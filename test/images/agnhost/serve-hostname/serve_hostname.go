@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// A small utility to just serve the hostname on TCP and/or UDP.
+// 一个通过 TCP 和/或 UDP 提供主机名服务的小工具。
 
 package servehostname
 
@@ -31,7 +31,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdServeHostname is used by agnhost Cobra.
+// CmdServeHostname 由 agnhost Cobra 使用。
 var CmdServeHostname = &cobra.Command{
 	Use:   "serve-hostname",
 	Short: "Serves the hostname",
@@ -109,14 +109,14 @@ func main(cmd *cobra.Command, args []string) {
 			log.Printf("HTTP request from %s", r.RemoteAddr)
 
 			if doClose {
-				// Add this header to force to close the connection after serving the request.
+				// 添加此请求头，强制在响应请求后关闭连接。
 				w.Header().Add("Connection", "close")
 			}
 
 			fmt.Fprintf(w, "%s", hostname)
 		})
 		go func() {
-			// Run in a closure so http.ListenAndServe doesn't block
+			// 在闭包中运行，避免 http.ListenAndServe 阻塞
 			log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 		}()
 	}

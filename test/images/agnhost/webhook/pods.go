@@ -35,7 +35,7 @@ const (
 	]`
 )
 
-// only allow pods to pull images from specific registry.
+// 仅允许 Pod 从特定的 registry 拉取镜像。
 func admitPods(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	klog.V(2).Info("admitting pods")
 	podResource := metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
@@ -64,7 +64,7 @@ func admitPods(ar v1.AdmissionReview) *v1.AdmissionResponse {
 		if v == "wait-forever" {
 			reviewResponse.Allowed = false
 			msg = msg + "the pod response should not be sent; "
-			<-make(chan int) // Sleep forever - no one sends to this channel
+			<-make(chan int) // 永久休眠——没有人会向此通道发送数据
 		}
 	}
 	for _, container := range pod.Spec.Containers {
@@ -140,8 +140,8 @@ func applyPodPatch(ar v1.AdmissionReview, shouldPatchPod func(*corev1.Pod) bool,
 	return &reviewResponse
 }
 
-// denySpecificAttachment denies `kubectl attach to-be-attached-pod -i -c=container1"
-// or equivalent client requests.
+// denySpecificAttachment 拒绝 `kubectl attach to-be-attached-pod -i -c=container1"`
+// 或等价的客户端请求。
 func denySpecificAttachment(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	klog.V(2).Info("handling attaching pods")
 	if ar.Request.Name != "to-be-attached-pod" {

@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdEntrypointTester is used by agnhost Cobra.
+// CmdEntrypointTester 由 agnhost Cobra 使用。
 var CmdEntrypointTester = &cobra.Command{
 	Use:   "entrypoint-tester",
 	Short: "Prints the args it's passed and exits",
@@ -31,12 +31,12 @@ var CmdEntrypointTester = &cobra.Command{
 	Run:   main,
 }
 
-// This program prints all the executable's arguments and exits.
+// 本程序打印可执行文件的所有参数后退出。
 func main(cmd *cobra.Command, args []string) {
-	// Some of the entrypoint-tester related tests overrides agnhost's default entrypoint
-	// with agnhost-2, and this function's args will only contain the subcommand's
-	// args (./agnhost entrypoint-tester these args), but we need to print *all* the
-	// args, which is why os.Args should be printed instead.
+	// 某些与 entrypoint-tester 相关的测试会用 agnhost-2 覆盖 agnhost 的默认入口点，
+	// 此时本函数的 args 只包含子命令的参数
+	// （./agnhost entrypoint-tester these args），但我们需要打印*所有*
+	// 参数，因此改为打印 os.Args。
 	fmt.Printf("%v\n", os.Args)
 	os.Exit(0)
 }

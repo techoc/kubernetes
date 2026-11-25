@@ -22,7 +22,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// alwaysDeny all requests made to this function.
+// alwaysDeny 拒绝传给该函数的所有请求。
 func alwaysDeny(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	klog.V(2).Info("calling always-deny")
 	reviewResponse := v1.AdmissionResponse{}

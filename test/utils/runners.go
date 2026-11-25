@@ -41,12 +41,12 @@ import (
 )
 
 const (
-	// String used to mark pod deletion
+	// 用于标记 pod 已被删除的字符串
 	nonExist = "NonExist"
 )
 
 func waitUntilPodIsScheduled(ctx context.Context, c clientset.Interface, name, namespace string, timeout time.Duration) (*v1.Pod, error) {
-	// Wait until it's scheduled
+	// 等待 pod 被调度
 	p, err := c.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{ResourceVersion: "0"})
 	if err == nil && p.Spec.NodeName != "" {
 		return p, nil
@@ -103,12 +103,12 @@ type RCConfig struct {
 	Timeout                       time.Duration
 	PodStatusFile                 *os.File
 	Replicas                      int
-	CPURequest                    int64                    // millicores
-	CPULimit                      int64                    // millicores
-	MemRequest                    int64                    // bytes
-	MemLimit                      int64                    // bytes
-	GpuLimit                      int64                    // count
-	PodResources                  *v1.ResourceRequirements // Pod-level resources
+	CPURequest                    int64                    // 毫核（millicores）
+	CPULimit                      int64                    // 毫核（millicores）
+	MemRequest                    int64                    // 字节
+	MemLimit                      int64                    // 字节
+	GpuLimit                      int64                    // 数量
+	PodResources                  *v1.ResourceRequirements // Pod 级别的资源
 	ReadinessProbe                *v1.Probe
 	DNSPolicy                     *v1.DNSPolicy
 	PriorityClassName             string
@@ -116,58 +116,58 @@ type RCConfig struct {
 	Lifecycle                     *v1.Lifecycle
 	SchedulerName                 string
 
-	// Env vars, set the same for every pod.
+	// 环境变量，每个 pod 都设置为相同的值。
 	Env map[string]string
 
-	// Extra labels and annotations added to every pod.
+	// 添加到每个 pod 上的额外标签和注解。
 	Labels      map[string]string
 	Annotations map[string]string
 
-	// Node selector for pods in the RC.
+	// RC 中 pod 的 node selector。
 	NodeSelector map[string]string
 
-	// Tolerations for pods in the RC.
+	// RC 中 pod 的 toleration。
 	Tolerations []v1.Toleration
 
-	// Ports to declare in the container (map of name to containerPort).
+	// 要在容器中声明的端口（名称到 containerPort 的映射）。
 	Ports map[string]int
-	// Ports to declare in the container as host and container ports.
+	// 要在容器中声明的端口，同时作为 host 端口和容器端口。
 	HostPorts map[string]int
 
 	Volumes      []v1.Volume
 	VolumeMounts []v1.VolumeMount
 
-	// Pointer to a list of pods; if non-nil, will be set to a list of pods
-	// created by this RC by RunRC.
+	// 指向 pod 列表的指针；如果不为 nil，RunRC 会将其设置为
+	// 由该 RC 创建的 pod 列表。
 	CreatedPods *[]*v1.Pod
 
-	// Maximum allowable container failures. If exceeded, RunRC returns an error.
-	// Defaults to replicas*0.1 if unspecified.
+	// 允许的容器失败次数上限。超过时 RunRC 返回错误。
+	// 未指定时默认为 replicas*0.1。
 	MaxContainerFailures *int
-	// Maximum allowed pod deletions count. If exceeded, RunRC returns an error.
-	// Defaults to 0.
+	// 允许的 pod 删除次数上限。超过时 RunRC 返回错误。
+	// 默认为 0。
 	MaxAllowedPodDeletions int
 
-	// If set to false starting RC will print progress, otherwise only errors will be printed.
+	// 设为 false 时启动 RC 会打印进度，否则只打印错误。
 	Silent bool
 
-	// If set this function will be used to print log lines instead of klog.
+	// 如果设置了该函数，将用它代替 klog 打印日志行。
 	LogFunc func(fmt string, args ...interface{})
-	// If set those functions will be used to gather data from Nodes - in integration tests where no
-	// kubelets are running those variables should be nil.
+	// 如果设置了这些函数，将用它们从 Node 收集数据——在没有运行 kubelet 的集成测试中，
+	// 这些变量应当为 nil。
 	NodeDumpFunc      func(ctx context.Context, c clientset.Interface, nodeNames []string, logFunc func(fmt string, args ...interface{}))
 	ContainerDumpFunc func(ctx context.Context, c clientset.Interface, ns string, logFunc func(ftm string, args ...interface{}))
 
-	// Names of the secrets and configmaps to mount.
+	// 要挂载的 secret 和 configmap 的名称。
 	SecretNames    []string
 	ConfigMapNames []string
 
 	ServiceAccountTokenProjections int
 
-	// Additional containers to run in the pod
+	// 要在 pod 中运行的额外容器
 	AdditionalContainers []v1.Container
 
-	// Security context for created pods
+	// 所创建 pod 的安全上下文
 	SecurityContext *v1.SecurityContext
 }
 
@@ -197,7 +197,7 @@ type JobConfig struct {
 	RCConfig
 }
 
-// podInfo contains pod information useful for debugging e2e tests.
+// podInfo 包含对调试 e2e 测试有用的 pod 信息。
 type podInfo struct {
 	oldHostname string
 	oldPhase    string
@@ -205,10 +205,10 @@ type podInfo struct {
 	phase       string
 }
 
-// podDiff is a map of pod name to podInfos
+// podDiff 是 pod 名称到 podInfo 的映射
 type podDiff map[string]*podInfo
 
-// Print formats and prints the give podDiff.
+// Print 格式化并打印给定的 podDiff。
 func (p podDiff) String(ignorePhases sets.String) string {
 	ret := ""
 	for name, info := range p {
@@ -244,8 +244,7 @@ func (p podDiff) String(ignorePhases sets.String) string {
 	return ret
 }
 
-// DeletedPods returns a slice of pods that were present at the beginning
-// and then disappeared.
+// DeletedPods 返回一开始存在、随后消失的 pod 的切片。
 func (p podDiff) DeletedPods() []string {
 	var deletedPods []string
 	for podName, podInfo := range p {
@@ -256,16 +255,16 @@ func (p podDiff) DeletedPods() []string {
 	return deletedPods
 }
 
-// diff computes a podDiff given 2 lists of pods.
+// diff 根据两个 pod 列表计算 podDiff。
 func diff(oldPods []*v1.Pod, curPods []*v1.Pod) podDiff {
 	podInfoMap := podDiff{}
 
-	// New pods will show up in the curPods list but not in oldPods. They have oldhostname/phase == nonexist.
+	// 新 pod 会出现在 curPods 列表中，但不在 oldPods 中。它们的 oldHostname/phase 为 nonexist。
 	for _, pod := range curPods {
 		podInfoMap[pod.Name] = &podInfo{hostname: pod.Spec.NodeName, phase: string(pod.Status.Phase), oldHostname: nonExist, oldPhase: nonExist}
 	}
 
-	// Deleted pods will show up in the oldPods list but not in curPods. They have a hostname/phase == nonexist.
+	// 被删除的 pod 会出现在 oldPods 列表中，但不在 curPods 中。它们的 hostname/phase 为 nonexist。
 	for _, pod := range oldPods {
 		if info, ok := podInfoMap[pod.Name]; ok {
 			info.oldHostname, info.oldPhase = pod.Spec.NodeName, string(pod.Status.Phase)
@@ -276,10 +275,9 @@ func diff(oldPods []*v1.Pod, curPods []*v1.Pod) podDiff {
 	return podInfoMap
 }
 
-// RunDeployment Launches (and verifies correctness) of a Deployment
-// and will wait for all pods it spawns to become "Running".
-// It's the caller's responsibility to clean up externally (i.e. use the
-// namespace lifecycle for handling Cleanup).
+// RunDeployment 启动一个 Deployment（并验证其正确性），
+// 并等待它创建的所有 pod 进入 "Running" 状态。
+// 清理工作由调用方在外部负责（例如通过 namespace 的生命周期来处理清理）。
 func RunDeployment(ctx context.Context, config DeploymentConfig) error {
 	err := config.create()
 	if err != nil {
@@ -351,10 +349,9 @@ func (config *DeploymentConfig) create() error {
 	return nil
 }
 
-// RunReplicaSet launches (and verifies correctness) of a ReplicaSet
-// and waits until all the pods it launches to reach the "Running" state.
-// It's the caller's responsibility to clean up externally (i.e. use the
-// namespace lifecycle for handling Cleanup).
+// RunReplicaSet 启动一个 ReplicaSet（并验证其正确性），
+// 并等待它创建的所有 pod 进入 "Running" 状态。
+// 清理工作由调用方在外部负责（例如通过 namespace 的生命周期来处理清理）。
 func RunReplicaSet(ctx context.Context, config ReplicaSetConfig) error {
 	err := config.create()
 	if err != nil {
@@ -422,10 +419,9 @@ func (config *ReplicaSetConfig) create() error {
 	return nil
 }
 
-// RunRC Launches (and verifies correctness) of a Replication Controller
-// and will wait for all pods it spawns to become "Running".
-// It's the caller's responsibility to clean up externally (i.e. use the
-// namespace lifecycle for handling Cleanup).
+// RunRC 启动一个 Replication Controller（并验证其正确性），
+// 并等待它创建的所有 pod 进入 "Running" 状态。
+// 清理工作由调用方在外部负责（例如通过 namespace 的生命周期来处理清理）。
 func RunRC(ctx context.Context, config RCConfig) error {
 	err := config.create()
 	if err != nil {
@@ -601,7 +597,7 @@ func computeRCStartupStatus(pods []*v1.Pod, expected int) RCStartupStatus {
 				}
 			}
 			if ready {
-				// Only count a pod is running when it is also ready.
+				// 只有当 pod 同时处于 ready 状态时才计为 running。
 				startupStatus.Running++
 			} else {
 				startupStatus.RunningButNotReady++
@@ -621,7 +617,7 @@ func computeRCStartupStatus(pods []*v1.Pod, expected int) RCStartupStatus {
 		} else if p.Status.Phase == v1.PodUnknown {
 			startupStatus.Unknown++
 		}
-		// Record count of scheduled pods (useful for computing scheduler throughput).
+		// 记录已调度 pod 的数量（用于计算 scheduler 吞吐量）。
 		if p.Spec.NodeName != "" {
 			startupStatus.Scheduled++
 		}
@@ -630,7 +626,7 @@ func computeRCStartupStatus(pods []*v1.Pod, expected int) RCStartupStatus {
 }
 
 func (config *RCConfig) start(ctx context.Context) error {
-	// Don't force tests to fail if they don't care about containers restarting.
+	// 如果测试不关心容器重启，就不要强制让测试失败。
 	var maxContainerFailures int
 	if config.MaxContainerFailures == nil {
 		maxContainerFailures = int(math.Max(1.0, float64(config.Replicas)*.01))
@@ -680,7 +676,7 @@ func (config *RCConfig) start(ctx context.Context) error {
 				config.NodeDumpFunc(ctx, config.Client, startupStatus.ContainerRestartNodes.List(), config.RCConfigLog)
 			}
 			if config.ContainerDumpFunc != nil {
-				// Get the logs from the failed containers to help diagnose what caused them to fail
+				// 获取失败容器的日志，以帮助诊断失败原因
 				config.ContainerDumpFunc(ctx, config.Client, config.Namespace, config.RCConfigLog)
 			}
 			return fmt.Errorf("%d containers failed which is more than allowed %d", startupStatus.FailedContainers, maxContainerFailures)
@@ -690,7 +686,7 @@ func (config *RCConfig) start(ctx context.Context) error {
 		deletedPods := diff.DeletedPods()
 		podDeletionsCount += len(deletedPods)
 		if podDeletionsCount > config.MaxAllowedPodDeletions {
-			// Number of pods which disappeared is over threshold
+			// 消失的 pod 数量超过了阈值
 			err := fmt.Errorf("%d pods disappeared for %s: %v", podDeletionsCount, config.Name, strings.Join(deletedPods, ", "))
 			config.RCConfigLog("%s", err.Error())
 			config.RCConfigLog("%s", diff.String(sets.NewString()))
@@ -709,7 +705,7 @@ func (config *RCConfig) start(ctx context.Context) error {
 	}
 
 	if oldRunning != config.Replicas {
-		// List only pods from a given replication controller.
+		// 只列出来自指定 replication controller 的 pod。
 		options := metav1.ListOptions{LabelSelector: label.String()}
 		if pods, err := config.Client.CoreV1().Pods(config.Namespace).List(ctx, options); err == nil {
 			for _, pod := range pods.Items {
@@ -723,16 +719,16 @@ func (config *RCConfig) start(ctx context.Context) error {
 	return nil
 }
 
-// Simplified version of RunRC, that does not create RC, but creates plain Pods.
-// Optionally waits for pods to start running (if waitForRunning == true).
-// The number of replicas must be non-zero.
+// RunRC 的简化版本，它不创建 RC，而是直接创建普通 Pod。
+// 可以选择等待 pod 开始运行（当 waitForRunning == true 时）。
+// 副本数必须非零。
 func StartPods(c clientset.Interface, replicas int, namespace string, podNamePrefix string,
 	pod v1.Pod, waitForRunning bool, logFunc func(fmt string, args ...interface{})) error {
-	// no pod to start
+	// 没有要启动的 pod
 	if replicas < 1 {
 		panic("StartPods: number of replicas must be non-zero")
 	}
-	startPodsID := string(uuid.NewUUID()) // So that we can label and find them
+	startPodsID := string(uuid.NewUUID()) // 以便为它们打标签并查找
 	for i := range replicas {
 		podName := fmt.Sprintf("%v-%v", podNamePrefix, i)
 		pod.ObjectMeta.Name = podName
@@ -754,14 +750,14 @@ func StartPods(c clientset.Interface, replicas int, namespace string, podNamePre
 	return nil
 }
 
-// Wait up to 10 minutes for all matching pods to become Running and at least one
-// matching pod exists.
+// 最多等待 10 分钟，直到所有匹配的 pod 都进入 Running 状态，
+// 并且至少存在一个匹配的 pod。
 func WaitForPodsWithLabelRunning(c clientset.Interface, ns string, label labels.Selector) error {
 	return WaitForEnoughPodsWithLabelRunning(c, ns, label, -1)
 }
 
-// Wait up to 10 minutes for at least 'replicas' many pods to be Running and at least
-// one matching pod exists. If 'replicas' is < 0, wait for all matching pods running.
+// 最多等待 10 分钟，直到至少 'replicas' 个 pod 处于 Running 状态，
+// 并且至少存在一个匹配的 pod。如果 'replicas' < 0，则等待所有匹配的 pod 运行。
 func WaitForEnoughPodsWithLabelRunning(c clientset.Interface, ns string, label labels.Selector, replicas int) error {
 	running := false
 	ps, err := NewPodStore(c, ns, label, fields.Everything())
@@ -793,7 +789,7 @@ func WaitForEnoughPodsWithLabelRunning(c clientset.Interface, ns string, label l
 	return nil
 }
 
-// TODO: attach secrets using different possibilities: env vars, image pull secrets.
+// TODO：用其他方式挂载 secret：环境变量、image pull secret。
 func attachSecrets(template *v1.PodTemplateSpec, secretNames []string) {
 	volumes := make([]v1.Volume, 0, len(secretNames))
 	mounts := make([]v1.VolumeMount, 0, len(secretNames))
@@ -816,7 +812,7 @@ func attachSecrets(template *v1.PodTemplateSpec, secretNames []string) {
 	template.Spec.Containers[0].VolumeMounts = mounts
 }
 
-// TODO: attach configmaps using different possibilities: env vars.
+// TODO：用其他方式挂载 configmap：环境变量。
 func attachConfigMaps(template *v1.PodTemplateSpec, configMapNames []string) {
 	volumes := make([]v1.Volume, 0, len(configMapNames))
 	mounts := make([]v1.VolumeMount, 0, len(configMapNames))

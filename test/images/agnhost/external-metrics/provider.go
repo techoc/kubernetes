@@ -28,8 +28,8 @@ type externalMetric struct {
 	metricName string
 	labels     map[string]string
 	value      int
-	shouldFail bool        // If true, this metric returns errors
-	timestamp  metav1.Time // for mocking we are returning only the current time
+	shouldFail bool        // 若为 true，该 metric 返回错误
+	timestamp  metav1.Time // 为了 mock，我们只返回当前时间
 }
 
 type metricProvider struct {
@@ -45,8 +45,8 @@ func NewConfigurableProvider() *metricProvider {
 	return p
 }
 
-// buildMetricKey creates a unique key combining metric name and labels
-// This allows multiple instances of the same metric with different labels
+// buildMetricKey 通过组合 metric 名称和标签创建一个唯一的 key。
+// 这允许同一 metric 拥有多个不同标签的实例。
 func buildMetricKey(metricName string, metricLabels map[string]string) string {
 	key := metricName
 	if len(metricLabels) > 0 {
@@ -59,8 +59,8 @@ func buildMetricKey(metricName string, metricLabels map[string]string) string {
 	return key
 }
 
-// parseLabels parses label selector from query string format
-// Example: "env=prod,region=us-west"
+// parseLabels 从查询字符串格式中解析 label selector。
+// 示例："env=prod,region=us-west"
 func parseLabels(labelSelector string) map[string]string {
 	labels := make(map[string]string)
 	if labelSelector == "" {
@@ -77,7 +77,7 @@ func parseLabels(labelSelector string) map[string]string {
 	return labels
 }
 
-// setMetricFailure controls whether a specific metric should fail
+// setMetricFailure 控制某个特定 metric 是否应当失败
 func (p *metricProvider) setMetricFailure(metricKey string, failStr string) error {
 	shouldFail := failStr == "true"
 
@@ -92,7 +92,7 @@ func (p *metricProvider) setMetricFailure(metricKey string, failStr string) erro
 	return nil
 }
 
-// setMetricFailure controls whether a specific metric should fail
+// setMetricFailure 控制某个特定 metric 是否应当失败
 func (p *metricProvider) setMetricValue(metricKey string, metricValue int) error {
 	p.externalMetricsLock.Lock()
 	defer p.externalMetricsLock.Unlock()
@@ -124,7 +124,7 @@ func (p *metricProvider) getMetrics(metricName string, labelSelector map[string]
 
 	var results []*externalMetric
 
-	// If label selector is provided, try exact match first
+	// 如果提供了 label selector，先尝试精确匹配
 	if len(labelSelector) > 0 {
 		key := buildMetricKey(metricName, labelSelector)
 		if metric, exists := p.externalMetrics[key]; exists {
@@ -133,19 +133,19 @@ func (p *metricProvider) getMetrics(metricName string, labelSelector map[string]
 		}
 	}
 
-	// Otherwise, find all metrics with the given name
+	// 否则，查找所有具有给定名称的 metric
 	for _, metric := range p.externalMetrics {
 		if metric.metricName != metricName {
 			continue
 		}
 
-		// If no label selector, include all metrics with this name
+		// 如果没有 label selector，则包含所有具有此名称的 metric
 		if len(labelSelector) == 0 {
 			results = append(results, metric)
 			continue
 		}
 
-		// Check if metric labels match the selector
+		// 检查 metric 的标签是否匹配 selector
 		matches := true
 		for selectorKey, selectorValue := range labelSelector {
 			if metricValue, exists := metric.labels[selectorKey]; !exists || metricValue != selectorValue {
@@ -158,7 +158,7 @@ func (p *metricProvider) getMetrics(metricName string, labelSelector map[string]
 		}
 	}
 
-	// For backward compatibility, also check if metricName exists as a key without labels
+	// 为向后兼容，还要检查 metricName 是否作为不带标签的 key 存在
 	if len(results) == 0 && len(labelSelector) == 0 {
 		if metric, exists := p.externalMetrics[metricName]; exists {
 			results = append(results, metric)

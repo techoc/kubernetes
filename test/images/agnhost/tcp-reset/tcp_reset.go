@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// A small utility to send RST on the TCP connection
+// 用于在 TCP 连接上发送 RST 的小工具
 // Ref: https://gosamples.dev/connection-reset-by-peer/
 
 package tcpreset
@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdTCPReset is used by agnhost Cobra.
+// CmdTCPReset 由 agnhost Cobra 使用。
 var CmdTCPReset = &cobra.Command{
 	Use:   "tcp-reset",
 	Short: "Serves on a tcp port and RST the connections received",
@@ -59,8 +59,8 @@ func main(cmd *cobra.Command, args []string) {
 			if err != nil {
 				log.Fatalf("Error from Accept(): %s", err)
 			}
-			// if there are still data in the buffer to read
-			// and the connection is closed, it will send a RST.
+			// 如果缓冲区中还有数据待读取，
+			// 此时关闭连接就会发送 RST。
 			buf := make([]byte, 1)
 			conn.Read(buf)
 			conn.Close()

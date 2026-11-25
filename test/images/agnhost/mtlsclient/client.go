@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package mtlsclient is an agnhost subcommand implementing a client to build
-// the mTLS with the server.
+// Package mtlsclient 是一个 agnhost 子命令，实现一个与服务器建立
+// mTLS 的客户端。
 package mtlsclient
 
 import (
@@ -87,7 +87,7 @@ func pollOnce() error {
 		RootCAs: serverTrustAnchors,
 	}
 
-	// Load and send client certificates if a bundle file was specified.
+	// 若指定了 bundle 文件，则加载并发送客户端证书。
 	if clientCredBundleFile != "" {
 		bundlePEM, err := os.ReadFile(clientCredBundleFile)
 		if err != nil {

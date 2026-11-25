@@ -34,10 +34,10 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// CleanCrdFn declares the clean up function needed to remove the CRD
+// CleanCrdFn 声明移除 CRD 所需的清理函数
 type CleanCrdFn func(ctx context.Context) error
 
-// TestCrd holds all the pieces needed to test with the CRD
+// TestCrd 包含使用 CRD 进行测试所需的全部组件
 type TestCrd struct {
 	APIExtensionClient *crdclientset.Clientset
 	Crd                *apiextensionsv1.CustomResourceDefinition
@@ -45,14 +45,14 @@ type TestCrd struct {
 	CleanUp            CleanCrdFn
 }
 
-// Option is a modifier for a CRD object used to customize CreateMultiVersionTestCRD and CreateTestCRD.
+// Option 是 CRD 对象的修改器，用于定制 CreateMultiVersionTestCRD 和 CreateTestCRD。
 type Option func(crd *apiextensionsv1.CustomResourceDefinition)
 
-// CreateMultiVersionTestCRD creates a new CRD specifically for the calling test.
+// CreateMultiVersionTestCRD 专门为调用它的测试创建一个新的 CRD。
 func CreateMultiVersionTestCRD(f *framework.Framework, group string, opts ...Option) (*TestCrd, error) {
 	testcrd := &TestCrd{}
 
-	// Creating a custom resource definition for use by assorted tests.
+	// 创建一个供各种测试使用的自定义资源定义。
 	config, err := framework.LoadConfig()
 	if err != nil {
 		framework.Failf("failed to load config: %v", err)
@@ -70,14 +70,14 @@ func CreateMultiVersionTestCRD(f *framework.Framework, group string, opts ...Opt
 	}
 
 	crd := genRandomCRD(f, group, opts...)
-	// Be robust about making the crd creation call.
+	// 稳健地执行 CRD 创建调用。
 	var got *apiextensionsv1.CustomResourceDefinition
 	if err := wait.PollUntilContextTimeout(context.TODO(), f.Timeouts.Poll, 30*time.Second, true, func(ctx context.Context) (bool, error) {
-		// Create CRD and waits for the resource to be recognized and available.
+		// 创建 CRD 并等待资源被识别且可用。
 		got, err = fixtures.CreateNewV1CustomResourceDefinitionWatchUnsafe(crd, apiExtensionClient)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) {
-				// regenerate on conflict
+				// 发生冲突时重新生成
 				framework.Logf("CustomResourceDefinition name %q was already taken, generate a new name and retry", crd.Name)
 				crd = genRandomCRD(f, group, opts...)
 			} else {
@@ -111,9 +111,9 @@ func CreateMultiVersionTestCRD(f *framework.Framework, group string, opts ...Opt
 	return testcrd, nil
 }
 
-// genRandomCRD generates a random CRD name and kind based on the framework's base name and a random suffix.
-// It also sets the group to the provided value and sets the scope to NamespaceScoped. If no versions are provided via
-// the opts, it will create a default version "v1" with an allow-all schema.
+// genRandomCRD 根据 framework 的基础名称和随机后缀生成随机的 CRD 名称和 kind。
+// 它还会将 group 设为提供的值，并将 scope 设为 NamespaceScoped。如果 opts 中没有提供版本，
+// 则会创建一个默认版本 "v1"，其 schema 允许所有字段。
 func genRandomCRD(f *framework.Framework, group string, opts ...Option) *apiextensionsv1.CustomResourceDefinition {
 	suffix := framework.RandomSuffix()
 	name := fmt.Sprintf("e2e-test-%s-%s-crd", f.UniqueName, suffix)
@@ -146,7 +146,7 @@ func genRandomCRD(f *framework.Framework, group string, opts ...Option) *apiexte
 	return crd
 }
 
-// CreateTestCRD creates a new CRD specifically for the calling test.
+// CreateTestCRD 专门为调用它的测试创建一个新的 CRD。
 func CreateTestCRD(f *framework.Framework, opts ...Option) (*TestCrd, error) {
 	group := fmt.Sprintf("%s.example.com", f.BaseName)
 	return CreateMultiVersionTestCRD(f, group, append([]Option{func(crd *apiextensionsv1.CustomResourceDefinition) {

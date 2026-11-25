@@ -55,22 +55,22 @@ type TestServer struct {
 	jwksHandler  *handlers.MockJWKsHandler
 }
 
-// JwksHandler is getter of JSON Web Key Sets handler
+// JwksHandler 是 JSON Web Key Sets handler 的 getter
 func (ts *TestServer) JwksHandler() *handlers.MockJWKsHandler {
 	return ts.jwksHandler
 }
 
-// TokenHandler is getter of JWT token handler
+// TokenHandler 是 JWT token handler 的 getter
 func (ts *TestServer) TokenHandler() *handlers.MockTokenHandler {
 	return ts.tokenHandler
 }
 
-// URL returns the public URL of server
+// URL 返回服务器的公开 URL
 func (ts *TestServer) URL() string {
 	return ts.httpServer.URL
 }
 
-// TokenURL returns the public URL of JWT token endpoint
+// TokenURL 返回 JWT token 端点的公开 URL
 func (ts *TestServer) TokenURL() (string, error) {
 	url, err := url.JoinPath(ts.httpServer.URL, tokenWebPath)
 	if err != nil {
@@ -80,7 +80,7 @@ func (ts *TestServer) TokenURL() (string, error) {
 	return url, nil
 }
 
-// BuildAndRunTestServer configures OIDC TLS server and its routing
+// BuildAndRunTestServer 配置 OIDC TLS 服务器及其路由
 func BuildAndRunTestServer(t *testing.T, caPath, caKeyPath, issuerOverride string) *TestServer {
 	t.Helper()
 
@@ -110,8 +110,8 @@ func BuildAndRunTestServer(t *testing.T, caPath, caKeyPath, issuerOverride strin
 	}
 
 	issuer := httpServer.URL
-	// issuerOverride is used to override the issuer URL in the well-known configuration.
-	// This is useful to validate scenarios where discovery url is different from the issuer url.
+	// issuerOverride 用于覆盖 well-known 配置中的 issuer URL。
+	// 这在验证发现 URL 与 issuer URL 不同的场景时很有用。
 	if len(issuerOverride) > 0 {
 		issuer = issuerOverride
 	}
@@ -120,8 +120,8 @@ func BuildAndRunTestServer(t *testing.T, caPath, caKeyPath, issuerOverride strin
 		discoveryDocHandler(t, writer, httpServer.URL, issuer)
 	})
 
-	// /c/d/bar/.well-known/openid-configuration is used to validate scenarios where discovery url is different from the issuer url
-	// and discovery url contains path.
+	// /c/d/bar/.well-known/openid-configuration 用于验证发现 URL 与 issuer URL 不同、
+	// 且发现 URL 包含路径的场景。
 	mux.HandleFunc("/c/d/bar"+openIDWellKnownWebPath, func(writer http.ResponseWriter, request *http.Request) {
 		discoveryDocHandler(t, writer, httpServer.URL, issuer)
 	})
@@ -193,8 +193,8 @@ type JosePrivateKey interface {
 	*rsa.PrivateKey | *ecdsa.PrivateKey
 }
 
-// TokenHandlerBehaviorReturningPredefinedJWT describes the scenario when signed JWT token is being created.
-// This behavior should being applied to the MockTokenHandler.
+// TokenHandlerBehaviorReturningPredefinedJWT 描述创建签名 JWT token 的场景。
+// 该行为应应用于 MockTokenHandler。
 func TokenHandlerBehaviorReturningPredefinedJWT[K JosePrivateKey](
 	t *testing.T,
 	privateKey K,
@@ -226,8 +226,8 @@ type JosePublicKey interface {
 	*rsa.PublicKey | *ecdsa.PublicKey
 }
 
-// DefaultJwksHandlerBehavior describes the scenario when JSON Web Key Set token is being returned.
-// This behavior should being applied to the MockJWKsHandler.
+// DefaultJwksHandlerBehavior 描述返回 JSON Web Key Set token 的场景。
+// 该行为应应用于 MockJWKsHandler。
 func DefaultJwksHandlerBehavior[K JosePublicKey](t *testing.T, verificationPublicKey K) func() jose.JSONWebKeySet {
 	t.Helper()
 
@@ -253,12 +253,12 @@ func GetSignatureAlgorithm[K JoseKey](key K) jose.SignatureAlgorithm {
 	case *ecdsa.PrivateKey, *ecdsa.PublicKey:
 		return jose.ES256
 	default:
-		panic("unknown key type") // should be impossible
+		panic("unknown key type") // 不应发生
 	}
 }
 
-// WriteTempFile writes content to a temporary file and returns its path.
-// The file is automatically cleaned up when the test completes.
+// WriteTempFile 将内容写入临时文件并返回其路径。
+// 测试完成后该文件会被自动清理。
 func WriteTempFile(t *testing.T, content string) string {
 	t.Helper()
 	file, err := os.CreateTemp("", "oidc-test")

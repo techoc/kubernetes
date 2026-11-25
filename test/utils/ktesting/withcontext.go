@@ -23,9 +23,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// WithCancel sets up cancellation in a [TContext.Cleanup] callback and
-// constructs a new TContext where [TContext.Cancel] cancels only the new
-// context.
+// WithCancel 在 [TContext.Cleanup] 回调中设置取消机制，
+// 并构造一个新的 TContext，其中 [TContext.Cancel]
+// 只取消新的 context。
 func (tCtx TContext) WithCancel() TContext {
 	ctx, cancel := context.WithCancelCause(tCtx)
 
@@ -40,22 +40,22 @@ func (tCtx TContext) WithCancel() TContext {
 	return tCtx
 }
 
-// WithoutCancel causes the returned context to ignore cancellation of its parent.
-// Calling Cancel will only cancel the new context.
-// This matches [context.WithoutCancel].
+// WithoutCancel 使返回的 context 忽略其父级的取消。
+// 调用 Cancel 只会取消新的 context。
+// 这与 [context.WithoutCancel] 一致。
 func (tCtx TContext) WithoutCancel() TContext {
 	ctx := context.WithoutCancel(tCtx)
 
 	tCtx.Context = ctx
-	tCtx = tCtx.WithCancel() // Re-create a cancelable TContext.
+	tCtx = tCtx.WithCancel() // 重新创建可取消的 TContext。
 	return tCtx
 }
 
-// WithTimeout sets up new context with a timeout. Canceling the timeout gets
-// registered in a cleanup callback. [TContext.Cancel] cancels only
-// the new context. The cause is used as reason why the context is canceled
-// once the timeout is reached. It may be empty, in which case the usual
-// "context canceled" error is used.
+// WithTimeout 设置一个带超时机制的新 context。取消超时
+// 会注册到清理回调中。[TContext.Cancel] 只取消
+// 新的 context。当到达超时时间时，cause 用作
+// context 被取消的原因。它可以为空，此时使用通常的
+// "context canceled" 错误。
 func (tCtx TContext) WithTimeout(timeout time.Duration, timeoutCause string) TContext {
 	ctx, cancel := withTimeout(tCtx, tCtx.TB(), timeout, timeoutCause)
 
@@ -64,7 +64,7 @@ func (tCtx TContext) WithTimeout(timeout time.Duration, timeoutCause string) TCo
 	return tCtx
 }
 
-// WithLogger constructs a new context with a different logger.
+// WithLogger 使用另一个 logger 构造新的 context。
 func (tCtx TContext) WithLogger(logger klog.Logger) TContext {
 	ctx := klog.NewContext(tCtx, logger)
 

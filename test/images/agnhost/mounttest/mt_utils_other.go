@@ -20,7 +20,7 @@ package mounttest
 
 import "strconv"
 
-// formatFsType returns a string representation of the filesystem type.
+// formatFsType 返回文件系统类型的字符串表示。
 func formatFsType(fsType int64) string {
 	return strconv.FormatInt(fsType, 10)
 }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The tests will fail and therefore are excluded from normal "make test" via
-// the "example" build tag. To run the tests and check the output, use "go test
+// 这些测试会失败，因此通过 "example" 构建标签将其排除在常规的 "make test"
+// 之外。要运行这些测试并查看输出，请使用 "go test
 // -tags example ."
 package withoutktesting

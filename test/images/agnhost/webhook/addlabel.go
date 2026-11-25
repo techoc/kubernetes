@@ -36,7 +36,7 @@ const (
      ]`
 )
 
-// Add a label {"added-label": "yes"} to the object
+// 为对象添加标签 {"added-label": "yes"}
 func addLabel(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	klog.V(2).Info("calling add-label")
 	obj := struct {
@@ -65,7 +65,7 @@ func addLabel(ar v1.AdmissionReview) *v1.AdmissionResponse {
 		reviewResponse.Patch = []byte(updateLabelPatch)
 		reviewResponse.PatchType = &pt
 	default:
-		// already set
+		// 已设置
 	}
 	return &reviewResponse
 }

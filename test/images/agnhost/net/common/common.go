@@ -18,12 +18,12 @@ package common
 
 import "log"
 
-// Runner is a client or server to run.
+// Runner 表示要运行的客户端或服务端。
 type Runner interface {
-	// NewOptions returns a new empty options structure to be populated
-	// by from the JSON -options argument.
+	// NewOptions 返回一个新的空选项结构体，
+	// 用于由 JSON -options 参数填充。
 	NewOptions() interface{}
-	// Run the client or server, taking in options. This execute the
-	// test code.
+	// Run 接收选项并运行客户端或服务端。
+	// 此处执行测试代码。
 	Run(logger *log.Logger, options interface{}) error
 }

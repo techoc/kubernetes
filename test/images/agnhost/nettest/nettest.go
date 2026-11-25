@@ -14,19 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// A tiny web server for checking networking connectivity.
+// 一个用于检查网络连通性的小型 web 服务器。
 //
-// Will dial out to, and expect to hear from, every pod that is a member of
-// the service passed in the flag -service.
+// 它会主动连接并通过 -service 标志传入的 service 中的每个 pod 通信，
+// 并期望收到每个 pod 的回应。
 //
-// Will serve a webserver on given -port.
+// 它会在给定的 -port 上提供 web 服务。
 //
-// Visit /read to see the current state, or /quit to shut down.
+// 访问 /read 可查看当前状态，访问 /quit 可关闭服务。
 //
-// Visit /status to see pass/running/fail determination. (literally, it will
-// return one of those words.)
+// 访问 /status 可查看 pass/running/fail 的判定结果（它实际上会返回这几个词之一）。
 //
-// /write is used by other network test pods to register connectivity.
+// /write 供其他网络测试 pod 用来上报连通性。
 
 package nettest
 
@@ -62,7 +61,7 @@ var (
 	delayShutdown int
 )
 
-// CmdNettest is used by agnhost Cobra.
+// CmdNettest 供 agnhost Cobra 使用。
 var CmdNettest = &cobra.Command{
 	Use:   "nettest",
 	Short: "Starts a tiny web server for checking networking connectivity",
@@ -91,13 +90,13 @@ func init() {
 	CmdNettest.Flags().IntVar(&delayShutdown, "delay-shutdown", 0, "Number of seconds to delay shutdown when receiving SIGTERM.")
 }
 
-// State tracks the internal state of our little http server.
-// It's returned verbatim over the /read endpoint.
+// State 记录我们这个小型 http 服务器的内部状态。
+// 它会通过 /read 端点原样返回。
 type State struct {
-	// Hostname is set once and never changed-- it's always safe to read.
+	// Hostname 只设置一次且永不修改——读取它总是安全的。
 	Hostname string
 
-	// The below fields require that lock is held before reading or writing.
+	// 以下字段在读写之前必须持有 lock。
 	Sent                 map[string]int
 	Received             map[string]int
 	Errors               []string
@@ -113,7 +112,7 @@ func (s *State) doneContactingPeers() {
 	s.StillContactingPeers = false
 }
 
-// serveStatus returns "pass", "running", or "fail".
+// serveStatus 返回 "pass"、"running" 或 "fail"。
 func (s *State) serveStatus(w http.ResponseWriter, r *http.Request) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -125,12 +124,12 @@ func (s *State) serveStatus(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "running")
 		return
 	}
-	// Logf can't be called while holding the lock, so defer using a goroutine
+	// 持有 lock 时不能调用 Logf，所以用 goroutine 延迟执行
 	go s.Logf("Declaring failure for %s/%s with %d sent and %d received and %d peers", namespace, service, len(s.Sent), len(s.Received), peerCount)
 	fmt.Fprintf(w, "fail")
 }
 
-// serveRead writes our json encoded state
+// serveRead 写出经过 JSON 编码的状态
 func (s *State) serveRead(w http.ResponseWriter, r *http.Request) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -141,18 +140,18 @@ func (s *State) serveRead(w http.ResponseWriter, r *http.Request) {
 	s.appendErr(err)
 }
 
-// WritePost is the format that (json encoded) requests to the /write handler should take.
+// WritePost 是发往 /write handler 的请求（经过 JSON 编码）应遵循的格式。
 type WritePost struct {
 	Source string
 	Dest   string
 }
 
-// WriteResp is returned by /write
+// WriteResp 由 /write 返回
 type WriteResp struct {
 	Hostname string
 }
 
-// serveWrite records the contact in our state.
+// serveWrite 在我们的状态中记录这次联系。
 func (s *State) serveWrite(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	s.lock.Lock()
@@ -171,16 +170,15 @@ func (s *State) serveWrite(w http.ResponseWriter, r *http.Request) {
 	s.appendErr(json.NewEncoder(w).Encode(&WriteResp{Hostname: s.Hostname}))
 }
 
-// appendErr adds err to the list, if err is not nil. s must be locked.
+// appendErr 在 err 不为 nil 时将其加入列表。调用时 s 必须处于加锁状态。
 func (s *State) appendErr(err error) {
 	if err != nil {
 		s.Errors = append(s.Errors, err.Error())
 	}
 }
 
-// Logf writes to the log message list. s must not be locked.
-// s's Log member will drop an old message if it would otherwise
-// become longer than 500 messages.
+// Logf 向日志消息列表写入内容。调用时 s 不能处于加锁状态。
+// 如果 s 的 Log 成员会超过 500 条消息，就会丢弃一条旧消息。
 func (s *State) Logf(format string, args ...interface{}) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -190,7 +188,7 @@ func (s *State) Logf(format string, args ...interface{}) {
 	}
 }
 
-// s must not be locked
+// 调用时 s 不能处于加锁状态
 func (s *State) appendSuccessfulSend(toHostname string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -201,7 +199,7 @@ func (s *State) appendSuccessfulSend(toHostname string) {
 }
 
 var (
-	// Our one and only state object
+	// 我们唯一的状态对象
 	state State
 )
 
@@ -246,22 +244,20 @@ func main(cmd *cobra.Command, args []string) {
 	select {}
 }
 
-// Find all sibling pods in the service and post to their /write handler.
+// 查找 service 中的所有同级 pod，并向它们的 /write handler 发送请求。
 func contactOthers(state *State) {
 	var (
 		versionInfo *version.Info
 		err         error
 	)
 	sleepTime := 5 * time.Second
-	// In large cluster getting all endpoints is pretty expensive.
-	// Thus, we will limit ourselves to send on average at most 10 such
-	// requests per second
+	// 在大型集群中，获取所有 endpoint 的开销相当大。
+	// 因此，我们将自己限制为平均每秒最多发送 10 个这样的请求
 	if sleepTime < time.Duration(peerCount/10)*time.Second {
 		sleepTime = time.Duration(peerCount/10) * time.Second
 	}
 	timeout := 5 * time.Minute
-	// Similarly we need to bump timeout so that it is reasonable in large
-	// clusters.
+	// 类似地，我们需要增大超时时间，使其在大型集群中合理可用。
 	if timeout < time.Duration(peerCount)*time.Second {
 		timeout = time.Duration(peerCount) * time.Second
 	}
@@ -277,10 +273,10 @@ func contactOthers(state *State) {
 		log.Fatalf("Unable to create client; error: %v\n", err)
 	}
 
-	// Try to get the server version until <timeout>; we use a timeout because
-	// the pod might not have immediate network connectivity.
+	// 在 <timeout> 之前尝试获取 server 版本；设置超时是因为
+	// pod 的网络连通性可能不是立刻就可用。
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(sleepTime) {
-		// Double check that worked by getting the server version.
+		// 通过获取 server 版本再次确认连接正常。
 		if versionInfo, err = client.Discovery().ServerVersion(); err != nil {
 			log.Printf("Unable to get server version: %v; retrying.\n", err)
 		} else {
@@ -302,8 +298,7 @@ func contactOthers(state *State) {
 		state.Logf("%v/%v has %v endpoints (%v), which is less than %v as expected. Waiting for all endpoints to come up.", namespace, service, len(eps), eps.List(), peerCount)
 	}
 
-	// Do this repeatedly, in case there's some propagation delay with getting
-	// newly started pods into the endpoints list.
+	// 重复执行此操作，以防新启动的 pod 加入 endpoint 列表时存在传播延迟。
 	for range 15 {
 		eps := getWebserverEndpoints(client)
 		for ep := range eps {
@@ -314,7 +309,8 @@ func contactOthers(state *State) {
 	}
 }
 
-// getWebserverEndpoints returns the webserver endpoints as a set of String, each in the format like "http://{ip}:{port}"
+// getWebserverEndpoints 以 String 集合的形式返回 webserver 的 endpoint，
+// 每个 endpoint 的格式类似 "http://{ip}:{port}"
 func getWebserverEndpoints(client clientset.Interface) sets.String {
 	endpoints, err := client.CoreV1().Endpoints(namespace).Get(context.TODO(), service, v1.GetOptions{})
 	eps := sets.String{}
@@ -333,7 +329,7 @@ func getWebserverEndpoints(client clientset.Interface) sets.String {
 	return eps
 }
 
-// contactSingle dials the address 'e' and tries to POST to its /write address.
+// contactSingle 连接地址 'e'，并尝试向其 /write 地址发送 POST 请求。
 func contactSingle(e string, state *State) {
 	body, err := json.Marshal(&WritePost{
 		Dest:   e,

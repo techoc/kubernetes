@@ -38,15 +38,15 @@ import (
 type runnerMap map[string]common.Runner
 
 var (
-	// flags for the command line. See usage args below for
-	// descriptions.
+	// 命令行标志。有关说明，
+	// 请参阅下面的用法参数。
 	flags struct {
 		Serve         string
 		Runner        string
 		Options       string
 		DelayShutdown int
 	}
-	// runners is a map from runner name to runner instance.
+	// runners 是从 runner 名称到 runner 实例的映射。
 	runners = makeRunnerMap()
 )
 
@@ -54,7 +54,7 @@ type logOutput struct {
 	b bytes.Buffer
 }
 
-// CmdNet is used by agnhost Cobra.
+// CmdNet 由 agnhost 的 Cobra 命令使用。
 var CmdNet = &cobra.Command{
 	Use:   "net",
 	Short: "Creates webserver or runner for various networking tests",
@@ -122,7 +122,7 @@ func main(cmd *cobra.Command, args []string) {
 }
 
 func makeRunnerMap() runnerMap {
-	// runner name is <pkg>-<file>-<specific>.
+	// runner 名称格式为 <pkg>-<file>-<specific>。
 	return runnerMap{
 		"nat-closewait-client": nat.NewCloseWaitClient(),
 		"nat-closewait-server": nat.NewCloseWaitServer(),
@@ -148,7 +148,7 @@ func executeRunner(name string, rawOptions string) (logOutput, error) {
 	return logOutput{}, fmt.Errorf("Invalid runner: '%v', see --help", runner)
 }
 
-// handleRunRequest handles a request JSON to the network tester.
+// handleRunRequest 处理发送给网络测试工具的 JSON 请求。
 func handleRunRequest(w http.ResponseWriter, r *http.Request) {
 	log.Printf("handleRunRequest %v", *r)
 

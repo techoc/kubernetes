@@ -37,7 +37,7 @@ const (
 	maxScopeIDLen     = 256
 )
 
-// FixedInfo information: https://docs.microsoft.com/en-us/windows/win32/api/iptypes/ns-iptypes-fixed_info_w2ksp1
+// FixedInfo 信息：https://docs.microsoft.com/en-us/windows/win32/api/iptypes/ns-iptypes-fixed_info_w2ksp1
 type FixedInfo struct {
 	HostName         [maxHostnameLen + 4]byte
 	DomainName       [maxDomainNameLen + 4]byte
@@ -51,8 +51,8 @@ type FixedInfo struct {
 }
 
 var (
-	// GetNetworkParams can be found in iphlpapi.dll
-	// see: https://docs.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getnetworkparams?redirectedfrom=MSDN
+	// GetNetworkParams 位于 iphlpapi.dll 中
+	// 参见：https://docs.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getnetworkparams?redirectedfrom=MSDN
 	iphlpapidll          = windows.MustLoadDLL("iphlpapi.dll")
 	procGetNetworkParams = iphlpapidll.MustFindProc("GetNetworkParams")
 )
@@ -80,16 +80,16 @@ func getRegistryValue(reg, key string) string {
 	return regValue
 }
 
-// GetDNSSuffixList reads DNS config file and returns the list of configured DNS suffixes
+// GetDNSSuffixList 读取 DNS 配置文件，返回已配置的 DNS 后缀列表
 func GetDNSSuffixList() []string {
-	// We start with the general suffix list that apply to all network connections.
+	// 首先收集适用于所有网络连接的通用后缀列表。
 	allSuffixes := []string{}
 	suffixes := getRegistryValue(netRegistry, "SearchList")
 	if suffixes != "" {
 		allSuffixes = strings.Split(suffixes, ",")
 	}
 
-	// Then we append the network-specific DNS suffix lists.
+	// 然后追加特定于网络的 DNS 后缀列表。
 	regKey, err := registry.OpenKey(registry.LOCAL_MACHINE, netIfacesRegistry, registry.ENUMERATE_SUB_KEYS)
 	if err != nil {
 		panic(err)
@@ -116,8 +116,8 @@ func GetDNSSuffixList() []string {
 }
 
 func getNetworkParams() *FixedInfo {
-	// We don't know how big we should make the byte buffer, but the call will tell us by
-	// setting the size afterwards.
+	// 我们不知道字节缓冲区应该设多大，但该调用会在之后
+	// 通过设置 size 告知我们。
 	var size int
 	buffer := make([]byte, 1)
 	procGetNetworkParams.Call(

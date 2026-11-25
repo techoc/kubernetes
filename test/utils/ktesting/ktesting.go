@@ -24,35 +24,35 @@ import (
 	"testing"
 
 	"k8s.io/klog/v2"
-	_ "k8s.io/kubernetes/test/utils/ktesting/format" // Activate YAML format in Gomega.
+	_ "k8s.io/kubernetes/test/utils/ktesting/format" // 在 Gomega 中启用 YAML 格式。
 )
 
 var klogVFlag *flag.Flag
 var haveVerbosityFromEnv = false
 
 func init() {
-	// Register "v" and "vmodule" in the global command line.
+	// 在全局命令行中注册 "v" 和 "vmodule"。
 	//
-	// This is where ktesting is opinionated: all tests using
-	// it should have those flags, without unit test authors
-	// having to manually ask for it.
+	// 这正是 ktesting 有主张的地方：所有使用它的测试
+	// 都应该有这些 flag，而单元测试作者无需
+	// 手动申请。
 	var klogFlags flag.FlagSet
 	klog.InitFlags(&klogFlags)
 	klogVFlag = klogFlags.Lookup("v")
 	for _, name := range []string{"v", "vmodule"} {
 		f := klogFlags.Lookup(name)
 
-		// Some other code might have done this already,
-		// for example ./staging/src/k8s.io/component-base/logs/testinit/testinit.go.
+		// 其他代码可能已经这样做了，
+		// 例如 ./staging/src/k8s.io/component-base/logs/testinit/testinit.go。
 		//
-		// As of https://tip.golang.org/doc/go1.21#language,
-		// the init from k8s.io/component-base is guaranteed to run
-		// before ours because that package name sorts first.
-		// By checking here whether the flags are already added
-		// ktesting works with and without component-base/logs/testinit.
+		// 根据 https://tip.golang.org/doc/go1.21#language，
+		// k8s.io/component-base 的 init 保证会在
+		// 我们的 init 之前运行，因为该包名排序更靠前。
+		// 通过在这里检查 flag 是否已经添加，
+		// ktesting 无论是否使用 component-base/logs/testinit 都能工作。
 		//
-		// We could require that a test binary only uses either ktesting
-		// or testinit, but this approach is more flexible.
+		// 我们可以要求测试二进制文件只使用 ktesting
+		// 或 testinit 之一，但当前做法更灵活。
 		if flag.CommandLine.Lookup(name) != nil {
 			continue
 		}
@@ -60,11 +60,11 @@ func init() {
 		flag.CommandLine.Var(f.Value, name, f.DefValue)
 	}
 
-	// CI jobs which run a large collection of tests cannot
-	// assume that all tests have these command line flags.
-	// They can set the KTESTING_VERBOSITY env variable
-	// to change the default verbosity in those tests which
-	// use ktesting, without breaking other tests which don't.
+	// 运行大量测试的 CI 任务不能假定
+	// 所有测试都有这些命令行 flag。
+	// 它们可以设置 KTESTING_VERBOSITY 环境变量，
+	// 以改变那些使用 ktesting 的测试的默认详细程度，
+	// 同时不影响不使用它的测试。
 	if v, ok := os.LookupEnv("KTESTING_VERBOSITY"); ok {
 		haveVerbosityFromEnv = true
 		if err := klogVFlag.Value.Set(v); err != nil {
@@ -73,29 +73,29 @@ func init() {
 	}
 }
 
-// SetDefaultVerbosity can be called during init to modify the default
-// log verbosity of the program. If the KTESTING_VERBOSITY env variable
-// is set, then the value from that variable is used.
+// 可在 init 期间调用 SetDefaultVerbosity，以修改程序
+// 默认的日志详细程度。如果设置了 KTESTING_VERBOSITY 环境变量，
+// 则使用该变量的值。
 //
-// Note that this immediately reconfigures the klog verbosity, already before
-// flag parsing. If the verbosity is non-zero and SetDefaultVerbosity is called
-// during init, then other init functions might start logging where normally
-// they wouldn't log anything. Should this occur, then the right fix is to
-// remove those log calls because logging during init is discouraged. It leads
-// to unpredictable output (init order is not specified) and/or is useless
-// (logging not initialized during init and thus conditional log output gets
-// omitted).
+// 注意，这会立即重新配置 klog 的详细程度，而且在 flag 解析之前
+// 就已生效。如果详细程度非零，且在 init 期间调用了
+// SetDefaultVerbosity，那么其他 init 函数可能会开始输出日志，
+// 而通常情况下它们不会记录任何内容。如果出现这种情况，
+// 正确的做法是移除那些日志调用，因为不鼓励在 init 期间记录日志。
+// 这会导致输出不可预测（init 顺序未指定），和/或毫无用处
+// （init 期间日志尚未初始化，因此条件日志输出会被
+// 省略）。
 func SetDefaultVerbosity(v int) {
 	if !haveVerbosityFromEnv {
 		_ = klogVFlag.Value.Set(fmt.Sprintf("%d", v))
 	}
 }
 
-// NewTestContext is a drop-in replacement for ktesting.NewTestContext.
+// NewTestContext 是 ktesting.NewTestContext 的直接替代品。
 //
-// The result can be cast to a TContext and has the same functionality
-// (for example, it gets cancelled at the end of the test).
-// It's returned as a context.Context to avoid breaking code which expects that type.
+// 结果可以转换为 TContext，并具有相同的功能
+// （例如，在测试结束时会被取消）。
+// 返回类型设为 context.Context，以免破坏期望该类型的代码。
 func NewTestContext(tb testing.TB) (klog.Logger, context.Context) {
 	tCtx := Init(tb)
 	return tCtx.Logger(), tCtx

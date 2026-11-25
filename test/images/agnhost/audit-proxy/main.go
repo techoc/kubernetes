@@ -31,7 +31,7 @@ import (
 	"k8s.io/apiserver/pkg/audit"
 )
 
-// CmdAuditProxy is used by agnhost Cobra.
+// CmdAuditProxy 由 agnhost Cobra 使用。
 var CmdAuditProxy = &cobra.Command{
 	Use:   "audit-proxy",
 	Short: "Listens on port 8080 for incoming audit events",
@@ -72,7 +72,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close()
 
-	// write events to stdout
+	// 将事件写入 stdout
 	for _, event := range el.Items {
 		err := encoder.Encode(&event, os.Stdout)
 		if err != nil {

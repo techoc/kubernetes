@@ -56,7 +56,7 @@ func closeBody(t *testing.T, resp *http.Response) {
 	}
 }
 
-// setupTestRegistry creates a temporary directory structure for the fake registry.
+// setupTestRegistry 为伪造的 registry 创建临时目录结构。
 func setupTestRegistry(t *testing.T) (string, func() error) {
 	t.Helper()
 	tempDir, err := os.MkdirTemp("", "fake-registry-")
@@ -67,7 +67,7 @@ func setupTestRegistry(t *testing.T) (string, func() error) {
 	manifestsDir := filepath.Join(tempDir, testImageName, "manifests")
 	blobsDir := filepath.Join(tempDir, testImageName, "blobs")
 
-	// write the manifest file using nested path
+	// 使用嵌套路径写入 manifest 文件
 	manifestPath := digestToPath(manifestsDir, testManifestDigest)
 	if err := os.MkdirAll(filepath.Dir(manifestPath), 0755); err != nil {
 		t.Fatalf("Failed to create manifests dir: %v", err)
@@ -76,12 +76,12 @@ func setupTestRegistry(t *testing.T) (string, func() error) {
 		t.Fatalf("Failed to write manifest file: %v", err)
 	}
 
-	// write the tag file (tags are still flat files)
+	// 写入 tag 文件（tag 仍为扁平文件）
 	if err := os.WriteFile(filepath.Join(manifestsDir, testTag), []byte(testManifestDigest), 0644); err != nil {
 		t.Fatalf("Failed to write tag file: %v", err)
 	}
 
-	// write the blob file using nested path
+	// 使用嵌套路径写入 blob 文件
 	blobPath := digestToPath(blobsDir, testBlobDigest)
 	if err := os.MkdirAll(filepath.Dir(blobPath), 0755); err != nil {
 		t.Fatalf("Failed to create blobs dir: %v", err)
@@ -105,7 +105,7 @@ func TestDigestToPath(t *testing.T) {
 		expected string
 	}{
 		{"valid sha256", "/base", "sha256:abc123", "/base/sha256/ab/abc123/data"},
-		{"short hash", "/base", "sha256:a", "/base/sha256:a"}, // fallback
+		{"short hash", "/base", "sha256:a", "/base/sha256:a"}, // 回退行为
 		{"no colon", "/base", "invalid", "/base/invalid"},
 		{"empty hash", "/base", "sha256:", "/base/sha256:"},
 	}

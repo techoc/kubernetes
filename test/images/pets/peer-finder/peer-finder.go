@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// A small utility program to lookup hostnames of endpoints in a service.
+// 一个用于查找服务中端点主机名的小工具程序。
 package main
 
 import (
@@ -52,7 +52,7 @@ func lookup(svcName string) (sets.String, error) {
 		return endpoints, err
 	}
 	for _, srvRecord := range srvRecords {
-		// The SRV records ends in a "." for the root domain
+		// SRV 记录以根域的 "." 结尾
 		ep := fmt.Sprintf("%v", srvRecord.Target[:len(srvRecord.Target)-1])
 		endpoints.Insert(ep)
 	}
@@ -102,7 +102,7 @@ func main() {
 	}
 	var domainName string
 
-	// If domain is not provided, try to get it from resolv.conf
+	// 如果未提供 domain，则尝试从 resolv.conf 获取
 	if *domain == "" {
 		resolvConfBytes, err := os.ReadFile("/etc/resolv.conf")
 		resolvConf := string(resolvConfBytes)
@@ -112,10 +112,10 @@ func main() {
 
 		var re *regexp.Regexp
 		if ns == "" {
-			// Looking for a domain that looks like with *.svc.**
+			// 查找形如 *.svc.** 的域
 			re, err = regexp.Compile(`\A(.*\n)*search\s{1,}(.*\s{1,})*(?P<goal>[a-zA-Z0-9-]{1,63}.svc.([a-zA-Z0-9-]{1,63}\.)*[a-zA-Z0-9]{2,63})`)
 		} else {
-			// Looking for a domain that looks like svc.**
+			// 查找形如 svc.** 的域
 			re, err = regexp.Compile(`\A(.*\n)*search\s{1,}(.*\s{1,})*(?P<goal>svc.([a-zA-Z0-9-]{1,63}\.)*[a-zA-Z0-9]{2,63})`)
 		}
 		if err != nil {
@@ -127,10 +127,10 @@ func main() {
 		for k, v := range result {
 			if groupNames[k] == "goal" {
 				if ns == "" {
-					// Domain is complete if ns is empty
+					// 如果 ns 为空，则域是完整的
 					domainName = v
 				} else {
-					// Need to convert svc.** into ns.svc.**
+					// 需要将 svc.** 转换为 ns.svc.**
 					domainName = ns + "." + v
 				}
 				break
@@ -169,6 +169,6 @@ func main() {
 		peers = newPeers
 		script = *onChange
 	}
-	// TODO: Exit if there's no on-change?
+	// TODO: 如果没有 on-change 是否应该退出？
 	log.Printf("Peer finder exiting")
 }

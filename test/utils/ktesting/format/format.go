@@ -14,12 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package format is an extension of Gomega's format package which
-// improves printing of objects that can be serialized well as YAML,
-// like the structs in the Kubernetes API.
+// Package format 是对 Gomega format 包的扩展，改进了那些能很好地序列化为 YAML
+// 的对象（例如 Kubernetes API 中的结构体）的打印效果。
 //
-// Just importing it is enough to activate this special YAML support
-// in Gomega.
+// 只需导入该包即可在 Gomega 中启用这种特殊的 YAML 支持。
 package format
 
 import (
@@ -35,18 +33,15 @@ func init() {
 	format.RegisterCustomFormatter(handleYAML)
 }
 
-// Object makes Gomega's [format.Object] available without having to import that
-// package.
+// Object 使得无需导入对应包即可使用 Gomega 的 [format.Object]。
 func Object(object interface{}, indentation uint) string {
 	return format.Object(object, indentation)
 }
 
-// handleYAML formats all values as YAML where the result
-// is likely to look better as YAML:
-//   - pointer to struct or struct where all fields
-//     have `json` tags
-//   - slices containing such a value
-//   - maps where the key or value are such a value
+// handleYAML 将结果用 YAML 表示可能更美观的所有值格式化为 YAML：
+//   - 指向结构体的指针，或所有字段都带有 `json` 标签的结构体
+//   - 包含此类值的切片
+//   - 键或值为此类值的 map
 func handleYAML(object interface{}) (string, bool) {
 	value := reflect.ValueOf(object)
 	if !useYAML(value.Type()) {
@@ -59,11 +54,11 @@ func handleYAML(object interface{}) (string, bool) {
 	return "\n" + strings.TrimSpace(string(y)), true
 }
 
-// unstructured is a copy of [k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured].
-// We cannot use that type directly (dependency on apimachinery!) but we can detect it
-// because it's convertible to this copy here.
+// unstructured 是 [k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured] 的副本。
+// 我们不能直接使用该类型（会依赖 apimachinery！），但可以检测它，因为它可以
+// 转换为此处的副本。
 //
-// Tests in test/utils/format will break should Unstructured ever get modified.
+// 如果 Unstructured 日后被修改，test/utils/format 中的测试将会失败。
 type unstructured struct {
 	Object map[string]interface{}
 }
@@ -72,16 +67,13 @@ var unstructuredObjectType = reflect.TypeFor[unstructured]()
 
 func useYAML(t reflect.Type) bool {
 	if t.ConvertibleTo(unstructuredObjectType) {
-		// unstructured.Unstructured looks nicer as YAML.
+		// unstructured.Unstructured 用 YAML 表示更美观。
 		//
-		// unstructured.Unstructured is a map, but because
-		// it's wrapped in a struct it does not get recognized
-		// as one by the code below and thus needs a direct check.
+		// unstructured.Unstructured 本质上是一个 map，但由于它被包裹在
+		// 结构体中，下面的代码无法将其识别为 map，因此需要直接检查。
 		//
-		// We also do this for other types which look like
-		// unstructured.Unstructured, partly because we cannot
-		// check for it explicitly, partly because it might be
-		// the right thing to do.
+		// 我们对其他看起来像 unstructured.Unstructured 的类型也这样做，
+		// 一方面因为无法显式检查它，另一方面因为这么做可能本来就是正确的。
 		return true
 	}
 
@@ -91,7 +83,7 @@ func useYAML(t reflect.Type) bool {
 	case reflect.Map:
 		return useYAML(t.Key()) || useYAML(t.Elem())
 	case reflect.Struct:
-		// All fields must have a `json` tag.
+		// 所有字段都必须带有 `json` 标签。
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
 			if _, ok := field.Tag.Lookup("json"); !ok {

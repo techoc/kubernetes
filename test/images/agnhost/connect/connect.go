@@ -28,7 +28,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdConnect is used by agnhost Cobra.
+// CmdConnect 由 agnhost Cobra 使用。
 var CmdConnect = &cobra.Command{
 	Use:   "connect [host:port]",
 	Short: "Attempts a TCP, UDP or SCTP connection and returns useful errors",
@@ -73,8 +73,7 @@ func main(cmd *cobra.Command, args []string) {
 }
 
 func connectTCP(dest string, timeout time.Duration) {
-	// Redundantly parse and resolve the destination so we can return the correct
-	// errors if there's a problem.
+	// 冗余地解析目的地，以便在出现问题时能够返回正确的错误。
 	if _, _, err := net.SplitHostPort(dest); err != nil {
 		fmt.Fprintf(os.Stderr, "UNKNOWN: %v\n", err)
 		os.Exit(1)
@@ -184,7 +183,7 @@ func connectUDP(dest string, timeout time.Duration, data string) {
 		parseUDPErrorAndExit(err)
 	}
 
-	// ensure the response from UDP server
+	// 确保收到 UDP 服务器的响应
 	if readBytes == 0 {
 		fmt.Fprintf(os.Stderr, "OTHER: No data received from the server. Cannot guarantee the server received the request.\n")
 		os.Exit(1)

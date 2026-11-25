@@ -31,7 +31,7 @@ import (
 	yaml "go.yaml.in/yaml/v2"
 )
 
-// RegistryList holds public and private image registries
+// RegistryList 保存公共和私有镜像仓库
 type RegistryList struct {
 	PromoterE2eRegistry      string `yaml:"promoterE2eRegistry"`
 	BuildImageRegistry       string `yaml:"buildImageRegistry"`
@@ -44,24 +44,24 @@ type RegistryList struct {
 	CloudProviderGcpRegistry string `yaml:"cloudProviderGcpRegistry"`
 }
 
-// Config holds an images registry, name, and version
+// Config 保存镜像的仓库、名称和版本
 type Config struct {
 	registry string
 	name     string
 	version  string
 }
 
-// SetRegistry sets an image registry in a Config struct
+// SetRegistry 设置 Config 结构体中的镜像仓库
 func (i *Config) SetRegistry(registry string) {
 	i.registry = registry
 }
 
-// SetName sets an image name in a Config struct
+// SetName 设置 Config 结构体中的镜像名称
 func (i *Config) SetName(name string) {
 	i.name = name
 }
 
-// SetVersion sets an image version in a Config struct
+// SetVersion 设置 Config 结构体中的镜像版本
 func (i *Config) SetVersion(version string) {
 	i.version = version
 }
@@ -105,7 +105,7 @@ func readRepoList(repoList string) (RegistryList, map[ImageID]Config, map[ImageI
 
 }
 
-// Essentially curl url | writer
+// 本质上就是 curl url | writer
 func readFromURL(url string, writer io.Writer) error {
 	httpTransport := new(http.Transport)
 	httpTransport.Proxy = http.ProxyFromEnvironment
@@ -129,7 +129,7 @@ func readFromURL(url string, writer io.Writer) error {
 var (
 	initRegistry = RegistryList{
 		// TODO: https://github.com/kubernetes/kubernetes/issues/130271
-		// Eliminate PrivateRegistry.
+		// 移除 PrivateRegistry。
 		PromoterE2eRegistry:      "registry.k8s.io/e2e-test-images",
 		BuildImageRegistry:       "registry.k8s.io/build-image",
 		InvalidRegistry:          "invalid.registry.k8s.io/invalid",
@@ -147,64 +147,64 @@ var (
 type ImageID int
 
 const (
-	// None is to be used for unset/default images
+	// None 用于未设置/默认的镜像
 	None ImageID = iota
-	// AgnhostPrev image
+	// AgnhostPrev 镜像
 	AgnhostPrev
-	// Agnhost image
+	// Agnhost 镜像
 	Agnhost
-	// AgnhostPrivate image
+	// AgnhostPrivate 镜像
 	AgnhostPrivate
-	// APIServer image
+	// APIServer 镜像
 	APIServer
-	// AppArmorLoader image
+	// AppArmorLoader 镜像
 	AppArmorLoader
-	// BusyBox image
+	// BusyBox 镜像
 	BusyBox
-	// DistrolessIptables Image
+	// DistrolessIptables 镜像
 	DistrolessIptables
-	// Etcd image
+	// Etcd 镜像
 	Etcd
-	// InvalidRegistryImage image
+	// InvalidRegistryImage 镜像
 	InvalidRegistryImage
-	// IpcUtils image
+	// IpcUtils 镜像
 	IpcUtils
-	// GlibcDnsTesting image (formerly JessieDnsutils)
+	// GlibcDnsTesting 镜像（旧称 JessieDnsutils）
 	GlibcDnsTesting
-	// Kitten image
+	// Kitten 镜像
 	Kitten
-	// Nautilus image
+	// Nautilus 镜像
 	Nautilus
-	// NFSProvisioner image
+	// NFSProvisioner 镜像
 	NFSProvisioner
-	// Nginx image
+	// Nginx 镜像
 	Nginx
-	// NginxNew image
+	// NginxNew 镜像
 	NginxNew
-	// NodePerfNpbEp image
+	// NodePerfNpbEp 镜像
 	NodePerfNpbEp
-	// NodePerfNpbIs image
+	// NodePerfNpbIs 镜像
 	NodePerfNpbIs
-	// NodePerfPytorchWideDeep image
+	// NodePerfPytorchWideDeep 镜像
 	NodePerfPytorchWideDeep
-	// Nonewprivs image
+	// Nonewprivs 镜像
 	Nonewprivs
-	// NonRoot runs with a default user of 1234
+	// NonRoot 以默认用户 1234 运行
 	NonRoot
-	// Pause - when these values are updated, also update cmd/kubelet/app/options/container_runtime.go
-	// Pause image
+	// Pause - 更新这些值时，也要更新 cmd/kubelet/app/options/container_runtime.go
+	// Pause 镜像
 	Pause
-	// Perl image
+	// Perl 镜像
 	Perl
-	// RegressionIssue74839 image
+	// RegressionIssue74839 镜像
 	RegressionIssue74839
-	// ResourceConsumer image
+	// ResourceConsumer 镜像
 	ResourceConsumer
-	// VolumeNFSServer image
+	// VolumeNFSServer 镜像
 	VolumeNFSServer
-	// VolumeISCSIServer image
+	// VolumeISCSIServer 镜像
 	VolumeISCSIServer
-	// SampleDevicePlugin image
+	// SampleDevicePlugin 镜像
 	SampleDevicePlugin
 )
 
@@ -231,7 +231,7 @@ func initImageConfigs(list RegistryList) (map[ImageID]Config, map[ImageID]Config
 	configs[NodePerfPytorchWideDeep] = Config{list.PromoterE2eRegistry, "node-perf/pytorch-wide-deep", "1.0.0"}
 	configs[Nonewprivs] = Config{list.PromoterE2eRegistry, "nonewprivs", "1.4"}
 	configs[NonRoot] = Config{list.PromoterE2eRegistry, "nonroot", "1.5"}
-	// Pause - when these values are updated, also update cmd/kubelet/app/options/container_runtime.go
+	// Pause - 更新这些值时，也要更新 cmd/kubelet/app/options/container_runtime.go
 	configs[Pause] = Config{list.GcRegistry, "pause", "3.10.2"}
 	configs[Perl] = Config{list.PromoterE2eRegistry, "perl", "5.26"}
 	configs[RegressionIssue74839] = Config{list.PromoterE2eRegistry, "regression-issue-74839", "1.5"}
@@ -240,12 +240,12 @@ func initImageConfigs(list RegistryList) (map[ImageID]Config, map[ImageID]Config
 	configs[VolumeISCSIServer] = Config{list.PromoterE2eRegistry, "volume/iscsi", "2.7"}
 	configs[SampleDevicePlugin] = Config{list.PromoterE2eRegistry, "sample-device-plugin", "1.7"}
 
-	// This adds more config entries. Those have no pre-defined ImageID number,
-	// but will be used via ReplaceRegistryInImageURL when deploying
-	// CSI drivers (test/e2e/storage/util/create.go).
+	// 这会增加更多配置项。这些配置项没有预定义的 ImageID 编号，
+	// 但在部署 CSI 驱动时会通过 ReplaceRegistryInImageURL 使用
+	// （test/e2e/storage/util/create.go）。
 	appendCSIImageConfigs(configs)
 
-	// if requested, map all the SHAs into a known format based on the input
+	// 如果有要求，则根据输入将所有 SHA 映射为已知格式
 	originalImageConfigs := configs
 	if repo := os.Getenv("KUBE_TEST_REPO"); len(repo) > 0 {
 		configs = GetMappedImageConfigs(originalImageConfigs, repo)
@@ -254,22 +254,22 @@ func initImageConfigs(list RegistryList) (map[ImageID]Config, map[ImageID]Config
 	return configs, originalImageConfigs
 }
 
-// GetMappedImageConfigs returns the images if they were mapped to the provided
-// image repository.
+// GetMappedImageConfigs 如果镜像被映射到所提供的
+// 镜像仓库，则返回这些镜像的配置。
 func GetMappedImageConfigs(originalImageConfigs map[ImageID]Config, repo string) map[ImageID]Config {
 	configs := make(map[ImageID]Config)
 	for i, config := range originalImageConfigs {
 		switch i {
 		case InvalidRegistryImage, AgnhostPrivate:
-			// These images are special and can't be run out of the cloud - some because they
-			// are authenticated, and others because they are not real images. Tests that depend
-			// on these images can't be run without access to the public internet.
+			// 这些镜像比较特殊，无法从云端运行——有些需要认证，
+			// 另一些则不是真实的镜像。依赖这些镜像的测试
+			// 在没有公网访问权限的情况下无法运行。
 			configs[i] = config
 			continue
 		}
 
-		// Build a new tag with the ImageID, a hash of the image spec (to be unique) and
-		// shorten and make the pull spec "safe" so it will fit in the tag
+		// 用 ImageID、镜像 spec 的哈希（保证唯一性）构建一个新标签，
+		// 并缩短 pull spec 使其“安全”，以便能放进标签中
 		configs[i] = getRepositoryMappedConfig(i, config, repo)
 	}
 	return configs
@@ -280,11 +280,11 @@ var (
 	reDashes   = regexp.MustCompile(`-+`)
 )
 
-// getRepositoryMappedConfig maps an existing image to the provided repo, generating a
-// tag that is unique with the input config. The tag will contain the imageID, a hash of
-// the image spec (to be unique) and shorten and make the pull spec "safe" so it will
-// fit in the tag to allow a human to recognize the value. If imageID is None, then no
-// imageID will be added to the tag.
+// getRepositoryMappedConfig 将已有镜像映射到所提供的仓库，生成一个
+// 对输入配置而言唯一的标签。标签将包含 imageID、镜像 spec
+// 的哈希（保证唯一性），并缩短 pull spec 使其“安全”，
+// 以便能放进标签中让人类识别出其值。如果 imageID 为 None，
+// 则标签中不会添加 imageID。
 func getRepositoryMappedConfig(imageID ImageID, config Config, repo string) Config {
 	parts := strings.SplitN(repo, "/", 2)
 	registry, name := parts[0], parts[1]
@@ -315,44 +315,44 @@ func getRepositoryMappedConfig(imageID ImageID, config Config, repo string) Conf
 	}
 }
 
-// GetOriginalImageConfigs returns the configuration before any mapping rules.
+// GetOriginalImageConfigs 返回应用任何映射规则之前的配置。
 func GetOriginalImageConfigs() map[ImageID]Config {
 	return originalImageConfigs
 }
 
-// GetImageConfigs returns the map of imageConfigs
+// GetImageConfigs 返回 imageConfigs 映射
 func GetImageConfigs() map[ImageID]Config {
 	return imageConfigs
 }
 
-// GetConfig returns the Config object for an image
+// GetConfig 返回某个镜像的 Config 对象
 func GetConfig(image ImageID) Config {
 	return imageConfigs[image]
 }
 
-// GetE2EImage returns the fully qualified URI to an image (including version)
+// GetE2EImage 返回镜像的完整 URI（包括版本）
 func GetE2EImage(image ImageID) string {
 	return fmt.Sprintf("%s/%s:%s", imageConfigs[image].registry, imageConfigs[image].name, imageConfigs[image].version)
 }
 
-// GetE2EImage returns the fully qualified URI to an image (including version)
+// GetE2EImage 返回镜像的完整 URI（包括版本）
 func (i *Config) GetE2EImage() string {
 	return fmt.Sprintf("%s/%s:%s", i.registry, i.name, i.version)
 }
 
-// GetPauseImageName returns the pause image name with proper version
+// GetPauseImageName 返回带有正确版本的 pause 镜像名称
 func GetPauseImageName() string {
 	return GetE2EImage(Pause)
 }
 
-// ReplaceRegistryInImageURL replaces the registry in the image URL with a custom one based
-// on the configured registries.
+// ReplaceRegistryInImageURL 根据配置的仓库，
+// 将镜像 URL 中的仓库替换为自定义仓库。
 func ReplaceRegistryInImageURL(imageURL string) (string, error) {
 	return replaceRegistryInImageURLWithList(imageURL, registry)
 }
 
-// replaceRegistryInImageURLWithList replaces the registry in the image URL with a custom one based
-// on the given registry list.
+// replaceRegistryInImageURLWithList 根据给定的仓库列表，
+// 将镜像 URL 中的仓库替换为自定义仓库。
 func replaceRegistryInImageURLWithList(imageURL string, reg RegistryList) (string, error) {
 	parts := strings.Split(imageURL, "/")
 	countParts := len(parts)
@@ -397,8 +397,8 @@ func replaceRegistryInImageURLWithList(imageURL string, reg RegistryList) (strin
 		registryAndUser = reg.CloudProviderGcpRegistry
 	default:
 		if countParts == 1 {
-			// We assume we found an image from docker hub library
-			// e.g. openjdk -> docker.io/library/openjdk
+			// 假设找到的是来自 docker hub library 的镜像
+			// 例如 openjdk -> docker.io/library/openjdk
 			registryAndUser = reg.DockerLibraryRegistry
 			break
 		}

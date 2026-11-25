@@ -31,24 +31,23 @@ import (
 	nettesting "k8s.io/kubernetes/third_party/forked/golang/net/testing"
 )
 
-// dnsHijackLock is a mutex to ensure that only one test can hijack DNS at a time.
-// This is necessary because net.DefaultResolver is a global variable.
+// dnsHijackLock 是一个互斥锁，用于确保同一时间只有一个测试能劫持 DNS。
+// 这是必要的，因为 net.DefaultResolver 是一个全局变量。
 var dnsHijackLock sync.Mutex
 
-// Server is a fake DNS server that can be used to override DNS resolution in tests.
-// This is particularly useful for testing components that rely on DNS without needing
-// to set up an actual DNS server. The server can be configured with a map of domain
-// names to IP addresses, and it will respond to DNS queries accordingly.
-// To use the fake DNS server, create an instance using NewServer, then call
-// Hijack to redirect DNS queries to the fake server.
-// This helper does not support running tests in parallel.
+// Server 是一个 fake DNS 服务器，可用于在测试中覆盖 DNS 解析。
+// 它对于测试依赖 DNS 的组件特别有用，而无需搭建真正的 DNS 服务器。
+// 可以用域名到 IP 地址的映射来配置该服务器，它会据此响应 DNS 查询。
+// 要使用这个 fake DNS 服务器，先用 NewServer 创建实例，
+// 然后调用 Hijack 将 DNS 查询重定向到该 fake 服务器。
+// 该辅助工具不支持并行运行测试。
 type Server struct {
 	dnsServer nettesting.FakeDNSServer
 }
 
-// NewServer creates a new fake DNS server. The hosts map should contain
-// domain names as keys and their corresponding IP addresses as string values.
-// It returns an error if any of the IP addresses are invalid.
+// NewServer 创建一个新的 fake DNS 服务器。hosts map 应以域名为键，
+// 以对应的 IP 地址字符串为值。
+// 如果任何一个 IP 地址无效，则返回错误。
 func NewServer(hosts map[string]string) (*Server, error) {
 	parsedHosts := make(map[string]net.IP, len(hosts))
 	for domain, ipStr := range hosts {
@@ -56,7 +55,7 @@ func NewServer(hosts map[string]string) (*Server, error) {
 		if ip == nil {
 			return nil, fmt.Errorf("invalid IP address for domain %s: %s", domain, ipStr)
 		}
-		// Ensure domain is clean without trailing dot for map key
+		// 确保域名是干净的，作为 map 键时没有结尾的点号
 		parsedHosts[strings.TrimSuffix(domain, ".")] = ip
 	}
 	dnsServer := nettesting.FakeDNSServer{}
@@ -84,7 +83,7 @@ func NewServer(hosts map[string]string) (*Server, error) {
 					Header: dnsmessage.ResourceHeader{Name: question.Name, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET, TTL: 300},
 					Body:   &dnsmessage.AResource{A: [4]byte(ipv4)},
 				}
-			} else { // Assume IPv6
+			} else { // 假定为 IPv6
 				resource = dnsmessage.Resource{
 					Header: dnsmessage.ResourceHeader{Name: question.Name, Type: dnsmessage.TypeAAAA, Class: dnsmessage.ClassINET, TTL: 300},
 					Body:   &dnsmessage.AAAAResource{AAAA: [16]byte(ip)},
@@ -101,12 +100,11 @@ func NewServer(hosts map[string]string) (*Server, error) {
 	}, nil
 }
 
-// Hijack takes control of the net.DefaultResolver to redirect DNS queries
-// to the fake server. It uses t.Cleanup to automatically restore the original
-// resolver after the test.
-// This helper does not support running tests in parallel.
+// Hijack 接管 net.DefaultResolver，将 DNS 查询重定向到 fake 服务器。
+// 它使用 t.Cleanup 在测试结束后自动恢复原来的 resolver。
+// 该辅助工具不支持并行运行测试。
 //
-// Example:
+// 示例：
 //
 //	dnsServer, _ := fakedns.NewServer(hosts)
 //	dnsServer.Hijack(t)

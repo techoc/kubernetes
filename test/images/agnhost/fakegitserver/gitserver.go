@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdFakeGitServer is used by agnhost Cobra.
+// CmdFakeGitServer 由 agnhost 的 Cobra 命令使用。
 var CmdFakeGitServer = &cobra.Command{
 	Use:   "fake-gitserver",
 	Short: "Fakes a git server",
@@ -38,8 +38,8 @@ func hello(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// When doing `git clone localhost:8000`, you will clone an empty git repo named "8000" on local.
-// You can also use `git clone localhost:8000 my-repo-name` to rename that repo.
+// 执行 `git clone localhost:8000` 时，会在本地克隆一个名为 "8000" 的空 git 仓库。
+// 也可以使用 `git clone localhost:8000 my-repo-name` 为该仓库重命名。
 func main(cmd *cobra.Command, args []string) {
 	http.HandleFunc("/", hello)
 	http.ListenAndServe(":8000", nil)

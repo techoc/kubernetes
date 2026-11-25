@@ -27,9 +27,9 @@ import (
 	gtypes "github.com/onsi/gomega/types"
 )
 
-// FailureError is an error where the error string is meant to be passed to
-// [TContext.Fatal] directly, i.e. adding some prefix like "unexpected error" is not
-// necessary. It is also not necessary to dump the error struct.
+// FailureError 是一种错误，其错误字符串应当直接传给
+// [TContext.Fatal]，也就是说不需要添加诸如 "unexpected error" 的前缀，
+// 也不需要打印整个错误结构体。
 type FailureError struct {
 	Msg            string
 	FullStackTrace string
@@ -47,8 +47,8 @@ func (f FailureError) Is(target error) bool {
 	return target == ErrFailure
 }
 
-// ErrFailure is an empty error that can be wrapped to indicate that an error
-// is a FailureError. It can also be used to test for a FailureError:.
+// ErrFailure 是一个空错误，可以被包装以表明某个错误是 FailureError。
+// 它也可用于判断一个错误是否为 FailureError：
 //
 //	return fmt.Errorf("some problem%w", ErrFailure)
 //	...
@@ -66,9 +66,8 @@ func gomegaAssertion(tCtx TContext, fatal bool, actual interface{}, extra ...int
 	return gomega.NewWithT(testingT).Expect(actual, extra...)
 }
 
-// assertTestingT implements Fatalf (the only function used by Gomega for
-// reporting failures) using TContext.Errorf, i.e. testing continues after a
-// failed assertion. The Helper method gets passed through.
+// assertTestingT 使用 TContext.Errorf 实现 Fatalf（Gomega 用来报告失败的唯一函数），
+// 也就是说断言失败后测试会继续执行。Helper 方法会被直接透传。
 type assertTestingT struct {
 	TContext
 }
@@ -80,27 +79,23 @@ func (a assertTestingT) Fatalf(format string, args ...any) {
 	a.Errorf(format, args...)
 }
 
-// ExpectNoError asserts that no error has occurred and fails the test if it does.
+// ExpectNoError 断言没有发生错误，如果发生错误则测试失败。
 //
-// As in [gomega], the optional explanation can be:
-//   - a [fmt.Sprintf] format string plus its arguments
-//   - a function returning a string, which will be called
-//     lazily to construct the explanation if needed
+// 与 [gomega] 中一样，可选的说明（explanation）可以是：
+//   - 一个 [fmt.Sprintf] 格式字符串及其参数
+//   - 一个返回字符串的函数，只有在需要时才会被延迟调用来构造说明
 //
-// If an explanation is provided, then it replaces the default "Unexpected
-// error" in the failure message. It's combined with additional details by
-// adding a colon at the end, as when wrapping an error. Therefore it should
-// not end with a punctuation mark or line break.
+// 如果提供了说明，它将替换失败消息中默认的 "Unexpected error"。
+// 与包装错误时一样，它会在末尾加上冒号，再拼接其他细节。
+// 因此，说明不应以标点或换行结尾。
 //
-// Using ExpectNoError instead of the corresponding Gomega or testify
-// assertions has the advantage that the failure message is short (good for
-// aggregation in https://go.k8s.io/triage) with more details captured in the
-// test log output (good when investigating one particular failure).
+// 使用 ExpectNoError 而非对应的 Gomega 或 testify 断言的好处是：
+// 失败消息很短（便于在 https://go.k8s.io/triage 中聚合），
+// 而更多细节会记录在测试日志输出中（便于排查某一次具体的失败）。
 //
-// Helper packages should return errors that are derived from [FailureError].
-// The test code then is forced to check for that error by the normal
-// linter and should provide additional context for the failure, just
-// as it would when printing or wrapping an error:
+// 辅助包应当返回派生自 [FailureError] 的错误。
+// 这样常规 linter 会强制测试代码检查该错误，
+// 并且测试代码应为失败提供额外上下文，就像打印或包装错误时所做的那样：
 //
 //	tCtx.ExpectNoError(somehelper.CreateSomething(tCtx, ...), "creating the first foobar")
 //	tCtx.ExpectNoError(somehelper.CreateSomething(tCtx, ...), "creating the second foobar")
@@ -109,8 +104,8 @@ func (tCtx TContext) ExpectNoError(err error, explain ...interface{}) {
 	tCtx.noError(tCtx.Fatalf, err, explain...)
 }
 
-// AssertNoError is a variant of ExpectNoError which reports an unexpected
-// error without aborting the test. It returns true if there was no error.
+// AssertNoError 是 ExpectNoError 的变体，它报告意外错误但不会中止测试。
+// 如果没有发生错误，则返回 true。
 func (tCtx TContext) AssertNoError(err error, explain ...interface{}) bool {
 	tCtx.Helper()
 	return tCtx.noError(tCtx.Errorf, err, explain...)
@@ -164,22 +159,20 @@ func buildDescription(explain ...interface{}) string {
 	return fmt.Sprintf(explain[0].(string), explain[1:]...)
 }
 
-// Eventually wraps [gomega.Eventually]. Supported argument types are:
-//   - A function with a `tCtx ktesting.TContext` or `ctx context.Context`
-//     parameter plus additional parameters and arbitrary return values.
-//   - A value which changes over time, usually a channel.
+// Eventually 包装了 [gomega.Eventually]。支持的参数类型有：
+//   - 一个函数，其第一个参数为 `tCtx ktesting.TContext` 或 `ctx context.Context`，
+//     此外可以带更多参数和任意返回值。
+//   - 一个随时间变化的值，通常是 channel。
 //
-// For functions, the context is provided by Eventually. Additional parameters
-// must be passed via WithParameters. The first return value is passed to the Gomega
-// matcher, all others (in particular an additional error) must be null.
-// As a special case, a function with `tCtx ktesting.TContext` and no return
-// values can be combined with gomega.Succeed as matcher.
+// 对于函数，上下文由 Eventually 提供。其他参数必须通过 WithParameters 传入。
+// 第一个返回值会传给 Gomega matcher，其余所有返回值（特别是额外的 error）
+// 都必须为 null。作为一种特殊情况，带 `tCtx ktesting.TContext` 参数且没有
+// 返回值的函数可以与 gomega.Succeed 这个 matcher 组合使用。
 //
-// In contrast to direct usage of [gomega.Eventually], making additional
-// assertions inside the callback function is okay in all cases as long as they
-// use the TContext that is passed in. An assertion failure is considered
-// temporary, so Eventually will continue to poll. This can be used to check a
-// value with multiple assertions instead of writing a custom matcher:
+// 与直接使用 [gomega.Eventually] 不同，在回调函数中做额外的断言总是可行的，
+// 只要这些断言使用传入的 TContext 即可。断言失败会被视为临时失败，
+// 因此 Eventually 会继续轮询。这可以用来对一个值做多重断言，
+// 而不必编写自定义 matcher：
 //
 //	cb := func(tCtx ktesting.TContext) {
 //	    value, err := doSomething(...)
@@ -189,30 +182,26 @@ func buildDescription(explain ...interface{}) string {
 //	}
 //	tCtx.Eventually(cb).Should(gomega.Succeed())
 //
-// The test stops in case of a failure. To continue, use AssertEventually.
+// 发生失败时测试会停止。如果想继续执行，请使用 AssertEventually。
 //
-// The default Gomega poll interval and timeout are used. Setting a specific
-// timeout may be useful:
+// 这里使用 Gomega 默认的轮询间隔和超时时间。设置特定的超时时间可能很有用：
 //
 //	tCtx.Eventually(cb).Timeout(5 * time.Second).Should(gomega.Succeed(), "foobar should succeed")
 //
-// Canceling the context in the callback only affects code in the callback. The
-// context passed to Eventually is not getting canceled. To abort polling
-// immediately because the expected condition is known to not be reached
-// anymore, use [gomega.StopTrying]:
+// 在回调中取消 context 只会影响回调内部的代码。传给 Eventually 的 context
+// 不会被取消。如果已经知道预期条件无法再达成，想立即终止轮询，
+// 请使用 [gomega.StopTrying]：
 //
 //	cb := func(func(tCtx ktesting.TContext) int {
 //	    value, err := doSomething(...)
 //	    if errors.Is(err, SomeFinalErr) {
-//	        // This message completely replaces the normal
-//	        // failure message and thus should include all
-//	        // relevant information.
+//	        // 这条消息会完全替换正常的失败消息，
+//	        // 因此应当包含所有相关信息。
 //	        //
-//	        // github.com/onsi/gomega/format is a good way
-//	        // to format arbitrary data. It uses indention
-//	        // and falls back to YAML for Kubernetes API
-//	        // structs for readability.
-//	        gomega.StopTrying("permanent failure, last value:\n%s", format.Object(value, 1 /* indent one level */)).
+//	        // github.com/onsi/gomega/format 是格式化任意数据的好方法。
+//	        // 它使用缩进，对于 Kubernetes API 结构体还会回退到 YAML
+//	        // 以保证可读性。
+//	        gomega.StopTrying("permanent failure, last value:\n%s", format.Object(value, 1 /* 缩进一级 */)).
 //	            Wrap(err).Now()
 //	    }
 //	    tCtx.ExpectNoError(err, "something failed")
@@ -220,8 +209,8 @@ func buildDescription(explain ...interface{}) string {
 //	}
 //	tCtx.Eventually(cb).Should(gomega.Equal(42), "should be the answer to everything")
 //
-// To poll again after some specific timeout, use [gomega.TryAgainAfter]. This is
-// particularly useful in [Consistently] to ignore some intermittent error.
+// 若要在特定超时后再次轮询，请使用 [gomega.TryAgainAfter]。
+// 这在 [Consistently] 中忽略间歇性错误时尤其有用。
 //
 //	cb := func(func(tCtx ktesting.TContext) int {
 //	    value, err := doSomething(...)
@@ -238,34 +227,32 @@ func (tCtx TContext) Eventually(arg any) gomega.AsyncAssertion {
 	return tCtx.newAsyncAssertion(gomega.NewWithT(tCtx).Eventually, arg)
 }
 
-// AssertEventually is a variant of Eventually which merely records a failure
-// without stopping the test.
+// AssertEventually 是 Eventually 的变体，它只记录失败，不停止测试。
 func (tCtx TContext) AssertEventually(arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	return tCtx.newAsyncAssertion(gomega.NewWithT(assertTestingT{tCtx}).Eventually, arg)
 }
 
-// Consistently wraps [gomega.Consistently] the same way as [Eventually] wraps
-// [gomega.Eventually].
+// Consistently 包装 [gomega.Consistently] 的方式与 [Eventually] 包装
+// [gomega.Eventually] 的方式相同。
 func (tCtx TContext) Consistently(arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	return tCtx.newAsyncAssertion(gomega.NewWithT(tCtx).Consistently, arg)
 }
 
-// AssertConsistently is a variant of Consistently which merely records a failure
-// without stopping the test.
+// AssertConsistently 是 Consistently 的变体，它只记录失败，不停止测试。
 func (tCtx TContext) AssertConsistently(arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	return tCtx.newAsyncAssertion(gomega.NewWithT(assertTestingT{tCtx}).Consistently, arg)
 }
 
-// newAsyncAssertion must be kept identical to the corresponding newAsyncAssertion in
-// the client-go ktesting, minus the support for TContext from that package.
+// newAsyncAssertion 必须与 client-go ktesting 中对应的 newAsyncAssertion 保持一致，
+// 但不包括那个包中对 TContext 的支持。
 func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx any, args ...any) gomega.AsyncAssertion, arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	// switch arg := arg.(type) {
 	// case func(tCtx TContext):
-	// 	// Tricky to handle via reflect, so let's cover this directly...
+	// 	// 用 reflect 处理起来比较麻烦，所以直接在这里覆盖这种情况……
 	// 	return eventuallyOrConsistently(tCtx, func(g gomega.Gomega, ctx context.Context) (err error) {
 	// 		tCtx := WithContext(tCtx, ctx)
 	// 		tCtx, finalize := WithError(tCtx, &err)
@@ -275,16 +262,16 @@ func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx
 	// default:
 	v := reflect.ValueOf(arg)
 	if v.Kind() != reflect.Func {
-		// Gomega must deal with it.
+		// 交给 Gomega 处理。
 		return eventuallyOrConsistently(tCtx, arg)
 	}
 	t := v.Type()
 	if t.NumIn() == 0 || t.In(0) != tContextType {
-		// Not a function we can wrap.
+		// 不是我们可以包装的函数。
 		return eventuallyOrConsistently(tCtx, arg)
 	}
-	// Build a wrapper function with context instead of TContext as first parameter.
-	// The wrapper then builds that TContext when called and invokes the actual function.
+	// 构建一个包装函数，用 context 代替 TContext 作为第一个参数。
+	// 包装函数被调用时会构造出 TContext，然后调用真正的函数。
 	in := make([]reflect.Type, t.NumIn())
 	in[0] = contextType
 	for i := 1; i < t.NumIn(); i++ {
@@ -294,9 +281,8 @@ func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx
 	for i := range t.NumOut() {
 		out[i] = t.Out(i)
 	}
-	// The last result must always be an error because we need the ability to return assertion
-	// failures, so we may have to add an error result value if the function doesn't
-	// already have it.
+	// 最后一个返回值必须是 error，因为我们需要能够返回断言失败，
+	// 所以如果函数本身没有 error 返回值，就必须添加一个。
 	addErrResult := t.NumOut() == 0 || t.Out(t.NumOut()-1) != errorType
 	if addErrResult {
 		out = append(out, errorType)
@@ -309,22 +295,20 @@ func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx
 			WithError(&err)
 		args[0] = reflect.ValueOf(tCtx)
 		defer func() {
-			// This runs *after* finalize.
-			// If we are returning normally, then we must inject back the err
-			// value that was set by finalize.
+			// 这段逻辑在 finalize 之后执行。
+			// 如果是正常返回，就必须把 finalize 设置的 err 值回填。
 			if r := recover(); r != nil {
-				// Nope, no results needed.
+				// 不，不需要结果。
 				panic(r)
 			}
 			errValue := reflect.ValueOf(err)
 			if err == nil {
-				// reflect doesn't like this ("returned zero Value").
-				// We need a value of the right type.
+				// reflect 不接受这种情况（"returned zero Value"）。
+				// 我们需要一个类型正确的值。
 				errValue = reflect.New(errorType).Elem()
 			}
-			// If the call panicked and the panic was recoved
-			// by finalize(), then results is still nil.
-			// We need to fill in null values.
+			// 如果调用发生了 panic，且该 panic 被 finalize() 恢复，
+			// 那么 results 仍然为 nil。我们需要填入空值。
 			if len(results) == 0 && t.NumOut() > 0 {
 				for t := range t.Outs() {
 					results = append(results, reflect.New(t).Elem())
@@ -338,7 +322,7 @@ func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx
 				results[len(results)-1] = errValue
 			}
 		}()
-		defer finalize() // Must be called directly, otherwise it cannot recover a panic.
+		defer finalize() // 必须直接调用，否则它无法恢复 panic。
 		return v.Call(args)
 	})
 	return eventuallyOrConsistently(tCtx, wrapper.Interface())

@@ -24,7 +24,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Get a clientset with in-cluster config.
+// 使用集群内配置获取 clientset。
 func getClient() *kubernetes.Clientset {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -44,7 +44,7 @@ func configTLS(config Config, clientset *kubernetes.Clientset) *tls.Config {
 	}
 	return &tls.Config{
 		Certificates: []tls.Certificate{sCert},
-		// TODO: uses mutual tls after we agree on what cert the apiserver should use.
+		// TODO: 待我们就 apiserver 应使用何种证书达成一致后，改用双向 TLS。
 		// ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
 }

@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	// The directories to load profiles from.
+	// 从中加载 profile 的目录。
 	dirs []string
 	poll = flag.Duration("poll", -1, "Poll the directories for new profiles with this interval. Values < 0 disable polling, and exit after loading the profiles.")
 )
@@ -58,12 +58,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check that the required parser binary is found.
+	// 检查是否能找到所需的 parser 二进制文件。
 	if _, err := exec.LookPath(parser); err != nil {
 		klog.Exitf("Required binary %s not found in PATH", parser)
 	}
 
-	// Check that loaded profiles can be read.
+	// 检查是否能读取已加载的 profile。
 	if _, err := getLoadedProfiles(); err != nil {
 		klog.Exitf("Unable to access apparmor profiles: %v", err)
 	}
@@ -75,7 +75,7 @@ func main() {
 	}
 }
 
-// No polling: run once and exit.
+// 不轮询：运行一次后退出。
 func runOnce() {
 	if success, newProfiles := loadNewProfiles(); !success {
 		if len(newProfiles) > 0 {
@@ -92,7 +92,7 @@ func runOnce() {
 	}
 }
 
-// Poll the directories indefinitely.
+// 无限期轮询这些目录。
 func pollForever() {
 	klog.V(2).Infof("Polling %s every %s", strings.Join(dirs, ", "), poll.String())
 	pollFn := func() {
@@ -101,7 +101,7 @@ func pollForever() {
 			klog.V(2).Infof("Successfully loaded profiles: %v", newProfiles)
 		}
 	}
-	pollFn() // Run immediately.
+	pollFn() // 立即运行一次。
 	ticker := time.NewTicker(*poll)
 	for range ticker.C {
 		pollFn()
@@ -126,14 +126,14 @@ func loadNewProfiles() (success bool, newProfiles []string) {
 
 		for _, info := range infos {
 			path := filepath.Join(dir, info.Name())
-			// If directory, or symlink to a directory, skip it.
+			// 如果是目录，或指向目录的符号链接，则跳过。
 			resolvedInfo, err := resolveSymlink(dir, info)
 			if err != nil {
 				klog.Warningf("Error resolving symlink: %v", err)
 				continue
 			}
 			if resolvedInfo.IsDir() {
-				// Directory listing is shallow.
+				// 目录列表只遍历一层。
 				klog.V(4).Infof("Skipping directory %s", path)
 				continue
 			}
@@ -152,7 +152,7 @@ func loadNewProfiles() (success bool, newProfiles []string) {
 					success = false
 					continue
 				}
-				// Add new profiles to list of loaded profiles.
+				// 将新 profile 加入已加载 profile 的列表。
 				newProfiles = append(newProfiles, profiles...)
 				for _, profile := range profiles {
 					loadedProfiles[profile] = true
@@ -176,7 +176,7 @@ func getProfileNames(path string) ([]string, error) {
 		return nil, fmt.Errorf("error reading profiles from %s: %v", path, err)
 	}
 
-	trimmed := strings.TrimSpace(string(out)) // Remove trailing \n
+	trimmed := strings.TrimSpace(string(out)) // 去掉末尾的 \n
 	return strings.Split(trimmed, "\n"), nil
 }
 
@@ -204,15 +204,14 @@ func loadProfiles(path string) error {
 	return nil
 }
 
-// If the given fileinfo is a symlink, return the FileInfo of the target. Otherwise, return the
-// given fileinfo.
+// 如果给定的 fileinfo 是符号链接，则返回其目标的 FileInfo。否则返回给定的 fileinfo。
 func resolveSymlink(basePath string, entry os.DirEntry) (os.FileInfo, error) {
 	info, err := entry.Info()
 	if err != nil {
 		return nil, fmt.Errorf("error getting the fileInfo: %v", err)
 	}
 	if info.Mode()&os.ModeSymlink == 0 {
-		// Not a symlink.
+		// 不是符号链接。
 		return info, nil
 	}
 
@@ -228,9 +227,9 @@ func resolveSymlink(basePath string, entry os.DirEntry) (os.FileInfo, error) {
 	return resolvedInfo, nil
 }
 
-// TODO: This is copied from k8s.io/kubernetes/pkg/security/apparmor.getLoadedProfiles.
+// TODO: 这段代码复制自 k8s.io/kubernetes/pkg/security/apparmor.getLoadedProfiles。
 //
-//	Refactor that method to expose it in a reusable way, and delete this version.
+//	重构该方法，使其以可复用的方式暴露出来，然后删除这个版本。
 func getLoadedProfiles() (map[string]bool, error) {
 	profilesPath := path.Join(apparmorfs, "profiles")
 	profilesFile, err := os.Open(profilesPath)
@@ -244,7 +243,7 @@ func getLoadedProfiles() (map[string]bool, error) {
 	for scanner.Scan() {
 		profileName := parseProfileName(scanner.Text())
 		if profileName == "" {
-			// Unknown line format; skip it.
+			// 未知的行格式，跳过。
 			continue
 		}
 		profiles[profileName] = true
@@ -252,13 +251,13 @@ func getLoadedProfiles() (map[string]bool, error) {
 	return profiles, nil
 }
 
-// The profiles file is formatted with one profile per line, matching a form:
+// profiles 文件的格式为每行一个 profile，形式如下：
 //
 //	namespace://profile-name (mode)
 //	profile-name (mode)
 //
-// Where mode is {enforce, complain, kill}. The "namespace://" is only included for namespaced
-// profiles. For the purposes of Kubernetes, we consider the namespace part of the profile name.
+// 其中 mode 为 {enforce, complain, kill} 之一。"namespace://" 只会出现在带命名空间的 profile 中。
+// 就 Kubernetes 而言，我们将命名空间视为 profile 名称的一部分。
 func parseProfileName(profileLine string) string {
 	modeIndex := strings.IndexRune(profileLine, '(')
 	if modeIndex < 0 {

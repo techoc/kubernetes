@@ -27,16 +27,16 @@ import (
 	e2etestingmanifests "k8s.io/kubernetes/test/e2e/testing-manifests"
 )
 
-// All of the image tags are of the format registry.k8s.io/sig-storage/hostpathplugin:v1.7.3.
+// 所有镜像标签的格式均为 registry.k8s.io/sig-storage/hostpathplugin:v1.7.3。
 var imageRE = regexp.MustCompile(`^(.*)/([^/:]*):(.*)$`)
 
-// appendCSIImageConfigs extracts image repo, name and version from
-// the YAML files under test/e2e/testing-manifests/storage-csi and
-// creates new config entries  for them.
+// appendCSIImageConfigs 从 test/e2e/testing-manifests/storage-csi 下的 YAML 文件中
+// 提取镜像仓库、名称和版本，
+// 并为它们创建新的配置项。
 func appendCSIImageConfigs(configs map[ImageID]Config) {
 	embeddedFS := e2etestingmanifests.GetE2ETestingManifestsFS().EmbeddedFS
 
-	// We add our images with ImageID numbers that start after the highest existing number.
+	// 我们添加镜像时，其 ImageID 编号从现有最大编号之后开始。
 	index := ImageID(0)
 	for i := range configs {
 		if i > index {
@@ -56,25 +56,25 @@ func appendCSIImageConfigs(configs map[ImageID]Config) {
 			return err
 		}
 
-		// Split at the "---" separator before working on
-		// individual item. Only works for .yaml.
+		// 在处理单个条目之前，先按 "---" 分隔符拆分。
+		// 仅适用于 .yaml。
 		//
-		// We need to split ourselves because we need access
-		// to each original chunk of data for
-		// runtime.DecodeInto. kubectl has its own
-		// infrastructure for this, but that is a lot of code
-		// with many dependencies.
+		// 我们需要自己拆分，因为我们需要访问每个原始数据块，
+		// 以供 runtime.DecodeInto 使用。kubectl 对此
+		// 有自己的基础设施，但那是大量代码
+		// 并且有
+		// 许多依赖。
 		items := bytes.Split(data, []byte("\n---"))
 		for i, item := range items {
-			// We don't care what the actual type is. We just
-			// unmarshal into generic maps and then look up images.
+			// 我们不关心实际类型是什么。只需
+			// 反序列化为通用 map，然后查找镜像即可。
 			var object interface{}
 			if err := yaml.Unmarshal(item, &object); err != nil {
 				return fmt.Errorf("decode item #%d in %s: %v",
 					i, path, err)
 			}
 
-			// Will be called for all image strings.
+			// 会对所有镜像字符串调用。
 			visit := func(value string) {
 				parts := imageRE.FindStringSubmatch(value)
 				if parts == nil {
@@ -90,8 +90,8 @@ func appendCSIImageConfigs(configs map[ImageID]Config) {
 				configs[index] = config
 			}
 
-			// These paths match plain Pods and more complex types
-			// like Deployments.
+			// 这些路径可匹配普通 Pod 以及更复杂的类型，
+			// 如 Deployment。
 			findStrings(object, visit, "spec", "containers", "image")
 			findStrings(object, visit, "spec", "template", "spec", "containers", "image")
 
@@ -104,14 +104,14 @@ func appendCSIImageConfigs(configs map[ImageID]Config) {
 	}
 }
 
-// findStrings recursively decends into an object along a certain path.  Path
-// elements are the named fields. If a field references a list, each of the
-// list elements will be followed.
+// findStrings 沿指定路径递归深入到对象中。路径
+// 元素即命名字段。如果某个字段引用的是列表，则会依次
+// 遍历列表中的每个元素。
 //
-// Conceptually this is similar to a JSON path.
+// 从概念上讲，这类似于 JSON 路径。
 func findStrings(object interface{}, visit func(value string), path ...string) {
 	if len(path) == 0 {
-		// Found it. May or may not be a string, though.
+		// 找到了。不过它可能是也可能不是字符串。
 		if object, ok := object.(string); ok {
 			visit(object)
 		}
@@ -120,12 +120,12 @@ func findStrings(object interface{}, visit func(value string), path ...string) {
 
 	switch object := object.(type) {
 	case []interface{}:
-		// If we are in a list, check each entry.
+		// 如果处于列表中，则检查每个条目。
 		for _, child := range object {
 			findStrings(child, visit, path...)
 		}
 	case map[string]interface{}:
-		// Follow path if possible
+		// 尽可能沿路径深入
 		if child, ok := object[path[0]]; ok {
 			findStrings(child, visit, path[1:]...)
 		}

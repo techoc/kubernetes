@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdDNSSuffix is used by agnhost Cobra.
+// CmdDNSSuffix 由 agnhost Cobra 使用。
 var CmdDNSSuffix = &cobra.Command{
 	Use:   "dns-suffix",
 	Short: "Prints the host's DNS suffix list",
@@ -33,7 +33,7 @@ var CmdDNSSuffix = &cobra.Command{
 	Run:   printDNSSuffixList,
 }
 
-// CmdDNSServerList is used by agnhost Cobra.
+// CmdDNSServerList 由 agnhost Cobra 使用。
 var CmdDNSServerList = &cobra.Command{
 	Use:   "dns-server-list",
 	Short: "Prints the host's DNS Server list",
@@ -42,7 +42,7 @@ var CmdDNSServerList = &cobra.Command{
 	Run:   printDNSServerList,
 }
 
-// CmdEtcHosts is used by agnhost Cobra.
+// CmdEtcHosts 由 agnhost Cobra 使用。
 var CmdEtcHosts = &cobra.Command{
 	Use:   "etc-hosts",
 	Short: "Prints the host's /etc/hosts file",

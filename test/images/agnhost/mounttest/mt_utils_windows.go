@@ -29,13 +29,13 @@ import (
 )
 
 func umask(mask int) int {
-	// noop for Windows.
+	// 在 Windows 上为空操作。
 	return 0
 }
 
 func fileOwner(path string) error {
-	// Windows does not have owner UID / GID. However, it has owner SID.
-	// not currently implemented in Kubernetes, so noop.
+	// Windows 没有所有者 UID / GID，但有所有者 SID。
+	// Kubernetes 目前尚未实现该功能，因此为空操作。
 	return nil
 }
 
@@ -73,11 +73,11 @@ func getFilePerm(path string) (os.FileMode, error) {
 		errOut bytes.Buffer
 	)
 
-	// NOTE(claudiub): Symlinks have different permissions which might not match the target's.
-	// We want to evaluate the permissions of the target's not the symlink's.
+	// NOTE(claudiub): 符号链接的权限可能与目标文件的权限不同。
+	// 我们要检查的是目标文件的权限，而不是符号链接本身的权限。
 	info, err := os.Lstat(path)
 	if err == nil {
-		// go1.23 behavior change: https://github.com/golang/go/issues/63703#issuecomment-2535941458
+		// go1.23 行为变更：https://github.com/golang/go/issues/63703#issuecomment-2535941458
 		if info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular != 0 {
 			evaluated, err := filepath.EvalSymlinks(path)
 			if err != nil {
@@ -109,6 +109,6 @@ func getFilePerm(path string) (os.FileMode, error) {
 }
 
 func fsType(path string) error {
-	// only NTFS is supported at the moment.
+	// 目前仅支持 NTFS。
 	return nil
 }

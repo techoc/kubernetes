@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package mtlsserver is an agnhost subcommand implementing a server to build
-// the mTLS with the client and echo the client identity.
+// Package mtlsserver 是一个 agnhost 子命令，实现一个与客户端建立 mTLS
+// 并回显客户端身份的服务器。
 package mtlsserver
 
 import (
@@ -78,7 +78,7 @@ func serve() error {
 		return fmt.Errorf("failed to append client certs from PEM")
 	}
 
-	// Pre-load server cert to check early if it's readable
+	// 预加载服务器证书，以便及早检查其是否可读
 	_, err = tls.LoadX509KeyPair(serverCredsFile, serverCredsFile)
 	if err != nil {
 		return fmt.Errorf("while loading server key pair: %w", err)
@@ -90,10 +90,10 @@ func serve() error {
 		Handler: serveMux,
 
 		TLSConfig: &tls.Config{
-			// Tell the client to send client certs if they have any.  Don't
-			// pass in roots to verify the client certificate, since we expect
-			// multiple types signed by different CAs.  Instead, each endpoint
-			// will do the appropriate client certificate verification.
+			// 告知客户端如有证书就发送过来。不传入根证书来验证客户端证书，
+			// 因为我们预期会有由不同 CA 签发的多种类型证书。相反，
+			// 每个端点将执行相应的客户端证书验证。
+			//
 			ClientAuth: tls.RequestClientCert,
 		},
 
@@ -102,7 +102,7 @@ func serve() error {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	// TODO: Auto-reload the server creds
+	// TODO: 自动重新加载服务器凭据
 	if err := server.ListenAndServeTLS(serverCredsFile, serverCredsFile); err != nil {
 		return fmt.Errorf("while listening: %w", err)
 	}
@@ -118,8 +118,8 @@ func handleGetSPIFFEEcho(w http.ResponseWriter, r *http.Request) {
 
 	leafCert := r.TLS.PeerCertificates[0]
 
-	// TODO: Use the trust domain from the leaf certificate to select which
-	// trust bundle to use, to permit federated use cases.
+	// TODO: 根据叶证书中的 trust domain 选择要使用的 trust bundle，
+	// 以支持联邦场景。
 
 	intermediatePool := x509.NewCertPool()
 	if len(r.TLS.PeerCertificates) > 1 {

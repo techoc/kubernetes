@@ -30,12 +30,12 @@ var (
 	consumeMemBinary = "testlimit.exe"
 )
 
-// ConsumeMem consumes a given number of megabytes for the specified duration.
+// ConsumeMem 在指定时长内消耗给定数量的内存（以兆字节计）。
 func ConsumeMem(megabytes int, durationSec int) {
 	log.Printf("ConsumeMem megabytes: %v, durationSec: %v", megabytes, durationSec)
 	megabytesString := strconv.Itoa(megabytes)
 	durationSecString := strconv.Itoa(durationSec)
-	// creating new consume memory process
+	// 创建新的内存消耗进程
 	consumeMem := exec.Command(consumeMemBinary, "-accepteula", "-d", megabytesString, "-e", "0", durationSecString, "-c", "1")
 	err := consumeMem.Start()
 	if err != nil {
@@ -43,7 +43,7 @@ func ConsumeMem(megabytes int, durationSec int) {
 		return
 	}
 
-	// testlimit does not end after durationSec elapsed, so we'll stop it ourselves.
+	// testlimit 在 durationSec 到期后不会自行结束，因此我们需要手动停止它。
 	time.AfterFunc(time.Duration(durationSec)*time.Second, func() {
 		if err := consumeMem.Process.Kill(); err != nil {
 			log.Printf("Could not kill testlimit process! Error: %v", err)

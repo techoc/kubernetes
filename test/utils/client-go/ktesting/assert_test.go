@@ -30,7 +30,7 @@ func TestAssert(t *testing.T) {
 		"eventually-timeout": {
 			cb: func(tCtx TContext) {
 				tCtx.Eventually(func(tCtx TContext) int {
-					// Canceling here is a nop.
+					// 在此处取消是空操作。
 					tCtx.Cancel("testing")
 					return 0
 				}).WithTimeout(time.Second).Should(gomega.Equal(1))
@@ -174,7 +174,7 @@ func TestAssert(t *testing.T) {
 		"consistently-timeout": {
 			cb: func(tCtx TContext) {
 				tCtx.Consistently(func(tCtx TContext) float64 {
-					// Canceling here is a nop.
+					// 在此处取消是空操作。
 					tCtx.Cancel("testing")
 					return 0
 				}).WithTimeout(time.Second).Should(gomega.Equal(1.0))
@@ -311,7 +311,7 @@ func TestAssert(t *testing.T) {
 (FATAL) FATAL ERROR: <klog header>:
 	Unexpected error: fake error
 `,
-			// {s: fake error} depends on indentation (https://github.com/onsi/gomega/issues/886).
+			// {s: fake error} 取决于缩进 (https://github.com/onsi/gomega/issues/886)。
 		},
 		"expect-no-error-failure": {
 			cb: func(tCtx TContext) {
@@ -411,7 +411,7 @@ func TestAssert(t *testing.T) {
 		"fatal": {
 			cb: func(tCtx TContext) {
 				tCtx.Fatal("Error", "a", "b", 42)
-				// not reached
+				// 不会执行到这里
 				tCtx.Log("Log")
 			},
 			expectTrace: `(FATAL) FATAL ERROR: <klog header>:
@@ -421,7 +421,7 @@ func TestAssert(t *testing.T) {
 		"fatalf": {
 			cb: func(tCtx TContext) {
 				tCtx.Fatalf("Error %s %s %d", "a", "b", 42)
-				// not reached
+				// 不会执行到这里
 				tCtx.Log("Log")
 			},
 			expectTrace: `(FATAL) FATAL ERROR: <klog header>:

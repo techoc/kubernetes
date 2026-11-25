@@ -22,7 +22,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Config contains the server (the webhook) cert and key.
+// Config 包含服务端（即 webhook）的证书和密钥。
 type Config struct {
 	CertFile string
 	KeyFile  string
@@ -35,7 +35,7 @@ func configTLS(config Config) *tls.Config {
 	}
 	return &tls.Config{
 		Certificates: []tls.Certificate{sCert},
-		// TODO: uses mutual tls after we agree on what cert the apiserver should use.
+		// TODO: 待我们就 apiserver 应使用何种证书达成一致后，改用双向 TLS。
 		// ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
 }

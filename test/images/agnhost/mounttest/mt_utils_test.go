@@ -58,7 +58,7 @@ func TestFsType_EmptyPath(t *testing.T) {
 }
 
 func TestFsType_ValidPath(t *testing.T) {
-	// Use a path that exists on the system
+	// 使用系统上确实存在的路径
 	testPath := os.TempDir()
 
 	output := captureStdout(func() {
@@ -68,13 +68,13 @@ func TestFsType_ValidPath(t *testing.T) {
 		}
 	})
 
-	// Verify the output format
+	// 验证输出格式
 	expectedPrefix := fmt.Sprintf("mount type of %q:", testPath)
 	if !strings.HasPrefix(output, expectedPrefix) {
 		t.Errorf("fsType(%q) output should start with %q, got: %q", testPath, expectedPrefix, output)
 	}
 
-	// Verify the output is printed exactly once (not duplicated)
+	// 验证输出只打印一次（没有重复）
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) != 1 {
 		t.Errorf("fsType(%q) should print exactly one line, got %d lines: %q", testPath, len(lines), output)
@@ -91,7 +91,7 @@ func TestFsType_NonExistentPath(t *testing.T) {
 		}
 	})
 
-	// Should print an error message
+	// 应当打印一条错误消息
 	if !strings.Contains(output, "error from statfs") {
 		t.Errorf("fsType(%q) should print error message, got: %q", testPath, output)
 	}

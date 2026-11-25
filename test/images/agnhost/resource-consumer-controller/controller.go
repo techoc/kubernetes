@@ -31,7 +31,7 @@ import (
 	"k8s.io/kubernetes/test/images/resource-consumer/common"
 )
 
-// CmdResourceConsumerController is used by agnhost Cobra.
+// CmdResourceConsumerController 由 agnhost Cobra 使用。
 var CmdResourceConsumerController = &cobra.Command{
 	Use:   "resource-consumer-controller",
 	Short: "Starts a HTTP server that spreads requests around resource consumers",
@@ -48,9 +48,8 @@ var (
 	dnsDomain                string
 )
 
-// getDNSDomain walks through DNS configuration and looks for "svc.foo" record
-// where "foo" is currently configured DNS suffix. Then picks that 'foo' part up
-// and returns to a caller.
+// getDNSDomain 遍历 DNS 配置，查找 "svc.foo" 记录，其中 "foo" 是当前配置的 DNS 后缀。
+// 然后提取其中的 'foo' 部分并返回给调用方。
 func getDNSDomain() string {
 	if dnsDomain != "" {
 		return dnsDomain
@@ -59,7 +58,7 @@ func getDNSDomain() string {
 	r, _ := regexp.Compile("^svc.")
 	for _, currentDNSSuffix := range dnsSuffixList {
 		if r.MatchString(currentDNSSuffix) {
-			// Save DNS suffix without the 'svc.' part
+			// 保存 DNS 后缀，去掉 'svc.' 部分
 			dnsDomain = currentDNSSuffix[4:]
 			break
 		}
@@ -97,22 +96,22 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, common.BadRequest, http.StatusBadRequest)
 		return
 	}
-	// parsing POST request data and URL data
+	// 解析 POST 请求数据和 URL 数据
 	if err := req.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// handle consumeCPU
+	// 处理 consumeCPU
 	if req.URL.Path == common.ConsumeCPUAddress {
 		c.handleConsumeCPU(w, req.Form)
 		return
 	}
-	// handle consumeMem
+	// 处理 consumeMem
 	if req.URL.Path == common.ConsumeMemAddress {
 		c.handleConsumeMem(w, req.Form)
 		return
 	}
-	// handle bumpMetric
+	// 处理 bumpMetric
 	if req.URL.Path == common.BumpMetricAddress {
 		c.handleBumpMetric(w, req.Form)
 		return
@@ -121,7 +120,7 @@ func (c *controller) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (c *controller) handleConsumeCPU(w http.ResponseWriter, query url.Values) {
-	// getting string data for consumeCPU
+	// 获取 consumeCPU 的字符串数据
 	durationSecString := query.Get(common.DurationSecQuery)
 	millicoresString := query.Get(common.MillicoresQuery)
 	requestSizeInMillicoresString := query.Get(common.RequestSizeInMillicoresQuery)
@@ -130,7 +129,7 @@ func (c *controller) handleConsumeCPU(w http.ResponseWriter, query url.Values) {
 		return
 	}
 
-	// convert data (strings to ints) for consumeCPU
+	// 为 consumeCPU 转换数据（字符串转整数）
 	durationSec, durationSecError := strconv.Atoi(durationSecString)
 	millicores, millicoresError := strconv.Atoi(millicoresString)
 	requestSizeInMillicores, requestSizeInMillicoresError := strconv.Atoi(requestSizeInMillicoresString)
@@ -154,7 +153,7 @@ func (c *controller) handleConsumeCPU(w http.ResponseWriter, query url.Values) {
 }
 
 func (c *controller) handleConsumeMem(w http.ResponseWriter, query url.Values) {
-	// getting string data for consumeMem
+	// 获取 consumeMem 的字符串数据
 	durationSecString := query.Get(common.DurationSecQuery)
 	megabytesString := query.Get(common.MegabytesQuery)
 	requestSizeInMegabytesString := query.Get(common.RequestSizeInMegabytesQuery)
@@ -163,7 +162,7 @@ func (c *controller) handleConsumeMem(w http.ResponseWriter, query url.Values) {
 		return
 	}
 
-	// convert data (strings to ints) for consumeMem
+	// 为 consumeMem 转换数据（字符串转整数）
 	durationSec, durationSecError := strconv.Atoi(durationSecString)
 	megabytes, megabytesError := strconv.Atoi(megabytesString)
 	requestSizeInMegabytes, requestSizeInMegabytesError := strconv.Atoi(requestSizeInMegabytesString)
@@ -187,7 +186,7 @@ func (c *controller) handleConsumeMem(w http.ResponseWriter, query url.Values) {
 }
 
 func (c *controller) handleBumpMetric(w http.ResponseWriter, query url.Values) {
-	// getting string data for handleBumpMetric
+	// 获取 handleBumpMetric 的字符串数据
 	metric := query.Get(common.MetricNameQuery)
 	deltaString := query.Get(common.DeltaQuery)
 	durationSecString := query.Get(common.DurationSecQuery)
@@ -197,7 +196,7 @@ func (c *controller) handleBumpMetric(w http.ResponseWriter, query url.Values) {
 		return
 	}
 
-	// convert data (strings to ints/floats) for handleBumpMetric
+	// 为 handleBumpMetric 转换数据（字符串转整数/浮点数）
 	durationSec, durationSecError := strconv.Atoi(durationSecString)
 	delta, deltaError := strconv.Atoi(deltaString)
 	requestSizeCustomMetric, requestSizeCustomMetricError := strconv.Atoi(requestSizeCustomMetricString)
@@ -239,11 +238,11 @@ func (c *controller) sendConsumeCustomMetric(w http.ResponseWriter, metric strin
 }
 
 func createConsumerURL(suffix string) string {
-	// NOTE: full DNS name is used due to the Windows platform restriction where PQDNs are not supported.
+	// NOTE: 由于 Windows 平台不支持 PQDN，因此使用完整的 DNS 名称。
 	return fmt.Sprintf("http://%s.%s.svc.%s:%d%s", consumerServiceName, consumerServiceNamespace, getDNSDomain(), consumerPort, suffix)
 }
 
-// sendOneConsumeCPURequest sends POST request for cpu consumption
+// sendOneConsumeCPURequest 发送用于消耗 CPU 的 POST 请求
 func (c *controller) sendOneConsumeCPURequest(w http.ResponseWriter, millicores int, durationSec int) {
 	defer c.waitGroup.Done()
 	query := createConsumerURL(common.ConsumeCPUAddress)
@@ -257,7 +256,7 @@ func (c *controller) sendOneConsumeCPURequest(w http.ResponseWriter, millicores 
 	fmt.Fprintf(w, "Consumed %d millicores\n", millicores)
 }
 
-// sendOneConsumeMemRequest sends POST request for memory consumption
+// sendOneConsumeMemRequest 发送用于消耗内存的 POST 请求
 func (c *controller) sendOneConsumeMemRequest(w http.ResponseWriter, megabytes int, durationSec int) {
 	defer c.waitGroup.Done()
 	query := createConsumerURL(common.ConsumeMemAddress)
@@ -271,7 +270,7 @@ func (c *controller) sendOneConsumeMemRequest(w http.ResponseWriter, megabytes i
 	fmt.Fprintf(w, "Consumed %d megabytes\n", megabytes)
 }
 
-// sendOneConsumeCustomMetric sends POST request for custom metric consumption
+// sendOneConsumeCustomMetric 发送用于消耗自定义指标的 POST 请求
 func (c *controller) sendOneConsumeCustomMetric(w http.ResponseWriter, customMetricName string, delta int, durationSec int) {
 	defer c.waitGroup.Done()
 	query := createConsumerURL(common.BumpMetricAddress)

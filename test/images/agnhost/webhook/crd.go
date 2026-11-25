@@ -26,7 +26,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// This function expects all CRDs submitted to it to be apiextensions.k8s.io/v1beta1 or apiextensions.k8s.io/v1.
+// 该函数预期提交给它的所有 CRD 均为 apiextensions.k8s.io/v1beta1 或 apiextensions.k8s.io/v1。
 func admitCRD(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	klog.V(2).Info("admitting crd")
 

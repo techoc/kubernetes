@@ -14,19 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package localupcluster contains wrapper code around invoking hack/local-up-cluster.sh
-// and managing the resulting cluster.
+// Package localupcluster 包含围绕调用 hack/local-up-cluster.sh 以及管理所创建集群的封装代码。
 //
-// The basic mode of operation is:
-//   - local-up-cluster.sh contains all the logic of how to configure and invoke components.
-//   - local-up-cluster.sh is run in dry-run mode, which prints all commands and their parameters
-//     without actually running them, except for etcd: etcd's lifecycle is managed as before
-//     by the caller or local-up-cluster.sh.
-//   - local-up-cluster.sh is kept running as long as the cluster runs to keep etcd running and
-//     generated configuration files around.
-//   - This package takes care of running the commands, including output redirection.
-//   - It can stop commands and run them again using different binaries to similar upgrades
-//     or downgrades.
+// 基本的工作方式如下：
+//   - local-up-cluster.sh 包含如何配置和调用各组件的全部逻辑。
+//   - local-up-cluster.sh 以 dry-run 模式运行，它会打印所有命令及其参数，
+//     但并不实际执行这些命令，etcd 除外：etcd 的生命周期仍由调用方或
+//     local-up-cluster.sh 像以前一样管理。
+//   - 只要集群还在运行，local-up-cluster.sh 就会一直保持运行，以维持 etcd 进程并保留生成的配置文件。
+//   - 本包负责执行这些命令，包括输出重定向。
+//   - 它可以停止命令，并使用不同的二进制文件重新运行，以模拟升级或降级。
 package localupcluster
 
 import (
@@ -59,9 +56,9 @@ import (
 
 type ClusterComponentName string
 
-// Component names.
+// 组件名称。
 //
-// They match the names in the local-up-cluster.sh and etc.sh output, if the script runs those components.
+// 如果 local-up-cluster.sh 和 etc.sh 运行了这些组件，这里的名称与它们输出中的名称一致。
 const (
 	Etcd                  = ClusterComponentName("etcd")
 	KubeAPIServer         = ClusterComponentName("kube-apiserver")
@@ -72,16 +69,16 @@ const (
 	Kubectl               = ClusterComponentName("kubectl")
 )
 
-// Kubernetes components running in the cluster, in the order in which they need to be started and upgraded.
+// 集群中运行的 Kubernetes 组件，按启动和升级所需的顺序列出。
 var KubeClusterComponents = []ClusterComponentName{KubeAPIServer, KubeControllerManager, KubeScheduler, Kubelet, KubeProxy}
 
-// featureGatedComponents lists the components that accept --feature-gates on their command line.
+// featureGatedComponents 列出命令行接受 --feature-gates 参数的组件。
 var featureGatedComponents = []ClusterComponentName{KubeAPIServer, KubeControllerManager, KubeScheduler, Kubelet}
 
-// All components, including etcd.
+// 所有组件，包括 etcd。
 var components = append([]ClusterComponentName{Etcd}, KubeClusterComponents...)
 
-// RUN <name> <command line> in the local-up-cluster.sh output marks commands that we need to run.
+// local-up-cluster.sh 输出中的 RUN <name> <command line> 标记了我们需要执行的命令。
 const localUpClusterRunPrefix = "RUN "
 
 func repoRoot(tCtx ktesting.TContext) string {
@@ -103,15 +100,15 @@ func New() *Cluster {
 	return c
 }
 
-// Cluster represents one cluster.
+// Cluster 表示一个集群。
 //
-// hack/local-up-cluster.sh must be functional in the current environment. If necessary,
-// env variables like CONTAINER_RUNTIME_ENDPOINT have to be set to adapt the script
-// to the host system. The current user must have permission to use the container runtime.
-// All Kubernetes components run as that user with files stored in a test temp directory.
+// hack/local-up-cluster.sh 必须能在当前环境中正常工作。如有必要，
+// 需要设置 CONTAINER_RUNTIME_ENDPOINT 等环境变量，使脚本适配当前主机系统。
+// 当前用户必须有权使用容器运行时。
+// 所有 Kubernetes 组件都以该用户身份运行，文件存放在测试临时目录中。
 //
-// local-up-cluster.sh does not support more than one cluster per host, so
-// tests using this package have to run sequentially.
+// local-up-cluster.sh 不支持每台主机上运行多个集群，因此
+// 使用本包的测试必须顺序执行。
 type Cluster struct {
 	running    map[ClusterComponentName]*Cmd
 	dir        string
@@ -119,26 +116,25 @@ type Cluster struct {
 	settings   map[string]string
 }
 
-// Start brings up the cluster anew. If it was already running, it will be stopped first.
+// Start 重新启动集群。如果集群已经在运行，会先将其停止。
 //
-// The caller must invoke Stop in a suitable context to stop the cluster.
-// If the ARTIFACTS env variable is set and the test failed,
-// log files of the kind cluster get dumped into
-// $ARTIFACTS/<test name>/kind/<cluster name> before stopping it.
+// 调用方必须在合适的上下文中调用 Stop 来停止集群。
+// 如果设置了 ARTIFACTS 环境变量且测试失败，在停止集群之前，
+// kind 集群的日志文件会被转储到
+// $ARTIFACTS/<test name>/kind/<cluster name>。
 //
-// The binary directory must contain kube-apiserver, kube-controller-manager,
-// kube-scheduler, kube-proxy, and kubelet. Those binaries can be from a previous
-// Kubernetes release. They will be invoked with parameters  as defined in the
-// *current* local-up-cluster.sh. This works as long as local-up-cluster.sh in its
-// default configuration doesn't depend on something which was added only recently.
+// 二进制文件目录必须包含 kube-apiserver、kube-controller-manager、
+// kube-scheduler、kube-proxy 和 kubelet。这些二进制文件可以来自旧的
+// Kubernetes 版本。它们会按照*当前* local-up-cluster.sh 中定义的参数被调用。
+// 只要默认配置下的 local-up-cluster.sh 不依赖最近才加入的功能，这种方式就能正常工作。
 func (c *Cluster) Start(tCtx ktesting.TContext, state string, bindir string, localUpClusterEnv map[string]string, featureGates string) {
 	tCtx.Helper()
 	c.Stop(tCtx)
 
 	if artifacts, ok := os.LookupEnv("ARTIFACTS"); ok {
-		// Sanitize the name:
-		// - remove E2E [] tags
-		// - replace whitespaces and some special characters with hyphens
+		// 清理名称：
+		// - 移除 E2E 的 [] 标签
+		// - 将空白字符和一些特殊字符替换为连字符
 		testName := tCtx.Name()
 		testName = regexp.MustCompile(`\s*\[[^\]]*\]`).ReplaceAllString(testName, "")
 		testName = regexp.MustCompile(`[[:space:]/:()\\]+`).ReplaceAllString(testName, "-")
@@ -151,11 +147,10 @@ func (c *Cluster) Start(tCtx ktesting.TContext, state string, bindir string, loc
 	c.running = make(map[ClusterComponentName]*Cmd)
 	c.settings = make(map[string]string)
 
-	// Spawn local-up-cluster.sh in the background,
-	// parse output to pick up commands and run them in order,
-	// then wait for it to finish. Once it has completed,
-	// we know everything that we need to know to run and
-	// modify the cluster.
+	// 在后台启动 local-up-cluster.sh，
+	// 解析其输出以提取命令并按顺序执行，
+	// 然后等待脚本结束。脚本完成后，
+	// 我们就掌握了运行和修改集群所需的全部信息。
 	lines := make(chan string, 100)
 	cmd := &Cmd{
 		Name: "local-up-cluster",
@@ -165,7 +160,7 @@ func (c *Cluster) Start(tCtx ktesting.TContext, state string, bindir string, loc
 			"-d", // dry run
 		},
 		ProcessOutput: func(output Output) {
-			// Redirect processing into the main goroutine.
+			// 将处理过程转到主 goroutine 中执行。
 			if output.EOF {
 				close(lines)
 				return
@@ -183,7 +178,7 @@ func (c *Cluster) Start(tCtx ktesting.TContext, state string, bindir string, loc
 		tCtx.ExpectNoError(err, "KUBE_VERBOSE")
 	}
 	if kubeVerboseVal < 2 {
-		cmd.AdditionalEnv["KUBE_VERBOSE"] = "2" // Enables -x for configuration variable assignments.
+		cmd.AdditionalEnv["KUBE_VERBOSE"] = "2" // 为配置变量赋值启用 -x 输出。
 	}
 	cmd.Start(tCtx)
 	defer cmd.Stop(tCtx, "stopping")
@@ -201,14 +196,14 @@ processLocalUpClusterOutput:
 			c.processLocalUpClusterOutput(tCtx, state, line, featureGates)
 		}
 	}
-	// Usually it has stopped by now already because we saw the end of its output stream,
-	// but we still need to verify its exit code.
+	// 通常此时它已经停止了，因为我们看到了输出流的结束，
+	// 但仍需验证其退出码。
 	cmd.Wait(tCtx)
 
 	tCtx.Logf("cluster is running, use KUBECONFIG=%s to access it", c.kubeConfig)
 }
 
-// Matches e.g. "+ API_SECURE_PORT=6443".
+// 匹配类似 "+ API_SECURE_PORT=6443" 的行。
 var varAssignment = regexp.MustCompile(`^\+ ([A-Z0-9_]+)=(.*)$`)
 
 func (c *Cluster) processLocalUpClusterOutput(tCtx ktesting.TContext, state string, line string, featureGates string) {
@@ -223,7 +218,7 @@ func (c *Cluster) processLocalUpClusterOutput(tCtx ktesting.TContext, state stri
 		name := parts[0]
 		cmdLine := parts[1]
 
-		// Cluster components and etcd are kept running.
+		// 集群组件和 etcd 会保持运行。
 		if slices.Contains(components, ClusterComponentName(name)) {
 			if featureGates != "" && slices.Contains(featureGatedComponents, ClusterComponentName(name)) {
 				splitCmdLine := strings.Split(cmdLine, " ")
@@ -235,7 +230,7 @@ func (c *Cluster) processLocalUpClusterOutput(tCtx ktesting.TContext, state stri
 			return
 		}
 
-		// Other commands get invoked and need to terminate before we proceed.
+		// 其他命令会被调用，并且必须结束后我们才能继续。
 		c.runCmd(tCtx, name, cmdLine)
 		return
 	}
@@ -254,7 +249,7 @@ func (c *Cluster) runComponent(tCtx ktesting.TContext, state string, component C
 		Name:        string(component) + "-" + state,
 		CommandLine: commandLine,
 		LogFile:     path.Join(c.dir, fmt.Sprintf("%s-%s.log", component, state)),
-		// Stopped via Cluster.Stop.
+		// 通过 Cluster.Stop 停止。
 		KeepRunning: true,
 	}
 
@@ -273,14 +268,13 @@ func (c *Cluster) runCmd(tCtx ktesting.TContext, name, command string) {
 }
 
 func fromLocalUpClusterOutput(command string) []string {
-	// The assumption here is that arguments don't contain spaces.
-	// We cannot pass the entire string to a shell and let the shell do
-	// the parsing because some arguments contain special characters like $
-	// without quoting them.
+	// 这里假设参数中不包含空格。
+	// 我们不能把整个字符串交给 shell 去解析，因为有些参数包含
+	// $ 之类的特殊字符，且没有对它们加引号。
 	return strings.Split(command, " ")
 }
 
-// Stop ensures that the cluster is not running anymore.
+// Stop 确保集群不再运行。
 func (c *Cluster) Stop(tCtx ktesting.TContext) {
 	tCtx.Helper()
 	for _, component := range slices.Backward(components) {
@@ -293,7 +287,7 @@ func (c *Cluster) Stop(tCtx ktesting.TContext) {
 	}
 }
 
-// LoadConfig returns the REST config for the running cluster.
+// LoadConfig 返回正在运行的集群的 REST 配置。
 func (c *Cluster) LoadConfig(tCtx ktesting.TContext) *restclient.Config {
 	tCtx.Helper()
 	cfg, err := clientcmd.LoadFromFile(c.kubeConfig)
@@ -304,7 +298,7 @@ func (c *Cluster) LoadConfig(tCtx ktesting.TContext) *restclient.Config {
 
 }
 
-// GetSystemLogs returns the output of the given component, the empty string and false if not started.
+// GetSystemLogs 返回指定组件的输出；若该组件未启动，则返回空字符串和 false。
 func (c *Cluster) GetSystemLogs(tCtx ktesting.TContext, component ClusterComponentName) (GString, bool) {
 	cmd, ok := c.running[component]
 	if !ok {
@@ -313,8 +307,7 @@ func (c *Cluster) GetSystemLogs(tCtx ktesting.TContext, component ClusterCompone
 	return GString(cmd.Output(tCtx)), true
 }
 
-// GString is useful for log output because in contrast to the default behavior for
-// strings it truncates in the middle.
+// GString 适用于日志输出，因为与字符串的默认行为不同，它会从中间截断。
 type GString string
 
 var (
@@ -330,7 +323,7 @@ func (gs GString) GomegaString() string {
 	elipsis := "\n...\n"
 	keepLen := format.MaxLength - len(elipsis)
 	if keepLen < 0 {
-		// Cannot truncate in the middle, result would be too long. Leave it to Gomega.
+		// 无法从中间截断，否则结果会太长。交给 Gomega 处理。
 		return s
 	}
 	return s[:keepLen/2] + elipsis + s[len(gs)-keepLen/2:]
@@ -341,15 +334,14 @@ func (gs GString) String() string {
 }
 
 type ModifyOptions struct {
-	// BinDir specifies where to find the replacement Kubernetes components.
-	// If empty, then only components explicitly listed in FileByComponent
-	// get modified.
+	// BinDir 指定在哪里查找用于替换的 Kubernetes 组件。
+	// 如果为空，则只修改 FileByComponent 中明确列出的组件。
 	BinDir string
 
-	// FileByComponent overrides BinDir for those components which are specified here.
+	// FileByComponent 为这里指定的组件覆盖 BinDir 的设置。
 	FileByComponent map[ClusterComponentName]string
 
-	// FeatureGatesByComponent specifies feature gates to apply to component command line.
+	// FeatureGatesByComponent 指定要应用到组件命令行上的 feature gate。
 	FeatureGatesByComponent map[ClusterComponentName]string
 }
 
@@ -363,14 +355,13 @@ func (m ModifyOptions) GetComponentFile(component ClusterComponentName) string {
 	return ""
 }
 
-// Modify changes the cluster as described in the options.
+// Modify 按照选项中的描述修改集群。
 //
-// The state description is required. It gets used as
-// file suffix for log files and in log messages.
-// It needs to be unique through the life of the cluster.
+// 必须提供状态描述。它会被用作日志文件的文件名后缀，
+// 也会出现在日志消息中。
+// 在集群的整个生命周期内，该描述必须保持唯一。
 //
-// The returned options can be passed to Modify unchanged
-// to restore the original state.
+// 返回的选项可以原样传给 Modify，以恢复原始状态。
 func (c *Cluster) Modify(tCtx ktesting.TContext, state string, options ModifyOptions) ModifyOptions {
 	tCtx.Helper()
 
@@ -380,9 +371,8 @@ func (c *Cluster) Modify(tCtx ktesting.TContext, state string, options ModifyOpt
 
 	updated := make(map[ClusterComponentName]*Cmd)
 
-	// Phase 1: stop all components that need modification in reverse order
-	// so that dependent components (KCM, scheduler) are stopped before the
-	// apiserver they depend on.
+	// 阶段 1：按逆序停止所有需要修改的组件，
+	// 使依赖组件（KCM、scheduler）先于它们所依赖的 apiserver 停止。
 	for _, component := range slices.Backward(KubeClusterComponents) {
 		fileName := options.GetComponentFile(component)
 		if fileName == "" && options.FeatureGatesByComponent[component] == "" {
@@ -399,10 +389,10 @@ func (c *Cluster) Modify(tCtx ktesting.TContext, state string, options ModifyOpt
 		tCtx.Logf("command %s with pid %d stopped: %s", cmd.Name, cmd.cmd.ProcessState.Pid(), cmd.cmd.ProcessState)
 		dumpProcesses(tCtx)
 
-		// Find the command (might be wrapped by sudo!).
+		// 找到对应的命令（它可能包了一层 sudo！）。
 		cmdLine := slices.Clone(cmd.CommandLine)
 
-		// Replace binary if requested.
+		// 如果需要，则替换二进制文件。
 		if fileName != "" {
 			found := false
 			for i := range cmdLine {
@@ -423,12 +413,11 @@ func (c *Cluster) Modify(tCtx ktesting.TContext, state string, options ModifyOpt
 		updated[component] = cmd
 	}
 
-	// Phase 2: start all stopped components in the standard startup order
-	// (apiserver first) so that each component starts against a fully-ready
-	// apiserver.
+	// 阶段 2：按照标准启动顺序（apiserver 优先）启动所有已停止的组件，
+	// 使每个组件启动时面对的都是完全就绪的 apiserver。
 	for _, component := range KubeClusterComponents {
 		if cmd, ok := updated[component]; ok {
-			// Apply feature gates.
+			// 应用 feature gate。
 			if featureGates, ok := options.FeatureGatesByComponent[component]; ok {
 				merged, err := mergeFeatureGatesFlags(cmd.CommandLine, featureGates)
 				tCtx.ExpectNoError(err, "merge feature gates %s into %s command line", featureGates, component)
@@ -442,14 +431,14 @@ func (c *Cluster) Modify(tCtx ktesting.TContext, state string, options ModifyOpt
 }
 
 func (c *Cluster) runComponentWithRetry(tCtx ktesting.TContext, component ClusterComponentName, cmd *Cmd) {
-	// Sometimes components fail to come up. We have to retry.
+	// 有时组件会启动失败，必须重试。
 	//
-	// For example, the apiserver's port might not be free again yet (no SO_LINGER!).
-	// Or kube-controller-manager:
+	// 例如，apiserver 的端口可能还没有释放（没有 SO_LINGER！）。
+	// 又或者 kube-controller-manager：
 	//  I0630 13:20:45.046709   61710 serving.go:380] Generated self-signed cert (/var/run/kubernetes/kube-controller-manager.crt, /var/run/kubernetes/kube-controller-manager.key)
 	//  W0630 13:20:45.410578   61710 requestheader_controller.go:204] Unable to get configmap/extension-apiserver-authentication in kube-system.  Usually fixed by 'kubectl create rolebinding -n kube-system ROLEBINDING_NAME --role=extension-apiserver-authentication-reader --serviceaccount=YOUR_NS:YOUR_SA'
 	//  E0630 13:20:45.410618   61710 run.go:72] "command failed" err="unable to load configmap based request-header-client-ca-file: configmaps \"extension-apiserver-authentication\" is forbidden: User \"system:kube-controller-manager\" cannot get resource \"configmaps\" in API group \"\" in the namespace \"kube-system\""
-	// The kube-controller-manager then is stuck. Perhaps it should retry instead?
+	// 随后 kube-controller-manager 就卡住了。也许它自己应该重试？
 	for i := 0; ; i++ {
 		tCtx.Logf("running %s with output redirected to %s", cmd.Name, cmd.LogFile)
 		cmd.Start(tCtx)
@@ -464,11 +453,11 @@ func (c *Cluster) runComponentWithRetry(tCtx ktesting.TContext, component Cluste
 			break
 		}
 		if !cmd.Running() && i < 10 {
-			// Retry.
+			// 重试。
 			time.Sleep(time.Second)
 			continue
 		}
-		// Re-raise the failure.
+		// 重新抛出失败。
 		tCtx.ExpectNoError(err)
 	}
 	tCtx.Logf("started %s with pid %d", cmd.Name, cmd.cmd.Process.Pid)
@@ -481,23 +470,23 @@ func (c *Cluster) checkReadiness(tCtx ktesting.TContext, cmd *Cmd) {
 		return
 	}
 
-	// For all other components we expect to have the .kubeconfig file.
+	// 对于所有其他组件，我们期望 .kubeconfig 文件已经存在。
 	restConfig := c.LoadConfig(tCtx)
 	tCtx = tCtx.WithRESTConfig(restConfig)
 	tCtx = tCtx.WithStep(fmt.Sprintf("wait for %s readiness", cmd.Name))
 
-	// For the apiserver we use the admin client certificate with the cluster CA.
+	// 对于 apiserver，我们使用带有集群 CA 的 admin 客户端证书。
 	tlsConfig, err := restclient.TLSConfigFor(restConfig)
 	if err != nil {
 		tCtx.Fatalf("get TLS config for readiness check: %v", err)
 	}
 
-	// The kubelet requires client authentication for /healthz. Use the admin client
-	// certificate with InsecureSkipVerify because the kubelet uses a self-signed cert.
+	// kubelet 的 /healthz 需要客户端认证。使用 admin 客户端证书，
+	// 并设置 InsecureSkipVerify，因为 kubelet 使用的是自签名证书。
 	tlsConfigWithClientCert := tlsConfig.Clone()
 	tlsConfigWithClientCert.InsecureSkipVerify = true
 
-	// For other components we can skip TLS verification because they use self-signed certs.
+	// 对于其他组件，可以跳过 TLS 验证，因为它们使用的是自签名证书。
 	insecureTLSConfig := &tls.Config{InsecureSkipVerify: true}
 
 	switch {
@@ -506,16 +495,16 @@ func (c *Cluster) checkReadiness(tCtx ktesting.TContext, cmd *Cmd) {
 	case strings.HasPrefix(cmd.Name, string(KubeScheduler)):
 		c.checkReadyz(tCtx, cmd, "https", c.settings["API_HOST_IP"], c.settings["SCHEDULER_SECURE_PORT"], insecureTLSConfig)
 	case strings.HasPrefix(cmd.Name, string(KubeControllerManager)):
-		// TODO: switch to /readyz once it is implemented and available in all tested releases.
+		// TODO：在 /readyz 实现并出现在所有测试的发行版中后切换过去。
 		c.checkHealthz(tCtx, cmd, "https", c.settings["API_HOST_IP"], c.settings["KCM_SECURE_PORT"], insecureTLSConfig)
 	case strings.HasPrefix(cmd.Name, string(KubeProxy)):
-		// TODO: switch to /readyz once it is implemented and available in all tested releases.
+		// TODO：在 /readyz 实现并出现在所有测试的发行版中后切换过去。
 		c.checkHealthz(tCtx, cmd, "http" /* not an error! */, c.settings["API_HOST_IP"], c.settings["PROXY_HEALTHZ_PORT"], insecureTLSConfig)
 	case strings.HasPrefix(cmd.Name, string(Kubelet)):
-		// TODO: switch to /readyz once it is implemented and available in all tested releases.
+		// TODO：在 /readyz 实现并出现在所有测试的发行版中后切换过去。
 		c.checkHealthz(tCtx, cmd, "https", c.settings["KUBELET_HOST"], c.settings["KUBELET_PORT"], tlsConfigWithClientCert)
 
-		// Also wait for the node to be ready.
+		// 同时等待节点就绪。
 		tCtx.WithStep("wait for node ready").Eventually(func(tCtx ktesting.TContext) (*corev1.NodeList, error) {
 			return tCtx.Client().CoreV1().Nodes().List(tCtx, metav1.ListOptions{})
 		}).Should(gomega.HaveField("Items", gomega.ConsistOf(gomega.HaveField("Status.Conditions", gomega.ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -559,7 +548,7 @@ func (c *Cluster) checkEndpoint(tCtx ktesting.TContext, cmd *Cmd, scheme, hostIP
 }
 
 func dumpProcesses(tCtx ktesting.TContext) {
-	// Uncomment the code to get additional debug output.
+	// 取消注释以下代码可获得额外的调试输出。
 	//
 	// cmd := &Cmd{
 	// 	Name:         "ps",
@@ -571,10 +560,10 @@ func dumpProcesses(tCtx ktesting.TContext) {
 	// tCtx.Log(processes)
 }
 
-// ToggleFeatureGates restarts the feature gated components with the specified feature gates.
-// The returned ModifyOptions can be passed to Modify to restore the original state.
-// Gates that are locked in the current release are automatically excluded from kubelet's
-// command line, since kubelet lacks --emulated-version support and would reject toggling a locked gate.
+// ToggleFeatureGates 使用指定的 feature gate 重启受 feature gate 控制的组件。
+// 返回的 ModifyOptions 可以传给 Modify，以恢复原始状态。
+// 当前发行版中已锁定的 gate 会自动从 kubelet 的命令行中排除，
+// 因为 kubelet 不支持 --emulated-version，会拒绝切换已锁定的 gate。
 func (c *Cluster) ToggleFeatureGates(tCtx ktesting.TContext, state string, featureGates string) ModifyOptions {
 	tCtx.Helper()
 
@@ -596,9 +585,9 @@ func (c *Cluster) ToggleFeatureGates(tCtx ktesting.TContext, state string, featu
 	return c.Modify(tCtx, state, opts)
 }
 
-// filterLockedFeatureGates removes gates that are locked to their default value from the
-// feature gates string. Kubelet does not support --emulated-version and would reject
-// toggling a locked gate, so locked gates must be excluded from its command line.
+// filterLockedFeatureGates 从 feature gate 字符串中移除那些已锁定为默认值的 gate。
+// Kubelet 不支持 --emulated-version，会拒绝切换已锁定的 gate，
+// 因此必须从它的命令行中排除已锁定的 gate。
 func filterLockedFeatureGates(featureGates string, allGates map[featuregate.Feature]featuregate.FeatureSpec) string {
 	filtered := slices.DeleteFunc(strings.Split(featureGates, ","), func(gate string) bool {
 		gateName := strings.TrimSpace(strings.SplitN(gate, "=", 2)[0])
@@ -608,21 +597,20 @@ func filterLockedFeatureGates(featureGates string, allGates map[featuregate.Feat
 	return strings.Join(filtered, ",")
 }
 
-// mergeFeatureGatesFlags merges the given feature gates (in "fg1=true,fg2=false" format)
-// into the command line. Any existing --feature-gates flags are merged together and
-// overridden by the new gates. The result contains exactly one --feature-gates flag at
-// the position of the first one previously found, or appended at the end if none was
-// present. If no gates result, the command line is returned unchanged.
+// mergeFeatureGatesFlags 将给定的 feature gate（采用 "fg1=true,fg2=false" 格式）
+// 合并到命令行中。已有的 --feature-gates 标志会被合并在一起，
+// 并被新的 gate 覆盖。结果中只保留一个 --feature-gates 标志，
+// 位置与之前找到的第一个标志相同；如果之前没有，则追加到末尾。
+// 如果最终没有任何 gate，则命令行原样返回。
 //
-// An error is returned if any --feature-gates flag in cmdLine or the featureGates
-// argument itself is malformed.
+// 如果 cmdLine 中的任何 --feature-gates 标志或 featureGates 参数本身格式错误，
+// 则返回错误。
 func mergeFeatureGatesFlags(cmdLine []string, featureGates string) ([]string, error) {
 	gates := map[string]bool{}
 	gatesValue := cliflag.NewMapStringBool(&gates)
 
-	// Strip all --feature-gates tokens from the command line, accumulating
-	// their values into gatesValue. Remember where the first one was so the
-	// merged flag lands at the same position.
+	// 从命令行中去掉所有 --feature-gates 标记，把它们的值累积到
+	// gatesValue 中。记住第一个标记的位置，以便合并后的标志放在同一位置。
 	insertIdx := -1
 	out := make([]string, 0, len(cmdLine))
 	for _, tok := range cmdLine {
@@ -639,14 +627,14 @@ func mergeFeatureGatesFlags(cmdLine []string, featureGates string) ([]string, er
 		}
 	}
 
-	// Apply the new gates on top (new values win over existing ones).
+	// 在此之上应用新的 gate（新值优先于已有值）。
 	if featureGates != "" {
 		if err := gatesValue.Set(featureGates); err != nil {
 			return nil, fmt.Errorf("invalid feature gates %q: %w", featureGates, err)
 		}
 	}
 
-	// If no existing parseable flag was found and no gates resulted, nothing to do.
+	// 如果既没有找到可解析的已有标志，也没有产生任何 gate，则无需处理。
 	if insertIdx == -1 && len(gates) == 0 {
 		return out, nil
 	}

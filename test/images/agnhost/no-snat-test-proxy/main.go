@@ -26,7 +26,7 @@ import (
 	"k8s.io/component-base/logs"
 )
 
-// CmdNoSnatTestProxy is used by agnhost Cobra.
+// CmdNoSnatTestProxy 由 agnhost Cobra 使用。
 var CmdNoSnatTestProxy = &cobra.Command{
 	Use:   "no-snat-test-proxy",
 	Short: "Creates a proxy for the /checknosnat endpoint",
@@ -41,7 +41,7 @@ func init() {
 	CmdNoSnatTestProxy.Flags().StringVar(&port, "port", "31235", "The port to serve /checknosnat endpoint on.")
 }
 
-// This Pod's /checknosnat takes `target` and `ips` arguments, and queries {target}/checknosnat?ips={ips}
+// 该 Pod 的 /checknosnat 接受 `target` 和 `ips` 参数，并查询 {target}/checknosnat?ips={ips}
 
 type masqTestProxy struct {
 	Port string
@@ -62,10 +62,10 @@ func main(cmd *cobra.Command, args []string) {
 }
 
 func (m *masqTestProxy) Run() error {
-	// register handler
+	// 注册处理函数
 	http.HandleFunc("/checknosnat", checknosnat)
 
-	// spin up the server
+	// 启动服务器
 	return http.ListenAndServe(":"+m.Port, nil)
 }
 
@@ -90,7 +90,7 @@ func checknosnat(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Respond the same status code and body as /checknosnat on the internal Pod
+	// 返回与内部 Pod 上 /checknosnat 相同的状态码和响应体
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
 }

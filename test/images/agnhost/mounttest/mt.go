@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdMounttest is used by agnhost Cobra.
+// CmdMounttest 由 agnhost Cobra 使用。
 var CmdMounttest = &cobra.Command{
 	Use:   "mounttest",
 	Short: "Creates files with given permissions and outputs FS type, owner, mode, permissions, contents of files",
@@ -63,25 +63,25 @@ func init() {
 	CmdMounttest.Flags().BoolVar(&breakOnExpectedContent, "break_on_expected_content", true, "Break out of loop on expected content, (use with --file_content_in_loop flag only)")
 }
 
-// This program performs some tests on the filesystem as dictated by the
-// flags passed by the user.
+// 本程序根据用户传入的标志，
+// 对文件系统执行相应的测试。
 func main(cmd *cobra.Command, args []string) {
 	var (
 		err  error
 		errs = []error{}
 	)
 
-	// Clear the umask so we can set any mode bits we want.
+	// 清除 umask，以便我们可以设置任意所需的模式位。
 	umask(0000)
 
-	// NOTE: the ordering of execution of the various command line
-	// flags is intentional and allows a single command to:
+	// 注意：各命令行标志的执行顺序是有意为之的，
+	// 使得单条命令可以：
 	//
-	// 1.  Check the fstype of a path
-	// 2.  Write a new file within that path
-	// 3.  Check that the file's content can be read
+	// 1. 检查路径的文件系统类型
+	// 2. 在该路径下写入新文件
+	// 3. 检查文件内容是否可读
 	//
-	// Changing the ordering of the following code will break tests.
+	// 改变以下代码的顺序会破坏测试。
 
 	err = fsType(fsTypePath)
 	if err != nil {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package grpchealthchecking offers a tiny grpc health checking endpoint.
+// Package grpchealthchecking 提供一个简单的 gRPC 健康检查端点。
 package grpchealthchecking
 
 import (
@@ -35,7 +35,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// CmdGrpcHealthChecking is used by agnhost Cobra.
+// CmdGrpcHealthChecking 由 agnhost 的 Cobra 命令使用。
 var CmdGrpcHealthChecking = &cobra.Command{
 	Use:   "grpc-health-checking",
 	Short: "Starts a simple grpc health checking endpoint",
@@ -106,9 +106,9 @@ func NewHealthChecker(started time.Time) *HealthChecker {
 func main(cmd *cobra.Command, args []string) {
 	started := time.Now()
 
-	// Validate flags
+	// 校验标志
 	//
-	// if certFile or privKeyFile are not both set, exit with error
+	// 如果 certFile 或 privKeyFile 未同时设置，则以错误退出
 	if (certFile == "" && privKeyFile != "") || (certFile != "" && privKeyFile == "") {
 		log.Fatalf("Both --tls-cert-file and --tls-private-key-file must be set")
 	}

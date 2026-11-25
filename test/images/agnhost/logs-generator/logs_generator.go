@@ -39,7 +39,7 @@ var (
 	}
 )
 
-// CmdLogsGenerator is used by agnhost Cobra.
+// CmdLogsGenerator 由 agnhost 的 Cobra 命令使用。
 var CmdLogsGenerator = &cobra.Command{
 	Use:   "logs-generator",
 	Short: "Outputs lines of logs to stdout uniformly",
@@ -58,7 +58,7 @@ func init() {
 	CmdLogsGenerator.Flags().DurationVarP(&duration, "run-duration", "d", 0, "Total duration of the run")
 }
 
-// Outputs linesTotal lines of logs to stdout uniformly for duration
+// 在 duration 时间段内均匀地向 stdout 输出 linesTotal 行日志
 func generateLogs(cmd *cobra.Command, args []string) {
 	if linesTotal <= 0 {
 		klog.Fatalf("Invalid total number of lines: %d", linesTotal)
@@ -78,7 +78,7 @@ func generateLogs(cmd *cobra.Command, args []string) {
 	}
 }
 
-// Generates apiserver-like line with average length of 100 symbols
+// 生成类似 apiserver 的日志行，平均长度约为 100 个字符
 func generateLogLine(id int) string {
 	method := httpMethods[rand.Intn(len(httpMethods))]
 	namespace := namespaces[rand.Intn(len(namespaces))]

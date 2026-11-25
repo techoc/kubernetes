@@ -38,7 +38,7 @@ func UpdateReplicaSetWithRetries(c clientset.Interface, namespace, name string, 
 		if rs, err = c.AppsV1().ReplicaSets(namespace).Get(context.TODO(), name, metav1.GetOptions{}); err != nil {
 			return false, err
 		}
-		// Apply the update, then attempt to push it to the apiserver.
+		// 应用更新，然后尝试将其推送到 apiserver。
 		applyUpdate(rs)
 		if rs, err = c.AppsV1().ReplicaSets(namespace).Update(context.TODO(), rs, metav1.UpdateOptions{}); err == nil {
 			logf("Updating replica set %q", name)
@@ -53,7 +53,7 @@ func UpdateReplicaSetWithRetries(c clientset.Interface, namespace, name string, 
 	return rs, pollErr
 }
 
-// Verify .Status.Replicas is equal to .Spec.Replicas
+// 验证 .Status.Replicas 是否等于 .Spec.Replicas
 func WaitRSStable(t *testing.T, clientSet clientset.Interface, rs *apps.ReplicaSet, pollInterval, pollTimeout time.Duration) error {
 	desiredGeneration := rs.Generation
 	if err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {

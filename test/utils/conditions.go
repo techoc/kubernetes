@@ -28,15 +28,15 @@ type ContainerFailures struct {
 	Restarts int
 }
 
-// PodRunningReady checks whether pod p's phase is running and it has a ready
-// condition of status true.
+// PodRunningReady 检查 Pod p 的阶段是否为 Running，
+// 并且是否具有状态为 true 的 Ready condition。
 func PodRunningReady(p *v1.Pod) (bool, error) {
-	// Check the phase is running.
+	// 检查阶段是否为 Running。
 	if p.Status.Phase != v1.PodRunning {
 		return false, fmt.Errorf("want pod '%s' on '%s' to be '%v' but was '%v'",
 			p.ObjectMeta.Name, p.Spec.NodeName, v1.PodRunning, p.Status.Phase)
 	}
-	// Check the ready condition is true.
+	// 检查 Ready condition 是否为 true。
 	if !podutil.IsPodReady(p) {
 		return false, fmt.Errorf("pod '%s' on '%s' didn't have condition {%v %v}; conditions: %v",
 			p.ObjectMeta.Name, p.Spec.NodeName, v1.PodReady, v1.ConditionTrue, p.Status.Conditions)
@@ -45,7 +45,7 @@ func PodRunningReady(p *v1.Pod) (bool, error) {
 }
 
 func PodRunningReadyOrSucceeded(p *v1.Pod) (bool, error) {
-	// Check if the phase is succeeded.
+	// 检查阶段是否为 Succeeded。
 	if p.Status.Phase == v1.PodSucceeded {
 		return true, nil
 	}
@@ -56,10 +56,10 @@ func PodSucceeded(p *v1.Pod) (bool, error) {
 	return p.Status.Phase == v1.PodSucceeded, nil
 }
 
-// FailedContainers inspects all containers in a pod and returns failure
-// information for containers that have failed or been restarted.
-// A map is returned where the key is the containerID and the value is a
-// struct containing the restart and failure information
+// FailedContainers 检查 Pod 中的所有容器，并返回已失败或
+// 已重启容器的失败信息。
+// 返回一个 map，其中键为 containerID，值为
+// 包含重启和失败信息的结构体
 func FailedContainers(pod *v1.Pod) map[string]ContainerFailures {
 	var state ContainerFailures
 	states := make(map[string]ContainerFailures)
@@ -87,9 +87,9 @@ func FailedContainers(pod *v1.Pod) map[string]ContainerFailures {
 	return states
 }
 
-// TerminatedContainers inspects all containers in a pod and returns a map
-// of "container name: termination reason", for all currently terminated
-// containers.
+// TerminatedContainers 检查 Pod 中的所有容器，并返回一个 map，
+// 其中包含所有当前已终止容器的
+// "容器名: 终止原因"。
 func TerminatedContainers(pod *v1.Pod) map[string]string {
 	states := make(map[string]string)
 	statuses := pod.Status.ContainerStatuses

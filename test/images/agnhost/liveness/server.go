@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// A simple server that is alive for 10 seconds, then reports unhealthy for
-// the rest of its (hopefully) short existence.
+// 一个简单的服务器，存活 10 秒，随后在其（希望很）短暂余生中
+// 报告不健康。
 
 package liveness
 
@@ -29,7 +29,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdLiveness is used by agnhost Cobra.
+// CmdLiveness 由 agnhost Cobra 使用。
 var CmdLiveness = &cobra.Command{
 	Use:   "liveness",
 	Short: "Starts a server that is alive for 10 seconds",

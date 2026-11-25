@@ -37,12 +37,12 @@ const (
 	duration365d         = time.Hour * 24 * 365
 )
 
-// NewPrivateKey creates an RSA private key
+// NewPrivateKey 创建一个 RSA 私钥
 func NewPrivateKey() (*rsa.PrivateKey, error) {
 	return rsa.GenerateKey(cryptorand.Reader, rsaKeySize)
 }
 
-// EncodeCertPEM returns PEM-endcoded certificate data
+// EncodeCertPEM 返回 PEM 编码的证书数据
 func EncodeCertPEM(cert *x509.Certificate) []byte {
 	block := pem.Block{
 		Type:  certificateBlockType,
@@ -51,9 +51,9 @@ func EncodeCertPEM(cert *x509.Certificate) []byte {
 	return pem.EncodeToMemory(&block)
 }
 
-// NewSignedCert creates a signed certificate using the given CA certificate and key
+// NewSignedCert 使用给定的 CA 证书和密钥创建签名证书
 func NewSignedCert(cfg *certutil.Config, key crypto.Signer, caCert *x509.Certificate, caKey crypto.Signer) (*x509.Certificate, error) {
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 返回 [0, max-1) 范围内的均匀随机值，然后给 serial 加 1，使其成为 [1, max) 范围内的均匀随机值。
 	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		return nil, err

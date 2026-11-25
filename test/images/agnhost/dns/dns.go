@@ -24,18 +24,18 @@ import (
 
 const etcHostsFile = "/etc/hosts"
 
-// A /etc/resolv.conf file managed by kubelet looks like this:
+// 由 kubelet 管理的 /etc/resolv.conf 文件内容如下：
 // nameserver DNS_CLUSTER_IP
 // search test-dns.svc.cluster.local svc.cluster.local cluster.local q53aahaikqaehcai3ylfqdtc5b.bx.internal.cloudapp.net
 // options ndots:5
 
-// GetDNSSuffixList reads DNS config file and returns the list of configured DNS suffixes
+// GetDNSSuffixList 读取 DNS 配置文件，返回已配置的 DNS 后缀列表
 func GetDNSSuffixList() []string {
 	fileData := readFile("/etc/resolv.conf")
 	lines := strings.Split(fileData, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "search") {
-			// omit the starting "search".
+			// 去掉开头的 "search"。
 			return strings.Split(line, " ")[1:]
 		}
 	}
@@ -48,7 +48,7 @@ func getDNSServerList() []string {
 	lines := strings.Split(fileData, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "nameserver") {
-			// omit the starting "nameserver".
+			// 去掉开头的 "nameserver"。
 			return strings.Split(line, " ")[1:]
 		}
 	}

@@ -32,7 +32,7 @@ const (
      ]`
 )
 
-// deny configmaps with specific key-value pair.
+// 拒绝包含特定键值对的 ConfigMap。
 func admitConfigMaps(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	klog.V(2).Info("admitting configmaps")
 	configMapResource := metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}

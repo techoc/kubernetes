@@ -24,7 +24,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// alwaysAllowDelayFiveSeconds sleeps for five seconds and allows all requests made to this function.
+// alwaysAllowDelayFiveSeconds 休眠五秒，然后允许所有发送到此函数的请求。
 func alwaysAllowDelayFiveSeconds(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	klog.V(2).Info("always-allow-with-delay sleeping for 5 seconds")
 	time.Sleep(5 * time.Second)

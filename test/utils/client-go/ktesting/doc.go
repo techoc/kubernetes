@@ -14,13 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package ktesting in client-go adds supports for testing with client-go
-// to ktesting:
-// - Storing and retrieving client instances and REST configuration.
-// - TODO: Namespace creation.
+// client-go 中的 ktesting 包为 ktesting 增加了使用 client-go 进行测试的支持：
+// - 存储和获取客户端实例及 REST 配置。
+// - TODO: 创建命名空间。
 //
-// Those can of course also be passed as separate parameters.
-// When using TContext, a single parameter is enough.
+// 当然，这些内容也可以作为单独的参数传递。
+// 使用 TContext 时，一个参数就足够了。
 //
-// TODO: move to k8s.io/client-go/ktesting
+// TODO: 移至 k8s.io/client-go/ktesting
 package ktesting

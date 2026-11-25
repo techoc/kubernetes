@@ -17,13 +17,13 @@ limitations under the License.
 package nat
 
 /*
-client/server for testing CLOSE_WAIT timeout condition in iptables NAT.
+用于测试 iptables NAT 中 CLOSE_WAIT 超时情况的客户端/服务端。
 
 client              server
   |                   |
   |<--tcp handshake-->|
-  |<-------fin--------| half-close from server
-  |                   | client is in CLOSE_WAIT
+  |<-------fin--------| 服务端半关闭
+  |                   | 客户端处于 CLOSE_WAIT 状态
 */
 
 import (
@@ -36,17 +36,16 @@ import (
 	"k8s.io/kubernetes/test/images/agnhost/net/common"
 )
 
-// leakedConnection is a global variable that should leak the active
-// connection assigned here.
+// leakedConnection 是一个全局变量，用于故意泄漏赋给它的活动连接。
 //
 //nolint:unused // U1000 intentional unused variable
 var leakedConnection *net.TCPConn
 
-// CloseWaitServerOptions holds server JSON options.
+// CloseWaitServerOptions 保存服务端的 JSON 选项。
 type CloseWaitServerOptions struct {
-	// Address to bind for the test
+	// 测试要绑定的地址
 	LocalAddr string
-	// Timeout to wait after sending the FIN.
+	// 发送 FIN 之后要等待的超时时间。
 	PostFinTimeoutSeconds int
 }
 
@@ -54,17 +53,17 @@ type closeWaitServer struct {
 	options *CloseWaitServerOptions
 }
 
-// NewCloseWaitServer returns a new Runner.
+// NewCloseWaitServer 返回一个新的 Runner。
 func NewCloseWaitServer() common.Runner {
 	return &closeWaitServer{}
 }
 
-// NewOptions allocates new options structure.
+// NewOptions 分配新的 options 结构体。
 func (server *closeWaitServer) NewOptions() interface{} {
 	return &CloseWaitServerOptions{}
 }
 
-// Run the server-side of the test.
+// Run 运行测试的服务端部分。
 func (server *closeWaitServer) Run(logger *log.Logger, rawOptions interface{}) error {
 	if options, ok := rawOptions.(*CloseWaitServerOptions); ok {
 		server.options = options
@@ -95,9 +94,9 @@ func (server *closeWaitServer) Run(logger *log.Logger, rawOptions interface{}) e
 
 	logger.Printf("Client connected")
 
-	// Send client half-close FIN so client is now in CLOSE_WAIT. We keep
-	// the client -> server pipe open to verify whether or not the NAT
-	// dropped our connection.
+	// 向客户端发送半关闭的 FIN，使客户端进入 CLOSE_WAIT 状态。
+	// 我们保持 client -> server 方向的管道开放，
+	// 以验证 NAT 是否丢弃了我们的连接。
 	if err := conn.CloseWrite(); err != nil {
 		return err
 	}
@@ -112,17 +111,15 @@ func (server *closeWaitServer) Run(logger *log.Logger, rawOptions interface{}) e
 	return nil
 }
 
-// CloseWaitClientOptions holds client JSON options.
+// CloseWaitClientOptions 保存客户端的 JSON 选项。
 type CloseWaitClientOptions struct {
-	// RemoteAddr of the server to connect to.
+	// 要连接的服务端的 RemoteAddr。
 	RemoteAddr string
-	// TimeoutSeconds on I/O with the server.
+	// 与服务端进行 I/O 的超时秒数。
 	TimeoutSeconds int
-	// Half-close timeout (to give the test time to check the status of the
-	// conntrack table entry.
+	// 半关闭后的等待时间（给测试留出检查 conntrack 表项状态的时间）。
 	PostFinTimeoutSeconds int
-	// Leak connection (assign to global variable so connection persists
-	// as long as the process remains.
+	// 是否泄漏连接（赋值给全局变量，使连接在进程存活期间一直保持）。
 	LeakConnection bool
 }
 
@@ -130,17 +127,17 @@ type closeWaitClient struct {
 	options *CloseWaitClientOptions
 }
 
-// NewCloseWaitClient creates a new runner
+// NewCloseWaitClient 创建一个新的 runner
 func NewCloseWaitClient() common.Runner {
 	return &closeWaitClient{}
 }
 
-// NewOptions allocates new options structure.
+// NewOptions 分配新的 options 结构体。
 func (client *closeWaitClient) NewOptions() interface{} {
 	return &CloseWaitClientOptions{}
 }
 
-// Run the client.m
+// Run 运行客户端。
 func (client *closeWaitClient) Run(logger *log.Logger, rawOptions interface{}) error {
 	if options, ok := rawOptions.(*CloseWaitClientOptions); ok {
 		client.options = options

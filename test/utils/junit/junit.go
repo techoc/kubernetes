@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package junit provides data structures to allow easy XML encoding
-// and decoding of JUnit test results.
+// Package junit 提供数据结构，以便于对 JUnit 测试结果进行 XML 编码
+// 和解码。
 package junit
 
 import (
@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-// TestSuite is a top-level test suite containing test cases.
+// TestSuite 是包含测试用例的顶层测试套件。
 type TestSuite struct {
 	XMLName xml.Name `xml:"testsuite"`
 
@@ -46,8 +46,8 @@ type TestSuite struct {
 	SystemErr string `xml:"system-err,omitempty"`
 }
 
-// Update iterates through the TestCases and updates Tests, Errors,
-// Failures, and Skipped top level attributes.
+// Update 遍历 TestCases，并更新 Tests、Errors、
+// Failures 和 Skipped 这些顶层属性。
 func (t *TestSuite) Update() {
 	t.Tests = len(t.TestCases)
 	for _, tc := range t.TestCases {
@@ -59,7 +59,7 @@ func (t *TestSuite) Update() {
 	}
 }
 
-// Property is a simple key-value property that can be attached to a TestSuite.
+// Property 是可以附加到 TestSuite 的简单键值对属性。
 type Property struct {
 	XMLName xml.Name `xml:"property"`
 
@@ -67,7 +67,7 @@ type Property struct {
 	Value string `xml:"value,attr"`
 }
 
-// Error represents the errors in a test case.
+// Error 表示测试用例中的错误。
 type Error struct {
 	XMLName xml.Name `xml:"error"`
 
@@ -77,7 +77,7 @@ type Error struct {
 	Value string `xml:",cdata"`
 }
 
-// Failure represents the failures in a test case.
+// Failure 表示测试用例中的失败。
 type Failure struct {
 	XMLName xml.Name `xml:"failure"`
 
@@ -87,7 +87,7 @@ type Failure struct {
 	Value string `xml:",cdata"`
 }
 
-// TestCase represents a single test case within a suite.
+// TestCase 表示套件中的单个测试用例。
 type TestCase struct {
 	XMLName xml.Name `xml:"testcase"`
 

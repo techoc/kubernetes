@@ -27,13 +27,13 @@ func TestCSIImageConfigs(t *testing.T) {
 	configs := map[ImageID]Config{}
 	appendCSIImageConfigs(configs)
 
-	// We expect at least one entry for each of these images. There may be
-	// more than one entry for the same image when different YAMLs use
-	// different versions.
+	// 我们期望这些镜像中的每一个至少有一个条目。当不同的 YAML
+	// 使用不同版本时，同一个镜像可能会有
+	// 多个条目。
 	//
-	// The exact versions are not checked here because that would bring
-	// back the problem of updating the expected versions. The set of
-	// images shouldn't change much.
+	// 此处不检查确切的版本，因为那会重新引入
+	// 需要不断更新预期版本的问题。
+	// 镜像集合不应该有太大变化。
 	expectedImages := []string{
 		"csi-attacher",
 		"csi-external-health-monitor-controller",
@@ -44,17 +44,17 @@ func TestCSIImageConfigs(t *testing.T) {
 		"hostpathplugin",
 		"livenessprobe",
 
-		// From the GCP deployment.
+		// 来自 GCP 部署。
 		"gcp-compute-persistent-disk-csi-driver",
 
-		// For some hostpath tests.
+		// 用于一些 hostpath 测试。
 		"busybox",
 
-		// For AnyVolumeDataSource feature tests.
+		// 用于 AnyVolumeDataSource 特性测试。
 		"volume-data-source-validator",
 		"hello-populator",
 
-		// For SnapshotMetadata feature tests.
+		// 用于 SnapshotMetadata 特性测试。
 		"csi-snapshot-metadata",
 	}
 	actualImages := sets.NewString()

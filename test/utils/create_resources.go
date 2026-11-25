@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO: Refactor common part of functions in this file for generic object kinds.
+// TODO: 重构本文件中针对通用对象类型的函数公共部分。
 
 package utils
 
@@ -32,14 +32,14 @@ import (
 )
 
 const (
-	// Parameters for retrying with exponential backoff.
+	// 使用指数退避进行重试的参数。
 	retryBackoffInitialDuration = 100 * time.Millisecond
 	retryBackoffFactor          = 3
 	retryBackoffJitter          = 0
 	retryBackoffSteps           = 6
 )
 
-// Utility for retrying the given function with exponential backoff.
+// 使用指数退避重试给定函数的工具函数。
 func RetryWithExponentialBackOff(fn wait.ConditionFunc) error {
 	backoff := wait.Backoff{
 		Duration: retryBackoffInitialDuration,
@@ -169,7 +169,7 @@ func CreatePersistentVolumeClaimWithRetries(c clientset.Interface, namespace str
 	return RetryWithExponentialBackOff(createFunc)
 }
 
-// isGenerateNameConflict returns whether the error is generateName conflict or not.
+// isGenerateNameConflict 返回该错误是否为 generateName 冲突。
 func isGenerateNameConflict(meta metav1.ObjectMeta, err error) bool {
 	if apierrors.IsAlreadyExists(err) && meta.Name == "" {
 		return true

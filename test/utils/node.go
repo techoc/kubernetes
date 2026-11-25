@@ -18,8 +18,8 @@ package utils
 
 import v1 "k8s.io/api/core/v1"
 
-// GetNodeCondition extracts the provided condition from the given status and returns that.
-// Returns nil and -1 if the condition is not present, and the index of the located condition.
+// GetNodeCondition 从给定状态中提取所提供的 condition 并返回。
+// 如果 condition 不存在，则返回 nil 和 -1；存在时返回其索引。
 func GetNodeCondition(status *v1.NodeStatus, conditionType v1.NodeConditionType) (int, *v1.NodeCondition) {
 	if status == nil {
 		return -1, nil

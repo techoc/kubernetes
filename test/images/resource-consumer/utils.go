@@ -29,12 +29,12 @@ var (
 	consumeMemBinary = "stress"
 )
 
-// ConsumeMem consumes a given number of megabytes for the specified duration.
+// ConsumeMem 在指定时长内消耗给定数量的内存（以兆字节计）。
 func ConsumeMem(megabytes int, durationSec int) {
 	log.Printf("ConsumeMem megabytes: %v, durationSec: %v", megabytes, durationSec)
 	megabytesString := strconv.Itoa(megabytes) + "M"
 	durationSecString := strconv.Itoa(durationSec)
-	// creating new consume memory process
+	// 创建新的内存消耗进程
 	consumeMem := exec.Command(consumeMemBinary, "-m", "1", "--vm-bytes", megabytesString, "--vm-hang", "0", "-t", durationSecString)
 	err := consumeMem.Run()
 	if err != nil {

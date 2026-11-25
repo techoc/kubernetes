@@ -58,7 +58,7 @@ func TestWithRESTConfig(t *testing.T) {
 		tCtx.Assert(tCtx.APIExtensions()).To(gomega.BeIdenticalTo(extensions), "APIExtensions()")
 	})
 
-	// Cancel, then let testing.T invoke test cleanup.
+	// 先取消，然后让 testing.T 执行测试清理。
 	tCtx.Cancel("test is complete")
 }
 
@@ -91,6 +91,6 @@ func TestWithClients(t *testing.T) {
 		tCtx.Assert(tCtx.APIExtensions()).To(gomega.BeIdenticalTo(extensions), "APIExtensions()")
 	})
 
-	// Cancel, then let testing.T invoke test cleanup.
+	// 先取消，然后让 testing.T 执行测试清理。
 	tCtx.Cancel("test is complete")
 }

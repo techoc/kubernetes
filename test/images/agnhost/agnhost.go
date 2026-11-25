@@ -55,7 +55,7 @@ import (
 	tcpreset "k8s.io/kubernetes/test/images/agnhost/tcp-reset"
 	testwebserver "k8s.io/kubernetes/test/images/agnhost/test-webserver"
 	"k8s.io/kubernetes/test/images/agnhost/webhook"
-	"k8s.io/kubernetes/third_party/forked/vishhstress" // MIT License
+	"k8s.io/kubernetes/third_party/forked/vishhstress" // MIT 许可证
 )
 
 var Version = "development"
@@ -102,8 +102,8 @@ func main() {
 	rootCmd.AddCommand(mtlsserver.CmdMtlsServer)
 	rootCmd.AddCommand(nonewprivs.CmdNoNewPrivs)
 	rootCmd.AddCommand(externalmetrics.CmdExternalMetricsServer)
-	// NOTE(claudiub): Some tests are passing logging related flags, so we need to be able to
-	// accept them. This will also include them in the printed help.
+	// NOTE(claudiub): 某些测试会传入与日志相关的标志，因此我们需要能够
+	// 接受这些标志，这也会让它们出现在打印的帮助信息中。
 	code := cli.Run(rootCmd)
 	os.Exit(code)
 }

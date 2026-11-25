@@ -21,8 +21,8 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-// CreateKubeConfig converts a [rest.Config] into a [clientcmdapi.Config]
-// which then can be written to a file with [clientcmd.WriteToFile].
+// CreateKubeConfig 将 [rest.Config] 转换为 [clientcmdapi.Config]，
+// 然后可以使用 [clientcmd.WriteToFile] 将其写入文件。
 func CreateKubeConfig(clientCfg *rest.Config) *clientcmdapi.Config {
 	clusterNick := "cluster"
 	userNick := "user"

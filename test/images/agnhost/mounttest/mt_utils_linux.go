@@ -24,8 +24,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// formatFsType returns a string representation of the filesystem type.
-// It translates known filesystem magic numbers to human-readable names.
+// formatFsType 返回文件系统类型的字符串表示。
+// 它会把已知的文件系统魔数转换为便于阅读的名称。
 func formatFsType(fsType int64) string {
 	if fsType == unix.TMPFS_MAGIC {
 		return "tmpfs"

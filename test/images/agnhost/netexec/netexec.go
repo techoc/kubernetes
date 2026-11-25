@@ -58,7 +58,7 @@ var (
 
 const bindToAny = ""
 
-// CmdNetexec is used by agnhost Cobra.
+// CmdNetexec 由 agnhost Cobra 使用。
 var CmdNetexec = &cobra.Command{
 	Use:   "netexec",
 	Short: "Creates HTTP(S), UDP, and (optionally) SCTP servers with various endpoints",
@@ -187,7 +187,7 @@ func main(cmd *cobra.Command, args []string) {
 		addRoutes(http.DefaultServeMux, sigTermReceived, exitCh)
 	}
 
-	// UDP server
+	// UDP 服务器
 	if udpPort != -1 {
 		udpBindTo, err := parseAddresses(udpListenAddresses)
 		if err != nil {
@@ -199,7 +199,7 @@ func main(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// SCTP server
+	// SCTP 服务器
 	if sctpPort != -1 {
 		go startSCTPServer(sctpPort)
 	}
@@ -227,7 +227,7 @@ func addRoutes(mux *http.ServeMux, sigTermReceived chan struct{}, exitCh chan sh
 	mux.HandleFunc("/redirect", redirectHandler)
 	mux.HandleFunc("/shell", shellHandler)
 	mux.HandleFunc("/upload", uploadHandler)
-	// older handlers
+	// 旧版处理器
 	mux.HandleFunc("/hostName", hostNameHandler)
 	mux.HandleFunc("/shutdown", shutdownHandler)
 }
@@ -245,7 +245,7 @@ func startServer(server *http.Server, exitCh chan shutdownRequest, fn func() err
 
 	if err := fn(); err != nil {
 		if err == http.ErrServerClosed {
-			// wait until the goroutine calls os.Exit()
+			// 等待 goroutine 调用 os.Exit()
 			select {}
 		}
 		log.Fatal(err)
@@ -351,8 +351,8 @@ func envvarHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprint(w, val)
 }
 
-// healthHandler response with a 200 if the UDP server is ready. It also serves
-// as a health check of the HTTP server by virtue of being a HTTP handler.
+// healthHandler 在 UDP 服务器就绪时返回 200。由于它本身是一个 HTTP 处理器，
+// 因此也兼作 HTTP 服务器的健康检查。
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("GET /healthz")
 	if serverReady.Load() {
@@ -362,8 +362,8 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusPreconditionFailed)
 }
 
-// readyzHandler response with a 200 if the UDP server is ready. It serves as a readyz that will return a 503
-// once a sig-term has been received.   This allows for graceful removal from endpoints during a pod delete flow.
+// readyzHandler 在 UDP 服务器就绪时返回 200。它作为就绪检查端点，在收到 sig-term 后会返回 503，
+// 从而在 Pod 删除流程中能够优雅地从 endpoints 中移除。
 func readyzHandler(sigTermReceived chan struct{}) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GET /readyz")
@@ -641,7 +641,7 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, location, code)
 }
 
-// udp server supports the hostName, echo and clientIP commands.
+// UDP 服务器支持 hostName、echo 和 clientIP 命令。
 func startUDPServer(address string, udpPort int) {
 	serverAddress, err := net.ResolveUDPAddr("udp", net.JoinHostPort(address, strconv.Itoa(udpPort)))
 	assertNoError(err, fmt.Sprintf("failed to resolve UDP address for port %d", udpPort))
@@ -651,7 +651,7 @@ func startUDPServer(address string, udpPort int) {
 	buf := make([]byte, 2048)
 
 	log.Printf("Started UDP server on port %s %d", address, udpPort)
-	// Start responding to readiness probes.
+	// 开始响应就绪探针。
 	serverReady.Store(true)
 	defer func() {
 		log.Printf("UDP server exited")
@@ -700,7 +700,7 @@ func startUDPServer(address string, udpPort int) {
 	}
 }
 
-// sctp server supports the hostName, echo and clientIP commands.
+// SCTP 服务器支持 hostName、echo 和 clientIP 命令。
 func startSCTPServer(sctpPort int) {
 	serverAddress, err := sctp.ResolveSCTPAddr("sctp", fmt.Sprintf(":%d", sctpPort))
 	assertNoError(err, fmt.Sprintf("failed to resolve SCTP address for port %d", sctpPort))
@@ -710,7 +710,7 @@ func startSCTPServer(sctpPort int) {
 	buf := make([]byte, 1024)
 
 	log.Printf("Started SCTP server")
-	// Start responding to readiness probes.
+	// 开始响应就绪探针。
 	serverReady.Store(true)
 	defer func() {
 		log.Printf("SCTP server exited")
@@ -783,7 +783,7 @@ func parseAddresses(addresses string) ([]string, error) {
 	if addresses == "" {
 		return []string{bindToAny}, nil
 	}
-	// Using a set to remove duplicates
+	// 使用集合去重
 	res := make([]string, 0)
 	split := strings.Split(addresses, ",")
 	for _, address := range split {

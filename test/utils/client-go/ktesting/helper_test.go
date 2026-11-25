@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// testcase wraps a callback which is called with a TContext that intercepts
-// errors and log output. Those get compared.
+// testcase 包装一个回调函数，该函数会通过一个拦截错误和日志输出的 TContext 来调用。
+// 随后会对这些内容进行比较。
 type testcase struct {
 	cb             func(TContext)
 	expectDuration time.Duration
@@ -57,24 +57,23 @@ func (tc testcase) run(t *testing.T) {
 	})
 }
 
-// normalize replaces parts of message texts which may vary with constant strings.
+// normalize 将消息文本中可能变化的部分替换为常量字符串。
 func normalize(msg string) string {
-	// duration
+	// 持续时间
 	msg = regexp.MustCompile(`[[:digit:]]+\.[[:digit:]]+s`).ReplaceAllString(msg, "x.y s")
-	// hex pointer value
+	// 十六进制指针值
 	msg = regexp.MustCompile(`0x[[:xdigit:]]+`).ReplaceAllString(msg, "0xXXXX")
-	// per-test klog header
+	// 每个测试的 klog 头部
 	msg = regexp.MustCompile(`[EI][[:digit:]]{4} [[:digit:]]{2}:[[:digit:]]{2}:[[:digit:]]{2}\.[[:digit:]]{6}\]`).ReplaceAllString(msg, "<klog header>:")
 	return msg
 }
 
-// mockTB records which calls were made (type and parameters)
+// mockTB 记录发生了哪些调用（类型与参数）。
 //
-// The final string looks similar to the output visible in `go test -v`,
-// except that it is visible how the sausage was made (Fatal vs Log + FailNow).
-// Log+FailNow and Fatal are equivalent with testing.T, but not
-// with Ginkgo as underlying TB because it can only properly
-// capture the failure message if Fatal is used.
+// 最终得到的字符串与 `go test -v` 中可见的输出类似，
+// 区别在于可以看到“香肠是怎么做出来的”（Fatal 与 Log + FailNow）。
+// 对于 testing.T，Log+FailNow 与 Fatal 是等价的，但对于以 Ginkgo 作为底层 TB 的情况则不然，
+// 因为只有使用 Fatal 时它才能正确捕获失败消息。
 type mockTB struct {
 	log strings.Builder
 }
@@ -88,7 +87,7 @@ func (m *mockTB) Chdir(dir string) {
 }
 
 func (m *mockTB) Cleanup(func()) {
-	// Gets called by Init all the time, not logged because it's distracting.
+	// 总会被 Init 调用，但不记录下来，因为它会干扰视线。
 	// m.log.WriteString("(CLEANUP)\n")
 }
 
@@ -125,8 +124,8 @@ func (m *mockTB) Fatalf(format string, args ...any) {
 }
 
 func (m *mockTB) Helper() {
-	// TODO: include stack unwinding to verify that Helper is called in the right places.
-	// Merely logging it is not sufficient.
+	// TODO: 加入堆栈回溯，以验证 Helper 在正确的位置被调用。
+	// 仅仅记录它是不够的。
 	// m.log.WriteString("HELPER\n")
 }
 
@@ -139,7 +138,7 @@ func (m *mockTB) Logf(format string, args ...any) {
 }
 
 func (m *mockTB) Name() string {
-	// Gets called by Init all the time, not logged because its distracting.
+	// 总会被 Init 调用，但不记录下来，因为它会干扰视线。
 	// m.log.WriteString("(NAME)\n")
 	return "logBufferT"
 }

@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// A tiny binary for testing ports.
+// 一个用于测试端口的小工具。
 //
-// Reads env vars; for every var of the form SERVE_PORT_X, where X is a valid
-// port number, porter starts an HTTP server which serves the env var's value
-// in response to any query.
+// 读取环境变量；对于每个形如 SERVE_PORT_X 的变量（X 是有效的端口号），
+// porter 会启动一个 HTTP 服务器，用该环境变量的值响应任何查询。
 
 package porter
 
@@ -43,7 +42,7 @@ const (
 	sctpPrefix = "SERVE_SCTP_PORT_"
 )
 
-// CmdPorter is used by agnhost Cobra.
+// CmdPorter 供 agnhost Cobra 使用。
 var CmdPorter = &cobra.Command{
 	Use:   "porter",
 	Short: "Serves requested data on ports specified in ENV variables",
@@ -62,7 +61,7 @@ To use a different cert/key, mount them into the pod and set the "CERT_FILE" and
 	Run:  main,
 }
 
-// JSONResponse enables --json-response flag
+// JSONResponse 启用 --json-response 标志
 var JSONResponse bool
 
 type jsonResponse struct {
@@ -76,9 +75,9 @@ func init() {
 
 func main(cmd *cobra.Command, args []string) {
 	for _, vk := range os.Environ() {
-		// Put everything before the first = sign in parts[0], and
-		// everything else in parts[1] (even if there are multiple =
-		// characters).
+		// 将第一个 = 号之前的内容放入 parts[0]，
+		// 其余内容放入 parts[1]（即使有多个 =
+		// 字符）。
 		parts := strings.SplitN(vk, "=", 2)
 		key := parts[0]
 		value := parts[1]

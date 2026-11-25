@@ -26,10 +26,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Bail out early when -help was given as parameter.
+	// 如果参数中包含 -help，则提前退出。
 	flag.Parse()
 
-	// Must be called *before* creating new goroutines.
+	// 必须在创建新 goroutine *之前* 调用。
 	goleakOpts := []goleak.Option{
 		goleak.IgnoreCurrent(),
 	}

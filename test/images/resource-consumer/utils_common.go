@@ -22,10 +22,10 @@ import (
 	"os/exec"
 )
 
-// ConsumeCPU consumes a given number of millicores for the specified duration.
+// ConsumeCPU 在指定时长内消耗给定数量的毫核（millicore）。
 func ConsumeCPU(millicores int, durationSec int) {
 	log.Printf("ConsumeCPU millicores: %v, durationSec: %v", millicores, durationSec)
-	// creating new consume cpu process
+	// 创建新的 CPU 消耗进程
 	arg1 := fmt.Sprintf("-millicores=%d", millicores)
 	arg2 := fmt.Sprintf("-duration-sec=%d", durationSec)
 	consumeCPU := exec.Command(consumeCPUBinary, arg1, arg2)
@@ -35,8 +35,8 @@ func ConsumeCPU(millicores int, durationSec int) {
 	}
 }
 
-// GetCurrentStatus prints out a no-op.
+// GetCurrentStatus 输出一个空操作。
 func GetCurrentStatus() {
 	log.Printf("GetCurrentStatus")
-	// not implemented
+	// 尚未实现
 }

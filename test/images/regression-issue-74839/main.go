@@ -27,7 +27,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// TCP port to listen
+// 要监听的 TCP 端口
 const port = 9000
 
 func main() {
@@ -36,7 +36,7 @@ func main() {
 		panic("No valid IP found")
 	}
 
-	// listen TCP packets to inject the out of order TCP packets
+	// 监听 TCP 数据包，以注入乱序的 TCP 数据包
 	for _, ip := range ips {
 		log.Printf("external ip: %v", ip.String())
 		go probe(ip.String())
@@ -44,7 +44,7 @@ func main() {
 
 	log.Printf("listen on %v:%d", "0.0.0.0", port)
 
-	// open a server listening to establish the TCP connections
+	// 开启一个监听中的服务端以建立 TCP 连接
 	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {
 		panic(err)
@@ -57,7 +57,7 @@ func main() {
 		}
 
 		go func(conn net.Conn) {
-			// Close the connection after 10 secs
+			// 10 秒后关闭连接
 			time.Sleep(10 * time.Second)
 			conn.Close()
 		}(conn)
@@ -117,8 +117,8 @@ func probe(ip string) {
 					SrcPort:    pkt.DestPort,
 					DestPort:   pkt.SrcPort,
 					Ack:        seq,
-					Seq:        pkt.Ack - 100000,      // Bad: seq out-of-window
-					Flags:      (5 << 12) | PSH | ACK, // Offset and Flags  oooo000F FFFFFFFF (o:offset, F:flags)
+					Seq:        pkt.Ack - 100000,      // 错误：seq 超出窗口
+					Flags:      (5 << 12) | PSH | ACK, // Offset 和 Flags  oooo000F FFFFFFFF (o:offset, F:flags)
 					WindowSize: pkt.WindowSize,
 				}
 
@@ -136,9 +136,9 @@ func probe(ip string) {
 	}
 }
 
-// getIPs gets the IPs from the downward API
-// we don't have to validate the IPs because
-// they are validated previously by kubernetes/CNI
+// getIPs 从 downward API 获取 IP
+// 我们无需校验这些 IP，因为它们
+// 此前已经由 kubernetes/CNI 校验过
 func getIPs() []net.IP {
 	var ips []net.IP
 	podIP, podIPs := os.Getenv("POD_IP"), os.Getenv("POD_IPS")

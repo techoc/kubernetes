@@ -33,19 +33,18 @@ import (
 	"k8s.io/kubernetes/test/utils/kubeconfig"
 )
 
-// TestAPIServer provides access to a running apiserver instance.
+// TestAPIServer 提供对正在运行的 apiserver 实例的访问。
 type TestAPIServer struct {
-	// ClientSet is already initialized to access the apiserver as admin.
+	// ClientSet 已经初始化为以 admin 身份访问 apiserver。
 	ClientSet clientset.Interface
 
-	// KubeConfigFile is the absolute path for a kube.config file that
-	// grants admin access to the apiserver.
+	// KubeConfigFile 是一个 kube.config 文件的绝对路径，
+	// 该文件授予对 apiserver 的 admin 访问权限。
 	KubeConfigFile string
 }
 
-// StartAPIServer runs etcd and apiserver in the background in the same
-// process. All resources get released automatically when the test
-// completes. If startup fails, the test gets aborted.
+// StartAPIServer 在同一进程的后台运行 etcd 和 apiserver。
+// 测试完成时，所有资源都会自动释放。如果启动失败，测试会被中止。
 func StartAPITestServer(t *testing.T) TestAPIServer {
 	cfg := etcdserver.NewTestConfig(t)
 	etcdClient := etcdserver.RunEtcd(t, cfg)
@@ -66,11 +65,11 @@ func StartAPITestServer(t *testing.T) TestAPIServer {
 }
 
 func writeKubeConfigForWardleServerToKASConnection(t *testing.T, kubeClientConfig *rest.Config) string {
-	// write a kubeconfig out for starting other API servers with delegated auth.  remember, no in-cluster config
-	// the loopback client config uses a loopback cert with different SNI.  We need to use the "real"
-	// cert, so we'll hope we aren't hacked during a unit test and instead load it from the server we started.
+	// 写出一个 kubeconfig，用于以委托认证方式启动其他 API server。注意，没有 in-cluster config。
+	// loopback client config 使用了具有不同 SNI 的 loopback 证书。我们需要使用"真实"的
+	// 证书，因此我们假设在单元测试期间不会被攻击，直接从我们启动的服务器上加载它。
 	wardleToKASKubeClientConfig := rest.CopyConfig(kubeClientConfig)
-	wardleToKASKubeClientConfig.ServerName = "" // reset SNI to use the "real" cert
+	wardleToKASKubeClientConfig.ServerName = "" // 重置 SNI 以使用"真实"证书
 
 	servingCerts, _, err := cert.GetServingCertificatesForURL(wardleToKASKubeClientConfig.Host, "")
 	if err != nil {

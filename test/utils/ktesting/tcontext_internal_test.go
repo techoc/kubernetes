@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file is in package ktesting (not ktesting_test) so that it can access
-// unexported fields of TContext.
+// 本文件属于 ktesting 包（而非 ktesting_test），以便访问
+// TContext 的未导出字段。
 package ktesting
 
 import (
@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting/initoption"
 )
 
-// deadlineT2 mirrors the deadlineT helper in ktesting_test.
+// deadlineT2 对应于 ktesting_test 中的 deadlineT 辅助类型。
 type deadlineT2 struct {
 	TB
 	deadline *time.Time
@@ -42,8 +42,8 @@ func (t *deadlineT2) Deadline() (time.Time, bool) {
 	return *t.deadline, true
 }
 
-// TestDefaultCleanupGracePeriod verifies that cleanupGracePeriod is set to
-// DefaultCleanupGracePeriod when no override is given.
+// TestDefaultCleanupGracePeriod 验证在未指定覆盖值时，
+// cleanupGracePeriod 会被设为 DefaultCleanupGracePeriod。
 func TestDefaultCleanupGracePeriod(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockDeadline := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -55,8 +55,8 @@ func TestDefaultCleanupGracePeriod(t *testing.T) {
 	})
 }
 
-// TestCustomCleanupGracePeriod verifies that WithCleanupGracePeriod stores the
-// override in cleanupGracePeriod and shifts the effective deadline accordingly.
+// TestCustomCleanupGracePeriod 验证 WithCleanupGracePeriod 会将
+// 覆盖值存入 cleanupGracePeriod，并相应调整有效的截止时间。
 func TestCustomCleanupGracePeriod(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockDeadline := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -79,8 +79,8 @@ func TestCustomCleanupGracePeriod(t *testing.T) {
 	})
 }
 
-// TestInitCtxCleanupGracePeriod verifies that InitCtx applies
-// WithCleanupGracePeriod via the previously ignored opts parameter.
+// TestInitCtxCleanupGracePeriod 验证 InitCtx 会通过此前被忽略的
+// opts 参数应用 WithCleanupGracePeriod。
 func TestInitCtxCleanupGracePeriod(t *testing.T) {
 	custom := 42 * time.Second
 	tCtx := InitCtx(context.Background(), t, initoption.WithCleanupGracePeriod(custom))
@@ -89,8 +89,8 @@ func TestInitCtxCleanupGracePeriod(t *testing.T) {
 	}
 }
 
-// TestInitCtxDefaultCleanupGracePeriod verifies that InitCtx falls back to
-// DefaultCleanupGracePeriod when no option is given.
+// TestInitCtxDefaultCleanupGracePeriod 验证在未给定选项时，
+// InitCtx 会回退到 DefaultCleanupGracePeriod。
 func TestInitCtxDefaultCleanupGracePeriod(t *testing.T) {
 	tCtx := InitCtx(context.Background(), t)
 	if tCtx.cleanupGracePeriod != DefaultCleanupGracePeriod {

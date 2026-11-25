@@ -48,7 +48,7 @@ import (
 
 const SpiffePathKey = "spiffe/path-overriding"
 
-// Controller is an in-memory signing controller for PodCertificateRequests.
+// Controller 是一个用于 PodCertificateRequests 的内存签名控制器。
 type Controller struct {
 	clock      clock.PassiveClock
 	signerName string
@@ -63,7 +63,7 @@ type Controller struct {
 	caCerts     [][]byte
 }
 
-// New creates a new Controller.
+// New 创建一个新的 Controller。
 func New(clock clock.PassiveClock, signerName, clusterDNSDomain string, caKeys []crypto.PrivateKey, caCerts [][]byte, kc kubernetes.Interface) *Controller {
 	pcrInformer := certinformersv1.NewFilteredPodCertificateRequestInformer(kc, metav1.NamespaceAll, 24*time.Hour, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 		func(opts *metav1.ListOptions) {
@@ -133,7 +133,7 @@ func (c *Controller) Run(ctx context.Context) {
 }
 
 func (c *Controller) ensureTrustBundle(ctx context.Context) {
-	// Create a ClusterTrustBundle with the signer's CA.
+	// 用签名者的 CA 创建一个 ClusterTrustBundle。
 	prefix := strings.Replace(c.signerName, "/", ":", 1)
 	ctbName := prefix + ":primary-bundle"
 	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.caCerts[0]})
@@ -218,16 +218,14 @@ func (c *Controller) handlePCR(ctx context.Context, pcr *certsv1.PodCertificateR
 		return nil
 	}
 
-	// PodCertificateRequests don't have an approval stage, and the node
-	// restriction / isolation check is handled by kube-apiserver.
+	// PodCertificateRequests 没有审批阶段，节点限制 / 隔离检查由 kube-apiserver 处理。
 
-	// If our signer had a policy about which pods are allowed to request
-	// certificates, it would be implemented here.
+	// 如果我们的签名器有关于哪些 pod 可以请求证书的策略，将在这里实现。
 
-	// Proceed to signing.  Our toy signer will make a SPIFFE cert encoding the
-	// namespace and name of the pod's service account.
+	// 继续签名。这个玩具签名器会生成一份 SPIFFE 证书，其中编码了 pod 的 service account 的
+	// 命名空间和名称。
 
-	// Is the PCR already signed?
+	// PCR 是否已经签名？
 	if pcr.Status.CertificateChain != "" {
 		return nil
 	}
@@ -237,9 +235,8 @@ func (c *Controller) handlePCR(ctx context.Context, pcr *certsv1.PodCertificateR
 		return fmt.Errorf("while parsing PKCS#10 request: %w", err)
 	}
 
-	// If our signer had an opinion on which key types were allowable, it would
-	// check subjectPublicKey, and deny the PCR with a SuggestedKeyType
-	// condition on it.
+	// 如果我们的签名器对允许的密钥类型有要求，就会检查 subjectPublicKey，
+	// 并在 PCR 上设置 SuggestedKeyType 条件来拒绝它。
 
 	lifetime := 24 * time.Hour
 	requestedLifetime := time.Duration(*pcr.Spec.MaxExpirationSeconds) * time.Second
@@ -261,7 +258,7 @@ func (c *Controller) handlePCR(ctx context.Context, pcr *certsv1.PodCertificateR
 	notBefore := c.clock.Now().Add(-2 * time.Minute)
 	notAfter := notBefore.Add(lifetime)
 	beginRefreshAt := notAfter.Add(-30 * time.Minute)
-	// Construct DNS names
+	// 构造 DNS 名称
 	dnsNames := []string{
 		fmt.Sprintf("server.%s.svc", pcr.ObjectMeta.Namespace),
 	}
@@ -287,7 +284,7 @@ func (c *Controller) handlePCR(ctx context.Context, pcr *certsv1.PodCertificateR
 		return fmt.Errorf("while signing subject cert: %w", err)
 	}
 
-	// Compose the certificate chain
+	// 组装证书链
 	chainPEM := &bytes.Buffer{}
 	err = pem.Encode(chainPEM, &pem.Block{
 		Type:  "CERTIFICATE",
@@ -306,7 +303,7 @@ func (c *Controller) handlePCR(ctx context.Context, pcr *certsv1.PodCertificateR
 		}
 	}
 
-	// Don't modify the copy in the informer cache.
+	// 不要修改 informer 缓存中的副本。
 	pcr = pcr.DeepCopy()
 	pcr.Status.Conditions = []metav1.Condition{
 		{
@@ -329,8 +326,8 @@ func (c *Controller) handlePCR(ctx context.Context, pcr *certsv1.PodCertificateR
 	return nil
 }
 
-// GenerateCAHierarchy makes a CA hierarchy, possibly with intermediates.  The
-// outputs can be used with Controller.
+// GenerateCAHierarchy 创建一个 CA 层级结构，可能包含中间证书。
+// 其输出可以传给 Controller 使用。
 func GenerateCAHierarchy(numIntermediates int) ([]crypto.PrivateKey, [][]byte, error) {
 	caKeys := []crypto.PrivateKey{}
 	caCerts := [][]byte{}

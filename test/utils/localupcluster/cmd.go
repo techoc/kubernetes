@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package localupcluster contains wrapper code around invoking hack/local-up-cluster.sh
-// and managing the resulting cluster.
+// Package localupcluster 包含调用 hack/local-up-cluster.sh
+// 以及管理所创建集群的封装代码。
 package localupcluster
 
 import (
@@ -34,39 +34,39 @@ import (
 )
 
 type Cmd struct {
-	// Name is a short, descriptive name.
+	// Name 是一个简短的描述性名称。
 	Name string
 
-	// CommandLine is the complete command line, including the command itself.
+	// CommandLine 是完整的命令行，包括命令本身。
 	CommandLine []string
 
-	// AdditionalEnv gets added to the current environment.
+	// AdditionalEnv 会被添加到当前环境变量中。
 	AdditionalEnv map[string]string
 
-	// Log output as it gets printed.
+	// LogOutput 在输出被打印时将其记录下来。
 	LogOutput bool
 
-	// ProcessOutput, it non-nil, gets called for each line printed by the
-	// command on stderr or stdout. The line does not include the trailing
-	// newline.
+	// ProcessOutput 如果非 nil，则命令在 stderr 或 stdout 上打印的
+	// 每一行都会调用它。
+	// 该行不包含末尾的换行符。
 	//
-	// Called with EOF true when output processing stops. This implies
-	// that the command has stopped or output processing failed. A non-empty
+	// 当输出处理停止时，会以 EOF 为 true 调用它。这意味着
+	// 命令已停止或输出处理失败。
 	// line in this case is the output processing error.
 	ProcessOutput func(output Output)
 
-	// Gather output in a string buffer. That collected output is returned by Wait and Stop.
-	// If disabled, those methods return the empty string.
+	// GatherOutput 将输出收集到一个字符串缓冲区中。收集到的输出由 Wait 和 Stop 返回。
+	// 如果禁用，这些方法将返回空字符串。
 	GatherOutput bool
 
-	// LogFile specifies a file to write the output to.
-	// Can be combined with other options for output handling.
-	// If it's the only one, then the command writes directly
-	// into the file.
+	// LogFile 指定将输出写入的文件。
+	// 可以与其他输出处理选项组合使用。
+	// 如果它是唯一选项，
+	// 则命令会直接写入该文件。
 	LogFile string
 
-	// KeepRunning ensures that the command is kept running beyond the end of its context,
-	// i.e. context cancellation is ignored. Such commands have to be stopped explicitly.
+	// KeepRunning 确保命令在其 context 结束后仍继续运行，
+	// 即忽略 context 取消。此类命令必须显式停止。
 	KeepRunning bool
 
 	cancel    func(string)
@@ -107,11 +107,11 @@ func (c *Cmd) Start(tCtx ktesting.TContext) {
 	c.gathering = false
 	switch {
 	case c.LogOutput || c.ProcessOutput != nil || c.GatherOutput:
-		// Process each line through an in-memory pipe.
+		// 通过内存管道逐行处理输出。
 		reader, writer = io.Pipe()
 		c.gathering = true
 	case c.LogFile != "":
-		// Let command write directly.
+		// 让命令直接写入文件。
 		f, err := os.Create(c.LogFile)
 		tCtx.ExpectNoError(err, "create log file")
 		writer = f
@@ -161,8 +161,8 @@ func (c *Cmd) Start(tCtx ktesting.TContext) {
 		tCtx.Logf("Command %s terminated, result: %v", c.Name, c.result)
 		now := time.Now()
 		if reader != nil {
-			// Has to be closed to stop output processing, otherwise the scanner
-			// keeps reading because someone might still write something.
+			// 必须关闭以停止输出处理，否则 scanner
+			// 会继续读取，因为可能还会有人写入内容。
 			_ = writer.Close()
 		}
 		if c.LogFile != "" {
@@ -188,7 +188,7 @@ func (c *Cmd) Wait(tCtx ktesting.TContext) string {
 func (c *Cmd) Stop(tCtx ktesting.TContext, reason string) string {
 	tCtx.Helper()
 	if c.cancel == nil {
-		// Not started...
+		// 尚未启动……
 		return ""
 	}
 	if c.LogFile != "" {

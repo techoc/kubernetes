@@ -32,7 +32,7 @@ import (
 	"k8s.io/apiserver/pkg/audit"
 )
 
-// AuditEvent is a simplified representation of an audit event for testing purposes
+// AuditEvent 是审计事件的简化表示，用于测试目的
 type AuditEvent struct {
 	ID                      types.UID
 	Level                   auditinternal.Level
@@ -52,18 +52,18 @@ type AuditEvent struct {
 	ResponseObject          bool
 	AuthorizeDecision       string
 
-	// The Check functions in this package takes ownerships of these maps. You should
-	// not reference these maps after calling the Check functions.
+	// 本包中的 Check 函数会接管这些 map 的所有权。调用
+	// Check 函数后，不应再引用这些 map。
 	AdmissionWebhookMutationAnnotations map[string]string
 	AdmissionWebhookPatchAnnotations    map[string]string
 
-	// Only populated when a filter is provided to testEventFromInternalFiltered
+	// 只有在向 testEventFromInternalFiltered 提供过滤器时才会填充
 	CustomAuditAnnotations map[string]string
 }
 
 type AuditAnnotationsFilter func(key, val string) bool
 
-// MissingEventsReport provides an analysis if any events are missing
+// MissingEventsReport 提供关于是否有事件缺失的分析
 type MissingEventsReport struct {
 	FirstEventChecked *auditinternal.Event
 	LastEventChecked  *auditinternal.Event
@@ -72,7 +72,7 @@ type MissingEventsReport struct {
 	AllEvents         []AuditEvent
 }
 
-// String returns a human readable string representation of the report
+// String 返回报告的人类可读字符串表示
 func (m *MissingEventsReport) String() string {
 	return fmt.Sprintf(`missing %d events
 
@@ -85,14 +85,14 @@ func (m *MissingEventsReport) String() string {
 - missing events: %#v`, len(m.MissingEvents), m.FirstEventChecked, m.LastEventChecked, m.NumEventsChecked, m.MissingEvents)
 }
 
-// CheckAuditLines searches the audit log for the expected audit lines.
+// CheckAuditLines 在审计日志中搜索预期的审计行。
 func CheckAuditLines(stream io.Reader, expected []AuditEvent, version schema.GroupVersion) (missingReport *MissingEventsReport, err error) {
 	return CheckAuditLinesFiltered(stream, expected, version, nil)
 }
 
-// CheckAuditLinesFiltered searches the audit log for the expected audit lines, customAnnotationsFilter
-// controls which audit annotations are added to AuditEvent.CustomAuditAnnotations.
-// If the customAnnotationsFilter is nil, AuditEvent.CustomAuditAnnotations will be empty.
+// CheckAuditLinesFiltered 在审计日志中搜索预期的审计行，customAnnotationsFilter
+// 控制哪些审计注解会被添加到 AuditEvent.CustomAuditAnnotations 中。
+// 如果 customAnnotationsFilter 为 nil，AuditEvent.CustomAuditAnnotations 将为空。
 func CheckAuditLinesFiltered(stream io.Reader, expected []AuditEvent, version schema.GroupVersion, customAnnotationsFilter AuditAnnotationsFilter) (missingReport *MissingEventsReport, err error) {
 	expectations := newAuditEventTracker(expected)
 
@@ -133,9 +133,9 @@ func CheckAuditLinesFiltered(stream io.Reader, expected []AuditEvent, version sc
 	return missingReport, nil
 }
 
-// testEventFromInternalFiltered takes an internal audit event and returns a test event, customAnnotationsFilter
-// controls which audit annotations are added to AuditEvent.CustomAuditAnnotations.
-// If the customAnnotationsFilter is nil, AuditEvent.CustomAuditAnnotations will be empty.
+// testEventFromInternalFiltered 接收一个内部审计事件并返回一个测试事件，customAnnotationsFilter
+// 控制哪些审计注解会被添加到 AuditEvent.CustomAuditAnnotations 中。
+// 如果 customAnnotationsFilter 为 nil，AuditEvent.CustomAuditAnnotations 将为空。
 func testEventFromInternalFiltered(e *auditinternal.Event, customAnnotationsFilter AuditAnnotationsFilter) (AuditEvent, error) {
 	event := AuditEvent{
 		Level:      e.Level,
@@ -189,28 +189,28 @@ func testEventFromInternalFiltered(e *auditinternal.Event, customAnnotationsFilt
 	return event, nil
 }
 
-// auditEvent is a private wrapper on top of AuditEvent used by auditEventTracker
+// auditEvent 是 AuditEvent 之上的私有包装，由 auditEventTracker 使用
 type auditEvent struct {
 	event AuditEvent
 	found bool
 }
 
-// auditEventTracker keeps track of AuditEvent expectations and marks matching events as found
+// auditEventTracker 跟踪对 AuditEvent 的预期，并将匹配的事件标记为已找到
 type auditEventTracker struct {
 	events []*auditEvent
 }
 
-// newAuditEventTracker creates a tracker that tracks whether expect events are found
+// newAuditEventTracker 创建一个跟踪器，用于跟踪预期事件是否被找到
 func newAuditEventTracker(expected []AuditEvent) *auditEventTracker {
 	expectations := &auditEventTracker{events: []*auditEvent{}}
 	for _, event := range expected {
-		// we copy the references to the maps in event
+		// 我们复制 event 中指向 map 的引用
 		expectations.events = append(expectations.events, &auditEvent{event: event, found: false})
 	}
 	return expectations
 }
 
-// Mark marks the given event as found if it's expected
+// Mark 如果给定事件符合预期，则将其标记为已找到
 func (t *auditEventTracker) Mark(event AuditEvent) {
 	for _, e := range t.events {
 		if reflect.DeepEqual(e.event, event) {
@@ -219,7 +219,7 @@ func (t *auditEventTracker) Mark(event AuditEvent) {
 	}
 }
 
-// Missing reports events that are expected but not found
+// Missing 报告那些符合预期但未找到的事件
 func (t *auditEventTracker) Missing() []AuditEvent {
 	var missing []AuditEvent
 	for _, e := range t.events {

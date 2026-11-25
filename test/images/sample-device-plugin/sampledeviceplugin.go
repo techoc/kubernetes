@@ -38,7 +38,7 @@ const (
 	cdiPrefix    = "CDI-"
 )
 
-// stubAllocFunc creates and returns allocation response for the input allocate request
+// stubAllocFunc 根据输入的分配请求创建并返回分配响应
 func stubAllocFunc(r *pluginapi.AllocateRequest, devs map[string]*pluginapi.Device) (*pluginapi.AllocateResponse, error) {
 	var responses pluginapi.AllocateResponse
 	for _, req := range r.ContainerRequests {
@@ -53,10 +53,10 @@ func stubAllocFunc(r *pluginapi.AllocateRequest, devs map[string]*pluginapi.Devi
 				return nil, fmt.Errorf("invalid allocation request with unhealthy device: %s", requestID)
 			}
 
-			// create fake device file
+			// 创建伪造的设备文件
 			fpath := filepath.Join("/tmp", dev.ID)
 
-			// clean first
+			// 先清理
 			if err := os.RemoveAll(fpath); err != nil {
 				return nil, fmt.Errorf("failed to clean fake device file from previous run: %s", err)
 			}
@@ -74,7 +74,7 @@ func stubAllocFunc(r *pluginapi.AllocateRequest, devs map[string]*pluginapi.Devi
 			})
 
 			if os.Getenv("CDI_ENABLED") != "" {
-				// add the CDI device ID to the response.
+				// 将 CDI 设备 ID 加入响应。
 				cdiDevice := &pluginapi.CDIDevice{
 					Name: fmt.Sprintf("%s=%s", resourceName, cdiPrefix+dev.ID),
 				}
@@ -87,7 +87,7 @@ func stubAllocFunc(r *pluginapi.AllocateRequest, devs map[string]*pluginapi.Devi
 	return &responses, nil
 }
 
-// stubAllocFunc creates and returns allocation response for the input allocate request
+// stubAllocFunc 根据输入的分配请求创建并返回分配响应
 func stubRegisterControlFunc() bool {
 	return false
 }
@@ -95,7 +95,7 @@ func stubRegisterControlFunc() bool {
 func main() {
 	ctx := context.Background()
 	logger := klog.FromContext(ctx)
-	// respond to syscalls for termination
+	// 响应终止相关的系统调用
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -125,7 +125,7 @@ func main() {
 			panic(err)
 		}
 		defer func() {
-			// Remove CDI file
+			// 删除 CDI 文件
 			if _, err := os.Stat(cdiPath); err == nil || os.IsExist(err) {
 				err := os.Remove(cdiPath)
 				if err != nil {
@@ -176,7 +176,7 @@ func main() {
 					}
 					logger.Info("Control file was deleted, registration succeeded")
 				}
-			// Catch termination signals
+			// 捕获终止信号
 			case sig := <-sigCh:
 				logger.Info("Shutting down, received signal", "signal", sig)
 				if err := dp1.Stop(logger); err != nil {
@@ -192,7 +192,7 @@ func main() {
 		}
 
 		go dp1.Watch(ctx, pluginapi.KubeletSocket, resourceName, pluginapi.DevicePluginPath)
-		// Catch termination signals
+		// 捕获终止信号
 		sig := <-sigCh
 		logger.Info("Shutting down, received signal", "signal", sig)
 		if err := dp1.Stop(logger); err != nil {

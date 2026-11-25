@@ -28,7 +28,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// CmdNoSnatTest is used by agnhost Cobra.
+// CmdNoSnatTest 供 agnhost Cobra 使用。
 var CmdNoSnatTest = &cobra.Command{
 	Use:   "no-snat-test",
 	Short: "Creates the /checknosnat and /whoami endpoints",
@@ -47,10 +47,10 @@ func init() {
 	CmdNoSnatTest.Flags().StringVar(&port, "port", "8080", "The port to serve /checknosnat and /whoami endpoints on.")
 }
 
-// ip = target for /whoami query
-// rip = returned ip
-// pip = this pod's ip
-// nip = this node's ip
+// ip = /whoami 查询的目标
+// rip = 返回的 ip
+// pip = 本 pod 的 ip
+// nip = 本节点的 ip
 
 type masqTester struct {
 	Port string
@@ -71,8 +71,8 @@ func main(cmd *cobra.Command, args []string) {
 }
 
 func (m *masqTester) Run() error {
-	// pip is the current pod's IP and nip is the current node's IP
-	// pull the pip and nip out of the env
+	// pip 是当前 pod 的 IP，nip 是当前节点的 IP
+	// 从环境变量中取出 pip 和 nip
 	pip, ok := os.LookupEnv("POD_IP")
 	if !ok {
 		return fmt.Errorf("POD_IP env var was not present in the environment")
@@ -82,7 +82,7 @@ func (m *masqTester) Run() error {
 		return fmt.Errorf("NODE_IP env var was not present in the environment")
 	}
 
-	// validate that pip and nip are ip addresses.
+	// 验证 pip 和 nip 是 IP 地址。
 	if netutils.ParseIPSloppy(pip) == nil {
 		return fmt.Errorf("POD_IP env var contained %q, which is not an IP address", pip)
 	}
@@ -90,11 +90,11 @@ func (m *masqTester) Run() error {
 		return fmt.Errorf("NODE_IP env var contained %q, which is not an IP address", nip)
 	}
 
-	// register handlers
+	// 注册处理函数
 	http.HandleFunc("/whoami", whoami)
 	http.HandleFunc("/checknosnat", mkChecknosnat(pip, nip))
 
-	// spin up the server
+	// 启动服务器
 	return http.ListenAndServe(":"+m.Port, nil)
 }
 
@@ -108,9 +108,9 @@ func joinErrors(errs []error, sep string) string {
 	return strings.Join(strs, sep)
 }
 
-// Builds checknosnat handler, using pod and node ip of current location
+// 使用当前位置的 pod 和节点 IP 构建 checknosnat 处理函数
 func mkChecknosnat(pip string, nip string) handler {
-	// Queries /whoami for each provided ip, resp 200 if all resp bodies match this Pod's ip, 500 otherwise
+	// 对每个提供的 ip 查询 /whoami，若所有响应体都匹配本 Pod 的 ip 则返回 200，否则返回 500
 	return func(w http.ResponseWriter, req *http.Request) {
 		errs := []error{}
 		ips := strings.Split(req.URL.Query().Get("ips"), ",")
@@ -128,12 +128,12 @@ func mkChecknosnat(pip string, nip string) handler {
 	}
 }
 
-// Writes the req.RemoteAddr into the response, req.RemoteAddr is the address of the incoming connection
+// 将 req.RemoteAddr 写入响应，req.RemoteAddr 是传入连接的地址
 func whoami(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "%s", req.RemoteAddr)
 }
 
-// Queries ip/whoami and compares response to pip, uses nip to differentiate SNAT from other potential failure modes
+// 查询 ip/whoami 并将响应与 pip 比较，用 nip 来区分 SNAT 与其他可能的失败模式
 func check(ip string, pip string, nip string) error {
 	url := fmt.Sprintf("http://%s/whoami", ip)
 	resp, err := http.Get(url)

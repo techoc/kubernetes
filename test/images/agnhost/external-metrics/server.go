@@ -32,7 +32,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// CmdExternalMetricsServer is used by agnhost Cobra.
+// CmdExternalMetricsServer 由 agnhost Cobra 使用。
 var CmdExternalMetricsServer = &cobra.Command{
 	Use:   "external-metrics",
 	Short: "Starts an external metrics server for testing",
@@ -57,18 +57,17 @@ func init() {
 
 func main(cmd *cobra.Command, args []string) {
 
-	// Initialize the metric provider
+	// 初始化指标提供者
 	provider = NewConfigurableProvider()
-	// Create some default metrics
+	// 创建一些默认指标
 	provider.createMetric("queue_messages_ready", nil, 100, false)
 	provider.createMetric("http_requests_total", nil, 500, false)
 	secureServing := options.NewSecureServingOptions()
 	secureServing.BindPort = port
 	secureServing.ServerCert.CertDirectory = "/tmp/cert"
 	secureServing.ServerCert.PairName = "apiserver"
-	// Generate self-signed TLS certificates if none exist. This allows the server to run with HTTPS
-	// without requiring manually provisioned certificates. The certs are valid for "localhost" and
-	// the loopback IP 127.0.0.1. The second parameter (nil) means no additional alternate names.
+	// 如果不存在 TLS 证书，则生成自签名证书。这样服务器无需手动准备证书即可通过 HTTPS 运行。
+	// 证书对 "localhost" 和回环 IP 127.0.0.1 有效。第二个参数（nil）表示不添加其他备用名称。
 	if err := secureServing.MaybeDefaultWithSelfSignedCerts(
 		"localhost",
 		nil,
@@ -160,11 +159,11 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if len(parts) >= 4 && parts[1] == "namespaces" {
 		metricName := parts[3]
 
-		// Parse label selector from query parameter
+		// 从查询参数中解析标签选择器
 		labelSelector := r.URL.Query().Get("labelSelector")
 		labels := parseLabels(labelSelector)
 
-		// Get all metrics matching the name and label selector
+		// 获取所有匹配名称和标签选择器的指标
 		metrics := provider.getMetrics(metricName, labels)
 
 		if len(metrics) == 0 {
@@ -176,7 +175,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Build response items
+		// 构建响应条目
 		var items []map[string]interface{}
 		for _, metric := range metrics {
 			if metric.shouldFail {
@@ -188,7 +187,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 			items = append(items, map[string]interface{}{
 				"metricName":   metric.metricName,
 				"metricLabels": metric.labels,
-				"timestamp":    time.Now().UTC().Format(time.RFC3339), // TODO: maybe we need to make this configurable?
+				"timestamp":    time.Now().UTC().Format(time.RFC3339), // TODO: 也许需要将其设为可配置？
 				"value":        fmt.Sprintf("%d", metric.value),
 			})
 		}
@@ -207,8 +206,8 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// failMetric handles requests to mark a metric as failing or not failing.
-// Supports label selectors via the "labels" query parameter (format: key1=value1,key2=value2).
+// failMetric 处理将指标标记为失败或非失败的请求。
+// 通过 "labels" 查询参数支持标签选择器（格式：key1=value1,key2=value2）。
 func failMetric(w http.ResponseWriter, r *http.Request) {
 	klog.InfoS("", "method", r.Method, "path", r.URL.Path)
 	w.Header().Set("Content-Type", "application/json")
@@ -267,7 +266,7 @@ func setMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse labels from query parameter
+	// 从查询参数中解析标签
 	labelSelector := r.URL.Query().Get("labels")
 	labels := parseLabels(labelSelector)
 	metricKey := buildMetricKey(metricName, labels)
@@ -320,7 +319,7 @@ func createMetric(w http.ResponseWriter, r *http.Request) {
 	failParam := r.URL.Query().Get("fail")
 	shouldFail := failParam == "true"
 
-	// Parse labels from query parameter
+	// 从查询参数中解析标签
 	labelSelector := r.URL.Query().Get("labels")
 	labels := parseLabels(labelSelector)
 

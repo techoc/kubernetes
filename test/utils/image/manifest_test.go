@@ -115,7 +115,7 @@ func TestReplaceRegistryInImageURL(t *testing.T) {
 		},
 	}
 
-	// Set custom registries
+	// 设置自定义 registry
 	reg := RegistryList{
 		DockerLibraryRegistry: "test.io/library",
 		GcRegistry:            "test.io",

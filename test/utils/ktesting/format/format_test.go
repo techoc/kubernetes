@@ -35,12 +35,11 @@ func TestGomegaFormatObject(t *testing.T) {
 		"struct":         {value: myStruct{a: 1, b: 2}, expected: `<format_test.myStruct>: {a: 1, b: 2}`},
 		"gomegastringer": {value: typeWithGomegaStringer(2), expected: `<format_test.typeWithGomegaStringer>: my stringer 2`},
 
-		// v1.Pod is tested in test/utils/format.
+		// v1.Pod 在 test/utils/format 中测试。
 
-		// For unstructured.Unstructured, the corresponding testuses the real type.
-		// The expected result is a bit different because "our" myUnstructured has no
-		// special JSON encoding methods, but for testing that YAML is used at all that's
-		// sufficient.
+		// 对于 unstructured.Unstructured，对应的测试使用的是真实类型。
+		// 预期结果稍有不同，因为“我们的” myUnstructured 没有特殊的
+		// JSON 编码方法，但对于测试是否使用了 YAML 而言，这已经足够。
 		"unstructured-pointer": {
 			value: &myUnstructured{
 				Object: map[string]any{

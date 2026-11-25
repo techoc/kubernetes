@@ -44,7 +44,7 @@ func init() {
 	CmdFakeRegistryServer.Flags().BoolVar(&private, "private", false, "Enable authentication for the registry.")
 }
 
-// CmdFakeRegistryServer is the cobra command for the fake registry server
+// CmdFakeRegistryServer 是 fake registry server 的 cobra 命令
 var CmdFakeRegistryServer = &cobra.Command{
 	Use:   "fake-registry-server",
 	Short: "Starts a fake registry server for testing",
@@ -89,10 +89,10 @@ func auth(h http.Handler) http.Handler {
 	})
 }
 
-// digestToPath converts a digest to a nested directory path following the Docker
-// registry storage layout. For example, "sha256:abc123..." becomes
-// "<baseDir>/sha256/ab/abc123.../data". This avoids filesystem issues with colons
-// in filenames on Windows and matches the standard Docker registry layout.
+// digestToPath 按照 Docker registry 的存储布局，将 digest 转换为嵌套的目录路径。
+// 例如，"sha256:abc123..." 会变成 "<baseDir>/sha256/ab/abc123.../data"。
+// 这样既避免了 Windows 上文件名中包含冒号带来的文件系统问题，
+// 也符合标准的 Docker registry 布局。
 func digestToPath(baseDir, digest string) string {
 	parts := strings.SplitN(digest, ":", 2)
 	if len(parts) != 2 || len(parts[1]) < 2 {
@@ -103,7 +103,7 @@ func digestToPath(baseDir, digest string) string {
 	return filepath.Join(baseDir, algo, hash[:2], hash, "data")
 }
 
-// handleBlobs serves blob requests
+// handleBlobs 处理 blob 请求
 func handleBlobs(w http.ResponseWriter, r *http.Request, imageName, identifier string) {
 	filePath := digestToPath(filepath.Join(registryDir, imageName, "blobs"), identifier)
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -111,15 +111,14 @@ func handleBlobs(w http.ResponseWriter, r *http.Request, imageName, identifier s
 	http.ServeFile(w, r, filePath)
 }
 
-// handleManifests serves manifest requests. It dynamically sets the Content-Type
-// based on the manifest's mediaType field. If the identifier is a tag, it
-// reads the digest from the tag file and issues a redirect.
+// handleManifests 处理 manifest 请求。它会根据 manifest 的 mediaType 字段动态设置 Content-Type。
+// 如果 identifier 是一个 tag，它会从 tag 文件中读取 digest 并发出重定向。
 func handleManifests(w http.ResponseWriter, r *http.Request, imageName, identifier string) {
 	manifestsDir := filepath.Join(registryDir, imageName, "manifests")
 
-	// if the identifier is not a digest, assume it's a tag and perform a redirect.
+	// 如果 identifier 不是 digest，则假定它是 tag 并执行重定向。
 	if !strings.HasPrefix(identifier, "sha256:") {
-		// Tags are stored as flat files (not nested)
+		// tag 以扁平文件存储（不嵌套）
 		tagFilePath := filepath.Join(manifestsDir, identifier)
 		log.Printf("Looking for tag file: %s", tagFilePath)
 		digest, err := os.ReadFile(tagFilePath)

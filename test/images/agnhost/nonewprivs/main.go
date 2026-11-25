@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdNoneNewPrivs is used by agnhost Cobra.
+// CmdNoneNewPrivs 由 agnhost 的 Cobra 命令使用。
 var CmdNoNewPrivs = &cobra.Command{
 	Use:   "nonewprivs",
 	Short: "Prints the UID of the running process",

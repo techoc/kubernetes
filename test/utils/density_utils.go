@@ -57,8 +57,8 @@ func AddLabelsToNode(c clientset.Interface, nodeName string, labels map[string]s
 	return err
 }
 
-// RemoveLabelOffNode is for cleaning up labels temporarily added to node,
-// won't fail if target label doesn't exist or has been removed.
+// RemoveLabelOffNode 用于清理临时添加到节点上的标签，
+// 如果目标标签不存在或已被移除，不会报错。
 func RemoveLabelOffNode(c clientset.Interface, nodeName string, labelKeys []string) error {
 	var node *v1.Node
 	var err error
@@ -91,8 +91,8 @@ func RemoveLabelOffNode(c clientset.Interface, nodeName string, labelKeys []stri
 	return err
 }
 
-// VerifyLabelsRemoved checks if Node for given nodeName does not have any of labels from labelKeys.
-// Return non-nil error if it does.
+// VerifyLabelsRemoved 检查给定 nodeName 的节点是否不再具有 labelKeys 中的任何标签。
+// 如果仍具有，则返回非 nil 错误。
 func VerifyLabelsRemoved(c clientset.Interface, nodeName string, labelKeys []string) error {
 	node, err := c.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
 	if err != nil {

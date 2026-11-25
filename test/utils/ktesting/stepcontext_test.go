@@ -49,7 +49,7 @@ func TestStepContext(t *testing.T) {
 			cb: func(tCtx TContext) {
 				tCtx = tCtx.WithStep("step")
 				tCtx.Fatal("Error", "a", "b", 42)
-				// not reached
+				// 不会执行到
 				tCtx.Log("Log")
 			},
 			expectTrace: `(FATAL) FATAL ERROR: <klog header>:
@@ -60,7 +60,7 @@ func TestStepContext(t *testing.T) {
 			cb: func(tCtx TContext) {
 				tCtx = tCtx.WithStep("step")
 				tCtx.Fatalf("Error %s %s %d", "a", "b", 42)
-				// not reached
+				// 不会执行到
 				tCtx.Log("Log")
 			},
 			expectTrace: `(FATAL) FATAL ERROR: <klog header>:
@@ -82,23 +82,23 @@ func TestProgressReport(t *testing.T) {
 		goleak.VerifyNone(t)
 		defaultProgressReporter.out = oldOut
 
-		// If we get here, the defaultProgressReporter is not active anymore,
-		// but the interrupt context should still be canceled.
+		// 如果执行到这里，defaultProgressReporter 已不再处于活动状态，
+		// 但中断上下文仍应已被取消。
 		gomega.NewGomegaWithT(t).Expect(defaultProgressReporter.usageCount).To(gomega.Equal(int64(0)), "usage count")
 		gomega.NewGomegaWithT(t).Expect(context.Cause(interruptCtx)).To(gomega.MatchError(gomega.Equal("received interrupt signal")), "interrupted persistently")
 
-		// Reset for next test.
+		// 为下一个测试重置。
 		interruptCtx, interrupted = context.WithCancelCause(context.Background())
 	})
 
-	// This must use a real testing.T, otherwise Init doesn't initialize signal handling.
+	// 这里必须使用真正的 testing.T，否则 Init 不会初始化信号处理。
 	tCtx := Init(t)
 	tCtx = tCtx.WithStep("step")
 	removeReporter := tCtx.Value("GINKGO_SPEC_CONTEXT").(ginkgoReporter).AttachProgressReporter(func() string { return "hello world" })
 	defer removeReporter()
 	tCtx.Expect(tCtx.Value("some other key")).To(gomega.BeNil(), "value for unknown context value key")
 
-	// Trigger report and wait for it.
+	// 触发报告并等待其完成。
 	defaultProgressReporter.progressChannel <- os.Interrupt
 	report := <-out.stream
 	tCtx.Expect(report).To(gomega.Equal(`You requested a progress report.
@@ -117,8 +117,8 @@ INFO: canceling test context: received interrupt signal
 	gomega.NewGomegaWithT(t).Eventually(func() error { return context.Cause(tCtx) }).WithTimeout(30*time.Second).To(gomega.MatchError(gomega.Equal("received interrupt signal")), "interrupted")
 }
 
-// outputStream forwards exactly one Write call to a stream.
-// A second Write call is an error and will panic.
+// outputStream 将一个 Write 调用转发到流中。
+// 第二次 Write 调用是错误的，会触发 panic。
 type outputStream struct {
 	stream chan string
 }

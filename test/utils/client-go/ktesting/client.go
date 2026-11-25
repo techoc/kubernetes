@@ -56,27 +56,22 @@ func set(tCtx ktesting.TContext, data data) TContext {
 	return TContext{tCtx.WithValue(dataKey, &data)}
 }
 
-// TContext is a drop-in replacement for [ktesting.TContext]. It adds support
-// for client-go.
+// TContext 是 [ktesting.TContext] 的直接替代品，并增加了对 client-go 的支持。
 //
-// New methods allow retrieving instances of several client-go types without
-// having to pass all of them down into call chains of test helper functions as
-// separate parameters.
+// 新增的方法可用于获取多种 client-go 类型的实例，无需将它们作为单独的
+// 参数一路传递到测试辅助函数的调用链中。
 //
-// All methods which have a [ktesting.TContext] in their prototype get
-// overridden such that they work with a TContext instead. This ensures
-// that the new methods are always accessible.
+// 所有原型中包含 [ktesting.TContext] 的方法都会被重写，改为使用 TContext
+// 工作。这确保新增的方法始终可被访问。
 //
-// When calling functions which expect a [ktesting.TContext] pass
-// the TContext field embedded here.
+// 调用需要 [ktesting.TContext] 的函数时，传入此处嵌入的 TContext 字段即可。
 type TContext struct {
 	ktesting.TContext
 }
 
-// RESTConfig returns a copy of the config for a rest client with the UserAgent
-// set to include the current test name or nil if not available. Several typed
-// clients using this config are available through [Client], [Dynamic],
-// [APIExtensions].
+// RESTConfig 返回 rest 客户端配置的副本，其中 UserAgent 设置为包含当前测试名称；
+// 如果不可用则返回 nil。可通过 [Client]、[Dynamic]、[APIExtensions]
+// 获取使用此配置的多个类型化客户端。
 func (tCtx TContext) RESTConfig() *rest.Config {
 	return rest.CopyConfig(get(tCtx).restConfig)
 }
@@ -88,8 +83,8 @@ func (tCtx TContext) Client() clientset.Interface            { return get(tCtx).
 func (tCtx TContext) Dynamic() dynamic.Interface             { return get(tCtx).dynamic }
 func (tCtx TContext) APIExtensions() apiextensions.Interface { return get(tCtx).apiextensions }
 
-// WithRESTConfig initializes all client-go clients with new clients
-// created for the config. The current test name gets included in the UserAgent.
+// WithRESTConfig 使用该配置创建的新客户端初始化所有 client-go 客户端。
+// 当前测试名称会包含在 UserAgent 中。
 func WithRESTConfig(tCtx ktesting.TContext, cfg *rest.Config) TContext {
 	cfg = rest.CopyConfig(cfg)
 	cfg.UserAgent = fmt.Sprintf("%s -- %s", rest.DefaultKubernetesUserAgent(), tCtx.Name())
@@ -108,7 +103,7 @@ func (tCtx TContext) WithRESTConfig(cfg *rest.Config) TContext {
 	return WithRESTConfig(tCtx.TContext, cfg)
 }
 
-// WithClients uses an existing config and clients.
+// WithClients 使用已有的配置和客户端。
 func WithClients(tCtx ktesting.TContext, cfg *rest.Config, mapper *restmapper.DeferredDiscoveryRESTMapper, client clientset.Interface, dynamic dynamic.Interface, apiextensions apiextensions.Interface) TContext {
 	return set(tCtx, data{
 		restConfig:    cfg,

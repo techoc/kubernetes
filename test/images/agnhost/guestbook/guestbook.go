@@ -32,7 +32,7 @@ import (
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 )
 
-// CmdGuestbook is used by agnhost Cobra.
+// CmdGuestbook 由 agnhost Cobra 使用。
 var CmdGuestbook = &cobra.Command{
 	Use:   "guestbook",
 	Short: "Creates a HTTP server with various endpoints representing a guestbook app",
@@ -129,8 +129,8 @@ func startHTTPServer(port string) {
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 }
 
-// registerHandler will register the caller in this server's list of replicas.
-// /set requests will be propagated to replicas, if any.
+// registerHandler 会将调用方注册到本服务器的副本列表中。
+// /set 请求会传播给副本（如果存在）。
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 	values, err := url.Parse(r.URL.RequestURI())
 	if err != nil {
@@ -141,7 +141,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	ip := values.Query().Get("host")
 	log.Printf("GET /register?host=%s", ip)
 
-	// send all the store to the replica as well.
+	// 同时将整个存储发送给副本。
 	output := make(map[string]interface{})
 	output["data"] = store
 	bytes, err := json.Marshal(output)
@@ -154,8 +154,8 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Node '%s' registered.", ip)
 }
 
-// getHandler will return '{"data": value}', where value is the stored value for
-// the given key if non-empty, or entire store.
+// getHandler 返回 '{"data": value}'，其中 value 是给定 key 对应的存储值（若 key 非空），
+// 否则为整个存储。
 func getHandler(w http.ResponseWriter, r *http.Request) {
 	values, err := url.Parse(r.URL.RequestURI())
 	if err != nil {
@@ -186,8 +186,8 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// setHandler will set the given key-value pair in its own store and propagate
-// it to its replicas, if any. Will return '{"message": "Updated"}' to the caller on success.
+// setHandler 会在自身的存储中设置给定的键值对，并传播给副本（如果存在）。
+// 成功时向调用方返回 '{"message": "Updated"}'。
 func setHandler(w http.ResponseWriter, r *http.Request) {
 	values, err := url.Parse(r.URL.RequestURI())
 	if err != nil {
@@ -226,8 +226,8 @@ func setHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// guestbookHandler will proxy the request to agnhost-primary if the given cmd is
-// 'set' or agnhost-replica if the given cmd is 'get'.
+// guestbookHandler 在给定 cmd 为 'set' 时将请求代理到 agnhost-primary，
+// 在给定 cmd 为 'get' 时代理到 agnhost-replica。
 func guestbookHandler(w http.ResponseWriter, r *http.Request) {
 	values, err := url.Parse(r.URL.RequestURI())
 	if err != nil {

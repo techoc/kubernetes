@@ -35,7 +35,7 @@ func TestCancelManual(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// Blocks until tCtx.Cancel is called below.
+		// 阻塞直到下面调用 tCtx.Cancel。
 		<-tCtx.Done()
 	}()
 	tCtx.Cancel("manually canceled")
@@ -44,22 +44,21 @@ func TestCancelManual(t *testing.T) {
 
 func TestCancelAutomatic(t *testing.T) {
 	var wg sync.WaitGroup
-	// This callback gets registered first and thus
-	// gets invoked last.
+	// 这个回调最先注册，因此最后被调用。
 	t.Cleanup(wg.Wait)
 	tCtx := ktesting.Init(t)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// Blocks until the context gets canceled automatically.
+		// 阻塞直到 context 被自动取消。
 		<-tCtx.Done()
 	}()
 }
 
 func TestSyncTestInit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		// This must work inside a synctest bubble, despite Deadline panicking there.
-		// We then don't have a deadline.
+		// 这必须能在 synctest bubble 中工作，尽管 Deadline 在那里会 panic。
+		// 这样的话我们就没有 deadline。
 		tCtx := ktesting.Init(t)
 		deadline, ok := tCtx.Deadline()
 		if ok {
@@ -72,8 +71,8 @@ func TestSyncTestInit(t *testing.T) {
 }
 
 func TestNormalInit(t *testing.T) {
-	// The outcome depends on how the unit test was started.
-	// See below for deterministic deadline/no deadline testing.
+	// 结果取决于单元测试是如何启动的。
+	// 关于确定性的有/无 deadline 测试，见下文。
 	expectDeadline, expectOK := t.Deadline()
 	expectDeadline = expectDeadline.Add(-ktesting.DefaultCleanupGracePeriod)
 	tCtx := ktesting.Init(t)
@@ -98,7 +97,7 @@ func TestNoDeadline(t *testing.T) {
 
 func TestDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		// Inside a synctest bubble this is always in the future.
+		// 在 synctest bubble 中，这个时间总是在未来。
 		mockDeadline := time.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC)
 		mockT := &deadlineT{T: t, deadline: &mockDeadline}
 		tCtx := ktesting.Init(mockT)
@@ -112,8 +111,8 @@ func TestDeadline(t *testing.T) {
 	})
 }
 
-// deadlineT overrides Deadline, returning false if no
-// deadline is configured and the deadline otherwise.
+// deadlineT 覆盖 Deadline：如果没有配置 deadline 则返回 false，
+// 否则返回配置好的 deadline。
 type deadlineT struct {
 	*testing.T
 	deadline *time.Time
@@ -142,7 +141,7 @@ func TestCancelCtx(t *testing.T) {
 		tCtx.Assert(tCtx.Logger()).To(gomega.Equal(baseCtx.Logger()), "Logger()")
 	})
 
-	// Cancel, then let testing.T invoke test cleanup.
+	// 先取消，然后让 testing.T 执行测试清理。
 	tCtx.Cancel("test is complete")
 }
 
@@ -152,7 +151,7 @@ func TestParallel(t *testing.T) {
 
 	tCtx := ktesting.Init(t)
 
-	// Each sub-test runs in parallel to the others and waits for the other two.
+	// 每个子测试都与其他子测试并行运行，并等待另外两个子测试。
 	test := func(tCtx ktesting.TContext) {
 		tCtx.Parallel()
 		wg.Done()

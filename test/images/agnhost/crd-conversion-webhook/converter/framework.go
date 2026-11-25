@@ -36,8 +36,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// convertFunc is the user defined function for any conversion. The code in this file is a
-// template that can be use for any CR conversion given this function.
+// convertFunc 是用户定义的转换函数。本文件中的代码是一个模板，
+// 只要提供该函数，即可用于任何 CR 转换。
 type convertFunc func(Object *unstructured.Unstructured, version string) (*unstructured.Unstructured, metav1.Status)
 
 func statusErrorWithMessage(msg string, params ...interface{}) metav1.Status {
@@ -53,8 +53,8 @@ func statusSucceed() metav1.Status {
 	}
 }
 
-// doConversionV1beta1 converts the requested objects in the v1beta1 ConversionRequest using the given conversion function and
-// returns a conversion response. Failures are reported with the Reason in the conversion response.
+// doConversionV1beta1 使用给定的转换函数转换 v1beta1 ConversionRequest 中请求的对象，
+// 并返回转换响应。失败通过转换响应中的 Reason 报告。
 func doConversionV1beta1(convertRequest *v1beta1.ConversionRequest, convert convertFunc) *v1beta1.ConversionResponse {
 	var convertedObjects []runtime.RawExtension
 	for _, obj := range convertRequest.Objects {
@@ -84,8 +84,8 @@ func doConversionV1beta1(convertRequest *v1beta1.ConversionRequest, convert conv
 	}
 }
 
-// doConversionV1 converts the requested objects in the v1 ConversionRequest using the given conversion function and
-// returns a conversion response. Failures are reported with the Reason in the conversion response.
+// doConversionV1 使用给定的转换函数转换 v1 ConversionRequest 中请求的对象，
+// 并返回转换响应。失败通过转换响应中的 Reason 报告。
 func doConversionV1(convertRequest *v1.ConversionRequest, convert convertFunc) *v1.ConversionResponse {
 	var convertedObjects []runtime.RawExtension
 	for _, obj := range convertRequest.Objects {
@@ -154,7 +154,7 @@ func serve(w http.ResponseWriter, r *http.Request, convert convertFunc) {
 		convertReview.Response = doConversionV1beta1(convertReview.Request, convert)
 		convertReview.Response.UID = convertReview.Request.UID
 
-		// reset the request, it is not needed in a response.
+		// 重置请求，响应中不需要它。
 		convertReview.Request = &v1beta1.ConversionRequest{}
 		responseObj = convertReview
 	case v1.SchemeGroupVersion.WithKind("ConversionReview"):
@@ -168,7 +168,7 @@ func serve(w http.ResponseWriter, r *http.Request, convert convertFunc) {
 		convertReview.Response = doConversionV1(convertReview.Request, convert)
 		convertReview.Response.UID = convertReview.Request.UID
 
-		// reset the request, it is not needed in a response.
+		// 重置请求，响应中不需要它。
 		convertReview.Request = &v1.ConversionRequest{}
 		responseObj = convertReview
 	default:
@@ -196,7 +196,7 @@ func serve(w http.ResponseWriter, r *http.Request, convert convertFunc) {
 	klog.V(2).Infof("sending response: %s", buf.String())
 }
 
-// ServeExampleConvert servers endpoint for the example converter defined as convertExampleCRD function.
+// ServeExampleConvert 为 convertExampleCRD 函数定义的示例转换器提供服务端点。
 func ServeExampleConvert(w http.ResponseWriter, r *http.Request) {
 	serve(w, r, convertExampleCRD)
 }

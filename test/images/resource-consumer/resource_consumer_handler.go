@@ -27,19 +27,19 @@ import (
 	"k8s.io/kubernetes/test/images/resource-consumer/common"
 )
 
-// ResourceConsumerHandler holds metrics for a resource consumer.
+// ResourceConsumerHandler 保存资源消耗器的指标。
 type ResourceConsumerHandler struct {
 	metrics     map[string]float64
 	metricsLock sync.Mutex
 }
 
-// NewResourceConsumerHandler creates and initializes a ResourceConsumerHandler to defaults.
+// NewResourceConsumerHandler 创建 ResourceConsumerHandler 并初始化为默认值。
 func NewResourceConsumerHandler() *ResourceConsumerHandler {
 	return &ResourceConsumerHandler{metrics: map[string]float64{}}
 }
 
 func (handler *ResourceConsumerHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// handle exposing metrics in Prometheus format (both GET & POST)
+	// 处理以 Prometheus 格式暴露指标（GET 和 POST 均支持）
 	if req.URL.Path == common.MetricsAddress {
 		handler.handleMetrics(w)
 		return
@@ -48,27 +48,27 @@ func (handler *ResourceConsumerHandler) ServeHTTP(w http.ResponseWriter, req *ht
 		http.Error(w, common.BadRequest, http.StatusBadRequest)
 		return
 	}
-	// parsing POST request data and URL data
+	// 解析 POST 请求数据和 URL 数据
 	if err := req.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// handle consumeCPU
+	// 处理 consumeCPU
 	if req.URL.Path == common.ConsumeCPUAddress {
 		handler.handleConsumeCPU(w, req.Form)
 		return
 	}
-	// handle consumeMem
+	// 处理 consumeMem
 	if req.URL.Path == common.ConsumeMemAddress {
 		handler.handleConsumeMem(w, req.Form)
 		return
 	}
-	// handle getCurrentStatus
+	// 处理 getCurrentStatus
 	if req.URL.Path == common.GetCurrentStatusAddress {
 		handler.handleGetCurrentStatus(w)
 		return
 	}
-	// handle bumpMetric
+	// 处理 bumpMetric
 	if req.URL.Path == common.BumpMetricAddress {
 		handler.handleBumpMetric(w, req.Form)
 		return
@@ -77,7 +77,7 @@ func (handler *ResourceConsumerHandler) ServeHTTP(w http.ResponseWriter, req *ht
 }
 
 func (handler *ResourceConsumerHandler) handleConsumeCPU(w http.ResponseWriter, query url.Values) {
-	// getting string data for consumeCPU
+	// 获取 consumeCPU 的字符串数据
 	durationSecString := query.Get(common.DurationSecQuery)
 	millicoresString := query.Get(common.MillicoresQuery)
 	if durationSecString == "" || millicoresString == "" {
@@ -85,7 +85,7 @@ func (handler *ResourceConsumerHandler) handleConsumeCPU(w http.ResponseWriter, 
 		return
 	}
 
-	// convert data (strings to ints) for consumeCPU
+	// 为 consumeCPU 转换数据（字符串转整数）
 	durationSec, durationSecError := strconv.Atoi(durationSecString)
 	millicores, millicoresError := strconv.Atoi(millicoresString)
 	if durationSecError != nil || millicoresError != nil {
@@ -100,7 +100,7 @@ func (handler *ResourceConsumerHandler) handleConsumeCPU(w http.ResponseWriter, 
 }
 
 func (handler *ResourceConsumerHandler) handleConsumeMem(w http.ResponseWriter, query url.Values) {
-	// getting string data for consumeMem
+	// 获取 consumeMem 的字符串数据
 	durationSecString := query.Get(common.DurationSecQuery)
 	megabytesString := query.Get(common.MegabytesQuery)
 	if durationSecString == "" || megabytesString == "" {
@@ -108,7 +108,7 @@ func (handler *ResourceConsumerHandler) handleConsumeMem(w http.ResponseWriter, 
 		return
 	}
 
-	// convert data (strings to ints) for consumeMem
+	// 为 consumeMem 转换数据（字符串转整数）
 	durationSec, durationSecError := strconv.Atoi(durationSecString)
 	megabytes, megabytesError := strconv.Atoi(megabytesString)
 	if durationSecError != nil || megabytesError != nil {
@@ -155,7 +155,7 @@ func (handler *ResourceConsumerHandler) bumpMetric(metric string, delta float64,
 }
 
 func (handler *ResourceConsumerHandler) handleBumpMetric(w http.ResponseWriter, query url.Values) {
-	// getting string data for handleBumpMetric
+	// 获取 handleBumpMetric 的字符串数据
 	metric := query.Get(common.MetricNameQuery)
 	deltaString := query.Get(common.DeltaQuery)
 	durationSecString := query.Get(common.DurationSecQuery)
@@ -164,7 +164,7 @@ func (handler *ResourceConsumerHandler) handleBumpMetric(w http.ResponseWriter, 
 		return
 	}
 
-	// convert data (strings to ints/floats) for handleBumpMetric
+	// 为 handleBumpMetric 转换数据（字符串转整数/浮点数）
 	durationSec, durationSecError := strconv.Atoi(durationSecString)
 	delta, deltaError := strconv.ParseFloat(deltaString, 64)
 	if durationSecError != nil || deltaError != nil {

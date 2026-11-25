@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package openidmetadata tests the OIDC discovery endpoints which are part of
-// the ServiceAccountIssuerDiscovery feature.
+// Package openidmetadata 测试 OIDC 发现端点，
+// 它们是 ServiceAccountIssuerDiscovery 特性的一部分。
 package openidmetadata
 
 import (
@@ -37,7 +37,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// CmdTestServiceAccountIssuerDiscovery is used by agnhost Cobra.
+// CmdTestServiceAccountIssuerDiscovery 由 agnhost Cobra 使用。
 var CmdTestServiceAccountIssuerDiscovery = &cobra.Command{
 	Use:   "test-service-account-issuer-discovery",
 	Short: "Tests the ServiceAccountIssuerDiscovery feature",
@@ -66,16 +66,16 @@ func main(cmd *cobra.Command, args []string) {
 	log.Print("OK: Got token")
 
 	/*
-		  To support both in-cluster discovery and external (non kube-apiserver)
-		  discovery:
-		  1. Attempt with in-cluster discovery. Only trust Cluster CA.
-		     If pass, exit early, successfully. This attempt includes the bearer
-			 token, so we only trust the Cluster CA to avoid sending tokens to
-			 some external endpoint by accident.
-		  2. If in-cluster discovery doesn't pass, then try again assuming both
-		     discovery doc and JWKS endpoints are external rather than being
-			 served from kube-apiserver. This attempt does not pass the bearer
-			 token at all.
+		  为同时支持集群内发现与外部（非 kube-apiserver）
+		  发现：
+		  1. 先尝试集群内发现。仅信任集群 CA。
+		     若验证通过，则提前成功退出。此次尝试携带
+			 bearer token，因此只信任集群 CA，以避免
+			 意外将 token 发送给某个外部端点。
+		  2. 若集群内发现未通过，则假定发现文档和 JWKS 端点
+		     均由外部提供，而不是由 kube-apiserver 提供，
+			 再重试一次。此次尝试完全不传递
+			 bearer token。
 	*/
 
 	log.Print("validating with in-cluster discovery")
@@ -123,7 +123,7 @@ func validate(ctx context.Context, raw string) error {
 	}
 	log.Printf("OK: Constructed OIDC provider for issuer %v", unsafeClaims.Issuer)
 
-	// IMPORTANT: The algorithms listed below must be kept in sync with:
+	// 重要：下面列出的算法必须与以下内容保持同步：
 	// - pkg/serviceaccount/externaljwt/plugin/plugin.go validateJWTHeader
 	// - pkg/serviceaccount/jwt.go signerFromRSAPrivateKey
 	// - pkg/serviceaccount/jwt.go signerFromECDSAPrivateKey
@@ -173,18 +173,18 @@ func gettoken() (string, error) {
 }
 
 func withExternalOAuth2Client(ctx context.Context) (context.Context, error) {
-	// Use the default http transport with the system root bundle,
-	// since it's validating against the external internet.
+	// 使用带有系统根证书的默认 http transport，
+	// 因为这是针对外部互联网进行验证。
 	return context.WithValue(ctx,
-		// The `oidc` library respects the oauth2.HTTPClient context key; if it is set,
-		// the library will use the provided http.Client rather than the default HTTP client.
+		// `oidc` 库会识别 oauth2.HTTPClient context key；若设置了该 key，
+		// 库将使用提供的 http.Client，而不是默认的 HTTP client。
 		oauth2.HTTPClient, &http.Client{
 			Transport: http.DefaultTransport,
 		}), nil
 }
 
 func withInClusterOauth2Client(ctx context.Context) (context.Context, error) {
-	// Use the in-cluster config so we can trust and authenticate with kube-apiserver
+	// 使用集群内配置，以便信任 kube-apiserver 并向其进行身份验证
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
@@ -196,17 +196,17 @@ func withInClusterOauth2Client(ctx context.Context) (context.Context, error) {
 	}
 
 	return context.WithValue(ctx,
-		// The `oidc` library respects the oauth2.HTTPClient context key; if it is set,
-		// the library will use the provided http.Client rather than the default HTTP client.
+		// `oidc` 库会识别 oauth2.HTTPClient context key；若设置了该 key，
+		// 库将使用提供的 http.Client，而不是默认的 HTTP client。
 		oauth2.HTTPClient, &http.Client{
 			Transport: rt,
 		}), nil
 }
 
-// DNS can be available sometime after the container starts due to the way
-// networking is set up for Windows nodes with dockershim as the container runtime.
-// In this case, we should make sure we are able to resolve the issuer before
-// invoking oidc.NewProvider.
+// 由于以 dockershim 为容器运行时的 Windows 节点的网络设置方式，
+// DNS 可能在容器启动一段时间后才可用。此时，在调用 oidc.NewProvider
+// 之前，我们应确保能够解析 issuer，
+// 然后再发起发现请求。
 // See https://github.com/kubernetes/kubernetes/issues/99470 for more details.
 func ensureWindowsDNSAvailability(issuer string) error {
 	log.Println("Ensuring Windows DNS availability")

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Partially copied from https://github.com/bowei/lighthouse/blob/master/pkg/probe/tcp_test.go
+// 部分代码复制自 https://github.com/bowei/lighthouse/blob/master/pkg/probe/tcp_test.go
 
 package main
 
@@ -66,8 +66,8 @@ func TestTCPChecksummer(t *testing.T) {
 				{
 					0x7f, 0x00, 0x00, 0x01, // 127.0.0.1
 					0x7f, 0x00, 0x00, 0x01, // 127.0.0.1
-					0x00, 0x06, // TCP proto 6
-					0x00, 0x14, // Size = 20 bytes
+					0x00, 0x06, // TCP 协议 6
+					0x00, 0x14, // 大小 = 20 字节
 					0x00, 0x50, 0x1f, 0x90, 0x00,
 					0x00, 0x00, 0x01, 0x00, 0x00,
 					0x00, 0x00, 0x50, 0x02, 0x00,

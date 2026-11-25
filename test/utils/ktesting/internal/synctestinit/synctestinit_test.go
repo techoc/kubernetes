@@ -23,14 +23,13 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestSyncTestInit matches the corresponding test in the main package. It
-// exists here as the only test inside this package because signal.Notify fails
-// inside a synctest bubble when called for the first time in a process and we
-// want to enforce that situation.
+// TestSyncTestInit 与主包中的对应测试一致。它作为该包中唯一的测试存在，
+// 因为 signal.Notify 在进程中首次调用时，在 synctest bubble 内会失败，
+// 而我们希望强制构造这种情形。
 func TestSyncTestInit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		// This must work inside a synctest bubble, despite Deadline panicking there.
-		// We then don't have a deadline.
+		// 即使 Deadline 在 synctest bubble 内会 panic，这里也必须能正常工作。
+		// 这样我们就没有截止时间。
 		tCtx := ktesting.Init(t)
 		deadline, ok := tCtx.Deadline()
 		if ok {

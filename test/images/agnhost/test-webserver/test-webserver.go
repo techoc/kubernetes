@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testwebserver offers a tiny web server that serves a static file.
+// Package testwebserver 提供一个提供静态文件服务的小型 Web 服务器。
 package testwebserver
 
 import (
@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdTestWebserver is used by agnhost Cobra.
+// CmdTestWebserver 由 agnhost Cobra 使用。
 var CmdTestWebserver = &cobra.Command{
 	Use:   "test-webserver",
 	Short: "Starts a simple HTTP fileserver",
@@ -47,12 +47,12 @@ func main(cmd *cobra.Command, args []string) {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "private")
-		// Needed for local proxy to Kubernetes API server to work.
+		// 本地代理访问 Kubernetes API Server 时需要此配置。
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,Cache-Control,Content-Type")
-		// Disable If-Modified-Since so update-demo isn't broken by 304s
+		// 禁用 If-Modified-Since，避免 304 响应破坏 update-demo
 		r.Header.Del("If-Modified-Since")
 		fs.ServeHTTP(w, r)
 	})

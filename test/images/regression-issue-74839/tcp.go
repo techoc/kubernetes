@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Partially copied from https://github.com/bowei/lighthouse/blob/master/pkg/probe/tcp.go
+// 部分代码复制自 https://github.com/bowei/lighthouse/blob/master/pkg/probe/tcp.go
 
 package main
 
@@ -31,27 +31,27 @@ const (
 )
 
 const (
-	// Control Bits. 6 bits.
+	// 控制位，共 6 位。
 	// 00    01    02    03    04    05
 	// U     A     P     R     S     F
 
-	// FIN is a TCP flag
+	// FIN 是一个 TCP 标志位
 	FIN uint16 = 1 << iota
-	// SYN is a TCP flag
+	// SYN 是一个 TCP 标志位
 	SYN
-	// RST is a TCP flag
+	// RST 是一个 TCP 标志位
 	RST
-	// PSH is a TCP flag
+	// PSH 是一个 TCP 标志位
 	PSH
-	// ACK is a TCP flag
+	// ACK 是一个 TCP 标志位
 	ACK
-	// URG is a TCP flag
+	// URG 是一个 TCP 标志位
 	URG
-	// ECE is a TCP flag
+	// ECE 是一个 TCP 标志位
 	ECE
-	// CWR is a TCP flag
+	// CWR 是一个 TCP 标志位
 	CWR
-	// NS is a TCP flag
+	// NS 是一个 TCP 标志位
 	NS
 )
 
@@ -60,11 +60,11 @@ type tcpPacket struct {
 	DestPort uint16 // 2
 	Seq      uint32 // 4
 	Ack      uint32 // 8
-	// Flags bytes includes
-	// Data Offset. 4 bits.
-	// reserved. 3 bits. (must be zero)
-	// ECN, Explicit Congestion Notification. 3 bits.
-	// Control Bits (Real flags). 6 bits.
+	// Flags 字节包含
+	// Data Offset，4 位。
+	// reserved，3 位（必须为 0）。
+	// ECN（Explicit Congestion Notification，显式拥塞通知），3 位。
+	// Control Bits（真正的标志位），6 位。
 	Flags      uint16 // 12
 	WindowSize uint16 // 14
 	Checksum   uint16 // 16
@@ -144,7 +144,7 @@ func checksumTCP(src, dest net.IP, tcpHeader, data []byte) uint16 {
 	log.Printf("calling checksumTCP: %v %v %v %v", src, dest, tcpHeader, data)
 	chk := &tcpChecksummer{}
 
-	// Encode pseudoheader.
+	// 编码伪首部（pseudoheader）。
 	if src.To4() != nil {
 		// IPv4 [ src (4) | dst (4) | rsv (1) | proto (1) | tcp length (2) ] ... | tcp header | data
 		chk.add(src.To4())

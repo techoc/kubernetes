@@ -28,7 +28,7 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
-	// TODO: try this library to see if it generates correct json patch
+	// TODO: 试用这个库，看它是否能生成正确的 json patch
 	// https://github.com/mattbaird/jsonpatch
 )
 
@@ -39,7 +39,7 @@ var (
 	sidecarImage string
 )
 
-// CmdWebhook is used by agnhost Cobra.
+// CmdWebhook 由 agnhost Cobra 使用。
 var CmdWebhook = &cobra.Command{
 	Use:   "webhook",
 	Short: "Starts a HTTP server, useful for testing MutatingAdmissionWebhook and ValidatingAdmissionWebhook",
@@ -61,13 +61,13 @@ func init() {
 		"Image to be used as the injected sidecar")
 }
 
-// admitv1beta1Func handles a v1beta1 admission
+// admitv1beta1Func 处理 v1beta1 准入请求
 type admitv1beta1Func func(v1beta1.AdmissionReview) *v1beta1.AdmissionResponse
 
-// admitv1beta1Func handles a v1 admission
+// admitv1beta1Func 处理 v1 准入请求
 type admitv1Func func(v1.AdmissionReview) *v1.AdmissionResponse
 
-// admitHandler is a handler, for both validators and mutators, that supports multiple admission review versions
+// admitHandler 是验证器和变更器共用的处理器，支持多种准入审查版本
 type admitHandler struct {
 	v1beta1 admitv1beta1Func
 	v1      admitv1Func
@@ -88,8 +88,7 @@ func delegateV1beta1AdmitToV1(f admitv1Func) admitv1beta1Func {
 	}
 }
 
-// serve handles the http portion of a request prior to handing to an admit
-// function
+// serve 处理请求的 HTTP 部分，然后将其交给 admit 函数处理
 func serve(w http.ResponseWriter, r *http.Request, admit admitHandler) {
 	var body []byte
 	if r.Body != nil {
@@ -98,7 +97,7 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitHandler) {
 		}
 	}
 
-	// verify the content type is accurate
+	// 校验内容类型是否正确
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
 		klog.Errorf("contentType=%s, expect application/json", contentType)

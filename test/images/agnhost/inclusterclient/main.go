@@ -36,7 +36,7 @@ import (
 
 var pollInterval int
 
-// CmdInClusterClient is used by agnhost Cobra.
+// CmdInClusterClient 由 agnhost Cobra 使用。
 var CmdInClusterClient = &cobra.Command{
 	Use:   "inclusterclient",
 	Short: "Periodically poll the Kubernetes \"/healthz\" endpoint",

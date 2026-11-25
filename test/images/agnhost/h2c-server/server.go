@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package h2cserver offers a tiny HTTP/2 cleartext (h2c) web server for probe testing.
+// Package h2cserver 提供一个小型的 HTTP/2 明文（h2c）Web 服务器，用于探针测试。
 package h2cserver
 
 import (
@@ -27,7 +27,7 @@ import (
 	"golang.org/x/net/http2"
 )
 
-// CmdH2CServer is used by agnhost Cobra.
+// CmdH2CServer 由 agnhost 的 Cobra 命令使用。
 var CmdH2CServer = &cobra.Command{
 	Use:   "h2c-server",
 	Short: "Starts a simple HTTP/2 cleartext (h2c) server",

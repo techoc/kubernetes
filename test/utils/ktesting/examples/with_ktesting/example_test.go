@@ -18,9 +18,9 @@ limitations under the License.
 
 package withktesting
 
-// The tests below will fail and therefore are excluded from
-// normal "make test" via the "example" build tag. To run
-// the tests and check the output, use "go test -tags example ."
+// 下面的测试会失败，因此通过 "example" 构建标签将其排除在
+// 常规的 "make test" 之外。要运行这些测试并查看输出，请使用
+// "go test -tags example ."
 
 import (
 	"context"
@@ -41,10 +41,9 @@ func TestTimeout(t *testing.T) {
 		t.Logf("Will fail shortly before the test suite deadline at %s.", deadline)
 	}
 
-	// This is how Ginkgo and ktesting communicate to Gomega how to
-	// provide a progress report when stuck in e.g. gomega.Eventually.
-	// Here we use this to provide some additional output when
-	// this example is sent a SIGUSR1.
+	// Ginkgo 和 ktesting 通过这种方式告知 Gomega，在卡住时（例如
+	// gomega.Eventually 中）如何提供进度报告。
+	// 这里用它在该示例收到 SIGUSR1 时提供一些额外的输出。
 	remove := tCtx.Value("GINKGO_SPEC_CONTEXT").(interface {
 		AttachProgressReporter(func() string) func()
 	}).AttachProgressReporter(func() string { return "waiting for timeout or interrupt" })
@@ -52,10 +51,10 @@ func TestTimeout(t *testing.T) {
 
 	select {
 	case <-time.After(1000 * time.Hour):
-		// This should not be reached.
+		// 不应执行到这里。
 		tCtx.Log("Huh?! I shouldn't be that old.")
 	case <-tCtx.Done():
-		// But this will before the test suite timeout.
+		// 但这一分支会在测试套件超时之前触发。
 		tCtx.Errorf("need to stop: %v", context.Cause(tCtx))
 	}
 }

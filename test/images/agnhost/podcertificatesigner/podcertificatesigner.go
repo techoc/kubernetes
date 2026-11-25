@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podcertificatesigner is an agnhost subcommand implementing a toy
-// PodCertificateRequest signer.  It is meant to run continuously in an
-// in-cluster pod.
+// Package podcertificatesigner 是 agnhost 的一个子命令，实现了一个简易的
+// PodCertificateRequest 签名器。它用于在集群内的 Pod 中持续运行。
 package podcertificatesigner
 
 import (
@@ -76,12 +75,12 @@ func run(cmd *cobra.Command, args []string) error {
 	c := hermeticpodcertificatesigner.New(clock.RealClock{}, signerName, clusterDNSDomain, caKeys, caCerts, kc)
 	go c.Run(ctx)
 
-	// Wait for a shutdown signal.
+	// 等待关停信号。
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 	<-signalCh
 
-	// Canceling the context will begin exiting all of our controllers.
+	// 取消上下文将开始退出所有控制器。
 	cancel()
 
 	return nil

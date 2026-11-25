@@ -22,8 +22,8 @@ import (
 	"strings"
 )
 
-// WithError creates a context where test failures are collected and stored in
-// the provided error instance when the caller is done. Use it like this:
+// WithError 创建一个 context，用于收集测试失败，
+// 并在调用方结束时将其存入提供的 error 实例。用法如下：
 //
 //	func doSomething(tCtx ktesting.TContext) (finalErr error) {
 //	     tCtx, finalize := WithError(tCtx, &finalErr)
@@ -31,24 +31,22 @@ import (
 //	     ...
 //	     tCtx.Fatal("some failure")
 //
-// Any error already stored in the variable will get overwritten by finalize if
-// there were test failures, otherwise the variable is left unchanged.
-// If there were multiple test errors, then the error will wrap all of
-// them with errors.Join.
+// 如果发生了测试失败，finalize 会覆盖该变量中已有的任何错误，
+// 否则变量保持不变。如果有多个测试错误，
+// 则会用 errors.Join 将它们全部包装起来。
 //
-// Test failures are not propagated to the parent context.
-// WithRESTConfig initializes all client-go clients with new clients
-// created for the config. The current test name gets included in the UserAgent.
+// 测试失败不会传播到父 context。
+// WithRESTConfig 会用根据该配置创建的新客户端初始化所有 client-go 客户端。
+// 当前测试名称会被包含在 UserAgent 中。
 func (tCtx TContext) WithError(err *error) (TContext, func()) {
 	tCtx.capture = &capture{}
 
 	return tCtx, func() {
-		// Recover has to be called in the deferred function. When called inside
-		// a function called by a deferred function (like finalize below), it
-		// returns nil.
+		// Recover 必须在 deferred 函数中调用。如果在被 defer 调用的函数
+		// （比如下面的 finalize）中调用，它会返回 nil。
 		if e := recover(); e != nil {
 			if _, ok := e.(fatalWithError); !ok {
-				// Not our own panic, pass it on instead of setting the error.
+				// 不是我们自己的 panic，继续向外抛出，而不是设置错误。
 				panic(e)
 			}
 		}
@@ -76,14 +74,14 @@ type failures struct {
 }
 
 func (e failures) GomegaString() string {
-	// We don't need to repeat the string. Errors already get formatted once by Gomega itself,
-	// then it calls GomegaString for a summary that isn't necessary anymore.
+	// 不需要重复输出字符串。Gomega 本身已经格式化过一次错误，
+	// 之后它调用 GomegaString 只是为了得到一个已无必要的摘要。
 	return ""
 }
 
-// buildHeader handles:
-// - "ERROR:<non-empty prefix><optional header><suffix>" -> use both prefix and suffix when we have a header, otherwise just the suffix
-// - "<empty prefix><optional header><suffix>" -> use suffix only if we have a header
+// buildHeader 负责处理以下情况：
+// - "ERROR:<non-empty prefix><optional header><suffix>"：有 header 时同时使用 prefix 和 suffix，否则只使用 suffix
+// - "<empty prefix><optional header><suffix>"：仅在有 header 时使用 suffix
 func (tCtx TContext) buildHeader(prefix, suffix string) string {
 	if tCtx.perTestHeader != nil {
 		return prefix + tCtx.perTestHeader() + suffix
@@ -94,7 +92,7 @@ func (tCtx TContext) buildHeader(prefix, suffix string) string {
 	return ""
 }
 
-// indent either indents all follow-up lines or all lines including the first one.
+// indent 要么只缩进后续各行，要么连同第一行一起缩进所有行。
 func indent(msg string, all bool) string {
 	header := ""
 	if all {
@@ -135,7 +133,7 @@ func (tCtx TContext) Error(args ...any) {
 	if tCtx.capture == nil {
 		tCtx.Helper()
 		msg := strings.TrimSpace(fmt.Sprintln(args...))
-		// ERROR *before* header to make it stand out as failure.
+		// 将 ERROR 放在 header *之前*，使其作为失败信息更醒目。
 		tCtx.TB().Error("ERROR:" + tCtx.buildHeader(" ", "\n") + indent(tCtx.steps+msg, true))
 		return
 	}
@@ -143,11 +141,10 @@ func (tCtx TContext) Error(args ...any) {
 	tCtx.capture.mutex.Lock()
 	defer tCtx.capture.mutex.Unlock()
 
-	// Gomega adds a leading newline in https://github.com/onsi/gomega/blob/f804ac6ada8d36164ecae0513295de8affce1245/internal/gomega.go#L37
-	// Let's strip that at start and end because ktesting will make errors
-	// stand out more with the "ERROR" prefix, so there's no need for additional
-	// line breaks. Besides, Sprintln (required for `go vet printf`) also
-	// adds a trailing newline that we don't want.
+	// Gomega 在 https://github.com/onsi/gomega/blob/f804ac6ada8d36164ecae0513295de8affce1245/internal/gomega.go#L37 处添加了开头换行。
+	// 这里去掉开头和结尾的换行，因为 ktesting 会用 "ERROR" 前缀让错误更加醒目，
+	// 不需要额外的空行。此外，Sprintln（`go vet printf` 所必需的）也会
+	// 添加一个我们不想要的结尾换行。
 	msg := strings.TrimSpace(fmt.Sprintln(args...))
 	tCtx.capture.errors = append(tCtx.capture.errors, errors.New(tCtx.steps+msg))
 	tCtx.capture.failed = true
@@ -156,9 +153,9 @@ func (tCtx TContext) Error(args ...any) {
 func (tCtx TContext) Errorf(format string, args ...any) {
 	if tCtx.capture == nil {
 		tCtx.Helper()
-		// Enable `go vet printf` by directly calling fmt.Sprintln.
+		// 直接调用 fmt.Sprintln，以便启用 `go vet printf`。
 		msg := strings.TrimSpace(fmt.Sprintf(format, args...))
-		// ERROR *before* header to make it stand out as failure.
+		// 将 ERROR 放在 header *之前*，使其作为失败信息更醒目。
 		tCtx.TB().Error("ERROR:" + tCtx.buildHeader(" ", "\n") + indent(tCtx.steps+msg, true))
 		return
 	}
@@ -210,9 +207,9 @@ func (tCtx TContext) Failed() bool {
 func (tCtx TContext) Fatal(args ...any) {
 	if tCtx.capture == nil {
 		tCtx.Helper()
-		// Enable `go vet printf` by directly calling fmt.Sprintln.
+		// 直接调用 fmt.Sprintln，以便启用 `go vet printf`。
 		msg := strings.TrimSpace(fmt.Sprintln(args...))
-		// FATAL ERROR *before* header to make it stand out as failure.
+		// 将 FATAL ERROR 放在 header *之前*，使其作为失败信息更醒目。
 		tCtx.TB().Fatal("FATAL ERROR:" + tCtx.buildHeader(" ", "\n") + indent(tCtx.steps+msg, true))
 	}
 
@@ -223,9 +220,9 @@ func (tCtx TContext) Fatal(args ...any) {
 func (tCtx TContext) Fatalf(format string, args ...any) {
 	if tCtx.capture == nil {
 		tCtx.Helper()
-		// Enable `go vet printf` by directly calling fmt.Sprintf.
+		// 直接调用 fmt.Sprintf，以便启用 `go vet printf`。
 		msg := strings.TrimSpace(fmt.Sprintf(format, args...))
-		// FATAL ERROR *before* header to make it stand out as failure.
+		// 将 FATAL ERROR 放在 header *之前*，使其作为失败信息更醒目。
 		tCtx.TB().Fatal("FATAL ERROR:" + tCtx.buildHeader(" ", "\n") + indent(tCtx.steps+msg, true))
 		return
 	}
@@ -234,10 +231,9 @@ func (tCtx TContext) Fatalf(format string, args ...any) {
 	tCtx.FailNow()
 }
 
-// fatalWithError is the internal type that should never get propagated up. The
-// only case where that can happen is when the developer forgot to call
-// finalize via defer. The string explains that, in case that developers get to
-// see it.
+// fatalWithError 是内部类型，绝不应向外传播。
+// 唯一可能发生这种情况的场景是开发者忘记通过 defer 调用 finalize。
+// 这个字符串会对该情况作出解释，以防开发者真的看到它。
 type fatalWithError string
 
 const failed = fatalWithError("WithError TContext encountered a fatal error, but the finalize function was not called via defer as it should have been.")

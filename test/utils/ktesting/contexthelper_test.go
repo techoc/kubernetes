@@ -122,11 +122,11 @@ func TestCause(t *testing.T) {
 						tCtx.Assert(time.Until(actualDeadline)).To(gomega.Equal(tt.expectDeadline), "remaining time till Deadline()")
 					}
 				}
-				// Unblock background goroutines.
+				// 解除后台 goroutine 的阻塞。
 				time.Sleep(tt.sleep)
-				// Wait for them to do their work.
+				// 等待它们完成各自的工作。
 				synctest.Wait()
-				// Now check.
+				// 现在开始检查。
 				actualErr := ctx.Err()
 				actualCause := context.Cause(ctx)
 				if tt.expectErr == nil {
@@ -144,8 +144,8 @@ func TestCause(t *testing.T) {
 	}
 }
 
-// TestCancel checks how cancellation propagates or doesn't propagate
-// when setting up child contexts through WithCancel or WithoutCancel.
+// TestCancel 检查通过 WithCancel 或 WithoutCancel 建立子上下文时，
+// 取消操作如何传播（或不传播）。
 func TestCancel(t *testing.T) {
 	tCtx := Init(t)
 	tCtx2 := tCtx.WithoutCancel()

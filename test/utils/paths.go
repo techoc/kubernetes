@@ -25,7 +25,7 @@ import (
 	"strings"
 )
 
-// GetK8sRootDir returns the root directory for kubernetes, if present in the gopath.
+// GetK8sRootDir 返回 gopath 中 kubernetes 的根目录（如果存在）。
 func GetK8sRootDir() (string, error) {
 	dir := os.Getenv("KUBE_ROOT")
 	if len(dir) > 0 {
@@ -39,7 +39,7 @@ func GetK8sRootDir() (string, error) {
 	return filepath.Join(dir, fmt.Sprintf("%s/", "k8s.io/kubernetes")), nil
 }
 
-// GetCAdvisorRootDir returns the root directory for cAdvisor, if present in the gopath.
+// GetCAdvisorRootDir 返回 gopath 中 cAdvisor 的根目录（如果存在）。
 func GetCAdvisorRootDir() (string, error) {
 	dir, err := RootDir()
 	if err != nil {
@@ -48,13 +48,13 @@ func GetCAdvisorRootDir() (string, error) {
 	return filepath.Join(dir, fmt.Sprintf("%s/", "github.com/google/cadvisor")), nil
 }
 
-// RootDir gets the on-disk kubernetes source directory, returning an error is none is found
+// RootDir 获取磁盘上的 kubernetes 源码目录，找不到时返回错误
 func RootDir() (string, error) {
-	// Get the directory of the current executable
+	// 获取当前可执行文件所在的目录
 	_, testExec, _, _ := runtime.Caller(0)
 	path := filepath.Dir(testExec)
 
-	// Look for the kubernetes source root directory
+	// 查找 kubernetes 源码根目录
 	if strings.Contains(path, "k8s.io/kubernetes") {
 		splitPath := strings.Split(path, "k8s.io/kubernetes")
 		return splitPath[0], nil
@@ -63,9 +63,9 @@ func RootDir() (string, error) {
 	return "", errors.New("could not find kubernetes source root directory")
 }
 
-// GetK8sBuildOutputDir returns the build output directory for k8s
-// For dockerized build, targetArch (eg: 'linux/arm64', 'linux/amd64') must be explicitly specified
-// For non dockerized build, targetArch is ignored
+// GetK8sBuildOutputDir 返回 k8s 的构建输出目录
+// 对于 docker 化构建，必须显式指定 targetArch（例如 'linux/arm64'、'linux/amd64'）
+// 对于非 docker 化构建，targetArch 会被忽略
 func GetK8sBuildOutputDir(isDockerizedBuild bool, targetArch string) (string, error) {
 	k8sRoot, err := GetK8sRootDir()
 	if err != nil {

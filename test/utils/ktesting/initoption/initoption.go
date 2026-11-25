@@ -22,36 +22,33 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting/internal"
 )
 
-// InitOption is a functional option for Init and InitCtx.
+// InitOption 是 Init 和 InitCtx 的函数式选项。
 type InitOption func(c *internal.InitConfig)
 
-// PerTestOutput controls whether a per-test logger gets
-// set up by Init. Has no effect in InitCtx.
+// PerTestOutput 控制 Init 是否为每个测试设置 logger。
+// 对 InitCtx 无效。
 func PerTestOutput(enabled bool) InitOption {
 	return func(c *internal.InitConfig) {
 		c.PerTestOutput = enabled
 	}
 }
 
-// BufferLogs controls whether log entries are captured in memory in addition
-// to being printed. Off by default. Unit tests that want to verify that
-// log entries are emitted as expected can turn this on and then retrieve
-// the captured log through the Underlier LogSink interface.
+// BufferLogs 控制除了打印日志之外，是否还在内存中捕获日志条目。默认关闭。
+// 希望验证日志条目是否按预期输出的单元测试可以打开此选项，
+// 然后通过 Underlier LogSink 接口获取捕获到的日志。
 func BufferLogs(enabled bool) InitOption {
 	return func(c *internal.InitConfig) {
 		c.BufferLogs = enabled
 	}
 }
 
-// WithCleanupGracePeriod overrides the default cleanup grace period used by
-// [Init]. The cleanup grace period is the time reserved before the test-suite
-// deadline so that cleanup callbacks can complete before the test binary is
-// killed.
+// WithCleanupGracePeriod 覆盖 [Init] 使用的默认清理宽限期。
+// 清理宽限期是在测试套件 deadline 之前预留的一段时间，
+// 以便清理回调能够在测试二进制文件被终止之前完成。
 //
-// A non-positive value is ignored and the default is used instead.
+// 非正值会被忽略，改用默认值。
 //
-// When using Ginkgo to manage the test suite this option has no effect because
-// Ginkgo itself manages timeouts.
+// 当使用 Ginkgo 管理测试套件时，此选项无效，因为 Ginkgo 自身管理超时。
 func WithCleanupGracePeriod(d time.Duration) InitOption {
 	return func(c *internal.InitConfig) {
 		c.CleanupGracePeriod = d

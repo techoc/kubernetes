@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	// Parameters for retrying updates/waits with linear backoff.
-	// TODO: Try to move this to exponential backoff by modifying scale.Scale().
+	// 使用线性退避重试更新/等待的参数。
+	// TODO: 尝试通过修改 scale.Scale()，改用指数退避。
 	updateRetryInterval = 5 * time.Second
 	updateRetryTimeout  = 1 * time.Minute
 	waitRetryInterval   = 5 * time.Second

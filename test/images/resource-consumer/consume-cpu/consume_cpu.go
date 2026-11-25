@@ -27,7 +27,7 @@ import (
 
 func main() {
 	flag.Parse()
-	// convert millicores to percentage
+	// 将 millicores 转换为百分比
 	millicoresPct := float64(*millicores) / float64(10)
 	duration := time.Duration(*durationSec) * time.Second
 	start := time.Now()

@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// If there ever is a non-Windows build platform that doesn't
-	// have SIGUSR1, then we need to add another exception for it.
+	// 如果将来出现没有 SIGUSR1 的非 Windows 构建平台，
+	// 就需要为它再添加一个例外。
 	progressSignals = []os.Signal{syscall.SIGUSR1}
 )

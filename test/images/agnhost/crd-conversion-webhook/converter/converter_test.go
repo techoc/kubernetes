@@ -74,7 +74,7 @@ request:
 	for _, tc := range cases {
 		t.Run(tc.apiVersion+" "+tc.contentType, func(t *testing.T) {
 			sampleObj := fmt.Sprintf(sampleObjTemplate, tc.apiVersion)
-			// First try json, it should fail as the data is taml
+			// 先尝试 json，由于数据是 yaml，此处应当失败
 			response := httptest.NewRecorder()
 			request, err := http.NewRequest("POST", "/convert", strings.NewReader(sampleObj))
 			if err != nil {

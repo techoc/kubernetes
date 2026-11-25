@@ -27,15 +27,14 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// See [ktesting.FailureError].
+// 参见 [ktesting.FailureError]。
 type FailureError = ktesting.FailureError
 
-// See [ktesting.ErrFailure].
+// 参见 [ktesting.ErrFailure]。
 var ErrFailure error = ktesting.ErrFailure
 
-// assertTestingT implements Fatalf (the only function used by Gomega for
-// reporting failures) using TContext.Errorf, i.e. testing continues after a
-// failed assertion. The Helper method gets passed through.
+// assertTestingT 使用 TContext.Errorf 实现 Fatalf（Gomega 用来报告失败的唯一函数），
+// 也就是说断言失败后测试会继续执行。Helper 方法会被直接透传。
 type assertTestingT struct {
 	TContext
 }
@@ -47,47 +46,46 @@ func (a assertTestingT) Fatalf(format string, args ...any) {
 	a.Errorf(format, args...)
 }
 
-// See [ktesting.Eventually].
+// 参见 [ktesting.Eventually]。
 func (tCtx TContext) Eventually(arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	return tCtx.newAsyncAssertion(gomega.NewWithT(tCtx).Eventually, arg)
 }
 
-// See [ktesting.AssertEventually].
+// 参见 [ktesting.AssertEventually]。
 func (tCtx TContext) AssertEventually(arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	return tCtx.newAsyncAssertion(gomega.NewWithT(assertTestingT{tCtx}).Eventually, arg)
 }
 
-// See [ktesting.Consistently].
+// 参见 [ktesting.Consistently]。
 func (tCtx TContext) Consistently(arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	return tCtx.newAsyncAssertion(gomega.NewWithT(tCtx).Consistently, arg)
 }
 
-// See [ktesting.AssertConsistently].
+// 参见 [ktesting.AssertConsistently]。
 func (tCtx TContext) AssertConsistently(arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	return tCtx.newAsyncAssertion(gomega.NewWithT(assertTestingT{tCtx}).Consistently, arg)
 }
 
-// newAsyncAssertion must be kept identical to the corresponding newAsyncAssertion in
-// the base ktesting, with the addition of the support for TContext from this
-// package.
+// newAsyncAssertion 必须与基础 ktesting 中对应的 newAsyncAssertion 保持一致，
+// 但增加了对本包 TContext 的支持。
 func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx any, args ...any) gomega.AsyncAssertion, arg any) gomega.AsyncAssertion {
 	tCtx.Helper()
 	v := reflect.ValueOf(arg)
 	if v.Kind() != reflect.Func {
-		// Gomega must deal with it.
+		// 交给 Gomega 处理。
 		return eventuallyOrConsistently(tCtx, arg)
 	}
 	t := v.Type()
 	if t.NumIn() == 0 || !slices.Contains(supportedContextTypes, t.In(0)) {
-		// Not a function we can wrap.
+		// 不是我们可以包装的函数。
 		return eventuallyOrConsistently(tCtx, arg)
 	}
-	// Build a wrapper function with context instead of TContext as first parameter.
-	// The wrapper then builds that TContext when called and invokes the actual function.
+	// 构建一个包装函数，用 context 代替 TContext 作为第一个参数。
+	// 包装函数被调用时会构造出 TContext，然后调用真正的函数。
 	in := make([]reflect.Type, t.NumIn())
 	in[0] = contextType
 	for i := 1; i < t.NumIn(); i++ {
@@ -97,9 +95,8 @@ func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx
 	for i := range t.NumOut() {
 		out[i] = t.Out(i)
 	}
-	// The last result must always be an error because we need the ability to return assertion
-	// failures, so we may have to add an error result value if the function doesn't
-	// already have it.
+	// 最后一个返回值必须是 error，因为我们需要能够返回断言失败，
+	// 所以如果函数本身没有 error 返回值，就必须添加一个。
 	addErrResult := t.NumOut() == 0 || t.Out(t.NumOut()-1) != errorType
 	if addErrResult {
 		out = append(out, errorType)
@@ -111,34 +108,32 @@ func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx
 		var finalize func()
 		switch t.In(0) {
 		case baseContextType:
-			// Construct a base TContext.
+			// 构造一个基础的 TContext。
 			argTCtx, finalize = tCtx.TContext.WithContext(args[0].Interface().(context.Context)).
 				WithCancel().
 				WithError(&err)
 		case k8sContextType:
-			// Construct a client-go TContext.
+			// 构造一个 client-go 的 TContext。
 			argTCtx, finalize = tCtx.WithContext(args[0].Interface().(context.Context)).
 				WithCancel().
 				WithError(&err)
 		}
 		args[0] = reflect.ValueOf(argTCtx)
 		defer func() {
-			// This runs *after* finalize.
-			// If we are returning normally, then we must inject back the err
-			// value that was set by finalize.
+			// 这段逻辑在 finalize 之后执行。
+			// 如果是正常返回，就必须把 finalize 设置的 err 值回填。
 			if r := recover(); r != nil {
-				// Nope, no results needed.
+				// 不，不需要结果。
 				panic(r)
 			}
 			errValue := reflect.ValueOf(err)
 			if err == nil {
-				// reflect doesn't like this ("returned zero Value").
-				// We need a value of the right type.
+				// reflect 不接受这种情况（"returned zero Value"）。
+				// 我们需要一个类型正确的值。
 				errValue = reflect.New(errorType).Elem()
 			}
-			// If the call panicked and the panic was recoved
-			// by finalize(), then results is still nil.
-			// We need to fill in null values.
+			// 如果调用发生了 panic，且该 panic 被 finalize() 恢复，
+			// 那么 results 仍然为 nil。我们需要填入空值。
 			if len(results) == 0 && t.NumOut() > 0 {
 				for t := range t.Outs() {
 					results = append(results, reflect.New(t).Elem())
@@ -152,7 +147,7 @@ func (tCtx TContext) newAsyncAssertion(eventuallyOrConsistently func(actualOrCtx
 				results[len(results)-1] = errValue
 			}
 		}()
-		defer finalize() // Must be called directly, otherwise it cannot recover a panic.
+		defer finalize() // 必须直接调用，否则它无法恢复 panic。
 		return v.Call(args)
 	})
 	return eventuallyOrConsistently(tCtx, wrapper.Interface())

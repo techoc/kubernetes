@@ -16,7 +16,7 @@ limitations under the License.
 
 package common
 
-// Constants related to Prometheus metrics.
+// 与 Prometheus 指标相关的常量。
 const (
 	ConsumeCPUAddress       = "/ConsumeCPU"
 	ConsumeMemAddress       = "/ConsumeMem"

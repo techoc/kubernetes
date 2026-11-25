@@ -23,10 +23,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Harness adds some functionality to testing.T, in particular resource cleanup.
-// It embeds testing.T, so should have the same signature.
+// Harness 为 testing.T 添加了一些功能，特别是资源清理。
+// 它内嵌了 testing.T，因此应具有相同的签名。
 //
-// Example usage:
+// 用法示例：
 // ```
 //
 //	func MyTest(tt *testing.T) {
@@ -41,14 +41,14 @@ type Harness struct {
 	defers []func() error
 }
 
-// For creates a Harness from a testing.T
-// Callers must call Close on the Harness so that resources can be cleaned up
+// For 从一个 testing.T 创建 Harness。
+// 调用者必须在 Harness 上调用 Close，以便清理资源。
 func For(t *testing.T) *Harness {
 	h := &Harness{T: t}
 	return h
 }
 
-// Close cleans up any owned resources, and should be called in a defer block after For
+// Close 清理所有持有的资源，应在 For 之后通过 defer 调用。
 func (h *Harness) Close() {
 	for _, d := range h.defers {
 		if err := d(); err != nil {
@@ -57,9 +57,9 @@ func (h *Harness) Close() {
 	}
 }
 
-// TempDir is a wrapper around os.MkdirTemp for tests.
-// It automatically fails the test if we can't create a temp file,
-// and deletes the temp directory when Close is called on the Harness
+// TempDir 是 os.MkdirTemp 面向测试的包装。
+// 如果无法创建临时文件，它会自动令测试失败，
+// 并在 Harness 上调用 Close 时删除该临时目录。
 func (h *Harness) TempDir(baseDir string, prefix string) string {
 	tempDir, err := os.MkdirTemp(baseDir, prefix)
 	if err != nil {

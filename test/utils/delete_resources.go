@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO: Refactor common part of functions in this file for generic object kinds.
+// TODO: 重构本文件中针对通用对象类型的函数公共部分。
 
 package utils
 

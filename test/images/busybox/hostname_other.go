@@ -20,10 +20,10 @@ package main
 
 import "errors"
 
-// getFQDN is only implemented for Windows because this helper binary is only
-// copied into busybox images for Windows. The image build still
-// compiles this package for Linux platforms before selecting the
-// Dockerfile, so keep this stub to satisfy cross-platform builds.
+// getFQDN 仅在 Windows 上实现，因为该辅助二进制文件只会
+// 被复制到 Windows 的 busybox 镜像中。镜像构建仍会在选择
+// Dockerfile 之前针对 Linux 平台编译此包，
+// 因此保留这个桩实现以满足跨平台构建。
 func getFQDN() (string, error) {
 	return "", errors.New("hostname -f is only supported by this helper on Windows")
 }

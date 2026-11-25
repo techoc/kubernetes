@@ -14,18 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// A tiny binary for testing port forwarding. The following environment variables
-// control the binary's logic:
+// 一个用于测试端口转发的小型二进制程序。以下环境变量控制该程序的行为：
 //
-// BIND_PORT - the TCP port to use for the listener
-// EXPECTED_CLIENT_DATA - data that we expect to receive from the client; may be "".
-// CHUNKS - how many chunks of data we should send to the client
-// CHUNK_SIZE - how large each chunk should be
-// CHUNK_INTERVAL - the delay in between sending each chunk
+// BIND_PORT - 监听器使用的 TCP 端口
+// EXPECTED_CLIENT_DATA - 期望从客户端收到的数据；可以为空字符串 ""。
+// CHUNKS - 要向客户端发送多少个数据块
+// CHUNK_SIZE - 每个数据块的大小
+// CHUNK_INTERVAL - 发送每个数据块之间的延迟
 //
-// Log messages are written to stdout at various stages of the binary's execution.
-// Test code can retrieve this container's log and validate that the expected
-// behavior is taking place.
+// 在程序执行的各个阶段，日志消息会写入 stdout。
+// 测试代码可以获取这个容器的日志，验证预期行为是否发生。
 
 package portforwardtester
 
@@ -50,18 +48,17 @@ func getEnvInt(name string) int {
 	return value
 }
 
-// taken from net/http/server.go:
+// 摘自 net/http/server.go：
 //
-// rstAvoidanceDelay is the amount of time we sleep after closing the
-// write side of a TCP connection before closing the entire socket.
-// By sleeping, we increase the chances that the client sees our FIN
-// and processes its final data before they process the subsequent RST
-// from closing a connection with known unread data.
-// This RST seems to occur mostly on BSD systems. (And Windows?)
-// This timeout is somewhat arbitrary (~latency around the planet).
+// rstAvoidanceDelay 是在关闭 TCP 连接的写端之后、
+// 关闭整个 socket 之前休眠的时间。
+// 通过休眠，我们增加这样的机会：客户端先看到我们的 FIN 并处理完最后的数据，
+// 然后再处理因关闭带有已知未读数据的连接而产生的 RST。
+// 这种 RST 似乎主要出现在 BSD 系统上（Windows 上也有？）。
+// 这个超时时间多少有点随意（大约是绕地球一圈的延迟）。
 const rstAvoidanceDelay = 500 * time.Millisecond
 
-// CmdPortForwardTester is used by agnhost Cobra.
+// CmdPortForwardTester 供 agnhost Cobra 使用。
 var CmdPortForwardTester = &cobra.Command{
 	Use:   "port-forward-tester",
 	Short: "Creates a TCP server that sends chunks of data",
@@ -146,15 +143,15 @@ func main(cmd *cobra.Command, args []string) {
 
 	fmt.Println("Shutting down connection")
 
-	// set linger timeout to flush buffers. This is the official way according to the go api docs. But
-	// there are controversial discussions whether this value has any impact on most platforms
-	// (compare https://codereview.appspot.com/95320043).
+	// 设置 linger 超时以刷新缓冲区。按照 Go API 文档，这是官方做法。但是
+	// 关于这个值在大多数平台上是否真的有影响，一直存在争议
+	// （参见 https://codereview.appspot.com/95320043）。
 	conn.SetLinger(-1)
 
-	// Flush the connection cleanly, following https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable:
-	// 1. close write half of connection which sends a FIN packet
-	// 2. give client some time to receive the FIN
-	// 3. close the complete connection
+	// 按照 https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable 的说明干净地刷新连接：
+	// 1. 关闭连接的写半边，这会发送一个 FIN 包
+	// 2. 给客户端一些时间接收 FIN
+	// 3. 关闭整个连接
 	conn.CloseWrite()
 	time.Sleep(rstAvoidanceDelay)
 	conn.Close()

@@ -29,10 +29,10 @@ import (
 	"k8s.io/api/admission/v1beta1"
 )
 
-// NewAdmissionWebhookServer sets up a webhook server with TLS enabled, returns URL and Close function
-// for the server
+// NewAdmissionWebhookServer 搭建一个启用 TLS 的 webhook 服务器，返回其 URL
+// 和 Close 函数
 func NewAdmissionWebhookServer(handler http.Handler) (string, func(), error) {
-	// set up webhook server
+	// 搭建 webhook 服务器
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(LocalhostCert) {
 		return "", nil, fmt.Errorf("Failed to append Cert from PEM")
@@ -50,8 +50,8 @@ func NewAdmissionWebhookServer(handler http.Handler) (string, func(), error) {
 	return webhookServer.URL, webhookServer.Close, nil
 }
 
-// AdmissionWebhookHandler creates a HandlerFunc that decodes/encodes AdmissionReview and performs
-// given admit function
+// AdmissionWebhookHandler 创建一个 HandlerFunc，它对 AdmissionReview 进行解码/编码，
+// 并执行给定的 admit 函数
 func AdmissionWebhookHandler(t *testing.T, admit func(*v1beta1.AdmissionReview) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
@@ -85,7 +85,7 @@ func AdmissionWebhookHandler(t *testing.T, admit func(*v1beta1.AdmissionReview) 
 	}
 }
 
-// LocalhostCert was generated from crypto/tls/generate_cert.go with the following command:
+// LocalhostCert 是使用以下命令从 crypto/tls/generate_cert.go 生成的：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host 127.0.0.1,::1,example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var LocalhostCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -108,7 +108,7 @@ F4nkUthwlKx4yEJHZBRuFPnO7Z81jNKuwL276+mczRH7piI6z9uyMV/JbEsOIxyL
 W6CzB7pZ9Nj1YLpgzc1r6oONHLokMJJIz/IvkQ==
 -----END CERTIFICATE-----`)
 
-// LocalhostKey is the private key for LocalhostCert.
+// LocalhostKey 是 LocalhostCert 的私钥。
 var LocalhostKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA1Z5/aTwqY706M34tn60l8ZHkanWDl8mM1pYf4Q7qg3zA9XqW
 LX6S4rTYDYCb4stEasC72lQnbEWHbthiQE76zubP8WOFHdvGR3mjAvHWz4FxvLOT

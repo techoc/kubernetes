@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CmdPause is used by agnhost Cobra.
+// CmdPause 由 agnhost Cobra 使用。
 var CmdPause = &cobra.Command{
 	Use:   "pause",
 	Short: "Pauses the execution",
@@ -42,12 +42,12 @@ func pause(cmd *cobra.Command, args []string) {
 	fmt.Println("Signals registered")
 	sig := <-sigCh
 
-	// Pods using the agnhost image may choose to override the default
-	// termination message path. They then have to the TERMINATION_MESSAGE_PATH
-	// env variable.
+	// 使用 agnhost 镜像的 Pod 可能会覆盖默认的
+	// 终止消息路径。此时它们必须使用 TERMINATION_MESSAGE_PATH
+	// 环境变量。
 	//
-	// `terminationMessagePolicy: FallbackToLogsOnError` also works because
-	// the same message is also the last line of output.
+	// `terminationMessagePolicy: FallbackToLogsOnError` 同样有效，因为
+	// 同一条消息也是输出的最后一行。
 	terminationMessagePath := os.Getenv("TERMINATION_MESSAGE_PATH")
 	if terminationMessagePath == "" {
 		terminationMessagePath = "/dev/termination-log"

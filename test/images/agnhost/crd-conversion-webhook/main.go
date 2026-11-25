@@ -31,7 +31,7 @@ var (
 	port     int
 )
 
-// CmdCrdConversionWebhook is used by agnhost Cobra.
+// CmdCrdConversionWebhook 供 agnhost Cobra 使用。
 var CmdCrdConversionWebhook = &cobra.Command{
 	Use:   "crd-conversion-webhook",
 	Short: "Starts HTTP server on port 443 for testing CustomResourceConversionWebhook",
@@ -54,7 +54,7 @@ func init() {
 		"Secure port that the webhook listens on")
 }
 
-// Config contains the server (the webhook) cert and key.
+// Config 包含服务器（即 webhook）的证书和密钥。
 type Config struct {
 	CertFile string
 	KeyFile  string

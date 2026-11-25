@@ -18,9 +18,9 @@ limitations under the License.
 
 package withoutktesting
 
-// The tests below will fail and therefore are excluded from
-// normal "make test" via the "example" build tag. To run
-// the tests and check the output, use "go test -tags example ."
+// 下面的测试会失败，因此通过 "example" 构建标签将其排除在
+// 常规的 "make test" 之外。要运行这些测试并查看输出，请使用
+// "go test -tags example ."
 
 import (
 	"testing"
@@ -33,7 +33,7 @@ func TestTimeout(t *testing.T) {
 	t.Cleanup(func() {
 		t.Log("Cleaning up...")
 	})
-	// This will not complete anytime soon...
+	// 这不会在短时间内完成……
 	t.Log("Please kill me.")
 	<-time.After(1000 * time.Hour)
 }

@@ -16,23 +16,23 @@ limitations under the License.
 
 package ktesting
 
-// WithStep creates a context where a prefix is added to all errors and log
-// messages, similar to how errors are wrapped. This can be nested, leaving a
-// trail of "bread crumbs" that help figure out where in a test some problem
-// occurred or why some log output gets written:
+// WithStep 创建一个 context，其中会给所有错误和日志
+// 消息加上前缀，类似于错误的包装。这可以嵌套，留下
+// 一串"面包屑"线索，帮助定位测试中问题发生的位置，
+// 或为什么会产生某些日志输出：
 //
 //	ERROR: bake cake: set heat for baking: oven not found
 //
-// The string should describe the operation that is about to happen ("starting
-// the controller", "list items") or what is being operated on ("HTTP server").
-// Multiple different prefixes get concatenated with a colon.
+// 该字符串应描述即将进行的操作（"starting
+// the controller"、"list items"），或所操作的对象（"HTTP server"）。
+// 多个不同的前缀会以冒号连接。
 func (tCtx TContext) WithStep(step string) TContext {
 	tCtx.steps += step + ": "
 	return tCtx
 }
 
-// Step is useful when the context with the step information is
-// used more than once:
+// 当带有步骤信息的 context 会被多次使用时，
+// Step 很有用：
 //
 //	ktesting.Step(tCtx, "step 1", func(tCtx ktesting.TContext) {
 //	 tCtx.Log(...)
@@ -41,16 +41,16 @@ func (tCtx TContext) WithStep(step string) TContext {
 //	    }
 //	)}
 //
-// Inside the callback, the tCtx variable is the one where the step
-// has been added. This avoids the need to introduce multiple different
-// context variables and risk of using the wrong one.
+// 在回调中，tCtx 变量是已经添加了步骤的那个。
+// 这样就不必引入多个不同的 context 变量，
+// 也避免了用错变量的风险。
 func (tCtx TContext) Step(step string, cb func(tCtx TContext)) {
 	tCtx.Helper()
 	cb(tCtx.WithStep(step))
 }
 
-// Value intercepts a search for the special "GINKGO_SPEC_CONTEXT" and
-// wraps the underlying reporter so that the steps are visible in the report.
+// Value 会拦截对特殊 "GINKGO_SPEC_CONTEXT" 的查找，
+// 并包装底层 reporter，使步骤在报告中可见。
 func (tCtx TContext) Value(key any) any {
 	if tCtx.steps != "" {
 		if s, ok := key.(string); ok && s == ginkgoSpecContextKey {

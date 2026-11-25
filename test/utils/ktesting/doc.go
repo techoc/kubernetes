@@ -14,27 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package ktesting exists in different variants, each adding more
-// functionality on top of the previous one:
-//   - [k8s.io/klog/v2/ktesting]: contextual logging, caller determines
-//     all aspects
-//   - [k8s.io/kubernetes/test/utils/ktesting]: abstraction around
-//     Go testing and Ginkgo
-//   - [k8s.io/kubernetes/test/utils/client-go/ktesting]: tailored towards
-//     testing Kubernetes
+// ktesting 包有多个变体，每个变体都在前一个变体的基础上
+// 增加更多功能：
+//   - [k8s.io/klog/v2/ktesting]: 上下文日志，调用方决定
+//     所有细节
+//   - [k8s.io/kubernetes/test/utils/ktesting]: 对 Go testing 和
+//     Ginkgo 的抽象
+//   - [k8s.io/kubernetes/test/utils/client-go/ktesting]: 针对
+//     Kubernetes 测试定制
 //
-// Consumers can switch from a simpler variant to a more complex one simply
-// changing the import path. The more complex ones have additional package
-// dependencies.
+// 使用者只需修改 import 路径，即可从较简单的变体切换到
+// 较复杂的变体。较复杂的变体有额外的包
+// 依赖。
 //
-// This variant is opinionated. Importing it:
-// - adds the -v command line flag
-// - enables better dumping of complex datatypes
-// - sets the default verbosity to 5 (can be changed with [SetDefaultVerbosity])
+// 此变体有自己的主张。导入它会：
+// - 增加 -v 命令行 flag
+// - 启用对复杂数据类型的更好转储
+// - 将默认详细程度设为 5（可通过 [SetDefaultVerbosity] 修改）
 //
-// It also adds additional APIs and types for unit and integration tests
-// which are too experimental for klog and/or are unrelated to logging.
-// The ktesting package itself takes care of managing a test context
-// with deadlines, timeouts, cancellation, and some common attributes
-// as first-class members of the API.
+// 它还为单元测试和集成测试添加了额外的 API 和类型，
+// 这些对 klog 来说过于实验性，和/或与日志无关。
+// ktesting 包本身负责管理测试上下文，并将截止时间、
+// 超时、取消以及一些常用属性作为 API 的
+// 一等成员。
 package ktesting

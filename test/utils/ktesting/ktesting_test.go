@@ -42,9 +42,9 @@ func TestLogFlags(t *testing.T) {
 		tCtx.Errorf("unexpected command line flag: %s", f.Name)
 	})
 
-	// The behavior of init and SetDefaultVerbosity depend on whether
-	// "KTESTING_VERBOSITY" is set. We don't know how this test gets
-	// invoked, so we have to adapt the expectations based on that.
+	// init 和 SetDefaultVerbosity 的行为取决于是否设置了
+	// "KTESTING_VERBOSITY"。我们不知道该测试是如何被调用的，
+	// 因此必须据此调整预期。
 	v, ok := os.LookupEnv("KTESTING_VERBOSITY")
 	if !ok {
 		v = "0"

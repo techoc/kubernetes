@@ -69,10 +69,10 @@ func LogPodsOfDeployment(c clientset.Interface, deployment *apps.Deployment, rsL
 	}
 }
 
-// Waits for the deployment to complete.
-// If during a rolling update (rolling == true), returns an error if the deployment's
-// rolling update strategy (max unavailable or max surge) is broken at any times.
-// It's not seen as a rolling update if shortly after a scaling event or the deployment is just created.
+// 等待 deployment 完成。
+// 如果在滚动更新期间（rolling == true），且 deployment 的
+// 滚动更新策略（max unavailable 或 max surge）在任意时刻被破坏，则返回错误。
+// 如果是在扩缩容事件后不久，或者 deployment 刚创建，则不会视为滚动更新。
 func waitForDeploymentCompleteMaybeCheckRolling(c clientset.Interface, d *apps.Deployment, rolling bool, logf LogfFn, pollInterval, pollTimeout time.Duration) error {
 	var (
 		deployment *apps.Deployment
@@ -86,7 +86,7 @@ func waitForDeploymentCompleteMaybeCheckRolling(c clientset.Interface, d *apps.D
 			return false, err
 		}
 
-		// If during a rolling update, make sure rolling update strategy isn't broken at any times.
+		// 如果处于滚动更新期间，确保滚动更新策略在任何时刻都没有被破坏。
 		if rolling {
 			reason, err = checkRollingUpdateStatus(c, deployment, logf)
 			if err != nil {
@@ -95,7 +95,7 @@ func waitForDeploymentCompleteMaybeCheckRolling(c clientset.Interface, d *apps.D
 			logf(reason)
 		}
 
-		// When the deployment status and its underlying resources reach the desired state, we're done
+		// 当 deployment 状态及其底层资源达到期望状态时，就完成了
 		if deploymentutil.DeploymentComplete(d, &deployment.Status) {
 			return true, nil
 		}
@@ -122,12 +122,12 @@ func checkRollingUpdateStatus(c clientset.Interface, deployment *apps.Deployment
 		return "", err
 	}
 	if newRS == nil {
-		// New RC hasn't been created yet.
+		// 新的 RC 还没有创建。
 		reason = "new replica set hasn't been created yet"
 		return reason, nil
 	}
 	allRSs := append(oldRSs, newRS)
-	// The old/new ReplicaSets need to contain the pod-template-hash label
+	// 新旧 ReplicaSet 都必须包含 pod-template-hash 标签
 	for i := range allRSs {
 		if !labelsutil.SelectorHasLabel(allRSs[i].Spec.Selector, apps.DefaultDeploymentUniqueLabelKey) {
 			reason = "all replica sets need to contain the pod-template-hash label"
@@ -135,7 +135,7 @@ func checkRollingUpdateStatus(c clientset.Interface, deployment *apps.Deployment
 		}
 	}
 
-	// Check max surge and min available
+	// 检查 max surge 和 min available
 	totalCreated := deploymentutil.GetReplicaCountForReplicaSets(allRSs)
 	maxCreated := *(deployment.Spec.Replicas) + deploymentutil.MaxSurge(*deployment)
 	if totalCreated > maxCreated {
@@ -152,9 +152,11 @@ func checkRollingUpdateStatus(c clientset.Interface, deployment *apps.Deployment
 	return "", nil
 }
 
-// GetAllReplicaSets returns the old and new replica sets targeted by the given Deployment. It gets PodList and ReplicaSetList from client interface.
-// Note that the first set of old replica sets doesn't include the ones with no pods, and the second set of old replica sets include all old replica sets.
-// The third returned value is the new replica set, and it may be nil if it doesn't exist yet.
+// GetAllReplicaSets 返回给定 Deployment 对应的新旧 replica set。
+// 它从 client 接口获取 PodList 和 ReplicaSetList。
+// 注意，第一组旧 replica set 不包含没有 pod 的那些，
+// 而第二组旧 replica set 包含所有旧 replica set。
+// 第三个返回值是新的 replica set，如果它还不存在，则可能为 nil。
 func GetAllReplicaSets(deployment *apps.Deployment, c clientset.Interface) ([]*apps.ReplicaSet, []*apps.ReplicaSet, *apps.ReplicaSet, error) {
 	rsList, err := deploymentutil.ListReplicaSets(deployment, deploymentutil.RsListFromClient(c.AppsV1()))
 	if err != nil {
@@ -165,8 +167,10 @@ func GetAllReplicaSets(deployment *apps.Deployment, c clientset.Interface) ([]*a
 	return oldRSes, allOldRSes, newRS, nil
 }
 
-// GetOldReplicaSets returns the old replica sets targeted by the given Deployment; get PodList and ReplicaSetList from client interface.
-// Note that the first set of old replica sets doesn't include the ones with no pods, and the second set of old replica sets include all old replica sets.
+// GetOldReplicaSets 返回给定 Deployment 对应的旧 replica set；
+// 它从 client 接口获取 PodList 和 ReplicaSetList。
+// 注意，第一组旧 replica set 不包含没有 pod 的那些，
+// 而第二组旧 replica set 包含所有旧 replica set。
 func GetOldReplicaSets(deployment *apps.Deployment, c clientset.Interface) ([]*apps.ReplicaSet, []*apps.ReplicaSet, error) {
 	rsList, err := deploymentutil.ListReplicaSets(deployment, deploymentutil.RsListFromClient(c.AppsV1()))
 	if err != nil {
@@ -176,8 +180,9 @@ func GetOldReplicaSets(deployment *apps.Deployment, c clientset.Interface) ([]*a
 	return oldRSes, allOldRSes, nil
 }
 
-// GetNewReplicaSet returns a replica set that matches the intent of the given deployment; get ReplicaSetList from client interface.
-// Returns nil if the new replica set doesn't exist yet.
+// GetNewReplicaSet 返回符合给定 deployment 意图的 replica set；
+// 它从 client 接口获取 ReplicaSetList。
+// 如果新的 replica set 还不存在，则返回 nil。
 func GetNewReplicaSet(deployment *apps.Deployment, c clientset.Interface) (*apps.ReplicaSet, error) {
 	rsList, err := deploymentutil.ListReplicaSets(deployment, deploymentutil.RsListFromClient(c.AppsV1()))
 	if err != nil {
@@ -186,23 +191,25 @@ func GetNewReplicaSet(deployment *apps.Deployment, c clientset.Interface) (*apps
 	return deploymentutil.FindNewReplicaSet(deployment, rsList), nil
 }
 
-// Waits for the deployment to complete, and check rolling update strategy isn't broken at any times.
-// Rolling update strategy should not be broken during a rolling update.
+// 等待 deployment 完成，并检查滚动更新策略在任何时刻都没有被破坏。
+// 在滚动更新期间不应破坏滚动更新策略。
 func WaitForDeploymentCompleteAndCheckRolling(c clientset.Interface, d *apps.Deployment, logf LogfFn, pollInterval, pollTimeout time.Duration) error {
 	rolling := true
 	return waitForDeploymentCompleteMaybeCheckRolling(c, d, rolling, logf, pollInterval, pollTimeout)
 }
 
-// Waits for the deployment to complete, and don't check if rolling update strategy is broken.
-// Rolling update strategy is used only during a rolling update, and can be violated in other situations,
-// such as shortly after a scaling event or the deployment is just created.
+// 等待 deployment 完成，但不检查滚动更新策略是否被破坏。
+// 滚动更新策略只在滚动更新期间适用，在其他情况下可能被违反，
+// 例如扩缩容事件后不久，或者 deployment 刚创建时。
 func WaitForDeploymentComplete(c clientset.Interface, d *apps.Deployment, logf LogfFn, pollInterval, pollTimeout time.Duration) error {
 	rolling := false
 	return waitForDeploymentCompleteMaybeCheckRolling(c, d, rolling, logf, pollInterval, pollTimeout)
 }
 
-// WaitForDeploymentRevisionAndImage waits for the deployment's and its new RS's revision and container image to match the given revision and image.
-// Note that deployment revision and its new RS revision should be updated shortly, so we only wait for 1 minute here to fail early.
+// WaitForDeploymentRevisionAndImage 等待 deployment 及其新 RS 的 revision 和容器镜像
+// 与给定的 revision 和镜像相匹配。
+// 注意，deployment 的 revision 及其新 RS 的 revision 应当很快更新，
+// 因此这里只等待 1 分钟，以便尽早失败。
 func WaitForDeploymentRevisionAndImage(c clientset.Interface, ns, deploymentName string, revision, image string, logf LogfFn, pollInterval, pollTimeout time.Duration) error {
 	var deployment *apps.Deployment
 	var newRS *apps.ReplicaSet
@@ -213,7 +220,7 @@ func WaitForDeploymentRevisionAndImage(c clientset.Interface, ns, deploymentName
 		if err != nil {
 			return false, err
 		}
-		// The new ReplicaSet needs to be non-nil and contain the pod-template-hash label
+		// 新的 ReplicaSet 必须非 nil，且包含 pod-template-hash 标签
 		newRS, err = GetNewReplicaSet(deployment, c)
 		if err != nil {
 			return false, err
@@ -249,14 +256,15 @@ func WaitForDeploymentRevisionAndImage(c clientset.Interface, ns, deploymentName
 	return nil
 }
 
-// CheckDeploymentRevisionAndImage checks if the input deployment's and its new replica set's revision and image are as expected.
+// CheckDeploymentRevisionAndImage 检查输入的 deployment 及其新 replica set 的
+// revision 和镜像是否符合预期。
 func CheckDeploymentRevisionAndImage(c clientset.Interface, ns, deploymentName, revision, image string) error {
 	deployment, err := c.AppsV1().Deployments(ns).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("unable to get deployment %s during revision check: %v", deploymentName, err)
 	}
 
-	// Check revision of the new replica set of this deployment
+	// 检查该 deployment 的新 replica set 的 revision
 	newRS, err := GetNewReplicaSet(deployment, c)
 	if err != nil {
 		return fmt.Errorf("unable to get new replicaset of deployment %s during revision check: %v", deploymentName, err)
@@ -265,21 +273,21 @@ func CheckDeploymentRevisionAndImage(c clientset.Interface, ns, deploymentName, 
 }
 
 func checkRevisionAndImage(deployment *apps.Deployment, newRS *apps.ReplicaSet, revision, image string) error {
-	// The new ReplicaSet needs to be non-nil and contain the pod-template-hash label
+	// 新的 ReplicaSet 必须非 nil，且包含 pod-template-hash 标签
 	if newRS == nil {
 		return fmt.Errorf("new replicaset for deployment %q is yet to be created", deployment.Name)
 	}
 	if !labelsutil.SelectorHasLabel(newRS.Spec.Selector, apps.DefaultDeploymentUniqueLabelKey) {
 		return fmt.Errorf("new replica set %q doesn't have %q label selector", newRS.Name, apps.DefaultDeploymentUniqueLabelKey)
 	}
-	// Check revision of this deployment, and of the new replica set of this deployment
+	// 检查该 deployment 的 revision，以及该 deployment 的新 replica set 的 revision
 	if deployment.Annotations == nil || deployment.Annotations[deploymentutil.RevisionAnnotation] != revision {
 		return fmt.Errorf("deployment %q doesn't have the required revision set", deployment.Name)
 	}
 	if newRS.Annotations == nil || newRS.Annotations[deploymentutil.RevisionAnnotation] != revision {
 		return fmt.Errorf("new replicaset %q doesn't have the required revision set", newRS.Name)
 	}
-	// Check the image of this deployment, and of the new replica set of this deployment
+	// 检查该 deployment 的镜像，以及该 deployment 的新 replica set 的镜像
 	if !containsImage(deployment.Spec.Template.Spec.Containers, image) {
 		return fmt.Errorf("deployment %q doesn't have the required image %s set", deployment.Name, image)
 	}
@@ -308,7 +316,7 @@ func UpdateDeploymentWithRetries(c clientset.Interface, namespace, name string, 
 		if deployment, err = c.AppsV1().Deployments(namespace).Get(context.TODO(), name, metav1.GetOptions{}); err != nil {
 			return false, err
 		}
-		// Apply the update, then attempt to push it to the apiserver.
+		// 应用更新，然后尝试将其推送到 apiserver。
 		applyUpdate(deployment)
 		if deployment, err = c.AppsV1().Deployments(namespace).Update(context.TODO(), deployment, metav1.UpdateOptions{}); err == nil {
 			logf("Updating deployment %s", name)
@@ -329,7 +337,8 @@ func WaitForObservedDeployment(c clientset.Interface, ns, deploymentName string,
 	}, desiredGeneration, 2*time.Second, 1*time.Minute)
 }
 
-// WaitForDeploymentUpdatedReplicasGTE waits for given deployment to be observed by the controller and has at least a number of updatedReplicas
+// WaitForDeploymentUpdatedReplicasGTE 等待给定 deployment 被 controller 观察到，
+// 并且至少有一定数量的 updatedReplicas
 func WaitForDeploymentUpdatedReplicasGTE(c clientset.Interface, ns, deploymentName string, minUpdatedReplicas int32, desiredGeneration int64, pollInterval, pollTimeout time.Duration) error {
 	var deployment *apps.Deployment
 	err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {

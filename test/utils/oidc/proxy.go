@@ -26,10 +26,10 @@ import (
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 )
 
-// NewHTTPConnectProxyHandler returns an http.Handler that implements an HTTP CONNECT proxy.
-// When a CONNECT request is received, it dials the target, hijacks the client connection,
-// and bidirectionally copies data between them. The called flag is set to true when a
-// non-ready request is received.
+// NewHTTPConnectProxyHandler 返回一个实现了 HTTP CONNECT 代理的 http.Handler。
+// 收到 CONNECT 请求时，它会连接目标、劫持客户端连接，
+// 并在两者之间双向复制数据。当收到非 ready 请求时，
+// called 标志会被置为 true。
 func NewHTTPConnectProxyHandler(t testing.TB, called *atomic.Bool) http.Handler {
 	t.Helper()
 
@@ -67,7 +67,7 @@ func NewHTTPConnectProxyHandler(t testing.TB, called *atomic.Bool) http.Handler 
 		}
 		defer func() { _ = clientConn.Close() }()
 
-		// use t.Errorf for all errors after this Write since the client may think the connection is good
+		// 此次 Write 之后的所有错误均使用 t.Errorf，因为客户端可能认为连接是正常的
 		_, err = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 		if err != nil {
 			t.Errorf("unexpected established error: %v", err)
@@ -93,8 +93,8 @@ func NewHTTPConnectProxyHandler(t testing.TB, called *atomic.Bool) http.Handler 
 			close(readerComplete)
 		}()
 
-		// Wait for one half the connection to exit. Once it does,
-		// the defer will clean up the other half of the connection.
+		// 等待连接的任意一半退出。一旦退出，
+		// defer 将清理连接的另一半。
 		select {
 		case <-writerComplete:
 		case <-readerComplete:

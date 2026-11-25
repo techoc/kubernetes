@@ -31,7 +31,7 @@ func TestMergeFeatureGatesFlags(t *testing.T) {
 		wantErr      bool
 	}{
 		"nop": {
-			// --feature-gates= (empty value) with no new gates: output must be unchanged.
+			// --feature-gates=（空值）且没有新特性门控时：输出必须保持不变。
 			cmdLine:      []string{"--feature-gates="},
 			featureGates: "",
 			want:         []string{"--feature-gates="},
@@ -107,15 +107,15 @@ func TestMergeFeatureGatesFlags(t *testing.T) {
 			wantErr:      true,
 		},
 		"existing-empty-flag-no-new-gates": {
-			// --feature-gates= (empty value) is parseable but yields no gates;
-			// featureGates is also empty. The placeholder must not be left as "".
+			// --feature-gates=（空值）可以解析，但不产生任何特性门控；
+			// featureGates 也为空。占位符不应保留为 ""。
 			cmdLine:      []string{"--feature-gates=", "--some-option"},
 			featureGates: "",
 			want:         []string{"--feature-gates=", "--some-option"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			// Snapshot input to detect accidental mutation.
+			// 对输入做快照，以检测意外的修改。
 			cmdLineCopy := append([]string(nil), tc.cmdLine...)
 
 			got, err := mergeFeatureGatesFlags(tc.cmdLine, tc.featureGates)
