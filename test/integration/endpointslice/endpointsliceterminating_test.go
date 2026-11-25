@@ -36,8 +36,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestEndpointSliceTerminating tests that terminating endpoints are included with the
-// correct conditions set for ready, serving and terminating.
+// TestEndpointSliceTerminating 测试 terminating endpoint 会被包含，并且
+// ready、serving 和 terminating 条件被正确设置。
 func TestEndpointSliceTerminating(t *testing.T) {
 	testcases := []struct {
 		name              string
@@ -104,7 +104,7 @@ func TestEndpointSliceTerminating(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 			server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 			defer server.TearDownFn()
 
@@ -127,11 +127,11 @@ func TestEndpointSliceTerminating(t *testing.T) {
 				client,
 				1*time.Second)
 
-			// Start informer and controllers
+			// 启动 informer 和 controller
 			informers.Start(tCtx.Done())
 			go epsController.Run(tCtx, 1)
 
-			// Create namespace
+			// 创建 namespace
 			ns := framework.CreateNamespaceOrDie(client, "test-endpoints-terminating", t)
 			defer framework.DeleteNamespaceOrDie(client, ns, t)
 
@@ -204,7 +204,7 @@ func TestEndpointSliceTerminating(t *testing.T) {
 				t.Fatalf("Failed to update status for test ready pod: %v", err)
 			}
 
-			// first check that endpoints are included, test should always have 1 initial endpoint
+			// 首先检查 endpoint 是否被包含，测试中应始终有 1 个初始 endpoint
 			err = wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
 				esList, err := client.DiscoveryV1().EndpointSlices(ns.Name).List(context.TODO(), metav1.ListOptions{
 					LabelSelector: discovery.LabelServiceName + "=" + svc.Name,
@@ -233,14 +233,14 @@ func TestEndpointSliceTerminating(t *testing.T) {
 				t.Errorf("Error waiting for endpoint slices: %v", err)
 			}
 
-			// Delete pod and check endpoints slice conditions
+			// 删除 Pod 并检查 EndpointSlice 的条件
 			err = client.CoreV1().Pods(ns.Name).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatalf("Failed to delete pod in terminating state: %v", err)
 			}
 
-			// Validate that terminating the endpoint will result in the expected endpoints in EndpointSlice.
-			// Use a stricter timeout value here since we should try to catch regressions in the time it takes to remove terminated endpoints.
+			// 验证终止 endpoint 后 EndpointSlice 中会出现预期的 endpoint。
+			// 此处使用更严格的超时时间，以便捕获移除已终止 endpoint 所耗时间的回归。
 			var endpoints []discovery.Endpoint
 			err = wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
 				esList, err := client.DiscoveryV1().EndpointSlices(ns.Name).List(context.TODO(), metav1.ListOptions{

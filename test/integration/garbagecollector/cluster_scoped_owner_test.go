@@ -51,7 +51,7 @@ func (b *readDelayer) Read(p []byte) (n int, err error) {
 }
 
 func TestClusterScopedOwners(t *testing.T) {
-	// Start the test server and wrap the client to delay PV watch responses
+	// 启动测试服务器并包装客户端，以延迟 PV watch 响应
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	server.ClientConfig.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
 		return roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -116,7 +116,7 @@ func TestClusterScopedOwners(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// wait for deletable children to go away
+	// 等待可删除的子对象消失
 	if err := wait.Poll(5*time.Second, 300*time.Second, func() (bool, error) {
 		_, err := clientSet.CoreV1().ConfigMaps(ns.Name).Get(context.TODO(), "cm-missing", metav1.GetOptions{})
 		switch {
@@ -133,15 +133,15 @@ func TestClusterScopedOwners(t *testing.T) {
 	}
 	t.Logf("deletable children removed")
 
-	// Give time for blocked children to be incorrectly cleaned up
+	// 留出时间，让被阻塞的子对象有机会被错误地清理掉
 	time.Sleep(5 * time.Second)
 
-	// ensure children with unverifiable parents don't get reaped
+	// 确保父对象无法验证的子对象不会被回收
 	if _, err := clientSet.CoreV1().ConfigMaps(ns.Name).Get(context.TODO(), "cm-invalid", metav1.GetOptions{}); err != nil {
 		t.Fatalf("child with invalid ownerRef is unexpectedly missing: %v", err)
 	}
 
-	// ensure children with present parents don't get reaped
+	// 确保父对象存在的子对象不会被回收
 	if _, err := clientSet.CoreV1().ConfigMaps(ns.Name).Get(context.TODO(), "cm-valid", metav1.GetOptions{}); err != nil {
 		t.Fatalf("child with valid ownerRef is unexpectedly missing: %v", err)
 	}

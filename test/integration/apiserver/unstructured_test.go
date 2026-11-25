@@ -34,9 +34,9 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestRequestObjectConvertibleToUnstructured tests that write requests fail if the request object
-// is not convertible to unstructured. The ability to convert an object to unstructured ensures that
-// it can be encoded as JSON and that field managers can be determined.
+// TestRequestObjectConvertibleToUnstructured 测试当请求对象无法转换为 unstructured 时，写请求会失败。
+// 对象能够转换为 unstructured，可确保其能被编码为 JSON，
+// 并确定 field manager。
 func TestRequestObjectConvertibleToUnstructured(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{}, framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -49,8 +49,8 @@ func TestRequestObjectConvertibleToUnstructured(t *testing.T) {
 		`1z`,
 		`z`,
 	} {
-		// The Protobuf request encoding is required. Invalid JSON cannot be embedded in a
-		// JSON object or array without making the containing object or array also invalid.
+		// 必须使用 Protobuf 请求编码。无效 JSON 无法嵌入 JSON 对象或数组，
+		// 否则外层对象或数组也会变成无效的。
 		protoConfig := server.ClientConfig
 		protoConfig.ContentConfig.ContentType = runtime.ContentTypeProtobuf
 		protoConfig.ContentConfig.AcceptContentTypes = runtime.ContentTypeProtobuf
@@ -75,17 +75,17 @@ func TestRequestObjectConvertibleToUnstructured(t *testing.T) {
 		if _, err := protoClient.AppsV1().ControllerRevisions("default").Apply(context.TODO(), appsv1applyconfigurations.ControllerRevision("test-revision-apply", "default").
 			WithData(runtime.RawExtension{Raw: []byte(raw)}),
 			metav1.ApplyOptions{}); errors.As(err, &marshalerError) {
-			// In this case the error is currently client-side, since apply request
-			// bodies must be encoded as JSON. Included here to cover the future
-			// possibility of Protobuf-encoded apply configurations.
+			// 在这种情况下，错误目前发生在客户端，因为 apply 请求体必须编码为 JSON。
+			// 此处包含该检查，是为了覆盖未来 apply configuration
+			// 支持 Protobuf 编码的可能性。
 			t.Logf("apply returned client-side marshaler error as expected with rawextension %#v: %v", raw, err)
 		} else {
 			t.Errorf("apply returned unexpected error: %#v", err)
 		}
 
-		// Create an object to be updated. If the object does not exist, then the update
-		// will short-circuit on "not found" before it encounters the error that is
-		// interesting to this test.
+		// 创建一个待更新的对象。如果对象不存在，则 update 会因 "not found"
+		// 提前短路，从而在本测试关心的错误出现之前
+		// 就返回。
 		existing, err := protoClient.AppsV1().ControllerRevisions("default").Create(context.TODO(), &appsv1.ControllerRevision{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: fmt.Sprintf("test-revision-update-%d", i),

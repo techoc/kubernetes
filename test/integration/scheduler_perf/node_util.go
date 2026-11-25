@@ -30,48 +30,48 @@ import (
 )
 
 const (
-	// createNodeRetries defines number of retries when creating nodes.
+	// createNodeRetries 定义创建节点时的重试次数。
 	createNodeRetries = 5
 
-	// pollingInterval defines how often to poll when waiting for nodes to be created.
+	// pollingInterval 定义等待节点创建完成时的轮询间隔。
 	pollingInterval = 2 * time.Second
 
-	// singleCallTimeout is how long to try single API calls (like 'get' or 'list'). Used to prevent
-	// transient failures from failing tests.
+	// singleCallTimeout 是单次 API 调用（如 'get' 或 'list'）的尝试时长。用于防止
+	// 瞬时失败导致测试失败。
 	singleCallTimeout = 5 * time.Minute
 )
 
-// NodeTemplate is responsible for creating a v1.Node instance that is ready
-// to be sent to the API server.
+// NodeTemplate 负责创建一个 v1.Node 实例，
+// 该实例可直接发送到 API server。
 type NodeTemplate interface {
-	// GetNodeTemplate returns a node template for one out of many different nodes.
-	// It gets called multiple times with an increasing index and a fixed count parameters.
-	// This number can, but doesn't have to be, used to modify parts of the node spec like
-	// for example a named reference to some other object.
+	// GetNodeTemplate 返回众多不同节点之一的节点模板。
+	// 它会被多次调用，其中 index 递增，count 参数保持不变。
+	// 可以使用（但不是必须）这些数字修改 node spec 的部分内容，
+	// 例如指向其他对象的具名引用。
 	GetNodeTemplate(index, count int) (*v1.Node, error)
 }
 
-// StaticNodeTemplate returns an implementation of NodeTemplate for a fixed node that is the same regardless of the index.
+// StaticNodeTemplate 返回一个 NodeTemplate 实现，无论 index 如何，它都返回同一个固定节点。
 func StaticNodeTemplate(node *v1.Node) NodeTemplate {
 	return (*staticNodeTemplate)(node)
 }
 
 type staticNodeTemplate v1.Node
 
-// GetNodeTemplate implements [NodeTemplate.GetNodeTemplate] by returning the same node
-// for each call.
+// GetNodeTemplate 实现了 [NodeTemplate.GetNodeTemplate]，每次调用
+// 都返回同一个节点。
 func (s *staticNodeTemplate) GetNodeTemplate(index, count int) (*v1.Node, error) {
 	return (*v1.Node)(s), nil
 }
 
-// IntegrationTestNodePreparer holds configuration information for the test node preparer.
+// IntegrationTestNodePreparer 保存测试节点准备器的配置信息。
 type IntegrationTestNodePreparer struct {
 	client          clientset.Interface
 	countToStrategy []CountToStrategy
 	nodeTemplate    NodeTemplate
 }
 
-// NewIntegrationTestNodePreparer creates an IntegrationTestNodePreparer with a given nodeTemplate.
+// NewIntegrationTestNodePreparer 使用给定的 nodeTemplate 创建一个 IntegrationTestNodePreparer。
 func NewIntegrationTestNodePreparer(client clientset.Interface, countToStrategy []CountToStrategy, nodeTemplate NodeTemplate) TestNodePreparer {
 	return &IntegrationTestNodePreparer{
 		client:          client,
@@ -80,7 +80,7 @@ func NewIntegrationTestNodePreparer(client clientset.Interface, countToStrategy 
 	}
 }
 
-// PrepareNodes prepares countToStrategy test nodes.
+// PrepareNodes 准备 countToStrategy 指定的测试节点。
 func (p *IntegrationTestNodePreparer) PrepareNodes(ctx context.Context, nextNodeIndex int) error {
 	numNodes := 0
 	for _, v := range p.countToStrategy {
@@ -95,9 +95,9 @@ func (p *IntegrationTestNodePreparer) PrepareNodes(ctx context.Context, nextNode
 			return fmt.Errorf("failed to get node template: %w", err)
 		}
 		for range createNodeRetries {
-			// Create nodes with the usual kubernetes.io/hostname label.
-			// For that we need to know the name in advance, if we want to
-			// do it in one request.
+			// 使用常见的 kubernetes.io/hostname 标签创建节点。
+			// 为此，如果希望在一个请求中完成，
+			// 我们需要提前知道节点名称。
 			node := baseNode.DeepCopy()
 			name := node.Name
 			if name == "" {
@@ -133,10 +133,10 @@ func (p *IntegrationTestNodePreparer) PrepareNodes(ctx context.Context, nextNode
 	return nil
 }
 
-// CleanupNodes deletes existing test nodes.
+// CleanupNodes 删除现有的测试节点。
 func (p *IntegrationTestNodePreparer) CleanupNodes(ctx context.Context) error {
-	// TODO(#93794): make CleanupNodes only clean up the nodes created by this
-	// IntegrationTestNodePreparer to make this more intuitive.
+	// TODO(#93794): 让 CleanupNodes 只清理由该
+	// IntegrationTestNodePreparer 创建的节点，使其行为更直观。
 	nodes, err := waitListAllNodes(ctx, p.client)
 	if err != nil {
 		klog.Fatalf("Error listing nodes: %v", err)
@@ -151,7 +151,7 @@ func (p *IntegrationTestNodePreparer) CleanupNodes(ctx context.Context) error {
 	return errRet
 }
 
-// waitListAllNodes is a wrapper around listing nodes supporting retries.
+// waitListAllNodes 是对列出节点操作的封装，支持重试。
 func waitListAllNodes(ctx context.Context, c clientset.Interface) (*v1.NodeList, error) {
 	var nodes *v1.NodeList
 	var err error

@@ -70,8 +70,7 @@ func TestGracefulShutdown(t *testing.T) {
 	resp.Body.Close()
 
 	t.Logf("shutting down server")
-	// We tear it down in the background to ensure that
-	// pending requests should work fine.
+	// 在后台拆除服务，以确保待处理请求仍能正常工作。
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {

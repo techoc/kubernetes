@@ -34,7 +34,7 @@ import (
 	testutils "k8s.io/kubernetes/test/integration/util"
 )
 
-// _ to avoid unused import
+// _ 用于避免未使用的 import
 var _ = time.Second
 
 func makeTestPods(pgName string, reqCPUs ...string) []*v1.Pod {
@@ -87,10 +87,10 @@ func TestCPGScheduling(t *testing.T) {
 	}{
 		{
 			name: "TestCPGHierarchicalScheduling",
-			// TestCPGHierarchicalScheduling verifies that readiness and feasibility propagate correctly
-			// across a 3-level CPG hierarchy with mixed Gang and Basic policies.
+			// TestCPGHierarchicalScheduling 验证在混合 Gang 和 Basic 策略的三层 CPG
+			// 层级结构中，就绪性和可行性能够正确传播。
 			//
-			// Tree structure:
+			// 树形结构：
 			//
 			//	                    cpg-root (Gang, Min: 2)
 			//	            /                 |                 \
@@ -101,9 +101,9 @@ func TestCPGScheduling(t *testing.T) {
 			//
 			// [Gang] [Gang] [Gang]     [Basic]   [Gang]      [Gang]     [Gang]
 			//
-			// (S) = Success (pods schedule according to policy)
-			// (F) = Fail (pods cannot schedule)
-			// Note: pg6 fails because its parent cpg-sub3 fails (needs 2 children but pg7 fails).
+			// (S) = 成功（Pod 按策略完成调度）
+			// (F) = 失败（Pod 无法调度）
+			// 注意：pg6 失败是因为其父节点 cpg-sub3 失败（需要 2 个子节点，但 pg7 失败）。
 			steps: []stepsframework.Step{
 				{
 					Name:        "Create Node",
@@ -175,11 +175,11 @@ func TestCPGScheduling(t *testing.T) {
 					CreatePods: concatPods(
 						makeTestPods("pg1", "1", "1", "1"),
 						makeTestPods("pg2", "1", "1", "1"),
-						makeTestPods("pg3", "100", "100", "100"), // (F) unschedulable
+						makeTestPods("pg3", "100", "100", "100"), // (F) 不可调度
 						makeTestPods("pg4", "1", "1", "1"),
 						makeTestPods("pg5", "1", "1", "1"),
 						makeTestPods("pg6", "1", "1", "1"),
-						makeTestPods("pg7", "100", "100", "100"), // (F) unschedulable
+						makeTestPods("pg7", "100", "100", "100"), // (F) 不可调度
 					),
 				},
 				{
@@ -203,18 +203,18 @@ func TestCPGScheduling(t *testing.T) {
 		},
 		{
 			name: "TestCPGMinGroupCount",
-			// TestCPGMinGroupCount verifies that a Gang CompositePodGroup schedules its children
-			// if at least MinGroupCount of them are fully schedulable.
+			// TestCPGMinGroupCount 验证当 Gang CompositePodGroup 至少有 MinGroupCount 个
+			// 子节点完全可调度时，它会调度这些子节点。
 			//
-			// Tree structure:
+			// 树形结构：
 			//
 			//	   cpg-root (Gang, MinGroup: 2)
 			//	  /             |              \
 			//	pg1            pg2            pg3
 			//	(S)            (S)            (F)
 			//
-			// (S) = Success
-			// (F) = Fail
+			// (S) = 成功
+			// (F) = 失败
 			steps: []stepsframework.Step{
 				{
 					Name:        "Create Node",
@@ -272,18 +272,18 @@ func TestCPGScheduling(t *testing.T) {
 		},
 		{
 			name: "TestCPGBasicWithGangChildren",
-			// TestCPGBasicWithGangChildren verifies that a Basic CompositePodGroup allows its ready
-			// child Gang groups to schedule independently of each other.
+			// TestCPGBasicWithGangChildren 验证 Basic CompositePodGroup 允许其已就绪的
+			// Gang 子组彼此独立地调度。
 			//
-			// Tree structure:
+			// 树形结构：
 			//
 			//	   cpg-root (Basic)
 			//	  /            \
 			//	pg1            pg2
 			//	(S)            (F)
 			//
-			// (S) = Success
-			// (F) = Fail
+			// (S) = 成功
+			// (F) = 失败
 			steps: []stepsframework.Step{
 				{
 					Name:        "Create Node",
@@ -335,17 +335,17 @@ func TestCPGScheduling(t *testing.T) {
 		},
 		{
 			name: "TestCPGBasicWithBasicChildren",
-			// TestCPGBasicWithBasicChildren verifies that a Basic CompositePodGroup with Basic child
-			// pod groups schedules all pods successfully since there are no gang constraints.
+			// TestCPGBasicWithBasicChildren 验证带有 Basic 子 PodGroup 的 Basic
+			// CompositePodGroup 能够成功调度所有 Pod，因为不存在 gang 约束。
 			//
-			// Tree structure:
+			// 树形结构：
 			//
 			//	   cpg-root (Basic)
 			//	  /            \
 			//	pg1            pg2
 			//	(S)            (S)
 			//
-			// (S) = Success
+			// (S) = 成功
 			steps: []stepsframework.Step{
 				{
 					Name:        "Create Node",
@@ -392,18 +392,18 @@ func TestCPGScheduling(t *testing.T) {
 		},
 		{
 			name: "TestCPGGangWithBasicChildren",
-			// TestCPGGangWithBasicChildren verifies that a Gang CompositePodGroup with Basic children
-			// enforces the gang scheduling policy (minGroupCount) at the root level.
+			// TestCPGGangWithBasicChildren 验证带有 Basic 子节点的 Gang CompositePodGroup
+			// 会在根节点强制执行 gang 调度策略（minGroupCount）。
 			//
-			// Tree structure:
+			// 树形结构：
 			//
 			//	   cpg-root (Gang, Min: 2)
 			//	  /          |          \
 			//	pg1         pg2         pg3
 			//	(S)         (S)         (F)
 			//
-			// (S) = Success
-			// (F) = Fail
+			// (S) = 成功
+			// (F) = 失败
 			steps: []stepsframework.Step{
 				{
 					Name:        "Create Node",
@@ -461,17 +461,17 @@ func TestCPGScheduling(t *testing.T) {
 		},
 		{
 			name: "TestCPGBasicWithUnschedulableBasicChildren",
-			// TestCPGBasicWithUnschedulableBasicChildren verifies that when a Basic CompositePodGroup has
-			// unschedulable Basic child pod groups, the pods remain unscheduled.
+			// TestCPGBasicWithUnschedulableBasicChildren 验证当 Basic CompositePodGroup
+			// 包含不可调度的 Basic 子 PodGroup 时，这些 Pod 保持未调度状态。
 			//
-			// Tree structure:
+			// 树形结构：
 			//
 			//	   cpg-root (Basic)
 			//	  /            \
 			//	pg1            pg2
 			//	(F)            (F)
 			//
-			// (F) = Fail
+			// (F) = 失败
 			steps: []stepsframework.Step{
 				{
 					Name:        "Create Node",
@@ -518,27 +518,27 @@ func TestCPGScheduling(t *testing.T) {
 		},
 		{
 			name: "TestCPGDynamicChildAddition",
-			// TestCPGDynamicChildAddition verifies that after a CompositePodGroup (CPG) hierarchy
-			// successfully schedules its initial pods, dynamically adding new child groups and sub-CPGs
-			// behaves correctly under scheduling policies (e.g., Gang scheduling with minGroupCount).
+			// TestCPGDynamicChildAddition 验证 CompositePodGroup（CPG）层级结构成功调度
+			// 初始 Pod 之后，动态添加新的子组和子 CPG 时，在调度策略（例如带
+			// minGroupCount 的 Gang 调度）下仍能正确工作。
 			//
-			// Tree structure progression:
+			// 树形结构演进：
 			//
-			// Stage 1:
+			// 阶段 1：
 			//
 			//	cpg-root (Basic)
 			//	   |
 			//	  pg1 (Basic)
 			//	  (Scheduled)
 			//
-			// Stage 2 (Dynamically added pg2):
+			// 阶段 2（动态添加 pg2）：
 			//
 			//	 cpg-root (Basic)
 			//	  /      \
 			//	pg1      pg2 (Basic)
 			//	(S)      (Scheduled)
 			//
-			// Stage 3 (Dynamically added cpg-sub tree under cpg-root):
+			// 阶段 3（在 cpg-root 下动态添加 cpg-sub 子树）：
 			//
 			//	 cpg-root (Basic)
 			//	  /   |  \
@@ -547,7 +547,7 @@ func TestCPGScheduling(t *testing.T) {
 			//	           sub-pg1 (Basic)
 			//	           (Pending - quorum of 2 not met)
 			//
-			// Stage 4 (Dynamically added sub-pg2 under cpg-sub):
+			// 阶段 4（在 cpg-sub 下动态添加 sub-pg2）：
 			//
 			//	 cpg-root (Basic)
 			//	  /   |  \
@@ -556,7 +556,7 @@ func TestCPGScheduling(t *testing.T) {
 			//	        sub-pg1  sub-pg2 (Basic)
 			//	        (S)      (S)
 			//
-			// (S) = Successfully scheduled
+			// (S) = 调度成功
 			steps: []stepsframework.Step{
 				{
 					Name:        "Create Node",
@@ -664,7 +664,7 @@ func TestPodGroupDependentRequiredValidation(t *testing.T) {
 		scheduler.WithPodInitialBackoffSeconds(1))
 	cs, ns := testCtx.ClientSet, testCtx.NS.Name
 
-	// Case 1: ParentCompositePodGroupName set and WorkloadRef set -> Should PASS
+	// 场景 1：设置了 ParentCompositePodGroupName 且设置了 WorkloadRef -> 应当通过
 	pgPass := &schedulingapi.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-pass", Namespace: ns},
 		Spec: schedulingapi.PodGroupSpec{
@@ -683,7 +683,7 @@ func TestPodGroupDependentRequiredValidation(t *testing.T) {
 		t.Fatalf("Expected PodGroup with ParentCompositePodGroupName and WorkloadRef to be created successfully, got error: %v", err)
 	}
 
-	// Case 2: ParentCompositePodGroupName set and WorkloadRef NOT set -> Should FAIL
+	// 场景 2：设置了 ParentCompositePodGroupName 但未设置 WorkloadRef -> 应当失败
 	pgFail := &schedulingapi.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-fail", Namespace: ns},
 		Spec: schedulingapi.PodGroupSpec{

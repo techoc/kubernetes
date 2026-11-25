@@ -46,10 +46,10 @@ func normalizeInformerOutputFunc(initialVal string) func(output []string) []stri
 	return func(output []string) []string {
 		result := make([]string, 0, len(output))
 
-		// Removes initial value and all of its direct repetitions
+		// 移除初始值及其所有直接重复项
 		lastVal := initialVal
 		for _, v := range output {
-			// Make values unique as informer(List+Watch) duplicates some events
+			// 去重，因为 informer（List+Watch）会产生重复的事件
 			if v == lastVal {
 				continue
 			}
@@ -64,7 +64,7 @@ func normalizeInformerOutputFunc(initialVal string) func(output []string) []stri
 func noop() {}
 
 func TestWatchRestartsIfTimeoutNotReached(t *testing.T) {
-	// Has to be longer than 5 seconds
+	// 必须大于 5 秒
 	timeout := 30 * time.Second
 
 	logger, _ := ktesting.NewTestContext(t)
@@ -106,7 +106,7 @@ func TestWatchRestartsIfTimeoutNotReached(t *testing.T) {
 		defer close(stoppedChan)
 		counter := 0
 
-		// These 5 seconds are here to protect against a race at the end when we could write something there at the same time as watch.Until ends
+		// 预留这 5 秒是为了避免结尾处出现竞态：否则可能在 watch.Until 结束的同时还在写入内容
 		softTimeout := timeout - 5*time.Second
 		if softTimeout < 0 {
 			panic("Timeout has to be grater than 5 seconds!")
@@ -114,7 +114,7 @@ func TestWatchRestartsIfTimeoutNotReached(t *testing.T) {
 		endChannel := time.After(softTimeout)
 		for {
 			select {
-			// TODO: get this lower once we figure out how to extend ETCD cache
+			// TODO: 等我们弄清楚如何扩展 ETCD 缓存后再把这个值调低
 			case <-time.After(1000 * time.Millisecond):
 				counter = counter + 1
 
@@ -167,7 +167,7 @@ func TestWatchRestartsIfTimeoutNotReached(t *testing.T) {
 				}
 				w, err := getWatchFunc(c, secret)(options)
 				return w, err, noop
-			}, // regular watcher; unfortunately destined to fail
+			}, // 普通的 watcher；很遗憾注定会失败
 			normalizeOutputFunc: noopNormalization,
 		},
 		{
@@ -198,10 +198,10 @@ func TestWatchRestartsIfTimeoutNotReached(t *testing.T) {
 						return getWatchFunc(c, secret)(options)
 					},
 				}
-				// there is an inherent race between a producer (generateEvents) and a consumer (the watcher) that needs to be solved here
-				// since the watcher is driven by an informer it is crucial to start producing only after the informer has synced
-				// otherwise we might not get all expected events since the informer LIST (or watchelist) and only then WATCHES
-				// all events received during the initial LIST (or watchlist) will be seen as a single event (to most recent version of an obj)
+				// 生产者（generateEvents）和消费者（watcher）之间存在固有竞态，需要在此处理
+				// 由于 watcher 由 informer 驱动，必须在 informer 完成同步之后才开始生产事件
+				// 否则可能无法收到所有预期事件，因为 informer 会先 LIST（或 watchlist），然后才 WATCH
+				// 初始 LIST（或 watchlist）期间收到的所有事件会被视为单个事件（即对象的最新版本）
 				_, informer, w, done := watchtools.NewIndexerInformerWatcherWithLogger(logger, lw, &corev1.Secret{})
 				cache.WaitForCacheSync(context.TODO().Done(), informer.HasSynced)
 				return w, nil, func() { <-done }
@@ -236,7 +236,7 @@ func TestWatchRestartsIfTimeoutNotReached(t *testing.T) {
 				stoppedChan := make(chan struct{})
 				go generateEvents(t, c, secret, &referenceOutput, stopChan, stoppedChan)
 
-				// Record current time to be able to asses if the timeout has been reached
+				// 记录当前时间，以便判断是否已到达超时时间
 				startTime := time.Now()
 				ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), timeout)
 				defer cancel()
@@ -246,7 +246,7 @@ func TestWatchRestartsIfTimeoutNotReached(t *testing.T) {
 						t.Fatalf("Received an object that is not a Secret: %#v", event.Object)
 					}
 					output = append(output, s.Annotations["count"])
-					// Watch will never end voluntarily
+					// Watch 不会主动结束
 					return false, nil
 				})
 				watchDuration := time.Since(startTime)

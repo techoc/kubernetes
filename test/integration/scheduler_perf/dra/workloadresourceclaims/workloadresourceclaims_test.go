@@ -36,14 +36,13 @@ func TestMain(m *testing.M) {
 }
 
 func TestSchedulerPerf(t *testing.T) {
-	// This feature doesn't depend on any specific allocator features, so only
-	// the default allocator is used.
+	// 该特性不依赖任何特定的 allocator 特性，因此只使用默认的 allocator。
 	perf.RunIntegrationPerfScheduling(t, "performance-config.yaml")
 }
 
 func BenchmarkPerfScheduling(b *testing.B) {
-	// Restrict benchmarking to the allocator for this feature
-	// to ensure that we do not accidentally pick something else.
+	// 将基准测试限制为该特性的 allocator，
+	// 以确保不会意外选用其他 allocator。
 	structured.EnableAllocators("incubating")
 	defer structured.EnableAllocators()
 

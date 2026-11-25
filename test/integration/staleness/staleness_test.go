@@ -34,7 +34,7 @@ import (
 )
 
 func TestPodListerRV(t *testing.T) {
-	// Start the server with default storage setup
+	// 使用默认的 storage 配置启动 server
 	server := apiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -59,7 +59,7 @@ func TestPodListerRV(t *testing.T) {
 		},
 	}
 
-	// Create pods
+	// 创建 Pod
 	createdPod, err := clientSet.CoreV1().Pods("default").Create(ctx, testpod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("error in create pod: %v", err)
@@ -77,7 +77,7 @@ func TestPodListerRV(t *testing.T) {
 	if rv == "" {
 		t.Fatalf("Expected rv to be set: %v", err)
 	}
-	// Update the pod labels to increment the resource version.
+	// 更新 Pod 的标签，使 resource version 递增。
 	createdPod.Labels = map[string]string{"foo": "bar"}
 	_, err = clientSet.CoreV1().Pods("default").Update(ctx, createdPod, metav1.UpdateOptions{})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestPodListerRV(t *testing.T) {
 	if err != nil {
 		t.Errorf("RV did not increase after update: %v", err)
 	}
-	// Test that delete also increments the RV
+	// 测试删除操作是否也会增加 RV
 	rv = store.LastStoreSyncResourceVersion()
 	if rv == "" {
 		t.Error("Expected rv to be set, but it was not")

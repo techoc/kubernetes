@@ -17,6 +17,6 @@ limitations under the License.
 package framework
 
 import (
-	// All integration tests are expected to have logging flags.
+	// 所有集成测试都应具备日志相关的 flag。
 	_ "k8s.io/component-base/logs/testinit"
 )

@@ -29,10 +29,10 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// testOptionalNodeOperations verifies DRA optional node operations.
-// Note: This test relies on the shared test setup (in dra.go) having configured
-// worker-0 to declare support for DRAOptionalNodeOperations when this feature is enabled.
-// All other nodes (worker-1 through worker-7) lack this declared feature.
+// testOptionalNodeOperations 验证 DRA 可选节点操作。
+// 注意：此测试依赖共享的测试初始化（在 dra.go 中），该初始化在该特性启用时
+// 已配置 worker-0 声明支持 DRAOptionalNodeOperations。
+// 其他所有节点（worker-1 到 worker-7）都没有该声明特性。
 func testOptionalNodeOperations(tCtx ktesting.TContext, enabled bool) {
 	if !enabled {
 		return
@@ -117,7 +117,7 @@ func testOptionalNodeOperations(tCtx ktesting.TContext, enabled bool) {
 						PodGroupName: &podGroup.Name,
 					}
 				}
-				// Apply node selector to the last pod if specified to test rejection.
+				// 如果指定了 node selector，则将其应用到最后一个 Pod，以测试拒绝行为。
 				if i == numPods-1 && tt.nodeSelector != nil {
 					p.Spec.NodeSelector = tt.nodeSelector
 				}
@@ -126,9 +126,8 @@ func testOptionalNodeOperations(tCtx ktesting.TContext, enabled bool) {
 			}
 
 			if tt.expectScheduled {
-				// The PodScheduled condition checked by [waitForPodScheduled] could
-				// converge to either a True or False status due to a race
-				// condition, but Pods should still ultimately be scheduled:
+				// [waitForPodScheduled] 检查的 PodScheduled 条件由于竞态
+				// 可能收敛为 True 或 False 两种状态，但 Pod 最终仍应被调度：
 				// https://github.com/kubernetes/kubernetes/issues/139417#issuecomment-4651436886
 				for _, pod := range pods {
 					tCtx.Eventually(func(tCtx ktesting.TContext) (string, error) {
@@ -143,7 +142,7 @@ func testOptionalNodeOperations(tCtx ktesting.TContext, enabled bool) {
 					)
 				}
 			} else {
-				// Verify that the pod with node selector (the last one) is unschedulable.
+				// 验证带有 node selector 的 Pod（最后一个）不可调度。
 				unschedulablePod := pods[numPods-1]
 				expectPodUnschedulable(tCtx, unschedulablePod, "")
 			}

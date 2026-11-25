@@ -74,9 +74,9 @@ func TestDynamicClientBuilder(t *testing.T) {
 	})
 	defer tearDownFn()
 
-	// We want to test if the token rotation works fine here.
-	// To minimize the time this test would consume, we use the minimial token expiration.
-	// The minimial token expiration is defined in:
+	// 这里我们想测试 token 轮换是否正常工作。
+	// 为尽量减少测试耗时，使用最小的 token 过期时间。
+	// 最小 token 过期时间定义在：
 	// pkg/apis/authentication/validation/validation.go
 	exp := int64(600)
 	leeway := 99
@@ -97,8 +97,8 @@ func TestDynamicClientBuilder(t *testing.T) {
 		t.Fatalf("dynamic client get resources failed befroe deleting sa: %v", err)
 	}
 
-	// We want to trigger token rotation here by deleting service account
-	// the dynamic client was using.
+	// 这里通过删除 dynamic client 正在使用的 service account
+	// 来触发 token 轮换。
 	if err = dymClient.CoreV1().ServiceAccounts(ns).Delete(tCtx, saName, metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("delete service account %s failed: %v", saName, err)
 	}

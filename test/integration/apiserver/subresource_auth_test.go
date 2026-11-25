@@ -35,7 +35,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestPodSubresourceAuth tests that the synthetic authorization check for pod subresources is working correctly.
+// TestPodSubresourceAuth 测试 pod 子资源的合成鉴权检查是否正常工作。
 func TestPodSubresourceAuth(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, clientConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
@@ -76,7 +76,7 @@ func TestPodSubresourceAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// User with only 'get' permissions
+	// 只有 'get' 权限的用户
 	podGetterUsername := "pod-getter"
 	podGetterRole := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-getter-role"},
@@ -107,7 +107,7 @@ func TestPodSubresourceAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// User with 'get' and 'create' permissions on pods subresources.
+	// 对 pods 子资源具有 'get' 和 'create' 权限的用户。
 	podCreatorUsername := "pod-creator"
 	podCreatorRole := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-creator-role"},
@@ -143,7 +143,7 @@ func TestPodSubresourceAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for the permissions to become effective by ensuring a create request is allowed
+	// 通过确认 create 请求被允许，等待权限生效
 	waitContext, cancel := context.WithTimeout(context.TODO(), wait.ForeverTestTimeout)
 	defer cancel()
 	authutil.WaitForNamedAuthorizationUpdate(t, waitContext, adminClientset.AuthorizationV1(), podCreatorUsername, ns, "create", "", schema.GroupResource{Group: "", Resource: "pods/exec"}, true)
@@ -151,8 +151,8 @@ func TestPodSubresourceAuth(t *testing.T) {
 	subresources := []string{"exec", "attach", "portforward"}
 	for _, subresource := range subresources {
 		t.Run(fmt.Sprintf("subresource=%s", subresource), func(t *testing.T) {
-			// User with only 'get' permissions should be denied.
-			// GET method, since that is the method for WebSocket upgrade requests.
+			// 只有 'get' 权限的用户应被拒绝。
+			// 使用 GET 方法，因为 WebSocket 升级请求使用的就是该方法。
 			err := podGetterClient.CoreV1().RESTClient().Get().
 				Namespace(ns).
 				Resource("pods").
@@ -164,8 +164,8 @@ func TestPodSubresourceAuth(t *testing.T) {
 				t.Errorf("expected forbidden error for user with only 'get' permissions, but got: %v", err)
 			}
 
-			// User with 'get' and 'create' permissions should be allowed.
-			// GET method, since that is the method for WebSocket upgrade requests.
+			// 具有 'get' 和 'create' 权限的用户应被允许。
+			// 使用 GET 方法，因为 WebSocket 升级请求使用的就是该方法。
 			err = podCreatorClient.CoreV1().RESTClient().Get().
 				Namespace(ns).
 				Resource("pods").
@@ -173,10 +173,10 @@ func TestPodSubresourceAuth(t *testing.T) {
 				SubResource(subresource).
 				Do(context.TODO()).
 				Error()
-			// Absence of "Forbidden" is proof of success; the integration test
-			// server doesn't have a real Kubelet running for the pod, so the
-			// proxying/streaming connection ultimately fails after the authorization
-			// has already succeeded (hence "Bad Request" error).
+			// 没有 "Forbidden" 即表示成功；集成测试服务器
+			// 并未为该 pod 运行真实的 Kubelet，因此代理/流式连接
+			// 在鉴权成功之后最终会失败
+			// （因此返回 "Bad Request" 错误）。
 			if err != nil && !errors.IsBadRequest(err) {
 				t.Errorf("expected nil error for user with 'create' permissions, but got: %v", err)
 			}

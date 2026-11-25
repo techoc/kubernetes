@@ -70,8 +70,7 @@ func setupWithServerSetup(t *testing.T, serverSetup framework.TestServerSetup) (
 		}
 
 		opts.Admission.GenericAdmission.DisablePlugins = append(opts.Admission.GenericAdmission.DisablePlugins,
-			// Disable ServiceAccount admission plugin as we don't have
-			// serviceaccount controller running.
+			// 禁用 ServiceAccount 准入插件，因为没有运行 serviceaccount 控制器。
 			"ServiceAccount",
 			"TaintNodesByCondition",
 		)
@@ -163,14 +162,13 @@ func cleanupDaemonSets(t *testing.T, cs clientset.Interface, ds *apps.DaemonSet)
 		return
 	}
 
-	// We set the nodeSelector to a random label. This label is nearly guaranteed
-	// to not be set on any node so the DameonSetController will start deleting
-	// daemon pods. Once it's done deleting the daemon pods, it's safe to delete
-	// the DaemonSet.
+	// 我们将 nodeSelector 设为一个随机 label。该 label 几乎可以确定不会出现在任何节点上，
+	// 因此 DaemonSetController 会开始删除 daemon Pod。待其删除完所有 daemon Pod 后，
+	// 就可以安全地删除 DaemonSet。
 	ds.Spec.Template.Spec.NodeSelector = map[string]string{
 		string(uuid.NewUUID()): string(uuid.NewUUID()),
 	}
-	// force update to avoid version conflict
+	// 强制更新以避免版本冲突
 	ds.ResourceVersion = ""
 
 	if ds, err = cs.AppsV1().DaemonSets(ds.Namespace).Update(context.TODO(), ds, metav1.UpdateOptions{}); err != nil {
@@ -182,7 +180,7 @@ func cleanupDaemonSets(t *testing.T, cs clientset.Interface, ds *apps.DaemonSet)
 		testutils.RemovePodFinalizersInNamespace(context.TODO(), cs, t, ds.Namespace)
 	}
 
-	// Wait for the daemon set controller to kill all the daemon pods.
+	// 等待 daemon set 控制器终止所有 daemon Pod。
 	if err := wait.Poll(100*time.Millisecond, 30*time.Second, func() (bool, error) {
 		updatedDS, err := cs.AppsV1().DaemonSets(ds.Namespace).Get(context.TODO(), ds.Name, metav1.GetOptions{})
 		if err != nil {
@@ -389,8 +387,7 @@ func validateDaemonSetPodsTolerations(
 	}
 }
 
-// podUnschedulable returns a condition function that returns true if the given pod
-// gets unschedulable status.
+// podUnschedulable 返回一个条件函数，当给定 Pod 进入不可调度状态时返回 true。
 func podUnschedulable(c clientset.Interface, podNamespace, podName string) wait.ConditionFunc {
 	return func() (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
@@ -398,7 +395,7 @@ func podUnschedulable(c clientset.Interface, podNamespace, podName string) wait.
 			return false, nil
 		}
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 这可能是连接错误，因此需要重试。
 			return false, nil
 		}
 		_, cond := podutil.GetPodCondition(&pod.Status, v1.PodScheduled)
@@ -407,19 +404,19 @@ func podUnschedulable(c clientset.Interface, podNamespace, podName string) wait.
 	}
 }
 
-// waitForPodUnscheduleWithTimeout waits for a pod to fail scheduling and returns
-// an error if it does not become unschedulable within the given timeout.
+// waitForPodUnschedulableWithTimeout 等待 Pod 调度失败，如果它在给定超时时间内
+// 未变为不可调度状态，则返回错误。
 func waitForPodUnschedulableWithTimeout(cs clientset.Interface, pod *v1.Pod, timeout time.Duration) error {
 	return wait.Poll(100*time.Millisecond, timeout, podUnschedulable(cs, pod.Namespace, pod.Name))
 }
 
-// waitForPodUnschedule waits for a pod to fail scheduling and returns
-// an error if it does not become unschedulable within the timeout duration (30 seconds).
+// waitForPodUnschedulable 等待 Pod 调度失败，如果它在超时时间（30 秒）内
+// 未变为不可调度状态，则返回错误。
 func waitForPodUnschedulable(cs clientset.Interface, pod *v1.Pod) error {
 	return waitForPodUnschedulableWithTimeout(cs, pod, 10*time.Second)
 }
 
-// waitForPodsCreated waits for number of pods are created.
+// waitForPodsCreated 等待指定数量的 Pod 被创建。
 func waitForPodsCreated(podInformer cache.SharedIndexInformer, num int) error {
 	return wait.Poll(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		objects := podInformer.GetIndexer().List()
@@ -646,7 +643,7 @@ func TestSimpleDaemonSetRestartsPodsOnTerminalPhase(t *testing.T) {
 				if _, err := podClient.UpdateStatus(ctx, podCopy, metav1.UpdateOptions{}); err != nil {
 					t.Fatalf("Failed to mark the pod as terminal with phase: %v. Error: %v", tc.phase, err)
 				}
-				// verify all pods are active. They either continue Running or are Pending after restart
+				// 验证所有 Pod 均处于活跃状态：它们要么继续 Running，要么在重启后处于 Pending
 				validateDaemonSetPodsActive(podClient, podInformer, numNodes, t)
 				validateDaemonSetPodsAndMarkReady(podClient, podInformer, numNodes, t)
 				validateDaemonSetStatus(dsClient, ds.Name, int32(numNodes), t)
@@ -707,7 +704,7 @@ func TestDaemonSetWithNodeSelectorLaunchesPods(t *testing.T) {
 		defer cleanupDaemonSets(t, clientset, ds)
 
 		addNodes(nodeClient, 0, 2, nil, t)
-		// Two nodes with labels
+		// 两个带 label 的节点
 		addNodes(nodeClient, 2, 2, map[string]string{
 			"zone": "test",
 		}, t)
@@ -756,9 +753,8 @@ func TestNotReadyNodeDaemonDoesLaunchPod(t *testing.T) {
 	})
 }
 
-// TestInsufficientCapacityNodeDaemonSetCreateButNotLaunchPod tests thaat the DaemonSet should create
-// Pods for all the nodes regardless of available resource on the nodes, and kube-scheduler should
-// not schedule Pods onto the nodes with insufficient resource.
+// TestInsufficientCapacityNode 测试 DaemonSet 应为所有节点创建 Pod，
+// 而不考虑节点上的可用资源；同时 kube-scheduler 不应将 Pod 调度到资源不足的节点上。
 func TestInsufficientCapacityNode(t *testing.T) {
 	forEachStrategy(t, func(t *testing.T, strategy *apps.DaemonSetUpdateStrategy) {
 		ctx, closeFn, dc, informers, clientset := setup(t)
@@ -810,14 +806,14 @@ func TestInsufficientCapacityNode(t *testing.T) {
 			t.Fatalf("Failed to create node: %v", err)
 		}
 
-		// 2 pods are created. But only one of two Pods is scheduled by default scheduler.
+		// 创建了 2 个 Pod，但默认调度器只调度了其中 1 个。
 		validateDaemonSetPodsAndMarkReady(podClient, podInformer, 2, t)
 		validateDaemonSetStatus(dsClient, ds.Name, 1, t)
 	})
 }
 
-// TestLaunchWithHashCollision tests that a DaemonSet can be updated even if there is a
-// hash collision with an existing ControllerRevision
+// TestLaunchWithHashCollision 测试即使与现有 ControllerRevision 发生哈希冲突，
+// DaemonSet 仍可被更新
 func TestLaunchWithHashCollision(t *testing.T) {
 	ctx, closeFn, dc, informers, clientset := setup(t)
 	defer closeFn()
@@ -831,13 +827,13 @@ func TestLaunchWithHashCollision(t *testing.T) {
 	informers.Start(ctx.Done())
 	go dc.Run(ctx, 2)
 
-	// Create single node
+	// 创建单个节点
 	_, err := nodeClient.Create(ctx, newNode("single-node", nil), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create node: %v", err)
 	}
 
-	// Create new DaemonSet with RollingUpdate strategy
+	// 创建使用 RollingUpdate 策略的新 DaemonSet
 	orgDs := newDaemonSet("foo", ns.Name)
 	oneIntString := intstr.FromInt32(1)
 	orgDs.Spec.UpdateStrategy = apps.DaemonSetUpdateStrategy{
@@ -851,7 +847,7 @@ func TestLaunchWithHashCollision(t *testing.T) {
 		t.Fatalf("Failed to create DaemonSet: %v", err)
 	}
 
-	// Wait for the DaemonSet to be created before proceeding
+	// 等待 DaemonSet 创建完成后再继续
 	err = waitForDaemonSetAndControllerRevisionCreated(clientset, ds.Name, ds.Namespace)
 	if err != nil {
 		t.Fatalf("Failed to create DaemonSet: %v", err)
@@ -866,15 +862,14 @@ func TestLaunchWithHashCollision(t *testing.T) {
 		orgCollisionCount = *ds.Status.CollisionCount
 	}
 
-	// Look up the ControllerRevision for the DaemonSet
+	// 查找 DaemonSet 对应的 ControllerRevision
 	_, name := hashAndNameForDaemonSet(ds)
 	revision, err := clientset.AppsV1().ControllerRevisions(ds.Namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil || revision == nil {
 		t.Fatalf("Failed to look up ControllerRevision: %v", err)
 	}
 
-	// Create a "fake" ControllerRevision that we know will create a hash collision when we make
-	// the next update
+	// 创建一个“伪造”的 ControllerRevision，我们知道下次更新时会产生哈希冲突
 	one := int64(1)
 	ds.Spec.Template.Spec.TerminationGracePeriodSeconds = &one
 
@@ -895,13 +890,12 @@ func TestLaunchWithHashCollision(t *testing.T) {
 		t.Fatalf("Failed to create ControllerRevision: %v", err)
 	}
 
-	// Make an update of the DaemonSet which we know will create a hash collision when
-	// the next ControllerRevision is created.
+	// 更新 DaemonSet，我们知道下次创建 ControllerRevision 时会产生哈希冲突。
 	ds = updateDS(t, dsClient, ds.Name, func(updateDS *apps.DaemonSet) {
 		updateDS.Spec.Template.Spec.TerminationGracePeriodSeconds = &one
 	})
 
-	// Wait for any pod with the latest Spec to exist
+	// 等待具有最新 Spec 的 Pod 出现
 	err = wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		objects := podInformer.GetIndexer().List()
 		for _, object := range objects {
@@ -919,10 +913,11 @@ func TestLaunchWithHashCollision(t *testing.T) {
 	validateDaemonSetCollisionCount(dsClient, ds.Name, orgCollisionCount+1, t)
 }
 
-// Test DaemonSet Controller updates label of the pod after "DedupCurHistories". The scenario is
-// 1. Create an another controllerrevision owned by the daemonset but with higher revision and different hash
-// 2. Add a node to ensure the controller sync
-// 3. The dsc is expected to "PATCH" the existing pod label with new hash and deletes the old controllerrevision once finishes the update
+// TestDSCUpdatesPodLabelAfterDedupCurHistories 测试 DaemonSet 控制器在 “DedupCurHistories” 之后
+// 更新 Pod 的 label。场景如下：
+// 1. 创建另一个由该 DaemonSet 所有、revision 更高且 hash 不同的 controllerrevision
+// 2. 添加一个节点以确保控制器执行同步
+// 3. dsc 应使用新 hash “PATCH” 现有 Pod 的 label，并在更新完成后删除旧的 controllerrevision
 func TestDSCUpdatesPodLabelAfterDedupCurHistories(t *testing.T) {
 	ctx, closeFn, dc, informers, clientset := setup(t)
 	defer closeFn()
@@ -936,13 +931,13 @@ func TestDSCUpdatesPodLabelAfterDedupCurHistories(t *testing.T) {
 	informers.Start(ctx.Done())
 	go dc.Run(ctx, 2)
 
-	// Create single node
+	// 创建单个节点
 	_, err := nodeClient.Create(ctx, newNode("single-node", nil), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create node: %v", err)
 	}
 
-	// Create new DaemonSet with RollingUpdate strategy
+	// 创建使用 RollingUpdate 策略的新 DaemonSet
 	orgDs := newDaemonSet("foo", ns.Name)
 	oneIntString := intstr.FromInt32(1)
 	orgDs.Spec.UpdateStrategy = apps.DaemonSetUpdateStrategy{
@@ -956,7 +951,7 @@ func TestDSCUpdatesPodLabelAfterDedupCurHistories(t *testing.T) {
 		t.Fatalf("Failed to create DaemonSet: %v", err)
 	}
 	t.Logf("ds created")
-	// Wait for the DaemonSet to be created before proceeding
+	// 等待 DaemonSet 创建完成后再继续
 	err = waitForDaemonSetAndControllerRevisionCreated(clientset, ds.Name, ds.Namespace)
 	if err != nil {
 		t.Fatalf("Failed to create DaemonSet: %v", err)
@@ -967,7 +962,7 @@ func TestDSCUpdatesPodLabelAfterDedupCurHistories(t *testing.T) {
 		t.Fatalf("Failed to get DaemonSet: %v", err)
 	}
 
-	// Look up the ControllerRevision for the DaemonSet
+	// 查找 DaemonSet 对应的 ControllerRevision
 	_, name := hashAndNameForDaemonSet(ds)
 	revision, err := clientset.AppsV1().ControllerRevisions(ds.Namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil || revision == nil {
@@ -975,7 +970,7 @@ func TestDSCUpdatesPodLabelAfterDedupCurHistories(t *testing.T) {
 	}
 	t.Logf("revision: %v", revision.Name)
 
-	// Create a "fake" ControllerRevision which is owned by the same daemonset
+	// 创建一个由同一 DaemonSet 所有的“伪造” ControllerRevision
 	one := int64(1)
 	ds.Spec.Template.Spec.TerminationGracePeriodSeconds = &one
 
@@ -997,13 +992,13 @@ func TestDSCUpdatesPodLabelAfterDedupCurHistories(t *testing.T) {
 	}
 	t.Logf("revision: %v", newName)
 
-	// ensure the daemonset to be synced
+	// 确保 DaemonSet 完成同步
 	_, err = nodeClient.Create(ctx, newNode("second-node", nil), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create node: %v", err)
 	}
 
-	// check whether the pod label is updated after controllerrevision is created
+	// 检查创建 controllerrevision 后 Pod 的 label 是否已更新
 	err = wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		objects := podInformer.GetIndexer().List()
 		for _, object := range objects {
@@ -1050,7 +1045,7 @@ func TestDSCUpdatesPodLabelAfterDedupCurHistories(t *testing.T) {
 	}
 }
 
-// TestTaintedNode tests tainted node isn't expected to have pod scheduled
+// TestTaintedNode 测试带污点的节点不应有 Pod 被调度上去
 func TestTaintedNode(t *testing.T) {
 	forEachStrategy(t, func(t *testing.T, strategy *apps.DaemonSetUpdateStrategy) {
 		ctx, closeFn, dc, informers, clientset := setup(t)
@@ -1091,7 +1086,7 @@ func TestTaintedNode(t *testing.T) {
 		validateDaemonSetPodsAndMarkReady(podClient, podInformer, 1, t)
 		validateDaemonSetStatus(dsClient, ds.Name, 1, t)
 
-		// remove taint from nodeWithTaint
+		// 移除 nodeWithTaint 上的污点
 		nodeWithTaint, err = nodeClient.Get(ctx, "node-with-taint", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Failed to retrieve nodeWithTaint: %v", err)
@@ -1108,8 +1103,8 @@ func TestTaintedNode(t *testing.T) {
 	})
 }
 
-// TestUnschedulableNodeDaemonDoesLaunchPod tests that the DaemonSet Pods can still be scheduled
-// to the Unschedulable nodes.
+// TestUnschedulableNodeDaemonDoesLaunchPod 测试 DaemonSet 的 Pod 仍可被调度到
+// 不可调度的节点上。
 func TestUnschedulableNodeDaemonDoesLaunchPod(t *testing.T) {
 	forEachStrategy(t, func(t *testing.T, strategy *apps.DaemonSetUpdateStrategy) {
 		ctx, closeFn, dc, informers, clientset := setup(t)
@@ -1135,7 +1130,7 @@ func TestUnschedulableNodeDaemonDoesLaunchPod(t *testing.T) {
 
 		defer cleanupDaemonSets(t, clientset, ds)
 
-		// Creates unschedulable node.
+		// 创建不可调度的节点。
 		node := newNode("unschedulable-node", nil)
 		node.Spec.Unschedulable = true
 		node.Spec.Taints = []v1.Taint{
@@ -1150,7 +1145,7 @@ func TestUnschedulableNodeDaemonDoesLaunchPod(t *testing.T) {
 			t.Fatalf("Failed to create node: %v", err)
 		}
 
-		// Creates network-unavailable node.
+		// 创建网络不可用的节点。
 		nodeNU := newNode("network-unavailable-node", nil)
 		nodeNU.Status.Conditions = []v1.NodeCondition{
 			{Type: v1.NodeReady, Status: v1.ConditionFalse},
@@ -1237,7 +1232,7 @@ func TestDaemonSetRollingUpdateWithTolerations(t *testing.T) {
 		},
 	}
 
-	// Add six nodes with zone-y, zone-z or common taint
+	// 添加六个节点，分别带有 zone-y、zone-z 或 common 污点
 	for i := range 6 {
 		if i < 2 {
 			taints = []v1.Taint{
@@ -1260,7 +1255,7 @@ func TestDaemonSetRollingUpdateWithTolerations(t *testing.T) {
 		}
 	}
 
-	// Create DaemonSet with zone-y toleration
+	// 创建带 zone-y 容忍的 DaemonSet
 	tolerations = []v1.Toleration{
 		{Key: "zone-y", Operator: v1.TolerationOpExists},
 		{Key: "zone-common", Operator: v1.TolerationOpExists},
@@ -1277,7 +1272,7 @@ func TestDaemonSetRollingUpdateWithTolerations(t *testing.T) {
 	validateUpdatedNumberScheduled(ctx, dsClient, ds.Name, 4, t)
 	validateDaemonSetPodsTolerations(podClient, podInformer, tolerations, "zone-", t)
 
-	// Update DaemonSet with zone-z toleration
+	// 更新 DaemonSet，添加 zone-z 容忍
 	tolerations = []v1.Toleration{
 		{Key: "zone-z", Operator: v1.TolerationOpExists},
 		{Key: "zone-common", Operator: v1.TolerationOpExists},
@@ -1288,19 +1283,18 @@ func TestDaemonSetRollingUpdateWithTolerations(t *testing.T) {
 		t.Fatalf("Failed to update DaemonSet: %v", err)
 	}
 
-	// Expected numberPods of validateDaemonSetPodsActive is 7 when update DaemonSet
-	// and before updated pods become ready because:
-	//   - New 2 pods are created and Pending on Zone Z nodes
-	//   - New 1 pod are created as surge and Pending on Zone Common node
-	//   - Old 2 pods that violate scheduling constraints on Zone Y nodes will remain existing and Running
-	//     until other new pods become available
+	// 在更新 DaemonSet 后、更新后的 Pod 就绪前，validateDaemonSetPodsActive 期望 numberPods 为 7，原因是：
+	//   - 新建了 2 个 Pod，在 Zone Z 节点上处于 Pending
+	//   - 新建了 1 个 surge Pod，在 Zone Common 节点上处于 Pending
+	//   - Zone Y 节点上违反调度约束的 2 个旧 Pod 将继续存在并保持 Running，
+	//     直到其他新 Pod 可用为止
 	validateDaemonSetPodsActive(podClient, podInformer, 7, t)
 	validateDaemonSetPodsAndMarkReady(podClient, podInformer, 4, t)
 	validateDaemonSetStatus(dsClient, ds.Name, 4, t)
 	validateUpdatedNumberScheduled(ctx, dsClient, ds.Name, 4, t)
 	validateDaemonSetPodsTolerations(podClient, podInformer, tolerations, "zone-", t)
 
-	// Update DaemonSet with zone-y and zone-z toleration
+	// 更新 DaemonSet，添加 zone-y 和 zone-z 容忍
 	tolerations = []v1.Toleration{
 		{Key: "zone-y", Operator: v1.TolerationOpExists},
 		{Key: "zone-z", Operator: v1.TolerationOpExists},
@@ -1317,7 +1311,7 @@ func TestDaemonSetRollingUpdateWithTolerations(t *testing.T) {
 	validateUpdatedNumberScheduled(ctx, dsClient, ds.Name, 6, t)
 	validateDaemonSetPodsTolerations(podClient, podInformer, tolerations, "zone-", t)
 
-	// Update DaemonSet with no toleration
+	// 更新 DaemonSet，移除所有容忍
 	ds.Spec.Template.Spec.Tolerations = nil
 	_, err = dsClient.Update(ctx, ds, metav1.UpdateOptions{})
 	if err != nil {

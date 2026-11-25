@@ -41,7 +41,7 @@ import (
 )
 
 func TestServiceAllocation(t *testing.T) {
-	// Create an IPv4 single stack control-plane
+	// 创建一个 IPv4 单栈 control-plane
 	serviceCIDR := "192.168.0.0/29"
 	var testcases = []struct {
 		name                 string
@@ -99,7 +99,7 @@ func TestServiceAllocation(t *testing.T) {
 				}
 			}
 
-			// Wait until the default "kubernetes" service is created.
+			// 等待默认的 "kubernetes" service 创建完成。
 			if err := wait.PollUntilContextTimeout(context.Background(), 250*time.Millisecond, 15*time.Second, true, func(context.Context) (bool, error) {
 				_, err := client.CoreV1().Services(metav1.NamespaceDefault).Get(context.TODO(), "kubernetes", metav1.GetOptions{})
 				if err != nil && !apierrors.IsNotFound(err) {
@@ -110,14 +110,14 @@ func TestServiceAllocation(t *testing.T) {
 				t.Fatalf("creating kubernetes service timed out: %v", err)
 			}
 
-			// make 5 more services to take up all IPs
+			// 再创建 5 个 service 以占满所有 IP
 			for i := range 5 {
 				if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc(i), metav1.CreateOptions{}); err != nil {
 					t.Error(err)
 				}
 			}
 
-			// Make another service. It will fail because we're out of cluster IPs
+			// 再创建一个 service。由于集群 IP 已耗尽，该操作会失败
 			if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc(8), metav1.CreateOptions{}); err != nil {
 				if !strings.Contains(err.Error(), "range is full") {
 					t.Errorf("unexpected error text: %v", err)
@@ -134,13 +134,14 @@ func TestServiceAllocation(t *testing.T) {
 				t.Fatalf("unexpected creation success. The following IPs exist: %#v. It should only be possible to allocate 2 IP addresses in this cluster.\n\n%#v", allIPs, svcs)
 			}
 
-			// Delete the first service.
+			// 删除第一个 service。
 			if err := client.CoreV1().Services(metav1.NamespaceDefault).Delete(context.TODO(), svc(1).ObjectMeta.Name, metav1.DeleteOptions{}); err != nil {
 				t.Fatalf("got unexpected error: %v", err)
 			}
 
-			// The ipallocator has an informer, and it needs to wait for the deletion to be propagated before it can allocate the IP again.
-			// This time creating the second service should work, assume a maximum of 2 seconds for the informer to catch up.
+			// ipallocator 有一个 informer，它需要等待删除事件传播后
+			// 才能重新分配该 IP。这次创建第二个 service 应该成功，
+			// 假设 informer 最多需要 2 秒来赶上进度。
 			err = wait.PollUntilContextTimeout(context.Background(), 250*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
 				_, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(ctx, svc(8), metav1.CreateOptions{})
 				return err == nil, nil
@@ -153,7 +154,7 @@ func TestServiceAllocation(t *testing.T) {
 }
 
 func TestServiceAllocIPAddressLargeCIDR(t *testing.T) {
-	// Create an IPv6 single stack control-plane with a large range
+	// 创建一个具有大地址范围的 IPv6 单栈 control-plane
 	serviceCIDR := "2001:db8::/64"
 	tCtx := ktesting.Init(t)
 	etcdOptions := framework.SharedEtcd()
@@ -198,7 +199,7 @@ func TestServiceAllocIPAddressLargeCIDR(t *testing.T) {
 		t.Fatalf("creating kubernetes service timed out")
 	}
 
-	// create 5 random services and check that the Services have an IP associated
+	// 创建 5 个随机 service 并检查它们是否关联了 IP
 	for i := range 5 {
 		svc, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(tCtx, svc(i), metav1.CreateOptions{})
 		if err != nil {
@@ -210,8 +211,8 @@ func TestServiceAllocIPAddressLargeCIDR(t *testing.T) {
 		}
 	}
 
-	// Make a service in the top of the range to verify we can allocate in the whole range
-	// because it is not reasonable to create 2^64 services
+	// 在地址范围末尾创建一个 service，以验证整个范围内都可分配，
+	// 因为创建 2^64 个 service 并不现实
 	lastSvc := svc(8)
 	lastSvc.Spec.ClusterIP = "2001:db8::ffff:ffff:ffff:ffff"
 	if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(tCtx, lastSvc, metav1.CreateOptions{}); err != nil {
@@ -239,7 +240,7 @@ func TestMigrateService(t *testing.T) {
 	defer s.TearDownFn()
 	serviceName := "test-old-service"
 	namespace := "old-service-ns"
-	// Create a service and store it in etcd
+	// 创建一个 service 并将其存入 etcd
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              serviceName,
@@ -274,15 +275,15 @@ func TestMigrateService(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(kubeclient, namespace, t)
 	defer framework.DeleteNamespaceOrDie(kubeclient, ns, t)
 
-	// TODO: Understand why the Service can not be obtained with a List, it only works if we trigger an event
-	// by updating the Service.
+	// TODO: 弄清为什么无法通过 List 获取该 Service，只有通过
+	// 更新 Service 触发事件后才能获取到。
 	_, err = kubeclient.CoreV1().Services(namespace).Update(context.Background(), svc, metav1.UpdateOptions{})
 	if err != nil {
 		t.Error(err)
 	}
 
 	err = wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
-		// The repair loop must create the IP address associated
+		// 修复循环必须创建关联的 IP address
 		_, err = kubeclient.NetworkingV1().IPAddresses().Get(context.TODO(), svc.Spec.ClusterIP, metav1.GetOptions{})
 		if err != nil {
 			return false, nil
@@ -295,8 +296,8 @@ func TestMigrateService(t *testing.T) {
 
 }
 
-// TestSkewedAllocatorsRollback creating an apiserver with the new allocator and
-// later starting an old apiserver with the bitmap allocator.
+// TestSkewedAllocatorsRollback 先用新分配器创建一个 apiserver，
+// 再启动一个使用 bitmap 分配器的旧 apiserver。
 func TestSkewedAllocatorsRollback(t *testing.T) {
 	// TODO(#134606): Fix or remove this test.
 	t.Skip("Temporarily disabled: see http://issues.k8s.io/134606")
@@ -317,7 +318,7 @@ func TestSkewedAllocatorsRollback(t *testing.T) {
 
 	etcdOptions := framework.SharedEtcd()
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
-	// s1 uses IPAddress allocator
+	// s1 使用 IPAddress 分配器
 	s1 := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{
 			"--service-cluster-ip-range=10.0.0.0/24",
@@ -330,7 +331,7 @@ func TestSkewedAllocatorsRollback(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// create 5 random services and check that the Services have an IP associated
+	// 创建 5 个随机 service 并检查它们是否关联了 IP
 	for i := range 5 {
 		service, err := kubeclient1.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc(i), metav1.CreateOptions{})
 		if err != nil {
@@ -343,7 +344,7 @@ func TestSkewedAllocatorsRollback(t *testing.T) {
 		}
 	}
 
-	// s2 uses bitmap allocator
+	// s2 使用 bitmap 分配器
 	s2 := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{
 			"--service-cluster-ip-range=10.0.0.0/24",
@@ -358,7 +359,7 @@ func TestSkewedAllocatorsRollback(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// create 5 random services and check that the Services have an IP associated
+	// 创建 5 个随机 service 并检查它们是否关联了 IP
 	for i := 5; i < 10; i++ {
 		service, err := kubeclient2.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc(i), metav1.CreateOptions{})
 		if err != nil {
@@ -366,7 +367,7 @@ func TestSkewedAllocatorsRollback(t *testing.T) {
 		}
 
 		err = wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
-			// The repair loop must create the IP address associated
+			// 修复循环必须创建关联的 IP address
 			_, err = kubeclient1.NetworkingV1().IPAddresses().Get(context.TODO(), service.Spec.ClusterIP, metav1.GetOptions{})
 			if err != nil {
 				return false, nil
@@ -381,9 +382,9 @@ func TestSkewedAllocatorsRollback(t *testing.T) {
 
 }
 
-// TestSkewAllocatorsRollout test that two different apiservers, one with
-// the feature gate enable and other with it disable, can not allocate
-// the same IP to two different Services
+// TestSkewAllocatorsRollout 测试两个不同的 apiserver（一个启用了
+// feature gate，另一个未启用）不会将同一个 IP
+// 分配给两个不同的 Service
 func TestSkewAllocatorsRollout(t *testing.T) {
 	svc := func(name string, ip string) *v1.Service {
 		return &v1.Service{
@@ -402,10 +403,10 @@ func TestSkewAllocatorsRollout(t *testing.T) {
 
 	etcdOptions := framework.SharedEtcd()
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
-	// Order matters here because the apiserver allocator logic needs to cast
-	// the Allocator interface to be able to pass the Service reference.
+	// 这里的顺序很重要，因为 apiserver 的分配器逻辑需要对
+	// Allocator 接口进行类型转换，才能传入 Service 引用。
 
-	// oldServer uses bitmap allocator
+	// oldServer 使用 bitmap 分配器
 	oldServer := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{
 			"--service-cluster-ip-range=10.0.0.0/16",
@@ -419,7 +420,7 @@ func TestSkewAllocatorsRollout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	// s1 uses IPAddress allocator
+	// s1 使用 IPAddress 分配器
 	newServer := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{
 			"--service-cluster-ip-range=10.0.0.0/16",
@@ -438,7 +439,7 @@ func TestSkewAllocatorsRollout(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(kubeclientNew, namespace, t)
 	defer framework.DeleteNamespaceOrDie(kubeclientNew, ns, t)
 
-	// create two Services in parallel , with the same ClusterIP, in each apiserver N times.
+	// 在每个 apiserver 上并行创建两个使用相同 ClusterIP 的 Service，重复 N 次。
 	concurrency := 100
 	var errorsOld, errorsNew atomic.Uint64
 
@@ -475,7 +476,7 @@ func TestSkewAllocatorsRollout(t *testing.T) {
 		t.Fatalf("expected %d Services creation to have failed, got %d", concurrency, errorsTotal)
 	}
 
-	// It takes some time for Services to be available,
+	// Service 需要一些时间才会可用，
 	servicesList := []v1.Service{}
 	err = wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
 		svcs, err := kubeclientNew.CoreV1().Services(namespace).List(context.TODO(), metav1.ListOptions{})
@@ -493,14 +494,14 @@ func TestSkewAllocatorsRollout(t *testing.T) {
 		t.Fatalf("No expected Services objects created: %v", err)
 	}
 
-	// It takes some time for the repairip loop to create the corresponding IPAddress objects
-	// ClusterIPs are synchronized through the bitmap.
+	// repairip 循环需要一些时间才能创建相应的 IPAddress 对象，
+	// ClusterIP 通过 bitmap 进行同步。
 	err = wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
 		ips, err := kubeclientNew.NetworkingV1().IPAddresses().List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			return false, nil
 		}
-		// count the kubernetes.default service too
+		// 也把 kubernetes.default service 计算在内
 		if len(ips.Items) != concurrency+1 {
 			t.Logf("expected %d IPAddresses to exist, got %d: %v", concurrency+1, len(ips.Items), ips.Items)
 			return false, nil
@@ -520,11 +521,11 @@ func TestSkewAllocatorsRollout(t *testing.T) {
 		}
 	}
 
-	// Check all the IPAddress objects are created
+	// 检查所有 IPAddress 对象都已创建
 	for i := 5; i < concurrency+5; i++ {
 		ip := fmt.Sprintf("10.0.0.%d", i)
 		err = wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
-			// The repair loop must create the IP address associated
+			// 修复循环必须创建关联的 IP address
 			_, err = kubeclientNew.NetworkingV1().IPAddresses().Get(context.Background(), ip, metav1.GetOptions{})
 			if err != nil {
 				return false, nil
@@ -554,7 +555,7 @@ func TestFlagsIPAllocator(t *testing.T) {
 
 	etcdOptions := framework.SharedEtcd()
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
-	// s1 uses IPAddress allocator
+	// s1 使用 IPAddress 分配器
 	s1 := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{"--service-cluster-ip-range=10.0.0.0/24"},
 		etcdOptions)
@@ -565,7 +566,7 @@ func TestFlagsIPAllocator(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// create 5 random services and check that the Services have an IP associated
+	// 创建 5 个随机 service 并检查它们是否关联了 IP
 	for i := range 5 {
 		service, err := kubeclient1.CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), svc(i), metav1.CreateOptions{})
 		if err != nil {
@@ -580,7 +581,7 @@ func TestFlagsIPAllocator(t *testing.T) {
 
 }
 
-// regression test for https://issues.k8s.io/135333
+// 针对 https://issues.k8s.io/135333 的回归测试
 func TestInvalidService(t *testing.T) {
 	etcdOptions := framework.SharedEtcd()
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
@@ -598,7 +599,7 @@ func TestInvalidService(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// ServiceCIDR controller
+	// ServiceCIDR 控制器
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	resyncPeriod := 12 * time.Hour
@@ -612,12 +613,12 @@ func TestInvalidService(t *testing.T) {
 	informerFactory.Start(ctx.Done())
 	informerFactory.WaitForCacheSync(ctx.Done())
 
-	// Add a new service CIDR to be able to create new IPs.
+	// 添加一个新的 service CIDR，以便创建新的 IP。
 	cidr := makeServiceCIDR("test2", "10.168.0.0/24", "")
 	if _, err := client.NetworkingV1().ServiceCIDRs().Create(context.Background(), cidr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("got unexpected error: %v", err)
 	}
-	// wait ServiceCIDR is ready
+	// 等待 ServiceCIDR 就绪
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client.NetworkingV1().ServiceCIDRs().Get(context.TODO(), cidr.Name, metav1.GetOptions{})
 		if err != nil {
@@ -628,9 +629,9 @@ func TestInvalidService(t *testing.T) {
 		t.Fatalf("waiting for service cidr ready condition %v", err)
 	}
 
-	// A service without a name keeps failing to allocate an IP address because
-	// it tries to create the IPAddress object with an invalid reference.
-	// Eventually the request times out causing high CPU usage during that time.
+	// 没有名称的 service 会一直无法分配 IP address，
+	// 因为它试图用无效的引用创建 IPAddress 对象。
+	// 最终请求超时，在此期间会导致 CPU 使用率升高。
 	svc := &v1.Service{
 		Spec: v1.ServiceSpec{
 			Type: v1.ServiceTypeClusterIP,
@@ -640,10 +641,10 @@ func TestInvalidService(t *testing.T) {
 		},
 	}
 
-	// The request can not time out during the allocation and should return an invalid error instead.
+	// 分配过程中请求不应超时，而应返回无效错误。
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// It will fail because the service is missing a name
+	// 由于该 service 缺少名称，操作将失败
 	_, err = client.CoreV1().Services(metav1.NamespaceDefault).Create(ctx, svc, metav1.CreateOptions{})
 	if err == nil {
 		t.Fatalf("expected error")

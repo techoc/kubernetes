@@ -16,7 +16,7 @@ limitations under the License.
 
 package volumescheduling
 
-// This file tests the VolumeScheduling feature.
+// 本文件测试 VolumeScheduling 特性。
 
 import (
 	"context"
@@ -54,7 +54,7 @@ type testConfig struct {
 }
 
 var (
-	// Delete API objects immediately
+	// 立即删除 API 对象
 	deletePeriod = int64(0)
 	deleteOption = metav1.DeleteOptions{GracePeriodSeconds: &deletePeriod}
 
@@ -102,7 +102,7 @@ func TestVolumeBinding(t *testing.T) {
 		pod  *v1.Pod
 		pvs  []*testPV
 		pvcs []*testPVC
-		// Create these, but they should not be bound in the end
+		// 创建这些对象，但最终不应被绑定
 		unboundPvcs []*testPVC
 		unboundPvs  []*testPV
 		shouldFail  bool
@@ -189,7 +189,7 @@ func TestVolumeBinding(t *testing.T) {
 	for name, test := range cases {
 		klog.Infof("Running test %v", name)
 
-		// Create two StorageClasses
+		// 创建两个 StorageClass
 		suffix := rand.String(4)
 		classes := map[string]*storagev1.StorageClass{}
 		classes[classImmediate] = makeStorageClass(fmt.Sprintf("immediate-%v", suffix), &modeImmediate)
@@ -200,7 +200,7 @@ func TestVolumeBinding(t *testing.T) {
 			}
 		}
 
-		// Create PVs
+		// 创建 PV
 		for _, pvConfig := range test.pvs {
 			pv := makePV(pvConfig.name, classes[pvConfig.scName].Name, pvConfig.preboundPVC, config.ns, pvConfig.node)
 			if _, err := config.client.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{}); err != nil {
@@ -215,7 +215,7 @@ func TestVolumeBinding(t *testing.T) {
 			}
 		}
 
-		// Wait for PVs to become available to avoid race condition in PV controller
+		// 等待 PV 变为可用状态，以避免 PV 控制器中的竞态条件
 		// https://github.com/kubernetes/kubernetes/issues/85320
 		for _, pvConfig := range test.pvs {
 			if err := waitForPVPhase(config.client, pvConfig.name, v1.VolumeAvailable); err != nil {
@@ -229,7 +229,7 @@ func TestVolumeBinding(t *testing.T) {
 			}
 		}
 
-		// Create PVCs
+		// 创建 PVC
 		for _, pvcConfig := range test.pvcs {
 			pvc := makePVC(pvcConfig.name, config.ns, &classes[pvcConfig.scName].Name, pvcConfig.preboundPV)
 			if _, err := config.client.CoreV1().PersistentVolumeClaims(config.ns).Create(context.TODO(), pvc, metav1.CreateOptions{}); err != nil {
@@ -243,7 +243,7 @@ func TestVolumeBinding(t *testing.T) {
 			}
 		}
 
-		// Create Pod
+		// 创建 Pod
 		if _, err := config.client.CoreV1().Pods(config.ns).Create(context.TODO(), test.pod, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create Pod %q: %v", test.pod.Name, err)
 		}
@@ -257,7 +257,7 @@ func TestVolumeBinding(t *testing.T) {
 			}
 		}
 
-		// Validate PVC/PV binding
+		// 验证 PVC/PV 绑定
 		for _, pvc := range test.pvcs {
 			validatePVCPhase(t, config.client, pvc.name, config.ns, v1.ClaimBound, false)
 		}
@@ -271,12 +271,12 @@ func TestVolumeBinding(t *testing.T) {
 			validatePVPhase(t, config.client, pv.name, v1.VolumeAvailable)
 		}
 
-		// Force delete objects, but they still may not be immediately removed
+		// 强制删除对象，但它们可能不会立即被移除
 		deleteTestObjects(config.client, config.ns, deleteOption)
 	}
 }
 
-// TestVolumeBindingRescheduling tests scheduler will retry scheduling when needed.
+// TestVolumeBindingRescheduling 测试调度器会在需要时重试调度。
 func TestVolumeBindingRescheduling(t *testing.T) {
 	config := setupCluster(t, "volume-scheduling-", 2, 0, 0)
 	defer config.teardown()
@@ -313,7 +313,7 @@ func TestVolumeBindingRescheduling(t *testing.T) {
 				if _, err := config.client.StorageV1().StorageClasses().Create(context.TODO(), sc, metav1.CreateOptions{}); err != nil {
 					t.Fatalf("Failed to create StorageClass %q: %v", sc.Name, err)
 				}
-				// Create pv for this class to mock static provisioner behavior.
+				// 为该 StorageClass 创建 PV，以模拟静态制备器的行为。
 				pv := makePV("pv-reschedule-onclassadd-static", storageClassName, "", "", node1)
 				if pv, err := config.client.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{}); err != nil {
 					t.Fatalf("Failed to create PersistentVolume %q: %v", pv.Name, err)
@@ -347,7 +347,7 @@ func TestVolumeBindingRescheduling(t *testing.T) {
 			t.Fatal("pod is required for this test")
 		}
 
-		// Create unbound pvc
+		// 创建未绑定的 PVC
 		for _, pvcConfig := range test.pvcs {
 			pvc := makePVC(pvcConfig.name, config.ns, &storageClassName, "")
 			if _, err := config.client.CoreV1().PersistentVolumeClaims(config.ns).Create(context.TODO(), pvc, metav1.CreateOptions{}); err != nil {
@@ -355,7 +355,7 @@ func TestVolumeBindingRescheduling(t *testing.T) {
 			}
 		}
 
-		// Create PVs
+		// 创建 PV
 		for _, pvConfig := range test.pvs {
 			pv := makePV(pvConfig.name, sharedClasses[pvConfig.scName].Name, pvConfig.preboundPVC, config.ns, pvConfig.node)
 			if _, err := config.client.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{}); err != nil {
@@ -363,21 +363,21 @@ func TestVolumeBindingRescheduling(t *testing.T) {
 			}
 		}
 
-		// Create pod
+		// 创建 Pod
 		if _, err := config.client.CoreV1().Pods(config.ns).Create(context.TODO(), test.pod, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create Pod %q: %v", test.pod.Name, err)
 		}
 
-		// Wait for pod is unschedulable.
+		// 等待 Pod 变为不可调度状态。
 		klog.Infof("Waiting for pod is unschedulable")
 		if err := waitForPodUnschedulable(config.client, test.pod); err != nil {
 			t.Errorf("Failed as Pod %s was not unschedulable: %v", test.pod.Name, err)
 		}
 
-		// Trigger
+		// 触发
 		test.trigger(config)
 
-		// Wait for pod is scheduled or unschedulable.
+		// 等待 Pod 被调度或变为不可调度状态。
 		if !test.shouldFail {
 			klog.Infof("Waiting for pod is scheduled")
 			if err := waitForPodToSchedule(config.client, test.pod); err != nil {
@@ -390,31 +390,30 @@ func TestVolumeBindingRescheduling(t *testing.T) {
 			}
 		}
 
-		// Force delete objects, but they still may not be immediately removed
+		// 强制删除对象，但它们可能不会立即被移除
 		deleteTestObjects(config.client, config.ns, deleteOption)
 	}
 }
 
-// TestVolumeBindingStress creates <podLimit> pods, each with <volsPerPod> unbound or prebound PVCs.
-// PVs are precreated.
+// TestVolumeBindingStress 创建 <podLimit> 个 Pod，每个 Pod 带有 <volsPerPod> 个未绑定或预绑定的 PVC。
+// PV 是预先创建好的。
 func TestVolumeBindingStress(t *testing.T) {
 	testVolumeBindingStress(t, 0, false, 0)
 }
 
-// Like TestVolumeBindingStress but with scheduler resync. In real cluster,
-// scheduler will schedule failed pod frequently due to various events, e.g.
-// service/node update events.
-// This is useful to detect possible race conditions.
+// 与 TestVolumeBindingStress 类似，但带有调度器重新同步。在真实集群中，
+// 由于各种事件（如 service/node 更新事件），调度器会频繁地
+// 重试调度失败的 Pod。这有助于检测可能的竞态条件。
 func TestVolumeBindingStressWithSchedulerResync(t *testing.T) {
 	testVolumeBindingStress(t, time.Second, false, 0)
 }
 
-// Like TestVolumeBindingStress but with fast dynamic provisioning
+// 与 TestVolumeBindingStress 类似，但使用快速的动态制备
 func TestVolumeBindingDynamicStressFast(t *testing.T) {
 	testVolumeBindingStress(t, 0, true, 0)
 }
 
-// Like TestVolumeBindingStress but with slow dynamic provisioning
+// 与 TestVolumeBindingStress 类似，但使用缓慢的动态制备
 func TestVolumeBindingDynamicStressSlow(t *testing.T) {
 	testVolumeBindingStress(t, 0, true, 10)
 }
@@ -423,8 +422,8 @@ func testVolumeBindingStress(t *testing.T, schedulerResyncPeriod time.Duration, 
 	config := setupCluster(t, "volume-binding-stress-", 1, schedulerResyncPeriod, provisionDelaySeconds)
 	defer config.teardown()
 
-	// Set max volume limit to the number of PVCs the test will create
-	// TODO: remove when max volume limit allows setting through storageclass
+	// 将最大卷数限制设为测试将创建的 PVC 数量
+	// TODO: 当最大卷数限制支持通过 storageclass 设置时，移除此处设置
 	t.Setenv("KUBE_MAX_PD_VOLS", fmt.Sprintf("%v", podLimit*volsPerPod))
 
 	scName := &classWait
@@ -437,7 +436,7 @@ func testVolumeBindingStress(t *testing.T, schedulerResyncPeriod time.Duration, 
 	}
 
 	klog.Infof("Start creating PVs and PVCs")
-	// Create enough PVs and PVCs for all the pods
+	// 为所有 Pod 创建足够的 PV 和 PVC
 	podVolumesCount := podLimit * volsPerPod
 	pvs := make([]*v1.PersistentVolume, podVolumesCount)
 	pvcs := make([]*v1.PersistentVolumeClaim, podVolumesCount)
@@ -448,13 +447,13 @@ func testVolumeBindingStress(t *testing.T, schedulerResyncPeriod time.Duration, 
 			pvName  = fmt.Sprintf("pv-stress-%v", i)
 			pvcName = fmt.Sprintf("pvc-stress-%v", i)
 		)
-		// Don't create pvs for dynamic provisioning test
+		// 动态制备测试不创建 PV
 		if !dynamic {
 			if rand.Int()%2 == 0 {
-				// static unbound pvs
+				// 静态未绑定 PV
 				pv = makePV(pvName, *scName, "", "", node1)
 			} else {
-				// static prebound pvs
+				// 静态预绑定 PV
 				pv = makePV(pvName, classImmediate, pvcName, config.ns, node1)
 			}
 			if pv, err := config.client.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{}); err != nil {
@@ -476,7 +475,7 @@ func testVolumeBindingStress(t *testing.T, schedulerResyncPeriod time.Duration, 
 	klog.Infof("Start creating Pods")
 	pods := make([]*v1.Pod, podLimit)
 	workqueue.ParallelizeUntil(context.TODO(), 16, podLimit, func(i int) {
-		// Generate string of all the PVCs for the pod
+		// 生成该 Pod 所用全部 PVC 的名称列表
 		podPvcs := []string{}
 		for j := i * volsPerPod; j < (i+1)*volsPerPod; j++ {
 			podPvcs = append(podPvcs, pvcs[j].Name)
@@ -490,23 +489,23 @@ func testVolumeBindingStress(t *testing.T, schedulerResyncPeriod time.Duration, 
 	})
 
 	klog.Infof("Start validating pod scheduled")
-	// Validate Pods scheduled
+	// 验证 Pod 已被调度
 	workqueue.ParallelizeUntil(context.TODO(), 16, len(pods), func(i int) {
 		pod := pods[i]
-		// Use increased timeout for stress test because there is a higher chance of
-		// PV sync error
+		// 压力测试使用更长的超时时间，因为出现
+		// PV 同步错误的概率更高
 		if err := waitForPodToScheduleWithTimeout(config.client, pod, 2*time.Minute); err != nil {
 			t.Errorf("Failed to schedule Pod %q: %v", pod.Name, err)
 		}
 	})
 
 	klog.Infof("Start validating PVCs scheduled")
-	// Validate PVC/PV binding
+	// 验证 PVC/PV 绑定
 	workqueue.ParallelizeUntil(context.TODO(), 16, len(pvcs), func(i int) {
 		validatePVCPhase(t, config.client, pvcs[i].Name, config.ns, v1.ClaimBound, dynamic)
 	})
 
-	// Don't validate pv for dynamic provisioning test
+	// 动态制备测试不验证 PV
 	if !dynamic {
 		klog.Infof("Start validating PVs scheduled")
 		workqueue.ParallelizeUntil(context.TODO(), 16, len(pvs), func(i int) {
@@ -522,7 +521,7 @@ func testVolumeBindingWithAffinity(t *testing.T, anti bool, numNodes, numPods, n
 	pods := []*v1.Pod{}
 	pvcs := []*v1.PersistentVolumeClaim{}
 
-	// Create PVs for the first node
+	// 为第一个节点创建 PV
 	for i := range numPVsFirstNode {
 		pv := makePV(fmt.Sprintf("pv-node1-%v", i), classWait, "", "", node1)
 		if pv, err := config.client.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{}); err != nil {
@@ -530,7 +529,7 @@ func testVolumeBindingWithAffinity(t *testing.T, anti bool, numNodes, numPods, n
 		}
 	}
 
-	// Create 1 PV per Node for the remaining nodes
+	// 为其余节点各创建 1 个 PV
 	for i := 2; i <= numNodes; i++ {
 		pv := makePV(fmt.Sprintf("pv-node%v-0", i), classWait, "", "", fmt.Sprintf("node-%v", i))
 		if pv, err := config.client.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{}); err != nil {
@@ -538,16 +537,16 @@ func testVolumeBindingWithAffinity(t *testing.T, anti bool, numNodes, numPods, n
 		}
 	}
 
-	// Create pods
+	// 创建 Pod
 	for i := range numPods {
-		// Create one pvc per pod
+		// 每个 Pod 创建一个 PVC
 		pvc := makePVC(fmt.Sprintf("pvc-%v", i), config.ns, &classWait, "")
 		if pvc, err := config.client.CoreV1().PersistentVolumeClaims(config.ns).Create(context.TODO(), pvc, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create PersistentVolumeClaim %q: %v", pvc.Name, err)
 		}
 		pvcs = append(pvcs, pvc)
 
-		// Create pod with pod affinity
+		// 创建带有 Pod affinity 的 Pod
 		pod := makePod(fmt.Sprintf("pod%03d", i), config.ns, []string{pvc.Name})
 		pod.Spec.Affinity = &v1.Affinity{}
 		affinityTerms := []v1.PodAffinityTerm{
@@ -580,13 +579,13 @@ func testVolumeBindingWithAffinity(t *testing.T, anti bool, numNodes, numPods, n
 		pods = append(pods, pod)
 	}
 
-	// Validate Pods scheduled
+	// 验证 Pod 已被调度
 	scheduledNodes := sets.NewString()
 	for _, pod := range pods {
 		if err := waitForPodToSchedule(config.client, pod); err != nil {
 			t.Errorf("Failed to schedule Pod %q: %v", pod.Name, err)
 		} else {
-			// Keep track of all the nodes that the Pods were scheduled on
+			// 记录 Pod 被调度到的所有节点
 			pod, err = config.client.CoreV1().Pods(config.ns).Get(context.TODO(), pod.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("Failed to get Pod %q: %v", pod.Name, err)
@@ -598,20 +597,20 @@ func testVolumeBindingWithAffinity(t *testing.T, anti bool, numNodes, numPods, n
 		}
 	}
 
-	// Validate the affinity policy
+	// 验证 affinity 策略
 	if anti {
-		// The pods should have been spread across different nodes
+		// Pod 应该被分散到不同的节点上
 		if scheduledNodes.Len() != numPods {
 			t.Errorf("Pods were scheduled across %v nodes instead of %v", scheduledNodes.Len(), numPods)
 		}
 	} else {
-		// The pods should have been scheduled on 1 node
+		// Pod 应该都被调度到同一个节点上
 		if scheduledNodes.Len() != 1 {
 			t.Errorf("Pods were scheduled across %v nodes instead of %v", scheduledNodes.Len(), 1)
 		}
 	}
 
-	// Validate PVC binding
+	// 验证 PVC 绑定
 	for _, pvc := range pvcs {
 		validatePVCPhase(t, config.client, pvc.Name, config.ns, v1.ClaimBound, false)
 	}
@@ -619,9 +618,9 @@ func testVolumeBindingWithAffinity(t *testing.T, anti bool, numNodes, numPods, n
 
 func TestVolumeBindingWithAntiAffinity(t *testing.T) {
 	numNodes := 10
-	// Create as many pods as number of nodes
+	// 创建与节点数量相同的 Pod
 	numPods := numNodes
-	// Create many more PVs on node1 to increase chance of selecting node1
+	// 在 node1 上创建更多 PV，以提高选中 node1 的概率
 	numPVsFirstNode := 10 * numNodes
 
 	testVolumeBindingWithAffinity(t, true, numNodes, numPods, numPVsFirstNode)
@@ -629,9 +628,9 @@ func TestVolumeBindingWithAntiAffinity(t *testing.T) {
 
 func TestVolumeBindingWithAffinity(t *testing.T) {
 	numPods := 10
-	// Create many more nodes to increase chance of selecting a PV on a different node than node1
+	// 创建更多节点，以提高选中非 node1 节点上 PV 的概率
 	numNodes := 10 * numPods
-	// Create numPods PVs on the first node
+	// 在第一个节点上创建 numPods 个 PV
 	numPVsFirstNode := numPods
 
 	testVolumeBindingWithAffinity(t, true, numNodes, numPods, numPVsFirstNode)
@@ -644,17 +643,17 @@ func TestPVAffinityConflict(t *testing.T) {
 	pv := makePV("local-pv", classImmediate, "", "", node1)
 	pvc := makePVC("local-pvc", config.ns, &classImmediate, "")
 
-	// Create PV
+	// 创建 PV
 	if _, err := config.client.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PersistentVolume %q: %v", pv.Name, err)
 	}
 
-	// Create PVC
+	// 创建 PVC
 	if _, err := config.client.CoreV1().PersistentVolumeClaims(config.ns).Create(context.TODO(), pvc, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PersistentVolumeClaim %q: %v", pvc.Name, err)
 	}
 
-	// Wait for PVC bound
+	// 等待 PVC 绑定
 	if err := waitForPVCBound(config.client, pvc); err != nil {
 		t.Fatalf("PVC %q failed to bind: %v", pvc.Name, err)
 	}
@@ -667,15 +666,15 @@ func TestPVAffinityConflict(t *testing.T) {
 		podName := "local-pod-" + strconv.Itoa(i+1)
 		pod := makePod(podName, config.ns, []string{"local-pvc"})
 		nodeMarkers[i].(func(*v1.Pod, string))(pod, "node-2")
-		// Create Pod
+		// 创建 Pod
 		if _, err := config.client.CoreV1().Pods(config.ns).Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create Pod %q: %v", pod.Name, err)
 		}
-		// Give time to scheduler to attempt to schedule pod
+		// 给调度器一些时间尝试调度 Pod
 		if err := waitForPodUnschedulable(config.client, pod); err != nil {
 			t.Errorf("Failed as Pod %s was not unschedulable: %v", pod.Name, err)
 		}
-		// Check pod conditions
+		// 检查 Pod 的状态条件
 		p, err := config.client.CoreV1().Pods(config.ns).Get(context.TODO(), podName, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Failed to access Pod %s status: %v", podName, err)
@@ -689,7 +688,7 @@ func TestPVAffinityConflict(t *testing.T) {
 		if !strings.Contains(p.Status.Conditions[0].Message, "node(s) didn't match Pod's node affinity") {
 			t.Fatalf("Failed as Pod's %s failure message does not contain expected message: node(s) didn't match Pod's node affinity. Got message %q", podName, p.Status.Conditions[0].Message)
 		}
-		// Deleting test pod
+		// 删除测试 Pod
 		if err := config.client.CoreV1().Pods(config.ns).Delete(context.TODO(), podName, metav1.DeleteOptions{}); err != nil {
 			t.Fatalf("Failed to delete Pod %s: %v", podName, err)
 		}
@@ -705,7 +704,7 @@ func TestVolumeProvision(t *testing.T) {
 		pvs             []*testPV
 		boundPvcs       []*testPVC
 		provisionedPvcs []*testPVC
-		// Create these, but they should not be bound in the end
+		// 创建这些对象，但最终不应被绑定
 		unboundPvcs []*testPVC
 		shouldFail  bool
 	}
@@ -740,9 +739,9 @@ func TestVolumeProvision(t *testing.T) {
 		},
 		"immediate provisioned by controller": {
 			pod: makePod("pod-i-unbound", config.ns, []string{"pvc-controller-provisioned"}),
-			// A pvc of immediate binding mode is expected to be provisioned by controller,
-			// we treat it as "bound" here because it is supposed to be in same state
-			// with bound claims, i.e. in bound status and has no selectedNode annotation.
+			// 即时绑定模式的 PVC 预期由控制器制备，
+			// 这里将其视为"已绑定"，因为它应处于与已绑定 PVC
+			// 相同的状态，即处于 Bound 状态且没有 selectedNode annotation。
 			boundPvcs: []*testPVC{{"pvc-controller-provisioned", classImmediate, ""}},
 		},
 	}
@@ -833,7 +832,7 @@ func TestVolumeProvision(t *testing.T) {
 			validatePVPhase(t, config.client, pv.name, v1.VolumeBound)
 		}
 
-		// Force delete objects, but they still may not be immediately removed
+		// 强制删除对象，但它们可能不会立即被移除
 		t.Log("Deleting test objects")
 		deleteTestObjects(config.client, config.ns, deleteOption)
 	}
@@ -843,7 +842,7 @@ func TestVolumeProvision(t *testing.T) {
 	}
 }
 
-// TestCapacity covers different scenarios involving CSIStorageCapacity objects.
+// TestCapacity 覆盖涉及 CSIStorageCapacity 对象的不同场景。
 func TestCapacity(t *testing.T) {
 	config := setupCluster(t, "volume-scheduling", 1, 0, 0)
 	defer config.teardown()
@@ -879,7 +878,7 @@ func TestCapacity(t *testing.T) {
 	}
 
 	run := func(t *testing.T, test testcaseType) {
-		// Create StorageClasses
+		// 创建 StorageClass
 		suffix := rand.String(4)
 		classes := map[string]*storagev1.StorageClass{}
 		classes[classImmediate] = makeDynamicProvisionerStorageClass(fmt.Sprintf("immediate-%v", suffix), &modeImmediate, nil)
@@ -901,8 +900,8 @@ func TestCapacity(t *testing.T) {
 			}
 		}
 
-		// The provisioner isn't actually a CSI driver, but
-		// that doesn't matter here.
+		// 该 provisioner 实际上不是 CSI driver，
+		// 但在这里无关紧要。
 		if test.capacitySupported {
 			if _, err := config.client.StorageV1().CSIDrivers().Create(context.TODO(),
 				&storagev1.CSIDriver{
@@ -917,13 +916,13 @@ func TestCapacity(t *testing.T) {
 				t.Fatalf("Failed to create CSIDriver: %v", err)
 			}
 
-			// kube-scheduler may need some time before it gets the CSIDriver object.
-			// Without it, scheduling will happen without considering capacity, which
-			// is not what we want to test.
+			// kube-scheduler 可能需要一些时间才能获取到 CSIDriver 对象。
+			// 如果缺少该对象，调度将不会考虑容量因素，
+			// 这不是我们要测试的场景。
 			time.Sleep(5 * time.Second)
 		}
 
-		// Create CSIStorageCapacity
+		// 创建 CSIStorageCapacity
 		if test.haveCapacity {
 			if _, err := config.client.StorageV1().CSIStorageCapacities("default").Create(context.TODO(),
 				&storagev1.CSIStorageCapacity{
@@ -932,7 +931,7 @@ func TestCapacity(t *testing.T) {
 					},
 					StorageClassName: classes[classWait].Name,
 					NodeTopology:     &metav1.LabelSelector{},
-					// More than the 5Gi used in makePVC.
+					// 大于 makePVC 中使用的 5Gi。
 					Capacity: resource.NewQuantity(6*1024*1024*1024, resource.BinarySI),
 				},
 				metav1.CreateOptions{}); err != nil {
@@ -940,7 +939,7 @@ func TestCapacity(t *testing.T) {
 			}
 		}
 
-		// Create PVCs
+		// 创建 PVC
 		for _, pvcConfig := range test.pvcs {
 			pvc := makePVC(pvcConfig.name, config.ns, &classes[pvcConfig.scName].Name, pvcConfig.preboundPV)
 			if _, err := config.client.CoreV1().PersistentVolumeClaims(config.ns).Create(context.TODO(), pvc, metav1.CreateOptions{}); err != nil {
@@ -948,12 +947,12 @@ func TestCapacity(t *testing.T) {
 			}
 		}
 
-		// Create Pod
+		// 创建 Pod
 		if _, err := config.client.CoreV1().Pods(config.ns).Create(context.TODO(), test.pod, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create Pod %q: %v", test.pod.Name, err)
 		}
 
-		// Lack of capacity prevents pod scheduling and binding.
+		// 容量不足会阻止 Pod 的调度和绑定。
 		shouldFail := test.capacitySupported && !test.haveCapacity
 		if shouldFail {
 			if err := waitForPodUnschedulable(config.client, test.pod); err != nil {
@@ -965,7 +964,7 @@ func TestCapacity(t *testing.T) {
 			}
 		}
 
-		// Validate
+		// 验证
 		for _, pvc := range test.pvcs {
 			if shouldFail {
 				validatePVCPhase(t, config.client, pvc.name, config.ns, v1.ClaimPending, false)
@@ -974,7 +973,7 @@ func TestCapacity(t *testing.T) {
 			}
 		}
 
-		// Force delete objects, but they still may not be immediately removed
+		// 强制删除对象，但它们可能不会立即被移除
 		deleteTestObjects(config.client, config.ns, deleteOption)
 	}
 
@@ -983,9 +982,8 @@ func TestCapacity(t *testing.T) {
 	}
 }
 
-// TestRescheduleProvisioning validate that PV controller will remove
-// selectedNode annotation from a claim to reschedule volume provision
-// on provision failure.
+// TestRescheduleProvisioning 验证当制备失败时，PV 控制器会移除
+// PVC 上的 selectedNode annotation，以便重新安排卷制备。
 func TestRescheduleProvisioning(t *testing.T) {
 	testCtx := testutil.InitTestAPIServer(t, "reschedule-volume-provision", nil)
 
@@ -1001,20 +999,20 @@ func TestRescheduleProvisioning(t *testing.T) {
 		t.Fatalf("Failed to create PV controller: %v", err)
 	}
 
-	// Prepare node and storage class.
+	// 准备节点和 StorageClass。
 	testNode := makeNode(1)
 	if _, err := clientset.CoreV1().Nodes().Create(context.TODO(), testNode, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Node %q: %v", testNode.Name, err)
 	}
 	scName := "fail-provision"
 	sc := makeDynamicProvisionerStorageClass(scName, &modeWait, nil)
-	// Expect the storage class fail to provision.
+	// 预期该 StorageClass 制备失败。
 	sc.Parameters[volumetest.ExpectProvisionFailureKey] = ""
 	if _, err := clientset.StorageV1().StorageClasses().Create(context.TODO(), sc, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create StorageClass %q: %v", sc.Name, err)
 	}
 
-	// Create a pvc with selected node annotation.
+	// 创建一个带有 selected-node annotation 的 PVC。
 	pvcName := "pvc-fail-to-provision"
 	pvc := makePVC(pvcName, ns, &scName, "")
 	pvc.Annotations = map[string]string{"volume.kubernetes.io/selected-node": node1}
@@ -1022,18 +1020,18 @@ func TestRescheduleProvisioning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create PersistentVolumeClaim %q: %v", pvc.Name, err)
 	}
-	// Validate selectedNode annotation exists on created claim.
+	// 验证创建的 PVC 上存在 selectedNode annotation。
 	selectedNodeAnn, exist := pvc.Annotations["volume.kubernetes.io/selected-node"]
 	if !exist || selectedNodeAnn != node1 {
 		t.Fatalf("Created pvc is not annotated as expected")
 	}
 
-	// Start controller.
+	// 启动控制器。
 	go ctrl.Run(testCtx.Ctx)
 	informerFactory.Start(testCtx.Ctx.Done())
 	informerFactory.WaitForCacheSync(testCtx.Ctx.Done())
 
-	// Validate that the annotation is removed by controller for provision reschedule.
+	// 验证控制器为重新安排制备而移除了该 annotation。
 	if err := waitForProvisionAnn(clientset, pvc, false); err != nil {
 		t.Errorf("Expect to reschedule provision for PVC %v/%v, but still found selected-node annotation on it", ns, pvcName)
 	}
@@ -1052,12 +1050,12 @@ func setupCluster(t *testing.T, nsName string, numberOfNodes int, resyncPeriod t
 		t.Fatalf("Failed to create PV controller: %v", err)
 	}
 	go ctrl.Run(testCtx.Ctx)
-	// Start informer factory after all controllers are configured and running.
+	// 在所有控制器配置完成并运行后启动 informer factory。
 	informerFactory.Start(testCtx.Ctx.Done())
 	informerFactory.WaitForCacheSync(testCtx.Ctx.Done())
 
-	// Create shared objects
-	// Create nodes
+	// 创建共享对象
+	// 创建节点
 	for i := range numberOfNodes {
 		testNode := makeNode(i + 1)
 		if _, err := clientset.CoreV1().Nodes().Create(context.TODO(), testNode, metav1.CreateOptions{}); err != nil {
@@ -1065,7 +1063,7 @@ func setupCluster(t *testing.T, nsName string, numberOfNodes int, resyncPeriod t
 		}
 	}
 
-	// Create SCs
+	// 创建 StorageClass
 	for _, sc := range sharedClasses {
 		if _, err := clientset.StorageV1().StorageClasses().Create(context.TODO(), sc, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create StorageClass %q: %v", sc.Name, err)
@@ -1085,10 +1083,10 @@ func setupCluster(t *testing.T, nsName string, numberOfNodes int, resyncPeriod t
 
 func initPVController(t *testing.T, testCtx *testutil.TestContext, provisionDelaySeconds int) (*persistentvolume.PersistentVolumeController, informers.SharedInformerFactory, error) {
 	clientset := testCtx.ClientSet
-	// Informers factory for controllers
+	// 供控制器使用的 informer factory
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 
-	// Start PV controller for volume binding.
+	// 启动用于卷绑定的 PV 控制器。
 	host := volumetest.NewFakeVolumeHost(t, "/tmp/fake", nil, nil)
 	provisionerNames := sets.New(
 		provisionerPluginName,
@@ -1116,7 +1114,7 @@ func initPVController(t *testing.T, testCtx *testutil.TestContext, provisionDela
 
 	params := persistentvolume.ControllerParameters{
 		KubeClient: clientset,
-		// Use a frequent resync period to retry API update conflicts due to
+		// 使用较短的重新同步周期来重试 API 更新冲突，原因是
 		// https://github.com/kubernetes/kubernetes/issues/85320
 		SyncPeriod:                5 * time.Second,
 		VolumePlugins:             plugins,

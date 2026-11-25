@@ -44,11 +44,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// preQueueingHintPlugin is a test plugin that implements PreQueueingHintFn
-// and tracks how many times its QueueingHintFn is called.
+// preQueueingHintPlugin 是一个测试插件，实现了 PreQueueingHintFn，
+// 并记录其 QueueingHintFn 被调用的次数。
 type preQueueingHintPlugin struct {
 	queueingHintCalls atomic.Int64
-	// targetPod is the pod that PreQueueingHintFn will return.
+	// targetPod 是 PreQueueingHintFn 将返回的 Pod。
 	targetPod types.NamespacedName
 }
 
@@ -60,7 +60,7 @@ func (pl *preQueueingHintPlugin) Name() string {
 }
 
 func (pl *preQueueingHintPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
-	// Reject all pods - they need a node with a special label.
+	// 拒绝所有 Pod —— 它们需要一个带有特殊标签的节点。
 	if nodeInfo.Node().Labels["enable-scheduling"] == "true" {
 		return nil
 	}
@@ -73,7 +73,7 @@ func (pl *preQueueingHintPlugin) EventsToRegister(_ context.Context) ([]fwk.Clus
 			Event:          fwk.ClusterEvent{Resource: fwk.Node, ActionType: fwk.UpdateNodeLabel},
 			QueueingHintFn: pl.queueingHint,
 			PreQueueingHintFn: func(logger klog.Logger, oldObj, newObj interface{}) (fwk.PreQueueingHintResult, error) {
-				// Only return the target pod.
+				// 只返回目标 Pod。
 				return fwk.PreQueueingHintResult{Pods: []types.NamespacedName{pl.targetPod}}, nil
 			},
 		},
@@ -85,15 +85,14 @@ func (pl *preQueueingHintPlugin) queueingHint(logger klog.Logger, pod *v1.Pod, o
 	return fwk.Queue, nil
 }
 
-// TestPreQueueingHintNarrowsPodSet verifies that when PreQueueingHintFn is
-// registered and the feature gate is enabled, only the targeted pod's
-// QueueingHintFn is invoked on a matching event.
+// TestPreQueueingHintNarrowsPodSet 验证当注册了 PreQueueingHintFn 且 feature gate 启用时，
+// 在匹配事件发生时只会调用目标 Pod 的 QueueingHintFn。
 func TestPreQueueingHintNarrowsPodSet(t *testing.T) {
 	tests := []struct {
 		name           string
 		featureEnabled bool
-		// With 3 unschedulable pods and PreQueueingHint targeting only pod-1,
-		// we expect QueueingHintFn to be called 1 time (enabled) or 3 times (disabled).
+		// 有 3 个不可调度的 Pod 且 PreQueueingHint 仅指向 pod-1 时，
+		// 预期 QueueingHintFn 被调用 1 次（启用）或 3 次（禁用）。
 		wantHintCalls int64
 	}{
 		{
@@ -141,14 +140,14 @@ func TestPreQueueingHintNarrowsPodSet(t *testing.T) {
 			testutils.SyncSchedulerInformerFactory(testCtx)
 			go testCtx.Scheduler.Run(testCtx.SchedulerCtx)
 
-			// Create a node without the required label (pods will be unschedulable).
+			// 创建一个没有所需标签的节点（Pod 将不可调度）。
 			node := st.MakeNode().Name("node-1").Label("kubernetes.io/hostname", "node-1").
 				Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
-			// Create 3 pods that will all be unschedulable.
+			// 创建 3 个都不可调度的 Pod。
 			for i := 1; i <= 3; i++ {
 				pod := &v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
@@ -170,22 +169,22 @@ func TestPreQueueingHintNarrowsPodSet(t *testing.T) {
 				}
 			}
 
-			// Wait for all 3 pods to be attempted and become unschedulable.
+			// 等待所有 3 个 Pod 都被尝试调度并变为不可调度。
 			if err := testutils.WaitForPodUnschedulableWithTimeout(testCtx.Ctx, testCtx.ClientSet, &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-3", Namespace: testCtx.NS.Name}}, 30*time.Second); err != nil {
 				t.Fatalf("pod-3 not unschedulable: %v", err)
 			}
 
-			// Reset the counter.
+			// 重置计数器。
 			plugin.queueingHintCalls.Store(0)
 
-			// Trigger a node label update event (matches the plugin's EventsToRegister).
+			// 触发节点标签更新事件（匹配插件的 EventsToRegister）。
 			nodeCopy := node.DeepCopy()
 			nodeCopy.Labels["some-label"] = "some-value"
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, nodeCopy, metav1.UpdateOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
-			// Wait for the scheduler to process the event.
+			// 等待调度器处理该事件。
 			err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
 				return plugin.queueingHintCalls.Load() == tt.wantHintCalls, nil
 			})

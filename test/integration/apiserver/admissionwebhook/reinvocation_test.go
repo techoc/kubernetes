@@ -63,12 +63,12 @@ rules:
 `
 )
 
-// TestWebhookReinvocationPolicyWithWatchCache ensures that the admission webhook reinvocation policy is applied correctly with the watch cache enabled.
+// TestWebhookReinvocationPolicyWithWatchCache 确保启用 watch cache 时，admission webhook 的重新调用策略被正确应用。
 func TestWebhookReinvocationPolicyWithWatchCache(t *testing.T) {
 	testWebhookReinvocationPolicy(t, true)
 }
 
-// TestWebhookReinvocationPolicyWithoutWatchCache ensures that the admission webhook reinvocation policy is applied correctly without the watch cache enabled.
+// TestWebhookReinvocationPolicyWithoutWatchCache 确保未启用 watch cache 时，admission webhook 的重新调用策略被正确应用。
 func TestWebhookReinvocationPolicyWithoutWatchCache(t *testing.T) {
 	testWebhookReinvocationPolicy(t, false)
 }
@@ -81,7 +81,7 @@ func patchAnnotationValue(configuration, webhook string, patch string) string {
 	return strings.Replace(fmt.Sprintf(`{"configuration": "%s", "webhook": "%s", "patch": %s, "patchType": "JSONPatch"}`, configuration, webhook, patch), " ", "", -1)
 }
 
-// testWebhookReinvocationPolicy ensures that the admission webhook reinvocation policy is applied correctly.
+// testWebhookReinvocationPolicy 确保 admission webhook 的重新调用策略被正确应用。
 func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 	reinvokeNever := admissionregistrationv1.NeverReinvocationPolicy
 	reinvokeIfNeeded := admissionregistrationv1.IfNeededReinvocationPolicy
@@ -103,9 +103,9 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 		expectAuditMutationAnnotations map[string]string
 		expectAuditPatchAnnotations    map[string]string
 	}{
-		{ // in-tree (mutation), webhook (no mutation), no reinvocation required
+		{ // in-tree（变更）、webhook（无变更），无需重新调用
 			name:                 "no reinvocation for in-tree only mutation",
-			initialPriorityClass: "low-priority", // trigger initial in-tree mutation
+			initialPriorityClass: "low-priority", // 触发初始的 in-tree 变更
 			webhooks: []testWebhook{
 				{path: "/noop", policy: &reinvokeIfNeeded},
 			},
@@ -114,9 +114,9 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				"mutation.webhook.admission.k8s.io/round_0_index_0": mutationAnnotationValue("admission.integration.test-0", "admission.integration.test.0.noop", false),
 			},
 		},
-		{ // in-tree (mutation), webhook (mutation), reinvoke in-tree (no-mutation), no webhook reinvocation required
+		{ // in-tree（变更）、webhook（变更）、重新调用 in-tree（无变更），无需重新调用 webhook
 			name:                 "no webhook reinvocation for webhook when no in-tree reinvocation mutations",
-			initialPriorityClass: "low-priority", // trigger initial in-tree mutation
+			initialPriorityClass: "low-priority", // 触发初始的 in-tree 变更
 			webhooks: []testWebhook{
 				{path: "/addlabel", policy: &reinvokeIfNeeded},
 			},
@@ -128,12 +128,12 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				"mutation.webhook.admission.k8s.io/round_0_index_0": mutationAnnotationValue("admission.integration.test-1", "admission.integration.test.0.addlabel", true),
 			},
 		},
-		{ // in-tree (mutation), webhook (mutation), reinvoke in-tree (mutation), webhook (no-mutation), both reinvoked
+		{ // in-tree（变更）、webhook（变更）、重新调用 in-tree（变更）、webhook（无变更），两者都被重新调用
 			name:                 "webhook is reinvoked after in-tree reinvocation",
-			initialPriorityClass: "low-priority", // trigger initial in-tree mutation
+			initialPriorityClass: "low-priority", // 触发初始的 in-tree 变更
 			webhooks: []testWebhook{
-				// Priority plugin is ordered to run before mutating webhooks
-				{path: "/setpriority", policy: &reinvokeIfNeeded}, // trigger in-tree reinvoke mutation
+				// Priority 插件被安排在 mutating webhook 之前运行
+				{path: "/setpriority", policy: &reinvokeIfNeeded}, // 触发 in-tree 重新调用时的变更
 			},
 			expectInvocations: map[string]int{"/setpriority": 2},
 			expectAuditPatchAnnotations: map[string]string{
@@ -144,9 +144,9 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				"mutation.webhook.admission.k8s.io/round_1_index_0": mutationAnnotationValue("admission.integration.test-2", "admission.integration.test.0.setpriority", false),
 			},
 		},
-		{ // in-tree (mutation), webhook A (mutation), webhook B (mutation), reinvoke in-tree (no-mutation), reinvoke webhook A (no-mutation), no reinvocation of webhook B required
+		{ // in-tree（变更）、webhook A（变更）、webhook B（变更）、重新调用 in-tree（无变更）、重新调用 webhook A（无变更），无需重新调用 webhook B
 			name:                 "no reinvocation of webhook B when in-tree or prior webhook mutations",
-			initialPriorityClass: "low-priority", // trigger initial in-tree mutation
+			initialPriorityClass: "low-priority", // 触发初始的 in-tree 变更
 			webhooks: []testWebhook{
 				{path: "/addlabel", policy: &reinvokeIfNeeded},
 				{path: "/conditionaladdlabel", policy: &reinvokeIfNeeded},
@@ -163,9 +163,9 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				"mutation.webhook.admission.k8s.io/round_1_index_0": mutationAnnotationValue("admission.integration.test-3", "admission.integration.test.0.addlabel", false),
 			},
 		},
-		{ // in-tree (mutation), webhook A (mutation), webhook B (mutation), reinvoke in-tree (no-mutation), reinvoke webhook A (mutation), reinvoke webhook B (mutation), both webhooks reinvoked
+		{ // in-tree（变更）、webhook A（变更）、webhook B（变更）、重新调用 in-tree（无变更）、重新调用 webhook A（变更）、重新调用 webhook B（变更），两个 webhook 都被重新调用
 			name:                 "all webhooks reinvoked when any webhook reinvocation causes mutation",
-			initialPriorityClass: "low-priority", // trigger initial in-tree mutation
+			initialPriorityClass: "low-priority", // 触发初始的 in-tree 变更
 			webhooks: []testWebhook{
 				{path: "/settrue", policy: &reinvokeIfNeeded},
 				{path: "/setfalse", policy: &reinvokeIfNeeded},
@@ -185,9 +185,9 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				"mutation.webhook.admission.k8s.io/round_1_index_1": mutationAnnotationValue("admission.integration.test-4", "admission.integration.test.1.setfalse", true),
 			},
 		},
-		{ // in-tree (mutation), webhook A is SKIPPED due to objectSelector not matching, webhook B (mutation), reinvoke in-tree (no-mutation), webhook A is SKIPPED even though the labels match now, because it's not called in the first round. No reinvocation of webhook B required
+		{ // in-tree（变更）、webhook A 因 objectSelector 不匹配而被跳过、webhook B（变更）、重新调用 in-tree（无变更）、webhook A 即使现在标签匹配也会被跳过（因为第一轮没有调用它），无需重新调用 webhook B
 			name:                 "no reinvocation of webhook B when in-tree or prior webhook mutations",
-			initialPriorityClass: "low-priority", // trigger initial in-tree mutation
+			initialPriorityClass: "low-priority", // 触发初始的 in-tree 变更
 			webhooks: []testWebhook{
 				{path: "/conditionaladdlabel", policy: &reinvokeIfNeeded, objectSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"a": "true"}}},
 				{path: "/addlabel", policy: &reinvokeIfNeeded},
@@ -204,7 +204,7 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 		{
 			name: "invalid priority class set by webhook should result in error from in-tree priority plugin",
 			webhooks: []testWebhook{
-				// Priority plugin is ordered to run before mutating webhooks
+				// Priority 插件被安排在 mutating webhook 之前运行
 				{path: "/setinvalidpriority", policy: &reinvokeIfNeeded},
 			},
 			expectError:       true,
@@ -264,7 +264,7 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 	webhookServer.StartTLS()
 	defer webhookServer.Close()
 
-	// prepare audit policy file
+	// 准备审计策略文件
 	policyFile, err := os.CreateTemp("", "audit-policy.yaml")
 	if err != nil {
 		t.Fatalf("Failed to create audit policy file: %v", err)
@@ -277,7 +277,7 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 		t.Fatalf("Failed to close audit policy file: %v", err)
 	}
 
-	// prepare audit log file
+	// 准备审计日志文件
 	logFile, err := os.CreateTemp("", "audit.log")
 	if err != nil {
 		t.Fatalf("Failed to create audit log file: %v", err)
@@ -294,10 +294,10 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 	}, framework.SharedEtcd())
 	defer s.TearDownFn()
 
-	// Configure a client with a distinct user name so that it is easy to distinguish requests
-	// made by the client from requests made by controllers. We use this to filter out requests
-	// before recording them to ensure we don't accidentally mistake requests from controllers
-	// as requests made by the client.
+	// 使用一个独特的用户名配置客户端，便于区分该客户端发起的请求
+	// 和控制器发起的请求。我们用它在记录请求之前先进行过滤，
+	// 以免不小心把控制器的请求误认为
+	// 是该客户端发起的请求。
 	clientConfig := rest.CopyConfig(s.ClientConfig)
 	clientConfig.Impersonate.UserName = testReinvocationClientUsername
 	clientConfig.Impersonate.Groups = []string{"system:masters", "system:authenticated"}
@@ -324,7 +324,7 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				t.Fatal(err)
 			}
 
-			// Write markers to a separate namespace to avoid cross-talk
+			// 将标记写入独立的命名空间，避免相互干扰
 			markerNs := ns + "-markers"
 			markerNsLabels := map[string]string{"test-markers": testCaseID}
 			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: markerNs, Labels: markerNsLabels}}, metav1.CreateOptions{})
@@ -332,7 +332,7 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				t.Fatal(err)
 			}
 
-			// Create a maker object to use to check for the webhook configurations to be ready.
+			// 创建一个标记对象，用于检查 webhook 配置是否已经就绪。
 			marker, err := client.CoreV1().Pods(markerNs).Create(context.TODO(), newReinvocationMarkerFixture(markerNs), metav1.CreateOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -361,7 +361,7 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 					SideEffects:             &noSideEffects,
 				})
 			}
-			// Register a marker checking webhook with each set of webhook configurations
+			// 为每组 webhook 配置注册一个用于检查标记的 webhook
 			markerEndpoint := webhookServer.URL + "/marker"
 			webhooks = append(webhooks, admissionregistrationv1.MutatingWebhook{
 				Name: "admission.integration.test.marker",
@@ -393,7 +393,7 @@ func testWebhookReinvocationPolicy(t *testing.T, watchCache bool) {
 				}
 			}()
 
-			// wait until new webhook is called the first time
+			// 等待新 webhook 第一次被调用
 			if err := wait.PollImmediate(time.Millisecond*5, wait.ForeverTestTimeout, func() (bool, error) {
 				_, err = client.CoreV1().Pods(markerNs).Patch(context.TODO(), marker.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 				select {
@@ -483,8 +483,8 @@ type invocationRecorder struct {
 	counts map[string]int
 }
 
-// Reset zeros out all counts and returns a channel that is closed when the first admission of the
-// marker object is received.
+// Reset 将所有计数清零，并返回一个 channel；当收到标记对象的
+// 第一次 admission 请求时，该 channel 会被关闭。
 func (i *invocationRecorder) Reset() chan struct{} {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -545,7 +545,7 @@ func newReinvokeWebhookHandler(recorder *invocationRecorder) http.Handler {
 			http.Error(w, err.Error(), 400)
 		}
 		if review.Request.UserInfo.Username != testReinvocationClientUsername {
-			// skip requests not originating from this integration test's client
+			// 跳过并非来自本集成测试客户端的请求
 			allow(w)
 			return
 		}
@@ -562,8 +562,8 @@ func newReinvokeWebhookHandler(recorder *invocationRecorder) http.Handler {
 
 		switch r.URL.Path {
 		case "/marker":
-			// When resetting between tests, a marker object is patched until this webhook
-			// observes it, at which point it is considered ready.
+			// 在测试之间重置时，会不断 patch 标记对象，直到该 webhook 观察到它，
+			// 此时即认为 webhook 已就绪。
 			recorder.MarkerReceived()
 			allow(w)
 			return
@@ -580,14 +580,14 @@ func newReinvokeWebhookHandler(recorder *invocationRecorder) http.Handler {
 				return
 			}
 			allow(w)
-		case "/conditionaladdlabel": // if 'a' is set, set 'b' to true
+		case "/conditionaladdlabel": // 如果设置了 'a'，则将 'b' 设为 true
 			labels := pod.GetLabels()
 			if _, ok := labels["a"]; ok {
 				patch(w, `[{"op": "add", "path": "/metadata/labels/b", "value": "true"}]`)
 				return
 			}
 			allow(w)
-		case "/setpriority": // sets /spec/priorityClassName to high-priority if it is not already set
+		case "/setpriority": // 如果尚未设置 /spec/priorityClassName，则将其设为 high-priority
 			if pod.Spec.PriorityClassName != "high-priority" {
 				if pod.Spec.Priority != nil {
 					patch(w, `[{"op": "add", "path": "/spec/priorityClassName", "value": "high-priority"},{"op": "remove", "path": "/spec/priority"}]`)

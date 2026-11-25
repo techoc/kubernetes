@@ -32,10 +32,10 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestServiceAllocPerformance measure the latency to create N services with a parallelism of K
-// using the old and the new ClusterIP allocators.
-// The test is skipped to run on CI and is left to execute manually to check for possible regressions.
-// The current results with 100 works and 15k services on a (n2-standard-48) vCPU: 48 RAM: 192 GB are:
+// TestServiceAllocPerformance 测量使用新旧 ClusterIP 分配器、
+// 以 K 的并行度创建 N 个 service 的延迟。
+// 该测试在 CI 上会跳过，需手动执行以检查是否存在性能回退。
+// 在 (n2-standard-48) vCPU: 48 RAM: 192 GB 上，100 个 worker 和 15k 个 service 的当前结果为：
 // legacy perf_test.go:139: [RESULT] Duration 1m9.646167533s: [quantile:0.5  value:0.462886801 quantile:0.9  value:0.496662838 quantile:0.99  value:0.725845905]
 // new perf_test.go:139: [RESULT] Duration 2m12.900694343s: [quantile:0.5  value:0.481814448 quantile:0.9  value:1.3867615469999999 quantile:0.99  value:1.888190671]
 func TestServiceAllocPerformance(t *testing.T) {
@@ -103,7 +103,7 @@ func TestServiceAllocPerformance(t *testing.T) {
 
 			legacyregistry.Reset()
 
-			// 100 workers for 15k services
+			// 用 100 个 worker 处理 15k 个 service
 			nworkers := 100
 			nservices := 150
 			jobs := make(chan int, nservices)

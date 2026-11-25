@@ -29,22 +29,22 @@ import (
 )
 
 func TestFieldsWipingConsistency(t *testing.T) {
-	// Each allowlist tracks pre-existing APIs that do not implement the expected
-	// field wiping behavior. DO NOT ADD NEW ENTRIES to any of these lists.
+	// 每个 allowlist 记录的是未实现预期字段擦除行为的既有 API。
+	// 请勿向这些列表添加新条目。
 
-	// APIs where creating via the main endpoint does not wipe status.
+	// 通过主端点创建时不会擦除 status 的 API。
 	createDoesNotWipeStatus := sets.New(
-		// Nodes allow all fields, including status, to be set on create.
+		// Node 允许在创建时设置所有字段，包括 status。
 		"nodes.v1",
 	)
 
-	// APIs where updating via the /status endpoint does not wipe metadata.
-	// All new APIs should use ResetObjectMetaForStatus.
+	// 通过 /status 端点更新时不会擦除 metadata 的 API。
+	// 所有新 API 都应使用 ResetObjectMetaForStatus。
 	statusDoesNotWipeMetadata := sets.New(
 		// https://github.com/kubernetes/kubernetes/issues/137681
 		"customresourcedefinitions.v1.apiextensions.k8s.io",
 
-		// APIs that do not use ResetObjectMetaForStatus:
+		// 未使用 ResetObjectMetaForStatus 的 API：
 		"certificatesigningrequests.v1.certificates.k8s.io",
 		"cronjobs.v1.batch",
 		"daemonsets.v1.apps",
@@ -79,16 +79,16 @@ func TestFieldsWipingConsistency(t *testing.T) {
 
 		rsc := api.ResourceClient()
 
-		// Create the resource and check if status is wiped on create.
+		// 创建资源并检查创建时 status 是否被擦除。
 		created, err := rsc.Apply(context.TODO(), name, obj, metav1.ApplyOptions{FieldManager: "spec-manager"})
 		if err != nil {
 			t.Fatalf("Failed to create via SSA: %v", err)
 		}
 		createWipesStatus := !checkPatch(t, status, "status", created.Object)
 
-		// Infer main-endpoint GetResetFields behavior from the created object's
-		// managedFields, before the status apply below (Force: true) steals
-		// ownership of the status fields and destroys the evidence.
+		// 从创建出的对象的 managedFields 推断主端点的 GetResetFields 行为，
+		// 要在下面的 status apply（Force: true）抢占 status 字段所有权
+		// 并破坏证据之前完成。
 		ssaMainResetsStatus := true
 		for _, mf := range created.GetManagedFields() {
 			if mf.Manager == "spec-manager" && mf.Subresource == "" {
@@ -96,7 +96,7 @@ func TestFieldsWipingConsistency(t *testing.T) {
 			}
 		}
 
-		// Apply to /status endpoint with mutated spec, status and metadata field changes.
+		// 使用修改后的 spec、status 和 metadata 字段 apply 到 /status 端点。
 		statusObj := TestObj(t, api.StorageData.Stub, status, api.Mapping.GroupVersionKind)
 		if api.StorageData.MutatedStub != "" {
 			if err := json.Unmarshal([]byte(api.StorageData.MutatedStub), &statusObj.Object); err != nil {
@@ -115,7 +115,7 @@ func TestFieldsWipingConsistency(t *testing.T) {
 			t.Fatalf("Failed to apply status via SSA: %v", err)
 		}
 
-		// Read after writing to observe field wiping behavior and managedField state.
+		// 写入后读取，以观察字段擦除行为和 managedField 状态。
 		baseline, err := rsc.Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Failed to get baseline: %v", err)
@@ -123,7 +123,7 @@ func TestFieldsWipingConsistency(t *testing.T) {
 		baselineStatus := baseline.Object["status"]
 		baselineSpec := baseline.Object["spec"]
 
-		// Infer GetResetFields behavior from managedFields.
+		// 从 managedFields 推断 GetResetFields 行为。
 		ssaStatusResetsSpec := true
 		ssaStatusResetsMetadata := true
 		for _, mf := range baseline.GetManagedFields() {
@@ -133,7 +133,7 @@ func TestFieldsWipingConsistency(t *testing.T) {
 			}
 		}
 
-		// Check / PrepareForUpdate status wiping
+		// 检查 / PrepareForUpdate 的 status 擦除
 		var mainWipesStatus bool
 		if baselineStatus != nil {
 			differentStatus := api.StorageData.GetMutatedStatusStub()
@@ -146,7 +146,7 @@ func TestFieldsWipingConsistency(t *testing.T) {
 			mainWipesStatus = true
 		}
 
-		// Check /status PrepareForUpdate spec wiping
+		// 检查 /status PrepareForUpdate 的 spec 擦除
 		var statusWipesSpec bool
 		differentSpec := api.StorageData.MutatedStub
 		if baselineSpec != nil && differentSpec != "" {
@@ -163,7 +163,7 @@ func TestFieldsWipingConsistency(t *testing.T) {
 			statusWipesSpec = true
 		}
 
-		// Check /status PrepareForUpdate metadata wiping
+		// 检查 /status PrepareForUpdate 的 metadata 擦除
 		var statusWipesMetadata bool
 		labelPatch := []byte(`{"metadata": {"labels": {"test-wipe-label": "test-value"}}}`)
 		result, err := rsc.Patch(context.TODO(), name, types.MergePatchType, labelPatch, metav1.PatchOptions{}, "status")
@@ -182,10 +182,10 @@ func TestFieldsWipingConsistency(t *testing.T) {
 			t.Errorf("Status endpoint: SSA ResetMetadata (%v) and PrepareForUpdate wipeMetadata (%v) behaviors do not match.", ssaStatusResetsMetadata, statusWipesMetadata)
 		}
 
-		// Enforce field wiping behaviors, with allowlists for pre-existing exceptions.
+		// 强制校验字段擦除行为，并通过 allowlist 豁免既有例外。
 		assertWiped(t, api.Mapping.Resource, "create must wipe status", createWipesStatus, createDoesNotWipeStatus)
-		assertWiped(t, api.Mapping.Resource, "update must wipe status", mainWipesStatus, sets.New[string]())      // No exemptions exist for this, please do not add any in the future.
-		assertWiped(t, api.Mapping.Resource, "status update must wipe spec", statusWipesSpec, sets.New[string]()) // No exemptions exist for this, please do not add any in the future.
+		assertWiped(t, api.Mapping.Resource, "update must wipe status", mainWipesStatus, sets.New[string]())      // 此项没有豁免，今后也不要添加。
+		assertWiped(t, api.Mapping.Resource, "status update must wipe spec", statusWipesSpec, sets.New[string]()) // 此项没有豁免，今后也不要添加。
 		assertWiped(t, api.Mapping.Resource, "status update must wipe metadata", statusWipesMetadata, statusDoesNotWipeMetadata)
 
 		if err := rsc.Delete(context.TODO(), name, *metav1.NewDeleteOptions(0)); err != nil {
@@ -194,8 +194,8 @@ func TestFieldsWipingConsistency(t *testing.T) {
 	})
 }
 
-// checkPatch checks if field values under fieldScope (e.g. spec, status, metdata) in objData match the values
-// in the applyManifest.
+// checkPatch 检查 objData 中 fieldScope（例如 spec、status、metdata）下的字段值
+// 是否与 applyManifest 中的值一致。
 func checkPatch(t *testing.T, applyManifest string, fieldScope string, objData map[string]interface{}) bool {
 	t.Helper()
 	var applyObj map[string]interface{}
@@ -213,7 +213,7 @@ func checkPatch(t *testing.T, applyManifest string, fieldScope string, objData m
 	return containsAll(applyValue, objValue)
 }
 
-// managedFieldsOwnTopLevelField checks whether a FieldsV1 set contains a given top-level field.
+// managedFieldsOwnTopLevelField 检查 FieldsV1 集合是否包含给定的顶层字段。
 func managedFieldsOwnTopLevelField(t *testing.T, fieldsV1 *metav1.FieldsV1, field string) bool {
 	t.Helper()
 	if fieldsV1 == nil {
@@ -228,7 +228,7 @@ func managedFieldsOwnTopLevelField(t *testing.T, fieldsV1 *metav1.FieldsV1, fiel
 	return ok
 }
 
-// assertWiped checks that a field wiping behavior holds, with an allowlist for known exceptions.
+// assertWiped 检查字段擦除行为是否成立，并通过 allowlist 豁免已知例外。
 func assertWiped(t *testing.T, gvr schema.GroupVersionResource, msg string, wiped bool, allowed sets.Set[string]) {
 	t.Helper()
 	name := ResourceString(gvr)
@@ -243,7 +243,7 @@ func assertWiped(t *testing.T, gvr schema.GroupVersionResource, msg string, wipe
 	}
 }
 
-// managedFieldsOwnLabel checks whether a FieldsV1 set contains a metadata label.
+// managedFieldsOwnLabel 检查 FieldsV1 集合是否包含某个 metadata label。
 func managedFieldsOwnLabel(t *testing.T, fieldsV1 *metav1.FieldsV1, labelKey string) bool {
 	t.Helper()
 	if fieldsV1 == nil {

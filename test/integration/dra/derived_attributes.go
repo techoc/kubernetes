@@ -30,12 +30,12 @@ func testDerivedAttributes(tCtx ktesting.TContext) {
 	tCtx.Parallel()
 	namespace := createTestNamespace(tCtx, nil)
 
-	// 1. Create two distinct device classes and drivers to match our allocator test.
+	// 1. 创建两个不同的 device class 和 driver，以匹配我们的 allocator 测试。
 	classA, driverA := createTestClass(tCtx, namespace+"-a")
 	classB, driverB := createTestClass(tCtx, namespace+"-b")
 
-	// 2. Create ResourceSlices on worker-0 for both drivers.
-	// Driver A has two devices:
+	// 2. 为两个 driver 在 worker-0 上创建 ResourceSlice。
+	// Driver A 有两个设备：
 	// - device-a1 (numa: numa-0)
 	// - device-a2 (numa: numa-1)
 	sliceA := st.MakeResourceSlice("worker-0", driverA).
@@ -47,7 +47,7 @@ func testDerivedAttributes(tCtx ktesting.TContext) {
 		})
 	createSlice(tCtx, sliceA.Obj())
 
-	// Driver B has two devices:
+	// Driver B 有两个设备：
 	// - device-b1 (numaNode: numa-1)
 	// - device-b2 (numaNode: numa-2)
 	sliceB := st.MakeResourceSlice("worker-0", driverB).
@@ -59,13 +59,13 @@ func testDerivedAttributes(tCtx ktesting.TContext) {
 		})
 	createSlice(tCtx, sliceB.Obj())
 
-	// 3. Start the scheduler and claim controller.
+	// 3. 启动 scheduler 和 claim controller。
 	startScheduler(tCtx)
 	startClaimController(tCtx)
 
-	// 4. Construct the ResourceClaim with DerivedAttributes and a MatchAttribute constraint.
-	// Both requests must align on the virtual "sharedNumaNode" grouping key.
-	// Since device-a2 and device-b1 both resolve to "numa-1", the allocator should co-allocate them.
+	// 4. 构造带有 DerivedAttributes 和 MatchAttribute 约束的 ResourceClaim。
+	// 两个 request 必须在虚拟的 "sharedNumaNode" 分组键上保持一致。
+	// 由于 device-a2 和 device-b1 都解析为 "numa-1"，allocator 应将它们一起分配。
 	claimName := "derived-attributes-claim"
 	claimObj := st.MakeResourceClaim().
 		Name(claimName).
@@ -116,17 +116,17 @@ func testDerivedAttributes(tCtx ktesting.TContext) {
 	claim, err := tCtx.Client().ResourceV1().ResourceClaims(namespace).Create(tCtx, claimObj, metav1.CreateOptions{})
 	tCtx.ExpectNoError(err, "create claim")
 
-	// 5. Create a pod referencing this claim.
+	// 5. 创建引用该 claim 的 Pod。
 	pod := st.MakePod().Name("derived-attributes-pod").Namespace(namespace).
 		Container("container").
 		PodResourceClaims(v1.PodResourceClaim{Name: "my-claim", ResourceClaimName: &claim.Name}).
 		Obj()
 	createPod(tCtx, namespace, "", pod, claim)
 
-	// 6. Verify that the pod is successfully scheduled.
+	// 6. 验证 Pod 是否调度成功。
 	waitForPodScheduled(tCtx, namespace, pod.Name)
 
-	// 7. Verify that the claim is allocated to the correct devices (device-a2 and device-b1).
+	// 7. 验证 claim 被分配到了正确的设备（device-a2 和 device-b1）。
 	allocatedClaim := waitForClaimAllocatedToDevice(tCtx, namespace, claim.Name, schedulingTimeout)
 	require.NotNil(tCtx, allocatedClaim.Status.Allocation)
 
@@ -141,7 +141,7 @@ func testDerivedAttributes(tCtx ktesting.TContext) {
 	require.Equal(tCtx, "device-b1", results[1].Device)
 }
 
-// sortResults sorts results by Request name so assertion is deterministic.
+// sortResults 按 Request 名称对结果排序，使断言结果确定。
 func sortResults(results []resourceapi.DeviceRequestAllocationResult) {
 	for i := 0; i < len(results)-1; i++ {
 		for j := i + 1; j < len(results); j++ {

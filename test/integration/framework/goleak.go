@@ -26,25 +26,23 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 )
 
-// IgnoreBackgroundGoroutines returns options for goleak.Find
-// which ignore goroutines created by "go test" and init functions,
-// like the one from go.opencensus.io/stats/view/worker.go.
+// IgnoreBackgroundGoroutines 返回 goleak.Find 的选项，
+// 用于忽略由 "go test" 和 init 函数创建的 goroutine，
+// 例如来自 go.opencensus.io/stats/view/worker.go 的那个。
 //
-// Goroutines that normally get created later when using the apiserver
-// get created already when calling this function, therefore they
-// also get ignored.
+// 通常在使用 apiserver 时较晚才会创建的 goroutine，
+// 在调用此函数时就已经创建好了，因此它们也会被忽略。
 func IgnoreBackgroundGoroutines() []goleak.Option {
-	// Ensure that on-demand goroutines are running.
+	// 确保按需创建的 goroutine 正在运行。
 	_ = healthz.LogHealthz.Check(nil)
 
 	return []goleak.Option{goleak.IgnoreCurrent()}
 }
 
-// GoleakCheck sets up leak checking for a test or benchmark.
-// The check runs as cleanup operation and records an
-// error when goroutines were leaked.
+// GoleakCheck 为测试或基准测试设置 goroutine 泄漏检查。
+// 该检查作为清理操作运行，当发生 goroutine 泄漏时会记录错误。
 func GoleakCheck(tb testing.TB, opts ...goleak.Option) {
-	// Must be called *before* creating new goroutines.
+	// 必须在创建新 goroutine *之前* 调用。
 	opts = append(opts, IgnoreBackgroundGoroutines()...)
 
 	tb.Cleanup(func() {
@@ -55,9 +53,9 @@ func GoleakCheck(tb testing.TB, opts ...goleak.Option) {
 }
 
 func goleakFindRetry(opts ...goleak.Option) error {
-	// Several tests don't wait for goroutines to stop. goleak.Find retries
-	// internally, but not long enough. 600 seconds seemed to be enough for
-	// most tests, even when testing in the CI.
+	// 有些测试不会等待 goroutine 停止。goleak.Find 内部会重试，
+	// 但时间不够长。600 秒对大多数测试来说似乎足够，
+	// 即使是在 CI 中运行测试时也是如此。
 	timeout := 600 * time.Second
 	start := time.Now()
 	for {
@@ -65,7 +63,7 @@ func goleakFindRetry(opts ...goleak.Option) error {
 		if err == nil {
 			return nil
 		}
-		runtime.GC() // let cleanups run, i.e. those associated with tlsTransportCache in client-go
+		runtime.GC() // 让清理操作得以运行，例如与 client-go 中 tlsTransportCache 关联的清理
 		if time.Now().Sub(start) >= timeout {
 			return err
 		}

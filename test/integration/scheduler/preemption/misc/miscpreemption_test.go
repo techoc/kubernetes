@@ -48,7 +48,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// imported from testutils
+// 从 testutils 导入
 var (
 	initPausePod                    = testutils.InitPausePod
 	createNode                      = testutils.CreateNode
@@ -67,10 +67,10 @@ var (
 
 var lowPriority, mediumPriority, highPriority = int32(100), int32(200), int32(300)
 
-// TestNonPreemption tests NonPreempt option of PriorityClass of scheduler works as expected.
+// TestNonPreemption 测试调度器的 PriorityClass 的 NonPreempt 选项是否按预期工作。
 func TestNonPreemption(t *testing.T) {
 	var preemptNever = v1.PreemptNever
-	// Initialize scheduler.
+	// 初始化调度器。
 	testCtx := initTest(t, "non-preemption")
 	cs := testCtx.ClientSet
 	tests := []struct {
@@ -106,7 +106,7 @@ func TestNonPreemption(t *testing.T) {
 		},
 	})
 
-	// Create a node with some resources
+	// 创建一个带有一些资源的节点
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
 		v1.ResourceCPU:    "500m",
@@ -138,9 +138,9 @@ func TestNonPreemption(t *testing.T) {
 				}
 
 				err = testutils.WaitForNominatedNodeNameWithTimeout(testCtx.Ctx, cs, preemptorPod, 5*time.Second)
-				// test.PreemptionPolicy == nil means we expect the preemptor to be nominated.
+				// test.PreemptionPolicy == nil 表示期望抢占者获得提名。
 				expect := test.PreemptionPolicy == nil
-				// err == nil indicates the preemptor is indeed nominated.
+				// err == nil 表示抢占者确实获得了提名。
 				got := err == nil
 				if got != expect {
 					t.Errorf("Expect preemptor to be nominated=%v, but got=%v", expect, got)
@@ -150,9 +150,9 @@ func TestNonPreemption(t *testing.T) {
 	}
 }
 
-// TestDisablePreemption tests disable pod preemption of scheduler works as expected.
+// TestDisablePreemption 测试调度器禁用 Pod 抢占的功能是否按预期工作。
 func TestDisablePreemption(t *testing.T) {
-	// Initialize scheduler, and disable preemption.
+	// 初始化调度器，并禁用抢占。
 	testCtx := initTestDisablePreemption(t, "disable-preemption")
 	cs := testCtx.ClientSet
 
@@ -186,7 +186,7 @@ func TestDisablePreemption(t *testing.T) {
 		},
 	}
 
-	// Create a node with some resources
+	// 创建一个带有一些资源的节点
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
 		v1.ResourceCPU:    "500m",
@@ -203,29 +203,29 @@ func TestDisablePreemption(t *testing.T) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerAsyncPreemption, asyncPreemptionEnabled)
 
 				pods := make([]*v1.Pod, len(test.existingPods))
-				// Create and run existingPods.
+				// 创建并运行 existingPods。
 				for i, p := range test.existingPods {
 					pods[i], err = runPausePod(cs, p)
 					if err != nil {
 						t.Fatalf("Test [%v]: Error running pause pod: %v", test.name, err)
 					}
 				}
-				// Create the "pod".
+				// 创建该 Pod。
 				preemptor, err := createPausePod(cs, test.pod)
 				if err != nil {
 					t.Errorf("Error while creating high priority pod: %v", err)
 				}
-				// Ensure preemptor should keep unschedulable.
+				// 确保抢占者保持不可调度状态。
 				if err := waitForPodUnschedulable(testCtx.Ctx, cs, preemptor); err != nil {
 					t.Errorf("Preemptor %v should not become scheduled", preemptor.Name)
 				}
 
-				// Ensure preemptor should not be nominated.
+				// 确保抢占者不会获得提名。
 				if err := testutils.WaitForNominatedNodeNameWithTimeout(testCtx.Ctx, cs, preemptor, 5*time.Second); err == nil {
 					t.Errorf("Preemptor %v should not be nominated", preemptor.Name)
 				}
 
-				// Cleanup
+				// 清理
 				pods = append(pods, preemptor)
 				testutils.CleanupPods(testCtx.Ctx, cs, t, pods)
 			})
@@ -233,13 +233,13 @@ func TestDisablePreemption(t *testing.T) {
 	}
 }
 
-// This test verifies that system critical priorities are created automatically and resolved properly.
+// 该测试验证系统关键优先级会被自动创建并正确解析。
 func TestPodPriorityResolution(t *testing.T) {
 	admission := priority.NewPlugin()
 	testCtx := testutils.InitTestScheduler(t, testutils.InitTestAPIServer(t, "preemption", admission))
 	cs := testCtx.ClientSet
 
-	// Build clientset and informers for controllers.
+	// 为控制器构建 clientset 和 informer。
 	externalClientConfig := restclient.CopyConfig(testCtx.KubeConfig)
 	externalClientConfig.QPS = -1
 	externalClientset := clientset.NewForConfigOrDie(externalClientConfig)
@@ -247,12 +247,12 @@ func TestPodPriorityResolution(t *testing.T) {
 	admission.SetExternalKubeClientSet(externalClientset)
 	admission.SetExternalKubeInformerFactory(externalInformers)
 
-	// Waiting for all controllers to sync
+	// 等待所有控制器完成同步
 	testutils.SyncSchedulerInformerFactory(testCtx)
 	externalInformers.Start(testCtx.Ctx.Done())
 	externalInformers.WaitForCacheSync(testCtx.Ctx.Done())
 
-	// Run all controllers
+	// 运行所有控制器
 	go testCtx.Scheduler.Run(testCtx.Ctx)
 
 	tests := []struct {
@@ -295,7 +295,7 @@ func TestPodPriorityResolution(t *testing.T) {
 		},
 	}
 
-	// Create a node with some resources
+	// 创建一个带有一些资源的节点
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
 		v1.ResourceCPU:    "500m",
@@ -353,11 +353,11 @@ func mkPriorityPodWithGrace(tc *testutils.TestContext, name string, priority int
 	return pod
 }
 
-// This test ensures that while the preempting pod is waiting for the victims to
-// terminate, other pending lower priority pods are not scheduled in the room created
-// after preemption and while the higher priority pods is not scheduled yet.
+// 该测试确保当抢占中的 Pod 等待被驱逐者终止时，
+// 其他待调度的低优先级 Pod 不会占用抢占后腾出的空间，
+// 且高优先级 Pod 尚未被调度。
 func TestPreemptionStarvation(t *testing.T) {
-	// Initialize scheduler.
+	// 初始化调度器。
 	testCtx := initTest(t, "preemption")
 	cs := testCtx.ClientSet
 
@@ -368,9 +368,9 @@ func TestPreemptionStarvation(t *testing.T) {
 		preemptor          *v1.Pod
 	}{
 		{
-			// This test ensures that while the preempting pod is waiting for the victims
-			// terminate, other lower priority pods are not scheduled in the room created
-			// after preemption and while the higher priority pods is not scheduled yet.
+			// 该测试确保当抢占中的 Pod 等待被驱逐者终止时，
+			// 其他低优先级 Pod 不会占用抢占后腾出的空间，
+			// 且高优先级 Pod 尚未被调度。
 			name:               "starvation test: higher priority pod is scheduled before the lower priority ones",
 			numExistingPod:     10,
 			numExpectedPending: 5,
@@ -386,7 +386,7 @@ func TestPreemptionStarvation(t *testing.T) {
 		},
 	}
 
-	// Create a node with some resources
+	// 创建一个带有一些资源的节点
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
 		v1.ResourceCPU:    "500m",
@@ -409,52 +409,52 @@ func TestPreemptionStarvation(t *testing.T) {
 					pendingPods := make([]*v1.Pod, test.numExpectedPending)
 					numRunningPods := test.numExistingPod - test.numExpectedPending
 					runningPods := make([]*v1.Pod, numRunningPods)
-					// Create and run existingPods.
+					// 创建并运行 existingPods。
 					for i := range numRunningPods {
 						runningPods[i], err = createPausePod(cs, mkPriorityPodWithGrace(testCtx, fmt.Sprintf("rpod-%v", i), mediumPriority, 0))
 						if err != nil {
 							t.Fatalf("Error creating pause pod: %v", err)
 						}
 					}
-					// make sure that runningPods are all scheduled.
+					// 确保 runningPods 都已被调度。
 					for _, p := range runningPods {
 						if err := testutils.WaitForPodToSchedule(testCtx.Ctx, cs, p); err != nil {
 							t.Fatalf("Pod %v/%v didn't get scheduled: %v", p.Namespace, p.Name, err)
 						}
 					}
-					// Create pending pods.
+					// 创建待调度的 Pod。
 					for i := 0; i < test.numExpectedPending; i++ {
 						pendingPods[i], err = createPausePod(cs, mkPriorityPodWithGrace(testCtx, fmt.Sprintf("ppod-%v", i), mediumPriority, 0))
 						if err != nil {
 							t.Fatalf("Error creating pending pod: %v", err)
 						}
 					}
-					// Make sure that all pending pods are being marked unschedulable.
+					// 确保所有待调度的 Pod 都被标记为不可调度。
 					for _, p := range pendingPods {
 						if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, wait.ForeverTestTimeout, false,
 							podUnschedulable(cs, p.Namespace, p.Name)); err != nil {
 							t.Errorf("Pod %v/%v didn't get marked unschedulable: %v", p.Namespace, p.Name, err)
 						}
 					}
-					// Create the preemptor.
+					// 创建抢占者。
 					preemptor, err := createPausePod(cs, test.preemptor)
 					if err != nil {
 						t.Errorf("Error while creating the preempting pod: %v", err)
 					}
 
-					// Make sure that preemptor is scheduled after preemptions.
+					// 确保抢占完成后抢占者被调度。
 					if err := testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, cs, preemptor, 60*time.Second); err != nil {
 						t.Errorf("Preemptor pod %v didn't get scheduled: %v", preemptor.Name, err)
 					}
 
-					// Check if .status.nominatedNodeName of the preemptor pod gets set when feature gate is disabled.
-					// This test always expects preemption to occur since numExistingPod (10) fills the node completely.
+					// 检查当 feature gate 禁用时，抢占者 Pod 的 .status.nominatedNodeName 是否被设置。
+					// 由于 numExistingPod（10）占满了节点，该测试总是预期发生抢占。
 					if !clearingNominatedNodeNameAfterBinding {
 						if err := testutils.WaitForNominatedNodeName(testCtx.Ctx, cs, preemptor); err != nil {
 							t.Errorf(".status.nominatedNodeName was not set for pod %v/%v: %v", preemptor.Namespace, preemptor.Name, err)
 						}
 					}
-					// Cleanup
+					// 清理
 					klog.Info("Cleaning up all pods...")
 					allPods := pendingPods
 					allPods = append(allPods, runningPods...)
@@ -466,24 +466,23 @@ func TestPreemptionStarvation(t *testing.T) {
 	}
 }
 
-// TestPreemptionRaces tests that other scheduling events and operations do not
-// race with the preemption process.
+// TestPreemptionRaces 测试其他调度事件和操作不会与抢占过程产生竞态。
 func TestPreemptionRaces(t *testing.T) {
-	// Initialize scheduler.
+	// 初始化调度器。
 	testCtx := initTest(t, "preemption-race")
 	cs := testCtx.ClientSet
 
 	tests := []struct {
 		name              string
-		numInitialPods    int // Pods created and executed before running preemptor
-		numAdditionalPods int // Pods created after creating the preemptor
-		numRepetitions    int // Repeat the tests to check races
+		numInitialPods    int // 在运行抢占者之前创建并运行的 Pod
+		numAdditionalPods int // 创建抢占者之后创建的 Pod
+		numRepetitions    int // 重复测试以检查竞态
 		preemptor         *v1.Pod
 	}{
 		{
-			// This test ensures that while the preempting pod is waiting for the victims
-			// terminate, other lower priority pods are not scheduled in the room created
-			// after preemption and while the higher priority pods is not scheduled yet.
+			// 该测试确保当抢占中的 Pod 等待被驱逐者终止时，
+			// 其他低优先级 Pod 不会占用抢占后腾出的空间，
+			// 且高优先级 Pod 尚未被调度。
 			name:              "ensures that other pods are not scheduled while preemptor is being marked as nominated (issue #72124)",
 			numInitialPods:    2,
 			numAdditionalPods: 20,
@@ -500,7 +499,7 @@ func TestPreemptionRaces(t *testing.T) {
 		},
 	}
 
-	// Create a node with some resources
+	// 创建一个带有一些资源的节点
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "100",
 		v1.ResourceCPU:    "5000m",
@@ -526,20 +525,20 @@ func TestPreemptionRaces(t *testing.T) {
 					for n := 0; n < test.numRepetitions; n++ {
 						initialPods := make([]*v1.Pod, test.numInitialPods)
 						additionalPods := make([]*v1.Pod, test.numAdditionalPods)
-						// Create and run existingPods.
+						// 创建并运行 existingPods。
 						for i := 0; i < test.numInitialPods; i++ {
 							initialPods[i], err = createPausePod(cs, mkPriorityPodWithGrace(testCtx, fmt.Sprintf("rpod-%v", i), mediumPriority, 0))
 							if err != nil {
 								t.Fatalf("Error creating pause pod: %v", err)
 							}
 						}
-						// make sure that initial Pods are all scheduled.
+						// 确保初始的 Pod 都已被调度。
 						for _, p := range initialPods {
 							if err := testutils.WaitForPodToSchedule(testCtx.Ctx, cs, p); err != nil {
 								t.Fatalf("Pod %v/%v didn't get scheduled: %v", p.Namespace, p.Name, err)
 							}
 						}
-						// Create the preemptor.
+						// 创建抢占者。
 						klog.Info("Creating the preemptor pod...")
 						preemptor, err := createPausePod(cs, test.preemptor)
 						if err != nil {
@@ -553,12 +552,12 @@ func TestPreemptionRaces(t *testing.T) {
 								t.Fatalf("Error creating pending pod: %v", err)
 							}
 						}
-						// Make sure that preemptor is scheduled after preemptions.
+						// 确保抢占完成后抢占者被调度。
 						if err := testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, cs, preemptor, 60*time.Second); err != nil {
 							t.Errorf("Preemptor pod %v didn't get scheduled: %v", preemptor.Name, err)
 						}
 
-						// Check that the preemptor pod gets nominated node name when feature gate is disabled.
+						// 检查当 feature gate 禁用时，抢占者 Pod 是否获得提名节点名称。
 						if !clearingNominatedNodeNameAfterBinding {
 							if err := testutils.WaitForNominatedNodeName(testCtx.Ctx, cs, preemptor); err != nil {
 								t.Errorf(".status.nominatedNodeName was not set for pod %v/%v: %v", preemptor.Namespace, preemptor.Name, err)
@@ -579,7 +578,7 @@ func TestPreemptionRaces(t *testing.T) {
 								t.Errorf("Pod %v/%v is no longer unschedulable: %v", p.Namespace, p.Name, err)
 							}
 						}
-						// Cleanup
+						// 清理
 						klog.Info("Cleaning up all pods...")
 						allPods := additionalPods
 						allPods = append(allPods, initialPods...)
@@ -618,9 +617,9 @@ func addPodConditionReady(pod *v1.Pod) {
 	}
 }
 
-// TestPDBInPreemption tests PodDisruptionBudget support in preemption.
+// TestPDBInPreemption 测试抢占过程中对 PodDisruptionBudget 的支持。
 func TestPDBInPreemption(t *testing.T) {
-	// Initialize scheduler.
+	// 初始化调度器。
 	testCtx := initTest(t, "preemption-pdb")
 	cs := testCtx.ClientSet
 
@@ -794,7 +793,7 @@ func TestPDBInPreemption(t *testing.T) {
 					v1.ResourceMemory: *resource.NewQuantity(400, resource.DecimalSI)},
 				},
 			}),
-			// The third node is chosen because PDB is not violated for node 3 and the victims have lower priority than node-2.
+			// 选择第三个节点是因为在 node 3 上不会违反 PDB，且其牺牲者的优先级低于 node-2 上的。
 			preemptedPodIndexes: map[int]struct{}{4: {}, 5: {}, 6: {}},
 		},
 	}
@@ -818,40 +817,40 @@ func TestPDBInPreemption(t *testing.T) {
 
 					pods := make([]*v1.Pod, len(test.existingPods))
 					var err error
-					// Create and run existingPods.
+					// 创建并运行 existingPods。
 					for i, p := range test.existingPods {
 						if pods[i], err = runPausePod(cs, p); err != nil {
 							t.Fatalf("Test [%v]: Error running pause pod: %v", test.name, err)
 						}
-						// Add pod condition ready so that PDB is updated.
+						// 添加 Pod 的 Ready 条件，以便 PDB 得到更新。
 						addPodConditionReady(p)
 						if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).UpdateStatus(testCtx.Ctx, p, metav1.UpdateOptions{}); err != nil {
 							t.Fatal(err)
 						}
 					}
-					// Wait for Pods to be stable in scheduler cache.
+					// 等待 Pod 在调度器缓存中稳定下来。
 					if err := waitCachedPodsStable(testCtx, test.existingPods); err != nil {
 						t.Fatalf("Not all pods are stable in the cache: %v", err)
 					}
 
-					// Create PDBs.
+					// 创建 PDB。
 					for _, pdb := range test.pdbs {
 						_, err := testCtx.ClientSet.PolicyV1().PodDisruptionBudgets(testCtx.NS.Name).Create(testCtx.Ctx, pdb, metav1.CreateOptions{})
 						if err != nil {
 							t.Fatalf("Failed to create PDB: %v", err)
 						}
 					}
-					// Wait for PDBs to become stable.
+					// 等待 PDB 稳定下来。
 					if err := waitForPDBsStable(testCtx, test.pdbs, test.pdbPodNum); err != nil {
 						t.Fatalf("Not all pdbs are stable in the cache: %v", err)
 					}
 
-					// Create the "pod".
+					// 创建该 Pod。
 					preemptor, err := createPausePod(cs, test.pod)
 					if err != nil {
 						t.Errorf("Error while creating high priority pod: %v", err)
 					}
-					// Wait for preemption of pods and make sure the other ones are not preempted.
+					// 等待 Pod 被抢占，并确保其他 Pod 没有被抢占。
 					for i, p := range pods {
 						if _, found := test.preemptedPodIndexes[i]; found {
 							if err = wait.PollUntilContextTimeout(testCtx.Ctx, time.Second, wait.ForeverTestTimeout, false,
@@ -864,14 +863,14 @@ func TestPDBInPreemption(t *testing.T) {
 							}
 						}
 					}
-					// Also check if .status.nominatedNodeName of the preemptor pod gets set.
+					// 同时检查抢占者 Pod 的 .status.nominatedNodeName 是否被设置。
 					if len(test.preemptedPodIndexes) > 0 && !clearingNominatedNodeNameAfterBinding {
 						if err := testutils.WaitForNominatedNodeName(testCtx.Ctx, cs, preemptor); err != nil {
 							t.Errorf("Test [%v]: .status.nominatedNodeName was not set for pod %v/%v: %v", test.name, preemptor.Namespace, preemptor.Name, err)
 						}
 					}
 
-					// Cleanup
+					// 清理
 					pods = append(pods, preemptor)
 					testutils.CleanupPods(testCtx.Ctx, cs, t, pods)
 					if err := cs.PolicyV1().PodDisruptionBudgets(testCtx.NS.Name).DeleteCollection(testCtx.Ctx, metav1.DeleteOptions{}, metav1.ListOptions{}); err != nil {
@@ -886,8 +885,7 @@ func TestPDBInPreemption(t *testing.T) {
 	}
 }
 
-// TestReadWriteOncePodPreemption tests preemption scenarios for pods with
-// ReadWriteOncePod PVCs.
+// TestReadWriteOncePodPreemption 测试使用 ReadWriteOncePod PVC 的 Pod 的抢占场景。
 func TestReadWriteOncePodPreemption(t *testing.T) {
 	cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 		Profiles: []configv1.KubeSchedulerProfile{{
@@ -927,7 +925,7 @@ func TestReadWriteOncePodPreemption(t *testing.T) {
 	pvc1 := st.MakePersistentVolumeClaim().
 		Name("pvc-with-read-write-once-pod-1").
 		Namespace(testCtx.NS.Name).
-		// Annotation and volume name required for PVC to be considered bound.
+		// PVC 被视为已绑定所需的注解和卷名。
 		Annotation(volume.AnnBindCompleted, "true").
 		VolumeName(pv1.Name).
 		AccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod}).
@@ -942,7 +940,7 @@ func TestReadWriteOncePodPreemption(t *testing.T) {
 	pvc2 := st.MakePersistentVolumeClaim().
 		Name("pvc-with-read-write-once-pod-2").
 		Namespace(testCtx.NS.Name).
-		// Annotation and volume name required for PVC to be considered bound.
+		// PVC 被视为已绑定所需的注解和卷名。
 		Annotation(volume.AnnBindCompleted, "true").
 		VolumeName(pv2.Name).
 		AccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod}).
@@ -1175,7 +1173,7 @@ func TestReadWriteOncePodPreemption(t *testing.T) {
 		},
 	}
 
-	// Create a node with some resources and a label.
+	// 创建一个带有一些资源和标签的节点。
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
 		v1.ResourceCPU:    "500m",
@@ -1206,7 +1204,7 @@ func TestReadWriteOncePodPreemption(t *testing.T) {
 							t.Errorf("Error cleaning up test: %v", err)
 						}
 					})
-					// Create and run existingPods.
+					// 创建并运行 existingPods。
 					for i, p := range test.existingPods {
 						var err error
 						pods[i], err = runPausePod(cs, p)
@@ -1214,13 +1212,13 @@ func TestReadWriteOncePodPreemption(t *testing.T) {
 							t.Fatalf("Error running pause pod: %v", err)
 						}
 					}
-					// Create the "pod".
+					// 创建该 Pod。
 					preemptor, err := createPausePod(cs, test.pod)
 					if err != nil {
 						t.Errorf("Error while creating high priority pod: %v", err)
 					}
 					pods = append(pods, preemptor)
-					// Wait for preemption of pods and make sure the other ones are not preempted.
+					// 等待 Pod 被抢占，并确保其他 Pod 没有被抢占。
 					for i, p := range pods {
 						if _, found := test.preemptedPodIndexes[i]; found {
 							if err = wait.PollUntilContextTimeout(testCtx.Ctx, time.Second, wait.ForeverTestTimeout, false,
@@ -1233,7 +1231,7 @@ func TestReadWriteOncePodPreemption(t *testing.T) {
 							}
 						}
 					}
-					// Also check that the preemptor pod gets the NominatedNodeName field set.
+					// 同时检查抢占者 Pod 是否设置了 NominatedNodeName 字段。
 					if len(test.preemptedPodIndexes) > 0 && !clearingNominatedNodeNameAfterBinding {
 						if err := testutils.WaitForNominatedNodeName(testCtx.Ctx, cs, preemptor); err != nil {
 							t.Errorf("NominatedNodeName field was not set for pod %v: %v", preemptor.Name, err)

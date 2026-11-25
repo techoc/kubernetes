@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO: This file can potentially be moved to a common place used by both e2e and integration tests.
+// TODO: 这个文件或许可以移到一个公共位置，供 e2e 测试和集成测试共用。
 
 package framework
 
@@ -30,7 +30,7 @@ import (
 	nodectlr "k8s.io/kubernetes/pkg/controller/nodelifecycle"
 )
 
-// CreateNamespaceOrDie creates a namespace.
+// CreateNamespaceOrDie 创建一个命名空间。
 func CreateNamespaceOrDie(c clientset.Interface, baseName string, t testing.TB) *v1.Namespace {
 	ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: baseName}}
 	result, err := c.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
@@ -40,7 +40,7 @@ func CreateNamespaceOrDie(c clientset.Interface, baseName string, t testing.TB) 
 	return result
 }
 
-// DeleteNamespaceOrDie deletes a namespace.
+// DeleteNamespaceOrDie 删除一个命名空间。
 func DeleteNamespaceOrDie(c clientset.Interface, ns *v1.Namespace, t testing.TB) {
 	err := c.CoreV1().Namespaces().Delete(context.TODO(), ns.Name, metav1.DeleteOptions{})
 	if err != nil {
@@ -48,8 +48,8 @@ func DeleteNamespaceOrDie(c clientset.Interface, ns *v1.Namespace, t testing.TB)
 	}
 }
 
-// Filter filters nodes in NodeList in place, removing nodes that do not
-// satisfy the given condition
+// Filter 就地对 NodeList 中的节点进行过滤，移除不满足
+// 给定条件的节点。
 func Filter(nodeList *v1.NodeList, fn func(node v1.Node) bool) {
 	var l []v1.Node
 
@@ -61,9 +61,9 @@ func Filter(nodeList *v1.NodeList, fn func(node v1.Node) bool) {
 	nodeList.Items = l
 }
 
-// IsNodeSchedulable returns true if:
-// 1) doesn't have "unschedulable" field set
-// 2) it also returns true from IsNodeReady
+// IsNodeSchedulable 在以下情况下返回 true：
+// 1) 未设置 "unschedulable" 字段
+// 2) IsNodeReady 也返回 true
 func IsNodeSchedulable(node *v1.Node) bool {
 	if node == nil {
 		return false
@@ -71,9 +71,9 @@ func IsNodeSchedulable(node *v1.Node) bool {
 	return !node.Spec.Unschedulable && IsNodeReady(node)
 }
 
-// IsNodeReady returns true if:
-// 1) it's Ready condition is set to true
-// 2) doesn't have NetworkUnavailable condition set to true
+// IsNodeReady 在以下情况下返回 true：
+// 1) Ready condition 被设置为 true
+// 2) NetworkUnavailable condition 未被设置为 true
 func IsNodeReady(node *v1.Node) bool {
 	nodeReady := IsConditionSetAsExpected(node, v1.NodeReady, true)
 	networkReady := isConditionUnset(node, v1.NodeNetworkUnavailable) ||
@@ -81,17 +81,17 @@ func IsNodeReady(node *v1.Node) bool {
 	return nodeReady && networkReady
 }
 
-// IsConditionSetAsExpected returns a wantTrue value if the node has a match to the conditionType, otherwise returns an opposite value of the wantTrue with detailed logging.
+// IsConditionSetAsExpected 如果节点的 condition 与 conditionType 匹配，则返回 wantTrue 值，否则返回 wantTrue 的相反值，并记录详细日志。
 func IsConditionSetAsExpected(node *v1.Node, conditionType v1.NodeConditionType, wantTrue bool) bool {
 	return isNodeConditionSetAsExpected(node, conditionType, wantTrue, false)
 }
 
-// IsConditionSetAsExpectedSilent returns a wantTrue value if the node has a match to the conditionType, otherwise returns an opposite value of the wantTrue.
+// IsConditionSetAsExpectedSilent 如果节点的 condition 与 conditionType 匹配，则返回 wantTrue 值，否则返回 wantTrue 的相反值。
 func IsConditionSetAsExpectedSilent(node *v1.Node, conditionType v1.NodeConditionType, wantTrue bool) bool {
 	return isNodeConditionSetAsExpected(node, conditionType, wantTrue, true)
 }
 
-// isConditionUnset returns true if conditions of the given node do not have a match to the given conditionType, otherwise false.
+// isConditionUnset 如果给定节点的 conditions 中没有与给定 conditionType 匹配的项，则返回 true，否则返回 false。
 func isConditionUnset(node *v1.Node, conditionType v1.NodeConditionType) bool {
 	for _, cond := range node.Status.Conditions {
 		if cond.Type == conditionType {
@@ -101,16 +101,16 @@ func isConditionUnset(node *v1.Node, conditionType v1.NodeConditionType) bool {
 	return true
 }
 
-// isNodeConditionSetAsExpected checks a node for a condition, and returns 'true' if the wanted value is the same as the condition value, useful for polling until a condition on a node is met.
+// isNodeConditionSetAsExpected 检查节点的某个 condition，当期望值与该 condition 的值相同时返回 'true'，适用于轮询等待节点上的 condition 达成。
 func isNodeConditionSetAsExpected(node *v1.Node, conditionType v1.NodeConditionType, wantTrue, silent bool) bool {
-	// Check the node readiness condition (logging all).
+	// 检查节点的就绪 condition（记录所有日志）。
 	for _, cond := range node.Status.Conditions {
-		// Ensure that the condition type and the status matches as desired.
+		// 确保 condition 的类型和状态与期望一致。
 		if cond.Type == conditionType {
-			// For NodeReady condition we need to check Taints as well
+			// 对于 NodeReady condition，还需要检查 Taints
 			if cond.Type == v1.NodeReady {
 				hasNodeControllerTaints := false
-				// For NodeReady we need to check if Taints are gone as well
+				// 对于 NodeReady，还需要检查 Taints 是否已移除
 				taints := node.Spec.Taints
 				for _, taint := range taints {
 					if taint.MatchTaint(nodectlr.UnreachableTaintTemplate) || taint.MatchTaint(nodectlr.NotReadyTaintTemplate) {
@@ -135,7 +135,7 @@ func isNodeConditionSetAsExpected(node *v1.Node, conditionType v1.NodeConditionT
 					}
 					return false
 				}
-				// TODO: check if the Node is tainted once we enable NC notReady/unreachable taints by default
+				// TODO: 在默认启用 NC 的 notReady/unreachable taints 后，检查 Node 是否带有污点
 				if cond.Status != v1.ConditionTrue {
 					return true
 				}

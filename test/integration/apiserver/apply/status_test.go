@@ -36,15 +36,15 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// namespace used for all tests, do not change this
+// 所有测试使用的命名空间，请勿修改
 const testNamespace = "statusnamespace"
 
-// TestApplyStatus makes sure that applying the status works for all known types.
+// TestApplyStatus 确保对所有已知类型 apply status 都能正常工作。
 func TestApplyStatus(t *testing.T) {
 	testApplyStatus(t, func(testing.TB, *rest.Config) {})
 }
 
-// TestApplyStatus makes sure that applying the status works for all known types.
+// TestApplyStatus 确保对所有已知类型 apply status 都能正常工作。
 func TestApplyStatusWithCBOR(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.ClientsAllowCBOR, true)
@@ -62,8 +62,8 @@ func testApplyStatus(t *testing.T, reconfigureClient func(testing.TB, *rest.Conf
 		if !api.HasVerb("patch") || !api.HasVerb("get") || !api.HasVerb("update") {
 			t.Skip("Resource does not support patch, get, and update")
 		}
-		// both spec and status get wiped for CSRs,
-		// nothing is expected to be managed for it, skip it
+		// 对于 CSR，spec 和 status 都会被擦除，
+		// 不会有任何内容被管理，跳过
 		if api.Mapping.Resource.Resource == "certificatesigningrequests" {
 			t.Skip()
 		}
@@ -80,7 +80,7 @@ func testApplyStatus(t *testing.T, reconfigureClient func(testing.TB, *rest.Conf
 		}
 		name := newObj.GetName()
 
-		// etcd test stub data doesn't contain apiVersion/kind (!), but apply requires it
+		// etcd 测试 stub 数据不包含 apiVersion/kind（！），但 apply 需要它们
 		newObj.SetGroupVersionKind(api.Mapping.GroupVersionKind)
 
 		dynamicClientConfig := rest.CopyConfig(api.Config)
@@ -91,7 +91,7 @@ func testApplyStatus(t *testing.T, reconfigureClient func(testing.TB, *rest.Conf
 		}
 
 		rsc := dynamicClient.Resource(api.Mapping.Resource).Namespace(namespace)
-		// apply to create
+		// apply 以创建对象
 		_, err = rsc.Apply(context.TODO(), name, &newObj, metav1.ApplyOptions{FieldManager: "create_test"})
 		if err != nil {
 			t.Fatal(err)

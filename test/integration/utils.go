@@ -32,15 +32,15 @@ import (
 	kubeapiservertesting "k8s.io/kubernetes/cmd/kube-apiserver/app/testing"
 )
 
-// DeletePodOrErrorf deletes a pod or fails with a call to t.Errorf.
+// DeletePodOrErrorf 删除一个 Pod，失败时调用 t.Errorf。
 func DeletePodOrErrorf(t *testing.T, c clientset.Interface, ns, name string) {
 	if err := c.CoreV1().Pods(ns).Delete(context.TODO(), name, metav1.DeleteOptions{}); err != nil {
 		t.Errorf("unable to delete pod %v: %v", name, err)
 	}
 }
 
-// Requests to try.  Each one should be forbidden or not forbidden
-// depending on the authentication and authorization setup of the API server.
+// 需要尝试的请求。根据 API server 的认证和授权配置，
+// 每个请求都应被禁止或不被禁止。
 var (
 	Code200 = map[int]bool{200: true}
 	Code201 = map[int]bool{201: true}
@@ -52,7 +52,7 @@ var (
 	Code503 = map[int]bool{503: true}
 )
 
-// WaitForPodToDisappear polls the API server if the pod has been deleted.
+// WaitForPodToDisappear 轮询 API server 以确认 Pod 已被删除。
 func WaitForPodToDisappear(podClient coreclient.PodInterface, podName string, interval, timeout time.Duration) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
 		_, err := podClient.Get(context.TODO(), podName, metav1.GetOptions{})
@@ -66,7 +66,7 @@ func WaitForPodToDisappear(podClient coreclient.PodInterface, podName string, in
 	})
 }
 
-// GetEtcdClients returns an initialized etcd clientv3.Client and clientv3.KV.
+// GetEtcdClients 返回一个已初始化的 etcd clientv3.Client 和 clientv3.KV。
 func GetEtcdClients(config storagebackend.TransportConfig) (*clientv3.Client, clientv3.KV, error) {
 	return kubeapiservertesting.GetEtcdClients(config)
 }

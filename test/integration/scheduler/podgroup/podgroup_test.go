@@ -656,7 +656,7 @@ func TestPodGroupScheduling(t *testing.T) {
 				})
 
 				testCtx := testutils.InitTestSchedulerWithNS(t, "podgroup-scheduling",
-					// disable backoff
+					// 禁用 backoff
 					scheduler.WithPodMaxBackoffSeconds(0),
 					scheduler.WithPodInitialBackoffSeconds(0))
 
@@ -692,7 +692,7 @@ func TestWorkloadAwarePreemptionInvocation(t *testing.T) {
 	pg := st.MakePodGroup().Namespace("default").Name("pg1").WorkloadRef("t1", "workload").
 		DisruptionModeAll().Priority(100).MinCount(3).Obj()
 
-	// Low priority pods taking up all resources
+	// 占用全部资源的低优先级 Pod
 	lowPods := []*v1.Pod{
 		st.MakePod().Namespace("default").Name("low-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).Obj(),
 		st.MakePod().Namespace("default").Name("low-2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).Obj(),
@@ -700,7 +700,7 @@ func TestWorkloadAwarePreemptionInvocation(t *testing.T) {
 		st.MakePod().Namespace("default").Name("low-4").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).Obj(),
 	}
 
-	// High priority pods belonging to a group
+	// 属于某个 PodGroup 的高优先级 Pod
 	highPods := []*v1.Pod{
 		st.MakePod().Namespace("default").Name("high-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").Priority(100).Obj(),
 		st.MakePod().Namespace("default").Name("high-2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").Priority(100).Obj(),
@@ -717,7 +717,7 @@ func TestWorkloadAwarePreemptionInvocation(t *testing.T) {
 		t.Fatalf("Failed to create node: %v", err)
 	}
 
-	// 1. Create low priority pods
+	// 1. 创建低优先级 Pod
 	for _, p := range lowPods {
 		p.Namespace = ns
 		if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, p, metav1.CreateOptions{}); err != nil {
@@ -725,7 +725,7 @@ func TestWorkloadAwarePreemptionInvocation(t *testing.T) {
 		}
 	}
 
-	// Wait for low priority pods to be scheduled
+	// 等待低优先级 Pod 完成调度
 	for _, p := range lowPods {
 		if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, wait.ForeverTestTimeout, false,
 			testutils.PodScheduled(cs, ns, p.Name)); err != nil {
@@ -733,18 +733,18 @@ func TestWorkloadAwarePreemptionInvocation(t *testing.T) {
 		}
 	}
 
-	// 2. Create workload
+	// 2. 创建 workload
 	if _, err := cs.SchedulingV1beta1().Workloads(ns).Create(testCtx.Ctx, workload, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create workload: %v", err)
 	}
 
-	// 3. Create PodGroup
+	// 3. 创建 PodGroup
 	pg.Namespace = ns
 	if _, err := cs.SchedulingV1beta1().PodGroups(ns).Create(testCtx.Ctx, pg, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PodGroup: %v", err)
 	}
 
-	// 4. Create high priority pods
+	// 4. 创建高优先级 Pod
 	for _, p := range highPods {
 		p.Namespace = ns
 		if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, p, metav1.CreateOptions{}); err != nil {
@@ -752,7 +752,7 @@ func TestWorkloadAwarePreemptionInvocation(t *testing.T) {
 		}
 	}
 
-	// 5. Verify that WorkloadAwarePreemption was called
+	// 5. 验证 WorkloadAwarePreemption 是否被调用
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
 		for _, pod := range lowPods {
 			events, err := cs.CoreV1().Events(ns).List(ctx, metav1.ListOptions{
@@ -776,7 +776,7 @@ func TestWorkloadAwarePreemptionInvocation(t *testing.T) {
 	t.Logf("WorkloadAwarePreemption was called (verified via events)")
 }
 
-// mockPostFilterPlugin is a custom PostFilter plugin that just counts invocations.
+// mockPostFilterPlugin 是一个仅统计调用次数的自定义 PostFilter 插件。
 type mockPostFilterPlugin struct {
 	lock  sync.Mutex
 	count int
@@ -810,7 +810,7 @@ func TestPostFilterNotCalled(t *testing.T) {
 	pg := st.MakePodGroup().Namespace("default").Name("pg1").WorkloadRef("t1", "workload").
 		DisruptionModeAll().Priority(100).MinCount(3).Obj()
 
-	// Low priority pods taking up all resources
+	// 占用全部资源的低优先级 Pod
 	lowPods := []*v1.Pod{
 		st.MakePod().Namespace("default").Name("low-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).Obj(),
 		st.MakePod().Namespace("default").Name("low-2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).Obj(),
@@ -818,7 +818,7 @@ func TestPostFilterNotCalled(t *testing.T) {
 		st.MakePod().Namespace("default").Name("low-4").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).Obj(),
 	}
 
-	// High priority pods belonging to a group
+	// 属于某个 PodGroup 的高优先级 Pod
 	highPods := []*v1.Pod{
 		st.MakePod().Namespace("default").Name("high-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").Priority(100).Obj(),
 		st.MakePod().Namespace("default").Name("high-2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").Priority(100).Obj(),
@@ -847,7 +847,7 @@ func TestPostFilterNotCalled(t *testing.T) {
 	})
 
 	testCtx := testutils.InitTestSchedulerWithNS(t, "post-filter-count",
-		// Set high backoff times so that the scheduler does not retry scheduling before checking the count.
+		// 设置较长的 backoff 时间，确保调度器在检查计数之前不会重试调度。
 		scheduler.WithPodMaxBackoffSeconds(100),
 		scheduler.WithPodInitialBackoffSeconds(100),
 		scheduler.WithFrameworkOutOfTreeRegistry(registry),
@@ -860,7 +860,7 @@ func TestPostFilterNotCalled(t *testing.T) {
 		t.Fatalf("Failed to create node: %v", err)
 	}
 
-	// 1. Create low priority pods
+	// 1. 创建低优先级 Pod
 	for _, p := range lowPods {
 		p.Namespace = ns
 		if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, p, metav1.CreateOptions{}); err != nil {
@@ -868,7 +868,7 @@ func TestPostFilterNotCalled(t *testing.T) {
 		}
 	}
 
-	// Wait for low priority pods to be scheduled
+	// 等待低优先级 Pod 完成调度
 	for _, p := range lowPods {
 		if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, wait.ForeverTestTimeout, false,
 			testutils.PodScheduled(cs, ns, p.Name)); err != nil {
@@ -876,18 +876,18 @@ func TestPostFilterNotCalled(t *testing.T) {
 		}
 	}
 
-	// 2. Create workload
+	// 2. 创建 workload
 	if _, err := cs.SchedulingV1beta1().Workloads(ns).Create(testCtx.Ctx, workload, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create workload: %v", err)
 	}
 
-	// 3. Create PodGroup
+	// 3. 创建 PodGroup
 	pg.Namespace = ns
 	if _, err := cs.SchedulingV1beta1().PodGroups(ns).Create(testCtx.Ctx, pg, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PodGroup: %v", err)
 	}
 
-	// 4. Create high priority pods
+	// 4. 创建高优先级 Pod
 	for _, p := range highPods {
 		p.Namespace = ns
 		if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, p, metav1.CreateOptions{}); err != nil {
@@ -895,7 +895,7 @@ func TestPostFilterNotCalled(t *testing.T) {
 		}
 	}
 
-	// 5. Wait for high priority pod to be marked as unschedulable
+	// 5. 等待高优先级 Pod 被标记为不可调度
 	for _, p := range highPods {
 		err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, wait.ForeverTestTimeout, false,
 			testutils.PodUnschedulable(cs, ns, p.Name))
@@ -909,7 +909,7 @@ func TestPostFilterNotCalled(t *testing.T) {
 	}
 }
 
-// mockPodGroupPostFilterPlugin is a custom PodGroupPostFilter plugin that just counts invocations.
+// mockPodGroupPostFilterPlugin 是一个仅统计调用次数的自定义 PodGroupPostFilter 插件。
 type mockPodGroupPostFilterPlugin struct {
 	name  string
 	lock  sync.Mutex

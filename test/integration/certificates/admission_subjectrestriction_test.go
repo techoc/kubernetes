@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Verifies that the CertificateSubjectRestriction admission controller works as expected.
+// 验证 CertificateSubjectRestriction 准入控制器按预期工作。
 func TestCertificateSubjectRestrictionPlugin(t *testing.T) {
 	tests := map[string]struct {
 		signerName string
@@ -47,12 +47,12 @@ func TestCertificateSubjectRestrictionPlugin(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Run an apiserver with the default configuration options.
+			// 使用默认配置选项启动 apiserver。
 			s := kubeapiservertesting.StartTestServerOrDie(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{""}, framework.SharedEtcd())
 			defer s.TearDownFn()
 			client := clientset.NewForConfigOrDie(s.ClientConfig)
 
-			// Attempt to create the CSR resource.
+			// 尝试创建 CSR 资源。
 			csr := buildTestingCSR("csr", test.signerName, test.group)
 			_, err := client.CertificatesV1().CertificateSigningRequests().Create(context.TODO(), csr, metav1.CreateOptions{})
 			if err != nil && test.error != err.Error() {

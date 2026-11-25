@@ -86,7 +86,7 @@ func TestCheckFieldItemsInEmptyList(t *testing.T) {
 				t.Fatalf("gvr: %s, list is nil", gvr)
 			}
 
-			// Field `items` in List object should be a zero-length array when no obj in etcd.
+			// 当 etcd 中没有对象时，List 对象中的 `items` 字段应为零长度数组。
 			if list.Items == nil {
 				t.Fatalf("gvr: %s, fields items of list is nil", gvr)
 			}

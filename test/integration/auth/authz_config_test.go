@@ -71,7 +71,7 @@ authorizers:
 	)
 	t.Cleanup(server.TearDownFn)
 
-	// Make sure anonymous requests work
+	// 确保匿名请求可以正常工作
 	anonymousClient := clientset.NewForConfigOrDie(rest.AnonymousClientConfig(server.ClientConfig))
 	healthzResult, err := anonymousClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	if !bytes.Equal(healthzResult, []byte(`ok`)) {
@@ -142,7 +142,7 @@ users:
 - name: test
 `
 
-	// returns malformed responses when called
+	// 被调用时返回格式错误的响应
 	errorName := "error.example.com"
 	serverErrorCalled := atomic.Int32{}
 	serverError := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -162,7 +162,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// hangs for 2 seconds when called
+	// 被调用时挂起 2 秒
 	timeoutName := "timeout.example.com"
 	serverTimeoutCalled := atomic.Int32{}
 	serverTimeout := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -184,7 +184,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// returns a deny response when called
+	// 被调用时返回拒绝响应
 	denyName := "deny.example.com"
 	serverDenyCalled := atomic.Int32{}
 	serverDeny := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -207,7 +207,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// returns a no opinion response when called
+	// 被调用时返回无意见响应
 	noOpinionName := "noopinion.example.com"
 	serverNoOpinionCalled := atomic.Int32{}
 	serverNoOpinion := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -229,7 +229,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// returns malformed responses when called, which is then configured to fail open
+	// 被调用时返回格式错误的响应，随后该 webhook 被配置为 fail open
 	failOpenName := "failopen.example.com"
 	serverFailOpenCalled := atomic.Int32{}
 	serverFailOpen := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -249,7 +249,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// returns allow responses when called with a label selector containing an allow key, and records the selectors it saw
+	// 当被调用且 label selector 包含 allow 键时返回允许响应，并记录它看到的 selector
 	selectorName := "selector.example.com"
 	serverSelectorCalled := atomic.Int32{}
 	var selectorLabelAttributes *authorizationv1.LabelSelectorAttributes
@@ -284,7 +284,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// returns an allow response when called
+	// 被调用时返回允许响应
 	allowName := "allow.example.com"
 	serverAllowCalled := atomic.Int32{}
 	serverAllow := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -306,7 +306,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// returns an allow response when called
+	// 被调用时返回允许响应
 	allowReloadedName := "allowreloaded.example.com"
 	serverAllowReloadedCalled := atomic.Int32{}
 	serverAllowReloaded := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -532,7 +532,7 @@ authorizers:
 	impersonationConfig.Impersonate.UserName = "alice"
 	aliceClient := clientset.NewForConfigOrDie(impersonationConfig)
 
-	// malformed webhook short circuits
+	// 格式错误的 webhook 会直接短路
 	t.Log("checking error")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
@@ -553,7 +553,7 @@ authorizers:
 		assertCounts(counts{errorCount: 1})
 	}
 
-	// timeout webhook short circuits
+	// 超时的 webhook 会直接短路
 	t.Log("checking timeout")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
@@ -574,7 +574,7 @@ authorizers:
 		assertCounts(counts{timeoutCount: 1, webhookExclusionCount: 1})
 	}
 
-	// deny webhook short circuits
+	// 拒绝的 webhook 会直接短路
 	t.Log("checking deny")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
@@ -595,7 +595,7 @@ authorizers:
 		assertCounts(counts{denyCount: 1, webhookExclusionCount: 2})
 	}
 
-	// no-opinion webhook passes through, allow webhook allows
+	// 无意见的 webhook 继续传递，允许的 webhook 放行
 	t.Log("checking allow")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
@@ -616,8 +616,8 @@ authorizers:
 		assertCounts(counts{noOpinionCount: 1, failOpenCount: 1, allowCount: 1, webhookExclusionCount: 4})
 	}
 
-	// the timeout webhook results in match condition eval errors when evaluating a non-resource request
-	// failure policy is deny
+	// 在评估非资源请求时，超时的 webhook 会导致 match condition 求值错误
+	// 其 failure policy 为 deny
 	t.Log("checking match condition eval error")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
@@ -630,8 +630,8 @@ authorizers:
 		t.Fatal("expected denied, got allowed")
 	} else {
 		t.Log(result.Status.Reason)
-		// error webhook matchConditions skip non-resource request
-		// timeout webhook matchConditions error on non-resource request
+		// error webhook 的 matchConditions 会跳过非资源请求
+		// timeout webhook 的 matchConditions 对非资源请求会报错
 		assertCounts(counts{webhookExclusionCount: 1, evalErrorsCount: 1})
 	}
 
@@ -656,8 +656,8 @@ authorizers:
 	disorderedUnknownLabelRequirements := disorderedLabelRequirements.DeepCopy()
 	disorderedUnknownLabelRequirements.Requirements = append(disorderedUnknownLabelRequirements.Requirements, metav1.LabelSelectorRequirement{Key: "x", Operator: "Unknown"})
 
-	// make request matching selector webhook matchCondition
-	// check fieldSelector and labelSelector are parsed and normalized
+	// 发起与 selector webhook matchCondition 匹配的请求
+	// 检查 fieldSelector 和 labelSelector 是否被解析并规范化
 	_, err := aliceClient.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{FieldSelector: disorderedFieldSelector, LabelSelector: disorderedLabelSelector})
 	assertCounts(counts{selectorCount: 1, webhookExclusionCount: 3})
 	if err != nil {
@@ -672,8 +672,8 @@ authorizers:
 	selectorFieldAttributes = nil
 	selectorLabelAttributes = nil
 
-	// make subjectaccessreview request containing fieldSelector and labelSelector requirements
-	// check known fieldSelector and labelSelector requirements get passed through to the webhook as-is
+	// 发起包含 fieldSelector 和 labelSelector requirements 的 subjectaccessreview 请求
+	// 检查已知的 fieldSelector 和 labelSelector requirements 是否被原样传递给 webhook
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
 		ResourceAttributes: &authorizationv1.ResourceAttributes{
@@ -701,8 +701,8 @@ authorizers:
 	selectorFieldAttributes = nil
 	selectorLabelAttributes = nil
 
-	// make subjectaccessreview request containing fieldSelector and labelSelector rawSelector
-	// check fieldSelector and labelSelector rawSelector get parsed and passed to the webhook
+	// 发起包含 fieldSelector 和 labelSelector rawSelector 的 subjectaccessreview 请求
+	// 检查 fieldSelector 和 labelSelector rawSelector 是否被解析并传递给 webhook
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
 		ResourceAttributes: &authorizationv1.ResourceAttributes{
@@ -730,7 +730,7 @@ authorizers:
 	selectorFieldAttributes = nil
 	selectorLabelAttributes = nil
 
-	// check last loaded success/failure metric timestamps, ensure success is present, failure is not
+	// 检查最近加载的成功/失败指标时间戳，确保成功时间戳存在，失败时间戳不存在
 	initialMetrics, err := getMetrics(t, adminClient)
 	if err != nil {
 		t.Fatal(err)
@@ -742,12 +742,12 @@ authorizers:
 		t.Fatal("expected no failure timestamp, got one")
 	}
 
-	// write bogus file
+	// 写入无效的配置文件
 	if err := atomicWriteFile(configFileName, []byte(`apiVersion: apiserver.config.k8s.io`), os.FileMode(0644)); err != nil {
 		t.Fatal(err)
 	}
 
-	// wait for failure timestamp > success timestamp
+	// 等待失败时间戳晚于成功时间戳
 	var reload1Metrics *metrics
 	err = wait.PollUntilContextTimeout(context.TODO(), time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		reload1Metrics, err = getMetrics(t, adminClient)
@@ -767,7 +767,7 @@ authorizers:
 		t.Fatal(err)
 	}
 
-	// ensure authz still works
+	// 确保鉴权仍然正常工作
 	t.Log("checking allow")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
@@ -788,7 +788,7 @@ authorizers:
 		assertCounts(counts{noOpinionCount: 1, failOpenCount: 1, allowCount: 1, webhookExclusionCount: 4})
 	}
 
-	// write good config with different webhook
+	// 写入使用另一个 webhook 的有效配置
 	if err := atomicWriteFile(configFileName, []byte(`
 apiVersion: apiserver.config.k8s.io/v1
 kind: AuthorizationConfiguration
@@ -808,7 +808,7 @@ authorizers:
 		t.Fatal(err)
 	}
 
-	// wait for success timestamp > reload1Metrics.reloadFailure timestamp
+	// 等待成功时间戳晚于 reload1Metrics.reloadFailure 时间戳
 	var reload2Metrics *metrics
 	err = wait.PollUntilContextTimeout(context.TODO(), time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		reload2Metrics, err = getMetrics(t, adminClient)
@@ -842,7 +842,7 @@ authorizers:
 		t.Fatal(err)
 	}
 
-	// ensure authz still works, new webhook is called
+	// 确保鉴权仍然正常工作，且新的 webhook 被调用
 	t.Log("checking allow")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",
@@ -863,12 +863,12 @@ authorizers:
 		assertCounts(counts{allowReloadedCount: 1})
 	}
 
-	// delete file (do this test last because it makes file watch fall back to one minute poll interval)
+	// 删除文件（该检查放在最后，因为它会使文件监听回退到一分钟一次的轮询间隔）
 	if err := os.Remove(configFileName); err != nil {
 		t.Fatal(err)
 	}
 
-	// wait for failure timestamp > success timestamp
+	// 等待失败时间戳晚于成功时间戳
 	var reload3Metrics *metrics
 	err = wait.PollUntilContextTimeout(context.TODO(), time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		reload3Metrics, err = getMetrics(t, adminClient)
@@ -904,7 +904,7 @@ authorizers:
 		t.Fatal(err)
 	}
 
-	// ensure authz still works, new webhook is called
+	// 确保鉴权仍然正常工作，且新的 webhook 被调用
 	t.Log("checking allow")
 	if result, err := adminClient.AuthorizationV1().SubjectAccessReviews().Create(context.TODO(), &authorizationv1.SubjectAccessReview{Spec: authorizationv1.SubjectAccessReviewSpec{
 		User: "alice",

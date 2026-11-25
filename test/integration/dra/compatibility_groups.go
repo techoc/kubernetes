@@ -25,19 +25,18 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// compatDevice describes a device to place on a shared counter set, together
-// with the compatibility groups it declares there.
+// compatDevice 描述要放置在共享 counter set 上的设备，以及它在该 counter set 上
+// 声明的兼容性组。
 type compatDevice struct {
 	name   string
 	groups []string
 }
 
-// compatGroupsSlices builds the two node-local ResourceSlices that make up one
-// pool: a counter set slice and a device slice (a single ResourceSlice may set
-// either sharedCounters or devices, not both). All devices draw from the same
-// counter set and declare the given compatibility groups. The counter set has
-// room for two devices (each consumes half of it), so two devices can be
-// co-allocated only when their compatibility groups intersect.
+// compatGroupsSlices 构建组成一个 pool 的两个节点本地 ResourceSlice：
+// 一个 counter set slice 和一个 device slice（单个 ResourceSlice 只能设置
+// sharedCounters 或 devices 之一，不能同时设置两者）。所有设备都从同一个
+// counter set 中取用资源，并声明给定的兼容性组。该 counter set 可容纳两个设备
+// （每个消耗一半），因此只有当两个设备的兼容性组有交集时才能被共同分配。
 func compatGroupsSlices(nodeName, driverName, counterSet string, devices ...compatDevice) (counters, deviceSlice *resourceapi.ResourceSlice) {
 	c := st.MakeResourceSlice(nodeName, driverName)
 	c.Name = nodeName + "-" + driverName + "-counters"
@@ -63,18 +62,17 @@ func compatGroupsSlices(nodeName, driverName, counterSet string, devices ...comp
 	return c.Obj(), d.Obj()
 }
 
-// createCompatGroupsPool creates both slices of a compatibility-groups pool and
-// returns the created device slice (the one carrying compatibilityGroups).
+// createCompatGroupsPool 创建兼容性组 pool 的两个 slice，
+// 并返回创建出的 device slice（即携带 compatibilityGroups 的那个）。
 func createCompatGroupsPool(tCtx ktesting.TContext, nodeName, driverName, counterSet string, devices ...compatDevice) *resourceapi.ResourceSlice {
 	counters, deviceSlice := compatGroupsSlices(nodeName, driverName, counterSet, devices...)
 	createSlice(tCtx, counters)
 	return createSlice(tCtx, deviceSlice)
 }
 
-// testCompatibilityGroups exercises the DRADeviceCompatibilityGroups feature end
-// to end through a real apiserver + scheduler. With the feature enabled the
-// scheduler must enforce group intersection when co-allocating devices on a
-// counter set; with it disabled the apiserver must drop the field on write.
+// testCompatibilityGroups 通过真实的 apiserver + scheduler 端到端验证
+// DRADeviceCompatibilityGroups feature。启用该 feature 时，调度器在 counter set 上
+// 共同分配设备时必须强制要求兼容性组有交集；禁用时，apiserver 必须在写入时丢弃该字段。
 func testCompatibilityGroups(tCtx ktesting.TContext, enabled bool) {
 	if !enabled {
 		tCtx.Run("FieldDroppedWhenDisabled", testCompatibilityGroupsFieldDropped)
@@ -86,8 +84,8 @@ func testCompatibilityGroups(tCtx ktesting.TContext, enabled bool) {
 	tCtx.Run("IncompatibleRejectedCompatibleAdmitted", testIncompatibleAcrossNodes)
 }
 
-// testCompatibleCoAllocation verifies that two devices declaring the same group
-// on a counter set can be co-allocated to one claim.
+// testCompatibleCoAllocation 验证在 counter set 上声明相同兼容性组的两个设备
+// 可以被共同分配给同一个 claim。
 func testCompatibleCoAllocation(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driverName := createTestClass(tCtx, namespace)
@@ -115,11 +113,10 @@ func testCompatibleCoAllocation(tCtx ktesting.TContext) {
 	tCtx.Expect(allocated.Status.Allocation.Devices.Results).To(gomega.HaveLen(2))
 }
 
-// testIncompatibleUnschedulable verifies that a pod is left unschedulable when
-// the only devices its claim can draw from declare disjoint compatibility groups
-// on a shared counter set. The claim asks for two devices, the node's only two
-// devices are "mig" and "vgpu" (no intersection) and both draw from the same
-// counter set, so they cannot be co-allocated and no node can satisfy the claim.
+// testIncompatibleUnschedulable 验证当 claim 唯一可取用的设备在共享 counter set 上
+// 声明了互不相交的兼容性组时，Pod 会保持不可调度状态。该 claim 请求两个设备，
+// 节点上仅有的两个设备分别属于 "mig" 和 "vgpu"（无交集），且都从同一个 counter set
+// 取用资源，因此无法共同分配，没有任何节点能满足该 claim。
 func testIncompatibleUnschedulable(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driverName := createTestClass(tCtx, namespace)
@@ -145,18 +142,16 @@ func testIncompatibleUnschedulable(tCtx ktesting.TContext) {
 	tCtx.Expect(unallocated.Status.Allocation).To(gomega.BeNil(), "incompatible claim must not be allocated")
 }
 
-// testIncompatibleAcrossNodes verifies that the scheduler refuses to co-allocate
-// an incompatible pair of devices (the only candidates on one node) and instead
-// places the pod on a node whose devices share a compatibility group. A second
-// pod, created after the compatible node is exhausted, is then left
-// unschedulable: this confirms the first pod chose the compatible node because
-// the incompatible node genuinely cannot satisfy the claim, not by chance.
+// testIncompatibleAcrossNodes 验证调度器不会共同分配一对不兼容的设备
+// （它们是某个节点上唯一的候选设备），而是将 Pod 放置到其设备具有共同兼容性组的
+// 节点上。在兼容节点资源耗尽后创建的第二个 Pod 会保持不可调度状态：这证明第一个
+// Pod 选择兼容节点是因为不兼容节点确实无法满足 claim，而非偶然。
 func testIncompatibleAcrossNodes(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driverName := createTestClass(tCtx, namespace)
 	nodeA, nodeB := twoNodeNames(tCtx)
 
-	// nodeA offers only an incompatible pair; nodeB offers a compatible pair.
+	// nodeA 只提供一对不兼容的设备；nodeB 提供一对兼容的设备。
 	createCompatGroupsPool(tCtx, nodeA, driverName, "gpu-0",
 		compatDevice{"dev-0", []string{"mig"}},
 		compatDevice{"dev-1", []string{"vgpu"}},
@@ -178,9 +173,9 @@ func testIncompatibleAcrossNodes(tCtx ktesting.TContext) {
 	tCtx.Expect(scheduled.Spec.NodeName).To(gomega.Equal(nodeB),
 		"pod must land on the node with a compatible device pair, not the incompatible one")
 
-	// The first pod consumed nodeB's whole counter set (both "mig" devices). A
-	// second identical pod now has nowhere to go: nodeB is exhausted and nodeA's
-	// only pair is incompatible, so it must stay unschedulable.
+	// 第一个 Pod 消耗了 nodeB 的整个 counter set（两个 "mig" 设备）。此时第二个
+	// 相同的 Pod 无处可去：nodeB 的资源已耗尽，而 nodeA 上仅有的一对设备不兼容，
+	// 因此它必须保持不可调度状态。
 	claim2 := st.MakeResourceClaim().Name("claim").Namespace(namespace).
 		RequestWithNameCount("req", class.Name, 2).Obj()
 	createdClaim2 := createClaim(tCtx, namespace, "-cross-2", class, claim2)
@@ -191,12 +186,11 @@ func testIncompatibleAcrossNodes(tCtx ktesting.TContext) {
 	expectPodUnschedulable(tCtx, createdPod2, "cannot allocate all claims")
 }
 
-// testCompatibilityGroupsFieldPersisted verifies the enabled half of the
-// feature-gate round-trip: with the feature on, compatibilityGroups written to a
-// ResourceSlice survives create and is returned on read-back. (The disabled half
-// is testCompatibilityGroupsFieldDropped; the ratcheting case - preserved on
-// update when the old object already used it - is a unit strategy test, since it
-// needs a gate toggle the fixed-per-config integration harness cannot express.)
+// testCompatibilityGroupsFieldPersisted 验证 feature gate 往返测试中启用的一半：
+// 启用该 feature 时，写入 ResourceSlice 的 compatibilityGroups 在创建后得以保留，
+// 并在读回时返回。（禁用的一半由 testCompatibilityGroupsFieldDropped 验证；
+// ratcheting 场景——旧对象已使用该字段时在更新中保留——由策略单元测试覆盖，
+// 因为它需要切换 gate，而固定配置的集成测试框架无法表达这种切换。）
 func testCompatibilityGroupsFieldPersisted(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	_, driverName := createTestClass(tCtx, namespace)
@@ -212,8 +206,8 @@ func testCompatibilityGroupsFieldPersisted(tCtx ktesting.TContext) {
 		gomega.ConsistOf("mig"), "compatibilityGroups must be persisted when the feature is enabled")
 }
 
-// testCompatibilityGroupsFieldDropped verifies that, with the feature gate
-// disabled, the apiserver drops compatibilityGroups on write.
+// testCompatibilityGroupsFieldDropped 验证禁用 feature gate 时，apiserver 会在写入时
+// 丢弃 compatibilityGroups。
 func testCompatibilityGroupsFieldDropped(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	_, driverName := createTestClass(tCtx, namespace)

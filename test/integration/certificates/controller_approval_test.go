@@ -40,7 +40,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Integration tests that verify the behaviour of the CSR auto-approving controller.
+// 集成测试，用于验证 CSR 自动批准控制器的行为。
 func TestController_AutoApproval(t *testing.T) {
 	validKubeAPIServerClientKubeletUsername := "system:node:abc"
 	validKubeAPIServerClientKubeletCSR := pemWithTemplate(&x509.CertificateRequest{
@@ -92,19 +92,19 @@ func TestController_AutoApproval(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
-			// Run an apiserver with the default configuration options.
+			// 使用默认配置选项启动 apiserver。
 			s := kubeapiservertesting.StartTestServerOrDie(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{""}, framework.SharedEtcd())
 			defer s.TearDownFn()
 			client := clientset.NewForConfigOrDie(s.ClientConfig)
 			informers := informers.NewSharedInformerFactory(clientset.NewForConfigOrDie(restclient.AddUserAgent(s.ClientConfig, "certificatesigningrequest-informers")), time.Second)
 
-			// Register the controller
+			// 注册控制器
 			c := approver.NewCSRApprovingController(ctx, client, informers.Certificates().V1().CertificateSigningRequests())
-			// Start the controller & informers
+			// 启动控制器和 informer
 			informers.Start(ctx.Done())
 			go c.Run(ctx, 1)
 
-			// Configure appropriate permissions
+			// 配置相应的权限
 			if test.grantNodeClient {
 				grantUserNodeClientPermissions(t, client, test.username, false)
 			}
@@ -112,8 +112,8 @@ func TestController_AutoApproval(t *testing.T) {
 				grantUserNodeClientPermissions(t, client, test.username, true)
 			}
 
-			// Use a client that impersonates the test case 'username' to ensure the `spec.username`
-			// field on the CSR is set correctly.
+			// 使用模拟测试用例中 'username' 的客户端，以确保 CSR 上的 `spec.username`
+			// 字段被正确设置。
 			impersonationConfig := restclient.CopyConfig(s.ClientConfig)
 			impersonationConfig.Impersonate.UserName = test.username
 			impersonationClient, err := clientset.NewForConfig(impersonationConfig)
@@ -170,8 +170,8 @@ func waitForCertificateRequestApproved(client clientset.Interface, name string) 
 }
 
 func ensureCertificateRequestNotApproved(client clientset.Interface, name string) error {
-	// If waiting for the CSR to be approved times out, we class this as 'not auto approved'.
-	// There is currently no way to explicitly check if the CSR has been rejected for auto-approval.
+	// 如果等待 CSR 被批准超时，我们将其归类为“未自动批准”。
+	// 目前没有方法可以显式检查 CSR 是否因自动批准而被拒绝。
 	err := waitForCertificateRequestApproved(client, name)
 	switch {
 	case wait.Interrupted(err):

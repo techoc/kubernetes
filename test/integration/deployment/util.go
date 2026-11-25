@@ -67,7 +67,7 @@ func testLabels() map[string]string {
 	return map[string]string{"name": "test"}
 }
 
-// newDeployment returns a RollingUpdate Deployment with a fake container image
+// newDeployment 返回一个使用 RollingUpdate 策略、镜像为假镜像的 Deployment
 func newDeployment(name, ns string, replicas int32) *apps.Deployment {
 	return &apps.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -102,9 +102,9 @@ func newDeployment(name, ns string, replicas int32) *apps.Deployment {
 	}
 }
 
-// dcSetup sets up necessities for Deployment integration test, including control plane, apiserver, informers, and clientset
+// dcSetup 准备 Deployment 集成测试所需的各项设施，包括 control plane、apiserver、informer 和 clientset
 func dcSetup(ctx context.Context, t *testing.T) (kubeapiservertesting.TearDownFunc, *replicaset.ReplicaSetController, *deployment.DeploymentController, informers.SharedInformerFactory, clientset.Interface) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为没有运行 serviceaccount 控制器。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)
@@ -135,10 +135,10 @@ func dcSetup(ctx context.Context, t *testing.T) (kubeapiservertesting.TearDownFu
 	return server.TearDownFn, rm, dc, informers, clientSet
 }
 
-// dcSimpleSetup sets up necessities for Deployment integration test, including control plane, apiserver,
-// and clientset, but not controllers and informers
+// dcSimpleSetup 准备 Deployment 集成测试所需的各项设施，包括 control plane、apiserver
+// 和 clientset，但不包括控制器和 informer
 func dcSimpleSetup(t *testing.T) (kubeapiservertesting.TearDownFunc, clientset.Interface) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为没有运行 serviceaccount 控制器。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)
@@ -149,7 +149,7 @@ func dcSimpleSetup(t *testing.T) (kubeapiservertesting.TearDownFunc, clientset.I
 	return server.TearDownFn, clientSet
 }
 
-// runControllersAndInformers runs RS and deployment controllers and informers
+// runControllersAndInformers 启动 RS 控制器、Deployment 控制器和 informer
 func runControllersAndInformers(t *testing.T, rm *replicaset.ReplicaSetController, dc *deployment.DeploymentController, informers informers.SharedInformerFactory) func() {
 	ctx, cancelFn := context.WithCancel(context.Background())
 	informers.Start(ctx.Done())
@@ -158,7 +158,7 @@ func runControllersAndInformers(t *testing.T, rm *replicaset.ReplicaSetControlle
 	return cancelFn
 }
 
-// addPodConditionReady sets given pod status to ready at given time
+// addPodConditionReady 将给定 Pod 的状态设置为在给定时间就绪
 func addPodConditionReady(pod *v1.Pod, time metav1.Time) {
 	pod.Status = v1.PodStatus{
 		Phase: v1.PodRunning,
@@ -185,20 +185,20 @@ func markPodReady(c clientset.Interface, ns string, pod *v1.Pod) error {
 	return err
 }
 
-// markUpdatedPodsReady manually marks updated Deployment pods status to ready,
-// until the deployment is complete
+// markUpdatedPodsReady 手动将更新后的 Deployment Pod 标记为就绪，
+// 直到 Deployment 完成
 func (d *deploymentTester) markUpdatedPodsReady(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	ns := d.deployment.Namespace
 	err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
-		// We're done when the deployment is complete
+		// Deployment 完成即结束
 		if completed, err := d.deploymentComplete(); err != nil {
 			return false, err
 		} else if completed {
 			return true, nil
 		}
-		// Otherwise, mark remaining pods as ready
+		// 否则，将剩余的 Pod 标记为就绪
 		pods, err := d.listUpdatedPods()
 		if err != nil {
 			d.t.Log(err)
@@ -221,19 +221,19 @@ func (d *deploymentTester) markUpdatedPodsReady(wg *sync.WaitGroup) {
 	}
 }
 
-// removeTerminatedPods manually removes terminated Deployment pods,
-// until the deployment is complete
+// removeTerminatedPods 手动删除已终止的 Deployment Pod，
+// 直到 Deployment 完成
 func (d *deploymentTester) removeTerminatedPods(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	err := wait.PollUntilContextTimeout(ctx, pollInterval, pollTimeout, true, func(ctx context.Context) (bool, error) {
-		// We're done when the deployment is complete
+		// Deployment 完成即结束
 		if completed, err := d.deploymentComplete(); err != nil {
 			return false, err
 		} else if completed {
 			return true, nil
 		}
-		// Otherwise, mark remaining pods as ready
+		// 否则，将剩余的 Pod 标记为就绪
 		rsList, err := deploymentutil.ListReplicaSets(d.deployment, deploymentutil.RsListFromClient(d.c.AppsV1()))
 		if err != nil {
 			d.t.Log(err)
@@ -260,32 +260,32 @@ func (d *deploymentTester) deploymentComplete() (bool, error) {
 	return deploymentutil.DeploymentComplete(d.deployment, &latest.Status), nil
 }
 
-// Waits for the deployment to complete, and check rolling update strategy isn't broken at any times.
-// Rolling update strategy should not be broken during a rolling update.
+// 等待 Deployment 完成，并检查滚动更新策略在任何时刻都没有被破坏。
+// 滚动更新期间不应违反滚动更新策略。
 func (d *deploymentTester) waitForDeploymentCompleteAndCheckRolling() error {
 	return testutil.WaitForDeploymentCompleteAndCheckRolling(d.c, d.deployment, d.t.Logf, pollInterval, pollTimeout)
 }
 
-// Waits for the deployment to complete, and don't check if rolling update strategy is broken.
-// Rolling update strategy is used only during a rolling update, and can be violated in other situations,
-// such as shortly after a scaling event or the deployment is just created.
+// 等待 Deployment 完成，但不检查滚动更新策略是否被破坏。
+// 滚动更新策略仅在滚动更新期间适用，其他情况下（例如扩缩容后不久或 Deployment 刚创建时）
+// 可以被违反。
 func (d *deploymentTester) waitForDeploymentComplete() error {
 	return testutil.WaitForDeploymentComplete(d.c, d.deployment, d.t.Logf, pollInterval, pollTimeout)
 }
 
-// waitForDeploymentCompleteAndCheckRollingAndMarkPodsReady waits for the Deployment to complete
-// while marking updated Deployment pods as ready at the same time.
-// Uses hard check to make sure rolling update strategy is not violated at any times.
+// waitForDeploymentCompleteAndCheckRollingAndMarkPodsReady 等待 Deployment 完成，
+// 同时将更新后的 Deployment Pod 标记为就绪。
+// 使用严格检查确保滚动更新策略在任何时刻都不被违反。
 func (d *deploymentTester) waitForDeploymentCompleteAndCheckRollingAndMarkPodsReady() error {
 	var wg sync.WaitGroup
 
-	// Manually mark updated Deployment pods as ready in a separate goroutine
+	// 在单独的 goroutine 中手动将更新后的 Deployment Pod 标记为就绪
 	wg.Add(1)
 	go d.markUpdatedPodsReady(&wg)
-	// Wait for goroutine to finish, for all return paths.
+	// 在所有返回路径上都等待 goroutine 结束。
 	defer wg.Wait()
 
-	// Wait for the Deployment status to complete while Deployment pods are becoming ready
+	// 在 Deployment Pod 逐渐就绪的同时，等待 Deployment 状态完成
 	err := d.waitForDeploymentCompleteAndCheckRolling()
 	if err != nil {
 		return fmt.Errorf("failed to wait for Deployment %s to complete: %v", d.deployment.Name, err)
@@ -294,46 +294,46 @@ func (d *deploymentTester) waitForDeploymentCompleteAndCheckRollingAndMarkPodsRe
 	return nil
 }
 
-// waitForDeploymentCompleteAndMarkPodsReady waits for the Deployment to complete
-// while marking updated Deployment pods as ready at the same time.
+// waitForDeploymentCompleteAndMarkPodsReady 等待 Deployment 完成，
+// 同时将更新后的 Deployment Pod 标记为就绪。
 func (d *deploymentTester) waitForDeploymentCompleteAndMarkPodsReady() error {
 	var wg sync.WaitGroup
 
-	// Manually mark updated Deployment pods as ready in a separate goroutine
+	// 在单独的 goroutine 中手动将更新后的 Deployment Pod 标记为就绪
 	wg.Add(1)
 	go d.markUpdatedPodsReady(&wg)
 
-	// Wait for the Deployment status to complete using soft check, while Deployment pods are becoming ready
+	// 在 Deployment Pod 逐渐就绪的同时，使用宽松检查等待 Deployment 状态完成
 	err := d.waitForDeploymentComplete()
 	if err != nil {
 		return fmt.Errorf("failed to wait for Deployment status %s: %v", d.deployment.Name, err)
 	}
 
-	// Wait for goroutine to finish
+	// 等待 goroutine 结束
 	wg.Wait()
 
 	return nil
 }
 
-// waitForDeploymentCompleteAndMarkPodsReadyAndRemoveTerminating waits for the Deployment to complete
-// while marking updated Deployment pods as ready and removes terminated pods at the same time.
+// waitForDeploymentCompleteAndMarkPodsReadyAndRemoveTerminating 等待 Deployment 完成，
+// 同时将更新后的 Deployment Pod 标记为就绪，并删除已终止的 Pod。
 func (d *deploymentTester) waitForDeploymentCompleteAndMarkPodsReadyAndRemoveTerminated(ctx context.Context) error {
 	var wg sync.WaitGroup
 
-	// Manually mark updated Deployment pods as ready in a separate goroutine
+	// 在单独的 goroutine 中手动将更新后的 Deployment Pod 标记为就绪
 	wg.Add(1)
 	go d.markUpdatedPodsReady(&wg)
 
 	wg.Add(1)
 	go d.removeTerminatedPods(ctx, &wg)
 
-	// Wait for the Deployment status to complete using soft check, while Deployment pods are becoming ready
+	// 在 Deployment Pod 逐渐就绪的同时，使用宽松检查等待 Deployment 状态完成
 	err := d.waitForDeploymentComplete()
 	if err != nil {
 		return fmt.Errorf("failed to wait for Deployment status %s: %w", d.deployment.Name, err)
 	}
 
-	// Wait for goroutine to finish
+	// 等待 goroutine 结束
 	wg.Wait()
 
 	return nil
@@ -450,7 +450,7 @@ func (d *deploymentTester) scaleDeployment(newReplicas int32) error {
 	return nil
 }
 
-// waitForReadyReplicas waits for number of ready replicas to equal number of replicas.
+// waitForReadyReplicas 等待就绪副本数等于期望副本数。
 func (d *deploymentTester) waitForReadyReplicas() error {
 	if err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
 		deployment, err := d.c.AppsV1().Deployments(d.deployment.Namespace).Get(context.TODO(), d.deployment.Name, metav1.GetOptions{})
@@ -464,7 +464,7 @@ func (d *deploymentTester) waitForReadyReplicas() error {
 	return nil
 }
 
-// markUpdatedPodsReadyWithoutComplete marks updated Deployment pods as ready without waiting for deployment to complete.
+// markUpdatedPodsReadyWithoutComplete 将更新后的 Deployment Pod 标记为就绪，但不等待 Deployment 完成。
 func (d *deploymentTester) markUpdatedPodsReadyWithoutComplete() error {
 	if err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
 		pods, err := d.listUpdatedPods()
@@ -488,11 +488,11 @@ func (d *deploymentTester) markUpdatedPodsReadyWithoutComplete() error {
 	return nil
 }
 
-// waitForReadyReplicas waits for number of ready replicas to equal number of replicas.
+// waitForReadyReplicas 等待就绪副本数等于期望副本数。
 func (d *deploymentTester) waitForDeploymentStatusReplicasFields(ctx context.Context, replicas, updatedReplicas, readyReplicas, availableReplicas, unavailableReplicas int32, terminatingReplicas *int32) error {
 	var lastErr error
 	err := wait.PollUntilContextTimeout(ctx, pollInterval, pollTimeout, true, func(_ context.Context) (bool, error) {
-		// do not pass ctx to checkDeploymentStatusReplicasFields (Deployments().Get) so we always obtain the latest error and not the one from deadline exceeded
+		// 不将 ctx 传给 checkDeploymentStatusReplicasFields（Deployments().Get），以便始终获得最新的错误，而非超时错误
 		lastErr = d.checkDeploymentStatusReplicasFields(replicas, updatedReplicas, readyReplicas, availableReplicas, unavailableReplicas, terminatingReplicas)
 		return lastErr == nil, nil
 	})
@@ -502,8 +502,8 @@ func (d *deploymentTester) waitForDeploymentStatusReplicasFields(ctx context.Con
 	return nil
 }
 
-// Verify all replicas fields of DeploymentStatus have desired count.
-// Immediately return an error when found a non-matching replicas field.
+// 校验 DeploymentStatus 中所有副本数相关字段均为期望值。
+// 一旦发现字段不匹配，立即返回错误。
 func (d *deploymentTester) checkDeploymentStatusReplicasFields(replicas, updatedReplicas, readyReplicas, availableReplicas, unavailableReplicas int32, terminatingReplicas *int32) error {
 	deployment, err := d.c.AppsV1().Deployments(d.deployment.Namespace).Get(context.TODO(), d.deployment.Name, metav1.GetOptions{})
 	if err != nil {

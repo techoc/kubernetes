@@ -33,9 +33,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestHPAScaleUpToMin integration creates a Deployment and HPA, then verifies the HPA exists and
-// is reconciled, by bringing the replicas of the Deployment within the HPA's min and max range.
-// Given that the metrics aren't mocked, it should go up to min only.
+// TestHPAScaleUpToMin 集成测试创建一个 Deployment 和 HPA，然后通过使
+// Deployment 的副本数处于 HPA 的 min 和 max 范围内，验证 HPA 存在
+// 且被调谐。由于指标没有被 mock，副本数只会增长到 min。
 func TestHPAScaleUpToMin(t *testing.T) {
 	ctx := t.Context()
 
@@ -67,7 +67,7 @@ func TestHPAScaleUpToMin(t *testing.T) {
 	}
 }
 
-// TestHPAScaleToZero verifies that HPA can scale up to five, then down to zero and back again, using an external metric.
+// TestHPAScaleToZero 验证 HPA 使用外部指标时可以先扩容到五个副本，再缩容到零，然后再扩回来。
 func TestHPAScaleToZero(t *testing.T) {
 	ctx := t.Context()
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HPAScaleToZero, true)
@@ -81,7 +81,7 @@ func TestHPAScaleToZero(t *testing.T) {
 	ns := createTestNamespace(t, cs)
 	deployment := createDeployment(t, cs, ns.Name, 1)
 
-	// Create HPA using an external metric.
+	// 使用外部指标创建 HPA。
 	metricSpec := autoscalingv2.MetricSpec{
 		Type: autoscalingv2.ExternalMetricSourceType,
 		External: &autoscalingv2.ExternalMetricSource{
@@ -96,14 +96,14 @@ func TestHPAScaleToZero(t *testing.T) {
 	}
 	createHPA(t, cs, deployment, metricSpec, withHPAMinMaxReplicas(0, 10))
 
-	// Phase 1: metric=500, expect scale up to 5 pods.
+	// 阶段 1：metric=500，期望扩容到 5 个 Pod。
 	metricValue.Store(resource.MustParse("500"))
 	err := waitForDeploymentCondition(ctx, cs, deployment, atLeastReplicas(5))
 	if err != nil {
 		t.Fatalf("Phase 1: HPA did not scale up: %v", err)
 	}
 
-	// Verify the ScaledToZero condition is set to false on the HPA.
+	// 验证 HPA 上的 ScaledToZero condition 被设置为 false。
 	gotHPA, err := cs.AutoscalingV2().HorizontalPodAutoscalers(ns.Name).Get(ctx, hpaName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Phase 3: failed to get HPA: %v", err)
@@ -122,14 +122,14 @@ func TestHPAScaleToZero(t *testing.T) {
 		t.Fatal("Phase 1: ScaledToZero condition not found on HPA status")
 	}
 
-	// Phase 2: metric=0, expect scale down to 0 and ScaledToZero condition.
+	// 阶段 2：metric=0，期望缩容到 0 并设置 ScaledToZero condition。
 	metricValue.Store(resource.MustParse("0"))
 	err = waitForDeploymentCondition(ctx, cs, deployment, equalReplicas(0))
 	if err != nil {
 		t.Fatalf("Phase 2: HPA did not scale to zero: %v", err)
 	}
 
-	// Verify the ScaledToZero condition is set on the HPA.
+	// 验证 HPA 上设置了 ScaledToZero condition。
 	gotHPA, err = cs.AutoscalingV2().HorizontalPodAutoscalers(ns.Name).Get(ctx, hpaName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Phase 2: failed to get HPA: %v", err)
@@ -148,14 +148,14 @@ func TestHPAScaleToZero(t *testing.T) {
 		t.Fatal("Phase 2: ScaledToZero condition not found on HPA status")
 	}
 
-	// Phase 3: metric=400, expect scale up again (replicas >= 4).
+	// 阶段 3：metric=400，期望再次扩容（副本数 >= 4）。
 	metricValue.Store(resource.MustParse("400"))
 	err = waitForDeploymentCondition(ctx, cs, deployment, atLeastReplicas(4))
 	if err != nil {
 		t.Fatalf("Phase 3: HPA did not scale back up: %v", err)
 	}
 
-	// Verify the ScaledToZero condition is set to false on the HPA.
+	// 验证 HPA 上的 ScaledToZero condition 被设置为 false。
 	gotHPA, err = cs.AutoscalingV2().HorizontalPodAutoscalers(ns.Name).Get(ctx, hpaName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Phase 3: failed to get HPA: %v", err)
@@ -175,13 +175,13 @@ func TestHPAScaleToZero(t *testing.T) {
 	}
 }
 
-// TestHPAScaleToZeroRejected verifies that scaling to zero is limited to object
-// and external metrics and is guarded by the HPAScaleToZero feature gate. In
-// both cases below the API server must reject an HPA with minReplicas: 0:
-//   - a resource (CPU) metric is never eligible to scale to zero, even with the
-//     feature gate enabled, and
-//   - while the feature gate is disabled, minReplicas: 0 is forbidden even for
-//     an otherwise eligible external metric.
+// TestHPAScaleToZeroRejected 验证缩容到零仅限于 object 和
+// external 指标，并且受 HPAScaleToZero feature gate 控制。
+// 以下两种情况中，API server 都必须拒绝 minReplicas: 0 的 HPA：
+//   - 即使启用了 feature gate，resource（CPU）指标也永远
+//     不适合缩容到零；
+//   - 当 feature gate 禁用时，即使 external 指标本身符合
+//     条件，也禁止 minReplicas: 0。
 func TestHPAScaleToZeroRejected(t *testing.T) {
 	cpuMetric := autoscalingv2.MetricSpec{
 		Type: autoscalingv2.ResourceMetricSourceType,

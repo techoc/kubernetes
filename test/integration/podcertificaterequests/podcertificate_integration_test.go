@@ -54,7 +54,8 @@ func TestCleanerController(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Run an apiserver with PodCertificateRequest features enabled.
+	// 启动一个启用了 PodCertificateRequest
+	// 特性的 apiserver。
 	s := kubeapiservertesting.StartTestServerOrDie(
 		t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
@@ -69,8 +70,9 @@ func TestCleanerController(t *testing.T) {
 	client := clientset.NewForConfigOrDie(s.ClientConfig)
 	informers := informers.NewSharedInformerFactory(clientset.NewForConfigOrDie(restclient.AddUserAgent(s.ClientConfig, "certificatesigningrequest-informers")), time.Second)
 
-	// Register the cleaner controller with a short configured timeout.  Within
-	// 15 seconds the PCR should be deleted.
+	// 注册 cleaner controller，并配置
+	// 较短的超时时间。
+	// PCR 应在 15 秒内被删除。
 	cleanerClient, err := serviceAccountClient(s.ClientConfig, "kube-system", "podcertificaterequestcleaner")
 	if err != nil {
 		t.Fatalf("Unexpected error creating client that impersonates kube-system/podcertificaterequestcleaner: %v", err)
@@ -84,10 +86,10 @@ func TestCleanerController(t *testing.T) {
 	)
 	go c.Run(ctx, 1)
 
-	// Start the controller & informers
+	// 启动 controller 和 informer
 	informers.Start(ctx.Done())
 
-	// Make a node
+	// 创建一个节点
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
@@ -99,7 +101,7 @@ func TestCleanerController(t *testing.T) {
 		t.Fatalf("Unexpected error creating node1: %v", err)
 	}
 
-	// Make a serviceaccount
+	// 创建一个 serviceaccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -111,7 +113,7 @@ func TestCleanerController(t *testing.T) {
 		t.Fatalf("Unexpected error creating sa1: %v", err)
 	}
 
-	// Make a pod
+	// 创建一个 Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -133,13 +135,13 @@ func TestCleanerController(t *testing.T) {
 		t.Fatalf("Unexpected error creating pod1: %v", err)
 	}
 
-	// Create a clientset that impersonates node1
+	// 创建一个模拟 node1 的 clientset
 	node1Client, err := nodeClient(s.ClientConfig, "node1")
 	if err != nil {
 		t.Fatalf("Error in create clientset: %v", err)
 	}
 
-	// Have node1 create a PodCertificateRequest for pod1
+	// 让 node1 为 pod1 创建 PodCertificateRequest
 	stubReq := mustMakeStubPKCS10Request(t)
 	pcr := &certsv1.PodCertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -175,18 +177,20 @@ func TestCleanerController(t *testing.T) {
 		t.Fatalf("Unexpected error after waiting for PodCertificateRequest to be deleted: %v", err)
 	}
 
-	// TODO(KEP-4317): For beta, check via audit logs that it was the cleaner
-	// controller that issued the deletion.
+	// TODO(KEP-4317): 在 beta 阶段，通过审计日志
+	// 确认删除操作确实由
+	// cleaner controller 发起。
 }
 
 func TestNodeRestriction(t *testing.T) {
-	// Create a setup with two nodes, and a pod running on node1.  Node2 cannot
-	// make a PodCertificateRequest that refers to the pod on node1.
+	// 搭建一个包含两个节点的环境，Pod 运行在
+	// node1 上。node2 不能创建引用 node1 上 Pod 的
+	// PodCertificateRequest。
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Run an apiserver with PodCertificateRequest features enabled.
+	// 启动一个启用了 PodCertificateRequest 特性的 apiserver。
 	s := kubeapiservertesting.StartTestServerOrDie(
 		t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
@@ -201,7 +205,7 @@ func TestNodeRestriction(t *testing.T) {
 
 	client := clientset.NewForConfigOrDie(s.ClientConfig)
 
-	// Make node1 and node2
+	// 创建 node1 和 node2
 	node1 := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
@@ -223,7 +227,7 @@ func TestNodeRestriction(t *testing.T) {
 		t.Fatalf("Unexpected error creating node1: %v", err)
 	}
 
-	// Create clientsets for nodes
+	// 为节点创建 clientset
 	node1Client, err := nodeClient(s.ClientConfig, "node1")
 	if err != nil {
 		t.Fatalf("Error in create clientset: %v", err)
@@ -233,7 +237,7 @@ func TestNodeRestriction(t *testing.T) {
 		t.Fatalf("Error in create clientset: %v", err)
 	}
 
-	// Make a serviceaccount
+	// 创建一个 serviceaccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -245,7 +249,7 @@ func TestNodeRestriction(t *testing.T) {
 		t.Fatalf("Unexpected error creating sa1: %v", err)
 	}
 
-	// Make a pod
+	// 创建一个 Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -269,7 +273,7 @@ func TestNodeRestriction(t *testing.T) {
 	}
 
 	t.Run("node1 can create PCR for pod on node1", func(t *testing.T) {
-		// Have node2 create a PodCertificateRequest for pod1
+		// 让 node2 为 pod1 创建 PodCertificateRequest
 		stubReq := mustMakeStubPKCS10Request(t)
 		pcr := &certsv1.PodCertificateRequest{
 			ObjectMeta: metav1.ObjectMeta{
@@ -289,8 +293,8 @@ func TestNodeRestriction(t *testing.T) {
 			},
 		}
 
-		// Informer lag inside kube-apiserver could cause us to get transient
-		// errors.
+		// kube-apiserver 内部的 informer 延迟
+		// 可能导致偶发错误。
 		var lastErr string
 		err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, err = node1Client.CertificatesV1().PodCertificateRequests("default").Create(ctx, pcr, metav1.CreateOptions{})
@@ -309,7 +313,7 @@ func TestNodeRestriction(t *testing.T) {
 	})
 
 	t.Run("node2 cannot create PCR for pod on node1", func(t *testing.T) {
-		// Have node2 create a PodCertificateRequest for pod1
+		// 让 node2 为 pod1 创建 PodCertificateRequest
 		stubReq := mustMakeStubPKCS10Request(t)
 		pcr := &certsv1.PodCertificateRequest{
 			ObjectMeta: metav1.ObjectMeta{
@@ -329,10 +333,9 @@ func TestNodeRestriction(t *testing.T) {
 			},
 		}
 
-		// Informer lag inside kube-apiserver could cause us to get a
-		// non-Forbidden error from the noderestriction admission plugin.  This
-		// should be transient, so wait for some time to see if we reach our
-		// durable error condition.
+		// kube-apiserver 内部的 informer 延迟可能导致 noderestriction
+		// admission 插件返回非 Forbidden 错误。这应该是暂时现象，
+		// 因此等待一段时间，看是否能达到稳定的错误状态。
 		var lastErr string
 		err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, err = node2Client.CertificatesV1().PodCertificateRequests("default").Create(ctx, pcr, metav1.CreateOptions{})
@@ -353,7 +356,7 @@ func TestNodeRestriction(t *testing.T) {
 	})
 
 	t.Run("node2 cannot create PCR for pod that doesn't exist", func(t *testing.T) {
-		// Have node2 create a PodCertificateRequest for pod1
+		// 让 node2 为 pod1 创建 PodCertificateRequest
 		stubReq := mustMakeStubPKCS10Request(t)
 		pcr := &certsv1.PodCertificateRequest{
 			ObjectMeta: metav1.ObjectMeta{
@@ -373,10 +376,10 @@ func TestNodeRestriction(t *testing.T) {
 			},
 		}
 
-		// The noderestriction admission plugin will *not* return Forbidden,
-		// since this situation could always be caused by informer lag.  Just
-		// hold here for 15 seconds and assume if we're still getting an error,
-		// then it can't be due to informer lag.
+		// noderestriction admission 插件不会返回
+		// Forbidden，因为这种情况总有可能是由 informer 延迟
+		// 造成的。这里只需等待 15 秒，如果仍然收到错误，
+		// 就认为它不可能是由 informer 延迟导致的。
 		err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, err = node2Client.CertificatesV1().PodCertificateRequests("default").Create(ctx, pcr, metav1.CreateOptions{})
 			if err == nil {
@@ -384,7 +387,7 @@ func TestNodeRestriction(t *testing.T) {
 			}
 			return false, nil
 		})
-		if err == nil { // EQUALS nil
+		if err == nil { // 等于 nil
 			t.Fatalf("PCR creation unexpectedly succeeded")
 		}
 
@@ -396,7 +399,7 @@ func TestNodeAuthorization(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Run an apiserver with PodCertificateRequest features enabled.
+	// 启动一个启用了 PodCertificateRequest 特性的 apiserver。
 	s := kubeapiservertesting.StartTestServerOrDie(
 		t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
@@ -411,7 +414,7 @@ func TestNodeAuthorization(t *testing.T) {
 
 	client := clientset.NewForConfigOrDie(s.ClientConfig)
 
-	// Make node1 and node2
+	// 创建 node1 和 node2
 	node1 := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
@@ -433,7 +436,7 @@ func TestNodeAuthorization(t *testing.T) {
 		t.Fatalf("Unexpected error creating node1: %v", err)
 	}
 
-	// Make a serviceaccount
+	// 创建一个 serviceaccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -445,7 +448,7 @@ func TestNodeAuthorization(t *testing.T) {
 		t.Fatalf("Unexpected error creating sa1: %v", err)
 	}
 
-	// Make a pod
+	// 创建一个 Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -468,7 +471,7 @@ func TestNodeAuthorization(t *testing.T) {
 		t.Fatalf("Unexpected error creating pod1: %v", err)
 	}
 
-	// Create a clientsets that impersonate the nodes
+	// 创建模拟这些节点的 clientset
 	node1Client, err := nodeClient(s.ClientConfig, "node1")
 	if err != nil {
 		t.Fatalf("Error in create clientset: %v", err)
@@ -478,7 +481,7 @@ func TestNodeAuthorization(t *testing.T) {
 		t.Fatalf("Error in create clientset: %v", err)
 	}
 
-	// Have node1 create a PodCertificateRequest for pod1
+	// 让 node1 为 pod1 创建 PodCertificateRequest
 	stubReq := mustMakeStubPKCS10Request(t)
 	pcr := &certsv1.PodCertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -498,8 +501,8 @@ func TestNodeAuthorization(t *testing.T) {
 		},
 	}
 
-	// Creating the PCR could fail if there is informer lag in the
-	// noderestriction logic.  Poll until it succeeds.
+	// 如果 noderestriction 逻辑中存在 informer 延迟，创建 PCR 可能会失败。
+	// 轮询直到成功。
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, err = node1Client.CertificatesV1().PodCertificateRequests("default").Create(ctx, pcr, metav1.CreateOptions{})
 		if err != nil {
@@ -513,8 +516,8 @@ func TestNodeAuthorization(t *testing.T) {
 	}
 
 	t.Run("node1 can directly get pcr1", func(t *testing.T) {
-		// Getting the PCR could fail if there is lag in the node authorizer graph population.
-		// Poll until it succeeds.
+		// 如果 node authorizer 图填充存在延迟，获取 PCR 可能会失败。
+		// 轮询直到成功。
 		err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, err := node1Client.CertificatesV1().PodCertificateRequests("default").Get(ctx, "pcr1", metav1.GetOptions{})
 			if err != nil {
@@ -580,14 +583,14 @@ func TestNodeAuthorization(t *testing.T) {
 }
 
 func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
-	// A targeted test case to make sure that the node authorizer isn't mixing
-	// up namespaces and names.
+	// 这是一个针对性测试用例，确保 node authorizer
+	// 不会混淆 namespace 和 name。
 
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Run an apiserver with PodCertificateRequest features enabled.
+	// 启动一个启用了 PodCertificateRequest 特性的 apiserver。
 	s := kubeapiservertesting.StartTestServerOrDie(
 		t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
@@ -602,7 +605,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 
 	client := clientset.NewForConfigOrDie(s.ClientConfig)
 
-	// Make node1 and node2
+	// 创建 node1 和 node2
 	node1 := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
@@ -624,7 +627,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 		t.Fatalf("Unexpected error creating node1: %v", err)
 	}
 
-	// Make namespaces "foo" and "bar"
+	// 创建命名空间 "foo" 和 "bar"
 	_, err = client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "foo",
@@ -642,7 +645,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 		t.Fatalf("Unexpected error creating namespace nar: %v", err)
 	}
 
-	// Make a serviceaccount in each namespace
+	// 在每个命名空间中创建一个 serviceaccount
 	saFoo := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "foo",
@@ -664,7 +667,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 		t.Fatalf("Unexpected error creating serviceaccount bar: %v", err)
 	}
 
-	// Make a pod named "foo" in namespace "bar", and vice-versa
+	// 在命名空间 "bar" 中创建一个名为 "foo" 的 Pod，反之亦然
 	podBarFoo := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "bar",
@@ -708,7 +711,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 		t.Fatalf("Unexpected error creating pod foo/bar: %v", err)
 	}
 
-	// Create a clientsets that impersonate the nodes
+	// 创建模拟这些节点的 clientset
 	node1Client, err := nodeClient(s.ClientConfig, "node1")
 	if err != nil {
 		t.Fatalf("Error in create clientset: %v", err)
@@ -718,7 +721,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 		t.Fatalf("Error in create clientset: %v", err)
 	}
 
-	// Have node1 create a PodCertificateRequest for bar/foo
+	// 让 node1 为 bar/foo 创建 PodCertificateRequest
 	stubReq := mustMakeStubPKCS10Request(t)
 	pcrBarFoo := &certsv1.PodCertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -737,8 +740,8 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 			UnverifiedUserAnnotations: map[string]string{hermeticpodcertificatesigner.SpiffePathKey: "foo"},
 		},
 	}
-	// Creating the PCR could fail if there is informer lag in the
-	// noderestriction logic.  Poll until it succeeds.
+	// 如果 noderestriction 逻辑中存在 informer 延迟，创建 PCR 可能会失败。
+	// 轮询直到成功。
 	var lastErr string
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, err = node1Client.CertificatesV1().PodCertificateRequests("bar").Create(ctx, pcrBarFoo, metav1.CreateOptions{})
@@ -755,7 +758,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 		t.Fatalf("Unexpected error creating pcr bar/foo: %v", err)
 	}
 
-	// Have node2 create a PodCertificateRequest for foo/bar
+	// 让 node2 为 foo/bar 创建 PodCertificateRequest
 	stubReqFooBar := mustMakeStubPKCS10Request(t)
 	pcrFooBar := &certsv1.PodCertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -774,8 +777,8 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 			UnverifiedUserAnnotations: map[string]string{hermeticpodcertificatesigner.SpiffePathKey: "bar"},
 		},
 	}
-	// Creating the PCR could fail if there is informer lag in the
-	// noderestriction logic.  Poll until it succeeds.
+	// 如果 noderestriction 逻辑中存在 informer 延迟，创建 PCR 可能会失败。
+	// 轮询直到成功。
 	lastErr = ""
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, err = node2Client.CertificatesV1().PodCertificateRequests("foo").Create(ctx, pcrFooBar, metav1.CreateOptions{})
@@ -793,8 +796,8 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 	}
 
 	t.Run("node1 can directly get bar/foo", func(t *testing.T) {
-		// Getting the PCR could fail if there is lag in the node authorizer graph population.
-		// Poll until it succeeds.
+		// 如果 node authorizer 图填充存在延迟，获取 PCR 可能会失败。
+		// 轮询直到成功。
 		var lastErr string
 		err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, err := node1Client.CertificatesV1().PodCertificateRequests("bar").Get(ctx, "foo", metav1.GetOptions{})
@@ -813,8 +816,8 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 	})
 
 	t.Run("node2 can directly get foo/bar", func(t *testing.T) {
-		// Getting the PCR could fail if there is lag in the node authorizer graph population.
-		// Poll until it succeeds.
+		// 如果 node authorizer 图填充存在延迟，获取 PCR 可能会失败。
+		// 轮询直到成功。
 		var lastErr string
 		err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, err := node2Client.CertificatesV1().PodCertificateRequests("foo").Get(ctx, "bar", metav1.GetOptions{})
@@ -832,7 +835,7 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 		}
 	})
 
-	// Delete bar/foo
+	// 删除 bar/foo
 	err = client.CertificatesV1().PodCertificateRequests("bar").Delete(ctx, "foo", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Unexpected error deleting pcr bar/foo: %v", err)
@@ -847,19 +850,18 @@ func TestNodeAuthorizerNamespaceNameConfusion(t *testing.T) {
 }
 
 func TestSignerNameAuthorization(t *testing.T) {
-	// The noderestriction admission plugin normally requires that a pod mount a
-	// podCertificate projected volume for a given signer before its node is
-	// allowed to create a PodCertificateRequest for that signer.  As an
-	// administrator override, granting the
-	// "request-serviceaccounts-podcertificate-signer" verb on the signer name
-	// for a service account also authorizes the request.  This test exercises
-	// that override path with a pod that does *not* mount a podCertificate
-	// volume.
+	// noderestriction admission 插件通常要求 Pod 为某个 signer 挂载
+	// podCertificate projected volume，然后才允许其所在节点为该 signer
+	// 创建 PodCertificateRequest。作为管理员覆盖手段，
+	// 为 service account 在 signer name 上授予
+	// "request-serviceaccounts-podcertificate-signer" verb 也可以
+	// 授权该请求。本测试使用一个*没有*挂载 podCertificate volume
+	// 的 Pod 来验证这条覆盖路径。
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Run an apiserver with PodCertificateRequest features enabled.
+	// 启动一个启用了 PodCertificateRequest 特性的 apiserver。
 	s := kubeapiservertesting.StartTestServerOrDie(
 		t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
@@ -874,7 +876,7 @@ func TestSignerNameAuthorization(t *testing.T) {
 
 	client := clientset.NewForConfigOrDie(s.ClientConfig)
 
-	// Make node1
+	// 创建 node1
 	node1 := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
@@ -886,7 +888,7 @@ func TestSignerNameAuthorization(t *testing.T) {
 		t.Fatalf("Unexpected error creating node1: %v", err)
 	}
 
-	// Make a serviceaccount
+	// 创建一个 serviceaccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -898,7 +900,7 @@ func TestSignerNameAuthorization(t *testing.T) {
 		t.Fatalf("Unexpected error creating sa1: %v", err)
 	}
 
-	// Make a pod that does *not* mount a podCertificate projected volume.
+	// 创建一个*没有*挂载 podCertificate projected volume 的 Pod。
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -920,7 +922,7 @@ func TestSignerNameAuthorization(t *testing.T) {
 		t.Fatalf("Unexpected error creating pod1: %v", err)
 	}
 
-	// Create a clientset that impersonates node1
+	// 创建一个模拟 node1 的 clientset
 	node1Client, err := nodeClient(s.ClientConfig, "node1")
 	if err != nil {
 		t.Fatalf("Error in create clientset: %v", err)
@@ -948,10 +950,9 @@ func TestSignerNameAuthorization(t *testing.T) {
 	}
 
 	t.Run("node1 cannot create PCR before the signer is authorized", func(t *testing.T) {
-		// Informer lag inside kube-apiserver could cause us to get a
-		// non-Forbidden error from the noderestriction admission plugin.  This
-		// should be transient, so wait for some time to see if we reach our
-		// durable Forbidden condition.
+		// kube-apiserver 内部的 informer 延迟可能导致 noderestriction admission
+		// 插件返回非 Forbidden 错误。这应该是暂时现象，因此等待一段时间，
+		// 看是否能达到稳定的 Forbidden 状态。
 		var lastErr string
 		err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, err := node1Client.CertificatesV1().PodCertificateRequests("default").Create(ctx, makePCR(), metav1.CreateOptions{})
@@ -971,7 +972,7 @@ func TestSignerNameAuthorization(t *testing.T) {
 		}
 	})
 
-	// Grant node1 the ability to request the kubernetes.io/foo signer for sa1.
+	// 授予 node1 为 sa1 请求 kubernetes.io/foo signer 的能力。
 	authutil.GrantUserAuthorization(t, ctx, client, "system:node:node1", rbacv1.PolicyRule{
 		APIGroups:     []string{certsv1.GroupName},
 		Resources:     []string{"kubernetes.io:foo"},
@@ -1001,10 +1002,9 @@ func nodeClient(cfg *restclient.Config, node string) (*clientset.Clientset, erro
 	return clientset.NewForConfig(newCfg)
 }
 
-// podCertificateVolume returns a projected volume that mounts a podCertificate
-// for the given signer.  Pods that mount such a volume are allowed by the
-// noderestriction admission plugin to have a PodCertificateRequest created for
-// the matching signer.
+// podCertificateVolume 返回一个 projected volume，为给定 signer 挂载
+// podCertificate。挂载了这种 volume 的 Pod，被 noderestriction admission
+// 插件允许为匹配的 signer 创建 PodCertificateRequest。
 func podCertificateVolume(signerName string) []corev1.Volume {
 	return []corev1.Volume{
 		{

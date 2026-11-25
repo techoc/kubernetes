@@ -80,7 +80,7 @@ func TestScaleAllResources(t *testing.T) {
 		t.Run(test.kind, func(t *testing.T) {
 			validObject := []byte(test.validObj)
 
-			// Create the object
+			// 创建对象
 			_, err := client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				AbsPath(test.path).
 				Namespace("default").
@@ -96,7 +96,7 @@ func TestScaleAllResources(t *testing.T) {
 			assertReplicasValue(t, obj, 1)
 			assertReplicasOwnership(t, obj, "apply_test")
 
-			// Call scale subresource to update replicas
+			// 调用 scale 子资源来更新 replicas
 			_, err = client.CoreV1().RESTClient().
 				Patch(types.MergePatchType).
 				AbsPath(test.path).
@@ -114,7 +114,7 @@ func TestScaleAllResources(t *testing.T) {
 			assertReplicasValue(t, obj, 5)
 			assertReplicasOwnership(t, obj, "scale_test")
 
-			// Re-apply the original object, it should fail with conflict because replicas have changed
+			// 重新 apply 原始对象，因为 replicas 已改变，应当因冲突而失败
 			_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				AbsPath(test.path).
 				Namespace("default").
@@ -127,7 +127,7 @@ func TestScaleAllResources(t *testing.T) {
 				t.Fatalf("Expected conflict when re-applying the original object, but got: %v", err)
 			}
 
-			// Re-apply forcing the changes should succeed
+			// 强制重新 apply 这些变更应当成功
 			_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				AbsPath(test.path).
 				Namespace("default").
@@ -144,7 +144,7 @@ func TestScaleAllResources(t *testing.T) {
 			assertReplicasValue(t, obj, 1)
 			assertReplicasOwnership(t, obj, "apply_test")
 
-			// Run "Apply" with a scale object with a different number of replicas. It should generate a conflict.
+			// 使用 replicas 数量不同的 scale 对象执行 "Apply"，应当产生冲突。
 			_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				AbsPath(test.path).
 				Namespace("default").
@@ -161,7 +161,7 @@ func TestScaleAllResources(t *testing.T) {
 				t.Fatalf("Expected conflict with `apply_test` manager when but got: %v", err)
 			}
 
-			// Same as before but force. Only the new manager should own .spec.replicas
+			// 与之前相同但使用 force。此时只有新 manager 应拥有 .spec.replicas
 			_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				AbsPath(test.path).
 				Namespace("default").
@@ -179,7 +179,7 @@ func TestScaleAllResources(t *testing.T) {
 			assertReplicasValue(t, obj, 17)
 			assertReplicasOwnership(t, obj, "apply_scale")
 
-			// Replace scale object
+			// 替换 scale 对象
 			_, err = client.CoreV1().RESTClient().Put().
 				AbsPath(test.path).
 				Namespace("default").
@@ -196,7 +196,7 @@ func TestScaleAllResources(t *testing.T) {
 			assertReplicasValue(t, obj, 7)
 			assertReplicasOwnership(t, obj, "replace_test")
 
-			// Apply the same number of replicas, both managers should own the field
+			// apply 相同的 replicas 数量，此时两个 manager 都应拥有该字段
 			_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				AbsPath(test.path).
 				Namespace("default").
@@ -213,7 +213,7 @@ func TestScaleAllResources(t *testing.T) {
 			assertReplicasValue(t, obj, 7)
 			assertReplicasOwnership(t, obj, "replace_test", "co_owning_test")
 
-			// Scaling again should make this manager the only owner of replicas
+			// 再次 scale 后，该 manager 应成为 replicas 的唯一拥有者
 			_, err = client.CoreV1().RESTClient().Patch(types.MergePatchType).
 				AbsPath(test.path).
 				Namespace("default").
@@ -241,7 +241,7 @@ func TestScaleUpdateOnlyStatus(t *testing.T) {
 	path := "/apis/apps/v1"
 	validObject := []byte(validAppsV1("Deployment"))
 
-	// Create the object
+	// 创建对象
 	_, err := client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 		AbsPath(path).
 		Namespace("default").
@@ -257,7 +257,7 @@ func TestScaleUpdateOnlyStatus(t *testing.T) {
 	assertReplicasValue(t, obj, 1)
 	assertReplicasOwnership(t, obj, "apply_test")
 
-	// Call scale subresource to update replicas
+	// 调用 scale 子资源来更新 replicas
 	_, err = client.CoreV1().RESTClient().
 		Patch(types.MergePatchType).
 		AbsPath(path).
@@ -423,16 +423,16 @@ func assertReplicasOwnership(t *testing.T, obj *unstructured.Unstructured, field
 
 		spec, ok := entryJSON["f:spec"].(map[string]interface{})
 		if !ok {
-			// continue with the next managedField, as we this field does not hold the spec entry
+			// 继续处理下一个 managedField，因为该字段不包含 spec 条目
 			continue
 		}
 
 		if _, ok := spec["f:replicas"]; !ok {
-			// continue with the next managedField, as we this field does not hold the spec.replicas entry
+			// 继续处理下一个 managedField，因为该字段不包含 spec.replicas 条目
 			continue
 		}
 
-		// check if the manager is one of the ones we expect
+		// 检查该 manager 是否属于我们预期的 manager 之一
 		if _, ok := seen[managedField.Manager]; !ok {
 			t.Fatalf("Unexpected field manager, found %q, expected to be in: %v", managedField.Manager, seen)
 		}

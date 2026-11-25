@@ -534,13 +534,15 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 		"--disable-admission-plugins=ServiceAccount,StorageObjectInUseProtection",
 		// 强制启用所有资源，以便检查存储。
 		"--runtime-config=api/all=true",
-		// 同时启用保护资源的 feature gate，以检查其存储。
+		// 同时启用保护资源的 feature gate 以检查其存储。
 		// 例如 "--feature-gates=EphemeralContainers=true",
 	}, etcdConfig)
 	defer server.TearDownFn()
 
-	// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求和控制器发起的请求。
-	// 我们据此在记录之前过滤请求，确保不会把控制器的请求误当成该客户端的请求。
+	// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求
+	// 和控制器发起的请求。我们据此在记录请求之前先过滤，
+	// 确保不会把控制器发出的请求
+	// 误当成该客户端发出的请求。
 	clientConfig := rest.CopyConfig(server.ClientConfig)
 	clientConfig.Impersonate.UserName = testClientUsername
 	clientConfig.Impersonate.Groups = []string{"system:masters", "system:authenticated"}
@@ -798,8 +800,9 @@ func testResourceDelete(c *testContext) {
 		return
 	}
 	// 先给对象添加 finalizer，再删除它。
-	// 我们不通过设置 DeleteOptions.PropagationPolicy 来添加 finalizer，
-	// 因为某些资源（例如 events）不支持垃圾回收器的 finalizer。
+	// 我们不通过设置 DeleteOptions.PropagationPolicy
+	// 来添加 finalizer，因为某些资源（例如 events）
+	// 不支持垃圾回收器的 finalizer。
 	_, err = c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Patch(
 		context.TODO(),
 		obj.GetName(),

@@ -53,8 +53,8 @@ import (
 
 func TestNodeAuthorizer(t *testing.T) {
 	const (
-		// Define credentials
-		// Fake values for testing.
+		// 定义凭据
+		// 测试中使用的假值。
 		tokenMaster      = "master-token"
 		tokenNodeUnknown = "unknown-token"
 		tokenNode1       = "node1-token"
@@ -80,17 +80,17 @@ func TestNodeAuthorizer(t *testing.T) {
 		"--authorization-mode", "Node,RBAC",
 		"--token-auth-file", tokenFile.Name(),
 		"--enable-admission-plugins", "NodeRestriction",
-		// The "default" SA is not installed, causing the ServiceAccount plugin to retry for ~1s per
-		// API request.
+		// 未安装 "default" SA，这会导致 ServiceAccount 插件
+		// 对每个 API 请求重试约 1 秒。
 		"--disable-admission-plugins", "ServiceAccount,TaintNodesByCondition",
 	}, framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// Build client config and superuser clientset
+	// 构建客户端配置和超级用户 clientset
 	clientConfig := server.ClientConfig
 	superuserClient, superuserClientExternal := clientsetForToken(tokenMaster, clientConfig)
 
-	// Create objects
+	// 创建对象
 	if _, err := superuserClient.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns"}}, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -217,8 +217,8 @@ func TestNodeAuthorizer(t *testing.T) {
 	}
 	removeResourceClaimReference := func(client clientset.Interface) func() error {
 		return func() error {
-			// An explicit empty slice clears the field; null would be
-			// treated as an omitted field and preserved by the apiserver.
+			// 显式使用空 slice 会清空该字段；null 会被视为未提供的字段，
+			// 从而被 apiserver 保留。
 			_, err := client.CoreV1().Pods("ns").Patch(context.TODO(), "node2normalpod", types.MergePatchType,
 				[]byte(`{"status":{"resourceClaimStatuses":[]}}`),
 				metav1.PatchOptions{}, "status")
@@ -465,7 +465,7 @@ func TestNodeAuthorizer(t *testing.T) {
 	patchNode1CSINode := func(client clientset.Interface) func() error {
 		return func() error {
 			bs := []byte(fmt.Sprintf(`{"csiDrivers": [ { "driver": "net.example.storage.driver2", "nodeID": "net.example.storage/node1", "topologyKeys": [ "net.example.storage/region" ] } ] }`))
-			// StrategicMergePatch is unsupported by CRs. Falling back to MergePatch
+			// CR 不支持 StrategicMergePatch。回退到 MergePatch
 			_, err := client.StorageV1().CSINodes().Patch(context.TODO(), "node1", types.MergePatchType, bs, metav1.PatchOptions{})
 			return err
 		}
@@ -482,7 +482,7 @@ func TestNodeAuthorizer(t *testing.T) {
 	_, csiNode1Client := clientsetForToken(tokenNode1, clientConfig)
 	_, csiNode2Client := clientsetForToken(tokenNode2, clientConfig)
 
-	// all node requests from node1 and unknown node fail
+	// 来自 node1 和未知节点的所有节点请求均失败
 	expectForbidden(t, getSecret(nodeanonClient))
 	expectForbidden(t, getPVSecret(nodeanonClient))
 	expectForbidden(t, getConfigMap(nodeanonClient))
@@ -510,7 +510,7 @@ func TestNodeAuthorizer(t *testing.T) {
 	expectNotFound(t, updateNode2Status(node1Client))
 	expectForbidden(t, deleteNode2(node1Client))
 
-	// related object requests from node2 fail
+	// 来自 node2 的相关对象请求失败
 	expectForbidden(t, getSecret(node2Client))
 	expectForbidden(t, getPVSecret(node2Client))
 	expectForbidden(t, getConfigMap(node2Client))
@@ -520,26 +520,26 @@ func TestNodeAuthorizer(t *testing.T) {
 	expectForbidden(t, getResourceClaimTemplate(node2Client))
 
 	expectForbidden(t, createNode2NormalPod(nodeanonClient))
-	// mirror pod and self node lifecycle is allowed
+	// 允许操作 mirror pod 和自身节点的生命周期
 	expectAllowed(t, createNode2(node2Client))
 	expectAllowed(t, updateNode2Status(node2Client))
 	expectForbidden(t, createNode2MirrorPod(nodeanonClient))
 	expectForbidden(t, deleteNode2MirrorPod(nodeanonClient))
 	expectForbidden(t, createNode2MirrorPod(node1Client))
 	expectNotFound(t, deleteNode2MirrorPod(node1Client))
-	// create a pod as an admin to add object references
+	// 以管理员身份创建 pod，以添加对象引用
 	expectAllowed(t, createNode2NormalPod(superuserClient))
 
 	expectAllowed(t, createNode2MirrorPod(node2Client))
 	expectAllowed(t, deleteNode2MirrorPod(node2Client))
 	expectAllowed(t, createNode2MirrorPod(node2Client))
 	expectAllowed(t, createNode2MirrorPodEviction(node2Client))
-	// self deletion is not allowed
+	// 不允许删除自身
 	expectForbidden(t, deleteNode2(node2Client))
-	// modification of another node's status is not allowed
+	// 不允许修改其他节点的状态
 	expectForbidden(t, updateNode2Status(node1Client))
 
-	// unidentifiable node and node1 are still forbidden
+	// 无法识别的节点和 node1 仍然被禁止
 	expectForbidden(t, getSecret(nodeanonClient))
 	expectForbidden(t, getPVSecret(nodeanonClient))
 	expectForbidden(t, getConfigMap(nodeanonClient))
@@ -570,30 +570,30 @@ func TestNodeAuthorizer(t *testing.T) {
 	expectNotFound(t, deleteNode2MirrorPod(node1Client))
 	expectNotFound(t, createNode2MirrorPodEviction(node1Client))
 
-	// node2 can get referenced objects now
+	// node2 现在可以获取被引用的对象
 	expectAllowed(t, getSecret(node2Client))
 	expectAllowed(t, getPVSecret(node2Client))
 	expectAllowed(t, getConfigMap(node2Client))
 	expectAllowed(t, getPVC(node2Client))
 	expectAllowed(t, getPV(node2Client))
 
-	// node2 can only get direct claim references
+	// node2 只能获取直接引用的 claim
 	expectAllowed(t, getResourceClaim(node2Client))
 	expectForbidden(t, getResourceClaimTemplate(node2Client))
 
-	// node cannot add a claim reference
+	// 节点不能添加 claim 引用
 	expectForbidden(t, addResourceClaimTemplateReference(node2Client))
-	// superuser can add a claim reference
+	// 超级用户可以添加 claim 引用
 	expectAllowed(t, addResourceClaimTemplateReference(superuserClient))
-	// node can get direct and template claim references
+	// 节点可以获取直接和模板 claim 引用
 	expectAllowed(t, getResourceClaim(node2Client))
 	expectAllowed(t, getResourceClaimTemplate(node2Client))
 
-	// node cannot remove a claim reference
+	// 节点不能移除 claim 引用
 	expectForbidden(t, removeResourceClaimReference(node2Client))
-	// superuser can remove a claim reference
+	// 超级用户可以移除 claim 引用
 	expectAllowed(t, removeResourceClaimReference(superuserClient))
-	// node2 can only get direct claim references
+	// node2 只能获取直接引用的 claim
 	expectAllowed(t, getResourceClaim(node2Client))
 	expectForbidden(t, getResourceClaimTemplate(node2Client))
 
@@ -603,61 +603,61 @@ func TestNodeAuthorizer(t *testing.T) {
 	expectAllowed(t, createNode2MirrorPod(node2Client))
 	expectAllowed(t, deleteNode2MirrorPod(node2Client))
 
-	// recreate as an admin to test eviction
+	// 以管理员身份重新创建，以测试驱逐
 	expectAllowed(t, createNode2NormalPod(superuserClient))
 	expectAllowed(t, createNode2MirrorPod(superuserClient))
 	expectAllowed(t, createNode2NormalPodEviction(node2Client))
 	expectAllowed(t, createNode2MirrorPodEviction(node2Client))
-	// clean up node2
+	// 清理 node2
 	expectAllowed(t, deleteNode2(superuserClient))
 
-	// re-create a pod as an admin to add object references
+	// 以管理员身份重新创建 pod，以添加对象引用
 	expectAllowed(t, createNode2NormalPod(superuserClient))
 
 	expectForbidden(t, updatePVCCapacity(node1Client))
 	expectAllowed(t, updatePVCCapacity(node2Client))
 	expectForbidden(t, updatePVCPhase(node2Client))
 
-	// Enabled CSIPersistentVolume feature
+	// 已启用 CSIPersistentVolume 特性
 	expectForbidden(t, getVolumeAttachment(node1ClientExternal))
 	expectAllowed(t, getVolumeAttachment(node2ClientExternal))
 
-	// create node2 again
+	// 再次创建 node2
 	expectAllowed(t, createNode2(node2Client))
-	// clean up node2
+	// 清理 node2
 	expectAllowed(t, deleteNode2(superuserClient))
 
-	// node1 allowed to operate on its own lease
+	// 允许 node1 操作自己的 lease
 	expectAllowed(t, createNode1Lease(node1Client))
 	expectAllowed(t, getNode1Lease(node1Client))
 	expectAllowed(t, updateNode1Lease(node1Client))
 	expectAllowed(t, patchNode1Lease(node1Client))
 	expectAllowed(t, deleteNode1Lease(node1Client))
-	// node2 not allowed to operate on another node's lease
+	// 不允许 node2 操作其他节点的 lease
 	expectForbidden(t, createNode1Lease(node2Client))
 	expectForbidden(t, getNode1Lease(node2Client))
 	expectForbidden(t, updateNode1Lease(node2Client))
 	expectForbidden(t, patchNode1Lease(node2Client))
 	expectForbidden(t, deleteNode1Lease(node2Client))
 
-	// node1 allowed to operate on its own CSINode
+	// 允许 node1 操作自己的 CSINode
 	expectAllowed(t, createNode1CSINode(csiNode1Client))
 	expectAllowed(t, getNode1CSINode(csiNode1Client))
 	expectAllowed(t, updateNode1CSINode(csiNode1Client))
 	expectAllowed(t, patchNode1CSINode(csiNode1Client))
 	expectAllowed(t, deleteNode1CSINode(csiNode1Client))
-	// node2 not allowed to operate on another node's CSINode
+	// 不允许 node2 操作其他节点的 CSINode
 	expectForbidden(t, createNode1CSINode(csiNode2Client))
 	expectForbidden(t, getNode1CSINode(csiNode2Client))
 	expectForbidden(t, updateNode1CSINode(csiNode2Client))
 	expectForbidden(t, patchNode1CSINode(csiNode2Client))
 	expectForbidden(t, deleteNode1CSINode(csiNode2Client))
 
-	// Always allowed. Permission to delete specific objects is checked per object.
-	// Beware, this is destructive!
+	// 始终允许。删除特定对象的权限会逐个对象进行检查。
+	// 注意，这是破坏性操作！
 	expectAllowed(t, deleteResourceSliceCollection(csiNode1Client, ptr.To("node1")))
 
-	// One slice must have been deleted, the other not.
+	// 必须已删除其中一个 slice，另一个保留。
 	slices, err := superuserClient.ResourceV1().ResourceSlices().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -669,7 +669,7 @@ func TestNodeAuthorizer(t *testing.T) {
 		t.Fatal("wrong slice deleted")
 	}
 
-	// Superuser can delete.
+	// 超级用户可以删除。
 	expectAllowed(t, deleteResourceSliceCollection(superuserClient, nil))
 	slices, err = superuserClient.ResourceV1().ResourceSlices().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -680,9 +680,9 @@ func TestNodeAuthorizer(t *testing.T) {
 	}
 }
 
-// expect executes a function a set number of times until it either returns the
-// expected error or executes too many times. It returns if the retries timed
-// out and the last error returned by the method.
+// expect 会多次执行函数，直到其返回期望的错误，
+// 或执行次数过多。它返回重试是否超时，
+// 以及该方法最后一次返回的错误。
 func expect(t *testing.T, f func() error, wantErr func(error) bool) (timeout bool, lastErr error) {
 	t.Helper()
 	err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
@@ -732,17 +732,17 @@ func expectedForbiddenMessage(t *testing.T, f func() error, expectedMessage stri
 	}
 }
 
-// TestNodeRestrictionServiceAccount is an integration test to verify that
-// the NodeRestriction admission plugin
-// - forbids kubelet to request a token for a service account token that's not bound to a pod
-// - forbids kubelet to request a token for a service account token when pod is not found
-// - kubelet successfully requests a token for a service account token when pod is found and uid matches
-// This test is run with the ServiceAccountNodeAudienceRestriction feature disabled
-// to validate the default behavior of the NodeRestriction admission plugin.
+// TestNodeRestrictionServiceAccount 是一个集成测试，用于验证
+// NodeRestriction admission 插件：
+// - 禁止 kubelet 为未绑定到 pod 的 service account 请求 token
+// - 禁止 kubelet 在 pod 不存在时请求 service account 的 token
+// - 当 pod 存在且 uid 匹配时，kubelet 可以成功请求 service account 的 token
+// 该测试在禁用 ServiceAccountNodeAudienceRestriction 特性的情况下运行，
+// 以验证 NodeRestriction admission 插件的默认行为。
 func TestNodeRestrictionServiceAccount(t *testing.T) {
 	const (
-		// Define credentials
-		// Fake values for testing.
+		// 定义凭据
+		// 测试中使用的假值。
 		tokenMaster = "master-token"
 		tokenNode1  = "node1-token"
 		tokenNode2  = "node2-token"
@@ -770,7 +770,7 @@ func TestNodeRestrictionServiceAccount(t *testing.T) {
 	}, framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// Build client config and superuser clientset
+	// 构建客户端配置和超级用户 clientset
 	clientConfig := server.ClientConfig
 	superuserClient, _ := clientsetForToken(tokenMaster, clientConfig)
 
@@ -778,11 +778,11 @@ func TestNodeRestrictionServiceAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// RBAC permissions are required to test service account token requests
-	// using the node client because we cannot rely on the node authorizer since we have not
-	// configured the references needed for it to work.  This test is focused on exercising
-	// the node admission logic, not the node authorizer logic.  We want to know what happens
-	// in admission if the request was already authorized.
+	// 使用 node 客户端测试 service account token 请求需要 RBAC 权限，
+	// 因为我们尚未配置 node authorizer 工作所需的引用，无法依赖它。
+	// 本测试专注于验证 node admission 逻辑，
+	// 而非 node authorizer 逻辑。
+	// 我们想了解在请求已被授权的情况下 admission 会发生什么。
 	configureRBACForServiceAccountToken(t, superuserClient)
 
 	createTokenRequestNodeNotBoundToPod := func(client clientset.Interface) func() error {
@@ -817,36 +817,36 @@ func TestNodeRestrictionServiceAccount(t *testing.T) {
 	})
 
 	t.Run("service account token request is successful", func(t *testing.T) {
-		// create a pod as an admin to add object references
+		// 以管理员身份创建 pod，以添加对象引用
 		pod := createPod(t, superuserClient, nil)
 		createServiceAccount(t, superuserClient, "ns", "default")
 		expectAllowed(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("")))
 	})
 }
 
-// TestNodeRestrictionServiceAccountAudience is an integration test to verify that
-// the NodeRestriction admission plugin
-// - allows kubelet to request a token for a service account that's in the pod spec
-//  1. pod --> ephemeral --> pvc --> pv --> csi --> driver --> tokenrequest with audience
-//  2. pod --> pvc --> pv --> csi --> driver --> tokenrequest with audience
-//  3. pod --> csi --> driver --> tokenrequest with audience
-//  4. pod --> projected --> service account token with audience
+// TestNodeRestrictionServiceAccountAudience 是一个集成测试，用于验证当启用
+// ServiceAccountNodeAudienceRestriction 特性时，NodeRestriction admission 插件：
+// - 允许 kubelet 为 pod spec 中出现的 service account 请求 token
+//  1. pod --> ephemeral --> pvc --> pv --> csi --> driver --> 带 audience 的 tokenrequest
+//  2. pod --> pvc --> pv --> csi --> driver --> 带 audience 的 tokenrequest
+//  3. pod --> csi --> driver --> 带 audience 的 tokenrequest
+//  4. pod --> projected --> 带 audience 的 service account token
 //
-// - allows kubelet to request a token for a service account based on subjectacccessreview
-//  1. clusterrole and clusterrolebinding allowing a node to request specific audience for a service account
-//  2. clusterrole and rolebinding allowing a node to request specific audience for a service account
-//  3. role and rolebinding allowing a node to request specific audience for a service account in a namespace
-//  4. clusterrole and rolebinding allowing a node to request specific audience for any service account in a namespace
-//  5. clusterrole and rolebinding allowing any node to request any audience for a service account in a namespace
-//  6. clusterrole and rolebinding allowing any node to request any audience for any service account in a namespace
-//  7. api server audience "" configured with rbac role
+// - 允许 kubelet 基于 subjectacccessreview 为 service account 请求 token
+//  1. clusterrole 和 clusterrolebinding 允许节点为 service account 请求特定 audience
+//  2. clusterrole 和 rolebinding 允许节点为 service account 请求特定 audience
+//  3. role 和 rolebinding 允许节点为某 namespace 中的 service account 请求特定 audience
+//  4. clusterrole 和 rolebinding 允许节点为某 namespace 中的任意 service account 请求特定 audience
+//  5. clusterrole 和 rolebinding 允许任意节点为某 namespace 中的 service account 请求任意 audience
+//  6. clusterrole 和 rolebinding 允许任意节点为任意 namespace 中的
+//     任意 service account 请求任意 audience
+//  7. 通过 rbac role 配置 api server audience ""
 //
-// - forbids kubelet to request a token for a service account that's not in the pod spec
-// when the ServiceAccountNodeAudienceRestriction feature is enabled.
+// - 禁止 kubelet 为不在 pod spec 中的 service account 请求 token
 func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 	const (
-		// Define credentials
-		// Fake values for testing.
+		// 定义凭据
+		// 测试中使用的假值。
 		tokenMaster = "master-token"
 		tokenNode1  = "node1-token"
 	)
@@ -878,12 +878,12 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 	kcm := kubecontrollermanagertesting.StartTestServerOrDie(t, ctx, []string{
 		"--kubeconfig=" + kubeConfigFile,
-		"--controllers=ephemeral-volume-controller", // we need this controller to test the ephemeral volume source in the pod
-		"--leader-elect=false",                      // KCM leader election calls os.Exit when it ends, so it is easier to just turn it off altogether
+		"--controllers=ephemeral-volume-controller", // 需要该控制器来测试 pod 中的 ephemeral volume source
+		"--leader-elect=false",                      // KCM leader election 结束时会调用 os.Exit，因此干脆将其关闭
 	})
 	defer kcm.TearDownFn()
 
-	// Build client config and superuser clientset
+	// 构建客户端配置和超级用户 clientset
 	clientConfig := server.ClientConfig
 	superuserClient, _ := clientsetForToken(tokenMaster, clientConfig)
 
@@ -891,11 +891,11 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// RBAC permissions are required to test service account token requests
-	// using the node client because we cannot rely on the node authorizer since we have not
-	// configured the references needed for it to work.  This test is focused on exercising
-	// the node admission logic, not the node authorizer logic.  We want to know what happens
-	// in admission if the request was already authorized.
+	// 使用 node 客户端测试 service account token 请求需要 RBAC 权限，
+	// 因为我们尚未配置 node authorizer 工作所需的引用，无法依赖它。
+	// 本测试专注于验证 node admission 逻辑，
+	// 而非 node authorizer 逻辑。
+	// 我们想了解在请求已被授权的情况下 admission 会发生什么。
 	configureRBACForServiceAccountToken(t, superuserClient)
 
 	_, err = superuserClient.CoreV1().PersistentVolumeClaims("ns").Create(context.TODO(), &corev1.PersistentVolumeClaim{
@@ -1107,7 +1107,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACClusterRole(t, cr, superuserClient)
 		deleteRBACClusterRoleBinding(t, crb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("audience1"), tokenRequestWithName("some-random-name")), `system:node:node1 is not authorized to request tokens for audience "audience1"`)
 		deletePod(t, superuserClient, "pod1")
 		deleteServiceAccount(t, superuserClient, "ns", "some-random-name")
@@ -1141,7 +1141,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACClusterRole(t, cr, superuserClient)
 		deleteRBACRoleBinding(t, rb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("audience1")), `system:node:node1 is not authorized to request tokens for audience "audience1"`)
 		deletePod(t, superuserClient, "pod1")
 	})
@@ -1174,7 +1174,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACRole(t, role, superuserClient)
 		deleteRBACRoleBinding(t, rb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("audience1")), `system:node:node1 is not authorized to request tokens for audience "audience1"`)
 		deletePod(t, superuserClient, "pod1")
 	})
@@ -1186,7 +1186,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 				APIGroups:     []string{""},
 				Resources:     []string{"audience1"},
 				Verbs:         []string{"request-serviceaccounts-token-audience"},
-				ResourceNames: []string{}, // resource name empty means all service accounts
+				ResourceNames: []string{}, // resource name 为空表示所有 service account
 			}},
 		}
 		rb := &rbacv1.RoleBinding{
@@ -1208,7 +1208,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACRole(t, role, superuserClient)
 		deleteRBACRoleBinding(t, rb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("audience1"), tokenRequestWithName("custom-sa")), `system:node:node1 is not authorized to request tokens for audience "audience1"`)
 		deletePod(t, superuserClient, "pod1")
 		deleteServiceAccount(t, superuserClient, "ns", "custom-sa")
@@ -1219,7 +1219,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "audience-access-for-nodes", Namespace: "ns"},
 			Rules: []rbacv1.PolicyRule{{
 				APIGroups:     []string{""},
-				Resources:     []string{"*"}, // wildcard for audiences
+				Resources:     []string{"*"}, // audience 的通配符
 				Verbs:         []string{"request-serviceaccounts-token-audience"},
 				ResourceNames: []string{"default"},
 			}},
@@ -1247,7 +1247,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACRole(t, role, superuserClient)
 		deleteRBACRoleBinding(t, rb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("audience1")), `system:node:node1 is not authorized to request tokens for audience "audience1"`)
 		deletePod(t, superuserClient, "pod1")
 	})
@@ -1257,9 +1257,9 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "audience-access-for-nodes", Namespace: "ns"},
 			Rules: []rbacv1.PolicyRule{{
 				APIGroups:     []string{""},
-				Resources:     []string{"*"}, // wildcard for audiences
+				Resources:     []string{"*"}, // audience 的通配符
 				Verbs:         []string{"request-serviceaccounts-token-audience"},
-				ResourceNames: []string{}, // empty resource name means all service accounts
+				ResourceNames: []string{}, // 空的 resource name 表示所有 service account
 			}},
 		}
 		rb := &rbacv1.RoleBinding{
@@ -1281,7 +1281,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACRole(t, role, superuserClient)
 		deleteRBACRoleBinding(t, rb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("audience1")), `system:node:node1 is not authorized to request tokens for audience "audience1"`)
 		deletePod(t, superuserClient, "pod1")
 	})
@@ -1293,7 +1293,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 				APIGroups:     []string{""},
 				Resources:     []string{""},
 				Verbs:         []string{"request-serviceaccounts-token-audience"},
-				ResourceNames: []string{}, // empty resource name means all service accounts
+				ResourceNames: []string{}, // 空的 resource name 表示所有 service account
 			}},
 		}
 		rb := &rbacv1.RoleBinding{
@@ -1314,7 +1314,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACRole(t, role, superuserClient)
 		deleteRBACRoleBinding(t, rb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("")), `system:node:node1 is not authorized to request tokens for audience ""`)
 		deletePod(t, superuserClient, "pod1")
 	})
@@ -1326,7 +1326,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 				APIGroups:     []string{""},
 				Resources:     []string{"myaud://audience1/audience2.com"},
 				Verbs:         []string{"request-serviceaccounts-token-audience"},
-				ResourceNames: []string{}, // empty resource name means all service accounts
+				ResourceNames: []string{}, // 空的 resource name 表示所有 service account
 			}},
 		}
 		rb := &rbacv1.RoleBinding{
@@ -1347,7 +1347,7 @@ func TestNodeRestrictionServiceAccountAudience(t *testing.T) {
 
 		deleteRBACRole(t, role, superuserClient)
 		deleteRBACRoleBinding(t, rb, superuserClient)
-		// After the delete use a expectedForbiddenMessage to wait for the RBAC authorizer to catch up.
+		// 删除后使用 expectedForbiddenMessage 等待 RBAC authorizer 同步。
 		expectedForbiddenMessage(t, createTokenRequest(node1Client, pod.UID, tokenRequestWithAudiences("myaud://audience1/audience2.com")), `system:node:node1 is not authorized to request tokens for audience "myaud://audience1/audience2.com"`)
 		deletePod(t, superuserClient, "pod1")
 	})

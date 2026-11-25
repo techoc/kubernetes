@@ -36,8 +36,8 @@ import (
 	testutils "k8s.io/kubernetes/test/integration/util"
 )
 
-// createBoundRWOPPVC creates a HostPath PV and a PVC bound to it, both with the
-// ReadWriteOncePod access mode.
+// createBoundRWOPPVC 创建一个 HostPath PV 和一个与之绑定的 PVC，两者都使用
+// ReadWriteOncePod 访问模式。
 func createBoundRWOPPVC(cs kubernetes.Interface, ns, name string) error {
 	storage := v1.VolumeResourceRequirements{Requests: v1.ResourceList{v1.ResourceStorage: resource.MustParse("1Mi")}}
 	volType := v1.HostPathDirectoryOrCreate
@@ -53,7 +53,7 @@ func createBoundRWOPPVC(cs kubernetes.Interface, ns, name string) error {
 	_, err = testutils.CreatePVC(cs, st.MakePersistentVolumeClaim().
 		Name(name).
 		Namespace(ns).
-		// Annotation and volume name required for PVC to be considered bound.
+		// PVC 要被视为已绑定，需要设置 annotation 和 volume name。
 		Annotation(volume.AnnBindCompleted, "true").
 		VolumeName(pv.Name).
 		AccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod}).
@@ -65,23 +65,21 @@ func createBoundRWOPPVC(cs kubernetes.Interface, ns, name string) error {
 	return nil
 }
 
-// TestPodGroupSchedulingWithReadWriteOncePodPVC is a regression test for the
-// snapshot AssumePod/ForgetPod bug. During a PodGroup scheduling cycle the pods
-// of a group are assumed into the scheduler snapshot one by one, so AssumePod
-// must record the assumed pod's PVCs in the snapshot's usedPVCRefCounts:
-// otherwise the VolumeRestrictions plugin does not see that a ReadWriteOncePod
-// PVC is already used by a pod assumed earlier in the same cycle and silently
-// lets a second pod mount it.
+// TestPodGroupSchedulingWithReadWriteOncePodPVC 是针对快照
+// AssumePod/ForgetPod bug 的回归测试。在 PodGroup 调度周期中，
+// 组内 Pod 会被逐个假定（assume）到调度器快照中，因此 AssumePod
+// 必须把被假定 Pod 的 PVC 记录到快照的 usedPVCRefCounts 中：
+// 否则 VolumeRestrictions 插件看不到同一周期中较早假定的 Pod
+// 已经使用了某个 ReadWriteOncePod PVC，会静默地允许第二个 Pod 挂载它。
 //
-// The first pod is created and enqueued first so the pod group cycle (which
-// orders pods of equal priority by enqueue time) always assumes it before the
-// second pod, although the conflict is symmetric: whichever pod is assumed
-// second must observe the PVC of the one assumed first. In the conflict case
-// both pods reference the same ReadWriteOncePod PVC, so the group must stay
-// unschedulable; without the fix both pods are scheduled and share the PVC in
-// violation of its access mode. The no-conflict case is the positive control:
-// with two distinct PVCs the same group schedules, proving the setup is
-// schedulable and the conflict case fails for the intended reason.
+// 第一个 Pod 先被创建和入队，因此 PodGroup 调度周期（按入队时间
+// 对同优先级 Pod 排序）总是在第二个 Pod 之前假定它，尽管冲突是
+// 对称的：无论哪个 Pod 被第二个假定，都必须观察到先被假定的那个
+// Pod 的 PVC。在冲突场景中，两个 Pod 引用同一个 ReadWriteOncePod
+// PVC，因此该 PodGroup 必须保持不可调度；没有修复时两个 Pod 都会
+// 被调度并共享该 PVC，违反其访问模式。无冲突场景作为正向对照：
+// 使用两个不同的 PVC 时，同一个 PodGroup 可以完成调度，证明测试
+// 环境本身是可调度的，而冲突场景确实因预期原因失败。
 func TestPodGroupSchedulingWithReadWriteOncePodPVC(t *testing.T) {
 	nodeCapacity := map[v1.ResourceName]string{v1.ResourceCPU: "2"}
 	podRequest := map[v1.ResourceName]string{v1.ResourceCPU: "1"}
@@ -92,8 +90,9 @@ func TestPodGroupSchedulingWithReadWriteOncePodPVC(t *testing.T) {
 
 	tests := []struct {
 		name string
-		// secondPodPVC is the PVC referenced by the pod assumed second in the
-		// cycle; the pod assumed first always references pvc-1.
+		// secondPodPVC 是调度周期中第二个被假定的
+		// Pod 所引用的 PVC；第一个被假定的 Pod
+		// 始终引用 pvc-1。
 		secondPodPVC string
 		steps        []stepsframework.Step
 	}{
@@ -134,7 +133,7 @@ func TestPodGroupSchedulingWithReadWriteOncePodPVC(t *testing.T) {
 			})
 
 			testCtx := testutils.InitTestSchedulerWithNS(t, "podgroup-pvc",
-				// disable backoff
+				// 禁用 backoff
 				scheduler.WithPodMaxBackoffSeconds(0),
 				scheduler.WithPodInitialBackoffSeconds(0))
 			ns := testCtx.NS.Name
@@ -145,14 +144,15 @@ func TestPodGroupSchedulingWithReadWriteOncePodPVC(t *testing.T) {
 				}
 			}
 
-			// firstPod is assumed first (created and enqueued before the second
-			// pod) and takes pvc-1.
+			// firstPod 会被优先假定（比第二个 Pod 先创建和
+			// 入队），并占用 pvc-1。
 			firstPod := st.MakePod().Name("pvc-pod-1").
 				Req(podRequest).Container("image").
 				PVC("pvc-1").
 				PodGroupName("pg").Priority(200).Obj()
-			// secondPod is assumed second; whether its PVC conflicts with the
-			// first pod's depends on the test case.
+			// secondPod 会被第二个假定；它的 PVC
+			// 是否与第一个 Pod 的冲突取决于
+			// 具体测试用例。
 			secondPod := st.MakePod().Name("pvc-pod-2").
 				Req(podRequest).Container("image").
 				PVC(tt.secondPodPVC).

@@ -107,7 +107,7 @@ func TestGetsSelfAttributes(t *testing.T) {
 					opts.Authorization.Modes = []string{"AlwaysAllow"}
 				},
 				ModifyServerConfig: func(config *controlplane.Config) {
-					// Unset BearerToken to disable BearerToken authenticator.
+					// 清空 BearerToken 以禁用 BearerToken authenticator。
 					config.ControlPlane.Generic.LoopbackClientConfig.BearerToken = ""
 					config.ControlPlane.Generic.Authentication.Authenticator = authenticator.RequestFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
 						respMu.RLock()
@@ -158,7 +158,7 @@ func TestGetsSelfAttributes(t *testing.T) {
 					opts.Authorization.Modes = []string{"AlwaysAllow"}
 				},
 				ModifyServerConfig: func(config *controlplane.Config) {
-					// Unset BearerToken to disable BearerToken authenticator.
+					// 清空 BearerToken 以禁用 BearerToken authenticator。
 					config.ControlPlane.Generic.LoopbackClientConfig.BearerToken = ""
 					config.ControlPlane.Generic.Authentication.Authenticator = authenticator.RequestFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
 						respMu.RLock()

@@ -62,10 +62,10 @@ const (
 func TestQuota(t *testing.T) {
 	ctx := ktesting.Init(t)
 
-	// Set up a API server
+	// 启动一个 API server
 	_, kubeConfig, tearDownFn := framework.StartTestServer(ctx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 		},
 	})
@@ -112,7 +112,7 @@ func TestQuota(t *testing.T) {
 	}
 	go resourceQuotaController.Run(ctx, 2)
 
-	// Periodically the quota controller to detect new resource types
+	// 定期运行 quota controller 以检测新的资源类型
 	go resourceQuotaController.Sync(ctx, discoveryFunc, 30*time.Second)
 
 	informers.Start(ctx.Done())
@@ -174,7 +174,7 @@ func waitForQuota(t *testing.T, quota *v1.ResourceQuota, clientset *clientset.Cl
 	}
 }
 
-// waitForUsedResourceQuota polls a ResourceQuota status for an expected used value
+// waitForUsedResourceQuota 轮询 ResourceQuota 的 status，直到其 used 值符合预期
 func waitForUsedResourceQuota(t *testing.T, c clientset.Interface, ns, quotaName string, used v1.ResourceList) {
 	err := wait.Poll(1*time.Second, resourceQuotaTimeout, func() (bool, error) {
 		resourceQuota, err := c.CoreV1().ResourceQuotas(ns).Get(context.TODO(), quotaName, metav1.GetOptions{})
@@ -182,12 +182,12 @@ func waitForUsedResourceQuota(t *testing.T, c clientset.Interface, ns, quotaName
 			return false, err
 		}
 
-		// used may not yet be calculated
+		// used 可能尚未计算出来
 		if resourceQuota.Status.Used == nil {
 			return false, nil
 		}
 
-		// verify that the quota shows the expected used resource values
+		// 验证 quota 显示的资源使用量与预期一致
 		for k, v := range used {
 			actualValue, found := resourceQuota.Status.Used[k]
 			if !found {
@@ -270,7 +270,7 @@ func scale(t *testing.T, namespace string, clientset *clientset.Clientset) {
 }
 
 func TestQuotaLimitedResourceDenial(t *testing.T) {
-	// Create admission configuration with ResourceQuota configuration.
+	// 创建带有 ResourceQuota 配置的 admission 配置。
 	admissionConfigFile, err := os.CreateTemp("", "admission-config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -294,10 +294,10 @@ plugins:
 
 	tCtx := ktesting.Init(t)
 
-	// Set up an API server
+	// 启动一个 API server
 	_, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Admission.GenericAdmission.ConfigFile = admissionConfigFile.Name()
 
@@ -344,13 +344,13 @@ plugins:
 	}
 	go resourceQuotaController.Run(tCtx, 2)
 
-	// Periodically the quota controller to detect new resource types
+	// 定期运行 quota controller 以检测新的资源类型
 	go resourceQuotaController.Sync(tCtx, discoveryFunc, 30*time.Second)
 
 	informers.Start(tCtx.Done())
 	close(informersStarted)
 
-	// try to create a pod
+	// 尝试创建一个 Pod
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
@@ -369,8 +369,8 @@ plugins:
 		t.Fatalf("expected error for insufficient quota")
 	}
 
-	// now create a covering quota
-	// note: limited resource does a matchContains, so we now have "pods" matching "pods" and "count/pods"
+	// 现在创建一个覆盖性的 quota
+	// 注意：limited resource 使用 matchContains，因此现在 "pods" 会同时匹配 "pods" 和 "count/pods"
 	quota := &v1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "quota",
@@ -385,9 +385,9 @@ plugins:
 	}
 	waitForQuota(t, quota, clientset)
 
-	// attempt to create a new pod once the quota is propagated
+	// 待 quota 传播完成后，尝试创建一个新的 Pod
 	err = wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
-		// retry until we succeed (to allow time for all changes to propagate)
+		// 重试直到成功（给所有变更留出传播时间）
 		if _, err := clientset.CoreV1().Pods(ns.Name).Create(tCtx, pod, metav1.CreateOptions{}); err == nil {
 			return true, nil
 		}
@@ -399,7 +399,7 @@ plugins:
 }
 
 func TestQuotaLimitService(t *testing.T) {
-	// Create admission configuration with ResourceQuota configuration.
+	// 创建带有 ResourceQuota 配置的 admission 配置。
 	admissionConfigFile, err := os.CreateTemp("", "admission-config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -423,10 +423,10 @@ plugins:
 
 	tCtx := ktesting.Init(t)
 
-	// Set up an API server
+	// 启动一个 API server
 	_, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Admission.GenericAdmission.ConfigFile = admissionConfigFile.Name()
 
@@ -473,14 +473,14 @@ plugins:
 	}
 	go resourceQuotaController.Run(tCtx, 2)
 
-	// Periodically the quota controller to detect new resource types
+	// 定期运行 quota controller 以检测新的资源类型
 	go resourceQuotaController.Sync(tCtx, discoveryFunc, 30*time.Second)
 
 	informers.Start(tCtx.Done())
 	close(informersStarted)
 
-	// now create a covering quota
-	// note: limited resource does a matchContains, so we now have "pods" matching "pods" and "count/pods"
+	// 现在创建一个覆盖性的 quota
+	// 注意：limited resource 使用 matchContains，因此现在 "pods" 会同时匹配 "pods" 和 "count/pods"
 	quota := &v1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "quota",
@@ -497,21 +497,21 @@ plugins:
 
 	waitForQuota(t, quota, clientset)
 
-	// Creating the first node port service should succeed
+	// 创建第一个 node port Service 应该成功
 	nodePortService := newService("np-svc", v1.ServiceTypeNodePort, true)
 	_, err = clientset.CoreV1().Services(ns.Name).Create(tCtx, nodePortService, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("creating first node port Service should not have returned error: %v", err)
 	}
 
-	// Creating the first loadbalancer service should succeed
+	// 创建第一个 loadbalancer Service 应该成功
 	lbServiceWithNodePort1 := newService("lb-svc-withnp1", v1.ServiceTypeLoadBalancer, true)
 	_, err = clientset.CoreV1().Services(ns.Name).Create(tCtx, lbServiceWithNodePort1, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("creating first loadbalancer Service should not have returned error: %v", err)
 	}
 
-	// wait for ResourceQuota status to be updated before proceeding, otherwise the test will race with resource quota controller
+	// 继续之前先等待 ResourceQuota status 更新，否则测试会与 resource quota controller 产生竞态
 	expectedQuotaUsed := v1.ResourceList{
 		v1.ResourceServices:              resource.MustParse("2"),
 		v1.ResourceServicesNodePorts:     resource.MustParse("2"),
@@ -519,18 +519,18 @@ plugins:
 	}
 	waitForUsedResourceQuota(t, clientset, quota.Namespace, quota.Name, expectedQuotaUsed)
 
-	// Creating another loadbalancer Service using node ports should fail because node prot quota is exceeded
+	// 创建另一个使用 node port 的 loadbalancer Service 应该失败，因为 node port quota 已超出
 	lbServiceWithNodePort2 := newService("lb-svc-withnp2", v1.ServiceTypeLoadBalancer, true)
 	testServiceForbidden(clientset, ns.Name, lbServiceWithNodePort2, t)
 
-	// Creating a loadbalancer Service without node ports should succeed
+	// 创建不使用 node port 的 loadbalancer Service 应该成功
 	lbServiceWithoutNodePort1 := newService("lb-svc-wonp1", v1.ServiceTypeLoadBalancer, false)
 	_, err = clientset.CoreV1().Services(ns.Name).Create(tCtx, lbServiceWithoutNodePort1, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("creating another loadbalancer Service without node ports should not have returned error: %v", err)
 	}
 
-	// wait for ResourceQuota status to be updated before proceeding, otherwise the test will race with resource quota controller
+	// 继续之前先等待 ResourceQuota status 更新，否则测试会与 resource quota controller 产生竞态
 	expectedQuotaUsed = v1.ResourceList{
 		v1.ResourceServices:              resource.MustParse("3"),
 		v1.ResourceServicesNodePorts:     resource.MustParse("2"),
@@ -538,18 +538,18 @@ plugins:
 	}
 	waitForUsedResourceQuota(t, clientset, quota.Namespace, quota.Name, expectedQuotaUsed)
 
-	// Creating another loadbalancer Service without node ports should fail because loadbalancer quota is exceeded
+	// 创建另一个不使用 node port 的 loadbalancer Service 应该失败，因为 loadbalancer quota 已超出
 	lbServiceWithoutNodePort2 := newService("lb-svc-wonp2", v1.ServiceTypeLoadBalancer, false)
 	testServiceForbidden(clientset, ns.Name, lbServiceWithoutNodePort2, t)
 
-	// Creating a ClusterIP Service should succeed
+	// 创建 ClusterIP Service 应该成功
 	clusterIPService1 := newService("clusterip-svc1", v1.ServiceTypeClusterIP, false)
 	_, err = clientset.CoreV1().Services(ns.Name).Create(tCtx, clusterIPService1, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("creating a cluster IP Service should not have returned error: %v", err)
 	}
 
-	// wait for ResourceQuota status to be updated before proceeding, otherwise the test will race with resource quota controller
+	// 继续之前先等待 ResourceQuota status 更新，否则测试会与 resource quota controller 产生竞态
 	expectedQuotaUsed = v1.ResourceList{
 		v1.ResourceServices:              resource.MustParse("4"),
 		v1.ResourceServicesNodePorts:     resource.MustParse("2"),
@@ -557,12 +557,12 @@ plugins:
 	}
 	waitForUsedResourceQuota(t, clientset, quota.Namespace, quota.Name, expectedQuotaUsed)
 
-	// Creating a ClusterIP Service should fail because Service quota has been exceeded.
+	// 创建 ClusterIP Service 应该失败，因为 Service quota 已超出。
 	clusterIPService2 := newService("clusterip-svc2", v1.ServiceTypeClusterIP, false)
 	testServiceForbidden(clientset, ns.Name, clusterIPService2, t)
 }
 
-// testServiceForbidden attempts to create a Service expecting 403 Forbidden due to resource quota limits being exceeded.
+// testServiceForbidden 尝试创建 Service，预期因超出 resource quota 限制而返回 403 Forbidden。
 func testServiceForbidden(clientset clientset.Interface, namespace string, service *v1.Service, t *testing.T) {
 	pollErr := wait.PollImmediate(2*time.Second, 30*time.Second, func() (bool, error) {
 		_, err := clientset.CoreV1().Services(namespace).Create(context.TODO(), service, metav1.CreateOptions{})
@@ -584,7 +584,7 @@ func testServiceForbidden(clientset clientset.Interface, namespace string, servi
 
 func newService(name string, svcType v1.ServiceType, allocateNodePort bool) *v1.Service {
 	var allocateNPs *bool
-	// Only set allocateLoadBalancerNodePorts when service type is LB
+	// 仅在 Service 类型为 LB 时设置 allocateLoadBalancerNodePorts
 	if svcType == v1.ServiceTypeLoadBalancer {
 		allocateNPs = &allocateNodePort
 	}

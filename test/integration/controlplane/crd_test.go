@@ -98,7 +98,7 @@ func TestCRDShadowGroup(t *testing.T) {
 	}
 	etcd.CreateTestCRDs(t, apiextensionsclient, true, crd)
 
-	// wait to give aggregator time to update
+	// 等待 aggregator 完成更新
 	time.Sleep(2 * time.Second)
 
 	t.Logf("Checking that we still see the NetworkPolicy")

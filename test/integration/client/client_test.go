@@ -106,7 +106,7 @@ func TestClient(t *testing.T) {
 		t.Errorf("expected no pods, got %#v", pods)
 	}
 
-	// get a validation error
+	// 获取一个校验错误
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "test",
@@ -126,7 +126,7 @@ func TestClient(t *testing.T) {
 		t.Fatalf("unexpected non-error: %v", got)
 	}
 
-	// get a created pod
+	// 获取一个已创建的 Pod
 	pod.Spec.Containers[0].Image = "an-image"
 	got, err = client.CoreV1().Pods("default").Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
@@ -136,7 +136,7 @@ func TestClient(t *testing.T) {
 		t.Errorf("unexpected empty pod Name %v", got)
 	}
 
-	// pod is shown, but not scheduled
+	// Pod 已显示，但尚未被调度
 	pods, err = client.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -198,7 +198,7 @@ func TestAtomicPut(t *testing.T) {
 		"foo": "bar",
 	}
 	for i := range 5 {
-		// a: z, b: y, etc...
+		// a: z, b: y，依此类推……
 		testLabels[string([]byte{byte('a' + i)})] = string([]byte{byte('z' - i)})
 	}
 	var wg sync.WaitGroup
@@ -222,7 +222,7 @@ func TestAtomicPut(t *testing.T) {
 				_, err = rcs.Update(context.TODO(), tmpRC, metav1.UpdateOptions{})
 				if err != nil {
 					if apierrors.IsConflict(err) {
-						// This is what we expect.
+						// 这正是预期情况。
 						continue
 					}
 					t.Errorf("Unexpected error putting atomicRC: %v", err)
@@ -308,7 +308,7 @@ func TestPatch(t *testing.T) {
 			return result.Error()
 		}
 
-		// trying to chase flakes, this should give us resource versions of objects as we step through
+		// 为了排查偶发失败，这里会在逐步执行时打印对象的 resourceVersion
 		jsonObj, err := result.Raw()
 		if err != nil {
 			t.Log(err)
@@ -320,7 +320,7 @@ func TestPatch(t *testing.T) {
 	}
 
 	for k, v := range pb {
-		// add label
+		// 添加 label
 		err := execPatch(k, v.AddLabelBody)
 		if err != nil {
 			t.Fatalf("Failed updating patchpod with patch type %s: %v", k, err)
@@ -333,7 +333,7 @@ func TestPatch(t *testing.T) {
 			t.Errorf("Failed updating patchpod with patch type %s: labels are: %v", k, pod.Labels)
 		}
 
-		// remove one label
+		// 删除一个 label
 		err = execPatch(k, v.RemoveLabelBody)
 		if err != nil {
 			t.Fatalf("Failed updating patchpod with patch type %s: %v", k, err)
@@ -346,7 +346,7 @@ func TestPatch(t *testing.T) {
 			t.Errorf("Failed updating patchpod with patch type %s: labels are: %v", k, pod.Labels)
 		}
 
-		// remove all labels
+		// 删除所有 label
 		err = execPatch(k, v.RemoveAllLabelsBody)
 		if err != nil {
 			t.Fatalf("Failed updating patchpod with patch type %s: %v", k, err)
@@ -384,7 +384,7 @@ func TestPatchWithCreateOnUpdate(t *testing.T) {
 		return c.CoreV1().RESTClient().Patch(types.MergePatchType).Resource("endpoints").Namespace("default").Name("patchendpoint").Body(json).Do(context.TODO()).Get()
 	}
 
-	// Make sure patch doesn't get to CreateOnUpdate
+	// 确保 patch 不会走到 CreateOnUpdate
 	{
 		endpointJSON, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion), endpointTemplate)
 		if err != nil {
@@ -395,13 +395,13 @@ func TestPatchWithCreateOnUpdate(t *testing.T) {
 		}
 	}
 
-	// Create the endpoint (endpoints set AllowCreateOnUpdate=true) to get a UID and resource version
+	// 创建 endpoint（endpoints 设置了 AllowCreateOnUpdate=true）以获得 UID 和 resourceVersion
 	createdEndpoint, err := c.CoreV1().Endpoints("default").Update(context.TODO(), endpointTemplate, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("Failed creating endpoint: %v", err)
 	}
 
-	// Make sure identity patch is accepted
+	// 确保身份 patch 被接受
 	{
 		endpointJSON, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion), createdEndpoint)
 		if err != nil {
@@ -412,7 +412,7 @@ func TestPatchWithCreateOnUpdate(t *testing.T) {
 		}
 	}
 
-	// Make sure patch complains about a mismatched resourceVersion
+	// 确保 patch 会因 resourceVersion 不匹配而报错
 	{
 		endpointTemplate.Name = ""
 		endpointTemplate.UID = ""
@@ -426,7 +426,7 @@ func TestPatchWithCreateOnUpdate(t *testing.T) {
 		}
 	}
 
-	// Make sure patch complains about mutating the UID
+	// 确保 patch 会因修改 UID 而报错
 	{
 		endpointTemplate.Name = ""
 		endpointTemplate.UID = "abc"
@@ -440,7 +440,7 @@ func TestPatchWithCreateOnUpdate(t *testing.T) {
 		}
 	}
 
-	// Make sure patch complains about a mismatched name
+	// 确保 patch 会因名称不匹配而报错
 	{
 		endpointTemplate.Name = "changedname"
 		endpointTemplate.UID = ""
@@ -454,7 +454,7 @@ func TestPatchWithCreateOnUpdate(t *testing.T) {
 		}
 	}
 
-	// Make sure patch containing originally submitted JSON is accepted
+	// 确保包含最初提交 JSON 的 patch 被接受
 	{
 		endpointTemplate.Name = ""
 		endpointTemplate.UID = ""
@@ -482,7 +482,7 @@ func TestAPIVersions(t *testing.T) {
 	}
 	versions := metav1.ExtractGroupVersions(g)
 
-	// Verify that the server supports the API version used by the client.
+	// 验证服务端支持客户端使用的 API 版本。
 	for _, version := range versions {
 		if version == clientVersion {
 			return
@@ -567,7 +567,7 @@ func TestEventValidation(t *testing.T) {
 	}
 
 	for _, test := range testcases {
-		// create test
+		// 创建测试对象
 		oldEventObj := mkCoreEvent("corev1", test.namespace)
 		corev1Event, err := client.CoreV1().Events(oldEventObj.Namespace).Create(context.TODO(), oldEventObj, metav1.CreateOptions{})
 		if err != nil && !test.hasError {
@@ -581,7 +581,7 @@ func TestEventValidation(t *testing.T) {
 		if corev1Event.Namespace != eventsv1Event.Namespace {
 			t.Errorf("%v, events created by different api client have different namespaces that isn't expected", test.name)
 		}
-		// update test
+		// 更新测试对象
 		corev1Event.Count++
 		corev1Event, err = client.CoreV1().Events(corev1Event.Namespace).Update(context.TODO(), corev1Event, metav1.UpdateOptions{})
 		if err != nil && !test.hasError {
@@ -769,9 +769,8 @@ func TestSingleWatch(t *testing.T) {
 			t.Fatal("Watch channel closed unexpectedly.")
 		}
 
-		// We expect to see an ADD of event-9 and only event-9. (This
-		// catches a bug where all the events would have been sent down
-		// the channel.)
+		// 预期只看到 event-9 的一条 ADD 事件。（这用于捕获
+		// 所有 event 都被发送到 channel 的 bug。）
 		if e, a := watch.Added, got.Type; e != a {
 			t.Errorf("Wanted %v, got %v", e, a)
 		}
@@ -787,8 +786,8 @@ func TestSingleWatch(t *testing.T) {
 }
 
 func TestMultiWatch(t *testing.T) {
-	// Disable this test as long as it demonstrates a problem.
-	// TODO: Re-enable this test when we get #6059 resolved.
+	// 该测试仍会暴露问题，因此暂时禁用。
+	// TODO: 待 #6059 解决后重新启用该测试。
 	t.Skip()
 
 	const watcherCount = 50
@@ -822,7 +821,7 @@ func TestMultiWatch(t *testing.T) {
 	receivedTimes := make(chan timePair, watcherCount*2)
 	watchesStarted := sync.WaitGroup{}
 
-	// make a bunch of pods and watch them
+	// 创建一批 Pod 并 watch 它们
 	for i := range watcherCount {
 		watchesStarted.Add(1)
 		name := fmt.Sprintf("multi-watch-%v", i)
@@ -853,7 +852,7 @@ func TestMultiWatch(t *testing.T) {
 			}
 			defer w.Stop()
 			watchesStarted.Done()
-			e, ok := <-w.ResultChan() // should get the update (that we'll do below)
+			e, ok := <-w.ResultChan() // 应该收到更新事件（见下方操作）
 			if !ok {
 				panic(fmt.Sprintf("%v ended early?", name))
 			}
@@ -865,8 +864,8 @@ func TestMultiWatch(t *testing.T) {
 	}
 	log.Printf("%v: %v pods made and watchers started", time.Now(), watcherCount)
 
-	// wait for watches to start before we start spamming the system with
-	// objects below, otherwise we'll hit the watch window restriction.
+	// 等待 watch 全部启动，再在下面开始大量创建对象，
+	// 否则会触发 watch 窗口限制。
 	watchesStarted.Wait()
 
 	const (
@@ -874,7 +873,7 @@ func TestMultiWatch(t *testing.T) {
 		usePodsAsUnrelatedType   = true
 	)
 
-	// make a bunch of unrelated changes in parallel
+	// 并行制造一批无关的变更
 	if useEventsAsUnrelatedType {
 		const unrelatedCount = 3000
 		var wg sync.WaitGroup
@@ -961,8 +960,8 @@ func TestMultiWatch(t *testing.T) {
 		}
 	}
 
-	// Now we still have changes being made in parallel, but at least 1000 have been made.
-	// Make some updates to send down the watches.
+	// 此时仍有并行变更在进行，但至少已完成 1000 个。
+	// 执行一些更新，以便向 watch 发送事件。
 	sentTimes := make(chan timePair, watcherCount*2)
 	for i := range watcherCount {
 		go func(i int) {
@@ -1028,7 +1027,7 @@ func TestApplyWithApplyConfiguration(t *testing.T) {
 
 	c := kubernetes.NewForConfigOrDie(testServer.ClientConfig)
 
-	// Test apply to spec
+	// 测试 apply 到 spec
 	obj, err := c.AppsV1().Deployments("default").Apply(context.TODO(), deployment, metav1.ApplyOptions{FieldManager: "test-mgr", Force: true})
 	if err != nil {
 		t.Fatalf("unexpected error when applying manifest for Deployment: %v", err)
@@ -1041,7 +1040,7 @@ func TestApplyWithApplyConfiguration(t *testing.T) {
 		t.Errorf("expected resourceCPU limit %d but got %d", 4, cpu.Value())
 	}
 
-	// Test apply to status
+	// 测试 apply 到 status
 	statusApply := appsv1ac.Deployment("nginx-deployment-3", "default").
 		WithStatus(appsv1ac.DeploymentStatus().
 			WithConditions(
@@ -1074,17 +1073,17 @@ func TestApplyWithApplyConfiguration(t *testing.T) {
 func TestExtractModifyApply(t *testing.T) {
 	testCases := []struct {
 		name string
-		// modifyFunc modifies deployApply, defined below, after it is applied and "extracted"
-		// apply is skipped if this func is nil
+		// modifyFunc 在下方定义的 deployApply 被 apply 并“提取”之后对其进行修改
+		// 如果该函数为 nil，则跳过 apply
 		modifyFunc       func(apply *appsv1ac.DeploymentApplyConfiguration)
-		modifyStatusFunc func(apply *appsv1ac.DeploymentApplyConfiguration) // same but for status
-		// verifyAppliedFunc verifies the results of applying the applied
-		// configuration after modifyFunc modifies it. Only called if modifyFunc is provided.
+		modifyStatusFunc func(apply *appsv1ac.DeploymentApplyConfiguration) // status 的对应函数
+		// verifyAppliedFunc 校验 modifyFunc 修改后再次 apply 所得到的结果。
+		// 仅在提供了 modifyFunc 时调用。
 		verifyAppliedFunc       func(applied *appsv1ac.DeploymentApplyConfiguration)
-		verifyStatusAppliedFunc func(applied *appsv1ac.DeploymentApplyConfiguration) // same but for status
+		verifyStatusAppliedFunc func(applied *appsv1ac.DeploymentApplyConfiguration) // status 的对应函数
 	}{
 		{
-			// With<fieldname>() on a scalar field replaces it with the given value
+			// 标量字段上的 With<fieldname>() 会用给定值替换该字段
 			name: "modify-scalar",
 			modifyFunc: func(apply *appsv1ac.DeploymentApplyConfiguration) {
 				apply.Spec.WithReplicas(2)
@@ -1096,10 +1095,10 @@ func TestExtractModifyApply(t *testing.T) {
 			},
 		},
 		{
-			// With<fieldname>() on a non-empty struct field replaces the entire struct
+			// 非空结构体字段上的 With<fieldname>() 会替换整个结构体
 			name: "modify-struct",
 			modifyFunc: func(apply *appsv1ac.DeploymentApplyConfiguration) {
-				apply.Spec.Template.WithSpec(corev1ac.PodSpec(). // replace the Spec of the existing Template
+				apply.Spec.Template.WithSpec(corev1ac.PodSpec(). // 替换现有 Template 的 Spec
 											WithContainers(
 						corev1ac.Container().
 							WithName("modify-struct").
@@ -1118,7 +1117,7 @@ func TestExtractModifyApply(t *testing.T) {
 			},
 		},
 		{
-			// With<fieldname>() on a non-empty map field puts all the given entries into the existing map
+			// 非空 map 字段上的 With<fieldname>() 会将所有给定条目放入现有 map
 			name: "modify-map",
 			modifyFunc: func(apply *appsv1ac.DeploymentApplyConfiguration) {
 				apply.WithLabels(map[string]string{"label2": "value2"})
@@ -1134,7 +1133,7 @@ func TestExtractModifyApply(t *testing.T) {
 			},
 		},
 		{
-			// With<fieldname>() on a non-empty slice field appends all the given items to the existing slice
+			// 非空 slice 字段上的 With<fieldname>() 会将所有给定项追加到现有 slice
 			name: "modify-slice",
 			modifyFunc: func(apply *appsv1ac.DeploymentApplyConfiguration) {
 				apply.Spec.Template.Spec.WithContainers(corev1ac.Container().
@@ -1156,7 +1155,7 @@ func TestExtractModifyApply(t *testing.T) {
 			},
 		},
 		{
-			// Append a condition to the status if the object
+			// 如果对象已有 status，则向其追加一个 condition
 			name: "modify-status-conditions",
 			modifyStatusFunc: func(apply *appsv1ac.DeploymentApplyConfiguration) {
 				apply.WithStatus(appsv1ac.DeploymentStatus().
@@ -1190,7 +1189,7 @@ func TestExtractModifyApply(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Applied at the started of each test
+			// 在每个测试开始时先 apply
 			deployApply := appsv1ac.Deployment(tc.name, "default").
 				WithLabels(map[string]string{"label1": "value1"}).
 				WithSpec(appsv1ac.DeploymentSpec().
@@ -1259,7 +1258,7 @@ func TestExtractModifyApply_ForceOwnership(t *testing.T) {
 	c := kubernetes.NewForConfigOrDie(testServer.ClientConfig)
 	deploymentClient := c.AppsV1().Deployments("default")
 
-	// apply an initial state with one field manager
+	// 使用某个字段管理器 apply 初始状态
 	createApply := appsv1ac.Deployment("nginx-apply", "default").
 		WithSpec(appsv1ac.DeploymentSpec().
 			WithSelector(metav1ac.LabelSelector().
@@ -1283,7 +1282,7 @@ func TestExtractModifyApply_ForceOwnership(t *testing.T) {
 		t.Fatalf("Error creating createApply: %v", err)
 	}
 
-	// apply some non-overlapping fields with another field manager
+	// 使用另一个字段管理器 apply 一些不重叠的字段
 	sidecarApply := appsv1ac.Deployment("nginx-apply", "default").
 		WithSpec(appsv1ac.DeploymentSpec().
 			WithTemplate(corev1ac.PodTemplateSpec().
@@ -1309,8 +1308,8 @@ func TestExtractModifyApply_ForceOwnership(t *testing.T) {
 		t.Errorf("Expected sidecarExtracted apply configuration to match original, but got:\n%s\n", cmp.Diff(sidecarApply, sidecarExtracted))
 	}
 
-	// modify the extracted apply configuration that was just applied and add some fields that overlap
-	// with the fields owned by the other field manager to force ownership of them
+	// 修改刚刚 apply 后提取出的 apply configuration，添加一些与另一个字段管理器
+	// 所拥有字段重叠的字段，以强制接管这些字段的所有权
 	sidecarExtracted.Spec.Template.Spec.Containers[0].WithImage("nginx:1.14.3")
 	sidecarExtracted.Spec.Template.Spec.WithContainers(corev1ac.Container().
 		WithName("nginx").
@@ -1321,7 +1320,7 @@ func TestExtractModifyApply_ForceOwnership(t *testing.T) {
 		t.Fatalf("Unexpected error when applying manifest for Deployment: %v", err)
 	}
 
-	// extract apply configurations for both field managers and check that they are what we expect
+	// 为两个字段管理器分别提取 apply configuration，并检查它们是否符合预期
 	reappliedExtracted, err := appsv1ac.ExtractDeployment(reapplied, "sidecar-mgr")
 	if err != nil {
 		t.Fatalf("Error extracting sidecarExtracted apply configuration: %v", err)
@@ -1373,8 +1372,8 @@ func TestExtractModifyApply_ForceOwnership(t *testing.T) {
 }
 
 func TestClientCBOREnablement(t *testing.T) {
-	// Generated clients for built-in types force Protobuf by default. They are tested here to
-	// ensure that the CBOR client feature gates do not interfere with this.
+	// 内置类型的生成客户端默认强制使用 Protobuf。这里测试它们，以确保 CBOR 客户端
+	// feature gate 不会对此造成干扰。
 	DoRequestWithProtobufPreferredGeneratedClient := func(t *testing.T, config *rest.Config) error {
 		clientset, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -1394,9 +1393,9 @@ func TestClientCBOREnablement(t *testing.T) {
 	}
 
 	DoRequestWithGeneratedClient := func(t *testing.T, config *rest.Config) error {
-		// This is using a generated client from sample-apiserver because it is generated
-		// without --prefer-protobuf. For convenience, the test serves the API as a CRD with
-		// a permissive schema instead of running a real aggregated sample-apiserver.
+		// 这里使用来自 sample-apiserver 的生成客户端，因为它没有使用 --prefer-protobuf
+		// 生成。为方便起见，测试将 API 以宽松 schema 的 CRD 形式提供，而不是运行真正的
+		// 聚合 sample-apiserver。
 		wardleClient, err := wardlev1alpha1client.NewForConfig(config)
 		if err != nil {
 			t.Fatal(err)
@@ -1418,8 +1417,8 @@ func TestClientCBOREnablement(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Generated clients for built-in types include the PreferProtobuf option, which
-		// forces Protobuf encoding on a per-request basis.
+		// 内置类型的生成客户端包含 PreferProtobuf 选项，它会按请求强制使用
+		// Protobuf 编码。
 		client := gentype.NewClientWithListAndApply[*v1.Namespace, *v1.NamespaceList, *corev1ac.NamespaceApplyConfiguration](
 			"namespaces",
 			clientset.CoreV1().RESTClient(),
@@ -1446,8 +1445,8 @@ func TestClientCBOREnablement(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Generated clients for built-in types include the PreferProtobuf option, which
-		// forces Protobuf encoding on a per-request basis.
+		// 内置类型的生成客户端包含 PreferProtobuf 选项，它会按请求强制使用
+		// Protobuf 编码。
 		client := gentype.NewClientWithListAndApply[*v1.Namespace, *v1.NamespaceList, *corev1ac.NamespaceApplyConfiguration](
 			"namespaces",
 			clientset.CoreV1().RESTClient(),
@@ -1730,8 +1729,8 @@ func TestClientCBOREnablement(t *testing.T) {
 
 	for _, served := range []bool{true, false} {
 		t.Run(fmt.Sprintf("served=%t", served), func(t *testing.T) {
-			// Batch test cases with their server configuration instead of starting and stopping
-			// a new apiserver for each test case.
+			// 按服务端配置对测试用例分组，避免为每个测试用例都启动和停止
+			// 一个新的 apiserver。
 			if served {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 			}
@@ -1775,7 +1774,7 @@ func TestClientCBOREnablement(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// wait to see cr in discovery
+			// 等待 CR 出现在 discovery 中
 			discoveryClient, err := discovery.NewDiscoveryClientForConfig(server.ClientConfig)
 			if err != nil {
 				t.Fatal(err)
@@ -1855,7 +1854,7 @@ func TestCBORWithTypedClient(t *testing.T) {
 	const TestNamespace = "test-cbor-typed-client"
 
 	{
-		// Setup using client with default config.
+		// 使用默认配置的客户端进行准备。
 		clientset, err := kubernetes.NewForConfig(server.ClientConfig)
 		if err != nil {
 			t.Fatal(err)
@@ -1871,7 +1870,7 @@ func TestCBORWithTypedClient(t *testing.T) {
 	}
 
 	config := rest.CopyConfig(server.ClientConfig)
-	// Content negotiation controlled by client feature gates.
+	// 内容协商由客户端 feature gate 控制。
 	config.ContentType = ""
 	config.AcceptContentTypes = ""
 	config.Wrap(framework.AssertRequestResponseAsCBOR(t))
@@ -1880,10 +1879,9 @@ func TestCBORWithTypedClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should be identical to
+	// 应与以下内容相同：
 	// https://github.com/kubernetes/kubernetes/blob/9ec52fc06395e6ac2fd7a947d6b9fbd3f1bbacb3/staging/src/k8s.io/client-go/kubernetes/typed/core/v1/namespace.go#L64-L72
-	// minus the PrefersProtobuf option, which overrides content negotiation to Protobuf on a
-	// per-request basis.
+	// 但不包含 PrefersProtobuf 选项——该选项会按请求将内容协商覆盖为 Protobuf。
 	var secretClient corev1client.SecretInterface = gentype.NewClientWithListAndApply[*v1.Secret, *v1.SecretList, *corev1ac.SecretApplyConfiguration](
 		"secrets",
 		clientset.CoreV1().RESTClient(),
@@ -1908,7 +1906,7 @@ func TestCBORWithTypedClient(t *testing.T) {
 	}
 	defer w.Stop()
 
-	// do a real update to observe a watch event
+	// 执行一次真实更新以观察 watch 事件
 	if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		s, err := secretClient.Get(context.TODO(), secret.GetName(), metav1.GetOptions{})
 		if err != nil {
@@ -1938,7 +1936,7 @@ func TestCBORWithTypedClient(t *testing.T) {
 			}
 
 			if ns, ok := e.Object.(*v1.Secret); ok && ns.GetAnnotations()["foo"] == "bar" {
-				// observed update
+				// 观察到更新
 				seen = true
 				break
 			}
@@ -1963,7 +1961,7 @@ func TestCBORWithTypedClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// for UpdateStatus
+	// 用于 UpdateStatus
 	nsClient := gentype.NewClientWithListAndApply[*v1.Namespace, *v1.NamespaceList, *corev1ac.NamespaceApplyConfiguration](
 		"namespaces",
 		clientset.CoreV1().RESTClient(),
@@ -1985,9 +1983,8 @@ func TestCBORWithTypedClient(t *testing.T) {
 	}
 
 	config = rest.CopyConfig(server.ClientConfig)
-	// Configuring a non-empty AcceptContentTypes avoids the "default to accepting Protobuf"
-	// behavior from client-gen's --prefer-protobuf option, which is set when generating all of
-	// the clients with ApplyScale.
+	// 设置非空的 AcceptContentTypes 可以避免 client-gen 的 --prefer-protobuf 选项带来的
+	// “默认接受 Protobuf”行为；生成所有带 ApplyScale 的客户端时都会设置该选项。
 	config.AcceptContentTypes = "application/cbor"
 	config.Wrap(framework.AssertRequestResponseAsCBOR(t))
 	clientset, err = kubernetes.NewForConfig(config)
@@ -1995,7 +1992,7 @@ func TestCBORWithTypedClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// for Apply, ApplyStatus, and ApplyScale
+	// 用于 Apply、ApplyStatus 和 ApplyScale
 	rsClient := clientset.AppsV1().ReplicaSets(TestNamespace)
 	rs, err := rsClient.Apply(
 		context.TODO(),
@@ -2075,7 +2072,7 @@ func TestUnsupportedMediaTypeCircuitBreaker(t *testing.T) {
 				t.Errorf("expected to receive unsupported media type on first cbor request, got: %v", err)
 			}
 
-			// Requests from this client should fall back from application/cbor to application/json.
+			// 来自该客户端的请求应从 application/cbor 回退到 application/json。
 			if _, err := client.Namespaces().Create(
 				context.TODO(),
 				&v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-client-415"}},
@@ -2084,8 +2081,7 @@ func TestUnsupportedMediaTypeCircuitBreaker(t *testing.T) {
 				t.Errorf("expected to receive nil error on subsequent cbor request, got: %v", err)
 			}
 
-			// The circuit breaker trips on a per-client basis, so it should not begin tripped for a
-			// fresh client with identical config.
+			// 熔断器按客户端独立生效，因此使用相同配置新建的客户端不应一开始就处于熔断状态。
 			client, err = corev1client.NewForConfig(config)
 			if err != nil {
 				t.Fatal(err)

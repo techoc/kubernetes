@@ -56,22 +56,22 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 	netutils "k8s.io/utils/net"
 
-	// install all APIs
+	// 安装所有 API
 	_ "k8s.io/kubernetes/pkg/controlplane"
 )
 
-// This key is for testing purposes only and is not considered secure.
+// 此密钥仅用于测试，不被认为是安全的。
 const ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIEZmTmUhuanLjPA2CLquXivuwBDHTt5XYwgIr/kA1LtRoAoGCCqGSM49
 AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
 /IR3qCXyThP/dbCiHrF3v1cuhBOHY8CLVg==
 -----END EC PRIVATE KEY-----`
 
-// StartRealAPIServerOrDie starts an API server that is appropriate for use in tests that require one of every resource
+// StartRealAPIServerOrDie 启动一个适用于需要每类资源各有一个的测试的 API server
 func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRunOptions)) *APIServer {
 	tCtx := ktesting.Init(t)
 
-	// Strip out "/" in subtests
+	// 去掉子测试名称中的 "/"
 	certDir, err := os.MkdirTemp("", strings.ReplaceAll(t.Name(), "/", ""))
 	if err != nil {
 		t.Fatal(err)
@@ -97,11 +97,11 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 	}
 
 	opts := options.NewServerRunOptions()
-	// If EmulationVersion of DefaultFeatureGate is set during test, we need to propagate it to the apiserver ComponentGlobalsRegistry.
+	// 如果测试中设置了 DefaultFeatureGate 的 EmulationVersion，需要将其传播到 apiserver 的 ComponentGlobalsRegistry。
 	featureGate := feature.DefaultMutableFeatureGate.DeepCopy()
 	effectiveVersion := compatibility.DefaultKubeEffectiveVersionForTest()
 	effectiveVersion.SetEmulationVersion(featureGate.EmulationVersion())
-	// set up new instance of ComponentGlobalsRegistry instead of using the DefaultComponentGlobalsRegistry to avoid contention in parallel tests.
+	// 创建新的 ComponentGlobalsRegistry 实例，而不是使用 DefaultComponentGlobalsRegistry，以避免并行测试中的竞争。
 	componentGlobalsRegistry := basecompatibility.NewComponentGlobalsRegistry()
 	if err := componentGlobalsRegistry.Register(basecompatibility.DefaultKubeComponent, effectiveVersion, featureGate); err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 	opts.Options.SecureServing.ServerCert.CertDirectory = certDir
 	opts.Options.ServiceAccountSigningKeyFile = saSigningKeyFile.Name()
 	opts.Options.Etcd.StorageConfig.Transport.ServerList = []string{framework.GetEtcdURL()}
-	opts.Options.Etcd.DefaultStorageMediaType = runtime.ContentTypeJSON // force json we can easily interpret the result in etcd
+	opts.Options.Etcd.DefaultStorageMediaType = runtime.ContentTypeJSON // 强制使用 json，方便直接解读 etcd 中的结果
 	opts.ServiceClusterIPRanges = defaultServiceClusterIPRange.String()
 	opts.Options.Authentication.APIAudiences = []string{"https://foo.bar.example.com"}
 	opts.Options.Authentication.ServiceAccounts.Issuers = []string{"https://foo.bar.example.com"}
@@ -124,8 +124,8 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 		f(opts)
 	}
 
-	// If the local ComponentGlobalsRegistry is changed by configFuncs,
-	// we need to copy the new feature values back to the DefaultFeatureGate because most feature checks still use the DefaultFeatureGate.
+	// 如果 configFuncs 修改了本地的 ComponentGlobalsRegistry，
+	// 需要将新的特性值拷回 DefaultFeatureGate，因为大多数特性检查仍使用 DefaultFeatureGate。
 	if !featureGate.EmulationVersion().EqualTo(feature.DefaultMutableFeatureGate.EmulationVersion()) || !featureGate.MinCompatibilityVersion().EqualTo(feature.DefaultMutableFeatureGate.MinCompatibilityVersion()) {
 		featuregatetesting.SetFeatureGateVersionsDuringTest(t, feature.DefaultMutableFeatureGate, effectiveVersion.EmulationVersion(), effectiveVersion.MinCompatibilityVersion())
 	}
@@ -149,13 +149,13 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 		t.Fatalf("failed to validate ServerRunOptions: %v", utilerrors.NewAggregate(errs))
 	}
 
-	// get etcd client before starting API server
+	// 在启动 API server 之前获取 etcd client
 	rawClient, kvClient, err := integration.GetEtcdClients(completedOptions.Etcd.StorageConfig.Transport)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// make sure we start with a clean slate
+	// 确保从干净的状态开始
 	if _, err := kvClient.Delete(context.Background(), "/registry/", clientv3.WithPrefix()); err != nil {
 		t.Fatal(err)
 	}
@@ -175,18 +175,18 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 
 	kubeClientConfig := restclient.CopyConfig(kubeAPIServer.GenericAPIServer.LoopbackClientConfig)
 
-	// we make lots of requests, don't be slow
+	// 我们会发出大量请求，别让它慢下来
 	kubeClientConfig.QPS = 99999
 	kubeClientConfig.Burst = 9999
 
-	// we make requests to all resources, don't log warnings about deprecated ones
+	// 我们会请求所有资源，不要记录关于已废弃资源的警告
 	restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
 
 	kubeClient := clientset.NewForConfigOrDie(kubeClientConfig)
 
 	errCh := make(chan error)
 	go func() {
-		// Catch panics that occur in this go routine so we get a comprehensible failure
+		// 捕获此 goroutine 中发生的 panic，以便得到可理解的失败信息
 		defer func() {
 			if err := recover(); err != nil {
 				t.Errorf("Unexpected panic trying to start API server: %#v", err)
@@ -215,7 +215,7 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 		default:
 		}
 
-		// wait for the server to be healthy
+		// 等待 server 健康
 		result := kubeClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO())
 		content, _ := result.Raw()
 		lastHealth = string(content)
@@ -236,10 +236,10 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 		t.Fatal(err)
 	}
 
-	// create CRDs so we can make sure that custom resources do not get lost
+	// 创建 CRD，以确保自定义资源不会丢失
 	CreateTestCRDs(t, apiextensionsclientset.NewForConfigOrDie(kubeClientConfig), false, GetCustomResourceDefinitionData()...)
 
-	// force cached discovery reset
+	// 强制重置缓存的 discovery
 	discoveryClient := cacheddiscovery.NewMemCacheClient(kubeClient.Discovery())
 	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
 	restMapper.Reset()
@@ -250,12 +250,12 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 	}
 
 	cleanup := func() {
-		// Cancel stopping apiserver and cleaning up
-		// after itself, including shutting down its storage layer.
+		// 取消 apiserver 以停止它并自行清理，
+		// 包括关闭其存储层。
 		tCtx.Cancel("cleaning up")
 
-		// If the apiserver was started, let's wait for it to
-		// shutdown clearly.
+		// 如果 apiserver 已启动，等待它
+		// 完全关闭。
 		err, ok := <-errCh
 		if ok && err != nil {
 			t.Error(err)
@@ -277,8 +277,8 @@ func StartRealAPIServerOrDie(t *testing.T, configFuncs ...func(*options.ServerRu
 	}
 }
 
-// APIServer represents a running API server that is ready for use
-// The Cleanup func must be deferred to prevent resource leaks
+// APIServer 表示一个已运行且可供使用的 API server
+// 必须 defer Cleanup 函数，以防止资源泄漏
 type APIServer struct {
 	Client    clientset.Interface
 	Dynamic   dynamic.Interface
@@ -289,19 +289,19 @@ type APIServer struct {
 	Cleanup   func()
 }
 
-// Resource contains REST mapping information for a specific resource and extra metadata such as delete collection support
+// Resource 包含特定资源的 REST 映射信息，以及诸如是否支持 delete collection 等额外元数据
 type Resource struct {
 	Mapping             *meta.RESTMapping
 	HasDeleteCollection bool
 }
 
-// GetResources fetches the Resources associated with serverResources that support get and create
+// GetResources 获取 serverResources 中支持 get 和 create 的对应 Resource
 func GetResources(t *testing.T, serverResources []*metav1.APIResourceList) []Resource {
 	var resources []Resource
 
 	for _, discoveryGroup := range serverResources {
 		for _, discoveryResource := range discoveryGroup.APIResources {
-			// this is a subresource, skip it
+			// 这是一个子资源，跳过
 			if strings.Contains(discoveryResource.Name, "/") {
 				continue
 			}
@@ -358,15 +358,15 @@ func scope(namespaced bool) meta.RESTScope {
 	return meta.RESTScopeRoot
 }
 
-// JSONToUnstructured converts a JSON stub to unstructured.Unstructured and
-// returns a dynamic resource client that can be used to interact with it
+// JSONToUnstructured 将 JSON stub 转换为 unstructured.Unstructured，
+// 并返回可用于与其交互的 dynamic resource client
 func JSONToUnstructured(stub, namespace string, mapping *meta.RESTMapping, dynamicClient dynamic.Interface) (dynamic.ResourceInterface, *unstructured.Unstructured, error) {
 	typeMetaAdder := map[string]interface{}{}
 	if err := json.Unmarshal([]byte(stub), &typeMetaAdder); err != nil {
 		return nil, nil, err
 	}
 
-	// we don't require GVK on the data we provide, so we fill it in here.  We could, but that seems extraneous.
+	// 我们不要求提供的数据中带有 GVK，因此在此补全。也可以提供，但那显得多余。
 	typeMetaAdder["apiVersion"] = mapping.GroupVersionKind.GroupVersion().String()
 	typeMetaAdder["kind"] = mapping.GroupVersionKind.Kind
 
@@ -377,9 +377,9 @@ func JSONToUnstructured(stub, namespace string, mapping *meta.RESTMapping, dynam
 	return dynamicClient.Resource(mapping.Resource).Namespace(namespace), &unstructured.Unstructured{Object: typeMetaAdder}, nil
 }
 
-// CreateTestCRDs creates the given CRDs, any failure causes the test to Fatal.
-// If skipCrdExistsInDiscovery is true, the CRDs are only checked for the Established condition via their Status.
-// If skipCrdExistsInDiscovery is false, the CRDs are checked via discovery, see CrdExistsInDiscovery.
+// CreateTestCRDs 创建给定的 CRD，任何失败都会导致测试 Fatal。
+// 如果 skipCrdExistsInDiscovery 为 true，则仅通过 CRD 的 Status 检查 Established 条件。
+// 如果 skipCrdExistsInDiscovery 为 false，则通过 discovery 检查 CRD，参见 CrdExistsInDiscovery。
 func CreateTestCRDs(t *testing.T, client apiextensionsclientset.Interface, skipCrdExistsInDiscovery bool, crds ...*apiextensionsv1.CustomResourceDefinition) {
 	for _, crd := range crds {
 		createTestCRD(t, client, skipCrdExistsInDiscovery, crd)
@@ -421,7 +421,7 @@ func waitForEstablishedCRD(client apiextensionsclientset.Interface, name string)
 	})
 }
 
-// CrdExistsInDiscovery checks to see if the given CRD exists in discovery at all served versions.
+// CrdExistsInDiscovery 检查给定 CRD 在所有 served 版本的 discovery 中是否存在。
 func CrdExistsInDiscovery(client apiextensionsclientset.Interface, crd *apiextensionsv1.CustomResourceDefinition) bool {
 	var versions []string
 	for _, v := range crd.Spec.Versions {

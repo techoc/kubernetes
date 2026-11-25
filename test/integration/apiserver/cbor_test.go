@@ -51,16 +51,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestNondeterministicResponseEncoding verifies that the encoding of response bodies to CBOR is not
-// deterministic. Even in cases where encoding deterministically has no overhead, some randomness is
-// introduced to prevent clients from inadvertently depending on deterministic encoding when it is
-// not guaranteed.
+// TestNondeterministicResponseEncoding 验证响应体编码为 CBOR 时
+// 不是确定性的。即使在某些情况下确定性编码没有额外开销，
+// 也会引入一些随机性，以防止客户端在不能保证确定性编码时
+// 无意中依赖它。
 func TestNondeterministicResponseEncoding(t *testing.T) {
-	// Nondeterministic map key order is not guaranteed to select each possible ordering with
-	// equal probability. In practice, since metav1.WatchEvent only has two fields, it does and
-	// the probability of either possible map key ordering is approximately 50%. The probability
-	// that this test flakes because a watch event was encoded the same way on every trial is
-	// about 2^-NTrials, so NTrials needs to be big enough to make sure that doesn't happen.
+	// 非确定性的 map 键顺序并不保证以相同概率选取每一种可能的顺序。
+	// 实际上，由于 metav1.WatchEvent 只有两个字段，确实如此，
+	// 两种可能的 map 键顺序的概率各约为 50%。该测试因为每次试验中 watch event
+	// 都以相同方式编码而出现不稳定的概率约为 2^-NTrials，
+	// 因此 NTrials 需要足够大，以确保不会发生这种情况。
 	const NTrials = 40
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
@@ -87,12 +87,12 @@ func TestNondeterministicResponseEncoding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Compare pairs of "get" requests at the same resource version for encoding differences.
+	// 比较相同 resource version 下的成对 "get" 请求，观察编码差异。
 	responseDiff := false
 	for i := 0; i < NTrials && !responseDiff; i++ {
 		request := client.RESTClient().Get().Resource("namespaces").Name(namespace.GetName())
 
-		// get at latest resource version
+		// 在最新的 resource version 上执行 get
 		result := request.Do(context.TODO())
 		raw1, err := result.Raw()
 		if err != nil {
@@ -102,7 +102,7 @@ func TestNondeterministicResponseEncoding(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// get again at same resource version
+		// 在相同的 resource version 上再次执行 get
 		trial := request.VersionedParams(&metav1.GetOptions{ResourceVersion: namespace.ResourceVersion}, scheme.ParameterCodec).Do(context.TODO())
 		var trialObject corev1.Namespace
 		if err := trial.Into(&trialObject); err != nil {
@@ -120,8 +120,8 @@ func TestNondeterministicResponseEncoding(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(raw1, raw2) {
-			// Observed a response body that was not byte-for-byte the same as the first
-			// response body.
+			// 观察到响应体与第一个响应体
+			// 并非逐字节相同。
 			responseDiff = true
 		}
 	}
@@ -129,18 +129,18 @@ func TestNondeterministicResponseEncoding(t *testing.T) {
 		t.Errorf("performed %d consecutive get requests to the same resource and observed identical response bodies each time", NTrials)
 	}
 
-	// Induce a watch event, then compare the encoding of the induced event across pairs of
-	// watch requests.
+	// 触发一个 watch event，然后比较成对的
+	// watch 请求中该事件的编码。
 	eventDiff := false
 	objDiff := false
 	for i := 0; i < NTrials && (!eventDiff || !objDiff); i++ {
-		// Get latest to have a valid resource version to start watches from.
+		// 先获取最新版本，以得到一个有效的 resource version 作为 watch 起点。
 		namespace, err := client.Namespaces().Get(context.TODO(), namespace.GetName(), metav1.GetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// Patch so that watchers will see a "modified" event.
+		// 执行 patch，使 watcher 能看到一个 "modified" 事件。
 		patched, err := client.Namespaces().Patch(context.TODO(), namespace.GetName(), types.JSONPatchType, []byte(fmt.Sprintf(`[{"op":"add","path":"/metadata/annotations/foo","value":"%d"}]`, i)), metav1.PatchOptions{})
 		if err != nil {
 			t.Fatal(err)
@@ -148,8 +148,8 @@ func TestNondeterministicResponseEncoding(t *testing.T) {
 
 		request := client.RESTClient().Get().Resource("namespaces")
 
-		// Get the raw bytes of the watch event induced by the patch plus the raw bytes of
-		// its embedded object.
+		// 获取由 patch 触发的 watch event 的原始字节，
+		// 以及其中嵌入对象的原始字节。
 		getRawEventAndRawObject := func() ([]byte, []byte, error) {
 			ctx, cancel := context.WithTimeout(context.TODO(), 6*time.Second)
 			defer cancel()
@@ -175,9 +175,9 @@ func TestNondeterministicResponseEncoding(t *testing.T) {
 				var event metav1.WatchEvent
 				got, _, err := sd.Decode(nil, &event)
 				if err != nil {
-					// Either the server timeout or client context timeout will
-					// cause an EOF here to terminate the loop if the expected
-					// event is never received.
+					// 如果始终没有收到预期事件，
+					// 服务端超时或客户端 context 超时
+					// 都会在此产生 EOF，从而终止循环。
 					t.Fatal(err)
 				}
 				if got != &event {
@@ -234,9 +234,9 @@ func TestNondeterministicResponseEncoding(t *testing.T) {
 			objDiff = true
 		}
 
-		// Cut out the embedded object so that we can observe that the watch event itself is
-		// encoded nondeterministically rather than simply embedding a nondeterministic
-		// object encoding.
+		// 去掉嵌入的对象，以便观察是否是 watch event 本身
+		// 以非确定方式编码，而不只是嵌入了一个
+		// 非确定编码的对象。
 		event1 = bytes.Replace(event1, raw1, nil, 1)
 		event2 = bytes.Replace(event2, raw2, nil, 1)
 		if !bytes.Equal(event1, event2) {
@@ -261,10 +261,10 @@ func (d *rawCapturingDecoder) Decode(data []byte, defaults *schema.GroupVersionK
 	return d.delegate.Decode(data, defaults, into)
 }
 
-// TestCBORNonResourceEndpoints verifies that non-resource structured endpoints and structured error
-// responses support the CBOR encoding when the CBORServingAndStorage feature gate is enabled. This
-// covers the legacy and non-legacy discovery endpoints, statusz, flagz, and the error response
-// produced by the request deadline filter for a malformed timeout query parameter.
+// TestCBORNonResourceEndpoints 验证在启用 CBORServingAndStorage feature gate 时，
+// 非资源结构化端点和结构化错误响应支持 CBOR 编码。这包括旧版和非旧版的发现端点、
+// statusz、flagz，以及请求截止时间过滤器针对格式错误的 timeout 查询参数
+// 所产生的错误响应。
 func TestCBORNonResourceEndpoints(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.ClientsAllowCBOR, true)

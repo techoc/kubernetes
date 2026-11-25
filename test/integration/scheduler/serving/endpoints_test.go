@@ -168,10 +168,10 @@ func TestEndpointHandlers(t *testing.T) {
 			err = retry.OnError(
 				retry.DefaultBackoff,
 				func(err error) bool {
-					// the endpoint /readyz/sched-handler-sync needs some time to finish
-					// the initialization, so we need to retry
+					// 端点 /readyz/sched-handler-sync 需要一些时间来完成
+					// 初始化，因此需要重试
 					return !tt.useBrokenConfig &&
-						// The message differ depending on endpoint
+						// 错误消息因端点而异
 						(tt.path == "/readyz" && strings.Contains(err.Error(), "sched-handler-sync failed: reason withheld") ||
 							tt.path == "/readyz/sched-handler-sync" && strings.Contains(err.Error(), "handlers are not fully synchronized"))
 				},
@@ -595,7 +595,7 @@ func TestSchedulerZPages(t *testing.T) {
 					t.Errorf("unexpected Kind: %s", cfg.GetKind())
 				}
 
-				// confirm that they expose public config type
+				// 确认它们暴露了公开的配置类型
 				var schedulerConfig kubeschedulerconfigv1.KubeSchedulerConfiguration
 				err = json.Unmarshal(body, &struct {
 					ComponentConfig *kubeschedulerconfigv1.KubeSchedulerConfiguration `json:"componentconfig"`
@@ -608,10 +608,10 @@ func TestSchedulerZPages(t *testing.T) {
 	}
 }
 
-// TODO: Make this a util function once there is a unified way to start a testing apiserver so that we can reuse it.
+// TODO: 一旦有了启动测试 apiserver 的统一方式，就将其改为 util 函数，以便复用。
 func startTestAPIServer(t *testing.T) (server *kubeapiservertesting.TestServer, apiserverConfig, token string, err error) {
-	// Insulate this test from picking up in-cluster config when run inside a pod
-	// We can't assume we have permissions to write to /var/run/secrets/... from a unit test to mock in-cluster config for testing
+	// 避免该测试在 Pod 内运行时拾取集群内配置
+	// 我们不能假设单元测试有权限写入 /var/run/secrets/... 来模拟集群内配置以进行测试
 	originalHost := os.Getenv("KUBERNETES_SERVICE_HOST")
 	if len(originalHost) > 0 {
 		if err = os.Setenv("KUBERNETES_SERVICE_HOST", ""); err != nil {
@@ -622,8 +622,8 @@ func startTestAPIServer(t *testing.T) (server *kubeapiservertesting.TestServer, 
 		}()
 	}
 
-	// authenticate to apiserver via bearer token
-	token = "flwqkenfjasasdfmwerasd" // Fake token for testing.
+	// 通过 bearer token 向 apiserver 进行认证
+	token = "flwqkenfjasasdfmwerasd" // 用于测试的假 token。
 	var tokenFile *os.File
 	tokenFile, err = os.CreateTemp("", "kubeconfig")
 	if err != nil {
@@ -636,7 +636,7 @@ func startTestAPIServer(t *testing.T) (server *kubeapiservertesting.TestServer, 
 		return
 	}
 
-	// start apiserver
+	// 启动 apiserver
 	server = kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--token-auth-file", tokenFile.Name(),
 		"--authorization-mode", "AlwaysAllow",
@@ -668,9 +668,9 @@ func clientAndURLFromTestServer(s kubeschedulertesting.TestServer) (*http.Client
 	secureInfo := s.Config.SecureServing
 	secureOptions := s.Options.SecureServing
 	url := fmt.Sprintf("https://%s", secureInfo.Listener.Addr().String())
-	url = strings.ReplaceAll(url, "[::]", "127.0.0.1") // switch to IPv4 because the self-signed cert does not support [::]
+	url = strings.ReplaceAll(url, "[::]", "127.0.0.1") // 切换到 IPv4，因为自签名证书不支持 [::]
 
-	// read self-signed server cert disk
+	// 从磁盘读取自签名的服务端证书
 	pool := x509.NewCertPool()
 	serverCertPath := path.Join(secureOptions.ServerCert.CertDirectory, secureOptions.ServerCert.PairName+".crt")
 	serverCert, err := os.ReadFile(serverCertPath)

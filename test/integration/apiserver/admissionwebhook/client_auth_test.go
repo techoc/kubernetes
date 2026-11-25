@@ -143,8 +143,9 @@ plugins:
 	defer s.TearDownFn()
 
 	// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求
-	// 和控制器发起的请求。我们据此在记录之前过滤请求，
-	// 确保不会把控制器的请求误当成该客户端的请求。
+	// 和控制器发起的请求。我们据此在记录请求之前先过滤，
+	// 确保不会把控制器发出的请求
+	// 误当成该客户端发出的请求。
 	clientConfig := rest.CopyConfig(s.ClientConfig)
 	clientConfig.Impersonate.UserName = testClientAuthClientUsername
 	clientConfig.Impersonate.Groups = []string{"system:masters", "system:authenticated"}

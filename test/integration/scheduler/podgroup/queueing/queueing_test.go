@@ -153,8 +153,8 @@ func TestPodGroupQueueing(t *testing.T) {
 
 	tests := []struct {
 		name string
-		// podInjector injects the given pod when the watched pod is during PreFilter phase.
-		// nil means that no pod is injected during scheduling.
+		// podInjector 在被监听的 Pod 处于 PreFilter 阶段时注入指定的 Pod。
+		// nil 表示调度期间不注入任何 Pod。
 		podInjector    *podInjector
 		bindingFailing *bindingFailing
 		steps          []stepsframework.Step

@@ -56,7 +56,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestPodGroupPreemption tests preemption scenarios involving pod groups.
+// TestPodGroupPreemption 测试涉及 PodGroup 的抢占场景。
 func TestPodGroupPreemption(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.GenericWorkload:                 true,
@@ -67,9 +67,9 @@ func TestPodGroupPreemption(t *testing.T) {
 		name          string
 		nodes         []*v1.Node
 		podGroups     []*schedulingv1beta1.PodGroup
-		initialPods   []*v1.Pod // pods that should be scheduled before preemption starts
-		preemptorPods []*v1.Pod // pods that belong to a group and should trigger preemption
-		// the order may be important to ensure deterministic scheduling result, where only some of the preemptor pods will get scheduled.
+		initialPods   []*v1.Pod // 应在抢占开始前被调度的 Pod
+		preemptorPods []*v1.Pod // 属于某个组并应触发抢占的 Pod
+		// 该顺序对于确保确定性的调度结果可能很重要，因为只有部分抢占者 Pod 会被调度。
 		preemptorPodsQueuedInCreationOrder bool
 		pdb                                *policyv1.PodDisruptionBudget
 		expectedScheduled                  []string
@@ -80,13 +80,13 @@ func TestPodGroupPreemption(t *testing.T) {
 		enablePodGroupPreemptionPolicy     bool
 		customPluginName                   string
 		customPluginFunc                   frameworkruntime.PluginFactory
-		// tempRemovePG, if true, temporarily removes PodGroups for the time of creating preemptor pods
-		// - but after initial pods have been scheduled.
-		// This ensures that the initial pods get scheduled before preemptor pods are created AND
-		// all preemptor pods are created and kept in incompletePodGroupPods.
-		// Once the PodGroup is recreated, all pods become schedulable simultaneously and
-		// are guaranteed to be evaluated together in the next PodGroup scheduling cycle.
-		// This avoids test flakiness caused by running multiple PodGroup scheduling cycles with a partial set of preemptor pods.
+		// tempRemovePG 为 true 时，会在创建抢占者 Pod 期间临时移除 PodGroup，
+		// 但这是在初始 Pod 已被调度之后进行的。
+		// 这确保初始 Pod 在抢占者 Pod 创建之前被调度，并且
+		// 所有抢占者 Pod 都被创建并保留在 incompletePodGroupPods 中。
+		// 一旦重新创建 PodGroup，所有 Pod 会同时变为可调度状态，
+		// 并保证在下一个 PodGroup 调度周期中一起被评估。
+		// 这避免了因使用部分抢占者 Pod 运行多个 PodGroup 调度周期而导致的测试不稳定。
 		tempRemovePG       bool
 		expectedEventOrder []string
 	}{
@@ -146,9 +146,9 @@ func TestPodGroupPreemption(t *testing.T) {
 				st.MakePodGroup().Name("pg1").Namespace("default").Priority(100).MinCount(3).Obj(),
 			},
 			initialPods: []*v1.Pod{
-				// low-1 takes all CPU on node1
+				// low-1 占用 node1 上的全部 CPU
 				st.MakePod().Name("low-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").ZeroTerminationGracePeriod().Priority(10).Node("node1").Obj(),
-				// low-2 takes half CPU on node2
+				// low-2 占用 node2 上一半的 CPU
 				st.MakePod().Name("low-2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").ZeroTerminationGracePeriod().Priority(10).Node("node2").Obj(),
 			},
 			preemptorPods: []*v1.Pod{
@@ -156,8 +156,8 @@ func TestPodGroupPreemption(t *testing.T) {
 				st.MakePod().Name("high-2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").ZeroTerminationGracePeriod().Priority(100).Obj(),
 				st.MakePod().Name("high-3").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").ZeroTerminationGracePeriod().Priority(100).Obj(),
 			},
-			// With custom scoring, preemptor pods will prefer on high-1 node
-			// which will force preemption of low-1 pod.
+			// 使用自定义打分时，抢占者 Pod 会优先选择 high-1 节点，
+			// 这将迫使 low-1 Pod 被抢占。
 			expectedScheduled:          []string{"high-1", "high-2", "high-3", "low-2"},
 			expectedPreempted:          []string{"low-1"},
 			expectedToHaveNNNInfo:      []string{"high-1", "high-2", "high-3"},
@@ -175,9 +175,9 @@ func TestPodGroupPreemption(t *testing.T) {
 				st.MakePodGroup().Name("pg1").Namespace("default").Priority(100).BasicPolicy().Obj(),
 			},
 			initialPods: []*v1.Pod{
-				// low-1 takes half CPU on node1
+				// low-1 占用 node1 上一半的 CPU
 				st.MakePod().Name("low-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").ZeroTerminationGracePeriod().Priority(10).Node("node1").Obj(),
-				// very-low-1 takes all CPU on node2
+				// very-low-1 占用 node2 上的全部 CPU
 				st.MakePod().Name("very-low-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").ZeroTerminationGracePeriod().Priority(5).Node("node2").Obj(),
 			},
 			preemptorPods: []*v1.Pod{
@@ -185,8 +185,8 @@ func TestPodGroupPreemption(t *testing.T) {
 				st.MakePod().Name("high-2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").ZeroTerminationGracePeriod().Priority(100).Obj(),
 				st.MakePod().Name("high-3").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").ZeroTerminationGracePeriod().Priority(100).Obj(),
 			},
-			// With custom scoring, preemptor pods will prefer high-1 node
-			// which will force preemption of low-1 pod.
+			// 使用自定义打分时，抢占者 Pod 会优先选择 high-1 节点，
+			// 这将迫使 low-1 Pod 被抢占。
 			expectedScheduled:          []string{"high-1", "high-2", "high-3", "very-low-1"},
 			expectedPreempted:          []string{"low-1"},
 			expectedToHaveNNNInfo:      []string{},
@@ -419,7 +419,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				st.MakePod().Name("p-c").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("preemptor-pg").ZeroTerminationGracePeriod().Priority(100).Obj(),
 			},
 			preemptorPodsQueuedInCreationOrder: true,
-			// p-a will preempt victim-pg, p-b will schedule to empty space, so only p-a will have NNN info.
+			// p-a 将抢占 victim-pg，p-b 将调度到空余空间，因此只有 p-a 会有 NNN 信息。
 			expectedScheduled:          []string{"p-a", "p-b", "v3", "v4"},
 			expectedPreempted:          []string{"v1", "v2"},
 			expectedUnschedulable:      []string{"p-c"},
@@ -478,13 +478,13 @@ func TestPodGroupPreemption(t *testing.T) {
 			},
 			expectedScheduled: []string{"p-a", "p-b", "p-c"},
 			expectedPreempted: []string{"v1", "v2", "v3"},
-			// There are no guarantees about NNN,
-			// depending on the number of queued pods in WAS cycle
-			// WAP can preempt different number of pods
-			// It's also possible that WAP will preempt enough pods
-			// so the further WAS cycle (after observing more pods)
-			// will no longer need to run WAP.
-			// In that case it's possible that none of the pods will have NNN set.
+			// NNN 没有保证，
+			// 取决于 WAS 周期中排队的 Pod 数量，
+			// WAP 可能抢占不同数量的 Pod。
+			// 也有可能 WAP 抢占了足够多的 Pod，
+			// 使得后续的 WAS 周期（在观察到更多 Pod 后）
+			// 不再需要运行 WAP。
+			// 在这种情况下，可能所有 Pod 都不会设置 NNN。
 			expectedToHaveNNNInfo:      []string{},
 			expectedPodsPreemptedByWAP: 3,
 		},
@@ -513,7 +513,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				st.MakePod().Name("p-c").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("preemptor-pg").ZeroTerminationGracePeriod().Priority(100).Obj(),
 			},
 			preemptorPodsQueuedInCreationOrder: true,
-			// p-a will preempt "victim-pg" and p-b will schedule to empty space, so only p-a will have NNN info.
+			// p-a 将抢占 "victim-pg"，p-b 将调度到空余空间，因此只有 p-a 会有 NNN 信息。
 			expectedScheduled:          []string{"p-a", "p-b", "v3", "v4"},
 			expectedPreempted:          []string{"v1", "v2"},
 			expectedUnschedulable:      []string{"p-c"},
@@ -683,8 +683,8 @@ func TestPodGroupPreemption(t *testing.T) {
 			expectedPodsPreemptedByWAP: 1,
 		},
 		{
-			// Even though there is enough resources to keep initial pod when scheduling preemptor
-			// due to the pod anti affinity it cannot be reprieved.
+			// 尽管在调度抢占者时有足够的资源保留初始 Pod，
+			// 但由于 Pod 的反亲和性，它无法被豁免。
 			name: "Gang scheduling: preemption with pod anti-affinity constraints",
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node1").Label("kubernetes.io/hostname", "node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj(),
@@ -708,8 +708,8 @@ func TestPodGroupPreemption(t *testing.T) {
 			expectedPodsPreemptedByWAP: 1,
 		},
 		{
-			// Even though there is enough resources to keep initial pod when scheduling preemptor
-			// due to the pod node port it cannot be reprieved.
+			// 尽管在调度抢占者时有足够的资源保留初始 Pod，
+			// 但由于 Pod 的节点端口，它无法被豁免。
 			name: "Gang scheduling: preemption with pod node port",
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj(),
@@ -731,8 +731,8 @@ func TestPodGroupPreemption(t *testing.T) {
 			expectedPodsPreemptedByWAP: 1,
 		},
 		{
-			// Even though there is enough resources to keep initial pod when scheduling preemptor
-			// due to the pod topolgy spread it cannot be reprieved.
+			// 尽管在调度抢占者时有足够的资源保留初始 Pod，
+			// 但由于 Pod 的拓扑分布约束，它无法被豁免。
 			name: "Gang scheduling: preemption with pod topology spread constraints",
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node1").Label("kubernetes.io/hostname", "node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "16", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj(),
@@ -790,7 +790,7 @@ func TestPodGroupPreemption(t *testing.T) {
 			},
 			initialPods: []*v1.Pod{
 				st.MakePod().Name("initial-pod").Label("app", "foo").Node("node1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").ZeroTerminationGracePeriod().Priority(10).Obj(),
-				// initial-pod-2 can be reprieved even though it has lower priority, because it won't cause skew
+				// initial-pod-2 即使优先级较低也可以被豁免，因为它不会造成倾斜
 				st.MakePod().Name("initial-pod-2").Label("app", "foo").Node("node2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").ZeroTerminationGracePeriod().Priority(5).Obj(),
 			},
 			preemptorPods: []*v1.Pod{
@@ -829,8 +829,8 @@ func TestPodGroupPreemption(t *testing.T) {
 			expectedPodsPreemptedByWAP: 1,
 		},
 		{
-			// This scenario verifies that during reprieval we respect Reserve plugins.
-			// The number of reserved pods + pods with "resource-taken" is at max 2.
+			// 该场景验证在豁免期间会遵循 Reserve 插件。
+			// 已预留的 Pod 数量加上带有 "resource-taken" 标签的 Pod 数量最多为 2。
 			name: "Reserve plugins are called during preemption simulation, so second pod fails",
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "3", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj(),
@@ -877,9 +877,9 @@ func TestPodGroupPreemption(t *testing.T) {
 			expectedPreempted:          []string{"low-1"},
 			expectedPodsPreemptedByWAP: 1,
 			tempRemovePG:               true,
-			// both preemptor pods will become schedulable at once, but there will be only place for 1 pod without preemption
-			// the scheduling cycle should prefer binding this pod over preempting to make room for both pods
-			// preemption will be called in the subsequent cycle to make room for the second pod.
+			// 两个抢占者 Pod 将同时变为可调度状态，但不抢占的话只有 1 个 Pod 的位置
+			// 该调度周期应优先绑定这个 Pod，而不是为了让两个 Pod 都能调度而进行抢占
+			// 抢占将在后续周期中被调用，以为第二个 Pod 腾出空间。
 			expectedEventOrder: []string{"Bind:high-1", "PodGroupPostFilter:pg1", "Bind:high-2"},
 		},
 		{
@@ -903,9 +903,9 @@ func TestPodGroupPreemption(t *testing.T) {
 			expectedPreempted:          []string{"low-1"},
 			expectedPodsPreemptedByWAP: 1,
 			tempRemovePG:               true,
-			// both preemptor pods will become schedulable at once, but there will be only place for 1 pod without preemption
-			// the scheduling cycle should prefer binding this pod over preempting to make room for both pods
-			// preemption will be called in the subsequent cycle to make room for the second pod.
+			// 两个抢占者 Pod 将同时变为可调度状态，但不抢占的话只有 1 个 Pod 的位置
+			// 该调度周期应优先绑定这个 Pod，而不是为了让两个 Pod 都能调度而进行抢占
+			// 抢占将在后续周期中被调用，以为第二个 Pod 腾出空间。
 			expectedEventOrder: []string{"Bind:high-1", "PodGroupPostFilter:pg1", "Bind:high-2"},
 		},
 		{
@@ -988,7 +988,7 @@ func TestPodGroupPreemption(t *testing.T) {
 			customPluginFunc:           newPresetScorePlugin(map[string]int64{"node1": 0, "node2": 0, "node3": 100, "node4": 100}),
 		},
 		{
-			// Even after removing low prio pods in each topology, none of them becomes available.
+			// 即使移除了每个拓扑中的低优先级 Pod，仍然没有任何拓扑可用。
 			name: "Topology-Aware Preemption: insufficient capacity across all topologies, no preemption performed",
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node1").Label("topology-key", "zone1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj(),
@@ -1027,7 +1027,7 @@ func TestPodGroupPreemption(t *testing.T) {
 			recorder := eventRecorder{}
 			registry := make(frameworkruntime.Registry)
 
-			// Register mock bind plugin that will register NNN information during binding.
+			// 注册 mock 绑定插件，它将在绑定期间记录 NNN 信息。
 			mockBindPluginName := "mockBindPlugin"
 			var bindPlugin = mockBindPlugin{
 				name:       mockBindPluginName,
@@ -1071,9 +1071,9 @@ func TestPodGroupPreemption(t *testing.T) {
 							},
 							Disabled: []configv1.Plugin{
 								{Name: names.DefaultBinder},
-								// Disable DefaultPreemption from its default position to allow explicit ordering.
-								// If not disabled, it runs as an override first and terminates the post-filter chain,
-								// preventing our mock plugins from recording events.
+								// 从默认位置禁用 DefaultPreemption，以允许显式排序。
+								// 如果不禁用，它会首先作为覆盖插件运行并终止 post-filter 链，
+								// 导致我们的 mock 插件无法记录事件。
 								{Name: names.DefaultPreemption},
 							},
 						},
@@ -1089,8 +1089,8 @@ func TestPodGroupPreemption(t *testing.T) {
 				cfg.Profiles[0].Plugins.MultiPoint.Enabled = append(cfg.Profiles[0].Plugins.MultiPoint.Enabled, config.Plugin{Name: tt.customPluginName})
 			}
 
-			// Set PodMaxBackoff to 1 second to turn on backoff and allow apiCacher to get information about
-			// pod NNN. Without this we might have a race between starting binding and update of apiCacher.
+			// 将 PodMaxBackoff 设为 1 秒以开启退避，并让 apiCacher 能够获取关于
+			// Pod NNN 的信息。否则，开始绑定与 apiCacher 更新之间可能出现竞态。
 			testCtx := testutils.InitTestSchedulerWithNS(t, "podgroup-preemption",
 				scheduler.WithProfiles(cfg.Profiles...),
 				scheduler.WithFrameworkOutOfTreeRegistry(registry),
@@ -1098,14 +1098,14 @@ func TestPodGroupPreemption(t *testing.T) {
 				scheduler.WithPodInitialBackoffSeconds(0))
 			cs, ns := testCtx.ClientSet, testCtx.NS.Name
 
-			// Create nodes
+			// 创建节点
 			for _, n := range tt.nodes {
 				if _, err := cs.CoreV1().Nodes().Create(testCtx.Ctx, n, metav1.CreateOptions{}); err != nil {
 					t.Fatalf("Failed to create node %s: %v", n.Name, err)
 				}
 			}
 
-			// Create PDB if specified
+			// 如果指定了 PDB，则创建 PDB
 			if tt.pdb != nil {
 				tt.pdb.Namespace = ns
 				if _, err := cs.PolicyV1().PodDisruptionBudgets(ns).Create(testCtx.Ctx, tt.pdb, metav1.CreateOptions{}); err != nil {
@@ -1113,7 +1113,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 1. Create PodGroups
+			// 1. 创建 PodGroup
 			for _, pg := range tt.podGroups {
 				pg.Namespace = ns
 				if _, err := cs.SchedulingV1beta1().PodGroups(ns).Create(testCtx.Ctx, pg, metav1.CreateOptions{}); err != nil {
@@ -1121,7 +1121,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 2. Create initial pods
+			// 2. 创建初始 Pod
 			for _, p := range tt.initialPods {
 				p.Namespace = ns
 				if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, p, metav1.CreateOptions{}); err != nil {
@@ -1129,7 +1129,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 3. Wait for initial pods to be scheduled
+			// 3. 等待初始 Pod 被调度
 			for _, p := range tt.initialPods {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 					testutils.PodScheduled(cs, ns, p.Name)); err != nil {
@@ -1139,11 +1139,11 @@ func TestPodGroupPreemption(t *testing.T) {
 
 			recorder.Clear()
 
-			// 4. Create preemptor pods
+			// 4. 创建抢占者 Pod
 			if tt.tempRemovePG {
-				// Temporarily remove PodGroups. This is a trick to ensure that all preemptor pods
-				// are created and queued as unschedulable first, and then become schedulable at once
-				// when the PodGroup is recreated.
+				// 临时移除 PodGroup。这是一个技巧，用于确保所有抢占者 Pod
+				// 都先被创建并以不可调度状态排队，然后在 PodGroup 重新创建时
+				// 同时变为可调度状态。
 				pgNames := make([]string, len(tt.podGroups))
 				for i, pg := range tt.podGroups {
 					pgNames[i] = pg.Name
@@ -1165,7 +1165,7 @@ func TestPodGroupPreemption(t *testing.T) {
 						if ok {
 							return true, nil
 						}
-						// pod may have gotten queued and scheduled between the polls
+						// Pod 可能在两次轮询之间已被排队和调度
 						return podScheduledFn(ctx)
 					})
 					if err != nil {
@@ -1175,7 +1175,7 @@ func TestPodGroupPreemption(t *testing.T) {
 			}
 
 			if tt.tempRemovePG {
-				// Wait for preemptor pods to be unschedulable
+				// 等待抢占者 Pod 变为不可调度
 				for _, p := range tt.preemptorPods {
 					if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 						func(ctx context.Context) (bool, error) {
@@ -1185,7 +1185,7 @@ func TestPodGroupPreemption(t *testing.T) {
 					}
 				}
 
-				// Recreate PodGroups
+				// 重新创建 PodGroup
 				for _, pg := range tt.podGroups {
 					pgCopy := pg.DeepCopy()
 					pgCopy.ResourceVersion = ""
@@ -1195,7 +1195,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 5. Wait for preemption to complete if WAP calls are expected
+			// 5. 如果预期会调用 WAP，则等待抢占完成
 			if tt.expectedPodsPreemptedByWAP > 0 {
 				wapCalls := 0
 				err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
@@ -1221,7 +1221,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 6. Verify unschedulable pods
+			// 6. 验证不可调度的 Pod
 			for _, podName := range tt.expectedUnschedulable {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 					testutils.PodUnschedulable(cs, ns, podName)); err != nil {
@@ -1229,7 +1229,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 7. Verify scheduled pods
+			// 7. 验证已调度的 Pod
 			for _, podName := range tt.expectedScheduled {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 					testutils.PodScheduled(cs, ns, podName)); err != nil {
@@ -1237,7 +1237,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 8. Verify preempted pods
+			// 8. 验证被抢占的 Pod
 			for _, podName := range tt.expectedPreempted {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 200*time.Millisecond, 5*time.Second, false,
 					func(ctx context.Context) (bool, error) {
@@ -1255,14 +1255,14 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 9. Verify preemptor pods have nominated node name
+			// 9. 验证抢占者 Pod 具有提名节点名称
 			for _, podName := range tt.expectedToHaveNNNInfo {
 				if node, ok := bindPlugin.nnnInfo.Load(podName); !ok || node.(string) == "" {
 					t.Errorf("Pod %s was expected to have nominated node name but didn't", podName)
 				}
 			}
 
-			// Verify event order
+			// 验证事件顺序
 			if len(tt.expectedEventOrder) > 0 {
 				actualEvents := recorder.GetEvents()
 				if diff := cmp.Diff(tt.expectedEventOrder, actualEvents); diff != "" {
@@ -1270,7 +1270,7 @@ func TestPodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 10. Dump the state of pods to ease debugging failed runs.
+			// 10. Dump Pod 的状态，以便于调试失败的运行。
 			if t.Failed() {
 				t.Log("Dumping states of initial and preemptor pods:")
 				var allPods []string
@@ -1318,22 +1318,22 @@ func TestPodGroupPreemptionStatus(t *testing.T) {
 	cs := testCtx.ClientSet
 	ns := testCtx.NS.Name
 
-	// Create a node.
+	// 创建一个节点。
 	node := st.MakeNode().Name("node-1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Obj()
 	if _, err := cs.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create node: %v", err)
 	}
-	// Create a low-priority pod low-1 taking whole node
+	// 创建一个占用整个节点资源的低优先级 Pod low-1
 	lowPod := st.MakePod().Name("low-1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).TerminationGracePeriodSeconds(30).Obj()
 	if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, lowPod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create low-priority pod: %v", err)
 	}
-	// Wait for low-priority pod to be scheduled
+	// 等待低优先级 Pod 被调度
 	if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 		testutils.PodScheduled(cs, ns, lowPod.Name)); err != nil {
 		t.Fatalf("Failed to wait for low-priority pod to be scheduled: %v", err)
 	}
-	// Create a high-priority pod high-1 belonging to pg1 (priority=100)
+	// 创建一个属于 pg1 的高优先级 Pod high-1（priority=100）
 	pg := st.MakePodGroup().Name("pg1").Namespace(ns).MinCount(1).Priority(100).Obj()
 	if _, err := cs.SchedulingV1beta1().PodGroups(ns).Create(testCtx.Ctx, pg, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PodGroup: %v", err)
@@ -1342,7 +1342,7 @@ func TestPodGroupPreemptionStatus(t *testing.T) {
 	if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, highPod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create high-priority pod: %v", err)
 	}
-	// Poll until the low-priority pod gets DeletionTimestamp set (which indicates preemption is triggered)
+	// 轮询直到低优先级 Pod 被设置 DeletionTimestamp（这表明抢占已触发）
 	err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
 		pod, err := cs.CoreV1().Pods(ns).Get(ctx, lowPod.Name, metav1.GetOptions{})
 		if err != nil {
@@ -1353,9 +1353,9 @@ func TestPodGroupPreemptionStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to wait for low-priority pod to get DeletionTimestamp set: %v", err)
 	}
-	// Verify the PodGroup condition.
-	// We want PodGroupInitiallyScheduled status to be False, Reason to be Unschedulable, and Message to contain
-	// both "minCount (1) cannot be satisfied" and "pod group preemption found a placement for podgroup"
+	// 验证 PodGroup 的条件。
+	// 期望 PodGroupInitiallyScheduled 的 status 为 False，Reason 为 Unschedulable，且 Message 包含
+	// "minCount (1) cannot be satisfied" 和 "pod group preemption found a placement for podgroup"
 	var cond *metav1.Condition
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 5*time.Second, false, func(ctx context.Context) (bool, error) {
 		currentPG, err := cs.SchedulingV1beta1().PodGroups(ns).Get(ctx, pg.Name, metav1.GetOptions{})
@@ -1411,7 +1411,7 @@ func TestPodGroupPreemption_NominatedNodeNameRespected(t *testing.T) {
 	)
 	cs, ns := testCtx.ClientSet, testCtx.NS.Name
 
-	// 1. Create 3 nodes
+	// 1. 创建 3 个节点
 	nodes := []*v1.Node{
 		st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj(),
 		st.MakeNode().Name("node2").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj(),
@@ -1423,13 +1423,13 @@ func TestPodGroupPreemption_NominatedNodeNameRespected(t *testing.T) {
 		}
 	}
 
-	// 2. Create PodGroup with minCount=2
+	// 2. 创建 minCount=2 的 PodGroup
 	pg := st.MakePodGroup().Name("pg1").Namespace(ns).Priority(50).MinCount(2).Obj()
 	if _, err := cs.SchedulingV1beta1().PodGroups(ns).Create(testCtx.Ctx, pg, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create pod group pg1: %v", err)
 	}
 
-	// 3. Create initial pods: pod1 on node1 (high priority), pod2 on node2 & pod3 on node3 (low priority with default grace period)
+	// 3. 创建初始 Pod：node1 上的 pod1（高优先级）、node2 上的 pod2 和 node3 上的 pod3（低优先级，使用默认优雅终止期）
 	initialPods := []*v1.Pod{
 		st.MakePod().Name("pod1").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(100).ZeroTerminationGracePeriod().Node("node1").Obj(),
 		st.MakePod().Name("pod2").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).Node("node2").Obj(),
@@ -1441,14 +1441,14 @@ func TestPodGroupPreemption_NominatedNodeNameRespected(t *testing.T) {
 		}
 	}
 
-	// Wait for initial pods to be scheduled
+	// 等待初始 Pod 被调度
 	for _, pod := range initialPods {
 		if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, testutils.PodScheduled(cs, ns, pod.Name)); err != nil {
 			t.Fatalf("Failed to wait for initial pod %s to schedule: %v", pod.Name, err)
 		}
 	}
 
-	// 4. Create preemptor pods belonging to pg1
+	// 4. 创建属于 pg1 的抢占者 Pod
 	preemptorPods := []*v1.Pod{
 		st.MakePod().Name("preemptor-1").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").Priority(50).Obj(),
 		st.MakePod().Name("preemptor-2").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg1").Priority(50).Obj(),
@@ -1459,7 +1459,7 @@ func TestPodGroupPreemption_NominatedNodeNameRespected(t *testing.T) {
 		}
 	}
 
-	// 5. Wait for preemption to occur and verify that NominatedNodeName is set on both preemptor pods
+	// 5. 等待抢占发生，并验证两个抢占者 Pod 都设置了 NominatedNodeName
 	initialNNNs := make(map[string]string)
 	for _, pod := range preemptorPods {
 		podName := pod.Name
@@ -1485,12 +1485,12 @@ func TestPodGroupPreemption_NominatedNodeNameRespected(t *testing.T) {
 		}
 	}
 
-	// 6. Remove pod1 from node1
+	// 6. 从 node1 移除 pod1
 	if err := cs.CoreV1().Pods(ns).Delete(testCtx.Ctx, "pod1", metav1.DeleteOptions{GracePeriodSeconds: new(int64(0))}); err != nil {
 		t.Fatalf("Failed to delete pod1: %v", err)
 	}
 
-	// Wait for pod1 to be completely removed from API server
+	// 等待 pod1 从 API server 中完全移除
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
 		_, err := cs.CoreV1().Pods(ns).Get(ctx, "pod1", metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -1502,7 +1502,7 @@ func TestPodGroupPreemption_NominatedNodeNameRespected(t *testing.T) {
 		t.Fatalf("Timed out waiting for pod1 to be deleted: %v", err)
 	}
 
-	// 7. Verify that nominated node names did not change to node1 despite node1 having free space and higher score from preferNode1ScorePlugin
+	// 7. 验证尽管 node1 有空闲空间且从 preferNode1ScorePlugin 获得更高分数，提名节点名称仍没有变为 node1
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 3*time.Second, false, func(ctx context.Context) (bool, error) {
 		_, err := cs.CoreV1().Pods(ns).Get(ctx, "pod2", metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -1544,7 +1544,7 @@ func TestPodGroupPreemption_NominatedNodeNameRespected(t *testing.T) {
 	}
 }
 
-// TestCompositePodGroupPreemption tests preemption scenarios involving composite pod groups.
+// TestCompositePodGroupPreemption 测试涉及复合 PodGroup 的抢占场景。
 func TestCompositePodGroupPreemption(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.GenericWorkload:                 true,
@@ -1557,8 +1557,8 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 		nodes                          []*v1.Node
 		compositePodGroups             []*schedulingv1alpha3.CompositePodGroup
 		podGroups                      []*schedulingv1beta1.PodGroup
-		initialPods                    []*v1.Pod // pods that should be scheduled before preemption starts
-		preemptorPods                  []*v1.Pod // pods that belong to a CPG hierarchy and should trigger preemption
+		initialPods                    []*v1.Pod // 应在抢占开始前被调度的 Pod
+		preemptorPods                  []*v1.Pod // 属于 CPG 层级结构并应触发抢占的 Pod
 		pdb                            *policyv1.PodDisruptionBudget
 		expectedScheduled              []string
 		expectedPreempted              []string
@@ -1568,16 +1568,16 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 		enablePodGroupPreemptionPolicy bool
 		customPluginName               string
 		customPluginFunc               frameworkruntime.PluginFactory
-		// tempRemoveCPG, if true, temporarily removes CompositePodGroups and PodGroups for the time
-		// of creating preemptor pods - but after initial pods have been scheduled.
-		// This ensures that all preemptor pods are created and kept in incompletePodGroupPods.
-		// Once the groups are recreated, all pods become schedulable simultaneously and
-		// are guaranteed to be evaluated together in the next PodGroup scheduling cycle.
-		// This avoids test flakiness caused by running multiple scheduling cycles with a partial set of preemptor pods.
+		// tempRemoveCPG 为 true 时，会在创建抢占者 Pod 期间临时移除 CompositePodGroup 和 PodGroup，
+		// 但这是在初始 Pod 已被调度之后进行的。
+		// 这确保所有抢占者 Pod 都被创建并保留在 incompletePodGroupPods 中。
+		// 一旦重新创建这些组，所有 Pod 会同时变为可调度状态，并
+		// 保证在下一个 PodGroup 调度周期中一起被评估。
+		// 这避免了因使用部分抢占者 Pod 运行多个调度周期而导致的测试不稳定。
 		tempRemoveCPG bool
-		// removeCPGNameBeforePreemption removes the specified CPG from the cluster after initial pods are scheduled,
-		// but before preemptors are created. This simulates scenarios where a hierarchy is broken
-		// mid-operation to ensure the victim selection logic correctly falls back when parents are missing.
+		// removeCPGNameBeforePreemption 在初始 Pod 被调度后、抢占者 Pod 创建前，
+		// 从集群中移除指定的 CPG。这模拟了层级结构在运行中途被破坏的场景，
+		// 以确保当父级缺失时，牺牲者选择逻辑能正确回退。
 		removeCPGNameBeforePreemption string
 	}{
 
@@ -1693,24 +1693,24 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				st.MakeCompositePodGroup().Name("cpg-victim").Namespace("default").Priority(10).BasicPolicy().DisruptionModeAll().WorkloadRef("wl1", "t1").Obj(),
 			},
 			podGroups: []*schedulingv1beta1.PodGroup{
-				// Workload 1: A standalone PodGroup (Rank 2)
+				// 工作负载 1：独立的 PodGroup（Rank 2）
 				st.MakePodGroup().Name("pg-victim-standalone").Namespace("default").Priority(10).MinCount(1).WorkloadRef("t1", "wl2").Obj(),
-				// Workload 2: A PodGroup under a CompositePodGroup (Rank 3)
+				// 工作负载 2：CompositePodGroup 下的 PodGroup（Rank 3）
 				st.MakePodGroup().Name("pg-victim-child").Namespace("default").Priority(10).MinCount(1).ParentCompositePodGroup("cpg-victim").WorkloadRef("t1", "wl1").Obj(),
-				// Preemptor Workload
+				// 抢占者工作负载
 				st.MakePodGroup().Name("pg-preemptor").Namespace("default").Priority(100).MinCount(1).WorkloadRef("t1", "wl3").Obj(),
 			},
 			initialPods: []*v1.Pod{
-				// Standalone PG Pod
+				// 独立的 PG Pod
 				st.MakePod().Name("low-pg").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg-victim-standalone").ZeroTerminationGracePeriod().Priority(10).Node("node1").Obj(),
-				// CPG Child PG Pod
+				// CPG 子级 PG Pod
 				st.MakePod().Name("low-cpg").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg-victim-child").ZeroTerminationGracePeriod().Priority(10).Node("node1").Obj(),
 			},
 			preemptorPods: []*v1.Pod{
 				st.MakePod().Name("high-preemptor").Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").PodGroupName("pg-preemptor").ZeroTerminationGracePeriod().Priority(100).Obj(),
 			},
-			// The scheduler needs 1 CPU. It has two options: low-pg (Rank 2) or low-cpg (Rank 3).
-			// Since Rank 2 < Rank 3, it will choose low-pg (standalone PG) to reprieve the more important CPG structure.
+			// 调度器需要 1 个 CPU。它有两个选择：low-pg（Rank 2）或 low-cpg（Rank 3）。
+			// 由于 Rank 2 < Rank 3，它将选择 low-pg（独立的 PG），以豁免更重要的 CPG 结构。
 			expectedScheduled:              []string{"high-preemptor"},
 			expectedPreempted:              []string{"low-pg"},
 			expectedPodsPreemptedByWAP:     1,
@@ -2197,7 +2197,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 			})
 			registry := make(frameworkruntime.Registry)
 
-			// Register mock bind plugin that will register NNN information during binding.
+			// 注册 mock 绑定插件，它将在绑定期间记录 NNN 信息。
 			mockBindPluginName := "mockBindPlugin"
 			var bindPlugin = mockBindPlugin{
 				name:       mockBindPluginName,
@@ -2257,8 +2257,8 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 			}
 			cfg := configtesting.V1ToInternalWithDefaults(t, cfgV1)
 
-			// Set PodMaxBackoff to 1 second to turn on backoff and allow apiCacher to get information about
-			// pod NNN. Without this we might have a race between starting binding and update of apiCacher.
+			// 将 PodMaxBackoff 设为 1 秒以开启退避，并让 apiCacher 能够获取关于
+			// Pod NNN 的信息。否则，开始绑定与 apiCacher 更新之间可能出现竞态。
 			testCtx := testutils.InitTestSchedulerWithNS(t, "cpg-preemption",
 				scheduler.WithProfiles(cfg.Profiles...),
 				scheduler.WithFrameworkOutOfTreeRegistry(registry),
@@ -2266,14 +2266,14 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				scheduler.WithPodInitialBackoffSeconds(0))
 			cs, ns := testCtx.ClientSet, testCtx.NS.Name
 
-			// Create nodes
+			// 创建节点
 			for _, n := range tt.nodes {
 				if _, err := cs.CoreV1().Nodes().Create(testCtx.Ctx, n, metav1.CreateOptions{}); err != nil {
 					t.Fatalf("Failed to create node %s: %v", n.Name, err)
 				}
 			}
 
-			// 1. Create CompositePodGroups
+			// 1. 创建 CompositePodGroup
 			for _, cpg := range tt.compositePodGroups {
 				cpg.Namespace = ns
 				if _, err := cs.SchedulingV1alpha3().CompositePodGroups(ns).Create(testCtx.Ctx, cpg, metav1.CreateOptions{}); err != nil {
@@ -2281,7 +2281,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 2. Create PodGroups
+			// 2. 创建 PodGroup
 			for _, pg := range tt.podGroups {
 				pg.Namespace = ns
 				if _, err := cs.SchedulingV1beta1().PodGroups(ns).Create(testCtx.Ctx, pg, metav1.CreateOptions{}); err != nil {
@@ -2289,7 +2289,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 3. Create PodDisruptionBudget if provided
+			// 3. 如果提供了 PodDisruptionBudget，则创建它
 			if tt.pdb != nil {
 				tt.pdb.Namespace = ns
 				if _, err := cs.PolicyV1().PodDisruptionBudgets(ns).Create(testCtx.Ctx, tt.pdb, metav1.CreateOptions{}); err != nil {
@@ -2297,7 +2297,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 4. Create initial pods
+			// 4. 创建初始 Pod
 			for _, p := range tt.initialPods {
 				p.Namespace = ns
 				if _, err := cs.CoreV1().Pods(ns).Create(testCtx.Ctx, p, metav1.CreateOptions{}); err != nil {
@@ -2311,11 +2311,11 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 5. Create preemptor pods
+			// 5. 创建抢占者 Pod
 			if tt.tempRemoveCPG {
-				// Temporarily remove CPGs and PGs. This is a trick to ensure that all preemptor pods
-				// are created and queued as unschedulable first, and then become schedulable at once
-				// when the CPG is recreated.
+				// 临时移除 CPG 和 PG。这是一个技巧，用于确保所有抢占者 Pod
+				// 都先被创建并以不可调度状态排队，然后在 CPG 重新创建时
+				// 同时变为可调度状态。
 				cpgNames := make([]string, len(tt.compositePodGroups))
 				for i, cpg := range tt.compositePodGroups {
 					cpgNames[i] = cpg.Name
@@ -2346,7 +2346,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 			}
 
 			if tt.tempRemoveCPG {
-				// Wait for preemptor pods to be unschedulable
+				// 等待抢占者 Pod 变为不可调度
 				for _, p := range tt.preemptorPods {
 					if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 						func(ctx context.Context) (bool, error) {
@@ -2356,7 +2356,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 					}
 				}
 
-				// Recreate CPGs and PGs
+				// 重新创建 CPG 和 PG
 				for _, cpg := range tt.compositePodGroups {
 					cpgCopy := cpg.DeepCopy()
 					cpgCopy.ResourceVersion = ""
@@ -2373,7 +2373,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 6. Wait for preemption to complete if WAP calls are expected
+			// 6. 如果预期会调用 WAP，则等待抢占完成
 			if tt.expectedPodsPreemptedByWAP > 0 {
 				wapCalls := 0
 				err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
@@ -2399,7 +2399,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 7. Verify unschedulable pods
+			// 7. 验证不可调度的 Pod
 			for _, podName := range tt.expectedUnschedulable {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 					testutils.PodUnschedulable(cs, ns, podName)); err != nil {
@@ -2407,7 +2407,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 8. Verify scheduled pods
+			// 8. 验证已调度的 Pod
 			for _, podName := range tt.expectedScheduled {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false,
 					testutils.PodScheduled(cs, ns, podName)); err != nil {
@@ -2415,7 +2415,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 9. Verify preempted pods
+			// 9. 验证被抢占的 Pod
 			for _, podName := range tt.expectedPreempted {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 200*time.Millisecond, 5*time.Second, false,
 					func(ctx context.Context) (bool, error) {
@@ -2433,14 +2433,14 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 				}
 			}
 
-			// 10. Verify preemptor pods have nominated node name
+			// 10. 验证抢占者 Pod 具有提名节点名称
 			for _, podName := range tt.expectedToHaveNNNInfo {
 				if node, ok := bindPlugin.nnnInfo.Load(podName); !ok || node.(string) == "" {
 					t.Errorf("Pod %s was expected to have nominated node name but didn't", podName)
 				}
 			}
 
-			// 11. Dump the state of pods to ease debugging failed runs.
+			// 11. Dump Pod 的状态，以便于调试失败的运行。
 			if t.Failed() {
 				t.Log("Dumping states of initial and preemptor pods:")
 				var allPods []string
@@ -2480,7 +2480,7 @@ func TestCompositePodGroupPreemption(t *testing.T) {
 	}
 }
 
-// mockBindPlugin is a fake plugin that registers NNN information during binding.
+// mockBindPlugin 是一个在绑定期间记录 NNN 信息的假插件。
 type mockBindPlugin struct {
 	name       string
 	realPlugin fwk.BindPlugin
@@ -2664,7 +2664,7 @@ func deletePodGroups(ctx context.Context, cs clientset.Interface, ns string, pgN
 			return err
 		}
 	}
-	// Wait for the pod groups to be deleted.
+	// 等待 PodGroup 被删除。
 	for _, name := range pgNames {
 		err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
 			_, err := cs.SchedulingV1beta1().PodGroups(ns).Get(ctx, name, metav1.GetOptions{})
@@ -2687,7 +2687,7 @@ func deleteCompositePodGroups(ctx context.Context, cs clientset.Interface, ns st
 			return err
 		}
 	}
-	// Wait for the composite pod groups to be deleted.
+	// 等待 CompositePodGroup 被删除。
 	for _, name := range cpgNames {
 		err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
 			_, err := cs.SchedulingV1alpha3().CompositePodGroups(ns).Get(ctx, name, metav1.GetOptions{})
@@ -2842,13 +2842,13 @@ func TestPodGroupCycleStatePreserved(t *testing.T) {
 	)
 	cs, ns := testCtx.ClientSet, testCtx.NS.Name
 
-	// 1. Create node with 3 CPU capacity
+	// 1. 创建一个具有 3 个 CPU 容量的节点
 	node := st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "3", v1.ResourceMemory: "4Gi", v1.ResourcePods: "32"}).Obj()
 	if _, err := cs.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create node: %v", err)
 	}
 
-	// 2. Create high-pod (priority 500, CPU 2) and low-pod (priority 10, CPU 1)
+	// 2. 创建 high-pod（priority 500，CPU 2）和 low-pod（priority 10，CPU 1）
 	highPod := st.MakePod().Name("high-pod").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").Priority(500).ZeroTerminationGracePeriod().Node("node1").Obj()
 	lowPod := st.MakePod().Name("low-pod").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).Container("image").Priority(10).ZeroTerminationGracePeriod().Node("node1").Obj()
 
@@ -2858,14 +2858,14 @@ func TestPodGroupCycleStatePreserved(t *testing.T) {
 		}
 	}
 
-	// Wait for initial pods to be scheduled
+	// 等待初始 Pod 被调度
 	for _, p := range []*v1.Pod{highPod, lowPod} {
 		if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, testutils.PodScheduled(cs, ns, p.Name)); err != nil {
 			t.Fatalf("Failed to wait for initial pod %s to schedule: %v", p.Name, err)
 		}
 	}
 
-	// 3. Create preemptor pods belonging to pg1 (each needing CPU 2)
+	// 3. 创建属于 pg1 的抢占者 Pod（每个需要 2 个 CPU）
 	preemptor1 := st.MakePod().Name("preemptor-1").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").PodGroupName("pg1").Priority(100).ZeroTerminationGracePeriod().Obj()
 	preemptor2 := st.MakePod().Name("preemptor-2").Namespace(ns).Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").PodGroupName("pg1").Priority(100).ZeroTerminationGracePeriod().Obj()
 
@@ -2875,7 +2875,7 @@ func TestPodGroupCycleStatePreserved(t *testing.T) {
 		}
 	}
 
-	// 4. Create PodGroup with minCount=2 and priority=100
+	// 4. 创建 minCount=2 且 priority=100 的 PodGroup
 	pg := st.MakePodGroup().Name("pg1").Namespace(ns).Priority(100).MinCount(2).Obj()
 	if _, err := cs.SchedulingV1beta1().PodGroups(ns).Create(testCtx.Ctx, pg, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PodGroup pg1: %v", err)
@@ -2883,7 +2883,7 @@ func TestPodGroupCycleStatePreserved(t *testing.T) {
 
 	var recordedPods sets.Set[string]
 
-	// 5. Verify that stateVerifierPostFilterPlugin was called and state was preserved
+	// 5. 验证 stateVerifierPostFilterPlugin 被调用且状态得以保留
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
 		stateVerifier.lock.Lock()
 		recordedPods = sets.New(stateVerifier.recordedPodNames...)

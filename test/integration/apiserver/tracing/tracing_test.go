@@ -53,8 +53,8 @@ import (
 )
 
 func TestAPIServerTracingWithKMSv2(t *testing.T) {
-	// Listen for traces from the API Server before starting it, so the
-	// API Server will successfully connect right away during the test.
+	// 在启动 API Server 之前先监听其 trace，
+	// 这样测试期间 API Server 就能立即成功连接。
 	listener, err := net.Listen("tcp", "localhost:")
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ resources:
 		t.Fatal(err)
 	}
 
-	// Write the configuration for tracing to a file
+	// 将 tracing 配置写入文件
 	tracingConfigFile, err := os.CreateTemp("", "tracing-config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 
 	_ = kmsv2mock.NewBase64Plugin(t, "@kms-provider.sock")
 
-	// Start the API Server with our tracing configuration
+	// 使用我们的 tracing 配置启动 API Server
 	testServer := kubeapiservertesting.StartTestServerOrDie(t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
 		[]string{
@@ -156,7 +156,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		{
 			desc: "get secret",
 			apiCall: func(ctx context.Context, c client.Interface) error {
-				// This depends on the "create secret" step having completed successfully
+				// 这依赖于 "create secret" 步骤已成功完成
 				_, err = clientSet.CoreV1().Secrets(v1.NamespaceDefault).Get(ctx, "fake", metav1.GetOptions{})
 				return err
 			},
@@ -182,12 +182,12 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 			ctx, traceID := sampledContext()
 			fakeServer.resetExpectations(tc.expectedTrace, traceID)
 
-			// Make our call to the API server
+			// 向 API server 发起调用
 			if err := tc.apiCall(ctx, clientSet); err != nil {
 				t.Fatal(err)
 			}
 
-			// Wait for a span to be recorded from our request
+			// 等待从我们的请求中记录到 span
 			select {
 			case <-fakeServer.traceFound:
 			case <-time.After(30 * time.Second):
@@ -198,14 +198,14 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 }
 
 func TestAPIServerTracingWithEgressSelector(t *testing.T) {
-	// Listen for traces from the API Server before starting it, so the
-	// API Server will successfully connect right away during the test.
+	// 在启动 API Server 之前先监听其 trace，
+	// 这样测试期间 API Server 就能立即成功连接。
 	listener, err := net.Listen("tcp", "localhost:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Use an egress selector which doesn't have a controlplane config to ensure
-	// tracing works in that context. Write the egress selector configuration to a file.
+	// 使用没有 controlplane 配置的 egress selector，以确保在该场景下 tracing 正常工作。
+	// 将 egress selector 配置写入文件。
 	egressSelectorConfigFile, err := os.CreateTemp("", "egress_selector_configuration.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +223,7 @@ egressSelections:
 		t.Fatal(err)
 	}
 
-	// Write the configuration for tracing to a file
+	// 将 tracing 配置写入文件
 	tracingConfigFile, err := os.CreateTemp("", "tracing-config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		t.Fatal(err)
 	}
 
-	// Start the API Server with our tracing configuration
+	// 使用我们的 tracing 配置启动 API Server
 	testServer := kubeapiservertesting.StartTestServerOrDie(t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
 		[]string{
@@ -251,7 +251,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Make sure the API Server hasn't crashed.
+	// 确保 API Server 没有崩溃。
 	_, err = clientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -259,13 +259,13 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 }
 
 func TestUnauthenticatedAPIServerTracing(t *testing.T) {
-	// Listen for traces from the API Server before starting it, so the
-	// API Server will successfully connect right away during the test.
+	// 在启动 API Server 之前先监听其 trace，
+	// 这样测试期间 API Server 就能立即成功连接。
 	listener, err := net.Listen("tcp", "localhost:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Write the configuration for tracing to a file
+	// 将 tracing 配置写入文件
 	tracingConfigFile, err := os.CreateTemp("", "tracing-config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -287,7 +287,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 	go srv.Serve(listener)
 	defer srv.Stop()
 
-	// Start the API Server with our tracing configuration
+	// 使用我们的 tracing 配置启动 API Server
 	testServer := kubeapiservertesting.StartTestServerOrDie(t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
 		[]string{"--tracing-config-file=" + tracingConfigFile.Name()},
@@ -296,7 +296,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 	defer testServer.TearDownFn()
 
 	ctx, testTraceID := sampledContext()
-	// Match any span that has the tests' Trace ID
+	// 匹配任何具有测试 Trace ID 的 span
 	fakeServer.resetExpectations([]*spanExpectation{{}}, testTraceID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testServer.ClientConfig.Host+"/healthz", nil)
@@ -304,7 +304,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		t.Fatal(err)
 	}
 	unauthenticatedConfig := rest.CopyConfig(testServer.ClientConfig)
-	// Remove the bearer token from the request to make it unauthenticated.
+	// 从请求中移除 bearer token，使其成为未认证请求。
 	unauthenticatedConfig.BearerToken = ""
 	transport, err := rest.TransportFor(unauthenticatedConfig)
 	if err != nil {
@@ -315,7 +315,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		t.Fatal(err)
 	}
 
-	// Ensure we do not find any matching traces, since the request was not authenticated
+	// 由于请求未通过认证，确保找不到任何匹配的 trace
 	select {
 	case <-fakeServer.traceFound:
 		t.Fatal("Found a trace when none was expected")
@@ -324,13 +324,13 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 }
 
 func TestAPIServerTracing(t *testing.T) {
-	// Listen for traces from the API Server before starting it, so the
-	// API Server will successfully connect right away during the test.
+	// 在启动 API Server 之前先监听其 trace，
+	// 这样测试期间 API Server 就能立即成功连接。
 	listener, err := net.Listen("tcp", "localhost:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Write the configuration for tracing to a file
+	// 将 tracing 配置写入文件
 	tracingConfigFile, err := os.CreateTemp("", "tracing-config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -360,7 +360,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 	}()
 	defer srv.Stop()
 
-	// Start the API Server with our tracing configuration
+	// 使用我们的 tracing 配置启动 API Server
 	testServer := kubeapiservertesting.StartTestServerOrDie(t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
 		[]string{"--tracing-config-file=" + tracingConfigFile.Name()},
@@ -498,7 +498,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		{
 			desc: "get node",
 			apiCall: func(ctx context.Context) error {
-				// This depends on the "create node" step having completed successfully
+				// 这依赖于 "create node" 步骤已成功完成
 				_, err = clientSet.CoreV1().Nodes().Get(ctx, "fake", metav1.GetOptions{})
 				return err
 			},
@@ -914,7 +914,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		{
 			desc: "update node",
 			apiCall: func(ctx context.Context) error {
-				// This depends on the "create node" step having completed successfully
+				// 这依赖于 "create node" 步骤已成功完成
 				_, err = clientSet.CoreV1().Nodes().Update(ctx,
 					&v1.Node{ObjectMeta: metav1.ObjectMeta{
 						Name:        "fake",
@@ -1039,7 +1039,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		{
 			desc: "patch node",
 			apiCall: func(ctx context.Context) error {
-				// This depends on the "create node" step having completed successfully
+				// 这依赖于 "create node" 步骤已成功完成
 				oldNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{
 					Name:        "fake",
 					Annotations: map[string]string{"foo": "bar"},
@@ -1182,7 +1182,7 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 		{
 			desc: "delete node",
 			apiCall: func(ctx context.Context) error {
-				// This depends on the "create node" step having completed successfully
+				// 这依赖于 "create node" 步骤已成功完成
 				return clientSet.CoreV1().Nodes().Delete(ctx, "fake", metav1.DeleteOptions{})
 			},
 			expectedTrace: []*spanExpectation{
@@ -1277,12 +1277,12 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 			ctx, testTraceID := sampledContext()
 			fakeServer.resetExpectations(tc.expectedTrace, testTraceID)
 
-			// Make our call to the API server
+			// 向 API server 发起调用
 			if err := tc.apiCall(ctx); err != nil {
 				t.Fatal(err)
 			}
 
-			// Wait for a span to be recorded from our request
+			// 等待从我们的请求中记录到 span
 			select {
 			case <-fakeServer.traceFound:
 			case <-time.After(30 * time.Second):
@@ -1297,12 +1297,12 @@ endpoint: %s`, listener.Addr().String())), os.FileMode(0755)); err != nil {
 	}
 }
 
-// traceServer implements TracesServiceServer, which can receive spans from the
-// API Server via OTLP.
+// traceServer 实现了 TracesServiceServer，可通过 OTLP
+// 接收来自 API Server 的 span。
 type traceServer struct {
 	t *testing.T
 	traceservice.UnimplementedTraceServiceServer
-	// the lock guards the per-scenario state below
+	// 该锁保护下面的每个场景的状态
 	lock         sync.Mutex
 	traceFound   chan struct{}
 	expectations traceExpectation
@@ -1314,11 +1314,11 @@ func (t *traceServer) Export(ctx context.Context, req *traceservice.ExportTraceS
 	defer t.lock.Unlock()
 
 	t.expectations.update(req, t.testTraceID)
-	// if all expectations are met, notify the test scenario by closing traceFound
+	// 如果所有期望都已满足，则关闭 traceFound 以通知测试场景
 	if t.expectations.met() {
 		select {
 		case <-t.traceFound:
-			// traceFound is already closed
+			// traceFound 已经关闭
 		default:
 			close(t.traceFound)
 		}
@@ -1326,8 +1326,8 @@ func (t *traceServer) Export(ctx context.Context, req *traceservice.ExportTraceS
 	return &traceservice.ExportTraceServiceResponse{}, nil
 }
 
-// resetExpectations is used by a new test scenario to set new expectations for
-// the test server.
+// resetExpectations 由新的测试场景使用，
+// 用于为测试服务器设置新的期望。
 func (t *traceServer) resetExpectations(newExpectations traceExpectation, traceID trace.TraceID) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -1336,11 +1336,11 @@ func (t *traceServer) resetExpectations(newExpectations traceExpectation, traceI
 	t.testTraceID = traceID
 }
 
-// traceExpectation is an expectation for an entire trace
+// traceExpectation 表示对整条 trace 的期望
 type traceExpectation []*spanExpectation
 
-// met returns true if all span expectations the server is looking for have
-// been satisfied.
+// met 在服务器寻找的所有 span 期望
+// 都已满足时返回 true。
 func (t traceExpectation) met() bool {
 	for _, se := range t {
 		if !se.met {
@@ -1350,8 +1350,8 @@ func (t traceExpectation) met() bool {
 	return true
 }
 
-// update finds all expectations that are met by a span in the
-// incoming request.
+// update 查找传入请求中
+// 被某个 span 满足的所有期望。
 func (t traceExpectation) update(req *traceservice.ExportTraceServiceRequest, traceID trace.TraceID) {
 	for _, resourceSpans := range req.GetResourceSpans() {
 		for _, instrumentationSpans := range resourceSpans.GetScopeSpans() {
@@ -1362,7 +1362,7 @@ func (t traceExpectation) update(req *traceservice.ExportTraceServiceRequest, tr
 	}
 }
 
-// updateForSpan updates expectations based on a single incoming span.
+// updateForSpan 根据单个传入的 span 更新期望。
 func (t traceExpectation) updateForSpan(span *tracev1.Span, traceID trace.TraceID) {
 	if hex.EncodeToString(span.TraceId) != traceID.String() {
 		return
@@ -1382,7 +1382,7 @@ func (t traceExpectation) updateForSpan(span *tracev1.Span, traceID trace.TraceI
 
 }
 
-// spanExpectation is the expectation for a single span
+// spanExpectation 表示对单个 span 的期望
 type spanExpectation struct {
 	name       string
 	attributes attributeExpectation
@@ -1390,11 +1390,11 @@ type spanExpectation struct {
 	met        bool
 }
 
-// eventExpectation is the expectation for an event attached to a span.
-// It is comprised of event names.
+// eventExpectation 表示对附加到 span 上的事件的期望。
+// 它由事件名称组成。
 type eventExpectation []string
 
-// matches returns true if all expected events exist in the list of input events.
+// matches 在输入事件列表中存在所有期望的事件时返回 true。
 func (e eventExpectation) matches(events []*tracev1.Span_Event) bool {
 	eventMap := map[string]struct{}{}
 	for _, event := range events {
@@ -1408,11 +1408,11 @@ func (e eventExpectation) matches(events []*tracev1.Span_Event) bool {
 	return true
 }
 
-// eventExpectation is the expectation for an event attached to a span.
-// It is a map from attribute key, to a value-matching function.
+// eventExpectation 表示对附加到 span 上的事件的期望。
+// 它是从属性键到值匹配函数的映射。
 type attributeExpectation map[string]func(*commonv1.AnyValue) bool
 
-// matches returns true if all expected attributes exist in the intput list of attributes.
+// matches 在输入的属性列表中存在所有期望的属性时返回 true。
 func (a attributeExpectation) matches(attrs []*commonv1.KeyValue) bool {
 	attrsMap := map[string]*commonv1.AnyValue{}
 	for _, attr := range attrs {

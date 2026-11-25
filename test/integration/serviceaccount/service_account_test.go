@@ -16,9 +16,9 @@ limitations under the License.
 
 package serviceaccount
 
-// This file tests authentication and (soon) authorization of HTTP requests to an API server object.
-// It does not use the client in pkg/client/... because authentication and authorization needs
-// to work for any client of the HTTP interface.
+// 本文件测试发往 API server 对象的 HTTP 请求的认证以及（即将支持的）授权。
+// 这里不使用 pkg/client/... 中的客户端，因为认证和授权
+// 必须对 HTTP 接口的任意客户端都有效。
 
 import (
 	"context"
@@ -65,25 +65,25 @@ func TestServiceAccountAutoCreate(t *testing.T) {
 
 	ns := "test-service-account-creation"
 
-	// Create namespace
+	// 创建命名空间
 	_, err = c.CoreV1().Namespaces().Create(tCtx, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("could not create namespace: %v", err)
 	}
 
-	// Get service account
+	// 获取 service account
 	defaultUser, err := getServiceAccount(c, ns, "default", true)
 	if err != nil {
 		t.Fatalf("Default serviceaccount not created: %v", err)
 	}
 
-	// Delete service account
+	// 删除 service account
 	err = c.CoreV1().ServiceAccounts(ns).Delete(tCtx, defaultUser.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Could not delete default serviceaccount: %v", err)
 	}
 
-	// Get recreated service account
+	// 获取重新创建的 service account
 	defaultUser2, err := getServiceAccount(c, ns, "default", true)
 	if err != nil {
 		t.Fatalf("Default serviceaccount not created: %v", err)
@@ -103,13 +103,13 @@ func TestServiceAccountTokenAutoMount(t *testing.T) {
 
 	ns := "auto-mount-ns"
 
-	// Create "my" namespace
+	// 创建 "my" 命名空间
 	_, err = c.CoreV1().Namespaces().Create(tCtx, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		t.Fatalf("could not create namespace: %v", err)
 	}
 
-	// Pod to create
+	// 要创建的 Pod
 	protoPod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "protopod"},
 		Spec: v1.PodSpec{
@@ -147,19 +147,19 @@ func TestServiceAccountTokenAuthentication(t *testing.T) {
 	myns := "auth-ns"
 	otherns := "other-ns"
 
-	// Create "my" namespace
+	// 创建 "my" 命名空间
 	_, err = c.CoreV1().Namespaces().Create(tCtx, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: myns}}, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		t.Fatalf("could not create namespace: %v", err)
 	}
 
-	// Create "other" namespace
+	// 创建 "other" 命名空间
 	_, err = c.CoreV1().Namespaces().Create(tCtx, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: otherns}}, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		t.Fatalf("could not create namespace: %v", err)
 	}
 
-	// Create "ro" user in myns
+	// 在 myns 中创建 "ro" 用户
 	roSA, err := c.CoreV1().ServiceAccounts(myns).Create(tCtx, &v1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: readOnlyServiceAccountName}}, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Service Account not created: %v", err)
@@ -179,7 +179,7 @@ func TestServiceAccountTokenAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not delete token: %v", err)
 	}
-	// wait for delete to be observed and reacted to via watch
+	// 等待通过 watch 观察到删除操作并作出响应
 	err = wait.PollImmediate(100*time.Millisecond, 30*time.Second, func() (bool, error) {
 		_, err := roClient.CoreV1().Secrets(myns).List(tCtx, metav1.ListOptions{})
 		if err == nil {
@@ -197,7 +197,7 @@ func TestServiceAccountTokenAuthentication(t *testing.T) {
 	}
 	doServiceAccountAPIRequests(t, roClient, myns, false, false, false)
 
-	// Create "rw" user in myns
+	// 在 myns 中创建 "rw" 用户
 	rwSA, err := c.CoreV1().ServiceAccounts(myns).Create(tCtx, &v1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: readWriteServiceAccountName}}, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Service Account not created: %v", err)
@@ -222,7 +222,7 @@ func TestLegacyServiceAccountTokenTracking(t *testing.T) {
 		t.Fatalf("failed to setup ServiceAccounts server: %v", err)
 	}
 
-	// create service account
+	// 创建 service account
 	myns := "auth-ns"
 	_, err = c.CoreV1().Namespaces().Create(tCtx, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: myns}}, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -238,7 +238,7 @@ func TestLegacyServiceAccountTokenTracking(t *testing.T) {
 		t.Fatalf("Secret not created: %v", err)
 	}
 
-	// manually craft an auto created token
+	// 手动伪造一个自动创建的 token
 	autoSecretName := "auto-token"
 	autoSecret, err := createServiceAccountToken(c, mysa, myns, autoSecretName)
 	if err != nil {
@@ -292,7 +292,7 @@ func TestLegacyServiceAccountTokenTracking(t *testing.T) {
 				t.Fatalf("Could not get secret: %v", err)
 			}
 
-			// doServiceAccountAPIRequests has 4 API requests
+			// doServiceAccountAPIRequests 会发起 4 个 API 请求
 			if test.expectWarning && len(wh.warnings) != 4*concurrency {
 				t.Fatalf("Expect %d warnings, got %d", 4*concurrency, len(wh.warnings))
 			}
@@ -300,7 +300,7 @@ func TestLegacyServiceAccountTokenTracking(t *testing.T) {
 				t.Fatalf("Don't expect warnings, got %d", len(wh.warnings))
 			}
 
-			// authenticated legacy token should have the expected annotation and label.
+			// 通过认证的旧版 token 应具有预期的 annotation 和 label。
 			date, ok := liveSecret.GetLabels()[serviceaccount.LastUsedLabelKey]
 			if !ok {
 				t.Fatalf("Secret wasn't labeled with %q", serviceaccount.LastUsedLabelKey)
@@ -311,7 +311,7 @@ func TestLegacyServiceAccountTokenTracking(t *testing.T) {
 		})
 	}
 
-	// configmap should exist with 'since' timestamp.
+	// configmap 应带有 'since' 时间戳而存在。
 	if err = wait.PollImmediate(time.Millisecond*10, wait.ForeverTestTimeout, func() (bool, error) {
 		dateBefore := time.Now().UTC().Format("2006-01-02")
 		configMap, err := c.CoreV1().ConfigMaps(metav1.NamespaceSystem).Get(tCtx, legacytokentracking.ConfigMapName, metav1.GetOptions{})
@@ -332,14 +332,14 @@ func TestLegacyServiceAccountTokenTracking(t *testing.T) {
 	}
 }
 
-// startServiceAccountTestServerAndWaitForCaches returns a started server
-// It is the responsibility of the caller to ensure the returned stopFunc is called
+// startServiceAccountTestServerAndWaitForCaches 返回一个已启动的 server。
+// 调用方有责任确保返回的 stopFunc 被调用。
 func startServiceAccountTestServerAndWaitForCaches(ctx context.Context, t *testing.T) (clientset.Interface, *restclient.Config, func(), clientinformers.SharedInformerFactory, error) {
 	var serviceAccountKey interface{}
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	// Set up a API server
+	// 建立一个 API server
 	rootClientset, clientConfig, tearDownFn := framework.StartTestServer(ctx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
 			var err error
@@ -349,10 +349,10 @@ func startServiceAccountTestServerAndWaitForCaches(ctx context.Context, t *testi
 			}
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Set up a stub authorizer:
-			// 1. The "root" user is allowed to do anything
-			// 2. ServiceAccounts named "ro" are allowed read-only operations in their namespace
-			// 3. ServiceAccounts named "rw" are allowed any operation in their namespace
+			// 建立一个桩 authorizer：
+			// 1. "root" 用户可以做任何事
+			// 2. 名为 "ro" 的 ServiceAccount 可以在其命名空间内执行只读操作
+			// 3. 名为 "rw" 的 ServiceAccount 可以在其命名空间内执行任何操作
 			authorizer := authorizer.AuthorizerFunc(func(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 				username := ""
 				if user := attrs.GetUser(); user != nil {
@@ -360,9 +360,9 @@ func startServiceAccountTestServerAndWaitForCaches(ctx context.Context, t *testi
 				}
 				ns := attrs.GetNamespace()
 
-				// If the user is a service account...
+				// 如果用户是 service account……
 				if serviceAccountNamespace, serviceAccountName, err := serviceaccountapiserver.SplitUsername(username); err == nil {
-					// Limit them to their own namespace
+					// 将它们限制在自己的命名空间内
 					if serviceAccountNamespace == ns {
 						switch serviceAccountName {
 						case readOnlyServiceAccountName:
@@ -395,7 +395,7 @@ func startServiceAccountTestServerAndWaitForCaches(ctx context.Context, t *testi
 
 	informers := clientinformers.NewSharedInformerFactory(rootClientset, controller.NoResyncPeriodFunc())
 
-	// Start the service account and service account token controllers
+	// 启动 service account 和 service account token 控制器
 	tokenGenerator, err := serviceaccount.JWTTokenGenerator(serviceaccount.LegacyIssuer, serviceAccountKey)
 	if err != nil {
 		return rootClientset, clientConfig, stop, informers, err
@@ -427,10 +427,10 @@ func startServiceAccountTestServerAndWaitForCaches(ctx context.Context, t *testi
 	informers.Start(ctx.Done())
 	go serviceAccountController.Run(ctx, 5)
 
-	// since this method starts the controllers in a separate goroutine
-	// and the tests don't check /readyz there is no way
-	// the tests can tell it is safe to call the server and requests won't be rejected
-	// thus we wait until caches have synced
+	// 由于该方法在单独的 goroutine 中启动控制器，
+	// 而测试不会检查 /readyz，因此测试无法判断
+	// 何时可以安全地调用 server 且请求不会被拒绝，
+	// 所以我们等待缓存完成同步。
 	informers.WaitForCacheSync(ctx.Done())
 
 	return rootClientset, clientConfig, stop, informers, nil

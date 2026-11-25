@@ -31,17 +31,17 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestExcludedResources is an open-box test to ensure that a resource that is not persisted
-// is either in the allow-list or block-list of the CEL admission.
+// TestExcludedResources 是一个白盒测试，用于确保未被持久化的资源
+// 要么在 CEL admission 的 allow-list 中，要么在 block-list 中。
 //
-// see staging/src/k8s.io/apiserver/pkg/admission/exclusion/exclusion.go
-// for the lists that the test is about.
+// 有关该测试所涉及的列表，
+// 见 staging/src/k8s.io/apiserver/pkg/admission/exclusion/exclusion.go
 func TestExcludedResources(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t,
-		nil, // no extra options
-		// enable all APIs to cover all defined resources
-		// note that it does not require feature flags enabled to
-		// discovery GVRs of disabled features.
+		nil, // 无额外选项
+		// 启用所有 API，以覆盖所有已定义的资源
+		// 注意，发现已禁用特性的 GVR
+		// 并不需要启用对应的 feature flag。
 		[]string{"--runtime-config=api/all=true"},
 		framework.SharedEtcd())
 	if err != nil {

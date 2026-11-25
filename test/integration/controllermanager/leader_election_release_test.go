@@ -33,17 +33,14 @@ import (
 	"k8s.io/kubernetes/test/utils/kubeconfig"
 )
 
-// TestLeaderElectionReleaseOnCancel verifies that when the
-// ControllerManagerReleaseLeaderElectionLockOnExit feature gate is enabled,
-// tearing down the KCM (cancelling its context) causes the leader election
-// lease to be released (holder identity cleared). This allows a new leader
-// to acquire the lock without waiting for the full lease duration to expire.
+// TestLeaderElectionReleaseOnCancel 验证：当启用 ControllerManagerReleaseLeaderElectionLockOnExit
+// feature gate 时，拆除 KCM（取消其 context）会释放 leader election 租约
+// （清除 holder identity）。这样新的 leader 无需等待整个租约期到期即可获得锁。
 //
-// Note: We only test the feature-enabled case here. The feature-disabled case
-// retains the legacy behavior where OnStoppedLeading calls klog.FlushAndExit
-// (os.Exit), which cannot be tested in-process.
+// 注意：这里只测试启用该 feature 的情况。未启用时仍保留旧行为，即
+// OnStoppedLeading 调用 klog.FlushAndExit（os.Exit），无法在进程内测试。
 func TestLeaderElectionReleaseOnCancel(t *testing.T) {
-	// Start a real API server.
+	// 启动一个真实的 API server。
 	apiServer := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	t.Cleanup(apiServer.TearDownFn)
 
@@ -52,14 +49,14 @@ func TestLeaderElectionReleaseOnCancel(t *testing.T) {
 		t.Fatalf("failed to create client: %v", err)
 	}
 
-	// Write a kubeconfig file for the KCM to use.
+	// 写入供 KCM 使用的 kubeconfig 文件。
 	clientConfig := kubeconfig.CreateKubeConfig(apiServer.ClientConfig)
 	kubeConfigFile := filepath.Join(t.TempDir(), "kubeconfig.yaml")
 	if err := clientcmd.WriteToFile(*clientConfig, kubeConfigFile); err != nil {
 		t.Fatalf("failed to write kubeconfig: %v", err)
 	}
 
-	// Start a full KCM with leader election and the feature gate enabled.
+	// 启动启用了 leader election 和该 feature gate 的完整 KCM。
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -73,13 +70,13 @@ func TestLeaderElectionReleaseOnCancel(t *testing.T) {
 	}
 	t.Cleanup(kcm.TearDownFn)
 
-	// Wait for the lease to exist and have a holder. There can be a brief gap
-	// between the KCM's /healthz becoming ready and the lease being acquired.
+	// 等待 Lease 出现并具有持有者。KCM 的 /healthz 就绪与其获取 Lease 之间
+	// 可能有短暂间隔。
 	var lease *coordinationv1.Lease
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		lease, err = client.CoordinationV1().Leases("kube-system").Get(ctx, "kube-controller-manager", metav1.GetOptions{})
 		if err != nil {
-			return false, nil // retry on not-found or transient errors
+			return false, nil // 未找到或遇到瞬时错误时重试
 		}
 		return lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "", nil
 	})
@@ -88,10 +85,10 @@ func TestLeaderElectionReleaseOnCancel(t *testing.T) {
 	}
 	t.Logf("lease holder before shutdown: %q", *lease.Spec.HolderIdentity)
 
-	// Tear down the KCM (cancels its context), which should release the lease.
+	// 拆除 KCM（取消其 context），这应释放 Lease。
 	kcm.TearDownFn()
 
-	// Poll until the lease holder is cleared.
+	// 轮询等待 Lease 持有者被清除。
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
 		lease, err = client.CoordinationV1().Leases("kube-system").Get(ctx, "kube-controller-manager", metav1.GetOptions{})
 		if err != nil {

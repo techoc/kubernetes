@@ -58,7 +58,7 @@ func TestServiceAllocNewServiceCIDR(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	// ServiceCIDR controller
+	// ServiceCIDR 控制器
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	resyncPeriod := 12 * time.Hour
@@ -72,15 +72,15 @@ func TestServiceAllocNewServiceCIDR(t *testing.T) {
 	informerFactory.Start(ctx.Done())
 	informerFactory.WaitForCacheSync(ctx.Done())
 
-	// /29 = 6 services, kubernetes.default takes the first address
-	// make 5 more services to take up all IPs
+	// /29 = 6 个 service，kubernetes.default 占用第一个地址
+	// 再创建 5 个 service 以占满所有 IP
 	for i := range 5 {
 		if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.Background(), makeService(fmt.Sprintf("service-%d", i)), metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Make another service. It will fail because we're out of cluster IPs
+	// 再创建一个 service。由于集群 IP 已耗尽，该操作会失败
 	if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.Background(), makeService("fail"), metav1.CreateOptions{}); err != nil {
 		if !strings.Contains(err.Error(), "range is full") {
 			t.Fatalf("unexpected error text: %v", err)
@@ -97,12 +97,12 @@ func TestServiceAllocNewServiceCIDR(t *testing.T) {
 		t.Fatalf("unexpected creation success. The following IPs exist: %#v. It should only be possible to allocate 6 IP addresses in this cluster.\n\n%#v", allIPs, svcs)
 	}
 
-	// Add a new service CIDR to be able to create new IPs.
+	// 添加一个新的 service CIDR，以便创建新的 IP。
 	cidr := makeServiceCIDR("test2", "10.168.0.0/24", "")
 	if _, err := client.NetworkingV1().ServiceCIDRs().Create(context.Background(), cidr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("got unexpected error: %v", err)
 	}
-	// wait ServiceCIDR is ready
+	// 等待 ServiceCIDR 就绪
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client.NetworkingV1().ServiceCIDRs().Get(context.TODO(), cidr.Name, metav1.GetOptions{})
 		if err != nil {
@@ -112,7 +112,7 @@ func TestServiceAllocNewServiceCIDR(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("waiting for default service cidr ready condition set to false: %v", err)
 	}
-	// This time creating more Services should work
+	// 这次创建更多 Service 应该会成功
 	for i := 10; i < 150; i++ {
 		if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(context.Background(), makeService(fmt.Sprintf("service-%d", i)), metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
@@ -120,23 +120,23 @@ func TestServiceAllocNewServiceCIDR(t *testing.T) {
 	}
 }
 
-// A ServiceCIDR can be deleted if there are no orphan IPs or if the existing IPs are contained in other ServiceCIDR
-// that is not being deleted.
-// The test starts the apiserver with the range "192.168.0.0/29"
-// Create Services to fill the range
-// Creates a new ServiceCIDR cidr1 with the same range as the one defined in the apiserver
-// Deletes cidr1 object will work since its range is covered by the default ServiceCIDR created by the apiserver flags
-// Creates a new cidr2 with a different range than cidr1
-// Creates a new service so it picks an IPAddress on this range because "192.168.0.0/29" is full at this point
-// Creates a new cidr3 that contains cidr2
-// Deletes cidr2 since it is covered by cidr3
-// Tries to delete cidr3 but is blocked since there is an IPAddress
-// Deletes the Service with the IPAddress blocking the deletion
-// cidr3 must not exist at this point
+// 当没有孤立 IP，或现有 IP 包含在另一个未被删除的 ServiceCIDR 中时，
+// 该 ServiceCIDR 可以被删除。
+// 测试以 "192.168.0.0/29" 范围启动 apiserver
+// 创建 Service 以填满该范围
+// 新建一个与 apiserver 中定义的范围相同的 ServiceCIDR cidr1
+// 删除 cidr1 对象会成功，因为其范围被 apiserver flag 创建的默认 ServiceCIDR 覆盖
+// 新建一个范围与 cidr1 不同的 cidr2
+// 新建一个 service，由于此时 "192.168.0.0/29" 已满，它会从该范围获取 IPAddress
+// 新建一个包含 cidr2 的 cidr3
+// 删除 cidr2，因为其范围被 cidr3 覆盖
+// 尝试删除 cidr3 会被阻止，因为还存在一个 IPAddress
+// 删除那个阻碍删除的 IPAddress 所属的 Service
+// 此时 cidr3 必须已不存在
 func TestServiceCIDRDeletion(t *testing.T) {
-	cidr1 := "192.168.0.0/29" // same as the default
-	cidr2 := "10.0.0.0/24"    // new range
-	cidr3 := "10.0.0.0/16"    // contains cidr2
+	cidr1 := "192.168.0.0/29" // 与默认值相同
+	cidr2 := "10.0.0.0/24"    // 新范围
+	cidr3 := "10.0.0.0/16"    // 包含 cidr2
 
 	etcdOptions := framework.SharedEtcd()
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
@@ -158,7 +158,7 @@ func TestServiceCIDRDeletion(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "test-service-cidr-deletion", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// ServiceCIDR controller
+	// ServiceCIDR 控制器
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	resyncPeriod := 12 * time.Hour
@@ -172,19 +172,19 @@ func TestServiceCIDRDeletion(t *testing.T) {
 	informerFactory.Start(ctx.Done())
 	informerFactory.WaitForCacheSync(ctx.Done())
 
-	// /29 = 6 services, kubernetes.default takes the first address
-	// make 5 more services to take up all IPs
+	// /29 = 6 个 service，kubernetes.default 占用第一个地址
+	// 再创建 5 个 service 以占满所有 IP
 	for i := range 5 {
 		if _, err := client.CoreV1().Services(ns.Name).Create(context.Background(), makeService(fmt.Sprintf("service-%d", i)), metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// create a new ServiceCIDRs that overlaps the default one
+	// 新建一个与默认 ServiceCIDR 范围重叠的 ServiceCIDR
 	_, err = client.NetworkingV1().ServiceCIDRs().Create(ctx, makeServiceCIDR("cidr1", cidr1, ""), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wait until is ready.
+	// 等待其就绪。
 	if err := wait.PollUntilContextTimeout(context.Background(), 250*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client.NetworkingV1().ServiceCIDRs().Get(ctx, "cidr1", metav1.GetOptions{})
 		if err != nil {
@@ -194,7 +194,8 @@ func TestServiceCIDRDeletion(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("cidr1 is not ready")
 	}
-	// we should be able to delete the ServiceCIDR despite it contains IP addresses as it overlaps with the default ServiceCIDR
+	// 尽管该 ServiceCIDR 包含 IP 地址，我们也应该能删除它，
+	// 因为它与默认的 ServiceCIDR 范围重叠
 	err = client.NetworkingV1().ServiceCIDRs().Delete(ctx, "cidr1", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -210,13 +211,13 @@ func TestServiceCIDRDeletion(t *testing.T) {
 		t.Fatalf("cidr1 has not been deleted")
 	}
 
-	// add a new ServiceCIDR with a new range
+	// 添加一个使用新范围的 ServiceCIDR
 	_, err = client.NetworkingV1().ServiceCIDRs().Create(ctx, makeServiceCIDR("cidr2", cidr2, ""), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// wait the allocator process the new ServiceCIDR
-	// Wait until is ready.
+	// 等待分配器处理新的 ServiceCIDR
+	// 等待其就绪。
 	if err := wait.PollUntilContextTimeout(context.Background(), 250*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client.NetworkingV1().ServiceCIDRs().Get(ctx, "cidr2", metav1.GetOptions{})
 		if err != nil {
@@ -226,7 +227,7 @@ func TestServiceCIDRDeletion(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("cidr2 is not ready")
 	}
-	// create a new Service so it will take a new IP address from the new range
+	// 新建一个 Service，使其从新范围中获取 IP 地址
 	svc, err := client.CoreV1().Services(ns.Name).Create(context.Background(), makeService("new-cidr-service"), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -236,12 +237,12 @@ func TestServiceCIDRDeletion(t *testing.T) {
 		t.Fatalf("Service %s expected to have an IP on range %s, got %s", svc.Name, cidr2, svc.Spec.ClusterIP)
 	}
 
-	// add a new ServiceCIDR that overlaps the existing one
+	// 添加一个新的 ServiceCIDR，其范围与现有 range 重叠
 	_, err = client.NetworkingV1().ServiceCIDRs().Create(ctx, makeServiceCIDR("cidr3", cidr3, ""), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wait until is ready.
+	// 等待其就绪。
 	if err := wait.PollUntilContextTimeout(context.Background(), 250*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client.NetworkingV1().ServiceCIDRs().Get(ctx, "cidr3", metav1.GetOptions{})
 		if err != nil {
@@ -251,7 +252,8 @@ func TestServiceCIDRDeletion(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("cidr3 is not ready")
 	}
-	// we should be able to delete the ServiceCIDR2 despite it contains IP addresses as it is contained on ServiceCIDR3
+	// 尽管 ServiceCIDR2 包含 IP 地址，我们也应该能删除它，
+	// 因为它被包含在 ServiceCIDR3 中
 	err = client.NetworkingV1().ServiceCIDRs().Delete(ctx, "cidr2", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -267,12 +269,12 @@ func TestServiceCIDRDeletion(t *testing.T) {
 		t.Fatalf("cidr2 has not been deleted")
 	}
 
-	// serviceCIDR3 will not be able to be deleted until the IPAddress is removed
+	// 在 IPAddress 被移除之前，无法删除 serviceCIDR3
 	err = client.NetworkingV1().ServiceCIDRs().Delete(ctx, "cidr3", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wait until is not ready.
+	// 等待其变为未就绪状态。
 	if err := wait.PollUntilContextTimeout(context.Background(), 250*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client.NetworkingV1().ServiceCIDRs().Get(ctx, "cidr3", metav1.GetOptions{})
 		if err != nil {
@@ -288,12 +290,12 @@ func TestServiceCIDRDeletion(t *testing.T) {
 		t.Fatalf("cidr3 is ready")
 	}
 
-	// delete the service blocking the deletion
+	// 删除阻碍删除操作的 service
 	if err := client.CoreV1().Services(ns.Name).Delete(context.Background(), "new-cidr-service", metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// cidr3 must not exist
+	// cidr3 必须已不存在
 	if err := wait.PollUntilContextTimeout(context.Background(), 250*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		_, err := client.NetworkingV1().ServiceCIDRs().Get(ctx, "cidr3", metav1.GetOptions{})
 		if err != nil && apierrors.IsNotFound(err) {
@@ -333,7 +335,7 @@ func makeService(name string) *v1.Service {
 	}
 }
 
-// returns true of the ServiceCIDRConditionReady is true
+// 当 ServiceCIDRConditionReady 为 true 时返回 true
 func isServiceCIDRReady(serviceCIDR *networkingv1.ServiceCIDR) bool {
 	if serviceCIDR == nil {
 		return false
@@ -354,16 +356,16 @@ func cidrContainsIP(cidr, ip string) bool {
 	return prefix.Contains(address)
 }
 
-// TestValidationAdmissionPolicyServiceCIDR tests that a ValidatingAdmissionPolicy
-// can be used to prevent updates to the default ServiceCIDR from users other than the
-// apiserver, and that the apiserver can update it on startup.
+// TestValidationAdmissionPolicyServiceCIDR 测试 ValidatingAdmissionPolicy
+// 可以阻止 apiserver 以外的用户更新默认 ServiceCIDR，
+// 并且 apiserver 在启动时可以更新它。
 func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
-	// This test restarts the apiserver, so it cannot run in parallel.
+	// 该测试会重启 apiserver，因此不能并行运行。
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	etcdOptions := framework.SharedEtcd()
-	// 1. Start an apiserver as a single stack.
+	// 1. 以单栈方式启动一个 apiserver。
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
 	s := kubeapiservertesting.StartTestServerOrDie(t,
 		apiServerOptions,
@@ -382,7 +384,7 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 		t.Fatalf("Failed to create clientset: %v", err)
 	}
 
-	// fake user
+	// 伪造用户
 	newCfg := *s.ClientConfig
 	newCfg.Impersonate = rest.ImpersonationConfig{
 		UserName: "fake-admin",
@@ -393,7 +395,8 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 		t.Fatalf("Unexpected error creating kubernetes client impersonating %q", newCfg.Impersonate.UserName)
 	}
 
-	// 2. Install a validationadmissionpolicy that only allows the user apiserver to update the default servicecidr to dual stack
+	// 2. 安装一个 validationadmissionpolicy，只允许 apiserver 用户
+	//    将默认 servicecidr 更新为双栈
 	policy := &admissionregistrationv1.ValidatingAdmissionPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "deny-non-apiserver-servicecidr-updates"},
 		Spec: admissionregistrationv1.ValidatingAdmissionPolicySpec{
@@ -409,7 +412,7 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 				},
 			},
 			Validations: []admissionregistrationv1.Validation{{
-				// only allow to CREATE or UPDATE the default kubernetes ServiceCIDR to the apiserver
+				// 只允许 apiserver 创建或更新默认的 kubernetes ServiceCIDR
 				Expression: "request.userInfo.username == 'system:apiserver' && 'system:masters' in request.userInfo.groups",
 				Message:    "only apiserver can update and create servicecidrs",
 			}, {
@@ -431,7 +434,7 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 				admissionregistrationv1.Deny,
 			},
 			MatchResources: &admissionregistrationv1.MatchResources{
-				NamespaceSelector: &metav1.LabelSelector{}, // Match cluster-scoped resources
+				NamespaceSelector: &metav1.LabelSelector{}, // 匹配集群范围的资源
 			},
 		},
 	}
@@ -441,10 +444,10 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 		t.Fatalf("Failed to create binding: %v", err)
 	}
 
-	// Wait for policy and binding to become active.
+	// 等待 policy 和 binding 生效。
 	time.Sleep(2 * time.Second)
 
-	// 3. Try to update the defaultservicecidr to dual stack from the test and check that fails
+	// 3. 尝试从测试中把 defaultservicecidr 更新为双栈，并检查其失败
 	defaultCIDR, err := clientset.NetworkingV1().ServiceCIDRs().Get(ctx, "kubernetes", metav1.GetOptions{})
 	if err != nil {
 		s.TearDownFn()
@@ -462,7 +465,7 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 		t.Fatalf("Expected error to contain 'only apiserver can update and create servicecidrs', but got: %v", err)
 	}
 
-	// 4. add a new ServiceCIDR
+	// 4. 添加一个新的 ServiceCIDR
 	_, err = clientset.NetworkingV1().ServiceCIDRs().Create(ctx, makeServiceCIDR("cidrnew", "192.168.0.0/28", ""), metav1.CreateOptions{})
 	if err == nil {
 		s.TearDownFn()
@@ -473,7 +476,7 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 		t.Fatalf("Expected error to contain 'only allow changes on the default servicecidr', but got: %v", err)
 	}
 
-	// 5. Stop current apiserver and start a new one with dual stack cidrs in the flags
+	// 5. 停止当前 apiserver，并启动一个在 flag 中带有双栈 CIDR 的新 apiserver
 	s.TearDownFn()
 	apiServerOptionsDual := kubeapiservertesting.NewDefaultTestServerOptions()
 	sDual := kubeapiservertesting.StartTestServerOrDie(t,
@@ -493,11 +496,11 @@ func TestValidationAdmissionPolicyServiceCIDR(t *testing.T) {
 		t.Fatalf("Failed to create clientset for dual-stack server: %v", err)
 	}
 
-	// 6. Validate that the default service cidr has been updated
+	// 6. 验证默认 service CIDR 已被更新
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		cidr, err := clientsetDual.NetworkingV1().ServiceCIDRs().Get(ctx, "kubernetes", metav1.GetOptions{})
 		if err != nil {
-			// The API server may not be fully ready, so retry on error.
+			// API server 可能尚未完全就绪，因此出错时重试。
 			t.Logf("failed to get service cidr, retrying: %v", err)
 			return false, nil
 		}

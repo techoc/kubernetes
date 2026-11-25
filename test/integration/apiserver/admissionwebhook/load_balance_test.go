@@ -118,8 +118,10 @@ func TestWebhookLoadBalance(t *testing.T) {
 			}, framework.SharedEtcd())
 			defer s.TearDownFn()
 
-			// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求和控制器发起的请求。
-			// 我们据此在记录之前过滤请求，确保不会把控制器的请求误当成该客户端的请求。
+			// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求
+			// 和控制器发起的请求。我们据此在记录请求之前先过滤，
+			// 确保不会把控制器发出的请求
+			// 误当成该客户端发出的请求。
 			clientConfig := rest.CopyConfig(s.ClientConfig)
 			clientConfig.QPS = 100
 			clientConfig.Burst = 200
@@ -258,7 +260,8 @@ type connectionRecorder struct {
 	upOnce sync.Once
 }
 
-// Reset 将所有计数清零，并返回一个 channel：当收到第一个针对 marker 对象的准入请求时该 channel 被关闭。
+// Reset 将所有计数清零，并返回一个 channel：
+// 当收到第一个针对 marker 对象的准入请求时该 channel 被关闭。
 func (i *connectionRecorder) Reset() chan struct{} {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -359,8 +362,9 @@ func (c *connectionTrackingListener) Addr() net.Addr {
 	return c.delegate.Addr()
 }
 
-// TestWebhookLoadBalanceAcrossEndpoints 确保使用 ServiceReference 时，webhook 客户端会把连续请求
-// 分发到 service 后面不同的 endpoint IP 上。在 host-rewrite 连接池隔离修复之前，所有连续请求都会
+// TestWebhookLoadBalanceAcrossEndpoints 确保使用 ServiceReference 时，webhook 客户端
+// 会把连续请求分发到 service 后面不同的 endpoint IP 上。
+// 在 host-rewrite 连接池隔离修复之前，所有连续请求都会
 // 复用单个共享池中第一条已建立的 TCP 连接，导致其他 endpoint 完全得不到请求。
 func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 	roots := x509.NewCertPool()

@@ -96,11 +96,11 @@ Args:
 `))
 )
 
-// This produces too much output:
+// 这会产生过多输出：
 // {{range .OtherArgs}} {{.}}
 // {{end}}
 
-// Doesn't work?
+// 这样不管用？
 // Unrecognized lines: {{with $delta := sub .TotalLines .JsonLines}}{{$delta}} ({{percent $delta .TotalLines}} of total lines){{end}}
 
 func (s logStats) String() string {
@@ -128,11 +128,11 @@ func loadLog(path string) (messages []logMessage, stats logStats, err error) {
 		buffer.Write(line)
 		msg, err := parseLine(buffer.Bytes(), &stats)
 		if err != nil {
-			// JSON might have been split across multiple lines.
+			// JSON 可能被拆分到了多行中。
 			var jsonErr *json.SyntaxError
 			if errors.As(err, &jsonErr) && jsonErr.Offset > 1 {
-				// The start of the buffer was okay. Keep the
-				// data and add the next line to it.
+				// 缓冲区开头部分没有问题。保留这些
+				// 数据，并把下一行追加进去。
 				stats.SplitLines++
 				continue
 			}
@@ -152,7 +152,7 @@ func loadLog(path string) (messages []logMessage, stats logStats, err error) {
 	return
 }
 
-// String format for API structs from generated.pb.go.
+// generated.pb.go 中 API 结构体的字符串格式。
 // &Container{...}
 var objectRE = regexp.MustCompile(`^&([a-zA-Z]*)\{`)
 
@@ -181,7 +181,7 @@ func parseLine(line []byte, stats *logStats) (item logMessage, err error) {
 			}
 			item.msg = msg
 		case "ts", "caller":
-			// ignore
+			// 忽略
 		case "err":
 			errStr, ok := value.(string)
 			if !ok {
@@ -222,7 +222,7 @@ func parseLine(line []byte, stats *logStats) (item logMessage, err error) {
 		}
 	}
 
-	// Sort by key.
+	// 按键排序。
 	var keys []string
 	for key := range kvs {
 		keys = append(keys, key)
@@ -233,7 +233,7 @@ func parseLine(line []byte, stats *logStats) (item logMessage, err error) {
 	}
 
 	if !item.isError && item.err != nil {
-		// Error is a normal key/value.
+		// Error 是普通的 key/value。
 		item.kvs = append(item.kvs, "err", item.err)
 		item.err = nil
 	}
@@ -243,11 +243,11 @@ func parseLine(line []byte, stats *logStats) (item logMessage, err error) {
 	return
 }
 
-// This is a list of objects that might have been dumped.  The simple ones must
-// come first because unmarshaling will try one after the after and an
-// ObjectRef would unmarshal fine into any of the others whereas any of the
-// other types hopefully have enough extra fields that they won't fit (unknown
-// fields are an error).
+// 这是可能被 dump 出来的对象列表。简单的类型必须
+// 排在前面，因为反序列化会依次尝试每种类型，而
+// ObjectRef 可以顺利反序列化为其他任意类型，但
+// 其他类型应该有足够的额外字段，使其无法匹配
+// （未知字段会导致错误）。
 var objectTypes = []reflect.Type{
 	reflect.TypeOf(klog.ObjectRef{}),
 	reflect.TypeOf(&runtimev1.VersionResponse{}),

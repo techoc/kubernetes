@@ -59,81 +59,81 @@ const (
 
 type CoreResourceEnqueueTestCase struct {
 	Name string
-	// InitialNodes is the list of Nodes to be created at first.
+	// InitialNodes 是最先要创建的 Node 列表。
 	InitialNodes []*v1.Node
-	// InitialPods is the list of Pods to be created at first if it's not empty.
-	// Note that the scheduler won't schedule those Pods,
-	// meaning, those Pods should be already scheduled basically; they should have .spec.nodename.
+	// InitialPods 是首先创建的 Pod 列表（如果不为空）。
+	// 注意调度器不会调度这些 Pod，
+	// 也就是说，这些 Pod 基本上应该已经被调度过；它们应具有 .spec.nodename。
 	InitialPods []*v1.Pod
-	// InitialPVCs are the list of PersistentVolumeClaims to be created at first.
-	// Note that PVs are automatically created following PVCs.
-	// Also, the namespace of pvcs is automatically filled in.
+	// InitialPVCs 是首先创建的 PersistentVolumeClaim 列表。
+	// 注意 PV 会随 PVC 自动创建。
+	// 此外，PVC 的命名空间会自动填充。
 	InitialPVCs []*v1.PersistentVolumeClaim
-	// InitialPVs are the list of PersistentVolume to be created at first.
+	// InitialPVs 是首先创建的 PersistentVolume 列表。
 	InitialPVs []*v1.PersistentVolume
-	// InitialStorageClasses are the list of StorageClass to be created at first.
+	// InitialStorageClasses 是首先创建的 StorageClass 列表。
 	InitialStorageClasses []*storagev1.StorageClass
-	// InitialCSINodes are the list of CSINode to be created at first.
+	// InitialCSINodes 是首先创建的 CSINode 列表。
 	InitialCSINodes []*storagev1.CSINode
-	// InitialCSIDrivers are the list of CSIDriver to be created at first.
+	// InitialCSIDrivers 是首先创建的 CSIDriver 列表。
 	InitialCSIDrivers []*storagev1.CSIDriver
-	// InitialStorageCapacities are the list of CSIStorageCapacity to be created at first.
+	// InitialStorageCapacities 是首先创建的 CSIStorageCapacity 列表。
 	InitialStorageCapacities []*storagev1.CSIStorageCapacity
-	// InitialVolumeAttachment is the list of VolumeAttachment to be created at first.
+	// InitialVolumeAttachment 是首先创建的 VolumeAttachment 列表。
 	InitialVolumeAttachment []*storagev1.VolumeAttachment
-	// InitialDeviceClasses are the list of DeviceClass to be created at first.
+	// InitialDeviceClasses 是首先创建的 DeviceClass 列表。
 	InitialDeviceClasses []*resourceapi.DeviceClass
-	// InitialPodGroups is the list of PodGroups to be created at first.
+	// InitialPodGroups 是首先创建的 PodGroup 列表。
 	InitialPodGroups []*schedulingapi.PodGroup
-	// Pods are the list of Pods to be created.
-	// All of them are expected to be unschedulable at first.
+	// Pods 是要创建的 Pod 列表。
+	// 预期它们最初都是不可调度的。
 	Pods []*v1.Pod
-	// ExpectedInitialRejectingPhase specifies how Pods are supposed to be initially rejected.
-	// rejectingPhase could be either "PreEnqueue" or "SchedulingCycle". Depending on the value:
-	// - "PreEnqueue": test case waits for the Pods to be observed by the scheduler
-	//   and put in the unschedulable pods pool, being blocked at the PreEnqueue gate.
-	// - "SchedulingCycle": test case lets pods experience scheduling cycle once,
-	//   being rejected by PreFilter or Filter gates.
-	// Defaults to "SchedulingCycle".
+	// ExpectedInitialRejectingPhase 指定 Pod 最初应以何种方式被拒绝。
+	// rejectingPhase 可以是 "PreEnqueue" 或 "SchedulingCycle"。取值含义如下：
+	// - "PreEnqueue"：测试用例等待 Pod 被调度器观察到，
+	//   并因阻塞在 PreEnqueue 门控处而被放入不可调度 Pod 池。
+	// - "SchedulingCycle"：测试用例让 Pod 经历一次调度周期，
+	//   被 PreFilter 或 Filter 门控拒绝。
+	// 默认为 "SchedulingCycle"。
 	ExpectedInitialRejectingPhase rejectingPhase
-	// TriggerFn is the function that triggers the event to move Pods.
-	// It returns the map keyed with ClusterEvents to be triggered by this function,
-	// and valued with the number of triggering of the event.
+	// TriggerFn 是触发事件以移动 Pod 的函数。
+	// 它返回一个 map，键为该函数要触发的 ClusterEvent，
+	// 值为该事件被触发的次数。
 	TriggerFn func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error)
-	// WantRequeuedPods is the map of Pods that are expected to be requeued after triggerFn.
+	// WantRequeuedPods 是预期在 triggerFn 之后被重新入队的 Pod 集合。
 	WantRequeuedPods sets.Set[string]
-	// EnablePlugins is a list of plugins to enable.
-	// PrioritySort and DefaultPreemption are enabled by default because they are required by the framework.
-	// If empty, all plugins are enabled.
+	// EnablePlugins 是要启用的插件列表。
+	// PrioritySort 和 DefaultPreemption 默认启用，因为框架需要它们。
+	// 如果为空，则启用所有插件。
 	EnablePlugins []string
-	// EnabledRAExtendedResource indicates wether the test case should run with feature gate
-	// DRAExtendedResource enabled or not.
+	// EnableDRAExtendedResource 表示测试用例是否应在 feature gate
+	// DRAExtendedResource 启用的情况下运行。
 	EnableDRAExtendedResource bool
-	// EnableNodeDeclaredFeatures indicates if the test case runs with the NodeDeclaredFeatures feature gate enabled.
+	// EnableNodeDeclaredFeatures 表示测试用例是否在 NodeDeclaredFeatures feature gate 启用的情况下运行。
 	EnableNodeDeclaredFeatures bool
-	// EnableGenericWorkload indicates wether the test case should run with feature gate
-	// GenericWorkload enabled or not.
+	// EnableGenericWorkload 表示测试用例是否应在 feature gate
+	// GenericWorkload 启用的情况下运行。
 	EnableGenericWorkload bool
 }
 
-// We define all the test cases here in the one place,
-// We needed to do this because running all these test cases resulted in the timeout.
+// 我们将所有测试用例集中定义在一处，
+// 这样做是因为一次性运行所有这些测试用例会导致超时。
 var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 	{
 		Name:          "Pod without a required toleration to a node isn't requeued to activeQ",
 		EnablePlugins: []string{names.TaintToleration, names.NodeResourcesFit},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Taints([]v1.Taint{{Key: v1.TaintNodeNotReady, Effect: v1.TaintEffectNoSchedule}}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 doesn't have the required toleration and will be rejected by the TaintToleration plugin.
-			//   (TaintToleration plugin is evaluated before NodeResourcesFit plugin.)
-			// - Pod2 has the required toleration, but requests a large amount of CPU - will be rejected by the NodeResourcesFit plugin.
+			// - Pod1 没有所需的 toleration，将被 TaintToleration 插件拒绝。
+			//   （TaintToleration 插件在 NodeResourcesFit 插件之前评估。）
+			// - Pod2 有所需的 toleration，但请求大量 CPU —— 将被 NodeResourcesFit 插件拒绝。
 			st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Obj(),
 			st.MakePod().Name("pod2").Toleration(v1.TaintNodeNotReady).Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeChange event by increasing CPU capacity.
-			// It makes Pod2 schedulable.
-			// Pod1 is not requeued because the Node is still unready and it doesn't have the required toleration.
+			// 通过增加 CPU 容量触发 NodeChange 事件。
+			// 这使 Pod2 变为可调度。
+			// Pod1 不会被重新入队，因为节点仍未就绪且其没有所需的 toleration。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Taints([]v1.Taint{{Key: v1.TaintNodeNotReady, Effect: v1.TaintEffectNoSchedule}}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the node: %w", err)
 			}
@@ -149,7 +149,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Label("anti", "anti").Name("pod1").PodAntiAffinityExists("anti", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod2 will be rejected by the PodAffinity plugin.
+			// - Pod2 将被 PodAffinity 插件拒绝。
 			st.MakePod().Label("anti", "anti").Name("pod2").PodAntiAffinityExists("anti", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
@@ -166,15 +166,15 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.NodeAffinity},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node1").Label("group", "a").Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 will be rejected by the NodeAffinity plugin.
+			// - Pod1 将被 NodeAffinity 插件拒绝。
 			st.MakePod().Name("pod1").NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
-			// - Pod2 will be rejected by the NodeAffinity plugin.
+			// - Pod2 将被 NodeAffinity 插件拒绝。
 			st.MakePod().Name("pod2").NodeAffinityIn("group", []string{"c"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event to change label.
-			// It causes pod1 to be requeued.
-			// It causes pod2 not to be requeued.
+			// 触发 NodeUpdate 事件以更改标签。
+			// 这会使 pod1 被重新入队。
+			// 这不会使 pod2 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, st.MakeNode().Name("fake-node1").Label("group", "b").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the node: %w", err)
 			}
@@ -189,13 +189,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("node1").Label("group", "a").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Obj(),
 			st.MakeNode().Name("node2").Label("group", "b").Obj()},
 		Pods: []*v1.Pod{
-			// - The initial pod would be accepted by the NodeAffinity plugin for node1, but will be blocked by the NodeResources plugin.
-			// - The pod will be blocked by the NodeAffinity plugin for node2, therefore we know NodeAffinity will be queried for qhint for both testing nodes.
+			// - 初始 Pod 在 node1 上会被 NodeAffinity 插件接受，但会被 NodeResources 插件阻止。
+			// - 该 Pod 在 node2 上会被 NodeAffinity 插件阻止，因此我们知道对两个测试节点都会查询 NodeAffinity 的 qhint。
 			st.MakePod().Name("pod1").NodeAffinityIn("group", []string{"a"}, st.NodeSelectorTypeMatchExpressions).Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event to add new label.
-			// It won't cause pod to be requeued, because there was a match already before the update, meaning this plugin wasn't blocking the scheduling.
+			// 触发 NodeUpdate 事件以添加新标签。
+			// 这不会导致 Pod 被重新入队，因为在更新之前已经存在匹配，这意味着该插件并未阻碍调度。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, st.MakeNode().Name("node1").Label("group", "a").Label("node", "fake-node").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the node: %w", err)
 			}
@@ -208,15 +208,15 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.NodeAffinity},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node1").Label("group", "a").Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 will be rejected by the NodeAffinity plugin.
+			// - Pod1 将被 NodeAffinity 插件拒绝。
 			st.MakePod().Name("pod1").NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
-			// - Pod2 will be rejected by the NodeAffinity plugin.
+			// - Pod2 将被 NodeAffinity 插件拒绝。
 			st.MakePod().Name("pod2").NodeAffinityIn("group", []string{"c"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeAdd event with the awaited label.
-			// It causes pod1 to be requeued.
-			// It causes pod2 not to be requeued.
+			// 触发带有预期标签的 NodeAdd 事件。
+			// 这会使 pod1 被重新入队。
+			// 这不会使 pod2 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, st.MakeNode().Name("fake-node2").Label("group", "b").Obj(), metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the node: %w", err)
 			}
@@ -229,13 +229,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.TaintToleration},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node").Taints([]v1.Taint{{Key: "taint-key", Effect: v1.TaintEffectNoSchedule}}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 doesn't have the required toleration and will be rejected by the TaintToleration plugin.
+			// - Pod1 没有所需的 toleration，将被 TaintToleration 插件拒绝。
 			st.MakePod().Name("pod1").Container("image").Obj(),
 			st.MakePod().Name("pod2").Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a PodUpdate event by adding a toleration to Pod1.
-			// It makes Pod1 schedulable. Pod2 is not requeued because of not having toleration.
+			// 通过为 Pod1 添加 toleration 触发 PodUpdate 事件。
+			// 这使 Pod1 变为可调度。Pod2 因没有 toleration 而不会被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Update(testCtx.Ctx, st.MakePod().Name("pod1").Container("image").Toleration("taint-key").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the pod: %w", err)
 			}
@@ -248,14 +248,14 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.TaintToleration},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node").Taints([]v1.Taint{{Key: v1.TaintNodeNotReady, Effect: v1.TaintEffectNoSchedule}}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1, pod2 and pod3 don't have the required toleration and will be rejected by the TaintToleration plugin.
+			// - Pod1、pod2 和 pod3 没有所需的 toleration，将被 TaintToleration 插件拒绝。
 			st.MakePod().Name("pod1").Toleration("taint-key").Container("image").Obj(),
 			st.MakePod().Name("pod2").Toleration("taint-key2").Container("image").Obj(),
 			st.MakePod().Name("pod3").Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that changes the existing taint to a taint that matches the toleration that pod1 has.
-			// It makes Pod1 schedulable. Pod2 and pod3 are not requeued because of not having the corresponding toleration.
+			// 触发 NodeUpdate 事件，将现有污点更改为与 pod1 的 toleration 匹配的污点。
+			// 这使 Pod1 变为可调度。Pod2 和 pod3 因没有对应 toleration 而不会被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, st.MakeNode().Name("fake-node").Taints([]v1.Taint{{Key: "taint-key", Effect: v1.TaintEffectNoSchedule}}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the Node: %w", err)
 			}
@@ -268,13 +268,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.TaintToleration},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node1").Taints([]v1.Taint{{Key: v1.TaintNodeNotReady, Effect: v1.TaintEffectNoSchedule}}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 and Pod2 don't have the required toleration and will be rejected by the TaintToleration plugin.
+			// - Pod1 和 Pod2 没有所需的 toleration，将被 TaintToleration 插件拒绝。
 			st.MakePod().Name("pod1").Toleration("taint-key").Container("image").Obj(),
 			st.MakePod().Name("pod2").Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeCreated event with the taint.
-			// It makes Pod1 schedulable. Pod2 is not requeued because of not having toleration.
+			// 触发带有该污点的 NodeCreated 事件。
+			// 这使 Pod1 变为可调度。Pod2 因没有 toleration 而不会被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, st.MakeNode().Name("fake-node2").Taints([]v1.Taint{{Key: "taint-key", Effect: v1.TaintEffectNoSchedule}}).Obj(), metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create the Node: %w", err)
 			}
@@ -287,12 +287,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.NodeResourcesFit},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 requests a large amount of CPU and will be rejected by the NodeResourcesFit plugin.
+			// - Pod1 请求大量 CPU，将被 NodeResourcesFit 插件拒绝。
 			st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a PodUpdate event by reducing cpu requested by pod1.
-			// It makes Pod1 schedulable.
+			// 通过减少 pod1 请求的 CPU 来触发 PodUpdate 事件。
+			// 这使 Pod1 变为可调度。
 			if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).UpdateResize(testCtx.Ctx, "pod1", st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to resize the pod: %w", err)
 			}
@@ -308,12 +308,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod2 request will be rejected because there are not enough free resources on the Node
+			// - Pod2 的请求将被拒绝，因为节点上没有足够的空闲资源
 			st.MakePod().Name("pod2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an assigned Pod1 delete event.
-			// It makes Pod2 schedulable.
+			// 触发已分配的 Pod1 删除事件。
+			// 这使 Pod2 变为可调度。
 			if err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Delete(testCtx.Ctx, "pod1", metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); err != nil {
 				return nil, fmt.Errorf("failed to delete pod1: %w", err)
 			}
@@ -326,14 +326,14 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.NodeResourcesFit},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 requests a large amount of CPU and will be rejected by the NodeResourcesFit plugin.
+			// - Pod1 请求大量 CPU，将被 NodeResourcesFit 插件拒绝。
 			st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Obj(),
-			// - Pod2 requests a large amount of CPU and will be rejected by the NodeResourcesFit plugin.
+			// - Pod2 请求大量 CPU，将被 NodeResourcesFit 插件拒绝。
 			st.MakePod().Name("pod2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "5"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeCreated event.
-			// It makes Pod1 schedulable. Pod2 is not requeued because of having too high requests.
+			// 触发 NodeCreated 事件。
+			// 这使 Pod1 变为可调度。Pod2 因请求过高而不会被重新入队。
 			node := st.MakeNode().Name("fake-node2").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create a new node: %w", err)
@@ -347,14 +347,14 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.NodeResourcesFit},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 requests a large amount of CPU and will be rejected by the NodeResourcesFit plugin.
+			// - Pod1 请求大量 CPU，将被 NodeResourcesFit 插件拒绝。
 			st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Obj(),
-			// - Pod2 requests a large amount of CPU and will be rejected by the NodeResourcesFit plugin.
+			// - Pod2 请求大量 CPU，将被 NodeResourcesFit 插件拒绝。
 			st.MakePod().Name("pod2").Req(map[v1.ResourceName]string{v1.ResourceCPU: "5"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases the CPU capacity of fake-node.
-			// It makes Pod1 schedulable. Pod2 is not requeued because of having too high requests.
+			// 触发 NodeUpdate 事件，增加 fake-node 的 CPU 容量。
+			// 这使 Pod1 变为可调度。Pod2 因请求过高而不会被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -369,11 +369,11 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4", "example.com/gpu": "1"}).Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests the example.com/gpu extended resource that is unavailable on the node.
+			// - Pod1 请求节点上不可用的 example.com/gpu 扩展资源。
 			st.MakePod().Name("pod1").Res(map[v1.ResourceName]string{v1.ResourceCPU: "5", "example.com/gpu": "1"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases unrelated (not requested) memory capacity of fake-node1, which should not requeue Pod1.
+			// 触发 NodeUpdate 事件，增加 fake-node1 上无关的（未被请求的）内存容量，这不应使 Pod1 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "4000"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -389,11 +389,11 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4", "example.com/gpu": "1"}).Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests the example.com/gpu extended resource that is unavailable on the node.
+			// - Pod1 请求节点上不可用的 example.com/gpu 扩展资源。
 			st.MakePod().Name("pod1").Res(map[v1.ResourceName]string{v1.ResourceCPU: "5", "example.com/gpu": "1"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases unrelated (not requested) memory capacity of fake-node1, which should not requeue Pod1.
+			// 触发 NodeUpdate 事件，增加 fake-node1 上无关的（未被请求的）内存容量，这不应使 Pod1 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "4000"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -409,11 +409,11 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests the example.com/gpu extended resource that is unavailable on the node.
+			// - Pod1 请求节点上不可用的 example.com/gpu 扩展资源。
 			st.MakePod().Name("pod1").Res(map[v1.ResourceName]string{"example.com/gpu": "1"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases unrelated (not requested) memory capacity of fake-node1, which should not requeue Pod1.
+			// 触发 NodeUpdate 事件，增加 fake-node1 上无关的（未被请求的）内存容量，这不应使 Pod1 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "4000"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -440,12 +440,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			},
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests available amount of CPU (in fake-node1), but will be rejected by NodeAffinity plugin. Note that the NodeResourceFit plugin will register for QHints because it rejected fake-node2.
+			// - Pod1 请求了可用数量的 CPU（在 fake-node1 上），但会被 NodeAffinity 插件拒绝。注意，NodeResourcesFit 插件会注册 QHint，因为它拒绝了 fake-node2。
 			st.MakePod().Name("pod1").Res(map[v1.ResourceName]string{v1.ResourceCPU: "4", "example.com/gpu": "1"}).NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases unrelated (not requested) memory capacity of fake-node1, which should not requeue Pod1,
-			// but it requeues, because the DynamicResourceAllocation plugin might handle the extended resource.
+			// 触发 NodeUpdate 事件，增加 fake-node1 上无关的（未被请求的）内存容量，这不应使 Pod1 被重新入队，
+			// 但它仍被重新入队，因为 DynamicResourceAllocation 插件可能会处理该扩展资源。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "4000"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -461,12 +461,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests available amount of CPU (in fake-node1), but will be rejected due to lack of extended resource exampe.com/gpu.
+			// - Pod1 请求了可用数量的 CPU（在 fake-node1 上），但因缺少扩展资源 example.com/gpu 而会被拒绝。
 			st.MakePod().Name("pod1").Res(map[v1.ResourceName]string{v1.ResourceCPU: "4", "example.com/gpu": "1"}).Container("image").Obj(),
 			st.MakePod().Name("pod2").Res(map[v1.ResourceName]string{v1.ResourceCPU: "4", "example.com/othergpu": "1"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a DeviceClass Create event that has the extended resource name that matches pod's resource request.
+			// 触发 DeviceClass 创建事件，其扩展资源名称与 Pod 的资源请求相匹配。
 			if _, err := testCtx.ClientSet.ResourceV1().DeviceClasses().Create(testCtx.Ctx, &resourceapi.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "fake-class"}, Spec: resourceapi.DeviceClassSpec{ExtendedResourceName: ptr.To("example.com/gpu")}}, metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create the fake-class: %w", err)
 			}
@@ -484,12 +484,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests available amount of CPU (in fake-node1), but will be rejected due to lack of extended resource example.com/gpu.
+			// - Pod1 请求了可用数量的 CPU（在 fake-node1 上），但因缺少扩展资源 example.com/gpu 而会被拒绝。
 			st.MakePod().Name("pod1").Res(map[v1.ResourceName]string{v1.ResourceCPU: "4", "example.com/gpu": "1"}).Container("image").Obj(),
 			st.MakePod().Name("pod2").Res(map[v1.ResourceName]string{v1.ResourceCPU: "4", "example.com/othergpu": "1"}).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a DeviceClass Update event that adds the extended resource name that matches pod's resource request.
+			// 触发 DeviceClass 更新事件，添加与 Pod 资源请求相匹配的扩展资源名称。
 			if _, err := testCtx.ClientSet.ResourceV1().DeviceClasses().Update(testCtx.Ctx, &resourceapi.DeviceClass{ObjectMeta: metav1.ObjectMeta{Name: "fake-class"}, Spec: resourceapi.DeviceClassSpec{ExtendedResourceName: ptr.To("example.com/gpu")}}, metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the fake-class: %w", err)
 			}
@@ -507,11 +507,11 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node2").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Label("group", "b").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests available amount of CPU (in fake-node1), but will be rejected by NodeAffinity plugin. Note that the NodeResourceFit plugin will register for QHints because it rejected fake-node2.
+			// - Pod1 请求了可用数量的 CPU（在 fake-node1 上），但会被 NodeAffinity 插件拒绝。注意，NodeResourcesFit 插件会注册 QHint，因为它拒绝了 fake-node2。
 			st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases unrealted (not requested) memory capacity of fake-node1, which should not requeue Pod1.
+			// 触发 NodeUpdate 事件，增加 fake-node1 上无关的（未被请求的）内存容量，这不应使 Pod1 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "4000"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -527,11 +527,11 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node2").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Label("group", "b").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 requests available amount of CPU (in fake-node1), but will be rejected by NodeAffinity plugin. Note that the NodeResourceFit plugin will register for QHints because it rejected fake-node2.
+			// - Pod1 请求了可用数量的 CPU（在 fake-node1 上），但会被 NodeAffinity 插件拒绝。注意，NodeResourcesFit 插件会注册 QHint，因为它拒绝了 fake-node2。
 			st.MakePod().Name("pod1").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases the requested CPU capacity of fake-node1, which should requeue Pod1.
+			// 触发 NodeUpdate 事件，增加 fake-node1 上被请求的 CPU 容量，这应使 Pod1 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "5"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -547,15 +547,15 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node2").Capacity(map[v1.ResourceName]string{v1.ResourcePods: "1"}).Label("group", "b").Obj(),
 		},
 		InitialPods: []*v1.Pod{
-			// - Pod1 will be scheduled on fake-node2 because of the affinity label.
+			// - 由于亲和性标签，Pod1 将被调度到 fake-node2。
 			st.MakePod().Name("pod1").NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Node("fake-node2").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod2 is unschedulable because Pod1 saturated ResourcePods limit in fake-node2. Note that the NodeResourceFit plugin will register for QHints because it rejected fake-node2.
+			// - Pod2 不可调度，因为 Pod1 占满了 fake-node2 的 ResourcePods 限制。注意，NodeResourcesFit 插件会注册 QHint，因为它拒绝了 fake-node2。
 			st.MakePod().Name("pod2").NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event that increases the allowed Pods number of fake-node1, which should requeue Pod2.
+			// 触发 NodeUpdate 事件，增加 fake-node1 允许的 Pod 数量，这应使 Pod2 被重新入队。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node1").Capacity(map[v1.ResourceName]string{v1.ResourcePods: "3"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -568,7 +568,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.TaintToleration},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node").Taints([]v1.Taint{{Key: v1.TaintNodeNotReady, Effect: v1.TaintEffectNoSchedule}}).Obj()},
 		Pods: []*v1.Pod{
-			// - Pod1 doesn't have the required toleration and will be rejected by the TaintToleration plugin.
+			// - Pod1 没有所需的 toleration，将被 TaintToleration 插件拒绝。
 			st.MakePod().Name("pod1").Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
@@ -580,8 +580,8 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		WantRequeuedPods: sets.Set[string]{},
 	},
 	{
-		// The test case makes sure that PreFilter plugins returning PreFilterResult are also inserted into pInfo.UnschedulablePlugins
-		// meaning, they're taken into consideration during requeuing flow of the queue.
+		// 该测试用例确保返回 PreFilterResult 的 PreFilter 插件也会被插入到 pInfo.UnschedulablePlugins 中，
+		// 也就是说，在队列的重新入队流程中会考虑它们。
 		// https://github.com/kubernetes/kubernetes/issues/122018
 		Name:          "Pod rejected by the PreFilter of NodeAffinity plugin and Filter of NodeResourcesFit is requeued based on both plugins",
 		EnablePlugins: []string{names.NodeAffinity, names.NodeResourcesFit},
@@ -590,12 +590,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakeNode().Name("fake-node2").Label("node", "fake-node2").Label("zone", "zone1").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod1 will be rejected by the NodeAffinity plugin and NodeResourcesFit plugin.
+			// - Pod1 将被 NodeAffinity 插件和 NodeResourcesFit 插件拒绝。
 			st.MakePod().Label("unscheduled", "plugins").Name("pod1").NodeAffinityIn("metadata.name", []string{"fake-node"}, st.NodeSelectorTypeMatchFields).Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// We will trigger UpdateNodeAllocatable and UpdateNodeLabel events which work for
-			// the NodeResourcesFit and NodeAffinity plugins respectively.
+			// 我们将触发 UpdateNodeAllocatable 和 UpdateNodeLabel 事件，
+			// 它们分别对应 NodeResourcesFit 和 NodeAffinity 插件。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().UpdateStatus(testCtx.Ctx, st.MakeNode().Name("fake-node").Label("metadata.name", "fake-node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -615,13 +615,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Label("anti1", "anti1").Label("anti2", "anti2").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod2 and pod3 will be rejected by the PodAffinity plugin.
+			// - Pod2 和 pod3 将被 PodAffinity 插件拒绝。
 			st.MakePod().Name("pod2").Label("anti1", "anti1").PodAntiAffinityExists("anti1", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod3").Label("anti2", "anti2").PodAntiAffinityExists("anti2", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 		},
 
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Delete the pod's label 'anti1' which will make it match pod2's antiAffinity.
+			// 删除 Pod 的 'anti1' 标签，使其匹配 pod2 的 antiAffinity。
 			if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Update(testCtx.Ctx, st.MakePod().Name("pod1").Label("anti2", "anti2").Container("image").Node("fake-node").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update pod1: %w", err)
 			}
@@ -638,13 +638,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Label("anti2", "anti2").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and pod4 will be rejected by the PodAffinity plugin.
+			// - Pod3 和 pod4 将被 PodAffinity 插件拒绝。
 			st.MakePod().Name("pod3").Label("anti1", "anti1").PodAntiAffinityExists("anti1", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("anti2", "anti2").PodAntiAffinityExists("anti2", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 		},
 
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Delete pod1 which will make pod3 schedulable because pod3's antiAffinity won't match pod1 anymore.
+			// 删除 pod1 将使 pod3 可调度，因为 pod3 的 antiAffinity 不再匹配 pod1。
 			if err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Delete(testCtx.Ctx, "pod1", metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); err != nil {
 				return nil, fmt.Errorf("failed to delete pod1: %w", err)
 			}
@@ -661,13 +661,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").PodAntiAffinityExists("anti2", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and pod4 will be rejected by the PodAffinity plugin.
+			// - Pod3 和 pod4 将被 PodAffinity 插件拒绝。
 			st.MakePod().Name("pod3").Label("anti1", "anti1").Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("anti2", "anti2").Container("image").Obj(),
 		},
 
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Delete pod1 which will make pod3 schedulable because pod1's antiAffinity won't match pod3 anymore.
+			// 删除 pod1 将使 pod3 可调度，因为 pod1 的 antiAffinity 不再匹配 pod3。
 			if err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Delete(testCtx.Ctx, "pod1", metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); err != nil {
 				return nil, fmt.Errorf("failed to delete pod1: %w", err)
 			}
@@ -683,13 +683,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod2 and pod3 will be rejected by the PodAffinity plugin.
+			// - Pod2 和 pod3 将被 PodAffinity 插件拒绝。
 			st.MakePod().Name("pod2").PodAffinityExists("aaa", "node", st.PodAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod3").PodAffinityExists("bbb", "node", st.PodAffinityWithRequiredReq).Container("image").Obj(),
 		},
 
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Add label to the pod which will make it match pod2's podAffinity.
+			// 为 Pod 添加标签，使其匹配 pod2 的 podAffinity。
 			if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Update(testCtx.Ctx, st.MakePod().Name("pod1").Label("aaa", "bbb").Container("image").Node("fake-node").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update pod1: %w", err)
 			}
@@ -703,13 +703,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 		EnablePlugins: []string{names.InterPodAffinity},
 		InitialNodes:  []*v1.Node{st.MakeNode().Name("fake-node1").Label("aaa", "fake-node").Obj()},
 		Pods: []*v1.Pod{
-			// - pod1 and pod2 will be rejected by the PodAffinity plugin.
+			// - pod1 和 pod2 将被 PodAffinity 插件拒绝。
 			st.MakePod().Name("pod1").PodAffinityExists("bbb", "zone", st.PodAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod2").PodAffinityExists("ccc", "region", st.PodAffinityWithRequiredReq).Container("image").Obj(),
 		},
 
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Create the node which will make it match pod1's podAffinity.
+			// 创建节点，使其匹配 pod1 的 podAffinity。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, st.MakeNode().Name("fake-node2").Label("zone", "zone1").Obj(), metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create fake-node2: %w", err)
 			}
@@ -728,15 +728,15 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Label("affinity1", "affinity1").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - pod2, pod3, pod4 will be rejected by the PodAffinity plugin.
+			// - pod2、pod3、pod4 将被 PodAffinity 插件拒绝。
 			st.MakePod().Name("pod2").Label("affinity1", "affinity1").PodAffinityExists("affinity1", "node", st.PodAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod3").Label("affinity1", "affinity1").PodAffinityExists("affinity1", "other", st.PodAffinityWithRequiredReq).Container("image").Obj(),
-			// This Pod doesn't have any label so that this PodAffinity doesn't match this Pod itself.
+			// 该 Pod 没有任何标签，因此这个 PodAffinity 不会匹配该 Pod 自身。
 			st.MakePod().Name("pod4").PodAffinityExists("affinity1", "region", st.PodAffinityWithRequiredReq).NodeAffinityIn("group", []string{"b"}, st.NodeSelectorTypeMatchExpressions).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Add "node" label to the node which may make pod2 schedulable.
-			// Update "region" label to the node which may make pod4 schedulable.
+			// 为节点添加 "node" 标签，这可能使 pod2 可调度。
+			// 更新节点的 "region" 标签，这可能使 pod4 可调度。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, st.MakeNode().Name("fake-node").Label("node", "fake-node").Label("region", "region-2").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -752,14 +752,14 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Label("anti1", "anti1").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - pod2, pod3, pod4 will be rejected by the PodAffinity plugin.
+			// - pod2、pod3、pod4 将被 PodAffinity 插件拒绝。
 			st.MakePod().Name("pod2").Label("anti1", "anti1").PodAntiAffinityExists("anti1", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod3").Label("anti1", "anti1").PodAntiAffinityExists("anti1", "service", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("anti1", "anti1").PodAntiAffinityExists("anti1", "other", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Remove "node" label from the node which will make it not match pod2's podAntiAffinity.
-			// Change "service" label from service-a to service-b which may pod3 schedulable.
+			// 从节点移除 "node" 标签，使其不再匹配 pod2 的 podAntiAffinity。
+			// 将 "service" 标签从 service-a 改为 service-b，这可能使 pod3 可调度。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, st.MakeNode().Name("fake-node").Label("service", "service-b").Label("region", "fake-node").Label("other", "fake-node").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update fake-node: %w", err)
 			}
@@ -775,12 +775,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Label("anti1", "anti1").Container("image").Node("fake-node1").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - pod2, pod3 will be rejected by the PodAntiAffinity plugin.
+			// - pod2 和 pod3 将被 PodAntiAffinity 插件拒绝。
 			st.MakePod().Name("pod2").PodAntiAffinityExists("anti1", "zone", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 			st.MakePod().Name("pod3").PodAntiAffinityExists("anti1", "node", st.PodAntiAffinityWithRequiredReq).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Create the node which will make pod2, pod3 be schedulable.
+			// 创建节点，使 pod2 和 pod3 可调度。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, st.MakeNode().Name("fake-node2").Label("zone", "fake-node").Obj(), metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create fake-node2: %w", err)
 			}
@@ -801,9 +801,9 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod4").Container("image").ContainerPort([]v1.ContainerPort{{ContainerPort: 8080, HostPort: 8081}}).Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an assigned Pod delete event.
-			// Because Pod1 and Pod3 have common port, deleting Pod1 makes Pod3 schedulable.
-			// By setting GracePeriodSeconds to 0, allowing Pod3 to be requeued immediately after Pod1 is deleted.
+			// 触发已分配的 Pod 删除事件。
+			// 因为 Pod1 和 Pod3 使用相同端口，删除 Pod1 会使 Pod3 可调度。
+			// 通过将 GracePeriodSeconds 设为 0，使 Pod3 在 Pod1 删除后立即重新入队。
 			if err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Delete(testCtx.Ctx, "pod1", metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); err != nil {
 				return nil, fmt.Errorf("failed to delete Pod: %w", err)
 			}
@@ -822,8 +822,8 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Container("image").ContainerPort([]v1.ContainerPort{{ContainerPort: 8080, HostPort: 8080}}).Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeCreated event.
-			// It makes Pod2 schedulable.
+			// 触发 NodeCreated 事件。
+			// 这使 Pod2 变为可调度。
 			node := st.MakeNode().Name("fake-node2").Label("node", "fake-node2").Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create a new node: %w", err)
@@ -840,8 +840,8 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeUpdate event to change the Node to ready.
-			// It makes Pod1 schedulable.
+			// 触发 NodeUpdate 事件，将节点变为就绪状态。
+			// 这使 Pod1 变为可调度。
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, st.MakeNode().Name("fake-node").Unschedulable(false).Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the node: %w", err)
 			}
@@ -857,8 +857,8 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeCreated event.
-			// It makes Pod1 schedulable.
+			// 触发 NodeCreated 事件。
+			// 这使 Pod1 变为可调度。
 			node := st.MakeNode().Name("fake-node2").Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create a new node: %w", err)
@@ -875,7 +875,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger a NodeCreated event, but with unschedulable node, which wouldn't make Pod1 schedulable.
+			// 触发 NodeCreated 事件，但创建的是不可调度的节点，这不会使 Pod1 可调度。
 			node := st.MakeNode().Name("fake-node2").Unschedulable(true).Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create a new node: %w", err)
@@ -893,13 +893,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Label("key2", "val").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and Pod4 will be rejected by the PodTopologySpread plugin.
+			// - Pod3 和 Pod4 将被 PodTopologySpread 插件拒绝。
 			st.MakePod().Name("pod3").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("key2", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key2").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an assigned Pod add event.
-			// It should requeue pod3 only because this pod only has key1 label that pod3's topologyspread checks, and doesn't have key2 label that pod4's one does.
+			// 触发已分配的 Pod 添加事件。
+			// 只应重新入队 pod3，因为该 Pod 只有 pod3 的 topologyspread 检查的 key1 标签，而没有 pod4 所需的 key2 标签。
 			pod := st.MakePod().Name("pod5").Label("key1", "val").Node("fake-node").Container("image").Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Create(testCtx.Ctx, pod, metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create Pod %q: %w", pod.Name, err)
@@ -918,14 +918,14 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Label("key2", "val").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and Pod4 will be rejected by the PodTopologySpread plugin.
+			// - Pod3 和 Pod4 将被 PodTopologySpread 插件拒绝。
 			st.MakePod().Name("pod3").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("key2", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key2").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an assigned Pod update event.
-			// It should requeue pod3 only because this updated pod had key1 label,
-			// and it's related only to the label selector that pod3's topologyspread has.
+			// 触发已分配的 Pod 更新事件。
+			// 只应重新入队 pod3，因为被更新的 Pod 有 key1 标签，
+			// 而它只与 pod3 的 topologyspread 所使用的标签选择器相关。
 			if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Update(testCtx.Ctx, st.MakePod().Name("pod1").Label("key3", "val").Container("image").Node("fake-node").Obj(), metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update the pod: %w", err)
 			}
@@ -942,13 +942,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Label("key2", "val").Container("image").Node("fake-node").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and Pod4 will be rejected by the PodTopologySpread plugin.
+			// - Pod3 和 Pod4 将被 PodTopologySpread 插件拒绝。
 			st.MakePod().Name("pod3").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(2)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("key2", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key2").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an assigned Pod delete event.
-			// It should requeue pod3 only because this pod only has key1 label that pod3's topologyspread checks, and doesn't have key2 label that pod4's one does.
+			// 触发已分配的 Pod 删除事件。
+			// 只应重新入队 pod3，因为该 Pod 只有 pod3 的 topologyspread 检查的 key1 标签，而没有 pod4 所需的 key2 标签。
 			if err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Delete(testCtx.Ctx, "pod1", metav1.DeleteOptions{GracePeriodSeconds: new(int64)}); err != nil {
 				return nil, fmt.Errorf("failed to delete Pod: %w", err)
 			}
@@ -968,13 +968,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Label("key1", "val").Container("image").Node("fake-node2").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and Pod4 will be rejected by the PodTopologySpread plugin.
+			// - Pod3 和 Pod4 将被 PodTopologySpread 插件拒绝。
 			st.MakePod().Name("pod3").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(2)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("key1", "val").SpreadConstraint(1, "zone", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(2)), nil, nil, nil).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an Node add event.
-			// It should requeue pod3 only because this node only has node label, and doesn't have zone label that pod4's topologyspread requires.
+			// 触发 Node 添加事件。
+			// 只应重新入队 pod3，因为该节点只有 node 标签，而没有 pod4 的 topologyspread 所需的 zone 标签。
 			node := st.MakeNode().Name("fake-node3").Label("node", "fake-node").Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to create a new node: %w", err)
@@ -997,7 +997,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod4").Label("key1", "val").SpreadConstraint(1, "service", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), nil, nil, nil, nil).Container("image").Node("fake-node2").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod5, Pod6, Pod7, Pod8, Pod9 will be rejected by the PodTopologySpread plugin.
+			// - Pod5、Pod6、Pod7、Pod8、Pod9 将被 PodTopologySpread 插件拒绝。
 			st.MakePod().Name("pod5").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod6").Label("key1", "val").SpreadConstraint(1, "zone", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod7").Label("key1", "val").SpreadConstraint(1, "region", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
@@ -1005,12 +1005,12 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod9").Label("key1", "val").SpreadConstraint(1, "service", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an Node update event.
-			// It should requeue pod5 because it deletes the "node" label from fake-node2.
-			// It should requeue pod6 because the update adds the "zone" label to fake-node2.
-			// It should not requeue pod7 because the update does not change the value of "region" label.
-			// It should not requeue pod8 because the update does not add the "other" label.
-			// It should requeue pod9 because the update changes the value of "service" label.
+			// 触发 Node 更新事件。
+			// 应重新入队 pod5，因为该更新删除了 fake-node2 的 "node" 标签。
+			// 应重新入队 pod6，因为该更新为 fake-node2 添加了 "zone" 标签。
+			// 不应重新入队 pod7，因为该更新没有改变 "region" 标签的值。
+			// 不应重新入队 pod8，因为该更新没有添加 "other" 标签。
+			// 应重新入队 pod9，因为该更新改变了 "service" 标签的值。
 			node := st.MakeNode().Name("fake-node2").Label("zone", "fake-node").Label("region", "fake-node").Label("service", "service-b").Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, node, metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update node: %w", err)
@@ -1031,13 +1031,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Label("key1", "val").SpreadConstraint(1, "zone", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), nil, nil, nil, nil).Container("image").Node("fake-node2").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and Pod4 will be rejected by the PodTopologySpread plugin.
+			// - Pod3 和 Pod4 将被 PodTopologySpread 插件拒绝。
 			st.MakePod().Name("pod3").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("key1", "val").SpreadConstraint(1, "zone", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an NodeTaint delete event.
-			// It should requeue pod4 only because this node only has zone label, and doesn't have node label that pod3 requires.
+			// 触发 NodeTaint 删除事件。
+			// 只应重新入队 pod4，因为该节点只有 zone 标签，而没有 pod3 所需的 node 标签。
 			if err := testCtx.ClientSet.CoreV1().Nodes().Delete(testCtx.Ctx, "fake-node2", metav1.DeleteOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update node: %w", err)
 			}
@@ -1058,13 +1058,13 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod2").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), nil, nil, nil, nil).Container("image").Node("fake-node2").Obj(),
 		},
 		Pods: []*v1.Pod{
-			// - Pod3 and Pod4 will be rejected by the PodTopologySpread plugin.
+			// - Pod3 和 Pod4 将被 PodTopologySpread 插件拒绝。
 			st.MakePod().Name("pod3").Label("key1", "val").SpreadConstraint(1, "node", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Obj(),
 			st.MakePod().Name("pod4").Label("key1", "val").SpreadConstraint(1, "zone", v1.DoNotSchedule, st.MakeLabelSelector().Exists("key1").Obj(), ptr.To(int32(3)), nil, nil, nil).Container("image").Toleration("aaa").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// Trigger an NodeTaint update event.
-			// It should requeue pod4 only because this node only has zone label, and doesn't have node label that pod3 requires.
+			// 触发 NodeTaint 更新事件。
+			// 只应重新入队 pod4，因为该节点只有 zone 标签，而没有 pod3 所需的 node 标签。
 			node := st.MakeNode().Name("fake-node3").Label("zone", "fake-node").Taints([]v1.Taint{{Key: "aaa", Value: "bbb", Effect: v1.TaintEffectNoSchedule}}).Obj()
 			if _, err := testCtx.ClientSet.CoreV1().Nodes().Update(testCtx.Ctx, node, metav1.UpdateOptions{}); err != nil {
 				return nil, fmt.Errorf("failed to update node: %w", err)
@@ -1905,7 +1905,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Container("image").PVC("pvc1").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// When updating CSINodes by using MakeCSINode, an error occurs because the resourceVersion is not specified. Therefore, the actual CSINode is retrieved.
+			// 使用 MakeCSINode 更新 CSINode 时，会因未指定 resourceVersion 而报错。因此这里获取实际的 CSINode。
 			csinode, err := testCtx.ClientSet.StorageV1().CSINodes().Get(testCtx.Ctx, "fake-node", metav1.GetOptions{})
 			if err != nil {
 				return nil, fmt.Errorf("failed to get CSINode: %w", err)
@@ -1952,7 +1952,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			).Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// When updating CSIDrivers by using MakeCSIDriver, an error occurs because the resourceVersion is not specified. Therefore, the actual CSIDrivers is retrieved.
+			// 使用 MakeCSIDriver 更新 CSIDriver 时，会因未指定 resourceVersion 而报错。因此这里获取实际的 CSIDriver。
 			csidriver, err := testCtx.ClientSet.StorageV1().CSIDrivers().Get(testCtx.Ctx, "csidriver", metav1.GetOptions{})
 			if err != nil {
 				return nil, fmt.Errorf("failed to get CSIDriver: %w", err)
@@ -1999,7 +1999,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			).Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// When updating CSIDrivers by using MakeCSIDriver, an error occurs because the resourceVersion is not specified. Therefore, the actual CSIDrivers is retrieved.
+			// 使用 MakeCSIDriver 更新 CSIDriver 时，会因未指定 resourceVersion 而报错。因此这里获取实际的 CSIDriver。
 			csidriver, err := testCtx.ClientSet.StorageV1().CSIDrivers().Get(testCtx.Ctx, "csidriver", metav1.GetOptions{})
 			if err != nil {
 				return nil, fmt.Errorf("failed to get CSIDriver: %w", err)
@@ -2084,7 +2084,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Container("image").PVC("pvc1").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// When updating CSIStorageCapacities by using MakeCSIStorageCapacity, an error occurs because the resourceVersion is not specified. Therefore, the actual CSIStorageCapacities is retrieved.
+			// 使用 MakeCSIStorageCapacity 更新 CSIStorageCapacity 时，会因未指定 resourceVersion 而报错。因此这里获取实际的 CSIStorageCapacity。
 			csc, err := testCtx.ClientSet.StorageV1().CSIStorageCapacities(testCtx.NS.Name).Get(testCtx.Ctx, "csc", metav1.GetOptions{})
 			if err != nil {
 				return nil, fmt.Errorf("failed to get CSIStorageCapacity: %w", err)
@@ -2129,7 +2129,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 			st.MakePod().Name("pod1").Container("image").PVC("pvc1").Obj(),
 		},
 		TriggerFn: func(testCtx *testutils.TestContext) (map[fwk.ClusterEvent]uint64, error) {
-			// When updating CSIStorageCapacities by using MakeCSIStorageCapacity, an error occurs because the resourceVersion is not specified. Therefore, the actual CSIStorageCapacities is retrieved.
+			// 使用 MakeCSIStorageCapacity 更新 CSIStorageCapacity 时，会因未指定 resourceVersion 而报错。因此这里获取实际的 CSIStorageCapacity。
 			csc, err := testCtx.ClientSet.StorageV1().CSIStorageCapacities(testCtx.NS.Name).Get(testCtx.Ctx, "csc", metav1.GetOptions{})
 			if err != nil {
 				return nil, fmt.Errorf("failed to get CSIStorageCapacity: %w", err)
@@ -2487,7 +2487,7 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 				return nil, err
 			}
 			updatedPod := pod.DeepCopy()
-			// Modify toleration so that we no longer require the feature.
+			// 修改 toleration，使我们不再需要该特性。
 			updatedPod.Spec.Tolerations[0].TolerationSeconds = ptr.To(int64(0))
 			if _, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Update(testCtx.Ctx, updatedPod, metav1.UpdateOptions{}); err != nil {
 				return nil, err
@@ -2568,8 +2568,8 @@ var CoreResourceEnqueueTestCases = []*CoreResourceEnqueueTestCase{
 	},
 }
 
-// TestCoreResourceEnqueue verify Pods failed by in-tree default plugins can be
-// moved properly upon their registered events.
+// TestCoreResourceEnqueue 验证因内置默认插件而失败的 Pod
+// 能在其注册的事件发生时被正确移动。
 func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 	t.Helper()
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScaling, true)
@@ -2600,7 +2600,7 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 	opts := []scheduler.Option{scheduler.WithPodInitialBackoffSeconds(0), scheduler.WithPodMaxBackoffSeconds(0)}
 	if tt.EnablePlugins != nil {
 		enablePlugins := []configv1.Plugin{
-			// These are required plugins to start the scheduler.
+			// 这些是启动调度器所需的插件。
 			{Name: "PrioritySort"},
 			{Name: "DefaultBinder"},
 		}
@@ -2624,9 +2624,8 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 		opts = append(opts, scheduler.WithProfiles(cfg.Profiles...))
 	}
 
-	// Use zero backoff seconds to bypass backoffQ.
-	// It's intended to not start the scheduler's queue, and hence to
-	// not start any flushing logic. We will pop and schedule the Pods manually later.
+	// 使用零退避秒数以绕过 backoffQ。
+	// 目的是不启动调度器的队列，从而不启动任何 flush 逻辑。稍后我们将手动弹出并调度 Pod。
 	testCtx := testutils.InitTestSchedulerWithOptions(
 		t,
 		testutils.InitTestAPIServer(t, "core-res-enqueue", nil),
@@ -2639,7 +2638,7 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 	defer testCtx.Scheduler.SchedulingQueue.Close()
 
 	cs, ns, ctx := testCtx.ClientSet, testCtx.NS.Name, testCtx.Ctx
-	// Create one Node with a taint.
+	// 创建一个带污点的 Node。
 	for _, node := range tt.InitialNodes {
 		if _, err := cs.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create an initial Node %q: %v", node.Name, err)
@@ -2716,7 +2715,7 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 
 	switch tt.ExpectedInitialRejectingPhase {
 	case rejectingPhasePreEnqueue:
-		// Wait for the tt.Pods to be unschedulable in the scheduling queue.
+		// 等待 tt.Pods 在调度队列中变为不可调度。
 		if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 			pendingPods, _ := testCtx.Scheduler.SchedulingQueue.PendingPods()
 			return len(pendingPods) == len(tt.Pods) && len(testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()) == 0, nil
@@ -2726,8 +2725,8 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 		t.Log("All pods are waiting as unschedulable, will trigger triggerFn")
 	case rejectingPhaseSchedulingCycle:
 		fallthrough
-	default: // Defaults to rejectingPhaseSchedulingCycle.
-		// Wait for the tt.Pods to be present in the scheduling active queue.
+	default: // 默认为 rejectingPhaseSchedulingCycle。
+		// 等待 tt.Pods 出现在调度活动队列中。
 		if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 			pendingPods, _ := testCtx.Scheduler.SchedulingQueue.PendingPods()
 			return len(pendingPods) == len(tt.Pods) && len(testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()) == len(tt.Pods), nil
@@ -2737,11 +2736,11 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 
 		t.Log("Confirmed Pods in the scheduling queue, starting to schedule them")
 
-		// Pop all pods out. They should become unschedulable.
+		// 弹出所有 Pod。它们应变为不可调度。
 		for i := 0; i < len(tt.Pods); i++ {
 			testCtx.Scheduler.ScheduleOne(testCtx.Ctx)
 		}
-		// Wait for the tt.Pods to be still present in the scheduling (unschedulable) queue.
+		// 等待 tt.Pods 仍留在调度（不可调度）队列中。
 		if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 			activePodsCount := len(testCtx.Scheduler.SchedulingQueue.PodsInActiveQ())
 			if activePodsCount > 0 {
@@ -2756,7 +2755,7 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 		t.Log("finished initial schedulings for all Pods, will trigger triggerFn")
 	}
 
-	legacyregistry.Reset() // reset the metric before triggering
+	legacyregistry.Reset() // 在触发前重置指标
 	wantTriggeredEvents, err := tt.TriggerFn(testCtx)
 	if err != nil {
 		t.Fatalf("Failed to trigger the event: %v", err)
@@ -2786,10 +2785,10 @@ func RunTestCoreResourceEnqueue(t *testing.T, tt *CoreResourceEnqueueTestCase) {
 
 	t.Log("all events are handled by the scheduler, will check if tt.requeuedPods are requeued")
 
-	// Wait for the tt.Pods to be still present in the scheduling queue.
+	// 等待 tt.Pods 仍留在调度队列中。
 	var requeuedPods sets.Set[string]
 	if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
-		requeuedPods = sets.Set[string]{} // reset
+		requeuedPods = sets.Set[string]{} // 重置
 		for _, requeuedPod := range testCtx.Scheduler.SchedulingQueue.PodsInActiveQ() {
 			requeuedPods.Insert(requeuedPod.Name)
 		}

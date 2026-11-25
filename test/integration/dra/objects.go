@@ -30,18 +30,17 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// NewMaxResourceSlices creates slices that are as large as possible given the current validation constraints.
+// NewMaxResourceSlices 在当前校验约束下创建尽可能大的 ResourceSlice。
 func NewMaxResourceSlices() map[string]*resourceapi.ResourceSlice {
 	slices := map[string]*resourceapi.ResourceSlice{
 		"basic": newBasicResourceSlice(resourceapi.ResourceSliceMaxDevices),
-		// advanced combines all device-level features (taints, consumes counters
-		// with compatibility groups, and list values) into the largest possible
-		// device-based slice.
-		// Compatibility groups grow this maximal slice by ~16,640 B (1,190,621 B -> ~1,207,261 B, +1.4%),
-		// which stays well within the object size limit.
+		// advanced 将所有设备级别的特性（taint、带兼容组的 consumes counter 以及列表值）
+		// 组合进一个尽可能大的、基于设备的 slice。
+		// 兼容组使这个最大 slice 增大约 16,640 字节（1,190,621 B -> ~1,207,261 B，+1.4%），
+		// 仍远在对象大小限制之内。
 		"advanced": newAdvancedResourceSlice(),
-		// shared-counters is a distinct slice kind: SharedCounters and Devices are
-		// mutually exclusive per slice, so it cannot be merged into "advanced".
+		// shared-counters 是一类独立的 slice：每个 slice 中 SharedCounters 与 Devices
+		// 互斥，因此无法合并进 "advanced"。
 		"shared-counters": newSharedCountersResourceSlice(),
 	}
 	return slices
@@ -89,7 +88,7 @@ func newBasicResourceSlice(numDevices int) *resourceapi.ResourceSlice {
 	for i := range numDevices {
 		devices = append(devices, resourceapi.Device{
 			Name: maxDNSLabel(i),
-			// Use attributes rather than capacity since it is more expensive.
+			// 使用 attribute 而非 capacity，因为后者开销更大。
 			Attributes: func() map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 				attributes := make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute)
 				for i := range resourceapi.ResourceSliceMaxAttributesAndCapacitiesPerDevice {
@@ -128,8 +127,8 @@ func newSharedCountersResourceSlice() *resourceapi.ResourceSlice {
 	return slice
 }
 
-// newAdvancedResourceSlice builds the maximal device-feature slice: taints,
-// consumes counters, compatibility groups, and list values combined.
+// newAdvancedResourceSlice 构建包含全部设备特性的最大 slice：
+// taint、consumes counter、兼容组和列表值的组合。
 func newAdvancedResourceSlice() *resourceapi.ResourceSlice {
 	slice := newResourceSliceWithTaintsAndConsumesCounters()
 	addListValues(slice)
@@ -137,8 +136,7 @@ func newAdvancedResourceSlice() *resourceapi.ResourceSlice {
 	return slice
 }
 
-// addCompatibilityGroups declares the maximum number of compatibility groups
-// on each device counter consumption.
+// addCompatibilityGroups 为每一处设备 counter consumption 声明最大数量的兼容组。
 func addCompatibilityGroups(slice *resourceapi.ResourceSlice) {
 	for i := range slice.Spec.Devices {
 		for j := range slice.Spec.Devices[i].ConsumesCounters {
@@ -153,8 +151,8 @@ func addCompatibilityGroups(slice *resourceapi.ResourceSlice) {
 
 func addListValues(slice *resourceapi.ResourceSlice) {
 	for i, device := range slice.Spec.Devices {
-		// Make each attribute a list of strings (adds some encoding overhead).
-		// The first list gets as many additional strings as allowed by the overall value limit.
+		// 将每个 attribute 变成字符串列表（会增加一些编码开销）。
+		// 第一个列表会按整体 value 上限尽可能多地追加字符串。
 		numAdditionalValues := resourceapi.ResourceSliceMaxAttributeValuesPerDevice - resourceapi.ResourceSliceMaxAttributesAndCapacitiesPerDevice
 		for k, v := range device.Attributes {
 			v.StringValues = []string{*v.StringValue}
@@ -173,10 +171,10 @@ func commonResourceSlice() *resourceapi.ResourceSlice {
 	return &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: maxSubDomain(1),
-			// Number of labels is not restricted.
+			// label 的数量不受限制。
 			Labels: maxKeyValueMap(10),
-			// Total size of annotations is limited to TotalAnnotationSizeLimitB = 256 KB.
-			// Let's be a bit more realistic.
+			// annotation 的总大小限制为 TotalAnnotationSizeLimitB = 256 KB。
+			// 这里取得保守一些。
 			Annotations: maxKeyValueMap(10),
 		},
 
@@ -191,7 +189,7 @@ func commonResourceSlice() *resourceapi.ResourceSlice {
 	}
 }
 
-// maxKeyValueMap produces a map for labels or annotations.
+// maxKeyValueMap 生成用于 label 或 annotation 的 map。
 func maxKeyValueMap(n int) map[string]string {
 	m := make(map[string]string)
 	for i := range n {
@@ -201,7 +199,7 @@ func maxKeyValueMap(n int) map[string]string {
 }
 
 func maxLabelName(i int) string {
-	// A "label" is a qualified name.
+	// "label" 即 qualified name。
 	return maxQualifiedName(i)
 }
 

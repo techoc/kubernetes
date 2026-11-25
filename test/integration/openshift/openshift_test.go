@@ -24,8 +24,8 @@ import (
 	controlplaneapiserver "k8s.io/kubernetes/pkg/controlplane/apiserver"
 )
 
-// This test references methods that OpenShift uses to customize the apiserver on startup, that
-// are not referenced directly by an instance.
+// 这个测试引用了 OpenShift 在启动时用于定制 apiserver 的方法，
+// 这些方法不会被实例直接引用。
 func TestApiserverExportsSymbols(t *testing.T) {
 	_ = &controlplane.Config{
 		ControlPlane: controlplaneapiserver.Config{

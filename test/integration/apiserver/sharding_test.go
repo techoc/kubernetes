@@ -38,8 +38,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// calculateShardRange divides the 64-bit hash space evenly across shards and
-// returns the hex-encoded start (inclusive) and end (exclusive) for the given index.
+// calculateShardRange 将 64 位哈希空间平均分配给各个 shard，
+// 返回给定索引对应的十六进制编码起始值（含）和结束值（不含）。
 func calculateShardRange(index, total int) (start, end string) {
 	maxVal := new(big.Int).Lsh(big.NewInt(1), 64) // 2^64
 	span := new(big.Int).Div(maxVal, big.NewInt(int64(total)))
@@ -47,7 +47,7 @@ func calculateShardRange(index, total int) (start, end string) {
 	startVal := new(big.Int).Mul(span, big.NewInt(int64(index)))
 	endVal := new(big.Int).Mul(span, big.NewInt(int64(index+1)))
 	if index == total-1 {
-		endVal = maxVal // last shard covers remainder
+		endVal = maxVal // 最后一个 shard 覆盖剩余部分
 	}
 
 	start = fmt.Sprintf("0x%016x", startVal)
@@ -64,12 +64,12 @@ func shardSelectorStringForField(field string, index, total int) string {
 	return fmt.Sprintf("shardRange(%s, '%s', '%s')", field, start, end)
 }
 
-// objectInShard returns true if the object's UID hash falls within the given shard range.
+// objectInShard 在对象的 UID 哈希落在给定 shard 范围内时返回 true。
 func objectInShard(uid string, index, total int) bool {
 	return valueInShard(uid, index, total)
 }
 
-// valueInShard returns true if the hash of value falls within the given shard range.
+// valueInShard 在 value 的哈希落在给定 shard 范围内时返回 true。
 func valueInShard(value string, index, total int) bool {
 	start, end := calculateShardRange(index, total)
 	hash := "0x" + sharding.HashField(value)
@@ -85,7 +85,7 @@ func TestShardedList(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "shard-list", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create a batch of configmaps.
+	// 创建一批 configmap。
 	const numObjects = 20
 	created := make([]*v1.ConfigMap, 0, numObjects)
 	for range numObjects {
@@ -112,7 +112,7 @@ func TestShardedList(t *testing.T) {
 			t.Fatalf("shard %d: failed to list: %v", shard, err)
 		}
 
-		// The response must include shard info with the selector echoed back.
+		// 响应中必须包含 shard 信息，并回显 selector。
 		if list.ShardInfo == nil {
 			t.Errorf("shard %d: expected shardInfo to be set", shard)
 		} else if list.ShardInfo.Selector != selector {
@@ -131,7 +131,7 @@ func TestShardedList(t *testing.T) {
 		}
 	}
 
-	// Every created object must appear in exactly one shard.
+	// 每个创建的对象都必须且只能出现在一个 shard 中。
 	for _, cm := range created {
 		if !allFound[string(cm.UID)] {
 			t.Errorf("object %s (UID %s) was not returned by any shard", cm.Name, cm.UID)
@@ -148,7 +148,7 @@ func TestShardedWatch(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "shard-watch", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Get initial resource version.
+	// 获取初始 resource version。
 	list, err := client.CoreV1().ConfigMaps(ns.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("initial list failed: %v", err)
@@ -157,7 +157,7 @@ func TestShardedWatch(t *testing.T) {
 
 	const numShards = 2
 
-	// Start a watch per shard.
+	// 每个 shard 启动一个 watch。
 	watchers := make([]watch.Interface, numShards)
 	for shard := range numShards {
 		w, err := client.CoreV1().ConfigMaps(ns.Name).Watch(ctx, metav1.ListOptions{
@@ -171,9 +171,9 @@ func TestShardedWatch(t *testing.T) {
 		watchers[shard] = w
 	}
 
-	// Create objects and track which shard should see each one.
+	// 创建对象，并记录每个对象应该被哪个 shard 看到。
 	const numObjects = 10
-	expectedShard := make(map[string]int) // UID -> shard index
+	expectedShard := make(map[string]int) // UID -> shard 索引
 	created := make([]*v1.ConfigMap, 0, numObjects)
 
 	for range numObjects {
@@ -194,7 +194,7 @@ func TestShardedWatch(t *testing.T) {
 		}
 	}
 
-	// Multiplex all watcher channels into a single channel for easy consumption.
+	// 将所有 watcher 的 channel 复用为单个 channel，便于消费。
 	type shardEvent struct {
 		shard     int
 		eventType watch.EventType
@@ -213,8 +213,8 @@ func TestShardedWatch(t *testing.T) {
 		}(shard, w)
 	}
 
-	// waitForEvents drains the multiplexed channel until count events of the
-	// given type are collected, returning per-shard UID sets.
+	// waitForEvents 从复用后的 channel 中持续读取，直到收集到指定数量的
+	// 给定类型事件，并返回每个 shard 对应的 UID 集合。
 	waitForEvents := func(eventType watch.EventType, count int) []map[string]bool {
 		t.Helper()
 		perShard := make([]map[string]bool, numShards)
@@ -238,11 +238,11 @@ func TestShardedWatch(t *testing.T) {
 		return perShard
 	}
 
-	// Collect ADDED events.
+	// 收集 ADDED 事件。
 	added := waitForEvents(watch.Added, numObjects)
 	verifyShardEvents(t, "ADDED", added, expectedShard, numShards)
 
-	// Update each object by setting an annotation, then collect MODIFIED events.
+	// 通过设置 annotation 更新每个对象，然后收集 MODIFIED 事件。
 	for _, cm := range created {
 		cm.Annotations = map[string]string{"updated": "true"}
 		if _, err := client.CoreV1().ConfigMaps(ns.Name).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
@@ -252,7 +252,7 @@ func TestShardedWatch(t *testing.T) {
 	modified := waitForEvents(watch.Modified, numObjects)
 	verifyShardEvents(t, "MODIFIED", modified, expectedShard, numShards)
 
-	// Delete each object, then collect DELETED events.
+	// 删除每个对象，然后收集 DELETED 事件。
 	for _, cm := range created {
 		if err := client.CoreV1().ConfigMaps(ns.Name).Delete(ctx, cm.Name, metav1.DeleteOptions{}); err != nil {
 			t.Fatalf("failed to delete configmap %s: %v", cm.Name, err)
@@ -262,7 +262,7 @@ func TestShardedWatch(t *testing.T) {
 	verifyShardEvents(t, "DELETED", deleted, expectedShard, numShards)
 }
 
-// verifyShardEvents checks that each UID was seen by exactly the expected shard.
+// verifyShardEvents 检查每个 UID 是否只被预期的 shard 看到。
 func verifyShardEvents(t *testing.T, eventType string, perShard []map[string]bool, expectedShard map[string]int, numShards int) {
 	t.Helper()
 	for uid, expectedIdx := range expectedShard {
@@ -286,7 +286,7 @@ func TestShardedListFeatureGateDisabled(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "shard-disabled", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create a configmap so the namespace is non-empty.
+	// 创建一个 configmap，使 namespace 非空。
 	_, err := client.CoreV1().ConfigMaps(ns.Name).Create(ctx, &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "test"},
 	}, metav1.CreateOptions{})
@@ -294,8 +294,8 @@ func TestShardedListFeatureGateDisabled(t *testing.T) {
 		t.Fatalf("failed to create configmap: %v", err)
 	}
 
-	// List with a shard selector — when the gate is off, the selector should be
-	// ignored and all objects returned (not sharded).
+	// 使用 shard selector 进行 list —— 当 gate 关闭时，selector 应被忽略，
+	// 返回所有对象（不做分片）。
 	list, err := client.CoreV1().ConfigMaps(ns.Name).List(ctx, metav1.ListOptions{
 		ShardSelector: shardSelectorString(0, 2),
 	})
@@ -320,7 +320,7 @@ func TestShardedListComplete(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "shard-complete", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// An empty/everything selector should return all objects without sharded=true.
+	// 空/全量 selector 应返回所有对象，且不带 sharded=true。
 	const numObjects = 5
 	for range numObjects {
 		_, err := client.CoreV1().ConfigMaps(ns.Name).Create(ctx, &v1.ConfigMap{
@@ -333,8 +333,8 @@ func TestShardedListComplete(t *testing.T) {
 		}
 	}
 
-	// A single shard covering the full range (shard 0 of 1) has empty start and end,
-	// which means no selector string — just use a normal list.
+	// 覆盖完整范围的单个 shard（shard 0/1）起始和结束值均为空，
+	// 这意味着没有 selector 字符串 —— 直接使用普通 list 即可。
 	list, err := client.CoreV1().ConfigMaps(ns.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("list failed: %v", err)
@@ -353,7 +353,7 @@ func TestShardedListByNamespace(t *testing.T) {
 	ctx, client, _, tearDownFn := setup(t)
 	defer tearDownFn()
 
-	// Create multiple namespaces with one ConfigMap each.
+	// 创建多个 namespace，每个包含一个 ConfigMap。
 	const numNamespaces = 10
 	type nsObj struct {
 		namespace string
@@ -375,11 +375,11 @@ func TestShardedListByNamespace(t *testing.T) {
 	}
 
 	const numShards = 3
-	allFound := make(map[string]bool) // UID -> found
+	allFound := make(map[string]bool) // UID -> 是否已找到
 
 	for shard := range numShards {
 		selector := shardSelectorStringForField("object.metadata.namespace", shard, numShards)
-		// List across all namespaces.
+		// 跨所有 namespace 进行 list。
 		list, err := client.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{
 			ShardSelector: selector,
 		})
@@ -399,7 +399,7 @@ func TestShardedListByNamespace(t *testing.T) {
 		}
 	}
 
-	// Every object we created must appear in exactly one shard.
+	// 我们创建的每个对象都必须且只能出现在一个 shard 中。
 	for _, obj := range objects {
 		if !allFound[obj.uid] {
 			t.Errorf("object in namespace %s (UID %s) was not returned by any shard", obj.namespace, obj.uid)
@@ -407,9 +407,9 @@ func TestShardedListByNamespace(t *testing.T) {
 	}
 }
 
-// TestShardedListAllResources verifies that sharding is wired for every API
-// resource. It follows the same discovery+etcd pattern used by the dryrun
-// integration tests.
+// TestShardedListAllResources 验证每个 API resource
+// 都已接入分片。它沿用 dryrun 集成测试所用的
+// discovery + etcd 模式。
 func TestShardedListAllResources(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ShardedListAndWatch, true)
 
@@ -449,7 +449,7 @@ func TestShardedListAllResources(t *testing.T) {
 			continue
 		}
 
-		// Check that this resource supports list.
+		// 检查该 resource 是否支持 list。
 		hasListVerb := false
 		for _, discoveryGroup := range serverResources {
 			for _, r := range discoveryGroup.APIResources {
@@ -479,7 +479,7 @@ func TestShardedListAllResources(t *testing.T) {
 			}
 			uid := string(created.GetUID())
 
-			// List with 2 shards and verify the object appears in exactly one.
+			// 使用 2 个 shard 进行 list，验证对象只出现在其中一个。
 			const numShards = 2
 			foundInShard := -1
 			for shard := range numShards {

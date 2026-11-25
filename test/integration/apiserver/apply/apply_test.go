@@ -61,12 +61,12 @@ import (
 )
 
 func setup(t testing.TB) (clientset.Interface, kubeapiservertesting.TearDownFunc) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount 控制器。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)
-	// There are some tests (in scale_test.go) that rely on the response to be returned in JSON.
-	// So we overwrite it here.
+	// 有些测试（在 scale_test.go 中）依赖以 JSON 形式返回的响应，
+	// 因此在这里覆盖该设置。
 	config.ContentType = runtime.ContentTypeJSON
 	clientSet, err := clientset.NewForConfig(config)
 	if err != nil {
@@ -75,9 +75,9 @@ func setup(t testing.TB) (clientset.Interface, kubeapiservertesting.TearDownFunc
 	return clientSet, server.TearDownFn
 }
 
-// TestApplyAlsoCreates makes sure that PATCH requests with the apply content type
-// will create the object if it doesn't already exist
-// TODO: make a set of test cases in an easy-to-consume place (separate package?) so it's easy to test in both integration and e2e.
+// TestApplyAlsoCreates 确保使用 apply content type 的 PATCH 请求
+// 在对象不存在时会创建该对象
+// TODO: 将一组测试用例放在易于使用的位置（单独的包？），以便在集成测试和 e2e 测试中都能方便地使用。
 func TestApplyAlsoCreates(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -141,7 +141,7 @@ func TestApplyAlsoCreates(t *testing.T) {
 				t.Fatalf("Failed to retrieve object: %v", err)
 			}
 
-			// Test that we can re apply with a different field manager and don't get conflicts
+			// 测试使用不同的 field manager 重新 apply 时不会产生冲突
 			_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				Namespace("default").
 				Resource(tc.resource).
@@ -157,8 +157,8 @@ func TestApplyAlsoCreates(t *testing.T) {
 	}
 }
 
-// TestNoOpUpdateSameResourceVersion makes sure that PUT requests which change nothing
-// will not change the resource version (no write to etcd is done)
+// TestNoOpUpdateSameResourceVersion 确保不做任何变更的 PUT 请求
+// 不会改变 resource version（即不会写入 etcd）
 func TestNoOpUpdateSameResourceVersion(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -202,7 +202,7 @@ func TestNoOpUpdateSameResourceVersion(t *testing.T) {
 		t.Fatalf("Failed to create object: %v", err)
 	}
 
-	// Sleep for one second to make sure that the times of each update operation is different.
+	// 休眠一秒，确保每次更新操作的时间不同。
 	time.Sleep(1 * time.Second)
 
 	createdObject, err := client.CoreV1().RESTClient().Get().Namespace("default").Resource(podResource).Name(podName).Do(context.TODO()).Get()
@@ -220,7 +220,7 @@ func TestNoOpUpdateSameResourceVersion(t *testing.T) {
 		t.Fatalf("Failed to marshal created object: %v", err)
 	}
 
-	// Test that we can put the same object and don't change the RV
+	// 测试 put 相同的对象不会改变 RV
 	_, err = client.CoreV1().RESTClient().Put().
 		Namespace("default").
 		Resource(podResource).
@@ -312,8 +312,8 @@ func TestNoOpApplyWithEmptyMap(t *testing.T) {
 		t.Fatalf("Failed to create object: %v", err)
 	}
 
-	// This sleep is necessary to consistently produce different timestamps because the time field in managedFields has
-	// 1 second granularity and if both apply requests happen during the same second, this test would flake.
+	// 这次休眠是必要的，用于稳定地产生不同的时间戳：managedFields 中的 time 字段精度为 1 秒，
+	// 如果两个 apply 请求发生在同一秒内，该测试就会出现不稳定。
 	time.Sleep(1 * time.Second)
 
 	createdObject, err := client.AppsV1().RESTClient().Get().Namespace("default").Resource(deploymentsResource).Name(deploymentName).Do(context.TODO()).Get()
@@ -331,7 +331,7 @@ func TestNoOpApplyWithEmptyMap(t *testing.T) {
 		t.Fatalf("Failed to marshal created object: %v", err)
 	}
 
-	// Test that we can apply the same object and don't change the RV
+	// 测试 apply 相同的对象不会改变 RV
 	_, err = client.AppsV1().RESTClient().Patch(types.ApplyPatchType).
 		Namespace("default").
 		Param("fieldManager", "apply_test").
@@ -410,8 +410,8 @@ func TestApplyEmptyMarkerStructDifferentFromNil(t *testing.T) {
 		t.Fatalf("Failed to create object: %v", err)
 	}
 
-	// This sleep is necessary to consistently produce different timestamps because the time field in managedFields has
-	// 1 second granularity and if both apply requests happen during the same second, this test would flake.
+	// 这次休眠是必要的，用于稳定地产生不同的时间戳：managedFields 中的 time 字段精度为 1 秒，
+	// 如果两个 apply 请求发生在同一秒内，该测试就会出现不稳定。
 	time.Sleep(1 * time.Second)
 
 	createdObject, err := client.CoreV1().RESTClient().Get().Namespace("default").Resource(podsResource).Name(podName).Do(context.TODO()).Get()
@@ -450,7 +450,7 @@ func TestApplyEmptyMarkerStructDifferentFromNil(t *testing.T) {
 		}
 	}`)
 
-	// Test that an apply with no emptyDir is recognized as distinct from an empty marker struct emptyDir.
+	// 测试不带 emptyDir 的 apply 会被识别为与空标记结构体 emptyDir 不同。
 	_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 		Namespace("default").
 		Param("fieldManager", "apply_test").
@@ -526,7 +526,7 @@ func TestNoopChangeCreationTime(t *testing.T) {
 	}
 
 	require.NoError(t, err)
-	// Sleep for one second to make sure that the times of each update operation is different.
+	// 休眠一秒，确保每次更新操作的时间不同。
 	time.Sleep(1200 * time.Millisecond)
 
 	newObj, err := client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
@@ -545,12 +545,12 @@ func TestNoopChangeCreationTime(t *testing.T) {
 	require.Equal(t, obj, newObj)
 }
 
-// TestNoSemanticUpdateAppleSameResourceVersion makes sure that APPLY requests which makes no semantic changes
-// will not change the resource version (no write to etcd is done)
+// TestNoSemanticUpdateAppleSameResourceVersion 确保没有语义变更的 APPLY 请求
+// 不会改变 resource version（即不会写入 etcd）
 //
-// Some of the non-semantic changes are:
-// - Applying an atomic struct that removes a default
-// - Changing Quantity or other fields that are normalized
+// 以下是一些非语义变更：
+// - apply 一个移除了默认值的 atomic 结构体
+// - 修改 Quantity 或其他会被规范化的字段
 func TestNoSemanticUpdateApplySameResourceVersion(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -606,7 +606,7 @@ func TestNoSemanticUpdateApplySameResourceVersion(t *testing.T) {
 		t.Fatalf("Failed to get RV: %v", err)
 	}
 
-	// Sleep for one second to make sure that the times of each update operation is different.
+	// 休眠一秒，确保每次更新操作的时间不同。
 	time.Sleep(1200 * time.Millisecond)
 
 	obj, err = client.AppsV1().RESTClient().Patch(types.ApplyPatchType).
@@ -629,12 +629,12 @@ func TestNoSemanticUpdateApplySameResourceVersion(t *testing.T) {
 	}
 }
 
-// TestNoSemanticUpdateAppleSameResourceVersion makes sure that PUT requests which makes no semantic changes
-// will not change the resource version (no write to etcd is done)
+// TestNoSemanticUpdateAppleSameResourceVersion 确保没有语义变更的 PUT 请求
+// 不会改变 resource version（即不会写入 etcd）
 //
-// Some of the non-semantic changes are:
-// - Applying an atomic struct that removes a default
-// - Changing Quantity or other fields that are normalized
+// 以下是一些非语义变更：
+// - apply 一个移除了默认值的 atomic 结构体
+// - 修改 Quantity 或其他会被规范化的字段
 func TestNoSemanticUpdatePutSameResourceVersion(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -689,7 +689,7 @@ func TestNoSemanticUpdatePutSameResourceVersion(t *testing.T) {
 		t.Fatalf("Failed to get RV: %v", err)
 	}
 
-	// Sleep for one second to make sure that the times of each update operation is different.
+	// 休眠一秒，确保每次更新操作的时间不同。
 	time.Sleep(1200 * time.Millisecond)
 
 	obj, err = client.AppsV1().RESTClient().Put().
@@ -712,8 +712,8 @@ func TestNoSemanticUpdatePutSameResourceVersion(t *testing.T) {
 	}
 }
 
-// TestCreateOnApplyFailsWithUID makes sure that PATCH requests with the apply content type
-// will not create the object if it doesn't already exist and it specifies a UID
+// TestCreateOnApplyFailsWithUID 确保使用 apply content type 的 PATCH 请求
+// 在对象不存在且指定了 UID 时不会创建该对象
 func TestCreateOnApplyFailsWithUID(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -830,8 +830,8 @@ func TestApplyUpdateApplyConflictForced(t *testing.T) {
 	}
 }
 
-// TestApplyGroupsManySeparateUpdates tests that when many different managers update the same object,
-// the number of managedFields entries will only grow to a certain size.
+// TestApplyGroupsManySeparateUpdates 测试当许多不同的 manager 更新同一个对象时，
+// managedFields 条目的数量只会增长到某个上限。
 func TestApplyGroupsManySeparateUpdates(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -873,7 +873,7 @@ func TestApplyGroupsManySeparateUpdates(t *testing.T) {
 		t.Fatalf("Failed to get meta accessor: %v", err)
 	}
 
-	// Expect 11 entries, because the cap for update entries is 10, and 1 apply entry
+	// 预期有 11 个条目，因为 update 条目的上限是 10，再加上 1 个 apply 条目
 	if actual, expected := len(accessor.GetManagedFields()), 11; actual != expected {
 		if b, err := json.MarshalIndent(object, "\t", "\t"); err == nil {
 			t.Fatalf("Object expected to contain %v entries in managedFields, but got %v:\n%v", expected, actual, string(b))
@@ -882,18 +882,18 @@ func TestApplyGroupsManySeparateUpdates(t *testing.T) {
 		}
 	}
 
-	// Expect the first entry to have the manager name "apply_test"
+	// 预期第一个条目的 manager 名称为 "apply_test"
 	if actual, expected := accessor.GetManagedFields()[0].Manager, "apply_test"; actual != expected {
 		t.Fatalf("Expected first manager to be named %v but got %v", expected, actual)
 	}
 
-	// Expect the second entry to have the manager name "ancient-changes"
+	// 预期第二个条目的 manager 名称为 "ancient-changes"
 	if actual, expected := accessor.GetManagedFields()[1].Manager, "ancient-changes"; actual != expected {
 		t.Fatalf("Expected first manager to be named %v but got %v", expected, actual)
 	}
 }
 
-// TestCreateVeryLargeObject tests that a very large object can be created without exceeding the size limit due to managedFields
+// TestCreateVeryLargeObject 测试可以创建一个非常大的对象，而不会因 managedFields 导致超出大小限制
 func TestCreateVeryLargeObject(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -911,12 +911,12 @@ func TestCreateVeryLargeObject(t *testing.T) {
 		cfg.Data[unique] = "A"
 	}
 
-	// Should be able to create an object near the object size limit.
+	// 应当能够创建一个接近对象大小限制的对象。
 	if _, err := client.CoreV1().ConfigMaps(cfg.Namespace).Create(context.TODO(), cfg, metav1.CreateOptions{}); err != nil {
 		t.Errorf("unable to create large test configMap: %v", err)
 	}
 
-	// Applying to the same object should cause managedFields to go over the object size limit, and fail.
+	// 对同一对象执行 apply 会使 managedFields 超出对象大小限制，从而失败。
 	_, err := client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 		Namespace(cfg.Namespace).
 		Resource("configmaps").
@@ -937,7 +937,7 @@ func TestCreateVeryLargeObject(t *testing.T) {
 	}
 }
 
-// TestUpdateVeryLargeObject tests that a small object can be updated to be very large without exceeding the size limit due to managedFields
+// TestUpdateVeryLargeObject 测试可以将一个小对象更新为非常大的对象，而不会因 managedFields 导致超出大小限制
 func TestUpdateVeryLargeObject(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -950,13 +950,13 @@ func TestUpdateVeryLargeObject(t *testing.T) {
 		Data: map[string]string{"k": "v"},
 	}
 
-	// Create a small config map.
+	// 创建一个小的 config map。
 	cfg, err := client.CoreV1().ConfigMaps(cfg.Namespace).Create(context.TODO(), cfg, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("unable to create configMap: %v", err)
 	}
 
-	// Should be able to update a small object to be near the object size limit.
+	// 应当能够将一个小的对象更新到接近对象大小限制。
 	var updateErr error
 	pollErr := wait.PollImmediate(100*time.Millisecond, 30*time.Second, func() (bool, error) {
 		updateCfg, err := client.CoreV1().ConfigMaps(cfg.Namespace).Get(context.TODO(), cfg.Name, metav1.GetOptions{})
@@ -964,7 +964,7 @@ func TestUpdateVeryLargeObject(t *testing.T) {
 			return false, err
 		}
 
-		// Apply the large update, then attempt to push it to the apiserver.
+		// 应用大幅更新，然后尝试将其推送到 apiserver。
 		for i := range 9999 {
 			unique := fmt.Sprintf("this-key-is-very-long-so-as-to-create-a-very-large-serialized-fieldset-%v", i)
 			updateCfg.Data[unique] = "A"
@@ -980,7 +980,7 @@ func TestUpdateVeryLargeObject(t *testing.T) {
 		t.Errorf("unable to update configMap: %v", updateErr)
 	}
 
-	// Applying to the same object should cause managedFields to go over the object size limit, and fail.
+	// 对同一对象执行 apply 会使 managedFields 超出对象大小限制，从而失败。
 	_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 		Namespace(cfg.Namespace).
 		Resource("configmaps").
@@ -1001,7 +1001,7 @@ func TestUpdateVeryLargeObject(t *testing.T) {
 	}
 }
 
-// TestPatchVeryLargeObject tests that a small object can be patched to be very large without exceeding the size limit due to managedFields
+// TestPatchVeryLargeObject 测试可以将一个小对象 patch 为非常大的对象，而不会因 managedFields 导致超出大小限制
 func TestPatchVeryLargeObject(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1014,7 +1014,7 @@ func TestPatchVeryLargeObject(t *testing.T) {
 		Data: map[string]string{"k": "v"},
 	}
 
-	// Create a small config map.
+	// 创建一个小的 config map。
 	if _, err := client.CoreV1().ConfigMaps(cfg.Namespace).Create(context.TODO(), cfg, metav1.CreateOptions{}); err != nil {
 		t.Errorf("unable to create configMap: %v", err)
 	}
@@ -1026,7 +1026,7 @@ func TestPatchVeryLargeObject(t *testing.T) {
 	}
 	patchString = fmt.Sprintf("%s}}", patchString)
 
-	// Should be able to update a small object to be near the object size limit.
+	// 应当能够将一个小的对象更新到接近对象大小限制。
 	_, err := client.CoreV1().RESTClient().Patch(types.MergePatchType).
 		AbsPath("/api/v1").
 		Namespace(cfg.Namespace).
@@ -1037,7 +1037,7 @@ func TestPatchVeryLargeObject(t *testing.T) {
 		t.Errorf("unable to patch configMap: %v", err)
 	}
 
-	// Applying to the same object should cause managedFields to go over the object size limit, and fail.
+	// 对同一对象执行 apply 会使 managedFields 超出对象大小限制，从而失败。
 	_, err = client.CoreV1().RESTClient().Patch(types.ApplyYAMLPatchType).
 		Namespace("default").
 		Resource("configmaps").
@@ -1058,8 +1058,8 @@ func TestPatchVeryLargeObject(t *testing.T) {
 	}
 }
 
-// TestPatchVeryLargeObjectCBORApply mirrors TestPatchVeryLargeObject using the +cbor structured
-// syntax suffix for application/apply-patch and with CBOR enabled.
+// TestPatchVeryLargeObjectCBORApply 与 TestPatchVeryLargeObject 类似，
+// 但为 application/apply-patch 使用 +cbor 结构化语法后缀，并启用 CBOR。
 func TestPatchVeryLargeObjectCBORApply(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.ClientsAllowCBOR, true)
@@ -1075,7 +1075,7 @@ func TestPatchVeryLargeObjectCBORApply(t *testing.T) {
 		Data: map[string]string{"k": "v"},
 	}
 
-	// Create a small config map.
+	// 创建一个小的 config map。
 	if _, err := client.CoreV1().ConfigMaps(cfg.Namespace).Create(context.TODO(), cfg, metav1.CreateOptions{}); err != nil {
 		t.Errorf("unable to create configMap: %v", err)
 	}
@@ -1087,7 +1087,7 @@ func TestPatchVeryLargeObjectCBORApply(t *testing.T) {
 	}
 	patchString = fmt.Sprintf("%s}}", patchString)
 
-	// Should be able to update a small object to be near the object size limit.
+	// 应当能够将一个小的对象更新到接近对象大小限制。
 	_, err := client.CoreV1().RESTClient().Patch(types.MergePatchType).
 		AbsPath("/api/v1").
 		Namespace(cfg.Namespace).
@@ -1098,7 +1098,7 @@ func TestPatchVeryLargeObjectCBORApply(t *testing.T) {
 		t.Errorf("unable to patch configMap: %v", err)
 	}
 
-	// Applying to the same object should cause managedFields to go over the object size limit, and fail.
+	// 对同一对象执行 apply 会使 managedFields 超出对象大小限制，从而失败。
 	_, err = client.CoreV1().RESTClient().Patch(types.ApplyYAMLPatchType).
 		Namespace("default").
 		Resource("configmaps").
@@ -1131,7 +1131,7 @@ func TestPatchVeryLargeObjectCBORApply(t *testing.T) {
 	}
 }
 
-// TestApplyManagedFields makes sure that managedFields api does not change
+// TestApplyManagedFields 确保 managedFields API 不会发生变化
 func TestApplyManagedFields(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1171,9 +1171,9 @@ func TestApplyManagedFields(t *testing.T) {
 		t.Fatalf("Failed to patch object: %v", err)
 	}
 
-	// Sleep for one second to make sure that the times of each update operation is different.
-	// This will let us check that update entries with the same manager name are grouped together,
-	// and that the most recent update time is recorded in the grouped entry.
+	// 休眠一秒，确保每次更新操作的时间不同。
+	// 这样我们可以检查同名 manager 的 update 条目是否被合并到一起，
+	// 以及合并后的条目中是否记录了最近的更新时间。
 	time.Sleep(1 * time.Second)
 
 	_, err = client.CoreV1().RESTClient().Patch(types.MergePatchType).
@@ -1256,7 +1256,7 @@ func TestApplyManagedFields(t *testing.T) {
 	}
 }
 
-// TestApplyRemovesEmptyManagedFields there are no empty managers in managedFields
+// TestApplyRemovesEmptyManagedFields 确保 managedFields 中不会留下空的 manager
 func TestApplyRemovesEmptyManagedFields(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1344,7 +1344,7 @@ func TestApplyRequiresFieldManager(t *testing.T) {
 	}
 }
 
-// TestApplyRemoveContainerPort removes a container port from a deployment
+// TestApplyRemoveContainerPort 测试从 deployment 中移除一个容器端口
 func TestApplyRemoveContainerPort(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1445,8 +1445,8 @@ func TestApplyRemoveContainerPort(t *testing.T) {
 	}
 }
 
-// TestApplyFailsWithVersionMismatch ensures that a version mismatch between the
-// patch object and the live object will error
+// TestApplyFailsWithVersionMismatch 确保 patch 对象与现存对象之间的
+// 版本不匹配时会报错
 func TestApplyFailsWithVersionMismatch(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1540,8 +1540,8 @@ func TestApplyFailsWithVersionMismatch(t *testing.T) {
 	}
 }
 
-// TestApplyConvertsManagedFieldsVersion checks that the apply
-// converts the API group-version in the field manager
+// TestApplyConvertsManagedFieldsVersion 检查 apply 是否会转换
+// field manager 中的 API group-version
 func TestApplyConvertsManagedFieldsVersion(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1682,7 +1682,7 @@ func TestApplyConvertsManagedFieldsVersion(t *testing.T) {
 	}
 }
 
-// TestClearManagedFieldsWithMergePatch verifies it's possible to clear the managedFields
+// TestClearManagedFieldsWithMergePatch 验证可以清除 managedFields
 func TestClearManagedFieldsWithMergePatch(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1736,7 +1736,7 @@ func TestClearManagedFieldsWithMergePatch(t *testing.T) {
 	}
 }
 
-// TestClearManagedFieldsWithStrategicMergePatch verifies it's possible to clear the managedFields
+// TestClearManagedFieldsWithStrategicMergePatch 验证可以清除 managedFields
 func TestClearManagedFieldsWithStrategicMergePatch(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1794,7 +1794,7 @@ func TestClearManagedFieldsWithStrategicMergePatch(t *testing.T) {
 	}
 }
 
-// TestClearManagedFieldsWithJSONPatch verifies it's possible to clear the managedFields
+// TestClearManagedFieldsWithJSONPatch 验证可以清除 managedFields
 func TestClearManagedFieldsWithJSONPatch(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1848,7 +1848,7 @@ func TestClearManagedFieldsWithJSONPatch(t *testing.T) {
 	}
 }
 
-// TestClearManagedFieldsWithUpdate verifies it's possible to clear the managedFields
+// TestClearManagedFieldsWithUpdate 验证可以清除 managedFields
 func TestClearManagedFieldsWithUpdate(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -1925,7 +1925,7 @@ func TestErrorsDontFail(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Tries to create with a managed fields that has an empty `fieldsType`.
+	// 尝试用 `fieldsType` 为空的 managed field 创建对象。
 	_, err := client.CoreV1().RESTClient().Post().
 		Namespace("default").
 		Resource("configmaps").
@@ -2169,7 +2169,7 @@ func TestApplyDoesNotChangeManagedFieldsViaSubresources(t *testing.T) {
 	}
 }
 
-// TestClearManagedFieldsWithUpdateEmptyList verifies it's possible to clear the managedFields by sending an empty list.
+// TestClearManagedFieldsWithUpdateEmptyList 验证可以通过发送空列表来清除 managedFields。
 func TestClearManagedFieldsWithUpdateEmptyList(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
@@ -2251,14 +2251,14 @@ func TestClearManagedFieldsWithUpdateEmptyList(t *testing.T) {
 	}
 }
 
-// TestApplyUnsetExclusivelyOwnedFields verifies that when owned fields are omitted from an applied
-// configuration, and no other managers own the field, it is removed.
+// TestApplyUnsetExclusivelyOwnedFields 验证当 apply 的配置中省略了独占拥有的字段，
+// 且没有其他 manager 拥有该字段时，该字段会被移除。
 func TestApplyUnsetExclusivelyOwnedFields(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// spec.replicas is a optional, defaulted field
-	// spec.template.spec.hostname is an optional, non-defaulted field
+	// spec.replicas 是一个可选的、带默认值的字段
+	// spec.template.spec.hostname 是一个可选的、无默认值的字段
 	apply := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2303,7 +2303,7 @@ func TestApplyUnsetExclusivelyOwnedFields(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// unset spec.replicas and spec.template.spec.hostname
+	// 移除 spec.replicas 和 spec.template.spec.hostname
 	apply = []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2358,14 +2358,14 @@ func TestApplyUnsetExclusivelyOwnedFields(t *testing.T) {
 	}
 }
 
-// TestApplyUnsetSharedFields verifies that when owned fields are omitted from an applied
-// configuration, but other managers also own the field, is it not removed.
+// TestApplyUnsetSharedFields 验证当 apply 的配置中省略了拥有的字段，
+// 但其他 manager 也拥有该字段时，该字段不会被移除。
 func TestApplyUnsetSharedFields(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// spec.replicas is a optional, defaulted field
-	// spec.template.spec.hostname is an optional, non-defaulted field
+	// spec.replicas 是一个可选的、带默认值的字段
+	// spec.template.spec.hostname 是一个可选的、无默认值的字段
 	apply := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2412,7 +2412,7 @@ func TestApplyUnsetSharedFields(t *testing.T) {
 		}
 	}
 
-	// unset spec.replicas and spec.template.spec.hostname
+	// 移除 spec.replicas 和 spec.template.spec.hostname
 	apply = []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2467,14 +2467,14 @@ func TestApplyUnsetSharedFields(t *testing.T) {
 	}
 }
 
-// TestApplyCanTransferFieldOwnershipToController verifies that when an applier creates an
-// object, a controller takes ownership of a field, and the applier
-// then omits the field from its applied configuration, that the field value persists.
+// TestApplyCanTransferFieldOwnershipToController 验证当 applier 创建对象后，
+// 某个 controller 取得某字段的所有权，随后 applier 在其 apply 配置中省略该字段时，
+// 该字段的值会保留。
 func TestApplyCanTransferFieldOwnershipToController(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Applier creates a deployment with replicas set to 3
+	// applier 创建一个 replicas 设为 3 的 deployment
 	apply := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2518,7 +2518,7 @@ func TestApplyCanTransferFieldOwnershipToController(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// a controller takes over the replicas field
+	// 一个 controller 接管 replicas 字段
 	applied, ok := appliedObj.(*appsv1.Deployment)
 	if !ok {
 		t.Fatalf("Failed to convert response object to Deployment")
@@ -2531,7 +2531,7 @@ func TestApplyCanTransferFieldOwnershipToController(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// applier omits replicas
+	// applier 省略 replicas
 	apply = []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2574,7 +2574,7 @@ func TestApplyCanTransferFieldOwnershipToController(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// ensure the container is deleted even though a controller updated a field of the container
+	// 确保即使 controller 更新了容器的某个字段，容器仍会被删除
 	deployment, ok := patched.(*appsv1.Deployment)
 	if !ok {
 		t.Fatalf("Failed to convert response object to Deployment")
@@ -2584,14 +2584,14 @@ func TestApplyCanTransferFieldOwnershipToController(t *testing.T) {
 	}
 }
 
-// TestApplyCanRemoveMapItemsContributedToByControllers verifies that when an applier creates an
-// object, a controller modifies the contents of the map item via update, and the applier
-// then omits the item from its applied configuration, that the item is removed.
+// TestApplyCanRemoveMapItemsContributedToByControllers 验证当 applier 创建对象后，
+// 某个 controller 通过 update 修改了 map 项的内容，随后 applier 在其 apply 配置中省略该项时，
+// 该项会被移除。
 func TestApplyCanRemoveMapItemsContributedToByControllers(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Applier creates a deployment with a name=nginx container
+	// applier 创建一个带有 name=nginx 容器的 deployment
 	apply := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2634,7 +2634,7 @@ func TestApplyCanRemoveMapItemsContributedToByControllers(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// a controller sets container.workingDir of the name=nginx container via an update
+	// 一个 controller 通过 update 设置 name=nginx 容器的 container.workingDir
 	applied, ok := appliedObj.(*appsv1.Deployment)
 	if !ok {
 		t.Fatalf("Failed to convert response object to Deployment")
@@ -2646,7 +2646,7 @@ func TestApplyCanRemoveMapItemsContributedToByControllers(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// applier removes name=nginx the container
+	// applier 移除 name=nginx 的容器
 	apply = []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2691,7 +2691,7 @@ func TestApplyCanRemoveMapItemsContributedToByControllers(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// ensure the container is deleted even though a controller updated a field of the container
+	// 确保即使 controller 更新了容器的某个字段，容器仍会被删除
 	deployment, ok := patched.(*appsv1.Deployment)
 	if !ok {
 		t.Fatalf("Failed to convert response object to Deployment")
@@ -2704,12 +2704,12 @@ func TestApplyCanRemoveMapItemsContributedToByControllers(t *testing.T) {
 	}
 }
 
-// TestDefaultMissingKeys makes sure that the missing keys default is used when merging.
+// TestDefaultMissingKeys 确保合并时使用缺失键的默认值。
 func TestDefaultMissingKeys(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Applier creates a deployment with containerPort but no protocol
+	// applier 创建一个带有 containerPort 但没有 protocol 的 deployment
 	apply := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2756,7 +2756,7 @@ func TestDefaultMissingKeys(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// Applier updates the name, and uses the protocol, we should get a conflict.
+	// applier 更新 name 并使用 protocol，此时应当产生冲突。
 	apply = []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -2982,12 +2982,12 @@ func BenchmarkServerSideApply(b *testing.B) {
 }
 
 func benchAll(b *testing.B, client clientset.Interface, pod v1.Pod) {
-	// Make sure pod is ready to post
+	// 确保 pod 已准备好用于 post
 	pod.ObjectMeta.CreationTimestamp = metav1.Time{}
 	pod.ObjectMeta.ResourceVersion = ""
 	pod.ObjectMeta.UID = ""
 
-	// Create pod for repeated-updates
+	// 创建一个用于重复更新的 pod
 	pod.Name = "repeated-pod"
 	_, err := client.CoreV1().RESTClient().Post().
 		Namespace("default").
@@ -3059,7 +3059,7 @@ func benchListPod(client clientset.Interface, pod v1.Pod, num int) func(*testing
 		if err := createNamespace(client, namespace); err != nil {
 			b.Fatal(err)
 		}
-		// Create pods
+		// 创建 pod
 		for i := range num {
 			pod.Name = fmt.Sprintf("get-%d-%d", b.N, i)
 			pod.Namespace = namespace
@@ -3237,7 +3237,7 @@ func TestRenamingAppliedFieldManagers(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Creating an object
+	// 创建一个对象
 	podBytes := []byte(`{
 		"apiVersion": "v1",
 		"kind": "Pod",
@@ -3327,7 +3327,7 @@ func TestRenamingUpdatedFieldManagers(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Creating an object
+	// 创建一个对象
 	podBytes := []byte(`{
 		"apiVersion": "v1",
 		"kind": "Pod",
@@ -3427,7 +3427,7 @@ func TestDroppingSubresourceField(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Creating an object
+	// 创建一个对象
 	podBytes := []byte(`{
 		"apiVersion": "v1",
 		"kind": "Pod",
@@ -3538,7 +3538,7 @@ func TestDroppingSubresourceFromSpecField(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Creating an object
+	// 创建一个对象
 	podBytes := []byte(`{
 		"apiVersion": "v1",
 		"kind": "Pod",
@@ -3650,7 +3650,7 @@ func TestSubresourceField(t *testing.T) {
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// Creating a deployment
+	// 创建一个 deployment
 	deploymentBytes := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -3727,32 +3727,32 @@ func TestSubresourceField(t *testing.T) {
 	}
 }
 
-// K8s has a bug introduced in vX.XX.X which changed the treatment of
-// ObjectReferences from granular to atomic. This means that only one manager
-// may own all fields of the ObjectReference. This resulted in a regression
-// for the common use case of user-specified GVK, and machine-populated UID fields.
+// K8s 在 vX.XX.X 中引入了一个 bug，将 ObjectReferences 的处理方式
+// 从 granular 改成了 atomic。这意味着只有一个 manager 可以拥有
+// ObjectReference 的所有字段。这导致了一个退化：在用户指定 GVK、
+// 机器填充 UID 字段这一常见场景下会出现问题。
 //
-// This is a test to show that clusters  affected by this bug before it was fixed
-// do not experience any friction when updating to a version of k8s which marks
-// the fields' management again as granular.
+// 该测试用于证明，在 bug 修复前受此影响的集群，在升级到将字段管理
+// 再次标记为 granular 的 k8s 版本时
+// 不会遇到任何阻力。
 func TestApplyFormerlyAtomicFields(t *testing.T) {
-	// Start server with our populated ObjectReference. Since it is atomic its
-	// ownership changed when XX popualted the UID after the user specified the
-	// GVKN.
+	// 启动时带上我们填充好的 ObjectReference。由于它是 atomic 的，
+	// 在用户指定 GVKN 后 XX 填充 UID 时，
+	// 其所有权发生了变化。
 
-	// 1. Create PersistentVolume with its claimRef owned by
-	//		kube-controller-manager as in v1.22 - 1.24
-	// 2. Attempt to re-apply the original PersistentVolume which does not
-	//		include uid.
-	// 3. Check that:
-	//		a.) The operaiton was successfu;
-	//		b.) The uid is unchanged
+	// 1. 创建 PersistentVolume，其 claimRef 由
+	//		kube-controller-manager 拥有，与 v1.22 - 1.24 中一样
+	// 2. 尝试重新 apply 不包含 uid 的
+	//		原始 PersistentVolume。
+	// 3. 检查：
+	//		a.) 操作成功；
+	//		b.) uid 未发生变化
 
 	client, closeFn := setup(t)
 	defer closeFn()
 
-	// old PersistentVolume from last version of k8s with its claimRef owned
-	// atomically
+	// 来自上一版本 k8s 的旧 PersistentVolume，其 claimRef
+	// 以 atomic 方式拥有
 	oldPersistentVolume := []byte(`
 	{
 		"apiVersion": "v1",
@@ -3854,7 +3854,7 @@ func TestApplyFormerlyAtomicFields(t *testing.T) {
 		}
 	}`)
 
-	// Re-applies name and namespace
+	// 重新 apply name 和 namespace
 	originalPV := []byte(`{
 		"kind": "PersistentVolume",
 		"apiVersion": "v1",
@@ -3882,7 +3882,7 @@ func TestApplyFormerlyAtomicFields(t *testing.T) {
 		}
 	}`)
 
-	// Create PV
+	// 创建 PV
 	originalObj, err := client.CoreV1().RESTClient().
 		Post().
 		Param("fieldManager", "apply_test").
@@ -3897,7 +3897,7 @@ func TestApplyFormerlyAtomicFields(t *testing.T) {
 		t.Fatalf("returned object is incorrect type: %t", originalObj)
 	}
 
-	// Directly set managed fields to object
+	// 直接为对象设置 managed fields
 	newObj, err := client.CoreV1().RESTClient().
 		Patch(types.StrategicMergePatchType).
 		Name("pv-storage").
@@ -3913,8 +3913,8 @@ func TestApplyFormerlyAtomicFields(t *testing.T) {
 		t.Fatalf("returned object is incorrect type: %t", newObj)
 	}
 
-	// Is initialized, attempt to write to fields underneath
-	//	claimRef ObjectReference.
+	// 已初始化，尝试写入
+	//	claimRef ObjectReference 下的字段
 	newObj, err = client.CoreV1().RESTClient().
 		Patch(types.ApplyPatchType).
 		Name("pv-storage").
@@ -3930,15 +3930,15 @@ func TestApplyFormerlyAtomicFields(t *testing.T) {
 		t.Fatalf("returned object is incorrect type: %t", newObj)
 	}
 
-	// Test that bug is fixed by showing no error and that uid is not cleared.
+	// 通过无错误且 uid 未被清空来验证 bug 已修复。
 	if !reflect.DeepEqual(originalObj.(*v1.PersistentVolume).Spec.ClaimRef, newObj.(*v1.PersistentVolume).Spec.ClaimRef) {
 		t.Fatalf("claimRef changed unexpectedly")
 	}
 
-	// Expect that we know own name/namespace fields
-	// All other fields unowned
-	// Make sure apply_test now owns claimRef.UID and that kube-controller-manager owns
-	// claimRef (but its ownership is not respected due to new granular structType)
+	// 期望我们现在拥有 name/namespace 字段
+	// 其余字段均不被拥有
+	// 确保 apply_test 现在拥有 claimRef.UID，且 kube-controller-manager 拥有
+	// claimRef（但由于新的 granular structType，其所有权不再被尊重）
 	managedFields := newObj.(*v1.PersistentVolume).ManagedFields
 	var expectedManagedFields []metav1.ManagedFieldsEntry
 	expectedManagedFieldsString := []byte(`[
@@ -3974,7 +3974,7 @@ func TestApplyFormerlyAtomicFields(t *testing.T) {
 		t.Fatalf("unexpectly failed to decode expected managed fields")
 	}
 
-	// Wipe timestamps before comparison
+	// 比较前清除时间戳
 	for i := range expectedManagedFields {
 		expectedManagedFields[i].Time = nil
 	}
@@ -4052,7 +4052,7 @@ func TestDuplicatesInAssociativeLists(t *testing.T) {
     }
   }
 }`)
-	// Create the object
+	// 创建对象
 	obj, err := client.AppsV1().RESTClient().
 		Post().
 		Namespace("default").
@@ -4152,7 +4152,7 @@ func TestDuplicatesInAssociativeLists(t *testing.T) {
 	}
 ]`)
 
-	// Apply unrelated fields, fieldmanager should be strictly additive.
+	// apply 不相关的字段，fieldmanager 应当严格以追加方式更新。
 	ds = []byte(`
 apiVersion: apps/v1
 kind: DaemonSet
@@ -4319,7 +4319,7 @@ spec:
 ]
 `)
 
-	// Change name of some ports.
+	// 修改部分 port 的名称。
 	ds = []byte(`{
   "apiVersion": "apps/v1",
   "kind": "DaemonSet",
@@ -4556,7 +4556,7 @@ spec:
 ]
 `)
 
-	// Replaces envvars and paths.
+	// 替换环境变量和路径。
 	ds = []byte(`
 apiVersion: apps/v1
 kind: DaemonSet
@@ -4595,7 +4595,7 @@ spec:
 	}
 
 	daemon = obj.(*appsv1.DaemonSet)
-	// HOME is removed, PATH is replaced with 1.
+	// HOME 被移除，PATH 被替换为 1 个。
 	if want, got := 2, len(daemon.Spec.Template.Spec.Containers[0].Env); want != got {
 		t.Fatalf("Expected %v EnvVars, got %v", want, got)
 	}
@@ -4741,7 +4741,7 @@ func TestApplyMatchesFakeClientsetApply(t *testing.T) {
 	defer closeFn()
 	fakeClient := fake.NewClientset()
 
-	// The fake client does not default fields, so we set all defaulted fields directly.
+	// fake client 不会对字段做默认值填充，因此我们直接设置所有带默认值的字段。
 	deployment := appsv1ac.Deployment("deployment", "default").
 		WithLabels(map[string]string{"app": "nginx"}).
 		WithSpec(appsv1ac.DeploymentSpec().
@@ -4781,10 +4781,10 @@ func TestApplyMatchesFakeClientsetApply(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// wipe metadata except name, namespace, labels and managedFields (but wipe timestamps in managedFields)
+	// 清除 metadata，但保留 name、namespace、labels 和 managedFields（但清除 managedFields 中的时间戳）
 	realCreated.ObjectMeta = wipeMetadataForFakeClientTests(realCreated.ObjectMeta)
 	fakeCreated.ObjectMeta = wipeMetadataForFakeClientTests(fakeCreated.ObjectMeta)
-	// wipe status
+	// 清除 status
 	realCreated.Status = appsv1.DeploymentStatus{}
 	fakeCreated.Status = appsv1.DeploymentStatus{}
 	// TODO: Remove once https://github.com/kubernetes/kubernetes/issues/125671 is fixed.
@@ -4794,7 +4794,7 @@ func TestApplyMatchesFakeClientsetApply(t *testing.T) {
 		t.Errorf("Unexpected fake created: (-want +got): %v", diff)
 	}
 
-	// Force apply with a different field manager
+	// 使用不同的 field manager 强制 apply
 	deploymentUpdate := appsv1ac.Deployment("deployment", "default").
 		WithSpec(appsv1ac.DeploymentSpec().
 			WithReplicas(4))
@@ -4809,10 +4809,10 @@ func TestApplyMatchesFakeClientsetApply(t *testing.T) {
 		t.Fatalf("Failed to create object using Apply patch: %v", err)
 	}
 
-	// wipe metadata except name, namespace, labels and managedFields (but wipe timestamps in managedFields)
+	// 清除 metadata，但保留 name、namespace、labels 和 managedFields（但清除 managedFields 中的时间戳）
 	realUpdated.ObjectMeta = wipeMetadataForFakeClientTests(realUpdated.ObjectMeta)
 	fakeUpdated.ObjectMeta = wipeMetadataForFakeClientTests(fakeUpdated.ObjectMeta)
-	// wipe status
+	// 清除 status
 	realUpdated.Status = appsv1.DeploymentStatus{}
 	fakeUpdated.Status = appsv1.DeploymentStatus{}
 	// TODO: Remove once https://github.com/kubernetes/kubernetes/issues/125671 is fixed.
@@ -4860,10 +4860,10 @@ func expectManagedFields(t *testing.T, managedFields []metav1.ManagedFieldsEntry
 	}
 }
 
-// TestCreateOnApplyFailsWithForbidden makes sure that PATCH requests with the apply content type
-// will not create the object if the user does not have both patch and create permissions.
+// TestCreateOnApplyFailsWithForbidden 确保当用户不同时具备 patch 和 create 权限时，
+// 使用 apply content type 的 PATCH 请求不会创建对象。
 func TestCreateOnApplyFailsWithForbidden(t *testing.T) {
-	// Enable RBAC so we can exercise authorization errors.
+	// 启用 RBAC，以便触发授权错误。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, append([]string{"--authorization-mode=RBAC"}, framework.DefaultTestServerFlags()...), framework.SharedEtcd())
 	t.Cleanup(server.TearDownFn)
 

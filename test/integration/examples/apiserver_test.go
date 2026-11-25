@@ -241,19 +241,19 @@ func TestAPIServiceWaitOnStart(t *testing.T) {
 }
 
 func TestAggregatedAPIServer(t *testing.T) {
-	// Testing default, BanFlunder default=true in 1.2
+	// 测试默认情况，1.2 中 BanFlunder 默认为 true
 	t.Run("WithoutWardleFeatureGateAtV1.2", func(t *testing.T) {
 		testAggregatedAPIServer(t, false, true, "1.2", "1.2")
 	})
-	// Testing emulation version N, BanFlunder default=true in 1.1
+	// 测试模拟版本 N，1.1 中 BanFlunder 默认为 true
 	t.Run("WithoutWardleFeatureGateAtV1.1", func(t *testing.T) {
 		testAggregatedAPIServer(t, false, true, "1.1", "1.1")
 	})
-	// Testing emulation version N-1, BanFlunder default=false in 1.0
+	// 测试模拟版本 N-1，1.0 中 BanFlunder 默认为 false
 	t.Run("WithoutWardleFeatureGateAtV1.0", func(t *testing.T) {
 		testAggregatedAPIServer(t, false, false, "1.1", "1.0")
 	})
-	// Testing emulation version N-1, Explicitly set BanFlunder=true in 1.0
+	// 测试模拟版本 N-1，在 1.0 中显式设置 BanFlunder=true
 	t.Run("WithWardleFeatureGateAtV1.0", func(t *testing.T) {
 		testAggregatedAPIServer(t, true, true, "1.1", "1.0")
 	})
@@ -270,8 +270,8 @@ func TestFrontProxyConfig(t *testing.T) {
 	})
 }
 
-// TestFrontProxyConfig tests that the RequestHeader configuration is consumed
-// correctly by the aggregated API servers.
+// TestFrontProxyConfig 测试聚合 API server 是否正确消费
+// RequestHeader 配置。
 func testFrontProxyConfig(t *testing.T, withUID bool) {
 	const testNamespace = "integration-test-front-proxy-config"
 	const wardleBinaryVersion = "1.1"
@@ -279,8 +279,8 @@ func testFrontProxyConfig(t *testing.T, withUID bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	t.Cleanup(cancel)
 
-	// Set the emulation version for the kube-apiserver testserver by mapping
-	// the wardle version to the kube version.
+	// 通过将 wardle 版本映射为 kube 版本，为 kube-apiserver testserver
+	// 设置模拟版本。
 	wardleEmulationVersion := version.MustParse(wardleBinaryVersion)
 	kubeEmulationVersion := sampleserver.WardleVersionToKubeVersion(wardleEmulationVersion)
 	extraKASFlags := []string{
@@ -290,11 +290,11 @@ func testFrontProxyConfig(t *testing.T, withUID bool) {
 		extraKASFlags = []string{"--requestheader-uid-headers=x-remote-uid"}
 	}
 
-	// start up the KAS and prepare the options for the wardle API server
+	// 启动 KAS 并为 wardle API server 准备选项
 	testKAS, wardleOptions, wardlePort := prepareAggregatedWardleAPIServer(ctx, t, testNamespace, wardleBinaryVersion, extraKASFlags, withUID)
 	kubeConfig := getKubeConfig(testKAS)
 
-	// create the SA that we will use to query the aggregated API
+	// 创建用于查询聚合 API 的 SA
 	kubeClient := client.NewForConfigOrDie(kubeConfig)
 	expectedSA, err := kubeClient.CoreV1().ServiceAccounts(testNamespace).Create(ctx, &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -340,9 +340,9 @@ func testFrontProxyConfig(t *testing.T, withUID bool) {
 
 	var checksProcessed atomic.Uint32
 
-	// wrap the authz round tripper to catch the request for our SA SAR to the KAS
+	// 包装 authz round tripper，以捕获我们的 SA 发往 KAS 的 SAR 请求
 	wardleOptions.RecommendedOptions.Authorization.WithCustomRoundTripper(
-		// adding a round tripper wrapper to test default RequestHeader configuration
+		// 添加一个 round tripper 包装器，用于测试默认的 RequestHeader 配置
 		transport.WrapperFunc(func(rt http.RoundTripper) http.RoundTripper {
 			return roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 				gotUser, ok := genericapirequest.UserFrom(req.Context())
@@ -350,7 +350,7 @@ func testFrontProxyConfig(t *testing.T, withUID bool) {
 					return nil, fmt.Errorf("got an unauthenticated request")
 				}
 
-				// this is likely the KAS checking the OpenAPI endpoints
+				// 这可能是 KAS 在检查 OpenAPI endpoint
 				if gotUser.GetName() == "system:anonymous" || gotUser.GetName() == "system:aggregator" || gotUser.GetName() == "system:kube-aggregator" {
 					return rt.RoundTrip(req)
 				}
@@ -380,7 +380,7 @@ func testFrontProxyConfig(t *testing.T, withUID bool) {
 	runPreparedWardleServer(ctx, t, wardleOptions, wardleCertDir, wardlePort, false, true, wardleBinaryVersion, kubeConfig, withUID)
 	waitForWardleAPIServiceReady(ctx, t, kubeConfig, wardleCertDir, testNamespace)
 
-	// get the wardle API client using our SA token
+	// 使用我们的 SA token 获取 wardle API client
 	wardleClientConfig := rest.AnonymousClientConfig(kubeConfig)
 	wardleClientConfig.BearerToken = saToken
 	wardleClient := wardlev1alpha1client.NewForConfigOrDie(wardleClientConfig)
@@ -407,8 +407,8 @@ func testAggregatedAPIServer(t *testing.T, setWardleFeatureGate, banFlunder bool
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	t.Cleanup(cancel)
 
-	// set the emulation version for the kube-apiserver testserver by mapping
-	// the wardle version to the kube version.
+	// 通过将 wardle 版本映射为 kube 版本，为 kube-apiserver testserver
+	// 设置模拟版本。
 	wardleEmulationVersion := version.MustParse(wardleEmulationVersionRaw)
 	kubeEmulationVersion := sampleserver.WardleVersionToKubeVersion(wardleEmulationVersion)
 	extraKASFlags := []string{
@@ -423,7 +423,7 @@ func testAggregatedAPIServer(t *testing.T, setWardleFeatureGate, banFlunder bool
 
 	directWardleClientConfig := runPreparedWardleServer(ctx, t, wardleOptions, wardleCertDir, wardlePort, setWardleFeatureGate, banFlunder, wardleEmulationVersionRaw, kubeClientConfig, false)
 
-	// now we're finally ready to test. These are what's run by default now
+	// 现在终于可以开始测试了。这些是默认运行的内容
 	wardleDirectClient := client.NewForConfigOrDie(directWardleClientConfig)
 	testAPIGroupList(ctx, t, wardleDirectClient.Discovery().RESTClient())
 	testAPIGroup(ctx, t, wardleDirectClient.Discovery().RESTClient())
@@ -433,7 +433,7 @@ func testAggregatedAPIServer(t *testing.T, setWardleFeatureGate, banFlunder bool
 
 	waitForWardleAPIServiceReady(ctx, t, kubeClientConfig, wardleCertDir, testNamespace)
 
-	// perform simple CRUD operations against the wardle resources
+	// 对 wardle 资源执行简单的 CRUD 操作
 	_, err := wardleClient.Fischers().Create(ctx, &wardlev1alpha1.Fischer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "panda",
@@ -443,7 +443,7 @@ func testAggregatedAPIServer(t *testing.T, setWardleFeatureGate, banFlunder bool
 	if err != nil {
 		t.Fatal(err)
 	}
-	// clean up data after test is done
+	// 测试完成后清理数据
 	defer wardleClient.Fischers().Delete(ctx, "panda", metav1.DeleteOptions{})
 	fischersList, err := wardleClient.Fischers().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -495,12 +495,12 @@ func testAggregatedAPIServer(t *testing.T, setWardleFeatureGate, banFlunder bool
 		t.Error("expected non-empty resource version for flunder list")
 	}
 
-	// Since ClientCAs are provided by "client-ca::kube-system::extension-apiserver-authentication::client-ca-file" controller
-	// we need to wait until it picks up the configmap (via a lister) otherwise the response might contain an empty result.
-	// The following code waits up to ForeverTestTimeout seconds for ClientCA to show up otherwise it fails
-	// maybe in the future this could be wired into the /readyz EP
+	// 由于 ClientCA 由 "client-ca::kube-system::extension-apiserver-authentication::client-ca-file" controller
+	// 提供，我们需要等待它通过 lister 读取 configmap，否则响应中可能包含空结果。
+	// 以下代码最多等待 ForeverTestTimeout 秒，等待 ClientCA 出现，否则测试失败，
+	// 也许将来可以将其接入 /readyz EP。
 
-	// Now we want to verify that the client CA bundles properly reflect the values for the cluster-authentication
+	// 现在我们要验证 client CA bundle 正确反映了 cluster-authentication 的配置值
 	var firstKubeCANames []string
 	err = wait.Poll(1*time.Second, wait.ForeverTestTimeout, func() (done bool, err error) {
 		firstKubeCANames, err = cert.GetClientCANamesForURL(kubeClientConfig.Host)
@@ -525,23 +525,23 @@ func testAggregatedAPIServer(t *testing.T, setWardleFeatureGate, banFlunder bool
 		t.Fatal(err)
 	}
 	t.Log(firstWardleCANames)
-	// Now we want to verify that the client CA bundles properly reflect the values for the cluster-authentication
+	// 现在我们要验证 client CA bundle 正确反映了 cluster-authentication 的配置值
 	if !reflect.DeepEqual(firstKubeCANames, firstWardleCANames) {
 		t.Fatal("names don't match")
 	}
 
-	// now we update the client-ca nd request-header-client-ca-file and the kas will consume it, update the configmap
-	// and then the wardle server will detect and update too.
+	// 现在我们更新 client-ca 和 request-header-client-ca-file，KAS 会消费它并更新 configmap，
+	// 随后 wardle server 也会检测到并更新。
 	if err := os.WriteFile(path.Join(testKAS.TmpDir, "client-ca.crt"), differentClientCA, 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path.Join(testKAS.TmpDir, "proxy-ca.crt"), differentFrontProxyCA, 0644); err != nil {
 		t.Fatal(err)
 	}
-	// wait for it to be picked up.  there's a test in certreload_test.go that ensure this works
+	// 等待其被读取。certreload_test.go 中有一个测试可确保此机制有效
 	time.Sleep(4 * time.Second)
 
-	// Now we want to verify that the client CA bundles properly updated to reflect the new values written for the kube-apiserver
+	// 现在我们要验证 client CA bundle 已正确更新，反映为 kube-apiserver 写入的新值
 	secondKubeCANames, err := cert.GetClientCANamesForURL(kubeClientConfig.Host)
 	if err != nil {
 		t.Fatal(err)
@@ -558,7 +558,7 @@ func testAggregatedAPIServer(t *testing.T, setWardleFeatureGate, banFlunder bool
 	}
 	t.Log(secondWardleCANames)
 
-	// second wardle should contain all the certs, first and last
+	// 第二个 wardle 应包含所有证书，包括最初的和最新的
 	numMatches := 0
 	for _, needle := range firstKubeCANames {
 		for _, haystack := range secondWardleCANames {
@@ -603,22 +603,22 @@ func TestAggregatedAPIServerRejectRedirectResponse(t *testing.T) {
 	}))
 	defer redirectServer.Close()
 
-	// endpoints cannot have loopback IPs so we need to override the resolver itself
+	// endpoint 不能使用 loopback IP，因此我们需要覆盖 resolver 本身
 	t.Cleanup(app.SetServiceResolverForTests(staticURLServiceResolver(fmt.Sprintf("https://%s", redirectServer.Listener.Addr().String()))))
 
-	// start the server after resolver is overwritten
+	// 在 resolver 被覆盖后启动 server
 	redirectServer.StartTLS()
 
 	testServer := kastesting.StartTestServerOrDie(t, &kastesting.TestServerInstanceOptions{EnableCertAuth: false}, nil, framework.SharedEtcd())
 	defer testServer.TearDownFn()
 	kubeClientConfig := rest.CopyConfig(testServer.ClientConfig)
-	// force json because everything speaks it
+	// 强制使用 json，所有组件都支持它
 	kubeClientConfig.ContentType = ""
 	kubeClientConfig.AcceptContentTypes = ""
 	kubeClient := client.NewForConfigOrDie(kubeClientConfig)
 	aggregatorClient := aggregatorclient.NewForConfigOrDie(kubeClientConfig)
 
-	// create the bare minimum resources required to be able to get the API service into an available state
+	// 创建使 API service 进入 available 状态所需的最少资源
 	_, err := kubeClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "kube-redirect",
@@ -658,7 +658,7 @@ func TestAggregatedAPIServerRejectRedirectResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// wait for the API service to be available
+	// 等待 API service 变为 available
 	err = wait.Poll(time.Second, wait.ForeverTestTimeout, func() (done bool, err error) {
 		apiService, err := aggregatorClient.ApiregistrationV1().APIServices().Get(ctx, "v1alpha1.reject.redirect.example.com", metav1.GetOptions{})
 		if err != nil {
@@ -681,9 +681,9 @@ func TestAggregatedAPIServerRejectRedirectResponse(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 
-	// get raw response to check the original error and msg
+	// 获取原始响应，以检查最初的错误和消息
 	expectedMsg := "the backend attempted to redirect this request, which is not permitted"
-	// add specific request path suffix to discriminate between request from client and generic pings from the aggregator
+	// 添加特定的请求路径后缀，以区分来自客户端的请求和来自 aggregator 的通用 ping
 	url := url.URL{
 		Path: "/apis/reject.redirect.example.com/v1alpha1/tryRedirect",
 	}
@@ -696,15 +696,15 @@ func TestAggregatedAPIServerRejectRedirectResponse(t *testing.T) {
 }
 
 func prepareAggregatedWardleAPIServer(ctx context.Context, t *testing.T, namespace, wardleBinaryVersion string, kubeAPIServerFlags []string, withUID bool) (*kastesting.TestServer, *sampleserver.WardleServerOptions, int) {
-	// makes the kube-apiserver very responsive.  it's normally a minute
+	// 让 kube-apiserver 响应更快，通常需要一分钟
 	dynamiccertificates.FileRefreshDuration = 1 * time.Second
 
-	// we need the wardle port information first to set up the service resolver
+	// 我们首先需要 wardle 的端口信息，以设置 service resolver
 	listener, wardlePort, err := genericapiserveroptions.CreateListener("tcp", "127.0.0.1:0", net.ListenConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// endpoints cannot have loopback IPs so we need to override the resolver itself
+	// endpoint 不能使用 loopback IP，因此我们需要覆盖 resolver 本身
 	t.Cleanup(app.SetServiceResolverForTests(staticURLServiceResolver(fmt.Sprintf("https://127.0.0.1:%d", wardlePort))))
 
 	testServer := kastesting.StartTestServerOrDie(t,
@@ -715,8 +715,8 @@ func prepareAggregatedWardleAPIServer(ctx context.Context, t *testing.T, namespa
 		framework.SharedEtcd())
 	t.Cleanup(func() { testServer.TearDownFn() })
 
-	// Create a new registry since the testServer's ComponentGlobalsRegistry is already Set(),
-	// and wardle server would try to Set() again in the test.
+	// 创建新的 registry，因为 testServer 的 ComponentGlobalsRegistry 已经被 Set()，
+	// 而 wardle server 在测试中会再次尝试 Set()。
 	componentGlobalsRegistry := basecompatibility.NewComponentGlobalsRegistry()
 	_, _ = componentGlobalsRegistry.ComponentGlobalsOrRegister(
 		basecompatibility.DefaultKubeComponent,
@@ -729,7 +729,7 @@ func prepareAggregatedWardleAPIServer(ctx context.Context, t *testing.T, namespa
 
 	kubeClient := client.NewForConfigOrDie(getKubeConfig(testServer))
 
-	// create the bare minimum resources required to be able to get the API service into an available state
+	// 创建使 API service 进入 available 状态所需的最少资源
 	_, err = kubeClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
@@ -753,7 +753,7 @@ func prepareAggregatedWardleAPIServer(ctx context.Context, t *testing.T, namespa
 
 	wardleOptions := sampleserver.NewWardleServerOptions(os.Stdout, os.Stderr)
 	wardleOptions.ComponentGlobalsRegistry = componentGlobalsRegistry
-	// ensure this is a SAN on the generated cert for service FQDN
+	// 确保这是生成的证书中对应 Service FQDN 的 SAN
 	wardleOptions.AlternateDNS = []string{
 		fmt.Sprintf("api.%s.svc", namespace),
 	}
@@ -776,7 +776,7 @@ func runPreparedWardleServer(
 	withUID bool,
 ) *rest.Config {
 
-	// start the wardle server to prove we can aggregate it
+	// 启动 wardle server，以证明我们可以聚合它
 	wardleToKASKubeConfigFile := writeKubeConfigForWardleServerToKASConnection(t, rest.CopyConfig(kubeConfig))
 	t.Cleanup(func() { os.Remove(wardleToKASKubeConfigFile) })
 
@@ -792,7 +792,7 @@ func runPreparedWardleServer(
 		if flunderBanningFeatureGate {
 			args = append(args, "--feature-gates", fmt.Sprintf("wardle:BanFlunder=%v", banFlunder))
 		}
-		// TODO figure out how to actually make BinaryVersion/EmulationVersion work with Wardle and KAS at the same time when Alpha FG are being set
+		// TODO 弄清楚在设置 Alpha FG 时，如何真正让 BinaryVersion/EmulationVersion 同时适用于 Wardle 和 KAS
 		wardleCmd := sampleserver.NewCommandStartWardleServer(ctx, wardleOptions, withUID)
 		wardleCmd.SetArgs(args)
 		if err := wardleCmd.Execute(); err != nil {
@@ -834,7 +834,7 @@ func waitForWardleAPIServiceReady(ctx context.Context, t *testing.T, kubeConfig 
 		t.Fatal(err)
 	}
 
-	// wait for the API service to be available
+	// 等待 API service 变为 available
 	err = wait.Poll(time.Second, wait.ForeverTestTimeout, func() (done bool, err error) {
 		apiService, err := aggregatorClient.ApiregistrationV1().APIServices().Get(ctx, "v1alpha1.wardle.example.com", metav1.GetOptions{})
 		if err != nil {
@@ -852,14 +852,14 @@ func waitForWardleAPIServiceReady(ctx context.Context, t *testing.T, kubeConfig 
 			return false, nil
 		}
 
-		// make sure discovery is healthy overall
+		// 确保 discovery 整体健康
 		_, _, err = kubeClient.Discovery().ServerGroupsAndResources()
 		if err != nil {
 			t.Log("discovery failed", err)
 			return false, nil
 		}
 
-		// make sure we have the wardle resources in discovery
+		// 确保 discovery 中包含 wardle 资源
 		apiResources, err := kubeClient.Discovery().ServerResourcesForGroupVersion("wardle.example.com/v1alpha1")
 		if err != nil {
 			t.Log("wardle discovery failed", err)
@@ -887,7 +887,7 @@ func waitForWardleAPIServiceReady(ctx context.Context, t *testing.T, kubeConfig 
 
 func getKubeConfig(testServer *kastesting.TestServer) *rest.Config {
 	kubeClientConfig := rest.CopyConfig(testServer.ClientConfig)
-	// force json because everything speaks it
+	// 强制使用 json，所有组件都支持它
 	kubeClientConfig.ContentType = ""
 	kubeClientConfig.AcceptContentTypes = ""
 
@@ -904,14 +904,14 @@ func waitForWardleRunning(ctx context.Context, t *testing.T, wardleToKASKubeConf
 	lastHealthContent := []byte{}
 	var lastHealthErr error
 	err := wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (done bool, err error) {
-		if _, err := os.Stat(directWardleClientConfig.CAFile); os.IsNotExist(err) { // wait until the file trust is created
+		if _, err := os.Stat(directWardleClientConfig.CAFile); os.IsNotExist(err) { // 等待信任文件创建完成
 			lastHealthErr = err
 			return false, nil
 		}
 		directWardleClientConfig.Host = fmt.Sprintf("https://127.0.0.1:%d", wardlePort)
 		wardleClient, err = client.NewForConfig(directWardleClientConfig)
 		if err != nil {
-			// this happens because we race the API server start
+			// 这是因为我们与 API server 的启动过程发生了竞态
 			t.Log(err)
 			return false, nil
 		}
@@ -935,9 +935,9 @@ func waitForWardleRunning(ctx context.Context, t *testing.T, wardleToKASKubeConf
 func wardleCAFilePath(wardleCertDir string) string { return path.Join(wardleCertDir, "apiserver.crt") }
 
 func writeKubeConfigForWardleServerToKASConnection(t *testing.T, kubeClientConfig *rest.Config) string {
-	// write a kubeconfig out for starting other API servers with delegated auth.  remember, no in-cluster config
-	// the loopback client config uses a loopback cert with different SNI.  We need to use the "real"
-	// cert, so we'll hope we aren't hacked during a unit test and instead load it from the server we started.
+	// 写出一个 kubeconfig，用于以 delegated auth 启动其他 API server。记住，没有 in-cluster 配置。
+	// loopback client 配置使用具有不同 SNI 的 loopback 证书。我们需要使用"真实"证书，
+	// 因此希望在单元测试期间不会被攻击，直接从我们启动的 server 加载它。
 	wardleToKASKubeClientConfig := rest.CopyConfig(kubeClientConfig)
 
 	servingCerts, _, err := cert.GetServingCertificatesForURL(wardleToKASKubeClientConfig.Host, "")
@@ -1079,7 +1079,7 @@ func testAPIResourceList(ctx context.Context, t *testing.T, client rest.Interfac
 }
 
 var (
-	// I have no idea what these certs are, they just need to be different
+	// 我不知道这些证书是什么，它们只需要互不相同
 	differentClientCA = []byte(`-----BEGIN CERTIFICATE-----
 MIIDQDCCAiigAwIBAgIJANWw74P5KJk2MA0GCSqGSIb3DQEBCwUAMDQxMjAwBgNV
 BAMMKWdlbmVyaWNfd2ViaG9va19hZG1pc3Npb25fcGx1Z2luX3Rlc3RzX2NhMCAX

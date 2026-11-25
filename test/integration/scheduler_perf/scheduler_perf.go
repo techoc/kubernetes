@@ -81,11 +81,11 @@ const (
 )
 
 const (
-	// Two modes supported in "churn" operator.
+	// "churn" 操作支持两种模式。
 
-	// Create continuously create API objects without deleting them.
+	// Create 持续创建 API 对象而不删除它们。
 	Create = "create"
-	// Recreate creates a number of API objects and then delete them, and repeat the iteration.
+	// Recreate 创建一批 API 对象后将其删除，并重复该过程。
 	Recreate = "recreate"
 )
 
@@ -96,10 +96,10 @@ const (
 	eventLabelName           = "event"
 )
 
-// Run with -v=2, this is the default log level in production.
+// 使用 -v=2 运行，这是生产环境中的默认日志级别。
 //
-// In a PR this can be bumped up temporarily to run pull-kubernetes-scheduler-perf
-// with more log output.
+// 在 PR 中可以临时调高该值，以便运行 pull-kubernetes-scheduler-perf
+// 时输出更多日志。
 const DefaultLoggingVerbosity = 2
 
 var LoggingFeatureGate FeatureGateFlag
@@ -171,8 +171,8 @@ var (
 		},
 	}
 
-	// PluginNames is the names of the plugins that scheduler_perf collects metrics for.
-	// We export this variable because people outside k/k may want to put their custom plugins.
+	// PluginNames 是 scheduler_perf 为其收集指标的插件名称列表。
+	// 我们导出该变量，因为 k/k 之外的人可能希望加入自己的自定义插件。
 	PluginNames = []string{
 		names.PrioritySort,
 		names.DefaultBinder,
@@ -207,20 +207,20 @@ var enableTrace bool
 var withDataItemsUniqueID bool
 var perTestFilePrefix string
 
-// InitTests should be called in a TestMain in each config subdirectory.
+// InitTests 应在每个配置子目录的 TestMain 中调用。
 func InitTests() error {
-	// Run with -v=2, this is the default log level in production.
+	// 使用 -v=2 运行，这是生产环境中的默认日志级别。
 	ktesting.SetDefaultVerbosity(DefaultLoggingVerbosity)
 
-	// test/integration/framework/flags.go unconditionally initializes the
-	// logging flags. That's correct for most tests, but in the
-	// scheduler_perf test we want more control over the flags, therefore
-	// here strip them out.
+	// test/integration/framework/flags.go 会无条件初始化
+	// 日志相关的 flag。对大多数测试来说这是正确的，但在
+	// scheduler_perf 测试中我们希望更好地控制这些 flag，
+	// 因此在这里将它们剥离。
 	var fs flag.FlagSet
 	flag.CommandLine.VisitAll(func(f *flag.Flag) {
 		switch f.Name {
 		case "log-flush-frequency", "v", "vmodule":
-			// These will be added below ourselves, don't copy.
+			// 这些稍后由我们自己添加，不复制过来。
 		default:
 			fs.Var(f.Value, f.Name, f.Usage)
 		}
@@ -241,7 +241,7 @@ func InitTests() error {
 	flag.BoolVar(&enableTrace, "perf-trace", false, "write an execution trace for each test")
 	flag.BoolVar(&withDataItemsUniqueID, "with-data-items-unique-id", true, "include a unique run ID in the names of files written to -data-items-dir")
 
-	// This would fail if we hadn't removed the logging flags above.
+	// 如果没有去掉上面的日志 flag，这里就会失败。
 	logsapi.AddGoFlags(LoggingConfig, flag.CommandLine)
 
 	flag.Parse()
@@ -250,37 +250,36 @@ func InitTests() error {
 	return logsapi.ValidateAndApply(LoggingConfig, LoggingFeatureGate)
 }
 
-// testCase defines a set of test cases that intends to test the performance of
-// similar workloads of varying sizes with shared overall settings such as
-// feature gates and metrics collected.
+// testCase 定义一组测试用例，用于在共享的总体设置（如
+// feature gate 和收集的指标）下，测试不同规模的类似工作负载的性能。
 type testCase struct {
-	// Name of the testCase.
+	// testCase 的名称。
 	Name string
-	// Feature gates to set before running the test.
-	// Optional
+	// 运行测试前要设置的 feature gate。
+	// 可选
 	FeatureGates map[featuregate.Feature]bool
-	// List of metrics to collect. Defaults to
-	// defaultMetricsCollectorConfig if unspecified.
-	// Optional
+	// 要收集的指标列表。如果未指定，则默认使用
+	// defaultMetricsCollectorConfig。
+	// 可选
 	MetricsCollectorConfig *metricsCollectorConfig
-	// Template for sequence of ops that each workload must follow. Each op will
-	// be executed serially one after another.
+	// 每个工作负载必须遵循的操作序列模板。每个操作将
+	// 按顺序依次执行。
 	WorkloadTemplate []op
-	// List of workloads to run under this testCase.
+	// 在该 testCase 下运行的工作负载列表。
 	Workloads []*Workload
-	// SchedulerConfigPath is the path of scheduler configuration
-	// Optional
+	// SchedulerConfigPath 是调度器配置的路径
+	// 可选
 	SchedulerConfigPath string
-	// Default path to spec file describing the pods to create.
-	// This path can be overridden in createPodsOp by setting PodTemplatePath .
-	// Optional
+	// 描述要创建的 Pod 的 spec 文件的默认路径。
+	// 可以在 createPodsOp 中通过设置 PodTemplatePath 覆盖此路径。
+	// 可选
 	DefaultPodTemplatePath *string
-	// Labels can be used to enable or disable workloads inside this test case.
+	// Labels 可用于启用或禁用该测试用例内的工作负载。
 	Labels []string
-	// DefaultThresholdMetricSelector defines default metric used for threshold comparison.
-	// It is only populated to workloads without their ThresholdMetricSelector set.
-	// If nil, the default metric is set to "SchedulingThroughput" with "Average" data bucket.
-	// Optional
+	// DefaultThresholdMetricSelector 定义用于阈值比较的默认指标。
+	// 它只会填充给未设置 ThresholdMetricSelector 的工作负载。
+	// 如果为 nil，默认指标设为 "SchedulingThroughput"，数据桶为 "Average"。
+	// 可选
 	DefaultThresholdMetricSelector *thresholdMetricSelector
 }
 
@@ -304,40 +303,39 @@ func (tc *testCase) workloadNamesUnique() error {
 	return nil
 }
 
-// Workload is a subtest under a testCase that tests the scheduler performance
-// for a certain ordering of ops. The set of nodes created and pods scheduled
-// in a Workload may be heterogeneous.
+// Workload 是 testCase 下的子测试，用于按特定的操作顺序测试调度器性能。
+// 一个 Workload 中创建的节点和被调度的 Pod 可以是异构的。
 type Workload struct {
-	// Name of the workload.
+	// 工作负载的名称。
 	Name string
-	// Values of parameters used in the workloadTemplate.
+	// workloadTemplate 中使用的参数值。
 	Params params
-	// Labels can be used to enable or disable a workload.
+	// Labels 可用于启用或禁用某个工作负载。
 	Labels []string
-	// Threshold is compared to average value of metric specified using thresholdMetricSelector.
-	// The comparison is performed for op with CollectMetrics set to true.
-	// If the measured value is below the threshold, the workload's test case will fail.
-	// If set to zero, the threshold check is disabled.
+	// Threshold 会与 thresholdMetricSelector 指定指标的平均值进行比较。
+	// 比较针对 CollectMetrics 设为 true 的操作进行。
+	// 如果测量值低于阈值，该工作负载所属的测试用例将失败。
+	// 如果设为零，则禁用阈值检查。
 	//
-	// May contain a single value or map of topic name to value.
-	// The single value is used if there is no entry in the map for the topic name.
-	// Topic names are passed to RunBenchmarkPerfScheduling. This approach
-	// makes it possible to reuse the same test cases in different configurations.
+	// 可以是单个值，也可以是主题名到值的映射。
+	// 如果映射中没有对应主题名的条目，则使用单个值。
+	// 主题名会传给 RunBenchmarkPerfScheduling。这种方式
+	// 使得同一批测试用例可以在不同配置下复用。
 	//
-	// Optional
+	// 可选
 	Threshold thresholds
-	// ThresholdMetricSelector defines to what metric the Threshold should be compared.
-	// If nil, the metric is set to DefaultThresholdMetricSelector of the testCase.
-	// If DefaultThresholdMetricSelector is nil, the metric is set to "SchedulingThroughput".
-	// Optional
+	// ThresholdMetricSelector 定义 Threshold 与哪个指标进行比较。
+	// 如果为 nil，则使用 testCase 的 DefaultThresholdMetricSelector。
+	// 如果 DefaultThresholdMetricSelector 也为 nil，则使用 "SchedulingThroughput"。
+	// 可选
 	ThresholdMetricSelector *thresholdMetricSelector
-	// Feature gates to set before running the workload.
-	// Explicitly setting a feature in this map overrides the test case settings.
-	// Optional
+	// 运行工作负载前要设置的 feature gate。
+	// 在此映射中显式设置某个 feature 会覆盖测试用例的设置。
+	// 可选
 	FeatureGates map[featuregate.Feature]bool
 }
 
-// GetParam retrieves a parameter from the Workload's parameters as an integer.
+// GetParam 从 Workload 的参数中按整数取出一个参数。
 func (w *Workload) GetParam(key string) (int, error) {
 	return w.Params.get(key)
 }
@@ -363,7 +361,7 @@ func (w *Workload) setDefaults(testCaseThresholdMetricSelector *thresholdMetricS
 		w.ThresholdMetricSelector = testCaseThresholdMetricSelector
 		return
 	}
-	// By default, SchedulingThroughput Average should be compared with the threshold.
+	// 默认情况下，应将 SchedulingThroughput 的 Average 与阈值比较。
 	w.ThresholdMetricSelector = &thresholdMetricSelector{
 		Name:       "SchedulingThroughput",
 		DataBucket: "Average",
@@ -377,7 +375,7 @@ type thresholds struct {
 
 func (t *thresholds) UnmarshalJSON(text []byte) error {
 	if errFloat64 := json.Unmarshal(text, &t.value); errFloat64 != nil {
-		// Not a plain number. Let's try as map.
+		// 不是普通数字，尝试按映射解析。
 		if errMap := json.Unmarshal(text, &t.valuesByTopic); errMap != nil {
 			return fmt.Errorf("expected either float64 or topic name -> float64 map: %w, %w", errFloat64, errMap)
 		}
@@ -392,17 +390,17 @@ func (t *thresholds) Get(topicName string) float64 {
 	return t.value
 }
 
-// thresholdMetricSelector defines the name and labels of metric to compare with threshold.
+// thresholdMetricSelector 定义要与阈值比较的指标的名称和标签。
 type thresholdMetricSelector struct {
-	// Name of the metric is compared to "Metric" field in DataItem labels.
+	// 指标名称，与 DataItem 标签中的 "Metric" 字段比较。
 	Name string
-	// Labels of the metric. All of them needs to match the metric's labels to assume equality.
+	// 指标的标签。必须全部与指标的标签匹配才认为相等。
 	Labels map[string]string
-	// DataBucket specifies which data bucket should be compared against the threshold.
+	// DataBucket 指定应将数据桶中的哪个值与阈值比较。
 	DataBucket string
-	// ExpectLower defines whether the threshold should denote the maximum allowable value of the metric.
-	// If false, the threshold defines minimum allowable value.
-	// Optional
+	// ExpectLower 定义阈值是否表示指标的最大允许值。
+	// 如果为 false，则阈值表示最小允许值。
+	// 可选
 	ExpectLower bool
 }
 
@@ -433,11 +431,11 @@ func (ms thresholdMetricSelector) isValid(mcc *metricsCollectorConfig) error {
 
 type params struct {
 	params map[string]any
-	// isUsed field records whether params is used or not.
+	// isUsed 字段记录参数是否被使用过。
 	isUsed map[string]bool
 }
 
-// UnmarshalJSON is a custom unmarshaler for params.
+// UnmarshalJSON 是 params 的自定义反序列化器。
 //
 // from(json):
 //
@@ -453,7 +451,7 @@ type params struct {
 //			"intNodes": 500,
 //			"initPods": 50,
 //		},
-//		isUsed: map[string]bool{}, // empty map
+//		isUsed: map[string]bool{}, // 空 map
 //	}
 func (p *params) UnmarshalJSON(b []byte) error {
 	aux := map[string]any{}
@@ -467,9 +465,9 @@ func (p *params) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// get retrieves the parameter as an integer
+// get 以整数形式取出参数
 func (p params) get(key string) (int, error) {
-	// JSON unmarshal integer constants in an "any" field as float.
+	// JSON 反序列化会把 "any" 字段中的整数常量解为浮点数。
 	f, err := getParam[float64](p, key)
 	if err != nil {
 		return 0, err
@@ -477,9 +475,9 @@ func (p params) get(key string) (int, error) {
 	return int(f), nil
 }
 
-// getParam retrieves the parameter as specific type. There is no conversion,
-// so in practice this means that only types that JSON unmarshalling uses
-// (float64, string, bool) work.
+// getParam 以指定类型取出参数。这里不做类型转换，
+// 因此实际上只有 JSON 反序列化所使用的类型
+// （float64、string、bool）才有效。
 func getParam[T float64 | string | bool](p params, key string) (T, error) {
 	p.isUsed[key] = true
 	param, ok := p.params[key]
@@ -494,7 +492,7 @@ func getParam[T float64 | string | bool](p params, key string) (T, error) {
 	return t, nil
 }
 
-// unusedParams returns the names of unusedParams
+// unusedParams 返回未使用参数的名称
 func (w Workload) unusedParams() []string {
 	var ret []string
 	for name := range w.Params.params {
@@ -505,13 +503,13 @@ func (w Workload) unusedParams() []string {
 	return ret
 }
 
-// op is a dummy struct which stores the real op in itself.
+// op 是一个哑结构体，真正的操作存放在其内部。
 type op struct {
 	realOp realOp
 }
 
-// UnmarshalJSON is a custom unmarshaler for the op struct since we don't know
-// which op we're decoding at runtime.
+// UnmarshalJSON 是 op 结构体的自定义反序列化器，因为在运行时
+// 我们并不知道正在解码的是哪个操作。
 func (op *op) UnmarshalJSON(b []byte) error {
 	possibleOps := map[operationCode]realOp{
 		allocResourceClaimsOpcode:    &allocResourceClaimsOp{},
@@ -533,7 +531,7 @@ func (op *op) UnmarshalJSON(b []byte) error {
 		stopCollectingProfileOpcode:  &stopCollectingProfileOp{},
 		// TODO(#94601): add a delete nodes op to simulate scaling behaviour?
 	}
-	// First determine the opcode using lenient decoding (= ignore extra fields).
+	// 首先使用宽松解码（即忽略多余字段）确定 opcode。
 	var possibleOp struct {
 		Opcode operationCode
 	}
@@ -556,34 +554,33 @@ func (op *op) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// realOp is an interface that is implemented by different structs. To evaluate
-// the validity of ops at parse-time, a isValid function must be implemented.
+// realOp 是由不同结构体实现的接口。为了在解析时检查操作的有效性，
+// 必须实现 isValid 函数。
 type realOp interface {
-	// isValid verifies the validity of the op args such as node/pod count. Note
-	// that we don't catch undefined parameters at this stage.
+	// isValid 检查操作参数（如节点/Pod 数量）的有效性。注意，
+	// 在这个阶段我们不会捕获未定义的参数。
 	//
-	// This returns errInvalidOp if the configured operation does not match.
+	// 如果配置的操作不匹配，则返回 errInvalidOp。
 	isValid(allowParameterization bool) error
-	// collectsMetrics checks if the op collects metrics.
+	// collectsMetrics 检查该操作是否收集指标。
 	collectsMetrics() bool
-	// patchParams returns a patched realOp of the same type after substituting
-	// parameterizable values with workload-specific values. One should implement
-	// this method on the value receiver base type, not a pointer receiver base
-	// type, even though calls will be made from with a *realOp. This is because
-	// callers don't want the receiver to inadvertently modify the realOp
-	// (instead, it's returned as a return value).
+	// patchParams 在将可参数化的值替换为工作负载特定的值之后，
+	// 返回一个同类型的修补后 realOp。尽管调用是通过 *realOp 发起的，
+	// 但该方法应实现在值接收者的基础类型上，而不是指针接收者的基础类型上。
+	// 这是因为调用方不希望接收者意外地修改 realOp
+	//（而是将其作为返回值返回）。
 	patchParams(w *Workload) (realOp, error)
 }
 
-// runnableOp is an interface implemented by some operations. It makes it possible
-// to execute the operation without having to add separate code into runWorkload.
+// runnableOp 是部分操作实现的接口。它使得执行操作无需在 runWorkload 中
+// 添加额外的代码。
 type runnableOp interface {
 	realOp
 
-	// requiredNamespaces returns all namespaces that runWorkload must create
-	// before running the operation.
+	// requiredNamespaces 返回 runWorkload 在运行该操作前
+	// 必须创建的所有命名空间。
 	requiredNamespaces() []string
-	// run executes the steps provided by the operation.
+	// run 执行该操作提供的步骤。
 	run(ktesting.TContext)
 }
 
@@ -593,7 +590,7 @@ func isValidParameterizable(val string) bool {
 
 func isValidCount(allowParameterization bool, count int, countParam string) bool {
 	if !allowParameterization || countParam == "" {
-		// Ignore parameter. The value itself must be okay.
+		// 忽略参数，值本身必须合法。
 		return count >= 0
 	}
 	return isValidParameterizable(countParam)
@@ -613,10 +610,9 @@ func initTestOutput(tb testing.TB) io.Writer {
 		output = fileOutput
 
 		tb.Cleanup(func() {
-			// Dump the log output when the test is done.  The user
-			// can decide how much of it will be visible in case of
-			// success: then "go test" truncates, "go test -v"
-			// doesn't. All of it will be shown for a failure.
+			// 测试结束后转储日志输出。若测试成功，用户
+			// 可决定显示多少内容："go test" 会截断，
+			// "go test -v" 则不会。失败时会显示全部内容。
 			if err := fileOutput.Close(); err != nil {
 				tb.Fatalf("close log file: %v", err)
 			}
@@ -636,13 +632,11 @@ func setupTestCase(t testing.TB, tc *testCase, featureGates map[featuregate.Feat
 	tCtx := ktesting.Init(t, initoption.PerTestOutput(UseTestingLog))
 	artifacts, doArtifacts := os.LookupEnv("ARTIFACTS")
 	if !UseTestingLog && doArtifacts {
-		// Reconfigure logging so that it goes to a separate file per
-		// test instead of stderr. If the test passes, the file gets
-		// deleted. The overall output can be very large (> 200 MB for
-		// ci-benchmark-scheduler-perf-master). With this approach, we
-		// have log output for failures without having to store large
-		// amounts of data that no-one is looking at. The performance
-		// is the same as writing to stderr.
+		// 重新配置日志，使其按测试写入单独的文件，
+		// 而不是写入 stderr。如果测试通过，该文件会被
+		// 删除。总体输出可能非常大（ci-benchmark-scheduler-perf-master
+		// 超过 200 MB）。采用这种方式，我们既能保留失败时的日志输出，
+		// 又无需存储大量无人查看的数据。性能与写入 stderr 相同。
 		if err := logsapi.ResetForTest(LoggingFeatureGate); err != nil {
 			t.Fatalf("Failed to reset the logging configuration: %v", err)
 		}
@@ -652,23 +646,21 @@ func setupTestCase(t testing.TB, tc *testCase, featureGates map[featuregate.Feat
 			t.Fatalf("Failed to create per-test log output file: %v", err)
 		}
 		t.Cleanup(func() {
-			// Everything should have stopped by now, checked below
-			// by GoleakCheck (which runs first during test
-			// shutdown!). Therefore we can clean up. Errors get logged
-			// and fail the test, but cleanup tries to continue.
+			// 到这里所有内容都应该已经停止，下面的
+			// GoleakCheck 会进行检查（它在测试
+			// 关闭时最先运行！）。因此可以进行清理。错误会被记录
+			// 并使测试失败，但清理仍会继续进行。
 			//
-			// Note that the race detector will flag any goroutine
-			// as causing a race if there is no explicit wait for
-			// that goroutine to stop.  We know that they must have
-			// stopped (GoLeakCheck!) but the race detector
-			// doesn't.
+			// 注意，如果没有显式等待某个 goroutine 停止，
+			// 竞态检测器就会将它标记为引发了竞态。我们知道它们
+			// 一定已经停止（GoLeakCheck！），但竞态检测器不知道。
 			//
-			// This is a major issue because many Kubernetes goroutines get
-			// started without waiting for them to stop :-(
+			// 这是个大问题，因为许多 Kubernetes 的 goroutine 启动时
+			// 并没有等待它们停止 :-(
 			//
-			// In practice, klog's own flushing got called out by the race detector.
-			// As we know about that one, we can force it to stop explicitly to
-			// satisfy the race detector.
+			// 实际上，klog 自身的 flushing 就被竞态检测器点名了。
+			// 既然我们知道这一点，就可以显式强制它停止，
+			// 以满足竞态检测器的要求。
 			klog.StopFlushDaemon()
 			if err := logsapi.ResetForTest(LoggingFeatureGate); err != nil {
 				t.Errorf("Failed to reset the logging configuration: %v", err)
@@ -691,17 +683,16 @@ func setupTestCase(t testing.TB, tc *testCase, featureGates map[featuregate.Feat
 		}
 	}
 
-	// Ensure that there are no leaked
-	// goroutines.  They could influence
-	// performance of the next benchmark.
-	// This must *after* RedirectKlog
-	// because then during cleanup, the
-	// test will wait for goroutines to
-	// quit *before* restoring klog settings.
+	// 确保没有泄漏的
+	// goroutine。它们可能影响
+	// 下一个基准测试的性能。
+	// 这必须在 RedirectKlog *之后* 执行，
+	// 因为这样在清理时，测试会在恢复 klog 设置
+	// *之前* 等待 goroutine 退出。
 	framework.GoleakCheck(t)
 
-	// We need to set emulation version for NodeDeclaredFeatures feature gate, which is locked at 1.37.
-	// Only emulate v1.36 when NodeDeclaredFeatures is explicitly disabled.
+	// 我们需要为 NodeDeclaredFeatures feature gate 设置模拟版本，该 gate 锁定在 1.37。
+	// 仅当 NodeDeclaredFeatures 被显式禁用时才模拟 v1.36。
 	if ndfEnabled, exists := featureGates[features.NodeDeclaredFeatures]; exists && !ndfEnabled {
 		featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 	}
@@ -717,16 +708,15 @@ func setupTestCase(t testing.TB, tc *testCase, featureGates map[featuregate.Feat
 		}
 	}
 
-	// Now that we are ready to run, start
-	// a brand new etcd.
+	// 现在准备就绪，启动一个全新的 etcd。
 	logger := tCtx.Logger()
 	if !UseTestingLog {
-		// Associate output going to the global log with the current test.
+		// 将写入全局日志的输出与当前测试关联起来。
 		logger = logger.WithName(tCtx.Name())
 	}
 	framework.StartEtcd(logger, t, true)
 
-	// 30 minutes should be plenty enough even for the 5000-node tests.
+	// 即使是 5000 节点的测试，30 分钟也应该足够了。
 	timeout := 30 * time.Minute
 	tCtx = tCtx.WithTimeout(timeout, fmt.Sprintf("timed out after the %s per-test timeout", timeout))
 
@@ -740,37 +730,36 @@ func featureGatesMerge(src map[featuregate.Feature]bool, overrides map[featurega
 	return result
 }
 
-// fixJSONOutput works around Go not emitting a "pass" action for
-// sub-benchmarks
-// (https://github.com/golang/go/issues/66825#issuecomment-2343229005), which
-// causes gotestsum to report a successful benchmark run as failed
-// (https://github.com/gotestyourself/gotestsum/issues/413#issuecomment-2343206787).
+// fixJSONOutput 用于绕开 Go 不为子基准测试发出 "pass" 动作的问题
+// （https://github.com/golang/go/issues/66825#issuecomment-2343229005），
+// 该问题会导致 gotestsum 将成功的基准测试运行报告为失败
+// （https://github.com/gotestyourself/gotestsum/issues/413#issuecomment-2343206787）。
 //
-// It does this by printing the missing "PASS" output line that test2json
-// then converts into the "pass" action.
+// 它的做法是打印缺失的 "PASS" 输出行，test2json 随后会将其
+// 转换为 "pass" 动作。
 func fixJSONOutput(b *testing.B) {
 	if !slices.Contains(os.Args, "-test.v=test2json") {
-		// Not printing JSON.
+		// 不输出 JSON。
 		return
 	}
 
 	start := time.Now()
 	b.Cleanup(func() {
 		if b.Failed() {
-			// Really has failed, do nothing.
+			// 确实失败了，不做处理。
 			return
 		}
-		// SYN gets injected when using -test.v=test2json, see
+		// 使用 -test.v=test2json 时会注入 SYN，参见
 		// https://cs.opensource.google/go/go/+/refs/tags/go1.23.3:src/testing/testing.go;drc=87ec2c959c73e62bfae230ef7efca11ec2a90804;l=527
 		fmt.Fprintf(os.Stderr, "%c--- PASS: %s (%.2fs)\n", 22 /* SYN */, b.Name(), time.Since(start).Seconds())
 	})
 }
 
-// RunBenchmarkPerfScheduling runs the scheduler performance benchmark tests.
+// RunBenchmarkPerfScheduling 运行调度器性能基准测试。
 //
-// You can pass your own scheduler plugins via outOfTreePluginRegistry.
-// Also, you may want to put your plugins in PluginNames variable in this package
-// to collect metrics for them.
+// 可以通过 outOfTreePluginRegistry 传入自己的调度器插件。
+// 此外，你可能还希望将插件加入本包的 PluginNames 变量，
+// 以便为它们收集指标。
 func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName string, outOfTreePluginRegistry frameworkruntime.Registry, options ...SchedulerPerfOption) {
 	opts := &schedulerPerfOptions{
 		outOfTreePluginRegistry: outOfTreePluginRegistry,
@@ -796,12 +785,12 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 
 	output := initTestOutput(b)
 
-	// Because we run sequentially, it is possible to change the global
-	// klog logger and redirect log output. Quite a lot of code still uses
-	// it instead of supporting contextual logging.
+	// 由于我们是顺序运行的，因此可以更改全局
+	// klog logger 并重定向日志输出。仍有相当多的代码在使用它，
+	// 而不支持上下文日志。
 	//
-	// Because we leak one goroutine which calls klog, we cannot restore
-	// the previous state.
+	// 由于我们泄漏了一个调用 klog 的 goroutine，因此无法恢复
+	// 之前的状态。
 	_ = framework.RedirectKlog(b, output)
 
 	dataItems := DataItems{Version: "v1"}
@@ -820,8 +809,8 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 					tCtx.TB().Cleanup(func() {
 						tCtx.Cancel("workload is done")
 						<-schedulerDone
-						// Reset metrics to prevent metrics generated in current workload gets
-						// carried over to the next workload.
+						// 重置指标，防止当前工作负载产生的指标
+						// 被带入下一个工作负载。
 						legacyregistry.Reset()
 					})
 
@@ -837,7 +826,7 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 						}
 					}
 
-					// This is used for our custom .dat files and profile files.
+					// 这用于我们自定义的 .dat 文件和 profile 文件。
 					if withDataItemsUniqueID {
 						perTestFilePrefix = strings.ReplaceAll(fmt.Sprintf("%s_%s_%s_%s", tc.Name, w.Name, topicName, runID), "/", "_")
 					} else {
@@ -851,21 +840,19 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 					dataItems.DataItems = append(dataItems.DataItems, results...)
 
 					if len(results) > 0 {
-						// The default ns/op is not
-						// useful because it includes
-						// the time spent on
-						// initialization and shutdown. Here we suppress it.
+						// 默认的 ns/op 没有
+						// 意义，因为它包含了
+						// 初始化和关闭所花的
+						// 时间。这里将其抑制。
 						b.ReportMetric(0, "ns/op")
 
-						// Instead, report the same
-						// results that also get stored
-						// in the JSON file.
+						// 改为报告同样会存入
+						// JSON 文件中的结果。
 						for _, result := range results {
-							// For some metrics like
-							// scheduler_framework_extension_point_duration_seconds
-							// the actual value has some
-							// other unit. We patch the key
-							// to make it look right.
+							// 对于某些指标（如
+							// scheduler_framework_extension_point_duration_seconds），
+							// 实际值的单位有所不同。我们修改 key
+							// 以使其看起来正确。
 							metric := strings.ReplaceAll(result.Labels["Metric"], "_seconds", "_"+result.Unit)
 							for key, value := range result.Data {
 								b.ReportMetric(value, metric+"/"+key)
@@ -873,12 +860,12 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 						}
 					}
 
-					// In any case, we should make sure InFlightEvents is empty after running the scenario.
+					// 无论如何，我们都应确保场景运行后 InFlightEvents 为空。
 					if err = checkEmptyInFlightEvents(); err != nil {
 						tCtx.Errorf("%s: %s", w.Name, err)
 					}
 
-					// Exactly one result is expected to contain the progress information.
+					// 预期只有一个结果包含进度信息。
 					for _, item := range results {
 						if len(item.progress) == 0 {
 							continue
@@ -889,7 +876,7 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 							b.Fatalf("prepare data file: %v", err)
 						}
 
-						// Print progress over time.
+						// 打印随时间变化的进度。
 						for _, sample := range item.progress {
 							if _, err := fmt.Fprintf(f, "%.1fs %d %d %d %f %d %d %d %d\n", sample.ts.Sub(item.start).Seconds(), sample.completed, sample.attempts, sample.observedTotal, sample.observedRate, sample.activePods, sample.backoffPods, sample.unschedulable, sample.gatedPods); err != nil {
 								b.Fatalf("write to data file: %v", err)
@@ -903,9 +890,9 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 			}
 		})
 	}
-	// Different top-level BenchmarkPerfScheduling* tests are supported as long as they use unique topic names.
-	// The final JSON file then is always called BenchmarkPerfScheduling_benchmark_<topic name>_<date+time>.json
-	// because that is what perf-dash is configured to read:
+	// 支持不同的顶层 BenchmarkPerfScheduling* 测试，只要它们使用唯一的主题名。
+	// 最终的 JSON 文件总是命名为 BenchmarkPerfScheduling_benchmark_<topic name>_<date+time>.json，
+	// 因为 perf-dash 被配置为读取该名称：
 	// https://github.com/kubernetes/perf-tests/blob/581139e45e79cf04b9c2777b82677957f1e7f90b/perfdash/config.go#L520-L525
 	namePrefix := b.Name()
 	namePrefix = regexp.MustCompile(`^BenchmarkPerfScheduling[^/]*`).ReplaceAllString(namePrefix, "BenchmarkPerfScheduling")
@@ -916,7 +903,7 @@ func RunBenchmarkPerfScheduling(b *testing.B, configFile string, topicName strin
 	}
 }
 
-// RunIntegrationPerfScheduling runs the scheduler performance integration tests.
+// RunIntegrationPerfScheduling 运行调度器性能集成测试。
 func RunIntegrationPerfScheduling(t *testing.T, configFile string, options ...SchedulerPerfOption) {
 	opts := &schedulerPerfOptions{}
 	for _, option := range options {
@@ -948,8 +935,8 @@ func RunIntegrationPerfScheduling(t *testing.T, configFile string, options ...Sc
 					tCtx.TB().Cleanup(func() {
 						tCtx.Cancel("workload is done")
 						<-schedulerDone
-						// Reset metrics to prevent metrics generated in current workload gets
-						// carried over to the next workload.
+						// 重置指标，防止当前工作负载产生的指标
+						// 被带入下一个工作负载。
 						legacyregistry.Reset()
 					})
 					err := w.isValid(tc.MetricsCollectorConfig)
@@ -962,7 +949,7 @@ func RunIntegrationPerfScheduling(t *testing.T, configFile string, options ...Sc
 						tCtx.Fatalf("Error running workload %s: %s", w.Name, err)
 					}
 
-					// In any case, we should make sure InFlightEvents is empty after running the scenario.
+					// 无论如何，我们都应确保场景运行后 InFlightEvents 为空。
 					if err = checkEmptyInFlightEvents(); err != nil {
 						tCtx.Errorf("%s: %s", w.Name, err)
 					}
@@ -977,7 +964,7 @@ func loadSchedulerConfig(file string) (*config.KubeSchedulerConfiguration, error
 	if err != nil {
 		return nil, err
 	}
-	// The UniversalDecoder runs defaulting and returns the internal type by default.
+	// UniversalDecoder 默认执行默认值填充并返回内部类型。
 	obj, gvk, err := scheme.Codecs.UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
 		return nil, err
@@ -1043,8 +1030,8 @@ func valueWithinThreshold(value, threshold float64, expectLower bool) bool {
 	return value > threshold
 }
 
-// applyThreshold adds the threshold to data item with metric specified via metricSelector and verifies that
-// this metrics value is within threshold.
+// applyThreshold 将阈值添加到由 metricSelector 指定指标的数据项中，
+// 并验证该指标值是否在阈值范围内。
 func applyThreshold(items []DataItem, threshold float64, metricSelector thresholdMetricSelector) error {
 	if threshold == 0 {
 		return nil
@@ -1074,11 +1061,10 @@ func applyThreshold(items []DataItem, threshold float64, metricSelector threshol
 }
 
 func checkEmptyInFlightEvents() error {
-	// checkEmptyInFlightEvents seems to race with completion of the scenario,
-	// which started to go wrong a lot after speeding up metrics gathering
-	// during the scenario.
+	// checkEmptyInFlightEvents 似乎会与场景完成过程发生竞态，
+	// 在加快场景中指标收集速度后，这一情况开始频繁出问题。
 	//
-	// TODO: re-enable it when it's reliable again.
+	// TODO: 当它重新可靠时再次启用。
 	return nil
 	// labels := append(schedframework.AllClusterEventLabels(), metrics.PodPoppedInFlightEvent)
 	// for _, label := range labels {
@@ -1099,30 +1085,29 @@ func runWorkload(tCtx ktesting.TContext, tc *testCase, w *Workload, topicName st
 		start := time.Now()
 		b.Cleanup(func() {
 			duration := time.Since(start)
-			// This includes startup and shutdown time and thus does not
-			// reflect scheduling performance. It's useful to get a feeling
-			// for how long each workload runs overall.
+			// 其中包含启动和关闭时间，因此不能
+			// 反映调度性能。它有助于大致了解
+			// 每个工作负载整体的运行时长。
 			b.ReportMetric(duration.Seconds(), "runtime_seconds")
 		})
 	}
 
-	// Disable error checking of the sampling interval length in the
-	// throughput collector by default. When running benchmarks, report
-	// it as test failure when samples are not taken regularly.
+	// 默认禁用吞吐量收集器中采样间隔长度的错误检查。
+	// 运行基准测试时，如果采样不规律，则将其报告为测试失败。
 	var throughputErrorMargin float64
 	if benchmarking {
-		// TODO: To prevent the perf-test failure, we increased the error margin, if still not enough
-		// one day, we should think of another approach to avoid this trick.
+		// TODO: 为防止性能测试失败，我们增大了误差范围；如果仍不够，
+		// 将来应该考虑用其他方式避免这种取巧做法。
 		throughputErrorMargin = 30
 	}
 
-	// Additional informers needed for testing. The pod informer was
-	// already created before (scheduler.NewInformerFactory) and the
-	// factory was started for it (mustSetupCluster), therefore we don't
-	// need to start again.
+	// 测试所需的额外 informer。Pod informer 之前
+	// 已经创建（scheduler.NewInformerFactory），并且
+	// 对应的 factory 已经启动（mustSetupCluster），因此无需
+	// 再次启动。
 	podInformer := informerFactory.Core().V1().Pods()
 
-	// Everything else started by this function gets stopped before it returns.
+	// 该函数启动的其他所有内容都会在其返回前停止。
 	tCtx = tCtx.WithCancel()
 
 	executor := WorkloadExecutor{
@@ -1158,14 +1143,14 @@ func runWorkload(tCtx ktesting.TContext, tc *testCase, w *Workload, topicName st
 		}
 	}
 
-	// check unused params and inform users
+	// 检查未使用的参数并提示用户
 	unusedParams := w.unusedParams()
 	if len(unusedParams) != 0 {
 		return nil, fmt.Errorf("the parameters %v are defined on workload %s, but unused.\nPlease make sure there are no typos", unusedParams, w.Name)
 	}
 
-	// Some tests have unschedulable pods. Do not add an implicit barrier at the
-	// end as we do not want to wait for them.
+	// 某些测试包含不可调度的 Pod。不要在末尾添加隐式屏障，
+	// 因为我们不想等待这些 Pod。
 	return executor.dataItems, nil
 }
 
@@ -1209,10 +1194,10 @@ func validateTestCases(testCases []*testCase) error {
 		if len(tc.WorkloadTemplate) == 0 {
 			return fmt.Errorf("%s: no ops defined", tc.Name)
 		}
-		// Make sure there's at least one CreatePods op with collectMetrics set to
-		// true, or a startCollectingMetricsOp together with stopCollectingMetricsOp
-		// in each workload. What's the point of running a performance
-		// benchmark if no statistics are collected for reporting?
+		// 确保每个工作负载中至少有一个 collectMetrics 设为 true 的
+		// CreatePods 操作，或者同时存在 startCollectingMetricsOp
+		// 和 stopCollectingMetricsOp。如果不收集统计数据用于报告，
+		// 运行性能基准测试还有什么意义？
 		if !tc.collectsMetrics() {
 			return fmt.Errorf("%s: no op in the workload template collects metrics", tc.Name)
 		}

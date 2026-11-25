@@ -139,14 +139,14 @@ func testBuiltinResourceRead(t *testing.T, cfg *rest.Config, shouldBlock bool) {
 	assertBlocking("reads of built-in resources", t, err, shouldBlock)
 }
 
-// TestStorageVersionBootstrap ensures that before the StorageVersions are
-// updated, only the following the request are accepted by the apiserver:
-// 1. read requests
-// 2. non-persisting write requests
-// 3. write requests to the storageversion API
-// 4. requests to CR or aggregated API
+// TestStorageVersionBootstrap 确保在 StorageVersions 更新之前，
+// apiserver 只接受以下请求：
+// 1. 读请求
+// 2. 非持久化写请求
+// 3. 对 storageversion API 的写请求
+// 4. 对 CR 或聚合 API 的请求
 func TestStorageVersionBootstrap(t *testing.T) {
-	// Start server and create CRD
+	// 启动 server 并创建 CRD
 	etcdConfig := framework.SharedEtcd()
 	flags := framework.DefaultTestServerFlags()
 	flags = append(flags, "--runtime-config=api/all=true")
@@ -167,7 +167,7 @@ func TestStorageVersionBootstrap(t *testing.T) {
 			Manager:        delegate,
 		}
 	}
-	// Restart api server, enable the storage version API and the feature gates.
+	// 重启 api server，启用 storage version API 和相应的 feature gate。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.StorageVersionAPI: true,
 		features.APIServerIdentity: true,
@@ -177,8 +177,8 @@ func TestStorageVersionBootstrap(t *testing.T) {
 			StorageVersionWrapFunc: wrapperFunc,
 		},
 		[]string{
-			// force enable all resources to ensure that the storage updates can handle cross group resources.
-			// TODO: drop these once we stop allowing them to be served.
+			// 强制启用所有资源，以确保 storage 更新能处理跨 group 的资源。
+			// TODO: 当我们不再允许提供这些资源后，移除这些配置。
 			"--runtime-config=api/all=true,extensions/v1beta1/deployments=true,extensions/v1beta1/daemonsets=true,extensions/v1beta1/replicasets=true,extensions/v1beta1/podsecuritypolicies=true,extensions/v1beta1/networkpolicies=true,internal.apiserver.k8s.io/v1alpha1=true",
 		},
 		etcdConfig)
@@ -208,12 +208,11 @@ func TestStorageVersionBootstrap(t *testing.T) {
 		t.Run("read of k8s native API should pass", func(t *testing.T) {
 			testBuiltinResourceRead(t, cfg, false)
 		})
-		// TODO: Write to aggregated API should pass.
+		// TODO: 对聚合 API 的写操作应该通过。
 	})
 
-	// After the storage versions are updated, even though the
-	// StorageVersionManager.Complete() still returns false, the filter
-	// should not block any request.
+	// storage version 更新后，即使 StorageVersionManager.Complete()
+	// 仍返回 false，过滤器也不应阻止任何请求。
 	close(startUpdateSV)
 	<-updateFinished
 	t.Run("after storage version update", func(t *testing.T) {
@@ -237,11 +236,11 @@ func TestStorageVersionBootstrap(t *testing.T) {
 		})
 	})
 
-	// After the StorageVersionManager.Complete() returns true, the server should become healthy.
+	// 当 StorageVersionManager.Complete() 返回 true 后，server 应变为健康状态。
 	close(completed)
 	close(finishUpdateSV)
 	t.Run("after storage version manager complete", func(t *testing.T) {
-		// wait until healthz endpoint returns ok
+		// 等待 healthz 端点返回 ok
 		client := clientset.NewForConfigOrDie(cfg)
 		err := wait.Poll(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 			result := client.CoreV1().RESTClient().Get().AbsPath("/healthz").Do(context.TODO())

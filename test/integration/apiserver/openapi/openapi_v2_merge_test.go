@@ -169,7 +169,7 @@ func TestOpenAPIV2CRDMergeNoDuplicateTypes(t *testing.T) {
 	}
 
 	var openAPISpec spec.Swagger
-	// Poll for the OpenAPI to be updated with the new CRD
+	// 轮询等待 OpenAPI 更新以包含新的 CRD
 	wait.Poll(time.Second*1, wait.ForeverTestTimeout, func() (bool, error) {
 		jsonData, err := clientset.RESTClient().Get().AbsPath("/openapi/v2").Do(context.TODO()).Raw()
 		if err != nil {

@@ -26,16 +26,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// TestGenerationManagement tests that metadata.generation is managed when a resource is updated.
+// TestGenerationManagement 测试资源更新时 metadata.generation 的管理方式。
 //
-// The test ensures:
-// 1. Generation initializes to 1.
-// 2. Generation monotonically increases for each spec update.
-// 3. Generation does not increase for status updates.
+// 该测试确保：
+// 1. Generation 初始化为 1。
+// 2. 每次 spec 更新时 Generation 单调递增。
+// 3. status 更新时 Generation 不增加。
 func TestGenerationManagement(t *testing.T) {
 
-	// DO NOT ADD NEW ENTRIES HERE.
-	// This tracks resources that have status but do not manage generation.
+	// 请勿在此添加新条目。
+	// 这里记录的是有 status 但不管理 generation 的资源。
 	generationExempt := sets.New(
 		"apiservices.v1.apiregistration.k8s.io",
 		"certificatesigningrequests.v1.certificates.k8s.io",
@@ -81,7 +81,7 @@ func TestGenerationManagement(t *testing.T) {
 			t.Fatalf("Failed to get baseline: %v", err)
 		}
 
-		// Verify that generation initializes to 1.
+		// 验证 generation 初始化为 1。
 		if matchesException(api.Mapping.Resource, generationExempt) {
 			if baseline.GetGeneration() != 0 {
 				t.Errorf("Expected generation exempt resource always have generation 0, but got %v", baseline.GetGeneration())
@@ -90,7 +90,7 @@ func TestGenerationManagement(t *testing.T) {
 			t.Errorf("Expected generation to be %v on create, got %v", 1, baseline.GetGeneration())
 		}
 
-		// Verify that updating status does NOT bump generation.
+		// 验证更新 status 不会增加 generation。
 		update := api.StorageData.GetMutatedStatusStub()
 		statusObj := TestObj(t, api.StorageData.Stub, update, api.Mapping.GroupVersionKind)
 		statusObj.SetName(name)
@@ -109,7 +109,7 @@ func TestGenerationManagement(t *testing.T) {
 			t.Errorf("Expected generation to remain %v after status update, but got %v", baseline.GetGeneration(), afterStatus.GetGeneration())
 		}
 
-		// Verify that updating spec does bump generation.
+		// 验证更新 spec 会增加 generation。
 		result, err := rsc.Patch(context.TODO(), name, types.MergePatchType, []byte(differentSpec), metav1.PatchOptions{})
 		if err != nil {
 			if !errors.IsInvalid(err) {

@@ -63,7 +63,7 @@ func (d *Definition) HasStatus() bool {
 	return d.HasSubresource("status")
 }
 
-// ResourceClient returns a dynamic resource client scoped to the appropriate namespace.
+// ResourceClient 返回一个限定在适当命名空间内的 dynamic resource client。
 func (d *Definition) ResourceClient() dynamic.ResourceInterface {
 	namespace := d.Namespace
 	if d.Mapping.Scope == meta.RESTScopeRoot {
@@ -72,13 +72,13 @@ func (d *Definition) ResourceClient() dynamic.ResourceInterface {
 	return d.DynamicClient.Resource(d.Mapping.Resource).Namespace(namespace)
 }
 
-// TestAllDefinitions starts an apiserver and runs testFunc against every
-// discoverable resource. It registers a fixed set of CRDs so that a sample
-// set of custom resources discoverable and tested.
+// TestAllDefinitions 启动一个 apiserver，并对每个
+// 可发现的资源运行 testFunc。它会注册一组固定的 CRD，
+// 以便让一部分自定义资源可被发现和测试。
 func TestAllDefinitions(t *testing.T, testNamespace string, testFunc DefinitionTestFunc) {
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), []string{
 		"--disable-admission-plugins", "ServiceAccount,TaintNodesByCondition",
-		// Enable all APIs and features
+		// 启用所有 API 和特性
 		"--runtime-config=api/all=true",
 		"--feature-gates=AllAlpha=true,AllBeta=true",
 	}, framework.SharedEtcd())
@@ -111,7 +111,7 @@ func TestAllDefinitions(t *testing.T, testNamespace string, testFunc DefinitionT
 
 	for _, resourceList := range resourceLists {
 		for _, resource := range resourceList.APIResources {
-			// Iterate over root resources
+			// 只遍历根资源
 			if strings.Contains(resource.Name, "/") {
 				continue
 			}
@@ -177,8 +177,8 @@ func CreateMapping(groupVersion string, resource metav1.APIResource) (*meta.REST
 	}, nil
 }
 
-// ResourceString returns the kubectl-style "resource.version.group" representation
-// of a GroupVersionResource (e.g. "deployments.v1.apps", "pods.v1").
+// ResourceString 返回 GroupVersionResource 的 kubectl 风格表示形式
+// "resource.version.group"（例如 "deployments.v1.apps"、"pods.v1"）。
 func ResourceString(gvr schema.GroupVersionResource) string {
 	if gvr.Group == "" {
 		return gvr.Resource + "." + gvr.Version
@@ -186,15 +186,15 @@ func ResourceString(gvr schema.GroupVersionResource) string {
 	return gvr.Resource + "." + gvr.Version + "." + gvr.Group
 }
 
-// matchesException returns true if gvr matches an entry in exceptions.
-// Excepttions are of the form "resource.version.group". For example,
-// "pods.v1" or "deployments.v1.apps".
+// matchesException 在 gvr 与 exceptions 中的某项匹配时返回 true。
+// 例外项采用 "resource.version.group" 形式。例如，
+// "pods.v1" 或 "deployments.v1.apps"。
 func matchesException(gvr schema.GroupVersionResource, exceptions sets.Set[string]) bool {
 	return exceptions.Has(ResourceString(gvr))
 }
 
-// TestObj is a generic test helper that creates an Unstructured object from a creation stub
-// and explicitly sets the status from a separate JSON payload.
+// TestObj 是一个通用测试辅助函数，它根据创建 stub 创建 Unstructured 对象，
+// 并从单独的 JSON 载荷中显式设置 status。
 func TestObj(t *testing.T, stub, status string, gvk schema.GroupVersionKind) *unstructured.Unstructured {
 	t.Helper()
 	obj := &unstructured.Unstructured{}

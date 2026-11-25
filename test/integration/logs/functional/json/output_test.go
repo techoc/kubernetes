@@ -32,12 +32,12 @@ import (
 )
 
 func init() {
-	// hack/make-rules/test-integration.sh expects that all unit tests
-	// support -v and -vmodule.
+	// hack/make-rules/test-integration.sh 期望所有单元测试
+	// 都支持 -v 和 -vmodule。
 	klog.InitFlags(nil)
 }
 
-// TestJsonOutput tests the JSON logger, directly and as backend for klog.
+// TestJsonOutput 测试 JSON logger，包括直接使用以及作为 klog 后端使用。
 func TestJSONOutput(t *testing.T) {
 	test.InitKlog(t)
 	newLogger := func(out io.Writer, v int, vmodule string) logr.Logger {
@@ -52,9 +52,9 @@ func TestJSONOutput(t *testing.T) {
 		return logger
 	}
 
-	// If Go modules are turned off (for example, as in "make test-integration"),
-	// references to klog like k8s.io/klog/v2.ObjectRef.MarshalLog become
-	// k8s.io/kubernetes/vendor/k8s.io/klog/v2.ObjectRef.MarshalLog.
+	// 如果关闭了 Go modules（例如执行 "make test-integration" 时），
+	// 对 klog 的引用（如 k8s.io/klog/v2.ObjectRef.MarshalLog）会变成
+	// k8s.io/kubernetes/vendor/k8s.io/klog/v2.ObjectRef.MarshalLog。
 	injectVendor := func(mapping map[string]string) map[string]string {
 		if os.Getenv("GO111MODULE") != "off" {
 			return mapping

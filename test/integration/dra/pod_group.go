@@ -136,9 +136,8 @@ func testPodGroup(tCtx ktesting.TContext) {
 			}
 
 			waitForClaimAllocatedToDevice(tCtx, namespace, claim.Name, schedulingTimeout)
-			// The PodScheduled condition checked by [waitForPodScheduled] could
-			// converge to either a True or False status due to a race
-			// condition, but Pods should still ultimately be scheduled:
+			// [waitForPodScheduled] 检查的 PodScheduled 条件由于竞态
+			// 可能收敛为 True 或 False 两种状态，但 Pod 最终仍应被调度：
 			// https://github.com/kubernetes/kubernetes/issues/139417#issuecomment-4651436886
 			tCtx.Eventually(func(tCtx ktesting.TContext) ([]v1.Pod, error) {
 				var groupPods []v1.Pod

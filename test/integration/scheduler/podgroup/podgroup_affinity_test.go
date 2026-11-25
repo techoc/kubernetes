@@ -34,40 +34,40 @@ import (
 
 const hostnameKey = "kubernetes.io/hostname"
 
-// TestPodGroupSchedulingWithPodAntiAffinity is a regression test for the snapshot
-// AssumePod/ForgetPod bug. During a PodGroup scheduling cycle the pods of a group
-// are assumed into the scheduler snapshot one by one, so the snapshot must keep
-// its havePodsWithRequiredAntiAffinityNodeInfoList consistent: otherwise the
-// InterPodAffinity plugin does not see the required anti-affinity terms of pods
-// assumed earlier in the same cycle and silently co-locates pods that should be
-// kept apart.
+// TestPodGroupSchedulingWithPodAntiAffinity 是针对快照
+// AssumePod/ForgetPod bug 的回归测试。在 PodGroup 调度周期中，
+// 组内 Pod 会被逐个假定（assume）到调度器快照中，因此快照
+// 必须保持其 havePodsWithRequiredAntiAffinityNodeInfoList 一致：
+// 否则 InterPodAffinity 插件看不到同一周期中较早假定的 Pod
+// 所声明的 required anti-affinity 项，会悄悄地把本应分开的
+// Pod 调度到一起。
 //
-// The anti-affinity pod is created and enqueued first so the pod group cycle
-// (which orders pods of equal priority by enqueue time) always assumes it before
-// the plain pod, and it is pinned to node-1 so the assignment is deterministic.
-// The plain pod declares no anti-affinity of its own, so it can only be kept off
-// node-1 via the existing-pods anti-affinity term recorded in the snapshot when
-// the anti-affinity pod was assumed - exactly the path the fix repairs.
+// 反亲和 Pod 会先被创建并入队，因此 PodGroup 调度周期（按入队时间
+// 对同优先级 Pod 排序）总是在普通 Pod 之前先假定它；同时它被
+// 固定在 node-1 上，以保证分配结果是确定性的。普通 Pod 自身
+// 没有声明任何反亲和性，所以只能通过假定反亲和 Pod 时记录在
+// 快照中的 existing-pods 反亲和项来避免落到 node-1 上——
+// 这正是修复所针对的路径。
 //
-// The single-topology case is the deterministic regression signal: without the
-// fix the plain pod ignores the assumed anti-affinity pod, the group is silently
-// co-located on the only node and the "unschedulable" assertion fails. The
-// multi-topology case additionally checks that the plain pod lands on node-2.
+// 单拓扑场景是确定性的回归信号：没有修复时，普通 Pod 会忽略
+// 已被假定的反亲和 Pod，整组 Pod 被静默地调度到唯一的节点上，
+// 从而使 "unschedulable" 断言失败。多拓扑场景还额外检查普通
+// Pod 是否落在 node-2 上。
 func TestPodGroupSchedulingWithPodAntiAffinity(t *testing.T) {
 	nodeCapacity := map[v1.ResourceName]string{v1.ResourceCPU: "2"}
 	podRequest := map[v1.ResourceName]string{v1.ResourceCPU: "1"}
 
-	// antiAffinityPod repels other pods labeled app=foo from its hostname. It is
-	// assumed first (created and enqueued before the plain pod) and pinned to
-	// node-1 for a deterministic assignment.
+	// antiAffinityPod 会把其他带有 app=foo 标签的 Pod 从它的
+	// hostname 上排开。它会被优先假定（比普通 Pod 先创建和
+	// 入队），并固定在 node-1 上以保证分配结果确定。
 	antiAffinityPod := st.MakePod().Name("anti-pod").Label("app", "foo").
 		Req(podRequest).Container("image").
 		NodeSelector(map[string]string{hostnameKey: "node-1"}).
 		PodAntiAffinity(hostnameKey, &metav1.LabelSelector{MatchLabels: map[string]string{"app": "foo"}}, st.PodAntiAffinityWithRequiredReq).
 		PodGroupName("pg").Priority(200).Obj()
-	// plainPod matches the anti-affinity pod's selector but declares no
-	// anti-affinity itself, so it can only be kept off node-1 via the existing-pods
-	// anti-affinity path that relies on the snapshot.
+	// plainPod 匹配反亲和 Pod 的选择器，但自身没有声明反亲和性，
+	// 所以只能通过依赖快照的 existing-pods 反亲和路径来
+	// 避免落到 node-1 上。
 	plainPod := st.MakePod().Name("plain-pod").Label("app", "foo").
 		Req(podRequest).Container("image").
 		PodGroupName("pg").Priority(200).Obj()
@@ -153,7 +153,7 @@ func TestPodGroupSchedulingWithPodAntiAffinity(t *testing.T) {
 			})
 
 			testCtx := testutils.InitTestSchedulerWithNS(t, "podgroup-anti-affinity",
-				// disable backoff
+				// 禁用 backoff
 				scheduler.WithPodMaxBackoffSeconds(0),
 				scheduler.WithPodInitialBackoffSeconds(0))
 			ns := testCtx.NS.Name

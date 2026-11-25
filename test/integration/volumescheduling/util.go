@@ -27,36 +27,36 @@ import (
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
-// waitForPodToScheduleWithTimeout waits for a pod to get scheduled and returns
-// an error if it does not scheduled within the given timeout.
+// waitForPodToScheduleWithTimeout 等待 Pod 被调度，如果未在给定超时时间内
+// 完成调度，则返回错误。
 func waitForPodToScheduleWithTimeout(cs clientset.Interface, pod *v1.Pod, timeout time.Duration) error {
 	return wait.Poll(100*time.Millisecond, timeout, podScheduled(cs, pod.Namespace, pod.Name))
 }
 
-// waitForPodToSchedule waits for a pod to get scheduled and returns an error if
-// it does not get scheduled within the timeout duration (30 seconds).
+// waitForPodToSchedule 等待 Pod 被调度，如果未在超时时间（30 秒）内
+// 完成调度，则返回错误。
 func waitForPodToSchedule(cs clientset.Interface, pod *v1.Pod) error {
 	return waitForPodToScheduleWithTimeout(cs, pod, 30*time.Second)
 }
 
-// waitForPodUnscheduleWithTimeout waits for a pod to fail scheduling and returns
-// an error if it does not become unschedulable within the given timeout.
+// waitForPodUnscheduleWithTimeout 等待 Pod 调度失败，如果未在给定超时时间内
+// 变为不可调度，则返回错误。
 func waitForPodUnschedulableWithTimeout(cs clientset.Interface, pod *v1.Pod, timeout time.Duration) error {
 	return wait.Poll(100*time.Millisecond, timeout, podUnschedulable(cs, pod.Namespace, pod.Name))
 }
 
-// waitForPodUnschedule waits for a pod to fail scheduling and returns
-// an error if it does not become unschedulable within the timeout duration (30 seconds).
+// waitForPodUnschedule 等待 Pod 调度失败，如果未在超时时间（30 秒）内
+// 变为不可调度，则返回错误。
 func waitForPodUnschedulable(cs clientset.Interface, pod *v1.Pod) error {
 	return waitForPodUnschedulableWithTimeout(cs, pod, 30*time.Second)
 }
 
-// podScheduled returns true if a node is assigned to the given pod.
+// podScheduled 在给定 Pod 已分配到节点时返回 true。
 func podScheduled(c clientset.Interface, podNamespace, podName string) wait.ConditionFunc {
 	return func() (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 可能是连接错误，因此我们希望重试。
 			return false, nil
 		}
 		if pod.Spec.NodeName == "" {
@@ -66,13 +66,13 @@ func podScheduled(c clientset.Interface, podNamespace, podName string) wait.Cond
 	}
 }
 
-// podUnschedulable returns a condition function that returns true if the given pod
-// gets unschedulable status.
+// podUnschedulable 返回一个条件函数，当给定 Pod 变为
+// 不可调度状态时该函数返回 true。
 func podUnschedulable(c clientset.Interface, podNamespace, podName string) wait.ConditionFunc {
 	return func() (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 可能是连接错误，因此我们希望重试。
 			return false, nil
 		}
 		_, cond := podutil.GetPodCondition(&pod.Status, v1.PodScheduled)

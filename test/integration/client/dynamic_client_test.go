@@ -65,7 +65,7 @@ func TestDynamicClient(t *testing.T) {
 
 	resource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 
-	// Create a Pod with the normal client
+	// 使用普通客户端创建 Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "test",
@@ -85,7 +85,7 @@ func TestDynamicClient(t *testing.T) {
 		t.Fatalf("unexpected error when creating pod: %v", err)
 	}
 
-	// check dynamic list
+	// 检查动态 list
 	unstructuredList, err := dynamicClient.Resource(resource).Namespace("default").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error when listing pods: %v", err)
@@ -104,7 +104,7 @@ func TestDynamicClient(t *testing.T) {
 		t.Fatalf("unexpected pod in list. wanted %#v, got %#v", actual, got)
 	}
 
-	// check dynamic get
+	// 检查动态 get
 	unstruct, err := dynamicClient.Resource(resource).Namespace("default").Get(context.TODO(), actual.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error when getting pod %q: %v", actual.Name, err)
@@ -119,7 +119,7 @@ func TestDynamicClient(t *testing.T) {
 		t.Fatalf("unexpected pod in list. wanted %#v, got %#v", actual, got)
 	}
 
-	// delete the pod dynamically
+	// 通过动态客户端删除 Pod
 	err = dynamicClient.Resource(resource).Namespace("default").Delete(context.TODO(), actual.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error when deleting pod: %v", err)
@@ -166,8 +166,8 @@ func TestDynamicClientWatchWithCBOR(t *testing.T) {
 				return response, rterr
 			}
 
-			// We can't synchronously inspect streaming responses, so tee to a buffer
-			// and inspect it at the end of the test.
+			// 无法同步检查流式响应，因此将其复制到缓冲区，
+			// 在测试结束时再进行检查。
 			var buf bytes.Buffer
 			response.Body = struct {
 				io.Reader
@@ -251,9 +251,8 @@ func testDynamicClientWatch(t *testing.T, client clientset.Interface, dynamicCli
 			t.Fatal("Watch channel closed unexpectedly.")
 		}
 
-		// We expect to see an ADD of event-9 and only event-9. (This
-		// catches a bug where all the events would have been sent down
-		// the channel.)
+		// 预期只看到 event-9 的一条 ADD 事件。（这用于捕获
+		// 所有 event 都被发送到 channel 的 bug。）
 		if e, a := watch.Added, got.Type; e != a {
 			t.Errorf("Wanted %v, got %v", e, a)
 		}
@@ -283,7 +282,7 @@ func TestUnstructuredExtract(t *testing.T) {
 
 	resource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 
-	// Apply an unstructured with the dynamic client
+	// 使用动态客户端 apply 一个 unstructured 对象
 	name := "test-pod"
 	pod := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -291,9 +290,9 @@ func TestUnstructuredExtract(t *testing.T) {
 			"kind":       "Pod",
 			"metadata": map[string]interface{}{
 				"name": name,
-				// namespace will always get set by extract,
-				// so we add it here (even though it's optional)
-				// to ensure what we apply equals what we extract.
+				// namespace 总会被 extract 设置，
+				// 因此这里也加上它（尽管它是可选的），
+				// 以确保 apply 的内容与 extract 的结果一致。
 				"namespace": "default",
 			},
 			"spec": map[string]interface{}{
@@ -312,7 +311,7 @@ func TestUnstructuredExtract(t *testing.T) {
 		t.Fatalf("failed to marshal pod into bytes: %v", err)
 	}
 
-	// apply the unstructured object to the cluster
+	// 将 unstructured 对象 apply 到集群
 	actual, err := dynamicClient.Resource(resource).Namespace("default").Patch(
 		context.TODO(),
 		name,
@@ -323,7 +322,7 @@ func TestUnstructuredExtract(t *testing.T) {
 		t.Fatalf("unexpected error when creating pod: %v", err)
 	}
 
-	// extract the object
+	// 提取对象
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(result.ClientConfig)
 	extractor, err := metav1ac.NewUnstructuredExtractor(discoveryClient)
 	if err != nil {
@@ -334,7 +333,7 @@ func TestUnstructuredExtract(t *testing.T) {
 		t.Fatalf("unexpected error when extracting: %v", err)
 	}
 
-	// confirm that the extracted object equals the applied object
+	// 确认提取出的对象与 apply 的对象一致
 	if !reflect.DeepEqual(pod, extracted) {
 		t.Fatalf("extracted pod doesn't equal applied pod. wanted:\n %v\n, got:\n %v\n", pod, extracted)
 	}
@@ -644,7 +643,7 @@ func TestUnsupportedMediaTypeCircuitBreakerDynamicClient(t *testing.T) {
 		t.Errorf("expected to receive unsupported media type on first cbor request, got: %v", err)
 	}
 
-	// Requests from this client should fall back from application/cbor to application/json.
+	// 来自该客户端的请求应从 application/cbor 回退到 application/json。
 	if _, err := client.Resource(corev1.SchemeGroupVersion.WithResource("namespaces")).Create(
 		context.TODO(),
 		&unstructured.Unstructured{Object: map[string]interface{}{"metadata": map[string]interface{}{"name": "test-dynamic-client-415"}}},
@@ -653,8 +652,7 @@ func TestUnsupportedMediaTypeCircuitBreakerDynamicClient(t *testing.T) {
 		t.Errorf("expected to receive nil error on subsequent cbor request, got: %v", err)
 	}
 
-	// The circuit breaker trips on a per-client basis, so it should not begin tripped for a
-	// fresh client with identical config.
+	// 熔断器按客户端独立生效，因此使用相同配置新建的客户端不应一开始就处于熔断状态。
 	client, err = dynamic.NewForConfig(config)
 	if err != nil {
 		t.Fatal(err)

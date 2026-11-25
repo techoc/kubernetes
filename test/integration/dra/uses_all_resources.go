@@ -36,11 +36,11 @@ func testUsesAllResources(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	nodes, err := tCtx.Client().CoreV1().Nodes().List(tCtx, metav1.ListOptions{})
 	tCtx.ExpectNoError(err, "list nodes")
-	numDevicesPerNode := 100 // One pod gets scheduled per device.
+	numDevicesPerNode := 100 // 每个设备调度一个 Pod。
 
 	class, driverName := createTestClass(tCtx, namespace)
 	for _, node := range nodes.Items {
-		// Globally unique device names make debugging simpler...
+		// 全局唯一的设备名让调试更简单……
 		devices := make([]string, numDevicesPerNode)
 		for i := range numDevicesPerNode {
 			devices[i] = fmt.Sprintf("%s-device-%03d", node.Name, i)
@@ -69,7 +69,7 @@ func testUsesAllResources(tCtx ktesting.TContext) {
 
 	startScheduler(tCtx)
 
-	// Eventually, all pods should be scheduled and thus all claims allocated.
+	// 最终所有 Pod 都应被调度，从而所有 claim 都被分配。
 	allocated := make(map[structured.DeviceID]*resourceapi.ResourceClaim, len(claims))
 	tCtx = tCtx.WithStep("check claim allocation").WithTimeout(time.Duration(len(pods))*5*time.Second, "scheduling timeout for all pods")
 	for _, claim := range claims {

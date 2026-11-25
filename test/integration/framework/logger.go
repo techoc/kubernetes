@@ -24,11 +24,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// RedirectKlog modifies the global klog logger so that it writes via the given
-// writer. This only works when different tests run sequentially.
+// RedirectKlog 修改全局 klog logger，使其通过给定的 writer 写入。
+// 这仅在不同测试顺序执行时才有效。
 //
-// The returned cleanup function restores the previous state. Beware that it is
-// not thread-safe, all goroutines which call klog must have been stopped.
+// 返回的清理函数会恢复之前的状态。注意它不是线程安全的，
+// 所有调用 klog 的 goroutine 都必须已经停止。
 func RedirectKlog(tb testing.TB, output io.Writer) func() {
 	expectNoError := func(err error) {
 		if err != nil {
@@ -54,13 +54,12 @@ func RedirectKlog(tb testing.TB, output io.Writer) func() {
 	return state.Restore
 }
 
-// NewTBWriter creates an io.Writer which turns each write into a tb.Log call.
+// NewTBWriter 创建一个 io.Writer，将每次写入转换为一次 tb.Log 调用。
 //
-// Note that no attempts are made to determine the actual call site because
-// our caller doesn't know about the TB instance and thus cannot mark itself
-// as helper. Therefore the code here doesn't do it either and thus shows up
-// as call site in the testing output. To avoid that, contextual logging
-// and ktesting have to be used.
+// 注意，这里不会尝试确定实际的调用位置，因为我们的调用方不知道 TB 实例，
+// 因此无法将自身标记为 helper。所以这里的代码也不这样做，
+// 从而在测试输出中显示为调用位置。要避免这种情况，必须使用
+// contextual logging 和 ktesting。
 func NewTBWriter(tb testing.TB) io.Writer {
 	return testingWriter{TB: tb}
 }
@@ -74,14 +73,13 @@ func (tw testingWriter) Write(data []byte) (int, error) {
 	if logLen == 0 {
 		return 0, nil
 	}
-	// Trim trailing line break? Log will add it.
+	// 去掉行尾的换行符？Log 会自行添加。
 	if data[logLen-1] == '\n' {
 		logLen--
 	}
-	// We could call TB.Helper here, but that doesn't really help because
-	// then our caller (code in klog) will be reported instead, which isn't
-	// right either. klog would have to call TB.Helper itself, but doesn't
-	// know about the TB instance.
+	// 我们确实可以在这里调用 TB.Helper，但这并没有什么帮助，
+	// 因为那样会被报告为调用方的是 klog 中的代码，这同样不正确。
+	// klog 必须自己调用 TB.Helper，但它并不知道 TB 实例。
 	tw.Log(string(data[:logLen]))
 	return len(data), nil
 }

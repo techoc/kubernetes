@@ -60,7 +60,7 @@ func TestOpenAPIV3SpecRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// attempt to fetch and unmarshal
+			// 尝试获取并反序列化
 			url := kubeConfig.Host + "/openapi/v3" + path
 			req, err := http.NewRequest("GET", url, nil)
 			if err != nil {
@@ -117,17 +117,17 @@ func TestAddRemoveGroupVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a new CRD with group mygroup.example.com
+	// 创建一个 group 为 mygroup.example.com 的新 CRD
 	noxuDefinition := fixtures.NewNoxuV1CustomResourceDefinition(apiextensionsv1.NamespaceScoped)
 	noxuDefinition, err = fixtures.CreateNewV1CustomResourceDefinition(noxuDefinition, apiExtensionClient, dynamicClient)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// It takes a second for CRD specs to propagate to the aggregator
+	// CRD spec 需要一点时间才能传播到 aggregator
 	time.Sleep(4 * time.Second)
 
-	// Verify that the new group version is populated in the discovery for OpenaPI v3
+	// 验证新的 group version 已出现在 OpenAPI v3 的 discovery 中
 	jsonData, err := clientset.RESTClient().Get().AbsPath("/openapi/v3").Do(context.TODO()).Raw()
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ func TestAddRemoveGroupVersion(t *testing.T) {
 		t.Fatal("Expected group version mygroup.example.com to be present after CRD applied")
 	}
 
-	// Check the spec for the newly published group version
+	// 检查新发布的 group version 的 spec
 	jsonData, err = clientset.RESTClient().Get().AbsPath("/openapi/v3/apis/mygroup.example.com/v1beta1").Do(context.TODO()).Raw()
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ func TestAddRemoveGroupVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Delete the CRD and ensure that the group/version is also deleted in discovery
+	// 删除 CRD，并确认该 group/version 也从 discovery 中删除
 	if err := fixtures.DeleteV1CustomResourceDefinition(noxuDefinition, apiExtensionClient); err != nil {
 		t.Fatal(err)
 	}
@@ -182,8 +182,8 @@ func TestAddRemoveGroupVersion(t *testing.T) {
 }
 
 func TestOpenAPIV3ProtoRoundtrip(t *testing.T) {
-	// The OpenAPI V3 proto library strips fields that are sibling elements to $ref
-	// See https://github.com/kubernetes/kubernetes/issues/106387 for more details
+	// OpenAPI V3 proto 库会剔除与 $ref 同级的字段
+	// 更多细节见 https://github.com/kubernetes/kubernetes/issues/106387
 	t.Skip("Skipping OpenAPI V3 Proto roundtrip test")
 
 	tCtx := ktesting.Init(t)
@@ -194,7 +194,7 @@ func TestOpenAPIV3ProtoRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// attempt to fetch and unmarshal
+	// 尝试获取并反序列化
 	req, err := http.NewRequest("GET", kubeConfig.Host+"/openapi/v3/apis/apps/v1", nil)
 	if err != nil {
 		t.Fatal(err)

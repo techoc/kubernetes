@@ -102,9 +102,8 @@ func TestSchedulingGates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Use zero backoff seconds to bypass backoffQ.
-			// It's intended to not start the scheduler's queue, and hence to
-			// not start any flushing logic. We will pop and schedule the Pods manually later.
+			// 使用零退避秒数以绕过 backoffQ。
+			// 目的是不启动调度器的队列，从而不启动任何 flush 逻辑。稍后我们将手动弹出并调度 Pod。
 			testCtx := testutils.InitTestSchedulerWithOptions(
 				t,
 				testutils.InitTestAPIServer(t, "pod-scheduling-gates", nil),
@@ -122,14 +121,14 @@ func TestSchedulingGates(t *testing.T) {
 
 			cs, ns, ctx := testCtx.ClientSet, testCtx.NS.Name, testCtx.Ctx
 
-			// Create node, so we can schedule pods.
+			// 创建节点，以便调度 Pod。
 			node := st.MakeNode().Name("node").Obj()
 			if _, err := cs.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{}); err != nil {
 				t.Fatal("Failed to create node")
 
 			}
 
-			// Create pods.
+			// 创建 Pod。
 			for _, p := range tt.pods {
 				p.Namespace = ns
 				if _, err := cs.CoreV1().Pods(ns).Create(ctx, p, metav1.CreateOptions{}); err != nil {
@@ -137,7 +136,7 @@ func TestSchedulingGates(t *testing.T) {
 				}
 			}
 
-			// Wait for the pods to be present in the scheduling queue.
+			// 等待 Pod 出现在调度队列中。
 			if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 				pendingPods, _ := testCtx.Scheduler.SchedulingQueue.PendingPods()
 				return len(pendingPods) == len(tt.pods), nil
@@ -145,7 +144,7 @@ func TestSchedulingGates(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Schedule pods.
+			// 调度 Pod。
 			for _, podName := range tt.schedule {
 				testCtx.Scheduler.ScheduleOne(testCtx.Ctx)
 				if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, testutils.PodScheduled(cs, ns, podName)); err != nil {
@@ -153,7 +152,7 @@ func TestSchedulingGates(t *testing.T) {
 				}
 			}
 
-			// Delete pods, which triggers AssignedPodDelete event in the scheduling queue.
+			// 删除 Pod，这会在调度队列中触发 AssignedPodDelete 事件。
 			for _, podName := range tt.delete {
 				if err := cs.CoreV1().Pods(ns).Delete(ctx, podName, metav1.DeleteOptions{}); err != nil {
 					t.Fatalf("Error calling Delete on %s", podName)
@@ -163,12 +162,12 @@ func TestSchedulingGates(t *testing.T) {
 				}
 			}
 
-			// Ensure gated pods are not in ActiveQ
+			// 确保带有 gate 的 Pod 不在 ActiveQ 中
 			if len(testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()) > 0 {
 				t.Fatal("Expected no schedulable pods")
 			}
 
-			// Remove scheduling gates from the pod spec.
+			// 从 Pod spec 中移除调度 gate。
 			for _, podName := range tt.rmGates {
 				patch := `{"spec": {"schedulingGates": null}}`
 				if _, err := cs.CoreV1().Pods(ns).Patch(ctx, podName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
@@ -176,7 +175,7 @@ func TestSchedulingGates(t *testing.T) {
 				}
 			}
 
-			// Schedule pods which no longer have gates.
+			// 调度已不再带有 gate 的 Pod。
 			for _, podName := range tt.rmGates {
 				testCtx.Scheduler.ScheduleOne(testCtx.Ctx)
 				if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, testutils.PodScheduled(cs, ns, podName)); err != nil {
@@ -200,18 +199,18 @@ func (f *fakeCRPlugin) Filter(_ context.Context, _ fwk.CycleState, _ *v1.Pod, _ 
 	return fwk.NewStatus(fwk.Unschedulable, "always fail")
 }
 
-// EventsToRegister returns the possible events that may make a Pod
-// failed by this plugin schedulable.
+// EventsToRegister 返回可能使被该插件判定为失败的 Pod
+// 变为可调度的事件。
 func (f *fakeCRPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
 		{Event: fwk.ClusterEvent{Resource: "foos.v1.example.com", ActionType: fwk.All}},
 	}, nil
 }
 
-// TestCustomResourceEnqueue constructs a fake plugin that registers custom resources
-// to verify Pods failed by this plugin can be moved properly upon CR events.
+// TestCustomResourceEnqueue 构造一个注册自定义资源的假插件，
+// 以验证被该插件判定为失败的 Pod 能在 CR 事件发生时被正确移动。
 func TestCustomResourceEnqueue(t *testing.T) {
-	// Start API Server with apiextensions supported.
+	// 启动支持 apiextensions 的 API Server。
 	server := apiservertesting.StartTestServerOrDie(
 		t, apiservertesting.NewDefaultTestServerOptions(),
 		[]string{"--disable-admission-plugins=ServiceAccount,TaintNodesByCondition", "--runtime-config=api/all=true"},
@@ -228,7 +227,7 @@ func TestCustomResourceEnqueue(t *testing.T) {
 	apiExtensionClient := apiextensionsclient.NewForConfigOrDie(server.ClientConfig)
 	dynamicClient := dynamic.NewForConfigOrDie(server.ClientConfig)
 
-	// Create a Foo CRD.
+	// 创建一个 Foo CRD。
 	fooCRD := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "foos.example.com",
@@ -288,9 +287,8 @@ func TestCustomResourceEnqueue(t *testing.T) {
 		t.Fatalf("Failed to integration test ns: %v", err)
 	}
 
-	// Use zero backoff seconds to bypass backoffQ.
-	// It's intended to not start the scheduler's queue, and hence to
-	// not start any flushing logic. We will pop and schedule the Pods manually later.
+	// 使用零退避秒数以绕过 backoffQ。
+	// 目的是不启动调度器的队列，从而不启动任何 flush 逻辑。稍后我们将手动弹出并调度 Pod。
 	testCtx = testutils.InitTestSchedulerWithOptions(
 		t,
 		testCtx,
@@ -305,20 +303,20 @@ func TestCustomResourceEnqueue(t *testing.T) {
 	defer testutils.CleanupTest(t, testCtx)
 
 	cs, ns, ctx := testCtx.ClientSet, testCtx.NS.Name, testCtx.Ctx
-	// Create one Node.
+	// 创建一个 Node。
 	node := st.MakeNode().Name("fake-node").Obj()
 	if _, err := cs.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Node %q: %v", node.Name, err)
 	}
 
-	// Create a testing Pod.
+	// 创建一个测试 Pod。
 	pause := imageutils.GetPauseImageName()
 	pod := st.MakePod().Namespace(ns).Name("fake-pod").Container(pause).Obj()
 	if _, err := cs.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pod %q: %v", pod.Name, err)
 	}
 
-	// Wait for the testing Pod to be present in the scheduling queue.
+	// 等待测试 Pod 出现在调度队列中。
 	if err := wait.PollUntilContextTimeout(ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 		pendingPods, _ := testCtx.Scheduler.SchedulingQueue.PendingPods()
 		return len(pendingPods) == 1, nil
@@ -326,23 +324,23 @@ func TestCustomResourceEnqueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Pop fake-pod out. It should be unschedulable.
+	// 弹出 fake-pod。它应是不可调度的。
 	entity := testutils.NextEntityOrDie(t, testCtx)
 	podInfo := entity.(*framework.QueuedPodInfo)
 	schedFramework, ok := testCtx.Scheduler.Profiles[podInfo.Pod.Spec.SchedulerName]
 	if !ok {
 		t.Fatalf("Cannot find the profile for Pod %v", podInfo.Pod.Name)
 	}
-	// Schedule the Pod manually.
+	// 手动调度该 Pod。
 	_, fitError := testCtx.Scheduler.SchedulePod(ctx, schedFramework, framework.NewCycleState(), podInfo)
-	// The fitError is expected to be non-nil as it failed the fakeCRPlugin plugin.
+	// fitError 预期非 nil，因为它在 fakeCRPlugin 插件处失败。
 	if fitError == nil {
 		t.Fatalf("Expect Pod %v to fail at scheduling.", podInfo.Pod.Name)
 	}
 	testCtx.Scheduler.FailureHandler(ctx, schedFramework, podInfo, fwk.NewStatus(fwk.Unschedulable).WithError(fitError), nil, time.Now())
 
-	// Trigger a Custom Resource event.
-	// We expect this event to trigger moving the test Pod from unschedulableEntities to activeQ.
+	// 触发 Custom Resource 事件。
+	// 期望该事件触发将测试 Pod 从 unschedulableEntities 移到 activeQ。
 	crdGVR := schema.GroupVersionResource{Group: fooCRD.Spec.Group, Version: fooCRD.Spec.Versions[0].Name, Resource: "foos"}
 	crClient := dynamicClient.Resource(crdGVR).Namespace(ns)
 	if _, err := crClient.Create(ctx, &unstructured.Unstructured{
@@ -355,15 +353,15 @@ func TestCustomResourceEnqueue(t *testing.T) {
 		t.Fatalf("Unable to create cr: %v", err)
 	}
 
-	// Now we should be able to pop the Pod from activeQ again.
+	// 现在我们应该能够再次从 activeQ 中弹出该 Pod。
 	entity = testutils.NextEntityOrDie(t, testCtx)
 	if attempts := entity.GetAttempts(); attempts != 2 {
 		t.Errorf("Expected the Pod to be attempted 2 times, but got %v", attempts)
 	}
 }
 
-// TestRequeueByBindFailure verify Pods failed by bind plugin are
-// put back to the queue regardless of whether event happens or not.
+// TestRequeueByBindFailure 验证因绑定插件而失败的 Pod
+// 无论是否发生事件都会被放回队列。
 func TestRequeueByBindFailure(t *testing.T) {
 	fakeBind := &firstFailBindPlugin{}
 	registry := frameworkruntime.Registry{
@@ -393,7 +391,7 @@ func TestRequeueByBindFailure(t *testing.T) {
 			},
 		}}})
 
-	// Use zero backoff seconds to bypass backoffQ.
+	// 使用零退避秒数以绕过 backoffQ。
 	testCtx := testutils.InitTestSchedulerWithOptions(
 		t,
 		testutils.InitTestAPIServer(t, "core-res-enqueue", nil),
@@ -412,28 +410,28 @@ func TestRequeueByBindFailure(t *testing.T) {
 	if _, err := cs.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Node %q: %v", node.Name, err)
 	}
-	// create a pod.
+	// 创建一个 Pod。
 	pod := st.MakePod().Namespace(ns).Name("pod-1").Container(imageutils.GetPauseImageName()).Obj()
 	if _, err := cs.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pod %q: %v", pod.Name, err)
 	}
 
-	// 1. first binding try should fail.
-	// 2. The pod should be enqueued to activeQ/backoffQ without any event.
-	// 3. The pod should be scheduled in the second binding try.
-	// Here, waiting until (3).
+	// 1. 第一次绑定尝试应失败。
+	// 2. Pod 应在没有任何事件的情况下被重新入队到 activeQ/backoffQ。
+	// 3. Pod 应在第二次绑定尝试时被调度。
+	// 这里等待直到 (3) 发生。
 	err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, wait.ForeverTestTimeout, false, testutils.PodScheduled(cs, ns, pod.Name))
 	if err != nil {
 		t.Fatalf("Expect pod-1 to be scheduled by the bind plugin: %v", err)
 	}
 
-	// Make sure the first binding trial was failed, and this pod is scheduled at the second trial.
+	// 确保第一次绑定尝试失败，且该 Pod 在第二次尝试时被调度。
 	if fakeBind.counter != 1 {
 		t.Fatalf("Expect pod-1 to be scheduled by the bind plugin in the second binding try: %v", err)
 	}
 }
 
-// firstFailBindPlugin rejects the Pod in the first Bind call.
+// firstFailBindPlugin 在第一次 Bind 调用时拒绝 Pod。
 type firstFailBindPlugin struct {
 	counter             int
 	defaultBinderPlugin fwk.BindPlugin
@@ -445,7 +443,7 @@ func (*firstFailBindPlugin) Name() string {
 
 func (p *firstFailBindPlugin) Bind(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodename string) *fwk.Status {
 	if p.counter == 0 {
-		// fail in the first Bind call.
+		// 在第一次 Bind 调用时失败。
 		p.counter++
 		return fwk.NewStatus(fwk.Error, "firstFailBindPlugin rejects the Pod")
 	}
@@ -453,8 +451,8 @@ func (p *firstFailBindPlugin) Bind(ctx context.Context, state fwk.CycleState, po
 	return p.defaultBinderPlugin.Bind(ctx, state, pod, nodename)
 }
 
-// TestRequeueByPermitRejection verify Pods failed by permit plugins in the binding cycle are
-// put back to the queue, according to the correct scheduling cycle number.
+// TestRequeueByPermitRejection 验证在绑定周期中因 permit 插件而失败的 Pod
+// 会根据正确的调度周期编号被放回队列。
 func TestRequeueByPermitRejection(t *testing.T) {
 	queueingHintCalledCounter := 0
 	fakePermit := &fakePermitPlugin{}
@@ -482,7 +480,7 @@ func TestRequeueByPermitRejection(t *testing.T) {
 			},
 		}}})
 
-	// Use zero backoff seconds to bypass backoffQ.
+	// 使用零退避秒数以绕过 backoffQ。
 	testCtx := testutils.InitTestSchedulerWithOptions(
 		t,
 		testutils.InitTestAPIServer(t, "core-res-enqueue", nil),
@@ -501,27 +499,27 @@ func TestRequeueByPermitRejection(t *testing.T) {
 	if _, err := cs.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Node %q: %v", node.Name, err)
 	}
-	// create a pod.
+	// 创建一个 Pod。
 	pod := st.MakePod().Namespace(ns).Name("pod-1").Container(imageutils.GetPauseImageName()).Obj()
 	if _, err := cs.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pod %q: %v", pod.Name, err)
 	}
 
-	// update node label. (causes the NodeUpdate event)
+	// 更新节点标签（引发 NodeUpdate 事件）
 	node.Labels = map[string]string{"updated": ""}
 	if _, err := cs.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Failed to add labels to the node: %v", err)
 	}
 
-	// create a pod to increment the scheduling cycle number in the scheduling queue.
-	// We can make sure NodeUpdate event, that has happened in the previous scheduling cycle, makes Pod to be enqueued to activeQ via the scheduling queue.
+	// 创建一个 Pod，以增加调度队列中的调度周期编号。
+	// 这样可以确保在上一个调度周期发生的 NodeUpdate 事件能通过调度队列使 Pod 被重新入队到 activeQ。
 	pod = st.MakePod().Namespace(ns).Name("pod-2").Container(imageutils.GetPauseImageName()).Obj()
 	if _, err := cs.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pod %q: %v", pod.Name, err)
 	}
 
-	// reject pod-1 to simulate the failure in Permit plugins.
-	// This pod-1 should be enqueued to activeQ because the NodeUpdate event has happened.
+	// 拒绝 pod-1 以模拟 Permit 插件中的失败。
+	// 由于 NodeUpdate 事件已经发生，pod-1 应被重新入队到 activeQ。
 	fakePermit.frameworkHandler.IterateOverWaitingPods(func(wp fwk.WaitingPod) {
 		if wp.GetPod().Name == "pod-1" {
 			wp.Reject(fakePermitPluginName, "fakePermitPlugin rejects the Pod")
@@ -529,7 +527,7 @@ func TestRequeueByPermitRejection(t *testing.T) {
 		}
 	})
 
-	// Wait for pod-2 to be scheduled.
+	// 等待 pod-2 被调度。
 	err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, wait.ForeverTestTimeout, false, func(ctx context.Context) (done bool, err error) {
 		fakePermit.frameworkHandler.IterateOverWaitingPods(func(wp fwk.WaitingPod) {
 			if wp.GetPod().Name == "pod-2" {
@@ -584,17 +582,17 @@ func (p *fakePermitPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEve
 }
 
 func TestPopFromBackoffQWhenActiveQEmpty(t *testing.T) {
-	// Set initial backoff to 1000s to make sure pod won't go to the activeQ after being requeued.
+	// 将初始退避设为 1000 秒，以确保 Pod 重新入队后不会进入 activeQ。
 	testCtx := testutils.InitTestSchedulerWithNS(t, "pop-from-backoffq", scheduler.WithPodInitialBackoffSeconds(1000), scheduler.WithPodMaxBackoffSeconds(1000))
 	cs, ns, ctx := testCtx.ClientSet, testCtx.NS.Name, testCtx.Ctx
 
-	// Create node, so we can schedule pods.
+	// 创建节点，以便调度 Pod。
 	node := st.MakeNode().Name("node").Obj()
 	if _, err := cs.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{}); err != nil {
 		t.Fatal("Failed to create node")
 	}
 
-	// Create a pod that will be unschedulable.
+	// 创建一个不可调度的 Pod。
 	pod := st.MakePod().Namespace(ns).Name("pod").NodeAffinityIn("foo", []string{"bar"}, st.NodeSelectorTypeMatchExpressions).Container(imageutils.GetPauseImageName()).Obj()
 	if _, err := cs.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create pod: %v", err)
@@ -605,21 +603,21 @@ func TestPopFromBackoffQWhenActiveQEmpty(t *testing.T) {
 		t.Fatalf("Expected pod to be unschedulable: %v", err)
 	}
 
-	// Create node with label to make the pod schedulable.
+	// 创建带有标签的节点，使 Pod 可调度。
 	node2 := st.MakeNode().Name("node-schedulable").Label("foo", "bar").Obj()
 	if _, err := cs.CoreV1().Nodes().Create(ctx, node2, metav1.CreateOptions{}); err != nil {
 		t.Fatal("Failed to create node-schedulable")
 	}
 
-	// Pod should be scheduled, even if it was in the backoffQ, because PopFromBackoffQ feature is enabled.
+	// 即使 Pod 在 backoffQ 中，也应被调度，因为 PopFromBackoffQ 特性已启用。
 	err = wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, wait.ForeverTestTimeout, false, testutils.PodScheduled(cs, ns, pod.Name))
 	if err != nil {
 		t.Fatalf("Expected pod to be scheduled: %v", err)
 	}
 }
 
-// TestCoreResourceEnqueue verify Pods failed by in-tree default plugins can be
-// moved properly upon their registered events.
+// TestCoreResourceEnqueue 验证因内置默认插件而失败的 Pod
+// 能在其注册的事件发生时被正确移动。
 func TestCoreResourceEnqueue(t *testing.T) {
 	for _, tt := range CoreResourceEnqueueTestCases {
 		t.Run(strings.Join(append(tt.EnablePlugins, tt.Name), "/"), func(t *testing.T) {

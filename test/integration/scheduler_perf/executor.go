@@ -148,7 +148,7 @@ func (e *WorkloadExecutor) runCreateNamespaceOp(tCtx ktesting.TContext, opIndex 
 	}
 	for _, n := range nsPreparer.namespaces() {
 		if _, ok := e.numPodsScheduledPerNamespace[n]; ok {
-			// this namespace has been already created.
+			// 该命名空间已经创建过了。
 			continue
 		}
 		e.numPodsScheduledPerNamespace[n] = 0
@@ -168,14 +168,14 @@ func (e *WorkloadExecutor) runBarrierOp(tCtx ktesting.TContext, opIndex int, op 
 			return err
 		}
 	case Scheduled:
-		// Default should be treated like "Scheduled", so handling both in the same way.
+		// 默认值应视为 "Scheduled"，因此两者采用相同的处理方式。
 		fallthrough
 	default:
 		if err := waitUntilPodsScheduled(tCtx, e.podInformer, op.LabelSelector, op.Namespaces, e.numPodsScheduledPerNamespace); err != nil {
 			return err
 		}
-		// At the end of the barrier, we can be sure that there are no pods
-		// pending scheduling in the namespaces that we just blocked on.
+		// 在 barrier 结束时，可以确定刚刚等待的命名空间中
+		// 没有等待调度的 Pod。
 		if len(op.Namespaces) == 0 {
 			e.numPodsScheduledPerNamespace = make(map[string]int)
 		} else {
@@ -195,11 +195,11 @@ func (e *WorkloadExecutor) runSleepOp(tCtx ktesting.TContext, op *sleepOp) error
 	return nil
 }
 
-// runCreatePodGroupsOp executes the createPodGroups operation.
-// It creates the configured number of PodGroups from a template and
-// then waits for them to be visible in the scheduler's informer cache.
-// This ensures that subsequent operations (like creating pods that reference these pod groups) won't fail due to cache lag.
-// It timeouts after 10 seconds if the condition is not met.
+// runCreatePodGroupsOp 执行 createPodGroups 操作。
+// 它根据模板创建配置数量的 PodGroup，
+// 然后等待它们在调度器的 informer 缓存中可见。
+// 这确保后续操作（例如创建引用这些 PodGroup 的 Pod）不会因缓存滞后而失败。
+// 如果条件未满足，将在 10 秒后超时。
 func (e *WorkloadExecutor) runCreatePodGroupsOp(tCtx ktesting.TContext, op *createPodGroups) error {
 	if err := createNamespaceIfNotPresent(tCtx, op.Namespace, &e.numPodsScheduledPerNamespace); err != nil {
 		return err
@@ -222,8 +222,8 @@ func (e *WorkloadExecutor) runCreatePodGroupsOp(tCtx ktesting.TContext, op *crea
 		}
 	}
 
-	// Wait for pod groups to be visible in the scheduler's informer cache.
-	// It times out after 10 seconds if the condition is not met.
+	// 等待 PodGroup 在调度器的 informer 缓存中可见。
+	// 如果条件未满足，将在 10 秒后超时。
 	tCtx.Logf("waiting for %d PodGroups in namespace %q", op.Count, op.Namespace)
 	err := wait.PollUntilContextTimeout(tCtx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
 		podGroups, err := e.podGroupInformer.Lister().PodGroups(op.Namespace).List(labels.Everything())
@@ -255,7 +255,7 @@ func (e *WorkloadExecutor) createPodGroupWithRetry(tCtx ktesting.TContext, obj *
 			return nil
 		}
 
-		// Fail fast on non-retriable client errors (invalid specs, bad requests, forbidden access).
+		// 对于不可重试的客户端错误（无效规格、错误请求、禁止访问），快速失败。
 		if apierrors.IsInvalid(err) || apierrors.IsBadRequest(err) || apierrors.IsForbidden(err) {
 			return err
 		}
@@ -279,7 +279,7 @@ func (e *WorkloadExecutor) runStopCollectingMetrics(tCtx ktesting.TContext, opIn
 }
 
 func (e *WorkloadExecutor) runCreatePodsOp(tCtx ktesting.TContext, opIndex int, op *createPodsOp) error {
-	// define Pod's namespace automatically, and create that namespace.
+	// 自动确定 Pod 的命名空间，并创建该命名空间。
 	namespace := fmt.Sprintf("namespace-%d", opIndex)
 	if op.Namespace != nil {
 		namespace = *op.Namespace
@@ -307,17 +307,16 @@ func (e *WorkloadExecutor) runCreatePodsOp(tCtx ktesting.TContext, opIndex int, 
 	}
 	switch {
 	case op.SkipWaitToCompletion:
-		// Only record those namespaces that may potentially require barriers
-		// in the future.
+		// 只记录那些将来可能需要 barrier 的命名空间。
 		e.numPodsScheduledPerNamespace[namespace] += op.Count
 	case op.SteadyState:
 		if err := createPodsSteadily(tCtx, namespace, e.podInformer, op); err != nil {
 			return err
 		}
 	default:
-		// Default timeout is 10 minutes because even at the lowest observed QPS of ~10 pods/sec,
-		// a standard 5000-node test completes. Heavy test suites (e.g. TAS) can configure a custom
-		// podsSchedulingTimeout option to avoid meeting this strict default ceiling.
+		// 默认超时为 10 分钟，因为即使在观测到的最低 QPS（约 10 个 Pod/秒）下，
+		// 标准的 5000 节点测试也能完成。较重的测试套件（例如 TAS）可以配置自定义的
+		// podsSchedulingTimeout 选项，以避免受此严格默认上限的约束。
 		timeout := 10 * time.Minute
 		if e.opts != nil && e.opts.podsSchedulingTimeout > 0 {
 			timeout = e.opts.podsSchedulingTimeout
@@ -327,9 +326,8 @@ func (e *WorkloadExecutor) runCreatePodsOp(tCtx ktesting.TContext, opIndex int, 
 		}
 	}
 	if op.CollectMetrics {
-		// CollectMetrics and SkipWaitToCompletion can never be true at the
-		// same time, so if we're here, it means that all pods have been
-		// scheduled.
+		// CollectMetrics 和 SkipWaitToCompletion 不可能同时为 true，
+		// 因此执行到这里意味着所有 Pod 都已被调度。
 		items, err := stopCollectingMetrics(tCtx, e.collectorCancel, &e.collectorWG, e.workload.Threshold.Get(e.topicName), *e.workload.ThresholdMetricSelector, opIndex, e.collectors)
 		if err != nil {
 			return err
@@ -399,7 +397,7 @@ func (e *WorkloadExecutor) runChurnOp(tCtx ktesting.TContext, opIndex int, op *c
 		namespace = fmt.Sprintf("namespace-%d", opIndex)
 	}
 	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(cacheddiscovery.NewMemCacheClient(tCtx.Client().Discovery()))
-	// Ensure the namespace exists.
+	// 确保命名空间存在。
 	nsObj := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	if _, err := tCtx.Client().CoreV1().Namespaces().Create(tCtx, nsObj, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
 		return fmt.Errorf("unable to create namespace %v: %w", namespace, err)
@@ -412,13 +410,13 @@ func (e *WorkloadExecutor) runChurnOp(tCtx ktesting.TContext, opIndex int, op *c
 		if err != nil {
 			return fmt.Errorf("unable to parse the %v-th template path: %w", i, err)
 		}
-		// Obtain GVR.
+		// 获取 GVR。
 		mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
 			return fmt.Errorf("unable to find GVR for %v: %w", gvk, err)
 		}
 		gvr := mapping.Resource
-		// Distinguish cluster-scoped with namespaced API objects.
+		// 区分集群作用域和命名空间作用域的 API 对象。
 		var dynRes dynamic.ResourceInterface
 		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 			dynRes = tCtx.Dynamic().Resource(gvr).Namespace(namespace)
@@ -476,7 +474,7 @@ func (e *WorkloadExecutor) runChurnOp(tCtx ktesting.TContext, opIndex int, op *c
 			defer e.wg.Done()
 			defer ticker.Stop()
 			retVals := make([][]string, len(churnFns))
-			// For each churn function, instantiate a slice of strings with length "op.Number".
+			// 为每个 churn 函数实例化一个长度为 "op.Number" 的字符串切片。
 			for i := range retVals {
 				retVals[i] = make([]string, op.Number)
 			}
@@ -525,8 +523,8 @@ func (e *WorkloadExecutor) runStartCollectingMetricsOp(tCtx ktesting.TContext, o
 	return nil
 }
 
-// runStartCollectingProfileOp starts profile collection.
-// The output file is created relative to dataItemsDir if it is set.
+// runStartCollectingProfileOp 启动性能剖析收集。
+// 如果设置了 dataItemsDir，输出文件将相对于该目录创建。
 func (e *WorkloadExecutor) runStartCollectingProfileOp(tCtx ktesting.TContext, _ int, op *startCollectingProfileOp) error {
 	switch strings.ToUpper(op.Type) {
 	case "CPU":
@@ -581,14 +579,14 @@ func startCollectingMetrics(tCtx ktesting.TContext, collectorWG *sync.WaitGroup,
 	collectorCtx := tCtx.WithCancel()
 	workloadName := tCtx.Name()
 
-	// Clean up memory usage from the initial setup phase.
+	// 清理初始设置阶段产生的内存占用。
 	runtime.GC()
 
-	// The first part is the same for each workload, therefore we can strip it.
+	// 第一部分对每个工作负载都相同，因此可以将其去掉。
 	workloadName = workloadName[strings.Index(name, "/")+1:]
 	collectorsList := getTestDataCollectors(podInformer, fmt.Sprintf("%s/%s", workloadName, name), namespaces, labelSelector, mcc, throughputErrorMargin)
 	for _, collector := range collectorsList {
-		// Need loop-local variable for function below.
+		// 下面的函数需要使用循环内的局部变量。
 		err := collector.init()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize data collector: %w", err)
@@ -609,13 +607,13 @@ func startCollectingMetrics(tCtx ktesting.TContext, collectorWG *sync.WaitGroup,
 	}
 	startBlockFileName := ""
 	if enableBlockProfile {
-		// Rate of 1 captures every blocking event.
+		// 比率为 1 时捕获每一次阻塞事件。
 		runtime.SetBlockProfileRate(1)
 		startBlockFileName = startCumulativeProfile(tCtx, "block", "block.prof")
 	}
 	startMutexFileName := ""
 	if enableMutexProfile {
-		// Fraction of 1 captures every mutex contention event.
+		// 比例为 1 时捕获每一次互斥锁竞争事件。
 		runtime.SetMutexProfileFraction(1)
 		startMutexFileName = startCumulativeProfile(tCtx, "mutex", "mutex.prof")
 	}
@@ -692,7 +690,7 @@ type testDataCollector interface {
 	collect() []DataItem
 }
 
-// var for mocking in tests.
+// 用于在测试中进行 mock 的变量。
 var getTestDataCollectors = func(podInformer coreinformers.PodInformer, name string, namespaces []string, labelSelector map[string]string, mcc *metricsCollectorConfig, throughputErrorMargin float64) []testDataCollector {
 	if mcc == nil {
 		mcc = &defaultMetricsCollectorConfig
@@ -707,8 +705,8 @@ var getTestDataCollectors = func(podInformer coreinformers.PodInformer, name str
 
 func createNamespaceIfNotPresent(tCtx ktesting.TContext, namespace string, podsPerNamespace *map[string]int) error {
 	if _, ok := (*podsPerNamespace)[namespace]; !ok {
-		// The namespace has not created yet.
-		// So, create that and register it.
+		// 该命名空间尚未创建。
+		// 因此创建它并进行登记。
 		_, err := tCtx.Client().CoreV1().Namespaces().Create(tCtx, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to create namespace for Pod: %v", namespace)
@@ -718,8 +716,8 @@ func createNamespaceIfNotPresent(tCtx ktesting.TContext, namespace string, podsP
 	return nil
 }
 
-// createPodsRapidly implements the "create pods rapidly" mode of [createPodsOp].
-// It's a nop when cpo.SteadyState is true.
+// createPodsRapidly 实现 [createPodsOp] 的“快速创建 Pod”模式。
+// 当 cpo.SteadyState 为 true 时，该函数不执行任何操作。
 func createPodsRapidly(tCtx ktesting.TContext, namespace string, cpo *createPodsOp) error {
 	if cpo.SteadyState {
 		return nil
@@ -735,8 +733,8 @@ func createPodsRapidly(tCtx ktesting.TContext, namespace string, cpo *createPods
 	return podCreator.CreatePods(tCtx)
 }
 
-// createPodsSteadily implements the "create pods and delete pods" mode of [createPodsOp].
-// It's a nop when cpo.SteadyState is false.
+// createPodsSteadily 实现 [createPodsOp] 的“创建 Pod 并删除 Pod”模式。
+// 当 cpo.SteadyState 为 false 时，该函数不执行任何操作。
 func createPodsSteadily(tCtx ktesting.TContext, namespace string, podInformer coreinformers.PodInformer, cpo *createPodsOp) error {
 	if !cpo.SteadyState {
 		return nil
@@ -748,8 +746,7 @@ func createPodsSteadily(tCtx ktesting.TContext, namespace string, podInformer co
 	tCtx.Logf("creating pods in namespace %q for %s", namespace, cpo.Duration)
 	tCtx = tCtx.WithTimeout(cpo.Duration.Duration, fmt.Sprintf("the operation ran for the configured %s", cpo.Duration.Duration))
 
-	// Start watching pods in the namespace. Any pod which is seen as being scheduled
-	// gets deleted.
+	// 开始监听命名空间中的 Pod。任何被看到已调度的 Pod 都会被删除。
 	scheduledPods := make(chan *v1.Pod, cpo.Count)
 	defer close(scheduledPods)
 
@@ -761,7 +758,7 @@ func createPodsSteadily(tCtx ktesting.TContext, namespace string, podInformer co
 		}
 
 		if (oldPod == nil || oldPod.Spec.NodeName == "") && newPod.Spec.NodeName != "" {
-			// Only ask for deletion in our namespace.
+			// 只请求删除我们命名空间中的 Pod。
 			if newPod.Namespace != namespace {
 				return
 			}
@@ -786,19 +783,17 @@ func createPodsSteadily(tCtx ktesting.TContext, namespace string, podInformer co
 		tCtx.ExpectNoError(cache.ShutDownEventHandler(podInformer.Informer(), handle), "remove event handler")
 	}()
 
-	// Seed the namespace with the initial number of pods.
-	// This is the backlog for the scheduler. Because we
-	// delete each scheduled pod as soon as we see it and
-	// create a new one, a) the scheduler's queue should never
-	// be empty and b) the number of pods running concurrently
-	// should be smaller than this number, i.e. the cluster
-	// will typically be more or less in its starting condition
-	// for each pod scheduling attempt.
+	// 用初始数量的 Pod 填充该命名空间。
+	// 这些 Pod 是调度器的待处理积压。由于我们
+	// 一看到已调度的 Pod 就将其删除并创建新的 Pod，
+	// a) 调度器的队列不应为空，b) 并发运行的 Pod 数量
+	// 应小于该数量，即每次 Pod 调度尝试时集群
+	// 通常都大致处于其起始状态。
 	if err := strategy(tCtx, tCtx.Client(), namespace, cpo.Count); err != nil {
 		return fmt.Errorf("create initial %d pods: %w", cpo.Count, err)
 	}
 
-	// Now loop until we are done. Report periodically how many pods were scheduled.
+	// 现在循环直到结束，并定期报告已调度的 Pod 数量。
 	countScheduledPods := 0
 	lastCountScheduledPods := 0
 	logPeriod := time.Second
@@ -809,48 +804,46 @@ func createPodsSteadily(tCtx ktesting.TContext, namespace string, podInformer co
 		case <-tCtx.Done():
 			tCtx.Logf("Completed after seeing %d scheduled pod: %v", countScheduledPods, context.Cause(tCtx))
 
-			// Sanity check: at least one pod should have been scheduled,
-			// giving us a non-zero average.
+			// 健全性检查：至少应有一个 Pod 已被调度，
+			// 从而使平均值非零。
 			//
-			// This is important because otherwise "no pods scheduled because of constant
-			// failure" would not get detected in unit tests. For benchmarks
-			// it's less important, but indicates that the time period
-			// might have been too small.
+			// 这很重要，否则在单元测试中“由于持续失败而没有 Pod 被调度”
+			// 的情况将无法被发现。对于基准测试而言这没那么重要，
+			// 但表明时间段可能太短。
 			//
-			// The collector logs "Failed to measure SchedulingThroughput ... Increase pods and/or nodes to make scheduling take longer"
-			// but that is hard to spot.
+			// 收集器会记录 "Failed to measure SchedulingThroughput ... Increase pods and/or nodes to make scheduling take longer"，
+			// 但这条日志很难注意到。
 			//
-			// The non-steady case blocks until all pods have been scheduled
-			// and doesn't need this check.
+			// 非稳态情况会阻塞直到所有 Pod 都被调度，
+			// 因此不需要此检查。
 			if countScheduledPods == 0 {
 				return errors.New("no pod at all got scheduled, either because of a problem or because the test interval was too small")
 			}
 			return nil
 		case pod := <-scheduledPods:
 			countScheduledPods++
-			// Delete the scheduled pod.
+			// 删除已调度的 Pod。
 			err := tCtx.Client().CoreV1().Pods(pod.Namespace).Delete(tCtx, pod.Name, metav1.DeleteOptions{
 				GracePeriodSeconds: new(int64(0)),
-				PropagationPolicy:  new(metav1.DeletePropagationBackground), // Foreground will block.
+				PropagationPolicy:  new(metav1.DeletePropagationBackground), // Foreground 会阻塞。
 			})
-			// Ignore errors when the time is up. errors.Is(context.Canceled) would
-			// be more precise, but doesn't work because client-go doesn't reliably
-			// propagate it.
+			// 时间到时忽略错误。errors.Is(context.Canceled) 会更精确，
+			// 但由于 client-go 不能可靠地传播该错误，因此无法使用。
 			if tCtx.Err() != nil {
 				continue
 			}
 			if err != nil {
-				// Worse, sometimes rate limiting gives up *before* the context deadline is reached.
-				// Then we get here with this error:
+				// 更糟的是，有时速率限制会在 context 截止时间到达*之前*就放弃。
+				// 然后我们会带着这个错误来到这里：
 				//   client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context deadline
 				//
-				// This also can be ignored. We'll retry if the test is not done yet.
+				// 这同样可以忽略。如果测试尚未结束，我们会重试。
 				if strings.Contains(err.Error(), "would exceed context deadline") {
 					continue
 				}
 				return fmt.Errorf("delete scheduled pod: %w", err)
 			}
-			// Immediately create a new one to keep the scheduler busy.
+			// 立即创建一个新 Pod，使调度器保持忙碌。
 			err = strategy(tCtx, tCtx.Client(), namespace, 1)
 			if tCtx.Err() != nil {
 				continue
@@ -871,10 +864,9 @@ func createPodsSteadily(tCtx ktesting.TContext, namespace string, podInformer co
 	}
 }
 
-// waitUntilPodsScheduled blocks until the all pods in the given namespaces are
-// scheduled.
+// waitUntilPodsScheduled 会阻塞，直到给定命名空间中的所有 Pod 都被调度。
 func waitUntilPodsScheduled(tCtx ktesting.TContext, podInformer coreinformers.PodInformer, labelSelector map[string]string, namespaces []string, numPodsScheduledPerNamespace map[string]int) error {
-	// If unspecified, default to all known namespaces.
+	// 如果未指定，则默认为所有已知的命名空间。
 	if len(namespaces) == 0 {
 		for namespace := range numPodsScheduledPerNamespace {
 			namespaces = append(namespaces, namespace)
@@ -897,10 +889,10 @@ func waitUntilPodsScheduled(tCtx ktesting.TContext, podInformer coreinformers.Po
 	return nil
 }
 
-// waitUntilPodsAttempted blocks until the all pods in the given namespaces are
-// attempted (at least once went through a scheduling cycle).
+// waitUntilPodsAttempted 会阻塞，直到给定命名空间中的所有 Pod 都被尝试调度
+// （至少经历过一次调度周期）。
 func waitUntilPodsAttempted(tCtx ktesting.TContext, podInformer coreinformers.PodInformer, labelSelector map[string]string, namespaces []string, numPodsScheduledPerNamespace map[string]int) error {
-	// If unspecified, default to all known namespaces.
+	// 如果未指定，则默认为所有已知的命名空间。
 	if len(namespaces) == 0 {
 		for namespace := range numPodsScheduledPerNamespace {
 			namespaces = append(namespaces, namespace)
@@ -923,9 +915,9 @@ func waitUntilPodsAttempted(tCtx ktesting.TContext, podInformer coreinformers.Po
 	return nil
 }
 
-// waitUntilPodsAttemptedInNamespace blocks until all pods in the given
-// namespace at least once went through a scheduling cycle.
-// Times out after 10 minutes similarly to waitUntilPodsScheduledInNamespace.
+// waitUntilPodsAttemptedInNamespace 会阻塞，直到给定命名空间中的所有 Pod
+// 至少经历过一次调度周期。
+// 与 waitUntilPodsScheduledInNamespace 类似，10 分钟后超时。
 func waitUntilPodsAttemptedInNamespace(tCtx ktesting.TContext, podInformer coreinformers.PodInformer, labelSelector map[string]string, namespace string, wantCount int) error {
 	var pendingPod *v1.Pod
 
@@ -980,11 +972,11 @@ func getNodePreparer(prefix string, cno *createNodesOp, clientset clientset.Inte
 	), nil
 }
 
-// waitUntilPodsScheduledInNamespace blocks until all pods in the given
-// namespace are scheduled. Times out after 10 minutes by default because even at the
-// lowest observed QPS of ~10 pods/sec, a 5000-node test should complete.
-// Complex test suites (e.g. TAS where each pod gets scheduled multiple times for placements)
-// may override this timeout via schedulerPerfOptions.
+// waitUntilPodsScheduledInNamespace 会阻塞，直到给定命名空间中的所有 Pod 都被调度。
+// 默认 10 分钟后超时，因为即使在观测到的最低 QPS（约 10 个 Pod/秒）下，
+// 5000 节点的测试也应能完成。
+// 复杂的测试套件（例如 TAS，其中每个 Pod 会为了放置而被多次调度）
+// 可以通过 schedulerPerfOptions 覆盖此超时。
 func waitUntilPodsScheduledInNamespace(tCtx ktesting.TContext, podInformer coreinformers.PodInformer, labelSelector map[string]string, namespace string, wantCount int, timeout time.Duration) error {
 	var pendingPod *v1.Pod
 
@@ -1111,7 +1103,7 @@ func getCustomVolumeFactory(pvTemplate *v1.PersistentVolume) func(id int) *v1.Pe
 	}
 }
 
-// namespacePreparer holds configuration information for the test namespace preparer.
+// namespacePreparer 保存测试命名空间准备器的配置信息。
 type namespacePreparer struct {
 	count  int
 	prefix string
@@ -1133,7 +1125,7 @@ func newNamespacePreparer(tCtx ktesting.TContext, cno *createNamespacesOp) (*nam
 	}, nil
 }
 
-// namespaces returns namespace names have been (or will be) created by this namespacePreparer
+// namespaces 返回已由（或将由）该 namespacePreparer 创建的命名空间名称
 func (p *namespacePreparer) namespaces() []string {
 	namespaces := make([]string, p.count)
 	for i := 0; i < p.count; i++ {
@@ -1142,7 +1134,7 @@ func (p *namespacePreparer) namespaces() []string {
 	return namespaces
 }
 
-// prepare creates the namespaces.
+// prepare 创建命名空间。
 func (p *namespacePreparer) prepare(tCtx ktesting.TContext) error {
 	base := &v1.Namespace{}
 	if p.spec != nil {
@@ -1162,7 +1154,7 @@ func (p *namespacePreparer) prepare(tCtx ktesting.TContext) error {
 	return nil
 }
 
-// cleanup deletes existing test namespaces.
+// cleanup 删除已存在的测试命名空间。
 func (p *namespacePreparer) cleanup(tCtx ktesting.TContext) error {
 	var errRet error
 	for i := 0; i < p.count; i++ {
@@ -1197,19 +1189,19 @@ func getUnstructuredFromFile(path string) (*unstructured.Unstructured, *schema.G
 	return unstructuredObj, gvk, nil
 }
 
-// gcForMemProfile forces the runtime to update memory profile statistics.
-// According to https://go.dev/wiki/Performance#memory-profiler, memprof stats
-// are updated in a deferred way. Several consecutive GCs push the update
-// pipeline forward to present a consistent snapshot.
+// gcForMemProfile 强制运行时更新内存剖析统计数据。
+// 根据 https://go.dev/wiki/Performance#memory-profiler，memprof 统计
+// 是以延迟方式更新的。连续多次 GC 会推进更新流程，
+// 以呈现一致的快照。
 func gcForMemProfile() {
 	runtime.GC()
 	runtime.GC()
 	runtime.GC()
 }
 
-// startCumulativeProfile writes an initial snapshot of the named pprof profile
-// to a "-start-<fileSuffix>" output file.
-// Returns the path of the snapshot file to be passed to endCumulativeProfile.
+// startCumulativeProfile 将指定 pprof 剖析的初始快照写入
+// "-start-<fileSuffix>" 输出文件。
+// 返回快照文件的路径，供 endCumulativeProfile 使用。
 func startCumulativeProfile(tCtx ktesting.TContext, pprofName, fileSuffix string) string {
 	f, err := createOutputFile("-start-" + fileSuffix)
 	tCtx.ExpectNoError(err, "create start "+pprofName+" profile")
@@ -1219,10 +1211,10 @@ func startCumulativeProfile(tCtx ktesting.TContext, pprofName, fileSuffix string
 	return startFileName
 }
 
-// endCumulativeProfile writes a final snapshot of the named pprof profile to a
-// "-end-<fileSuffix>" file and computes a "-delta-<fileSuffix>" file via
-// go tool pprof. Developers don't need to remember the go tool pprof invocation
-// for deltas.
+// endCumulativeProfile 将指定 pprof 剖析的最终快照写入
+// "-end-<fileSuffix>" 文件，并通过 go tool pprof 计算
+// "-delta-<fileSuffix>" 文件。开发者无需记住用于计算差值的
+// go tool pprof 调用命令。
 func endCumulativeProfile(tCtx ktesting.TContext, pprofName, fileSuffix, startFileName string) {
 	f, err := createOutputFile("-end-" + fileSuffix)
 	tCtx.ExpectNoError(err, "create end "+pprofName+" profile")

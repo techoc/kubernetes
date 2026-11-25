@@ -34,8 +34,8 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// WaitForNamedAuthorizationUpdate checks if the given user can perform the named verb and action on the named resource.
-// Copied from k8s.io/kubernetes/test/e2e/framework/auth.
+// WaitForNamedAuthorizationUpdate 检查给定用户是否可以对指定资源执行指定的 verb 和 action。
+// 复制自 k8s.io/kubernetes/test/e2e/framework/auth。
 func WaitForNamedAuthorizationUpdate(t *testing.T, ctx context.Context, c authorizationv1client.SubjectAccessReviewsGetter, user, namespace, verb, resourceName string, resource schema.GroupResource, allowed bool) {
 	t.Helper()
 
@@ -96,7 +96,7 @@ func grantAuthorization(t *testing.T, ctx context.Context, adminClient clientset
 		Subjects: []rbacv1.Subject{
 			{
 				Kind: accountKind,
-				// APIGroup defaults to the appropriate value for both users and service accounts
+				// 对于用户和 service account，APIGroup 都会默认取相应的值
 				Name:      name,
 				Namespace: namespace,
 			},

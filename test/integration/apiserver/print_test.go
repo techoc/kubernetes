@@ -108,7 +108,7 @@ var kindAllowList = sets.NewString(
 	// --
 )
 
-// TODO (soltysh): this list has to go down to 0!
+// TODO (soltysh): 这个列表必须缩减到 0！
 var missingHanlders = sets.NewString(
 	"ClusterRole",
 	"LimitRange",
@@ -120,7 +120,7 @@ var missingHanlders = sets.NewString(
 
 func TestServerSidePrint(t *testing.T) {
 	_, clientSet, kubeConfig, tearDownFn := setupWithResources(t,
-		// additional groupversions needed for the test to run
+		// 测试运行所需的额外 groupversion
 		[]schema.GroupVersion{
 			{Group: "discovery.k8s.io", Version: "v1"},
 			{Group: "discovery.k8s.io", Version: "v1beta1"},
@@ -179,7 +179,7 @@ func TestServerSidePrint(t *testing.T) {
 		return
 	}
 	for gvk, apiType := range legacyscheme.Scheme.AllKnownTypes() {
-		// we do not care about internal objects or lists // TODO make sure this is always true
+		// 我们不关心 internal 对象或 list // TODO 确保这一点始终成立
 		if gvk.Version == runtime.APIVersionInternal || strings.HasSuffix(apiType.Name(), "List") {
 			continue
 		}
@@ -188,10 +188,10 @@ func TestServerSidePrint(t *testing.T) {
 		}
 
 		t.Logf("Checking %s", gvk)
-		// read table definition as returned by the server
+		// 读取服务端返回的 table 定义
 		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
-			// if we have no mapping, we aren't serving it and we don't need to check its printer.
+			// 如果没有 mapping，说明该类型未提供服务，无需检查其 printer。
 			t.Logf("unexpected error getting mapping for GVK %s: %v", gvk, err)
 			continue
 		}
@@ -215,7 +215,7 @@ func TestServerSidePrint(t *testing.T) {
 			continue
 		}
 
-		// get table definition used in printers
+		// 获取 printers 中使用的 table 定义
 		obj, err := legacyscheme.Scheme.New(gvk)
 		if err != nil {
 			t.Errorf("unexpected error creating %s: %v", gvk, err)

@@ -67,7 +67,7 @@ func createNodes(t *testing.T, client *clientset.Clientset, startIndex, endIndex
 		}(i)
 	}
 
-	go func() { // wait in another go-routine to close channel
+	go func() { // 在另一个 goroutine 中等待以关闭 channel
 		wg.Wait()
 		close(errs)
 	}()
@@ -94,7 +94,7 @@ func deleteNodes(t *testing.T, client *clientset.Clientset, startIndex, endIndex
 		}(i)
 	}
 
-	go func() { // wait in another go-routine to close channel
+	go func() { // 在另一个 goroutine 中等待以关闭 channel
 		wg.Wait()
 		close(errs)
 	}()
@@ -131,7 +131,7 @@ func waitForNodesWithTTLAnnotation(t *testing.T, nodeLister listers.NodeLister, 
 	}
 }
 
-// Test whether ttlcontroller sets correct ttl annotations.
+// 测试 ttlcontroller 是否设置了正确的 TTL annotation。
 func TestTTLAnnotations(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -146,19 +146,19 @@ func TestTTLAnnotations(t *testing.T) {
 	go nodeInformer.Informer().Run(ctx.Done())
 	go ttlc.Run(ctx, 1)
 
-	// Create 100 nodes all should have annotation equal to 0.
+	// 创建 100 个节点，它们的 annotation 都应为 0。
 	createNodes(t, testClient, 0, 100)
 	waitForNodesWithTTLAnnotation(t, informers.Core().V1().Nodes().Lister(), 100, 0)
 
-	// Create 1 more node, all annotation should change to 15.
+	// 再创建 1 个节点，所有 annotation 都应变为 15。
 	createNodes(t, testClient, 100, 101)
 	waitForNodesWithTTLAnnotation(t, informers.Core().V1().Nodes().Lister(), 101, 15)
 
-	// Delete 11 nodes, it should still remain at the level of 15.
+	// 删除 11 个节点，TTL 应仍保持在 15。
 	deleteNodes(t, testClient, 90, 101)
 	waitForNodesWithTTLAnnotation(t, informers.Core().V1().Nodes().Lister(), 90, 15)
 
-	// Delete 1 more node, all should be decreased to 0.
+	// 再删除 1 个节点，所有 TTL 都应降为 0。
 	deleteNodes(t, testClient, 89, 90)
 	waitForNodesWithTTLAnnotation(t, informers.Core().V1().Nodes().Lister(), 89, 0)
 }

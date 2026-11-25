@@ -40,7 +40,7 @@ import (
 )
 
 func TestEndpointUpdates(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -60,15 +60,15 @@ func TestEndpointUpdates(t *testing.T) {
 		client,
 		0)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller
 	informers.Start(tCtx.Done())
 	go epController.Run(tCtx, 1)
 
-	// Create namespace
+	// 创建 namespace
 	ns := framework.CreateNamespaceOrDie(client, "test-endpoints-updates", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create a pod with labels
+	// 创建带有 label 的 Pod
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -91,7 +91,7 @@ func TestEndpointUpdates(t *testing.T) {
 		t.Fatalf("Failed to create pod %s: %v", pod.Name, err)
 	}
 
-	// Set pod IPs
+	// 设置 Pod IP
 	createdPod.Status = v1.PodStatus{
 		Phase:  v1.PodRunning,
 		PodIPs: []v1.PodIP{{IP: "1.1.1.1"}, {IP: "2001:db8::"}},
@@ -101,14 +101,14 @@ func TestEndpointUpdates(t *testing.T) {
 		t.Fatalf("Failed to update status of pod %s: %v", pod.Name, err)
 	}
 
-	// Create a service associated to the pod
+	// 创建与该 Pod 关联的 Service
 	svc := newService(ns.Name, "foo1")
 	svc1, err := client.CoreV1().Services(ns.Name).Create(tCtx, svc, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create service %s: %v", svc.Name, err)
 	}
 
-	// Obtain ResourceVersion of the new endpoint created
+	// 获取新建 Endpoints 的 ResourceVersion
 	var resVersion string
 	if err := wait.PollImmediate(1*time.Second, wait.ForeverTestTimeout, func() (bool, error) {
 		endpoints, err := client.CoreV1().Endpoints(ns.Name).Get(tCtx, svc.Name, metav1.GetOptions{})
@@ -122,17 +122,16 @@ func TestEndpointUpdates(t *testing.T) {
 		t.Fatalf("endpoints not found: %v", err)
 	}
 
-	// Force recomputation on the endpoint controller
+	// 强制 endpoint controller 重新计算
 	svc1.SetAnnotations(map[string]string{"foo": "bar"})
 	_, err = client.CoreV1().Services(ns.Name).Update(tCtx, svc1, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to update service %s: %v", svc1.Name, err)
 	}
 
-	// Create a new service and wait until it has been processed,
-	// this way we can be sure that the endpoint for the original service
-	// was recomputed before asserting, since we only have 1 worker
-	// in the endpoint controller
+	// 创建一个新 Service 并等待它被处理，
+	// 这样我们可以确保在断言之前，原 Service 的 Endpoints
+	// 已被重新计算，因为 endpoint controller 中只有 1 个 worker。
 	svc2 := newService(ns.Name, "foo2")
 	_, err = client.CoreV1().Services(ns.Name).Create(tCtx, svc2, metav1.CreateOptions{})
 	if err != nil {
@@ -150,8 +149,8 @@ func TestEndpointUpdates(t *testing.T) {
 		t.Fatalf("endpoints not found: %v", err)
 	}
 
-	// the endpoint controller should not update the endpoint created for the original
-	// service since nothing has changed, the resource version has to be the same
+	// 由于没有任何变化，endpoint controller 不应更新为原 Service 创建的
+	// Endpoints，其 resource version 必须保持不变。
 	endpoints, err := client.CoreV1().Endpoints(ns.Name).Get(tCtx, svc.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("error fetching endpoints: %v", err)
@@ -162,9 +161,9 @@ func TestEndpointUpdates(t *testing.T) {
 
 }
 
-// Regression test for https://issues.k8s.io/125638
+// 针对 https://issues.k8s.io/125638 的回归测试
 func TestEndpointWithMultiplePodUpdates(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -184,17 +183,17 @@ func TestEndpointWithMultiplePodUpdates(t *testing.T) {
 		client,
 		0)
 
-	// Process 10 services in parallel to increase likelihood of outdated informer cache.
+	// 并行处理 10 个 Service，以提高出现 informer 缓存过期的概率。
 	concurrency := 10
-	// Start informer and controllers
+	// 启动 informer 和 controller
 	informers.Start(tCtx.Done())
 	go epController.Run(tCtx, concurrency)
 
-	// Create namespace
+	// 创建 namespace
 	ns := framework.CreateNamespaceOrDie(client, "test-endpoints-updates", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create a pod with labels
+	// 创建带有 label 的 Pod
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -217,7 +216,7 @@ func TestEndpointWithMultiplePodUpdates(t *testing.T) {
 		t.Fatalf("Failed to create pod %s: %v", pod.Name, err)
 	}
 
-	// Set pod status
+	// 设置 Pod 状态
 	pod.Status = v1.PodStatus{
 		Phase:      v1.PodRunning,
 		Conditions: []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue}},
@@ -229,7 +228,7 @@ func TestEndpointWithMultiplePodUpdates(t *testing.T) {
 	}
 
 	var services []*v1.Service
-	// Create services associated to the pod
+	// 创建与该 Pod 关联的多个 Service
 	for i := range concurrency {
 		svc := newService(ns.Name, fmt.Sprintf("foo%d", i))
 		_, err = client.CoreV1().Services(ns.Name).Create(tCtx, svc, metav1.CreateOptions{})
@@ -240,7 +239,7 @@ func TestEndpointWithMultiplePodUpdates(t *testing.T) {
 	}
 
 	for _, service := range services {
-		// Ensure the new endpoints are created.
+		// 确保新的 Endpoints 已创建。
 		if err := wait.PollUntilContextTimeout(tCtx, 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
 			_, err := client.CoreV1().Endpoints(ns.Name).Get(tCtx, service.Name, metav1.GetOptions{})
 			if err != nil {
@@ -252,7 +251,7 @@ func TestEndpointWithMultiplePodUpdates(t *testing.T) {
 		}
 	}
 
-	// Update pod's status and revert it immediately. The endpoints should be in-sync with the pod's status eventually.
+	// 更新 Pod 状态并立即恢复。Endpoints 最终应与 Pod 状态保持一致。
 	pod.Status.Conditions[0].Status = v1.ConditionFalse
 	pod, err = client.CoreV1().Pods(ns.Name).UpdateStatus(tCtx, pod, metav1.UpdateOptions{})
 	if err != nil {
@@ -265,10 +264,10 @@ func TestEndpointWithMultiplePodUpdates(t *testing.T) {
 		t.Fatalf("Failed to update pod %s to ready: %v", pod.Name, err)
 	}
 
-	// Some workers might update endpoints twice (Ready->NotReady->Ready), while others may not update endpoints at all
-	// if they receive the 2nd pod update quickly. Consequently, we can't rely on endpoints resource version to
-	// determine if the controller has processed the pod updates. Instead, we will wait for 1 second, assuming that this
-	// provides enough time for the workers to process endpoints at least once.
+	// 有些 worker 可能会更新 Endpoints 两次（Ready->NotReady->Ready），而另一些 worker
+	// 如果很快收到第二次 Pod 更新，可能完全不更新 Endpoints。因此不能依靠 Endpoints 的
+	// resource version 来判断 controller 是否已处理 Pod 更新。改为等待 1 秒，假设这段时间
+	// 足以让 worker 至少处理一次 Endpoints。
 	time.Sleep(1 * time.Second)
 	expectedEndpointAddresses := []v1.EndpointAddress{
 		{
@@ -303,11 +302,11 @@ func TestEndpointWithMultiplePodUpdates(t *testing.T) {
 	}
 }
 
-// TestExternalNameToClusterIPTransition tests that Service of type ExternalName
-// does not get endpoints, and after transition to ClusterIP, service gets endpoint,
-// without headless label
+// TestExternalNameToClusterIPTransition 测试 ExternalName 类型的 Service
+// 不会有 Endpoints，而在转换为 ClusterIP 后，Service 会获得 Endpoints，
+// 且不带 headless label。
 func TestExternalNameToClusterIPTransition(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -327,15 +326,15 @@ func TestExternalNameToClusterIPTransition(t *testing.T) {
 		client,
 		0)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller
 	informers.Start(tCtx.Done())
 	go epController.Run(tCtx, 1)
 
-	// Create namespace
+	// 创建 namespace
 	ns := framework.CreateNamespaceOrDie(client, "test-endpoints-updates", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create a pod with labels
+	// 创建带有 label 的 Pod
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -358,7 +357,7 @@ func TestExternalNameToClusterIPTransition(t *testing.T) {
 		t.Fatalf("Failed to create pod %s: %v", pod.Name, err)
 	}
 
-	// Set pod IPs
+	// 设置 Pod IP
 	createdPod.Status = v1.PodStatus{
 		Phase:  v1.PodRunning,
 		PodIPs: []v1.PodIP{{IP: "1.1.1.1"}, {IP: "2001:db8::"}},
@@ -368,7 +367,7 @@ func TestExternalNameToClusterIPTransition(t *testing.T) {
 		t.Fatalf("Failed to update status of pod %s: %v", pod.Name, err)
 	}
 
-	// Create an ExternalName service associated to the pod
+	// 创建与该 Pod 关联的 ExternalName Service
 	svc := newExternalNameService(ns.Name, "foo1")
 	svc1, err := client.CoreV1().Services(ns.Name).Create(tCtx, svc, metav1.CreateOptions{})
 	if err != nil {
@@ -387,7 +386,7 @@ func TestExternalNameToClusterIPTransition(t *testing.T) {
 		t.Errorf("expected error waiting for endpoints")
 	}
 
-	// update service to ClusterIP type and verify endpoint was created
+	// 将 Service 更新为 ClusterIP 类型，并验证 Endpoints 已创建
 	svc1.Spec.Type = v1.ServiceTypeClusterIP
 	_, err = client.CoreV1().Services(ns.Name).Update(tCtx, svc1, metav1.UpdateOptions{})
 	if err != nil {
@@ -410,13 +409,12 @@ func TestExternalNameToClusterIPTransition(t *testing.T) {
 	}
 }
 
-// TestEndpointWithTerminatingPod tests that terminating pods are NOT included in Endpoints.
-// This capability is only available in the newer EndpointSlice API and there are no plans to
-// include it for Endpoints. This test can be removed in the future if we decide to include
-// terminating endpoints in Endpoints, but in the mean time this test ensures we do not change
-// this behavior accidentally.
+// TestEndpointWithTerminatingPod 测试处于 terminating 状态的 Pod 不会包含在 Endpoints 中。
+// 此能力仅在较新的 EndpointSlice API 中提供，且没有计划为 Endpoints 加入该能力。
+// 如果将来决定在 Endpoints 中包含 terminating endpoint，可以移除该测试，
+// 但在此之前，该测试确保我们不会意外改变这一行为。
 func TestEndpointWithTerminatingPod(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -436,15 +434,15 @@ func TestEndpointWithTerminatingPod(t *testing.T) {
 		client,
 		0)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller
 	informers.Start(tCtx.Done())
 	go epController.Run(tCtx, 1)
 
-	// Create namespace
+	// 创建 namespace
 	ns := framework.CreateNamespaceOrDie(client, "test-endpoints-terminating", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create a pod with labels
+	// 创建带有 label 的 Pod
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "test-pod",
@@ -493,7 +491,7 @@ func TestEndpointWithTerminatingPod(t *testing.T) {
 		t.Fatalf("Failed to update status of pod %s: %v", pod.Name, err)
 	}
 
-	// Create a service associated to the pod
+	// 创建与该 Pod 关联的 Service
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-service",
@@ -516,7 +514,7 @@ func TestEndpointWithTerminatingPod(t *testing.T) {
 		t.Fatalf("Failed to create service %s: %v", svc.Name, err)
 	}
 
-	// poll until associated Endpoints to the previously created Service exists
+	// 轮询等待之前创建的 Service 对应的 Endpoints 出现
 	if err := wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
 		endpoints, err := client.CoreV1().Endpoints(ns.Name).Get(tCtx, svc.Name, metav1.GetOptions{})
 		if err != nil {
@@ -542,10 +540,10 @@ func TestEndpointWithTerminatingPod(t *testing.T) {
 		t.Fatalf("error deleting test pod: %v", err)
 	}
 
-	// poll until endpoint for deleted Pod is no longer in Endpoints.
+	// 轮询等待被删除 Pod 的 endpoint 不再出现在 Endpoints 中。
 	if err := wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
-		// Ensure that the recently deleted Pod exists but with a deletion timestamp. If the Pod does not exist,
-		// we should fail the test since it is no longer validating against a terminating pod.
+		// 确保刚刚删除的 Pod 仍然存在但带有 deletion timestamp。如果 Pod 不存在，
+		// 则应判定测试失败，因为此时它不再针对 terminating Pod 进行验证。
 		pod, err := client.CoreV1().Pods(ns.Name).Get(tCtx, pod.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return false, fmt.Errorf("expected Pod %q to exist with deletion timestamp but was not found: %v", pod.Name, err)
@@ -582,7 +580,7 @@ func labelMap() map[string]string {
 	return map[string]string{"foo": "bar"}
 }
 
-// newService returns a service with selector and exposing ports
+// newService 返回一个带有 selector 并暴露端口的 Service
 func newService(namespace, name string) *v1.Service {
 	return &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -600,7 +598,7 @@ func newService(namespace, name string) *v1.Service {
 	}
 }
 
-// newExternalNameService returns an ExternalName service with selector and exposing ports
+// newExternalNameService 返回一个带有 selector 并暴露端口的 ExternalName Service
 func newExternalNameService(namespace, name string) *v1.Service {
 	svc := newService(namespace, name)
 	svc.Spec.Type = v1.ServiceTypeExternalName
@@ -609,7 +607,7 @@ func newExternalNameService(namespace, name string) *v1.Service {
 }
 
 func TestEndpointTruncate(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -629,15 +627,15 @@ func TestEndpointTruncate(t *testing.T) {
 		client,
 		0)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller
 	informers.Start(tCtx.Done())
 	go epController.Run(tCtx, 1)
 
-	// Create namespace
+	// 创建 namespace
 	ns := framework.CreateNamespaceOrDie(client, "test-endpoints-truncate", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create a pod with labels
+	// 创建带有 label 的 Pod
 	basePod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "test-pod",
@@ -675,7 +673,7 @@ func TestEndpointTruncate(t *testing.T) {
 		},
 	}
 
-	// create 1001 Pods to reach endpoint max capacity that is set to 1000
+	// 创建 1001 个 Pod，以达到设置为 1000 的 Endpoints 最大容量
 	allPodNames := sets.New[string]()
 	baseIP := netutils.BigForIP(netutils.ParseIPSloppy("10.0.0.1"))
 	for i := range 1001 {
@@ -697,7 +695,7 @@ func TestEndpointTruncate(t *testing.T) {
 		}
 	}
 
-	// Create a service associated to the pod
+	// 创建与该 Pod 关联的 Service
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-service",
@@ -721,7 +719,7 @@ func TestEndpointTruncate(t *testing.T) {
 	}
 
 	var truncatedPodName string
-	// poll until associated Endpoints to the previously created Service exists
+	// 轮询等待之前创建的 Service 对应的 Endpoints 出现
 	if err := wait.PollUntilContextTimeout(tCtx, 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
 		podNames := sets.New[string]()
 		endpoints, err := client.CoreV1().Endpoints(ns.Name).Get(tCtx, svc.Name, metav1.GetOptions{})
@@ -743,14 +741,14 @@ func TestEndpointTruncate(t *testing.T) {
 		if !ok || truncated != "truncated" {
 			return false, nil
 		}
-		// There is only 1 truncated Pod.
+		// 只有 1 个 Pod 被截断。
 		truncatedPodName, _ = allPodNames.Difference(podNames).PopAny()
 		return true, nil
 	}); err != nil {
 		t.Fatalf("endpoints not found: %v", err)
 	}
 
-	// Update the truncated Pod several times to make endpoints controller resync the service.
+	// 多次更新被截断的 Pod，使 endpoint controller 重新同步该 Service。
 	truncatedPod, err := client.CoreV1().Pods(ns.Name).Get(tCtx, truncatedPodName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to get pod %s: %v", truncatedPodName, err)
@@ -768,7 +766,7 @@ func TestEndpointTruncate(t *testing.T) {
 		}
 	}
 
-	// delete 501 Pods
+	// 删除 501 个 Pod
 	for i := 500; i < 1001; i++ {
 		podName := fmt.Sprintf("%s-%d", basePod.Name, i)
 		err = client.CoreV1().Pods(ns.Name).Delete(tCtx, podName, metav1.DeleteOptions{})
@@ -777,7 +775,7 @@ func TestEndpointTruncate(t *testing.T) {
 		}
 	}
 
-	// poll until endpoints for deleted Pod are no longer in Endpoints.
+	// 轮询等待被删除 Pod 的 endpoint 不再出现在 Endpoints 中。
 	if err := wait.PollUntilContextTimeout(tCtx, 1*time.Second, 10*time.Second, true, func(context.Context) (bool, error) {
 		endpoints, err := client.CoreV1().Endpoints(ns.Name).Get(tCtx, svc.Name, metav1.GetOptions{})
 		if err != nil {
