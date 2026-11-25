@@ -36,18 +36,18 @@ const (
 	unmanagedWarning    = "deleting Pods that declare no controller"
 )
 
-// PodDelete informs filtering logic whether a pod should be deleted or not
+// PodDelete 告知过滤逻辑某个 pod 是否应被删除
 type PodDelete struct {
 	Pod    corev1.Pod
 	Status PodDeleteStatus
 }
 
-// PodDeleteList is a wrapper around []PodDelete
+// PodDeleteList 是对 []PodDelete 的包装
 type PodDeleteList struct {
 	items []PodDelete
 }
 
-// Pods returns a list of all pods marked for deletion after filtering.
+// Pods 返回过滤后所有被标记为待删除的 pod 列表。
 func (l *PodDeleteList) Pods() []corev1.Pod {
 	pods := []corev1.Pod{}
 	for _, i := range l.items {
@@ -58,7 +58,7 @@ func (l *PodDeleteList) Pods() []corev1.Pod {
 	return pods
 }
 
-// Warnings returns all warning messages concatenated into a string.
+// Warnings 将所有警告消息拼接为一个字符串并返回。
 func (l *PodDeleteList) Warnings() string {
 	ps := make(map[string][]string)
 	for _, i := range l.items {
@@ -92,28 +92,28 @@ func (l *PodDeleteList) errors() []error {
 	return errs
 }
 
-// PodDeleteStatus informs filters if a pod should be deleted
+// PodDeleteStatus 告知过滤器某个 pod 是否应被删除
 type PodDeleteStatus struct {
 	Delete  bool
 	Reason  string
 	Message string
 }
 
-// PodFilter takes a pod and returns a PodDeleteStatus
+// PodFilter 接收一个 pod 并返回 PodDeleteStatus
 type PodFilter func(corev1.Pod) PodDeleteStatus
 
 const (
-	// PodDeleteStatusTypeOkay is "Okay"
+	// PodDeleteStatusTypeOkay 为 "Okay"
 	PodDeleteStatusTypeOkay = "Okay"
-	// PodDeleteStatusTypeSkip is "Skip"
+	// PodDeleteStatusTypeSkip 为 "Skip"
 	PodDeleteStatusTypeSkip = "Skip"
-	// PodDeleteStatusTypeWarning is "Warning"
+	// PodDeleteStatusTypeWarning 为 "Warning"
 	PodDeleteStatusTypeWarning = "Warning"
-	// PodDeleteStatusTypeError is "Error"
+	// PodDeleteStatusTypeError 为 "Error"
 	PodDeleteStatusTypeError = "Error"
 )
 
-// MakePodDeleteStatusOkay is a helper method to return the corresponding PodDeleteStatus
+// MakePodDeleteStatusOkay 是返回对应 PodDeleteStatus 的辅助方法
 func MakePodDeleteStatusOkay() PodDeleteStatus {
 	return PodDeleteStatus{
 		Delete: true,
@@ -121,7 +121,7 @@ func MakePodDeleteStatusOkay() PodDeleteStatus {
 	}
 }
 
-// MakePodDeleteStatusSkip is a helper method to return the corresponding PodDeleteStatus
+// MakePodDeleteStatusSkip 是返回对应 PodDeleteStatus 的辅助方法
 func MakePodDeleteStatusSkip() PodDeleteStatus {
 	return PodDeleteStatus{
 		Delete: false,
@@ -129,7 +129,7 @@ func MakePodDeleteStatusSkip() PodDeleteStatus {
 	}
 }
 
-// MakePodDeleteStatusWithWarning is a helper method to return the corresponding PodDeleteStatus
+// MakePodDeleteStatusWithWarning 是返回对应 PodDeleteStatus 的辅助方法
 func MakePodDeleteStatusWithWarning(delete bool, message string) PodDeleteStatus {
 	return PodDeleteStatus{
 		Delete:  delete,
@@ -138,7 +138,7 @@ func MakePodDeleteStatusWithWarning(delete bool, message string) PodDeleteStatus
 	}
 }
 
-// MakePodDeleteStatusWithError is a helper method to return the corresponding PodDeleteStatus
+// MakePodDeleteStatusWithError 是返回对应 PodDeleteStatus 的辅助方法
 func MakePodDeleteStatusWithError(message string) PodDeleteStatus {
 	return PodDeleteStatus{
 		Delete:  false,
@@ -147,8 +147,8 @@ func MakePodDeleteStatusWithError(message string) PodDeleteStatus {
 	}
 }
 
-// The filters are applied in a specific order, only the last filter's
-// message will be retained if there are any warnings.
+// 过滤器按特定顺序应用，若存在多条警告，
+// 仅保留最后一个过滤器的消息。
 func (d *Helper) makeFilters() []PodFilter {
 	baseFilters := []PodFilter{
 		d.skipDeletedFilter,
@@ -171,29 +171,29 @@ func hasLocalStorage(pod corev1.Pod) bool {
 }
 
 func isControllerRefDaemonSet(workloadRef *metav1.OwnerReference) bool {
-	// find if workloadRef is daemonSet
+	// 判断 workloadRef 是否为 daemonSet
 	daemonSetAPIVersion, daemonSetKind := appsv1.SchemeGroupVersion.WithKind("DaemonSet").ToAPIVersionAndKind()
 	return workloadRef.Kind == daemonSetKind && workloadRef.APIVersion == daemonSetAPIVersion
 }
 
 func (d *Helper) daemonSetFilter(pod corev1.Pod) PodDeleteStatus {
-	// Note that we return false in cases where the pod is DaemonSet managed,
-	// regardless of flags.
+	// 注意，无论标志如何设置，对于由 DaemonSet 管理的 pod
+	// 我们都返回 false。
 	//
-	// The exception is for pods that are orphaned (the referencing
-	// management resource - including DaemonSet - is not found).
-	// Such pods will be deleted if --force is used.
+	// 例外情况是孤立的 pod（其引用的管理资源
+	// ——包括 DaemonSet——未找到）。
+	// 使用 --force 时，这类 pod 会被删除。
 	controllerRef := metav1.GetControllerOf(&pod)
 	if controllerRef == nil || !isControllerRefDaemonSet(controllerRef) {
 		return MakePodDeleteStatusOkay()
 	}
-	// Any finished pod can be removed.
+	// 任何已结束的 pod 都可以被移除。
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return MakePodDeleteStatusOkay()
 	}
 
 	if _, err := d.Client.AppsV1().DaemonSets(pod.Namespace).Get(d.getContext(), controllerRef.Name, metav1.GetOptions{}); err != nil {
-		// remove orphaned pods with a warning if --force is used
+		// 使用 --force 时，带警告地移除孤立 pod
 		if apierrors.IsNotFound(err) && d.Force {
 			return MakePodDeleteStatusWithWarning(true, err.Error())
 		}
@@ -219,7 +219,7 @@ func (d *Helper) localStorageFilter(pod corev1.Pod) PodDeleteStatus {
 	if !hasLocalStorage(pod) {
 		return MakePodDeleteStatusOkay()
 	}
-	// Any finished pod can be removed.
+	// 任何已结束的 pod 都可以被移除。
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return MakePodDeleteStatusOkay()
 	}
@@ -227,14 +227,14 @@ func (d *Helper) localStorageFilter(pod corev1.Pod) PodDeleteStatus {
 		return MakePodDeleteStatusWithError(localStorageFatal)
 	}
 
-	// TODO: this warning gets dropped by subsequent filters;
-	// consider accounting for multiple warning conditions or at least
-	// preserving the last warning message.
+	// TODO: 该警告会被后续过滤器丢弃；
+	// 应考虑兼容多个警告条件，或至少
+	// 保留最后一条警告消息。
 	return MakePodDeleteStatusWithWarning(true, localStorageWarning)
 }
 
 func (d *Helper) unreplicatedFilter(pod corev1.Pod) PodDeleteStatus {
-	// any finished pod can be removed
+	// 任何已结束的 pod 都可以被移除
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return MakePodDeleteStatusOkay()
 	}

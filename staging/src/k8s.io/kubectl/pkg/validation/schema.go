@@ -28,21 +28,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Schema is an interface that knows how to validate an API object serialized to a byte array.
+// Schema 是能够对序列化为字节数组的 API 对象执行校验的接口。
 type Schema interface {
 	ValidateBytes(data []byte) error
 }
 
-// NullSchema always validates bytes.
+// NullSchema 始终通过字节校验。
 type NullSchema struct{}
 
-// ValidateBytes never fails for NullSchema.
+// 对 NullSchema 而言，ValidateBytes 永远不会失败。
 func (NullSchema) ValidateBytes(data []byte) error { return nil }
 
-// NoDoubleKeySchema is a schema that disallows double keys.
+// NoDoubleKeySchema 是不允许出现重复键的 schema。
 type NoDoubleKeySchema struct{}
 
-// ValidateBytes validates bytes.
+// ValidateBytes 执行字节校验。
 func (NoDoubleKeySchema) ValidateBytes(data []byte) error {
 	var list []error
 	if err := validateNoDuplicateKeys(data, "metadata", "labels"); err != nil {
@@ -56,9 +56,9 @@ func (NoDoubleKeySchema) ValidateBytes(data []byte) error {
 
 func validateNoDuplicateKeys(data []byte, path ...string) error {
 	r := ejson.NewDecoder(bytes.NewReader(data))
-	// This is Go being unfriendly. The 'path ...string' comes in as a
-	// []string, and SeekTo takes ...interface{}, so we can't just pass
-	// the path straight in, we have to copy it.  *sigh*
+	// 这是 Go 不够友好的地方：'path ...string' 传入后实际是 []string，
+	// 而 SeekTo 接受的是 ...interface{}，所以不能直接把 path 传进去，
+	// 必须先复制一份。*叹气*
 	ifacePath := []interface{}{}
 	for ix := range path {
 		ifacePath = append(ifacePath, path[ix])
@@ -90,10 +90,10 @@ func validateNoDuplicateKeys(data []byte, path ...string) error {
 	}
 }
 
-// ConjunctiveSchema encapsulates a schema list.
+// ConjunctiveSchema 封装了一个 schema 列表。
 type ConjunctiveSchema []Schema
 
-// ValidateBytes validates bytes per a ConjunctiveSchema.
+// ValidateBytes 按照 ConjunctiveSchema 逐个校验字节。
 func (c ConjunctiveSchema) ValidateBytes(data []byte) error {
 	var list []error
 	schemas := []Schema(c)
@@ -113,18 +113,16 @@ func NewParamVerifyingSchema(s Schema, verifier resource.Verifier, directive str
 	}
 }
 
-// paramVerifyingSchema only performs validation
-// based on the fieldValidation query param
-// being unsupported by the apiserver, because
-// server-side validation will be performed instead
-// of client-side validation.
+// 仅当 apiserver 不支持 fieldValidation 查询参数时，
+// paramVerifyingSchema 才执行校验，因为此时
+// 会由服务端校验取代客户端校验。
 type paramVerifyingSchema struct {
 	schema    Schema
 	verifier  resource.Verifier
 	directive string
 }
 
-// ValidateBytes validates bytes per a ParamVerifyingSchema
+// ValidateBytes 按照 ParamVerifyingSchema 的规则校验字节
 func (c *paramVerifyingSchema) ValidateBytes(data []byte) error {
 	obj, err := parse(data)
 	if err != nil {
@@ -144,7 +142,7 @@ func (c *paramVerifyingSchema) ValidateBytes(data []byte) error {
 		case metav1.FieldValidationWarn:
 			klog.Warningf("cannot perform warn validation if server-side field validation is unsupported, skipping validation")
 		default:
-			// can't be reached
+			// 不会执行到这里
 			klog.Warningf("unexpected field validation directive: %s, skipping validation", c.directive)
 		}
 		return nil

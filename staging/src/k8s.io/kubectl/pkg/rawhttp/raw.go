@@ -27,27 +27,27 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// RawPost uses the REST client to POST content
+// RawPost 使用 REST client 以 POST 方式发送内容
 func RawPost(restClient *rest.RESTClient, streams genericiooptions.IOStreams, url, filename string) error {
 	return raw(restClient, streams, url, filename, "POST")
 }
 
-// RawPut uses the REST client to PUT content
+// RawPut 使用 REST client 以 PUT 方式发送内容
 func RawPut(restClient *rest.RESTClient, streams genericiooptions.IOStreams, url, filename string) error {
 	return raw(restClient, streams, url, filename, "PUT")
 }
 
-// RawGet uses the REST client to GET content
+// RawGet 使用 REST client 以 GET 方式获取内容
 func RawGet(restClient *rest.RESTClient, streams genericiooptions.IOStreams, url string) error {
 	return raw(restClient, streams, url, "", "GET")
 }
 
-// RawDelete uses the REST client to DELETE content
+// RawDelete 使用 REST client 以 DELETE 方式删除内容
 func RawDelete(restClient *rest.RESTClient, streams genericiooptions.IOStreams, url, filename string) error {
 	return raw(restClient, streams, url, filename, "DELETE")
 }
 
-// raw makes a simple HTTP request to the provided path on the server using the default credentials.
+// raw 使用默认凭据向服务端提供的路径发起简单的 HTTP 请求。
 func raw(restClient *rest.RESTClient, streams genericiooptions.IOStreams, url, filename, requestType string) error {
 	var data io.Reader
 	switch {

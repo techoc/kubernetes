@@ -22,19 +22,19 @@ import (
 	"k8s.io/kube-openapi/pkg/util/proto"
 )
 
-// fieldLookup walks through a schema by following a path, and returns
-// the final schema.
+// fieldLookup 沿路径遍历 schema，
+// 并返回最终的 schema。
 type fieldLookup struct {
-	// Path to walk
+	// 要遍历的路径
 	Path []string
 
-	// Return information: Schema found, or error.
+	// 返回信息：找到的 Schema，或错误。
 	Schema proto.Schema
 	Error  error
 }
 
-// SaveLeafSchema is used to detect if we are done walking the path, and
-// saves the schema as a match.
+// SaveLeafSchema 用于判断路径是否已遍历完毕，
+// 并将该 schema 保存为匹配结果。
 func (f *fieldLookup) SaveLeafSchema(schema proto.Schema) bool {
 	if len(f.Path) != 0 {
 		return false
@@ -45,35 +45,35 @@ func (f *fieldLookup) SaveLeafSchema(schema proto.Schema) bool {
 	return true
 }
 
-// VisitArray is mostly a passthrough.
+// VisitArray 基本只是原样传递。
 func (f *fieldLookup) VisitArray(a *proto.Array) {
 	if f.SaveLeafSchema(a) {
 		return
 	}
 
-	// Passthrough arrays.
+	// 原样传递数组。
 	a.SubType.Accept(f)
 }
 
-// VisitMap is mostly a passthrough.
+// VisitMap 基本只是原样传递。
 func (f *fieldLookup) VisitMap(m *proto.Map) {
 	if f.SaveLeafSchema(m) {
 		return
 	}
 
-	// Passthrough maps.
+	// 原样传递 map。
 	m.SubType.Accept(f)
 }
 
-// VisitPrimitive stops the operation and returns itself as the found
-// schema, even if it had more path to walk.
+// VisitPrimitive 会停止操作并将自身作为找到的 schema 返回，
+// 即使还有更多路径需要遍历。
 func (f *fieldLookup) VisitPrimitive(p *proto.Primitive) {
-	// Even if Path is not empty (we're not expecting a leaf),
-	// return that primitive.
+	// 即使 Path 不为空（即预期不是叶子节点），
+	// 也返回该 primitive。
 	f.Schema = p
 }
 
-// VisitKind unstacks fields as it finds them.
+// VisitKind 在找到字段时将其逐个从路径中弹出。
 func (f *fieldLookup) VisitKind(k *proto.Kind) {
 	if f.SaveLeafSchema(k) {
 		return
@@ -93,17 +93,17 @@ func (f *fieldLookup) VisitArbitrary(a *proto.Arbitrary) {
 	f.Schema = a
 }
 
-// VisitReference is mostly a passthrough.
+// VisitReference 基本只是原样传递。
 func (f *fieldLookup) VisitReference(r proto.Reference) {
 	if f.SaveLeafSchema(r) {
 		return
 	}
 
-	// Passthrough references.
+	// 原样传递引用。
 	r.SubSchema().Accept(f)
 }
 
-// LookupSchemaForField looks for the schema of a given path in a base schema.
+// LookupSchemaForField 在基础 schema 中查找给定路径对应的 schema。
 func LookupSchemaForField(schema proto.Schema, path []string) (proto.Schema, error) {
 	f := &fieldLookup{Path: path}
 	schema.Accept(f)

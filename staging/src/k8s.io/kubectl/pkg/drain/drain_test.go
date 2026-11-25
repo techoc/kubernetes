@@ -87,7 +87,7 @@ func TestDeletePods(t *testing.T) {
 			expectError:       false,
 			expectedError:     nil,
 			getPodFn: func(namespace, name string) (*corev1.Pod, error) {
-				// Return a pod with the same name, but different UID
+				// 返回名称相同但 UID 不同的 pod
 				return &corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: namespace,
@@ -241,7 +241,7 @@ func addCoreNonEvictionSupport(t *testing.T, k *fake.Clientset) {
 	k.Resources = append(k.Resources, coreResources)
 }
 
-// addEvictionSupport implements simple fake eviction support on the fake.Clientset
+// addEvictionSupport 在 fake.Clientset 上实现简单的模拟 eviction 支持
 func addEvictionSupport(t *testing.T, k *fake.Clientset, version string) {
 	podsEviction := metav1.APIResource{
 		Name:    "pods/eviction",
@@ -259,7 +259,7 @@ func addEvictionSupport(t *testing.T, k *fake.Clientset, version string) {
 	}
 	k.Resources = append(k.Resources, coreResources, policyResources)
 
-	// Delete pods when evict is called
+	// 调用 evict 时删除 pod
 	k.PrependReactor("create", "pods", func(action ktest.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() != "eviction" {
 			return false, nil, nil
@@ -279,11 +279,11 @@ func addEvictionSupport(t *testing.T, k *fake.Clientset, version string) {
 		default:
 			t.Errorf("unknown version %s", version)
 		}
-		// Avoid the lock
+		// 避免持锁
 		go func() {
 			err := k.CoreV1().Pods(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 			if err != nil {
-				// Errorf because we can't call Fatalf from another goroutine
+				// 使用 Errorf，因为不能从另一个 goroutine 调用 Fatalf
 				t.Errorf("failed to delete pod: %s/%s", namespace, name)
 			}
 		}()
@@ -385,7 +385,7 @@ func TestDeleteOrEvict(t *testing.T) {
 				},
 			}
 
-			// Create 4 pods, and try to remove the first 2
+			// 创建 4 个 pod，并尝试移除前 2 个
 			var expectedEvictions []policyv1.Eviction
 			var create []runtime.Object
 			deletePods := []corev1.Pod{}
@@ -413,7 +413,7 @@ func TestDeleteOrEvict(t *testing.T) {
 				}
 			}
 
-			// Build the fake client
+			// 构造 fake client
 			k := fake.NewSimpleClientset(create...)
 			if tc.evictionSupported {
 				addEvictionSupport(t, k, "v1")
@@ -422,12 +422,12 @@ func TestDeleteOrEvict(t *testing.T) {
 			}
 			h.Client = k
 			h.DisableEviction = tc.disableEviction
-			// Do the eviction
+			// 执行 eviction
 			if err := h.DeleteOrEvictPods(deletePods); err != nil {
 				t.Fatalf("error from DeleteOrEvictPods: %v", err)
 			}
 
-			// Test that other pods are still there
+			// 验证其他 pod 仍然存在
 			var remainingPods []string
 			{
 				podList, err := k.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
@@ -445,7 +445,7 @@ func TestDeleteOrEvict(t *testing.T) {
 				t.Errorf("%s: unexpected remaining pods after DeleteOrEvictPods; actual %v; expected %v", tc.description, remainingPods, expected)
 			}
 
-			// Test that pods were evicted as expected
+			// 验证 pod 已按预期被 evict
 			var actualEvictions []policyv1.Eviction
 			for _, action := range k.Actions() {
 				if action.GetVerb() != "create" || action.GetResource().Resource != "pods" || action.GetSubresource() != "eviction" {
@@ -505,8 +505,8 @@ func TestDeleteOrEvictWithDryRunServer(t *testing.T) {
 
 			k := fake.NewSimpleClientset(allPods...)
 
-			// This reactor intercepts delete requests with DryRun set and returns success without
-			// removing the object, simulating real API server dry-run behavior.
+			// 该 reactor 拦截带有 DryRun 标记的 delete 请求，不删除对象
+			// 直接返回成功，模拟真实 API server 的 dry-run 行为。
 			k.PrependReactor("delete", "pods", func(actions ktest.Action) (bool, runtime.Object, error) {
 				deleteAction := actions.(ktest.DeleteAction)
 				if slices.Contains(deleteAction.GetDeleteOptions().DryRun, metav1.DryRunAll) {
@@ -599,8 +599,8 @@ func TestEvictDuringNamespaceTerminating(t *testing.T) {
 	testNamespace := "default"
 
 	retryDelay := 5 * time.Millisecond
-	// Give the helper enough room for a retry plus scheduler jitter on loaded CI
-	// hosts. A 10ms total timeout is too small under -race.
+	// 为 helper 留出足够时间完成一次重试，并容忍高负载 CI 主机上的
+	// 调度抖动。在 -race 模式下，总计 10ms 的超时太短。
 	globalTimeout := 20 * retryDelay
 
 	tests := []struct {
@@ -632,7 +632,7 @@ func TestEvictDuringNamespaceTerminating(t *testing.T) {
 				},
 			}
 
-			// pod with DeletionTimestamp, indicating deletion in progress
+			// 带有 DeletionTimestamp 的 pod，表示删除正在进行中
 			deletedPod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              testPodName,
@@ -647,7 +647,7 @@ func TestEvictDuringNamespaceTerminating(t *testing.T) {
 			k := fake.NewClientset(initialPod)
 			addEvictionSupport(t, k, "v1")
 
-			// mock eviction to return NamespaceTerminating error
+			// 模拟 eviction 返回 NamespaceTerminating 错误
 			k.PrependReactor("create", "pods", func(action ktest.Action) (bool, runtime.Object, error) {
 				if action.GetSubresource() != "eviction" {
 					return false, nil, nil
@@ -668,16 +668,16 @@ func TestEvictDuringNamespaceTerminating(t *testing.T) {
 
 			k.PrependReactor("get", "pods", func(action ktest.Action) (bool, runtime.Object, error) {
 				if !test.refresh {
-					// for non-refresh test, always return the initial pod
+					// 非刷新测试场景始终返回初始 pod
 					return true, initialPod, nil
 				}
 
 				if retry {
-					// second call, pod is deleted
+					// 第二次调用，pod 已被删除
 					return true, nil, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, testPodName)
 				}
 
-				// first call, pod is being deleted
+				// 第一次调用，pod 正在被删除
 				retry = true
 
 				return true, deletedPod, nil

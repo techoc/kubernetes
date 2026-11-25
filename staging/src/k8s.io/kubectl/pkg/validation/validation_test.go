@@ -25,15 +25,15 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/kube-openapi/pkg/util/proto/validation"
 
-	// This dependency is needed to register API types.
+	// 该依赖项用于注册 API 类型。
 	"k8s.io/kube-openapi/pkg/util/proto/testing"
 	"k8s.io/kubectl/pkg/util/openapi"
 )
 
 var fakeSchema = testing.Fake{Path: filepath.Join("..", "..", "testdata", "openapi", "swagger.json")}
 
-// fakeResourcesGetter implements the OpenAPIResourcesGetter interface, returning the
-// openapi resources from the swagger.json (above).
+// fakeResourcesGetter 实现了 OpenAPIResourcesGetter 接口，返回
+// 上述 swagger.json 中的 openapi 资源。
 type fakeResourcesGetter struct{}
 
 func (r *fakeResourcesGetter) OpenAPISchema() (openapi.Resources, error) {

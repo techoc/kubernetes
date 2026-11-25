@@ -31,30 +31,30 @@ type fieldsPrinter interface {
 	PrintFields(proto.Schema) error
 }
 
-// jsonPathParse gets back the inner list of nodes we want to work with
+// jsonPathParse 返回我们要处理的内部节点列表
 func jsonPathParse(in string) ([]jsonpath.Node, error) {
-	// Remove trailing period just in case
+	// 以防万一，移除末尾的句点
 	in = strings.TrimSuffix(in, ".")
 
-	// Define initial jsonpath Parser
+	// 定义初始的 jsonpath 解析器
 	jpp, err := jsonpath.Parse("user", "{."+in+"}")
 	if err != nil {
 		return nil, err
 	}
 
-	// Because of the way the jsonpath library works, the schema of the parser is [][]NodeList
-	// meaning we need to get the outer node list, make sure it's only length 1, then get the inner node
-	// list, and only then can we look at the individual nodes themselves.
+	// 由于 jsonpath 库的工作方式，解析器的结构为 [][]NodeList，
+	// 这意味着我们需要先取得外层节点列表，确认其长度仅为 1，再取得内层节点列表，
+	// 此后才能查看各个节点本身。
 	outerNodeList := jpp.Root.Nodes
 	if len(outerNodeList) != 1 {
 		return nil, fmt.Errorf("must pass in 1 jsonpath string")
 	}
 
-	// The root node is always a list node so this type assertion is safe
+	// 根节点始终是列表节点，因此此类型断言是安全的
 	return outerNodeList[0].(*jsonpath.ListNode).Nodes, nil
 }
 
-// SplitAndParseResourceRequest separates the users input into a model and fields
+// SplitAndParseResourceRequest 将用户输入拆分为模型和字段
 func SplitAndParseResourceRequest(inResource string, mapper meta.RESTMapper) (schema.GroupVersionResource, []string, error) {
 	inResourceNodeList, err := jsonPathParse(inResource)
 	if err != nil {
@@ -81,15 +81,15 @@ func SplitAndParseResourceRequest(inResource string, mapper meta.RESTMapper) (sc
 	return gvr, fieldsPath, nil
 }
 
-// SplitAndParseResourceRequestWithMatchingPrefix separates the users input into a model and fields
-// while selecting gvr whose (resource, group) prefix matches the resource
+// SplitAndParseResourceRequestWithMatchingPrefix 将用户输入拆分为模型和字段，
+// 同时选择 (resource, group) 前缀与该资源匹配的 gvr
 func SplitAndParseResourceRequestWithMatchingPrefix(inResource string, mapper meta.RESTMapper) (gvr schema.GroupVersionResource, fieldsPath []string, err error) {
 	inResourceNodeList, err := jsonPathParse(inResource)
 	if err != nil {
 		return schema.GroupVersionResource{}, nil, err
 	}
 
-	// Get resource from first node of jsonpath
+	// 从 jsonpath 的第一个节点获取资源
 	if inResourceNodeList[0].Type() != jsonpath.NodeField {
 		return schema.GroupVersionResource{}, nil, fmt.Errorf("invalid jsonpath syntax, first node must be field node")
 	}
@@ -101,13 +101,13 @@ func SplitAndParseResourceRequestWithMatchingPrefix(inResource string, mapper me
 	}
 
 	for _, gvrItem := range gvrs {
-		// Find first gvr whose gr prefixes requested resource
+		// 查找第一个 gr 前缀与所请求资源匹配的 gvr
 		groupResource := gvrItem.GroupResource().String()
 		if strings.HasPrefix(inResource, groupResource) {
 			resourceSuffix := inResource[len(groupResource):]
 			var fieldsPath []string
 			if len(resourceSuffix) > 0 {
-				// Define another jsonpath Parser for the resource suffix
+				// 为资源后缀定义另一个 jsonpath 解析器
 				resourceSuffixNodeList, err := jsonPathParse(resourceSuffix)
 				if err != nil {
 					return schema.GroupVersionResource{}, nil, err
@@ -127,7 +127,7 @@ func SplitAndParseResourceRequestWithMatchingPrefix(inResource string, mapper me
 		}
 	}
 
-	// If no match, take the first (the highest priority) gvr
+	// 如果没有匹配项，则取第一个（优先级最高的）gvr
 	fieldsPath = []string{}
 	if len(gvrs) > 0 {
 		gvr = gvrs[0]
@@ -148,16 +148,16 @@ func SplitAndParseResourceRequestWithMatchingPrefix(inResource string, mapper me
 	return gvr, fieldsPath, nil
 }
 
-// PrintModelDescription prints the description of a specific model or dot path.
-// If recursive, all components nested within the fields of the schema will be
-// printed.
+// PrintModelDescription 打印指定模型或点路径的描述。
+// 如果 recursive 为真，嵌套在该 schema 字段中的所有组件都将被
+// 打印。
 func PrintModelDescription(fieldsPath []string, w io.Writer, schema proto.Schema, gvk schema.GroupVersionKind, recursive bool, maxDepth int) error {
 	fieldName := ""
 	if len(fieldsPath) != 0 {
 		fieldName = fieldsPath[len(fieldsPath)-1]
 	}
 
-	// Go down the fieldsPath to find what we're trying to explain
+	// 沿 fieldsPath 向下查找我们要解释的内容
 	schema, err := LookupSchemaForField(schema, fieldsPath)
 	if err != nil {
 		return err

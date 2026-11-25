@@ -16,14 +16,14 @@ limitations under the License.
 
 package explain
 
-// fieldsPrinterBuilder builds either a regularFieldsPrinter or a
-// recursiveFieldsPrinter based on the argument.
+// fieldsPrinterBuilder 根据参数构建 regularFieldsPrinter 或
+// recursiveFieldsPrinter。
 type fieldsPrinterBuilder struct {
 	Recursive bool
 	MaxDepth  int
 }
 
-// BuildFieldsPrinter builds the appropriate fieldsPrinter.
+// BuildFieldsPrinter 构建合适的 fieldsPrinter。
 func (f fieldsPrinterBuilder) BuildFieldsPrinter(writer *Formatter) fieldsPrinter {
 	if f.Recursive {
 		return &recursiveFieldsPrinter{

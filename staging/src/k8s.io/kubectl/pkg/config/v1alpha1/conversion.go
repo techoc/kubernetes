@@ -21,7 +21,7 @@ import (
 	config "k8s.io/kubectl/pkg/config"
 )
 
-// v1alpha1 Preference does not have `CredentialPluginPolicy` or `CredentialPluginAllowlist` fields. They can be left blank, so the autoConvert functions will suffice.
+// v1alpha1 的 Preference 没有 `CredentialPluginPolicy` 或 `CredentialPluginAllowlist` 字段。它们可以留空，所以 autoConvert 函数就足够了。
 func Convert_config_Preference_To_v1alpha1_Preference(in *config.Preference, out *Preference, s conversion.Scope) error {
 	return autoConvert_config_Preference_To_v1alpha1_Preference(in, out, s)
 }

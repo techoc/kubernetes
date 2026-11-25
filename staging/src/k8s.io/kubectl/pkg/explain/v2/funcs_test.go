@@ -57,8 +57,8 @@ func TestFuncs(t *testing.T) {
 			Expect:   "[this is a slash separated thing]",
 		},
 		{
-			// TODO: we should find a way to both realign line breaks and not break yaml texts in descriptions
-			// example from https://github.com/kubernetes-sigs/cluster-api/blob/f495466327aa340ad8c36182eb4e2797e7e35bef/config/crd/bases/cluster.x-k8s.io_machinedrainrules.yaml#L89
+			// TODO: 我们应当找到一种方法，既能重新对齐换行符，又不会破坏描述中的 yaml 文本
+			// 示例来自 https://github.com/kubernetes-sigs/cluster-api/blob/f495466327aa340ad8c36182eb4e2797e7e35bef/config/crd/bases/cluster.x-k8s.io_machinedrainrules.yaml#L89
 			Name:     "make sure explain doesnt break current descriptions",
 			FuncName: "wrap",
 			Source:   `{{wrap 76 .}}`,

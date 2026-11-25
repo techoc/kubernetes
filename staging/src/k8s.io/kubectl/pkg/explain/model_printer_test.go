@@ -160,9 +160,9 @@ FIELDS:
 	}
 }
 
-// TestModelMaxDepth is an integration-style test for the v1 (OpenAPIv2) render
-// path. It exercises PrintModelDescription end-to-end with exact expected
-// outputs across the boundary values of --max-depth.
+// TestModelMaxDepth 是针对 v1（OpenAPIv2）渲染路径的集成式测试。
+// 它端到端地调用 PrintModelDescription，并在 --max-depth 的各个边界值上
+// 验证输出是否与预期精确匹配。
 func TestModelMaxDepth(t *testing.T) {
 	gvk := schema.GroupVersionKind{
 		Group:   "",

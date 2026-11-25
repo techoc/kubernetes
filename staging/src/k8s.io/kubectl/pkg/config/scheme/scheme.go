@@ -26,13 +26,13 @@ import (
 )
 
 var (
-	// Scheme defines methods for serializing and deserializing API objects.
+	// Scheme 定义了序列化和反序列化 API 对象的方法。
 	Scheme = runtime.NewScheme()
-	// StrictCodecs provides methods for retrieving codecs and serializers
-	// for specific versions and content types.
+	// StrictCodecs 提供了针对特定版本和内容类型获取编解码器
+	// 与序列化器的方法。
 	StrictCodecs = serializer.NewCodecFactory(Scheme, serializer.EnableStrict)
-	// LenientCodecs provides methods for retrieving codecs and serializers
-	// for specific versions and content types.
+	// LenientCodecs 提供了针对特定版本和内容类型获取编解码器
+	// 与序列化器的方法。
 	LenientCodecs = serializer.NewCodecFactory(Scheme, serializer.DisableStrict)
 )
 
@@ -40,7 +40,7 @@ func init() {
 	AddToScheme(Scheme)
 }
 
-// AddToScheme registers the API group and adds types to a scheme
+// AddToScheme 注册 API 组，并将类型添加到 scheme 中。
 func AddToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(config.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))

@@ -22,43 +22,43 @@ import (
 	"k8s.io/kube-openapi/pkg/util/proto"
 )
 
-// typeName finds the name of a schema
+// typeName 用于查找 schema 的名称
 type typeName struct {
 	Name string
 }
 
 var _ proto.SchemaVisitor = &typeName{}
 
-// VisitArray adds the [] prefix and recurses.
+// VisitArray 添加 [] 前缀并递归。
 func (t *typeName) VisitArray(a *proto.Array) {
 	s := &typeName{}
 	a.SubType.Accept(s)
 	t.Name = fmt.Sprintf("[]%s", s.Name)
 }
 
-// VisitKind just returns "Object".
+// VisitKind 直接返回 "Object"。
 func (t *typeName) VisitKind(k *proto.Kind) {
 	t.Name = "Object"
 }
 
-// VisitMap adds the map[string] prefix and recurses.
+// VisitMap 添加 map[string] 前缀并递归。
 func (t *typeName) VisitMap(m *proto.Map) {
 	s := &typeName{}
 	m.SubType.Accept(s)
 	t.Name = fmt.Sprintf("map[string]%s", s.Name)
 }
 
-// VisitPrimitive returns the name of the primitive.
+// VisitPrimitive 返回 primitive 的名称。
 func (t *typeName) VisitPrimitive(p *proto.Primitive) {
 	t.Name = p.Type
 }
 
-// VisitReference is just a passthrough.
+// VisitReference 只是直接透传。
 func (t *typeName) VisitReference(r proto.Reference) {
 	r.SubSchema().Accept(t)
 }
 
-// GetTypeName returns the type of a schema.
+// GetTypeName 返回 schema 的类型。
 func GetTypeName(schema proto.Schema) string {
 	t := &typeName{}
 	schema.Accept(t)

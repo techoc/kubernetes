@@ -28,20 +28,20 @@ type Generator interface {
 	AddTemplate(name string, contents string) error
 
 	Render(
-		// Template to use for rendering
+		// 用于渲染的模板
 		templateName string,
-		// Self-Contained OpenAPI Document Containing all schemas used by $ref
-		// Only OpenAPI V3 documents are supported
+		// 自包含的 OpenAPI 文档，包含 $ref 所使用的所有 schema
+		// 仅支持 OpenAPI V3 文档
 		document map[string]interface{},
-		// Resource within OpenAPI document for which to render explain schema
+		// OpenAPI 文档中要为其渲染 explain schema 的资源
 		gvr schema.GroupVersionResource,
-		// Field path of child of resource to focus output onto
+		// 要将输出聚焦到的资源子字段路径
 		fieldSelector []string,
-		// Boolean indicating whether the fields should be rendered recursively/deeply
+		// 布尔值，指示字段是否应递归/深度渲染
 		recursive bool,
-		// Maximum recursion depth when recursive is true. 0 means no limit.
+		// recursive 为 true 时的最大递归深度。0 表示无限制。
 		maxDepth int,
-		// Output writer
+		// 输出写入器
 		writer io.Writer,
 	) error
 }
@@ -76,20 +76,20 @@ func (g *generator) AddTemplate(name string, contents string) error {
 }
 
 func (g *generator) Render(
-	// Template to use for rendering
+	// 用于渲染的模板
 	templateName string,
-	// Self-Contained OpenAPI Document Containing all schemas used by $ref
-	// Only OpenAPI V3 documents are supported
+	// 自包含的 OpenAPI 文档，包含 $ref 所使用的所有 schema
+	// 仅支持 OpenAPI V3 文档
 	document map[string]interface{},
-	// Resource within OpenAPI document for which to render explain schema
+	// OpenAPI 文档中要为其渲染 explain schema 的资源
 	gvr schema.GroupVersionResource,
-	// Field path of child of resource to focus output onto
+	// 要将输出聚焦到的资源子字段路径
 	fieldSelector []string,
-	// Boolean indicating whether the fields should be rendered recursively/deeply
+	// 布尔值，指示字段是否应递归/深度渲染
 	recursive bool,
-	// Maximum recursion depth when recursive is true. 0 means no limit.
+	// recursive 为 true 时的最大递归深度。0 表示无限制。
 	maxDepth int,
-	// Output writer
+	// 输出写入器
 	writer io.Writer,
 ) error {
 	compiledTemplate, ok := g.templates[templateName]

@@ -22,19 +22,19 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Preference stores elements of KubeRC configuration file
+// Preference 存储 KubeRC 配置文件中的各个元素。
 type Preference struct {
 	metav1.TypeMeta
 
-	// Defaults allow changing default option values of commands.
-	// This is especially useful, when user doesn't want to explicitly
-	// set options each time.
+	// Defaults 允许修改命令的默认选项值。
+	// 当用户不想每次都显式设置选项时，
+	// 这一点尤其有用。
 	// +optional
 	Defaults []CommandDefaults
 
-	// Aliases allow defining command aliases for existing kubectl commands, with optional default option values.
-	// If the alias name collides with a built-in command, built-in command always takes precedence.
-	// Option overrides defined in the defaults section do NOT apply to aliases for the same command.
+	// Aliases 允许为现有的 kubectl 命令定义别名，并可附带默认的选项值。
+	// 如果别名与内置命令同名，内置命令始终优先。
+	// defaults 部分中定义的选项覆盖不适用于同一命令的别名。
 	// kubectl [ALIAS NAME] [USER_OPTIONS] [USER_EXPLICIT_ARGS] expands to
 	// kubectl [COMMAND] # built-in command alias points to
 	//         [KUBERC_PREPEND_ARGS]
@@ -51,8 +51,8 @@ type Preference struct {
 	//   appendArgs:
 	//   - --
 	//   - custom-arg1
-	// For example, if user invokes "kubectl runx test-pod" command,
-	// this will be expanded to "kubectl run --image=nginx test-pod -- custom-arg1"
+	// 例如，如果用户调用 "kubectl runx test-pod" 命令，
+	// 该命令将展开为 "kubectl run --image=nginx test-pod -- custom-arg1"
 	// - name: getn
 	//   command: get
 	//   options:
@@ -65,40 +65,40 @@ type Preference struct {
 	// +optional
 	Aliases []AliasOverride
 
-	// credentialPluginPolicy specifies the policy governing which, if any, client-go
-	// credential plugins may be executed. It MUST be one of { "", "AllowAll", "DenyAll", "Allowlist" }.
-	// If the policy is "", then it falls back to "AllowAll" (this is required
-	// to maintain backward compatibility). If the policy is DenyAll, no
-	// credential plugins may run. If the policy is Allowlist, only those
-	// plugins meeting the criteria specified in the `credentialPluginAllowlist`
-	// field may run.
+	// credentialPluginPolicy 指定管理哪些 client-go 凭据插件
+	// 可以执行（如果有）的策略。它必须是以下值之一：
+	// { "", "AllowAll", "DenyAll", "Allowlist" }。
+	// 如果策略为 ""，则回退到 "AllowAll"（这是保持向后兼容所必需的）。
+	// 如果策略为 DenyAll，则不允许运行任何凭据插件。
+	// 如果策略为 Allowlist，则只有满足 `credentialPluginAllowlist`
+	// 字段中所指定条件的插件才可以运行。
 	// +optional
 	CredentialPluginPolicy CredentialPluginPolicy
 
-	// Allowlist is a slice of allowlist entries. If any of them is a match,
-	// then the executable in question may execute. That is, the result is the
-	// logical OR of all entries in the allowlist. This list MUST NOT be
-	// supplied if the policy is not "Allowlist".
+	// Allowlist 是由允许列表条目组成的切片。如果其中任何
+	// 一个条目匹配，则相应的可执行文件可以运行。也就是说，
+	// 结果是允许列表中所有条目的逻辑或。如果策略不是
+	// "Allowlist"，则绝不能提供此列表。
 	//
 	// e.g.
 	// credentialPluginAllowlist:
 	// - name: cloud-provider-plugin
 	// - name: /usr/local/bin/my-plugin
-	// In the above example, the user allows the credential plugins
-	// `cloud-provider-plugin` (found somewhere in PATH), and the plugin found
-	// at the explicit path `/usr/local/bin/my-plugin`.
+	// 在上面的示例中，用户允许使用凭据插件
+	// `cloud-provider-plugin`（在 PATH 中的某处找到），以及位于显式路径
+	// `/usr/local/bin/my-plugin` 的插件。
 	// +optional
 	CredentialPluginAllowlist []AllowlistEntry
 }
 
-// CredentialPluginPolicy specifies the policy governing which, if any, client-go
-// credential plugins may be executed. It MUST be one of { "", "AllowAll", "DenyAll", "Allowlist" }.
-// If the policy is "", then it falls back to "AllowAll" (this is required
-// to maintain backward compatibility). If the policy is DenyAll, no
-// credential plugins may run. If the policy is Allowlist, only those
-// plugins meeting the criteria specified in the `credentialPluginAllowlist`
-// field may run. If the policy is not `Allowlist` but one is provided, it
-// is considered a configuration error.
+// CredentialPluginPolicy 指定管理哪些 client-go 凭据插件
+// 可以执行（如果有）的策略。它必须是以下值之一：
+// { "", "AllowAll", "DenyAll", "Allowlist" }。
+// 如果策略为 ""，则回退到 "AllowAll"（这是保持向后兼容所必需的）。
+// 如果策略为 DenyAll，则不允许运行任何凭据插件。
+// 如果策略为 Allowlist，则只有满足 `credentialPluginAllowlist`
+// 字段中所指定条件的插件才可以运行。如果策略不是 `Allowlist`
+// 却提供了该字段，则视为配置错误。
 type CredentialPluginPolicy string
 
 const (
@@ -107,58 +107,58 @@ const (
 	PluginPolicyAllowlist CredentialPluginPolicy = "Allowlist"
 )
 
-// AllowlistEntry is an entry in the allowlist. For each allowlist item, at
-// least one field must be nonempty. A struct with all empty fields is
-// considered a misconfiguration error. Each field is a criterion for
-// execution. If multiple fields are specified, then the criteria of all
-// specified fields must be met. That is, the result of an individual entry is
-// the logical AND of all checks corresponding to the specified fields within
-// the entry.
+// AllowlistEntry 是允许列表中的一个条目。
+// 对于每个允许列表项，至少要有一个字段非空。
+// 所有字段都为空的结构体被视为配置错误。
+// 每个字段都是一项执行条件。如果指定了多个字段，
+// 则必须满足所有指定字段的条件。
+// 也就是说，单个条目的结果是该条目内所有
+// 指定字段对应检查的逻辑与。
 type AllowlistEntry struct {
-	// Command matching is performed by first resolving the absolute path of both
-	// the plugin and the name in the allowlist entry using `exec.LookPath`. It
-	// will be called on both, and the resulting strings must be equal. If
-	// either call to `exec.LookPath` results in an error, the `Command` check
-	// will be considered a failure.
+	// 命令匹配时，首先使用 `exec.LookPath` 解析插件
+	// 和允许列表条目中名称的绝对路径。该调用会分别
+	// 作用于两者，所得字符串必须相等。如果任意一次
+	// `exec.LookPath` 调用出错，`Command` 检查将被视为
+	// 失败。
 	Command string
 }
 
-// AliasOverride stores the alias definitions.
+// AliasOverride 存储别名定义。
 type AliasOverride struct {
-	// Name is the name of alias that can only include alphabetical characters
-	// If the alias name conflicts with the built-in command,
-	// built-in command will be used.
+	// Name 是别名的名称，只能包含字母字符。
+	// 如果别名与内置命令冲突，
+	// 将使用内置命令。
 	Name string
-	// Command is the single or set of commands to execute, such as "set env" or "create"
+	// Command 是要执行的单条或一组命令，例如 "set env" 或 "create"
 	Command string
-	// PrependArgs stores the arguments such as resource names, etc.
-	// These arguments are inserted after the alias name.
+	// PrependArgs 存储资源名称等参数。
+	// 这些参数会插入到别名名称之后。
 	PrependArgs []string
-	// AppendArgs stores the arguments such as resource names, etc.
-	// These arguments are appended to the USER_ARGS.
+	// AppendArgs 存储资源名称等参数。
+	// 这些参数会追加到 USER_ARGS 之后。
 	AppendArgs []string
-	// Options is allocated to store the option definitions of alias.
-	// Options only modify the default value of the option and if
-	// user explicitly passes a value, explicit one is used.
+	// Options 用于存放别名的选项定义。
+	// Options 只修改选项的默认值，如果用户
+	// 显式传递了值，则使用显式值。
 	Options []CommandOptionDefault
 }
 
-// CommandDefaults stores the commands and their associated option's
-// default values.
+// CommandDefaults 存储命令及其关联选项的
+// 默认值。
 type CommandDefaults struct {
-	// Command refers to a command whose flag's default value is changed.
+	// Command 指其标志默认值被修改的命令。
 	Command string
-	// Options is a list of options storing different default values.
+	// Options 是存储不同默认值的选项列表。
 	Options []CommandOptionDefault
 }
 
-// CommandOptionDefault stores the name and the specified default
-// value of an option.
+// CommandOptionDefault 存储某个选项的名称
+// 和指定的默认值。
 type CommandOptionDefault struct {
-	// Option name (long form, without dashes).
+	// 选项名称（完整形式，不带短横线）。
 	Name string
 
-	// In a string format of a default value. It will be parsed
-	// by kubectl to the compatible value of the option.
+	// 默认值的字符串形式。kubectl 会将其解析为
+	// 与该选项兼容的值。
 	Default string
 }

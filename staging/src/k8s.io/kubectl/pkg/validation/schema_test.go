@@ -93,10 +93,10 @@ func TestValidateDuplicateLabelsPassCases(t *testing.T) {
 	}
 }
 
-// AlwaysInvalidSchema is always invalid.
+// AlwaysInvalidSchema 始终无效。
 type AlwaysInvalidSchema struct{}
 
-// ValidateBytes always fails to validate.
+// ValidateBytes 始终校验失败。
 func (AlwaysInvalidSchema) ValidateBytes([]byte) error {
 	return fmt.Errorf("always invalid")
 }
@@ -154,10 +154,8 @@ func (v *mockVerifier) HasSupport(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-// TestParamVerifyingSchema tests that client-side schema validation
-// should be bypassed (and therefore validation succeeds) in all cases
-// except when the field validation is "Strict" and server-side validation is
-// unsupported.
+// TestParamVerifyingSchema 验证在所有情况下都应跳过客户端 schema 校验
+// （因此校验成功），除非字段校验为 "Strict" 且不支持服务端校验。
 func TestParamVerifyingSchema(t *testing.T) {
 	bytes := []byte(`
 {

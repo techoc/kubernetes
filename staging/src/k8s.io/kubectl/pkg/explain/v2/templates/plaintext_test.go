@@ -129,13 +129,13 @@ var (
 )
 
 type testCase struct {
-	// test case name
+	// 测试用例名称
 	Name string
-	// if empty uses main template
+	// 若为空则使用主模板
 	Subtemplate string
-	// context to render withi
+	// 用于渲染的上下文
 	Context any
-	// checks to perform on rendered output
+	// 对渲染输出执行的检查
 	Checks []check
 }
 
@@ -188,7 +188,7 @@ func ReduceDict[K comparable, V any, N any](val map[K]V, accum N, mapper func(N,
 func TestPlaintext(t *testing.T) {
 	testcases := []testCase{
 		{
-			// Test case where resource being rendered is not found in OpenAPI schema
+			// 测试用例：待渲染的资源在 OpenAPI schema 中不存在
 			Name: "ResourceNotFound",
 			Context: v2.TemplateContext{
 				Document:  apiExtensionsV1OpenAPI,
@@ -201,7 +201,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test basic ability to find a GVR and print its description
+			// 测试查找 GVR 并打印其描述的基本能力
 			Name: "SchemaFound",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -218,7 +218,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test basic ability to find a namespaced GVR and print its description
+			// 测试查找带命名空间的 GVR 并打印其描述的基本能力
 			Name: "SchemaFoundNamespaced",
 			Context: v2.TemplateContext{
 				Document: batchV1OpenAPI,
@@ -235,7 +235,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test basic ability to find a GVR without a list verb and print its description
+			// 测试查找没有 list verb 的 GVR 并打印其描述的基本能力
 			Name: "SchemaFoundWithoutListVerb",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPIWithoutListVerb,
@@ -252,7 +252,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test basic ability to find a namespaced GVR without a list verb and print its description
+			// 测试查找带命名空间且没有 list verb 的 GVR 并打印其描述的基本能力
 			Name: "SchemaFoundNamespacedWithoutListVerb",
 			Context: v2.TemplateContext{
 				Document: batchV1OpenAPIWithoutListVerb,
@@ -269,7 +269,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test basic ability to find a namespaced GVR without a top level list verb and print its description
+			// 测试查找带命名空间且没有顶层 list verb 的 GVR 并打印其描述的基本能力
 			Name: "SchemaFoundNamespacedWithoutTopLevelListVerb",
 			Context: v2.TemplateContext{
 				Document: batchV1OpenAPIWithoutListVerb,
@@ -286,8 +286,8 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test that shows trying to find a non-existent field path of an existing
-			// schema
+			// 测试用例：尝试在已有 schema 中查找一个不存在的
+			// 字段路径
 			Name: "SchemaFieldPathNotFound",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -304,7 +304,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test traversing a single level for scalar field path
+			// 测试遍历单层的标量字段路径
 			Name: "SchemaFieldPathShallow",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -321,7 +321,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test traversing a multiple levels for scalar field path
+			// 测试遍历多层的标量字段路径
 			Name: "SchemaFieldPathDeep",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -338,8 +338,8 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test traversing a multiple levels for scalar field path
-			// through an array field
+			// 测试遍历多层的标量字段路径
+			// 穿过数组字段
 			Name: "SchemaFieldPathViaList",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -356,8 +356,8 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Test traversing a multiple levels for scalar field path
-			// through a map[string]T field.
+			// 测试遍历多层的标量字段路径
+			// 穿过 map[string]T 字段。
 			Name: "SchemaFieldPathViaMap",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -374,7 +374,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that walking through a recursively specified schema is A-OK!
+			// 表明遍历递归定义的 schema 完全没问题！
 			Name: "SchemaFieldPathRecursive",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -391,7 +391,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that all fields are included
+			// 表明所有字段均已包含
 			Name: "SchemaAllFields",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -408,7 +408,7 @@ func TestPlaintext(t *testing.T) {
 			}),
 		},
 		{
-			// Shows that all fields are included
+			// 表明所有字段均已包含
 			Name: "SchemaAllFieldsRecursive",
 			Context: v2.TemplateContext{
 				Document: apiExtensionsV1OpenAPI,
@@ -425,7 +425,7 @@ func TestPlaintext(t *testing.T) {
 			}),
 		},
 		{
-			// Shows that the typeguess template works with scalars
+			// 表明 typeguess 模板适用于标量类型
 			Name:        "Scalar",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -438,7 +438,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template works with boolean additionalProperties
+			// 表明 typeguess 模板适用于布尔型 additionalProperties
 			Name:        "True additionalProperties",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -452,7 +452,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Show that a ref to a primitive type uses the referred type's type
+			// 表明指向基本类型的 $ref 使用被引用类型的类型
 			Name:        "PrimitiveRef",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -476,8 +476,8 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template behaves correctly given an
-			// array with unknown items
+			// 表明 typeguess 模板在给定 items 类型未知的
+			// 数组时行为正确
 			Name:        "ArrayUnknown",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -491,7 +491,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess puts Object tpye in title case
+			// 表明 typeguess 将 Object 类型以首字母大写形式输出
 			Name:        "ObjectTitle",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -505,7 +505,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template works with scalars
+			// 表明 typeguess 模板适用于标量类型
 			Name:        "ArrayOfScalar",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -522,9 +522,9 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template works with arrays containing
-			// a items which are a schema specified by a single-element allOf
-			// pointing to a $ref
+			// 表明 typeguess 模板适用于这样的数组：其元素由
+			// 仅含单个指向 $ref 的 allOf 元素的 schema
+			// 指定
 			Name:        "ArrayOfAllOfRef",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -546,8 +546,8 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template works with arrays containing
-			// a items which are a schema pointing to a $ref
+			// 表明 typeguess 模板适用于这样的数组：其元素为
+			// 指向 $ref 的 schema
 			Name:        "ArrayOfRef",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -565,7 +565,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template works with arrays of maps of scalars
+			// 表明 typeguess 模板适用于标量 map 组成的数组
 			Name:        "ArrayOfMap",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -585,7 +585,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template works with maps of arrays of scalars
+			// 表明 typeguess 模板适用于标量数组组成的 map
 			Name:        "MapOfArrayOfScalar",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -605,7 +605,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template works with maps of ref types
+			// 表明 typeguess 模板适用于引用类型组成的 map
 			Name:        "MapOfRef",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -627,8 +627,8 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that the typeguess template prints `Object` if there
-			// is absolutely no type information
+			// 表明当完全没有类型信息时，typeguess 模板会输出
+			// `Object`
 			Name:        "Unknown",
 			Subtemplate: "typeGuess",
 			Context: map[string]any{
@@ -711,7 +711,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that fieldDetail renders externalDocs after description
+			// 表明 fieldDetail 在 description 之后渲染 externalDocs
 			Name:        "FieldExternalDocs",
 			Subtemplate: "fieldDetail",
 			Context: map[string]any{
@@ -740,7 +740,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that fieldDetail does not render externalDocs in short mode
+			// 表明 fieldDetail 在 short 模式下不渲染 externalDocs
 			Name:        "FieldExternalDocsShort",
 			Subtemplate: "fieldDetail",
 			Context: map[string]any{
@@ -766,7 +766,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// show that extractEnum can skip empty enum slice
+			// 表明 extractEnum 可以跳过空的 enum 切片
 			Name:        "extractEmptyEnum",
 			Subtemplate: "extractEnum",
 			Context: map[string]any{
@@ -781,7 +781,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// show that extractEnum can extract any enum slice and style it uppercase
+			// 表明 extractEnum 可以提取任意 enum 切片并以大写形式排版
 			Name:        "extractEnumSimpleForm",
 			Subtemplate: "extractEnum",
 			Context: map[string]any{
@@ -801,7 +801,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// show that extractEnum can extract any enum slice and style it lowercase
+			// 表明 extractEnum 可以提取任意 enum 切片并以小写形式排版
 			Name:        "extractEnumLongFormWithIndent",
 			Subtemplate: "extractEnum",
 			Context: map[string]any{
@@ -819,7 +819,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// show that extractEnum can extract any enum slice and style it with truncated enums
+			// 表明 extractEnum 可以提取任意 enum 切片并在枚举被截断时排版
 			Name:        "extractEnumLongFormWithLimitAndIndent",
 			Subtemplate: "extractEnum",
 			Context: map[string]any{
@@ -838,7 +838,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// show that extractEnum can extract any enum slice and style it with truncated enums
+			// 表明 extractEnum 可以提取任意 enum 切片并在枚举被截断时排版
 			Name:        "extractEnumSimpleFormWithLimitAndIndent",
 			Subtemplate: "extractEnum",
 			Context: map[string]any{
@@ -858,7 +858,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// show that extractEnum can extract any enum slice and style it with empty string
+			// 表明 extractEnum 可以提取任意 enum 切片并处理空字符串
 			Name:        "extractEnumSimpleFormEmptyString",
 			Subtemplate: "extractEnum",
 			Context: map[string]any{
@@ -874,7 +874,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that externalDocs renders both description and URL
+			// 表明 externalDocs 会同时渲染 description 和 URL
 			Name:        "ExternalDocsDescriptionAndURL",
 			Subtemplate: "externalDocs",
 			Context: map[string]any{
@@ -892,7 +892,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that externalDocs renders URL when description is absent
+			// 表明当 description 缺失时，externalDocs 仍会渲染 URL
 			Name:        "ExternalDocsURLOnly",
 			Subtemplate: "externalDocs",
 			Context: map[string]any{
@@ -908,7 +908,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Shows that externalDocs renders nothing when absent
+			// 表明 externalDocs 缺失时不渲染任何内容
 			Name:        "ExternalDocsAbsent",
 			Subtemplate: "externalDocs",
 			Context: map[string]any{
@@ -921,7 +921,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Integration test: shows that externalDocs appears in full output
+			// 集成测试：表明 externalDocs 出现在完整输出中
 			Name: "SchemaWithExternalDocs",
 			Context: v2.TemplateContext{
 				Document: map[string]any{
@@ -981,7 +981,7 @@ func TestPlaintext(t *testing.T) {
 			},
 		},
 		{
-			// Integration test: shows that externalDocs on a child field appears in field list
+			// 集成测试：表明子字段上的 externalDocs 出现在字段列表中
 			Name: "SchemaWithFieldExternalDocs",
 			Context: v2.TemplateContext{
 				Document: map[string]any{
@@ -1053,8 +1053,8 @@ func TestPlaintext(t *testing.T) {
 				MaxDepth:  0,
 			},
 			Checks: []check{
-				// Non-recursive field details separate descriptions with a blank line,
-				// and the root template emits the final trailing newline.
+				// 非递归的字段详情会用空行分隔描述，
+				// 而根模板会输出最后的结尾换行符。
 				checkEquals(`GROUP:      example.com
 KIND:       Widget
 VERSION:    v1

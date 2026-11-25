@@ -123,7 +123,7 @@ node1   1000m        10%      1024Mi          10%
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a new TopCmdPrinter with a test writer.
+			// 使用测试 writer 创建一个新的 TopCmdPrinter。
 			_, _, out, _ := genericiooptions.NewTestIOStreams()
 
 			availableResources := make(map[string]v1.ResourceList)
@@ -371,7 +371,7 @@ test-1   400m         5120Mi
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a new TopCmdPrinter with a test writer.
+			// 使用测试 writer 创建一个新的 TopCmdPrinter。
 			_, _, out, _ := genericiooptions.NewTestIOStreams()
 
 			top := NewTopCmdPrinter(out, false)

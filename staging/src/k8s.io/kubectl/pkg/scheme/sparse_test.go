@@ -44,7 +44,7 @@ func TestCronJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// clear typemeta
+	// 清除 typemeta
 	uncastDst.(*v1.CronJob).TypeMeta = metav1.TypeMeta{}
 
 	if !equality.Semantic.DeepEqual(src, uncastDst) {

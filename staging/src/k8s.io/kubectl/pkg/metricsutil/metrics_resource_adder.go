@@ -33,7 +33,7 @@ func NewResourceAdder(resources []corev1.ResourceName) *ResourceAdder {
 	}
 }
 
-// AddPodMetrics adds each pod metric to the total
+// AddPodMetrics 将每个 pod 的指标累加到总量中
 func (adder *ResourceAdder) AddPodMetrics(m *metricsapi.PodMetrics) {
 	for _, c := range m.Containers {
 		for _, res := range adder.resources {

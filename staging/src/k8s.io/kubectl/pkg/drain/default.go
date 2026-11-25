@@ -23,15 +23,15 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
-// This file contains default implementations of how to
-// drain/cordon/uncordon nodes.  These functions may be called
-// directly, or their functionality copied into your own code, for
-// example if you want different output behaviour.
+// 本文件包含如何 drain/cordon/uncordon 节点的
+// 默认实现。这些函数可以直接调用，或者将其功能
+// 复制到你自己的代码中，例如当你想要
+// 不同的输出行为时。
 
-// RunNodeDrain shows the canonical way to drain a node.
-// You should first cordon the node, e.g. using RunCordonOrUncordon
+// RunNodeDrain 展示 drain 节点的规范方式。
+// 你应首先 cordon 该节点，例如使用 RunCordonOrUncordon
 func RunNodeDrain(drainer *Helper, nodeName string) error {
-	// TODO(justinsb): Ensure we have adequate e2e coverage of this function in library consumers
+	// TODO(justinsb): 确保库使用者对该函数有足够的 e2e 覆盖
 	list, errs := drainer.GetPodsForDeletion(nodeName)
 	if errs != nil {
 		return utilerrors.NewAggregate(errs)
@@ -41,13 +41,13 @@ func RunNodeDrain(drainer *Helper, nodeName string) error {
 	}
 
 	if err := drainer.DeleteOrEvictPods(list.Pods()); err != nil {
-		// Maybe warn about non-deleted pods here
+		// 可以在此处对未删除的 pod 发出警告
 		return err
 	}
 	return nil
 }
 
-// RunCordonOrUncordon demonstrates the canonical way to cordon or uncordon a Node
+// RunCordonOrUncordon 展示 cordon 或 uncordon 节点的规范方式
 func RunCordonOrUncordon(drainer *Helper, node *corev1.Node, desired bool) error {
 	if drainer.Ctx == nil {
 		return fmt.Errorf("RunCordonOrUncordon error: drainer.Ctx can't be nil")
@@ -55,11 +55,11 @@ func RunCordonOrUncordon(drainer *Helper, node *corev1.Node, desired bool) error
 	if drainer.Client == nil {
 		return fmt.Errorf("RunCordonOrUncordon error: drainer.Client can't be nil")
 	}
-	// TODO(justinsb): Ensure we have adequate e2e coverage of this function in library consumers
+	// TODO(justinsb): 确保库使用者对该函数有足够的 e2e 覆盖
 	c := NewCordonHelper(node)
 
 	if updateRequired := c.UpdateIfRequired(desired); !updateRequired {
-		// Already done
+		// 无需改动
 		return nil
 	}
 

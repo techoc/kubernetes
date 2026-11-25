@@ -31,21 +31,21 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// CordonHelper wraps functionality to cordon/uncordon nodes
+// CordonHelper 封装了 cordon/uncordon 节点的功能
 type CordonHelper struct {
 	node    *corev1.Node
 	desired bool
 }
 
-// NewCordonHelper returns a new CordonHelper
+// NewCordonHelper 返回一个新的 CordonHelper
 func NewCordonHelper(node *corev1.Node) *CordonHelper {
 	return &CordonHelper{
 		node: node,
 	}
 }
 
-// NewCordonHelperFromRuntimeObject returns a new CordonHelper, or an error if given object is not a
-// node or cannot be encoded as JSON
+// NewCordonHelperFromRuntimeObject 返回一个新的 CordonHelper；若给定对象不是
+// node 或无法编码为 JSON，则返回错误
 func NewCordonHelperFromRuntimeObject(nodeObject runtime.Object, scheme *runtime.Scheme, gvk schema.GroupVersionKind) (*CordonHelper, error) {
 	nodeObject, err := scheme.ConvertToVersion(nodeObject, gvk.GroupVersion())
 	if err != nil {
@@ -60,24 +60,24 @@ func NewCordonHelperFromRuntimeObject(nodeObject runtime.Object, scheme *runtime
 	return NewCordonHelper(node), nil
 }
 
-// UpdateIfRequired returns true if c.node.Spec.Unschedulable isn't already set,
-// or false when no change is needed
+// UpdateIfRequired 在 c.node.Spec.Unschedulable 尚未设置时返回 true，
+// 无需变更时返回 false
 func (c *CordonHelper) UpdateIfRequired(desired bool) bool {
 	c.desired = desired
 
 	return c.node.Spec.Unschedulable != c.desired
 }
 
-// PatchOrReplace uses given clientset to update the node status, either by patching or
-// updating the given node object; it may return error if the object cannot be encoded as
-// JSON, or if either patch or update calls fail; it will also return a second error
-// whenever creating a patch has failed
+// PatchOrReplace 使用给定的 clientset 更新 node 状态，方式为 patch
+// 或 update 给定的 node 对象。若对象无法编码为 JSON，或
+// patch/update 调用失败，则可能返回错误；创建 patch 时
+// 失败还会返回第二个错误
 func (c *CordonHelper) PatchOrReplace(clientset kubernetes.Interface, serverDryRun bool) (error, error) {
 	return c.PatchOrReplaceWithContext(context.TODO(), clientset, serverDryRun)
 }
 
-// PatchOrReplaceWithContext provides the option to pass a custom context while updating
-// the node status
+// PatchOrReplaceWithContext 提供在更新 node 状态时
+// 传入自定义 context 的选项
 func (c *CordonHelper) PatchOrReplaceWithContext(clientCtx context.Context, clientset kubernetes.Interface, serverDryRun bool) (error, error) {
 	client := clientset.CoreV1().Nodes()
 

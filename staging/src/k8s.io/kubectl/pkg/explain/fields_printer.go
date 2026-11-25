@@ -18,10 +18,10 @@ package explain
 
 import "k8s.io/kube-openapi/pkg/util/proto"
 
-// indentDesc is the level of indentation for descriptions.
+// indentDesc 是描述文本的缩进层级。
 const indentDesc = 2
 
-// regularFieldsPrinter prints fields with their type and description.
+// regularFieldsPrinter 打印字段及其类型和描述。
 type regularFieldsPrinter struct {
 	Writer *Formatter
 	Error  error
@@ -30,13 +30,13 @@ type regularFieldsPrinter struct {
 var _ proto.SchemaVisitor = &regularFieldsPrinter{}
 var _ fieldsPrinter = &regularFieldsPrinter{}
 
-// VisitArray prints a Array type. It is just a passthrough.
+// VisitArray 打印 Array 类型。它只是直接透传。
 func (f *regularFieldsPrinter) VisitArray(a *proto.Array) {
 	a.SubType.Accept(f)
 }
 
-// VisitKind prints a Kind type. It prints each key in the kind, with
-// the type, the required flag, and the description.
+// VisitKind 打印 Kind 类型。它打印 Kind 中的每个 key，
+// 包括其类型、必填标记和描述。
 func (f *regularFieldsPrinter) VisitKind(k *proto.Kind) {
 	for _, key := range k.Keys() {
 		v := k.Fields[key]
@@ -60,22 +60,22 @@ func (f *regularFieldsPrinter) VisitKind(k *proto.Kind) {
 	}
 }
 
-// VisitMap prints a Map type. It is just a passthrough.
+// VisitMap 打印 Map 类型。它只是直接透传。
 func (f *regularFieldsPrinter) VisitMap(m *proto.Map) {
 	m.SubType.Accept(f)
 }
 
-// VisitPrimitive prints a Primitive type. It stops the recursion.
+// VisitPrimitive 打印 Primitive 类型。它终止递归。
 func (f *regularFieldsPrinter) VisitPrimitive(p *proto.Primitive) {
-	// Nothing to do. Shouldn't really happen.
+	// 无需处理。实际上不应走到这里。
 }
 
-// VisitReference prints a Reference type. It is just a passthrough.
+// VisitReference 打印 Reference 类型。它只是直接透传。
 func (f *regularFieldsPrinter) VisitReference(r proto.Reference) {
 	r.SubSchema().Accept(f)
 }
 
-// PrintFields will write the types from schema.
+// PrintFields 将写出 schema 中的类型。
 func (f *regularFieldsPrinter) PrintFields(schema proto.Schema) error {
 	schema.Accept(f)
 	return f.Error

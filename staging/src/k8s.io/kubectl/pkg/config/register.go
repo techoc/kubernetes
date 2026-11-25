@@ -21,20 +21,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name used in this package
+// GroupName 是本包使用的组名
 const GroupName = "kubectl.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 是 scheme 构建器，包含此 API 包需要运行的 scheme 初始化函数
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是一个全局函数，用于将此 API 组和版本注册到 scheme 中
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// addKnownTypes registers known types to the given scheme
+// addKnownTypes 向给定的 scheme 注册已知类型
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Preference{},

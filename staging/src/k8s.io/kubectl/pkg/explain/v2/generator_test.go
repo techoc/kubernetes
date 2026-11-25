@@ -34,8 +34,8 @@ var appsDeploymentGVR = schema.GroupVersionResource{
 	Resource: "deployments",
 }
 
-// Shows generic throws error when attempting to `Render“ an invalid output name
-// And if it is then added as a template, no error is thrown upon `Render`
+// 演示当尝试使用无效的输出名称执行 `Render“ 时，generic 会抛出错误
+// 而如果该名称随后被添加为模板，则执行 `Render` 时不会抛出错误
 func TestGeneratorMissingOutput(t *testing.T) {
 	var buf bytes.Buffer
 	var doc map[string]interface{}
@@ -59,7 +59,7 @@ func TestGeneratorMissingOutput(t *testing.T) {
 	require.Equal(t, "ok", buf.String())
 }
 
-// Shows that correct context with the passed object is passed to the template
+// 演示包含所传入对象的正确上下文会被传递给模板
 func TestGeneratorContext(t *testing.T) {
 	var buf bytes.Buffer
 	var doc map[string]interface{}
@@ -94,9 +94,9 @@ func TestGeneratorContext(t *testing.T) {
 	require.Equal(t, expectedContext, actualContext)
 }
 
-// bytesForGV returns the OpenAPI V3 spec for the passed
-// group/version as a byte slice. Assumes bytes are in json
-// format. The passed path string looks like:
+// bytesForGV 以字节切片的形式返回所传入
+// group/version 的 OpenAPI V3 规范。假定字节为 json
+// 格式。传入的路径字符串形如：
 //
 //	apis/apps/v1
 func bytesForGV(t *testing.T, gvPath string) []byte {

@@ -22,18 +22,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// All kubectl code should eventually switch to use this Registry and Scheme instead of the global ones.
+// 所有 kubectl 代码最终都应该改用这个 Registry 和 Scheme，而不是全局的那些。
 
-// Scheme is the default instance of runtime.Scheme to which types in the Kubernetes API are already registered.
+// Scheme 是 runtime.Scheme 的默认实例，Kubernetes API 中的类型已经注册到其中。
 var Scheme = runtime.NewScheme()
 
-// Codecs provides access to encoding and decoding for the scheme
+// Codecs 提供对该 scheme 进行编码和解码的访问入口
 var Codecs = serializer.NewCodecFactory(Scheme)
 
-// ParameterCodec handles versioning of objects that are converted to query parameters.
+// ParameterCodec 处理被转换为查询参数的对象的版本控制。
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
 
-// DefaultJSONEncoder returns a default encoder for our scheme
+// DefaultJSONEncoder 返回我们这个 scheme 的默认编码器
 func DefaultJSONEncoder() runtime.Encoder {
 	return unstructured.NewJSONFallbackEncoder(Codecs.LegacyCodec(Scheme.PrioritizedVersionsAllGroups()...))
 }

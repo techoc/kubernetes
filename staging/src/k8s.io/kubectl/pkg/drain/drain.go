@@ -41,22 +41,22 @@ import (
 )
 
 const (
-	// EvictionKind represents the kind of evictions object
+	// EvictionKind 表示 evictions 对象的 kind
 	EvictionKind = "Eviction"
-	// EvictionSubresource represents the kind of evictions object as pod's subresource
+	// EvictionSubresource 表示作为 pod 子资源的 evictions 对象的 kind
 	EvictionSubresource = "pods/eviction"
 	podSkipMsgTemplate  = "pod %q has DeletionTimestamp older than %v seconds, skipping\n"
 )
 
-// Helper contains the parameters to control the behaviour of drainer
+// Helper 包含控制 drainer 行为的参数
 type Helper struct {
 	Ctx    context.Context
 	Client kubernetes.Interface
 	Force  bool
 
-	// GracePeriodSeconds is how long to wait for a pod to terminate.
-	// IMPORTANT: 0 means "delete immediately"; set to a negative value
-	// to use the pod's terminationGracePeriodSeconds.
+	// GracePeriodSeconds 是等待 pod 终止的时长。
+	// 重要：0 表示"立即删除"；设置为负值
+	// 则使用 pod 的 terminationGracePeriodSeconds。
 	GracePeriodSeconds int
 
 	IgnoreAllDaemonSets bool
@@ -66,21 +66,21 @@ type Helper struct {
 	PodSelector         string
 	ChunkSize           int64
 
-	// DisableEviction forces drain to use delete rather than evict
+	// DisableEviction 强制 drain 使用 delete 而非 evict
 	DisableEviction bool
 
-	// SkipWaitForDeleteTimeoutSeconds ignores pods that have a
-	// DeletionTimeStamp > N seconds. It's up to the user to decide when this
-	// option is appropriate; examples include the Node is unready and the pods
-	// won't drain otherwise
+	// SkipWaitForDeleteTimeoutSeconds 忽略具有较大
+	// DeletionTimeStamp（超过 N 秒）的 pod。何时适用该选项
+	// 由用户自行判断；例如 Node 未就绪且
+	// 这些 pod 无法通过其他方式 drain。
 	SkipWaitForDeleteTimeoutSeconds int
 
-	// EvictErrorRetryDelay is used to control the retry delay after a pod eviction error
+	// EvictErrorRetryDelay 用于控制 pod eviction 出错后的重试延迟
 	EvictErrorRetryDelay time.Duration
 
-	// AdditionalFilters are applied sequentially after base drain filters to
-	// exclude pods using custom logic.  Any filter that returns PodDeleteStatus
-	// with Delete == false will immediately stop execution of further filters.
+	// AdditionalFilters 在基础 drain 过滤器之后依次应用，
+	// 使用自定义逻辑排除 pod。任何返回 Delete == false 的 PodDeleteStatus
+	// 的过滤器都会立即中止后续过滤器的执行。
 	AdditionalFilters []PodFilter
 
 	Out    io.Writer
@@ -88,14 +88,14 @@ type Helper struct {
 
 	DryRunStrategy cmdutil.DryRunStrategy
 
-	// OnPodDeletedOrEvicted is called when a pod is evicted/deleted; for printing progress output
+	// OnPodDeletedOrEvicted 在 pod 被 evict/delete 时调用，用于输出进度信息
 	// Deprecated: use OnPodDeletionOrEvictionFinished instead
 	OnPodDeletedOrEvicted func(pod *corev1.Pod, usingEviction bool)
 
-	// OnPodDeletionOrEvictionFinished is called when a pod is eviction/deletetion is failed; for printing progress output
+	// OnPodDeletionOrEvictionFinished 在 pod eviction/deletion 失败时调用，用于输出进度信息
 	OnPodDeletionOrEvictionFinished func(pod *corev1.Pod, usingEviction bool, err error)
 
-	// OnPodDeletionOrEvictionStarted is called when a pod eviction/deletion is started; for printing progress output
+	// OnPodDeletionOrEvictionStarted 在 pod eviction/deletion 开始时调用，用于输出进度信息
 	OnPodDeletionOrEvictionStarted func(pod *corev1.Pod, usingEviction bool)
 }
 
@@ -113,13 +113,13 @@ type waitForDeleteParams struct {
 	out                             io.Writer
 }
 
-// CheckEvictionSupport uses Discovery API to find out if the server support
-// eviction subresource If support, it will return its groupVersion; Otherwise,
-// it will return an empty GroupVersion
+// CheckEvictionSupport 使用 Discovery API 查询服务端是否支持
+// eviction 子资源。若支持，则返回其 groupVersion；否则
+// 返回空的 GroupVersion。
 func CheckEvictionSupport(clientset kubernetes.Interface) (schema.GroupVersion, error) {
 	discoveryClient := clientset.Discovery()
 
-	// version info available in subresources since v1.8.0 in https://github.com/kubernetes/kubernetes/pull/49971
+	// 自 v1.8.0 起子资源中提供版本信息，参见 https://github.com/kubernetes/kubernetes/pull/49971
 	resourceList, err := discoveryClient.ServerResourcesForGroupVersion("v1")
 	if err != nil {
 		return schema.GroupVersion{}, err
@@ -144,18 +144,18 @@ func (d *Helper) makeDeleteOptions() metav1.DeleteOptions {
 	return deleteOptions
 }
 
-// DeletePod will delete the given pod, or return an error if it couldn't
+// DeletePod 删除给定的 pod，若删除失败则返回错误
 func (d *Helper) DeletePod(pod corev1.Pod) error {
 	return d.Client.CoreV1().Pods(pod.Namespace).Delete(d.getContext(), pod.Name, d.makeDeleteOptions())
 }
 
-// EvictPod will evict the given pod, or return an error if it couldn't
+// EvictPod evict 给定的 pod，若失败则返回错误
 func (d *Helper) EvictPod(pod corev1.Pod, evictionGroupVersion schema.GroupVersion) error {
 	delOpts := d.makeDeleteOptions()
 
 	switch evictionGroupVersion {
 	case policyv1.SchemeGroupVersion:
-		// send policy/v1 if the server supports it
+		// 服务端支持时发送 policy/v1
 		eviction := &policyv1.Eviction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pod.Name,
@@ -166,7 +166,7 @@ func (d *Helper) EvictPod(pod corev1.Pod, evictionGroupVersion schema.GroupVersi
 		return d.Client.PolicyV1().Evictions(eviction.Namespace).Evict(d.getContext(), eviction)
 
 	default:
-		// otherwise, fall back to policy/v1beta1, supported by all servers that support the eviction subresource
+		// 否则回退到 policy/v1beta1，所有支持 eviction 子资源的服务端都支持该版本
 		eviction := &policyv1beta1.Eviction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pod.Name,
@@ -178,10 +178,10 @@ func (d *Helper) EvictPod(pod corev1.Pod, evictionGroupVersion schema.GroupVersi
 	}
 }
 
-// GetPodsForDeletion receives resource info for a node, and returns those pods as PodDeleteList,
-// or error if it cannot list pods. All pods that are ready to be deleted can be obtained with .Pods(),
-// and string with all warning can be obtained with .Warnings(), and .Errors() for all errors that
-// occurred during deletion.
+// GetPodsForDeletion 接收节点的资源信息，以 PodDeleteList 形式返回该节点上的 pod，
+// 若无法列出 pod 则返回错误。可通过 .Pods() 获取所有可删除的 pod，
+// 通过 .Warnings() 获取包含全部警告的字符串，
+// 通过 .Errors() 获取删除过程中发生的所有错误。
 func (d *Helper) GetPodsForDeletion(nodeName string) (*PodDeleteList, []error) {
 	labelSelector, err := labels.Parse(d.PodSelector)
 	if err != nil {
@@ -224,15 +224,15 @@ func filterPods(podList *corev1.PodList, filters []PodFilter) *PodDeleteList {
 		for _, filter := range filters {
 			status = filter(pod)
 			if !status.Delete {
-				// short-circuit as soon as pod is filtered out
-				// at that point, there is no reason to run pod
-				// through any additional filters
+				// pod 被过滤掉后立即短路
+				// 此时没有必要再让该 pod
+				// 经过任何后续过滤器
 				break
 			}
 		}
-		// Add the pod to PodDeleteList no matter what PodDeleteStatus is,
-		// those pods whose PodDeleteStatus is false like DaemonSet will
-		// be catched by list.errors()
+		// 无论 PodDeleteStatus 是什么，都将 pod 加入 PodDeleteList，
+		// 像 DaemonSet 这类 PodDeleteStatus 为 false 的 pod
+		// 会由 list.errors() 捕获
 		pod.Kind = "Pod"
 		pod.APIVersion = "v1"
 		pods = append(pods, PodDelete{
@@ -244,13 +244,13 @@ func filterPods(podList *corev1.PodList, filters []PodFilter) *PodDeleteList {
 	return list
 }
 
-// DeleteOrEvictPods deletes or evicts the pods on the api server
+// DeleteOrEvictPods 删除或 evict API server 上的 pod
 func (d *Helper) DeleteOrEvictPods(pods []corev1.Pod) error {
 	if len(pods) == 0 {
 		return nil
 	}
 
-	// TODO(justinsb): unnecessary?
+	// TODO(justinsb): 是否多余？
 	getPodFn := func(namespace, name string) (*corev1.Pod, error) {
 		return d.Client.CoreV1().Pods(namespace).Get(d.getContext(), name, metav1.GetOptions{})
 	}
@@ -269,7 +269,7 @@ func (d *Helper) DeleteOrEvictPods(pods []corev1.Pod) error {
 	return d.deletePods(pods, getPodFn)
 }
 
-// syncWriter serializes concurrent Write calls with a mutex.
+// syncWriter 使用互斥锁将并发的 Write 调用串行化。
 type syncWriter struct {
 	mu sync.Mutex
 	w  io.Writer
@@ -285,7 +285,7 @@ func (d *Helper) evictPods(pods []corev1.Pod, evictionGroupVersion schema.GroupV
 	returnCh := make(chan error, 1)
 	out := io.Writer(&syncWriter{w: d.Out})
 	errOut := io.Writer(&syncWriter{w: d.ErrOut})
-	// 0 timeout means infinite, we use MaxInt64 to represent it.
+	// 超时时间为 0 表示无限等待，这里用 MaxInt64 表示。
 	var globalTimeout time.Duration
 	if d.Timeout == 0 {
 		globalTimeout = time.Duration(math.MaxInt64)
@@ -311,7 +311,7 @@ func (d *Helper) evictPods(pods []corev1.Pod, evictionGroupVersion schema.GroupV
 				}
 				select {
 				case <-ctx.Done():
-					// return here or we'll leak a goroutine.
+					// 必须在此返回，否则会泄漏 goroutine。
 					returnCh <- fmt.Errorf("error when evicting pods/%q -n %q: global timeout reached: %v", activePod.Name, activePod.Namespace, globalTimeout)
 					return
 				default:
@@ -328,13 +328,13 @@ func (d *Helper) evictPods(pods []corev1.Pod, evictionGroupVersion schema.GroupV
 					fmt.Fprintf(errOut, "error when evicting pods/%q -n %q (will retry after %v): %v\n", activePod.Name, activePod.Namespace, d.EvictErrorRetryDelay, err)
 					time.Sleep(d.EvictErrorRetryDelay)
 				} else if !activePod.ObjectMeta.DeletionTimestamp.IsZero() && apierrors.IsForbidden(err) && apierrors.HasStatusCause(err, corev1.NamespaceTerminatingCause) {
-					// an eviction request in a deleting namespace will throw a forbidden error,
-					// if the pod is already marked deleted, we can ignore this error, an eviction
-					// request will never succeed, but we will waitForDelete for this pod.
+					// 在正在删除的命名空间中发起 eviction 请求会返回 forbidden 错误，
+					// 如果 pod 已被标记为删除，可以忽略该错误：eviction 请求永远不会成功，
+					// 但我们会通过 waitForDelete 等待该 pod。
 					break
 				} else if apierrors.IsForbidden(err) && apierrors.HasStatusCause(err, corev1.NamespaceTerminatingCause) {
-					// an eviction request in a deleting namespace will throw a forbidden error,
-					// if the pod is not marked deleted, we retry until it is.
+					// 在正在删除的命名空间中发起 eviction 请求会返回 forbidden 错误，
+					// 如果 pod 尚未被标记为删除，则持续重试直到它被标记。
 					//nolint:errcheck
 					fmt.Fprintf(errOut, "error when evicting pod %q from terminating namespace %q (will retry after %v): %v\n", activePod.Name, activePod.Namespace, d.EvictErrorRetryDelay, err)
 					time.Sleep(d.EvictErrorRetryDelay)
@@ -344,7 +344,7 @@ func (d *Helper) evictPods(pods []corev1.Pod, evictionGroupVersion schema.GroupV
 				}
 
 				freshPod, err := getPodFn(activePod.Namespace, activePod.Name)
-				// we ignore errors and let eviction sort it out with the original pod.
+				// 忽略错误，让 eviction 逻辑结合原始 pod 自行处理。
 				if err == nil {
 					activePod = *freshPod
 				}
@@ -390,7 +390,7 @@ func (d *Helper) evictPods(pods []corev1.Pod, evictionGroupVersion schema.GroupV
 }
 
 func (d *Helper) deletePods(pods []corev1.Pod, getPodFn func(namespace, name string) (*corev1.Pod, error)) error {
-	// 0 timeout means infinite, we use MaxInt64 to represent it.
+	// 超时时间为 0 表示无限等待，这里用 MaxInt64 表示。
 	var globalTimeout time.Duration
 	if d.Timeout == 0 {
 		globalTimeout = time.Duration(math.MaxInt64)
@@ -441,8 +441,8 @@ func waitForDelete(params waitForDeleteParams) ([]corev1.Pod, error) {
 		pendingPods := []corev1.Pod{}
 		for i, pod := range pods {
 			p, err := params.getPodFn(pod.Namespace, pod.Name)
-			// The implementation of getPodFn that uses client-go returns an empty Pod struct when there is an error,
-			// so we need to check that err == nil and p != nil to know that a pod was found successfully.
+			// 使用 client-go 的 getPodFn 实现在出错时会返回空的 Pod 结构体，
+			// 因此需要同时检查 err == nil 和 p != nil，才能确认成功找到了 pod。
 			if apierrors.IsNotFound(err) || (err == nil && p != nil && p.ObjectMeta.UID != pod.ObjectMeta.UID) {
 				if params.onFinishFn != nil {
 					params.onFinishFn(&pod, params.usingEviction, nil)
@@ -469,9 +469,9 @@ func waitForDelete(params waitForDeleteParams) ([]corev1.Pod, error) {
 	return pods, err
 }
 
-// Since Helper does not have a constructor, we can't enforce Helper.Ctx != nil
-// Multiple public methods prevent us from initializing the context in a single
-// place as well.
+// Helper 没有构造函数，因此无法强制保证 Helper.Ctx != nil。
+// 同时存在多个公开方法，同样无法在一个位置
+// 统一初始化 context。
 func (d *Helper) getContext() context.Context {
 	if d.Ctx != nil {
 		return d.Ctx

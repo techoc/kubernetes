@@ -198,20 +198,20 @@ func WithBuiltinTemplateFuncs(tmpl *template.Template) *template.Template {
 		"resolveRef": func(refAny any, document map[string]any) map[string]any {
 			refString, ok := refAny.(string)
 			if !ok {
-				// if passed nil, or wrong type just treat the same
-				// way as unresolved reference (makes for easier templates)
+				// 如果传入 nil 或类型错误，就按与未解析引用相同的方式处理
+				// （这样模板写起来更简单）
 				return nil
 			}
 
-			// Resolve field path encoded by the ref
+			// 解析该 ref 中编码的字段路径
 			ref, err := jsonreference.New(refString)
 			if err != nil {
-				// Unrecognized ref format.
+				// 无法识别的 ref 格式。
 				return nil
 			}
 
 			if !ref.HasFragmentOnly {
-				// Downloading is not supported. Treat as not found
+				// 不支持下载。按未找到处理
 				return nil
 			}
 
@@ -221,7 +221,7 @@ func WithBuiltinTemplateFuncs(tmpl *template.Template) *template.Template {
 
 			for _, k := range components {
 				if len(k) == 0 {
-					// first component is usually empty (#/components/) , etc
+					// 第一个组成部分通常为空（如 #/components/）等
 					continue
 				}
 

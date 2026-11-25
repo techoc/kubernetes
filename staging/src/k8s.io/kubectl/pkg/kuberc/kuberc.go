@@ -51,18 +51,18 @@ var (
 	shortHandRegex = regexp.MustCompile("^-[a-zA-Z]+$")
 )
 
-// compile-time check that these two types are aligned
+// 编译时检查，确保这两个类型一致。
 var _ = clientcmdapi.AllowlistEntry(config.AllowlistEntry{})
 
-// PreferencesHandler is responsible for setting default flags
-// arguments based on user's kuberc configuration.
+// PreferencesHandler 负责根据用户的 kuberc 配置设置默认的
+// 标志参数。
 type PreferencesHandler interface {
 	AddFlags(flags *pflag.FlagSet)
 	Apply(rootCmd *cobra.Command, kubeConfigFlags *genericclioptions.ConfigFlags, args []string, errOut io.Writer) ([]string, error)
 }
 
-// Preferences stores the kuberc file coming either from environment variable
-// or file from set in flag or the default kuberc path.
+// Preferences 存储 kuberc 文件，该文件可能来自环境变量、
+// 通过标志指定的文件，或默认的 kuberc 路径。
 type Preferences struct {
 	getPreferencesFunc func(kuberc string, errOut io.Writer) (*config.Preference, error)
 
@@ -70,7 +70,7 @@ type Preferences struct {
 	policy  clientcmdapi.PluginPolicy
 }
 
-// NewPreferences returns initialized Preferences object.
+// NewPreferences 返回已初始化的 Preferences 对象。
 func NewPreferences() PreferencesHandler {
 	return &Preferences{
 		getPreferencesFunc: DefaultGetPreferences,
@@ -86,13 +86,13 @@ type aliasing struct {
 	originalCommand bytes.Buffer
 }
 
-// AddFlags adds kuberc related flags into the command.
+// AddFlags 将与 kuberc 相关的标志添加到命令中。
 func (p *Preferences) AddFlags(flags *pflag.FlagSet) {
 	flags.String("kuberc", "", "Path to the kuberc file to use for preferences. This can be disabled by exporting KUBECTL_KUBERC=false feature gate or turning off the feature KUBERC=off.")
 }
 
-// Apply firstly applies the aliases in the preferences file and secondly overrides
-// the default values of flags.
+// Apply 首先应用首选项文件中的别名，其次覆盖
+// 标志的默认值。
 func (p *Preferences) Apply(rootCmd *cobra.Command, kubeConfigFlags *genericclioptions.ConfigFlags, args []string, errOut io.Writer) ([]string, error) {
 	if len(args) <= 1 {
 		return args, nil
@@ -145,9 +145,9 @@ func (p *Preferences) convertPluginPolicy(kuberc *config.Preference) {
 	}
 }
 
-// `applyPluginPolicy` wraps the rest client getter with one that propagates
-// the allowlist, via the rest config, to the code handling credential exec
-// plugins.
+// `applyPluginPolicy` 用一个包装器替换 rest 客户端获取器，
+// 该包装器通过 rest 配置将允许列表传递给处理凭据 exec
+// 插件的代码。
 func (p *Preferences) applyPluginPolicy(kubeConfigFlags *genericclioptions.ConfigFlags, kuberc *config.Preference) {
 	wrapConfigFn := kubeConfigFlags.WrapConfigFn
 	kubeConfigFlags.WithWrapConfigFn(func(c *rest.Config) *rest.Config {
@@ -163,7 +163,7 @@ func (p *Preferences) applyPluginPolicy(kubeConfigFlags *genericclioptions.Confi
 	})
 }
 
-// applyOverrides finds the command and sets the defaulted flag values in kuberc.
+// applyOverrides 查找命令，并设置 kuberc 中指定的标志默认值。
 func (p *Preferences) applyOverrides(rootCmd *cobra.Command, kuberc *config.Preference, args []string, errOut io.Writer) error {
 	args = args[1:]
 	cmd, _, err := rootCmd.Find(args)
@@ -186,7 +186,7 @@ func (p *Preferences) applyOverrides(rootCmd *cobra.Command, kuberc *config.Pref
 			return fmt.Errorf("alias %s can not be overridden", cmd.Name())
 		}
 
-		// This function triggers merging the persistent flags in the parent commands.
+		// 调用此函数会触发合并父命令中的持久标志。
 		_ = cmd.InheritedFlags()
 
 		allShorthands := make(map[string]struct{})
@@ -202,7 +202,7 @@ func (p *Preferences) applyOverrides(rootCmd *cobra.Command, kuberc *config.Pref
 				return fmt.Errorf("invalid flag %s for command %s", fl.Name, c.Command)
 			}
 			if searchInArgs(existingFlag.Name, existingFlag.Shorthand, allShorthands, args) {
-				// Don't modify the value implicitly, if it is passed in args explicitly
+				// 如果参数中已显式传递该值，则不要隐式修改它。
 				continue
 			}
 			err = cmd.Flags().Set(fl.Name, fl.Default)
@@ -211,7 +211,7 @@ func (p *Preferences) applyOverrides(rootCmd *cobra.Command, kuberc *config.Pref
 			}
 			originalCommand.WriteString(fmt.Sprintf(" --%s=%s", fl.Name, fl.Default))
 		}
-		// Add annotation to trace back command built with default values set within kuberc
+		// 添加注解，以便追溯使用 kuberc 中所设默认值构建的命令。
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string, 1)
 		}
@@ -222,20 +222,20 @@ func (p *Preferences) applyOverrides(rootCmd *cobra.Command, kuberc *config.Pref
 	return nil
 }
 
-// applyAliases firstly appends all defined aliases in kuberc file to the root command.
-// Since there may be several alias definitions belonging to the same command, it extracts the
-// alias that is currently executed from args. After that it sets the flag definitions in alias as default values
-// of the command. Lastly, others parameters (e.g. resources, etc.) that are passed as arguments in kuberc
-// is appended into the command args.
+// applyAliases 首先将 kuberc 文件中定义的所有别名追加到根命令。
+// 由于可能有多个别名定义指向同一命令，它会从参数中
+// 提取当前正在执行的别名。之后，它将别名中的标志定义设为
+// 该命令的默认值。最后，将 kuberc 中作为参数传递的其他参数
+// （如资源等）追加到命令参数中。
 func (p *Preferences) applyAliases(rootCmd *cobra.Command, kuberc *config.Preference, args []string, errOut io.Writer) ([]string, error) {
 	_, _, err := rootCmd.Find(args[1:])
 	if err == nil {
-		// Command is found, no need to continue for aliasing
+		// 已找到命令，无需继续进行别名处理。
 		return args, nil
 	}
 
 	var aliasArgs *aliasing
-	var commandName string // first "non-flag" arguments
+	var commandName string // 第一个“非标志”参数
 	var commandIndex int
 	for index, arg := range args[1:] {
 		if !strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, cobra.ShellCompRequestCmd) {
@@ -251,7 +251,7 @@ func (p *Preferences) applyAliases(rootCmd *cobra.Command, kuberc *config.Prefer
 			continue
 		}
 
-		// do not allow shadowing built-ins
+		// 不允许遮蔽内置命令。
 		if _, _, err := rootCmd.Find([]string{alias.Name}); err == nil {
 			fmt.Fprintf(errOut, "Warning: Setting alias %q to a built-in command is not supported\n", alias.Name)
 			break
@@ -280,8 +280,8 @@ func (p *Preferences) applyAliases(rootCmd *cobra.Command, kuberc *config.Prefer
 		}
 
 		if aliasArgs == nil {
-			// pursue with the current behavior.
-			// This might be a built-in command, external plugin, etc.
+			// 沿用当前行为。
+			// 这可能是内置命令、外部插件等。
 			return args, nil
 		}
 
@@ -292,7 +292,7 @@ func (p *Preferences) applyAliases(rootCmd *cobra.Command, kuberc *config.Prefer
 			return args, nil
 		}
 
-		// This function triggers merging the persistent flags in the parent commands.
+		// 调用此函数会触发合并父命令中的持久标志。
 		_ = foundAliasCmd.InheritedFlags()
 
 		allShorthands := make(map[string]struct{})
@@ -308,7 +308,7 @@ func (p *Preferences) applyAliases(rootCmd *cobra.Command, kuberc *config.Prefer
 				return args, fmt.Errorf("invalid alias flag %s in alias %s", fl.Name, args[0])
 			}
 			if searchInArgs(existingFlag.Name, existingFlag.Shorthand, allShorthands, args) {
-				// Don't modify the value implicitly, if it is passed in args explicitly
+				// 如果参数中已显式传递该值，则不要隐式修改它。
 				continue
 			}
 			err = foundAliasCmd.Flags().Set(fl.Name, fl.Default)
@@ -319,28 +319,28 @@ func (p *Preferences) applyAliases(rootCmd *cobra.Command, kuberc *config.Prefer
 		}
 
 		if len(aliasArgs.prependArgs) > 0 {
-			// prependArgs defined in kuberc should be inserted after the alias name.
+			// kuberc 中定义的 prependArgs 应插入到别名名称之后。
 			if commandIndex+1 >= len(args) {
-				// command is the last item, we simply append just like appendArgs
+				// 命令是最后一项，直接像 appendArgs 一样追加即可。
 				args = append(args, aliasArgs.prependArgs...)
 			} else {
 				args = append(args[:commandIndex+1], append(aliasArgs.prependArgs, args[commandIndex+1:]...)...)
 			}
 		}
 		if len(aliasArgs.appendArgs) > 0 {
-			// appendArgs defined in kuberc should be appended to actual args.
+			// kuberc 中定义的 appendArgs 应追加到实际参数中。
 			args = append(args, aliasArgs.appendArgs...)
 		}
-		// Cobra (command.go#L1078) appends only root command's args into the actual args and ignores the others.
-		// We are appending the additional args defined in kuberc in here and
-		// expect that it will be passed along to the actual command.
+		// Cobra (command.go#L1078) 仅将根命令的参数追加到实际参数中，而忽略其他参数。
+		// 我们在此处追加 kuberc 中定义的额外参数，
+		// 期望它们会被一并传递给实际命令。
 		rootCmd.SetArgs(args[1:])
-		// Remove alias arg to add the remaining arguments that are not flags nor part of the preferences
+		// 移除别名参数，以添加既不是标志也不属于首选项的其余参数。
 		sanitizedArgs := strings.ReplaceAll(strings.Join(args[1:], " "), foundAliasCmd.Name(), "")
 		if len(sanitizedArgs) > 0 {
 			aliasArgs.originalCommand.WriteString(fmt.Sprintf(" %s", sanitizedArgs))
 		}
-		// Add annotation to trace back command built without aliases applied
+		// 添加注解，以便追溯未应用别名时构建的命令。
 		if aliasArgs.command.Annotations == nil {
 			aliasArgs.command.Annotations = make(map[string]string, 1)
 		}
@@ -351,9 +351,9 @@ func (p *Preferences) applyAliases(rootCmd *cobra.Command, kuberc *config.Prefer
 	return args, nil
 }
 
-// LoadKuberc returns the correct kuberc file. Explicitly specified is always highest priority.
-// If it isn't set, KUBERC environment variable is the next choice.
-// If none of them is set, default kuberc location will be used.
+// LoadKuberc 返回正确的 kuberc 文件。显式指定的文件始终具有最高优先级。
+// 如果未显式指定，则其次考虑 KUBERC 环境变量。
+// 如果两者都未设置，则使用默认的 kuberc 位置。
 func LoadKuberc(kuberc string) (string, bool, error) {
 	if val := os.Getenv("KUBERC"); val == "off" {
 		if kuberc != "" {
@@ -376,12 +376,12 @@ func LoadKuberc(kuberc string) (string, bool, error) {
 	return kubeRCFile, explicitly, nil
 }
 
-// DefaultGetPreferences returns KubeRCConfiguration.
-// If users sets kuberc file explicitly in --kuberc flag, it has the highest
-// priority. If not specified, it looks for in KUBERC environment variable.
-// If KUBERC is also not set, it falls back to default .kuberc file at the same location
-// where kubeconfig's defaults are residing in.
-// If KUBERC is set to "off", kuberc will be turned off and original behaviors in kubectl will be applied.
+// DefaultGetPreferences 返回 KubeRCConfiguration。
+// 如果用户通过 --kuberc 标志显式设置了 kuberc 文件，
+// 则该文件具有最高优先级。如果未指定，则查找 KUBERC 环境变量。
+// 如果 KUBERC 也未设置，则回退到与 kubeconfig 默认位置
+// 相同的目录下的默认 .kuberc 文件。
+// 如果 KUBERC 设置为 "off"，则会关闭 kuberc，并应用 kubectl 的原有行为。
 func DefaultGetPreferences(kuberc string, errOut io.Writer) (*config.Preference, error) {
 	kubeRCFile, explicitly, err := LoadKuberc(kuberc)
 	if err != nil {
@@ -395,20 +395,20 @@ func DefaultGetPreferences(kuberc string, errOut io.Writer) (*config.Preference,
 	preference, err := decodePreference(kubeRCFile)
 	switch {
 	case preference != nil && runtime.IsStrictDecodingError(err):
-		// just warn about strict decoding errors if we got a usable Preference object back
+		// 如果已拿到可用的 Preference 对象，则仅对严格解码错误发出警告。
 		fmt.Fprintf(errOut, "kuberc: ignoring strict decoding error in %s: %v", kubeRCFile, err) //nolint:errcheck
 		return preference, nil
 
 	case explicitly && err != nil:
-		// if explicitly requested, error on any error other than a StrictDecodingError
+		// 如果是显式请求的，则除 StrictDecodingError 外的任何错误都直接返回。
 		return nil, fmt.Errorf("kuberc: %w", err)
 
 	case !explicitly && os.IsNotExist(err):
-		// if not explicitly requested, silently ignore missing kuberc
+		// 如果不是显式请求的，则静默忽略 kuberc 文件缺失。
 		return nil, nil
 
 	case !explicitly && err != nil:
-		// if not explicitly requested, only warn on any other error
+		// 如果不是显式请求的，则对其他任何错误仅发出警告。
 		fmt.Fprintf(errOut, "kuberc: no preferences loaded from %s: %v", kubeRCFile, err) //nolint:errcheck
 		return nil, nil
 
@@ -417,16 +417,16 @@ func DefaultGetPreferences(kuberc string, errOut io.Writer) (*config.Preference,
 	}
 }
 
-// Normally, we should extract this value directly from kuberc flag.
-// However, flag values are set during the command execution and
-// we are in very early stages to prepare commands prior to execute them.
-// Besides, we only need kuberc flag value in this stage.
+// 通常，我们应直接从 kuberc 标志中提取此值。
+// 但是，标志值是在命令执行期间设置的，
+// 而我们当前处于执行命令之前的非常早期的准备阶段。
+// 此外，在这个阶段我们只需要 kuberc 标志的值。
 func getExplicitKuberc(args []string) (string, error) {
 	var kubercPath string
 	for i, arg := range args {
 		if arg == "--" {
-			// flags after "--" does not represent any flag of
-			// the command. We should short cut the iteration in here.
+			// "--" 之后的标志不代表命令的任何标志。
+			// 我们应在此处提前结束遍历。
 			break
 		}
 		if arg == "--kuberc" {
@@ -452,21 +452,21 @@ func getExplicitKuberc(args []string) (string, error) {
 	return kubercPath, nil
 }
 
-// searchInArgs searches the given key in the args and returns
-// true, if it finds. Otherwise, it returns false.
+// searchInArgs 在参数中搜索给定的键，找到则返回 true，
+// 否则返回 false。
 func searchInArgs(flagName string, shorthand string, allShorthands map[string]struct{}, args []string) bool {
 	for _, arg := range args {
-		// if flag is set in args in "--flag value" or "--flag=value" format,
-		// we should return it as found
+		// 如果参数以 "--flag value" 或 "--flag=value" 格式设置了标志，
+		// 则应将其视为已找到。
 		if fmt.Sprintf("--%s", flagName) == arg || strings.HasPrefix(arg, fmt.Sprintf("--%s=", flagName)) {
 			return true
 		}
 		if shorthand == "" {
 			continue
 		}
-		// shorthand can be in "-n value" or "-nvalue" format
-		// it is guaranteed that shorthand is one letter. So that
-		// checking just the prefix -oyaml also finds --output.
+		// 简写可以是 "-n value" 或 "-nvalue" 格式。
+		// 可以确定简写只有一个字母，因此仅检查前缀 -oyaml
+		// 也能找到 --output。
 		if strings.HasPrefix(arg, fmt.Sprintf("-%s", shorthand)) {
 			return true
 		}
@@ -475,12 +475,12 @@ func searchInArgs(flagName string, shorthand string, allShorthands map[string]st
 			continue
 		}
 
-		// remove prefix "-"
+		// 移除前缀 "-"。
 		arg = arg[1:]
-		// short hands can be in a combined "-abc" format.
-		// First we need to ensure that all the values are shorthand to safely search ours.
-		// Because we know that "-abcvalue" is not valid. So that we need to be sure that if we find
-		// "b" it correctly refers to the shorthand "b" not arbitrary value "-cargb".
+		// 简写可以组合成 "-abc" 格式。
+		// 首先需要确保所有值都是简写，才能安全地搜索我们的目标。
+		// 因为我们知道 "-abcvalue" 是无效的。所以需要确认，如果找到
+		// "b"，它确实指的是简写 "b"，而不是任意值 "-cargb"。
 		arbitraryFound := false
 		for _, runeValue := range shorthand {
 			if _, ok := allShorthands[string(runeValue)]; !ok {
@@ -491,7 +491,7 @@ func searchInArgs(flagName string, shorthand string, allShorthands map[string]st
 		if arbitraryFound {
 			continue
 		}
-		// verified that all values are short hand. Now search ours
+		// 已确认所有值都是简写。现在搜索我们的目标。
 		if strings.Contains(arg, shorthand) {
 			return true
 		}

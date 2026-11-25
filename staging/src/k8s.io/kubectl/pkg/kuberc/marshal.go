@@ -35,8 +35,8 @@ import (
 	"k8s.io/kubectl/pkg/config/v1beta1"
 )
 
-// decodePreference iterates over the yamls in kuberc file to find the first supported Preference version.
-// Once it finds, it returns the internal object as well as accumulated errors during the iteration.
+// decodePreference 遍历 kuberc 文件中的各个 YAML 文档，查找第一个受支持的 Preference 版本。
+// 找到后，它会返回内部对象，以及遍历过程中累积的错误。
 func decodePreference(kubercFile string) (*config.Preference, error) {
 	kubercBytes, err := os.ReadFile(kubercFile)
 	if err != nil {
@@ -48,32 +48,32 @@ func decodePreference(kubercFile string) (*config.Preference, error) {
 	for {
 		doc, readErr := reader.Read()
 		if errors.Is(readErr, io.EOF) {
-			// no more entries, expected when we reach the end of the file
+			// 没有更多条目，到达文件末尾时预期如此。
 			break
 		}
 		if readErr != nil {
-			// other errors are fatal
+			// 其他错误是致命错误。
 			return nil, readErr
 		}
 		if len(bytes.TrimSpace(doc)) == 0 {
-			// empty item, ignore
+			// 空条目，忽略。
 			continue
 		}
-		// remember we attempted
+		// 记录我们已尝试过
 		attemptedItems++
 		pref, gvk, strictDecodeErr := scheme.StrictCodecs.UniversalDecoder().Decode(doc, nil, nil)
 		if strictDecodeErr != nil {
 			var lenientDecodeErr error
 			pref, gvk, lenientDecodeErr = scheme.LenientCodecs.UniversalDecoder().Decode(doc, nil, nil)
 			if lenientDecodeErr != nil {
-				// both strict and lenient failed
-				// verbose log the error with the most information about this item and continue
+				// 严格解码和宽松解码都失败了。
+				// 以详细日志输出包含该条目最多信息的错误，然后继续。
 				klog.V(5).Infof("kuberc: strict decoding error for entry %d in %s: %v", attemptedItems, kubercFile, strictDecodeErr)
 				continue
 			}
 		}
 
-		// check expected GVK, if bad, verbose log and continue
+		// 检查期望的 GVK，如果不匹配，则输出详细日志并继续。
 		expectedGK := schema.GroupKind{
 			Group: config.SchemeGroupVersion.Group,
 			Kind:  "Preference",
@@ -83,14 +83,14 @@ func decodePreference(kubercFile string) (*config.Preference, error) {
 			continue
 		}
 
-		// check expected go type, if bad, verbose log and continue
+		// 检查期望的 Go 类型，如果不匹配，则输出详细日志并继续。
 		preferences, ok := pref.(*config.Preference)
 		if !ok {
 			klog.V(5).Infof("kuberc: unexpected object type %T for entry %d in %s", pref, attemptedItems, kubercFile)
 			continue
 		}
 
-		// we have a usable preferences to return
+		// 我们得到了可用的首选项，可以返回。
 		klog.V(5).Infof("kuberc: using entry %d (%s) in %s", attemptedItems, gvk.GroupVersion(), kubercFile)
 		return preferences, strictDecodeErr
 	}
@@ -99,12 +99,12 @@ func decodePreference(kubercFile string) (*config.Preference, error) {
 		return nil, fmt.Errorf("no valid preferences found in %s, use --v=5 to see details", kubercFile)
 	}
 
-	// empty doc
+	// 空文档
 	klog.V(5).Infof("kuberc: no preferences found in %s", kubercFile)
 	return nil, nil
 }
 
-// LoadPreference loads the kuberc file, and returns v1beta1.Preference object
+// LoadPreference 加载 kuberc 文件，并返回 v1beta1.Preference 对象。
 func LoadPreference(kubercFile string) (*v1beta1.Preference, error) {
 	internal, err := decodePreference(kubercFile)
 	if err != nil {
@@ -117,7 +117,7 @@ func LoadPreference(kubercFile string) (*v1beta1.Preference, error) {
 	return prefs.(*v1beta1.Preference), nil
 }
 
-// SavePreference saves the preference to the kuberc file
+// SavePreference 将首选项保存到 kuberc 文件中。
 func SavePreference(pref *v1beta1.Preference, kubercFile string, out io.Writer) error {
 	dir := filepath.Dir(kubercFile)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -139,8 +139,8 @@ func SavePreference(pref *v1beta1.Preference, kubercFile string, out io.Writer) 
 	return nil
 }
 
-// CreateDefaultPreference returns Preference object with
-// some default configurations.
+// CreateDefaultPreference 返回带有一些默认配置的
+// Preference 对象。
 func CreateDefaultPreference() *v1beta1.Preference {
 	return &v1beta1.Preference{
 		TypeMeta: metav1.TypeMeta{

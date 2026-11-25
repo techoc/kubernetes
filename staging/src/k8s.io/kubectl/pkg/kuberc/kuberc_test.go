@@ -895,7 +895,7 @@ func TestApplyOverride(t *testing.T) {
 			if errWriter.String() != "" {
 				t.Fatalf("unexpected error message %s\n", errWriter.String())
 			}
-			// Verify annotation and the original command
+			// 验证注解和原始命令。
 			originalCommand := actualCmd.Annotations[KubeRCOriginalCommandAnnotation]
 			if !strings.Contains(originalCommand, actualCmd.Name()) {
 				t.Fatalf("missing command '%s' in original command '%s'", originalCommand, actualCmd.Name())
@@ -2722,9 +2722,9 @@ func TestGetExplicitKuberc(t *testing.T) {
 	}
 }
 
-// Add list of commands in nested way.
-// First iteration adds command into rootCmd,
-// Second iteration adds command into the previous one.
+// 以嵌套方式添加命令列表。
+// 第一次迭代将命令添加到 rootCmd，
+// 第二次迭代将命令添加到前一个命令中。
 func addCommands[T supportedTypes](rootCmd *cobra.Command, commands []fakeCmds[T]) {
 	if len(commands) == 0 {
 		return
@@ -2759,13 +2759,13 @@ func TestDefaultGetPreferences(t *testing.T) {
 	tests := map[string]struct {
 		defaultKubercFile string
 
-		// kubercEnv and kubercEnvFile are mutually exclusive, the latter will
-		// overrite the former always
+		// kubercEnv 和 kubercEnvFile 互斥，后者
+		// 始终会覆盖前者。
 		kubercEnv     string
 		kubercEnvFile string
 
-		// kubercFlag and kubercFlagFile are mutually exclusive, the latter will
-		// overrite the former always
+		// kubercFlag 和 kubercFlagFile 互斥，后者
+		// 始终会覆盖前者。
 		kubercFlag     string
 		kubercFlagFile string
 
@@ -2773,7 +2773,7 @@ func TestDefaultGetPreferences(t *testing.T) {
 		expectedError       string
 		expectedPreferences *config.Preference
 	}{
-		// flag variants
+		// 标志变体
 		"explicit flag with valid file returns preference": {
 			kubercFlagFile: `apiVersion: kubectl.config.k8s.io/v1beta1
 kind: Preference
@@ -2809,7 +2809,7 @@ unknownField: value`,
 			expectedError: "no such file or directory",
 		},
 
-		// KUBERC env variants
+		// KUBERC 环境变量变体
 		"KUBERC=off with empty flag returns nil": {
 			kubercEnv: "off",
 		},
@@ -2849,7 +2849,7 @@ unknownField: value`,
 			expectedError: "no valid preferences found",
 		},
 
-		// default kuberc variants
+		// 默认 kuberc 变体
 		"no explicit kuberc, non-existent default file returns nil": {
 			defaultKubercFile: "",
 		},

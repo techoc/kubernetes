@@ -53,11 +53,11 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-// Register all groups in the kubectl's registry, but no componentconfig group since it's not in k8s.io/api
-// The code in this file mostly duplicate the install under k8s.io/kubernetes/pkg/api and k8s.io/kubernetes/pkg/apis,
-// but does NOT register the internal types.
+// 在 kubectl 的注册表中注册所有组，但不注册 componentconfig 组，因为它不在 k8s.io/api 中
+// 本文件中的代码大体上复制了 k8s.io/kubernetes/pkg/api 和 k8s.io/kubernetes/pkg/apis 下的 install 代码，
+// 但不会注册内部类型。
 func init() {
-	// Register external types for Scheme
+	// 为 Scheme 注册外部类型
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Version: "v1"})
 	utilruntime.Must(metav1beta1.AddMetaToScheme(Scheme))
 	utilruntime.Must(metav1.AddMetaToScheme(Scheme))

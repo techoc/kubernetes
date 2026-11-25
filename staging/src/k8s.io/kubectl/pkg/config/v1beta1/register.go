@@ -21,10 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name used in this package
+// GroupName 是此包中使用的组名。
 const GroupName = "kubectl.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 var (
@@ -34,13 +34,13 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 此处只注册手动编写的函数。生成函数的注册
+	// 发生在生成的文件中。这种分离使得即使生成文件
+	// 缺失，代码也能编译。
 	localSchemeBuilder.Register(addKnownTypes, RegisterDefaults)
 }
 
-// addKnownTypes registers known types to the given scheme
+// addKnownTypes 将已知类型注册到给定的 scheme 中。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Preference{},

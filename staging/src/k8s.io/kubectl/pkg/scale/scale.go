@@ -33,34 +33,34 @@ import (
 	scaleclient "k8s.io/client-go/scale"
 )
 
-// Scaler provides an interface for resources that can be scaled.
+// Scaler 为可伸缩的资源提供接口。
 type Scaler interface {
-	// Scale scales the named resource after checking preconditions. It optionally
-	// retries in the event of resource version mismatch (if retry is not nil),
-	// and optionally waits until the status of the resource matches newSize (if wait is not nil)
-	// TODO: Make the implementation of this watch-based (#56075) once #31345 is fixed.
+	// Scale 在检查前置条件后对指定资源执行伸缩。当资源版本不匹配时，
+	// 可选择重试（retry 不为 nil 时）；也可选择等待，直到资源状态与 newSize 一致
+	// （wait 不为 nil 时）。
+	// TODO: 待 #31345 修复后，将该实现改为基于 watch 的方式（#56075）。
 	Scale(namespace, name string, newSize uint, actualSize *int32, preconditions *ScalePrecondition, retry, wait *RetryParams, gvr schema.GroupVersionResource, dryRun bool) error
-	// ScaleSimple does a simple one-shot attempt at scaling - not useful on its own, but
-	// a necessary building block for Scale
+	// ScaleSimple 执行一次简单的单次伸缩尝试——它本身并无太大用途，
+	// 但却是 Scale 的必要组成部分
 	ScaleSimple(namespace, name string, preconditions *ScalePrecondition, newSize uint, gvr schema.GroupVersionResource, dryRun bool) (updatedResourceVersion string, actualSize int32, err error)
 }
 
-// NewScaler get a scaler for a given resource
+// NewScaler 获取指定资源的 scaler
 func NewScaler(scalesGetter scaleclient.ScalesGetter) Scaler {
 	return &genericScaler{scalesGetter}
 }
 
-// ScalePrecondition describes a condition that must be true for the scale to take place
-// If CurrentSize == -1, it is ignored.
-// If CurrentResourceVersion is the empty string, it is ignored.
-// Otherwise they must equal the values in the resource for it to be valid.
+// ScalePrecondition 描述执行伸缩前必须成立的条件。
+// 若 CurrentSize == -1，则忽略该条件。
+// 若 CurrentResourceVersion 为空字符串，则忽略该条件。
+// 否则，它们必须与资源中的值相等才视为有效。
 type ScalePrecondition struct {
 	Size            int
 	ResourceVersion string
 }
 
-// A PreconditionError is returned when a resource fails to match
-// the scale preconditions passed to kubectl.
+// 当资源未能匹配传给 kubectl 的
+// 伸缩前置条件时，返回 PreconditionError。
 type PreconditionError struct {
 	Precondition  string
 	ExpectedValue string
@@ -71,7 +71,7 @@ func (pe PreconditionError) Error() string {
 	return fmt.Sprintf("Expected %s to be %s, was %s", pe.Precondition, pe.ExpectedValue, pe.ActualValue)
 }
 
-// RetryParams encapsulates the retry parameters used by kubectl's scaler.
+// RetryParams 封装 kubectl scaler 使用的重试参数。
 type RetryParams struct {
 	Interval, Timeout time.Duration
 }
@@ -80,7 +80,7 @@ func NewRetryParams(interval, timeout time.Duration) *RetryParams {
 	return &RetryParams{interval, timeout}
 }
 
-// ScaleCondition is a closure around Scale that facilitates retries via util.wait
+// ScaleCondition 是围绕 Scale 的闭包，便于通过 util.wait 进行重试
 func ScaleCondition(r Scaler, precondition *ScalePrecondition, namespace, name string, count uint, updatedResourceVersion *string, actualSize *int32, gvr schema.GroupVersionResource, dryRun bool) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
 		rv, size, err := r.ScaleSimple(namespace, name, precondition, count, gvr, dryRun)
@@ -90,7 +90,7 @@ func ScaleCondition(r Scaler, precondition *ScalePrecondition, namespace, name s
 		if actualSize != nil {
 			*actualSize = size
 		}
-		// Retry only on update conflicts.
+		// 仅在更新冲突时重试。
 		if apierrors.IsConflict(err) {
 			return false, nil
 		}
@@ -101,7 +101,7 @@ func ScaleCondition(r Scaler, precondition *ScalePrecondition, namespace, name s
 	}
 }
 
-// validateGeneric ensures that the preconditions match. Returns nil if they are valid, otherwise an error
+// validateGeneric 确保前置条件匹配。条件有效时返回 nil，否则返回错误
 func (precondition *ScalePrecondition) validate(scale *autoscalingv1.Scale) error {
 	if precondition.Size != -1 && int(scale.Spec.Replicas) != precondition.Size {
 		return PreconditionError{"replicas", strconv.Itoa(precondition.Size), strconv.Itoa(int(scale.Spec.Replicas))}
@@ -112,14 +112,14 @@ func (precondition *ScalePrecondition) validate(scale *autoscalingv1.Scale) erro
 	return nil
 }
 
-// genericScaler can update scales for resources in a particular namespace
+// genericScaler 可更新特定命名空间中资源的 scale
 type genericScaler struct {
 	scaleNamespacer scaleclient.ScalesGetter
 }
 
 var _ Scaler = &genericScaler{}
 
-// ScaleSimple updates a scale of a given resource. It returns the resourceVersion of the scale if the update was successful.
+// ScaleSimple 更新指定资源的 scale。更新成功时返回 scale 的 resourceVersion。
 func (s *genericScaler) ScaleSimple(namespace, name string, preconditions *ScalePrecondition, newSize uint, gvr schema.GroupVersionResource, dryRun bool) (updatedResourceVersion string, actualSize int32, err error) {
 	if preconditions != nil {
 		scale, err := s.scaleNamespacer.Scales(namespace).Get(context.TODO(), gvr.GroupResource(), name, metav1.GetOptions{})
@@ -141,11 +141,11 @@ func (s *genericScaler) ScaleSimple(namespace, name string, preconditions *Scale
 		return updatedScale.ResourceVersion, updatedScale.Spec.Replicas, nil
 	}
 
-	// objectForReplicas is used for encoding scale patch
+	// objectForReplicas 用于编码 scale patch
 	type objectForReplicas struct {
 		Replicas uint `json:"replicas"`
 	}
-	// objectForSpec is used for encoding scale patch
+	// objectForSpec 用于编码 scale patch
 	type objectForSpec struct {
 		Spec objectForReplicas `json:"spec"`
 	}
@@ -167,11 +167,11 @@ func (s *genericScaler) ScaleSimple(namespace, name string, preconditions *Scale
 	return updatedScale.ResourceVersion, updatedScale.Spec.Replicas, nil
 }
 
-// Scale updates a scale of a given resource to a new size, with optional precondition check (if preconditions is not nil),
-// optional retries (if retry is not nil), and then optionally waits for the status to reach desired count.
+// Scale 将指定资源的 scale 更新为新大小，可选择进行前置条件检查（preconditions 不为 nil 时）、
+// 重试（retry 不为 nil 时），然后可选择等待状态达到期望的副本数。
 func (s *genericScaler) Scale(namespace, resourceName string, newSize uint, actualSize *int32, preconditions *ScalePrecondition, retry, waitForReplicas *RetryParams, gvr schema.GroupVersionResource, dryRun bool) error {
 	if retry == nil {
-		// make it try only once, immediately
+		// 使其立即只尝试一次
 		retry = &RetryParams{Interval: time.Millisecond, Timeout: time.Millisecond}
 	}
 	cond := ScaleCondition(s, preconditions, namespace, resourceName, newSize, nil, actualSize, gvr, dryRun)
@@ -184,15 +184,15 @@ func (s *genericScaler) Scale(namespace, resourceName string, newSize uint, actu
 	return nil
 }
 
-// scaleHasDesiredReplicas returns a condition that will be true if and only if the desired replica
-// count for a scale (Spec) equals its updated replicas count (Status)
+// scaleHasDesiredReplicas 返回一个条件函数，当且仅当 scale 的期望副本数（Spec）
+// 等于其已更新的副本数（Status）时，该条件才为 true
 func scaleHasDesiredReplicas(sClient scaleclient.ScalesGetter, gr schema.GroupResource, resourceName string, namespace string, desiredReplicas int32) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		actualScale, err := sClient.Scales(namespace).Get(ctx, gr, resourceName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
-		// this means the desired scale target has been reset by something else
+		// 这说明期望的 scale 目标已被其他因素重置
 		if actualScale.Spec.Replicas != desiredReplicas {
 			return true, nil
 		}
@@ -201,8 +201,8 @@ func scaleHasDesiredReplicas(sClient scaleclient.ScalesGetter, gr schema.GroupRe
 	}
 }
 
-// WaitForScaleHasDesiredReplicas waits until condition scaleHasDesiredReplicas is satisfied
-// or returns error when timeout happens
+// WaitForScaleHasDesiredReplicas 等待 scaleHasDesiredReplicas 条件满足，
+// 超时则返回错误
 func WaitForScaleHasDesiredReplicas(sClient scaleclient.ScalesGetter, gr schema.GroupResource, resourceName string, namespace string, newSize uint, waitForReplicas *RetryParams) error {
 	if waitForReplicas == nil {
 		return fmt.Errorf("waitForReplicas parameter cannot be nil")

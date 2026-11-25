@@ -22,8 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// KindVisitor is used with GroupKindElement to call a particular function depending on the
-// Kind of a schema.GroupKind
+// KindVisitor 与 GroupKindElement 配合使用，根据 schema.GroupKind 的
+// Kind 调用相应的函数
 type KindVisitor interface {
 	VisitDaemonSet(kind GroupKindElement)
 	VisitDeployment(kind GroupKindElement)
@@ -35,10 +35,10 @@ type KindVisitor interface {
 	VisitCronJob(kind GroupKindElement)
 }
 
-// GroupKindElement defines a Kubernetes API group elem
+// GroupKindElement 定义一个 Kubernetes API group 元素
 type GroupKindElement schema.GroupKind
 
-// Accept calls the Visit method on visitor that corresponds to elem's Kind
+// Accept 调用 visitor 上与 elem 的 Kind 对应的 Visit 方法
 func (elem GroupKindElement) Accept(visitor KindVisitor) error {
 	switch {
 	case elem.GroupMatch("apps", "extensions") && elem.Kind == "DaemonSet":
@@ -63,8 +63,8 @@ func (elem GroupKindElement) Accept(visitor KindVisitor) error {
 	return nil
 }
 
-// GroupMatch returns true if and only if elem's group matches one
-// of the group arguments
+// 当且仅当 elem 的 group 与传入的某个 group 参数匹配时，
+// GroupMatch 返回 true
 func (elem GroupKindElement) GroupMatch(groups ...string) bool {
 	for _, g := range groups {
 		if elem.Group == g {

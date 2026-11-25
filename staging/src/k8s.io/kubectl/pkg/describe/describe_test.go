@@ -358,7 +358,7 @@ func TestDescribeTopologySpreadConstraints(t *testing.T) {
 func TestDescribeSecret(t *testing.T) {
 	testCases := []struct {
 		description string
-		data        map[string][]byte // secret key -> secret in bytes
+		data        map[string][]byte // secret 键 -> 字节形式的 secret
 		expected    []string
 	}{
 		{
@@ -1374,7 +1374,7 @@ func TestDescribeService(t *testing.T) {
 }
 
 func TestPodDescribeResultsSorted(t *testing.T) {
-	// Arrange
+	// 准备
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"}}
 	fake := fake.NewClientset(
 		&corev1.EventList{
@@ -1413,18 +1413,18 @@ func TestPodDescribeResultsSorted(t *testing.T) {
 	c := &describeClient{T: t, Namespace: "foo", Interface: fake}
 	d := PodDescriber{c}
 
-	// Act
+	// 执行
 	out, err := d.Describe("foo", "bar", DescriberSettings{ShowEvents: true})
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	VerifyDatesInOrder(out, "\n" /* rowDelimiter */, "\t" /* columnDelimiter */, t)
 }
 
-// VerifyDatesInOrder checks the start of each line for a RFC1123Z date
-// and posts error if all subsequent dates are not equal or increasing
+// VerifyDatesInOrder 检查每行开头是否为 RFC1123Z 格式的日期，
+// 如果后续日期不全相等或不递增，则报错。
 func VerifyDatesInOrder(
 	resultToTest, rowDelimiter, columnDelimiter string, t *testing.T) {
 	lines := strings.Split(resultToTest, rowDelimiter)
@@ -1587,7 +1587,7 @@ func TestDescribeContainers(t *testing.T) {
 		status           corev1.ContainerStatus
 		expectedElements []string
 	}{
-		// Running state.
+		// Running 状态。
 		{
 			container: corev1.Container{Name: "test", Image: "image"},
 			status: corev1.ContainerStatus{
@@ -1602,7 +1602,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Running", "Ready", "True", "Restart Count", "7", "Image", "image", "Started"},
 		},
-		// Waiting state.
+		// Waiting 状态。
 		{
 			container: corev1.Container{Name: "test", Image: "image"},
 			status: corev1.ContainerStatus{
@@ -1617,7 +1617,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Waiting", "Ready", "True", "Restart Count", "7", "Image", "image", "Reason", "potato"},
 		},
-		// Terminated state.
+		// Terminated 状态。
 		{
 			container: corev1.Container{Name: "test", Image: "image"},
 			status: corev1.ContainerStatus{
@@ -1635,7 +1635,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Terminated", "Ready", "True", "Restart Count", "7", "Image", "image", "Reason", "potato", "Started", "Finished", "Exit Code", "2"},
 		},
-		// Last Terminated
+		// 上一次 Terminated 状态
 		{
 			container: corev1.Container{Name: "test", Image: "image"},
 			status: corev1.ContainerStatus{
@@ -1658,7 +1658,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Terminated", "Ready", "True", "Restart Count", "7", "Image", "image", "Started", "Finished", "Exit Code", "2", "crashing", "3"},
 		},
-		// No state defaults to waiting.
+		// 未设置状态时默认为 waiting。
 		{
 			container: corev1.Container{Name: "test", Image: "image"},
 			status: corev1.ContainerStatus{
@@ -1668,7 +1668,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Waiting", "Ready", "True", "Restart Count", "7", "Image", "image"},
 		},
-		// Env
+		// 环境变量
 		{
 			container: corev1.Container{Name: "test", Image: "image", Env: []corev1.EnvVar{{Name: "envname", Value: "xyz"}}, EnvFrom: []corev1.EnvFromSource{{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "a123"}}}}},
 			status: corev1.ContainerStatus{
@@ -1714,7 +1714,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Waiting", "Ready", "True", "Restart Count", "7", "Image", "image", "envname", "xyz", "a123\tSecret with prefix 'p_'\tOptional: false"},
 		},
-		// Command
+		// 启动命令
 		{
 			container: corev1.Container{Name: "test", Image: "image", Command: []string{"sleep", "1000"}},
 			status: corev1.ContainerStatus{
@@ -1724,7 +1724,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Waiting", "Ready", "True", "Restart Count", "7", "Image", "image", "sleep", "1000"},
 		},
-		// Command with newline
+		// 带换行符的启动命令
 		{
 			container: corev1.Container{Name: "test", Image: "image", Command: []string{"sleep", "1000\n2000"}},
 			status: corev1.ContainerStatus{
@@ -1734,7 +1734,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"1000\n      2000"},
 		},
-		// Args
+		// 参数
 		{
 			container: corev1.Container{Name: "test", Image: "image", Args: []string{"time", "1000"}},
 			status: corev1.ContainerStatus{
@@ -1744,7 +1744,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"test", "State", "Waiting", "Ready", "True", "Restart Count", "7", "Image", "image", "time", "1000"},
 		},
-		// Args with newline
+		// 带换行符的参数
 		{
 			container: corev1.Container{Name: "test", Image: "image", Args: []string{"time", "1000\n2000"}},
 			status: corev1.ContainerStatus{
@@ -1754,7 +1754,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"1000\n      2000"},
 		},
-		// Using limits.
+		// 设置 limits 的情况。
 		{
 			container: corev1.Container{
 				Name:  "test",
@@ -1774,7 +1774,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"cpu", "1k", "memory", "4G", "storage", "20G"},
 		},
-		// Using requests.
+		// 设置 requests 的情况。
 		{
 			container: corev1.Container{
 				Name:  "test",
@@ -1789,7 +1789,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"cpu", "1k", "memory", "4G", "storage", "20G"},
 		},
-		// volumeMounts read/write
+		// volumeMounts 读写挂载
 		{
 			container: corev1.Container{
 				Name:  "test",
@@ -1803,7 +1803,7 @@ func TestDescribeContainers(t *testing.T) {
 			},
 			expectedElements: []string{"mounted-volume", "/opt/", "(rw)"},
 		},
-		// volumeMounts readonly
+		// volumeMounts 只读挂载
 		{
 			container: corev1.Container{
 				Name:  "test",
@@ -1819,7 +1819,7 @@ func TestDescribeContainers(t *testing.T) {
 			expectedElements: []string{"Mounts", "mounted-volume", "/opt/", "(ro)"},
 		},
 
-		// volumeMounts subPath
+		// volumeMounts 的 subPath
 		{
 			container: corev1.Container{
 				Name:  "test",
@@ -1835,7 +1835,7 @@ func TestDescribeContainers(t *testing.T) {
 			expectedElements: []string{"Mounts", "mounted-volume", "/opt/", "(rw,path=\"foo\")"},
 		},
 
-		// volumeDevices
+		// 块设备卷
 		{
 			container: corev1.Container{
 				Name:  "test",
@@ -2490,7 +2490,7 @@ func TestPersistentVolumeClaimDescriber(t *testing.T) {
 			},
 			expectedElements: []string{"VolumeMode", "Block"},
 		},
-		// Tests for Status.Condition.
+		// 针对 Status.Condition 的测试。
 		{
 			name: "condition-type",
 			pvc: &corev1.PersistentVolumeClaim{
@@ -6301,8 +6301,8 @@ func getHugePageResourceList(pageSize, value string) corev1.ResourceList {
 	return res
 }
 
-// mergeResourceLists will merge resoure lists. When two lists have the same resourece, the value from
-// the last list will be present in the result
+// mergeResourceLists 用于合并资源列表。当两个列表中存在相同资源时，
+// 结果中会保留最后一个列表中的值
 func mergeResourceLists(resourceLists ...corev1.ResourceList) corev1.ResourceList {
 	result := corev1.ResourceList{}
 	for _, rl := range resourceLists {
@@ -6497,7 +6497,7 @@ func TestDescribeNodeWithSidecar(t *testing.T) {
 			},
 			Spec: corev1.PodSpec{
 				InitContainers: []corev1.Container{
-					// sidecar, should sum into the total resources
+					// sidecar，应计入资源总量
 					{
 						Name:          "init-container-1",
 						RestartPolicy: &restartPolicy,
@@ -6505,7 +6505,7 @@ func TestDescribeNodeWithSidecar(t *testing.T) {
 							Requests: getResourceList("1", "1Gi"),
 						},
 					},
-					// non-sidecar
+					// 非 sidecar
 					{
 						Name: "init-container-2",
 						Resources: corev1.ResourceRequirements{
@@ -6639,7 +6639,7 @@ func TestDescribeNodeWithPodLevelResources(t *testing.T) {
 				Kind: "Pod",
 			},
 			Spec: corev1.PodSpec{
-				// Pod-level resources
+				// Pod 级别资源
 				Resources: &corev1.ResourceRequirements{
 					Requests: getResourceList("2", "4Gi"),
 					Limits:   getResourceList("4", "8Gi"),
@@ -6667,15 +6667,15 @@ func TestDescribeNodeWithPodLevelResources(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Verify that describeNodeResource works correctly with pod-level resources
-	// Pod-level resources: requests cpu=2, memory=4Gi; limits cpu=4, memory=8Gi
-	// Node allocatable: cpu=4, memory=12Gi
-	// Expected: cpu requests 2 (50%), cpu limits 4 (100%), memory requests 4Gi (33%), memory limits 8Gi (66%)
+	// 验证 describeNodeResource 能正确处理 Pod 级别资源
+	// Pod 级别资源：requests cpu=2，memory=4Gi；limits cpu=4，memory=8Gi
+	// 节点可分配资源：cpu=4，memory=12Gi
+	// 预期结果：cpu requests 2 (50%)，cpu limits 4 (100%)，memory requests 4Gi (33%)，memory limits 8Gi (66%)
 	expectedOut := []string{
 		"pod-with-pod-level-resources",
-		// Verify per-pod row shows correct computed values for pod-level resources
+		// 验证每个 Pod 的行正确展示了 Pod 级别资源的计算结果
 		"pod-with-pod-level-resources    2 (50%)       4 (100%)    4Gi (33%)        8Gi (66%)",
-		// Verify the allocated resources totals correctly account for pod-level resources
+		// 验证已分配资源总计正确计入了 Pod 级别资源
 		`Allocated resources:
   (Total limits may be over 100 percent, i.e., overcommitted.)
   Resource           Requests   Limits
@@ -6757,7 +6757,7 @@ func TestDescribeNodeWithResourceSlice(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Verify node-exclusive resource slices are shown aggregated by pool
+	// 验证节点独占的 resource slice 按 pool 聚合展示
 	expectedOut := []string{
 		"Unschedulable",
 		"true",
@@ -6777,7 +6777,7 @@ func TestDescribeNodeWithResourceSlice(t *testing.T) {
 }
 
 func TestDescribeNodeWithResourceSliceCapping(t *testing.T) {
-	// Create a node with more than 10 pools to test capping
+	// 创建一个包含超过 10 个 pool 的节点，以测试数量上限
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "bar",
@@ -6787,7 +6787,7 @@ func TestDescribeNodeWithResourceSliceCapping(t *testing.T) {
 
 	objects := []runtime.Object{node}
 
-	// Create 12 different driver/pool combinations
+	// 创建 12 组不同的 driver/pool 组合
 	for i := range 12 {
 		objects = append(objects, &resourcev1.ResourceSlice{
 			ObjectMeta: metav1.ObjectMeta{
@@ -6814,7 +6814,7 @@ func TestDescribeNodeWithResourceSliceCapping(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Should show capping message
+	// 应展示数量上限提示信息
 	if !strings.Contains(out, "...and 2 more pools") {
 		t.Errorf("expected capping message in output: %q", out)
 	}
@@ -6836,7 +6836,7 @@ func TestDescribeNodeWithNoResourceSlices(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Should NOT show ResourceSlices section when there are none
+	// 没有 ResourceSlices 时不应展示该部分
 	if strings.Contains(out, "Node-Local ResourceSlices") {
 		t.Errorf("did not expect ResourceSlices section when there are no slices: %q", out)
 	}
@@ -7511,8 +7511,8 @@ func TestSmartLabelFor(t *testing.T) {
 		{"apiURL", "API URL"},
 		{"kubeAPI", "Kube API"},
 		{"userUID", "User UID"},
-		{"HTTPSProxy", "HTTPSProxy"},  // Multiple capitals stay together
-		{"customCRDs", "Custom CRDs"}, // Another pluralized acronym
+		{"HTTPSProxy", "HTTPSProxy"},  // 多个大写字母保持连写
+		{"customCRDs", "Custom CRDs"}, // 缩写的复数形式
 	}
 
 	for _, tt := range tests {

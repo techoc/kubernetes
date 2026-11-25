@@ -164,7 +164,7 @@ var _ = Describe("When KindVisitor accepts a GroupKind", func() {
 	})
 })
 
-// TestKindVisitor increments a value each time a Visit method was called
+// TestKindVisitor 在每次调用 Visit 方法时递增相应的值
 type TestKindVisitor struct {
 	visits map[string]int
 }

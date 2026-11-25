@@ -46,7 +46,7 @@ type TopCmdPrinter struct {
 	measuredResources []v1.ResourceName
 	nodeColumns       []string
 	podColumns        []string
-	// a map from a node name to its missing resources
+	// 从 node 名称到其缺失资源的映射
 	nodesMissingResources map[string][]string
 }
 
@@ -95,7 +95,7 @@ func (printer *TopCmdPrinter) PrintNodeMetrics(metrics []metricsapi.NodeMetrics,
 		delete(availableResources, m.Name)
 	}
 
-	// print lines for nodes of which the metrics is unreachable.
+	// 为指标不可达的 node 打印对应行。
 	for nodeName := range availableResources {
 		printer.printMissingMetricsNodeLine(w, nodeName, measuredResources)
 	}

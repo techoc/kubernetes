@@ -18,11 +18,11 @@ package explain
 
 import "k8s.io/kube-openapi/pkg/util/proto"
 
-// indentPerLevel is the level of indentation for each field recursion.
+// indentPerLevel 是每次字段递归的缩进层级。
 const indentPerLevel = 3
 
-// recursiveFieldsPrinter recursively prints all the fields for a given
-// schema.
+// recursiveFieldsPrinter 针对给定的 schema
+// 递归打印其所有字段。
 type recursiveFieldsPrinter struct {
 	Writer   *Formatter
 	Error    error
@@ -34,13 +34,13 @@ var _ proto.SchemaVisitor = &recursiveFieldsPrinter{}
 var _ fieldsPrinter = &recursiveFieldsPrinter{}
 var visitedReferences = map[string]struct{}{}
 
-// VisitArray is just a passthrough.
+// VisitArray 只是直接透传。
 func (f *recursiveFieldsPrinter) VisitArray(a *proto.Array) {
 	a.SubType.Accept(f)
 }
 
-// VisitKind prints all its fields with their type, and then recurses
-// inside each of these (pre-order).
+// VisitKind 打印其所有字段及其类型，
+// 然后递归进入每个字段内部（前序遍历）。
 func (f *recursiveFieldsPrinter) VisitKind(k *proto.Kind) {
 	for _, key := range k.Keys() {
 		v := k.Fields[key]
@@ -60,17 +60,17 @@ func (f *recursiveFieldsPrinter) VisitKind(k *proto.Kind) {
 	}
 }
 
-// VisitMap is just a passthrough.
+// VisitMap 只是直接透传。
 func (f *recursiveFieldsPrinter) VisitMap(m *proto.Map) {
 	m.SubType.Accept(f)
 }
 
-// VisitPrimitive does nothing, since it doesn't have sub-fields.
+// VisitPrimitive 不做任何事，因为它没有子字段。
 func (f *recursiveFieldsPrinter) VisitPrimitive(p *proto.Primitive) {
-	// Nothing to do.
+	// 无需处理。
 }
 
-// VisitReference is just a passthrough.
+// VisitReference 只是直接透传。
 func (f *recursiveFieldsPrinter) VisitReference(r proto.Reference) {
 	if _, ok := visitedReferences[r.Reference()]; ok {
 		return
@@ -80,8 +80,8 @@ func (f *recursiveFieldsPrinter) VisitReference(r proto.Reference) {
 	delete(visitedReferences, r.Reference())
 }
 
-// PrintFields will recursively print all the fields for the given
-// schema.
+// PrintFields 将针对给定的 schema
+// 递归打印其所有字段。
 func (f *recursiveFieldsPrinter) PrintFields(schema proto.Schema) error {
 	schema.Accept(f)
 	return f.Error

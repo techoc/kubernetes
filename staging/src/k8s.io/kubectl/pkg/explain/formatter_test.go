@@ -30,9 +30,9 @@ func TestFormatterWrite(t *testing.T) {
 	}
 
 	f.Write("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
-	// Indent creates a new Formatter
+	// Indent 会创建一个新的 Formatter
 	f.Indent(5).Write("Morbi at turpis faucibus, gravida dolor ut, fringilla velit.")
-	// So Indent(2) doesn't indent to 7 here.
+	// 因此这里的 Indent(2) 不会缩进到 7。
 	f.Indent(2).Write("Etiam maximus urna at tellus faucibus mattis.")
 
 	want := `Lorem ipsum dolor sit amet, consectetur adipiscing elit.
@@ -54,9 +54,9 @@ func TestFormatterWrappedWrite(t *testing.T) {
 
 	f.WriteWrapped("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi at turpis faucibus, gravida dolor ut, fringilla velit.")
 	f.Indent(10).WriteWrapped("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi at turpis faucibus, gravida dolor ut, fringilla velit.")
-	// Test long words (especially urls) on their own line.
+	// 测试长单词（尤其是 url）独占一行。
 	f.Indent(20).WriteWrapped("Lorem ipsum dolor sit amet, consectetur adipiscing elit. ThisIsAVeryLongWordThatDoesn'tFitOnALineOnItsOwn. Morbi at turpis faucibus, gravida dolor ut, fringilla velit.")
-	// Test content that includes newlines, bullet points, and blockquotes/code blocks
+	// 测试包含换行、项目符号以及引用块/代码块的内容
 	f.Indent(4).WriteWrapped(`
 This is an
 introductory paragraph
@@ -121,7 +121,7 @@ func TestDefaultWrap(t *testing.T) {
 	buf := bytes.Buffer{}
 	f := Formatter{
 		Writer: &buf,
-		// Wrap is not set
+		// 未设置 Wrap
 	}
 
 	f.WriteWrapped("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi at turpis faucibus, gravida dolor ut, fringilla velit. Etiam maximus urna at tellus faucibus mattis.")

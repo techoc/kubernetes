@@ -41,31 +41,31 @@ func TestReferenceTypename(t *testing.T) {
 		expected string
 	}{
 		{
-			// Kind is "Object"
+			// Kind 为 "Object"
 			name:     "test1",
 			path:     []string{},
 			expected: "Object",
 		},
 		{
-			// Reference is equal to pointed type "Object"
+			// Reference 等同于其指向的类型 "Object"
 			name:     "test2",
 			path:     []string{"field1"},
 			expected: "Object",
 		},
 		{
-			// Reference is equal to pointed type "string"
+			// Reference 等同于其指向的类型 "string"
 			name:     "test3",
 			path:     []string{"field1", "primitive"},
 			expected: "string",
 		},
 		{
-			// Array of object of reference to string
+			// 由指向 string 的引用组成的对象的数组
 			name:     "test4",
 			path:     []string{"field2"},
 			expected: "[]map[string]string",
 		},
 		{
-			// Array of integer
+			// integer 数组
 			name:     "test5",
 			path:     []string{"field1", "array"},
 			expected: "[]integer",

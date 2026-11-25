@@ -512,14 +512,14 @@ func TestReplicaSetsGetterFailsPreconditions(t *testing.T) {
 	}
 }
 
-// TestGenericScaleSimple exercises GenericScaler.ScaleSimple method
+// TestGenericScaleSimple 测试 GenericScaler.ScaleSimple 方法
 func TestGenericScaleSimple(t *testing.T) {
-	// test data
+	// 测试数据
 	scaleClient := createFakeScaleClient("deployments", "abc", 5, nil)
-	// expected actions
+	// 预期操作
 	scaleClientExpectedAction := []string{"patch", "get", "update", "get", "update", "get", "get", "update", "get"}
 
-	// test scenarios
+	// 测试场景
 	scenarios := []struct {
 		name         string
 		precondition *ScalePrecondition
@@ -529,7 +529,7 @@ func TestGenericScaleSimple(t *testing.T) {
 		scaleGetter  scale.ScalesGetter
 		expectError  bool
 	}{
-		// scenario 0: scale up the "abc" deployment without precondition
+		// 场景 0：无条件扩充 "abc" deployment
 		{
 			name:         "scale up the \"abc\" deployment without precondition",
 			precondition: nil,
@@ -538,7 +538,7 @@ func TestGenericScaleSimple(t *testing.T) {
 			resName:      "abc",
 			scaleGetter:  scaleClient,
 		},
-		// scenario 1: scale up the "abc" deployment
+		// 场景 1：扩充 "abc" deployment
 		{
 			name:         "scale up the \"abc\" deployment",
 			precondition: &ScalePrecondition{10, ""},
@@ -547,7 +547,7 @@ func TestGenericScaleSimple(t *testing.T) {
 			resName:      "abc",
 			scaleGetter:  scaleClient,
 		},
-		// scenario 2: scale down the "abc" deployment
+		// 场景 2：缩减 "abc" deployment
 		{
 			name:         "scale down the \"abs\" deployment",
 			precondition: &ScalePrecondition{20, ""},
@@ -556,8 +556,8 @@ func TestGenericScaleSimple(t *testing.T) {
 			resName:      "abc",
 			scaleGetter:  scaleClient,
 		},
-		// scenario 3: precondition error, expected size is 1,
-		// note that the previous scenario (2) set the size to 5
+		// 场景 3：前置条件错误，期望大小为 1，
+		// 注意前一个场景（2）已将大小设为 5
 		{
 			name:         "precondition error, expected size is 1",
 			precondition: &ScalePrecondition{1, ""},
@@ -567,7 +567,7 @@ func TestGenericScaleSimple(t *testing.T) {
 			scaleGetter:  scaleClient,
 			expectError:  true,
 		},
-		// scenario 4: precondition is not validated when the precondition size is set to -1
+		// 场景 4：当前置条件大小设为 -1 时，不校验前置条件
 		{
 			name:         "precondition is not validated when the size is set to -1",
 			precondition: &ScalePrecondition{-1, ""},
@@ -576,7 +576,7 @@ func TestGenericScaleSimple(t *testing.T) {
 			resName:      "abc",
 			scaleGetter:  scaleClient,
 		},
-		// scenario 5: precondition error, resource version mismatch
+		// 场景 5：前置条件错误，resource version 不匹配
 		{
 			name:         "precondition error, resource version mismatch",
 			precondition: &ScalePrecondition{5, "v1"},
@@ -588,7 +588,7 @@ func TestGenericScaleSimple(t *testing.T) {
 		},
 	}
 
-	// act
+	// 执行测试
 	for index, scenario := range scenarios {
 		t.Run(fmt.Sprintf("running scenario %d: %s", index+1, scenario.name), func(t *testing.T) {
 			target := NewScaler(scenario.scaleGetter)
@@ -610,7 +610,7 @@ func TestGenericScaleSimple(t *testing.T) {
 		})
 	}
 
-	// check actions
+	// 检查操作记录
 	actions := scaleClient.Actions()
 	if len(actions) != len(scaleClientExpectedAction) {
 		t.Errorf("unexpected actions: %v, expected %d actions got %d", actions, len(scaleClientExpectedAction), len(actions))
@@ -622,14 +622,14 @@ func TestGenericScaleSimple(t *testing.T) {
 	}
 }
 
-// TestGenericScale exercises GenericScaler.Scale method
+// TestGenericScale 测试 GenericScaler.Scale 方法
 func TestGenericScale(t *testing.T) {
-	// test data
+	// 测试数据
 	scaleClient := createFakeScaleClient("deployments", "abc", 5, nil)
-	// expected actions
+	// 预期操作
 	scaleClientExpectedAction := []string{"patch", "get", "update", "get", "get"}
 
-	// test scenarios
+	// 测试场景
 	scenarios := []struct {
 		name            string
 		precondition    *ScalePrecondition
@@ -640,7 +640,7 @@ func TestGenericScale(t *testing.T) {
 		waitForReplicas *RetryParams
 		expectError     bool
 	}{
-		// scenario 0: scale up the "abc" deployment without precondition
+		// 场景 0：无条件扩充 "abc" deployment
 		{
 			name:         "scale up the \"abc\" deployment without precondition",
 			precondition: nil,
@@ -649,7 +649,7 @@ func TestGenericScale(t *testing.T) {
 			resName:      "abc",
 			scaleGetter:  scaleClient,
 		},
-		// scenario 1: scale up the "abc" deployment
+		// 场景 1：扩充 "abc" deployment
 		{
 			name:         "scale up the \"abc\" deployment",
 			precondition: &ScalePrecondition{10, ""},
@@ -658,7 +658,7 @@ func TestGenericScale(t *testing.T) {
 			resName:      "abc",
 			scaleGetter:  scaleClient,
 		},
-		//scenario 2: a resource name cannot be empty
+		// 场景 2：资源名不能为空
 		{
 			name:         "a resource name cannot be empty",
 			precondition: &ScalePrecondition{10, ""},
@@ -668,7 +668,7 @@ func TestGenericScale(t *testing.T) {
 			scaleGetter:  scaleClient,
 			expectError:  true,
 		},
-		// scenario 3: wait for replicas error due to status.Replicas != spec.Replicas
+		// 场景 3：因 status.Replicas != spec.Replicas 导致等待副本数出错
 		{
 			name:            "wait for replicas error due to status.Replicas != spec.Replicas",
 			precondition:    &ScalePrecondition{10, ""},
@@ -681,7 +681,7 @@ func TestGenericScale(t *testing.T) {
 		},
 	}
 
-	// act
+	// 执行测试
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			target := NewScaler(scenario.scaleGetter)
@@ -701,7 +701,7 @@ func TestGenericScale(t *testing.T) {
 		})
 	}
 
-	// check actions
+	// 检查操作记录
 	actions := scaleClient.Actions()
 	if len(actions) != len(scaleClientExpectedAction) {
 		t.Errorf("unexpected actions: %v, expected %d actions got %d", actions, len(scaleClientExpectedAction), len(actions))

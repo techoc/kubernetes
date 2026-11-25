@@ -22,15 +22,15 @@ import (
 )
 
 const (
-	// fieldIndentLevel is the level of indentation for fields.
+	// fieldIndentLevel 是字段的缩进级别。
 	fieldIndentLevel = 3
-	// descriptionIndentLevel is the level of indentation for the
-	// description.
+	// descriptionIndentLevel 是描述的
+	// 缩进级别。
 	descriptionIndentLevel = 5
 )
 
-// modelPrinter prints a schema in Writer. Its "Builder" will decide if
-// it's recursive or not.
+// modelPrinter 在 Writer 中打印 schema。其 "Builder" 决定
+// 是否递归打印。
 type modelPrinter struct {
 	Name         string
 	Type         string
@@ -50,9 +50,9 @@ func (m *modelPrinter) PrintKindAndVersion() error {
 	return m.Writer.Write("VERSION:  %s\n", m.GVK.GroupVersion())
 }
 
-// PrintDescription prints the description for a given schema. There
-// might be multiple description, since we collect descriptions when we
-// go through references, arrays and maps.
+// PrintDescription 打印给定 schema 的描述。
+// 描述可能有多个，因为我们在遍历引用、数组和 map 时
+// 会收集描述。
 func (m *modelPrinter) PrintDescription(schema proto.Schema) error {
 	if err := m.Writer.Write("DESCRIPTION:"); err != nil {
 		return err
@@ -78,8 +78,8 @@ func (m *modelPrinter) PrintDescription(schema proto.Schema) error {
 	return nil
 }
 
-// VisitArray recurses inside the subtype, while collecting the type if
-// not done yet, and the description.
+// VisitArray 在子类型中递归，同时收集尚未获取的类型
+// 和描述。
 func (m *modelPrinter) VisitArray(a *proto.Array) {
 	m.Descriptions = append(m.Descriptions, a.GetDescription())
 	if m.Type == "" {
@@ -88,7 +88,7 @@ func (m *modelPrinter) VisitArray(a *proto.Array) {
 	a.SubType.Accept(m)
 }
 
-// VisitKind prints a full resource with its fields.
+// VisitKind 打印完整资源及其字段。
 func (m *modelPrinter) VisitKind(k *proto.Kind) {
 	if err := m.PrintKindAndVersion(); err != nil {
 		m.Error = err
@@ -113,8 +113,8 @@ func (m *modelPrinter) VisitKind(k *proto.Kind) {
 	m.Error = m.Builder.BuildFieldsPrinter(m.Writer.Indent(fieldIndentLevel)).PrintFields(k)
 }
 
-// VisitMap recurses inside the subtype, while collecting the type if
-// not done yet, and the description.
+// VisitMap 在子类型中递归，同时收集尚未获取的类型
+// 和描述。
 func (m *modelPrinter) VisitMap(om *proto.Map) {
 	m.Descriptions = append(m.Descriptions, om.GetDescription())
 	if m.Type == "" {
@@ -123,7 +123,7 @@ func (m *modelPrinter) VisitMap(om *proto.Map) {
 	om.SubType.Accept(m)
 }
 
-// VisitPrimitive prints a field type and its description.
+// VisitPrimitive 打印字段类型及其描述。
 func (m *modelPrinter) VisitPrimitive(p *proto.Primitive) {
 	if err := m.PrintKindAndVersion(); err != nil {
 		m.Error = err
@@ -149,13 +149,13 @@ func (m *modelPrinter) VisitArbitrary(a *proto.Arbitrary) {
 	m.Error = m.PrintDescription(a)
 }
 
-// VisitReference recurses inside the subtype, while collecting the description.
+// VisitReference 在子类型中递归，同时收集描述。
 func (m *modelPrinter) VisitReference(r proto.Reference) {
 	m.Descriptions = append(m.Descriptions, r.GetDescription())
 	r.SubSchema().Accept(m)
 }
 
-// PrintModel prints the description of a schema in writer.
+// PrintModel 在 writer 中打印 schema 的描述。
 func PrintModel(name string, writer *Formatter, builder fieldsPrinterBuilder, schema proto.Schema, gvk schema.GroupVersionKind) error {
 	m := &modelPrinter{Name: name, Writer: writer, Builder: builder, GVK: gvk}
 	schema.Accept(m)

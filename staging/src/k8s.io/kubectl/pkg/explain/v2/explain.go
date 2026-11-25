@@ -27,9 +27,9 @@ import (
 	"k8s.io/client-go/openapi"
 )
 
-// PrintModelDescription prints the description of a specific model or dot path.
-// If recursive, all components nested within the fields of the schema will be
-// printed.
+// PrintModelDescription 打印指定 model 或点分路径的描述。
+// 如果 recursive 为 true，则 schema 字段中嵌套的所有组件都会
+// 被打印出来。
 func PrintModelDescription(
 	fieldsPath []string,
 	w io.Writer,
@@ -48,7 +48,7 @@ func PrintModelDescription(
 		generator, fieldsPath, w, client, gvr, recursive, maxDepth, outputFormat)
 }
 
-// Factored out for testability
+// 抽取出来以便于测试
 func printModelDescriptionWithGenerator(
 	generator Generator,
 	fieldsPath []string,

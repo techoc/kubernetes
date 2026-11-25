@@ -27,21 +27,21 @@ import (
 	"k8s.io/kubectl/pkg/util/openapi"
 )
 
-// schemaValidation validates the object against an OpenAPI schema.
+// schemaValidation 根据 OpenAPI schema 校验对象。
 type schemaValidation struct {
 	resourcesGetter openapi.OpenAPIResourcesGetter
 }
 
-// NewSchemaValidation creates a new Schema that can be used
-// to validate objects.
+// NewSchemaValidation 创建一个新的 Schema，
+// 可用于校验对象。
 func NewSchemaValidation(resourcesGetter openapi.OpenAPIResourcesGetter) Schema {
 	return &schemaValidation{
 		resourcesGetter: resourcesGetter,
 	}
 }
 
-// ValidateBytes will validates the object against using the Resources
-// object.
+// ValidateBytes 将使用 Resources 对象
+// 对对象进行校验。
 func (v *schemaValidation) ValidateBytes(data []byte) error {
 	obj, err := parse(data)
 	if err != nil {
@@ -80,14 +80,14 @@ func (v *schemaValidation) validateList(object interface{}) []error {
 }
 
 func (v *schemaValidation) validateResource(obj interface{}, gvk schema.GroupVersionKind) []error {
-	// This lazy-loads the OpenAPI V2 specifications, caching the specs.
+	// 此处延迟加载并缓存 OpenAPI V2 规范。
 	resources, err := v.resourcesGetter.OpenAPISchema()
 	if err != nil {
 		return []error{err}
 	}
 	resource := resources.LookupResource(gvk)
 	if resource == nil {
-		// resource is not present, let's just skip validation.
+		// 资源不存在，直接跳过校验。
 		return nil
 	}
 

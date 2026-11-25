@@ -27,7 +27,7 @@ func Convert_config_AllowlistEntry_To_v1beta1_AllowlistEntry(in *config.Allowlis
 	return autoConvert_config_AllowlistEntry_To_v1beta1_AllowlistEntry(in, out, s)
 }
 
-// The internal AllowlistEntry type does not have the `Name` field, which is deprecated as of v1.36. Convert `Name` to `Command` where possible, and return an error if both `Name` and `Command` are supplied.
+// 内部 AllowlistEntry 类型没有 `Name` 字段，该字段自 v1.36 起已弃用。在可能的情况下将 `Name` 转换为 `Command`，如果同时提供了 `Name` 和 `Command`，则返回错误。
 func Convert_v1beta1_AllowlistEntry_To_config_AllowlistEntry(in *AllowlistEntry, out *config.AllowlistEntry, s conversion.Scope) error {
 	if err := autoConvert_v1beta1_AllowlistEntry_To_config_AllowlistEntry(in, out, s); err != nil {
 		return err
@@ -41,9 +41,9 @@ func Convert_v1beta1_AllowlistEntry_To_config_AllowlistEntry(in *AllowlistEntry,
 	case len(in.Name) != 0:
 		out.Command = in.Name
 	default:
-		// both `Name` and `Command` are empty, propagate the empty value and
-		// allow validation to catch it later since it's a validation error, not a
-		// conversion error
+		// `Name` 和 `Command` 都为空，传播该空值，
+		// 并留待后续校验捕获，因为这属于校验错误，而非
+		// 转换错误
 	}
 	return nil
 }

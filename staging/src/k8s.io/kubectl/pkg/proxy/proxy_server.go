@@ -35,31 +35,31 @@ import (
 )
 
 const (
-	// DefaultHostAcceptRE is the default value for which hosts to accept.
+	// DefaultHostAcceptRE 是默认接受的 host 值。
 	DefaultHostAcceptRE = "^localhost$,^127\\.0\\.0\\.1$,^\\[::1\\]$"
-	// DefaultPathAcceptRE is the default path to accept.
+	// DefaultPathAcceptRE 是默认接受的路径。
 	DefaultPathAcceptRE = "^.*"
-	// DefaultPathRejectRE is the default set of paths to reject.
+	// DefaultPathRejectRE 是默认拒绝的路径集合。
 	DefaultPathRejectRE = "^/api/.*/pods/.*/exec,^/api/.*/pods/.*/attach,^/api/.*/nodes/.*/proxy/run"
-	// DefaultMethodRejectRE is the set of HTTP methods to reject by default.
+	// DefaultMethodRejectRE 是默认拒绝的 HTTP 方法集合。
 	DefaultMethodRejectRE = "^$"
 )
 
-// FilterServer rejects requests which don't match one of the specified regular expressions
+// FilterServer 拒绝与指定正则表达式均不匹配的请求
 type FilterServer struct {
-	// Only paths that match this regexp will be accepted
+	// 只有匹配此正则的路径才会被接受
 	AcceptPaths []*regexp.Regexp
-	// Paths that match this regexp will be rejected, even if they match the above
+	// 匹配此正则的路径会被拒绝，即使它们匹配上述规则
 	RejectPaths []*regexp.Regexp
-	// Hosts are required to match this list of regexp
+	// host 必须匹配此正则列表
 	AcceptHosts []*regexp.Regexp
-	// Methods that match this regexp are rejected
+	// 匹配此正则的方法会被拒绝
 	RejectMethods []*regexp.Regexp
-	// The delegate to call to handle accepted requests.
+	// 处理被接受请求的 delegate。
 	delegate http.Handler
 }
 
-// MakeRegexpArray splits a comma separated list of regexps into an array of Regexp objects.
+// MakeRegexpArray 将逗号分隔的正则列表拆分为 Regexp 对象数组。
 func MakeRegexpArray(str string) ([]*regexp.Regexp, error) {
 	if str == "" {
 		return []*regexp.Regexp{}, nil
@@ -76,7 +76,7 @@ func MakeRegexpArray(str string) ([]*regexp.Regexp, error) {
 	return result, nil
 }
 
-// MakeRegexpArrayOrDie creates an array of regular expression objects from a string or exits.
+// MakeRegexpArrayOrDie 从字符串创建正则表达式对象数组，失败则退出。
 func MakeRegexpArrayOrDie(str string) []*regexp.Regexp {
 	result, err := MakeRegexpArray(str)
 	if err != nil {
@@ -108,15 +108,15 @@ func (f *FilterServer) accept(method, path, host string) bool {
 	return false
 }
 
-// HandlerFor makes a shallow copy of f which passes its requests along to the
-// new delegate.
+// HandlerFor 对 f 做浅拷贝，该副本将请求
+// 转交给新的 delegate。
 func (f *FilterServer) HandlerFor(delegate http.Handler) *FilterServer {
 	f2 := *f
 	f2.delegate = delegate
 	return &f2
 }
 
-// Get host from a host header value like "localhost" or "localhost:8080"
+// 从形如 "localhost" 或 "localhost:8080" 的 host header 值中提取 host
 func extractHost(header string) (host string) {
 	host, _, err := net.SplitHostPort(header)
 	if err != nil {
@@ -136,7 +136,7 @@ func (f *FilterServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	http.Error(rw, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 }
 
-// Server is a http.Handler which proxies Kubernetes APIs to remote API server.
+// Server 是一个 http.Handler，将 Kubernetes API 代理到远程 API server。
 type Server struct {
 	handler http.Handler
 }
@@ -148,8 +148,8 @@ func (r *responder) Error(w http.ResponseWriter, req *http.Request, err error) {
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
-// makeUpgradeTransport creates a transport that explicitly bypasses HTTP2 support
-// for proxy connections that must upgrade.
+// makeUpgradeTransport 创建一个 transport，对必须升级的代理连接
+// 显式绕过 HTTP2 支持。
 func makeUpgradeTransport(config *rest.Config, keepalive time.Duration) (proxy.UpgradeRequestRoundTripper, error) {
 	transportConfig, err := config.TransportConfig()
 	if err != nil {
@@ -174,8 +174,8 @@ func makeUpgradeTransport(config *rest.Config, keepalive time.Duration) (proxy.U
 	return proxy.NewUpgradeRequestRoundTripper(rt, upgrader), nil
 }
 
-// NewServer creates and installs a new Server.
-// 'filter', if non-nil, protects requests to the api only.
+// NewServer 创建并安装一个新的 Server。
+// 'filter' 若非 nil，仅保护发往 api 的请求。
 func NewServer(filebase string, apiProxyPrefix string, staticPrefix string, filter *FilterServer, cfg *rest.Config, keepalive time.Duration, appendLocationPath bool) (*Server, error) {
 	proxyHandler, err := NewProxyHandler(apiProxyPrefix, filter, cfg, keepalive, appendLocationPath)
 	if err != nil {
@@ -184,14 +184,14 @@ func NewServer(filebase string, apiProxyPrefix string, staticPrefix string, filt
 	mux := http.NewServeMux()
 	mux.Handle(apiProxyPrefix, proxyHandler)
 	if filebase != "" {
-		// Require user to explicitly request this behavior rather than
-		// serving their working directory by default.
+		// 要求用户显式请求该行为，而不是
+		// 默认就提供其工作目录的内容。
 		mux.Handle(staticPrefix, newFileHandler(staticPrefix, filebase))
 	}
 	return &Server{handler: mux}, nil
 }
 
-// NewProxyHandler creates an api proxy handler for the cluster
+// NewProxyHandler 为该集群创建 api 代理 handler
 func NewProxyHandler(apiProxyPrefix string, filter *FilterServer, cfg *rest.Config, keepalive time.Duration, appendLocationPath bool) (http.Handler, error) {
 	host := cfg.Host
 	if !strings.HasSuffix(host, "/") {
@@ -228,26 +228,26 @@ func NewProxyHandler(apiProxyPrefix string, filter *FilterServer, cfg *rest.Conf
 	return proxyServer, nil
 }
 
-// Listen is a simple wrapper around net.Listen.
+// Listen 是对 net.Listen 的简单封装。
 func (s *Server) Listen(address string, port int) (net.Listener, error) {
 	return net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
 }
 
-// ListenUnix does net.Listen for a unix socket
+// ListenUnix 对 unix socket 执行 net.Listen
 func (s *Server) ListenUnix(path string) (net.Listener, error) {
-	// Remove any socket, stale or not, but fall through for other files
+	// 移除任意 socket 文件（无论是否陈旧），但其他文件类型继续执行后续逻辑
 	fi, err := os.Stat(path)
 	if err == nil && (fi.Mode()&os.ModeSocket) != 0 {
 		os.Remove(path)
 	}
-	// Default to only user accessible socket, caller can open up later if desired
+	// 默认 socket 仅用户可访问，调用方可按需在之后放宽权限
 	oldmask, _ := util.Umask(0077)
 	l, err := net.Listen("unix", path)
 	util.Umask(oldmask)
 	return l, err
 }
 
-// ServeOnListener starts the server using given listener, loops forever.
+// ServeOnListener 使用给定的 listener 启动 server，并持续循环运行。
 func (s *Server) ServeOnListener(l net.Listener) error {
 	server := http.Server{
 		Handler: s.handler,
@@ -259,8 +259,8 @@ func newFileHandler(prefix, base string) http.Handler {
 	return http.StripPrefix(prefix, http.FileServer(http.Dir(base)))
 }
 
-// like http.StripPrefix, but always leaves an initial slash. (so that our
-// regexps will work.)
+// 类似 http.StripPrefix，但始终保留开头的斜杠
+// （以便我们的正则表达式能够正常工作）。
 func stripLeaveSlash(prefix string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		p := strings.TrimPrefix(req.URL.Path, prefix)

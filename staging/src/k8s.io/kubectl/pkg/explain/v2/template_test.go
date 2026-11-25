@@ -23,15 +23,15 @@ import (
 	"testing"
 )
 
-// Ensure that the templates are embededd correctly.
+// 确保模板被正确嵌入。
 func TestRegisterBuitinTemplates(t *testing.T) {
 	myGenerator := NewGenerator().(*generator)
 	err := registerBuiltinTemplates(myGenerator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Show that generator now as a named template for each file in the `templates`
-	// directory.
+	// 验证 generator 现在为 `templates` 目录中的每个文件
+	// 都拥有一个具名模板。
 	files, err := os.ReadDir("templates")
 	if err != nil {
 		t.Fatal(err)

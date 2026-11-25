@@ -422,7 +422,7 @@ func TestAPIRequests(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// httptest.NewServer should always generate a valid URL.
+	// httptest.NewServer 应始终生成有效的 URL。
 	target, _ := url.Parse(ts.URL)
 	target.Path = "/"
 	proxy := newProxy(target)

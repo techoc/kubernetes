@@ -38,7 +38,7 @@ var apiGroupsGVR = schema.GroupVersionResource{
 func TestExplainErrors(t *testing.T) {
 	var buf bytes.Buffer
 
-	// Validate error when GVR is not found in returned paths map.
+	// 验证在返回的 paths map 中找不到 GVR 时的错误。
 	fakeClient := openapitest.NewFakeClient()
 	err := PrintModelDescription(nil, &buf, fakeClient, schema.GroupVersionResource{
 		Group:    "test0.example.com",
@@ -47,12 +47,12 @@ func TestExplainErrors(t *testing.T) {
 	}, false, 0, "unknown-format")
 	require.ErrorContains(t, err, "couldn't find resource for \"test0.example.com/v1, Resource=doesntmatter\"")
 
-	// Validate error when openapi client returns error.
+	// 验证 openapi client 返回错误时的错误。
 	fakeClient.ForcedErr = fmt.Errorf("Always fails")
 	err = PrintModelDescription(nil, &buf, fakeClient, apiGroupsGVR, false, 0, "unknown-format")
 	require.ErrorContains(t, err, "failed to fetch list of groupVersions")
 
-	// Validate error when GroupVersion "Schema()" call returns error.
+	// 验证 GroupVersion 的 "Schema()" 调用返回错误时的错误。
 	fakeClient = openapitest.NewFakeClient()
 	forceErrorGV := openapitest.FakeGroupVersion{ForcedErr: fmt.Errorf("Always fails")}
 	fakeClient.PathsMap["apis/test1.example.com/v1"] = &forceErrorGV
@@ -63,7 +63,7 @@ func TestExplainErrors(t *testing.T) {
 	}, false, 0, "unknown-format")
 	require.ErrorContains(t, err, "failed to fetch openapi schema ")
 
-	// Validate error when returned bytes from GroupVersion "Schema" are invalid.
+	// 验证 GroupVersion "Schema" 返回的字节无效时的错误。
 	parseErrorGV := openapitest.FakeGroupVersion{GVSpec: []byte(`<some invalid json!>`)}
 	fakeClient.PathsMap["apis/test2.example.com/v1"] = &parseErrorGV
 	err = PrintModelDescription(nil, &buf, fakeClient, schema.GroupVersionResource{
@@ -73,14 +73,14 @@ func TestExplainErrors(t *testing.T) {
 	}, false, 0, "unknown-format")
 	require.ErrorContains(t, err, "failed to parse openapi schema")
 
-	// Validate error when render template is not recognized.
+	// 验证渲染模板无法识别时的错误。
 	client := openapitest.NewEmbeddedFileClient()
 	err = PrintModelDescription(nil, &buf, client, apiGroupsGVR, false, 0, "unknown-format")
 	require.ErrorContains(t, err, "unrecognized format: unknown-format")
 }
 
-// Shows that the correct GVR is fetched from the open api client when
-// given to explain
+// 表明将 GVR 传给 explain 时，会从 open api client 中
+// 获取到正确的 GVR
 func TestExplainOpenAPIClient(t *testing.T) {
 	var buf bytes.Buffer
 

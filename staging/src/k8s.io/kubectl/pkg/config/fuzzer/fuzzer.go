@@ -23,7 +23,7 @@ import (
 	"k8s.io/kubectl/pkg/config"
 )
 
-// Funcs returns the fuzzer functions for the kubectl apis.
+// Funcs 返回 kubectl API 的 fuzzer 函数。
 func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(obj *config.Preference, c randfill.Continue) {

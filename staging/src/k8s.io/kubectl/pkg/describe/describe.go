@@ -86,7 +86,7 @@ import (
 	storageutil "k8s.io/kubectl/pkg/util/storage"
 )
 
-// Each level has 2 spaces for PrefixWriter
+// PrefixWriter 的每个层级使用 2 个空格
 const (
 	LEVEL_0 = iota
 	LEVEL_1
@@ -96,49 +96,49 @@ const (
 )
 
 var (
-	// globally skipped annotations
+	// 全局跳过的注解
 	skipAnnotations = sets.New[string](corev1.LastAppliedConfigAnnotation)
 
-	// DescriberFn gives a way to easily override the function for unit testing if needed
+	// DescriberFn 提供了一种在需要时轻松覆盖该函数以进行单元测试的方式
 	DescriberFn DescriberFunc = Describer
 )
 
-// Describer returns a Describer for displaying the specified RESTMapping type or an error.
+// Describer 返回一个用于展示指定 RESTMapping 类型的 Describer，或一个错误。
 func Describer(restClientGetter genericclioptions.RESTClientGetter, mapping *meta.RESTMapping) (ResourceDescriber, error) {
 	clientConfig, err := restClientGetter.ToRESTConfig()
 	if err != nil {
 		return nil, err
 	}
-	// try to get a describer
+	// 尝试获取一个 describer
 	if describer, ok := DescriberFor(mapping.GroupVersionKind.GroupKind(), clientConfig); ok {
 		return describer, nil
 	}
-	// if this is a kind we don't have a describer for yet, go generic if possible
+	// 如果这个 kind 还没有对应的 describer，则尽可能使用通用 describer
 	if genericDescriber, ok := GenericDescriberFor(mapping, clientConfig); ok {
 		return genericDescriber, nil
 	}
-	// otherwise return an unregistered error
+	// 否则返回未注册的错误
 	return nil, fmt.Errorf("no description has been implemented for %s", mapping.GroupVersionKind.String())
 }
 
-// PrefixWriter can write text at various indentation levels.
+// PrefixWriter 可以在不同的缩进级别写入文本。
 type PrefixWriter interface {
-	// Write writes text with the specified indentation level.
+	// Write 按指定的缩进级别写入文本。
 	Write(level int, format string, a ...interface{})
-	// WriteLine writes an entire line with no indentation level.
+	// WriteLine 写入整行内容，不添加缩进。
 	WriteLine(a ...interface{})
-	// Flush forces indentation to be reset.
+	// Flush 强制重置缩进。
 	Flush()
 }
 
-// prefixWriter implements PrefixWriter
+// prefixWriter 实现了 PrefixWriter
 type prefixWriter struct {
 	out io.Writer
 }
 
 var _ PrefixWriter = &prefixWriter{}
 
-// NewPrefixWriter creates a new PrefixWriter.
+// NewPrefixWriter 创建一个新的 PrefixWriter。
 func NewPrefixWriter(out io.Writer) PrefixWriter {
 	return &prefixWriter{out: out}
 }
@@ -164,8 +164,8 @@ func (pw *prefixWriter) Flush() {
 	}
 }
 
-// nestedPrefixWriter implements PrefixWriter by increasing the level
-// before passing text on to some other writer.
+// nestedPrefixWriter 在将文本传递给其他 writer 之前先增加层级，
+// 以此实现 PrefixWriter。
 type nestedPrefixWriter struct {
 	PrefixWriter
 	indent int
@@ -173,7 +173,7 @@ type nestedPrefixWriter struct {
 
 var _ PrefixWriter = &prefixWriter{}
 
-// NewPrefixWriter creates a new PrefixWriter.
+// NewPrefixWriter 创建一个新的 PrefixWriter。
 func NewNestedPrefixWriter(out PrefixWriter, indent int) PrefixWriter {
 	return &nestedPrefixWriter{PrefixWriter: out, indent: indent}
 }
@@ -237,8 +237,8 @@ func describerMap(clientConfig *rest.Config) (map[schema.GroupKind]ResourceDescr
 	return m, nil
 }
 
-// DescriberFor returns the default describe functions for each of the standard
-// Kubernetes types.
+// DescriberFor 返回每种标准 Kubernetes 类型的
+// 默认 describe 函数。
 func DescriberFor(kind schema.GroupKind, clientConfig *rest.Config) (ResourceDescriber, bool) {
 	describers, err := describerMap(clientConfig)
 	if err != nil {
@@ -250,16 +250,16 @@ func DescriberFor(kind schema.GroupKind, clientConfig *rest.Config) (ResourceDes
 	return f, ok
 }
 
-// GenericDescriberFor returns a generic describer for the specified mapping
-// that uses only information available from runtime.Unstructured
+// GenericDescriberFor 返回指定 mapping 的通用 describer，
+// 它只使用 runtime.Unstructured 中可用的信息。
 func GenericDescriberFor(mapping *meta.RESTMapping, clientConfig *rest.Config) (ResourceDescriber, bool) {
-	// used to fetch the resource
+	// 用于获取资源
 	dynamicClient, err := dynamic.NewForConfig(clientConfig)
 	if err != nil {
 		return nil, false
 	}
 
-	// used to get events for the resource
+	// 用于获取该资源的事件
 	clientSet, err := clientset.NewForConfig(clientConfig)
 	if err != nil {
 		return nil, false
@@ -345,8 +345,8 @@ func printUnstructuredContent(w PrefixWriter, level int, content map[string]inte
 }
 
 func smartLabelFor(field string) string {
-	// skip creating smart label if field name contains
-	// special characters other than '-'
+	// 如果字段名包含 '-' 以外的特殊字符，
+	// 则不生成智能标签
 	if strings.IndexFunc(field, func(r rune) bool {
 		return !unicode.IsLetter(r) && r != '-'
 	}) != -1 {
@@ -361,7 +361,7 @@ func smartLabelFor(field string) string {
 		part := parts[i]
 		if i < len(parts)-1 {
 			nextPart := parts[i+1]
-			// Merge if current part is 2+ uppercase letters and next starts with uppercase
+			// 如果当前部分是两个及以上的大写字母，且下一部分以大写开头，则进行合并
 			allUpper := true
 			for _, r := range part {
 				if unicode.IsLetter(r) && !unicode.IsUpper(r) {
@@ -396,7 +396,7 @@ func smartLabelFor(field string) string {
 	return strings.Join(result, " ")
 }
 
-// DefaultObjectDescriber can describe the default Kubernetes objects.
+// DefaultObjectDescriber 可以描述默认的 Kubernetes 对象。
 var DefaultObjectDescriber ObjectDescriber
 
 func init() {
@@ -437,7 +437,7 @@ func init() {
 	DefaultObjectDescriber = d
 }
 
-// NamespaceDescriber generates information about a namespace
+// NamespaceDescriber 生成有关 namespace 的信息
 type NamespaceDescriber struct {
 	clientset.Interface
 }
@@ -460,8 +460,8 @@ func (d *NamespaceDescriber) Describe(namespace, name string, describerSettings 
 		})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// Server does not support resource quotas.
-			// Not an error, will not show resource quotas information.
+			// 服务端不支持 resource quota。
+			// 这不是错误，只是不会展示 resource quota 信息。
 			resourceQuotaList = nil
 		} else {
 			return "", err
@@ -480,8 +480,8 @@ func (d *NamespaceDescriber) Describe(namespace, name string, describerSettings 
 		})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// Server does not support limit ranges.
-			// Not an error, will not show limit ranges information.
+			// 服务端不支持 limit range。
+			// 这不是错误，只是不会展示 limit range 信息。
 			limitRangeList = nil
 		} else {
 			return "", err
@@ -553,7 +553,7 @@ func describeLimitRangeSpec(spec corev1.LimitRangeSpec, prefix string, w PrefixW
 		}
 
 		for k := range set {
-			// if no value is set, we output -
+			// 如果未设置值，则输出 -
 			maxValue := "-"
 			minValue := "-"
 			defaultLimitValue := "-"
@@ -591,7 +591,7 @@ func describeLimitRangeSpec(spec corev1.LimitRangeSpec, prefix string, w PrefixW
 	}
 }
 
-// DescribeLimitRanges merges a set of limit range items into a single tabular description
+// DescribeLimitRanges 将一组 limit range 项合并成单个表格描述
 func DescribeLimitRanges(limitRanges *corev1.LimitRangeList, w PrefixWriter) {
 	if len(limitRanges.Items) == 0 {
 		w.Write(LEVEL_0, "No LimitRange resource.\n")
@@ -604,7 +604,7 @@ func DescribeLimitRanges(limitRanges *corev1.LimitRangeList, w PrefixWriter) {
 	}
 }
 
-// DescribeResourceQuotas merges a set of quota items into a single tabular description of all quotas
+// DescribeResourceQuotas 将一组 quota 项合并成单个表格，描述所有配额
 func DescribeResourceQuotas(quotas *corev1.ResourceQuotaList, w PrefixWriter) {
 	if len(quotas.Items) == 0 {
 		w.Write(LEVEL_0, "No resource quota.\n")
@@ -647,7 +647,7 @@ func DescribeResourceQuotas(quotas *corev1.ResourceQuotaList, w PrefixWriter) {
 	}
 }
 
-// LimitRangeDescriber generates information about a limit range
+// LimitRangeDescriber 生成有关 limit range 的信息
 type LimitRangeDescriber struct {
 	clientset.Interface
 }
@@ -672,7 +672,7 @@ func describeLimitRange(limitRange *corev1.LimitRange) (string, error) {
 	})
 }
 
-// ResourceQuotaDescriber generates information about a resource quota
+// ResourceQuotaDescriber 生成有关 resource quota 的信息
 type ResourceQuotaDescriber struct {
 	clientset.Interface
 }
@@ -742,8 +742,8 @@ func describeQuota(resourceQuota *corev1.ResourceQuota) (string, error) {
 	})
 }
 
-// PodDescriber generates information about a pod and the replication controllers that
-// create it.
+// PodDescriber 生成有关 pod 及创建它的
+// replication controller 的信息。
 type PodDescriber struct {
 	clientset.Interface
 }
@@ -815,7 +815,7 @@ func describePod(pod *corev1.Pod, events *corev1.EventList) (string, error) {
 				w.Write(LEVEL_0, "LocalhostProfile:\t%s\n", *pod.Spec.SecurityContext.SeccompProfile.LocalhostProfile)
 			}
 		}
-		// remove when .IP field is deprecated
+		// 当 .IP 字段被废弃时移除
 		w.Write(LEVEL_0, "IP:\t%s\n", pod.Status.PodIP)
 		describePodIPs(pod, w, "")
 		if controlledBy := printController(pod); len(controlledBy) > 0 {
@@ -1457,7 +1457,7 @@ func printCSIPersistentVolumeAttributesMultilineIndent(w PrefixWriter, initialIn
 		return
 	}
 
-	// to print labels in the sorted order
+	// 按排序后的顺序打印标签
 	keys := make([]string, 0, len(attributes))
 	for key := range attributes {
 		if skip.Has(key) {
@@ -1531,7 +1531,7 @@ func printVolumeNodeAffinity(w PrefixWriter, affinity *corev1.VolumeNodeAffinity
 	}
 }
 
-// printLabelsMultiline prints multiple labels with a user-defined alignment.
+// printLabelsMultiline 使用用户定义的对齐方式打印多个标签。
 func printNodeSelectorTermsMultilineWithIndent(w PrefixWriter, indentLevel int, title, innerIndent string, reqs []corev1.NodeSelectorRequirement) {
 	w.Write(indentLevel, "%s:%s", title, innerIndent)
 
@@ -1693,13 +1693,13 @@ ownersLoop:
 			}
 		}
 		if podIndex == -1 {
-			// Maybe the pod has been deleted
+			// 也许 pod 已被删除
 			continue
 		}
 
 		for _, pod := range pods {
 			if pod.UID == nsPods.Items[podIndex].UID {
-				// This owner pod is already recorded, look for pods between other owners
+				// 这个属主 pod 已被记录，继续查找其他属主之间的 pod
 				continue ownersLoop
 			}
 		}
@@ -1738,8 +1738,8 @@ func describePersistentVolumeClaim(pvc *corev1.PersistentVolumeClaim, events *co
 	})
 }
 
-// printPersistentVolumeClaim is used for both PVCs and PersistentVolumeClaimTemplate. For the latter,
-// we need to skip some fields which have no meaning.
+// printPersistentVolumeClaim 同时用于 PVC 和 PersistentVolumeClaimTemplate。对于后者，
+// 我们需要跳过一些没有意义的字段。
 func printPersistentVolumeClaim(w PrefixWriter, pvc *corev1.PersistentVolumeClaim, isFullPVC bool) {
 	if isFullPVC {
 		w.Write(LEVEL_0, "Name:\t%s\n", pvc.Name)
@@ -1939,7 +1939,7 @@ func describeContainerProbe(container corev1.Container, w PrefixWriter) {
 }
 
 func describeContainerVolumes(container corev1.Container, w PrefixWriter) {
-	// Show volumeMounts
+	// 展示 volumeMounts
 	none := ""
 	if len(container.VolumeMounts) == 0 {
 		none = "\t<none>"
@@ -1958,7 +1958,7 @@ func describeContainerVolumes(container corev1.Container, w PrefixWriter) {
 		}
 		w.Write(LEVEL_3, "%s from %s (%s)\n", mount.MountPath, mount.Name, strings.Join(flags, ","))
 	}
-	// Show volumeDevices if exists
+	// 如果存在 volumeDevices 则展示
 	if len(container.VolumeDevices) > 0 {
 		w.Write(LEVEL_2, "Devices:%s\n", none)
 		sort.Sort(SortableVolumeDevices(container.VolumeDevices))
@@ -2042,7 +2042,7 @@ func describeContainerEnvFrom(container corev1.Container, resolverFn EnvVarResol
 	}
 }
 
-// DescribeProbe is exported for consumers in other API groups that have probes
+// DescribeProbe 导出供其他带有 probe 的 API 组的使用方使用
 func DescribeProbe(probe *corev1.Probe) string {
 	attrs := fmt.Sprintf("delay=%ds timeout=%ds period=%ds successThreshold=%d failureThreshold=%d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.SuccessThreshold, probe.FailureThreshold)
 	switch {
@@ -2069,7 +2069,7 @@ func DescribeProbe(probe *corev1.Probe) string {
 
 type EnvVarResolverFunc func(e corev1.EnvVar) string
 
-// EnvValueFrom is exported for use by describers in other packages
+// EnvValueFrom 导出供其他包中的 describer 使用
 func EnvValueRetriever(pod *corev1.Pod) EnvVarResolverFunc {
 	return func(e corev1.EnvVar) string {
 		gv, err := schema.ParseGroupVersion(e.ValueFrom.FieldRef.APIVersion)
@@ -2079,12 +2079,12 @@ func EnvValueRetriever(pod *corev1.Pod) EnvVarResolverFunc {
 		gvk := gv.WithKind("Pod")
 		internalFieldPath, _, err := scheme.Scheme.ConvertFieldLabel(gvk, e.ValueFrom.FieldRef.FieldPath, "")
 		if err != nil {
-			return "" // pod validation should catch this on create
+			return "" // pod 校验应在创建时捕获此问题
 		}
 
 		valueFrom, err := fieldpath.ExtractFieldPathAsString(pod, internalFieldPath)
 		if err != nil {
-			return "" // pod validation should catch this on create
+			return "" // pod 校验应在创建时捕获此问题
 		}
 
 		return valueFrom
@@ -2156,8 +2156,8 @@ func printBool(value bool) string {
 	return "False"
 }
 
-// ReplicationControllerDescriber generates information about a replication controller
-// and the pods it has created.
+// ReplicationControllerDescriber 生成有关 replication controller
+// 及其创建的 pod 的信息。
 type ReplicationControllerDescriber struct {
 	clientset.Interface
 }
@@ -2237,7 +2237,7 @@ func DescribePodTemplate(template *corev1.PodTemplateSpec, w PrefixWriter) {
 	}
 }
 
-// ReplicaSetDescriber generates information about a ReplicaSet and the pods it has created.
+// ReplicaSetDescriber 生成有关 ReplicaSet 及其创建的 pod 的信息。
 type ReplicaSetDescriber struct {
 	clientset.Interface
 }
@@ -2297,7 +2297,7 @@ func describeReplicaSet(rs *appsv1.ReplicaSet, events *corev1.EventList, running
 	})
 }
 
-// JobDescriber generates information about a job and the pods it has created.
+// JobDescriber 生成有关 job 及其创建的 pod 的信息。
 type JobDescriber struct {
 	clientset.Interface
 }
@@ -2395,7 +2395,7 @@ func capIndexesListOrNone(indexes string, softLimit int) string {
 	return indexes[:ix+1] + "..."
 }
 
-// CronJobDescriber generates information about a cron job and the jobs it has created.
+// CronJobDescriber 生成有关 cron job 及其创建的 job 的信息。
 type CronJobDescriber struct {
 	client clientset.Interface
 }
@@ -2500,7 +2500,7 @@ func printActiveJobs(w PrefixWriter, title string, jobs []corev1.ObjectReference
 	w.WriteLine("")
 }
 
-// DaemonSetDescriber generates information about a daemon set and the pods it has created.
+// DaemonSetDescriber 生成有关 daemon set 及其创建的 pod 的信息。
 type DaemonSetDescriber struct {
 	clientset.Interface
 }
@@ -2552,7 +2552,7 @@ func describeDaemonSet(daemon *appsv1.DaemonSet, selector labels.Selector, event
 	})
 }
 
-// SecretDescriber generates information about a secret
+// SecretDescriber 生成有关 secret 的信息
 type SecretDescriber struct {
 	clientset.Interface
 }
@@ -2746,7 +2746,7 @@ func (i *IngressClassDescriber) describeIngressClassV1(ic *networkingv1.IngressC
 	})
 }
 
-// ServiceCIDRDescriber generates information about a ServiceCIDR.
+// ServiceCIDRDescriber 生成有关 ServiceCIDR 的信息。
 type ServiceCIDRDescriber struct {
 	client clientset.Interface
 }
@@ -2834,7 +2834,7 @@ func (c *ServiceCIDRDescriber) describeServiceCIDRV1beta1(svc *networkingv1beta1
 	})
 }
 
-// IPAddressDescriber generates information about an IPAddress.
+// IPAddressDescriber 生成有关 IPAddress 的信息。
 type IPAddressDescriber struct {
 	client clientset.Interface
 }
@@ -2904,7 +2904,7 @@ func (c *IPAddressDescriber) describeIPAddressV1beta1(ip *networkingv1beta1.IPAd
 	})
 }
 
-// ServiceDescriber generates information about a service.
+// ServiceDescriber 生成有关 service 的信息。
 type ServiceDescriber struct {
 	clientset.Interface
 }
@@ -3033,7 +3033,7 @@ func describeService(service *corev1.Service, endpointSlices []discoveryv1.Endpo
 	})
 }
 
-// EndpointsDescriber generates information about an Endpoint.
+// EndpointsDescriber 生成有关 Endpoint 的信息。
 type EndpointsDescriber struct {
 	clientset.Interface
 }
@@ -3106,7 +3106,7 @@ func describeEndpoints(ep *corev1.Endpoints, events *corev1.EventList) (string, 
 	})
 }
 
-// EndpointSliceDescriber generates information about an EndpointSlice.
+// EndpointSliceDescriber 生成有关 EndpointSlice 的信息。
 type EndpointSliceDescriber struct {
 	clientset.Interface
 }
@@ -3206,7 +3206,7 @@ func describeEndpointSliceV1(eps *discoveryv1.EndpointSlice, events *corev1.Even
 	})
 }
 
-// ServiceAccountDescriber generates information about a service.
+// ServiceAccountDescriber 生成有关 service 的信息。
 type ServiceAccountDescriber struct {
 	clientset.Interface
 }
@@ -3268,7 +3268,7 @@ func describeServiceAccount(serviceAccount *corev1.ServiceAccount, events *corev
 	})
 }
 
-// RoleDescriber generates information about a node.
+// RoleDescriber 生成有关 node 的信息。
 type RoleDescriber struct {
 	clientset.Interface
 }
@@ -3307,7 +3307,7 @@ func (d *RoleDescriber) Describe(namespace, name string, describerSettings Descr
 	})
 }
 
-// ClusterRoleDescriber generates information about a node.
+// ClusterRoleDescriber 生成有关 node 的信息。
 type ClusterRoleDescriber struct {
 	clientset.Interface
 }
@@ -3363,7 +3363,7 @@ func CombineResourceGroup(resource, group []string) string {
 	return combine
 }
 
-// RoleBindingDescriber generates information about a node.
+// RoleBindingDescriber 生成有关 node 的信息。
 type RoleBindingDescriber struct {
 	clientset.Interface
 }
@@ -3395,7 +3395,7 @@ func (d *RoleBindingDescriber) Describe(namespace, name string, describerSetting
 	})
 }
 
-// ClusterRoleBindingDescriber generates information about a node.
+// ClusterRoleBindingDescriber 生成有关 node 的信息。
 type ClusterRoleBindingDescriber struct {
 	clientset.Interface
 }
@@ -3427,7 +3427,7 @@ func (d *ClusterRoleBindingDescriber) Describe(namespace, name string, describer
 	})
 }
 
-// NodeDescriber generates information about a node.
+// NodeDescriber 生成有关 node 的信息。
 type NodeDescriber struct {
 	clientset.Interface
 }
@@ -3443,8 +3443,8 @@ func (d *NodeDescriber) Describe(namespace, name string, describerSettings Descr
 		fields.OneTermNotEqualSelector("status.phase", string(corev1.PodSucceeded)),
 		fields.OneTermNotEqualSelector("status.phase", string(corev1.PodFailed)),
 	)
-	// in a policy aware setting, users may have access to a node, but not all pods
-	// in that case, we note that the user does not have access to the pods
+	// 在启用了策略感知的设置中，用户可能有权访问 node，但无权访问所有 pod
+	// 在这种情况下，我们会注明用户无权访问这些 pod
 	canViewPods := true
 	initialOpts := metav1.ListOptions{
 		FieldSelector: fieldSelector.String(),
@@ -3463,22 +3463,22 @@ func (d *NodeDescriber) Describe(namespace, name string, describerSettings Descr
 		if ref, err := reference.GetReference(scheme.Scheme, node); err != nil {
 			klog.Errorf("Unable to construct reference to '%#v': %v", node, err)
 		} else {
-			// TODO: We haven't decided the namespace for Node object yet.
-			// there are two UIDs for host events:
-			// controller use node.uid
-			// kubelet use node.name
-			// TODO: Uniform use of UID
+			// TODO: 我们尚未确定 Node 对象的 namespace。
+			// 主机事件有两种 UID：
+			// controller 使用 node.uid
+			// kubelet 使用 node.name
+			// TODO: 统一使用 UID
 			events, _ = searchEvents(d.CoreV1(), ref, describerSettings.ChunkSize)
 
 			ref.UID = types.UID(ref.Name)
 			eventsInvName, _ := searchEvents(d.CoreV1(), ref, describerSettings.ChunkSize)
 
-			// Merge the results of two queries
+			// 合并两次查询的结果
 			events.Items = append(events.Items, eventsInvName.Items...)
 		}
 	}
 
-	// Fetch ResourceSlices exclusive to this node using indexed field selector (O(1) query)
+	// 使用索引字段选择器获取专属于该节点的 ResourceSlice（O(1) 查询）
 	var resourceSlices []resourcev1.ResourceSlice
 	if sliceList, err := d.ResourceV1().ResourceSlices().List(context.TODO(), metav1.ListOptions{
 		FieldSelector: fields.Set{resourcev1.ResourceSliceSelectorNodeName: node.Name}.AsSelector().String(),
@@ -3571,7 +3571,7 @@ func describeNode(node *corev1.Node, nodeNonTerminatedPodsList *corev1.PodList, 
 		w.Write(LEVEL_0, "  Container Runtime Version:\t%s\n", node.Status.NodeInfo.ContainerRuntimeVersion)
 		w.Write(LEVEL_0, "  Kubelet Version:\t%s\n", node.Status.NodeInfo.KubeletVersion)
 
-		// remove when .PodCIDR is deprecated
+		// 当 .PodCIDR 被废弃时移除
 		if len(node.Spec.PodCIDR) > 0 {
 			w.Write(LEVEL_0, "PodCIDR:\t%s\n", node.Spec.PodCIDR)
 		}
@@ -3594,10 +3594,10 @@ func describeNode(node *corev1.Node, nodeNonTerminatedPodsList *corev1.PodList, 
 	})
 }
 
-// describeNodeResourceSlices displays ResourceSlices that are exclusive to this node.
-// It aggregates slices by driver/pool and shows device counts, with output capped at 10 pools.
+// describeNodeResourceSlices 展示专属于该节点的 ResourceSlice。
+// 它按 driver/pool 聚合 slice 并显示设备数量，输出最多包含 10 个 pool。
 func describeNodeResourceSlices(w PrefixWriter, resourceSlices []resourcev1.ResourceSlice) {
-	// Aggregate by driver/pool
+	// 按 driver/pool 聚合
 	type poolInfo struct {
 		driver      string
 		pool        string
@@ -3622,7 +3622,7 @@ func describeNodeResourceSlices(w PrefixWriter, resourceSlices []resourcev1.Reso
 		return
 	}
 
-	// Sort pool keys for consistent output
+	// 对 pool 键排序，保证输出一致
 	sortedKeys := make([]string, 0, len(pools))
 	for k := range pools {
 		sortedKeys = append(sortedKeys, k)
@@ -3839,7 +3839,7 @@ func describeCertificateSigningRequest(csr metav1.ObjectMeta, signerName string,
 	})
 }
 
-// HorizontalPodAutoscalerDescriber generates information about a horizontal pod autoscaler.
+// HorizontalPodAutoscalerDescriber 生成有关 horizontal pod autoscaler 的信息。
 type HorizontalPodAutoscalerDescriber struct {
 	client clientset.Interface
 }
@@ -3847,9 +3847,9 @@ type HorizontalPodAutoscalerDescriber struct {
 func (d *HorizontalPodAutoscalerDescriber) Describe(namespace, name string, describerSettings DescriberSettings) (string, error) {
 	var events *corev1.EventList
 
-	// autoscaling/v2 is introduced since v1.23 and autoscaling/v1 does not have full backward compatibility
-	// with autoscaling/v2, so describer will try to get and describe hpa v2 object firstly, if it fails,
-	// describer will fall back to do with hpa v1 object
+	// autoscaling/v2 自 v1.23 起引入，autoscaling/v1 与 autoscaling/v2 并不完全向后兼容，
+	// 因此 describer 会先尝试获取并描述 hpa v2 对象；若失败，
+	// 则回退使用 hpa v1 对象。
 	hpaV2, err := d.client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err == nil {
 		if describerSettings.ShowEvents {
@@ -3970,7 +3970,7 @@ func describeHorizontalPodAutoscalerV2(hpa *autoscalingv2.HorizontalPodAutoscale
 		}
 		w.Write(LEVEL_0, "Min replicas:\t%s\n", minReplicas)
 		w.Write(LEVEL_0, "Max replicas:\t%d\n", hpa.Spec.MaxReplicas)
-		// only print the hpa behavior if present
+		// 仅在存在时打印 hpa 行为
 		if hpa.Spec.Behavior != nil {
 			w.Write(LEVEL_0, "Behavior:\n")
 			printDirectionBehavior(w, "Scale Up", hpa.Spec.Behavior.ScaleUp)
@@ -4203,7 +4203,7 @@ func DescribeEvents(el *corev1.EventList, w PrefixWriter) {
 	}
 }
 
-// DeploymentDescriber generates information about a deployment.
+// DeploymentDescriber 生成有关 deployment 的信息。
 type DeploymentDescriber struct {
 	client clientset.Interface
 }
@@ -4272,7 +4272,7 @@ func describeDeployment(d *appsv1.Deployment, oldRSs []*appsv1.ReplicaSet, newRS
 }
 
 func printReplicaSetsByLabels(matchingRSs []*appsv1.ReplicaSet) string {
-	// Format the matching ReplicaSets into strings.
+	// 将匹配的 ReplicaSet 格式化为字符串。
 	rsStrings := make([]string, 0, len(matchingRSs))
 	for _, rs := range matchingRSs {
 		rsStrings = append(rsStrings, fmt.Sprintf("%s (%d/%d replicas created)", rs.Name, rs.Status.Replicas, *rs.Spec.Replicas))
@@ -4294,7 +4294,7 @@ func getPodStatusForController(c corev1client.PodInterface, selector labels.Sele
 	}
 	for _, pod := range rcPods.Items {
 		controllerRef := metav1.GetControllerOf(&pod)
-		// Skip pods that are orphans or owned by other controllers.
+		// 跳过孤儿 pod 或由其他 controller 拥有的 pod。
 		if controllerRef == nil || controllerRef.UID != uid {
 			continue
 		}
@@ -4326,7 +4326,7 @@ func getPodsInChunks(c corev1client.PodInterface, initialOpts metav1.ListOptions
 	return podList, err
 }
 
-// ConfigMapDescriber generates information about a ConfigMap
+// ConfigMapDescriber 生成有关 ConfigMap 的信息
 type ConfigMapDescriber struct {
 	clientset.Interface
 }
@@ -4371,7 +4371,7 @@ func (d *ConfigMapDescriber) Describe(namespace, name string, describerSettings 
 	})
 }
 
-// NetworkPolicyDescriber generates information about a networkingv1.NetworkPolicy
+// NetworkPolicyDescriber 生成有关 networkingv1.NetworkPolicy 的信息
 type NetworkPolicyDescriber struct {
 	clientset.Interface
 }
@@ -4751,7 +4751,7 @@ func describePodDisruptionBudgetV1(pdb *policyv1.PodDisruptionBudget, events *co
 	})
 }
 
-// PriorityClassDescriber generates information about a PriorityClass.
+// PriorityClassDescriber 生成有关 PriorityClass 的信息。
 type PriorityClassDescriber struct {
 	clientset.Interface
 }
@@ -4811,7 +4811,7 @@ func policyTypesToString(pts []networkingv1.PolicyType) string {
 	return stringOrNone(formattedString)
 }
 
-// newErrNoDescriber creates a new ErrNoDescriber with the names of the provided types.
+// newErrNoDescriber 使用所提供类型的名称创建一个新的 ErrNoDescriber。
 func newErrNoDescriber(types ...reflect.Type) error {
 	names := make([]string, 0, len(types))
 	for _, t := range types {
@@ -4820,18 +4820,18 @@ func newErrNoDescriber(types ...reflect.Type) error {
 	return ErrNoDescriber{Types: names}
 }
 
-// Describers implements ObjectDescriber against functions registered via Add. Those functions can
-// be strongly typed. Types are exactly matched (no conversion or assignable checks).
+// Describers 基于通过 Add 注册的函数实现 ObjectDescriber。这些函数可以是强类型的。
+// 类型必须精确匹配（不进行转换或可赋值性检查）。
 type Describers struct {
 	searchFns map[reflect.Type][]typeFunc
 }
 
-// DescribeObject implements ObjectDescriber and will attempt to print the provided object to a string,
-// if at least one describer function has been registered with the exact types passed, or if any
-// describer can print the exact object in its first argument (the remainder will be provided empty
-// values). If no function registered with Add can satisfy the passed objects, an ErrNoDescriber will
-// be returned
-// TODO: reorder and partial match extra.
+// DescribeObject 实现了 ObjectDescriber。如果至少注册了一个 describer 函数，
+// 其类型与传入的类型完全一致，或者某个 describer 能用其第一个参数描述传入的
+// 精确对象（其余参数将提供空值），那么它会尝试将提供的对象打印为字符串。
+// 如果没有通过 Add 注册的函数能满足传入的对象，则将
+// 返回 ErrNoDescriber。
+// TODO: 对 extra 支持重排序和部分匹配。
 func (d *Describers) DescribeObject(exact interface{}, extra ...interface{}) (string, error) {
 	exactType := reflect.TypeOf(exact)
 	fns, ok := d.searchFns[exactType]
@@ -4864,12 +4864,12 @@ func (d *Describers) DescribeObject(exact interface{}, extra ...interface{}) (st
 	return "", newErrNoDescriber(append([]reflect.Type{exactType}, types...)...)
 }
 
-// Add adds one or more describer functions to the Describer. The passed function must
-// match the signature:
+// Add 向 Describer 添加一个或多个 describer 函数。传入的函数必须
+// 符合签名：
 //
 //	func(...) (string, error)
 //
-// Any number of arguments may be provided.
+// 可以提供任意数量的参数。
 func (d *Describers) Add(fns ...interface{}) error {
 	for _, fn := range fns {
 		fv := reflect.ValueOf(fn)
@@ -4892,8 +4892,8 @@ func (d *Describers) Add(fns ...interface{}) error {
 			return fmt.Errorf("expected string return, got: %v", ft)
 		}
 		var forErrorType error
-		// This convolution is necessary, otherwise TypeOf picks up on the fact
-		// that forErrorType is nil.
+		// 这种绕弯的写法是必要的，否则 TypeOf 会发现
+		// forErrorType 是 nil。
 		errorType := reflect.TypeOf(&forErrorType).Elem()
 		if ft.Out(1) != errorType {
 			return fmt.Errorf("expected error return, got: %v", ft)
@@ -4912,19 +4912,19 @@ func (d *Describers) Add(fns ...interface{}) error {
 	return nil
 }
 
-// typeFunc holds information about a describer function and the types it accepts
+// typeFunc 保存 describer 函数及其接受类型的信息
 type typeFunc struct {
 	Extra []reflect.Type
 	Fn    reflect.Value
 }
 
-// Matches returns true when the passed types exactly match the Extra list.
+// Matches 在传入的类型与 Extra 列表完全匹配时返回 true。
 func (fn typeFunc) Matches(types []reflect.Type) bool {
 	if len(fn.Extra) != len(types) {
 		return false
 	}
-	// reorder the items in array types and fn.Extra
-	// convert the type into string and sort them, check if they are matched
+	// 对 types 数组和 fn.Extra 中的项重新排序
+	// 将类型转换为字符串并排序，检查它们是否匹配
 	varMap := make(map[reflect.Type]bool)
 	for i := range fn.Extra {
 		varMap[fn.Extra[i]] = true
@@ -4937,7 +4937,7 @@ func (fn typeFunc) Matches(types []reflect.Type) bool {
 	return true
 }
 
-// Describe invokes the nested function with the exact number of arguments.
+// Describe 使用精确数量的参数调用嵌套函数。
 func (fn typeFunc) Describe(exact interface{}, extra ...interface{}) (string, error) {
 	values := []reflect.Value{reflect.ValueOf(exact)}
 	for i, obj := range extra {
@@ -4956,12 +4956,12 @@ func (fn typeFunc) Describe(exact interface{}, extra ...interface{}) (string, er
 	return s, err
 }
 
-// printLabelsMultiline prints multiple labels with a proper alignment.
+// printLabelsMultiline 使用恰当的对齐方式打印多个标签。
 func printLabelsMultiline(w PrefixWriter, title string, labels map[string]string) {
 	printLabelsMultilineWithIndent(w, "", title, "\t", labels, sets.New[string]())
 }
 
-// printLabelsMultiline prints multiple labels with a user-defined alignment.
+// printLabelsMultiline 使用用户定义的对齐方式打印多个标签。
 func printLabelsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerIndent string, labels map[string]string, skip sets.Set[string]) {
 	w.Write(LEVEL_0, "%s%s:%s", initialIndent, title, innerIndent)
 
@@ -4970,7 +4970,7 @@ func printLabelsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerI
 		return
 	}
 
-	// to print labels in the sorted order
+	// 按排序后的顺序打印标签
 	keys := make([]string, 0, len(labels))
 	for key := range labels {
 		if skip.Has(key) {
@@ -4993,12 +4993,12 @@ func printLabelsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerI
 	}
 }
 
-// printTaintsMultiline prints multiple taints with a proper alignment.
+// printTaintsMultiline 使用恰当的对齐方式打印多个 taint。
 func printNodeTaintsMultiline(w PrefixWriter, title string, taints []corev1.Taint) {
 	printTaintsMultilineWithIndent(w, "", title, "\t", taints)
 }
 
-// printTaintsMultilineWithIndent prints multiple taints with a user-defined alignment.
+// printTaintsMultilineWithIndent 使用用户定义的对齐方式打印多个 taint。
 func printTaintsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerIndent string, taints []corev1.Taint) {
 	w.Write(LEVEL_0, "%s%s:%s", initialIndent, title, innerIndent)
 
@@ -5007,7 +5007,7 @@ func printTaintsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerI
 		return
 	}
 
-	// to print taints in the sorted order
+	// 按排序后的顺序打印 taint
 	sort.Slice(taints, func(i, j int) bool {
 		cmpKey := func(taint corev1.Taint) string {
 			return string(taint.Effect) + "," + taint.Key
@@ -5024,12 +5024,12 @@ func printTaintsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerI
 	}
 }
 
-// printPodsMultiline prints multiple pods with a proper alignment.
+// printPodsMultiline 使用恰当的对齐方式打印多个 pod。
 func printPodsMultiline(w PrefixWriter, title string, pods []corev1.Pod) {
 	printPodsMultilineWithIndent(w, "", title, "\t", pods)
 }
 
-// printPodsMultilineWithIndent prints multiple pods with a user-defined alignment.
+// printPodsMultilineWithIndent 使用用户定义的对齐方式打印多个 pod。
 func printPodsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerIndent string, pods []corev1.Pod) {
 	w.Write(LEVEL_0, "%s%s:%s", initialIndent, title, innerIndent)
 
@@ -5038,7 +5038,7 @@ func printPodsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerInd
 		return
 	}
 
-	// to print pods in the sorted order
+	// 按排序后的顺序打印 pod
 	sort.Slice(pods, func(i, j int) bool {
 		cmpKey := func(pod corev1.Pod) string {
 			return pod.Name
@@ -5055,12 +5055,12 @@ func printPodsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerInd
 	}
 }
 
-// printPodTolerationsMultiline prints multiple tolerations with a proper alignment.
+// printPodTolerationsMultiline 使用恰当的对齐方式打印多个 toleration。
 func printPodTolerationsMultiline(w PrefixWriter, title string, tolerations []corev1.Toleration) {
 	printTolerationsMultilineWithIndent(w, "", title, "\t", tolerations)
 }
 
-// printTolerationsMultilineWithIndent prints multiple tolerations with a user-defined alignment.
+// printTolerationsMultilineWithIndent 使用用户定义的对齐方式打印多个 toleration。
 func printTolerationsMultilineWithIndent(w PrefixWriter, initialIndent, title, innerIndent string, tolerations []corev1.Toleration) {
 	w.Write(LEVEL_0, "%s%s:%s", initialIndent, title, innerIndent)
 
@@ -5069,7 +5069,7 @@ func printTolerationsMultilineWithIndent(w PrefixWriter, initialIndent, title, i
 		return
 	}
 
-	// to print tolerations in the sorted order
+	// 按排序后的顺序打印 toleration
 	sort.Slice(tolerations, func(i, j int) bool {
 		return tolerations[i].Key < tolerations[j].Key
 	})
@@ -5088,7 +5088,7 @@ func printTolerationsMultilineWithIndent(w PrefixWriter, initialIndent, title, i
 		}
 		// tolerations:
 		// - operator: "Exists"
-		// is a special case which tolerates everything
+		// 是一种容忍一切的特殊情况
 		if toleration.Operator == corev1.TolerationOpExists && len(toleration.Value) == 0 {
 			if len(toleration.Key) != 0 || len(toleration.Effect) != 0 {
 				w.Write(LEVEL_0, " op=Exists")
@@ -5136,7 +5136,7 @@ func (list SortableResourceNames) Less(i, j int) bool {
 	return list[i] < list[j]
 }
 
-// SortedResourceNames returns the sorted resource names of a resource list.
+// SortedResourceNames 返回资源列表中排序后的资源名称。
 func SortedResourceNames(list corev1.ResourceList) []corev1.ResourceName {
 	resources := make([]corev1.ResourceName, 0, len(list))
 	for res := range list {
@@ -5190,12 +5190,12 @@ func (list SortableVolumeDevices) Less(i, j int) bool {
 
 var maxAnnotationLen = 140
 
-// printAnnotationsMultiline prints multiple annotations with a proper alignment.
-// If annotation string is too long, we omit chars more than 200 length.
+// printAnnotationsMultiline 使用恰当的对齐方式打印多个注解。
+// 如果注解字符串过长，我们会省略超过 200 长度的字符。
 func printAnnotationsMultiline(w PrefixWriter, title string, annotations map[string]string) {
 	w.Write(LEVEL_0, "%s:\t", title)
 
-	// to print labels in the sorted order
+	// 按排序后的顺序打印标签
 	keys := make([]string, 0, len(annotations))
 	for key := range annotations {
 		if skipAnnotations.Has(key) {
@@ -5232,8 +5232,8 @@ func shorten(s string, maxLength int) string {
 	return s
 }
 
-// translateMicroTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
+// translateMicroTimestampSince 以人类可读的近似形式返回自 timestamp
+// 以来经过的时间。
 func translateMicroTimestampSince(timestamp metav1.MicroTime) string {
 	if timestamp.IsZero() {
 		return "<unknown>"
@@ -5242,8 +5242,8 @@ func translateMicroTimestampSince(timestamp metav1.MicroTime) string {
 	return duration.HumanDuration(time.Since(timestamp.Time))
 }
 
-// translateTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
+// translateTimestampSince 以人类可读的近似形式返回自 timestamp
+// 以来经过的时间。
 func translateTimestampSince(timestamp metav1.Time) string {
 	if timestamp.IsZero() {
 		return "<unknown>"
@@ -5252,7 +5252,7 @@ func translateTimestampSince(timestamp metav1.Time) string {
 	return duration.HumanDuration(time.Since(timestamp.Time))
 }
 
-// Pass ports=nil for all ports.
+// 传入 ports=nil 表示所有端口。
 func formatEndpointSlices(endpointSlices []discoveryv1.EndpointSlice, ports sets.Set[string]) string {
 	if len(endpointSlices) == 0 {
 		return "<none>"
@@ -5263,18 +5263,18 @@ func formatEndpointSlices(endpointSlices []discoveryv1.EndpointSlice, ports sets
 	count := 0
 	for i := range endpointSlices {
 		if len(endpointSlices[i].Ports) == 0 {
-			// It's possible to have headless services with no ports.
+			// headless service 有可能没有端口。
 			for j := range endpointSlices[i].Endpoints {
 				if len(list) == max {
 					more = true
 				}
 				isReady := endpointSlices[i].Endpoints[j].Conditions.Ready == nil || *endpointSlices[i].Endpoints[j].Conditions.Ready
 				if !isReady {
-					// ready indicates that this endpoint is prepared to receive traffic,
-					// according to whatever system is managing the endpoint. A nil value
-					// indicates an unknown state. In most cases consumers should interpret this
-					// unknown state as ready.
-					// More info: vendor/k8s.io/api/discovery/v1/types.go
+					// ready 表示该 endpoint 已准备好接收流量，
+					// 这是由管理该 endpoint 的系统所决定的。nil 值
+					// 表示状态未知。大多数情况下，使用方应将此
+					// 未知状态视为 ready。
+					// 更多信息：vendor/k8s.io/api/discovery/v1/types.go
 					continue
 				}
 				if !more {
@@ -5283,7 +5283,7 @@ func formatEndpointSlices(endpointSlices []discoveryv1.EndpointSlice, ports sets
 				count++
 			}
 		} else {
-			// "Normal" services with ports defined.
+			// 定义了端口的“普通”service。
 			for j := range endpointSlices[i].Ports {
 				port := endpointSlices[i].Ports[j]
 				if ports == nil || ports.Has(*port.Name) {
@@ -5294,11 +5294,11 @@ func formatEndpointSlices(endpointSlices []discoveryv1.EndpointSlice, ports sets
 						addr := endpointSlices[i].Endpoints[k].Addresses[0]
 						isReady := endpointSlices[i].Endpoints[k].Conditions.Ready == nil || *endpointSlices[i].Endpoints[k].Conditions.Ready
 						if !isReady {
-							// ready indicates that this endpoint is prepared to receive traffic,
-							// according to whatever system is managing the endpoint. A nil value
-							// indicates an unknown state. In most cases consumers should interpret this
-							// unknown state as ready.
-							// More info: vendor/k8s.io/api/discovery/v1/types.go
+							// ready 表示该 endpoint 已准备好接收流量，
+							// 这是由管理该 endpoint 的系统所决定的。nil 值
+							// 表示状态未知。大多数情况下，使用方应将此
+							// 未知状态视为 ready。
+							// 更多信息：vendor/k8s.io/api/discovery/v1/types.go
 							continue
 						}
 						if !more {
@@ -5331,7 +5331,7 @@ func extractCSRStatus(conditions []string, certificateBytes []byte) string {
 		}
 	}
 	var status string
-	// must be in order of precedence
+	// 必须按优先级顺序排列
 	if denied {
 		status += "Denied"
 	} else if approved {
@@ -5348,7 +5348,7 @@ func extractCSRStatus(conditions []string, certificateBytes []byte) string {
 	return status
 }
 
-// backendStringer behaves just like a string interface and converts the given backend to a string.
+// backendStringer 的行为类似 string 接口，将给定的 backend 转换为字符串。
 func serviceBackendStringer(backend *networkingv1.IngressServiceBackend) string {
 	if backend == nil {
 		return ""
@@ -5363,10 +5363,10 @@ func serviceBackendStringer(backend *networkingv1.IngressServiceBackend) string 
 	return fmt.Sprintf("%v:%v", backend.Name, bPort)
 }
 
-// findNodeRoles returns the roles of a given node.
-// The roles are determined by looking for:
-// * a node-role.kubernetes.io/<role>="" label
-// * a kubernetes.io/role="<role>" label
+// findNodeRoles 返回给定 node 的角色。
+// 角色通过查找以下标签确定：
+// * node-role.kubernetes.io/<role>="" 标签
+// * kubernetes.io/role="<role>" 标签
 func findNodeRoles(node *corev1.Node) []string {
 	roles := sets.New[string]()
 	for k, v := range node.Labels {
@@ -5383,8 +5383,8 @@ func findNodeRoles(node *corev1.Node) []string {
 	return sets.List(roles)
 }
 
-// ingressLoadBalancerStatusStringerV1 behaves mostly like a string interface and converts the given status to a string.
-// `wide` indicates whether the returned value is meant for --o=wide output. If not, it's clipped to 16 bytes.
+// ingressLoadBalancerStatusStringerV1 的行为基本类似 string 接口，将给定的 status 转换为字符串。
+// `wide` 表示返回值是否用于 --o=wide 输出。若不是，则会截断到 16 字节。
 func ingressLoadBalancerStatusStringerV1(s networkingv1.IngressLoadBalancerStatus, wide bool) string {
 	ingress := s.Ingress
 	result := sets.New[string]()
@@ -5403,8 +5403,8 @@ func ingressLoadBalancerStatusStringerV1(s networkingv1.IngressLoadBalancerStatu
 	return r
 }
 
-// searchEvents finds events about the specified object.
-// It is very similar to CoreV1.Events.Search, but supports the Limit parameter.
+// searchEvents 查找与指定对象相关的事件。
+// 它与 CoreV1.Events.Search 非常相似，但支持 Limit 参数。
 func searchEvents(client corev1client.EventsGetter, objOrRef runtime.Object, limit int64) (*corev1.EventList, error) {
 	ref, err := reference.GetReference(scheme.Scheme, objOrRef)
 	if err != nil {

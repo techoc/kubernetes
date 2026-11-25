@@ -28,8 +28,8 @@ import (
 )
 
 func TestRoundTripTypes(t *testing.T) {
-	// Because v1alpha1 does not have fields of these types, the fuzzing will
-	// be incorrect, so we need to manually intervene here
+	// 由于 v1alpha1 没有这些类型的字段，模糊测试会
+	// 不正确，因此我们需要在这里手动干预
 	customFuzzerFuncs := func(codecs runtimeserializer.CodecFactory) []interface{} {
 		return []interface{}{
 			func(s *config.CredentialPluginPolicy, c randfill.Continue) {
