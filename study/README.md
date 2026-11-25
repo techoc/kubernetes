@@ -22,6 +22,8 @@
 | `04-workflow.md`     | 构建、测试、verify、update、生成物与依赖边界      |
 | `05-contribution.md` | 贡献前约束、PR 自检清单、review 处理              |
 | `06-progress.md`     | 打卡表、能力矩阵、阶段复盘问题                    |
+| `11-translation-plan.md` | 全仓库中文注释计划：边界、批次、守卫与生成物同步 |
+| `12-translation-progress.md` | 中文注释翻译进度表，与学习进度分开 |
 
 建议阅读顺序：`02-curriculum.md` → `07-mental-model.md` → `01-code-map.md` → `03-exercises.md`。`08-gotchas.md`
 放在手边当纠偏清单，每读完一个子系统扫一遍。`04-workflow.md` 在第 1 周就要扫一遍，真正动手前再精读。
