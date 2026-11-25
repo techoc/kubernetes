@@ -35,7 +35,7 @@ var (
 		`)
 )
 
-// NewPreflightPhase creates a kubeadm workflow phase that implements preflight checks for a new control-plane node.
+// NewPreflightPhase 创建为新控制平面节点实现预检的 kubeadm 工作流阶段。
 func NewPreflightPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "preflight",
@@ -53,7 +53,7 @@ func NewPreflightPhase() workflow.Phase {
 	}
 }
 
-// runPreflight executes preflight checks logic.
+// runPreflight 执行预检逻辑。
 func runPreflight(c workflow.RunData) error {
 	data, ok := c.(InitData)
 	if !ok {
@@ -61,7 +61,7 @@ func runPreflight(c workflow.RunData) error {
 	}
 
 	fmt.Println("[preflight] Running pre-flight checks")
-	// First, check if we're root separately from the other preflight checks and fail fast.
+	// 首先单独检查是否以 root 身份运行，以便快速失败。
 	if err := preflight.RunRootCheckOnly(data.IgnorePreflightErrors()); err != nil {
 		return err
 	}

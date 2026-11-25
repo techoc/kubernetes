@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// CreateRandBytes returns a cryptographically secure slice of random bytes with a given size
+// CreateRandBytes 返回指定长度的密码学安全随机字节切片。
 func CreateRandBytes(size uint32) ([]byte, error) {
 	bytes := make([]byte, size)
 	if _, err := rand.Read(bytes); err != nil {
@@ -33,8 +33,8 @@ func CreateRandBytes(size uint32) ([]byte, error) {
 	return bytes, nil
 }
 
-// EncryptBytes takes a byte slice of raw data and an encryption key and returns an encrypted byte slice of data.
-// The key must be an AES key, either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256
+// EncryptBytes 使用加密密钥加密原始字节并返回密文。
+// 密钥必须为 16、24 或 32 字节的 AES 密钥，分别对应 AES-128、AES-192 和 AES-256。
 func EncryptBytes(data, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -51,8 +51,8 @@ func EncryptBytes(data, key []byte) ([]byte, error) {
 	return gcm.Seal(nonce, nonce, data, nil), nil
 }
 
-// DecryptBytes takes a byte slice of encrypted data and an encryption key and returns a decrypted byte slice of data.
-// The key must be an AES key, either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256
+// DecryptBytes 使用加密密钥解密密文并返回明文。
+// 密钥必须为 16、24 或 32 字节的 AES 密钥，分别对应 AES-128、AES-192 和 AES-256。
 func DecryptBytes(data, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {

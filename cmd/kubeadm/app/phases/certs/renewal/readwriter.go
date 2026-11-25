@@ -31,27 +31,25 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 )
 
-// certificateReadWriter defines the behavior of a component that
-// read or write a certificate stored/embedded in a file
+// certificateReadWriter 定义读取或写入文件中存储或嵌入的证书的接口。
 type certificateReadWriter interface {
-	//Exists return true if the certificate exists
+	// Exists 在证书存在时返回 true。
 	Exists() (bool, error)
 
-	// Read a certificate stored/embedded in a file
+	// 读取文件中存储或嵌入的证书。
 	Read() (*x509.Certificate, error)
 
-	// Write (update) a certificate stored/embedded in a file
+	// 写入或更新文件中存储或嵌入的证书。
 	Write(*x509.Certificate, crypto.Signer) error
 }
 
-// pkiCertificateReadWriter defines a certificateReadWriter for certificate files
-// in the K8s pki managed by kubeadm
+// pkiCertificateReadWriter 定义用于 kubeadm 管理的 K8s PKI 证书文件的 certificateReadWriter。
 type pkiCertificateReadWriter struct {
 	baseName       string
 	certificateDir string
 }
 
-// newPKICertificateReadWriter return a new pkiCertificateReadWriter
+// newPKICertificateReadWriter 返回新的 pkiCertificateReadWriter。
 func newPKICertificateReadWriter(certificateDir string, baseName string) *pkiCertificateReadWriter {
 	return &pkiCertificateReadWriter{
 		baseName:       baseName,
@@ -59,7 +57,7 @@ func newPKICertificateReadWriter(certificateDir string, baseName string) *pkiCer
 	}
 }
 
-// Exists checks if a certificate exist
+// Exists 检查证书是否存在。
 func (rw *pkiCertificateReadWriter) Exists() (bool, error) {
 	certificatePath, _ := pkiutil.PathsForCertAndKey(rw.certificateDir, rw.baseName)
 	return fileExists(certificatePath)
@@ -76,7 +74,7 @@ func fileExists(filename string) (bool, error) {
 	return !info.IsDir(), nil
 }
 
-// Read a certificate from a file the K8s pki managed by kubeadm
+// 从 kubeadm 管理的 K8s PKI 文件读取证书。
 func (rw *pkiCertificateReadWriter) Read() (*x509.Certificate, error) {
 	certificatePath, _ := pkiutil.PathsForCertAndKey(rw.certificateDir, rw.baseName)
 	certs, err := certutil.CertsFromFile(certificatePath)
@@ -84,12 +82,12 @@ func (rw *pkiCertificateReadWriter) Read() (*x509.Certificate, error) {
 		return nil, errors.Wrapf(err, "failed to load existing certificate %s", rw.baseName)
 	}
 
-	// Safely pick the first one because the sender's certificate must come first in the list.
-	// For details, see: https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
+	// 安全地取第一项，因为发送方证书必须位于列表首位。
+	// 详见 https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
 	return certs[0], nil
 }
 
-// Write a certificate to files in the K8s pki managed by kubeadm
+// 将证书写入 kubeadm 管理的 K8s PKI 文件。
 func (rw *pkiCertificateReadWriter) Write(newCert *x509.Certificate, newKey crypto.Signer) error {
 	if err := pkiutil.WriteCertAndKey(rw.certificateDir, rw.baseName, newCert, newKey); err != nil {
 		return errors.Wrapf(err, "failed to write new certificate %s", rw.baseName)
@@ -97,9 +95,8 @@ func (rw *pkiCertificateReadWriter) Write(newCert *x509.Certificate, newKey cryp
 	return nil
 }
 
-// kubeConfigReadWriter defines a certificateReadWriter for certificate files
-// embedded in the kubeConfig files managed by kubeadm, and more specifically
-// for the client certificate of the AuthInfo
+// kubeConfigReadWriter 定义用于 kubeadm 管理的 kubeConfig 文件中嵌入证书的 certificateReadWriter，
+// 具体处理 AuthInfo 的客户端证书。
 type kubeConfigReadWriter struct {
 	kubernetesDir      string
 	kubeConfigFileName string
@@ -110,7 +107,7 @@ type kubeConfigReadWriter struct {
 	caCert             *x509.Certificate
 }
 
-// newKubeconfigReadWriter return a new kubeConfigReadWriter
+// newKubeconfigReadWriter 返回新的 kubeConfigReadWriter。
 func newKubeconfigReadWriter(kubernetesDir string, kubeConfigFileName string, certificateDir, baseName string) *kubeConfigReadWriter {
 	return &kubeConfigReadWriter{
 		kubernetesDir:      kubernetesDir,
@@ -121,41 +118,39 @@ func newKubeconfigReadWriter(kubernetesDir string, kubeConfigFileName string, ce
 	}
 }
 
-// Exists checks if a certificate embedded in kubeConfig file exists
+// Exists 检查 kubeConfig 文件中是否嵌有证书。
 func (rw *kubeConfigReadWriter) Exists() (bool, error) {
 	return fileExists(rw.kubeConfigFilePath)
 }
 
-// Read a certificate embedded in kubeConfig file managed by kubeadm.
-// Please note that the kubeConfig file itself is kept in the ReadWriter state thus allowing
-// to preserve the attributes (Context, Servers, AuthInfo etc.)
+// 读取 kubeadm 管理的 kubeConfig 文件中嵌入的证书。
+// ReadWriter 状态会保留 kubeConfig 文件本身，以便保留 Context、Servers、AuthInfo 等属性。
 func (rw *kubeConfigReadWriter) Read() (*x509.Certificate, error) {
-	// try to load the kubeConfig file
+	// 尝试加载 kubeConfig 文件
 	kubeConfig, err := clientcmd.LoadFromFile(rw.kubeConfigFilePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to load kubeConfig file %s", rw.kubeConfigFilePath)
 	}
 
-	// The CA cert is required for updating kubeconfig files.
-	// For local CA renewal, the local CA on disk could have changed, thus a reload is needed.
-	// For CSR renewal we assume the same CA on disk is mounted for usage with KCM's
-	// '--cluster-signing-cert-file' flag.
+	// 更新 kubeconfig 文件需要 CA 证书。
+	// 本地 CA 续签时，磁盘上的 CA 可能已变化，因此需要重新加载。
+	// CSR 续签则假定磁盘上的同一 CA 已挂载，供 KCM 的 --cluster-signing-cert-file 参数使用。
 	certificatePath, _ := pkiutil.PathsForCertAndKey(rw.certificateDir, rw.baseName)
 	caCerts, err := certutil.CertsFromFile(certificatePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to load existing certificate %s", rw.baseName)
 	}
 
-	// Safely pick the first one because the sender's certificate must come first in the list.
-	// For details, see: https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
+	// 安全地取第一项，因为发送方证书必须位于列表首位。
+	// 详见 https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
 	rw.caCert = caCerts[0]
 
-	// get current context
+	// 获取当前上下文
 	if _, ok := kubeConfig.Contexts[kubeConfig.CurrentContext]; !ok {
 		return nil, errors.Errorf("invalid kubeConfig file %s: missing context %s", rw.kubeConfigFilePath, kubeConfig.CurrentContext)
 	}
 
-	// get cluster info for current context and ensure a server certificate is embedded in it
+	// 获取当前上下文的集群信息，并确保其中嵌有服务器证书
 	clusterName := kubeConfig.Contexts[kubeConfig.CurrentContext].Cluster
 	if _, ok := kubeConfig.Clusters[clusterName]; !ok {
 		return nil, errors.Errorf("invalid kubeConfig file %s: missing cluster %s", rw.kubeConfigFilePath, clusterName)
@@ -166,7 +161,7 @@ func (rw *kubeConfigReadWriter) Read() (*x509.Certificate, error) {
 		return nil, errors.Errorf("kubeConfig file %s does not have an embedded server certificate", rw.kubeConfigFilePath)
 	}
 
-	// get auth info for current context and ensure a client certificate is embedded in it
+	// 获取当前上下文的认证信息，并确保其中嵌有客户端证书
 	authInfoName := kubeConfig.Contexts[kubeConfig.CurrentContext].AuthInfo
 	if _, ok := kubeConfig.AuthInfos[authInfoName]; !ok {
 		return nil, errors.Errorf("invalid kubeConfig file %s: missing authInfo %s", rw.kubeConfigFilePath, authInfoName)
@@ -177,7 +172,7 @@ func (rw *kubeConfigReadWriter) Read() (*x509.Certificate, error) {
 		return nil, errors.Errorf("kubeConfig file %s does not have an embedded client certificate", rw.kubeConfigFilePath)
 	}
 
-	// parse the client certificate, retrieve the cert config and then renew it
+	// 解析客户端证书、提取证书配置并续签
 	certs, err := certutil.ParseCertsPEM(authInfo.ClientCertificateData)
 	if err != nil {
 		return nil, errors.Wrapf(err, "kubeConfig file %s does not contain a valid client certificate", rw.kubeConfigFilePath)
@@ -188,35 +183,34 @@ func (rw *kubeConfigReadWriter) Read() (*x509.Certificate, error) {
 	return certs[0], nil
 }
 
-// Write a certificate embedded in kubeConfig file managed by kubeadm
-// Please note that all the other attribute of the kubeConfig file are preserved, but this
-// requires to call Read before Write
+// 将证书写入 kubeadm 管理的 kubeConfig 文件。
+// 写入前必须调用 Read，以便保留 kubeConfig 文件的其他属性。
 func (rw *kubeConfigReadWriter) Write(newCert *x509.Certificate, newKey crypto.Signer) error {
-	// check if Read was called before Write
+	// 检查写入前是否调用过 Read
 	if rw.kubeConfig == nil {
 		return errors.Errorf("failed to Write kubeConfig file with renewed certs. It is necessary to call Read before Write")
 	}
 
-	// encodes the new key
+	// 编码新私钥
 	encodedClientKey, err := keyutil.MarshalPrivateKeyToPEM(newKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to marshal private key to PEM")
 	}
 
-	// Update the embedded CA in the kubeconfig file.
-	// This assumes that the user has kept the current context to the desired one.
+	// 更新 kubeconfig 文件中嵌入的 CA。
+	// 假定用户已将当前上下文设为目标上下文。
 	clusterName := rw.kubeConfig.Contexts[rw.kubeConfig.CurrentContext].Cluster
 	cluster := rw.kubeConfig.Clusters[clusterName]
 	cluster.CertificateAuthorityData = pkiutil.EncodeCertPEM(rw.caCert)
 
-	// get auth info for current context and ensure a client certificate is embedded in it
+	// 获取当前上下文的认证信息，并确保其中嵌有客户端证书
 	authInfoName := rw.kubeConfig.Contexts[rw.kubeConfig.CurrentContext].AuthInfo
 
-	// create a kubeConfig copy with the new client certs
+	// 创建包含新客户端证书的 kubeConfig 副本
 	newConfig := rw.kubeConfig.DeepCopy()
 	newConfig.AuthInfos[authInfoName].ClientKeyData = encodedClientKey
 	newConfig.AuthInfos[authInfoName].ClientCertificateData = pkiutil.EncodeCertPEM(newCert)
 
-	// writes the kubeConfig to disk
+	// 将 kubeConfig 写入磁盘
 	return clientcmd.WriteToFile(*newConfig, rw.kubeConfigFilePath)
 }

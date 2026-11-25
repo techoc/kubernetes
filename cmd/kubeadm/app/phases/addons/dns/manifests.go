@@ -17,7 +17,7 @@ limitations under the License.
 package dns
 
 const (
-	// CoreDNSService is the CoreDNS Service manifest
+	// CoreDNSService 是 CoreDNS Service 清单。
 	CoreDNSService = `
 apiVersion: v1
 kind: Service
@@ -53,7 +53,7 @@ spec:
     k8s-app: kube-dns
 `
 
-	// CoreDNSDeployment is the CoreDNS Deployment manifest
+	// CoreDNSDeployment 是 CoreDNS Deployment 清单。
 	CoreDNSDeployment = `
 apiVersion: apps/v1
 kind: Deployment
@@ -159,7 +159,7 @@ spec:
               path: Corefile
 `
 
-	// CoreDNSConfigMap is the CoreDNS ConfigMap manifest
+	// CoreDNSConfigMap 是 CoreDNS ConfigMap 清单。
 	CoreDNSConfigMap = `
 apiVersion: v1
 kind: ConfigMap
@@ -194,7 +194,7 @@ data:
         loadbalance
     }
 `
-	// CoreDNSClusterRole is the CoreDNS ClusterRole manifest
+	// CoreDNSClusterRole 是 CoreDNS ClusterRole 清单。
 	CoreDNSClusterRole = `
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -219,7 +219,7 @@ rules:
   - list
   - watch
 `
-	// CoreDNSClusterRoleBinding is the CoreDNS Clusterrolebinding manifest
+	// CoreDNSClusterRoleBinding 是 CoreDNS ClusterRoleBinding 清单。
 	CoreDNSClusterRoleBinding = `
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -234,7 +234,7 @@ subjects:
   name: coredns
   namespace: kube-system
 `
-	// CoreDNSServiceAccount is the CoreDNS ServiceAccount manifest
+	// CoreDNSServiceAccount 是 CoreDNS ServiceAccount 清单。
 	CoreDNSServiceAccount = `
 apiVersion: v1
 kind: ServiceAccount

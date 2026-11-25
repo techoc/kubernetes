@@ -20,39 +20,35 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// BootstrapToken describes one bootstrap token, stored as a Secret in the cluster
+// BootstrapToken 描述存储在集群 Secret 中的一个引导令牌。
 // +k8s:deepcopy-gen=true
 type BootstrapToken struct {
-	// Token is used for establishing bidirectional trust between nodes and control-planes.
-	// Used for joining nodes in the cluster.
+	// Token 用于在节点与控制平面之间建立双向信任，并供节点加入集群。
 	Token *BootstrapTokenString `json:"token" datapolicy:"token"`
-	// Description sets a human-friendly message why this token exists and what it's used
-	// for, so other administrators can know its purpose.
+	// Description 设置易于理解的说明，描述令牌存在的原因和用途，便于其他管理员了解。
 	// +optional
 	Description string `json:"description,omitempty"`
-	// TTL defines the time to live for this token. Defaults to 24h.
-	// Expires and TTL are mutually exclusive.
+	// TTL 定义令牌的有效期，默认为 24 小时。
+	// Expires 与 TTL 互斥。
 	// +optional
 	TTL *metav1.Duration `json:"ttl,omitempty"`
-	// Expires specifies the timestamp when this token expires. Defaults to being set
-	// dynamically at runtime based on the TTL. Expires and TTL are mutually exclusive.
+	// Expires 指定令牌到期的时间戳。默认根据 TTL 在运行时动态设置。
+	// Expires 与 TTL 互斥。
 	// +optional
 	Expires *metav1.Time `json:"expires,omitempty"`
-	// Usages describes the ways in which this token can be used. Can by default be used
-	// for establishing bidirectional trust, but that can be changed here.
+	// Usages 描述令牌的可用方式。默认可用于建立双向信任，可在此修改。
 	// +optional
 	Usages []string `json:"usages,omitempty"`
-	// Groups specifies the extra groups that this token will authenticate as when/if
-	// used for authentication
+	// Groups 指定令牌用于认证时所属的额外组。
 	// +optional
 	Groups []string `json:"groups,omitempty"`
 }
 
-// BootstrapTokenString is a token of the format abcdef.abcdef0123456789 that is used
-// for both validation of the practically of the API server from a joining node's point
-// of view and as an authentication method for the node in the bootstrap phase of
-// "kubeadm join". This token is and should be short-lived
+// BootstrapTokenString 是格式为 abcdef.abcdef0123456789 的短期令牌。
+// 加入集群的节点既用它验证 API Server 的可用性，也在 "kubeadm join" 引导阶段用它进行认证。
 type BootstrapTokenString struct {
-	ID     string `json:"-"`
+	// ID 是令牌中点号前的标识部分，不参与 JSON 序列化。
+	ID string `json:"-"`
+	// Secret 是令牌中点号后的秘密部分，不序列化且必须按敏感数据处理。
 	Secret string `json:"-" datapolicy:"token"`
 }

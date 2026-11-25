@@ -20,8 +20,7 @@ package copycerts
 
 import "golang.org/x/sys/unix"
 
-// on unix where umask may be in effect, clear umask so tests
-// are not sensitive to the developer's system umask
+// 在 Unix 上清除可能生效的 umask，使测试不受开发者系统 umask 影响。
 func setNoUmask() {
 	unix.Umask(0)
 }

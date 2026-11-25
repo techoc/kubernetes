@@ -25,7 +25,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// APIEndpointFromString returns an APIEndpoint struct based on a "host:port" raw string.
+// APIEndpointFromString 根据 "host:port" 格式的原始字符串返回 APIEndpoint 结构体。
 func APIEndpointFromString(apiEndpoint string) (APIEndpoint, error) {
 	apiEndpointHost, apiEndpointPortStr, err := net.SplitHostPort(apiEndpoint)
 	if err != nil {
@@ -44,6 +44,7 @@ func APIEndpointFromString(apiEndpoint string) (APIEndpoint, error) {
 	}, nil
 }
 
+// String 以 net.JoinHostPort 可接受的形式返回端点，确保 IPv6 地址带方括号。
 func (endpoint *APIEndpoint) String() string {
 	return net.JoinHostPort(endpoint.AdvertiseAddress, strconv.FormatInt(int64(endpoint.BindPort), 10))
 }

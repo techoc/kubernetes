@@ -26,36 +26,57 @@ import (
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
-// InitData is the interface to use for init phases.
-// The "initData" type from "cmd/init.go" must satisfy this interface.
+// InitData 是 init 阶段使用的接口。
+// cmd/init.go 中的 initData 类型必须满足此接口。
 type InitData interface {
+	// UploadCerts 返回是否将控制平面证书上传到集群。
 	UploadCerts() bool
+	// CertificateKey 返回用于加密和解密上传证书的密钥。
 	CertificateKey() string
+	// SetCertificateKey 设置证书密钥；缺失时无法解密上传的证书。
 	SetCertificateKey(key string)
+	// SkipCertificateKeyPrint 返回是否避免在输出中暴露证书密钥。
 	SkipCertificateKeyPrint() bool
+	// Cfg 返回当前 init 工作流使用的配置。
 	Cfg() *kubeadmapi.InitConfiguration
+	// DryRun 返回是否仅模拟执行；此时写入路径通常指向临时目录。
 	DryRun() bool
+	// SkipTokenPrint 返回是否避免打印默认引导令牌。
 	SkipTokenPrint() bool
+	// IgnorePreflightErrors 返回允许忽略的预检错误集合。
 	IgnorePreflightErrors() sets.Set[string]
+	// CertificateWriteDir 返回证书写入目录；dry-run 时返回临时目录。
 	CertificateWriteDir() string
+	// CertificateDir 返回用户配置的证书目录，不随 dry-run 临时目录改变。
 	CertificateDir() string
+	// KubeConfig 返回 kubeadm 使用的配置；使用默认路径时仅连接本地 API 服务器。
 	KubeConfig() (*clientcmdapi.Config, error)
+	// KubeConfigOriginal 返回未经 kubeadm 修改的原始配置。
 	KubeConfigOriginal() (*clientcmdapi.Config, error)
+	// KubeConfigDir 返回配置写入目录；dry-run 时返回临时目录。
 	KubeConfigDir() string
+	// KubeConfigPath 返回配置加载路径。
 	KubeConfigPath() string
+	// ManifestDir 返回静态 Pod 清单写入目录；dry-run 时返回临时目录。
 	ManifestDir() string
+	// KubeletDir 返回 kubelet 配置写入目录；dry-run 时返回临时目录。
 	KubeletDir() string
+	// ExternalCA 返回是否由用户提供外部 CA；此时 kubeadm 无法重签缺失证书。
 	ExternalCA() bool
+	// OutputWriter 返回命令输出目标。
 	OutputWriter() io.Writer
+	// Client 返回集群客户端；调用前必须已建立所需 kubeconfig。
 	Client() (clientset.Interface, error)
+	// Tokens 返回可使用的引导令牌。
 	Tokens() []string
+	// PatchesDir 返回组件补丁目录；命令行值优先于配置值。
 	PatchesDir() string
 }
 
-// a package local type for testing purposes.
+// 包内类型，仅供测试使用。
 type testInitData struct{}
 
-// testInitData must satisfy InitData.
+// testInitData 必须满足 InitData。
 var _ InitData = &testInitData{}
 
 func (t *testInitData) UploadCerts() bool                                 { return false }

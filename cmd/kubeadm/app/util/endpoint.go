@@ -29,27 +29,27 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// GetControlPlaneEndpoint returns a properly formatted endpoint for the control plane built according following rules:
-// - If the controlPlaneEndpoint is defined, use it.
-// - if the controlPlaneEndpoint is defined but without a port number, use the controlPlaneEndpoint + localEndpoint.BindPort is used.
-// - Otherwise, in case the controlPlaneEndpoint is not defined, use the localEndpoint.AdvertiseAddress + the localEndpoint.BindPort.
+// GetControlPlaneEndpoint 按以下规则生成格式正确的控制平面端点：
+// - 已定义 controlPlaneEndpoint 时直接使用。
+// - 已定义但未指定端口时，拼接 controlPlaneEndpoint 与 localEndpoint.BindPort。
+// - 未定义时，使用 localEndpoint.AdvertiseAddress 与 localEndpoint.BindPort。
 func GetControlPlaneEndpoint(controlPlaneEndpoint string, localEndpoint *kubeadmapi.APIEndpoint) (string, error) {
-	// get the URL of the local endpoint
+	// 获取本地端点的 URL。
 	localAPIEndpoint, err := GetLocalAPIEndpoint(localEndpoint)
 	if err != nil {
 		return "", err
 	}
 
-	// if the controlplane endpoint is defined
+	// 若控制平面端点已定义。
 	if len(controlPlaneEndpoint) > 0 {
-		// parse the controlplane endpoint
+		// 解析控制平面端点。
 		var host, port string
 		var err error
 		if host, port, err = ParseHostPort(controlPlaneEndpoint); err != nil {
 			return "", errors.Wrapf(err, "invalid value %q given for controlPlaneEndpoint", controlPlaneEndpoint)
 		}
 
-		// if a port is provided within the controlPlaneAddress warn the users we are using it, else use the bindport
+		// controlPlaneAddress 含端口时告知用户将使用该端口，否则使用 bindPort。
 		localEndpointPort := strconv.Itoa(int(localEndpoint.BindPort))
 		if port != "" {
 			if port != localEndpointPort {
@@ -59,17 +59,16 @@ func GetControlPlaneEndpoint(controlPlaneEndpoint string, localEndpoint *kubeadm
 			port = localEndpointPort
 		}
 
-		// overrides the control-plane url using the controlPlaneAddress (and eventually the bindport)
+		// 使用 controlPlaneAddress（可能含 bindPort）覆盖控制平面 URL。
 		return formatURL(host, port).String(), nil
 	}
 
 	return localAPIEndpoint, nil
 }
 
-// GetLocalAPIEndpoint parses an APIEndpoint and returns it as a string,
-// or returns and error in case it cannot be parsed.
+// GetLocalAPIEndpoint 将 APIEndpoint 解析为字符串；解析失败时返回错误。
 func GetLocalAPIEndpoint(localEndpoint *kubeadmapi.APIEndpoint) (string, error) {
-	// get the URL of the local endpoint
+	// 获取本地端点的 URL。
 	localEndpointIP, localEndpointPort, err := parseAPIEndpoint(localEndpoint)
 	if err != nil {
 		return "", err
@@ -78,32 +77,31 @@ func GetLocalAPIEndpoint(localEndpoint *kubeadmapi.APIEndpoint) (string, error) 
 	return url.String(), nil
 }
 
-// ParseHostPort parses a network address of the form "host:port", "ipv4:port", "[ipv6]:port" into host and port;
-// ":port" can be eventually omitted.
-// If the string is not a valid representation of network address, ParseHostPort returns an error.
+// ParseHostPort 将 "host:port"、"ipv4:port"、"[ipv6]:port" 形式的网络地址解析为主机和端口；
+// 可省略 ":port"。地址无效时返回错误。
 func ParseHostPort(hostport string) (string, string, error) {
 	var host, port string
 	var err error
 
-	// try to split host and port
+	// 尝试拆分主机和端口。
 	if host, port, err = net.SplitHostPort(hostport); err != nil {
-		// if SplitHostPort returns an error, the entire hostport is considered as host
+		// SplitHostPort 返回错误时，将整个 hostport 视为主机。
 		host = hostport
 	}
 
-	// if port is defined, parse and validate it
+	// 若定义了端口，解析并校验。
 	if port != "" {
 		if _, err := ParsePort(port); err != nil {
 			return "", "", errors.Errorf("hostport %s: port %s must be a valid number between 1 and 65535, inclusive", hostport, port)
 		}
 	}
 
-	// if host is a valid IP, returns it
+	// 主机为有效 IP 时返回它。
 	if ip := netutils.ParseIPSloppy(host); ip != nil {
 		return host, port, nil
 	}
 
-	// if host is a validate RFC-1123 subdomain, returns it
+	// 主机为有效的 RFC-1123 子域时返回它。
 	if errs := validation.IsDNS1123Subdomain(host); len(errs) == 0 {
 		return host, port, nil
 	}
@@ -111,8 +109,7 @@ func ParseHostPort(hostport string) (string, string, error) {
 	return "", "", errors.Errorf("hostport %s: host '%s' must be a valid IP address or a valid RFC-1123 DNS subdomain", hostport, host)
 }
 
-// ParsePort parses a string representing a TCP port.
-// If the string is not a valid representation of a TCP port, ParsePort returns an error.
+// ParsePort 解析表示 TCP 端口的字符串；无效时返回错误。
 func ParsePort(port string) (int, error) {
 	portInt, err := netutils.ParsePort(port, true)
 	if err == nil && (1 <= portInt && portInt <= 65535) {
@@ -122,16 +119,16 @@ func ParsePort(port string) (int, error) {
 	return 0, errors.New("port must be a valid number between 1 and 65535, inclusive")
 }
 
-// parseAPIEndpoint parses an APIEndpoint and returns the AdvertiseAddress as net.IP and the BindPort as string.
-// If the BindPort or AdvertiseAddress are invalid it returns an error.
+// parseAPIEndpoint 将 APIEndpoint 的 AdvertiseAddress 解析为 net.IP，BindPort 解析为字符串；
+// 任一字段无效时返回错误。
 func parseAPIEndpoint(localEndpoint *kubeadmapi.APIEndpoint) (net.IP, string, error) {
-	// parse the bind port
+	// 解析绑定端口。
 	bindPortString := strconv.Itoa(int(localEndpoint.BindPort))
 	if _, err := ParsePort(bindPortString); err != nil {
 		return nil, "", errors.Wrapf(err, "invalid value %q given for api.bindPort", localEndpoint.BindPort)
 	}
 
-	// parse the AdvertiseAddress
+	// 解析 AdvertiseAddress。
 	var ip = netutils.ParseIPSloppy(localEndpoint.AdvertiseAddress)
 	if ip == nil {
 		return nil, "", errors.Errorf("invalid value `%s` given for api.advertiseAddress", localEndpoint.AdvertiseAddress)
@@ -140,7 +137,7 @@ func parseAPIEndpoint(localEndpoint *kubeadmapi.APIEndpoint) (net.IP, string, er
 	return ip, bindPortString, nil
 }
 
-// formatURL takes a host and a port string and creates a net.URL using https scheme
+// formatURL 使用 HTTPS scheme 根据主机和端口字符串创建 net.URL。
 func formatURL(host, port string) *url.URL {
 	return &url.URL{
 		Scheme: "https",

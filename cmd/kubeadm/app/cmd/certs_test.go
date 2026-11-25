@@ -107,7 +107,7 @@ func TestRunRenewCommands(t *testing.T) {
 	cfg := configutil.GetDefaultInternalConfig(t)
 	cfg.CertificatesDir = tmpDir
 
-	// Generate all the CA
+	// 生成全部 CA。
 	CACerts := map[string]*x509.Certificate{}
 	CAKeys := map[string]crypto.Signer{}
 	for _, ca := range []*certsphase.KubeadmCert{
@@ -123,7 +123,7 @@ func TestRunRenewCommands(t *testing.T) {
 		CAKeys[ca.Name] = caKey
 	}
 
-	// Generate all the signed certificates
+	// 生成全部已签名证书。
 	for _, cert := range []*certsphase.KubeadmCert{
 		certsphase.KubeadmCertAPIServer(),
 		certsphase.KubeadmCertKubeletClient(),
@@ -140,7 +140,7 @@ func TestRunRenewCommands(t *testing.T) {
 		}
 	}
 
-	// Generate all the kubeconfig files with embedded certs
+	// 生成内嵌证书的全部 kubeconfig 文件。
 	for _, kubeConfig := range []string{
 		kubeadmconstants.AdminKubeConfigFileName,
 		kubeadmconstants.SuperAdminKubeConfigFileName,
@@ -255,7 +255,7 @@ func TestRunRenewCommands(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.command, func(t *testing.T) {
-			// Get file ModTime before renew
+			// 获取续期前的文件修改时间。
 			ModTime := map[string]time.Time{}
 			for _, cert := range test.Certs {
 				file, err := os.Stat(filepath.Join(tmpDir, fmt.Sprintf("%s.crt", cert.BaseName)))
@@ -272,19 +272,19 @@ func TestRunRenewCommands(t *testing.T) {
 				ModTime[kubeConfig] = file.ModTime()
 			}
 
-			// exec renew
+			// 执行续期。
 			renewCmds := getRenewSubCommands(os.Stdout, tmpDir)
 			args := fmt.Sprintf("--cert-dir=%s", tmpDir)
 			if len(test.Args) > 0 {
 				args = test.Args + " " + args
 			}
 			err := runSubCommand(t, renewCmds, test.command, io.Discard, args)
-			// certs renew doesn't support positional Args
+			// certs renew 不支持位置参数。
 			if (err != nil) != test.expectedError {
 				t.Errorf("failed to run renew commands, expected error: %t, actual error: %v", test.expectedError, err)
 			}
 			if !test.expectedError {
-				// check the file is modified
+				// 检查文件已修改。
 				for _, cert := range test.Certs {
 					file, err := os.Stat(filepath.Join(tmpDir, fmt.Sprintf("%s.crt", cert.BaseName)))
 					if err != nil {
@@ -383,8 +383,7 @@ func TestGenCSRConfig(t *testing.T) {
 		}
 	}
 
-	// A minimal kubeadm config with just enough values to avoid triggering
-	// auto-detection of config values at runtime.
+	// 最小 kubeadm 配置，仅包含避免运行时自动检测配置值所需的字段。
 	var kubeadmConfig = fmt.Sprintf(`
 apiVersion: %s
 kind: InitConfiguration
@@ -492,7 +491,7 @@ func TestRunCmdCertsExpiration(t *testing.T) {
 	cfg := configutil.GetDefaultInternalConfig(t)
 	cfg.CertificatesDir = kdir
 
-	// Generate all the CA
+	// 生成全部 CA。
 	caCerts := map[string]*x509.Certificate{}
 	caKeys := map[string]crypto.Signer{}
 	for _, ca := range []*certsphase.KubeadmCert{
@@ -508,7 +507,7 @@ func TestRunCmdCertsExpiration(t *testing.T) {
 		caKeys[ca.Name] = caKey
 	}
 
-	// Generate all the signed certificates
+	// 生成全部已签名证书。
 	kubeadmCerts := []*certsphase.KubeadmCert{
 		certsphase.KubeadmCertAPIServer(),
 		certsphase.KubeadmCertKubeletClient(),
@@ -526,7 +525,7 @@ func TestRunCmdCertsExpiration(t *testing.T) {
 		}
 	}
 
-	// Generate all the kubeconfig files with embedded certs
+	// 生成内嵌证书的全部 kubeconfig 文件。
 	kubeConfigs := []string{
 		kubeadmconstants.AdminKubeConfigFileName,
 		kubeadmconstants.SuperAdminKubeConfigFileName,
@@ -539,8 +538,7 @@ func TestRunCmdCertsExpiration(t *testing.T) {
 		}
 	}
 
-	// A minimal kubeadm config with just enough values to avoid triggering
-	// auto-detection of config values at runtime.
+	// 最小 kubeadm 配置，仅包含避免运行时自动检测配置值所需的字段。
 	var kubeadmConfig = fmt.Sprintf(`
 apiVersion: %[1]s
 kind: ClusterConfiguration
@@ -550,14 +548,14 @@ kubernetesVersion: %s`,
 		cfg.CertificatesDir,
 		kubeadmconstants.MinimumControlPlaneVersion.String())
 
-	// Write the minimal kubeadm config to a file
+	// 将最小配置写入文件。
 	customConfigPath := kdir + "/kubeadm.conf"
 	f, err := os.Create(customConfigPath)
 	require.NoError(t, err)
 	_, err = f.Write([]byte(kubeadmConfig))
 	require.NoError(t, err)
 
-	// fakeClientSetFromFile returns a fake clientset with kubeadm config map
+	// fakeClientSetFromFile 返回包含 kubeadm 配置映射的伪客户端集。
 	var fakeClientSetFromFile = func(_ string) (kubernetes.Interface, error) {
 		client := fakeclientset.NewSimpleClientset()
 		client.PrependReactor("get", "configmaps", func(action clientgotesting.Action) (bool, runtime.Object, error) {
@@ -574,13 +572,13 @@ kubernetesVersion: %s`,
 				}
 				return true, cm, nil
 			}
-			// Return an empty config map for kubelet and kube-proxy components.
+			// 为 kubelet 和 kube-proxy 组件返回空配置映射。
 			return true, &v1.ConfigMap{}, nil
 		})
 		return client, nil
 	}
 
-	// Select a certificate used to simulate a missing certificate file
+	// 选择一个证书来模拟证书文件缺失。
 	brokenCertName := kubeadmconstants.APIServerCertAndKeyBaseName
 	brokenCertPath, _ := pkiutil.PathsForCertAndKey(cfg.CertificatesDir, brokenCertName)
 
@@ -638,7 +636,7 @@ kubernetesVersion: %s`,
 					lines = append(lines, line)
 				}
 			}
-			// 2 lines for the column headers.
+			// 列标题占两行。
 			expectedLineCount := len(caCerts) + len(kubeadmCerts) + len(kubeConfigs) + 2
 			assert.Lenf(t, lines, expectedLineCount, "expected %d non-blank lines in output", expectedLineCount)
 		}
@@ -663,7 +661,7 @@ kubernetesVersion: %s`,
 			name:   "fetch kubeadm config from server and print json and no missing certs",
 			output: "json",
 		},
-		// all broken cases must be at the end of the list.
+		// 所有异常用例必须放在列表末尾。
 		{
 			name:           "fetch kubeadm config from file and print columns and missing certs",
 			config:         customConfigPath,
@@ -691,7 +689,7 @@ kubernetesVersion: %s`,
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.brokenCertName != "" {
-				// remove the file to simulate a missing certificate
+				// 删除文件以模拟证书缺失。
 				_ = os.Remove(brokenCertPath)
 			}
 			runTestCase(t, tc)

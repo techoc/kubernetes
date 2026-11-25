@@ -26,9 +26,8 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// Chroot chroot()s to the new path.
-// NB: All file paths after this call are effectively relative to
-// `rootfs`
+// Chroot 将根目录切换到新路径。
+// 注意：此后所有文件路径实际上都相对于 `rootfs`。
 func Chroot(rootfs string) error {
 	if err := syscall.Chroot(rootfs); err != nil {
 		return errors.Wrapf(err, "unable to chroot to %s", rootfs)

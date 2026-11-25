@@ -41,26 +41,22 @@ import (
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 )
 
-// All tests in this file use an alternative set of `known` component configs.
-// In this case it's just one known config and it's kubeadm's very own ClusterConfiguration.
-// ClusterConfiguration is normally not managed by this package. It's only used, because of the following:
-// - It's a versioned API that is under the control of kubeadm maintainers. This enables us to test
-//   the componentconfigs package more thoroughly without having to have full and always up to date
-//   knowledge about the config of another component.
-// - Other components often introduce new fields in their configs without bumping up the config version.
-//   This, often times, requires that the PR that introduces such new fields to touch kubeadm test code.
-//   Doing so, requires more work on the part of developers and reviewers. When kubeadm moves out of k/k
-//   this would allow for more sporadic breaks in kubeadm tests as PRs that merge in k/k and introduce
-//   new fields won't be able to fix the tests in kubeadm.
-// - If we implement tests for all common functionality using the config of another component and it gets
-//   deprecated and/or we stop supporting it in production, we'll have to focus on a massive test refactoring
-//   or just continue importing this config just for test use.
+// 本文件所有测试使用替代的 `known` 组件配置集合。
+// 这里仅包含一个已知配置，即 kubeadm 自身的 ClusterConfiguration。
+// ClusterConfiguration 通常不由本包管理，仅出于以下原因用于测试：
+// - 它是版本化 API，由 kubeadm 维护者掌控。这样无需全面且持续了解其他组件的配置，
+//   也能更充分地测试 componentconfigs 包。
+// - 其他组件经常在不升级配置版本的情况下向配置添加字段。
+//   这通常要求添加这些字段的 PR 同时修改 kubeadm 测试代码，增加开发者和审查者的工作。
+//   当 kubeadm 迁出 k/k 后，在 k/k 中合并并添加字段的 PR 将无法修复 kubeadm 中的测试，
+//   从而使 kubeadm 测试更偶发地出现故障。
+// - 如果使用其他组件的配置测试所有通用功能，而该配置被弃用或停止在生产中支持，
+//   就需要大规模重构测试，或仅为测试继续导入该配置。
 //
-// Thus, to reduce maintenance costs without sacrificing test coverage, we introduce this mini-framework
-// and set of tests here which replace the normal component configs with a single one (ClusterConfiguration)
-// and test the component config independent logic of this package.
+// 因此，为在不降低测试覆盖率的情况下减少维护成本，这里引入一个小型框架和一组测试，
+// 用单个 ClusterConfiguration 替代普通组件配置，测试本包中独立于组件配置的逻辑。
 
-// clusterConfigHandler is the handler instance for the latest supported ClusterConfiguration to be used in tests
+// clusterConfigHandler 是测试中使用的最新受支持 ClusterConfiguration 的处理实例。
 var clusterConfigHandler = handler{
 	GroupVersion: kubeadmapiv1.SchemeGroupVersion,
 	AddToScheme:  kubeadmapiv1.AddToScheme,
@@ -115,37 +111,37 @@ func (cc *clusterConfig) Mutate() error {
 	return nil
 }
 
-// fakeKnown replaces temporarily during the execution of each test here known (in configset.go)
+// fakeKnown 在本文件每个测试执行期间临时替换 known（位于 configset.go）。
 var fakeKnown = []*handler{
 	&clusterConfigHandler,
 }
 
-// fakeKnownContext is the func that houses the fake component config context.
-// NOTE: It does not support concurrent test execution!
+// fakeKnownContext 是承载伪组件配置上下文的函数。
+// 注意：不支持并发执行测试！
 func fakeKnownContext(f func()) {
-	// Save the real values
+	// 保存真实值。
 	realKnown := known
 	realScheme := Scheme
 	realCodecs := Codecs
 
-	// Replace the context with the fake context
+	// 将上下文替换为伪上下文。
 	known = fakeKnown
 	Scheme = kubeadmscheme.Scheme
 	Codecs = kubeadmscheme.Codecs
 
-	// Upon function exit, restore the real values
+	// 函数退出时恢复真实值。
 	defer func() {
 		known = realKnown
 		Scheme = realScheme
 		Codecs = realCodecs
 	}()
 
-	// Call f in the fake context
+	// 在伪上下文中调用 f。
 	f()
 }
 
-// testClusterConfigMap is a short hand for creating and possibly signing a test config map.
-// This produces config maps that can be loaded by clusterConfigFromCluster
+// testClusterConfigMap 是创建测试 ConfigMap 并按需签名的简写函数。
+// 生成的 ConfigMap 可由 clusterConfigFromCluster 加载。
 func testClusterConfigMap(yaml string, signIt bool) *v1.ConfigMap {
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -164,31 +160,31 @@ func testClusterConfigMap(yaml string, signIt bool) *v1.ConfigMap {
 	return cm
 }
 
-// oldClusterConfigVersion is used as an old unsupported version in tests throughout this file
+// oldClusterConfigVersion 在本文件测试中用作旧的不受支持版本。
 const oldClusterConfigVersion = "v1alpha1"
 
 var (
-	// currentClusterConfigVersion represents the current actively supported version of ClusterConfiguration
+	// currentClusterConfigVersion 表示当前受支持的 ClusterConfiguration 版本。
 	currentClusterConfigVersion = kubeadmapiv1.SchemeGroupVersion.Version
 
-	// currentFooClusterConfig is a minimal currently supported ClusterConfiguration
-	// with a well known value of clusterName (in this case `foo`)
+	// currentFooClusterConfig 是当前受支持的最小 ClusterConfiguration，
+	// clusterName 使用已知值 `foo`。
 	currentFooClusterConfig = fmt.Sprintf(`
 		apiVersion: %s
 		kind: ClusterConfiguration
 		clusterName: foo
 	`, kubeadmapiv1.SchemeGroupVersion)
 
-	// oldFooClusterConfig is a minimal unsupported ClusterConfiguration
-	// with a well known value of clusterName (in this case `foo`)
+	// oldFooClusterConfig 是不受支持的最小 ClusterConfiguration，
+	// clusterName 使用已知值 `foo`。
 	oldFooClusterConfig = fmt.Sprintf(`
 		apiVersion: %s/%s
 		kind: ClusterConfiguration
 		clusterName: foo
 	`, kubeadmapiv1.GroupName, oldClusterConfigVersion)
 
-	// This is the "minimal" valid config that can be unmarshalled to and from YAML.
-	// Due to same static defaulting it's not exactly small in size.
+	// 这是可与 YAML 双向序列化的“最小”有效配置。
+	// 由于采用相同的静态默认化逻辑，实际大小并不小。
 	validUnmarshallableClusterConfig = struct {
 		yaml string
 		obj  kubeadmapiv1.ClusterConfiguration
@@ -320,7 +316,7 @@ func TestGeneratedConfigFromCluster(t *testing.T) {
 			kind: ClusterConfiguration
 		`, kubeadmapiv1.SchemeGroupVersion.String()))
 		testYAMLHash := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(testYAML)))
-		// The SHA256 sum of "The quick brown fox jumps over the lazy dog"
+		// 字符串 "The quick brown fox jumps over the lazy dog" 的 SHA256 摘要。
 		const mismatchHash = "sha256:d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
 		tests := []struct {
 			name         string
@@ -365,7 +361,7 @@ func TestGeneratedConfigFromCluster(t *testing.T) {
 	})
 }
 
-// runClusterConfigFromTest holds common test case data and evaluation code for handler.From* functions
+// runClusterConfigFromTest 保存 handler.From* 函数的通用测试数据和求值逻辑。
 func runClusterConfigFromTest(t *testing.T, perform func(t *testing.T, in string) (kubeadmapi.ComponentConfig, error)) {
 	fakeKnownContext(func() {
 		tests := []struct {
@@ -514,7 +510,7 @@ func TestGetVersionStates(t *testing.T) {
 				obj:  testClusterConfigMap(oldFooClusterConfig, true),
 				expected: outputapiv1alpha3.ComponentConfigVersionState{
 					Group:            kubeadmapiv1.GroupName,
-					CurrentVersion:   "", // The config is treated as if it's missing
+					CurrentVersion:   "", // 将该配置视为缺失。
 					PreferredVersion: currentClusterConfigVersion,
 				},
 			},

@@ -116,7 +116,7 @@ func TestEnsureProxyAddon(t *testing.T) {
 		},
 	}
 
-	// Override the default timeouts to be shorter
+	// 将默认超时时间缩短。
 	defaultTimeouts := kubeadmapi.GetActiveTimeouts()
 	defaultAPICallTimeout := defaultTimeouts.KubernetesAPICall
 	defaultTimeouts.KubernetesAPICall = &metav1.Duration{Duration: time.Microsecond * 500}
@@ -126,10 +126,10 @@ func TestEnsureProxyAddon(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a fake client and set up default test configuration
+			// 创建伪造客户端，并设置默认测试配置。
 			client := clientsetfake.NewSimpleClientset()
 
-			// TODO: Consider using a YAML file instead for this that makes it possible to specify YAML documents for the ComponentConfigs
+			// TODO: 考虑改用 YAML 文件，以便指定 ComponentConfigs 的 YAML 文档。
 			initConfiguration, err := configutil.DefaultedStaticInitConfiguration()
 			if err != nil {
 				t.Errorf("test failed to convert external to internal version: %v", err)
@@ -144,7 +144,7 @@ func TestEnsureProxyAddon(t *testing.T) {
 			initConfiguration.ClusterConfiguration.Networking.PodSubnet = "5.6.7.8/24"
 			initConfiguration.ClusterConfiguration.ImageRepository = "someRepo"
 
-			// Simulate an error if necessary
+			// 必要时模拟错误。
 			switch tc.simError {
 			case ServiceAccountError:
 				client.PrependReactor("create", "serviceaccounts", func(action core.Action) (bool, runtime.Object, error) {
@@ -159,7 +159,7 @@ func TestEnsureProxyAddon(t *testing.T) {
 
 			err = EnsureProxyAddon(&initConfiguration.ClusterConfiguration, &initConfiguration.LocalAPIEndpoint, client, "", os.Stdout, false)
 
-			// Compare actual to expected errors
+			// 比较实际错误与预期错误。
 			actErr := "No error"
 			if err != nil {
 				actErr = err.Error()

@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
-// Funcs returns the fuzzer functions for the kubeadm apis.
+// Funcs 返回 kubeadm API 的模糊测试函数。
 func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		fuzzBootstrapToken,

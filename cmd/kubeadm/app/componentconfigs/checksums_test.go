@@ -115,7 +115,7 @@ func TestSignConfigMap(t *testing.T) {
 			target := test.configMap.DeepCopy()
 			SignConfigMap(target)
 
-			// Verify that we have a correct annotation
+			// 确认注解值正确。
 			signature, ok := target.Annotations[constants.ComponentConfigHashAnnotationKey]
 			if !ok {
 				t.Errorf("no %s annotation found in the config map", constants.ComponentConfigHashAnnotationKey)
@@ -125,7 +125,7 @@ func TestSignConfigMap(t *testing.T) {
 				}
 			}
 
-			// Verify that we have added an annotation (and not overwritten them)
+			// 确认新增了注解，且没有覆盖原有注解。
 			expectedAnnotationCount := 1 + len(test.configMap.Annotations)
 			if len(target.Annotations) != expectedAnnotationCount {
 				t.Errorf("unexpected number of annotations - got %d, expected %d", len(target.Annotations), expectedAnnotationCount)

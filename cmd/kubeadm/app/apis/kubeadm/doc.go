@@ -17,6 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=kubeadm.k8s.io
 
-// Package kubeadm is the package that contains the libraries that drive the kubeadm binary.
-// kubeadm is responsible for handling a Kubernetes cluster's lifecycle.
+// Package kubeadm 包含驱动 kubeadm 可执行文件的库。
+// kubeadm 负责处理 Kubernetes 集群的生命周期。
 package kubeadm

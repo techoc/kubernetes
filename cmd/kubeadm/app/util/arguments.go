@@ -27,15 +27,13 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// ArgumentsToCommand takes two Arg slices, one with the base arguments and one
-// with optional override arguments. In the return list, base arguments will precede
-// override arguments. Depending on MergeMethod, the overrides can append to,
-// prepend to, or replace a base argument.
+// ArgumentsToCommand 接收基础参数和可选覆盖参数两个 Arg 切片。返回值中基础参数在前。
+// 根据 MergeMethod，覆盖参数可追加到基础参数之前或之后，也可替换同名基础参数。
 func ArgumentsToCommand(base, overrides []kubeadmapi.Arg) []string {
-	// Sort only the base.
+	// 仅排序基础参数。
 	sortArgsSlice(&base)
 
-	// Collect the "replace" overrides.
+	// 收集 "replace" 类型的覆盖参数。
 	overrideArgs := make(map[string]kubeadmapi.Arg, len(overrides))
 	tail := make([]string, 0, len(overrides))
 	for _, arg := range overrides {
@@ -50,7 +48,7 @@ func ArgumentsToCommand(base, overrides []kubeadmapi.Arg) []string {
 		ov, ok := overrideArgs[arg.Name]
 		switch {
 		case !ok:
-			// Base arg is unchanged.
+			// 基础参数不变。
 		case ov.MergeMethod == "":
 			continue
 		default:
@@ -62,16 +60,15 @@ func ArgumentsToCommand(base, overrides []kubeadmapi.Arg) []string {
 	return append(command, tail...)
 }
 
-// ArgumentsFromCommand parses a CLI command in the form "--foo=bar" to an Arg slice.
-// This function's primary purpose is to parse the kubeadm-flags.env file, but can remain unused
-// for some releases.
+// ArgumentsFromCommand 将 "--foo=bar" 形式的 CLI 命令解析为 Arg 切片。
+// 主要用于解析 kubeadm-flags.env，但某些版本可能暂不使用。
 func ArgumentsFromCommand(command []string) []kubeadmapi.Arg {
 	args := []kubeadmapi.Arg{}
 	for i, arg := range command {
 		key, val, err := parseArgument(arg)
 
-		// Ignore if the first argument doesn't satisfy the criteria, it's most often the binary name
-		// Warn in all other cases, but don't error out. This can happen only if the user has edited the argument list by hand, so they might know what they are doing
+		// 首个参数不符合条件时忽略，它通常是二进制名称。
+		// 其他情况仅警告而不报错；这通常意味着用户手工编辑过参数列表，可能清楚自己的修改。
 		if err != nil {
 			if i != 0 {
 				klog.Warningf("[kubeadm] WARNING: The component argument %q could not be parsed correctly. The argument must be of the form %q. Skipping...\n", arg, "--")
@@ -87,7 +84,7 @@ func ArgumentsFromCommand(command []string) []kubeadmapi.Arg {
 	return args
 }
 
-// parseArgument parses the argument "--foo=bar" to "foo" and "bar"
+// parseArgument 将 "--foo=bar" 解析为 "foo" 和 "bar"。
 func parseArgument(arg string) (string, string, error) {
 	if !strings.HasPrefix(arg, "--") {
 		return "", "", errors.New("the argument should start with '--'")
@@ -95,12 +92,12 @@ func parseArgument(arg string) (string, string, error) {
 	if !strings.Contains(arg, "=") {
 		return "", "", errors.New("the argument should have a '=' between the flag and the value")
 	}
-	// Remove the starting --
+	// 去掉开头的 --。
 	arg = strings.TrimPrefix(arg, "--")
-	// Split the string on =. Return only two substrings, since we want only key/value, but the value can include '=' as well
+	// 按 = 分割；仅取前两段，因为只需要键和值，值本身也可包含 =。
 	keyvalSlice := strings.SplitN(arg, "=", 2)
 
-	// Make sure both a key and value is present
+	// 确保键和值均存在。
 	if len(keyvalSlice) != 2 {
 		return "", "", errors.New("the argument must have both a key and a value")
 	}
@@ -111,7 +108,7 @@ func parseArgument(arg string) (string, string, error) {
 	return keyvalSlice[0], keyvalSlice[1], nil
 }
 
-// sortArgsSlice sorts a slice of Args alpha-numerically.
+// sortArgsSlice 按字母和数字顺序排序 Args 切片。
 func sortArgsSlice(argsPtr *[]kubeadmapi.Arg) {
 	args := *argsPtr
 	sort.Slice(args, func(i, j int) bool {

@@ -19,8 +19,8 @@ limitations under the License.
 package v1beta4
 
 const (
-	// DefaultCACertPath defines default location of CA certificate on Windows
+	// DefaultCACertPath 定义 Windows 上 CA 证书的默认位置。
 	DefaultCACertPath = "C:/etc/kubernetes/pki/ca.crt"
-	// DefaultContainerRuntimeURLScheme defines default socket url prefix
+	// DefaultContainerRuntimeURLScheme 定义默认的套接字 URL 前缀。
 	DefaultContainerRuntimeURLScheme = "npipe"
 )

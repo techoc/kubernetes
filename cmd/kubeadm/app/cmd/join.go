@@ -128,9 +128,8 @@ var (
 		`)
 )
 
-// joinOptions defines all the options exposed via flags by kubeadm join.
-// Please note that this structure includes the public kubeadm config API, but only a subset of the options
-// supported by this api will be exposed as a flag.
+// joinOptions 定义 kubeadm join 通过参数暴露的全部选项。
+// 该结构包含公开的 kubeadm 配置 API，但只有部分受支持的选项会暴露为参数。
 type joinOptions struct {
 	cfgPath               string
 	token                 string `datapolicy:"token"`
@@ -142,11 +141,11 @@ type joinOptions struct {
 	skipCRIDetect         bool
 }
 
-// compile-time assert that the local data object satisfies the phases data interface.
+// 编译期断言本地数据对象满足阶段数据接口。
 var _ phases.JoinData = &joinData{}
 
-// joinData defines all the runtime information used when running the kubeadm join workflow;
-// this data is shared across all the phases that are included in the workflow.
+// joinData 定义运行 kubeadm join 工作流所需的全部运行时信息，
+// 并供工作流包含的所有阶段共享。
 type joinData struct {
 	cfg                   *kubeadmapi.JoinConfiguration
 	initCfg               *kubeadmapi.InitConfiguration
@@ -159,9 +158,8 @@ type joinData struct {
 	dryRunDir             string
 }
 
-// newCmdJoin returns "kubeadm join" command.
-// NB. joinOptions is exposed as parameter for allowing unit testing of
-// the newJoinData method, that implements all the command options validation logic
+// newCmdJoin 返回 kubeadm join 命令。
+// 注意：joinOptions 作为参数暴露，以便单元测试实现全部命令选项校验逻辑的 newJoinData 方法。
 func newCmdJoin(out io.Writer, joinOptions *joinOptions) *cobra.Command {
 	if joinOptions == nil {
 		joinOptions = newJoinOptions()
@@ -188,9 +186,9 @@ func newCmdJoin(out io.Writer, joinOptions *joinOptions) *cobra.Command {
 				return err
 			}
 
-			// if the node is hosting a new control plane instance
+			// 若节点将承载新的控制平面实例，
 			if data.cfg.ControlPlane != nil {
-				// outputs the join control plane done message and exit
+				// 输出控制平面加入完成消息并退出。
 				etcdMessage := ""
 				if data.initCfg.Etcd.External == nil {
 					etcdMessage = "* A new etcd member was added to the local/stacked etcd cluster."
@@ -205,14 +203,14 @@ func newCmdJoin(out io.Writer, joinOptions *joinOptions) *cobra.Command {
 				}
 
 			} else {
-				// otherwise, if the node joined as a worker node;
-				// outputs the join done message and exit
+				// 否则，若节点作为工作节点加入，
+				// 输出加入完成消息并退出。
 				fmt.Fprint(data.outputWriter, joinWorkerNodeDoneMsg)
 			}
 
 			return nil
 		},
-		// We accept the control-plane location as an optional positional argument
+		// 控制平面地址作为可选的位置参数接收。
 		Args: cobra.MaximumNArgs(1),
 	}
 
@@ -228,33 +226,32 @@ func newCmdJoin(out io.Writer, joinOptions *joinOptions) *cobra.Command {
 	joinRunner.AppendPhase(phases.NewControlPlaneJoinPhase())
 	joinRunner.AppendPhase(phases.NewWaitControlPlanePhase())
 
-	// sets the data builder function, that will be used by the runner
-	// both when running the entire workflow or single phases
+	// 为运行器设置数据构建函数，运行完整工作流或单个阶段时都会调用。
 	joinRunner.SetDataInitializer(func(cmd *cobra.Command, args []string) (workflow.RunData, error) {
 		if cmd.Flags().Lookup(options.NodeCRISocket) == nil {
-			// skip CRI detection
-			// assume that the command execution does not depend on CRISocket when --cri-socket flag is not set
+			// 跳过 CRI 检测。
+			// 未设置 --cri-socket 时，假定命令执行不依赖 CRISocket。
 			joinOptions.skipCRIDetect = true
 		}
 		data, err := newJoinData(cmd, args, joinOptions, out, kubeadmconstants.GetAdminKubeConfigPath())
 		if err != nil {
 			return nil, err
 		}
-		// If the flag for skipping phases was empty, use the values from config
+		// 若跳过阶段的参数为空，则使用配置中的值。
 		if len(joinRunner.Options.SkipPhases) == 0 {
 			joinRunner.Options.SkipPhases = data.cfg.SkipPhases
 		}
 		return data, nil
 	})
 
-	// binds the Runner to kubeadm join command by altering
-	// command help, adding --skip-phases flag and by adding phases subcommands
+	// 将 Runner 绑定到 kubeadm join 命令：修改帮助信息、
+	// 添加 --skip-phases 参数并添加阶段子命令。
 	joinRunner.BindToCommand(cmd)
 
 	return cmd
 }
 
-// addJoinConfigFlags adds join flags bound to the config to the specified flagset
+// addJoinConfigFlags 将绑定到配置的 join 参数添加到指定参数集。
 func addJoinConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.JoinConfiguration) {
 	flagSet.StringVar(
 		&cfg.NodeRegistration.Name, options.NodeName, cfg.NodeRegistration.Name,
@@ -264,7 +261,7 @@ func addJoinConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.JoinConfigurati
 		&cfg.ControlPlane.CertificateKey, options.CertificateKey, cfg.ControlPlane.CertificateKey,
 		"Use this key to decrypt the certificate secrets uploaded by init. The certificate key is a hex encoded string that is an AES key of size 32 bytes.",
 	)
-	// add control plane endpoint flags to the specified flagset
+	// 将控制平面端点参数添加到指定参数集。
 	flagSet.StringVar(
 		&cfg.ControlPlane.LocalAPIEndpoint.AdvertiseAddress, options.APIServerAdvertiseAddress, cfg.ControlPlane.LocalAPIEndpoint.AdvertiseAddress,
 		"If the node should host a new control plane instance, the IP address the API Server will advertise it's listening on. If not set the default network interface will be used.",
@@ -273,7 +270,7 @@ func addJoinConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.JoinConfigurati
 		&cfg.ControlPlane.LocalAPIEndpoint.BindPort, options.APIServerBindPort, cfg.ControlPlane.LocalAPIEndpoint.BindPort,
 		"If the node should host a new control plane instance, the port for the API Server to bind to.",
 	)
-	// adds bootstrap token specific discovery flags to the specified flagset
+	// 将引导令牌发现相关参数添加到指定参数集。
 	flagSet.StringVar(
 		&cfg.Discovery.BootstrapToken.Token, options.TokenDiscovery, "",
 		"For token-based discovery, the token used to validate cluster information fetched from the API server.",
@@ -286,7 +283,7 @@ func addJoinConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.JoinConfigurati
 		&cfg.Discovery.BootstrapToken.UnsafeSkipCAVerification, options.TokenDiscoverySkipCAHash, false,
 		"For token-based discovery, allow joining without --discovery-token-ca-cert-hash pinning.",
 	)
-	//	discovery via kube config file flag
+	// 通过 kubeconfig 文件发现。
 	flagSet.StringVar(
 		&cfg.Discovery.File.KubeConfigPath, options.FileDiscovery, "",
 		"For file-based discovery, a file or URL from which to load cluster information.",
@@ -298,7 +295,7 @@ func addJoinConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.JoinConfigurati
 	cmdutil.AddCRISocketFlag(flagSet, &cfg.NodeRegistration.CRISocket)
 }
 
-// addJoinOtherFlags adds join flags that are not bound to a configuration file to the given flagset
+// addJoinOtherFlags 将不绑定到配置文件的 join 参数添加到指定参数集。
 func addJoinOtherFlags(flagSet *flag.FlagSet, joinOptions *joinOptions) {
 	options.AddConfigFlag(flagSet, &joinOptions.cfgPath)
 	flagSet.StringSliceVar(
@@ -320,21 +317,21 @@ func addJoinOtherFlags(flagSet *flag.FlagSet, joinOptions *joinOptions) {
 	options.AddPatchesFlag(flagSet, &joinOptions.patchesDir)
 }
 
-// newJoinOptions returns a struct ready for being used for creating cmd join flags.
+// newJoinOptions 返回可用于创建 join 命令参数的结构体。
 func newJoinOptions() *joinOptions {
-	// initialize the public kubeadm config API by applying defaults
+	// 应用默认值以初始化公开的 kubeadm 配置 API。
 	externalcfg := &kubeadmapiv1.JoinConfiguration{}
 
-	// Add optional config objects to host flags.
-	// un-set objects will be cleaned up afterwards (into newJoinData func)
+	// 添加可选配置对象以承载参数。
+	// 未设置的对象随后会在 newJoinData 中清理。
 	externalcfg.Discovery.File = &kubeadmapiv1.FileDiscovery{}
 	externalcfg.Discovery.BootstrapToken = &kubeadmapiv1.BootstrapTokenDiscovery{}
 	externalcfg.ControlPlane = &kubeadmapiv1.JoinControlPlane{}
 
-	// This object is used for storage of control-plane flags.
+	// 此对象用于保存控制平面参数。
 	joinControlPlane := &kubeadmapiv1.JoinControlPlane{}
 
-	// Apply defaults
+	// 应用默认值。
 	kubeadmscheme.Scheme.Default(externalcfg)
 	kubeadmapiv1.SetDefaults_JoinControlPlane(joinControlPlane)
 
@@ -343,23 +340,22 @@ func newJoinOptions() *joinOptions {
 	}
 }
 
-// newJoinData returns a new joinData struct to be used for the execution of the kubeadm join workflow.
-// This func takes care of validating joinOptions passed to the command, and then it converts
-// options into the internal JoinConfiguration type that is used as input all the phases in the kubeadm join workflow
+// newJoinData 返回用于执行 kubeadm join 工作流的新 joinData。
+// 它校验传给命令的 joinOptions，再将选项转换为内部 JoinConfiguration，
+// 作为 kubeadm join 工作流所有阶段的输入。
 func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Writer, adminKubeConfigPath string) (*joinData, error) {
 
-	// Validate the mixed arguments with --config and return early on errors
+	// 校验 --config 与其他参数的组合，出错时提前返回。
 	if err := validation.ValidateMixedArguments(cmd.Flags()); err != nil {
 		return nil, err
 	}
 
-	// Re-apply defaults to the public kubeadm API (this will set only values not exposed/not set as a flags)
+	// 重新应用公开 kubeadm API 的默认值，仅设置未暴露为参数或未设置的值。
 	kubeadmscheme.Scheme.Default(opt.externalcfg)
 
-	// Validate standalone flags values and/or combination of flags and then assigns
-	// validated values to the public kubeadm config API when applicable
+	// 校验独立参数及其组合，并在适用时将校验后的值赋给公开的 kubeadm 配置 API。
 
-	// if a token is provided, use this value for both discovery-token and tls-bootstrap-token when those values are not provided
+	// 若提供了令牌，在未显式提供对应值时，同时用于 discovery-token 和 tls-bootstrap-token。
 	if len(opt.token) > 0 {
 		if len(opt.externalcfg.Discovery.TLSBootstrapToken) == 0 {
 			opt.externalcfg.Discovery.TLSBootstrapToken = opt.token
@@ -369,12 +365,12 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 		}
 	}
 
-	// if a file or URL from which to load cluster information was not provided, unset the Discovery.File object
+	// 若未提供加载集群信息的文件或 URL，则取消设置 Discovery.File。
 	if len(opt.externalcfg.Discovery.File.KubeConfigPath) == 0 {
 		opt.externalcfg.Discovery.File = nil
 	}
 
-	// if an APIServerEndpoint from which to retrieve cluster information was not provided, unset the Discovery.BootstrapToken object
+	// 若未提供用于获取集群信息的 APIServerEndpoint，则取消设置 Discovery.BootstrapToken。
 	if len(args) == 0 {
 		opt.externalcfg.Discovery.BootstrapToken = nil
 	} else {
@@ -384,14 +380,13 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 		opt.externalcfg.Discovery.BootstrapToken.APIServerEndpoint = args[0]
 	}
 
-	// If not passing --control-plane, unset the ControlPlane object
+	// 若未传入 --control-plane，则取消设置 ControlPlane。
 	if !opt.controlPlane {
-		// Use a defaulted JoinControlPlane object to detect if the user has passed
-		// other control-plane related flags.
+		// 使用应用默认值后的 JoinControlPlane 判断用户是否传入了其他控制平面相关参数。
 		defaultJCP := &kubeadmapiv1.JoinControlPlane{}
 		kubeadmapiv1.SetDefaults_JoinControlPlane(defaultJCP)
 
-		// This list must match the JCP flags in addJoinConfigFlags()
+		// 此列表必须与 addJoinConfigFlags() 中的 JCP 参数一致。
 		joinControlPlaneFlags := []string{
 			options.CertificateKey,
 			options.APIServerAdvertiseAddress,
@@ -405,11 +400,11 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 		opt.externalcfg.ControlPlane = nil
 	}
 
-	// if the admin.conf file already exists, use it for skipping the discovery process.
-	// NB. this case can happen when we are joining a control-plane node only (and phases are invoked atomically)
+	// 若 admin.conf 已存在，使用它跳过发现过程。
+	// 注意：加入控制平面节点且各阶段原子执行时可能发生这种情况。
 	var tlsBootstrapCfg *clientcmdapi.Config
 	if _, err := os.Stat(adminKubeConfigPath); err == nil && opt.controlPlane {
-		// use the admin.conf as tlsBootstrapCfg, that is the kubeconfig file used for reading the kubeadm-config during discovery
+		// 将 admin.conf 作为 tlsBootstrapCfg，即在发现期间读取 kubeadm-config 的 kubeconfig 文件。
 		klog.V(1).Infof("[preflight] found %s. Use it for skipping discovery", adminKubeConfigPath)
 		tlsBootstrapCfg, err = clientcmd.LoadFromFile(adminKubeConfigPath)
 		if err != nil {
@@ -417,8 +412,7 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 		}
 	}
 
-	// Either use the config file if specified, or convert public kubeadm API to the internal JoinConfiguration
-	// and validates JoinConfiguration
+	// 若指定配置文件则使用它，否则将公开 kubeadm API 转换为内部 JoinConfiguration 并校验。
 	if opt.externalcfg.NodeRegistration.Name == "" {
 		klog.V(1).Infoln("[preflight] found NodeName empty; using OS hostname as NodeName")
 	}
@@ -427,14 +421,14 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 		klog.V(1).Infoln("[preflight] found advertiseAddress empty; using default interface's IP address as advertiseAddress")
 	}
 
-	// in case the command doesn't have flags for discovery, makes the join cfg validation pass checks on discovery
+	// 命令没有发现相关参数时，使 join 配置能够通过发现校验。
 	if cmd.Flags().Lookup(options.FileDiscovery) == nil {
 		if _, err := os.Stat(adminKubeConfigPath); os.IsNotExist(err) {
 			return nil, errors.Errorf("File %s does not exists. Please use 'kubeadm join phase control-plane-prepare' subcommands to generate it.", adminKubeConfigPath)
 		}
 		klog.V(1).Infof("[preflight] found discovery flags missing for this command. using FileDiscovery: %s", adminKubeConfigPath)
 		opt.externalcfg.Discovery.File = &kubeadmapiv1.FileDiscovery{KubeConfigPath: adminKubeConfigPath}
-		opt.externalcfg.Discovery.BootstrapToken = nil //NB. this could be removed when we get better control on args (e.g. phases without discovery should have NoArgs )
+		opt.externalcfg.Discovery.BootstrapToken = nil // 注意：更好地控制参数后可能移除此逻辑（例如无发现阶段的命令使用 NoArgs）。
 	}
 
 	cfg, err := configutil.LoadOrDefaultJoinConfiguration(opt.cfgPath, opt.externalcfg, configutil.LoadOrDefaultConfigurationOptions{
@@ -448,10 +442,10 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 	if err != nil {
 		return nil, err
 	}
-	// Also set the union of pre-flight errors to JoinConfiguration, to provide a consistent view of the runtime configuration:
+	// 同时将预检错误的并集写入 JoinConfiguration，使运行时配置视图保持一致：
 	cfg.NodeRegistration.IgnorePreflightErrors = sets.List(ignorePreflightErrorsSet)
 
-	// override node name and CRI socket from the command line opt
+	// 用命令行选项覆盖节点名称和 CRI 套接字。
 	if opt.externalcfg.NodeRegistration.Name != "" {
 		cfg.NodeRegistration.Name = opt.externalcfg.NodeRegistration.Name
 	}
@@ -465,7 +459,7 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 		}
 	}
 
-	// If dry running creates a temporary directory for saving kubeadm generated files.
+	// 若为 dry-run，创建用于保存 kubeadm 生成文件的临时目录。
 	dryRunDir := ""
 	if opt.dryRun || cfg.DryRun {
 		if dryRunDir, err = kubeadmconstants.GetDryRunDir(kubeadmconstants.EnvVarJoinDryRunDir, "kubeadm-join-dryrun", klog.Warningf); err != nil {
@@ -484,7 +478,7 @@ func newJoinData(cmd *cobra.Command, args []string, opt *joinOptions, out io.Wri
 	}, nil
 }
 
-// CertificateKey returns the key used to encrypt the certs.
+// CertificateKey 返回用于加密证书的密钥。
 func (j *joinData) CertificateKey() string {
 	if j.cfg.ControlPlane != nil {
 		return j.cfg.ControlPlane.CertificateKey
@@ -492,17 +486,17 @@ func (j *joinData) CertificateKey() string {
 	return ""
 }
 
-// Cfg returns the JoinConfiguration.
+// Cfg 返回 JoinConfiguration。
 func (j *joinData) Cfg() *kubeadmapi.JoinConfiguration {
 	return j.cfg
 }
 
-// DryRun returns the DryRun flag.
+// DryRun 返回 DryRun 参数的值。
 func (j *joinData) DryRun() bool {
 	return j.dryRun
 }
 
-// KubeConfigDir returns the Kubernetes configuration directory or the temporary directory if DryRun is true.
+// KubeConfigDir 返回 Kubernetes 配置目录；dry-run 时返回临时目录。
 func (j *joinData) KubeConfigDir() string {
 	if j.dryRun {
 		return j.dryRunDir
@@ -510,7 +504,7 @@ func (j *joinData) KubeConfigDir() string {
 	return kubeadmconstants.KubernetesDir
 }
 
-// KubeletDir returns the kubelet configuration directory or the temporary directory if DryRun is true.
+// KubeletDir 返回 kubelet 配置目录；dry-run 时返回临时目录。
 func (j *joinData) KubeletDir() string {
 	if j.dryRun {
 		return j.dryRunDir
@@ -518,7 +512,7 @@ func (j *joinData) KubeletDir() string {
 	return kubeadmconstants.KubeletRunDirectory
 }
 
-// ManifestDir returns the path where manifest should be stored or the temporary directory if DryRun is true.
+// ManifestDir 返回清单保存目录；dry-run 时返回临时目录。
 func (j *joinData) ManifestDir() string {
 	if j.dryRun {
 		return j.dryRunDir
@@ -526,7 +520,7 @@ func (j *joinData) ManifestDir() string {
 	return kubeadmconstants.GetStaticPodDirectory()
 }
 
-// CertificateWriteDir returns the path where certs should be stored or the temporary directory if DryRun is true.
+// CertificateWriteDir 返回证书保存目录；dry-run 时返回临时目录。
 func (j *joinData) CertificateWriteDir() string {
 	if j.dryRun {
 		return j.dryRunDir
@@ -534,7 +528,7 @@ func (j *joinData) CertificateWriteDir() string {
 	return j.initCfg.CertificatesDir
 }
 
-// TLSBootstrapCfg returns the cluster-info (kubeconfig).
+// TLSBootstrapCfg 返回 cluster-info（kubeconfig）。
 func (j *joinData) TLSBootstrapCfg() (*clientcmdapi.Config, error) {
 	if j.tlsBootstrapCfg != nil {
 		return j.tlsBootstrapCfg, nil
@@ -556,7 +550,7 @@ func (j *joinData) TLSBootstrapCfg() (*clientcmdapi.Config, error) {
 	return tlsBootstrapCfg, err
 }
 
-// InitCfg returns the InitConfiguration.
+// InitCfg 返回 InitConfiguration。
 func (j *joinData) InitCfg() (*kubeadmapi.InitConfiguration, error) {
 	if j.initCfg != nil {
 		return j.initCfg, nil
@@ -578,14 +572,14 @@ func (j *joinData) InitCfg() (*kubeadmapi.InitConfiguration, error) {
 	return initCfg, err
 }
 
-// Client returns the Client for accessing the cluster with the identity defined in admin.conf.
+// Client 返回以 admin.conf 中身份访问集群的客户端。
 func (j *joinData) Client() (clientset.Interface, error) {
 	pathAdmin := filepath.Join(j.KubeConfigDir(), kubeadmconstants.AdminKubeConfigFileName)
 
 	if j.dryRun {
 		dryRun := apiclient.NewDryRun()
-		// For the dynamic dry-run client use this kubeconfig only if it exists.
-		// That would happen presumably after TLS bootstrap.
+		// 动态 dry-run 客户端仅在此 kubeconfig 存在时使用它，
+		// 这种情况可能发生在 TLS 引导之后。
 		if _, err := os.Stat(pathAdmin); err == nil {
 			if err := dryRun.WithKubeConfigFile(pathAdmin); err != nil {
 				return nil, err
@@ -627,10 +621,8 @@ func (j *joinData) Client() (clientset.Interface, error) {
 	return client, nil
 }
 
-// WaitControlPlaneClient returns a basic client used for the purpose of waiting
-// for control plane components to report 'ok' on their respective health check endpoints.
-// It uses the admin.conf as the base, but modifies it to point at the local API server instead
-// of the control plane endpoint.
+// WaitControlPlaneClient 返回用于等待控制平面组件在各自健康检查端点报告 ok 的基础客户端。
+// 它以 admin.conf 为基础，但改为指向本地 API 服务器，而非控制平面端点。
 func (j *joinData) WaitControlPlaneClient() (clientset.Interface, error) {
 	pathAdmin := filepath.Join(j.KubeConfigDir(), kubeadmconstants.AdminKubeConfigFileName)
 	config, err := clientcmd.LoadFromFile(pathAdmin)
@@ -652,19 +644,19 @@ func (j *joinData) WaitControlPlaneClient() (clientset.Interface, error) {
 	return client, nil
 }
 
-// IgnorePreflightErrors returns the list of preflight errors to ignore.
+// IgnorePreflightErrors 返回要忽略的预检错误列表。
 func (j *joinData) IgnorePreflightErrors() sets.Set[string] {
 	return j.ignorePreflightErrors
 }
 
-// OutputWriter returns the io.Writer used to write messages such as the "join done" message.
+// OutputWriter 返回用于写入加入完成等消息的 io.Writer。
 func (j *joinData) OutputWriter() io.Writer {
 	return j.outputWriter
 }
 
-// PatchesDir returns the folder where patches for components are stored
+// PatchesDir 返回保存组件补丁的目录。
 func (j *joinData) PatchesDir() string {
-	// If provided, make the flag value override the one in config.
+	// 若提供了参数值，则覆盖配置中的值。
 	if len(j.patchesDir) > 0 {
 		return j.patchesDir
 	}
@@ -674,13 +666,13 @@ func (j *joinData) PatchesDir() string {
 	return ""
 }
 
-// fetchInitConfigurationFromJoinConfiguration retrieves the init configuration from a join configuration, performing the discovery
+// fetchInitConfigurationFromJoinConfiguration 从 join 配置执行发现并获取 init 配置。
 func fetchInitConfigurationFromJoinConfiguration(cfg *kubeadmapi.JoinConfiguration, client clientset.Interface, tlsBootstrapCfg *clientcmdapi.Config) (*kubeadmapi.InitConfiguration, error) {
 	var err error
 
 	klog.V(1).Infoln("[preflight] Retrieving KubeConfig objects")
 	if client == nil {
-		// creates a client to access the cluster using the bootstrap token identity
+		// 创建使用引导令牌身份访问集群的客户端。
 		client, err = kubeconfigutil.ToClientSet(tlsBootstrapCfg)
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to access the cluster")
@@ -691,7 +683,7 @@ func fetchInitConfigurationFromJoinConfiguration(cfg *kubeadmapi.JoinConfigurati
 		return nil, err
 	}
 
-	// Create the final KubeConfig file with the cluster name discovered after fetching the cluster configuration
+	// 获取集群配置后，使用发现的集群名创建最终 KubeConfig 文件。
 	_, clusterinfo, err := kubeconfigutil.GetClusterFromKubeConfig(tlsBootstrapCfg)
 	if err != nil {
 		return nil, errors.Wrap(err, "the TLS bootstrap kubeconfig is malformed")
@@ -705,7 +697,7 @@ func fetchInitConfigurationFromJoinConfiguration(cfg *kubeadmapi.JoinConfigurati
 	}
 	currentContext.Cluster = initConfiguration.ClusterName
 
-	// injects into the kubeadm configuration the information about the joining node
+	// 将加入节点的信息注入 kubeadm 配置。
 	initConfiguration.NodeRegistration = cfg.NodeRegistration
 	if cfg.ControlPlane != nil {
 		initConfiguration.LocalAPIEndpoint = cfg.ControlPlane.LocalAPIEndpoint
@@ -714,7 +706,7 @@ func fetchInitConfigurationFromJoinConfiguration(cfg *kubeadmapi.JoinConfigurati
 	return initConfiguration, nil
 }
 
-// fetchInitConfiguration reads the cluster configuration from the kubeadm-admin configMap
+// fetchInitConfiguration 从 kubeadm-admin ConfigMap 读取集群配置。
 func fetchInitConfiguration(client clientset.Interface) (*kubeadmapi.InitConfiguration, error) {
 	getNodeRegistration := false
 	getAPIEndpoint := false

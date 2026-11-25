@@ -18,16 +18,16 @@ package kubeconfig
 
 /*
 
-	PHASE: KUBECONFIG
+	阶段：KUBECONFIG
 
-	INPUTS:
-		From InitConfiguration
-			The API Server endpoint (AdvertiseAddress + BindPort) is required so the kubeconfig file knows where to find the control-plane
-			The KubernetesDir path is required for knowing where to put the kubeconfig files
-			The PKIPath is required for knowing where all certificates should be stored
+	输入：
+		来自 InitConfiguration
+			API Server 端点（AdvertiseAddress + BindPort）用于让 kubeconfig 文件找到控制平面，必填。
+			KubernetesDir 路径用于确定 kubeconfig 文件的写入位置，必填。
+			PKIPath 用于确定所有证书的存储位置，必填。
 
-	OUTPUTS:
-		Files to KubernetesDir (default /etc/kubernetes):
+	输出：
+		文件写入 KubernetesDir（默认 /etc/kubernetes）：
 		 - admin.conf
 		 - kubelet.conf
 		 - scheduler.conf

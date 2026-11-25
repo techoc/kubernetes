@@ -40,8 +40,7 @@ var (
 		`)
 )
 
-// NewKubeletFinalizePhase creates a kubeadm workflow phase that updates settings
-// relevant to the kubelet after TLS bootstrap.
+// NewKubeletFinalizePhase 创建 kubeadm 工作流阶段，更新 TLS 引导后与 kubelet 相关的设置。
 func NewKubeletFinalizePhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "kubelet-finalize",
@@ -65,17 +64,16 @@ func NewKubeletFinalizePhase() workflow.Phase {
 	}
 }
 
-// runKubeletFinalizeEnableClientCertRotation detects if the kubelet certificate rotation is enabled
-// and updates the kubelet.conf file to point to a rotatable certificate and key for the
-// Node user.
+// runKubeletFinalizeEnableClientCertRotation 检测是否启用 kubelet 证书轮换，
+// 并更新 kubelet.conf，使 Node 用户指向可轮换的证书和密钥。
 func runKubeletFinalizeEnableClientCertRotation(c workflow.RunData) error {
 	data, ok := c.(InitData)
 	if !ok {
 		return errors.New("kubelet-finalize phase invoked with an invalid data struct")
 	}
 
-	// Check if the user has added the kubelet --cert-dir flag.
-	// If yes, use that path, else use the kubeadm provided value.
+	// 检查用户是否添加 kubelet --cert-dir 参数。
+	// 若已添加则使用该路径，否则使用 kubeadm 提供的值。
 	cfg := data.Cfg()
 	pkiPath := filepath.Join(data.KubeletDir(), "pki")
 	val, idx := kubeadmapi.GetArgValue(cfg.NodeRegistration.KubeletExtraArgs, "cert-dir", -1)
@@ -83,7 +81,7 @@ func runKubeletFinalizeEnableClientCertRotation(c workflow.RunData) error {
 		pkiPath = val
 	}
 
-	// Check for the existence of the kubelet-client-current.pem file in the kubelet certificate directory.
+	// 检查 kubelet 证书目录中是否存在 kubelet-client-current.pem。
 	rotate := false
 	pemPath := filepath.Join(pkiPath, "kubelet-client-current.pem")
 	if _, err := os.Stat(pemPath); err == nil {
@@ -93,7 +91,7 @@ func runKubeletFinalizeEnableClientCertRotation(c workflow.RunData) error {
 		klog.V(1).Infof("[kubelet-finalize] Assuming that kubelet client certificate rotation is disabled: %v", err)
 	}
 
-	// Exit early if rotation is disabled.
+	// 若未启用轮换，则提前退出。
 	if !rotate {
 		return nil
 	}
@@ -101,18 +99,18 @@ func runKubeletFinalizeEnableClientCertRotation(c workflow.RunData) error {
 	kubeconfigPath := filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.KubeletKubeConfigFileName)
 	fmt.Printf("[kubelet-finalize] Updating %q to point to a rotatable kubelet client certificate and key\n", kubeconfigPath)
 
-	// Exit early if dry-running is enabled.
+	// 若启用 dry-run，则提前退出。
 	if data.DryRun() {
 		return nil
 	}
 
-	// Load the kubeconfig from disk.
+	// 从磁盘加载 kubeconfig。
 	kubeconfig, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return errors.Wrapf(err, "could not load %q", kubeconfigPath)
 	}
 
-	// Perform basic validation. The errors here can only happen if the kubelet.conf was corrupted.
+	// 执行基本校验。此处错误只可能在 kubelet.conf 损坏时发生。
 	if len(kubeconfig.CurrentContext) == 0 {
 		return errors.Errorf("the file %q does not have current context set", kubeconfigPath)
 	}
@@ -129,18 +127,18 @@ func runKubeletFinalizeEnableClientCertRotation(c workflow.RunData) error {
 		return errors.Errorf("the file %q does not contain authentication for user %q", kubeconfigPath, cfg.NodeRegistration.Name)
 	}
 
-	// Update the client certificate and key of the node authorizer to point to the PEM symbolic link.
+	// 更新节点授权器的客户端证书和密钥，使其指向 PEM 符号链接。
 	info.ClientKeyData = []byte{}
 	info.ClientCertificateData = []byte{}
 	info.ClientKey = pemPath
 	info.ClientCertificate = pemPath
 
-	// Writes the kubeconfig back to disk.
+	// 将 kubeconfig 写回磁盘。
 	if err = clientcmd.WriteToFile(*kubeconfig, kubeconfigPath); err != nil {
 		return errors.Wrapf(err, "failed to serialize %q", kubeconfigPath)
 	}
 
-	// Restart the kubelet.
+	// 重启 kubelet。
 	klog.V(1).Info("[kubelet-finalize] Restarting the kubelet to enable client certificate rotation")
 	kubeletphase.TryRestartKubelet()
 

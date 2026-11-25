@@ -45,33 +45,33 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/staticpod"
 )
 
-// StaticPodPathManager is responsible for tracking the directories used in the static pod upgrade transition
+// StaticPodPathManager 负责跟踪静态 Pod 升级过程中使用的目录。
 type StaticPodPathManager interface {
-	// MoveFile should move a file from oldPath to newPath
+	// MoveFile 将文件从 oldPath 移动到 newPath。
 	MoveFile(oldPath, newPath string) error
-	// KubernetesDir is the directory Kubernetes owns for storing various configuration files
+	// KubernetesDir 是 Kubernetes 用于存储各种配置文件的目录。
 	KubernetesDir() string
-	// PatchesDir should point to the folder where patches for components are stored
+	// PatchesDir 应指向存储组件补丁的目录。
 	PatchesDir() string
-	// RealManifestPath gets the file path for the component in the "real" static pod manifest directory used by the kubelet
+	// RealManifestPath 返回 kubelet 使用的 "实际" 静态 Pod 清单目录中组件的文件路径。
 	RealManifestPath(component string) string
-	// RealManifestDir should point to the static pod manifest directory used by the kubelet
+	// RealManifestDir 应指向 kubelet 使用的静态 Pod 清单目录。
 	RealManifestDir() string
-	// TempManifestPath gets the file path for the component in the temporary directory created for generating new manifests for the upgrade
+	// TempManifestPath 返回升级期间为生成新清单而创建的临时目录中组件的文件路径。
 	TempManifestPath(component string) string
-	// TempManifestDir should point to the temporary directory created for generating new manifests for the upgrade
+	// TempManifestDir 应指向升级期间为生成新清单而创建的临时目录。
 	TempManifestDir() string
-	// BackupManifestPath gets the file path for the component in the backup directory used for backing up manifests during the transition
+	// BackupManifestPath 返回升级过渡期间用于备份清单的备份目录中组件的文件路径。
 	BackupManifestPath(component string) string
-	// BackupManifestDir should point to the backup directory used for backing up manifests during the transition
+	// BackupManifestDir 应指向升级过渡期间用于备份清单的备份目录。
 	BackupManifestDir() string
-	// BackupEtcdDir should point to the backup directory used for backing up manifests during the transition
+	// BackupEtcdDir 应指向升级过渡期间用于备份 etcd 的目录。
 	BackupEtcdDir() string
-	// CleanupDirs cleans up all temporary directories
+	// CleanupDirs 清理所有临时目录。
 	CleanupDirs() error
 }
 
-// KubeStaticPodPathManager is a real implementation of StaticPodPathManager that is used when upgrading a static pod cluster
+// KubeStaticPodPathManager 是 StaticPodPathManager 的实际实现，用于升级静态 Pod 集群。
 type KubeStaticPodPathManager struct {
 	kubernetesDir     string
 	patchesDir        string
@@ -84,7 +84,7 @@ type KubeStaticPodPathManager struct {
 	keepEtcdDir     bool
 }
 
-// NewKubeStaticPodPathManager creates a new instance of KubeStaticPodPathManager
+// NewKubeStaticPodPathManager 创建 KubeStaticPodPathManager 实例。
 func NewKubeStaticPodPathManager(kubernetesDir, patchesDir, tempDir, backupDir, backupEtcdDir string, keepManifestDir, keepEtcdDir bool) StaticPodPathManager {
 	return &KubeStaticPodPathManager{
 		kubernetesDir:     kubernetesDir,
@@ -98,7 +98,7 @@ func NewKubeStaticPodPathManager(kubernetesDir, patchesDir, tempDir, backupDir, 
 	}
 }
 
-// NewKubeStaticPodPathManagerUsingTempDirs creates a new instance of KubeStaticPodPathManager with temporary directories backing it
+// NewKubeStaticPodPathManagerUsingTempDirs 创建使用临时目录的 KubeStaticPodPathManager 实例。
 func NewKubeStaticPodPathManagerUsingTempDirs(kubernetesDir, patchesDir string, saveManifestsDir, saveEtcdDir bool) (StaticPodPathManager, error) {
 	upgradedManifestsDir, err := constants.CreateTempDir(kubernetesDir, "kubeadm-upgraded-manifests")
 	if err != nil {
@@ -116,57 +116,57 @@ func NewKubeStaticPodPathManagerUsingTempDirs(kubernetesDir, patchesDir string, 
 	return NewKubeStaticPodPathManager(kubernetesDir, patchesDir, upgradedManifestsDir, backupManifestsDir, backupEtcdDir, saveManifestsDir, saveEtcdDir), nil
 }
 
-// MoveFile should move a file from oldPath to newPath
+// MoveFile 将文件从 oldPath 移动到 newPath。
 func (spm *KubeStaticPodPathManager) MoveFile(oldPath, newPath string) error {
 	return filesutil.MoveFile(oldPath, newPath)
 }
 
-// KubernetesDir should point to the directory Kubernetes owns for storing various configuration files
+// KubernetesDir 应指向 Kubernetes 用于存储各种配置文件的目录。
 func (spm *KubeStaticPodPathManager) KubernetesDir() string {
 	return spm.kubernetesDir
 }
 
-// PatchesDir should point to the folder where patches for components are stored
+// PatchesDir 应指向存储组件补丁的目录。
 func (spm *KubeStaticPodPathManager) PatchesDir() string {
 	return spm.patchesDir
 }
 
-// RealManifestPath gets the file path for the component in the "real" static pod manifest directory used by the kubelet
+// RealManifestPath 返回 kubelet 使用的 "实际" 静态 Pod 清单目录中组件的文件路径。
 func (spm *KubeStaticPodPathManager) RealManifestPath(component string) string {
 	return constants.GetStaticPodFilepath(component, spm.realManifestDir)
 }
 
-// RealManifestDir should point to the static pod manifest directory used by the kubelet
+// RealManifestDir 应指向 kubelet 使用的静态 Pod 清单目录。
 func (spm *KubeStaticPodPathManager) RealManifestDir() string {
 	return spm.realManifestDir
 }
 
-// TempManifestPath gets the file path for the component in the temporary directory created for generating new manifests for the upgrade
+// TempManifestPath 返回升级期间为生成新清单而创建的临时目录中组件的文件路径。
 func (spm *KubeStaticPodPathManager) TempManifestPath(component string) string {
 	return constants.GetStaticPodFilepath(component, spm.tempManifestDir)
 }
 
-// TempManifestDir should point to the temporary directory created for generating new manifests for the upgrade
+// TempManifestDir 应指向升级期间为生成新清单而创建的临时目录。
 func (spm *KubeStaticPodPathManager) TempManifestDir() string {
 	return spm.tempManifestDir
 }
 
-// BackupManifestPath gets the file path for the component in the backup directory used for backing up manifests during the transition
+// BackupManifestPath 返回升级过渡期间用于备份清单的备份目录中组件的文件路径。
 func (spm *KubeStaticPodPathManager) BackupManifestPath(component string) string {
 	return constants.GetStaticPodFilepath(component, spm.backupManifestDir)
 }
 
-// BackupManifestDir should point to the backup directory used for backing up manifests during the transition
+// BackupManifestDir 应指向升级过渡期间用于备份清单的备份目录。
 func (spm *KubeStaticPodPathManager) BackupManifestDir() string {
 	return spm.backupManifestDir
 }
 
-// BackupEtcdDir should point to the backup directory used for backing up manifests during the transition
+// BackupEtcdDir 应指向升级过渡期间用于备份 etcd 的目录。
 func (spm *KubeStaticPodPathManager) BackupEtcdDir() string {
 	return spm.backupEtcdDir
 }
 
-// CleanupDirs cleans up all temporary directories except those the user has requested to keep around
+// CleanupDirs 清理所有临时目录，但保留用户要求保留的目录。
 func (spm *KubeStaticPodPathManager) CleanupDirs() error {
 	var errlist []error
 	if err := os.RemoveAll(spm.TempManifestDir()); err != nil {
@@ -188,9 +188,8 @@ func (spm *KubeStaticPodPathManager) CleanupDirs() error {
 }
 
 func upgradeComponent(component string, certsRenewMgr *renewal.Manager, waiter apiclient.Waiter, pathMgr StaticPodPathManager, cfg *kubeadmapi.InitConfiguration, beforePodHash string, recoverManifests map[string]string) error {
-	// Special treatment is required for etcd case, when rollbackOldManifests should roll back etcd
-	// manifests only for the case when component is Etcd. Also check if the kube-apiserver needs an upgrade
-	// by comparing its manifests and later decide if etcd certs can be renewed and etcd can be restarted.
+	// etcd 需要特殊处理：rollbackOldManifests 仅在组件为 Etcd 时回滚 etcd 清单。
+	// 同时比较 kube-apiserver 的清单，判断其是否需要升级，进而决定能否续期 etcd 证书并重启 etcd。
 	recoverEtcd := false
 	apiServerUpgrade := false
 	if component == constants.Etcd {
@@ -205,18 +204,18 @@ func upgradeComponent(component string, certsRenewMgr *renewal.Manager, waiter a
 
 	fmt.Printf("[upgrade/staticpods] Preparing for %q upgrade\n", component)
 
-	// The old manifest is here; in the /etc/kubernetes/manifests/
+	// 旧清单位于 /etc/kubernetes/manifests/。
 	currentManifestPath := pathMgr.RealManifestPath(component)
-	// The new, upgraded manifest will be written here
+	// 新的升级后清单将写入此处。
 	newManifestPath := pathMgr.TempManifestPath(component)
-	// The old manifest will be moved here; into a subfolder of the temporary directory
-	// If a rollback is needed, these manifests will be put back to where they where initially
+	// 旧清单将移动到此处，即临时目录的子目录。
+	// 若需要回滚，这些清单将放回原位。
 	backupManifestPath := pathMgr.BackupManifestPath(component)
 
-	// Store the backup path in the recover list. If something goes wrong now, this component will be rolled back.
+	// 将备份路径存入恢复列表。若此时出错，该组件将被回滚。
 	recoverManifests[component] = backupManifestPath
 
-	// Skip upgrade if current and new manifests are equal
+	// 若当前清单与新清单相同，则跳过升级。
 	equal, diff, err := staticpod.ManifestFilesAreEqual(currentManifestPath, newManifestPath)
 	if err != nil {
 		return err
@@ -232,15 +231,15 @@ func upgradeComponent(component string, certsRenewMgr *renewal.Manager, waiter a
 		klog.V(4).Infof("Pod manifest files diff:\n%s\n", diff)
 	}
 
-	// if certificate renewal should be performed
+	// 判断是否应续期证书。
 	if certsRenewMgr != nil {
-		// renew all the certificates used by the current component
+		// 续期当前组件使用的所有证书。
 		if err := renewCertsByComponent(cfg, component, certsRenewMgr); err != nil {
 			return rollbackOldManifests(recoverManifests, errors.Wrapf(err, "failed to renew certificates for component %q", component), pathMgr, recoverEtcd)
 		}
 	}
 
-	// This can only happen if the component is etcd, cert renewal is enabled and kube-apiserver needs an upgrade
+	// 仅当组件为 etcd、证书续期已启用且 kube-apiserver 需要升级时，才会出现此情况。
 	if equal && certsRenewMgr != nil {
 		fmt.Printf("[upgrade/staticpods] Restarting the %s static pod and backing up its manifest to %q\n",
 			component, backupManifestPath)
@@ -249,12 +248,12 @@ func upgradeComponent(component string, certsRenewMgr *renewal.Manager, waiter a
 			currentManifestPath, backupManifestPath)
 	}
 
-	// Move the old manifest into the old-manifests directory
+	// 将旧清单移动到 old-manifests 目录。
 	if err := pathMgr.MoveFile(currentManifestPath, backupManifestPath); err != nil {
 		return rollbackOldManifests(recoverManifests, err, pathMgr, recoverEtcd)
 	}
 
-	// Move the new manifest into the manifests directory
+	// 将新清单移动到 manifests 目录。
 	if err := pathMgr.MoveFile(newManifestPath, currentManifestPath); err != nil {
 		return rollbackOldManifests(recoverManifests, err, pathMgr, recoverEtcd)
 	}
@@ -262,17 +261,17 @@ func upgradeComponent(component string, certsRenewMgr *renewal.Manager, waiter a
 	fmt.Println("[upgrade/staticpods] Waiting for the kubelet to restart the component")
 	fmt.Printf("[upgrade/staticpods] This can take up to %v\n", kubeadmapi.GetActiveTimeouts().UpgradeManifests.Duration)
 
-	// Wait for the mirror Pod hash to change; otherwise we'll run into race conditions here when the kubelet hasn't had time to
-	// notice the removal of the Static Pod, leading to a false positive below where we check that the API endpoint is healthy
-	// If we don't do this, there is a case where we remove the Static Pod manifest, kubelet is slow to react, kubeadm checks the
-	// API endpoint below of the OLD Static Pod component and proceeds quickly enough, which might lead to unexpected results.
+	// 等待镜像 Pod 的哈希值改变；否则，kubelet 尚未及时注意到 Static Pod 被移除时，
+	// 下面的 API 端点健康检查可能出现误判。
+	// 若不等待，可能在移除 Static Pod 清单后，kubelet 反应迟缓，而 kubeadm 已检查旧组件的 API 端点并继续执行，
+	// 从而导致意外结果。
 	if !equal {
 		if err := waiter.WaitForStaticPodHashChange(cfg.NodeRegistration.Name, component, beforePodHash); err != nil {
 			return rollbackOldManifests(recoverManifests, err, pathMgr, recoverEtcd)
 		}
 	}
 
-	// Wait for the static pod component to come up and register itself as a mirror pod
+	// 等待静态 Pod 组件启动并注册为镜像 Pod。
 	if err := waiter.WaitForPodsWithLabel("component=" + component); err != nil {
 		return rollbackOldManifests(recoverManifests, err, pathMgr, recoverEtcd)
 	}
@@ -282,20 +281,20 @@ func upgradeComponent(component string, certsRenewMgr *renewal.Manager, waiter a
 	return nil
 }
 
-// performEtcdStaticPodUpgrade performs upgrade of etcd, it returns bool which indicates fatal error or not and the actual error.
+// performEtcdStaticPodUpgrade 升级 etcd，并返回表示是否发生致命错误的布尔值及实际错误。
 func performEtcdStaticPodUpgrade(certsRenewMgr *renewal.Manager, client clientset.Interface, waiter apiclient.Waiter, pathMgr StaticPodPathManager, cfg *kubeadmapi.InitConfiguration, recoverManifests map[string]string, oldEtcdClient, newEtcdClient etcdutil.ClusterInterrogator) (bool, error) {
-	// Add etcd static pod spec only if external etcd is not configured
+	// 仅在未配置外部 etcd 时添加 etcd 静态 Pod 配置。
 	if cfg.Etcd.External != nil {
 		return false, errors.New("external etcd detected, won't try to change any etcd state")
 	}
 
-	// Checking health state of etcd before proceeding with the upgrade
+	// 升级前检查 etcd 健康状态。
 	err := oldEtcdClient.CheckClusterHealth()
 	if err != nil {
 		return true, errors.Wrap(err, "etcd cluster is not healthy")
 	}
 
-	// Backing up etcd data store
+	// 备份 etcd 数据存储。
 	backupEtcdDir := pathMgr.BackupEtcdDir()
 	runningEtcdDir := cfg.Etcd.Local.DataDir
 	var (
@@ -324,8 +323,8 @@ func performEtcdStaticPodUpgrade(certsRenewMgr *renewal.Manager, client clientse
 		return true, errors.Wrapf(err, "failed to back up etcd data after %d attempts", attempt)
 	}
 
-	// Get the desired etcd version. That's either the one specified by the user in cfg.Etcd.Local.ImageTag
-	// or the kubeadm preferred one for the desired Kubernetes version
+	// 获取期望的 etcd 版本：用户在 cfg.Etcd.Local.ImageTag 中指定的版本，
+	// 或 kubeadm 为期望 Kubernetes 版本推荐的版本。
 	var desiredEtcdVersion *version.Version
 	if cfg.Etcd.Local.ImageTag != "" {
 		desiredEtcdVersion, err = version.ParseSemantic(
@@ -334,7 +333,7 @@ func performEtcdStaticPodUpgrade(certsRenewMgr *renewal.Manager, client clientse
 			return true, errors.Wrapf(err, "failed to parse tag %q as a semantic version", cfg.Etcd.Local.ImageTag)
 		}
 	} else {
-		// Need to check currently used version and version from constants, if differs then upgrade
+		// 比较当前版本与常量中的版本；若不同，则升级。
 		var warning error
 		desiredEtcdVersion, warning, err = constants.EtcdSupportedVersion(constants.SupportedEtcdVersion, cfg.KubernetesVersion)
 		if err != nil {
@@ -345,7 +344,7 @@ func performEtcdStaticPodUpgrade(certsRenewMgr *renewal.Manager, client clientse
 		}
 	}
 
-	// Get the etcd version of the local/stacked etcd member running on the current machine
+	// 获取当前机器上本地或堆叠 etcd 成员的版本。
 	currentEtcdVersionStr, err := GetEtcdImageTagFromStaticPod(pathMgr.RealManifestDir())
 	if err != nil {
 		return true, errors.Wrap(err, "failed to retrieve the current etcd version")
@@ -364,49 +363,48 @@ func performEtcdStaticPodUpgrade(certsRenewMgr *renewal.Manager, client clientse
 		return true, err
 	}
 
-	// Write the updated etcd static Pod manifest into the temporary directory, at this point no etcd change
-	// has occurred in any aspects.
-	if err := etcdphase.CreateLocalEtcdStaticPodManifestFile(pathMgr.TempManifestDir(), pathMgr.PatchesDir(), cfg.NodeRegistration.Name, &cfg.ClusterConfiguration, &cfg.LocalAPIEndpoint, false /* isDryRun */); err != nil {
+	// 将更新后的 etcd 静态 Pod 清单写入临时目录；此时 etcd 尚未发生任何变更。
+	if err := etcdphase.CreateLocalEtcdStaticPodManifestFile(pathMgr.TempManifestDir(), pathMgr.PatchesDir(), cfg.NodeRegistration.Name, &cfg.ClusterConfiguration, &cfg.LocalAPIEndpoint, false /* 是否试运行 */); err != nil {
 		return true, errors.Wrap(err, "error creating local etcd static pod manifest file")
 	}
 
 	retries := 10
 	retryInterval := 15 * time.Second
 
-	// Perform etcd upgrade using common to all control plane components function
+	// 使用控制平面组件通用函数升级 etcd。
 	if err := upgradeComponent(constants.Etcd, certsRenewMgr, waiter, pathMgr, cfg, beforeEtcdPodHash, recoverManifests); err != nil {
 		fmt.Printf("[upgrade/etcd] Failed to upgrade etcd: %v\n", err)
-		// Since upgrade component failed, the old etcd manifest has either been restored or was never touched
-		// Now we need to check the health of etcd cluster if it is up with old manifest
+		// 由于组件升级失败，旧 etcd 清单已恢复或从未修改。
+		// 现在检查使用旧清单的 etcd 集群是否健康。
 		fmt.Println("[upgrade/etcd] Waiting for previous etcd to become available")
 		if _, err := oldEtcdClient.WaitForClusterAvailable(retries, retryInterval); err != nil {
 			fmt.Printf("[upgrade/etcd] Failed to healthcheck previous etcd: %v\n", err)
 
-			// At this point we know that etcd cluster is dead and it is safe to copy backup datastore and to rollback old etcd manifest
+			// 此时可知 etcd 集群已不可用，可以复制备份数据存储并回滚旧 etcd 清单。
 			fmt.Println("[upgrade/etcd] Rolling back etcd data")
 			if err := rollbackEtcdData(cfg, pathMgr); err != nil {
-				// Even copying back datastore failed, no options for recovery left, bailing out
+				// 若复制回数据存储也失败，则已无恢复选项，退出。
 				return true, errors.Errorf("fatal error rolling back local etcd cluster datadir: %v, the backup of etcd database is stored here:(%s)", err, backupEtcdDir)
 			}
 			fmt.Println("[upgrade/etcd] Etcd data rollback successful")
 
-			// Now that we've rolled back the data, let's check if the cluster comes up
+			// 数据已回滚，现在检查集群能否启动。
 			fmt.Println("[upgrade/etcd] Waiting for previous etcd to become available")
 			if _, err := oldEtcdClient.WaitForClusterAvailable(retries, retryInterval); err != nil {
 				fmt.Printf("[upgrade/etcd] Failed to healthcheck previous etcd: %v\n", err)
-				// Nothing else left to try to recover etcd cluster
+				// 已无其他方法可恢复 etcd 集群。
 				return true, errors.Wrapf(err, "fatal error rolling back local etcd cluster manifest, the backup of etcd database is stored here:(%s)", backupEtcdDir)
 			}
 
-			// We've recovered to the previous etcd from this case
+			// 本次已恢复到升级前的 etcd。
 		}
 		fmt.Println("[upgrade/etcd] Etcd was rolled back and is now available")
 
-		// Since etcd cluster came back up with the old manifest
+		// 由于 etcd 集群已使用旧清单恢复，返回升级失败错误。
 		return true, errors.Wrap(err, "fatal error when trying to upgrade the etcd cluster, rolled the state back to pre-upgrade state")
 	}
 
-	// Initialize the new etcd client if it wasn't pre-initialized
+	// 若新 etcd 客户端尚未初始化，则进行初始化。
 	if newEtcdClient == nil {
 		etcdClient, err := etcdutil.NewFromCluster(client, cfg.CertificatesDir)
 		if err != nil {
@@ -415,41 +413,41 @@ func performEtcdStaticPodUpgrade(certsRenewMgr *renewal.Manager, client clientse
 		newEtcdClient = etcdClient
 	}
 
-	// Checking health state of etcd after the upgrade
+	// 升级后检查 etcd 健康状态。
 	fmt.Println("[upgrade/etcd] Waiting for etcd to become available")
 	if _, err = newEtcdClient.WaitForClusterAvailable(retries, retryInterval); err != nil {
 		fmt.Printf("[upgrade/etcd] Failed to healthcheck etcd: %v\n", err)
-		// Despite the fact that upgradeComponent was successful, there is something wrong with the etcd cluster
-		// First step is to restore back up of datastore
+		// 尽管 upgradeComponent 已成功，etcd 集群仍有异常。
+		// 首先恢复数据存储备份。
 		fmt.Println("[upgrade/etcd] Rolling back etcd data")
 		if err := rollbackEtcdData(cfg, pathMgr); err != nil {
-			// Even copying back datastore failed, no options for recovery left, bailing out
+			// 若复制回数据存储也失败，则已无恢复选项，退出。
 			return true, errors.Wrapf(err, "fatal error rolling back local etcd cluster datadir, the backup of etcd database is stored here:(%s)", backupEtcdDir)
 		}
 		fmt.Println("[upgrade/etcd] Etcd data rollback successful")
 
-		// Old datastore has been copied, rolling back old manifests
+		// 旧数据存储已复制，正在回滚旧清单。
 		fmt.Println("[upgrade/etcd] Rolling back etcd manifest")
 		rollbackOldManifests(recoverManifests, err, pathMgr, true)
-		// rollbackOldManifests() always returns an error -- ignore it and continue
+		// rollbackOldManifests() 始终返回错误；忽略该错误并继续。
 
-		// Assuming rollback of the old etcd manifest was successful, check the status of etcd cluster again
+		// 假定旧 etcd 清单回滚成功，再次检查 etcd 集群状态。
 		fmt.Println("[upgrade/etcd] Waiting for previous etcd to become available")
 		if _, err := oldEtcdClient.WaitForClusterAvailable(retries, retryInterval); err != nil {
 			fmt.Printf("[upgrade/etcd] Failed to healthcheck previous etcd: %v\n", err)
-			// Nothing else left to try to recover etcd cluster
+			// 已无其他方法可恢复 etcd 集群。
 			return true, errors.Wrapf(err, "fatal error rolling back local etcd cluster manifest, the backup of etcd database is stored here:(%s)", backupEtcdDir)
 		}
 		fmt.Println("[upgrade/etcd] Etcd was rolled back and is now available")
 
-		// We've successfully rolled back etcd, and now return an error describing that the upgrade failed
+		// etcd 已成功回滚；现在返回描述升级失败的错误。
 		return true, errors.Wrap(err, "fatal error upgrading local etcd cluster, rolled the state back to pre-upgrade state")
 	}
 
 	return false, nil
 }
 
-// StaticPodControlPlane upgrades a static pod-hosted control plane
+// StaticPodControlPlane 升级由静态 Pod 承载的控制平面。
 func StaticPodControlPlane(client clientset.Interface, waiter apiclient.Waiter, pathMgr StaticPodPathManager, cfg *kubeadmapi.InitConfiguration, etcdUpgrade, renewCerts bool, oldEtcdClient, newEtcdClient etcdutil.ClusterInterrogator) error {
 	recoverManifests := map[string]string{}
 	var isExternalEtcd bool
@@ -461,7 +459,7 @@ func StaticPodControlPlane(client clientset.Interface, waiter apiclient.Waiter, 
 
 	if oldEtcdClient == nil {
 		if cfg.Etcd.External != nil {
-			// External etcd
+			// 外部 etcd
 			isExternalEtcd = true
 			etcdClient, err := etcdutil.New(
 				cfg.Etcd.External.Endpoints,
@@ -473,12 +471,12 @@ func StaticPodControlPlane(client clientset.Interface, waiter apiclient.Waiter, 
 				return errors.Wrap(err, "failed to create etcd client for external etcd")
 			}
 			oldEtcdClient = etcdClient
-			// Since etcd is managed externally, the new etcd client will be the same as the old client
+			// 由于 etcd 由外部管理，新 etcd 客户端与旧客户端相同。
 			if newEtcdClient == nil {
 				newEtcdClient = etcdClient
 			}
 		} else {
-			// etcd Static Pod
+			// etcd 静态 Pod。
 			etcdClient, err := etcdutil.NewFromCluster(client, cfg.CertificatesDir)
 			if err != nil {
 				return errors.Wrap(err, "failed to create etcd client")
@@ -495,17 +493,17 @@ func StaticPodControlPlane(client clientset.Interface, waiter apiclient.Waiter, 
 		}
 	}
 
-	// Write the updated static Pod manifests into the temporary directory.
-	// As part of the design, this must be called before the below performEtcdStaticPodUpgrade() call.
+	// 将更新后的静态 Pod 清单写入临时目录。
+	// 根据设计，必须在下面的 performEtcdStaticPodUpgrade() 调用之前执行。
 	fmt.Printf("[upgrade/staticpods] Writing new Static Pod manifests to %q\n", pathMgr.TempManifestDir())
-	err = controlplane.CreateInitStaticPodManifestFiles(pathMgr.TempManifestDir(), pathMgr.PatchesDir(), cfg, false /* isDryRun */)
+	err = controlplane.CreateInitStaticPodManifestFiles(pathMgr.TempManifestDir(), pathMgr.PatchesDir(), cfg, false /* 是否试运行 */)
 	if err != nil {
 		return errors.Wrap(err, "error creating init static pod manifest files")
 	}
 
-	// etcd upgrade is done prior to other control plane components
+	// 先升级 etcd，再升级其他控制平面组件。
 	if !isExternalEtcd && etcdUpgrade {
-		// Perform etcd upgrade using common to all control plane components function
+		// 使用控制平面组件通用函数升级 etcd。
 		fatal, err := performEtcdStaticPodUpgrade(certsRenewMgr, client, waiter, pathMgr, cfg, recoverManifests, oldEtcdClient, newEtcdClient)
 		if err != nil {
 			if fatal {
@@ -515,7 +513,7 @@ func StaticPodControlPlane(client clientset.Interface, waiter apiclient.Waiter, 
 		}
 	}
 
-	// Upgrade the rest of the control plane components
+	// 升级其余控制平面组件。
 	for _, component := range constants.ControlPlaneComponents {
 		if err = upgradeComponent(component, certsRenewMgr, waiter, pathMgr, cfg, beforePodHashMap[component], recoverManifests); err != nil {
 			return err
@@ -523,73 +521,73 @@ func StaticPodControlPlane(client clientset.Interface, waiter apiclient.Waiter, 
 	}
 
 	if renewCerts {
-		// renew the certificate embedded in the admin.conf file
+		// 续期 admin.conf 中嵌入的证书。
 		renewed, err := certsRenewMgr.RenewUsingLocalCA(constants.AdminKubeConfigFileName)
 		if err != nil {
 			return rollbackOldManifests(recoverManifests, errors.Wrapf(err, "failed to upgrade the %s certificates", constants.AdminKubeConfigFileName), pathMgr, false)
 		}
 
 		if !renewed {
-			// if not error, but not renewed because of external CA detected, inform the user
+			// 若未报错但因检测到外部 CA 而未续期，则告知用户。
 			fmt.Printf("[upgrade/staticpods] External CA detected, %s certificate can't be renewed\n", constants.AdminKubeConfigFileName)
 		}
 
-		// Do the same for super-admin.conf, but only if it exists
+		// 对 super-admin.conf 执行相同操作，但仅在其存在时进行。
 		if _, err := os.Stat(filepath.Join(pathMgr.KubernetesDir(), constants.SuperAdminKubeConfigFileName)); err == nil {
-			// renew the certificate embedded in the super-admin.conf file
+			// 续期 super-admin.conf 中嵌入的证书。
 			renewed, err := certsRenewMgr.RenewUsingLocalCA(constants.SuperAdminKubeConfigFileName)
 			if err != nil {
 				return rollbackOldManifests(recoverManifests, errors.Wrapf(err, "failed to upgrade the %s certificates", constants.SuperAdminKubeConfigFileName), pathMgr, false)
 			}
 
 			if !renewed {
-				// if not error, but not renewed because of external CA detected, inform the user
+				// 若未报错但因检测到外部 CA 而未续期，则告知用户。
 				fmt.Printf("[upgrade/staticpods] External CA detected, %s certificate can't be renewed\n", constants.SuperAdminKubeConfigFileName)
 			}
 		}
 	}
 
-	// Remove the temporary directories used on a best-effort (don't fail if the calls error out)
-	// The calls are set here by design; we should _not_ use "defer" above as that would remove the directories
-	// even in the "fail and rollback" case, where we want the directories preserved for the user.
+	// 尽力删除使用的临时目录；删除失败不使升级失败。
+	// 按设计在此处调用，而不在上方使用 "defer"，否则在 "失败并回滚" 场景下也会删除目录，
+	// 而用户可能希望保留这些目录。
 	return pathMgr.CleanupDirs()
 }
 
-// rollbackOldManifests rolls back the backed-up manifests if something went wrong.
-// It always returns an error to the caller.
+// rollbackOldManifests 在出错时回滚已备份的清单。
+// 它始终向调用方返回错误。
 func rollbackOldManifests(oldManifests map[string]string, origErr error, pathMgr StaticPodPathManager, restoreEtcd bool) error {
 	errs := []error{origErr}
 	for component, backupPath := range oldManifests {
-		// Will restore etcd manifest only if it was explicitly requested by setting restoreEtcd to True
+		// 仅当通过将 restoreEtcd 设置为 true 明确要求时，才恢复 etcd 清单。
 		if component == constants.Etcd && !restoreEtcd {
 			continue
 		}
-		// Where we should put back the backed up manifest
+		// 备份清单应放回的位置。
 		realManifestPath := pathMgr.RealManifestPath(component)
 
-		// Move the backup manifest back into the manifests directory
+		// 将备份清单移回 manifests 目录。
 		err := pathMgr.MoveFile(backupPath, realManifestPath)
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
-	// Let the user know there were problems, but we tried to recover
+	// 告知用户曾出现问题，但已尝试恢复。
 	return errors.Wrap(utilerrors.NewAggregate(errs),
 		"couldn't upgrade control plane. kubeadm has tried to recover everything into the earlier state. Errors faced")
 }
 
-// rollbackEtcdData rolls back the content of etcd folder if something went wrong.
-// When the folder contents are successfully rolled back, nil is returned, otherwise an error is returned.
+// rollbackEtcdData 在出错时回滚 etcd 目录内容。
+// 回滚成功返回 nil，否则返回错误。
 func rollbackEtcdData(cfg *kubeadmapi.InitConfiguration, pathMgr StaticPodPathManager) error {
 	backupEtcdDir := pathMgr.BackupEtcdDir()
 	runningEtcdDir := cfg.Etcd.Local.DataDir
 
-	// Clearing the live member dir is only safe if there is a backup to restore it from.
+	// 只有在存在可恢复备份时，清空当前成员目录才安全。
 	if _, err := os.Stat(filepath.Join(backupEtcdDir, "member")); err != nil {
 		return errors.Wrapf(err, "will not roll back the etcd data dir, no member dir in the etcd backup: %s", backupEtcdDir)
 	}
 
-	// Files etcd wrote after the backup must not survive the rollback.
+	// 备份后由 etcd 写入的文件不得在回滚后保留。
 	if err := os.RemoveAll(filepath.Join(runningEtcdDir, "member")); err != nil {
 		return errors.Wrapf(err, "could not clear the etcd member dir in %s", runningEtcdDir)
 	}
@@ -601,12 +599,11 @@ func rollbackEtcdData(cfg *kubeadmapi.InitConfiguration, pathMgr StaticPodPathMa
 	return nil
 }
 
-// renewCertsByComponent takes charge of renewing certificates used by a specific component before
-// the static pod of the component is upgraded
+// renewCertsByComponent 负责在组件静态 Pod 升级前续期该组件使用的证书。
 func renewCertsByComponent(cfg *kubeadmapi.InitConfiguration, component string, certsRenewMgr *renewal.Manager) error {
 	var certificates []string
 
-	// if etcd, only in case of local etcd, renew server, peer and health check certificate
+	// 若为 etcd，则仅在本地 etcd 情况下续期服务器、对端和健康检查证书。
 	if component == constants.Etcd {
 		if cfg.Etcd.Local != nil {
 			certificates = []string{
@@ -617,8 +614,8 @@ func renewCertsByComponent(cfg *kubeadmapi.InitConfiguration, component string, 
 		}
 	}
 
-	// if apiserver, renew apiserver serving certificate, kubelet and front-proxy client certificate.
-	//if local etcd, renew also the etcd client certificate
+	// 若为 apiserver，则续期 apiserver 服务证书、kubelet 客户端证书和 front-proxy 客户端证书。
+	// 若为本地 etcd，还要续期 etcd 客户端证书。
 	if component == constants.KubeAPIServer {
 		certificates = []string{
 			certsphase.KubeadmCertAPIServer().Name,
@@ -630,21 +627,21 @@ func renewCertsByComponent(cfg *kubeadmapi.InitConfiguration, component string, 
 		}
 	}
 
-	// if controller-manager, renew the certificate embedded in the controller-manager kubeConfig file
+	// 若为 controller-manager，则续期 controller-manager kubeConfig 文件中嵌入的证书。
 	if component == constants.KubeControllerManager {
 		certificates = []string{
 			constants.ControllerManagerKubeConfigFileName,
 		}
 	}
 
-	// if scheduler, renew the certificate embedded in the scheduler kubeConfig file
+	// 若为 scheduler，则续期 scheduler kubeConfig 文件中嵌入的证书。
 	if component == constants.KubeScheduler {
 		certificates = []string{
 			constants.SchedulerKubeConfigFileName,
 		}
 	}
 
-	// renew the selected components
+	// 续期所选组件的证书。
 	for _, cert := range certificates {
 		fmt.Printf("[upgrade/staticpods] Renewing %s certificate\n", cert)
 		renewed, err := certsRenewMgr.RenewUsingLocalCA(cert)
@@ -652,7 +649,7 @@ func renewCertsByComponent(cfg *kubeadmapi.InitConfiguration, component string, 
 			return err
 		}
 		if !renewed {
-			// if not error, but not renewed because of external CA detected, inform the user
+			// 若未报错但因检测到外部 CA 而未续期，则告知用户。
 			fmt.Printf("[upgrade/staticpods] External CA detected, %s certificate can't be renewed\n", cert)
 		}
 	}
@@ -660,24 +657,24 @@ func renewCertsByComponent(cfg *kubeadmapi.InitConfiguration, component string, 
 	return nil
 }
 
-// GetPathManagerForUpgrade returns a path manager properly configured for the given InitConfiguration.
+// GetPathManagerForUpgrade 返回为给定 InitConfiguration 正确配置的路径管理器。
 func GetPathManagerForUpgrade(kubernetesDir, patchesDir string, internalcfg *kubeadmapi.InitConfiguration, etcdUpgrade bool) (StaticPodPathManager, error) {
 	isExternalEtcd := internalcfg.Etcd.External != nil
 	return NewKubeStaticPodPathManagerUsingTempDirs(kubernetesDir, patchesDir, true, etcdUpgrade && !isExternalEtcd)
 }
 
-// PerformStaticPodUpgrade performs the upgrade of the control plane components for a static pod hosted cluster
+// PerformStaticPodUpgrade 升级静态 Pod 集群的控制平面组件。
 func PerformStaticPodUpgrade(client clientset.Interface, waiter apiclient.Waiter, internalcfg *kubeadmapi.InitConfiguration, etcdUpgrade, renewCerts bool, patchesDir string) error {
 	pathManager, err := GetPathManagerForUpgrade(constants.KubernetesDir, patchesDir, internalcfg, etcdUpgrade)
 	if err != nil {
 		return err
 	}
 
-	// The arguments oldEtcdClient and newEtdClient, are uninitialized because passing in the clients allow for mocking the client during testing
+	// oldEtcdClient 和 newEtdClient 参数未初始化，因为传入客户端便于在测试中模拟客户端。
 	return StaticPodControlPlane(client, waiter, pathManager, internalcfg, etcdUpgrade, renewCerts, nil, nil)
 }
 
-// DryRunStaticPodUpgrade fakes an upgrade of the control plane
+// DryRunStaticPodUpgrade 模拟控制平面升级。
 func DryRunStaticPodUpgrade(patchesDir string, internalcfg *kubeadmapi.InitConfiguration) error {
 	dryRunManifestDir, err := constants.GetDryRunDir(constants.EnvVarUpgradeDryRunDir, "kubeadm-upgrade-dryrun", klog.Warningf)
 	if err != nil {
@@ -685,11 +682,11 @@ func DryRunStaticPodUpgrade(patchesDir string, internalcfg *kubeadmapi.InitConfi
 	}
 
 	defer os.RemoveAll(dryRunManifestDir)
-	if err := controlplane.CreateInitStaticPodManifestFiles(dryRunManifestDir, patchesDir, internalcfg, true /* isDryRun */); err != nil {
+	if err := controlplane.CreateInitStaticPodManifestFiles(dryRunManifestDir, patchesDir, internalcfg, true /* 是否试运行 */); err != nil {
 		return err
 	}
 
-	// Print the contents of the upgraded manifests and pretend like they were in /etc/kubernetes/manifests
+	// 打印升级后的清单内容，并假装它们位于 /etc/kubernetes/manifests。
 	files := []dryrunutil.FileToPrint{}
 	for _, component := range constants.ControlPlaneComponents {
 		realPath := constants.GetStaticPodFilepath(component, dryRunManifestDir)
@@ -700,7 +697,7 @@ func DryRunStaticPodUpgrade(patchesDir string, internalcfg *kubeadmapi.InitConfi
 	return dryrunutil.PrintDryRunFiles(files, os.Stdout)
 }
 
-// GetEtcdImageTagFromStaticPod returns the image tag of the local etcd static pod
+// GetEtcdImageTagFromStaticPod 返回本地 etcd 静态 Pod 的镜像标签。
 func GetEtcdImageTagFromStaticPod(manifestDir string) (string, error) {
 	realPath := constants.GetStaticPodFilepath(constants.Etcd, manifestDir)
 	pod, err := staticpod.ReadStaticPodFromDisk(realPath)
@@ -711,11 +708,9 @@ func GetEtcdImageTagFromStaticPod(manifestDir string) (string, error) {
 	return convertImageTagMetadataToSemver(image.TagFromImage(pod.Spec.Containers[0].Image)), nil
 }
 
-// convertImageTagMetadataToSemver converts imagetag in the format of semver_metadata to semver+metadata
+// convertImageTagMetadataToSemver 将 semver_metadata 格式的镜像标签转换为 semver+metadata 格式。
 func convertImageTagMetadataToSemver(tag string) string {
-	// Container registries do not support `+` characters in tag names. This prevents imagetags from
-	// correctly representing semantic versions which use the plus symbol to delimit build metadata.
-	// Kubernetes uses the convention of using an underscore in image registries to preserve
-	// build metadata information in imagetags.
+	// 容器注册表不支持标签名称中的 `+` 字符，因此镜像标签无法正确表示使用加号分隔构建元数据的语义版本。
+	// Kubernetes 约定在镜像注册表中使用下划线，以在镜像标签中保留构建元数据。
 	return strings.Replace(tag, "_", "+", 1)
 }

@@ -25,790 +25,705 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// InitConfiguration contains a list of elements that is specific "kubeadm init"-only runtime
-// information.
+// InitConfiguration 包含仅适用于 `kubeadm init` 运行时信息的字段。
 type InitConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// `kubeadm init`-only information. These fields are solely used the first time `kubeadm init` runs.
-	// After that, the information in the fields IS NOT uploaded to the `kubeadm-config` ConfigMap
-	// that is used by `kubeadm upgrade` for instance. These fields must be omitempty.
+	// 以下字段仅供首次运行 `kubeadm init` 时使用，之后不会上传到 `kubeadm-config` ConfigMap，
+	// 也不会供 `kubeadm upgrade` 等命令使用。这些字段必须设置为 omitempty。
 
-	// BootstrapTokens is respected at `kubeadm init` time and describes a set of Bootstrap Tokens to create.
-	// This information IS NOT uploaded to the kubeadm cluster configmap, partly because of its sensitive nature
+	// BootstrapTokens 描述 `kubeadm init` 时要创建的一组 Bootstrap Token。
+	// 这些信息包含敏感内容，不会上传到集群的 ConfigMap。
 	// +optional
 	BootstrapTokens []bootstraptokenv1.BootstrapToken `json:"bootstrapTokens,omitempty"`
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用演练模式；启用时不应用任何更改，仅输出将要执行的操作。
 	// +optional
 	DryRun bool `json:"dryRun,omitempty"`
 
-	// NodeRegistration holds fields that relate to registering the new control-plane node to the cluster
+	// NodeRegistration 保存将新控制平面节点注册到集群所需的字段。
 	// +optional
 	NodeRegistration NodeRegistrationOptions `json:"nodeRegistration,omitempty"`
 
-	// LocalAPIEndpoint represents the endpoint of the API server instance that's deployed on this control plane node
-	// In HA setups, this differs from ClusterConfiguration.ControlPlaneEndpoint in the sense that ControlPlaneEndpoint
-	// is the global endpoint for the cluster, which then loadbalances the requests to each individual API server. This
-	// configuration object lets you customize what IP/DNS name and port the local API server advertises it's accessible
-	// on. By default, kubeadm tries to auto-detect the IP of the default interface and use that, but in case that process
-	// fails you may set the desired value here.
+	// LocalAPIEndpoint 表示部署在此控制平面节点上的 API Server 实例的端点。
+	// 在高可用集群中，它不同于 ClusterConfiguration.ControlPlaneEndpoint：后者是集群的全局端点，
+	// 负责将请求负载均衡到各个 API Server。此字段用于自定义本地 API Server 公布的 IP/DNS 名称和端口。
+	// 默认情况下，kubeadm 会尝试自动探测默认网卡的 IP；探测失败时可在此显式设置。
 	// +optional
 	LocalAPIEndpoint APIEndpoint `json:"localAPIEndpoint,omitempty"`
 
-	// CertificateKey sets the key with which certificates and keys are encrypted prior to being uploaded in
-	// a secret in the cluster during the uploadcerts init phase.
-	// The certificate key is a hex encoded string that is an AES key of size 32 bytes.
+	// CertificateKey 设置证书密钥，用于在 uploadcerts 初始化阶段将证书和私钥加密后上传到集群 Secret。
+	// 证书密钥是长度为 32 字节的 AES 密钥的十六进制编码字符串。
 	// +optional
 	CertificateKey string `json:"certificateKey,omitempty"`
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm init --help" command.
-	// The flag "--skip-phases" takes precedence over this field.
+	// SkipPhases 是命令执行时要跳过的阶段列表，可通过 "kubeadm init --help" 查看。
+	// 命令行参数 "--skip-phases" 的优先级高于此字段。
 	// +optional
 	SkipPhases []string `json:"skipPhases,omitempty"`
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during
-	// "kubeadm init".
+	// Patches 保存 `kubeadm init` 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	// +optional
 	Patches *Patches `json:"patches,omitempty"`
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时设置。
 	// +optional
 	Timeouts *Timeouts `json:"timeouts,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterConfiguration contains cluster-wide configuration for a kubeadm cluster
+// ClusterConfiguration 包含 kubeadm 集群的全局配置。
 type ClusterConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// Etcd holds configuration for etcd.
+	// Etcd 保存 etcd 配置。
 	// +optional
 	Etcd Etcd `json:"etcd,omitempty"`
 
-	// Networking holds configuration for the networking topology of the cluster.
+	// Networking 保存集群的网络拓扑配置。
 	// +optional
 	Networking Networking `json:"networking,omitempty"`
 
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	// +optional
 	KubernetesVersion string `json:"kubernetesVersion,omitempty"`
 
-	// ControlPlaneEndpoint sets a stable IP address or DNS name for the control plane; it
-	// can be a valid IP address or a RFC-1123 DNS subdomain, both with optional TCP port.
-	// In case the ControlPlaneEndpoint is not specified, the AdvertiseAddress + BindPort
-	// are used; in case the ControlPlaneEndpoint is specified but without a TCP port,
-	// the BindPort is used.
-	// Possible usages are:
-	// e.g. In a cluster with more than one control plane instances, this field should be
-	// assigned the address of the external load balancer in front of the
-	// control plane instances.
-	// e.g.  in environments with enforced node recycling, the ControlPlaneEndpoint
-	// could be used for assigning a stable DNS to the control plane.
+	// ControlPlaneEndpoint 为控制平面设置稳定的 IP 地址或 DNS 名称；该值可以是有效 IP 地址，
+	// 也可以是符合 RFC-1123 的 DNS 子域名，两者都可附带 TCP 端口。
+	// 未指定时使用 AdvertiseAddress + BindPort；已指定但未包含 TCP 端口时使用 BindPort。
+	// 例如，多控制平面集群应将其设置为控制平面实例前端外部负载均衡器的地址；
+	// 在频繁回收节点的环境中，可用它为控制平面分配稳定的 DNS 名称。
 	// +optional
 	ControlPlaneEndpoint string `json:"controlPlaneEndpoint,omitempty"`
 
-	// APIServer contains extra settings for the API server control plane component
+	// APIServer 保存 API Server 控制平面组件的额外设置。
 	// +optional
 	APIServer APIServer `json:"apiServer,omitempty"`
 
-	// ControllerManager contains extra settings for the controller manager control plane component
+	// ControllerManager 保存控制器管理器控制平面组件的额外设置。
 	// +optional
 	ControllerManager ControlPlaneComponent `json:"controllerManager,omitempty"`
 
-	// Scheduler contains extra settings for the scheduler control plane component
+	// Scheduler 保存调度器控制平面组件的额外设置。
 	// +optional
 	Scheduler ControlPlaneComponent `json:"scheduler,omitempty"`
 
-	// DNS defines the options for the DNS add-on installed in the cluster.
+	// DNS 定义集群中安装的 DNS 插件的选项。
 	// +optional
 	DNS DNS `json:"dns,omitempty"`
 
-	// Proxy defines the options for the proxy add-on installed in the cluster.
+	// Proxy 定义集群中安装的代理插件的选项。
 	Proxy Proxy `json:"proxy,omitempty"`
 
-	// CertificatesDir specifies where to store or look for all required certificates.
+	// CertificatesDir 指定存放或查找所有必需证书的目录。
 	// +optional
 	CertificatesDir string `json:"certificatesDir,omitempty"`
 
-	// ImageRepository sets the container registry to pull images from.
-	// If empty, `registry.k8s.io` will be used by default; in case of kubernetes version is a CI build (kubernetes version starts with `ci/`)
-	// `gcr.io/k8s-staging-ci-images` will be used as a default for control plane components and for kube-proxy, while `registry.k8s.io`
-	// will be used for all the other images.
+	// ImageRepository 设置拉取容器镜像所用的镜像仓库。
+	// 为空时默认使用 `registry.k8s.io`；若 Kubernetes 版本为 CI 构建（版本以 `ci/` 开头），
+	// 控制平面组件和 kube-proxy 默认使用 `gcr.io/k8s-staging-ci-images`，其他镜像仍使用 `registry.k8s.io`。
 	// +optional
 	ImageRepository string `json:"imageRepository,omitempty"`
 
-	// FeatureGates holds kubeadm-specific feature gates enabled by the user.
+	// FeatureGates 保存用户启用的 kubeadm 专属特性门控。
 	// +optional
 	FeatureGates map[string]bool `json:"featureGates,omitempty"`
 
-	// The cluster name. This name will be used in kubeconfig files generated by kubeadm
-	// and will also be passed as a value to the kube-controller-manager's --cluster-name flag.
-	// Default value is 'kubernetes'.
+	// ClusterName 是集群名称，用于 kubeadm 生成的 kubeconfig 文件，
+	// 也会作为 kube-controller-manager 的 --cluster-name 参数值。默认值为 'kubernetes'。
 	// +optional
 	ClusterName string `json:"clusterName,omitempty"`
 
-	// EncryptionAlgorithm holds the type of asymmetric encryption algorithm used for keys and certificates.
-	// Can be one of "RSA-2048" (default), "RSA-3072", "RSA-4096", "ECDSA-P256" or "ECDSA-P384" .
+	// EncryptionAlgorithm 保存生成密钥和证书所用的非对称加密算法类型。
+	// 可选值为 "RSA-2048"（默认）、"RSA-3072"、"RSA-4096"、"ECDSA-P256" 或 "ECDSA-P384"。
 	// +optional
 	EncryptionAlgorithm EncryptionAlgorithmType `json:"encryptionAlgorithm,omitempty"`
 
-	// CertificateValidityPeriod specifies the validity period for a non-CA certificate generated by kubeadm.
-	// Default value: 8760h (365 days * 24 hours = 1 year)
+	// CertificateValidityPeriod 指定 kubeadm 生成的非 CA 证书的有效期。
+	// 默认值：8760h（365 天 × 24 小时 = 1 年）。
 	// +optional
 	CertificateValidityPeriod *metav1.Duration `json:"certificateValidityPeriod,omitempty"`
 
-	// CACertificateValidityPeriod specifies the validity period for a CA certificate generated by kubeadm.
-	// Default value: 87600h (365 days * 24 hours * 10 = 10 years)
+	// CACertificateValidityPeriod 指定 kubeadm 生成的 CA 证书的有效期。
+	// 默认值：87600h（365 天 × 24 小时 × 10 = 10 年）。
 	// +optional
 	CACertificateValidityPeriod *metav1.Duration `json:"caCertificateValidityPeriod,omitempty"`
 }
 
-// ControlPlaneComponent holds settings common to control plane component of the cluster
+// ControlPlaneComponent 保存集群控制平面组件的通用设置。
 type ControlPlaneComponent struct {
-	// ExtraArgs is an extra set of flags to pass to the control plane component.
-	// An argument name in this list is the flag name as it appears on the
-	// command line except without leading dash(es). Extra arguments will override existing
-	// default arguments. Duplicate extra arguments are allowed.
-	// The default arguments are sorted alpha-numerically but the extra arguments are not.
+	// ExtraArgs 是传递给控制平面组件的额外参数。
+	// 参数名为命令行中的参数名去掉前导短横线；额外参数会覆盖同名默认参数，允许重复。
+	// 默认参数按字母数字顺序排序，额外参数不排序。
 	// +optional
 	ExtraArgs []Arg `json:"extraArgs,omitempty"`
 
-	// ExtraVolumes is an extra set of host volumes, mounted to the control plane component.
+	// ExtraVolumes 是挂载到控制平面组件的一组额外宿主机卷。
 	// +optional
 	ExtraVolumes []HostPathMount `json:"extraVolumes,omitempty"`
 
-	// ExtraEnvs is an extra set of environment variables to pass to the control plane component.
-	// Environment variables passed using ExtraEnvs will override any existing environment variables, or *_proxy environment variables that kubeadm adds by default.
+	// ExtraEnvs 是传递给控制平面组件的一组额外环境变量。
+	// 其中设置的环境变量会覆盖已有环境变量，以及 kubeadm 默认添加的 *_proxy 环境变量。
 	// +optional
 	ExtraEnvs []EnvVar `json:"extraEnvs,omitempty"`
 }
 
-// APIServer holds settings necessary for API server deployments in the cluster
+// APIServer 保存集群中部署 API Server 所需的设置。
 type APIServer struct {
 	ControlPlaneComponent `json:""`
 
-	// CertSANs sets extra Subject Alternative Names for the API Server signing cert.
+	// CertSANs 为 API Server 签名证书设置额外的 Subject Alternative Name。
 	// +optional
 	CertSANs []string `json:"certSANs,omitempty"`
 }
 
-// DNS defines the DNS addon that should be used in the cluster
+// DNS 定义集群中使用的 DNS 插件。
 type DNS struct {
-	// ImageMeta allows to customize the image used for the DNS addon
+	// ImageMeta 允许自定义 DNS 插件使用的镜像。
 	ImageMeta `json:""`
 
-	// Disabled specifies whether to disable this addon in the cluster
+	// Disabled 指定是否在集群中禁用此插件。
 	// +optional
 	Disabled bool `json:"disabled,omitempty"`
 }
 
-// Proxy defines the proxy addon that should be used in the cluster
+// Proxy 定义集群中使用的代理插件。
 type Proxy struct {
-	// Disabled specifies whether to disable this addon in the cluster
+	// Disabled 指定是否在集群中禁用此插件。
 	// +optional
 	Disabled bool `json:"disabled,omitempty"`
 }
 
-// ImageMeta allows to customize the image used for components that are not
-// originated from the Kubernetes/Kubernetes release process
+// ImageMeta 允许自定义不来自 Kubernetes/Kubernetes 发布流程的组件镜像。
 type ImageMeta struct {
-	// ImageRepository sets the container registry to pull images from.
-	// if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+	// ImageRepository 设置拉取容器镜像所用的镜像仓库。
+	// 未设置时使用 ClusterConfiguration 中定义的 ImageRepository。
 	// +optional
 	ImageRepository string `json:"imageRepository,omitempty"`
 
-	// ImageTag allows to specify a tag for the image.
-	// In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+	// ImageTag 允许指定镜像标签。
+	// 设置此值后，kubeadm 在升级期间不会自动更改上述组件的版本。
 	// +optional
 	ImageTag string `json:"imageTag,omitempty"`
 
-	//TODO: evaluate if we need also a ImageName based on user feedbacks
+	// TODO: 根据用户反馈评估是否还需要 ImageName。
 }
 
-// APIEndpoint struct contains elements of API server instance deployed on a node.
+// APIEndpoint 包含部署在节点上的 API Server 实例的端点信息。
 type APIEndpoint struct {
-	// AdvertiseAddress sets the IP address for the API server to advertise.
+	// AdvertiseAddress 设置 API Server 公布的 IP 地址。
 	// +optional
 	AdvertiseAddress string `json:"advertiseAddress,omitempty"`
 
-	// BindPort sets the secure port for the API Server to bind to.
-	// Defaults to 6443.
+	// BindPort 设置 API Server 监听的安全端口，默认为 6443。
 	// +optional
 	BindPort int32 `json:"bindPort,omitempty"`
 }
 
-// NodeRegistrationOptions holds fields that relate to registering a new control-plane or node to the cluster, either via "kubeadm init" or "kubeadm join"
+// NodeRegistrationOptions 保存通过 `kubeadm init` 或 `kubeadm join` 将新控制平面节点或工作节点注册到集群所需的字段。
 type NodeRegistrationOptions struct {
 
-	// Name is the `.Metadata.Name` field of the Node API object that will be created in this `kubeadm init` or `kubeadm join` operation.
-	// This field is also used in the CommonName field of the kubelet's client certificate to the API server.
-	// Defaults to the hostname of the node if not provided.
+	// Name 是本次 `kubeadm init` 或 `kubeadm join` 操作创建的 Node API 对象的 `.Metadata.Name` 字段值。
+	// 此字段也用于 kubelet 连接 API Server 的客户端证书的 CommonName。未提供时默认为节点主机名。
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// CRISocket is used to retrieve container runtime info. This information will be annotated to the Node API object, for later re-use
+	// CRISocket 用于获取容器运行时信息，这些信息会标注到 Node API 对象上供后续复用。
 	// +optional
 	CRISocket string `json:"criSocket,omitempty"`
 
-	// Taints specifies the taints the Node API object should be registered with. If this field is unset, i.e. nil,
-	// it will be defaulted with a control-plane taint for control-plane nodes. If you don't want to taint your control-plane
-	// node, set this field to an empty slice, i.e. `taints: []` in the YAML file. This field is solely used for Node registration.
+	// Taints 指定注册 Node API 对象时使用的污点。未设置（即 nil）时，控制平面节点默认添加控制平面污点。
+	// 若不希望为控制平面节点添加污点，请在 YAML 文件中将此字段设置为空切片，即 `taints: []`。
+	// 此字段仅用于节点注册。
 	Taints []corev1.Taint `json:"taints"`
 
-	// KubeletExtraArgs passes through extra arguments to the kubelet. The arguments here are passed to the kubelet command line via the environment file
-	// kubeadm writes at runtime for the kubelet to source. This overrides the generic base-level configuration in the kubelet-config ConfigMap
-	// Flags have higher priority when parsing. These values are local and specific to the node kubeadm is executing on.
-	// An argument name in this list is the flag name as it appears on the command line except without leading dash(es).
-	// Extra arguments will override existing default arguments. Duplicate extra arguments are allowed.
-	// The default arguments are sorted alpha-numerically but the extra arguments are not.
+	// KubeletExtraArgs 是传递给 kubelet 的额外参数。kubeadm 在运行时写入供 kubelet 加载的环境文件，
+	// 再通过这些文件将参数传入 kubelet 命令行。解析时这些参数的优先级高于 kubelet-config ConfigMap 中的通用基础配置。
+	// 这些值仅对运行 kubeadm 的节点生效。参数名为命令行参数名去掉前导短横线；额外参数会覆盖同名默认参数，允许重复。
+	// 默认参数按字母数字顺序排序，额外参数不排序。
 	// +optional
 	KubeletExtraArgs []Arg `json:"kubeletExtraArgs,omitempty"`
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored when the current node is registered, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 是注册当前节点时要忽略的预检错误列表，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	// +optional
 	IgnorePreflightErrors []string `json:"ignorePreflightErrors,omitempty"`
 
-	// ImagePullPolicy specifies the policy for image pulling during kubeadm "init" and "join" operations.
-	// The value of this field must be one of "Always", "IfNotPresent" or "Never".
-	// If this field is unset kubeadm will default it to "IfNotPresent", or pull the required images if not present on the host.
+	// ImagePullPolicy 指定 kubeadm 执行 init 和 join 时的镜像拉取策略。
+	// 取值必须为 "Always"、"IfNotPresent" 或 "Never"；未设置时默认为 "IfNotPresent"，即仅在所需镜像不存在时拉取。
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// ImagePullSerial specifies if image pulling performed by kubeadm must be done serially or in parallel.
-	// Default: true
+	// ImagePullSerial 指定 kubeadm 应串行还是并行拉取镜像，默认为 true。
 	// +optional
 	ImagePullSerial *bool `json:"imagePullSerial,omitempty"`
 }
 
-// Networking contains elements describing cluster's networking configuration
+// Networking 包含集群网络配置。
 type Networking struct {
-	// ServiceSubnet is the subnet used by k8s services. Defaults to "10.96.0.0/12".
+	// ServiceSubnet 是 Kubernetes 服务使用的子网，默认为 "10.96.0.0/12"。
 	// +optional
 	ServiceSubnet string `json:"serviceSubnet,omitempty"`
-	// PodSubnet is the subnet used by pods.
+	// PodSubnet 是 Pod 使用的子网。
 	// +optional
 	PodSubnet string `json:"podSubnet,omitempty"`
-	// DNSDomain is the dns domain used by k8s services. Defaults to "cluster.local".
+	// DNSDomain 是 Kubernetes 服务使用的 DNS 域，默认为 "cluster.local"。
 	// +optional
 	DNSDomain string `json:"dnsDomain,omitempty"`
 }
 
-// Etcd contains elements describing Etcd configuration.
+// Etcd 包含 etcd 配置。
 type Etcd struct {
 
-	// Local provides configuration knobs for configuring the local etcd instance
-	// Local and External are mutually exclusive
+	// Local 保存本地 etcd 实例的配置。Local 与 External 互斥。
 	// +optional
 	Local *LocalEtcd `json:"local,omitempty"`
 
-	// External describes how to connect to an external etcd cluster
-	// Local and External are mutually exclusive
+	// External 描述如何连接外部 etcd 集群。Local 与 External 互斥。
 	// +optional
 	External *ExternalEtcd `json:"external,omitempty"`
 }
 
-// LocalEtcd describes that kubeadm should run an etcd cluster locally
+// LocalEtcd 表示 kubeadm 应在本地运行 etcd 集群。
 type LocalEtcd struct {
-	// ImageMeta allows to customize the container image used for etcd. Passing a custom etcd image
-	// tells kubeadm upgrade that this image is user-managed and that its upgrade must be skipped.
+	// ImageMeta 允许自定义 etcd 容器镜像。指定自定义 etcd 镜像后，kubeadm upgrade 会将其视为用户管理的镜像并跳过升级。
 	ImageMeta `json:""`
 
-	// DataDir is the directory etcd will place its data.
-	// Defaults to "/var/lib/etcd".
+	// DataDir 是 etcd 存放数据的目录，默认为 "/var/lib/etcd"。
 	DataDir string `json:"dataDir"`
 
-	// ExtraArgs are extra arguments provided to the etcd binary
-	// when run inside a static pod.
-	// An argument name in this list is the flag name as it appears on the
-	// command line except without leading dash(es). Extra arguments will override existing
-	// default arguments. Duplicate extra arguments are allowed.
-	// The default arguments are sorted alpha-numerically but the extra arguments are not.
+	// ExtraArgs 是 etcd 在静态 Pod 中运行时接收的额外参数。
+	// 参数名为命令行参数名去掉前导短横线；额外参数会覆盖同名默认参数，允许重复。
+	// 默认参数按字母数字顺序排序，额外参数不排序。
 	// +optional
 	ExtraArgs []Arg `json:"extraArgs,omitempty"`
 
-	// ExtraEnvs is an extra set of environment variables to pass to the control plane component.
-	// Environment variables passed using ExtraEnvs will override any existing environment variables, or *_proxy environment variables that kubeadm adds by default.
+	// ExtraEnvs 是传递给控制平面组件的一组额外环境变量。
+	// 其中设置的环境变量会覆盖已有环境变量，以及 kubeadm 默认添加的 *_proxy 环境变量。
 	// +optional
 	ExtraEnvs []EnvVar `json:"extraEnvs,omitempty"`
 
-	// ServerCertSANs sets extra Subject Alternative Names for the etcd server signing cert.
+	// ServerCertSANs 为 etcd 服务端签名证书设置额外的 Subject Alternative Name。
 	// +optional
 	ServerCertSANs []string `json:"serverCertSANs,omitempty"`
-	// PeerCertSANs sets extra Subject Alternative Names for the etcd peer signing cert.
+	// PeerCertSANs 为 etcd 对端签名证书设置额外的 Subject Alternative Name。
 	// +optional
 	PeerCertSANs []string `json:"peerCertSANs,omitempty"`
 }
 
-// ExternalEtcd describes an external etcd cluster.
-// Kubeadm has no knowledge of where certificate files live and they must be supplied.
+// ExternalEtcd 描述外部 etcd 集群。kubeadm 无法获知证书文件的位置，因此必须由用户提供。
 type ExternalEtcd struct {
-	// Endpoints of etcd members. Required when using external etcd.
-	// Specifies the client URLs (usually gRPC endpoints) for etcd communication.
-	// By default, these endpoints handle both gRPC traffic (primary etcd protocol)
-	// and HTTP traffic (metrics, health checks). However, if HTTPEndpoints is configured,
-	// the gRPC and HTTP traffic can be separated for better security and performance.
-	// Corresponds to etcd's --listen-client-urls configuration.
+	// Endpoints 是 etcd 成员端点，使用外部 etcd 时必填。
+	// 这些客户端 URL（通常为 gRPC 端点）默认同时处理 gRPC 流量（etcd 主要协议）和 HTTP 流量（指标、健康检查）。
+	// 配置 HTTPEndpoints 后，两类流量可分离以提升安全性和性能。对应 etcd 的 --listen-client-urls 配置。
 	Endpoints []string `json:"endpoints"`
 
-	// HTTPEndpoints are the dedicated HTTP endpoints for etcd communication.
-	// When configured, HTTP traffic (such as /metrics and /health endpoints) is separated
-	// from the gRPC traffic handled by Endpoints. This separation allows for better access
-	// control, as HTTP endpoints can be exposed without exposing the primary gRPC interface.
-	// Corresponds to etcd's --listen-client-http-urls configuration.
-	// If not provided, Endpoints will be used for both gRPC and HTTP traffic.
+	// HTTPEndpoints 是 etcd 通信专用的 HTTP 端点。
+	// 配置后，/metrics 和 /health 等 HTTP 流量会与 Endpoints 处理的 gRPC 流量分离，
+	// 从而允许只暴露 HTTP 端点而不暴露主要 gRPC 接口，便于访问控制。
+	// 对应 etcd 的 --listen-client-http-urls 配置；未提供时，两类流量均使用 Endpoints。
 	// +optional
 	HTTPEndpoints []string `json:"httpEndpoints,omitempty"`
 
-	// CAFile is an SSL Certificate Authority file used to secure etcd communication.
-	// Required if using a TLS connection.
+	// CAFile 是用于保护 etcd 通信的 SSL 证书颁发机构文件。使用 TLS 连接时必填。
 	CAFile string `json:"caFile"`
 
-	// CertFile is an SSL certification file used to secure etcd communication.
-	// Required if using a TLS connection.
+	// CertFile 是用于保护 etcd 通信的 SSL 证书文件。使用 TLS 连接时必填。
 	CertFile string `json:"certFile"`
 
-	// KeyFile is an SSL key file used to secure etcd communication.
-	// Required if using a TLS connection.
+	// KeyFile 是用于保护 etcd 通信的 SSL 私钥文件。使用 TLS 连接时必填。
 	KeyFile string `json:"keyFile"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// JoinConfiguration contains elements describing a particular node.
+// JoinConfiguration 包含加入集群的节点相关配置。
 type JoinConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用演练模式；启用时不应用任何更改，仅输出将要执行的操作。
 	// +optional
 	DryRun bool `json:"dryRun,omitempty"`
 
-	// NodeRegistration holds fields that relate to registering the new control-plane node to the cluster
+	// NodeRegistration 保存将新控制平面节点注册到集群所需的字段。
 	// +optional
 	NodeRegistration NodeRegistrationOptions `json:"nodeRegistration,omitempty"`
 
-	// CACertPath is the path to the SSL certificate authority used to
-	// secure communications between node and control-plane.
-	// Defaults to "/etc/kubernetes/pki/ca.crt".
+	// CACertPath 是用于保护节点与控制平面通信的 SSL 证书颁发机构文件路径。
+	// 默认为 "/etc/kubernetes/pki/ca.crt"。
 	// +optional
 	CACertPath string `json:"caCertPath,omitempty"`
 
-	// Discovery specifies the options for the kubelet to use during the TLS Bootstrap process
+	// Discovery 指定 kubelet 在 TLS Bootstrap 过程中使用的选项。
 	Discovery Discovery `json:"discovery"`
 
-	// ControlPlane defines the additional control plane instance to be deployed on the joining node.
-	// If nil, no additional control plane instance will be deployed.
+	// ControlPlane 定义要部署在加入集群节点上的额外控制平面实例。为 nil 时不部署额外控制平面实例。
 	// +optional
 	ControlPlane *JoinControlPlane `json:"controlPlane,omitempty"`
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm join --help" command.
-	// The flag "--skip-phases" takes precedence over this field.
+	// SkipPhases 是命令执行时要跳过的阶段列表，可通过 "kubeadm join --help" 查看。
+	// 命令行参数 "--skip-phases" 的优先级高于此字段。
 	// +optional
 	SkipPhases []string `json:"skipPhases,omitempty"`
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during
-	// "kubeadm join".
+	// Patches 保存 `kubeadm join` 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	// +optional
 	Patches *Patches `json:"patches,omitempty"`
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时设置。
 	// +optional
 	Timeouts *Timeouts `json:"timeouts,omitempty"`
 }
 
-// JoinControlPlane contains elements describing an additional control plane instance to be deployed on the joining node.
+// JoinControlPlane 包含部署在加入集群节点上的额外控制平面实例相关配置。
 type JoinControlPlane struct {
-	// LocalAPIEndpoint represents the endpoint of the API server instance to be deployed on this node.
+	// LocalAPIEndpoint 表示将部署在此节点上的 API Server 实例的端点。
 	// +optional
 	LocalAPIEndpoint APIEndpoint `json:"localAPIEndpoint,omitempty"`
 
-	// CertificateKey is the key that is used for decryption of certificates after they are downloaded from the secret
-	// upon joining a new control plane node. The corresponding encryption key is in the InitConfiguration.
-	// The certificate key is a hex encoded string that is an AES key of size 32 bytes.
+	// CertificateKey 用于新控制平面节点加入时解密从 Secret 下载的证书，对应的加密密钥位于 InitConfiguration 中。
+	// 证书密钥是长度为 32 字节的 AES 密钥的十六进制编码字符串。
 	// +optional
 	CertificateKey string `json:"certificateKey,omitempty"`
 }
 
-// Discovery specifies the options for the kubelet to use during the TLS Bootstrap process
+// Discovery 指定 kubelet 在 TLS Bootstrap 过程中使用的选项。
 type Discovery struct {
-	// BootstrapToken is used to set the options for bootstrap token based discovery
-	// BootstrapToken and File are mutually exclusive
+	// BootstrapToken 设置基于 Bootstrap Token 的发现选项。BootstrapToken 与 File 互斥。
 	// +optional
 	BootstrapToken *BootstrapTokenDiscovery `json:"bootstrapToken,omitempty"`
 
-	// File is used to specify a file or URL to a kubeconfig file from which to load cluster information
-	// BootstrapToken and File are mutually exclusive
+	// File 指定用于加载集群信息的 kubeconfig 文件或 URL。BootstrapToken 与 File 互斥。
 	// +optional
 	File *FileDiscovery `json:"file,omitempty"`
 
-	// TLSBootstrapToken is a token used for TLS bootstrapping.
-	// If .BootstrapToken is set, this field is defaulted to .BootstrapToken.Token, but can be overridden.
-	// If .File is set, this field **must be set** in case the KubeConfigFile does not contain any other authentication information
+	// TLSBootstrapToken 是用于 TLS 引导的令牌。
+	// 设置 .BootstrapToken 时，此字段默认使用 .BootstrapToken.Token，但可覆盖。
+	// 设置 .File 时，若 kubeconfig 文件不包含其他认证信息，则必须设置此字段。
 	// +optional
 	TLSBootstrapToken string `json:"tlsBootstrapToken,omitempty" datapolicy:"token"`
 }
 
-// BootstrapTokenDiscovery is used to set the options for bootstrap token based discovery
+// BootstrapTokenDiscovery 设置基于 Bootstrap Token 的发现选项。
 type BootstrapTokenDiscovery struct {
-	// Token is a token used to validate cluster information
-	// fetched from the control-plane.
+	// Token 是用于验证从控制平面获取的集群信息的令牌。
 	Token string `json:"token" datapolicy:"token"`
 
-	// APIServerEndpoint is an IP or domain name to the API server from which info will be fetched.
+	// APIServerEndpoint 是要从中获取信息的 API Server 的 IP 地址或域名。
 	// +optional
 	APIServerEndpoint string `json:"apiServerEndpoint,omitempty"`
 
-	// CACertHashes specifies a set of public key pins to verify
-	// when token-based discovery is used. The root CA found during discovery
-	// must match one of these values. Specifying an empty set disables root CA
-	// pinning, which can be unsafe. Each hash is specified as "<type>:<value>",
-	// where the only currently supported type is "sha256". This is a hex-encoded
-	// SHA-256 hash of the Subject Public Key Info (SPKI) object in DER-encoded
-	// ASN.1. These hashes can be calculated using, for example, OpenSSL.
+	// CACertHashes 指定基于令牌发现时用于验证的一组公钥固定值，发现得到的根 CA 必须匹配其中之一。
+	// 设置为空集合会禁用根 CA 固定，可能不安全。每个哈希值采用 "<type>:<value>" 格式，
+	// 目前唯一支持的类型为 "sha256"。哈希值是对 DER 编码的 ASN.1 中 Subject Public Key Info (SPKI)
+	// 对象计算的 SHA-256 十六进制摘要，可使用 OpenSSL 等工具计算。
 	// +optional
 	CACertHashes []string `json:"caCertHashes,omitempty" datapolicy:"security-key"`
 
-	// UnsafeSkipCAVerification allows token-based discovery
-	// without CA verification via CACertHashes. This can weaken
-	// the security of kubeadm since other nodes can impersonate the control-plane.
+	// UnsafeSkipCAVerification 允许基于令牌的发现跳过通过 CACertHashes 进行的 CA 验证。
+	// 其他节点可能因此冒充控制平面，削弱 kubeadm 的安全性。
 	// +optional
 	UnsafeSkipCAVerification bool `json:"unsafeSkipCAVerification,omitempty"`
 }
 
-// FileDiscovery is used to specify a file or URL to a kubeconfig file from which to load cluster information
+// FileDiscovery 指定用于加载集群信息的 kubeconfig 文件或 URL。
 type FileDiscovery struct {
-	// KubeConfigPath is used to specify the actual file path or URL to the kubeconfig file from which to load cluster information
+	// KubeConfigPath 指定用于加载集群信息的 kubeconfig 文件的实际路径或 URL。
 	KubeConfigPath string `json:"kubeConfigPath"`
 }
 
-// HostPathMount contains elements describing volumes that are mounted from the
-// host.
+// HostPathMount 包含从宿主机挂载的卷相关信息。
 type HostPathMount struct {
-	// Name of the volume inside the pod template.
+	// Name 是 Pod 模板中的卷名称。
 	Name string `json:"name"`
-	// HostPath is the path in the host that will be mounted inside
-	// the pod.
+	// HostPath 是将挂载到 Pod 内的宿主机路径。
 	HostPath string `json:"hostPath"`
-	// MountPath is the path inside the pod where hostPath will be mounted.
+	// MountPath 是 Pod 内挂载 HostPath 的路径。
 	MountPath string `json:"mountPath"`
-	// ReadOnly controls write access to the volume
+	// ReadOnly 控制卷是否只读。
 	// +optional
 	ReadOnly bool `json:"readOnly,omitempty"`
-	// PathType is the type of the HostPath.
+	// PathType 是 HostPath 的类型。
 	// +optional
 	PathType corev1.HostPathType `json:"pathType,omitempty"`
 }
 
-// Patches contains options related to applying patches to components deployed by kubeadm.
+// Patches 包含向 kubeadm 部署的组件应用补丁所需的选项。
 type Patches struct {
-	// Directory is a path to a directory that contains files named "target[suffix][+patchtype].extension".
-	// For example, "kube-apiserver0+merge.yaml" or just "etcd.json". "target" can be one of
-	// "kube-apiserver", "kube-controller-manager", "kube-scheduler", "etcd", "kubeletconfiguration", "corednsdeployment", "kubeproxydaemonset".
-	// "patchtype" can be one of "strategic" "merge" or "json" and they match the patch formats supported by kubectl.
-	// The default "patchtype" is "strategic". "extension" must be either "json" or "yaml".
-	// "suffix" is an optional string that can be used to determine which patches are applied
-	// first alpha-numerically.
+	// Directory 是存放补丁文件的目录，文件名格式为 "target[suffix][+patchtype].extension"。
+	// 例如 "kube-apiserver0+merge.yaml" 或 "etcd.json"。"target" 可选 "kube-apiserver"、
+	// "kube-controller-manager"、"kube-scheduler"、"etcd"、"kubeletconfiguration"、"corednsdeployment" 或 "kubeproxydaemonset"。
+	// "patchtype" 可选 "strategic"、"merge" 或 "json"，对应 kubectl 支持的补丁格式；默认值为 "strategic"。
+	// "extension" 必须为 "json" 或 "yaml"。可选 "suffix" 用于按字母数字顺序确定补丁的应用先后。
 	// +optional
 	Directory string `json:"directory,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ResetConfiguration contains a list of fields that are specifically "kubeadm reset"-only runtime information.
+// ResetConfiguration 包含仅适用于 `kubeadm reset` 运行时信息的字段。
 type ResetConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// CleanupTmpDir specifies whether the "/etc/kubernetes/tmp" directory should be cleaned during the reset process.
+	// CleanupTmpDir 指定重置过程中是否清理 "/etc/kubernetes/tmp" 目录。
 	// +optional
 	CleanupTmpDir bool `json:"cleanupTmpDir,omitempty"`
 
-	// CertificatesDir specifies the directory where the certificates are stored. If specified, it will be cleaned during the reset process.
+	// CertificatesDir 指定证书存放目录。指定后，重置过程中会清理该目录。
 	// +optional
 	CertificatesDir string `json:"certificatesDir,omitempty"`
 
-	// CRISocket is used to retrieve container runtime info and used for the removal of the containers.
-	// If CRISocket is not specified by flag or config file, kubeadm will try to detect one valid CRISocket instead.
+	// CRISocket 用于获取容器运行时信息并删除容器。
+	// 若命令行参数和配置文件均未指定 CRISocket，kubeadm 会尝试探测一个有效值。
 	// +optional
 	CRISocket string `json:"criSocket,omitempty"`
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用演练模式；启用时不应用任何更改，仅输出将要执行的操作。
 	// +optional
 	DryRun bool `json:"dryRun,omitempty"`
 
-	// Force flag instructs kubeadm to reset the node without prompting for confirmation.
+	// Force 指示 kubeadm 重置节点时无需确认。
 	// +optional
 	Force bool `json:"force,omitempty"`
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the reset process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 是重置过程中要忽略的预检错误列表，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	// +optional
 	IgnorePreflightErrors []string `json:"ignorePreflightErrors,omitempty"`
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm reset phase --help" command.
+	// SkipPhases 是命令执行时要跳过的阶段列表，可通过 "kubeadm reset phase --help" 查看。
 	// +optional
 	SkipPhases []string `json:"skipPhases,omitempty"`
 
-	// UnmountFlags is a list of unmount2() syscall flags that kubeadm can use when unmounting
-	// directories during "reset". A flag can be one of: MNT_FORCE, MNT_DETACH, MNT_EXPIRE, UMOUNT_NOFOLLOW.
-	// By default this list is empty.
+	// UnmountFlags 是 kubeadm 在 reset 期间卸载目录时可使用的 unmount2() 系统调用参数列表。
+	// 可选值为 MNT_FORCE、MNT_DETACH、MNT_EXPIRE、UMOUNT_NOFOLLOW，默认为空列表。
 	// +optional
 	UnmountFlags []string `json:"unmountFlags,omitempty"`
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时设置。
 	// +optional
 	Timeouts *Timeouts `json:"timeouts,omitempty"`
 }
 
-// Arg represents an argument with a name and a value.
+// Arg 表示带名称和值的参数。
 type Arg struct {
-	Name  string `json:"name"`
+	// Name 是参数名，匹配时按完整名称区分大小写。
+	Name string `json:"name"`
+	// Value 是参数值；是否允许独立值由使用方决定。
 	Value string `json:"value"`
 }
 
-// EnvVar represents an environment variable present in a Container.
+// EnvVar 表示容器中的环境变量。
 type EnvVar struct {
 	corev1.EnvVar `json:""`
 }
 
-// EncryptionAlgorithmType can define an asymmetric encryption algorithm type.
+// EncryptionAlgorithmType 表示非对称加密算法类型。
 type EncryptionAlgorithmType string
 
 const (
-	// EncryptionAlgorithmECDSAP256 defines the ECDSA encryption algorithm type with curve P256.
+	// EncryptionAlgorithmECDSAP256 表示使用 P-256 曲线的 ECDSA 加密算法。
 	EncryptionAlgorithmECDSAP256 EncryptionAlgorithmType = "ECDSA-P256"
-	// EncryptionAlgorithmECDSAP384 defines the ECDSA encryption algorithm type with curve P384.
+	// EncryptionAlgorithmECDSAP384 表示使用 P-384 曲线的 ECDSA 加密算法。
 	EncryptionAlgorithmECDSAP384 EncryptionAlgorithmType = "ECDSA-P384"
-	// EncryptionAlgorithmRSA2048 defines the RSA encryption algorithm type with key size 2048 bits.
+	// EncryptionAlgorithmRSA2048 表示密钥长度为 2048 位的 RSA 加密算法。
 	EncryptionAlgorithmRSA2048 EncryptionAlgorithmType = "RSA-2048"
-	// EncryptionAlgorithmRSA3072 defines the RSA encryption algorithm type with key size 3072 bits.
+	// EncryptionAlgorithmRSA3072 表示密钥长度为 3072 位的 RSA 加密算法。
 	EncryptionAlgorithmRSA3072 EncryptionAlgorithmType = "RSA-3072"
-	// EncryptionAlgorithmRSA4096 defines the RSA encryption algorithm type with key size 4096 bits.
+	// EncryptionAlgorithmRSA4096 表示密钥长度为 4096 位的 RSA 加密算法。
 	EncryptionAlgorithmRSA4096 EncryptionAlgorithmType = "RSA-4096"
 )
 
-// Timeouts holds various timeouts that apply to kubeadm commands.
+// Timeouts 保存适用于 kubeadm 命令的各种超时设置。
 type Timeouts struct {
-	// ControlPlaneComponentHealthCheck is the amount of time to wait for a control plane
-	// component, such as the API server, to be healthy during "kubeadm init" and "kubeadm join".
-	// Default: 4m
+	// ControlPlaneComponentHealthCheck 是 `kubeadm init` 和 `kubeadm join` 期间等待 API Server 等控制平面组件健康的超时时间，默认为 4m。
 	// +optional
 	ControlPlaneComponentHealthCheck *metav1.Duration `json:"controlPlaneComponentHealthCheck,omitempty"`
 
-	// KubeletHealthCheck is the amount of time to wait for the kubelet to be healthy
-	// during "kubeadm init" and "kubeadm join".
-	// Default: 4m
+	// KubeletHealthCheck 是 `kubeadm init` 和 `kubeadm join` 期间等待 kubelet 健康的超时时间，默认为 4m。
 	// +optional
 	KubeletHealthCheck *metav1.Duration `json:"kubeletHealthCheck,omitempty"`
 
-	// KubernetesAPICall is the amount of time to wait for the kubeadm client to complete a request to
-	// the API server. This applies to all types of methods (GET, POST, etc).
-	// Default: 1m
+	// KubernetesAPICall 是等待 kubeadm 客户端完成 API Server 请求的超时时间，适用于 GET、POST 等所有方法，默认为 1m。
 	// +optional
 	KubernetesAPICall *metav1.Duration `json:"kubernetesAPICall,omitempty"`
 
-	// EtcdAPICall is the amount of time to wait for the kubeadm etcd client to complete a request to
-	// the etcd cluster.
-	// Default: 2m
+	// EtcdAPICall 是等待 kubeadm 的 etcd 客户端完成集群请求的超时时间，默认为 2m。
 	// +optional
 	EtcdAPICall *metav1.Duration `json:"etcdAPICall,omitempty"`
 
-	// TLSBootstrap is the amount of time to wait for the kubelet to complete TLS bootstrap
-	// for a joining node.
-	// Default: 5m
+	// TLSBootstrap 是等待加入集群节点的 kubelet 完成 TLS 引导的超时时间，默认为 5m。
 	// +optional
 	TLSBootstrap *metav1.Duration `json:"tlsBootstrap,omitempty"`
 
-	// Discovery is the amount of time to wait for kubeadm to validate the API server identity
-	// for a joining node.
-	// Default: 5m
+	// Discovery 是 kubeadm 为加入集群节点验证 API Server 身份的超时时间，默认为 5m。
 	// +optional
 	Discovery *metav1.Duration `json:"discovery,omitempty"`
 
-	// UpgradeManifests is the timeout for upgrading static Pod manifests.
-	// Default: 5m
+	// UpgradeManifests 是升级静态 Pod 清单的超时时间，默认为 5m。
 	UpgradeManifests *metav1.Duration `json:"upgradeManifests,omitempty"`
 }
 
-// UpgradeApplyConfiguration contains a list of configurable options which are specific to the  "kubeadm upgrade apply" command.
+// UpgradeApplyConfiguration 包含专用于 `kubeadm upgrade apply` 命令的可配置选项。
 type UpgradeApplyConfiguration struct {
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	// +optional
 	KubernetesVersion string `json:"kubernetesVersion,omitempty"`
 
-	// AllowExperimentalUpgrades instructs kubeadm to show unstable versions of Kubernetes as an upgrade
-	// alternative and allows upgrading to an alpha/beta/release candidate version of Kubernetes.
-	// Default: false
+	// AllowExperimentalUpgrades 指示 kubeadm 将不稳定的 Kubernetes 版本列为升级候选，并允许升级到 alpha、beta 或候选版本，默认为 false。
 	// +optional
 	AllowExperimentalUpgrades *bool `json:"allowExperimentalUpgrades,omitempty"`
 
-	// Enable AllowRCUpgrades will show release candidate versions of Kubernetes as an upgrade alternative and
-	// allows upgrading to a release candidate version of Kubernetes.
+	// AllowRCUpgrades 指示 kubeadm 将 Kubernetes 候选版本列为升级候选，并允许升级到候选版本。
 	// +optional
 	AllowRCUpgrades *bool `json:"allowRCUpgrades,omitempty"`
 
-	// CertificateRenewal instructs kubeadm to execute certificate renewal during upgrades.
-	// Defaults to true.
+	// CertificateRenewal 指示 kubeadm 在升级期间执行证书续期，默认为 true。
 	// +optional
 	CertificateRenewal *bool `json:"certificateRenewal,omitempty"`
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用演练模式；启用时不应用任何更改，仅输出将要执行的操作。
 	// +optional
 	DryRun *bool `json:"dryRun,omitempty"`
 
-	// EtcdUpgrade instructs kubeadm to execute etcd upgrade during upgrades.
-	// Defaults to true.
+	// EtcdUpgrade 指示 kubeadm 在升级期间执行 etcd 升级，默认为 true。
 	// +optional
 	EtcdUpgrade *bool `json:"etcdUpgrade,omitempty"`
 
-	// ForceUpgrade flag instructs kubeadm to upgrade the cluster without prompting for confirmation.
+	// ForceUpgrade 指示 kubeadm 升级集群时无需确认。
 	// +optional
 	ForceUpgrade *bool `json:"forceUpgrade,omitempty"`
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the upgrade process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 是升级过程中要忽略的预检错误列表，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	// +optional
 	IgnorePreflightErrors []string `json:"ignorePreflightErrors,omitempty"`
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during "kubeadm upgrade".
+	// Patches 保存 `kubeadm upgrade` 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	// +optional
 	Patches *Patches `json:"patches,omitempty"`
 
-	// PrintConfig specifies whether the configuration file that will be used in the upgrade should be printed or not.
+	// PrintConfig 指定是否打印升级将使用的配置文件。
 	// +optional
 	PrintConfig *bool `json:"printConfig,omitempty"`
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// NOTE: This field is currently ignored for "kubeadm upgrade apply", but in the future it will be supported.
+	// SkipPhases 是命令执行时要跳过的阶段列表。
+	// 注意：`kubeadm upgrade apply` 当前忽略此字段，未来将支持。
 	SkipPhases []string `json:"skipPhases,omitempty"`
 
-	// ImagePullPolicy specifies the policy for image pulling during kubeadm "upgrade apply" operations.
-	// The value of this field must be one of "Always", "IfNotPresent" or "Never".
-	// If this field is unset kubeadm will default it to "IfNotPresent", or pull the required images if not present on the host.
+	// ImagePullPolicy 指定 kubeadm 执行 upgrade apply 时的镜像拉取策略。
+	// 取值必须为 "Always"、"IfNotPresent" 或 "Never"；未设置时默认为 "IfNotPresent"，即仅在所需镜像不存在时拉取。
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// ImagePullSerial specifies if image pulling performed by kubeadm must be done serially or in parallel.
-	// Default: true
+	// ImagePullSerial 指定 kubeadm 应串行还是并行拉取镜像，默认为 true。
 	// +optional
 	ImagePullSerial *bool `json:"imagePullSerial,omitempty"`
 }
 
-// UpgradeDiffConfiguration contains a list of configurable options which are specific to the "kubeadm upgrade diff" command.
+// UpgradeDiffConfiguration 包含专用于 `kubeadm upgrade diff` 命令的可配置选项。
 type UpgradeDiffConfiguration struct {
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	// +optional
 	KubernetesVersion string `json:"kubernetesVersion,omitempty"`
 
-	// DiffContextLines is the number of lines of context in the diff.
+	// DiffContextLines 是差异输出中的上下文行数。
 	// +optional
 	DiffContextLines int `json:"contextLines,omitempty"`
 }
 
-// UpgradeNodeConfiguration contains a list of configurable options which are specific to the "kubeadm upgrade node" command.
+// UpgradeNodeConfiguration 包含专用于 `kubeadm upgrade node` 命令的可配置选项。
 type UpgradeNodeConfiguration struct {
-	// CertificateRenewal instructs kubeadm to execute certificate renewal during upgrades.
-	// Defaults to true.
+	// CertificateRenewal 指示 kubeadm 在升级期间执行证书续期，默认为 true。
 	// +optional
 	CertificateRenewal *bool `json:"certificateRenewal,omitempty"`
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用演练模式；启用时不应用任何更改，仅输出将要执行的操作。
 	// +optional
 	DryRun *bool `json:"dryRun,omitempty"`
 
-	// EtcdUpgrade instructs kubeadm to execute etcd upgrade during upgrades.
-	// Defaults to true.
+	// EtcdUpgrade 指示 kubeadm 在升级期间执行 etcd 升级，默认为 true。
 	// +optional
 	EtcdUpgrade *bool `json:"etcdUpgrade,omitempty"`
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the upgrade process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 是升级过程中要忽略的预检错误列表，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	// +optional
 	IgnorePreflightErrors []string `json:"ignorePreflightErrors,omitempty"`
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm upgrade node phase --help" command.
+	// SkipPhases 是命令执行时要跳过的阶段列表，可通过 "kubeadm upgrade node phase --help" 查看。
 	// +optional
 	SkipPhases []string `json:"skipPhases,omitempty"`
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during "kubeadm upgrade".
+	// Patches 保存 `kubeadm upgrade` 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	// +optional
 	Patches *Patches `json:"patches,omitempty"`
 
-	// ImagePullPolicy specifies the policy for image pulling during kubeadm "upgrade node" operations.
-	// The value of this field must be one of "Always", "IfNotPresent" or "Never".
-	// If this field is unset kubeadm will default it to "IfNotPresent", or pull the required images if not present on the host.
+	// ImagePullPolicy 指定 kubeadm 执行 upgrade node 时的镜像拉取策略。
+	// 取值必须为 "Always"、"IfNotPresent" 或 "Never"；未设置时默认为 "IfNotPresent"，即仅在所需镜像不存在时拉取。
 	// +optional
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// ImagePullSerial specifies if image pulling performed by kubeadm must be done serially or in parallel.
-	// Default: true
+	// ImagePullSerial 指定 kubeadm 应串行还是并行拉取镜像，默认为 true。
 	// +optional
 	ImagePullSerial *bool `json:"imagePullSerial,omitempty"`
 }
 
-// UpgradePlanConfiguration contains a list of configurable options which are specific to the "kubeadm upgrade plan" command.
+// UpgradePlanConfiguration 包含专用于 `kubeadm upgrade plan` 命令的可配置选项。
 type UpgradePlanConfiguration struct {
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	KubernetesVersion string `json:"kubernetesVersion,omitempty"`
 
-	// AllowExperimentalUpgrades instructs kubeadm to show unstable versions of Kubernetes as an upgrade
-	// alternative and allows upgrading to an alpha/beta/release candidate version of Kubernetes.
-	// Default: false
+	// AllowExperimentalUpgrades 指示 kubeadm 将不稳定的 Kubernetes 版本列为升级候选，并允许升级到 alpha、beta 或候选版本，默认为 false。
 	// +optional
 	AllowExperimentalUpgrades *bool `json:"allowExperimentalUpgrades,omitempty"`
 
-	// Enable AllowRCUpgrades will show release candidate versions of Kubernetes as an upgrade alternative and
-	// allows upgrading to a release candidate version of Kubernetes.
+	// AllowRCUpgrades 指示 kubeadm 将 Kubernetes 候选版本列为升级候选，并允许升级到候选版本。
 	// +optional
 	AllowRCUpgrades *bool `json:"allowRCUpgrades,omitempty"`
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用演练模式；启用时不应用任何更改，仅输出将要执行的操作。
 	// +optional
 	DryRun *bool `json:"dryRun,omitempty"`
 
-	// EtcdUpgrade instructs kubeadm to execute etcd upgrade during upgrades.
-	// Defaults to true.
+	// EtcdUpgrade 指示 kubeadm 在升级期间执行 etcd 升级，默认为 true。
 	// +optional
 	EtcdUpgrade *bool `json:"etcdUpgrade,omitempty"`
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the upgrade process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 是升级过程中要忽略的预检错误列表，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	// +optional
 	IgnorePreflightErrors []string `json:"ignorePreflightErrors,omitempty"`
 
-	// PrintConfig specifies whether the configuration file that will be used in the upgrade should be printed or not.
+	// PrintConfig 指定是否打印升级将使用的配置文件。
 	// +optional
 	PrintConfig *bool `json:"printConfig,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// UpgradeConfiguration contains a list of options that are specific to "kubeadm upgrade" subcommands.
+// UpgradeConfiguration 包含专用于 `kubeadm upgrade` 各子命令的选项。
 type UpgradeConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// Apply holds a list of options that are specific to the "kubeadm upgrade apply" command.
+	// Apply 保存专用于 `kubeadm upgrade apply` 命令的选项。
 	// +optional
 	Apply UpgradeApplyConfiguration `json:"apply,omitempty"`
 
-	// Diff holds a list of options that are specific to the "kubeadm upgrade diff" command.
+	// Diff 保存专用于 `kubeadm upgrade diff` 命令的选项。
 	// +optional
 	Diff UpgradeDiffConfiguration `json:"diff,omitempty"`
 
-	// Node holds a list of options that are specific to the "kubeadm upgrade node" command.
+	// Node 保存专用于 `kubeadm upgrade node` 命令的选项。
 	// +optional
 	Node UpgradeNodeConfiguration `json:"node,omitempty"`
 
-	// Plan holds a list of options that are specific to the "kubeadm upgrade plan" command.
+	// Plan 保存专用于 `kubeadm upgrade plan` 命令的选项。
 	// +optional
 	Plan UpgradePlanConfiguration `json:"plan,omitempty"`
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时设置。
 	// +optional
 	Timeouts *Timeouts `json:"timeouts,omitempty"`
 }

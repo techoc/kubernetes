@@ -67,7 +67,7 @@ var (
 		`)))
 )
 
-// NewShowJoinCommandPhase creates a kubeadm workflow phase that implements showing the join command.
+// NewShowJoinCommandPhase 创建实现加入命令显示的 kubeadm 工作流阶段。
 func NewShowJoinCommandPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:         "show-join-command",
@@ -77,7 +77,7 @@ func NewShowJoinCommandPhase() workflow.Phase {
 	}
 }
 
-// showJoinCommand prints the join command after all the phases in init have finished
+// showJoinCommand 在 init 的所有阶段完成后打印加入命令。
 func showJoinCommand(c workflow.RunData) error {
 	data, ok := c.(InitData)
 	if !ok {
@@ -86,7 +86,7 @@ func showJoinCommand(c workflow.RunData) error {
 
 	adminKubeConfigPath := data.KubeConfigPath()
 
-	// Prints the join command, multiple times in case the user has multiple tokens
+	// 打印加入命令；用户有多个令牌时打印多次。
 	for _, token := range data.Tokens() {
 		if err := printJoinCommand(data.OutputWriter(), adminKubeConfigPath, token, data); err != nil {
 			return errors.Wrap(err, "failed to print join command")

@@ -45,7 +45,7 @@ func TestVerifyUnmarshalStrict(t *testing.T) {
 		groupVersion  schema.GroupVersion
 		expectedError bool
 	}{
-		// tests with file errors
+		// 文件错误的测试。
 		{
 			fileName:      "invalid_casesensitive_field.yaml",
 			kind:          constants.ClusterConfigurationKind,
@@ -106,7 +106,7 @@ func TestVerifyUnmarshalStrict(t *testing.T) {
 			groupVersion:  kubeproxyconfigv1alpha1.SchemeGroupVersion,
 			expectedError: true,
 		},
-		// test unknown groupVersion and kind
+		// 未知 groupVersion 和 kind 的测试。
 		{
 			fileName:      "valid_clustercfg.yaml",
 			kind:          constants.ClusterConfigurationKind,
@@ -119,7 +119,7 @@ func TestVerifyUnmarshalStrict(t *testing.T) {
 			groupVersion:  kubeadmapiv1.SchemeGroupVersion,
 			expectedError: true,
 		},
-		// valid tests
+		// 有效输入的测试。
 		{
 			fileName:      "valid_clustercfg.yaml",
 			kind:          constants.ClusterConfigurationKind,

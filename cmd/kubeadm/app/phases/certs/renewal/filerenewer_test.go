@@ -26,10 +26,10 @@ import (
 )
 
 func TestFileRenewer(t *testing.T) {
-	// creates a File renewer using a test Certificate authority
+	// 使用测试 CA 创建文件续签器
 	fr := NewFileRenewer(testCACert, testCAKey)
 
-	// renews a certificate
+	// 续签证书
 	certCfg := &pkiutil.CertConfig{
 		Config: certutil.Config{
 			CommonName: "test-certs",
@@ -45,7 +45,7 @@ func TestFileRenewer(t *testing.T) {
 		t.Fatalf("unexpected error renewing cert: %v", err)
 	}
 
-	// verify the renewed certificate
+	// 校验续签后的证书
 	pool := x509.NewCertPool()
 	pool.AddCert(testCACert)
 

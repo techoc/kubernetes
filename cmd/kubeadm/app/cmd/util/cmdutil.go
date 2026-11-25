@@ -34,13 +34,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// ErrorSubcommandRequired is an error returned when a parent command cannot be executed.
-// It starts with a new line so that it's separated from previous information like a Help() screen.
+// ErrorSubcommandRequired 是父命令无法执行时返回的错误。
+// 它以换行开头，以便与帮助屏幕等先前输出分隔。
 var ErrorSubcommandRequired = errors.New("\nerror: subcommand is required")
 
-// RequireSubcommand can be used to set an empty Run function and NoArgs on a Cobra command.
-// This handles a case where a subcommand must be specified for a parent command 'c'.
-// If no subcommand is specified the CLI exist with an error.
+// RequireSubcommand 可为 cobra 命令设置空的 Run 函数和 NoArgs。
+// 它处理父命令 c 必须指定子命令的情况；若未指定子命令，CLI 将以错误退出。
 func RequireSubcommand(c *cobra.Command) {
 	c.RunE = func(c *cobra.Command, args []string) error {
 		_ = c.Help()
@@ -49,16 +48,16 @@ func RequireSubcommand(c *cobra.Command) {
 	c.Args = cobra.NoArgs
 }
 
-// ValidateExactArgNumber validates that the required top-level arguments are specified
+// ValidateExactArgNumber 校验是否指定了必需的顶层参数。
 func ValidateExactArgNumber(args []string, supportedArgs []string) error {
 	lenSupported := len(supportedArgs)
 	validArgs := 0
-	// Disregard possible "" arguments; they are invalid
+	// 忽略可能的空字符串参数；它们无效。
 	for _, arg := range args {
 		if len(arg) > 0 {
 			validArgs++
 		}
-		// break early for too many arguments
+		// 参数过多时提前退出。
 		if validArgs > lenSupported {
 			return errors.Errorf("too many arguments. Required arguments: %v", supportedArgs)
 		}
@@ -70,16 +69,15 @@ func ValidateExactArgNumber(args []string, supportedArgs []string) error {
 	return nil
 }
 
-// GetKubeConfigPath can be used to search for a kubeconfig in standard locations
-// if and empty string is passed to the function. If a non-empty string is passed
-// the function returns the same string.
+// GetKubeConfigPath 在传入空字符串时搜索标准位置中的 kubeconfig；
+// 若传入非空字符串，则原样返回该字符串。
 func GetKubeConfigPath(file string) string {
-	// If a value is provided respect that.
+	// 若提供了值，则尊重该值。
 	if file != "" {
 		return file
 	}
-	// Find a config in the standard locations using DefaultClientConfigLoadingRules,
-	// but also consider the default config path.
+	// 使用 DefaultClientConfigLoadingRules 在标准位置查找配置，
+	// 同时考虑默认配置路径。
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	rules.Precedence = append(rules.Precedence, kubeadmconstants.GetAdminKubeConfigPath())
 	file = rules.GetDefaultFilename()
@@ -87,7 +85,7 @@ func GetKubeConfigPath(file string) string {
 	return file
 }
 
-// AddCRISocketFlag adds the cri-socket flag to the supplied flagSet
+// AddCRISocketFlag 将 cri-socket 参数添加到指定参数集。
 func AddCRISocketFlag(flagSet *pflag.FlagSet, criSocket *string) {
 	flagSet.StringVar(
 		criSocket, options.NodeCRISocket, *criSocket,
@@ -95,7 +93,7 @@ func AddCRISocketFlag(flagSet *pflag.FlagSet, criSocket *string) {
 	)
 }
 
-// InteractivelyConfirmAction asks the user whether they _really_ want to take the action.
+// InteractivelyConfirmAction 询问用户是否确实要执行该操作。
 func InteractivelyConfirmAction(action, question string, r io.Reader) error {
 	fmt.Printf("[%s] %s [y/N]: ", action, question)
 	scanner := bufio.NewScanner(r)
@@ -111,23 +109,23 @@ func InteractivelyConfirmAction(action, question string, r io.Reader) error {
 	return errors.New("won't proceed; the user didn't answer (Y|y) in order to continue")
 }
 
-// ValueFromFlagsOrConfig checks if the "name" flag has been set. If yes, it returns the value of the flag, otherwise it returns the value from config.
+// ValueFromFlagsOrConfig 检查是否设置了 name 参数；若已设置则返回参数值，否则返回配置中的值。
 func ValueFromFlagsOrConfig(flagSet *pflag.FlagSet, name string, cfgValue interface{}, flagValue interface{}) interface{} {
 	if flagSet.Changed(name) {
 		return flagValue
 	}
 
-	// covert the nil to false if this is a bool, this will help to get rid of nil dereference error.
+	// 若为布尔值则将 nil 转为 false，避免空指针解引用错误。
 	cfg, ok := cfgValue.(*bool)
 	if ok && cfg == nil {
 		return ptr.To(false)
 	}
 
-	// assume config has all the defaults set correctly.
+	// 假定配置已正确设置全部默认值。
 	return cfgValue
 }
 
-// TypeMismatchErr return an error which indicates how the type is mismatched.
+// TypeMismatchErr 返回描述类型不匹配原因的错误。
 func TypeMismatchErr(opt, rType string) error {
 	return errors.Errorf("type mismatch, %s is expected to be a pointer to %s", opt, rType)
 }

@@ -27,13 +27,13 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 )
 
-// labelsToAdd holds a list of labels that are applied on kubeadm managed control plane nodes
+// labelsToAdd 保存应用到 kubeadm 管理的控制平面节点上的标签。
 var labelsToAdd = []string{
 	constants.LabelNodeRoleControlPlane,
 	constants.LabelExcludeFromExternalLB,
 }
 
-// MarkControlPlane taints the control-plane and sets the control-plane label
+// MarkControlPlane 为控制平面添加污点，并设置控制平面标签。
 func MarkControlPlane(client clientset.Interface, controlPlaneName string, taints []v1.Taint) error {
 	fmt.Printf("[mark-control-plane] Marking the node %s as control-plane by adding the labels: %v\n",
 		controlPlaneName, labelsToAdd)

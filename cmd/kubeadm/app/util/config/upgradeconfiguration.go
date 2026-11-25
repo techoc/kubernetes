@@ -32,8 +32,8 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// documentMapToUpgradeConfiguration takes a map between GVKs and YAML/JSON documents (as returned by SplitYAMLDocuments),
-// finds a UpgradeConfiguration, decodes it, dynamically defaults it and then validates it prior to return.
+// documentMapToUpgradeConfiguration 接收 SplitYAMLDocuments 返回的 GVK 与 YAML/JSON 文档映射，
+// 查找 UpgradeConfiguration，解码、动态默认化并校验后返回。
 func documentMapToUpgradeConfiguration(gvkmap kubeadmapi.DocumentMap, allowDeprecated, allowExperimental, strictErrors bool) (*kubeadmapi.UpgradeConfiguration, error) {
 	upgradeBytes := []byte{}
 
@@ -43,12 +43,12 @@ func documentMapToUpgradeConfiguration(gvkmap kubeadmapi.DocumentMap, allowDepre
 			continue
 		}
 
-		// check if this version is supported and possibly not deprecated
+		// 检查版本是否受支持且未弃用。
 		if err := validateSupportedVersion(gvk, allowDeprecated, allowExperimental); err != nil {
 			return nil, err
 		}
 
-		// verify the validity of the YAML/JSON
+		// 校验 YAML/JSON 的有效性。
 		if err := strict.VerifyUnmarshalStrict([]*runtime.Scheme{kubeadmscheme.Scheme}, gvk, bytes); err != nil {
 			if !strictErrors {
 				klog.Warning(err.Error())
@@ -64,15 +64,14 @@ func documentMapToUpgradeConfiguration(gvkmap kubeadmapi.DocumentMap, allowDepre
 		return nil, errors.Errorf("no %s found in the supplied config", constants.UpgradeConfigurationKind)
 	}
 
-	// Set internalcfg to an empty struct value the deserializer will populate
+	// 将 internalcfg 置为空结构，供反序列化器填充。
 	internalcfg := &kubeadmapi.UpgradeConfiguration{}
-	// Decode the bytes into the internal struct. Under the hood, the bytes will be unmarshalled into the
-	// right external version, defaulted, and converted into the internal version.
+	// 将字节解码到内部结构；底层会先反序列化到正确的外部版本，再默认化并转换为内部版本。
 	if err := runtime.DecodeInto(kubeadmscheme.Codecs.UniversalDecoder(), upgradeBytes, internalcfg); err != nil {
 		return nil, err
 	}
 
-	// Validates cfg
+	// 校验 cfg。
 	if err := validation.ValidateUpgradeConfiguration(internalcfg).ToAggregate(); err != nil {
 		return nil, err
 	}
@@ -80,20 +79,19 @@ func documentMapToUpgradeConfiguration(gvkmap kubeadmapi.DocumentMap, allowDepre
 	return internalcfg, nil
 }
 
-// LoadUpgradeConfigurationFromFile loads UpgradeConfiguration from a file.
+// LoadUpgradeConfigurationFromFile 从文件加载 UpgradeConfiguration。
 func LoadUpgradeConfigurationFromFile(cfgPath string, _ LoadOrDefaultConfigurationOptions) (*kubeadmapi.UpgradeConfiguration, error) {
 	var err error
 	var upgradeCfg *kubeadmapi.UpgradeConfiguration
 
-	// Otherwise, we have a config file. Let's load it.
+	// 否则加载指定的配置文件。
 	configBytes, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to load config from file %q", cfgPath)
 	}
 
-	// Convert documentMap to internal UpgradeConfiguration, InitConfiguration and ClusterConfiguration from config file will be ignored.
-	// Upgrade should respect the cluster configuration from the existing cluster, re-configure the cluster with a InitConfiguration and
-	// ClusterConfiguration from the config file is not allowed for upgrade.
+	// 将 documentMap 转换为内部 UpgradeConfiguration；忽略文件中的 InitConfiguration 和
+	// ClusterConfiguration。升级应沿用现有集群配置，不允许通过配置文件重新配置集群。
 	if upgradeCfg, err = BytesToUpgradeConfiguration(configBytes); err != nil {
 		return nil, err
 	}
@@ -101,11 +99,10 @@ func LoadUpgradeConfigurationFromFile(cfgPath string, _ LoadOrDefaultConfigurati
 	return upgradeCfg, nil
 }
 
-// BytesToUpgradeConfiguration converts a byte slice to an internal, defaulted and validated UpgradeConfiguration object.
-// The map may contain many different YAML/JSON documents. These documents are parsed one-by-one.
-// The resulting UpgradeConfiguration is then dynamically defaulted and validated prior to return.
+// BytesToUpgradeConfiguration 将字节切片转换为已默认化并校验的内部 UpgradeConfiguration。
+// 输入可包含多个 YAML/JSON 文档，逐个解析；返回前应用动态默认值并校验。
 func BytesToUpgradeConfiguration(b []byte) (*kubeadmapi.UpgradeConfiguration, error) {
-	// Split the YAML/JSON documents in the file into a DocumentMap
+	// 将文件中的 YAML/JSON 文档拆分为 DocumentMap。
 	gvkmap, err := kubeadmutil.SplitConfigDocuments(b)
 	if err != nil {
 		return nil, err
@@ -114,18 +111,16 @@ func BytesToUpgradeConfiguration(b []byte) (*kubeadmapi.UpgradeConfiguration, er
 	return documentMapToUpgradeConfiguration(gvkmap, false, false, false)
 }
 
-// LoadOrDefaultUpgradeConfiguration takes a path to a config file and a versioned configuration that can serve as the default config
-// If cfgPath is specified, defaultversionedcfg will always get overridden. Otherwise, the default config (often populated by flags) will be used.
-// Then the external, versioned configuration is defaulted and converted to the internal type.
-// Right thereafter, the configuration is defaulted again with dynamic values
-// Lastly, the internal config is validated and returned.
+// LoadOrDefaultUpgradeConfiguration 接收配置文件路径和可作为默认值的版本化配置。
+// 指定 cfgPath 时始终以文件覆盖 defaultversionedcfg，否则使用默认配置（通常由参数填充）。
+// 随后将外部版本化配置默认化并转换为内部类型，再应用动态默认值，最后校验返回。
 func LoadOrDefaultUpgradeConfiguration(cfgPath string, defaultversionedcfg *kubeadmapiv1.UpgradeConfiguration, opts LoadOrDefaultConfigurationOptions) (*kubeadmapi.UpgradeConfiguration, error) {
 	var (
 		config *kubeadmapi.UpgradeConfiguration
 		err    error
 	)
 	if cfgPath != "" {
-		// Loads configuration from config file, if provided
+		// 若提供了配置文件，从中加载配置。
 		config, err = LoadUpgradeConfigurationFromFile(cfgPath, opts)
 	} else {
 		config, err = DefaultedUpgradeConfiguration(defaultversionedcfg, opts)
@@ -136,18 +131,18 @@ func LoadOrDefaultUpgradeConfiguration(cfgPath string, defaultversionedcfg *kube
 	return config, err
 }
 
-// DefaultedUpgradeConfiguration takes a versioned UpgradeConfiguration (usually filled in by command line parameters), defaults it, converts it to internal and validates it
+// DefaultedUpgradeConfiguration 接收通常由命令行参数填充的版本化 UpgradeConfiguration，
+// 默认化、转换为内部类型并校验。
 func DefaultedUpgradeConfiguration(defaultversionedcfg *kubeadmapiv1.UpgradeConfiguration, _ LoadOrDefaultConfigurationOptions) (*kubeadmapi.UpgradeConfiguration, error) {
 	internalcfg := &kubeadmapi.UpgradeConfiguration{}
 
-	// Takes passed flags into account; the defaulting is executed once again enforcing assignment of
-	// static default values to cfg only for values not provided with flags
+	// 考虑已传入的参数；再次执行默认值设置，仅对参数未提供的 cfg 字段赋静态默认值。
 	kubeadmscheme.Scheme.Default(defaultversionedcfg)
 	if err := kubeadmscheme.Scheme.Convert(defaultversionedcfg, internalcfg, nil); err != nil {
 		return nil, err
 	}
 
-	// Validates cfg
+	// 校验 cfg。
 	if err := validation.ValidateUpgradeConfiguration(internalcfg).ToAggregate(); err != nil {
 		return nil, err
 	}

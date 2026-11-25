@@ -31,12 +31,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// Version provides the version information of kubeadm.
+// Version 提供 kubeadm 的版本信息。
 type Version struct {
 	ClientVersion *apimachineryversion.Info `json:"clientVersion"`
 }
 
-// newCmdVersion provides the version information of kubeadm.
+// newCmdVersion 提供 kubeadm 的版本信息。
 func newCmdVersion(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
@@ -50,8 +50,7 @@ func newCmdVersion(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// RunVersion provides the version information of kubeadm in format depending on arguments
-// specified in cobra.Command.
+// RunVersion 根据 cobra.Command 中指定的参数，以相应格式提供 kubeadm 版本信息。
 func RunVersion(out io.Writer, cmd *cobra.Command) error {
 	klog.V(1).Infoln("[version] retrieving version info")
 	clientVersion := version.Get()

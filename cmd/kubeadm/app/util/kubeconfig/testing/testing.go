@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testing contains utilities for managing kubeadm kubeconfig in tests.
+// Package testing 包含在测试中管理 kubeadm kubeconfig 的工具。
 package testing
 
 import (
@@ -28,8 +28,7 @@ import (
 	certstestutil "k8s.io/kubernetes/cmd/kubeadm/app/util/certs/testing"
 )
 
-// AssertKubeConfigCurrentCluster is a utility function for kubeadm testing that asserts if the CurrentCluster in
-// the given KubeConfig object contains refers to a specific cluster
+// AssertKubeConfigCurrentCluster 断言 KubeConfig.CurrentCluster 引用指定集群，供 kubeadm 测试使用。
 func AssertKubeConfigCurrentCluster(t *testing.T, config *clientcmdapi.Config, expectedAPIServerAddress string, expectedAPIServerCaCert *x509.Certificate) {
 	currentContext := config.Contexts[config.CurrentContext]
 	currentCluster := config.Clusters[currentContext.Cluster]
@@ -55,8 +54,8 @@ func AssertKubeConfigCurrentCluster(t *testing.T, config *clientcmdapi.Config, e
 	}
 }
 
-// AssertKubeConfigCurrentAuthInfoWithClientCert is a utility function for kubeadm testing that asserts if the CurrentAuthInfo in
-// the given KubeConfig object contains a clientCert that refers to a specific client name, is signed by the expected CA, includes the expected organizations
+// AssertKubeConfigCurrentAuthInfoWithClientCert 断言 CurrentAuthInfo 中的 clientCert 引用指定客户端，
+// 由预期 CA 签署且包含预期组织，供 kubeadm 测试使用。
 func AssertKubeConfigCurrentAuthInfoWithClientCert(t *testing.T, config *clientcmdapi.Config, signinCa *x509.Certificate, expectedNotAfter time.Time, expectedClientName string, expectedOrganizations ...string) {
 	currentContext := config.Contexts[config.CurrentContext]
 	currentAuthInfo := config.AuthInfos[currentContext.AuthInfo]
@@ -80,8 +79,7 @@ func AssertKubeConfigCurrentAuthInfoWithClientCert(t *testing.T, config *clientc
 	certstestutil.AssertCertificateHasOrganizations(t, currentClientCert, expectedOrganizations...)
 }
 
-// AssertKubeConfigCurrentAuthInfoWithToken is a utility function for kubeadm testing that asserts if the CurrentAuthInfo in
-// the given KubeConfig object refers to expected token
+// AssertKubeConfigCurrentAuthInfoWithToken 断言 CurrentAuthInfo 引用预期令牌，供 kubeadm 测试使用。
 func AssertKubeConfigCurrentAuthInfoWithToken(t *testing.T, config *clientcmdapi.Config, expectedClientName, expectedToken string) {
 	currentContext := config.Contexts[config.CurrentContext]
 	currentAuthInfo := config.AuthInfos[currentContext.AuthInfo]
@@ -91,8 +89,7 @@ func AssertKubeConfigCurrentAuthInfoWithToken(t *testing.T, config *clientcmdapi
 	}
 }
 
-// AssertKubeConfigCurrentContextWithClusterName is a utility function for kubeadm testing that asserts if the Current Cluster config in
-// the given KubeConfig object refers to expected cluster name
+// AssertKubeConfigCurrentContextWithClusterName 断言当前集群配置引用预期集群名称，供 kubeadm 测试使用。
 func AssertKubeConfigCurrentContextWithClusterName(t *testing.T, config *clientcmdapi.Config, expectedClusterName string) {
 	currentContext := config.Contexts[config.CurrentContext]
 

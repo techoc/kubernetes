@@ -16,12 +16,9 @@ limitations under the License.
 
 package kubeadm
 
-// GetArgValue traverses an argument slice backwards and returns the value
-// of the given argument name and the index where it was found.
-// If the argument does not exist an empty string and -1 are returned.
-// startIdx defines where the iteration starts. If startIdx is a negative
-// value or larger than the size of the argument slice the iteration
-// will start from the last element.
+// GetArgValue 从后向前遍历参数切片，返回指定参数名的值及其索引。
+// 参数不存在时返回空字符串和 -1。
+// startIdx 指定遍历起点；若为负数或大于参数切片长度，则从最后一个元素开始。
 func GetArgValue(args []Arg, name string, startIdx int) (string, int) {
 	if startIdx < 0 || startIdx > len(args)-1 {
 		startIdx = len(args) - 1
@@ -35,10 +32,9 @@ func GetArgValue(args []Arg, name string, startIdx int) (string, int) {
 	return "", -1
 }
 
-// SetArgValues updates the value of one or more arguments or adds a new
-// one if missing. The function works backwards in the argument list.
-// nArgs holds how many existing arguments with this name should be set.
-// If nArgs is less than 1, all of them will be updated.
+// SetArgValues 更新一个或多个同名参数的值；不存在时追加新参数。
+// 函数从后向前遍历参数列表。
+// nArgs 指定要更新的同名参数数量；小于 1 时更新全部。
 func SetArgValues(args []Arg, name, value string, nArgs int) []Arg {
 	var count int
 	var found bool
@@ -62,8 +58,7 @@ func SetArgValues(args []Arg, name, value string, nArgs int) []Arg {
 	return args
 }
 
-// MergeArgWithBase takes a base and an argument and merges them based
-// on the argument's MergeMethod. No merge method means replace.
+// MergeArgWithBase 根据参数的 MergeMethod 合并基础值和参数值；未指定合并方式时执行替换。
 func MergeArgWithBase(base string, arg Arg) string {
 	switch arg.MergeMethod {
 	case ArgMergeMethodAppend:

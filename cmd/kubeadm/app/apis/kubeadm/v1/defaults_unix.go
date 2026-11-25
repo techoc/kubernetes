@@ -19,8 +19,8 @@ limitations under the License.
 package v1
 
 const (
-	// DefaultCACertPath defines default location of CA certificate on Linux
+	// DefaultCACertPath 定义 Linux 上 CA 证书的默认位置。
 	DefaultCACertPath = "/etc/kubernetes/pki/ca.crt"
-	// DefaultContainerRuntimeURLScheme defines default socket url prefix
+	// DefaultContainerRuntimeURLScheme 定义默认的套接字 URL 前缀。
 	DefaultContainerRuntimeURLScheme = "unix"
 )

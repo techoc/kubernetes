@@ -34,16 +34,16 @@ import (
 )
 
 const (
-	// BootstrapSignerClusterRoleName sets the name for the ClusterRole that allows access to ConfigMaps in the kube-public ns
+	// BootstrapSignerClusterRoleName 设置可访问 kube-public 命名空间中 ConfigMap 的 ClusterRole 名称。
 	BootstrapSignerClusterRoleName = "kubeadm:bootstrap-signer-clusterinfo"
 )
 
-// CreateBootstrapConfigMapIfNotExists creates the kube-public ConfigMap if it doesn't exist already
+// CreateBootstrapConfigMapIfNotExists 在 kube-public ConfigMap 不存在时创建它。
 func CreateBootstrapConfigMapIfNotExists(client clientset.Interface, kubeconfig *clientcmdapi.Config) error {
 
 	fmt.Printf("[bootstrap-token] Creating the %q ConfigMap in the %q namespace\n", bootstrapapi.ConfigMapClusterInfo, metav1.NamespacePublic)
 
-	// Clone the kubeconfig so that it's not mutated.
+	// 克隆 kubeconfig，避免原对象被修改。
 	adminConfig := kubeconfig.DeepCopy()
 	if err := clientcmdapi.FlattenConfig(adminConfig); err != nil {
 		return err
@@ -54,7 +54,7 @@ func CreateBootstrapConfigMapIfNotExists(client clientset.Interface, kubeconfig 
 	}
 
 	adminCluster := adminConfig.Contexts[adminConfig.CurrentContext].Cluster
-	// Copy the cluster from admin.conf to the bootstrap kubeconfig, contains the CA cert and the server URL
+	// 将 admin.conf 中的集群信息复制到引导 kubeconfig，包括 CA 证书和服务器 URL。
 	klog.V(1).Infoln("[bootstrap-token] copying the cluster from admin.conf to the bootstrap kubeconfig")
 	bootstrapConfig := &clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
@@ -66,7 +66,7 @@ func CreateBootstrapConfigMapIfNotExists(client clientset.Interface, kubeconfig 
 		return err
 	}
 
-	// Create or update the ConfigMap in the kube-public namespace
+	// 在 kube-public 命名空间中创建或更新 ConfigMap。
 	klog.V(1).Infoln("[bootstrap-token] creating/updating ConfigMap in kube-public namespace")
 	return apiclient.CreateOrUpdate(client.CoreV1().ConfigMaps(metav1.NamespacePublic), &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -79,7 +79,7 @@ func CreateBootstrapConfigMapIfNotExists(client clientset.Interface, kubeconfig 
 	})
 }
 
-// CreateClusterInfoRBACRules creates the RBAC rules for exposing the cluster-info ConfigMap in the kube-public namespace to unauthenticated users
+// CreateClusterInfoRBACRules 创建 RBAC 规则，允许未认证用户访问 kube-public 命名空间中的 cluster-info ConfigMap。
 func CreateClusterInfoRBACRules(client clientset.Interface) error {
 	klog.V(1).Infoln("creating the RBAC rules for exposing the cluster-info ConfigMap in the kube-public namespace")
 	err := apiclient.CreateOrUpdate(client.RbacV1().Roles(metav1.NamespacePublic), &rbac.Role{

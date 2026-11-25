@@ -53,18 +53,18 @@ const (
 	errExist   = "file already exists"
 )
 
-// clientCertAuth struct holds info required to build a client certificate to provide authentication info in a kubeconfig object
+// clientCertAuth 保存构建客户端证书所需的信息，用于在 kubeconfig 对象中提供认证信息。
 type clientCertAuth struct {
 	CAKey         crypto.Signer
 	Organizations []string
 }
 
-// tokenAuth struct holds info required to use a token to provide authentication info in a kubeconfig object
+// tokenAuth 保存在 kubeconfig 对象中使用令牌提供认证信息所需的数据。
 type tokenAuth struct {
 	Token string `datapolicy:"token"`
 }
 
-// kubeConfigSpec struct holds info required to build a KubeConfig object
+// kubeConfigSpec 保存构建 KubeConfig 对象所需的信息。
 type kubeConfigSpec struct {
 	CACert              *x509.Certificate
 	APIServer           string
@@ -75,11 +75,10 @@ type kubeConfigSpec struct {
 	EncryptionAlgorithm kubeadmapi.EncryptionAlgorithmType
 }
 
-// CreateJoinControlPlaneKubeConfigFiles will create and write to disk the kubeconfig files required by kubeadm
-// join --control-plane workflow, plus the admin kubeconfig file used by the administrator and kubeadm itself; the
-// kubelet.conf file must not be created because it will be created and signed by the kubelet TLS bootstrap process.
-// When not using external CA mode, if a kubeconfig file already exists it is used only if evaluated equal,
-// otherwise an error is returned. For external CA mode, the creation of kubeconfig files is skipped.
+// CreateJoinControlPlaneKubeConfigFiles 创建 kubeadm join --control-plane 流程所需的 kubeconfig 文件，
+// 以及供管理员和 kubeadm 使用的 admin kubeconfig 文件，并写入磁盘。
+// 不得创建 kubelet.conf，因为该文件将由 kubelet TLS 引导流程创建并签名。
+// 非外部 CA 模式下，已有 kubeconfig 仅在内容一致时复用，否则返回错误；外部 CA 模式跳过文件创建。
 func CreateJoinControlPlaneKubeConfigFiles(outDir string, cfg *kubeadmapi.InitConfiguration) error {
 	var externalCA bool
 	caKeyPath := filepath.Join(cfg.CertificatesDir, kubeadmconstants.CAKeyName)
@@ -105,37 +104,37 @@ func CreateJoinControlPlaneKubeConfigFiles(outDir string, cfg *kubeadmapi.InitCo
 	return nil
 }
 
-// CreateKubeConfigFile creates a kubeconfig file.
-// If the kubeconfig file already exists, it is used only if evaluated equal; otherwise an error is returned.
+// CreateKubeConfigFile 创建 kubeconfig 文件。
+// 已有文件仅在内容一致时复用，否则返回错误。
 func CreateKubeConfigFile(kubeConfigFileName string, outDir string, cfg *kubeadmapi.InitConfiguration) error {
 	klog.V(1).Infof("creating kubeconfig file for %s", kubeConfigFileName)
 	return createKubeConfigFiles(outDir, cfg, kubeConfigFileName)
 }
 
-// createKubeConfigFiles creates all the requested kubeconfig files.
-// If kubeconfig files already exists, they are used only if evaluated equal; otherwise an error is returned.
+// createKubeConfigFiles 创建请求的全部 kubeconfig 文件。
+// 已有文件仅在内容一致时复用，否则返回错误。
 func createKubeConfigFiles(outDir string, cfg *kubeadmapi.InitConfiguration, kubeConfigFileNames ...string) error {
 
-	// gets the KubeConfigSpecs, actualized for the current InitConfiguration
+	// 获取按当前 InitConfiguration 填充的 KubeConfigSpecs
 	specs, err := getKubeConfigSpecs(cfg)
 	if err != nil {
 		return err
 	}
 
 	for _, kubeConfigFileName := range kubeConfigFileNames {
-		// retrieves the KubeConfigSpec for given kubeConfigFileName
+		// 获取指定 kubeConfigFileName 的 KubeConfigSpec
 		spec, exists := specs[kubeConfigFileName]
 		if !exists {
 			return errors.Errorf("couldn't retrieve KubeConfigSpec for %s", kubeConfigFileName)
 		}
 
-		// builds the KubeConfig object
+		// 构建 KubeConfig 对象
 		config, err := buildKubeConfigFromSpec(spec, cfg.ClusterName)
 		if err != nil {
 			return err
 		}
 
-		// writes the kubeconfig to disk if it does not exist
+		// 如果 kubeconfig 不存在，写入磁盘
 		if err = createKubeConfigFileIfNotExists(outDir, kubeConfigFileName, config); err != nil {
 			return err
 		}
@@ -144,8 +143,8 @@ func createKubeConfigFiles(outDir string, cfg *kubeadmapi.InitConfiguration, kub
 	return nil
 }
 
-// getKubeConfigSpecs returns all KubeConfigSpecs actualized to the context of the current InitConfiguration
-// NB. this method holds the information about how kubeadm creates kubeconfig files.
+// getKubeConfigSpecs 返回按当前 InitConfiguration 填充的全部 KubeConfigSpecs。
+// 注意：此方法包含 kubeadm 创建 kubeconfig 文件所需的信息。
 func getKubeConfigSpecs(cfg *kubeadmapi.InitConfiguration) (map[string]*kubeConfigSpec, error) {
 	caCert, caKey, err := pkiutil.TryLoadCertAndKeyFromDisk(cfg.CertificatesDir, kubeadmconstants.CACertAndKeyBaseName)
 	if os.IsNotExist(errors.Unwrap(err)) {
@@ -154,7 +153,7 @@ func getKubeConfigSpecs(cfg *kubeadmapi.InitConfiguration) (map[string]*kubeConf
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create a kubeconfig; the CA files couldn't be loaded")
 	}
-	// Validate period
+	// 校验有效期
 	certsphase.CheckCertificatePeriodValidity(kubeadmconstants.CACertAndKeyBaseName, caCert)
 
 	configs, err := getKubeConfigSpecsBase(cfg)
@@ -168,12 +167,12 @@ func getKubeConfigSpecs(cfg *kubeadmapi.InitConfiguration) (map[string]*kubeConf
 	return configs, nil
 }
 
-// buildKubeConfigFromSpec creates a kubeconfig object for the given kubeConfigSpec
+// buildKubeConfigFromSpec 根据给定 kubeConfigSpec 创建 kubeconfig 对象。
 func buildKubeConfigFromSpec(spec *kubeConfigSpec, clustername string) (*clientcmdapi.Config, error) {
 
-	// If this kubeconfig should use token
+	// 如果此 kubeconfig 应使用令牌
 	if spec.TokenAuth != nil {
-		// create a kubeconfig with a token
+		// 创建使用令牌的 kubeconfig
 		return kubeconfigutil.CreateWithToken(
 			spec.APIServer,
 			clustername,
@@ -183,7 +182,7 @@ func buildKubeConfigFromSpec(spec *kubeConfigSpec, clustername string) (*clientc
 		), nil
 	}
 
-	// otherwise, create a client cert
+	// 否则创建客户端证书
 	clientCertConfig := newClientCertConfigFromKubeConfigSpec(spec)
 
 	clientCert, clientKey, err := pkiutil.NewCertAndKey(spec.CACert, spec.ClientCertAuth.CAKey, &clientCertConfig)
@@ -195,7 +194,7 @@ func buildKubeConfigFromSpec(spec *kubeConfigSpec, clustername string) (*clientc
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to marshal private key to PEM")
 	}
-	// create a kubeconfig with the client certs
+	// 创建使用客户端证书的 kubeconfig
 	return kubeconfigutil.CreateWithCerts(
 		spec.APIServer,
 		clustername,
@@ -218,7 +217,7 @@ func newClientCertConfigFromKubeConfigSpec(spec *kubeConfigSpec) pkiutil.CertCon
 	}
 }
 
-// validateKubeConfig check if the kubeconfig file exist and has the expected CA and server URL
+// validateKubeConfig 检查 kubeconfig 文件是否存在，以及 CA 和服务器 URL 是否符合预期。
 func validateKubeConfig(outDir, filename string, config *clientcmdapi.Config) error {
 	kubeConfigFilePath := filepath.Join(outDir, filename)
 
@@ -226,7 +225,7 @@ func validateKubeConfig(outDir, filename string, config *clientcmdapi.Config) er
 		return err
 	}
 
-	// The kubeconfig already exists, let's check if it has got the same CA and server URL
+	// kubeconfig 已存在，检查其 CA 和服务器 URL 是否相同
 	currentConfig, err := clientcmd.LoadFromFile(kubeConfigFilePath)
 	if err != nil {
 		return errors.Wrapf(err, "failed to load kubeconfig file %s that already exists on disk", kubeConfigFilePath)
@@ -246,12 +245,11 @@ func validateKubeConfig(outDir, filename string, config *clientcmdapi.Config) er
 		return errors.Errorf("failed to find the given CurrentContext Cluster in Clusters of the kubeconfig file %s", kubeConfigFilePath)
 	}
 
-	// Make sure the compared CAs are whitespace-trimmed. The function clientcmd.LoadFromFile() just decodes
-	// the base64 CA and places it raw in the v1.Config object. In case the user has extra whitespace
-	// in the CA they used to create a kubeconfig this comparison to a generated v1.Config will otherwise fail.
+	// 比较前去除 CA 两端的空白。clientcmd.LoadFromFile() 仅解码 base64 CA 并原样放入 v1.Config；
+	// 如果用户创建 kubeconfig 时使用的 CA 含多余空白，与生成的 v1.Config 比较会失败。
 	caCurrent := bytes.TrimSpace(currentConfig.Clusters[currentCluster].CertificateAuthorityData)
 	if len(caCurrent) == 0 {
-		// fallback to load CA cert data from external CA file
+		// 回退到从外部 CA 文件加载 CA 证书数据
 		clusterCAFilePath := currentConfig.Clusters[currentCluster].CertificateAuthority
 		if len(clusterCAFilePath) > 0 {
 			clusterCABytes, err := os.ReadFile(clusterCAFilePath)
@@ -264,29 +262,29 @@ func validateKubeConfig(outDir, filename string, config *clientcmdapi.Config) er
 	}
 	caExpected := bytes.TrimSpace(config.Clusters[expectedCluster].CertificateAuthorityData)
 
-	// Parse the current certificate authority data
+	// 解析当前 CA 数据
 	currentCACerts, err := certutil.ParseCertsPEM(caCurrent)
 	if err != nil {
 		return errors.Errorf("the kubeconfig file %q contains an invalid CA cert", kubeConfigFilePath)
 	}
 
-	// Parse the expected certificate authority data
+	// 解析预期 CA 数据
 	expectedCACerts, err := certutil.ParseCertsPEM(caExpected)
 	if err != nil {
 		return errors.Errorf("the expected base64 encoded CA cert could not be parsed as a PEM:\n%s\n", caExpected)
 	}
 
-	// Only use the first certificate in the current CA cert list
+	// 仅使用当前 CA 证书列表中的第一项
 	currentCaCert := currentCACerts[0]
 
-	// Find a common trust anchor
+	// 查找共同的信任锚
 	trustAnchorFound := slices.ContainsFunc(expectedCACerts, currentCaCert.Equal)
 	if !trustAnchorFound {
 		return errors.Errorf("a kubeconfig file %q exists but does not contain a trusted CA in its current context's "+
 			"cluster. Total CA certificates found: %d", kubeConfigFilePath, len(currentCACerts))
 	}
 
-	// If the current API Server location on disk doesn't match the expected API server, show a warning
+	// 如果磁盘上的 API Server 位置与预期不符，输出警告
 	if currentConfig.Clusters[currentCluster].Server != config.Clusters[expectedCluster].Server {
 		klog.Warningf("a kubeconfig file %q exists already but has an unexpected API Server URL: expected: %s, got: %s",
 			kubeConfigFilePath, config.Clusters[expectedCluster].Server, currentConfig.Clusters[currentCluster].Server)
@@ -295,16 +293,15 @@ func validateKubeConfig(outDir, filename string, config *clientcmdapi.Config) er
 	return nil
 }
 
-// createKubeConfigFileIfNotExists saves the KubeConfig object into a file if there isn't any file at the given path.
-// If there already is a kubeconfig file at the given path; kubeadm tries to load it and check if the values in the
-// existing and the expected config equals. If they do; kubeadm will just skip writing the file as it's up-to-date,
-// but if a file exists but has old content or isn't a kubeconfig file, this function returns an error.
+// createKubeConfigFileIfNotExists 在给定路径无文件时将 KubeConfig 对象保存到文件。
+// 如果已有 kubeconfig，kubeadm 会加载并比较现有配置与预期配置；内容一致时跳过写入。
+// 如果文件内容过期或不是 kubeconfig，则返回错误。
 func createKubeConfigFileIfNotExists(outDir, filename string, config *clientcmdapi.Config) error {
 	kubeConfigFilePath := filepath.Join(outDir, filename)
 
 	err := validateKubeConfig(outDir, filename, config)
 	if err != nil {
-		// Check if the file exist, and if it doesn't, just write it to disk
+		// 检查文件是否存在，不存在则写入磁盘
 		if !os.IsNotExist(err) {
 			return err
 		}
@@ -312,23 +309,22 @@ func createKubeConfigFileIfNotExists(outDir, filename string, config *clientcmda
 		err = kubeconfigutil.WriteToDisk(kubeConfigFilePath, config)
 		return errors.Wrapf(err, "failed to save kubeconfig file %q on disk", kubeConfigFilePath)
 	}
-	// kubeadm doesn't validate the existing kubeconfig file more than this (kubeadm trusts the client certs to be valid)
-	// Basically, if we find a kubeconfig file with the same path; the same CA cert and the same server URL;
-	// kubeadm thinks those files are equal and doesn't bother writing a new file
+	// kubeadm 对现有 kubeconfig 仅做此校验（信任客户端证书有效）：
+	// 如果路径、CA 证书和服务器 URL 均相同，就认为文件一致，不再写入新文件。
 	fmt.Printf("[kubeconfig] Using existing kubeconfig file: %q\n", kubeConfigFilePath)
 
 	return nil
 }
 
-// WriteKubeConfigWithClientCert writes a kubeconfig file - with a client certificate as authentication info  - to the given writer.
+// WriteKubeConfigWithClientCert 将使用客户端证书认证的 kubeconfig 写入给定 Writer。
 func WriteKubeConfigWithClientCert(out io.Writer, cfg *kubeadmapi.InitConfiguration, clientName string, organizations []string, notAfter time.Time) error {
 
-	// creates the KubeConfigSpecs, actualized for the current InitConfiguration
+	// 创建按当前 InitConfiguration 填充的 KubeConfigSpecs
 	caCert, caKey, err := pkiutil.TryLoadCertAndKeyFromDisk(cfg.CertificatesDir, kubeadmconstants.CACertAndKeyBaseName)
 	if err != nil {
 		return errors.Wrap(err, "couldn't create a kubeconfig; the CA files couldn't be loaded")
 	}
-	// Validate period
+	// 校验有效期
 	certsphase.CheckCertificatePeriodValidity(kubeadmconstants.CACertAndKeyBaseName, caCert)
 
 	controlPlaneEndpoint, err := kubeadmutil.GetControlPlaneEndpoint(cfg.ControlPlaneEndpoint, &cfg.LocalAPIEndpoint)
@@ -351,15 +347,15 @@ func WriteKubeConfigWithClientCert(out io.Writer, cfg *kubeadmapi.InitConfigurat
 	return writeKubeConfigFromSpec(out, spec, cfg.ClusterName)
 }
 
-// WriteKubeConfigWithToken writes a kubeconfig file - with a token as client authentication info - to the given writer.
+// WriteKubeConfigWithToken 将使用令牌认证的 kubeconfig 写入给定 Writer。
 func WriteKubeConfigWithToken(out io.Writer, cfg *kubeadmapi.InitConfiguration, clientName, token string, notAfter time.Time) error {
 
-	// creates the KubeConfigSpecs, actualized for the current InitConfiguration
+	// 创建按当前 InitConfiguration 填充的 KubeConfigSpecs
 	caCert, _, err := pkiutil.TryLoadCertAndKeyFromDisk(cfg.CertificatesDir, kubeadmconstants.CACertAndKeyBaseName)
 	if err != nil {
 		return errors.Wrap(err, "couldn't create a kubeconfig; the CA files couldn't be loaded")
 	}
-	// Validate period
+	// 校验有效期
 	certsphase.CheckCertificatePeriodValidity(kubeadmconstants.CACertAndKeyBaseName, caCert)
 
 	controlPlaneEndpoint, err := kubeadmutil.GetControlPlaneEndpoint(cfg.ControlPlaneEndpoint, &cfg.LocalAPIEndpoint)
@@ -381,16 +377,16 @@ func WriteKubeConfigWithToken(out io.Writer, cfg *kubeadmapi.InitConfiguration, 
 	return writeKubeConfigFromSpec(out, spec, cfg.ClusterName)
 }
 
-// writeKubeConfigFromSpec creates a kubeconfig object from a kubeConfigSpec and writes it to the given writer.
+// writeKubeConfigFromSpec 根据 kubeConfigSpec 创建 kubeconfig 对象并写入给定 Writer。
 func writeKubeConfigFromSpec(out io.Writer, spec *kubeConfigSpec, clustername string) error {
 
-	// builds the KubeConfig object
+	// 构建 KubeConfig 对象
 	config, err := buildKubeConfigFromSpec(spec, clustername)
 	if err != nil {
 		return err
 	}
 
-	// writes the kubeconfig to disk if it not exists
+	// 如果 kubeconfig 不存在，写入磁盘
 	configBytes, err := clientcmd.Write(*config)
 	if err != nil {
 		return errors.Wrap(err, "failure while serializing admin kubeconfig")
@@ -400,24 +396,24 @@ func writeKubeConfigFromSpec(out io.Writer, spec *kubeConfigSpec, clustername st
 	return nil
 }
 
-// ValidateKubeconfigsForExternalCA check if the kubeconfig file exist and has the expected CA and server URL using kubeadmapi.InitConfiguration.
+// ValidateKubeconfigsForExternalCA 使用 kubeadmapi.InitConfiguration 检查 kubeconfig 是否存在，以及 CA 和服务器 URL 是否符合预期。
 func ValidateKubeconfigsForExternalCA(outDir string, cfg *kubeadmapi.InitConfiguration) error {
-	// Creates a kubeconfig file with the target CA and server URL
-	// to be used as a input for validating user provided kubeconfig files
+	// 创建包含目标 CA 和服务器 URL 的 kubeconfig，
+	// 作为校验用户提供的 kubeconfig 文件的输入。
 	caCert, intermediaries, err := pkiutil.TryLoadCertChainFromDisk(cfg.CertificatesDir, kubeadmconstants.CACertAndKeyBaseName)
 	if err != nil {
 		return errors.Wrapf(err, "the CA file couldn't be loaded")
 	}
 
-	// Combine caCert and intermediaries into one array
+	// 将 caCert 和中间证书合并为一个数组
 	caCertChain := append([]*x509.Certificate{caCert}, intermediaries...)
 
-	// Validate period
+	// 校验有效期
 	for _, cert := range caCertChain {
 		certsphase.CheckCertificatePeriodValidity(kubeadmconstants.CACertAndKeyBaseName, cert)
 	}
 
-	// validate user provided kubeconfig files for the scheduler and controller-manager
+	// 校验用户为调度器和 Controller Manager 提供的 kubeconfig 文件
 	localAPIEndpoint, err := kubeadmutil.GetLocalAPIEndpoint(&cfg.LocalAPIEndpoint)
 	if err != nil {
 		return err
@@ -440,7 +436,7 @@ func ValidateKubeconfigsForExternalCA(outDir string, cfg *kubeadmapi.InitConfigu
 		}
 	}
 
-	// validate user provided kubeconfig files for the kubelet and admin
+	// 校验用户为 kubelet 和管理员提供的 kubeconfig 文件
 	controlPlaneEndpoint, err := kubeadmutil.GetControlPlaneEndpoint(cfg.ControlPlaneEndpoint, &cfg.LocalAPIEndpoint)
 	if err != nil {
 		return err
@@ -567,7 +563,7 @@ func createKubeConfigAndCSR(kubeConfigDir string, kubeadmConfig *kubeadmapi.Init
 		emptyClientCert []byte
 	)
 
-	// create a kubeconfig with the client certs
+	// 创建使用客户端证书的 kubeconfig
 	config := kubeconfigutil.CreateWithCerts(
 		spec.APIServer,
 		kubeadmConfig.ClusterName,
@@ -580,15 +576,14 @@ func createKubeConfigAndCSR(kubeConfigDir string, kubeadmConfig *kubeadmapi.Init
 	if err := kubeconfigutil.WriteToDisk(kubeConfigPath, config); err != nil {
 		return err
 	}
-	// Write CSR to disk
+	// 将 CSR 写入磁盘
 	if err := pkiutil.WriteCSR(kubeConfigDir, name, clientCSR); err != nil {
 		return err
 	}
 	return nil
 }
 
-// CreateDefaultKubeConfigsAndCSRFiles is used in ExternalCA mode to create
-// kubeconfig files and adjacent CSR files.
+// CreateDefaultKubeConfigsAndCSRFiles 用于 ExternalCA 模式，创建 kubeconfig 文件及同目录的 CSR 文件。
 func CreateDefaultKubeConfigsAndCSRFiles(out io.Writer, kubeConfigDir string, kubeadmConfig *kubeadmapi.InitConfiguration) error {
 	kubeConfigs, err := getKubeConfigSpecsBase(kubeadmConfig)
 	if err != nil {
@@ -608,20 +603,19 @@ func CreateDefaultKubeConfigsAndCSRFiles(out io.Writer, kubeConfigDir string, ku
 	return nil
 }
 
-// EnsureRBACFunc defines a function type that can be passed to EnsureAdminClusterRoleBinding().
+// EnsureRBACFunc 定义可传给 EnsureAdminClusterRoleBinding() 的函数类型。
 type EnsureRBACFunc func(context.Context, clientset.Interface, clientset.Interface, time.Duration, time.Duration) (clientset.Interface, error)
 
-// EnsureAdminClusterRoleBinding constructs a client from admin.conf and optionally
-// constructs a client from super-admin.conf if the file exists. It then proceeds
-// to pass the clients to EnsureAdminClusterRoleBindingImpl. The function returns a
-// usable client from admin.conf with RBAC properly constructed or an error.
+// EnsureAdminClusterRoleBinding 从 admin.conf 创建客户端；如果 super-admin.conf 存在，也据此创建客户端。
+// 然后将客户端传给 EnsureAdminClusterRoleBindingImpl。
+// 函数返回已正确配置 RBAC、可用的 admin.conf 客户端，或返回错误。
 func EnsureAdminClusterRoleBinding(outDir string, lae *kubeadmapi.APIEndpoint, ensureRBACFunc EnsureRBACFunc) (clientset.Interface, error) {
 	var (
 		err                           error
 		adminClient, superAdminClient clientset.Interface
 	)
 
-	// Create a client from admin.conf.
+	// 从 admin.conf 创建客户端。
 	kubeconfig, err := clientcmd.LoadFromFile(filepath.Join(outDir, kubeadmconstants.AdminKubeConfigFileName))
 	if err != nil {
 		return nil, err
@@ -632,7 +626,7 @@ func EnsureAdminClusterRoleBinding(outDir string, lae *kubeadmapi.APIEndpoint, e
 		return nil, err
 	}
 
-	// Create a client from super-admin.conf.
+	// 从 super-admin.conf 创建客户端。
 	superAdminPath := filepath.Join(outDir, kubeadmconstants.SuperAdminKubeConfigFileName)
 	if _, err := os.Stat(superAdminPath); err == nil {
 		kubeconfig, err := clientcmd.LoadFromFile(superAdminPath)
@@ -657,10 +651,8 @@ func EnsureAdminClusterRoleBinding(outDir string, lae *kubeadmapi.APIEndpoint, e
 	)
 }
 
-// EnsureAdminClusterRoleBindingImpl first attempts to see if the ClusterRoleBinding
-// kubeadm:cluster-admins exists by using adminClient. If it already exists,
-// it would mean the adminClient is usable. If it does not, attempt to create
-// the ClusterRoleBinding by using superAdminClient.
+// EnsureAdminClusterRoleBindingImpl 先使用 adminClient 检查 ClusterRoleBinding kubeadm:cluster-admins 是否存在。
+// 如果存在，说明 adminClient 可用；否则尝试使用 superAdminClient 创建该绑定。
 func EnsureAdminClusterRoleBindingImpl(ctx context.Context, adminClient, superAdminClient clientset.Interface,
 	retryInterval, retryTimeout time.Duration) (clientset.Interface, error) {
 
@@ -688,9 +680,8 @@ func EnsureAdminClusterRoleBindingImpl(ctx context.Context, adminClient, superAd
 		}
 	)
 
-	// First try to create the CRB with the admin.conf client. If the admin.conf contains a User bound
-	// to the built-in super-user group, this will pass. In all other cases an error will be returned.
-	// The poll here is required to ensure the API server is reachable during "kubeadm init" workflows.
+	// 先使用 admin.conf 客户端创建 CRB。如果 admin.conf 中的用户绑定到内置超级用户组，即可成功；
+	// 其他情况会返回错误。此处轮询用于确保 "kubeadm init" 流程中 API Server 可访问。
 	err = wait.PollUntilContextTimeout(
 		ctx,
 		retryInterval,
@@ -702,17 +693,15 @@ func EnsureAdminClusterRoleBindingImpl(ctx context.Context, adminClient, superAd
 				metav1.CreateOptions{},
 			); err != nil {
 				if apierrors.IsForbidden(err) {
-					// If it encounters a forbidden error this means that the API server was reached
-					// but the CRB is missing - i.e. the admin.conf user does not have permissions
-					// to create its own permission RBAC yet.
+					// 如果遇到禁止访问错误，说明 API Server 可访问，但 CRB 不存在，
+					// 即 admin.conf 用户尚无权限创建授予自身权限的 RBAC。
 					return true, nil
 				} else if apierrors.IsAlreadyExists(err) {
-					// If the CRB exists it means the admin.conf already has the right
-					// permissions; return.
+					// 如果 CRB 存在，说明 admin.conf 已有正确权限，直接返回。
 					crbExists = true
 					return true, nil
 				} else {
-					// Retry on any other error type.
+					// 遇到其他类型的错误时重试。
 					lastError = errors.Wrap(err, "unable to create ClusterRoleBinding")
 					return false, nil
 				}
@@ -724,19 +713,19 @@ func EnsureAdminClusterRoleBindingImpl(ctx context.Context, adminClient, superAd
 		return nil, lastError
 	}
 
-	// The CRB was created or already existed; return the admin.conf client.
+	// CRB 已创建或原本存在，返回 admin.conf 客户端。
 	if crbExists {
 		return adminClient, nil
 	}
 
-	// If the superAdminClient is nil at this point we cannot proceed creating the CRB; return an error.
+	// 此时如果 superAdminClient 为 nil，无法继续创建 CRB，返回错误。
 	if superAdminClient == nil {
 		return nil, errors.Errorf("the ClusterRoleBinding for the %s Group is missing but there is no %s to create it",
 			kubeadmconstants.ClusterAdminsGroupAndClusterRoleBinding,
 			kubeadmconstants.SuperAdminKubeConfigFileName)
 	}
 
-	// Create the ClusterRoleBinding with the super-admin.conf client.
+	// 使用 super-admin.conf 客户端创建 ClusterRoleBinding。
 	klog.V(1).Infof("creating the ClusterRoleBinding for the %s Group by using %s",
 		kubeadmconstants.ClusterAdminsGroupAndClusterRoleBinding,
 		kubeadmconstants.SuperAdminKubeConfigFileName)
@@ -756,7 +745,7 @@ func EnsureAdminClusterRoleBindingImpl(ctx context.Context, adminClient, superAd
 					klog.V(5).Infof("ClusterRoleBinding %s already exists.", kubeadmconstants.ClusterAdminsGroupAndClusterRoleBinding)
 					return true, nil
 				}
-				// Retry on any other type of error.
+				// 遇到其他类型的错误时重试。
 				return false, nil
 			}
 			return true, nil
@@ -767,6 +756,6 @@ func EnsureAdminClusterRoleBindingImpl(ctx context.Context, adminClient, superAd
 			kubeadmconstants.SuperAdminKubeConfigFileName)
 	}
 
-	// Once the CRB is in place, start using the admin.conf client.
+	// CRB 就位后，开始使用 admin.conf 客户端。
 	return adminClient, nil
 }

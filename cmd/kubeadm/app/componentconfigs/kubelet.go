@@ -31,30 +31,30 @@ import (
 )
 
 const (
-	// KubeletGroup is a pointer to the used API group name for the kubelet config
+	// KubeletGroup 指向 kubelet 配置使用的 API 组名。
 	KubeletGroup = kubeletconfig.GroupName
 
-	// kubeletReadOnlyPort specifies the default insecure http server port
-	// 0 will disable insecure http server.
+	// kubeletReadOnlyPort 指定不安全 HTTP 服务的默认端口。
+	// 值为 0 时禁用不安全 HTTP 服务。
 	kubeletReadOnlyPort int32 = 0
 
-	// kubeletRotateCertificates specifies the default value to enable certificate rotation
+	// kubeletRotateCertificates 指定启用证书轮换的默认值。
 	kubeletRotateCertificates = true
 
-	// kubeletAuthenticationAnonymousEnabled specifies the default value to disable anonymous access
+	// kubeletAuthenticationAnonymousEnabled 指定禁用匿名访问的默认值。
 	kubeletAuthenticationAnonymousEnabled = false
 
-	// kubeletAuthenticationWebhookEnabled set the default value to enable authentication webhook
+	// kubeletAuthenticationWebhookEnabled 指定启用认证 Webhook 的默认值。
 	kubeletAuthenticationWebhookEnabled = true
 
-	// kubeletHealthzBindAddress specifies the default healthz bind address
+	// kubeletHealthzBindAddress 指定 healthz 服务的默认监听地址。
 	kubeletHealthzBindAddress = "127.0.0.1"
 
-	// kubeletSystemdResolverConfig specifies the default resolver config when systemd service is active
+	// kubeletSystemdResolverConfig 指定 systemd 服务处于活动状态时使用的默认解析器配置。
 	kubeletSystemdResolverConfig = "/run/systemd/resolve/resolv.conf"
 )
 
-// kubeletHandler is the handler instance for the kubelet component config
+// kubeletHandler 是 kubelet 组件配置的处理实例。
 var kubeletHandler = handler{
 	GroupVersion: kubeletconfig.SchemeGroupVersion,
 	AddToScheme:  kubeletconfig.AddToScheme,
@@ -79,12 +79,13 @@ func kubeletConfigFromCluster(h *handler, clientset clientset.Interface, _ *kube
 	return cm, nil
 }
 
-// kubeletConfig implements the kubeadmapi.ComponentConfig interface for kubelet
+// kubeletConfig 为 kubelet 实现 kubeadmapi.ComponentConfig 接口。
 type kubeletConfig struct {
 	configBase
 	config kubeletconfig.KubeletConfiguration
 }
 
+// DeepCopy 深拷贝配置，避免调用方共享内部 map 和 slice。
 func (kc *kubeletConfig) DeepCopy() kubeadmapi.ComponentConfig {
 	result := &kubeletConfig{}
 	kc.configBase.DeepCopyInto(&result.configBase)
@@ -92,22 +93,27 @@ func (kc *kubeletConfig) DeepCopy() kubeadmapi.ComponentConfig {
 	return result
 }
 
+// Marshal 使用配置所属 GroupVersion 将 kubelet 配置编码为 YAML。
 func (kc *kubeletConfig) Marshal() ([]byte, error) {
 	return kc.configBase.Marshal(&kc.config)
 }
 
+// Unmarshal 从文档集合解析 kubelet 配置；版本不匹配时要求调用方手动转换。
 func (kc *kubeletConfig) Unmarshal(docmap kubeadmapi.DocumentMap) error {
 	return kc.configBase.Unmarshal(docmap, &kc.config)
 }
 
+// Get 返回内部配置指针，调用方修改会直接反映到当前对象。
 func (kc *kubeletConfig) Get() interface{} {
 	return &kc.config
 }
 
+// Set 替换内部配置值；cfg 必须是 *kubeletconfig.KubeletConfiguration。
 func (kc *kubeletConfig) Set(cfg interface{}) {
 	kc.config = *cfg.(*kubeletconfig.KubeletConfiguration)
 }
 
+// Default 依据集群配置补齐 kubelet 默认值，同时保留用户显式设置的非默认路径。
 func (kc *kubeletConfig) Default(cfg *kubeadmapi.ClusterConfiguration, _ *kubeadmapi.APIEndpoint, nodeRegOpts *kubeadmapi.NodeRegistrationOptions) {
 	const kind = "KubeletConfiguration"
 
@@ -141,7 +147,7 @@ func (kc *kubeletConfig) Default(cfg *kubeadmapi.ClusterConfiguration, _ *kubead
 		warnDefaultComponentConfigValue(kind, "clusterDomain", cfg.Networking.DNSDomain, kc.config.ClusterDomain)
 	}
 
-	// Require all clients to the kubelet API to have client certs signed by the cluster CA
+	// 要求所有访问 kubelet API 的客户端提供由集群 CA 签发的客户端证书。
 	clientCAFile := filepath.Join(cfg.CertificatesDir, constants.CACertName)
 	if kc.config.Authentication.X509.ClientCAFile == "" {
 		kc.config.Authentication.X509.ClientCAFile = clientCAFile
@@ -155,22 +161,22 @@ func (kc *kubeletConfig) Default(cfg *kubeadmapi.ClusterConfiguration, _ *kubead
 		warnDefaultComponentConfigValue(kind, "authentication.anonymous.enabled", kubeletAuthenticationAnonymousEnabled, *kc.config.Authentication.Anonymous.Enabled)
 	}
 
-	// On every client request to the kubelet API, execute a webhook (SubjectAccessReview request) to the API server
-	// and ask it whether the client is authorized to access the kubelet API
+	// 每次收到 kubelet API 客户端请求时，向 API 服务器执行 Webhook（SubjectAccessReview 请求），
+	// 询问该客户端是否有权访问 kubelet API。
 	if kc.config.Authorization.Mode == "" {
 		kc.config.Authorization.Mode = kubeletconfig.KubeletAuthorizationModeWebhook
 	} else if kc.config.Authorization.Mode != kubeletconfig.KubeletAuthorizationModeWebhook {
 		warnDefaultComponentConfigValue(kind, "authorization.mode", kubeletconfig.KubeletAuthorizationModeWebhook, kc.config.Authorization.Mode)
 	}
 
-	// Let clients using other authentication methods like ServiceAccount tokens also access the kubelet API
+	// 允许使用 ServiceAccount 令牌等其他认证方式的客户端访问 kubelet API。
 	if kc.config.Authentication.Webhook.Enabled == nil {
 		kc.config.Authentication.Webhook.Enabled = ptr.To(kubeletAuthenticationWebhookEnabled)
 	} else if !*kc.config.Authentication.Webhook.Enabled {
 		warnDefaultComponentConfigValue(kind, "authentication.webhook.enabled", kubeletAuthenticationWebhookEnabled, *kc.config.Authentication.Webhook.Enabled)
 	}
 
-	// Serve a /healthz webserver on 127.0.0.1:10248 that kubeadm can talk to
+	// 在 127.0.0.1:10248 上提供 /healthz Web 服务，供 kubeadm 访问。
 	if kc.config.HealthzBindAddress == "" {
 		kc.config.HealthzBindAddress = kubeletHealthzBindAddress
 	} else if kc.config.HealthzBindAddress != kubeletHealthzBindAddress {
@@ -187,8 +193,7 @@ func (kc *kubeletConfig) Default(cfg *kubeadmapi.ClusterConfiguration, _ *kubead
 		warnDefaultComponentConfigValue(kind, "readOnlyPort", kubeletReadOnlyPort, kc.config.ReadOnlyPort)
 	}
 
-	// We cannot show a warning for RotateCertificates==false and we must hardcode it to true.
-	// There is no way to determine if the user has set this or not, given the field is a non-pointer.
+	// RotateCertificates 为非指针字段，无法判断用户是否设置过 false，因此不能警告并强制设为 true。
 	kc.config.RotateCertificates = kubeletRotateCertificates
 
 	if len(kc.config.CgroupDriver) == 0 {

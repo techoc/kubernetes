@@ -108,7 +108,7 @@ func roundtrip(input string, bts *BootstrapTokenString) error {
 	var b []byte
 	var err error
 	newbts := &BootstrapTokenString{}
-	// If string input was specified, roundtrip like this: string -> (unmarshal) -> object -> (marshal) -> string
+	// 如果指定了字符串输入，按字符串 ->（反序列化）-> 对象 ->（序列化）-> 字符串的方式往返。
 	if len(input) > 0 {
 		if err := json.Unmarshal([]byte(input), newbts); err != nil {
 			return errors.Wrap(err, "expected no unmarshal error, got error")
@@ -123,7 +123,7 @@ func roundtrip(input string, bts *BootstrapTokenString) error {
 				string(b),
 			)
 		}
-	} else { // Otherwise, roundtrip like this: object -> (marshal) -> string -> (unmarshal) -> object
+	} else { // 否则，按对象 ->（序列化）-> 字符串 ->（反序列化）-> 对象的方式往返。
 		if b, err = json.Marshal(bts); err != nil {
 			return errors.Wrap(err, "expected no marshal error, got error")
 		}
@@ -172,16 +172,16 @@ func TestNewBootstrapTokenString(t *testing.T) {
 	}{
 		{token: "", expectedError: true, bts: nil},
 		{token: ".", expectedError: true, bts: nil},
-		{token: "1234567890123456789012", expectedError: true, bts: nil},   // invalid parcel size
-		{token: "12345.1234567890123456", expectedError: true, bts: nil},   // invalid parcel size
-		{token: ".1234567890123456", expectedError: true, bts: nil},        // invalid parcel size
-		{token: "123456.", expectedError: true, bts: nil},                  // invalid parcel size
-		{token: "123456:1234567890.123456", expectedError: true, bts: nil}, // invalid separation
-		{token: "abcdef:1234567890123456", expectedError: true, bts: nil},  // invalid separation
-		{token: "Abcdef.1234567890123456", expectedError: true, bts: nil},  // invalid token id
-		{token: "123456.AABBCCDDEEFFGGHH", expectedError: true, bts: nil},  // invalid token secret
-		{token: "123456.AABBCCD-EEFFGGHH", expectedError: true, bts: nil},  // invalid character
-		{token: "abc*ef.1234567890123456", expectedError: true, bts: nil},  // invalid character
+		{token: "1234567890123456789012", expectedError: true, bts: nil},   // 分段长度无效
+		{token: "12345.1234567890123456", expectedError: true, bts: nil},   // 分段长度无效
+		{token: ".1234567890123456", expectedError: true, bts: nil},        // 分段长度无效
+		{token: "123456.", expectedError: true, bts: nil},                  // 分段长度无效
+		{token: "123456:1234567890.123456", expectedError: true, bts: nil}, // 分隔符无效
+		{token: "abcdef:1234567890123456", expectedError: true, bts: nil},  // 分隔符无效
+		{token: "Abcdef.1234567890123456", expectedError: true, bts: nil},  // 令牌 ID 无效
+		{token: "123456.AABBCCDDEEFFGGHH", expectedError: true, bts: nil},  // 令牌密钥无效
+		{token: "123456.AABBCCD-EEFFGGHH", expectedError: true, bts: nil},  // 字符无效
+		{token: "abc*ef.1234567890123456", expectedError: true, bts: nil},  // 字符无效
 		{token: "abcdef.1234567890123456", expectedError: false, bts: &BootstrapTokenString{ID: "abcdef", Secret: "1234567890123456"}},
 		{token: "123456.aabbccddeeffgghh", expectedError: false, bts: &BootstrapTokenString{ID: "123456", Secret: "aabbccddeeffgghh"}},
 		{token: "abcdef.abcdef0123456789", expectedError: false, bts: &BootstrapTokenString{ID: "abcdef", Secret: "abcdef0123456789"}},
@@ -216,14 +216,14 @@ func TestNewBootstrapTokenStringFromIDAndSecret(t *testing.T) {
 		bts           *BootstrapTokenString
 	}{
 		{id: "", secret: "", expectedError: true, bts: nil},
-		{id: "1234567890123456789012", secret: "", expectedError: true, bts: nil}, // invalid parcel size
-		{id: "12345", secret: "1234567890123456", expectedError: true, bts: nil},  // invalid parcel size
-		{id: "", secret: "1234567890123456", expectedError: true, bts: nil},       // invalid parcel size
-		{id: "123456", secret: "", expectedError: true, bts: nil},                 // invalid parcel size
-		{id: "Abcdef", secret: "1234567890123456", expectedError: true, bts: nil}, // invalid token id
-		{id: "123456", secret: "AABBCCDDEEFFGGHH", expectedError: true, bts: nil}, // invalid token secret
-		{id: "123456", secret: "AABBCCD-EEFFGGHH", expectedError: true, bts: nil}, // invalid character
-		{id: "abc*ef", secret: "1234567890123456", expectedError: true, bts: nil}, // invalid character
+		{id: "1234567890123456789012", secret: "", expectedError: true, bts: nil}, // 分段长度无效
+		{id: "12345", secret: "1234567890123456", expectedError: true, bts: nil},  // 分段长度无效
+		{id: "", secret: "1234567890123456", expectedError: true, bts: nil},       // 分段长度无效
+		{id: "123456", secret: "", expectedError: true, bts: nil},                 // 分段长度无效
+		{id: "Abcdef", secret: "1234567890123456", expectedError: true, bts: nil}, // 令牌 ID 无效
+		{id: "123456", secret: "AABBCCDDEEFFGGHH", expectedError: true, bts: nil}, // 令牌密钥无效
+		{id: "123456", secret: "AABBCCD-EEFFGGHH", expectedError: true, bts: nil}, // 字符无效
+		{id: "abc*ef", secret: "1234567890123456", expectedError: true, bts: nil}, // 字符无效
 		{id: "abcdef", secret: "1234567890123456", expectedError: false, bts: &BootstrapTokenString{ID: "abcdef", Secret: "1234567890123456"}},
 		{id: "123456", secret: "aabbccddeeffgghh", expectedError: false, bts: &BootstrapTokenString{ID: "123456", Secret: "aabbccddeeffgghh"}},
 		{id: "abcdef", secret: "abcdef0123456789", expectedError: false, bts: &BootstrapTokenString{ID: "abcdef", Secret: "abcdef0123456789"}},
@@ -253,7 +253,7 @@ func TestNewBootstrapTokenStringFromIDAndSecret(t *testing.T) {
 	}
 }
 
-// This timestamp is used as the reference value when computing expiration dates based on TTLs in these unit tests
+// 在这些单元测试中，此时间戳用作根据 TTL 计算过期时间的参考值。
 var refTime = time.Date(1970, time.January, 1, 1, 1, 1, 0, time.UTC)
 
 func TestBootstrapTokenToSecret(t *testing.T) {
@@ -262,7 +262,7 @@ func TestBootstrapTokenToSecret(t *testing.T) {
 		secret *v1.Secret
 	}{
 		{
-			&BootstrapToken{ // all together
+			&BootstrapToken{ // 所有字段组合
 				Token:       &BootstrapTokenString{ID: "abcdef", Secret: "abcdef0123456789"},
 				Description: "foo",
 				Expires: &metav1.Time{
@@ -660,10 +660,10 @@ func TestBootstrapTokenFromSecret(t *testing.T) {
 				)
 			} else {
 				if actual == nil && rt.bt == nil {
-					// if both pointers are nil, it's okay, just continue
+					// 如果两个指针都为 nil，则符合预期，直接继续。
 					return
 				}
-				// If one of the pointers is defined but the other isn't, throw error. If both pointers are defined but unequal, throw error
+				// 如果仅一个指针非 nil，或两个指针均非 nil 但指向的值不相等，则报告错误。
 				if (actual == nil && rt.bt != nil) || (actual != nil && rt.bt == nil) || !reflect.DeepEqual(*actual, *rt.bt) {
 					t.Errorf(
 						"failed BootstrapTokenFromSecret\n\texpected: %s\n\t  actual: %s",

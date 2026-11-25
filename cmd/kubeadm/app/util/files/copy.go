@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package files contains utilities for managing files.
+// Package files 包含管理文件的工具。
 package files
 
 import (
@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// CopyFile copies a file from src to dest.
+// CopyFile 将文件从 src 复制到 dest。
 func CopyFile(src, dest string) error {
 	sourceFileInfo, err := os.Stat(src)
 	if err != nil {
@@ -57,7 +57,7 @@ func CopyFile(src, dest string) error {
 	return err
 }
 
-// CopyDir copies the content of a folder to dest, which is created if needed.
+// CopyDir 将目录内容复制到 dest，必要时创建该目录。
 func CopyDir(src, dest string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -79,14 +79,12 @@ func CopyDir(src, dest string) error {
 	})
 }
 
-// MoveFile moves a file from src to dest.
+// MoveFile 将文件从 src 移动到 dest。
 func MoveFile(src, dest string) error {
 	err := os.Rename(src, dest)
 	if err != nil && strings.Contains(err.Error(), "invalid cross-device link") {
-		// When calling os.Rename(), an "invalid cross-device link" error may occur
-		// if the source and destination files are on different file systems.
-		// In this case, the file is moved by copying and then deleting the source file,
-		// although it is less efficient than os.Rename().
+		// 源文件和目标文件位于不同文件系统时，os.Rename() 可能返回 "invalid cross-device link"。
+		// 此时先复制再删除源文件，效率低于 os.Rename()。
 		klog.V(4).Infof("cannot rename %v to %v due to %v, attempting an alternative method", src, dest, err)
 		if err := CopyFile(src, dest); err != nil {
 			return errors.Wrapf(err, "failed to copy file %v to %v", src, dest)

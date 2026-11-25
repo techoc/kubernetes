@@ -19,13 +19,13 @@ limitations under the License.
 package constants
 
 const (
-	// CRISocketContainerd is the containerd CRI endpoint
+	// CRISocketContainerd 是 containerd 的 CRI 端点。
 	CRISocketContainerd = "unix:///var/run/containerd/containerd.sock"
-	// CRISocketCRIO is the cri-o CRI endpoint
+	// CRISocketCRIO 是 cri-o 的 CRI 端点。
 	CRISocketCRIO = "unix:///var/run/crio/crio.sock"
-	// CRISocketDocker is the cri-dockerd CRI endpoint
+	// CRISocketDocker 是 cri-dockerd 的 CRI 端点。
 	CRISocketDocker = "unix:///var/run/cri-dockerd.sock"
 
-	// DefaultCRISocket defines the default CRI socket
+	// DefaultCRISocket 定义默认 CRI 套接字。
 	DefaultCRISocket = CRISocketContainerd
 )

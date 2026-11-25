@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// GetKubeletVersion is helper function that returns version of kubelet available in $PATH
+// GetKubeletVersion 是一个辅助函数，返回 $PATH 中可用的 kubelet 版本。
 func GetKubeletVersion(execer utilsexec.Interface) (*version.Version, error) {
 	kubeletVersionRegex := regexp.MustCompile(`^\s*Kubernetes v((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)([-\w.+]*)?)\s*$`)
 

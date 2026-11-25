@@ -517,7 +517,7 @@ func TestGetHostPathVolumesForTheControlPlane(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpdir)
 
-	// set up tmp caCertsExtraVolumePaths for testing
+	// 为测试设置临时 caCertsExtraVolumePaths
 	originalCACertsExtraVolumePaths := caCertsExtraVolumePaths
 	caCertsExtraVolumePaths = []string{fmt.Sprintf("%s/etc/pki/ca-trust", tmpdir), fmt.Sprintf("%s/usr/share/ca-certificates", tmpdir)}
 	defer func() { caCertsExtraVolumePaths = originalCACertsExtraVolumePaths }()

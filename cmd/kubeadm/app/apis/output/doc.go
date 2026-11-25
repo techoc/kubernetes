@@ -17,8 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=output.kubeadm.k8s.io
 
-// Package output implements the kubeadm structured output
-// The purpose of the kubeadm structured output is to have a well
-// defined versioned output format that other software that uses
-// kubeadm for cluster deployments can use and rely on.
+// Package output 实现 kubeadm 的结构化输出。
+// 其目标是提供明确、带版本的输出格式，供使用 kubeadm 部署集群的其他软件使用和依赖。
 package output

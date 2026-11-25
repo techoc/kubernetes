@@ -49,14 +49,14 @@ ignorePreflightErrors:
 `, kubeadmapiv1.SchemeGroupVersion.String(), defaultURLScheme)
 
 func TestNewResetData(t *testing.T) {
-	// create temp directory
+	// 创建临时目录。
 	tmpDir, err := os.MkdirTemp("", "kubeadm-reset-test")
 	if err != nil {
 		t.Errorf("Unable to create temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// create config file
+	// 创建配置文件。
 	configFilePath := filepath.Join(tmpDir, "test-config-file")
 	cfgFile, err := os.Create(configFilePath)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestNewResetData(t *testing.T) {
 				forceReset:            true,
 				dryRun:                true,
 				cleanupTmpDir:         true,
-				// resetCfg holds the value passed from flags except the value of ignorePreflightErrors
+				// resetCfg 保存参数传入的值，但不包含 ignorePreflightErrors。
 				resetCfg: &kubeadmapi.ResetConfiguration{
 					TypeMeta:        metav1.TypeMeta{Kind: "", APIVersion: ""},
 					Force:           true,
@@ -119,15 +119,15 @@ func TestNewResetData(t *testing.T) {
 			},
 			validate: expectedResetIgnorePreflightErrors(sets.New("a", "b")),
 		},
-		// Start the testcases with config file
+		// 从配置文件测试用例开始。
 		{
 			name: "Pass with config from file",
 			flags: map[string]string{
 				options.CfgPath: configFilePath,
 			},
 			data: &resetData{
-				certificatesDir:       "/etc/kubernetes/pki2",                                   // cover the case that default is overridden as well
-				criSocketPath:         fmt.Sprintf("%s:///var/run/fake.sock", defaultURLScheme), // cover the case that default is overridden as well
+				certificatesDir:       "/etc/kubernetes/pki2",                                   // 覆盖默认值。
+				criSocketPath:         fmt.Sprintf("%s:///var/run/fake.sock", defaultURLScheme), // 覆盖默认值。
 				ignorePreflightErrors: sets.New("a", "b"),
 				forceReset:            true,
 				dryRun:                true,
@@ -149,7 +149,7 @@ func TestNewResetData(t *testing.T) {
 				options.CfgPath: configFilePath,
 			},
 			validate: func(t *testing.T, data *resetData) {
-				// validate that the default value is overwritten
+				// 校验默认值已被覆盖。
 				if data.forceReset != true {
 					t.Error("Invalid forceReset")
 				}
@@ -216,19 +216,19 @@ func TestNewResetData(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// initialize an external reset option and inject it to the reset cmd
+			// 初始化外部 reset 选项并注入 reset 命令。
 			resetOptions := newResetOptions()
 			cmd := newCmdReset(nil, nil, resetOptions)
 
-			// make sure all cases use dry-run as we are not constructing a kubeconfig
+			// 确保所有用例使用 dry-run，因为测试未构造 kubeconfig。
 			tc.flags[options.DryRun] = "true"
 
-			// sets cmd flags (that will be reflected on the reset options)
+			// 设置命令参数（将反映到 reset 选项中）。
 			for f, v := range tc.flags {
 				cmd.Flags().Set(f, v)
 			}
 
-			// test newResetData method
+			// 测试 newResetData 方法。
 			data, err := newResetData(cmd, resetOptions, nil, nil, true)
 			if err != nil && !strings.Contains(err.Error(), tc.expectError) {
 				t.Fatalf("newResetData returned unexpected error, expected: %s, got %v", tc.expectError, err)
@@ -242,7 +242,7 @@ func TestNewResetData(t *testing.T) {
 					t.Fatalf("newResetData returned data (-want,+got):\n%s", diff)
 				}
 			}
-			// exec additional validation on the returned value
+			// 对返回值执行额外校验。
 			if tc.validate != nil {
 				tc.validate(t, data)
 			}

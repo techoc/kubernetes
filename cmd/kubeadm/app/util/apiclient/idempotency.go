@@ -35,10 +35,10 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// objectMutator is a function that mutates the given runtime object and optionally returns an error
+// objectMutator 修改给定的运行时对象，并可返回错误。
 type objectMutator[T runtime.Object] func(T) error
 
-// apiCallRetryInterval holds a local copy of apiCallRetryInterval for testing purposes
+// apiCallRetryInterval 保存 apiCallRetryInterval 的本地副本，供测试使用。
 var apiCallRetryInterval = constants.KubernetesAPICallRetryInterval
 
 type kubernetesInterface[T kubernetesObject] interface {
@@ -52,15 +52,13 @@ type kubernetesObject interface {
 	metav1.Object
 }
 
-// CreateOrUpdate creates a runtime object if the target resource doesn't exist.
-// If the resource exists already, this function will update the resource instead.
+// CreateOrUpdate 在目标资源不存在时创建运行时对象，已存在时更新它。
 func CreateOrUpdate[T kubernetesObject](client kubernetesInterface[T], obj T) error {
 	var lastError error
 	err := wait.PollUntilContextTimeout(context.Background(),
 		apiCallRetryInterval, kubeadmapi.GetActiveTimeouts().KubernetesAPICall.Duration,
 		true, func(_ context.Context) (bool, error) {
-			// This uses a background context for API calls to avoid confusing callers that don't
-			// expect context-related errors.
+			// API 调用使用后台 context，避免调用方收到其未预期的 context 相关错误。
 			ctx := context.Background()
 			if _, err := client.Create(ctx, obj, metav1.CreateOptions{}); err != nil {
 				if !apierrors.IsAlreadyExists(err) {
@@ -80,17 +78,15 @@ func CreateOrUpdate[T kubernetesObject](client kubernetesInterface[T], obj T) er
 	return lastError
 }
 
-// CreateOrMutate tries to create the provided object. If the resource exists already, the latest version will be fetched from
-// the cluster and mutator callback will be called on it, then an Update of the mutated object will be performed. This function is resilient
-// to conflicts, and a retry will be issued if the object was modified on the server between the refresh and the update (while the mutation was
-// taking place).
+// CreateOrMutate 尝试创建对象；资源已存在时，从集群获取最新版本，
+// 调用 mutator 回调修改后再更新。该函数可应对冲突：若对象在刷新与更新之间被服务端修改，
+// 将重试。
 func CreateOrMutate[T kubernetesObject](client kubernetesInterface[T], obj T, mutator objectMutator[T]) error {
 	var lastError error
 	err := wait.PollUntilContextTimeout(context.Background(),
 		apiCallRetryInterval, kubeadmapi.GetActiveTimeouts().KubernetesAPICall.Duration,
 		true, func(_ context.Context) (bool, error) {
-			// This uses a background context for API calls to avoid confusing callers that don't
-			// expect context-related errors.
+			// API 调用使用后台 context，避免调用方收到其未预期的 context 相关错误。
 			ctx := context.Background()
 			if _, err := client.Create(ctx, obj, metav1.CreateOptions{}); err != nil {
 				lastError = err
@@ -108,10 +104,8 @@ func CreateOrMutate[T kubernetesObject](client kubernetesInterface[T], obj T, mu
 	return lastError
 }
 
-// mutate takes an Object Meta (namespace and name), retrieves the resource from the server and tries to mutate it
-// by calling to the mutator callback, then an Update of the mutated object will be performed. This function is resilient
-// to conflicts, and a retry will be issued if the object was modified on the server between the refresh and the update (while the mutation was
-// taking place).
+// mutate 根据对象元数据（命名空间和名称）获取资源，调用 mutator 回调修改后更新。
+// 该函数可应对冲突：若对象在刷新与更新之间被服务端修改，将重试。
 func mutate[T kubernetesObject](ctx context.Context, client kubernetesInterface[T], meta metav1.ObjectMeta, mutator objectMutator[T]) error {
 	obj, err := client.Get(ctx, meta.Name, metav1.GetOptions{})
 	if err != nil {
@@ -124,15 +118,13 @@ func mutate[T kubernetesObject](ctx context.Context, client kubernetesInterface[
 	return err
 }
 
-// CreateOrRetain creates a runtime object if the target resource doesn't exist.
-// If the resource exists already, this function will retain the resource instead.
+// CreateOrRetain 在目标资源不存在时创建运行时对象，已存在时保留它。
 func CreateOrRetain[T kubernetesObject](client kubernetesInterface[T], obj T, name string) error {
 	var lastError error
 	err := wait.PollUntilContextTimeout(context.Background(),
 		apiCallRetryInterval, kubeadmapi.GetActiveTimeouts().KubernetesAPICall.Duration,
 		true, func(_ context.Context) (bool, error) {
-			// This uses a background context for API calls to avoid confusing callers that don't
-			// expect context-related errors.
+			// API 调用使用后台 context，避免调用方收到其未预期的 context 相关错误。
 			ctx := context.Background()
 			if _, err := client.Get(ctx, name, metav1.GetOptions{}); err != nil {
 				if !apierrors.IsNotFound(err) {
@@ -152,19 +144,18 @@ func CreateOrRetain[T kubernetesObject](client kubernetesInterface[T], obj T, na
 	return lastError
 }
 
-// PatchNodeOnce executes patchFn on the node object found by the node name.
+// PatchNodeOnce 在指定名称的 Node 对象上执行 patchFn。
 func PatchNodeOnce(client clientset.Interface, nodeName string, patchFn func(*v1.Node), lastError *error) func(context.Context) (bool, error) {
 	return func(_ context.Context) (bool, error) {
-		// First get the node object
+		// 先获取 Node 对象。
 		ctx := context.Background()
 		n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
 			*lastError = err
-			return false, nil // retry on any error
+			return false, nil // return false, nil // 任意错误均重试
 		}
 
-		// The node may appear to have no labels at first,
-		// so we wait for it to get hostname label.
+		// Node 刚出现时可能没有标签，因此等待其获得主机名标签。
 		if _, found := n.ObjectMeta.Labels[v1.LabelHostname]; !found {
 			return false, nil
 		}
@@ -175,7 +166,7 @@ func PatchNodeOnce(client clientset.Interface, nodeName string, patchFn func(*v1
 			return false, *lastError
 		}
 
-		// Execute the mutating function
+		// 执行修改函数。
 		patchFn(n)
 
 		newData, err := json.Marshal(n)
@@ -199,8 +190,8 @@ func PatchNodeOnce(client clientset.Interface, nodeName string, patchFn func(*v1
 	}
 }
 
-// PatchNode tries to patch a node using patchFn for the actual mutating logic.
-// Retries are provided by the wait package.
+// PatchNode 使用 patchFn 作为实际修改逻辑来修补 Node。
+// 重试由 wait 包提供。
 func PatchNode(client clientset.Interface, nodeName string, patchFn func(*v1.Node)) error {
 	var lastError error
 	err := wait.PollUntilContextTimeout(context.Background(),
@@ -212,9 +203,8 @@ func PatchNode(client clientset.Interface, nodeName string, patchFn func(*v1.Nod
 	return lastError
 }
 
-// GetConfigMapWithShortRetry tries to retrieve a ConfigMap using the given client, retrying for a short
-// time if it gets an unexpected error. The main usage of this function is in areas of the code that
-// fallback to a default ConfigMap value in case the one from the API cannot be quickly obtained.
+// GetConfigMapWithShortRetry 使用给定客户端获取 ConfigMap；遇到意外错误时短暂重试。
+// 主要用于 API 无法及时提供 ConfigMap 时回退到默认值的场景。
 func GetConfigMapWithShortRetry(client clientset.Interface, namespace, name string) (*v1.ConfigMap, error) {
 	var cm *v1.ConfigMap
 	var lastError error
@@ -222,9 +212,7 @@ func GetConfigMapWithShortRetry(client clientset.Interface, namespace, name stri
 		time.Millisecond*50, time.Millisecond*350,
 		true, func(_ context.Context) (bool, error) {
 			var err error
-			// Intentionally pass a new context to this API call. This will let the API call run
-			// independently of the parent context timeout, which is quite short and can cause the API
-			// call to return abruptly.
+			// 此处有意传入新的 context，使 API 调用不受父 context 的短超时影响而突然返回。
 			cm, err = client.CoreV1().ConfigMaps(namespace).Get(context.Background(), name, metav1.GetOptions{})
 			if err == nil {
 				return true, nil

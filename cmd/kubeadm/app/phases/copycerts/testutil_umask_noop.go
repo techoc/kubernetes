@@ -19,5 +19,5 @@ limitations under the License.
 package copycerts
 
 func setNoUmask() {
-	// no-op on not-unix
+	// 在非 Unix 系统上不执行任何操作。
 }

@@ -30,9 +30,9 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// CreateBasic creates a basic, general KubeConfig object that then can be extended
+// CreateBasic 创建可继续扩展的基础通用 KubeConfig 对象。
 func CreateBasic(serverURL, clusterName, userName string, caCert []byte) *clientcmdapi.Config {
-	// Use the cluster and the username as the context name
+	// 使用集群和用户名作为 context 名称。
 	contextName := fmt.Sprintf("%s@%s", userName, clusterName)
 
 	return &clientcmdapi.Config{
@@ -53,7 +53,7 @@ func CreateBasic(serverURL, clusterName, userName string, caCert []byte) *client
 	}
 }
 
-// CreateWithCerts creates a KubeConfig object with access to the API server with client certificates
+// CreateWithCerts 创建使用客户端证书访问 API Server 的 KubeConfig。
 func CreateWithCerts(serverURL, clusterName, userName string, caCert []byte, clientKey []byte, clientCert []byte) *clientcmdapi.Config {
 	config := CreateBasic(serverURL, clusterName, userName, caCert)
 	config.AuthInfos[userName] = &clientcmdapi.AuthInfo{
@@ -63,7 +63,7 @@ func CreateWithCerts(serverURL, clusterName, userName string, caCert []byte, cli
 	return config
 }
 
-// CreateWithToken creates a KubeConfig object with access to the API server with a token
+// CreateWithToken 创建使用令牌访问 API Server 的 KubeConfig。
 func CreateWithToken(serverURL, clusterName, userName string, caCert []byte, token string) *clientcmdapi.Config {
 	config := CreateBasic(serverURL, clusterName, userName, caCert)
 	config.AuthInfos[userName] = &clientcmdapi.AuthInfo{
@@ -72,7 +72,7 @@ func CreateWithToken(serverURL, clusterName, userName string, caCert []byte, tok
 	return config
 }
 
-// ClientSetFromFile returns a ready-to-use client from a kubeconfig file
+// ClientSetFromFile 根据 kubeconfig 文件返回可直接使用的客户端。
 func ClientSetFromFile(path string) (clientset.Interface, error) {
 	config, err := clientcmd.LoadFromFile(path)
 	if err != nil {
@@ -81,7 +81,7 @@ func ClientSetFromFile(path string) (clientset.Interface, error) {
 	return ToClientSet(config)
 }
 
-// ToClientSet converts a KubeConfig object to a client
+// ToClientSet 将 KubeConfig 对象转换为客户端。
 func ToClientSet(config *clientcmdapi.Config) (clientset.Interface, error) {
 	overrides := clientcmd.ConfigOverrides{Timeout: "10s"}
 	clientConfig, err := clientcmd.NewDefaultClientConfig(*config, &overrides).ClientConfig()
@@ -96,7 +96,7 @@ func ToClientSet(config *clientcmdapi.Config) (clientset.Interface, error) {
 	return client, nil
 }
 
-// WriteToDisk writes a KubeConfig object down to disk with mode 0600
+// WriteToDisk 以 0600 权限将 KubeConfig 写入磁盘。
 func WriteToDisk(filename string, kubeconfig *clientcmdapi.Config) error {
 	err := clientcmd.WriteToFile(*kubeconfig, filename)
 	if err != nil {
@@ -106,9 +106,9 @@ func WriteToDisk(filename string, kubeconfig *clientcmdapi.Config) error {
 	return nil
 }
 
-// GetClusterFromKubeConfig returns the default Cluster of the specified KubeConfig
+// GetClusterFromKubeConfig 返回指定 KubeConfig 的默认 Cluster。
 func GetClusterFromKubeConfig(config *clientcmdapi.Config) (string, *clientcmdapi.Cluster, error) {
-	// If there is an unnamed cluster object, use it
+	// 若存在未命名的集群对象，使用它。
 	if config.Clusters[""] != nil {
 		return "", config.Clusters[""], nil
 	}
@@ -124,7 +124,7 @@ func GetClusterFromKubeConfig(config *clientcmdapi.Config) (string, *clientcmdap
 	return "", nil, errors.Errorf("the current context is invalid: %s", config.CurrentContext)
 }
 
-// PointKubeConfigToLocalAPIEndpoint modifies the provided kubeconfig to point to the given APIEndpoint.
+// PointKubeConfigToLocalAPIEndpoint 将给定 kubeconfig 指向指定 APIEndpoint。
 func PointKubeConfigToLocalAPIEndpoint(config *clientcmdapi.Config, lae *kubeadmapi.APIEndpoint) {
 	for _, v := range config.Clusters {
 		v.Server = fmt.Sprintf("https://%s",
@@ -136,36 +136,35 @@ func PointKubeConfigToLocalAPIEndpoint(config *clientcmdapi.Config, lae *kubeadm
 	}
 }
 
-// HasAuthenticationCredentials returns true if the current user has valid authentication credentials for
-// token authentication, basic authentication or X509 authentication
+// HasAuthenticationCredentials 判断当前用户是否具有有效的令牌、基本认证或 X509 凭据。
 func HasAuthenticationCredentials(config *clientcmdapi.Config) bool {
 	authInfo := getCurrentAuthInfo(config)
 	if authInfo == nil {
 		return false
 	}
 
-	// token authentication
+	// 令牌认证。
 	if len(authInfo.Token) != 0 || len(authInfo.TokenFile) != 0 {
 		return true
 	}
 
-	// basic authentication
+	// 基本认证。
 	if len(authInfo.Username) != 0 && len(authInfo.Password) != 0 {
 		return true
 	}
 
-	// X509 authentication
+	// X509 认证。
 	if (len(authInfo.ClientCertificate) != 0 || len(authInfo.ClientCertificateData) != 0) &&
 		(len(authInfo.ClientKey) != 0 || len(authInfo.ClientKeyData) != 0) {
 		return true
 	}
 
-	// exec authentication
+	// exec 认证。
 	if authInfo.Exec != nil && len(authInfo.Exec.Command) != 0 {
 		return true
 	}
 
-	// authprovider authentication
+	// authprovider 认证。
 	if authInfo.AuthProvider != nil && len(authInfo.AuthProvider.Name) != 0 {
 		return true
 	}
@@ -173,8 +172,8 @@ func HasAuthenticationCredentials(config *clientcmdapi.Config) bool {
 	return false
 }
 
-// EnsureAuthenticationInfoAreEmbedded check if some authentication info are provided as external key/certificate
-// files, and eventually embeds such files into the kubeconfig file
+// EnsureAuthenticationInfoAreEmbedded 检查认证信息是否由外部密钥或证书文件提供，
+// 必要时将这些内容内嵌到 kubeconfig。
 func EnsureAuthenticationInfoAreEmbedded(config *clientcmdapi.Config) error {
 	authInfo := getCurrentAuthInfo(config)
 	if authInfo == nil {
@@ -209,8 +208,7 @@ func EnsureAuthenticationInfoAreEmbedded(config *clientcmdapi.Config) error {
 	return nil
 }
 
-// EnsureCertificateAuthorityIsEmbedded check if the certificate authority is provided as an external
-// file and eventually embeds it into the kubeconfig
+// EnsureCertificateAuthorityIsEmbedded 检查 CA 是否由外部文件提供，必要时将其内嵌到 kubeconfig。
 func EnsureCertificateAuthorityIsEmbedded(cluster *clientcmdapi.Cluster) error {
 	if cluster == nil {
 		return errors.New("received nil value for Cluster")
@@ -228,7 +226,7 @@ func EnsureCertificateAuthorityIsEmbedded(cluster *clientcmdapi.Cluster) error {
 	return nil
 }
 
-// getCurrentAuthInfo returns current authInfo, if defined
+// getCurrentAuthInfo 返回当前 authInfo；未定义时返回空值。
 func getCurrentAuthInfo(config *clientcmdapi.Config) *clientcmdapi.AuthInfo {
 	if config == nil || config.CurrentContext == "" ||
 		len(config.Contexts) == 0 || config.Contexts[config.CurrentContext] == nil {

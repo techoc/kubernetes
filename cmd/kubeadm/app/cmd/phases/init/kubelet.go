@@ -36,7 +36,7 @@ var (
 		`)
 )
 
-// NewKubeletStartPhase creates a kubeadm workflow phase that start kubelet on a node.
+// NewKubeletStartPhase 创建在节点上启动 kubelet 的 kubeadm 工作流阶段。
 func NewKubeletStartPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "kubelet-start",
@@ -55,28 +55,28 @@ func NewKubeletStartPhase() workflow.Phase {
 	}
 }
 
-// runKubeletStart executes kubelet start logic.
+// runKubeletStart 执行 kubelet 启动逻辑。
 func runKubeletStart(c workflow.RunData) error {
 	data, ok := c.(InitData)
 	if !ok {
 		return errors.New("kubelet-start phase invoked with an invalid data struct")
 	}
 
-	// First off, configure the kubelet. In this short timeframe, kubeadm is trying to stop/restart the kubelet
-	// Try to stop the kubelet service so no race conditions occur when configuring it
+	// 首先配置 kubelet。在这段短时间内，kubeadm 会尝试停止并重启 kubelet。
+	// 先停止 kubelet 服务，避免配置时发生竞态。
 	if !data.DryRun() {
 		klog.V(1).Infoln("Stopping the kubelet")
 		kubeletphase.TryStopKubelet()
 	}
 
-	// Write env file with flags for the kubelet to use. We do not need to write the --register-with-taints for the control-plane,
-	// as we handle that ourselves in the mark-control-plane phase
-	// TODO: Maybe we want to do that some time in the future, in order to remove some logic from the mark-control-plane phase?
+	// 写入 kubelet 使用的参数环境文件。控制平面无需写入 --register-with-taints，
+	// 因为我们在 mark-control-plane 阶段自行处理。
+	// TODO: 未来可考虑在此处理，以移除 mark-control-plane 阶段的部分逻辑。
 	if err := kubeletphase.WriteKubeletDynamicEnvFile(&data.Cfg().ClusterConfiguration, &data.Cfg().NodeRegistration, false, data.KubeletDir()); err != nil {
 		return errors.Wrap(err, "error writing a dynamic environment file for the kubelet")
 	}
 
-	// Write the instance kubelet configuration file to disk.
+	// 将实例 kubelet 配置文件写入磁盘。
 	kubeletConfig := &kubeletconfig.KubeletConfiguration{
 		ContainerRuntimeEndpoint: data.Cfg().NodeRegistration.CRISocket,
 	}
@@ -84,12 +84,12 @@ func runKubeletStart(c workflow.RunData) error {
 		return errors.Wrap(err, "error writing instance kubelet configuration to disk")
 	}
 
-	// Write the kubelet configuration file to disk.
+	// 将 kubelet 配置文件写入磁盘。
 	if err := kubeletphase.WriteConfigToDisk(&data.Cfg().ClusterConfiguration, data.KubeletDir(), data.PatchesDir(), data.OutputWriter()); err != nil {
 		return errors.Wrap(err, "error writing kubelet configuration to disk")
 	}
 
-	// Try to start the kubelet service in case it's inactive
+	// 若 kubelet 服务未运行，则尝试启动。
 	if !data.DryRun() {
 		fmt.Println("[kubelet-start] Starting the kubelet")
 		kubeletphase.TryStartKubelet()

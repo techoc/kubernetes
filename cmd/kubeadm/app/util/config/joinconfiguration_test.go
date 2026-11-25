@@ -137,7 +137,7 @@ func TestBytesToJoinConfiguration(t *testing.T) {
 }
 
 func TestLoadJoinConfigurationFromFile(t *testing.T) {
-	// Create temp folder for the test case
+	// 为测试用例创建临时目录。
 	tmpdir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("Couldn't create tmpdir: %v", err)

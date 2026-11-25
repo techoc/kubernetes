@@ -16,26 +16,26 @@ limitations under the License.
 
 package initsystem
 
-// InitSystem is the interface that describe behaviors of an init system
+// InitSystem 是描述 init 系统行为的接口。
 type InitSystem interface {
-	// EnableCommand returns a string describing how to enable a service
+	// EnableCommand 返回描述如何启用服务的字符串。
 	EnableCommand(service string) string
 
-	// ServiceStart tries to start a specific service
+	// ServiceStart 尝试启动指定服务。
 	ServiceStart(service string) error
 
-	// ServiceStop tries to stop a specific service
+	// ServiceStop 尝试停止指定服务。
 	ServiceStop(service string) error
 
-	// ServiceRestart tries to reload the environment and restart the specific service
+	// ServiceRestart 尝试重新加载环境并重启指定服务。
 	ServiceRestart(service string) error
 
-	// ServiceExists ensures the service is defined for this init system.
+	// ServiceExists 确认服务已在此 init 系统中定义。
 	ServiceExists(service string) bool
 
-	// ServiceIsEnabled ensures the service is enabled to start on each boot.
+	// ServiceIsEnabled 确认服务已配置为每次启动时自动运行。
 	ServiceIsEnabled(service string) bool
 
-	// ServiceIsActive ensures the service is running, or attempting to run. (crash looping in the case of kubelet)
+	// ServiceIsActive 确认服务正在运行或尝试运行；kubelet 崩溃循环时也视为活动。
 	ServiceIsActive(service string) bool
 }

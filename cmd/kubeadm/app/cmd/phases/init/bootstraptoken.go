@@ -43,7 +43,7 @@ var (
 		`)
 )
 
-// NewBootstrapTokenPhase returns the phase to bootstrapToken
+// NewBootstrapTokenPhase 返回 bootstrap-token 阶段。
 func NewBootstrapTokenPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "bootstrap-token",
@@ -86,34 +86,34 @@ func runBootstrapToken(c workflow.RunData) error {
 	}
 
 	fmt.Println("[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles")
-	// Create the default node bootstrap token
+	// 创建默认节点引导令牌。
 	if err := nodebootstraptokenphase.UpdateOrCreateTokens(client, false, data.Cfg().BootstrapTokens); err != nil {
 		return errors.Wrap(err, "error updating or creating token")
 	}
-	// Create RBAC rules that makes the bootstrap tokens able to get nodes
+	// 创建 RBAC 规则，允许引导令牌获取节点。
 	if err := nodebootstraptokenphase.AllowBootstrapTokensToGetNodes(client); err != nil {
 		return errors.Wrap(err, "error allowing bootstrap tokens to get Nodes")
 	}
-	// Create RBAC rules that makes the bootstrap tokens able to post CSRs
+	// 创建 RBAC 规则，允许引导令牌提交 CSR。
 	if err := nodebootstraptokenphase.AllowBootstrapTokensToPostCSRs(client); err != nil {
 		return errors.Wrap(err, "error allowing bootstrap tokens to post CSRs")
 	}
-	// Create RBAC rules that makes the bootstrap tokens able to get their CSRs approved automatically
+	// 创建 RBAC 规则，允许引导令牌自动获取其 CSR 的批准。
 	if err := nodebootstraptokenphase.AutoApproveNodeBootstrapTokens(client); err != nil {
 		return errors.Wrap(err, "error auto-approving node bootstrap tokens")
 	}
 
-	// Create/update RBAC rules that makes the nodes to rotate certificates and get their CSRs approved automatically
+	// 创建或更新 RBAC 规则，允许节点轮换证书并自动获得 CSR 批准。
 	if err := nodebootstraptokenphase.AutoApproveNodeCertificateRotation(client); err != nil {
 		return err
 	}
 
-	// Create RBAC rules that allow the API server kubelet client to access the kubelet API
+	// 创建 RBAC 规则，允许 API 服务器的 kubelet 客户端访问 kubelet API。
 	if err := nodebootstraptokenphase.AllowAPIServerToAccessKubeletAPI(client); err != nil {
 		return errors.Wrap(err, "error allowing API server to access kubelet API")
 	}
 
-	// Create the cluster-info ConfigMap with the associated RBAC rules
+	// 创建 cluster-info ConfigMap 及关联的 RBAC 规则。
 	if err := clusterinfophase.CreateBootstrapConfigMapIfNotExists(client, kubeconfig); err != nil {
 		return errors.Wrap(err, "error creating bootstrap ConfigMap")
 	}

@@ -30,7 +30,7 @@ import (
 	staticpodutil "k8s.io/kubernetes/cmd/kubeadm/app/util/staticpod"
 )
 
-// NewWaitControlPlanePhase is a hidden phase that runs after the control-plane and etcd phases
+// NewWaitControlPlanePhase 是在控制平面和 etcd 阶段之后运行的隐藏阶段。
 func NewWaitControlPlanePhase() workflow.Phase {
 	phase := workflow.Phase{
 		Name:  "wait-control-plane",
@@ -75,7 +75,7 @@ func runWaitControlPlanePhase(c workflow.RunData) error {
 	return nil
 }
 
-// newControlPlaneWaiter returns a new waiter that is used to wait on the control plane to boot up.
+// newControlPlaneWaiter 返回用于等待控制平面启动的新等待器。
 func newControlPlaneWaiter(dryRun bool, timeout time.Duration, client clientset.Interface, out io.Writer) (apiclient.Waiter, error) {
 	if dryRun {
 		return dryrunutil.NewWaiter(), nil

@@ -21,69 +21,63 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// Phase provides an implementation of a workflow phase that allows
-// creation of new phases by simply instantiating a variable of this type.
+// Phase 提供工作流阶段的实现，只需实例化此类型的变量即可创建新阶段。
 type Phase struct {
-	// name of the phase.
-	// Phase name should be unique among peer phases (phases belonging to
-	// the same workflow or phases belonging to the same parent phase).
+	// Name 是阶段名称。
+	// 同级阶段（属于同一工作流或同一父阶段）的名称必须唯一。
 	Name string
 
-	// Aliases returns the aliases for the phase.
+	// Aliases 是阶段的别名列表。
 	Aliases []string
 
-	// Short description of the phase.
+	// Short 是阶段简短描述。
 	Short string
 
-	// Long returns the long description of the phase.
+	// Long 是阶段的详细描述。
 	Long string
 
-	// Example returns the example for the phase.
+	// Example 是阶段用法示例。
 	Example string
 
-	// Hidden define if the phase should be hidden in the workflow help.
-	// e.g. PrintFilesIfDryRunning phase in the kubeadm init workflow is candidate for being hidden to the users
+	// Hidden 定义阶段是否在工作流帮助中隐藏。
+	// 例如 kubeadm init 工作流中的 PrintFilesIfDryRunning 阶段可考虑对用户隐藏。
 	Hidden bool
 
-	// Phases defines a nested, ordered sequence of phases.
+	// Phases 定义有序的子阶段序列。
 	Phases []Phase
 
-	// RunAllSiblings allows to assign to a phase the responsibility to
-	// run all the sibling phases
-	// Nb. phase marked as RunAllSiblings can not have Run functions
+	// RunAllSiblings 允许将运行全部同级阶段的责任交给某阶段。
+	// 注意：标记为 RunAllSiblings 的阶段不能定义 Run 或 RunIf。
 	RunAllSiblings bool
 
-	// Run defines a function implementing the phase action.
-	// It is recommended to implement type assertion, e.g. using golang type switch,
-	// for validating the RunData type.
+	// Run 定义实现阶段动作的函数。
+	// 建议实现类型断言，例如使用 Go 类型 switch 校验 RunData 类型。
 	Run func(data RunData) error
 
-	// RunIf define a function that implements a condition that should be checked
-	// before executing the phase action.
-	// If this function return nil, the phase action is always executed.
+	// RunIf 定义在执行阶段动作前检查的条件函数。
+	// 返回 true 时执行，返回 false 时跳过；错误会中止工作流。未设置时始终执行。
 	RunIf func(data RunData) (bool, error)
 
-	// InheritFlags defines the list of flags that the cobra command generated for this phase should Inherit
-	// from local flags defined in the parent command / or additional flags defined in the phase runner.
-	// If the values is not set or empty, no flags will be assigned to the command
-	// Nb. global flags are automatically inherited by nested cobra command
+	// InheritFlags 定义为此阶段生成的 cobra 命令应从父命令本地参数
+	// 或阶段运行器额外参数中继承的参数列表。
+	// 未设置或为空时，不会向命令分配参数。
+	// 注意：全局参数会自动由嵌套 cobra 命令继承。
 	InheritFlags []string
 
-	// LocalFlags defines the list of flags that should be assigned to the cobra command generated
-	// for this phase.
-	// Nb. if two or phases have the same local flags, please consider using local flags in the parent command
-	// or additional flags defined in the phase runner.
+	// LocalFlags 定义应分配给为此阶段生成的 cobra 命令的参数列表。
+	// 注意：若两个或多个阶段拥有相同本地参数，请考虑在父命令中定义本地参数，
+	// 或在阶段运行器中定义额外参数。
 	LocalFlags *pflag.FlagSet
 
-	// ArgsValidator defines the positional arg function to be used for validating args for this phase
-	// If not set a phase will adopt the args of the top level command.
+	// ArgsValidator 定义用于校验此阶段位置参数的函数。
+	// 叶阶段未设置时沿用顶层命令规则；非叶阶段始终不接受参数。
 	ArgsValidator cobra.PositionalArgs
 
-	// Dependencies is a list of phases that the specific phase depends on.
+	// Dependencies 是特定阶段所依赖的阶段列表。
 	Dependencies []string
 }
 
-// AppendPhase adds the given phase to the nested, ordered sequence of phases.
+// AppendPhase 将给定阶段添加到有序的子阶段序列。
 func (t *Phase) AppendPhase(phase Phase) {
 	t.Phases = append(t.Phases, phase)
 }

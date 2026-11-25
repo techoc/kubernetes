@@ -25,25 +25,35 @@ import (
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
-// resetData is the interface to use for reset phases.
-// The "resetData" type from "cmd/reset.go" must satisfy this interface.
+// resetData 是 reset 阶段使用的接口。
+// cmd/reset.go 中的 resetData 类型必须满足此接口。
 type resetData interface {
+	// ForceReset 返回是否跳过清理确认。
 	ForceReset() bool
+	// InputReader 返回读取用户确认输入的来源。
 	InputReader() io.Reader
+	// IgnorePreflightErrors 返回允许忽略的预检错误集合。
 	IgnorePreflightErrors() sets.Set[string]
+	// Cfg 返回用于检查集群组件的 init 配置。
 	Cfg() *kubeadmapi.InitConfiguration
+	// ResetCfg 返回当前 reset 工作流使用的配置。
 	ResetCfg() *kubeadmapi.ResetConfiguration
+	// DryRun 返回是否仅模拟清理，不执行实际删除。
 	DryRun() bool
+	// Client 返回访问集群的客户端；不可用时可能为 nil。
 	Client() clientset.Interface
+	// CertificatesDir 返回待清理的证书目录。
 	CertificatesDir() string
+	// CRISocketPath 返回节点的 CRI 套接字路径。
 	CRISocketPath() string
+	// CleanupTmpDir 返回是否清理 kubeadm 临时目录。
 	CleanupTmpDir() bool
 }
 
-// a package local type for testing purposes.
+// 包内类型，仅供测试使用。
 type testData struct{}
 
-// testData must satisfy resetData.
+// testData 必须满足 resetData。
 var _ resetData = &testData{}
 
 func (t *testData) ForceReset() bool                         { return false }

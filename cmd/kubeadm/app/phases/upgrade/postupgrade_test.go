@@ -383,7 +383,7 @@ func TestUnupgradedControlPlaneInstances(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var runtimeObjs []runtime.Object
 			for _, pod := range tc.pods {
-				runtimeObjs = append(runtimeObjs, &pod) // Use pointer
+				runtimeObjs = append(runtimeObjs, &pod) // 使用指针。
 			}
 			client := fake.NewSimpleClientset(runtimeObjs...)
 
@@ -399,7 +399,7 @@ func TestUnupgradedControlPlaneInstances(t *testing.T) {
 	}
 }
 
-// Just some stub code, the code could be enriched when necessary.
+// 仅为桩代码，必要时可进一步完善。
 type componentConfig struct {
 	userSupplied bool
 }
@@ -438,7 +438,7 @@ func (cc *componentConfig) SetUserSupplied(userSupplied bool) {
 	cc.userSupplied = userSupplied
 }
 
-// moveFiles moves files from one directory to another.
+// moveFiles 将文件从一个目录移动到另一个目录。
 func moveFiles(files map[string]string) error {
 	filesToRecover := make(map[string]string, len(files))
 	for from, to := range files {
@@ -450,7 +450,7 @@ func moveFiles(files map[string]string) error {
 	return nil
 }
 
-// rollbackFiles moves the files back to the original directory.
+// rollbackFiles 将文件移回原目录。
 func rollbackFiles(files map[string]string, originalErr error) error {
 	errs := []error{originalErr}
 	for from, to := range files {

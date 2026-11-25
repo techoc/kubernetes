@@ -26,13 +26,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
-// ChecksumForConfigMap calculates a checksum for the supplied config map. The exact algorithm depends on hash and prefix parameters
+// ChecksumForConfigMap 计算给定 ConfigMap 的校验和。
 func ChecksumForConfigMap(cm *v1.ConfigMap) string {
 	hash := sha256.New()
 
-	// Since maps are not ordered we need to make sure we order them somehow so we'll always get the same checksums
-	// for the same config maps. The solution here is to extract the keys into a slice and sort them.
-	// Then iterate over that slice to fetch the values to be hashed.
+	// map 本身无序，必须确定键的顺序，才能让相同 ConfigMap 始终得到相同校验和。
+	// 这里将键提取到 slice 中排序，再按该顺序取值并计算哈希。
 	keys := []string{}
 	for key := range cm.Data {
 		keys = append(keys, key)
@@ -43,7 +42,7 @@ func ChecksumForConfigMap(cm *v1.ConfigMap) string {
 		hash.Write([]byte(cm.Data[key]))
 	}
 
-	// Do the same as above, but for binaryData this time.
+	// 对 binaryData 重复上述过程。
 	keys = []string{}
 	for key := range cm.BinaryData {
 		keys = append(keys, key)
@@ -57,7 +56,7 @@ func ChecksumForConfigMap(cm *v1.ConfigMap) string {
 	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
 }
 
-// SignConfigMap calculates the supplied config map checksum and annotates it with it
+// SignConfigMap 计算给定 ConfigMap 的校验和，并将其写入注解。
 func SignConfigMap(cm *v1.ConfigMap) {
 	if cm.Annotations == nil {
 		cm.Annotations = map[string]string{}
@@ -65,7 +64,7 @@ func SignConfigMap(cm *v1.ConfigMap) {
 	cm.Annotations[constants.ComponentConfigHashAnnotationKey] = ChecksumForConfigMap(cm)
 }
 
-// VerifyConfigMapSignature returns true if the config map has checksum annotation and it matches; false otherwise
+// VerifyConfigMapSignature 在 ConfigMap 含校验和注解且校验和匹配时返回 true，否则返回 false。
 func VerifyConfigMapSignature(cm *v1.ConfigMap) bool {
 	signature, ok := cm.Annotations[constants.ComponentConfigHashAnnotationKey]
 	if !ok {

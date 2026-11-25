@@ -22,24 +22,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是此包使用的 API 组名称。
 const GroupName = "kubeadm.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
+	// SchemeBuilder 指向要添加到 Scheme 的函数列表。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme applies all the stored functions to the scheme.
+	// AddToScheme 将已注册的函数应用到 Scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 此处仅注册手工编写的函数，生成函数的注册由生成文件完成。
+	// 分开注册可确保缺少生成文件时代码仍能编译。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 

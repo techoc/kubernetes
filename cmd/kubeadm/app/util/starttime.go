@@ -14,23 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package util contains kubeadm utilities.
+// Package util 包含 kubeadm 工具。
 package util
 
 import (
 	"time"
 )
 
-// startTime is a variable that represents the start time of the kubeadm process.
-// It can be used to consistently use the same start time instead of calling time.Now()
-// in multiple locations and ending up with minor time deviations.
+// startTime 保存 kubeadm 进程启动时间，供各处一致使用，
+// 避免多次调用 time.Now() 导致细微时间偏差。
 var startTime time.Time
 
 func init() {
 	startTime = time.Now()
 }
 
-// StartTimeUTC returns startTime with its location set to UTC.
+// StartTimeUTC 返回时区设置为 UTC 的 startTime。
 func StartTimeUTC() time.Time {
 	return startTime.UTC()
 }

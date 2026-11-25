@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package staticpod contains utilities for managing the static pod.
+// Package staticpod 包含管理静态 Pod 的工具。
 package staticpod
 
 import (
@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/users"
 )
 
-// RunComponentAsNonRoot is a NO-OP on non linux.
+// RunComponentAsNonRoot 在非 Linux 上为空操作。
 func RunComponentAsNonRoot(componentName string, pod *v1.Pod, usersAndGroups *users.UsersAndGroups, cfg *kubeadmapi.ClusterConfiguration) error {
 	return nil
 }

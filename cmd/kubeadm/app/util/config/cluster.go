@@ -52,9 +52,9 @@ import (
 	kubeadmruntime "k8s.io/kubernetes/cmd/kubeadm/app/util/runtime"
 )
 
-// FetchInitConfigurationFromCluster fetches configuration from a ConfigMap in the cluster.
-// If shortConfigMapGet is true, a short retry is used when fetching the kubeadm-config ConfigMap,
-// which is suitable for callers like "kubeadm reset" that don't need a long retry.
+// FetchInitConfigurationFromCluster 从集群中的 ConfigMap 获取配置。
+// shortConfigMapGet 为真时，获取 kubeadm-config ConfigMap 仅短暂重试，
+// 适用于 "kubeadm reset" 等不需要长时间重试的调用方。
 func FetchInitConfigurationFromCluster(client clientset.Interface, printer output.Printer, logPrefix string, getNodeRegistration, getAPIEndpoint, getComponentConfigs, shortConfigMapGet bool) (*kubeadmapi.InitConfiguration, error) {
 	if printer == nil {
 		printer = &output.TextPrinter{}
@@ -63,16 +63,15 @@ func FetchInitConfigurationFromCluster(client clientset.Interface, printer outpu
 		logPrefix, constants.KubeadmConfigConfigMap, metav1.NamespaceSystem)
 	_, _ = printer.Printf("[%s] Use 'kubeadm init phase upload-config kubeadm --config your-config-file' to re-upload it.\n", logPrefix)
 
-	// Fetch the actual config from cluster
+	// 从集群获取实际配置。
 	cfg, err := getInitConfigurationFromCluster(constants.KubernetesDir, constants.KubeletRunDirectory, client, getNodeRegistration, getAPIEndpoint, getComponentConfigs, shortConfigMapGet)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply dynamic defaults.
-	// NB. skip CRI detection here because it won't be used at all and will be overridden later.
-	// NB. skip LocalAPIEndpoint defaulting when the caller did not request the endpoint (e.g. a
-	// worker join).
+	// 应用动态默认值。
+	// 注意：跳过 CRI 检测，因为此处不会使用且稍后会被覆盖。
+	// 注意：调用方未请求端点时（如 worker join），跳过 LocalAPIEndpoint 默认值设置。
 	if err := SetInitDynamicDefaults(cfg, true, !getAPIEndpoint); err != nil {
 		return nil, err
 	}
@@ -80,9 +79,9 @@ func FetchInitConfigurationFromCluster(client clientset.Interface, printer outpu
 	return cfg, nil
 }
 
-// getInitConfigurationFromCluster is separate only for testing purposes, don't call it directly, use FetchInitConfigurationFromCluster instead
+// getInitConfigurationFromCluster 仅为测试拆分，请勿直接调用，应使用 FetchInitConfigurationFromCluster。
 func getInitConfigurationFromCluster(kubeconfigDir string, kubeletRunDir string, client clientset.Interface, getNodeRegistration, getAPIEndpoint, getComponentConfigs, shortConfigMapGet bool) (*kubeadmapi.InitConfiguration, error) {
-	// Also, the config map really should be KubeadmConfigConfigMap...
+	// 此外，该 ConfigMap 更恰当的命名应是 KubeadmConfigConfigMap。
 	var configMap *v1.ConfigMap
 	var err error
 	if shortConfigMapGet {
@@ -110,7 +109,7 @@ func getInitConfigurationFromCluster(kubeconfigDir string, kubeletRunDir string,
 		return nil, errors.Wrap(err, "failed to get config map")
 	}
 
-	// Take an empty versioned InitConfiguration, statically default it and convert it to the internal type
+	// 创建空的版本化 InitConfiguration，应用静态默认值后转换为内部类型。
 	versionedInitcfg := &kubeadmapiv1.InitConfiguration{}
 	kubeadmscheme.Scheme.Default(versionedInitcfg)
 	initcfg := &kubeadmapi.InitConfiguration{}
@@ -118,12 +117,12 @@ func getInitConfigurationFromCluster(kubeconfigDir string, kubeletRunDir string,
 		return nil, errors.Wrap(err, "could not prepare a defaulted InitConfiguration")
 	}
 
-	// gets ClusterConfiguration from kubeadm-config
+	// 从 kubeadm-config 获取 ClusterConfiguration。
 	clusterConfigurationData, ok := configMap.Data[constants.ClusterConfigurationConfigMapKey]
 	if !ok {
 		return nil, errors.Errorf("unexpected error when reading kubeadm-config ConfigMap: %s key value pair missing", constants.ClusterConfigurationConfigMapKey)
 	}
-	// If ClusterConfiguration was patched by something other than kubeadm, it may have errors. Warn about them.
+	// 若 ClusterConfiguration 被 kubeadm 之外的组件修改并产生错误，发出警告。
 	if err := strict.VerifyUnmarshalStrict([]*runtime.Scheme{kubeadmscheme.Scheme},
 		kubeadmapiv1.SchemeGroupVersion.WithKind(constants.ClusterConfigurationKind),
 		[]byte(clusterConfigurationData)); err != nil {
@@ -134,7 +133,7 @@ func getInitConfigurationFromCluster(kubeconfigDir string, kubeletRunDir string,
 	}
 
 	if getComponentConfigs {
-		// get the component configs from the corresponding config maps
+		// 从对应的 ConfigMap 获取组件配置。
 		if err := componentconfigs.FetchFromCluster(&initcfg.ClusterConfiguration, client); err != nil {
 			return nil, errors.Wrap(err, "failed to get component configs")
 		}
@@ -147,7 +146,7 @@ func getInitConfigurationFromCluster(kubeconfigDir string, kubeletRunDir string,
 	}
 
 	if getAPIEndpoint {
-		// gets the APIEndpoint for the current control plane node
+		// 获取当前控制平面节点的 APIEndpoint。
 		if err := GetAPIEndpoint(client, initcfg.NodeRegistration.Name, &initcfg.LocalAPIEndpoint); err != nil {
 			return nil, errors.Wrap(err, "failed to getAPIEndpoint")
 		}
@@ -156,12 +155,9 @@ func getInitConfigurationFromCluster(kubeconfigDir string, kubeletRunDir string,
 	return initcfg, nil
 }
 
-// GetNodeName uses 3 different approaches for getting the node name.
-// First it attempts to construct a client from the given kubeconfig file
-// and get the SelfSubjectReview review for it - i.e. like "kubectl auth whoami".
-// If that fails it attempt to parse the kubeconfig client certificate subject.
-// Finally, it falls back to using the host name, which might not always be correct
-// due to node name overrides.
+// GetNodeName 依次尝试三种方式获取节点名称：先根据给定 kubeconfig 创建客户端并获取
+// SelfSubjectReview（类似 "kubectl auth whoami"）；失败后解析 kubeconfig 客户端证书主题；
+// 最后回退到主机名，但节点名称被覆盖时主机名可能不正确。
 func GetNodeName(kubeconfigFile string) (string, error) {
 	var (
 		nodeName string
@@ -187,15 +183,15 @@ func GetNodeName(kubeconfigFile string) (string, error) {
 	return nodeName, nil
 }
 
-// GetNodeRegistration returns the nodeRegistration for the current node
+// GetNodeRegistration 返回当前节点的 nodeRegistration。
 func GetNodeRegistration(kubeconfigDir, kubeletRunDir string, client clientset.Interface, nodeRegistration *kubeadmapi.NodeRegistrationOptions) error {
-	// gets the name of the current node
+	// 获取当前节点名称。
 	nodeName, err := GetNodeName(filepath.Join(kubeconfigDir, constants.KubeletKubeConfigFileName))
 	if err != nil {
 		return err
 	}
 
-	// gets the corresponding node and retrieves attributes stored there.
+	// 获取对应节点并读取其中存储的属性。
 	node, err := client.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "failed to get corresponding node")
@@ -223,27 +219,25 @@ func GetNodeRegistration(kubeconfigDir, kubeletRunDir string, client clientset.I
 		criSocket = kubeletConfig.ContainerRuntimeEndpoint
 	}
 
-	// returns the nodeRegistration attributes
+	// 返回 nodeRegistration 属性。
 	nodeRegistration.Name = nodeName
 	nodeRegistration.CRISocket = criSocket
 	nodeRegistration.Taints = node.Spec.Taints
-	// NB. currently nodeRegistration.KubeletExtraArgs isn't stored at node level but only in the kubeadm-flags.env
-	//     that isn't modified during upgrades
-	//     in future we might reconsider this thus enabling changes to the kubeadm-flags.env during upgrades as well
+	// 注意：nodeRegistration.KubeletExtraArgs 目前不存储在节点级别，仅在 kubeadm-flags.env 中，
+	// 且升级时不会修改。未来可能重新考虑，从而允许升级时修改该文件。
 	return nil
 }
 
-// getNodeNameFromKubeletConfig gets the node name from a kubelet config file
-// TODO: in future we want to switch to a more canonical way for doing this e.g. by having this
-// information in the local kubelet config configuration file.
+// getNodeNameFromKubeletConfig 从 kubelet 配置文件获取节点名称。
+// TODO: 未来希望改用更规范的方式，例如将信息存放在本地 kubelet 配置文件中。
 func getNodeNameFromKubeletConfig(fileName string) (string, error) {
-	// loads the kubelet.conf file
+	// 加载 kubelet.conf 文件。
 	config, err := clientcmd.LoadFromFile(fileName)
 	if err != nil {
 		return "", err
 	}
 
-	// gets the info about the current user
+	// 获取当前用户信息。
 	currentContext, exists := config.Contexts[config.CurrentContext]
 	if !exists {
 		return "", errors.Errorf("invalid kubeconfig file %s: missing context %s", fileName, config.CurrentContext)
@@ -253,15 +247,15 @@ func getNodeNameFromKubeletConfig(fileName string) (string, error) {
 		return "", errors.Errorf("invalid kubeconfig file %s: missing AuthInfo %s", fileName, currentContext.AuthInfo)
 	}
 
-	// gets the X509 certificate with current user credentials
+	// 获取包含当前用户凭据的 X509 证书。
 	var certs []*x509.Certificate
 	if len(authInfo.ClientCertificateData) > 0 {
-		// if the config file uses an embedded x509 certificate (e.g. kubelet.conf created by kubeadm), parse it
+		// 若配置文件内嵌 X509 证书（如 kubeadm 创建的 kubelet.conf），解析它。
 		if certs, err = certutil.ParseCertsPEM(authInfo.ClientCertificateData); err != nil {
 			return "", err
 		}
 	} else if len(authInfo.ClientCertificate) > 0 {
-		// if the config file links an external x509 certificate (e.g. kubelet.conf created by TLS bootstrap), load it
+		// 若配置文件引用外部 X509 证书（如 TLS bootstrap 创建的 kubelet.conf），加载它。
 		if certs, err = certutil.CertsFromFile(authInfo.ClientCertificate); err != nil {
 			return "", err
 		}
@@ -269,16 +263,16 @@ func getNodeNameFromKubeletConfig(fileName string) (string, error) {
 		return "", errors.Errorf("invalid kubeconfig file %s. x509 certificate expected", fileName)
 	}
 
-	// Safely pick the first one because the sender's certificate must come first in the list.
-	// For details, see: https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
+	// 发送方证书必须位于列表首位，因此可安全取第一项。
+	// 详见：https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
 	cert := certs[0]
 
-	// gets the node name from the certificate common name
+	// 从证书 common name 获取节点名称。
 	return strings.TrimPrefix(cert.Subject.CommonName, constants.NodesUserPrefix), nil
 }
 
-// getNodeNameFromSSR reads the node name from the SelfSubjectReview for a given client.
-// If the kubelet.conf is passed as fileName it can be used to retrieve the node name.
+// getNodeNameFromSSR 从给定客户端的 SelfSubjectReview 读取节点名称。
+// 传入 kubelet.conf 时也可用于获取节点名称。
 func getNodeNameFromSSR(client clientset.Interface) (string, error) {
 	ssr, err := client.AuthenticationV1().SelfSubjectReviews().
 		Create(context.Background(), &authv1.SelfSubjectReview{}, metav1.CreateOptions{})
@@ -293,7 +287,7 @@ func getNodeNameFromSSR(client clientset.Interface) (string, error) {
 	return strings.TrimPrefix(user, constants.NodesUserPrefix), nil
 }
 
-// GetAPIEndpoint gets the API endpoint for a given node.
+// GetAPIEndpoint 获取给定节点的 API 端点。
 func GetAPIEndpoint(client clientset.Interface, nodeName string, apiEndpoint *kubeadmapi.APIEndpoint) error {
 	return getAPIEndpointWithRetry(client, nodeName, apiEndpoint,
 		constants.KubernetesAPICallRetryInterval, kubeadmapi.GetActiveTimeouts().KubernetesAPICall.Duration)
@@ -312,8 +306,7 @@ func getAPIEndpointFromPodAnnotation(client clientset.Interface, nodeName string
 	interval, timeout time.Duration) error {
 	var rawAPIEndpoint string
 	var lastErr error
-	// Let's tolerate some unexpected transient failures from the API server or load balancers. Also, if
-	// static pods were not yet mirrored into the API server we want to wait for this propagation.
+	// 容忍 API 服务器或负载均衡器的短暂异常；静态 Pod 尚未镜像到 API 服务器时也等待其传播完成。
 	err := wait.PollUntilContextTimeout(context.Background(), interval, timeout, true,
 		func(ctx context.Context) (bool, error) {
 			rawAPIEndpoint, lastErr = getRawAPIEndpointFromPodAnnotationWithoutRetry(ctx, client, nodeName)
@@ -350,7 +343,7 @@ func getRawAPIEndpointFromPodAnnotationWithoutRetry(ctx context.Context, client 
 	return "", errors.Errorf("API server pod for node name %q hasn't got a %q annotation, cannot retrieve API endpoint", nodeName, constants.KubeAPIServerAdvertiseAddressEndpointAnnotationKey)
 }
 
-// readKubeletConfig reads a KubeletConfiguration from the specified file.
+// readKubeletConfig 从指定文件读取 KubeletConfiguration。
 func readKubeletConfig(kubeletDir, fileName string) (*kubeletconfig.KubeletConfiguration, error) {
 	kubeletFile := path.Join(kubeletDir, fileName)
 

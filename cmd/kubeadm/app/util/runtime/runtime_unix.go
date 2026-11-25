@@ -23,11 +23,11 @@ import (
 	"net/url"
 )
 
-// isExistingSocket checks if path exists and is domain socket
+// isExistingSocket 检查路径是否存在且为域 socket。
 func isExistingSocket(path string) bool {
 	u, err := url.Parse(path)
 	if err != nil {
-		// should not happen, since we are trying to access known / hardcoded sockets
+		// 不应发生，因为访问的是已知的硬编码 socket。
 		return false
 	}
 

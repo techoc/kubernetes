@@ -32,7 +32,7 @@ func newArgSlice(args *[]kubeadmapiv1.Arg) *argSlice {
 	return &argSlice{args: args}
 }
 
-// String implements github.com/spf13/pflag.Value
+// String 实现 github.com/spf13/pflag.Value。
 func (s *argSlice) String() string {
 	if s == nil || s.args == nil || len(*s.args) == 0 {
 		return ""
@@ -46,7 +46,7 @@ func (s *argSlice) String() string {
 	return strings.Join(pairs, ",")
 }
 
-// Set implements github.com/spf13/pflag.Value
+// Set 实现 github.com/spf13/pflag.Value。
 func (s *argSlice) Set(value string) error {
 	if s.args == nil {
 		s.args = &[]kubeadmapiv1.Arg{}
@@ -66,7 +66,7 @@ func (s *argSlice) Set(value string) error {
 	return nil
 }
 
-// Type implements github.com/spf13/pflag.Value
+// Type 实现 github.com/spf13/pflag.Value。
 func (s *argSlice) Type() string {
 	return "[]kubeadmapiv1.Arg"
 }

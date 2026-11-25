@@ -34,9 +34,8 @@ import (
 	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
 )
 
-// RetrieveValidatedConfigInfo connects to the API Server and makes sure it can talk
-// securely to the API Server using the provided CA cert and
-// optionally refreshes the cluster-info information from the cluster-info ConfigMap
+// RetrieveValidatedConfigInfo 连接 API Server，使用提供的 CA 证书确保能够安全通信，
+// 并可选择从 cluster-info ConfigMap 刷新 cluster-info 信息。
 func RetrieveValidatedConfigInfo(filepath string, discoveryTimeout time.Duration) (*clientcmdapi.Config, error) {
 	config, err := clientcmd.LoadFromFile(filepath)
 	if err != nil {
@@ -45,9 +44,8 @@ func RetrieveValidatedConfigInfo(filepath string, discoveryTimeout time.Duration
 	return ValidateConfigInfo(config, discoveryTimeout)
 }
 
-// ValidateConfigInfo connects to the API Server and makes sure it can talk
-// securely to the API Server using the provided CA cert/client certificates  and
-// optionally refreshes the cluster-info information from the cluster-info ConfigMap
+// ValidateConfigInfo 连接 API Server，使用提供的 CA 证书或客户端证书确保能够安全通信，
+// 并可选择从 cluster-info ConfigMap 刷新 cluster-info 信息。
 func ValidateConfigInfo(config *clientcmdapi.Config, discoveryTimeout time.Duration) (*clientcmdapi.Config, error) {
 	if len(config.Clusters) < 1 {
 		return nil, errors.New("the provided kubeconfig file must have at least one Cluster defined")
@@ -60,27 +58,25 @@ func ValidateConfigInfo(config *clientcmdapi.Config, discoveryTimeout time.Durat
 		return nil, err
 	}
 
-	// If the kubeconfig points to a file for the CA, make sure the CA file contents are embedded
+	// 如果 kubeconfig 中的 CA 指向文件，则确保 CA 文件内容已嵌入配置。
 	if err := kubeconfigutil.EnsureCertificateAuthorityIsEmbedded(currentCluster); err != nil {
 		return nil, err
 	}
 
-	// If the discovery file config contains authentication credentials
+	// 如果发现文件配置包含认证凭据。
 	if kubeconfigutil.HasAuthenticationCredentials(config) {
 		klog.V(1).Info("[discovery] Using authentication credentials from the discovery file for validating TLS connection")
 
-		// We should ensure that all the authentication info is embedded in config file, so everything will work also when
-		// the kubeconfig file will be stored in /etc/kubernetes/boostrap-kubelet.conf
+		// 应确保所有认证信息都嵌入配置文件，这样将 kubeconfig 文件存储到 /etc/kubernetes/boostrap-kubelet.conf 后仍能正常工作。
 		if err := kubeconfigutil.EnsureAuthenticationInfoAreEmbedded(config); err != nil {
 			return nil, err
 		}
 	} else {
-		// If the discovery file config does not contains authentication credentials
+		// 如果发现文件配置不包含认证凭据。
 		klog.V(1).Info("[discovery] Discovery file does not contains authentication credentials, using unauthenticated request for validating TLS connection")
 	}
 
-	// Try to read the cluster-info config map; this step was required by the original design in order
-	// to validate the TLS connection to the server early in the process
+	// 尝试读取 cluster-info ConfigMap；原始设计要求执行此步骤，以便尽早验证到服务器的 TLS 连接。
 	client, err := kubeconfigutil.ToClientSet(config)
 	if err != nil {
 		return nil, err
@@ -97,8 +93,8 @@ func ValidateConfigInfo(config *clientcmdapi.Config, discoveryTimeout time.Durat
 			clusterinfoCM, lastError = client.CoreV1().ConfigMaps(metav1.NamespacePublic).Get(context.Background(), bootstrapapi.ConfigMapClusterInfo, metav1.GetOptions{})
 			if lastError != nil {
 				if apierrors.IsForbidden(lastError) {
-					// If the request fails with a forbidden error, the cluster admin has not granted access to the cluster info configmap for anonymous clients.
-					// In that case, trust the cluster admin and do not refresh the cluster-info data
+					// 如果请求返回禁止访问错误，说明集群管理员未允许匿名客户端访问 cluster-info ConfigMap。
+					// 此时信任集群管理员，不刷新 cluster-info 数据。
 					klog.Warningf("[discovery] Could not access the %s ConfigMap for refreshing the cluster-info information, but the TLS cert is valid so proceeding...\n", bootstrapapi.ConfigMapClusterInfo)
 					return true, nil
 				}
@@ -112,12 +108,12 @@ func ValidateConfigInfo(config *clientcmdapi.Config, discoveryTimeout time.Durat
 			bootstrapapi.ConfigMapClusterInfo, discoveryTimeout)
 	}
 
-	// If we couldn't fetch the cluster-info ConfigMap, just return the cluster-info object the user provided
+	// 如果无法获取 cluster-info ConfigMap，则直接返回用户提供的 cluster-info 对象。
 	if clusterinfoCM == nil {
 		return config, nil
 	}
 
-	// We somehow got hold of the ConfigMap, try to read some data from it. If we can't, fallback on the user-provided file
+	// 已获取 ConfigMap，尝试从中读取数据；如果失败，则回退到用户提供的文件。
 	refreshedBaseKubeConfig, err := tryParseClusterInfoFromConfigMap(clusterinfoCM)
 	if err != nil {
 		klog.V(1).Infof("[discovery] The %s ConfigMap isn't set up properly (%v), but the TLS cert is valid so proceeding...\n", bootstrapapi.ConfigMapClusterInfo, err)
@@ -140,7 +136,7 @@ func ValidateConfigInfo(config *clientcmdapi.Config, discoveryTimeout time.Durat
 	return config, nil
 }
 
-// tryParseClusterInfoFromConfigMap tries to parse a kubeconfig file from a ConfigMap key
+// tryParseClusterInfoFromConfigMap 尝试从 ConfigMap 的键中解析 kubeconfig 文件。
 func tryParseClusterInfoFromConfigMap(cm *v1.ConfigMap) (*clientcmdapi.Config, error) {
 	kubeConfigString, ok := cm.Data[bootstrapapi.KubeConfigKey]
 	if !ok || len(kubeConfigString) == 0 {

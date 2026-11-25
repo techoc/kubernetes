@@ -355,7 +355,7 @@ func TestImageExists(t *testing.T) {
 }
 
 func TestIsExistingSocket(t *testing.T) {
-	// this test is not expected to work on Windows
+	// 此测试预期无法在 Windows 上运行。
 	if runtime.GOOS == "windows" {
 		return
 	}

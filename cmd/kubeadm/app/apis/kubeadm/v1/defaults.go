@@ -29,35 +29,34 @@ import (
 )
 
 const (
-	// DefaultServiceDNSDomain defines default cluster-internal domain name for Services and Pods
+	// DefaultServiceDNSDomain 定义服务和 Pod 的默认集群内部域名。
 	DefaultServiceDNSDomain = "cluster.local"
-	// DefaultServicesSubnet defines default service subnet range
+	// DefaultServicesSubnet 定义默认服务子网范围。
 	DefaultServicesSubnet = "10.96.0.0/12"
-	// DefaultClusterDNSIP defines default DNS IP
+	// DefaultClusterDNSIP 定义默认 DNS IP。
 	DefaultClusterDNSIP = "10.96.0.10"
-	// DefaultKubernetesVersion defines default kubernetes version
+	// DefaultKubernetesVersion 定义默认 Kubernetes 版本。
 	DefaultKubernetesVersion = "stable-1"
-	// DefaultCertificatesDir defines default certificate directory
+	// DefaultCertificatesDir 定义默认证书目录。
 	DefaultCertificatesDir = "/etc/kubernetes/pki"
-	// DefaultImageRepository defines default image registry
-	// (previously this defaulted to k8s.gcr.io)
+	// DefaultImageRepository 定义默认镜像仓库（此前默认为 k8s.gcr.io）。
 	DefaultImageRepository = "registry.k8s.io"
-	// DefaultManifestsDir defines default manifests directory
+	// DefaultManifestsDir 定义默认清单目录。
 	DefaultManifestsDir = "/etc/kubernetes/manifests"
-	// DefaultClusterName defines the default cluster name
+	// DefaultClusterName 定义默认集群名称。
 	DefaultClusterName = "kubernetes"
 
-	// DefaultEtcdDataDir defines default location of etcd where static pods will save data to
+	// DefaultEtcdDataDir 定义静态 Pod 中 etcd 保存数据的默认目录。
 	DefaultEtcdDataDir = "/var/lib/etcd"
-	// DefaultProxyBindAddressv4 is the default bind address when the advertise address is v4
+	// DefaultProxyBindAddressv4 是公布地址为 IPv4 时的默认绑定地址。
 	DefaultProxyBindAddressv4 = "0.0.0.0"
-	// DefaultProxyBindAddressv6 is the default bind address when the advertise address is v6
+	// DefaultProxyBindAddressv6 是公布地址为 IPv6 时的默认绑定地址。
 	DefaultProxyBindAddressv6 = "::"
 
-	// DefaultImagePullPolicy is the default image pull policy in kubeadm
+	// DefaultImagePullPolicy 是 kubeadm 的默认镜像拉取策略。
 	DefaultImagePullPolicy = corev1.PullIfNotPresent
 
-	// DefaultEncryptionAlgorithm is the default encryption algorithm.
+	// DefaultEncryptionAlgorithm 是默认加密算法。
 	DefaultEncryptionAlgorithm = EncryptionAlgorithmRSA2048
 )
 
@@ -65,7 +64,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_InitConfiguration assigns default values for the InitConfiguration
+// SetDefaults_InitConfiguration 为 InitConfiguration 设置默认值。
 func SetDefaults_InitConfiguration(obj *InitConfiguration) {
 	SetDefaults_BootstrapTokens(obj)
 	SetDefaults_APIEndpoint(&obj.LocalAPIEndpoint)
@@ -76,7 +75,7 @@ func SetDefaults_InitConfiguration(obj *InitConfiguration) {
 	SetDefaults_Timeouts(obj.Timeouts)
 }
 
-// SetDefaults_ClusterConfiguration assigns default values for the ClusterConfiguration
+// SetDefaults_ClusterConfiguration 为 ClusterConfiguration 设置默认值。
 func SetDefaults_ClusterConfiguration(obj *ClusterConfiguration) {
 	if obj.KubernetesVersion == "" {
 		obj.KubernetesVersion = DefaultKubernetesVersion
@@ -120,7 +119,7 @@ func SetDefaults_ClusterConfiguration(obj *ClusterConfiguration) {
 	SetDefaults_Etcd(obj)
 }
 
-// SetDefaults_Etcd assigns default values for the proxy
+// SetDefaults_Etcd 为 etcd 配置设置默认值。
 func SetDefaults_Etcd(obj *ClusterConfiguration) {
 	if obj.Etcd.External == nil && obj.Etcd.Local == nil {
 		obj.Etcd.Local = &LocalEtcd{}
@@ -135,17 +134,16 @@ func SetDefaults_Etcd(obj *ClusterConfiguration) {
 	}
 }
 
-// SetDefaults_ExternalEtcd assigns default values for the external etcd
+// SetDefaults_ExternalEtcd 为外部 etcd 配置设置默认值。
 func SetDefaults_ExternalEtcd(obj *ExternalEtcd) {
-	// If HTTPEndpoints is not set, default it to Endpoints
-	// This allows HTTP traffic (metrics, health checks) to use the same endpoints as gRPC traffic
+	// 未设置 HTTPEndpoints 时使用 Endpoints，使 HTTP 流量（指标、健康检查）与 gRPC 流量共用端点。
 	if len(obj.HTTPEndpoints) == 0 && len(obj.Endpoints) > 0 {
 		obj.HTTPEndpoints = make([]string, len(obj.Endpoints))
 		copy(obj.HTTPEndpoints, obj.Endpoints)
 	}
 }
 
-// SetDefaults_JoinConfiguration assigns default values to a regular node
+// SetDefaults_JoinConfiguration 为普通加入节点设置默认值。
 func SetDefaults_JoinConfiguration(obj *JoinConfiguration) {
 	if obj.CACertPath == "" {
 		obj.CACertPath = DefaultCACertPath
@@ -160,14 +158,14 @@ func SetDefaults_JoinConfiguration(obj *JoinConfiguration) {
 	SetDefaults_Timeouts(obj.Timeouts)
 }
 
-// SetDefaults_JoinControlPlane assigns default values for a joining control plane node
+// SetDefaults_JoinControlPlane 为加入集群的控制平面节点设置默认值。
 func SetDefaults_JoinControlPlane(obj *JoinControlPlane) {
 	if obj != nil {
 		SetDefaults_APIEndpoint(&obj.LocalAPIEndpoint)
 	}
 }
 
-// SetDefaults_Discovery assigns default values for the discovery process
+// SetDefaults_Discovery 为发现过程设置默认值。
 func SetDefaults_Discovery(obj *Discovery) {
 	if len(obj.TLSBootstrapToken) == 0 && obj.BootstrapToken != nil {
 		obj.TLSBootstrapToken = obj.BootstrapToken.Token
@@ -178,9 +176,9 @@ func SetDefaults_Discovery(obj *Discovery) {
 	}
 }
 
-// SetDefaults_FileDiscovery assigns default values for file based discovery
+// SetDefaults_FileDiscovery 为基于文件的发现设置默认值。
 func SetDefaults_FileDiscovery(obj *FileDiscovery) {
-	// Make sure file URL becomes path
+	// 确保 file URL 转换为路径。
 	if len(obj.KubeConfigPath) != 0 {
 		u, err := url.Parse(obj.KubeConfigPath)
 		if err == nil && u.Scheme == "file" {
@@ -189,11 +187,9 @@ func SetDefaults_FileDiscovery(obj *FileDiscovery) {
 	}
 }
 
-// SetDefaults_BootstrapTokens sets the defaults for the .BootstrapTokens field
-// If the slice is empty, it's defaulted with one token. Otherwise it just loops
-// through the slice and sets the defaults for the omitempty fields that are TTL,
-// Usages and Groups. Token is NOT defaulted with a random one in the API defaulting
-// layer, but set to a random value later at runtime if not set before.
+// SetDefaults_BootstrapTokens 为 .BootstrapTokens 字段设置默认值。
+// 切片为空时默认填入一个令牌；否则遍历切片，为 TTL、Usages 和 Groups 等可省略字段设置默认值。
+// API 默认化层不会为 Token 生成随机值；若仍未设置，将在运行时补充随机值。
 func SetDefaults_BootstrapTokens(obj *InitConfiguration) {
 
 	if len(obj.BootstrapTokens) == 0 {
@@ -205,14 +201,14 @@ func SetDefaults_BootstrapTokens(obj *InitConfiguration) {
 	}
 }
 
-// SetDefaults_APIEndpoint sets the defaults for the API server instance deployed on a node.
+// SetDefaults_APIEndpoint 为部署在节点上的 API Server 实例设置默认值。
 func SetDefaults_APIEndpoint(obj *APIEndpoint) {
 	if obj.BindPort == 0 {
 		obj.BindPort = constants.KubeAPIServerPort
 	}
 }
 
-// SetDefaults_NodeRegistration sets the defaults for the NodeRegistrationOptions object
+// SetDefaults_NodeRegistration 为 NodeRegistrationOptions 对象设置默认值。
 func SetDefaults_NodeRegistration(obj *NodeRegistrationOptions) {
 	if len(obj.ImagePullPolicy) == 0 {
 		obj.ImagePullPolicy = DefaultImagePullPolicy
@@ -222,7 +218,7 @@ func SetDefaults_NodeRegistration(obj *NodeRegistrationOptions) {
 	}
 }
 
-// SetDefaults_ResetConfiguration assigns default values for the ResetConfiguration object
+// SetDefaults_ResetConfiguration 为 ResetConfiguration 对象设置默认值。
 func SetDefaults_ResetConfiguration(obj *ResetConfiguration) {
 	if obj.CertificatesDir == "" {
 		obj.CertificatesDir = DefaultCertificatesDir
@@ -233,7 +229,7 @@ func SetDefaults_ResetConfiguration(obj *ResetConfiguration) {
 	SetDefaults_Timeouts(obj.Timeouts)
 }
 
-// SetDefaults_EnvVar assigns default values for EnvVar.
+// SetDefaults_EnvVar 为 EnvVar 设置默认值。
 // +k8s:defaulter-gen=covers
 func SetDefaults_EnvVar(obj *EnvVar) {
 	if obj.ValueFrom != nil {
@@ -245,7 +241,7 @@ func SetDefaults_EnvVar(obj *EnvVar) {
 	}
 }
 
-// SetDefaults_Timeouts assigns default values for timeouts.
+// SetDefaults_Timeouts 为超时设置默认值。
 func SetDefaults_Timeouts(obj *Timeouts) {
 	if obj.ControlPlaneComponentHealthCheck == nil {
 		obj.ControlPlaneComponentHealthCheck = &metav1.Duration{
@@ -284,7 +280,7 @@ func SetDefaults_Timeouts(obj *Timeouts) {
 	}
 }
 
-// SetDefaults_UpgradeConfiguration assigns default values for the UpgradeConfiguration
+// SetDefaults_UpgradeConfiguration 为 UpgradeConfiguration 设置默认值。
 func SetDefaults_UpgradeConfiguration(obj *UpgradeConfiguration) {
 	if obj.Node.EtcdUpgrade == nil {
 		obj.Node.EtcdUpgrade = ptr.To(true)

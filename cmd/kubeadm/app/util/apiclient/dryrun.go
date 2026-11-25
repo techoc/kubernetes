@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apiclient contains wrapping logic for Kubernetes API clients.
+// Package apiclient 包含 Kubernetes API 客户端的包装逻辑。
 package apiclient
 
 import (
@@ -47,15 +47,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// DryRun is responsible for performing verbose dry-run operations with a set of different
-// API clients. Any REST action that reaches the FakeClient() of a DryRun will be processed
-// as follows by the fake client reactor chain:
-//   - Log the action.
-//   - If the action is not GET or LIST just use the fake client store to write it, unless
-//     a user reactor was added with PrependReactor() or AppendReactor().
-//   - Attempt to GET or LIST using the real dynamic client.
-//   - If the above fails try to GET or LIST the object from the fake client store, unless
-//     a user reactor was added with PrependReactor() or AppendReactor().
+// DryRun 负责对一组不同的 API 客户端执行详细输出的试运行操作。
+// 到达 DryRun.FakeClient() 的 REST 操作由伪客户端反应链依次处理：
+//   - 记录操作。
+//   - 除 GET 和 LIST 外，直接使用伪客户端存储写入；除非用户通过 PrependReactor() 或 AppendReactor() 添加了反应器。
+//   - 尝试使用真实动态客户端执行 GET 或 LIST。
+//   - 若失败，则从伪客户端存储读取对象；除非用户通过 PrependReactor() 或 AppendReactor() 添加了反应器。
 type DryRun struct {
 	fakeClient    *fake.Clientset
 	client        clientset.Interface
@@ -65,7 +62,7 @@ type DryRun struct {
 	marshalFunc func(runtime.Object, schema.GroupVersion) ([]byte, error)
 }
 
-// NewDryRun creates a new DryRun object that only has a fake client.
+// NewDryRun 创建仅包含伪客户端的 DryRun。
 func NewDryRun() *DryRun {
 	d := &DryRun{}
 	d.fakeClient = fake.NewSimpleClientset()
@@ -73,7 +70,7 @@ func NewDryRun() *DryRun {
 	return d
 }
 
-// WithKubeConfigFile takes a file path and creates real clientset and dynamic clients.
+// WithKubeConfigFile 接收文件路径，并创建真实 clientset 和动态客户端。
 func (d *DryRun) WithKubeConfigFile(file string) error {
 	config, err := clientcmd.LoadFromFile(file)
 	if err != nil {
@@ -82,7 +79,7 @@ func (d *DryRun) WithKubeConfigFile(file string) error {
 	return d.WithKubeConfig(config)
 }
 
-// WithKubeConfig takes a Config (kubeconfig) and creates real clientset and dynamic client.
+// WithKubeConfig 接收 kubeconfig，并创建真实 clientset 和动态客户端。
 func (d *DryRun) WithKubeConfig(config *clientcmdapi.Config) error {
 	restConfig, err := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
@@ -91,7 +88,7 @@ func (d *DryRun) WithKubeConfig(config *clientcmdapi.Config) error {
 	return d.WithRestConfig(restConfig)
 }
 
-// WithRestConfig takes a rest Config and creates real clientset and dynamic clients.
+// WithRestConfig 接收 rest.Config，并创建真实 clientset 和动态客户端。
 func (d *DryRun) WithRestConfig(config *rest.Config) error {
 	var err error
 
@@ -108,26 +105,26 @@ func (d *DryRun) WithRestConfig(config *rest.Config) error {
 	return nil
 }
 
-// WithWriter sets the io.Writer used for printing by the DryRun.
+// WithWriter 设置 DryRun 打印输出所用的 io.Writer。
 func (d *DryRun) WithWriter(w io.Writer) *DryRun {
 	d.writer = w
 	return d
 }
 
-// WithMarshalFunction sets the DryRun marshal function.
+// WithMarshalFunction 设置 DryRun 的序列化函数。
 func (d *DryRun) WithMarshalFunction(f func(runtime.Object, schema.GroupVersion) ([]byte, error)) *DryRun {
 	d.marshalFunc = f
 	return d
 }
 
-// WithDefaultMarshalFunction sets the DryRun marshal function to the default one.
+// WithDefaultMarshalFunction 将 DryRun 的序列化函数恢复为默认实现。
 func (d *DryRun) WithDefaultMarshalFunction() *DryRun {
 	d.WithMarshalFunction(kubeadmutil.MarshalToYaml)
 	return d
 }
 
-// PrependReactor prepends a new reactor in the fake client ReactorChain at position 1.
-// Keeps position 0 for the log reactor:
+// PrependReactor 在伪客户端 ReactorChain 的位置 1 插入反应器。
+// 位置 0 保留给日志反应器：
 // [ log, r, ... rest of the chain, default fake client reactor ]
 func (d *DryRun) PrependReactor(r *testing.SimpleReactor) *DryRun {
 	log := d.fakeClient.Fake.ReactionChain[0]
@@ -139,8 +136,8 @@ func (d *DryRun) PrependReactor(r *testing.SimpleReactor) *DryRun {
 	return d
 }
 
-// AppendReactor appends a new reactor in the fake client ReactorChain at position len-2.
-// Keeps position len-1 for the default fake client reactor.
+// AppendReactor 在伪客户端 ReactorChain 的 len-2 位置追加反应器。
+// len-1 保留给默认伪客户端反应器。
 // [ log, rest of the chain... , r, default fake client reactor ]
 func (d *DryRun) AppendReactor(r *testing.SimpleReactor) *DryRun {
 	sz := len(d.fakeClient.Fake.ReactionChain)
@@ -150,26 +147,26 @@ func (d *DryRun) AppendReactor(r *testing.SimpleReactor) *DryRun {
 	return d
 }
 
-// Client returns the clientset for this DryRun.
+// Client 返回此 DryRun 的 clientset。
 func (d *DryRun) Client() clientset.Interface {
 	return d.client
 }
 
-// DynamicClient returns the dynamic client for this DryRun.
+// DynamicClient 返回此 DryRun 的动态客户端。
 func (d *DryRun) DynamicClient() dynamic.Interface {
 	return d.dynamicClient
 }
 
-// FakeClient returns the fake client for this DryRun.
+// FakeClient 返回此 DryRun 的伪客户端。
 func (d *DryRun) FakeClient() clientset.Interface {
 	return d.fakeClient
 }
 
-// addRectors is by default called by NewDryRun after creating the fake client.
-// It prepends a set of reactors before the default fake client reactor.
+// addRectors 默认由 NewDryRun 在创建伪客户端后调用，
+// 在默认伪客户端反应器之前插入一组反应器。
 func (d *DryRun) addReactors() {
 	reactors := []testing.Reactor{
-		// Add a reactor for logging all requests that reach the fake client.
+		// 添加反应器，记录到达伪客户端的所有请求。
 		&testing.SimpleReactor{
 			Verb:     "*",
 			Resource: "*",
@@ -178,9 +175,8 @@ func (d *DryRun) addReactors() {
 				return false, nil, nil
 			},
 		},
-		// Add a reactor for all GET requests that reach the fake client.
-		// This reactor calls the real dynamic client, but if it cannot process the object
-		// the reactor chain is continued.
+		// 添加反应器，处理到达伪客户端的所有 GET 请求。
+		// 该反应器调用真实动态客户端；无法处理对象时继续执行反应链。
 		&testing.SimpleReactor{
 			Verb:     "get",
 			Resource: "*",
@@ -201,9 +197,8 @@ func (d *DryRun) addReactors() {
 				return handled, obj, err
 			},
 		},
-		// Add a reactor for all LIST requests that reach the fake client.
-		// This reactor calls the real dynamic client, but if it cannot process the object
-		// the reactor chain is continued.
+		// 添加反应器，处理到达伪客户端的所有 LIST 请求。
+		// 该反应器调用真实动态客户端；无法处理对象时继续执行反应链。
 		&testing.SimpleReactor{
 			Verb:     "list",
 			Resource: "*",
@@ -228,7 +223,7 @@ func (d *DryRun) addReactors() {
 	d.fakeClient.Fake.ReactionChain = append(reactors, d.fakeClient.Fake.ReactionChain...)
 }
 
-// handleGetAction tries to handle all GET actions with the dynamic client.
+// handleGetAction 尝试使用动态客户端处理所有 GET 操作。
 func (d *DryRun) handleGetAction(action testing.GetAction) (bool, runtime.Object, error) {
 	if d.dynamicClient == nil {
 		return false, nil, errors.New("dynamicClient is nil")
@@ -250,7 +245,7 @@ func (d *DryRun) handleGetAction(action testing.GetAction) (bool, runtime.Object
 	return true, newObj, err
 }
 
-// handleListAction tries to handle all LIST actions with the dynamic client.
+// handleListAction 尝试使用动态客户端处理所有 LIST 操作。
 func (d *DryRun) handleListAction(action testing.ListAction) (bool, runtime.Object, error) {
 	if d.dynamicClient == nil {
 		return false, nil, errors.New("dynamicClient is nil")
@@ -277,7 +272,7 @@ func (d *DryRun) handleListAction(action testing.ListAction) (bool, runtime.Obje
 	return true, newObj, err
 }
 
-// decodeUnstructuredIntoAPIObject decodes an unstructured object into an API object.
+// decodeUnstructuredIntoAPIObject 将非结构化对象解码为 API 对象。
 func (d *DryRun) decodeUnstructuredIntoAPIObject(action testing.Action, obj runtime.Unstructured) (runtime.Object, error) {
 	objBytes, err := json.Marshal(obj)
 	if err != nil {
@@ -290,16 +285,16 @@ func (d *DryRun) decodeUnstructuredIntoAPIObject(action testing.Action, obj runt
 	return newObj, nil
 }
 
-// LogAction logs details about an action, such as name, object and resource.
+// LogAction 记录操作详情，例如名称、对象和资源。
 func (d *DryRun) LogAction(action testing.Action) {
-	// actionWithName is the generic interface for an action that has a name associated with it.
+	// actionWithName 是关联名称的操作的通用接口。
 	type actionWithNameAndNamespace interface {
 		testing.Action
 		GetName() string
 		GetNamespace() string
 	}
 
-	// actionWithObject is the generic interface for an action that has an object associated with it.
+	// actionWithObject 是关联对象的操作的通用接口。
 	type actionWithObject interface {
 		testing.Action
 		GetObject() runtime.Object
@@ -324,7 +319,7 @@ func (d *DryRun) LogAction(action testing.Action) {
 	}
 }
 
-// LogObject marshals the object and then prints it to the io.Writer of this DryRun.
+// LogObject 序列化对象，然后输出到此 DryRun 的 io.Writer。
 func (d *DryRun) LogObject(obj runtime.Object, gv schema.GroupVersion) {
 	objBytes, err := d.marshalFunc(obj, gv)
 	if err == nil {
@@ -333,8 +328,7 @@ func (d *DryRun) LogObject(obj runtime.Object, gv schema.GroupVersion) {
 	}
 }
 
-// HealthCheckJobReactor returns a reactor that handles the GET action for the Job
-// object used for the "CreateJob" upgrade preflight check.
+// HealthCheckJobReactor 返回处理升级预检 "CreateJob" 所用 Job 对象 GET 操作的反应器。
 func (d *DryRun) HealthCheckJobReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -351,7 +345,7 @@ func (d *DryRun) HealthCheckJobReactor() *testing.SimpleReactor {
 	}
 }
 
-// PatchNodeReactor returns a reactor that handles the generic PATCH action on Node objects.
+// PatchNodeReactor 返回处理 Node 对象通用 PATCH 操作的反应器。
 func (d *DryRun) PatchNodeReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "patch",
@@ -365,7 +359,7 @@ func (d *DryRun) PatchNodeReactor() *testing.SimpleReactor {
 	}
 }
 
-// GetNodeReactor returns a reactor that handles the generic GET action of Node objects.
+// GetNodeReactor 返回处理 Node 对象通用 GET 操作的反应器。
 func (d *DryRun) GetNodeReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -379,8 +373,7 @@ func (d *DryRun) GetNodeReactor() *testing.SimpleReactor {
 	}
 }
 
-// GetClusterInfoReactor returns a reactor that handles the GET action of the "cluster-info"
-// ConfigMap used during node bootstrap.
+// GetClusterInfoReactor 返回处理节点引导所用 "cluster-info" ConfigMap 的 GET 操作的反应器。
 func (d *DryRun) GetClusterInfoReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -397,8 +390,7 @@ func (d *DryRun) GetClusterInfoReactor() *testing.SimpleReactor {
 	}
 }
 
-// GetKubeadmConfigReactor returns a reactor that handles the GET action of the "kubeadm-config"
-// ConfigMap.
+// GetKubeadmConfigReactor 返回处理 "kubeadm-config" ConfigMap 的 GET 操作的反应器。
 func (d *DryRun) GetKubeadmConfigReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -416,7 +408,7 @@ func (d *DryRun) GetKubeadmConfigReactor() *testing.SimpleReactor {
 	}
 }
 
-// GetKubeadmCertsReactor returns a reactor that handles the GET action of the "kubeadm-certs" Secret.
+// GetKubeadmCertsReactor 返回处理 "kubeadm-certs" Secret 的 GET 操作的反应器。
 func (d *DryRun) GetKubeadmCertsReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -433,8 +425,7 @@ func (d *DryRun) GetKubeadmCertsReactor() *testing.SimpleReactor {
 	}
 }
 
-// GetKubeletConfigReactor returns a reactor that handles the GET action of the "kubelet-config"
-// ConfigMap.
+// GetKubeletConfigReactor 返回处理 "kubelet-config" ConfigMap 的 GET 操作的反应器。
 func (d *DryRun) GetKubeletConfigReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -451,8 +442,7 @@ func (d *DryRun) GetKubeletConfigReactor() *testing.SimpleReactor {
 	}
 }
 
-// GetKubeProxyConfigReactor returns a reactor that handles the GET action of the "kube-proxy"
-// ConfigMap.
+// GetKubeProxyConfigReactor 返回处理 "kube-proxy" ConfigMap 的 GET 操作的反应器。
 func (d *DryRun) GetKubeProxyConfigReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -469,8 +459,7 @@ func (d *DryRun) GetKubeProxyConfigReactor() *testing.SimpleReactor {
 	}
 }
 
-// GetCoreDNSConfigReactor returns a reactor that handles the GET action of the "coredns"
-// ConfigMap.
+// GetCoreDNSConfigReactor 返回处理 "coredns" ConfigMap 的 GET 操作的反应器。
 func (d *DryRun) GetCoreDNSConfigReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "get",
@@ -487,8 +476,7 @@ func (d *DryRun) GetCoreDNSConfigReactor() *testing.SimpleReactor {
 	}
 }
 
-// DeleteBootstrapTokenReactor returns a reactor that handles the DELETE action
-// of bootstrap token Secret.
+// DeleteBootstrapTokenReactor 返回处理引导令牌 Secret 的 DELETE 操作的反应器。
 func (d *DryRun) DeleteBootstrapTokenReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "delete",
@@ -510,7 +498,7 @@ func (d *DryRun) DeleteBootstrapTokenReactor() *testing.SimpleReactor {
 	}
 }
 
-// ListPodsReactor returns a reactor that handles the LIST action on pods.
+// ListPodsReactor 返回处理 Pod LIST 操作的反应器。
 func (d *DryRun) ListPodsReactor(nodeName string) *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "list",
@@ -527,7 +515,7 @@ func (d *DryRun) ListPodsReactor(nodeName string) *testing.SimpleReactor {
 	}
 }
 
-// ListDeploymentsReactor returns a reactor that handles the LIST action on deployments.
+// ListDeploymentsReactor 返回处理 Deployment LIST 操作的反应器。
 func (d *DryRun) ListDeploymentsReactor() *testing.SimpleReactor {
 	return &testing.SimpleReactor{
 		Verb:     "list",
@@ -544,7 +532,7 @@ func (d *DryRun) ListDeploymentsReactor() *testing.SimpleReactor {
 	}
 }
 
-// getJob returns a fake Job object.
+// getJob 返回伪 Job 对象。
 func getJob(namespace, name string) *batchv1.Job {
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -559,7 +547,7 @@ func getJob(namespace, name string) *batchv1.Job {
 	}
 }
 
-// getNode returns a fake Node object.
+// getNode 返回伪 Node 对象。
 func getNode(name string) *corev1.Node {
 	return &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -571,7 +559,7 @@ func getNode(name string) *corev1.Node {
 	}
 }
 
-// getConfigMap returns a fake ConfigMap object.
+// getConfigMap 返回伪 ConfigMap 对象。
 func getConfigMap(namespace, name string, data map[string]string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -582,7 +570,7 @@ func getConfigMap(namespace, name string, data map[string]string) *corev1.Config
 	}
 }
 
-// getSecret returns a fake Secret object.
+// getSecret 返回伪 Secret 对象。
 func getSecret(namespace, name string, data map[string][]byte) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -593,7 +581,7 @@ func getSecret(namespace, name string, data map[string][]byte) *corev1.Secret {
 	}
 }
 
-// getClusterInfoConfigMap returns a fake "cluster-info" ConfigMap.
+// getClusterInfoConfigMap 返回伪 "cluster-info" ConfigMap。
 func getClusterInfoConfigMap() *corev1.ConfigMap {
 	kubeconfig := dedent.Dedent(`apiVersion: v1
 clusters:
@@ -613,7 +601,7 @@ users: null
 	return getConfigMap(metav1.NamespacePublic, bootstrapapi.ConfigMapClusterInfo, data)
 }
 
-// getKubeadmConfigMap returns a fake "kubeadm-config" ConfigMap.
+// getKubeadmConfigMap 返回伪 "kubeadm-config" ConfigMap。
 func getKubeadmConfigMap() *corev1.ConfigMap {
 	ccData := fmt.Sprintf(`apiServer: {}
 apiVersion: kubeadm.k8s.io/v1beta4
@@ -648,9 +636,9 @@ scheduler: {}
 	return getConfigMap(metav1.NamespaceSystem, constants.KubeadmConfigConfigMap, data)
 }
 
-// getKubeadmCertsSecret returns a fake "kubeadm-certs" Secret.
+// getKubeadmCertsSecret 返回伪 "kubeadm-certs" Secret。
 func getKubeadmCertsSecret() *corev1.Secret {
-	// The cert data is empty because the actual content is not relevant for the dryrun test.
+	// 试运行测试不关心证书内容，因此此处留空。
 	data := map[string][]byte{
 		constants.CACertName:                                   {},
 		constants.CAKeyName:                                    {},
@@ -665,7 +653,7 @@ func getKubeadmCertsSecret() *corev1.Secret {
 	return getSecret(metav1.NamespaceSystem, constants.KubeadmCertsSecret, data)
 }
 
-// getKubeletConfigMap returns a fake "kubelet-config" ConfigMap.
+// getKubeletConfigMap 返回伪 "kubelet-config" ConfigMap。
 func getKubeletConfigMap() *corev1.ConfigMap {
 	configData := `apiVersion: kubelet.config.k8s.io/v1beta1
 authentication:
@@ -695,7 +683,7 @@ staticPodPath: /etc/kubernetes/manifests
 	return getConfigMap(metav1.NamespaceSystem, constants.KubeletBaseConfigurationConfigMap, data)
 }
 
-// getKubeProxyConfigMap returns a fake "kube-proxy" ConfigMap.
+// getKubeProxyConfigMap 返回伪 "kube-proxy" ConfigMap。
 func getKubeProxyConfigMap() *corev1.ConfigMap {
 	configData := `apiVersion: kubeproxy.config.k8s.io/v1alpha1
 bindAddress: 0.0.0.0
@@ -731,7 +719,7 @@ users:
 	return getConfigMap(metav1.NamespaceSystem, constants.KubeProxyConfigMap, data)
 }
 
-// getCoreDNSConfigMap returns a fake "coredns" ConfigMap.
+// getCoreDNSConfigMap 返回伪 "coredns" ConfigMap。
 func getCoreDNSConfigMap() *corev1.ConfigMap {
 	data := map[string]string{
 		"Corefile": "",
@@ -739,7 +727,7 @@ func getCoreDNSConfigMap() *corev1.ConfigMap {
 	return getConfigMap(metav1.NamespaceSystem, constants.CoreDNSConfigMap, data)
 }
 
-// getPod returns a fake Pod.
+// getPod 返回伪 Pod。
 func getPod(name, nodeName string) corev1.Pod {
 	return corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -768,7 +756,7 @@ func getPod(name, nodeName string) corev1.Pod {
 	}
 }
 
-// getPodList returns a list of fake pods.
+// getPodList 返回伪 Pod 列表。
 func getPodList(nodeName string) *corev1.PodList {
 	return &corev1.PodList{
 		Items: []corev1.Pod{
@@ -780,7 +768,7 @@ func getPodList(nodeName string) *corev1.PodList {
 	}
 }
 
-// getDeploymentList returns a fake list of deployments.
+// getDeploymentList 返回伪 Deployment 列表。
 func getDeploymentList() *appsv1.DeploymentList {
 	return &appsv1.DeploymentList{
 		Items: []appsv1.Deployment{

@@ -37,21 +37,19 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pubkeypin"
 )
 
-// TokenUser defines token user
+// TokenUser 定义令牌用户。
 const TokenUser = "tls-bootstrap-token-user"
 
-// For returns a kubeconfig object that can be used for doing the TLS Bootstrap with the right credentials
-// Also, before returning anything, it makes sure it can trust the API Server
-// It also prints the CA certificate information for user verification at verbosity level 1
+// For 返回带有正确凭据、可用于执行 TLS Bootstrap 的 kubeconfig 对象。
+// 返回前会确保能够信任 API Server，并在详细级别为 1 时输出 CA 证书信息供用户核验。
 func For(client clientset.Interface, cfg *kubeadmapi.JoinConfiguration) (*clientcmdapi.Config, error) {
 	config, err := DiscoverValidatedKubeConfig(client, cfg)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't validate the identity of the API Server")
 	}
 
-	// If the users has provided a TLSBootstrapToken use it for the join process.
-	// This is usually the case of Token discovery, but it can also be used with a discovery file
-	// without embedded authentication credentials.
+	// 如果用户提供了 TLSBootstrapToken，则在加入过程中使用它。
+	// 这通常用于 Token 发现，也可用于未嵌入认证凭据的发现文件。
 	var skipAuthCheck bool
 	if len(cfg.Discovery.TLSBootstrapToken) != 0 {
 		klog.V(1).Info("[discovery] Using provided TLSBootstrapToken as authentication credentials for the join process")
@@ -70,14 +68,14 @@ func For(client clientset.Interface, cfg *kubeadmapi.JoinConfiguration) (*client
 		skipAuthCheck = true
 	}
 
-	// if the config returned from discovery has authentication credentials, proceed with the TLS bootstrap process
+	// 如果发现返回的配置包含认证凭据，则继续执行 TLS Bootstrap 流程。
 	if !skipAuthCheck && !kubeconfigutil.HasAuthenticationCredentials(config) {
 		return nil, errors.New("could not find authentication credentials for the TLS bootstrap process. " +
 			"Please use Token discovery, a discovery file with embedded authentication credentials or a discovery " +
 			"file without authentication credentials but with the TLSBootstrapToken flag")
 	}
 
-	// If the CA cert is available in the kubeconfig, print it for information purposes
+	// 如果 kubeconfig 中存在 CA 证书，则输出该信息。
 	var cert *x509.Certificate
 	if cert, err = getCACertFromKubeconfig(config); err != nil {
 		return nil, errors.Wrap(err, "could not get CA certificate from discovery kubeconfig")
@@ -87,7 +85,7 @@ func For(client clientset.Interface, cfg *kubeadmapi.JoinConfiguration) (*client
 	return config, nil
 }
 
-// DiscoverValidatedKubeConfig returns a validated Config object that specifies where the cluster is and the CA cert to trust
+// DiscoverValidatedKubeConfig 返回经过验证的 Config 对象，其中指定集群位置和要信任的 CA 证书。
 func DiscoverValidatedKubeConfig(dryRunClient clientset.Interface, cfg *kubeadmapi.JoinConfiguration) (*clientcmdapi.Config, error) {
 	timeout := cfg.Timeouts.Discovery.Duration
 	switch {
@@ -104,13 +102,13 @@ func DiscoverValidatedKubeConfig(dryRunClient clientset.Interface, cfg *kubeadma
 	}
 }
 
-// isHTTPSURL checks whether the string is parsable as a URL and whether the Scheme is https
+// isHTTPSURL 检查字符串是否可解析为 URL，以及 Scheme 是否为 https。
 func isHTTPSURL(s string) bool {
 	u, err := url.Parse(s)
 	return err == nil && u.Scheme == "https"
 }
 
-// getCACertFromKubeconfig returns a single CA certificate from a kubeconfig, if available.
+// getCACertFromKubeconfig 在可用时从 kubeconfig 返回单个 CA 证书。
 func getCACertFromKubeconfig(config *clientcmdapi.Config) (*x509.Certificate, error) {
 	_, clusterInfo, err := kubeconfigutil.GetClusterFromKubeConfig(config)
 	if err != nil {
@@ -126,7 +124,7 @@ func getCACertFromKubeconfig(config *clientcmdapi.Config) (*x509.Certificate, er
 	return certs[0], nil
 }
 
-// formatCACertInfo formats summary information about the CA certificate.
+// formatCACertInfo 格式化 CA 证书的摘要信息。
 func formatCACertInfo(cert *x509.Certificate) string {
 	return fmt.Sprintf("CA Certificate:\n"+
 		"\tSubject: %v\n"+

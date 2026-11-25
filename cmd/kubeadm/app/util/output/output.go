@@ -29,38 +29,37 @@ import (
 )
 
 const (
-	// TextOutput describes the plain text output
+	// TextOutput 表示纯文本输出。
 	TextOutput = "text"
 
-	// JSONOutput describes the JSON output
+	// JSONOutput 表示 JSON 输出。
 	JSONOutput = "json"
 
-	// YAMLOutput describes the YAML output
+	// YAMLOutput 表示 YAML 输出。
 	YAMLOutput = "yaml"
 )
 
-// TextPrintFlags is an interface to handle custom text output
+// TextPrintFlags 是处理自定义文本输出的接口。
 type TextPrintFlags interface {
 	ToPrinter(outputFormat string) (Printer, error)
 }
 
-// PrintFlags composes common printer flag structs
-// used across kubeadm commands, and provides a method
-// of retrieving a known printer based on flag values provided.
+// PrintFlags 组合 kubeadm 各命令共用的打印参数结构，
+// 并根据参数值返回对应的打印器。
 type PrintFlags struct {
-	// JSONYamlPrintFlags provides default flags necessary for json/yaml printing.
+	// JSONYamlPrintFlags 提供 JSON/YAML 输出所需的默认参数。
 	JSONYamlPrintFlags *genericclioptions.JSONYamlPrintFlags
-	// KubeTemplatePrintFlags composes print flags that provide both a JSONPath and a go-template printer.
+	// KubeTemplatePrintFlags 组合同时支持 JSONPath 和 go-template 打印器的参数。
 	KubeTemplatePrintFlags *genericclioptions.KubeTemplatePrintFlags
-	// TextPrintFlags provides default flags necessary for kubeadm text printing.
+	// TextPrintFlags 提供 kubeadm 文本输出所需的默认参数。
 	TextPrintFlags TextPrintFlags
-	// TypeSetterPrinter is an implementation of ResourcePrinter that wraps another printer with types set on the objects
+	// TypeSetterPrinter 是 ResourcePrinter 的实现，包装另一个打印器并在对象上设置类型。
 	TypeSetterPrinter *printers.TypeSetterPrinter
-	// OutputFormat contains currently set output format
+	// OutputFormat 保存当前输出格式。
 	OutputFormat *string
 }
 
-// AllowedFormats returns a list of allowed output formats
+// AllowedFormats 返回允许的输出格式列表。
 func (pf *PrintFlags) AllowedFormats() []string {
 	ret := []string{TextOutput}
 	ret = append(ret, pf.JSONYamlPrintFlags.AllowedFormats()...)
@@ -69,9 +68,7 @@ func (pf *PrintFlags) AllowedFormats() []string {
 	return ret
 }
 
-// ToPrinter receives an outputFormat and returns a printer capable of
-// handling format printing.
-// Returns error if the specified outputFormat does not match supported formats.
+// ToPrinter 接收 outputFormat，返回能按该格式打印的打印器；格式不受支持时返回错误。
 func (pf *PrintFlags) ToPrinter() (Printer, error) {
 	outputFormat := ""
 	if pf.OutputFormat != nil {
@@ -99,27 +96,26 @@ func (pf *PrintFlags) ToPrinter() (Printer, error) {
 	return nil, genericclioptions.NoCompatiblePrinterError{OutputFormat: pf.OutputFormat, AllowedFormats: pf.AllowedFormats()}
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to Kubeadm printing to it
+// AddFlags 接收 *cobra.Command，并绑定 kubeadm 打印相关参数。
 func (pf *PrintFlags) AddFlags(cmd *cobra.Command) {
 	pf.JSONYamlPrintFlags.AddFlags(cmd)
 	pf.KubeTemplatePrintFlags.AddFlags(cmd)
 	cmd.Flags().StringVarP(pf.OutputFormat, "output", "o", *pf.OutputFormat, fmt.Sprintf("Output format. One of: %s.", strings.Join(pf.AllowedFormats(), "|")))
 }
 
-// WithDefaultOutput sets a default output format if one is not provided through a flag value
+// WithDefaultOutput 在参数未指定输出格式时设置默认格式。
 func (pf *PrintFlags) WithDefaultOutput(outputFormat string) *PrintFlags {
 	pf.OutputFormat = &outputFormat
 	return pf
 }
 
-// WithTypeSetter sets a wrapper than will surround the returned printer with a printer to type resources
+// WithTypeSetter 设置包装器，用类型设置打印器包围返回的打印器。
 func (pf *PrintFlags) WithTypeSetter(scheme *runtime.Scheme) *PrintFlags {
 	pf.TypeSetterPrinter = printers.NewTypeSetter(scheme)
 	return pf
 }
 
-// NewOutputFlags creates new KubeadmOutputFlags
+// NewOutputFlags 创建 KubeadmOutputFlags。
 func NewOutputFlags(textPrintFlags TextPrintFlags) *PrintFlags {
 	outputFormat := ""
 
@@ -131,13 +127,13 @@ func NewOutputFlags(textPrintFlags TextPrintFlags) *PrintFlags {
 		TextPrintFlags:         textPrintFlags,
 	}
 
-	// disable deprecated --template option
+	// 禁用已弃用的 --template 选项。
 	pf.KubeTemplatePrintFlags.TemplateArgument = nil
 
 	return pf
 }
 
-// Printer is a common printing interface in Kubeadm
+// Printer 是 kubeadm 的通用打印接口。
 type Printer interface {
 	PrintObj(obj runtime.Object, writer io.Writer) error
 	Fprintf(writer io.Writer, format string, args ...interface{}) (n int, err error)
@@ -146,42 +142,42 @@ type Printer interface {
 	Println(args ...interface{}) (n int, err error)
 }
 
-// TextPrinter implements Printer interface for generic text output
+// TextPrinter 实现 Printer，用于通用文本输出。
 type TextPrinter struct {
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj that prints object
+// PrintObj 实现 ResourcePrinter.PrintObj，打印对象。
 func (tp *TextPrinter) PrintObj(obj runtime.Object, writer io.Writer) error {
 	_, err := fmt.Fprintf(writer, "%+v\n", obj)
 	return err
 }
 
-// Fprintf is a wrapper around fmt.Fprintf
+// Fprintf 包装 fmt.Fprintf。
 func (tp *TextPrinter) Fprintf(writer io.Writer, format string, args ...interface{}) (n int, err error) {
 	return fmt.Fprintf(writer, format, args...)
 }
 
-// Fprintln is a wrapper around fmt.Fprintln
+// Fprintln 包装 fmt.Fprintln。
 func (tp *TextPrinter) Fprintln(writer io.Writer, args ...interface{}) (n int, err error) {
 	return fmt.Fprintln(writer, args...)
 }
 
-// Printf is a wrapper around fmt.Printf
+// Printf 包装 fmt.Printf。
 func (tp *TextPrinter) Printf(format string, args ...interface{}) (n int, err error) {
 	return fmt.Printf(format, args...)
 }
 
-// Println is a wrapper around fmt.Printf
+// Println 包装 fmt.Printf。
 func (tp *TextPrinter) Println(args ...interface{}) (n int, err error) {
 	return fmt.Println(args...)
 }
 
-// ResourcePrinterWrapper wraps ResourcePrinter and implements Printer interface
+// ResourcePrinterWrapper 包装 ResourcePrinter 并实现 Printer。
 type ResourcePrinterWrapper struct {
 	Printer printers.ResourcePrinter
 }
 
-// NewResourcePrinterWrapper creates new ResourcePrinter object
+// NewResourcePrinterWrapper 创建 ResourcePrinter。
 func NewResourcePrinterWrapper(resourcePrinter printers.ResourcePrinter, err error) (Printer, error) {
 	if err != nil {
 		return nil, err
@@ -189,35 +185,27 @@ func NewResourcePrinterWrapper(resourcePrinter printers.ResourcePrinter, err err
 	return &ResourcePrinterWrapper{Printer: resourcePrinter}, nil
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj that calls underlying printer API
+// PrintObj 实现 ResourcePrinter.PrintObj，调用底层打印器 API。
 func (rpw *ResourcePrinterWrapper) PrintObj(obj runtime.Object, writer io.Writer) error {
 	return rpw.Printer.PrintObj(obj, writer)
 }
 
-// Fprintf is an empty method to satisfy Printer interface
-// and silent info printing for structured output
-// This method is usually redefined for the text output
+// Fprintf 为空实现，用于满足 Printer 接口并抑制结构化输出的信息打印；文本输出通常会重写此方法。
 func (rpw *ResourcePrinterWrapper) Fprintf(writer io.Writer, format string, args ...interface{}) (n int, err error) {
 	return 0, nil
 }
 
-// Fprintln is an empty method to satisfy the Printer interface
-// and silent info printing for structured output
-// This method is usually redefined for the text output
+// Fprintln 为空实现，用于满足 Printer 接口并抑制结构化输出的信息打印；文本输出通常会重写此方法。
 func (rpw *ResourcePrinterWrapper) Fprintln(writer io.Writer, args ...interface{}) (n int, err error) {
 	return 0, nil
 }
 
-// Printf is an empty method to satisfy Printer interface
-// and silent info printing for structured output
-// This method is usually redefined for the text output
+// Printf 为空实现，用于满足 Printer 接口并抑制结构化输出的信息打印；文本输出通常会重写此方法。
 func (rpw *ResourcePrinterWrapper) Printf(format string, args ...interface{}) (n int, err error) {
 	return 0, nil
 }
 
-// Println is an empty method to satisfy Printer interface
-// and silent info printing for structured output
-// This method is usually redefined for the text output
+// Println 为空实现，用于满足 Printer 接口并抑制结构化输出的信息打印；文本输出通常会重写此方法。
 func (rpw *ResourcePrinterWrapper) Println(args ...interface{}) (n int, err error) {
 	return 0, nil
 }

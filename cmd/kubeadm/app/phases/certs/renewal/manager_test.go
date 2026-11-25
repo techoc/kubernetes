@@ -127,7 +127,7 @@ func TestRenewUsingLocalCA(t *testing.T) {
 		t.Fatalf("Failed to create the certificate renewal manager: %v", err)
 	}
 
-	// Prepare test certs with a past validity.
+	// 准备已过期的测试证书。
 	startTime := kubeadmutil.StartTimeUTC()
 
 	fmt.Println("START TIME TEST", startTime)

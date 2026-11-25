@@ -45,7 +45,7 @@ var (
 	printManifest = false
 )
 
-// NewAddonPhase returns the addon Cobra command
+// NewAddonPhase 返回插件阶段的 cobra 命令。
 func NewAddonPhase() workflow.Phase {
 	dnsLocalFlags := pflag.NewFlagSet(options.PrintManifest, pflag.ContinueOnError)
 	dnsLocalFlags.BoolVar(&printManifest, options.PrintManifest, printManifest, "Print the addon manifests to STDOUT instead of installing them")
@@ -103,7 +103,7 @@ func getInitData(c workflow.RunData) (*kubeadmapi.InitConfiguration, clientset.I
 	return cfg, client, patchesDir, out, err
 }
 
-// runCoreDNSAddon installs CoreDNS addon to a Kubernetes cluster
+// runCoreDNSAddon 将 CoreDNS 插件安装到 Kubernetes 集群。
 func runCoreDNSAddon(c workflow.RunData) error {
 	cfg, client, patchesDir, out, err := getInitData(c)
 	if err != nil {
@@ -112,7 +112,7 @@ func runCoreDNSAddon(c workflow.RunData) error {
 	return dnsaddon.EnsureDNSAddon(&cfg.ClusterConfiguration, client, patchesDir, out, printManifest)
 }
 
-// runKubeProxyAddon installs KubeProxy addon to a Kubernetes cluster
+// runKubeProxyAddon 将 kube-proxy 插件安装到 Kubernetes 集群。
 func runKubeProxyAddon(c workflow.RunData) error {
 	cfg, client, patchesDir, out, err := getInitData(c)
 	if err != nil {

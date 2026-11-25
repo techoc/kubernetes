@@ -19,16 +19,14 @@ package image
 import "regexp"
 
 var (
-	// tagMatcher is the regex used to match a tag.
-	// Basically we presume an image can be made of `[domain][:port][path]<name>[:tag][@sha256:digest]`
-	// We are obviously interested only in the tag, but for the purpose of properly matching it, we also match the digest
-	// (if present). All the parts before the tag we match in a single match everything (but not greedy) group.
-	// All matched sub-groups, except the tag one, get thrown away. Hence, in a result of FindStringSubmatch, if a tag
-	// matches, it's going to be the second returned element (after the full match).
+	// tagMatcher 是匹配标签的正则表达式。
+	// 假定镜像格式为 `[domain][:port][path]<name>[:tag][@sha256:digest]`。
+	// 为正确匹配标签，也匹配可能存在的摘要；标签前所有内容由一个非贪婪组匹配。
+	// 除标签组外的匹配子组均丢弃，因此 FindStringSubmatch 返回匹配时，标签位于第二个元素（完整匹配之后）。
 	tagMatcher = regexp.MustCompile(`^(?U:.*)(?::([[:word:]][[:word:].-]*))?(?:@sha256:[a-fA-F\d]{64})?$`)
 )
 
-// TagFromImage extracts a tag from image. An empty string is returned if no tag is discovered.
+// TagFromImage 从镜像提取标签；未找到时返回空字符串。
 func TagFromImage(image string) string {
 	matches := tagMatcher.FindStringSubmatch(image)
 	if len(matches) >= 2 {

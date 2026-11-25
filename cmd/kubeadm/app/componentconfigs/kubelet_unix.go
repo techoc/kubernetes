@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/initsystem"
 )
 
-// Mutate allows applying pre-defined modifications to the config before it's marshaled.
+// Mutate 在配置序列化前应用预定义的修改。
 func (kc *kubeletConfig) Mutate() error {
 	if err := mutateResolverConfig(&kc.config, isServiceActive); err != nil {
 		return err
@@ -34,7 +34,7 @@ func (kc *kubeletConfig) Mutate() error {
 	return nil
 }
 
-// mutateResolverConfig mutates the ResolverConfig in the kubeletConfig dynamically.
+// mutateResolverConfig 动态修改 kubeletConfig 中的 ResolverConfig。
 func mutateResolverConfig(cfg *kubeletconfig.KubeletConfiguration, isServiceActiveFunc func(string) (bool, error)) error {
 	ok, err := isServiceActiveFunc("systemd-resolved")
 	if err != nil {
@@ -52,7 +52,7 @@ func mutateResolverConfig(cfg *kubeletconfig.KubeletConfiguration, isServiceActi
 	return nil
 }
 
-// isServiceActive checks whether the given service exists and is running
+// isServiceActive 检查给定服务是否存在且正在运行。
 func isServiceActive(name string) (bool, error) {
 	initSystem, err := initsystem.GetInitSystem()
 	if err != nil {

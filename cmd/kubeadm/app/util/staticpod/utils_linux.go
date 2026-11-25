@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package staticpod contains utilities for managing the static pod.
+// Package staticpod 包含管理静态 Pod 的工具。
 package staticpod
 
 import (
@@ -36,7 +36,7 @@ import (
 type pathOwnerAndPermissionsUpdaterFunc func(path string, uid, gid int64, perms uint32) error
 type pathOwnerUpdaterFunc func(path string, uid, gid int64) error
 
-// RunComponentAsNonRoot updates the pod manifest and the hostVolume permissions to run as non root.
+// RunComponentAsNonRoot 更新 Pod 清单和 hostVolume 权限，使组件以非 root 运行。
 func RunComponentAsNonRoot(componentName string, pod *v1.Pod, usersAndGroups *users.UsersAndGroups, cfg *kubeadmapi.ClusterConfiguration) error {
 	switch componentName {
 	case kubeadmconstants.KubeAPIServer:
@@ -77,7 +77,7 @@ func RunComponentAsNonRoot(componentName string, pod *v1.Pod, usersAndGroups *us
 	return errors.New(fmt.Sprintf("component name %q is not valid", componentName))
 }
 
-// runKubeAPIServerAsNonRoot updates the pod manifest and the hostVolume permissions to run kube-apiserver as non root.
+// runKubeAPIServerAsNonRoot 更新 Pod 清单和 hostVolume 权限，使 kube-apiserver 以非 root 运行。
 func runKubeAPIServerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup, supplementalGroup *int64, updatePathOwnerAndPermissions pathOwnerAndPermissionsUpdaterFunc, cfg *kubeadmapi.ClusterConfiguration) error {
 	saPublicKeyFile := filepath.Join(cfg.CertificatesDir, kubeadmconstants.ServiceAccountPublicKeyName)
 	if err := updatePathOwnerAndPermissions(saPublicKeyFile, *runAsUser, *runAsGroup, 0600); err != nil {
@@ -107,11 +107,10 @@ func runKubeAPIServerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup, supplementalG
 	}
 	pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{
 		Capabilities: &v1.Capabilities{
-			// We drop all capabilities that are added by default.
+			// 删除默认添加的所有 capability。
 			Drop: []v1.Capability{"ALL"},
-			// kube-apiserver binary has the file capability cap_net_bind_service applied to it.
-			// This means that we must add this capability when running as non-root even if the
-			// capability is not required.
+			// kube-apiserver 二进制具有 cap_net_bind_service 文件 capability。
+			// 因此非 root 运行时必须添加该 capability，即使逻辑上不需要。
 			Add: []v1.Capability{"NET_BIND_SERVICE"},
 		},
 	}
@@ -121,7 +120,8 @@ func runKubeAPIServerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup, supplementalG
 	return nil
 }
 
-// runKubeControllerManagerAsNonRoot updates the pod manifest and the hostVolume permissions to run kube-controller-manager as non root.
+// runKubeControllerManagerAsNonRoot 更新 Pod 清单和 hostVolume 权限，
+// 使 kube-controller-manager 以非 root 运行。
 func runKubeControllerManagerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup, supplementalGroup *int64, updatePathOwnerAndPermissions pathOwnerAndPermissionsUpdaterFunc, cfg *kubeadmapi.ClusterConfiguration) error {
 	kubeconfigFile := filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.ControllerManagerKubeConfigFileName)
 	if err := updatePathOwnerAndPermissions(kubeconfigFile, *runAsUser, *runAsGroup, 0600); err != nil {
@@ -141,7 +141,7 @@ func runKubeControllerManagerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup, suppl
 	pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.To(false),
 		Capabilities: &v1.Capabilities{
-			// We drop all capabilities that are added by default.
+			// 删除默认添加的所有 capability。
 			Drop: []v1.Capability{"ALL"},
 		},
 	}
@@ -151,7 +151,7 @@ func runKubeControllerManagerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup, suppl
 	return nil
 }
 
-// runKubeSchedulerAsNonRoot updates the pod manifest and the hostVolume permissions to run kube-scheduler as non root.
+// runKubeSchedulerAsNonRoot 更新 Pod 清单和 hostVolume 权限，使 kube-scheduler 以非 root 运行。
 func runKubeSchedulerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup *int64, updatePathOwnerAndPermissions pathOwnerAndPermissionsUpdaterFunc) error {
 	kubeconfigFile := filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.SchedulerKubeConfigFileName)
 	if err := updatePathOwnerAndPermissions(kubeconfigFile, *runAsUser, *runAsGroup, 0600); err != nil {
@@ -159,7 +159,7 @@ func runKubeSchedulerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup *int64, update
 	}
 	pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.To(false),
-		// We drop all capabilities that are added by default.
+		// 删除默认添加的所有 capability。
 		Capabilities: &v1.Capabilities{
 			Drop: []v1.Capability{"ALL"},
 		},
@@ -169,7 +169,7 @@ func runKubeSchedulerAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup *int64, update
 	return nil
 }
 
-// runEtcdAsNonRoot updates the pod manifest and the hostVolume permissions to run etcd as non root.
+// runEtcdAsNonRoot 更新 Pod 清单和 hostVolume 权限，使 etcd 以非 root 运行。
 func runEtcdAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup *int64, updatePathOwnerAndPermissions pathOwnerAndPermissionsUpdaterFunc, updatePathOwner pathOwnerUpdaterFunc, cfg *kubeadmapi.ClusterConfiguration) error {
 	if err := updatePathOwner(cfg.Etcd.Local.DataDir, *runAsUser, *runAsGroup); err != nil {
 		return err
@@ -184,7 +184,7 @@ func runEtcdAsNonRoot(pod *v1.Pod, runAsUser, runAsGroup *int64, updatePathOwner
 	}
 	pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.To(false),
-		// We drop all capabilities that are added by default.
+		// 删除默认添加的所有 capability。
 		Capabilities: &v1.Capabilities{
 			Drop: []v1.Capability{"ALL"},
 		},

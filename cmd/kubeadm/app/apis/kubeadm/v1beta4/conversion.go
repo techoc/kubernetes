@@ -22,12 +22,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
-// Convert_kubeadm_InitConfiguration_To_v1beta4_InitConfiguration is required because the ClusterConfiguration is embedded in the private InitConfiguration struct.
+// Convert_kubeadm_InitConfiguration_To_v1beta4_InitConfiguration 是必需的，因为私有 InitConfiguration 结构体中嵌入了 ClusterConfiguration。
 func Convert_kubeadm_InitConfiguration_To_v1beta4_InitConfiguration(in *kubeadm.InitConfiguration, out *InitConfiguration, s conversion.Scope) error {
 	return autoConvert_kubeadm_InitConfiguration_To_v1beta4_InitConfiguration(in, out, s)
 }
 
-// Convert_v1beta4_InitConfiguration_To_kubeadm_InitConfiguration is required because the ClusterConfiguration is embedded in the private InitConfiguration struct.
+// Convert_v1beta4_InitConfiguration_To_kubeadm_InitConfiguration 是必需的，因为私有 InitConfiguration 结构体中嵌入了 ClusterConfiguration。
 func Convert_v1beta4_InitConfiguration_To_kubeadm_InitConfiguration(in *InitConfiguration, out *kubeadm.InitConfiguration, s conversion.Scope) error {
 	err := autoConvert_v1beta4_InitConfiguration_To_kubeadm_InitConfiguration(in, out, s)
 	if err != nil {
@@ -37,14 +37,14 @@ func Convert_v1beta4_InitConfiguration_To_kubeadm_InitConfiguration(in *InitConf
 	return err
 }
 
-// Convert_v1beta4_Arg_To_kubeadm_Arg is required because MergeMethod is not present in v1beta4.
+// Convert_v1beta4_Arg_To_kubeadm_Arg 是必需的，因为 v1beta4 中没有 MergeMethod。
 func Convert_v1beta4_Arg_To_kubeadm_Arg(in *Arg, out *kubeadm.Arg, s conversion.Scope) error {
 	out.Name = in.Name
 	out.Value = in.Value
 	return nil
 }
 
-// Convert_kubeadm_Arg_To_v1beta4_Arg is required because MergeMethod is not present in v1beta4.
+// Convert_kubeadm_Arg_To_v1beta4_Arg 是必需的，因为 v1beta4 中没有 MergeMethod。
 func Convert_kubeadm_Arg_To_v1beta4_Arg(in *kubeadm.Arg, out *Arg, s conversion.Scope) error {
 	out.Name = in.Name
 	out.Value = in.Value

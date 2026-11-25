@@ -43,14 +43,14 @@ import (
 )
 
 const (
-	// KubeProxyServiceAccountName describes the name of the ServiceAccount for the kube-proxy addon
+	// KubeProxyServiceAccountName 描述 kube-proxy 插件的 ServiceAccount 名称。
 	KubeProxyServiceAccountName = "kube-proxy"
 
-	// KubeProxyConfigMapRoleName sets the name of ClusterRole for ConfigMap
+	// KubeProxyConfigMapRoleName 设置 ConfigMap 所用 ClusterRole 的名称。
 	KubeProxyConfigMapRoleName = "kube-proxy"
 )
 
-// EnsureProxyAddon creates the kube-proxy addons
+// EnsureProxyAddon 创建 kube-proxy 插件。
 func EnsureProxyAddon(cfg *kubeadmapi.ClusterConfiguration, localEndpoint *kubeadmapi.APIEndpoint, client clientset.Interface, patchesDir string, out io.Writer, printManifest bool) error {
 	cmByte, err := createKubeProxyConfigMap(cfg, localEndpoint, client, printManifest)
 	if err != nil {
@@ -69,7 +69,7 @@ func EnsureProxyAddon(cfg *kubeadmapi.ClusterConfiguration, localEndpoint *kubea
 	return nil
 }
 
-// Create SA, RBACRules or print manifests of them to out if printManifest is true
+// 创建 ServiceAccount 和 RBAC 规则；若 printManifest 为 true，则将其清单输出到 out。
 func printOrCreateKubeProxyObjects(cmByte []byte, dsByte []byte, client clientset.Interface, out io.Writer, printManifest bool) error {
 	var saBytes, crbBytes, roleBytes, roleBindingBytes []byte
 	var err error
@@ -132,7 +132,7 @@ func printOrCreateKubeProxyObjects(cmByte []byte, dsByte []byte, client clientse
 		},
 	}
 
-	// Create the objects if printManifest is false
+	// 若 printManifest 为 false，则创建对象。
 	if !printManifest {
 		if err := apiclient.CreateOrUpdate(client.CoreV1().ServiceAccounts(sa.GetNamespace()), sa); err != nil {
 			return errors.Wrap(err, "error when creating kube-proxy service account")
@@ -191,7 +191,7 @@ func printOrCreateKubeProxyObjects(cmByte []byte, dsByte []byte, client clientse
 }
 
 func createKubeProxyConfigMap(cfg *kubeadmapi.ClusterConfiguration, localEndpoint *kubeadmapi.APIEndpoint, client clientset.Interface, printManifest bool) ([]byte, error) {
-	// Generate ControlPlane Endpoint kubeconfig file
+	// 生成控制平面端点 kubeconfig 文件。
 	controlPlaneEndpoint, err := kubeadmutil.GetControlPlaneEndpoint(cfg.ControlPlaneEndpoint, localEndpoint)
 	if err != nil {
 		return []byte(""), err
@@ -207,7 +207,7 @@ func createKubeProxyConfigMap(cfg *kubeadmapi.ClusterConfiguration, localEndpoin
 		return []byte(""), errors.Wrap(err, "error when marshaling")
 	}
 
-	// Indent the proxy CM bytes with 4 spaces to comply with the location in the template.
+	// 在代理 ConfigMap 内容前添加四个空格，以符合模板中的缩进位置。
 	var prefixBytes bytes.Buffer
 	scanner := bufio.NewScanner(bytes.NewReader(proxyBytes))
 	for scanner.Scan() {
@@ -243,7 +243,7 @@ func createKubeProxyConfigMap(cfg *kubeadmapi.ClusterConfiguration, localEndpoin
 		componentconfigs.SignConfigMap(kubeproxyConfigMap)
 	}
 
-	// Create the ConfigMap for kube-proxy or update it in case it already exists
+	// 创建 kube-proxy ConfigMap；若已存在，则更新。
 	return []byte(""), apiclient.CreateOrUpdate(client.CoreV1().ConfigMaps(kubeproxyConfigMap.GetNamespace()), kubeproxyConfigMap)
 }
 
@@ -272,15 +272,15 @@ func createKubeProxyAddon(cfg *kubeadmapi.ClusterConfiguration, client clientset
 	if err := kuberuntime.DecodeInto(clientsetscheme.Codecs.UniversalDecoder(), daemonSetbytes, kubeproxyDaemonSet); err != nil {
 		return []byte(""), errors.Wrap(err, "unable to decode kube-proxy daemonset")
 	}
-	// Propagate the http/https proxy host environment variables to the container
+	// 将 HTTP/HTTPS 代理主机环境变量传递给容器。
 	env := &kubeproxyDaemonSet.Spec.Template.Spec.Containers[0].Env
 	*env = append(*env, kubeadmutil.MergeKubeadmEnvVars(kubeadmutil.GetProxyEnvVars(nil))...)
 
-	// Create the DaemonSet for kube-proxy or update it in case it already exists
+	// 创建 kube-proxy DaemonSet；若已存在，则更新。
 	return []byte(""), apiclient.CreateOrUpdate(client.AppsV1().DaemonSets(kubeproxyDaemonSet.GetNamespace()), kubeproxyDaemonSet)
 }
 
-// applyKubeProxyDaemonSetPatches reads patches from a directory and applies them over the input kubeProxyDaemonSetBytes.
+// applyKubeProxyDaemonSetPatches 从目录读取补丁，并将其应用到传入的 kubeProxyDaemonSetBytes。
 func applyKubeProxyDaemonSetPatches(kubeProxyDaemonSetBytes []byte, patchesDir string, output io.Writer) ([]byte, error) {
 	patchManager, err := patches.GetPatchManagerForPath(patchesDir, patches.KnownTargets(), output)
 	if err != nil {

@@ -358,7 +358,7 @@ func TestDirAvailableCheck(t *testing.T) {
 		{
 			name: "Directory exists and has something",
 			check: DirAvailableCheck{
-				Path: os.TempDir(), // a directory was created previously in this test
+				Path: os.TempDir(), // 此测试之前已创建该目录。
 			},
 			expectedError: true,
 		},
@@ -383,8 +383,8 @@ func TestDirAvailableCheck(t *testing.T) {
 	}
 }
 
-// mockNetListener is a minimal implementation of net.Listener used for testing
-// PortOpenCheck without relying on real network sockets.
+// mockNetListener 是用于测试的最小 net.Listener 实现，
+// 无需依赖真实网络套接字即可测试 PortOpenCheck。
 type mockNetListener struct{}
 
 func (m *mockNetListener) Accept() (net.Conn, error) { return nil, nil }
@@ -484,7 +484,7 @@ func TestRunChecks(t *testing.T) {
 		output   string
 	}{
 		{[]Checker{}, true, ""},
-		{[]Checker{preflightCheckTest{"warning"}}, true, "\t[WARNING preflightCheckTest]: warning\n"}, // should just print warning
+		{[]Checker{preflightCheckTest{"warning"}}, true, "\t[WARNING preflightCheckTest]: warning\n"}, // 应只输出警告。
 		{[]Checker{preflightCheckTest{"error"}}, false, "[preflight] Some fatal errors occurred:\n\t[ERROR preflightCheckTest]: fake error\n[preflight] If you know what you are doing, you can make a check non-fatal with `--ignore-preflight-errors=...`\n"},
 		{[]Checker{preflightCheckTest{"test"}}, false, "[preflight] Some fatal errors occurred:\n\t[ERROR preflightCheckTest]: fake error\n[preflight] If you know what you are doing, you can make a check non-fatal with `--ignore-preflight-errors=...`\n"},
 		{[]Checker{DirAvailableCheck{Path: "/does/not/exist"}}, true, ""},
@@ -605,42 +605,42 @@ func TestKubernetesVersionCheck(t *testing.T) {
 	}{
 		{
 			check: KubernetesVersionCheck{
-				KubeadmVersion:    "v1.6.6", //Same version
+				KubeadmVersion:    "v1.6.6", // 版本相同。
 				KubernetesVersion: "v1.6.6",
 			},
 			expectWarnings: false,
 		},
 		{
 			check: KubernetesVersionCheck{
-				KubeadmVersion:    "v1.6.6", //KubernetesVersion version older than KubeadmVersion
+				KubeadmVersion:    "v1.6.6", // KubernetesVersion 低于 KubeadmVersion。
 				KubernetesVersion: "v1.5.5",
 			},
 			expectWarnings: false,
 		},
 		{
 			check: KubernetesVersionCheck{
-				KubeadmVersion:    "v1.6.6", //KubernetesVersion newer than KubeadmVersion, within the same minor release (new patch)
+				KubeadmVersion:    "v1.6.6", // KubernetesVersion 高于 KubeadmVersion，但属于同一次版本的新 patch。
 				KubernetesVersion: "v1.6.7",
 			},
 			expectWarnings: false,
 		},
 		{
 			check: KubernetesVersionCheck{
-				KubeadmVersion:    "v1.6.6", //KubernetesVersion newer than KubeadmVersion, in a different minor/in pre-release
+				KubeadmVersion:    "v1.6.6", // KubernetesVersion 高于 KubeadmVersion，属于不同次版本或预发布版本。
 				KubernetesVersion: "v1.7.0-alpha.0",
 			},
 			expectWarnings: true,
 		},
 		{
 			check: KubernetesVersionCheck{
-				KubeadmVersion:    "v1.6.6", //KubernetesVersion newer than KubeadmVersion, in a different minor/stable
+				KubeadmVersion:    "v1.6.6", // KubernetesVersion 高于 KubeadmVersion，属于不同次版本的稳定版。
 				KubernetesVersion: "v1.7.0",
 			},
 			expectWarnings: true,
 		},
 		{
 			check: KubernetesVersionCheck{
-				KubeadmVersion:    "v0.0.0", //"super-custom" builds - Skip this check
+				KubeadmVersion:    "v0.0.0", // "super-custom" 构建：跳过此检查。
 				KubernetesVersion: "v1.7.0",
 			},
 			expectWarnings: false,
@@ -670,35 +670,35 @@ func TestHTTPProxyCIDRCheck(t *testing.T) {
 			check: HTTPProxyCIDRCheck{
 				Proto: "https",
 				CIDR:  "127.0.0.0/8",
-			}, // Loopback addresses never should produce proxy warnings
+			}, // 回环地址始终不应产生代理警告。
 			expectWarnings: false,
 		},
 		{
 			check: HTTPProxyCIDRCheck{
 				Proto: "https",
 				CIDR:  "10.96.0.0/12",
-			}, // Expected to be accessed directly, we set NO_PROXY to 10.0.0.0/8
+			}, // 预期直连；已将 NO_PROXY 设为 10.0.0.0/8。
 			expectWarnings: false,
 		},
 		{
 			check: HTTPProxyCIDRCheck{
 				Proto: "https",
 				CIDR:  "192.168.0.0/16",
-			}, // Expected to go via proxy as this range is not listed in NO_PROXY
+			}, // 预期通过代理；该范围未列入 NO_PROXY。
 			expectWarnings: true,
 		},
 		{
 			check: HTTPProxyCIDRCheck{
 				Proto: "https",
 				CIDR:  "2001:db8::/56",
-			}, // Expected to be accessed directly, part of 2001:db8::/48 in NO_PROXY
+			}, // 预期直连；2001:db8::/48 的一部分已列入 NO_PROXY。
 			expectWarnings: false,
 		},
 		{
 			check: HTTPProxyCIDRCheck{
 				Proto: "https",
 				CIDR:  "2001:db8:1::/56",
-			}, // Expected to go via proxy, range is not in 2001:db8::/48
+			}, // 预期通过代理；该范围不在 2001:db8::/48 内。
 			expectWarnings: true,
 		},
 	}
@@ -730,7 +730,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 			check: HTTPProxyCheck{
 				Proto: "https",
 				Host:  "127.0.0.1",
-			}, // Loopback addresses never should produce proxy warnings
+			}, // 回环地址始终不应产生代理警告。
 			expectWarnings: false,
 		},
 		{
@@ -738,7 +738,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 			check: HTTPProxyCheck{
 				Proto: "https",
 				Host:  "10.96.0.1",
-			}, // Expected to be accessed directly, we set NO_PROXY to 10.0.0.0/8
+			}, // 预期直连；已将 NO_PROXY 设为 10.0.0.0/8。
 			expectWarnings: false,
 		},
 		{
@@ -746,7 +746,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 			check: HTTPProxyCheck{
 				Proto: "https",
 				Host:  "192.168.0.1",
-			}, // Expected to go via proxy as this range is not listed in NO_PROXY
+			}, // 预期通过代理；该范围未列入 NO_PROXY。
 			expectWarnings: true,
 		},
 		{
@@ -754,7 +754,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 			check: HTTPProxyCheck{
 				Proto: "https",
 				Host:  "[2001:db8::1:15]",
-			}, // Expected to be accessed directly, part of 2001:db8::/48 in NO_PROXY
+			}, // 预期直连；2001:db8::/48 的一部分已列入 NO_PROXY。
 			expectWarnings: false,
 		},
 		{
@@ -762,7 +762,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 			check: HTTPProxyCheck{
 				Proto: "https",
 				Host:  "[2001:db8:1::1:15]",
-			}, // Expected to go via proxy, range is not in 2001:db8::/48
+			}, // 预期通过代理；该范围不在 2001:db8::/48 内。
 			expectWarnings: true,
 		},
 		{
@@ -770,7 +770,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 			check: HTTPProxyCheck{
 				Proto: "https",
 				Host:  "2001:db8::1:15",
-			}, // Expected to be accessed directly, part of 2001:db8::/48 in NO_PROXY
+			}, // 预期直连；2001:db8::/48 的一部分已列入 NO_PROXY。
 			expectWarnings: false,
 		},
 		{
@@ -778,7 +778,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 			check: HTTPProxyCheck{
 				Proto: "https",
 				Host:  "2001:db8:1::1:15",
-			}, // Expected to go via proxy, range is not in 2001:db8::/48
+			}, // 预期通过代理；该范围不在 2001:db8::/48 内。
 			expectWarnings: true,
 		},
 	}
@@ -800,7 +800,7 @@ func TestHTTPProxyCheck(t *testing.T) {
 	}
 }
 
-// resetProxyEnv is helper function that unsets all *_proxy variables.
+// resetProxyEnv 是一个辅助函数，用于取消设置所有 *_proxy 变量。
 func resetProxyEnv(t *testing.T) {
 	for _, e := range os.Environ() {
 		key, value, _ := strings.Cut(e, "=")
@@ -813,10 +813,10 @@ func resetProxyEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://proxy.example.com:3128")
 	t.Setenv("HTTPS_PROXY", "https://proxy.example.com:3128")
 	t.Setenv("NO_PROXY", "example.com,10.0.0.0/8,2001:db8::/48")
-	// Check if we can reliably execute tests:
-	// ProxyFromEnvironment caches the *_proxy environment variables and
-	// if ProxyFromEnvironment already executed before our test with empty
-	// HTTP_PROXY it will make these tests return false positive failures
+	// 检查测试是否能够可靠执行：
+	// ProxyFromEnvironment 会缓存 *_proxy 环境变量；
+	// 如果在本测试之前已在 HTTP_PROXY 为空的情况下调用过 ProxyFromEnvironment，
+	// 会导致这些测试出现误报失败。
 	req, err := http.NewRequest("GET", "http://host.fake.tld/", nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -841,13 +841,13 @@ func TestKubeletVersionCheck(t *testing.T) {
 		expectErrors   bool
 		expectWarnings bool
 	}{
-		{"v" + currentKubernetesVersion.WithPatch(2).String(), "", false, false},                                                           // check minimally supported version when there is no information about control plane
-		{"v1.1.0", "v1.11.8", true, false},                                                                                                 // too old kubelet, should fail.
-		{"v" + minimumKubeletVersion.String(), minimumControlPlaneVersion.WithPatch(5).String(), false, false},                             // kubelet within same major.minor as control plane
-		{"v" + minimumKubeletVersion.WithPatch(5).String(), minimumControlPlaneVersion.WithPatch(1).String(), false, false},                // kubelet is newer, but still within same major.minor as control plane
-		{"v" + minimumKubeletVersion.String(), currentKubernetesVersion.WithPatch(1).String(), false, false},                               // kubelet is lower than control plane, but newer than minimally supported
-		{"v" + currentKubernetesVersion.WithPreRelease("alpha.1").String(), minimumControlPlaneVersion.WithPatch(1).String(), true, false}, // kubelet is newer (development build) than control plane, should fail.
-		{"v" + currentKubernetesVersion.String(), minimumControlPlaneVersion.WithPatch(5).String(), true, false},                           // kubelet is newer (release) than control plane, should fail.
+		{"v" + currentKubernetesVersion.WithPatch(2).String(), "", false, false},                                                           // 无控制平面信息时检查最低支持版本。
+		{"v1.1.0", "v1.11.8", true, false},                                                                                                 // kubelet 版本过旧，应失败。
+		{"v" + minimumKubeletVersion.String(), minimumControlPlaneVersion.WithPatch(5).String(), false, false},                             // kubelet 与控制平面属于同一 major.minor。
+		{"v" + minimumKubeletVersion.WithPatch(5).String(), minimumControlPlaneVersion.WithPatch(1).String(), false, false},                // kubelet 较新，但仍与控制平面属于同一 major.minor。
+		{"v" + minimumKubeletVersion.String(), currentKubernetesVersion.WithPatch(1).String(), false, false},                               // kubelet 低于控制平面，但高于最低支持版本。
+		{"v" + currentKubernetesVersion.WithPreRelease("alpha.1").String(), minimumControlPlaneVersion.WithPatch(1).String(), true, false}, // kubelet 开发构建版本高于控制平面，应失败。
+		{"v" + currentKubernetesVersion.String(), minimumControlPlaneVersion.WithPatch(5).String(), true, false},                           // kubelet 发布版本高于控制平面，应失败。
 	}
 
 	for _, tc := range cases {
@@ -933,7 +933,7 @@ func TestNumCPUCheck(t *testing.T) {
 }
 
 func TestMemCheck(t *testing.T) {
-	// skip this test, if OS in not Linux, since it will ONLY pass on Linux.
+	// 非 Linux 操作系统跳过此测试，因为它仅在 Linux 上通过。
 	if runtime.GOOS != "linux" {
 		t.Skip("unsupported OS for memory check test ")
 	}
@@ -959,7 +959,7 @@ func TestMemCheck(t *testing.T) {
 }
 
 func TestInitIPCheck(t *testing.T) {
-	// skip this test, if OS in not Linux, since it will ONLY pass on Linux.
+	// 非 Linux 操作系统跳过此测试，因为它仅在 Linux 上通过。
 	if runtime.GOOS != "linux" {
 		t.Skip("unsupported OS")
 	}
@@ -967,7 +967,7 @@ func TestInitIPCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected failure when defaulting InitConfiguration: %v", err)
 	}
-	internalcfg.LocalAPIEndpoint.AdvertiseAddress = "" // AdvertiseAddress is optional, it could be auto-detected.
+	internalcfg.LocalAPIEndpoint.AdvertiseAddress = "" // AdvertiseAddress 可选，可以自动检测。
 	ipv4File := "FileContent--proc-sys-net-ipv4-ip_forward"
 	ipv6File := "FileContent--proc-sys-net-ipv6-conf-default-forwarding"
 	var tests = []struct {
@@ -1021,7 +1021,7 @@ func TestInitIPCheck(t *testing.T) {
 }
 
 func TestJoinIPCheck(t *testing.T) {
-	// skip this test, if OS in not Linux, since it will ONLY pass on Linux.
+	// 非 Linux 操作系统跳过此测试，因为它仅在 Linux 上通过。
 	if runtime.GOOS != "linux" {
 		t.Skip("unsupported OS")
 	}

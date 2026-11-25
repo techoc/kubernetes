@@ -50,18 +50,18 @@ type fakeEtcdClient struct {
 	memberPromoteFunc func(context.Context, uint64) (*clientv3.MemberPromoteResponse, error)
 }
 
-// Close shuts down the client's etcd connections.
+// Close 关闭客户端的 etcd 连接。
 func (f *fakeEtcdClient) Close() error {
 	f.members = []*pb.Member{}
 	return nil
 }
 
-// Endpoints lists the registered endpoints for the client.
+// Endpoints 列出客户端已注册的端点。
 func (f *fakeEtcdClient) Endpoints() []string {
 	return f.endpoints
 }
 
-// MemberList lists the current cluster membership.
+// MemberList 列出当前集群成员。
 func (f *fakeEtcdClient) MemberList(ctx context.Context, opts ...clientv3.OpOption) (*clientv3.MemberListResponse, error) {
 	if f.memberListFunc != nil {
 		return f.memberListFunc(ctx, opts...)
@@ -71,22 +71,22 @@ func (f *fakeEtcdClient) MemberList(ctx context.Context, opts ...clientv3.OpOpti
 	}, nil
 }
 
-// MemberAdd adds a new member into the cluster.
+// MemberAdd 向集群添加成员。
 func (f *fakeEtcdClient) MemberAdd(_ context.Context, peerAddrs []string) (*clientv3.MemberAddResponse, error) {
 	return nil, errNotImplemented
 }
 
-// MemberAddAsLearner adds a new learner member into the cluster.
+// MemberAddAsLearner 向集群添加 learner 成员。
 func (f *fakeEtcdClient) MemberAddAsLearner(_ context.Context, peerAddrs []string) (*clientv3.MemberAddResponse, error) {
 	return nil, errNotImplemented
 }
 
-// MemberRemove removes an existing member from the cluster.
+// MemberRemove 从集群移除已有成员。
 func (f *fakeEtcdClient) MemberRemove(_ context.Context, id uint64) (*clientv3.MemberRemoveResponse, error) {
 	return nil, errNotImplemented
 }
 
-// MemberPromote promotes a member from raft learner (non-voting) to raft voting member.
+// MemberPromote 将成员从 raft learner（无投票权）提升为有投票权成员。
 func (f *fakeEtcdClient) MemberPromote(ctx context.Context, id uint64) (*clientv3.MemberPromoteResponse, error) {
 	if f.memberPromoteFunc != nil {
 		return f.memberPromoteFunc(ctx, id)
@@ -94,12 +94,12 @@ func (f *fakeEtcdClient) MemberPromote(ctx context.Context, id uint64) (*clientv
 	return nil, errNotImplemented
 }
 
-// Status gets the status of the endpoint.
+// Status 获取端点状态。
 func (f *fakeEtcdClient) Status(_ context.Context, endpoint string) (*clientv3.StatusResponse, error) {
 	return nil, errNotImplemented
 }
 
-// Sync synchronizes client's endpoints with the known endpoints from the etcd membership.
+// Sync 根据 etcd 成员列表中的已知端点同步客户端端点。
 func (f *fakeEtcdClient) Sync(_ context.Context) error {
 	return errNotImplemented
 }
@@ -882,7 +882,7 @@ type fakeEtcdClientWithStatusResponse struct {
 	statusRequestErrors map[string]error
 }
 
-// Status gets the status of the endpoint.
+// Status 获取端点状态。
 func (f *fakeEtcdClientWithStatusResponse) Status(_ context.Context, ep string) (*clientv3.StatusResponse, error) {
 	if f.statusRequestErrors != nil {
 		if _, ok := f.statusRequestErrors[ep]; ok {
@@ -989,7 +989,7 @@ func TestEvaluateClusterStatus(t *testing.T) {
 		},
 	}
 
-	// Temporarily reduce the etcd API call timeout from 2 minutes to 1 second.
+	// 临时将 etcd API 调用超时从 2 分钟缩短为 1 秒。
 	oldActiveTimeout := kubeadmapi.GetActiveTimeouts()
 	newActiveTimeout := oldActiveTimeout.DeepCopy()
 	newActiveTimeout.EtcdAPICall = &metav1.Duration{Duration: 1 * time.Second}
@@ -1071,7 +1071,7 @@ func TestMemberPromote(t *testing.T) {
 		wantPromoteCalls     int
 		minMemberListCalls   int
 	}{
-		// Normal path: learner is started, promotion succeeds, and the new endpoint is added.
+		// 正常路径：learner 已启动，提升成功并添加新端点。
 		{
 			name: "successful promotion adds endpoint",
 			memberListResults: []memberListResult{
@@ -1086,7 +1086,7 @@ func TestMemberPromote(t *testing.T) {
 			wantPromoteCalls:   1,
 			minMemberListCalls: 2,
 		},
-		// The learner exists but has not started yet, so kubeadm should wait before promoting.
+		// learner 已存在但尚未启动，kubeadm 应等待后再提升。
 		{
 			name: "learner not started yet and retried before promotion",
 			memberListResults: []memberListResult{
@@ -1102,7 +1102,7 @@ func TestMemberPromote(t *testing.T) {
 			wantPromoteCalls:   1,
 			minMemberListCalls: 3,
 		},
-		// A transient error of member listing while waiting for the learner to start should be retried.
+		// 等待 learner 启动期间列出成员出现短暂错误，应重试。
 		{
 			name: "member list error while waiting for learner start",
 			memberListResults: []memberListResult{
@@ -1118,7 +1118,7 @@ func TestMemberPromote(t *testing.T) {
 			wantPromoteCalls:   1,
 			minMemberListCalls: 3,
 		},
-		// A transient error of member listing before promotion, and it should be retried before calling MemberPromote.
+		// 提升前列出成员出现短暂错误，应在调用 MemberPromote 前重试。
 		{
 			name: "member list error before promotion is retried",
 			memberListResults: []memberListResult{
@@ -1134,7 +1134,7 @@ func TestMemberPromote(t *testing.T) {
 			wantPromoteCalls:   1,
 			minMemberListCalls: 3,
 		},
-		// A transient promotion error should be retried then can succeed later.
+		// 提升出现短暂错误，应重试并可能随后成功。
 		{
 			name: "transient promote error is retried and then succeeds",
 			memberListResults: []memberListResult{
@@ -1151,8 +1151,7 @@ func TestMemberPromote(t *testing.T) {
 			wantPromoteCalls:   2,
 			minMemberListCalls: 3,
 		},
-		// If promotion succeeded on the etcd side but the client saw an error,
-		// the next retry should treat an already promoted member as success.
+		// etcd 端已提升但客户端收到错误时，下次重试应将已提升成员视为成功。
 		{
 			name: "already promoted after transient promote failure adds endpoint",
 			memberListResults: []memberListResult{
@@ -1168,8 +1167,7 @@ func TestMemberPromote(t *testing.T) {
 			wantPromoteCalls:   1,
 			minMemberListCalls: 3,
 		},
-		// If the member is already promoted before the promote attempt,
-		// kubeadm should not call MemberPromote again.
+		// 尝试提升前成员已提升时，kubeadm 不应再次调用 MemberPromote。
 		{
 			name: "already promoted before promote attempt adds endpoint",
 			memberListResults: []memberListResult{
@@ -1181,7 +1179,7 @@ func TestMemberPromote(t *testing.T) {
 			wantPromoteCalls:   0,
 			minMemberListCalls: 2,
 		},
-		// If the endpoint is already present, promoting should still succeed without duplicating it.
+		// 端点已存在时，提升仍应成功且不重复添加端点。
 		{
 			name:             "endpoint is already present",
 			initialEndpoints: []string{initialEndpoint, promotedEndpoint},

@@ -218,7 +218,7 @@ func TestKubeletDefault(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// This is the same for all test cases so we set it here
+			// 所有测试用例共用此项，因此在此设置。
 			expected := test.expected
 			expected.configBase.GroupVersion = kubeletconfig.SchemeGroupVersion
 
@@ -236,7 +236,7 @@ func TestKubeletDefault(t *testing.T) {
 	}
 }
 
-// runKubeletFromTest holds common test case data and evaluation code for kubeletHandler.From* functions
+// runKubeletFromTest 保存 kubeletHandler.From* 函数的通用测试数据和求值逻辑。
 func runKubeletFromTest(t *testing.T, perform func(gvk schema.GroupVersionKind, yaml string) (kubeadmapi.ComponentConfig, error)) {
 	const (
 		kind          = "KubeletConfiguration"

@@ -32,32 +32,31 @@ import (
 )
 
 const (
-	// When a token is matched with 'BootstrapTokenPattern', the size of validated substrings returned by
-	// regexp functions which contains 'Submatch' in their names will be 3.
-	// Submatch 0 is the match of the entire expression, submatch 1 is
-	// the match of the first parenthesized subexpression, and so on.
-	// e.g.:
+	// 当令牌与 'BootstrapTokenPattern' 匹配时，名称中包含 'Submatch' 的
+	// 正则表达式函数返回的已验证子字符串数量为 3。
+	// 子匹配 0 匹配整个表达式，子匹配 1 匹配第一个括号内的子表达式，依此类推。
+	// 例如：
 	// result := bootstraputil.BootstrapTokenRegexp.FindStringSubmatch("abcdef.1234567890123456")
 	// result == []string{"abcdef.1234567890123456","abcdef","1234567890123456"}
 	// len(result) == 3
 	validatedSubstringsSize = 3
 )
 
-// MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON 实现 json.Marshaler 接口。
 func (bts BootstrapTokenString) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf(`"%s"`, bts.String())), nil
 }
 
-// UnmarshalJSON implements the json.Unmarshaller interface.
+// UnmarshalJSON 实现 json.Unmarshaller 接口。
 func (bts *BootstrapTokenString) UnmarshalJSON(b []byte) error {
-	// If the token is represented as "", just return quickly without an error
+	// 如果令牌表示为 ""，直接返回，不产生错误。
 	if len(b) == 0 {
 		return nil
 	}
 
-	// Remove unnecessary " characters coming from the JSON parser
+	// 移除 JSON 解析器带入的多余 " 字符。
 	token := strings.Replace(string(b), `"`, ``, -1)
-	// Convert the string Token to a BootstrapTokenString object
+	// 将字符串令牌转换为 BootstrapTokenString 对象。
 	newbts, err := NewBootstrapTokenString(token)
 	if err != nil {
 		return err
@@ -67,7 +66,7 @@ func (bts *BootstrapTokenString) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// String returns the string representation of the BootstrapTokenString
+// String 返回 BootstrapTokenString 的字符串表示形式。
 func (bts BootstrapTokenString) String() string {
 	if len(bts.ID) > 0 && len(bts.Secret) > 0 {
 		return bootstraputil.TokenFromIDAndSecret(bts.ID, bts.Secret)
@@ -75,10 +74,8 @@ func (bts BootstrapTokenString) String() string {
 	return ""
 }
 
-// NewBootstrapTokenString converts the given Bootstrap Token as a string
-// to the BootstrapTokenString object used for serialization/deserialization
-// and internal usage. It also automatically validates that the given token
-// is of the right format
+// NewBootstrapTokenString 将给定的字符串形式引导令牌转换为用于
+// 序列化、反序列化和内部处理的 BootstrapTokenString 对象，并自动验证令牌格式是否正确。
 func NewBootstrapTokenString(token string) (*BootstrapTokenString, error) {
 	substrs := bootstraputil.BootstrapTokenRegexp.FindStringSubmatch(token)
 	if len(substrs) != validatedSubstringsSize {
@@ -88,14 +85,13 @@ func NewBootstrapTokenString(token string) (*BootstrapTokenString, error) {
 	return &BootstrapTokenString{ID: substrs[1], Secret: substrs[2]}, nil
 }
 
-// NewBootstrapTokenStringFromIDAndSecret is a wrapper around NewBootstrapTokenString
-// that allows the caller to specify the ID and Secret separately
+// NewBootstrapTokenStringFromIDAndSecret 是 NewBootstrapTokenString 的包装函数，
+// 允许调用方分别指定 ID 和 Secret。
 func NewBootstrapTokenStringFromIDAndSecret(id, secret string) (*BootstrapTokenString, error) {
 	return NewBootstrapTokenString(bootstraputil.TokenFromIDAndSecret(id, secret))
 }
 
-// BootstrapTokenToSecret converts the given BootstrapToken object to its Secret representation that
-// may be submitted to the API Server in order to be stored.
+// BootstrapTokenToSecret 将给定的 BootstrapToken 对象转换为可提交给 API Server 存储的 Secret 表示形式。
 func BootstrapTokenToSecret(bt *BootstrapToken) *v1.Secret {
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -107,8 +103,8 @@ func BootstrapTokenToSecret(bt *BootstrapToken) *v1.Secret {
 	}
 }
 
-// encodeTokenSecretData takes the token discovery object and an optional duration and returns the .Data for the Secret
-// now is passed in order to be able to used in unit testing
+// encodeTokenSecretData 接收令牌对象和当前时间，返回 Secret 的 .Data 字段。
+// 传入 now 是为了便于单元测试。
 func encodeTokenSecretData(token *BootstrapToken, now time.Time) map[string][]byte {
 	data := map[string][]byte{
 		bootstrapapi.BootstrapTokenIDKey:     []byte(token.Token.ID),
@@ -119,18 +115,18 @@ func encodeTokenSecretData(token *BootstrapToken, now time.Time) map[string][]by
 		data[bootstrapapi.BootstrapTokenDescriptionKey] = []byte(token.Description)
 	}
 
-	// If for some strange reason both token.TTL and token.Expires would be set
-	// (they are mutually exclusive in validation so this shouldn't be the case),
-	// token.Expires has higher priority, as can be seen in the logic here.
+	// 如果出于某种原因同时设置了 token.TTL 和 token.Expires
+	// （验证逻辑要求二者互斥，因此不应出现这种情况），
+	// token.Expires 的优先级更高，如下面的逻辑所示。
 	if token.Expires != nil {
-		// Format the expiration date accordingly
-		// TODO: This maybe should be a helper function in bootstraputil?
+		// 据此设置过期时间的格式。
+		// TODO: 这或许应当作为 bootstraputil 中的辅助函数？
 		expirationString := token.Expires.Time.UTC().Format(time.RFC3339)
 		data[bootstrapapi.BootstrapTokenExpirationKey] = []byte(expirationString)
 
 	} else if token.TTL != nil && token.TTL.Duration > 0 {
-		// Only if .Expires is unset, TTL might have an effect
-		// Get the current time, add the specified duration, and format it accordingly
+		// 仅在未设置 .Expires 时，TTL 才可能生效。
+		// 将当前时间加上指定时长，并据此设置过期时间的格式。
 		expirationString := now.Add(token.TTL.Duration).UTC().Format(time.RFC3339)
 		data[bootstrapapi.BootstrapTokenExpirationKey] = []byte(expirationString)
 	}
@@ -145,15 +141,15 @@ func encodeTokenSecretData(token *BootstrapToken, now time.Time) map[string][]by
 	return data
 }
 
-// BootstrapTokenFromSecret returns a BootstrapToken object from the given Secret
+// BootstrapTokenFromSecret 从给定的 Secret 返回 BootstrapToken 对象。
 func BootstrapTokenFromSecret(secret *v1.Secret) (*BootstrapToken, error) {
-	// Get the Token ID field from the Secret data
+	// 从 Secret 数据中获取令牌 ID 字段。
 	tokenID := bootstrapsecretutil.GetData(secret, bootstrapapi.BootstrapTokenIDKey)
 	if len(tokenID) == 0 {
 		return nil, errors.Errorf("bootstrap Token Secret has no token-id data: %s", secret.Name)
 	}
 
-	// Enforce the right naming convention
+	// 确保命名符合约定。
 	if secret.Name != bootstraputil.BootstrapTokenSecretName(tokenID) {
 		return nil, errors.Errorf("bootstrap token name is not of the form '%s(token-id)'. Actual: %q. Expected: %q",
 			bootstrapapi.BootstrapTokenSecretPrefix, secret.Name, bootstraputil.BootstrapTokenSecretName(tokenID))
@@ -164,17 +160,16 @@ func BootstrapTokenFromSecret(secret *v1.Secret) (*BootstrapToken, error) {
 		return nil, errors.Errorf("bootstrap Token Secret has no token-secret data: %s", secret.Name)
 	}
 
-	// Create the BootstrapTokenString object based on the ID and Secret
+	// 根据 ID 和 Secret 创建 BootstrapTokenString 对象。
 	bts, err := NewBootstrapTokenStringFromIDAndSecret(tokenID, tokenSecret)
 	if err != nil {
 		return nil, errors.Wrap(err, "bootstrap Token Secret is invalid and couldn't be parsed")
 	}
 
-	// Get the description (if any) from the Secret
+	// 从 Secret 中获取描述（如果存在）。
 	description := bootstrapsecretutil.GetData(secret, bootstrapapi.BootstrapTokenDescriptionKey)
 
-	// Expiration time is optional, if not specified this implies the token
-	// never expires.
+	// 过期时间可选；未指定时表示令牌永不过期。
 	secretExpiration := bootstrapsecretutil.GetData(secret, bootstrapapi.BootstrapTokenExpirationKey)
 	var expires *metav1.Time
 	if len(secretExpiration) > 0 {
@@ -185,27 +180,26 @@ func BootstrapTokenFromSecret(secret *v1.Secret) (*BootstrapToken, error) {
 		expires = &metav1.Time{Time: expTime}
 	}
 
-	// Build an usages string slice from the Secret data
+	// 从 Secret 数据构建用途字符串切片。
 	var usages []string
 	for k, v := range secret.Data {
-		// Skip all fields that don't include this prefix
+		// 跳过所有不含此前缀的字段。
 		if !strings.HasPrefix(k, bootstrapapi.BootstrapTokenUsagePrefix) {
 			continue
 		}
-		// Skip those that don't have this usage set to true
+		// 跳过未将此用途设置为 true 的字段。
 		if string(v) != "true" {
 			continue
 		}
 		usages = append(usages, strings.TrimPrefix(k, bootstrapapi.BootstrapTokenUsagePrefix))
 	}
-	// Only sort the slice if defined
+	// 仅在切片非空时排序。
 	if usages != nil {
 		sort.Strings(usages)
 	}
 
-	// Get the extra groups information from the Secret
-	// It's done this way to make .Groups be nil in case there is no items, rather than an
-	// empty slice or an empty slice with a "" string only
+	// 从 Secret 获取额外组信息。
+	// 采用这种处理方式，使没有条目时 .Groups 为 nil，而不是空切片或仅含 "" 字符串的切片。
 	var groups []string
 	groupsString := bootstrapsecretutil.GetData(secret, bootstrapapi.BootstrapTokenExtraGroupsKey)
 	g := strings.Split(groupsString, ",")

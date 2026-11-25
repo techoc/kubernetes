@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apply implements phases of 'kubeadm upgrade apply'.
+// Package apply 实现 kubeadm upgrade apply 的阶段。
 package apply
 
 import (
@@ -36,7 +36,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/output"
 )
 
-// NewPreflightPhase returns a new prefight phase.
+// NewPreflightPhase 返回新的 preflight 阶段。
 func NewPreflightPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "preflight",
@@ -66,7 +66,7 @@ func runPreflight(c workflow.RunData) error {
 
 	initCfg, client, ignorePreflightErrors := data.InitCfg(), data.Client(), data.IgnorePreflightErrors()
 
-	// First, check if we're root separately from the other preflight checks and fail fast.
+	// 首先单独检查是否以 root 身份运行，以便快速失败。
 	if err := preflight.RunRootCheckOnly(ignorePreflightErrors); err != nil {
 		return err
 	}
@@ -74,31 +74,31 @@ func runPreflight(c workflow.RunData) error {
 		return err
 	}
 
-	// Run CoreDNS migration check.
+	// 运行 CoreDNS 迁移检查。
 	if err := upgrade.RunCoreDNSMigrationCheck(client, ignorePreflightErrors); err != nil {
 		return err
 	}
 
-	// Run healthchecks against the cluster.
+	// 对集群运行健康检查。
 	klog.V(1).Infoln("[upgrade/preflight] Verifying the cluster health")
 	if err := upgrade.CheckClusterHealth(client, &initCfg.ClusterConfiguration, ignorePreflightErrors, data.DryRun(), printer); err != nil {
 		return err
 	}
 
-	// Check if feature gate flags used in the cluster are consistent with the set of features currently supported by kubeadm.
+	// 检查集群使用的功能开关是否与 kubeadm 当前支持的功能集合一致。
 	if msg := features.CheckDeprecatedFlags(&features.InitFeatureGates, initCfg.FeatureGates); len(msg) > 0 {
 		for _, m := range msg {
 			_, _ = printer.Printf("[upgrade/preflight] %s\n", m)
 		}
 	}
 
-	// Validate requested and validate actual version.
+	// 校验请求的版本和实际版本。
 	klog.V(1).Infoln("[upgrade/preflight] Validating requested and actual version")
 	if err := configutil.NormalizeKubernetesVersion(&initCfg.ClusterConfiguration); err != nil {
 		return err
 	}
 
-	// Use normalized version string in all following code.
+	// 后续代码统一使用规范化后的版本字符串。
 	upgradeVersion, err := version.ParseSemantic(initCfg.KubernetesVersion)
 	if err != nil {
 		return errors.Errorf("unable to parse normalized version %q as a semantic version", initCfg.KubernetesVersion)
@@ -133,8 +133,8 @@ func runPreflight(c workflow.RunData) error {
 	return nil
 }
 
-// enforceVersionPolicies makes sure that the version the user specified is valid to upgrade to.
-// It handles both fatal and skippable (with --force) errors.
+// enforceVersionPolicies 确保用户指定的版本可升级。
+// 它同时处理致命错误和可跳过错误（使用 --force 跳过）。
 func enforceVersionPolicies(newK8sVersionStr string, newK8sVersion *version.Version, allowExperimentalUpgrades, allowRCUpgrades, force bool, versionGetter upgrade.VersionGetter) error {
 	fmt.Printf("[upgrade/preflight] You have chosen to upgrade the cluster version to %q\n", newK8sVersionStr)
 
@@ -147,19 +147,19 @@ func enforceVersionPolicies(newK8sVersionStr string, newK8sVersion *version.Vers
 		}
 
 		if len(versionSkewErrs.Skippable) > 0 {
-			// Return the error if the user hasn't specified the --force flag.
+			// 若用户未指定 --force，则返回错误。
 			if !force {
 				return errors.Errorf("the version argument is invalid due to these errors:\n\n%v\nCan be bypassed if you pass the --force flag",
 					formatErrorMsg(versionSkewErrs.Skippable))
 			}
-			// Soft errors found, but --force was specified.
+			// 发现可跳过错误，但用户指定了 --force。
 			fmt.Printf("[upgrade/preflight] Found %d potential version compatibility errors but skipping since the --force flag is set: \n\n%v", len(versionSkewErrs.Skippable), formatErrorMsg(versionSkewErrs.Skippable))
 		}
 	}
 	return nil
 }
 
-// formatErrorMsg returns a human-readable string describing the slice of errors passed to the function
+// formatErrorMsg 返回对传入错误切片的可读描述。
 func formatErrorMsg(errs []error) string {
 	var errMsg string
 	for _, err := range errs {

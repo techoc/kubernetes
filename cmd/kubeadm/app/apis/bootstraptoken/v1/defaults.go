@@ -24,20 +24,20 @@ import (
 )
 
 const (
-	// DefaultTokenDuration specifies the default amount of time that a bootstrap token will be valid
-	// Default behaviour is 24 hours
+	// DefaultTokenDuration 指定引导令牌默认的有效时长。
+	// 默认行为为 24 小时。
 	DefaultTokenDuration = 24 * time.Hour
 )
 
 var (
-	// DefaultTokenUsages specifies the default functions a token will get
+	// DefaultTokenUsages 指定令牌默认具备的用途。
 	DefaultTokenUsages = bootstrapapi.KnownTokenUsages
 
-	// DefaultTokenGroups specifies the default groups that this token will authenticate as when used for authentication
+	// DefaultTokenGroups 指定此令牌用于身份验证时默认所属的组。
 	DefaultTokenGroups = []string{"system:bootstrappers:kubeadm:default-node-token"}
 )
 
-// SetDefaults_BootstrapToken sets the defaults for an individual Bootstrap Token
+// SetDefaults_BootstrapToken 为单个引导令牌设置默认值。
 func SetDefaults_BootstrapToken(bt *BootstrapToken) {
 	if bt.TTL == nil {
 		bt.TTL = &metav1.Duration{

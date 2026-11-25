@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewPreflightPhase creates a kubeadm workflow phase implements preflight checks for reset
+// NewPreflightPhase 创建实现 reset 预检的 kubeadm 工作流阶段。
 func NewPreflightPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "preflight",
@@ -44,7 +44,7 @@ func NewPreflightPhase() workflow.Phase {
 	}
 }
 
-// runPreflight executes preflight checks logic.
+// runPreflight 执行预检逻辑。
 func runPreflight(c workflow.RunData) error {
 	r, ok := c.(resetData)
 	if !ok {

@@ -18,20 +18,20 @@ package certs
 
 /*
 
-	PHASE: CERTIFICATES
+	阶段：证书
 
-	INPUTS:
-		From InitConfiguration
-			.API.AdvertiseAddress is an optional parameter that can be passed for an extra addition to the SAN IPs
-			.APIServer.CertSANs is an optional parameter for adding DNS names and IPs to the API Server serving cert SAN
-			.Etcd.Local.ServerCertSANs is an optional parameter for adding DNS names and IPs to the etcd serving cert SAN
-			.Etcd.Local.PeerCertSANs is an optional parameter for adding DNS names and IPs to the etcd peer cert SAN
-			.Networking.DNSDomain is needed for knowing which DNS name the internal Kubernetes service has
-			.Networking.ServiceSubnet is needed for knowing which IP the internal Kubernetes service is going to point to
-			.CertificatesDir is required for knowing where all certificates should be stored
+	输入：
+		来自 InitConfiguration
+			.API.AdvertiseAddress 是可选参数，可追加到 SAN IP 列表。
+			.APIServer.CertSANs 是可选参数，可向 API Server 服务证书的 SAN 添加 DNS 名称和 IP。
+			.Etcd.Local.ServerCertSANs 是可选参数，可向 etcd 服务证书的 SAN 添加 DNS 名称和 IP。
+			.Etcd.Local.PeerCertSANs 是可选参数，可向 etcd 对等证书的 SAN 添加 DNS 名称和 IP。
+			.Networking.DNSDomain 用于确定内部 Kubernetes 服务的 DNS 名称。
+			.Networking.ServiceSubnet 用于确定内部 Kubernetes 服务指向的 IP。
+			.CertificatesDir 用于确定所有证书的存储位置，必填。
 
-	OUTPUTS:
-		Files to .CertificatesDir (default /etc/kubernetes/pki):
+	输出：
+		文件写入 .CertificatesDir（默认 /etc/kubernetes/pki）：
 		 - ca.crt
 		 - ca.key
 		 - apiserver.crt

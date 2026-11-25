@@ -41,21 +41,21 @@ const (
 
 type configMutatorsFunc func(*kubeadmapi.InitConfiguration, *pkiutil.CertConfig) error
 
-// KubeadmCert represents a certificate that Kubeadm will create to function properly.
+// KubeadmCert 表示 kubeadm 为正常运行而需要创建的证书。
 type KubeadmCert struct {
 	Name     string
 	LongName string
 	BaseName string
 	CAName   string
-	// Some attributes will depend on the InitConfiguration, only known at runtime.
-	// These functions will be run in series, passed both the InitConfiguration and a cert Config.
+	// 部分属性取决于 InitConfiguration，只能在运行时确定。
+	// 这些函数将按顺序执行，并接收 InitConfiguration 和证书 Config。
 	configMutators []configMutatorsFunc
 	config         pkiutil.CertConfig
-	// Used for unit tests.
+	// 仅供单元测试使用。
 	creationTime time.Time
 }
 
-// GetConfig returns the definition for the given cert given the provided InitConfiguration
+// GetConfig 根据给定的 InitConfiguration 返回指定证书的定义。
 func (k *KubeadmCert) GetConfig(ic *kubeadmapi.InitConfiguration) (*pkiutil.CertConfig, error) {
 	for _, f := range k.configMutators {
 		if err := f(ic, &k.config); err != nil {
@@ -63,17 +63,16 @@ func (k *KubeadmCert) GetConfig(ic *kubeadmapi.InitConfiguration) (*pkiutil.Cert
 		}
 	}
 
-	// creationTime should be set only during unit tests, otherwise the kubeadm start time
-	// should be
+	// creationTime 应仅在单元测试中设置，否则应使用 kubeadm 的启动时间。
 	if k.creationTime.IsZero() {
 		k.creationTime = kubeadmutil.StartTimeUTC()
 	}
 
-	// Backdate certificate to allow small time jumps.
+	// 将证书生效时间提前，以容忍小幅时间回退。
 	k.config.NotBefore = k.creationTime.Add(-kubeadmconstants.CertificateBackdate)
 
-	// Use the validity periods defined in the ClusterConfiguration.
-	// If CAName is empty this is a CA cert.
+	// 使用 ClusterConfiguration 中定义的有效期。
+	// 如果 CAName 为空，则此证书为 CA 证书。
 	if len(k.CAName) != 0 {
 		if ic.ClusterConfiguration.CertificateValidityPeriod != nil {
 			k.config.NotAfter = k.creationTime.
@@ -86,12 +85,12 @@ func (k *KubeadmCert) GetConfig(ic *kubeadmapi.InitConfiguration) (*pkiutil.Cert
 		}
 	}
 
-	// Use the encryption algorithm from ClusterConfiguration.
+	// 使用 ClusterConfiguration 中指定的加密算法。
 	k.config.EncryptionAlgorithm = ic.ClusterConfiguration.EncryptionAlgorithm
 	return &k.config, nil
 }
 
-// CreateFromCA makes and writes a certificate using the given CA cert and key.
+// CreateFromCA 使用给定的 CA 证书和密钥生成证书并写入磁盘。
 func (k *KubeadmCert) CreateFromCA(ic *kubeadmapi.InitConfiguration, caCert *x509.Certificate, caKey crypto.Signer) error {
 	cfg, err := k.GetConfig(ic)
 	if err != nil {
@@ -117,7 +116,7 @@ func (k *KubeadmCert) CreateFromCA(ic *kubeadmapi.InitConfiguration, caCert *x50
 	return nil
 }
 
-// CreateAsCA creates a certificate authority, writing the files to disk and also returning the created CA so it can be used to sign child certs.
+// CreateAsCA 创建证书颁发机构，将文件写入磁盘并返回该 CA，以便为子证书签名。
 func (k *KubeadmCert) CreateAsCA(ic *kubeadmapi.InitConfiguration) (*x509.Certificate, crypto.Signer, error) {
 	cfg, err := k.GetConfig(ic)
 	if err != nil {
@@ -141,10 +140,10 @@ func (k *KubeadmCert) CreateAsCA(ic *kubeadmapi.InitConfiguration) (*x509.Certif
 	return caCert, caKey, nil
 }
 
-// CertificateTree is represents a one-level-deep tree, mapping a CA to the certs that depend on it.
+// CertificateTree 表示一层深的证书树，将 CA 映射到依赖它的证书。
 type CertificateTree map[*KubeadmCert]Certificates
 
-// CreateTree creates the CAs, certs signed by the CAs, and writes them all to disk.
+// CreateTree 创建 CA、由 CA 签名的证书，并将它们全部写入磁盘。
 func (t CertificateTree) CreateTree(ic *kubeadmapi.InitConfiguration) error {
 	for ca, leaves := range t {
 		cfg, err := ca.GetConfig(ic)
@@ -156,17 +155,17 @@ func (t CertificateTree) CreateTree(ic *kubeadmapi.InitConfiguration) error {
 
 		caCert, err := pkiutil.TryLoadCertFromDisk(ic.CertificatesDir, ca.BaseName)
 		if err == nil {
-			// Validate period
+			// 校验有效期
 			CheckCertificatePeriodValidity(ca.BaseName, caCert)
 
-			// Cert exists already, make sure it's valid
+			// 证书已存在，确保其有效
 			if !caCert.IsCA {
 				return errors.Errorf("certificate %q is not a CA", ca.Name)
 			}
-			// Try and load a CA Key
+			// 尝试加载 CA 私钥
 			caKey, err = pkiutil.TryLoadKeyFromDisk(ic.CertificatesDir, ca.BaseName)
 			if err != nil {
-				// If there's no CA key, make sure every certificate exists.
+				// 如果没有 CA 私钥，确保所有证书均已存在。
 				for _, leaf := range leaves {
 					cl := certKeyLocation{
 						pkiDir:   ic.CertificatesDir,
@@ -179,10 +178,10 @@ func (t CertificateTree) CreateTree(ic *kubeadmapi.InitConfiguration) error {
 				}
 				continue
 			}
-			// CA key exists; just use that to create new certificates.
+			// CA 私钥已存在，直接用它创建新证书。
 			klog.V(1).Infof("[certs] Using the existing CA certificate %q and key %q\n", filepath.Join(ic.CertificatesDir, fmt.Sprintf("%s.crt", ca.BaseName)), filepath.Join(ic.CertificatesDir, fmt.Sprintf("%s.key", ca.BaseName)))
 		} else {
-			// CACert doesn't already exist, create a new cert and key.
+			// CA 证书尚不存在，创建新证书和私钥。
 			caCert, caKey, err = pkiutil.NewCertificateAuthority(cfg)
 			if err != nil {
 				return err
@@ -208,10 +207,10 @@ func (t CertificateTree) CreateTree(ic *kubeadmapi.InitConfiguration) error {
 	return nil
 }
 
-// CertificateMap is a flat map of certificates, keyed by Name.
+// CertificateMap 是以 Name 为键的扁平证书映射。
 type CertificateMap map[string]*KubeadmCert
 
-// CertTree returns a one-level-deep tree, mapping a CA cert to an array of certificates that should be signed by it.
+// CertTree 返回一层深的证书树，将 CA 证书映射到应由它签名的证书数组。
 func (m CertificateMap) CertTree() (CertificateTree, error) {
 	caMap := make(CertificateTree)
 
@@ -232,10 +231,10 @@ func (m CertificateMap) CertTree() (CertificateTree, error) {
 	return caMap, nil
 }
 
-// Certificates is a list of Certificates that Kubeadm should create.
+// Certificates 是 kubeadm 应创建的证书列表。
 type Certificates []*KubeadmCert
 
-// AsMap returns the list of certificates as a map, keyed by name.
+// AsMap 返回以名称为键的证书映射。
 func (c Certificates) AsMap() CertificateMap {
 	certMap := make(map[string]*KubeadmCert)
 	for _, cert := range c {
@@ -245,16 +244,16 @@ func (c Certificates) AsMap() CertificateMap {
 	return certMap
 }
 
-// GetDefaultCertList returns  all of the certificates kubeadm requires to function.
+// GetDefaultCertList 返回 kubeadm 正常运行所需的全部证书。
 func GetDefaultCertList() Certificates {
 	return Certificates{
 		KubeadmCertRootCA(),
 		KubeadmCertAPIServer(),
 		KubeadmCertKubeletClient(),
-		// Front Proxy certs
+		// 前端代理证书
 		KubeadmCertFrontProxyCA(),
 		KubeadmCertFrontProxyClient(),
-		// etcd certs
+		// etcd 证书
 		KubeadmCertEtcdCA(),
 		KubeadmCertEtcdServer(),
 		KubeadmCertEtcdPeer(),
@@ -263,19 +262,19 @@ func GetDefaultCertList() Certificates {
 	}
 }
 
-// GetCertsWithoutEtcd returns all of the certificates kubeadm needs when etcd is hosted externally.
+// GetCertsWithoutEtcd 返回 etcd 由外部托管时 kubeadm 所需的全部证书。
 func GetCertsWithoutEtcd() Certificates {
 	return Certificates{
 		KubeadmCertRootCA(),
 		KubeadmCertAPIServer(),
 		KubeadmCertKubeletClient(),
-		// Front Proxy certs
+		// 前端代理证书
 		KubeadmCertFrontProxyCA(),
 		KubeadmCertFrontProxyClient(),
 	}
 }
 
-// KubeadmCertRootCA is the definition of the Kubernetes Root CA for the API Server and kubelet.
+// KubeadmCertRootCA 定义 API Server 和 kubelet 使用的 Kubernetes 根 CA。
 func KubeadmCertRootCA() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "ca",
@@ -289,7 +288,7 @@ func KubeadmCertRootCA() *KubeadmCert {
 	}
 }
 
-// KubeadmCertAPIServer is the definition of the cert used to serve the Kubernetes API.
+// KubeadmCertAPIServer 定义用于提供 Kubernetes API 服务的证书。
 func KubeadmCertAPIServer() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "apiserver",
@@ -308,7 +307,7 @@ func KubeadmCertAPIServer() *KubeadmCert {
 	}
 }
 
-// KubeadmCertKubeletClient is the definition of the cert used by the API server to access the kubelet.
+// KubeadmCertKubeletClient 定义 API Server 访问 kubelet 时使用的证书。
 func KubeadmCertKubeletClient() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "apiserver-kubelet-client",
@@ -324,7 +323,7 @@ func KubeadmCertKubeletClient() *KubeadmCert {
 	}
 }
 
-// KubeadmCertFrontProxyCA is the definition of the CA used for the front end proxy.
+// KubeadmCertFrontProxyCA 定义前端代理使用的 CA。
 func KubeadmCertFrontProxyCA() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "front-proxy-ca",
@@ -338,7 +337,7 @@ func KubeadmCertFrontProxyCA() *KubeadmCert {
 	}
 }
 
-// KubeadmCertFrontProxyClient is the definition of the cert used by the API server to access the front proxy.
+// KubeadmCertFrontProxyClient 定义 API Server 访问前端代理时使用的证书。
 func KubeadmCertFrontProxyClient() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "front-proxy-client",
@@ -354,7 +353,7 @@ func KubeadmCertFrontProxyClient() *KubeadmCert {
 	}
 }
 
-// KubeadmCertEtcdCA is the definition of the root CA used by the hosted etcd server.
+// KubeadmCertEtcdCA 定义托管 etcd 服务器使用的根 CA。
 func KubeadmCertEtcdCA() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "etcd-ca",
@@ -368,7 +367,7 @@ func KubeadmCertEtcdCA() *KubeadmCert {
 	}
 }
 
-// KubeadmCertEtcdServer is the definition of the cert used to serve etcd to clients.
+// KubeadmCertEtcdServer 定义用于向客户端提供 etcd 服务的证书。
 func KubeadmCertEtcdServer() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "etcd-server",
@@ -377,10 +376,9 @@ func KubeadmCertEtcdServer() *KubeadmCert {
 		CAName:   "etcd-ca",
 		config: pkiutil.CertConfig{
 			Config: certutil.Config{
-				// TODO: etcd 3.2 introduced an undocumented requirement for ClientAuth usage on the
-				// server cert: https://github.com/etcd-io/etcd/issues/9785#issuecomment-396715692
-				// Once the upstream issue is resolved, this should be returned to only allowing
-				// ServerAuth usage.
+				// TODO: etcd 3.2 对服务器证书提出了未记录的 ClientAuth 使用要求：
+				// https://github.com/etcd-io/etcd/issues/9785#issuecomment-396715692
+				// 上游问题解决后，应恢复为仅允许 ServerAuth。
 				Usages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 			},
 		},
@@ -391,7 +389,7 @@ func KubeadmCertEtcdServer() *KubeadmCert {
 	}
 }
 
-// KubeadmCertEtcdPeer is the definition of the cert used by etcd peers to access each other.
+// KubeadmCertEtcdPeer 定义 etcd 对等节点相互访问时使用的证书。
 func KubeadmCertEtcdPeer() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "etcd-peer",
@@ -410,7 +408,7 @@ func KubeadmCertEtcdPeer() *KubeadmCert {
 	}
 }
 
-// KubeadmCertEtcdHealthcheck is the definition of the cert used by Kubernetes to check the health of the etcd server.
+// KubeadmCertEtcdHealthcheck 定义 Kubernetes 检查 etcd 服务器健康状态时使用的证书。
 func KubeadmCertEtcdHealthcheck() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "etcd-healthcheck-client",
@@ -426,7 +424,7 @@ func KubeadmCertEtcdHealthcheck() *KubeadmCert {
 	}
 }
 
-// KubeadmCertEtcdAPIClient is the definition of the cert used by the API server to access etcd.
+// KubeadmCertEtcdAPIClient 定义 API Server 访问 etcd 时使用的证书。
 func KubeadmCertEtcdAPIClient() *KubeadmCert {
 	return &KubeadmCert{
 		Name:     "apiserver-etcd-client",
@@ -460,7 +458,7 @@ func setCommonNameToNodeName() configMutatorsFunc {
 	}
 }
 
-// leafCertificates returns non-CA certificates from the supplied Certificates.
+// leafCertificates 从给定证书列表中返回非 CA 证书。
 func leafCertificates(c Certificates) (Certificates, error) {
 	certTree, err := c.AsMap().CertTree()
 	if err != nil {
@@ -501,8 +499,7 @@ func createKeyAndCSR(kubeadmConfig *kubeadmapi.InitConfiguration, cert *KubeadmC
 	return pkiutil.WriteCSR(certDir, name, csr)
 }
 
-// CreateDefaultKeysAndCSRFiles is used in ExternalCA mode to create key files
-// and adjacent CSR files.
+// CreateDefaultKeysAndCSRFiles 用于 ExternalCA 模式，创建私钥文件及同目录的 CSR 文件。
 func CreateDefaultKeysAndCSRFiles(out io.Writer, config *kubeadmapi.InitConfiguration) error {
 	certificates, err := leafCertificates(GetDefaultCertList())
 	if err != nil {

@@ -58,7 +58,7 @@ func getControlPlaneJoinPhaseFlags(name string) []string {
 	return flags
 }
 
-// NewControlPlaneJoinPhase creates a kubeadm workflow phase that implements joining a machine as a control plane instance
+// NewControlPlaneJoinPhase 创建实现将机器加入为控制平面实例的 kubeadm 工作流阶段。
 func NewControlPlaneJoinPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "control-plane-join",
@@ -77,7 +77,7 @@ func NewControlPlaneJoinPhase() workflow.Phase {
 	}
 }
 
-// NewEtcdJoinPhase creates a kubeadm workflow phase that implements joining etcd
+// NewEtcdJoinPhase 创建实现加入 etcd 的 kubeadm 工作流阶段。
 func NewEtcdJoinPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:          "etcd-join",
@@ -109,7 +109,7 @@ func runEtcdPhase(c workflow.RunData) error {
 		return nil
 	}
 
-	// gets access to the cluster using the identity defined in admin.conf
+	// 使用 admin.conf 中定义的身份访问集群。
 	client, err := data.Client()
 	if err != nil {
 		return errors.Wrap(err, "couldn't create Kubernetes client")
@@ -118,14 +118,14 @@ func runEtcdPhase(c workflow.RunData) error {
 	if err != nil {
 		return err
 	}
-	// in case of external etcd
+	// 使用外部 etcd 时。
 	if cfg.Etcd.External != nil {
 		fmt.Println("[control-plane-join] Using external etcd - no local stacked instance added")
 		return nil
 	}
 
 	if !data.DryRun() {
-		// Create the etcd data directory
+		// 创建 etcd 数据目录。
 		if err := etcdutil.CreateDataDirectory(cfg.Etcd.Local.DataDir); err != nil {
 			return err
 		}
@@ -133,16 +133,13 @@ func runEtcdPhase(c workflow.RunData) error {
 		fmt.Printf("[control-plane-join] Would ensure that %q directory is present\n", cfg.Etcd.Local.DataDir)
 	}
 
-	// Adds a new etcd instance; in order to do this the new etcd instance should be "announced" to
-	// the existing etcd members before being created.
-	// This operation must be executed after kubelet is already started in order to minimize the time
-	// between the new etcd member is announced and the start of the static pod running the new etcd member, because during
-	// this time frame etcd gets temporary not available (only when moving from 1 to 2 members in the etcd cluster).
-	// From https://coreos.com/etcd/docs/latest/v2/runtime-configuration.html
-	// "If you add a new member to a 1-node cluster, the cluster cannot make progress before the new member starts
-	// because it needs two members as majority to agree on the consensus. You will only see this behavior between the time
-	// etcdctl member add informs the cluster about the new member and the new member successfully establishing a connection to the
-	// existing one."
+	// 添加新 etcd 实例前，必须先向现有 etcd 成员“宣告”该实例，然后才能创建它。
+	// 此操作必须在 kubelet 启动后执行，以缩短新成员从宣告到运行新成员的静态 Pod 启动之间的时间。
+	// 在这段时间内 etcd 会暂时不可用（仅发生在 etcd 集群从 1 个成员扩展到 2 个成员时）。
+	// 参考 https://coreos.com/etcd/docs/latest/v2/runtime-configuration.html ：
+	// “向单节点集群添加新成员后，在新成员启动前集群无法继续工作，
+	// 因为共识需要两个成员作为多数，所以这种情况只会出现在 etcdctl member add 通知集群新成员，
+	// 到新成员成功与现有成员建立连接之间。”
 	if err := etcdphase.CreateStackedEtcdStaticPodManifestFile(client, data.ManifestDir(), data.PatchesDir(), cfg.NodeRegistration.Name, &cfg.ClusterConfiguration, &cfg.LocalAPIEndpoint, data.DryRun(), data.CertificateWriteDir()); err != nil {
 		return errors.Wrap(err, "error creating local etcd static pod manifest file")
 	}
@@ -160,7 +157,7 @@ func runMarkControlPlanePhase(c workflow.RunData) error {
 		return nil
 	}
 
-	// gets access to the cluster using the identity defined in admin.conf
+	// 使用 admin.conf 中定义的身份访问集群。
 	client, err := data.Client()
 	if err != nil {
 		return errors.Wrap(err, "couldn't create Kubernetes client")

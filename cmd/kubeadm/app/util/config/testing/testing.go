@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testing contains utilities for managing kubeadm configuration in tests.
+// Package testing 包含在测试中管理 kubeadm 配置的工具。
 package testing
 
 import (
@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 )
 
-// GetDefaultInternalConfig returns a defaulted kubeadmapi.InitConfiguration
+// GetDefaultInternalConfig 返回已默认化的 kubeadmapi.InitConfiguration。
 func GetDefaultInternalConfig(t *testing.T) *kubeadmapi.InitConfiguration {
 	internalcfg, err := config.DefaultedStaticInitConfiguration()
 	if err != nil {

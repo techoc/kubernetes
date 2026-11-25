@@ -40,23 +40,23 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/users"
 )
 
-// CreateInitStaticPodManifestFiles will write all static pod manifest files needed to bring up the control plane.
+// CreateInitStaticPodManifestFiles 写入启动控制平面所需的全部静态 Pod 清单文件。
 func CreateInitStaticPodManifestFiles(manifestDir, patchesDir string, cfg *kubeadmapi.InitConfiguration, isDryRun bool) error {
 	klog.V(1).Infoln("[control-plane] creating static Pod files")
 	return CreateStaticPodFiles(manifestDir, patchesDir, &cfg.ClusterConfiguration, &cfg.LocalAPIEndpoint, isDryRun, kubeadmconstants.KubeAPIServer, kubeadmconstants.KubeControllerManager, kubeadmconstants.KubeScheduler)
 }
 
-// GetStaticPodSpecs returns all staticPodSpecs actualized to the context of the current configuration
-// NB. this method holds the information about how kubeadm creates static pod manifests.
+// GetStaticPodSpecs 返回按当前配置填充的全部 staticPodSpecs。
+// 注意：此方法包含 kubeadm 创建静态 Pod 清单所需的信息。
 func GetStaticPodSpecs(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.APIEndpoint, proxyEnvs []kubeadmapi.EnvVar) map[string]v1.Pod {
-	// Get the required hostpath mounts
+	// 获取所需的 hostPath 挂载
 	mounts := getHostPathVolumesForTheControlPlane(cfg)
 	if proxyEnvs == nil {
 		proxyEnvs = kubeadmutil.GetProxyEnvVars(nil)
 	}
 	componentHealthCheckTimeout := kubeadmapi.GetActiveTimeouts().ControlPlaneComponentHealthCheck
 
-	// Prepare static pod specs
+	// 准备静态 Pod 配置
 	staticPodSpecs := map[string]v1.Pod{
 		kubeadmconstants.KubeAPIServer: staticpodutil.ComponentPod(v1.Container{
 			Name:            kubeadmconstants.KubeAPIServer,
@@ -119,9 +119,9 @@ func GetStaticPodSpecs(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmap
 	return staticPodSpecs
 }
 
-// CreateStaticPodFiles creates all the requested static pod files.
+// CreateStaticPodFiles 创建请求的全部静态 Pod 文件。
 func CreateStaticPodFiles(manifestDir, patchesDir string, cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.APIEndpoint, isDryRun bool, componentNames ...string) error {
-	// gets the StaticPodSpecs, actualized for the current ClusterConfiguration
+	// 获取按当前 ClusterConfiguration 填充的 StaticPodSpec
 	klog.V(1).Infoln("[control-plane] getting StaticPodSpecs")
 	specs := GetStaticPodSpecs(cfg, endpoint, nil)
 
@@ -138,15 +138,15 @@ func CreateStaticPodFiles(manifestDir, patchesDir string, cfg *kubeadmapi.Cluste
 		}
 	}
 
-	// creates required static pod specs
+	// 创建所需的静态 Pod 配置
 	for _, componentName := range componentNames {
-		// retrieves the StaticPodSpec for given component
+		// 获取指定组件的 StaticPodSpec
 		spec, exists := specs[componentName]
 		if !exists {
 			return errors.Errorf("couldn't retrieve StaticPodSpec for %q", componentName)
 		}
 
-		// print all volumes that are mounted
+		// 打印所有已挂载的卷
 		for _, v := range spec.Spec.Volumes {
 			klog.V(2).Infof("[control-plane] adding volume %q for component %q", v.Name, componentName)
 		}
@@ -161,7 +161,7 @@ func CreateStaticPodFiles(manifestDir, patchesDir string, cfg *kubeadmapi.Cluste
 			}
 		}
 
-		// if patchesDir is defined, patch the static Pod manifest
+		// 如果定义了 patchesDir，则修补静态 Pod 清单
 		if patchesDir != "" {
 			patchedSpec, err := staticpodutil.PatchStaticPod(&spec, patchesDir, os.Stdout)
 			if err != nil {
@@ -170,7 +170,7 @@ func CreateStaticPodFiles(manifestDir, patchesDir string, cfg *kubeadmapi.Cluste
 			spec = *patchedSpec
 		}
 
-		// writes the StaticPodSpec to disk
+		// 将 StaticPodSpec 写入磁盘
 		if err := staticpodutil.WriteStaticPodToDisk(componentName, manifestDir, spec); err != nil {
 			return errors.Wrapf(err, "failed to create static pod manifest file for %q", componentName)
 		}
@@ -181,7 +181,7 @@ func CreateStaticPodFiles(manifestDir, patchesDir string, cfg *kubeadmapi.Cluste
 	return nil
 }
 
-// getAPIServerCommand builds the right API server command from the given config object and version
+// getAPIServerCommand 根据给定配置对象和版本构建 API Server 命令。
 func getAPIServerCommand(cfg *kubeadmapi.ClusterConfiguration, localAPIEndpoint *kubeadmapi.APIEndpoint) []string {
 	defaultArguments := []kubeadmapi.Arg{
 		{Name: "advertise-address", Value: localAPIEndpoint.AdvertiseAddress},
@@ -199,8 +199,8 @@ func getAPIServerCommand(cfg *kubeadmapi.ClusterConfiguration, localAPIEndpoint 
 		{Name: "secure-port", Value: fmt.Sprintf("%d", localAPIEndpoint.BindPort)},
 		{Name: "allow-privileged", Value: "true"},
 		{Name: "kubelet-preferred-address-types", Value: "InternalIP,ExternalIP,Hostname"},
-		// add options to configure the front proxy.  Without the generated client cert, this will never be usable
-		// so add it unconditionally with recommended values
+		// 添加前端代理配置参数。缺少生成的客户端证书时前端代理将不可用，
+		// 因此始终使用推荐值添加这些参数。
 		{Name: "requestheader-username-headers", Value: "X-Remote-User"},
 		{Name: "requestheader-group-headers", Value: "X-Remote-Group"},
 		{Name: "requestheader-extra-headers-prefix", Value: "X-Remote-Extra-"},
@@ -212,11 +212,11 @@ func getAPIServerCommand(cfg *kubeadmapi.ClusterConfiguration, localAPIEndpoint 
 
 	command := []string{"kube-apiserver"}
 
-	// If the user set endpoints for an external etcd cluster
+	// 如果用户设置了外部 etcd 集群的端点
 	if cfg.Etcd.External != nil {
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "etcd-servers", strings.Join(cfg.Etcd.External.Endpoints, ","), 1)
 
-		// Use any user supplied etcd certificates
+		// 使用用户提供的 etcd 证书
 		if cfg.Etcd.External.CAFile != "" {
 			defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "etcd-cafile", cfg.Etcd.External.CAFile, 1)
 		}
@@ -226,8 +226,8 @@ func getAPIServerCommand(cfg *kubeadmapi.ClusterConfiguration, localAPIEndpoint 
 
 		}
 	} else {
-		// Default to etcd static pod on localhost
-		// localhost IP family should be the same that the AdvertiseAddress
+		// 默认使用 localhost 上的 etcd 静态 Pod。
+		// localhost 的 IP 协议族应与 AdvertiseAddress 一致。
 		etcdLocalhostAddress := "127.0.0.1"
 		if utilsnet.IsIPv6String(localAPIEndpoint.AdvertiseAddress) {
 			etcdLocalhostAddress = "::1"
@@ -238,11 +238,11 @@ func getAPIServerCommand(cfg *kubeadmapi.ClusterConfiguration, localAPIEndpoint 
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "etcd-certfile", filepath.Join(cfg.CertificatesDir, kubeadmconstants.APIServerEtcdClientCertName), 1)
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "etcd-keyfile", filepath.Join(cfg.CertificatesDir, kubeadmconstants.APIServerEtcdClientKeyName), 1)
 
-		// Apply user configurations for local etcd
+		// 应用用户为本地 etcd 提供的配置
 		if cfg.Etcd.Local != nil {
 			if _, idx := kubeadmapi.GetArgValue(cfg.Etcd.Local.ExtraArgs, "advertise-client-urls", -1); idx > -1 {
-				// advertise-client-urls may replace or for append/prepend extend the etcd
-				// client URLs. Apply the same merge onto the default etcd-servers.
+				// advertise-client-urls 可替换 etcd 客户端 URL，也可通过 append 或 prepend 扩展。
+				// 对默认 etcd-servers 应用相同的合并方式。
 				arg := cfg.Etcd.Local.ExtraArgs[idx]
 				if arg.MergeMethod != "" {
 					klog.Warningf("the local etcd --advertise-client-urls flag has a merge method %q and value %q; merging it with --etcd-servers %q",
@@ -271,9 +271,8 @@ func getAPIServerCommand(cfg *kubeadmapi.ClusterConfiguration, localAPIEndpoint 
 	return command
 }
 
-// getAuthzModes gets the authorization-related parameters to the api server
-// Node,RBAC is the default mode if nothing is passed to kubeadm. User provided modes override
-// the default.
+// getAuthzModes 获取 API Server 的授权相关参数。
+// kubeadm 未收到参数时默认使用 Node,RBAC；用户提供的模式会覆盖默认值。
 func getAuthzModes(arg *kubeadmapi.Arg) string {
 	defaultMode := []string{
 		kubeadmconstants.ModeNode,
@@ -287,7 +286,7 @@ func getAuthzModes(arg *kubeadmapi.Arg) string {
 
 	mode := []string{}
 	for requested := range strings.SplitSeq(arg.Value, ",") {
-		if len(requested) == 0 { // Skip empty values.
+		if len(requested) == 0 { // 跳过空值。
 			continue
 		}
 		if isValidAuthzMode(requested) {
@@ -301,7 +300,7 @@ func getAuthzModes(arg *kubeadmapi.Arg) string {
 		return defaultModeString
 	}
 
-	// Only validate the whole list of modes if there is no merge method.
+	// 仅在没有合并方式时校验整个模式列表。
 	if arg.MergeMethod == "" && !compareAuthzModes(defaultMode, mode) {
 		modeString := strings.Join(mode, ",")
 		klog.Warningf("the default kube-apiserver authorization-mode is %q; using %q",
@@ -314,7 +313,7 @@ func getAuthzModes(arg *kubeadmapi.Arg) string {
 	return defaultModeString
 }
 
-// compareAuthzModes compares two given authz modes and returns false if they do not match
+// compareAuthzModes 比较两个授权模式，不一致时返回 false。
 func compareAuthzModes(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -340,7 +339,7 @@ func isValidAuthzMode(authzMode string) bool {
 	return slices.Contains(allModes, authzMode)
 }
 
-// getControllerManagerCommand builds the right controller manager command from the given config object and version
+// getControllerManagerCommand 根据给定配置对象和版本构建 Controller Manager 命令。
 func getControllerManagerCommand(cfg *kubeadmapi.ClusterConfiguration) []string {
 
 	kubeconfigFile := filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.ControllerManagerKubeConfigFileName)
@@ -362,15 +361,15 @@ func getControllerManagerCommand(cfg *kubeadmapi.ClusterConfiguration) []string 
 		{Name: "controllers", Value: "*,bootstrapsigner,tokencleaner"},
 	}
 
-	// If using external CA, pass empty string to controller manager instead of ca.key/ca.crt path,
-	// so that the csrsigning controller fails to start
+	// 使用外部 CA 时，向 Controller Manager 传空字符串而非 ca.key/ca.crt 路径，
+	// 使 csrsigning 控制器无法启动。
 	if res, _ := certphase.UsingExternalCA(cfg); res {
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "cluster-signing-key-file", "", 1)
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "cluster-signing-cert-file", "", 1)
 	}
 
-	// Let the controller-manager allocate Node CIDRs for the Pod network.
-	// Each node will get a subspace of the address CIDR provided with --pod-network-cidr.
+	// 让 Controller Manager 为 Pod 网络分配节点 CIDR。
+	// 每个节点从 --pod-network-cidr 提供的地址 CIDR 中获得一个子网。
 	if cfg.Networking.PodSubnet != "" {
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "allocate-node-cidrs", "true", 1)
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "cluster-cidr", cfg.Networking.PodSubnet, 1)
@@ -379,7 +378,7 @@ func getControllerManagerCommand(cfg *kubeadmapi.ClusterConfiguration) []string 
 		}
 	}
 
-	// Set cluster name
+	// 设置集群名称
 	if cfg.ClusterName != "" {
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "cluster-name", cfg.ClusterName, 1)
 	}
@@ -390,7 +389,7 @@ func getControllerManagerCommand(cfg *kubeadmapi.ClusterConfiguration) []string 
 	return command
 }
 
-// getSchedulerCommand builds the right scheduler command from the given config object and version
+// getSchedulerCommand 根据给定配置对象和版本构建调度器命令。
 func getSchedulerCommand(cfg *kubeadmapi.ClusterConfiguration) []string {
 	kubeconfigFile := filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.SchedulerKubeConfigFileName)
 	defaultArguments := []kubeadmapi.Arg{

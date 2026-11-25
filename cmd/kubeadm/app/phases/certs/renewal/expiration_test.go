@@ -31,7 +31,7 @@ func TestExpirationInfo(t *testing.T) {
 
 	e := newExpirationInfo("x", cert, false)
 
-	if math.Abs(float64(validity-e.ResidualTime())) > float64(5*time.Second) { // using 5s of tolerance because the function is not deterministic (it uses time.Now()) and we want to avoid flakes
+	if math.Abs(float64(validity-e.ResidualTime())) > float64(5*time.Second) { // 使用 5 秒容差，因为函数依赖 time.Now()，结果不确定，容差可避免测试偶发失败。
 		t.Errorf("expected IsInRenewalWindow equal to %v, saw %v", validity, e.ResidualTime())
 	}
 }

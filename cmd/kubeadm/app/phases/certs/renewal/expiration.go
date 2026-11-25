@@ -21,23 +21,22 @@ import (
 	"time"
 )
 
-// ExpirationInfo defines expiration info for a certificate
+// ExpirationInfo 定义证书的过期信息。
 type ExpirationInfo struct {
-	// Name of the certificate
-	// For PKI certificates, it is the name defined in the certsphase package, while for certificates
-	// embedded in the kubeConfig files, it is the kubeConfig file name defined in the kubeadm constants package.
-	// If you use the CertificateRenewHandler returned by Certificates func, handler.Name already contains the right value.
+	// 证书名称。
+	// PKI 证书使用 certsphase 包中定义的名称；嵌入 kubeConfig 文件的证书使用 kubeadm 常量包中定义的文件名。
+	// 如果使用 Certificates 函数返回的 CertificateRenewHandler，handler.Name 已是正确的值。
 	Name string
 
-	// ExpirationDate defines certificate expiration date
+	// ExpirationDate 定义证书过期日期。
 	ExpirationDate time.Time
 
-	// ExternallyManaged defines if the certificate is externally managed, that is when
-	// the signing CA certificate is provided without the certificate key (In this case kubeadm can't renew the certificate)
+	// ExternallyManaged 表示证书是否由外部管理，即只提供签名 CA 证书而不提供其私钥。
+	// 此时 kubeadm 无法续签该证书。
 	ExternallyManaged bool
 }
 
-// newExpirationInfo returns a new ExpirationInfo
+// newExpirationInfo 返回新的 ExpirationInfo。
 func newExpirationInfo(name string, cert *x509.Certificate, externallyManaged bool) *ExpirationInfo {
 	return &ExpirationInfo{
 		Name:              name,
@@ -46,7 +45,7 @@ func newExpirationInfo(name string, cert *x509.Certificate, externallyManaged bo
 	}
 }
 
-// ResidualTime returns the time missing to expiration
+// ResidualTime 返回距离过期的剩余时间。
 func (e *ExpirationInfo) ResidualTime() time.Duration {
 	return time.Until(e.ExpirationDate)
 }

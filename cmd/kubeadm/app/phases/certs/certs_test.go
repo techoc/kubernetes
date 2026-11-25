@@ -47,23 +47,23 @@ func TestWriteCertificateAuthorityFilesIfNotExist(t *testing.T) {
 		expectedError bool
 		expectedCa    *x509.Certificate
 	}{
-		{ // ca cert does not exists > ca written
+		{ // CA 证书不存在 > 写入 CA
 			expectedCa: caCert,
 		},
-		{ // ca cert exists, is ca > existing ca used
+		{ // CA 证书存在且为 CA > 复用现有 CA
 			setupFunc: func(pkiDir string) error {
 				return writeCertificateAuthorityFilesIfNotExist(pkiDir, "dummy", setupCert, setupKey)
 			},
 			expectedCa: setupCert,
 		},
-		{ // some file exists, but it is not a valid ca cert > err
+		{ // 文件存在但不是有效 CA 证书 > 错误
 			setupFunc: func(pkiDir string) error {
 				filesutil.SetupEmptyFiles(t, pkiDir, "dummy.crt")
 				return nil
 			},
 			expectedError: true,
 		},
-		{ // cert exists, but it is not a ca > err
+		{ // 证书存在但不是 CA > 错误
 			setupFunc: func(pkiDir string) error {
 				cert, key, config := certstestutil.CreateTestCert(t, setupCert, setupKey, certutil.AltNames{})
 				return writeCertificateFilesIfNotExist(pkiDir, "dummy", setupCert, cert, key, config)
@@ -73,10 +73,10 @@ func TestWriteCertificateAuthorityFilesIfNotExist(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Create temp folder for the test case
+		// 为测试用例创建临时目录
 		tmpdir := t.TempDir()
 
-		// executes setup func (if necessary)
+		// 执行准备函数（如有）
 		if test.setupFunc != nil {
 			if err := test.setupFunc(tmpdir); err != nil {
 				t.Errorf("error executing setupFunc: %v", err)
@@ -84,7 +84,7 @@ func TestWriteCertificateAuthorityFilesIfNotExist(t *testing.T) {
 			}
 		}
 
-		// executes create func
+		// 执行创建函数
 		err := writeCertificateAuthorityFilesIfNotExist(tmpdir, "dummy", caCert, caKey)
 
 		if !test.expectedError && err != nil {
@@ -97,10 +97,10 @@ func TestWriteCertificateAuthorityFilesIfNotExist(t *testing.T) {
 			continue
 		}
 
-		// asserts expected files are there
+		// 断言预期文件均存在
 		filesutil.AssertFileExists(t, tmpdir, "dummy.key", "dummy.crt")
 
-		// check created cert
+		// 检查创建的证书
 		resultingCaCert, _, err := pkiutil.TryLoadCertAndKeyFromDisk(tmpdir, "dummy")
 		if err != nil {
 			t.Errorf("failure reading created cert: %v", err)
@@ -129,10 +129,10 @@ func TestWriteCertificateFilesIfNotExist(t *testing.T) {
 		expectedError bool
 		expectedCert  *x509.Certificate
 	}{
-		{ // cert does not exists > cert written
+		{ // 证书不存在 > 写入证书
 			expectedCert: cert,
 		},
-		{ // cert exists, is signed by the same ca, missing SANs (dns name) > err
+		{ // 证书存在且由同一 CA 签名，但缺少 DNS SAN > 错误
 			setupFunc: func(pkiDir string) error {
 				setupCert, setupKey, setupConfig := certstestutil.CreateTestCert(t, caCert, caKey, certutil.AltNames{
 					IPs: []net.IP{
@@ -143,7 +143,7 @@ func TestWriteCertificateFilesIfNotExist(t *testing.T) {
 			},
 			expectedError: true,
 		},
-		{ // cert exists, is signed by the same ca, missing SANs (IP address) > err
+		{ // 证书存在且由同一 CA 签名，但缺少 IP SAN > 错误
 			setupFunc: func(pkiDir string) error {
 				setupCert, setupKey, setupConfig := certstestutil.CreateTestCert(t, caCert, caKey, certutil.AltNames{
 					DNSNames: []string{"example.com"},
@@ -152,20 +152,20 @@ func TestWriteCertificateFilesIfNotExist(t *testing.T) {
 			},
 			expectedError: true,
 		},
-		{ // cert exists, is signed by the same ca, all SANs present > existing cert used
+		{ // 证书存在、由同一 CA 签名且 SAN 齐全 > 复用现有证书
 			setupFunc: func(pkiDir string) error {
 				return writeCertificateFilesIfNotExist(pkiDir, "dummy", caCert, setupCert, setupKey, config)
 			},
 			expectedCert: setupCert,
 		},
-		{ // some file exists, but it is not a valid cert > err
+		{ // 文件存在但不是有效证书 > 错误
 			setupFunc: func(pkiDir string) error {
 				filesutil.SetupEmptyFiles(t, pkiDir, "dummy.crt")
 				return nil
 			},
 			expectedError: true,
 		},
-		{ // cert exists, is signed by another ca > err
+		{ // 证书存在但由其他 CA 签名 > 错误
 			setupFunc: func(pkiDir string) error {
 				anotherCaCert, anotherCaKey := certstestutil.CreateCACert(t)
 				anotherCert, anotherKey, config := certstestutil.CreateTestCert(t, anotherCaCert, anotherCaKey, certutil.AltNames{})
@@ -177,10 +177,10 @@ func TestWriteCertificateFilesIfNotExist(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Create temp folder for the test case
+		// 为测试用例创建临时目录
 		tmpdir := t.TempDir()
 
-		// executes setup func (if necessary)
+		// 执行准备函数（如有）
 		if test.setupFunc != nil {
 			if err := test.setupFunc(tmpdir); err != nil {
 				t.Errorf("error executing setupFunc: %v", err)
@@ -188,7 +188,7 @@ func TestWriteCertificateFilesIfNotExist(t *testing.T) {
 			}
 		}
 
-		// executes create func
+		// 执行创建函数
 		err := writeCertificateFilesIfNotExist(tmpdir, "dummy", caCert, cert, key, config)
 
 		if !test.expectedError && err != nil {
@@ -201,10 +201,10 @@ func TestWriteCertificateFilesIfNotExist(t *testing.T) {
 			continue
 		}
 
-		// asserts expected files are there
+		// 断言预期文件均存在
 		filesutil.AssertFileExists(t, tmpdir, "dummy.key", "dummy.crt")
 
-		// check created cert
+		// 检查创建的证书
 		resultingCert, _, err := pkiutil.TryLoadCertAndKeyFromDisk(tmpdir, "dummy")
 		if err != nil {
 			t.Errorf("failure reading created cert: %v", err)
@@ -228,10 +228,10 @@ func TestCreateServiceAccountKeyAndPublicKeyFiles(t *testing.T) {
 		expectedErr bool
 		expectedKey []byte
 	}{
-		{ // key does not exists > key written
+		{ // 私钥不存在 > 写入私钥
 			name: "generate successfully",
 		},
-		{ // key exists > existing key used
+		{ // 私钥存在 > 复用现有私钥
 			name: "use existing key",
 			setupFunc: func(pkiDir string) error {
 				err := keyutil.WriteKey(filepath.Join(pkiDir, kubeadmconstants.ServiceAccountPrivateKeyName), setupKey)
@@ -239,7 +239,7 @@ func TestCreateServiceAccountKeyAndPublicKeyFiles(t *testing.T) {
 			},
 			expectedKey: setupKey,
 		},
-		{ // some file exists, but it is not a valid key > err
+		{ // 文件存在但不是有效私钥 > 错误
 			name: "empty key",
 			setupFunc: func(pkiDir string) error {
 				filesutil.SetupEmptyFiles(t, pkiDir, kubeadmconstants.ServiceAccountPrivateKeyName)
@@ -387,10 +387,10 @@ func TestSharedCertificateExists(t *testing.T) {
 				CertificatesDir: tmpdir,
 			}
 
-			// created expected keys
+			// 创建预期私钥
 			certstestutil.WritePKIFiles(t, tmpdir, test.files)
 
-			// executes create func
+			// 执行创建函数
 			ret, err := SharedCertificateExists(cfg)
 			switch {
 			case err != nil:
@@ -670,7 +670,7 @@ func TestCreateCertificateFilesMethods(t *testing.T) {
 	for _, test := range tests {
 		pkiutiltesting.Reset()
 
-		// Create temp folder for the test case
+		// 为测试用例创建临时目录
 		tmpdir := t.TempDir()
 
 		cfg := &kubeadmapi.InitConfiguration{
@@ -691,13 +691,13 @@ func TestCreateCertificateFilesMethods(t *testing.T) {
 			cfg.Etcd.External.Endpoints = []string{"192.168.1.1:2379"}
 		}
 
-		// executes create func
+		// 执行创建函数
 		if err := test.createFunc(cfg); err != nil {
 			t.Errorf("error executing createFunc: %v", err)
 			continue
 		}
 
-		// asserts expected files are there
+		// 断言预期文件均存在
 		filesutil.AssertFileExists(t, tmpdir, test.expectedFiles...)
 	}
 }
@@ -720,7 +720,7 @@ func assertCertsExist(t *testing.T, dir string) {
 	for caCert, certs := range tree {
 		if err := validateCACert(certKeyLocation{dir, caCert.BaseName, "", caCert.Name}); err != nil {
 			t.Errorf("couldn't validate CA certificate %v: %v", caCert.Name, err)
-			// Don't bother validating child certs, but do try the other CAs
+			// 不校验子证书，但继续尝试其他 CA
 			continue
 		}
 

@@ -27,23 +27,23 @@ import (
 )
 
 const (
-	// MaximumAllowedMinorVersionUpgradeSkew describes how many minor versions kubeadm can upgrade the control plane version in one go
+	// MaximumAllowedMinorVersionUpgradeSkew 描述 kubeadm 一次可升级控制平面版本的最大次版本数。
 	MaximumAllowedMinorVersionUpgradeSkew = 1
 
-	// MaximumAllowedMinorVersionDowngradeSkew describes how many minor versions kubeadm can upgrade the control plane version in one go
+	// MaximumAllowedMinorVersionDowngradeSkew 描述 kubeadm 一次可降级控制平面版本的最大次版本数。
 	MaximumAllowedMinorVersionDowngradeSkew = 1
 
-	// MaximumAllowedMinorVersionKubeletSkew describes how many minor versions the control plane version and the kubelet can skew in a kubeadm cluster
+	// MaximumAllowedMinorVersionKubeletSkew 描述 kubeadm 集群中控制平面版本与 kubelet 版本允许的最大次版本差异。
 	MaximumAllowedMinorVersionKubeletSkew = 3
 )
 
-// VersionSkewPolicyErrors describes version skew errors that might be seen during the validation process in EnforceVersionPolicies
+// VersionSkewPolicyErrors 描述 EnforceVersionPolicies 验证过程中可能出现的版本偏差错误。
 type VersionSkewPolicyErrors struct {
 	Mandatory []error
 	Skippable []error
 }
 
-// EnforceVersionPolicies enforces that the proposed new version is compatible with all the different version skew policies
+// EnforceVersionPolicies 确保建议的新版本符合所有版本偏差策略。
 func EnforceVersionPolicies(versionGetter VersionGetter, newK8sVersionStr string, newK8sVersion *version.Version, allowExperimentalUpgrades, allowRCUpgrades bool) *VersionSkewPolicyErrors {
 
 	skewErrors := &VersionSkewPolicyErrors{
@@ -53,7 +53,7 @@ func EnforceVersionPolicies(versionGetter VersionGetter, newK8sVersionStr string
 
 	clusterVersionStr, clusterVersion, err := versionGetter.ClusterVersion()
 	if err != nil {
-		// This case can't be forced: kubeadm has to be able to lookup cluster version for upgrades to work
+		// 此错误不可强制忽略：kubeadm 必须能够查询集群版本才能执行升级。
 		skewErrors.Mandatory = append(skewErrors.Mandatory, errors.Wrap(err, "Unable to fetch cluster version"))
 		return skewErrors
 	}
@@ -61,7 +61,7 @@ func EnforceVersionPolicies(versionGetter VersionGetter, newK8sVersionStr string
 
 	kubeadmVersionStr, kubeadmVersion, err := versionGetter.KubeadmVersion()
 	if err != nil {
-		// This case can't be forced: kubeadm has to be able to lookup its version for upgrades to work
+		// 此错误不可强制忽略：kubeadm 必须能够查询自身版本才能执行升级。
 		skewErrors.Mandatory = append(skewErrors.Mandatory, errors.Wrap(err, "Unable to fetch kubeadm version"))
 		return skewErrors
 	}
@@ -69,21 +69,21 @@ func EnforceVersionPolicies(versionGetter VersionGetter, newK8sVersionStr string
 
 	kubeletVersions, err := versionGetter.KubeletVersions()
 	if err != nil {
-		// This is a non-critical error; continue although kubeadm couldn't look this up
+		// 此错误不严重；即使 kubeadm 无法查询，也继续执行。
 		skewErrors.Skippable = append(skewErrors.Skippable, errors.Wrap(err, "Unable to fetch kubelet version"))
 	}
 
-	// Make sure the new version is a supported version (higher than the minimum one supported)
+	// 确保新版本受支持，即高于最低支持版本。
 	if !newK8sVersion.AtLeast(constants.MinimumControlPlaneVersion) {
-		// This must not happen, kubeadm always supports a minimum version; and we can't go below that
+		// 不应出现此情况：kubeadm 始终支持某个最低版本，不能低于该版本。
 		skewErrors.Mandatory = append(skewErrors.Mandatory, errors.Errorf("Specified version to upgrade to %q is equal to or lower than the minimum supported version %q. Please specify a higher version to upgrade to", newK8sVersionStr, clusterVersionStr))
 	}
 
-	// kubeadm doesn't support upgrades between two minor versions; e.g. a v1.7 -> v1.9 upgrade is not supported right away
+	// kubeadm 不支持一次跨越两个次版本升级，例如 v1.7 -> v1.9。
 	if newK8sVersion.Minor() > clusterVersion.Minor()+MaximumAllowedMinorVersionUpgradeSkew {
 		tooLargeUpgradeSkewErr := errors.Errorf("Specified version to upgrade to %q is too high; kubeadm can upgrade only %d minor version at a time", newK8sVersionStr, MaximumAllowedMinorVersionUpgradeSkew)
-		// If the version that we're about to upgrade to is a released version, we should fully enforce this policy
-		// If the version is a CI/dev/experimental version, it's okay to jump two minor version steps, but then require the -f flag
+		// 若要升级到已发布版本，应完整执行此策略。
+		// 若为 CI、开发或实验版本，可跨越两个次版本，但要求使用 -f 参数。
 		if len(newK8sVersion.PreRelease()) == 0 {
 			skewErrors.Mandatory = append(skewErrors.Mandatory, tooLargeUpgradeSkewErr)
 		} else {
@@ -91,11 +91,11 @@ func EnforceVersionPolicies(versionGetter VersionGetter, newK8sVersionStr string
 		}
 	}
 
-	// kubeadm doesn't support downgrades between two minor versions; e.g. a v1.9 -> v1.7 downgrade is not supported right away
+	// kubeadm 不支持一次跨越两个次版本降级，例如 v1.9 -> v1.7。
 	if newK8sVersion.Minor() < clusterVersion.Minor()-MaximumAllowedMinorVersionDowngradeSkew {
 		tooLargeDowngradeSkewErr := errors.Errorf("Specified version to downgrade to %q is too low; kubeadm can downgrade only %d minor version at a time", newK8sVersionStr, MaximumAllowedMinorVersionDowngradeSkew)
-		// If the version that we're about to downgrade to is a released version, we should fully enforce this policy
-		// If the version is a CI/dev/experimental version, it's okay to jump two minor version steps, but then require the -f flag
+		// 若要降级到已发布版本，应完整执行此策略。
+		// 若为 CI、开发或实验版本，可跨越两个次版本，但要求使用 -f 参数。
 		if len(newK8sVersion.PreRelease()) == 0 {
 			skewErrors.Mandatory = append(skewErrors.Mandatory, tooLargeDowngradeSkewErr)
 		} else {
@@ -103,19 +103,19 @@ func EnforceVersionPolicies(versionGetter VersionGetter, newK8sVersionStr string
 		}
 	}
 
-	// If the kubeadm version is lower than what we want to upgrade to; error
+	// 若 kubeadm 版本低于目标升级版本，则返回错误。
 	if kubeadmVersion.LessThan(newK8sVersion) {
 		if newK8sVersion.Minor() > kubeadmVersion.Minor() {
 			tooLargeKubeadmSkew := errors.Errorf("Specified version to upgrade to %q is at least one minor release higher than the kubeadm minor release (%d > %d). Such an upgrade is not supported", newK8sVersionStr, newK8sVersion.Minor(), kubeadmVersion.Minor())
-			// This is unsupported; kubeadm has no idea how it should handle a newer minor release than itself
-			// If the version is a CI/dev/experimental version though, lower the severity of this check, but then require the -f flag
+			// 此情况不受支持：kubeadm 不知道如何处理比自身更新的次版本。
+			// 不过，若目标为 CI、开发或实验版本，可降低此检查的严重性，但要求使用 -f 参数。
 			if len(newK8sVersion.PreRelease()) == 0 {
 				skewErrors.Mandatory = append(skewErrors.Mandatory, tooLargeKubeadmSkew)
 			} else {
 				skewErrors.Skippable = append(skewErrors.Skippable, tooLargeKubeadmSkew)
 			}
 		} else {
-			// Upgrading to a higher patch version than kubeadm is ok if the user specifies --force. Not recommended, but possible.
+			// 用户指定 --force 时，可升级到高于 kubeadm 的补丁版本。虽不推荐，但可行。
 			skewErrors.Skippable = append(skewErrors.Skippable, errors.Errorf("Specified version to upgrade to %q is higher than the kubeadm version %q. Upgrade kubeadm first using the tool you used to install kubeadm", newK8sVersionStr, kubeadmVersionStr))
 		}
 	}
@@ -125,40 +125,40 @@ func EnforceVersionPolicies(versionGetter VersionGetter, newK8sVersionStr string
 		skewErrors.Skippable = append(skewErrors.Skippable, errors.Errorf("Kubeadm version %s can only be used to upgrade to Kubernetes version %d.%d", kubeadmVersionStr, kubeadmVersion.Major(), kubeadmVersion.Minor()))
 	}
 
-	// Detect if the version is unstable and the user didn't allow that
+	// 检查版本是否不稳定，以及用户是否不允许使用该版本。
 	if err = detectUnstableVersionError(newK8sVersion, newK8sVersionStr, allowExperimentalUpgrades, allowRCUpgrades); err != nil {
 		skewErrors.Skippable = append(skewErrors.Skippable, err)
 	}
 
-	// Detect if there are too old kubelets in the cluster
-	// Check for nil here since this is the only case where kubeletVersions can be nil; if KubeletVersions() returned an error
-	// However, it's okay to skip that check
+	// 检查集群中是否存在过于老旧的 kubelet。
+	// 此处检查 nil：只有 KubeletVersions() 返回错误时，kubeletVersions 才可能为 nil。
+	// 此时可跳过此检查。
 	if kubeletVersions != nil {
 		if err = detectTooOldKubelets(newK8sVersion, kubeletVersions); err != nil {
 			skewErrors.Skippable = append(skewErrors.Skippable, err)
 		}
 	}
 
-	// If we did not see any errors, return nil
+	// 若未发现错误，则返回 nil。
 	if len(skewErrors.Skippable) == 0 && len(skewErrors.Mandatory) == 0 {
 		return nil
 	}
 
-	// Uh oh, we encountered one or more errors, return them
+	// 若遇到一个或多个错误，则返回这些错误。
 	return skewErrors
 }
 
-// detectUnstableVersionError is a helper function for detecting if the unstable version (if specified) is allowed to be used
+// detectUnstableVersionError 检查是否允许使用指定的不稳定版本。
 func detectUnstableVersionError(newK8sVersion *version.Version, newK8sVersionStr string, allowExperimentalUpgrades, allowRCUpgrades bool) error {
-	// Short-circuit quickly if this is not an unstable version
+	// 若并非不稳定版本，则立即返回。
 	if len(newK8sVersion.PreRelease()) == 0 {
 		return nil
 	}
-	// If the user has specified that unstable versions are fine, then no error should be returned
+	// 若用户已明确允许不稳定版本，则不返回错误。
 	if allowExperimentalUpgrades {
 		return nil
 	}
-	// If this is a release candidate and we allow such ones, everything's fine
+	// 若为允许使用的发布候选版本，则检查通过。
 	if strings.HasPrefix(newK8sVersion.PreRelease(), "rc") && allowRCUpgrades {
 		return nil
 	}
@@ -166,7 +166,7 @@ func detectUnstableVersionError(newK8sVersion *version.Version, newK8sVersionStr
 	return errors.Errorf("Specified version to upgrade to %q is an unstable version and such upgrades weren't allowed via setting the --allow-*-upgrades flags", newK8sVersionStr)
 }
 
-// detectTooOldKubelets errors out if the kubelet versions are so old that an unsupported skew would happen if the cluster was upgraded
+// detectTooOldKubelets 在 kubelet 版本过旧、升级后会产生不受支持的版本偏差时报错。
 func detectTooOldKubelets(newK8sVersion *version.Version, kubeletVersions map[string][]string) error {
 	var tooOldKubeletVersions []string
 	for versionStr := range kubeletVersions {

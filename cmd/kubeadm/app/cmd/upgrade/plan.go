@@ -54,7 +54,7 @@ var upgradePlanLongDesc = cmdutil.LongDesc(`
 	To skip the internet check, pass in the optional [version] parameter.
 `)
 
-// newCmdPlan returns the cobra command for `kubeadm upgrade plan`
+// newCmdPlan 返回 kubeadm upgrade plan 的 cobra 命令。
 func newCmdPlan(apf *applyPlanFlags) *cobra.Command {
 	flags := &planFlags{
 		applyPlanFlags: apf,
@@ -81,12 +81,12 @@ func newCmdPlan(apf *applyPlanFlags) *cobra.Command {
 
 	outputFlags.AddFlags(cmd)
 
-	// Register the common flags for apply and plan
+	// 注册 apply 和 plan 的公共参数。
 	addApplyPlanFlags(cmd.Flags(), flags.applyPlanFlags)
 	return cmd
 }
 
-// newComponentUpgradePlan helper creates outputapiv1alpha3.ComponentUpgradePlan object
+// newComponentUpgradePlan 辅助函数创建 outputapiv1alpha3.ComponentUpgradePlan 对象。
 func newComponentUpgradePlan(name, currentVersion, newVersion, nodeName string) outputapiv1alpha3.ComponentUpgradePlan {
 	return outputapiv1alpha3.ComponentUpgradePlan{
 		Name:           name,
@@ -96,9 +96,9 @@ func newComponentUpgradePlan(name, currentVersion, newVersion, nodeName string) 
 	}
 }
 
-// runPlan takes care of outputting available versions to upgrade to for the user
+// runPlan 负责向用户输出可升级到的版本。
 func runPlan(flagSet *pflag.FlagSet, flags *planFlags, args []string, printer output.Printer) error {
-	// Start with the basics, verify that the cluster is healthy, build a client and a versionGetter. Never dry-run when planning.
+	// 从基础检查开始：验证集群健康、构建客户端和版本获取器。规划时绝不 dry-run。
 	klog.V(1).Infoln("[upgrade/plan] verifying health of cluster")
 	klog.V(1).Infoln("[upgrade/plan] retrieving configuration from cluster")
 	client, versionGetter, initCfg, upgradeCfg, err := enforceRequirements(flagSet, flags.applyPlanFlags, args, false, false, printer)
@@ -106,10 +106,10 @@ func runPlan(flagSet *pflag.FlagSet, flags *planFlags, args []string, printer ou
 		return err
 	}
 
-	// Compute which upgrade possibilities there are
+	// 计算可用的升级可能性。
 	klog.V(1).Infoln("[upgrade/plan] computing upgrade possibilities")
 
-	// flags are respected while keeping the configuration file not changed.
+	// 尊重参数设置，同时保持配置文件不变。
 	allowRCUpgrades, ok := cmdutil.ValueFromFlagsOrConfig(flagSet, options.AllowRCUpgrades, upgradeCfg.Plan.AllowRCUpgrades, &flags.allowRCUpgrades).(*bool)
 	if !ok {
 		return cmdutil.TypeMismatchErr("allowRCUpgrades", "bool")
@@ -125,20 +125,20 @@ func runPlan(flagSet *pflag.FlagSet, flags *planFlags, args []string, printer ou
 		return errors.Wrap(err, "[upgrade/versions] FATAL")
 	}
 
-	// Fetch the current state of the component configs
+	// 获取组件配置的当前状态。
 	klog.V(1).Infoln("[upgrade/plan] analysing component config version states")
 	configVersionStates, err := componentconfigs.GetVersionStates(&initCfg.ClusterConfiguration, client)
 	if err != nil {
 		return errors.WithMessage(err, "[upgrade/versions] FATAL")
 	}
 
-	// No upgrades available
+	// 没有可用升级。
 	if len(availUpgrades) == 0 {
 		klog.V(1).Infoln("[upgrade/plan] Awesome, you're up-to-date! Enjoy!")
 		return nil
 	}
 
-	// Generate and print the upgrade plan
+	// 生成并打印升级计划。
 	etcdUpgrade, ok := cmdutil.ValueFromFlagsOrConfig(flagSet, options.EtcdUpgrade, upgradeCfg.Plan.EtcdUpgrade, &flags.etcdUpgrade).(*bool)
 	if !ok {
 		return cmdutil.TypeMismatchErr("etcdUpgrade", "bool")
@@ -147,7 +147,7 @@ func runPlan(flagSet *pflag.FlagSet, flags *planFlags, args []string, printer ou
 	return printer.PrintObj(plan, os.Stdout)
 }
 
-// genUpgradePlan generates upgrade plan from available upgrades and component config version states
+// genUpgradePlan 根据可用升级和组件配置版本状态生成升级计划。
 func genUpgradePlan(availUpgrades []upgrade.Upgrade, configVersions []outputapiv1alpha3.ComponentConfigVersionState, etcdUpgrade bool) *outputapiv1alpha3.UpgradePlan {
 	plan := &outputapiv1alpha3.UpgradePlan{ConfigVersions: configVersions}
 	for _, up := range availUpgrades {
@@ -156,8 +156,8 @@ func genUpgradePlan(availUpgrades []upgrade.Upgrade, configVersions []outputapiv
 	return plan
 }
 
-// TODO There is currently no way to cleanly output upgrades that involve adding, removing, or changing components
-// https://github.com/kubernetes/kubeadm/issues/810 was created to track addressing this.
+// TODO: 目前无法清晰输出涉及添加、删除或更改组件的升级。
+// 已创建 https://github.com/kubernetes/kubeadm/issues/810 跟踪此问题。
 func appendDNSComponent(components []outputapiv1alpha3.ComponentUpgradePlan, up *upgrade.Upgrade, name string) []outputapiv1alpha3.ComponentUpgradePlan {
 	beforeVersion := up.Before.DNSVersion
 	afterVersion := up.After.DNSVersion
@@ -168,7 +168,7 @@ func appendDNSComponent(components []outputapiv1alpha3.ComponentUpgradePlan, up 
 	return components
 }
 
-// appendKubeadmComponent appends kubeadm component to the list of components
+// appendKubeadmComponent 将 kubeadm 组件添加到组件列表。
 func appendKubeadmComponent(components []outputapiv1alpha3.ComponentUpgradePlan, up *upgrade.Upgrade, name string) []outputapiv1alpha3.ComponentUpgradePlan {
 	beforeVersion := up.Before.KubeadmVersion
 	afterVersion := up.After.KubeadmVersion
@@ -179,13 +179,13 @@ func appendKubeadmComponent(components []outputapiv1alpha3.ComponentUpgradePlan,
 	return components
 }
 
-// genAvailableUpgrade generates available upgrade from upgrade object.
+// genAvailableUpgrade 从 upgrade 对象生成可用升级信息。
 func genAvailableUpgrade(up *upgrade.Upgrade, etcdUpgrade bool) outputapiv1alpha3.AvailableUpgrade {
 	components := []outputapiv1alpha3.ComponentUpgradePlan{}
 
 	if up.CanUpgradeKubelets() {
-		// The map is of the form <old-version>:<node-names>. Here all the keys are put into a slice and sorted
-		// in order to always get the right order. Then the map value is extracted separately
+		// 映射形式为 <old-version>:<node-names>。将所有键放入切片并排序，
+		// 以确保始终获得正确顺序，然后分别提取映射值。
 		for _, oldVersion := range sortedSliceFromStringStringArrayMap(up.Before.KubeletVersions) {
 			nodeNames := up.Before.KubeletVersions[oldVersion]
 			for _, nodeName := range nodeNames {
@@ -219,7 +219,7 @@ func genAvailableUpgrade(up *upgrade.Upgrade, etcdUpgrade bool) outputapiv1alpha
 	components = appendDNSComponent(components, up, constants.CoreDNS)
 	components = appendKubeadmComponent(components, up, constants.Kubeadm)
 
-	// If etcd is not external, we should include it in the upgrade plan
+	// 若 etcd 不是外部的，则应将其纳入升级计划。
 	if etcdUpgrade {
 		for _, oldVersion := range sortedSliceFromStringStringArrayMap(up.Before.EtcdVersions) {
 			nodeNames := up.Before.EtcdVersions[oldVersion]
@@ -232,7 +232,7 @@ func genAvailableUpgrade(up *upgrade.Upgrade, etcdUpgrade bool) outputapiv1alpha
 	return outputapiv1alpha3.AvailableUpgrade{Description: up.Description, Components: components}
 }
 
-// sortedSliceFromStringStringArrayMap returns a slice of the keys in the map sorted alphabetically
+// sortedSliceFromStringStringArrayMap 返回按字母顺序排序的映射键切片。
 func sortedSliceFromStringStringArrayMap(strMap map[string][]string) []string {
 	strSlice := make([]string, 0, len(strMap))
 	for k := range strMap {
@@ -242,10 +242,10 @@ func sortedSliceFromStringStringArrayMap(strMap map[string][]string) []string {
 	return strSlice
 }
 
-// upgradePlanTextPrintFlags provides flags necessary for printing upgrade plan in a text form
+// upgradePlanTextPrintFlags 提供以文本形式打印升级计划所需的参数。
 type upgradePlanTextPrintFlags struct{}
 
-// ToPrinter returns a kubeadm printer for the text output format
+// ToPrinter 返回用于文本输出格式的 kubeadm 打印机。
 func (tpf *upgradePlanTextPrintFlags) ToPrinter(outputFormat string) (output.Printer, error) {
 	if outputFormat == output.TextOutput {
 		return &upgradePlanTextPrinter{}, nil
@@ -253,12 +253,12 @@ func (tpf *upgradePlanTextPrintFlags) ToPrinter(outputFormat string) (output.Pri
 	return nil, genericclioptions.NoCompatiblePrinterError{OutputFormat: &outputFormat, AllowedFormats: []string{output.TextOutput}}
 }
 
-// upgradePlanTextPrinter prints upgrade plan in a text form
+// upgradePlanTextPrinter 以文本形式打印升级计划。
 type upgradePlanTextPrinter struct {
 	output.TextPrinter
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj for upgrade plan plain text output
+// PrintObj 实现 ResourcePrinter.PrintObj，用于升级计划的纯文本输出。
 func (printer *upgradePlanTextPrinter) PrintObj(obj runtime.Object, writer io.Writer) error {
 	plan, ok := obj.(*outputapiv1alpha3.UpgradePlan)
 	if !ok {
@@ -274,7 +274,7 @@ func (printer *upgradePlanTextPrinter) PrintObj(obj runtime.Object, writer io.Wr
 	return nil
 }
 
-// printUpgradePlan prints a UX-friendly overview of what versions are available to upgrade to
+// printUpgradePlan 以便于用户理解的方式概述可升级到的版本。
 func (printer *upgradePlanTextPrinter) printAvailableUpgrade(writer io.Writer, au *outputapiv1alpha3.AvailableUpgrade) error {
 	var kubeVersion string
 	var beforeKubeadmVersion, afterKubeadmVersion string
@@ -340,7 +340,7 @@ func (printer *upgradePlanTextPrinter) printAvailableUpgrade(writer io.Writer, a
 	return nil
 }
 
-// printComponentConfigVersionStates prints a UX-friendly overview of the current state of component configs
+// printComponentConfigVersionStates 以便于用户理解的方式概述组件配置的当前状态。
 func (printer *upgradePlanTextPrinter) printComponentConfigVersionStates(w io.Writer, versionStates []outputapiv1alpha3.ComponentConfigVersionState) {
 	if len(versionStates) == 0 {
 		_, _ = printer.Fprintln(w, "No information available on component configs.")

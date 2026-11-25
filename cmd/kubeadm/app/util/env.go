@@ -26,8 +26,8 @@ import (
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
-// GetProxyEnvVars builds a list of environment variables in order to use the right proxy.
-// Passing nil for environment will make the function use the OS environment.
+// GetProxyEnvVars 构建用于选择正确代理的环境变量列表。
+// environment 为 nil 时使用操作系统环境。
 func GetProxyEnvVars(environment []string) []kubeadmapi.EnvVar {
 	envs := []kubeadmapi.EnvVar{}
 	if environment == nil {
@@ -36,7 +36,7 @@ func GetProxyEnvVars(environment []string) []kubeadmapi.EnvVar {
 	for _, env := range environment {
 		pos := strings.Index(env, "=")
 		if pos == -1 {
-			// Malformed environment variable, skip it.
+			// 环境变量格式错误，跳过。
 			continue
 		}
 		name := env[:pos]
@@ -51,8 +51,7 @@ func GetProxyEnvVars(environment []string) []kubeadmapi.EnvVar {
 	return envs
 }
 
-// MergeKubeadmEnvVars merges values of environment variable slices.
-// The values defined in later slices overwrite values in previous ones.
+// MergeKubeadmEnvVars 合并环境变量切片；后续切片中的值覆盖先前切片。
 func MergeKubeadmEnvVars(envList ...[]kubeadmapi.EnvVar) []v1.EnvVar {
 	m := make(map[string]v1.EnvVar)
 	merged := []v1.EnvVar{}

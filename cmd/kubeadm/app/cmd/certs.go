@@ -100,7 +100,7 @@ var (
 `)
 )
 
-// newCmdCertsUtility returns main command for certs phase
+// newCmdCertsUtility 返回证书阶段的主命令。
 func newCmdCertsUtility(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "certs",
@@ -116,7 +116,7 @@ func newCmdCertsUtility(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// genCSRConfig is the configuration required by the gencsr command
+// genCSRConfig 是 gencsr 命令所需的配置。
 type genCSRConfig struct {
 	kubeadmConfigPath string
 	certDir           string
@@ -136,11 +136,9 @@ func (o *genCSRConfig) addFlagSet(flagSet *pflag.FlagSet) {
 	options.AddKubeConfigDirFlag(flagSet, &o.kubeConfigDir)
 }
 
-// load merges command line flag values into kubeadm's config.
-// Reads Kubeadm config from a file (if present)
-// else use dynamically generated default config.
-// This configuration contains the DNS names and IP addresses which
-// are encoded in the control-plane CSRs.
+// load 将命令行参数并入 kubeadm 配置。
+// 若配置文件存在则从中读取，否则使用动态生成的默认配置。
+// 该配置包含编码在控制平面 CSR 中的 DNS 名称和 IP 地址。
 func (o *genCSRConfig) load() (err error) {
 	o.kubeadmConfig, err = configutil.LoadOrDefaultInitConfiguration(
 		o.kubeadmConfigPath,
@@ -153,14 +151,14 @@ func (o *genCSRConfig) load() (err error) {
 	if err != nil {
 		return err
 	}
-	// --cert-dir takes priority over kubeadm config if set.
+	// 若设置了 --cert-dir，其优先级高于 kubeadm 配置。
 	if o.certDir != "" {
 		o.kubeadmConfig.CertificatesDir = o.certDir
 	}
 	return nil
 }
 
-// newCmdGenCSR returns cobra.Command for generating keys and CSRs
+// newCmdGenCSR 返回用于生成密钥和 CSR 的 cobra.Command。
 func newCmdGenCSR(out io.Writer) *cobra.Command {
 	config := newGenCSRConfig()
 
@@ -181,7 +179,7 @@ func newCmdGenCSR(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// runGenCSR contains the logic of the generate-csr sub-command.
+// runGenCSR 实现 generate-csr 子命令的逻辑。
 func runGenCSR(out io.Writer, config *genCSRConfig) error {
 	if err := certsphase.CreateDefaultKeysAndCSRFiles(out, config.kubeadmConfig); err != nil {
 		return err
@@ -192,7 +190,7 @@ func runGenCSR(out io.Writer, config *genCSRConfig) error {
 	return nil
 }
 
-// newCmdCertificateKey returns cobra.Command for certificate key generate
+// newCmdCertificateKey 返回生成证书密钥的 cobra.Command。
 func newCmdCertificateKey() *cobra.Command {
 	return &cobra.Command{
 		Use:   "certificate-key",
@@ -211,7 +209,7 @@ func newCmdCertificateKey() *cobra.Command {
 	}
 }
 
-// newCmdCertsRenewal creates a new `cert renew` command.
+// newCmdCertsRenewal 创建 cert renew 命令。
 func newCmdCertsRenewal(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "renew",
@@ -233,16 +231,15 @@ type renewFlags struct {
 func getRenewSubCommands(out io.Writer, kdir string) []*cobra.Command {
 	flags := &renewFlags{
 		cfg: kubeadmapiv1.ClusterConfiguration{
-			// Setting kubernetes version to a default value in order to allow a not necessary internet lookup
+			// 设置默认 Kubernetes 版本，避免不必要的联网查询。
 			KubernetesVersion: kubeadmconstants.CurrentKubernetesVersion.String(),
 		},
 		kubeconfigPath: kubeadmconstants.GetAdminKubeConfigPath(),
 	}
-	// Default values for the cobra help text
+	// cobra 帮助文本的默认值。
 	kubeadmscheme.Scheme.Default(&flags.cfg)
 
-	// Get a renewal manager for a generic Cluster configuration, that is used only for getting
-	// the list of certificates for building subcommands
+	// 获取通用 Cluster 配置的续期管理器，仅用于构建子命令所需的证书列表。
 	rm, err := renewal.NewManager(&kubeadmapi.ClusterConfiguration{}, "")
 	if err != nil {
 		return nil
@@ -250,17 +247,17 @@ func getRenewSubCommands(out io.Writer, kdir string) []*cobra.Command {
 
 	cmdList := []*cobra.Command{}
 	for _, handler := range rm.Certificates() {
-		// get the cobra.Command skeleton for this command
+		// 获取该命令的 cobra.Command 骨架。
 		cmd := &cobra.Command{
 			Use:   handler.Name,
 			Short: fmt.Sprintf("Renew the %s", handler.LongName),
 			Long:  fmt.Sprintf(genericCertRenewLongDesc, handler.LongName),
 		}
 		addRenewFlags(cmd, flags)
-		// get the implementation of renewing this certificate
+		// 获取续期此证书的实现。
 		renewalFunc := func(handler *renewal.CertificateRenewHandler) func() error {
 			return func() error {
-				// Get cluster configuration (from --config, kubeadm-config ConfigMap, or default as a fallback)
+				// 获取集群配置：依次尝试 --config、kubeadm-config ConfigMap，最后回退到默认配置。
 				client, _ := kubeconfigutil.ClientSetFromFile(flags.kubeconfigPath)
 				internalcfg, err := getInternalCfg(flags.cfgPath, client, flags.cfg, &output.TextPrinter{}, "renew")
 				if err != nil {
@@ -270,7 +267,7 @@ func getRenewSubCommands(out io.Writer, kdir string) []*cobra.Command {
 				return renewCert(kdir, internalcfg, handler)
 			}
 		}(handler)
-		// install the implementation into the command
+		// 将实现安装到命令中。
 		cmd.RunE = func(*cobra.Command, []string) error { return renewalFunc() }
 		cmd.Args = cobra.NoArgs
 		cmdList = append(cmdList, cmd)
@@ -281,20 +278,20 @@ func getRenewSubCommands(out io.Writer, kdir string) []*cobra.Command {
 		Short: "Renew all available certificates",
 		Long:  allLongDesc,
 		RunE: func(*cobra.Command, []string) error {
-			// Get cluster configuration (from --config, kubeadm-config ConfigMap, or default as a fallback)
+			// 获取集群配置：依次尝试 --config、kubeadm-config ConfigMap，最后回退到默认配置。
 			client, _ := kubeconfigutil.ClientSetFromFile(flags.kubeconfigPath)
 			internalcfg, err := getInternalCfg(flags.cfgPath, client, flags.cfg, &output.TextPrinter{}, "renew")
 			if err != nil {
 				return err
 			}
 
-			// Get a renewal manager for an actual Cluster configuration
+			// 获取实际 Cluster 配置的续期管理器。
 			rm, err := renewal.NewManager(&internalcfg.ClusterConfiguration, kdir)
 			if err != nil {
 				return err
 			}
 
-			// Renew certificates
+			// 续期证书。
 			for _, handler := range rm.Certificates() {
 				if err := renewCert(kdir, internalcfg, handler); err != nil {
 					return err
@@ -318,7 +315,7 @@ func addRenewFlags(cmd *cobra.Command, flags *renewFlags) {
 }
 
 func renewCert(kdir string, internalcfg *kubeadmapi.InitConfiguration, handler *renewal.CertificateRenewHandler) error {
-	// Get a renewal manager for the given cluster configuration
+	// 获取指定集群配置的续期管理器。
 	rm, err := renewal.NewManager(&internalcfg.ClusterConfiguration, kdir)
 	if err != nil {
 		return err
@@ -329,8 +326,8 @@ func renewCert(kdir string, internalcfg *kubeadmapi.InitConfiguration, handler *
 		return nil
 	}
 
-	// renew using local certificate authorities.
-	// this operation can't complete in case the certificate key is not provided (external CA)
+	// 使用本地证书颁发机构续期。
+	// 若未提供证书密钥（外部 CA），此操作无法完成。
 	renewed, err := rm.RenewUsingLocalCA(handler.Name)
 	if err != nil {
 		return err
@@ -344,18 +341,17 @@ func renewCert(kdir string, internalcfg *kubeadmapi.InitConfiguration, handler *
 }
 
 func getInternalCfg(cfgPath string, client kubernetes.Interface, cfg kubeadmapiv1.ClusterConfiguration, printer output.Printer, logPrefix string) (*kubeadmapi.InitConfiguration, error) {
-	// In case the user is not providing a custom config, try to get current config from the cluster.
-	// NB. this operation should not block, because we want to allow certificate renewal also in case of not-working clusters
+	// 若用户未提供自定义配置，尝试从集群获取当前配置。
+	// 注意：此操作不应阻塞，以便集群不可用时仍能续期证书。
 	if cfgPath == "" && client != nil {
 		getNodeRegistration := true
 		getAPIEndpoint := staticpodutil.IsControlPlaneNode()
 		getComponentConfigs := true
 		internalcfg, err := configutil.FetchInitConfigurationFromCluster(client, printer, logPrefix, getNodeRegistration, getAPIEndpoint, getComponentConfigs, true)
 		if err == nil {
-			printer.Println() // add empty line to separate the FetchInitConfigurationFromCluster output from the command output
-			// certificate renewal or expiration checking doesn't depend on a running cluster, which means the CertificatesDir
-			// could be set to a value other than the default value or the value fetched from the cluster.
-			// cfg.CertificatesDir could be empty if the default value is set to empty (not true today).
+			printer.Println() // 添加空行，将 FetchInitConfigurationFromCluster 的输出与命令输出分隔开。
+			// 证书续期或过期检查不依赖运行中的集群，因此 CertificatesDir 可以使用默认值或集群返回值之外路径。
+			// 若默认值为空，cfg.CertificatesDir 也可能为空（目前默认值非空）。
 			if len(cfg.CertificatesDir) != 0 {
 				klog.V(1).Infof("Overriding the cluster certificate directory with the value from command line flag --%s: %s", options.CertificatesDir, cfg.CertificatesDir)
 				internalcfg.ClusterConfiguration.CertificatesDir = cfg.CertificatesDir
@@ -366,13 +362,13 @@ func getInternalCfg(cfgPath string, client kubernetes.Interface, cfg kubeadmapiv
 		printer.Printf("[%s] Error reading configuration from the Cluster. Falling back to default configuration\n\n", logPrefix)
 	}
 
-	// Read config from --config if provided. Otherwise, use the default configuration
+	// 若提供了 --config 则从中读取配置，否则使用默认配置。
 	return configutil.LoadOrDefaultInitConfiguration(cfgPath, &kubeadmapiv1.InitConfiguration{}, &cfg, configutil.LoadOrDefaultConfigurationOptions{
 		SkipCRIDetect: true,
 	})
 }
 
-// fetchCertificateExpirationInfo returns the certificate expiration info for the given renewal manager
+// fetchCertificateExpirationInfo 返回指定续期管理器对应的证书过期信息。
 func fetchCertificateExpirationInfo(rm *renewal.Manager) (*outputapiv1alpha3.CertificateExpirationInfo, error) {
 	info := &outputapiv1alpha3.CertificateExpirationInfo{}
 
@@ -390,7 +386,7 @@ func fetchCertificateExpirationInfo(rm *renewal.Manager) (*outputapiv1alpha3.Cer
 				ExternallyManaged:   e.ExternallyManaged,
 			})
 		} else {
-			// the certificate does not exist (for any reason)
+			// 证书不存在（无论何种原因）。
 			info.Certificates = append(info.Certificates, outputapiv1alpha3.Certificate{
 				Name:    handler.Name,
 				Missing: true,
@@ -411,7 +407,7 @@ func fetchCertificateExpirationInfo(rm *renewal.Manager) (*outputapiv1alpha3.Cer
 				ExternallyManaged:   e.ExternallyManaged,
 			})
 		} else {
-			// the CA does not exist (for any reason)
+			// CA 不存在（无论何种原因）。
 			info.CertificateAuthorities = append(info.CertificateAuthorities, outputapiv1alpha3.Certificate{
 				Name:    handler.Name,
 				Missing: true,
@@ -422,20 +418,19 @@ func fetchCertificateExpirationInfo(rm *renewal.Manager) (*outputapiv1alpha3.Cer
 	return info, nil
 }
 
-// clientSetFromFile is a variable that holds the function to create a clientset from a kubeconfig file.
-// It is used for testing purposes.
+// clientSetFromFile 保存从 kubeconfig 文件创建客户端集的函数，供测试使用。
 var clientSetFromFile = kubeconfigutil.ClientSetFromFile
 
-// newCmdCertsExpiration creates a new `cert check-expiration` command.
+// newCmdCertsExpiration 创建 cert check-expiration 命令。
 func newCmdCertsExpiration(out io.Writer, kdir string) *cobra.Command {
 	flags := &expirationFlags{
 		cfg: kubeadmapiv1.ClusterConfiguration{
-			// Setting kubernetes version to a default value in order to allow a not necessary internet lookup
+			// 设置默认 Kubernetes 版本，避免不必要的联网查询。
 			KubernetesVersion: kubeadmconstants.CurrentKubernetesVersion.String(),
 		},
 		kubeconfigPath: kubeadmconstants.GetAdminKubeConfigPath(),
 	}
-	// Default values for the cobra help text
+	// cobra 帮助文本的默认值。
 	kubeadmscheme.Scheme.Default(&flags.cfg)
 
 	outputFlags := output.NewOutputFlags(&certTextPrintFlags{}).WithTypeSetter(outputapischeme.Scheme).WithDefaultOutput(output.TextOutput)
@@ -450,14 +445,14 @@ func newCmdCertsExpiration(out io.Writer, kdir string) *cobra.Command {
 				return errors.Wrap(err, "could not construct output printer")
 			}
 
-			// Get cluster configuration (from --config, kubeadm-config ConfigMap, or default as a fallback)
+			// 获取集群配置：依次尝试 --config、kubeadm-config ConfigMap，最后回退到默认配置。
 			client, _ := clientSetFromFile(flags.kubeconfigPath)
 			internalcfg, err := getInternalCfg(flags.cfgPath, client, flags.cfg, printer, "check-expiration")
 			if err != nil {
 				return err
 			}
 
-			// Get a renewal manager for the given cluster configuration
+			// 获取指定集群配置的续期管理器。
 			rm, err := renewal.NewManager(&internalcfg.ClusterConfiguration, kdir)
 			if err != nil {
 				return err
@@ -488,12 +483,12 @@ func addExpirationFlags(cmd *cobra.Command, flags *expirationFlags) {
 	options.AddKubeConfigFlag(cmd.Flags(), &flags.kubeconfigPath)
 }
 
-// certsTextPrinter prints all certificates in a text form
+// certsTextPrinter 以文本形式打印全部证书。
 type certTextPrinter struct {
 	output.TextPrinter
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj for plain text output
+// PrintObj 实现 ResourcePrinter.PrintObj，用于纯文本输出。
 func (p *certTextPrinter) PrintObj(obj runtime.Object, writer io.Writer) error {
 	info, ok := obj.(*outputapiv1alpha3.CertificateExpirationInfo)
 	if !ok {
@@ -546,10 +541,10 @@ func (p *certTextPrinter) PrintObj(obj runtime.Object, writer io.Writer) error {
 	return tabw.Flush()
 }
 
-// certTextPrintFlags provides flags necessary for printing
+// certTextPrintFlags 提供文本打印所需的参数。
 type certTextPrintFlags struct{}
 
-// ToPrinter returns a kubeadm printer for the text output format
+// ToPrinter 返回用于文本输出格式的 kubeadm 打印机。
 func (tpf *certTextPrintFlags) ToPrinter(outputFormat string) (output.Printer, error) {
 	if outputFormat == output.TextOutput {
 		return &certTextPrinter{}, nil

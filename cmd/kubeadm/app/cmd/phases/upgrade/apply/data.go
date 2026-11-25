@@ -14,20 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apply implements phases of 'kubeadm upgrade apply'.
+// Package apply 实现 kubeadm upgrade apply 的阶段。
 package apply
 
 import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/upgrade"
 )
 
-// Data is the interface to use for kubeadm upgrade apply phases.
-// The "applyData" type from "cmd/upgrade/apply.go" must satisfy this interface.
+// Data 是 kubeadm upgrade apply 阶段使用的接口。
+// cmd/upgrade/apply.go 中的 applyData 类型必须满足此接口。
 type Data interface {
 	upgrade.Data
 
+	// SessionIsInteractive 返回是否允许交互确认；-y、-f 和 --dry-run 会退出交互模式。
 	SessionIsInteractive() bool
+	// AllowExperimentalUpgrades 返回是否允许升级到 alpha、beta 或候选发布版本。
 	AllowExperimentalUpgrades() bool
+	// AllowRCUpgrades 返回是否允许升级到候选发布版本。
 	AllowRCUpgrades() bool
+	// ForceUpgrade 返回是否允许跳过可跳过的升级错误。
 	ForceUpgrade() bool
 }

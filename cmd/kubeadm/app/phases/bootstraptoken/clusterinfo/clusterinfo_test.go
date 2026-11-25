@@ -89,7 +89,7 @@ func TestCreateBootstrapConfigMapIfNotExists(t *testing.T) {
 			t.Fatalf("could not write to tempfile: %v", err)
 		}
 
-		// Override the default timeouts to be shorter
+		// 将默认超时时间缩短。
 		defaultTimeouts := kubeadmapi.GetActiveTimeouts()
 		defaultAPICallTimeout := defaultTimeouts.KubernetesAPICall
 		defaultTimeouts.KubernetesAPICall = &metav1.Duration{Duration: time.Microsecond * 500}

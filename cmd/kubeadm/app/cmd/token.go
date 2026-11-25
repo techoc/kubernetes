@@ -55,7 +55,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/output"
 )
 
-// newCmdToken returns cobra.Command for token management
+// newCmdToken 返回令牌管理命令。
 func newCmdToken(out io.Writer, errW io.Writer) *cobra.Command {
 	var kubeConfigFile string
 	var dryRun bool
@@ -89,7 +89,7 @@ func newCmdToken(out io.Writer, errW io.Writer) *cobra.Command {
 
 	cfg := &kubeadmapiv1.InitConfiguration{}
 
-	// Default values for the cobra help text
+	// cobra 帮助文本的默认值。
 	kubeadmscheme.Scheme.Default(cfg)
 
 	var cfgPath string
@@ -203,7 +203,7 @@ func newCmdToken(out io.Writer, errW io.Writer) *cobra.Command {
 	return tokenCmd
 }
 
-// newCmdTokenGenerate returns cobra.Command to generate new token
+// newCmdTokenGenerate 返回生成新令牌的 cobra.Command。
 func newCmdTokenGenerate(out io.Writer) *cobra.Command {
 	return &cobra.Command{
 		Use:   "generate",
@@ -226,17 +226,17 @@ func newCmdTokenGenerate(out io.Writer) *cobra.Command {
 	}
 }
 
-// RunCreateToken generates a new bootstrap token and stores it as a secret on the server.
+// RunCreateToken 生成新的引导令牌，并将其作为 Secret 保存到服务器。
 func RunCreateToken(out io.Writer, client clientset.Interface, cfgPath string, initCfg *kubeadmapiv1.InitConfiguration, printJoinCommand bool, certificateKey string, kubeConfigFile string) error {
-	// ClusterConfiguration is needed just for the call to LoadOrDefaultInitConfiguration
+	// ClusterConfiguration 仅用于调用 LoadOrDefaultInitConfiguration。
 	clusterCfg := &kubeadmapiv1.ClusterConfiguration{
-		// KubernetesVersion is not used, but we set this explicitly to avoid
-		// the lookup of the version from the internet when executing LoadOrDefaultInitConfiguration
+		// KubernetesVersion 未被使用，但显式设置它可避免执行
+		// LoadOrDefaultInitConfiguration 时联网查询版本。
 		KubernetesVersion: kubeadmconstants.CurrentKubernetesVersion.String(),
 	}
 	kubeadmscheme.Scheme.Default(clusterCfg)
 
-	// This call returns the ready-to-use configuration based on the configuration file that might or might not exist and the default cfg populated by flags
+	// 此调用根据可能存在或缺失的配置文件以及参数填充的默认配置，返回可直接使用的配置。
 	klog.V(1).Infoln("[token] loading configurations")
 
 	internalcfg, err := configutil.LoadOrDefaultInitConfiguration(cfgPath, initCfg, clusterCfg, configutil.LoadOrDefaultConfigurationOptions{
@@ -251,8 +251,8 @@ func RunCreateToken(out io.Writer, client clientset.Interface, cfgPath string, i
 		return err
 	}
 
-	// if --print-join-command was specified, print a machine-readable full `kubeadm join` command
-	// otherwise, just print the token
+	// 若指定 --print-join-command，则打印可供机器读取的完整 kubeadm join 命令；
+	// 否则仅打印令牌。
 	if printJoinCommand {
 		skipTokenPrint := false
 		if certificateKey != "" {
@@ -283,7 +283,7 @@ func RunCreateToken(out io.Writer, client clientset.Interface, cfgPath string, i
 	return nil
 }
 
-// RunGenerateToken just generates a random token for the user
+// RunGenerateToken 仅为用户生成随机令牌。
 func RunGenerateToken(out io.Writer) error {
 	klog.V(1).Infoln("[token] generating random token")
 	token, err := bootstraputil.GenerateBootstrapToken()
@@ -324,33 +324,33 @@ func formatBootstrapToken(obj *outputapiv1alpha3.BootstrapToken) string {
 	return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\n", obj.Token, ttl, expires, usages, description, groups)
 }
 
-// tokenTextPrinter prints bootstrap token in a text form
+// tokenTextPrinter 以文本形式打印引导令牌。
 type tokenTextPrinter struct {
 	output.TextPrinter
 	columns         []string
 	headerIsPrinted bool
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj for plain text output
+// PrintObj 实现 ResourcePrinter.PrintObj，用于纯文本输出。
 func (ttp *tokenTextPrinter) PrintObj(obj runtime.Object, writer io.Writer) error {
 	tabw := tabwriter.NewWriter(writer, 10, 4, 3, ' ', 0)
 
-	// Print header
+	// 打印表头。
 	if !ttp.headerIsPrinted {
 		fmt.Fprintln(tabw, strings.Join(ttp.columns, "\t"))
 		ttp.headerIsPrinted = true
 	}
 
-	// Print token
+	// 打印令牌。
 	fmt.Fprint(tabw, formatBootstrapToken(obj.(*outputapiv1alpha3.BootstrapToken)))
 
 	return tabw.Flush()
 }
 
-// tokenTextPrintFlags provides flags necessary for printing bootstrap token in a text form.
+// tokenTextPrintFlags 提供以文本形式打印引导令牌所需的参数。
 type tokenTextPrintFlags struct{}
 
-// ToPrinter returns a kubeadm printer for the text output format
+// ToPrinter 返回用于文本输出格式的 kubeadm 打印机。
 func (tpf *tokenTextPrintFlags) ToPrinter(outputFormat string) (output.Printer, error) {
 	if outputFormat == output.TextOutput {
 		return &tokenTextPrinter{columns: []string{"TOKEN", "TTL", "EXPIRES", "USAGES", "DESCRIPTION", "EXTRA GROUPS"}}, nil
@@ -358,9 +358,9 @@ func (tpf *tokenTextPrintFlags) ToPrinter(outputFormat string) (output.Printer, 
 	return nil, genericclioptions.NoCompatiblePrinterError{OutputFormat: &outputFormat, AllowedFormats: []string{output.TextOutput}}
 }
 
-// RunListTokens lists details on all existing bootstrap tokens on the server.
+// RunListTokens 列出服务器上全部现有引导令牌的详细信息。
 func RunListTokens(out io.Writer, errW io.Writer, client clientset.Interface, printer output.Printer) error {
-	// First, build our selector for bootstrap tokens only
+	// 首先构建仅用于引导令牌的选择器。
 	klog.V(1).Infoln("[token] preparing selector for bootstrap token")
 	tokenSelector := fields.SelectorFromSet(
 		map[string]string{
@@ -378,14 +378,14 @@ func RunListTokens(out io.Writer, errW io.Writer, client clientset.Interface, pr
 	}
 
 	for _, secret := range secrets.Items {
-		// Get the BootstrapToken struct representation from the Secret object
+		// 从 Secret 对象获取 BootstrapToken 结构表示。
 		token, err := bootstraptokenv1.BootstrapTokenFromSecret(&secret)
 		if err != nil {
 			fmt.Fprintf(errW, "%v", err)
 			continue
 		}
 
-		// Convert token into versioned output structure
+		// 将令牌转换为带版本信息的输出结构。
 		outputToken := outputapiv1alpha3.BootstrapToken{
 			BootstrapToken: bootstraptokenv1.BootstrapToken{
 				Token:       &bootstraptokenv1.BootstrapTokenString{ID: token.Token.ID, Secret: token.Token.Secret},
@@ -404,14 +404,14 @@ func RunListTokens(out io.Writer, errW io.Writer, client clientset.Interface, pr
 	return nil
 }
 
-// RunDeleteTokens removes a bootstrap tokens from the server.
+// RunDeleteTokens 从服务器删除引导令牌。
 func RunDeleteTokens(out io.Writer, client clientset.Interface, tokenIDsOrTokens []string) error {
 	for _, tokenIDOrToken := range tokenIDsOrTokens {
-		// Assume this is a token id and try to parse it
+		// 假定这是令牌 ID，并尝试解析。
 		tokenID := tokenIDOrToken
 		klog.V(1).Info("[token] parsing token")
 		if !bootstraputil.IsValidBootstrapTokenID(tokenIDOrToken) {
-			// Okay, the full token with both id and secret was probably passed. Parse it and extract the ID only
+			// 用户可能传入了包含 ID 和密钥的完整令牌；解析并仅提取 ID。
 			bts, err := bootstraptokenv1.NewBootstrapTokenString(tokenIDOrToken)
 			if err != nil {
 				return errors.Errorf("given token didn't match pattern %q or %q",
@@ -430,8 +430,8 @@ func RunDeleteTokens(out io.Writer, client clientset.Interface, tokenIDsOrTokens
 	return nil
 }
 
-// getClientForTokenCommands returns a client to be used with token commands.
-// When dry-running it includes token specific reactors.
+// getClientForTokenCommands 返回供令牌命令使用的客户端。
+// dry-run 时包含令牌专用的反应器。
 func getClientForTokenCommands(file string, dryRun bool) (clientset.Interface, error) {
 	if dryRun {
 		dryRun := apiclient.NewDryRun().WithDefaultMarshalFunction().WithWriter(os.Stdout)

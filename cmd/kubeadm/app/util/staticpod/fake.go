@@ -25,15 +25,14 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 )
 
-// FakeStaticPod represents a fake static pod for use in tests
+// FakeStaticPod 表示测试用伪静态 Pod。
 type FakeStaticPod struct {
 	NodeName    string
 	Component   string
 	Annotations map[string]string
 }
 
-// Pod returns a pod structure representing the fake static pod with a
-// given suffix
+// Pod 返回带指定后缀、表示伪静态 Pod 的 Pod 结构。
 func (p *FakeStaticPod) Pod(suffix string) *v1.Pod {
 	pod := ComponentPod(
 		v1.Container{
@@ -52,13 +51,12 @@ func (p *FakeStaticPod) Pod(suffix string) *v1.Pod {
 	return &pod
 }
 
-// Create creates a fake static pod using the provided client
+// Create 使用给定客户端创建伪静态 Pod。
 func (p *FakeStaticPod) Create(client clientset.Interface) error {
 	return p.CreateWithPodSuffix(client, "")
 }
 
-// CreateWithPodSuffix creates a fake static pod using the provided
-// client and suffix
+// CreateWithPodSuffix 使用给定客户端和后缀创建伪静态 Pod。
 func (p *FakeStaticPod) CreateWithPodSuffix(client clientset.Interface, suffix string) error {
 	_, err := client.CoreV1().Pods(metav1.NamespaceSystem).Create(context.TODO(), p.Pod(suffix), metav1.CreateOptions{})
 	return err

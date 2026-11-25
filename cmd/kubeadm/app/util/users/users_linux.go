@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package users contains utilities for managing the users.
+// Package users 包含管理用户的工具。
 package users
 
 import (
@@ -37,22 +37,20 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// EntryMap holds a map of user or group entries.
+// EntryMap 保存用户或组条目映射。
 type EntryMap struct {
 	entries map[string]*entry
 }
 
-// UsersAndGroups is a structure that holds entry maps of users and groups.
-// It is returned by AddUsersAndGroups.
+// UsersAndGroups 保存用户和组条目映射，由 AddUsersAndGroups 返回。
 type UsersAndGroups struct {
-	// Users is an entry map of users.
+	// Users 是用户条目映射。
 	Users *EntryMap
-	// Groups is an entry map of groups.
+	// Groups 是组条目映射。
 	Groups *EntryMap
 }
 
-// entry is a structure that holds information about a UNIX user or group.
-// It partially conforms parsing of both users from /etc/passwd and groups from /etc/group.
+// entry 保存 UNIX 用户或组信息，可部分兼容解析 /etc/passwd 用户和 /etc/group 组。
 type entry struct {
 	name      string
 	id        int64
@@ -61,31 +59,30 @@ type entry struct {
 	shell     string
 }
 
-// limits is used to hold information about the minimum and maximum system ranges for UID and GID.
+// limits 保存 UID 和 GID 的系统最小、最大范围。
 type limits struct {
 	minUID, maxUID, minGID, maxGID int64
 }
 
 const (
-	// These are constants used when parsing /etc/passwd or /etc/group in terms of how many
-	// fields and entry has.
+	// 这些常量定义解析 /etc/passwd 或 /etc/group 时每条记录的字段数。
 	totalFieldsGroup = 4
 	totalFieldsUser  = 7
 
-	// klogLevel holds the klog level to use for output.
+	// klogLevel 保存输出使用的 klog 级别。
 	klogLevel = 5
 
-	// noshell holds a path to a binary to disable shell login.
+	// noshell 保存用于禁用 shell 登录的二进制路径。
 	noshell = "/bin/false"
 
-	// These are constants for the default system paths on Linux.
+	// 这些是 Linux 默认系统路径常量。
 	fileEtcLoginDefs = "/etc/login.defs"
 	fileEtcPasswd    = "/etc/passwd"
 	fileEtcGroup     = "/etc/group"
 )
 
 var (
-	// these entries hold the users and groups to create as defined in:
+	// 这些条目定义需创建的用户和组，来源：
 	// https://git.k8s.io/enhancements/keps/sig-cluster-lifecycle/kubeadm/2568-kubeadm-non-root-control-plane
 	usersToCreateSpec = []*entry{
 		{name: constants.EtcdUserName},
@@ -101,14 +98,11 @@ var (
 		{name: constants.ServiceAccountKeyReadersGroupName, userNames: []string{constants.KubeAPIServerUserName, constants.KubeControllerManagerUserName}},
 	}
 
-	// defaultLimits holds the default limits in case values are missing in /etc/login.defs
+	// defaultLimits 保存 /etc/login.defs 缺少值时的默认范围。
 	defaultLimits = &limits{minUID: 100, maxUID: 999, minGID: 100, maxGID: 999}
 )
 
-// ID returns the ID for an entry based on the entry name.
-// In case of a user entry it returns the user UID.
-// In case of a group entry it returns the group GID.
-// It returns nil if no such entry exists.
+// ID 根据条目名称返回 ID：用户条目返回 UID，组条目返回 GID；不存在时返回 nil。
 func (u *EntryMap) ID(name string) *int64 {
 	entry, ok := u.entries[name]
 	if !ok {
@@ -118,7 +112,7 @@ func (u *EntryMap) ID(name string) *int64 {
 	return &id
 }
 
-// String converts an EntryMap object to a readable string.
+// String 将 EntryMap 转换为可读字符串。
 func (u *EntryMap) String() string {
 	lines := make([]string, 0, len(u.entries))
 	for k, e := range u.entries {
@@ -128,23 +122,20 @@ func (u *EntryMap) String() string {
 	return strings.Join(lines, "")
 }
 
-// AddUsersAndGroups is a public wrapper around addUsersAndGroupsImpl with default system file paths.
+// AddUsersAndGroups 是 addUsersAndGroupsImpl 的公开包装，使用默认系统文件路径。
 func AddUsersAndGroups() (*UsersAndGroups, error) {
 	return addUsersAndGroupsImpl(fileEtcLoginDefs, fileEtcPasswd, fileEtcGroup)
 }
 
-// addUsersAndGroupsImpl adds the managed users and groups to the files specified
-// by pathUsers and pathGroups. It uses the file specified with pathLoginDef to
-// determine limits for UID and GID. If managed users and groups exist in these files
-// validation is performed on them. The function returns a pointer to a Users object
-// that can be used to return UID and GID of managed users.
+// addUsersAndGroupsImpl 将受管用户和组写入 pathUsers 和 pathGroups，
+// 根据 pathLoginDef 确定 UID/GID 范围。已有受管用户和组会按范围校验。
+// 返回 Users 指针，可用于获取受管用户的 UID 和 GID。
 func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAndGroups, error) {
 	klog.V(1).Info("Adding managed users and groups")
 	klog.V(klogLevel).Infof("Parsing %q", pathLoginDef)
 
-	// Read and parse /etc/login.def. Some distributions might be missing this file, which makes
-	// them non-standard. If an error occurs fallback to defaults by passing an empty string
-	// to parseLoginDefs().
+	// 读取并解析 /etc/login.def。某些发行版缺少此文件，属于非标准情况；
+	// 出错时向 parseLoginDefs() 传空字符串，回退到默认值。
 	var loginDef string
 	f, close, err := openFileWithLock(pathLoginDef)
 	if err != nil {
@@ -164,7 +155,7 @@ func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAn
 	klog.V(klogLevel).Infof("Using system UID/GID limits: %+v", limits)
 	klog.V(klogLevel).Infof("Parsing %q and %q", pathUsers, pathGroups)
 
-	// Open /etc/passwd and /etc/group with locks.
+	// 加锁打开 /etc/passwd 和 /etc/group。
 	fUsers, close, err := openFileWithLock(pathUsers)
 	if err != nil {
 		return nil, err
@@ -176,7 +167,7 @@ func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAn
 	}
 	defer close()
 
-	// Read the files.
+	// 读取文件。
 	fileUsers, err := readFile(fUsers)
 	if err != nil {
 		return nil, err
@@ -186,7 +177,7 @@ func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAn
 		return nil, err
 	}
 
-	// Parse the files.
+	// 解析文件。
 	users, err := parseEntries(fileUsers, totalFieldsUser)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not parse %q", pathUsers)
@@ -198,13 +189,13 @@ func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAn
 
 	klog.V(klogLevel).Info("Validating existing users and groups")
 
-	// Validate for existing tracked entries based on limits.
+	// 根据范围校验已有受管条目。
 	usersToCreate, groupsToCreate, err := validateEntries(users, groups, limits)
 	if err != nil {
 		return nil, errors.Wrap(err, "error validating existing users and groups")
 	}
 
-	// Allocate and assign IDs to users / groups.
+	// 分配 UID/GID 给用户和组。
 	allocUIDs, err := allocateIDs(users, limits.minUID, limits.maxUID, len(usersToCreate))
 	if err != nil {
 		return nil, err
@@ -224,11 +215,11 @@ func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAn
 		klog.V(klogLevel).Infof("Adding groups: %s", entriesToString(groupsToCreate))
 	}
 
-	// Add users and groups.
+	// 添加用户和组。
 	fileUsers = addEntries(fileUsers, usersToCreate, createUser)
 	fileGroups = addEntries(fileGroups, groupsToCreate, createGroup)
 
-	// Write the files.
+	// 写入文件。
 	klog.V(klogLevel).Infof("Writing %q and %q", pathUsers, pathGroups)
 	if err := writeFile(fUsers, fileUsers); err != nil {
 		return nil, err
@@ -237,7 +228,7 @@ func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAn
 		return nil, err
 	}
 
-	// Prepare the maps of users and groups.
+	// 准备用户和组映射。
 	var usersConcat []*entry
 	usersConcat = append(usersConcat, users...)
 	usersConcat = append(usersConcat, usersToCreate...)
@@ -256,19 +247,17 @@ func addUsersAndGroupsImpl(pathLoginDef, pathUsers, pathGroups string) (*UsersAn
 	return &UsersAndGroups{Users: mapUsers, Groups: mapGroups}, nil
 }
 
-// RemoveUsersAndGroups is a public wrapper around removeUsersAndGroupsImpl with
-// default system file paths.
+// RemoveUsersAndGroups 是 removeUsersAndGroupsImpl 的公开包装，使用默认系统文件路径。
 func RemoveUsersAndGroups() error {
 	return removeUsersAndGroupsImpl(fileEtcPasswd, fileEtcGroup)
 }
 
-// removeUsersAndGroupsImpl removes the managed users and groups from the files specified
-// by pathUsers and pathGroups.
+// removeUsersAndGroupsImpl 从 pathUsers 和 pathGroups 指定的文件中移除受管用户和组。
 func removeUsersAndGroupsImpl(pathUsers, pathGroups string) error {
 	klog.V(1).Info("Removing managed users and groups")
 	klog.V(klogLevel).Infof("Opening %q and %q", pathUsers, pathGroups)
 
-	// Open /etc/passwd and /etc/group.
+	// 打开 /etc/passwd 和 /etc/group。
 	fUsers, close, err := openFileWithLock(pathUsers)
 	if err != nil {
 		return err
@@ -280,7 +269,7 @@ func removeUsersAndGroupsImpl(pathUsers, pathGroups string) error {
 	}
 	defer close()
 
-	// Read the files.
+	// 读取文件。
 	fileUsers, err := readFile(fUsers)
 	if err != nil {
 		return err
@@ -293,13 +282,13 @@ func removeUsersAndGroupsImpl(pathUsers, pathGroups string) error {
 	klog.V(klogLevel).Infof("Removing users: %s", entriesToString(usersToCreateSpec))
 	klog.V(klogLevel).Infof("Removing groups: %s", entriesToString(groupsToCreateSpec))
 
-	// Delete users / groups.
+	// 删除用户和组。
 	fileUsers, _ = removeEntries(fileUsers, usersToCreateSpec)
 	fileGroups, _ = removeEntries(fileGroups, groupsToCreateSpec)
 
 	klog.V(klogLevel).Infof("Writing %q and %q", pathUsers, pathGroups)
 
-	// Write the files.
+	// 写入文件。
 	if err := writeFile(fUsers, fileUsers); err != nil {
 		return err
 	}
@@ -310,8 +299,8 @@ func removeUsersAndGroupsImpl(pathUsers, pathGroups string) error {
 	return nil
 }
 
-// parseLoginDefs can be used to parse an /etc/login.defs file and obtain system ranges for UID and GID.
-// Passing an empty string will return the defaults. The defaults are 100-999 for both UID and GID.
+// parseLoginDefs 解析 /etc/login.defs 中的 UID/GID 系统范围；传空字符串返回默认值，
+// UID 和 GID 默认均为 100-999。
 func parseLoginDefs(file string) (*limits, error) {
 	l := *defaultLimits
 	if len(file) == 0 {
@@ -326,7 +315,7 @@ func parseLoginDefs(file string) (*limits, error) {
 	lines := strings.Split(file, "\n")
 	for i, line := range lines {
 		for k, v := range mapping {
-			// A line must start with one of the definitions
+			// 每行必须以某个定义项开头。
 			if !strings.HasPrefix(line, k) {
 				continue
 			}
@@ -342,8 +331,7 @@ func parseLoginDefs(file string) (*limits, error) {
 	return &l, nil
 }
 
-// parseEntries can be used to parse an /etc/passwd or /etc/group file as their format is similar.
-// It returns a slice of entries obtained from the file.
+// parseEntries 可解析格式相似的 /etc/passwd 或 /etc/group，返回文件中的条目切片。
 // https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
 // https://www.cyberciti.biz/faq/understanding-etcgroup-file/
 func parseEntries(file string, totalFields int) ([]*entry, error) {
@@ -382,19 +370,18 @@ func parseEntries(file string, totalFields int) ([]*entry, error) {
 	return entries, nil
 }
 
-// validateEntries takes user and group entries and validates if these entries are valid based on limits,
-// mapping between users and groups and specs. Returns slices of missing user and group entries that must be created.
-// Returns an error if existing users and groups do not match requirements.
+// validateEntries 根据范围、用户与组映射及规格校验用户和组条目，
+// 返回待创建的用户和组切片；已有用户或组不符合要求时返回错误。
 func validateEntries(users, groups []*entry, limits *limits) ([]*entry, []*entry, error) {
 	u := []*entry{}
 	g := []*entry{}
-	// Validate users
+	// 校验用户。
 	for _, uc := range usersToCreateSpec {
 		for _, user := range users {
 			if uc.name != user.name {
 				continue
 			}
-			// Found existing user
+			// 找到已有用户。
 			if user.id < limits.minUID || user.id > limits.maxUID {
 				return nil, nil, errors.Errorf("UID %d for user %q is outside the system UID range: %d - %d",
 					user.id, user.name, limits.minUID, limits.maxUID)
@@ -407,19 +394,19 @@ func validateEntries(users, groups []*entry, limits *limits) ([]*entry, []*entry
 				if g.id != user.gid {
 					continue
 				}
-				// Found matching group GID for user GID
+				// 找到与用户 GID 匹配的组 GID。
 				if g.name != uc.name {
 					return nil, nil, errors.Errorf("user %q has GID %d but the group with that GID is not named %q",
 						uc.name, g.id, uc.name)
 				}
-				goto skipUser // Valid group GID and name; skip
+				goto skipUser // goto skipUser // 组 GID 和名称有效，跳过
 			}
 			return nil, nil, errors.Errorf("could not find group with GID %d for user %q", user.gid, user.name)
 		}
 		u = append(u, uc)
 	skipUser:
 	}
-	// validate groups
+	// 校验组。
 	for _, gc := range groupsToCreateSpec {
 		for _, group := range groups {
 			if gc.name != group.name {
@@ -435,7 +422,7 @@ func validateEntries(users, groups []*entry, limits *limits) ([]*entry, []*entry
 				return nil, nil, errors.Errorf("expected users %q for group %q; got %q",
 					u1, gc.name, u2)
 			}
-			goto skipGroup // group has valid users; skip
+			goto skipGroup // goto skipGroup // 组包含有效用户，跳过
 		}
 		g = append(g, gc)
 	skipGroup:
@@ -443,7 +430,7 @@ func validateEntries(users, groups []*entry, limits *limits) ([]*entry, []*entry
 	return u, g, nil
 }
 
-// allocateIDs takes a list of entries and based on minimum and maximum ID allocates a "total" of IDs.
+// allocateIDs 根据 ID 最小和最大值，为条目列表分配指定数量的 ID。
 func allocateIDs(entries []*entry, min, max int64, total int) ([]int64, error) {
 	if total == 0 {
 		return []int64{}, nil
@@ -466,8 +453,7 @@ func allocateIDs(entries []*entry, min, max int64, total int) ([]int64, error) {
 		total, min, max)
 }
 
-// addEntries takes /etc/passwd or /etc/group file content and appends entries to it based
-// on a createEntry function. Returns the updated contents of the file.
+// addEntries 根据 createEntry 函数将条目追加到 /etc/passwd 或 /etc/group 内容，返回更新后的内容。
 func addEntries(file string, entries []*entry, createEntry func(*entry) string) string {
 	out := file
 	newLines := make([]string, 0, len(entries))
@@ -476,7 +462,8 @@ func addEntries(file string, entries []*entry, createEntry func(*entry) string) 
 	}
 	newLinesStr := ""
 	if len(newLines) > 0 {
-		if !strings.HasSuffix(out, "\n") { // Append a new line if its missing.
+		if !strings.HasSuffix(out, "\n") { // if !strings.HasSuffix(out, "
+			// ") { // 缺少换行时追加
 			newLinesStr = "\n"
 		}
 		newLinesStr += strings.Join(newLines, "\n") + "\n"
@@ -484,8 +471,8 @@ func addEntries(file string, entries []*entry, createEntry func(*entry) string) 
 	return out + newLinesStr
 }
 
-// removeEntries takes /etc/passwd or /etc/group file content and deletes entries from them
-// by name matching. Returns the updated contents of the file and the number of entries removed.
+// removeEntries 按名称从 /etc/passwd 或 /etc/group 内容中删除条目，
+// 返回更新后的内容和删除的条目数。
 func removeEntries(file string, entries []*entry) (string, int) {
 	lines := strings.Split(file, "\n")
 	total := len(lines) - len(entries)
@@ -507,9 +494,8 @@ func removeEntries(file string, entries []*entry) (string, int) {
 	return strings.Join(newLines, "\n"), removed
 }
 
-// assignUserAndGroupIDs takes the list of existing groups, the users and groups to be created,
-// and assigns UIDs and GIDs to the users and groups to be created based on a list of provided UIDs and GIDs.
-// Returns an error if not enough UIDs or GIDs are passed. It does not perform any other validation.
+// assignUserAndGroupIDs 根据已有组、待创建用户和组以及给定 UID/GID 列表分配 ID。
+// UID 或 GID 不足时返回错误，不执行其他校验。
 func assignUserAndGroupIDs(groups, usersToCreate, groupsToCreate []*entry, uids, gids []int64) error {
 	if len(gids) < len(groupsToCreate) {
 		return errors.Errorf("not enough GIDs to assign to groups: have %d, want %d", len(gids), len(groupsToCreate))
@@ -520,7 +506,7 @@ func assignUserAndGroupIDs(groups, usersToCreate, groupsToCreate []*entry, uids,
 	for i := range groupsToCreate {
 		groupsToCreate[i].id = gids[i]
 	}
-	// Concat the list of old and new groups to find a matching GID.
+	// 合并新旧组列表以查找匹配的 GID。
 	groupsConcat := append([]*entry{}, groups...)
 	groupsConcat = append(groupsConcat, groupsToCreate...)
 	for i := range usersToCreate {
@@ -535,17 +521,17 @@ func assignUserAndGroupIDs(groups, usersToCreate, groupsToCreate []*entry, uids,
 	return nil
 }
 
-// createGroup is a helper function to produce a group from entry.
+// createGroup 根据 entry 辅助创建组。
 func createGroup(e *entry) string {
 	return fmt.Sprintf("%s:x:%d:%s", e.name, e.id, strings.Join(e.userNames, ","))
 }
 
-// createUser is a helper function to produce a user from entry.
+// createUser 根据 entry 辅助创建用户。
 func createUser(e *entry) string {
 	return fmt.Sprintf("%s:x:%d:%d:::/bin/false", e.name, e.id, e.gid)
 }
 
-// entriesToEntryMap takes a list of entries and prepares an EntryMap object.
+// entriesToEntryMap 将条目列表转换为 EntryMap。
 func entriesToEntryMap(entries, spec []*entry) (*EntryMap, error) {
 	m := map[string]*entry{}
 	for _, spec := range spec {
@@ -562,7 +548,7 @@ func entriesToEntryMap(entries, spec []*entry) (*EntryMap, error) {
 	return &EntryMap{entries: m}, nil
 }
 
-// entriesToString is a utility to convert a list of entries to string.
+// entriesToString 将条目列表转换为字符串。
 func entriesToString(entries []*entry) string {
 	lines := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -572,9 +558,8 @@ func entriesToString(entries []*entry) string {
 	return strings.Join(lines, ",")
 }
 
-// openFileWithLock opens the file at path by acquiring an exclusive write lock.
-// The returned close() function should be called to release the lock and close the file.
-// If a lock cannot be obtained the function fails after a period of time.
+// openFileWithLock 以独占写锁打开 path 指定文件。返回的 close() 应被调用以释放锁并关闭文件；
+// 无法及时获取锁时函数失败。
 func openFileWithLock(path string) (f *os.File, close func(), err error) {
 	f, err = os.OpenFile(path, os.O_RDWR, os.ModePerm)
 	if err != nil {
@@ -582,10 +567,8 @@ func openFileWithLock(path string) (f *os.File, close func(), err error) {
 	}
 	deadline := time.Now().Add(time.Second * 5)
 	for {
-		// If another process is holding a write lock, this call will exit
-		// with an error. F_SETLK is used instead of F_SETLKW to avoid
-		// the case where a runaway process grabs the exclusive lock and
-		// blocks this call indefinitely.
+		// 其他进程持有写锁时，此调用将返回错误。使用 F_SETLK 而非 F_SETLKW，
+		// 避免失控进程获取独占锁后无限阻塞当前调用。
 		// https://man7.org/linux/man-pages/man2/fcntl.2.html
 		lock := syscall.Flock_t{Type: syscall.F_WRLCK}
 		if err = syscall.FcntlFlock(f.Fd(), syscall.F_SETLK, &lock); err == nil {
@@ -602,8 +585,7 @@ func openFileWithLock(path string) (f *os.File, close func(), err error) {
 		return nil, nil, err
 	}
 	close = func() {
-		// This function should be called once operations with the file are finished.
-		// It unlocks the file and closes it.
+		// 文件操作结束后应调用此函数，以解锁并关闭文件。
 		unlock := syscall.Flock_t{Type: syscall.F_UNLCK}
 		_ = syscall.FcntlFlock(f.Fd(), syscall.F_SETLK, &unlock)
 		_ = f.Close()
@@ -611,7 +593,7 @@ func openFileWithLock(path string) (f *os.File, close func(), err error) {
 	return f, close, nil
 }
 
-// readFile reads a File into a string.
+// readFile 将 File 读取为字符串。
 func readFile(f *os.File) (string, error) {
 	buf := bytes.NewBuffer(nil)
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
@@ -623,7 +605,7 @@ func readFile(f *os.File) (string, error) {
 	return buf.String(), nil
 }
 
-// writeFile writes a string to a File.
+// writeFile 将字符串写入 File。
 func writeFile(f *os.File, str string) error {
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return err
@@ -637,8 +619,7 @@ func writeFile(f *os.File, str string) error {
 	return nil
 }
 
-// UpdatePathOwnerAndPermissions updates the owner and permissions of the given path.
-// If the path is a directory it is not recursively updated.
+// UpdatePathOwnerAndPermissions 更新给定路径的所有者和权限；目录不会递归更新。
 func UpdatePathOwnerAndPermissions(path string, uid, gid int64, perms uint32) error {
 	if err := os.Chown(path, int(uid), int(gid)); err != nil {
 		return errors.Wrapf(err, "failed to update owner of %q to uid: %d and gid: %d", path, uid, gid)
@@ -650,8 +631,7 @@ func UpdatePathOwnerAndPermissions(path string, uid, gid int64, perms uint32) er
 	return nil
 }
 
-// UpdatePathOwner recursively updates the owners of a directory.
-// It is equivalent to calling `chown -R uid:gid /path/to/dir`.
+// UpdatePathOwner 递归更新目录所有者，等价于执行 `chown -R uid:gid /path/to/dir`。
 func UpdatePathOwner(dirPath string, uid, gid int64) error {
 	err := filepath.WalkDir(dirPath, func(path string, d os.DirEntry, err error) error {
 		if err := os.Chown(path, int(uid), int(gid)); err != nil {

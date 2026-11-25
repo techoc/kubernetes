@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
-// SetDefaultTimeouts sets an internal Timeouts struct to its default values.
+// SetDefaultTimeouts 将内部 Timeouts 结构体设置为默认值。
 func SetDefaultTimeouts(t **Timeouts) {
 	*t = &Timeouts{
 		ControlPlaneComponentHealthCheck: &metav1.Duration{Duration: constants.ControlPlaneComponentHealthCheckTimeout},
@@ -46,14 +46,14 @@ func init() {
 	SetDefaultTimeouts(&activeTimeouts)
 }
 
-// GetActiveTimeouts gets the active timeouts structure.
+// GetActiveTimeouts 返回当前生效的超时配置。
 func GetActiveTimeouts() *Timeouts {
 	timeoutMutex.RLock()
 	defer timeoutMutex.RUnlock()
 	return activeTimeouts
 }
 
-// SetActiveTimeouts sets the active timeouts structure.
+// SetActiveTimeouts 设置当前生效的超时配置。
 func SetActiveTimeouts(timeouts *Timeouts) {
 	timeoutMutex.Lock()
 	activeTimeouts = timeouts.DeepCopy()

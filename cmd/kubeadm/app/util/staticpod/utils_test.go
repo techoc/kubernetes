@@ -404,7 +404,7 @@ func TestGetEtcdProbeEndpoint(t *testing.T) {
 }
 
 func TestComponentPod(t *testing.T) {
-	// priority value for system-node-critical class
+	// system-node-critical 优先级的 priority 值。
 	priority := int32(2000001000)
 	var tests = []struct {
 		name     string
@@ -648,9 +648,9 @@ func TestReadStaticPodFromDisk(t *testing.T) {
 	}
 }
 
-// getFileNotFoundForOS returns the expected error message for a file not found error on the current OS
-// - on Windows, the error message is "The system cannot find the file specified"
-// - on other, the error message is "no such file or directory"
+// getFileNotFoundForOS 返回当前操作系统下文件不存在错误的预期消息。
+// - Windows："The system cannot find the file specified"
+// - 其他系统："no such file or directory"
 func getFileNotFoundForOS() string {
 	if goruntime.GOOS == "windows" {
 		return "The system cannot find the file specified"
@@ -722,7 +722,7 @@ func TestReadMultipleStaticPodsFromDisk(t *testing.T) {
 				}
 			}
 
-			// Compare sorted result to expected result.
+			// 将排序后的结果与预期结果比较。
 			var actual []*v1.Pod
 			for _, v := range m {
 				actual = append(actual, v)
@@ -798,7 +798,7 @@ func TestManifestFilesAreEqual(t *testing.T) {
 		t.Run(rt.description, func(t *testing.T) {
 			tmpdir := t.TempDir()
 
-			// write 2 manifests
+			// 写入两个清单。
 			for i := range 2 {
 				if rt.podYamls[i] != "" {
 					manifestPath := filepath.Join(tmpdir, strconv.Itoa(i)+".yaml")
@@ -809,7 +809,7 @@ func TestManifestFilesAreEqual(t *testing.T) {
 				}
 			}
 
-			// compare them
+			// 比较它们。
 			result, diff, actualErr := ManifestFilesAreEqual(filepath.Join(tmpdir, "0.yaml"), filepath.Join(tmpdir, "1.yaml"))
 			if result != rt.expectedResult {
 				t.Errorf(

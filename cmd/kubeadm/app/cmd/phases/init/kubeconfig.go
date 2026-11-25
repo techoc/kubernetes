@@ -67,7 +67,7 @@ var (
 	}
 )
 
-// NewKubeConfigPhase creates a kubeadm workflow phase that creates all kubeconfig files necessary to establish the control plane and the admin kubeconfig file.
+// NewKubeConfigPhase 创建 kubeadm 工作流阶段，生成建立控制平面所需的全部 kubeconfig 文件和管理员 kubeconfig 文件。
 func NewKubeConfigPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "kubeconfig",
@@ -89,7 +89,7 @@ func NewKubeConfigPhase() workflow.Phase {
 	}
 }
 
-// NewKubeConfigFilePhase creates a kubeadm workflow phase that creates a kubeconfig file.
+// NewKubeConfigFilePhase 创建用于生成 kubeconfig 文件的 kubeadm 工作流阶段。
 func NewKubeConfigFilePhase(kubeConfigFileName string) workflow.Phase {
 	return workflow.Phase{
 		Name:         kubeconfigFilePhaseProperties[kubeConfigFileName].name,
@@ -129,7 +129,7 @@ func runKubeConfig(c workflow.RunData) error {
 	return nil
 }
 
-// runKubeConfigFile executes kubeconfig creation logic.
+// runKubeConfigFile 执行 kubeconfig 创建逻辑。
 func runKubeConfigFile(kubeConfigFileName string) func(workflow.RunData) error {
 	return func(c workflow.RunData) error {
 		data, ok := c.(InitData)
@@ -137,10 +137,10 @@ func runKubeConfigFile(kubeConfigFileName string) func(workflow.RunData) error {
 			return errors.New("kubeconfig phase invoked with an invalid data struct")
 		}
 
-		// if external CA mode, skip certificate authority generation
+		// 外部 CA 模式下跳过证书颁发机构生成。
 		if data.ExternalCA() {
 			fmt.Printf("[kubeconfig] External CA mode: Using user provided %s\n", kubeConfigFileName)
-			// If using an external CA while dryrun, copy kubeconfig files to dryrun dir for later use
+			// 使用外部 CA 且 dry-run 时，将 kubeconfig 文件复制到 dry-run 目录供后续使用。
 			if data.DryRun() {
 				err := filesutil.CopyFile(filepath.Join(kubeadmconstants.KubernetesDir, kubeConfigFileName), filepath.Join(data.KubeConfigDir(), kubeConfigFileName))
 				if err != nil {
@@ -150,7 +150,8 @@ func runKubeConfigFile(kubeConfigFileName string) func(workflow.RunData) error {
 			return nil
 		}
 
-		// if dryrunning, reads certificates from a temporary folder (and defer restore to the path originally specified by the user)
+		// dry-run 时从临时目录读取证书，
+		// 并延迟恢复到用户最初指定的路径。
 		cfg := data.Cfg()
 		cfg.CertificatesDir = data.CertificateWriteDir()
 		defer func() { cfg.CertificatesDir = data.CertificateDir() }()
@@ -158,11 +159,11 @@ func runKubeConfigFile(kubeConfigFileName string) func(workflow.RunData) error {
 		initConfiguration := data.Cfg().DeepCopy()
 
 		if kubeConfigFileName == kubeadmconstants.KubeletKubeConfigFileName {
-			// Unset the ControlPlaneEndpoint so the creation falls back to the LocalAPIEndpoint for the kubelet's kubeconfig.
+			// 取消设置 ControlPlaneEndpoint，使 kubelet 的 kubeconfig 回退到 LocalAPIEndpoint。
 			initConfiguration.ControlPlaneEndpoint = ""
 		}
 
-		// creates the KubeConfig file (or use existing)
+		// 创建 KubeConfig 文件（或使用已有文件）。
 		return kubeconfigphase.CreateKubeConfigFile(kubeConfigFileName, data.KubeConfigDir(), initConfiguration)
 	}
 }

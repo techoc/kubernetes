@@ -42,7 +42,7 @@ var controlPlanePrepareExample = cmdutil.Examples(`
 	kubeadm join phase control-plane-prepare all
 `)
 
-// NewControlPlanePreparePhase creates a kubeadm workflow phase that implements the preparation of the node to serve a control plane
+// NewControlPlanePreparePhase 创建实现节点控制平面服务准备的 kubeadm 工作流阶段。
 func NewControlPlanePreparePhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "control-plane-prepare",
@@ -151,7 +151,7 @@ func newControlPlanePrepareCertsSubphase() workflow.Phase {
 	return workflow.Phase{
 		Name:         "certs [api-server-endpoint]",
 		Short:        "Generate the certificates for the new control plane components",
-		Run:          runControlPlanePrepareCertsPhaseLocal, //NB. eventually in future we would like to break down this in sub phases for each cert or add the --csr option
+		Run:          runControlPlanePrepareCertsPhaseLocal, // 注意：未来可能按每张证书拆分为子阶段，或添加 --csr 参数。
 		InheritFlags: getControlPlanePreparePhaseFlags("certs"),
 	}
 }
@@ -160,7 +160,7 @@ func newControlPlanePrepareKubeconfigSubphase() workflow.Phase {
 	return workflow.Phase{
 		Name:         "kubeconfig [api-server-endpoint]",
 		Short:        "Generate the kubeconfig for the new control plane components",
-		Run:          runControlPlanePrepareKubeconfigPhaseLocal, //NB. eventually in future we would like to break down this in sub phases for each kubeconfig
+		Run:          runControlPlanePrepareKubeconfigPhaseLocal, // 注意：未来可能按每个 kubeconfig 拆分为子阶段。
 		InheritFlags: getControlPlanePreparePhaseFlags("kubeconfig"),
 	}
 }
@@ -169,7 +169,7 @@ func newControlPlanePrepareControlPlaneSubphase() workflow.Phase {
 	return workflow.Phase{
 		Name:          "control-plane",
 		Short:         "Generate the manifests for the new control plane components",
-		Run:           runControlPlanePrepareControlPlaneSubphase, //NB. eventually in future we would like to break down this in sub phases for each component
+		Run:           runControlPlanePrepareControlPlaneSubphase, // 注意：未来可能按每个组件拆分为子阶段。
 		InheritFlags:  getControlPlanePreparePhaseFlags("control-plane"),
 		ArgsValidator: cobra.NoArgs,
 	}
@@ -181,7 +181,7 @@ func runControlPlanePrepareControlPlaneSubphase(c workflow.RunData) error {
 		return errors.New("control-plane-prepare phase invoked with an invalid data struct")
 	}
 
-	// Skip if this is not a control plane
+	// 若不是控制平面则跳过。
 	if data.Cfg().ControlPlane == nil {
 		return nil
 	}
@@ -193,7 +193,7 @@ func runControlPlanePrepareControlPlaneSubphase(c workflow.RunData) error {
 
 	fmt.Printf("[control-plane] Using manifest folder %q\n", data.ManifestDir())
 
-	// If we're dry-running, set CertificatesDir to default value to get the right cert path in static pod yaml
+	// dry-run 时将 CertificatesDir 设为默认值，以在静态 Pod YAML 中获得正确的证书路径。
 	if data.DryRun() {
 		cfg.CertificatesDir = filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.DefaultCertificateDir)
 	}
@@ -231,7 +231,7 @@ func runControlPlanePrepareDownloadCertsPhaseLocal(c workflow.RunData) error {
 		return err
 	}
 
-	// If we're dry-running, download certs to tmp dir, and defer to restore to the path originally specified by the user
+	// dry-run 时将证书下载到临时目录，并延迟恢复到用户最初指定的路径。
 	certsDir := cfg.CertificatesDir
 	cfg.CertificatesDir = data.CertificateWriteDir()
 	defer func() { cfg.CertificatesDir = certsDir }()
@@ -253,7 +253,7 @@ func runControlPlanePrepareCertsPhaseLocal(c workflow.RunData) error {
 		return errors.New("control-plane-prepare phase invoked with an invalid data struct")
 	}
 
-	// Skip if this is not a control plane
+	// 若不是控制平面则跳过。
 	if data.Cfg().ControlPlane == nil {
 		return nil
 	}
@@ -265,11 +265,12 @@ func runControlPlanePrepareCertsPhaseLocal(c workflow.RunData) error {
 
 	fmt.Printf("[certs] Using certificateDir folder %q\n", cfg.CertificatesDir)
 
-	// if dryrunning, write certificates files to a temporary folder (and defer restore to the path originally specified by the user)
+	// dry-run 时将证书文件写入临时目录，
+	// 并延迟恢复到用户最初指定的路径。
 	certsDir := cfg.CertificatesDir
 	cfg.CertificatesDir = data.CertificateWriteDir()
 	defer func() { cfg.CertificatesDir = certsDir }()
-	// Generate missing certificates (if any)
+	// 生成缺失的证书（若有）。
 	return certsphase.CreatePKIAssets(cfg)
 }
 
@@ -279,7 +280,7 @@ func runControlPlanePrepareKubeconfigPhaseLocal(c workflow.RunData) error {
 		return errors.New("control-plane-prepare phase invoked with an invalid data struct")
 	}
 
-	// Skip if this is not a control plane
+	// 若不是控制平面则跳过。
 	if data.Cfg().ControlPlane == nil {
 		return nil
 	}
@@ -292,14 +293,13 @@ func runControlPlanePrepareKubeconfigPhaseLocal(c workflow.RunData) error {
 	fmt.Println("[kubeconfig] Generating kubeconfig files")
 	fmt.Printf("[kubeconfig] Using kubeconfig folder %q\n", data.KubeConfigDir())
 
-	// If we're dry-running, load certs from tmp dir, and defer to restore to the path originally specified by the user
+	// dry-run 时从临时目录加载证书，并延迟恢复到用户最初指定的路径。
 	certsDir := cfg.CertificatesDir
 	cfg.CertificatesDir = data.CertificateWriteDir()
 	defer func() { cfg.CertificatesDir = certsDir }()
 
-	// Generate kubeconfig files for controller manager, scheduler and for the admin/kubeadm itself
-	// NB. The kubeconfig file for kubelet will be generated by the TLS bootstrap process in
-	// following steps of the join --control-plane workflow
+	// 为 controller manager、scheduler 以及 admin/kubeadm 自身生成 kubeconfig 文件。
+	// 注意：kubelet 的 kubeconfig 文件将由后续 kubeadm join --control-plane 工作流中的 TLS 引导过程生成。
 	if err := kubeconfigphase.CreateJoinControlPlaneKubeConfigFiles(data.KubeConfigDir(), cfg); err != nil {
 		return errors.Wrap(err, "error generating kubeconfig files")
 	}

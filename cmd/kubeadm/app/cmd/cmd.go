@@ -28,7 +28,7 @@ import (
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 )
 
-// NewKubeadmCommand returns cobra.Command to run kubeadm command
+// NewKubeadmCommand 返回用于运行 kubeadm 命令的 cobra.Command。
 func NewKubeadmCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 	var rootfsPath string
 

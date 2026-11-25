@@ -23,7 +23,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// ParseTemplate validates and parses passed as argument template
+// ParseTemplate 校验并解析作为参数传入的模板。
 func ParseTemplate(strtmpl string, obj interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	tmpl, err := template.New("template").Parse(strtmpl)

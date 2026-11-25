@@ -50,7 +50,7 @@ import (
 	utilruntime "k8s.io/kubernetes/cmd/kubeadm/app/util/runtime"
 )
 
-// newCmdConfig returns cobra.Command for "kubeadm config" command
+// newCmdConfig 返回 kubeadm config 命令。
 func newCmdConfig(out io.Writer) *cobra.Command {
 	var kubeConfigFile string
 
@@ -76,7 +76,7 @@ func newCmdConfig(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// newCmdConfigPrint returns cobra.Command for "kubeadm config print" command
+// newCmdConfigPrint 返回 kubeadm config print 命令。
 func newCmdConfigPrint(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "print",
@@ -93,22 +93,22 @@ func newCmdConfigPrint(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// newCmdConfigPrintInitDefaults returns cobra.Command for "kubeadm config print init-defaults" command
+// newCmdConfigPrintInitDefaults 返回 kubeadm config print init-defaults 命令。
 func newCmdConfigPrintInitDefaults(out io.Writer) *cobra.Command {
 	return newCmdConfigPrintActionDefaults(out, "init", getDefaultInitConfigBytes)
 }
 
-// newCmdConfigPrintJoinDefaults returns cobra.Command for "kubeadm config print join-defaults" command
+// newCmdConfigPrintJoinDefaults 返回 kubeadm config print join-defaults 命令。
 func newCmdConfigPrintJoinDefaults(out io.Writer) *cobra.Command {
 	return newCmdConfigPrintActionDefaults(out, "join", getDefaultNodeConfigBytes)
 }
 
-// newCmdConfigPrintResetDefaults returns cobra.Command for "kubeadm config print reset-defaults" command
+// newCmdConfigPrintResetDefaults 返回 kubeadm config print reset-defaults 命令。
 func newCmdConfigPrintResetDefaults(out io.Writer) *cobra.Command {
 	return newCmdConfigPrintActionDefaults(out, "reset", getDefaultResetConfigBytes)
 }
 
-// newCmdConfigPrintUpgradeDefaults returns cobra.Command for "kubeadm config print upgrade-defaults" command
+// newCmdConfigPrintUpgradeDefaults 返回 kubeadm config print upgrade-defaults 命令。
 func newCmdConfigPrintUpgradeDefaults(out io.Writer) *cobra.Command {
 	return newCmdConfigPrintActionDefaults(out, "upgrade", getDefaultUpgradeConfigBytes)
 }
@@ -173,13 +173,13 @@ func getDefaultComponentConfigBytes(group string) ([]byte, error) {
 	return componentCfg.Marshal()
 }
 
-// legacyKindToGroupMap maps between the old API object types and the new way of specifying component configs (by group)
+// legacyKindToGroupMap 将旧 API 对象类型映射到按组指定组件配置的新方式。
 var legacyKindToGroupMap = map[string]string{
 	"KubeletConfiguration":   componentconfigs.KubeletGroup,
 	"KubeProxyConfiguration": componentconfigs.KubeProxyGroup,
 }
 
-// getSupportedComponentConfigKinds returns all currently supported component config API object names
+// getSupportedComponentConfigKinds 返回当前支持的全部组件配置 API 对象名称。
 func getSupportedComponentConfigKinds() []string {
 	objects := []string{}
 	for componentType := range legacyKindToGroupMap {
@@ -220,7 +220,7 @@ func getDefaultNodeConfigBytes() ([]byte, error) {
 			BootstrapToken: &kubeadmapiv1.BootstrapTokenDiscovery{
 				Token:                    configutil.PlaceholderToken.Token.String(),
 				APIServerEndpoint:        "kube-apiserver:6443",
-				UnsafeSkipCAVerification: true, // TODO: UnsafeSkipCAVerification: true needs to be set for validation to pass, but shouldn't be recommended as the default
+				UnsafeSkipCAVerification: true, // TODO: 验证需要设置 UnsafeSkipCAVerification: true，但不应将其推荐为默认值。
 			},
 		},
 	}, opts)
@@ -255,7 +255,7 @@ func getDefaultUpgradeConfigBytes() ([]byte, error) {
 	return configutil.MarshalKubeadmConfigObject(internalcfg, kubeadmapiv1.SchemeGroupVersion)
 }
 
-// newCmdConfigMigrate returns cobra.Command for "kubeadm config migrate" command
+// newCmdConfigMigrate 返回 kubeadm config migrate 命令。
 func newCmdConfigMigrate(out io.Writer) *cobra.Command {
 	var oldCfgPath, newCfgPath string
 	var allowExperimental bool
@@ -309,7 +309,7 @@ func newCmdConfigMigrate(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// newCmdConfigValidate returns cobra.Command for the "kubeadm config validate" command
+// newCmdConfigValidate 返回 kubeadm config validate 命令。
 func newCmdConfigValidate(out io.Writer) *cobra.Command {
 	var cfgPath string
 	var allowDeprecated, allowExperimental bool
@@ -352,7 +352,7 @@ func newCmdConfigValidate(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// newCmdConfigImages returns the "kubeadm config images" command
+// newCmdConfigImages 返回 kubeadm config images 命令。
 func newCmdConfigImages(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "images",
@@ -364,7 +364,7 @@ func newCmdConfigImages(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// newCmdConfigImagesPull returns the `kubeadm config images pull` command
+// newCmdConfigImagesPull 返回 kubeadm config images pull 命令。
 func newCmdConfigImagesPull() *cobra.Command {
 	externalClusterCfg := &kubeadmapiv1.ClusterConfiguration{}
 	kubeadmscheme.Scheme.Default(externalClusterCfg)
@@ -400,7 +400,7 @@ func newCmdConfigImagesPull() *cobra.Command {
 	return cmd
 }
 
-// PullControlPlaneImages pulls all images that the ImagesPull knows about
+// PullControlPlaneImages 拉取 ImagesPull 已知的全部镜像。
 func PullControlPlaneImages(runtime utilruntime.ContainerRuntime, cfg *kubeadmapi.ClusterConfiguration) error {
 	images := images.GetControlPlaneImages(cfg)
 	for _, image := range images {
@@ -412,15 +412,14 @@ func PullControlPlaneImages(runtime utilruntime.ContainerRuntime, cfg *kubeadmap
 	return nil
 }
 
-// newCmdConfigImagesList returns the "kubeadm config images list" command
+// newCmdConfigImagesList 返回 kubeadm config images list 命令。
 func newCmdConfigImagesList(out io.Writer, mockK8sVersion *string) *cobra.Command {
 	externalcfg := &kubeadmapiv1.ClusterConfiguration{}
 	kubeadmscheme.Scheme.Default(externalcfg)
 	var cfgPath, featureGatesString string
 	var err error
 
-	// This just sets the Kubernetes version for unit testing so kubeadm won't try to
-	// lookup the latest release from the internet.
+	// 单元测试仅设置 Kubernetes 版本，避免 kubeadm 联网查询最新稳定版本。
 	if mockK8sVersion != nil {
 		externalcfg.KubernetesVersion = *mockK8sVersion
 	}
@@ -455,7 +454,7 @@ func newCmdConfigImagesList(out io.Writer, mockK8sVersion *string) *cobra.Comman
 	return cmd
 }
 
-// NewImagesList returns the underlying struct for the "kubeadm config images list" command
+// NewImagesList 返回 kubeadm config images list 命令使用的底层结构体。
 func NewImagesList(cfgPath string, cfg *kubeadmapiv1.ClusterConfiguration) (*ImagesList, error) {
 	initcfg, err := configutil.LoadOrDefaultInitConfiguration(cfgPath, &kubeadmapiv1.InitConfiguration{}, cfg, configutil.LoadOrDefaultConfigurationOptions{
 		SkipCRIDetect: true,
@@ -469,17 +468,17 @@ func NewImagesList(cfgPath string, cfg *kubeadmapiv1.ClusterConfiguration) (*Ima
 	}, nil
 }
 
-// ImagesList defines the struct used for "kubeadm config images list"
+// ImagesList 定义 kubeadm config images list 命令使用的结构体。
 type ImagesList struct {
 	cfg *kubeadmapi.InitConfiguration
 }
 
-// imageTextPrinter prints image info in a text form
+// imageTextPrinter 以文本形式打印镜像信息。
 type imageTextPrinter struct {
 	output.TextPrinter
 }
 
-// PrintObj is an implementation of ResourcePrinter.PrintObj for plain text output
+// PrintObj 实现 ResourcePrinter.PrintObj，用于纯文本输出。
 func (itp *imageTextPrinter) PrintObj(obj runtime.Object, writer io.Writer) error {
 	var err error
 	if imgs, ok := obj.(*outputapiv1alpha3.Images); ok {
@@ -490,10 +489,10 @@ func (itp *imageTextPrinter) PrintObj(obj runtime.Object, writer io.Writer) erro
 	return err
 }
 
-// imageTextPrintFlags provides flags necessary for printing image in a text form.
+// imageTextPrintFlags 提供以文本形式打印镜像所需的参数。
 type imageTextPrintFlags struct{}
 
-// ToPrinter returns a kubeadm printer for the text output format
+// ToPrinter 返回用于文本输出格式的 kubeadm 打印机。
 func (ipf *imageTextPrintFlags) ToPrinter(outputFormat string) (output.Printer, error) {
 	if outputFormat == output.TextOutput {
 		return &imageTextPrinter{}, nil
@@ -501,7 +500,7 @@ func (ipf *imageTextPrintFlags) ToPrinter(outputFormat string) (output.Printer, 
 	return nil, genericclioptions.NoCompatiblePrinterError{OutputFormat: &outputFormat, AllowedFormats: []string{output.TextOutput}}
 }
 
-// Run runs the images command and writes the result to the io.Writer passed in
+// Run 运行镜像命令，并将结果写入传入的 io.Writer。
 func (i *ImagesList) Run(out io.Writer, printer output.Printer) error {
 	imgs := images.GetControlPlaneImages(&i.cfg.ClusterConfiguration)
 
@@ -512,7 +511,7 @@ func (i *ImagesList) Run(out io.Writer, printer output.Printer) error {
 	return nil
 }
 
-// AddImagesCommonConfigFlags adds the flags that configure kubeadm (and affect the images kubeadm will use)
+// AddImagesCommonConfigFlags 添加配置 kubeadm 的参数，这些参数会影响 kubeadm 使用的镜像。
 func AddImagesCommonConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.ClusterConfiguration, cfgPath *string, featureGatesString *string) {
 	options.AddKubernetesVersionFlag(flagSet, &cfg.KubernetesVersion)
 	options.AddFeatureGatesStringFlag(flagSet, featureGatesString)

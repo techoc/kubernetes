@@ -53,7 +53,7 @@ func fakeFetchInitConfig(client clientset.Interface, printer output.Printer, log
 }
 
 func TestRunDiff(t *testing.T) {
-	// create a temporary file with valid ClusterConfiguration
+	// 创建包含合法 ClusterConfiguration 的临时文件。
 	testUpgradeDiffConfigContents := []byte(fmt.Sprintf(`
 apiVersion: %s
 kind: UpgradeConfiguration
@@ -65,7 +65,7 @@ diff:
 		t.Fatal(err)
 	}
 	defer os.Remove(testUpgradeDiffConfig)
-	// create a temporary manifest file with dummy contents
+	// 创建包含伪内容的临时清单文件。
 	testUpgradeDiffManifestContents := []byte("some-contents")
 	testUpgradeDiffManifest, err := createTestRunDiffFile(testUpgradeDiffManifestContents)
 	if err != nil {
@@ -145,7 +145,7 @@ diff:
 }
 
 func TestValidateManifests(t *testing.T) {
-	// Create valid manifest paths
+	// 创建合法的清单路径。
 	apiServerManifest, err := createTestRunDiffFile([]byte{})
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestValidateManifests(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(schedulerManifest)
-	// Create a file path that does not exist
+	// 创建不存在的文件路径。
 	notExistFilePath := "./foobar123456"
 
 	testCases := []struct {

@@ -24,10 +24,10 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// Scheme is the runtime.Scheme to which all supported kubeadm ComponentConfig API types are registered.
+// Scheme 是注册所有受支持的 kubeadm ComponentConfig API 类型的 runtime.Scheme。
 var Scheme = runtime.NewScheme()
 
-// Codecs provides access to encoding and decoding for the scheme.
+// Codecs 提供该 Scheme 的编码和解码功能。
 var Codecs = serializer.NewCodecFactory(Scheme)
 
 func init() {
@@ -35,7 +35,7 @@ func init() {
 	AddToScheme(Scheme)
 }
 
-// AddToScheme builds the kubeadm ComponentConfig scheme using all known ComponentConfig versions.
+// AddToScheme 使用所有已知 ComponentConfig 版本构建 kubeadm ComponentConfig Scheme。
 func AddToScheme(scheme *runtime.Scheme) {
 	for _, handler := range known {
 		utilruntime.Must(handler.AddToScheme(scheme))

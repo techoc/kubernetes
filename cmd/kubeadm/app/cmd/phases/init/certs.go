@@ -50,7 +50,7 @@ var (
 		`)
 )
 
-// NewCertsPhase returns the phase for the certs
+// NewCertsPhase 返回证书阶段。
 func NewCertsPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:   "certs",
@@ -60,11 +60,11 @@ func NewCertsPhase() workflow.Phase {
 	}
 }
 
-// newCertSubPhases returns sub phases for certs phase
+// newCertSubPhases 返回证书阶段的子阶段。
 func newCertSubPhases() []workflow.Phase {
 	subPhases := []workflow.Phase{}
 
-	// All subphase
+	// 全部子阶段。
 	allPhase := workflow.Phase{
 		Name:           "all",
 		Short:          "Generate all certificates",
@@ -74,8 +74,8 @@ func newCertSubPhases() []workflow.Phase {
 
 	subPhases = append(subPhases, allPhase)
 
-	// This loop assumes that GetDefaultCertList() always returns a list of
-	// certificate that is preceded by the CAs that sign them.
+	// 此循环假定 GetDefaultCertList() 返回的证书列表中，
+	// 每张证书之前都会列出为其签名的 CA。
 	var lastCACert *certsphase.KubeadmCert
 	for _, cert := range certsphase.GetDefaultCertList() {
 		var phase workflow.Phase
@@ -88,7 +88,7 @@ func newCertSubPhases() []workflow.Phase {
 		subPhases = append(subPhases, phase)
 	}
 
-	// SA creates the private/public key pair, which doesn't use x509 at all
+	// SA 创建公私钥对，完全不使用 x509。
 	saPhase := workflow.Phase{
 		Name:         "sa",
 		Short:        "Generate a private key for signing service account tokens along with its public key",
@@ -138,10 +138,10 @@ func getCertPhaseFlags(name string) []string {
 }
 
 func getSANDescription(certSpec *certsphase.KubeadmCert) string {
-	// Defaulted config we will use to get SAN certs
+	// 用于获取 SAN 证书的应用默认值后的配置。
 	defaultConfig := &kubeadmapiv1.InitConfiguration{
 		LocalAPIEndpoint: kubeadmapiv1.APIEndpoint{
-			// GetAPIServerAltNames errors without an AdvertiseAddress; this is as good as any.
+			// GetAPIServerAltNames 在没有 AdvertiseAddress 时会报错；此处地址同样可用。
 			AdvertiseAddress: "127.0.0.1",
 		},
 	}
@@ -161,7 +161,7 @@ func getSANDescription(certSpec *certsphase.KubeadmCert) string {
 	if len(certConfig.AltNames.DNSNames) == 0 && len(certConfig.AltNames.IPs) == 0 {
 		return ""
 	}
-	// This mutates the certConfig, but we're throwing it after we construct the command anyway
+	// 此操作会修改 certConfig，但构造命令后不会再使用它。
 	sans := []string{}
 
 	for _, dnsName := range certConfig.AltNames.DNSNames {
@@ -182,13 +182,13 @@ func runCertsSa(c workflow.RunData) error {
 		return errors.New("certs phase invoked with an invalid data struct")
 	}
 
-	// if external CA mode, skip service account key generation
+	// 外部 CA 模式下跳过服务账号密钥生成。
 	if data.ExternalCA() {
 		fmt.Printf("[certs] Using existing sa keys\n")
 		return nil
 	}
 
-	// create the new service account key (or use existing)
+	// 创建新的服务账号密钥（或使用已有密钥）。
 	return certsphase.CreateServiceAccountKeyAndPublicKeyFiles(data.CertificateWriteDir(), data.Cfg().ClusterConfiguration.EncryptionAlgorithm)
 }
 
@@ -209,7 +209,7 @@ func runCAPhase(ca *certsphase.KubeadmCert) func(c workflow.RunData) error {
 			return errors.New("certs phase invoked with an invalid data struct")
 		}
 
-		// if using external etcd, skips etcd certificate authority generation
+		// 使用外部 etcd 时跳过 etcd 证书颁发机构生成。
 		if data.Cfg().Etcd.External != nil && ca.Name == "etcd-ca" {
 			fmt.Printf("[certs] External etcd mode: Skipping %s certificate authority generation\n", ca.BaseName)
 			return nil
@@ -220,7 +220,7 @@ func runCAPhase(ca *certsphase.KubeadmCert) func(c workflow.RunData) error {
 			srcCertPath, srcKeyPath := pkiutil.PathsForCertAndKey(data.CertificateDir(), ca.BaseName)
 			dryRunCertPath, dryRunKeyPath := pkiutil.PathsForCertAndKey(data.CertificateWriteDir(), ca.BaseName)
 
-			// If CA Cert existed while dryrun, copy CA Cert to dryrun dir for later use
+			// 若 dry-run 前已存在 CA 证书，将其复制到 dry-run 目录供后续使用。
 			if data.DryRun() {
 				if err := os.MkdirAll(filepath.Dir(dryRunCertPath), os.FileMode(0700)); err != nil {
 					return errors.Wrapf(err, "failed to create directory %s", filepath.Dir(dryRunCertPath))
@@ -231,7 +231,7 @@ func runCAPhase(ca *certsphase.KubeadmCert) func(c workflow.RunData) error {
 				}
 			}
 			if _, err := pkiutil.TryLoadKeyFromDisk(data.CertificateDir(), ca.BaseName); err == nil {
-				// If CA Key existed while dryrun, copy CA Key to dryrun dir for later use
+				// 若 dry-run 前已存在 CA 密钥，将其复制到 dry-run 目录供后续使用。
 				if data.DryRun() {
 					err := filesutil.CopyFile(srcKeyPath, dryRunKeyPath)
 					if err != nil {
@@ -245,12 +245,13 @@ func runCAPhase(ca *certsphase.KubeadmCert) func(c workflow.RunData) error {
 			return nil
 		}
 
-		// if dryrunning, write certificates authority to a temporary folder (and defer restore to the path originally specified by the user)
+		// dry-run 时将证书颁发机构写入临时目录，
+		// 并延迟恢复到用户最初指定的路径。
 		cfg := data.Cfg()
 		cfg.CertificatesDir = data.CertificateWriteDir()
 		defer func() { cfg.CertificatesDir = data.CertificateDir() }()
 
-		// create the new certificate authority (or use existing)
+		// 创建新的证书颁发机构（或使用已有机构）。
 		return certsphase.CreateCACertAndKeyFiles(ca, cfg)
 	}
 }
@@ -262,7 +263,7 @@ func runCertPhase(cert *certsphase.KubeadmCert, caCert *certsphase.KubeadmCert) 
 			return errors.New("certs phase invoked with an invalid data struct")
 		}
 
-		// if using external etcd, skips etcd certificates generation
+		// 使用外部 etcd 时跳过 etcd 证书生成。
 		if data.Cfg().Etcd.External != nil && cert.CAName == "etcd-ca" {
 			fmt.Printf("[certs] External etcd mode: Skipping %s certificate generation\n", cert.BaseName)
 			return nil
@@ -286,12 +287,13 @@ func runCertPhase(cert *certsphase.KubeadmCert, caCert *certsphase.KubeadmCert) 
 			return nil
 		}
 
-		// if dryrunning, write certificates to a temporary folder (and defer restore to the path originally specified by the user)
+		// dry-run 时将证书写入临时目录，
+		// 并延迟恢复到用户最初指定的路径。
 		cfg := data.Cfg()
 		cfg.CertificatesDir = data.CertificateWriteDir()
 		defer func() { cfg.CertificatesDir = data.CertificateDir() }()
 
-		// create the new certificate (or use existing)
+		// 创建新证书（或使用已有证书）。
 		return certsphase.CreateCertAndKeyFilesWithCA(cert, caCert, cfg)
 	}
 }

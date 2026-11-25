@@ -24,8 +24,8 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewCheckEtcdPhase is a hidden phase that runs after the control-plane-prepare and
-// before the bootstrap-kubelet phase that ensures etcd is healthy
+// NewCheckEtcdPhase 是在 control-plane-prepare 之后、bootstrap-kubelet 之前运行的隐藏阶段，
+// 用于确保 etcd 健康。
 func NewCheckEtcdPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:   "check-etcd",
@@ -40,7 +40,7 @@ func runCheckEtcdPhase(c workflow.RunData) error {
 		return errors.New("check-etcd phase invoked with an invalid data struct")
 	}
 
-	// Skip if this is not a control plane
+	// 若不是控制平面则跳过。
 	if data.Cfg().ControlPlane == nil {
 		return nil
 	}
@@ -62,9 +62,8 @@ func runCheckEtcdPhase(c workflow.RunData) error {
 
 	fmt.Println("[check-etcd] Checking that the etcd cluster is healthy")
 
-	// Checks that the etcd cluster is healthy
-	// NB. this check cannot be implemented before because it requires the admin.conf and all the certificates
-	//     for connecting to etcd already in place
+	// 检查 etcd 集群是否健康。
+	// 注意：此检查无法更早执行，因为它要求 admin.conf 和连接 etcd 所需的全部证书已就绪。
 	client, err := data.Client()
 	if err != nil {
 		return err

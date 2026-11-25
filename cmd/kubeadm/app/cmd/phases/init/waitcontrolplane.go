@@ -34,7 +34,7 @@ import (
 	staticpodutil "k8s.io/kubernetes/cmd/kubeadm/app/util/staticpod"
 )
 
-// NewWaitControlPlanePhase is a hidden phase that runs after the control-plane and etcd phases
+// NewWaitControlPlanePhase 是在控制平面和 etcd 阶段之后运行的隐藏阶段。
 func NewWaitControlPlanePhase() workflow.Phase {
 	phase := workflow.Phase{
 		Name:  "wait-control-plane",
@@ -50,10 +50,10 @@ func runWaitControlPlanePhase(c workflow.RunData) error {
 		return errors.New("wait-control-plane phase invoked with an invalid data struct")
 	}
 
-	// If we're dry-running, print the generated manifests.
-	// TODO: think of a better place to move this call - e.g. a hidden phase.
+	// dry-run 时打印生成的清单。
+	// TODO: 考虑将此调用移到更合适的位置，例如隐藏阶段。
 	if data.DryRun() {
-		if err := dryrunutil.PrintFilesIfDryRunning(true /* needPrintManifest */, data.ManifestDir(), data.OutputWriter()); err != nil {
+		if err := dryrunutil.PrintFilesIfDryRunning(true /* 是否需要打印清单。 */, data.ManifestDir(), data.OutputWriter()); err != nil {
 			return errors.Wrap(err, "error printing files on dryrun")
 		}
 	}
@@ -99,7 +99,7 @@ func runWaitControlPlanePhase(c workflow.RunData) error {
 	return nil
 }
 
-// newControlPlaneWaiter returns a new waiter that is used to wait on the control plane to boot up.
+// newControlPlaneWaiter 返回用于等待控制平面启动的新等待器。
 func newControlPlaneWaiter(dryRun bool, timeout time.Duration, client clientset.Interface, out io.Writer) (apiclient.Waiter, error) {
 	if dryRun {
 		return dryrunutil.NewWaiter(), nil

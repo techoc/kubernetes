@@ -25,29 +25,29 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// UnsupportedConfigVersionError is a special error type returned whenever we encounter too old config version
+// UnsupportedConfigVersionError 是遇到过旧配置版本时返回的特殊错误类型。
 type UnsupportedConfigVersionError struct {
-	// OldVersion is the config version that is causing the problem
+	// OldVersion 是导致问题的配置版本。
 	OldVersion schema.GroupVersion
 
-	// CurrentVersion describes the natively supported config version
+	// CurrentVersion 是原生支持的配置版本。
 	CurrentVersion schema.GroupVersion
 
-	// Document points to the YAML/JSON document that caused the problem
+	// Document 指向导致问题的 YAML/JSON 文档。
 	Document []byte
 }
 
-// Error implements the standard Golang error interface for UnsupportedConfigVersionError
+// Error 为 UnsupportedConfigVersionError 实现标准 Go error 接口。
 func (err *UnsupportedConfigVersionError) Error() string {
 	return fmt.Sprintf("unsupported apiVersion %q, you may have to do manual conversion to %q and run kubeadm again", err.OldVersion, err.CurrentVersion)
 }
 
-// UnsupportedConfigVersionsErrorMap is a cumulative version of the UnsupportedConfigVersionError type
+// UnsupportedConfigVersionsErrorMap 汇总多个 UnsupportedConfigVersionError。
 type UnsupportedConfigVersionsErrorMap map[string]*UnsupportedConfigVersionError
 
-// Error implements the standard Golang error interface for UnsupportedConfigVersionsErrorMap
+// Error 为 UnsupportedConfigVersionsErrorMap 实现标准 Go error 接口。
 func (errs UnsupportedConfigVersionsErrorMap) Error() string {
-	// Make sure the error messages we print are predictable by sorting them by the group names involved
+	// 按相关组名排序，确保输出的错误消息顺序稳定。
 	groups := make([]string, 0, len(errs))
 	for group := range errs {
 		groups = append(groups, group)
@@ -63,8 +63,7 @@ func (errs UnsupportedConfigVersionsErrorMap) Error() string {
 	return strings.Join(msgs, "\n\t- ")
 }
 
-// warnDefaultComponentConfigValue prints a warning if the user modified a field in a certain
-// ComponentConfig from the default recommended value in kubeadm.
+// warnDefaultComponentConfigValue 在用户将 ComponentConfig 中的字段改为非 kubeadm 推荐默认值时输出警告。
 func warnDefaultComponentConfigValue(componentConfigKind, paramName string, defaultValue, userValue interface{}) {
 	klog.Warningf("The recommended value for %q in %q is: %v; the provided value is: %v",
 		paramName, componentConfigKind, defaultValue, userValue)

@@ -36,32 +36,30 @@ var joinCommandTemplate = template.Must(template.New("join").Parse(`` +
 	--control-plane {{if .CertificateKey}}--certificate-key {{.CertificateKey}}{{end}}{{end}}`,
 ))
 
-// GetJoinWorkerCommand returns the kubeadm join command for a given token and
-// Kubernetes cluster (the current cluster in the kubeconfig file)
+// GetJoinWorkerCommand 返回给定令牌和 Kubernetes 集群（kubeconfig 文件中的当前集群）对应的 kubeadm join 命令。
 func GetJoinWorkerCommand(kubeConfigFile, token string, skipTokenPrint bool) (string, error) {
 	return getJoinCommand(kubeConfigFile, token, "", false, skipTokenPrint, false)
 }
 
-// GetJoinControlPlaneCommand returns the kubeadm join command for a given token and
-// Kubernetes cluster (the current cluster in the kubeconfig file)
+// GetJoinControlPlaneCommand 返回给定令牌和 Kubernetes 集群（kubeconfig 文件中的当前集群）对应的 kubeadm join 命令。
 func GetJoinControlPlaneCommand(kubeConfigFile, token, key string, skipTokenPrint, skipCertificateKeyPrint bool) (string, error) {
 	return getJoinCommand(kubeConfigFile, token, key, true, skipTokenPrint, skipCertificateKeyPrint)
 }
 
 func getJoinCommand(kubeConfigFile, token, key string, controlPlane, skipTokenPrint, skipCertificateKeyPrint bool) (string, error) {
-	// load the kubeconfig file to get the CA certificate and endpoint
+	// 加载 kubeconfig 文件以获取 CA 证书和端点。
 	config, err := clientcmd.LoadFromFile(kubeConfigFile)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to load kubeconfig")
 	}
 
-	// load the default cluster config
+	// 加载默认集群配置。
 	_, clusterConfig, err := kubeconfigutil.GetClusterFromKubeConfig(config)
 	if err != nil {
 		return "", errors.Wrapf(err, "malformed kubeconfig file: %s", kubeConfigFile)
 	}
 
-	// load CA certificates from the kubeconfig (either from PEM data or by file path)
+	// 从 kubeconfig 加载 CA 证书（来自 PEM 数据或文件路径）。
 	var caCerts []*x509.Certificate
 	if clusterConfig.CertificateAuthorityData != nil {
 		caCerts, err = clientcertutil.ParseCertsPEM(clusterConfig.CertificateAuthorityData)
@@ -77,7 +75,7 @@ func getJoinCommand(kubeConfigFile, token, key string, controlPlane, skipTokenPr
 		return "", errors.New("no CA certificates found in kubeconfig")
 	}
 
-	// hash all the CA certs and include their public key pins as trusted values
+	// 对全部 CA 证书计算哈希，并将其公钥固定值作为受信任值。
 	publicKeyPins := make([]string, 0, len(caCerts))
 	for _, caCert := range caCerts {
 		publicKeyPins = append(publicKeyPins, pubkeypin.Hash(caCert))

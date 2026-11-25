@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apply implements phases of 'kubeadm upgrade apply'.
+// Package apply 实现 kubeadm upgrade apply 的阶段。
 package apply
 
 import (
@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewBootstrapTokenPhase returns a new bootstrap-token phase.
+// NewBootstrapTokenPhase 返回新的 bootstrap-token 阶段。
 func NewBootstrapTokenPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "bootstrap-token",
@@ -59,32 +59,32 @@ func runBootstrapToken(c workflow.RunData) error {
 	client := data.Client()
 
 	var errs []error
-	// Create RBAC rules that makes the bootstrap tokens able to get nodes
+	// 创建 RBAC 规则，允许引导令牌获取节点。
 	if err := nodebootstraptoken.AllowBootstrapTokensToGetNodes(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	// Create/update RBAC rules that makes the bootstrap tokens able to post CSRs
+	// 创建或更新 RBAC 规则，允许引导令牌提交 CSR。
 	if err := nodebootstraptoken.AllowBootstrapTokensToPostCSRs(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	// Create/update RBAC rules that makes the bootstrap tokens able to get their CSRs approved automatically
+	// 创建或更新 RBAC 规则，允许引导令牌自动获得 CSR 批准。
 	if err := nodebootstraptoken.AutoApproveNodeBootstrapTokens(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	// Create/update RBAC rules that makes the nodes to rotate certificates and get their CSRs approved automatically
+	// 创建或更新 RBAC 规则，允许节点轮换证书并自动获得 CSR 批准。
 	if err := nodebootstraptoken.AutoApproveNodeCertificateRotation(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	// Create/update RBAC rules that allow the API server kubelet client to access the kubelet API
+	// 创建或更新 RBAC 规则，允许 API 服务器的 kubelet 客户端访问 kubelet API。
 	if err := nodebootstraptoken.AllowAPIServerToAccessKubeletAPI(client); err != nil {
 		errs = append(errs, err)
 	}
 
-	// Create/update RBAC rules that makes the cluster-info ConfigMap reachable
+	// 创建或更新 RBAC 规则，使 cluster-info ConfigMap 可访问。
 	if err := clusterinfophase.CreateClusterInfoRBACRules(client); err != nil {
 		errs = append(errs, err)
 	}

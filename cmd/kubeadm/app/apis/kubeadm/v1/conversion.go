@@ -22,12 +22,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
-// Convert_kubeadm_InitConfiguration_To_v1_InitConfiguration is required because the ClusterConfiguration is embedded in the private InitConfiguration struct.
+// Convert_kubeadm_InitConfiguration_To_v1_InitConfiguration 是必需的，因为私有 InitConfiguration 结构体中嵌入了 ClusterConfiguration。
 func Convert_kubeadm_InitConfiguration_To_v1_InitConfiguration(in *kubeadm.InitConfiguration, out *InitConfiguration, s conversion.Scope) error {
 	return autoConvert_kubeadm_InitConfiguration_To_v1_InitConfiguration(in, out, s)
 }
 
-// Convert_v1_InitConfiguration_To_kubeadm_InitConfiguration is required because the ClusterConfiguration is embedded in the private InitConfiguration struct.
+// Convert_v1_InitConfiguration_To_kubeadm_InitConfiguration 是必需的，因为私有 InitConfiguration 结构体中嵌入了 ClusterConfiguration。
 func Convert_v1_InitConfiguration_To_kubeadm_InitConfiguration(in *InitConfiguration, out *kubeadm.InitConfiguration, s conversion.Scope) error {
 	err := autoConvert_v1_InitConfiguration_To_kubeadm_InitConfiguration(in, out, s)
 	if err != nil {

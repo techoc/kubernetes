@@ -24,30 +24,30 @@ import (
 	"testing"
 )
 
-// testCertPEM is a simple self-signed test certificate issued with the openssl CLI:
+// testCertPEM 是使用 openssl CLI 签发的简单自签名测试证书：
 // openssl req -new -newkey rsa:2048 -days 36500 -nodes -x509 -keyout /dev/null -out test.crt
 //
 //go:embed testdata/test-cert.pem
 var testCertPEM string
 
-// expectedHash can be verified using the openssl CLI.
+// expectedHash 可使用 openssl CLI 验证。
 const expectedHash = `sha256:345959acb2c3b2feb87d281961c893f62a314207ef02599f1cc4a5fb255480b3`
 
-// testCert2PEM is a second test cert generated the same way as testCertPEM
+// testCert2PEM 是按 testCertPEM 相同方式生成的第二个测试证书。
 //
 //go:embed testdata/test-cert2.pem
 var testCert2PEM string
 
-// testCert is a small helper to get a test x509.Certificate from the PEM constants
+// testCert 从 PEM 常量获取测试用 x509.Certificate。
 func testCert(t *testing.T, pemString string) *x509.Certificate {
-	// Decode the example certificate from a PEM file into a PEM block
+	// 将示例证书从 PEM 文件解码为 PEM 块。
 	pemBlock, _ := pem.Decode([]byte(pemString))
 	if pemBlock == nil {
 		t.Fatal("failed to parse test certificate PEM")
 		return nil
 	}
 
-	// Parse the PEM block into an x509.Certificate
+	// 将 PEM 块解析为 x509.Certificate。
 	result, err := x509.ParseCertificate(pemBlock.Bytes)
 	if err != nil {
 		t.Fatalf("failed to parse test certificate: %v", err)
@@ -104,7 +104,7 @@ func TestSet(t *testing.T) {
 		return
 	}
 
-	s = NewSet() // keep set empty
+	s = NewSet() // s = NewSet() // 保持集合为空
 	hashes := []string{
 		`sha256:0000000000000000000000000000000000000000000000000000000000000000`,
 		`sha256:0000000000000000000000000000000000000000000000000000000000000001`,

@@ -34,47 +34,45 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/image"
 )
 
-// VersionGetter defines an interface for fetching different versions.
-// Easy to implement a fake variant of this interface for unit testing
+// VersionGetter 定义获取各种版本的接口。
+// 便于为实现该接口的伪造版本提供单元测试。
 type VersionGetter interface {
-	// ClusterVersion should return the version of the cluster i.e. the API Server version
+	// ClusterVersion 应返回集群版本，即 API 服务器版本。
 	ClusterVersion() (string, *versionutil.Version, error)
-	// KubeadmVersion should return the version of the kubeadm CLI
+	// KubeadmVersion 应返回 kubeadm CLI 版本。
 	KubeadmVersion() (string, *versionutil.Version, error)
-	// VersionFromCILabel should resolve CI labels like `latest`, `stable`, `stable-1.8`, etc. to real versions
+	// VersionFromCILabel 应将 `latest`、`stable`、`stable-1.8` 等 CI 标签解析为实际版本。
 	VersionFromCILabel(string, string) (string, *versionutil.Version, error)
-	// KubeletVersions should return a map with a version and a list of node names that describes how many kubelets there are for that version
+	// KubeletVersions 应返回版本到节点名称列表的映射，以描述各版本的 kubelet 数量。
 	KubeletVersions() (map[string][]string, error)
-	// ComponentVersions should return a map with a version and a list of node names that describes how many a given control-plane components there are for that version
+	// ComponentVersions 应返回版本到节点名称列表的映射，以描述各版本的控制平面组件数量。
 	ComponentVersions(string) (map[string][]string, error)
-	// DNSAddonVersion returns, if deployed, the CoreDNS image tag
+	// DNSAddonVersion 返回已部署的 CoreDNS 镜像标签；若未部署则返回零值。
 	DNSAddonVersion() (string, error)
 }
 
-// KubeVersionGetter handles the version-fetching mechanism from external sources
+// KubeVersionGetter 负责从外部来源获取版本。
 type KubeVersionGetter struct {
 	client clientset.Interface
 }
 
-// NewKubeVersionGetter returns a new instance of KubeVersionGetter
+// NewKubeVersionGetter 创建 KubeVersionGetter 实例。
 func NewKubeVersionGetter(client clientset.Interface) VersionGetter {
 	return &KubeVersionGetter{
 		client: client,
 	}
 }
 
-// ClusterVersion gets API server version
+// ClusterVersion 获取 API 服务器版本。
 func (g *KubeVersionGetter) ClusterVersion() (string, *versionutil.Version, error) {
 	var (
 		clusterVersionInfo *pkgversion.Info
 		err                error
 	)
-	// If we are dry-running, do not attempt to fetch the /version resource and just return
-	// the stored FakeServerVersion, which is done when constructing the dry-run client in
-	// common.go#getClient()
-	// The problem here is that during upgrade dry-run client reactors are backed by a dynamic client
-	// via NewClientBackedDryRunGetterFromKubeconfig() and for GetActions there seems to be no analog to
-	// Discovery().ServerVersion() resource for a dynamic client(?).
+	// 试运行时不尝试获取 /version 资源，而是返回存储的 FakeServerVersion。
+	// 该值在 common.go#getClient() 中构造试运行客户端时设置。
+	// 问题在于升级试运行客户端反应器由动态客户端通过 NewClientBackedDryRunGetterFromKubeconfig() 支持，
+	// 而 GetActions 似乎没有与动态客户端的 Discovery().ServerVersion() 相对应的资源。
 	fakeclientDiscovery, ok := g.client.Discovery().(*fakediscovery.FakeDiscovery)
 	if ok {
 		clusterVersionInfo = fakeclientDiscovery.FakedServerVersion
@@ -92,7 +90,7 @@ func (g *KubeVersionGetter) ClusterVersion() (string, *versionutil.Version, erro
 	return clusterVersionInfo.String(), clusterVersion, nil
 }
 
-// KubeadmVersion gets kubeadm version
+// KubeadmVersion 获取 kubeadm 版本。
 func (g *KubeVersionGetter) KubeadmVersion() (string, *versionutil.Version, error) {
 	kubeadmVersionInfo := version.Get()
 
@@ -103,7 +101,7 @@ func (g *KubeVersionGetter) KubeadmVersion() (string, *versionutil.Version, erro
 	return kubeadmVersionInfo.String(), kubeadmVersion, nil
 }
 
-// VersionFromCILabel resolves a version label like "latest" or "stable" to an actual version using the public Kubernetes CI uploads
+// VersionFromCILabel 使用公开的 Kubernetes CI 上传信息，将 "latest" 或 "stable" 等版本标签解析为实际版本。
 func (g *KubeVersionGetter) VersionFromCILabel(ciVersionLabel, description string) (string, *versionutil.Version, error) {
 	versionStr, err := kubeadmutil.KubernetesReleaseVersion(ciVersionLabel)
 	if err != nil {
@@ -117,14 +115,14 @@ func (g *KubeVersionGetter) VersionFromCILabel(ciVersionLabel, description strin
 	return versionStr, ver, nil
 }
 
-// KubeletVersions gets the versions of the kubelets in the cluster.
+// KubeletVersions 获取集群中的 kubelet 版本。
 func (g *KubeVersionGetter) KubeletVersions() (map[string][]string, error) {
 	nodes, err := g.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, errors.New("couldn't list all nodes in cluster")
 	}
 
-	// map kubelet version to a list of node names
+	// 将 kubelet 版本映射到节点名称列表。
 	kubeletVersions := make(map[string][]string)
 	for _, node := range nodes.Items {
 		kver := node.Status.NodeInfo.KubeletVersion
@@ -133,14 +131,14 @@ func (g *KubeVersionGetter) KubeletVersions() (map[string][]string, error) {
 	return kubeletVersions, nil
 }
 
-// DNSAddonVersion returns the CoreDNS image deployed in the cluster, or an error in case of multiple instances.
+// DNSAddonVersion 返回集群中部署的 CoreDNS 镜像；若存在多个实例，则返回错误。
 func (g *KubeVersionGetter) DNSAddonVersion() (string, error) {
 	return dns.DeployedDNSAddon(g.client)
 }
 
-// ComponentVersions gets the versions of the control-plane components in the cluster.
-// The name parameter is the name of the component to get the versions for.
-// The function returns a map with the version as the key and a list of node names as the value.
+// ComponentVersions 获取集群中控制平面组件的版本。
+// name 参数是要获取版本的组件名称。
+// 函数返回以版本为键、节点名称列表为值的映射。
 func (g *KubeVersionGetter) ComponentVersions(name string) (map[string][]string, error) {
 	podList, err := g.client.CoreV1().Pods(metav1.NamespaceSystem).List(
 		context.TODO(),
@@ -160,14 +158,14 @@ func (g *KubeVersionGetter) ComponentVersions(name string) (map[string][]string,
 	return componentVersions, nil
 }
 
-// OfflineVersionGetter will use the version provided or
+// OfflineVersionGetter 使用提供的版本；未提供时委托给内嵌的 VersionGetter。
 type OfflineVersionGetter struct {
 	VersionGetter
 	version string
 }
 
-// NewOfflineVersionGetter wraps a VersionGetter and skips online communication if default information is supplied.
-// Version can be "" and the behavior will be identical to the versionGetter passed in.
+// NewOfflineVersionGetter 包装 VersionGetter；提供默认信息时跳过在线通信。
+// Version 可以为 ""，此时行为与传入的 versionGetter 相同。
 func NewOfflineVersionGetter(versionGetter VersionGetter, version string) VersionGetter {
 	return &OfflineVersionGetter{
 		VersionGetter: versionGetter,
@@ -175,7 +173,7 @@ func NewOfflineVersionGetter(versionGetter VersionGetter, version string) Versio
 	}
 }
 
-// VersionFromCILabel will return the version that was passed into the struct
+// VersionFromCILabel 返回传入结构体的版本；若未提供版本，则委托给内嵌的 VersionGetter。
 func (o *OfflineVersionGetter) VersionFromCILabel(ciVersionLabel, description string) (string, *versionutil.Version, error) {
 	if o.version == "" {
 		return o.VersionGetter.VersionFromCILabel(ciVersionLabel, description)

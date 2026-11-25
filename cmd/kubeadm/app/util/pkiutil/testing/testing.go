@@ -32,14 +32,13 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 )
 
-// RunWithPrivateKeyFixtureDirectory overrides NewPrivateKey to return private key fixtures
-// while executing tests in m.
+// RunWithPrivateKeyFixtureDirectory 在 m 执行测试期间覆盖 NewPrivateKey，返回私钥 fixture。
 func RunWithPrivateKeyFixtureDirectory(m *testing.M) {
 	defer install()()
 	os.Exit(m.Run())
 }
 
-// Reset indicates a new test is starting and previously returned private key fixtures may be reused.
+// Reset 表示新测试开始，之前返回的私钥 fixture 可被复用。
 func Reset() {
 	lock.Lock()
 	defer lock.Unlock()

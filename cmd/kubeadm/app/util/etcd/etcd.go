@@ -47,11 +47,10 @@ import (
 
 const etcdTimeout = 2 * time.Second
 
-// ErrNoMemberIDForPeerURL is returned when it is not possible to obtain a member ID
-// from a given peer URL
+// ErrNoMemberIDForPeerURL 表示无法从给定 peer URL 获取成员 ID。
 var ErrNoMemberIDForPeerURL = errors.New("no member id found for peer URL")
 
-// ClusterInterrogator is an interface to get etcd cluster related information
+// ClusterInterrogator 是获取 etcd 集群信息的接口。
 type ClusterInterrogator interface {
 	CheckClusterHealth() error
 	WaitForClusterAvailable(retries int, retryInterval time.Duration) (bool, error)
@@ -65,35 +64,35 @@ type ClusterInterrogator interface {
 }
 
 type etcdClient interface {
-	// Close shuts down the client's etcd connections.
+	// Close 关闭客户端的 etcd 连接。
 	Close() error
 
-	// Endpoints lists the registered endpoints for the client.
+	// Endpoints 列出客户端已注册的端点。
 	Endpoints() []string
 
-	// MemberList lists the current cluster membership.
+	// MemberList 列出当前集群成员。
 	MemberList(ctx context.Context, opts ...clientv3.OpOption) (*clientv3.MemberListResponse, error)
 
-	// MemberAdd adds a new member into the cluster.
+	// MemberAdd 向集群添加成员。
 	MemberAdd(ctx context.Context, peerAddrs []string) (*clientv3.MemberAddResponse, error)
 
-	// MemberAddAsLearner adds a new learner member into the cluster.
+	// MemberAddAsLearner 向集群添加 learner 成员。
 	MemberAddAsLearner(ctx context.Context, peerAddrs []string) (*clientv3.MemberAddResponse, error)
 
-	// MemberRemove removes an existing member from the cluster.
+	// MemberRemove 从集群移除已有成员。
 	MemberRemove(ctx context.Context, id uint64) (*clientv3.MemberRemoveResponse, error)
 
-	// MemberPromote promotes a member from raft learner (non-voting) to raft voting member.
+	// MemberPromote 将成员从 raft learner（无投票权）提升为有投票权成员。
 	MemberPromote(ctx context.Context, id uint64) (*clientv3.MemberPromoteResponse, error)
 
-	// Status gets the status of the endpoint.
+	// Status 获取端点状态。
 	Status(ctx context.Context, endpoint string) (*clientv3.StatusResponse, error)
 
-	// Sync synchronizes client's endpoints with the known endpoints from the etcd membership.
+	// Sync 根据 etcd 成员列表中的已知端点同步客户端端点。
 	Sync(ctx context.Context) error
 }
 
-// Client provides connection parameters for an etcd cluster
+// Client 保存 etcd 集群的连接参数。
 type Client struct {
 	Endpoints []string
 
@@ -105,11 +104,11 @@ type Client struct {
 type etcdMemberStatus struct {
 	ep     string
 	status *clientv3.StatusResponse
-	// err is any error encountered while communicating with the etcd server.
+	// err 保存与 etcd 服务器通信时遇到的任意错误。
 	err error
 }
 
-// New creates a new EtcdCluster client
+// New 创建新的 EtcdCluster 客户端。
 func New(endpoints []string, ca, cert, key string) (*Client, error) {
 	client := Client{Endpoints: endpoints}
 
@@ -140,20 +139,19 @@ func New(endpoints []string, ca, cert, key string) (*Client, error) {
 	return &client, nil
 }
 
-// NewFromCluster creates an etcd client for the etcd endpoints present in etcd member list. In order to compose this information,
-// it will first discover at least one etcd endpoint to connect to. Once created, the client synchronizes client's endpoints with
-// the known endpoints from the etcd membership API, since it is the authoritative source of truth for the list of available members.
+// NewFromCluster 根据 etcd 成员列表中的端点创建客户端。先检查现有 etcd Pod，发现至少一个
+// 可连接端点；创建后再通过成员列表 API 同步端点，因为该 API 是可用成员的权威来源。
 func NewFromCluster(client clientset.Interface, certificatesDir string) (*Client, error) {
-	// Discover at least one etcd endpoint to connect to by inspecting the existing etcd pods
+	// 检查现有 etcd Pod，发现至少一个可连接端点。
 
-	// Get the list of etcd endpoints
+	// 获取 etcd 端点列表。
 	endpoints, err := getEtcdEndpoints(client)
 	if err != nil {
 		return nil, err
 	}
 	klog.V(1).Infof("etcd endpoints read from pods: %s", strings.Join(endpoints, ","))
 
-	// Creates an etcd client
+	// 创建 etcd 客户端。
 	etcdClient, err := New(
 		endpoints,
 		filepath.Join(certificatesDir, constants.EtcdCACertName),
@@ -164,7 +162,7 @@ func NewFromCluster(client clientset.Interface, certificatesDir string) (*Client
 		return nil, errors.Wrapf(err, "error creating etcd client for %v endpoints", endpoints)
 	}
 
-	// synchronizes client's endpoints with the known endpoints from the etcd membership.
+	// 根据 etcd 成员列表同步客户端端点。
 	err = etcdClient.Sync()
 	if err != nil {
 		return nil, errors.Wrap(err, "error syncing endpoints with etcd")
@@ -174,7 +172,7 @@ func NewFromCluster(client clientset.Interface, certificatesDir string) (*Client
 	return etcdClient, nil
 }
 
-// getEtcdEndpoints returns the list of etcd endpoints.
+// getEtcdEndpoints 返回 etcd 端点列表。
 func getEtcdEndpoints(client clientset.Interface) ([]string, error) {
 	return getEtcdEndpointsWithRetry(client,
 		constants.KubernetesAPICallRetryInterval, kubeadmapi.GetActiveTimeouts().KubernetesAPICall.Duration)
@@ -184,12 +182,11 @@ func getEtcdEndpointsWithRetry(client clientset.Interface, interval, timeout tim
 	return getRawEtcdEndpointsFromPodAnnotation(client, interval, timeout)
 }
 
-// getRawEtcdEndpointsFromPodAnnotation returns the list of endpoints as reported on etcd's pod annotations using the given backoff
+// getRawEtcdEndpointsFromPodAnnotation 按给定退避策略，从 etcd Pod 注解获取端点列表。
 func getRawEtcdEndpointsFromPodAnnotation(client clientset.Interface, interval, timeout time.Duration) ([]string, error) {
 	etcdEndpoints := []string{}
 	var lastErr error
-	// Let's tolerate some unexpected transient failures from the API server or load balancers. Also, if
-	// static pods were not yet mirrored into the API server we want to wait for this propagation.
+	// 容忍 API 服务器或负载均衡器的短暂异常；静态 Pod 尚未镜像到 API 服务器时也等待其传播完成。
 	err := wait.PollUntilContextTimeout(context.Background(), interval, timeout, true,
 		func(_ context.Context) (bool, error) {
 			var overallEtcdPodCount int
@@ -213,9 +210,8 @@ func getRawEtcdEndpointsFromPodAnnotation(client clientset.Interface, interval, 
 	return etcdEndpoints, nil
 }
 
-// getRawEtcdEndpointsFromPodAnnotationWithoutRetry returns the list of etcd endpoints as reported by etcd Pod annotations,
-// along with the number of global etcd pods. This allows for callers to tell the difference between "no endpoints found",
-// and "no endpoints found and pods were listed", so they can skip retrying.
+// getRawEtcdEndpointsFromPodAnnotationWithoutRetry 从 etcd Pod 注解获取端点列表及全局 etcd Pod 数量。
+// 调用方可据此区分“未找到端点”和“列出 Pod 后仍未找到端点”，从而跳过重试。
 func getRawEtcdEndpointsFromPodAnnotationWithoutRetry(client clientset.Interface) ([]string, int, error) {
 	klog.V(3).Infof("retrieving etcd endpoints from %q annotation in etcd Pods", constants.EtcdAdvertiseClientUrlsAnnotationKey)
 	podList, err := client.CoreV1().Pods(metav1.NamespaceSystem).List(
@@ -249,9 +245,9 @@ func getRawEtcdEndpointsFromPodAnnotationWithoutRetry(client clientset.Interface
 	return etcdEndpoints, len(podList.Items), nil
 }
 
-// Sync synchronizes client's endpoints with the known endpoints from the etcd membership.
+// Sync 根据 etcd 成员列表中的已知端点同步客户端端点。
 func (c *Client) Sync() error {
-	// Syncs the list of endpoints
+	// 同步端点列表。
 	var cli etcdClient
 	var lastError error
 	err := wait.PollUntilContextTimeout(context.Background(), constants.EtcdAPICallRetryInterval, kubeadmapi.GetActiveTimeouts().EtcdAPICall.Duration,
@@ -282,8 +278,7 @@ func (c *Client) Sync() error {
 	return nil
 }
 
-// Member struct defines an etcd member; it is used for avoiding to spread github.com/coreos/etcd dependency
-// across kubeadm codebase
+// Member 定义 etcd 成员，避免将 github.com/coreos/etcd 依赖扩散到整个 kubeadm 代码库。
 type Member struct {
 	Name    string
 	PeerURL string
@@ -307,7 +302,7 @@ func (c *Client) listMembersOnce() (*clientv3.MemberListResponse, error) {
 }
 
 func (c *Client) listMembers(timeout time.Duration) (*clientv3.MemberListResponse, error) {
-	// Gets the member list
+	// 获取成员列表。
 	var (
 		err       error
 		lastError error
@@ -335,7 +330,7 @@ func (c *Client) listMembers(timeout time.Duration) (*clientv3.MemberListRespons
 	return resp, nil
 }
 
-// GetMemberID returns the member ID of the given peer URL
+// GetMemberID 返回给定 peer URL 的成员 ID。
 func (c *Client) GetMemberID(peerURL string) (uint64, error) {
 	resp, err := c.listMembersFunc(0)
 	if err != nil {
@@ -350,7 +345,7 @@ func (c *Client) GetMemberID(peerURL string) (uint64, error) {
 	return 0, ErrNoMemberIDForPeerURL
 }
 
-// ListMembers returns the member list.
+// ListMembers 返回成员列表。
 func (c *Client) ListMembers() ([]Member, error) {
 	resp, err := c.listMembersFunc(0)
 	if err != nil {
@@ -364,7 +359,7 @@ func (c *Client) ListMembers() ([]Member, error) {
 	return ret, nil
 }
 
-// RemoveMember notifies an etcd cluster to remove an existing member
+// RemoveMember 通知 etcd 集群移除已有成员。
 func (c *Client) RemoveMember(id uint64) ([]Member, error) {
 	cli, err := c.newEtcdClient(c.Endpoints)
 	if err != nil {
@@ -372,7 +367,7 @@ func (c *Client) RemoveMember(id uint64) ([]Member, error) {
 	}
 	defer func() { _ = cli.Close() }()
 
-	// Remove an existing member from the cluster
+	// 从集群移除已有成员。
 	var (
 		lastError   error
 		respMembers []*etcdserverpb.Member
@@ -382,7 +377,7 @@ func (c *Client) RemoveMember(id uint64) ([]Member, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
 			defer cancel()
 
-			// List members and quickly return if the member does not exist.
+			// 列出成员；成员不存在时立即返回。
 			listResp, err := cli.MemberList(ctx)
 			if err != nil {
 				klog.V(5).Infof("Failed to check whether the member %s exists: %v", strconv.FormatUint(id, 16), err)
@@ -423,7 +418,7 @@ func (c *Client) RemoveMember(id uint64) ([]Member, error) {
 		return nil, lastError
 	}
 
-	// Returns the updated list of etcd members
+	// 返回更新后的 etcd 成员列表。
 	ret := []Member{}
 	for _, m := range respMembers {
 		ret = append(ret, Member{Name: m.Name, PeerURL: m.PeerURLs[0]})
@@ -432,23 +427,21 @@ func (c *Client) RemoveMember(id uint64) ([]Member, error) {
 	return ret, nil
 }
 
-// AddMember adds a new member into the etcd cluster
+// AddMember 向 etcd 集群添加成员。
 func (c *Client) AddMember(name string, peerAddrs string) ([]Member, error) {
 	return c.addMember(name, peerAddrs, false)
 }
 
-// AddMemberAsLearner adds a new learner member into the etcd cluster.
+// AddMemberAsLearner 向 etcd 集群添加 learner 成员。
 func (c *Client) AddMemberAsLearner(name string, peerAddrs string) ([]Member, error) {
 	return c.addMember(name, peerAddrs, true)
 }
 
-// addMember notifies an existing etcd cluster that a new member is joining, and
-// return the updated list of members. If the member has already been added to the
-// cluster, this will return the existing list of etcd members.
+// addMember 通知现有 etcd 集群有新成员加入并返回更新后的成员列表。
+// 成员已存在时返回现有 etcd 成员列表。
 func (c *Client) addMember(name string, peerAddrs string, isLearner bool) ([]Member, error) {
-	// Parse the peer address, required to add the client URL later to the list
-	// of endpoints for this client. Parsing as a first operation to make sure that
-	// if this fails no member addition is performed on the etcd cluster.
+	// 先解析 peer 地址，以便稍后将客户端 URL 加入端点列表；
+	// 首先执行可确保解析失败时不会向 etcd 集群添加成员。
 	parsedPeerAddrs, err := url.Parse(peerAddrs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error parsing peer address %s", peerAddrs)
@@ -460,7 +453,7 @@ func (c *Client) addMember(name string, peerAddrs string, isLearner bool) ([]Mem
 	}
 	defer func() { _ = cli.Close() }()
 
-	// Adds a new member to the cluster
+	// 向集群添加成员。
 	var (
 		lastError   error
 		respMembers []*etcdserverpb.Member
@@ -471,7 +464,7 @@ func (c *Client) addMember(name string, peerAddrs string, isLearner bool) ([]Mem
 			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
 			defer cancel()
 
-			// List members and quickly return if the member already exists.
+			// 列出成员；成员已存在时立即返回。
 			listResp, err := cli.MemberList(ctx)
 			if err != nil {
 				klog.V(5).Infof("Failed to check whether the member %q exists: %v", peerAddrs, err)
@@ -503,8 +496,8 @@ func (c *Client) addMember(name string, peerAddrs string, isLearner bool) ([]Mem
 				return true, nil
 			}
 
-			// If the error indicates that the peer already exists, exit early. In this situation, resp is nil, so
-			// call out to MemberList to fetch all the members before returning.
+			// 错误表明 peer 已存在时提前退出。此时 resp 为 nil，
+			// 因此调用 MemberList 获取全部成员后再返回。
 			if errors.Is(err, rpctypes.ErrPeerURLExist) {
 				klog.V(5).Info("The peer URL for the added etcd member already exists. Fetching the existing etcd members")
 				listResp, err = cli.MemberList(ctx)
@@ -522,19 +515,17 @@ func (c *Client) addMember(name string, peerAddrs string, isLearner bool) ([]Mem
 		return nil, lastError
 	}
 
-	// Returns the updated list of etcd members
+	// 返回更新后的 etcd 成员列表。
 	ret := []Member{}
 	for _, m := range respMembers {
-		// If the peer address matches, this is the member we are adding.
-		// Use the name we passed to the function.
+		// peer 地址匹配时即为待添加成员，使用传入函数的名称。
 		if peerAddrs == m.PeerURLs[0] {
 			ret = append(ret, Member{Name: name, PeerURL: peerAddrs})
 			continue
 		}
-		// Otherwise, we are processing other existing etcd members returned by AddMembers.
+		// 否则处理 AddMembers 返回的其他已有 etcd 成员。
 		memberName := m.Name
-		// In some cases during concurrent join, some members can end up without a name.
-		// Use the member ID as name for those.
+		// 并发加入时某些成员可能没有名称，此时使用成员 ID 作为名称。
 		if len(memberName) == 0 {
 			memberName = strconv.FormatUint(m.ID, 16)
 		}
@@ -542,15 +533,14 @@ func (c *Client) addMember(name string, peerAddrs string, isLearner bool) ([]Mem
 	}
 
 	if !isLearner {
-		// Add the new member client address to the list of endpoints
+		// 将新成员的客户端地址加入端点列表。
 		c.addEndpoint(GetClientURLByIP(parsedPeerAddrs.Hostname()))
 	}
 
 	return ret, nil
 }
 
-// getMemberStatus returns the status of the given member ID.
-// It returns whether the member is a learner and whether it is started.
+// getMemberStatus 返回指定成员 ID 的状态，包括是否为 learner 以及是否已启动。
 func (c *Client) getMemberStatus(memberID uint64) (isLearner bool, started bool, err error) {
 	resp, err := c.listMembersOnce()
 	if err != nil {
@@ -569,8 +559,7 @@ func (c *Client) getMemberStatus(memberID uint64) (isLearner bool, started bool,
 	}
 
 	started = true
-	// There is no field for "started".
-	// If the member is not started, the Name and ClientURLs fields are set to their respective zero values.
+	// 没有表示“已启动”的字段；成员未启动时，Name 和 ClientURLs 为各自的零值。
 	if len(m.Name) == 0 {
 		started = false
 	}
@@ -578,8 +567,8 @@ func (c *Client) getMemberStatus(memberID uint64) (isLearner bool, started bool,
 	return m.IsLearner, started, nil
 }
 
-// MemberPromote promotes a member as a voting member. If the given member ID is already a voting member this method
-// will return early and do nothing. It waits for the member to be started before attempting to promote.
+// MemberPromote 将成员提升为投票成员。成员已有投票权时直接返回；
+// 提升前等待成员启动。
 func (c *Client) MemberPromote(learnerID uint64) error {
 	var (
 		lastError     error
@@ -626,19 +615,16 @@ func (c *Client) MemberPromote(learnerID uint64) error {
 
 	defer func() { _ = cli.Close() }()
 
-	// TODO: warning logs from etcd client should be removed.
-	// The warning logs are printed by etcd client code for several reasons, including
-	// 1. can not promote yet(no synced)
-	// 2. context deadline exceeded
-	// 3. peer URLs already exists
-	// Once the client provides a way to check if the etcd learner is ready to promote, the retry logic can be revisited.
+	// TODO: 应移除 etcd 客户端的警告日志。客户端因多种原因打印警告，包括：
+	// 1. 尚未同步，无法提升
+	// 2. context 超时
+	// 3. peer URL 已存在
+	// 客户端提供检查 etcd learner 是否可提升的方法后，可重新审视重试逻辑。
 	var memberList []*etcdserverpb.Member
 	err = wait.PollUntilContextTimeout(context.Background(), constants.EtcdAPICallRetryInterval, kubeadmapi.GetActiveTimeouts().EtcdAPICall.Duration,
 		true, func(_ context.Context) (bool, error) {
-			// MemberPromote can return a transient client-side error even if the
-			// promotion already succeeded on the etcd side. Check the current
-			// member state before attempting another promotion so that retries
-			// remain idempotent.
+			// 即使提升已在 etcd 端成功，MemberPromote 也可能返回短暂的客户端错误。
+			// 再次提升前检查成员状态，确保重试保持幂等。
 			resp, statusErr := c.listMembersOnce()
 			if statusErr != nil {
 				klog.V(5).Infof("[etcd] Failed to list members before promoting learner %s: %v", learnerIDUint, statusErr)
@@ -696,7 +682,7 @@ func (c *Client) addEndpoint(ep string) {
 	c.Endpoints = append(c.Endpoints, ep)
 }
 
-// CheckClusterHealth returns nil for status Up or error for status Down
+// CheckClusterHealth 在状态为 Up 时返回 nil，状态为 Down 时返回错误。
 func (c *Client) CheckClusterHealth() error {
 	_, ok, err := c.getClusterStatus()
 	if err != nil {
@@ -708,20 +694,14 @@ func (c *Client) CheckClusterHealth() error {
 	return err
 }
 
-// getClusterStatus checks the health of the cluster members and returns
-// their individual status map, whether cluster quorum is satisfied, and any
-// aggregated member errors.
-//
-// The boolean result is true when a majority of members are healthy
-// (healthyCount > totalCount/2).
-//
-// A member is considered unhealthy if its status request failed or if the
-// reported status contains health errors.
+// getClusterStatus 检查成员健康状态，返回各成员状态、集群仲裁是否满足以及聚合成员错误。
+// 布尔结果为真表示健康成员占多数（healthyCount > totalCount/2）。
+// 状态请求失败或返回的健康状态含错误时，视为不健康成员。
 func (c *Client) getClusterStatus() (map[string]*etcdMemberStatus, bool, error) {
-	// Step 1: get the cluster status first
+	// 第一步：先获取集群状态。
 	clusterStatus := make(map[string]*etcdMemberStatus)
 	for _, ep := range c.Endpoints {
-		// Gets the member status
+		// 获取成员状态。
 		var lastError error
 		var resp *clientv3.StatusResponse
 		err := wait.PollUntilContextTimeout(context.Background(), constants.EtcdAPICallRetryInterval, kubeadmapi.GetActiveTimeouts().EtcdAPICall.Duration,
@@ -751,7 +731,7 @@ func (c *Client) getClusterStatus() (map[string]*etcdMemberStatus, bool, error) 
 		}
 	}
 
-	// Step 2: evaluate the cluster status
+	// 第二步：评估集群状态。
 	totalCount, healthyCount := len(clusterStatus), 0
 	var memberErrs []error
 
@@ -771,7 +751,7 @@ func (c *Client) getClusterStatus() (map[string]*etcdMemberStatus, bool, error) 
 	return clusterStatus, healthyCount > totalCount/2, err
 }
 
-// WaitForClusterAvailable returns true if the etcd cluster is healthy after retry attempts, otherwise returns an error.
+// WaitForClusterAvailable 在重试后返回 etcd 集群是否健康；不健康时返回错误。
 func (c *Client) WaitForClusterAvailable(retries int, retryInterval time.Duration) (bool, error) {
 	for i := range retries {
 		if i > 0 {
@@ -790,20 +770,17 @@ func (c *Client) WaitForClusterAvailable(retries int, retryInterval time.Duratio
 	return false, errors.New("timeout waiting for etcd cluster to be available")
 }
 
-// GetClientURL creates an HTTPS URL that uses the configured advertise
-// address and client port for the API controller
+// GetClientURL 使用配置的公告地址和控制器客户端端口创建 HTTPS URL。
 func GetClientURL(localEndpoint *kubeadmapi.APIEndpoint) string {
 	return "https://" + net.JoinHostPort(localEndpoint.AdvertiseAddress, strconv.Itoa(constants.EtcdListenClientPort))
 }
 
-// GetPeerURL creates an HTTPS URL that uses the configured advertise
-// address and peer port for the API controller
+// GetPeerURL 使用配置的公告地址和控制器 peer 端口创建 HTTPS URL。
 func GetPeerURL(localEndpoint *kubeadmapi.APIEndpoint) string {
 	return "https://" + net.JoinHostPort(localEndpoint.AdvertiseAddress, strconv.Itoa(constants.EtcdListenPeerPort))
 }
 
-// GetClientURLByIP creates an HTTPS URL based on an IP address
-// and the client listening port.
+// GetClientURLByIP 根据 IP 地址和客户端监听端口创建 HTTPS URL。
 func GetClientURLByIP(ip string) string {
 	return "https://" + net.JoinHostPort(ip, strconv.Itoa(constants.EtcdListenClientPort))
 }

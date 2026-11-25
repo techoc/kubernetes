@@ -36,6 +36,7 @@ import (
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 )
 
+// KubeadmGroupName 是测试所用 kubeadm API 的组名。
 const KubeadmGroupName = "kubeadm.k8s.io"
 
 var formats = []struct {
@@ -228,11 +229,10 @@ func TestVerifyAPIServerBindAddress(t *testing.T) {
 	}
 }
 
-// NOTE: do not delete this test once an older API is removed and there is only one API left.
-// Update the inline "gv" and "gvNew" variables, to have the GroupVersion String of
-// the API to be tested. If there are no new APIs make "gvNew" point to the old API.
-// If an experimental API has to be tested, use the 'allowExperimental' option
-// and add negative and positive test cases for the experimental API.
+// 注意：即使旧 API 已移除且只剩一种 API，也不要删除此测试。
+// 更新内联变量 "gv" 和 "gvNew"，使其指向待测 API 的 GroupVersion 字符串。
+// 若没有新 API，让 "gvNew" 指向旧 API。测试实验性 API 时使用 'allowExperimental'，
+// 并同时添加通过和失败用例。
 func TestMigrateOldConfig(t *testing.T) {
 	var (
 		gv    = kubeadmapiv1.SchemeGroupVersion.String()
@@ -455,10 +455,9 @@ func TestMigrateOldConfig(t *testing.T) {
 	}
 }
 
-// NOTE: do not delete this test once an older API is removed and there is only one API left.
-// Update the inline "gv" and "gvNew" variables, to have the GroupVersion String of
-// the API to be tested. If there are no experimental APIs make "gvNew" point to
-// an non-experimental API.
+// 注意：即使旧 API 已移除且只剩一种 API，也不要删除此测试。
+// 更新内联变量 "gv" 和 "gvNew"，使其指向待测 API 的 GroupVersion 字符串。
+// 若没有实验性 API，让 "gvNew" 指向非实验性 API。
 func TestValidateConfig(t *testing.T) {
 	var (
 		gv    = kubeadmapiv1.SchemeGroupVersion.String()
@@ -764,7 +763,7 @@ func TestMigrateMutators(t *testing.T) {
 		},
 		{
 			name:          "expect an error for a missing mutator",
-			mutators:      migrateMutators{}, // empty list of mutators
+			mutators:      migrateMutators{}, // mutators:      migrateMutators{}, // 空 mutator 列表
 			input:         []any{&kubeadmapi.ResetConfiguration{}},
 			expectedError: true,
 		},

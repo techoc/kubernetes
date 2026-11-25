@@ -20,7 +20,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewCmdAlpha returns "kubeadm alpha" command.
+// NewCmdAlpha 返回 kubeadm alpha 命令。
 func NewCmdAlpha() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "alpha",

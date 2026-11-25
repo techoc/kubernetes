@@ -18,15 +18,9 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/kubernetes/cmd/kubeadm/app/apis/output
 
-// Package v1alpha3 defines the v1alpha3 version of the kubeadm data structures
-// related to structured output
-// The purpose of the kubeadm structured output is to have a well
-// defined versioned output format that other software that uses
-// kubeadm for cluster deployments can use and rely on.
+// Package v1alpha3 定义 kubeadm 结构化输出的 v1alpha3 版本数据结构。
 //
-// Changes since v1alpha2:
-//   - Added support for outputting certificate expiration information for "kubeadm certs check-expiration"
-//     with the CertificateExpirationInfo structure.
-//   - Introduce a (breaking) change to the UpgradePlan structure used by "kubeadm upgrade plan".
-//     UpgradePlan now contains a list of AvailableUpgrade structures.
+// 自 v1alpha2 以来的变更：
+//   - 支持通过 CertificateExpirationInfo 输出 "kubeadm certs check-expiration" 的证书到期信息。
+//   - "kubeadm upgrade plan" 使用的 UpgradePlan 结构发生不兼容变更：现包含 AvailableUpgrade 列表。
 package v1alpha3

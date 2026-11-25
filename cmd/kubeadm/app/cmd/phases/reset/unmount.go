@@ -22,7 +22,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// unmountKubeletDirectory is a NOOP on all but linux.
+// unmountKubeletDirectory 在非 Linux 平台上为 NOOP。
 func unmountKubeletDirectory(kubeletRunDirectory string, flags []string) error {
 	klog.Warning("Cannot unmount filesystems on current OS, all mounted file systems will need to be manually unmounted")
 	return nil

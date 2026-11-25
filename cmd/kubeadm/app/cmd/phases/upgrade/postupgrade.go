@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package upgrade holds the common phases for 'kubeadm upgrade'.
+// Package upgrade 包含 kubeadm upgrade 的公共阶段。
 package upgrade
 
 import (
@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewPostUpgradePhase returns a new post-upgrade phase.
+// NewPostUpgradePhase 返回新的 post-upgrade 阶段。
 func NewPostUpgradePhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "post-upgrade",
@@ -43,11 +43,10 @@ func runPostUpgrade(c workflow.RunData) error {
 	if !ok {
 		return errors.New("post-upgrade phase invoked with an invalid data struct")
 	}
-	// PLACEHOLDER: this phase should contain any release specific post-upgrade tasks.
+	// 占位：此阶段应包含各发布版本特有的升级后任务。
 
-	// Rewrite the kubelet env file without unwanted flags to disk and print the remaining flags instead of dry-running.
-	// If not dry-running, the kubelet env file will be backed up to the /etc/kubernetes/tmp/ dir, so that it could be
-	// recovered if anything goes wrong.
+	// 将不含多余参数的 kubelet 环境文件重写至磁盘；dry-run 时改为打印剩余参数。
+	// 非 dry-run 时，kubelet 环境文件会备份到 /etc/kubernetes/tmp/，以便出错后恢复。
 	unwantedFlags := []string{}
 	err := upgrade.RemoveKubeletArgsFromFile(data.KubeletDir(), data.KubeConfigDir(), unwantedFlags, data.DryRun(), data.OutputWriter())
 	if err != nil {

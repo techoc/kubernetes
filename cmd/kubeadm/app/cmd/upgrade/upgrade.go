@@ -27,7 +27,7 @@ import (
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
-// applyPlanFlags holds the values for the common flags in `kubeadm upgrade apply` and `kubeadm upgrade plan`
+// applyPlanFlags 保存 kubeadm upgrade apply 和 kubeadm upgrade plan 的公共参数值。
 type applyPlanFlags struct {
 	kubeConfigPath            string
 	cfgPath                   string
@@ -40,7 +40,7 @@ type applyPlanFlags struct {
 	out                       io.Writer
 }
 
-// NewCmdUpgrade returns the cobra command for `kubeadm upgrade`
+// NewCmdUpgrade 返回 kubeadm upgrade 的 cobra 命令。
 func NewCmdUpgrade(out io.Writer) *cobra.Command {
 	flags := &applyPlanFlags{
 		kubeConfigPath:            kubeadmconstants.GetAdminKubeConfigPath(),

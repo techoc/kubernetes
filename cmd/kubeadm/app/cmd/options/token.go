@@ -28,22 +28,22 @@ import (
 	kubeadmapiv1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta4"
 )
 
-// NewBootstrapTokenOptions creates a new BootstrapTokenOptions object with the default values
+// NewBootstrapTokenOptions 创建带默认值的 BootstrapTokenOptions 对象。
 func NewBootstrapTokenOptions() *BootstrapTokenOptions {
 	bto := &BootstrapTokenOptions{&bootstraptokenv1.BootstrapToken{}, ""}
 	bootstraptokenv1.SetDefaults_BootstrapToken(bto.BootstrapToken)
 	return bto
 }
 
-// BootstrapTokenOptions is a wrapper struct for adding bootstrap token-related flags to a FlagSet
-// and applying the parsed flags to a InitConfiguration object later at runtime
-// TODO: In the future, we might want to group the flags in a better way than adding them all individually like this
+// BootstrapTokenOptions 是包装结构体，用于向 FlagSet 添加引导令牌相关参数，
+// 并在运行时将解析后的参数应用到 InitConfiguration 对象。
+// TODO: 未来可能改用更好的方式组织参数，而不是像现在这样逐个添加。
 type BootstrapTokenOptions struct {
 	*bootstraptokenv1.BootstrapToken
 	TokenStr string `datapolicy:"token"`
 }
 
-// AddTokenFlag adds the --token flag to the given flagset
+// AddTokenFlag 将 --token 参数添加到指定参数集。
 func (bto *BootstrapTokenOptions) AddTokenFlag(fs *pflag.FlagSet) {
 	fs.StringVar(
 		&bto.TokenStr, TokenStr, "",
@@ -51,12 +51,12 @@ func (bto *BootstrapTokenOptions) AddTokenFlag(fs *pflag.FlagSet) {
 	)
 }
 
-// AddTTLFlag adds the --token-ttl flag to the given flagset
+// AddTTLFlag 将 --token-ttl 参数添加到指定参数集。
 func (bto *BootstrapTokenOptions) AddTTLFlag(fs *pflag.FlagSet) {
 	bto.AddTTLFlagWithName(fs, TokenTTL)
 }
 
-// AddTTLFlagWithName adds the --token-ttl flag with a custom flag name given flagset
+// AddTTLFlagWithName 将带自定义名称的 --token-ttl 参数添加到指定参数集。
 func (bto *BootstrapTokenOptions) AddTTLFlagWithName(fs *pflag.FlagSet, flagName string) {
 	fs.DurationVar(
 		&bto.TTL.Duration, flagName, bto.TTL.Duration,
@@ -64,7 +64,7 @@ func (bto *BootstrapTokenOptions) AddTTLFlagWithName(fs *pflag.FlagSet, flagName
 	)
 }
 
-// AddUsagesFlag adds the --usages flag to the given flagset
+// AddUsagesFlag 将 --usages 参数添加到指定参数集。
 func (bto *BootstrapTokenOptions) AddUsagesFlag(fs *pflag.FlagSet) {
 	fs.StringSliceVar(
 		&bto.Usages, TokenUsages, bto.Usages,
@@ -72,7 +72,7 @@ func (bto *BootstrapTokenOptions) AddUsagesFlag(fs *pflag.FlagSet) {
 	)
 }
 
-// AddGroupsFlag adds the --groups flag to the given flagset
+// AddGroupsFlag 将 --groups 参数添加到指定参数集。
 func (bto *BootstrapTokenOptions) AddGroupsFlag(fs *pflag.FlagSet) {
 	fs.StringSliceVar(
 		&bto.Groups, TokenGroups, bto.Groups,
@@ -80,7 +80,7 @@ func (bto *BootstrapTokenOptions) AddGroupsFlag(fs *pflag.FlagSet) {
 	)
 }
 
-// AddDescriptionFlag adds the --description flag to the given flagset
+// AddDescriptionFlag 将 --description 参数添加到指定参数集。
 func (bto *BootstrapTokenOptions) AddDescriptionFlag(fs *pflag.FlagSet) {
 	fs.StringVar(
 		&bto.Description, TokenDescription, bto.Description,
@@ -88,8 +88,8 @@ func (bto *BootstrapTokenOptions) AddDescriptionFlag(fs *pflag.FlagSet) {
 	)
 }
 
-// ApplyTo applies the values set internally in the BootstrapTokenOptions object to a InitConfiguration object at runtime
-// If --token was specified in the CLI (as a string), it's parsed and validated before it's added to the BootstrapToken object.
+// ApplyTo 在运行时将 BootstrapTokenOptions 内部设置的值应用到 InitConfiguration 对象。
+// 若命令行以字符串形式指定 --token，则在加入 BootstrapToken 对象前会先解析并校验。
 func (bto *BootstrapTokenOptions) ApplyTo(cfg *kubeadmapiv1.InitConfiguration) error {
 	if len(bto.TokenStr) > 0 {
 		var err error
@@ -99,7 +99,7 @@ func (bto *BootstrapTokenOptions) ApplyTo(cfg *kubeadmapiv1.InitConfiguration) e
 		}
 	}
 
-	// Set the token specified by the flags as the first and only token to create in case --config is not specified
+	// 未指定 --config 时，将参数指定的令牌设为要创建的第一个也是唯一一个令牌。
 	cfg.BootstrapTokens = []bootstraptokenv1.BootstrapToken{*bto.BootstrapToken}
 	return nil
 }

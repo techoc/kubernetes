@@ -31,8 +31,8 @@ func TestNewCmdCompletion(t *testing.T) {
 	if len(shells) == 0 {
 		t.Error(shellsError)
 	}
-	// test newCmdCompletion with a valid shell.
-	// use a dummy parent command as newCmdCompletion needs it.
+	// 测试 newCmdCompletion 与合法 shell 的组合。
+	// 使用伪父命令，因为 newCmdCompletion 需要父命令。
 	parentCmd := &cobra.Command{}
 	args := []string{"completion", shells[0]}
 	parentCmd.SetArgs(args)
@@ -69,7 +69,7 @@ func TestRunCompletion(t *testing.T) {
 		},
 	}
 
-	// test all supported shells
+	// 测试全部受支持的 shell。
 	shells := GetSupportedShells()
 	if len(shells) == 0 {
 		t.Error(shellsError)
@@ -82,7 +82,7 @@ func TestRunCompletion(t *testing.T) {
 		testCases = append(testCases, test)
 	}
 
-	// use dummy cobra commands
+	// 使用伪 cobra 命令。
 	parentCmd := &cobra.Command{}
 	cmd := &cobra.Command{}
 	parentCmd.AddCommand(cmd)

@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// Check validates if a user has elevated (administrator) privileges.
+// Check 校验用户是否具有提升后的（管理员）权限。
 func (ipuc IsPrivilegedUserCheck) Check() (warnings, errorList []error) {
 	hProcessToken := windows.GetCurrentProcessToken()
 	if hProcessToken.IsElevated() {
@@ -35,15 +35,15 @@ func (ipuc IsPrivilegedUserCheck) Check() (warnings, errorList []error) {
 	return nil, []error{errors.New("the kubeadm process must be run by a user with elevated privileges")}
 }
 
-// Check number of memory required by kubeadm
-// No-op for Windows.
+// Check 检查 kubeadm 所需的内存数量。
+// 在 Windows 上为空操作。
 func (mc MemCheck) Check() (warnings, errorList []error) {
 	return nil, nil
 }
 
-// addExecChecks adds checks that verify if certain binaries are in PATH.
+// addExecChecks 添加检查，验证某些二进制文件是否存在于 PATH 中。
 func addExecChecks(checks []Checker, execer utilsexec.Interface, _ string) []Checker {
-	// kubeadm requires xcopy to be present in PATH for copying etcd directories.
+	// kubeadm 要求 xcopy 存在于 PATH 中，以复制 etcd 目录。
 	checks = append(checks, InPathCheck{executable: "xcopy", mandatory: true, exec: execer})
 	return checks
 }

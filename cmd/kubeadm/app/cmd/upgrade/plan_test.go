@@ -70,7 +70,7 @@ func TestSortedSliceFromStringStringArrayMap(t *testing.T) {
 	}
 }
 
-// TODO Think about modifying this test to be less verbose checking b/c it can be brittle.
+// TODO: 考虑简化此测试中的检查，避免测试过于冗长和脆弱。
 func TestPrintUpgradePlan(t *testing.T) {
 	versionStates := []outputapiv1alpha3.ComponentConfigVersionState{
 		{

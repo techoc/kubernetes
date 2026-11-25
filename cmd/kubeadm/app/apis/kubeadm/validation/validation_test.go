@@ -64,9 +64,9 @@ func TestValidateValidateTokenUsages(t *testing.T) {
 		f        *field.Path
 		expected bool
 	}{
-		{[]string{}, nil, true},                            // supported (no usages)
-		{[]string{"signing", "authentication"}, nil, true}, // supported
-		{[]string{"something else"}, nil, false},           // usage not supported
+		{[]string{}, nil, true},                            // 支持（无用途）
+		{[]string{"signing", "authentication"}, nil, true}, // 支持
+		{[]string{"something else"}, nil, false},           // 不支持该用途
 	}
 	for _, rt := range tests {
 		actual := ValidateTokenUsages(rt.u, rt.f)
@@ -87,9 +87,9 @@ func TestValidateTokenGroups(t *testing.T) {
 		f        *field.Path
 		expected bool
 	}{
-		{[]string{"some usage"}, []string{"some group"}, nil, false},                       // groups doesn't makes sense if usage authentication
-		{[]string{"authentication"}, []string{"some group"}, nil, false},                   // group not supported
-		{[]string{"authentication"}, []string{"system:bootstrappers:anygroup"}, nil, true}, // supported
+		{[]string{"some usage"}, []string{"some group"}, nil, false},                       // 用途不包含身份验证时，设置组无意义
+		{[]string{"authentication"}, []string{"some group"}, nil, false},                   // 不支持该组
+		{[]string{"authentication"}, []string{"system:bootstrappers:anygroup"}, nil, true}, // 支持
 	}
 	for _, rt := range tests {
 		actual := ValidateTokenGroups(rt.u, rt.g, rt.f)
@@ -108,12 +108,12 @@ func TestValidateNodeRegistrationOptions(t *testing.T) {
 		nodeName       string
 		expectedErrors bool
 	}{
-		{"", true},                  // node name can't be empty
-		{"INVALID-NODENAME", true},  // Upper cases is invalid
-		{"invalid-nodename-", true}, // Can't have trailing dashes
-		{"invalid-node?name", true}, // Unsupported characters
-		{"valid-nodename", false},   // supported
-		// test cases for criSocket are covered in TestValidateSocketPath
+		{"", true},                  // 节点名不能为空
+		{"INVALID-NODENAME", true},  // 不允许大写字母
+		{"invalid-nodename-", true}, // 不能以连字符结尾
+		{"invalid-node?name", true}, // 包含不支持的字符
+		{"valid-nodename", false},   // 支持
+		// criSocket 的测试用例由 TestValidateSocketPath 覆盖。
 	}
 	criPath := fmt.Sprintf("%s:///some/path", kubeadmapiv1.DefaultContainerRuntimeURLScheme)
 	for _, rt := range tests {
@@ -136,18 +136,18 @@ func TestValidateCertSANs(t *testing.T) {
 		sans     []string
 		expected bool
 	}{
-		{[]string{}, true},                                                     // ok if not provided
-		{[]string{"1,2,,3"}, false},                                            // not a DNS label or IP
-		{[]string{"my-hostname", "???&?.garbage"}, false},                      // not valid
-		{[]string{"my-hostname", "my.subdomain", "1.2.3.4"}, true},             // supported
-		{[]string{"my-hostname2", "my.other.subdomain", "10.0.0.10"}, true},    // supported
-		{[]string{"my-hostname", "my.subdomain", "2001:db8::4"}, true},         // supported
-		{[]string{"my-hostname2", "my.other.subdomain", "2001:db8::10"}, true}, // supported
-		{[]string{"*.my-hostname2", "*.my.other.subdomain"}, true},             // supported Wildcard DNS label
-		{[]string{"**.my-hostname2", "my.other.subdomain"}, false},             // not a Wildcard DNS label
-		{[]string{"*.*.my-hostname2", "my.other.subdomain"}, false},            // not a Wildcard DNS label
-		{[]string{"a.*.my-hostname2", "my.other.subdomain"}, false},            // not a Wildcard DNS label
-		{[]string{"*", "my.other.subdomain", "2001:db8::10"}, false},           // not a Wildcard DNS label
+		{[]string{}, true},                                                     // 未提供时通过
+		{[]string{"1,2,,3"}, false},                                            // 不是 DNS 标签或 IP
+		{[]string{"my-hostname", "???&?.garbage"}, false},                      // 无效
+		{[]string{"my-hostname", "my.subdomain", "1.2.3.4"}, true},             // 支持
+		{[]string{"my-hostname2", "my.other.subdomain", "10.0.0.10"}, true},    // 支持
+		{[]string{"my-hostname", "my.subdomain", "2001:db8::4"}, true},         // 支持
+		{[]string{"my-hostname2", "my.other.subdomain", "2001:db8::10"}, true}, // 支持
+		{[]string{"*.my-hostname2", "*.my.other.subdomain"}, true},             // 支持通配符 DNS 标签
+		{[]string{"**.my-hostname2", "my.other.subdomain"}, false},             // 不是通配符 DNS 标签
+		{[]string{"*.*.my-hostname2", "my.other.subdomain"}, false},            // 不是通配符 DNS 标签
+		{[]string{"a.*.my-hostname2", "my.other.subdomain"}, false},            // 不是通配符 DNS 标签
+		{[]string{"*", "my.other.subdomain", "2001:db8::10"}, false},           // 不是通配符 DNS 标签
 	}
 	for _, rt := range tests {
 		actual := ValidateCertSANs(rt.sans, nil)
@@ -225,7 +225,7 @@ func TestValidateIPNetFromString(t *testing.T) {
 		minaddrs int64
 		expected bool
 	}{
-		// dual-stack:
+		// 双栈：
 		{"invalid missing CIDR", "", 0, false},
 		{"valid dual-stack enabled but only an IPv4 CIDR specified", "10.0.0.16/12", 10, true},
 		{"valid dual-stack enabled but only an IPv6 CIDR specified", "2001:db8::/98", 10, true},
@@ -261,7 +261,7 @@ func TestValidatePodSubnetNodeMask(t *testing.T) {
 		cmExtraArgs []kubeadmapi.Arg
 		expected    bool
 	}{
-		// dual-stack:
+		// 双栈：
 		{"dual IPv4 only, but mask too small. Default node-mask", "10.0.0.16/29", nil, false},
 		{"dual IPv4 only, but mask too small. Configured node-mask", "10.0.0.16/24", []kubeadmapi.Arg{{Name: "node-cidr-mask-size-ipv4", Value: "23"}}, false},
 		{"dual IPv6 only, but mask too small. Default node-mask", "2001:db8::1/112", nil, false},
@@ -308,7 +308,7 @@ func TestValidateServiceSubnetSize(t *testing.T) {
 		{"single IPv6, but mask too large.", "2001:db8::1/64", false},
 		{"single IPv4 CIDR", "10.0.0.16/12", true},
 		{"single IPv6 CIDR", "2001:db8::/112", true},
-		// dual-stack:
+		// 双栈：
 		{"dual, but IPv4 mask too large.", "2001:db8::1/112,10.0.0.16/6", false},
 		{"dual, but IPv6 mask too large.", "2001:db8::1/12,10.0.0.16/16", false},
 		{"dual IPv4 IPv6", "10.0.0.16/12,2001:db8::/112", true},
@@ -495,7 +495,7 @@ func TestValidateCertificateKey(t *testing.T) {
 	}
 }
 
-// TODO: Create a separated test for ValidateClusterConfiguration
+// TODO: 为 ValidateClusterConfiguration 单独添加测试。
 func TestValidateInitConfiguration(t *testing.T) {
 	nodename := "valid-nodename"
 	criPath := fmt.Sprintf("%s:///some/path", kubeadmapiv1.DefaultContainerRuntimeURLScheme)
@@ -670,7 +670,7 @@ func TestValidateJoinConfiguration(t *testing.T) {
 				},
 			},
 		}, false},
-		{&kubeadmapi.JoinConfiguration{ // Pass without JoinControlPlane
+		{&kubeadmapi.JoinConfiguration{ // 不设置 JoinControlPlane 时通过
 			CACertPath: "/some/cert.crt",
 			Discovery: kubeadmapi.Discovery{
 				BootstrapToken: &kubeadmapi.BootstrapTokenDiscovery{
@@ -685,7 +685,7 @@ func TestValidateJoinConfiguration(t *testing.T) {
 				CRISocket: criPath,
 			},
 		}, true},
-		{&kubeadmapi.JoinConfiguration{ // Pass with JoinControlPlane
+		{&kubeadmapi.JoinConfiguration{ // 设置 JoinControlPlane 时通过
 			CACertPath: "/some/cert.crt",
 			Discovery: kubeadmapi.Discovery{
 				BootstrapToken: &kubeadmapi.BootstrapTokenDiscovery{
@@ -706,7 +706,7 @@ func TestValidateJoinConfiguration(t *testing.T) {
 				},
 			},
 		}, true},
-		{&kubeadmapi.JoinConfiguration{ // Fail JoinControlPlane.AdvertiseAddress validation
+		{&kubeadmapi.JoinConfiguration{ // JoinControlPlane.AdvertiseAddress 校验失败
 			CACertPath: "/some/cert.crt",
 			Discovery: kubeadmapi.Discovery{
 				BootstrapToken: &kubeadmapi.BootstrapTokenDiscovery{
@@ -727,7 +727,7 @@ func TestValidateJoinConfiguration(t *testing.T) {
 				},
 			},
 		}, false},
-		{&kubeadmapi.JoinConfiguration{ // Fail JoinControlPlane.BindPort validation
+		{&kubeadmapi.JoinConfiguration{ // JoinControlPlane.BindPort 校验失败
 			CACertPath: "/some/cert.crt",
 			Discovery: kubeadmapi.Discovery{
 				BootstrapToken: &kubeadmapi.BootstrapTokenDiscovery{
@@ -766,20 +766,20 @@ func TestValidateMixedArguments(t *testing.T) {
 		args     []string
 		expected bool
 	}{
-		// Expected to succeed, --config is mixed with skip-* flags only or no other flags
+		// 预期通过：--config 仅与 skip-* 参数或其他允许的参数混用，或不设置其他参数。
 		{[]string{"--foo=bar"}, true},
 		{[]string{"--config=hello"}, true},
 		{[]string{"--config=hello", "--ignore-preflight-errors=all"}, true},
-		// Expected to succeed, --config is mixed with skip-* flags only or no other flags
+		// 预期通过：--config 与 skip-* 参数及其他允许的参数混用。
 		{[]string{"--config=hello", "--skip-token-print=true"}, true},
 		{[]string{"--config=hello", "--ignore-preflight-errors=baz", "--skip-token-print"}, true},
 		{[]string{"--config=hello", "--yes=true"}, true},
 		{[]string{"--config=hello", "--print-manifest"}, true},
-		// Expected to fail, --config is mixed with the --foo flag
+		// 预期失败：--config 与 --foo 参数混用。
 		{[]string{"--config=hello", "--ignore-preflight-errors=baz", "--foo=bar"}, false},
 		{[]string{"--config=hello", "--foo=bar"}, false},
 		{[]string{"--config=hello", "--yes=true", "--foo=bar"}, false},
-		// Expected to fail, --config is mixed with the upgrade related flag
+		// 预期失败：--config 与升级相关参数混用。
 		{[]string{"--config=hello", "--allow-experimental-upgrades"}, false},
 	}
 
@@ -842,73 +842,73 @@ func TestValidateIgnorePreflightErrors(t *testing.T) {
 		expectedSet                         sets.Set[string]
 		expectedError                       bool
 	}{
-		{ // empty lists in CLI and config file
+		{ // 命令行和配置文件中的列表均为空
 			[]string{},
 			[]string{},
 			sets.New[string](),
 			false,
 		},
-		{ // empty list in CLI only
+		{ // 仅命令行列表为空
 			[]string{},
 			[]string{"a"},
 			sets.New("a"),
 			false,
 		},
-		{ // empty list in config file only
+		{ // 仅配置文件列表为空
 			[]string{"a"},
 			[]string{},
 			sets.New("a"),
 			false,
 		},
-		{ // no duplicates, no overlap
+		{ // 无重复且无交集
 			[]string{"a", "b"},
 			[]string{"c", "d"},
 			sets.New("a", "b", "c", "d"),
 			false,
 		},
-		{ // some duplicates, with some overlapping duplicates
+		{ // 存在重复，且两处有交集
 			[]string{"a", "b", "a"},
 			[]string{"c", "b"},
 			sets.New("a", "b", "c"),
 			false,
 		},
-		{ // empty list in CLI, but 'all' present in config file
+		{ // 命令行列表为空，配置文件中包含 'all'
 			[]string{},
 			[]string{"all"},
 			sets.New("all"),
 			false,
 		},
-		{ // empty list in config file, but 'all' present in CLI
+		{ // 配置文件列表为空，命令行中包含 'all'
 			[]string{"all"},
 			[]string{},
 			sets.New("all"),
 			false,
 		},
-		{ // some duplicates, only 'all' present in CLI and config file
+		{ // 两处均有重复，但只包含 'all'
 			[]string{"all"},
 			[]string{"all"},
 			sets.New("all"),
 			false,
 		},
-		{ // non-duplicate, but 'all' present together with individual checks in CLI
+		{ // 无重复，但命令行将 'all' 与单项检查同时设置
 			[]string{"a", "b", "all"},
 			[]string{},
 			sets.New[string](),
 			true,
 		},
-		{ // non-duplicate, but 'all' present together with individual checks in config file
+		{ // 无重复，但配置文件将 'all' 与单项检查同时设置
 			[]string{},
 			[]string{"a", "b", "all"},
 			sets.New[string](),
 			true,
 		},
-		{ // non-duplicate, but 'all' present in config file, while values are in CLI, which is forbidden
+		{ // 无重复，但配置文件包含 'all'，命令行包含具体值，不允许此组合
 			[]string{"a", "b"},
 			[]string{"all"},
 			sets.New[string](),
 			true,
 		},
-		{ // non-duplicate, but 'all' present in CLI, while values are in config file, which is forbidden
+		{ // 无重复，但命令行包含 'all'，配置文件包含具体值，不允许此组合
 			[]string{"all"},
 			[]string{"a", "b"},
 			sets.New[string](),
@@ -1564,7 +1564,7 @@ func TestPullPolicy(t *testing.T) {
 		expectedErrors int
 	}{
 		{
-			name:           "empty policy causes no errors", // gets defaulted
+			name:           "empty policy causes no errors", // 随后应用默认值
 			policy:         "",
 			expectedErrors: 0,
 		},
@@ -1667,7 +1667,7 @@ func TestValidateResetConfiguration(t *testing.T) {
 			name: "expect 0 errors",
 			cfg: &kubeadmapi.ResetConfiguration{
 				CRISocket:       fmt.Sprintf("%s:///var/run/containerd/containerd.sock", kubeadmapiv1.DefaultContainerRuntimeURLScheme),
-				CertificatesDir: "/foo/bar", // this is work on Windows too because of the local isAbs()
+				CertificatesDir: "/foo/bar", // 由于使用本地 isAbs()，此路径在 Windows 上也有效
 				UnmountFlags:    []string{kubeadmapi.UnmountFlagMNTForce},
 			},
 			expectedErrors: 0,

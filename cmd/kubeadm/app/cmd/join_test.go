@@ -57,19 +57,19 @@ nodeRegistration:
 `, kubeadmapiv1.SchemeGroupVersion.String(), expectedCRISocket)
 
 func TestNewJoinData(t *testing.T) {
-	// create temp directory
+	// 创建临时目录。
 	tmpDir, err := os.MkdirTemp("", "kubeadm-join-test")
 	if err != nil {
 		t.Errorf("Unable to create temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// create kubeconfig
+	// 创建 kubeconfig。
 	kubeconfigFilePath := filepath.Join(tmpDir, "test-kubeconfig-file")
 	kubeconfig := kubeconfigutil.CreateBasic("", "", "", []byte{})
 	kubeconfigutil.WriteToDisk(kubeconfigFilePath, kubeconfig)
 
-	// create config file
+	// 创建配置文件。
 	configFilePath := filepath.Join(tmpDir, "test-config-file")
 	cfgFile, err := os.Create(configFilePath)
 	if err != nil {
@@ -88,7 +88,7 @@ func TestNewJoinData(t *testing.T) {
 		expectError bool
 		expectWarn  bool
 	}{
-		// Join data passed using flags
+		// 通过参数传入 join 数据。
 		{
 			name:        "fails if no discovery method set",
 			expectError: true,
@@ -109,7 +109,7 @@ func TestNewJoinData(t *testing.T) {
 				options.FileDiscovery: "https://foo",
 			},
 			validate: func(t *testing.T, data *joinData) {
-				// validate that file discovery settings are set into join data
+				// 校验文件发现设置已写入 join 数据。
 				if data.cfg.Discovery.File == nil || data.cfg.Discovery.File.KubeConfigPath != "https://foo" {
 					t.Error("Invalid data.cfg.Discovery.File")
 				}
@@ -123,9 +123,9 @@ func TestNewJoinData(t *testing.T) {
 				options.TokenDiscoverySkipCAHash: "true",
 			},
 			validate: func(t *testing.T, data *joinData) {
-				// validate that bootstrap discovery settings are set into join data
+				// 校验引导令牌发现设置已写入 join 数据。
 				if data.cfg.Discovery.BootstrapToken == nil ||
-					data.cfg.Discovery.BootstrapToken.APIServerEndpoint != "1.2.3.4:6443" || //only first arg should be kept as APIServerEndpoint
+					data.cfg.Discovery.BootstrapToken.APIServerEndpoint != "1.2.3.4:6443" || // 仅保留第一个参数作为 APIServerEndpoint。
 					data.cfg.Discovery.BootstrapToken.Token != "abcdef.0123456789abcdef" ||
 					data.cfg.Discovery.BootstrapToken.UnsafeSkipCAVerification != true {
 					t.Error("Invalid data.cfg.Discovery.BootstrapToken")
@@ -140,7 +140,7 @@ func TestNewJoinData(t *testing.T) {
 				options.TokenDiscoverySkipCAHash: "true",
 			},
 			validate: func(t *testing.T, data *joinData) {
-				// validate that token sets both TLSBootstrapToken and BootstrapToken.Token into join data
+				// 校验令牌同时写入 TLSBootstrapToken 和 BootstrapToken.Token。
 				if data.cfg.Discovery.TLSBootstrapToken != "abcdef.0123456789abcdef" ||
 					data.cfg.Discovery.BootstrapToken == nil ||
 					data.cfg.Discovery.BootstrapToken.Token != "abcdef.0123456789abcdef" {
@@ -158,7 +158,7 @@ func TestNewJoinData(t *testing.T) {
 				options.TokenDiscoverySkipCAHash: "true",
 			},
 			validate: func(t *testing.T, data *joinData) {
-				// validate that TLSBootstrapToken and BootstrapToken.Token values are preserved into join data
+				// 校验 TLSBootstrapToken 和 BootstrapToken.Token 的值保持不变。
 				if data.cfg.Discovery.TLSBootstrapToken != "abcdef.0123456789abcdef" ||
 					data.cfg.Discovery.BootstrapToken == nil ||
 					data.cfg.Discovery.BootstrapToken.Token != "defghi.0123456789defghi" {
@@ -172,10 +172,10 @@ func TestNewJoinData(t *testing.T) {
 				options.ControlPlane:              "true",
 				options.APIServerAdvertiseAddress: "1.2.3.4",
 				options.APIServerBindPort:         "1234",
-				options.FileDiscovery:             "https://foo", //required only to pass discovery validation
+				options.FileDiscovery:             "https://foo", // 仅用于通过发现校验。
 			},
 			validate: func(t *testing.T, data *joinData) {
-				// validate that control plane attributes are set in join data
+				// 校验控制平面属性已写入 join 数据。
 				if data.cfg.ControlPlane == nil ||
 					data.cfg.ControlPlane.LocalAPIEndpoint.AdvertiseAddress != "1.2.3.4" ||
 					data.cfg.ControlPlane.LocalAPIEndpoint.BindPort != 1234 {
@@ -189,10 +189,10 @@ func TestNewJoinData(t *testing.T) {
 				options.ControlPlane:              "false",
 				options.APIServerAdvertiseAddress: "1.2.3.4",
 				options.APIServerBindPort:         "1.2.3.4",
-				options.FileDiscovery:             "https://foo", //required only to pass discovery validation
+				options.FileDiscovery:             "https://foo", // 仅用于通过发现校验。
 			},
 			validate: func(t *testing.T, data *joinData) {
-				// validate that control plane attributes are unset in join data
+				// 校验控制平面属性未写入 join 数据。
 				if data.cfg.ControlPlane != nil {
 					t.Error("Invalid ControlPlane")
 				}
@@ -207,7 +207,7 @@ func TestNewJoinData(t *testing.T) {
 			expectError: true,
 		},
 
-		// Join data passed using config file
+		// 通过配置文件传入 join 数据。
 		{
 			name: "Pass with config from file",
 			flags: map[string]string{
@@ -252,7 +252,7 @@ func TestNewJoinData(t *testing.T) {
 				options.NodeName: "anotherName",
 			},
 			validate: func(t *testing.T, data *joinData) {
-				// validate that node-name is overwritten
+				// 校验 node-name 已被覆盖。
 				if data.cfg.NodeRegistration.Name != "anotherName" {
 					t.Error("Invalid NodeRegistration.Name")
 				}
@@ -267,12 +267,12 @@ func TestNewJoinData(t *testing.T) {
 			expectError: true,
 		},
 
-		// Pre-flight errors:
+		// 预检错误：
 		{
 			name: "pre-flights errors from CLI args only",
 			flags: map[string]string{
 				options.IgnorePreflightErrors: "a,b",
-				options.FileDiscovery:         "https://foo", //required only to pass discovery validation
+				options.FileDiscovery:         "https://foo", // 仅用于通过发现校验。
 			},
 			validate: expectedJoinIgnorePreflightErrors(sets.New("a", "b")),
 		},
@@ -295,7 +295,7 @@ func TestNewJoinData(t *testing.T) {
 			name: "warn if --control-plane flag is not set",
 			flags: map[string]string{
 				options.APIServerBindPort: "8888",
-				options.FileDiscovery:     "https://foo", //required only to pass discovery validation
+				options.FileDiscovery:     "https://foo", // 仅用于通过发现校验。
 			},
 			expectWarn: true,
 		},
@@ -303,30 +303,30 @@ func TestNewJoinData(t *testing.T) {
 			name: "no warn if --control-plane flag is set",
 			flags: map[string]string{
 				options.APIServerBindPort: "8888",
-				options.FileDiscovery:     "https://bar", //required only to pass discovery validation
+				options.FileDiscovery:     "https://bar", // 仅用于通过发现校验。
 				options.ControlPlane:      "true",
 			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// initialize an external join option and inject it to the join cmd
+			// 初始化外部 join 选项并注入 join 命令。
 			joinOptions := newJoinOptions()
-			joinOptions.skipCRIDetect = true // avoid CRI detection in unit tests
+			joinOptions.skipCRIDetect = true // 单元测试中避免 CRI 检测。
 			cmd := newCmdJoin(nil, joinOptions)
 
-			// set klog output destination to bytes.Buffer so that log could be fetched and verified later.
+			// 将 klog 输出目的地设为 bytes.Buffer，以便后续获取并校验日志。
 			var buffer bytes.Buffer
 			klog.SetOutput(&buffer)
 			klog.LogToStderr(false)
 			defer klog.LogToStderr(true)
 
-			// sets cmd flags (that will be reflected on the join options)
+			// 设置命令参数（将反映到 join 选项中）。
 			for f, v := range tc.flags {
 				cmd.Flags().Set(f, v)
 			}
 
-			// test newJoinData method
+			// 测试 newJoinData 方法。
 			data, err := newJoinData(cmd, tc.args, joinOptions, nil, kubeconfigFilePath)
 			klog.Flush()
 			msg := "WARNING: --control-plane is also required when passing control-plane"
@@ -346,7 +346,7 @@ func TestNewJoinData(t *testing.T) {
 				t.Fatal("newJoinData didn't return error when expected")
 			}
 
-			// exec additional validation on the returned value
+			// 对返回值执行额外校验。
 			if tc.validate != nil {
 				tc.validate(t, data)
 			}

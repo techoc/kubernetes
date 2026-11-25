@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewUploadCertsPhase returns the uploadCerts phase
+// NewUploadCertsPhase 返回 upload-certs 阶段。
 func NewUploadCertsPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "upload-certs",

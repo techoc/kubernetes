@@ -16,6 +16,5 @@ limitations under the License.
 
 // +groupName=bootstraptoken.kubeadm.k8s.io
 
-// Package bootstraptoken contains an API and utilities wrapping the
-// "bootstrap.kubernetes.io/token" Secret type to ease its usage in kubeadm.
+// Package bootstraptoken 提供封装 "bootstrap.kubernetes.io/token" 类型 Secret 的 API 和工具，便于 kubeadm 使用。
 package bootstraptoken

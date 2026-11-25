@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package runtime provides the kubeadm container runtime implementation.
+// Package runtime 提供 kubeadm 容器运行时实现。
 package runtime
 
 import (
@@ -35,14 +35,14 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// defaultKnownCRISockets holds the set of known CRI endpoints
+// defaultKnownCRISockets 保存已知 CRI 端点集合。
 var defaultKnownCRISockets = []string{
 	constants.CRISocketContainerd,
 	constants.CRISocketCRIO,
 	constants.CRISocketDocker,
 }
 
-// ContainerRuntime is an interface for working with container runtimes
+// ContainerRuntime 是操作容器运行时的接口。
 type ContainerRuntime interface {
 	Connect() error
 	Close(ctx context.Context)
@@ -57,7 +57,7 @@ type ContainerRuntime interface {
 	IsRuntimeConfigImplemented() (bool, error)
 }
 
-// CRIRuntime is a struct that interfaces with the CRI
+// CRIRuntime 是与 CRI 交互的结构。
 type CRIRuntime struct {
 	impl           Impl
 	criSocket      string
@@ -65,10 +65,10 @@ type CRIRuntime struct {
 	imageService   criapi.ImageManagerService
 }
 
-// defaultTimeout is the default timeout inherited by crictl
+// defaultTimeout 是 crictl 继承的默认超时。
 const defaultTimeout = 2 * time.Second
 
-// NewContainerRuntime sets up and returns a ContainerRuntime struct
+// NewContainerRuntime 创建并返回 ContainerRuntime。
 func NewContainerRuntime(criSocket string) ContainerRuntime {
 	return &CRIRuntime{
 		impl:      &defaultImpl{},
@@ -76,12 +76,12 @@ func NewContainerRuntime(criSocket string) ContainerRuntime {
 	}
 }
 
-// SetImpl can be used to set the internal implementation for testing purposes.
+// SetImpl 可设置内部实现，供测试使用。
 func (runtime *CRIRuntime) SetImpl(impl Impl) {
 	runtime.impl = impl
 }
 
-// Connect establishes a connection with the CRI runtime.
+// Connect 建立与 CRI 运行时的连接。
 func (runtime *CRIRuntime) Connect() error {
 	runtimeService, err := runtime.impl.NewRemoteRuntimeService(context.Background(), runtime.criSocket, defaultTimeout)
 	if err != nil {
@@ -98,7 +98,7 @@ func (runtime *CRIRuntime) Connect() error {
 	return nil
 }
 
-// Close closes the connections to the runtime and image services.
+// Close 关闭运行时和镜像服务的连接。
 func (runtime *CRIRuntime) Close(ctx context.Context) {
 	if runtime.runtimeService != nil {
 		if err := runtime.runtimeService.Close(ctx); err != nil {
@@ -112,7 +112,7 @@ func (runtime *CRIRuntime) Close(ctx context.Context) {
 	}
 }
 
-// IsRunning checks if runtime is running.
+// IsRunning 检查运行时是否正在运行。
 func (runtime *CRIRuntime) IsRunning() error {
 	ctx, cancel := defaultContext()
 	defer cancel()
@@ -123,7 +123,7 @@ func (runtime *CRIRuntime) IsRunning() error {
 	}
 
 	for _, condition := range res.GetStatus().GetConditions() {
-		if condition.GetType() == runtimeapi.RuntimeReady && // NetworkReady will not be tested on purpose
+		if condition.GetType() == runtimeapi.RuntimeReady && // 有意不检查 NetworkReady
 			!condition.GetStatus() {
 			return errors.Errorf(
 				"container runtime condition %q is not true. reason: %s, message: %s",
@@ -135,7 +135,7 @@ func (runtime *CRIRuntime) IsRunning() error {
 	return nil
 }
 
-// ListKubeContainers lists running k8s CRI pods
+// ListKubeContainers 列出运行中的 Kubernetes CRI Pod。
 func (runtime *CRIRuntime) ListKubeContainers() ([]string, error) {
 	ctx, cancel := defaultContext()
 	defer cancel()
@@ -152,7 +152,7 @@ func (runtime *CRIRuntime) ListKubeContainers() ([]string, error) {
 	return pods, nil
 }
 
-// RemoveContainers removes running k8s pods
+// RemoveContainers 移除运行中的 Kubernetes Pod。
 func (runtime *CRIRuntime) RemoveContainers(containers []string) error {
 	errs := []error{}
 	for _, container := range containers {
@@ -187,7 +187,7 @@ func (runtime *CRIRuntime) RemoveContainers(containers []string) error {
 	return errorsutil.NewAggregate(errs)
 }
 
-// PullImage pulls the image
+// PullImage 拉取镜像。
 func (runtime *CRIRuntime) PullImage(image string) (err error) {
 	for range constants.PullImageRetry {
 		if _, err = runtime.impl.PullImage(context.Background(), runtime.imageService, &runtimeapi.ImageSpec{Image: image}, nil, nil); err == nil {
@@ -197,7 +197,7 @@ func (runtime *CRIRuntime) PullImage(image string) (err error) {
 	return errors.Wrapf(err, "failed to pull image %s", image)
 }
 
-// PullImagesInParallel pulls a list of images in parallel
+// PullImagesInParallel 并行拉取镜像列表。
 func (runtime *CRIRuntime) PullImagesInParallel(images []string, ifNotPresent bool) error {
 	errs := pullImagesInParallelImpl(images, ifNotPresent, runtime.ImageExists, runtime.PullImage)
 	return errorsutil.NewAggregate(errs)
@@ -243,7 +243,7 @@ func pullImagesInParallelImpl(images []string, ifNotPresent bool,
 	return errs
 }
 
-// ImageExists checks to see if the image exists on the system
+// ImageExists 检查系统中是否已存在镜像。
 func (runtime *CRIRuntime) ImageExists(image string) bool {
 	ctx, cancel := defaultContext()
 	defer cancel()
@@ -258,7 +258,7 @@ func (runtime *CRIRuntime) ImageExists(image string) bool {
 	return true
 }
 
-// detectCRISocketImpl is separated out only for test purposes, DON'T call it directly, use DetectCRISocket instead
+// detectCRISocketImpl 仅为测试拆分，请勿直接调用，应使用 DetectCRISocket。
 func detectCRISocketImpl(isSocket func(string) bool, knownCRISockets []string) (string, error) {
 	foundCRISockets := []string{}
 
@@ -270,25 +270,25 @@ func detectCRISocketImpl(isSocket func(string) bool, knownCRISockets []string) (
 
 	switch len(foundCRISockets) {
 	case 0:
-		// Fall back to the default socket if no CRI is detected, we can error out later on if we need it
+		// 未检测到 CRI 时回退到默认 socket；真正需要时可后续报错。
 		return constants.DefaultCRISocket, nil
 	case 1:
-		// Precisely one CRI found, use that
+		// 恰好找到一个 CRI，使用它。
 		return foundCRISockets[0], nil
 	default:
-		// Multiple CRIs installed?
+		// 安装了多个 CRI？
 		return "", errors.Errorf("found multiple CRI endpoints on the host. Please define which one do you wish "+
 			"to use by setting the 'criSocket' field in the kubeadm configuration file: %s",
 			strings.Join(foundCRISockets, ", "))
 	}
 }
 
-// DetectCRISocket uses a list of known CRI sockets to detect one. If more than one or none is discovered, an error is returned.
+// DetectCRISocket 从已知 CRI socket 中检测一个；发现多个或未发现时返回错误。
 func DetectCRISocket() (string, error) {
 	return detectCRISocketImpl(isExistingSocket, defaultKnownCRISockets)
 }
 
-// SandboxImage returns the sandbox image used by the container runtime
+// SandboxImage 返回容器运行时使用的 sandbox 镜像。
 func (runtime *CRIRuntime) SandboxImage() (string, error) {
 	ctx, cancel := defaultContext()
 	defer cancel()
@@ -318,7 +318,7 @@ func (runtime *CRIRuntime) SandboxImage() (string, error) {
 	return c.SandboxImage, nil
 }
 
-// IsRuntimeConfigImplemented checks if the container runtime supports the RuntimeConfig gRPC method
+// IsRuntimeConfigImplemented 检查容器运行时是否支持 RuntimeConfig gRPC 方法。
 func (runtime *CRIRuntime) IsRuntimeConfigImplemented() (bool, error) {
 	ctx, cancel := defaultContext()
 	defer cancel()

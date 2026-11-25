@@ -46,12 +46,12 @@ type fakeVersionGetter struct {
 
 var _ VersionGetter = &fakeVersionGetter{}
 
-// ClusterVersion gets a fake API server version
+// ClusterVersion 返回伪造的 API 服务器版本。
 func (f *fakeVersionGetter) ClusterVersion() (string, *versionutil.Version, error) {
 	return f.clusterVersion, versionutil.MustParseSemantic(f.clusterVersion), nil
 }
 
-// KubeadmVersion gets a fake kubeadm version
+// KubeadmVersion 返回伪造的 kubeadm 版本。
 func (f *fakeVersionGetter) KubeadmVersion() (string, *versionutil.Version, error) {
 	if f.kubeadmVersion == "" {
 		return "", nil, errors.New("get kubeadm version error")
@@ -59,7 +59,7 @@ func (f *fakeVersionGetter) KubeadmVersion() (string, *versionutil.Version, erro
 	return f.kubeadmVersion, versionutil.MustParseSemantic(f.kubeadmVersion), nil
 }
 
-// VersionFromCILabel gets fake latest versions from CI
+// VersionFromCILabel 从 CI 获取伪造的最新版本。
 func (f *fakeVersionGetter) VersionFromCILabel(ciVersionLabel, _ string) (string, *versionutil.Version, error) {
 	if f.stableVersion == "" {
 		return "", nil, errors.New("fake error")
@@ -76,7 +76,7 @@ func (f *fakeVersionGetter) VersionFromCILabel(ciVersionLabel, _ string) (string
 	return f.stablePatchVersion, versionutil.MustParseSemantic(f.stablePatchVersion), nil
 }
 
-// KubeletVersions should return a map with a version and a list of node names that describes how many kubelets there are for that version
+// KubeletVersions 应返回版本到节点名称列表的映射，以描述各版本的 kubelet 数量。
 func (f *fakeVersionGetter) KubeletVersions() (map[string][]string, error) {
 	if f.kubeletVersion == "" {
 		return nil, errors.New("get kubelet version failed")
@@ -86,7 +86,7 @@ func (f *fakeVersionGetter) KubeletVersions() (map[string][]string, error) {
 	}, nil
 }
 
-// ComponentVersions should return a map with a version and a list of node names that describes how many a given control-plane components there are for that version
+// ComponentVersions 应返回版本到节点名称列表的映射，以描述各版本的控制平面组件数量。
 func (f *fakeVersionGetter) ComponentVersions(name string) (map[string][]string, error) {
 	if name == constants.Etcd {
 		if f.isExternalEtcd {
@@ -128,14 +128,14 @@ const fakeCurrentCoreDNSVersion = "1.0.6"
 
 func TestGetAvailableUpgrades(t *testing.T) {
 
-	// constants for test cases
-	// variables are in the form v{MAJOR}{MINOR}{PATCH}, where MINOR is a variable so test are automatically uptodate to the latest MinimumControlPlaneVersion/
+	// 测试用例常量的变量形式为 v{MAJOR}{MINOR}{PATCH}，其中 MINOR 为变量，
+	// 使测试自动跟随最新的 MinimumControlPlaneVersion。
 
-	// v1.X series, e.g. v1.14
+	// v1.X 系列，例如 v1.14。
 	v1X0 := versionutil.MustParseSemantic("v1.14.0")
 	v1X5 := v1X0.WithPatch(5)
 
-	// v1.Y series, where Y = X+1, e.g. v1.15
+	// v1.Y 系列，其中 Y = X+1，例如 v1.15。
 	v1Y0 := versionutil.MustParseSemantic("v1.15.0")
 	v1Y0alpha0 := v1Y0.WithPreRelease("alpha.0")
 	v1Y0alpha1 := v1Y0.WithPreRelease("alpha.1")
@@ -144,7 +144,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 	v1Y3 := v1Y0.WithPatch(3)
 	v1Y5 := v1Y0.WithPatch(5)
 
-	// v1.Z series, where Z = Y+1, e.g. v1.16
+	// v1.Z 系列，其中 Z = Y+1，例如 v1.16。
 	v1Z0 := versionutil.MustParseSemantic("v1.16.0")
 	v1Z0alpha1 := v1Z0.WithPreRelease("alpha.1")
 	v1Z0alpha2 := v1Z0.WithPreRelease("alpha.2")
@@ -284,7 +284,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 			vg: &fakeVersionGetter{
 				clusterVersion:     v1Y1.String(),
 				componentVersion:   v1Y1.String(),
-				kubeletVersion:     v1Y1.String(), // the kubelet are on the same version as the control plane
+				kubeletVersion:     v1Y1.String(), // kubelet 与控制平面版本相同。
 				kubeadmVersion:     v1Y2.String(),
 				etcdVersion:        fakeCurrentEtcdVersion,
 				stablePatchVersion: v1Y3.String(),
@@ -329,7 +329,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 			vg: &fakeVersionGetter{
 				clusterVersion:     v1Y1.String(),
 				componentVersion:   v1Y1.String(),
-				kubeletVersion:     v1Y1.String(), // the kubelet are on the same version as the control plane
+				kubeletVersion:     v1Y1.String(), // kubelet 与控制平面版本相同。
 				kubeadmVersion:     v1Y2.String(),
 				isExternalEtcd:     true,
 				stablePatchVersion: v1Y3.String(),
@@ -374,7 +374,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 			vg: NewOfflineVersionGetter(&fakeVersionGetter{
 				clusterVersion:     v1Y1.String(),
 				componentVersion:   v1Y1.String(),
-				kubeletVersion:     v1Y1.String(), // the kubelet are on the same version as the control plane
+				kubeletVersion:     v1Y1.String(), // kubelet 与控制平面版本相同。
 				kubeadmVersion:     v1Y2.String(),
 				etcdVersion:        fakeCurrentEtcdVersion,
 				stablePatchVersion: v1Y3.String(),
@@ -419,7 +419,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 			vg: &fakeVersionGetter{
 				clusterVersion:     v1Y1.String(),
 				componentVersion:   v1Y1.String(),
-				kubeletVersion:     v1Y1.String(), // the kubelet are on the same version as the control plane
+				kubeletVersion:     v1Y1.String(), // kubelet 与控制平面版本相同。
 				kubeadmVersion:     v1Z0.String(),
 				etcdVersion:        fakeCurrentEtcdVersion,
 				stablePatchVersion: v1Y1.String(),
@@ -464,7 +464,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 			vg: &fakeVersionGetter{
 				clusterVersion:     v1Y3.String(),
 				componentVersion:   v1Y3.String(),
-				kubeletVersion:     v1Y3.String(), // the kubelet are on the same version as the control plane
+				kubeletVersion:     v1Y3.String(), // kubelet 与控制平面版本相同。
 				kubeadmVersion:     v1Y5.String(),
 				etcdVersion:        fakeCurrentEtcdVersion,
 				stablePatchVersion: v1Y5.String(),
@@ -495,7 +495,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 					},
 					After: ClusterState{
 						KubeVersion:    v1Y5.String(),
-						KubeadmVersion: v1Y5.String(), // Note: The kubeadm version mustn't be "downgraded" here
+						KubeadmVersion: v1Y5.String(), // 注意：此处不得降级 kubeadm 版本。
 						DNSVersion:     constants.CoreDNSVersion,
 						EtcdVersion:    getEtcdVersion(v1Y5),
 					},
@@ -752,7 +752,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 			},
 			expectedUpgrades: []Upgrade{
 				{
-					Description: "experimental version", // Note that this is considered an experimental version in this uncommon scenario
+					Description: "experimental version", // 注意：在此少见场景中，该版本被视为实验性版本。
 					Before: ClusterState{
 						KubeVersion: v1X5.String(),
 						KubeAPIServerVersions: map[string][]string{
@@ -900,8 +900,7 @@ func TestGetAvailableUpgrades(t *testing.T) {
 		},
 	}
 
-	// Instantiating a fake etcd cluster for being able to get etcd version for a corresponding
-	// Kubernetes release.
+	// 创建伪造的 etcd 集群，以便获取对应 Kubernetes 发布版本的 etcd 版本。
 	for _, rt := range tests {
 		t.Run(rt.name, func(t *testing.T) {
 			actualUpgrades, actualErr := GetAvailableUpgrades(rt.vg, rt.allowExperimental, rt.allowRCs, &output.TextPrinter{})

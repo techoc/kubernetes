@@ -27,24 +27,24 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/features"
 )
 
-// AddKubeConfigFlag adds the --kubeconfig flag to the given flagset
+// AddKubeConfigFlag 将 --kubeconfig 参数添加到指定参数集。
 func AddKubeConfigFlag(fs *pflag.FlagSet, kubeConfigFile *string) {
 	fs.StringVar(kubeConfigFile, KubeconfigPath, *kubeConfigFile, "The kubeconfig file to use when talking to the cluster. If the flag is not set, a set of standard locations can be searched for an existing kubeconfig file.")
-	// Note that DefValue is the text shown in the terminal and not the default value assigned to the flag
+	// 注意：DefValue 是终端显示的文本，而不是赋给参数的实际默认值。
 	fs.Lookup(KubeconfigPath).DefValue = constants.GetAdminKubeConfigPath()
 }
 
-// AddKubeConfigDirFlag adds the --kubeconfig-dir flag to the given flagset
+// AddKubeConfigDirFlag 将 --kubeconfig-dir 参数添加到指定参数集。
 func AddKubeConfigDirFlag(fs *pflag.FlagSet, kubeConfigDir *string) {
 	fs.StringVar(kubeConfigDir, KubeconfigDir, *kubeConfigDir, "The path where to save the kubeconfig file.")
 }
 
-// AddConfigFlag adds the --config flag to the given flagset
+// AddConfigFlag 将 --config 参数添加到指定参数集。
 func AddConfigFlag(fs *pflag.FlagSet, cfgPath *string) {
 	fs.StringVar(cfgPath, CfgPath, *cfgPath, "Path to a kubeadm configuration file.")
 }
 
-// AddIgnorePreflightErrorsFlag adds the --ignore-preflight-errors flag to the given flagset
+// AddIgnorePreflightErrorsFlag 将 --ignore-preflight-errors 参数添加到指定参数集。
 func AddIgnorePreflightErrorsFlag(fs *pflag.FlagSet, ignorePreflightErrors *[]string) {
 	fs.StringSliceVar(
 		ignorePreflightErrors, IgnorePreflightErrors, *ignorePreflightErrors,
@@ -52,13 +52,13 @@ func AddIgnorePreflightErrorsFlag(fs *pflag.FlagSet, ignorePreflightErrors *[]st
 	)
 }
 
-// AddControlPlanExtraArgsFlags adds the ExtraArgs flags for control plane components
+// AddControlPlanExtraArgsFlags 添加控制平面组件的 ExtraArgs 参数。
 func AddControlPlanExtraArgsFlags(fs *pflag.FlagSet, apiServerExtraArgs, controllerManagerExtraArgs, schedulerExtraArgs *[]kubeadmapiv1.Arg) {
-	// TODO: these flags are deprecated, remove them and related logic:
+	// TODO: 这些参数已弃用，应移除它们及相关逻辑：
 	// - AddControlPlanExtraArgsFlag()
-	// - files app/cmd/options/argslice*.go
+	// - 文件 app/cmd/options/argslice*.go
 	// - options.*ExtraArgs
-	// - usages in app/cmd/init.go and app/cmd/phases/init/controlplane.go
+	// - app/cmd/init.go 和 app/cmd/phases/init/controlplane.go 中的用法
 	fs.Var(newArgSlice(apiServerExtraArgs), APIServerExtraArgs, "A set of extra flags to pass to the API Server or override default ones in form of <flagname>=<value>")
 	fs.Var(newArgSlice(controllerManagerExtraArgs), ControllerManagerExtraArgs, "A set of extra flags to pass to the Controller Manager or override default ones in form of <flagname>=<value>")
 	fs.Var(newArgSlice(schedulerExtraArgs), SchedulerExtraArgs, "A set of extra flags to pass to the Scheduler or override default ones in form of <flagname>=<value>")
@@ -68,12 +68,12 @@ func AddControlPlanExtraArgsFlags(fs *pflag.FlagSet, apiServerExtraArgs, control
 	_ = fs.MarkDeprecated(SchedulerExtraArgs, fmt.Sprintf("use 'ClusterConfiguration.scheduler.extraArgs' instead. %s", future))
 }
 
-// AddImageMetaFlags adds the --image-repository flag to the given flagset
+// AddImageMetaFlags 将 --image-repository 参数添加到指定参数集。
 func AddImageMetaFlags(fs *pflag.FlagSet, imageRepository *string) {
 	fs.StringVar(imageRepository, ImageRepository, *imageRepository, "Choose a container registry to pull control plane images from")
 }
 
-// AddFeatureGatesStringFlag adds the --feature-gates flag to the given flagset
+// AddFeatureGatesStringFlag 将 --feature-gates 参数添加到指定参数集。
 func AddFeatureGatesStringFlag(fs *pflag.FlagSet, featureGatesString *string) {
 	if knownFeatures := features.KnownFeatures(&features.InitFeatureGates); len(knownFeatures) > 0 {
 		fs.StringVar(featureGatesString, FeatureGatesString, *featureGatesString, "A set of key=value pairs that describe feature gates for various features. "+
@@ -84,7 +84,7 @@ func AddFeatureGatesStringFlag(fs *pflag.FlagSet, featureGatesString *string) {
 	}
 }
 
-// AddKubernetesVersionFlag adds the --kubernetes-version flag to the given flagset
+// AddKubernetesVersionFlag 将 --kubernetes-version 参数添加到指定参数集。
 func AddKubernetesVersionFlag(fs *pflag.FlagSet, kubernetesVersion *string) {
 	fs.StringVar(
 		kubernetesVersion, KubernetesVersion, *kubernetesVersion,
@@ -92,7 +92,7 @@ func AddKubernetesVersionFlag(fs *pflag.FlagSet, kubernetesVersion *string) {
 	)
 }
 
-// AddKubeadmOtherFlags adds flags that are not bound to a configuration file to the given flagset
+// AddKubeadmOtherFlags 将不绑定到配置文件的参数添加到指定参数集。
 func AddKubeadmOtherFlags(flagSet *pflag.FlagSet, rootfsPath *string) {
 	flagSet.StringVar(
 		rootfsPath, "rootfs", *rootfsPath,
@@ -100,7 +100,7 @@ func AddKubeadmOtherFlags(flagSet *pflag.FlagSet, rootfsPath *string) {
 	)
 }
 
-// AddPatchesFlag adds the --patches flag to the given flagset
+// AddPatchesFlag 将 --patches 参数添加到指定参数集。
 func AddPatchesFlag(fs *pflag.FlagSet, patchesDir *string) {
 	const usage = `Path to a directory that contains files named ` +
 		`"target[suffix][+patchtype].extension". For example, ` +

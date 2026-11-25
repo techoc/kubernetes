@@ -50,9 +50,8 @@ import (
 	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
 )
 
-// initOptions defines all the init options exposed via flags by kubeadm init.
-// Please note that this structure includes the public kubeadm config API, but only a subset of the options
-// supported by this api will be exposed as a flag.
+// initOptions 定义 kubeadm init 通过参数暴露的全部选项。
+// 该结构包含公开的 kubeadm 配置 API，但只有部分受支持的选项会暴露为参数。
 type initOptions struct {
 	cfgPath                 string
 	skipTokenPrint          bool
@@ -71,21 +70,21 @@ type initOptions struct {
 }
 
 const (
-	// CoreDNSPhase is the name of CoreDNS subphase in "kubeadm init"
+	// CoreDNSPhase 是 kubeadm init 中 CoreDNS 子阶段的名称。
 	coreDNSPhase = "addon/coredns"
 
-	// KubeProxyPhase is the name of kube-proxy subphase during "kubeadm init"
+	// KubeProxyPhase 是 kubeadm init 中 kube-proxy 子阶段的名称。
 	kubeProxyPhase = "addon/kube-proxy"
 
-	// AddonPhase is the name of addon phase during "kubeadm init"
+	// AddonPhase 是 kubeadm init 中插件阶段的名称。
 	addonPhase = "addon"
 )
 
-// compile-time assert that the local data object satisfies the phases data interface.
+// 编译期断言本地数据对象满足阶段数据接口。
 var _ phases.InitData = &initData{}
 
-// initData defines all the runtime information used when running the kubeadm init workflow;
-// this data is shared across all the phases that are included in the workflow.
+// initData 定义运行 kubeadm init 工作流所需的全部运行时信息，
+// 并供工作流包含的所有阶段共享。
 type initData struct {
 	cfg                         *kubeadmapi.InitConfiguration
 	skipTokenPrint              bool
@@ -106,9 +105,8 @@ type initData struct {
 	adminKubeConfigBootstrapped bool
 }
 
-// newCmdInit returns "kubeadm init" command.
-// NB. initOptions is exposed as parameter for allowing unit testing of
-// the newInitOptions method, that implements all the command options validation logic
+// newCmdInit 返回 kubeadm init 命令。
+// 注意：initOptions 作为参数暴露，以便单元测试实现全部命令选项校验逻辑的 newInitOptions 方法。
 func newCmdInit(out io.Writer, initOptions *initOptions) *cobra.Command {
 	if initOptions == nil {
 		initOptions = newInitOptions()
@@ -136,8 +134,8 @@ func newCmdInit(out io.Writer, initOptions *initOptions) *cobra.Command {
 		Args: cobra.NoArgs,
 	}
 
-	// add flags to the init command.
-	// init command local flags could be eventually inherited by the sub-commands automatically generated for phases
+	// 为 init 命令添加参数。
+	// init 命令的本地参数最终可能由自动生成的阶段子命令继承。
 	AddInitConfigFlags(cmd.Flags(), initOptions.externalInitCfg)
 	AddClusterConfigFlags(cmd.Flags(), initOptions.externalClusterCfg, &initOptions.featureGatesString)
 	AddInitOtherFlags(cmd.Flags(), initOptions)
@@ -145,15 +143,14 @@ func newCmdInit(out io.Writer, initOptions *initOptions) *cobra.Command {
 	initOptions.bto.AddTTLFlag(cmd.Flags())
 	options.AddImageMetaFlags(cmd.Flags(), &initOptions.externalClusterCfg.ImageRepository)
 
-	// defines additional flag that are not used by the init command but that could be eventually used
-	// by the sub-commands automatically generated for phases
+	// 定义额外参数；init 命令本身不使用它们，但自动生成的阶段子命令可能使用。
 	initRunner.SetAdditionalFlags(func(flags *flag.FlagSet) {
 		options.AddKubeConfigFlag(flags, &initOptions.kubeconfigPath)
 		options.AddKubeConfigDirFlag(flags, &initOptions.kubeconfigDir)
 		options.AddControlPlanExtraArgsFlags(flags, &initOptions.externalClusterCfg.APIServer.ExtraArgs, &initOptions.externalClusterCfg.ControllerManager.ExtraArgs, &initOptions.externalClusterCfg.Scheduler.ExtraArgs)
 	})
 
-	// initialize the workflow runner with the list of phases
+	// 使用阶段列表初始化工作流运行器。
 	initRunner.AppendPhase(phases.NewPreflightPhase())
 	initRunner.AppendPhase(phases.NewCertsPhase())
 	initRunner.AppendPhase(phases.NewKubeConfigPhase())
@@ -169,19 +166,18 @@ func newCmdInit(out io.Writer, initOptions *initOptions) *cobra.Command {
 	initRunner.AppendPhase(phases.NewAddonPhase())
 	initRunner.AppendPhase(phases.NewShowJoinCommandPhase())
 
-	// sets the data builder function, that will be used by the runner
-	// both when running the entire workflow or single phases
+	// 为运行器设置数据构建函数，运行完整工作流或单个阶段时都会调用。
 	initRunner.SetDataInitializer(func(cmd *cobra.Command, args []string) (workflow.RunData, error) {
 		if cmd.Flags().Lookup(options.NodeCRISocket) == nil {
-			// skip CRI detection
-			// assume that the command execution does not depend on CRISocket when --cri-socket flag is not set
+			// 跳过 CRI 检测。
+			// 未设置 --cri-socket 时，假定命令执行不依赖 CRISocket。
 			initOptions.skipCRIDetect = true
 		}
 		data, err := newInitData(cmd, args, initOptions, out)
 		if err != nil {
 			return nil, err
 		}
-		// If the flag for skipping phases was empty, use the values from config
+		// 若跳过阶段的参数为空，则使用配置中的值。
 		if len(initRunner.Options.SkipPhases) == 0 {
 			initRunner.Options.SkipPhases = data.cfg.SkipPhases
 		}
@@ -190,14 +186,14 @@ func newCmdInit(out io.Writer, initOptions *initOptions) *cobra.Command {
 		return data, nil
 	})
 
-	// binds the Runner to kubeadm init command by altering
-	// command help, adding --skip-phases flag and by adding phases subcommands
+	// 将 Runner 绑定到 kubeadm init 命令：修改帮助信息、
+	// 添加 --skip-phases 参数并添加阶段子命令。
 	initRunner.BindToCommand(cmd)
 
 	return cmd
 }
 
-// AddInitConfigFlags adds init flags bound to the config to the specified flagset
+// AddInitConfigFlags 将绑定到配置的 init 参数添加到指定参数集。
 func AddInitConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.InitConfiguration) {
 	flagSet.StringVar(
 		&cfg.LocalAPIEndpoint.AdvertiseAddress, options.APIServerAdvertiseAddress, cfg.LocalAPIEndpoint.AdvertiseAddress,
@@ -218,7 +214,7 @@ func AddInitConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.InitConfigurati
 	cmdutil.AddCRISocketFlag(flagSet, &cfg.NodeRegistration.CRISocket)
 }
 
-// AddClusterConfigFlags adds cluster flags bound to the config to the specified flagset
+// AddClusterConfigFlags 将绑定到配置的集群参数添加到指定参数集。
 func AddClusterConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.ClusterConfiguration, featureGatesString *string) {
 	flagSet.StringVar(
 		&cfg.Networking.ServiceSubnet, options.NetworkingServiceSubnet, cfg.Networking.ServiceSubnet,
@@ -251,8 +247,8 @@ func AddClusterConfigFlags(flagSet *flag.FlagSet, cfg *kubeadmapiv1.ClusterConfi
 	options.AddFeatureGatesStringFlag(flagSet, featureGatesString)
 }
 
-// AddInitOtherFlags adds init flags that are not bound to a configuration file to the given flagset
-// Note: All flags that are not bound to the cfg object should be allowed in cmd/kubeadm/app/apis/kubeadm/validation/validation.go
+// AddInitOtherFlags 将不绑定到配置文件的 init 参数添加到指定参数集。
+// 注意：所有不绑定到 cfg 对象的参数都应允许出现在 cmd/kubeadm/app/apis/kubeadm/validation/validation.go 中。
 func AddInitOtherFlags(flagSet *flag.FlagSet, initOptions *initOptions) {
 	options.AddConfigFlag(flagSet, &initOptions.cfgPath)
 	flagSet.StringSliceVar(
@@ -278,16 +274,16 @@ func AddInitOtherFlags(flagSet *flag.FlagSet, initOptions *initOptions) {
 	options.AddPatchesFlag(flagSet, &initOptions.patchesDir)
 }
 
-// newInitOptions returns a struct ready for being used for creating cmd init flags.
+// newInitOptions 返回可用于创建 init 命令参数的结构体。
 func newInitOptions() *initOptions {
-	// initialize the public kubeadm config API by applying defaults
+	// 应用默认值以初始化公开的 kubeadm 配置 API。
 	externalInitCfg := &kubeadmapiv1.InitConfiguration{}
 	kubeadmscheme.Scheme.Default(externalInitCfg)
 
 	externalClusterCfg := &kubeadmapiv1.ClusterConfiguration{}
 	kubeadmscheme.Scheme.Default(externalClusterCfg)
 
-	// Create the options object for the bootstrap token-related flags, and override the default value for .Description
+	// 创建引导令牌相关参数的选项对象，并覆盖 .Description 的默认值。
 	bto := options.NewBootstrapTokenOptions()
 	bto.Description = "The default bootstrap token generated by 'kubeadm init'."
 
@@ -301,16 +297,15 @@ func newInitOptions() *initOptions {
 	}
 }
 
-// newInitData returns a new initData struct to be used for the execution of the kubeadm init workflow.
-// This func takes care of validating initOptions passed to the command, and then it converts
-// options into the internal InitConfiguration type that is used as input all the phases in the kubeadm init workflow
+// newInitData 返回用于执行 kubeadm init 工作流的新 initData。
+// 它校验传给命令的 initOptions，再将选项转换为内部 InitConfiguration，
+// 作为 kubeadm init 工作流所有阶段的输入。
 func newInitData(cmd *cobra.Command, args []string, initOptions *initOptions, out io.Writer) (*initData, error) {
-	// Re-apply defaults to the public kubeadm API (this will set only values not exposed/not set as a flags)
+	// 重新应用公开 kubeadm API 的默认值，仅设置未暴露为参数或未设置的值。
 	kubeadmscheme.Scheme.Default(initOptions.externalInitCfg)
 	kubeadmscheme.Scheme.Default(initOptions.externalClusterCfg)
 
-	// Validate standalone flags values and/or combination of flags and then assigns
-	// validated values to the public kubeadm config API when applicable
+	// 校验独立参数及其组合，并在适用时将校验后的值赋给公开的 kubeadm 配置 API。
 	var err error
 	if initOptions.externalClusterCfg.FeatureGates, err = features.NewFeatureGate(&features.InitFeatureGates, initOptions.featureGatesString); err != nil {
 		return nil, err
@@ -324,8 +319,7 @@ func newInitData(cmd *cobra.Command, args []string, initOptions *initOptions, ou
 		return nil, err
 	}
 
-	// Either use the config file if specified, or convert public kubeadm API to the internal InitConfiguration
-	// and validates InitConfiguration
+	// 若指定配置文件则使用它，否则将公开 kubeadm API 转换为内部 InitConfiguration 并校验。
 	cfg, err := configutil.LoadOrDefaultInitConfiguration(initOptions.cfgPath, initOptions.externalInitCfg, initOptions.externalClusterCfg, configutil.LoadOrDefaultConfigurationOptions{
 		SkipCRIDetect: initOptions.skipCRIDetect,
 	})
@@ -337,10 +331,10 @@ func newInitData(cmd *cobra.Command, args []string, initOptions *initOptions, ou
 	if err != nil {
 		return nil, err
 	}
-	// Also set the union of pre-flight errors to InitConfiguration, to provide a consistent view of the runtime configuration:
+	// 同时将预检错误的并集写入 InitConfiguration，使运行时配置视图保持一致：
 	cfg.NodeRegistration.IgnorePreflightErrors = sets.List(ignorePreflightErrorsSet)
 
-	// override node name from the command line option
+	// 用命令行选项覆盖节点名称。
 	if initOptions.externalInitCfg.NodeRegistration.Name != "" {
 		cfg.NodeRegistration.Name = initOptions.externalInitCfg.NodeRegistration.Name
 	}
@@ -352,7 +346,7 @@ func newInitData(cmd *cobra.Command, args []string, initOptions *initOptions, ou
 		return nil, err
 	}
 
-	// If dry running creates a temporary directory for saving kubeadm generated files.
+	// 若为 dry-run，创建用于保存 kubeadm 生成文件的临时目录。
 	dryRunDir := ""
 	if initOptions.dryRun || cfg.DryRun {
 		if dryRunDir, err = kubeadmconstants.GetDryRunDir(kubeadmconstants.EnvVarInitDryRunDir, "kubeadm-init-dryrun", klog.Warningf); err != nil {
@@ -360,28 +354,28 @@ func newInitData(cmd *cobra.Command, args []string, initOptions *initOptions, ou
 		}
 	}
 
-	// Checks if an external CA is provided by the user (when the CA Cert is present but the CA Key is not)
+	// 检查用户是否提供了外部 CA（存在 CA 证书但不存在 CA 密钥）。
 	externalCA, err := certsphase.UsingExternalCA(&cfg.ClusterConfiguration)
 	if externalCA {
-		// In case the certificates signed by CA (that should be provided by the user) are missing or invalid,
-		// returns, because kubeadm can't regenerate them without the CA Key
+		// 若用户应提供的、由该 CA 签发的证书缺失或无效，则直接返回，
+		// 因为 kubeadm 没有 CA 密钥无法重新生成。
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid or incomplete external CA")
 		}
 
-		// Validate that also the required kubeconfig files exists and are invalid, because
-		// kubeadm can't regenerate them without the CA Key
+		// 校验必需的 kubeconfig 文件是否存在且有效；
+		// 没有 CA 密钥时 kubeadm 无法重新生成它们。
 		kubeconfigDir := initOptions.kubeconfigDir
 		if err := kubeconfigphase.ValidateKubeconfigsForExternalCA(kubeconfigDir, cfg); err != nil {
 			return nil, err
 		}
 	}
 
-	// Checks if an external Front-Proxy CA is provided by the user (when the Front-Proxy CA Cert is present but the Front-Proxy CA Key is not)
+	// 检查用户是否提供了外部 Front-Proxy CA（存在证书但不存在密钥）。
 	externalFrontProxyCA, err := certsphase.UsingExternalFrontProxyCA(&cfg.ClusterConfiguration)
 	if externalFrontProxyCA {
-		// In case the certificates signed by Front-Proxy CA (that should be provided by the user) are missing or invalid,
-		// returns, because kubeadm can't regenerate them without the Front-Proxy CA Key
+		// 若用户应提供的、由 Front-Proxy CA 签发的证书缺失或无效，则直接返回，
+		// 因为 kubeadm 没有 Front-Proxy CA 密钥无法重新生成。
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid or incomplete external front-proxy CA")
 		}
@@ -408,47 +402,47 @@ func newInitData(cmd *cobra.Command, args []string, initOptions *initOptions, ou
 	}, nil
 }
 
-// UploadCerts returns Uploadcerts flag.
+// UploadCerts 返回 Uploadcerts 参数的值。
 func (d *initData) UploadCerts() bool {
 	return d.uploadCerts
 }
 
-// CertificateKey returns the key used to encrypt the certs.
+// CertificateKey 返回用于加密证书的密钥。
 func (d *initData) CertificateKey() string {
 	return d.cfg.CertificateKey
 }
 
-// SetCertificateKey set the key used to encrypt the certs.
+// SetCertificateKey 设置用于加密证书的密钥。
 func (d *initData) SetCertificateKey(key string) {
 	d.cfg.CertificateKey = key
 }
 
-// SkipCertificateKeyPrint returns the skipCertificateKeyPrint flag.
+// SkipCertificateKeyPrint 返回 skipCertificateKeyPrint 参数的值。
 func (d *initData) SkipCertificateKeyPrint() bool {
 	return d.skipCertificateKeyPrint
 }
 
-// Cfg returns initConfiguration.
+// Cfg 返回 InitConfiguration。
 func (d *initData) Cfg() *kubeadmapi.InitConfiguration {
 	return d.cfg
 }
 
-// DryRun returns the DryRun flag.
+// DryRun 返回 DryRun 参数的值。
 func (d *initData) DryRun() bool {
 	return d.dryRun
 }
 
-// SkipTokenPrint returns the SkipTokenPrint flag.
+// SkipTokenPrint 返回 SkipTokenPrint 参数的值。
 func (d *initData) SkipTokenPrint() bool {
 	return d.skipTokenPrint
 }
 
-// IgnorePreflightErrors returns the IgnorePreflightErrors flag.
+// IgnorePreflightErrors 返回 IgnorePreflightErrors 参数的值。
 func (d *initData) IgnorePreflightErrors() sets.Set[string] {
 	return d.ignorePreflightErrors
 }
 
-// CertificateWriteDir returns the path to the certificate folder or the temporary folder path in case of DryRun.
+// CertificateWriteDir 返回证书目录；dry-run 时返回临时目录。
 func (d *initData) CertificateWriteDir() string {
 	if d.dryRun {
 		return d.dryRunDir
@@ -456,15 +450,14 @@ func (d *initData) CertificateWriteDir() string {
 	return d.certificatesDir
 }
 
-// CertificateDir returns the CertificateDir as originally specified by the user.
+// CertificateDir 返回用户最初指定的 CertificateDir。
 func (d *initData) CertificateDir() string {
 	return d.certificatesDir
 }
 
-// KubeConfig returns a kubeconfig after loading it from KubeConfigPath().
-// If the default kubeconfig path is used (admin.conf), instead of constructing
-// a kubeconfig that points to the control plane endpoint, make it point to the localAPIEndpoint.
-// This would allow 'kubeadm init' to only talk to the local kube-apiserver instance.
+// KubeConfig 返回从 KubeConfigPath() 加载的 kubeconfig。
+// 若使用默认 kubeconfig 路径（admin.conf），不构造指向控制平面端点的配置，
+// 而是指向 localAPIEndpoint，使 kubeadm init 只与本地 kube-apiserver 实例通信。
 func (d *initData) KubeConfig() (*clientcmdapi.Config, error) {
 	if d.kubeconfig != nil {
 		return d.kubeconfig, nil
@@ -484,7 +477,7 @@ func (d *initData) KubeConfig() (*clientcmdapi.Config, error) {
 	return d.kubeconfig, nil
 }
 
-// KubeConfigOriginal returns the original kubeconfig loaded from file, without any modifications.
+// KubeConfigOriginal 返回从文件加载且未经修改的原始 kubeconfig。
 func (d *initData) KubeConfigOriginal() (*clientcmdapi.Config, error) {
 	if d.kubeconfigOriginal == nil {
 		if _, err := d.KubeConfig(); err != nil {
@@ -495,7 +488,7 @@ func (d *initData) KubeConfigOriginal() (*clientcmdapi.Config, error) {
 	return d.kubeconfigOriginal, nil
 }
 
-// KubeConfigDir returns the Kubernetes configuration directory or the temporary directory if DryRun is true.
+// KubeConfigDir 返回 Kubernetes 配置目录；dry-run 时返回临时目录。
 func (d *initData) KubeConfigDir() string {
 	if d.dryRun {
 		return d.dryRunDir
@@ -503,7 +496,7 @@ func (d *initData) KubeConfigDir() string {
 	return d.kubeconfigDir
 }
 
-// KubeConfigPath returns the path to the kubeconfig file to use for connecting to Kubernetes
+// KubeConfigPath 返回用于连接 Kubernetes 的 kubeconfig 文件路径。
 func (d *initData) KubeConfigPath() string {
 	if d.dryRun {
 		d.kubeconfigPath = filepath.Join(d.dryRunDir, kubeadmconstants.AdminKubeConfigFileName)
@@ -511,7 +504,7 @@ func (d *initData) KubeConfigPath() string {
 	return d.kubeconfigPath
 }
 
-// ManifestDir returns the path where manifest should be stored or the temporary directory if DryRun is true.
+// ManifestDir 返回清单保存目录；dry-run 时返回临时目录。
 func (d *initData) ManifestDir() string {
 	if d.dryRun {
 		return d.dryRunDir
@@ -519,7 +512,7 @@ func (d *initData) ManifestDir() string {
 	return kubeadmconstants.GetStaticPodDirectory()
 }
 
-// KubeletDir returns the kubelet configuration directory or the temporary directory if DryRun is true.
+// KubeletDir 返回 kubelet 配置目录；dry-run 时返回临时目录。
 func (d *initData) KubeletDir() string {
 	if d.dryRun {
 		return d.dryRunDir
@@ -527,17 +520,17 @@ func (d *initData) KubeletDir() string {
 	return kubeadmconstants.KubeletRunDirectory
 }
 
-// ExternalCA returns true if an external CA is provided by the user.
+// ExternalCA 在用户提供外部 CA 时返回 true。
 func (d *initData) ExternalCA() bool {
 	return d.externalCA
 }
 
-// OutputWriter returns the io.Writer used to write output to by this command.
+// OutputWriter 返回此命令用于写入输出的 io.Writer。
 func (d *initData) OutputWriter() io.Writer {
 	return d.outputWriter
 }
 
-// getDryRunClient creates a fake client that answers some GET calls in order to be able to do the full init flow in dry-run mode.
+// getDryRunClient 创建伪客户端，响应部分 GET 请求，使 dry-run 模式能够执行完整 init 流程。
 func getDryRunClient(d *initData) (clientset.Interface, error) {
 	kubeconfig, err := d.KubeConfig()
 	if err != nil {
@@ -555,9 +548,9 @@ func getDryRunClient(d *initData) (clientset.Interface, error) {
 	return dryRun.FakeClient(), nil
 }
 
-// Client returns a Kubernetes client to be used by kubeadm.
-// This function is implemented as a singleton, thus avoiding to recreate the client when it is used by different phases.
-// Important. This function must be called after the admin.conf kubeconfig file is created.
+// Client 返回供 kubeadm 使用的 Kubernetes 客户端。
+// 该函数采用单例实现，避免不同阶段重复创建客户端。
+// 重要：必须在创建 admin.conf kubeconfig 文件之后调用此函数。
 func (d *initData) Client() (clientset.Interface, error) {
 	var err error
 	if d.client == nil {
@@ -566,12 +559,12 @@ func (d *initData) Client() (clientset.Interface, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else { // Use a real client
+		} else { // 使用真实客户端。
 			isDefaultKubeConfigPath := d.KubeConfigPath() == kubeadmconstants.GetAdminKubeConfigPath()
-			// Only bootstrap the admin.conf if it's used by the user (i.e. --kubeconfig has its default value)
-			// and if the bootstrapping was not already done
+			// 仅在用户使用 admin.conf（即 --kubeconfig 为默认值）
+			// 且尚未完成引导时，引导 admin.conf。
 			if !d.adminKubeConfigBootstrapped && isDefaultKubeConfigPath {
-				// Call EnsureAdminClusterRoleBinding() to obtain a working client from admin.conf.
+				// 调用 EnsureAdminClusterRoleBinding()，获得可由 admin.conf 正常使用的客户端。
 				d.client, err = kubeconfigphase.EnsureAdminClusterRoleBinding(
 					kubeadmconstants.KubernetesDir,
 					&d.Cfg().LocalAPIEndpoint,
@@ -582,7 +575,7 @@ func (d *initData) Client() (clientset.Interface, error) {
 				}
 				d.adminKubeConfigBootstrapped = true
 			} else {
-				// Alternatively, just load the config pointed at the --kubeconfig path
+				// 或者仅加载 --kubeconfig 路径指向的配置。
 				cfg, err := d.KubeConfig()
 				if err != nil {
 					return nil, err
@@ -597,7 +590,7 @@ func (d *initData) Client() (clientset.Interface, error) {
 	return d.client, nil
 }
 
-// Tokens returns an array of token strings.
+// Tokens 返回令牌字符串数组。
 func (d *initData) Tokens() []string {
 	tokens := make([]string, 0, len(d.cfg.BootstrapTokens))
 	for _, bt := range d.cfg.BootstrapTokens {
@@ -606,9 +599,9 @@ func (d *initData) Tokens() []string {
 	return tokens
 }
 
-// PatchesDir returns the folder where patches for components are stored
+// PatchesDir 返回保存组件补丁的目录。
 func (d *initData) PatchesDir() string {
-	// If provided, make the flag value override the one in config.
+	// 若提供了参数值，则覆盖配置中的值。
 	if len(d.patchesDir) > 0 {
 		return d.patchesDir
 	}
@@ -618,14 +611,14 @@ func (d *initData) PatchesDir() string {
 	return ""
 }
 
-// manageSkippedAddons syncs proxy and DNS "Disabled" status and skipPhases.
+// manageSkippedAddons 同步 proxy 和 DNS 的 Disabled 状态与 skipPhases。
 func manageSkippedAddons(cfg *kubeadmapi.ClusterConfiguration, skipPhases []string) []string {
 	var (
 		skipDNSPhase   = false
 		skipProxyPhase = false
 	)
-	// If the DNS or Proxy addons are disabled, skip the corresponding phase.
-	// Alternatively, update the proxy and DNS "Disabled" status based on skipped addon phases.
+	// 若 DNS 或 Proxy 插件被禁用，则跳过对应阶段；
+	// 反之，根据跳过的插件阶段更新 proxy 和 DNS 的 Disabled 状态。
 	if isPhaseInSkipPhases(addonPhase, skipPhases) {
 		skipDNSPhase = true
 		skipProxyPhase = true

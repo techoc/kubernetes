@@ -35,18 +35,17 @@ import (
 )
 
 var (
-	// certPeriodValidation is used to store if period validation was done for a certificate
+	// certPeriodValidation 记录证书是否已完成有效期校验。
 	certPeriodValidationMutex sync.Mutex
 	certPeriodValidation      = map[string]struct{}{}
 )
 
-// CreatePKIAssets will create and write to disk all PKI assets necessary to establish the control plane.
-// If the PKI assets already exists in the target folder, they are used only if evaluated equal; otherwise an error is returned.
+// CreatePKIAssets 创建建立控制平面所需的全部 PKI 资产并写入磁盘。
+// 如果目标目录中已有 PKI 资产，仅在内容一致时复用，否则返回错误。
 func CreatePKIAssets(cfg *kubeadmapi.InitConfiguration) error {
 	klog.V(1).Infoln("creating PKI assets")
 
-	// This structure cannot handle multilevel CA hierarchies.
-	// This isn't a problem right now, but may become one in the future.
+	// 此结构无法处理多级 CA 层次，目前尚无影响，但将来可能成为问题。
 
 	var certList Certificates
 
@@ -67,32 +66,31 @@ func CreatePKIAssets(cfg *kubeadmapi.InitConfiguration) error {
 
 	fmt.Printf("[certs] Valid certificates and keys now exist in %q\n", cfg.CertificatesDir)
 
-	// Service accounts are not x509 certs, so handled separately
+	// 服务账户不是 x509 证书，因此单独处理
 	return CreateServiceAccountKeyAndPublicKeyFiles(cfg.CertificatesDir, cfg.ClusterConfiguration.EncryptionAlgorithm)
 }
 
-// CreateServiceAccountKeyAndPublicKeyFiles creates new public/private key files for signing service account users.
-// If the sa public/private key files already exist in the target folder, they are used only if evaluated equals; otherwise an error is returned.
+// CreateServiceAccountKeyAndPublicKeyFiles 创建用于服务账户用户签名的公钥和私钥文件。
+// 如果目标目录中已有服务账户密钥文件，仅在内容一致时复用，否则返回错误。
 func CreateServiceAccountKeyAndPublicKeyFiles(certsDir string, keyType kubeadmapi.EncryptionAlgorithmType) error {
 	klog.V(1).Infoln("creating new public/private key files for signing service account users")
 	_, err := keyutil.PrivateKeyFromFile(filepath.Join(certsDir, kubeadmconstants.ServiceAccountPrivateKeyName))
 	if err == nil {
-		// kubeadm doesn't validate the existing certificate key more than this;
-		// Basically, if we find a key file with the same path kubeadm thinks those files
-		// are equal and doesn't bother writing a new file
+		// kubeadm 对现有证书私钥仅做此校验：
+		// 如果找到路径相同的私钥文件，就认为文件一致，不再写入新文件。
 		fmt.Printf("[certs] Using the existing %q key\n", kubeadmconstants.ServiceAccountKeyBaseName)
 		return nil
 	} else if !os.IsNotExist(err) {
 		return errors.Wrapf(err, "file %s existed but it could not be loaded properly", kubeadmconstants.ServiceAccountPrivateKeyName)
 	}
 
-	// The key does NOT exist, let's generate it now
+	// 私钥不存在，现在生成
 	key, err := pkiutil.NewPrivateKey(keyType)
 	if err != nil {
 		return err
 	}
 
-	// Write .key and .pub files to disk
+	// 将 .key 和 .pub 文件写入磁盘
 	fmt.Printf("[certs] Generating %q key and public key\n", kubeadmconstants.ServiceAccountKeyBaseName)
 
 	if err := pkiutil.WriteKey(certsDir, kubeadmconstants.ServiceAccountKeyBaseName, key); err != nil {
@@ -102,8 +100,8 @@ func CreateServiceAccountKeyAndPublicKeyFiles(certsDir string, keyType kubeadmap
 	return pkiutil.WritePublicKey(certsDir, kubeadmconstants.ServiceAccountKeyBaseName, key.Public())
 }
 
-// CreateCACertAndKeyFiles generates and writes out a given certificate authority.
-// The certSpec should be one of the variables from this package.
+// CreateCACertAndKeyFiles 生成指定的证书颁发机构并写入磁盘。
+// certSpec 应是本包中的变量之一。
 func CreateCACertAndKeyFiles(certSpec *KubeadmCert, cfg *kubeadmapi.InitConfiguration) error {
 	if certSpec.CAName != "" {
 		return errors.Errorf("this function should only be used for CAs, but cert %s has CA %s", certSpec.Name, certSpec.CAName)
@@ -128,8 +126,8 @@ func CreateCACertAndKeyFiles(certSpec *KubeadmCert, cfg *kubeadmapi.InitConfigur
 	)
 }
 
-// CreateCertAndKeyFilesWithCA loads the given certificate authority from disk, then generates and writes out the given certificate and key.
-// The certSpec and caCertSpec should both be one of the variables from this package.
+// CreateCertAndKeyFilesWithCA 从磁盘加载指定的 CA，然后生成并写入指定的证书和私钥。
+// certSpec 和 caCertSpec 都应为本包中的变量。
 func CreateCertAndKeyFilesWithCA(certSpec *KubeadmCert, caCertSpec *KubeadmCert, cfg *kubeadmapi.InitConfiguration) error {
 	if certSpec.CAName != caCertSpec.Name {
 		return errors.Errorf("expected CAname for %s to be %q, but was %s", certSpec.Name, certSpec.CAName, caCertSpec.Name)
@@ -143,22 +141,22 @@ func CreateCertAndKeyFilesWithCA(certSpec *KubeadmCert, caCertSpec *KubeadmCert,
 	return certSpec.CreateFromCA(cfg, caCert, caKey)
 }
 
-// LoadCertificateAuthority tries to load a CA in the given directory with the given name.
+// LoadCertificateAuthority 尝试从给定目录加载指定名称的 CA。
 func LoadCertificateAuthority(pkiDir string, baseName string) (*x509.Certificate, crypto.Signer, error) {
-	// Checks if certificate authority exists in the PKI directory
+	// 检查 PKI 目录中是否存在证书颁发机构
 	if !pkiutil.CertOrKeyExist(pkiDir, baseName) {
 		return nil, nil, errors.Errorf("couldn't load %s certificate authority from %s", baseName, pkiDir)
 	}
 
-	// Try to load certificate authority .crt and .key from the PKI directory
+	// 尝试从 PKI 目录加载 CA 的 .crt 和 .key 文件
 	caCert, caKey, err := pkiutil.TryLoadCertAndKeyFromDisk(pkiDir, baseName)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failure loading %s certificate authority", baseName)
 	}
-	// Validate period
+	// 校验有效期
 	CheckCertificatePeriodValidity(baseName, caCert)
 
-	// Make sure the loaded CA cert actually is a CA
+	// 确保加载的 CA 证书确实是 CA 证书
 	if !caCert.IsCA {
 		return nil, nil, errors.Errorf("%s certificate is not a certificate authority", baseName)
 	}
@@ -166,34 +164,32 @@ func LoadCertificateAuthority(pkiDir string, baseName string) (*x509.Certificate
 	return caCert, caKey, nil
 }
 
-// writeCertificateAuthorityFilesIfNotExist write a new certificate Authority to the given path.
-// If there already is a certificate file at the given path; kubeadm tries to load it and check if the values in the
-// existing and the expected certificate equals. If they do; kubeadm will just skip writing the file as it's up-to-date,
-// otherwise this function returns an error.
+// writeCertificateAuthorityFilesIfNotExist 将新的 CA 写入给定路径。
+// 如果路径已有证书文件，kubeadm 会加载并比较现有证书与预期证书。
+// 内容一致时跳过写入，否则返回错误。
 func writeCertificateAuthorityFilesIfNotExist(pkiDir string, baseName string, caCert *x509.Certificate, caKey crypto.Signer) error {
 
-	// If cert or key exists, we should try to load them
+	// 如果证书或私钥已存在，尝试加载
 	if pkiutil.CertOrKeyExist(pkiDir, baseName) {
 
-		// Try to load .crt and .key from the PKI directory
+		// 尝试从 PKI 目录加载 .crt 和 .key 文件
 		caCert, _, err := pkiutil.TryLoadCertAndKeyFromDisk(pkiDir, baseName)
 		if err != nil {
 			return errors.Wrapf(err, "failure loading %s certificate", baseName)
 		}
-		// Validate period
+		// 校验有效期
 		CheckCertificatePeriodValidity(baseName, caCert)
 
-		// Check if the existing cert is a CA
+		// 检查现有证书是否为 CA 证书
 		if !caCert.IsCA {
 			return errors.Errorf("certificate %s is not a CA", baseName)
 		}
 
-		// kubeadm doesn't validate the existing certificate Authority more than this;
-		// Basically, if we find a certificate file with the same path; and it is a CA
-		// kubeadm thinks those files are equal and doesn't bother writing a new file
+		// kubeadm 对现有 CA 仅做此校验：
+		// 如果找到路径相同且确为 CA 的证书文件，就认为文件一致，不再写入新文件。
 		fmt.Printf("[certs] Using the existing %q certificate and key\n", baseName)
 	} else {
-		// Write .crt and .key files to disk
+		// 将 .crt 和 .key 文件写入磁盘
 		fmt.Printf("[certs] Generating %q certificate and key\n", baseName)
 
 		if err := pkiutil.WriteCertAndKey(pkiDir, baseName, caCert, caKey); err != nil {
@@ -203,41 +199,40 @@ func writeCertificateAuthorityFilesIfNotExist(pkiDir string, baseName string, ca
 	return nil
 }
 
-// writeCertificateFilesIfNotExist write a new certificate to the given path.
-// If there already is a certificate file at the given path; kubeadm tries to load it and check if the values in the
-// existing and the expected certificate equals. If they do; kubeadm will just skip writing the file as it's up-to-date,
-// otherwise this function returns an error.
+// writeCertificateFilesIfNotExist 将新证书写入给定路径。
+// 如果路径已有证书文件，kubeadm 会加载并比较现有证书与预期证书。
+// 内容一致时跳过写入，否则返回错误。
 func writeCertificateFilesIfNotExist(pkiDir string, baseName string, signingCert *x509.Certificate, cert *x509.Certificate, key crypto.Signer, cfg *pkiutil.CertConfig) error {
 
-	// Checks if the signed certificate exists in the PKI directory
+	// 检查 PKI 目录中是否存在已签名证书
 	if pkiutil.CertOrKeyExist(pkiDir, baseName) {
-		// Try to load key from the PKI directory
+		// 尝试从 PKI 目录加载私钥
 		_, err := pkiutil.TryLoadKeyFromDisk(pkiDir, baseName)
 		if err != nil {
 			return errors.Wrapf(err, "failure loading %s key", baseName)
 		}
 
-		// Try to load certificate from the PKI directory
+		// 尝试从 PKI 目录加载证书
 		signedCert, intermediates, err := pkiutil.TryLoadCertChainFromDisk(pkiDir, baseName)
 		if err != nil {
 			return errors.Wrapf(err, "failure loading %s certificate", baseName)
 		}
-		// Validate period
+		// 校验有效期
 		CheckCertificatePeriodValidity(baseName, signedCert)
 
-		// Check if the existing cert is signed by the given CA
+		// 检查现有证书是否由给定 CA 签名
 		if err := pkiutil.VerifyCertChain(signedCert, intermediates, signingCert); err != nil {
 			return errors.Errorf("certificate %s is not signed by corresponding CA", baseName)
 		}
 
-		// Check if the certificate has the correct attributes
+		// 检查证书属性是否正确
 		if err := validateCertificateWithConfig(signedCert, baseName, cfg); err != nil {
 			return err
 		}
 
 		fmt.Printf("[certs] Using the existing %q certificate and key\n", baseName)
 	} else {
-		// Write .crt and .key files to disk
+		// 将 .crt 和 .key 文件写入磁盘
 		fmt.Printf("[certs] Generating %q certificate and key\n", baseName)
 
 		if err := pkiutil.WriteCertAndKey(pkiDir, baseName, cert, key); err != nil {
@@ -258,9 +253,9 @@ type certKeyLocation struct {
 	uxName     string
 }
 
-// SharedCertificateExists verifies if the shared certificates exist and are still valid - the certificates must be
-// equal across control-plane nodes: ca.key, ca.crt, sa.key, sa.pub, front-proxy-ca.key, front-proxy-ca.crt and etcd/ca.key, etcd/ca.crt if local/stacked etcd
-// Missing private keys of CA are non-fatal and produce warnings.
+// SharedCertificateExists 检查共享证书是否存在且有效。各控制平面节点上的证书必须一致：
+// ca.key、ca.crt、sa.key、sa.pub、front-proxy-ca.key、front-proxy-ca.crt；本地或堆叠 etcd 还需 etcd/ca.key、etcd/ca.crt。
+// 缺少 CA 私钥不会致命，但会产生警告。
 func SharedCertificateExists(cfg *kubeadmapi.ClusterConfiguration) (bool, error) {
 	var errs []error
 	if err := validateCACertAndKey(certKeyLocation{cfg.CertificatesDir, kubeadmconstants.CACertAndKeyBaseName, "", "CA"}); err != nil {
@@ -275,7 +270,7 @@ func SharedCertificateExists(cfg *kubeadmapi.ClusterConfiguration) (bool, error)
 		errs = append(errs, err)
 	}
 
-	// in case of local/stacked etcd
+	// 适用于本地或堆叠 etcd
 	if cfg.Etcd.External == nil {
 		if err := validateCACertAndKey(certKeyLocation{cfg.CertificatesDir, kubeadmconstants.EtcdCACertAndKeyBaseName, "", "etcd CA"}); err != nil {
 			errs = append(errs, err)
@@ -287,10 +282,9 @@ func SharedCertificateExists(cfg *kubeadmapi.ClusterConfiguration) (bool, error)
 	return true, nil
 }
 
-// UsingExternalCA determines whether the user is relying on an external CA.  We currently implicitly determine this is the case
-// when the CA Cert is present but the CA Key is not.
-// This allows us to, e.g., skip generating certs or not start the csr signing controller.
-// In case we are using an external front-proxy CA, the function validates the certificates signed by front-proxy CA that should be provided by the user.
+// UsingExternalCA 判断用户是否使用外部 CA。当前仅凭 CA 证书存在而 CA 私钥不存在来推断。
+// 据此可跳过证书生成或无需启动 CSR 签名控制器。
+// 如果使用外部 front-proxy CA，本函数还会校验用户应提供的、由该 CA 签名的证书。
 func UsingExternalCA(cfg *kubeadmapi.ClusterConfiguration) (bool, error) {
 
 	if err := validateCACert(certKeyLocation{cfg.CertificatesDir, kubeadmconstants.CACertAndKeyBaseName, "", "CA"}); err != nil {
@@ -313,9 +307,8 @@ func UsingExternalCA(cfg *kubeadmapi.ClusterConfiguration) (bool, error) {
 	return true, nil
 }
 
-// UsingExternalFrontProxyCA determines whether the user is relying on an external front-proxy CA.  We currently implicitly determine this is the case
-// when the front proxy CA Cert is present but the front proxy CA Key is not.
-// In case we are using an external front-proxy CA, the function validates the certificates signed by front-proxy CA that should be provided by the user.
+// UsingExternalFrontProxyCA 判断用户是否使用外部 front-proxy CA。当前仅凭其证书存在而私钥不存在来推断。
+// 如果使用外部 front-proxy CA，本函数还会校验用户应提供的、由该 CA 签名的证书。
 func UsingExternalFrontProxyCA(cfg *kubeadmapi.ClusterConfiguration) (bool, error) {
 
 	if err := validateCACert(certKeyLocation{cfg.CertificatesDir, kubeadmconstants.FrontProxyCACertAndKeyBaseName, "", "front-proxy CA"}); err != nil {
@@ -334,9 +327,8 @@ func UsingExternalFrontProxyCA(cfg *kubeadmapi.ClusterConfiguration) (bool, erro
 	return true, nil
 }
 
-// UsingExternalEtcdCA determines whether the user is relying on an external etcd CA. We currently implicitly determine this is the case
-// when the etcd CA Cert is present but the etcd CA Key is not.
-// In case we are using an external etcd CA, the function validates the certificates signed by etcd CA that should be provided by the user.
+// UsingExternalEtcdCA 判断用户是否使用外部 etcd CA。当前仅凭其证书存在而私钥不存在来推断。
+// 如果使用外部 etcd CA，本函数还会校验用户应提供的、由该 CA 签名的证书。
 func UsingExternalEtcdCA(cfg *kubeadmapi.ClusterConfiguration) (bool, error) {
 	if err := validateCACert(certKeyLocation{cfg.CertificatesDir, kubeadmconstants.EtcdCACertAndKeyBaseName, "", "etcd CA"}); err != nil {
 		return false, err
@@ -366,25 +358,25 @@ func UsingExternalEtcdCA(cfg *kubeadmapi.ClusterConfiguration) (bool, error) {
 	return true, nil
 }
 
-// validateCACert tries to load a x509 certificate from pkiDir and validates that it is a CA
+// validateCACert 尝试从 pkiDir 加载 x509 证书，并校验其是否为 CA
 func validateCACert(l certKeyLocation) error {
-	// Check CA Cert
+	// 检查 CA 证书
 	caCert, err := pkiutil.TryLoadCertFromDisk(l.pkiDir, l.caBaseName)
 	if err != nil {
 		return errors.Wrapf(err, "failure loading certificate for %s", l.uxName)
 	}
-	// Validate period
+	// 校验有效期
 	CheckCertificatePeriodValidity(l.uxName, caCert)
 
-	// Check if cert is a CA
+	// 检查证书是否为 CA
 	if !caCert.IsCA {
 		return errors.Errorf("certificate %s is not a CA", l.uxName)
 	}
 	return nil
 }
 
-// validateCACertAndKey tries to load a x509 certificate and private key from pkiDir,
-// and validates that the cert is a CA. Failure to load the key produces a warning.
+// validateCACertAndKey 尝试从 pkiDir 加载 x509 证书和私钥，并校验证书是否为 CA。
+// 加载私钥失败时会产生警告。
 func validateCACertAndKey(l certKeyLocation) error {
 	if err := validateCACert(l); err != nil {
 		return err
@@ -397,53 +389,50 @@ func validateCACertAndKey(l certKeyLocation) error {
 	return nil
 }
 
-// validateSignedCert tries to load a x509 certificate and private key from pkiDir and validates
-// that the cert is signed by a given CA
+// validateSignedCert 尝试从 pkiDir 加载 x509 证书和私钥，并校验证书是否由给定 CA 签名。
 func validateSignedCert(l certKeyLocation) error {
-	// Try to load CA
+	// 尝试加载 CA
 	caCert, err := pkiutil.TryLoadCertFromDisk(l.pkiDir, l.caBaseName)
 	if err != nil {
 		return errors.Wrapf(err, "failure loading certificate authority for %s", l.uxName)
 	}
-	// Validate period
+	// 校验有效期
 	CheckCertificatePeriodValidity(l.uxName, caCert)
 
 	return validateSignedCertWithCA(l, caCert)
 }
 
-// validateSignedCertWithCA tries to load a certificate and private key and
-// validates that the cert is signed by the given caCert
+// validateSignedCertWithCA 尝试加载证书和私钥，并校验证书是否由给定 caCert 签名。
 func validateSignedCertWithCA(l certKeyLocation, caCert *x509.Certificate) error {
-	// Try to load key from the PKI directory
+	// 尝试从 PKI 目录加载私钥
 	_, err := pkiutil.TryLoadKeyFromDisk(l.pkiDir, l.baseName)
 	if err != nil {
 		return errors.Wrapf(err, "failure loading key for %s", l.baseName)
 	}
 
-	// Try to load certificate from the PKI directory
+	// 尝试从 PKI 目录加载证书
 	signedCert, intermediates, err := pkiutil.TryLoadCertChainFromDisk(l.pkiDir, l.baseName)
 	if err != nil {
 		return errors.Wrapf(err, "failure loading certificate for %s", l.uxName)
 	}
-	// Validate period
+	// 校验有效期
 	CheckCertificatePeriodValidity(l.uxName, signedCert)
 
-	// Check if the cert is signed by the CA
+	// 检查证书是否由该 CA 签名
 	if err := pkiutil.VerifyCertChain(signedCert, intermediates, caCert); err != nil {
 		return errors.Wrapf(err, "certificate %s is not signed by corresponding CA", l.uxName)
 	}
 	return nil
 }
 
-// validatePrivatePublicKey tries to load a private key from pkiDir
+// validatePrivatePublicKey 尝试从 pkiDir 加载私钥
 func validatePrivatePublicKey(l certKeyLocation) error {
-	// Try to load key
+	// 尝试加载私钥
 	_, _, err := pkiutil.TryLoadPrivatePublicKeyFromDisk(l.pkiDir, l.baseName)
 	return errors.Wrapf(err, "failure loading key for %s", l.uxName)
 }
 
-// validateCertificateWithConfig makes sure that a given certificate is valid at
-// least for the SANs defined in the configuration.
+// validateCertificateWithConfig 确保证书至少对配置中定义的 SAN 有效。
 func validateCertificateWithConfig(cert *x509.Certificate, baseName string, cfg *pkiutil.CertConfig) error {
 	for _, dnsName := range cfg.AltNames.DNSNames {
 		if err := cert.VerifyHostname(dnsName); err != nil {
@@ -458,9 +447,8 @@ func validateCertificateWithConfig(cert *x509.Certificate, baseName string, cfg 
 	return nil
 }
 
-// CheckCertificatePeriodValidity takes a certificate and prints a warning if its period
-// is not valid related to the current time. It does so only if the certificate was not validated already
-// by keeping track with a cache.
+// CheckCertificatePeriodValidity 检查证书有效期是否覆盖当前时间，并在无效时输出警告。
+// 通过缓存记录已校验的证书，避免重复校验。
 func CheckCertificatePeriodValidity(baseName string, cert *x509.Certificate) {
 	certPeriodValidationMutex.Lock()
 	defer certPeriodValidationMutex.Unlock()

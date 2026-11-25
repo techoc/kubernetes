@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package pubkeypin provides primitives for x509 public key pinning in the
-// style of RFC7469.
+// Package pubkeypin 提供遵循 RFC7469 的 X509 公钥固定原语。
 package pubkeypin
 
 import (
@@ -28,26 +27,26 @@ import (
 )
 
 const (
-	// formatSHA256 is the prefix for pins that are full-length SHA-256 hashes encoded in base 16 (hex)
+	// formatSHA256 是完整长度 SHA-256 哈希（以十六进制编码）的 pin 前缀。
 	formatSHA256 = "sha256"
 )
 
 var (
-	// supportedFormats enumerates the supported formats
+	// supportedFormats 列出支持的格式。
 	supportedFormats = strings.Join([]string{formatSHA256}, ", ")
 )
 
-// Set is a set of pinned x509 public keys.
+// Set 是已固定的 X509 公钥集合。
 type Set struct {
 	sha256Hashes map[string]bool
 }
 
-// NewSet returns a new, empty PubKeyPinSet
+// NewSet 返回新的空 PubKeyPinSet。
 func NewSet() *Set {
 	return &Set{make(map[string]bool)}
 }
 
-// Allow adds an allowed public key hash to the Set
+// Allow 向集合添加允许的公钥哈希。
 func (s *Set) Allow(pubKeyHashes ...string) error {
 	for _, pubKeyHash := range pubKeyHashes {
 		parts := strings.Split(pubKeyHash, ":")
@@ -69,7 +68,7 @@ func (s *Set) Allow(pubKeyHashes ...string) error {
 	return nil
 }
 
-// CheckAny checks if at least one certificate matches one of the public keys in the set
+// CheckAny 判断证书是否匹配集合中的任一公钥。
 func (s *Set) CheckAny(certificates []*x509.Certificate) error {
 	var hashes []string
 
@@ -83,39 +82,38 @@ func (s *Set) CheckAny(certificates []*x509.Certificate) error {
 	return errors.Errorf("none of the public keys %q are pinned", strings.Join(hashes, ":"))
 }
 
-// Empty returns true if the Set contains no pinned public keys.
+// Empty 判断集合是否未包含已固定的公钥。
 func (s *Set) Empty() bool {
 	return len(s.sha256Hashes) == 0
 }
 
-// Hash calculates the SHA-256 hash of the Subject Public Key Information (SPKI)
-// object in an x509 certificate (in DER encoding). It returns the full hash as a
-// hex encoded string (suitable for passing to Set.Allow).
+// Hash 计算 X509 证书中 SPKI 对象（DER 编码）的 SHA-256 哈希，
+// 返回可直接传给 Set.Allow 的完整十六进制字符串。
 func Hash(certificate *x509.Certificate) string {
 	spkiHash := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
 	return formatSHA256 + ":" + strings.ToLower(hex.EncodeToString(spkiHash[:]))
 }
 
-// allowSHA256 validates a "sha256" format hash and adds a canonical version of it into the Set
+// allowSHA256 校验 "sha256" 格式的哈希，并将规范形式加入集合。
 func (s *Set) allowSHA256(hash string) error {
-	// validate that the hash is the right length to be a full SHA-256 hash
+	// 校验长度是否为完整 SHA-256 哈希。
 	hashLength := hex.DecodedLen(len(hash))
 	if hashLength != sha256.Size {
 		return errors.Errorf("expected a %d byte SHA-256 hash, found %d bytes", sha256.Size, hashLength)
 	}
 
-	// validate that the hash is valid hex
+	// 校验是否为有效十六进制。
 	_, err := hex.DecodeString(hash)
 	if err != nil {
 		return errors.Wrap(err, "could not decode SHA-256 from hex")
 	}
 
-	// in the end, just store the original hex string in memory (in lowercase)
+	// 最终仅将原始十六进制字符串以小写形式存入内存。
 	s.sha256Hashes[strings.ToLower(hash)] = true
 	return nil
 }
 
-// checkSHA256 returns true if the certificate's "sha256" hash is pinned in the Set
+// checkSHA256 判断证书的 "sha256" 哈希是否固定在集合中。
 func (s *Set) checkSHA256(certificate *x509.Certificate) bool {
 	actualHash := sha256.Sum256(certificate.RawSubjectPublicKeyInfo)
 	actualHashHex := strings.ToLower(hex.EncodeToString(actualHash[:]))

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package config contains utilities for managing the kubeadm configuration API.
+// Package config 包含管理 kubeadm 配置 API 的工具。
 package config
 
 import (
@@ -43,15 +43,16 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// LoadOrDefaultConfigurationOptions holds the common LoadOrDefaultConfiguration options.
+// LoadOrDefaultConfigurationOptions 保存 LoadOrDefaultConfiguration 的通用选项。
 type LoadOrDefaultConfigurationOptions struct {
-	// AllowExperimental indicates whether the experimental / work in progress APIs can be used.
+	// AllowExperimental 表示是否允许使用实验性或仍在开发中的 API。
 	AllowExperimental bool
-	// SkipCRIDetect indicates whether to skip the CRI socket detection when no CRI socket is provided.
+	// SkipCRIDetect 表示未提供 CRI socket 时是否跳过 CRI socket 检测。
 	SkipCRIDetect bool
 }
 
-// MarshalKubeadmConfigObject marshals an Object registered in the kubeadm scheme. If the object is a InitConfiguration or ClusterConfiguration, some extra logic is run
+// MarshalKubeadmConfigObject 序列化 kubeadm scheme 中注册的对象。
+// 对象为 InitConfiguration 或 ClusterConfiguration 时执行额外处理。
 func MarshalKubeadmConfigObject(obj runtime.Object, gv schema.GroupVersion) ([]byte, error) {
 	switch internalcfg := obj.(type) {
 	case *kubeadmapi.InitConfiguration:
@@ -61,20 +62,19 @@ func MarshalKubeadmConfigObject(obj runtime.Object, gv schema.GroupVersion) ([]b
 	}
 }
 
-// validateSupportedVersion checks if the supplied GroupVersion is not on the lists of old unsupported or deprecated GVs.
-// If it is, an error is returned.
+// validateSupportedVersion 检查给定 GroupVersion 是否属于已不支持或已弃用的旧 GV；属于则返回错误。
 func validateSupportedVersion(gvk schema.GroupVersionKind, allowDeprecated, allowExperimental bool) error {
-	// The support matrix will look something like this now and in the future:
-	// v1.10 and earlier: v1alpha1
-	// v1.11: v1alpha1 read-only, writes only v1alpha2 config
-	// v1.12: v1alpha2 read-only, writes only v1alpha3 config. Errors if the user tries to use v1alpha1
-	// v1.13: v1alpha3 read-only, writes only v1beta1 config. Errors if the user tries to use v1alpha1 or v1alpha2
-	// v1.14: v1alpha3 convert only, writes only v1beta1 config. Errors if the user tries to use v1alpha1 or v1alpha2
-	// v1.15: v1beta1 read-only, writes only v1beta2 config. Errors if the user tries to use v1alpha1, v1alpha2 or v1alpha3
-	// v1.22: v1beta2 read-only, writes only v1beta3 config. Errors if the user tries to use v1beta1 and older
-	// v1.27: only v1beta3 config. Errors if the user tries to use v1beta2 and older
-	// v1.31: v1beta3 read-only, writes only v1beta4 config, errors if the user tries to use older APIs.
-	// v1.37: only v1beta4 config. Errors if the user tries to use v1beta3 and older
+	// 当前及未来的支持矩阵如下：
+	// v1.10 及更早：v1alpha1
+	// v1.11：v1alpha1 只读，仅写入 v1alpha2 配置
+	// v1.12：v1alpha2 只读，仅写入 v1alpha3 配置；使用 v1alpha1 报错
+	// v1.13：v1alpha3 只读，仅写入 v1beta1 配置；使用 v1alpha1 或 v1alpha2 报错
+	// v1.14：v1alpha3 仅转换，仅写入 v1beta1 配置；使用 v1alpha1 或 v1alpha2 报错
+	// v1.15：v1beta1 只读，仅写入 v1beta2 配置；使用 v1alpha1、v1alpha2 或 v1alpha3 报错
+	// v1.22：v1beta2 只读，仅写入 v1beta3 配置；使用 v1beta1 及更早版本报错
+	// v1.27：仅支持 v1beta3；使用 v1beta2 及更早版本报错
+	// v1.31：v1beta3 只读，仅写入 v1beta4；使用更早 API 报错
+	// v1.37：仅支持 v1beta4；使用 v1beta3 及更早版本报错
 	oldKnownAPIVersions := map[string]string{
 		"kubeadm.k8s.io/v1alpha1": "v1.11",
 		"kubeadm.k8s.io/v1alpha2": "v1.12",
@@ -84,12 +84,12 @@ func validateSupportedVersion(gvk schema.GroupVersionKind, allowDeprecated, allo
 		"kubeadm.k8s.io/v1beta3":  "v1.36",
 	}
 
-	// Experimental API versions are present here until released. Can be used only if allowed.
+	// 实验性 API 在正式发布前保留在此处，仅在明确允许时使用。
 	experimentalAPIVersions := map[string]struct{}{
 		"kubeadm.k8s.io/v1": {},
 	}
 
-	// Deprecated API versions are supported until removed. They throw a warning.
+	// 已弃用 API 在移除前仍受支持，但会发出警告。
 	deprecatedAPIVersions := map[string]struct{}{}
 
 	gvString := gvk.GroupVersion().String()
@@ -109,41 +109,38 @@ func validateSupportedVersion(gvk schema.GroupVersionKind, allowDeprecated, allo
 	return nil
 }
 
-// NormalizeKubernetesVersion resolves version labels, sets alternative
-// image registry if requested for CI builds, and validates minimal
-// version that kubeadm SetInitDynamicDefaults supports.
+// NormalizeKubernetesVersion 解析版本标签，按 CI 构建要求设置备用镜像仓库，
+// 并验证版本不低于 kubeadm SetInitDynamicDefaults 支持的最低版本。
 func NormalizeKubernetesVersion(cfg *kubeadmapi.ClusterConfiguration) error {
 	isCIVersion := kubeadmutil.KubernetesIsCIVersion(cfg.KubernetesVersion)
 
-	// Requested version is automatic CI build, thus use KubernetesCI Image Repository for core images
+	// 请求的是自动 CI 构建，因此核心镜像使用 KubernetesCI Image Repository。
 	if isCIVersion && cfg.ImageRepository == kubeadmapiv1.DefaultImageRepository {
 		cfg.CIImageRepository = constants.DefaultCIImageRepository
 	}
 
-	// Parse and validate the version argument and resolve possible CI version labels
+	// 解析并验证版本参数，同时解析可能的 CI 版本标签。
 	ver, err := kubeadmutil.KubernetesReleaseVersion(cfg.KubernetesVersion)
 	if err != nil {
 		return err
 	}
 
-	// Requested version is automatic CI build, thus mark CIKubernetesVersion as `ci/<resolved-version>`
+	// 请求的是自动 CI 构建，因此将 CIKubernetesVersion 标记为 `ci/<resolved-version>`。
 	if isCIVersion {
 		cfg.CIKubernetesVersion = fmt.Sprintf("%s%s", constants.CIKubernetesVersionPrefix, ver)
 	}
 
 	cfg.KubernetesVersion = ver
 
-	// Parse the given kubernetes version and make sure it's higher than the lowest supported
+	// 解析给定的 Kubernetes 版本，并确保其高于最低支持版本。
 	k8sVersion, err := version.ParseSemantic(cfg.KubernetesVersion)
 	if err != nil {
 		return errors.Wrapf(err, "couldn't parse Kubernetes version %q", cfg.KubernetesVersion)
 	}
 
-	// During the k8s release process, a kubeadm version in the main branch could be 1.23.0-pre,
-	// while the 1.22.0 version is not released yet. The MinimumControlPlaneVersion validation
-	// in such a case will not pass, since the value of MinimumControlPlaneVersion would be
-	// calculated as kubeadm version - 1 (1.22) and k8sVersion would still be at 1.21.x
-	// (fetched from the 'stable' marker). Handle this case by only showing a warning.
+	// Kubernetes 发布期间，主分支中的 kubeadm 版本可能已是 1.23.0-pre，而 1.22.0 尚未发布。
+	// 此时 MinimumControlPlaneVersion 按 kubeadm 版本减 1 计算为 1.22，但 k8sVersion 仍为从
+	// "stable" 标记获取的 1.21.x，因而无法通过校验。此情形仅显示警告。
 	mcpVersion := constants.MinimumControlPlaneVersion
 	versionInfo := componentversion.Get()
 	if isKubeadmPrereleaseVersion(&versionInfo, k8sVersion, mcpVersion) {
@@ -151,7 +148,7 @@ func NormalizeKubernetesVersion(cfg *kubeadmapi.ClusterConfiguration) error {
 
 		return nil
 	}
-	// If not a pre-release version, handle the validation normally.
+	// 非预发布版本按正常流程校验。
 	if k8sVersion.LessThan(mcpVersion) {
 		return errors.Errorf("this version of kubeadm only supports deploying clusters with the control plane version >= %s. Current version: %s",
 			mcpVersion, cfg.KubernetesVersion)
@@ -159,7 +156,7 @@ func NormalizeKubernetesVersion(cfg *kubeadmapi.ClusterConfiguration) error {
 	return nil
 }
 
-// LowercaseSANs can be used to force all SANs to be lowercase so it passes IsDNS1123Subdomain
+// LowercaseSANs 可强制将所有 SAN 转为小写，以通过 IsDNS1123Subdomain 校验。
 func LowercaseSANs(sans []string) {
 	for i, san := range sans {
 		lowercase := strings.ToLower(san)
@@ -170,18 +167,15 @@ func LowercaseSANs(sans []string) {
 	}
 }
 
-// VerifyAPIServerBindAddress can be used to verify if a bind address for the API Server is 0.0.0.0,
-// in which case this address is not valid and should not be used.
+// VerifyAPIServerBindAddress 检查 API 服务器的绑定地址是否为 0.0.0.0；该地址无效，不应使用。
 func VerifyAPIServerBindAddress(address string) error {
 	ip := netutils.ParseIPSloppy(address)
 	if ip == nil {
 		return errors.Errorf("cannot parse IP address: %s", address)
 	}
-	// There are users with network setups where default routes are present, but network interfaces
-	// use only link-local addresses (e.g. as described in RFC5549).
-	// In many cases that matching global unicast IP address can be found on loopback interface,
-	// so kubeadm allows users to specify address=Loopback for handling supporting the scenario above.
-	// Nb. SetAPIEndpointDynamicDefaults will try to translate loopback to a valid address afterwards
+	// 某些网络虽有默认路由，但接口仅使用链路本地地址（如 RFC5549 所述）。
+	// 回环接口上通常能找到匹配的全局单播地址，因此 kubeadm 允许指定 address=Loopback。
+	// 注意：SetAPIEndpointDynamicDefaults 随后会将 loopback 转换为有效地址。
 	if ip.IsLoopback() {
 		return nil
 	}
@@ -191,8 +185,8 @@ func VerifyAPIServerBindAddress(address string) error {
 	return nil
 }
 
-// ChooseAPIServerBindAddress is a wrapper for netutil.ResolveBindAddress that also handles
-// the case where no default routes were found and an IP for the API server could not be obtained.
+// ChooseAPIServerBindAddress 包装 netutil.ResolveBindAddress，
+// 并处理找不到默认路由、无法取得 API 服务器 IP 的情况。
 func ChooseAPIServerBindAddress(bindAddress net.IP) (net.IP, error) {
 	ip, err := netutil.ResolveBindAddress(bindAddress)
 	if err != nil {
@@ -212,7 +206,7 @@ func ChooseAPIServerBindAddress(bindAddress net.IP) (net.IP, error) {
 	return ip, nil
 }
 
-// validateKnownGVKs takes a list of GVKs and verifies if they are known in kubeadm or component config schemes
+// validateKnownGVKs 检查给定 GVK 列表是否已注册在 kubeadm 或组件配置 scheme 中。
 func validateKnownGVKs(gvks []schema.GroupVersionKind) error {
 	var unknown []schema.GroupVersionKind
 
@@ -224,8 +218,7 @@ func validateKnownGVKs(gvks []schema.GroupVersionKind) error {
 	for _, gvk := range gvks {
 		var scheme *runtime.Scheme
 
-		// Skip legacy known GVs so that they don't return errors.
-		// This makes the function return errors only for GVs that where never known.
+		// 跳过已知的旧 GV，避免其触发错误；函数仅对从未注册过的 GV 返回错误。
 		if err := validateSupportedVersion(gvk, true, true); err != nil {
 			continue
 		}
@@ -248,8 +241,7 @@ func validateKnownGVKs(gvks []schema.GroupVersionKind) error {
 	return nil
 }
 
-// MigrateOldConfig migrates an old configuration from a byte slice into a new one (returned again as a byte slice).
-// Only kubeadm kinds are migrated.
+// MigrateOldConfig 将旧配置字节切片迁移为新配置字节切片，仅迁移 kubeadm 类型。
 func MigrateOldConfig(oldConfig []byte, allowExperimental bool, mutators migrateMutators) ([]byte, error) {
 	newConfig := [][]byte{}
 
@@ -272,11 +264,11 @@ func MigrateOldConfig(oldConfig []byte, allowExperimental bool, mutators migrate
 	}
 
 	gv := kubeadmapiv1.SchemeGroupVersion
-	// Update GV to an experimental version if needed
+	// 必要时将 GV 更新为实验性版本。
 	if allowExperimental {
 		gv = kubeadmapiv1.SchemeGroupVersion
 	}
-	// Migrate InitConfiguration and ClusterConfiguration if there are any in the config
+	// 若配置中存在 InitConfiguration 和 ClusterConfiguration，则迁移它们。
 	if kubeadmutil.GroupVersionKindsHasInitConfiguration(gvks...) || kubeadmutil.GroupVersionKindsHasClusterConfiguration(gvks...) {
 		o, err := documentMapToInitConfiguration(gvkmap, true, allowExperimental, true, false)
 		if err != nil {
@@ -292,7 +284,7 @@ func MigrateOldConfig(oldConfig []byte, allowExperimental bool, mutators migrate
 		newConfig = append(newConfig, b)
 	}
 
-	// Migrate JoinConfiguration if there is any
+	// 若存在 JoinConfiguration，则迁移它。
 	if kubeadmutil.GroupVersionKindsHasJoinConfiguration(gvks...) {
 		o, err := documentMapToJoinConfiguration(gvkmap, true, allowExperimental, true, false)
 		if err != nil {
@@ -308,7 +300,7 @@ func MigrateOldConfig(oldConfig []byte, allowExperimental bool, mutators migrate
 		newConfig = append(newConfig, b)
 	}
 
-	// Migrate ResetConfiguration if there is any
+	// 若存在 ResetConfiguration，则迁移它。
 	if kubeadmutil.GroupVersionKindsHasResetConfiguration(gvks...) {
 		o, err := documentMapToResetConfiguration(gvkmap, true, allowExperimental, true, false)
 		if err != nil {
@@ -324,7 +316,7 @@ func MigrateOldConfig(oldConfig []byte, allowExperimental bool, mutators migrate
 		newConfig = append(newConfig, b)
 	}
 
-	// Migrate UpgradeConfiguration if there is any
+	// 若存在 UpgradeConfiguration，则迁移它。
 	if kubeadmutil.GroupVersionKindsHasUpgradeConfiguration(gvks...) {
 		o, err := documentMapToUpgradeConfiguration(gvkmap, true, allowExperimental, true)
 		if err != nil {
@@ -343,8 +335,7 @@ func MigrateOldConfig(oldConfig []byte, allowExperimental bool, mutators migrate
 	return bytes.Join(newConfig, []byte(constants.YAMLDocumentSeparator)), nil
 }
 
-// ValidateConfig takes a byte slice containing a kubeadm configuration and performs conversion
-// to internal types and validation.
+// ValidateConfig 接收 kubeadm 配置字节切片，转换为内部类型并校验。
 func ValidateConfig(config []byte, allowDeprecated, allowExperimental bool) error {
 	gvkmap, err := kubeadmutil.SplitConfigDocuments(config)
 	if err != nil {
@@ -360,28 +351,28 @@ func ValidateConfig(config []byte, allowDeprecated, allowExperimental bool) erro
 		return err
 	}
 
-	// Validate InitConfiguration and ClusterConfiguration if there are any in the config
+	// 若配置中存在 InitConfiguration 和 ClusterConfiguration，则校验它们。
 	if kubeadmutil.GroupVersionKindsHasInitConfiguration(gvks...) || kubeadmutil.GroupVersionKindsHasClusterConfiguration(gvks...) {
 		if _, err := documentMapToInitConfiguration(gvkmap, allowDeprecated, allowExperimental, true, true); err != nil {
 			return err
 		}
 	}
 
-	// Validate JoinConfiguration if there is any
+	// 若存在 JoinConfiguration，则校验它。
 	if kubeadmutil.GroupVersionKindsHasJoinConfiguration(gvks...) {
 		if _, err := documentMapToJoinConfiguration(gvkmap, allowDeprecated, allowExperimental, true, true); err != nil {
 			return err
 		}
 	}
 
-	// Validate ResetConfiguration if there is any
+	// 若存在 ResetConfiguration，则校验它。
 	if kubeadmutil.GroupVersionKindsHasResetConfiguration(gvks...) {
 		if _, err := documentMapToResetConfiguration(gvkmap, allowDeprecated, allowExperimental, true, true); err != nil {
 			return err
 		}
 	}
 
-	// Validate UpgradeConfiguration if there is any
+	// 若存在 UpgradeConfiguration，则校验它。
 	if kubeadmutil.GroupVersionKindsHasUpgradeConfiguration(gvks...) {
 		if _, err := documentMapToUpgradeConfiguration(gvkmap, allowDeprecated, allowExperimental, true); err != nil {
 			return err
@@ -391,14 +382,13 @@ func ValidateConfig(config []byte, allowDeprecated, allowExperimental bool) erro
 	return nil
 }
 
-// isKubeadmPrereleaseVersion returns true if the kubeadm version is a pre-release version and
-// the minimum control plane version is N+2 MINOR version of the given k8sVersion.
+// isKubeadmPrereleaseVersion 判断 kubeadm 是否为预发布版本，且最低控制平面版本是否为给定
+// k8sVersion 的 N+2 MINOR 版本。
 func isKubeadmPrereleaseVersion(versionInfo *apimachineryversion.Info, k8sVersion, mcpVersion *version.Version) bool {
-	if len(versionInfo.Major) != 0 { // Make sure the component version is populated
+	if len(versionInfo.Major) != 0 { // if len(versionInfo.Major) != 0 { // 确保组件版本已填充
 		kubeadmVersion := version.MustParseSemantic(versionInfo.String())
-		if len(kubeadmVersion.PreRelease()) != 0 { // Only handle this if the kubeadm binary is a pre-release
-			// After incrementing the k8s MINOR version by one, if this version is equal or greater than the
-			// MCP version, return true.
+		if len(kubeadmVersion.PreRelease()) != 0 { // if len(kubeadmVersion.PreRelease()) != 0 { // 仅处理 kubeadm 二进制为预发布版本的情况
+			// 将 k8s MINOR 版本加一后，若不早于 MCP 版本则返回 true。
 			v := k8sVersion.WithMinor(k8sVersion.Minor() + 1)
 			if comp, _ := v.Compare(mcpVersion.String()); comp != -1 {
 				return true
@@ -408,8 +398,7 @@ func isKubeadmPrereleaseVersion(versionInfo *apimachineryversion.Info, k8sVersio
 	return false
 }
 
-// prepareStaticVariables takes a given config and stores values from it in variables
-// that can be used from multiple packages.
+// prepareStaticVariables 从给定配置提取值并保存，供多个包使用。
 func prepareStaticVariables(config any) {
 	switch c := config.(type) {
 	case *kubeadmapi.InitConfiguration:
@@ -423,18 +412,16 @@ func prepareStaticVariables(config any) {
 	}
 }
 
-// migrateMutator can be used to mutate a slice of configuration objects.
-// The mutation is applied in-place and no copies are made.
+// migrateMutator 可修改配置对象切片；修改原地执行，不复制对象。
 type migrateMutator struct {
 	in         []any
 	mutateFunc func(in []any) error
 }
 
-// migrateMutators holds a list of registered mutators.
+// migrateMutators 保存已注册的 mutator。
 type migrateMutators []migrateMutator
 
-// mutate can be called on a list of registered mutators to find a suitable one to perform
-// a configuration object mutation.
+// mutate 在已注册的 mutator 中查找合适的实现来修改配置对象。
 func (mutators migrateMutators) mutate(in []any) error {
 	var mutator *migrateMutator
 	for idx, m := range mutators {
@@ -459,7 +446,7 @@ func (mutators migrateMutators) mutate(in []any) error {
 	return mutator.mutateFunc(in)
 }
 
-// addEmpty adds an empty migrate mutator for a given input.
+// addEmpty 为给定输入添加空的迁移 mutator。
 func (mutators *migrateMutators) addEmpty(in []any) {
 	mutator := migrateMutator{
 		in:         in,
@@ -468,13 +455,13 @@ func (mutators *migrateMutators) addEmpty(in []any) {
 	*mutators = append(*mutators, mutator)
 }
 
-// defaultMutators returns the default list of mutators for known configuration objects.
-// In case certain fileds need to be mutated during migration, it must be defined here.
+// defaultMutators 返回已知配置对象的默认 mutator 列表。
+// 迁移期间需要修改的字段必须在此定义。
 func defaultMigrateMutators() migrateMutators {
 	return defaultEmptyMigrateMutators()
 }
 
-// defaultEmptyMigrateMutators returns a list of empty mutators for known types.
+// defaultEmptyMigrateMutators 返回已知类型的空 mutator 列表。
 func defaultEmptyMigrateMutators() migrateMutators {
 	mutators := &migrateMutators{}
 

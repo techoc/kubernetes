@@ -40,21 +40,21 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/output"
 )
 
-// createJobHealthCheckPrefix is name prefix for the Job health check.
+// createJobHealthCheckPrefix 是 Job 健康检查的名称前缀。
 const createJobHealthCheckPrefix = "upgrade-health-check"
 
-// healthCheck is a helper struct for easily performing healthchecks against the cluster and printing the output
+// healthCheck 是用于执行集群健康检查并打印输出的辅助结构体。
 type healthCheck struct {
 	name    string
 	client  clientset.Interface
 	cfg     *kubeadmapi.ClusterConfiguration
 	dryRun  bool
 	printer output.Printer
-	// f is invoked with a k8s client and a kubeadm ClusterConfiguration passed to it. Should return an optional error
+	// f 接收 k8s 客户端和 kubeadm ClusterConfiguration，可选择返回错误。
 	f func(clientset.Interface, *kubeadmapi.ClusterConfiguration, bool, output.Printer) error
 }
 
-// Check is part of the preflight.Checker interface
+// Check 是 preflight.Checker 接口的一部分。
 func (c *healthCheck) Check() (warnings, errors []error) {
 	if err := c.f(c.client, c.cfg, c.dryRun, c.printer); err != nil {
 		return nil, []error{err}
@@ -62,15 +62,15 @@ func (c *healthCheck) Check() (warnings, errors []error) {
 	return nil, nil
 }
 
-// Name is part of the preflight.Checker interface
+// Name 是 preflight.Checker 接口的一部分。
 func (c *healthCheck) Name() string {
 	return c.name
 }
 
-// CheckClusterHealth makes sure:
-// - the cluster can accept a workload
-// - all control-plane Nodes are Ready
-// - (if static pod-hosted) that all required Static Pod manifests exist on disk
+// CheckClusterHealth 确保：
+// - 集群可以接受工作负载。
+// - 所有控制平面节点均处于 Ready 状态。
+// - 若使用静态 Pod，所有必需的 Static Pod 清单均存在于磁盘上。
 func CheckClusterHealth(client clientset.Interface, cfg *kubeadmapi.ClusterConfiguration, ignoreChecksErrors sets.Set[string], dryRun bool, printer output.Printer) error {
 	_, _ = printer.Println("[upgrade] Running cluster health checks")
 
@@ -101,7 +101,7 @@ func CheckClusterHealth(client clientset.Interface, cfg *kubeadmapi.ClusterConfi
 	return preflight.RunChecks(healthChecks, os.Stderr, ignoreChecksErrors)
 }
 
-// createJob is a check that verifies that a Job can be created in the cluster
+// createJob 验证能否在集群中创建 Job。
 func createJob(client clientset.Interface, cfg *kubeadmapi.ClusterConfiguration, _ bool, _ output.Printer) error {
 	const (
 		fieldSelector = "spec.unschedulable=false"
@@ -116,7 +116,7 @@ func createJob(client clientset.Interface, cfg *kubeadmapi.ClusterConfiguration,
 		listOptions    = metav1.ListOptions{Limit: 1, FieldSelector: fieldSelector}
 	)
 
-	// Check if there is at least one Node where a Job's Pod can schedule. If not, skip this preflight check.
+	// 检查是否至少有一个节点可调度 Job 的 Pod；若没有，则跳过此预检。
 	err = wait.PollUntilContextTimeout(ctx, time.Second*1, timeout, true, func(_ context.Context) (bool, error) {
 		nodes, err = client.CoreV1().Nodes().List(context.Background(), listOptions)
 		if err != nil {
@@ -135,14 +135,13 @@ func createJob(client clientset.Interface, cfg *kubeadmapi.ClusterConfiguration,
 		return nil
 	}
 
-	// Adding a margin of error to the polling timeout.
+	// 为轮询超时增加一定的容错余量。
 	timeoutWithMargin := timeout.Seconds() + timeoutMargin.Seconds()
 
-	// Do not use ObjectMeta.GenerateName to avoid the problem where the dry-run client for upgrade cannot obtain
-	// a Name for this Job during the GET call right after the CREATE call.
+	// 不使用 ObjectMeta.GenerateName，避免升级的试运行客户端在 CREATE 后立即 GET 时无法获取 Job 的 Name。
 	jobName := fmt.Sprintf("%s-%d", createJobHealthCheckPrefix, time.Now().UTC().UnixMilli())
 
-	// Prepare Job
+	// 准备 Job。
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -178,7 +177,7 @@ func createJob(client clientset.Interface, cfg *kubeadmapi.ClusterConfiguration,
 		},
 	}
 
-	// Create the Job, but retry if it fails
+	// 创建 Job，失败时重试。
 	klog.V(2).Infof("Creating a Job %q in the namespace %q", jobName, ns)
 	err = wait.PollUntilContextTimeout(ctx, time.Second*1, timeout, true, func(_ context.Context) (bool, error) {
 		_, err := client.BatchV1().Jobs(ns).Create(context.Background(), job, metav1.CreateOptions{})
@@ -193,7 +192,7 @@ func createJob(client clientset.Interface, cfg *kubeadmapi.ClusterConfiguration,
 		return errors.Wrapf(lastError, "could not create Job %q in the namespace %q", jobName, ns)
 	}
 
-	// Wait for the Job to complete
+	// 等待 Job 完成。
 	err = wait.PollUntilContextTimeout(ctx, time.Second*1, timeout, true, func(_ context.Context) (bool, error) {
 		job, err := client.BatchV1().Jobs(ns).Get(context.Background(), jobName, metav1.GetOptions{})
 		if err != nil {
@@ -219,7 +218,7 @@ func createJob(client clientset.Interface, cfg *kubeadmapi.ClusterConfiguration,
 	return nil
 }
 
-// controlPlaneNodesReady checks whether all control-plane Nodes in the cluster are in the Running state
+// controlPlaneNodesReady 检查集群中所有控制平面节点是否处于 Running 状态。
 func controlPlaneNodesReady(client clientset.Interface, _ *kubeadmapi.ClusterConfiguration, _ bool, _ output.Printer) error {
 	selectorControlPlane := labels.SelectorFromSet(map[string]string{
 		constants.LabelNodeRoleControlPlane: "",
@@ -238,7 +237,7 @@ func controlPlaneNodesReady(client clientset.Interface, _ *kubeadmapi.ClusterCon
 	return nil
 }
 
-// staticPodManifestHealth makes sure the required static pods are presents
+// staticPodManifestHealth 确保必需的静态 Pod 存在。
 func staticPodManifestHealth(_ clientset.Interface, _ *kubeadmapi.ClusterConfiguration, dryRun bool, printer output.Printer) error {
 	var nonExistentManifests []string
 	for _, component := range constants.ControlPlaneComponents {
@@ -257,7 +256,7 @@ func staticPodManifestHealth(_ clientset.Interface, _ *kubeadmapi.ClusterConfigu
 	return errors.Errorf("manifest files not found: %v", nonExistentManifests)
 }
 
-// getNotReadyNodes returns a string slice of nodes in the cluster that are NotReady
+// getNotReadyNodes 返回集群中处于 NotReady 状态的节点名称切片。
 func getNotReadyNodes(nodes []v1.Node) []string {
 	var notReadyNodes []string
 	for _, node := range nodes {

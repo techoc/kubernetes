@@ -19,35 +19,33 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm
 
-// Package v1 defines the v1 version of the kubeadm configuration file format.
-// This version improves on the v1beta4 format by fixing some minor issues and adding a few new fields.
+// Package v1 定义 kubeadm 配置文件的 v1 版本格式。
+// 此版本在 v1beta4 基础上修复了一些小问题并新增了若干字段。
 //
-// TODO: tracking issue for v1:
+// TODO: v1 的跟踪问题：
 //   - https://github.com/kubernetes/kubeadm/issues/3160
 //
-// A list of changes since v1beta4:
+// 自 v1beta4 以来的变更：
 // vx.yy:
-//   - Add a new field `MergeMethod` to an `Arg` with 3 possible values, `append`, `prepend`, or empty.
-//     This allows to control how an override argument is merged with the base argument of the same name.
-//     Empty is the default behavior and means replace.
+//   - 为 `Arg` 新增 `MergeMethod` 字段，可选值为 `append`、`prepend` 或空值。
+//     此字段用于控制覆盖参数与同名基础参数的合并方式；空值为默认行为，表示替换。
 //
-// Migration from old kubeadm config versions
+// 从旧版 kubeadm 配置迁移
 //
-//   - kubeadm v1.15.x and newer can be used to migrate from v1beta1 to v1beta2.
-//   - kubeadm v1.22.x and newer no longer support v1beta1 and older APIs, but can be used to migrate v1beta2 to v1beta3.
-//   - kubeadm v1.27.x and newer no longer support v1beta2 and older APIs.
-//   - kubeadm v1.31.x and newer can be used to migrate from v1beta3 to v1beta4.
-//   - kubeadm TODO and newer can be used to migrate from v1beta4 to v1.
+//   - kubeadm v1.15.x 及更新版本可用于从 v1beta1 迁移到 v1beta2。
+//   - kubeadm v1.22.x 及更新版本不再支持 v1beta1 及更早 API，但可用于从 v1beta2 迁移到 v1beta3。
+//   - kubeadm v1.27.x 及更新版本不再支持 v1beta2 及更早 API。
+//   - kubeadm v1.31.x 及更新版本可用于从 v1beta3 迁移到 v1beta4。
+//   - 未来的 kubeadm 版本可用于从 v1beta4 迁移到 v1。
 //
-// # Basics
+// # 基础
 //
-// The preferred way to configure kubeadm is to pass a YAML configuration file with the --config option. Some of the
-// configuration options defined in the kubeadm config file are also available as command line flags, but only
-// the most common/simple use case are supported with this approach.
+// 配置 kubeadm 的首选方式是通过 --config 选项传入 YAML 配置文件。
+// 配置文件中的部分选项也可通过命令行参数设置，但此方式仅支持最常见、最简单的用例。
 //
-// A kubeadm config file could contain multiple configuration types separated using three dashes ("---").
+// 一个 kubeadm 配置文件可以使用三个短横线（"---"）分隔多个配置类型。
 //
-// kubeadm supports the following configuration types:
+// kubeadm 支持以下配置类型：
 //
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: InitConfiguration
@@ -70,31 +68,26 @@ limitations under the License.
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: UpgradeConfiguration
 //
-// To print the defaults for "init" and "join" actions use the following commands:
+// 使用以下命令打印 init 和 join 等操作的默认配置：
 //
 //	kubeadm config print init-defaults
 //	kubeadm config print join-defaults
 //	kubeadm config print reset-defaults
 //	kubeadm config print upgrade-defaults
 //
-// The list of configuration types that must be included in a configuration file depends by the action you are
-// performing (init or join) and by the configuration options you are going to use (defaults or advanced customization).
+// 配置文件中必须包含的配置类型取决于执行的操作（init 或 join）以及要使用的配置选项（默认值或高级自定义）。
 //
-// If some configuration types are not provided, or provided only partially, kubeadm will use default values; defaults
-// provided by kubeadm includes also enforcing consistency of values across components when required (e.g.
-// cluster-cidr flag on controller manager and clusterCIDR on kube-proxy).
+// 若未提供某些配置类型或仅提供部分内容，kubeadm 将使用默认值；必要时还会强制保持各组件间取值一致，
+// 例如控制器管理器的 cluster-cidr 参数与 kube-proxy 的 clusterCIDR。
 //
-// Users are always allowed to override default values, with the only exception of a small subset of setting with
-// relevance for security (e.g. enforce authorization-mode Node and RBAC on api server)
+// 用户始终可以覆盖默认值，但少数与安全相关的设置除外（例如强制 API Server 使用 authorization-mode Node 和 RBAC）。
 //
-// If the user provides a configuration types that is not expected for the action you are performing, kubeadm will
-// ignore those types and print a warning.
+// 若用户提供了当前操作不需要的配置类型，kubeadm 将忽略这些类型并输出警告。
 //
-// # Kubeadm init configuration types
+// # kubeadm init 配置类型
 //
-// When executing kubeadm init with the --config option, the following configuration types could be used:
-// InitConfiguration, ClusterConfiguration, KubeProxyConfiguration, KubeletConfiguration, but only one
-// between InitConfiguration and ClusterConfiguration is mandatory.
+// 执行带 --config 选项的 kubeadm init 时，可使用 InitConfiguration、ClusterConfiguration、
+// KubeProxyConfiguration 和 KubeletConfiguration，但 InitConfiguration 与 ClusterConfiguration 至少必须提供一个。
 //
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: InitConfiguration
@@ -103,16 +96,11 @@ limitations under the License.
 //	nodeRegistration:
 //	    ...
 //
-// The InitConfiguration type should be used to configure runtime settings, that in case of kubeadm init
-// are the configuration of the bootstrap token and all the setting which are specific to the node where kubeadm
-// is executed, including:
+// InitConfiguration 用于配置 kubeadm init 的运行时设置，包括 Bootstrap Token 配置以及仅对执行 kubeadm 的节点生效的设置：
 //
-// - NodeRegistration, that holds fields that relate to registering the new node to the cluster;
-// use it to customize the node name, the CRI socket to use or any other settings that should apply to this
-// node only (e.g. the node ip).
+// - NodeRegistration 保存将新节点注册到集群所需的字段；可用于自定义节点名称、CRI 套接字或其他节点专属设置（如节点 IP）。
 //
-// - LocalAPIEndpoint, that represents the endpoint of the instance of the API server to be deployed on this node;
-// use it e.g. to customize the API server advertise address.
+// - LocalAPIEndpoint 表示将部署在此节点上的 API Server 实例端点；可用于自定义 API Server 公布地址。
 //
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: ClusterConfiguration
@@ -127,40 +115,33 @@ limitations under the License.
 //	    ...
 //	...
 //
-// The ClusterConfiguration type should be used to configure cluster-wide settings,
-// including settings for:
+// ClusterConfiguration 用于配置集群范围的设置，包括：
 //
-// - Networking, that holds configuration for the networking topology of the cluster; use it e.g. to customize
-// pod subnet or services subnet.
+// - Networking 保存集群网络拓扑配置；可用于自定义 Pod 子网或服务子网。
 //
-// - Etcd configurations; use it e.g. to customize the local etcd or to configure the API server
-// for using an external etcd cluster.
+// - Etcd 配置；可用于自定义本地 etcd，或配置 API Server 使用外部 etcd 集群。
 //
-// - kube-apiserver, kube-scheduler, kube-controller-manager configurations; use it to customize control-plane
-// components by adding customized setting or overriding kubeadm default settings.
+// - kube-apiserver、kube-scheduler、kube-controller-manager 配置；可通过添加自定义设置或覆盖 kubeadm 默认设置来定制控制平面组件。
 //
 //	apiVersion: kubeproxy.config.k8s.io/v1alpha1
 //	kind: KubeProxyConfiguration
 //	   ...
 //
-// The KubeProxyConfiguration type should be used to change the configuration passed to kube-proxy instances deployed
-// in the cluster. If this object is not provided or provided only partially, kubeadm applies defaults.
+// KubeProxyConfiguration 用于修改传递给集群中 kube-proxy 实例的配置。未提供此对象或仅提供部分内容时，kubeadm 会应用默认值。
 //
-// See https://kubernetes.io/docs/reference/command-line-tools-reference/kube-proxy/ or https://pkg.go.dev/k8s.io/kube-proxy/config/v1alpha1#KubeProxyConfiguration
-// for kube proxy official documentation.
+// kube-proxy 官方文档：https://kubernetes.io/docs/reference/command-line-tools-reference/kube-proxy/ 或
+// https://pkg.go.dev/k8s.io/kube-proxy/config/v1alpha1#KubeProxyConfiguration
 //
 //	apiVersion: kubelet.config.k8s.io/v1beta1
 //	kind: KubeletConfiguration
 //	   ...
 //
-// The KubeletConfiguration type should be used to change the configurations that will be passed to all kubelet instances
-// deployed in the cluster. If this object is not provided or provided only partially, kubeadm applies defaults.
+// KubeletConfiguration 用于修改传递给集群中所有 kubelet 实例的配置。未提供此对象或仅提供部分内容时，kubeadm 会应用默认值。
 //
-// See https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/ or https://pkg.go.dev/k8s.io/kubelet/config/v1beta1#KubeletConfiguration
-// for kubelet official documentation.
+// kubelet 官方文档：https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/ 或
+// https://pkg.go.dev/k8s.io/kubelet/config/v1beta1#KubeletConfiguration
 //
-// Here is a fully populated example of a single YAML file containing multiple
-// configuration types to be used during a `kubeadm init` run.
+// 以下是一个内容完整的 YAML 文件示例，包含 `kubeadm init` 运行所需的多种配置类型。
 //
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: InitConfiguration
@@ -283,9 +264,9 @@ limitations under the License.
 //	kind: KubeProxyConfiguration
 //	# kube-proxy specific options here
 //
-// # Kubeadm join configuration types
+// # kubeadm join 配置类型
 //
-// When executing kubeadm join with the --config option, the JoinConfiguration type should be provided.
+// 执行带 --config 选项的 kubeadm join 时，应提供 JoinConfiguration 类型。
 //
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: JoinConfiguration
@@ -296,27 +277,23 @@ limitations under the License.
 //	    unsafeSkipCAVerification: true
 //	  tlsBootstrapToken: abcdef.0123456789abcdef
 //
-// The JoinConfiguration type should be used to configure runtime settings, that in case of kubeadm join
-// are the discovery method used for accessing the cluster info and all the setting which are specific
-// to the node where kubeadm is executed, including:
+// JoinConfiguration 用于配置 kubeadm join 的运行时设置，包括访问集群信息的发现方式以及仅对执行 kubeadm 的节点生效的设置：
 //
-// - NodeRegistration, that holds fields that relate to registering the new node to the cluster;
-// use it to customize the node name, the CRI socket to use or any other settings that should apply to this
-// node only (e.g. the node ip).
+// - NodeRegistration 保存将新节点注册到集群所需的字段；可用于自定义节点名称、CRI 套接字或其他节点专属设置（如节点 IP）。
 //
-// - APIEndpoint, that represents the endpoint of the instance of the API server to be eventually deployed on this node.
+// - APIEndpoint 表示最终将部署在此节点上的 API Server 实例端点。
 //
-// # Kubeadm reset configuration types
+// # kubeadm reset 配置类型
 //
-// When executing kubeadm reset with the --config option, the ResetConfiguration type should be provided.
+// 执行带 --config 选项的 kubeadm reset 时，应提供 ResetConfiguration 类型。
 //
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: ResetConfiguration
 //	   ...
 //
-// # Kubeadm upgrade configuration types
+// # kubeadm upgrade 配置类型
 //
-// When executing kubeadm upgrade with the --config option, the UpgradeConfiguration type should be provided.
+// 执行带 --config 选项的 kubeadm upgrade 时，应提供 UpgradeConfiguration 类型。
 //
 //	apiVersion: kubeadm.k8s.io/v1
 //	kind: UpgradeConfiguration
@@ -329,7 +306,6 @@ limitations under the License.
 //	plan:
 //	  ...
 //
-// The UpgradeConfiguration structure includes a few substructures that only apply to different subcommands of "kubeadm upgrade".
-// For example, the "apply" substructure will be used with the "kubeadm upgrade apply" subcommand and all other substructures
-// will be ignored in such a case.
+// UpgradeConfiguration 包含多个分别适用于 `kubeadm upgrade` 不同子命令的子结构。
+// 例如，`kubeadm upgrade apply` 只使用 apply 子结构，其他子结构会被忽略。
 package v1

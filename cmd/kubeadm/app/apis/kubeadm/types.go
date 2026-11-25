@@ -26,419 +26,371 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// InitConfiguration contains a list of fields that are specifically "kubeadm init"-only runtime
-// information. The cluster-wide config is stored in ClusterConfiguration. The InitConfiguration
-// object IS NOT uploaded to the kubeadm-config ConfigMap in the cluster, only the
-// ClusterConfiguration is.
+// InitConfiguration 包含仅用于 "kubeadm init" 运行时的字段。
+// 集群级配置存储在 ClusterConfiguration 中。InitConfiguration 对象不会上传到集群中的
+// kubeadm-config ConfigMap，只有 ClusterConfiguration 会上传。
 type InitConfiguration struct {
 	metav1.TypeMeta
 
-	// ClusterConfiguration holds the cluster-wide information, and embeds that struct (which can be (un)marshalled separately as well)
-	// When InitConfiguration is marshalled to bytes in the external version, this information IS NOT preserved (which can be seen from
-	// the `json:"-"` tag in the external variant of these API types.
+	// ClusterConfiguration 保存集群级信息，并嵌入该结构体；该结构体也可单独编组或解组。
+	// 将 InitConfiguration 编组为外部版本的字节时，此信息不会保留，
+	// 因为这些 API 类型的外部版本使用 `json:"-"` tag。
 	ClusterConfiguration `json:"-"`
 
-	// BootstrapTokens is respected at "kubeadm init" time and describes a set of Bootstrap Tokens to create.
+	// BootstrapTokens 在 "kubeadm init" 时生效，描述要创建的一组 Bootstrap Token。
 	BootstrapTokens []bootstraptokenv1.BootstrapToken
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用空运行模式；启用时不应用任何更改，仅输出将要执行的操作。
 	DryRun bool
 
-	// NodeRegistration holds fields that relate to registering the new control-plane node to the cluster
+	// NodeRegistration 保存将新控制平面节点注册到集群所需的字段。
 	NodeRegistration NodeRegistrationOptions
 
-	// LocalAPIEndpoint represents the endpoint of the API server instance that's deployed on this control plane node
-	// In HA setups, this differs from ClusterConfiguration.ControlPlaneEndpoint in the sense that ControlPlaneEndpoint
-	// is the global endpoint for the cluster, which then loadbalances the requests to each individual API server. This
-	// configuration object lets you customize what IP/DNS name and port the local API server advertises it's accessible
-	// on. By default, kubeadm tries to auto-detect the IP of the default interface and use that, but in case that process
-	// fails you may set the desired value here.
+	// LocalAPIEndpoint 表示部署在此控制平面节点上的 API 服务器实例端点。
+	// 在高可用集群中，它不同于 ClusterConfiguration.ControlPlaneEndpoint：后者是将请求
+	// 负载均衡到各 API 服务器的全局集群端点。此配置可自定义本地 API 服务器通告其可访问的
+	// IP/DNS 名称和端口。默认情况下，kubeadm 尝试自动探测默认网卡的 IP；探测失败时需在此指定。
 	LocalAPIEndpoint APIEndpoint
 
-	// CertificateKey sets the key with which certificates and keys are encrypted prior to being uploaded in
-	// a secret in the cluster during the uploadcerts init phase.
-	// The certificate key is a hex encoded string that is an AES key of size 32 bytes.
+	// CertificateKey 设置加密密钥；在 uploadcerts init 阶段，证书和密钥会先加密再上传到集群 Secret。
+	// 证书密钥是长度为 32 字节的 AES 密钥的十六进制编码字符串。
 	CertificateKey string
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm init --help" command.
-	// The flag "--skip-phases" takes precedence over this field.
+	// SkipPhases 是命令执行期间要跳过的阶段列表。
+	// 可运行 "kubeadm init --help" 查看阶段列表。
+	// 命令行参数 "--skip-phases" 优先于此字段。
 	SkipPhases []string
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during
-	// "kubeadm init".
+	// Patches 包含 "kubeadm init" 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	Patches *Patches
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时。
 	Timeouts *Timeouts
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterConfiguration contains cluster-wide configuration for a kubeadm cluster
+// ClusterConfiguration 包含 kubeadm 集群的集群级配置。
 type ClusterConfiguration struct {
 	metav1.TypeMeta
 
-	// ComponentConfigs holds component configs known to kubeadm, should long-term only exist in the internal kubeadm API
+	// ComponentConfigs 保存 kubeadm 已知的组件配置；从长期设计看，它只应存在于内部 kubeadm API 中。
 	// +k8s:conversion-gen=false
 	ComponentConfigs ComponentConfigMap
 
-	// Etcd holds configuration for etcd.
+	// Etcd 保存 etcd 配置。
 	Etcd Etcd
 
-	// Networking holds configuration for the networking topology of the cluster.
+	// Networking 保存集群网络拓扑配置。
 	Networking Networking
 
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	KubernetesVersion string
 
-	// CIKubernetesVersion is the target CI version of the control plane.
-	// Useful for running kubeadm with CI Kubernetes version.
+	// CIKubernetesVersion 是控制平面的目标 CI 版本，用于运行 CI 版本的 kubeadm。
 	// +k8s:conversion-gen=false
 	CIKubernetesVersion string
 
-	// ControlPlaneEndpoint sets a stable IP address or DNS name for the control plane; it
-	// can be a valid IP address or a RFC-1123 DNS subdomain, both with optional TCP port.
-	// In case the ControlPlaneEndpoint is not specified, the AdvertiseAddress + BindPort
-	// are used; in case the ControlPlaneEndpoint is specified but without a TCP port,
-	// the BindPort is used.
-	// Possible usages are:
-	// e.g. In a cluster with more than one control plane instances, this field should be
-	// assigned the address of the external load balancer in front of the
-	// control plane instances.
-	// e.g.  in environments with enforced node recycling, the ControlPlaneEndpoint
-	// could be used for assigning a stable DNS to the control plane.
+	// ControlPlaneEndpoint 设置控制平面的稳定 IP 地址或 DNS 名称；两者均可带可选 TCP 端口，
+	// 且必须分别是有效 IP 地址或 RFC-1123 DNS 子域。
+	// 未指定时使用 AdvertiseAddress + BindPort；已指定但未带 TCP 端口时使用 BindPort。
+	// 常见用法：
+	// 例如，在具有多个控制平面实例的集群中，应将其设置为控制平面实例前方外部负载均衡器的地址。
+	// 例如，在强制回收节点的环境中，可用它为控制平面分配稳定的 DNS 名称。
 	ControlPlaneEndpoint string
 
-	// APIServer contains extra settings for the API server control plane component
+	// APIServer 保存 API 服务器控制平面组件的额外设置。
 	APIServer APIServer
 
-	// ControllerManager contains extra settings for the controller manager control plane component
+	// ControllerManager 保存控制器管理器控制平面组件的额外设置。
 	ControllerManager ControlPlaneComponent
 
-	// Scheduler contains extra settings for the scheduler control plane component
+	// Scheduler 保存调度器控制平面组件的额外设置。
 	Scheduler ControlPlaneComponent
 
-	// DNS defines the options for the DNS add-on installed in the cluster.
+	// DNS 定义集群中安装的 DNS 插件的选项。
 	DNS DNS
 
-	// Proxy defines the options for the proxy add-on installed in the cluster.
+	// Proxy 定义集群中安装的代理插件的选项。
 	Proxy Proxy
 
-	// CertificatesDir specifies where to store or look for all required certificates.
+	// CertificatesDir 指定存储或查找所有必需证书的目录。
 	CertificatesDir string
 
-	// ImageRepository sets the container registry to pull images from.
-	// If empty, `registry.k8s.io` will be used by default; in case of kubernetes version is a CI build (kubernetes version starts with `ci/`)
-	// `gcr.io/k8s-staging-ci-images` will be used as a default for control plane components and for kube-proxy, while `registry.k8s.io`
-	// will be used for all the other images.
+	// ImageRepository 设置用于拉取镜像的容器镜像仓库。
+	// 为空时默认使用 `registry.k8s.io`；若 Kubernetes 版本为 CI 构建（版本以 `ci/` 开头），
+	// 控制平面组件和 kube-proxy 默认使用 `gcr.io/k8s-staging-ci-images`，其他镜像默认使用 `registry.k8s.io`。
 	ImageRepository string
 
-	// CIImageRepository is the container registry for core images generated by CI.
-	// Useful for running kubeadm with images from CI builds.
+	// CIImageRepository 是 CI 生成的核心镜像的容器镜像仓库，用于运行 CI 构建的镜像。
 	// +k8s:conversion-gen=false
 	CIImageRepository string
 
-	// FeatureGates holds kubeadm-specific feature gates enabled by the user.
+	// FeatureGates 保存用户启用的 kubeadm 专属功能开关。
 	FeatureGates map[string]bool
 
-	// The cluster name. This name will be used in kubeconfig files generated by kubeadm
-	// and will also be passed as a value to the kube-controller-manager's --cluster-name flag.
-	// Default value is 'kubernetes'.
+	// 集群名称，用于 kubeadm 生成的 kubeconfig 文件，并作为 kube-controller-manager 的 --cluster-name 参数值。
+	// 默认值为 'kubernetes'。
 	ClusterName string
 
-	// EncryptionAlgorithm holds the type of asymmetric encryption algorithm used for keys and certificates.
-	// Can be one of "RSA-2048" (default), "RSA-3072", "RSA-4096", "ECDSA-P256" or "ECDSA-P384".
+	// EncryptionAlgorithm 保存用于密钥和证书的非对称加密算法类型。
+	// 可选 "RSA-2048"（默认）、"RSA-3072"、"RSA-4096"、"ECDSA-P256" 或 "ECDSA-P384"。
 	EncryptionAlgorithm EncryptionAlgorithmType
 
-	// CertificateValidityPeriod specifies the validity period for a non-CA certificate generated by kubeadm.
-	// Default value: 8760h (365 days * 24 hours = 1 year)
+	// CertificateValidityPeriod 指定 kubeadm 生成的非 CA 证书的有效期。
+	// 默认值为 8760h（365 天 × 24 小时 = 1 年）。
 	CertificateValidityPeriod *metav1.Duration
 
-	// CACertificateValidityPeriod specifies the validity period for a CA certificate generated by kubeadm.
-	// Default value: 87600h (365 days * 24 hours * 10 = 10 years)
+	// CACertificateValidityPeriod 指定 kubeadm 生成的 CA 证书的有效期。
+	// 默认值为 87600h（365 天 × 24 小时 × 10 = 10 年）。
 	CACertificateValidityPeriod *metav1.Duration
 }
 
-// ControlPlaneComponent holds settings common to control plane component of the cluster
+// ControlPlaneComponent 保存集群控制平面组件的通用设置。
 type ControlPlaneComponent struct {
-	// ExtraArgs is an extra set of flags to pass to the control plane component.
-	// An argument name in this list is the flag name as it appears on the
-	// command line except without leading dash(es). Extra arguments will override existing
-	// default arguments. Duplicate extra arguments are allowed.
-	// The default arguments are sorted alpha-numerically but the extra arguments are not.
+	// ExtraArgs 是传递给控制平面组件的额外参数集。
+	// 参数名是命令行中的参数名称，但不含前导连字符。额外参数会覆盖已有默认参数，允许重复。
+	// 默认参数按字母数字顺序排序，额外参数不排序。
 	ExtraArgs []Arg
 
-	// ExtraVolumes is an extra set of host volumes, mounted to the control plane component.
+	// ExtraVolumes 是挂载到控制平面组件的额外主机卷集。
 	ExtraVolumes []HostPathMount
 
-	// ExtraEnvs is an extra set of environment variables to pass to the control plane component.
-	// Environment variables passed using ExtraEnvs will override any existing environment variables, or *_proxy environment variables that kubeadm adds by default.
+	// ExtraEnvs 是传递给控制平面组件的额外环境变量集。
+	// 这些变量会覆盖已有环境变量，以及 kubeadm 默认添加的 *_proxy 环境变量。
 	// +optional
 	ExtraEnvs []EnvVar
 }
 
-// APIServer holds settings necessary for API server deployments in the cluster
+// APIServer 保存集群中 API 服务器部署所需的设置。
 type APIServer struct {
 	ControlPlaneComponent
 
-	// CertSANs sets extra Subject Alternative Names for the API Server signing cert.
+	// CertSANs 为 API 服务器签名证书设置额外的 Subject Alternative Name。
 	CertSANs []string
 }
 
-// DNS defines the DNS addon that should be used in the cluster
+// DNS 定义集群中应使用的 DNS 插件。
 type DNS struct {
-	// ImageMeta allows to customize the image used for the DNS addon
+	// ImageMeta 允许自定义 DNS 插件使用的镜像。
 	ImageMeta `json:""`
 
-	// Disabled specifies whether to disable this addon in the cluster
+	// Disabled 指定是否在集群中禁用此插件。
 	Disabled bool
 }
 
-// Proxy defines the proxy addon that should be used in the cluster
+// Proxy 定义集群中应使用的代理插件。
 type Proxy struct {
-	// Disabled specifies whether to disable this addon in the cluster
+	// Disabled 指定是否在集群中禁用此插件。
 	Disabled bool
 }
 
-// ImageMeta allows to customize the image used for components that are not
-// originated from the Kubernetes/Kubernetes release process
+// ImageMeta 允许自定义不来源于 Kubernetes/Kubernetes 发布流程的组件镜像。
 type ImageMeta struct {
-	// ImageRepository sets the container registry to pull images from.
-	// if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+	// ImageRepository 设置用于拉取镜像的容器镜像仓库。
+	// 未设置时改用 ClusterConfiguration 中定义的 ImageRepository。
 	ImageRepository string
 
-	// ImageTag allows to specify a tag for the image.
-	// In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+	// ImageTag 允许指定镜像 tag；设置后，kubeadm 升级时不会自动更改上述组件的版本。
 	ImageTag string
 
-	//TODO: evaluate if we need also a ImageName based on user feedbacks
+	// TODO: 根据用户反馈评估是否还需要 ImageName。
 }
 
-// APIEndpoint struct contains elements of API server instance deployed on a node.
+// APIEndpoint 包含部署在节点上的 API 服务器实例的组成元素。
 type APIEndpoint struct {
-	// AdvertiseAddress sets the IP address for the API server to advertise.
+	// AdvertiseAddress 设置 API 服务器通告的 IP 地址。
 	AdvertiseAddress string
 
-	// BindPort sets the secure port for the API Server to bind to.
-	// Defaults to 6443.
+	// BindPort 设置 API 服务器绑定的安全端口，默认为 6443。
 	BindPort int32
 }
 
-// NodeRegistrationOptions holds fields that relate to registering a new control-plane or node to the cluster, either via "kubeadm init" or "kubeadm join"
+// NodeRegistrationOptions 保存通过 "kubeadm init" 或 "kubeadm join" 将新控制平面节点或节点注册到集群所需的字段。
 type NodeRegistrationOptions struct {
 
-	// Name is the `.Metadata.Name` field of the Node API object that will be created in this "kubeadm init" or "kubeadm join" operation.
-	// This field is also used in the CommonName field of the kubelet's client certificate to the API server.
-	// Defaults to the hostname of the node if not provided.
+	// Name 是此次 "kubeadm init" 或 "kubeadm join" 操作创建的 Node API 对象的 `.Metadata.Name` 字段。
+	// 此字段也用作 kubelet 客户端证书中指向 API 服务器的 CommonName；未提供时默认为节点主机名。
 	Name string
 
-	// CRISocket is used to retrieve container runtime info. This information will be annotated to the Node API object, for later re-use
+	// CRISocket 用于获取容器运行时信息，这些信息会注解到 Node API 对象中供后续复用。
 	CRISocket string
 
-	// Taints specifies the taints the Node API object should be registered with. If this field is unset, i.e. nil,
-	// it will be defaulted with a control-plane taint for control-plane nodes. If you don't want to taint your control-plane
-	// node, set this field to an empty slice, i.e. `taints: []` in the YAML file. This field is solely used for Node registration.
+	// Taints 指定 Node API 对象注册时应携带的污点。
+	// 未设置（nil）时，控制平面节点默认带有 control-plane 污点；若不希望设置该污点，
+	// 请在 YAML 文件中将此字段设为空切片，即 `taints: []`。此字段仅用于节点注册。
 	Taints []v1.Taint
 
-	// KubeletExtraArgs passes through extra arguments to the kubelet. The arguments here are passed to the kubelet command line via the environment file
-	// kubeadm writes at runtime for the kubelet to source. This overrides the generic base-level configuration in the kubelet-config ConfigMap
-	// Flags have higher priority when parsing. These values are local and specific to the node kubeadm is executing on.
-	// An argument name in this list is the flag name as it appears on the command line except without leading dash(es).
-	// Extra arguments will override existing default arguments. Duplicate extra arguments are allowed.
-	// The default arguments are sorted alpha-numerically but the extra arguments are not.
+	// KubeletExtraArgs 将额外参数传递给 kubelet；参数经 kubeadm 在运行时写入的环境文件传给 kubelet 命令行。
+	// 它们会覆盖 kubelet-config ConfigMap 中的通用基础配置，且解析时优先于默认参数。
+	// 这些值仅对 kubeadm 所在节点有效。参数名不含前导连字符；额外参数会覆盖已有默认参数，允许重复。
+	// 默认参数按字母数字顺序排序，额外参数不排序。
 	KubeletExtraArgs []Arg
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored when the current node is registered, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 列出当前节点注册时要忽略的预检查错误，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	IgnorePreflightErrors []string
 
-	// ImagePullPolicy specifies the policy for image pulling during kubeadm "init" and "join" operations.
-	// The value of this field must be one of "Always", "IfNotPresent" or "Never".
-	// If this field is unset kubeadm will default it to "IfNotPresent", or pull the required images if not present on the host.
+	// ImagePullPolicy 指定 kubeadm 在 "init" 和 "join" 操作期间拉取镜像的策略。
+	// 可选 "Always"、"IfNotPresent" 或 "Never"；未设置时默认为 "IfNotPresent"，即仅在主机缺少所需镜像时拉取。
 	ImagePullPolicy v1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
-	// ImagePullSerial specifies if image pulling performed by kubeadm must be done serially or in parallel.
+	// ImagePullSerial 指定 kubeadm 拉取镜像必须串行还是并行执行。
 	ImagePullSerial *bool
 }
 
-// Networking contains elements describing cluster's networking configuration.
+// Networking 包含描述集群网络配置的字段。
 type Networking struct {
-	// ServiceSubnet is the subnet used by k8s services. Defaults to "10.96.0.0/12".
+	// ServiceSubnet 是 Kubernetes 服务使用的子网，默认为 "10.96.0.0/12"。
 	ServiceSubnet string
-	// PodSubnet is the subnet used by pods.
+	// PodSubnet 是 Pod 使用的子网。
 	PodSubnet string
-	// DNSDomain is the dns domain used by k8s services. Defaults to "cluster.local".
+	// DNSDomain 是 Kubernetes 服务使用的 DNS 域，默认为 "cluster.local"。
 	DNSDomain string
 }
 
-// Etcd contains elements describing Etcd configuration.
+// Etcd 包含描述 etcd 配置的字段。
 type Etcd struct {
 
-	// Local provides configuration knobs for configuring the local etcd instance
-	// Local and External are mutually exclusive
+	// Local 提供配置本地 etcd 实例的选项；Local 与 External 互斥。
 	Local *LocalEtcd
 
-	// External describes how to connect to an external etcd cluster
-	// Local and External are mutually exclusive
+	// External 描述如何连接外部 etcd 集群；Local 与 External 互斥。
 	External *ExternalEtcd
 }
 
-// LocalEtcd describes that kubeadm should run an etcd cluster locally
+// LocalEtcd 描述 kubeadm 应在本地运行 etcd 集群。
 type LocalEtcd struct {
-	// ImageMeta allows to customize the container image used for etcd. Passing a custom etcd image
-	// tells kubeadm upgrade that this image is user-managed and that its upgrade must be skipped.
+	// ImageMeta 允许自定义 etcd 容器镜像；指定自定义镜像会告知 kubeadm 升级跳过该用户管理镜像的升级。
 	ImageMeta `json:""`
 
-	// DataDir is the directory etcd will place its data.
-	// Defaults to "/var/lib/etcd".
+	// DataDir 是 etcd 存放数据的目录，默认为 "/var/lib/etcd"。
 	DataDir string
 
-	// ExtraArgs are extra arguments provided to the etcd binary
-	// when run inside a static pod.
-	// An argument name in this list is the flag name as it appears on the
-	// command line except without leading dash(es). Extra arguments will override existing
-	// default arguments. Duplicate extra arguments are allowed.
-	// The default arguments are sorted alpha-numerically but the extra arguments are not.
+	// ExtraArgs 是 etcd 在静态 Pod 中运行时接收的额外参数。
+	// 参数名是命令行参数名称，但不含前导连字符；额外参数会覆盖已有默认参数，允许重复。
+	// 默认参数按字母数字顺序排序，额外参数不排序。
 	ExtraArgs []Arg
 
-	// ExtraEnvs is an extra set of environment variables to pass to the control plane component.
-	// Environment variables passed using ExtraEnvs will override any existing environment variables, or *_proxy environment variables that kubeadm adds by default.
+	// ExtraEnvs 是传递给控制平面组件的额外环境变量集。
+	// 这些变量会覆盖已有环境变量，以及 kubeadm 默认添加的 *_proxy 环境变量。
 	// +optional
 	ExtraEnvs []EnvVar
 
-	// ServerCertSANs sets extra Subject Alternative Names for the etcd server signing cert.
+	// ServerCertSANs 为 etcd 服务器签名证书设置额外的 Subject Alternative Name。
 	ServerCertSANs []string
-	// PeerCertSANs sets extra Subject Alternative Names for the etcd peer signing cert.
+	// PeerCertSANs 为 etcd 对等节点签名证书设置额外的 Subject Alternative Name。
 	PeerCertSANs []string
 }
 
-// ExternalEtcd describes an external etcd cluster
+// ExternalEtcd 描述外部 etcd 集群。
 type ExternalEtcd struct {
-	// Endpoints of etcd members. Required when using external etcd.
-	// Specifies the client URLs (usually gRPC endpoints) for etcd communication.
-	// By default, these endpoints handle both gRPC traffic (primary etcd protocol)
-	// and HTTP traffic (metrics, health checks). However, if HTTPEndpoints is configured,
-	// the gRPC and HTTP traffic can be separated for better security and performance.
-	// Corresponds to etcd's --listen-client-urls configuration.
+	// Endpoints 是 etcd 成员端点，使用外部 etcd 时必填。
+	// 指定用于 etcd 通信的客户端 URL（通常为 gRPC 端点）。默认同时处理 gRPC 流量（etcd 主协议）
+	// 和 HTTP 流量（指标、健康检查）；配置 HTTPEndpoints 后可分离两类流量，以提高安全性和性能。
+	// 对应 etcd 的 --listen-client-urls 配置。
 	Endpoints []string
 
-	// HTTPEndpoints are the dedicated HTTP endpoints for etcd communication.
-	// When configured, HTTP traffic (such as /metrics and /health endpoints) is separated
-	// from the gRPC traffic handled by Endpoints. This separation allows for better access
-	// control, as HTTP endpoints can be exposed without exposing the primary gRPC interface.
-	// Corresponds to etcd's --listen-client-http-urls configuration.
-	// If not provided, Endpoints will be used for both gRPC and HTTP traffic.
+	// HTTPEndpoints 是专用于 etcd 通信的 HTTP 端点。
+	// 配置后，HTTP 流量（如 /metrics 和 /health 端点）与 Endpoints 处理的 gRPC 流量分离；
+	// 这样可在不暴露主 gRPC 接口的情况下控制 HTTP 端点的访问。
+	// 对应 etcd 的 --listen-client-http-urls 配置；未提供时，Endpoints 同时处理 gRPC 和 HTTP 流量。
 	// +optional
 	HTTPEndpoints []string
 
-	// CAFile is an SSL Certificate Authority file used to secure etcd communication.
+	// CAFile 是用于保护 etcd 通信的 SSL 证书颁发机构文件。
 	CAFile string
-	// CertFile is an SSL certification file used to secure etcd communication.
+	// CertFile 是用于保护 etcd 通信的 SSL 证书文件。
 	CertFile string
-	// KeyFile is an SSL key file used to secure etcd communication.
+	// KeyFile 是用于保护 etcd 通信的 SSL 密钥文件。
 	KeyFile string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// JoinConfiguration contains elements describing a particular node.
+// JoinConfiguration 包含描述特定节点的字段。
 type JoinConfiguration struct {
 	metav1.TypeMeta
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用空运行模式；启用时不应用任何更改，仅输出将要执行的操作。
 	DryRun bool
 
-	// NodeRegistration holds fields that relate to registering the new control-plane node to the cluster
+	// NodeRegistration 保存将新控制平面节点注册到集群所需的字段。
 	NodeRegistration NodeRegistrationOptions
 
-	// CACertPath is the path to the SSL certificate authority used to
-	// secure communications between node and control-plane.
-	// Defaults to "/etc/kubernetes/pki/ca.crt".
+	// CACertPath 是用于保护节点与控制平面通信的 SSL 证书颁发机构路径。
+	// 默认为 "/etc/kubernetes/pki/ca.crt"。
 	CACertPath string
 
-	// Discovery specifies the options for the kubelet to use during the TLS Bootstrap process
+	// Discovery 指定 kubelet 在 TLS 引导过程中使用的选项。
 	Discovery Discovery
 
-	// ControlPlane defines the additional control plane instance to be deployed on the joining node.
-	// If nil, no additional control plane instance will be deployed.
+	// ControlPlane 定义要部署在加入节点上的额外控制平面实例；为 nil 时不部署。
 	ControlPlane *JoinControlPlane
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm join --help" command.
-	// The flag "--skip-phases" takes precedence over this field.
+	// SkipPhases 是命令执行期间要跳过的阶段列表。
+	// 可运行 "kubeadm join --help" 查看阶段列表；命令行参数 "--skip-phases" 优先于此字段。
 	SkipPhases []string
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during
-	// "kubeadm join".
+	// Patches 包含 "kubeadm join" 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	Patches *Patches
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时。
 	Timeouts *Timeouts
 }
 
-// JoinControlPlane contains elements describing an additional control plane instance to be deployed on the joining node.
+// JoinControlPlane 包含描述要部署在加入节点上的额外控制平面实例的字段。
 type JoinControlPlane struct {
-	// LocalAPIEndpoint represents the endpoint of the API server instance to be deployed on this node.
+	// LocalAPIEndpoint 表示要部署在此节点上的 API 服务器实例端点。
 	LocalAPIEndpoint APIEndpoint
 
-	// CertificateKey is the key that is used for decryption of certificates after they are downloaded from the secret
-	// upon joining a new control plane node. The corresponding encryption key is in the InitConfiguration.
-	// The certificate key is a hex encoded string that is an AES key of size 32 bytes.
+	// CertificateKey 是加入新控制平面节点时，证书从 Secret 下载后用于解密证书的密钥。
+	// 对应的加密密钥位于 InitConfiguration 中；证书密钥是长度为 32 字节的 AES 密钥的十六进制编码字符串。
 	CertificateKey string
 }
 
-// Discovery specifies the options for the kubelet to use during the TLS Bootstrap process
+// Discovery 指定 kubelet 在 TLS 引导过程中使用的选项。
 type Discovery struct {
-	// BootstrapToken is used to set the options for bootstrap token based discovery
-	// BootstrapToken and File are mutually exclusive
+	// BootstrapToken 用于设置基于 Bootstrap Token 的发现选项；BootstrapToken 与 File 互斥。
 	BootstrapToken *BootstrapTokenDiscovery
 
-	// File is used to specify a file or URL to a kubeconfig file from which to load cluster information
-	// BootstrapToken and File are mutually exclusive
+	// File 指定用于加载集群信息的 kubeconfig 文件或 URL；BootstrapToken 与 File 互斥。
 	File *FileDiscovery
 
-	// TLSBootstrapToken is a token used for TLS bootstrapping.
-	// If .BootstrapToken is set, this field is defaulted to .BootstrapToken.Token, but can be overridden.
-	// If .File is set, this field **must be set** in case the KubeConfigFile does not contain any other authentication information
+	// TLSBootstrapToken 是用于 TLS 引导的令牌。
+	// 设置 .BootstrapToken 时，此字段默认取 .BootstrapToken.Token，但可覆盖。
+	// 设置 .File 时，若 KubeConfigFile 不含其他身份验证信息，则必须设置此字段。
 	TLSBootstrapToken string
 }
 
-// BootstrapTokenDiscovery is used to set the options for bootstrap token based discovery
+// BootstrapTokenDiscovery 用于设置基于 Bootstrap Token 的发现选项。
 type BootstrapTokenDiscovery struct {
-	// Token is a token used to validate cluster information
-	// fetched from the control-plane.
+	// Token 是用于验证从控制平面获取的集群信息的令牌。
 	Token string
 
-	// APIServerEndpoint is an IP or domain name to the API server from which info will be fetched.
+	// APIServerEndpoint 是用于获取信息的 API 服务器 IP 地址或域名。
 	APIServerEndpoint string
 
-	// CACertHashes specifies a set of public key pins to verify
-	// when token-based discovery is used. The root CA found during discovery
-	// must match one of these values. Specifying an empty set disables root CA
-	// pinning, which can be unsafe. Each hash is specified as "<type>:<value>",
-	// where the only currently supported type is "sha256". This is a hex-encoded
-	// SHA-256 hash of the Subject Public Key Info (SPKI) object in DER-encoded
-	// ASN.1. These hashes can be calculated using, for example, OpenSSL.
+	// CACertHashes 指定基于令牌发现时用于验证的公钥固定值集合；发现得到的根 CA 必须匹配其中一个值。
+	// 指定空集合会禁用根 CA 固定验证，可能不安全。每个哈希采用 "<type>:<value>" 格式，
+	// 目前仅支持 "sha256" 类型，值为 DER 编码 ASN.1 中 Subject Public Key Info（SPKI）对象的
+	// SHA-256 哈希的十六进制编码，可使用 OpenSSL 等工具计算。
 	CACertHashes []string
 
-	// UnsafeSkipCAVerification allows token-based discovery
-	// without CA verification via CACertHashes. This can weaken
-	// the security of kubeadm since other nodes can impersonate the control-plane.
+	// UnsafeSkipCAVerification 允许基于令牌发现时跳过 CACertHashes 的 CA 验证。
+	// 其他节点可能冒充控制平面，因此这会削弱 kubeadm 的安全性。
 	UnsafeSkipCAVerification bool
 }
 
-// FileDiscovery is used to specify a file or URL to a kubeconfig file from which to load cluster information
+// FileDiscovery 用于指定从中加载集群信息的 kubeconfig 文件或 URL。
 type FileDiscovery struct {
-	// KubeConfigPath is used to specify the actual file path or URL to the kubeconfig file from which to load cluster information
+	// KubeConfigPath 指定用于加载集群信息的 kubeconfig 文件路径或 URL。
 	KubeConfigPath string
 }
 
-// GetControlPlaneImageRepository returns name of image repository
-// for control plane images (API,Controller Manager,Scheduler and Proxy)
-// It will override location with CI registry name in case user requests special
-// Kubernetes version from CI build area.
-// (See: kubeadmconstants.DefaultCIImageRepository)
+// GetControlPlaneImageRepository 返回控制平面镜像（API、Controller Manager、Scheduler 和 Proxy）的镜像仓库名称。
+// 用户请求 CI 构建区域中的特殊 Kubernetes 版本时，将使用 CI 镜像仓库覆盖该位置。
+// （参见：kubeadmconstants.DefaultCIImageRepository）
 func (cfg *ClusterConfiguration) GetControlPlaneImageRepository() string {
 	if cfg.CIImageRepository != "" {
 		return cfg.CIImageRepository
@@ -446,332 +398,313 @@ func (cfg *ClusterConfiguration) GetControlPlaneImageRepository() string {
 	return cfg.ImageRepository
 }
 
-// HostPathMount contains elements describing volumes that are mounted from the
-// host.
+// HostPathMount 包含描述从主机挂载的卷的字段。
 type HostPathMount struct {
-	// Name of the volume inside the pod template.
+	// Name 是卷在 Pod 模板中的名称。
 	Name string
-	// HostPath is the path in the host that will be mounted inside
-	// the pod.
+	// HostPath 是要挂载到 Pod 内的主机路径。
 	HostPath string
-	// MountPath is the path inside the pod where hostPath will be mounted.
+	// MountPath 是 hostPath 挂载到 Pod 内的路径。
 	MountPath string
-	// ReadOnly controls write access to the volume
+	// ReadOnly 控制卷的写权限。
 	ReadOnly bool
-	// PathType is the type of the HostPath.
+	// PathType 是 HostPath 的类型。
 	PathType v1.HostPathType
 }
 
-// Patches contains options related to applying patches to components deployed by kubeadm.
+// Patches 包含向 kubeadm 部署的组件应用补丁所需的选项。
 type Patches struct {
-	// Directory is a path to a directory that contains files named "target[suffix][+patchtype].extension".
-	// For example, "kube-apiserver0+merge.yaml" or just "etcd.json". "target" can be one of
-	// "kube-apiserver", "kube-controller-manager", "kube-scheduler", "etcd", "kubeletconfiguration", "corednsdeployment", "kubeproxydaemonset".
-	// "patchtype" can be one of "strategic" "merge" or "json" and they match the patch formats supported by kubectl.
-	// The default "patchtype" is "strategic". "extension" must be either "json" or "yaml".
-	// "suffix" is an optional string that can be used to determine which patches are applied
-	// first alpha-numerically.
+	// Directory 是存放补丁文件的目录，文件命名为 "target[suffix][+patchtype].extension"。
+	// 例如 "kube-apiserver0+merge.yaml" 或 "etcd.json"。"target" 可选
+	// "kube-apiserver"、"kube-controller-manager"、"kube-scheduler"、"etcd"、"kubeletconfiguration"、"corednsdeployment"、"kubeproxydaemonset"。
+	// "patchtype" 可选 "strategic"、"merge" 或 "json"，对应 kubectl 支持的补丁格式，默认 "patchtype" 为 "strategic"。
+	// "extension" 必须为 "json" 或 "yaml"；"suffix" 是可选字符串，用于按字母数字顺序确定补丁的应用先后。
 	Directory string
 }
 
-// DocumentMap is a convenient way to describe a map between a YAML document and its GVK type
+// DocumentMap 是一种在 YAML 文档与其 GVK 类型之间建立映射的便捷表示。
 // +k8s:deepcopy-gen=false
 type DocumentMap map[schema.GroupVersionKind][]byte
 
-// ComponentConfig holds a known component config
+// ComponentConfig 保存已知的组件配置。
 type ComponentConfig interface {
-	// DeepCopy should create a new deep copy of the component config in place
+	// DeepCopy 应在原位置创建组件配置的新深拷贝。
 	DeepCopy() ComponentConfig
 
-	// Marshal is marshalling the config into a YAML document returned as a byte slice
+	// Marshal 将配置编组为 YAML 文档，并以字节切片返回。
 	Marshal() ([]byte, error)
 
-	// Unmarshal loads the config from a document map. No config in the document map is no error.
+	// Unmarshal 从文档映射加载配置；文档映射中无配置不视为错误。
 	Unmarshal(docmap DocumentMap) error
 
-	// Default patches the component config with kubeadm preferred defaults
+	// Default 使用 kubeadm 推荐的默认值填充组件配置。
 	Default(cfg *ClusterConfiguration, localAPIEndpoint *APIEndpoint, nodeRegOpts *NodeRegistrationOptions)
 
-	// IsUserSupplied indicates if the component config was supplied or modified by a user or was kubeadm generated
+	// IsUserSupplied 指示组件配置是用户提供或修改的，还是由 kubeadm 生成的。
 	IsUserSupplied() bool
 
-	// SetUserSupplied sets the state of the component config "user supplied" flag to, either true, or false.
+	// SetUserSupplied 将组件配置的 "user supplied" 标志设置为 true 或 false。
 	SetUserSupplied(userSupplied bool)
 
-	// Mutate allows applying pre-defined modifications to the config before it's marshaled.
+	// Mutate 允许在编组前对配置应用预定义修改。
 	Mutate() error
 
-	// Set can be used to set the internal configuration in the ComponentConfig
+	// Set 可用于设置 ComponentConfig 的内部配置。
 	Set(interface{})
 
-	// Get can be used to get the internal configuration in the ComponentConfig
+	// Get 可用于获取 ComponentConfig 的内部配置。
 	Get() interface{}
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ResetConfiguration contains a list of fields that are specifically "kubeadm reset"-only runtime information.
+// ResetConfiguration 包含仅用于 "kubeadm reset" 运行时的字段。
 type ResetConfiguration struct {
 	metav1.TypeMeta
 
-	// CertificatesDir specifies the directory where the certificates are stored. If specified, it will be cleaned during the reset process.
+	// CertificatesDir 指定证书存储目录；指定后会在重置过程中清理该目录。
 	CertificatesDir string
 
-	// CleanupTmpDir specifies whether the "/etc/kubernetes/tmp" directory should be cleaned during the reset process.
+	// CleanupTmpDir 指定重置过程中是否清理 "/etc/kubernetes/tmp" 目录。
 	CleanupTmpDir bool
 
-	// CRISocket is used to retrieve container runtime info and used for the removal of the containers.
-	// If CRISocket is not specified by flag or config file, kubeadm will try to detect one valid CRISocket instead.
+	// CRISocket 用于获取容器运行时信息并删除容器。
+	// 未通过参数或配置文件指定时，kubeadm 会尝试探测有效的 CRISocket。
 	CRISocket string
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用空运行模式；启用时不应用任何更改，仅输出将要执行的操作。
 	DryRun bool
 
-	// Force flag instructs kubeadm to reset the node without prompting for confirmation.
+	// Force 指示 kubeadm 无需确认即可重置节点。
 	Force bool
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the reset process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 列出重置过程中要忽略的预检查错误，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	IgnorePreflightErrors []string
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm reset phase --help" command.
+	// SkipPhases 是命令执行期间要跳过的阶段列表，可运行 "kubeadm reset phase --help" 查看。
 	SkipPhases []string
 
-	// UnmountFlags is a list of unmount2() syscall flags that kubeadm can use when unmounting
-	// directories during "reset". A flag can be one of: MNT_FORCE, MNT_DETACH, MNT_EXPIRE, UMOUNT_NOFOLLOW.
-	// By default this list is empty.
+	// UnmountFlags 列出 kubeadm 在 "reset" 期间卸载目录时可使用的 unmount2() 系统调用标志。
+	// 可选 MNT_FORCE、MNT_DETACH、MNT_EXPIRE、UMOUNT_NOFOLLOW，默认为空列表。
 	UnmountFlags []string
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时。
 	Timeouts *Timeouts
 }
 
-// UpgradeApplyConfiguration contains a list of configurable options which are specific to the "kubeadm upgrade apply" command.
+// UpgradeApplyConfiguration 包含 "kubeadm upgrade apply" 命令专属的可配置选项。
 type UpgradeApplyConfiguration struct {
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	KubernetesVersion string
 
-	// AllowExperimentalUpgrades instructs kubeadm to show unstable versions of Kubernetes as an upgrade
-	// alternative and allows upgrading to an alpha/beta/release candidate version of Kubernetes.
-	// Default: false
+	// AllowExperimentalUpgrades 指示 kubeadm 将不稳定的 Kubernetes 版本列为升级选项，
+	// 并允许升级到 Kubernetes 的 alpha、beta 或候选版本；默认为 false。
 	AllowExperimentalUpgrades *bool
 
-	// Enable AllowRCUpgrades will show release candidate versions of Kubernetes as an upgrade alternative and
-	// allows upgrading to a release candidate version of Kubernetes.
+	// AllowRCUpgrades 指示 kubeadm 将 Kubernetes 候选版本列为升级选项，并允许升级到候选版本。
 	AllowRCUpgrades *bool
 
-	// CertificateRenewal instructs kubeadm to execute certificate renewal during upgrades.
+	// CertificateRenewal 指示 kubeadm 在升级期间执行证书续期。
 	CertificateRenewal *bool
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用空运行模式；启用时不应用任何更改，仅输出将要执行的操作。
 	DryRun *bool
 
-	// EtcdUpgrade instructs kubeadm to execute etcd upgrade during upgrades.
+	// EtcdUpgrade 指示 kubeadm 在升级期间执行 etcd 升级。
 	EtcdUpgrade *bool
 
-	// ForceUpgrade flag instructs kubeadm to upgrade the cluster without prompting for confirmation.
+	// ForceUpgrade 指示 kubeadm 无需确认即可升级集群。
 	ForceUpgrade *bool
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the upgrade process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 列出升级过程中要忽略的预检查错误，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	IgnorePreflightErrors []string
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during "kubeadm upgrade".
+	// Patches 包含 "kubeadm upgrade" 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	Patches *Patches
 
-	// PrintConfig specifies whether the configuration file that will be used in the upgrade should be printed or not.
+	// PrintConfig 指定是否打印升级将使用的配置文件。
 	PrintConfig *bool
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// NOTE: This field is currently ignored for "kubeadm upgrade apply", but in the future it will be supported.
+	// SkipPhases 是命令执行期间要跳过的阶段列表。
+	// 注意：此字段目前对 "kubeadm upgrade apply" 无效，未来将支持。
 	SkipPhases []string
 
-	// ImagePullPolicy specifies the policy for image pulling during kubeadm "upgrade apply" operations.
-	// The value of this field must be one of "Always", "IfNotPresent" or "Never".
-	// If this field is unset kubeadm will default it to "IfNotPresent", or pull the required images if not present on the host.
+	// ImagePullPolicy 指定 kubeadm 在 "upgrade apply" 操作期间拉取镜像的策略。
+	// 可选 "Always"、"IfNotPresent" 或 "Never"；未设置时默认为 "IfNotPresent"，即仅在主机缺少所需镜像时拉取。
 	ImagePullPolicy v1.PullPolicy
 
-	// ImagePullSerial specifies if image pulling performed by kubeadm must be done serially or in parallel.
+	// ImagePullSerial 指定 kubeadm 拉取镜像必须串行还是并行执行。
 	ImagePullSerial *bool
 }
 
-// UpgradeDiffConfiguration contains a list of configurable options which are specific to the "kubeadm upgrade diff" command.
+// UpgradeDiffConfiguration 包含 "kubeadm upgrade diff" 命令专属的可配置选项。
 type UpgradeDiffConfiguration struct {
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	KubernetesVersion string
 
-	// DiffContextLines is the number of lines of context in the diff.
+	// DiffContextLines 是差异输出中的上下文行数。
 	DiffContextLines int
 }
 
-// UpgradeNodeConfiguration contains a list of configurable options which are specific to the "kubeadm upgrade node" command.
+// UpgradeNodeConfiguration 包含 "kubeadm upgrade node" 命令专属的可配置选项。
 type UpgradeNodeConfiguration struct {
-	// CertificateRenewal instructs kubeadm to execute certificate renewal during upgrades.
+	// CertificateRenewal 指示 kubeadm 在升级期间执行证书续期。
 	CertificateRenewal *bool
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用空运行模式；启用时不应用任何更改，仅输出将要执行的操作。
 	DryRun *bool
 
-	// EtcdUpgrade instructs kubeadm to execute etcd upgrade during upgrades.
+	// EtcdUpgrade 指示 kubeadm 在升级期间执行 etcd 升级。
 	EtcdUpgrade *bool
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the upgrade process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 列出升级过程中要忽略的预检查错误，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	IgnorePreflightErrors []string
 
-	// SkipPhases is a list of phases to skip during command execution.
-	// The list of phases can be obtained with the "kubeadm upgrade node phase --help" command.
+	// SkipPhases 是命令执行期间要跳过的阶段列表，可运行 "kubeadm upgrade node phase --help" 查看。
 	SkipPhases []string
 
-	// Patches contains options related to applying patches to components deployed by kubeadm during "kubeadm upgrade".
+	// Patches 包含 "kubeadm upgrade" 期间向 kubeadm 部署的组件应用补丁所需的选项。
 	Patches *Patches
 
-	// ImagePullPolicy specifies the policy for image pulling during kubeadm "upgrade node" operations.
-	// The value of this field must be one of "Always", "IfNotPresent" or "Never".
-	// If this field is unset kubeadm will default it to "IfNotPresent", or pull the required images if not present on the host.
+	// ImagePullPolicy 指定 kubeadm 在 "upgrade node" 操作期间拉取镜像的策略。
+	// 可选 "Always"、"IfNotPresent" 或 "Never"；未设置时默认为 "IfNotPresent"，即仅在主机缺少所需镜像时拉取。
 	ImagePullPolicy v1.PullPolicy
 
-	// ImagePullSerial specifies if image pulling performed by kubeadm must be done serially or in parallel.
+	// ImagePullSerial 指定 kubeadm 拉取镜像必须串行还是并行执行。
 	ImagePullSerial *bool
 }
 
-// UpgradePlanConfiguration contains a list of configurable options which are specific to the "kubeadm upgrade plan" command.
+// UpgradePlanConfiguration 包含 "kubeadm upgrade plan" 命令专属的可配置选项。
 type UpgradePlanConfiguration struct {
-	// KubernetesVersion is the target version of the control plane.
+	// KubernetesVersion 是控制平面的目标版本。
 	// +optional
 	KubernetesVersion string
 
-	// AllowExperimentalUpgrades instructs kubeadm to show unstable versions of Kubernetes as an upgrade
-	// alternative and allows upgrading to an alpha/beta/release candidate version of Kubernetes.
-	// Default: false
+	// AllowExperimentalUpgrades 指示 kubeadm 将不稳定的 Kubernetes 版本列为升级选项，
+	// 并允许升级到 Kubernetes 的 alpha、beta 或候选版本；默认为 false。
 	// +optional
 	AllowExperimentalUpgrades *bool
 
-	// Enable AllowRCUpgrades will show release candidate versions of Kubernetes as an upgrade alternative and
-	// allows upgrading to a release candidate version of Kubernetes.
+	// AllowRCUpgrades 指示 kubeadm 将 Kubernetes 候选版本列为升级选项，并允许升级到候选版本。
 	AllowRCUpgrades *bool
 
-	// DryRun tells if the dry run mode is enabled, don't apply any change if it is and just output what would be done.
+	// DryRun 指示是否启用空运行模式；启用时不应用任何更改，仅输出将要执行的操作。
 	DryRun *bool
 
-	// EtcdUpgrade instructs kubeadm to execute etcd upgrade during upgrades.
+	// EtcdUpgrade 指示 kubeadm 在升级期间执行 etcd 升级。
 	EtcdUpgrade *bool
 
-	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored during the upgrade process, e.g. 'IsPrivilegedUser,Swap'.
-	// Value 'all' ignores errors from all checks.
+	// IgnorePreflightErrors 列出升级过程中要忽略的预检查错误，例如 'IsPrivilegedUser,Swap'。
+	// 值为 'all' 时忽略所有检查的错误。
 	IgnorePreflightErrors []string
 
-	// PrintConfig specifies whether the configuration file that will be used in the upgrade should be printed or not.
+	// PrintConfig 指定是否打印升级将使用的配置文件。
 	PrintConfig *bool
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// UpgradeConfiguration contains a list of options that are specific to "kubeadm upgrade" subcommands.
+// UpgradeConfiguration 包含 "kubeadm upgrade" 子命令专属的选项。
 type UpgradeConfiguration struct {
 	metav1.TypeMeta
 
-	// Apply holds a list of options that are specific to the "kubeadm upgrade apply" command.
+	// Apply 保存 "kubeadm upgrade apply" 命令专属的选项。
 	Apply UpgradeApplyConfiguration
 
-	// Diff holds a list of options that are specific to the "kubeadm upgrade diff" command.
+	// Diff 保存 "kubeadm upgrade diff" 命令专属的选项。
 	Diff UpgradeDiffConfiguration
 
-	// Node holds a list of options that are specific to the "kubeadm upgrade node" command.
+	// Node 保存 "kubeadm upgrade node" 命令专属的选项。
 	Node UpgradeNodeConfiguration
 
-	// Plan holds a list of options that are specific to the "kubeadm upgrade plan" command.
+	// Plan 保存 "kubeadm upgrade plan" 命令专属的选项。
 	Plan UpgradePlanConfiguration
 
-	// Timeouts holds various timeouts that apply to kubeadm commands.
+	// Timeouts 保存适用于 kubeadm 命令的各种超时。
 	Timeouts *Timeouts
 }
 
 const (
-	// UnmountFlagMNTForce represents the flag "MNT_FORCE"
+	// UnmountFlagMNTForce 表示标志 "MNT_FORCE"。
 	UnmountFlagMNTForce = "MNT_FORCE"
-	// UnmountFlagMNTDetach represents the flag "MNT_DETACH"
+	// UnmountFlagMNTDetach 表示标志 "MNT_DETACH"。
 	UnmountFlagMNTDetach = "MNT_DETACH"
-	// UnmountFlagMNTExpire represents the flag "MNT_EXPIRE"
+	// UnmountFlagMNTExpire 表示标志 "MNT_EXPIRE"。
 	UnmountFlagMNTExpire = "MNT_EXPIRE"
-	// UnmountFlagUmountNoFollow represents the flag "UMOUNT_NOFOLLOW"
+	// UnmountFlagUmountNoFollow 表示标志 "UMOUNT_NOFOLLOW"。
 	UnmountFlagUmountNoFollow = "UMOUNT_NOFOLLOW"
 )
 
-// ComponentConfigMap is a map between a group name (as in GVK group) and a ComponentConfig
+// ComponentConfigMap 是 API 组名（GVK 中的组名）与 ComponentConfig 之间的映射。
 type ComponentConfigMap map[string]ComponentConfig
 
-// ArgMergeMethod defines the method used to merge an argument with the same name.
+// ArgMergeMethod 定义同名参数的合并方式。
 type ArgMergeMethod string
 
 const (
-	// ArgMergeMethodAppend appends the new value to the existing argument.
+	// ArgMergeMethodAppend 将新值追加到已有参数值。
 	ArgMergeMethodAppend ArgMergeMethod = "append"
-	// ArgMergeMethodPrepend prepends the new value to the existing argument.
+	// ArgMergeMethodPrepend 将新值插入已有参数值之前。
 	ArgMergeMethodPrepend ArgMergeMethod = "prepend"
 )
 
-// Arg represents an argument with a name and a value.
-// MergeMethod defines how to merge this argument with an existing base argument
-// with the same name. If no merge method is specified the default is to replace
-// the existing base argument. If multiple override arguments with the same name
-// exist and have a defined merge method, the last one will be used.
-// If a merge method is defined on an override argument but there is no matching
-// base argument, the override argument will be ignored.
+// Arg 表示带名称和值的参数。
+// MergeMethod 定义此参数与同名基础参数的合并方式；未指定时替换基础参数。
+// 若多个覆盖参数同名且定义了合并方式，则使用最后一个。
+// 若覆盖参数定义了合并方式但不存在同名基础参数，则忽略该覆盖参数。
 type Arg struct {
-	Name        string
-	Value       string
+	// Name 是参数名，匹配时按完整名称区分大小写。
+	Name string
+	// Value 是参数值；是否允许独立值由使用方决定。
+	Value string
+	// MergeMethod 指定与同名基础参数的合并方式；未设置时替换基础参数。
 	MergeMethod ArgMergeMethod
 }
 
-// EnvVar represents an environment variable present in a Container.
+// EnvVar 表示容器中存在的环境变量。
 type EnvVar struct {
 	v1.EnvVar
 }
 
-// EncryptionAlgorithmType can define an asymmetric encryption algorithm type.
+// EncryptionAlgorithmType 可定义非对称加密算法类型。
 type EncryptionAlgorithmType string
 
 const (
-	// EncryptionAlgorithmECDSAP256 defines the ECDSA encryption algorithm type with curve P256.
+	// EncryptionAlgorithmECDSAP256 定义使用 P-256 曲线的 ECDSA 加密算法类型。
 	EncryptionAlgorithmECDSAP256 EncryptionAlgorithmType = "ECDSA-P256"
-	// EncryptionAlgorithmECDSAP384 defines the ECDSA encryption algorithm type with curve P384.
+	// EncryptionAlgorithmECDSAP384 定义使用 P-384 曲线的 ECDSA 加密算法类型。
 	EncryptionAlgorithmECDSAP384 EncryptionAlgorithmType = "ECDSA-P384"
-	// EncryptionAlgorithmRSA2048 defines the RSA encryption algorithm type with key size 2048 bits.
+	// EncryptionAlgorithmRSA2048 定义密钥长度为 2048 位的 RSA 加密算法类型。
 	EncryptionAlgorithmRSA2048 EncryptionAlgorithmType = "RSA-2048"
-	// EncryptionAlgorithmRSA3072 defines the RSA encryption algorithm type with key size 3072 bits.
+	// EncryptionAlgorithmRSA3072 定义密钥长度为 3072 位的 RSA 加密算法类型。
 	EncryptionAlgorithmRSA3072 EncryptionAlgorithmType = "RSA-3072"
-	// EncryptionAlgorithmRSA4096 defines the RSA encryption algorithm type with key size 4096 bits.
+	// EncryptionAlgorithmRSA4096 定义密钥长度为 4096 位的 RSA 加密算法类型。
 	EncryptionAlgorithmRSA4096 EncryptionAlgorithmType = "RSA-4096"
 )
 
-// Timeouts holds various timeouts that apply to kubeadm commands.
+// Timeouts 保存适用于 kubeadm 命令的各种超时。
 type Timeouts struct {
-	// ControlPlaneComponentHealthCheck is the amount of time to wait for a control plane
-	// component, such as the API server, to be healthy during "kubeadm init" and "kubeadm join".
+	// ControlPlaneComponentHealthCheck 是 "kubeadm init" 和 "kubeadm join" 期间等待 API 服务器等控制平面组件健康的时长。
 	ControlPlaneComponentHealthCheck *metav1.Duration
 
-	// KubeletHealthCheck is the amount of time to wait for the kubelet to be healthy
-	// during "kubeadm init" and "kubeadm join".
+	// KubeletHealthCheck 是 "kubeadm init" 和 "kubeadm join" 期间等待 kubelet 健康的时长。
 	KubeletHealthCheck *metav1.Duration
 
-	// KubernetesAPICall is the amount of time to wait for the kubeadm client to complete a request to
-	// the API server. This applies to all types of methods (GET, POST, etc).
+	// KubernetesAPICall 是等待 kubeadm 客户端完成 API 服务器请求的时长，适用于 GET、POST 等所有方法。
 	KubernetesAPICall *metav1.Duration
 
-	// EtcdAPICall is the amount of time to wait for the kubeadm etcd client to complete a request to
-	// the etcd cluster.
+	// EtcdAPICall 是等待 kubeadm 的 etcd 客户端完成 etcd 集群请求的时长。
 	EtcdAPICall *metav1.Duration
 
-	// TLSBootstrap is the amount of time to wait for the kubelet to complete TLS bootstrap
-	// for a joining node.
+	// TLSBootstrap 是等待 kubelet 为加入节点完成 TLS 引导的时长。
 	TLSBootstrap *metav1.Duration
 
-	// Discovery is the amount of time to wait for kubeadm to validate the API server identity
-	// for a joining node.
+	// Discovery 是等待 kubeadm 为加入节点验证 API 服务器身份的时长。
 	Discovery *metav1.Duration
 
-	// UpgradeManifests is the timeout for upgrading static Pod manifests.
+	// UpgradeManifests 是升级静态 Pod 清单的超时。
 	UpgradeManifests *metav1.Duration
 }

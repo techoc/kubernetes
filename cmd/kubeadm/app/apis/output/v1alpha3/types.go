@@ -24,7 +24,7 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// BootstrapToken represents information for the bootstrap token output produced by kubeadm
+// BootstrapToken 表示 kubeadm 生成的引导令牌输出信息。
 type BootstrapToken struct {
 	metav1.TypeMeta `json:""`
 
@@ -33,99 +33,106 @@ type BootstrapToken struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Images represents information for the output produced by 'kubeadm config images list'
+// Images 表示 `kubeadm config images list` 生成的输出信息。
 type Images struct {
 	metav1.TypeMeta `json:""`
 
+	// Images 列出命令解析出的容器镜像引用。
 	Images []string `json:"images"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ComponentUpgradePlan represents information about upgrade plan for one component
+// ComponentUpgradePlan 表示单个组件的升级计划信息。
 type ComponentUpgradePlan struct {
 	metav1.TypeMeta `json:""`
 
-	Name           string `json:"name"`
+	// Name 是组件名称。
+	Name string `json:"name"`
+	// CurrentVersion 是节点当前使用的组件版本。
 	CurrentVersion string `json:"currentVersion"`
-	NewVersion     string `json:"newVersion"`
-	NodeName       string `json:"nodeName,omitempty"`
+	// NewVersion 是本次升级的目标版本。
+	NewVersion string `json:"newVersion"`
+	// NodeName 标识组件所在节点；无节点归属的组件留空。
+	NodeName string `json:"nodeName,omitempty"`
 }
 
-// ComponentConfigVersionState describes the current and desired version of a component config
+// ComponentConfigVersionState 描述组件配置的当前版本和目标版本。
 type ComponentConfigVersionState struct {
-	// Group points to the Kubernetes API group that covers the config
+	// Group 指向涵盖该配置的 Kubernetes API 组。
 	Group string `json:"group"`
 
-	// CurrentVersion is the currently active component config version
-	// NOTE: This can be empty in case the config was not found on the cluster or it was unsupported
-	// kubeadm generated version
+	// CurrentVersion 是当前生效的组件配置版本。
+	// 注意：若集群中不存在该配置，或其版本不是受支持的 kubeadm 版本生成的，此字段可以为空。
 	CurrentVersion string `json:"currentVersion"`
 
-	// PreferredVersion is the component config version that is currently preferred by kubeadm for use.
-	// NOTE: As of today, this is the only version supported by kubeadm.
+	// PreferredVersion 是 kubeadm 当前推荐使用的组件配置版本。
+	// 注意：目前这是 kubeadm 唯一支持的版本。
 	PreferredVersion string `json:"preferredVersion"`
 
-	// ManualUpgradeRequired indicates if users need to manually upgrade their component config versions. This happens if
-	// the CurrentVersion of the config is user supplied (or modified) and no longer supported. Users should upgrade
-	// their component configs to PreferredVersion or any other supported component config version.
+	// ManualUpgradeRequired 表示用户是否需要手动升级组件配置版本。
+	// 当配置的 CurrentVersion 由用户提供或修改且不再受支持时，需要手动升级。
+	// 用户应将组件配置升级到 PreferredVersion 或其他受支持的版本。
 	ManualUpgradeRequired bool `json:"manualUpgradeRequired"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// AvailableUpgrade represents information for a single available upgrade.
+// AvailableUpgrade 表示一个可用的升级选项。
 type AvailableUpgrade struct {
 	metav1.TypeMeta `json:""`
 
+	// Description 描述升级选项的版本类别或所处版本系列。
 	Description string `json:"description"`
 
+	// Components 列出该升级选项涉及的组件及版本变更。
 	Components []ComponentUpgradePlan `json:"components"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// UpgradePlan represents information about upgrade plan for the output
-// produced by 'kubeadm upgrade plan'
+// UpgradePlan 表示 `kubeadm upgrade plan` 生成的升级计划信息。
 type UpgradePlan struct {
 	metav1.TypeMeta `json:""`
 
+	// AvailableUpgrades 列出可升级到的目标版本系列及各组件的版本变更。
 	AvailableUpgrades []AvailableUpgrade `json:"availableUpgrades,omitempty"`
 
+	// ConfigVersions 列出组件配置版本的状态，供升级检查使用。
 	ConfigVersions []ComponentConfigVersionState `json:"configVersions,omitempty"`
 }
 
-// Certificate represents information for a certificate or a certificate authority when using the check-expiration command.
+// Certificate 表示使用 check-expiration 命令时显示的证书或证书颁发机构的信息。
 type Certificate struct {
-	// Name of the certificate.
+	// Name 是证书名称。
 	Name string `json:"name"`
 
-	// ExpirationDate defines certificate expiration date in UTC following the RFC3339 format.
+	// ExpirationDate 是采用 RFC3339 格式的 UTC 证书到期时间。
 	ExpirationDate metav1.Time `json:"expirationDate"`
 
-	// ResidualTimeSeconds represents the duration in seconds relative to the residual time before expiration.
+	// ResidualTimeSeconds 是距离证书到期剩余时间的秒数。
 	ResidualTimeSeconds int64 `json:"residualTime"`
 
-	// ExternallyManaged defines if the certificate is externally managed.
+	// ExternallyManaged 表示证书是否由外部管理。
 	ExternallyManaged bool `json:"externallyManaged"`
 
-	// CAName represents the name of the CA that signed the certificate.
-	// This field is empty for self-signed, root CA certificates.
+	// CAName 是签发该证书的证书颁发机构（CA）名称。
+	// 自签名根证书的此字段为空。
 	CAName string `json:"caName,omitempty"`
 
-	// Missing represents if the certificate is missing.
+	// Missing 表示证书是否缺失。
 	Missing bool `json:"missing"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CertificateExpirationInfo represents information for the output produced by 'kubeadm certs check-expiration'.
+// CertificateExpirationInfo 表示 `kubeadm certs check-expiration` 生成的输出信息。
 type CertificateExpirationInfo struct {
 	metav1.TypeMeta `json:""`
 
-	// Certificates holds a list of certificates to show expiration information for.
+	// Certificates 列出需要显示到期信息的证书。
 	Certificates []Certificate `json:"certificates"`
 
-	// CertificateAuthorities holds a list of certificate authorities to show expiration information for.
+	// CertificateAuthorities 列出需要显示到期信息的证书颁发机构。
 	CertificateAuthorities []Certificate `json:"certificateAuthorities"`
 }

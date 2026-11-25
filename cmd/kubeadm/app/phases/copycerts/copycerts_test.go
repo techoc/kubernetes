@@ -193,8 +193,7 @@ func TestUploadCerts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error reading certificate from disk: %v", err)
 		}
-		// Check that the encrypted contents on the secret match the contents on disk, and that all
-		// the expected certificates are in the secret
+		// 检查 Secret 中的加密内容与磁盘内容一致，且所有预期证书均已保存
 		if string(secretCertData) != string(diskCertData) {
 			t.Fatalf("cert %s does not have the expected contents. contents: %q; expected contents: %q", certName, string(secretCertData), string(diskCertData))
 		}
@@ -207,12 +206,12 @@ func TestDownloadCerts(t *testing.T) {
 		t.Fatalf("could not create certificate key: %v", err)
 	}
 
-	// Temporary directory where certificates will be generated
+	// 用于生成证书的临时目录
 	tmpdir := t.TempDir()
 	initConfiguration := configutil.GetDefaultInternalConfig(t)
 	initConfiguration.ClusterConfiguration.CertificatesDir = tmpdir
 
-	// Temporary directory where certificates will be downloaded to
+	// 用于下载证书的临时目录
 	targetTmpdir := t.TempDir()
 	initForDownloadConfiguration := configutil.GetDefaultInternalConfig(t)
 	initForDownloadConfiguration.ClusterConfiguration.CertificatesDir = targetTmpdir
@@ -235,10 +234,9 @@ func TestDownloadCerts(t *testing.T) {
 		if err != nil {
 			t.Errorf("error reading certificate from disk: %v", err)
 		}
-		// Check that the written files are either certificates or keys, and that they have
-		// the expected permissions
+		// 检查写入的文件均为证书或私钥，且权限符合预期
 		if _, err := keyutil.ParsePrivateKeyPEM(diskCertData); err == nil {
-			// File permissions are set differently on Windows, which does not match the expectation below.
+			// Windows 上的文件权限设置不同，不符合以下预期。
 			if goruntime.GOOS != "windows" {
 				if stat, err := os.Stat(certPath); err == nil {
 					if stat.Mode() != keyFileMode {
@@ -249,7 +247,7 @@ func TestDownloadCerts(t *testing.T) {
 				}
 			}
 		} else if _, err := keyutil.ParsePublicKeysPEM(diskCertData); err == nil {
-			// File permissions are set differently on Windows, which does not match the expectation below.
+			// Windows 上的文件权限设置不同，不符合以下预期。
 			if goruntime.GOOS != "windows" {
 				if stat, err := os.Stat(certPath); err == nil {
 					if stat.Mode() != certFileMode {

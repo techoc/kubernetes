@@ -24,8 +24,8 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// VerifyUnmarshalStrict takes a slice of schemes, a JSON/YAML byte slice and a GroupVersionKind
-// and verifies if the schema is known and if the byte slice unmarshals with strict mode.
+// VerifyUnmarshalStrict 接收 scheme 切片、JSON/YAML 字节和 GVK，
+// 检查 schema 是否已知，以及字节能否按严格模式反序列化。
 func VerifyUnmarshalStrict(schemes []*runtime.Scheme, gvk schema.GroupVersionKind, bytes []byte) error {
 	var scheme *runtime.Scheme
 	for _, s := range schemes {

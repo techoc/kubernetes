@@ -34,14 +34,14 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// MarshalToYaml marshals an object into yaml.
+// MarshalToYaml 将对象序列化为 YAML。
 func MarshalToYaml(obj runtime.Object, gv schema.GroupVersion) ([]byte, error) {
 	return MarshalToYamlForCodecs(obj, gv, clientsetscheme.Codecs)
 }
 
-// MarshalToYamlForCodecs marshals an object into yaml using the specified codec
-// TODO: Is specifying the gv really needed here?
-// TODO: Can we support json out of the box easily here?
+// MarshalToYamlForCodecs 使用指定 codec 将对象序列化为 YAML。
+// TODO: 此处真的需要指定 GV 吗？
+// TODO: 能否方便地直接支持 JSON？
 func MarshalToYamlForCodecs(obj runtime.Object, gv schema.GroupVersion, codecs serializer.CodecFactory) ([]byte, error) {
 	const mediaType = runtime.ContentTypeYAML
 	info, ok := runtime.SerializerInfoForMediaType(codecs.SupportedMediaTypes(), mediaType)
@@ -53,7 +53,7 @@ func MarshalToYamlForCodecs(obj runtime.Object, gv schema.GroupVersion, codecs s
 	return runtime.Encode(encoder, obj)
 }
 
-// UniversalUnmarshal unmarshals YAML or JSON into a runtime.Object using the universal deserializer.
+// UniversalUnmarshal 使用通用反序列化器将 YAML 或 JSON 反序列化到 runtime.Object。
 func UniversalUnmarshal(buffer []byte) (runtime.Object, error) {
 	codecs := clientsetscheme.Codecs
 	decoder := codecs.UniversalDeserializer()
@@ -64,8 +64,8 @@ func UniversalUnmarshal(buffer []byte) (runtime.Object, error) {
 	return obj, nil
 }
 
-// SplitConfigDocuments reads the YAML/JSON bytes per-document, unmarshals the TypeMeta information from each document
-// and returns a map between the GroupVersionKind of the document and the document bytes
+// SplitConfigDocuments 逐文档读取 YAML/JSON 字节，解析各文档的 TypeMeta，
+// 并返回文档 GVK 到文档字节的映射。
 func SplitConfigDocuments(documentBytes []byte) (kubeadmapi.DocumentMap, error) {
 	gvkmap := kubeadmapi.DocumentMap{}
 	knownKinds := map[string]bool{}
@@ -73,7 +73,7 @@ func SplitConfigDocuments(documentBytes []byte) (kubeadmapi.DocumentMap, error) 
 	buf := bytes.NewBuffer(documentBytes)
 	reader := utilyaml.NewYAMLReader(bufio.NewReader(buf))
 	for {
-		// Read one YAML document at a time, until io.EOF is returned
+		// 每次读取一个 YAML 文档，直到返回 io.EOF。
 		b, err := reader.Read()
 		if err == io.EOF {
 			break
@@ -83,7 +83,7 @@ func SplitConfigDocuments(documentBytes []byte) (kubeadmapi.DocumentMap, error) 
 		if len(b) == 0 {
 			break
 		}
-		// Deserialize the TypeMeta information of this byte slice
+		// 反序列化此字节切片的 TypeMeta。
 		gvk, err := yamlserializer.DefaultMetaFactory.Interpret(b)
 		if err != nil {
 			return nil, err
@@ -92,14 +92,14 @@ func SplitConfigDocuments(documentBytes []byte) (kubeadmapi.DocumentMap, error) 
 			return nil, errors.Errorf("invalid configuration for GroupVersionKind %+v: kind and apiVersion is mandatory information that must be specified", gvk)
 		}
 
-		// Check whether the kind has been registered before. If it has, throw an error
+		// 检查 kind 是否已注册；已注册则返回错误。
 		if known := knownKinds[gvk.Kind]; known {
 			errs = append(errs, errors.Errorf("invalid configuration: kind %q is specified twice in YAML file", gvk.Kind))
 			continue
 		}
 		knownKinds[gvk.Kind] = true
 
-		// Save the mapping between the gvk and the bytes that object consists of
+		// 保存 GVK 到对象字节的映射。
 		gvkmap[*gvk] = b
 	}
 	if err := errorsutil.NewAggregate(errs); err != nil {
@@ -108,7 +108,7 @@ func SplitConfigDocuments(documentBytes []byte) (kubeadmapi.DocumentMap, error) 
 	return gvkmap, nil
 }
 
-// GroupVersionKindsFromBytes parses the bytes and returns a gvk slice
+// GroupVersionKindsFromBytes 解析字节并返回 GVK 切片。
 func GroupVersionKindsFromBytes(b []byte) ([]schema.GroupVersionKind, error) {
 	gvkmap, err := SplitConfigDocuments(b)
 	if err != nil {
@@ -121,7 +121,7 @@ func GroupVersionKindsFromBytes(b []byte) ([]schema.GroupVersionKind, error) {
 	return gvks, nil
 }
 
-// GroupVersionKindsHasKind returns whether the following gvk slice contains the kind given as a parameter
+// GroupVersionKindsHasKind 判断给定 GVK 切片是否包含指定 kind。
 func GroupVersionKindsHasKind(gvks []schema.GroupVersionKind, kind string) bool {
 	for _, gvk := range gvks {
 		if gvk.Kind == kind {
@@ -131,27 +131,27 @@ func GroupVersionKindsHasKind(gvks []schema.GroupVersionKind, kind string) bool 
 	return false
 }
 
-// GroupVersionKindsHasClusterConfiguration returns whether the following gvk slice contains a ClusterConfiguration object
+// GroupVersionKindsHasClusterConfiguration 判断给定 GVK 切片是否包含 ClusterConfiguration。
 func GroupVersionKindsHasClusterConfiguration(gvks ...schema.GroupVersionKind) bool {
 	return GroupVersionKindsHasKind(gvks, constants.ClusterConfigurationKind)
 }
 
-// GroupVersionKindsHasInitConfiguration returns whether the following gvk slice contains a InitConfiguration object
+// GroupVersionKindsHasInitConfiguration 判断给定 GVK 切片是否包含 InitConfiguration。
 func GroupVersionKindsHasInitConfiguration(gvks ...schema.GroupVersionKind) bool {
 	return GroupVersionKindsHasKind(gvks, constants.InitConfigurationKind)
 }
 
-// GroupVersionKindsHasJoinConfiguration returns whether the following gvk slice contains a JoinConfiguration object
+// GroupVersionKindsHasJoinConfiguration 判断给定 GVK 切片是否包含 JoinConfiguration。
 func GroupVersionKindsHasJoinConfiguration(gvks ...schema.GroupVersionKind) bool {
 	return GroupVersionKindsHasKind(gvks, constants.JoinConfigurationKind)
 }
 
-// GroupVersionKindsHasResetConfiguration returns whether the following gvk slice contains a ResetConfiguration object
+// GroupVersionKindsHasResetConfiguration 判断给定 GVK 切片是否包含 ResetConfiguration。
 func GroupVersionKindsHasResetConfiguration(gvks ...schema.GroupVersionKind) bool {
 	return GroupVersionKindsHasKind(gvks, constants.ResetConfigurationKind)
 }
 
-// GroupVersionKindsHasUpgradeConfiguration returns whether the following gvk slice contains a UpgradeConfiguration object
+// GroupVersionKindsHasUpgradeConfiguration 判断给定 GVK 切片是否包含 UpgradeConfiguration。
 func GroupVersionKindsHasUpgradeConfiguration(gvks ...schema.GroupVersionKind) bool {
 	return GroupVersionKindsHasKind(gvks, constants.UpgradeConfigurationKind)
 }

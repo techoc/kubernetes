@@ -46,12 +46,13 @@ import (
 	staticpodutil "k8s.io/kubernetes/cmd/kubeadm/app/util/staticpod"
 )
 
-// fakeConfigMap is a helper for seeding a fake kube client with a ConfigMap in kube-system
+// fakeConfigMap 辅助在 kube-system 中为伪客户端填充 ConfigMap。
 type fakeConfigMap struct {
 	Name string
 	Data map[string]string
 }
 
+// Create 在 kube-system 中创建或更新测试用 ConfigMap。
 func (c *fakeConfigMap) Create(client clientset.Interface) error {
 	return apiclient.CreateOrUpdate(client.CoreV1().ConfigMaps(metav1.NamespaceSystem), &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -444,14 +445,14 @@ func TestGetInitConfigurationFromCluster(t *testing.T) {
 			name: "invalid - No ClusterConfiguration in kubeadm-config ConfigMap",
 			configMaps: []fakeConfigMap{
 				{
-					Name: kubeadmconstants.KubeadmConfigConfigMap, // ClusterConfiguration from kubeadm-config.
+					Name: kubeadmconstants.KubeadmConfigConfigMap, // Name: kubeadmconstants.KubeadmConfigConfigMap, // kubeadm-config 中的 ClusterConfiguration。
 					Data: map[string]string{},
 				},
 			},
 			expectedError: true,
 		},
 		{
-			name: "valid v1beta4 - new control plane == false", // InitConfiguration composed with data from different places, with also node specific information
+			name: "valid v1beta4 - new control plane == false", // name: "valid v1beta4 - new control plane == false", // 由不同来源的数据组成且包含节点特定信息的 InitConfiguration
 			staticPods: []staticpodutil.FakeStaticPod{
 				{
 					NodeName:  nodeName,
@@ -463,19 +464,19 @@ func TestGetInitConfigurationFromCluster(t *testing.T) {
 			},
 			configMaps: []fakeConfigMap{
 				{
-					Name: kubeadmconstants.KubeadmConfigConfigMap, // ClusterConfiguration from kubeadm-config.
+					Name: kubeadmconstants.KubeadmConfigConfigMap, // Name: kubeadmconstants.KubeadmConfigConfigMap, // kubeadm-config 中的 ClusterConfiguration。
 					Data: map[string]string{
 						kubeadmconstants.ClusterConfigurationConfigMapKey: string(cfgFiles["ClusterConfiguration_v1beta4"]),
 					},
 				},
 				{
-					Name: kubeadmconstants.KubeProxyConfigMap, // Kube-proxy component config from corresponding ConfigMap.
+					Name: kubeadmconstants.KubeProxyConfigMap, // Name: kubeadmconstants.KubeProxyConfigMap, // 对应 ConfigMap 中的 Kube-proxy 组件配置。
 					Data: map[string]string{
 						kubeadmconstants.KubeProxyConfigMapKey: string(cfgFiles["Kube-proxy_componentconfig"]),
 					},
 				},
 				{
-					Name: kubeadmconstants.KubeletBaseConfigurationConfigMap, // Kubelet component config from corresponding ConfigMap.
+					Name: kubeadmconstants.KubeletBaseConfigurationConfigMap, // Name: kubeadmconstants.KubeletBaseConfigurationConfigMap, // 对应 ConfigMap 中的 Kubelet 组件配置。
 					Data: map[string]string{
 						kubeadmconstants.KubeletBaseConfigurationConfigMapKey: string(cfgFiles["Kubelet_componentconfig"]),
 					},
@@ -494,7 +495,7 @@ func TestGetInitConfigurationFromCluster(t *testing.T) {
 			getAPIEndpoint:      true,
 		},
 		{
-			name: "valid v1beta4 - new control plane == true", // InitConfiguration composed with data from different places, without node specific information
+			name: "valid v1beta4 - new control plane == true", // name: "valid v1beta4 - new control plane == true", // 由不同来源的数据组成但不含节点特定信息的 InitConfiguration
 			staticPods: []staticpodutil.FakeStaticPod{
 				{
 					NodeName:  nodeName,
@@ -506,19 +507,19 @@ func TestGetInitConfigurationFromCluster(t *testing.T) {
 			},
 			configMaps: []fakeConfigMap{
 				{
-					Name: kubeadmconstants.KubeadmConfigConfigMap, // ClusterConfiguration from kubeadm-config.
+					Name: kubeadmconstants.KubeadmConfigConfigMap, // Name: kubeadmconstants.KubeadmConfigConfigMap, // kubeadm-config 中的 ClusterConfiguration。
 					Data: map[string]string{
 						kubeadmconstants.ClusterConfigurationConfigMapKey: string(cfgFiles["ClusterConfiguration_v1beta4"]),
 					},
 				},
 				{
-					Name: kubeadmconstants.KubeProxyConfigMap, // Kube-proxy component config from corresponding ConfigMap.
+					Name: kubeadmconstants.KubeProxyConfigMap, // Name: kubeadmconstants.KubeProxyConfigMap, // 对应 ConfigMap 中的 Kube-proxy 组件配置。
 					Data: map[string]string{
 						kubeadmconstants.KubeProxyConfigMapKey: string(cfgFiles["Kube-proxy_componentconfig"]),
 					},
 				},
 				{
-					Name: kubeadmconstants.KubeletBaseConfigurationConfigMap, // Kubelet component config from corresponding ConfigMap.
+					Name: kubeadmconstants.KubeletBaseConfigurationConfigMap, // Name: kubeadmconstants.KubeletBaseConfigurationConfigMap, // 对应 ConfigMap 中的 Kubelet 组件配置。
 					Data: map[string]string{
 						kubeadmconstants.KubeletBaseConfigurationConfigMapKey: string(cfgFiles["Kubelet_componentconfig"]),
 					},
@@ -583,7 +584,7 @@ func TestGetInitConfigurationFromCluster(t *testing.T) {
 				return
 			}
 
-			// Test expected values in InitConfiguration
+			// 检查 InitConfiguration 中的预期值。
 			if cfg == nil {
 				t.Errorf("unexpected nil return value")
 				return

@@ -55,7 +55,7 @@ type diffFlags struct {
 	out                           io.Writer
 }
 
-// newCmdDiff returns the cobra command for `kubeadm upgrade diff`
+// newCmdDiff 返回 kubeadm upgrade diff 的 cobra 命令。
 func newCmdDiff(out io.Writer) *cobra.Command {
 	flags := &diffFlags{
 		kubeConfigPath:                constants.GetAdminKubeConfigPath(),
@@ -69,7 +69,7 @@ func newCmdDiff(out io.Writer) *cobra.Command {
 		Use:   "diff [version]",
 		Short: "Show what differences would be applied to existing static pod manifests. See also: kubeadm upgrade apply --dry-run",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Run preflight checks for diff to check that the manifests already exist.
+			// 为 diff 运行预检，确认清单已存在。
 			if err := validateManifestsPath(
 				flags.apiServerManifestPath,
 				flags.controllerManagerManifestPath,
@@ -106,7 +106,7 @@ func validateManifestsPath(manifests ...string) (err error) {
 	return nil
 }
 
-// FetchInitConfigurationFunc defines the signature of the function which will fetch InitConfiguration from cluster.
+// FetchInitConfigurationFunc 定义从集群获取 InitConfiguration 的函数签名。
 type FetchInitConfigurationFunc func(client clientset.Interface, printer output.Printer, logPrefix string, getNodeRegistration, getAPIEndpoint, getComponentConfigs, shortConfigMapGet bool) (*kubeadmapi.InitConfiguration, error)
 
 func runDiff(fs *pflag.FlagSet, flags *diffFlags, args []string, fetchInitConfigurationFromCluster FetchInitConfigurationFunc) error {
@@ -128,7 +128,7 @@ func runDiff(fs *pflag.FlagSet, flags *diffFlags, args []string, fetchInitConfig
 		return err
 	}
 
-	// Pick up the version from the ClusterConfiguration.
+	// 从 ClusterConfiguration 获取版本。
 	if initCfg.KubernetesVersion != "" {
 		flags.newK8sVersionStr = initCfg.KubernetesVersion
 	}
@@ -136,13 +136,13 @@ func runDiff(fs *pflag.FlagSet, flags *diffFlags, args []string, fetchInitConfig
 		flags.newK8sVersionStr = upgradeCfg.Diff.KubernetesVersion
 	}
 
-	// Version must be specified via version arg if it's not set in ClusterConfiguration.
+	// 若 ClusterConfiguration 未设置版本，则必须通过版本参数指定。
 	if flags.newK8sVersionStr == "" {
 		if err := cmdutil.ValidateExactArgNumber(args, []string{"version"}); err != nil {
 			return err
 		}
 	}
-	// If option was specified in both args and config file, args will overwrite the config file.
+	// 若参数和配置文件都指定了选项，则参数覆盖配置文件。
 	if len(args) == 1 {
 		flags.newK8sVersionStr = args[0]
 	}
@@ -179,7 +179,7 @@ func runDiff(fs *pflag.FlagSet, flags *diffFlags, args []string, fetchInitConfig
 			return err
 		}
 
-		// Populated and write out the diff
+		// 填充并输出差异。
 		diff := difflib.UnifiedDiff{
 			A:        difflib.SplitLines(string(existingManifest)),
 			B:        difflib.SplitLines(string(newManifest)),

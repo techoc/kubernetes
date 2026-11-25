@@ -37,7 +37,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/users"
 )
 
-// NewCleanupNodePhase creates a kubeadm workflow phase that cleanup the node
+// NewCleanupNodePhase 创建清理节点的 kubeadm 工作流阶段。
 func NewCleanupNodePhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "cleanup-node",
@@ -61,7 +61,7 @@ func runCleanupNode(c workflow.RunData) error {
 	}
 	certsDir := r.CertificatesDir()
 
-	// Try to stop the kubelet service
+	// 尝试停止 kubelet 服务。
 	klog.V(1).Infoln("[reset] Getting init system")
 	initSystem, err := initsystem.GetInitSystem()
 	if err != nil {
@@ -80,19 +80,19 @@ func runCleanupNode(c workflow.RunData) error {
 	}
 
 	if !r.DryRun() {
-		// In case KubeletRunDirectory holds a symbolic link, evaluate it.
-		// This would also throw an error if the directory does not exist.
+		// 若 KubeletRunDirectory 是符号链接，则解析其目标。
+		// 目录不存在时此操作也会返回错误。
 		kubeletRunDirectory, err := filepath.EvalSymlinks(kubeadmconstants.KubeletRunDirectory)
 		if err != nil {
 			klog.Warningf("[reset] Skipping unmount of directories in %q: %v\n",
 				kubeadmconstants.KubeletRunDirectory, err)
 		} else {
-			// Unmount all mount paths under kubeletRunDirectory.
+			// 卸载 kubeletRunDirectory 下的全部挂载路径。
 			fmt.Printf("[reset] Unmounting mounted directories in %q\n", kubeadmconstants.KubeletRunDirectory)
 			if err := unmountKubeletDirectory(kubeletRunDirectory, r.ResetCfg().UnmountFlags); err != nil {
 				return err
 			}
-			// Clean the kubeletRunDirectory.
+			// 清理 kubeletRunDirectory。
 			dirsToClean = append(dirsToClean, kubeletRunDirectory)
 		}
 	} else {
@@ -108,7 +108,7 @@ func runCleanupNode(c workflow.RunData) error {
 		fmt.Println("[dryrun] Would remove Kubernetes-managed containers")
 	}
 
-	// Remove contents from the config and pki directories
+	// 删除配置目录和 pki 目录中的内容。
 	if certsDir != kubeadmapiv1.DefaultCertificatesDir {
 		klog.Warningf("[reset] WARNING: Cleaning a non-default certificates directory: %q\n", certsDir)
 	}
@@ -148,7 +148,7 @@ func removeContainers(criSocketPath string) error {
 	return containerRuntime.RemoveContainers(containers)
 }
 
-// resetConfigDir is used to cleanup the files in the folder defined in dirsToClean.
+// resetConfigDir 用于清理 dirsToClean 所定义目录中的文件。
 func resetConfigDir(configPathDir string, dirsToClean []string, isDryRun bool) {
 	if !isDryRun {
 		fmt.Printf("[reset] Deleting contents of directories: %v\n", dirsToClean)
@@ -182,10 +182,9 @@ func resetConfigDir(configPathDir string, dirsToClean []string, isDryRun bool) {
 	}
 }
 
-// CleanDir removes everything in a directory, but not the directory itself
+// CleanDir 删除目录中的全部内容，但保留目录本身。
 func CleanDir(filePath string) error {
-	// If the directory doesn't even exist there's nothing to do, and we do
-	// not consider this an error
+	// 若目录不存在，则无需处理，也不将此视为错误。
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return nil
 	}
@@ -207,7 +206,7 @@ func CleanDir(filePath string) error {
 	return nil
 }
 
-// IsDirEmpty returns true if a directory is empty
+// IsDirEmpty 在目录为空时返回 true。
 func IsDirEmpty(dir string) (bool, error) {
 	d, err := os.Open(dir)
 	if err != nil {

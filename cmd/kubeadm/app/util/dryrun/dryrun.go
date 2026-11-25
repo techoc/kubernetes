@@ -33,14 +33,14 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 )
 
-// FileToPrint represents a temporary file on disk that might want to be aliased when printing
-// Useful for things like loading a file from /tmp/ but saying to the user "Would write file foo to /etc/kubernetes/..."
+// FileToPrint 表示打印时可使用别名的磁盘临时文件。
+// 例如从 /tmp/ 加载文件，却向用户展示 /etc/kubernetes/... 中的目标路径。
 type FileToPrint struct {
 	RealPath  string
 	PrintPath string
 }
 
-// NewFileToPrint makes a new instance of FileToPrint with the specified arguments
+// NewFileToPrint 使用指定参数创建 FileToPrint。
 func NewFileToPrint(realPath, printPath string) FileToPrint {
 	return FileToPrint{
 		RealPath:  realPath,
@@ -48,14 +48,14 @@ func NewFileToPrint(realPath, printPath string) FileToPrint {
 	}
 }
 
-// PrintDryRunFile is a helper method around PrintDryRunFiles
+// PrintDryRunFile 是 PrintDryRunFiles 的辅助方法。
 func PrintDryRunFile(fileName, realDir, printDir string, w io.Writer) error {
 	return PrintDryRunFiles([]FileToPrint{
 		NewFileToPrint(filepath.Join(realDir, fileName), filepath.Join(printDir, fileName)),
 	}, w)
 }
 
-// PrintDryRunFiles prints the contents of the FileToPrints given to it to the writer w
+// PrintDryRunFiles 将给定 FileToPrint 的内容输出到 writer w。
 func PrintDryRunFiles(files []FileToPrint, w io.Writer) error {
 	errs := []error{}
 	for _, file := range files {
@@ -69,9 +69,8 @@ func PrintDryRunFiles(files []FileToPrint, w io.Writer) error {
 			continue
 		}
 
-		// Make it possible to fake the path of the file; i.e. you may want to tell the user
-		// "Here is what would be written to /etc/kubernetes/admin.conf", although you wrote it to /tmp/kubeadm-dryrun/admin.conf and are loading it from there
-		// Fall back to the "real" path if PrintPath is not set
+		// 可伪造文件路径：实际从 /tmp/kubeadm-dryrun/admin.conf 写入和加载，
+		// 却向用户展示 /etc/kubernetes/admin.conf。未设置 PrintPath 时使用真实路径。
 		outputFilePath := file.PrintPath
 		if len(outputFilePath) == 0 {
 			outputFilePath = file.RealPath
@@ -84,26 +83,26 @@ func PrintDryRunFiles(files []FileToPrint, w io.Writer) error {
 	return errorsutil.NewAggregate(errs)
 }
 
-// Waiter is an implementation of apiclient.Waiter that should be used for dry-running
+// Waiter 是用于试运行的 apiclient.Waiter 实现。
 type Waiter struct{}
 
-// NewWaiter returns a new Waiter object that talks to the given Kubernetes cluster
+// NewWaiter 返回与指定 Kubernetes 集群通信的新 Waiter。
 func NewWaiter() apiclient.Waiter {
 	return &Waiter{}
 }
 
-// WaitForControlPlaneComponents just returns a dummy nil, to indicate that the program should just proceed
+// WaitForControlPlaneComponents 仅返回占位的 nil，让流程继续。
 func (w *Waiter) WaitForControlPlaneComponents(podsMap map[string]*v1.Pod, apiServerAddress string) error {
 	return nil
 }
 
-// WaitForPodsWithLabel just returns a dummy nil, to indicate that the program should just proceed
+// WaitForPodsWithLabel 仅返回占位的 nil，让流程继续。
 func (w *Waiter) WaitForPodsWithLabel(kvLabel string) error {
 	fmt.Printf("[dryrun] Would wait for the Pods with the label %q in the %s namespace to become Running\n", kvLabel, metav1.NamespaceSystem)
 	return nil
 }
 
-// WaitForKubelet blocks until the kubelet /healthz endpoint returns 'ok'
+// WaitForKubelet 阻塞等待 kubelet 的 /healthz 端点返回 "ok"。
 func (w *Waiter) WaitForKubelet(healthzAddress string, healthzPort int32) error {
 	var (
 		addrPort        = net.JoinHostPort(healthzAddress, strconv.Itoa(int(healthzPort)))
@@ -113,10 +112,10 @@ func (w *Waiter) WaitForKubelet(healthzAddress string, healthzPort int32) error 
 	return nil
 }
 
-// SetTimeout is a no-op; we don't wait in this implementation
+// SetTimeout 不执行任何操作；此实现不会等待。
 func (w *Waiter) SetTimeout(_ time.Duration) {}
 
-// WaitForStaticPodControlPlaneHashes returns an empty hash for all control plane images;
+// WaitForStaticPodControlPlaneHashes 为所有控制平面镜像返回空哈希。
 func (w *Waiter) WaitForStaticPodControlPlaneHashes(_ string) (map[string]string, error) {
 	return map[string]string{
 		kubeadmconstants.KubeAPIServer:         "",
@@ -125,21 +124,20 @@ func (w *Waiter) WaitForStaticPodControlPlaneHashes(_ string) (map[string]string
 	}, nil
 }
 
-// WaitForStaticPodSingleHash returns an empty hash
-// but the empty strings there are needed
+// WaitForStaticPodSingleHash 返回空哈希；调用方需要这些空字符串。
 func (w *Waiter) WaitForStaticPodSingleHash(_ string, _ string) (string, error) {
 	return "", nil
 }
 
-// WaitForStaticPodHashChange returns a dummy nil error in order for the flow to just continue as we're dryrunning
+// WaitForStaticPodHashChange 返回占位的 nil 错误，使试运行流程继续。
 func (w *Waiter) WaitForStaticPodHashChange(_, _, _ string) error {
 	return nil
 }
 
-// PrintFilesIfDryRunning prints the static pod manifests to stdout and informs about the temporary directory to go and lookup when dry running
+// PrintFilesIfDryRunning 将静态 Pod 清单输出到标准输出，并提示试运行临时目录的位置。
 func PrintFilesIfDryRunning(needPrintManifest bool, manifestDir string, outputWriter io.Writer) error {
 	var files []FileToPrint
-	// Print static pod manifests if it is a control plane
+	// 控制平面节点输出静态 Pod 清单。
 	if needPrintManifest {
 		fmt.Printf("[dryrun] Wrote certificates, kubeconfig files and control plane manifests to the %q directory\n", manifestDir)
 		for _, component := range kubeadmconstants.ControlPlaneComponents {
@@ -154,7 +152,7 @@ func PrintFilesIfDryRunning(needPrintManifest bool, manifestDir string, outputWr
 	fmt.Println("[dryrun] The certificates or kubeconfig files would not be printed due to their sensitive nature")
 	fmt.Printf("[dryrun] Please examine the %q directory for details about what would be written\n", manifestDir)
 
-	// Print kubelet config manifests
+	// 输出 kubelet 配置清单。
 	kubeletConfigFiles := []string{kubeadmconstants.KubeletConfigurationFileName, kubeadmconstants.KubeletEnvFileName}
 	for _, filename := range kubeletConfigFiles {
 		realPath := filepath.Join(manifestDir, filename)

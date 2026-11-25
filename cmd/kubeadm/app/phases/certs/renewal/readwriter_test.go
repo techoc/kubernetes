@@ -36,56 +36,56 @@ import (
 )
 
 func TestPKICertificateReadWriter(t *testing.T) {
-	// creates a tmp folder
+	// 创建临时目录
 	dir := t.TempDir()
 
-	// creates a certificate
+	// 创建证书
 	cert := writeTestCertificate(t, dir, "test", testCACert, testCAKey, testCertOrganization, time.Time{}, time.Time{})
 
-	// Creates a pkiCertificateReadWriter
+	// 创建 pkiCertificateReadWriter
 	pkiReadWriter := newPKICertificateReadWriter(dir, "test")
 
-	// Reads the certificate
+	// 读取证书
 	readCert, err := pkiReadWriter.Read()
 	if err != nil {
 		t.Fatalf("couldn't read certificate: %v", err)
 	}
 
-	// Check if the certificate read from disk is equal to the original one
+	// 检查从磁盘读取的证书是否与原始证书一致
 	if !cert.Equal(readCert) {
 		t.Errorf("read cert does not match with expected cert")
 	}
 
-	// Create a new cert
+	// 创建新证书
 	newCert, newkey, err := pkiutil.NewCertAndKey(testCACert, testCAKey, testCertCfg)
 	if err != nil {
 		t.Fatalf("couldn't generate certificate: %v", err)
 	}
 
-	// Writes the new certificate
+	// 写入新证书
 	err = pkiReadWriter.Write(newCert, newkey)
 	if err != nil {
 		t.Fatalf("couldn't write new certificate: %v", err)
 	}
 
-	// Reads back the new certificate
+	// 读回新证书
 	readCert, err = pkiReadWriter.Read()
 	if err != nil {
 		t.Fatalf("couldn't read new certificate: %v", err)
 	}
 
-	// Check if the new certificate read from disk is equal to the original one
+	// 检查从磁盘读回的新证书是否与原始证书一致
 	if !newCert.Equal(readCert) {
 		t.Error("read cert does not match with expected new cert")
 	}
 }
 
 func TestKubeconfigReadWriter(t *testing.T) {
-	// creates tmp folders
+	// 创建临时目录
 	dirKubernetes := t.TempDir()
 	dirPKI := t.TempDir()
 
-	// write the CA cert and key to the temporary PKI dir
+	// 将 CA 证书和私钥写入临时 PKI 目录
 	caName := kubeadmconstants.CACertAndKeyBaseName
 	if err := pkiutil.WriteCertAndKey(
 		dirPKI,
@@ -95,53 +95,53 @@ func TestKubeconfigReadWriter(t *testing.T) {
 		t.Fatalf("couldn't write out certificate %s to %s", caName, dirPKI)
 	}
 
-	// creates a certificate and then embeds it into a kubeconfig file
+	// 创建证书并将其嵌入 kubeconfig 文件
 	cert := writeTestKubeconfig(t, dirKubernetes, "test", testCACert, testCAKey, time.Time{}, time.Time{})
 
-	// Creates a KubeconfigReadWriter
+	// 创建 KubeconfigReadWriter
 	kubeconfigReadWriter := newKubeconfigReadWriter(dirKubernetes, "test", dirPKI, caName)
 
-	// Reads the certificate embedded in a kubeconfig
+	// 读取 kubeconfig 中嵌入的证书
 	readCert, err := kubeconfigReadWriter.Read()
 	if err != nil {
 		t.Fatalf("couldn't read embedded certificate: %v", err)
 	}
 
-	// Check if the certificate read from disk is equal to the original one
+	// 检查从磁盘读取的证书是否与原始证书一致
 	if !cert.Equal(readCert) {
 		t.Errorf("read cert does not match with expected cert")
 	}
 
-	// Create a new cert
+	// 创建新证书
 	newCert, newkey, err := pkiutil.NewCertAndKey(testCACert, testCAKey, testCertCfg)
 	if err != nil {
 		t.Fatalf("couldn't generate certificate: %v", err)
 	}
 
-	// Writes the new certificate embedded in a kubeconfig
+	// 将新证书写入 kubeconfig
 	err = kubeconfigReadWriter.Write(newCert, newkey)
 	if err != nil {
 		t.Fatalf("couldn't write new embedded certificate: %v", err)
 	}
 
-	// Make sure that CA key is not present during Read() as it is not needed.
-	// This covers testing when the CA is external and not present on the host.
+	// 确保 Read() 时不存在 CA 私钥，因为无需读取。
+	// 此测试覆盖 CA 由外部提供且宿主机上没有该 CA 的情况。
 	_, caKeyPath := pkiutil.PathsForCertAndKey(dirPKI, caName)
 	os.Remove(caKeyPath)
 
-	// Reads back the new certificate embedded in a kubeconfig writer
+	// 从 kubeconfig 写入器读回新嵌入的证书
 	readCert, err = kubeconfigReadWriter.Read()
 	if err != nil {
 		t.Fatalf("couldn't read new embedded  certificate: %v", err)
 	}
 
-	// Check if the new certificate read from disk is equal to the original one
+	// 检查从磁盘读回的新证书是否与原始证书一致
 	if !newCert.Equal(readCert) {
 		t.Errorf("read cert does not match with expected new cert")
 	}
 }
 
-// writeTestCertificate is a utility for creating a test certificate
+// writeTestCertificate 是创建测试证书的工具函数。
 func writeTestCertificate(t *testing.T, dir, name string, caCert *x509.Certificate, caKey crypto.Signer, organization []string, notBefore, notAfter time.Time) *x509.Certificate {
 	cert, key, err := pkiutil.NewCertAndKey(caCert, caKey, makeTestCertConfig(organization, notBefore, notAfter))
 	if err != nil {
@@ -155,7 +155,7 @@ func writeTestCertificate(t *testing.T, dir, name string, caCert *x509.Certifica
 	return cert
 }
 
-// writeTestKubeconfig is a utility for creating a test kubeconfig with an embedded certificate
+// writeTestKubeconfig 是创建含嵌入证书的测试 kubeconfig 的工具函数。
 func writeTestKubeconfig(t *testing.T, dir, name string, caCert *x509.Certificate, caKey crypto.Signer, notBefore, notAfter time.Time) *x509.Certificate {
 
 	cfg := &pkiutil.CertConfig{

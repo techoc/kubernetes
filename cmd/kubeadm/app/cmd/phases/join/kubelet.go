@@ -46,7 +46,7 @@ import (
 	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
 )
 
-// NewKubeletStartPhase creates a kubeadm workflow phase that start kubelet on a node.
+// NewKubeletStartPhase 创建在节点上启动 kubelet 的 kubeadm 工作流阶段。
 func NewKubeletStartPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "kubelet-start [api-server-endpoint]",
@@ -69,7 +69,7 @@ func NewKubeletStartPhase() workflow.Phase {
 	}
 }
 
-// NewKubeletWaitBootstrapPhase creates a kubeadm workflow phase that start kubelet on a node.
+// NewKubeletWaitBootstrapPhase 创建等待 kubelet 在节点上完成 TLS 引导的 kubeadm 工作流阶段。
 func NewKubeletWaitBootstrapPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "kubelet-wait-bootstrap",
@@ -100,9 +100,8 @@ func getKubeletStartJoinData(c workflow.RunData) (*kubeadmapi.JoinConfiguration,
 	return cfg, initCfg, tlsBootstrapCfg, nil
 }
 
-// runKubeletStartJoinPhase executes the kubelet TLS bootstrap process.
-// This process is executed by the kubelet and completes with the node joining the cluster
-// with a dedicates set of credentials as required by the node authorizer
+// runKubeletStartJoinPhase 执行 kubelet TLS 引导过程。
+// 此过程由 kubelet 执行，最终使节点凭节点授权器要求的专用凭据加入集群。
 func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 	cfg, initCfg, tlsBootstrapCfg, err := getKubeletStartJoinData(c)
 	if err != nil {
@@ -116,7 +115,7 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 	bootstrapKubeConfigFile := filepath.Join(data.KubeConfigDir(), kubeadmconstants.KubeletBootstrapKubeConfigFileName)
 
 	var client clientset.Interface
-	// If dry-use the client from joinData, else create a new bootstrap client
+	// dry-run 时使用 joinData 中的客户端，否则创建新的引导客户端。
 	if data.DryRun() {
 		client, err = data.Client()
 		if err != nil {
@@ -129,8 +128,8 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 		}
 	}
 
-	// Set the server url to LocalAPIEndpoint if the feature gate is enabled so the config
-	// which gets passed to the kubelet forces it to talk to the local kube-apiserver.
+	// 启用功能开关时将服务器 URL 设为 LocalAPIEndpoint，
+	// 使传给 kubelet 的配置强制其与本地 kube-apiserver 通信。
 	if cfg.ControlPlane != nil {
 		for c, conf := range tlsBootstrapCfg.Clusters {
 			conf.Server, err = kubeadmutil.GetLocalAPIEndpoint(&cfg.ControlPlane.LocalAPIEndpoint)
@@ -141,16 +140,16 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 		}
 	}
 
-	// Write the bootstrap kubelet config file or the TLS-Bootstrapped kubelet config file down to disk
+	// 将引导 kubelet 配置文件或 TLS 引导后的 kubelet 配置文件写入磁盘。
 	klog.V(1).Infof("[kubelet-start] writing bootstrap kubelet config file at %s", bootstrapKubeConfigFile)
 	if err := kubeconfigutil.WriteToDisk(bootstrapKubeConfigFile, tlsBootstrapCfg); err != nil {
 		return errors.Wrap(err, "couldn't save bootstrap-kubelet.conf to disk")
 	}
 
-	// Write the ca certificate to disk so kubelet can use it for authentication
+	// 将 CA 证书写入磁盘，供 kubelet 认证使用。
 	cluster := tlsBootstrapCfg.Contexts[tlsBootstrapCfg.CurrentContext].Cluster
 
-	// If we're dry-running, write ca cert in tmp
+	// dry-run 时将 CA 证书写入临时目录。
 	caPath := cfg.CACertPath
 	if data.DryRun() {
 		caPath = filepath.Join(data.CertificateWriteDir(), kubeadmconstants.CACertName)
@@ -163,16 +162,14 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 		}
 	}
 
-	// Obtain the name of this Node.
+	// 获取此节点的名称。
 	nodeName, _, err := kubeletphase.GetNodeNameAndHostname(&cfg.NodeRegistration)
 	if err != nil {
 		klog.Warning(err)
 	}
 
-	// Make sure to exit before TLS bootstrap if a Node with the same name exist in the cluster
-	// and it has the "Ready" status.
-	// A new Node with the same name as an existing control-plane Node can cause undefined
-	// behavior and ultimately control-plane failure.
+	// 若集群中已存在同名且状态为 Ready 的节点，必须在 TLS 引导前退出。
+	// 与现有控制平面节点同名的新节点可能导致未定义行为，最终使控制平面故障。
 	klog.V(1).Infof("[kubelet-start] Checking for an existing Node in the cluster with name %q and status %q", nodeName, v1.NodeReady)
 	node, err := client.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -185,8 +182,8 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 		}
 	}
 
-	// Configure the kubelet. In this short timeframe, kubeadm is trying to stop/restart the kubelet
-	// Try to stop the kubelet service so no race conditions occur when configuring it
+	// 配置 kubelet。在这段短时间内，kubeadm 会尝试停止并重启 kubelet。
+	// 先停止 kubelet 服务，避免配置时发生竞态。
 	if !data.DryRun() {
 		klog.V(1).Infoln("[kubelet-start] Stopping the kubelet")
 		kubeletphase.TryStopKubelet()
@@ -194,7 +191,7 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 		fmt.Println("[kubelet-start] Would stop the kubelet")
 	}
 
-	// Write the instance kubelet configuration file to disk.
+	// 将实例 kubelet 配置文件写入磁盘。
 	kubeletConfig := &kubeletconfig.KubeletConfiguration{
 		ContainerRuntimeEndpoint: data.Cfg().NodeRegistration.CRISocket,
 	}
@@ -202,14 +199,13 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 		return errors.Wrap(err, "error writing instance kubelet configuration to disk")
 	}
 
-	// Write the configuration for the kubelet (using the bootstrap token credentials) to disk so the kubelet can start
+	// 将使用引导令牌凭据的 kubelet 配置写入磁盘，使 kubelet 能够启动。
 	if err := kubeletphase.WriteConfigToDisk(&initCfg.ClusterConfiguration, data.KubeletDir(), data.PatchesDir(), data.OutputWriter()); err != nil {
 		return err
 	}
 
-	// Write env file with flags for the kubelet to use. We only want to
-	// register the joining node with the specified taints if the node
-	// is not a control-plane. The mark-control-plane phase will register the taints otherwise.
+	// 写入 kubelet 使用的参数环境文件。仅在节点不是控制平面时，
+	// 才按指定污渍注册加入节点；否则由 mark-control-plane 阶段注册污渍。
 	registerTaintsUsingFlags := cfg.ControlPlane == nil
 	if err := kubeletphase.WriteKubeletDynamicEnvFile(&initCfg.ClusterConfiguration, &initCfg.NodeRegistration, registerTaintsUsingFlags, data.KubeletDir()); err != nil {
 		return err
@@ -217,24 +213,23 @@ func runKubeletStartJoinPhase(c workflow.RunData) (returnErr error) {
 
 	if data.DryRun() {
 		fmt.Println("[kubelet-start] Would start the kubelet")
-		// If we're dry-running, print the kubelet config manifests and print static pod manifests if joining a control plane.
-		// TODO: think of a better place to move this call - e.g. a hidden phase.
+		// dry-run 时打印 kubelet 配置清单；若加入控制平面，还打印静态 Pod 清单。
+		// TODO: 考虑将此调用移到更合适的位置，例如隐藏阶段。
 		if err := dryrunutil.PrintFilesIfDryRunning(cfg.ControlPlane != nil, data.ManifestDir(), data.OutputWriter()); err != nil {
 			return errors.Wrap(err, "error printing files on dryrun")
 		}
 		return nil
 	}
 
-	// Try to start the kubelet service in case it's inactive
+	// 若 kubelet 服务未运行，则尝试启动。
 	fmt.Println("[kubelet-start] Starting the kubelet")
 	kubeletphase.TryStartKubelet()
 
 	return nil
 }
 
-// runKubeletWaitBootstrapPhase waits for the kubelet to finish its TLS bootstrap process.
-// This process is executed by the kubelet and completes with the node joining the cluster
-// with a dedicates set of credentials as required by the node authorizer.
+// runKubeletWaitBootstrapPhase 等待 kubelet 完成 TLS 引导。
+// 此过程由 kubelet 执行，最终使节点凭节点授权器要求的专用凭据加入集群。
 func runKubeletWaitBootstrapPhase(c workflow.RunData) (returnErr error) {
 	data, ok := c.(JoinData)
 	if !ok {
@@ -253,22 +248,20 @@ func runKubeletWaitBootstrapPhase(c workflow.RunData) (returnErr error) {
 	}
 
 	bootstrapKubeConfigFile := filepath.Join(data.KubeConfigDir(), kubeadmconstants.KubeletBootstrapKubeConfigFileName)
-	// Deletes the bootstrapKubeConfigFile, so the credential used for TLS bootstrap is removed from disk
+	// 删除 bootstrapKubeConfigFile，从磁盘移除用于 TLS 引导的凭据。
 	defer func() {
 		_ = os.Remove(bootstrapKubeConfigFile)
 	}()
 
-	// Apply patches to the in-memory kubelet configuration so that any configuration changes like kubelet healthz
-	// address and port options are respected during the wait below. WriteConfigToDisk already applied patches to
-	// the kubelet.yaml written to disk. This should be done after WriteConfigToDisk because both use the same config
-	// in memory and we don't want patches to be applied two times to the config that is written to disk.
+	// 对内存中的 kubelet 配置应用补丁，使下方等待过程尊重 kubelet 健康检查地址和端口等配置更改。
+	// WriteConfigToDisk 已对写入磁盘的 kubelet.yaml 应用补丁。此操作必须在 WriteConfigToDisk 之后执行，
+	// 因为两者使用同一内存配置，需避免对磁盘配置重复应用补丁。
 	if err := kubeletphase.ApplyPatchesToConfig(&initCfg.ClusterConfiguration, data.PatchesDir()); err != nil {
 		return errors.Wrap(err, "could not apply patches to the in-memory kubelet configuration")
 	}
 
-	// Now the kubelet will perform the TLS Bootstrap, transforming /etc/kubernetes/bootstrap-kubelet.conf to /etc/kubernetes/kubelet.conf
-	// Wait for the kubelet to create the /etc/kubernetes/kubelet.conf kubeconfig file. If this process
-	// times out, display a somewhat user-friendly message.
+	// kubelet 随后执行 TLS 引导，将 /etc/kubernetes/bootstrap-kubelet.conf 转换为 /etc/kubernetes/kubelet.conf。
+	// 等待 kubelet 创建 /etc/kubernetes/kubelet.conf；若超时，显示较友好的用户提示。
 	waiter := apiclient.NewKubeWaiter(nil, 0, os.Stdout)
 	waiter.SetTimeout(cfg.Timeouts.KubeletHealthCheck.Duration)
 	kubeletConfig := initCfg.ClusterConfiguration.ComponentConfigs[componentconfigs.KubeletGroup].Get()
@@ -289,17 +282,16 @@ func runKubeletWaitBootstrapPhase(c workflow.RunData) (returnErr error) {
 	return nil
 }
 
-// waitForTLSBootstrappedClient waits for the /etc/kubernetes/kubelet.conf file to be available
+// waitForTLSBootstrappedClient 等待 /etc/kubernetes/kubelet.conf 文件可用。
 func waitForTLSBootstrappedClient(timeout time.Duration) error {
 	fmt.Println("[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap")
 
-	// Loop on every falsy return. Return with an error if raised. Exit successfully if true is returned.
+	// 返回值为 false 时继续循环，返回错误时以该错误退出，返回 true 时成功退出。
 	return wait.PollUntilContextTimeout(context.Background(),
 		kubeadmconstants.TLSBootstrapRetryInterval, timeout,
 		true, func(_ context.Context) (bool, error) {
-			// Check that we can create a client set out of the kubelet kubeconfig. This ensures not
-			// only that the kubeconfig file exists, but that other files required by it also exist (like
-			// client certificate and key)
+			// 检查能否从 kubelet kubeconfig 创建客户端集。这不仅确认配置文件存在，
+			// 也确认其引用的客户端证书和密钥等文件同样存在。
 			_, err := kubeconfigutil.ClientSetFromFile(kubeadmconstants.GetKubeletKubeConfigPath())
 			return (err == nil), nil
 		})

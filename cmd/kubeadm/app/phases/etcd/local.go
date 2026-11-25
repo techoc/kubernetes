@@ -51,9 +51,8 @@ const (
 	etcdHealthyCheckRetries  = 8
 )
 
-// CreateLocalEtcdStaticPodManifestFile will write local etcd static pod manifest file.
-// This function is used by init - when the etcd cluster is empty - or by kubeadm
-// upgrade - when the etcd cluster is already up and running (and the --initial-cluster flag have no impact)
+// CreateLocalEtcdStaticPodManifestFile 写入本地 etcd 静态 Pod 清单。
+// init 在 etcd 集群为空时调用此函数；kubeadm upgrade 在集群已运行时调用，此时 --initial-cluster 参数无效。
 func CreateLocalEtcdStaticPodManifestFile(manifestDir, patchesDir string, nodeName string, cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.APIEndpoint, isDryRun bool) error {
 	if cfg.Etcd.External != nil {
 		return errors.New("etcd static pod manifest cannot be generated for cluster using external etcd")
@@ -67,18 +66,18 @@ func CreateLocalEtcdStaticPodManifestFile(manifestDir, patchesDir string, nodeNa
 	return nil
 }
 
-// CheckLocalEtcdClusterStatus verifies health state of local/stacked etcd cluster before installing a new etcd member
+// CheckLocalEtcdClusterStatus 在安装新 etcd 成员前检查本地或堆叠 etcd 集群的健康状态。
 func CheckLocalEtcdClusterStatus(client clientset.Interface, certificatesDir string) error {
 	klog.V(1).Info("[etcd] Checking etcd cluster health")
 
-	// creates an etcd client that connects to all the local/stacked etcd members
+	// 创建连接所有本地或堆叠 etcd 成员的客户端
 	klog.V(1).Info("creating etcd client that connects to etcd pods")
 	etcdClient, err := etcdutil.NewFromCluster(client, certificatesDir)
 	if err != nil {
 		return err
 	}
 
-	// Checking health state
+	// 检查健康状态
 	err = etcdClient.CheckClusterHealth()
 	if err != nil {
 		return errors.Wrap(err, "etcd cluster is not healthy")
@@ -87,10 +86,9 @@ func CheckLocalEtcdClusterStatus(client clientset.Interface, certificatesDir str
 	return nil
 }
 
-// RemoveStackedEtcdMemberFromCluster will remove a local etcd member from etcd cluster,
-// when reset the control plane node.
+// RemoveStackedEtcdMemberFromCluster 在重置控制平面节点时，从 etcd 集群移除本地 etcd 成员。
 func RemoveStackedEtcdMemberFromCluster(client clientset.Interface, cfg *kubeadmapi.InitConfiguration) error {
-	// creates an etcd client that connects to all the local/stacked etcd members
+	// 创建连接所有本地或堆叠 etcd 成员的客户端
 	klog.V(1).Info("[etcd] creating etcd client that connects to etcd pods")
 	etcdClient, err := etcdutil.NewFromCluster(client, cfg.CertificatesDir)
 	if err != nil {
@@ -101,8 +99,7 @@ func RemoveStackedEtcdMemberFromCluster(client clientset.Interface, cfg *kubeadm
 	if err != nil {
 		return err
 	}
-	// If this is the only remaining stacked etcd member in the cluster, calling RemoveMember()
-	// is not needed.
+	// 如果这是集群中唯一的堆叠 etcd 成员，无需调用 RemoveMember()。
 	if len(members) == 1 {
 		etcdClientAddress := etcdutil.GetClientURL(&cfg.LocalAPIEndpoint)
 		if slices.Contains(etcdClient.Endpoints, etcdClientAddress) {
@@ -111,7 +108,7 @@ func RemoveStackedEtcdMemberFromCluster(client clientset.Interface, cfg *kubeadm
 		}
 	}
 
-	// notifies the other members of the etcd cluster about the removing member
+	// 通知 etcd 集群中的其他成员移除该成员
 	etcdPeerAddress := etcdutil.GetPeerURL(&cfg.LocalAPIEndpoint)
 
 	klog.V(2).Infof("[etcd] get the member id from peer: %s", etcdPeerAddress)
@@ -134,9 +131,8 @@ func RemoveStackedEtcdMemberFromCluster(client clientset.Interface, cfg *kubeadm
 	return nil
 }
 
-// CreateStackedEtcdStaticPodManifestFile will write local etcd static pod manifest file
-// for an additional etcd member that is joining an existing local/stacked etcd cluster.
-// Other members of the etcd cluster will be notified of the joining node in beforehand as well.
+// CreateStackedEtcdStaticPodManifestFile 为加入现有本地或堆叠 etcd 集群的新成员写入本地 etcd 静态 Pod 清单。
+// 同时提前通知 etcd 集群中的其他成员有新节点加入。
 func CreateStackedEtcdStaticPodManifestFile(client clientset.Interface, manifestDir, patchesDir string, nodeName string, cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.APIEndpoint, isDryRun bool, certificatesDir string) error {
 	etcdPeerAddress := etcdutil.GetPeerURL(endpoint)
 
@@ -146,7 +142,7 @@ func CreateStackedEtcdStaticPodManifestFile(client clientset.Interface, manifest
 	if isDryRun {
 		fmt.Printf("[etcd] Would add etcd member: %s\n", etcdPeerAddress)
 	} else {
-		// Creates an etcd client that connects to all the local/stacked etcd members.
+		// 创建连接所有本地或堆叠 etcd 成员的客户端。
 		klog.V(1).Info("creating etcd client that connects to etcd pods")
 		etcdClient, err = etcdutil.NewFromCluster(client, certificatesDir)
 		if err != nil {
@@ -189,8 +185,8 @@ func CreateStackedEtcdStaticPodManifestFile(client clientset.Interface, manifest
 	return nil
 }
 
-// GetEtcdPodSpec returns the etcd static Pod actualized to the context of the current configuration
-// NB. GetEtcdPodSpec methods holds the information about how kubeadm creates etcd static pod manifests.
+// GetEtcdPodSpec 返回按当前配置填充的 etcd 静态 Pod 配置。
+// 注意：此方法包含 kubeadm 创建 etcd 静态 Pod 清单所需的信息。
 func GetEtcdPodSpec(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.APIEndpoint, nodeName string, initialCluster []etcdutil.Member) v1.Pod {
 	pathType := v1.HostPathDirectoryOrCreate
 	etcdMounts := map[string]v1.Volume{
@@ -199,7 +195,7 @@ func GetEtcdPodSpec(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.A
 	}
 	componentHealthCheckTimeout := kubeadmapi.GetActiveTimeouts().ControlPlaneComponentHealthCheck
 
-	// probeHostname returns the correct localhost IP address family based on the endpoint AdvertiseAddress
+	// probeHostname 根据端点的 AdvertiseAddress 返回正确的 localhost IP 协议族。
 	probeHostname, probePort, probeScheme := staticpodutil.GetEtcdProbeEndpoint(&cfg.Etcd, utilsnet.IsIPv6String(endpoint.AdvertiseAddress))
 	return staticpodutil.ComponentPod(
 		v1.Container{
@@ -207,7 +203,7 @@ func GetEtcdPodSpec(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.A
 			Command:         getEtcdCommand(cfg, endpoint, nodeName, initialCluster, kubeadmconstants.SupportedEtcdVersion),
 			Image:           images.GetEtcdImage(cfg, kubeadmconstants.SupportedEtcdVersion),
 			ImagePullPolicy: v1.PullIfNotPresent,
-			// Mount the etcd datadir path read-write so etcd can store data in a more persistent manner
+			// 以读写方式挂载 etcd 数据目录，以便持久化存储数据
 			VolumeMounts: []v1.VolumeMount{
 				staticpodutil.NewVolumeMount(etcdVolumeName, cfg.Etcd.Local.DataDir, false),
 				staticpodutil.NewVolumeMount(certsVolumeName, cfg.CertificatesDir+"/etcd", false),
@@ -218,7 +214,7 @@ func GetEtcdPodSpec(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.A
 					v1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			},
-			// The etcd probe endpoints are explained here:
+			// etcd 探测端点的说明参见：
 			// https://github.com/kubernetes/kubeadm/issues/3039
 			LivenessProbe:  staticpodutil.LivenessProbe(probeHostname, "/livez", kubeadmconstants.ProbePort, probeScheme),
 			ReadinessProbe: staticpodutil.ReadinessProbe(probeHostname, "/readyz", kubeadmconstants.ProbePort, probeScheme),
@@ -233,14 +229,14 @@ func GetEtcdPodSpec(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.A
 			},
 		},
 		etcdMounts,
-		// etcd will listen on the advertise address of the API server, in a different port (2379)
+		// etcd 将在 API Server 的公告地址上监听另一个端口（2379）
 		map[string]string{kubeadmconstants.EtcdAdvertiseClientUrlsAnnotationKey: etcdutil.GetClientURL(endpoint)},
 	)
 }
 
-// getEtcdCommand builds the right etcd command from the given config object
+// getEtcdCommand 根据给定配置对象构建 etcd 命令。
 func getEtcdCommand(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.APIEndpoint, nodeName string, initialCluster []etcdutil.Member, supportedEtcdVersion map[uint8]string) []string {
-	// localhost IP family should be the same that the AdvertiseAddress
+	// localhost 的 IP 协议族应与 AdvertiseAddress 一致
 	etcdLocalhostAddress := "127.0.0.1"
 	if utilsnet.IsIPv6String(endpoint.AdvertiseAddress) {
 		etcdLocalhostAddress = "::1"
@@ -269,7 +265,7 @@ func getEtcdCommand(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.A
 	if len(initialCluster) == 0 {
 		defaultArguments = kubeadmapi.SetArgValues(defaultArguments, "initial-cluster", fmt.Sprintf("%s=%s", nodeName, etcdutil.GetPeerURL(endpoint)), 1)
 	} else {
-		// NB. the joining etcd member should be part of the initialCluster list
+		// 注意：加入的 etcd 成员应包含在 initialCluster 列表中
 		endpoints := []string{}
 		for _, member := range initialCluster {
 			endpoints = append(endpoints, fmt.Sprintf("%s=%s", member.Name, member.PeerURL))
@@ -285,7 +281,7 @@ func getEtcdCommand(cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.A
 }
 
 func prepareAndWriteEtcdStaticPod(manifestDir string, patchesDir string, cfg *kubeadmapi.ClusterConfiguration, endpoint *kubeadmapi.APIEndpoint, nodeName string, initialCluster []etcdutil.Member, isDryRun bool) error {
-	// gets etcd StaticPodSpec, actualized for the current ClusterConfiguration and the new list of etcd members
+	// 获取按当前 ClusterConfiguration 和新 etcd 成员列表填充的 etcd StaticPodSpec
 	spec := GetEtcdPodSpec(cfg, endpoint, nodeName, initialCluster)
 
 	var usersAndGroups *users.UsersAndGroups
@@ -299,7 +295,7 @@ func prepareAndWriteEtcdStaticPod(manifestDir string, patchesDir string, cfg *ku
 			if err != nil {
 				return errors.Wrap(err, "failed to create users and groups")
 			}
-			// usersAndGroups is nil on non-linux.
+			// 在非 Linux 系统上 usersAndGroups 为 nil。
 			if usersAndGroups != nil {
 				if err := staticpodutil.RunComponentAsNonRoot(kubeadmconstants.Etcd, &spec, usersAndGroups, cfg); err != nil {
 					return errors.Wrapf(err, "failed to run component %q as non-root", kubeadmconstants.Etcd)
@@ -308,7 +304,7 @@ func prepareAndWriteEtcdStaticPod(manifestDir string, patchesDir string, cfg *ku
 		}
 	}
 
-	// if patchesDir is defined, patch the static Pod manifest
+	// 如果定义了 patchesDir，则修补静态 Pod 清单
 	if patchesDir != "" {
 		patchedSpec, err := staticpodutil.PatchStaticPod(&spec, patchesDir, os.Stdout)
 		if err != nil {
@@ -317,12 +313,12 @@ func prepareAndWriteEtcdStaticPod(manifestDir string, patchesDir string, cfg *ku
 		spec = *patchedSpec
 	}
 
-	// writes etcd StaticPod to disk
+	// 将 etcd StaticPod 写入磁盘
 	if err := staticpodutil.WriteStaticPodToDisk(kubeadmconstants.Etcd, manifestDir, spec); err != nil {
 		return err
 	}
 
-	// If dry-running, print the static etcd pod manifest file.
+	// 试运行时打印静态 etcd Pod 清单。
 	if isDryRun {
 		realPath := kubeadmconstants.GetStaticPodFilepath(kubeadmconstants.Etcd, manifestDir)
 		outputPath := kubeadmconstants.GetStaticPodFilepath(kubeadmconstants.Etcd, kubeadmconstants.GetStaticPodDirectory())

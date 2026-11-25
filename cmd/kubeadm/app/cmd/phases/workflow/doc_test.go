@@ -39,74 +39,73 @@ type myPhaseData interface {
 }
 
 func ExamplePhase() {
-	// Create a phase
+	// 创建阶段。
 	var myPhase1 = Phase{
 		Name:  "myPhase1",
 		Short: "A phase of a kubeadm composable workflow...",
 		Run: func(data RunData) error {
-			// transform data into a typed data struct
+			// 将数据转换为带类型的数据结构。
 			d, ok := data.(myPhaseData)
 			if !ok {
 				return errors.New("invalid RunData type")
 			}
 
-			// implement your phase logic...
+			// 实现阶段逻辑。
 			fmt.Printf("%v\n", d.Data())
 			return nil
 		},
 	}
 
-	// Create another phase
+	// 创建另一个阶段。
 	var myPhase2 = Phase{
 		Name:  "myPhase2",
 		Short: "Another phase of a kubeadm composable workflow...",
 		Run: func(data RunData) error {
-			// transform data into a typed data struct
+			// 将数据转换为带类型的数据结构。
 			d, ok := data.(myPhaseData)
 			if !ok {
 				return errors.New("invalid RunData type")
 			}
 
-			// implement your phase logic...
+			// 实现阶段逻辑。
 			fmt.Printf("%v\n", d.Data())
 			return nil
 		},
 	}
 
-	// Adds the new phases to the workflow
-	// Phases will be executed the same order they are added to the workflow
+	// 将新阶段添加到工作流。
+	// 阶段按添加到工作流的顺序执行。
 	myWorkflowRunner.AppendPhase(myPhase1)
 	myWorkflowRunner.AppendPhase(myPhase2)
 }
 
 func ExampleRunner_Run() {
-	// Create a phase
+	// 创建阶段。
 	var myPhase = Phase{
 		Name:  "myPhase",
 		Short: "A phase of a kubeadm composable workflow...",
 		Run: func(data RunData) error {
-			// transform data into a typed data struct
+			// 将数据转换为带类型的数据结构。
 			d, ok := data.(myPhaseData)
 			if !ok {
 				return errors.New("invalid RunData type")
 			}
 
-			// implement your phase logic...
+			// 实现阶段逻辑。
 			fmt.Printf("%v\n", d.Data())
 			return nil
 		},
 	}
 
-	// Adds the new phase to the workflow
+	// 将新阶段添加到工作流。
 	var myWorkflowRunner = NewRunner()
 	myWorkflowRunner.AppendPhase(myPhase)
 
-	// Defines the method that creates the runtime data shared
-	// among all the phases included in the workflow
+	// 定义创建运行时数据的方法，数据由工作流包含的所有阶段共享。
 	myWorkflowRunner.SetDataInitializer(func(cmd *cobra.Command, args []string) (RunData, error) {
 		return myWorkflowData{data: "some data"}, nil
 	})
 
-	// Runs the workflow by passing a list of arguments
+	// 传入参数列表以运行工作流。
 	myWorkflowRunner.Run([]string{})
 }

@@ -41,16 +41,15 @@ import (
 
 var applyKubeletConfigPatchesFunc = applyKubeletConfigPatches
 
-// WriteConfigToDisk writes the kubelet config object down to a file
-// Used at "kubeadm init" and "kubeadm upgrade" time
+// WriteConfigToDisk 将 kubelet 配置对象写入文件。
+// 在 "kubeadm init" 和 "kubeadm upgrade" 时使用。
 func WriteConfigToDisk(cfg *kubeadmapi.ClusterConfiguration, kubeletDir, patchesDir string, output io.Writer) error {
 	kubeletCfg, ok := cfg.ComponentConfigs[componentconfigs.KubeletGroup]
 	if !ok {
 		return errors.New("no kubelet component config found")
 	}
 
-	// Node-specific mutations must not leak into the cluster-wide configuration
-	// that may be uploaded after this file is written.
+	// 节点特定修改不得泄漏到写入文件后可能上传的集群级配置中。
 	localKubeletCfg := kubeletCfg.DeepCopy()
 	if err := localKubeletCfg.Mutate(); err != nil {
 		return err
@@ -61,7 +60,7 @@ func WriteConfigToDisk(cfg *kubeadmapi.ClusterConfiguration, kubeletDir, patches
 		return err
 	}
 
-	// Apply patches to the KubeletConfiguration
+	// 将补丁应用到 KubeletConfiguration。
 	if len(patchesDir) != 0 {
 		kubeletBytes, err = applyKubeletConfigPatchesFunc(kubeletBytes, patchesDir, output)
 		if err != nil {
@@ -78,15 +77,13 @@ func WriteConfigToDisk(cfg *kubeadmapi.ClusterConfiguration, kubeletDir, patches
 	return writeConfigBytesToDisk(kubeletBytes, kubeletDir, kubeadmconstants.KubeletConfigurationFileName)
 }
 
-// WriteInstanceConfigToDisk writes the container runtime endpoint configuration
-// to the instance configuration file in the specified kubelet directory.
+// WriteInstanceConfigToDisk 将容器运行时端点配置写入指定 kubelet 目录中的实例配置文件。
 func WriteInstanceConfigToDisk(cfg *kubeletconfig.KubeletConfiguration, kubeletDir string) error {
 	instanceFileContent := fmt.Sprintf("containerRuntimeEndpoint: %q\n", cfg.ContainerRuntimeEndpoint)
 	return writeConfigBytesToDisk([]byte(instanceFileContent), kubeletDir, kubeadmconstants.KubeletInstanceConfigurationFileName)
 }
 
-// ApplyPatchesToConfig applies the patches located in patchesDir to the KubeletConfiguration stored
-// in the ClusterConfiguration.ComponentConfigs map.
+// ApplyPatchesToConfig 将 patchesDir 中的补丁应用到 ClusterConfiguration.ComponentConfigs 中存储的 KubeletConfiguration。
 func ApplyPatchesToConfig(cfg *kubeadmapi.ClusterConfiguration, patchesDir string) error {
 	kubeletCfg, ok := cfg.ComponentConfigs[componentconfigs.KubeletGroup]
 	if !ok {
@@ -102,7 +99,7 @@ func ApplyPatchesToConfig(cfg *kubeadmapi.ClusterConfiguration, patchesDir strin
 		return err
 	}
 
-	// Apply patches to the KubeletConfiguration. Output is discarded.
+	// 将补丁应用到 KubeletConfiguration，并丢弃输出。
 	if len(patchesDir) != 0 {
 		kubeletBytes, err = applyKubeletConfigPatchesFunc(kubeletBytes, patchesDir, io.Discard)
 		if err != nil {
@@ -121,8 +118,8 @@ func ApplyPatchesToConfig(cfg *kubeadmapi.ClusterConfiguration, patchesDir strin
 	return nil
 }
 
-// CreateConfigMap creates a ConfigMap with the generic kubelet configuration.
-// Used at "kubeadm init" and "kubeadm upgrade" time
+// CreateConfigMap 创建包含通用 kubelet 配置的 ConfigMap。
+// 在 "kubeadm init" 和 "kubeadm upgrade" 时使用。
 func CreateConfigMap(cfg *kubeadmapi.ClusterConfiguration, client clientset.Interface) error {
 	configMapName := kubeadmconstants.KubeletBaseConfigurationConfigMap
 	fmt.Printf("[kubelet] Creating a ConfigMap %q in namespace %s with the configuration for the kubelets in the cluster\n", configMapName, metav1.NamespaceSystem)
@@ -161,7 +158,7 @@ func CreateConfigMap(cfg *kubeadmapi.ClusterConfiguration, client clientset.Inte
 	return nil
 }
 
-// createConfigMapRBACRules creates the RBAC rules for exposing the base kubelet ConfigMap in the kube-system namespace to unauthenticated users
+// createConfigMapRBACRules 创建 RBAC 规则，允许未认证用户访问 kube-system 命名空间中的基础 kubelet ConfigMap。
 func createConfigMapRBACRules(client clientset.Interface) error {
 	if err := apiclient.CreateOrUpdate(client.RbacV1().Roles(metav1.NamespaceSystem), &rbac.Role{
 		ObjectMeta: metav1.ObjectMeta{
@@ -203,12 +200,12 @@ func createConfigMapRBACRules(client clientset.Interface) error {
 	})
 }
 
-// writeConfigBytesToDisk writes a byte slice down to disk at the specific location of the kubelet config file
+// writeConfigBytesToDisk 将字节切片写入 kubelet 配置文件指定位置。
 func writeConfigBytesToDisk(b []byte, kubeletDir, fileName string) error {
 	configFile := filepath.Join(kubeletDir, fileName)
 	fmt.Printf("[kubelet-start] Writing kubelet configuration to file %q\n", configFile)
 
-	// creates target folder if not already exists
+	// 若目标目录不存在，则创建。
 	if err := os.MkdirAll(kubeletDir, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory %q", kubeletDir)
 	}
@@ -219,7 +216,7 @@ func writeConfigBytesToDisk(b []byte, kubeletDir, fileName string) error {
 	return nil
 }
 
-// applyKubeletConfigPatches reads patches from a directory and applies them over the input kubeletBytes
+// applyKubeletConfigPatches 从目录读取补丁，并将其应用到传入的 kubeletBytes。
 func applyKubeletConfigPatches(kubeletBytes []byte, patchesDir string, output io.Writer) ([]byte, error) {
 	patchManager, err := patches.GetPatchManagerForPath(patchesDir, patches.KnownTargets(), output)
 	if err != nil {
@@ -242,9 +239,9 @@ func applyKubeletConfigPatches(kubeletBytes []byte, patchesDir string, output io
 	return kubeletBytes, nil
 }
 
-// applyKubeletConfigPatchFromFile applies a single patch file to the kubelet configuration bytes.
+// applyKubeletConfigPatchFromFile 将单个补丁文件应用到 kubelet 配置内容。
 func applyKubeletConfigPatchFromFile(kubeletConfigBytes []byte, patchFilePath string, output io.Writer) ([]byte, error) {
-	// Get the patch data from the file.
+	// 从文件读取补丁数据。
 	data, err := os.ReadFile(patchFilePath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read patch file %q", patchFilePath)
@@ -257,13 +254,13 @@ func applyKubeletConfigPatchFromFile(kubeletConfigBytes []byte, patchFilePath st
 
 	patchManager := patches.NewPatchManager([]*patches.PatchSet{patchSet}, []string{patches.KubeletConfiguration}, output)
 
-	// Always convert the target data to JSON.
+	// 始终将目标数据转换为 JSON。
 	patchData, err := yaml.YAMLToJSON(kubeletConfigBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	// Define the patch target.
+	// 定义补丁目标。
 	patchTarget := &patches.PatchTarget{
 		Name:                      patches.KubeletConfiguration,
 		StrategicMergePatchObject: kubeletconfig.KubeletConfiguration{},
@@ -275,7 +272,7 @@ func applyKubeletConfigPatchFromFile(kubeletConfigBytes []byte, patchFilePath st
 		return nil, err
 	}
 
-	// Convert the patched data back to YAML and return it.
+	// 将打过补丁的数据转换回 YAML 并返回。
 	kubeletConfigBytes, err = yaml.JSONToYAML(patchTarget.Data)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert patched data to YAML")

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testing contains utilities for managing kubeadm files in tests.
+// Package testing 包含在测试中管理 kubeadm 文件的工具。
 package testing
 
 import (
@@ -23,7 +23,7 @@ import (
 	"testing"
 )
 
-// SetupEmptyFiles is a utility function for kubeadm testing that creates one or more empty files (touch)
+// SetupEmptyFiles 创建一个或多个空文件（touch），供 kubeadm 测试使用。
 func SetupEmptyFiles(t *testing.T, tmpdir string, fileNames ...string) {
 	for _, fileName := range fileNames {
 		newFile, err := os.Create(filepath.Join(tmpdir, fileName))
@@ -34,8 +34,7 @@ func SetupEmptyFiles(t *testing.T, tmpdir string, fileNames ...string) {
 	}
 }
 
-// AssertFilesCount is a utility function for kubeadm testing that asserts if the given folder contains
-// count files.
+// AssertFilesCount 断言给定目录包含指定数量的文件，供 kubeadm 测试使用。
 func AssertFilesCount(t *testing.T, dirName string, count int) {
 	files, err := os.ReadDir(dirName)
 	if err != nil {
@@ -57,8 +56,7 @@ func AssertFilesCount(t *testing.T, dirName string, count int) {
 	}
 }
 
-// AssertFileExists is a utility function for kubeadm testing that asserts if the given folder contains
-// the given files.
+// AssertFileExists 断言给定目录包含指定文件，供 kubeadm 测试使用。
 func AssertFileExists(t *testing.T, dirName string, fileNames ...string) {
 	for _, fileName := range fileNames {
 		path := filepath.Join(dirName, fileName)

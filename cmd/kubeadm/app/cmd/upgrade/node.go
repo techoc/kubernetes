@@ -42,9 +42,8 @@ import (
 	staticpodutil "k8s.io/kubernetes/cmd/kubeadm/app/util/staticpod"
 )
 
-// nodeOptions defines all the options exposed via flags by kubeadm upgrade node.
-// Please note that this structure includes the public kubeadm config API, but only a subset of the options
-// supported by this api will be exposed as a flag.
+// nodeOptions 定义 kubeadm upgrade node 通过参数暴露的全部选项。
+// 该结构包含公开的 kubeadm 配置 API，但只有部分受支持的选项会暴露为参数。
 type nodeOptions struct {
 	cfgPath               string
 	kubeConfigPath        string
@@ -55,11 +54,11 @@ type nodeOptions struct {
 	ignorePreflightErrors []string
 }
 
-// compile-time assert that the local data object satisfies the phases data interface.
+// 编译期断言本地数据对象满足阶段数据接口。
 var _ phases.Data = &nodeData{}
 
-// nodeData defines all the runtime information used when running the kubeadm upgrade node workflow;
-// this data is shared across all the phases that are included in the workflow.
+// nodeData 定义运行 kubeadm upgrade node 工作流所需的全部运行时信息，
+// 并供工作流包含的所有阶段共享。
 type nodeData struct {
 	etcdUpgrade           bool
 	renewCerts            bool
@@ -75,7 +74,7 @@ type nodeData struct {
 	outputWriter          io.Writer
 }
 
-// newCmdNode returns the cobra command for `kubeadm upgrade node`
+// newCmdNode 返回 kubeadm upgrade node 的 cobra 命令。
 func newCmdNode(out io.Writer) *cobra.Command {
 	nodeOptions := newNodeOptions()
 	nodeRunner := workflow.NewRunner()
@@ -109,13 +108,13 @@ func newCmdNode(out io.Writer) *cobra.Command {
 		Args: cobra.NoArgs,
 	}
 
-	// adds flags to the node command
-	// flags could be eventually inherited by the sub-commands automatically generated for phases
+	// 向 node 命令添加参数。
+	// 这些参数最终可能由自动生成的阶段子命令继承。
 	addUpgradeNodeFlags(cmd.Flags(), nodeOptions)
 	options.AddConfigFlag(cmd.Flags(), &nodeOptions.cfgPath)
 	options.AddPatchesFlag(cmd.Flags(), &nodeOptions.patchesDir)
 
-	// initialize the workflow runner with the list of phases
+	// 使用阶段列表初始化工作流运行器。
 	nodeRunner.AppendPhase(phases.NewPreflightPhase())
 	nodeRunner.AppendPhase(phases.NewControlPlane())
 	nodeRunner.AppendPhase(phases.NewKubeconfigPhase())
@@ -123,31 +122,30 @@ func newCmdNode(out io.Writer) *cobra.Command {
 	nodeRunner.AppendPhase(commonphases.NewAddonPhase())
 	nodeRunner.AppendPhase(commonphases.NewPostUpgradePhase())
 
-	// sets the data builder function, that will be used by the runner
-	// both when running the entire workflow or single phases
+	// 为运行器设置数据构建函数，运行完整工作流或单个阶段时都会调用。
 	nodeRunner.SetDataInitializer(func(cmd *cobra.Command, args []string) (workflow.RunData, error) {
 		data, err := newNodeData(cmd, nodeOptions, out)
 		if err != nil {
 			return nil, err
 		}
-		// If the flag for skipping phases was empty, use the values from config
+		// 若跳过阶段的参数为空，则使用配置中的值。
 		if len(nodeRunner.Options.SkipPhases) == 0 {
 			nodeRunner.Options.SkipPhases = data.cfg.Node.SkipPhases
 		}
 		return data, nil
 	})
 
-	// binds the Runner to kubeadm upgrade node command by altering
-	// command help, adding --skip-phases flag and by adding phases subcommands
+	// 将 Runner 绑定到 kubeadm upgrade node 命令：修改帮助信息、
+	// 添加 --skip-phases 参数并添加阶段子命令。
 	nodeRunner.BindToCommand(cmd)
 
 	return cmd
 }
 
-// newNodeOptions returns a struct ready for being used for creating cmd kubeadm upgrade node flags.
+// newNodeOptions 返回可用于创建 kubeadm upgrade node 命令参数的结构体。
 func newNodeOptions() *nodeOptions {
 	return &nodeOptions{
-		kubeConfigPath: "", // This is populated in newNodeData() on runtime
+		kubeConfigPath: "", // 此值在运行时由 newNodeData() 填充。
 		dryRun:         false,
 		renewCerts:     true,
 		etcdUpgrade:    true,
@@ -162,14 +160,14 @@ func addUpgradeNodeFlags(flagSet *flag.FlagSet, nodeOptions *nodeOptions) {
 	flagSet.StringSliceVar(&nodeOptions.ignorePreflightErrors, options.IgnorePreflightErrors, nodeOptions.ignorePreflightErrors, "A list of checks whose errors will be shown as warnings. Example: 'IsPrivilegedUser,Swap'. Value 'all' ignores errors from all checks.")
 }
 
-// newNodeData returns a new nodeData struct to be used for the execution of the kubeadm upgrade node workflow.
-// This func takes care of validating nodeOptions passed to the command, and then it converts
-// options into the internal InitConfiguration type that is used as input all the phases in the kubeadm upgrade node workflow
+// newNodeData 返回用于执行 kubeadm upgrade node 工作流的新 nodeData。
+// 它校验传给命令的 nodeOptions，再将选项转换为内部 InitConfiguration，
+// 作为 kubeadm upgrade node 工作流所有阶段的输入。
 func newNodeData(cmd *cobra.Command, nodeOptions *nodeOptions, out io.Writer) (*nodeData, error) {
 	isControlPlaneNode := staticpodutil.IsControlPlaneNode()
 
 	if len(nodeOptions.kubeConfigPath) == 0 {
-		// Update the kubeconfig path depending on whether this is a control plane node or not.
+		// 根据节点是否为控制平面节点更新 kubeconfig 路径。
 		nodeOptions.kubeConfigPath = constants.GetKubeletKubeConfigPath()
 		if isControlPlaneNode {
 			nodeOptions.kubeConfigPath = constants.GetAdminKubeConfigPath()
@@ -188,7 +186,7 @@ func newNodeData(cmd *cobra.Command, nodeOptions *nodeOptions, out io.Writer) (*
 		return nil, cmdutil.TypeMismatchErr("dryRun", "bool")
 	}
 
-	// If dry running creates a temporary directory for saving kubeadm generated files.
+	// 若为 dry-run，创建用于保存 kubeadm 生成文件的临时目录。
 	dryRunDir := ""
 	if *dryRun {
 		if dryRunDir, err = constants.GetDryRunDir(constants.EnvVarUpgradeDryRunDir, "kubeadm-upgrade-node-dryrun", klog.Warningf); err != nil {
@@ -202,7 +200,7 @@ func newNodeData(cmd *cobra.Command, nodeOptions *nodeOptions, out io.Writer) (*
 		return nil, errors.Wrapf(err, "couldn't create a Kubernetes client from file %q", nodeOptions.kubeConfigPath)
 	}
 
-	// Fetches the cluster configuration
+	// 获取集群配置。
 	getNodeRegistration := true
 	getAPIEndpoint := isControlPlaneNode
 	getComponentConfigs := true
@@ -215,7 +213,7 @@ func newNodeData(cmd *cobra.Command, nodeOptions *nodeOptions, out io.Writer) (*
 	if err != nil {
 		return nil, err
 	}
-	// Also set the union of pre-flight errors to InitConfiguration, to provide a consistent view of the runtime configuration:
+	// 同时将预检错误的并集写入 InitConfiguration，使运行时配置视图保持一致：
 	initCfg.NodeRegistration.IgnorePreflightErrors = sets.List(ignorePreflightErrorsSet)
 
 	var patchesDir string
@@ -241,61 +239,62 @@ func newNodeData(cmd *cobra.Command, nodeOptions *nodeOptions, out io.Writer) (*
 	}, nil
 }
 
-// DryRun returns the dryRun flag.
+// DryRun 返回 dryRun 参数的值。
 func (d *nodeData) DryRun() bool {
 	return d.dryRun
 }
 
-// EtcdUpgrade returns the etcdUpgrade flag.
+// EtcdUpgrade 返回 etcdUpgrade 参数的值。
 func (d *nodeData) EtcdUpgrade() bool {
 	return d.etcdUpgrade
 }
 
-// RenewCerts returns the renewCerts flag.
+// RenewCerts 返回 renewCerts 参数的值。
 func (d *nodeData) RenewCerts() bool {
 	return d.renewCerts
 }
 
-// Cfg returns upgradeConfiguration.
+// Cfg 返回 UpgradeConfiguration。
 func (d *nodeData) Cfg() *kubeadmapi.UpgradeConfiguration {
 	return d.cfg
 }
 
-// InitCfg returns the InitConfiguration.
+// InitCfg 返回 InitConfiguration。
 func (d *nodeData) InitCfg() *kubeadmapi.InitConfiguration {
 	return d.initCfg
 }
 
-// IsControlPlaneNode returns the isControlPlaneNode flag.
+// IsControlPlaneNode 返回 isControlPlaneNode 参数的值。
 func (d *nodeData) IsControlPlaneNode() bool {
 	return d.isControlPlaneNode
 }
 
-// Client returns a Kubernetes client to be used by kubeadm.
+// Client 返回供 kubeadm 使用的 Kubernetes 客户端。
 func (d *nodeData) Client() clientset.Interface {
 	return d.client
 }
 
-// PatchesDir returns the folder where patches for components are stored
+// PatchesDir 返回保存组件补丁的目录。
 func (d *nodeData) PatchesDir() string {
 	return d.patchesDir
 }
 
-// IgnorePreflightErrors returns the list of preflight errors to ignore.
+// IgnorePreflightErrors 返回要忽略的预检错误列表。
 func (d *nodeData) IgnorePreflightErrors() sets.Set[string] {
 	return d.ignorePreflightErrors
 }
 
-// KubeConfigPath returns the path to the user kubeconfig file.
+// KubeConfigPath 返回用户 kubeconfig 文件的路径。
 func (d *nodeData) KubeConfigPath() string {
 	return d.kubeConfigPath
 }
 
+// OutputWriter 返回供 kubeadm 使用的输出写入器。
 func (d *nodeData) OutputWriter() io.Writer {
 	return d.outputWriter
 }
 
-// KubeConfigDir returns the Kubernetes configuration directory or the temporary directory if DryRun is true.
+// KubeConfigDir 返回 Kubernetes 配置目录；dry-run 时返回临时目录。
 func (j *nodeData) KubeConfigDir() string {
 	if j.dryRun {
 		return j.dryRunDir
@@ -303,7 +302,7 @@ func (j *nodeData) KubeConfigDir() string {
 	return constants.KubernetesDir
 }
 
-// KubeletDir returns the kubelet configuration directory or the temporary directory if DryRun is true.
+// KubeletDir 返回 kubelet 配置目录；dry-run 时返回临时目录。
 func (j *nodeData) KubeletDir() string {
 	if j.dryRun {
 		return j.dryRunDir

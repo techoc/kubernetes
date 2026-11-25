@@ -23,7 +23,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// see: https://github.com/kubernetes/kubernetes/issues/104265
+	// 参见 https://github.com/kubernetes/kubernetes/issues/104265
 	setNoUmask()
 	pkiutiltesting.RunWithPrivateKeyFixtureDirectory(m)
 }

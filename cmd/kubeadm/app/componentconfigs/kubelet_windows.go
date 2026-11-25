@@ -30,22 +30,21 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// Mutate modifies absolute path fields in the KubeletConfiguration to be Windows compatible absolute paths.
+// Mutate 将 KubeletConfiguration 中的绝对路径字段改为 Windows 兼容的绝对路径。
 func (kc *kubeletConfig) Mutate() error {
-	// When "kubeadm join" downloads the KubeletConfiguration from the cluster on Windows
-	// nodes, it would contain absolute paths that may lack drive letters, since the config
-	// could have been generated on a Linux control-plane node. On Windows the
-	// Golang filepath.IsAbs() function returns false unless the path contains a drive letter.
-	// This trips client-go and the kubelet, creating problems on Windows nodes.
-	// Fixing it in client-go or the kubelet is a breaking change to existing Windows
-	// users that rely on relative paths:
+	// 在 Windows 节点上，`kubeadm join` 从集群下载的 KubeletConfiguration
+	// 可能包含不带盘符的绝对路径，因为配置可能生成于 Linux 控制平面节点。
+	// Windows 上 Go 的 filepath.IsAbs() 仅在路径包含盘符时返回 true。
+	// 这会使 client-go 和 kubelet 出错，并在 Windows 节点上引发问题。
+	// 在 client-go 或 kubelet 中修复会破坏依赖相对路径的现有 Windows
+	// 用户的兼容性：
 	//   https://github.com/kubernetes/kubernetes/pull/77710#issuecomment-491989621
 	//
-	// Thus, a workaround here is to adapt the KubeletConfiguration paths for Windows.
-	// Note this is currently bound to KubeletConfiguration v1beta1.
+	// 因此，这里通过调整 KubeletConfiguration 路径来兼容 Windows。
+	// 注意：此处理目前绑定 KubeletConfiguration v1beta1。
 	klog.V(2).Infoln("[componentconfig] Adapting the paths in the KubeletConfiguration for Windows...")
 
-	// Get the drive from where the kubeadm binary was called.
+	// 获取调用 kubeadm 二进制文件时所在的盘符。
 	exe, err := os.Executable()
 	if err != nil {
 		return errors.Wrap(err, "could not obtain information about the kubeadm executable")
@@ -53,25 +52,24 @@ func (kc *kubeletConfig) Mutate() error {
 	drive := filepath.VolumeName(filepath.Dir(exe))
 	klog.V(2).Infof("[componentconfig] Assuming Windows drive %q", drive)
 
-	// Mutate the paths in the config.
+	// 修改配置中的路径。
 	mutatePaths(&kc.config, drive)
 	return nil
 }
 
 func mutatePaths(cfg *kubeletconfig.KubeletConfiguration, drive string) {
 	mutateStringField := func(name string, field *string) {
-		// filepath.IsAbs() is not reliable here in the Windows runtime, so check if the
-		// path starts with "/" instead. This means the path originated from a Unix node and
-		// is an absolute path.
+		// filepath.IsAbs() 在 Windows 运行时中不可靠，因此改为检查路径是否
+		// 以 "/" 开头。这表示路径来自 Unix 节点，是绝对路径。
 		if !strings.HasPrefix(*field, "/") {
 			return
 		}
-		// Prepend the drive letter to the path and update the field.
+		// 在路径前添加盘符并更新字段。
 		*field = filepath.Join(drive, *field)
 		klog.V(2).Infof("[componentconfig] kubelet/Windows: adapted path for field %q to %q", name, *field)
 	}
 
-	// Mutate the fields we care about.
+	// 修改需要处理的字段。
 	klog.V(2).Infof("[componentconfig] kubelet/Windows: changing field \"resolverConfig\" to empty")
 	cfg.ResolverConfig = ptr.To("")
 	mutateStringField("staticPodPath", &cfg.StaticPodPath)

@@ -34,7 +34,7 @@ import (
 	utilstaticpod "k8s.io/kubernetes/cmd/kubeadm/app/util/staticpod"
 )
 
-// NewRemoveETCDMemberPhase creates a kubeadm workflow phase for remove-etcd-member
+// NewRemoveETCDMemberPhase 创建 remove-etcd-member 的 kubeadm 工作流阶段。
 func NewRemoveETCDMemberPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "remove-etcd-member",
@@ -55,7 +55,7 @@ func runRemoveETCDMemberPhase(c workflow.RunData) error {
 	}
 	cfg := r.Cfg()
 
-	// Only clear etcd data when using local etcd.
+	// 仅在使用本地 etcd 时清理 etcd 数据。
 	klog.V(1).Infoln("[reset] Checking for etcd config")
 	etcdManifestPath := filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.ManifestsSubDirName, "etcd.yaml")
 	etcdDataDir, err := getEtcdDataDir(etcdManifestPath, cfg)
@@ -77,8 +77,8 @@ func runRemoveETCDMemberPhase(c workflow.RunData) error {
 				fmt.Printf("[dryrun] Would delete contents of the etcd data directory: %v\n", etcdDataDir)
 			}
 		}
-		// This could happen if the phase `cleanup-node` is run before the `remove-etcd-member`.
-		// Cleanup the data in the etcd data dir to avoid some stale files which might cause the failure to build cluster in the next time.
+		// 若先运行 cleanup-node 阶段再运行 remove-etcd-member，则可能发生这种情况。
+		// 清理 etcd 数据目录中的文件，避免残留文件导致下次创建集群失败。
 		empty, _ := IsDirEmpty(etcdDataDir)
 		if !empty && !r.DryRun() {
 			if err := CleanDir(etcdDataDir); err != nil {
@@ -105,8 +105,8 @@ func getEtcdDataDir(manifestPath string, cfg *kubeadmapi.InitConfiguration) (str
 	klog.Warningln("[reset] No kubeadm config, using etcd pod spec to get data directory")
 
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-		// Fall back to use the default cluster config if etcd.yaml doesn't exist, this could happen that
-		// etcd.yaml is removed by other reset phases, e.g. cleanup-node.
+		// 若 etcd.yaml 不存在，则回退到默认集群配置；
+		// 该文件可能已被 cleanup-node 等 reset 阶段删除。
 		cfg := &kubeadmapiv1.ClusterConfiguration{}
 		scheme.Scheme.Default(cfg)
 		return cfg.Etcd.Local.DataDir, nil

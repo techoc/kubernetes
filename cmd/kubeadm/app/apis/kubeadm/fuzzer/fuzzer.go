@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
-// Funcs returns the fuzzer functions for the kubeadm apis.
+// Funcs 返回 kubeadm API 的模糊测试函数。
 func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		fuzzInitConfiguration,
@@ -49,13 +49,12 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 func fuzzInitConfiguration(obj *kubeadm.InitConfiguration, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 
-	// Avoid round tripping the ClusterConfiguration embedded in the InitConfiguration, since it is
-	// only present in the internal version and not in public versions
+	// 避免往返 InitConfiguration 中嵌入的 ClusterConfiguration，因为它仅存在于内部版本，而不存在于公开版本中。
 	obj.ClusterConfiguration = kubeadm.ClusterConfiguration{}
 
-	// Adds the default bootstrap token to get the round trip working
+	// 使用默认的引导令牌，否则往返测试无法通过。
 	obj.BootstrapTokens = []bootstraptokenv1.BootstrapToken{
 		{
 			Groups: []string{"foo"},
@@ -70,33 +69,33 @@ func fuzzInitConfiguration(obj *kubeadm.InitConfiguration, c randfill.Continue) 
 	obj.DryRun = false
 	kubeadm.SetDefaultTimeouts(&obj.Timeouts)
 
-	// Required because MergeMethod is not present in v1beta4.
-	// TODO: remove this once v1beta4 is removed.
+	// v1beta4 中没有 MergeMethod 字段，必须置空才能通过往返测试。
+	// TODO: v1beta4 移除后即可删除此处。
 	obj.NodeRegistration.KubeletExtraArgs = nil
 }
 
 func fuzzNodeRegistration(obj *kubeadm.NodeRegistrationOptions, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 	obj.IgnorePreflightErrors = nil
 	obj.ImagePullSerial = ptr.To(true)
 
-	// Required because MergeMethod is not present in v1beta4.
-	// TODO: remove this once v1beta4 is removed.
+	// v1beta4 中没有 MergeMethod 字段，必须置空才能通过往返测试。
+	// TODO: v1beta4 移除后即可删除此处。
 	obj.KubeletExtraArgs = nil
 }
 
 func fuzzClusterConfiguration(obj *kubeadm.ClusterConfiguration, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 	obj.CertificatesDir = "foo"
 	obj.ClusterName = "bar"
 	obj.ImageRepository = "baz"
-	obj.CIImageRepository = "" // This fields doesn't exists in public API >> using default to get the roundtrip test pass
+	obj.CIImageRepository = "" // 公开 API 中不存在该字段，因此使用默认值以保证往返测试通过
 	obj.KubernetesVersion = "qux"
-	obj.CIKubernetesVersion = "" // This fields doesn't exists in public API >> using default to get the roundtrip test pass
+	obj.CIKubernetesVersion = "" // 公开 API 中不存在该字段，因此使用默认值以保证往返测试通过
 	obj.ControllerManager.ExtraEnvs = nil
 	obj.APIServer.ExtraEnvs = nil
 	obj.Scheduler.ExtraEnvs = nil
@@ -106,8 +105,8 @@ func fuzzClusterConfiguration(obj *kubeadm.ClusterConfiguration, c randfill.Cont
 	obj.CertificateValidityPeriod = &metav1.Duration{Duration: constants.CertificateValidityPeriod}
 	obj.CACertificateValidityPeriod = &metav1.Duration{Duration: constants.CACertificateValidityPeriod}
 
-	// Required because MergeMethod is not present in v1beta4.
-	// TODO: remove this once v1beta4 is removed.
+	// v1beta4 中没有 MergeMethod 字段，必须置空才能通过往返测试。
+	// TODO: v1beta4 移除后即可删除此处。
 	obj.APIServer.ExtraArgs = nil
 	obj.ControllerManager.ExtraArgs = nil
 	obj.Scheduler.ExtraArgs = nil
@@ -120,28 +119,28 @@ func fuzzDNS(obj *kubeadm.DNS, c randfill.Continue) {
 }
 
 func fuzzComponentConfigMap(obj *kubeadm.ComponentConfigMap, c randfill.Continue) {
-	// This is intentionally empty because component config does not exists in the public api
-	// (empty mean all ComponentConfigs fields nil, and this is necessary for getting roundtrip passing)
+	// 此处故意留空：公开 API 中没有 component config。
+	// 留空意味着 ComponentConfigs 的所有字段均为 nil，这是往返测试通过的前提。
 }
 
 func fuzzLocalEtcd(obj *kubeadm.LocalEtcd, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 	obj.DataDir = "foo"
 }
 
 func fuzzExternalEtcd(obj *kubeadm.ExternalEtcd, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Required because the HTTPEndpoints is defaulted to Endpoints.
+	// HTTPEndpoints 会被默认成 Endpoints，因此需显式赋值。
 	obj.HTTPEndpoints = obj.Endpoints
 }
 
 func fuzzNetworking(obj *kubeadm.Networking, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 	obj.DNSDomain = "foo"
 	obj.ServiceSubnet = "bar"
 }
@@ -149,7 +148,7 @@ func fuzzNetworking(obj *kubeadm.Networking, c randfill.Continue) {
 func fuzzJoinConfiguration(obj *kubeadm.JoinConfiguration, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 	obj.CACertPath = "foo"
 	obj.Discovery = kubeadm.Discovery{
 		BootstrapToken:    &kubeadm.BootstrapTokenDiscovery{Token: "baz"},
@@ -162,8 +161,8 @@ func fuzzJoinConfiguration(obj *kubeadm.JoinConfiguration, c randfill.Continue) 
 	obj.DryRun = false
 	kubeadm.SetDefaultTimeouts(&obj.Timeouts)
 
-	// Required because MergeMethod is not present in v1beta4.
-	// TODO: remove this once v1beta4 is removed.
+	// v1beta4 中没有 MergeMethod 字段，必须置空才能通过往返测试。
+	// TODO: v1beta4 移除后即可删除此处。
 	obj.NodeRegistration.KubeletExtraArgs = nil
 }
 
@@ -174,7 +173,7 @@ func fuzzJoinControlPlane(obj *kubeadm.JoinControlPlane, c randfill.Continue) {
 func fuzzResetConfiguration(obj *kubeadm.ResetConfiguration, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 	obj.CertificatesDir = "/tmp"
 	kubeadm.SetDefaultTimeouts(&obj.Timeouts)
 }
@@ -182,7 +181,7 @@ func fuzzResetConfiguration(obj *kubeadm.ResetConfiguration, c randfill.Continue
 func fuzzUpgradeConfiguration(obj *kubeadm.UpgradeConfiguration, c randfill.Continue) {
 	c.FillNoCustom(obj)
 
-	// Pinning values for fields that get defaults if fuzz value is empty string or nil (thus making the round trip test fail)
+	// 固定那些在模糊值为空字符串或 nil 时会应用默认值的字段（否则往返测试会失败）。
 	obj.Node.EtcdUpgrade = ptr.To(true)
 	obj.Node.CertificateRenewal = ptr.To(false)
 	obj.Node.ImagePullPolicy = corev1.PullIfNotPresent

@@ -22,8 +22,8 @@ import (
 	kubeadmapiv1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta4"
 )
 
-// SetKubernetesVersion gets the current Kubeadm version and sets it as KubeadmVersion in the config,
-// unless it's already set to a value different from the default.
+// SetKubernetesVersion 获取当前 kubeadm 版本并设置为配置中的 KubeadmVersion，
+// 但若已设置为非默认值则保留。
 func SetKubernetesVersion(cfg *kubeadmapiv1.ClusterConfiguration) {
 
 	if cfg.KubernetesVersion != kubeadmapiv1.DefaultKubernetesVersion && cfg.KubernetesVersion != "" {

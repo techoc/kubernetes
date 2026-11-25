@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package upgrade holds the common phases for 'kubeadm upgrade'.
+// Package upgrade 包含 kubeadm upgrade 的公共阶段。
 package upgrade
 
 import (
@@ -33,7 +33,7 @@ var (
 		`)
 )
 
-// NewKubeletConfigPhase returns a new kubelet-config phase.
+// NewKubeletConfigPhase 返回新的 kubelet-config 阶段。
 func NewKubeletConfigPhase() workflow.Phase {
 	phase := workflow.Phase{
 		Name:  "kubelet-config",
@@ -56,9 +56,8 @@ func runKubeletConfigPhase(c workflow.RunData) error {
 		return errors.New("kubelet-config phase invoked with an invalid data struct")
 	}
 
-	// Write the configuration for the kubelet down to disk and print the generated manifests instead of dry-running.
-	// If not dry-running, the kubelet config file will be backed up to the /etc/kubernetes/tmp/ dir, so that it could be
-	// recovered if anything goes wrong.
+	// 将 kubelet 配置写入磁盘；dry-run 时改为打印生成的清单。
+	// 非 dry-run 时，kubelet 配置文件会备份到 /etc/kubernetes/tmp/，以便出错后恢复。
 	err := upgrade.WriteKubeletConfigFiles(data.InitCfg(), data.KubeletDir(), data.KubeConfigDir(), data.PatchesDir(), data.DryRun(), data.OutputWriter())
 	if err != nil {
 		return err

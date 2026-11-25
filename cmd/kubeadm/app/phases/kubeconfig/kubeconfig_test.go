@@ -55,30 +55,30 @@ import (
 )
 
 func TestGetKubeConfigSpecsFailsIfCADoesntExists(t *testing.T) {
-	// Create temp folder for the test case (without a CA)
+	// 为测试用例创建临时目录（不含 CA）
 	tmpdir := t.TempDir()
 
-	// Creates an InitConfiguration pointing to the pkidir folder
+	// 创建指向 pkidir 目录的 InitConfiguration
 	cfg := &kubeadmapi.InitConfiguration{
 		ClusterConfiguration: kubeadmapi.ClusterConfiguration{
 			CertificatesDir: tmpdir,
 		},
 	}
 
-	// Executes getKubeConfigSpecs
+	// 执行 getKubeConfigSpecs
 	if _, err := getKubeConfigSpecs(cfg); err == nil {
 		t.Error("getKubeConfigSpecs didnt failed when expected")
 	}
 }
 
 func TestGetKubeConfigSpecs(t *testing.T) {
-	// Create temp folder for the test case
+	// 为测试用例创建临时目录
 	tmpdir := t.TempDir()
 
-	// Adds a pki folder with a ca certs to the temp folder
+	// 在临时目录中添加含 CA 证书的 pki 目录
 	pkidir := certstestutil.SetupPkiDirWithCertificateAuthority(t, tmpdir)
 
-	// Creates InitConfigurations pointing to the pkidir folder
+	// 创建指向 pkidir 目录的 InitConfiguration
 	cfgs := []*kubeadmapi.InitConfiguration{
 		{
 			LocalAPIEndpoint: kubeadmapi.APIEndpoint{AdvertiseAddress: "1.2.3.4", BindPort: 1234},
@@ -163,7 +163,7 @@ func TestGetKubeConfigSpecs(t *testing.T) {
 
 		for _, assertion := range assertions {
 			t.Run(fmt.Sprintf("%d-%s", i, assertion.clientName), func(t *testing.T) {
-				// Executes getKubeConfigSpecs
+				// 执行 getKubeConfigSpecs
 				specs, err := getKubeConfigSpecs(cfg)
 				if err != nil {
 					t.Fatal("getKubeConfigSpecs failed!")
@@ -172,28 +172,28 @@ func TestGetKubeConfigSpecs(t *testing.T) {
 				var spec *kubeConfigSpec
 				var ok bool
 
-				// assert the spec for the kubeConfigFile exists
+				// 断言 kubeConfigFile 对应的配置存在
 				if spec, ok = specs[assertion.kubeConfigFile]; !ok {
 					t.Errorf("getKubeConfigSpecs didn't create spec for %s ", assertion.kubeConfigFile)
 					return
 				}
 
-				// Assert clientName
+				// 断言 clientName
 				if spec.ClientName != assertion.clientName {
 					t.Errorf("getKubeConfigSpecs for %s clientName is %s, expected %s", assertion.kubeConfigFile, spec.ClientName, assertion.clientName)
 				}
 
-				// Assert Organizations
+				// 断言 Organizations
 				if spec.ClientCertAuth == nil || !reflect.DeepEqual(spec.ClientCertAuth.Organizations, assertion.organizations) {
 					t.Errorf("getKubeConfigSpecs for %s Organizations is %v, expected %v", assertion.kubeConfigFile, spec.ClientCertAuth.Organizations, assertion.organizations)
 				}
 
-				// Assert EncryptionAlgorithm
+				// 断言 EncryptionAlgorithm
 				if spec.EncryptionAlgorithm != cfg.EncryptionAlgorithm {
 					t.Errorf("getKubeConfigSpecs for %s EncryptionAlgorithm is %s, expected %s", assertion.kubeConfigFile, spec.EncryptionAlgorithm, cfg.EncryptionAlgorithm)
 				}
 
-				// Asserts InitConfiguration values injected into spec
+				// 断言 InitConfiguration 的值已注入配置
 				controlPlaneEndpoint, err := kubeadmutil.GetControlPlaneEndpoint(cfg.ControlPlaneEndpoint, &cfg.LocalAPIEndpoint)
 				if err != nil {
 					t.Error(err)
@@ -216,7 +216,7 @@ func TestGetKubeConfigSpecs(t *testing.T) {
 					}
 				}
 
-				// Asserts CA certs and CA keys loaded into specs
+				// 断言 CA 证书和私钥已加载到配置中
 				if spec.CACert == nil {
 					t.Errorf("getKubeConfigSpecs didn't loaded CACert into spec for %s!", assertion.kubeConfigFile)
 				}
@@ -229,40 +229,40 @@ func TestGetKubeConfigSpecs(t *testing.T) {
 }
 
 func TestBuildKubeConfigFromSpecWithClientAuth(t *testing.T) {
-	// Creates a CA
+	// 创建 CA
 	caCert, caKey := certstestutil.SetupCertificateAuthority(t)
 
 	notAfter, _ := time.Parse(time.RFC3339, "2026-01-02T15:04:05Z")
 
-	// Executes buildKubeConfigFromSpec passing a KubeConfigSpec with a ClientAuth
+	// 执行 buildKubeConfigFromSpec，传入含 ClientAuth 的 KubeConfigSpec
 	config := setupKubeConfigWithClientAuth(t, caCert, caKey, notAfter, "https://1.2.3.4:1234", "myClientName", "test-cluster", "myOrg1", "myOrg2")
 
-	// Asserts spec data are propagated to the kubeconfig
+	// 断言配置数据已传递到 kubeconfig
 	kubeconfigutil.AssertKubeConfigCurrentCluster(t, config, "https://1.2.3.4:1234", caCert)
 	kubeconfigutil.AssertKubeConfigCurrentAuthInfoWithClientCert(t, config, caCert, notAfter, "myClientName", "myOrg1", "myOrg2")
 }
 
 func TestBuildKubeConfigFromSpecWithTokenAuth(t *testing.T) {
-	// Creates a CA
+	// 创建 CA
 	caCert, _ := certstestutil.SetupCertificateAuthority(t)
 
-	// Executes buildKubeConfigFromSpec passing a KubeConfigSpec with a Token
+	// 执行 buildKubeConfigFromSpec，传入含 Token 的 KubeConfigSpec
 	config := setupKubeConfigWithTokenAuth(t, caCert, "https://1.2.3.4:1234", "myClientName", "123456", "test-cluster")
 
-	// Asserts spec data are propagated to the kubeconfig
+	// 断言配置数据已传递到 kubeconfig
 	kubeconfigutil.AssertKubeConfigCurrentCluster(t, config, "https://1.2.3.4:1234", caCert)
 	kubeconfigutil.AssertKubeConfigCurrentAuthInfoWithToken(t, config, "myClientName", "123456")
 }
 
 func TestCreateKubeConfigFileIfNotExists(t *testing.T) {
 
-	// Creates a CAs
+	// 创建多个 CA
 	caCert, caKey := certstestutil.SetupCertificateAuthority(t)
 	anotherCaCert, anotherCaKey := certstestutil.SetupCertificateAuthority(t)
 
 	notAfter, _ := time.Parse(time.RFC3339, "2026-01-02T15:04:05Z")
 
-	// build kubeconfigs (to be used to test kubeconfigs equality/not equality)
+	// 构建 kubeconfig（用于测试内容是否相等）
 	config := setupKubeConfigWithClientAuth(t, caCert, caKey, notAfter, "https://1.2.3.4:1234", "test-cluster", "myOrg1", "myOrg2")
 	configWithAnotherClusterCa := setupKubeConfigWithClientAuth(t, anotherCaCert, anotherCaKey, notAfter, "https://1.2.3.4:1234", "test-cluster", "myOrg1", "myOrg2")
 	configWithAnotherClusterAddress := setupKubeConfigWithClientAuth(t, caCert, caKey, notAfter, "https://3.4.5.6:3456", "myOrg1", "test-cluster", "myOrg2")
@@ -275,28 +275,28 @@ func TestCreateKubeConfigFileIfNotExists(t *testing.T) {
 		kubeConfig         *clientcmdapi.Config
 		expectedError      bool
 	}{
-		{ // if there is no existing KubeConfig, creates the kubeconfig
+		{ // 如果不存在 KubeConfig，则创建
 			name:       "KubeConfig doesn't exist",
 			kubeConfig: config,
 		},
-		{ // if KubeConfig is invalid raise error
+		{ // 如果 KubeConfig 无效则返回错误
 			name:               "KubeConfig is invalid",
 			existingKubeConfig: invalidConfig,
 			kubeConfig:         invalidConfig,
 			expectedError:      true,
 		},
-		{ // if KubeConfig is equal to the existingKubeConfig - refers to the same cluster -, use the existing (Test idempotency)
+		{ // 如果 KubeConfig 与现有文件内容一致（指向同一集群），复用现有文件（测试幂等性）
 			name:               "KubeConfig refers to the same cluster",
 			existingKubeConfig: config,
 			kubeConfig:         config,
 		},
-		{ // if KubeConfig is not equal to the existingKubeConfig - refers to the another cluster (a cluster with another Ca) -, raise error
+		{ // 如果 KubeConfig 与现有文件不一致（指向另一个集群或使用另一个 CA），返回错误
 			name:               "KubeConfig refers to the cluster with another CA",
 			existingKubeConfig: config,
 			kubeConfig:         configWithAnotherClusterCa,
 			expectedError:      true,
 		},
-		{ // if KubeConfig is not equal to the existingKubeConfig - tolerate custom server addresses
+		{ // 如果 KubeConfig 与现有文件不一致，允许自定义服务器地址
 			name:               "KubeConfig referst to the cluster with another address",
 			existingKubeConfig: config,
 			kubeConfig:         configWithAnotherClusterAddress,
@@ -305,17 +305,17 @@ func TestCreateKubeConfigFileIfNotExists(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create temp folder for the test case
+			// 为测试用例创建临时目录
 			tmpdir := t.TempDir()
 
-			// Writes the existing kubeconfig file to disk
+			// 将现有 kubeconfig 文件写入磁盘
 			if test.existingKubeConfig != nil {
 				if err := createKubeConfigFileIfNotExists(tmpdir, "test.conf", test.existingKubeConfig); err != nil {
 					t.Errorf("createKubeConfigFileIfNotExists failed")
 				}
 			}
 
-			// Writes the kubeconfig file to disk
+			// 将 kubeconfig 文件写入磁盘
 			err := createKubeConfigFileIfNotExists(tmpdir, "test.conf", test.kubeConfig)
 			if test.expectedError && err == nil {
 				t.Errorf("createKubeConfigFileIfNotExists didn't failed when expected to fail")
@@ -324,7 +324,7 @@ func TestCreateKubeConfigFileIfNotExists(t *testing.T) {
 				t.Errorf("createKubeConfigFileIfNotExists failed")
 			}
 
-			// Assert that the created file is there
+			// 断言文件已创建
 			filesutil.AssertFileExists(t, tmpdir, "test.conf")
 		})
 	}
@@ -337,14 +337,14 @@ func TestCreateKubeconfigFilesAndWrappers(t *testing.T) {
 		expectedFiles            []string
 		expectedError            bool
 	}{
-		{ // Test createKubeConfigFiles fails for unknown kubeconfig is requested
+		{ // 测试请求未知 kubeconfig 时 createKubeConfigFiles 失败
 			name: "createKubeConfigFiles",
 			createKubeConfigFunction: func(outDir string, cfg *kubeadmapi.InitConfiguration) error {
 				return createKubeConfigFiles(outDir, cfg, "unknown.conf")
 			},
 			expectedError: true,
 		},
-		{ // Test CreateJoinControlPlaneKubeConfigFiles (wrapper to createKubeConfigFile)
+		{ // 测试 CreateJoinControlPlaneKubeConfigFiles（createKubeConfigFile 的包装函数）
 			name:                     "CreateJoinControlPlaneKubeConfigFiles",
 			createKubeConfigFunction: CreateJoinControlPlaneKubeConfigFiles,
 			expectedFiles: []string{
@@ -357,13 +357,13 @@ func TestCreateKubeconfigFilesAndWrappers(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create temp folder for the test case
+			// 为测试用例创建临时目录
 			tmpdir := t.TempDir()
 
-			// Adds a pki folder with a ca certs to the temp folder
+			// 在临时目录中添加含 CA 证书的 pki 目录
 			pkidir := certstestutil.SetupPkiDirWithCertificateAuthority(t, tmpdir)
 
-			// Creates an InitConfiguration pointing to the pkidir folder
+			// 创建指向 pkidir 目录的 InitConfiguration
 			cfg := &kubeadmapi.InitConfiguration{
 				LocalAPIEndpoint: kubeadmapi.APIEndpoint{AdvertiseAddress: "1.2.3.4", BindPort: 1234},
 				ClusterConfiguration: kubeadmapi.ClusterConfiguration{
@@ -371,7 +371,7 @@ func TestCreateKubeconfigFilesAndWrappers(t *testing.T) {
 				},
 			}
 
-			// Execs the createKubeConfigFunction
+			// 执行 createKubeConfigFunction
 			err := test.createKubeConfigFunction(tmpdir, cfg)
 			if test.expectedError && err == nil {
 				t.Errorf("createKubeConfigFunction didn't failed when expected to fail")
@@ -382,17 +382,17 @@ func TestCreateKubeconfigFilesAndWrappers(t *testing.T) {
 				return
 			}
 
-			// Assert expected files are there
+			// 断言预期文件均存在
 			filesutil.AssertFileExists(t, tmpdir, test.expectedFiles...)
 		})
 	}
 }
 
 func TestWriteKubeConfigFailsIfCADoesntExists(t *testing.T) {
-	// Temporary folders for the test case (without a CA)
+	// 测试用例的临时目录（不含 CA）
 	tmpdir := t.TempDir()
 
-	// Creates an InitConfiguration pointing to the tmpdir folder
+	// 创建指向 tmpdir 目录的 InitConfiguration
 	cfg := &kubeadmapi.InitConfiguration{
 		ClusterConfiguration: kubeadmapi.ClusterConfiguration{
 			CertificatesDir: tmpdir,
@@ -423,7 +423,7 @@ func TestWriteKubeConfigFailsIfCADoesntExists(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			buf := new(bytes.Buffer)
 
-			// executes writeKubeConfigFunction
+			// 执行 writeKubeConfigFunction
 			if err := test.writeKubeConfigFunction(buf); err == nil {
 				t.Error("writeKubeConfigFunction didnt failed when expected")
 			}
@@ -432,19 +432,19 @@ func TestWriteKubeConfigFailsIfCADoesntExists(t *testing.T) {
 }
 
 func TestWriteKubeConfig(t *testing.T) {
-	// Temporary folders for the test case
+	// 测试用例的临时目录
 	tmpdir := t.TempDir()
 
-	// Adds a pki folder with a ca cert to the temp folder
+	// 在临时目录中添加含 CA 证书的 pki 目录
 	pkidir := certstestutil.SetupPkiDirWithCertificateAuthority(t, tmpdir)
 
-	// Retrieves ca cert for assertions
+	// 获取用于断言的 CA 证书
 	caCert, _, err := pkiutil.TryLoadCertAndKeyFromDisk(pkidir, kubeadmconstants.CACertAndKeyBaseName)
 	if err != nil {
 		t.Fatalf("couldn't retrieve ca cert: %v", err)
 	}
 
-	// Creates an InitConfiguration pointing to the pkidir folder
+	// 创建指向 pkidir 目录的 InitConfiguration
 	cfg := &kubeadmapi.InitConfiguration{
 		LocalAPIEndpoint: kubeadmapi.APIEndpoint{AdvertiseAddress: "1.2.3.4", BindPort: 1234},
 		ClusterConfiguration: kubeadmapi.ClusterConfiguration{
@@ -483,29 +483,29 @@ func TestWriteKubeConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			buf := new(bytes.Buffer)
 
-			// executes writeKubeConfigFunction
+			// 执行 writeKubeConfigFunction
 			if err := test.writeKubeConfigFunction(buf); err != nil {
 				t.Error("writeKubeConfigFunction failed")
 				return
 			}
 
-			// reads kubeconfig written to stdout
+			// 读取写入标准输出的 kubeconfig
 			config, err := clientcmd.Load(buf.Bytes())
 			if err != nil {
 				t.Errorf("Couldn't read kubeconfig file from buffer: %v", err)
 				return
 			}
 
-			// checks that CLI flags are properly propagated
+			// 检查 CLI 参数是否正确传递
 			kubeconfigutil.AssertKubeConfigCurrentCluster(t, config, "https://1.2.3.4:1234", caCert)
 
 			if test.withClientCert {
-				// checks that kubeconfig files have expected client cert
+				// 检查 kubeconfig 文件是否包含预期客户端证书
 				kubeconfigutil.AssertKubeConfigCurrentAuthInfoWithClientCert(t, config, caCert, notAfter, "myUser", "myOrg")
 			}
 
 			if test.withToken {
-				// checks that kubeconfig files have expected token
+				// 检查 kubeconfig 文件是否包含预期令牌
 				kubeconfigutil.AssertKubeConfigCurrentAuthInfoWithToken(t, config, "myUser", "12345")
 			}
 		})
@@ -541,8 +541,7 @@ func TestValidateKubeConfig(t *testing.T) {
 	configWithSameClusterCaByExternalFile.Clusters[currentCtx.Cluster].CertificateAuthorityData = nil
 	configWithSameClusterCaByExternalFile.Clusters[currentCtx.Cluster].CertificateAuthority = tmpfile.Name()
 
-	// create a valid config but with whitespace around the CA PEM.
-	// validateKubeConfig() should tolerate that.
+	// 创建 CA PEM 两端含空白的有效配置，validateKubeConfig() 应能容忍。
 	configWhitespace := config.DeepCopy()
 	configWhitespaceCtx := configWhitespace.Contexts[configWhitespace.CurrentContext]
 	configWhitespaceCA := string(configWhitespace.Clusters[configWhitespaceCtx.Cluster].CertificateAuthorityData)
@@ -622,7 +621,7 @@ func TestValidateKubeconfigsForExternalCA(t *testing.T) {
 		},
 	}
 
-	// creates CA, write to pkiDir and remove ca.key to get into external CA condition
+	// 创建 CA、写入 pkiDir 并删除 ca.key，以进入外部 CA 场景
 	caCert, caKey := certstestutil.SetupCertificateAuthority(t)
 
 	if err := pkiutil.WriteCertBundle(pkiDir, kubeadmconstants.CACertAndKeyBaseName, []*x509.Certificate{caCert}); err != nil {
@@ -631,14 +630,14 @@ func TestValidateKubeconfigsForExternalCA(t *testing.T) {
 
 	notAfter, _ := time.Parse(time.RFC3339, "2026-01-02T15:04:05Z")
 
-	// create a valid config
+	// 创建有效配置
 	config := setupKubeConfigWithClientAuth(t, caCert, caKey, notAfter, "https://1.2.3.4:1234", "test-cluster", "myOrg1")
 
-	// create a config with another CA
+	// 创建使用另一个 CA 的配置
 	anotherCaCert, anotherCaKey := certstestutil.SetupCertificateAuthority(t)
 	configWithAnotherClusterCa := setupKubeConfigWithClientAuth(t, anotherCaCert, anotherCaKey, notAfter, "https://1.2.3.4:1234", "test-cluster", "myOrg1")
 
-	// create a config with another server URL
+	// 创建使用另一个服务器 URL 的配置
 	configWithAnotherServerURL := setupKubeConfigWithClientAuth(t, caCert, caKey, notAfter, "https://4.3.2.1:4321", "test-cluster", "myOrg1")
 
 	tests := map[string]struct {
@@ -731,16 +730,16 @@ func TestValidateKubeconfigsForExternalCAMissingRoot(t *testing.T) {
 		},
 	}
 
-	// Creates CA, write to pkiDir and remove ca.key to get into external CA mode
+	// 创建 CA、写入 pkiDir 并删除 ca.key，以进入外部 CA 模式
 	caCert, caKey := certstestutil.SetupCertificateAuthority(t)
 
-	// Setup multiple intermediate certificate authorities (CAs) for testing purposes.
-	// This is "Root CA" signs "Intermediate Authority 1A" signs "Intermediate Authority 2A"
+	// 为测试设置多个中间 CA。
+	// 证书链为 "Root CA" 签发 "Intermediate Authority 1A"，再签发 "Intermediate Authority 2A"。
 	intermediateCACert1a, intermediateCAKey1a := certstestutil.SetupIntermediateCertificateAuthority(t, caCert, caKey, "Intermediate Authority 1A")
 	intermediateCACert2a, intermediateCAKey2a := certstestutil.SetupIntermediateCertificateAuthority(t, intermediateCACert1a, intermediateCAKey1a, "Intermediate Authority 1A")
 
-	// These two CA certificates should both validate using the Intermediate CA 2B certificate
-	// This is "Root CA" signs "Intermediate Authority 1B" signs "Intermediate Authority 2B"
+	// 这两个 CA 证书都应能通过 Intermediate CA 2B 验证。
+	// 证书链为 "Root CA" 签发 "Intermediate Authority 1B"，再签发 "Intermediate Authority 2B"。
 	intermediateCACert1b, intermediateCAKey1b := certstestutil.SetupIntermediateCertificateAuthority(t, caCert, caKey, "Intermediate Authority 1B")
 	intermediateCACert2b, intermediateCAKey2b := certstestutil.SetupIntermediateCertificateAuthority(t, intermediateCACert1b, intermediateCAKey1b, "Intermediate Authority 2B")
 
@@ -768,7 +767,7 @@ func TestValidateKubeconfigsForExternalCAMissingRoot(t *testing.T) {
 		expectedError bool
 		caCertificate []*x509.Certificate
 	}{
-		// Positive test cases
+		// 正向测试用例
 		"valid config issued from RootCA": {
 			filesToWrite: map[string]*clientcmdapi.Config{
 				kubeadmconstants.AdminKubeConfigFileName:             multipleCAConfigRootCAIssuer,
@@ -817,7 +816,7 @@ func TestValidateKubeconfigsForExternalCAMissingRoot(t *testing.T) {
 			initConfig:    initConfig,
 			expectedError: false,
 		},
-		// Negative test cases
+		// 负向测试用例
 		"invalid config issued from IntermediateCA 2A, testing a chain with a different issuer": {
 			filesToWrite: map[string]*clientcmdapi.Config{
 				kubeadmconstants.AdminKubeConfigFileName:             multipleCAConfigDifferentIssuer,
@@ -867,7 +866,7 @@ func TestValidateKubeconfigsForExternalCAMissingRoot(t *testing.T) {
 	}
 }
 
-// setupKubeConfigWithClientAuth is a test utility function that wraps buildKubeConfigFromSpec for building a KubeConfig object With ClientAuth
+// setupKubeConfigWithClientAuth 是测试工具函数，封装 buildKubeConfigFromSpec 以构建使用 ClientAuth 的 KubeConfig。
 func setupKubeConfigWithClientAuth(t *testing.T, caCert *x509.Certificate, caKey crypto.Signer, notAfter time.Time, apiServer, clientName, clustername string, organizations ...string) *clientcmdapi.Config {
 	spec := &kubeConfigSpec{
 		CACert:     caCert,
@@ -888,7 +887,7 @@ func setupKubeConfigWithClientAuth(t *testing.T, caCert *x509.Certificate, caKey
 	return config
 }
 
-// setupKubeConfigWithTokenAuth is a test utility function that wraps buildKubeConfigFromSpec for building a KubeConfig object With Token
+// setupKubeConfigWithTokenAuth 是测试工具函数，封装 buildKubeConfigFromSpec 以构建使用 Token 的 KubeConfig。
 func setupKubeConfigWithTokenAuth(t *testing.T, caCert *x509.Certificate, apiServer, clientName, token, clustername string) *clientcmdapi.Config {
 	spec := &kubeConfigSpec{
 		CACert:     caCert,
@@ -942,7 +941,7 @@ func TestEnsureAdminClusterRoleBinding(t *testing.T) {
 		{
 			name:                  "super-admin.conf is missing",
 			missingSuperAdminConf: true,
-			expectedError:         false, // The file is optional.
+			expectedError:         false, // 此文件为可选文件。
 		},
 	}
 
@@ -957,8 +956,7 @@ func TestEnsureAdminClusterRoleBinding(t *testing.T) {
 				return adminClient, nil
 			}
 
-			// Create the admin.conf and super-admin.conf so that EnsureAdminClusterRoleBinding
-			// can create clients from the files.
+			// 创建 admin.conf 和 super-admin.conf，供 EnsureAdminClusterRoleBinding 从中创建客户端。
 			os.Remove(filepath.Join(dir, kubeadmconstants.AdminKubeConfigFileName))
 			if !tc.missingAdminConf {
 				if err := CreateKubeConfigFile(kubeadmconstants.AdminKubeConfigFileName, dir, cfg); err != nil {
@@ -1002,7 +1000,7 @@ func TestEnsureAdminClusterRoleBindingImpl(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			// A "create" call against a real server can return a forbidden error and a non-nil CRB
+			// 对真实服务器执行 "create" 时，可能同时返回禁止访问错误和非 nil CRB
 			name: "admin.conf: handle forbidden error and returned CRBs, when the super-admin.conf client is nil",
 			setupAdminClient: func(client *clientsetfake.Clientset) {
 				client.PrependReactor("create", "clusterrolebindings", func(action clientgotesting.Action) (bool, runtime.Object, error) {
@@ -1101,7 +1099,7 @@ func TestEnsureAdminClusterRoleBindingImpl(t *testing.T) {
 			adminClient := clientsetfake.NewSimpleClientset()
 			tc.setupAdminClient(adminClient)
 
-			var superAdminClient clientset.Interface // ensure superAdminClient is nil by default
+			var superAdminClient clientset.Interface // 确保 superAdminClient 默认为 nil
 			if tc.setupSuperAdminClient != nil {
 				fakeSuperAdminClient := clientsetfake.NewSimpleClientset()
 				tc.setupSuperAdminClient(fakeSuperAdminClient)

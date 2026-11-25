@@ -43,8 +43,8 @@ const (
 )
 
 var (
-	// dummyKubernetesVersion and dummyKubernetesVersionStr are just used for unit testing, in order to not make
-	// kubeadm lookup dl.k8s.io to resolve what the latest stable release is
+	// dummyKubernetesVersion 和 dummyKubernetesVersionStr 仅供单元测试使用，
+	// 避免 kubeadm 访问 dl.k8s.io 查询最新稳定版本。
 	dummyKubernetesVersion    = constants.MinimumControlPlaneVersion
 	dummyKubernetesVersionStr = dummyKubernetesVersion.String()
 )
@@ -66,7 +66,7 @@ func TestImagesListRunWithCustomConfigPath(t *testing.T) {
 	testcases := []struct {
 		name               string
 		expectedImageCount int
-		// each string provided here must appear in at least one image returned by Run
+		// 此处每个字符串都必须出现在 Run 返回的至少一个镜像中。
 		expectedImageSubstrings []string
 		configContents          []byte
 	}{
@@ -338,7 +338,7 @@ registry.k8s.io/etcd:{{.EtcdVersion}}
 func TestNewCmdConfigPrintActionDefaults(t *testing.T) {
 	tests := []struct {
 		name             string
-		expectedKinds    []string // need to be sorted
+		expectedKinds    []string // 需要排序。
 		componentConfigs string
 		cmdProc          func(out io.Writer) *cobra.Command
 	}{

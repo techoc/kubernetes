@@ -57,7 +57,7 @@ var (
 		`)
 )
 
-// NewUploadConfigPhase returns the phase to uploadConfig
+// NewUploadConfigPhase 返回 upload-config 阶段。
 func NewUploadConfigPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "upload-config",
@@ -99,7 +99,7 @@ func getUploadConfigPhaseFlags() []string {
 	}
 }
 
-// runUploadKubeadmConfig uploads the kubeadm configuration to a ConfigMap
+// runUploadKubeadmConfig 将 kubeadm 配置上传到 ConfigMap。
 func runUploadKubeadmConfig(c workflow.RunData) error {
 	cfg, client, err := getUploadConfigData(c)
 	if err != nil {
@@ -113,7 +113,7 @@ func runUploadKubeadmConfig(c workflow.RunData) error {
 	return nil
 }
 
-// runUploadKubeletConfig uploads the kubelet configuration to a ConfigMap
+// runUploadKubeletConfig 将 kubelet 配置上传到 ConfigMap。
 func runUploadKubeletConfig(c workflow.RunData) error {
 	cfg, client, err := getUploadConfigData(c)
 	if err != nil {

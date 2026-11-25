@@ -23,13 +23,13 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 )
 
-// FileRenewer define a certificate renewer implementation that uses given CA cert and key for generating new certificates
+// FileRenewer 定义使用给定 CA 证书和私钥生成新证书的续签器。
 type FileRenewer struct {
 	caCert *x509.Certificate
 	caKey  crypto.Signer
 }
 
-// NewFileRenewer returns a new certificate renewer that uses given CA cert and key for generating new certificates
+// NewFileRenewer 返回使用给定 CA 证书和私钥生成新证书的续签器。
 func NewFileRenewer(caCert *x509.Certificate, caKey crypto.Signer) *FileRenewer {
 	return &FileRenewer{
 		caCert: caCert,
@@ -37,7 +37,7 @@ func NewFileRenewer(caCert *x509.Certificate, caKey crypto.Signer) *FileRenewer 
 	}
 }
 
-// Renew a certificate using a given CA cert and key
+// 使用给定 CA 证书和私钥续签证书。
 func (r *FileRenewer) Renew(cfg *pkiutil.CertConfig) (*x509.Certificate, crypto.Signer, error) {
 	return pkiutil.NewCertAndKey(r.caCert, r.caKey, cfg)
 }

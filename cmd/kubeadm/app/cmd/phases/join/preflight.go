@@ -53,7 +53,7 @@ var (
 		`)))
 )
 
-// NewPreflightPhase creates a kubeadm workflow phase that implements preflight checks for a new node join
+// NewPreflightPhase 创建为新节点加入执行预检的 kubeadm 工作流阶段。
 func NewPreflightPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "preflight [api-server-endpoint]",
@@ -81,7 +81,7 @@ func NewPreflightPhase() workflow.Phase {
 	}
 }
 
-// runPreflight executes preflight checks logic.
+// runPreflight 执行预检逻辑。
 func runPreflight(c workflow.RunData) error {
 	j, ok := c.(JoinData)
 	if !ok {
@@ -89,9 +89,9 @@ func runPreflight(c workflow.RunData) error {
 	}
 	fmt.Println("[preflight] Running pre-flight checks")
 
-	// Start with general checks
+	// 从通用检查开始。
 	klog.V(1).Infoln("[preflight] Running general checks")
-	// First, check if we're root separately from the other preflight checks and fail fast.
+	// 首先单独检查是否以 root 身份运行，以便快速失败。
 	if err := preflight.RunRootCheckOnly(j.IgnorePreflightErrors()); err != nil {
 		return err
 	}
@@ -104,14 +104,14 @@ func runPreflight(c workflow.RunData) error {
 		return err
 	}
 
-	// Continue with more specific checks based on the init configuration
+	// 根据 init 配置继续执行更具体的检查。
 	klog.V(1).Infoln("[preflight] Running configuration dependant checks")
 	if j.Cfg().ControlPlane != nil {
-		// Checks if the cluster configuration supports
-		// joining a new control plane instance and if all the necessary certificates are provided
+		// 检查集群配置是否支持加入新的控制平面实例，
+		// 以及是否提供了全部必需证书。
 		hasCertificateKey := len(j.CertificateKey()) > 0
 		if err := checkIfReadyForAdditionalControlPlane(&initCfg.ClusterConfiguration, hasCertificateKey); err != nil {
-			// outputs the not ready for hosting a new control plane instance message
+			// 输出节点尚不适合承载新控制平面实例的消息。
 			ctx := map[string]string{
 				"Error": err.Error(),
 			}
@@ -121,7 +121,7 @@ func runPreflight(c workflow.RunData) error {
 			return errors.New(msg.String())
 		}
 
-		// run kubeadm init preflight checks for checking all the prerequisites
+		// 运行 kubeadm init 预检，检查全部前置条件。
 		fmt.Println("[preflight] Running pre-flight checks before initializing the new control plane instance")
 
 		if err := preflight.RunInitNodeChecks(utilsexec.New(), initCfg, j.IgnorePreflightErrors(), true, hasCertificateKey); err != nil {
@@ -143,16 +143,16 @@ func runPreflight(c workflow.RunData) error {
 	return nil
 }
 
-// checkIfReadyForAdditionalControlPlane ensures that the cluster is in a state that supports
-// joining an additional control plane instance and if the node is ready to preflight
+// checkIfReadyForAdditionalControlPlane 确保集群状态支持加入额外的控制平面实例，
+// 且节点已准备好接受预检。
 func checkIfReadyForAdditionalControlPlane(initConfiguration *kubeadmapi.ClusterConfiguration, hasCertificateKey bool) error {
-	// blocks if the cluster was created without a stable control plane endpoint
+	// 若集群创建时没有稳定控制平面端点，则阻塞。
 	if initConfiguration.ControlPlaneEndpoint == "" {
 		return errors.New("unable to add a new control plane instance to a cluster that doesn't have a stable controlPlaneEndpoint address")
 	}
 
 	if !hasCertificateKey {
-		// checks if the certificates are provided and are still valid, not expired yet.
+		// 检查证书是否已提供且仍有效、尚未过期。
 		if ret, err := certs.SharedCertificateExists(initConfiguration); !ret {
 			return err
 		}

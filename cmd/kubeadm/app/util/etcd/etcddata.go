@@ -22,7 +22,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// CreateDataDirectory creates the etcd data directory (commonly /var/lib/etcd) with the right permissions.
+// CreateDataDirectory 创建 etcd 数据目录（通常为 /var/lib/etcd）并设置正确权限。
 func CreateDataDirectory(dir string) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create the etcd data directory: %q", dir)

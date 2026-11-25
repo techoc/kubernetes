@@ -38,7 +38,7 @@ func assertNotExists(t *testing.T, path string) {
 	}
 }
 
-// assertDirEmpty verifies a directory either does not exist, or is empty.
+// assertDirEmpty 校验目录不存在或为空。
 func assertDirEmpty(t *testing.T, path string) {
 	dac := preflight.DirAvailableCheck{Path: path}
 	_, errors := dac.Check()
@@ -157,7 +157,7 @@ func TestConfigDirCleaner(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Logf("Running test: %s", name)
 
-			// Create a temporary directory for our fake config dir:
+			// 为伪配置目录创建临时目录。
 			tmpDir, err := os.MkdirTemp("", "kubeadm-reset-test")
 			if err != nil {
 				t.Errorf("Unable to create temporary directory: %s", err)
@@ -189,7 +189,7 @@ func TestConfigDirCleaner(t *testing.T) {
 			}
 			resetConfigDir(tmpDir, dirsToClean, false)
 
-			// Verify the files we cleanup implicitly in every test:
+			// 验证每个测试都会隐式清理的文件。
 			assertExists(t, tmpDir)
 			assertNotExists(t, filepath.Join(tmpDir, kubeadmconstants.AdminKubeConfigFileName))
 			assertNotExists(t, filepath.Join(tmpDir, kubeadmconstants.KubeletKubeConfigFileName))
@@ -197,7 +197,7 @@ func TestConfigDirCleaner(t *testing.T) {
 			assertDirEmpty(t, filepath.Join(tmpDir, "pki"))
 			assertDirEmpty(t, filepath.Join(tmpDir, "tmp"))
 
-			// Verify the files as requested by the test:
+			// 验证测试要求清理的文件。
 			for _, path := range test.verifyExists {
 				assertExists(t, filepath.Join(tmpDir, path))
 			}

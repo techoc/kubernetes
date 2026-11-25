@@ -297,7 +297,7 @@ func TestBytesToInitConfiguration(t *testing.T) {
 				}
 
 				if !tc.expectedError {
-					// Ignore dynamic fields that may be set during defaulting
+					// 忽略默认值设置过程中可能赋值的动态字段。
 					diffOpts := []cmp.Option{
 						cmpopts.IgnoreFields(kubeadmapi.NodeRegistrationOptions{}, "Name"),
 						cmpopts.IgnoreFields(kubeadmapi.InitConfiguration{}, "Timeouts", "BootstrapTokens", "LocalAPIEndpoint"),
@@ -315,8 +315,8 @@ func TestBytesToInitConfiguration(t *testing.T) {
 }
 
 func TestSetInitDynamicDefaultsSkipAPIEndpoint(t *testing.T) {
-	// "not-an-ip" is a sentinel that would cause SetAPIEndpointDynamicDefaults to return
-	// an error if invoked. With skipAPIEndpoint=true, the value must be left untouched.
+	// "not-an-ip" 是哨兵值；调用 SetAPIEndpointDynamicDefaults 会返回错误。
+	// skipAPIEndpoint=true 时必须保持该值不变。
 	const sentinel = "not-an-ip"
 
 	tests := []struct {

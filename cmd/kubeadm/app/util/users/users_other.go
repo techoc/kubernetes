@@ -16,41 +16,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package users contains utilities for managing the users.
+// Package users 包含管理用户的工具。
 package users
 
-// EntryMap is empty on non-Linux.
+// EntryMap 在非 Linux 上为空。
 type EntryMap struct{}
 
-// UsersAndGroups is empty on non-Linux.
+// UsersAndGroups 在非 Linux 上为空。
 type UsersAndGroups struct{}
 
-// ID is a NO-OP on non-Linux.
+// ID 在非 Linux 上为空操作。
 func (*EntryMap) ID(string) *int64 {
 	return nil
 }
 
-// String is NO-OP on non-Linux.
+// String 在非 Linux 上为空操作。
 func (*EntryMap) String() string {
 	return ""
 }
 
-// AddUsersAndGroups is a NO-OP on non-Linux.
+// AddUsersAndGroups 在非 Linux 上为空操作。
 func AddUsersAndGroups() (*UsersAndGroups, error) {
 	return nil, nil
 }
 
-// RemoveUsersAndGroups is a NO-OP on non-Linux.
+// RemoveUsersAndGroups 在非 Linux 上为空操作。
 func RemoveUsersAndGroups() error {
 	return nil
 }
 
-// UpdatePathOwnerAndPermissions is a NO-OP on non-Linux.
+// UpdatePathOwnerAndPermissions 在非 Linux 上为空操作。
 func UpdatePathOwnerAndPermissions(path string, uid, gid int64, perms uint32) error {
 	return nil
 }
 
-// UpdatePathOwner is a NO-OP on non-Linux.
+// UpdatePathOwner 在非 Linux 上为空操作。
 func UpdatePathOwner(dirPath string, uid, gid int64) error {
 	return nil
 }

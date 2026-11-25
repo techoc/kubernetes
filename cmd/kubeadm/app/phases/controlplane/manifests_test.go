@@ -49,7 +49,7 @@ var cpVersion = kubeadmconstants.MinimumControlPlaneVersion.WithPreRelease("beta
 
 func TestGetStaticPodSpecs(t *testing.T) {
 
-	// Creates a Cluster Configuration
+	// 创建 ClusterConfiguration
 	cfg := &kubeadmapi.ClusterConfiguration{
 		KubernetesVersion: "v1.9.0",
 		Scheduler: kubeadmapi.ControlPlaneComponent{ExtraEnvs: []kubeadmapi.EnvVar{
@@ -59,7 +59,7 @@ func TestGetStaticPodSpecs(t *testing.T) {
 		}},
 	}
 
-	// Executes GetStaticPodSpecs
+	// 执行 GetStaticPodSpecs
 	specs := GetStaticPodSpecs(cfg, &kubeadmapi.APIEndpoint{
 		BindPort: kubeadmconstants.KubeAPIServerPort,
 	}, []kubeadmapi.EnvVar{})
@@ -124,9 +124,9 @@ func TestGetStaticPodSpecs(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// assert the spec for the staticPodName exists
+			// 断言 staticPodName 对应的配置存在
 			if spec, ok := specs[tc.staticPodName]; ok {
-				// Assert each specs refers to the right pod
+				// 断言每个配置都指向正确的 Pod
 				if spec.Spec.Containers[0].Name != tc.staticPodName {
 					t.Errorf("getKubeConfigSpecs spec for %s contains pod %s, expects %s", tc.staticPodName, spec.Spec.Containers[0].Name, tc.staticPodName)
 				}
@@ -197,23 +197,23 @@ func TestCreateStaticPodFilesAndWrappers(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create temp folder for the test case
+			// 为测试用例创建临时目录
 			tmpdir := t.TempDir()
 
-			// Creates a Cluster Configuration
+			// 创建 ClusterConfiguration
 			cfg := &kubeadmapi.ClusterConfiguration{
 				KubernetesVersion: "v1.9.0",
 			}
 
-			// Execute createStaticPodFunction
+			// 执行 createStaticPodFunction
 			manifestPath := filepath.Join(tmpdir, kubeadmconstants.ManifestsSubDirName)
-			err := CreateStaticPodFiles(manifestPath, "", cfg, &kubeadmapi.APIEndpoint{}, false /* isDryRun */, test.components...)
+			err := CreateStaticPodFiles(manifestPath, "", cfg, &kubeadmapi.APIEndpoint{}, false /* 是否试运行 */, test.components...)
 			if err != nil {
 				t.Errorf("Error executing createStaticPodFunction: %v", err)
 				return
 			}
 
-			// Assert expected files are there
+			// 断言预期文件均存在
 			filesutil.AssertFilesCount(t, manifestPath, len(test.components))
 
 			for _, fileName := range test.components {
@@ -224,10 +224,10 @@ func TestCreateStaticPodFilesAndWrappers(t *testing.T) {
 }
 
 func TestCreateStaticPodFilesWithPatches(t *testing.T) {
-	// Create temp folder for the test case
+	// 为测试用例创建临时目录
 	tmpdir := t.TempDir()
 
-	// Creates a Cluster Configuration
+	// 创建 ClusterConfiguration
 	cfg := &kubeadmapi.ClusterConfiguration{
 		KubernetesVersion: "v1.9.0",
 	}
@@ -249,9 +249,9 @@ func TestCreateStaticPodFilesWithPatches(t *testing.T) {
 		t.Fatalf("WriteFile returned unexpected error: %v", err)
 	}
 
-	// Execute createStaticPodFunction with patches
+	// 执行 createStaticPodFunction 并应用补丁
 	manifestPath := filepath.Join(tmpdir, kubeadmconstants.ManifestsSubDirName)
-	err = CreateStaticPodFiles(manifestPath, patchesPath, cfg, &kubeadmapi.APIEndpoint{}, false /* isDryRun */, kubeadmconstants.KubeAPIServer)
+	err = CreateStaticPodFiles(manifestPath, patchesPath, cfg, &kubeadmapi.APIEndpoint{}, false /* 是否试运行 */, kubeadmconstants.KubeAPIServer)
 	if err != nil {
 		t.Errorf("Error executing createStaticPodFunction: %v", err)
 		return
@@ -627,7 +627,7 @@ func TestGetAPIServerCommand(t *testing.T) {
 			},
 		},
 		{
-			// Note that we do not block it at this level but api server would fail to start.
+			// 注意：此层不会阻止，但 API Server 将无法启动。
 			name: "authorization-config and authorization-mode extra-args",
 			cfg: &kubeadmapi.ClusterConfiguration{
 				Networking:      kubeadmapi.Networking{ServiceSubnet: "bar", DNSDomain: "cluster.local"},
@@ -751,8 +751,8 @@ func errorDiffArguments(t *testing.T, name string, actual, expected []string) {
 		expectedShort, actualShort)
 }
 
-// removeCommon removes common items from left list
-// makes comparing two cmdline (with lots of arguments) easier
+// removeCommon 从左侧列表移除共同项，
+// 使包含大量参数的两条命令行更易比较。
 func removeCommon(left, right []string) []string {
 	origSet := sets.New(left...)
 	origSet.Delete(right...)
@@ -1119,7 +1119,7 @@ func TestGetControllerManagerCommandExternalCA(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			pkiutiltesting.Reset()
 
-			// Create temp folder for the test case
+			// 为测试用例创建临时目录
 			tmpdir := t.TempDir()
 			test.cfg.CertificatesDir = tmpdir
 
@@ -1127,7 +1127,7 @@ func TestGetControllerManagerCommandExternalCA(t *testing.T) {
 				t.Errorf("failed creating pki assets: %v", err)
 			}
 
-			// delete ca.key and front-proxy-ca.key if test.caKeyPresent is false
+			// 如果 test.caKeyPresent 为 false，删除 ca.key 和 front-proxy-ca.key
 			if !test.caKeyPresent {
 				if err := os.Remove(filepath.Join(test.cfg.CertificatesDir, kubeadmconstants.CAKeyName)); err != nil {
 					t.Errorf("failed removing %s: %v", kubeadmconstants.CAKeyName, err)

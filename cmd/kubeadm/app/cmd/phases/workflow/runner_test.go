@@ -313,7 +313,7 @@ func phaseBuilder6(name string, args cobra.PositionalArgs, phases ...Phase) Phas
 	}
 }
 
-// customArgs is a custom cobra.PositionArgs function
+// customArgs 是自定义 cobra.PositionArgs 函数。
 func customArgs(cmd *cobra.Command, args []string) error {
 	for _, a := range args {
 		if a != "qux" {
@@ -325,8 +325,8 @@ func customArgs(cmd *cobra.Command, args []string) error {
 
 func TestBindToCommandArgRequirements(t *testing.T) {
 
-	// because cobra.ExactArgs(1) == cobra.ExactArgs(3), it is needed
-	// to run test argument sets that both pass and fail to ensure the correct function was set.
+	// 由于 cobra.ExactArgs(1) == cobra.ExactArgs(3)，需运行分别通过和失败的参数集，
+	// 以确保设置的是正确的函数。
 	var usecases = []struct {
 		name      string
 		runner    Runner
@@ -387,7 +387,7 @@ func TestBindToCommandArgRequirements(t *testing.T) {
 
 			rt.runner.BindToCommand(rt.cmd)
 
-			// Checks that cmd gets a new phase subcommand
+			// 检查命令获得新的阶段子命令。
 			phaseCmd := getCmd(rt.cmd, "phase")
 			if phaseCmd == nil {
 				t.Error("cmd didn't have phase subcommand\n")
@@ -402,13 +402,13 @@ func TestBindToCommandArgRequirements(t *testing.T) {
 					continue
 				}
 
-				// Test passing argument set
+				// 测试通过的参数集。
 				err := cCmd.Args(cCmd, args.pass)
 				if err != nil {
 					t.Errorf("command %s should validate the args: %v\n %v", cCmd.Name(), args.pass, err)
 				}
 
-				// Test failing argument set
+				// 测试失败的参数集。
 				err = cCmd.Args(cCmd, args.fail)
 
 				if err == nil {
@@ -451,7 +451,7 @@ func TestBindToCommand(t *testing.T) {
 				Phases: []Phase{phaseBuilder4("foo", []string{"flag1"})},
 			},
 			expectedCmdAndFlags: map[string][]string{
-				"phase foo": {"flag1"}, //not "flag2"
+				"phase foo": {"flag1"}, // 不含 "flag2"。
 			},
 		},
 		{
@@ -460,7 +460,7 @@ func TestBindToCommand(t *testing.T) {
 				Phases: []Phase{
 					phaseBuilder4("foo", []string{"flag3"}),
 					phaseBuilder4("bar", []string{"flag1", "flag2", "flag3"}),
-					phaseBuilder4("baz", []string{"flag1"}), //test if additional flags are filtered too
+					phaseBuilder4("baz", []string{"flag1"}), // 测试额外参数是否也被过滤。
 				},
 			},
 			setAdditionalFlags: func(flags *pflag.FlagSet) {
@@ -488,7 +488,7 @@ func TestBindToCommand(t *testing.T) {
 				Phases: []Phase{
 					phaseBuilder4("foo", []string{"flag3"},
 						phaseBuilder4("bar", []string{"flag1", "flag2", "flag3"}),
-						phaseBuilder4("baz", []string{"flag1"}), //test if additional flags are filtered too
+						phaseBuilder4("baz", []string{"flag1"}), // 测试额外参数是否也被过滤。
 						phaseBuilder5("qux", localFlags),
 					),
 				},
@@ -522,7 +522,7 @@ func TestBindToCommand(t *testing.T) {
 
 			rt.runner.BindToCommand(cmd)
 
-			// in case of no phases, checks that cmd is untouched
+			// 没有阶段时，检查命令保持不变。
 			if len(rt.runner.Phases) == 0 {
 				if cmd.Long != "" {
 					t.Error("cmd.Long is set while it should be leaved untouched\n")
@@ -539,9 +539,9 @@ func TestBindToCommand(t *testing.T) {
 				return
 			}
 
-			// Otherwise, if there are phases
+			// 反之，若存在阶段，
 
-			// Checks that cmd get the description set and the skip-phases flags
+			// 检查命令已设置描述和 skip-phases 参数。
 			if cmd.Long == "" {
 				t.Error("cmd.Long not set\n")
 			}
@@ -550,7 +550,7 @@ func TestBindToCommand(t *testing.T) {
 				t.Error("cmd didn't have skip-phases flag\n")
 			}
 
-			// Checks that cmd gets a new phase subcommand (without local flags)
+			// 检查命令获得新的阶段子命令（不含本地参数）。
 			phaseCmd := getCmd(cmd, "phase")
 			if phaseCmd == nil {
 				t.Error("cmd didn't have phase subcommand\n")
@@ -560,7 +560,7 @@ func TestBindToCommand(t *testing.T) {
 				t.Errorf("command phase didn't have expected flags: %v\n", err)
 			}
 
-			// Checks that cmd subcommand gets subcommand for phases (without flags properly sets)
+			// 检查命令子命令获得阶段子命令（参数未正确设置）。
 			for c, flags := range rt.expectedCmdAndFlags {
 
 				cCmd := getCmd(cmd, c)

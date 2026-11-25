@@ -52,7 +52,7 @@ var (
 	`)
 )
 
-// newCmdKubeConfigUtility returns main command for kubeconfig phase
+// newCmdKubeConfigUtility 返回 kubeconfig 阶段的主命令。
 func newCmdKubeConfigUtility(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "kubeconfig",
@@ -64,7 +64,7 @@ func newCmdKubeConfigUtility(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-// newCmdUserKubeConfig returns sub commands for kubeconfig phase
+// newCmdUserKubeConfig 返回 kubeconfig 阶段的子命令。
 func newCmdUserKubeConfig(out io.Writer) *cobra.Command {
 
 	initCfg := &kubeadmapiv1.InitConfiguration{}
@@ -76,14 +76,14 @@ func newCmdUserKubeConfig(out io.Writer) *cobra.Command {
 		validityPeriod             time.Duration
 	)
 
-	// Creates the UX Command
+	// 创建面向用户的命令。
 	cmd := &cobra.Command{
 		Use:     "user",
 		Short:   "Output a kubeconfig file for an additional user",
 		Long:    userKubeconfigLongDesc,
 		Example: userKubeconfigExample,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// This call returns the ready-to-use configuration based on the defaults populated by flags
+			// 此调用返回基于参数填充的默认值、可直接使用的配置。
 			internalCfg, err := configutil.LoadOrDefaultInitConfiguration(cfgPath, initCfg, clusterCfg, configutil.LoadOrDefaultConfigurationOptions{
 				SkipCRIDetect: true,
 			})
@@ -105,12 +105,12 @@ func newCmdUserKubeConfig(out io.Writer) *cobra.Command {
 				notAfter = startTime.Add(validityPeriod)
 			}
 
-			// if the kubeconfig file for an additional user has to use a token, use it
+			// 若额外用户的 kubeconfig 需要使用令牌，则使用该令牌。
 			if token != "" {
 				return kubeconfigphase.WriteKubeConfigWithToken(out, internalCfg, clientName, token, notAfter)
 			}
 
-			// Otherwise, write a kubeconfig file with a generate client cert
+			// 否则，写入包含生成的客户端证书的 kubeconfig 文件。
 			return kubeconfigphase.WriteKubeConfigWithClientCert(out, internalCfg, clientName, organizations, notAfter)
 		},
 		Args: cobra.NoArgs,
@@ -118,7 +118,7 @@ func newCmdUserKubeConfig(out io.Writer) *cobra.Command {
 
 	options.AddConfigFlag(cmd.Flags(), &cfgPath)
 
-	// Add command specific flags
+	// 添加命令专用参数。
 	cmd.Flags().StringVar(&token, options.TokenStr, token, "The token that should be used as the authentication mechanism for this kubeconfig, instead of client certificates")
 	cmd.Flags().StringVar(&clientName, "client-name", clientName, "The name of user. It will be used as the CN if client certificates are created")
 	cmd.Flags().StringSliceVar(&organizations, "org", organizations, "The organizations of the client certificate. It will be used as the O if client certificates are created")

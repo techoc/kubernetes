@@ -59,7 +59,7 @@ func TestUploadConfiguration(t *testing.T) {
 			cfg.NodeRegistration.CRISocket = kubeadmconstants.DefaultCRISocket
 
 			client := clientsetfake.NewSimpleClientset()
-			// For idempotent test, we check the result of the second call.
+			// 幂等性测试检查第二次调用的结果。
 			if err := UploadConfiguration(cfg, client); err != nil {
 				t2.Fatalf("UploadConfiguration() error = %v", err)
 			}
@@ -87,7 +87,7 @@ func TestUploadConfiguration(t *testing.T) {
 					t2.Errorf("unexpected component configs in decodedCfg: %d", len(decodedCfg.ComponentConfigs))
 				}
 
-				// Force initialize with an empty map so that reflect.DeepEqual works
+				// 强制初始化为空映射，使 reflect.DeepEqual 可正常工作。
 				decodedCfg.ComponentConfigs = kubeadmapi.ComponentConfigMap{}
 
 				if !reflect.DeepEqual(decodedCfg, &cfg.ClusterConfiguration) {

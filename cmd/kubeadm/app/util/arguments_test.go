@@ -331,7 +331,7 @@ func TestRoundtrip(t *testing.T) {
 
 	for _, rt := range tests {
 		t.Run(rt.name, func(t *testing.T) {
-			// These two methods should be each other's opposite functions, test that by chaining the methods and see if you get the same result back
+			// 这两个方法应互为逆操作；串联调用后应得到相同结果，以此验证。
 			actual := ArgumentsToCommand(ArgumentsFromCommand(rt.args), []kubeadmapi.Arg{})
 			sort.Strings(actual)
 			sort.Strings(rt.args)

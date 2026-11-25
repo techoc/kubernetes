@@ -139,7 +139,7 @@ func TestRunCreateToken(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bts, err := bootstraptokenv1.NewBootstrapTokenString(tc.token)
-			if err != nil && len(tc.token) != 0 { // if tc.token is "" it's okay as it will be generated later at runtime
+			if err != nil && len(tc.token) != 0 { // 若 tc.token 为空，将在运行时生成，因此此处允许为空。
 				t.Fatalf("token couldn't be parsed for testing: %v", err)
 			}
 
@@ -223,8 +223,7 @@ func TestNewCmdToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// the command is created for each test so that the kubeConfigFile
-			// variable in newCmdToken() is reset.
+			// 每个测试都重新创建命令，以重置 newCmdToken() 中的 kubeConfigFile 变量。
 			cmd := newCmdToken(&buf, &bufErr)
 			if _, err = f.WriteString(tc.configToWrite); err != nil {
 				t.Errorf("Unable to write test file %q: %v", fullPath, err)
@@ -251,12 +250,12 @@ func TestGetClientForTokenCommands(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	fullPath := filepath.Join(tmpDir, testConfigTokenFile)
 
-	// test dryRun = false on a non-existing file
+	// 测试文件不存在时 dryRun = false。
 	if _, err = getClientForTokenCommands(fullPath, false); err == nil {
 		t.Errorf("dry-run: false; did no fail for test file %q: %v", fullPath, err)
 	}
 
-	// test dryRun = true on a non-existing file
+	// 测试文件不存在时 dryRun = true。
 	if _, err = getClientForTokenCommands(fullPath, true); err == nil {
 		t.Errorf("dry-run: true; did no fail for test file %q: %v", fullPath, err)
 	}
@@ -271,7 +270,7 @@ func TestGetClientForTokenCommands(t *testing.T) {
 		t.Errorf("Unable to write test file %q: %v", fullPath, err)
 	}
 
-	// test dryRun = true on an existing file
+	// 测试文件存在时 dryRun = true。
 	if _, err = getClientForTokenCommands(fullPath, true); err != nil {
 		t.Errorf("dry-run: true; failed for test file %q: %v", fullPath, err)
 	}
@@ -302,13 +301,13 @@ func TestRunDeleteTokens(t *testing.T) {
 		t.Errorf("unable to create client for test file %q: %v", fullPath, err)
 	}
 
-	// test valid; should not fail
-	// for some reason Secrets().Delete() does not fail even for this dummy config
+	// 测试合法输入，预期不失败。
+	// 由于某种原因，即使对于此伪配置，Secrets().Delete() 也不会失败。
 	if err = RunDeleteTokens(&buf, client, []string{"abcdef.1234567890123456", "abcdef.2345678901234567"}); err != nil {
 		t.Errorf("RunDeleteToken() failed for a valid token: %v", err)
 	}
 
-	// test invalid token; should fail
+	// 测试非法令牌，预期失败。
 	if err = RunDeleteTokens(&buf, client, []string{"invalid-token"}); err == nil {
 		t.Errorf("RunDeleteToken() succeeded for an invalid token: %v", err)
 	}

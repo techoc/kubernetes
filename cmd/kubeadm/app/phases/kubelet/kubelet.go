@@ -25,9 +25,9 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/initsystem"
 )
 
-// TryStartKubelet attempts to bring up kubelet service
+// TryStartKubelet 尝试启动 kubelet 服务。
 func TryStartKubelet() {
-	// If we notice that the kubelet service is inactive, try to start it
+	// 若发现 kubelet 服务未运行，则尝试启动。
 	initSystem, err := initsystem.GetInitSystem()
 	if err != nil {
 		fmt.Println("[kubelet-start] No supported init system detected, won't make sure the kubelet is running properly.")
@@ -38,16 +38,16 @@ func TryStartKubelet() {
 		fmt.Println("[kubelet-start] Couldn't detect a kubelet service, can't make sure the kubelet is running properly.")
 	}
 
-	// This runs "systemctl daemon-reload && systemctl restart kubelet"
+	// 执行 "systemctl daemon-reload && systemctl restart kubelet"。
 	if err := initSystem.ServiceRestart(kubeadmconstants.Kubelet); err != nil {
 		klog.Warningf("[kubelet-start] WARNING: unable to start the kubelet service: [%v]\n", err)
 		fmt.Printf("[kubelet-start] Please ensure kubelet is reloaded and running manually.\n")
 	}
 }
 
-// TryStopKubelet attempts to bring down the kubelet service momentarily
+// TryStopKubelet 尝试临时停止 kubelet 服务。
 func TryStopKubelet() {
-	// If we notice that the kubelet service is inactive, try to start it
+	// 若发现 kubelet 服务未运行，则尝试启动。
 	initSystem, err := initsystem.GetInitSystem()
 	if err != nil {
 		fmt.Println("[kubelet-start] No supported init system detected, won't make sure the kubelet not running for a short period of time while setting up configuration for it.")
@@ -58,15 +58,15 @@ func TryStopKubelet() {
 		fmt.Println("[kubelet-start] Couldn't detect a kubelet service, can't make sure the kubelet not running for a short period of time while setting up configuration for it.")
 	}
 
-	// This runs "systemctl daemon-reload && systemctl stop kubelet"
+	// 执行 "systemctl daemon-reload && systemctl stop kubelet"。
 	if err := initSystem.ServiceStop(kubeadmconstants.Kubelet); err != nil {
 		klog.Warningf("[kubelet-start] WARNING: unable to stop the kubelet service momentarily: [%v]\n", err)
 	}
 }
 
-// TryRestartKubelet attempts to restart the kubelet service
+// TryRestartKubelet 尝试重启 kubelet 服务。
 func TryRestartKubelet() {
-	// If we notice that the kubelet service is inactive, try to start it
+	// 若发现 kubelet 服务未运行，则尝试启动。
 	initSystem, err := initsystem.GetInitSystem()
 	if err != nil {
 		fmt.Println("[kubelet-start] No supported init system detected, won't make sure the kubelet not running for a short period of time while setting up configuration for it.")
@@ -77,7 +77,7 @@ func TryRestartKubelet() {
 		fmt.Println("[kubelet-start] Couldn't detect a kubelet service, can't make sure the kubelet not running for a short period of time while setting up configuration for it.")
 	}
 
-	// This runs "systemctl daemon-reload && systemctl stop kubelet"
+	// 执行 "systemctl daemon-reload && systemctl stop kubelet"。
 	if err := initSystem.ServiceRestart(kubeadmconstants.Kubelet); err != nil {
 		klog.Warningf("[kubelet-start] WARNING: unable to restart the kubelet service momentarily: [%v]\n", err)
 	}

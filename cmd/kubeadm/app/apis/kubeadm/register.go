@@ -21,16 +21,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是此包使用的 API 组名。
 const GroupName = "kubeadm.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
+	// SchemeBuilder 指向要添加到 Scheme 的函数列表。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme applies all the stored functions to the scheme.
+	// AddToScheme 将所有已保存的函数应用到 Scheme。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 

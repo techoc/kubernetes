@@ -50,8 +50,7 @@ const (
 	externalEtcdKey  = "external-etcd.key"
 )
 
-// createShortLivedBootstrapToken creates the token used to manager kubeadm-certs
-// and return the tokenID
+// createShortLivedBootstrapToken 创建用于管理 kubeadm-certs 的短期令牌，并返回 tokenID。
 func createShortLivedBootstrapToken(client clientset.Interface) (string, error) {
 	tokenStr, err := bootstraputil.GenerateBootstrapToken()
 	if err != nil {
@@ -75,7 +74,7 @@ func createShortLivedBootstrapToken(client clientset.Interface) (string, error) 
 	return tokens[0].Token.ID, nil
 }
 
-// CreateCertificateKey returns a cryptographically secure random key
+// CreateCertificateKey 返回密码学安全的随机密钥。
 func CreateCertificateKey() (string, error) {
 	randBytes, err := cryptoutil.CreateRandBytes(kubeadmconstants.CertificateKeySize)
 	if err != nil {
@@ -84,7 +83,7 @@ func CreateCertificateKey() (string, error) {
 	return hex.EncodeToString(randBytes), nil
 }
 
-// UploadCerts save certs needs to join a new control-plane on kubeadm-certs secret.
+// UploadCerts 将新控制平面节点加入所需的证书保存到 kubeadm-certs Secret。
 func UploadCerts(client clientset.Interface, cfg *kubeadmapi.InitConfiguration, key string) error {
 	fmt.Printf("[upload-certs] Storing the certificates in Secret %q in the %q Namespace\n", kubeadmconstants.KubeadmCertsSecret, metav1.NamespaceSystem)
 	decodedKey, err := hex.DecodeString(key)
@@ -214,7 +213,7 @@ func getDataFromDisk(cfg *kubeadmapi.InitConfiguration, key []byte) (map[string]
 	return secretData, nil
 }
 
-// DownloadCerts downloads the certificates needed to join a new control plane.
+// DownloadCerts 下载加入新控制平面所需的证书。
 func DownloadCerts(client clientset.Interface, cfg *kubeadmapi.InitConfiguration, key string) error {
 	fmt.Printf("[download-certs] Downloading the certificates in Secret %q in the %q Namespace\n", kubeadmconstants.KubeadmCertsSecret, metav1.NamespaceSystem)
 
@@ -275,13 +274,12 @@ func getSecret(client clientset.Interface) (*v1.Secret, error) {
 func getDataFromSecret(secret *v1.Secret, key []byte) (map[string][]byte, error) {
 	secretData := map[string][]byte{}
 	for secretName, encryptedSecret := range secret.Data {
-		// In some cases the secret might have empty data if the secrets were not present on disk
-		// when uploading. This can specially happen with external insecure etcd (no certs)
+		// 如果上传时磁盘上没有相应 Secret，kubeadm-certs 中的数据可能为空；
+		// 使用无证书的外部不安全 etcd 时尤其如此。
 		if len(encryptedSecret) > 0 {
 			cert, err := cryptoutil.DecryptBytes(encryptedSecret, key)
 			if err != nil {
-				// If any of the decrypt operations fail do not return a partial result,
-				// return an empty result immediately
+				// 任一解密操作失败时不要返回部分结果，立即返回空结果
 				return map[string][]byte{}, err
 			}
 			secretData[secretName] = cert

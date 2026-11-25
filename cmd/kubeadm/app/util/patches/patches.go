@@ -39,35 +39,33 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// PatchTarget defines a target to be patched, such as a control-plane static Pod.
+// PatchTarget 定义待修补目标，例如控制平面静态 Pod。
 type PatchTarget struct {
-	// Name must be the name of a known target. In the case of Kubernetes objects
-	// this is likely to match the ObjectMeta.Name of a target.
+	// Name 必须是已知目标名称。对于 Kubernetes 对象，通常与目标的 ObjectMeta.Name 匹配。
 	Name string
 
-	// StrategicMergePatchObject is only used for strategic merge patches.
-	// It represents the underlying object type that is patched - e.g. "v1.Pod"
+	// StrategicMergePatchObject 仅用于战略合并补丁，表示被修补的底层对象类型，如 "v1.Pod"。
 	StrategicMergePatchObject interface{}
 
-	// Data must contain the bytes that will be patched.
+	// Data 必须包含待修补的字节。
 	Data []byte
 }
 
-// PatchManager defines an object that can apply patches.
+// PatchManager 定义可应用补丁的对象。
 type PatchManager struct {
 	patchSets    []*PatchSet
 	knownTargets []string
 	output       io.Writer
 }
 
-// PatchSet defines a set of patches of a certain type that can patch a PatchTarget.
+// PatchSet 定义一组可修补 PatchTarget 的同类补丁。
 type PatchSet struct {
 	targetName string
 	patchType  types.PatchType
 	patches    []string
 }
 
-// String() is used for unit-testing.
+// String() 用于单元测试。
 func (ps *PatchSet) String() string {
 	return fmt.Sprintf(
 		"{%q, %q, %#v}",
@@ -78,11 +76,11 @@ func (ps *PatchSet) String() string {
 }
 
 const (
-	// KubeletConfiguration defines the kubeletconfiguration patch target.
+	// KubeletConfiguration 定义 kubeletconfiguration 补丁目标。
 	KubeletConfiguration = "kubeletconfiguration"
-	// CoreDNSDeployment defines the corednsdeployment patch target.
+	// CoreDNSDeployment 定义 corednsdeployment 补丁目标。
 	CoreDNSDeployment = "corednsdeployment"
-	// KubeProxyDaemonSet defines the kubeproxydaemonset patch target.
+	// KubeProxyDaemonSet 定义 kubeproxydaemonset 补丁目标。
 	KubeProxyDaemonSet = "kubeproxydaemonset"
 )
 
@@ -94,7 +92,7 @@ var (
 		"json":      types.JSONPatchType,
 		"merge":     types.MergePatchType,
 		"strategic": types.StrategicMergePatchType,
-		"":          types.StrategicMergePatchType, // Default
+		"":          types.StrategicMergePatchType, // "":          types.StrategicMergePatchType, // 默认
 	}
 	patchTypeList    = []string{"json", "merge", "strategic"}
 	patchTypesJoined = strings.Join(patchTypeList, "|")
@@ -113,12 +111,12 @@ var (
 	}
 )
 
-// KnownTargets returns the locally defined knownTargets.
+// KnownTargets 返回本地定义的 knownTargets。
 func KnownTargets() []string {
 	return knownTargets
 }
 
-// NewPatchManager creates a patch manager that can be used to apply patches to "knownTargets".
+// NewPatchManager 创建可将补丁应用到 "knownTargets" 的补丁管理器。
 func NewPatchManager(patchSets []*PatchSet, knownTargets []string, output io.Writer) *PatchManager {
 	return &PatchManager{
 		patchSets:    patchSets,
@@ -127,9 +125,8 @@ func NewPatchManager(patchSets []*PatchSet, knownTargets []string, output io.Wri
 	}
 }
 
-// GetPatchManagerForPath creates a patch manager that can be used to apply patches to "knownTargets".
-// "path" should contain patches that can be used to patch the "knownTargets".
-// If "output" is non-nil, messages about actions performed by the manager would go on this io.Writer.
+// GetPatchManagerForPath 创建可将补丁应用到 "knownTargets" 的补丁管理器。
+// "path" 应包含可用于这些目标的补丁；output 非空时，操作消息写入该 io.Writer。
 func GetPatchManagerForPath(path string, knownTargets []string, output io.Writer) (*PatchManager, error) {
 	pathLock.RLock()
 	if pm, known := pathCache[path]; known {
@@ -144,7 +141,7 @@ func GetPatchManagerForPath(path string, knownTargets []string, output io.Writer
 
 	fmt.Fprintf(output, "[patches] Reading patches from path %q\n", path)
 
-	// Get the files in the path.
+	// 获取路径中的文件。
 	patchSets, patchFiles, ignoredFiles, err := getPatchSetsFromPath(path, knownTargets, output)
 	if err != nil {
 		return nil, err
@@ -169,8 +166,7 @@ func GetPatchManagerForPath(path string, knownTargets []string, output io.Writer
 	return pm, nil
 }
 
-// ApplyPatchesToTarget takes a patch target and patches its "Data" using the patches
-// stored in the patch manager. The resulted "Data" is always converted to JSON.
+// ApplyPatchesToTarget 使用管理器中保存的补丁修补目标的 "Data"，结果始终转换为 JSON。
 func (pm *PatchManager) ApplyPatchesToTarget(patchTarget *PatchTarget) error {
 	var err error
 	var patchedData []byte
@@ -179,26 +175,26 @@ func (pm *PatchManager) ApplyPatchesToTarget(patchTarget *PatchTarget) error {
 		return errors.Errorf("unknown patch target name %q, must be one of %v", patchTarget.Name, pm.knownTargets)
 	}
 
-	// Always convert the target data to JSON.
+	// 始终将目标数据转换为 JSON。
 	patchedData, err = yaml.YAMLToJSON(patchTarget.Data)
 	if err != nil {
 		return err
 	}
 
-	// Iterate over the patchSets.
+	// 遍历 patchSets。
 	for _, patchSet := range pm.patchSets {
 		if patchSet.targetName != patchTarget.Name {
 			continue
 		}
 
-		// Iterate over the patches in the patchSets.
+		// 遍历 patchSets 中的补丁。
 		for _, patch := range patchSet.patches {
 			patchBytes := []byte(patch)
 
-			// Patch based on the patch type.
+			// 根据补丁类型应用。
 			switch patchSet.patchType {
 
-			// JSON patch.
+			// JSON 补丁。
 			case types.JSONPatchType:
 				var patchObj jsonpatch.Patch
 				patchObj, err = jsonpatch.DecodePatch(patchBytes)
@@ -206,11 +202,11 @@ func (pm *PatchManager) ApplyPatchesToTarget(patchTarget *PatchTarget) error {
 					patchedData, err = patchObj.Apply(patchedData)
 				}
 
-			// Merge patch.
+				// 合并补丁。
 			case types.MergePatchType:
 				patchedData, err = jsonpatch.MergePatch(patchedData, patchBytes)
 
-			// Strategic merge patch.
+				// 战略合并补丁。
 			case types.StrategicMergePatchType:
 				patchedData, err = strategicpatch.StrategicMergePatch(
 					patchedData,
@@ -228,19 +224,19 @@ func (pm *PatchManager) ApplyPatchesToTarget(patchTarget *PatchTarget) error {
 			fmt.Fprintf(pm.output, "[patches] Applied patch of type %q to target %q\n", patchSet.patchType, patchTarget.Name)
 		}
 
-		// Update the data for this patch target.
+		// 更新此补丁目标的数据。
 		patchTarget.Data = patchedData
 	}
 
 	return nil
 }
 
-// parseFilename validates a file name and retrieves the encoded target name and patch type.
-// - On unknown extension or target name it returns a warning
-// - On unknown patch type it returns an error
-// - On success it returns a target name and patch type
+// parseFilename 校验文件名并提取目标名称和补丁类型。
+// - 扩展名或目标名未知时返回警告。
+// - 补丁类型未知时返回错误。
+// - 成功时返回目标名和补丁类型。
 func parseFilename(fileName string, knownTargets []string) (string, types.PatchType, error, error) {
-	// Return a warning if the extension cannot be matched.
+	// 扩展名无法匹配时返回警告。
 	if !regExtension.MatchString(fileName) {
 		return "", "", errors.Errorf("the file extension must be one of %v", knownExtensions), nil
 	}
@@ -248,7 +244,7 @@ func parseFilename(fileName string, knownTargets []string) (string, types.PatchT
 	regFileNameSplit := regexp.MustCompile(
 		fmt.Sprintf(`^(%s)([^.+\n]*)?(\+)?(%s)?`, strings.Join(knownTargets, "|"), patchTypesJoined),
 	)
-	// Extract the target name and patch type. The resulting sub-string slice would look like this:
+	// 提取目标名和补丁类型，结果子串切片如下：
 	//   [full-match, targetName, suffix, +, patchType]
 	sub := regFileNameSplit.FindStringSubmatch(fileName)
 	if sub == nil {
@@ -264,12 +260,11 @@ func parseFilename(fileName string, knownTargets []string) (string, types.PatchT
 	return targetName, patchType, nil, nil
 }
 
-// CreatePatchSet creates a patchSet object, by splitting the given "data" by "\n---".
+// CreatePatchSet 按 "\n---" 分割给定 "data"，创建 patchSet。
 func CreatePatchSet(targetName string, patchType types.PatchType, data string) (*PatchSet, error) {
 	var patches []string
 
-	// Split the patches and convert them to JSON.
-	// Data that is already JSON will not cause an error.
+	// 拆分补丁并转换为 JSON；已是 JSON 的数据不会报错。
 	buf := bytes.NewBuffer([]byte(data))
 	reader := utilyaml.NewYAMLReader(bufio.NewReader(buf))
 	for {
@@ -299,14 +294,13 @@ func CreatePatchSet(targetName string, patchType types.PatchType, data string) (
 	}, nil
 }
 
-// getPatchSetsFromPath walks a path, ignores sub-directories and non-patch files, and
-// returns a list of patchFile objects.
+// getPatchSetsFromPath 遍历路径，忽略子目录和非补丁文件，返回 patchFile 列表。
 func getPatchSetsFromPath(targetPath string, knownTargets []string, output io.Writer) ([]*PatchSet, []string, []string, error) {
 	patchFiles := []string{}
 	ignoredFiles := []string{}
 	patchSets := []*PatchSet{}
 
-	// Check if targetPath is a directory.
+	// 检查 targetPath 是否为目录。
 	info, err := os.Lstat(targetPath)
 	if err != nil {
 		goto return_path_error
@@ -325,14 +319,14 @@ func getPatchSetsFromPath(targetPath string, knownTargets []string, output io.Wr
 			return err
 		}
 
-		// Sub-directories and "." are ignored.
+		// 忽略子目录和 "."。
 		if info.IsDir() {
 			return nil
 		}
 
 		baseName := info.Name()
 
-		// Parse the filename and retrieve the target and patch type
+		// 解析文件名，获取目标和补丁类型。
 		targetName, patchType, warn, err := parseFilename(baseName, knownTargets)
 		if err != nil {
 			return err
@@ -343,7 +337,7 @@ func getPatchSetsFromPath(targetPath string, knownTargets []string, output io.Wr
 			return nil
 		}
 
-		// Read the patch file.
+		// 读取补丁文件。
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return errors.Wrapf(err, "could not read the file %q", path)
@@ -355,7 +349,7 @@ func getPatchSetsFromPath(targetPath string, knownTargets []string, output io.Wr
 			return nil
 		}
 
-		// Create a patchSet object.
+		// 创建 patchSet。
 		patchSet, err := CreatePatchSet(targetName, patchType, string(data))
 		if err != nil {
 			return err

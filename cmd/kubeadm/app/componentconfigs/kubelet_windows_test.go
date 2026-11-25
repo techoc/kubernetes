@@ -61,7 +61,7 @@ func TestMutatePaths(t *testing.T) {
 			name: "valid: some fields are not absolute paths",
 			cfg: &kubeletconfig.KubeletConfiguration{
 				ResolverConfig: &fooResolverConfig,
-				StaticPodPath:  "./foo/staticpods", // not an absolute Unix path
+				StaticPodPath:  "./foo/staticpods", // 不是 Unix 绝对路径
 				Authentication: kubeletconfig.KubeletAuthentication{
 					X509: kubeletconfig.KubeletX509Authentication{
 						ClientCAFile: "/foo/ca.crt",

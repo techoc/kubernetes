@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package node implements phases of 'kubeadm upgrade node'.
+// Package node 实现 kubeadm upgrade node 的阶段。
 package node
 
 import (
@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewKubeconfigPhase returns a new kubeconfig phase.
+// NewKubeconfigPhase 返回新的 kubeconfig 阶段。
 func NewKubeconfigPhase() workflow.Phase {
 	phase := workflow.Phase{
 		Name:   "kubeconfig",
@@ -49,13 +49,13 @@ func runKubeconfig() func(c workflow.RunData) error {
 			return errors.New("kubeconfig phase invoked with an invalid data struct")
 		}
 
-		// If this is not a control-plane node, this phase should not be executed.
+		// 若不是控制平面节点，则不应执行此阶段。
 		if !data.IsControlPlaneNode() {
 			fmt.Println("[upgrade/kubeconfig] Skipping phase. Not a control plane node.")
 			return nil
 		}
 
-		// Otherwise, retrieve all the info required for kubeconfig upgrade.
+		// 否则，获取 kubeconfig 升级所需的全部信息。
 		cfg := data.InitCfg()
 
 		if err := upgrade.UpdateKubeletKubeconfigServer(cfg, data.DryRun()); err != nil {

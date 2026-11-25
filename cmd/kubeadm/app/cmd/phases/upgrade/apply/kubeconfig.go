@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apply implements phases of 'kubeadm upgrade apply'.
+// Package apply 实现 kubeadm upgrade apply 的阶段。
 package apply
 
 import (
@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewKubeconfigPhase returns a new kubeconfig phase.
+// NewKubeconfigPhase 返回新的 kubeconfig 阶段。
 func NewKubeconfigPhase() workflow.Phase {
 	phase := workflow.Phase{
 		Name:   "kubeconfig",

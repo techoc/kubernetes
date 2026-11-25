@@ -49,20 +49,20 @@ import (
 )
 
 const (
-	// PublicKeyBlockType is a possible value for pem.Block.Type.
+	// PublicKeyBlockType 是 pem.Block.Type 的一个可能取值。
 	PublicKeyBlockType = "PUBLIC KEY"
-	// CertificateBlockType is a possible value for pem.Block.Type.
+	// CertificateBlockType 是 pem.Block.Type 的一个可能取值。
 	CertificateBlockType = "CERTIFICATE"
 )
 
-// CertConfig is a wrapper around certutil.Config extending it with EncryptionAlgorithm.
+// CertConfig 包装 certutil.Config，并扩展 EncryptionAlgorithm 字段。
 type CertConfig struct {
 	certutil.Config
 	NotAfter            time.Time
 	EncryptionAlgorithm kubeadmapi.EncryptionAlgorithmType
 }
 
-// NewCertificateAuthority creates new certificate and private key for the certificate authority
+// NewCertificateAuthority 创建新的 CA 证书和私钥。
 func NewCertificateAuthority(config *CertConfig) (*x509.Certificate, crypto.Signer, error) {
 	key, err := NewPrivateKey(config.EncryptionAlgorithm)
 	if err != nil {
@@ -76,7 +76,7 @@ func NewCertificateAuthority(config *CertConfig) (*x509.Certificate, crypto.Sign
 	return cert, key, nil
 }
 
-// NewIntermediateCertificateAuthority creates new certificate and private key for an intermediate certificate authority
+// NewIntermediateCertificateAuthority 创建新的中间 CA 证书和私钥。
 func NewIntermediateCertificateAuthority(parentCert *x509.Certificate, parentKey crypto.Signer, config *CertConfig) (*x509.Certificate, crypto.Signer, error) {
 	key, err := NewPrivateKey(config.EncryptionAlgorithm)
 	if err != nil {
@@ -91,7 +91,7 @@ func NewIntermediateCertificateAuthority(parentCert *x509.Certificate, parentKey
 	return cert, key, nil
 }
 
-// NewCertAndKey creates new certificate and key by passing the certificate authority certificate and key
+// NewCertAndKey 使用 CA 证书和私钥创建新证书和密钥。
 func NewCertAndKey(caCert *x509.Certificate, caKey crypto.Signer, config *CertConfig) (*x509.Certificate, crypto.Signer, error) {
 	if len(config.Usages) == 0 {
 		return nil, nil, errors.New("must specify at least one ExtKeyUsage")
@@ -110,7 +110,7 @@ func NewCertAndKey(caCert *x509.Certificate, caKey crypto.Signer, config *CertCo
 	return cert, key, nil
 }
 
-// NewCSRAndKey generates a new key and CSR and that could be signed to create the given certificate
+// NewCSRAndKey 生成可签署为指定证书的新密钥和 CSR。
 func NewCSRAndKey(config *CertConfig) (*x509.CertificateRequest, crypto.Signer, error) {
 	key, err := NewPrivateKey(config.EncryptionAlgorithm)
 	if err != nil {
@@ -125,12 +125,12 @@ func NewCSRAndKey(config *CertConfig) (*x509.CertificateRequest, crypto.Signer, 
 	return csr, key, nil
 }
 
-// HasServerAuth returns true if the given certificate is a ServerAuth
+// HasServerAuth 判断给定证书是否用于 ServerAuth。
 func HasServerAuth(cert *x509.Certificate) bool {
 	return slices.Contains(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 }
 
-// WriteCertAndKey stores certificate and key at the specified location
+// WriteCertAndKey 将证书和密钥保存到指定位置。
 func WriteCertAndKey(pkiPath string, name string, cert *x509.Certificate, key crypto.Signer) error {
 	if err := WriteKey(pkiPath, name, key); err != nil {
 		return errors.Wrap(err, "couldn't write key")
@@ -139,7 +139,7 @@ func WriteCertAndKey(pkiPath string, name string, cert *x509.Certificate, key cr
 	return WriteCert(pkiPath, name, cert)
 }
 
-// WriteCert stores the given certificate at the given location
+// WriteCert 将给定证书保存到指定位置。
 func WriteCert(pkiPath, name string, cert *x509.Certificate) error {
 	if cert == nil {
 		return errors.New("certificate cannot be nil when writing to file")
@@ -153,7 +153,7 @@ func WriteCert(pkiPath, name string, cert *x509.Certificate) error {
 	return nil
 }
 
-// WriteCertBundle stores the given certificate bundle at the given location
+// WriteCertBundle 将给定证书链保存到指定位置。
 func WriteCertBundle(pkiPath, name string, certs []*x509.Certificate) error {
 	for i, cert := range certs {
 		if cert == nil {
@@ -173,7 +173,7 @@ func WriteCertBundle(pkiPath, name string, certs []*x509.Certificate) error {
 	return nil
 }
 
-// WriteKey stores the given key at the given location
+// WriteKey 将给定密钥保存到指定位置。
 func WriteKey(pkiPath, name string, key crypto.Signer) error {
 	if key == nil {
 		return errors.New("private key cannot be nil when writing to file")
@@ -191,10 +191,8 @@ func WriteKey(pkiPath, name string, key crypto.Signer) error {
 	return nil
 }
 
-// WriteCSR writes the pem-encoded CSR data to csrPath.
-// The CSR file will be created with file mode 0600.
-// If the CSR file already exists, it will be overwritten.
-// The parent directory of the csrPath will be created as needed with file mode 0700.
+// WriteCSR 将 PEM 编码的 CSR 写入 csrPath。文件权限为 0600，已存在则覆盖；
+// 必要时创建权限为 0700 的父目录。
 func WriteCSR(csrDir, name string, csr *x509.CertificateRequest) error {
 	if csr == nil {
 		return errors.New("certificate request cannot be nil when writing to file")
@@ -212,7 +210,7 @@ func WriteCSR(csrDir, name string, csr *x509.CertificateRequest) error {
 	return nil
 }
 
-// WritePublicKey stores the given public key at the given location
+// WritePublicKey 将给定公钥保存到指定位置。
 func WritePublicKey(pkiPath, name string, key crypto.PublicKey) error {
 	if key == nil {
 		return errors.New("public key cannot be nil when writing to file")
@@ -230,7 +228,7 @@ func WritePublicKey(pkiPath, name string, key crypto.PublicKey) error {
 	return nil
 }
 
-// CertOrKeyExist returns a boolean whether the cert or the key exists
+// CertOrKeyExist 判断证书或密钥是否存在。
 func CertOrKeyExist(pkiPath, name string) bool {
 	certificatePath, privateKeyPath := PathsForCertAndKey(pkiPath, name)
 
@@ -240,7 +238,7 @@ func CertOrKeyExist(pkiPath, name string) bool {
 	return !(os.IsNotExist(certErr) && os.IsNotExist(keyErr))
 }
 
-// CSROrKeyExist returns true if one of the CSR or key exists
+// CSROrKeyExist 判断 CSR 或密钥是否存在。
 func CSROrKeyExist(csrDir, name string) bool {
 	csrPath := pathForCSR(csrDir, name)
 	keyPath := pathForKey(csrDir, name)
@@ -251,7 +249,7 @@ func CSROrKeyExist(csrDir, name string) bool {
 	return !(os.IsNotExist(csrErr) && os.IsNotExist(keyErr))
 }
 
-// TryLoadCertAndKeyFromDisk tries to load a cert and a key from the disk and validates that they are valid
+// TryLoadCertAndKeyFromDisk 尝试从磁盘加载证书和密钥，并验证其有效性。
 func TryLoadCertAndKeyFromDisk(pkiPath, name string) (*x509.Certificate, crypto.Signer, error) {
 	cert, err := TryLoadCertFromDisk(pkiPath, name)
 	if err != nil {
@@ -266,7 +264,7 @@ func TryLoadCertAndKeyFromDisk(pkiPath, name string) (*x509.Certificate, crypto.
 	return cert, key, nil
 }
 
-// TryLoadCertFromDisk tries to load the cert from the disk
+// TryLoadCertFromDisk 尝试从磁盘加载证书。
 func TryLoadCertFromDisk(pkiPath, name string) (*x509.Certificate, error) {
 	certificatePath := pathForCert(pkiPath, name)
 
@@ -275,14 +273,14 @@ func TryLoadCertFromDisk(pkiPath, name string) (*x509.Certificate, error) {
 		return nil, errors.Wrapf(err, "couldn't load the certificate file %s", certificatePath)
 	}
 
-	// Safely pick the first one because the sender's certificate must come first in the list.
-	// For details, see: https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
+	// 发送方证书必须位于列表首位，因此可安全取第一项。
+	// 详见：https://www.rfc-editor.org/rfc/rfc4346#section-7.4.2
 	cert := certs[0]
 
 	return cert, nil
 }
 
-// TryLoadCertChainFromDisk tries to load the cert chain from the disk
+// TryLoadCertChainFromDisk 尝试从磁盘加载证书链。
 func TryLoadCertChainFromDisk(pkiPath, name string) (*x509.Certificate, []*x509.Certificate, error) {
 	certificatePath := pathForCert(pkiPath, name)
 
@@ -297,17 +295,17 @@ func TryLoadCertChainFromDisk(pkiPath, name string) (*x509.Certificate, []*x509.
 	return cert, intermediates, nil
 }
 
-// TryLoadKeyFromDisk tries to load the key from the disk and validates that it is valid
+// TryLoadKeyFromDisk 尝试从磁盘加载密钥，并验证其有效性。
 func TryLoadKeyFromDisk(pkiPath, name string) (crypto.Signer, error) {
 	privateKeyPath := pathForKey(pkiPath, name)
 
-	// Parse the private key from a file
+	// 从文件解析私钥。
 	privKey, err := keyutil.PrivateKeyFromFile(privateKeyPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "couldn't load the private key file %s", privateKeyPath)
 	}
 
-	// Allow RSA and ECDSA formats only
+	// 仅允许 RSA 和 ECDSA 格式。
 	var key crypto.Signer
 	switch k := privKey.(type) {
 	case *rsa.PrivateKey:
@@ -321,11 +319,11 @@ func TryLoadKeyFromDisk(pkiPath, name string) (crypto.Signer, error) {
 	return key, nil
 }
 
-// TryLoadPrivatePublicKeyFromDisk tries to load the key from the disk and validates that it is valid
+// TryLoadPrivatePublicKeyFromDisk 尝试从磁盘加载密钥，并验证其有效性。
 func TryLoadPrivatePublicKeyFromDisk(pkiPath, name string) (crypto.PrivateKey, crypto.PublicKey, error) {
 	privateKeyPath := pathForKey(pkiPath, name)
 
-	// Parse the private key from a file
+	// 从文件解析私钥。
 	privKey, err := keyutil.PrivateKeyFromFile(privateKeyPath)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "couldn't load the private key file %s", privateKeyPath)
@@ -333,13 +331,13 @@ func TryLoadPrivatePublicKeyFromDisk(pkiPath, name string) (crypto.PrivateKey, c
 
 	publicKeyPath := pathForPublicKey(pkiPath, name)
 
-	// Parse the public key from a file
+	// 从文件解析公钥。
 	pubKeys, err := keyutil.PublicKeysFromFile(publicKeyPath)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "couldn't load the public key file %s", publicKeyPath)
 	}
 
-	// Allow RSA and ECDSA formats only
+	// 仅允许 RSA 和 ECDSA 格式。
 	mismatchErrFmt := "the private key file %[2]s is in %[1]s format but the public key file %[3]s is not in %[1]s format"
 	switch k := privKey.(type) {
 	case *rsa.PrivateKey:
@@ -359,7 +357,7 @@ func TryLoadPrivatePublicKeyFromDisk(pkiPath, name string) (crypto.PrivateKey, c
 	}
 }
 
-// PathsForCertAndKey returns the paths for the certificate and key given the path and basename.
+// PathsForCertAndKey 根据路径和文件名返回证书及密钥的路径。
 func PathsForCertAndKey(pkiPath, name string) (string, string) {
 	return pathForCert(pkiPath, name), pathForKey(pkiPath, name)
 }
@@ -380,9 +378,9 @@ func pathForCSR(pkiPath, name string) string {
 	return filepath.Join(pkiPath, fmt.Sprintf("%s.csr", name))
 }
 
-// GetAPIServerAltNames builds an AltNames object for to be used when generating apiserver certificate
+// GetAPIServerAltNames 构建生成 API Server 证书所用的 AltNames。
 func GetAPIServerAltNames(cfg *kubeadmapi.InitConfiguration) (*certutil.AltNames, error) {
-	// advertise address
+	// 公告地址。
 	advertiseAddress := netutils.ParseIPSloppy(cfg.LocalAPIEndpoint.AdvertiseAddress)
 	if advertiseAddress == nil {
 		return nil, errors.Errorf("error parsing LocalAPIEndpoint AdvertiseAddress %v: is not a valid textual representation of an IP address",
@@ -403,7 +401,7 @@ func GetAPIServerAltNames(cfg *kubeadmapi.InitConfiguration) (*certutil.AltNames
 		dnsNames = append(dnsNames, fmt.Sprintf("kubernetes.default.svc.%s", cfg.Networking.DNSDomain))
 	}
 
-	// create AltNames with defaults DNSNames/IPs
+	// 使用默认 DNSNames/IP 创建 AltNames。
 	altNames := &certutil.AltNames{
 		DNSNames: dnsNames,
 		IPs: []net.IP{
@@ -412,7 +410,7 @@ func GetAPIServerAltNames(cfg *kubeadmapi.InitConfiguration) (*certutil.AltNames
 		},
 	}
 
-	// add cluster controlPlaneEndpoint if present (dns or ip)
+	// 若存在集群 controlPlaneEndpoint（DNS 或 IP），将其加入。
 	if len(cfg.ControlPlaneEndpoint) > 0 {
 		if host, _, err := kubeadmutil.ParseHostPort(cfg.ControlPlaneEndpoint); err == nil {
 			if ip := netutils.ParseIPSloppy(host); ip != nil {
@@ -430,23 +428,23 @@ func GetAPIServerAltNames(cfg *kubeadmapi.InitConfiguration) (*certutil.AltNames
 	return altNames, nil
 }
 
-// GetEtcdAltNames builds an AltNames object for generating the etcd server certificate.
-// `advertise address` and localhost are included in the SAN since this is the interfaces the etcd static pod listens on.
-// The user can override the listen address with `Etcd.ExtraArgs` and add SANs with `Etcd.ServerCertSANs`.
+// GetEtcdAltNames 构建生成 etcd 服务端证书所用的 AltNames。
+// etcd 静态 Pod 监听公告地址和 localhost，因此 SAN 包含二者。
+// 用户可通过 Etcd.ExtraArgs 覆盖监听地址，通过 Etcd.ServerCertSANs 添加 SAN。
 func GetEtcdAltNames(cfg *kubeadmapi.InitConfiguration) (*certutil.AltNames, error) {
 	return getAltNames(cfg, kubeadmconstants.EtcdServerCertName)
 }
 
-// GetEtcdPeerAltNames builds an AltNames object for generating the etcd peer certificate.
-// Hostname and `API.AdvertiseAddress` are included if the user chooses to promote the single node etcd cluster into a multi-node one (stacked etcd).
-// The user can override the listen address with `Etcd.ExtraArgs` and add SANs with `Etcd.PeerCertSANs`.
+// GetEtcdPeerAltNames 构建生成 etcd peer 证书所用的 AltNames。
+// 用户若将单节点 etcd 集群提升为多节点（堆叠 etcd），SAN 包含主机名和 API.AdvertiseAddress。
+// 用户可通过 Etcd.ExtraArgs 覆盖监听地址，通过 Etcd.PeerCertSANs 添加 SAN。
 func GetEtcdPeerAltNames(cfg *kubeadmapi.InitConfiguration) (*certutil.AltNames, error) {
 	return getAltNames(cfg, kubeadmconstants.EtcdPeerCertName)
 }
 
-// getAltNames builds an AltNames object with the cfg and certName.
+// getAltNames 根据 cfg 和 certName 构建 AltNames。
 func getAltNames(cfg *kubeadmapi.InitConfiguration, certName string) (*certutil.AltNames, error) {
-	// advertise address
+	// 公告地址。
 	advertiseAddress := netutils.ParseIPSloppy(cfg.LocalAPIEndpoint.AdvertiseAddress)
 	if advertiseAddress == nil {
 		return nil, errors.Errorf("error parsing LocalAPIEndpoint AdvertiseAddress %v: is not a valid textual representation of an IP address",
@@ -460,7 +458,7 @@ func getAltNames(cfg *kubeadmapi.InitConfiguration, certName string) (*certutil.
 		dnsNames = []string{"localhost"}
 	}
 
-	// create AltNames with defaults DNSNames/IPs
+	// 使用默认 DNSNames/IP 创建 AltNames。
 	altNames := &certutil.AltNames{
 		DNSNames: dnsNames,
 		IPs:      []net.IP{advertiseAddress, net.IPv4(127, 0, 0, 1), net.IPv6loopback},
@@ -476,12 +474,10 @@ func getAltNames(cfg *kubeadmapi.InitConfiguration, certName string) (*certutil.
 	return altNames, nil
 }
 
-// appendSANsToAltNames parses SANs from as list of strings and adds them to altNames for use on a specific cert
-// altNames is passed in with a pointer, and the struct is modified
-// valid IP address strings are parsed and added to altNames.IPs as net.IP's
-// RFC-1123 compliant DNS strings are added to altNames.DNSNames as strings
-// RFC-1123 compliant wildcard DNS strings are added to altNames.DNSNames as strings
-// certNames is used to print user facing warnings and should be the name of the cert the altNames will be used for
+// appendSANsToAltNames 解析字符串列表中的 SAN，并加入特定证书的 altNames。
+// altNames 以指针传入并原地修改；有效 IP 加入 altNames.IPs，
+// 符合 RFC-1123 的 DNS 名和通配 DNS 名加入 altNames.DNSNames。
+// certNames 用于面向用户的警告，应为 altNames 对应证书的名称。
 func appendSANsToAltNames(altNames *certutil.AltNames, SANs []string, certName string) {
 	for _, altname := range SANs {
 		if ip := netutils.ParseIPSloppy(altname); ip != nil {
@@ -500,7 +496,7 @@ func appendSANsToAltNames(altNames *certutil.AltNames, SANs []string, certName s
 	}
 }
 
-// EncodeCSRPEM returns PEM-encoded CSR data
+// EncodeCSRPEM 返回 PEM 编码的 CSR。
 func EncodeCSRPEM(csr *x509.CertificateRequest) []byte {
 	block := pem.Block{
 		Type:  certutil.CertificateRequestBlockType,
@@ -509,7 +505,7 @@ func EncodeCSRPEM(csr *x509.CertificateRequest) []byte {
 	return pem.EncodeToMemory(&block)
 }
 
-// NewCSR creates a new CSR
+// NewCSR 创建新 CSR。
 func NewCSR(cfg CertConfig, key crypto.Signer) (*x509.CertificateRequest, error) {
 	RemoveDuplicateAltNames(&cfg.AltNames)
 
@@ -531,7 +527,7 @@ func NewCSR(cfg CertConfig, key crypto.Signer) (*x509.CertificateRequest, error)
 	return x509.ParseCertificateRequest(csrBytes)
 }
 
-// EncodeCertPEM returns PEM-encoded certificate data
+// EncodeCertPEM 返回 PEM 编码的证书。
 func EncodeCertPEM(cert *x509.Certificate) []byte {
 	block := pem.Block{
 		Type:  CertificateBlockType,
@@ -540,7 +536,7 @@ func EncodeCertPEM(cert *x509.Certificate) []byte {
 	return pem.EncodeToMemory(&block)
 }
 
-// EncodeCertBundlePEM returns PEM-encoded certificate bundle
+// EncodeCertBundlePEM 返回 PEM 编码的证书链。
 func EncodeCertBundlePEM(certs []*x509.Certificate) ([]byte, error) {
 	buf := bytes.Buffer{}
 
@@ -558,7 +554,7 @@ func EncodeCertBundlePEM(certs []*x509.Certificate) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// EncodePublicKeyPEM returns PEM-encoded public data
+// EncodePublicKeyPEM 返回 PEM 编码的公钥。
 func EncodePublicKeyPEM(key crypto.PublicKey) ([]byte, error) {
 	der, err := x509.MarshalPKIXPublicKey(key)
 	if err != nil {
@@ -571,12 +567,11 @@ func EncodePublicKeyPEM(key crypto.PublicKey) ([]byte, error) {
 	return pem.EncodeToMemory(&block), nil
 }
 
-// NewPrivateKey returns a new private key.
+// NewPrivateKey 返回新私钥。
 var NewPrivateKey = GeneratePrivateKey
 
-// rsaKeySizeFromAlgorithmType takes a known RSA algorithm defined in the kubeadm API
-// an returns its key size. For unknown types it returns 0. For an empty type it returns
-// the default size of 2048.
+// rsaKeySizeFromAlgorithmType 返回 kubeadm API 中已知 RSA 算法的密钥长度。
+// 未知类型返回 0，空类型返回默认值 2048。
 func rsaKeySizeFromAlgorithmType(keyType kubeadmapi.EncryptionAlgorithmType) int {
 	switch keyType {
 	case kubeadmapi.EncryptionAlgorithmRSA2048, "":
@@ -590,7 +585,7 @@ func rsaKeySizeFromAlgorithmType(keyType kubeadmapi.EncryptionAlgorithmType) int
 	}
 }
 
-// GeneratePrivateKey is the default function for generating private keys.
+// GeneratePrivateKey 是生成私钥的默认函数。
 func GeneratePrivateKey(keyType kubeadmapi.EncryptionAlgorithmType) (crypto.Signer, error) {
 	switch keyType {
 	case kubeadmapi.EncryptionAlgorithmECDSAP256:
@@ -606,9 +601,9 @@ func GeneratePrivateKey(keyType kubeadmapi.EncryptionAlgorithmType) (crypto.Sign
 	return rsa.GenerateKey(cryptorand.Reader, rsaKeySize)
 }
 
-// NewSignedCert creates a signed certificate using the given CA certificate and key
+// NewSignedCert 使用给定 CA 证书和私钥创建签名证书。
 func NewSignedCert(cfg *CertConfig, key crypto.Signer, caCert *x509.Certificate, caKey crypto.Signer, isCA bool) (*x509.Certificate, error) {
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 返回 [0, max-1) 内的均匀随机值，再加 1 使序列号均匀分布于 [1, max)。
 	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		return nil, err
@@ -657,9 +652,9 @@ func NewSignedCert(cfg *CertConfig, key crypto.Signer, caCert *x509.Certificate,
 	return x509.ParseCertificate(certDERBytes)
 }
 
-// NewSelfSignedCACert creates a new self-signed CA certificate
+// NewSelfSignedCACert 创建新的自签名 CA 证书。
 func NewSelfSignedCACert(cfg *CertConfig, key crypto.Signer) (*x509.Certificate, error) {
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 返回 [0, max-1) 内的均匀随机值，再加 1 使序列号均匀分布于 [1, max)。
 	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		return nil, err
@@ -701,7 +696,7 @@ func NewSelfSignedCACert(cfg *CertConfig, key crypto.Signer) (*x509.Certificate,
 	return x509.ParseCertificate(certDERBytes)
 }
 
-// RemoveDuplicateAltNames removes duplicate items in altNames.
+// RemoveDuplicateAltNames 移除 altNames 中的重复项。
 func RemoveDuplicateAltNames(altNames *certutil.AltNames) {
 	if altNames == nil {
 		return
@@ -722,8 +717,7 @@ func RemoveDuplicateAltNames(altNames *certutil.AltNames) {
 	altNames.IPs = ips
 }
 
-// ValidateCertPeriod checks if the certificate is valid relative to the current time
-// (+/- offset)
+// ValidateCertPeriod 检查证书在当前时间的指定偏移范围内是否有效。
 func ValidateCertPeriod(cert *x509.Certificate, offset time.Duration) error {
 	period := fmt.Sprintf("NotBefore: %v, NotAfter: %v", cert.NotBefore, cert.NotAfter)
 	now := time.Now().Add(offset).UTC()
@@ -736,8 +730,7 @@ func ValidateCertPeriod(cert *x509.Certificate, offset time.Duration) error {
 	return nil
 }
 
-// VerifyCertChain verifies that a certificate has a valid chain of
-// intermediate CAs back to the root CA
+// VerifyCertChain 验证证书是否具有从中间 CA 到根 CA 的有效证书链。
 func VerifyCertChain(cert *x509.Certificate, intermediates []*x509.Certificate, root *x509.Certificate) error {
 	rootPool := x509.NewCertPool()
 	rootPool.AddCert(root)

@@ -33,19 +33,19 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// CoreDNSCheck validates installed kubelet version
+// CoreDNSCheck 执行 CoreDNS 迁移检查。
 type CoreDNSCheck struct {
 	name   string
 	client clientset.Interface
 	f      func(clientset.Interface) error
 }
 
-// Name is part of the preflight.Checker interface
+// Name 是 preflight.Checker 接口的一部分。
 func (c CoreDNSCheck) Name() string {
 	return c.name
 }
 
-// Check is part of the preflight.Checker interface
+// Check 是 preflight.Checker 接口的一部分。
 func (c CoreDNSCheck) Check() (warnings, errors []error) {
 	if err := c.f(c.client); err != nil {
 		return nil, []error{err}
@@ -53,7 +53,7 @@ func (c CoreDNSCheck) Check() (warnings, errors []error) {
 	return nil, nil
 }
 
-// RunCoreDNSMigrationCheck initializes checks related to CoreDNS migration.
+// RunCoreDNSMigrationCheck 初始化 CoreDNS 迁移相关检查。
 func RunCoreDNSMigrationCheck(client clientset.Interface, ignorePreflightErrors sets.Set[string]) error {
 	migrationChecks := []preflight.Checker{
 		&CoreDNSCheck{
@@ -71,8 +71,7 @@ func RunCoreDNSMigrationCheck(client clientset.Interface, ignorePreflightErrors 
 	return preflight.RunChecks(migrationChecks, os.Stderr, ignorePreflightErrors)
 }
 
-// checkUnsupportedPlugins checks if there are any plugins included in the current configuration
-// that are unsupported for migration.
+// checkUnsupportedPlugins 检查当前配置中是否存在不支持迁移的插件。
 func checkUnsupportedPlugins(client clientset.Interface) error {
 	klog.V(1).Infoln("validating if there are any unsupported CoreDNS plugins in the Corefile")
 	_, corefile, currentInstalledCoreDNSversion, err := dns.GetCoreDNSInfo(client)
@@ -104,7 +103,7 @@ func checkUnsupportedPlugins(client clientset.Interface) error {
 	return nil
 }
 
-// checkMigration validates if migration of the current CoreDNS ConfigMap is possible.
+// checkMigration 验证当前 CoreDNS ConfigMap 是否可迁移。
 func checkMigration(client clientset.Interface) error {
 	klog.V(1).Infoln("validating if migration can be done for the current CoreDNS release.")
 	_, corefile, currentInstalledCoreDNSversion, err := dns.GetCoreDNSInfo(client)

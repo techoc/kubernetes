@@ -23,7 +23,7 @@ import (
 )
 
 func isAbs(path string) bool {
-	// on Windows, filepath.IsAbs will not return True for paths prefixed with a slash, even
-	// though they can be used as absolute paths (https://docs.microsoft.com/en-us/dotnet/standard/io/file-path-formats).
+	// 在 Windows 上，即使路径以斜杠开头，filepath.IsAbs 也不会返回 true，
+	// 但此类路径仍可用作绝对路径 (https://docs.microsoft.com/en-us/dotnet/standard/io/file-path-formats).
 	return filepath.IsAbs(path) || (len(path) > 0 && (path[0] == '\\' || path[0] == '/'))
 }

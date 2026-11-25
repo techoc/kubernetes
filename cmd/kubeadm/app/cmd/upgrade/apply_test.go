@@ -54,7 +54,7 @@ timeouts:
 `, kubeadmapiv1.SchemeGroupVersion.String())
 
 func TestNewApplyData(t *testing.T) {
-	// create temp directory
+	// 创建临时目录。
 	tmpDir, err := os.MkdirTemp("", "kubeadm-upgrade-apply-test")
 	if err != nil {
 		t.Errorf("Unable to create temporary directory: %v", err)
@@ -63,7 +63,7 @@ func TestNewApplyData(t *testing.T) {
 		_ = os.RemoveAll(tmpDir)
 	}()
 
-	// create config file
+	// 创建配置文件。
 	configFilePath := filepath.Join(tmpDir, "test-config-file")
 	cfgFile, err := os.Create(configFilePath)
 	if err != nil {
@@ -108,11 +108,11 @@ func TestNewApplyData(t *testing.T) {
 			expectedError: "couldn't create a Kubernetes client from file",
 		},
 
-		// TODO: add more test cases here when the fake client for `kubeadm upgrade apply` can be injected
+		// TODO：可为 kubeadm upgrade apply 注入伪客户端后，在此添加更多测试用例。
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Initialize an external apply flags and inject it to the apply cmd.
+			// 初始化外部 apply 参数并注入 apply 命令。
 			apf := &applyPlanFlags{
 				kubeConfigPath:            kubeadmconstants.GetAdminKubeConfigPath(),
 				cfgPath:                   "",
@@ -126,7 +126,7 @@ func TestNewApplyData(t *testing.T) {
 
 			cmd := newCmdApply(apf)
 
-			// Sets cmd flags (that will be reflected on the init options).
+			// 设置命令参数（将反映到 init 选项中）。
 			for f, v := range tc.flags {
 				_ = cmd.Flags().Set(f, v)
 			}
@@ -136,7 +136,7 @@ func TestNewApplyData(t *testing.T) {
 				renewCerts:     true,
 			}
 
-			// Test newApplyData method.
+			// 测试 newApplyData 方法。
 			data, err := newApplyData(cmd, tc.args, flags)
 			if err == nil && len(tc.expectedError) != 0 {
 				t.Error("Expected error, but got success")
@@ -145,7 +145,7 @@ func TestNewApplyData(t *testing.T) {
 				t.Fatalf("newApplyData returned unexpected error, expected: %s, got %v", tc.expectedError, err)
 			}
 
-			// Exec additional validation on the returned value.
+			// 对返回值执行额外校验。
 			if tc.validate != nil {
 				tc.validate(t, data)
 			}

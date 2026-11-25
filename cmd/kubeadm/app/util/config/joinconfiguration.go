@@ -32,7 +32,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// SetJoinDynamicDefaults checks and sets configuration values for the JoinConfiguration object
+// SetJoinDynamicDefaults 检查并设置 JoinConfiguration 的配置值。
 func SetJoinDynamicDefaults(cfg *kubeadmapi.JoinConfiguration, skipCRIDetect bool) error {
 	addControlPlaneTaint := false
 	if cfg.ControlPlane != nil {
@@ -45,7 +45,7 @@ func SetJoinDynamicDefaults(cfg *kubeadmapi.JoinConfiguration, skipCRIDetect boo
 	return SetJoinControlPlaneDefaults(cfg.ControlPlane)
 }
 
-// SetJoinControlPlaneDefaults checks and sets configuration values for the JoinControlPlane object
+// SetJoinControlPlaneDefaults 检查并设置 JoinControlPlane 的配置值。
 func SetJoinControlPlaneDefaults(cfg *kubeadmapi.JoinControlPlane) error {
 	if cfg != nil {
 		if err := SetAPIEndpointDynamicDefaults(&cfg.LocalAPIEndpoint); err != nil {
@@ -55,18 +55,16 @@ func SetJoinControlPlaneDefaults(cfg *kubeadmapi.JoinControlPlane) error {
 	return nil
 }
 
-// LoadOrDefaultJoinConfiguration takes a path to a config file and a versioned configuration that can serve as the default config
-// If cfgPath is specified, defaultversionedcfg will always get overridden. Otherwise, the default config (often populated by flags) will be used.
-// Then the external, versioned configuration is defaulted and converted to the internal type.
-// Right thereafter, the configuration is defaulted again with dynamic values (like IP addresses of a machine, etc)
-// Lastly, the internal config is validated and returned.
+// LoadOrDefaultJoinConfiguration 接收配置文件路径和可作为默认值的版本化配置。
+// 指定 cfgPath 时始终以文件覆盖 defaultversionedcfg，否则使用默认配置（通常由参数填充）。
+// 随后将外部版本化配置默认化并转换为内部类型，再应用本机 IP 等动态默认值，最后校验返回。
 func LoadOrDefaultJoinConfiguration(cfgPath string, defaultversionedcfg *kubeadmapiv1.JoinConfiguration, opts LoadOrDefaultConfigurationOptions) (*kubeadmapi.JoinConfiguration, error) {
 	var (
 		config *kubeadmapi.JoinConfiguration
 		err    error
 	)
 	if cfgPath != "" {
-		// Loads configuration from config file, if provided
+		// 若提供了配置文件，从中加载配置。
 		config, err = LoadJoinConfigurationFromFile(cfgPath, opts)
 	} else {
 		config, err = DefaultedJoinConfiguration(defaultversionedcfg, opts)
@@ -77,7 +75,7 @@ func LoadOrDefaultJoinConfiguration(cfgPath string, defaultversionedcfg *kubeadm
 	return config, err
 }
 
-// LoadJoinConfigurationFromFile loads versioned JoinConfiguration from file, converts it to internal, defaults and validates it
+// LoadJoinConfigurationFromFile 从文件加载版本化 JoinConfiguration，转换为内部类型、默认化并校验。
 func LoadJoinConfigurationFromFile(cfgPath string, opts LoadOrDefaultConfigurationOptions) (*kubeadmapi.JoinConfiguration, error) {
 	klog.V(1).Infof("loading configuration from %q", cfgPath)
 
@@ -89,11 +87,10 @@ func LoadJoinConfigurationFromFile(cfgPath string, opts LoadOrDefaultConfigurati
 	return BytesToJoinConfiguration(b, opts)
 }
 
-// BytesToJoinConfiguration converts a byte slice to an internal, defaulted and validated JoinConfiguration object.
-// The map may contain many different YAML/JSON documents. These documents are parsed one-by-one.
-// The resulting JoinConfiguration is then dynamically defaulted and validated prior to return.
+// BytesToJoinConfiguration 将字节切片转换为已默认化并校验的内部 JoinConfiguration。
+// 输入可包含多个 YAML/JSON 文档，逐个解析；返回前应用动态默认值并校验。
 func BytesToJoinConfiguration(b []byte, opts LoadOrDefaultConfigurationOptions) (*kubeadmapi.JoinConfiguration, error) {
-	// Split the YAML/JSON documents in the file into a DocumentMap
+	// 将文件中的 YAML/JSON 文档拆分为 DocumentMap。
 	gvkmap, err := kubeadmutil.SplitConfigDocuments(b)
 	if err != nil {
 		return nil, err
@@ -102,23 +99,23 @@ func BytesToJoinConfiguration(b []byte, opts LoadOrDefaultConfigurationOptions) 
 	return documentMapToJoinConfiguration(gvkmap, false, false, false, opts.SkipCRIDetect)
 }
 
-// documentMapToJoinConfiguration takes a map between GVKs and YAML/JSON documents (as returned by SplitYAMLDocuments),
-// finds a JoinConfiguration, decodes it, dynamically defaults it and then validates it prior to return.
+// documentMapToJoinConfiguration 接收 SplitYAMLDocuments 返回的 GVK 与 YAML/JSON 文档映射，
+// 查找 JoinConfiguration，解码、动态默认化并校验后返回。
 func documentMapToJoinConfiguration(gvkmap kubeadmapi.DocumentMap, allowDeprecated, allowExperimental, strictErrors, skipCRIDetect bool) (*kubeadmapi.JoinConfiguration, error) {
 	joinBytes := []byte{}
 	for gvk, bytes := range gvkmap {
-		// not interested in anything other than JoinConfiguration
+		// 仅处理 JoinConfiguration，忽略其他类型。
 		if gvk.Kind != constants.JoinConfigurationKind {
 			klog.Warningf("[config] WARNING: Ignored configuration document with GroupVersionKind %v\n", gvk)
 			continue
 		}
 
-		// check if this version is supported and possibly not deprecated
+		// 检查版本是否受支持且未弃用。
 		if err := validateSupportedVersion(gvk, allowDeprecated, allowExperimental); err != nil {
 			return nil, err
 		}
 
-		// verify the validity of the YAML/JSON
+		// 校验 YAML/JSON 的有效性。
 		if err := strict.VerifyUnmarshalStrict([]*runtime.Scheme{kubeadmscheme.Scheme}, gvk, bytes); err != nil {
 			if !strictErrors {
 				klog.Warning(err.Error())
@@ -139,11 +136,11 @@ func documentMapToJoinConfiguration(gvkmap kubeadmapi.DocumentMap, allowDeprecat
 		return nil, err
 	}
 
-	// Applies dynamic defaults to settings not provided with flags
+	// 对参数未提供的设置应用动态默认值。
 	if err := SetJoinDynamicDefaults(internalcfg, skipCRIDetect); err != nil {
 		return nil, err
 	}
-	// Validates cfg (flags/configs + defaults)
+	// 校验 cfg（参数/配置 + 默认值）。
 	if err := validation.ValidateJoinConfiguration(internalcfg).ToAggregate(); err != nil {
 		return nil, err
 	}
@@ -151,22 +148,22 @@ func documentMapToJoinConfiguration(gvkmap kubeadmapi.DocumentMap, allowDeprecat
 	return internalcfg, nil
 }
 
-// DefaultedJoinConfiguration takes a versioned JoinConfiguration (usually filled in by command line parameters), defaults it, converts it to internal and validates it
+// DefaultedJoinConfiguration 接收通常由命令行参数填充的版本化 JoinConfiguration，
+// 默认化、转换为内部类型并校验。
 func DefaultedJoinConfiguration(defaultversionedcfg *kubeadmapiv1.JoinConfiguration, opts LoadOrDefaultConfigurationOptions) (*kubeadmapi.JoinConfiguration, error) {
 	internalcfg := &kubeadmapi.JoinConfiguration{}
 
-	// Takes passed flags into account; the defaulting is executed once again enforcing assignment of
-	// static default values to cfg only for values not provided with flags
+	// 考虑已传入的参数；再次执行默认值设置，仅对参数未提供的 cfg 字段赋静态默认值。
 	kubeadmscheme.Scheme.Default(defaultversionedcfg)
 	if err := kubeadmscheme.Scheme.Convert(defaultversionedcfg, internalcfg, nil); err != nil {
 		return nil, err
 	}
 
-	// Applies dynamic defaults to settings not provided with flags
+	// 对参数未提供的设置应用动态默认值。
 	if err := SetJoinDynamicDefaults(internalcfg, opts.SkipCRIDetect); err != nil {
 		return nil, err
 	}
-	// Validates cfg (flags/configs + defaults)
+	// 校验 cfg（参数/配置 + 默认值）。
 	if err := validation.ValidateJoinConfiguration(internalcfg).ToAggregate(); err != nil {
 		return nil, err
 	}

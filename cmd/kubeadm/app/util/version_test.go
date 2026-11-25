@@ -156,13 +156,13 @@ func TestVersionFromNetwork(t *testing.T) {
 	currentVersion := normalizedBuildVersion(constants.CurrentKubernetesVersion.String())
 
 	cases := map[string]T{
-		"stable":          {"stable-1", "v1.4.6", false, false}, // recursive pointer to stable-1
+		"stable":          {"stable-1", "v1.4.6", false, false}, // "stable":          {"stable-1", "v1.4.6", false, false}, // 递归指向 stable-1
 		"stable-1":        {"v1.4.6", "v1.4.6", false, false},
 		"stable-1.3":      {"v1.3.10", "v1.3.10", false, false},
 		"latest":          {"v1.6.0-alpha.0", "v1.6.0-alpha.0", false, false},
 		"latest-1.3":      {"v1.3.11-beta.0", "v1.3.11-beta.0", false, false},
-		"latest-1.5":      {"", currentVersion, true, false}, // fallback to currentVersion on fetcher error
-		"invalid-version": {"", "", false, true},             // invalid version cannot be parsed
+		"latest-1.5":      {"", currentVersion, true, false}, // "latest-1.5":      {"", currentVersion, true, false}, // 获取失败时回退到 currentVersion
+		"invalid-version": {"", "", false, true},             // "invalid-version": {"", "", false, true},             // 无效版本无法解析
 	}
 
 	for k, v := range cases {
@@ -200,13 +200,13 @@ func TestVersionToTag(t *testing.T) {
 		expected string
 	}
 	cases := []T{
-		// NOP
+		// 空操作。
 		{"", ""},
-		// Official releases
+		// 正式发布。
 		{"v1.0.0", "v1.0.0"},
-		// CI or custom builds
+		// CI 或自定义构建。
 		{"v10.1.2-alpha.1.100+0123456789abcdef+SOMETHING", "v10.1.2-alpha.1.100_0123456789abcdef_SOMETHING"},
-		// random and invalid input: should return safe value
+		// 随机及无效输入：应返回安全值。
 		{"v1,0!0+üñµ", "v1_0_0____"},
 	}
 
@@ -229,19 +229,19 @@ func TestSplitVersion(t *testing.T) {
 		valid  bool
 	}
 	cases := []T{
-		// Release area
+		// 发布区域。
 		{"v1.7.0", "https://dl.k8s.io/release", "v1.7.0", true},
 		{"v1.8.0-alpha.2.1231+afabd012389d53a", "https://dl.k8s.io/release", "v1.8.0-alpha.2.1231+afabd012389d53a", true},
 		{"release/v1.7.0", "https://dl.k8s.io/release", "v1.7.0", true},
 		{"release/latest-1.7", "https://dl.k8s.io/release", "latest-1.7", true},
-		// CI builds area
+		// CI 构建区域。
 		{"ci/latest", "https://storage.googleapis.com/k8s-release-dev/ci", "latest", true},
 		{"ci/latest-1.7", "https://storage.googleapis.com/k8s-release-dev/ci", "latest-1.7", true},
-		// unknown label in default (release) area: splitVersion validate only areas.
+		// 默认发布区域中的未知标签：splitVersion 仅校验区域。
 		{"unknown-1", "https://dl.k8s.io/release", "unknown-1", true},
-		// unknown area, not valid input.
+		// 未知区域，输入无效。
 		{"unknown/latest-1", "", "", false},
-		// invalid input
+		// 无效输入。
 		{"", "", "", false},
 		{"ci/", "", "", false},
 	}
@@ -270,10 +270,10 @@ func TestKubernetesIsCIVersion(t *testing.T) {
 	}
 	cases := []T{
 		{"", false},
-		// Official releases
+		// 正式发布。
 		{"v1.0.0", false},
 		{"release/v1.0.0", false},
-		// CI builds
+		// CI 构建。
 		{"ci/latest-1", true},
 		{"ci/v1.9.0-alpha.1.123+acbcbfd53bfa0a", true},
 		{"ci/", false},
@@ -290,7 +290,7 @@ func TestKubernetesIsCIVersion(t *testing.T) {
 	}
 }
 
-// Validate kubernetesReleaseVersion but with bucket prefixes
+// 校验带 bucket 前缀的 kubernetesReleaseVersion。
 func TestCIBuildVersion(t *testing.T) {
 	type T struct {
 		input    string
@@ -298,12 +298,12 @@ func TestCIBuildVersion(t *testing.T) {
 		valid    bool
 	}
 	cases := []T{
-		// Official releases
+		// 正式发布。
 		{"v1.7.0", "v1.7.0", true},
 		{"release/v1.8.0", "v1.8.0", true},
 		{"1.4.0-beta.0", "v1.4.0-beta.0", true},
 		{"release/0invalid", "", false},
-		// CI or custom builds
+		// CI 或自定义构建。
 		{"ci/v1.9.0-alpha.1.123+acbcbfd53bfa0a", "v1.9.0-alpha.1.123+acbcbfd53bfa0a", true},
 		{"ci/1.9.0-alpha.1.123+acbcbfd53bfa0a", "v1.9.0-alpha.1.123+acbcbfd53bfa0a", true},
 		{"ci/0invalid", "", false},

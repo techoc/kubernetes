@@ -74,14 +74,14 @@ kind: Config
 `
 
 func TestNewInitData(t *testing.T) {
-	// create temp directory
+	// 创建临时目录。
 	tmpDir, err := os.MkdirTemp("", "kubeadm-init-test")
 	if err != nil {
 		t.Errorf("Unable to create temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// create config file
+	// 创建配置文件。
 	configFilePath := filepath.Join(tmpDir, "test-config-file")
 	cfgFile, err := os.Create(configFilePath)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestNewInitData(t *testing.T) {
 		validate    func(*testing.T, *initData)
 		expectError bool
 	}{
-		// Init data passed using flags
+		// 通过参数传入 init 数据。
 		{
 			name: "pass without any flag (use defaults)",
 		},
@@ -118,7 +118,7 @@ func TestNewInitData(t *testing.T) {
 			expectError: true,
 		},
 
-		// Init data passed using config file
+		// 通过配置文件传入 init 数据。
 		{
 			name: "Pass with config from file",
 			flags: map[string]string{
@@ -166,7 +166,7 @@ func TestNewInitData(t *testing.T) {
 				options.NodeName: "anotherName",
 			},
 			validate: func(t *testing.T, data *initData) {
-				// validate that node-name is overwritten
+				// 校验 node-name 已被覆盖。
 				if data.cfg.NodeRegistration.Name != "anotherName" {
 					t.Error("Invalid NodeRegistration.Name")
 				}
@@ -181,7 +181,7 @@ func TestNewInitData(t *testing.T) {
 			expectError: true,
 		},
 
-		// Pre-flight errors:
+		// 预检错误：
 		{
 			name: "pre-flights errors from CLI args only",
 			flags: map[string]string{
@@ -207,17 +207,17 @@ func TestNewInitData(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// initialize an external init option and inject it to the init cmd
+			// 初始化外部 init 选项并注入 init 命令。
 			initOptions := newInitOptions()
-			initOptions.skipCRIDetect = true // avoid CRI detection in unit tests
+			initOptions.skipCRIDetect = true // 单元测试中避免 CRI 检测。
 			cmd := newCmdInit(nil, initOptions)
 
-			// sets cmd flags (that will be reflected on the init options)
+			// 设置命令参数（将反映到 init 选项中）。
 			for f, v := range tc.flags {
 				cmd.Flags().Set(f, v)
 			}
 
-			// test newInitData method
+			// 测试 newInitData 方法。
 			data, err := newInitData(cmd, tc.args, initOptions, nil)
 			if err != nil && !tc.expectError {
 				t.Fatalf("newInitData returned unexpected error: %v", err)
@@ -225,7 +225,7 @@ func TestNewInitData(t *testing.T) {
 			if err == nil && tc.expectError {
 				t.Fatal("newInitData didn't return error when expected")
 			}
-			// exec additional validation on the returned value
+			// 对返回值执行额外校验。
 			if tc.validate != nil {
 				tc.validate(t, data)
 			}
@@ -383,9 +383,9 @@ func TestInitDataClientWithNonDefaultKubeconfig(t *testing.T) {
 		t.Fatalf("os.WriteFile returned unexpected error: %v", err)
 	}
 
-	// initialize an external init option and inject it to the init cmd
+	// 初始化外部 init 选项并注入 init 命令。
 	initOptions := newInitOptions()
-	initOptions.skipCRIDetect = true // avoid CRI detection in unit tests
+	initOptions.skipCRIDetect = true // 单元测试中避免 CRI 检测。
 	initOptions.kubeconfigPath = kubeconfigPath
 	cmd := newCmdInit(nil, initOptions)
 

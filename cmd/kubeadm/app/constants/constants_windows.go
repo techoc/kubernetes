@@ -19,14 +19,14 @@ limitations under the License.
 package constants
 
 const (
-	// CRISocketContainerd is the containerd CRI endpoint
+	// CRISocketContainerd 是 containerd 的 CRI 端点。
 	CRISocketContainerd = "npipe:////./pipe/containerd-containerd"
-	// CRISocketCRIO is the cri-o CRI endpoint
-	// NOTE: this is a placeholder as CRI-O does not support Windows
+	// CRISocketCRIO 是 cri-o 的 CRI 端点。
+	// 注意：由于 CRI-O 不支持 Windows，此值仅为占位符。
 	CRISocketCRIO = "npipe:////./pipe/cri-o"
-	// CRISocketDocker is the cri-dockerd CRI endpoint
+	// CRISocketDocker 是 cri-dockerd 的 CRI 端点。
 	CRISocketDocker = "npipe:////./pipe/cri-dockerd"
 
-	// DefaultCRISocket defines the default CRI socket
+	// DefaultCRISocket 定义默认 CRI 套接字。
 	DefaultCRISocket = CRISocketContainerd
 )

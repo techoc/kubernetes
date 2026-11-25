@@ -155,7 +155,7 @@ func TestApplyKubeletConfigPatchFromFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			output := io.Discard
 
-			// Create a temporary file to store the patch content.
+			// 创建临时文件以保存补丁内容。
 			patchFile, err := os.CreateTemp("", "instance-config-*.yml")
 			if err != nil {
 				t.Errorf("Error creating temporary file: %v", err)
@@ -170,7 +170,7 @@ func TestApplyKubeletConfigPatchFromFile(t *testing.T) {
 				t.Errorf("Error writing instance config to file: %v", err)
 			}
 
-			// Apply the patch.
+			// 应用补丁。
 			result, err := applyKubeletConfigPatchFromFile(tt.kubeletConfig, patchFile.Name(), output)
 			if !tt.expectError && err != nil {
 				t.Errorf("Unexpected error: %v", err)
@@ -229,7 +229,7 @@ func TestApplyPatchesToConfig(t *testing.T) {
 	componentconfigs.Default(cfg, localAPIEndpoint, nodeRegOps)
 	cfg.ComponentConfigs[componentconfigs.KubeletGroup].Set(kc)
 
-	// Change to a fake function that does patching with string replace.
+	// 改为使用通过字符串替换执行打补丁的伪造函数。
 	applyKubeletConfigPatchesFunc = func(b []byte, _ string, _ io.Writer) ([]byte, error) {
 		b = bytes.ReplaceAll(b, []byte("foobar"), []byte(expectedAddress))
 		b = bytes.ReplaceAll(b, []byte("1234"), []byte(fmt.Sprintf("%d", expectedPort)))

@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// Check number of memory required by kubeadm
+// Check 检查 kubeadm 所需的内存数量。
 func (mc MemCheck) Check() (warnings, errorList []error) {
 	info := syscall.Sysinfo_t{}
 	err := syscall.Sysinfo(&info)
@@ -36,7 +36,7 @@ func (mc MemCheck) Check() (warnings, errorList []error) {
 		errorList = append(errorList, errors.Wrapf(err, "failed to get system info"))
 	}
 
-	// Totalram holds the total usable memory. Unit holds the size of a memory unit in bytes. Multiply them and convert to MB
+	// Totalram 保存可用内存总量，Unit 保存内存单元的字节数；两者相乘后转换为 MB。
 	actual := uint64(info.Totalram) * uint64(info.Unit) / 1024 / 1024
 	if actual < mc.Mem {
 		errorList = append(errorList, errors.Errorf("the system RAM (%d MB) is less than the minimum %d MB", actual, mc.Mem))
@@ -44,7 +44,7 @@ func (mc MemCheck) Check() (warnings, errorList []error) {
 	return warnings, errorList
 }
 
-// addOSValidator adds a new OSValidator
+// addOSValidator 添加一个新的 OSValidator。
 func addOSValidator(validators []system.Validator, reporter *system.StreamReporter, kubeletVersion string) []system.Validator {
 	validators = append(validators,
 		&system.OSValidator{Reporter: reporter},
@@ -53,7 +53,7 @@ func addOSValidator(validators []system.Validator, reporter *system.StreamReport
 	return validators
 }
 
-// addIPv6Checks adds IPv6 related checks
+// addIPv6Checks 添加 IPv6 相关检查。
 func addIPv6Checks(checks []Checker) []Checker {
 	checks = append(checks,
 		FileContentCheck{Path: ipv6DefaultForwarding, Content: []byte{'1'}},
@@ -61,22 +61,22 @@ func addIPv6Checks(checks []Checker) []Checker {
 	return checks
 }
 
-// addIPv4Checks adds IPv4 related checks
+// addIPv4Checks 添加 IPv4 相关检查。
 func addIPv4Checks(checks []Checker) []Checker {
 	checks = append(checks,
 		FileContentCheck{Path: ipv4Forward, Content: []byte{'1'}})
 	return checks
 }
 
-// addSwapCheck adds a swap check
+// addSwapCheck 添加 swap 检查。
 func addSwapCheck(checks []Checker) []Checker {
 	checks = append(checks, SwapCheck{})
 	return checks
 }
 
-// addExecChecks adds checks that verify if certain binaries are in PATH
+// addExecChecks 添加检查，验证某些二进制文件是否存在于 PATH 中。
 func addExecChecks(checks []Checker, execer utilsexec.Interface, k8sVersion string) []Checker {
-	// For k8s >= 1.32.0, kube-proxy no longer depends on conntrack to be present in PATH
+	// 从 k8s >= 1.32.0 起，kube-proxy 不再依赖 conntrack 存在于 PATH 中。
 	// (ref: https://github.com/kubernetes/kubernetes/pull/126952)
 	if v, err := utilversion.ParseSemantic(k8sVersion); err == nil {
 		if v.LessThan(utilversion.MustParseSemantic("1.32.0")) {
@@ -84,14 +84,14 @@ func addExecChecks(checks []Checker, execer utilsexec.Interface, k8sVersion stri
 		}
 	}
 
-	// kubelet requires losetup to be present in PATH for block volume support since 1.9.0.
+	// 从 1.9.0 起，kubelet 要求 losetup 存在于 PATH 中以支持块卷。
 	// (ref: https://github.com/kubernetes/kubernetes/pull/51494)
 	checks = append(checks, InPathCheck{executable: "losetup", mandatory: true, exec: execer})
 
-	// kubelet requires mount to be present in PATH for in-tree volume plugins.
+	// kubelet 要求 mount 存在于 PATH 中以支持树内卷插件。
 	checks = append(checks, InPathCheck{executable: "mount", mandatory: true, exec: execer})
 
-	// kubeadm requires cp to be present in PATH for copying etcd directories.
+	// kubeadm 要求 cp 存在于 PATH 中以复制 etcd 目录。
 	checks = append(checks, InPathCheck{executable: "cp", mandatory: true, exec: execer})
 	return checks
 }

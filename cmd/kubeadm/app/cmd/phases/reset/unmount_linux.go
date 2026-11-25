@@ -47,7 +47,7 @@ func flagsToInt(flags []string) int {
 	return res
 }
 
-// unmountKubeletDirectory unmounts all paths that contain KubeletRunDirectory
+// unmountKubeletDirectory 卸载包含 KubeletRunDirectory 的全部路径。
 func unmountKubeletDirectory(kubeletRunDirectory string, flags []string) error {
 	raw, err := os.ReadFile("/proc/mounts")
 	if err != nil {
@@ -55,7 +55,7 @@ func unmountKubeletDirectory(kubeletRunDirectory string, flags []string) error {
 	}
 
 	if !strings.HasSuffix(kubeletRunDirectory, "/") {
-		// trailing "/" is needed to ensure that possibly mounted /var/lib/kubelet is skipped
+		// 末尾的 "/" 用于确保跳过可能挂载的 /var/lib/kubelet。
 		kubeletRunDirectory += "/"
 	}
 
@@ -69,8 +69,7 @@ func unmountKubeletDirectory(kubeletRunDirectory string, flags []string) error {
 		}
 		klog.V(5).Infof("[reset] Unmounting %q", m[1])
 		if err := syscall.Unmount(m[1], flagsInt); err != nil {
-			// EINVAL is expected here if a duplicate mount entry
-			// was already unmounted via its shared peer.
+			// 若重复挂载项已通过其共享对端卸载，则此处预期返回 EINVAL。
 			if err == syscall.EINVAL {
 				klog.Warningf("[reset] Ignoring EINVAL error while unmounting %q", m[1])
 				continue

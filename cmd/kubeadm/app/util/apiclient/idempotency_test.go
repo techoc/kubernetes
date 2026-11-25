@@ -41,7 +41,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Override the default interval and timeouts during tests
+	// 测试期间覆盖默认重试间隔和超时。
 	defaultRetryInterval := apiCallRetryInterval
 	apiCallRetryInterval = time.Millisecond * 50
 
@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 
 	exitVal := m.Run()
 
-	// Restore the default interval and timeouts
+	// 恢复默认重试间隔和超时。
 	apiCallRetryInterval = defaultRetryInterval
 	defaultTimeouts.KubernetesAPICall = defaultAPICallTimeout
 

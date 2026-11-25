@@ -78,8 +78,8 @@ func TestEnforceVersionPolicies(t *testing.T) {
 				kubeadmVersion: "v1.12.3",
 			},
 			newK8sVersion:         "v1.10.10",
-			expectedMandatoryErrs: 1, // version must be higher than v1.12.0
-			expectedSkippableErrs: 1, // can't upgrade old k8s with newer kubeadm
+			expectedMandatoryErrs: 1, // 版本必须高于 v1.12.0。
+			expectedSkippableErrs: 1, // 不能使用新版 kubeadm 升级旧版 k8s。
 		},
 		{
 			name: "upgrading two minor versions in one go is not supported",
@@ -89,7 +89,7 @@ func TestEnforceVersionPolicies(t *testing.T) {
 				kubeadmVersion: "v1.13.0",
 			},
 			newK8sVersion:         "v1.13.0",
-			expectedMandatoryErrs: 1, // can't upgrade two minor versions
+			expectedMandatoryErrs: 1, // 不能一次升级两个次版本。
 		},
 		{
 			name: "upgrading with n-3 kubelet is supported",
@@ -108,7 +108,7 @@ func TestEnforceVersionPolicies(t *testing.T) {
 				kubeadmVersion: "v1.15.0",
 			},
 			newK8sVersion:         "v1.15.0",
-			expectedSkippableErrs: 1, // kubelet <-> apiserver skew too large
+			expectedSkippableErrs: 1, // kubelet <-> apiserver 版本偏差过大。
 		},
 		{
 			name: "downgrading two minor versions in one go is not supported",
@@ -118,7 +118,7 @@ func TestEnforceVersionPolicies(t *testing.T) {
 				kubeadmVersion: currentKubernetesVersion.String(),
 			},
 			newK8sVersion:         currentKubernetesVersion.String(),
-			expectedMandatoryErrs: 1, // can't downgrade two minor versions
+			expectedMandatoryErrs: 1, // 不能一次降级两个次版本。
 		},
 		{
 			name: "kubeadm version must be higher than the new kube version. However, patch version skews may be forced",
@@ -218,7 +218,7 @@ func TestEnforceVersionPolicies(t *testing.T) {
 				kubeadmVersion: currentKubernetesVersion.String(),
 			},
 			newK8sVersion:         minimumControlPlaneVersion.WithPatch(6).String(),
-			expectedSkippableErrs: 1, // can't upgrade old k8s with newer kubeadm
+			expectedSkippableErrs: 1, // 不能使用新版 kubeadm 升级旧版 k8s。
 		},
 		{
 			name: "build release supported at MinimumControlPlaneVersion",
@@ -241,11 +241,11 @@ func TestEnforceVersionPolicies(t *testing.T) {
 
 			actualSkewErrs := EnforceVersionPolicies(rt.vg, rt.newK8sVersion, newK8sVer, rt.allowExperimental, rt.allowRCs)
 			if actualSkewErrs == nil {
-				// No errors were seen. Report unit test failure if we expected to see errors
+				// 未出现错误。若预期有错误，则报告单元测试失败。
 				if rt.expectedMandatoryErrs+rt.expectedSkippableErrs > 0 {
 					t.Errorf("failed TestEnforceVersionPolicies\n\texpected errors but got none")
 				}
-				// Otherwise, just move on with the next test
+				// 否则继续下一个测试。
 				return
 			}
 

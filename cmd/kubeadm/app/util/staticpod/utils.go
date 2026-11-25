@@ -47,10 +47,10 @@ import (
 )
 
 const (
-	// kubeControllerManagerBindAddressArg represents the bind-address argument of the kube-controller-manager configuration.
+	// kubeControllerManagerBindAddressArg 表示 kube-controller-manager 配置的 bind-address 参数。
 	kubeControllerManagerBindAddressArg = "bind-address"
 
-	// kubeSchedulerBindAddressArg represents the bind-address argument of the kube-scheduler configuration.
+	// kubeSchedulerBindAddressArg 表示 kube-scheduler 配置的 bind-address 参数。
 	kubeSchedulerBindAddressArg = "bind-address"
 )
 
@@ -59,9 +59,9 @@ var (
 	usersAndGroupsOnce sync.Once
 )
 
-// ComponentPod returns a Pod object from the container, volume and annotations specifications
+// ComponentPod 根据容器、卷和注解规格创建 Pod 对象。
 func ComponentPod(container v1.Container, volumes map[string]v1.Volume, annotations map[string]string) v1.Pod {
-	// priority value for system-node-critical class
+	// system-node-critical 优先级的 priority 值。
 	priority := int32(2000001000)
 	return v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -71,8 +71,8 @@ func ComponentPod(container v1.Container, volumes map[string]v1.Volume, annotati
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      container.Name,
 			Namespace: metav1.NamespaceSystem,
-			// The component and tier labels are useful for quickly identifying the control plane Pods when doing a .List()
-			// against Pods in the kube-system namespace. Can for example be used together with the WaitForPodsWithLabel function
+			// component 和 tier 标签便于在 kube-system 中列出控制平面 Pod 时快速识别，
+			// 例如可与 WaitForPodsWithLabel 配合使用。
 			Labels:      map[string]string{"component": container.Name, "tier": kubeadmconstants.ControlPlaneTier},
 			Annotations: annotations,
 		},
@@ -91,7 +91,7 @@ func ComponentPod(container v1.Container, volumes map[string]v1.Volume, annotati
 	}
 }
 
-// ComponentResources returns the v1.ResourceRequirements object needed for allocating a specified amount of the CPU
+// ComponentResources 返回分配指定 CPU 数量所需的 v1.ResourceRequirements。
 func ComponentResources(cpu string) v1.ResourceRequirements {
 	return v1.ResourceRequirements{
 		Requests: v1.ResourceList{
@@ -100,7 +100,7 @@ func ComponentResources(cpu string) v1.ResourceRequirements {
 	}
 }
 
-// NewVolume creates a v1.Volume with a hostPath mount to the specified location
+// NewVolume 创建挂载到指定位置的 hostPath v1.Volume。
 func NewVolume(name, path string, pathType *v1.HostPathType) v1.Volume {
 	return v1.Volume{
 		Name: name,
@@ -113,7 +113,7 @@ func NewVolume(name, path string, pathType *v1.HostPathType) v1.Volume {
 	}
 }
 
-// NewVolumeMount creates a v1.VolumeMount to the specified location
+// NewVolumeMount 创建指向指定位置的 v1.VolumeMount。
 func NewVolumeMount(name, path string, readOnly bool) v1.VolumeMount {
 	return v1.VolumeMount{
 		Name:      name,
@@ -122,7 +122,7 @@ func NewVolumeMount(name, path string, readOnly bool) v1.VolumeMount {
 	}
 }
 
-// VolumeMapToSlice returns a slice of volumes from a map's values
+// VolumeMapToSlice 将映射中的值转换为卷切片。
 func VolumeMapToSlice(volumes map[string]v1.Volume) []v1.Volume {
 	v := make([]v1.Volume, 0, len(volumes))
 
@@ -137,7 +137,7 @@ func VolumeMapToSlice(volumes map[string]v1.Volume) []v1.Volume {
 	return v
 }
 
-// VolumeMountMapToSlice returns a slice of volumes from a map's values
+// VolumeMountMapToSlice 将映射中的值转换为卷挂载切片。
 func VolumeMountMapToSlice(volumeMounts map[string]v1.VolumeMount) []v1.VolumeMount {
 	v := make([]v1.VolumeMount, 0, len(volumeMounts))
 
@@ -152,9 +152,9 @@ func VolumeMountMapToSlice(volumeMounts map[string]v1.VolumeMount) []v1.VolumeMo
 	return v
 }
 
-// PatchStaticPod applies patches stored in patchesDir to a static Pod.
+// PatchStaticPod 将 patchesDir 中的补丁应用到静态 Pod。
 func PatchStaticPod(pod *v1.Pod, patchesDir string, output io.Writer) (*v1.Pod, error) {
-	// Marshal the Pod manifest into YAML.
+	// 将 Pod 清单序列化为 YAML。
 	podYAML, err := kubeadmutil.MarshalToYaml(pod, v1.SchemeGroupVersion)
 	if err != nil {
 		return pod, errors.Wrapf(err, "failed to marshal Pod manifest to YAML")
@@ -187,15 +187,15 @@ func PatchStaticPod(pod *v1.Pod, patchesDir string, output io.Writer) (*v1.Pod, 
 	return pod2, nil
 }
 
-// WriteStaticPodToDisk writes a static pod file to disk
+// WriteStaticPodToDisk 将静态 Pod 文件写入磁盘。
 func WriteStaticPodToDisk(componentName, manifestDir string, pod v1.Pod) error {
 
-	// creates target folder if not already exists
+	// 必要时创建目标目录。
 	if err := os.MkdirAll(manifestDir, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create directory %q", manifestDir)
 	}
 
-	// writes the pod to disk
+	// 将 Pod 写入磁盘。
 	serialized, err := kubeadmutil.MarshalToYaml(&pod, v1.SchemeGroupVersion)
 	if err != nil {
 		return errors.Wrapf(err, "failed to marshal manifest for %q to YAML", componentName)
@@ -210,7 +210,7 @@ func WriteStaticPodToDisk(componentName, manifestDir string, pod v1.Pod) error {
 	return nil
 }
 
-// ReadStaticPodFromDisk reads a static pod file from disk
+// ReadStaticPodFromDisk 从磁盘读取静态 Pod 文件。
 func ReadStaticPodFromDisk(manifestPath string) (*v1.Pod, error) {
 	buf, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -230,8 +230,7 @@ func ReadStaticPodFromDisk(manifestPath string) (*v1.Pod, error) {
 	return pod, nil
 }
 
-// ReadMultipleStaticPodsFromDisk reads multiple known component static Pods from manifestDir
-// and returns a list of Pods objects.
+// ReadMultipleStaticPodsFromDisk 从 manifestDir 读取多个已知组件的静态 Pod，并返回 Pod 列表。
 func ReadMultipleStaticPodsFromDisk(manifestDir string, components ...string) (map[string]*v1.Pod, error) {
 	var (
 		podMap = map[string]*v1.Pod{}
@@ -252,29 +251,28 @@ func ReadMultipleStaticPodsFromDisk(manifestDir string, components ...string) (m
 	return podMap, nil
 }
 
-// LivenessProbe creates a Probe object with a HTTPGet handler
+// LivenessProbe 创建带 HTTPGet 处理器的 Probe。
 func LivenessProbe(host, path, port string, scheme v1.URIScheme) *v1.Probe {
-	// sets initialDelaySeconds same as periodSeconds to skip one period before running a check
+	// 将 initialDelaySeconds 设为 periodSeconds，跳过一个周期后再执行检查。
 	return createHTTPProbe(host, path, port, scheme, 10, 15, 8, 10)
 }
 
-// ReadinessProbe creates a Probe object with a HTTPGet handler
+// ReadinessProbe 创建带 HTTPGet 处理器的 Probe。
 func ReadinessProbe(host, path, port string, scheme v1.URIScheme) *v1.Probe {
-	// sets initialDelaySeconds as '0' because we don't want to delay user infrastructure checks
-	// looking for "ready" status on kubeadm static Pods
+	// initialDelaySeconds 设为 0，避免延迟基础设施检查 kubeadm 静态 Pod 的 "ready" 状态。
 	return createHTTPProbe(host, path, port, scheme, 0, 15, 3, 1)
 }
 
-// StartupProbe creates a Probe object with a HTTPGet handler
+// StartupProbe 创建带 HTTPGet 处理器的 Probe。
 func StartupProbe(host, path, port string, scheme v1.URIScheme, timeoutForControlPlane *metav1.Duration) *v1.Probe {
 	periodSeconds, timeoutForControlPlaneSeconds := int32(10), kubeadmconstants.ControlPlaneComponentHealthCheckTimeout.Seconds()
 	if timeoutForControlPlane != nil {
 		timeoutForControlPlaneSeconds = timeoutForControlPlane.Seconds()
 	}
-	// sets failureThreshold big enough to guarantee the full timeout can cover the worst case scenario for the control-plane to come alive
-	// we ignore initialDelaySeconds in the calculation here for simplicity
+	// failureThreshold 足够大，确保完整超时覆盖控制平面启动的最坏情况；
+	// 为简化计算，忽略 initialDelaySeconds。
 	failureThreshold := int32(math.Ceil(timeoutForControlPlaneSeconds / float64(periodSeconds)))
-	// sets initialDelaySeconds same as periodSeconds to skip one period before running a check
+	// 将 initialDelaySeconds 设为 periodSeconds，跳过一个周期后再执行检查。
 	return createHTTPProbe(host, path, port, scheme, periodSeconds, 15, failureThreshold, periodSeconds)
 }
 
@@ -295,7 +293,7 @@ func createHTTPProbe(host, path, port string, scheme v1.URIScheme, initialDelayS
 	}
 }
 
-// GetAPIServerProbeAddress returns the probe address for the API server
+// GetAPIServerProbeAddress 返回 API Server 的探测地址。
 func GetAPIServerProbeAddress(endpoint *kubeadmapi.APIEndpoint) string {
 	if endpoint != nil && endpoint.AdvertiseAddress != "" {
 		return getProbeAddress(endpoint.AdvertiseAddress)
@@ -304,7 +302,7 @@ func GetAPIServerProbeAddress(endpoint *kubeadmapi.APIEndpoint) string {
 	return "127.0.0.1"
 }
 
-// GetControllerManagerProbeAddress returns the kubernetes controller manager probe address
+// GetControllerManagerProbeAddress 返回 Kubernetes 控制器管理器的探测地址。
 func GetControllerManagerProbeAddress(cfg *kubeadmapi.ClusterConfiguration) string {
 	if addr, idx := kubeadmapi.GetArgValue(cfg.ControllerManager.ExtraArgs, kubeControllerManagerBindAddressArg, -1); idx > -1 {
 		return getProbeAddress(addr)
@@ -312,7 +310,7 @@ func GetControllerManagerProbeAddress(cfg *kubeadmapi.ClusterConfiguration) stri
 	return "127.0.0.1"
 }
 
-// GetSchedulerProbeAddress returns the kubernetes scheduler probe address
+// GetSchedulerProbeAddress 返回 Kubernetes 调度器的探测地址。
 func GetSchedulerProbeAddress(cfg *kubeadmapi.ClusterConfiguration) string {
 	if addr, idx := kubeadmapi.GetArgValue(cfg.Scheduler.ExtraArgs, kubeSchedulerBindAddressArg, -1); idx > -1 {
 		return getProbeAddress(addr)
@@ -320,9 +318,8 @@ func GetSchedulerProbeAddress(cfg *kubeadmapi.ClusterConfiguration) string {
 	return "127.0.0.1"
 }
 
-// GetEtcdProbeEndpoint takes a kubeadm Etcd configuration object and attempts to parse
-// the first URL in the listen-metrics-urls argument, returning an etcd probe hostname,
-// port and scheme
+// GetEtcdProbeEndpoint 解析 kubeadm Etcd 配置中 listen-metrics-urls 参数的第一个 URL，
+// 返回 etcd 探测主机名、端口和 scheme。
 func GetEtcdProbeEndpoint(cfg *kubeadmapi.Etcd, isIPv6 bool) (string, int32, v1.URIScheme) {
 	localhost := "127.0.0.1"
 	if isIPv6 {
@@ -332,23 +329,23 @@ func GetEtcdProbeEndpoint(cfg *kubeadmapi.Etcd, isIPv6 bool) (string, int32, v1.
 		return localhost, kubeadmconstants.EtcdMetricsPort, v1.URISchemeHTTP
 	}
 	if arg, idx := kubeadmapi.GetArgValue(cfg.Local.ExtraArgs, "listen-metrics-urls", -1); idx > -1 {
-		// Use the first url in the listen-metrics-urls if multiple URL's are specified.
+		// 指定多个 URL 时使用 listen-metrics-urls 中的第一个。
 		arg = strings.Split(arg, ",")[0]
 		parsedURL, err := url.Parse(arg)
 		if err != nil {
 			return localhost, kubeadmconstants.EtcdMetricsPort, v1.URISchemeHTTP
 		}
-		// Parse scheme
+		// 解析 scheme。
 		scheme := v1.URISchemeHTTP
 		if parsedURL.Scheme == "https" {
 			scheme = v1.URISchemeHTTPS
 		}
-		// Parse hostname
+		// 解析主机名。
 		hostname := parsedURL.Hostname()
 		if len(hostname) == 0 {
 			hostname = localhost
 		}
-		// Parse port
+		// 解析端口。
 		port := kubeadmconstants.EtcdMetricsPort
 		portStr := parsedURL.Port()
 		if len(portStr) != 0 {
@@ -362,7 +359,7 @@ func GetEtcdProbeEndpoint(cfg *kubeadmapi.Etcd, isIPv6 bool) (string, int32, v1.
 	return localhost, kubeadmconstants.EtcdMetricsPort, v1.URISchemeHTTP
 }
 
-// ManifestFilesAreEqual compares 2 files. It returns true if their contents are equal, false otherwise
+// ManifestFilesAreEqual 比较两个文件，内容相同返回 true，否则返回 false。
 func ManifestFilesAreEqual(path1, path2 string) (bool, string, error) {
 	pod1, err := ReadStaticPodFromDisk(path1)
 	if err != nil {
@@ -405,12 +402,9 @@ func ManifestFilesAreEqual(path1, path2 string) (bool, string, error) {
 	return false, diffStr, nil
 }
 
-// getProbeAddress returns a valid probe address.
-// Kubeadm uses the bind-address to configure the probe address. It's common to use the
-// unspecified address "0.0.0.0" or "::" as bind-address when we want to listen in all interfaces,
-// however this address can't be used as probe #86504.
-// If the address is an unspecified address getProbeAddress returns empty,
-// that means that kubelet will use the PodIP as probe address.
+// getProbeAddress 返回有效探测地址。kubeadm 使用 bind-address 配置探测地址；
+// 监听所有接口时常设为未指定地址 "0.0.0.0" 或 "::"，但该地址不能用于探测（见 #86504）。
+// 若为未指定地址，返回空字符串，使 kubelet 使用 PodIP 作为探测地址。
 func getProbeAddress(addr string) string {
 	if addr == "0.0.0.0" || addr == "::" {
 		return ""
@@ -418,8 +412,7 @@ func getProbeAddress(addr string) string {
 	return addr
 }
 
-// GetUsersAndGroups returns the local usersAndGroups, but first creates it
-// in a thread safe way once.
+// GetUsersAndGroups 返回本地 usersAndGroups；首次调用时以线程安全方式创建一次。
 func GetUsersAndGroups() (*users.UsersAndGroups, error) {
 	var err error
 	usersAndGroupsOnce.Do(func() {
@@ -428,17 +421,14 @@ func GetUsersAndGroups() (*users.UsersAndGroups, error) {
 	return usersAndGroups, err
 }
 
-// DeepHashObject writes specified object to hash using the spew library
-// which follows pointers and prints actual values of the nested objects
-// ensuring the hash does not change when a pointer changes.
-// Copied from k8s.io/kubernetes/pkg/util/hash/hash.go#DeepHashObject
+// DeepHashObject 使用 spew 库将对象写入哈希，跟随指针并输出嵌套对象的实际值，
+// 确保指针变化时哈希不变。复制自 k8s.io/kubernetes/pkg/util/hash/hash.go#DeepHashObject。
 func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 	hasher.Reset()
 	fmt.Fprintf(hasher, "%v", dump.ForHash(objectToWrite))
 }
 
-// IsControlPlaneNode returns true if the kube-apiserver static pod manifest is present
-// on the host.
+// IsControlPlaneNode 在宿主机存在 kube-apiserver 静态 Pod 清单时返回 true。
 func IsControlPlaneNode() bool {
 	isControlPlaneNode := true
 

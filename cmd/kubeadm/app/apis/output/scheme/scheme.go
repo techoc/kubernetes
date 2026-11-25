@@ -27,10 +27,10 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/output/v1alpha3"
 )
 
-// Scheme is the runtime.Scheme to which all kubeadm api types are registered.
+// Scheme 是注册了所有 kubeadm API 类型的 runtime.Scheme。
 var Scheme = runtime.NewScheme()
 
-// Codecs provides access to encoding and decoding for the scheme.
+// Codecs 提供该 Scheme 的编码和解码功能。
 var Codecs = serializer.NewCodecFactory(Scheme)
 
 func init() {
@@ -38,7 +38,7 @@ func init() {
 	AddToScheme(Scheme)
 }
 
-// AddToScheme builds the kubeadm scheme using all known versions of the kubeadm api.
+// AddToScheme 将 kubeadm API 的所有已知版本注册到 Scheme。
 func AddToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(output.AddToScheme(scheme))
 	utilruntime.Must(v1alpha3.AddToScheme(scheme))

@@ -37,8 +37,7 @@ import (
 )
 
 var (
-	// TestMain generates the bellow certs and keys so that
-	// they are reused in tests whenever possible
+	// TestMain 生成以下证书和密钥，供测试尽可能复用。
 
 	rootCACert, servCert *x509.Certificate
 	rootCAKey, servKey   crypto.Signer
@@ -120,8 +119,7 @@ func TestNewCertAndKey(t *testing.T) {
 }
 
 func TestHasServerAuth(t *testing.T) {
-	// Override NewPrivateKey to reuse the same key for all certs
-	// since this test is only checking cert.ExtKeyUsage
+	// 覆盖 NewPrivateKey，让所有证书复用同一密钥；此测试仅检查 cert.ExtKeyUsage。
 	privateKeyFunc := NewPrivateKey
 	NewPrivateKey = func(kubeadmapi.EncryptionAlgorithmType) (crypto.Signer, error) {
 		return rootCAKey, nil
@@ -445,7 +443,7 @@ func TestTryLoadCertChainFromDisk(t *testing.T) {
 		t.Fatalf("failed to write cert: %v", err)
 	}
 
-	// rootCACert is treated as an intermediate CA here
+	// 此处将 rootCACert 视为中间 CA。
 	bundle := []*x509.Certificate{servCert, rootCACert}
 	err = WriteCertBundle(tmpdir, "bundle", bundle)
 	if err != nil {

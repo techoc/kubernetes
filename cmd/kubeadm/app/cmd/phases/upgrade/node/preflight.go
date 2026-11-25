@@ -27,7 +27,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewPreflightPhase returns a new preflight phase.
+// NewPreflightPhase 返回新的 preflight 阶段。
 func NewPreflightPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "preflight",
@@ -41,7 +41,7 @@ func NewPreflightPhase() workflow.Phase {
 	}
 }
 
-// runPreflight executes preflight checks logic.
+// runPreflight 执行预检逻辑。
 func runPreflight(c workflow.RunData) error {
 	data, ok := c.(Data)
 	if !ok {
@@ -49,7 +49,7 @@ func runPreflight(c workflow.RunData) error {
 	}
 	fmt.Println("[upgrade/preflight] Running pre-flight checks")
 
-	// First, check if we're root separately from the other preflight checks and fail fast.
+	// 首先单独检查是否以 root 身份运行，以便快速失败。
 	if err := preflight.RunRootCheckOnly(data.IgnorePreflightErrors()); err != nil {
 		return err
 	}
@@ -57,10 +57,10 @@ func runPreflight(c workflow.RunData) error {
 		return err
 	}
 
-	// If this is a control-plane node, pull the basic images.
+	// 若是控制平面节点，则拉取基础镜像。
 	if data.IsControlPlaneNode() {
-		// Update the InitConfiguration used for RunPullImagesCheck with ImagePullPolicy and ImagePullSerial
-		// that come from UpgradeNodeConfiguration.
+		// 使用 UpgradeNodeConfiguration 中的 ImagePullPolicy 和 ImagePullSerial
+		// 更新 RunPullImagesCheck 所用的 InitConfiguration。
 		initConfig := data.InitCfg()
 		initConfig.NodeRegistration.ImagePullPolicy = data.Cfg().Node.ImagePullPolicy
 		initConfig.NodeRegistration.ImagePullSerial = data.Cfg().Node.ImagePullSerial

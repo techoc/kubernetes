@@ -41,7 +41,7 @@ var (
 		`)
 )
 
-// NewEtcdPhase creates a kubeadm workflow phase that implements handling of etcd.
+// NewEtcdPhase 创建实现 etcd 处理的 kubeadm 工作流阶段。
 func NewEtcdPhase() workflow.Phase {
 	phase := workflow.Phase{
 		Name:  "etcd",
@@ -83,11 +83,11 @@ func runEtcdPhaseLocal() func(c workflow.RunData) error {
 		}
 		cfg := data.Cfg()
 
-		// Add etcd static pod spec only if external etcd is not configured
+		// 仅在未配置外部 etcd 时添加 etcd 静态 Pod 清单。
 		if cfg.Etcd.External == nil {
-			// creates target folder if doesn't exist already
+			// 若目标目录不存在则创建。
 			if !data.DryRun() {
-				// Create the etcd data directory
+				// 创建 etcd 数据目录。
 				if err := etcdutil.CreateDataDirectory(cfg.Etcd.Local.DataDir); err != nil {
 					return err
 				}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package upgrade holds the common phases for 'kubeadm upgrade'.
+// Package upgrade 包含 kubeadm upgrade 的公共阶段。
 package upgrade
 
 import (
@@ -32,7 +32,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewAddonPhase returns a new addon phase.
+// NewAddonPhase 返回新的插件阶段。
 func NewAddonPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:  "addon",
@@ -80,7 +80,7 @@ func getInitData(c workflow.RunData) (*kubeadmapi.InitConfiguration, clientset.I
 	return data.InitCfg(), data.Client(), data.PatchesDir(), data.OutputWriter(), data.DryRun(), data.IsControlPlaneNode(), nil
 }
 
-// runCoreDNSAddon upgrades the CoreDNS addon.
+// runCoreDNSAddon 升级 CoreDNS 插件。
 func runCoreDNSAddon(c workflow.RunData) error {
 	const skipMessagePrefix = "[upgrade/addon] Skipping the addon/coredns phase."
 
@@ -114,7 +114,7 @@ func runCoreDNSAddon(c workflow.RunData) error {
 	return nil
 }
 
-// runKubeProxyAddon upgrades the kube-proxy addon.
+// runKubeProxyAddon 升级 kube-proxy 插件。
 func runKubeProxyAddon(c workflow.RunData) error {
 	const skipMessagePrefix = "[upgrade/addon] Skipping the addon/kube-proxy phase."
 

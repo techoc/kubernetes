@@ -42,24 +42,24 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pubkeypin"
 )
 
-// BootstrapUser defines bootstrap user name
+// BootstrapUser 定义 Bootstrap 用户名。
 const BootstrapUser = "token-bootstrap-client"
 
-// RetrieveValidatedConfigInfo connects to the API Server and tries to fetch the cluster-info ConfigMap
-// It then makes sure it can trust the API Server by looking at the JWS-signed tokens and (if CACertHashes is not empty)
-// validating the cluster CA against a set of pinned public keys
+// RetrieveValidatedConfigInfo 连接 API Server 并尝试获取 cluster-info ConfigMap。
+// 随后通过 JWS 签名令牌确认能够信任 API Server；如果 CACertHashes 非空，
+// 还会使用一组固定的公钥验证集群 CA。
 func RetrieveValidatedConfigInfo(dryRunClient clientset.Interface, cfg *kubeadmapi.Discovery, timeout time.Duration) (*clientcmdapi.Config, error) {
 	isDryRun := dryRunClient != nil
 	isTesting := false
 	return retrieveValidatedConfigInfo(dryRunClient, cfg, constants.DiscoveryRetryInterval, timeout, isDryRun, isTesting)
 }
 
-// retrieveValidatedConfigInfo is a private implementation of RetrieveValidatedConfigInfo.
-// It accepts an optional clientset that can be used for testing purposes.
+// retrieveValidatedConfigInfo 是 RetrieveValidatedConfigInfo 的私有实现。
+// 它接受一个可选的 clientset，供测试使用。
 func retrieveValidatedConfigInfo(client clientset.Interface, cfg *kubeadmapi.Discovery, interval, timeout time.Duration, isDryRun, isTesting bool) (*clientcmdapi.Config, error) {
 	var err error
 
-	// Make sure the interval is not bigger than the duration
+	// 确保重试间隔不超过超时时长。
 	if interval > timeout {
 		interval = timeout
 	}
@@ -80,7 +80,7 @@ func retrieveValidatedConfigInfo(client clientset.Interface, cfg *kubeadmapi.Dis
 		return nil, err
 	}
 
-	// Load the CACertHashes into a pubkeypin.Set
+	// 将 CACertHashes 加载到 pubkeypin.Set 中。
 	pubKeyPins := pubkeypin.NewSet()
 	if err := pubKeyPins.Allow(cfg.BootstrapToken.CACertHashes...); err != nil {
 		return nil, errors.Wrap(err, "invalid discovery token CA certificate hash")
@@ -91,13 +91,13 @@ func retrieveValidatedConfigInfo(client clientset.Interface, cfg *kubeadmapi.Dis
 		return nil, err
 	}
 
-	// Validate the token in the cluster info
+	// 验证 cluster-info 中的令牌。
 	insecureKubeconfigBytes, err := validateClusterInfoToken(insecureClusterInfo, token)
 	if err != nil {
 		return nil, err
 	}
 
-	// Load the insecure config
+	// 加载不安全的配置。
 	insecureConfig, err := clientcmd.Load(insecureKubeconfigBytes)
 	if err != nil {
 		return nil, errors.Wrapf(err, "couldn't parse the kubeconfig file in the %s ConfigMap", bootstrapapi.ConfigMapClusterInfo)
@@ -108,19 +108,19 @@ func retrieveValidatedConfigInfo(client clientset.Interface, cfg *kubeadmapi.Dis
 		return nil, errors.Wrapf(err, "malformed kubeconfig in the %s ConfigMap", bootstrapapi.ConfigMapClusterInfo)
 	}
 
-	// If no TLS root CA pinning was specified, we're done
+	// 如果未指定 TLS 根 CA 固定，则到此结束。
 	if pubKeyPins.Empty() {
 		klog.V(1).Infof("[discovery] Cluster info signature and contents are valid and no TLS pinning was specified, will use API Server %q", endpoint)
 		return insecureConfig, nil
 	}
 
-	// Load and validate the cluster CA from the insecure kubeconfig
+	// 从不安全的 kubeconfig 中加载并验证集群 CA。
 	clusterCABytes, err := validateClusterCA(insecureConfig, pubKeyPins)
 	if err != nil {
 		return nil, err
 	}
 
-	// Now that we know the cluster CA, connect back a second time validating with that CA
+	// 已知集群 CA，使用该 CA 验证并第二次建立连接。
 	secureBootstrapConfig := buildSecureBootstrapKubeConfig(endpoint, clusterCABytes, clusterName)
 
 	klog.V(1).Infof("[discovery] Requesting info from %q again to validate TLS against the pinned public key", endpoint)

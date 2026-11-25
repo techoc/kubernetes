@@ -25,10 +25,10 @@ import (
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
-// a package local type for testing purposes.
+// 包内类型，仅供测试使用。
 type testData struct{}
 
-// testData must satisfy Data.
+// testData 必须满足 Data。
 var _ Data = &testData{}
 
 func (t *testData) EtcdUpgrade() bool                       { return false }

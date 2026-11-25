@@ -112,7 +112,7 @@ func TestKubeProxyDefault(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// This is the same for all test cases so we set it here
+			// 所有测试用例共用此项，因此在此设置。
 			expected := test.expected
 			expected.configBase.GroupVersion = kubeproxyconfig.SchemeGroupVersion
 
@@ -217,7 +217,7 @@ func TestKubeProxyDefaultBindAddressPreserved(t *testing.T) {
 	}
 }
 
-// runKubeProxyFromTest holds common test case data and evaluation code for kubeProxyHandler.From* functions
+// runKubeProxyFromTest 保存 kubeProxyHandler.From* 函数的通用测试数据和求值逻辑。
 func runKubeProxyFromTest(t *testing.T, perform func(gvk schema.GroupVersionKind, yaml string) (kubeadmapi.ComponentConfig, error)) {
 	const (
 		kind        = "KubeProxyConfiguration"

@@ -58,7 +58,7 @@ var (
 	`)
 )
 
-// resetOptions defines all the options exposed via flags by kubeadm reset.
+// resetOptions 定义 kubeadm reset 通过参数暴露的全部选项。
 type resetOptions struct {
 	kubeconfigPath        string
 	cfgPath               string
@@ -67,8 +67,8 @@ type resetOptions struct {
 	skipCRIDetect         bool
 }
 
-// resetData defines all the runtime information used when running the kubeadm reset workflow;
-// this data is shared across all the phases that are included in the workflow.
+// resetData 定义运行 kubeadm reset 工作流所需的全部运行时信息，
+// 并供工作流包含的所有阶段共享。
 type resetData struct {
 	certificatesDir       string
 	client                clientset.Interface
@@ -83,11 +83,11 @@ type resetData struct {
 	cleanupTmpDir         bool
 }
 
-// newResetOptions returns a struct ready for being used for creating cmd join flags.
+// newResetOptions 返回可用于创建 reset 命令参数的结构体。
 func newResetOptions() *resetOptions {
-	// initialize the public kubeadm config API by applying defaults
+	// 应用默认值以初始化公开的 kubeadm 配置 API。
 	externalcfg := &kubeadmapiv1.ResetConfiguration{}
-	// Apply defaults
+	// 应用默认值。
 	kubeadmscheme.Scheme.Default(externalcfg)
 	return &resetOptions{
 		kubeconfigPath: kubeadmconstants.GetAdminKubeConfigPath(),
@@ -95,9 +95,9 @@ func newResetOptions() *resetOptions {
 	}
 }
 
-// newResetData returns a new resetData struct to be used for the execution of the kubeadm reset workflow.
+// newResetData 返回用于执行 kubeadm reset 工作流的新 resetData。
 func newResetData(cmd *cobra.Command, opts *resetOptions, in io.Reader, out io.Writer, allowExperimental bool) (*resetData, error) {
-	// Validate the mixed arguments with --config and return early on errors
+	// 校验 --config 与其他参数的组合，出错时提前返回。
 	if err := validation.ValidateMixedArguments(cmd.Flags()); err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func newResetData(cmd *cobra.Command, opts *resetOptions, in io.Reader, out io.W
 		client  clientset.Interface
 	)
 
-	// Either use the config file if specified, or convert public kubeadm API to the internal ResetConfiguration and validates cfg.
+	// 若指定配置文件则使用它，否则将公开 kubeadm API 转换为内部 ResetConfiguration 并校验。
 	resetCfg, err := configutil.LoadOrDefaultResetConfiguration(opts.cfgPath, opts.externalcfg, configutil.LoadOrDefaultConfigurationOptions{
 		AllowExperimental: allowExperimental,
 		SkipCRIDetect:     opts.skipCRIDetect,
@@ -149,7 +149,7 @@ func newResetData(cmd *cobra.Command, opts *resetOptions, in io.Reader, out io.W
 		return nil, err
 	}
 	if initCfg != nil {
-		// Also set the union of pre-flight errors to InitConfiguration, to provide a consistent view of the runtime configuration:
+		// 同时将预检错误的并集写入 InitConfiguration，使运行时配置视图保持一致：
 		initCfg.NodeRegistration.IgnorePreflightErrors = sets.List(ignorePreflightErrorsSet)
 	}
 
@@ -163,11 +163,11 @@ func newResetData(cmd *cobra.Command, opts *resetOptions, in io.Reader, out io.W
 	}
 
 	certificatesDir := kubeadmapiv1.DefaultCertificatesDir
-	if cmd.Flags().Changed(options.CertificatesDir) { // flag is specified
+	if cmd.Flags().Changed(options.CertificatesDir) { // 已指定参数。
 		certificatesDir = opts.externalcfg.CertificatesDir
-	} else if len(resetCfg.CertificatesDir) > 0 { // configured in the ResetConfiguration
+	} else if len(resetCfg.CertificatesDir) > 0 { // 已在 ResetConfiguration 中配置。
 		certificatesDir = resetCfg.CertificatesDir
-	} else if initCfg != nil && len(initCfg.ClusterConfiguration.CertificatesDir) > 0 { // fetch from cluster
+	} else if initCfg != nil && len(initCfg.ClusterConfiguration.CertificatesDir) > 0 { // 从集群获取。
 		certificatesDir = initCfg.ClusterConfiguration.CertificatesDir
 	}
 
@@ -186,7 +186,7 @@ func newResetData(cmd *cobra.Command, opts *resetOptions, in io.Reader, out io.W
 	}, nil
 }
 
-// AddResetFlags adds reset flags
+// AddResetFlags 添加 reset 参数。
 func AddResetFlags(flagSet *flag.FlagSet, resetOptions *resetOptions) {
 	flagSet.StringVar(
 		&resetOptions.externalcfg.CertificatesDir, options.CertificatesDir, kubeadmapiv1.DefaultCertificatesDir,
@@ -210,7 +210,7 @@ func AddResetFlags(flagSet *flag.FlagSet, resetOptions *resetOptions) {
 	cmdutil.AddCRISocketFlag(flagSet, &resetOptions.externalcfg.CRISocket)
 }
 
-// newCmdReset returns the "kubeadm reset" command
+// newCmdReset 返回 kubeadm reset 命令。
 func newCmdReset(in io.Reader, out io.Writer, resetOptions *resetOptions) *cobra.Command {
 	if resetOptions == nil {
 		resetOptions = newResetOptions()
@@ -238,83 +238,82 @@ func newCmdReset(in io.Reader, out io.Writer, resetOptions *resetOptions) *cobra
 	}
 
 	AddResetFlags(cmd.Flags(), resetOptions)
-	// initialize the workflow runner with the list of phases
+	// 使用阶段列表初始化工作流运行器。
 	resetRunner.AppendPhase(phases.NewPreflightPhase())
 	resetRunner.AppendPhase(phases.NewRemoveETCDMemberPhase())
 	resetRunner.AppendPhase(phases.NewCleanupNodePhase())
 
-	// sets the data builder function, that will be used by the runner
-	// both when running the entire workflow or single phases
+	// 为运行器设置数据构建函数，运行完整工作流或单个阶段时都会调用。
 	resetRunner.SetDataInitializer(func(cmd *cobra.Command, args []string) (workflow.RunData, error) {
 		if cmd.Flags().Lookup(options.NodeCRISocket) == nil {
-			// skip CRI detection
-			// assume that the command execution does not depend on CRISocket when --cri-socket flag is not set
+			// 跳过 CRI 检测。
+			// 未设置 --cri-socket 时，假定命令执行不依赖 CRISocket。
 			resetOptions.skipCRIDetect = true
 		}
 		data, err := newResetData(cmd, resetOptions, in, out, true)
 		if err != nil {
 			return nil, err
 		}
-		// If the flag for skipping phases was empty, use the values from config
+		// 若跳过阶段的参数为空，则使用配置中的值。
 		if len(resetRunner.Options.SkipPhases) == 0 {
 			resetRunner.Options.SkipPhases = data.resetCfg.SkipPhases
 		}
 		return data, nil
 	})
 
-	// binds the Runner to kubeadm reset command by altering
-	// command help, adding --skip-phases flag and by adding phases subcommands
+	// 将 Runner 绑定到 kubeadm reset 命令：修改帮助信息、
+	// 添加 --skip-phases 参数并添加阶段子命令。
 	resetRunner.BindToCommand(cmd)
 
 	return cmd
 }
 
-// ResetCfg returns the ResetConfiguration.
+// ResetCfg 返回 ResetConfiguration。
 func (r *resetData) ResetCfg() *kubeadmapi.ResetConfiguration {
 	return r.resetCfg
 }
 
-// Cfg returns the InitConfiguration.
+// Cfg 返回 InitConfiguration。
 func (r *resetData) Cfg() *kubeadmapi.InitConfiguration {
 	return r.cfg
 }
 
-// DryRun returns the dryRun flag.
+// DryRun 返回 dryRun 参数的值。
 func (r *resetData) DryRun() bool {
 	return r.dryRun
 }
 
-// CleanupTmpDir returns the cleanupTmpDir flag.
+// CleanupTmpDir 返回 cleanupTmpDir 参数的值。
 func (r *resetData) CleanupTmpDir() bool {
 	return r.cleanupTmpDir
 }
 
-// CertificatesDir returns the CertificatesDir.
+// CertificatesDir 返回 CertificatesDir。
 func (r *resetData) CertificatesDir() string {
 	return r.certificatesDir
 }
 
-// Client returns the Client for accessing the cluster.
+// Client 返回用于访问集群的 Client。
 func (r *resetData) Client() clientset.Interface {
 	return r.client
 }
 
-// ForceReset returns the forceReset flag.
+// ForceReset 返回 forceReset 参数的值。
 func (r *resetData) ForceReset() bool {
 	return r.forceReset
 }
 
-// InputReader returns the io.reader used to read messages.
+// InputReader 返回用于读取消息的 io.Reader。
 func (r *resetData) InputReader() io.Reader {
 	return r.inputReader
 }
 
-// IgnorePreflightErrors returns the list of preflight errors to ignore.
+// IgnorePreflightErrors 返回要忽略的预检错误列表。
 func (r *resetData) IgnorePreflightErrors() sets.Set[string] {
 	return r.ignorePreflightErrors
 }
 
-// CRISocketPath returns the criSocketPath.
+// CRISocketPath 返回 criSocketPath。
 func (r *resetData) CRISocketPath() string {
 	return r.criSocketPath
 }
@@ -327,6 +326,6 @@ func resetDetectCRISocket(resetCfg *kubeadmapi.ResetConfiguration, initCfg *kube
 		return initCfg.NodeRegistration.CRISocket, nil
 	}
 
-	// try to detect it on host
+	// 尝试在主机上检测。
 	return utilruntime.DetectCRISocket()
 }

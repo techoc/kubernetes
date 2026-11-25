@@ -77,13 +77,13 @@ func generateTestKubeadmConfig(dir, id, certDir, clusterName string) (string, er
 
 func TestKubeConfigSubCommandsThatWritesToOut(t *testing.T) {
 
-	// Temporary folders for the test case
+	// 测试用例使用的临时目录。
 	tmpdir := t.TempDir()
 
-	// Adds a pki folder with a ca cert to the temp folder
+	// 在临时目录中添加包含 CA 证书的 pki 目录。
 	pkidir := certstestutil.SetupPkiDirWithCertificateAuthority(t, tmpdir)
 
-	// Retrieves ca cert for assertions
+	// 获取 CA 证书用于断言。
 	caCert, _, err := pkiutil.TryLoadCertAndKeyFromDisk(pkidir, kubeadmconstants.CACertAndKeyBaseName)
 	if err != nil {
 		t.Fatalf("couldn't retrieve ca cert: %v", err)
@@ -135,7 +135,7 @@ func TestKubeConfigSubCommandsThatWritesToOut(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			buf := new(bytes.Buffer)
 
-			// Get subcommands working in the temporary directory
+			// 使子命令在临时目录中运行。
 			cmd := newCmdUserKubeConfig(buf)
 
 			cfgPath, err := generateTestKubeadmConfig(tmpdir, test.name, pkidir, test.clusterName)
@@ -148,39 +148,39 @@ func TestKubeConfigSubCommandsThatWritesToOut(t *testing.T) {
 				fmt.Sprintf("--config=%s", cfgPath),
 			}
 
-			// Execute the subcommand
+			// 执行子命令。
 			allFlags := append(commonFlags, test.additionalFlags...)
 			cmd.SetArgs(allFlags)
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("Could not execute subcommand: %v", err)
 			}
 
-			// reads kubeconfig written to stdout
+			// 读取写入标准输出的 kubeconfig。
 			config, err := clientcmd.Load(buf.Bytes())
 			if err != nil {
 				t.Fatalf("couldn't read kubeconfig file from buffer: %v", err)
 			}
 
-			// checks that CLI flags are properly propagated
+			// 检查命令行参数已正确传递。
 			kubeconfigutil.AssertKubeConfigCurrentCluster(t, config, "https://1.2.3.4:1234", caCert)
 
 			if test.withClientCert {
 				if test.expectedValidityPeriod == 0 {
 					test.expectedValidityPeriod = kubeadmconstants.CertificateValidityPeriod
 				}
-				// checks that kubeconfig files have expected client cert
+				// 检查 kubeconfig 文件包含预期的客户端证书。
 				startTime := kubeadmutil.StartTimeUTC()
 				notAfter := startTime.Add(test.expectedValidityPeriod)
 				kubeconfigutil.AssertKubeConfigCurrentAuthInfoWithClientCert(t, config, caCert, notAfter, "myUser")
 			}
 
 			if test.withToken {
-				// checks that kubeconfig files have expected token
+				// 检查 kubeconfig 文件包含预期的令牌。
 				kubeconfigutil.AssertKubeConfigCurrentAuthInfoWithToken(t, config, "myUser", "123456")
 			}
 
 			if len(test.clusterName) > 0 {
-				// checks that kubeconfig files have expected cluster name
+				// 检查 kubeconfig 文件包含预期的集群名。
 				kubeconfigutil.AssertKubeConfigCurrentContextWithClusterName(t, config, test.clusterName)
 			}
 		})

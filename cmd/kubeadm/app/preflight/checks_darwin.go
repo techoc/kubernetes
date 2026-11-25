@@ -20,16 +20,16 @@ package preflight
 
 import utilsexec "k8s.io/utils/exec"
 
-// This is a MacOS stub
+// 这是 macOS 桩实现。
 
-// Check number of memory required by kubeadm
-// No-op for Darwin (MacOS).
+// Check 检查 kubeadm 所需的内存数量。
+// 在 Darwin（macOS）上为空操作。
 func (mc MemCheck) Check() (warnings, errorList []error) {
 	return nil, nil
 }
 
-// addExecChecks adds checks that verify if certain binaries are in PATH
-// No-op for Darwin (MacOS).
+// addExecChecks 添加检查，验证某些二进制文件是否存在于 PATH 中。
+// 在 Darwin（macOS）上为空操作。
 func addExecChecks(checks []Checker, _ utilsexec.Interface, _ string) []Checker {
 	return checks
 }

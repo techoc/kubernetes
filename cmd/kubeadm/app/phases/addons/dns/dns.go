@@ -51,7 +51,7 @@ const (
 	coreDNSReplicas       = 2
 )
 
-// DeployedDNSAddon returns the image tag of the DNS addon currently deployed
+// DeployedDNSAddon 返回当前已部署 DNS 插件的镜像标签。
 func DeployedDNSAddon(client clientset.Interface) (string, error) {
 	deploymentsClient := client.AppsV1().Deployments(metav1.NamespaceSystem)
 	deployments, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{LabelSelector: "k8s-app=kube-dns"})
@@ -69,7 +69,7 @@ func DeployedDNSAddon(client clientset.Interface) (string, error) {
 	}
 }
 
-// deployedDNSReplicas returns the replica count for the current DNS deployment
+// deployedDNSReplicas 返回当前 DNS Deployment 的副本数。
 func deployedDNSReplicas(client clientset.Interface, replicas int32) (*int32, error) {
 	deploymentsClient := client.AppsV1().Deployments(metav1.NamespaceSystem)
 	deployments, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{LabelSelector: "k8s-app=kube-dns"})
@@ -86,7 +86,7 @@ func deployedDNSReplicas(client clientset.Interface, replicas int32) (*int32, er
 	}
 }
 
-// EnsureDNSAddon creates the CoreDNS addon
+// EnsureDNSAddon 创建 CoreDNS 插件。
 func EnsureDNSAddon(cfg *kubeadmapi.ClusterConfiguration, client clientset.Interface, patchesDir string, out io.Writer, printManifest bool) error {
 	var replicas *int32
 	var err error
@@ -103,7 +103,7 @@ func EnsureDNSAddon(cfg *kubeadmapi.ClusterConfiguration, client clientset.Inter
 }
 
 func coreDNSAddon(cfg *kubeadmapi.ClusterConfiguration, client clientset.Interface, replicas *int32, patchesDir string, out io.Writer, printManifest bool) error {
-	// Get the YAML manifest
+	// 获取 YAML 清单。
 	coreDNSDeploymentBytes, err := kubeadmutil.ParseTemplate(CoreDNSDeployment, struct {
 		DeploymentName, Image, ControlPlaneTaintKey string
 		Replicas                                    *int32
@@ -117,7 +117,7 @@ func coreDNSAddon(cfg *kubeadmapi.ClusterConfiguration, client clientset.Interfa
 		return errors.Wrap(err, "error when parsing CoreDNS deployment template")
 	}
 
-	// Apply patches to the CoreDNS Deployment
+	// 将补丁应用到 CoreDNS Deployment。
 	if len(patchesDir) != 0 {
 		coreDNSDeploymentBytes, err = applyCoreDNSDeploymentPatches(coreDNSDeploymentBytes, patchesDir, out)
 		if err != nil {
@@ -125,7 +125,7 @@ func coreDNSAddon(cfg *kubeadmapi.ClusterConfiguration, client clientset.Interfa
 		}
 	}
 
-	// Get the config file for CoreDNS
+	// 获取 CoreDNS 配置文件。
 	coreDNSConfigMapBytes, err := kubeadmutil.ParseTemplate(CoreDNSConfigMap, struct{ DNSDomain, UpstreamNameserver, StubDomain string }{
 		DNSDomain: cfg.Networking.DNSDomain,
 	})
@@ -175,7 +175,7 @@ func createCoreDNSAddon(deploymentBytes, serviceBytes, configBytes []byte, clien
 		return errors.Wrapf(err, "%s ConfigMap", unableToDecodeCoreDNS)
 	}
 
-	// Create the ConfigMap for CoreDNS or update/migrate it in case it already exists
+	// 创建 CoreDNS ConfigMap；若已存在，则更新或迁移。
 	_, corefile, currentInstalledCoreDNSVersion, err := GetCoreDNSInfo(client)
 	if err != nil {
 		return errors.Wrap(err, "unable to fetch CoreDNS current installed version and ConfigMap.")
@@ -186,21 +186,20 @@ func createCoreDNSAddon(deploymentBytes, serviceBytes, configBytes []byte, clien
 		return err
 	}
 
-	// Assume that migration is always possible, rely on migrateCoreDNSCorefile() to fail if not.
+	// 假定迁移始终可行，若不可行则交由 migrateCoreDNSCorefile() 返回错误。
 	canMigrateCorefile := true
 
 	configMapClient := client.CoreV1().ConfigMaps(coreDNSConfigMap.GetNamespace())
 
 	if corefile == "" || migration.Default("", corefile) {
-		// If the Corefile is empty or default, the latest default Corefile will be applied
+		// 若 Corefile 为空或为默认内容，则应用最新的默认 Corefile。
 		if err := apiclient.CreateOrUpdate(configMapClient, coreDNSConfigMap); err != nil {
 			return err
 		}
 	} else if corefileMigrationRequired {
-		// If migration is required, try and migrate the Corefile
+		// 若需要迁移，则尝试迁移 Corefile。
 		if err := migrateCoreDNSCorefile(client, coreDNSConfigMap, corefile, currentInstalledCoreDNSVersion); err != nil {
-			// Errors in Corefile Migration is verified during preflight checks. This part will be executed when a user has chosen
-			// to ignore preflight check errors.
+			// Corefile 迁移错误已在预检中验证。仅当用户选择忽略预检错误时，才会执行此处逻辑。
 			canMigrateCorefile = false
 			klog.Warningf("the CoreDNS Configuration was not migrated: %v. The existing CoreDNS Corefile configuration has been retained.", err)
 			if err := apiclient.CreateOrRetain(configMapClient, coreDNSConfigMap, kubeadmconstants.CoreDNSConfigMap); err != nil {
@@ -208,7 +207,7 @@ func createCoreDNSAddon(deploymentBytes, serviceBytes, configBytes []byte, clien
 			}
 		}
 	} else {
-		// If the Corefile is modified and doesn't require any migration, it'll be retained for the benefit of the user
+		// 若 Corefile 已修改且无需迁移，则保留其内容，以免影响用户配置。
 		if err := apiclient.CreateOrRetain(configMapClient, coreDNSConfigMap, kubeadmconstants.CoreDNSConfigMap); err != nil {
 			return err
 		}
@@ -219,7 +218,7 @@ func createCoreDNSAddon(deploymentBytes, serviceBytes, configBytes []byte, clien
 		return errors.Wrapf(err, "%s ClusterRole", unableToDecodeCoreDNS)
 	}
 
-	// Create the Clusterroles for CoreDNS or update it in case it already exists
+	// 创建 CoreDNS ClusterRole；若已存在，则更新。
 	if err := apiclient.CreateOrUpdate(client.RbacV1().ClusterRoles(), coreDNSClusterRoles); err != nil {
 		return err
 	}
@@ -229,7 +228,7 @@ func createCoreDNSAddon(deploymentBytes, serviceBytes, configBytes []byte, clien
 		return errors.Wrapf(err, "%s ClusterRoleBinding", unableToDecodeCoreDNS)
 	}
 
-	// Create the Clusterrolebindings for CoreDNS or update it in case it already exists
+	// 创建 CoreDNS ClusterRoleBinding；若已存在，则更新。
 	if err := apiclient.CreateOrUpdate(client.RbacV1().ClusterRoleBindings(), coreDNSClusterRolesBinding); err != nil {
 		return err
 	}
@@ -239,7 +238,7 @@ func createCoreDNSAddon(deploymentBytes, serviceBytes, configBytes []byte, clien
 		return errors.Wrapf(err, "%s ServiceAccount", unableToDecodeCoreDNS)
 	}
 
-	// Create the ConfigMap for CoreDNS or update it in case it already exists
+	// 创建 CoreDNS ConfigMap；若已存在，则更新。
 	if err := apiclient.CreateOrUpdate(client.CoreV1().ServiceAccounts(coreDNSServiceAccount.GetNamespace()), coreDNSServiceAccount); err != nil {
 		return err
 	}
@@ -249,14 +248,14 @@ func createCoreDNSAddon(deploymentBytes, serviceBytes, configBytes []byte, clien
 		return errors.Wrapf(err, "%s Deployment", unableToDecodeCoreDNS)
 	}
 
-	// Create the deployment for CoreDNS or retain it in case the CoreDNS migration has failed during upgrade
+	// 创建 CoreDNS Deployment；若升级期间 CoreDNS 迁移失败，则保留现有 Deployment。
 	deploymentsClient := client.AppsV1().Deployments(coreDNSDeployment.GetNamespace())
 	if !canMigrateCorefile {
 		if err := apiclient.CreateOrRetain(deploymentsClient, coreDNSDeployment, kubeadmconstants.CoreDNSDeploymentName); err != nil {
 			return err
 		}
 	} else {
-		// Create the Deployment for CoreDNS or update it in case it already exists
+		// 创建 CoreDNS Deployment；若已存在，则更新。
 		if err := apiclient.CreateOrUpdate(deploymentsClient, coreDNSDeployment); err != nil {
 			return err
 		}
@@ -271,9 +270,9 @@ func createDNSService(dnsService *v1.Service, serviceBytes []byte, client client
 		return errors.Wrap(err, "unable to decode the DNS service")
 	}
 
-	// Can't use a generic apiclient helper func here as we have to tolerate more than AlreadyExists.
+	// 此处不能使用通用 apiclient 辅助函数，因为还需容忍 AlreadyExists 之外的情况。
 	if _, err := client.CoreV1().Services(metav1.NamespaceSystem).Create(context.TODO(), dnsService, metav1.CreateOptions{}); err != nil {
-		// Ignore if the Service is invalid with this error message:
+		// 若 Service 因以下错误而无效，则忽略：
 		// 	Service "kube-dns" is invalid: spec.clusterIP: Invalid value: "10.96.0.10": provided IP is already allocated
 
 		if !apierrors.IsAlreadyExists(err) && !apierrors.IsInvalid(err) {
@@ -287,11 +286,11 @@ func createDNSService(dnsService *v1.Service, serviceBytes []byte, client client
 	return nil
 }
 
-// isCoreDNSConfigMapMigrationRequired checks if a migration of the CoreDNS ConfigMap is required.
+// isCoreDNSConfigMapMigrationRequired 检查是否需要迁移 CoreDNS ConfigMap。
 func isCoreDNSConfigMapMigrationRequired(corefile, currentInstalledCoreDNSVersion string) (bool, error) {
 	var isMigrationRequired bool
 
-	// Current installed version is expected to be empty for init
+	// 初始化时，预期当前已安装版本为空。
 	if currentInstalledCoreDNSVersion == "" {
 		return isMigrationRequired, nil
 	}
@@ -305,7 +304,7 @@ func isCoreDNSConfigMapMigrationRequired(corefile, currentInstalledCoreDNSVersio
 		return isMigrationRequired, errors.Wrap(err, "unable to get list of changes to the configuration.")
 	}
 
-	// Check if there are any plugins/options which needs to be removed or is a new default
+	// 检查是否存在需要移除的插件或选项，或已成为新默认值的插件或选项。
 	for _, dep := range deprecated {
 		if dep.Severity == "removed" || dep.Severity == "newdefault" {
 			isMigrationRequired = true
@@ -316,13 +315,13 @@ func isCoreDNSConfigMapMigrationRequired(corefile, currentInstalledCoreDNSVersio
 }
 
 func migrateCoreDNSCorefile(client clientset.Interface, cm *v1.ConfigMap, corefile, currentInstalledCoreDNSVersion string) error {
-	// Since the current configuration present is not the default version, try and migrate it.
+	// 由于当前配置不是默认版本，尝试迁移。
 	updatedCorefile, err := migration.Migrate(currentInstalledCoreDNSVersion, strings.TrimLeft(kubeadmconstants.CoreDNSVersion, "v"), corefile, false)
 	if err != nil {
 		return errors.Wrap(err, "unable to migrate CoreDNS ConfigMap")
 	}
 
-	// Take a copy of the existing Corefile data as `Corefile-backup` and update the ConfigMap
+	// 将现有 Corefile 数据复制为 `Corefile-backup`，并更新 ConfigMap。
 	if _, err := client.CoreV1().ConfigMaps(cm.ObjectMeta.Namespace).Update(context.TODO(), &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kubeadmconstants.CoreDNSConfigMap,
@@ -336,7 +335,7 @@ func migrateCoreDNSCorefile(client clientset.Interface, cm *v1.ConfigMap, corefi
 		return errors.Wrap(err, "unable to update the CoreDNS ConfigMap")
 	}
 
-	// Point the CoreDNS deployment to the `Corefile-backup` data.
+	// 将 CoreDNS Deployment 指向 `Corefile-backup` 数据。
 	if err := setCorefile(client, "Corefile-backup"); err != nil {
 		return err
 	}
@@ -346,7 +345,7 @@ func migrateCoreDNSCorefile(client clientset.Interface, cm *v1.ConfigMap, corefi
 	if err != nil {
 		return errors.Wrap(err, "unable to get list of changes to the configuration.")
 	}
-	// show the migration changes
+	// 显示迁移变更。
 	klog.V(2).Infof("the CoreDNS configuration has been migrated and applied: %v.", updatedCorefile)
 	klog.V(2).Infoln("the old migration has been saved in the CoreDNS ConfigMap under the name [Corefile-backup]")
 	klog.V(2).Infoln("The changes in the new CoreDNS Configuration are as follows:")
@@ -356,7 +355,7 @@ func migrateCoreDNSCorefile(client clientset.Interface, cm *v1.ConfigMap, corefi
 	return nil
 }
 
-// GetCoreDNSInfo gets the current CoreDNS installed and the current Corefile Configuration of CoreDNS.
+// GetCoreDNSInfo 获取当前安装的 CoreDNS 及其 Corefile 配置。
 func GetCoreDNSInfo(client clientset.Interface) (*v1.ConfigMap, string, string, error) {
 	coreDNSConfigMap, err := client.CoreV1().ConfigMaps(metav1.NamespaceSystem).Get(context.TODO(), kubeadmconstants.CoreDNSConfigMap, metav1.GetOptions{})
 	if err != nil {
@@ -391,7 +390,7 @@ func setCorefile(client clientset.Interface, coreDNSCorefileName string) error {
 	return nil
 }
 
-// applyCoreDNSDeploymentPatches reads patches from a directory and applies them over the input coreDNSDeploymentBytes
+// applyCoreDNSDeploymentPatches 从目录读取补丁，并将其应用到传入的 coreDNSDeploymentBytes。
 func applyCoreDNSDeploymentPatches(coreDNSDeploymentBytes []byte, patchesDir string, output io.Writer) ([]byte, error) {
 	patchManager, err := patches.GetPatchManagerForPath(patchesDir, patches.KnownTargets(), output)
 	if err != nil {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package node implements phases of 'kubeadm upgrade node'.
+// Package node 实现 kubeadm upgrade node 的阶段。
 package node
 
 import (
@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewControlPlane returns a new control-plane phase.
+// NewControlPlane 返回新的 control-plane 阶段。
 func NewControlPlane() workflow.Phase {
 	phase := workflow.Phase{
 		Name:  "control-plane",
@@ -53,13 +53,13 @@ func runControlPlane() func(c workflow.RunData) error {
 			return errors.New("control-plane phase invoked with an invalid data struct")
 		}
 
-		// if this is not a control-plane node, this phase should not be executed
+		// 若不是控制平面节点，则不应执行此阶段。
 		if !data.IsControlPlaneNode() {
 			fmt.Println("[upgrade/control-plane] Skipping phase. Not a control plane node.")
 			return nil
 		}
 
-		// otherwise, retrieve all the info required for control plane upgrade
+		// 否则，获取控制平面升级所需的全部信息。
 		cfg := data.InitCfg()
 		client := data.Client()
 		dryRun := data.DryRun()
@@ -67,7 +67,7 @@ func runControlPlane() func(c workflow.RunData) error {
 		renewCerts := data.RenewCerts()
 		patchesDir := data.PatchesDir()
 
-		// Upgrade the control plane and etcd if installed on this node
+		// 升级此节点上安装的控制平面和 etcd。
 		fmt.Printf("[upgrade/control-plane] Upgrading your Static Pod-hosted control plane instance to version %q...\n", cfg.KubernetesVersion)
 		if dryRun {
 			fmt.Printf("[dryrun] Would upgrade your static Pod-hosted control plane to version %q", cfg.KubernetesVersion)

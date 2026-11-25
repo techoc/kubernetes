@@ -29,13 +29,10 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// RetrieveValidatedConfigInfo downloads a discovery kubeconfig from the given
-// HTTPS URL and hands it to file.ValidateConfigInfo for the cluster-info
-// ConfigMap validation that completes discovery. The HTTPS connection itself
-// is verified only against the host's default TLS trust store; kubeadm does
-// not pin to a caller-supplied CA at this stage, so the kubeconfig payload is
-// retrieved from an effectively arbitrary location and only becomes trusted
-// after file.ValidateConfigInfo succeeds.
+// RetrieveValidatedConfigInfo 从指定的 HTTPS URL 下载发现用 kubeconfig，
+// 并将其交给 file.ValidateConfigInfo 执行 cluster-info ConfigMap 校验，以完成发现流程。
+// HTTPS 连接本身仅根据主机的默认 TLS 信任库验证；kubeadm 在此阶段不固定到调用方提供的 CA，
+// 因此 kubeconfig 内容实际上可能从任意位置获取，只有在 file.ValidateConfigInfo 成功后才受到信任。
 func RetrieveValidatedConfigInfo(httpsURL string, discoveryTimeout time.Duration) (*clientcmdapi.Config, error) {
 	client := &http.Client{Transport: netutil.SetOldTransportDefaults(&http.Transport{})}
 	response, err := client.Get(httpsURL)

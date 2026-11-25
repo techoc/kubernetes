@@ -40,7 +40,7 @@ import (
 )
 
 func TestGetEtcdPodSpec(t *testing.T) {
-	// Creates a ClusterConfiguration
+	// 创建 ClusterConfiguration
 	cfg := &kubeadmapi.ClusterConfiguration{
 		KubernetesVersion: "v1.7.0",
 		Etcd: kubeadmapi.Etcd{
@@ -56,10 +56,10 @@ func TestGetEtcdPodSpec(t *testing.T) {
 	}
 	endpoint := &kubeadmapi.APIEndpoint{}
 
-	// Executes GetEtcdPodSpec
+	// 执行 GetEtcdPodSpec
 	spec := GetEtcdPodSpec(cfg, endpoint, "", []etcdutil.Member{})
 
-	// Assert each specs refers to the right pod
+	// 断言每个配置都指向正确的 Pod
 	if spec.Spec.Containers[0].Name != kubeadmconstants.Etcd {
 		t.Errorf("getKubeConfigSpecs spec for etcd contains pod %s, expects %s", spec.Spec.Containers[0].Name, kubeadmconstants.Etcd)
 	}
@@ -70,7 +70,7 @@ func TestGetEtcdPodSpec(t *testing.T) {
 }
 
 func TestCreateLocalEtcdStaticPodManifestFile(t *testing.T) {
-	// Create temp folder for the test case
+	// 为测试用例创建临时目录
 	tmpdir := t.TempDir()
 
 	var tests = []struct {
@@ -203,15 +203,15 @@ status: {}
 	}
 
 	for _, test := range tests {
-		// Execute createStaticPodFunction
+		// 执行 createStaticPodFunction
 		manifestPath := filepath.Join(tmpdir, kubeadmconstants.ManifestsSubDirName)
-		err := CreateLocalEtcdStaticPodManifestFile(manifestPath, "", "", test.cfg, &kubeadmapi.APIEndpoint{}, false /* IsDryRun */)
+		err := CreateLocalEtcdStaticPodManifestFile(manifestPath, "", "", test.cfg, &kubeadmapi.APIEndpoint{}, false /* 是否试运行 */)
 
 		if !test.expectedError {
 			if err != nil {
 				t.Errorf("CreateLocalEtcdStaticPodManifestFile failed when not expected: %v", err)
 			}
-			// Assert expected files are there
+			// 断言预期文件均存在
 			filesutil.AssertFilesCount(t, manifestPath, 1)
 			filesutil.AssertFileExists(t, manifestPath, kubeadmconstants.Etcd+".yaml")
 			manifestBytes, err := os.ReadFile(path.Join(manifestPath, kubeadmconstants.Etcd+".yaml"))
@@ -231,10 +231,10 @@ status: {}
 }
 
 func TestCreateLocalEtcdStaticPodManifestFileWithPatches(t *testing.T) {
-	// Create temp folder for the test case
+	// 为测试用例创建临时目录
 	tmpdir := t.TempDir()
 
-	// Creates a Cluster Configuration
+	// 创建 ClusterConfiguration
 	cfg := &kubeadmapi.ClusterConfiguration{
 		KubernetesVersion: "v1.7.0",
 		Etcd: kubeadmapi.Etcd{
@@ -262,7 +262,7 @@ func TestCreateLocalEtcdStaticPodManifestFileWithPatches(t *testing.T) {
 	}
 
 	manifestPath := filepath.Join(tmpdir, kubeadmconstants.ManifestsSubDirName)
-	err = CreateLocalEtcdStaticPodManifestFile(manifestPath, patchesPath, "", cfg, &kubeadmapi.APIEndpoint{}, false /* IsDryRun */)
+	err = CreateLocalEtcdStaticPodManifestFile(manifestPath, patchesPath, "", cfg, &kubeadmapi.APIEndpoint{}, false /* 是否试运行 */)
 	if err != nil {
 		t.Errorf("Error executing createStaticPodFunction: %v", err)
 		return
@@ -326,7 +326,7 @@ func TestGetEtcdCommand(t *testing.T) {
 			advertiseAddress: "1.2.3.4",
 			nodeName:         "foo",
 			initialCluster: []etcdutil.Member{
-				{Name: "foo", PeerURL: fmt.Sprintf("https://1.2.3.4:%d", kubeadmconstants.EtcdListenPeerPort)}, // NB. the joining etcd instance should be part of the initialCluster list
+				{Name: "foo", PeerURL: fmt.Sprintf("https://1.2.3.4:%d", kubeadmconstants.EtcdListenPeerPort)}, // 注意：加入的 etcd 实例应包含在 initialCluster 列表中
 				{Name: "bar", PeerURL: fmt.Sprintf("https://5.6.7.8:%d", kubeadmconstants.EtcdListenPeerPort)},
 			},
 			expected: []string{

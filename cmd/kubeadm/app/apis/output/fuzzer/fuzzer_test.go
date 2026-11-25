@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/output/scheme"
 )
 
+// TestRoundTripTypes 验证类型经过编码和解码后保持一致。
 func TestRoundTripTypes(t *testing.T) {
 	roundtrip.RoundTripTestForAPIGroup(t, scheme.AddToScheme, Funcs)
 }

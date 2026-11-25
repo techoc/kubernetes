@@ -24,15 +24,15 @@ import (
 	winio "github.com/Microsoft/go-winio"
 )
 
-// isExistingSocket checks if path exists and is domain socket
+// isExistingSocket 检查路径是否存在且为域 socket。
 func isExistingSocket(path string) bool {
 	u, err := url.Parse(path)
 	if err != nil {
-		// should not happen, since we are trying to access known / hardcoded sockets
+		// 不应发生，因为访问的是已知的硬编码 socket。
 		return false
 	}
 
-	// the dial path must be without "npipe://"
+	// 拨号路径必须去掉 "npipe://"。
 	_, err = winio.DialPipe(u.Path, nil)
 	if err != nil {
 		return false

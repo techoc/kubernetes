@@ -43,7 +43,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/output"
 )
 
-// applyFlags holds the information about the flags that can be passed to apply
+// applyFlags 保存可传给 apply 的参数信息。
 type applyFlags struct {
 	*applyPlanFlags
 
@@ -54,11 +54,11 @@ type applyFlags struct {
 	patchesDir         string
 }
 
-// compile-time assert that the local data object satisfies the phases data interface.
+// 编译期断言本地数据对象满足阶段数据接口。
 var _ phases.Data = &applyData{}
 
-// applyData defines all the runtime information used when running the kubeadm upgrade apply workflow;
-// this data is shared across all the phases that are included in the workflow.
+// applyData 定义运行 kubeadm upgrade apply 工作流所需的全部运行时信息，
+// 并供工作流包含的所有阶段共享。
 type applyData struct {
 	nonInteractiveMode        bool
 	force                     bool
@@ -77,7 +77,7 @@ type applyData struct {
 	outputWriter              io.Writer
 }
 
-// newCmdApply returns the cobra command for `kubeadm upgrade apply`
+// newCmdApply 返回 kubeadm upgrade apply 的 cobra 命令。
 func newCmdApply(apf *applyPlanFlags) *cobra.Command {
 	flags := &applyFlags{
 		applyPlanFlags: apf,
@@ -119,16 +119,16 @@ func newCmdApply(apf *applyPlanFlags) *cobra.Command {
 		},
 	}
 
-	// Register the common flags for apply and plan
+	// 注册 apply 和 plan 的公共参数。
 	addApplyPlanFlags(cmd.Flags(), flags.applyPlanFlags)
-	// Specify the valid flags specific for apply
+	// 指定 apply 特有的合法参数。
 	cmd.Flags().BoolVarP(&flags.nonInteractiveMode, "yes", "y", flags.nonInteractiveMode, "Perform the upgrade and do not prompt for confirmation (non-interactive mode).")
 	cmd.Flags().BoolVarP(&flags.force, options.Force, "f", flags.force, "Force upgrading although some requirements might not be met. This also implies non-interactive mode.")
 	cmd.Flags().BoolVar(&flags.dryRun, options.DryRun, flags.dryRun, "Do not change any state, just output what actions would be performed.")
 	cmd.Flags().BoolVar(&flags.renewCerts, options.CertificateRenewal, flags.renewCerts, "Perform the renewal of certificates used by component changed during upgrades.")
 	options.AddPatchesFlag(cmd.Flags(), &flags.patchesDir)
 
-	// Initialize the workflow runner with the list of phases
+	// 使用阶段列表初始化工作流运行器。
 	applyRunner.AppendPhase(phases.NewPreflightPhase())
 	applyRunner.AppendPhase(phases.NewControlPlanePhase())
 	applyRunner.AppendPhase(phases.NewUploadConfigPhase())
@@ -138,28 +138,27 @@ func newCmdApply(apf *applyPlanFlags) *cobra.Command {
 	applyRunner.AppendPhase(commonphases.NewAddonPhase())
 	applyRunner.AppendPhase(commonphases.NewPostUpgradePhase())
 
-	// Sets the data builder function, that will be used by the runner,
-	// both when running the entire workflow or single phases.
+	// 为运行器设置数据构建函数，运行完整工作流或单个阶段时都会调用。
 	applyRunner.SetDataInitializer(func(cmd *cobra.Command, args []string) (workflow.RunData, error) {
 		data, err := newApplyData(cmd, args, flags)
 		if err != nil {
 			return nil, err
 		}
-		// If the flag for skipping phases was empty, use the values from config
+		// 若跳过阶段的参数为空，则使用配置中的值。
 		if len(applyRunner.Options.SkipPhases) == 0 {
 			applyRunner.Options.SkipPhases = data.cfg.Apply.SkipPhases
 		}
 		return data, nil
 	})
 
-	// Binds the Runner to kubeadm upgrade apply command by altering
-	// command help, adding --skip-phases flag and by adding phases subcommands.
+	// 将 Runner 绑定到 kubeadm upgrade apply 命令：修改帮助信息、
+	// 添加 --skip-phases 参数并添加阶段子命令。
 	applyRunner.BindToCommand(cmd)
 
 	return cmd
 }
 
-// newApplyData returns a new applyData struct to be used for the execution of the kubeadm upgrade apply workflow.
+// newApplyData 返回用于执行 kubeadm upgrade apply 工作流的新 applyData。
 func newApplyData(cmd *cobra.Command, args []string, applyFlags *applyFlags) (*applyData, error) {
 	externalCfg := &v1beta4.UpgradeConfiguration{}
 	opt := configutil.LoadOrDefaultConfigurationOptions{}
@@ -169,14 +168,14 @@ func newApplyData(cmd *cobra.Command, args []string, applyFlags *applyFlags) (*a
 	}
 
 	upgradeVersion := upgradeCfg.Apply.KubernetesVersion
-	// The version arg is mandatory, unless it's specified in the config file.
+	// 除非配置文件中已指定，否则版本参数为必填项。
 	if upgradeVersion == "" {
 		if err := cmdutil.ValidateExactArgNumber(args, []string{"version"}); err != nil {
 			return nil, err
 		}
 	}
 
-	// If the version was specified in both the arg and config file, the arg will overwrite the config file.
+	// 若参数和配置文件都指定了版本，则参数覆盖配置文件。
 	if len(args) == 1 {
 		upgradeVersion = args[0]
 	}
@@ -196,7 +195,7 @@ func newApplyData(cmd *cobra.Command, args []string, applyFlags *applyFlags) (*a
 		return nil, cmdutil.TypeMismatchErr("dryRun", "bool")
 	}
 
-	// If dry running creates a temporary directory for saving kubeadm generated files.
+	// 若为 dry-run，创建用于保存 kubeadm 生成文件的临时目录。
 	dryRunDir := ""
 	if *dryRun {
 		if dryRunDir, err = constants.GetDryRunDir(constants.EnvVarUpgradeDryRunDir, "kubeadm-upgrade-apply-dryrun", klog.Warningf); err != nil {
@@ -236,7 +235,7 @@ func newApplyData(cmd *cobra.Command, args []string, applyFlags *applyFlags) (*a
 		return nil, errors.Wrapf(err, "couldn't create a Kubernetes client from file %q", applyFlags.kubeConfigPath)
 	}
 
-	// Fetches the cluster configuration.
+	// 获取集群配置。
 	klog.V(1).Infoln("[upgrade] retrieving configuration from cluster")
 	getNodeRegistration := true
 	isControlPlaneNode := true
@@ -251,20 +250,19 @@ func newApplyData(cmd *cobra.Command, args []string, applyFlags *applyFlags) (*a
 		return nil, errors.Wrap(err, "[upgrade] FATAL")
 	}
 
-	// Also set the union of pre-flight errors to InitConfiguration, to provide a consistent view of the runtime configuration:
+	// 同时将预检错误的并集写入 InitConfiguration，使运行时配置视图保持一致：
 	initCfg.NodeRegistration.IgnorePreflightErrors = sets.List(ignorePreflightErrorsSet)
 
-	// Set the ImagePullPolicy and ImagePullSerial from the UpgradeApplyConfiguration to the InitConfiguration.
-	// These are used by preflight.RunPullImagesCheck() when running 'apply'.
+	// 将 UpgradeApplyConfiguration 中的 ImagePullPolicy 和 ImagePullSerial
+	// 写入 InitConfiguration，供运行 apply 时的 preflight.RunPullImagesCheck() 使用。
 	initCfg.NodeRegistration.ImagePullPolicy = upgradeCfg.Apply.ImagePullPolicy
 	initCfg.NodeRegistration.ImagePullSerial = upgradeCfg.Apply.ImagePullSerial
 
-	// The `upgrade apply` version always overwrites the KubernetesVersion in the returned cfg with the target
-	// version. While this is not the same for `upgrade plan` where the KubernetesVersion should be the old
-	// one (because the call to getComponentConfigVersionStates requires the currently installed version).
-	// This also makes the KubernetesVersion value returned for `upgrade plan` consistent as that command
-	// allows to not specify a target version in which case KubernetesVersion will always hold the currently
-	// installed one.
+	// upgrade apply 的版本参数总会用目标版本覆盖返回 cfg 中的 KubernetesVersion。
+	// upgrade plan 则不同，其 KubernetesVersion 应保持旧版本，
+	// 因为 getComponentConfigVersionStates 需要当前已安装的版本。
+	// 这也使 upgrade plan 返回的 KubernetesVersion 保持一致：该命令允许不指定目标版本，
+	// 此时 KubernetesVersion 始终为当前已安装版本。
 	initCfg.KubernetesVersion = upgradeVersion
 
 	var patchesDir string
@@ -297,78 +295,78 @@ func newApplyData(cmd *cobra.Command, args []string, applyFlags *applyFlags) (*a
 	}, nil
 }
 
-// DryRun returns the dryRun flag.
+// DryRun 返回 dryRun 参数的值。
 func (d *applyData) DryRun() bool {
 	return d.dryRun
 }
 
-// EtcdUpgrade returns the etcdUpgrade flag.
+// EtcdUpgrade 返回 etcdUpgrade 参数的值。
 func (d *applyData) EtcdUpgrade() bool {
 	return d.etcdUpgrade
 }
 
-// RenewCerts returns the renewCerts flag.
+// RenewCerts 返回 renewCerts 参数的值。
 func (d *applyData) RenewCerts() bool {
 	return d.renewCerts
 }
 
-// Cfg returns the UpgradeConfiguration.
+// Cfg 返回 UpgradeConfiguration。
 func (d *applyData) Cfg() *kubeadmapi.UpgradeConfiguration {
 	return d.cfg
 }
 
-// InitCfg returns the InitConfiguration.
+// InitCfg 返回 InitConfiguration。
 func (d *applyData) InitCfg() *kubeadmapi.InitConfiguration {
 	return d.initCfg
 }
 
-// Client returns a Kubernetes client to be used by kubeadm.
+// Client 返回供 kubeadm 使用的 Kubernetes 客户端。
 func (d *applyData) Client() clientset.Interface {
 	return d.client
 }
 
-// PatchesDir returns the folder where patches for components are stored.
+// PatchesDir 返回保存组件补丁的目录。
 func (d *applyData) PatchesDir() string {
 	return d.patchesDir
 }
 
-// IgnorePreflightErrors returns the list of preflight errors to ignore.
+// IgnorePreflightErrors 返回要忽略的预检错误列表。
 func (d *applyData) IgnorePreflightErrors() sets.Set[string] {
 	return d.ignorePreflightErrors
 }
 
-// OutputWriter returns the output writer to be used by kubeadm.
+// OutputWriter 返回供 kubeadm 使用的输出写入器。
 func (d *applyData) OutputWriter() io.Writer {
 	return d.outputWriter
 }
 
-// SessionIsInteractive returns true if the session is of an interactive type (the default, can be opted out of with -y, -f or --dry-run).
+// SessionIsInteractive 在会话为交互式时返回 true（默认如此，可通过 -y、-f 或 --dry-run 退出交互模式）。
 func (d *applyData) SessionIsInteractive() bool {
 	return !(d.nonInteractiveMode || d.dryRun || d.force)
 }
 
-// AllowExperimentalUpgrades returns true if upgrading to an alpha/beta/release candidate version of Kubernetes is allowed.
+// AllowExperimentalUpgrades 在允许升级到 Kubernetes 的 alpha、beta 或候选发布版本时返回 true。
 func (d *applyData) AllowExperimentalUpgrades() bool {
 	return d.allowExperimentalUpgrades
 }
 
-// AllowRCUpgrades returns true if upgrading to a release candidate version of Kubernetes is allowed.
+// AllowRCUpgrades 在允许升级到 Kubernetes 候选发布版本时返回 true。
 func (d *applyData) AllowRCUpgrades() bool {
 	return d.allowRCUpgrades
 }
 
-// ForceUpgrade returns true if force-upgrading is enabled.
+// ForceUpgrade 在启用强制升级时返回 true。
 func (d *applyData) ForceUpgrade() bool {
 	return d.force
 }
 
-// IsControlPlaneNode returns if the node is a control-plane node.
+// IsControlPlaneNode 返回节点是否为控制平面节点。
 func (d *applyData) IsControlPlaneNode() bool {
-	// `kubeadm upgrade apply` should always be executed on a control-plane node
+	// kubeadm upgrade apply 应始终在控制平面节点上执行。
 	return true
 }
 
-// KubeConfigDir returns the Kubernetes configuration directory or the temporary directory if DryRun is true.
+// KubeConfigDir 返回 Kubernetes 配置目录；dry-run 时返回临时目录。
 func (j *applyData) KubeConfigDir() string {
 	if j.dryRun {
 		return j.dryRunDir
@@ -376,7 +374,7 @@ func (j *applyData) KubeConfigDir() string {
 	return constants.KubernetesDir
 }
 
-// KubeletDir returns the kubelet configuration directory or the temporary directory if DryRun is true.
+// KubeletDir 返回 kubelet 配置目录；dry-run 时返回临时目录。
 func (j *applyData) KubeletDir() string {
 	if j.dryRun {
 		return j.dryRunDir

@@ -28,16 +28,16 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// WindowsInitSystem is the windows implementation of InitSystem
+// WindowsInitSystem 是 InitSystem 的 Windows 实现。
 type WindowsInitSystem struct{}
 
-// EnableCommand return a string describing how to enable a service
+// EnableCommand 返回描述如何启用服务的字符串。
 func (sysd WindowsInitSystem) EnableCommand(service string) string {
 	return fmt.Sprintf("Set-Service '%s' -StartupType Automatic", service)
 }
 
-// ServiceStart tries to start a specific service
-// Following Windows documentation: https://docs.microsoft.com/en-us/windows/desktop/Services/starting-a-service
+// ServiceStart 尝试启动指定服务。
+// 遵循 Windows 文档：https://docs.microsoft.com/en-us/windows/desktop/Services/starting-a-service
 func (sysd WindowsInitSystem) ServiceStart(service string) error {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -51,7 +51,7 @@ func (sysd WindowsInitSystem) ServiceStart(service string) error {
 	}
 	defer s.Close()
 
-	// Check if service is already started
+	// 检查服务是否已启动。
 	status, err := s.Query()
 	if err != nil {
 		return errors.Wrapf(err, "could not query service %s", service)
@@ -73,13 +73,13 @@ func (sysd WindowsInitSystem) ServiceStart(service string) error {
 		}
 	}
 
-	// Start the service
+	// 启动服务。
 	err = s.Start("is", "manual-started")
 	if err != nil {
 		return errors.Wrapf(err, "could not start service %s", service)
 	}
 
-	// Check that the start was successful
+	// 检查启动是否成功。
 	status, err = s.Query()
 	if err != nil {
 		return errors.Wrapf(err, "could not query service %s", service)
@@ -98,7 +98,7 @@ func (sysd WindowsInitSystem) ServiceStart(service string) error {
 	return nil
 }
 
-// ServiceRestart tries to reload the environment and restart the specific service
+// ServiceRestart 尝试重新加载环境并重启指定服务。
 func (sysd WindowsInitSystem) ServiceRestart(service string) error {
 	if err := sysd.ServiceStop(service); err != nil {
 		return errors.Wrapf(err, "couldn't stop service %s", service)
@@ -110,8 +110,8 @@ func (sysd WindowsInitSystem) ServiceRestart(service string) error {
 	return nil
 }
 
-// ServiceStop tries to stop a specific service
-// Following Windows documentation: https://docs.microsoft.com/en-us/windows/desktop/Services/stopping-a-service
+// ServiceStop 尝试停止指定服务。
+// 遵循 Windows 文档：https://docs.microsoft.com/en-us/windows/desktop/Services/stopping-a-service
 func (sysd WindowsInitSystem) ServiceStop(service string) error {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -125,7 +125,7 @@ func (sysd WindowsInitSystem) ServiceStop(service string) error {
 	}
 	defer s.Close()
 
-	// Check if service is already stopped
+	// 检查服务是否已停止。
 	status, err := s.Query()
 	if err != nil {
 		return errors.Wrapf(err, "could not query service %s", service)
@@ -135,7 +135,7 @@ func (sysd WindowsInitSystem) ServiceStop(service string) error {
 		return nil
 	}
 
-	// If StopPending, check that service eventually stops
+	// 若处于 StopPending，等待服务最终停止。
 	if status.State == svc.StopPending {
 		timeout := time.Now().Add(10 * time.Second)
 		for status.State != svc.Stopped {
@@ -151,13 +151,13 @@ func (sysd WindowsInitSystem) ServiceStop(service string) error {
 		return nil
 	}
 
-	// Stop the service
+	// 停止服务。
 	status, err = s.Control(svc.Stop)
 	if err != nil {
 		return errors.Wrapf(err, "could not stop service %s", service)
 	}
 
-	// Check that the stop was successful
+	// 检查停止是否成功。
 	status, err = s.Query()
 	if err != nil {
 		return errors.Wrapf(err, "could not query service %s", service)
@@ -176,7 +176,7 @@ func (sysd WindowsInitSystem) ServiceStop(service string) error {
 	return nil
 }
 
-// ServiceExists ensures the service is defined for this init system.
+// ServiceExists 确认服务已在此 init 系统中定义。
 func (sysd WindowsInitSystem) ServiceExists(service string) bool {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -192,7 +192,7 @@ func (sysd WindowsInitSystem) ServiceExists(service string) bool {
 	return true
 }
 
-// ServiceIsEnabled ensures the service is enabled to start on each boot.
+// ServiceIsEnabled 确认服务已配置为每次启动时自动运行。
 func (sysd WindowsInitSystem) ServiceIsEnabled(service string) bool {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -214,7 +214,7 @@ func (sysd WindowsInitSystem) ServiceIsEnabled(service string) bool {
 	return c.StartType != mgr.StartDisabled
 }
 
-// ServiceIsActive ensures the service is running, or attempting to run. (crash looping in the case of kubelet)
+// ServiceIsActive 确认服务正在运行或尝试运行；kubelet 崩溃循环时也视为活动。
 func (sysd WindowsInitSystem) ServiceIsActive(service string) bool {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -234,9 +234,8 @@ func (sysd WindowsInitSystem) ServiceIsActive(service string) bool {
 	return status.State == svc.Running
 }
 
-// GetInitSystem returns an InitSystem for the current system, or nil
-// if we cannot detect a supported init system.
-// This indicates we will skip init system checks, not an error.
+// GetInitSystem 返回当前系统的 InitSystem；无法检测到受支持的系统时返回 nil。
+// 这表示跳过 init 系统检查，并非错误。
 func GetInitSystem() (InitSystem, error) {
 	m, err := mgr.Connect()
 	if err != nil {

@@ -29,7 +29,7 @@ func TestArgSliceStringSet(t *testing.T) {
 		input  *[]kubeadmapiv1.Arg
 		output string
 	}{
-		// a test case with nil is input is not needed because ExtraArgs are never nil in ClusterConfiguration
+		// 无需测试输入为 nil 的用例，因为 ClusterConfiguration 中的 ExtraArgs 永不为 nil。
 		{
 			name:   "no args",
 			input:  &[]kubeadmapiv1.Arg{},

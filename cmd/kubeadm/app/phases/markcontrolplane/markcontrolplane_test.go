@@ -32,11 +32,8 @@ import (
 )
 
 func TestMarkControlPlane(t *testing.T) {
-	// Note: this test takes advantage of the deterministic marshalling of
-	// JSON provided by strategicpatch so that "expectedPatch" can use a
-	// string equality test instead of a logical JSON equality test. That
-	// will need to change if strategicpatch's behavior changes in the
-	// future.
+	// 注意：此测试利用 strategicpatch 对 JSON 的确定性序列化，使 "expectedPatch" 可使用字符串相等比较，
+	// 而非 JSON 逻辑相等比较。若 strategicpatch 的行为改变，此处也需相应调整。
 	tests := []struct {
 		name           string
 		existingLabels []string

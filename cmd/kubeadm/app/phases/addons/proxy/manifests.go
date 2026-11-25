@@ -17,7 +17,7 @@ limitations under the License.
 package proxy
 
 const (
-	// KubeProxyConfigMap19 is the proxy ConfigMap manifest for Kubernetes 1.9 and above
+	// KubeProxyConfigMap19 是适用于 Kubernetes 1.9 及以上版本的代理 ConfigMap 清单。
 	KubeProxyConfigMap19 = `
 kind: ConfigMap
 apiVersion: v1
@@ -50,7 +50,7 @@ data:
 {{ .ProxyConfig}}
 `
 
-	// KubeProxyDaemonSet19 is the proxy DaemonSet manifest for Kubernetes 1.9 and above
+	// KubeProxyDaemonSet19 是适用于 Kubernetes 1.9 及以上版本的代理 DaemonSet 清单。
 	KubeProxyDaemonSet19 = `
 apiVersion: apps/v1
 kind: DaemonSet

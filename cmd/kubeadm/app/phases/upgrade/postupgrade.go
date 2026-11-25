@@ -41,11 +41,9 @@ import (
 	filesutil "k8s.io/kubernetes/cmd/kubeadm/app/util/files"
 )
 
-// UnupgradedControlPlaneInstances returns a list of control plane instances that have not yet been upgraded.
-//
-// NB. This function can only be called after the current control plane instance has been upgraded already.
-// Because it determines whether the other control plane instances have been upgraded by checking whether
-// the kube-apiserver image of other control plane instance is the same as that of this instance.
+// UnupgradedControlPlaneInstances 返回尚未升级的控制平面实例列表。
+// 注意：只能在当前控制平面实例已升级后调用此函数。
+// 因为它通过比较其他控制平面实例与当前实例的 kube-apiserver 镜像，判断前者是否已升级。
 func UnupgradedControlPlaneInstances(client clientset.Interface, nodeName string) ([]string, error) {
 	selector := labels.SelectorFromSet(labels.Set(map[string]string{
 		"component": kubeadmconstants.KubeAPIServer,
@@ -95,9 +93,9 @@ func UnupgradedControlPlaneInstances(client clientset.Interface, nodeName string
 	return nil, nil
 }
 
-// WriteKubeletConfigFiles writes the kubelet config file to disk, but first creates a backup of any existing one.
+// WriteKubeletConfigFiles 将 kubelet 配置文件写入磁盘；写入前会备份已有文件。
 func WriteKubeletConfigFiles(cfg *kubeadmapi.InitConfiguration, kubeletDir string, kubeConfigDir string, patchesDir string, dryRun bool, out io.Writer) error {
-	// Create a copy of the kubelet config file in the /etc/kubernetes/tmp or kubeConfigDir.
+	// 在 /etc/kubernetes/tmp 或 kubeConfigDir 中创建 kubelet 配置文件副本。
 	backupDir, err := kubeadmconstants.CreateTimestampDir(kubeConfigDir, "kubeadm-kubelet-config")
 	if err != nil {
 		return err
@@ -136,19 +134,19 @@ func WriteKubeletConfigFiles(cfg *kubeadmapi.InitConfiguration, kubeletDir strin
 		}
 	}
 
-	if dryRun { // Print the instance-config.yaml.
+	if dryRun { // 打印 instance-config.yaml。
 		err = dryrunutil.PrintDryRunFile(kubeadmconstants.KubeletInstanceConfigurationFileName, kubeletDir, kubeadmconstants.KubeletRunDirectory, out)
 		if err != nil {
 			return errors.Wrap(err, "error printing kubelet instance configuration file on dryrun")
 		}
 	}
 
-	// Write the configuration for the kubelet down to disk so the upgraded kubelet can start with fresh config
+	// 将 kubelet 配置写入磁盘，使升级后的 kubelet 使用新配置启动。
 	if err := kubeletphase.WriteConfigToDisk(&cfg.ClusterConfiguration, kubeletDir, patchesDir, out); err != nil {
 		return errors.Wrap(err, "error writing kubelet configuration to file")
 	}
 
-	if dryRun { // Print the config.yaml with patches applied.
+	if dryRun { // 打印已应用补丁的 config.yaml。
 		err := dryrunutil.PrintDryRunFile(kubeadmconstants.KubeletConfigurationFileName, kubeletDir, kubeadmconstants.KubeletRunDirectory, out)
 		if err != nil {
 			return errors.Wrap(err, "error printing kubelet configuration file on dryrun")
@@ -157,21 +155,21 @@ func WriteKubeletConfigFiles(cfg *kubeadmapi.InitConfiguration, kubeletDir strin
 	return nil
 }
 
-// RemoveKubeletArgsFromFile removes unwanted kubelet flags from the existing KubeletEnvFile file,
-// but first creates a backup of the existing file.
+// RemoveKubeletArgsFromFile 从现有 KubeletEnvFile 文件中移除不需要的 kubelet 参数，
+// 但会先备份现有文件。
 func RemoveKubeletArgsFromFile(kubeletDir string, kubeConfigDir string, unwantedFlags []string, dryRun bool, out io.Writer) error {
-	// If there are no unwanted flags, do nothing.
+	// 若没有不需要的参数，则不执行任何操作。
 	if len(unwantedFlags) == 0 {
 		return nil
 	}
 
-	// For dry run mode, we can not access the real kubelet env file in the dry-run directory, so we only print the unwanted flags instead.
+	// 试运行模式下无法访问试运行目录中的真实 kubelet 环境文件，因此仅打印不需要的参数。
 	if dryRun {
 		_, _ = fmt.Fprintf(out, "[dryrun] Would remove unwanted kubelet flags %v from %s\n", unwantedFlags, kubeadmconstants.KubeletEnvFileName)
 		return nil
 	}
 
-	// Create a copy of the KubeletEnvFile in the /etc/kubernetes/tmp or kubeConfigDir.
+	// 在 /etc/kubernetes/tmp 或 kubeConfigDir 中创建 KubeletEnvFile 副本。
 	backupDir, err := kubeadmconstants.CreateTempDir(kubeConfigDir, "kubeadm-kubelet-env")
 	if err != nil {
 		return err
@@ -200,7 +198,7 @@ func RemoveKubeletArgsFromFile(kubeletDir string, kubeConfigDir string, unwanted
 		}
 		kubeletFlags = append(kubeletFlags, arg)
 	}
-	// Rewrite env file if needed
+	// 必要时重写环境文件。
 	if len(args) != len(kubeletFlags) {
 		if err := kubeletphase.WriteKubeletArgsToFile(kubeletFlags, nil, kubeletDir); err != nil {
 			return errors.Wrap(err, "error writing kubelet env file")
@@ -209,7 +207,7 @@ func RemoveKubeletArgsFromFile(kubeletDir string, kubeConfigDir string, unwanted
 	return nil
 }
 
-// UpdateKubeletKubeconfigServer changes the Server URL in the kubelet's kubeconfig if necessary.
+// UpdateKubeletKubeconfigServer 在必要时修改 kubelet kubeconfig 中的 Server URL。
 func UpdateKubeletKubeconfigServer(cfg *kubeadmapi.InitConfiguration, dryRun bool) error {
 	kubeletKubeConfigFilePath := filepath.Join(kubeadmconstants.KubernetesDir, kubeadmconstants.KubeletKubeConfigFileName)
 
@@ -242,7 +240,7 @@ func UpdateKubeletKubeconfigServer(cfg *kubeadmapi.InitConfiguration, dryRun boo
 	}
 
 	var targetServer string
-	// Skip changing kubeconfig file if Server does not match the ControlPlaneEndpoint.
+	// 若 Server 与 ControlPlaneEndpoint 不匹配，则跳过 kubeconfig 文件修改。
 	if config.Clusters[configContext.Cluster].Server != controlPlaneAPIEndpoint || controlPlaneAPIEndpoint == localAPIEndpoint {
 		klog.V(2).Infof("Skipping update of the Server URL in %s, because it's already not equal to %q or already matches the localAPIEndpoint", kubeletKubeConfigFilePath, controlPlaneAPIEndpoint)
 		return nil

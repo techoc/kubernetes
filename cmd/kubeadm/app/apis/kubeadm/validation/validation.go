@@ -48,19 +48,19 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// ValidateInitConfiguration validates an InitConfiguration object and collects all encountered errors
+// ValidateInitConfiguration 校验 InitConfiguration 对象并收集所有错误。
 func ValidateInitConfiguration(c *kubeadm.InitConfiguration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateNodeRegistrationOptions(&c.NodeRegistration, field.NewPath("nodeRegistration"))...)
 	allErrs = append(allErrs, ValidateBootstrapTokens(c.BootstrapTokens, field.NewPath("bootstrapTokens"))...)
 	allErrs = append(allErrs, ValidateClusterConfiguration(&c.ClusterConfiguration)...)
-	// TODO(Arvinderpal): update advertiseAddress validation for dual-stack once it's implemented.
+	// TODO(Arvinderpal): 双栈实现后更新 advertiseAddress 校验。
 	allErrs = append(allErrs, ValidateAPIEndpoint(&c.LocalAPIEndpoint, field.NewPath("localAPIEndpoint"))...)
 	allErrs = append(allErrs, ValidateCertificateKey(c.CertificateKey, field.NewPath("certificateKey"))...)
 	return allErrs
 }
 
-// ValidateClusterConfiguration validates an ClusterConfiguration object and collects all encountered errors
+// ValidateClusterConfiguration 校验 ClusterConfiguration 对象并收集所有错误。
 func ValidateClusterConfiguration(c *kubeadm.ClusterConfiguration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateDNS(&c.DNS, field.NewPath("dns"))...)
@@ -81,7 +81,7 @@ func ValidateClusterConfiguration(c *kubeadm.ClusterConfiguration) field.ErrorLi
 	return allErrs
 }
 
-// ValidateAPIServer validates a APIServer object and collects all encountered errors
+// ValidateAPIServer 校验 APIServer 对象并收集所有错误。
 func ValidateAPIServer(a *kubeadm.APIServer, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateCertSANs(a.CertSANs, fldPath.Child("certSANs"))...)
@@ -89,21 +89,21 @@ func ValidateAPIServer(a *kubeadm.APIServer, fldPath *field.Path) field.ErrorLis
 	return allErrs
 }
 
-// ValidateControllerManager validates the controller manager object and collects all encountered errors
+// ValidateControllerManager 校验控制器管理器对象并收集所有错误。
 func ValidateControllerManager(a *kubeadm.ControlPlaneComponent, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateExtraArgs(a.ExtraArgs, fldPath.Child("extraArgs"))...)
 	return allErrs
 }
 
-// ValidateScheduler validates the scheduler object and collects all encountered errors
+// ValidateScheduler 校验调度器对象并收集所有错误。
 func ValidateScheduler(a *kubeadm.ControlPlaneComponent, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateExtraArgs(a.ExtraArgs, fldPath.Child("extraArgs"))...)
 	return allErrs
 }
 
-// ValidateJoinConfiguration validates node configuration and collects all encountered errors
+// ValidateJoinConfiguration 校验节点配置并收集所有错误。
 func ValidateJoinConfiguration(c *kubeadm.JoinConfiguration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateDiscovery(&c.Discovery, field.NewPath("discovery"))...)
@@ -116,7 +116,7 @@ func ValidateJoinConfiguration(c *kubeadm.JoinConfiguration) field.ErrorList {
 	return allErrs
 }
 
-// ValidateJoinControlPlane validates joining control plane configuration and collects all encountered errors
+// ValidateJoinControlPlane 校验加入控制平面的配置并收集所有错误。
 func ValidateJoinControlPlane(c *kubeadm.JoinControlPlane, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if c != nil {
@@ -126,7 +126,7 @@ func ValidateJoinControlPlane(c *kubeadm.JoinControlPlane, fldPath *field.Path) 
 	return allErrs
 }
 
-// ValidateNodeRegistrationOptions validates the NodeRegistrationOptions object
+// ValidateNodeRegistrationOptions 校验 NodeRegistrationOptions 对象并收集所有错误。
 func ValidateNodeRegistrationOptions(nro *kubeadm.NodeRegistrationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(nro.Name) == 0 {
@@ -140,11 +140,11 @@ func ValidateNodeRegistrationOptions(nro *kubeadm.NodeRegistrationOptions, fldPa
 	allErrs = append(allErrs, ValidateSocketPath(nro.CRISocket, fldPath.Child("criSocket"))...)
 	allErrs = append(allErrs, ValidateExtraArgs(nro.KubeletExtraArgs, fldPath.Child("kubeletExtraArgs"))...)
 	allErrs = append(allErrs, ValidateImagePullPolicy(nro.ImagePullPolicy, fldPath.Child("imagePullPolicy"))...)
-	// TODO: Maybe validate .Taints as well in the future using something like validateNodeTaints() in pkg/apis/core/validation
+	// TODO: 未来可考虑使用 pkg/apis/core/validation 中的 validateNodeTaints() 等逻辑校验 .Taints。
 	return allErrs
 }
 
-// ValidateDiscovery validates discovery related configuration and collects all encountered errors
+// ValidateDiscovery 校验发现相关配置并收集所有错误。
 func ValidateDiscovery(d *kubeadm.Discovery, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -171,7 +171,7 @@ func ValidateDiscovery(d *kubeadm.Discovery, fldPath *field.Path) field.ErrorLis
 	return allErrs
 }
 
-// ValidateDiscoveryBootstrapToken validates bootstrap token discovery configuration
+// ValidateDiscoveryBootstrapToken 校验基于 Bootstrap Token 的发现配置并收集所有错误。
 func ValidateDiscoveryBootstrapToken(b *kubeadm.BootstrapTokenDiscovery, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -189,7 +189,7 @@ func ValidateDiscoveryBootstrapToken(b *kubeadm.BootstrapTokenDiscovery, fldPath
 	return allErrs
 }
 
-// ValidateDiscoveryFile validates file discovery configuration
+// ValidateDiscoveryFile 校验文件发现配置并收集所有错误。
 func ValidateDiscoveryFile(f *kubeadm.FileDiscovery, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -198,7 +198,7 @@ func ValidateDiscoveryFile(f *kubeadm.FileDiscovery, fldPath *field.Path) field.
 	return allErrs
 }
 
-// ValidateDiscoveryTokenAPIServer validates discovery token for API server
+// ValidateDiscoveryTokenAPIServer 校验用于发现的 API 服务器令牌。
 func ValidateDiscoveryTokenAPIServer(apiServer string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	_, _, err := net.SplitHostPort(apiServer)
@@ -208,7 +208,7 @@ func ValidateDiscoveryTokenAPIServer(apiServer string, fldPath *field.Path) fiel
 	return allErrs
 }
 
-// ValidateDiscoveryKubeConfigPath validates location of a discovery file
+// ValidateDiscoveryKubeConfigPath 校验发现文件的位置。
 func ValidateDiscoveryKubeConfigPath(discoveryFile string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	u, err := url.Parse(discoveryFile)
@@ -218,7 +218,7 @@ func ValidateDiscoveryKubeConfigPath(discoveryFile string, fldPath *field.Path) 
 	}
 
 	if u.Scheme == "" {
-		// URIs with no scheme should be treated as files
+		// 不带 scheme 的 URI 按文件处理。
 		if _, err := os.Stat(discoveryFile); os.IsNotExist(err) {
 			allErrs = append(allErrs, field.Invalid(fldPath, discoveryFile, "not a valid HTTPS URL or a file on disk"))
 		}
@@ -231,7 +231,7 @@ func ValidateDiscoveryKubeConfigPath(discoveryFile string, fldPath *field.Path) 
 	return allErrs
 }
 
-// ValidateBootstrapTokens validates a slice of BootstrapToken objects
+// ValidateBootstrapTokens 校验 BootstrapToken 对象切片并收集所有错误。
 func ValidateBootstrapTokens(bts []bootstraptokenv1.BootstrapToken, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, bt := range bts {
@@ -247,7 +247,7 @@ func ValidateBootstrapTokens(bts []bootstraptokenv1.BootstrapToken, fldPath *fie
 	return allErrs
 }
 
-// ValidateToken validates a Bootstrap Token
+// ValidateToken 校验 Bootstrap Token 并收集所有错误。
 func ValidateToken(token string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -258,18 +258,18 @@ func ValidateToken(token string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateTokenGroups validates token groups
+// ValidateTokenGroups 校验令牌组并收集所有错误。
 func ValidateTokenGroups(usages []string, groups []string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	// adding groups only makes sense for authentication
+	// 只有用于身份验证时，设置组才有意义。
 	usagesSet := sets.New(usages...)
 	usageAuthentication := strings.TrimPrefix(bootstrapapi.BootstrapTokenUsageAuthentication, bootstrapapi.BootstrapTokenUsagePrefix)
 	if len(groups) > 0 && !usagesSet.Has(usageAuthentication) {
 		allErrs = append(allErrs, field.Invalid(fldPath, groups, fmt.Sprintf("token groups cannot be specified unless --usages includes %q", usageAuthentication)))
 	}
 
-	// validate any extra group names
+	// 校验所有额外组名。
 	for _, group := range groups {
 		if err := bootstraputil.ValidateBootstrapGroupName(group); err != nil {
 			allErrs = append(allErrs, field.Invalid(fldPath, groups, err.Error()))
@@ -279,11 +279,11 @@ func ValidateTokenGroups(usages []string, groups []string, fldPath *field.Path) 
 	return allErrs
 }
 
-// ValidateTokenUsages validates token usages
+// ValidateTokenUsages 校验令牌用途并收集所有错误。
 func ValidateTokenUsages(usages []string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	// validate usages
+	// 校验用途。
 	if err := bootstraputil.ValidateUsages(usages); err != nil {
 		allErrs = append(allErrs, field.Invalid(fldPath, usages, err.Error()))
 	}
@@ -291,7 +291,7 @@ func ValidateTokenUsages(usages []string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateEtcd validates the .Etcd sub-struct.
+// ValidateEtcd 校验 .Etcd 子结构并收集所有错误。
 func ValidateEtcd(e *kubeadm.Etcd, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	localPath := fldPath.Child("local")
@@ -316,15 +316,15 @@ func ValidateEtcd(e *kubeadm.Etcd, fldPath *field.Path) field.ErrorList {
 	}
 	if e.External != nil {
 		requireHTTPS := true
-		// Only allow the http scheme if no certs/keys are passed
+		// 未传入证书或密钥时，允许使用 HTTP scheme。
 		if e.External.CAFile == "" && e.External.CertFile == "" && e.External.KeyFile == "" {
 			requireHTTPS = false
 		}
-		// Require either none or both of the cert/key pair
+		// 证书和密钥必须同时设置或同时不设置。
 		if (e.External.CertFile == "" && e.External.KeyFile != "") || (e.External.CertFile != "" && e.External.KeyFile == "") {
 			allErrs = append(allErrs, field.Invalid(externalPath, "", "either both or none of .Etcd.External.CertFile and .Etcd.External.KeyFile must be set"))
 		}
-		// If the cert and key are specified, require the CA as well
+		// 同时设置证书和密钥时，还必须设置 CA。
 		if e.External.CertFile != "" && e.External.KeyFile != "" && e.External.CAFile == "" {
 			allErrs = append(allErrs, field.Invalid(externalPath, "", "setting .Etcd.External.CertFile and .Etcd.External.KeyFile requires .Etcd.External.CAFile"))
 		}
@@ -335,7 +335,7 @@ func ValidateEtcd(e *kubeadm.Etcd, fldPath *field.Path) field.ErrorList {
 			allErrs = append(allErrs, ValidateURLs(e.External.Endpoints, requireHTTPS, externalPath.Child("endpoints"))...)
 		}
 
-		allErrs = append(allErrs, ValidateURLs(e.External.HTTPEndpoints, false /* requireHTTPS */, externalPath.Child("httpEndpoints"))...)
+		allErrs = append(allErrs, ValidateURLs(e.External.HTTPEndpoints, false /* 要求 HTTPS */, externalPath.Child("httpEndpoints"))...)
 
 		if e.External.CAFile != "" {
 			allErrs = append(allErrs, ValidateAbsolutePath(e.External.CAFile, externalPath.Child("caFile"))...)
@@ -350,7 +350,7 @@ func ValidateEtcd(e *kubeadm.Etcd, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateEncryptionAlgorithm validates the public key algorithm
+// ValidateEncryptionAlgorithm 校验公钥算法并收集所有错误。
 func ValidateEncryptionAlgorithm(algo kubeadm.EncryptionAlgorithmType, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	knownAlgorithms := sets.New(
@@ -367,7 +367,7 @@ func ValidateEncryptionAlgorithm(algo kubeadm.EncryptionAlgorithmType, fldPath *
 	return allErrs
 }
 
-// ValidateCertSANs validates alternative names
+// ValidateCertSANs 校验备用名称并收集所有错误。
 func ValidateCertSANs(altnames []string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, altname := range altnames {
@@ -382,7 +382,7 @@ func ValidateCertSANs(altnames []string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateURLs validates the URLs given in the string slice, makes sure they are parsable. Optionally, it can enforces HTTPS usage.
+// ValidateURLs 校验字符串切片中的 URL 可解析，并可选择强制要求使用 HTTPS。
 func ValidateURLs(urls []string, requireHTTPS bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, urlstr := range urls {
@@ -401,7 +401,7 @@ func ValidateURLs(urls []string, requireHTTPS bool, fldPath *field.Path) field.E
 	return allErrs
 }
 
-// ValidateIPFromString validates ip address
+// ValidateIPFromString 校验 IP 地址并收集所有错误。
 func ValidateIPFromString(ipaddr string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if netutils.ParseIPSloppy(ipaddr) == nil {
@@ -410,7 +410,7 @@ func ValidateIPFromString(ipaddr string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidatePort validates port numbers
+// ValidatePort 校验端口号并收集所有错误。
 func ValidatePort(port int32, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if _, err := kubeadmutil.ParsePort(strconv.Itoa(int(port))); err != nil {
@@ -419,7 +419,7 @@ func ValidatePort(port int32, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateHostPort validates host[:port] endpoints
+// ValidateHostPort 校验 host[:port] 格式的端点并收集所有错误。
 func ValidateHostPort(endpoint string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if _, _, err := kubeadmutil.ParseHostPort(endpoint); endpoint != "" && err != nil {
@@ -428,7 +428,7 @@ func ValidateHostPort(endpoint string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateIPNetFromString validates network portion of ip address
+// ValidateIPNetFromString 校验 IP 地址的网络部分并收集所有错误。
 func ValidateIPNetFromString(subnetStr string, minAddrs int64, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	subnets, err := netutils.ParseCIDRs(strings.Split(subnetStr, ","))
@@ -437,10 +437,10 @@ func ValidateIPNetFromString(subnetStr string, minAddrs int64, fldPath *field.Pa
 		return allErrs
 	}
 	switch {
-	// if DualStack only 2 CIDRs allowed
+	// 双栈网络只允许两个 CIDR。
 	case len(subnets) > 2:
 		allErrs = append(allErrs, field.Invalid(fldPath, subnetStr, "expected one (IPv4 or IPv6) CIDR or two CIDRs from each family for dual-stack networking"))
-	// if DualStack and there are 2 CIDRs validate if there is at least one of each IP family
+	// 双栈网络有两个 CIDR 时，校验是否分别包含两种 IP 协议族。
 	case len(subnets) == 2:
 		areDualStackCIDRs, err := netutils.IsDualStackCIDRs(subnets)
 		if err != nil {
@@ -449,14 +449,14 @@ func ValidateIPNetFromString(subnetStr string, minAddrs int64, fldPath *field.Pa
 			allErrs = append(allErrs, field.Invalid(fldPath, subnetStr, "expected one (IPv4 or IPv6) CIDR or two CIDRs from each family for dual-stack networking"))
 		}
 	}
-	// validate the subnet/s
+	// 校验每个子网。
 	for _, s := range subnets {
 		numAddresses := netutils.RangeSize(s)
 		if numAddresses < minAddrs {
 			allErrs = append(allErrs, field.Invalid(fldPath, s.String(), fmt.Sprintf("subnet with %d address(es) is too small, the minimum is %d", numAddresses, minAddrs)))
 		}
 
-		// Warn when the subnet is in site-local range - i.e. contains addresses that belong to fec0::/10
+		// 子网位于 site-local 范围（包含 fec0::/10 中的地址）时发出警告。
 		_, siteLocalNet, _ := netutils.ParseCIDRSloppy("fec0::/10")
 		if siteLocalNet.Contains(s.IP) || s.Contains(siteLocalNet.IP) {
 			klog.Warningf("the subnet %v contains IPv6 site-local addresses that belong to fec0::/10 which has been deprecated by rfc3879", s)
@@ -465,14 +465,12 @@ func ValidateIPNetFromString(subnetStr string, minAddrs int64, fldPath *field.Pa
 	return allErrs
 }
 
-// ValidateServiceSubnetSize validates that the maximum subnet size is not exceeded
-// Should be a small cidr due to how it is stored in etcd.
-// bigger cidr (specially those offered by IPv6) will add no value
-// and significantly increase snapshotting time.
-// NOTE: This is identical to validation performed in the apiserver.
+// ValidateServiceSubnetSize 校验是否超过最大子网大小。
+// 由于子网存储在 etcd 中，其 CIDR 应较小；较大的 CIDR（尤其是 IPv6 提供的范围）
+// 不会带来额外价值，还会显著增加快照耗时。此校验与 apiserver 中的校验一致。
 func ValidateServiceSubnetSize(subnetStr string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
-	// subnets were already validated
+	// 子网已完成校验。
 	subnets, _ := netutils.ParseCIDRs(strings.Split(subnetStr, ","))
 	for _, serviceSubnet := range subnets {
 		ones, bits := serviceSubnet.Mask.Size()
@@ -484,23 +482,23 @@ func ValidateServiceSubnetSize(subnetStr string, fldPath *field.Path) field.Erro
 	return allErrs
 }
 
-// ValidatePodSubnetNodeMask validates that the relation between podSubnet and node-masks is correct
+// ValidatePodSubnetNodeMask 校验 podSubnet 与节点掩码之间的关系是否正确。
 func ValidatePodSubnetNodeMask(subnetStr string, c *kubeadm.ClusterConfiguration, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
-	// subnets were already validated
+	// 子网已完成校验。
 	subnets, _ := netutils.ParseCIDRs(strings.Split(subnetStr, ","))
 	for _, podSubnet := range subnets {
-		// obtain podSubnet mask
+		// 获取 podSubnet 掩码。
 		mask := podSubnet.Mask
 		maskSize, _ := mask.Size()
-		// obtain node-cidr-mask
+		// 获取 node-cidr-mask。
 		nodeMask, err := getClusterNodeMask(c, netutils.IsIPv6(podSubnet.IP))
 		if err != nil {
 			allErrs = append(allErrs, field.Invalid(fldPath, podSubnet.String(), err.Error()))
 			continue
 		}
-		// the pod subnet mask needs to allow one or multiple node-masks
-		// i.e. if it has a /24 the node mask must be between 24 and 32 for ipv4
+		// Pod 子网掩码必须能容纳一个或多个节点掩码；
+		// 例如，若为 /24，IPv4 节点掩码必须介于 24 和 32 之间。
 		if maskSize > nodeMask {
 			allErrs = append(allErrs, field.Invalid(fldPath, podSubnet.String(), fmt.Sprintf("the size of pod subnet with mask %d is smaller than the size of node subnet with mask %d", maskSize, nodeMask)))
 		} else if (nodeMask - maskSize) > constants.PodSubnetNodeMaskMaxDiff {
@@ -510,13 +508,12 @@ func ValidatePodSubnetNodeMask(subnetStr string, c *kubeadm.ClusterConfiguration
 	return allErrs
 }
 
-// getClusterNodeMask returns the corresponding node-cidr-mask
-// based on the Cluster configuration and the IP family
-// Default is 24 for IPv4 and 64 for IPv6
+// getClusterNodeMask 根据集群配置和 IP 协议族返回对应的 node-cidr-mask。
+// IPv4 默认为 24，IPv6 默认为 64。
 func getClusterNodeMask(c *kubeadm.ClusterConfiguration, isIPv6 bool) (int, error) {
-	// defaultNodeMaskCIDRIPv4 is default mask size for IPv4 node cidr for use by the controller manager
+	// defaultNodeMaskCIDRIPv4 是控制器管理器使用的 IPv4 节点 CIDR 默认掩码长度。
 	const defaultNodeMaskCIDRIPv4 = 24
-	// defaultNodeMaskCIDRIPv6 is default mask size for IPv6 node cidr for use by the controller manager
+	// defaultNodeMaskCIDRIPv6 是控制器管理器使用的 IPv6 节点 CIDR 默认掩码长度。
 	const defaultNodeMaskCIDRIPv6 = 64
 	var maskSize int
 	var maskArg string
@@ -530,7 +527,7 @@ func getClusterNodeMask(c *kubeadm.ClusterConfiguration, isIPv6 bool) (int, erro
 
 	maskValue, _ := kubeadm.GetArgValue(c.ControllerManager.ExtraArgs, maskArg, -1)
 	if len(maskValue) != 0 {
-		// assume it is an integer, if not it will fail later
+		// 假定值为整数；若不是，后续转换会失败。
 		maskSize, err = strconv.Atoi(maskValue)
 		if err != nil {
 			return 0, errors.Wrapf(err, "could not parse the value of the kube-controller-manager flag %s as an integer", maskArg)
@@ -543,7 +540,7 @@ func getClusterNodeMask(c *kubeadm.ClusterConfiguration, isIPv6 bool) (int, erro
 	return maskSize, nil
 }
 
-// ValidateDNS validates the DNS object and collects all encountered errors
+// ValidateDNS 校验 DNS 对象并收集所有错误。
 func ValidateDNS(dns *kubeadm.DNS, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -554,7 +551,7 @@ func ValidateDNS(dns *kubeadm.DNS, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateNetworking validates networking configuration
+// ValidateNetworking 校验网络配置并收集所有错误。
 func ValidateNetworking(c *kubeadm.ClusterConfiguration, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	dnsDomainFldPath := fldPath.Child("dnsDomain")
@@ -564,21 +561,21 @@ func ValidateNetworking(c *kubeadm.ClusterConfiguration, fldPath *field.Path) fi
 
 	if len(c.Networking.ServiceSubnet) != 0 {
 		allErrs = append(allErrs, ValidateIPNetFromString(c.Networking.ServiceSubnet, constants.MinimumAddressesInServiceSubnet, fldPath.Child("serviceSubnet"))...)
-		// Service subnet was already validated, we need to validate now the subnet size
+		// 服务子网已完成校验，现在校验其大小。
 		allErrs = append(allErrs, ValidateServiceSubnetSize(c.Networking.ServiceSubnet, fldPath.Child("serviceSubnet"))...)
 	}
 	if len(c.Networking.PodSubnet) != 0 {
 		allErrs = append(allErrs, ValidateIPNetFromString(c.Networking.PodSubnet, constants.MinimumAddressesInPodSubnet, fldPath.Child("podSubnet"))...)
 		val, _ := kubeadm.GetArgValue(c.ControllerManager.ExtraArgs, "allocate-node-cidrs", -1)
 		if val != "false" {
-			// Pod subnet was already validated, we need to validate now against the node-mask
+			// Pod 子网已完成校验，现在校验其与节点掩码的关系。
 			allErrs = append(allErrs, ValidatePodSubnetNodeMask(c.Networking.PodSubnet, c, fldPath.Child("podSubnet"))...)
 		}
 	}
 	return allErrs
 }
 
-// ValidateAbsolutePath validates whether provided path is absolute or not
+// ValidateAbsolutePath 校验提供的路径是否为绝对路径并收集所有错误。
 func ValidateAbsolutePath(path string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if !isAbs(path) {
@@ -587,9 +584,9 @@ func ValidateAbsolutePath(path string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateMixedArguments validates passed arguments
+// ValidateMixedArguments 校验传入的参数并返回错误。
 func ValidateMixedArguments(flag *pflag.FlagSet) error {
-	// If --config isn't set, we have nothing to validate
+	// 未设置 --config 时，无需校验。
 	if !flag.Changed("config") {
 		return nil
 	}
@@ -597,7 +594,7 @@ func ValidateMixedArguments(flag *pflag.FlagSet) error {
 	mixedInvalidFlags := []string{}
 	flag.Visit(func(f *pflag.Flag) {
 		if isAllowedFlag(f.Name) {
-			// "--skip-*" flags or other allowed flags can be set with --config
+			// "--skip-*" 等其他允许的参数可与 --config 同时设置。
 			return
 		}
 		mixedInvalidFlags = append(mixedInvalidFlags, f.Name)
@@ -626,11 +623,11 @@ func isAllowedFlag(flagName string) bool {
 	return strings.HasPrefix(flagName, "skip-")
 }
 
-// ValidateFeatureGates validates provided feature gates
+// ValidateFeatureGates 校验提供的功能开关并收集所有错误。
 func ValidateFeatureGates(featureGates map[string]bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	// check valid feature names are provided
+	// 检查是否提供了有效的功能名称。
 	for k := range featureGates {
 		if !features.Supports(features.InitFeatureGates, k) {
 			allErrs = append(allErrs, field.Invalid(fldPath, featureGates,
@@ -640,7 +637,7 @@ func ValidateFeatureGates(featureGates map[string]bool, fldPath *field.Path) fie
 	return allErrs
 }
 
-// ValidateAPIEndpoint validates API server's endpoint
+// ValidateAPIEndpoint 校验 API 服务器端点并收集所有错误。
 func ValidateAPIEndpoint(c *kubeadm.APIEndpoint, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateIPFromString(c.AdvertiseAddress, fldPath.Child("advertiseAddress"))...)
@@ -648,7 +645,7 @@ func ValidateAPIEndpoint(c *kubeadm.APIEndpoint, fldPath *field.Path) field.Erro
 	return allErrs
 }
 
-// ValidateCertificateKey validates the certificate key is a valid hex encoded AES key
+// ValidateCertificateKey 校验证书密钥是否为有效的十六进制编码 AES 密钥。
 func ValidateCertificateKey(certificateKey string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -667,19 +664,19 @@ func ValidateCertificateKey(certificateKey string, fldPath *field.Path) field.Er
 	return allErrs
 }
 
-// ValidateIgnorePreflightErrors validates duplicates in:
-// - ignore-preflight-errors flag and
-// - ignorePreflightErrors field in {Init,Join}Configuration files.
+// ValidateIgnorePreflightErrors 校验以下两处是否存在重复项：
+// - ignore-preflight-errors 参数；
+// - {Init,Join}Configuration 文件中的 ignorePreflightErrors 字段。
 func ValidateIgnorePreflightErrors(ignorePreflightErrorsFromCLI, ignorePreflightErrorsFromConfigFile []string) (sets.Set[string], error) {
 	ignoreErrors := sets.New[string]()
 	allErrs := field.ErrorList{}
 
 	for _, item := range ignorePreflightErrorsFromConfigFile {
-		ignoreErrors.Insert(strings.ToLower(item)) // parameters are case insensitive
+		ignoreErrors.Insert(strings.ToLower(item)) // 参数不区分大小写。
 	}
 
 	for _, item := range ignorePreflightErrorsFromCLI {
-		ignoreErrors.Insert(strings.ToLower(item)) // parameters are case insensitive
+		ignoreErrors.Insert(strings.ToLower(item)) // 参数不区分大小写。
 	}
 
 	if ignoreErrors.Has("all") && ignoreErrors.Len() > 1 {
@@ -689,11 +686,11 @@ func ValidateIgnorePreflightErrors(ignorePreflightErrorsFromCLI, ignorePreflight
 	return ignoreErrors, allErrs.ToAggregate()
 }
 
-// ValidateSocketPath validates format of socket path or url
+// ValidateSocketPath 校验 socket 路径或 URL 的格式并收集所有错误。
 func ValidateSocketPath(socket string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	if len(socket) == 0 { // static and dynamic defaulting should have added a value to the field already
+	if len(socket) == 0 { // 静态和动态默认值逻辑应已为此字段填入值。
 		return append(allErrs, field.Invalid(fldPath, socket, "empty CRI socket"))
 	}
 
@@ -702,7 +699,7 @@ func ValidateSocketPath(socket string, fldPath *field.Path) field.ErrorList {
 		return append(allErrs, field.Invalid(fldPath, socket, fmt.Sprintf("URL parsing error: %v", err)))
 	}
 
-	// static and dynamic defaulting should have ensured that an URL scheme is used
+	// 静态和动态默认值逻辑应已确保使用 URL scheme。
 	if u.Scheme != kubeadmapiv1.DefaultContainerRuntimeURLScheme {
 		return append(allErrs, field.Invalid(fldPath, socket, fmt.Sprintf("only URL scheme %q is supported, got %q", kubeadmapiv1.DefaultContainerRuntimeURLScheme, u.Scheme)))
 	}
@@ -710,7 +707,7 @@ func ValidateSocketPath(socket string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateImageRepository validates the image repository format
+// ValidateImageRepository 校验镜像仓库格式并收集所有错误。
 func ValidateImageRepository(imageRepository string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -722,7 +719,7 @@ func ValidateImageRepository(imageRepository string, fldPath *field.Path) field.
 	return allErrs
 }
 
-// ValidateResetConfiguration validates a ResetConfiguration object and collects all encountered errors
+// ValidateResetConfiguration 校验 ResetConfiguration 对象并收集所有错误。
 func ValidateResetConfiguration(c *kubeadm.ResetConfiguration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateSocketPath(c.CRISocket, field.NewPath("criSocket"))...)
@@ -731,7 +728,7 @@ func ValidateResetConfiguration(c *kubeadm.ResetConfiguration) field.ErrorList {
 	return allErrs
 }
 
-// ValidateExtraArgs validates a set of arguments and collects all encountered errors
+// ValidateExtraArgs 校验一组参数并收集所有错误。
 func ValidateExtraArgs(args []kubeadm.Arg, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -749,7 +746,7 @@ func ValidateExtraArgs(args []kubeadm.Arg, fldPath *field.Path) field.ErrorList 
 	return allErrs
 }
 
-// ValidateUnmountFlags validates a set of unmount flags and collects all encountered errors
+// ValidateUnmountFlags 校验一组卸载标志并收集所有错误。
 func ValidateUnmountFlags(flags []string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -765,7 +762,7 @@ func ValidateUnmountFlags(flags []string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateImagePullPolicy validates if the user specified pull policy is correct
+// ValidateImagePullPolicy 校验用户指定的拉取策略是否正确。
 func ValidateImagePullPolicy(policy corev1.PullPolicy, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	switch policy {
@@ -777,7 +774,7 @@ func ValidateImagePullPolicy(policy corev1.PullPolicy, fldPath *field.Path) fiel
 	}
 }
 
-// ValidateUpgradeConfiguration validates a UpgradeConfiguration object and collects all encountered errors
+// ValidateUpgradeConfiguration 校验 UpgradeConfiguration 对象并收集所有错误。
 func ValidateUpgradeConfiguration(c *kubeadm.UpgradeConfiguration) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if c.Apply.Patches != nil {
@@ -795,7 +792,7 @@ func ValidateUpgradeConfiguration(c *kubeadm.UpgradeConfiguration) field.ErrorLi
 	return allErrs
 }
 
-// ValidateCertValidity validates if the values for cert validity are too big or don't match
+// ValidateCertValidity 校验证书有效期是否过长或与 CA 证书有效期不匹配。
 func ValidateCertValidity(cfg *kubeadm.ClusterConfiguration) []error {
 	var allErrs []error
 	if cfg.CertificateValidityPeriod != nil && cfg.CertificateValidityPeriod.Duration > constants.CertificateValidityPeriod {

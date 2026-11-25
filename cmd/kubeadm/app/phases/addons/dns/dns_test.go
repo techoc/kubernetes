@@ -1672,8 +1672,8 @@ func TestIsCoreDNSConfigMapMigrationRequired(t *testing.T) {
 	}
 }
 
-// replicas is replica of each DNS deployment
-// deploymentSize is the number of deployments with `k8s-app=kube-dns` label.
+// replicas 是每个 DNS Deployment 的副本数。
+// deploymentSize 是带有 `k8s-app=kube-dns` 标签的 Deployment 数量。
 func newMockClientForTest(t *testing.T, replicas int32, deploymentSize int, image string, configMap string, configData string) *clientsetfake.Clientset {
 	if image == "" {
 		image = "registry.k8s.io/coredns/coredns:" + kubeadmconstants.CoreDNSVersion

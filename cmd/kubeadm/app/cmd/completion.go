@@ -89,7 +89,7 @@ var (
 	}
 )
 
-// GetSupportedShells returns a list of supported shells
+// GetSupportedShells 返回受支持的 shell 列表。
 func GetSupportedShells() []string {
 	shells := []string{}
 	for s := range completionShells {
@@ -98,7 +98,7 @@ func GetSupportedShells() []string {
 	return shells
 }
 
-// newCmdCompletion returns the "kubeadm completion" command
+// newCmdCompletion 返回 kubeadm completion 命令。
 func newCmdCompletion(out io.Writer, boilerPlate string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "completion SHELL",
@@ -114,7 +114,7 @@ func newCmdCompletion(out io.Writer, boilerPlate string) *cobra.Command {
 	return cmd
 }
 
-// RunCompletion checks given arguments and executes command
+// RunCompletion 检查给定参数并执行命令。
 func RunCompletion(out io.Writer, boilerPlate string, cmd *cobra.Command, args []string) error {
 	if length := len(args); length == 0 {
 		return errors.New("shell not specified")

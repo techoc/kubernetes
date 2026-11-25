@@ -26,45 +26,43 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// OpenRCInitSystem defines openrc
+// OpenRCInitSystem 定义 OpenRC 实现。
 type OpenRCInitSystem struct{}
 
-// ServiceStart tries to start a specific service
+// ServiceStart 尝试启动指定服务。
 func (openrc OpenRCInitSystem) ServiceStart(service string) error {
 	args := []string{service, "start"}
 	return exec.Command("rc-service", args...).Run()
 }
 
-// ServiceStop tries to stop a specific service
+// ServiceStop 尝试停止指定服务。
 func (openrc OpenRCInitSystem) ServiceStop(service string) error {
 	args := []string{service, "stop"}
 	return exec.Command("rc-service", args...).Run()
 }
 
-// ServiceRestart tries to reload the environment and restart the specific service
+// ServiceRestart 尝试重新加载环境并重启指定服务。
 func (openrc OpenRCInitSystem) ServiceRestart(service string) error {
 	args := []string{service, "restart"}
 	return exec.Command("rc-service", args...).Run()
 }
 
-// ServiceExists ensures the service is defined for this init system.
-// openrc writes to stderr if a service is not found or not enabled
-// this is in contrast to systemd which only writes to stdout.
-// Hence, we use the Combinedoutput, and ignore the error.
+// ServiceExists 确认服务已定义。OpenRC 在服务不存在或未启用时写入 stderr，
+// 而 systemd 仅写入 stdout；因此使用 CombinedOutput 并忽略错误。
 func (openrc OpenRCInitSystem) ServiceExists(service string) bool {
 	args := []string{service, "status"}
 	outBytes, _ := exec.Command("rc-service", args...).CombinedOutput()
 	return !strings.Contains(string(outBytes), "does not exist")
 }
 
-// ServiceIsEnabled ensures the service is enabled to start on each boot.
+// ServiceIsEnabled 确认服务已配置为每次启动时自动运行。
 func (openrc OpenRCInitSystem) ServiceIsEnabled(service string) bool {
 	args := []string{"show", "default"}
 	outBytes, _ := exec.Command("rc-update", args...).Output()
 	return strings.Contains(string(outBytes), service)
 }
 
-// ServiceIsActive ensures the service is running, or attempting to run. (crash looping in the case of kubelet)
+// ServiceIsActive 确认服务正在运行或尝试运行；kubelet 崩溃循环时也视为活动。
 func (openrc OpenRCInitSystem) ServiceIsActive(service string) bool {
 	args := []string{service, "status"}
 	outBytes, _ := exec.Command("rc-service", args...).CombinedOutput()
@@ -72,20 +70,20 @@ func (openrc OpenRCInitSystem) ServiceIsActive(service string) bool {
 	return !strings.Contains(outStr, "stopped") && !strings.Contains(outStr, "does not exist")
 }
 
-// EnableCommand return a string describing how to enable a service
+// EnableCommand 返回描述如何启用服务的字符串。
 func (openrc OpenRCInitSystem) EnableCommand(service string) string {
 	return fmt.Sprintf("rc-update add %s default", service)
 }
 
-// SystemdInitSystem defines systemd
+// SystemdInitSystem 定义 systemd 实现。
 type SystemdInitSystem struct{}
 
-// EnableCommand return a string describing how to enable a service
+// EnableCommand 返回描述如何启用服务的字符串。
 func (sysd SystemdInitSystem) EnableCommand(service string) string {
 	return fmt.Sprintf("systemctl enable %s.service", service)
 }
 
-// reloadSystemd reloads the systemd daemon
+// reloadSystemd 重新加载 systemd 守护进程。
 func (sysd SystemdInitSystem) reloadSystemd() error {
 	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
 		return errors.Wrap(err, "failed to reload systemd")
@@ -93,9 +91,9 @@ func (sysd SystemdInitSystem) reloadSystemd() error {
 	return nil
 }
 
-// ServiceStart tries to start a specific service
+// ServiceStart 尝试启动指定服务。
 func (sysd SystemdInitSystem) ServiceStart(service string) error {
-	// Before we try to start any service, make sure that systemd is ready
+	// 启动服务前确认 systemd 已就绪。
 	if err := sysd.reloadSystemd(); err != nil {
 		return err
 	}
@@ -103,9 +101,9 @@ func (sysd SystemdInitSystem) ServiceStart(service string) error {
 	return exec.Command("systemctl", args...).Run()
 }
 
-// ServiceRestart tries to reload the environment and restart the specific service
+// ServiceRestart 尝试重新加载环境并重启指定服务。
 func (sysd SystemdInitSystem) ServiceRestart(service string) error {
-	// Before we try to restart any service, make sure that systemd is ready
+	// 重启服务前确认 systemd 已就绪。
 	if err := sysd.reloadSystemd(); err != nil {
 		return err
 	}
@@ -113,13 +111,13 @@ func (sysd SystemdInitSystem) ServiceRestart(service string) error {
 	return exec.Command("systemctl", args...).Run()
 }
 
-// ServiceStop tries to stop a specific service
+// ServiceStop 尝试停止指定服务。
 func (sysd SystemdInitSystem) ServiceStop(service string) error {
 	args := []string{"stop", service}
 	return exec.Command("systemctl", args...).Run()
 }
 
-// ServiceExists ensures the service is defined for this init system.
+// ServiceExists 确认服务已在此 init 系统中定义。
 func (sysd SystemdInitSystem) ServiceExists(service string) bool {
 	args := []string{"status", service}
 	outBytes, _ := exec.Command("systemctl", args...).Output()
@@ -127,19 +125,18 @@ func (sysd SystemdInitSystem) ServiceExists(service string) bool {
 	return !strings.Contains(output, "Loaded: not-found") && !strings.Contains(output, "could not be found")
 }
 
-// ServiceIsEnabled ensures the service is enabled to start on each boot.
+// ServiceIsEnabled 确认服务已配置为每次启动时自动运行。
 func (sysd SystemdInitSystem) ServiceIsEnabled(service string) bool {
 	args := []string{"is-enabled", service}
 	err := exec.Command("systemctl", args...).Run()
 	return err == nil
 }
 
-// ServiceIsActive will check is the service is "active". In the case of
-// crash looping services (kubelet in our case) status will return as
-// "activating", so we will consider this active as well.
+// ServiceIsActive 检查服务是否为 "active"。kubelet 等服务崩溃循环时状态为
+// "activating"，此实现也将其视为活动。
 func (sysd SystemdInitSystem) ServiceIsActive(service string) bool {
 	args := []string{"is-active", service}
-	// Ignoring error here, command returns non-0 if in "activating" status:
+	// 此处忽略错误；服务处于 "activating" 时命令返回非零退出码。
 	outBytes, _ := exec.Command("systemctl", args...).Output()
 	output := strings.TrimSpace(string(outBytes))
 	if output == "active" || output == "activating" {
@@ -148,11 +145,10 @@ func (sysd SystemdInitSystem) ServiceIsActive(service string) bool {
 	return false
 }
 
-// GetInitSystem returns an InitSystem for the current system, or nil
-// if we cannot detect a supported init system.
-// This indicates we will skip init system checks, not an error.
+// GetInitSystem 返回当前系统的 InitSystem；无法检测到受支持的系统时返回 nil。
+// 这表示跳过 init 系统检查，并非错误。
 func GetInitSystem() (InitSystem, error) {
-	// Assume existence of systemctl in path implies this is a systemd system:
+	// PATH 中存在 systemctl 即假定系统使用 systemd。
 	_, err := exec.LookPath("systemctl")
 	if err == nil {
 		return &SystemdInitSystem{}, nil

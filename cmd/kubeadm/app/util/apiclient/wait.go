@@ -43,16 +43,15 @@ import (
 )
 
 const (
-	// TODO: switch to /livez once all components support it
-	// and delete the endpointHealthz constant.
+	// TODO: 所有组件支持后切换到 /livez，并删除 endpointHealthz 常量。
 	// https://github.com/kubernetes/kubernetes/issues/118158
 	endpointHealthz = "healthz"
 	endpointLivez   = "livez"
 
 	argPort        = "secure-port"
 	argBindAddress = "bind-address"
-	// By default, for kube-api-server, kubeadm does not apply a --bind-address flag.
-	// Check --advertise-address instead.
+	// 默认情况下，kubeadm 不为 kube-api-server 设置 --bind-address，
+	// 因此应检查 --advertise-address。
 	argAdvertiseAddress = "advertise-address"
 )
 
@@ -77,33 +76,33 @@ var (
 `)
 )
 
-// Waiter is an interface for waiting for criteria in Kubernetes to happen
+// Waiter 是等待 Kubernetes 中条件满足的接口。
 type Waiter interface {
-	// WaitForControlPlaneComponents waits for all control plane components to be ready.
+	// WaitForControlPlaneComponents 等待所有控制平面组件就绪。
 	WaitForControlPlaneComponents(podMap map[string]*v1.Pod, apiServerAddress string) error
-	// WaitForPodsWithLabel waits for Pods in the kube-system namespace to become Ready
+	// WaitForPodsWithLabel 等待 kube-system 命名空间中的 Pod 就绪。
 	WaitForPodsWithLabel(kvLabel string) error
-	// WaitForStaticPodSingleHash fetches sha256 hash for the control plane static pod
+	// WaitForStaticPodSingleHash 获取控制平面静态 Pod 的 SHA-256 哈希。
 	WaitForStaticPodSingleHash(nodeName string, component string) (string, error)
-	// WaitForStaticPodHashChange waits for the given static pod component's static pod hash to get updated.
-	// By doing that we can be sure that the kubelet has restarted the given Static Pod
+	// WaitForStaticPodHashChange 等待指定静态 Pod 组件的哈希更新，
+	// 从而确认 kubelet 已重启该静态 Pod。
 	WaitForStaticPodHashChange(nodeName, component, previousHash string) error
-	// WaitForStaticPodControlPlaneHashes fetches sha256 hashes for the control plane static pods
+	// WaitForStaticPodControlPlaneHashes 获取控制平面静态 Pod 的 SHA-256 哈希。
 	WaitForStaticPodControlPlaneHashes(nodeName string) (map[string]string, error)
-	// WaitForKubelet blocks until the kubelet /healthz endpoint returns 'ok'
+	// WaitForKubelet 阻塞等待 kubelet 的 /healthz 端点返回 "ok"。
 	WaitForKubelet(healthzAddress string, healthzPort int32) error
-	// SetTimeout adjusts the timeout to the specified duration
+	// SetTimeout 将超时调整为指定时长。
 	SetTimeout(timeout time.Duration)
 }
 
-// KubeWaiter is an implementation of Waiter that is backed by a Kubernetes client
+// KubeWaiter 是基于 Kubernetes 客户端的 Waiter 实现。
 type KubeWaiter struct {
 	client  clientset.Interface
 	timeout time.Duration
 	writer  io.Writer
 }
 
-// NewKubeWaiter returns a new Waiter object that talks to the given Kubernetes cluster
+// NewKubeWaiter 返回与指定 Kubernetes 集群通信的新 Waiter。
 func NewKubeWaiter(client clientset.Interface, timeout time.Duration, writer io.Writer) Waiter {
 	return &KubeWaiter{
 		client:  client,
@@ -112,16 +111,14 @@ func NewKubeWaiter(client clientset.Interface, timeout time.Duration, writer io.
 	}
 }
 
-// controlPlaneComponent holds a component name and an URL
-// on which to perform health checks.
+// controlPlaneComponent 保存组件名称以及执行健康检查的 URL。
 type controlPlaneComponent struct {
 	name        string
 	addressPort string
 	endpoint    string
 }
 
-// getControlPlaneComponentAddressAndPort parses the command in a static Pod
-// container and extracts the values of the given args.
+// getControlPlaneComponentAddressAndPort 解析静态 Pod 容器命令，提取指定参数的值。
 func getControlPlaneComponentAddressAndPort(pod *v1.Pod, name string, args []string) ([]string, error) {
 	var (
 		values    = make([]string, len(args))
@@ -161,12 +158,11 @@ func getControlPlaneComponentAddressAndPort(pod *v1.Pod, name string, args []str
 	return values, nil
 }
 
-// getControlPlaneComponents reads the static Pods of control plane components
-// and returns a slice of 'controlPlaneComponent'.
+// getControlPlaneComponents 读取控制平面组件的静态 Pod，并返回 controlPlaneComponent 切片。
 func getControlPlaneComponents(podMap map[string]*v1.Pod, addressAPIServer string) ([]controlPlaneComponent, error) {
 	var (
-		// By default kubeadm deploys the kube-controller-manager and kube-scheduler
-		// with --bind-address=127.0.0.1. This should match get{Scheduler|ControllerManager}Command().
+		// 默认情况下，kubeadm 为 kube-controller-manager 和 kube-scheduler 设置
+		// --bind-address=127.0.0.1。此值应与 get{Scheduler|ControllerManager}Command() 保持一致。
 		addressKCM       = "127.0.0.1"
 		addressScheduler = "127.0.0.1"
 
@@ -242,7 +238,7 @@ func getControlPlaneComponents(podMap map[string]*v1.Pod, addressAPIServer strin
 	return result, nil
 }
 
-// WaitForControlPlaneComponents waits for all control plane components to report "ok".
+// WaitForControlPlaneComponents 等待所有控制平面组件报告 "ok"。
 func (w *KubeWaiter) WaitForControlPlaneComponents(podMap map[string]*v1.Pod, apiSeverAddress string) error {
 	_, _ = fmt.Fprintf(w.writer, "[control-plane-check] Waiting for healthy control plane components."+
 		" This can take up to %v\n", w.timeout)
@@ -273,8 +269,7 @@ func (w *KubeWaiter) WaitForControlPlaneComponents(podMap map[string]*v1.Pod, ap
 				constants.KubernetesAPICallRetryInterval,
 				w.timeout,
 				true, func(ctx context.Context) (bool, error) {
-					// The kube-apiserver check should use the client defined in the waiter
-					// or otherwise the regular http client can fail when anonymous auth is enabled.
+					// kube-apiserver 检查应使用 waiter 中的客户端，否则启用匿名认证时普通 HTTP 客户端可能失败。
 					if comp.name == constants.KubeAPIServer {
 						result := w.client.Discovery().RESTClient().
 							Get().AbsPath(comp.endpoint).Do(ctx).StatusCode(&statusCode)
@@ -323,8 +318,7 @@ func (w *KubeWaiter) WaitForControlPlaneComponents(podMap map[string]*v1.Pod, ap
 	return utilerrors.NewAggregate(errs)
 }
 
-// WaitForPodsWithLabel will lookup pods with the given label and wait until they are all
-// reporting status as running.
+// WaitForPodsWithLabel 查找具有指定标签的 Pod，并等待全部进入 running 状态。
 func (w *KubeWaiter) WaitForPodsWithLabel(kvLabel string) error {
 
 	lastKnownPodNumber := -1
@@ -357,7 +351,7 @@ func (w *KubeWaiter) WaitForPodsWithLabel(kvLabel string) error {
 		})
 }
 
-// WaitForKubelet blocks until the kubelet /healthz endpoint returns 'ok'.
+// WaitForKubelet 阻塞等待 kubelet 的 /healthz 端点返回 "ok"。
 func (w *KubeWaiter) WaitForKubelet(healthzAddress string, healthzPort int32) error {
 	var (
 		lastError       error
@@ -413,12 +407,12 @@ func (w *KubeWaiter) WaitForKubelet(healthzAddress string, healthzPort int32) er
 	return nil
 }
 
-// SetTimeout adjusts the timeout to the specified duration
+// SetTimeout 将超时调整为指定时长。
 func (w *KubeWaiter) SetTimeout(timeout time.Duration) {
 	w.timeout = timeout
 }
 
-// WaitForStaticPodControlPlaneHashes blocks until it timeouts or gets a hash map for all components and their Static Pods
+// WaitForStaticPodControlPlaneHashes 阻塞等待所有组件及其静态 Pod 的哈希映射，超时则返回。
 func (w *KubeWaiter) WaitForStaticPodControlPlaneHashes(nodeName string) (map[string]string, error) {
 
 	componentHash := ""
@@ -444,7 +438,7 @@ func (w *KubeWaiter) WaitForStaticPodControlPlaneHashes(nodeName string) (map[st
 	return mirrorPodHashes, nil
 }
 
-// WaitForStaticPodSingleHash blocks until it timeouts or gets a hash for a single component and its Static Pod
+// WaitForStaticPodSingleHash 阻塞等待单个组件及其静态 Pod 的哈希，超时则返回。
 func (w *KubeWaiter) WaitForStaticPodSingleHash(nodeName string, component string) (string, error) {
 
 	componentPodHash := ""
@@ -466,8 +460,8 @@ func (w *KubeWaiter) WaitForStaticPodSingleHash(nodeName string, component strin
 	return componentPodHash, err
 }
 
-// WaitForStaticPodHashChange blocks until it timeouts or notices that the Mirror Pod (for the Static Pod, respectively) has changed
-// This implicitly means this function blocks until the kubelet has restarted the Static Pod in question
+// WaitForStaticPodHashChange 阻塞等待镜像 Pod（即对应静态 Pod）的 UID 变化，超时则返回。
+// 这同时意味着等待 kubelet 重启该静态 Pod。
 func (w *KubeWaiter) WaitForStaticPodHashChange(nodeName, component, previousHash string) error {
 	var err, lastErr error
 	err = wait.PollUntilContextTimeout(context.Background(),
@@ -478,9 +472,9 @@ func (w *KubeWaiter) WaitForStaticPodHashChange(nodeName, component, previousHas
 				lastErr = err
 				return false, nil
 			}
-			// Set lastErr to nil to be able to later distinguish between getStaticPodSingleHash() and timeout errors
+			// 将 lastErr 置空，以便后续区分 getStaticPodSingleHash() 错误与超时错误。
 			lastErr = nil
-			// We should continue polling until the UID changes
+			// 应持续轮询，直到 UID 改变。
 			if hash == previousHash {
 				return false, nil
 			}
@@ -488,14 +482,14 @@ func (w *KubeWaiter) WaitForStaticPodHashChange(nodeName, component, previousHas
 			return true, nil
 		})
 
-	// If lastError is not nil, this must be a getStaticPodSingleHash() error, else if err is not nil there was a poll timeout
+	// lastError 非空表示 getStaticPodSingleHash() 出错；否则 err 非空表示轮询超时。
 	if lastErr != nil {
 		return lastErr
 	}
 	return errors.Wrapf(err, "static Pod hash for component %s on Node %s did not change after %v", component, nodeName, w.timeout)
 }
 
-// getStaticPodSingleHash computes hashes for a single Static Pod resource
+// getStaticPodSingleHash 计算单个静态 Pod 资源的哈希。
 func getStaticPodSingleHash(client clientset.Interface, nodeName string, component string) (string, error) {
 
 	staticPodName := fmt.Sprintf("%s-%s", component, nodeName)
@@ -508,7 +502,7 @@ func getStaticPodSingleHash(client clientset.Interface, nodeName string, compone
 	return staticPodHash, nil
 }
 
-// PrintControlPlaneErrorHelpScreen prints help text on wait ControlPlane components errors.
+// PrintControlPlaneErrorHelpScreen 在等待控制平面组件出错时打印帮助信息。
 func PrintControlPlaneErrorHelpScreen(outputWriter io.Writer, criSocket string) {
 	context := struct {
 		Socket string
@@ -519,7 +513,7 @@ func PrintControlPlaneErrorHelpScreen(outputWriter io.Writer, criSocket string) 
 	_, _ = fmt.Fprintln(outputWriter, "")
 }
 
-// PrintKubeletErrorHelpScreen prints help text on kubelet errors.
+// PrintKubeletErrorHelpScreen 在 kubelet 出错时打印帮助信息。
 func PrintKubeletErrorHelpScreen(outputWriter io.Writer) {
 	_, _ = fmt.Fprintln(outputWriter, kubeletFailMsg)
 }

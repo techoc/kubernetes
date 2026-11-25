@@ -87,9 +87,9 @@ func TestEnforceRequirements(t *testing.T) {
 			}
 
 			expErr := tt.expectedErr
-			// pre-flight check expects the user to be root, so the root and non-root should hit different errors
+			// 预检要求用户为 root，因此 root 与非 root 应得到不同错误。
 			isPrivileged := preflight.IsPrivilegedUserCheck{}
-			// this will return an array of errors if we're not running as a privileged user.
+			// 若非特权用户运行，此处将返回错误数组。
 			_, errors := isPrivileged.Check()
 			if len(errors) != 0 && len(tt.expectedErrNonRoot) != 0 {
 				expErr = tt.expectedErrNonRoot

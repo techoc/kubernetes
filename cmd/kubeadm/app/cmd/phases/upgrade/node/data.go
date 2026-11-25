@@ -14,17 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package node implements phases of 'kubeadm upgrade node'.
+// Package node 实现 kubeadm upgrade node 的阶段。
 package node
 
 import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/upgrade"
 )
 
-// Data is the interface to use for kubeadm upgrade node phases.
-// The "nodeData" type from "cmd/upgrade/node.go" must satisfy this interface.
+// Data 是 kubeadm upgrade node 阶段使用的接口。
+// cmd/upgrade/node.go 中的 nodeData 类型必须满足此接口。
 type Data interface {
 	upgrade.Data
 
+	// KubeConfigPath 返回访问当前集群所用的用户 kubeconfig 路径。
 	KubeConfigPath() string
 }

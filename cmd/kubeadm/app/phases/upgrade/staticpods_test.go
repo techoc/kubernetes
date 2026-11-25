@@ -88,46 +88,47 @@ networking:
   serviceSubnet: 10.96.0.0/12
 `, kubeadmapiv1.SchemeGroupVersion.String())
 
-// fakeWaiter is a fake apiclient.Waiter that returns errors it was initialized with
+// fakeWaiter 是伪造的 apiclient.Waiter，返回初始化时设置的错误。
 type fakeWaiter struct {
 	errsToReturn map[string]error
 }
 
+// NewFakeStaticPodWaiter 创建用于测试的伪造静态 Pod 等待器。
 func NewFakeStaticPodWaiter(errsToReturn map[string]error) apiclient.Waiter {
 	return &fakeWaiter{
 		errsToReturn: errsToReturn,
 	}
 }
 
-// WaitForControlPlaneComponents just returns a dummy nil, to indicate that the program should just proceed
+// WaitForControlPlaneComponents 仅返回占位的 nil，表示程序应继续执行。
 func (w *fakeWaiter) WaitForControlPlaneComponents(podsMap map[string]*v1.Pod, apiServerAddress string) error {
 	return nil
 }
 
-// WaitForPodsWithLabel just returns an error if set from errsToReturn
+// WaitForPodsWithLabel 在 errsToReturn 设置错误时返回该错误。
 func (w *fakeWaiter) WaitForPodsWithLabel(kvLabel string) error {
 	return w.errsToReturn[waitForPodsWithLabel]
 }
 
-// SetTimeout is a no-op; we don't use it in this implementation
+// SetTimeout 为空操作；此实现不使用超时设置。
 func (w *fakeWaiter) SetTimeout(_ time.Duration) {}
 
-// WaitForStaticPodControlPlaneHashes returns an error if set from errsToReturn
+// WaitForStaticPodControlPlaneHashes 在 errsToReturn 设置错误时返回该错误。
 func (w *fakeWaiter) WaitForStaticPodControlPlaneHashes(_ string) (map[string]string, error) {
 	return map[string]string{}, w.errsToReturn[waitForHashes]
 }
 
-// WaitForStaticPodSingleHash returns an error if set from errsToReturn
+// WaitForStaticPodSingleHash 在 errsToReturn 设置错误时返回该错误。
 func (w *fakeWaiter) WaitForStaticPodSingleHash(_ string, _ string) (string, error) {
 	return "", w.errsToReturn[waitForHashes]
 }
 
-// WaitForStaticPodHashChange returns an error if set from errsToReturn
+// WaitForStaticPodHashChange 在 errsToReturn 设置错误时返回该错误。
 func (w *fakeWaiter) WaitForStaticPodHashChange(_, _, _ string) error {
 	return w.errsToReturn[waitForHashChange]
 }
 
-// WaitForHKubelet returns a dummy nil just to implement the interface
+// WaitForKubelet 仅返回占位的 nil 以实现接口。
 func (w *fakeWaiter) WaitForKubelet(_ string, _ int32) error {
 	return nil
 }
@@ -142,6 +143,7 @@ type fakeStaticPodPathManager struct {
 	MoveFileFunc      func(string, string) error
 }
 
+// NewFakeStaticPodPathManager 创建用于测试的伪造静态 Pod 路径管理器。
 func NewFakeStaticPodPathManager(moveFileFunc func(string, string) error) (StaticPodPathManager, error) {
 	kubernetesDir, err := os.MkdirTemp("", "kubeadm-pathmanager-")
 	if err != nil {
@@ -268,7 +270,7 @@ func (c fakePodManifestEtcdClient) WaitForClusterAvailable(retries int, retryInt
 }
 
 func (c fakePodManifestEtcdClient) CheckClusterHealth() error {
-	// Make sure the certificates generated from the upgrade are readable from disk
+	// 确保升级生成的证书可从磁盘读取。
 	tlsInfo := transport.TLSInfo{
 		CertFile:      filepath.Join(c.CertificatesDir, constants.EtcdCACertName),
 		KeyFile:       filepath.Join(c.CertificatesDir, constants.EtcdHealthcheckClientCertName),
@@ -365,7 +367,7 @@ func TestStaticPodControlPlane(t *testing.T) {
 				waitForPodsWithLabel: nil,
 			},
 			moveFileFunc: func(oldPath, newPath string) error {
-				// fail for kube-apiserver move
+				// 模拟 kube-apiserver 移动失败。
 				if strings.Contains(newPath, "kube-apiserver") {
 					return errors.New("moving the kube-apiserver file failed")
 				}
@@ -382,7 +384,7 @@ func TestStaticPodControlPlane(t *testing.T) {
 				waitForPodsWithLabel: nil,
 			},
 			moveFileFunc: func(oldPath, newPath string) error {
-				// fail for kube-controller-manager move
+				// 模拟 kube-controller-manager 移动失败。
 				if strings.Contains(newPath, "kube-controller-manager") {
 					return errors.New("moving the kube-apiserver file failed")
 				}
@@ -399,7 +401,7 @@ func TestStaticPodControlPlane(t *testing.T) {
 				waitForPodsWithLabel: nil,
 			},
 			moveFileFunc: func(oldPath, newPath string) error {
-				// fail for kube-scheduler move
+				// 模拟 kube-scheduler 移动失败。
 				if strings.Contains(newPath, "kube-scheduler") {
 					return errors.New("moving the kube-apiserver file failed")
 				}
@@ -508,16 +510,16 @@ func TestStaticPodControlPlane(t *testing.T) {
 				}
 			}
 
-			// Initialize the directory with v1.7 manifests; should then be upgraded to v1.8 using the method
-			err = controlplanephase.CreateInitStaticPodManifestFiles(pathMgr.RealManifestDir(), pathMgr.PatchesDir(), oldcfg, false /* isDryRun */)
+			// 使用 v1.7 清单初始化目录；随后应通过该方法升级到 v1.8。
+			err = controlplanephase.CreateInitStaticPodManifestFiles(pathMgr.RealManifestDir(), pathMgr.PatchesDir(), oldcfg, false /* 是否试运行 */)
 			if err != nil {
 				t.Fatalf("couldn't run CreateInitStaticPodManifestFiles: %v", err)
 			}
-			err = etcdphase.CreateLocalEtcdStaticPodManifestFile(pathMgr.RealManifestDir(), pathMgr.PatchesDir(), oldcfg.NodeRegistration.Name, &oldcfg.ClusterConfiguration, &oldcfg.LocalAPIEndpoint, false /* isDryRun */)
+			err = etcdphase.CreateLocalEtcdStaticPodManifestFile(pathMgr.RealManifestDir(), pathMgr.PatchesDir(), oldcfg.NodeRegistration.Name, &oldcfg.ClusterConfiguration, &oldcfg.LocalAPIEndpoint, false /* 是否试运行 */)
 			if err != nil {
 				t.Fatalf("couldn't run CreateLocalEtcdStaticPodManifestFile: %v", err)
 			}
-			// Get a hash of the v1.7 API server manifest to compare later (was the file re-written)
+			// 获取 v1.7 API 服务器清单的哈希值，以便稍后比较文件是否被重写。
 			oldHash, err := getAPIServerHash(pathMgr.RealManifestDir())
 			if err != nil {
 				t.Fatalf("couldn't read temp file: %v", err)
@@ -528,7 +530,7 @@ func TestStaticPodControlPlane(t *testing.T) {
 				t.Fatalf("couldn't create config: %v", err)
 			}
 
-			// create the kubeadm etcd certs
+			// 创建 kubeadm etcd 证书。
 			caCert, caKey, err := certsphase.KubeadmCertEtcdCA().CreateAsCA(newcfg)
 			if err != nil {
 				t.Fatalf("couldn't create new CA certificate: %v", err)
@@ -675,7 +677,7 @@ func getAPIServerHash(dir string) (string, error) {
 func getConfig(version, certsDir, etcdDataDir string) (*kubeadmapi.InitConfiguration, error) {
 	configBytes := []byte(fmt.Sprintf(testConfiguration, certsDir, etcdDataDir, version))
 
-	// Unmarshal the config
+	// 解析配置。
 	return configutil.BytesToInitConfiguration(configBytes, true /* skipCRIDetect */)
 }
 
@@ -768,7 +770,7 @@ func TestRenewCertsByComponent(t *testing.T) {
 		skipCreateEtcdCA      bool
 		shouldErrorOnRenew    bool
 		certsShouldExist      []*certsphase.KubeadmCert
-		certsShouldBeRenewed  []*certsphase.KubeadmCert // NB. If empty, it will assume certsShouldBeRenewed == certsShouldExist
+		certsShouldBeRenewed  []*certsphase.KubeadmCert // 注意：若为空，则假定 certsShouldBeRenewed == certsShouldExist。
 		kubeConfigShouldExist []string
 	}{
 		{
@@ -857,7 +859,7 @@ func TestRenewCertsByComponent(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			pkiutiltesting.Reset()
 
-			// Setup up basic requisites
+			// 设置基本前置条件。
 			tmpDir := t.TempDir()
 
 			cfg := configtestutil.GetDefaultInternalConfig(t)
@@ -883,7 +885,7 @@ func TestRenewCertsByComponent(t *testing.T) {
 
 			certMaps := make(map[string]big.Int)
 
-			// Create expected certs and load to recorde the serial numbers
+			// 创建预期证书，并加载后记录序列号。
 			for _, kubeCert := range test.certsShouldExist {
 				if err := kubeCert.CreateFromCA(cfg, caCert, caKey); err != nil {
 					t.Fatalf("couldn't create certificate %q: %v", kubeCert.Name, err)
@@ -896,7 +898,7 @@ func TestRenewCertsByComponent(t *testing.T) {
 				certMaps[kubeCert.Name] = *cert.SerialNumber
 			}
 
-			// Create expected kubeconfigs
+			// 创建预期 kubeconfig。
 			for _, kubeConfig := range test.kubeConfigShouldExist {
 				if err := kubeconfigphase.CreateKubeConfigFile(kubeConfig, tmpDir, cfg); err != nil {
 					t.Fatalf("couldn't create kubeconfig %q: %v", kubeConfig, err)
@@ -909,7 +911,7 @@ func TestRenewCertsByComponent(t *testing.T) {
 				certMaps[kubeConfig] = *newCerts[0].SerialNumber
 			}
 
-			// Renew everything
+			// 续期所有证书。
 			rm, err := renewal.NewManager(&cfg.ClusterConfiguration, tmpDir)
 			if err != nil {
 				t.Fatalf("Failed to create the certificate renewal manager: %v", err)
@@ -920,14 +922,14 @@ func TestRenewCertsByComponent(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected renewal error, got nothing")
 				}
-				// expected error, got error
+				// 预期有错误，实际返回错误。
 				return
 			}
 			if err != nil {
 				t.Fatalf("couldn't renew certificates: %v", err)
 			}
 
-			// See if the certificate serial numbers change
+			// 检查证书序列号是否改变。
 			for _, kubeCert := range test.certsShouldExist {
 				newCert, err := pkiutil.TryLoadCertFromDisk(tmpDir, kubeCert.BaseName)
 				if err != nil {
@@ -954,7 +956,7 @@ func TestRenewCertsByComponent(t *testing.T) {
 				}
 			}
 
-			// See if the embedded certificate serial numbers change
+			// 检查嵌入证书的序列号是否改变。
 			for _, kubeConfig := range test.kubeConfigShouldExist {
 				newCerts, err := getEmbeddedCerts(tmpDir, kubeConfig)
 				if err != nil {
@@ -1031,7 +1033,7 @@ func TestGetPathManagerForUpgrade(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Use a temporary directory
+			// 使用临时目录。
 			tmpdir, err := os.MkdirTemp("", "TestGetPathManagerForUpgrade")
 			if err != nil {
 				t.Fatalf("unexpected error making temporary directory: %v", err)

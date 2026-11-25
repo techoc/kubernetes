@@ -49,8 +49,11 @@ var InitFeatureGates = FeatureList{
 // Feature represents a feature being gated
 type Feature struct {
 	featuregate.FeatureSpec
-	MinimumVersion     *version.Version
-	HiddenInHelpText   bool
+	// MinimumVersion 是启用该 feature gate 所需的最低 Kubernetes 版本；nil 表示不额外限制。
+	MinimumVersion *version.Version
+	// HiddenInHelpText 控制 KnownFeatures 是否在帮助文本中隐藏该 feature gate。
+	HiddenInHelpText bool
+	// DeprecationMessage 是废弃 feature gate 时向用户展示的迁移说明。
 	DeprecationMessage string
 }
 

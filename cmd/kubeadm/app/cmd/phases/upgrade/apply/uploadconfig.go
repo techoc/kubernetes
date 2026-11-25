@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apply implements phases of 'kubeadm upgrade apply'.
+// Package apply 实现 kubeadm upgrade apply 的阶段。
 package apply
 
 import (
@@ -31,7 +31,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// NewUploadConfigPhase returns a new upload-config phase.
+// NewUploadConfigPhase 返回新的 upload-config 阶段。
 func NewUploadConfigPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "upload-config",
@@ -68,7 +68,7 @@ func getUploadConfigPhaseFlags() []string {
 	}
 }
 
-// runUploadKubeadmConfig uploads the kubeadm configuration to a ConfigMap.
+// runUploadKubeadmConfig 将 kubeadm 配置上传到 ConfigMap。
 func runUploadKubeadmConfig(c workflow.RunData) error {
 	cfg, client, dryRun, err := getUploadConfigData(c)
 	if err != nil {
@@ -87,7 +87,7 @@ func runUploadKubeadmConfig(c workflow.RunData) error {
 	return nil
 }
 
-// runUploadKubeletConfig uploads the kubelet configuration to a ConfigMap.
+// runUploadKubeletConfig 将 kubelet 配置上传到 ConfigMap。
 func runUploadKubeletConfig(c workflow.RunData) error {
 	cfg, client, dryRun, err := getUploadConfigData(c)
 	if err != nil {

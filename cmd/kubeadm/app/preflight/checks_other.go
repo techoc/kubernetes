@@ -22,26 +22,26 @@ import (
 	system "k8s.io/system-validators/validators"
 )
 
-// addOSValidator adds a new OSValidator
-// No-op for Darwin (MacOS), Windows.
+// addOSValidator 添加一个新的 OSValidator。
+// 在 Darwin（macOS）和 Windows 上为空操作。
 func addOSValidator(validators []system.Validator, _ *system.StreamReporter, _ string) []system.Validator {
 	return validators
 }
 
-// addIPv6Checks adds IPv6 related checks
-// No-op for Darwin (MacOS), Windows.
+// addIPv6Checks 添加 IPv6 相关检查。
+// 在 Darwin（macOS）和 Windows 上为空操作。
 func addIPv6Checks(checks []Checker) []Checker {
 	return checks
 }
 
-// addIPv4Checks adds IPv4 related checks
-// No-op for Darwin (MacOS), Windows.
+// addIPv4Checks 添加 IPv4 相关检查。
+// 在 Darwin（macOS）和 Windows 上为空操作。
 func addIPv4Checks(checks []Checker) []Checker {
 	return checks
 }
 
-// addSwapCheck adds a swap check
-// No-op for Darwin (MacOS), Windows.
+// addSwapCheck 添加 swap 检查。
+// 在 Darwin（macOS）和 Windows 上为空操作。
 func addSwapCheck(checks []Checker) []Checker {
 	return checks
 }

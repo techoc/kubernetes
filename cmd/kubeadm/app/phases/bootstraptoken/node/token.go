@@ -31,12 +31,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// CreateNewTokens tries to create a token and fails if one with the same ID already exists
+// CreateNewTokens 尝试创建令牌；若相同 ID 的令牌已存在，则失败。
 func CreateNewTokens(client clientset.Interface, tokens []bootstraptokenv1.BootstrapToken) error {
 	return UpdateOrCreateTokens(client, true, tokens)
 }
 
-// UpdateOrCreateTokens attempts to update a token with the given ID, or create if it does not already exist.
+// UpdateOrCreateTokens 尝试更新指定 ID 的令牌；若不存在，则创建。
 func UpdateOrCreateTokens(client clientset.Interface, failIfExists bool, tokens []bootstraptokenv1.BootstrapToken) error {
 
 	secretsClient := client.CoreV1().Secrets(metav1.NamespaceSystem)
