@@ -37,7 +37,7 @@ var (
 )
 
 var (
-	directiveRe = regexp.MustCompile(`^\s*//\s*(go:|nolint|\+|line\s)|^\s*//\s*Deprecated:`)
+	directiveRe = regexp.MustCompile(`^\s*//\s*(go:|nolint|\+)|^\s*//line\s|^\s*//\s*Deprecated:`)
 	outputRe    = regexp.MustCompile(`^\s*//\s*(Unordered )?Output:`)
 	licenseRe   = regexp.MustCompile(`Copyright (The )?Kubernetes Authors`)
 )
