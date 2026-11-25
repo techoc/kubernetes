@@ -24,35 +24,33 @@ import (
 	"k8s.io/apiserver/pkg/storage/cacher/store"
 )
 
-// cacheIntervalSource provides the iteration logic for a watchCacheInterval.
+// cacheIntervalSource 为 watchCacheInterval 提供事件的迭代逻辑。
 type cacheIntervalSource interface {
 	Next() (*watchCacheEvent, error)
 }
 
-// watchCacheInterval serves as an abstraction over a source
-// of watchCacheEvents. It delegates iteration to a cacheIntervalSource
-// and holds common metadata (resourceVersion, initialEventsEndBookmark).
+// watchCacheInterval 是对 watchCacheEvent 某个来源的抽象封装。
+// 它把具体的迭代工作委托给一个 cacheIntervalSource，
+// 并保存通用元数据（resourceVersion、initialEventsEndBookmark）。
 //
 // 区间对象让 watch 在持有 cache 读锁的极短时间内“预订”一段事件范围，
 // 之后的遍历在锁外完成，避免长时间阻塞写入路径。
 type watchCacheInterval struct {
-	// source provides the iteration logic for this interval.
+	// source 为该区间提供事件的迭代逻辑。
 	source cacheIntervalSource
 
-	// resourceVersion is the resourceVersion from which
-	// the interval was constructed.
+	// resourceVersion 是构造该区间时所使用的 resourceVersion。
 	resourceVersion uint64
 
-	// initialEventsEndBookmark will be sent after sending all events in cacheInterval
+	// initialEventsEndBookmark 会在发送完 cacheInterval 中的所有事件之后发送
 	//
 	// 仅用于 SendInitialEvents 语义：客户端据此得知“初始事件已发完”，
 	// 后续可以安全地以 bookmark 的 RV 作为 watch 起点。
 	initialEventsEndBookmark *watchCacheEvent
 }
 
-// Next returns the next item in the cache interval provided the cache
-// interval is still valid. An error is returned if the interval is
-// invalidated.
+// Next 返回该 cache interval 中的下一个元素，前提是该区间仍然有效。
+// 如果区间已经失效，则返回错误。
 func (wci *watchCacheInterval) Next() (*watchCacheEvent, error) {
 	return wci.source.Next()
 }
@@ -79,10 +77,9 @@ func newCacheInterval(startIndex, endIndex int, indexer indexerFunc, indexValida
 	}
 }
 
-// newCacheIntervalFromStore is meant to handle the case of rv=0, such that the events
-// returned by Next() need to be events from a List() done on the underlying store of
-// the watch cache.
-// The items returned in the interval will be sorted by Key.
+// newCacheIntervalFromStore 用于处理 rv=0 的情况：此时 Next() 返回的事件
+// 必须来自对 watch cache 底层存储执行的一次 List()。
+// 该区间返回的条目会按 Key 排序。
 //
 // rv=0 的 list/watch 不走事件历史，而是直接从存储快照取全量对象，包装成 Added 事件。
 func newCacheIntervalFromStore(resourceVersion uint64, snap store.Snapshot, key string, matchesSingle bool) (*watchCacheInterval, error) {
@@ -121,9 +118,9 @@ func newCacheIntervalFromStore(resourceVersion uint64, snap store.Snapshot, key 
 	return ci, nil
 }
 
-// newCacheIntervalFromLazySnapshot builds an interval backed by an immutable store snapshot
-// Unlike newCacheIntervalFromStore, it captures snapshot reference which takes O(1) under watch-cache RLock
-// and defers O(N) traversal to first Next() call post lock release
+// newCacheIntervalFromLazySnapshot 构造一个由不可变存储快照支撑的区间。
+// 与 newCacheIntervalFromStore 不同，它只是捕获快照引用，因此在 watch cache
+// 读锁内只需 O(1)；而 O(N) 的遍历被推迟到释放锁之后的第一次 Next() 调用。
 //
 // 这是大集群 list 的关键优化：持锁时间与对象数无关，避免全量 list 期间阻塞写请求。
 func newCacheIntervalFromLazySnapshot(resourceVersion uint64, snap store.Snapshot) *watchCacheInterval {
@@ -148,89 +145,68 @@ func storeElementToWatchCacheEvent(elem *store.Element, resourceVersion uint64) 
 	}
 }
 
-// historyCacheIntervalSource serves events from the watchCache circular buffer.
-// It maintains a window of events over the underlying source and copies them
-// in batches into an internal buffer to reduce lock acquisition frequency.
+// historyCacheIntervalSource 从 watchCache 的环形缓冲区中提供事件。
+// 它在底层来源上维护一个事件窗口，并按批次把事件复制到内部缓冲区，
+// 以降低加锁频率。
 //
-// An interval can be either valid or invalid at any given point of time.
-// When the circular buffer is full and an event needs to be popped off,
-// watchCache::startIndex is incremented. In this case, an interval tracking
-// that popped event is valid only if it has already been copied to its
-// internal buffer. However, for efficiency we perform that lazily and we
-// mark an interval as invalid iff we need to copy events from the watchCache
-// and we end up needing events that have already been popped off. This
-// translates to the following condition:
+// 区间在任意时刻要么有效、要么无效。当环形缓冲区已满且需要弹出一个事件时，
+// watchCache::startIndex 会自增。在这种情况下，跟踪该被弹出事件的区间，
+// 只有当它已经被复制到自身内部缓冲区时才仍然有效。不过出于效率考虑，
+// 我们是惰性执行该复制的：当且仅当我们需要从 watchCache 复制事件、
+// 而最终用到的事件已经被弹出时，才把区间标记为无效。这等价于如下条件：
 //
 //	historyCacheIntervalSource::startIndex >= watchCache::startIndex.
 //
-// When this condition becomes false, the interval is no longer valid and
-// should not be used to retrieve and serve elements from the underlying
-// source.
+// 当该条件不再成立时，区间即失效，不应再被用于从底层来源检索并提供元素。
 type historyCacheIntervalSource struct {
-	// startIndex denotes the starting point of the interval
-	// being considered. The value is the index in the actual
-	// source of watchCacheEvents. If the source of events is
-	// the watchCache, then this must be used modulo capacity.
+	// startIndex 表示所考虑区间的起始位置。该值是事件真实来源
+	// （watchCacheEvents）中的下标。若事件来源是 watchCache，
+	// 则该下标必须对 capacity 取模后使用。
 	startIndex int
 
-	// endIndex denotes the ending point of the interval being
-	// considered. The value is the index in the actual source
-	// of events. If the source of the events is the watchCache,
-	// then this should be used modulo capacity.
+	// endIndex 表示所考虑区间的结束位置。该值是事件真实来源中的下标。
+	// 若事件来源是 watchCache，则该下标应当对 capacity 取模后使用。
 	endIndex int
 
-	// indexer is meant to inject behaviour for how an event must
-	// be retrieved from the underlying source given an index.
+	// indexer 用于注入“在给定下标时如何从底层来源取出一个事件”的行为。
 	indexer indexerFunc
 
-	// indexValidator is used to check if a given index is still
-	// valid perspective. If it is deemed that the index is not
-	// valid, then this interval can no longer be used to serve
-	// events. Use of indexValidator is warranted only in cases
-	// where the window of events in the underlying source can
-	// change over time. Furthermore, an interval is invalid if
-	// its startIndex no longer coincides with the startIndex of
-	// underlying source.
+	// indexValidator 用于判断给定下标是否仍然有效。如果判定该下标已失效，
+	// 那么这个区间就不能再用于提供事件。只有当底层来源中的事件窗口
+	// 会随时间变化时，才有必要使用 indexValidator。
+	// 此外，若区间的 startIndex 不再与底层来源的 startIndex 一致，
+	// 该区间即为无效。
 	indexValidator indexValidator
 
-	// buffer holds watchCacheEvents that this interval returns on
-	// a call to Next(). This exists mainly to reduce acquiring the
-	// lock on each invocation of Next().
+	// buffer 保存该区间在 Next() 调用时返回的 watchCacheEvent。
+	// 它的存在主要是为了减少每次调用 Next() 时的加锁开销。
 	buffer *watchCacheIntervalBuffer
 
-	// lock effectively protects access to the underlying source
-	// of events through - indexer and indexValidator.
+	// lock 实际上保护的是通过 indexer 和 indexValidator 访问底层事件来源。
 	//
-	// Given that indexer and indexValidator only read state, if
-	// possible, Locker obtained through RLocker() is provided.
+	// 鉴于 indexer 和 indexValidator 只读取状态，在可能的情况下，
+	// 提供由 RLocker() 获得的 Locker（即读锁）。
 	lock sync.Locker
 }
 
-// Next returns the next event from the watchCache circular buffer.
-// An error is returned if the interval has been invalidated.
+// Next 返回 watchCache 环形缓冲区中的下一个事件。
+// 若该区间已被判定失效，则返回错误。
 //
-// An interval can be either valid or invalid at any given point of time.
-// When the circular buffer is full and an event needs to be popped off,
-// watchCache::startIndex is incremented. In this case, an interval tracking
-// that popped event is valid only if it has already been copied to its
-// internal buffer. However, for efficiency we perform that lazily and we
-// mark an interval as invalid iff we need to copy events from the watchCache
-// and we end up needing events that have already been popped off. This
-// translates to the following condition:
+// 区间在任意时刻要么有效、要么无效。当环形缓冲区已满且需要弹出一个事件时，
+// watchCache::startIndex 会自增。在这种情况下，跟踪该被弹出事件的区间，
+// 只有当它已经被复制到自身内部缓冲区时才仍然有效。不过出于效率考虑，
+// 我们是惰性执行该复制的：当且仅当我们需要从 watchCache 复制事件、
+// 而最终用到的事件已经被弹出时，才把区间标记为无效。这等价于如下条件：
 //
 //	historyCacheIntervalSource::startIndex >= watchCache::startIndex.
 //
-// When this condition becomes false, the interval is no longer valid and
-// should not be used to retrieve and serve elements from the underlying
-// source.
+// 当该条件不再成立时，区间即失效，不应再被用于从底层来源检索并提供元素。
 func (s *historyCacheIntervalSource) Next() (*watchCacheEvent, error) {
-	// if there are items in the buffer to return, return from
-	// the buffer.
+	// 如果缓冲区里还有可返回的元素，就直接从缓冲区返回。
 	if event, exists := s.buffer.next(); exists {
 		return event, nil
 	}
-	// check if there are still other events in this interval
-	// that can be processed.
+	// 检查该区间内是否还有可供处理的其他事件。
 	if s.startIndex >= s.endIndex {
 		return nil, nil
 	}
@@ -264,7 +240,7 @@ func (s *historyCacheIntervalSource) fillBuffer() {
 	}
 }
 
-// snapshotCacheIntervalSource serves events from a pre-populated buffer.
+// snapshotCacheIntervalSource 从预先填充好的缓冲区中提供事件。
 type snapshotCacheIntervalSource struct {
 	buffer *watchCacheIntervalBuffer
 }
@@ -277,20 +253,19 @@ func (s *snapshotCacheIntervalSource) Next() (*watchCacheEvent, error) {
 	return event, nil
 }
 
-// lazySnapshotCacheIntervalSource serves events from an immutable snapshot.
-// The snapshot reference is captured under the watchCache lock, but the O(N)
-// traversal that materializes the events is deferred until the first Next()
-// call so that it runs off the watchCache lock.
+// lazySnapshotCacheIntervalSource 从不可变快照中提供事件。
+// 快照引用是在 watchCache 锁内捕获的，而把事件真正物化出来的那次 O(N) 遍历
+// 被推迟到第一次 Next() 调用，从而在锁外执行。
 type lazySnapshotCacheIntervalSource struct {
-	// snapshot is an immutable point-in-time copy of the store.
+	// snapshot 是存储在某一刻的不可变副本。
 	snapshot store.Snapshot
-	// resourceVersion is assigned to every watchCacheEvent produced by this source.
+	// resourceVersion 会被赋给该 source 产生的每一个 watchCacheEvent。
 	resourceVersion uint64
-	// loaded indicates whether items has been materialized from the snapshot.
+	// loaded 表示 items 是否已经从快照中物化出来。
 	loaded bool
-	// items holds the result of OrderedListPrefix, populated on the first Next() call
+	// items 保存 OrderedListPrefix 的结果，在第一次 Next() 调用时填充
 	items []interface{}
-	// currentIndex tracks the current position within items.
+	// currentIndex 跟踪当前在 items 中的位置。
 	currentIndex int
 }
 
@@ -319,29 +294,27 @@ func (s *lazySnapshotCacheIntervalSource) Next() (*watchCacheEvent, error) {
 // bufferSize 是批量预取的容量；权衡锁竞争与单次持锁时长。
 const bufferSize = 100
 
-// watchCacheIntervalBuffer is used to reduce acquiring
-// the lock on each invocation of historyCacheIntervalSource.Next().
+// watchCacheIntervalBuffer 用于减少 historyCacheIntervalSource.Next()
+// 每次调用时的加锁开销。
 type watchCacheIntervalBuffer struct {
-	// buffer is used to hold watchCacheEvents that
-	// the interval returns on a call to Next().
+	// buffer 用于保存该区间在 Next() 调用时返回的 watchCacheEvent。
 	buffer []*watchCacheEvent
-	// The first element of buffer is defined by startIndex,
-	// its last element is defined by endIndex.
+	// buffer 的第一个元素由 startIndex 界定，
+	// 最后一个元素由 endIndex 界定。
 	startIndex int
 	endIndex   int
 }
 
-// next returns the next event present in the interval buffer provided
-// it is not empty.
+// next 返回该区间缓冲区中的下一个事件，前提是缓冲区非空。
 func (wcib *watchCacheIntervalBuffer) next() (*watchCacheEvent, bool) {
 	if wcib.isEmpty() {
 		return nil, false
 	}
 	next := wcib.buffer[wcib.startIndex]
-	// clean the unused event reference in the buffer. If this is not
-	// done, event if the watch event is aged out from the watch
-	// cache, it will not be GCed during the lifetime of the watcher
-	// that holds a reference to the buffer.
+	// 清理缓冲区中已不再使用的事件引用。若不做清理，
+	// 即使 watch 事件已经从 watch cache 中被老化淘汰，
+	// 在持有该缓冲区引用的 watcher 存活期间，
+	// 这些事件也无法被 GC 回收。
 	//
 	// 置 nil 是必要的内存回收措施：长连接的 watcher 可能长期持有缓冲区，
 	// 不清空会让已过期的对象无法被 GC。

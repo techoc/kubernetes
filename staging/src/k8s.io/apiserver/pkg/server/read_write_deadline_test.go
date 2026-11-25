@@ -55,25 +55,24 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 		setup        setup
 		expectations map[string]expectation
 	}{
-		// scenario:
-		//   a) timeout filter enabled: Yes
-		//   b) client specifies timeout in the request URI: No
-		//   c) the handler writes to the ResponseWriter object before request times out: No
-		//   d) the handler flushes the ResponseWriter object before request times out: No
-		// observation:
-		//  the timeout filter detects that the context of the request has exceeded its
-		//  deadline, since the ResponseWriter object has not been written to yet,
-		//  the following takes place:
-		//   - it marks the ResponseWriter object as timeout=true, so any further
-		//   attempt to write to it will yield an 'http: Handler timeout' error
-		//   - it sends 504 status code to the client
-		// expectation (same behavior for both http/1x and http/2.0):
-		//  client:
-		//   - client receives a '504 GatewayTimeout' status code
-		//   - reading the Body of the Response object yields an error
-		//  server:
-		//   - Write to the ResponseWriter yields an 'http: Handler timeout'
-		//     error immediately.
+		// 场景：
+		//   a) 是否启用超时过滤器：是
+		//   b) 客户端是否在请求 URI 中指定超时：否
+		//   c) 请求超时之前，handler 是否已向 ResponseWriter 对象写入：否
+		//   d) 请求超时之前，handler 是否已 flush ResponseWriter 对象：否
+		// 观察到的行为：
+		//  超时过滤器发现请求的 context 已超过其 deadline，由于此时
+		//  ResponseWriter 对象尚未被写入，因此会发生以下情况：
+		//   - 它把 ResponseWriter 对象标记为 timeout=true，此后任何
+		//   向它写入的尝试都会得到 'http: Handler timeout' 错误
+		//   - 它向客户端发送 504 状态码
+		// 预期（http/1x 与 http/2.0 行为一致）：
+		//  客户端：
+		//   - 客户端收到 '504 GatewayTimeout' 状态码
+		//   - 读取 Response 对象的 Body 会得到一个错误
+		//  服务端：
+		//   - 向 ResponseWriter 写入会立刻得到 'http: Handler timeout'
+		//     错误
 		{
 			setup: setup{
 				name:                        "timeout occurs before the handler writes to or flushes the ResponseWriter",
@@ -98,19 +97,18 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 			},
 		},
 
-		// scenario:
-		//   a) timeout filter enabled: Yes
-		//   b) client specifies timeout in the request URI: No
-		//   c) the handler writes to the ResponseWriter object before request times out: Yes
-		//   d) the handler flushes the ResponseWriter object before request times out: No
-		// observation:
-		//  the timeout filter detects that the context of the request has exceeded its
-		//  deadline, since the ResponseWriter object has already been written to,
-		//  the following takes place:
-		//   - it marks the ResponseWriter object as timeout=true, so any further attempt
-		//   to write to it will yield an 'http: Handler timeout' error
-		//   - it can't send '504 GatewayTimeout' to the client since the ResponseWriter
-		//   object has already been written to, so it panics with 'net/http: abort Handler' error
+		// 场景：
+		//   a) 是否启用超时过滤器：是
+		//   b) 客户端是否在请求 URI 中指定超时：否
+		//   c) 请求超时之前，handler 是否已向 ResponseWriter 对象写入：是
+		//   d) 请求超时之前，handler 是否已 flush ResponseWriter 对象：否
+		// 观察到的行为：
+		//  超时过滤器发现请求的 context 已超过其 deadline，由于此时
+		//  ResponseWriter 对象已经被写入过，因此会发生以下情况：
+		//   - 它把 ResponseWriter 对象标记为 timeout=true，此后任何向它
+		//   写入的尝试都会得到 'http: Handler timeout' 错误
+		//   - 由于 ResponseWriter 对象已经被写入过，无法再向客户端发送
+		//   '504 GatewayTimeout'，于是它以 'net/http: abort Handler' 错误 panic
 		{
 			setup: setup{
 				name:                        "timeout occurs after the handler writes to the ResponseWriter",
@@ -120,18 +118,18 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 				serverReqTimeout:            time.Second,
 			},
 			expectations: map[string]expectation{
-				// expectation:
-				//  - client: receives a stream reset error, no 'Response' from the server
-				//  - server: Write to the ResponseWriter yields an 'http: Handler timeout' error
+				// 预期：
+				//  - 客户端：收到 stream reset 错误，没有来自服务端的 'Response'
+				//  - 服务端：向 ResponseWriter 写入得到 'http: Handler timeout' 错误
 				"HTTP/2.0": {
 					clientErr:                wantContains{"stream error: stream ID 1; INTERNAL_ERROR; received from peer"},
 					clientStatusCodeExpected: 0,
 					clientRespBodyReadErr:    wantNoError{},
 					handlerWriteErr:          wantError{http.ErrHandlerTimeout},
 				},
-				// expectation:
-				//  - client: receives an 'io.EOF' error, no 'Response' from the server
-				//  - server: Write to the ResponseWriter yields an 'http: Handler timeout' error
+				// 预期：
+				//  - 客户端：收到 'io.EOF' 错误，没有来自服务端的 'Response'
+				//  - 服务端：向 ResponseWriter 写入得到 'http: Handler timeout' 错误
 				"HTTP/1.1": {
 					clientErr:                wantError{io.EOF},
 					clientStatusCodeExpected: 0,
@@ -141,19 +139,18 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 			},
 		},
 
-		// scenario:
-		//   a) timeout filter enabled: Yes
-		//   b) client specifies timeout in the request URI: No
-		//   c) the handler writes to the ResponseWriter object before request times out: Yes
-		//   d) the handler flushes the ResponseWriter object before request times out: Yes
-		// observation:
-		//  the timeout filter detects that the context of the request has exceeded its
-		//  deadline, since the ResponseWriter object has already been written to,
-		//  the following takes place:
-		//   - it marks the ResponseWriter object as timeout=true, so any further attempt
-		//   to write to it will yield an 'http: Handler timeout' error
-		//   - it can't send '504 GatewayTimeout' to the client since the ResponseWriter
-		//   object has already been written to, so it panics with 'net/http: abort Handler' error
+		// 场景：
+		//   a) 是否启用超时过滤器：是
+		//   b) 客户端是否在请求 URI 中指定超时：否
+		//   c) 请求超时之前，handler 是否已向 ResponseWriter 对象写入：是
+		//   d) 请求超时之前，handler 是否已 flush ResponseWriter 对象：是
+		// 观察到的行为：
+		//  超时过滤器发现请求的 context 已超过其 deadline，由于此时
+		//  ResponseWriter 对象已经被写入过，因此会发生以下情况：
+		//   - 它把 ResponseWriter 对象标记为 timeout=true，此后任何向它
+		//   写入的尝试都会得到 'http: Handler timeout' 错误
+		//   - 由于 ResponseWriter 对象已经被写入过，无法再向客户端发送
+		//   '504 GatewayTimeout'，于是它以 'net/http: abort Handler' 错误 panic
 		{
 			setup: setup{
 				name:                        "timeout occurs after the handler writes to and flushes the ResponseWriter",
@@ -163,22 +160,20 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 				serverReqTimeout:            time.Second,
 			},
 			expectations: map[string]expectation{
-				// expectation:
-				//  - client: since the ResponseWriter has been flushed the client
-				//  receives a response from the server, but reading the response body
-				//  is expected to yield a stream reset error.
-				//  - server: Write to the ResponseWriter yields an 'http: Handler timeout' error
+				// 预期：
+				//  - 客户端：由于 ResponseWriter 已被 flush，客户端会收到
+				//  服务端返回的响应，但读取响应体应当得到一个 stream reset 错误。
+				//  - 服务端：向 ResponseWriter 写入得到 'http: Handler timeout' 错误
 				"HTTP/2.0": {
 					clientErr:                wantNoError{},
 					clientStatusCodeExpected: 200,
 					clientRespBodyReadErr:    wantContains{"stream error: stream ID 1; INTERNAL_ERROR; received from peer"},
 					handlerWriteErr:          wantError{http.ErrHandlerTimeout},
 				},
-				// expectation:
-				//  - client: since the ResponseWriter has been flushed the client
-				//  receives a response from the server, but reading the response body
-				//  will yield an 'unexpected EOF' error.
-				//  - server: Write to the ResponseWriter yields an 'http: Handler timeout' error
+				// 预期：
+				//  - 客户端：由于 ResponseWriter 已被 flush，客户端会收到
+				//  服务端返回的响应，但读取响应体会得到 'unexpected EOF' 错误。
+				//  - 服务端：向 ResponseWriter 写入得到 'http: Handler timeout' 错误
 				"HTTP/1.1": {
 					clientErr:                wantNoError{},
 					clientStatusCodeExpected: 200,
@@ -188,12 +183,12 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 			},
 		},
 
-		// scenario:
-		//   a) timeout filter enabled: Yes
-		//   b) client specifies timeout in the request URI: Yes
-		//   c) the handler writes to the ResponseWriter object before request times out: Yes
-		//   d) the handler flushes the ResponseWriter object before request times out: No
-		// observation:
+		// 场景：
+		//   a) 是否启用超时过滤器：是
+		//   b) 客户端是否在请求 URI 中指定超时：是
+		//   c) 请求超时之前，handler 是否已向 ResponseWriter 对象写入：是
+		//   d) 请求超时之前，handler 是否已 flush ResponseWriter 对象：否
+		// 观察到的行为：
 		// 当超时过滤器发现请求 context 已超过其 deadline 时，会发生：
 		//   - 它把 ResponseWriter 标记为 timeout=true，之后再向其写入
 		//     都会返回 'http: Handler timeout' 错误
@@ -211,16 +206,16 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 				clientTimeout:               time.Second,                 // b
 				handlerWritesBeforeTimeout:  true,                        // c
 				handlerFlushesBeforeTimeout: false,                       // d
-				serverReqTimeout:            wait.ForeverTestTimeout * 2, // this should not be in effect
+				serverReqTimeout:            wait.ForeverTestTimeout * 2, // 该值不应生效
 
-				// twice the request timeout so it can withstand flakes in CI
+				// 取请求超时的两倍，以便抵御 CI 上的偶发失败（flaky）
 				waiter: &waitWithDuration{after: 2 * time.Second},
 			},
 			expectations: map[string]expectation{
-				// expectation:
-				//  - client: receives either a context.DeadlineExceeded error from its transport
-				//    or it receives the error from the server
-				//  - server: Write to the ResponseWriter will yields an 'http: Handler timeout'
+				// 预期：
+				//  - 客户端：要么从自己的 transport 收到 context.DeadlineExceeded 错误，
+				//    要么收到服务端返回的错误
+				//  - 服务端：向 ResponseWriter 写入会得到 'http: Handler timeout'
 				"HTTP/2.0": {
 					clientErr: wantEitherOr{
 						err:      context.DeadlineExceeded,
@@ -230,10 +225,10 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					clientRespBodyReadErr:    wantNoError{},
 					handlerWriteErr:          wantError{http.ErrHandlerTimeout},
 				},
-				// expectation:
-				//  - client: receives either a context.DeadlineExceeded error from its
-				//    transport, or it receives the error from the server
-				//  - server: Write to the ResponseWriter will yields an 'http: Handler timeout'
+				// 预期：
+				//  - 客户端：要么从自己的 transport 收到 context.DeadlineExceeded
+				//    错误，要么收到服务端返回的错误
+				//  - 服务端：向 ResponseWriter 写入会得到 'http: Handler timeout'
 				"HTTP/1.1": {
 					clientErr: wantEitherOr{
 						err:      context.DeadlineExceeded,
@@ -247,7 +242,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		for _, proto := range []string{"HTTP/1.1", "HTTP/2.0"} { // every test is run for both http/1x and http/2.0
+		for _, proto := range []string{"HTTP/1.1", "HTTP/2.0"} { // 每个用例都会分别用 http/1x 和 http/2.0 跑一遍
 			t.Run(fmt.Sprintf("%s/%s", test.setup.name, proto), func(t *testing.T) {
 				setup := test.setup
 				want, ok := test.expectations[proto]
@@ -260,7 +255,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 				config.AuditPolicyRuleEvaluator = fakeAudit
 				config.AuditBackend = fakeAudit
 
-				// setup server run option --request-timeout
+				// 配置服务端启动参数 --request-timeout
 				config.RequestTimeout = setup.serverReqTimeout
 
 				s, err := config.Complete(nil).New("test", NewEmptyDelegate())
@@ -268,7 +263,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					t.Fatalf("Error in setting up a GenericAPIServer object: %v", err)
 				}
 
-				// using this, the handler blocks until the timeout occurs
+				// 借助它，handler 会一直阻塞直到超时发生
 				waiter := setup.waiter
 				if waiter == nil {
 					waiter = &waitWithChannelClose{after: make(chan time.Time)}
@@ -293,19 +288,18 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 						return
 					}
 
-					// TODO: we don't support `FlushError` yet
+					// TODO: 我们尚不支持 `FlushError`
 					flusher, ok := w.(http.Flusher)
 					if !ok {
 						t.Errorf("expected ResponseWriter object to implement FlushError")
 						return
 					}
 
-					// make sure that we have the right request
-					//  - it must be a non long-running request
-					//  - it must have a received-at timestamp so we
-					//    can calculate the request deadline accurately.
-					//  - the context of the request must have the
-					//    expected deadline
+					// 确认我们拿到的是正确的请求
+					//  - 它必须是一个非长时运行（non long-running）请求
+					//  - 它必须带有 received-at 时间戳，这样我们才能
+					//    准确计算出请求的 deadline
+					//  - 请求的 context 必须具有预期的 deadline
 					reqInfo, ok := request.RequestInfoFrom(ctx)
 					if !ok {
 						t.Errorf("expected the request context to have a RequestInfo associated")
@@ -330,8 +324,8 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 						return
 					}
 
-					// does the handler write to or flush the
-					// ResponseWriter object before timeout occurs?
+					// 在超时发生之前，handler 是否向 ResponseWriter
+					// 对象写入过或 flush 过？
 					if setup.handlerWritesBeforeTimeout {
 						if _, err := w.Write([]byte("hello")); err != nil {
 							t.Errorf("unexpected error from Write: %v", err)
@@ -342,7 +336,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 						flusher.Flush()
 					}
 
-					// wait for the request context deadline to elapse
+					// 等待请求 context 的 deadline 到期
 					<-waiter.wait()
 
 					// 在超时发生后写入 ResponseWriter。
@@ -350,8 +344,8 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					_, err := w.Write([]byte("a"))
 					want.handlerWriteErr.verify(t, err)
 
-					// flush the ResponseWriter object after timeout happens
-					// http.Flusher does not return an error
+					// 在超时发生之后 flush ResponseWriter 对象
+					// http.Flusher 不会返回错误
 					flusher.Flush()
 				})
 				s.Handler.NonGoRestfulMux.Handle("/ping", handler)
@@ -369,14 +363,14 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					client := server.Client()
 
 					url := fmt.Sprintf("%s/ping", server.URL)
-					// if the user has specified a timeout then add
-					// it to the request URI
+					// 如果用户指定了超时，就把它
+					// 追加到请求 URI 中
 					if setup.clientTimeout > 0 {
 						url = fmt.Sprintf("%s?timeout=%s", url, setup.clientTimeout)
 					}
-					// if the client has specified a timeout then we
-					// must wire the request context with the same
-					// deadline, this is how client-go behaves today.
+					// 如果客户端指定了超时，我们就必须
+					// 用相同的 deadline 来串联请求 context，
+					// client-go 目前就是这种行为。
 					ctx := context.Background()
 					if setup.clientTimeout > 0 {
 						var cancel context.CancelFunc
@@ -393,7 +387,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					resp, err := client.Do(req)
 					want.clientErr.verify(t, err)
 
-					// do we expect a valid http status code?
+					// 我们是否期望一个有效的 http 状态码？
 					switch {
 					case want.clientStatusCodeExpected > 0:
 						if resp == nil {
@@ -404,7 +398,7 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 							t.Errorf("expected a status code: %d, but got: %#v", want.clientStatusCodeExpected, resp)
 						}
 
-						// read off the body of the response, and verify what we expect
+						// 读取响应体，并校验我们的预期
 						_, err = io.ReadAll(resp.Body)
 						want.clientRespBodyReadErr.verify(t, err)
 
@@ -518,13 +512,13 @@ type waitWithChannelClose struct {
 }
 
 func (w waitWithChannelClose) wait() <-chan time.Time {
-	// for http/2, we do the following:
-	// a) let the handler block indefinitely
-	// b) this forces the write timeout to occur on the server side
-	// c) the http2 client receives a stream reset error immediately
-	//    after the write timeout occurs.
-	// d) the client then closes the channel by calling close
-	// e) the handler unblocks and terminates
+	// 对于 http/2，我们按以下步骤进行：
+	// a) 让 handler 无限期阻塞
+	// b) 这迫使写超时在服务端发生
+	// c) http2 客户端在写超时发生之后会立刻
+	//    收到一个 stream reset 错误
+	// d) 随后客户端通过调用 close 关闭通道
+	// e) handler 解除阻塞并结束
 	return w.after
 }
 
