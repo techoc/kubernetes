@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package reflect is a fork of go's standard library reflection package, which
-// allows for deep equal with equality functions defined.
+// Package reflect 是 Go 标准库 reflect 包的一个分支，
+// 支持使用自定义的相等函数进行深度比较。
 package reflect
 
 import (
@@ -12,11 +12,10 @@ import (
 	"strings"
 )
 
-// Equalities is a map from type to a function comparing two values of
-// that type.
+// Equalities 是从类型到用于比较该类型两个值的函数的映射。
 type Equalities map[reflect.Type]reflect.Value
 
-// For convenience, panics on errors
+// 为方便起见，出错时直接 panic
 func EqualitiesOrDie(funcs ...interface{}) Equalities {
 	e := Equalities{}
 	if err := e.AddFuncs(funcs...); err != nil {
@@ -25,7 +24,7 @@ func EqualitiesOrDie(funcs ...interface{}) Equalities {
 	return e
 }
 
-// AddFuncs is a shortcut for multiple calls to AddFunc.
+// AddFuncs 是多次调用 AddFunc 的快捷方式。
 func (e Equalities) AddFuncs(funcs ...interface{}) error {
 	for _, f := range funcs {
 		if err := e.AddFunc(f); err != nil {
@@ -35,8 +34,8 @@ func (e Equalities) AddFuncs(funcs ...interface{}) error {
 	return nil
 }
 
-// AddFunc uses func as an equality function: it must take
-// two parameters of the same type, and return a boolean.
+// AddFunc 将 func 用作相等函数：它必须接受
+// 两个同类型的参数，并返回一个布尔值。
 func (e Equalities) AddFunc(eqFunc interface{}) error {
 	fv := reflect.ValueOf(eqFunc)
 	ft := fv.Type()
@@ -61,21 +60,19 @@ func (e Equalities) AddFunc(eqFunc interface{}) error {
 	return nil
 }
 
-// Below here is forked from go's reflect/deepequal.go
+// 以下内容分支自 Go 的 reflect/deepequal.go
 
-// During deepValueEqual, must keep track of checks that are
-// in progress.  The comparison algorithm assumes that all
-// checks in progress are true when it reencounters them.
-// Visited comparisons are stored in a map indexed by visit.
+// 在 deepValueEqual 执行期间，必须记录正在进行的检查。
+// 比较算法在再次遇到这些检查时，假定它们的结果均为 true。
+// 已访问的比较记录在一个以 visit 为键的 map 中。
 type visit struct {
 	a1  uintptr
 	a2  uintptr
 	typ reflect.Type
 }
 
-// unexportedTypePanic is thrown when you use this DeepEqual on something that has an
-// unexported type. It indicates a programmer error, so should not occur at runtime,
-// which is why it's not public and thus impossible to catch.
+// 当对含有非导出类型的对象使用 DeepEqual 时，会抛出 unexportedTypePanic。
+// 这表示程序员犯了错误，运行时本不应发生，因此它不公开，也就无法被捕获。
 type unexportedTypePanic []reflect.Type
 
 func (u unexportedTypePanic) Error() string { return u.String() }
@@ -97,29 +94,28 @@ func makeUsefulPanic(v reflect.Value) {
 	}
 }
 
-// Tests for deep equality using reflected types. The map argument tracks
-// comparisons that have already been seen, which allows short circuiting on
-// recursive types.
-// equateNilAndEmpty controls whether empty maps/slices are equivalent to nil
+// 通过反射类型测试深度相等。map 参数用于记录已经比较过的对象，
+// 从而在递归类型上实现短路。
+// equateNilAndEmpty 控制空的 map/slice 是否等价于 nil
 func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool, equateNilAndEmpty bool, depth int) bool {
-	// Turn a panic from an unexported field into an annotated one so the full
-	// access path is visible in the stack trace.
+	// 将非导出字段触发的 panic 转成带注释的 panic，
+	// 以便完整的访问路径出现在堆栈跟踪中。
 	defer makeUsefulPanic(v1)
 
 	if !v1.IsValid() || !v2.IsValid() {
-		// An invalid Value represents a nil interface; two nils are equal.
+		// 无效的 Value 表示 nil 接口；两个 nil 相等。
 		return v1.IsValid() == v2.IsValid()
 	}
 	if v1.Type() != v2.Type() {
 		return false
 	}
-	// A registered equality function overrides the structural comparison.
+	// 已注册的相等函数优先于结构化比较。
 	if fv, ok := e[v1.Type()]; ok {
 		return fv.Call([]reflect.Value{v1, v2})[0].Bool()
 	}
 
 	hard := func(k reflect.Kind) bool {
-		// Only container-like kinds can be recursive and need cycle tracking.
+		// 只有类似容器的 Kind 才可能递归，需要跟踪环。
 		switch k {
 		case reflect.Array, reflect.Map, reflect.Slice, reflect.Struct:
 			return true
@@ -131,32 +127,32 @@ func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool,
 		addr1 := v1.UnsafeAddr()
 		addr2 := v2.UnsafeAddr()
 		if addr1 > addr2 {
-			// Canonicalize order to reduce number of entries in visited.
+			// 规范化顺序，减少 visited 中的条目数。
 			addr1, addr2 = addr2, addr1
 		}
 
-		// Short circuit if references are identical ...
+		// 若引用相同则短路 ...
 		if addr1 == addr2 {
 			return true
 		}
 
-		// ... or already seen
-		// Assuming in-progress comparisons are equal is safe for a
-		// well-formed graph and necessary to terminate on cycles.
+		// ... 或已经比较过
+		// 对结构良好的图而言，假定进行中的比较相等是安全的，
+		// 也是在环上终止比较的必要条件。
 		typ := v1.Type()
 		v := visit{addr1, addr2, typ}
 		if visited[v] {
 			return true
 		}
 
-		// Remember for later.
+		// 记录下来供后续使用。
 		visited[v] = true
 	}
 
 	switch v1.Kind() {
 	case reflect.Array:
-		// We don't need to check length here because length is part of
-		// an array's type, which has already been filtered for.
+		// 这里无需检查长度，因为长度是数组类型的一部分，
+		// 而类型已在前面过滤过。
 		for i := 0; i < v1.Len(); i++ {
 			if !e.deepValueEqual(v1.Index(i), v2.Index(i), visited, equateNilAndEmpty, depth+1) {
 				return false
@@ -177,14 +173,14 @@ func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool,
 				return false
 			}
 
-			// Optimize nil and empty cases
-			// Two lists that are BOTH nil are equal
-			// No need to check v2 is nil since v1.IsNil == v2.IsNil from above
+			// 优化 nil 和空的情况
+			// 两个都为 nil 的列表相等
+			// 上面已得出 v1.IsNil == v2.IsNil，无需再检查 v2 是否为 nil
 			if v1.IsNil() {
 				return true
 			}
 
-			// Two lists that are both empty and both non nil are equal
+			// 两个都为空且都非 nil 的列表相等
 			if v1.Len() == 0 && v2.Len() == 0 {
 				return true
 			}
@@ -228,14 +224,14 @@ func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool,
 				return false
 			}
 
-			// Optimize nil and empty cases
-			// Two maps that are BOTH nil are equal
-			// No need to check v2 is nil since v1.IsNil == v2.IsNil from above
+			// 优化 nil 和空的情况
+			// 两个都为 nil 的 map 相等
+			// 上面已得出 v1.IsNil == v2.IsNil，无需再检查 v2 是否为 nil
 			if v1.IsNil() {
 				return true
 			}
 
-			// Two maps that are both empty and both non nil are equal
+			// 两个都为空且都非 nil 的 map 相等
 			if v1.Len() == 0 && v2.Len() == 0 {
 				return true
 			}
@@ -256,10 +252,10 @@ func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool,
 		if v1.IsNil() && v2.IsNil() {
 			return true
 		}
-		// Can't do better than this:
+		// 只能做到这样：
 		return false
 	default:
-		// Normal equality suffices
+		// 普通的相等比较即可
 		if !v1.CanInterface() || !v2.CanInterface() {
 			panic(unexportedTypePanic{})
 		}
@@ -267,15 +263,15 @@ func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool,
 	}
 }
 
-// DeepEqual is like reflect.DeepEqual, but focused on semantic equality
-// instead of memory equality.
+// DeepEqual 类似于 reflect.DeepEqual，但关注的是语义相等，
+// 而非内存上的相等。
 //
-// It will use e's equality functions if it finds types that match.
+// 如果找到匹配的类型，它会使用 e 中的相等函数。
 //
-// An empty slice *is* equal to a nil slice for our purposes; same for maps.
+// 在我们的语义里，空 slice *确实*等于 nil slice；map 也是如此。
 //
-// Unexported field members cannot be compared and will cause an informative panic; you must add an Equality
-// function for these types.
+// 非导出的字段成员无法比较，会触发带有说明信息的 panic；
+// 你必须为这些类型添加 Equality 函数。
 func (e Equalities) DeepEqual(a1, a2 interface{}) bool {
 	return e.deepEqual(a1, a2, true)
 }
@@ -284,8 +280,8 @@ func (e Equalities) DeepEqualWithNilDifferentFromEmpty(a1, a2 interface{}) bool 
 	return e.deepEqual(a1, a2, false)
 }
 
-// deepEqual is the interface-level entry point; it unwraps to reflect.Values
-// and seeds the cycle-detection map.
+// deepEqual 是接口层面的入口；它将参数展开为 reflect.Value，
+// 并初始化用于环检测的 map。
 func (e Equalities) deepEqual(a1, a2 interface{}, equateNilAndEmpty bool) bool {
 	if a1 == nil || a2 == nil {
 		return a1 == a2
@@ -299,7 +295,7 @@ func (e Equalities) deepEqual(a1, a2 interface{}, equateNilAndEmpty bool) bool {
 }
 
 func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool, depth int) bool {
-	// Same panic annotation as deepValueEqual.
+	// 与 deepValueEqual 使用相同的 panic 注释处理。
 	defer makeUsefulPanic(v1)
 
 	if !v1.IsValid() || !v2.IsValid() {
@@ -324,30 +320,30 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 		addr1 := v1.UnsafeAddr()
 		addr2 := v2.UnsafeAddr()
 		if addr1 > addr2 {
-			// Canonicalize order to reduce number of entries in visited.
+			// 规范化顺序，减少 visited 中的条目数。
 			addr1, addr2 = addr2, addr1
 		}
 
-		// Short circuit if references are identical ...
+		// 若引用相同则短路 ...
 		if addr1 == addr2 {
 			return true
 		}
 
-		// ... or already seen
+		// ... 或已经比较过
 		typ := v1.Type()
 		v := visit{addr1, addr2, typ}
 		if visited[v] {
 			return true
 		}
 
-		// Remember for later.
+		// 记录下来供后续使用。
 		visited[v] = true
 	}
 
 	switch v1.Kind() {
 	case reflect.Array:
-		// We don't need to check length here because length is part of
-		// an array's type, which has already been filtered for.
+		// 这里无需检查长度，因为长度是数组类型的一部分，
+		// 而类型已在前面过滤过。
 		for i := 0; i < v1.Len(); i++ {
 			if !e.deepValueDerive(v1.Index(i), v2.Index(i), visited, depth+1) {
 				return false
@@ -355,8 +351,8 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 		}
 		return true
 	case reflect.Slice:
-		// In derive semantics an empty or nil "wanted" slice imposes no
-		// constraint; it matches any actual slice.
+		// 在 derive 语义下，为空或 nil 的 "wanted" slice 不构成
+		// 任何约束；它与任意实际 slice 都匹配。
 		if v1.IsNil() || v1.Len() == 0 {
 			return true
 		}
@@ -373,7 +369,7 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 		}
 		return true
 	case reflect.String:
-		// An empty string is considered unset and therefore matches anything.
+		// 空字符串被视为未设置，因此与任意值匹配。
 		if v1.Len() == 0 {
 			return true
 		}
@@ -418,10 +414,10 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 		if v1.IsNil() && v2.IsNil() {
 			return true
 		}
-		// Can't do better than this:
+		// 只能做到这样：
 		return false
 	default:
-		// Normal equality suffices
+		// 普通的相等比较即可
 		if !v1.CanInterface() || !v2.CanInterface() {
 			panic(unexportedTypePanic{})
 		}
@@ -429,13 +425,12 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 	}
 }
 
-// DeepDerivative is similar to DeepEqual except that unset fields in a1 are
-// ignored (not compared). This allows us to focus on the fields that matter to
-// the semantic comparison.
+// DeepDerivative 与 DeepEqual 类似，区别在于 a1 中未设置的字段会被
+// 忽略（不参与比较），这样就能专注于对语义比较有意义的字段。
 //
-// The unset fields include a nil pointer and an empty string.
+// 未设置的字段包括 nil 指针和空字符串。
 func (e Equalities) DeepDerivative(a1, a2 interface{}) bool {
-	// A nil "wanted" object matches everything, including nil.
+	// nil 的 "wanted" 对象与一切匹配，包括 nil 本身。
 	if a1 == nil {
 		return true
 	}

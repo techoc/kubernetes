@@ -32,24 +32,24 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NewSerializer creates a JSON serializer that handles encoding versioned objects into the proper JSON form. If typer
-// is not nil, the object has the group, version, and kind fields set.
+// NewSerializer 创建一个 JSON 序列化器，负责将带版本的对象编码为正确的 JSON 格式。如果 typer
+// 不为 nil，则会设置对象的 group、version 和 kind 字段。
 // Deprecated: use NewSerializerWithOptions instead.
 func NewSerializer(meta MetaFactory, creater runtime.ObjectCreater, typer runtime.ObjectTyper, pretty bool) *Serializer {
 	return NewSerializerWithOptions(meta, creater, typer, SerializerOptions{false, pretty, false, false})
 }
 
-// NewYAMLSerializer creates a YAML serializer that handles encoding versioned objects into the proper YAML form. If typer
-// is not nil, the object has the group, version, and kind fields set. This serializer supports only the subset of YAML that
-// matches JSON, and will error if constructs are used that do not serialize to JSON.
+// NewYAMLSerializer 创建一个 YAML 序列化器，负责将带版本的对象编码为正确的 YAML 格式。如果 typer
+// 不为 nil，则会设置对象的 group、version 和 kind 字段。该序列化器仅支持与 JSON 匹配的 YAML 子集，
+// 若使用了无法序列化为 JSON 的 YAML 结构，则会报错。
 // Deprecated: use NewSerializerWithOptions instead.
 func NewYAMLSerializer(meta MetaFactory, creater runtime.ObjectCreater, typer runtime.ObjectTyper) *Serializer {
 	return NewSerializerWithOptions(meta, creater, typer, SerializerOptions{true, false, false, false})
 }
 
-// NewSerializerWithOptions creates a JSON/YAML serializer that handles encoding versioned objects into the proper JSON/YAML
-// form. If typer is not nil, the object has the group, version, and kind fields set. Options are copied into the Serializer
-// and are immutable.
+// NewSerializerWithOptions 创建一个 JSON/YAML 序列化器，负责将带版本的对象编码为正确的 JSON/YAML
+// 格式。如果 typer 不为 nil，则会设置对象的 group、version 和 kind 字段。Options 会被复制到 Serializer 中，
+// 且不可变。
 func NewSerializerWithOptions(meta MetaFactory, creater runtime.ObjectCreater, typer runtime.ObjectTyper, options SerializerOptions) *Serializer {
 	return &Serializer{
 		meta:       meta,
@@ -60,7 +60,7 @@ func NewSerializerWithOptions(meta MetaFactory, creater runtime.ObjectCreater, t
 	}
 }
 
-// identifier computes Identifier of Encoder based on the given options.
+// identifier 根据给定的 options 计算 Encoder 的 Identifier。
 func identifier(options SerializerOptions) runtime.Identifier {
 	result := map[string]string{
 		"name":   "json",
@@ -76,30 +76,30 @@ func identifier(options SerializerOptions) runtime.Identifier {
 	return runtime.Identifier(identifier)
 }
 
-// SerializerOptions holds the options which are used to configure a JSON/YAML serializer.
-// example:
-// (1) To configure a JSON serializer, set `Yaml` to `false`.
-// (2) To configure a YAML serializer, set `Yaml` to `true`.
-// (3) To configure a strict serializer that can return strictDecodingError, set `Strict` to `true`.
+// SerializerOptions 保存用于配置 JSON/YAML 序列化器的选项。
+// 示例：
+// (1) 配置 JSON 序列化器时，将 `Yaml` 设为 `false`。
+// (2) 配置 YAML 序列化器时，将 `Yaml` 设为 `true`。
+// (3) 配置可返回 strictDecodingError 的严格序列化器时，将 `Strict` 设为 `true`。
 type SerializerOptions struct {
-	// Yaml: configures the Serializer to work with JSON(false) or YAML(true).
-	// When `Yaml` is enabled, this serializer only supports the subset of YAML that
-	// matches JSON, and will error if constructs are used that do not serialize to JSON.
+	// Yaml：配置 Serializer 使用 JSON（false）还是 YAML（true）。
+	// 启用 `Yaml` 时，该序列化器仅支持与 JSON 匹配的 YAML 子集，
+	// 若使用了无法序列化为 JSON 的结构，则会报错。
 	Yaml bool
 
-	// Pretty: configures a JSON enabled Serializer(`Yaml: false`) to produce human-readable output.
-	// This option is silently ignored when `Yaml` is `true`.
+	// Pretty：配置启用 JSON 的 Serializer（`Yaml: false`）生成便于阅读的输出。
+	// 当 `Yaml` 为 `true` 时，该选项会被静默忽略。
 	Pretty bool
 
-	// Strict: configures the Serializer to return strictDecodingError's when duplicate fields are present decoding JSON or YAML.
-	// Note that enabling this option is not as performant as the non-strict variant, and should not be used in fast paths.
+	// Strict：配置 Serializer 在解码 JSON 或 YAML 时遇到重复字段返回 strictDecodingError。
+	// 注意，启用该选项的性能不如非严格模式，不应在快速路径中使用。
 	Strict bool
 
-	// StreamingCollectionsEncoding enables encoding collection, one item at the time, drastically reducing memory needed.
+	// StreamingCollectionsEncoding 支持逐项编码集合，从而大幅降低所需内存。
 	StreamingCollectionsEncoding bool
 }
 
-// Serializer handles encoding versioned objects into the proper JSON form
+// Serializer 负责将带版本的对象编码为正确的 JSON 格式
 type Serializer struct {
 	meta    MetaFactory
 	options SerializerOptions
@@ -109,13 +109,13 @@ type Serializer struct {
 	identifier runtime.Identifier
 }
 
-// Serializer implements Serializer
+// Serializer 实现了 Serializer 接口
 var _ runtime.Serializer = &Serializer{}
 var _ recognizer.RecognizingDecoder = &Serializer{}
 
-// gvkWithDefaults returns group kind and version defaulting from provided default
-// Only missing components are filled in; an explicitly supplied group/version
-// is never overwritten, so defaults cannot silently change the target.
+// gvkWithDefaults 返回使用给定默认值补全后的 group、kind 和 version。
+// 仅填充缺失的部分；显式提供的 group/version 不会被覆盖，
+// 因此默认值不会悄悄改变目标。
 func gvkWithDefaults(actual, defaultGVK schema.GroupVersionKind) schema.GroupVersionKind {
 	if len(actual.Kind) == 0 {
 		actual.Kind = defaultGVK.Kind
@@ -130,17 +130,17 @@ func gvkWithDefaults(actual, defaultGVK schema.GroupVersionKind) schema.GroupVer
 	return actual
 }
 
-// Decode attempts to convert the provided data into YAML or JSON, extract the stored schema kind, apply the provided default gvk, and then
-// load that data into an object matching the desired schema kind or the provided into.
-// If into is *runtime.Unknown, the raw data will be extracted and no decoding will be performed.
-// If into is not registered with the typer, then the object will be straight decoded using normal JSON/YAML unmarshalling.
-// If into is provided and the original data is not fully qualified with kind/version/group, the type of the into will be used to alter the returned gvk.
-// If into is nil or data's gvk different from into's gvk, it will generate a new Object with ObjectCreater.New(gvk)
-// On success or most errors, the method will return the calculated schema kind.
-// The gvk calculate priority will be originalData > default gvk > into
+// Decode 尝试将提供的数据转换为 YAML 或 JSON，提取其中保存的 schema kind，应用提供的默认 gvk，
+// 然后将数据加载到与所需 schema kind 或提供的 into 相匹配的对象中。
+// 如果 into 是 *runtime.Unknown，则会提取原始数据，不执行任何解码。
+// 如果 into 未注册到 typer，则会直接使用常规的 JSON/YAML 反序列化来解码对象。
+// 如果提供了 into，而原始数据未完整限定 kind/version/group，则会使用 into 的类型来修改返回的 gvk。
+// 如果 into 为 nil，或数据的 gvk 与 into 的 gvk 不同，则会通过 ObjectCreater.New(gvk) 生成一个新对象。
+// 成功时或大多数错误情况下，该方法都会返回计算得到的 schema kind。
+// gvk 的计算优先级为：originalData > default gvk > into
 func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	data := originalData
-	// YAML is converted to JSON first so there is a single decoding path below.
+	// 先将 YAML 转换为 JSON，这样后续只需一条解码路径。
 	if s.options.Yaml {
 		altered, err := yaml.YAMLToJSON(data)
 		if err != nil {
@@ -149,19 +149,19 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 		data = altered
 	}
 
-	// Read the type information actually present in the document.
+	// 读取文档中实际出现的类型信息。
 	actual, err := s.meta.Interpret(data)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Caller-provided defaults fill in whatever the document omitted.
+	// 用调用方提供的默认值补全文档中省略的部分。
 	if gvk != nil {
 		*actual = gvkWithDefaults(*actual, *gvk)
 	}
 
-	// Unknown means "keep the raw bytes and let the caller decide later", so no
-	// schema resolution is attempted.
+	// Unknown 表示“保留原始字节，交由调用方后续决定”，
+	// 因此此处不尝试解析 schema。
 	if unk, ok := into.(*runtime.Unknown); ok && unk != nil {
 		unk.Raw = originalData
 		unk.ContentType = runtime.ContentTypeJSON
@@ -174,16 +174,16 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 		types, _, err := s.typer.ObjectKinds(into)
 		switch {
 		case runtime.IsNotRegisteredError(err), isUnstructured:
-			// Unregistered or unstructured target: decode JSON directly without
-			// creating a scheme object. Strict-mode duplicates are still checked.
+			// 未注册或 unstructured 目标：直接解码 JSON，不创建 scheme 对象。
+			// 严格模式下的重复字段检查仍会执行。
 			strictErrs, err := s.unmarshal(into, data, originalData)
 			if err != nil {
 				return nil, actual, err
 			}
 
-			// when decoding directly into a provided unstructured object,
-			// extract the actual gvk decoded from the provided data,
-			// and ensure it is non-empty.
+			// 直接解码到提供的 unstructured 对象时，
+			// 提取从所提供数据中解码出的实际 gvk，
+			// 并确保其非空。
 			if isUnstructured {
 				*actual = into.GetObjectKind().GroupVersionKind()
 				if len(actual.Kind) == 0 {
@@ -199,12 +199,12 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 		case err != nil:
 			return nil, actual, err
 		default:
-			// The into object is registered; its GVK is the next default.
+			// into 对象已注册；其 GVK 作为下一级默认值。
 			*actual = gvkWithDefaults(*actual, types[0])
 		}
 	}
 
-	// Without kind/version the document cannot be resolved to a Go type.
+	// 缺少 kind/version 时，无法将文档解析为某个 Go 类型。
 	if len(actual.Kind) == 0 {
 		return nil, actual, runtime.NewMissingKindErr(string(originalData))
 	}
@@ -212,7 +212,7 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 		return nil, actual, runtime.NewMissingVersionErr(string(originalData))
 	}
 
-	// use the target if necessary
+	// 必要时使用目标对象
 	obj, err := runtime.UseOrCreateObject(s.typer, s.creater, *actual, into)
 	if err != nil {
 		return nil, actual, err
@@ -222,14 +222,14 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 	if err != nil {
 		return nil, actual, err
 	} else if len(strictErrs) > 0 {
-		// Duplicate fields are reported but the object is still returned, so
-		// callers can choose to treat the warning as an error.
+		// 重复字段会被报告，但仍会返回对象，
+		// 由调用方决定是否将该警告视为错误。
 		return obj, actual, runtime.NewStrictDecodingError(strictErrs)
 	}
 	return obj, actual, nil
 }
 
-// Encode serializes the provided object to the given writer.
+// Encode 将提供的对象序列化到给定的 writer。
 func (s *Serializer) Encode(obj runtime.Object, w io.Writer) error {
 	if co, ok := obj.(runtime.CacheableObject); ok {
 		return co.CacheEncode(s.Identifier(), s.doEncode, w)
@@ -238,8 +238,8 @@ func (s *Serializer) Encode(obj runtime.Object, w io.Writer) error {
 }
 
 func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
-	// YAML output is produced by round-tripping through JSON, which guarantees
-	// the YAML is exactly the JSON-subset the serializer supports.
+	// YAML 输出通过先转为 JSON 再转回的方式生成，这保证了
+	// 输出恰好是序列化器所支持的 JSON 子集对应的 YAML。
 	if s.options.Yaml {
 		json, err := json.Marshal(obj)
 		if err != nil {
@@ -253,7 +253,7 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
 		return err
 	}
 
-	// Pretty printing is a client-facing convenience; it must stay valid JSON.
+	// 美化输出是为方便客户端阅读；输出必须仍是合法的 JSON。
 	if s.options.Pretty {
 		data, err := json.MarshalIndent(obj, "", "  ")
 		if err != nil {
@@ -262,8 +262,8 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
 		_, err = w.Write(data)
 		return err
 	}
-	// Collections can be streamed item by item to keep memory bounded; if the
-	// object is not a collection this falls through to the standard encoder.
+	// 集合可以逐项流式编码以限制内存占用；如果对象不是集合，
+	// 则回退到标准编码器。
 	if s.options.StreamingCollectionsEncoding {
 		ok, err := streamEncodeCollections(obj, w)
 		if err != nil {
@@ -273,22 +273,21 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
 			return nil
 		}
 	}
-	// json.Encoder appends a newline, which also acts as the frame separator
-	// for streaming readers.
+	// json.Encoder 会追加换行符，该换行符同时也是流式读取器的帧分隔符。
 	encoder := json.NewEncoder(w)
 	return encoder.Encode(obj)
 }
 
-// IsStrict indicates whether the serializer
-// uses strict decoding or not
+// IsStrict 指示序列化器
+// 是否使用严格解码
 func (s *Serializer) IsStrict() bool {
 	return s.options.Strict
 }
 
 func (s *Serializer) unmarshal(into runtime.Object, data, originalData []byte) (strictErrs []error, err error) {
-	// If the deserializer is non-strict, return here.
-	// Case-sensitive and int-preserving: Kubernetes field names are exact and
-	// large integers must not be silently converted to float64.
+	// 如果反序列化器处于非严格模式，直接返回。
+	// 区分大小写并保留整数：Kubernetes 的字段名精确匹配，
+	// 且大整数不能被静默转换为 float64。
 	if !s.options.Strict {
 		if err := kjson.UnmarshalCaseSensitivePreserveInts(data, into); err != nil {
 			return nil, err
@@ -297,9 +296,9 @@ func (s *Serializer) unmarshal(into runtime.Object, data, originalData []byte) (
 	}
 
 	if s.options.Yaml {
-		// In strict mode pass the original data through the YAMLToJSONStrict converter.
-		// This is done to catch duplicate fields in YAML that would have been dropped in the original YAMLToJSON conversion.
-		// TODO: rework YAMLToJSONStrict to return warnings about duplicate fields without terminating so we don't have to do this twice.
+		// 严格模式下，将原始数据传给 YAMLToJSONStrict 转换器。
+		// 这样做是为了捕获 YAML 中的重复字段，否则这些字段会在原本的 YAMLToJSON 转换中被丢弃。
+		// TODO: 改造 YAMLToJSONStrict，使其能不中断地返回重复字段警告，这样就不必重复转换两次。
 		_, err := yaml.YAMLToJSONStrict(originalData)
 		if err != nil {
 			strictErrs = append(strictErrs, err)
@@ -308,9 +307,8 @@ func (s *Serializer) unmarshal(into runtime.Object, data, originalData []byte) (
 
 	var strictJSONErrs []error
 	if u, isUnstructured := into.(runtime.Unstructured); isUnstructured {
-		// Unstructured is a custom unmarshaler that gets delegated
-		// to, so in order to detect strict JSON errors we need
-		// to unmarshal directly into the object.
+		// Unstructured 是自定义的 unmarshaler，反序列化会委托给它，
+		// 因此要检测严格的 JSON 错误，需要直接反序列化到该对象中。
 		m := map[string]interface{}{}
 		strictJSONErrs, err = kjson.UnmarshalStrict(data, &m)
 		u.SetUnstructuredContent(m)
@@ -318,59 +316,59 @@ func (s *Serializer) unmarshal(into runtime.Object, data, originalData []byte) (
 		strictJSONErrs, err = kjson.UnmarshalStrict(data, into)
 	}
 	if err != nil {
-		// fatal decoding error, not due to strictness
+		// 致命的解码错误，并非由严格模式引起
 		return nil, err
 	}
-	// Duplicate-field warnings are collected rather than returned as fatal.
+	// 重复字段警告会被收集起来，而不是作为致命错误返回。
 	strictErrs = append(strictErrs, strictJSONErrs...)
 	return strictErrs, nil
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现了 runtime.Encoder 接口。
 func (s *Serializer) Identifier() runtime.Identifier {
 	return s.identifier
 }
 
-// RecognizesData implements the RecognizingDecoder interface.
+// RecognizesData 实现了 RecognizingDecoder 接口。
 func (s *Serializer) RecognizesData(data []byte) (ok, unknown bool, err error) {
 	if s.options.Yaml {
-		// we could potentially look for '---'
-		// YAML is a superset of JSON, so a JSON check cannot rule it in.
+		// 理论上可以查找 '---' 分隔符，
+		// 但 YAML 是 JSON 的超集，因此 JSON 检查无法确认数据一定是 JSON。
 		return false, true, nil
 	}
 	return utilyaml.IsJSONBuffer(data), false, nil
 }
 
-// Framer is the default JSON framing behavior, with newlines delimiting individual objects.
+// Framer 是默认的 JSON 分帧行为，使用换行符分隔各个对象。
 var Framer = jsonFramer{}
 
 type jsonFramer struct{}
 
-// NewFrameWriter implements stream framing for this serializer
+// NewFrameWriter 为该序列化器实现流式分帧
 func (jsonFramer) NewFrameWriter(w io.Writer) io.Writer {
-	// we can write JSON objects directly to the writer, because they are self-framing
+	// JSON 对象自带边界，因此可以直接写入 writer
 	return w
 }
 
-// NewFrameReader implements stream framing for this serializer
+// NewFrameReader 为该序列化器实现流式分帧
 func (jsonFramer) NewFrameReader(r io.ReadCloser) io.ReadCloser {
-	// we need to extract the JSON chunks of data to pass to Decode()
+	// 需要提取 JSON 数据块，以便传给 Decode()
 	return framer.NewJSONFramedReader(r)
 }
 
-// YAMLFramer is the default JSON framing behavior, with newlines delimiting individual objects.
+// YAMLFramer 是默认的 YAML 分帧行为，使用换行符分隔各个对象。
 var YAMLFramer = yamlFramer{}
 
 type yamlFramer struct{}
 
-// NewFrameWriter implements stream framing for this serializer
+// NewFrameWriter 为该序列化器实现流式分帧
 func (yamlFramer) NewFrameWriter(w io.Writer) io.Writer {
 	return yamlFrameWriter{w}
 }
 
-// NewFrameReader implements stream framing for this serializer
+// NewFrameReader 为该序列化器实现流式分帧
 func (yamlFramer) NewFrameReader(r io.ReadCloser) io.ReadCloser {
-	// extract the YAML document chunks directly
+	// 直接提取 YAML 文档块
 	return utilyaml.NewDocumentDecoder(r)
 }
 
@@ -378,8 +376,8 @@ type yamlFrameWriter struct {
 	w io.Writer
 }
 
-// Write separates each document with the YAML document separator (`---` followed by line
-// break). Writers must write well formed YAML documents (include a final line break).
+// Write 使用 YAML 文档分隔符（`---` 后跟换行）分隔每个文档。
+// 写入方必须写入格式良好的 YAML 文档（包含末尾换行）。
 func (w yamlFrameWriter) Write(data []byte) (n int, err error) {
 	if _, err := w.w.Write([]byte("---\n")); err != nil {
 		return 0, err

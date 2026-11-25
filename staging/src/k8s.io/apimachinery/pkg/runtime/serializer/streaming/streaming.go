@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package streaming implements encoder and decoder for streams
-// of runtime.Objects over io.Writer/Readers.
+// Package streaming 实现了通过 io.Writer/Reader 传输
+// runtime.Object 流的编码器与解码器。
 package streaming
 
 import (
@@ -27,22 +27,22 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// Encoder is a runtime.Encoder on a stream.
+// Encoder 是作用在流上的 runtime.Encoder。
 type Encoder interface {
-	// Encode will write the provided object to the stream or return an error. It obeys the same
-	// contract as runtime.VersionedEncoder.
+	// Encode 会将给定对象写入流，或返回错误。它遵循与
+	// runtime.VersionedEncoder 相同的约定。
 	Encode(obj runtime.Object) error
 }
 
-// Decoder is a runtime.Decoder from a stream.
+// Decoder 是从流中读取的 runtime.Decoder。
 type Decoder interface {
-	// Decode will return io.EOF when no more objects are available.
+	// 当没有更多对象可用时，Decode 将返回 io.EOF。
 	Decode(defaults *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error)
-	// Close closes the underlying stream.
+	// Close 关闭底层流。
 	Close() error
 }
 
-// Serializer is a factory for creating encoders and decoders that work over streams.
+// Serializer 是用于创建面向流工作的编码器和解码器的工厂。
 type Serializer interface {
 	NewEncoder(w io.Writer) Encoder
 	NewDecoder(r io.ReadCloser) Decoder
@@ -56,9 +56,8 @@ type decoder struct {
 	resetRead bool
 }
 
-// NewDecoder creates a streaming decoder that reads object chunks from r and decodes them with d.
-// The reader is expected to return ErrShortRead if the provided buffer is not large enough to read
-// an entire object.
+// NewDecoder 创建一个流式解码器，它从 r 读取对象数据块并用 d 进行解码。
+// 如果提供的缓冲区不足以读取完整对象，reader 应返回 ErrShortRead。
 func NewDecoder(r io.ReadCloser, d runtime.Decoder) Decoder {
 	return &decoder{
 		reader:   r,
@@ -70,32 +69,32 @@ func NewDecoder(r io.ReadCloser, d runtime.Decoder) Decoder {
 
 var ErrObjectTooLarge = fmt.Errorf("object to decode was longer than maximum allowed size")
 
-// Decode reads the next object from the stream and decodes it.
+// Decode 从流中读取下一个对象并解码。
 func (d *decoder) Decode(defaults *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	base := 0
 	for {
-		// The reader may return io.ErrShortBuffer when the frame does not fit;
-		// in that case grow the buffer and retry.
+		// 当帧放不下时，reader 可能返回 io.ErrShortBuffer；
+		// 此时扩大缓冲区并重试。
 		n, err := d.reader.Read(d.buf[base:])
 		if err == io.ErrShortBuffer {
 			if n == 0 {
-				// A short read with no progress would loop forever.
+				// 没有进展的短读取会导致无限循环。
 				return nil, nil, fmt.Errorf("got short buffer with n=0, base=%d, cap=%d", base, cap(d.buf))
 			}
 			if d.resetRead {
-				// Still draining the oversized frame; keep consuming until the
-				// reader stops returning ErrShortBuffer.
+				// 仍在排空超大帧；继续消费，直到 reader
+				// 不再返回 ErrShortBuffer。
 				continue
 			}
-			// double the buffer size up to maxBytes
+			// 将缓冲区大小加倍，最大不超过 maxBytes
 			if len(d.buf) < d.maxBytes {
 				base += n
 				d.buf = append(d.buf, make([]byte, len(d.buf))...)
 				continue
 			}
-			// must read the rest of the frame (until we stop getting ErrShortBuffer)
-			// Dropping out now would leave the stream positioned mid-frame and
-			// corrupt the next decode, so drain it before reporting the error.
+			// 必须读完帧的剩余部分（直到不再收到 ErrShortBuffer）。
+			// 现在退出会让流停留在帧中间，破坏下一次解码，
+			// 所以先排空再报告错误。
 			d.resetRead = true
 			return nil, nil, ErrObjectTooLarge
 		}
@@ -103,7 +102,7 @@ func (d *decoder) Decode(defaults *schema.GroupVersionKind, into runtime.Object)
 			return nil, nil, err
 		}
 		if d.resetRead {
-			// now that we have drained the large read, continue
+			// 已排空超大的读取内容，继续执行
 			d.resetRead = false
 			continue
 		}
@@ -123,7 +122,7 @@ type encoder struct {
 	buf     *bytes.Buffer
 }
 
-// NewEncoder returns a new streaming encoder.
+// NewEncoder 返回一个新的流式编码器。
 func NewEncoder(w io.Writer, e runtime.Encoder) Encoder {
 	return &encoder{
 		writer:  w,
@@ -132,10 +131,10 @@ func NewEncoder(w io.Writer, e runtime.Encoder) Encoder {
 	}
 }
 
-// Encode writes the provided object to the nested writer.
+// Encode 将给定对象写入内层的 writer。
 func (e *encoder) Encode(obj runtime.Object) error {
-	// Encode into an intermediate buffer so a partial write cannot corrupt the
-	// stream: the frame is emitted with a single Write call.
+	// 先编码到中间缓冲区，避免部分写入破坏流：
+	// 整个帧通过一次 Write 调用写出。
 	if err := e.encoder.Encode(obj, e.buf); err != nil {
 		return err
 	}

@@ -23,26 +23,24 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// ResolveFieldValue extracts a metadata field value from a runtime.Object
-// based on the given field path.
+// ResolveFieldValue 根据给定的字段路径，从 runtime.Object 中提取元数据字段值。
 //
-// Field paths use CEL-style object-rooted syntax ("object.metadata.<field>"),
-// which differs from the fieldSelector format ("metadata.<field>"). The
-// "object." prefix anchors the path to the resource being filtered.
+// 字段路径采用 CEL 风格的以对象为根的语法（"object.metadata.<field>"），
+// 这与 fieldSelector 格式（"metadata.<field>"）不同。"object." 前缀
+// 将路径锚定在被过滤的资源上。
 //
-// Supported field paths:
+// 支持的字段路径：
 //   - "object.metadata.uid"
 //   - "object.metadata.namespace"
 func ResolveFieldValue(obj runtime.Object, fieldPath string) (string, error) {
-	// All supported paths live under metadata, so the accessor is obtained
-	// once up front.
+	// 所有支持的路径都在 metadata 下，因此预先一次性获取 accessor。
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		return "", fmt.Errorf("failed to access object metadata: %w", err)
 	}
 
-	// Only fields whose values are stable and shardable are accepted; unknown
-	// paths are an error so typos do not silently produce a wrong partition.
+	// 只接受取值稳定且可用于分片的字段；未知路径会报错，
+	// 以免拼写错误悄悄导致分到错误的分区。
 	switch fieldPath {
 	case "object.metadata.uid":
 		return string(accessor.GetUID()), nil

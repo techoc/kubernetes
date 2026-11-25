@@ -38,8 +38,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// testConversions counts conversion invocations so tests can assert that a
-// codec path actually performed a conversion rather than returning the input.
+// testConversions 统计转换调用次数，以便测试断言某条 codec 路径确实执行了转换，
+// 而不是直接返回输入对象。
 type testConversions struct {
 	internalToExternalCalls int
 	externalToInternalCalls int
@@ -59,8 +59,8 @@ func (c *testConversions) externalToInternalSimple(in *runtimetesting.ExternalSi
 	return nil
 }
 
-// registerConversions installs both directions of the simple type's conversion
-// so the scheme can be exercised as a codec.
+// registerConversions 注册简单类型双向的转换函数，
+// 以便将 scheme 作为 codec 进行测试。
 func (c *testConversions) registerConversions(s *runtime.Scheme) error {
 	if err := s.AddConversionFunc((*runtimetesting.InternalSimple)(nil), (*runtimetesting.ExternalSimple)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return c.internalToExternalSimple(a.(*runtimetesting.InternalSimple), b.(*runtimetesting.ExternalSimple), scope)
@@ -75,10 +75,8 @@ func (c *testConversions) registerConversions(s *runtime.Scheme) error {
 	return nil
 }
 
-// TestScheme covers the core scheme/codec round trips: encode then decode back
-// to the internal type, decode directly to the external type, conversion to
-// and from unstructured, and the requirement that unstructured objects carry
-// both kind and version.
+// TestScheme 覆盖 scheme/codec 的核心往返流程：编码后再解码回内部类型、直接解码为外部类型、
+// 与 unstructured 之间的相互转换，以及 unstructured 对象必须同时携带 kind 和 version 的要求。
 func TestScheme(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	internalGVK := internalGV.WithKind("Simple")
@@ -90,10 +88,10 @@ func TestScheme(t *testing.T) {
 	scheme.AddKnownTypeWithName(externalGVK, &runtimetesting.ExternalSimple{})
 	utilruntime.Must(runtimetesting.RegisterConversions(scheme))
 
-	// If set, would clear TypeMeta during conversion.
+	// 若启用，则在转换期间清除 TypeMeta。
 	//scheme.AddIgnoredConversionType(&TypeMeta{}, &TypeMeta{})
 
-	// test that scheme is an ObjectTyper
+	// 验证 scheme 实现了 ObjectTyper 接口
 	var _ runtime.ObjectTyper = scheme
 
 	conversions := &testConversions{
@@ -101,7 +99,7 @@ func TestScheme(t *testing.T) {
 		externalToInternalCalls: 0,
 	}
 
-	// Register functions to verify that scope.Meta() gets set correctly.
+	// 注册函数，验证 scope.Meta() 是否被正确设置。
 	utilruntime.Must(conversions.registerConversions(scheme))
 
 	t.Run("Encode, Decode, DecodeInto, and DecodeToVersion", func(t *testing.T) {
@@ -135,8 +133,8 @@ func TestScheme(t *testing.T) {
 		if err := runtime.DecodeInto(codec, data, obj3); err != nil {
 			t.Fatal(err)
 		}
-		// clearing TypeMeta is a function of the scheme, which we do not test here (ConvertToVersion
-		// does not automatically clear TypeMeta anymore).
+		// 清除 TypeMeta 是 scheme 的职责，此处不测试该行为（ConvertToVersion
+		// 不再自动清除 TypeMeta）。
 		simple.TypeMeta = runtime.TypeMeta{Kind: "Simple", APIVersion: externalGV.String()}
 		if e, a := simple, obj3; !reflect.DeepEqual(e, a) {
 			t.Errorf("Expected:\n %#v,\n Got:\n %#v", e, a)
@@ -255,9 +253,8 @@ func TestScheme(t *testing.T) {
 	})
 }
 
-// TestBadJSONRejection verifies the JSON serializer rejects documents that
-// lack a kind or name an unregistered kind, instead of decoding into a random
-// type.
+// TestBadJSONRejection 验证 JSON 序列化器会拒绝缺少 kind 或指定未注册 kind 的文档，
+// 而不会随意解码成某个类型。
 func TestBadJSONRejection(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -274,8 +271,8 @@ func TestBadJSONRejection(t *testing.T) {
 	}
 }
 
-// TestExternalToInternalMapping verifies that serialized external types are
-// decoded into their registered internal counterparts and compare equal.
+// TestExternalToInternalMapping 验证序列化后的外部类型会被解码为对应的已注册内部类型，
+// 且两者比较结果相等。
 func TestExternalToInternalMapping(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "testExternal"}
@@ -307,8 +304,8 @@ func TestExternalToInternalMapping(t *testing.T) {
 	}
 }
 
-// TestExtensionMapping verifies that embedded extension objects are encoded
-// with their own apiVersion/kind and decoded back into runtime.Unknown.
+// TestExtensionMapping 验证嵌入的扩展对象会携带自身的 apiVersion/kind 进行编码，
+// 并在解码后还原为 runtime.Unknown。
 func TestExtensionMapping(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "testExternal"}
@@ -319,8 +316,8 @@ func TestExtensionMapping(t *testing.T) {
 	scheme.AddKnownTypeWithName(externalGV.WithKind("ExtensionType"), &runtimetesting.ExternalExtensionType{})
 	scheme.AddKnownTypeWithName(externalGV.WithKind("OptionalExtensionType"), &runtimetesting.ExternalOptionalExtensionType{})
 
-	// register external first when the object is the same in both schemes, so ObjectVersionAndKind reports the
-	// external version.
+	// 当对象在两个 scheme 中相同时，先注册外部版本，这样 ObjectVersionAndKind 会返回
+	// 外部版本。
 	scheme.AddKnownTypeWithName(externalGV.WithKind("A"), &runtimetesting.ExtensionA{})
 	scheme.AddKnownTypeWithName(externalGV.WithKind("B"), &runtimetesting.ExtensionB{})
 	scheme.AddKnownTypeWithName(internalGV.WithKind("A"), &runtimetesting.ExtensionA{})
@@ -344,7 +341,7 @@ func TestExtensionMapping(t *testing.T) {
 					ContentType: runtime.ContentTypeJSON,
 				},
 			},
-			// apiVersion is set in the serialized object for easier consumption by clients
+			// 在序列化对象中设置 apiVersion，便于客户端使用
 			`{"apiVersion":"` + externalGV.String() + `","kind":"ExtensionType","extension":{"apiVersion":"test.group/testExternal","kind":"A","testString":"foo"}}
 `,
 		}, {
@@ -355,7 +352,7 @@ func TestExtensionMapping(t *testing.T) {
 					ContentType: runtime.ContentTypeJSON,
 				},
 			},
-			// apiVersion is set in the serialized object for easier consumption by clients
+			// 在序列化对象中设置 apiVersion，便于客户端使用
 			`{"apiVersion":"` + externalGV.String() + `","kind":"ExtensionType","extension":{"apiVersion":"test.group/testExternal","kind":"B","testString":"bar"}}
 `,
 		}, {
@@ -385,9 +382,8 @@ func TestExtensionMapping(t *testing.T) {
 	}
 }
 
-// TestEncode verifies that encoding an internal object through a versioned
-// codec produces data that decodes back to the same internal object, and that
-// the returned GVK is the target external version.
+// TestEncode 验证通过带版本的 codec 编码内部对象后，所得数据可解码回同一个内部对象，
+// 且返回的 GVK 是目标外部版本。
 func TestEncode(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	internalGVK := internalGV.WithKind("Simple")
@@ -421,9 +417,8 @@ func TestEncode(t *testing.T) {
 	}
 }
 
-// TestUnversionedTypes verifies that types registered as unversioned keep the
-// group/version they were declared in even when the codec targets another
-// group; unversioned objects are never converted.
+// TestUnversionedTypes 验证注册为无版本的类型即使 codec 指向另一个 group，
+// 也会保留其声明时的 group/version；无版本对象永远不会被执行转换。
 func TestUnversionedTypes(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	internalGVK := internalGV.WithKind("Simple")
@@ -471,12 +466,12 @@ func TestUnversionedTypes(t *testing.T) {
 	if !reflect.DeepEqual(obj2, test) {
 		t.Errorf("Expected:\n %#v,\n Got:\n %#v", test, obj2)
 	}
-	// object is serialized as an unversioned object (in the group and version it was defined in)
+	// 对象被序列化为无版本对象（使用其定义时所属的 group 和 version）
 	if *gvk != externalGV.WithKind("InternalSimple") {
 		t.Errorf("unexpected gvk returned by decode: %#v", *gvk)
 	}
 
-	// when serialized to a different group, the object is kept in its preferred name
+	// 序列化到不同的 group 时，对象仍保留其首选名称
 	codec = serializer.NewCodecFactory(scheme).LegacyCodec(otherGV)
 	data, err = runtime.Encode(codec, obj)
 	if err != nil {
@@ -487,9 +482,9 @@ func TestUnversionedTypes(t *testing.T) {
 	}
 }
 
-// Returns a new Scheme set up with the test objects.
-// The registrations deliberately cover the same Go type under several
-// group/version/kind combinations to exercise ambiguity handling.
+// 返回一个配置好测试对象的新 Scheme。
+// 这些注册刻意让同一个 Go 类型对应多个 group/version/kind 组合，
+// 以检验歧义处理逻辑。
 func GetTestScheme() *runtime.Scheme {
 	internalGV := schema.GroupVersion{Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Version: "v1"}
@@ -498,9 +493,8 @@ func GetTestScheme() *runtime.Scheme {
 	differentExternalGV := schema.GroupVersion{Group: "other", Version: "v2"}
 
 	s := runtime.NewScheme()
-	// Ordinarily, we wouldn't add TestType2, but because this is a test and
-	// both types are from the same package, we need to get it into the system
-	// so that converter will match it with ExternalType2.
+	// 通常情况下不会添加 TestType2，但这是测试代码，且两个类型来自同一个包，
+	// 因此需要将其注册进系统，以便转换器能与 ExternalType2 匹配。
 	s.AddKnownTypes(internalGV, &runtimetesting.TestType1{}, &runtimetesting.TestType2{}, &runtimetesting.ExternalInternalSame{})
 	s.AddKnownTypes(externalGV, &runtimetesting.ExternalInternalSame{})
 	s.AddKnownTypeWithName(externalGV.WithKind("TestType1"), &runtimetesting.ExternalTestType1{})
@@ -518,8 +512,8 @@ func GetTestScheme() *runtime.Scheme {
 	return s
 }
 
-// TestKnownTypes verifies KnownTypes returns exactly the types registered for a
-// group/version and nothing for an unregistered group/version.
+// TestKnownTypes 验证 KnownTypes 只返回某个 group/version 下已注册的类型，
+// 对未注册的 group/version 不返回任何类型。
 func TestKnownTypes(t *testing.T) {
 	s := GetTestScheme()
 	if len(s.KnownTypes(schema.GroupVersion{Group: "group", Version: "v2"})) != 0 {
@@ -534,9 +528,8 @@ func TestKnownTypes(t *testing.T) {
 	}
 }
 
-// TestAddKnownTypesIdemPotent verifies that registering the same type twice,
-// by any registration entry point, leaves a single entry rather than
-// duplicating or panicking. This matters because init paths can run twice.
+// TestAddKnownTypesIdemPotent 验证通过任意注册入口重复注册同一类型时，
+// 只会保留一条记录，不会出现重复或 panic。这一点很重要，因为初始化路径可能会执行两次。
 func TestAddKnownTypesIdemPotent(t *testing.T) {
 	s := runtime.NewScheme()
 
@@ -577,7 +570,7 @@ func TestAddKnownTypesIdemPotent(t *testing.T) {
 	}
 }
 
-// redefine InternalSimple with the same name, but obviously as a different type than in runtimetesting
+// 重新定义一个同名的 InternalSimple，但显然与 runtimetesting 中的类型是不同类型
 type InternalSimple struct {
 	runtime.TypeMeta `json:""`
 	TestString       string `json:"testString"`
@@ -585,9 +578,8 @@ type InternalSimple struct {
 
 func (s *InternalSimple) DeepCopyObject() runtime.Object { return nil }
 
-// TestConflictingAddKnownTypes verifies that registering two different Go
-// types under the same kind panics: silently accepting would make decoding
-// nondeterministic.
+// TestConflictingAddKnownTypes 验证将两种不同的 Go 类型注册到同一个 kind 下会触发 panic：
+// 静默接受会导致解码结果不确定。
 func TestConflictingAddKnownTypes(t *testing.T) {
 	s := runtime.NewScheme()
 	gv := schema.GroupVersion{Group: "foo", Version: "v1"}
@@ -623,8 +615,7 @@ func TestConflictingAddKnownTypes(t *testing.T) {
 	}
 }
 
-// TestConvertToVersionBasic checks the simplest internal-to-external
-// conversion through the scheme.
+// TestConvertToVersionBasic 检查通过 scheme 进行的最简单的内部到外部类型转换。
 func TestConvertToVersionBasic(t *testing.T) {
 	s := GetTestScheme()
 	tt := &runtimetesting.TestType1{A: "I'm not a pointer object"}
@@ -641,8 +632,8 @@ func TestConvertToVersionBasic(t *testing.T) {
 	}
 }
 
-// testGroupVersioner is a GroupVersioner with a fixed target and success flag,
-// used to drive conversion decisions deterministically.
+// testGroupVersioner 是一个带有固定目标和成功标志的 GroupVersioner，
+// 用于以可控的方式驱动转换决策。
 type testGroupVersioner struct {
 	target schema.GroupVersionKind
 	ok     bool
@@ -656,11 +647,9 @@ func (m testGroupVersioner) Identifier() string {
 	return "testGroupVersioner"
 }
 
-// TestConvertToVersion covers version targeting: conversion to internal and
-// external versions, unregistered/unstructured inputs, multi-group targets,
-// and the invariant that ConvertToVersion never returns the input object and
-// never mutates it. The same: true cases additionally assert that
-// UnsafeConvertToVersion returns the original object when no copy is needed.
+// TestConvertToVersion 覆盖版本定向转换：转换到内部和外部版本、未注册/unstructured 输入、
+// 多 group 目标，以及 ConvertToVersion 绝不返回输入对象也绝不修改它的不变式。
+// same: true 的用例还会额外断言：当无需拷贝时，UnsafeConvertToVersion 会返回原始对象。
 func TestConvertToVersion(t *testing.T) {
 	testCases := []struct {
 		scheme *runtime.Scheme
@@ -670,13 +659,13 @@ func TestConvertToVersion(t *testing.T) {
 		out    runtime.Object
 		errFn  func(error) bool
 	}{
-		// errors if the type is not registered in the scheme
+		// 类型未在 scheme 中注册时报错
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.UnknownType{},
 			errFn:  func(err error) bool { return err != nil && runtime.IsNotRegisteredError(err) },
 		},
-		// errors if the group versioner returns no target
+		// group versioner 未返回目标时报错
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -685,14 +674,14 @@ func TestConvertToVersion(t *testing.T) {
 				return err != nil && strings.Contains(err.Error(), "is not suitable for converting")
 			},
 		},
-		// converts to internal
+		// 转换到内部版本
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
 			gv:     schema.GroupVersion{Version: runtime.APIVersionInternal},
 			out:    &runtimetesting.TestType1{A: "test"},
 		},
-		// converts from unstructured to internal
+		// 从 unstructured 转换到内部版本
 		{
 			scheme: GetTestScheme(),
 			in: &runtimetesting.Unstructured{Object: map[string]interface{}{
@@ -703,7 +692,7 @@ func TestConvertToVersion(t *testing.T) {
 			gv:  schema.GroupVersion{Version: runtime.APIVersionInternal},
 			out: &runtimetesting.TestType1{A: "test"},
 		},
-		// converts from unstructured to external
+		// 从 unstructured 转换到外部版本
 		{
 			scheme: GetTestScheme(),
 			in: &runtimetesting.Unstructured{Object: map[string]interface{}{
@@ -714,7 +703,7 @@ func TestConvertToVersion(t *testing.T) {
 			gv:  schema.GroupVersion{Group: "custom", Version: "v1"},
 			out: &runtimetesting.ExternalTestType1{MyWeirdCustomEmbeddedVersionKindField: runtimetesting.MyWeirdCustomEmbeddedVersionKindField{APIVersion: "custom/v1", ObjectKind: "TestType3"}, A: "test"},
 		},
-		// prefers the best match
+		// 优先选择最佳匹配
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -724,7 +713,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// unversioned type returned as-is
+		// 无版本类型原样返回
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.UnversionedType{A: "test"},
@@ -735,7 +724,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// unversioned type returned when not included in the target types
+		// 目标类型列表中不包含时，仍返回无版本类型
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.UnversionedType{A: "test"},
@@ -746,7 +735,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// detected as already being in the target version
+		// 检测到已经处于目标版本
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -757,7 +746,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// detected as already being in the first target version
+		// 检测到已经处于第一个目标版本
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -768,7 +757,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// detected as already being in the first target version
+		// 检测到已经处于第一个目标版本
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -779,7 +768,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// the external type is registered in multiple groups, versions, and kinds, and can be targeted to all of them (1/3): different kind
+		// 外部类型注册在多个 group、version 和 kind 下，且可定向到其中任意一个（1/3）：kind 不同
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -790,7 +779,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// the external type is registered in multiple groups, versions, and kinds, and can be targeted to all of them (2/3): different gv
+		// 外部类型注册在多个 group、version 和 kind 下，且可定向到其中任意一个（2/3）：gv 不同
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -801,7 +790,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// the external type is registered in multiple groups, versions, and kinds, and can be targeted to all of them (3/3): different gvk
+		// 外部类型注册在多个 group、version 和 kind 下，且可定向到其中任意一个（3/3）：gvk 不同
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -812,7 +801,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// multi group versioner recognizes multiple groups and forces the output to a particular version, copies because version differs
+		// multi group versioner 可识别多个 group 并强制输出到特定版本；因版本不同而执行拷贝
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -822,7 +811,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// multi group versioner recognizes multiple groups and forces the output to a particular version, copies because version differs
+		// multi group versioner 可识别多个 group 并强制输出到特定版本；因版本不同而执行拷贝
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -832,7 +821,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// multi group versioner is unable to find a match when kind AND group don't match (there is no TestType1 kind in group "other", and no kind "TestType5" in the default group)
+		// 当 kind 和 group 都不匹配时，multi group versioner 无法找到匹配项（group "other" 中没有 TestType1 kind，默认 group 中也没有 "TestType5" kind）
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.TestType1{A: "test"},
@@ -841,7 +830,7 @@ func TestConvertToVersion(t *testing.T) {
 				return err != nil && strings.Contains(err.Error(), "is not suitable for converting")
 			},
 		},
-		// multi group versioner recognizes multiple groups and forces the output to a particular version, performs no copy
+		// multi group versioner 可识别多个 group 并强制输出到特定版本；无需拷贝
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -852,7 +841,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// multi group versioner recognizes multiple groups and forces the output to a particular version, performs no copy
+		// multi group versioner 可识别多个 group 并强制输出到特定版本；无需拷贝
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.ExternalTestType1{A: "test"},
@@ -863,7 +852,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// group versioner can choose a particular target kind for a given input when kind is the same across group versions
+		// 当各 group/version 下 kind 相同时，group versioner 可为给定输入选择特定的目标 kind
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.TestType1{A: "test"},
@@ -873,7 +862,7 @@ func TestConvertToVersion(t *testing.T) {
 				A:                                     "test",
 			},
 		},
-		// group versioner can choose a different kind
+		// group versioner 可以选择不同的 kind
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.TestType1{A: "test"},
@@ -927,8 +916,8 @@ func TestConvertToVersion(t *testing.T) {
 	}
 }
 
-// TestConvert covers explicit into-object conversion, including converting an
-// internal object into unstructured with a target version.
+// TestConvert 覆盖显式的转换到目标对象（into）的方式，包括在给定目标版本的情况下
+// 将内部对象转换为 unstructured。
 func TestConvert(t *testing.T) {
 	testCases := []struct {
 		scheme *runtime.Scheme
@@ -938,7 +927,7 @@ func TestConvert(t *testing.T) {
 		out    runtime.Object
 		errFn  func(error) bool
 	}{
-		// converts from internal to unstructured, given a target version
+		// 给定目标版本，从内部类型转换到 unstructured
 		{
 			scheme: GetTestScheme(),
 			in:     &runtimetesting.TestType1{A: "test"},
@@ -972,8 +961,8 @@ func TestConvert(t *testing.T) {
 	}
 }
 
-// TestMetaValues verifies the conversion callbacks receive the right scope and
-// that a round trip internal->external->internal preserves the value.
+// TestMetaValues 验证转换回调收到正确的 scope，
+// 且 internal->external->internal 的往返过程会保留该值。
 func TestMetaValues(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "externalVersion"}
@@ -988,7 +977,7 @@ func TestMetaValues(t *testing.T) {
 		externalToInternalCalls: 0,
 	}
 
-	// Register functions to verify that scope.Meta() gets set correctly.
+	// 注册函数，验证 scope.Meta() 是否被正确设置。
 	utilruntime.Must(conversions.registerConversions(s))
 
 	simple := &runtimetesting.InternalSimple{
@@ -1017,8 +1006,8 @@ func TestMetaValues(t *testing.T) {
 	}
 }
 
-// TestMetaValuesUnregisteredConvert verifies conversion functions registered
-// for types that are not in the scheme still run when explicitly invoked.
+// TestMetaValuesUnregisteredConvert 验证为未注册到 scheme 中的类型注册的转换函数，
+// 在显式调用时仍会执行。
 func TestMetaValuesUnregisteredConvert(t *testing.T) {
 	type InternalSimple struct {
 		Version    string `json:"apiVersion,omitempty"`
@@ -1031,11 +1020,11 @@ func TestMetaValuesUnregisteredConvert(t *testing.T) {
 		TestString string `json:"testString"`
 	}
 	s := runtime.NewScheme()
-	// We deliberately don't register the types.
+	// 此处刻意不注册这些类型。
 
 	internalToExternalCalls := 0
 
-	// Register functions to verify that scope.Meta() gets set correctly.
+	// 注册函数，验证 scope.Meta() 是否被正确设置。
 	convertSimple := func(in *InternalSimple, out *ExternalSimple, scope conversion.Scope) error {
 		out.TestString = in.TestString
 		internalToExternalCalls++
@@ -1056,15 +1045,14 @@ func TestMetaValuesUnregisteredConvert(t *testing.T) {
 		t.Errorf("Expected %v, got %v", e, a)
 	}
 
-	// Verify that our conversion handler got called.
+	// 验证转换处理函数确实被调用了。
 	if e, a := 1, internalToExternalCalls; e != a {
 		t.Errorf("Expected %v, got %v", e, a)
 	}
 }
 
-// TestRegisterValidate verifies the scheme dispatches to per-type validation
-// functions for both create and update, and that subresources and options are
-// passed through to them.
+// TestRegisterValidate 验证 scheme 在创建和更新时都会分发到按类型注册的校验函数，
+// 并且子资源和 options 会被传递给这些函数。
 func TestRegisterValidate(t *testing.T) {
 	invalidValue := field.Invalid(field.NewPath("testString"), "", "Invalid value").WithOrigin("invalid-value")
 	invalidLength := field.Invalid(field.NewPath("testString"), "", "Invalid length").WithOrigin("invalid-length")
@@ -1114,7 +1102,7 @@ func TestRegisterValidate(t *testing.T) {
 	s := runtime.NewScheme()
 	ctx := context.Background()
 
-	// register multiple types for testing to ensure registration is working as expected
+	// 注册多个类型进行测试，确保注册行为符合预期
 	s.AddValidationFunc(&TestType1{}, func(ctx context.Context, op operation.Operation, object, oldObject interface{}) field.ErrorList {
 		if enabled, exists := op.HasOption("option1"); enabled || !exists {
 			return field.ErrorList{invalidIfOptionErr}
@@ -1146,7 +1134,7 @@ func TestRegisterValidate(t *testing.T) {
 	}
 }
 
-// TestType1 is a minimal runtime.Object used only by TestRegisterValidate.
+// TestType1 是仅由 TestRegisterValidate 使用的最小 runtime.Object。
 type TestType1 struct {
 	Version    string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
@@ -1157,8 +1145,8 @@ func (TestType1) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKi
 
 func (TestType1) DeepCopyObject() runtime.Object { return nil }
 
-// TestType2 is a second minimal runtime.Object used only by
-// TestRegisterValidate, so registration of multiple validators is exercised.
+// TestType2 是另一个仅由 TestRegisterValidate 使用的最小 runtime.Object，
+// 用于检验多个校验器的注册。
 type TestType2 struct {
 	Version    string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
@@ -1169,13 +1157,13 @@ func (TestType2) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKi
 
 func (TestType2) DeepCopyObject() runtime.Object { return nil }
 
-// TestToOpenAPIDefinitionName verifies the deterministic name synthesized for
-// an unstructured GVK and the errors returned when part of the GVK is missing.
-// The name is used to key OpenAPI schemas, so it must be stable.
+// TestToOpenAPIDefinitionName 验证为 unstructured GVK 合成的名称是确定性的，
+// 以及 GVK 缺少某部分时返回的错误。
+// 该名称用于作为 OpenAPI schema 的键，因此必须保持稳定。
 func TestToOpenAPIDefinitionName(t *testing.T) {
 	testCases := []struct {
 		name        string
-		registerGvk *schema.GroupVersionKind // defaults to gvk unless set
+		registerGvk *schema.GroupVersionKind // 未设置时默认为 gvk
 		registerObj runtime.Object
 		gvk         schema.GroupVersionKind
 		out         string
