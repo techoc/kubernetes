@@ -41,9 +41,9 @@ type pluginInitializer struct {
 	restMapper        meta.RESTMapper
 }
 
-// New creates an instance of admission plugins initializer.
-// This constructor is public with a long param list so that callers immediately know that new information can be expected
-// during compilation when they update a level.
+// New 创建准入插件初始化器实例。
+// 该构造函数刻意公开且参数列表很长，这样升级版本新增依赖时，
+// 调用方会在编译期立刻感知到多了新的入参。
 func New(
 	extClientset kubernetes.Interface,
 	dynamicClient dynamic.Interface,
@@ -68,16 +68,15 @@ func New(
 	}
 }
 
-// Initialize checks the initialization interfaces implemented by a plugin
-// and provide the appropriate initialization data
+// Initialize 检查插件实现了哪些初始化接口，并注入对应的初始化数据。
 func (i pluginInitializer) Initialize(plugin admission.Interface) {
-	// First tell the plugin about drained notification, so it can pass it to further initializations.
+	// 先注入 drain 通知，好让插件能把它传给后续的初始化步骤。
 	// 必须最先注入：后续初始化（如启动 informer）需要据此在关闭时停止。
 	if wants, ok := plugin.(WantsDrainedNotification); ok {
 		wants.SetDrainedNotification(i.stopCh)
 	}
 
-	// Second tell the plugin about enabled features, so it can decide whether to start informers or not
+	// 其次告知插件已启用的特性，插件据此决定要不要启动 informer
 	if wants, ok := plugin.(WantsEffectiveVersion); ok {
 		wants.InspectEffectiveVersion(i.effectiveVersion)
 	}

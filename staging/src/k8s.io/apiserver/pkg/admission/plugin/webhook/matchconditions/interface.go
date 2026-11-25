@@ -33,9 +33,9 @@ type MatchResult struct {
 	FailedConditionName string
 }
 
-// Matcher contains logic for converting Evaluations to bool of matches or does not match
+// Matcher 包含把 Evaluations 转换为是否匹配的布尔结论的逻辑。
 type Matcher interface {
-	// Match is used to take cel evaluations and convert into decisions
+	// Match 用于把 CEL 求值结果转换为决策。
 	// 多个条件之间是逻辑与：任一条件为 false 即整体不匹配；
 	// 任一条件求值出错则立即返回错误，不再继续求值后续条件。
 	Match(ctx context.Context, versionedAttr *admission.VersionedAttributes, versionedParams runtime.Object, authz authorizer.UnconditionalAuthorizer) MatchResult

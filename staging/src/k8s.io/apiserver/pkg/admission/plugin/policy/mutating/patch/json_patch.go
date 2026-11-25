@@ -46,8 +46,7 @@ import (
 	pointer "k8s.io/utils/ptr"
 )
 
-// JSONPatchCondition contains the inputs needed to compile and evaluate a cel expression
-// that returns a JSON patch value.
+// JSONPatchCondition 包含编译并求值返回 JSON patch 值的 CEL 表达式所需的输入。
 //
 // 该表达式必须求值为 JSONPatch 类型的列表；列表中的每个元素对应一个 JSON Patch 操作。
 type JSONPatchCondition struct {
@@ -68,7 +67,7 @@ func (v *JSONPatchCondition) ReturnTypes() []*celgo.Type {
 
 var jsonPatchType = types.NewObjectType("JSONPatch")
 
-// NewJSONPatcher creates a patcher that performs a JSON Patch mutation.
+// NewJSONPatcher 创建一个执行 JSON Patch 变更的 patcher。
 //
 // patchEvaluator 负责编译并求值策略中的 CEL 表达式，此处只关心求值结果。
 func NewJSONPatcher(patchEvaluator plugincel.MutatingEvaluator) Patcher {
@@ -110,7 +109,6 @@ func (e *jsonPatcher) Patch(ctx context.Context, r Request, runtimeCELCostBudget
 		if errors.Is(err, jsonpatch.ErrTestFailed) {
 			// JSON Patch 的 test 操作失败是策略作者表达的“条件不满足”，
 			// 按 RFC 6902 语义应当整体不应用，而不是报错。
-			// If a json patch fails a test operation, the patch must not be applied
 			return r.VersionedAttributes.VersionedObject.Object(), nil
 		}
 		return nil, fmt.Errorf("JSON Patch: %w", err)
@@ -149,17 +147,17 @@ func (e *jsonPatcher) evaluatePatchExpression(ctx context.Context, patchEvaluato
 	}
 	refVal := eval.EvalResult
 
-	// the return type can be any valid CEL value.
-	// Scalars, maps and lists are used to set the value when the path points to a field of that type.
-	// ObjectVal is used when the path points to a struct. A map like "{"field1": 1, "fieldX": bool}" is not
-	// possible in Kubernetes CEL because maps and lists may not have mixed types.
+	// 返回类型可以是任意合法的 CEL 值：当 path 指向标量、映射或列表字段时
+	// 直接用对应值设置；指向结构体时使用 ObjectVal。形如
+	// "{"field1": 1, "fieldX": bool}" 的映射在 Kubernetes CEL 中不可行，
+	// 因为映射和列表的元素不能混合类型。
 	//
 	// 表达式结果必须是 list(JSONPatch)。下面这些类型断言在理论上不会失败，
 	// 因为编译阶段已检查返回类型；保留它们是为了在类型系统被绕过时快速失败。
 
 	iter, ok := refVal.(traits.Lister)
 	if !ok {
-		// Should never happen since compiler checks return type.
+		// 编译器已检查返回类型，这不应发生。
 		return nil, -1, fmt.Errorf("type mismatch: JSONPatchType.expression should evaluate to array")
 	}
 	result := jsonpatch.Patch{}
@@ -167,16 +165,16 @@ func (e *jsonPatcher) evaluatePatchExpression(ctx context.Context, patchEvaluato
 		v := it.Next()
 		patchObj, err := v.ConvertToNative(reflect.TypeOf(&mutation.JSONPatchVal{}))
 		if err != nil {
-			// Should never happen since return type is checked by compiler.
+			// 返回类型已由编译器检查，这不应发生。
 			return nil, -1, fmt.Errorf("type mismatch: JSONPatchType.expression should evaluate to array of JSONPatch: %w", err)
 		}
 		op, ok := patchObj.(*mutation.JSONPatchVal)
 		if !ok {
-			// Should never happen since return type is checked by compiler.
+			// 返回类型已由编译器检查，这不应发生。
 			return nil, -1, fmt.Errorf("type mismatch: JSONPatchType.expression should evaluate to array of JSONPatch, got element of %T", patchObj)
 		}
 
-		// Construct a JSON Patch from the evaluated CEL expression
+		// 根据求值后的 CEL 表达式构造 JSON Patch
 		// 对 op/path/from 做 Quote，确保它们作为 JSON 字符串而不是裸值写入 patch。
 		resultOp := jsonpatch.Operation{}
 		resultOp["op"] = pointer.To(gojson.RawMessage(strconv.Quote(op.Op)))
@@ -186,13 +184,11 @@ func (e *jsonPatcher) evaluatePatchExpression(ctx context.Context, patchEvaluato
 		}
 		if op.Val != nil {
 			if objVal, ok := op.Val.(*dynamic.ObjectVal); ok {
-				// TODO: Object initializers are insufficiently type checked.
-				// In the interim, we use this sanity check to detect type mismatches
-				// between field names and Object initializers. For example,
-				// "Object.spec{ selector: Object.spec.wrong{}}" is detected as a mismatch.
-				// Before beta, attaching full type information both to Object initializers and
-				// the "object" and "oldObject" variables is needed. This will allow CEL to
-				// perform comprehensive runtime type checking.
+				// TODO: Object 初始化器的类型检查不够充分。
+				// 作为过渡措施，我们用这个合理性检查来检测字段名与 Object 初始化器之间的
+				// 类型不匹配，例如 "Object.spec{ selector: Object.spec.wrong{}}" 会被判定为不匹配。
+				// 进入 beta 之前，需要为 Object 初始化器以及 "object" 和 "oldObject" 变量
+				// 附上完整类型信息，从而让 CEL 能够进行全面的运行时类型检查。
 				//
 				// 在完整类型信息到位之前，用字段路径与初始化器类型名校验兜底。
 				err := objVal.CheckTypeNamesMatchFieldPathNames()
@@ -200,8 +196,8 @@ func (e *jsonPatcher) evaluatePatchExpression(ctx context.Context, patchEvaluato
 					return nil, -1, fmt.Errorf("type mismatch: %w", err)
 				}
 			}
-			// CEL data literals representing arbitrary JSON values can be serialized to JSON for use in
-			// JSON Patch if first converted to pb.Value.
+			// 表示任意 JSON 值的 CEL 数据字面量，若先转换为 pb.Value，
+			// 即可序列化为 JSON 供 JSON Patch 使用。
 			// 借由 structpb.Value 中转，把任意 CEL 值统一序列化为 JSON。
 			v, err := op.Val.ConvertToNative(reflect.TypeOf(&structpb.Value{}))
 			if err != nil {

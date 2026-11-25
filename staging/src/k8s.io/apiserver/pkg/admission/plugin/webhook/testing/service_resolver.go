@@ -28,8 +28,8 @@ type serviceResolver struct {
 	base url.URL
 }
 
-// NewServiceResolver returns a static service resolve that return the given URL or
-// an error for the failResolve namespace.
+// NewServiceResolver 返回一个静态 service 解析器，总是返回给定 URL；
+// 对 failResolve 命名空间则返回错误。
 // 特殊命名空间 failResolve 用于模拟服务解析失败的分支。
 func NewServiceResolver(base url.URL) webhook.ServiceResolver {
 	return &serviceResolver{base}
@@ -49,7 +49,7 @@ type panickingResolver struct {
 	panicMessage string
 }
 
-// NewPanickingServiceResolver returns a static service resolver that panics.
+// NewPanickingServiceResolver 返回一个在解析时 panic 的静态 service 解析器。
 func NewPanickingServiceResolver(panicMessage string) webhook.ServiceResolver {
 	return &panickingResolver{panicMessage}
 }

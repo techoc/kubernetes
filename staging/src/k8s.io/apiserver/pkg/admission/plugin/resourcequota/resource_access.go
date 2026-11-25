@@ -31,17 +31,14 @@ import (
 	"k8s.io/utils/lru"
 )
 
-// QuotaAccessor abstracts the get/set logic from the rest of the Evaluator.  This could be a test stub, a straight passthrough,
-// or most commonly a series of deconflicting caches.
-//
-// 中文说明：把“读配额 / 写状态”从评估逻辑中抽离，使 evaluator 可以在不感知
-// informer、LRU、singleflight 等细节的前提下工作。
+// QuotaAccessor 把 get/set 逻辑从评估器其余部分抽象出来：可以是测试桩、直通封装，
+// 或最常见的一串串扰缓存，使 evaluator 无需感知 informer、LRU、singleflight 等细节。
 type QuotaAccessor interface {
-	// UpdateQuotaStatus is called to persist final status.  This method should write to persistent storage.
-	// An error indicates that write didn't complete successfully.
+	// UpdateQuotaStatus 用于持久化最终状态，应写入持久存储；
+	// 返回错误表示写入未成功完成。
 	UpdateQuotaStatus(newQuota *corev1.ResourceQuota) error
 
-	// GetQuotas gets all possible quotas for a given namespace
+	// GetQuotas 返回给定 namespace 下所有可能的配额
 	GetQuotas(namespace string) ([]corev1.ResourceQuota, error)
 }
 
@@ -50,33 +47,33 @@ type QuotaAccessor interface {
 type quotaAccessor struct {
 	client kubernetes.Interface
 
-	// lister can list/get quota objects from a shared informer's cache
+	// lister 从共享 informer 缓存中列取配额对象
 	lister corev1listers.ResourceQuotaLister
 
-	// hasSynced indicates whether the lister has completed its initial sync
+	// hasSynced 表示 lister 是否已完成初始同步
 	hasSynced func() bool
 
-	// liveLookups holds the last few live lookups we've done to help ammortize cost on repeated lookup failures.
-	// This lets us handle the case of latent caches, by looking up actual results for a namespace on cache miss/no results.
-	// We track the lookup result here so that for repeated requests, we don't look it up very often.
+	// liveLookups 缓存最近几次实时查询结果，摊薄反复查询失败的成本。
+	// 以应对缓存滞后：缓存未命中或无结果时实时查询该 namespace 的真实结果。
+	// 记录查询结果，重复请求时无需频繁实时查询。
 	liveLookupCache *lru.Cache
 	group           singleflight.Group
 	liveTTL         time.Duration
-	// updatedQuotas holds a cache of quotas that we've updated.  This is used to pull the "really latest" during back to
-	// back quota evaluations that touch the same quota doc.  This only works because we can compare etcd resourceVersions
-	// for the same resource as integers.  Before this change: 22 updates with 12 conflicts.  after this change: 15 updates with 0 conflicts
+	// updatedQuotas 缓存我们更新过的配额，用于在连续评估同一配额文档时
+	// 读到“真正最新”的版本；这之所以可行，是因为同一资源的 etcd
+	// resourceVersion 可按整数比较。改动前：22 次更新、12 次冲突；
 	updatedQuotas *lru.Cache
 }
 
-// newQuotaAccessor creates an object that conforms to the QuotaAccessor interface to be used to retrieve quota objects.
+// newQuotaAccessor 创建符合 QuotaAccessor 接口的对象，用于获取配额。
 //
-// 中文说明：client/lister 在此处故意留空，等 SetInternalKubeClientSet 与
+// client/lister 在此处故意留空，等 SetInternalKubeClientSet 与
 // SetInternalKubeInformerFactory 注入后再使用，符合准入插件的初始化顺序。
 func newQuotaAccessor() (*quotaAccessor, error) {
 	liveLookupCache := lru.New(100)
 	updatedCache := lru.New(100)
 
-	// client and lister will be set when SetInternalKubeClientSet and SetInternalKubeInformerFactory are invoked
+	// client 与 lister 将在 SetInternalKubeClientSet 和 SetInternalKubeInformerFactory 被调用时注入
 	return &quotaAccessor{
 		liveLookupCache: liveLookupCache,
 		liveTTL:         time.Duration(30 * time.Second),
@@ -100,11 +97,8 @@ func (e *quotaAccessor) UpdateQuotaStatus(newQuota *corev1.ResourceQuota) error 
 
 var etcdVersioner = storage.APIObjectVersioner{}
 
-// checkCache compares the passed quota against the value in the look-aside cache and returns the newer
-// if the cache is out of date, it deletes the stale entry.  This only works because of etcd resourceVersions
-// being monotonically increasing integers
-//
-// 中文说明：informer 可能滞后于刚写入的结果，因此读取时以 resourceVersion
+// checkCache 将传入的配额与旁路缓存中的值比较并返回较新者；缓存过期时删除旧条目。
+// 这之所以可行，是因为 etcd resourceVersion 是单调递增的整数 可能滞后于刚写入的结果，因此读取时以 resourceVersion
 // 较大者为准；缓存落后于调用方时立即淘汰，避免脏数据长期滞留。
 func (e *quotaAccessor) checkCache(quota *corev1.ResourceQuota) *corev1.ResourceQuota {
 	key := quota.Namespace + "/" + quota.Name
@@ -125,22 +119,22 @@ func (e *quotaAccessor) checkCache(quota *corev1.ResourceQuota) *corev1.Resource
 // GetQuotas 返回指定 namespace 下所有配额；优先使用 informer 缓存，缓存尚未
 // 同步时回退到实时查询，并用 singleflight 合并同一 namespace 的并发请求。
 func (e *quotaAccessor) GetQuotas(namespace string) ([]corev1.ResourceQuota, error) {
-	// determine if there are any quotas in this namespace
-	// if there are no quotas, we don't need to do anything
+	// 判断该 namespace 是否存在配额
+	// 没有配额就无需做任何事
 	items, err := e.lister.ResourceQuotas(namespace).List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("error resolving quota: %v", err)
 	}
 
-	// if there are no items held in our unsynced lister, check our live-lookup LRU, if that misses, do the live lookup to prime it.
+	// 未同步的 lister 无数据时查实时 LRU；仍未命中则实时查询并预热缓存。
 	//
-	// 中文说明：缓存未同步时“空结果”不能当作没有配额，否则会漏掉配额校验；
+	// 缓存未同步时“空结果”不能当作没有配额，否则会漏掉配额校验；
 	// 实时查询结果带 TTL 缓存，避免每次请求都直连 apiserver。
 	if len(items) == 0 && !e.hasSynced() {
 		lruItemObj, ok := e.liveLookupCache.Get(namespace)
 		if !ok || lruItemObj.(liveLookupEntry).expiry.Before(time.Now()) {
-			// use singleflight.Group to avoid flooding the apiserver with repeated
-			// requests. See #22422 for details.
+			// 使用 singleflight.Group 避免重复请求淹没 apiserver，
+			// 详见 #22422。
 			lruItemObj, err, _ = e.group.Do(namespace, func() (interface{}, error) {
 				liveList, err := e.client.CoreV1().ResourceQuotas(namespace).List(context.TODO(), metav1.ListOptions{})
 				if err != nil {
@@ -169,7 +163,7 @@ func (e *quotaAccessor) GetQuotas(namespace string) ([]corev1.ResourceQuota, err
 		quota := items[i]
 		// 用最近一次写回结果覆盖可能滞后的 informer 副本。
 		quota = e.checkCache(quota)
-		// always make a copy.  We're going to muck around with this and we should never mutate the originals
+		// 始终复制一份：接下来会随意改动它，绝不能修改原始对象
 		resourceQuotas = append(resourceQuotas, *quota)
 	}
 

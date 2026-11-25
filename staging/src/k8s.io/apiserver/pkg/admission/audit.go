@@ -23,7 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/audit"
 )
 
-// auditHandler logs annotations set by other admission handlers
+// auditHandler 记录其他准入 handler 设置的注解。
 //
 // 通过装饰器而非在每个插件里散落审计调用，保证注解收集与插件实现解耦。
 type auditHandler struct {
@@ -34,10 +34,9 @@ var _ Interface = &auditHandler{}
 var _ MutationInterface = &auditHandler{}
 var _ ValidationInterface = &auditHandler{}
 
-// WithAudit is a decorator for a admission phase. It saves annotations
-// of attribute into the audit event. Attributes passed to the Admit and
-// Validate function must be instance of privateAnnotationsGetter or
-// AnnotationsGetter, otherwise an error is returned.
+// WithAudit 是准入阶段的装饰器，把 Attributes 上的注解写入审计事件。
+// 传给 Admit 和 Validate 的 Attributes 必须是 privateAnnotationsGetter 或
+// AnnotationsGetter 的实例，否则返回错误。
 func WithAudit(i Interface) Interface {
 	if i == nil {
 		return i
@@ -106,7 +105,7 @@ func (handler *auditHandler) logAnnotations(ctx context.Context, a Attributes) {
 	case AnnotationsGetter:
 		annotations = a.GetAnnotations(ae.GetEventLevel())
 	default:
-		// this will never happen, because we have already checked it in ensureAnnotationGetter
+		// 不会走到这里，ensureAnnotationGetter 已经检查过
 	}
 
 	audit.AddAuditAnnotationsMap(ctx, annotations)

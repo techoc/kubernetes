@@ -42,13 +42,13 @@ func init() {
 	utilruntime.Must(v1.AddToScheme(scheme))
 }
 
-// LoadConfig extracts the webhook admission configuration from configFile.
+// LoadConfig 从 configFile 中提取 webhook admission 配置。
 // configFile 为 nil 时返回空配置而非错误，允许插件在无外部配置的情况下运行。
 func LoadConfig(configFile io.Reader) (*webhookadmission.WebhookAdmission, error) {
 	if configFile == nil {
 		return &webhookadmission.WebhookAdmission{}, nil
 	}
-	// we have a config so parse it.
+	// 存在配置文件，解析它。
 	data, err := io.ReadAll(configFile)
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func LoadConfig(configFile io.Reader) (*webhookadmission.WebhookAdmission, error
 		return nil, fmt.Errorf("unexpected type: %T", decodedObj)
 	}
 
-	// KubeConfigFile may be empty when only staticManifestsDir is configured.
+	// 仅配置了 staticManifestsDir 时，KubeConfigFile 可能为空。
 	// 强制绝对路径，避免结果依赖 apiserver 的工作目录——不同启动方式下相对路径含义不同。
 	if len(config.KubeConfigFile) > 0 && !path.IsAbs(config.KubeConfigFile) {
 		return nil, field.Invalid(field.NewPath("kubeConfigFile"), config.KubeConfigFile, "must be an absolute file path")

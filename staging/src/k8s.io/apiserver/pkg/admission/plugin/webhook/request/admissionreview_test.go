@@ -40,7 +40,7 @@ import (
 )
 
 // TestVerifyAdmissionResponse 覆盖 webhook 响应的校验与 v1beta1 兼容修正。
-// 中文说明：v1 校验严格（group/version/kind/uid/patch 一致性都必须正确），
+// v1 校验严格（group/version/kind/uid/patch 一致性都必须正确），
 // 而 v1beta1 历史上允许缺失或错误，必须继续宽容处理，否则旧 webhook 会集体失效。
 func TestVerifyAdmissionResponse(t *testing.T) {
 	v1beta1JSONPatch := admissionv1beta1.PatchTypeJSONPatch
@@ -65,7 +65,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 		expectResult           *metav1.Status
 		expectErr              string
 	}{
-		// Allowed validating
+		// 允许的（Allowed）validating 响应
 		{
 			name: "v1beta1 allowed validating",
 			uid:  "123",
@@ -83,8 +83,8 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			},
 			expectAllowed: true,
 		},
-		// Allowed mutating
-		// 中文说明：mutating 与 validating 的差异只在是否允许返回 patch，allowed 本身语义相同。
+		// 允许的（Allowed）mutating 响应
+		// mutating 与 validating 的差异只在是否允许返回 patch，allowed 本身语义相同。
 		{
 			name:     "v1beta1 allowed mutating",
 			uid:      "123",
@@ -105,8 +105,8 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			expectAllowed: true,
 		},
 
-		// Audit annotations
-		// 中文说明：审计注解原样透传到审计事件，不做合并或去重。
+		// 审计注解（Audit annotations）
+		// 审计注解原样透传到审计事件，不做合并或去重。
 		{
 			name: "v1beta1 auditAnnotations",
 			uid:  "123",
@@ -134,8 +134,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			expectAuditAnnotations: map[string]string{"foo": "bar"},
 		},
 
-		// Patch
-		// 中文说明：v1beta1 缺省 patchType 时按 JSONPatch 处理，v1 则要求显式声明。
+		// Patch 场景		// v1beta1 缺省 patchType 时按 JSONPatch 处理，v1 则要求显式声明。
 		{
 			name:     "v1beta1 patch",
 			uid:      "123",
@@ -168,8 +167,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			expectPatchType: "JSONPatch",
 		},
 
-		// Result
-		// 中文说明：拒绝时 Status 直接回传给客户端，因此内容必须保真。
+		// Result 字段场景		// 拒绝时 Status 直接回传给客户端，因此内容必须保真。
 		{
 			name: "v1beta1 result",
 			uid:  "123",
@@ -197,8 +195,8 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			expectResult:  &metav1.Status{Status: "Failure", Message: "Foo", Code: 401},
 		},
 
-		// Missing response
-		// 中文说明：空响应视为协议错误，必须拒绝而不是当作 allow。
+		// 缺少响应（Missing response）
+		// 空响应视为协议错误，必须拒绝而不是当作 allow。
 		{
 			name:      "v1beta1 no response",
 			uid:       "123",
@@ -214,8 +212,8 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			expectErr: "response was absent",
 		},
 
-		// v1 invalid responses
-		// 中文说明：v1 契约要求回显正确的 TypeMeta 与请求 uid，用于防止响应错配。
+		// v1 非法响应
+		// v1 契约要求回显正确的 TypeMeta 与请求 uid，用于防止响应错配。
 		{
 			name: "v1 wrong group",
 			uid:  "123",
@@ -322,7 +320,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			},
 			expectAllowed:   true,
 			expectPatch:     []byte(`[{"op":"add","path":"/foo","value":"bar"}]`),
-			expectPatchType: invalidv1Patch, // invalid patch types are caught when the mutating dispatcher evaluates the patch
+			expectPatchType: invalidv1Patch, // 非法 patch 类型会在 mutating dispatcher 求值 patch 时才被发现
 		},
 		{
 			name:     "v1 patch for validating webhook",
@@ -353,8 +351,8 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 			expectErr: `validating webhook may not return response.patchType`,
 		},
 
-		// v1beta1 invalid responses that we have to allow/fixup for compatibility
-		// 中文说明：这些响应在 v1 下非法，但为了让既有 v1beta1 webhook 继续工作而放行/修正。
+		// 出于兼容性不得不放行/修正的 v1beta1 非法响应
+		// 这些响应在 v1 下非法，但为了让既有 v1beta1 webhook 继续工作而放行/修正。
 		{
 			name: "v1beta1 wrong group/version/kind",
 			uid:  "123",
@@ -462,7 +460,7 @@ func TestVerifyAdmissionResponse(t *testing.T) {
 
 // TestCreateAdmissionObjects 验证 AdmissionReview 请求的构造：版本协商、等价资源映射
 // 与字段填充。
-// 中文说明：请求中的 Kind/Resource 是“规则意图”的版本（extensions/v1beta1），
+// 请求中的 Kind/Resource 是“规则意图”的版本（extensions/v1beta1），
 // 而 RequestKind/RequestResource 保留客户端原始版本（apps/v1），两者不能混淆；
 // 版本选择遵循 webhook 声明的优先顺序。
 func TestCreateAdmissionObjects(t *testing.T) {

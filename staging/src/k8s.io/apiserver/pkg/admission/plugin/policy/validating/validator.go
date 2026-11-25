@@ -38,8 +38,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// validator implements the Validator interface
-// validator 持有一组已编译的 CEL 求值器，对单个请求依次执行匹配条件、
+// validator 实现 Validator 接口，持有一组已编译的 CEL 求值器，对单个请求依次执行匹配条件、
 // validation 表达式、messageExpression 与审计注解表达式。
 type validator struct {
 	celMatcher            matchconditions.Matcher
@@ -47,8 +46,6 @@ type validator struct {
 	auditAnnotationFilter cel.ConditionEvaluator
 	messageFilter         cel.ConditionEvaluator
 	failPolicy            *v1.FailurePolicyType
-	// compileError holds any compilation error from the CEL expressions.
-	// If non-nil, the validator will return an error result based on the failPolicy.
 	// 编译错误延迟到求值阶段处理：策略对象本身仍可存在，但每次准入都会按
 	// failurePolicy 返回相应决策（Ignore 放行、Fail 拒绝）。
 	compileError error
@@ -90,8 +87,8 @@ func (v *validator) CompileError() error {
 	return v.compileError
 }
 
-// Validate takes a list of Evaluation and a failure policy and converts them into actionable PolicyDecisions
-// runtimeCELCostBudget was added for testing purpose only. Callers should always use const RuntimeCELCostBudget from k8s.io/apiserver/pkg/apis/cel/config.go as input.
+// Validate 把一组求值结果与 failure policy 转换为可执行的 PolicyDecision。
+// runtimeCELCostBudget 仅供测试使用；调用方应始终传入 k8s.io/apiserver/pkg/apis/cel/config.go 中的常量 RuntimeCELCostBudget。
 // Validate 把 CEL 求值结果翻译成可执行的准入决策与审计注解。整体顺序：
 // 匹配条件 -> validation 表达式 -> message 表达式 -> 审计注解表达式。
 // 任一阶段出错都按 failurePolicy 决定放行或拒绝，宁可失败关闭也不能
@@ -131,7 +128,7 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 			}
 		}
 
-		// if preconditions are not met, then do not return any validations
+		// 若前置条件（preconditions）不满足，则不返回任何 validation 结果
 		if !matchResults.Matches {
 			return ValidateResult{}
 		}
@@ -142,7 +139,6 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 	optionalVars := cel.OptionalVariableBindings{VersionedParams: versionedParams, Authorizer: authz}
 	expressionOptionalVars := cel.OptionalVariableBindings{VersionedParams: versionedParams}
 	admissionRequest := cel.CreateAdmissionRequest(versionedAttr.Attributes, metav1.GroupVersionResource(matchedResource), metav1.GroupVersionKind(versionedAttr.VersionedKind))
-	// Decide which fields are exposed
 	// namespace 对象可能为 nil（集群级资源），由 CreateNamespaceObject 处理。
 	ns := cel.CreateNamespaceObject(namespace)
 	evalResults, remainingBudget, err := v.validationFilter.ForInput(ctx, versionedAttr, admissionRequest, optionalVars, ns, runtimeCELCostBudget)
@@ -163,7 +159,7 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 	for i, evalResult := range evalResults {
 		var decision = &decisions[i]
 		decision.Elapsed = evalResult.Elapsed
-		// TODO: move this to generics
+		// TODO: 把这段逻辑上移到泛型层
 		// 求值结果需还原为 ValidationCondition 才能拿到 reason/message 等元数据；
 		// 类型不符属于内部错误，按失败策略处理。
 		validation, ok := evalResult.ExpressionAccessor.(*ValidationCondition)
@@ -197,21 +193,19 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 			} else {
 				decision.Reason = *validation.Reason
 			}
-			// decide the failure message
+			// 决定最终使用的失败消息
 			var message string
-			// attempt to set message with messageExpression result
+			// 尝试以 messageExpression 的结果作为消息
 			if messageResult != nil && messageResult.Error == nil && messageResult.EvalResult != nil {
-				// also fallback if the eval result is non-string (including null) or
-				// whitespaces.
+				// 求值结果非字符串（包括 null）或去空白后为空时同样回退。
 				if message, ok = messageResult.EvalResult.Value().(string); ok {
 					message = strings.TrimSpace(message)
-					// deny excessively long message from EvalResult
 					// 限制长度与换行，防止用户通过策略注入超大或伪造多行的状态消息。
 					if len(message) > celconfig.MaxEvaluatedMessageExpressionSizeBytes {
 						klog.V(2).InfoS("excessively long message denied", "message", message)
 						message = ""
 					}
-					// deny message that contains newlines
+					// 拒绝包含换行的消息
 					if strings.ContainsAny(message, "\n") {
 						klog.V(2).InfoS("multi-line message denied", "message", message)
 						message = ""
@@ -219,14 +213,14 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 				}
 			}
 			if messageResult != nil && messageResult.Error != nil {
-				// log any error with messageExpression
+				// 记录 messageExpression 的求值错误
 				klog.V(2).ErrorS(messageResult.Error, "error while evaluating messageExpression")
 			}
-			// fallback to set message to the custom message
+			// 回退：使用策略自定义的 message
 			if message == "" && len(validation.Message) > 0 {
 				message = strings.TrimSpace(validation.Message)
 			}
-			// fallback to use the expression to compose a message
+			// 再回退：用表达式本身拼一条消息
 			if message == "" {
 				message = fmt.Sprintf("failed expression: %v", strings.TrimSpace(validation.Expression))
 			}
@@ -260,7 +254,7 @@ func (v *validator) Validate(ctx context.Context, matchedResource schema.GroupVe
 		}
 		var auditAnnotationResult = &auditAnnotationResults[i]
 		auditAnnotationResult.Elapsed = evalResult.Elapsed
-		// TODO: move this to generics
+		// TODO: 把这段逻辑上移到泛型层
 		validation, ok := evalResult.ExpressionAccessor.(*AuditAnnotationCondition)
 		if !ok {
 			klog.Error("Invalid type conversion to AuditAnnotationCondition")

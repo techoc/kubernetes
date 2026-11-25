@@ -114,8 +114,7 @@ type LazyObject struct {
 	// UseSchemalessTypeRef 表示改用 SchemalessTypedToVal（基于反射的惰性 ref.Val），
 	// 而不是通过 DefaultTypeAdapter 转成 unstructured 表示。
 	//
-	// Deprecated: This field is temporary and will be removed when schemaless becomes the default.
-	// 已弃用：该字段是临时的，待 schemaless 成为默认实现后移除。
+	// Deprecated: 该字段是临时的，待 schemaless 成为默认实现后移除。
 	UseSchemalessTypeRef bool
 	celVal               ref.Val
 }
@@ -150,7 +149,7 @@ func (l *LazyObject) CELValue() (ref.Val, error) {
 		l.celVal = types.DefaultTypeAdapter.NativeToValue(u.Object)
 		return l.celVal, nil
 	}
-	// TODO: use SchemalessTypeRef always.
+	// TODO: 始终使用 SchemalessTypeRef。
 	if l.UseSchemalessTypeRef {
 		l.celVal = common.SchemalessTypedToVal(l.object)
 		return l.celVal, nil

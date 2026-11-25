@@ -84,7 +84,7 @@ func TestCompositedPolicies(t *testing.T) {
 			variables: []NamedExpressionAccessor{
 				&testVariable{
 					name:       "name",
-					expression: "1 == '1'", // won't compile
+					expression: "1 == '1'", // 无法编译
 				},
 			},
 			attributes:           endpointCreateAttributes(),
@@ -98,7 +98,7 @@ func TestCompositedPolicies(t *testing.T) {
 			variables: []NamedExpressionAccessor{
 				&testVariable{
 					name:       "count",
-					expression: "object.subsets[114514].addresses.size()", // array index out of bound
+					expression: "object.subsets[114514].addresses.size()", // 数组下标越界
 				},
 			},
 			attributes:           endpointCreateAttributes(),
@@ -112,13 +112,13 @@ func TestCompositedPolicies(t *testing.T) {
 			variables: []NamedExpressionAccessor{
 				&testVariable{
 					name:       "name",
-					expression: "object.metadata.name", // cost = 3
+					expression: "object.metadata.name", // 成本 = 3
 				},
 			},
 			attributes:           endpointCreateAttributes(),
-			expression:           "variables.name == 'endpoints1'", // cost = 3
+			expression:           "variables.name == 'endpoints1'", // 成本 = 3
 			expectedResult:       true,
-			runtimeCostBudget:    4, // enough for main variable but not for entire expression
+			runtimeCostBudget:    4, // 足够主变量求值，但不足以覆盖整个表达式
 			expectErr:            true,
 			expectedErrorMessage: "running out of cost budget",
 		},
@@ -128,13 +128,13 @@ func TestCompositedPolicies(t *testing.T) {
 			variables: []NamedExpressionAccessor{
 				&testVariable{
 					name:       "name",
-					expression: "object.metadata.name", // cost = 3
+					expression: "object.metadata.name", // 成本 = 3
 				},
 			},
 			attributes:        endpointCreateAttributes(),
-			expression:        "variables.name == 'endpoints1' && variables.name == 'endpoints1' ", // cost = 7
+			expression:        "variables.name == 'endpoints1' && variables.name == 'endpoints1' ", // 成本 = 7
 			expectedResult:    true,
-			runtimeCostBudget: 10, // enough for one lazy evaluation but not two, should pass
+			runtimeCostBudget: 10, // 足够一次惰性求值但不够两次，应当通过
 		},
 		{
 			name: "single boolean variable in expression",
@@ -265,16 +265,16 @@ func TestCompositedPolicies(t *testing.T) {
 	}
 }
 
-// TestCompilerIsolation verifies that each call to NewCompositedCompiler
-// creates an isolated environment where variables from one compiler
-// do not leak into another.
+// TestCompilerIsolation 验证每次调用 NewCompositedCompiler 都会创建
+// 隔离的环境，一个编译器中的变量不会
+// 泄漏到另一个编译器中。
 //
 // 隔离性很重要：不同策略/配置可以复用同一基础环境，但组合变量必须
 // 各自独立，否则一个来源的变量会污染另一来源的求值。
 func TestCompilerIsolation(t *testing.T) {
 	baseEnv := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion())
 
-	// Create first compiler with variable "foo"
+	// 创建第一个编译器，包含变量 "foo"
 	compiler1, err := NewCompositedCompiler(baseEnv)
 	if err != nil {
 		t.Fatal(err)
@@ -284,7 +284,7 @@ func TestCompilerIsolation(t *testing.T) {
 	}
 	compiler1.CompileAndStoreVariables(vars1, OptionalVariableDeclarations{}, environment.StoredExpressions)
 
-	// Create second compiler with variable "baz"
+	// 创建第二个编译器，包含变量 "baz"
 	compiler2, err := NewCompositedCompiler(baseEnv)
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +294,7 @@ func TestCompilerIsolation(t *testing.T) {
 	}
 	compiler2.CompileAndStoreVariables(vars2, OptionalVariableDeclarations{}, environment.StoredExpressions)
 
-	// Verify isolation: compiler1 should not have "baz", compiler2 should not have "foo"
+	// 验证隔离性：compiler1 不应有 "baz"，compiler2 不应有 "foo"
 	if _, ok := compiler1.state.mapType.Fields["baz"]; ok {
 		t.Error("compiler1 should not have variable 'baz' from compiler2")
 	}
@@ -302,7 +302,7 @@ func TestCompilerIsolation(t *testing.T) {
 		t.Error("compiler2 should not have variable 'foo' from compiler1")
 	}
 
-	// Verify each compiler has its own variable
+	// 验证每个编译器都有自己的变量
 	if _, ok := compiler1.state.mapType.Fields["foo"]; !ok {
 		t.Error("compiler1 should have variable 'foo'")
 	}

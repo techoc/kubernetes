@@ -22,8 +22,7 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
-// ErrorType decodes the error to determine the error type
-// that the metrics understand.
+// ErrorType 解析错误，得到指标可理解的错误类型。
 // 只暴露有限的枚举值，避免错误字符串进入指标标签造成基数爆炸。
 func ErrorType(err error) MutationErrorType {
 	if err == nil {

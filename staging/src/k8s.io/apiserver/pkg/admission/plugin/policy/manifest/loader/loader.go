@@ -14,14 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package loader provides generic functionality to load policy and binding
-// configurations from manifest files. It handles file reading, YAML/JSON
-// decoding, manifest name validation (suffix + uniqueness), policy-specific
-// manifest constraints, and binding-reference checking. Type-specific
-// defaulting and validation (e.g., scheme-based defaulting via internal
-// types) are injected by callers through the AcceptObjectFunc callbacks.
+// Package loader 提供从清单文件加载策略与绑定配置的通用功能，
+// 负责文件读取、YAML/JSON 解码、清单名称校验（后缀 + 唯一性）、
+// 针对策略的清单约束以及绑定引用检查。与类型相关的默认化和校验
+// （例如基于 scheme 的默认化）由调用方通过 AcceptObjectFunc 回调注入。
 //
-// 中文说明：本包刻意不绑定具体 API 类型，VAP/MAP 各自的校验逻辑通过回调注入，
+// 本包刻意不绑定具体 API 类型，VAP/MAP 各自的校验逻辑通过回调注入，
 // 从而让静态清单加载逻辑可以同时服务两者，也便于测试用最小 scheme。
 package loader
 
@@ -38,28 +36,26 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/manifest"
 )
 
-// ErrUnrecognizedType is returned by AcceptObjectFunc when the object type is
-// not handled. This allows callers with multiple accept functions to try the next one.
+// ErrUnrecognizedType 由 AcceptObjectFunc 在对象类型未被处理时返回，
+// 使得配置了多个 accept 函数的调用方可以尝试下一个。
 //
-// 中文说明：这是一个哨兵错误，必须用 errors.Is 判断；调用方据此区分“类型不匹配”
+// 这是一个哨兵错误，必须用 errors.Is 判断；调用方据此区分“类型不匹配”
 // 与真正的解析失败。
 var ErrUnrecognizedType = fmt.Errorf("unrecognized resource type")
 
-// AcceptObjectFunc extracts typed items from a decoded runtime.Object, applying
-// defaulting and validation. Returns ErrUnrecognizedType if the object type is
-// not handled by this function.
+// AcceptObjectFunc 从解码后的 runtime.Object 中提取带类型的条目，
+// 并完成默认化与校验；若该函数未处理此对象类型，返回 ErrUnrecognizedType。
 //
-// 中文说明：返回切片是为了兼容一个对象展开为多个条目的情况（例如列表或组合类型）。
+// 返回切片是为了兼容一个对象展开为多个条目的情况（例如列表或组合类型）。
 type AcceptObjectFunc[T metav1.Object] func(obj runtime.Object) ([]T, error)
 
-// LoadPolicyManifests is a generic helper that loads policy and binding manifests
-// from a directory. It handles file I/O, decoding, v1.List unwrapping, manifest
-// name validation, policy-specific manifest constraints, binding-reference checking,
-// and deterministic sorting by name. The decoder should be created by the caller
-// with whatever scheme is appropriate (e.g., with full internal type install for
-// kube-apiserver, or a minimal v1-only scheme for other consumers).
+// LoadPolicyManifests 是一个泛型辅助函数，从目录加载策略与绑定清单。
+// 负责文件 I/O、解码、v1.List 解包、清单名称校验、针对策略的清单约束、
+// 绑定引用检查，以及按名称的确定性排序。decoder 应由调用方按合适的
+// scheme 创建（例如 kube-apiserver 安装完整的内部类型，其他使用者
+// 可用仅含 v1 的最小 scheme）。
 //
-// 中文说明：返回的 hash 覆盖目录内容，用于判断清单是否变化；排序保证输出稳定，
+// 返回的 hash 覆盖目录内容，用于判断清单是否变化；排序保证输出稳定，
 // 使策略执行顺序可复现。任一文件出错都会整体失败——静态清单属于启动期配置，
 // 部分加载会让安全策略静默缺失。
 func LoadPolicyManifests[P, B metav1.Object](
@@ -109,9 +105,8 @@ func LoadPolicyManifests[P, B metav1.Object](
 	return policies, bindings, hash, nil
 }
 
-// acceptFileObject handles type dispatch for a decoded object, including
-// generic v1.List unwrapping, manifest name validation, policy-specific
-// manifest constraint validation, and the default unsupported-type error.
+// acceptFileObject 对解码后的对象做类型分发，包括通用的 v1.List 解包、
+// 清单名称校验、针对策略的清单约束校验，以及默认的不支持类型错误。
 func acceptFileObject[P, B metav1.Object](
 	obj runtime.Object,
 	filePath string,
@@ -120,8 +115,7 @@ func acceptFileObject[P, B metav1.Object](
 	acceptPolicy AcceptObjectFunc[P],
 	acceptBinding AcceptObjectFunc[B],
 ) ([]P, []B, error) {
-	// Handle generic v1.List by recursing into each item
-	// 中文说明：v1.List 的条目是 RawExtension，需要再次解码；递归复用同一套校验。
+	// v1.List 的条目是 RawExtension，需要再次解码；递归复用同一套校验。
 	if list, ok := obj.(*metav1.List); ok {
 		var allPolicies []P
 		var allBindings []B
@@ -140,8 +134,7 @@ func acceptFileObject[P, B metav1.Object](
 		return allPolicies, allBindings, nil
 	}
 
-	// Try policy
-	// 中文说明：先试 policy 再试 binding；只有 ErrUnrecognizedType 才继续尝试下一种，
+	// 先试 policy 再试 binding；只有 ErrUnrecognizedType 才继续尝试下一种，
 	// 其他错误（默认值/校验失败）直接上抛。
 	policies, pErr := acceptPolicy(obj)
 	if pErr != nil && !errors.Is(pErr, ErrUnrecognizedType) {
@@ -156,7 +149,7 @@ func acceptFileObject[P, B metav1.Object](
 		return policies, nil, nil
 	}
 
-	// Try binding
+	// 再尝试 binding
 	bindings, bErr := acceptBinding(obj)
 	if bErr != nil && !errors.Is(bErr, ErrUnrecognizedType) {
 		return nil, nil, bErr
@@ -170,12 +163,11 @@ func acceptFileObject[P, B metav1.Object](
 		return nil, bindings, nil
 	}
 
-	// Neither recognized it
+	// 两者都无法识别该类型
 	return nil, nil, fmt.Errorf("unsupported resource type %T", obj)
 }
 
-// validateAcceptedItem runs manifest name validation and policy-specific
-// manifest constraint validation.
+// validateAcceptedItem 执行清单名称校验与针对策略的清单约束校验。
 func validateAcceptedItem[T metav1.Object](item T, filePath string, seenNames map[string]string) error {
 	name := item.GetName()
 	if err := manifest.ValidateManifestName(name, filePath, seenNames); err != nil {
@@ -189,10 +181,10 @@ func validateAcceptedItem[T metav1.Object](item T, filePath string, seenNames ma
 	return validatePolicyManifestConstraints(obj, name)
 }
 
-// validatePolicyManifestConstraints validates manifest-specific constraints
-// for policy and binding types (paramKind, paramRef, policyName suffix).
+// validatePolicyManifestConstraints 校验策略与绑定类型的清单专属约束
+// （paramKind、paramRef、policyName 后缀）。
 //
-// 中文说明：静态清单没有 API 写入路径去解析 paramKind/paramRef 引用，
+// 静态清单没有 API 写入路径去解析 paramKind/paramRef 引用，
 // 因此这两项在清单模式下直接拒绝，避免出现“配置被接受但永不生效”。
 func validatePolicyManifestConstraints(obj runtime.Object, name string) error {
 	switch c := obj.(type) {
@@ -218,10 +210,10 @@ func validatePolicyManifestConstraints(obj runtime.Object, name string) error {
 	return nil
 }
 
-// validateBindingConstraints checks common binding manifest constraints:
-// policyName must be non-empty, have the static suffix, and paramRef must be nil.
+// validateBindingConstraints 检查 binding 清单的通用约束：
+// policyName 必须非空、带静态后缀，且 paramRef 必须为 nil。
 //
-// 中文说明：后缀检查用于防止清单 binding 与 API binding 混淆；policyName 为空则
+// 后缀检查用于防止清单 binding 与 API binding 混淆；policyName 为空则
 // binding 没有意义，尽早报错。
 func validateBindingConstraints(bindingName, policyName string, hasParamRef bool) error {
 	if len(policyName) == 0 {
@@ -236,8 +228,7 @@ func validateBindingConstraints(bindingName, policyName string, hasParamRef bool
 	return nil
 }
 
-// validateBindingReferences ensures all bindings reference policies that exist in the manifest set.
-// 中文说明：只在清单集合内校验，静态 binding 不允许引用 API 中定义的策略，
+// 只在清单集合内校验，静态 binding 不允许引用 API 中定义的策略，
 // 以保证“文件即事实来源”且重载结果可预测。
 func validateBindingReferences[P, B metav1.Object](policies []P, bindings []B, getBindingPolicyName func(B) string) error {
 	policyNames := sets.New[string]()

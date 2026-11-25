@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package source provides a Source implementation that loads webhook configurations from manifest files.
+// Package source 提供一个 Source 实现，从静态清单文件加载 webhook 配置。
 package source
 
 import (
@@ -33,10 +33,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// defaultReloadInterval is the default interval at which the manifest directory is checked for changes.
+// defaultReloadInterval 是检查清单目录变更的默认间隔。
 var defaultReloadInterval = 1 * time.Minute
 
-// SetReloadIntervalForTests sets the reload interval for testing and returns a function to restore the original value.
+// SetReloadIntervalForTests 为测试设置重载间隔，并返回一个恢复原值的函数。
 //
 // 这是包级全局变量，测试必须用返回的函数恢复原值，否则会污染同包其他用例。
 func SetReloadIntervalForTests(interval time.Duration) func() {
@@ -47,20 +47,20 @@ func SetReloadIntervalForTests(interval time.Duration) func() {
 	}
 }
 
-// ValidatingWebhookLoadFunc loads validating webhook configurations from a directory.
-// Returns the configurations, a hash string for change detection, and any error.
+// ValidatingWebhookLoadFunc 从目录加载 validating webhook 配置，
+// 返回配置列表、用于变更检测的哈希字符串以及错误。
 //
 // hash 由文件内容计算，用于在内容未变时跳过重建 accessor 的开销。
 type ValidatingWebhookLoadFunc func(dir string) ([]*admissionregistrationv1.ValidatingWebhookConfiguration, string, error)
 
-// MutatingWebhookLoadFunc loads mutating webhook configurations from a directory.
-// Returns the configurations, a hash string for change detection, and any error.
+// MutatingWebhookLoadFunc 从目录加载 mutating webhook 配置，
+// 返回配置列表、用于变更检测的哈希字符串以及错误。
 type MutatingWebhookLoadFunc func(dir string) ([]*admissionregistrationv1.MutatingWebhookConfiguration, string, error)
 
-// accessorBuilder builds webhook accessors from configurations.
+// accessorBuilder 从配置构建 webhook 访问器。
 type accessorBuilder[T runtime.Object] func(configs []T) []webhook.WebhookAccessor
 
-// webhookData holds the currently loaded webhook configurations and pre-built accessors.
+// webhookData 保存当前已加载的 webhook 配置与预构建的访问器。
 //
 // 配置与 accessor 放在同一个不可变快照里整体原子替换，读者不会看到半更新的状态。
 type webhookData[T runtime.Object] struct {
@@ -68,7 +68,7 @@ type webhookData[T runtime.Object] struct {
 	accessors      []webhook.WebhookAccessor
 }
 
-// staticWebhookSource provides webhook configurations loaded from manifest files.
+// staticWebhookSource 提供从清单文件加载的 webhook 配置。
 //
 // 所有可变状态都用 atomic 保存：读路径（每个准入请求）无锁，写路径（重载循环）单线程。
 type staticWebhookSource[T runtime.Object] struct {
@@ -80,21 +80,21 @@ type staticWebhookSource[T runtime.Object] struct {
 	buildAccessors accessorBuilder[T]
 
 	current      atomic.Pointer[webhookData[T]]
-	lastReadHash atomic.Pointer[string] // hash of last file content read (for short-circuiting)
+	lastReadHash atomic.Pointer[string] // 上次读取的文件内容哈希（用于短路跳过重载）
 	hasSynced    atomic.Bool
 }
 
-// ValidatingSource provides validating webhook configurations loaded from manifest files.
+// ValidatingSource 提供从清单文件加载的 validating webhook 配置。
 type ValidatingSource struct {
 	*staticWebhookSource[*admissionregistrationv1.ValidatingWebhookConfiguration]
 }
 
-// MutatingSource provides mutating webhook configurations loaded from manifest files.
+// MutatingSource 提供从清单文件加载的 mutating webhook 配置。
 type MutatingSource struct {
 	*staticWebhookSource[*admissionregistrationv1.MutatingWebhookConfiguration]
 }
 
-// NewValidatingSource creates a new validating webhook source that loads configurations from the specified directory.
+// NewValidatingSource 创建一个新的 validating webhook 数据源，从指定目录加载配置。
 func NewValidatingSource(manifestsDir, apiServerID string, loadFunc ValidatingWebhookLoadFunc) *ValidatingSource {
 	metrics.RegisterMetrics()
 	return &ValidatingSource{
@@ -109,7 +109,7 @@ func NewValidatingSource(manifestsDir, apiServerID string, loadFunc ValidatingWe
 	}
 }
 
-// NewMutatingSource creates a new mutating webhook source that loads configurations from the specified directory.
+// NewMutatingSource 创建一个新的 mutating webhook 数据源，从指定目录加载配置。
 func NewMutatingSource(manifestsDir, apiServerID string, loadFunc MutatingWebhookLoadFunc) *MutatingSource {
 	metrics.RegisterMetrics()
 	return &MutatingSource{
@@ -124,7 +124,7 @@ func NewMutatingSource(manifestsDir, apiServerID string, loadFunc MutatingWebhoo
 	}
 }
 
-// LoadInitial performs the initial load of webhook manifests.
+// LoadInitial 执行 webhook 清单的初始加载。
 //
 // 失败直接返回错误，让 apiserver 启动失败：静态清单是启动前提，静默降级会让本应被拦截的
 // 请求放行。
@@ -136,7 +136,7 @@ func (s *staticWebhookSource[T]) LoadInitial() error {
 
 	accessors := s.buildAccessors(configs)
 
-	// Validate accessors eagerly to catch selector parse errors at startup.
+	// 提前校验 accessor，以便在启动时就发现选择器解析错误。
 	if err := validateAccessors(accessors); err != nil {
 		return err
 	}
@@ -151,8 +151,8 @@ func (s *staticWebhookSource[T]) LoadInitial() error {
 	return nil
 }
 
-// RunReloadLoop watches for configuration changes and reloads when detected.
-// It blocks until ctx is canceled.
+// RunReloadLoop 监听配置变更并在检测到变化时重载。
+// 该方法会阻塞直到 ctx 被取消。
 func (s *staticWebhookSource[T]) RunReloadLoop(ctx context.Context) {
 	filesystem.WatchUntil(
 		ctx,
@@ -177,13 +177,13 @@ func (s *staticWebhookSource[T]) checkAndReload() {
 		return
 	}
 
-	// Short-circuit if file content hasn't changed since last read.
+	// 若文件内容自上次读取以来未变化，则短路返回。
 	if last := s.lastReadHash.Load(); last != nil && hash == *last {
 		return
 	}
 	s.lastReadHash.Store(&hash)
 
-	// Build and validate accessors (configs may be empty if files deleted)
+	// 构建并校验 accessor（文件被删除时 configs 可能为空）
 	accessors := s.buildAccessors(configs)
 	if err := validateAccessors(accessors); err != nil {
 		klog.ErrorS(err, "manifest webhook accessor validation failed after reload", "plugin", string(s.webhookType), "dir", s.manifestsDir)
@@ -196,12 +196,12 @@ func (s *staticWebhookSource[T]) checkAndReload() {
 	metrics.RecordAutomaticReloadSuccess(s.webhookType, s.apiServerID, hash)
 }
 
-// HasSynced returns true if the initial load has completed.
+// HasSynced 在初始加载完成后返回 true。
 func (s *staticWebhookSource[T]) HasSynced() bool {
 	return s.hasSynced.Load()
 }
 
-// Webhooks returns the list of webhook accessors.
+// Webhooks 返回 webhook 访问器列表。
 //
 // 返回的切片属于不可变快照，调用方不得修改；初始加载完成前返回 nil。
 func (s *staticWebhookSource[T]) Webhooks() []webhook.WebhookAccessor {
@@ -212,13 +212,11 @@ func (s *staticWebhookSource[T]) Webhooks() []webhook.WebhookAccessor {
 	return current.accessors
 }
 
-// validateAccessors exercises lazy getters on each accessor to surface latent
-// errors (e.g. invalid label selectors) early.
-// Note: We intentionally skip GetRESTClient validation here because it requires
-// a ClientManager. API validation (applied during defaulting) already ensures
-// CA bundles parse and URLs are present and valid, and the manifest loader
-// rejects service references, which covers the inputs needed to construct a
-// REST client at admission time.
+// validateAccessors 对每个 accessor 触发惰性 getter，以便尽早暴露潜在错误
+// （如无效的标签选择器）。
+// 注意：这里有意跳过 GetRESTClient 校验，因为它需要 ClientManager。
+// API 校验（在默认化阶段执行）已确保 CA bundle 可解析、URL 存在且合法，
+// 且清单加载器会拒绝 service 引用，这已覆盖准入时构造 REST 客户端所需的输入。
 func validateAccessors(accessors []webhook.WebhookAccessor) error {
 	var errs []error
 	for _, a := range accessors {

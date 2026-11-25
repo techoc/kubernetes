@@ -29,19 +29,19 @@ import (
 
 // Install registers the API group and adds types to a scheme
 //
-// 中文说明：v1beta1/v1alpha1 属于旧的 k8s.io 组，v1 属于 config.k8s.io 组，
+// v1beta1/v1alpha1 属于旧的 k8s.io 组，v1 属于 config.k8s.io 组，
 // 两组共存是为了让旧配置文件继续可解码；优先级设置决定无版本信息时的默认解码版本。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(resourcequotaapi.AddToScheme(scheme))
 
 	// v1beta1 and v1alpha1 are in the k8s.io-suffixed group
-	// 中文说明：v1beta1 优先于 v1alpha1，保证未标注 apiVersion 的旧配置按较新语义解析。
+	// v1beta1 优先于 v1alpha1，保证未标注 apiVersion 的旧配置按较新语义解析。
 	utilruntime.Must(resourcequotav1beta1.AddToScheme(scheme))
 	utilruntime.Must(resourcequotav1alpha1.AddToScheme(scheme))
 	utilruntime.Must(scheme.SetVersionPriority(resourcequotav1beta1.SchemeGroupVersion, resourcequotav1alpha1.SchemeGroupVersion))
 
 	// v1 is in the config.k8s.io-suffixed group
-	// 中文说明：独立组意味着序列化时必须显式写出 apiVersion，避免与旧组混淆。
+	// 独立组意味着序列化时必须显式写出 apiVersion，避免与旧组混淆。
 	utilruntime.Must(resourcequotav1.AddToScheme(scheme))
 	utilruntime.Must(scheme.SetVersionPriority(resourcequotav1.SchemeGroupVersion))
 }

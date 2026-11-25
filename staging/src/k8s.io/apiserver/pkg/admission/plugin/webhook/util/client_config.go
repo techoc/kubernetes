@@ -22,7 +22,7 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook"
 )
 
-// HasAdmissionReviewVersion check whether a version is accepted by a given webhook.
+// HasAdmissionReviewVersion 检查给定 webhook 是否接受某个版本。
 //
 // 版本协商是双向的：apiserver 发送的 AdmissionReview 版本必须是 webhook 在
 // admissionReviewVersions 中声明支持的版本。webhook 配置可能包含多个版本，

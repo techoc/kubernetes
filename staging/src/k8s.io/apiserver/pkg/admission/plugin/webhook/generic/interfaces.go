@@ -30,7 +30,6 @@ type VersionedAttributeAccessor interface {
 	VersionedAttribute(gvk schema.GroupVersionKind) (*admission.VersionedAttributes, error)
 }
 
-// Source can list dynamic webhook plugins.
 // Source 抽象动态 webhook 配置的来源（例如来自 API 的配置对象）。
 // HasSynced 用于判断配置是否已完成初始同步，未同步前调用方应视为无 hook。
 type Source interface {
@@ -38,8 +37,8 @@ type Source interface {
 	HasSynced() bool
 }
 
-// WebhookInvocation describes how to call a webhook, including the resource and subresource the webhook registered for,
-// and the kind that should be sent to the webhook.
+// WebhookInvocation 描述如何调用 webhook，包括其注册的 resource 与 subresource，
+// 以及应发送给它的 kind。
 //
 // 一个 webhook 的匹配规则以 Resource/Subresource 为准，但实际发送的对象
 // 可能是 Kind 指定的版本；两者分离是为了支持 webhook 要求旧版本的场景。
@@ -50,11 +49,10 @@ type WebhookInvocation struct {
 	Kind        schema.GroupVersionKind
 }
 
-// Dispatcher dispatches webhook call to a list of webhooks with admission attributes as argument.
+// Dispatcher 以准入属性为参数，把 webhook 调用分发给一组 webhook。
 type Dispatcher interface {
-	// Dispatch a request to the webhooks. Dispatcher may choose not to
-	// call a hook, either because the rules of the hook does not match, or
-	// the namespaceSelector or the objectSelector of the hook does not
-	// match. A non-nil error means the request is rejected.
+	// 将请求分发给 webhooks。Dispatcher 可能选择不调用某个 hook，
+	// 例如其 rules、namespaceSelector 或 objectSelector 不匹配。
+	// 返回非 nil 错误意味着请求被拒绝。
 	Dispatch(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces, hooks []webhook.WebhookAccessor) error
 }

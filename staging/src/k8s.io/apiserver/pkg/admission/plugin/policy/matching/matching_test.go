@@ -81,7 +81,7 @@ func TestMatcher(t *testing.T) {
 
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 将 deployments 同时归入所有 API 组
 			return "/deployments"
 		}
 		return ""
@@ -96,13 +96,13 @@ func TestMatcher(t *testing.T) {
 	mapper.RegisterKindFor(gvr("apps", "v1beta1", "deployments"), "scale", gvk("apps", "v1beta1", "Scale"))
 	mapper.RegisterKindFor(gvr("apps", "v1alpha1", "deployments"), "scale", gvk("apps", "v1alpha1", "Scale"))
 
-	// register invalid kinds to trigger an error
+	// 注册非法的 kind，以便触发错误
 	mapper.RegisterKindFor(gvr("example.com", "v1", "widgets"), "", gvk("", "", ""))
 	mapper.RegisterKindFor(gvr("example.com", "v2", "widgets"), "", gvk("", "", ""))
 
 	interfaces := &admission.RuntimeObjectInterfaces{EquivalentResourceMapper: mapper}
 
-	// TODO write test cases for name matching and exclude matching
+	// TODO: 补充名称匹配与排除匹配的测试用例
 	testcases := []struct {
 		name string
 
@@ -597,9 +597,8 @@ func TestMatcher(t *testing.T) {
 			if !expectResource.Empty() && !matches {
 				t.Fatalf("expectResource is non-empty, but did not match")
 			} else if expectResource.Empty() {
-				// Test for exact match by default. Tests that expect an equivalent
-				// resource to match should explicitly state so by supplying
-				// expectMatchResource
+				// 默认测试精确匹配。期望等价资源命中的用例，
+				// 需要通过提供 expectMatchResource 显式声明。
 				expectResource = testcase.attrs.GetResource()
 			}
 
@@ -649,7 +648,7 @@ func BenchmarkMatcher(b *testing.B) {
 
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 将 deployments 同时归入所有 API 组
 			return "/deployments"
 		}
 		return ""
@@ -725,7 +724,7 @@ func BenchmarkShouldCallHookWithComplexRule(b *testing.B) {
 
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 将 deployments 同时归入所有 API 组
 			return "/deployments"
 		}
 		return ""
@@ -797,7 +796,7 @@ func BenchmarkShouldCallHookWithComplexSelectorAndRule(b *testing.B) {
 
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 将 deployments 同时归入所有 API 组
 			return "/deployments"
 		}
 		return ""

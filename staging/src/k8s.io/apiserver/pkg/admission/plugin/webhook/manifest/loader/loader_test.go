@@ -80,14 +80,14 @@ func TestValidateWebhookClientConfig(t *testing.T) {
 // TestLoadManifests 验证目录加载：按扩展名筛选、支持单对象与 v1.List、
 // 拒绝不支持的类型，并对重名配置报错；成功时返回非空的内容哈希用于变更检测。
 func TestLoadManifests(t *testing.T) {
-	// Build a minimal decoder (admissionregistration types only, no full client-go scheme)
+	// 构建一个最小解码器（只含 admissionregistration 类型，不引入完整 client-go scheme）
 	// 只注册必要类型，避免测试依赖整个 client-go scheme。
 	s := runtime.NewScheme()
 	utilruntime.Must(admissionregistrationv1.AddToScheme(s))
 	s.AddUnversionedTypes(metav1.SchemeGroupVersion, &metav1.List{}, &metav1.Status{})
 	decoder := serializer.NewCodecFactory(s).UniversalDeserializer()
 
-	// Simple accept function that extracts the typed object (no kube-apiserver defaulting)
+	// 简单的 accept 函数，直接取出类型化对象（不做 kube-apiserver 默认化）
 	// 测试用 accept 不做默认值填充，只做类型断言，聚焦加载逻辑本身。
 	accept := func(obj runtime.Object) ([]*admissionregistrationv1.ValidatingWebhookConfiguration, error) {
 		vwc, ok := obj.(*admissionregistrationv1.ValidatingWebhookConfiguration)

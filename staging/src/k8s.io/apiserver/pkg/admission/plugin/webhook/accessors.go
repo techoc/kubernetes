@@ -33,87 +33,85 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// WebhookAccessor provides a common interface to both mutating and validating webhook types.
+// WebhookAccessor 为变更型与校验型 webhook 提供统一的访问接口。
 //
-// 中文说明：两类 webhook 的 API 结构相似但类型不同，访问器把它们统一起来；
+// 两类 webhook 的 API 结构相似但类型不同，访问器把它们统一起来；
 // 实现必须并发安全，因为同一访问器会被多个准入请求同时读取。
 type WebhookAccessor interface {
-	// This accessor provides the methods needed to support matching against webhook
-	// predicates
+	// 该访问器提供按 webhook predicates 匹配所需的方法。
 	namespace.NamespaceSelectorProvider
 	object.ObjectSelectorProvider
 
-	// GetUID gets a string that uniquely identifies the webhook.
+	// GetUID 返回唯一标识该 webhook 的字符串。
 	//
-	// 中文说明：UID 由配置 UID 与 webhook 名称组合而成，跨配置唯一；
+	// UID 由配置 UID 与 webhook 名称组合而成，跨配置唯一；
 	// 指标与日志用它区分同名 webhook。
 	GetUID() string
 
-	// GetConfigurationName gets the name of the webhook configuration that owns this webhook.
+	// GetConfigurationName 返回拥有该 webhook 的 webhook 配置名称。
 	GetConfigurationName() string
 
-	// GetRESTClient gets the webhook client
+	// GetRESTClient 返回 webhook 客户端。
 	//
-	// 中文说明：客户端按 clientConfig 惰性构造并缓存，ClientManager 负责
+	// 客户端按 clientConfig 惰性构造并缓存，ClientManager 负责
 	// 复用连接与证书；返回 error 时调用方应按 failurePolicy 处理。
 	GetRESTClient(clientManager *webhookutil.ClientManager) (*rest.RESTClient, error)
 
-	// GetCompiledMatcher gets the compiled matcher object
+	// GetCompiledMatcher 返回编译后的 matcher 对象。
 	//
-	// 中文说明：编译结果缓存于访问器内，首次调用后即复用；compiler 由
+	// 编译结果缓存于访问器内，首次调用后即复用；compiler 由
 	// 插件持有，同一访问器只应被同一个 compiler 编译。
 	GetCompiledMatcher(compiler cel.ConditionCompiler) matchconditions.Matcher
 
-	// GetName gets the webhook Name field. Note that the name is scoped to the webhook
-	// configuration and does not provide a globally unique identity, if a unique identity is
-	// needed, use GetUID.
+	// GetName 返回 webhook 的 Name 字段。注意该名称仅在 webhook 配置内有效，
+	// 不具备全局唯一身份；如需唯一身份，请使用 GetUID。
 	GetName() string
-	// GetClientConfig gets the webhook ClientConfig field.
+	// GetClientConfig 返回 webhook 的 ClientConfig 字段。
 	GetClientConfig() v1.WebhookClientConfig
-	// GetRules gets the webhook Rules field.
+	// GetRules 返回 webhook 的 Rules 字段。
 	GetRules() []v1.RuleWithOperations
-	// GetFailurePolicy gets the webhook FailurePolicy field.
+	// GetFailurePolicy 返回 webhook 的 FailurePolicy 字段。
 	GetFailurePolicy() *v1.FailurePolicyType
-	// GetMatchPolicy gets the webhook MatchPolicy field.
+	// GetMatchPolicy 返回 webhook 的 MatchPolicy 字段。
 	GetMatchPolicy() *v1.MatchPolicyType
-	// GetNamespaceSelector gets the webhook NamespaceSelector field.
+	// GetNamespaceSelector 返回 webhook 的 NamespaceSelector 字段。
 	GetNamespaceSelector() *metav1.LabelSelector
-	// GetObjectSelector gets the webhook ObjectSelector field.
+	// GetObjectSelector 返回 webhook 的 ObjectSelector 字段。
 	GetObjectSelector() *metav1.LabelSelector
-	// GetSideEffects gets the webhook SideEffects field.
+	// GetSideEffects 返回 webhook 的 SideEffects 字段。
 	GetSideEffects() *v1.SideEffectClass
-	// GetTimeoutSeconds gets the webhook TimeoutSeconds field.
+	// GetTimeoutSeconds 返回 webhook 的 TimeoutSeconds 字段。
 	GetTimeoutSeconds() *int32
-	// GetAdmissionReviewVersions gets the webhook AdmissionReviewVersions field.
+	// GetAdmissionReviewVersions 返回 webhook 的 AdmissionReviewVersions 字段。
 	GetAdmissionReviewVersions() []string
 
-	// GetMatchConditions gets the webhook match conditions field.
+	// GetMatchConditions 返回 webhook 的 matchConditions 字段。
 	GetMatchConditions() []v1.MatchCondition
 
-	// GetMutatingWebhook if the accessor contains a MutatingWebhook, returns it and true, else returns false.
+	// GetMutatingWebhook 若访问器包含 MutatingWebhook，返回它和 true，否则返回 false。
 	//
-	// 中文说明：用 (value, ok) 而非返回 nil 接口，避免调用方对 nil 接口
+	// 用 (value, ok) 而非返回 nil 接口，避免调用方对 nil 接口
 	// 与 nil 指针的判断混淆。
 	GetMutatingWebhook() (*v1.MutatingWebhook, bool)
-	// GetValidatingWebhook if the accessor contains a ValidatingWebhook, returns it and true, else returns false.
+	// GetValidatingWebhook 若访问器包含 ValidatingWebhook，返回它和 true，否则返回 false。
 	GetValidatingWebhook() (*v1.ValidatingWebhook, bool)
 
-	// GetType returns the type of the accessor (validate or admit)
+	// GetType 返回访问器的类型（validate 或 admit）。
 	//
-	// 中文说明：返回固定字符串而非枚举，是因为它直接用作指标标签与日志字段。
+	// 返回固定字符串而非枚举，是因为它直接用作指标标签与日志字段。
 	GetType() string
 }
 
-// NewMutatingWebhookAccessor creates an accessor for a MutatingWebhook.
+// NewMutatingWebhookAccessor 为 MutatingWebhook 创建访问器。
 //
-// 中文说明：configurationName 用于日志定位；uid 需由调用方保证唯一。
+// configurationName 用于日志定位；uid 需由调用方保证唯一。
 func NewMutatingWebhookAccessor(uid, configurationName string, h *v1.MutatingWebhook) WebhookAccessor {
 	return &mutatingWebhookAccessor{uid: uid, configurationName: configurationName, MutatingWebhook: h}
 }
 
 // mutatingWebhookAccessor 包装 MutatingWebhook，并惰性缓存派生结果。
 //
-// 中文说明：selector、client、matcher 的构造都可能失败或较慢，用 sync.Once
+// selector、client、matcher 的构造都可能失败或较慢，用 sync.Once
 // 保证只做一次且并发安全；缓存结果包含 error，避免失败路径被反复重试。
 type mutatingWebhookAccessor struct {
 	*v1.MutatingWebhook
@@ -159,7 +157,7 @@ func (m *mutatingWebhookAccessor) GetType() string {
 
 // GetCompiledMatcher 编译并缓存 matchConditions。
 //
-// 中文说明：webhook 的 matchConditions 不可使用 params，但可见 authorizer，
+// webhook 的 matchConditions 不可使用 params，但可见 authorizer，
 // 因此 OptionalVariableDeclarations 固定为 HasParams=false、HasAuthorizer=true。
 func (m *mutatingWebhookAccessor) GetCompiledMatcher(compiler cel.ConditionCompiler) matchconditions.Matcher {
 	m.compileMatcher.Do(func() {
@@ -184,7 +182,7 @@ func (m *mutatingWebhookAccessor) GetCompiledMatcher(compiler cel.ConditionCompi
 
 // GetParsedNamespaceSelector 把 LabelSelector 解析为可复用选择器并缓存。
 //
-// 中文说明：解析失败会缓存 error，配置修正后需重新构建访问器才能恢复。
+// 解析失败会缓存 error，配置修正后需重新构建访问器才能恢复。
 func (m *mutatingWebhookAccessor) GetParsedNamespaceSelector() (labels.Selector, error) {
 	m.initNamespaceSelector.Do(func() {
 		m.namespaceSelector, m.namespaceSelectorErr = metav1.LabelSelectorAsSelector(m.NamespaceSelector)
@@ -252,14 +250,14 @@ func (m *mutatingWebhookAccessor) GetValidatingWebhook() (*v1.ValidatingWebhook,
 	return nil, false
 }
 
-// NewValidatingWebhookAccessor creates an accessor for a ValidatingWebhook.
+// NewValidatingWebhookAccessor 为 ValidatingWebhook 创建访问器。
 func NewValidatingWebhookAccessor(uid, configurationName string, h *v1.ValidatingWebhook) WebhookAccessor {
 	return &validatingWebhookAccessor{uid: uid, configurationName: configurationName, ValidatingWebhook: h}
 }
 
 // validatingWebhookAccessor 与 mutatingWebhookAccessor 结构对称，仅类型不同。
 //
-// 中文说明：故意不抽象为泛型：API 类型没有公共字段接口，强行泛型化反而
+// 故意不抽象为泛型：API 类型没有公共字段接口，强行泛型化反而
 // 需要大量类型开关。
 type validatingWebhookAccessor struct {
 	*v1.ValidatingWebhook
@@ -299,7 +297,7 @@ func (v *validatingWebhookAccessor) GetRESTClient(clientManager *webhookutil.Cli
 
 // GetCompiledMatcher 编译并缓存 matchConditions。
 //
-// 中文说明：与 mutating 版本唯一差别是传给 NewMatcher 的 operation 标签
+// 与 mutating 版本唯一差别是传给 NewMatcher 的 operation 标签
 // 为 "validating"，用于错误信息中指明阶段。
 func (v *validatingWebhookAccessor) GetCompiledMatcher(compiler cel.ConditionCompiler) matchconditions.Matcher {
 	v.compileMatcher.Do(func() {
@@ -394,12 +392,12 @@ func (v *validatingWebhookAccessor) GetValidatingWebhook() (*v1.ValidatingWebhoo
 	return v.ValidatingWebhook, true
 }
 
-// hookClientConfigForWebhook construct a webhookutil.ClientConfig using a WebhookAccessor to access
-// v1beta1.MutatingWebhook and v1beta1.ValidatingWebhook API objects.  webhookutil.ClientConfig is used
-// to create a HookClient and the purpose of the config struct is to share that with other packages
-// that need to create a HookClient.
+// hookClientConfigForWebhook 通过 WebhookAccessor 读取
+// v1beta1.MutatingWebhook 与 v1beta1.ValidatingWebhook API 对象，构造
+// webhookutil.ClientConfig。webhookutil.ClientConfig 用于创建 HookClient，
+// 该配置结构体的意义是与其他需要创建 HookClient 的包共享此配置。
 //
-// 中文说明：URL 与 Service 互斥，API 校验已保证只有一个被设置；端口缺省为 443
+// URL 与 Service 互斥，API 校验已保证只有一个被设置；端口缺省为 443
 // 是历史约定，避免要求用户总是显式写端口。
 func hookClientConfigForWebhook(w WebhookAccessor) webhookutil.ClientConfig {
 	ret := webhookutil.ClientConfig{Name: w.GetName(), CABundle: w.GetClientConfig().CABundle}

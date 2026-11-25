@@ -293,14 +293,13 @@ func TestApplyConfiguration(t *testing.T) {
 				},
 			},
 		},
-		// This test verifies that modifying an existing environment variable works correctly,
-		// even if the original object contains duplicates.
-		// Because 'env' is defined with `listType=map` and `listMapKey=name` in the schema,
-		// Structured Merge Diff (SMD) treats 'name' as the unique key.
-		// When the patch updates the entry with name="test", SMD merges the changes.
-		// As a side effect of the merge process on a map-type list, duplicate entries for the
-		// same key in the original object are consolidated into a single entry in the result.
-		// This matches the behavior of Server-Side Apply (SSA) and kubectl apply.
+		// 该用例验证：即使原对象含有重复项，修改已存在的环境变量也能正确生效。
+		// 由于 schema 中 env 被声明为 `listType=map` 且 `listMapKey=name`，
+		// 结构化合并差异（SMD）以 'name' 作为唯一键。
+		// 当补丁更新 name="test" 的条目时，SMD 会合并这些变更。
+		// 作为对 map 型列表执行合并的副作用，原对象中同一键的重复条目
+		// 会在结果中被归并为单一条目。
+		// 这与 Server-Side Apply（SSA）和 kubectl apply 的行为一致。
 		{
 			name: "apply configuration modify existing env variable",
 			expression: `Object{

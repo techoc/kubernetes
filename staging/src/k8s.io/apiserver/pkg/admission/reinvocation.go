@@ -18,10 +18,10 @@ package admission
 
 import "context"
 
-// newReinvocationHandler creates a handler that wraps the provided admission chain and reinvokes it
-// if needed according to re-invocation policy of the webhooks.
+// newReinvocationHandler 创建一个包装给定准入链的 handler，
+// 并按各 webhook 的重入策略在需要时重新调用该链。
 //
-// 中文说明：重入只发生在变更阶段；后续 webhook 可能修改了前序 webhook 关心的字段，
+// 重入只发生在变更阶段；后续 webhook 可能修改了前序 webhook 关心的字段，
 // 因此需要给它们一次基于最终对象的重新判断机会。
 func newReinvocationHandler(admissionChain Interface) Interface {
 	return &reinvoker{admissionChain}
@@ -29,18 +29,17 @@ func newReinvocationHandler(admissionChain Interface) Interface {
 
 // reinvoker 包装整条准入链，至多触发一次额外调用。
 //
-// 中文说明：只重入一次（由 SetIsReinvoke 保证），防止互相修改的 webhook 之间
+// 只重入一次（由 SetIsReinvoke 保证），防止互相修改的 webhook 之间
 // 无限来回震荡；这是有意的收敛保证。
 type reinvoker struct {
 	admissionChain Interface
 }
 
-// Admit performs an admission control check using the wrapped admission chain, reinvoking the
-// admission chain if needed according to the reinvocation policy.  Plugins are expected to check
-// the admission attributes' reinvocation context against their reinvocation policy to decide if
-// they should re-run, and to update the reinvocation context if they perform any mutations.
+// Admit 使用被包装的准入链执行准入控制检查，并根据重入策略在需要时重新调用准入链。
+// 插件应当检查准入属性的重入上下文是否符合其重入策略来决定是否重跑，
+// 并在执行变更时更新重入上下文。
 //
-// 中文说明：首次 Admit 出错立即返回；只有成功且上下文请求重入时才执行第二次。
+// 首次 Admit 出错立即返回；只有成功且上下文请求重入时才执行第二次。
 // 第二次调用覆盖整条链，树内插件也会被重跑，因此它们必须保证幂等。
 func (r *reinvoker) Admit(ctx context.Context, a Attributes, o ObjectInterfaces) error {
 	if mutator, ok := r.admissionChain.(MutationInterface); ok {
@@ -52,18 +51,17 @@ func (r *reinvoker) Admit(ctx context.Context, a Attributes, o ObjectInterfaces)
 		if s.ShouldReinvoke() {
 			// 先标记再调用：即便第二次调用中再次设置请求，也不会形成第三次调用。
 			s.SetIsReinvoke()
-			// Calling admit a second time will reinvoke all in-tree plugins
-			// as well as any webhook plugins that need to be reinvoked based on the
-			// reinvocation policy.
+			// 第二次调用 Admit 会重新调用所有树内插件，
+			// 以及根据重入策略需要重入的 webhook 插件。
 			return mutator.Admit(ctx, a, o)
 		}
 	}
 	return nil
 }
 
-// Validate performs an admission control check using the wrapped admission chain, and returns immediately on first error.
+// Validate 使用被包装的准入链执行准入控制检查，并在遇到第一个错误时立即返回。
 //
-// 中文说明：校验阶段不做重入——校验只读对象，不会引入需要重新判断的变更。
+// 校验阶段不做重入——校验只读对象，不会引入需要重新判断的变更。
 func (r *reinvoker) Validate(ctx context.Context, a Attributes, o ObjectInterfaces) error {
 	if validator, ok := r.admissionChain.(ValidationInterface); ok {
 		return validator.Validate(ctx, a, o)
@@ -71,9 +69,9 @@ func (r *reinvoker) Validate(ctx context.Context, a Attributes, o ObjectInterfac
 	return nil
 }
 
-// Handles will return true if any of the admission chain handlers handle the given operation.
+// Handles 在准入链中任意 handler 处理给定操作时返回 true。
 //
-// 中文说明：直接委托，包装层不改变操作支持集合。
+// 直接委托，包装层不改变操作支持集合。
 func (r *reinvoker) Handles(operation Operation) bool {
 	return r.admissionChain.Handles(operation)
 }

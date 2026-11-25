@@ -43,7 +43,7 @@ const (
 	EvalDeny  PolicyDecisionEvaluation = "deny"
 )
 
-// PolicyDecision contains the action determined from a cel evaluation along with metadata such as message, reason and duration
+// PolicyDecision 记录由 CEL 求值得出的动作，以及 message、reason、耗时等元数据。
 //
 // 该结构会出现在审计与拒绝响应中，字段语义需保持稳定。
 type PolicyDecision struct {
@@ -63,15 +63,12 @@ type PolicyDecision struct {
 type PolicyAuditAnnotationAction string
 
 const (
-	// AuditAnnotationActionPublish indicates that the audit annotation should be
-	// published with the audit event.
+	// AuditAnnotationActionPublish 表示该审计注解应随审计事件一起发布。
 	AuditAnnotationActionPublish PolicyAuditAnnotationAction = "publish"
-	// AuditAnnotationActionError indicates that the valueExpression resulted
-	// in an error.
+	// AuditAnnotationActionError 表示 valueExpression 求值出错。
 	AuditAnnotationActionError PolicyAuditAnnotationAction = "error"
-	// AuditAnnotationActionExclude indicates that the audit annotation should be excluded
-	// because the valueExpression evaluated to null, or because FailurePolicy is Ignore
-	// and the expression failed with a parse error, type check error, or runtime error.
+	// AuditAnnotationActionExclude 表示应排除该审计注解：valueExpression 求值为
+	// null，或 FailurePolicy 为 Ignore 且表达式出现解析、类型检查或运行时错误。
 	AuditAnnotationActionExclude PolicyAuditAnnotationAction = "exclude"
 )
 
@@ -97,7 +94,7 @@ func reasonToCode(r metav1.StatusReason) int32 {
 	case metav1.StatusReasonInvalid:
 		return http.StatusUnprocessableEntity
 	default:
-		// It should not reach here since we only allow above reason to be set from API level
+		// 不应走到这里：API 层只允许设置上述几种 reason
 		return http.StatusUnprocessableEntity
 	}
 }

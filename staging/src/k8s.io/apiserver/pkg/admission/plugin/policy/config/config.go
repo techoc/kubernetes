@@ -42,26 +42,26 @@ func init() {
 	utilruntime.Must(v1.AddToScheme(scheme))
 }
 
-// PolicyConfig holds the configuration loaded from the config file.
+// PolicyConfig 保存从配置文件加载的配置。
 //
-// 中文说明：只暴露已校验的字段，调用方无需再关心版本转换细节。
+// 只暴露已校验的字段，调用方无需再关心版本转换细节。
 type PolicyConfig struct {
-	// StaticManifestsDir is the path to the directory containing static policy manifests.
+	// StaticManifestsDir 是存放静态策略清单的目录路径。
 	StaticManifestsDir string
 }
 
-// staticManifestsDirAccessor is implemented by config types that have a StaticManifestsDir field.
+// staticManifestsDirAccessor 由带有 StaticManifestsDir 字段的配置类型实现。
 //
-// 中文说明：内部访问器接口让 loadConfig 能同时处理 validating 与 mutating
+// 内部访问器接口让 loadConfig 能同时处理 validating 与 mutating
 // 两种配置类型，而无需在加载逻辑里写重复的类型分支。
 type staticManifestsDirAccessor interface {
 	runtime.Object
 	GetStaticManifestsDir() string
 }
 
-// LoadValidatingConfig extracts the validating admission policy configuration from configFile.
+// LoadValidatingConfig 从 configFile 中提取 validating admission policy 配置。
 //
-// 中文说明：类型判定基于内部（无版本）类型，因为 UniversalDecoder 已先完成转换。
+// 类型判定基于内部（无版本）类型，因为 UniversalDecoder 已先完成转换。
 func LoadValidatingConfig(configFile io.Reader) (PolicyConfig, error) {
 	return loadConfig(configFile, func(obj runtime.Object) bool {
 		_, ok := obj.(*policyconfig.ValidatingAdmissionPolicyConfiguration)
@@ -69,9 +69,9 @@ func LoadValidatingConfig(configFile io.Reader) (PolicyConfig, error) {
 	})
 }
 
-// LoadMutatingConfig extracts the mutating admission policy configuration from configFile.
+// LoadMutatingConfig 从 configFile 中提取 mutating admission policy 配置。
 //
-// 中文说明：与 LoadValidatingConfig 共享加载逻辑，仅类型过滤不同。
+// 与 LoadValidatingConfig 共享加载逻辑，仅类型过滤不同。
 func LoadMutatingConfig(configFile io.Reader) (PolicyConfig, error) {
 	return loadConfig(configFile, func(obj runtime.Object) bool {
 		_, ok := obj.(*policyconfig.MutatingAdmissionPolicyConfiguration)

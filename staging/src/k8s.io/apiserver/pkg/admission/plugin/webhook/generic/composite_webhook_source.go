@@ -24,8 +24,8 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook"
 )
 
-// compositeWebhookSource combines multiple webhook sources into a single source.
-// Static (manifest-based) webhooks are returned before API-based webhooks.
+// compositeWebhookSource 把多个 webhook 来源合并为单一来源。
+// 静态（基于 manifest）的 webhook 排在基于 API 的 webhook 之前。
 //
 // 缓存 last* 字段是为了避免每次准入请求都重新拼接切片：Webhooks() 在热路径上
 // 被频繁调用，而底层来源通常长时间不变。比较的是切片底层数组指针，而不是
@@ -42,9 +42,9 @@ type compositeWebhookSource struct {
 
 var _ Source = &compositeWebhookSource{}
 
-// NewCompositeWebhookSource creates a webhook source that combines static and API-based sources.
-// Static webhooks are evaluated first, followed by API-based webhooks.
-// If staticSource is nil, only apiSource webhooks are returned.
+// NewCompositeWebhookSource 创建一个合并静态来源与 API 来源的 webhook 来源。
+// 静态 webhook 先被求值，其后是基于 API 的 webhook。
+// 若 staticSource 为 nil，则只返回 apiSource 的 webhook。
 func NewCompositeWebhookSource(staticSource, apiSource Source) Source {
 	if staticSource == nil {
 		return apiSource
@@ -55,9 +55,9 @@ func NewCompositeWebhookSource(staticSource, apiSource Source) Source {
 	}
 }
 
-// Webhooks returns all webhook accessors from both sources.
-// Static webhooks come first, followed by API-based webhooks.
-// The combined slice is cached and reused when the underlying slices haven't changed.
+// Webhooks 返回两个来源的全部 webhook accessor。
+// 静态 webhook 在前，随后是基于 API 的 webhook。
+// 当底层切片未变化时，合并后的切片会被缓存并复用。
 func (c *compositeWebhookSource) Webhooks() []webhook.WebhookAccessor {
 	var staticSlice, apiSlice []webhook.WebhookAccessor
 	if c.staticSource != nil {
@@ -78,7 +78,7 @@ func (c *compositeWebhookSource) Webhooks() []webhook.WebhookAccessor {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Re-check under write lock.
+	// 在写锁下重新检查。
 	// 可能在释放读锁到获取写锁之间，另一个 goroutine 已经完成重建。
 	if slicesAreEqual(c.lastStaticSlice, staticSlice) && slicesAreEqual(c.lastAPISlice, apiSlice) {
 		return c.lastCombined
@@ -94,7 +94,7 @@ func (c *compositeWebhookSource) Webhooks() []webhook.WebhookAccessor {
 	return combined
 }
 
-// slicesAreEqual reports whether two slices share the same backing array and length.
+// slicesAreEqual 报告两个切片是否共享同一底层数组且长度相同。
 //
 // 只比较首元素地址：只要底层来源返回同一个切片（即使内容被原地修改），就认为
 // 未变化。这依赖来源返回稳定切片的约定，换来的是零分配的比较。
@@ -102,7 +102,7 @@ func slicesAreEqual[T any](a, b []T) bool {
 	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
 }
 
-// HasSynced returns true only when both sources have synced.
+// HasSynced 仅当两个来源都已同步时返回 true。
 //
 // nil 来源视为已同步：未配置的来源不阻塞准入链启动。
 func (c *compositeWebhookSource) HasSynced() bool {

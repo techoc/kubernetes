@@ -31,12 +31,12 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
-// TestExcludeVirtualResources verifies the ValidatingAdmissionWebhook plugin implements the
-// WantsExcludedAdmissionResources initializer and, when ExcludeAdmissionWebhookVirtualResources is
-// enabled, skips dispatch for excluded resources (so a rejecting webhook is never called); when the
-// gate is disabled it dispatches as before. The production excluded set is auth/authz virtual
-// resources; here a core resource is marked excluded so the mechanism can be exercised with the
-// fixtures the webhook test harness supports.
+// TestExcludeVirtualResources 验证 ValidatingAdmissionWebhook 插件实现了
+// WantsExcludedAdmissionResources 初始化接口；当启用 ExcludeAdmissionWebhookVirtualResources
+// 时会为被排除的资源跳过分发（因此拒绝请求的 webhook 永远不会被调用）；门控
+// 关闭时则照旧分发。生产环境的排除集合是 auth/authz 虚拟
+// 资源；这里把一个核心资源标记为排除，以便用 webhook
+// 测试框架支持的夹具来演练该机制。
 //
 // 测试思路：同一套断言在开关开/关两种配置下各跑一次，只有“是否调用 webhook”这一变量不同。
 // 由于 webhook 配置为 fail policy 且总是拒绝，开关生效时 Validate 返回 nil 即证明未分发。
@@ -67,7 +67,7 @@ func TestExcludeVirtualResources(t *testing.T) {
 		},
 		FailurePolicy: &fail,
 		SideEffects:   &none,
-		// Empty (non-nil) selectors match everything; nil would parse to "matches nothing".
+		// 空的（非 nil）selector 匹配一切；nil 会被解析为“不匹配任何对象”。
 		NamespaceSelector:       &metav1.LabelSelector{},
 		ObjectSelector:          &metav1.LabelSelector{},
 		AdmissionReviewVersions: []string{"v1"},
@@ -78,8 +78,8 @@ func TestExcludeVirtualResources(t *testing.T) {
 		t.Fatalf("failed to create validating webhook: %v", err)
 	}
 
-	// WantsExcludedAdmissionResources wiring. NewAttribute issues a request for the core "pod"
-	// resource, so mark that excluded.
+	// WantsExcludedAdmissionResources 的接线。NewAttribute 发出的请求针对核心 "pod"
+	// 资源，因此把它标记为排除。
 	wants, ok := interface{}(wh).(initializer.WantsExcludedAdmissionResources)
 	if !ok {
 		t.Fatal("plugin does not implement WantsExcludedAdmissionResources")
@@ -106,13 +106,13 @@ func TestExcludeVirtualResources(t *testing.T) {
 	attr := webhooktesting.NewAttribute("default", nil, false)
 	o := webhooktesting.NewObjectInterfacesForTest()
 
-	// Gate enabled: the excluded resource is skipped, so the rejecting webhook is never called.
+	// 门控开启：被排除的资源被跳过，拒绝请求的 webhook 不会被调用。
 	wantsFeatures.InspectFeatureGates(newExcludeGate(t, true))
 	if err := wh.Validate(context.TODO(), attr, o); err != nil {
 		t.Errorf("with gate enabled, expected the excluded resource to be skipped (nil), got: %v", err)
 	}
 
-	// Gate disabled: the webhook is dispatched and rejects the request.
+	// 门控关闭：webhook 被分发并拒绝请求。
 	wantsFeatures.InspectFeatureGates(newExcludeGate(t, false))
 	if err := wh.Validate(context.TODO(), attr, o); err == nil {
 		t.Error("with gate disabled, expected the webhook to reject the request, got nil")

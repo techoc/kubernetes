@@ -42,7 +42,7 @@ var (
 )
 
 // Register registers a plugin
-// 中文说明：配置在插件注册时解析并校验，配置错误会直接导致 apiserver 启动失败，
+// 配置在插件注册时解析并校验，配置错误会直接导致 apiserver 启动失败，
 // 而不是在首个请求时才暴露。5 是评估器并发数。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName,
@@ -64,7 +64,7 @@ func Register(plugins *admission.Plugins) {
 
 // QuotaAdmission implements an admission controller that can enforce quota constraints
 //
-// 中文说明：只实现 ValidationInterface，即只在 create/update 时做校验；配额的实际
+// 只实现 ValidationInterface，即只在 create/update 时做校验；配额的实际
 // 扣减由 quota controller 异步完成，这里负责拒绝超额请求。
 type QuotaAdmission struct {
 	*admission.Handler
@@ -94,7 +94,7 @@ type liveLookupEntry struct {
 // using the provided registry.  The registry must have the capability to handle group/kinds that
 // are persisted by the server this admission controller is intercepting
 //
-// 中文说明：此处只注册 create/update；Delete 不需要准入校验，配额回收由 controller 处理。
+// 此处只注册 create/update；Delete 不需要准入校验，配额回收由 controller 处理。
 func NewResourceQuota(config *resourcequotaapi.Configuration, numEvaluators int) (*QuotaAdmission, error) {
 	quotaAccessor, err := newQuotaAccessor()
 	if err != nil {
@@ -129,7 +129,7 @@ func (a *QuotaAdmission) SetExternalKubeInformerFactory(f informers.SharedInform
 
 // SetQuotaConfiguration assigns and initializes configuration and evaluator for QuotaAdmission
 //
-// 中文说明：evaluator 需要 stopCh 才能启动后台 worker；initializer 的调用顺序不保证
+// evaluator 需要 stopCh 才能启动后台 worker；initializer 的调用顺序不保证
 // stopCh 先于配置注入，因此这里记录错误，留给 ValidateInitialization 统一报出。
 func (a *QuotaAdmission) SetQuotaConfiguration(c quota.Configuration) {
 	a.quotaConfiguration = c
@@ -171,7 +171,7 @@ func (a *QuotaAdmission) ValidateInitialization() error {
 
 // Validate makes admission decisions while enforcing quota
 //
-// 中文说明：非 namespace 作用域的请求不受配额约束；创建 Namespace 本身也跳过，
+// 非 namespace 作用域的请求不受配额约束；创建 Namespace 本身也跳过，
 // 否则 Namespace 创建会因尚不存在配额对象而出现自引用问题。
 func (a *QuotaAdmission) Validate(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	// ignore all operations that are not namespaced or creation of namespaces

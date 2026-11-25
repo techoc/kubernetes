@@ -31,19 +31,19 @@ import (
 func TestAddAnnotation(t *testing.T) {
 	attr := &attributesRecord{}
 
-	// test AddAnnotation
+	// 测试 AddAnnotation
 	attr.AddAnnotation("foo.admission.k8s.io/key1", "value1")
 	attr.AddAnnotation("foo.admission.k8s.io/key2", "value2")
 	annotations := attr.getAnnotations(auditinternal.LevelMetadata)
 	assert.Equal(t, "value1", annotations["foo.admission.k8s.io/key1"])
 
-	// test overwrite
+	// 测试覆盖写入
 	assert.Error(t, attr.AddAnnotation("foo.admission.k8s.io/key1", "value1-overwrite"),
 		"admission annotations should not be allowd to be overwritten")
 	annotations = attr.getAnnotations(auditinternal.LevelMetadata)
 	assert.Equal(t, "value1", annotations["foo.admission.k8s.io/key1"], "admission annotations should not be overwritten")
 
-	// test invalid plugin names
+	// 测试非法插件名
 	//
 	// 非法输入覆盖四类错误：DNS 子域名格式错误、缺少插件名、缺少 key、空串。
 	var testCases = map[string]string{
@@ -59,7 +59,7 @@ func TestAddAnnotation(t *testing.T) {
 		assert.Equal(t, "", annotations[invalidKey], name+": invalid pluginName is not allowed ")
 	}
 
-	// test all saved annotations
+	// 测试全部已保存的注解
 	//
 	// 最终只应留下两条合法注解：失败的写入不能产生残留。
 	assert.Equal(

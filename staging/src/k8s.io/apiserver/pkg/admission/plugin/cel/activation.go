@@ -32,7 +32,7 @@ import (
 	"k8s.io/apiserver/pkg/cel/library"
 )
 
-// activationOptions holds options for newActivation.
+// activationOptions 保存 newActivation 的选项。
 // 用函数式选项而非新增参数，避免调用点随选项增加而频繁改动。
 type activationOptions struct {
 	// useSchemalessTypeRef 为 true 时，对象使用无 schema 的类型引用（schemaless）来求值，
@@ -40,11 +40,11 @@ type activationOptions struct {
 	useSchemalessTypeRef bool
 }
 
-// activationOption defines a functional option for newActivation.
+// activationOption 是 newActivation 的函数式选项类型。
 // 函数式选项：每次调用都新建一个闭包，保证选项之间互不影响。
 type activationOption func(*activationOptions)
 
-// useSchemalessTypeRef returns an activationOption that configures the activation to use SchemalessTypeRef on the versioned attributes.
+// useSchemalessTypeRef 返回一个 activationOption，使 activation 对版本化属性使用 SchemalessTypeRef。
 // 仅用于 admission 策略插件等尚未切换到无 schema 求值的调用方。
 func useSchemalessTypeRef() activationOption {
 	return func(o *activationOptions) {
@@ -52,8 +52,8 @@ func useSchemalessTypeRef() activationOption {
 	}
 }
 
-// newActivation creates an activation for CEL admission plugins from the given request, admission chain and
-// variable binding information.
+// newActivation 根据给定的请求、准入链与变量绑定信息，
+// 为 CEL 准入插件创建 activation。
 // 返回的 activation 在单次请求的整个表达式求值过程中复用，因此其中的值在构建后必须视为只读。
 func newActivation(compositionCtx CompositionContext, versionedAttr *admission.VersionedAttributes, request *admissionv1.AdmissionRequest, inputs OptionalVariableBindings, namespace *v1.Namespace, options ...activationOption) (*evaluationActivation, error) {
 	// 先应用全部选项，再根据选项决定如何准备对象。
@@ -107,7 +107,7 @@ func newActivation(compositionCtx CompositionContext, versionedAttr *admission.V
 		requestResourceAuthorizer: requestResourceAuthorizerVal,
 	}
 
-	// composition is an optional feature that only applies for ValidatingAdmissionPolicy and MutatingAdmissionPolicy.
+	// composition 是可选特性，仅适用于 ValidatingAdmissionPolicy 与 MutatingAdmissionPolicy。
 	// 变量在这里惰性求值，因此真正的开销要等到表达式引用它们时才会产生。
 	if compositionCtx != nil {
 		va.variables = compositionCtx.Variables(va)
@@ -122,8 +122,7 @@ type evaluationActivation struct {
 	object, oldObject, params, request, namespace, authorizer, requestResourceAuthorizer, variables interface{}
 }
 
-// ResolveName returns a value from the activation by qualified name, or false if the name
-// could not be found.
+// ResolveName 按限定名从 activation 中取值，找不到时返回 false。
 // 返回 false 让 cel-go 报 "no such attribute"，而不是静默得到 null；
 // params 例外——它在未绑定时显式返回 nil，以符合 CEL 变量语义。
 func (a *evaluationActivation) ResolveName(name string) (interface{}, bool) {
@@ -133,7 +132,7 @@ func (a *evaluationActivation) ResolveName(name string) (interface{}, bool) {
 	case OldObjectVarName:
 		return a.oldObject, true
 	case ParamsVarName:
-		return a.params, true // params may be null
+		return a.params, true // params 可能为 null
 	case RequestVarName:
 		return a.request, true
 	case NamespaceVarName:
@@ -143,27 +142,27 @@ func (a *evaluationActivation) ResolveName(name string) (interface{}, bool) {
 		return a.authorizer, a.authorizer != nil
 	case RequestResourceAuthorizerVarName:
 		return a.requestResourceAuthorizer, a.requestResourceAuthorizer != nil
-	case VariableVarName: // variables always present
+	case VariableVarName: // variables 总是存在
 		return a.variables, true
 	default:
 		return nil, false
 	}
 }
 
-// Parent returns the parent of the current activation, may be nil.
-// If non-nil, the parent will be searched during resolve calls.
+// Parent 返回当前 activation 的父级，可能为 nil。
+// 若非 nil，resolve 调用时会向父级继续查找。
 // 策略插件使用扁平命名空间，不需要父激活链。
 func (a *evaluationActivation) Parent() interpreter.Activation {
 	return nil
 }
 
-// Evaluate runs a compiled CEL admission plugin expression using the provided activation and CEL
-// runtime cost budget.
+// Evaluate 使用给定的 activation 与 CEL 运行时成本预算，
+// 求值已编译的 CEL 准入插件表达式。
 // 返回值中的 remainingBudget 为 -1 表示预算已耗尽或无法计算，调用方应停止后续规则。
 // 返回的 error 仅在成本核算出现不可恢复问题时非 nil；表达式自身的错误记录在 EvaluationResult.Error 中。
 func (a *evaluationActivation) Evaluate(ctx context.Context, compositionCtx CompositionContext, compilationResult CompilationResult, remainingBudget int64) (EvaluationResult, int64, error) {
 	var evaluation = EvaluationResult{}
-	if compilationResult.ExpressionAccessor == nil { // in case of placeholder
+	if compilationResult.ExpressionAccessor == nil { // 占位符情况
 		// 占位表达式（例如仅用于声明匹配条件）不产生任何开销。
 		return evaluation, remainingBudget, nil
 	}
@@ -188,7 +187,7 @@ func (a *evaluationActivation) Evaluate(ctx context.Context, compositionCtx Comp
 	}
 	t1 := time.Now()
 	evalResult, evalDetails, err := compilationResult.Program.ContextEval(ctx, a)
-	// budget may be spent due to lazy evaluation of composited variables
+	// 预算可能因组合变量的惰性求值而被消耗
 	// 组合变量在表达式引用时才求值，其成本必须从同一预算中扣除，防止绕过成本限制。
 	if compositionCtx != nil {
 		compositionCost := compositionCtx.GetAndResetCost()

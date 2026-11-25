@@ -38,7 +38,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
-// BenchmarkAdmit tests the performance cost of invoking a mutating webhook
+// BenchmarkAdmit 测试调用 mutating webhook 的性能开销。
 //
 // 若未设置 WEBHOOK_TEST_SERVER_URL，会在进程内起一个测试服务端，此时测得的时间包含
 // webhook 本身的处理开销，只适合做相对比较。
@@ -68,7 +68,7 @@ func BenchmarkAdmit(b *testing.B) {
 		webhooktesting.ConvertToMutatingTestCases(webhooktesting.NewNonMutatingTestCases(serverURL), "test-webhooks")...)
 
 	for _, tt := range testCases {
-		// For now, skip failure cases or tests that explicitly skip benchmarking
+		// 暂时跳过失败用例或显式跳过基准测试的用例
 		if !tt.ExpectAllow || tt.SkipBenchmark {
 			continue
 		}
@@ -112,7 +112,7 @@ func BenchmarkAdmit(b *testing.B) {
 	}
 }
 
-// TestAdmit tests that MutatingWebhook#Admit works as expected
+// TestAdmit 测试 MutatingWebhook#Admit 是否按预期工作。
 //
 // 覆盖允许/拒绝、patch 应用、注解、状态码、拒绝指标以及重调用决策等场景；
 // 每个用例都会重新构造插件与 informer，避免用例间状态串扰。
@@ -177,7 +177,7 @@ func TestAdmit(t *testing.T) {
 					t.Errorf("expected labels '%v', but got '%v'", tt.ExpectLabels, attr.GetObject().(metav1.Object).GetLabels())
 				}
 			}
-			// ErrWebhookRejected is not an error for our purposes
+			// ErrWebhookRejected 对我们而言不算错误
 			if tt.ErrorContains != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.ErrorContains) {
 					t.Errorf("expected an error saying %q, but got: %v", tt.ErrorContains, err)
@@ -223,7 +223,7 @@ func TestAdmit(t *testing.T) {
 	}
 }
 
-// TestAdmitCachedClient tests that MutatingWebhook#Admit should cache restClient
+// TestAdmitCachedClient 测试 MutatingWebhook#Admit 应当缓存 restClient。
 //
 // 用计数器统计 AuthenticationInfoResolver 调用次数：只替换 webhook 源而不换客户端配置，
 // 若 REST 客户端缓存正确，第二轮及之后不应再解析认证信息。
@@ -251,7 +251,7 @@ func TestAdmitCachedClient(t *testing.T) {
 		ns := "webhook-test"
 		client, informer := webhooktesting.NewFakeMutatingDataSource(ns, webhooktesting.ConvertToMutatingWebhooks(tt.Webhooks), stopCh)
 
-		// override the webhook source. The client cache will stay the same.
+		// 覆盖 webhook source。客户端缓存保持不变。
 		cacheMisses := new(int32)
 		wh.SetAuthenticationInfoResolverWrapper(webhooktesting.Wrapper(webhooktesting.NewAuthenticationInfoResolver(cacheMisses)))
 		wh.SetExternalKubeClientSet(client)
@@ -280,7 +280,8 @@ func TestAdmitCachedClient(t *testing.T) {
 	}
 }
 
-// TestWebhookDuration tests that MutatingWebhook#Admit sets webhook duration in context correctly
+// TestWebhookDuration 测试 MutatingWebhook#Admit 是否正确地把 webhook 耗时
+// 写入 context。
 //
 // 使用假时钟让 webhook 处理器可控地推进时间，从而精确断言延迟跟踪器中的累计耗时；
 // 只有请求上下文里预置了跟踪器时才应记录。

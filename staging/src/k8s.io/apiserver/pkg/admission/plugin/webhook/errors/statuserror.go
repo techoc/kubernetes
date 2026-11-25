@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ToStatusErr returns a StatusError with information about the webhook plugin
+// ToStatusErr 返回带有 webhook 插件相关信息的 StatusError。
 //
 // 入参 result 可能来自不受信任的 webhook，因此这里会把状态码提升到 4xx
 // 以上、把状态强制为 Failure，并统一加上 “denied the request” 前缀，
@@ -38,11 +38,11 @@ func ToStatusErr(webhookName string, result *metav1.Status) *apierrors.StatusErr
 		result = &metav1.Status{Status: metav1.StatusFailure}
 	}
 
-	// Make sure we don't return < 400 status codes along with a rejection
+	// 确保拒绝请求时不会返回 < 400 的状态码
 	if result.Code < http.StatusBadRequest {
 		result.Code = http.StatusBadRequest
 	}
-	// Make sure we don't return "" or "Success" status along with a rejection
+	// 确保拒绝请求时不会返回 "" 或 "Success" 状态
 	if result.Status == "" || result.Status == metav1.StatusSuccess {
 		result.Status = metav1.StatusFailure
 	}
@@ -62,7 +62,7 @@ func ToStatusErr(webhookName string, result *metav1.Status) *apierrors.StatusErr
 	}
 }
 
-// NewDryRunUnsupportedErr returns a StatusError with information about the webhook plugin
+// NewDryRunUnsupportedErr 返回带有 webhook 插件相关信息的 StatusError。
 //
 // dry-run 请求不会真正持久化，webhook 声明不支持 dry-run 时必须直接返回 400，
 // 而不是静默放行，否则会掩盖 dry-run 的副作用检查语义。

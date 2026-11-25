@@ -14,11 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cel holds the shared abstractions for compiling and evaluating CEL
-// expressions used by admission plugins (validating, mutating, and policy).
-// It deliberately knows nothing about individual policy resources: callers
-// adapt their own types to ExpressionAccessor, and this package only deals with
-// compilation results and evaluation inputs/outputs.
+// Package cel 提供准入插件（校验、变异与策略）编译和求值 CEL 表达式的共享抽象。
+// 它刻意不了解具体的策略资源：调用方把自己的类型适配为 ExpressionAccessor，
+// 本包只处理编译结果与求值的输入/输出。
 package cel
 
 import (
@@ -36,121 +34,110 @@ import (
 	"k8s.io/apiserver/pkg/cel/environment"
 )
 
-// ExpressionAccessor is the minimal view of a CEL expression the compiler
-// needs. Implementations are supplied by each admission plugin so that this
-// package does not depend on any concrete policy API type.
+// ExpressionAccessor 是编译器所需的最小 CEL 表达式视图。
+// 由各个准入插件提供实现，使本包不依赖任何具体的策略 API 类型。
 type ExpressionAccessor interface {
-	// GetExpression returns the CEL source text to compile.
+	// GetExpression 返回待编译的 CEL 源码文本。
 	GetExpression() string
-	// ReturnTypes lists the types the expression is allowed to produce; more
-	// than one entry means the plugin accepts a union of result types.
+	// ReturnTypes 列出表达式允许产生的类型；包含多个条目表示插件接受
+	// 多种结果类型的并集。
 	ReturnTypes() []*cel.Type
 }
 
-// NamedExpressionAccessor extends NamedExpressionAccessor with a name.
+// NamedExpressionAccessor 在 ExpressionAccessor 之上增加了名称。
 type NamedExpressionAccessor interface {
 	ExpressionAccessor
 
-	GetName() string // follows the naming convention of ExpressionAccessor
+	GetName() string // 遵循 ExpressionAccessor 的命名约定。
 }
 
-// EvaluationResult contains the minimal required fields and metadata of a cel evaluation.
-// The fields are intentionally exported so that plugins can both report metrics
-// (Elapsed) and render per-expression errors without re-evaluating.
+// EvaluationResult 包含一次 CEL 求值的最小必需字段与元数据。
+// 字段刻意导出，方便插件既上报指标（Elapsed），又无需重新求值即可
+// 渲染逐表达式的错误。
 type EvaluationResult struct {
-	// EvalResult is the CEL value produced by the expression; it is the raw
-	// ref.Val so that callers can decide how to convert it to a Go value.
+	// EvalResult 是表达式产生的 CEL 值；保留原始 ref.Val，
+	// 由调用方决定如何转换为 Go 值。
 	EvalResult ref.Val
-	// ExpressionAccessor is the expression that produced EvalResult, allowing
-	// callers to correlate results with source expressions.
+	// ExpressionAccessor 是产生 EvalResult 的表达式，方便调用方把
+	// 结果与源表达式对应起来。
 	ExpressionAccessor ExpressionAccessor
-	// Elapsed is how long this single expression took to evaluate.
+	// Elapsed 是这条表达式单次求值所花的时间。
 	Elapsed time.Duration
-	// Error is non-nil if evaluation of this expression failed. Other results
-	// in the same batch may still be usable.
+	// Error 非空表示该表达式求值失败；同一批次中的其他结果
+	// 可能仍然可用。
 	Error error
 }
 
-// OptionalVariableDeclarations declares which optional CEL variables
-// are declared for an expression.
+// OptionalVariableDeclarations 声明为表达式声明了哪些可选 CEL 变量。
 //
-// The declaration set is part of the compile cache key: the same expression
-// compiled with different declarations is a distinct compiled program. Bindings
-// are supplied separately at evaluation time via OptionalVariableBindings.
+// 声明集合是编译缓存键的一部分：同一表达式配不同声明会编译成不同的程序。
+// 变量的实际绑定在求值时通过 OptionalVariableBindings 单独提供。
 type OptionalVariableDeclarations struct {
-	// HasParams specifies if the "params" variable is declared.
-	// The "params" variable may still be bound to "null" when declared.
+	// HasParams 指定是否声明了 "params" 变量；
+	// 即使声明了，"params" 也可能绑定为 null。
 	HasParams bool
-	// HasAuthorizer specifies if the "authorizer" and "authorizer.requestResource"
-	// variables are declared. When declared, the authorizer variables are
-	// expected to be non-null.
+	// HasAuthorizer 指定是否声明了 "authorizer" 与 "authorizer.requestResource"
+	// 变量；声明后这两个变量预期非 null。
 	HasAuthorizer bool
-	// HasPatchTypes specifies if JSONPatch, Object, Object.metadata and similar types are available in CEL. These can be used
-	// to initialize the typed objects in CEL required to create patches.
+	// HasPatchTypes 指定 CEL 中是否可用 JSONPatch、Object、Object.metadata 等类型；
+	// 这些类型用于初始化创建补丁所需的 CEL 类型化对象。
 	HasPatchTypes bool
 }
 
-// ConditionCompiler contains a function to assist with converting types and values to/from CEL-typed values.
+// ConditionCompiler 提供在 CEL 类型化值与其他类型/值之间转换的编译辅助函数。
 type ConditionCompiler interface {
-	// CompileCondition is used for the cel expression compilation.
-	// envType selects the CEL environment (e.g. with or without optional
-	// variables); implementations must cache compiled programs keyed by
-	// expression, declarations, and envType.
+	// CompileCondition 用于 CEL 表达式的编译。
+	// envType 选择 CEL 环境（例如含或不含可选变量）；实现必须以
+	// 表达式、声明集合与 envType 作为键缓存已编译的程序。
 	CompileCondition(expressions []ExpressionAccessor, optionalDecls OptionalVariableDeclarations, envType environment.Type) ConditionEvaluator
 }
 
-// OptionalVariableBindings provides expression bindings for optional CEL variables.
-// Bindings are runtime values; the corresponding declarations must have been
-// enabled at compile time, otherwise the expression cannot reference them.
+// OptionalVariableBindings 提供可选 CEL 变量的表达式绑定。
+// 绑定是运行时值；对应的声明必须已在编译期启用，否则表达式无法引用它们。
 type OptionalVariableBindings struct {
-	// VersionedParams provides the "params" variable binding. This variable binding may
-	// be set to nil even when OptionalVariableDeclarations.HashParams is set to true.
+	// VersionedParams 提供 "params" 变量的绑定；即使
+	// OptionalVariableDeclarations.HasParams 为 true，该绑定也可能为 nil。
 	VersionedParams runtime.Object
-	// Authorizer provides the authorizer used for the "authorizer" and
-	// "authorizer.requestResource" variable bindings. If the expression was compiled with
-	// OptionalVariableDeclarations.HasAuthorizer set to true this must be non-nil.
+	// Authorizer 提供用于 "authorizer" 与 "authorizer.requestResource"
+	// 变量绑定的授权器；若表达式编译时
+	// OptionalVariableDeclarations.HasAuthorizer 为 true，此处必须非 nil。
 	Authorizer authorizer.UnconditionalAuthorizer
 }
 
-// ConditionEvaluator contains the result of compiling a CEL expression
-// that evaluates to a condition. This is used both for validation and pre-conditions.
-// It expects the inbound object to already have been converted to the version expected
-// by the underlying CEL code (which is indicated by the match criteria of a policy definition).
-// versionedParams may be nil.
+// ConditionEvaluator 保存“求值为条件的 CEL 表达式”的编译结果，既用于校验
+// 也用于 precondition。它要求传入对象已经转换为底层 CEL 代码期望的版本
+// （由策略定义的匹配条件指明）；versionedParams 可以为 nil。
 type ConditionEvaluator interface {
-	// ForInput converts compiled CEL-typed values into evaluated CEL-typed value.
-	// runtimeCELCostBudget was added for testing purpose only. Callers should always use const RuntimeCELCostBudget from k8s.io/apiserver/pkg/apis/cel/config.go as input.
-	// If cost budget is calculated, the condition should return the remaining budget.
+	// ForInput 把已编译的 CEL 类型化值转换为求值后的 CEL 类型化值。
+	// runtimeCELCostBudget 仅用于测试；调用方应始终使用
+	// k8s.io/apiserver/pkg/apis/cel/config.go 中的常量 RuntimeCELCostBudget 作为入参。
+	// 若计算了成本预算，条件应返回剩余预算。
 	//
-	// Implementations must be safe for concurrent use: one compiled evaluator
-	// serves all requests.
+	// 实现必须支持并发使用：一个编译后的 evaluator 服务所有请求。
 	ForInput(ctx context.Context, versionedAttr *admission.VersionedAttributes, request *v1.AdmissionRequest, optionalVars OptionalVariableBindings, namespace *corev1.Namespace, runtimeCELCostBudget int64) ([]EvaluationResult, int64, error)
 
-	// CompilationErrors returns a list of errors from the compilation of the mutatingEvaluator
+	// CompilationErrors 返回编译结果中的错误列表。
 	CompilationErrors() []error
 }
 
-// MutatingCompiler contains a function to assist with converting types and values to/from CEL-typed values.
+// MutatingCompiler 提供在 CEL 类型化值与其他类型/值之间转换的编译辅助函数。
 type MutatingCompiler interface {
-	// CompileMutatingEvaluator is used for the cel expression compilation.
-	// The returned evaluator produces a JSON patch plus the list of typed
-	// objects used to build it.
+	// CompileMutatingEvaluator 用于 CEL 表达式的编译。
+	// 返回的 evaluator 产生 JSON 补丁以及构建它所用的类型化对象列表。
 	CompileMutatingEvaluator(expression ExpressionAccessor, optionalDecls OptionalVariableDeclarations, envType environment.Type) MutatingEvaluator
 }
 
-// MutatingEvaluator contains the result of compiling a CEL expression
-// that evaluates to a mutation.
-// It expects the inbound object to already have been converted to the version expected
-// by the underlying CEL code (which is indicated by the match criteria of a policy definition).
-// versionedParams may be nil.
+// MutatingEvaluator 保存“求值为变异的 CEL 表达式”的编译结果。
+// 它要求传入对象已经转换为底层 CEL 代码期望的版本
+// （由策略定义的匹配条件指明）；versionedParams 可以为 nil。
 type MutatingEvaluator interface {
-	// ForInput converts compiled CEL-typed values into a CEL-typed value representing a mutation.
-	// runtimeCELCostBudget was added for testing purpose only. Callers should always use const RuntimeCELCostBudget from k8s.io/apiserver/pkg/apis/cel/config.go as input.
-	// If cost budget is calculated, the condition should return the remaining budget.
+	// ForInput 把已编译的 CEL 类型化值转换为表示一次变异的 CEL 类型化值。
+	// runtimeCELCostBudget 仅用于测试；调用方应始终使用
+	// k8s.io/apiserver/pkg/apis/cel/config.go 中的常量 RuntimeCELCostBudget 作为入参。
+	// 若计算了成本预算，应返回剩余预算。
 	//
-	// Implementations must be safe for concurrent use.
 	ForInput(ctx context.Context, versionedAttr *admission.VersionedAttributes, request *v1.AdmissionRequest, optionalVars OptionalVariableBindings, namespace *corev1.Namespace, runtimeCELCostBudget int64) (EvaluationResult, int64, error)
 
-	// CompilationErrors returns a list of errors from the compilation of the mutatingEvaluator
+	// CompilationErrors 返回编译 mutatingEvaluator 过程中的错误列表。
 	CompilationErrors() []error
 }

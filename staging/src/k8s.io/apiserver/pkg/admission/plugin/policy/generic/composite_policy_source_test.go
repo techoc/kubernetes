@@ -21,13 +21,13 @@ import (
 	"testing"
 )
 
-// testHook is a minimal Hook implementation for testing.
+// testHook 是用于测试的最小 Hook 实现。
 // 仅保留 name 字段，测试只需断言顺序与缓存复用，不关心钩子内容。
 type testHook struct {
 	name string
 }
 
-// mockPolicySource implements Source[testHook] for testing.
+// mockPolicySource 是实现 Source[testHook] 的测试替身。
 type mockPolicySource struct {
 	hooks     []testHook
 	hasSynced bool
@@ -121,20 +121,20 @@ func TestCompositePolicySource_Caching(t *testing.T) {
 
 	source := NewCompositePolicySource[testHook](staticSource, apiSource)
 
-	// First call should create the combined slice.
+	// 第一次调用应创建合并后的切片。
 	hooks1 := source.Hooks()
 	if len(hooks1) != 2 {
 		t.Fatalf("Expected 2 hooks, got %d", len(hooks1))
 	}
 
-	// Second call with same underlying slices should return the cached combined slice.
+	// 底层切片未变时第二次调用应返回缓存的合并切片。
 	// 通过比较首元素地址判断是否命中缓存（同一底层数组）。
 	hooks2 := source.Hooks()
 	if &hooks1[0] != &hooks2[0] {
 		t.Error("Expected cached slice to be returned when underlying slices haven't changed")
 	}
 
-	// Changing the underlying slice should produce a new combined slice.
+	// 底层切片变化后应产生新的合并切片。
 	staticSource.hooks = []testHook{{name: "static-2"}}
 	hooks3 := source.Hooks()
 	if hooks3[0].name != "static-2" {

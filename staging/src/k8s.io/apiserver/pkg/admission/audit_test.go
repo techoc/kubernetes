@@ -30,19 +30,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeHandler implements Interface
 // fakeHandler 是可控的准入插件替身：返回值与注解都由测试用例指定，
 // 便于验证 WithAudit 装饰器只增加审计信息、不改变决策。
 type fakeHandler struct {
-	// return value of Admit()
+	// Admit() 的返回值
 	admit error
-	// annotations add to attributesRecord during Admit() phase
+	// Admit() 阶段写入 attributesRecord 的注解
 	admitAnnotations map[string]string
-	// return value of Validate()
+	// Validate() 的返回值
 	validate error
-	// annotations add to attributesRecord during Validate() phase
+	// Validate() 阶段写入 attributesRecord 的注解
 	validateAnnotations map[string]string
-	// return value of Handles()
+	// Handles() 的返回值
 	handles bool
 }
 
@@ -206,7 +205,7 @@ func TestWithAuditConcurrency(t *testing.T) {
 	auditHandler := WithAudit(handler)
 	a := attributes()
 
-	// Simulate the scenario store.DeleteCollection
+	// 模拟 store.DeleteCollection 的场景
 	workers := 2
 	wg := &sync.WaitGroup{}
 	wg.Add(workers)

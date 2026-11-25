@@ -23,7 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook"
 )
 
-// mockSource implements Source for testing.
+// mockSource 是实现 Source 接口的测试替身。
 //
 // hasSynced 单独可控，便于覆盖组合源在部分就绪时的行为。
 type mockSource struct {
@@ -123,19 +123,19 @@ func TestCompositeWebhookSource_Caching(t *testing.T) {
 
 	source := NewCompositeWebhookSource(staticSource, apiSource)
 
-	// First call should create the combined slice.
+	// 首次调用应当创建合并后的切片。
 	webhooks1 := source.Webhooks()
 	if len(webhooks1) != 2 {
 		t.Fatalf("Expected 2 webhooks, got %d", len(webhooks1))
 	}
 
-	// Second call with same underlying slices should return the cached combined slice.
+	// 底层切片未变时，第二次调用应返回缓存的合并切片。
 	webhooks2 := source.Webhooks()
 	if &webhooks1[0] != &webhooks2[0] {
 		t.Error("Expected cached slice to be returned when underlying slices haven't changed")
 	}
 
-	// Changing the underlying slice should produce a new combined slice.
+	// 更换底层切片后应产生新的合并切片。
 	newStaticWebhook := createTestValidatingWebhook("static-2", "static-config-2")
 	staticSource.webhooks = []webhook.WebhookAccessor{newStaticWebhook}
 	webhooks3 := source.Webhooks()

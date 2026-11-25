@@ -30,9 +30,9 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/generic"
 )
 
-// AdmissionResponse contains the fields extracted from an AdmissionReview response
+// AdmissionResponse 包含从 AdmissionReview 响应中提取出的字段。
 //
-// 中文说明：只保留准入逻辑关心的字段，隐藏 AdmissionReview 的版本差异；
+// 只保留准入逻辑关心的字段，隐藏 AdmissionReview 的版本差异；
 // 这样调用方无需区分 v1/v1beta1，也便于日后新增版本。
 type AdmissionResponse struct {
 	AuditAnnotations map[string]string
@@ -43,11 +43,11 @@ type AdmissionResponse struct {
 	Warnings         []string
 }
 
-// VerifyAdmissionResponse checks the validity of the provided admission review object, and returns the
-// audit annotations, whether the response allowed the request, any provided patch/patchType/status,
-// or an error if the provided admission review was not valid.
+// VerifyAdmissionResponse 检查所提供的 admission review 对象的有效性，并返回
+// 审计注解、该响应是否允许请求、所提供的 patch/patchType/status，
+// 或在所提供的 admission review 无效时返回错误。
 //
-// 中文说明：这是信任外部 webhook 输出的第一道校验。UID 必须与请求一致，
+// 这是信任外部 webhook 输出的第一道校验。UID 必须与请求一致，
 // 否则响应可能属于另一个并发请求（重放/串扰）；GVK 必须匹配，防止服务端返回错误版本。
 // 对 mutating webhook，patch 与 patchType 必须成对出现——只给 patch 无法安全应用；
 // 对 validating webhook，出现 patch 一律拒绝，因为它无权修改对象。
@@ -59,12 +59,12 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 			return nil, fmt.Errorf("webhook response was absent")
 		}
 
-		// Verify UID matches
+		// 校验 UID 是否匹配
 		if r.Response.UID != uid {
 			return nil, fmt.Errorf("expected response.uid=%q, got %q", uid, r.Response.UID)
 		}
 
-		// Verify GVK
+		// 校验 GVK
 		v1GVK := admissionv1.SchemeGroupVersion.WithKind("AdmissionReview")
 		if r.GroupVersionKind() != v1GVK {
 			return nil, fmt.Errorf("expected webhook response of %v, got %v", v1GVK.String(), r.GroupVersionKind().String())
@@ -74,7 +74,7 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 		patchType := admissionv1.PatchType("")
 
 		if mutating {
-			// Ensure a mutating webhook provides both patch and patchType together
+			// 确保 mutating webhook 同时提供 patch 与 patchType
 			if len(r.Response.Patch) > 0 && r.Response.PatchType == nil {
 				return nil, fmt.Errorf("webhook returned response.patch but not response.patchType")
 			}
@@ -90,7 +90,7 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 				}
 			}
 		} else {
-			// Ensure a validating webhook doesn't return patch or patchType
+			// 确保 validating webhook 不返回 patch 或 patchType
 			if len(r.Response.Patch) > 0 {
 				return nil, fmt.Errorf("validating webhook may not return response.patch")
 			}
@@ -113,16 +113,16 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 			return nil, fmt.Errorf("webhook response was absent")
 		}
 
-		// Response GVK and response.uid were not verified in v1beta1 handling, allow any
+		// v1beta1 的处理流程未校验响应 GVK 与 response.uid，此处允许任意值
 
 		patch := []byte(nil)
 		patchType := admissionv1.PatchType("")
 		if mutating {
 			patch = r.Response.Patch
 			if len(r.Response.Patch) > 0 {
-				// patch type was not verified in v1beta1 admissionreview handling. pin to only supported version if a patch is provided.
+				// v1beta1 admissionreview 处理流程未校验 patch type。若提供了 patch，则固定为唯一受支持的版本。
 				//
-				// 中文说明：v1beta1 的 PatchType 语义模糊，这里统一假定为 JSONPatch，
+				// v1beta1 的 PatchType 语义模糊，这里统一假定为 JSONPatch，
 				// 这是该版本事实上的唯一用法，避免引入未经验证的补丁类型。
 				patchType = admissionv1.PatchTypeJSONPatch
 			}
@@ -142,10 +142,10 @@ func VerifyAdmissionResponse(uid types.UID, mutating bool, review runtime.Object
 	}
 }
 
-// CreateAdmissionObjects returns the unique request uid, the AdmissionReview object to send the webhook and to decode the response into,
-// or an error if the webhook does not support receiving any of the admission review versions we know to send
+// CreateAdmissionObjects 返回唯一的请求 uid、要发送给 webhook 的 AdmissionReview 对象和用于解码响应的对象，
+// 若 webhook 不支持任何我们已知可发送的 admission review 版本，则返回错误。
 //
-// 中文说明：按 webhook 声明的版本偏好顺序选择第一个受支持的版本；
+// 按 webhook 声明的版本偏好顺序选择第一个受支持的版本；
 // request 与 response 必须是同一版本的对象，否则解码会失败。
 // UID 在每次调用时新生成，用于把并发请求的响应严格对应起来。
 func CreateAdmissionObjects(versionedAttributes *admission.VersionedAttributes, invocation *generic.WebhookInvocation) (uid types.UID, request, response runtime.Object, err error) {
@@ -168,9 +168,9 @@ func CreateAdmissionObjects(versionedAttributes *admission.VersionedAttributes, 
 	return "", nil, nil, fmt.Errorf("webhook does not accept known AdmissionReview versions (v1, v1beta1)")
 }
 
-// CreateV1AdmissionReview creates an AdmissionReview for the provided admission.Attributes
+// CreateV1AdmissionReview 为给定的 admission.Attributes 创建 AdmissionReview。
 //
-// 中文说明：Kind/Resource 取自 webhook 配置的匹配目标，RequestKind/RequestResource
+// Kind/Resource 取自 webhook 配置的匹配目标，RequestKind/RequestResource
 // 取自实际请求——两者可能不同（例如通过转换版本访问），webhook 需要能区分，
 // 否则无法正确判断自己是否应处理该请求。
 // UserInfo 的 Extra 需逐项复制为 authenticationv1.ExtraValue，直接赋值类型不兼容。
@@ -191,7 +191,7 @@ func CreateV1AdmissionReview(uid types.UID, versionedAttributes *admission.Versi
 	}
 	dryRun := attr.IsDryRun()
 
-	// Convert the extra information in the user object
+	// 转换 user 对象中的 extra 信息
 	for key, val := range aUserInfo.GetExtra() {
 		userInfo.Extra[key] = authenticationv1.ExtraValue(val)
 	}
@@ -239,9 +239,9 @@ func CreateV1AdmissionReview(uid types.UID, versionedAttributes *admission.Versi
 	}
 }
 
-// CreateV1beta1AdmissionReview creates an AdmissionReview for the provided admission.Attributes
+// CreateV1beta1AdmissionReview 为给定的 admission.Attributes 创建 v1beta1 AdmissionReview。
 //
-// 中文说明：字段布局与 v1 完全一致，仅类型不同；保留独立实现是为了让 v1beta1
+// 字段布局与 v1 完全一致，仅类型不同；保留独立实现是为了让 v1beta1
 // 的兼容行为（如不校验 GVK）可以单独演进，而不影响 v1 路径。
 func CreateV1beta1AdmissionReview(uid types.UID, versionedAttributes *admission.VersionedAttributes, invocation *generic.WebhookInvocation) *admissionv1beta1.AdmissionReview {
 	attr := versionedAttributes.Attributes
@@ -260,7 +260,7 @@ func CreateV1beta1AdmissionReview(uid types.UID, versionedAttributes *admission.
 	}
 	dryRun := attr.IsDryRun()
 
-	// Convert the extra information in the user object
+	// 转换 user 对象中的 extra 信息
 	for key, val := range aUserInfo.GetExtra() {
 		userInfo.Extra[key] = authenticationv1.ExtraValue(val)
 	}

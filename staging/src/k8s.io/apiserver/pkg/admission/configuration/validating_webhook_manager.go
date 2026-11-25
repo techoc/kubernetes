@@ -37,12 +37,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Type for test injection.
+// 该函数类型用于测试注入。
 //
 // 类型别名仅用于测试注入：把 WebhookAccessor 的构造方式参数化，便于在单测里替换成假实现。
 type validatingWebhookAccessorCreator func(uid string, configurationName string, h *v1.ValidatingWebhook) webhook.WebhookAccessor
 
-// validatingWebhookConfigurationManager collects the validating webhook objects so that they can be called.
+// validatingWebhookConfigurationManager 收集 validating webhook 对象以便调用。
 //
 // 它把集群中所有 ValidatingWebhookConfiguration 的 webhook 汇总成一个有序列表供准入插件调用。
 // 列表顺序由配置名字典序决定，保证同一批配置在不同 apiserver 实例上得到一致的调用顺序。
@@ -55,9 +55,8 @@ type validatingWebhookConfigurationManager struct {
 	// configurationsCache 以配置名为键缓存单个配置的 accessor 切片。
 	// 单条配置未变化时直接复用，避免重复编译 CEL 表达式等昂贵操作。
 	configurationsCache sync.Map
-	// createValidatingWebhookAccessor is used to instantiate webhook accessors.
-	// This function is defined as field instead of a struct method to allow injection
-	// during tests
+	// createValidatingWebhookAccessor 用于实例化 webhook 访问器。把它定义为字段
+	// 而非结构体方法，以便在测试中进行注入。
 	//
 	// 作为字段而非方法存在，是为了在测试中注入桩实现。
 	createValidatingWebhookAccessor validatingWebhookAccessorCreator
@@ -116,7 +115,7 @@ func NewValidatingWebhookConfigurationManager(f informers.SharedInformerFactory,
 	return manager
 }
 
-// Webhooks returns the merged ValidatingWebhookConfiguration.
+// Webhooks 返回合并后的 ValidatingWebhookConfiguration。
 //
 // 返回按配置名排序后合并的 webhook accessor 列表；出错时记录错误并返回已获得的部分结果。
 func (v *validatingWebhookConfigurationManager) Webhooks() []webhook.WebhookAccessor {
@@ -127,8 +126,7 @@ func (v *validatingWebhookConfigurationManager) Webhooks() []webhook.WebhookAcce
 	return out
 }
 
-// HasSynced returns true if the initial set of validating webhook configurations
-// has been loaded.
+// HasSynced 在初始的 validating webhook 配置集加载完成后返回 true。
 //
 // 首次同步完成前返回 false，调用方据此决定是否等待 webhook 配置就绪。
 func (v *validatingWebhookConfigurationManager) HasSynced() bool { return v.hasSynced() }
@@ -142,11 +140,10 @@ func (v *validatingWebhookConfigurationManager) getConfiguration() ([]webhook.We
 	return v.getValidatingWebhookConfigurations(configurations), nil
 }
 
-// getMutatingWebhookConfigurations returns the webhook accessors for a given list of
-// mutating webhook configurations.
-//
-// This function will, first, try to load the webhook accessors from the cache and avoid
-// recreating them, which can be expessive (requiring CEL expression recompilation).
+// getValidatingWebhookConfigurations 返回给定 validating webhook 配置列表
+// 对应的 webhook 访问器（上游原注释误写为 getMutatingWebhook-
+// Configurations）。该函数会优先从缓存加载访问器，避免重建带来的
+// 开销（重建代价较高，需要重新编译 CEL 表达式）。
 //
 // 实现要点：先按配置名稳定排序，再逐条配置查缓存；未命中时才重建该配置的 accessor 并回填缓存。
 func (v *validatingWebhookConfigurationManager) getValidatingWebhookConfigurations(configurations []*v1.ValidatingWebhookConfiguration) []webhook.WebhookAccessor {
@@ -161,15 +158,14 @@ func (v *validatingWebhookConfigurationManager) getValidatingWebhookConfiguratio
 	for _, c := range configurations {
 		cachedConfigurationAccessors, ok := v.configurationsCache.Load(c.Name)
 		if ok {
-			// Pick an already cached webhookAccessor
+			// 直接使用已缓存的 webhookAccessor。
 			accessors = append(accessors, cachedConfigurationAccessors.([]webhook.WebhookAccessor)...)
 			continue
 		}
 
 		logExcludedResourcesForValidatingWebhook(c.Name, c.Webhooks, v.excludedWebhookResources)
 
-		// webhook names are not validated for uniqueness, so we check for duplicates and
-		// add a int suffix to distinguish between them
+		// webhook 名称没有做唯一性校验，因此这里检查重复并追加整数后缀加以区分。
 		//
 		// uid 形如 "<配置名>/<webhook名>/<序号>"，序号用于区分同名 webhook。
 		names := map[string]int{}

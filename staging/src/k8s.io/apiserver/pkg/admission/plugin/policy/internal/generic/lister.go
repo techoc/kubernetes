@@ -86,7 +86,7 @@ func (w lister[T]) Get(name string) (T, error) {
 		return result, err
 	}
 	if !exists {
-		// kerrors.StatusNotFound requires a GroupResource we cannot provide
+		// kerrors.StatusNotFound 要求提供 GroupResource，而这里无法获得
 		return result, &kerrors.StatusError{ErrStatus: metav1.Status{
 			Status:  metav1.StatusFailure,
 			Code:    http.StatusNotFound,

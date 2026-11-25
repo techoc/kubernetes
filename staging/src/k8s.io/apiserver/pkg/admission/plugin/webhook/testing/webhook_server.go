@@ -34,13 +34,13 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
-// NewTestServerWithHandler returns a webhook test HTTPS server
-// which uses given handler function to handle requests
+// NewTestServerWithHandler 返回一个用于 webhook 测试的 HTTPS 服务器，
+// 使用给定的 handler 函数处理请求。
 //
 // 强制要求客户端证书（RequireAndVerifyClientCert），以便同时覆盖
 // apiserver 作为客户端时双向 TLS 的路径。
 func NewTestServerWithHandler(t testing.TB, handler func(http.ResponseWriter, *http.Request)) *httptest.Server {
-	// Create the test webhook server
+	// 创建测试 webhook 服务器
 	sCert, err := tls.X509KeyPair(testcerts.ServerCert, testcerts.ServerKey)
 	if err != nil {
 		t.Error(err)
@@ -57,7 +57,7 @@ func NewTestServerWithHandler(t testing.TB, handler func(http.ResponseWriter, *h
 	return testServer
 }
 
-// NewTestServer returns a webhook test HTTPS server with fixed webhook test certs.
+// NewTestServer 返回使用固定 webhook 测试证书的 webhook 测试 HTTPS 服务器。
 func NewTestServer(t testing.TB) *httptest.Server {
 	return NewTestServerWithHandler(t, webhookHandler)
 }
@@ -196,8 +196,8 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ClockSteppingWebhookHandler given a fakeClock returns a request handler
-// that moves time in given clock by an amount specified in the webhook request
+// ClockSteppingWebhookHandler 给定 fakeClock，返回一个请求处理器，
+// 它会按 webhook 请求中指定的时长推进给定时钟的时间。
 //
 // 路径形如 /allow/300 或 /disallow/300，末尾数字是希望推进的（纳秒级）
 // 时长；这样无需真实等待即可测试超时与重试逻辑。

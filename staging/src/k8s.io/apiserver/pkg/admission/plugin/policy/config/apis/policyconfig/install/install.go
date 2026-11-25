@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the policyconfig API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// 本包安装 policyconfig API 组，使其对所有 API 编解码机制可用。
 //
 // policyconfig 是 MutatingAdmissionPolicy 等策略配置的 API 组；
 // 本包只负责把它挂到 scheme 上，不做任何业务逻辑。
@@ -28,7 +27,7 @@ import (
 	v1 "k8s.io/apiserver/pkg/admission/plugin/policy/config/apis/policyconfig/v1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并把类型加入 scheme。
 //
 // 先注册内部版本与 v1 版本，再把 v1 设为该组的首选版本，
 // 保证序列化/解码默认走 v1。

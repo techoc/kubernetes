@@ -14,11 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package loader provides generic functionality to load webhook configurations
-// from manifest files. It handles file reading, YAML/JSON decoding, and generic
-// manifest validation. Type-specific defaulting and validation (e.g., scheme-based
-// defaulting via internal types) are injected by callers through the AcceptObjectFunc
-// callback.
+// Package loader 提供从清单文件加载 webhook 配置的通用功能，
+// 负责文件读取、YAML/JSON 解码与通用清单校验。与类型相关的默认化和校验
+// （例如基于 scheme 的默认化）由调用方通过 AcceptObjectFunc 回调注入。
 //
 // 泛型参数 T 让 validating/mutating 两类配置共用同一套文件遍历与校验逻辑，
 // 类型相关的默认值与字段校验则通过回调注入，避免在包内做类型分支。
@@ -35,18 +33,17 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/webhook"
 )
 
-// AcceptObjectFunc extracts typed items from a decoded runtime.Object, applying
-// defaulting and validation. Returns the extracted items, or an error if the
-// object type is not recognized or processing fails.
+// AcceptObjectFunc 从解码后的 runtime.Object 中提取带类型的配置项，
+// 并完成默认化与校验。返回提取出的配置项；若对象类型无法识别
+// 或处理失败则返回错误。
 //
 // 返回切片是因为一个文件对象可能展开为多个配置项；由调用方决定默认值
 // 与校验规则，loader 只负责结构性检查。
 type AcceptObjectFunc[T metav1.Object] func(obj runtime.Object) ([]T, error)
 
-// LoadManifests loads webhook configurations from manifest files in dir using
-// the provided decoder and acceptObject callback. It handles file I/O, YAML
-// splitting, decoding, v1.List unwrapping, manifest name validation, webhook
-// client config validation, and deterministic sorting by name.
+// LoadManifests 使用给定的 decoder 与 acceptObject 回调，从目录 dir 中的
+// 清单文件加载 webhook 配置。负责文件 I/O、YAML 拆分、解码、v1.List 解包、
+// 清单名称校验、webhook 客户端配置校验，以及按名称的确定性排序。
 //
 // 返回的 hash 覆盖全部文件内容，供上层做变更检测；排序保证相同的文件集合
 // 总是产生相同的顺序，便于比较与测试。
@@ -85,9 +82,8 @@ func LoadManifests[T metav1.Object](
 	return configs, hash, nil
 }
 
-// acceptFileObject handles type dispatch for a decoded object, including
-// generic v1.List unwrapping, manifest name validation, item validation,
-// and the default unsupported-type error.
+// acceptFileObject 对解码后的对象做类型分发，包括通用的 v1.List 解包、
+// 清单名称校验、配置项校验，以及默认的不支持类型错误。
 func acceptFileObject[T metav1.Object](
 	obj runtime.Object,
 	filePath string,
@@ -95,7 +91,6 @@ func acceptFileObject[T metav1.Object](
 	decoder runtime.Decoder,
 	acceptObject AcceptObjectFunc[T],
 ) ([]T, error) {
-	// Handle generic v1.List by recursing into each item
 	// 递归处理 List，使生效中的校验对嵌套项同样适用。
 	if list, ok := obj.(*metav1.List); ok {
 		var allItems []T
@@ -125,13 +120,13 @@ func acceptFileObject[T metav1.Object](
 	return items, nil
 }
 
-// validateAcceptedItem runs manifest name validation and webhook client config validation.
+// validateAcceptedItem 执行清单名称校验与 webhook 客户端配置校验。
 func validateAcceptedItem[T metav1.Object](item T, filePath string, seenNames map[string]string) error {
 	name := item.GetName()
 	if err := manifest.ValidateManifestName(name, filePath, seenNames); err != nil {
 		return err
 	}
-	// Validate webhook client configs for webhook configuration types.
+	// 对 webhook 配置类型执行 webhook 客户端配置校验。
 	obj, ok := any(item).(runtime.Object)
 	if !ok {
 		return fmt.Errorf("type %T does not implement runtime.Object", item)
@@ -139,8 +134,8 @@ func validateAcceptedItem[T metav1.Object](item T, filePath string, seenNames ma
 	return validateWebhookClientConfigs(obj, name, filePath)
 }
 
-// validateWebhookClientConfigs validates that all webhooks in a configuration
-// use URL-based client config (service references are not supported for manifests).
+// validateWebhookClientConfigs 校验配置中的所有 webhook 均使用基于 URL 的
+// 客户端配置（清单不支持 service 引用）。
 // 静态清单没有 Service 解析能力，因此明确拒绝 service 引用，只允许 url。
 func validateWebhookClientConfigs(obj runtime.Object, configName, filePath string) error {
 	switch c := obj.(type) {
@@ -162,8 +157,8 @@ func validateWebhookClientConfigs(obj runtime.Object, configName, filePath strin
 	return nil
 }
 
-// ValidateWebhookClientConfig checks that a webhook uses URL-based client config
-// (service references are not supported for static manifests).
+// ValidateWebhookClientConfig 检查 webhook 是否使用基于 URL 的客户端配置
+// （静态清单不支持 service 引用）。
 // 错误信息包含 webhook 名、配置名与文件路径，便于在大量清单中定位问题来源。
 func ValidateWebhookClientConfig(webhookName, configName, filePath string, cc admissionregistrationv1.WebhookClientConfig) error {
 	if cc.Service != nil {
@@ -175,23 +170,23 @@ func ValidateWebhookClientConfig(webhookName, configName, filePath string, cc ad
 	return nil
 }
 
-// ValidatingLoadResult holds the validating webhook configurations loaded from manifest files.
+// ValidatingLoadResult 保存从清单文件加载的 validating webhook 配置。
 type ValidatingLoadResult struct {
-	// Configurations is the list of loaded validating webhook configurations.
+	// Configurations 是已加载的 validating webhook 配置列表。
 	Configurations []*admissionregistrationv1.ValidatingWebhookConfiguration
-	// Hash is the sha256 hash of all loaded files, used for change detection.
+	// Hash 是所有已加载文件的 sha256 哈希，用于变更检测。
 	Hash string
 }
 
-// MutatingLoadResult holds the mutating webhook configurations loaded from manifest files.
+// MutatingLoadResult 保存从清单文件加载的 mutating webhook 配置。
 type MutatingLoadResult struct {
-	// Configurations is the list of loaded mutating webhook configurations.
+	// Configurations 是已加载的 mutating webhook 配置列表。
 	Configurations []*admissionregistrationv1.MutatingWebhookConfiguration
-	// Hash is the sha256 hash of all loaded files, used for change detection.
+	// Hash 是所有已加载文件的 sha256 哈希，用于变更检测。
 	Hash string
 }
 
-// BuildValidatingAccessors builds webhook accessors from validating webhook configurations.
+// BuildValidatingAccessors 从 validating webhook 配置构建 webhook 访问器。
 // uid 中拼接出现次数（names[n]），是为了在同一配置内存在同名 webhook 时
 // 仍能生成唯一标识，而不是让后者覆盖前者。
 func BuildValidatingAccessors(configs []*admissionregistrationv1.ValidatingWebhookConfiguration) []webhook.WebhookAccessor {
@@ -209,7 +204,7 @@ func BuildValidatingAccessors(configs []*admissionregistrationv1.ValidatingWebho
 	return accessors
 }
 
-// BuildMutatingAccessors builds webhook accessors from mutating webhook configurations.
+// BuildMutatingAccessors 从 mutating webhook 配置构建 webhook 访问器。
 // 与 validating 版本结构一致，仅构造函数不同。
 func BuildMutatingAccessors(configs []*admissionregistrationv1.MutatingWebhookConfiguration) []webhook.WebhookAccessor {
 	var accessors []webhook.WebhookAccessor
@@ -226,12 +221,12 @@ func BuildMutatingAccessors(configs []*admissionregistrationv1.MutatingWebhookCo
 	return accessors
 }
 
-// GetWebhookAccessors returns webhook accessors for all validating webhooks.
+// GetWebhookAccessors 返回所有 validating webhook 的 webhook 访问器。
 func (r *ValidatingLoadResult) GetWebhookAccessors() []webhook.WebhookAccessor {
 	return BuildValidatingAccessors(r.Configurations)
 }
 
-// GetWebhookAccessors returns webhook accessors for all mutating webhooks.
+// GetWebhookAccessors 返回所有 mutating webhook 的 webhook 访问器。
 func (r *MutatingLoadResult) GetWebhookAccessors() []webhook.WebhookAccessor {
 	return BuildMutatingAccessors(r.Configurations)
 }

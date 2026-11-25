@@ -25,8 +25,8 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// Wrapper turns an AuthenticationInfoResolver into a AuthenticationInfoResolverWrapper that unconditionally
-// returns the given AuthenticationInfoResolver.
+// Wrapper 把一个 AuthenticationInfoResolver 转换成 AuthenticationInfoResolverWrapper，
+// 后者无条件返回给定的 AuthenticationInfoResolver。
 //
 // 用于在测试里跳过真实的 service/URL 解析，直接注入预置的 TLS 配置。
 func Wrapper(r webhook.AuthenticationInfoResolver) func(webhook.AuthenticationInfoResolver) webhook.AuthenticationInfoResolver {
@@ -35,8 +35,8 @@ func Wrapper(r webhook.AuthenticationInfoResolver) func(webhook.AuthenticationIn
 	}
 }
 
-// NewAuthenticationInfoResolver creates a fake AuthenticationInfoResolver that counts cache misses on
-// every call to its methods.
+// NewAuthenticationInfoResolver 创建一个假的 AuthenticationInfoResolver，
+// 其每次方法调用都会统计缓存未命中次数。
 //
 // cacheMisses 由调用方传入并在每次解析时原子递增，用于断言缓存命中情况；
 // 返回的 rest.Config 固定使用 testcerts 中的 CA 与客户端证书。
@@ -71,7 +71,8 @@ func (a *authenticationInfoResolver) ClientConfigForService(serviceName, service
 	return a.restConfig, nil
 }
 
-// NewPanickingAuthenticationInfoResolver creates a fake AuthenticationInfoResolver that panics
+// NewPanickingAuthenticationInfoResolver 创建一个每次调用都会 panic 的
+// 假 AuthenticationInfoResolver。
 //
 // 用于验证调用方在解析器 panic 时的恢复行为（应转为请求错误而不是进程崩溃）。
 func NewPanickingAuthenticationInfoResolver(panicMessage string) webhook.AuthenticationInfoResolver {

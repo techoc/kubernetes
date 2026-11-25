@@ -16,8 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// Package policyconfig defines the configuration for the validating and mutating admission policy plugins.
-//
 // 本包是策略类准入插件（ValidatingAdmissionPolicy / MutatingAdmissionPolicy）
 // 的配置 API 内部版本，仅用于 apiserver 的配置解码与转换，不作为集群 API 暴露。
 package policyconfig

@@ -40,11 +40,10 @@ func extractResourceName(a Attributes) (name string, resource schema.GroupResour
 	if obj != nil {
 		accessor, err := meta.Accessor(obj)
 		if err != nil {
-			// not all object have ObjectMeta.  If we don't, return a name with a slash (always illegal)
+			// 并非所有对象都有 ObjectMeta；取不到时返回带斜杠的名字（始终非法）
 			return "Unknown/errorGettingName", resource, nil
 		}
 
-		// this is necessary because name object name generation has not occurred yet
 		// 对象名可能尚未由 API server 生成，此时 generateName 是最有信息量的标识。
 		if len(accessor.GetName()) > 0 {
 			name = accessor.GetName()
@@ -55,13 +54,13 @@ func extractResourceName(a Attributes) (name string, resource schema.GroupResour
 	return name, resource, nil
 }
 
-// NewForbidden is a utility function to return a well-formatted admission control error response
+// NewForbidden 是一个工具函数，返回格式良好的准入控制拒绝错误响应。
 //
-// 中文说明：把插件返回的任意错误包装成带资源/名称上下文的
+// 把插件返回的任意错误包装成带资源/名称上下文的
 // Forbidden，便于用户定位是哪个对象被拒。已经是 Forbidden 的错误直接透传，避免重复包装后
 // 原因链被改写、客户端无法用 IsForbidden 判断。
 func NewForbidden(a Attributes, internalError error) error {
-	// do not double wrap an error of same type
+	// 不对同类型错误重复包装
 	if apierrors.IsForbidden(internalError) {
 		return internalError
 	}
@@ -72,9 +71,9 @@ func NewForbidden(a Attributes, internalError error) error {
 	return apierrors.NewForbidden(resource, name, internalError)
 }
 
-// NewNotFound is a utility function to return a well-formatted admission control error response
+// NewNotFound 是一个工具函数，返回格式良好的准入控制错误响应。
 //
-// 中文说明：与 NewForbidden 对称，供插件表示“请求引用的对象不存在”。
+// 与 NewForbidden 对称，供插件表示“请求引用的对象不存在”。
 func NewNotFound(a Attributes) error {
 	name, resource, err := extractResourceName(a)
 	if err != nil {

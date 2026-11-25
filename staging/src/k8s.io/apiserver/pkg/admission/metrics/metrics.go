@@ -28,7 +28,7 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// WebhookRejectionErrorType defines different error types that happen in a webhook rejection.
+// WebhookRejectionErrorType 定义了 webhook 拒绝请求时发生的不同错误类型。
 //
 // 区分“webhook 正常拒绝”与“调用 webhook 失败/服务端内部错误”，
 // 因为二者对运维的含义完全不同：前者是策略生效，后者是链路故障。
@@ -38,17 +38,17 @@ const (
 	namespace = "apiserver"
 	subsystem = "admission"
 
-	// WebhookRejectionCallingWebhookError identifies a calling webhook error which causes
-	// a webhook admission to reject a request
+	// WebhookRejectionCallingWebhookError 标识导致 webhook 准入拒绝请求的
+	// 调用 webhook 错误。
 	//
 	// 调用 webhook 本身出错（超时、网络、证书等）导致的拒绝。
 	WebhookRejectionCallingWebhookError WebhookRejectionErrorType = "calling_webhook_error"
-	// WebhookRejectionAPIServerInternalError identifies an apiserver internal error which
-	// causes a webhook admission to reject a request
+	// WebhookRejectionAPIServerInternalError 标识导致 webhook 准入拒绝请求的
+	// apiserver 内部错误。
 	//
 	// apiserver 侧内部错误导致的拒绝。
 	WebhookRejectionAPIServerInternalError WebhookRejectionErrorType = "apiserver_internal_error"
-	// WebhookRejectionNoError identifies a webhook properly rejected a request
+	// WebhookRejectionNoError 标识 webhook 正常地拒绝了请求。
 	//
 	// webhook 正常返回拒绝，链路本身没有错误。
 	WebhookRejectionNoError WebhookRejectionErrorType = "no_error"
@@ -58,13 +58,13 @@ var (
 	// summary 指标保留 5 小时窗口，用于观察较长时间内的分位数而不无限增长内存。
 	latencySummaryMaxAge = 5 * time.Hour
 
-	// Metrics provides access to all admission metrics.
+	// Metrics 提供对所有准入指标的访问入口。
 	//
 	// 全局单例：指标注册只能发生一次，否则 legacyregistry 会因重复注册而 panic。
 	Metrics = newAdmissionMetrics()
 )
 
-// ObserverFunc is a func that emits metrics.
+// ObserverFunc 是一个用于上报指标的函数。
 //
 // extraLabels 用于在通用装饰器里追加标签，如插件名。
 type ObserverFunc func(ctx context.Context, elapsed time.Duration, rejected bool, attr admission.Attributes, stepType string, extraLabels ...string)
@@ -76,21 +76,21 @@ const (
 	stepAdmit    = "admit"
 )
 
-// WithControllerMetrics is a decorator for named admission handlers.
+// WithControllerMetrics 是具名准入处理器的装饰器。
 //
 // 用内置控制器的名字作为额外标签，把耗时归因到具体插件。
 func WithControllerMetrics(i admission.Interface, name string) admission.Interface {
 	return WithMetrics(i, Metrics.ObserveAdmissionController, name)
 }
 
-// WithStepMetrics is a decorator for a whole admission phase, i.e. admit or validation.admission step.
+// WithStepMetrics 是整个准入阶段（即 admit 或 validation.admission 步骤）的装饰器。
 //
 // 用于统计整段准入流程的耗时，不归因到单个插件。
 func WithStepMetrics(i admission.Interface) admission.Interface {
 	return WithMetrics(i, Metrics.ObserveAdmissionStep)
 }
 
-// WithMetrics is a decorator for admission handlers with a generic observer func.
+// WithMetrics 使用通用的 observer 函数为准入处理器添加指标装饰。
 func WithMetrics(i admission.Interface, observer ObserverFunc, extraLabels ...string) admission.Interface {
 	return &pluginHandlerWithMetrics{
 		Interface:   i,
@@ -99,7 +99,7 @@ func WithMetrics(i admission.Interface, observer ObserverFunc, extraLabels ...st
 	}
 }
 
-// pluginHandlerWithMetrics decorates a admission handler with metrics.
+// pluginHandlerWithMetrics 为准入处理器添加指标装饰。
 //
 // 内嵌原接口以保留其全部方法，只覆写 Admit/Validate 以插入计时。
 type pluginHandlerWithMetrics struct {
@@ -108,7 +108,7 @@ type pluginHandlerWithMetrics struct {
 	extraLabels []string
 }
 
-// Admit performs a mutating admission control check and emit metrics.
+// Admit 执行可变（mutating）准入检查并上报指标。
 //
 // 若被装饰的插件不实现 MutationInterface 则直接放行，这样同一个装饰器可安全包裹任意插件。
 func (p pluginHandlerWithMetrics) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
@@ -124,7 +124,7 @@ func (p pluginHandlerWithMetrics) Admit(ctx context.Context, a admission.Attribu
 	return err
 }
 
-// Validate performs a non-mutating admission control check and emits metrics.
+// Validate 执行非可变准入检查并上报指标。
 func (p pluginHandlerWithMetrics) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	validatingHandler, ok := p.Interface.(admission.ValidationInterface)
 	if !ok {
@@ -137,7 +137,7 @@ func (p pluginHandlerWithMetrics) Validate(ctx context.Context, a admission.Attr
 	return err
 }
 
-// AdmissionMetrics instruments admission with prometheus metrics.
+// AdmissionMetrics 使用 prometheus 指标为准入流程埋点。
 type AdmissionMetrics struct {
 	step                            *metricSet
 	controller                      *metricSet
@@ -150,11 +150,11 @@ type AdmissionMetrics struct {
 	matchConditionEvaluationSeconds *metricSet
 }
 
-// newAdmissionMetrics create a new AdmissionMetrics, configured with default metric names.
+// newAdmissionMetrics 创建一个新的 AdmissionMetrics，使用默认的指标名称。
 func newAdmissionMetrics() *AdmissionMetrics {
-	// Admission metrics for a step of the admission flow. The entire admission flow is broken down into a series of steps
-	// Each step is identified by a distinct type label value.
-	// Use buckets ranging from 5 ms to 2.5 seconds.
+	// 准入流程各步骤的指标。整个准入流程被拆分为一系列步骤，
+	// 每个步骤由不同的 type 标签值标识。
+	// 使用从 5 毫秒到 2.5 秒的桶。
 	step := &metricSet{
 		latencies: metrics.NewHistogramVec(
 			&metrics.HistogramOpts{
@@ -181,8 +181,8 @@ func newAdmissionMetrics() *AdmissionMetrics {
 		),
 	}
 
-	// Built-in admission controller metrics. Each admission controller is identified by name.
-	// Use buckets ranging from 5 ms to 2.5 seconds.
+	// 内置准入控制器的指标。每个准入控制器以名称标识。
+	// 使用从 5 毫秒到 2.5 秒的桶。
 	controller := &metricSet{
 		latencies: metrics.NewHistogramVec(
 			&metrics.HistogramOpts{
@@ -199,8 +199,8 @@ func newAdmissionMetrics() *AdmissionMetrics {
 		latenciesSummary: nil,
 	}
 
-	// Admission webhook metrics. Each webhook is identified by name.
-	// Use buckets ranging from 5 ms to 2.5 seconds (admission webhooks timeout at 30 seconds by default).
+	// 准入 webhook 的指标。每个 webhook 以名称标识。
+	// 使用从 5 毫秒到 2.5 秒的桶（准入 webhook 默认超时为 30 秒）。
 	webhook := &metricSet{
 		latencies: metrics.NewHistogramVec(
 			&metrics.HistogramOpts{
@@ -301,22 +301,20 @@ func (m *AdmissionMetrics) reset() {
 	m.webhook.reset()
 }
 
-// ObserveAdmissionStep records admission related metrics for a admission step, identified by step type.
+// ObserveAdmissionStep 记录以步骤类型标识的准入步骤的相关指标。
 func (m *AdmissionMetrics) ObserveAdmissionStep(ctx context.Context, elapsed time.Duration, rejected bool, attr admission.Attributes, stepType string, extraLabels ...string) {
 	// 标签顺序必须与注册时声明的顺序一致：type、operation、rejected。
 	m.step.observe(ctx, elapsed, append(extraLabels, stepType, string(attr.GetOperation()), strconv.FormatBool(rejected))...)
 }
 
-// ObserveAdmissionController records admission related metrics for a built-in admission controller, identified by it's plugin handler name.
+// ObserveAdmissionController 记录以插件处理器名称标识的内置准入控制器的相关指标。
 func (m *AdmissionMetrics) ObserveAdmissionController(ctx context.Context, elapsed time.Duration, rejected bool, attr admission.Attributes, stepType string, extraLabels ...string) {
 	m.controller.observe(ctx, elapsed, append(extraLabels, stepType, string(attr.GetOperation()), strconv.FormatBool(rejected))...)
 }
 
-// ObserveWebhook records admission related metrics for a admission webhook.
+// ObserveWebhook 记录准入 webhook 的相关指标。
 func (m *AdmissionMetrics) ObserveWebhook(ctx context.Context, name string, elapsed time.Duration, rejected bool, attr admission.Attributes, stepType string, code int) {
-	// We truncate codes greater than 600 to keep the cardinality bounded.
-	//
-	// webhook 可能返回任意状态码，截断可避免指标基数失控。
+	// webhook 可能返回任意状态码，这里将大于 600 的状态码截断，以避免指标基数失控。
 	if code > 600 {
 		code = 600
 	}
@@ -324,27 +322,27 @@ func (m *AdmissionMetrics) ObserveWebhook(ctx context.Context, name string, elap
 	m.webhook.observe(ctx, elapsed, name, stepType, string(attr.GetOperation()), strconv.FormatBool(rejected))
 }
 
-// ObserveWebhookRejection records admission related metrics for an admission webhook rejection.
+// ObserveWebhookRejection 记录准入 webhook 拒绝事件的相关指标。
 func (m *AdmissionMetrics) ObserveWebhookRejection(ctx context.Context, name, stepType, operation string, errorType WebhookRejectionErrorType, rejectionCode int) {
-	// We truncate codes greater than 600 to keep the cardinality bounded.
-	// This should be rarely done by a malfunctioning webhook server.
+	// 将大于 600 的状态码截断，以控制指标基数。
+	// 只有行为异常的 webhook 服务器才会返回这类状态码。
 	if rejectionCode > 600 {
 		rejectionCode = 600
 	}
 	m.webhookRejection.WithContext(ctx).WithLabelValues(name, stepType, operation, string(errorType), strconv.Itoa(rejectionCode)).Inc()
 }
 
-// WebhookRejectionGathererForTest exposes admission webhook rejection metric for access by unit test.
+// WebhookRejectionGathererForTest 暴露准入 webhook 拒绝指标，供单元测试访问。
 func (m *AdmissionMetrics) WebhookRejectionGathererForTest() *metrics.CounterVec {
 	return m.webhookRejection
 }
 
-// ObserveWebhookFailOpen records validating or mutating webhook that fail open.
+// ObserveWebhookFailOpen 记录 fail open（失败放行）的 validating 或 mutating webhook。
 func (m *AdmissionMetrics) ObserveWebhookFailOpen(ctx context.Context, name, stepType string) {
 	m.webhookFailOpen.WithContext(ctx).WithLabelValues(name, stepType).Inc()
 }
 
-// ObserveMatchConditionEvalError records validating or mutating webhook that are not called due to match conditions
+// ObserveMatchConditionEvalError 记录因 match conditions 求值出错而未被调用的
 //
 // 注意：matchCondition 求值出错时默认策略是“跳过该 webhook”，因此这里统计的是被跳过的次数，
 // 与 ObserveMatchConditionExclusion 区分开，便于定位是配置写错还是条件本身命中。
@@ -352,12 +350,12 @@ func (m *AdmissionMetrics) ObserveMatchConditionEvalError(ctx context.Context, n
 	m.matchConditionEvalErrors.WithContext(ctx).WithLabelValues(name, kind, stepType, operation).Inc()
 }
 
-// ObserveMatchConditionExclusion records validating or mutating webhook that are not called due to match conditions
+// ObserveMatchConditionExclusion 记录因命中 match conditions 而未被调用的
 func (m *AdmissionMetrics) ObserveMatchConditionExclusion(ctx context.Context, name, kind, stepType, operation string) {
 	m.matchConditionExclusions.WithContext(ctx).WithLabelValues(name, kind, stepType, operation).Inc()
 }
 
-// ObserveMatchConditionEvaluationTime records duration of match condition evaluation process.
+// ObserveMatchConditionEvaluationTime 记录 match condition 求值过程的耗时。
 func (m *AdmissionMetrics) ObserveMatchConditionEvaluationTime(ctx context.Context, elapsed time.Duration, name, kind, stepType, operation string) {
 	m.matchConditionEvaluationSeconds.observe(ctx, elapsed, name, kind, stepType, operation)
 }
@@ -368,7 +366,7 @@ type metricSet struct {
 	latenciesSummary *metrics.SummaryVec
 }
 
-// MustRegister registers all the prometheus metrics in the metricSet.
+// MustRegister 注册 metricSet 中的所有 prometheus 指标。
 func (m *metricSet) mustRegister() {
 	legacyregistry.MustRegister(m.latencies)
 	if m.latenciesSummary != nil {
@@ -376,7 +374,7 @@ func (m *metricSet) mustRegister() {
 	}
 }
 
-// Reset resets all the prometheus metrics in the metricSet.
+// Reset 重置 metricSet 中的所有 prometheus 指标。
 func (m *metricSet) reset() {
 	m.latencies.Reset()
 	if m.latenciesSummary != nil {
@@ -384,7 +382,7 @@ func (m *metricSet) reset() {
 	}
 }
 
-// Observe records an observed admission event to all metrics in the metricSet.
+// Observe 将一次观测到的准入事件记录到 metricSet 的所有指标中。
 func (m *metricSet) observe(ctx context.Context, elapsed time.Duration, labels ...string) {
 	elapsedSeconds := elapsed.Seconds()
 	m.latencies.WithContext(ctx).WithLabelValues(labels...).Observe(elapsedSeconds)

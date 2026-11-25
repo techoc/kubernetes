@@ -28,10 +28,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Factory is a function that returns an Interface for admission decisions.
-// The config parameter provides an io.Reader handler to the factory in
-// order to load specific configurations. If no configuration is provided
-// the parameter is nil.
+// Factory 是一个返回用于准入决策的 Interface 的函数。
+// config 参数向工厂提供用于加载特定配置的 io.Reader；
+// 未提供配置时该参数为 nil。
 type Factory func(config io.Reader) (Interface, error)
 
 // Plugins 维护准入插件名到工厂的注册表；并发安全，注册与查找都在锁内完成。
@@ -45,10 +44,9 @@ func NewPlugins() *Plugins {
 	return &Plugins{}
 }
 
-// All registered admission options.
+// 所有已注册的准入选项。
 var (
-	// PluginEnabledFn checks whether a plugin is enabled.  By default, if you ask about it, it's enabled.
-	//
+	// PluginEnabledFn 检查插件是否启用。默认情况下，只要询问即视为启用。
 	// 该钩子由各发行版（如 kube-apiserver 的 feature gate 校验）覆盖，
 	// 用于在插件创建前做外部条件检查；默认全放行以保持库的通用性。
 	PluginEnabledFn = func(name string, config io.Reader) bool {
@@ -56,10 +54,10 @@ var (
 	}
 )
 
-// PluginEnabledFunc is a function type that can provide an external check on whether an admission plugin may be enabled
+// PluginEnabledFunc 是提供“准入插件能否启用”外部检查的函数类型
 type PluginEnabledFunc func(name string, config io.Reader) bool
 
-// Registered enumerates the names of all registered plugins.
+// Registered 列出所有已注册插件的名称。
 //
 // 返回排序后的名称列表，保证日志与错误输出稳定。
 func (ps *Plugins) Registered() []string {
@@ -73,8 +71,7 @@ func (ps *Plugins) Registered() []string {
 	return keys
 }
 
-// Register registers a plugin Factory by name. This
-// is expected to happen during app startup.
+// Register 按名称注册插件 Factory，预期在应用启动阶段调用。
 //
 // 重复注册是编程错误，直接 Fatal 终止进程：静默覆盖会让实际生效的插件难以追踪。
 func (ps *Plugins) Register(name string, plugin Factory) {
@@ -93,11 +90,9 @@ func (ps *Plugins) Register(name string, plugin Factory) {
 	ps.registry[name] = plugin
 }
 
-// getPlugin creates an instance of the named plugin.  It returns `false` if
-// the name is not known. The error is returned only when the named provider was
-// known but failed to initialize.  The config parameter specifies the io.Reader
-// handler of the configuration file for the cloud provider, or nil for no configuration.
-//
+// getPlugin 创建具名插件的实例；名称未知时返回 `false`。
+// 仅当已知该名称但初始化失败时才返回错误。config 指定该插件配置文件的
+// io.Reader，无配置时为 nil。
 // 返回的 bool 区分“未知插件”与“已知但初始化失败”：前者由调用方决定是否报错，
 // 后者一定是错误。
 func (ps *Plugins) getPlugin(name string, config io.Reader) (Interface, bool, error) {
@@ -120,7 +115,7 @@ func (ps *Plugins) getPlugin(name string, config io.Reader) (Interface, bool, er
 	return ret, true, err
 }
 
-// splitStream reads the stream bytes and constructs two copies of it.
+// splitStream 读取流的全部字节并构造两份副本。
 //
 // 配置流只能读一次，但既要给 enabled 检查又要给工厂，因此先整体读入再复制两份。
 // 对 typed nil（如 (*bytes.Buffer)(nil)）也做判空，避免后续 ReadAll 返回误导性错误。
@@ -137,9 +132,7 @@ func splitStream(config io.Reader) (io.Reader, io.Reader, error) {
 	return bytes.NewBuffer(configBytes), bytes.NewBuffer(configBytes), nil
 }
 
-// NewFromPlugins returns an admission.Interface that will enforce admission control decisions of all
-// the given plugins.
-//
+// NewFromPlugins 返回一个 admission.Interface，强制执行所给全部插件的准入控制决策。
 // 顺序即执行顺序：调用方传入的 pluginNames 顺序决定了 mutating 与 validating 链的顺序，
 // 因此配置解析阶段必须保持用户声明的次序。最终包一层 reinvocation handler，
 // 支持 mutating 插件在对象被后续插件修改后重新执行。
@@ -181,7 +174,7 @@ func (ps *Plugins) NewFromPlugins(pluginNames []string, configProvider ConfigPro
 	return newReinvocationHandler(chainAdmissionHandler(handlers)), nil
 }
 
-// InitPlugin creates an instance of the named interface.
+// InitPlugin 创建具名接口的实例。
 //
 // 空名字表示“不启用任何插件”，返回 (nil, nil) 而非错误，便于配置层统一处理。
 func (ps *Plugins) InitPlugin(name string, config io.Reader, pluginInitializer PluginInitializer) (Interface, error) {
@@ -199,7 +192,7 @@ func (ps *Plugins) InitPlugin(name string, config io.Reader, pluginInitializer P
 	}
 
 	pluginInitializer.Initialize(plugin)
-	// ensure that plugins have been properly initialized
+	// 确保插件已正确初始化
 	if err := ValidateInitialization(plugin); err != nil {
 		return nil, fmt.Errorf("failed to initialize admission plugin %q: %v", name, err)
 	}
@@ -207,8 +200,8 @@ func (ps *Plugins) InitPlugin(name string, config io.Reader, pluginInitializer P
 	return plugin, nil
 }
 
-// ValidateInitialization will call the InitializationValidate function in each plugin if they implement
-// the InitializationValidator interface.
+// ValidateInitialization 会对实现了 InitializationValidator 接口的
+// 每个插件调用其 ValidateInitialization 函数。
 func ValidateInitialization(plugin Interface) error {
 	if validater, ok := plugin.(InitializationValidator); ok {
 		err := validater.ValidateInitialization()

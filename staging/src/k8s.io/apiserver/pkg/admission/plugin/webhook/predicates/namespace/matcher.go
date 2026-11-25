@@ -34,13 +34,11 @@ import (
 
 // NamespaceSelectorProvider 由具体的 webhook 配置实现，提供已解析的 namespaceSelector。
 type NamespaceSelectorProvider interface {
-	// GetNamespaceSelector gets the webhook NamespaceSelector field.
-	// 返回解析后的选择器；解析失败说明配置非法，调用方应拒绝该 webhook。
+	// 返回 webhook 的 NamespaceSelector 字段，即解析后的选择器；解析失败说明配置非法，调用方应拒绝该 webhook。
 	GetParsedNamespaceSelector() (labels.Selector, error)
 }
 
-// Matcher decides if a request is exempted by the NamespaceSelector of a
-// webhook configuration.
+// Matcher 判断请求是否被 webhook 配置的 NamespaceSelector 豁免（跳过调用）。
 // 通过读取目标命名空间的标签判断请求是否命中 webhook 的 namespaceSelector。
 type Matcher struct {
 	NamespaceLister corelisters.NamespaceLister
@@ -51,14 +49,13 @@ type Matcher struct {
 func (m *Matcher) GetNamespace(ctx context.Context, name string) (*v1.Namespace, error) {
 	ns, err := m.NamespaceLister.Get(name)
 	if apierrors.IsNotFound(err) && len(name) > 0 {
-		// in case of latency in our caches, make a call direct to storage to verify that it truly exists or not
 		// 缓存可能滞后，直接回源确认命名空间是否真的不存在，避免误判。
 		ns, err = m.Client.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
 	}
 	return ns, err
 }
 
-// Validate checks if the Matcher has a NamespaceLister and Client.
+// Validate 检查 Matcher 是否配置了 NamespaceLister 与 Client。
 func (m *Matcher) Validate() error {
 	var errs []error
 	if m.NamespaceLister == nil {
@@ -70,18 +67,11 @@ func (m *Matcher) Validate() error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// GetNamespaceLabels gets the labels of the namespace related to the attr.
+// GetNamespaceLabels 返回与 attr 相关的命名空间的标签。
 func (m *Matcher) GetNamespaceLabels(attr admission.Attributes) (map[string]string, error) {
-	// If the request itself is creating or updating a namespace, then get the
-	// labels from attr.Object, because namespaceLister doesn't have the latest
-	// namespace yet.
-	//
-	// However, if the request is deleting a namespace, then get the label from
-	// the namespace in the namespaceLister, because a delete request is not
-	// going to change the object, and attr.Object will be a DeleteOptions
-	// rather than a namespace object.
-	//
-	// 中文说明：创建/更新命名空间时必须使用请求体中的对象，缓存里还是旧版本；
+	// 若请求本身在创建或更新命名空间，从 attr.Object 取标签，
+	// 因为 namespaceLister 还没有最新的命名空间；
+	// 创建/更新命名空间时必须使用请求体中的对象，缓存里还是旧版本；
 	// 删除时 attr.Object 是 DeleteOptions，只能回退到缓存中的命名空间标签。
 	if attr.GetResource().Resource == "namespaces" &&
 		len(attr.GetSubresource()) == 0 &&
@@ -99,7 +89,7 @@ func (m *Matcher) GetNamespaceLabels(attr admission.Attributes) (map[string]stri
 		return nil, err
 	}
 	if apierrors.IsNotFound(err) {
-		// in case of latency in our caches, make a call direct to storage to verify that it truly exists or not
+		// 缓存可能滞后，直接回源确认命名空间是否真的不存在。
 		namespace, err = m.Client.CoreV1().Namespaces().Get(context.TODO(), namespaceName, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
@@ -108,17 +98,15 @@ func (m *Matcher) GetNamespaceLabels(attr admission.Attributes) (map[string]stri
 	return namespace.Labels, nil
 }
 
-// MatchNamespaceSelector decides whether the request matches the
-// namespaceSelector of the webhook. Only when they match, the webhook is called.
+// MatchNamespaceSelector 判断请求是否命中 webhook 的 namespaceSelector，
+// 只有命中时才调用该 webhook。
 // 返回 true 表示 webhook 应被调用；第二个返回值非空时表示无法完成匹配。
 func (m *Matcher) MatchNamespaceSelector(p NamespaceSelectorProvider, attr admission.Attributes) (bool, *apierrors.StatusError) {
 	namespaceName := attr.GetNamespace()
 	if len(namespaceName) == 0 && attr.GetResource().Resource != "namespaces" {
-		// If the request is about a cluster scoped resource, and it is not a
-		// namespace, it is never exempted.
-		// TODO: figure out a way selective exempt cluster scoped resources.
-		// Also update the comment in types.go
-		// 集群级资源没有命名空间标签可匹配，因此无条件调用 webhook。
+		// 请求针对集群级资源且不是 namespace 时，永不豁免。
+		// TODO: 想办法有选择地豁免集群级资源。
+		// 同时更新 types.go 中的注释
 		return true, nil
 	}
 	selector, err := p.GetParsedNamespaceSelector()
@@ -131,9 +119,8 @@ func (m *Matcher) MatchNamespaceSelector(p NamespaceSelectorProvider, attr admis
 	}
 
 	namespaceLabels, err := m.GetNamespaceLabels(attr)
-	// this means the namespace is not found, for backwards compatibility,
-	// return a 404
-	// 为保持向后兼容，命名空间不存在时原样透传 404 状态。
+	// 到这里说明命名空间不存在，为保持向后兼容，
+	// 返回 404；命名空间不存在时原样透传状态。
 	if apierrors.IsNotFound(err) {
 		status, ok := err.(apierrors.APIStatus)
 		if !ok {

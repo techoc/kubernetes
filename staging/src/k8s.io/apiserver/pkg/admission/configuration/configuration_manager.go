@@ -46,52 +46,35 @@ type getFunc func() (runtime.Object, error)
 
 // poller 按间隔轮询配置，并缓存最近一次成功读取的结果。
 //
-// When running, poller calls `get` every `interval`. If `get` is
-// successful, `Ready()` returns ready and `configuration()` returns the
-// `mergedConfiguration`; if `get` has failed more than `failureThreshold ` times,
-// `Ready()` returns not ready and `configuration()` returns nil configuration.
-// In an HA setup, the poller is consistent only if the `get` is
-// doing consistent read.
+// 运行期间 poller 每隔 interval 调用一次 `get`：`get` 成功时 `Ready()` 返回就绪、
+// `configuration()` 返回 `mergedConfiguration`；`get` 连续失败次数超过
+// `failureThreshold` 时 `Ready()` 返回未就绪、`configuration()` 返回 nil 配置。
+// 在 HA 部署中，只有当 `get` 使用一致性读时，poller 才具有一致性。
 type poller struct {
-	// a function to consistently read the latest configuration
 	// 读取最新配置的函数；一致性由调用方保证。
 	get getFunc
-	// consistent read interval
-	// read-only
 	// 轮询间隔，运行期间不可变。
 	interval time.Duration
-	// if the number of consecutive read failure equals or exceeds the failureThreshold , the
-	// configuration is regarded as not ready.
-	// read-only
 	// 连续失败达到该次数后配置被视为未就绪。
 	failureThreshold int
-	// number of consecutive failures so far.
 	// 当前连续失败次数；成功一次即清零。
 	failures int
-	// If the poller has passed the bootstrap phase. The poller is considered
-	// bootstrapped either bootstrapGracePeriod after the first call of
-	// configuration(), or when setConfigurationAndReady() is called, whichever
-	// comes first.
-	// 是否已度过启动阶段；度过之后不再重试读取。
+	// 是否已度过启动阶段：首次调用 configuration() 后的 bootstrapGracePeriod，
+	// 或 setConfigurationAndReady() 被调用，二者取更早者。
+	// 度过之后不再重试读取。
 	bootstrapped bool
-	// configuration() retries bootstrapRetries times if poller is not bootstrapped
-	// read-only
-	// 启动阶段 configuration() 的最大尝试次数。
+	// 启动阶段（未 bootstrapped 时）configuration() 的最大尝试次数。
 	bootstrapRetries int
-	// Grace period for bootstrapping
-	// read-only
 	// 启动宽限期，超时后无论是否读到配置都视为已启动。
 	bootstrapGracePeriod time.Duration
 	// once 保证宽限期定时器只启动一次。
 	once sync.Once
-	// if the configuration is regarded as ready.
 	// 配置是否就绪；只有成功读取过才会为 true。
 	ready bool
 	// 最近一次成功读取并合并后的配置对象。
 	mergedConfiguration runtime.Object
 	// 最近一次读取错误，用于在未就绪时向调用方暴露根因。
 	lastErr error
-	// lock must be hold when reading/writing the data fields of poller.
 	// 读写 poller 的数据字段时必须持有该锁。
 	lock sync.RWMutex
 }
@@ -124,7 +107,6 @@ func (a *poller) notReady() {
 
 // bootstrapping 启动一个宽限期定时器，超时后把 poller 标记为已度过启动阶段。
 func (a *poller) bootstrapping() {
-	// bootstrapGracePeriod is read-only, so no lock is required
 	// 宽限期是只读字段，因此读取无需加锁。
 	timer := time.NewTimer(a.bootstrapGracePeriod)
 	go func() {
@@ -138,8 +120,6 @@ func (a *poller) bootstrapping() {
 
 // configuration 返回当前配置；未就绪时返回错误。
 //
-// If the poller is not bootstrapped yet, the configuration() gets a few chances
-// to retry. This hides transient failures during system startup.
 // 启动阶段会在持锁的读取循环之间睡眠等待，最多尝试 bootstrapRetries 次，
 // 以掩盖启动初期的瞬态失败；超过宽限期后只尝试一次，避免阻塞请求路径。
 func (a *poller) configuration() (runtime.Object, error) {

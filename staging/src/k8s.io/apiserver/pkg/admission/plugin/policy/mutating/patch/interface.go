@@ -27,10 +27,10 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/cel"
 )
 
-// Patcher provides a patch function to perform a mutation to an object in the admission chain.
+// Patcher 提供 patch 函数，用于在准入链中对对象执行一次变更。
 type Patcher interface {
-	// Patch returns a copy of the object in the request, modified to change specified by the patch.
-	// The original object in the request MUST NOT be modified in-place.
+	// Patch 返回请求中对象的副本，并按补丁内容完成修改。
+	// 严禁原地修改请求中的原始对象。
 	//
 	// 返回副本而非原地修改，是因为同一对象可能被后续插件、审计与响应序列化共享；
 	// 原地修改会让失败回滚变得不可能。runtimeCELCostBudget 限制 CEL 求值开销，
@@ -38,7 +38,7 @@ type Patcher interface {
 	Patch(ctx context.Context, request Request, runtimeCELCostBudget int64) (runtime.Object, error)
 }
 
-// Request defines the arguments required by a patcher.
+// Request 定义 patcher 所需的参数。
 type Request struct {
 	// MatchedResource 是策略匹配到的资源，用于构造 apply 配置与字段管理所需的信息。
 	MatchedResource schema.GroupVersionResource

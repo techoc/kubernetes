@@ -39,45 +39,37 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// PolicyInvocation is a single policy-binding-param tuple from a Policy Hook
-// in the context of a specific request. The params have already been resolved
-// and any error in configuration or setting up the invocation is stored in
-// the Error field.
-//
+// PolicyInvocation 表示某个请求上下文中来自一条 Policy Hook 的
+// policy-binding-param 三元组。params 已解析完毕，配置或构造 invocation
+// 过程中的错误存放在 Error 字段。
 // 一个绑定若通过 selector 匹配到多个 param，会展开成多条 invocation，
-// 因此下游 delegate 必须能处理"同一绑定多次求值"的情况。
+// 因此下游 delegate 必须能处理“同一绑定多次求值”的情况。
 type PolicyInvocation[P runtime.Object, B runtime.Object, E Evaluator] struct {
-	// Relevant policy for this hook.
-	// This field is always populated
+	// 与本次 hook 相关的策略；该字段总是有值。
 	Policy P
 
-	// Matched Kind for the request given the policy's matchconstraints
-	// May be empty if there was an error matching the resource
+	// 根据策略的 matchConstraints 匹配出的请求 Kind；
 	Kind schema.GroupVersionKind
 
-	// Matched Resource for the request given the policy's matchconstraints
-	// May be empty if there was an error matching the resource
+	// 根据策略的 matchConstraints 匹配出的请求 Resource；
 	Resource schema.GroupVersionResource
 
-	// Relevant binding for this hook.
-	// May be empty if there was an error with the policy's configuration itself
+	// 与本次 hook 相关的绑定；
+	// 策略自身配置有误时可能为空。
 	Binding B
 
-	// Compiled policy evaluator
+	// 编译后的策略评估器。
 	Evaluator E
 
-	// Params fetched by the binding to use to evaluate the policy
+	// 绑定获取的、用于评估策略的参数。
 	Param runtime.Object
 }
 
-// dispatcherDelegate is called during a request with a pre-filtered list
-// of (Policy, Binding, Param) tuples that are active and match the request.
-// The dispatcher delegate is responsible for updating the object on the
-// admission attributes in the case of mutation, or returning a status error in
-// the case of validation.
-//
-// The delegate provides the "validation" or "mutation" aspect of dispatcher functionality
-// (in contrast to generic.PolicyDispatcher which only selects active policies and params)
+// dispatcherDelegate 在请求期间被调用，接收已预先过滤好的、处于激活状态且与请求
+// 匹配的 (Policy, Binding, Param) 三元组列表。delegate 负责在变异场景下更新
+// admission attributes 上的对象，或在校验场景下返回状态错误。
+// delegate 提供调度功能中“校验”或“变异”的部分
+// （与之相对，generic.PolicyDispatcher 只负责筛选激活的策略与参数）。
 type dispatcherDelegate[P, B runtime.Object, E Evaluator] func(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces, versionedAttributes webhookgeneric.VersionedAttributeAccessor, invocations []PolicyInvocation[P, B, E]) ([]PolicyError, *apierrors.StatusError)
 
 // policyDispatcher 负责从所有 hook 中筛出与当前请求匹配的 (policy, binding, param)，
@@ -104,23 +96,20 @@ func NewPolicyDispatcher[P runtime.Object, B runtime.Object, E Evaluator](
 	}
 }
 
-// Dispatch implements generic.Dispatcher. It loops through all active hooks
-// (policy x binding pairs) and selects those which are active for the current
-// request. It then resolves all params and creates an Invocation for each
-// matching policy-binding-param tuple. The delegate is then called with the
-// list of tuples.
-//
+// Dispatch 实现 generic.Dispatcher：遍历所有激活的 hook（policy×binding 组合），
+// 筛出与当前请求匹配的项，解析全部 params，为每个匹配的
+// policy-binding-param 三元组构造 Invocation，再携带该列表调用 delegate。
 // Start 无后台工作，满足 Dispatcher 接口即可。
 func (d *policyDispatcher[P, B, E]) Start(ctx context.Context) error {
 	return nil
 }
 
-// Note: MatchConditions expressions are not evaluated here. The dispatcher delegate
-// is expected to ignore the result of any policies whose match conditions dont pass.
-// This may be possible to refactor so matchconditions are checked here instead.
+// 注意：MatchConditions 表达式不在这里求值。delegate 需要自行忽略
+// match conditions 未通过的策略结果。将来或许可以重构，把
+// matchconditions 的检查挪到这里。
 func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces, hooks []PolicyHook[P, B, E]) error {
 	var relevantHooks []PolicyInvocation[P, B, E]
-	// Construct all the versions we need to call our webhooks
+	// 构造调用 webhook 所需的全部版本化属性。
 	versionedAttrAccessor := &versionedAttributeAccessor{
 		versionedAttrs:   map[schema.GroupVersionKind]*admission.VersionedAttributes{},
 		attr:             a,
@@ -149,7 +138,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 		policyAccessor := d.newPolicyAccessor(hook.Policy)
 		matches, matchGVR, matchGVK, err := d.matcher.DefinitionMatches(a, o, policyAccessor)
 		if err != nil {
-			// There was an error evaluating if this policy matches anything.
+			// 评估策略是否匹配时出错。
 			addConfigError(err, policyAccessor, nil)
 			continue
 		} else if !matches {
@@ -164,24 +153,21 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 			bindingAccessor := d.newBindingAccessor(binding)
 			matches, err = d.matcher.BindingMatches(a, o, bindingAccessor)
 			if err != nil {
-				// There was an error evaluating if this binding matches anything.
+				// 评估绑定是否匹配时出错。
 				addConfigError(err, policyAccessor, bindingAccessor)
 				continue
 			} else if !matches {
 				continue
 			}
 
-			// here the binding matches.
-			// VersionedAttr result will be cached and reused later during parallel
-			// hook calls.
+			// 到这里绑定已匹配。
+			// VersionedAttr 的结果会被缓存，供后续并行调用 hook 时复用。
 			if _, err = versionedAttrAccessor.VersionedAttribute(matchGVK); err != nil {
-				// VersionedAttr result will be cached and reused later during parallel
-				// hook calls.
 				addConfigError(err, policyAccessor, nil)
 				continue
 			}
 
-			// Collect params for this binding
+			// 收集该绑定的 params。
 			params, err := CollectParams(
 				policyAccessor.GetParamKind(),
 				hook.ParamInformer,
@@ -192,13 +178,13 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 				hook.RESTMapper,
 			)
 			if err != nil {
-				// There was an error collecting params for this binding.
+				// 收集该绑定的 params 时出错。
 				addConfigError(err, policyAccessor, bindingAccessor)
 				continue
 			}
 
-			// If params is empty and there was no error, that means that
-			// ParamNotFoundAction is ignore, so it shouldnt be added to list
+			// params 为空且没有出错，说明 ParamNotFoundAction 是 Ignore，
+			// 因此不需要加入列表。
 			for _, param := range params {
 				relevantHooks = append(relevantHooks, PolicyInvocation[P, B, E]{
 					Policy:    hook.Policy,
@@ -223,7 +209,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 
 	var filteredErrors []PolicyError
 	for _, e := range policyErrors {
-		// we always default the FailurePolicy if it is unset and validate it in API level
+		// FailurePolicy 未设置时一律默认为 Fail，且已在 API 层做过校验。
 		var policy v1.FailurePolicyType
 		if fp := e.Policy.GetFailurePolicy(); fp == nil {
 			policy = v1.Fail
@@ -233,7 +219,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 
 		switch policy {
 		case v1.Ignore:
-			// TODO: add metrics for ignored error here
+			// TODO: 在此为被忽略的错误添加指标。
 			continue
 		case v1.Fail:
 			filteredErrors = append(filteredErrors, e)
@@ -247,10 +233,10 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 
 		forbiddenErr := admission.NewForbidden(a, fmt.Errorf("admission request denied by policy"))
 
-		// The forbiddenErr is always a StatusError.
+		// forbiddenErr 一定是 StatusError。
 		var err *apierrors.StatusError
 		if !errors.As(forbiddenErr, &err) {
-			// Should never happen.
+			// 理论上不会发生。
 			return apierrors.NewInternalError(fmt.Errorf("failed to create status error"))
 		}
 		// 先清空占位消息，下面用第一条真实的拒绝原因填充。
@@ -259,8 +245,8 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 		for _, policyError := range filteredErrors {
 			message := policyError.Error()
 
-			// If this is the first denied decision, use its message and reason
-			// for the status error message.
+			// 如果是第一条被拒绝的决定，用它的 message 和 reason
+			// 作为状态错误的消息。
 			if err.ErrStatus.Message == "" {
 				err.ErrStatus.Message = message
 				if policyError.Reason != "" {
@@ -268,7 +254,7 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 				}
 			}
 
-			// Add the denied decision's message to the status error's details
+			// 把被拒绝决定的消息加入状态错误的 details。
 			err.ErrStatus.Details.Causes = append(
 				err.ErrStatus.Details.Causes,
 				metav1.StatusCause{Message: message})
@@ -280,12 +266,11 @@ func (d *policyDispatcher[P, B, E]) Dispatch(ctx context.Context, a admission.At
 	return nil
 }
 
-// Returns params to use to evaluate a policy-binding with given param
-// configuration. If the policy-binding has no param configuration, it
-// returns a single-element list with a nil param.
+// 返回用于配合给定 param 配置评估某条 policy-binding 的 params；
+// 若该 policy-binding 没有 param 配置，返回只含一个 nil param 的列表。
 //
-// The dynamicClient and restMapper parameters enable direct API fallback when
-// the informer cache hasn't received the watch event for a newly created param yet.
+// dynamicClient 与 restMapper 参数支持在 informer 缓存尚未收到
+// 新建 param 的 watch 事件时，直接回退到 API 读取。
 //
 // 参数解析失败会被上抛为配置错误，最终由绑定的 FailurePolicy 决定是否拒绝请求；
 // 因此这里的错误信息要足够具体，便于用户定位是 paramKind、namespace 还是 selector 的问题。
@@ -298,37 +283,35 @@ func CollectParams(
 	dynamicClient dynamic.Interface,
 	restMapper meta.RESTMapper,
 ) ([]runtime.Object, error) {
-	// If definition has paramKind, paramRef is required in binding.
-	// If definition has no paramKind, paramRef set in binding will be ignored.
+	// 定义带有 paramKind 时，绑定必须提供 paramRef；
+	// 定义没有 paramKind 时，绑定中设置的 paramRef 将被忽略。
 	var params []runtime.Object
 	var paramStore cache.GenericNamespaceLister
 
-	// Make sure the param kind is ready to use
+	// 确保 param kind 可用。
 	if paramKind != nil && paramRef != nil {
 		if paramInformer == nil {
 			return nil, fmt.Errorf("paramKind kind `%v` not known",
 				paramKind.String())
 		}
 
-		// Set up cluster-scoped, or namespaced access to the params
-		// "default" if not provided, and paramKind is namespaced
+		// 建立集群级或命名空间级的 param 访问；
+		// paramKind 为命名空间级且未提供 namespace 时回退到 default。
 		paramStore = paramInformer.Lister()
 		if paramScope.Name() == meta.RESTScopeNameNamespace {
 			paramsNamespace := namespace
 			if len(paramRef.Namespace) > 0 {
 				paramsNamespace = paramRef.Namespace
 			} else if len(paramsNamespace) == 0 {
-				// You must supply namespace if your matcher can possibly
-				// match a cluster-scoped resource
+				// 如果 matcher 可能匹配集群级资源，
+				// 则必须提供 namespace。
 				return nil, fmt.Errorf("cannot use namespaced paramRef in policy binding that matches cluster-scoped resources")
 			}
 
 			paramStore = paramInformer.Lister().ByNamespace(paramsNamespace)
 		}
 
-		// If the param informer for this admission policy has not yet
-		// had time to perform an initial listing, don't attempt to use
-		// it.
+		// 若该准入策略的 param informer 尚未完成首次列表，就不要尝试使用它。
 		// 限时 1 秒等待首次同步：准入路径不能无限阻塞，超时按配置错误处理。
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
@@ -339,35 +322,33 @@ func CollectParams(
 		}
 	}
 
-	// Find params to use with policy
+	// 查找与策略配合使用的 params。
 	switch {
 	case paramKind == nil:
-		// ParamKind is unset. Ignore any globalParamRef or namespaceParamRef
-		// setting.
+		// ParamKind 未设置，忽略 globalParamRef 或 namespaceParamRef 的配置。
 		return []runtime.Object{nil}, nil
 	case paramRef == nil:
-		// Policy ParamKind is set, but binding does not use it.
-		// Validate with nil params
+		// 策略的 ParamKind 已设置，但绑定没有使用它；
+		// 以 nil param 校验。
 		return []runtime.Object{nil}, nil
 	case len(paramRef.Namespace) > 0 && paramScope.Name() == meta.RESTScopeRoot.Name():
-		// Not allowed to set namespace for cluster-scoped param
+		// 集群级 param 不允许设置 namespace。
 		return nil, fmt.Errorf("paramRef.namespace must not be provided for a cluster-scoped `paramKind`")
 
 	case len(paramRef.Name) > 0:
 		if paramRef.Selector != nil {
-			// This should be validated, but just in case.
+			// 本应由校验保证，这里只是兜底。
 			return nil, fmt.Errorf("paramRef.name and paramRef.selector are mutually exclusive")
 		}
 
-		// First attempt: try to get the param from the informer cache (fast path)
+		// 第一步：尝试从 informer 缓存获取 param（快路径）。
 		param, err := paramStore.Get(paramRef.Name)
 
-		// If cache returns NotFound and we have a client, try direct API call as fallback.
-		// This handles the race condition where resources (ConfigMap, Policy, Binding, and Param)
-		// are created in quick succession. The informer cache may have completed its initial
-		// sync (checked by WaitForCacheSync above), but newly created params might not have
-		// propagated to the cache yet. The direct API call ensures we get the correct answer
-		// without timing-dependent retry logic.
+		// 缓存返回 NotFound 且有 client 时，尝试直接调用 API 作为回退。
+		// 这处理了 ConfigMap、Policy、Binding、Param 被连续快速创建时的竞态：
+		// informer 缓存可能已完成首次同步（上面的 WaitForCacheSync 已检查），
+		// 但新建的 param 尚未传播到缓存。直接 API 调用保证拿到正确结果，
+		// 无需依赖时序的重试逻辑。
 		if apierrors.IsNotFound(err) && dynamicClient != nil && restMapper != nil && paramKind != nil {
 			param, err = getParamDirectly(dynamicClient, restMapper, paramKind, paramRef, namespace, paramScope)
 		}
@@ -376,45 +357,42 @@ func CollectParams(
 		case err == nil:
 			params = []runtime.Object{param}
 		case apierrors.IsNotFound(err):
-			// Param not yet available. User may need to wait a bit
-			// before being able to use it for validation.
+			// param 尚不可用，用户可能需要稍等才能用它做校验。
 			//
-			// Set params to nil to prepare for not found action
+			// 将 params 置为 nil，为 not found 动作做准备。
 			params = nil
 		case apierrors.IsInvalid(err):
-			// Param mis-configured
-			// require to set namespace for namespaced resource
-			// and unset namespace for cluster scoped resource
+			// param 配置有误：命名空间级资源必须设置 namespace，
+			// 集群级资源必须不设 namespace。
 			return nil, err
 		default:
-			// Internal error
+			// 内部错误。
 			utilruntime.HandleError(err)
 			return nil, err
 		}
 	case paramRef.Selector != nil:
-		// Select everything by default if empty name and selector
+		// name 与 selector 均为空时默认全选。
 		selector, err := metav1.LabelSelectorAsSelector(paramRef.Selector)
 		if err != nil {
-			// Cannot parse label selector: configuration error
+			// 无法解析 label selector：属于配置错误。
 			return nil, err
 
 		}
 
 		paramList, err := paramStore.List(selector)
 		if err != nil {
-			// There was a bad internal error
+			// 严重的内部错误。
 			utilruntime.HandleError(err)
 			return nil, err
 		}
 
-		// Successfully grabbed params
+		// 成功获取到 params。
 		params = paramList
 	default:
-		// Should be unreachable due to validation
+		// 有 API 校验保证，理论上不可达。
 		return nil, fmt.Errorf("one of name or selector must be provided")
 	}
 
-	// Apply fail action for params not found case
 	// Deny 动作下"没找到参数"本身就要拒绝请求，否则绑定会静默失效。
 	if len(params) == 0 && paramRef.ParameterNotFoundAction != nil && *paramRef.ParameterNotFoundAction == v1.DenyAction {
 		return nil, errors.New("no params found for policy binding with `Deny` parameterNotFoundAction")
@@ -423,9 +401,8 @@ func CollectParams(
 	return params, nil
 }
 
-// getParamDirectly performs a direct API call to retrieve a param when the informer
-// cache doesn't have it yet. This handles the race condition where a param resource
-// is created but the watch event hasn't propagated to the informer cache.
+// getParamDirectly 在 informer 缓存还没有该 param 时直接调用 API 获取，
+// 用于处理 param 资源刚创建、watch 事件尚未传播到缓存的竞态。
 //
 // 直接读 API 比"重试等 watch"更可预测：一次同步 GET 要么拿到对象，
 // 要么明确 NotFound，避免在准入路径上引入不确定的等待时间。
@@ -437,7 +414,7 @@ func getParamDirectly(
 	namespace string,
 	paramScope meta.RESTScope,
 ) (runtime.Object, error) {
-	// Convert GVK to GVR using the RESTMapper
+	// 使用 RESTMapper 将 GVK 转换为 GVR。
 	gv, err := schema.ParseGroupVersion(paramKind.APIVersion)
 	if err != nil {
 		return nil, fmt.Errorf("invalid paramKind APIVersion %q: %w", paramKind.APIVersion, err)
@@ -446,16 +423,16 @@ func getParamDirectly(
 
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
-		// An unknown paramKind (CRD not registered or deleted) is reported as
-		// NotFound so the caller routes it through ParameterNotFoundAction
-		// instead of failing the admission request as an internal error.
+		// 未知的 paramKind（CRD 未注册或已删除）报告为 NotFound，让调用方走
+		// ParameterNotFoundAction 处理，
+		// 而不是作为内部错误拒绝准入请求。
 		if meta.IsNoMatchError(err) {
 			return nil, apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, paramRef.Name)
 		}
 		return nil, fmt.Errorf("failed to find REST mapping for %v: %w", gvk, err)
 	}
 
-	// Determine the namespace for the Get request
+	// 确定 Get 请求的命名空间。
 	var targetNamespace string
 	if paramScope.Name() == meta.RESTScopeNameNamespace {
 		if len(paramRef.Namespace) > 0 {
@@ -465,7 +442,7 @@ func getParamDirectly(
 		}
 	}
 
-	// Perform the direct API call with a timeout
+	// 带超时执行直接的 API 调用。
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
@@ -483,17 +460,16 @@ func getParamDirectly(
 	return convertParamToInformerRepresentation(gvk, param)
 }
 
-// convertParamToInformerRepresentation makes a get response object look like an informer object by
-// representing it as unstructured and without TypeMeta. This ensures that CEL expressions
-// receive param objects identically regardless of if the object was received via the informer
-// or if an informer cache miss resulted in a get request to fetch the object.
+// convertParamToInformerRepresentation 把 GET 响应对象转换成 informer 对象的形态：
+// 以 unstructured 表示、不带 TypeMeta。这样无论对象来自 informer 还是缓存未命中后
+// 的 GET，CEL 表达式收到的 param 对象都保持一致。
 //
 // 关键一致性要求：同一 param 无论来自缓存还是直接 GET，CEL 看到的对象形态必须相同，
 // 否则同一表达式会在两条路径上给出不同结果。
 func convertParamToInformerRepresentation(gvk schema.GroupVersionKind, param *unstructured.Unstructured) (runtime.Object, error) {
 	typed, err := clientgoscheme.Scheme.New(gvk)
 	if err != nil {
-		// The kind has no typed representation, so its informer also serves unstructured objects.
+		// 该 kind 没有类型化表示，其 informer 同样只提供 unstructured 对象。
 		return param, nil
 	}
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(param.UnstructuredContent(), typed); err != nil {

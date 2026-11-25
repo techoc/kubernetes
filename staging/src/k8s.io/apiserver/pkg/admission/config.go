@@ -51,12 +51,10 @@ func makeAbs(path, base string) (string, error) {
 	return filepath.Join(base, path), nil
 }
 
-// ReadAdmissionConfiguration reads the admission configuration at the specified path.
-// It returns the loaded admission configuration if the input file aligns with the required syntax.
-// If it does not align with the provided syntax, it returns a default configuration for the enumerated
-// set of pluginNames whose config location references the specified configFilePath.
-// It does this to preserve backward compatibility when admission control files were opaque.
-// It returns an error if the file did not exist.
+// ReadAdmissionConfiguration 读取指定路径的准入配置。
+// 若输入文件符合要求的语法，返回加载后的准入配置；若不符合，则为所枚举的
+// pluginNames 集合生成引用该 configFilePath 的默认配置——这是为了保留
+// 准入控制文件尚为不透明格式时的向后兼容性。文件不存在时返回错误。
 //
 // 该函数同时兼容新旧两种配置文件格式：新格式是版本化的 AdmissionConfiguration；
 // 旧格式是 ImagePolicyWebhook / PodNodeSelector 插件的裸配置。旧格式无法被
@@ -67,7 +65,7 @@ func ReadAdmissionConfiguration(pluginNames []string, configFilePath string, con
 		// 未指定配置文件：返回空配置，调用方会按插件默认值运行。
 		return configProvider{config: &apiserver.AdmissionConfiguration{}}, nil
 	}
-	// a file was provided, so we just read it.
+	// 提供了配置文件，直接读取。
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read admission control configuration from %q [%v]", configFilePath, err)
@@ -76,7 +74,7 @@ func ReadAdmissionConfiguration(pluginNames []string, configFilePath string, con
 	codecs := serializer.NewCodecFactory(configScheme, serializer.EnableStrict)
 	decoder := codecs.UniversalDecoder()
 	decodedObj, err := runtime.Decode(decoder, data)
-	// we were able to decode the file successfully
+	// 文件成功解码
 	if err == nil {
 		decodedConfig, ok := decodedObj.(*apiserver.AdmissionConfiguration)
 		if !ok {
@@ -89,7 +87,7 @@ func ReadAdmissionConfiguration(pluginNames []string, configFilePath string, con
 			if decodedConfig.Plugins[i].Path == "" {
 				continue
 			}
-			// we update relative file paths to absolute paths
+			// 把相对路径转换为绝对路径
 			absPath, err := makeAbs(decodedConfig.Plugins[i].Path, baseDir)
 			if err != nil {
 				return nil, err
@@ -102,12 +100,11 @@ func ReadAdmissionConfiguration(pluginNames []string, configFilePath string, con
 	}
 	// 只有“缺少 apiVersion/kind”或“类型未注册”这类错误才可能意味着这是旧格式
 	// 裸配置；其它错误（例如语法错误）必须原样返回，不能当作旧格式吞掉。
-	// we got an error where the decode wasn't related to a missing type
+	// 解码报错，且并非缺少版本/类型未注册这类错误
 	if !(runtime.IsMissingVersion(err) || runtime.IsMissingKind(err) || runtime.IsNotRegisteredError(err)) {
 		return nil, err
 	}
 
-	// Only tolerate load errors if the file appears to be one of the two legacy plugin configs
 	// 通过顶层 key 判断是否为旧格式；不是则把原始解码错误返回，避免掩盖真正的问题。
 	unstructuredData := map[string]interface{}{}
 	if err2 := yaml.Unmarshal(data, &unstructuredData); err2 != nil {
@@ -119,10 +116,8 @@ func ReadAdmissionConfiguration(pluginNames []string, configFilePath string, con
 		return nil, err
 	}
 
-	// convert the legacy format to the new admission control format
-	// in order to preserve backwards compatibility, we set plugins that
-	// previously read input from a non-versioned file configuration to the
-	// current input file.
+	// 把旧格式转换为新的准入控制格式：为保留向后兼容性，将过去从未版本化
+	// 文件配置读取输入的插件指向当前输入文件。
 	// 只有这两个插件历史上使用未版本化的裸配置；其余插件不受此兼容逻辑影响。
 	legacyPluginsWithUnversionedConfig := sets.New[string]("ImagePolicyWebhook", "PodNodeSelector")
 	externalConfig := &apiserverv1.AdmissionConfiguration{}
@@ -151,16 +146,15 @@ type configProvider struct {
 	config *apiserver.AdmissionConfiguration
 }
 
-// GetAdmissionPluginConfigurationFor returns a reader that holds the admission plugin configuration.
+// GetAdmissionPluginConfigurationFor 返回持有准入插件配置的 reader。
 //
 // 返回的 reader 有两种来源：内嵌的 Configuration.Raw（优先）或 Path 指向的文件。
 // 两者都没有时返回 (nil, nil)，表示该插件没有额外配置。
 func GetAdmissionPluginConfigurationFor(pluginCfg apiserver.AdmissionPluginConfiguration) (io.Reader, error) {
-	// if there is a nest object, return it directly
+	// 若存在内嵌对象，直接返回它
 	if pluginCfg.Configuration != nil {
 		return bytes.NewBuffer(pluginCfg.Configuration.Raw), nil
 	}
-	// there is nothing nested, so we delegate to path
 	// 配置文件在启动阶段读取；读不到说明部署有误，直接 Fatal 终止，避免带病运行。
 	if pluginCfg.Path != "" {
 		content, err := os.ReadFile(pluginCfg.Path)
@@ -170,20 +164,19 @@ func GetAdmissionPluginConfigurationFor(pluginCfg apiserver.AdmissionPluginConfi
 		}
 		return bytes.NewBuffer(content), nil
 	}
-	// there is no special config at all
+	// 完全没有特殊配置
 	return nil, nil
 }
 
-// ConfigFor returns a reader for the specified plugin.
-// If no specific configuration is present, we return a nil reader.
+// ConfigFor 返回指定插件的 reader；若无对应配置则返回 nil reader。
 //
 // 按插件名线性查找；插件名必须与注册名完全一致，不做大小写或别名归一化。
 func (p configProvider) ConfigFor(pluginName string) (io.Reader, error) {
-	// there is no config, so there is no potential config
+	// 没有任何配置，自然也没有可用配置
 	if p.config == nil {
 		return nil, nil
 	}
-	// look for matching plugin and get configuration
+	// 查找同名插件并取其配置
 	for _, pluginCfg := range p.config.Plugins {
 		if pluginName != pluginCfg.Name {
 			continue
@@ -194,6 +187,6 @@ func (p configProvider) ConfigFor(pluginName string) (io.Reader, error) {
 		}
 		return pluginConfig, nil
 	}
-	// there is no registered config that matches on plugin name.
+	// 没有按插件名匹配上的已注册配置。
 	return nil, nil
 }

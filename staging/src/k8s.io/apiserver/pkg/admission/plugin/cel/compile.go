@@ -43,10 +43,10 @@ const (
 	VariableVarName                  = "variables"
 )
 
-// BuildRequestType generates a DeclType for AdmissionRequest. This may be replaced with a utility that
-// converts the native type definition to apiservercel.DeclType once such a utility becomes available.
-// The 'uid' field is omitted since it is not needed for in-process admission review.
-// The 'object' and 'oldObject' fields are omitted since they are exposed as root level CEL variables.
+// BuildRequestType 为 AdmissionRequest 生成 DeclType。将来可能会改用某种工具，
+// 把原生类型定义直接转换为 apiservercel.DeclType。
+// 'uid' 字段被省略，因为进程内准入审查不需要它。
+// 'object' 与 'oldObject' 字段被省略，因为它们以根级 CEL 变量暴露。
 func BuildRequestType() *apiservercel.DeclType {
 	// field/fields 是局部辅助函数：DeclField 的构造参数较长，
 	// 包装后可以让下面的 schema 定义接近声明式写法。
@@ -93,9 +93,9 @@ func BuildRequestType() *apiservercel.DeclType {
 	))
 }
 
-// BuildNamespaceType generates a DeclType for Namespace.
-// Certain nested fields in Namespace (e.g. managedFields, ownerReferences etc.) are omitted in the generated DeclType
-// by design.
+// BuildNamespaceType 为 Namespace 生成 DeclType。
+// 生成的 DeclType 中会按设计省略 Namespace 的某些嵌套字段
+// （如 managedFields、ownerReferences 等）。
 func BuildNamespaceType() *apiservercel.DeclType {
 	field := func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField {
 		return apiservercel.NewDeclField(name, declType, required, nil, nil)
@@ -145,7 +145,7 @@ func BuildNamespaceType() *apiservercel.DeclType {
 	))
 }
 
-// CompilationResult represents a compiled validations expression.
+// CompilationResult 表示已编译的校验表达式。
 // Error 与 Program 互斥：编译失败时 Program 为 nil，调用方需先检查 Error。
 type CompilationResult struct {
 	Program            cel.Program
@@ -154,8 +154,7 @@ type CompilationResult struct {
 	OutputType         *cel.Type
 }
 
-// Compiler provides a CEL expression compiler configured with the desired admission related CEL variables and
-// environment mode.
+// Compiler 提供配置了所需准入相关 CEL 变量与环境模式的 CEL 表达式编译器。
 //
 // 实现会按 OptionalVariableDeclarations 预构建环境，避免每次编译都重新
 // 组装 CEL 选项。
@@ -175,8 +174,8 @@ func NewCompiler(env *environment.EnvSet) Compiler {
 // variableDeclEnvs 以可选变量声明为键缓存 CEL 环境。
 type variableDeclEnvs map[OptionalVariableDeclarations]*environment.EnvSet
 
-// CompileCELExpression returns a compiled CEL expression.
-// perCallLimit was added for testing purpose only. Callers should always use const PerCallLimit from k8s.io/apiserver/pkg/apis/cel/config.go as input.
+// CompileCELExpression 返回编译后的 CEL 表达式。
+// perCallLimit 仅用于测试。调用方应始终使用 k8s.io/apiserver/pkg/apis/cel/config.go 中的常量 PerCallLimit 作为入参。
 func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor, options OptionalVariableDeclarations, envType environment.Type) CompilationResult {
 	// resultError 统一构造失败结果，并保留 expressionAccessor，
 	// 便于上层把错误关联回具体的表达式。
@@ -225,7 +224,7 @@ func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor, op
 	// 理论上 Compile 通过后不会失败，所以归为内部错误。
 	_, err = cel.AstToCheckedExpr(ast)
 	if err != nil {
-		// should be impossible since env.Compile returned no issues
+		// 理论上不可能，因为 env.Compile 已返回无问题
 		return resultError("unexpected compilation error: "+err.Error(), apiservercel.ErrorTypeInternal, nil)
 	}
 	// InterruptCheckFrequency 让长表达式可被中断，防止单个策略耗尽 CPU。
@@ -247,7 +246,7 @@ func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor, op
 func mustBuildEnvs(baseEnv *environment.EnvSet) variableDeclEnvs {
 	requestType := BuildRequestType()
 	namespaceType := BuildNamespaceType()
-	envs := make(variableDeclEnvs, 8) // since the number of variable combinations is small, pre-build a environment for each
+	envs := make(variableDeclEnvs, 8) // 变量组合数量很少，为每种组合预构建一个环境
 	for _, hasParams := range []bool{false, true} {
 		for _, hasAuthorizer := range []bool{false, true} {
 			var err error
@@ -290,8 +289,8 @@ func createEnvForOpts(baseEnv *environment.EnvSet, namespaceType *apiservercel.D
 
 	extended, err := baseEnv.Extend(
 		environment.VersionedOptions{
-			// Feature epoch was actually 1.26, but we artificially set it to 1.0 because these
-			// options should always be present.
+			// 特性 epoch 实际是 1.26，但我们人为设为 1.0，因为这些
+			// 选项应当始终存在。
 			IntroducedVersion: version.MajorMinor(1, 0),
 			EnvOptions:        envOpts,
 			DeclTypes: []*apiservercel.DeclType{
@@ -318,11 +317,11 @@ func createEnvForOpts(baseEnv *environment.EnvSet, namespaceType *apiservercel.D
 // 在 CEL 中构造 patch 使用。IntroducedVersion 被刻意设为 1.0，
 // 使其不受特性门控影响、始终可用。
 var hasPatchTypes = environment.VersionedOptions{
-	// Feature epoch was actually 1.32, but we artificially set it to 1.0 because these
-	// options should always be present.
+	// 特性 epoch 实际是 1.32，但我们人为设为 1.0，因为这些
+	// 选项应当始终存在。
 	IntroducedVersion: version.MajorMinor(1, 0),
 	EnvOptions: []cel.EnvOption{
 		common.ResolverEnvOption(&mutation.DynamicTypeResolver{}),
-		environment.UnversionedLib(library.JSONPatch), // for jsonPatch.escape() function
+		environment.UnversionedLib(library.JSONPatch), // 供 jsonPatch.escape() 函数使用
 	},
 }

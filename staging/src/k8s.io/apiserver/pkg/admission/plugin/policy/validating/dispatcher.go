@@ -62,8 +62,6 @@ func NewDispatcher(
 
 // policyDecisionWithMetadata 把 CEL 决策与其来源策略、绑定关联起来，
 // 以便最终错误消息和指标能指出是哪个策略拒绝了请求。
-// contains the cel PolicyDecisions along with the ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding
-// that determined the decision
 type policyDecisionWithMetadata struct {
 	PolicyDecision
 	Definition *admissionregistrationv1.ValidatingAdmissionPolicy
@@ -75,7 +73,7 @@ func (c *dispatcher) Start(ctx context.Context) error {
 	return nil
 }
 
-// Dispatch implements generic.Dispatcher.
+// Dispatch 实现 generic.Dispatcher 接口。
 // Dispatch 遍历命中请求的所有策略与绑定并执行 CEL 校验。
 // 决策按顺序累积，最终仅以第一个拒绝决策构造错误（其余仍会写入指标/注解）。
 // 注意：任何非预期的内部状态（无法识别的 action 等）都会以 error 返回，
@@ -87,7 +85,7 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 	// addConfigError 按策略的 failurePolicy 处理配置类错误：
 	// Ignore 时放行，Fail（默认）时拒绝。绑定为 nil 表示错误来自策略本身。
 	addConfigError := func(err error, definition *admissionregistrationv1.ValidatingAdmissionPolicy, binding *admissionregistrationv1.ValidatingAdmissionPolicyBinding) {
-		// we always default the FailurePolicy if it is unset and validate it in API level
+		// FailurePolicy 未设置时总是会被默认化，并在 API 层完成校验
 		var policy admissionregistrationv1.FailurePolicyType
 		if definition.Spec.FailurePolicy == nil {
 			policy = admissionregistrationv1.Fail
@@ -95,10 +93,10 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 			policy = *definition.Spec.FailurePolicy
 		}
 
-		// apply FailurePolicy specified in ValidatingAdmissionPolicy, the default would be Fail
+		// 应用 ValidatingAdmissionPolicy 中指定的 FailurePolicy，默认为 Fail
 		switch policy {
 		case admissionregistrationv1.Ignore:
-			// TODO: add metrics for ignored error here
+			// TODO: 在这里为被忽略的错误补充指标
 			return
 		case admissionregistrationv1.Fail:
 			var message string
@@ -138,26 +136,25 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 		definition := hook.Policy
 		matches, matchResource, matchKind, err := c.matcher.DefinitionMatches(a, o, NewValidatingAdmissionPolicyAccessor(definition))
 		if err != nil {
-			// Configuration error.
+			// 配置错误。
 			addConfigError(err, definition, nil)
 			continue
 		}
 		if !matches {
-			// Policy definition does not match request
+			// 策略定义与请求不匹配
 			continue
 		} else if hook.ConfigurationError != nil {
-			// Configuration error.
+			// 配置错误。
 			addConfigError(hook.ConfigurationError, definition, nil)
 			continue
 		}
 
 		auditAnnotationCollector := newAuditAnnotationCollector()
 		for _, binding := range hook.Bindings {
-			// If the key is inside dependentBindings, there is guaranteed to
-			// be a bindingInfo for it
+			// 若键存在于 dependentBindings 中，则必然有其对应的 bindingInfo
 			matches, err := c.matcher.BindingMatches(a, o, NewValidatingAdmissionPolicyBindingAccessor(binding))
 			if err != nil {
-				// Configuration error.
+				// 配置错误。
 				addConfigError(err, definition, binding)
 				continue
 			}
@@ -184,8 +181,6 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 
 			versionedAttr := versionedAttrs[matchKind]
 			if versionedAttr == nil && len(params) > 0 {
-				// As optimization versionedAttr creation is deferred until
-				// first use. Since > 0 params, we will validate
 				// 只有带参数时才需要对象的不同版本；延迟转换可省掉无参数策略的开销。
 				va, err := admission.NewVersionedAttributes(a, matchKind, o)
 				if err != nil {
@@ -201,16 +196,12 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 			var namespace *v1.Namespace
 			namespaceName := a.GetNamespace()
 
-			// Special case, the namespace object has the namespace of itself (maybe a bug).
-			// unset it if the incoming object is a namespace
 			// Namespace 对象自身的 namespace 字段会等于它自己的名字，
 			// 若不置空，CEL 的 namespaceObject 会错误地指向自身。
 			if gvk := a.GetKind(); gvk.Kind == "Namespace" && gvk.Version == "v1" && gvk.Group == "" {
 				namespaceName = ""
 			}
 
-			// if it is cluster scoped, namespaceName will be empty
-			// Otherwise, get the Namespace resource.
 			// 集群级资源没有 namespaceObject；命名空间级资源取不到 Namespace
 			// 时直接返回错误，因为策略可能依赖其标签做匹配。
 			if namespaceName != "" {
@@ -223,9 +214,6 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 			for _, param := range params {
 				var p runtime.Object = param
 				if p != nil && p.GetObjectKind().GroupVersionKind().Empty() {
-					// Make sure param has TypeMeta populated
-					// This is a simple hack to make sure typeMeta is
-					// available to CEL without making copies of objects, etc.
 					// 内部类型不带 TypeMeta，但 CEL 参数对象需要 apiVersion/kind；
 					// 用包装器在 ToUnstructured 时补上，避免深拷贝。
 					p = &wrappedParam{
@@ -301,7 +289,6 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 						}
 						auditAnnotationCollector.add(auditAnnotation.Key, value)
 					case AuditAnnotationActionError:
-						// When failurePolicy=fail, audit annotation errors result in deny
 						// 注解表达式求值失败视为策略配置错误：产生带错误原因的拒绝决策。
 						d := policyDecisionWithMetadata{
 							Definition: definition,
@@ -315,7 +302,7 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 						}
 						deniedDecisions = append(deniedDecisions, d)
 						celmetrics.Metrics.ObserveRejection(ctx, auditAnnotation.Elapsed, definition.Name, binding.Name, ErrorType(&d.PolicyDecision))
-					case AuditAnnotationActionExclude: // skip it
+					case AuditAnnotationActionExclude: // 直接跳过
 					default:
 						return fmt.Errorf("unsupported AuditAnnotation Action: %s", auditAnnotation.Action)
 					}
@@ -330,7 +317,7 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 	}
 
 	if len(deniedDecisions) > 0 {
-		// TODO: refactor admission.NewForbidden so the name extraction is reusable but the code/reason is customizable
+		// TODO: 重构 admission.NewForbidden，使名称提取可复用，同时 code/reason 可自定义
 		// 仅以第一个拒绝决策构造错误消息；其余拒绝仍已记录指标，避免消息膨胀。
 		var message string
 		deniedDecision := deniedDecisions[0]
@@ -353,9 +340,9 @@ func (c *dispatcher) Dispatch(ctx context.Context, a admission.Attributes, o adm
 	return nil
 }
 
-// maxValidationFailures is the maximum number of validation failures to include in the audit annotation
-// to prevent audit logs resource exhaustion.
-// The expected size of 50 validation failures is ~10KB.
+// maxValidationFailures 是写入审计注解的 validation failure 条数上限，
+// 用于防止审计日志资源耗尽。
+// 50 条 validation failure 的预期大小约为 10KB。
 const maxValidationFailures = 50
 
 // publishValidationFailureAnnotations 把审计型校验失败写入对象注解。
@@ -393,8 +380,6 @@ func formatPoliciesBindings(failures []ValidationFailureValue) string {
 // maxAuditAnnotationValueLength 是单个审计注解值的最大长度（10KB）。
 const maxAuditAnnotationValueLength = 10 * 1024
 
-// validationFailureValue defines the JSON format of a "validation.policy.admission.k8s.io/validation_failure" audit
-// annotation value.
 // ValidationFailureValue 是写入审计注解的 JSON 结构。
 // 字段名属于对外可见的审计格式，修改需考虑兼容性。
 type ValidationFailureValue struct {
@@ -418,8 +403,8 @@ func newAuditAnnotationCollector() auditAnnotationCollector {
 
 // add 追加一个注解值。
 func (a auditAnnotationCollector) add(key, value string) {
-	// If multiple bindings produces the exact same key and value for an audit annotation,
-	// ignore the duplicates.
+	// 若多个绑定为审计注解产生了完全相同的键和值，
+	// 忽略重复项。
 	for _, v := range a.annotations[key] {
 		if v == value {
 			return
@@ -436,8 +421,8 @@ func (a auditAnnotationCollector) publish(policyName string, attributes admissio
 		if len(bindingAnnotations) == 1 {
 			value = bindingAnnotations[0]
 		} else {
-			// Multiple distinct values can exist when binding params are used in the valueExpression of an auditAnnotation.
-			// When this happens, the values are concatenated into a comma-separated list.
+			// 当审计注解的 valueExpression 引用了绑定参数时，可能出现多个不同的值，
+			// 此时将这些值拼接为逗号分隔的列表。
 			value = strings.Join(bindingAnnotations, ", ")
 		}
 		if err := attributes.AddAnnotation(policyName+"/"+key, value); err != nil {
@@ -446,8 +431,6 @@ func (a auditAnnotationCollector) publish(policyName string, attributes admissio
 	}
 }
 
-// A workaround to fact that native types do not have TypeMeta populated, which
-// is needed for CEL expressions to be able to access the value.
 // wrappedParam 在不复制底层对象的前提下为 CEL 参数补充 TypeMeta。
 // 仅在 ToUnstructured 时合并 TypeMeta，其余方法委托或直接报错。
 type wrappedParam struct {

@@ -23,9 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// mockLoadFunc is a test double for the manifest loader: it records how many
-// times it was invoked so tests can assert that reloads are actually triggered,
-// and returns canned configs/hash/error.
+// mockLoadFunc 是 manifest 加载器的测试替身：它记录被调用的次数，
+// 以便测试断言重载确实被触发，并返回预置的配置/哈希/错误。
 type mockLoadFunc struct {
 	configs   []*admissionregistrationv1.ValidatingWebhookConfiguration
 	hash      string
@@ -38,9 +37,9 @@ func (m *mockLoadFunc) load(_ string) ([]*admissionregistrationv1.ValidatingWebh
 	return m.configs, m.hash, m.err
 }
 
-// validVWC builds a minimal valid ValidatingWebhookConfiguration. The webhook
-// must have a URL client config, an AdmissionReview version, and an explicit
-// side-effect class to pass validation.
+// validVWC 构造一个最小的合法 ValidatingWebhookConfiguration。webhook
+// 必须带有 URL 形式的 client config、一个 AdmissionReview 版本，以及显式的
+// side-effect 类别，才能通过校验。
 func validVWC(name string) *admissionregistrationv1.ValidatingWebhookConfiguration {
 	return &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -58,8 +57,8 @@ func validVWC(name string) *admissionregistrationv1.ValidatingWebhookConfigurati
 	}
 }
 
-// invalidSelectorVWC is a valid config whose namespace selector uses an
-// unrecognized operator, which validation must reject.
+// invalidSelectorVWC 是一个合法配置，但其 namespace selector 使用了
+// 无法识别的操作符，校验必须拒绝它。
 func invalidSelectorVWC(name string) *admissionregistrationv1.ValidatingWebhookConfiguration {
 	vwc := validVWC(name)
 	vwc.Webhooks[0].NamespaceSelector = &metav1.LabelSelector{
@@ -71,8 +70,8 @@ func invalidSelectorVWC(name string) *admissionregistrationv1.ValidatingWebhookC
 	return vwc
 }
 
-// TestValidatingSource_ValidateBeforeStore verifies that LoadInitial rejects
-// configurations with invalid selectors and does not store them (Bug #1).
+// TestValidatingSource_ValidateBeforeStore 验证 LoadInitial 会拒绝
+// 带非法 selector 的配置且不予存储（Bug #1）。
 //
 // 关键不变量：校验必须在写入缓存之前完成，否则一次坏配置会污染后续所有请求。
 func TestValidatingSource_ValidateBeforeStore(t *testing.T) {
@@ -93,9 +92,9 @@ func TestValidatingSource_ValidateBeforeStore(t *testing.T) {
 	}
 }
 
-// TestValidatingSource_ReloadKeepsPreviousOnValidationFailure verifies that
-// checkAndReload keeps the previous valid configuration when the new one fails
-// validation (Bug #1 on reload path).
+// TestValidatingSource_ReloadKeepsPreviousOnValidationFailure 验证当新配置
+// 校验失败时，checkAndReload 会保留之前的合法配置
+// （Bug #1 在重载路径上）。
 func TestValidatingSource_ReloadKeepsPreviousOnValidationFailure(t *testing.T) {
 	mock := &mockLoadFunc{
 		configs: []*admissionregistrationv1.ValidatingWebhookConfiguration{validVWC("good")},
@@ -114,7 +113,7 @@ func TestValidatingSource_ReloadKeepsPreviousOnValidationFailure(t *testing.T) {
 		t.Fatalf("expected 1 webhook after LoadInitial, got %d", len(initialWebhooks))
 	}
 
-	// Switch to invalid config for reload
+	// 切换为非法配置以触发重载
 	mock.configs = []*admissionregistrationv1.ValidatingWebhookConfiguration{invalidSelectorVWC("bad")}
 	mock.hash = "h2"
 
@@ -125,14 +124,14 @@ func TestValidatingSource_ReloadKeepsPreviousOnValidationFailure(t *testing.T) {
 	if len(reloadedWebhooks) != 1 {
 		t.Fatalf("expected 1 webhook after failed reload, got %d", len(reloadedWebhooks))
 	}
-	// Should still be the original accessor
+	// 应当仍是原来的 accessor
 	if &initialWebhooks[0] != &reloadedWebhooks[0] {
 		t.Error("Webhooks() returned different slice after failed reload; previous config should be preserved")
 	}
 }
 
-// TestValidatingSource_CachedAccessorSlice verifies that Webhooks() returns
-// the same slice on repeated calls (Bug #2 — enables composite source caching).
+// TestValidatingSource_CachedAccessorSlice 验证 Webhooks() 在重复调用时
+// 返回同一个切片（Bug #2 —— 使 composite source 的缓存成为可能）。
 //
 // 复用同一底层数组可避免上层组合源每次调用都重新分配，从而让缓存命中稳定。
 func TestValidatingSource_CachedAccessorSlice(t *testing.T) {
@@ -159,8 +158,8 @@ func TestValidatingSource_CachedAccessorSlice(t *testing.T) {
 	}
 }
 
-// TestValidatingSource_PreviousHashSkipsReload verifies that when checkAndReload
-// is called and the hash hasn't changed, the source keeps the original accessors
+// TestValidatingSource_PreviousHashSkipsReload 验证当 checkAndReload
+// 被调用且哈希未变化时，source 保留原有的 accessors
 // (the source owns hash comparison).
 func TestValidatingSource_PreviousHashSkipsReload(t *testing.T) {
 	mock := &mockLoadFunc{
@@ -179,7 +178,7 @@ func TestValidatingSource_PreviousHashSkipsReload(t *testing.T) {
 
 	initialWebhooks := src.Webhooks()
 
-	// loadFunc returns same hash — source should detect no change
+	// loadFunc 返回相同的哈希 —— source 应检测到无变化
 	// 注意：loadFunc 仍会被调用（哈希由 loadFunc 计算），但结果不应替换缓存。
 	src.checkAndReload()
 
@@ -196,8 +195,8 @@ func TestValidatingSource_PreviousHashSkipsReload(t *testing.T) {
 	}
 }
 
-// TestValidatingSource_FilesDeletionClearsConfigs verifies that when loadFunc
-// returns empty configs with a new hash, stored configs are updated to empty.
+// TestValidatingSource_FilesDeletionClearsConfigs 验证当 loadFunc
+// 返回空配置且哈希变化时，存储的配置会被更新为空。
 //
 // 删除清单文件是合法的配置变更，必须真正清空，而不是被当作校验失败保留旧值。
 func TestValidatingSource_FilesDeletionClearsConfigs(t *testing.T) {
@@ -215,7 +214,7 @@ func TestValidatingSource_FilesDeletionClearsConfigs(t *testing.T) {
 		t.Fatalf("expected 1 webhook after LoadInitial, got %d", len(src.Webhooks()))
 	}
 
-	// Simulate files deleted: empty configs, new hash
+	// 模拟文件被删除：空配置、新哈希
 	mock.configs = []*admissionregistrationv1.ValidatingWebhookConfiguration{}
 	mock.hash = "h2"
 

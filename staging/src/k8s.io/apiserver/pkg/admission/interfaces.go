@@ -27,120 +27,103 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-// Attributes is an interface used by AdmissionController to get information about a request
-// that is used to make an admission decision.
-//
-// Attributes 是一次准入请求的只读视图：插件只能通过它观察请求，任何对对象的修改都必须经由
+// Attributes 是准入控制器用于获取请求信息、进而做出准入决策的接口，
+// 是一次准入请求的只读视图：插件只能通过它观察请求，任何对对象的修改都必须经由
 // 返回 patch/新对象完成，从而让准入链能比较修改前后差异并写入审计。实现返回的对象可能被
 // 多个插件共享，插件不得原地修改它们。
 type Attributes interface {
-	// GetName returns the name of the object as presented in the request.  On a CREATE operation, the client
-	// may omit name and rely on the server to generate the name.  If that is the case, this method will return
-	// the empty string
-	//
-	// 注意：这里返回的是请求中出现的名字，而不是默认值或服务端生成的名字。
+	// GetName 返回请求中出现的对象名。CREATE 操作时客户端可能省略名字、
+	// 依赖服务端生成，此时返回空字符串。
 	GetName() string
-	// GetNamespace is the namespace associated with the request (if any)
+	// GetNamespace 返回请求关联的命名空间（如有）。
 	GetNamespace() string
-	// GetResource is the name of the resource being requested.  This is not the kind.  For example: pods
+	// GetResource 返回被请求的资源名，不是 kind，例如 pods。
 	GetResource() schema.GroupVersionResource
-	// GetSubresource is the name of the subresource being requested.  This is a different resource, scoped to the parent resource, but it may have a different kind.
-	// For instance, /pods has the resource "pods" and the kind "Pod", while /pods/foo/status has the resource "pods", the sub resource "status", and the kind "Pod"
-	// (because status operates on pods). The binding resource for a pod though may be /pods/foo/binding, which has resource "pods", subresource "binding", and kind "Binding".
+	// GetSubresource 返回被请求的子资源名。子资源依附于父资源，但 kind 可能不同：
+	// /pods 的资源是 pods、kind 是 Pod；/pods/foo/status 的资源仍是 pods、子资源是
+	// status、kind 是 Pod（status 作用于 pod）；而 /pods/foo/binding 的资源是 pods、
 	GetSubresource() string
-	// GetOperation is the operation being performed
+	// GetOperation 返回正在执行的操作。
 	GetOperation() Operation
-	// GetOperationOptions is the options for the operation being performed
+	// GetOperationOptions 返回该操作附带的选项对象。
 	GetOperationOptions() runtime.Object
-	// IsDryRun indicates that modifications will definitely not be persisted for this request. This is to prevent
-	// admission controllers with side effects and a method of reconciliation from being overwhelmed.
-	// However, a value of false for this does not mean that the modification will be persisted, because it
-	// could still be rejected by a subsequent validation step.
+	// IsDryRun 表示本请求的修改一定不会持久化，用于避免有副作用且有
+	// 调和机制的准入控制器被试运行请求压垮。但返回 false 不代表修改
+	// 一定会被持久化，后续校验步骤仍可能拒绝该请求。
 	IsDryRun() bool
-	// GetObject is the object from the incoming request prior to default values being applied
-	//
+	// GetObject 返回请求中默认值填充之前的对象。
 	// 返回的是反序列化后、默认值填充前的对象，因此插件看到的是客户端原始意图。
 	GetObject() runtime.Object
-	// GetOldObject is the existing object. Only populated for UPDATE and DELETE requests.
+	// GetOldObject 返回已存在的旧对象，仅 UPDATE 和 DELETE 请求有值。
 	GetOldObject() runtime.Object
-	// GetKind is the type of object being manipulated.  For example: Pod
+	// GetKind 返回被操作对象的类型，例如 Pod。
 	GetKind() schema.GroupVersionKind
-	// GetUserInfo is information about the requesting user
+	// GetUserInfo 返回发起请求的用户信息。
 	GetUserInfo() user.Info
 
-	// AddAnnotation sets annotation according to key-value pair. The key should be qualified, e.g., podsecuritypolicy.admission.k8s.io/admit-policy, where
-	// "podsecuritypolicy" is the name of the plugin, "admission.k8s.io" is the name of the organization, "admit-policy" is the key name.
-	// An error is returned if the format of key is invalid. When trying to overwrite annotation with a new value, an error is returned.
-	// Both ValidationInterface and MutationInterface are allowed to add Annotations.
-	// By default, an annotation gets logged into audit event if the request's audit level is greater or
-	// equal to Metadata.
-	//
+	// AddAnnotation 按键值对设置注解。键必须是限定名，例如
+	// podsecuritypolicy.admission.k8s.io/admit-policy："podsecuritypolicy" 是
+	// 插件名，"admission.k8s.io" 是组织名，"admit-policy" 是键名。键格式非法
+	// 或用新值覆盖已有注解时返回错误。ValidationInterface 与 MutationInterface
+	// 都可以添加注解。默认情况下，请求审计级别不低于 Metadata 时注解会记入审计事件。
 	// 禁止覆盖已有键是为了避免插件之间静默互相覆盖；键必须带域名前缀，防止不同插件冲突。
 	AddAnnotation(key, value string) error
 
-	// AddAnnotationWithLevel sets annotation according to key-value pair with additional intended audit level.
-	// An Annotation gets logged into audit event if the request's audit level is greater or equal to the
-	// intended audit level.
+	// AddAnnotationWithLevel 按键值对设置注解，并指定预期的审计级别；
+	// 当请求的审计级别不低于该预期级别时，注解会记入审计事件。
 	AddAnnotationWithLevel(key, value string, level auditinternal.Level) error
 
-	// GetReinvocationContext tracks the admission request information relevant to the re-invocation policy.
-	//
+	// GetReinvocationContext 返回与重调用策略相关的准入请求信息。
 	// 重调用上下文在整条准入链中共享，用于判断某插件在对象被其他插件修改后是否需要再次执行。
 	GetReinvocationContext() ReinvocationContext
 }
 
-// ObjectInterfaces is an interface used by AdmissionController to get object interfaces
-// such as Converter or Defaulter. These interfaces are normally coming from Request Scope
-// to handle special cases like CRDs.
-//
+// ObjectInterfaces 是准入控制器用于获取 Converter、Defaulter 等对象接口的接口。
 // 这些接口来自请求作用域（Request Scope）而非全局注册表，因此对 CRD 等动态类型同样适用：
 // 插件不能假设自己拿到的是编译期已知的类型。
 type ObjectInterfaces interface {
-	// GetObjectCreater is the ObjectCreator appropriate for the requested object.
+	// GetObjectCreater 返回适用于被请求对象的 ObjectCreator。
 	GetObjectCreater() runtime.ObjectCreater
-	// GetObjectTyper is the ObjectTyper appropriate for the requested object.
+	// GetObjectTyper 返回适用于被请求对象的 ObjectTyper。
 	GetObjectTyper() runtime.ObjectTyper
-	// GetObjectDefaulter is the ObjectDefaulter appropriate for the requested object.
+	// GetObjectDefaulter 返回适用于被请求对象的 ObjectDefaulter。
 	GetObjectDefaulter() runtime.ObjectDefaulter
-	// GetObjectConvertor is the ObjectConvertor appropriate for the requested object.
+	// GetObjectConvertor 返回适用于被请求对象的 ObjectConvertor。
 	GetObjectConvertor() runtime.ObjectConvertor
-	// GetEquivalentResourceMapper is the EquivalentResourceMapper appropriate for finding equivalent resources and expected kind for the requested object.
+	// GetEquivalentResourceMapper 返回用于查找被请求对象等价资源与预期 kind 的 EquivalentResourceMapper。
 	GetEquivalentResourceMapper() runtime.EquivalentResourceMapper
 }
 
-// privateAnnotationsGetter is a private interface which allows users to get annotations from Attributes.
-//
+// privateAnnotationsGetter 是允许从 Attributes 读取注解的私有接口。
 // 私有接口用于在不扩大公开 API 的前提下，让同包代码读取注解；外部实现应改用 AnnotationsGetter。
 type privateAnnotationsGetter interface {
 	getAnnotations(maxLevel auditinternal.Level) map[string]string
 }
 
-// AnnotationsGetter allows users to get annotations from Attributes. An alternate Attribute should implement
-// this interface.
+// AnnotationsGetter 允许从 Attributes 读取注解；自定义的 Attributes 实现应实现本接口。
 type AnnotationsGetter interface {
 	GetAnnotations(maxLevel auditinternal.Level) map[string]string
 }
 
-// ReinvocationContext provides access to the admission related state required to implement the re-invocation policy.
+// ReinvocationContext 提供实现重调用策略所需的准入状态访问。
 type ReinvocationContext interface {
-	// IsReinvoke returns true if the current admission check is a re-invocation.
+	// IsReinvoke 当前一次准入检查是否为重调用。
 	IsReinvoke() bool
-	// SetIsReinvoke sets the current admission check as a re-invocation.
+	// SetIsReinvoke 将当前准入检查标记为重调用。
 	SetIsReinvoke()
-	// ShouldReinvoke returns true if any plugin has requested a re-invocation.
+	// ShouldReinvoke 有插件请求过重调用时返回 true。
 	ShouldReinvoke() bool
-	// SetShouldReinvoke signals that a re-invocation is desired.
+	// SetShouldReinvoke 发出需要重调用的信号。
 	SetShouldReinvoke()
-	// AddValue set a value for a plugin name, possibly overriding a previous value.
+	// SetValue 为指定插件名设置值，可能覆盖之前的值。
 	SetValue(plugin string, v interface{})
-	// Value reads a value for a webhook.
+	// Value 读取指定插件保存的值。
 	Value(plugin string) interface{}
 }
 
-// Interface is an abstract, pluggable interface for Admission Control decisions.
+// Interface 是准入控制决策的抽象可插拔接口。
 type Interface interface {
-	// Handles returns true if this admission controller can handle the given operation
-	// where operation can be one of CREATE, UPDATE, DELETE, or CONNECT
+	// Handles 当本准入控制器能处理给定操作（CREATE、UPDATE、DELETE 或 CONNECT）时返回 true。
 	Handles(operation Operation) bool
 }
 
@@ -148,27 +131,26 @@ type Interface interface {
 type MutationInterface interface {
 	Interface
 
-	// Admit makes an admission decision based on the request attributes.
-	// Context is used only for timeout/deadline/cancellation and tracing information.
+	// Admit 基于请求属性做出准入决策。
+	// ctx 仅用于超时/截止时间/取消以及追踪信息。
 	Admit(ctx context.Context, a Attributes, o ObjectInterfaces) (err error)
 }
 
-// ValidationInterface is an abstract, pluggable interface for Admission Control decisions.
-//
+// ValidationInterface 是准入控制决策的抽象可插拔接口（仅校验）。
 // 校验插件必须保持无副作用：它们可能在同一请求中被重调用，且不得修改对象。
 type ValidationInterface interface {
 	Interface
 
-	// Validate makes an admission decision based on the request attributes.  It is NOT allowed to mutate
-	// Context is used only for timeout/deadline/cancellation and tracing information.
+	// Validate 基于请求属性做出准入决策，不允许修改对象。
+	// ctx 仅用于超时/截止时间/取消以及追踪信息。
 	Validate(ctx context.Context, a Attributes, o ObjectInterfaces) (err error)
 }
 
-// Operation is the type of resource operation being checked for admission control
-// This type is sourced from the authorizer package to avoid import cycles.
+// Operation 表示准入控制正在检查的资源操作类型。
+// 该类型取自 authorizer 包，以避免导入循环。
 type Operation = authorizer.AdmissionOperation
 
-// Operation constants
+// 操作类型常量。
 const (
 	Create  Operation = "CREATE"
 	Update  Operation = "UPDATE"
@@ -176,22 +158,19 @@ const (
 	Connect Operation = "CONNECT"
 )
 
-// PluginInitializer is used for initialization of shareable resources between admission plugins.
-// After initialization the resources have to be set separately
-//
+// PluginInitializer 用于初始化准入插件之间共享的资源；初始化完成后资源需分别设置。
 // 所有插件共享同一个初始化器实例，因此 Initialize 必须并发安全，且不应持有 plugin 引用
 // 之外的长期状态。
 type PluginInitializer interface {
 	Initialize(plugin Interface)
 }
 
-// InitializationValidator holds ValidateInitialization functions, which are responsible for validation of initialized
-// shared resources and should be implemented on admission plugins
+// InitializationValidator 提供 ValidateInitialization 方法，负责校验已初始化的共享资源，应由准入插件实现。
 type InitializationValidator interface {
 	ValidateInitialization() error
 }
 
-// ConfigProvider provides a way to get configuration for an admission plugin based on its name
+// ConfigProvider 提供按插件名获取准入插件配置的方式。
 type ConfigProvider interface {
 	ConfigFor(pluginName string) (io.Reader, error)
 }

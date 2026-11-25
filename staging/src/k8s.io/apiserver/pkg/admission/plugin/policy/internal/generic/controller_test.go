@@ -119,8 +119,7 @@ func setupTest(ctx context.Context, customReconciler func(string, string, runtim
 	tracker = clienttesting.NewObjectTracker(scheme, codecs.UniversalDecoder())
 	reconciledObjects := make(chan runtime.Object)
 
-	// Set up fake informers that return instances of mock Policy definitoins
-	// and mock policy bindings
+	// 构造返回 mock Policy 定义与 mock policy 绑定的伪 informer
 	informer = &testInformer{SharedIndexInformer: cache.NewSharedIndexInformer(cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			return tracker.List(fakeGVR, fakeGVK, "")
@@ -163,12 +162,12 @@ func setupTest(ctx context.Context, customReconciler func(string, string, runtim
 	)
 
 	verifyNoMoreEvents = func() bool {
-		close(reconciledObjects) // closing means that a future attempt to send will crash
+		close(reconciledObjects) // 关闭后若再尝试发送会导致 panic
 		for leftover := range reconciledObjects {
 			panic(fmt.Errorf("leftover object which was not anticipated by test: %v", leftover))
 		}
-		// TODO(alexzielenski): this effectively doesn't test anything since the
-		// controller drops any pending events when it shuts down.
+		// TODO(alexzielenski): 这实际上没有测试到任何内容，因为
+		// 控制器在关闭时会丢弃所有待处理事件。
 		return true
 	}
 
@@ -183,7 +182,7 @@ func TestReconcile(t *testing.T) {
 
 	tracker, myController, informer, waitForReconcile, verifyNoMoreEvents := setupTest(testContext, nil)
 
-	// Add object to informer
+	// 向 informer 添加对象
 	initialObject := &unstructured.Unstructured{}
 	initialObject.SetUnstructuredContent(map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -197,14 +196,14 @@ func TestReconcile(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 
-	// Start informer
+	// 启动 informer
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		informer.Run(testContext.Done())
 	}()
 
-	// Start controller
+	// 启动控制器
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -214,17 +213,16 @@ func TestReconcile(t *testing.T) {
 		}
 	}()
 
-	// The controller is blocked because the reconcile function sends on an
-	// unbuffered channel.
+	// 控制器被阻塞：reconcile 函数会向无缓冲 channel 发送数据。
 	require.False(t, myController.HasSynced())
 
-	// Wait for all enqueued reconciliations
+	// 等待所有已入队的 reconciliation 完成
 	require.NoError(t, waitForReconcile(initialObject))
 
-	// Now it is safe to wait for it to Sync
+	// 此时可以安全地等待其 Sync 完成
 	require.True(t, cache.WaitForCacheSync(testContext.Done(), myController.HasSynced))
 
-	// Updated object
+	// 更新对象
 	updatedObject := &unstructured.Unstructured{}
 	updatedObject.SetUnstructuredContent(map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -236,7 +234,7 @@ func TestReconcile(t *testing.T) {
 	updatedObject.SetGroupVersionKind(fakeGVK)
 	require.NoError(t, tracker.Update(fakeGVR, updatedObject, ""))
 
-	// Wait for all enqueued reconciliations
+	// 等待所有已入队的 reconciliation 完成
 	require.NoError(t, waitForReconcile(updatedObject))
 	require.NoError(t, tracker.Delete(fakeGVR, updatedObject.GetNamespace(), updatedObject.GetName()))
 	require.NoError(t, waitForReconcile(nil))
@@ -257,14 +255,14 @@ func TestShutdown(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 
-	// Start informer
+	// 启动 informer
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		informer.Run(testContext.Done())
 	}()
 
-	// Start controller
+	// 启动控制器
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -274,22 +272,22 @@ func TestShutdown(t *testing.T) {
 		}
 	}()
 
-	// Wait for controller and informer to start up
+	// 等待控制器与 informer 启动
 	require.True(t, cache.WaitForCacheSync(testContext.Done(), myController.HasSynced))
 
-	// Stop the controller and informer
+	// 停止控制器与 informer
 	testCancel()
 
-	// Wait for controller and informer to stop
+	// 等待控制器与 informer 退出
 	wg.Wait()
 
-	// Ensure the event handler was cleaned up
+	// 确认事件处理器已被清理
 	require.Empty(t, informer.registrations)
 
 	verifyNoMoreEvents()
 }
 
-// Show an error is thrown informer isn't started when the controller runs
+// 演示：控制器运行时 informer 尚未启动会抛出错误。
 // 验证 informer 未启动时控制器不会永远挂起，而是在 ctx 到期后以
 // DeadlineExceeded 停止并清理 handler。
 func TestInformerNeverStarts(t *testing.T) {
@@ -300,7 +298,7 @@ func TestInformerNeverStarts(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 
-	// Start controller
+	// 启动控制器
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -310,28 +308,27 @@ func TestInformerNeverStarts(t *testing.T) {
 		}
 	}()
 
-	// Wait for deadline to pass without syncing the cache
+	// 等待截止时间到达，期间缓存不会完成同步
 	require.False(t, cache.WaitForCacheSync(testContext.Done(), myController.HasSynced))
 
-	// Wait for controller to stop (or context deadline will pass quickly)
+	// 等待控制器停止（否则 context 会很快超时）
 	wg.Wait()
 
-	// Ensure there are no event handlers
+	// 确认没有残留的事件处理器
 	require.Empty(t, informer.registrations)
 
 	verifyNoMoreEvents()
 }
 
-// Shows that if RV does not change, the reconciler does not get called
-// resourceVersion 未变化时不应重复 reconcile，否则周期性 resync
-// 会带来无谓的全量重算。
+// 验证：resourceVersion 未变化时不应重复调用 reconciler，
+// 否则周期性 resync 会带来无谓的全量重算。
 func TestIgnoredUpdate(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer testCancel()
 
 	tracker, myController, informer, waitForReconcile, verifyNoMoreEvents := setupTest(testContext, nil)
 
-	// Add object to informer
+	// 向 informer 添加对象
 	initialObject := &unstructured.Unstructured{}
 	initialObject.SetUnstructuredContent(map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -345,14 +342,14 @@ func TestIgnoredUpdate(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 
-	// Start informer
+	// 启动 informer
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		informer.Run(testContext.Done())
 	}()
 
-	// Start controller
+	// 启动控制器
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -362,30 +359,29 @@ func TestIgnoredUpdate(t *testing.T) {
 		}
 	}()
 
-	// The controller is blocked because the reconcile function sends on an
-	// unbuffered channel.
+	// 控制器被阻塞：reconcile 函数会向无缓冲 channel 发送数据。
 	require.False(t, myController.HasSynced())
 
-	// Wait for all enqueued reconciliations
+	// 等待所有已入队的 reconciliation 完成
 	require.NoError(t, waitForReconcile(initialObject))
 
-	// Now it is safe to wait for it to Sync
+	// 此时可以安全地等待其 Sync 完成
 	require.True(t, cache.WaitForCacheSync(testContext.Done(), myController.HasSynced))
 
-	// Send update with the same object
+	// 用相同对象触发一次更新
 	require.NoError(t, tracker.Update(fakeGVR, initialObject, ""))
 
-	// Don't wait for it to be reconciled
+	// 不等待其被 reconcile
 
 	testCancel()
 	wg.Wait()
 
-	// TODO(alexzielenski): Find a better way to test this since the
-	// controller drops any pending events when it shuts down.
+	// TODO(alexzielenski): 需要找更好的测试方式，因为
+	// 控制器在关闭时会丢弃所有待处理事件。
 	verifyNoMoreEvents()
 }
 
-// Shows that an object which fails reconciliation will retry
+// 验证：reconciliation 失败的对象会重试，
 // 失败的对象应以退避方式快速重试，直到 reconcile 返回成功。
 func TestReconcileRetry(t *testing.T) {
 	testContext, testCancel := context.WithTimeout(context.Background(), wait.ForeverTestTimeout)
@@ -396,14 +392,14 @@ func TestReconcileRetry(t *testing.T) {
 	tracker, myController, _, waitForReconcile, verifyNoMoreEvents := setupTest(testContext, func(s1, s2 string, o runtime.Object) error {
 
 		if calls.Add(1) > 2 {
-			// Suddenly start liking the object
+			// 突然开始接受该对象
 			success.Store(true)
 			return nil
 		}
 		return errors.New("i dont like this object")
 	})
 
-	// Start informer
+	// 启动 informer
 	wg := sync.WaitGroup{}
 
 	wg.Add(1)
@@ -412,7 +408,7 @@ func TestReconcileRetry(t *testing.T) {
 		myController.Informer().Run(testContext.Done())
 	}()
 
-	// Start controller
+	// 启动控制器
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -422,7 +418,7 @@ func TestReconcileRetry(t *testing.T) {
 		}
 	}()
 
-	// Add object to informer
+	// 向 informer 添加对象
 	initialObject := &unstructured.Unstructured{}
 	initialObject.SetUnstructuredContent(map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -436,7 +432,7 @@ func TestReconcileRetry(t *testing.T) {
 	require.NoError(t, waitForReconcile(initialObject), "initial reconcile")
 	require.NoError(t, waitForReconcile(initialObject), "previous reconcile failed, should retry quickly")
 	require.NoError(t, waitForReconcile(initialObject), "previous reconcile failed, should retry quickly")
-	// Will not try again since calls > 2 for last reconcile
+	// 上次 reconcile 时 calls > 2，因此不会再重试
 	require.True(t, success.Load(), "last call to reconcile should return success")
 	testCancel()
 	wg.Wait()

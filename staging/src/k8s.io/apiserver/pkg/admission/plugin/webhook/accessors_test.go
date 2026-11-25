@@ -37,7 +37,6 @@ func TestMutatingWebhookAccessor(t *testing.T) {
 			orig := &v1.MutatingWebhook{}
 			f.Fill(orig)
 
-			// zero out any accessor type specific fields not included in the accessor
 			// ReinvocationPolicy 只属于 MutatingWebhook，访问器接口不暴露它，
 			// 因此先清零，否则往返比较会误报差异。
 			orig.ReinvocationPolicy = nil

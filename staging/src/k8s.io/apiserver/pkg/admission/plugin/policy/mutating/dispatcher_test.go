@@ -43,7 +43,7 @@ import (
 
 // TestDispatcher 是 MutatingAdmissionPolicy 分发器的端到端用例。
 //
-// 中文说明：每个用例给出对象、匹配规则与 mutation 表达式，断言补丁应用后的最终对象。
+// 每个用例给出对象、匹配规则与 mutation 表达式，断言补丁应用后的最终对象。
 // 覆盖的要点包括：ApplyConfiguration 补丁、多策略叠加、匹配/不匹配、reinvocation
 // 以及默认值在补丁后生效（策略写入的字段会被 defaulter 补齐）。
 // 类型转换器基于内置的 OpenAPI 客户端预热，因此测试不依赖网络。
@@ -55,7 +55,7 @@ func TestDispatcher(t *testing.T) {
 		object, oldObject runtime.Object
 		gvk               schema.GroupVersionKind
 		gvr               schema.GroupVersionResource
-		params            []runtime.Object // All params are expected to be ConfigMap for this test.
+		params            []runtime.Object // 本测试中所有参数都应为 ConfigMap。
 		policyHooks       []PolicyHook
 		expect            runtime.Object
 	}{
@@ -473,7 +473,7 @@ func TestDispatcher(t *testing.T) {
 				}},
 		},
 		{
-			// TODO: This behavior pre-exists with webhook match conditions but should be reconsidered
+			// TODO: 该行为沿袭自 webhook 的 matchConditions，但值得重新审视
 			name: "1st policy still does not match after 2nd policy sets match condition",
 			gvk:  deploymentGVK,
 			gvr:  deploymentGVR,
@@ -630,8 +630,7 @@ func TestDispatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Register a fake defaulter since registering the full defaulter adds noise
-	// and creates dep cycles.
+	// 注册伪造的 defaulter：完整 defaulter 会引入噪音并造成依赖环。
 	scheme.AddTypeDefaultingFunc(&appsv1.Deployment{},
 		func(obj interface{}) { fakeSetDefaultForDeployment(obj.(*appsv1.Deployment)) })
 
@@ -641,7 +640,7 @@ func TestDispatcher(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			client := fake.NewClientset(tc.params...)
 
-			// always include default namespace
+			// 始终包含 default 命名空间
 			err := client.Tracker().Add(&corev1.Namespace{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "v1",
@@ -717,7 +716,7 @@ var _ meta.RESTScope = testParamScope{}
 // fakeSetDefaultForDeployment 只补默认的更新策略类型，避免引入完整 defaulter 的
 // 依赖与噪音，同时仍能验证「补丁后执行 defaulting」这一行为。
 func fakeSetDefaultForDeployment(obj *appsv1.Deployment) {
-	// Just default strategy type so the tests have a defaulted field to observe
+	// 只默认化 strategy 类型，让测试有一个可观察的默认化字段
 	strategy := &obj.Spec.Strategy
 	if strategy.Type == "" {
 		strategy.Type = appsv1.RollingUpdateDeploymentStrategyType

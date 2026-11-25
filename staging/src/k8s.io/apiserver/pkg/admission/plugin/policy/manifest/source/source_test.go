@@ -130,7 +130,7 @@ func TestStaticPolicySource_HashSkipsReload(t *testing.T) {
 	}
 	hooksBefore := src.Hooks()
 
-	// checkAndReload with the same hash should skip the update.
+	// 使用相同哈希调用 checkAndReload 应跳过更新。
 	src.checkAndReload()
 
 	if mock.callCount != 2 {
@@ -140,7 +140,7 @@ func TestStaticPolicySource_HashSkipsReload(t *testing.T) {
 	if len(hooksAfter) != len(hooksBefore) {
 		t.Errorf("Hooks() length changed from %d to %d after no-op reload", len(hooksBefore), len(hooksAfter))
 	}
-	// Verify the pointer didn't change (same underlying slice).
+	// 校验指针未变（仍是同一个底层切片）。
 	if &hooksAfter[0] != &hooksBefore[0] {
 		t.Error("Hooks() returned a different slice after hash-matched reload; expected same slice")
 	}
@@ -163,7 +163,7 @@ func TestStaticPolicySource_FilesDeletionClearsHooks(t *testing.T) {
 		t.Fatalf("Hooks() returned %d hooks after initial load, want 1", len(src.Hooks()))
 	}
 
-	// Simulate files being deleted: empty policies/bindings with a new hash.
+	// 模拟文件被删除：策略/绑定为空且哈希变化。
 	mock.policies = nil
 	mock.bindings = nil
 	mock.hash = "h2"
@@ -190,7 +190,7 @@ func TestStaticPolicySource_ReloadKeepsPreviousOnError(t *testing.T) {
 		t.Fatalf("LoadInitial() returned unexpected error: %v", err)
 	}
 
-	// Make loadFunc return an error on subsequent calls.
+	// 让 loadFunc 在后续调用中返回错误。
 	mock.err = fmt.Errorf("simulated load error")
 
 	src.checkAndReload()

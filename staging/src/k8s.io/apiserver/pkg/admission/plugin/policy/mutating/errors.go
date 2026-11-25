@@ -22,8 +22,7 @@ import (
 	celmetrics "k8s.io/apiserver/pkg/admission/plugin/policy/mutating/metrics"
 )
 
-// ErrorType decodes the error to determine the error type
-// that the metrics understand.
+// ErrorType 解析错误，得到指标可理解的错误类型。
 // 这里用错误字符串前缀而非错误类型来分类，是因为错误来自 CEL 编译与求值层，
 // 该层未导出可用于类型断言的错误值；改动上述错误消息会导致指标分类静默退化，
 // 因此这些字符串实际上构成隐式契约。

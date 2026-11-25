@@ -28,11 +28,11 @@ import (
 // ObjectSelectorProvider 由 webhook/policy 配置对象实现，暴露解析后的
 // objectSelector；解析失败说明配置非法，调用方需按内部错误处理。
 type ObjectSelectorProvider interface {
-	// GetObjectSelector gets the webhook ObjectSelector field.
+	// GetObjectSelector 获取 webhook 的 ObjectSelector 字段。
 	GetParsedObjectSelector() (labels.Selector, error)
 }
 
-// Matcher decides if a request selected by the ObjectSelector.
+// Matcher 决定请求是否被 ObjectSelector 选中。
 //
 // 无状态、可并发复用；真正的匹配语义在 matchObject 中。
 type Matcher struct {
@@ -53,8 +53,8 @@ func matchObject(obj runtime.Object, selector labels.Selector) bool {
 
 }
 
-// MatchObjectSelector decides whether the request matches the ObjectSelector
-// of the webhook. Only when they match, the webhook is called.
+// MatchObjectSelector 决定请求是否命中 webhook 的 ObjectSelector。
+// 只有命中时才会调用该 webhook。
 //
 // 新旧对象取“或”是刻意的：UPDATE 时即使新对象不再匹配，旧对象匹配也应
 // 触发 webhook，否则无法实现“移除标签时做清理”这类策略。

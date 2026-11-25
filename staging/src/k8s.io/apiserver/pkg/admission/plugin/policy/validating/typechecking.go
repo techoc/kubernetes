@@ -53,8 +53,7 @@ type TypeChecker struct {
 	RestMapper     meta.RESTMapper
 }
 
-// TypeCheckingContext holds information about the policy being type-checked.
-// The struct is opaque to the caller.
+// TypeCheckingContext 保存被检查策略的相关信息；对调用方而言是不透明结构。
 type TypeCheckingContext struct {
 	gvks          []schema.GroupVersionKind
 	declTypes     []*apiservercel.DeclType
@@ -71,18 +70,17 @@ type typeOverwrite struct {
 	params *apiservercel.DeclType
 }
 
-// TypeCheckingResult holds the issues found during type checking, any returned
-// error, and the gvk that the type checking is performed against.
+// TypeCheckingResult 记录类型检查发现的问题、可能返回的错误，以及检查所针对的 GVK。
 type TypeCheckingResult struct {
-	// GVK is the associated GVK
+	// GVK 是本次结果关联的 GroupVersionKind。
 	GVK schema.GroupVersionKind
-	// Issues contain machine-readable information about the typechecking result.
+	// Issues 包含类型检查结果中面向用户的机器可读信息。
 	Issues error
-	// Err is the possible error that was encounter during type checking.
+	// Err 是类型检查过程中遇到的内部错误。
 	Err error
 }
 
-// TypeCheckingResults is a collection of TypeCheckingResult
+// TypeCheckingResults 是 TypeCheckingResult 的集合。
 type TypeCheckingResults []*TypeCheckingResult
 
 // String 把每个非空结果拼接成多行文本；空结果被跳过，
@@ -98,8 +96,7 @@ func (rs TypeCheckingResults) String() string {
 	return strings.Join(messages, "\n")
 }
 
-// String converts the result to human-readable form as a string.
-// 单条结果的文本总是以换行结尾，多行拼接时格式保持一致。
+// String 把单条结果转换为人类可读文本；输出总是以换行结尾，多行拼接时格式保持一致。
 func (r *TypeCheckingResult) String() string {
 	if r.Issues == nil && r.Err == nil {
 		return ""
@@ -110,19 +107,16 @@ func (r *TypeCheckingResult) String() string {
 	return fmt.Sprintf("%v: %s\n", r.GVK, r.Issues)
 }
 
-// Check preforms the type check against the given policy, and format the result
-// as []ExpressionWarning that is ready to be set in policy.Status
-// The result is nil if type checking returns no warning.
-// The policy object is NOT mutated. The caller should update Status accordingly
-// 返回值可直接写入 policy.Status.TypeChecking，非空即代表存在需要提示用户的问题。
+// Check 对给定策略执行类型检查，并把结果格式化为可直接写入 policy.Status 的
+// []ExpressionWarning；没有 warning 时返回 nil。不会修改策略对象本身，
+// 调用方需要自行更新 Status。
 func (c *TypeChecker) Check(policy *v1.ValidatingAdmissionPolicy) []v1.ExpressionWarning {
 	ctx := c.CreateContext(policy)
 
-	// warnings to return, note that the capacity is optimistically set to zero
-	// 不预分配容量：类型错误是少数情况，避免每次调用都分配多余内存。
-	var warnings []v1.ExpressionWarning // intentionally not setting capacity
+	// 待返回的 warnings；不预分配容量：类型错误是少数情况，避免每次调用都分配多余内存。
+	var warnings []v1.ExpressionWarning // 有意不预分配容量
 
-	// check main validation expressions and their message expressions, located in spec.validations[*]
+	// 检查 spec.validations[*] 中的主验证表达式及其 message 表达式；
 	// 注意 messageExpression 是可选的，只有非空时才检查，否则会误报空表达式错误。
 	fieldRef := field.NewPath("spec", "validations")
 	for i, v := range policy.Spec.Validations {
@@ -133,7 +127,7 @@ func (c *TypeChecker) Check(policy *v1.ValidatingAdmissionPolicy) []v1.Expressio
 				Warning:  results.String(),
 			})
 		}
-		// Note that MessageExpression is optional
+		// 注意 MessageExpression 是可选的。
 		if v.MessageExpression == "" {
 			continue
 		}
@@ -149,7 +143,7 @@ func (c *TypeChecker) Check(policy *v1.ValidatingAdmissionPolicy) []v1.Expressio
 	return warnings
 }
 
-// CreateContext resolves all types and their schemas from a policy definition and creates the context.
+// CreateContext 从策略定义解析所有类型及其 schema 并构造上下文。
 // 解析失败时采用“尽量检查”策略：跳过无法解析的 GVK，而不是让整个检查失败，
 // 因为类型检查只影响 Status 中的 warning，绝不能改变策略的执行语义。
 func (c *TypeChecker) CreateContext(policy *v1.ValidatingAdmissionPolicy) *TypeCheckingContext {
@@ -160,13 +154,12 @@ func (c *TypeChecker) CreateContext(policy *v1.ValidatingAdmissionPolicy) *TypeC
 	for _, gvk := range allGvks {
 		declType, err := c.declType(gvk)
 		if err != nil {
-			// type checking errors MUST NOT alter the behavior of the policy
-			// even if an error occurs.
+			// 即使出错，类型检查错误也绝不能改变策略的行为。
 			if !errors.Is(err, resolver.ErrSchemaNotFound) {
-				// Anything except ErrSchemaNotFound is an internal error
+				// 除 ErrSchemaNotFound 外都属于内部错误。
 				klog.V(2).ErrorS(err, "internal error: schema resolution failure", "gvk", gvk)
 			}
-			// skip for not found or internal error
+			// schema 未找到或内部错误都直接跳过。
 			continue
 		}
 		gvks = append(gvks, gvk)
@@ -175,7 +168,7 @@ func (c *TypeChecker) CreateContext(policy *v1.ValidatingAdmissionPolicy) *TypeC
 	ctx.gvks = gvks
 	ctx.declTypes = declTypes
 
-	paramsGVK := c.paramsGVK(policy) // maybe empty, correctly handled
+	paramsGVK := c.paramsGVK(policy) // 可能为空，下游已正确处理。
 	paramsDeclType, err := c.declType(paramsGVK)
 	if err != nil {
 		if !errors.Is(err, resolver.ErrSchemaNotFound) {
@@ -207,7 +200,7 @@ func (c *TypeChecker) compiler(ctx *TypeCheckingContext, typeOverwrite typeOverw
 	return compiler, nil
 }
 
-// CheckExpression type checks a single expression, given the context
+// CheckExpression 在给定上下文下对单个表达式做类型检查。
 // 对 context 中的每个 GVK 分别编译一次：同一个表达式在不同资源类型下
 // 可能合法也可能非法，因此结果按 GVK 逐条收集。
 func (c *TypeChecker) CheckExpression(ctx *TypeCheckingContext, expression string) TypeCheckingResults {
@@ -293,9 +286,7 @@ func (c *TypeChecker) paramsGVK(policy *v1.ValidatingAdmissionPolicy) schema.Gro
 	return gv.WithKind(policy.Spec.ParamKind.Kind)
 }
 
-// typesToCheck extracts a list of GVKs that needs type checking from the policy
-// the result is sorted in the order of Group, Version, and Kind
-//
+// typesToCheck 从策略中提取需要类型检查的 GVK 列表，结果按 Group、Version、Kind 排序。
 // 只依据 MatchConstraints 中可枚举的规则计算；通配符规则被跳过，
 // 因为无法为其确定有限的 GVK 集合。RESTMapper 可能因发现缓存尚未刷新而解析失败，
 // 因此每个策略最多触发一次刷新重试。
@@ -304,7 +295,7 @@ func (c *TypeChecker) typesToCheck(p *v1.ValidatingAdmissionPolicy) []schema.Gro
 	if p.Spec.MatchConstraints == nil || len(p.Spec.MatchConstraints.ResourceRules) == 0 {
 		return nil
 	}
-	restMapperRefreshAttempted := false // at most once per policy, refresh RESTMapper and retry resolution.
+	restMapperRefreshAttempted := false // 每个策略最多刷新一次 RESTMapper 并重试解析。
 	for _, rule := range p.Spec.MatchConstraints.ResourceRules {
 		groups := extractGroups(&rule.Rule)
 		if len(groups) == 0 {
@@ -318,9 +309,8 @@ func (c *TypeChecker) typesToCheck(p *v1.ValidatingAdmissionPolicy) []schema.Gro
 		if len(resources) == 0 {
 			continue
 		}
-		// sort GVRs so that the loop below provides
-		// consistent results.
-		// 排序后同样的规则总是产生相同的 GVK 列表与相同的截断点，使 warning 稳定可复现。
+		// 对 GVR 排序，使下面的循环产生一致的结果：同样的规则总是得到相同的
+		// GVK 列表与相同的截断点，warning 因此稳定可复现。
 		sort.Strings(groups)
 		sort.Strings(versions)
 		sort.Strings(resources)
@@ -336,7 +326,7 @@ func (c *TypeChecker) typesToCheck(p *v1.ValidatingAdmissionPolicy) []schema.Gro
 					resolved, err := c.RestMapper.KindsFor(gvr)
 					if err != nil {
 						if restMapperRefreshAttempted {
-							// RESTMapper refresh happens at most once per policy
+							// 每个策略最多刷新一次 RESTMapper。
 							continue
 						}
 						c.tryRefreshRESTMapper()
@@ -350,9 +340,7 @@ func (c *TypeChecker) typesToCheck(p *v1.ValidatingAdmissionPolicy) []schema.Gro
 						if !r.Empty() {
 							gvks.Insert(r)
 							count++
-							// early return if maximum number of types are already
-							// collected
-							// 达到上限即返回，保证单个策略的类型检查耗时有上界。
+							// 已收集到数量上限即提前返回，保证单个策略的类型检查耗时有上界。
 							if count == maxTypesToCheck {
 								if gvks.Len() == 0 {
 									return nil
@@ -376,7 +364,7 @@ func (c *TypeChecker) typesToCheck(p *v1.ValidatingAdmissionPolicy) []schema.Gro
 func extractGroups(rule *v1.Rule) []string {
 	groups := make([]string, 0, len(rule.APIGroups))
 	for _, group := range rule.APIGroups {
-		// give up if wildcard
+		// 出现通配符就放弃。
 		if strings.ContainsAny(group, "*") {
 			return nil
 		}
@@ -402,7 +390,7 @@ func extractVersions(rule *v1.Rule) []string {
 func extractResources(rule *v1.Rule) []string {
 	resources := make([]string, 0, len(rule.Resources))
 	for _, resource := range rule.Resources {
-		// skip wildcard and subresources
+		// 跳过通配符与子资源。
 		if strings.ContainsAny(resource, "*/") {
 			continue
 		}
@@ -411,8 +399,7 @@ func extractResources(rule *v1.Rule) []string {
 	return resources
 }
 
-// sortGVKList sorts the list by Group, Version, and Kind
-// returns the list itself.
+// sortGVKList 按 Group、Version、Kind 排序并原地返回列表本身。
 func sortGVKList(list []schema.GroupVersionKind) []schema.GroupVersionKind {
 	sort.Slice(list, func(i, j int) bool {
 		if g := strings.Compare(list[i].Group, list[j].Group); g != 0 {
@@ -426,7 +413,7 @@ func sortGVKList(list []schema.GroupVersionKind) []schema.GroupVersionKind {
 	return list
 }
 
-// tryRefreshRESTMapper refreshes the RESTMapper if it supports refreshing.
+// tryRefreshRESTMapper 在 RESTMapper 支持刷新时执行刷新。
 func (c *TypeChecker) tryRefreshRESTMapper() {
 	if r, ok := c.RestMapper.(meta.ResettableRESTMapper); ok {
 		r.Reset()
@@ -443,22 +430,22 @@ func buildEnvSet(hasParams bool, hasAuthorizer bool, types typeOverwrite) (*envi
 	var varOpts []cel.EnvOption
 	var declTypes []*apiservercel.DeclType
 
-	// namespace, hand-crafted type
+	// namespace：手写类型。
 	declTypes = append(declTypes, namespaceType)
 	varOpts = append(varOpts, createVariableOpts(namespaceType, plugincel.NamespaceVarName)...)
 
-	// request, hand-crafted type
+	// request：手写类型。
 	declTypes = append(declTypes, requestType)
 	varOpts = append(varOpts, createVariableOpts(requestType, plugincel.RequestVarName)...)
 
-	// object and oldObject, same type, type(s) resolved from constraints
-	// 两者共享同一份类型：类型检查阶段无法得知对象是否已存在。
+	// object 与 oldObject 使用同一类型，来自 constraints 解析；
+	// 类型检查阶段无法得知对象是否已存在，因此共享。
 	if types.object != nil {
 		declTypes = append(declTypes, types.object)
 	}
 	varOpts = append(varOpts, createVariableOpts(types.object, plugincel.ObjectVarName, plugincel.OldObjectVarName)...)
 
-	// params, defined by ParamKind
+	// params：由 ParamKind 定义。
 	if hasParams {
 		if types.params != nil {
 			declTypes = append(declTypes, types.params)
@@ -466,16 +453,15 @@ func buildEnvSet(hasParams bool, hasAuthorizer bool, types typeOverwrite) (*envi
 		varOpts = append(varOpts, createVariableOpts(types.params, plugincel.ParamsVarName)...)
 	}
 
-	// authorizer, implicitly available to all expressions of a policy
+	// authorizer：对所有策略表达式隐式可用。
 	if hasAuthorizer {
-		// we only need its structure but not the variable itself
+		// 只需要它的类型结构，不需要变量本身。
 		varOpts = append(varOpts, cel.Variable("authorizer", library.AuthorizerType))
 	}
 
 	return baseEnv.Extend(
 		environment.VersionedOptions{
-			// Feature epoch was actually 1.26, but we artificially set it to 1.0 because these
-			// options should always be present.
+			// 特性纪元实际是 1.26，但这里人为设为 1.0，因为这些选项应当始终存在。
 			IntroducedVersion: version.MajorMinor(1, 0),
 			EnvOptions:        varOpts,
 			DeclTypes:         declTypes,
@@ -483,10 +469,9 @@ func buildEnvSet(hasParams bool, hasAuthorizer bool, types typeOverwrite) (*envi
 	)
 }
 
-// createVariableOpts creates a slice of EnvOption
-// that can be used for creating a CEL env containing variables of declType.
-// declType can be nil, in which case the variables will be of DynType.
-// 退化为 DynType 是刻意的：schema 缺失时宁可放弃类型检查，也不能阻止策略生效。
+// createVariableOpts 生成一组 EnvOption，用于创建包含 declType 对应变量的 CEL 环境；
+// declType 可以为 nil，此时变量退化为 DynType。
+// 这是刻意的：schema 缺失时宁可放弃类型检查，也不能阻止策略生效。
 func createVariableOpts(declType *apiservercel.DeclType, variables ...string) []cel.EnvOption {
 	opts := make([]cel.EnvOption, 0, len(variables))
 	t := cel.DynType
@@ -506,12 +491,11 @@ type typeCheckingCompiler struct {
 	typeOverwrite typeOverwrite
 }
 
-// CompileCELExpression compiles the given expression.
-// The implementation is the same as that of staging/src/k8s.io/apiserver/pkg/admission/plugin/cel/compile.go
-// except that:
-// - object, oldObject, and params are typed instead of Dyn
-// - compiler does not enforce the output type
-// - the compiler does not initialize the program
+// CompileCELExpression 编译给定表达式。实现与
+// staging/src/k8s.io/apiserver/pkg/admission/plugin/cel/compile.go 相同，区别在于：
+// - object、oldObject、params 使用具体类型而非 Dyn
+// - 编译器不强制要求输出类型
+// - 编译器不初始化 program
 func (c *typeCheckingCompiler) CompileCELExpression(expressionAccessor plugincel.ExpressionAccessor, options plugincel.OptionalVariableDeclarations, mode environment.Type) plugincel.CompilationResult {
 	resultError := func(errorString string, errType apiservercel.ErrorType) plugincel.CompilationResult {
 		return plugincel.CompilationResult{
@@ -527,12 +511,12 @@ func (c *typeCheckingCompiler) CompileCELExpression(expressionAccessor plugincel
 		return resultError(fmt.Sprintf("fail to build env: %v", err), apiservercel.ErrorTypeInternal)
 	}
 	ast, issues := env.Compile(expressionAccessor.GetExpression())
-	// issues 非空即编译错误；这里把原始错误文本交给调用方，
-	// 由调用方按 ErrorTypeInvalid 归入用户可见的 warning。
+	// issues 非空即编译错误；把原始错误文本交给调用方，按 ErrorTypeInvalid
+	// 归入用户可见的 warning。
 	if issues != nil {
 		return resultError(issues.String(), apiservercel.ErrorTypeInvalid)
 	}
-	// type checker does not require the program, however the type must still be set.
+	// 类型检查器不需要 program，但输出类型仍必须设置。
 	return plugincel.CompilationResult{
 		OutputType: ast.OutputType(),
 	}

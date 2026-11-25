@@ -28,13 +28,9 @@ import (
 	"k8s.io/apiserver/pkg/cel/environment"
 )
 
-// compilePolicy compiles the policy into a PolicyEvaluator
-// any error is stored and delayed until invocation.
-//
-// Each individual mutation is compiled into MutationEvaluationFunc and
-// returned is a PolicyEvaluator in the same order as the mutations appeared in the policy.
-//
-// compilePolicy 编译失败时不返回 error，而是把错误塞进 PolicyEvaluator.Error 延迟到
+// compilePolicy 把策略编译为 PolicyEvaluator：每个 mutation 都会单独编译，
+// 结果按其在策略中出现的顺序返回。
+// 编译失败时不返回 error，而是把错误塞进 PolicyEvaluator.Error 延迟到
 // 请求时暴露。这是刻意的：策略对象一旦被接受就必须始终存在，编译错误不能阻止其入库，
 // 否则用户将无法通过更新策略来修复自身错误。
 func compilePolicy(policy *v1.MutatingAdmissionPolicy) PolicyEvaluator {
@@ -48,11 +44,11 @@ func compilePolicy(policy *v1.MutatingAdmissionPolicy) PolicyEvaluator {
 		}}
 	}
 
-	// Compile and store variables
+	// 编译并存储变量
 	// 变量先编译并存入编译器，后续 matchConditions 与 mutations 才能引用它们。
 	compiler.CompileAndStoreVariables(convertV1Variables(policy.Spec.Variables), opts, environment.StoredExpressions)
 
-	// Compile matchers
+	// 编译匹配条件
 	// 没有 matchConditions 时保持 nil，调用方可据此跳过匹配阶段。
 	var matcher matchconditions.Matcher = nil
 	matchConditions := policy.Spec.MatchConditions
@@ -64,7 +60,7 @@ func compilePolicy(policy *v1.MutatingAdmissionPolicy) PolicyEvaluator {
 		matcher = matchconditions.NewMatcher(compiler.CompileCondition(matchExpressionAccessors, opts, environment.StoredExpressions), policy.Spec.FailurePolicy, "policy", "validate", policy.Name)
 	}
 
-	// Compiler patchers
+	// 编译 patcher
 	// 每个 mutation 独立编译为 Patcher，顺序严格保持与策略中声明一致，
 	// 因为后一个 patch 可能依赖前一个 patch 的结果。
 	var patchers []patch.Patcher

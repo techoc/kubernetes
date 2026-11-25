@@ -44,8 +44,6 @@ type attributesRecord struct {
 	oldObject   runtime.Object
 	userInfo    user.Info
 
-	// other elements are always accessed in single goroutine.
-	// But ValidatingAdmissionWebhook add annotations concurrently.
 	// 其余字段只在单个 goroutine 中访问；但 ValidatingAdmissionWebhook 会并发写 annotations，
 	// 因此只有 annotations 需要加锁。
 	annotations     map[string]annotation
@@ -135,9 +133,8 @@ func (record *attributesRecord) GetUserInfo() user.Info {
 	return record.userInfo
 }
 
-// getAnnotations implements privateAnnotationsGetter.It's a private method used
-// by WithAudit decorator.
-// getAnnotations 返回审计级别不高于 maxLevel 的注解副本；返回副本使调用方可在锁外安全读取。
+// getAnnotations 实现 privateAnnotationsGetter，是供 WithAudit 装饰器使用的私有方法；
+// 返回审计级别不高于 maxLevel 的注解副本；返回副本使调用方可在锁外安全读取。
 func (record *attributesRecord) getAnnotations(maxLevel auditinternal.Level) map[string]string {
 	// 读锁足以保护 map 的并发读，复制成本换来调用方无需持锁。
 	record.annotationsLock.RLock()
@@ -157,7 +154,6 @@ func (record *attributesRecord) getAnnotations(maxLevel auditinternal.Level) map
 	return cp
 }
 
-// AddAnnotation adds an annotation to attributesRecord with Metadata audit level
 // AddAnnotation 以 Metadata 级别添加注解，是大多数插件的默认入口。
 func (record *attributesRecord) AddAnnotation(key, value string) error {
 	return record.AddAnnotationWithLevel(key, value, auditinternal.LevelMetadata)
@@ -197,13 +193,10 @@ func (record *attributesRecord) GetReinvocationContext() ReinvocationContext {
 
 // reinvocationContext 记录准入链的重入状态与插件间共享值。
 type reinvocationContext struct {
-	// isReinvoke is true when admission plugins are being reinvoked
 	// isReinvoke 为 true 表示当前正处于重入执行。
 	isReinvoke bool
-	// reinvokeRequested is true when an admission plugin requested a re-invocation of the chain
 	// reinvokeRequested 为 true 表示某个插件请求再次执行整条链。
 	reinvokeRequested bool
-	// values stores reinvoke context values per plugin.
 	// values 按插件名保存重入时需要传递的值。
 	values map[string]interface{}
 }

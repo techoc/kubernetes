@@ -20,26 +20,23 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// WebhookAdmission provides configuration for the webhook admission controller.
+// WebhookAdmission 提供 webhook 准入控制器的配置。
 // 该配置通过 apiserver 的 --admission-control-config-file 加载，
 // 决定 webhook 配置从哪里获取。
 type WebhookAdmission struct {
 	metav1.TypeMeta `json:""`
 
-	// KubeConfigFile is the path to the kubeconfig file.
-	// 指向 kubeconfig 的路径；该 kubeconfig 中的集群地址即 webhook 配置的来源。
+	// KubeConfigFile 是 kubeconfig 文件的路径。
 	KubeConfigFile string `json:"kubeConfigFile"`
 
-	// StaticManifestsDir is the path to a directory containing static webhook
-	// configurations to be loaded at startup. Files with extensions .yaml,
-	// .yml, and .json are read. Only admissionregistration.k8s.io/v1
-	// ValidatingWebhookConfiguration and MutatingWebhookConfiguration
-	// resources are supported.
-	// Using this field requires the ManifestBasedAdmissionControlConfig
-	// feature gate to be enabled.
+	// StaticManifestsDir 是包含静态 webhook 配置的目录路径，这些配置在启动时加载。
+	// 会读取扩展名为 .yaml、.yml 与 .json 的文件。仅支持
+	// admissionregistration.k8s.io/v1 的 ValidatingWebhookConfiguration 与
+	// MutatingWebhookConfiguration 资源。
+	// 使用该字段需要启用 ManifestBasedAdmissionControlConfig 特性门控。
 	// +optional
 	//
-	// 中文说明：静态清单目录在启动时一次性加载，不随文件变化热更新；
+	// 静态清单目录在启动时一次性加载，不随文件变化热更新；
 	// 启用需开启 ManifestBasedAdmissionControlConfig 特性门控，
 	// 且只接受 admissionregistration.k8s.io/v1 的两种 webhook 配置资源。
 	StaticManifestsDir string `json:"staticManifestsDir,omitempty"`

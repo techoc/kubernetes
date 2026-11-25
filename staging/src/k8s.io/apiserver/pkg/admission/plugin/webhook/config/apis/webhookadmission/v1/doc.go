@@ -19,7 +19,7 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=apiserver.config.k8s.io
 
-// Package v1 is the v1 version of the API.
+// Package v1 是该 API 的 v1 版本。
 // 该版本是 Webhook 准入控制器配置的稳定版本，通过 conversion-gen
 // 转换为内部版本后使用；版本升级时旧字段必须保持向后兼容。
 package v1

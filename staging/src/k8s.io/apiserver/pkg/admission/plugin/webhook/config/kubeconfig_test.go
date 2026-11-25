@@ -30,15 +30,15 @@ import (
 
 // TestLoadConfig 验证 WebhookAdmissionConfiguration 的加载与静态清单目录的校验。
 //
-// 中文说明：用例覆盖三类关注点：
+// 用例覆盖三类关注点：
 //  1. 通用解码错误（空输入、未知 kind）；
 //  2. staticManifestsDir 的合法性——必须为绝对路径、必须存在、必须是目录，
 //     且在特性门控关闭时该字段直接 Forbidden，防止配置在未启用功能的版本上被静默接受；
 //  3. 字段组合——允许只配置 staticManifestsDir 而不配 kubeConfigFile。
 func TestLoadConfig(t *testing.T) {
-	// Create a temp directory for tests that need a valid directory path
+	// 为需要合法目录路径的用例创建临时目录
 	validDir := t.TempDir()
-	// Create a temp file for "not a directory" test
+	// 为“不是目录”用例创建临时文件
 	notADirFile := path.Join(t.TempDir(), "file.txt")
 	if err := os.WriteFile(notADirFile, []byte(""), 0644); err != nil {
 		t.Fatal(err)

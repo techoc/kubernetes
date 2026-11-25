@@ -1041,7 +1041,7 @@ func TestRuntimeCELCostBudget(t *testing.T) {
 					Expression: "object.subsets.size() > 2",
 				},
 				&testCondition{
-					Expression: "true", // zero cost
+					Expression: "true", // 零成本
 				},
 			},
 			attributes:               newValidAttribute(nil, false),
@@ -1362,7 +1362,7 @@ func TestRuntimeCELCostBudget(t *testing.T) {
 	}
 }
 
-// newObjectInterfacesForTest returns an ObjectInterfaces appropriate for test cases in this file.
+// newObjectInterfacesForTest 返回适合本文件测试用例的 ObjectInterfaces。
 func newObjectInterfacesForTest() admission.ObjectInterfaces {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
@@ -1538,7 +1538,7 @@ func (f fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) 
 			panic(fmt.Sprintf("unsupported type: %T", a))
 		}
 
-		// Compare AttributesRecord structs - contains error fields but we're comparing the struct, not handling errors
+		// 比较 AttributesRecord 结构体——其中含错误字段，但我们比较的是结构体本身，不处理错误
 		//nolint:all
 		if reflect.DeepEqual(f.match.match, *other) {
 			return f.match.decision, f.match.reason, f.match.err

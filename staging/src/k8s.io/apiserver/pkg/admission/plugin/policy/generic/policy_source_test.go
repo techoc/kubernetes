@@ -73,14 +73,14 @@ func TestPolicySourceHasSyncedEmpty(t *testing.T) {
 	defer testCancel()
 	require.NoError(t, testContext.Start())
 
-	// Should be able to wait for cache sync
+	// 应能等待缓存同步
 	require.True(t, cache.WaitForCacheSync(testContext.Done(), testContext.Source.HasSynced), "cache should sync after informer running")
 }
 
 // TestPolicySourceHasSyncedInitialList 验证从 informer 初始列表构造 Hook，
 // 并验证后续增量更新（新增 policy+binding、更新已有 policy）会反映到 Hooks 中。
 func TestPolicySourceHasSyncedInitialList(t *testing.T) {
-	// Create a list of fake policies
+	// 创建一组伪造的 policy
 	initialObjects := []runtime.Object{
 		&FakePolicy{
 			ObjectMeta: metav1.ObjectMeta{
@@ -155,7 +155,7 @@ func TestPolicySourceHasSyncedInitialList(t *testing.T) {
 // 无 binding 的 policy 不会出现在 Hooks 中；binding 改绑到另一个 policy 后，
 // Hook 应随之迁移到新 policy，旧 policy 因失去 binding 而被移除。
 func TestPolicySourceBindsToPolicies(t *testing.T) {
-	// Create a list of fake policies
+	// 创建一组伪造的 policy
 	initialObjects := []runtime.Object{
 		&FakePolicy{
 			ObjectMeta: metav1.ObjectMeta{
@@ -342,7 +342,7 @@ func TestCollectParamsHandlesCacheMiss(t *testing.T) {
 	}).Namespace("default").Create(ctx, configMap, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	// Now create policy and binding that reference this ConfigMap
+	// 现在创建引用该 ConfigMap 的 policy 与 binding
 	policy := &FakePolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-policy",

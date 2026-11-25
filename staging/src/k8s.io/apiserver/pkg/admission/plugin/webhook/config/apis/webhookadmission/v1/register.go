@@ -21,20 +21,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名。
 //
-// 中文说明：配置 API 组名。使用 apiserver.config.k8s.io 而非主 API 组，
+// 配置 API 组名。使用 apiserver.config.k8s.io 而非主 API 组，
 // 是因为这类配置只被 API Server 自身读取，不通过 REST 端点暴露给普通客户端。
 const GroupName = "apiserver.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 把 SchemeBuilder 连同 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 与 AddToScheme 会留在 k8s.io/kubernetes 中。
 	//
-	// 中文说明：SchemeBuilder 是类型注册的聚合点；localSchemeBuilder 让 AddToScheme
+	// SchemeBuilder 是类型注册的聚合点；localSchemeBuilder 让 AddToScheme
 	// 绑定到本包的 builder，避免直接暴露可变全局状态。AddToScheme 供调用方把本组
 	// 类型加入任意 scheme。
 	SchemeBuilder      runtime.SchemeBuilder
@@ -43,11 +43,10 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写的函数。生成函数的注册在生成文件中完成。
+	// 这样拆分后，即使生成文件缺失，代码仍能编译。
 	//
-	// 中文说明：手写注册与生成注册分离，使生成文件缺失时仍可编译——
+	// 手写注册与生成注册分离，使生成文件缺失时仍可编译——
 	// 这对开发期与代码生成工具的自举很重要。
 	localSchemeBuilder.Register(addKnownTypes)
 }

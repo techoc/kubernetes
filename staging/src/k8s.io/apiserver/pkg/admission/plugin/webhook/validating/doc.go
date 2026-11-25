@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package validating makes calls to validating (i.e., non-mutating) webhooks
-// during the admission process.
+// Package validating 在准入过程中调用校验型（即非变更型）webhook。
 //
 // 校验型 webhook 只返回允许/拒绝，不得修改对象；即使返回 patch 也会被忽略。
 package validating

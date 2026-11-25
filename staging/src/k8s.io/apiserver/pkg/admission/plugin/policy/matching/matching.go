@@ -43,7 +43,7 @@ type MatchCriteria interface {
 	GetMatchResources() v1.MatchResources
 }
 
-// Matcher decides if a request matches against matchCriteria
+// Matcher 判断请求是否满足 matchCriteria。
 type Matcher struct {
 	namespaceMatcher *namespace.Matcher
 	objectMatcher    *object.Matcher
@@ -55,7 +55,7 @@ func (m *Matcher) GetNamespace(ctx context.Context, name string) (*corev1.Namesp
 	return m.namespaceMatcher.GetNamespace(ctx, name)
 }
 
-// NewMatcher initialize the matcher with dependencies requires
+// NewMatcher 用所需的依赖初始化 matcher。
 func NewMatcher(
 	namespaceLister listersv1.NamespaceLister,
 	client kubernetes.Interface,
@@ -69,7 +69,7 @@ func NewMatcher(
 	}
 }
 
-// ValidateInitialization verify if the matcher is ready before use
+// ValidateInitialization 在使用前校验 matcher 是否已就绪。
 func (m *Matcher) ValidateInitialization() error {
 	if err := m.namespaceMatcher.Validate(); err != nil {
 		return fmt.Errorf("namespaceMatcher is not properly setup: %v", err)
@@ -84,13 +84,13 @@ func (m *Matcher) ValidateInitialization() error {
 // 失败也不会让整个准入链报错——错误只应影响真正会应用该策略的请求。
 func (m *Matcher) Matches(attr admission.Attributes, o admission.ObjectInterfaces, criteria MatchCriteria) (bool, schema.GroupVersionResource, schema.GroupVersionKind, error) {
 	matches, matchNsErr := m.namespaceMatcher.MatchNamespaceSelector(criteria, attr)
-	// Should not return an error here for policy which do not apply to the request, even if err is an unexpected scenario.
+	// 对不适用于当前请求的策略，即使 err 属于意外场景，也不应在此返回错误。
 	if !matches && matchNsErr == nil {
 		return false, schema.GroupVersionResource{}, schema.GroupVersionKind{}, nil
 	}
 
 	matches, matchObjErr := m.objectMatcher.MatchObjectSelector(criteria, attr)
-	// Should not return an error here for policy which do not apply to the request, even if err is an unexpected scenario.
+	// 对不适用于当前请求的策略，即使 err 属于意外场景，也不应在此返回错误。
 	if !matches && matchObjErr == nil {
 		return false, schema.GroupVersionResource{}, schema.GroupVersionKind{}, nil
 	}
@@ -123,7 +123,7 @@ func (m *Matcher) Matches(attr admission.Attributes, o admission.ObjectInterface
 		return false, schema.GroupVersionResource{}, schema.GroupVersionKind{}, nil
 	}
 
-	// now that we know this applies to this request otherwise, if there were selector errors, return them
+	// 至此已确认该策略适用于当前请求；selector 错误此时才需要返回。
 	if matchNsErr != nil {
 		return false, schema.GroupVersionResource{}, schema.GroupVersionKind{}, matchNsErr
 	}
@@ -150,12 +150,12 @@ func matchesResourceRules(namedRules []v1.NamedRuleWithOperations, matchPolicy *
 		if !ruleMatcher.Matches() {
 			continue
 		}
-		// an empty name list always matches
+		// 名称列表为空表示始终匹配。
 		if len(namedRule.ResourceNames) == 0 {
 			return true, matchResource, matchKind, nil
 		}
-		// TODO: GetName() can return an empty string if the user is relying on
-		// the API server to generate the name... figure out what to do for this edge case
+		// TODO: 若用户依赖 API server 生成名称，GetName() 可能返回空字符串……
+		// 需要确定这种边界情况的处理方式。
 		name := attr.GetName()
 		for _, matchedName := range namedRule.ResourceNames {
 			if name == matchedName {
@@ -164,9 +164,8 @@ func matchesResourceRules(namedRules []v1.NamedRuleWithOperations, matchPolicy *
 		}
 	}
 
-	// if match policy is undefined or exact, don't perform fuzzy matching
-	// note that defaulting to fuzzy matching is set by the API
-	// nil 视为 Exact：策略未显式声明时不做等价资源扩展。
+	// nil 视为 Exact：策略未显式声明时不做等价资源扩展；
+	// 注意默认走 fuzzy 匹配是由 API 设置的。
 	if matchPolicy == nil || *matchPolicy == v1.Exact {
 		return false, schema.GroupVersionResource{}, schema.GroupVersionKind{}, nil
 	}
@@ -177,7 +176,7 @@ func matchesResourceRules(namedRules []v1.NamedRuleWithOperations, matchPolicy *
 	for _, namedRule := range namedRules {
 		for _, equivalent := range equivalents {
 			if equivalent == attr.GetResource() {
-				// we have already checked the original resource
+				// 原始资源此前已经检查过。
 				continue
 			}
 			attrWithOverride.resource = equivalent
@@ -194,13 +193,13 @@ func matchesResourceRules(namedRules []v1.NamedRuleWithOperations, matchPolicy *
 			if matchKind.Empty() {
 				return false, schema.GroupVersionResource{}, schema.GroupVersionKind{}, fmt.Errorf("unable to convert to %v: unknown kind", equivalent)
 			}
-			// an empty name list always matches
+			// 名称列表为空表示始终匹配。
 			if len(namedRule.ResourceNames) == 0 {
 				return true, equivalent, matchKind, nil
 			}
 
-			// TODO: GetName() can return an empty string if the user is relying on
-			// the API server to generate the name... figure out what to do for this edge case
+			// TODO: 若用户依赖 API server 生成名称，GetName() 可能返回空字符串……
+			// 需要确定这种边界情况的处理方式。
 			name := attr.GetName()
 			for _, matchedName := range namedRule.ResourceNames {
 				if name == matchedName {

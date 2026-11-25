@@ -20,22 +20,20 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// WebhookAdmission provides configuration for the webhook admission controller.
+// WebhookAdmission 提供 webhook 准入控制器的配置。
 //
 // 该类型是外部配置 API 的一部分，字段名与 JSON 标签一经发布即不可更改。
 type WebhookAdmission struct {
 	metav1.TypeMeta
 
-	// KubeConfigFile is the path to the kubeconfig file.
+	// KubeConfigFile 是 kubeconfig 文件的路径。
 	KubeConfigFile string
 
-	// StaticManifestsDir is the path to a directory containing static webhook
-	// configurations to be loaded at startup. Files with extensions .yaml,
-	// .yml, and .json are read. Only admissionregistration.k8s.io/v1
-	// ValidatingWebhookConfiguration and MutatingWebhookConfiguration
-	// resources are supported.
-	// Using this field requires the ManifestBasedAdmissionControlConfig
-	// feature gate to be enabled.
+	// StaticManifestsDir 是包含静态 webhook 配置的目录路径，这些配置在启动时加载。
+	// 会读取扩展名为 .yaml、.yml 与 .json 的文件。仅支持
+	// admissionregistration.k8s.io/v1 的 ValidatingWebhookConfiguration 与
+	// MutatingWebhookConfiguration 资源。
+	// 使用该字段需要启用 ManifestBasedAdmissionControlConfig 特性门控。
 	//
 	// 与 KubeConfigFile 不同，这里加载的是完整的 WebhookConfiguration 对象，支持运行时
 	// 自动重载；未开启 feature gate 时该字段会被拒绝，以免用户误以为配置已生效。

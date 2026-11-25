@@ -71,10 +71,8 @@ func TestExcludedResourcesNamedByRule(t *testing.T) {
 	}
 }
 
-// TestLogExcludedResourcesForWebhook is a smoke test ensuring the logging helpers run without
-// panicking when no resources are excluded.
-//
-// 中文说明：这里只验证 mutating/validating 两条日志路径在“排除集合为空”时
+// TestLogExcludedResourcesForWebhook 是冒烟测试，确保在没有资源被排除时
+// 日志辅助函数不会 panic。这里只验证 mutating/validating 两条日志路径在“排除集合为空”时
 // 不会因 nil 集合或空切片而 panic；日志内容本身不是断言目标。
 func TestLogExcludedResourcesForWebhook(t *testing.T) {
 	logExcludedResourcesForValidatingWebhook("test-config", []v1.ValidatingWebhook{{

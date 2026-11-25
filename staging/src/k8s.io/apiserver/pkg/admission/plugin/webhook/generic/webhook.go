@@ -49,33 +49,32 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
-// Webhook is an abstract admission plugin with all the infrastructure to define Admit or Validate on-top.
-//
-// 它把"配置来源、匹配、调用"这些与具体插件无关的部分集中起来，
+// Webhook 是一个抽象准入插件，提供了在其上定义 Admit 或 Validate 的全部基础设施。
+// 它把“配置来源、匹配、调用”这些与具体插件无关的部分集中起来，
 // Mutating/Validating 插件只需实现差异化的调度逻辑。
 type Webhook struct {
 	*admission.Handler
 
-	// Factories for creating webhook sources.
+	// 创建 webhook 来源的工厂。
 	apiSourceInformers  informers.SharedInformerFactory
 	apiSourceFactory    sourceFactory
 	staticSourceFactory StaticSourceFactory
 
-	// Configuration provided via admission config file and initializers.
-	staticManifestsDir string // path to static webhook manifest directory (optional)
-	apiServerID        string // identity of this API server instance, used for metrics
+	// 通过准入配置文件与 initializer 提供的配置。
+	staticManifestsDir string // 静态 webhook 清单目录路径（可选）
+	apiServerID        string // 本 API server 实例的身份标识，用于指标
 
-	// hookSource is the webhook source used at admission time. When staticManifestsDir
-	// is configured, this is a composite source combining staticSource (loaded from disk)
-	// with apiSource (from the API). Otherwise, it points directly to apiSource.
+	// hookSource 是准入时使用的 webhook 来源。配置了 staticManifestsDir 时，
+	// 它是把 staticSource（从磁盘加载）与 apiSource（来自 API）组合起来的
+	// 复合来源；否则直接指向 apiSource。
 	hookSource Source
-	// apiSource provides webhook configurations from the Kubernetes API (informer-based).
+	// apiSource 从 Kubernetes API（基于 informer）提供 webhook 配置。
 	apiSource Source
-	// staticSource holds a reference to only the static (manifest-based) webhook source.
-	// This can be used to route requests for excluded resources to static hooks only.
+	// staticSource 只持有静态（基于清单）webhook 来源的引用，
+	// 可用于把被排除资源的请求只路由给静态 hook。
 	staticSource ReloadableSource
 
-	// Admission-time dependencies.
+	// 准入期依赖。
 	namespaceInformer coreinformers.NamespaceInformer
 	clientManager     *webhookutil.ClientManager
 	namespaceMatcher  *namespace.Matcher
@@ -84,15 +83,15 @@ type Webhook struct {
 	filterCompiler    cel.ConditionCompiler
 	authorizer        authorizer.UnconditionalAuthorizer
 
-	// Lifecycle.
+	// 生命周期。
 	stopCh <-chan struct{}
 
-	// excludedAdmissionResources are virtual resources (auth/authz reviews) that admission
-	// webhooks must not intercept when excludeVirtualResources is set. It is populated from
-	// the authoritative exclusion list via SetExcludedAdmissionResources.
+	// excludedAdmissionResources 是开启 excludeVirtualResources 时准入 webhook
+	// 不得拦截的虚拟资源（auth/authz review），其内容由
+	// SetExcludedAdmissionResources 从权威排除列表填充。
 	excludedAdmissionResources sets.Set[schema.GroupResource]
-	// excludeVirtualResources caches whether the ExcludeAdmissionWebhookVirtualResources
-	// feature is enabled, set once via InspectFeatureGates to avoid a gate lookup per request.
+	// excludeVirtualResources 缓存 ExcludeAdmissionWebhookVirtualResources 特性
+	// 是否启用，由 InspectFeatureGates 一次性设置，避免每请求查询门控。
 	excludeVirtualResources bool
 }
 
@@ -108,21 +107,19 @@ var (
 type sourceFactory func(f informers.SharedInformerFactory, excludedWebhookResources sets.Set[schema.GroupResource]) Source
 type dispatcherFactory func(cm *webhookutil.ClientManager) Dispatcher
 
-// ReloadableSource extends Source with a method to run a reload loop
-// that watches for configuration changes and blocks until the context is canceled.
+// ReloadableSource 在 Source 之上增加一个运行重载循环的方法：
+// 监听配置变化并阻塞直到 context 取消。
 type ReloadableSource interface {
 	Source
-	// RunReloadLoop watches for configuration changes and reloads when detected.
-	// It blocks until ctx is canceled.
+	// RunReloadLoop 监听配置变化并在检测到时重载；阻塞直到 ctx 取消。
 	RunReloadLoop(ctx context.Context)
 }
 
-// StaticSourceFactory creates a static webhook source from a manifest directory.
-// The returned Source should have LoadInitial() already called.
+// StaticSourceFactory 从清单目录创建静态 webhook 来源；
+// 返回的 Source 应当已经调用过 LoadInitial()。
 type StaticSourceFactory func(manifestsDir string) (ReloadableSource, error)
 
-// NewWebhook creates a new generic admission webhook.
-//
+// NewWebhook 构造一个通用的准入 webhook。
 // 客户端管理器同时注册 v1beta1 与 v1：webhook 服务端可能只支持旧版本，
 // 由 ClientManager 在请求时协商。默认 resolver 可被后续 initializer 覆盖。
 func NewWebhook(handler *admission.Handler, configFile io.Reader, sourceFactory sourceFactory, dispatcherFactory dispatcherFactory) (*Webhook, error) {
@@ -146,7 +143,7 @@ func NewWebhook(handler *admission.Handler, configFile io.Reader, sourceFactory 
 	if err != nil {
 		return nil, err
 	}
-	// Set defaults which may be overridden later.
+	// 设置默认值，后续可能被覆盖。
 	cm.SetAuthenticationInfoResolver(authInfoResolver)
 	cm.SetServiceResolver(webhookutil.NewDefaultServiceResolver())
 
@@ -163,69 +160,68 @@ func NewWebhook(handler *admission.Handler, configFile io.Reader, sourceFactory 
 	}, nil
 }
 
-// SetAuthenticationInfoResolverWrapper sets the
-// AuthenticationInfoResolverWrapper.
-// TODO find a better way wire this, but keep this pull small for now.
+// SetAuthenticationInfoResolverWrapper 设置 AuthenticationInfoResolverWrapper。
+// TODO: 找到更好的装配方式，暂时先保持本改动最小。
 func (a *Webhook) SetAuthenticationInfoResolverWrapper(wrapper webhookutil.AuthenticationInfoResolverWrapper) {
 	a.clientManager.SetAuthenticationInfoResolverWrapper(wrapper)
 }
 
-// SetServiceResolver sets a service resolver for the webhook admission plugin.
-// Passing a nil resolver does not have an effect, instead a default one will be used.
+// SetServiceResolver 为 webhook 准入插件设置 service resolver；
+// 传入 nil 不生效，将使用默认 resolver。
 func (a *Webhook) SetServiceResolver(sr webhookutil.ServiceResolver) {
 	a.clientManager.SetServiceResolver(sr)
 }
 
-// SetStaticSourceFactory sets the factory for creating static webhook sources.
-// This should be called before SetExternalKubeInformerFactory.
+// SetStaticSourceFactory 设置创建静态 webhook 来源的工厂；
+// 应在 SetExternalKubeInformerFactory 之前调用。
 func (a *Webhook) SetStaticSourceFactory(factory StaticSourceFactory) {
 	a.staticSourceFactory = factory
 }
 
-// SetAPIServerID implements the WantsAPIServerID interface.
-// The API server ID is used for metrics labeling and must be set before
-// SetExternalKubeInformerFactory is called.
+// SetAPIServerID 实现 WantsAPIServerID 接口。
+// API server ID 用于指标打标，必须在 SetExternalKubeInformerFactory
+// 之前设置。
 func (a *Webhook) SetAPIServerID(id string) {
 	a.apiServerID = id
 }
 
-// GetAPIServerID returns the stored API server ID.
+// GetAPIServerID 返回已保存的 API server ID。
 func (a *Webhook) GetAPIServerID() string {
 	return a.apiServerID
 }
 
-// SetDrainedNotification implements the WantsDrainedNotification interface.
+// SetDrainedNotification 实现 WantsDrainedNotification 接口。
 func (a *Webhook) SetDrainedNotification(stopCh <-chan struct{}) {
 	a.stopCh = stopCh
 }
 
-// SetExcludedAdmissionResources implements the WantsExcludedAdmissionResources interface.
+// SetExcludedAdmissionResources 实现 WantsExcludedAdmissionResources 接口。
 func (a *Webhook) SetExcludedAdmissionResources(excludedResources []schema.GroupResource) {
 	a.excludedAdmissionResources.Insert(excludedResources...)
 }
 
-// InspectFeatureGates implements the WantsFeatures interface. It caches whether the
-// ExcludeAdmissionWebhookVirtualResources feature is enabled so Dispatch avoids a gate
-// lookup on every request.
+// InspectFeatureGates 实现 WantsFeatures 接口：缓存
+// ExcludeAdmissionWebhookVirtualResources 特性是否启用，
+// 使 Dispatch 无需每个请求都查询 feature gate。
 func (a *Webhook) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	a.excludeVirtualResources = featureGates.Enabled(features.ExcludeAdmissionWebhookVirtualResources)
 }
 
-// SetExternalKubeClientSet implements the WantsExternalKubeInformerFactory interface.
-// It sets external ClientSet for admission plugins that need it
+// SetExternalKubeClientSet 实现 WantsExternalKubeClientSet 接口，
+// 为需要它的准入插件设置外部 ClientSet。
 func (a *Webhook) SetExternalKubeClientSet(client clientset.Interface) {
 	a.namespaceMatcher.Client = client
 }
 
-// SetExternalKubeInformerFactory implements the WantsExternalKubeInformerFactory interface.
+// SetExternalKubeInformerFactory 实现 WantsExternalKubeInformerFactory 接口。
 func (a *Webhook) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	namespaceInformer := f.Core().V1().Namespaces()
 	a.namespaceMatcher.NamespaceLister = namespaceInformer.Lister()
 	a.namespaceInformer = namespaceInformer
 
-	// Stored for constructing apiSource in ValidateInitialization (after all initializers have
-	// run, so the excluded resource set is available). Reset apiSource so that re-setting the
-	// informer factory rebuilds it from the new factory.
+	// 暂存 informer factory，供 ValidateInitialization 中构造 apiSource 使用
+	// （此时全部 initializer 已运行完，排除资源集合已就绪）。重置 apiSource，
+	// 使得重新设置 informer factory 时会基于新工厂重建。
 	a.apiSourceInformers = f
 	a.apiSource = nil
 }
@@ -235,11 +231,11 @@ func (a *Webhook) SetUnconditionalAuthorizer(authorizer authorizer.Unconditional
 	a.authorizer = authorizer
 }
 
-// ValidateInitialization implements the InitializationValidator interface.
-// API and static source creation happens here (after all initializers have run) because
-// initialization setter order is not guaranteed.
+// ValidateInitialization 实现 InitializationValidator 接口。
+// API 来源与静态来源在这里创建（全部 initializer 运行之后），
+// 因为 initializer 的 setter 调用顺序没有保证。
 func (a *Webhook) ValidateInitialization() error {
-	// Construct apiSource if needed
+	// 如需要则构造 apiSource。
 	if a.apiSource == nil {
 		if a.apiSourceInformers == nil {
 			return fmt.Errorf("kubernetes client is not properly setup")
@@ -259,14 +255,13 @@ func (a *Webhook) ValidateInitialization() error {
 		return fmt.Errorf("clientManager is not properly setup: %v", err)
 	}
 
-	// Guard: if static manifests dir is set but feature gate is off, return an error
+	// 防御：设置了静态清单目录但特性门控未开启时报错。
 	if len(a.staticManifestsDir) > 0 && !utilfeature.DefaultFeatureGate.Enabled(features.ManifestBasedAdmissionControlConfig) {
 		return fmt.Errorf("static webhook manifests dir %q configured but %s feature gate is not enabled", a.staticManifestsDir, features.ManifestBasedAdmissionControlConfig)
 	}
 
-	// Construct hookSource. The static source path (which starts goroutines)
-	// is guarded to avoid duplicate construction. The API-only path is a cheap
-	// pointer assignment that must reflect the latest apiSource.
+	// 构造 hookSource。静态来源路径会启动 goroutine，因此加保护避免重复构造；
+	// 仅 API 的路径只是廉价的指针赋值，必须反映最新的 apiSource。
 	if len(a.staticManifestsDir) > 0 {
 		if a.hookSource == nil {
 			if a.staticSourceFactory == nil {
@@ -281,14 +276,14 @@ func (a *Webhook) ValidateInitialization() error {
 				return fmt.Errorf("failed to load static webhook manifests from %q: %w", a.staticManifestsDir, err)
 			}
 			a.staticSource = staticSource
-			// Start the file watcher in a background goroutine, tied to server shutdown
+			// 在后台 goroutine 中启动文件监听，随 server 退出而停止。
 			staticCtx, staticCancel := context.WithCancel(context.Background())
 			go func() {
 				defer staticCancel()
 				<-a.stopCh
 			}()
 			go staticSource.RunReloadLoop(staticCtx)
-			// Use composite source that combines static + API sources
+			// 使用组合静态来源与 API 来源的复合来源。
 			a.hookSource = NewCompositeWebhookSource(staticSource, a.apiSource)
 		}
 	} else {
@@ -303,20 +298,19 @@ func (a *Webhook) ValidateInitialization() error {
 	return nil
 }
 
-// ShouldCallHook returns invocation details if the webhook should be called, nil if the webhook should not be called,
-// or an error if an error was encountered during evaluation.
-//
+// ShouldCallHook 在应调用 webhook 时返回调用详情，不应调用时返回 nil，
+// 求值过程出错时返回错误。
 // 匹配顺序：namespace selector -> object selector -> rules（含等价资源）。
 // 前两步的匹配错误不会立即返回：如果最终规则不匹配，就不该因无关的
 // selector 错误而拒绝请求；只有确定要调用 webhook 时才把错误抛给用户。
 func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor, attr admission.Attributes, o admission.ObjectInterfaces, v VersionedAttributeAccessor) (*WebhookInvocation, *apierrors.StatusError) {
 	matches, matchNsErr := a.namespaceMatcher.MatchNamespaceSelector(h, attr)
-	// Should not return an error here for webhooks which do not apply to the request, even if err is an unexpected scenario.
+	// 对于不适用于本请求的 webhook 不应返回错误，即使 err 属于意外场景。
 	if !matches && matchNsErr == nil {
 		return nil, nil
 	}
 
-	// Should not return an error here for webhooks which do not apply to the request, even if err is an unexpected scenario.
+	// 对于不适用于本请求的 webhook 不应返回错误，即使 err 属于意外场景。
 	matches, matchObjErr := a.objectMatcher.MatchObjectSelector(h, attr)
 	if !matches && matchObjErr == nil {
 		return nil, nil
@@ -340,13 +334,13 @@ func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor,
 	if invocation == nil && h.GetMatchPolicy() != nil && *h.GetMatchPolicy() == v1.Equivalent {
 		attrWithOverride := &attrWithResourceOverride{Attributes: attr}
 		equivalents := o.GetEquivalentResourceMapper().EquivalentResourcesFor(attr.GetResource(), attr.GetSubresource())
-		// honor earlier rules first
+		// 优先遵循排在前面的规则。
 	OuterLoop:
 		for _, r := range h.GetRules() {
-			// see if the rule matches any of the equivalent resources
+			// 检查规则是否匹配任一等价资源。
 			for _, equivalent := range equivalents {
 				if equivalent == attr.GetResource() {
-					// exclude attr.GetResource(), which we already checked
+					// 排除 attr.GetResource()，前面已经检查过。
 					continue
 				}
 				attrWithOverride.resource = equivalent
@@ -396,7 +390,7 @@ func (a *Webhook) ShouldCallHook(ctx context.Context, h webhook.WebhookAccessor,
 			return nil, apierrors.NewForbidden(attr.GetResource().GroupResource(), attr.GetName(), matchResult.Error)
 		} else if !matchResult.Matches {
 			admissionmetrics.Metrics.ObserveMatchConditionExclusion(ctx, h.GetName(), "webhook", h.GetType(), string(attr.GetOperation()))
-			// if no match, always skip webhook
+			// 不匹配则始终跳过该 webhook。
 			return nil, nil
 		}
 	}
@@ -414,22 +408,21 @@ type attrWithResourceOverride struct {
 // GetResource 返回被替换后的等价资源。
 func (a *attrWithResourceOverride) GetResource() schema.GroupVersionResource { return a.resource }
 
-// isExcludedFromAllHooks returns true for non-persisted virtual resources (auth/authz reviews)
-// that must not be intercepted by any webhook, static or REST-based. It returns false (no-op)
-// when the ExcludeAdmissionWebhookVirtualResources feature is disabled.
+// isExcludedFromAllHooks 对不允许被任何 webhook（静态或 REST 来源）拦截的
+// 非持久化虚拟资源（auth/authz review）返回 true；
+// 未启用 ExcludeAdmissionWebhookVirtualResources 特性时恒为 false（无操作）。
 func (a *Webhook) isExcludedFromAllHooks(gr schema.GroupResource) bool {
 	return a.excludeVirtualResources && a.excludedAdmissionResources.Has(gr)
 }
 
-// isExcludedFromAPIHooks returns true for admission configuration resources (webhook
-// configurations and admission policies/bindings) that are excluded from API-based webhooks to
-// prevent circular dependencies, but may still be evaluated by static (manifest-based) webhooks.
+// isExcludedFromAPIHooks 对准入配置类资源（webhook 配置与准入策略/绑定）返回 true：
+// 这类资源被 API 来源的 webhook 排除以避免循环依赖，
+// 但仍可被静态（基于清单）的 webhook 处理。
 func (a *Webhook) isExcludedFromAPIHooks(attr admission.Attributes) bool {
 	return rules.IsExemptAdmissionConfigurationResource(attr)
 }
 
-// Dispatch is called by the downstream Validate or Admit methods.
-//
+// Dispatch 由下游的 Validate 或 Admit 方法调用。
 // 三层排除逻辑保护集群自身可用性：
 //   - 认证/授权 review 等虚拟资源不经过任何 webhook，避免准入卡死认证链路；
 //   - 准入配置资源不经过 API 来源的 webhook，避免自我引用死锁，
@@ -437,14 +430,14 @@ func (a *Webhook) isExcludedFromAPIHooks(attr admission.Attributes) bool {
 //   - 其余请求等就绪后按 hookSource 全量调度。
 func (a *Webhook) Dispatch(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	if a.isExcludedFromAllHooks(attr.GetResource().GroupResource()) {
-		// Virtual auth/authz resources are excluded from all webhooks (static and REST-based)
-		// so that admission cannot wedge a cluster out of its own auth path.
+		// 虚拟的 auth/authz 资源被所有 webhook（静态与 REST 来源）排除，
+		// 避免准入把集群卡死在自己的认证路径上。
 		return nil
 	}
 	if a.isExcludedFromAPIHooks(attr) {
-		// Admission config resources are excluded from API-based webhooks to prevent circular
-		// dependencies. However, static (manifest-based) webhooks are safe to evaluate since
-		// they don't have self-referential concerns.
+		// 准入配置资源被 API 来源的 webhook 排除以避免循环依赖；
+		// 但静态（基于清单）的 webhook 处理它们是安全的，
+		// 不存在自我引用问题。
 		if a.staticSource != nil {
 			if !a.staticSource.HasSynced() {
 				return admission.NewForbidden(attr, fmt.Errorf("not yet ready to handle request"))

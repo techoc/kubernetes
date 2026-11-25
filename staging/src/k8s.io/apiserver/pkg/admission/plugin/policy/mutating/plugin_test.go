@@ -148,7 +148,7 @@ func TestJSONPatch(t *testing.T) {
 		}
 	})
 
-	// Set up a policy and binding that match, no params
+	// 构造能匹配的 policy 与 binding，不带参数
 	require.NoError(t, testContext.UpdateAndWait(
 		&v1.MutatingAdmissionPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "policy"},
@@ -212,7 +212,7 @@ func TestSSAPatch(t *testing.T) {
 		}
 	})
 
-	// Set up a policy and binding that match, no params
+	// 构造能匹配的 policy 与 binding，不带参数
 	require.NoError(t, testContext.UpdateAndWait(
 		&v1.MutatingAdmissionPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "policy"},
@@ -281,7 +281,7 @@ func TestSSAMapList(t *testing.T) {
 		}
 	})
 
-	// Set up a policy and binding that match, no params
+	// 构造能匹配的 policy 与 binding，不带参数
 	require.NoError(t, testContext.UpdateAndWait(
 		&v1.MutatingAdmissionPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "policy"},

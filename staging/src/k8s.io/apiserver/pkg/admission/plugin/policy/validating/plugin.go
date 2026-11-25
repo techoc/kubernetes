@@ -40,9 +40,9 @@ import (
 )
 
 const (
-	// PluginName indicates the name of admission plug-in
+	// PluginName 表示准入插件的名字。
 	//
-	// 中文说明：此名称同时用于 --enable-admission-plugins 与指标标签，不可随意更改。
+	// 此名称同时用于 --enable-admission-plugins 与指标标签，不可随意更改。
 	PluginName = "ValidatingAdmissionPolicy"
 )
 
@@ -55,7 +55,7 @@ var (
 
 // getCompositionEnvTemplateWithStrictCost 返回共享的、启用严格成本评估的 CEL 环境模板。
 //
-// 中文说明：模板只读，各策略编译时在其基础上派生，避免跨策略共享可变状态。
+// 模板只读，各策略编译时在其基础上派生，避免跨策略共享可变状态。
 func getCompositionEnvTemplateWithStrictCost() *environment.EnvSet {
 	lazyCompositionEnvTemplateWithStrictCostInit.Do(func() {
 		lazyCompositionEnvTemplateWithStrictCost = environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion())
@@ -63,9 +63,9 @@ func getCompositionEnvTemplateWithStrictCost() *environment.EnvSet {
 	return lazyCompositionEnvTemplateWithStrictCost
 }
 
-// Register registers a plugin
+// Register 注册一个准入插件。
 //
-// 中文说明：注册工厂仅保存构造函数，真正的实例化发生在 apiserver 组装
+// 注册工厂仅保存构造函数，真正的实例化发生在 apiserver 组装
 // 插件链时，此时才读取组件配置文件。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName, func(configFile io.Reader) (admission.Interface, error) {
@@ -73,9 +73,9 @@ func Register(plugins *admission.Plugins) {
 	})
 }
 
-// Plugin is an implementation of admission.Interface.
+// Plugin 是 admission.Interface 的一种实现。
 //
-// 中文说明：这些类型别名把 API 类型与 generic 框架的泛型参数绑定在一起，
+// 这些类型别名把 API 类型与 generic 框架的泛型参数绑定在一起，
 // 使 Plugin 能以最少的代码复用策略分发、匹配与静态源逻辑。
 type Policy = v1.ValidatingAdmissionPolicy
 type PolicyBinding = v1.ValidatingAdmissionPolicyBinding
@@ -84,7 +84,7 @@ type PolicyHook = generic.PolicyHook[*Policy, *PolicyBinding, PolicyEvaluator]
 
 // Plugin 是 ValidatingAdmissionPolicy 准入插件。
 //
-// 中文说明：内嵌泛型插件，只额外实现 SetManifestLoaders 与 Validate，
+// 内嵌泛型插件，只额外实现 SetManifestLoaders 与 Validate，
 // 其余生命周期（启动 informer、关闭）由 generic.Plugin 负责。
 type Plugin struct {
 	*generic.Plugin[PolicyHook]
@@ -95,9 +95,9 @@ var _ admission.ValidationInterface = &Plugin{}
 var _ initializer.WantsExcludedAdmissionResources = &Plugin{}
 var _ initializer.WantsManifestLoaders = &Plugin{}
 
-// SetManifestLoaders provides the manifest load functions for scheme-based defaulting and validation.
+// SetManifestLoaders 注入基于 scheme 的默认化与校验所需的清单加载函数。
 //
-// 中文说明：仅在静态清单目录存在时才会被真正调用；此处注册一个工厂，
+// 仅在静态清单目录存在时才会被真正调用；此处注册一个工厂，
 // generic.Plugin 在得知目录路径后再按需创建静态源，实现配置与加载解耦。
 func (a *Plugin) SetManifestLoaders(loaders *initializer.ManifestLoaders) {
 	// 未启用静态配置能力时保持默认（仅 informer 源）行为。
@@ -132,7 +132,7 @@ func (a *Plugin) SetManifestLoaders(loaders *initializer.ManifestLoaders) {
 
 // NewPlugin 构造插件：加载配置、选择 CEL 版本并装配 informer 源与分发器。
 //
-// 中文说明：分发器使用 UnconditionalAuthorizer，因为策略中的 authorizer
+// 分发器使用 UnconditionalAuthorizer，因为策略中的 authorizer
 // 变量只关心是否放行，不能容忍带条件的延迟决定。
 func NewPlugin(configFile io.Reader) (*Plugin, error) {
 	cfg, err := config.LoadValidatingConfig(configFile)
@@ -170,9 +170,9 @@ func NewPlugin(configFile io.Reader) (*Plugin, error) {
 	return p, nil
 }
 
-// Validate makes an admission decision based on the request attributes.
+// Validate 根据请求属性做出准入决策。
 //
-// 中文说明：只做转发；分发器内部按匹配结果决定执行哪些策略，
+// 只做转发；分发器内部按匹配结果决定执行哪些策略，
 // 无匹配策略时开销极小。
 func (a *Plugin) Validate(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	return a.Plugin.Dispatch(ctx, attr, o)
@@ -180,7 +180,7 @@ func (a *Plugin) Validate(ctx context.Context, attr admission.Attributes, o admi
 
 // compilePolicy 把策略规格编译为可执行的 Validator。
 //
-// 中文说明：编译错误不会在此返回 error，而是存入 Validator，以便按
+// 编译错误不会在此返回 error，而是存入 Validator，以便按
 // failurePolicy 决定拒绝请求还是放行——配置错误不应无条件阻断整个集群。
 func compilePolicy(policy *Policy) Validator {
 	hasParam := false
@@ -238,7 +238,7 @@ func convertv1Validations(inputValidations []v1.Validation) []cel.ExpressionAcce
 
 // convertv1MessageExpressions 提取带 messageExpression 的校验规则。
 //
-// 中文说明：保持与 Validations 相同的下标，使编译结果与原始规则一一对应；
+// 保持与 Validations 相同的下标，使编译结果与原始规则一一对应；
 // 未设置该字段的位置保留 nil，执行时会跳过。
 func convertv1MessageExpressions(inputValidations []v1.Validation) []cel.ExpressionAccessor {
 	celExpressionAccessor := make([]cel.ExpressionAccessor, len(inputValidations))
@@ -268,7 +268,7 @@ func convertv1AuditAnnotations(inputValidations []v1.AuditAnnotation) []cel.Expr
 
 // convertv1beta1Variables 把变量声明适配为具名 CEL 表达式。
 //
-// 中文说明：函数名保留 v1beta1 是历史原因（变量特性最初在 v1beta1 引入），
+// 函数名保留 v1beta1 是历史原因（变量特性最初在 v1beta1 引入），
 // 当前输入已统一为 v1 类型。
 func convertv1beta1Variables(variables []v1.Variable) []cel.NamedExpressionAccessor {
 	namedExpressions := make([]cel.NamedExpressionAccessor, len(variables))

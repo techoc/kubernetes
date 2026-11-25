@@ -265,7 +265,7 @@ func TestCachingAuthorizer(t *testing.T) {
 					},
 				},
 				{
-					// now this should be cached
+					// 此时结果应当已被缓存
 					attributes: authorizer.AttributesRecord{
 						Name:                      "test name",
 						FieldSelectorRequirements: fields.ParseSelectorOrDie("foo=bar").Requirements(),
@@ -306,8 +306,8 @@ func TestCachingAuthorizer(t *testing.T) {
 					},
 				},
 				{
-					// notice that this does not have the malformed field selector.
-					// it should use the cached result
+					// 注意这里没有那个格式错误的字段选择器，
+					// 应当使用缓存的结果
 					attributes: authorizer.AttributesRecord{
 						Name: "test name",
 					},
@@ -340,7 +340,7 @@ func TestCachingAuthorizer(t *testing.T) {
 					},
 				},
 				{
-					// this should use the broader cached value because the selector will be ignored
+					// 由于选择器会被忽略，这里应使用更宽泛的缓存值
 					attributes: authorizer.AttributesRecord{
 						Name:                    "test name",
 						FieldSelectorParsingErr: errors.New("malformed"),
@@ -387,7 +387,7 @@ func TestCachingAuthorizer(t *testing.T) {
 					},
 				},
 				{
-					// now this should be cached
+					// 此时结果应当已被缓存
 					attributes: authorizer.AttributesRecord{
 						Name:                      "test name",
 						LabelSelectorRequirements: mustParseLabelSelector("foo=bar"),
@@ -443,8 +443,8 @@ func TestCachingAuthorizer(t *testing.T) {
 					},
 				},
 				{
-					// notice that this does not have the malformed field selector.
-					// it should use the cached result
+					// 注意这里没有那个格式错误的字段选择器，
+					// 应当使用缓存的结果
 					attributes: authorizer.AttributesRecord{
 						Name: "test name",
 					},
@@ -477,7 +477,7 @@ func TestCachingAuthorizer(t *testing.T) {
 					},
 				},
 				{
-					// this should use the broader cached value because the selector will be ignored
+					// 由于选择器会被忽略，这里应使用更宽泛的缓存值
 					attributes: authorizer.AttributesRecord{
 						Name:                    "test name",
 						LabelSelectorParsingErr: errors.New("malformed mess"),

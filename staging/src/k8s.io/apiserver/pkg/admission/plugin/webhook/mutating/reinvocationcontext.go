@@ -27,12 +27,12 @@ import (
 // 当后续 webhook 再次改动对象后需要重新调用它们，因此要保存上次调用的输出
 // 和已调用过、可重复调用的 hook 集合。
 type webhookReinvokeContext struct {
-	// lastWebhookOutput holds the result of the last webhook admission plugin call
+	// lastWebhookOutput 保存上一次 webhook 准入插件调用的结果
 	lastWebhookOutput runtime.Object
-	// previouslyInvokedReinvocableWebhooks holds the set of webhooks that have been invoked and
-	// should be reinvoked if a later mutation occurs
+	// previouslyInvokedReinvocableWebhooks 保存已被调用、且在后续发生修改时
+	// 应当被重新调用的 webhook 集合
 	previouslyInvokedReinvocableWebhooks sets.Set[string]
-	// reinvokeWebhooks holds the set of webhooks that should be reinvoked
+	// reinvokeWebhooks 保存应当被重新调用的 webhook 集合
 	reinvokeWebhooks sets.Set[string]
 }
 

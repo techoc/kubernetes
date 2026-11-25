@@ -96,7 +96,7 @@ func (v *fakeVersionedAttributeAccessor) VersionedAttribute(gvk schema.GroupVers
 }
 
 // TestShouldCallHook 验证 webhook 规则匹配、等价资源解析与 matchConditions 的组合语义。
-// 中文说明：核心不变量是“规则命中后，调用的 Kind/Resource/Subresource 必须是规则意图的
+// 核心不变量是“规则命中后，调用的 Kind/Resource/Subresource 必须是规则意图的
 // 那个等价版本”——Exact 只认精确匹配，Equivalent 才允许跨组/跨版本改写，且按规则顺序
 // 优先选择；匹配条件出错时按 fail-closed 拒绝请求。
 func TestShouldCallHook(t *testing.T) {
@@ -112,7 +112,7 @@ func TestShouldCallHook(t *testing.T) {
 	// 让 extensions/apps 各组下的 deployments 被视为同一资源，用于覆盖 equivalent 匹配。
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 让 deployments 在所有 API 组中同位注册
 			return "/deployments"
 		}
 		return ""
@@ -127,8 +127,8 @@ func TestShouldCallHook(t *testing.T) {
 	mapper.RegisterKindFor(gvr("apps", "v1beta1", "deployments"), "scale", gvk("apps", "v1beta1", "Scale"))
 	mapper.RegisterKindFor(gvr("apps", "v1alpha1", "deployments"), "scale", gvk("apps", "v1alpha1", "Scale"))
 
-	// register invalid kinds to trigger an error
-	// 中文说明：注册空 GVK 会让 kind 查找失败，用于验证匹配阶段的错误处理。
+	// 注册非法 kind 以触发错误
+	// 注册空 GVK 会让 kind 查找失败，用于验证匹配阶段的错误处理。
 	mapper.RegisterKindFor(gvr("example.com", "v1", "widgets"), "", gvk("", "", ""))
 	mapper.RegisterKindFor(gvr("example.com", "v2", "widgets"), "", gvk("", "", ""))
 
@@ -543,7 +543,7 @@ func BenchmarkShouldCallHookWithComplexSelector(b *testing.B) {
 
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 让 deployments 在所有 API 组中同位注册
 			return "/deployments"
 		}
 		return ""
@@ -617,7 +617,7 @@ func BenchmarkShouldCallHookWithComplexRule(b *testing.B) {
 
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 让 deployments 在所有 API 组中同位注册
 			return "/deployments"
 		}
 		return ""
@@ -690,7 +690,7 @@ func BenchmarkShouldCallHookWithComplexSelectorAndRule(b *testing.B) {
 
 	mapper := runtime.NewEquivalentResourceRegistryWithIdentity(func(resource schema.GroupResource) string {
 		if resource.Resource == "deployments" {
-			// co-locate deployments in all API groups
+			// 让 deployments 在所有 API 组中同位注册
 			return "/deployments"
 		}
 		return ""

@@ -42,9 +42,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestCompilation is an open-box test of mutatingEvaluator.compile
-// However, the result is a set of CEL programs, manually invoke them to assert
-// on the results.
+// TestCompilation 是对 mutatingEvaluator.compile 的白盒测试：
+// 编译结果是若干 CEL program，需要手工调用它们来断言求值结果。
 //
 // 白盒测试：绕过准入流程，直接对编译产物（Mutators）调用 Patch，
 // 从而精确断言 CEL 求值、patch 应用顺序、变量与参数绑定等行为。
@@ -285,15 +284,11 @@ func TestCompilation(t *testing.T) {
 			}}},
 		},
 		{
-			// TODO: This test documents existing behavior that we should be fixed before
-			// MutatingAdmissionPolicy graduates to beta.
-			// It is possible to initialize invalid Object types because we do not yet perform
-			// a full compilation pass with the types fully bound.  Before beta, we should
-			// recompile all expressions with fully bound types before evaluation and report
-			// errors if invalid Object types like this are initialized.
-			//
-			// 该用例固化了一个已知缺陷：无效的 Object 类型仍能构造成功，
-			// 因为当前编译未完全绑定类型；beta 前应在求值前重新编译并报错。
+			// TODO: 该用例固化了既有行为，在 MutatingAdmissionPolicy 进入 beta
+			// 之前应当修复。由于我们尚未执行类型完全绑定的整体编译，
+			// 因此可能初始化出非法的 Object 类型（如 Object.invalid）。进入 beta 前，
+			// 应在求值之前用完全绑定的类型重新编译所有表达式，
+			// 并在初始化了此类非法 Object 类型时报告错误。
 			name: "object types are not fully type checked",
 			policy: jsonPatches(policy("d1"), v1.JSONPatch{
 				Expression: `[

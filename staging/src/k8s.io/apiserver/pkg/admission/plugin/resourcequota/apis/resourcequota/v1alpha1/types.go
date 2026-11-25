@@ -23,54 +23,47 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Configuration provides configuration for the ResourceQuota admission controller.
+// Configuration 提供 ResourceQuota 准入控制器的配置。
 // 它对应 resourcequota 准入插件的配置文件，决定哪些资源在缺少配额时必须被拒绝。
 type Configuration struct {
 	metav1.TypeMeta `json:""`
 
-	// LimitedResources whose consumption is limited by default.
+	// LimitedResources 是默认限制消耗的资源列表。
 	// 每个条目描述一类资源；为空时所有资源都按默认配额策略处理。
 	// +optional
 	LimitedResources []LimitedResource `json:"limitedResources"`
 }
 
-// LimitedResource matches a resource whose consumption is limited by default.
-// To consume the resource, there must exist an associated quota that limits
-// its consumption.
+// LimitedResource 描述一个默认限制消耗的资源。
+// 要消耗该资源，必须存在限制其消耗的相关配额。
 // 该结构与 LimitedResources 配合，实现“没有覆盖配额就拒绝”的默认限制语义。
 type LimitedResource struct {
 
-	// APIGroup is the name of the APIGroup that contains the limited resource.
+	// APIGroup 是包含被限制资源的 APIGroup 名称。
 	// 留空表示 core 组；必须与 Resource 组合后才能唯一确定资源。
 	// +optional
 	APIGroup string `json:"apiGroup,omitempty"`
 
-	// Resource is the name of the resource this rule applies to.
-	// For example, if the administrator wants to limit consumption
-	// of a storage resource associated with persistent volume claims,
-	// the value would be "persistentvolumeclaims".
+	// Resource 是该规则适用的资源名称。
+	// 例如，若管理员想限制与持久卷声明（PVC）关联的存储资源消耗，
+	// 取值应为 "persistentvolumeclaims"。
 	Resource string `json:"resource"`
 
-	// For each intercepted request, the quota system will evaluate
-	// its resource usage.  It will iterate through each resource consumed
-	// and if the resource contains any substring in this listing, the
-	// quota system will ensure that there is a covering quota.  In the
-	// absence of a covering quota, the quota system will deny the request.
-	// For example, if an administrator wants to globally enforce that
-	// that a quota must exist to consume persistent volume claims associated
-	// with any storage class, the list would include
+	// 对每个被拦截的请求，配额系统都会评估其资源用量：
+	// 遍历其消耗的每种资源，若资源名包含本列表中的任一子串，
+	// 配额系统会确保存在覆盖配额（covering quota）；没有覆盖配额则拒绝请求。
+	// 例如，若管理员想全局强制“消耗任意 storageclass 的 PVC 必须有配额”，
+	// 列表中应包含
 	// ".storageclass.storage.k8s.io/requests.storage"
 	//
 	// 匹配为子串匹配（而非前缀），因此条目应包含足够具体的资源名后缀，
 	// 避免误伤其他资源键。
 	MatchContains []string `json:"matchContains,omitempty"`
-	// For each intercepted request, the quota system will figure out if the input object
-	// satisfies a scope which is present in this listing, then
-	// quota system will ensure that there is a covering quota.  In the
-	// absence of a covering quota, the quota system will deny the request.
-	// For example, if an administrator wants to globally enforce that
-	// a quota must exist to create a pod with "cluster-services" priorityclass
-	// the list would include "scopeName=PriorityClass, Operator=In, Value=cluster-services"
+	// 对每个被拦截的请求，配额系统会判断输入对象是否满足本列表中的某个作用域，
+	// 若满足则确保存在覆盖配额；没有覆盖配额则拒绝请求。
+	// 例如，若管理员想全局强制“创建使用 cluster-services 优先级类的 Pod
+	// 必须有配额”
+	// 列表中应包含 "scopeName=PriorityClass, Operator=In, Value=cluster-services"
 	// +optional
 	MatchScopes []v1.ScopedResourceSelectorRequirement `json:"matchScopes,omitempty"`
 }

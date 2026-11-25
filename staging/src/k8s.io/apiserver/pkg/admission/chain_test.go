@@ -139,7 +139,6 @@ func TestAdmitAndValidate(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("testcase = %s", test.name)
-		// call admit and check that validate was not called at all
 		// 第一阶段：只跑 Admit，同时确认没有任何插件误触发 Validate。
 		err := test.chain.Admit(context.TODO(), NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, test.ns, "", schema.GroupVersionResource{}, "", test.operation, test.options, false, nil), nil)
 		accepted := (err == nil)
@@ -157,11 +156,10 @@ func TestAdmitAndValidate(t *testing.T) {
 				t.Errorf("validate handler %s called during admit", fake.name)
 			}
 
-			// reset value for validation test
+			// 为校验阶段测试重置计数
 			fake.admitCalled = false
 		}
 
-		// call validate and check that admit was not called at all
 		// 第二阶段：只跑 Validate，同样确认 Admit 未被误触发。
 		err = test.chain.Validate(context.TODO(), NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, test.ns, "", schema.GroupVersionResource{}, "", test.operation, test.options, false, nil), nil)
 		accepted = (err == nil)

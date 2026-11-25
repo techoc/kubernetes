@@ -31,10 +31,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-// TestWantsUnconditionalAuthorizer ensures that the authorizer is injected
-// when the WantsUnconditionalAuthorizer interface is implemented by a plugin.
+// TestWantsUnconditionalAuthorizer 验证当插件实现了 WantsUnconditionalAuthorizer
+// 接口时，authorizer 会被注入。
 //
-// 中文说明：与 WantsAuthorizer 的区别在于是否受准入请求链路的条件求值约束；
+// 与 WantsAuthorizer 的区别在于是否受准入请求链路的条件求值约束；
 // 这里只验证注入路径，不验证鉴权语义。
 func TestWantsUnconditionalAuthorizer(t *testing.T) {
 	target := initializer.New(nil, nil, nil, &TestAuthorizer{}, nil, nil, nil, nil)
@@ -45,8 +45,7 @@ func TestWantsUnconditionalAuthorizer(t *testing.T) {
 	}
 }
 
-// TestWantsAuthorizer ensures that the authorizer is injected
-// when the WantsAuthorizer interface is implemented by a plugin.
+// TestWantsAuthorizer 验证当插件实现了 WantsAuthorizer 接口时，authorizer 会被注入。
 func TestWantsAuthorizer(t *testing.T) {
 	target := initializer.New(nil, nil, nil, &TestAuthorizer{}, nil, nil, nil, nil)
 	wantAuthorizerAdmission := &WantAuthorizerAdmission{}
@@ -56,8 +55,8 @@ func TestWantsAuthorizer(t *testing.T) {
 	}
 }
 
-// TestWantsExternalKubeClientSet ensures that the clientset is injected
-// when the WantsExternalKubeClientSet interface is implemented by a plugin.
+// TestWantsExternalKubeClientSet 验证当插件实现了 WantsExternalKubeClientSet 接口时，
+// clientset 会被注入。
 func TestWantsExternalKubeClientSet(t *testing.T) {
 	cs := &fake.Clientset{}
 	target := initializer.New(cs, nil, nil, &TestAuthorizer{}, nil, nil, nil, nil)
@@ -68,8 +67,8 @@ func TestWantsExternalKubeClientSet(t *testing.T) {
 	}
 }
 
-// TestWantsExternalKubeInformerFactory ensures that the informer factory is injected
-// when the WantsExternalKubeInformerFactory interface is implemented by a plugin.
+// TestWantsExternalKubeInformerFactory 验证当插件实现了 WantsExternalKubeInformerFactory
+// 接口时，informer factory 会被注入。
 func TestWantsExternalKubeInformerFactory(t *testing.T) {
 	cs := &fake.Clientset{}
 	sf := informers.NewSharedInformerFactory(cs, time.Duration(1)*time.Second)
@@ -81,10 +80,10 @@ func TestWantsExternalKubeInformerFactory(t *testing.T) {
 	}
 }
 
-// TestWantsShutdownSignal ensures that the shutdown signal is injected
-// when the WantsShutdownSignal interface is implemented by a plugin.
+// TestWantsShutdownSignal 验证当插件实现了 WantsShutdownSignal 接口时，
+// shutdown 信号会被注入。
 //
-// 中文说明：函数名仍是旧称 ShutdownNotification，接口已改名为 WantsDrainedNotification；
+// 函数名仍是旧称 ShutdownNotification，接口已改名为 WantsDrainedNotification；
 // 该通道在 apiserver 完成 drain 后关闭，插件据此停止后台工作。
 func TestWantsShutdownNotification(t *testing.T) {
 	stopCh := make(chan struct{})
@@ -96,7 +95,7 @@ func TestWantsShutdownNotification(t *testing.T) {
 	}
 }
 
-// WantExternalKubeInformerFactory is a test stub that fulfills the WantsExternalKubeInformerFactory interface
+// WantExternalKubeInformerFactory 是满足 WantsExternalKubeInformerFactory 接口的测试桩。
 type WantExternalKubeInformerFactory struct {
 	sf informers.SharedInformerFactory
 }
@@ -113,7 +112,7 @@ func (self *WantExternalKubeInformerFactory) ValidateInitialization() error     
 var _ admission.Interface = &WantExternalKubeInformerFactory{}
 var _ initializer.WantsExternalKubeInformerFactory = &WantExternalKubeInformerFactory{}
 
-// WantExternalKubeClientSet is a test stub that fulfills the WantsExternalKubeClientSet interface
+// WantExternalKubeClientSet 是满足 WantsExternalKubeClientSet 接口的测试桩。
 type WantExternalKubeClientSet struct {
 	cs kubernetes.Interface
 }
@@ -130,7 +129,7 @@ func (self *WantExternalKubeClientSet) ValidateInitialization() error      { ret
 var _ admission.Interface = &WantExternalKubeClientSet{}
 var _ initializer.WantsExternalKubeClientSet = &WantExternalKubeClientSet{}
 
-// WantUnconditionalAuthorizerAdmission is a test stub that fulfills the WantsUnconditionalAuthorizer interface.
+// WantUnconditionalAuthorizerAdmission 是满足 WantsUnconditionalAuthorizer 接口的测试桩。
 type WantUnconditionalAuthorizerAdmission struct {
 	auth authorizer.UnconditionalAuthorizer
 }
@@ -147,7 +146,7 @@ func (self *WantUnconditionalAuthorizerAdmission) ValidateInitialization() error
 var _ admission.Interface = &WantUnconditionalAuthorizerAdmission{}
 var _ initializer.WantsUnconditionalAuthorizer = &WantUnconditionalAuthorizerAdmission{}
 
-// WantAuthorizerAdmission is a test stub that fulfills the WantsAuthorizer interface.
+// WantAuthorizerAdmission 是满足 WantsAuthorizer 接口的测试桩。
 type WantAuthorizerAdmission struct {
 	auth authorizer.Authorizer
 }
@@ -164,8 +163,8 @@ func (self *WantAuthorizerAdmission) ValidateInitialization() error      { retur
 var _ admission.Interface = &WantAuthorizerAdmission{}
 var _ initializer.WantsAuthorizer = &WantAuthorizerAdmission{}
 
-// WantDrainedNotification is a test stub that filfills the WantsDrainedNotification interface.
-// 中文说明：只保存注入的通道，用于断言注入确实发生。
+// WantDrainedNotification 是满足 WantsDrainedNotification 接口的测试桩，
+// 只保存注入的通道，用于断言注入确实发生。
 type WantDrainedNotification struct {
 	stopCh <-chan struct{}
 }
@@ -182,25 +181,25 @@ func (self *WantDrainedNotification) ValidateInitialization() error      { retur
 var _ admission.Interface = &WantDrainedNotification{}
 var _ initializer.WantsDrainedNotification = &WantDrainedNotification{}
 
-// TestAuthorizer is a test stub that fulfills the full Authorizer interface.
+// TestAuthorizer 是实现了完整 Authorizer 接口的测试桩。
 type TestAuthorizer struct{}
 
 func (t *TestAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return authorizer.DecisionNoOpinion, "", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不具备条件求值能力，把 Authorize 的结论转换后返回。
 func (t *TestAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(t.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 该测试桩不支持条件求值。
 func (*TestAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
 func TestRESTMapperAdmissionPlugin(t *testing.T) {
-	// 中文说明：验证实现了 SetRESTMapper 的插件能拿到注入的 mapper；
+	// 验证实现了 SetRESTMapper 的插件能拿到注入的 mapper；
 	// 插件侧常用它把资源名解析成 GVK 再与规则匹配。
 	initializer := initializer.New(nil, nil, nil, &TestAuthorizer{}, nil, nil, nil, &doNothingRESTMapper{})
 	wantsRESTMapperAdmission := &WantsRESTMapperAdmissionPlugin{}
@@ -211,6 +210,7 @@ func TestRESTMapperAdmissionPlugin(t *testing.T) {
 	}
 }
 
+// WantsRESTMapperAdmissionPlugin 是满足 WantsRESTMapper 接口的测试桩，保存注入的 RESTMapper。
 type WantsRESTMapperAdmissionPlugin struct {
 	doNothingAdmission
 	doNothingPluginInitialization
@@ -248,7 +248,7 @@ func (doNothingRESTMapper) ResourceSingularizer(resource string) (singular strin
 
 type doNothingAdmission struct{}
 
-// 中文说明：以下嵌入类型把 admission.Interface 的方法拆开，便于各测试桩只实现自己关心的部分。
+// 以下嵌入类型把 admission.Interface 的方法拆开，便于各测试桩只实现自己关心的部分。
 func (doNothingAdmission) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	return nil
 }

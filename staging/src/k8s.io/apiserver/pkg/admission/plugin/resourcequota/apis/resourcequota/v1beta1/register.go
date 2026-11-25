@@ -23,7 +23,7 @@ import (
 
 // GroupName is the group name use in this package
 //
-// 中文说明：ResourceQuota 准入配置的组名。与主 resourcequota API 分离，
+// ResourceQuota 准入配置的组名。与主 resourcequota API 分离，
 // 因为这是 API Server 侧插件配置，生命周期与集群对象不同。
 const GroupName = "resourcequota.admission.k8s.io"
 
@@ -46,7 +46,7 @@ func init() {
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
 	//
-	// 中文说明：默认值函数与类型注册一并挂载；默认值在解码配置时生效，
+	// 默认值函数与类型注册一并挂载；默认值在解码配置时生效，
 	// 因此必须在 scheme 层面而非使用点处理，保证所有入口行为一致。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }

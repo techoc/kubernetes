@@ -37,26 +37,26 @@ func TestFullReinvocation(t *testing.T) {
 
 	rc := policyReinvokeContext{}
 
-	// key1 is invoked and it updates the configmap
+	// key1 被调用，并更新了 configmap
 	rc.SetLastPolicyInvocationOutput(cm1v1)
 	rc.RequireReinvokingPreviouslyInvokedPlugins()
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key1)
 
 	assert.True(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v2))
 
-	// key2 is invoked and it updates the configmap
+	// key2 被调用，并更新了 configmap
 	rc.SetLastPolicyInvocationOutput(cm1v2)
 	rc.RequireReinvokingPreviouslyInvokedPlugins()
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key2)
 
 	assert.True(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v1))
 
-	// key3 is invoked but it does not change anything
+	// key3 被调用，但没有改变任何内容
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key3)
 
 	assert.False(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v2))
 
-	// key1 is reinvoked
+	// key1 被重新调用
 	assert.True(t, rc.ShouldReinvoke(key1))
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key1)
 	rc.SetLastPolicyInvocationOutput(cm1v1)
@@ -64,7 +64,7 @@ func TestFullReinvocation(t *testing.T) {
 	assert.True(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v2))
 	rc.RequireReinvokingPreviouslyInvokedPlugins()
 
-	// key2 is reinvoked
+	// key2 被重新调用
 	assert.True(t, rc.ShouldReinvoke(key2))
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key2)
 	rc.SetLastPolicyInvocationOutput(cm1v2)
@@ -72,7 +72,7 @@ func TestFullReinvocation(t *testing.T) {
 	assert.True(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v1))
 	rc.RequireReinvokingPreviouslyInvokedPlugins()
 
-	// key3 is reinvoked, because the reinvocations have changed the resource
+	// 由于重调用改变了资源，key3 也被重新调用
 	assert.True(t, rc.ShouldReinvoke(key3))
 }
 
@@ -88,32 +88,32 @@ func TestPartialReinvocation(t *testing.T) {
 
 	rc := policyReinvokeContext{}
 
-	// key1 is invoked and it updates the configmap
+	// key1 被调用，并更新了 configmap
 	rc.SetLastPolicyInvocationOutput(cm1v1)
 	rc.RequireReinvokingPreviouslyInvokedPlugins()
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key1)
 
 	assert.True(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v2))
 
-	// key2 is invoked and it updates the configmap
+	// key2 被调用，并更新了 configmap
 	rc.SetLastPolicyInvocationOutput(cm1v2)
 	rc.RequireReinvokingPreviouslyInvokedPlugins()
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key2)
 
 	assert.True(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v1))
 
-	// key3 is invoked but it does not change anything
+	// key3 被调用，但没有改变任何内容
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key3)
 
 	assert.False(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v2))
 
-	// key1 is reinvoked but does not change anything
+	// key1 被重新调用，但没有改变任何内容
 	assert.True(t, rc.ShouldReinvoke(key1))
 
-	// key2 is not reinvoked because nothing changed since last invocation
+	// 自上次调用以来没有任何变化，key2 不会被重新调用
 	assert.False(t, rc.ShouldReinvoke(key2))
 
-	// key3 is not reinvoked because nothing changed since last invocation
+	// 自上次调用以来没有任何变化，key3 不会被重新调用
 	assert.False(t, rc.ShouldReinvoke(key3))
 }
 
@@ -127,25 +127,25 @@ func TestNoReinvocation(t *testing.T) {
 
 	rc := policyReinvokeContext{}
 
-	// key1 is invoked and it updates the configmap
+	// key1 被调用，并更新了 configmap
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key1)
 	rc.SetLastPolicyInvocationOutput(cm1v1)
 
 	assert.False(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v1))
 
-	// key2 is invoked but does not change anything
+	// key2 被调用，但没有改变任何内容
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key2)
 	rc.SetLastPolicyInvocationOutput(cm1v1)
 
 	assert.False(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v1))
 
-	// key3 is invoked but it does not change anything
+	// key3 被调用，但没有改变任何内容
 	rc.AddReinvocablePolicyToPreviouslyInvoked(key3)
 	rc.SetLastPolicyInvocationOutput(cm1v1)
 
 	assert.False(t, rc.IsOutputChangedSinceLastPolicyInvocation(cm1v1))
 
-	// no keys are reinvoked
+	// 没有任何 key 被重新调用
 	assert.False(t, rc.ShouldReinvoke(key1))
 	assert.False(t, rc.ShouldReinvoke(key2))
 	assert.False(t, rc.ShouldReinvoke(key3))

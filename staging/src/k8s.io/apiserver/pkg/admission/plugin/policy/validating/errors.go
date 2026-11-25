@@ -22,8 +22,7 @@ import (
 	celmetrics "k8s.io/apiserver/pkg/admission/plugin/policy/validating/metrics"
 )
 
-// ErrorType decodes the error to determine the error type
-// that the metrics understand.
+// ErrorType 解析策略决策，得到指标可理解的错误类型。
 //
 // 该函数把内部 PolicyDecision 映射为指标维度。之所以按消息前缀判断，
 // 是因为 PolicyDecision 只携带文本消息，没有独立的错误分类字段；前缀

@@ -41,7 +41,7 @@ import (
 // TestJSONPatch 验证 JSONPatch 表达式的语义：test/add/remove/replace/copy/move
 // 对 map、list 与嵌套字段的作用，以及错误分支（非法路径、类型不匹配等）。
 //
-// 中文说明：JSONPatch 遵循 RFC 6902。特别值得注意的用例：
+// JSONPatch 遵循 RFC 6902。特别值得注意的用例：
 //   - test 操作失败时整条补丁不生效（对象保持原样），这是乐观并发保护的基础；
 //   - 删除 map 键与删除 list 元素语义不同，前者按键名、后者按下标；
 //   - copy/move 到 list 末尾使用 "-" 追加。
@@ -157,7 +157,7 @@ func TestJSONPatch(t *testing.T) {
 			expectedResult: &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"y": "2"}}, Spec: appsv1.DeploymentSpec{}},
 		},
 		{
-			name: "jsonPatch add map to existing map", // performs a replacement
+			name: "jsonPatch add map to existing map", // 实际执行的是替换
 			expression: `[
 					JSONPatch{op: "add", path: "/metadata/labels", value: {"y": "2"}}, 
 				]`,
@@ -193,7 +193,7 @@ func TestJSONPatch(t *testing.T) {
 			expectedResult: &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"y": "1", "x": "2"}}, Spec: appsv1.DeploymentSpec{}},
 		},
 		{
-			name: "jsonPatch replace map value of unset field", // adds the field value
+			name: "jsonPatch replace map value of unset field", // 会新增该字段的值
 			expression: `[
 					JSONPatch{op: "replace", path: "/metadata/labels", value: {"y": "2"}}, 
 				]`,

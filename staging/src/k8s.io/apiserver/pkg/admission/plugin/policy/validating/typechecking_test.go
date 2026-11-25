@@ -65,7 +65,7 @@ func TestExtractTypeNames(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		policy   *v1.ValidatingAdmissionPolicy
-		expected []schema.GroupVersionKind // must be sorted
+		expected []schema.GroupVersionKind // 必须已排序
 	}{
 		{
 			name:     "empty",
@@ -247,7 +247,7 @@ func TestTypeCheck(t *testing.T) {
 
 	deploymentPolicyWithBadMessageExpression := deploymentPolicy.DeepCopy()
 	// messageExpression 期望返回字符串，这里刻意返回 int，用于验证它也被类型检查。
-	deploymentPolicyWithBadMessageExpression.Spec.Validations[0].MessageExpression = "object.foo + 114514" // confusion
+	deploymentPolicyWithBadMessageExpression.Spec.Validations[0].MessageExpression = "object.foo + 114514" // 故意制造混淆
 
 	multiExpressionPolicy := &v1.ValidatingAdmissionPolicy{Spec: v1.ValidatingAdmissionPolicySpec{
 		Validations: []v1.Validation{
@@ -457,7 +457,7 @@ func TestTypeCheck(t *testing.T) {
 			},
 			assertions: []assertionFunc{
 				// 只有第二条表达式出错，fieldRef 必须精确指向它，便于用户定位。
-				toHaveFieldRef("spec.validations[1].expression"), // expressions[0] is okay, [1] is wrong
+				toHaveFieldRef("spec.validations[1].expression"), // expressions[0] 是合法的，[1] 是错的
 				toHaveLengthOf(1),
 			},
 		},
@@ -616,7 +616,7 @@ func TestTypeCheck(t *testing.T) {
 				},
 				Validations: []v1.Validation{
 					{
-						Expression: "variables.name == object.foo", // foo is int64
+						Expression: "variables.name == object.foo", // foo 是 int64
 					},
 				},
 				MatchConstraints: deploymentPolicy.Spec.MatchConstraints,
@@ -649,7 +649,7 @@ func TestTypeCheck(t *testing.T) {
 				},
 				Validations: []v1.Validation{
 					{
-						Expression: "variables.name == object.foo", // foo is int64
+						Expression: "variables.name == object.foo", // foo 是 int64
 					},
 				},
 				MatchConstraints: deploymentPolicy.Spec.MatchConstraints,

@@ -36,12 +36,12 @@ type key struct {
 // 用于实现 reinvocation：当后续策略修改了对象时，重跑之前那些可重入的策略，
 // 直到达到稳定状态或次数上限。
 type policyReinvokeContext struct {
-	// lastPolicyOutput holds the result of the last Policy admission plugin call
+	// lastPolicyOutput 保存上一次 Policy 准入插件调用的结果
 	lastPolicyOutput runtime.Object
-	// previouslyInvokedReinvocablePolicys holds the set of policies that have been invoked and
-	// should be reinvoked if a later mutation occurs
+	// previouslyInvokedReinvocablePolicys 保存已执行、且一旦后续发生变更
+	// 就应重新执行（reinvoke）的策略集合
 	previouslyInvokedReinvocablePolicies sets.Set[key]
-	// reinvokePolicies holds the set of Policies that should be reinvoked
+	// reinvokePolicies 保存本轮需要重新执行的策略集合
 	reinvokePolicies sets.Set[key]
 }
 

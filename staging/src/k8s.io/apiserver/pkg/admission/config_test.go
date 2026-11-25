@@ -34,12 +34,12 @@ import (
 
 // TestReadAdmissionConfiguration 验证准入配置文件的反序列化与路径修正。
 //
-// 中文说明：重点覆盖三类行为：
+// 重点覆盖三类行为：
 //  1. 严格解码——重复字段与未知字段必须报错，防止拼写错误被静默忽略；
 //  2. 相对路径以配置文件所在目录为基准修正，绝对路径保持不变；
 //  3. 旧版扁平配置（imagePolicy 等）在启用对应插件时被映射为插件条目。
 func TestReadAdmissionConfiguration(t *testing.T) {
-	// create a place holder file to hold per test config
+	// 创建占位临时文件，用于存放每个用例的配置
 	configFile, err := os.CreateTemp("", "admission-plugin-config")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -49,12 +49,12 @@ func TestReadAdmissionConfiguration(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	configFileName := configFile.Name()
-	// the location that will be fixed up to be relative to the test config file.
+	// 下面的路径会被修正为相对于测试配置文件的位置
 	imagePolicyWebhookFile, err := makeAbs("image-policy-webhook.json", os.TempDir())
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	// individual test scenarios
+	// 各个测试场景
 	testCases := map[string]struct {
 		ConfigBody              string
 		ExpectedAdmissionConfig *apiserver.AdmissionConfiguration
@@ -239,11 +239,11 @@ func TestReadAdmissionConfiguration(t *testing.T) {
 
 // TestEmbeddedConfiguration 验证插件内嵌 configuration 字段原样透传。
 //
-// 中文说明：内嵌配置不经过本包的 scheme 解码，而是以原始 JSON 交给插件自行解析；
+// 内嵌配置不经过本包的 scheme 解码，而是以原始 JSON 交给插件自行解析；
 // 因此带 apiVersion/kind 与不带两种形态都必须保持字节级语义（用 JSON 语义比较，
 // 忽略空白差异）。这是插件自定义配置的兼容性基础。
 func TestEmbeddedConfiguration(t *testing.T) {
-	// create a place holder file to hold per test config
+	// 创建占位临时文件，用于存放每个用例的配置
 	configFile, err := os.CreateTemp("", "admission-plugin-config")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)

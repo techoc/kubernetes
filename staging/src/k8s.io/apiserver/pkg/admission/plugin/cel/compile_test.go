@@ -70,9 +70,9 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 		},
 		{
 			name: "object null checks",
-			// since object and oldObject are CEL variable, has() cannot be used (it works only on fields),
-			// so we always populate it to allow for a null check in the case of CREATE, where oldObject is
-			// null, and DELETE, where object is null.
+			// 由于 object 与 oldObject 是 CEL 变量，不能使用 has()（它只作用于字段），
+			// 因此始终填充它们，以便在 CREATE（oldObject 为
+			// null）与 DELETE（object 为 null）时可以做判空检查。
 			expressions: []string{"object == null || oldObject == null || object.foo == oldObject.foo"},
 		},
 		{
@@ -82,12 +82,12 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 		},
 		{
 			name: "function library",
-			// sanity check that functions of the various libraries are available
+			// 粗略检查各库的函数确实可用
 			expressions: []string{
-				"object.spec.string.matches('[0-9]+')",                      // strings extension lib
-				"object.spec.string.findAll('[0-9]+').size() > 0",           // kubernetes string lib
-				"object.spec.list.isSorted()",                               // kubernetes list lib
-				"url(object.spec.endpoint).getHostname() in ['ok1', 'ok2']", // kubernetes url lib
+				"object.spec.string.matches('[0-9]+')",                      // strings 扩展库
+				"object.spec.string.findAll('[0-9]+').size() > 0",           // kubernetes string 库
+				"object.spec.list.isSorted()",                               // kubernetes list 库
+				"url(object.spec.endpoint).getHostname() in ['ok1', 'ok2']", // kubernetes url 库
 			},
 		},
 		{
@@ -182,7 +182,7 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 		},
 	}
 
-	// Include the test library, which includes the test() function in the storage environment during test
+	// 引入 test 库——测试期间它会在 storage 环境中加入 test() 函数
 	// 用 1.999 这样的"未来版本"引入 test()，使该函数只出现在存储表达式环境，
 	// 从而验证两个环境的能力差异。
 	base := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion())
@@ -214,7 +214,7 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 						}
 					})
 					t.Run("auditAnnotation.valueExpression", func(t *testing.T) {
-						// Test audit annotation compilation by casting the result to a string
+						// 把结果强制转换为字符串，验证审计注解的编译
 						options := OptionalVariableDeclarations{HasParams: tc.hasParams, HasAuthorizer: tc.hasAuthorizer}
 						result := compiler.CompileCELExpression(&fakeAuditAnnotationCondition{
 							ValueExpression: "string(" + expr + ")",
@@ -242,7 +242,7 @@ func TestCompileValidatingPolicyExpression(t *testing.T) {
 						}
 					})
 					t.Run("auditAnnotation.valueExpression", func(t *testing.T) {
-						// Test audit annotation compilation by casting the result to a string
+						// 把结果强制转换为字符串，验证审计注解的编译
 						options := OptionalVariableDeclarations{HasParams: tc.hasParams, HasAuthorizer: tc.hasAuthorizer}
 						result := compiler.CompileCELExpression(&fakeAuditAnnotationCondition{
 							ValueExpression: "string(" + expr + ")",

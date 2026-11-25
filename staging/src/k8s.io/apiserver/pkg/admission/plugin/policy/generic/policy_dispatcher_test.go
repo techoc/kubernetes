@@ -28,10 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// TestConvertParamToInformerRepresentation verifies that params fetched with the
-// dynamic client fallback are converted to the same representation the param
-// informer returns, so that policy evaluation behaves identically regardless of
-// which path resolved the param.
+// TestConvertParamToInformerRepresentation 验证通过动态客户端回退获取的
+// 参数会被转换成与 param informer 返回相同的表示形式，
+// 从而无论参数由哪条路径解析，策略求值的行为都保持一致。
 //
 // 动态客户端回退路径拿到的是 unstructured，而 informer 路径缓存的是具体类型；若不做归一化，
 // 同一条策略在两条路径上会看到不同的对象形态（例如 TypeMeta 是否为空），导致 CEL 求值结果不一致。
@@ -61,7 +60,7 @@ func TestConvertParamToInformerRepresentation(t *testing.T) {
 					},
 				},
 			},
-			// Typed informers cache objects decoded by client-go, which have an empty TypeMeta.
+			// client-go 缓存的 typed informer 对象是解码后的结果，其 TypeMeta 为空。
 			wantObject: &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-param",

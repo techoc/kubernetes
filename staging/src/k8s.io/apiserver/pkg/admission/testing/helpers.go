@@ -30,9 +30,8 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
-// WithReinvocationTesting wraps a mutating admission handler and reinvokes it each time Admit is
-// called. It checks the admission output object and reports a test error if the admission handler
-// performs non-idempotent mutatations to the object.
+// WithReinvocationTesting 包装一个 mutating 准入处理器，每次调用 Admit 时都会重复调用它，
+// 并比对准入输出的对象：如果处理器对对象做了非幂等的变更，就上报测试错误。
 //
 // 背景：apiserver 在其他插件变更对象后会再次调用 mutating 插件，非幂等的
 // 变更会导致结果不可预测，因此用该包装器在单测中强制暴露这类 bug。
@@ -46,8 +45,7 @@ type reinvoker struct {
 	admission admission.MutationInterface
 }
 
-// Admit reinvokes the admission handler and reports a test error if the admission handler performs
-// non-idempotent mutatations to the admission object.
+// Admit 会重复调用准入处理器，若处理器对准入对象做了非幂等的变更则上报测试错误。
 //
 // 两次调用之间会把对象替换为 DeepCopy 后的副本，确保插件不能依赖指针
 // 身份或对象内部缓存，模拟真实 reinvocation 时的“往返拷贝”语义。
@@ -60,9 +58,9 @@ func (r *reinvoker) Admit(ctx context.Context, a admission.Attributes, o admissi
 			return err
 		}
 		if a.GetObject() != nil {
-			// keep a copy of the output for subsequent idempotency checking
+			// 保留一份输出副本，供后续幂等性比对使用
 			outputs = append(outputs, a.GetObject().DeepCopyObject())
-			// replace a.GetObject() with a copy of itself to make sure admission is safe to reinvoke with a round-tripped copy (no pointer comparisons are done)
+			// 用对象自身的副本替换 a.GetObject()，确保重复准入调用对「往返拷贝」后的对象依然安全（不做指针比较）
 			if deepCopyInto, ok := reflect.TypeOf(a.GetObject()).MethodByName("DeepCopyInto"); ok {
 				deepCopyInto.Func.Call([]reflect.Value{
 					reflect.ValueOf(a.GetObject().DeepCopyObject()),
@@ -81,8 +79,8 @@ func (r *reinvoker) Admit(ctx context.Context, a admission.Attributes, o admissi
 	return nil
 }
 
-// Handles will return true if any of the admission andler handlers handle the given operation.
-// 直接委托给被包装插件，保证包装器对调用方完全透明。
+// Handles 只要被包装的准入处理器中有一个能处理该操作就返回 true，这里直接委托，
+// 保证包装器对调用方完全透明。
 func (r *reinvoker) Handles(operation admission.Operation) bool {
 	r.t.Helper()
 	return r.admission.Handles(operation)

@@ -43,13 +43,9 @@ import (
 )
 
 const (
-	// ValidatingAuditAnnotationPrefix is a prefix for keeping noteworthy
-	// validating audit annotations.
+	// ValidatingAuditAnnotationPrefix 用于记录值得关注的 validating
+	// webhook 审计注解。
 	ValidatingAuditAnnotationPrefix = "validating.webhook.admission.k8s.io/"
-	// ValidatingAuditAnnotationFailedOpenKeyPrefix in an annotation indicates
-	// the validating webhook failed open when the webhook backend connection
-	// failed or returned an internal server error.
-	//
 	// fail-open 的结论不是“无意见”，而是“有风险地放行”，因此必须在审计
 	// 注解中留痕，供事后追查。
 	ValidatingAuditAnnotationFailedOpenKeyPrefix = "failed-open." + ValidatingAuditAnnotationPrefix
@@ -100,7 +96,7 @@ var _ generic.Dispatcher = &validatingDispatcher{}
 // 所有 webhook 并发调用，以请求总延迟而非累加延迟为准。
 func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces, hooks []webhook.WebhookAccessor) error {
 	var relevantHooks []*generic.WebhookInvocation
-	// Construct all the versions we need to call our webhooks
+	// 构造调用 webhook 所需的全部版本。
 	versionedAttrAccessor := &versionedAttributeAccessor{
 		versionedAttrs:   map[schema.GroupVersionKind]*admission.VersionedAttributes{},
 		attr:             attr,
@@ -117,7 +113,6 @@ func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attr
 		}
 
 		relevantHooks = append(relevantHooks, invocation)
-		// VersionedAttr result will be cached and reused later during parallel webhook calls
 		// 提前构造并缓存，把转换错误暴露在并发之前，且避免并发读写 map。
 		_, err := versionedAttrAccessor.VersionedAttribute(invocation.Kind)
 		if err != nil {
@@ -126,34 +121,33 @@ func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attr
 	}
 
 	if len(relevantHooks) == 0 {
-		// no matching hooks
+		// 没有任何匹配的 hook
 		return nil
 	}
 
-	// Check if the request has already timed out before spawning remote calls
 	// 先检查 ctx，避免为已超时的请求无谓地发起远程调用。
 	select {
 	case <-ctx.Done():
-		// parent context is canceled or timed out, no point in continuing
+		// 父上下文已取消或超时，继续调用没有意义
 		return apierrors.NewTimeoutError("request did not complete within requested timeout", 0)
 	default:
 	}
 
 	wg := sync.WaitGroup{}
-	errCh := make(chan error, 2*len(relevantHooks)) // double the length to handle extra errors for panics in the gofunc
+	errCh := make(chan error, 2*len(relevantHooks)) // 长度加倍，以容纳 gofunc 中 panic 产生的额外错误
 	wg.Add(len(relevantHooks))
 	for i := range relevantHooks {
 		go func(invocation *generic.WebhookInvocation, idx int) {
 			ignoreClientCallFailures := false
 			hookName := "unknown"
 			versionedAttr := versionedAttrAccessor.versionedAttrs[invocation.Kind]
-			// The ordering of these two defers is critical. The wg.Done will release the parent go func to close the errCh
-			// that is used by the second defer to report errors. The recovery and error reporting must be done first.
+			// 这两个 defer 的顺序至关重要：wg.Done 会放行父 goroutine 去关闭 errCh，
+			// 而 errCh 由第二个 defer 用于上报错误，因此恢复与报错必须先完成。
 			defer wg.Done()
 			defer func() {
-				// HandleCrash has already called the crash handlers and it has been configured to utilruntime.ReallyCrash
-				// This block prevents the second panic from failing our process.
-				// This failure mode for the handler functions properly using the channel below.
+				// HandleCrash 已调用过崩溃处理器，且其被配置为 utilruntime.ReallyCrash；
+				// 这里的 recover 防止第二次 panic 打垮进程，
+				// 该失败模式依赖下方通道正常运作。
 				recover()
 			}()
 			defer utilruntime.HandleCrash(
@@ -162,7 +156,6 @@ func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attr
 						return
 					}
 					if ignoreClientCallFailures {
-						// if failures are supposed to ignored, ignore it
 						// 配置为 Ignore 时 panic 属 fail-open：记录、计指标、写审计注解。
 						klog.Warningf("Panic calling webhook, failing open %v: %v", hookName, r)
 						admissionmetrics.Metrics.ObserveWebhookFailOpen(ctx, hookName, "validating")
@@ -173,7 +166,7 @@ func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attr
 						}
 						return
 					}
-					// this ensures that the admission request fails and a message is provided.
+					// 这确保准入请求失败并返回错误消息。
 					errCh <- apierrors.NewInternalError(fmt.Errorf("ValidatingAdmissionWebhook/%v has panicked: %v", hookName, r))
 				},
 			)
@@ -193,7 +186,7 @@ func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attr
 				case *webhookutil.ErrCallingWebhook:
 					if !ignoreClientCallFailures {
 						rejected = true
-						// Ignore context cancelled from webhook metrics
+						// 上下文已取消时，不计入 webhook 拒绝指标
 						if !errors.Is(err.Reason, context.Canceled) {
 							admissionmetrics.Metrics.ObserveWebhookRejection(ctx, hook.Name, "validating", string(versionedAttr.Attributes.GetOperation()), admissionmetrics.WebhookRejectionCallingWebhookError, int(err.Status.ErrStatus.Code))
 						}
@@ -215,7 +208,7 @@ func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attr
 
 			if callErr, ok := err.(*webhookutil.ErrCallingWebhook); ok {
 				if ignoreClientCallFailures {
-					// Ignore context cancelled from webhook metrics
+					// 上下文已取消时，不计入 webhook 拒绝指标
 					if errors.Is(callErr.Reason, context.Canceled) {
 						klog.Warningf("Context canceled when calling webhook %v", hook.Name)
 					} else {
@@ -260,7 +253,7 @@ func (d *validatingDispatcher) Dispatch(ctx context.Context, attr admission.Attr
 		// 多个拒绝时只返回第一个，其余记录以便诊断；合并 Status 语义复杂，
 		// 且对客户端而言第一个错误已足以说明请求被拒。
 		for i := 1; i < len(errs); i++ {
-			// TODO: merge status errors; until then, just return the first one.
+			// TODO: 合并 status 错误；在此之前先只返回第一个。
 			utilruntime.HandleError(errs[i])
 		}
 	}
@@ -284,7 +277,7 @@ func (d *validatingDispatcher) callHook(ctx context.Context, h *v1.ValidatingWeb
 	if err != nil {
 		return &webhookutil.ErrCallingWebhook{WebhookName: h.Name, Reason: fmt.Errorf("could not create admission objects: %w", err), Status: apierrors.NewBadRequest("error creating admission objects")}
 	}
-	// Make the webhook request
+	// 构造 webhook 请求
 	client, err := invocation.Webhook.GetRESTClient(d.cm)
 	if err != nil {
 		return &webhookutil.ErrCallingWebhook{WebhookName: h.Name, Reason: fmt.Errorf("could not get REST client: %w", err), Status: apierrors.NewInternalError(err)}
@@ -300,7 +293,7 @@ func (d *validatingDispatcher) callHook(ctx context.Context, h *v1.ValidatingWeb
 		attribute.String("UID", string(uid)))
 	defer span.End(500 * time.Millisecond)
 
-	// if the webhook has a specific timeout, wrap the context to apply it
+	// 若 webhook 配置了专属超时，包装 context 使其生效
 	if h.TimeoutSeconds != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(*h.TimeoutSeconds)*time.Second)
@@ -309,16 +302,15 @@ func (d *validatingDispatcher) callHook(ctx context.Context, h *v1.ValidatingWeb
 
 	r := client.Post().Body(request)
 
-	// if the context has a deadline, set it as a parameter to inform the backend
 	// 同时把超时告诉 webhook，便于对方自行控制处理时长。
 	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
-		// compute the timeout
+		// 计算超时
 		if timeout := time.Until(deadline); timeout > 0 {
-			// if it's not an even number of seconds, round up to the nearest second
+			// 若不是整秒，向上取整到最近的整秒
 			if truncated := timeout.Truncate(time.Second); truncated != timeout {
 				timeout = truncated + time.Second
 			}
-			// set the timeout
+			// 设置超时
 			r.Timeout(timeout)
 		}
 	}

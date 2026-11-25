@@ -28,7 +28,7 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
-// Matcher determines if the Attr matches the Rule.
+// Matcher 判断 Attr 是否命中 Rule。
 //
 // 所有字段都是只读的；Matches 不会有副作用，可在同一 Matcher 上重复调用。
 type Matcher struct {
@@ -36,7 +36,7 @@ type Matcher struct {
 	Attr admission.Attributes
 }
 
-// Matches returns if the Attr matches the Rule.
+// Matches 返回 Attr 是否命中 Rule。
 //
 // 五个条件必须同时满足（逻辑与）。各子检查独立求值，短路顺序无业务含义。
 func (r *Matcher) Matches() bool {
@@ -71,13 +71,13 @@ func (r *Matcher) scope() bool {
 	if r.Rule.Scope == nil || *r.Rule.Scope == v1.AllScopes {
 		return true
 	}
-	// attr.GetNamespace() is set to the name of the namespace for requests of the namespace object itself.
+	// 对 namespace 对象本身的请求，attr.GetNamespace() 会被设置为该 namespace 的名字。
 	switch *r.Rule.Scope {
 	case v1.NamespacedScope:
-		// first make sure that we are not requesting a namespace object (namespace objects are cluster-scoped)
+		// 首先确认请求的不是 namespace 对象（namespace 对象是集群级作用域）
 		return r.Attr.GetResource() != namespaceResource && r.Attr.GetNamespace() != metav1.NamespaceNone
 	case v1.ClusterScope:
-		// also return true if the request is for a namespace object (namespace objects are cluster-scoped)
+		// 若请求针对 namespace 对象也返回 true（namespace 对象是集群级作用域）
 		return r.Attr.GetResource() == namespaceResource || r.Attr.GetNamespace() == metav1.NamespaceNone
 	default:
 		return false
@@ -101,8 +101,8 @@ func (r *Matcher) operation() bool {
 		if op == v1.OperationAll {
 			return true
 		}
-		// The constants are the same such that this is a valid cast (and this
-		// is tested).
+		// 两组常量的取值相同，因此这是合法的强制类型转换
+		// （并且有测试覆盖）。
 		if op == v1.OperationType(attrOp) {
 			return true
 		}
@@ -137,8 +137,9 @@ func (r *Matcher) resource() bool {
 	return false
 }
 
-// IsExemptAdmissionConfigurationResource determines if an admission.Attributes object is describing
-// the admission of a ValidatingWebhookConfiguration or a MutatingWebhookConfiguration or a ValidatingAdmissionPolicy or a ValidatingAdmissionPolicyBinding
+// IsExemptAdmissionConfigurationResource 判断某个 admission.Attributes 对象
+// 描述的是否是对 ValidatingWebhookConfiguration、MutatingWebhookConfiguration、
+// ValidatingAdmissionPolicy 或 ValidatingAdmissionPolicyBinding 的准入操作。
 //
 // 对 admissionregistration.k8s.io 配置对象自身的请求豁免准入 webhook 与策略，
 // 否则自引用的策略可能导致递归或无法自举（bootstrap）——例如在集群还没有任何

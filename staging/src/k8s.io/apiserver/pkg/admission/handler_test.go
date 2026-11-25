@@ -28,14 +28,14 @@ import (
 func TestWaitForReady(t *testing.T) {
 	handler := newFakeHandler()
 
-	// 1. test no readyFunc
+	// 1. 未设置 readyFunc 的情形
 	// 没有配置就绪检查时默认就绪，避免测试或简单插件被迫实现
 	// 一个永远为真的回调。
 	if !handler.WaitForReady() {
 		t.Errorf("Expect ready for no readyFunc provided.")
 	}
 
-	// 2. readyFunc return ready immediately
+	// 2. readyFunc 立即返回就绪
 	// 回调立即就绪时应立刻返回，而不是空等一个轮询周期。
 	readyFunc := func() bool {
 		return true
@@ -45,7 +45,7 @@ func TestWaitForReady(t *testing.T) {
 		t.Errorf("Expect ready for readyFunc returns ready immediately.")
 	}
 
-	// 3. readyFunc always return not ready. WaitForReady timeout
+	// 3. readyFunc 始终返回未就绪，等待 WaitForReady 超时
 	// 故意永不就绪，验证 WaitForReady 有上界（timeToWaitForReady），
 	// 否则 apiserver 启动会永久挂起。
 	readyFunc = func() bool {

@@ -33,7 +33,7 @@ import (
 // MutatingWebhookConfiguration 转换为一组 webhook accessor。
 func TestGetMutatingWebhookConfig(t *testing.T) { synctest.Test(t, testGetMutatingWebhookConfig) }
 func testGetMutatingWebhookConfig(t *testing.T) {
-	// Build a test client that the admission plugin can use to look up the MutatingWebhookConfiguration
+	// 构造测试客户端，供准入插件查询 MutatingWebhookConfiguration。
 	client := fake.NewSimpleClientset()
 	informerFactory := informers.NewSharedInformerFactory(client, 0)
 	stop := make(chan struct{})
@@ -43,10 +43,10 @@ func testGetMutatingWebhookConfig(t *testing.T) {
 	informerFactory.Start(stop)
 	informerFactory.WaitForCacheSync(stop)
 
-	// Wait for background activity to settle.
+	// 等待后台活动结束。
 	synctest.Wait()
 
-	// no configurations
+	// 尚未创建任何配置
 	if configurations := manager.Webhooks(); len(configurations) != 0 {
 		t.Errorf("expected empty webhooks, but got %v", configurations)
 	}
@@ -61,7 +61,7 @@ func testGetMutatingWebhookConfig(t *testing.T) {
 		MutatingWebhookConfigurations().
 		Create(context.TODO(), webhookConfiguration, metav1.CreateOptions{})
 
-	// Wait for the notification to be delivered.
+	// 等待通知送达 informer。
 	synctest.Wait()
 	configurations := manager.Webhooks()
 
@@ -81,11 +81,10 @@ func testGetMutatingWebhookConfig(t *testing.T) {
 	}
 }
 
-// mockCreateMutatingWebhookAccessor is a struct used to compute how many times
-// the function webhook.NewMutatingWebhookAccessor is being called when refreshing
-// webhookAccessors.
+// mockCreateMutatingWebhookAccessor 用于统计刷新 webhookAccessors 时
+// webhook.NewMutatingWebhookAccessor 被调用了多少次。
 //
-// NOTE: Maybe there some testing help that we can import and reuse instead.
+// 注意：也许有现成的测试辅助工具可以直接复用，而不必自己写。
 type mockCreateMutatingWebhookAccessor struct {
 	numberOfCalls int
 }
@@ -126,8 +125,7 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 		name              string
 		args              args
 		numberOfCreations int
-		// number of refreshes are number of times we recrated a webhook accessor
-		// instead of pulling from the cache.
+		// 刷新次数指没有复用缓存、而是重新创建 webhook 访问器的次数。
 		numberOfRefreshes             int
 		finalNumberOfWebhookAccessors int
 	}{
@@ -232,7 +230,7 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 				informerFactory.Start(stop)
 				informerFactory.WaitForCacheSync(stop)
 
-				// Create webhooks
+				// 创建 webhook 配置
 				for _, configurations := range tt.args.createWebhookConfigurations {
 					client.
 						AdmissionregistrationV1().
@@ -248,7 +246,7 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 						len(webhooks),
 					)
 				}
-				// assert creations
+				// 校验首次创建的访问器数量
 				// 初次构建应为每个 webhook 各创建一次 accessor，没有多余的刷新。
 				if tt.numberOfCreations != fakeWebhookAccessorCreator.calledNTimes() {
 					t.Errorf(
@@ -257,10 +255,10 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 					)
 				}
 
-				// reset mock counter
+				// 重置 mock 计数器
 				fakeWebhookAccessorCreator.resetCounter()
 
-				// Update webhooks
+				// 更新 webhook 配置
 				for _, configurations := range tt.args.updateWebhookConfigurations {
 					client.
 						AdmissionregistrationV1().
@@ -277,7 +275,7 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 					)
 				}
 
-				// assert updates
+				// 校验更新阶段重建的访问器数量
 				// 仅被更新配置的 webhook 应重建 accessor；未变更配置必须命中缓存。
 				if tt.numberOfRefreshes != fakeWebhookAccessorCreator.calledNTimes() {
 					t.Errorf(
@@ -285,7 +283,7 @@ func TestGetMutatingWebhookConfigSmartReload(t *testing.T) {
 						tt.numberOfRefreshes, fakeWebhookAccessorCreator.calledNTimes(),
 					)
 				}
-				// reset mock counter for the next test cases
+				// 为后续用例重置 mock 计数器
 				fakeWebhookAccessorCreator.resetCounter()
 			})
 		})

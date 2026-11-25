@@ -386,7 +386,7 @@ func TestWithMetrics(t *testing.T) {
 
 		h := WithMetrics(test.handler, Metrics.ObserveAdmissionController, test.name)
 
-		// test mutation
+		// 测试变更（Admit）阶段。
 		// 这里传入空 GVK/GVR 是有意的：指标只依赖 operation 等标签，
 		// 构造完整属性反而会引入无关噪声。
 		err := h.(admission.MutationInterface).Admit(context.TODO(), admission.NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, test.ns, "", schema.GroupVersionResource{}, "", test.operation, test.options, false, nil), nil)
@@ -409,12 +409,11 @@ func TestWithMetrics(t *testing.T) {
 		}
 
 		if err != nil {
-			// skip validation step if mutation failed
-			// 变更失败时 apiserver 不会进入验证阶段，所以这里也不能断言 validate 指标。
+			// 变更失败时 apiserver 不会进入验证阶段，所以跳过验证步骤，这里也不能断言 validate 指标。
 			continue
 		}
 
-		// test validation
+		// 测试验证（Validate）阶段
 		err = h.(admission.ValidationInterface).Validate(context.TODO(), admission.NewAttributesRecord(nil, nil, schema.GroupVersionKind{}, test.ns, "", schema.GroupVersionResource{}, "", test.operation, test.options, false, nil), nil)
 		if test.validate && err != nil {
 			t.Errorf("expected admit to succeed, but failed: %v", err)

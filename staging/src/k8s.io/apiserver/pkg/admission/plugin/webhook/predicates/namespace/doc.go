@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package namespace defines the utilities that are used by the webhook
-// plugin to decide if a webhook should be applied to an object based on its
-// namespace.
+// Package namespace 定义 webhook 插件使用的工具，用于根据对象所属的
+// namespace 决定是否对该对象应用某个 webhook。
 //
 // 命名空间谓词是准入 webhook 的第一层过滤：只有当对象的命名空间满足
 // namespaceSelector 时，才可能把请求发送给该 webhook。selector 的匹配需要

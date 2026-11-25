@@ -35,14 +35,14 @@ import (
 // NOTE: This constant is duplicated in pkg/apis/admissionregistration/validation/static_suffix.go
 // because that package cannot import from staging. Keep both in sync.
 //
-// 中文说明：后缀是安全边界——REST API 拒绝创建以此结尾的对象，确保这些对象
+// 后缀是安全边界——REST API 拒绝创建以此结尾的对象，确保这些对象
 // 只能来自 apiserver 启动时读取的受信文件，无法被 API 客户端伪造或篡改。
 const StaticConfigSuffix = ".static.k8s.io"
 
 // ValidateStaticManifestsDir validates the staticManifestsDir config field.
 // It checks the feature gate is enabled, the path is absolute, exists, and is a directory.
 //
-// 中文说明：空字符串视为未配置且合法；要求绝对路径是因为 apiserver 的工作目录
+// 空字符串视为未配置且合法；要求绝对路径是因为 apiserver 的工作目录
 // 不可控，相对路径会在不同启动方式下解析到不同位置。
 func ValidateStaticManifestsDir(staticManifestsDir string) error {
 	if len(staticManifestsDir) > 0 {
@@ -66,7 +66,7 @@ func ValidateStaticManifestsDir(staticManifestsDir string) error {
 // ValidateManifestName checks that the object name is non-empty, has the required
 // .static.k8s.io suffix, and is unique within the manifest set.
 //
-// 中文说明：seenNames 由调用方跨文件累积，保证不同文件中的同名对象也被拒绝；
+// seenNames 由调用方跨文件累积，保证不同文件中的同名对象也被拒绝；
 // 名称重复会让后续按名查找产生歧义，必须在加载期就失败。
 func ValidateManifestName(name, filePath string, seenNames map[string]string) error {
 	if len(name) == 0 {

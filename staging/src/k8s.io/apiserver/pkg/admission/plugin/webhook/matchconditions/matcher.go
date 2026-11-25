@@ -40,7 +40,7 @@ import (
 // 编译期断言：MatchCondition 必须实现 CEL 表达式访问器接口。
 var _ celplugin.ExpressionAccessor = &MatchCondition{}
 
-// MatchCondition contains the inputs needed to compile, evaluate and match a cel expression
+// MatchCondition 包含编译、求值与匹配 CEL 表达式所需的输入。
 //
 // MatchCondition 是 v1.MatchCondition 的类型别名式包装（定义新类型而非 alias），
 // 目的是为其附加 ExpressionAccessor 方法，同时不污染 API 类型。
@@ -58,7 +58,7 @@ func (v *MatchCondition) ReturnTypes() []*cel.Type {
 
 var _ Matcher = &matcher{}
 
-// matcher evaluates compiled cel expressions and determines if they match the given request or not
+// matcher 求值已编译的 CEL 表达式，判断给定请求是否匹配。
 //
 // failPolicy 决定表达式求值出错（而非返回 false）时的行为：Fail 拒绝请求，
 // Ignore 视为不匹配并跳过 webhook 调用。
@@ -100,7 +100,7 @@ func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedA
 
 	if err != nil {
 		admissionmetrics.Metrics.ObserveMatchConditionEvaluationTime(ctx, time.Since(t), m.objectName, m.matcherKind, m.matcherType, string(versionedAttr.GetOperation()))
-		// filter returning error is unexpected and not an evaluation error so not incrementing metric here
+		// filter 返回错误属于意外情况，也不是表达式求值错误，因此此处不递增指标
 		// 框架级错误（非表达式求值错误）同样遵循 failurePolicy，保持与求值错误一致的外部行为。
 		if m.failPolicy == v1.Fail {
 			return MatchResult{
@@ -111,14 +111,14 @@ func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedA
 				Matches: false,
 			}
 		}
-		//TODO: add default so that if in future we add different failure types it doesn't fall through
+		//TODO: 增加 default 分支，避免将来引入其他失败类型时逻辑直接落空
 	}
 
 	errorList := []error{}
 	for _, evalResult := range evalResults {
 		matchCondition, ok := evalResult.ExpressionAccessor.(*MatchCondition)
 		if !ok {
-			// This shouldnt happen, but if it does treat same as eval error
+			// 理论上不应发生，若发生则按求值错误同等处理
 			klog.Error("Invalid type conversion to MatchCondition")
 			errorList = append(errorList, errors.New(fmt.Sprintf("internal error converting ExpressionAccessor to MatchCondition")))
 			continue
@@ -130,7 +130,7 @@ func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedA
 		}
 		if evalResult.EvalResult == celtypes.False {
 			admissionmetrics.Metrics.ObserveMatchConditionEvaluationTime(ctx, time.Since(t), m.objectName, m.matcherKind, m.matcherType, string(versionedAttr.GetOperation()))
-			// If any condition false, skip calling webhook always
+			// 只要有任一条件为 false，就始终跳过调用 webhook
 			// 报告首个不满足的条件名，便于用户定位问题。
 			return MatchResult{
 				Matches:             false,
@@ -140,21 +140,21 @@ func (m *matcher) Match(ctx context.Context, versionedAttr *admission.VersionedA
 	}
 	if len(errorList) > 0 {
 		admissionmetrics.Metrics.ObserveMatchConditionEvaluationTime(ctx, time.Since(t), m.objectName, m.matcherKind, m.matcherType, string(versionedAttr.GetOperation()))
-		// If mix of true and eval errors then resort to fail policy
+		// 若既有 true 又有求值错误，则依据 fail policy 处理
 		if m.failPolicy == v1.Fail {
-			// mix of true and errors with fail policy fail should fail request without calling webhook
+			// fail policy 为 fail 时，true 与错误的混合应拒绝请求且不调用 webhook
 			err = utilerrors.NewAggregate(errorList)
 			return MatchResult{
 				Error: err,
 			}
 		} else if m.failPolicy == v1.Ignore {
-			// if fail policy ignore then skip call to webhook
+			// fail policy 为 ignore 时，跳过对 webhook 的调用
 			return MatchResult{
 				Matches: false,
 			}
 		}
 	}
-	// if no results eval to false, return matches true with list of any errors encountered
+	// 没有任何结果求值为 false 时，返回 Matches=true，并附上遇到的所有错误列表
 	// 空条件列表也视为匹配，语义与“无 matchConditions”一致。
 	return MatchResult{
 		Matches: true,

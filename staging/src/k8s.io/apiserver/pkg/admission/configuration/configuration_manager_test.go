@@ -45,14 +45,13 @@ func TestTolerateBootstrapFailure(t *testing.T) {
 	// 把宽限期设得足够长，确保重试期间始终处于 bootstrap 阶段。
 	poller.bootstrapGracePeriod = 100 * time.Second
 	poller.bootstrapRetries = math.MaxInt32
-	// set failureThreshold to 0 so that one single failure will set "ready" to false.
+	// 把 failureThreshold 设为 0，这样单次失败就会把 ready 置为 false。
 	poller.failureThreshold = 0
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 	go poller.Run(stopCh)
 	go func() {
 		// 2 秒后模拟配置源恢复；即使调度延迟也不会导致测试偶发失败。
-		// The test might have false negative, but won't be flaky
 		timer := time.NewTimer(2 * time.Second)
 		defer timer.Stop()
 		<-timer.C
@@ -85,7 +84,7 @@ func TestNotTolerateNonbootstrapFailure(t *testing.T) {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 	go poller.Run(stopCh)
-	// to kick the bootstrap timer
+	// 触发 bootstrap 计时器
 	go poller.configuration()
 
 	// 等待 poller 自己把 bootstrapped 置为 true。

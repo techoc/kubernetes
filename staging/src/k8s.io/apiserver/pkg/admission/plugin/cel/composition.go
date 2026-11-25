@@ -36,7 +36,7 @@ import (
 
 const variablesTypeName = "kubernetes.variables"
 
-// CompositedCompiler compiles expressions with variable composition.
+// CompositedCompiler 编译带有变量组合的表达式。
 //
 // 变量组合（variable composition）把多个 CEL 变量声明合并到一个合成对象中，
 // 使策略可以引用其他策略/参数中定义的变量，同时保持各自的类型与编译结果。
@@ -48,16 +48,16 @@ type CompositedCompiler struct {
 	state *compositionState
 }
 
-// CompositedConditionEvaluator provides evaluation of a condition expression with variable composition.
-// The expressions must return a boolean.
+// CompositedConditionEvaluator 提供带变量组合的条件表达式的求值。
+// 表达式必须返回布尔值。
 type CompositedConditionEvaluator struct {
 	ConditionEvaluator
 
 	state *compositionState
 }
 
-// CompositedEvaluator provides evaluation of a single expression with variable composition.
-// The types that may returned by the expression is determined at compilation time.
+// CompositedEvaluator 提供带变量组合的单个表达式的求值。
+// 表达式可返回的类型在编译期确定。
 type CompositedEvaluator struct {
 	MutatingEvaluator
 
@@ -101,9 +101,9 @@ func NewCompositedCompiler(envSet *environment.EnvSet) (*CompositedCompiler, err
 	}, nil
 }
 
-// NewCompositedCompilerForTypeChecking creates a CompositedCompiler for type checking.
-// It initializes the composition state but leaves the Compilers nil, as they are expected
-// to be replaced by the caller (who is doing type checking).
+// NewCompositedCompilerForTypeChecking 用于类型检查场景创建 CompositedCompiler。
+// 它会初始化组合状态，但把 Compilers 留空，因为预期由调用方
+// （即执行类型检查的一方）替换它们。
 func NewCompositedCompilerForTypeChecking(envSet *environment.EnvSet) (*CompositedCompiler, error) {
 	newMapType := apiservercel.NewObjectType(variablesTypeName, map[string]*apiservercel.DeclField{})
 
@@ -130,7 +130,7 @@ func NewCompositedCompilerForTypeChecking(envSet *environment.EnvSet) (*Composit
 	}, nil
 }
 
-// Env returns the CEL environment for the given mode.
+// Env 返回给定 mode 对应的 CEL 环境。
 func (c *CompositedCompiler) Env(mode environment.Type) (*cel.Env, error) {
 	return c.state.Env(mode)
 }
@@ -166,7 +166,7 @@ func (c *CompositedCompiler) CompileCondition(expressions []ExpressionAccessor, 
 	}
 }
 
-// CompileEvaluator compiles an mutatingEvaluator for the given expression, options and environment.
+// CompileEvaluator 为给定的表达式、选项与环境编译一个 mutatingEvaluator。
 func (c *CompositedCompiler) CompileMutatingEvaluator(expression ExpressionAccessor, optionalDecls OptionalVariableDeclarations, envType environment.Type) MutatingEvaluator {
 	mutation := c.MutatingCompiler.CompileMutatingEvaluator(expression, optionalDecls, envType)
 	return &CompositedEvaluator{
@@ -282,9 +282,9 @@ func (a *variableAccessor) Callback(_ *lazy.MapValue) ref.Val {
 	return v
 }
 
-// convertCelTypeToDeclType converts a cel.Type to DeclType, for the use of
-// the TypeProvider and the cost estimator.
-// List and map types are created on-demand with their parameters converted recursively.
+// convertCelTypeToDeclType 将 cel.Type 转换为 DeclType，供
+// TypeProvider 与成本估算器使用。
+// List 与 map 类型按需创建，其参数递归转换。
 //
 // 无法识别的类型退化为 Dyn，保证类型转换不会因为新类型而失败。
 func convertCelTypeToDeclType(celType *cel.Type) *apiservercel.DeclType {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package metrics provides metrics for manifest-based admission configuration.
+// Package metrics 提供基于清单的准入配置相关指标。
 package metrics
 
 import (
@@ -65,24 +65,24 @@ var (
 	)
 )
 
-// ManifestType represents the admission plugin name for which manifests are being tracked.
+// ManifestType 表示当前正在跟踪清单的准入插件名称。
 type ManifestType string
 
 const (
-	// ValidatingWebhookManifestType represents validating webhook configurations.
+	// ValidatingWebhookManifestType 表示 validating webhook 配置。
 	ValidatingWebhookManifestType ManifestType = "ValidatingAdmissionWebhook"
-	// MutatingWebhookManifestType represents mutating webhook configurations.
+	// MutatingWebhookManifestType 表示 mutating webhook 配置。
 	MutatingWebhookManifestType ManifestType = "MutatingAdmissionWebhook"
-	// VAPManifestType represents validating admission policy configurations.
+	// VAPManifestType 表示 ValidatingAdmissionPolicy 配置。
 	VAPManifestType ManifestType = "ValidatingAdmissionPolicy"
-	// MAPManifestType represents mutating admission policy configurations.
+	// MAPManifestType 表示 MutatingAdmissionPolicy 配置。
 	MAPManifestType ManifestType = "MutatingAdmissionPolicy"
 )
 
 var registerMetrics sync.Once
 
-// configHashProviders stores providers per plugin for config info metrics.
-// Each plugin has its own provider that stores [apiserver_id_hash, config_hash].
+// configHashProviders 按插件存储配置信息指标的 provider，
+// 每个插件的 provider 各自保存 [apiserver_id_hash, config_hash]。
 //
 // 按插件分开存储，避免不同插件（webhook/policy）的配置哈希互相覆盖。
 var configHashProviders = map[ManifestType]*configmetrics.AtomicHashProvider{
@@ -92,7 +92,7 @@ var configHashProviders = map[ManifestType]*configmetrics.AtomicHashProvider{
 	MAPManifestType:               configmetrics.NewAtomicHashProvider(),
 }
 
-// multiTypeConfigInfoCollector emits config info metrics for multiple manifest types.
+// multiTypeConfigInfoCollector 为多种清单类型输出配置信息指标。
 //
 // 用自定义 collector 而不是 GaugeVec，是因为配置哈希按插件分别保存在
 // AtomicHashProvider 中，且只有成功加载过配置的插件才应暴露该指标。
@@ -111,12 +111,12 @@ func (c *multiTypeConfigInfoCollector) DescribeWithStability(ch chan<- *metrics.
 // CollectWithStability 为每个已上报配置的插件输出一条常量 1 的 info 指标。
 // 配置内容只以哈希形式出现，避免在指标中泄漏原文。
 func (c *multiTypeConfigInfoCollector) CollectWithStability(ch chan<- metrics.Metric) {
-	// Emit a metric for each plugin that has data
+	// 为每个有数据的插件输出一条指标
 	for manifestType, provider := range configHashProviders {
 		hashes := provider.GetCurrentHashes()
 		if len(hashes) >= 2 && len(hashes[0]) > 0 {
-			// hashes contains [apiserver_id_hash, config_hash]
-			// Prepend the plugin to match label order: ["plugin", "apiserver_id_hash", "hash"]
+			// hashes 包含 [apiserver_id_hash, config_hash]
+			// 前置插件名以匹配标签顺序：["plugin", "apiserver_id_hash", "hash"]
 			labelValues := append([]string{string(manifestType)}, hashes...)
 			ch <- metrics.NewLazyConstMetric(c.desc, metrics.GaugeValue, 1, labelValues...)
 		}
@@ -128,7 +128,7 @@ func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(admissionManifestAutomaticReloadsTotal)
 		legacyregistry.MustRegister(admissionManifestAutomaticReloadLastTimestampSeconds)
-		// Use a custom collector that emits metrics for all manifest types
+		// 使用自定义 collector 输出所有清单类型的指标
 		legacyregistry.CustomMustRegister(&multiTypeConfigInfoCollector{desc: admissionManifestLastConfigInfo})
 	})
 }
@@ -140,14 +140,14 @@ func ResetMetricsForTest() {
 	admissionManifestAutomaticReloadLastTimestampSeconds.Reset()
 }
 
-// RecordAutomaticReloadFailure records a failed reload attempt for the given manifest type.
+// RecordAutomaticReloadFailure 记录给定清单类型的重载失败。
 func RecordAutomaticReloadFailure(manifestType ManifestType, apiServerID string) {
 	apiServerIDHash := getHash(apiServerID)
 	admissionManifestAutomaticReloadsTotal.WithLabelValues("failure", string(manifestType), apiServerIDHash).Inc()
 	admissionManifestAutomaticReloadLastTimestampSeconds.WithLabelValues("failure", string(manifestType), apiServerIDHash).SetToCurrentTime()
 }
 
-// RecordAutomaticReloadSuccess records a successful reload for the given manifest type.
+// RecordAutomaticReloadSuccess 记录给定清单类型的重载成功。
 //
 // 成功时额外更新配置哈希，失败则保留上一次成功的哈希——监控上"最后生效的
 // 配置"不应因为一次失败的重载而丢失。
@@ -159,10 +159,10 @@ func RecordAutomaticReloadSuccess(manifestType ManifestType, apiServerID, config
 	RecordLastConfigInfo(manifestType, apiServerID, configHash)
 }
 
-// RecordLastConfigInfo records the hash of the last successfully loaded configuration.
+// RecordLastConfigInfo 记录最近一次成功加载配置的哈希。
 func RecordLastConfigInfo(manifestType ManifestType, apiServerID, configHash string) {
 	if provider, ok := configHashProviders[manifestType]; ok {
-		// Store [apiserver_id_hash, config_hash] - the multiTypeConfigInfoCollector prepends the type
+		// 存储 [apiserver_id_hash, config_hash]，类型名由 multiTypeConfigInfoCollector 前置
 		provider.SetHashes(getHash(apiServerID), configHash)
 	}
 }

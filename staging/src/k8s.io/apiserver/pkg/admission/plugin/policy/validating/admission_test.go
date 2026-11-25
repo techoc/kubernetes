@@ -67,7 +67,7 @@ var (
 		Kind:    "ParamsConfig",
 	}
 
-	// Common objects
+	// 公共对象
 	// denyPolicy 是一个最小可用的策略：校验表达式内容不重要，因为 fakeCompiler 会忽略它，
 	// 真正决定结果的是各测试注册的 validateFunc。
 	denyPolicy *admissionregistrationv1.ValidatingAdmissionPolicy = &admissionregistrationv1.ValidatingAdmissionPolicy{
@@ -114,7 +114,7 @@ var (
 			ParamRef: &admissionregistrationv1.ParamRef{
 				Name:      fakeParams.GetName(),
 				Namespace: fakeParams.GetNamespace(),
-				// fake object tracker does not populate defaults
+				// fake object tracker 不会填充默认值
 				ParameterNotFoundAction: ptr.To(admissionregistrationv1.DenyAction),
 			},
 			ValidationActions: []admissionregistrationv1.ValidationAction{admissionregistrationv1.Deny},
@@ -343,8 +343,6 @@ func (f *fakeMatcher) RegisterBinding(binding *admissionregistrationv1.Validatin
 	}
 }
 
-// Matches says whether this policy definition matches the provided admission
-// resource request
 // 等价 GVK/GVR 直接回填请求自身的值，因为 fakeMatcher 不做版本转换。
 func (f *fakeMatcher) DefinitionMatches(a admission.Attributes, o admission.ObjectInterfaces, definition generic.PolicyAccessor) (bool, schema.GroupVersionResource, schema.GroupVersionKind, error) {
 	namespace, name := definition.GetNamespace(), definition.GetName()
@@ -356,12 +354,10 @@ func (f *fakeMatcher) DefinitionMatches(a admission.Attributes, o admission.Obje
 		return fun(definition, a), a.GetResource(), a.GetKind(), nil
 	}
 
-	// Default is match everything
+	// 默认匹配一切
 	return f.DefaultMatch, a.GetResource(), a.GetKind(), nil
 }
 
-// Matches says whether this policy definition matches the provided admission
-// resource request
 // 与 DefinitionMatches 对称：未注册的绑定回退到 DefaultMatch。
 func (f *fakeMatcher) BindingMatches(a admission.Attributes, o admission.ObjectInterfaces, binding generic.BindingAccessor) (bool, error) {
 	namespace, name := binding.GetNamespace(), binding.GetName()
@@ -373,7 +369,7 @@ func (f *fakeMatcher) BindingMatches(a admission.Attributes, o admission.ObjectI
 		return fun(binding, a), nil
 	}
 
-	// Default is match everything
+	// 默认匹配一切
 	return f.DefaultMatch, nil
 }
 
@@ -383,15 +379,15 @@ func setupFakeTest(t *testing.T, comp *fakeCompiler, match *fakeMatcher) *generi
 	return setupTestCommon(t, comp, match, true)
 }
 
-// Starts CEL admission controller and sets up a plugin configured with it as well
-// as object trackers for manipulating the objects available to the system
+// setupTestCommon 启动 CEL admission 控制器，配置好插件，并提供可用于
+// 操纵系统内对象的 object tracker。
 //
-// ParamTracker only knows the gvk `paramGVK`. If in the future we need to
-// support multiple types of params this function needs to be augmented
+// ParamTracker 只认识 gvk `paramGVK`。如果将来需要支持多种参数类型，
+// 本函数需要相应扩展。
 //
-// PolicyTracker expects FakePolicyDefinition and FakePolicyBinding types
-// !TODO: refactor this test/framework to remove startInformers argument and
-// clean up the return args, and in general make it more accessible.
+// PolicyTracker 要求使用 FakePolicyDefinition 和 FakePolicyBinding 类型。
+// !TODO: 重构此测试/框架，去掉 startInformers 参数并清理返回值，
+// 整体上让它更易用。
 //
 // 实现细节：
 //   - 缩短策略刷新间隔，避免测试等待默认的较长周期；
@@ -456,7 +452,7 @@ func attributeRecord(
 		panic("both `old` and `new` may not be nil")
 	}
 
-	// one of old/new may be nil, but not both
+	// old/new 可以有一个为 nil，但不能都为 nil
 	example := new
 	if example == nil {
 		example = old
@@ -485,7 +481,7 @@ func attributeRecord(
 }
 
 // //////////////////////////////////////////////////////////////////////////////
-// Functionality Tests
+// 功能测试
 // //////////////////////////////////////////////////////////////////////////////
 
 // TestPluginNotReady 验证 informer 未启动（或初次 list/watch 失败）时插件拒绝处理请求，
@@ -496,25 +492,22 @@ func TestPluginNotReady(t *testing.T) {
 		DefaultMatch: true,
 	}
 
-	// Show that an unstarted informer (or one that has failed its listwatch)
-	// will show proper error from plugin
+	// 先证明未启动（或 listwatch 失败）的 informer 会让插件返回正确的错误
 	ctx := setupTestCommon(t, compiler, matcher, false)
 	err := ctx.Plugin.Dispatch(
 		context.Background(),
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns a denial
+		// 本测试不关心也不检查对象，只验证求值器被执行并返回拒绝
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
 
 	require.ErrorContains(t, err, "not yet ready to handle request")
 
-	// Show that by now starting the informer, the error is dissipated
+	// 再证明此时启动 informer 后，该错误随之消失
 	ctx = setupTestCommon(t, compiler, matcher, true)
 	err = ctx.Plugin.Dispatch(
 		context.Background(),
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns a denial
+		// 本测试不关心也不检查对象，只验证求值器被执行并返回拒绝
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
@@ -555,8 +548,7 @@ func TestBasicPolicyDefinitionFailure(t *testing.T) {
 	attr := attributeRecord(nil, fakeParams, admission.Create)
 	err := testContext.Plugin.Dispatch(
 		warnCtx,
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns a denial
+		// 本测试不关心也不检查对象，只验证求值器被执行并返回拒绝
 		attr,
 		&admission.RuntimeObjectInterfaces{},
 	)
@@ -569,8 +561,6 @@ func TestBasicPolicyDefinitionFailure(t *testing.T) {
 	require.ErrorContains(t, err, `Denied`)
 }
 
-// Shows that if a definition does not match the input, it will not be used.
-// But with a different input it will be used.
 // 这里用“对象名长度为偶数”作为匹配条件，构造奇偶两个输入验证匹配器的分流。
 func TestDefinitionDoesntMatch(t *testing.T) {
 	compiler := &fakeCompiler{}
@@ -599,7 +589,7 @@ func TestDefinitionDoesntMatch(t *testing.T) {
 	})
 
 	matcher.RegisterDefinition(denyPolicy, func(vap generic.PolicyAccessor, a admission.Attributes) bool {
-		// Match names with even-numbered length
+		// 匹配名称长度为偶数的对象
 		obj := a.GetObject()
 
 		accessor, err := meta.Accessor(obj)
@@ -613,8 +603,7 @@ func TestDefinitionDoesntMatch(t *testing.T) {
 
 	require.NoError(t, testContext.UpdateAndWait(fakeParams, denyPolicy, denyBinding))
 
-	// Validate a non-matching input.
-	// Should pass validation with no error.
+	// 校验一个不匹配的输入，应无错误地通过校验。
 
 	nonMatchingParams := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -633,8 +622,7 @@ func TestDefinitionDoesntMatch(t *testing.T) {
 				admission.Create), &admission.RuntimeObjectInterfaces{}))
 	require.Empty(t, passedParams)
 
-	// Validate a matching input.
-	// Should match and be denied.
+	// 校验一个匹配的输入，应命中并被拒绝。
 	matchingParams := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": paramsGVK.GroupVersion().String(),
@@ -673,7 +661,7 @@ func TestReconfigureBinding(t *testing.T) {
 			"kind":       paramsGVK.Kind,
 			"metadata": map[string]interface{}{
 				"name": "replicas-test2.example.com",
-				// fake object tracker does not populate missing namespace
+				// fake object tracker 不会补全缺失的 namespace
 				"namespace":       "default",
 				"resourceVersion": "2",
 			},
@@ -719,14 +707,13 @@ func TestReconfigureBinding(t *testing.T) {
 		&admission.RuntimeObjectInterfaces{},
 	)
 
-	// Expect validation to fail for first time due to binding unconditionally
-	// failing
+	// 预期第一次校验失败，因为绑定无条件失败
 	require.ErrorContains(t, err, `Denied`, "expect policy validation error")
 
-	// Expect `Compile` only called once
+	// 预期 `Compile` 只被调用了一次
 	require.Equal(t, 1, numCompiles, "expect `Compile` to be called only once")
 
-	// Update the tracker to point at different params
+	// 更新 tracker，指向另一组参数
 	require.NoError(t, testContext.UpdateAndWait(denyBinding2))
 
 	err = testContext.Plugin.Dispatch(
@@ -737,23 +724,23 @@ func TestReconfigureBinding(t *testing.T) {
 
 	require.ErrorContains(t, err, "no params found for policy binding with `Deny` parameterNotFoundAction")
 
-	// Add the missing params
+	// 补上缺失的参数
 	require.NoError(t, testContext.UpdateAndWait(fakeParams2))
 
-	// Expect validation to now fail again.
+	// 预期校验此时再次失败。
 	err = testContext.Plugin.Dispatch(
 		testContext,
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
 
-	// Expect validation to fail the third time due to validation failure
+	// 预期第三次失败源于策略校验本身失败
 	require.ErrorContains(t, err, `Denied`, "expected a true policy failure, not a configuration error")
 	// require.Equal(t, []*unstructured.Unstructured{fakeParams, fakeParams2}, passedParams, "expected call to `Validate` to cause call to evaluator")
 	require.Equal(t, 2, numCompiles, "expect changing binding causes a recompile")
 }
 
-// Shows that a policy which is in effect will stop being in effect when removed
+// TestRemoveDefinition 验证已生效的策略在被删除后不再生效。
 func TestRemoveDefinition(t *testing.T) {
 	// 删除策略后，同一个请求应从“被拒绝”变为“无策略处理而放行”，验证缓存能及时失效。
 	compiler := &fakeCompiler{}
@@ -796,14 +783,13 @@ func TestRemoveDefinition(t *testing.T) {
 
 	require.NoError(t, testContext.Plugin.Dispatch(
 		testContext,
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns a denial
+		// 本测试不关心也不检查对象，只验证求值器被执行并返回拒绝
 		record,
 		&admission.RuntimeObjectInterfaces{},
 	))
 }
 
-// Shows that a binding which is in effect will stop being in effect when removed
+// TestRemoveBinding 验证已生效的绑定在被删除后不再生效。
 func TestRemoveBinding(t *testing.T) {
 	// 与 TestRemoveDefinition 对称：策略仍在，但失去绑定后不应再被分发。
 	compiler := &fakeCompiler{}
@@ -846,8 +832,6 @@ func TestRemoveBinding(t *testing.T) {
 	require.NoError(t, testContext.DeleteAndWait(denyBinding))
 }
 
-// Shows that an error is surfaced if a paramSource specified in a binding does
-// not actually exist
 // 此处 paramKind 指向一个未注册的 Kind，错误应明确指向“找不到 paramKind 引用的资源”，
 // 而不是笼统的 CRD 不存在，便于集群管理员定位配置问题。
 func TestInvalidParamSourceGVK(t *testing.T) {
@@ -873,8 +857,7 @@ func TestInvalidParamSourceGVK(t *testing.T) {
 		&admission.RuntimeObjectInterfaces{},
 	)
 
-	// expect the specific error to be that the param was not found, not that CRD
-	// is not existing
+	// 预期具体错误是"未找到参数"，而不是 CRD 不存在
 	require.ErrorContains(t, err,
 		`failed to configure policy: failed to find resource referenced by paramKind: 'example.com/v1, Kind=BadParamKind'`)
 
@@ -882,8 +865,6 @@ func TestInvalidParamSourceGVK(t *testing.T) {
 	require.Empty(t, passedParams)
 }
 
-// Shows that an error is surfaced if a param specified in a binding does not
-// actually exist
 // 参数类型合法但实例缺失，错误取决于 ParameterNotFoundAction（此处为 Deny）。
 func TestInvalidParamSourceInstanceName(t *testing.T) {
 	compiler := &fakeCompiler{}
@@ -920,15 +901,12 @@ func TestInvalidParamSourceInstanceName(t *testing.T) {
 		&admission.RuntimeObjectInterfaces{},
 	)
 
-	// expect the specific error to be that the param was not found, not that CRD
-	// is not existing
+	// 预期具体错误是"未找到参数"，而不是 CRD 不存在
 	require.ErrorContains(t, err,
 		"no params found for policy binding with `Deny` parameterNotFoundAction")
 	require.Empty(t, passedParams)
 }
 
-// Show that policy still gets evaluated with `nil` param if paramRef & namespaceParamRef
-// are both unset
 // 策略声明了 paramKind 但绑定未引用任何参数实例时，求值仍应发生，只是 params 为 nil；
 // 策略作者需在 CEL 中自行处理 params 缺失的情况。
 func TestEmptyParamRef(t *testing.T) {
@@ -947,7 +925,7 @@ func TestEmptyParamRef(t *testing.T) {
 		numCompiles += 1
 		datalock.Unlock()
 
-		// Versioned params must be nil to pass the test
+		// 版本化参数必须为 nil 才能通过本测试
 		if versionedParams != nil {
 			return validating.ValidateResult{
 				Decisions: []validating.PolicyDecision{
@@ -971,8 +949,7 @@ func TestEmptyParamRef(t *testing.T) {
 
 	err := testContext.Plugin.Dispatch(
 		testContext,
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns a denial
+		// 本测试不关心也不检查对象，只验证求值器被执行并返回拒绝
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
@@ -981,11 +958,6 @@ func TestEmptyParamRef(t *testing.T) {
 	require.Equal(t, 1, numCompiles)
 }
 
-// Shows that a definition with no param source works just fine, and has
-// nil params passed to its evaluator.
-//
-// Also shows that if binding has specified params in this instance then they
-// are silently ignored.
 // 策略没有 paramKind 时，绑定上的 paramRef 不生效；这是有意的宽松处理，
 // 避免策略作者删除 paramKind 后旧绑定立刻变成配置错误。
 func TestEmptyParamSource(t *testing.T) {
@@ -999,7 +971,7 @@ func TestEmptyParamSource(t *testing.T) {
 	datalock := sync.Mutex{}
 	numCompiles := 0
 
-	// Push some fake
+	// 推入一些假对象
 	noParamSourcePolicy := *denyPolicy
 	noParamSourcePolicy.Spec.ParamKind = nil
 
@@ -1021,8 +993,7 @@ func TestEmptyParamSource(t *testing.T) {
 
 	err := testContext.Plugin.Dispatch(
 		testContext,
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns a denial
+		// 本测试不关心也不检查对象，只验证求值器被执行并返回拒绝
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
@@ -1031,9 +1002,6 @@ func TestEmptyParamSource(t *testing.T) {
 	require.Equal(t, 1, numCompiles)
 }
 
-// Shows what happens when multiple policies share one param type, then
-// one policy stops using the param. The expectation is the second policy
-// keeps behaving normally
 // 关键回归点：共享同一参数类型的策略不应因另一条策略修改 paramKind 而丢失参数，
 // 即参数 informer 的生命周期必须按“引用计数”而非“单一策略”管理。
 func TestMultiplePoliciesSharedParamType(t *testing.T) {
@@ -1044,7 +1012,7 @@ func TestMultiplePoliciesSharedParamType(t *testing.T) {
 
 	testContext := setupFakeTest(t, compiler, matcher)
 
-	// Use ConfigMap native-typed param
+	// 使用 ConfigMap 这种原生类型参数
 	policy1 := *denyPolicy
 	policy1.Name = "denypolicy1.example.com"
 	policy1.Spec = admissionregistrationv1.ValidatingAdmissionPolicySpec{
@@ -1112,14 +1080,12 @@ func TestMultiplePoliciesSharedParamType(t *testing.T) {
 
 	require.NoError(t, testContext.UpdateAndWait(fakeParams, &policy1, &binding1))
 
-	// Make sure policy 1 is created and bound to the params type first
+	// 确保 policy1 先被创建并绑定到参数类型
 	require.NoError(t, testContext.UpdateAndWait(&policy2, &binding2))
 
 	err := testContext.Plugin.Dispatch(
 		testContext,
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns admit meaning the params
-		// passed was a configmap
+		// 本测试不关心也不检查对象，只验证求值器被执行并放行，即传入的参数是 ConfigMap
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
@@ -1130,8 +1096,8 @@ func TestMultiplePoliciesSharedParamType(t *testing.T) {
 	require.EqualValues(t, 1, compiler.getNumCompiles(&policy2))
 	require.EqualValues(t, 1, evaluations2.Load())
 
-	// Remove param type from policy1
-	// Show that policy2 evaluator is still being passed the configmaps
+	// 移除 policy1 的 param 类型；
+	// 验证 policy2 的求值器依然收到 ConfigMap
 	policy1.Spec.ParamKind = nil
 	policy1.ResourceVersion = "2"
 
@@ -1142,9 +1108,7 @@ func TestMultiplePoliciesSharedParamType(t *testing.T) {
 
 	err = testContext.Plugin.Dispatch(
 		testContext,
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns admit meaning the params
-		// passed was a configmap
+		// 本测试不关心也不检查对象，只验证求值器被执行并放行，即传入的参数是 ConfigMap
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
@@ -1156,8 +1120,6 @@ func TestMultiplePoliciesSharedParamType(t *testing.T) {
 	require.EqualValues(t, 2, evaluations2.Load())
 }
 
-// Shows that we can refer to native-typed params just fine
-// (as opposed to CRD params)
 // 原生类型参数（ConfigMap）走的是 typed client 路径，与 CRD 的 unstructured 路径不同，
 // 这里断言求值器收到的是 *v1.ConfigMap 而非 unstructured。
 func TestNativeTypeParam(t *testing.T) {
@@ -1168,7 +1130,7 @@ func TestNativeTypeParam(t *testing.T) {
 	testContext := setupFakeTest(t, compiler, matcher)
 	evaluations := atomic.Int64{}
 
-	// Use ConfigMap native-typed param
+	// 使用 ConfigMap 这种原生类型参数
 	nativeTypeParamPolicy := *denyPolicy
 	nativeTypeParamPolicy.Spec.ParamKind = &admissionregistrationv1.ParamKind{
 		APIVersion: "v1",
@@ -1215,9 +1177,7 @@ func TestNativeTypeParam(t *testing.T) {
 
 	err := testContext.Plugin.Dispatch(
 		testContext,
-		// Object is irrelevant/unchecked for this test. Just test that
-		// the evaluator is executed, and returns admit meaning the params
-		// passed was a configmap
+		// 本测试不关心也不检查对象，只验证求值器被执行并放行，即传入的参数是 ConfigMap
 		attributeRecord(nil, fakeParams, admission.Create),
 		&admission.RuntimeObjectInterfaces{},
 	)
@@ -1321,7 +1281,7 @@ func TestWarnValidationAction(t *testing.T) {
 	}
 	testContext := setupFakeTest(t, compiler, matcher)
 
-	// Push some fake
+	// 推入一些假对象
 	noParamSourcePolicy := *denyPolicy
 	noParamSourcePolicy.Spec.ParamKind = nil
 
@@ -1365,7 +1325,7 @@ func TestAllValidationActions(t *testing.T) {
 	}
 	testContext := setupFakeTest(t, compiler, matcher)
 
-	// Push some fake
+	// 推入一些假对象
 	noParamSourcePolicy := *denyPolicy
 	noParamSourcePolicy.Spec.ParamKind = nil
 
@@ -1424,7 +1384,7 @@ func TestNamespaceParamRefName(t *testing.T) {
 
 	evaluations := atomic.Int64{}
 
-	// Use ConfigMap native-typed param
+	// 使用 ConfigMap 这种原生类型参数
 	nativeTypeParamPolicy := *denyPolicy
 	nativeTypeParamPolicy.Spec.ParamKind = &admissionregistrationv1.ParamKind{
 		APIVersion: "v1",
@@ -1507,9 +1467,8 @@ func TestNamespaceParamRefName(t *testing.T) {
 	}
 	require.NoError(t, testContext.UpdateAndWait(&nativeTypeParamPolicy, &namespaceParamBinding, configMapParam, configMapParam2, configMapParam3))
 
-	// Object is irrelevant/unchecked for this test. Just test that
-	// the evaluator is executed with correct namespace, and returns admit
-	// meaning the params passed was a configmap
+	// 本测试不关心也不检查对象，只验证求值器以正确的命名空间被执行并放行，
+	// 即传入的参数是 ConfigMap
 	err := testContext.Plugin.Dispatch(
 		testContext,
 		attributeRecord(nil, configMapParam, admission.Create),
@@ -1576,13 +1535,13 @@ func TestParamRef(t *testing.T) {
 		for _, nameIsSet := range []bool{false, true} {
 			for _, namespaceIsSet := range []bool{false, true} {
 				if paramIsClusterScoped && namespaceIsSet {
-					// Skip invalid configuration
+					// 跳过无效配置
 					continue
 				}
 
 				for _, selectorIsSet := range []bool{false, true} {
 					if selectorIsSet && nameIsSet {
-						// SKip invalid configuration
+						// 跳过无效配置
 						continue
 					}
 
@@ -1613,13 +1572,10 @@ func TestParamRef(t *testing.T) {
 						}
 
 						t.Run(name, func(t *testing.T) {
-							// Test creating a policy with a cluster or namesapce-scoped param
-							// and binding with the provided configuration. Test will ensure
-							// that the provided configuration is capable of matching
-							// params as expected, and not matching params when not expected.
-							// Also ensures the NotFound setting works as expected with this particular
-							// configuration of ParamRef when all the previously
-							// matched params are deleted.
+							// 测试创建带集群级或命名空间级参数的策略，并使用给定的配置创建绑定。
+							// 测试将确保该配置能如预期匹配参数、也能如预期不匹配参数；
+							// 同时确保在删除所有此前匹配到的参数后，该 ParamRef
+							// 配置下的 NotFound 设置按预期生效。
 							testParamRefCase(t, paramIsClusterScoped, nameIsSet, namespaceIsSet, selectorIsSet, denyNotFound)
 						})
 					}
@@ -1629,24 +1585,21 @@ func TestParamRef(t *testing.T) {
 	}
 }
 
-// testParamRefCase constructs a ParamRef and policy with appropriate ParamKind
-// for the given parameters, then constructs a scenario with several matching/non-matching params
-// of varying names, namespaces, labels.
+// testParamRefCase 根据给定参数构造相应的 ParamRef 和带 ParamKind 的策略，
+// 再构造一个包含多组匹配/不匹配参数的场景，这些参数的名称、namespace、label 各不相同。
 //
-// Test then selects subset of params that should match provided configuration
-// and ensuers those params are the only ones used.
+// 随后测试筛选出应与给定配置匹配的参数子集，
+// 并确保只有这些参数被使用。
 //
-// Also ensures NotFound action is enforced correctly by deleting all found
-// params and ensuring the Action is used.
+// 还会删除所有已找到的参数，确保 NotFound 动作被正确执行。
 //
-// This test is not meant to test every possible scenario of matching/not matching:
-// only that each ParamRef CAN be evaluated correctly for both cluster scoped
-// and namespace-scoped request kinds, and that the failure action is correctly
-// applied.
+// 本测试并非要覆盖匹配/不匹配的每种可能场景：
+// 只验证每个 ParamRef 对集群级和命名空间级请求 kind 都能被正确求值，
+// 且失败动作被正确应用。
 // 命名空间级参数且 paramRef 未指定命名空间时，命名空间级请求可解析，
 // 但集群级请求无法确定命名空间，属于配置错误。
 func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIsSet, selectorIsSet, denyNotFound bool) {
-	// Create a cluster scoped and a namespace scoped CRD
+	// 创建一个集群级和一个命名空间级 CRD
 	policy := *denyPolicy
 	binding := *denyBinding
 	binding.Spec.ParamRef = &admissionregistrationv1.ParamRef{}
@@ -1726,7 +1679,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 
 	testContext := setupFakeTest(t, compiler, matcher)
 
-	// Create library of params to try to fool the controller
+	// 构造一批参数，试图迷惑控制器
 	// 参数矩阵覆盖：匹配/不匹配名称、匹配/不匹配命名空间、匹配/不匹配标签，
 	// 以及命名空间级与集群级两类对象，用来确认 ParamRef 只选中应选中的那些。
 	params := []*unstructured.Unstructured{
@@ -1755,8 +1708,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 	}
 
 	for _, p := range params {
-		// Don't wait for these sync the informers would not have been
-		// created unless bound to a policy
+		// 不等待这些 informer 同步：未绑定到策略时它们根本不会被创建
 		require.NoError(t, testContext.Update(p))
 	}
 
@@ -1765,8 +1717,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 	namespacedRequestObject := newParam("some param", nonMatchingNamespace, nil)
 	clusterScopedRequestObject := newClusterScopedParam("other param", nil)
 
-	// Validate a namespaced object, and verify that the params being validated
-	// are the ones we would expect
+	// 校验命名空间级对象，验证被校验的参数正是预期的那些
 	// 期望集合由测试自身独立推导（与插件实现无关），再与插件实际传给求值器的参数比较，
 	// 这样即使两边共享同一错误逻辑也能暴露问题。
 	timeoutCtx, timeoutCancel := context.WithTimeout(testContext, 5*time.Second)
@@ -1782,9 +1733,8 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 		}
 
 		if !paramIsClusterScoped {
-			// If the paramRef has empty namespace and the kind is
-			// namespaced-scoped, then it only matches params of the same
-			// namespace
+			// 若 paramRef 的 namespace 为空且 kind 是命名空间级，
+			// 则只匹配同命名空间的参数
 			if len(paramRef.Namespace) == 0 && p.GetNamespace() != namespacedRequestObject.GetNamespace() {
 				continue
 			}
@@ -1804,7 +1754,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 				}
 			}
 
-			// Empty selector matches everything
+			// 空 selector 匹配全部
 			if len(paramRef.Selector.MatchExpressions) == 0 && len(paramRef.Selector.MatchLabels) == 0 {
 				matched = true
 			}
@@ -1821,8 +1771,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 	require.ErrorContains(t, testContext.Plugin.Dispatch(context.TODO(), attributeRecord(nil, namespacedRequestObject, admission.Create), &admission.RuntimeObjectInterfaces{}), "Denied by policy")
 	require.ElementsMatch(t, expectedParamsForNamespacedRequest, getAndResetObservedParams(), "should exactly match expected params")
 
-	// Validate a cluster-scoped object, and verify that the params being validated
-	// are the ones we would expect
+	// 校验集群级对象，验证被校验的参数正是预期的那些
 	var expectedParamsForClusterScopedRequest []*unstructured.Unstructured
 	timeoutCtx, timeoutCancel = context.WithTimeout(testContext, 5*time.Second)
 	defer timeoutCancel()
@@ -1852,7 +1801,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 				}
 			}
 
-			// Empty selector matches everything
+			// 空 selector 匹配全部
 			if len(paramRef.Selector.MatchExpressions) == 0 && len(paramRef.Selector.MatchLabels) == 0 {
 				matched = true
 			}
@@ -1869,7 +1818,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 
 	err := testContext.Plugin.Dispatch(context.TODO(), attributeRecord(nil, clusterScopedRequestObject, admission.Create), &admission.RuntimeObjectInterfaces{})
 	if shouldErrorOnClusterScopedRequests {
-		// Cannot validate cliuster-scoped resources against a paramRef that sets namespace
+		// 集群级资源不能与设置了 namespace 的 paramRef 一起校验
 		require.ErrorContains(t, err, "failed to configure binding: cannot use namespaced paramRef in policy binding that matches cluster-scoped resources")
 	} else {
 		require.NotEmpty(t, expectedParamsForClusterScopedRequest, "all test cases should match at least one param")
@@ -1877,8 +1826,6 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 	}
 	require.ElementsMatch(t, expectedParamsForClusterScopedRequest, getAndResetObservedParams(), "should exactly match expected params")
 
-	// Remove all params matched by namespaced, and cluster-scoped validation.
-	// Validate again to make sure NotFoundAction is respected
 	// 删除全部匹配参数后：Deny 应返回错误，Allow 应静默跳过且不调用求值器。
 	var deleted []runtime.Object
 	for _, p := range expectedParamsForNamespacedRequest {
@@ -1891,8 +1838,7 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 
 	require.NoError(t, testContext.DeleteAndWait(deleted...))
 
-	// Check that NotFound is working correctly for both namespaeed & non-namespaced
-	// request object
+	// 检查 NotFound 对带命名空间和不带命名空间的请求对象都工作正常
 	err = testContext.Plugin.Dispatch(context.TODO(), attributeRecord(nil, namespacedRequestObject, admission.Create), &admission.RuntimeObjectInterfaces{})
 	if denyNotFound {
 		require.ErrorContains(t, err, "no params found for policy binding with `Deny` parameterNotFoundAction")
@@ -1913,8 +1859,8 @@ func testParamRefCase(t *testing.T, paramIsClusterScoped, nameIsSet, namespaceIs
 	require.Empty(t, getAndResetObservedParams(), "policy should not have been evaluated")
 }
 
-// If the ParamKind is ClusterScoped, and namespace param is used.
-// This is a Configuration Error of the policy
+// 当 ParamKind 为 ClusterScoped 却使用了命名空间级参数时，
+// 这是策略的配置错误。
 // 配置错误应在分发阶段被拒绝，且不进入求值（evaluations 保持 0），
 // 以免用错误配置静默放行或拒绝流量。
 func TestNamespaceParamRefClusterScopedParamError(t *testing.T) {
@@ -1926,7 +1872,7 @@ func TestNamespaceParamRefClusterScopedParamError(t *testing.T) {
 
 	evaluations := atomic.Int64{}
 
-	// Use ValidatingAdmissionPolicy for param type since it is cluster-scoped
+	// 参数类型选用 ValidatingAdmissionPolicy，因为它是集群级资源
 	nativeTypeParamPolicy := *denyPolicy
 	nativeTypeParamPolicy.Spec.ParamKind = &admissionregistrationv1.ParamKind{
 		APIVersion: "admissionregistration.k8s.io/v1beta1",
@@ -1963,9 +1909,8 @@ func TestNamespaceParamRefClusterScopedParamError(t *testing.T) {
 
 	require.NoError(t, testContext.UpdateAndWait(&nativeTypeParamPolicy, &namespaceParamBinding))
 
-	// Object is irrelevant/unchecked for this test. Just test that
-	// the evaluator is executed with correct namespace, and returns admit
-	// meaning the params passed was a configmap
+	// 本测试不关心也不检查对象，只验证求值器以正确的命名空间被执行并放行，
+	// 即传入的参数是 ConfigMap
 	err := testContext.Plugin.Dispatch(
 		testContext,
 		attributeRecord(nil, fakeParams, admission.Create),
@@ -1986,7 +1931,7 @@ func TestAuditAnnotations(t *testing.T) {
 	}
 	testContext := setupFakeTest(t, compiler, matcher)
 
-	// Push some fake
+	// 推入一些假对象
 	policy := *denyPolicy
 	compiler.RegisterDefinition(denyPolicy, func(ctx context.Context, matchedResource schema.GroupVersionResource, versionedAttr *admission.VersionedAttributes, versionedParams runtime.Object, namespace *v1.Namespace, runtimeCELCostBudget int64, authz authorizer.UnconditionalAuthorizer) validating.ValidateResult {
 		o, err := meta.Accessor(versionedParams)
@@ -2049,7 +1994,7 @@ func TestAuditAnnotations(t *testing.T) {
 	require.ErrorContains(t, err, "example error")
 }
 
-// FakeAttributes decorates admission.Attributes. It's used to trace the added annotations.
+// FakeAttributes 装饰 admission.Attributes，用于追踪新增的注解。
 // 内嵌 Attributes 以复用全部默认行为，仅覆盖注解相关方法；互斥锁保护 map，
 // 因为分发过程中可能有多个校验器并发写入。
 type FakeAttributes struct {
@@ -2058,7 +2003,7 @@ type FakeAttributes struct {
 	mutex       sync.Mutex
 }
 
-// AddAnnotation adds an annotation key value pair to FakeAttributes
+// AddAnnotation 向 FakeAttributes 添加一对注解键值。
 func (f *FakeAttributes) AddAnnotation(k, v string) error {
 	return f.AddAnnotationWithLevel(k, v, auditinternal.LevelMetadata)
 }
@@ -2078,7 +2023,7 @@ func (f *FakeAttributes) AddAnnotationWithLevel(k, v string, _ auditinternal.Lev
 	return nil
 }
 
-// GetAnnotations reads annotations from FakeAttributes
+// GetAnnotations 从 FakeAttributes 读取注解。
 // 返回副本而非内部 map，避免调用方在锁外修改导致数据竞争。
 func (f *FakeAttributes) GetAnnotations(_ auditinternal.Level) map[string]string {
 	f.mutex.Lock()

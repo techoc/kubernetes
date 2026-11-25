@@ -172,10 +172,10 @@ func (c *controller[T]) Run(ctx context.Context) error {
 
 	// 等待初始缓存列表同步完成后再开始 reconcile 对象。
 	if !cache.WaitFor(ctx, "caches", c.informer.HasSyncedChecker(), registration.HasSyncedChecker()) {
-		// TODO: should cache.WaitFor return an error?
-		// ctx.Err() or context.Cause(ctx)?
-		// Either of them would make dead code like the "if err == nil"
-		// below more obvious.
+		// TODO: cache.WaitFor 是否应该返回错误？
+		// 是 ctx.Err() 还是 context.Cause(ctx)？
+		// 无论哪种，都能让下面 "if err == nil"
+		// 这类死代码更加明显。
 
 		// 缓存同步期间 ctx 被取消，提前返回
 		err := ctx.Err()

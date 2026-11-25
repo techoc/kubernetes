@@ -20,11 +20,10 @@ package initializer
 
 import "k8s.io/apiserver/pkg/admission"
 
-// apiServerIDInitializer injects the API server identity into admission plugins
-// that implement WantsAPIServerID. This is used for metrics labeling in HA setups
-// where multiple API servers may be running with different manifest configurations.
+// apiServerIDInitializer 把 API server 的身份注入实现了 WantsAPIServerID 的准入插件，
+// 用于 HA 部署下的指标标签——此时可能同时运行多个 apiserver，且各自加载的准入配置并不相同。
 //
-// 中文说明：HA 部署中多个 apiserver 可能加载不同的准入配置，指标需要按实例
+// HA 部署中多个 apiserver 可能加载不同的准入配置，指标需要按实例
 // 身份区分；身份只通过可选接口注入，未实现该接口的插件不受影响。
 type apiServerIDInitializer struct {
 	apiServerID string
@@ -32,20 +31,19 @@ type apiServerIDInitializer struct {
 
 var _ admission.PluginInitializer = &apiServerIDInitializer{}
 
-// NewAPIServerIDInitializer returns a PluginInitializer that injects the given
-// API server ID into admission plugins that implement WantsAPIServerID.
-// This initializer must be placed before the generic initializer in the chain
-// so that the API server ID is available when SetExternalKubeInformerFactory is called.
+// NewAPIServerIDInitializer 返回一个 PluginInitializer，把给定的 API server ID 注入
+// 实现了 WantsAPIServerID 的准入插件。该初始化器必须排在初始化链中通用初始化器之前，
+// 以保证调用 SetExternalKubeInformerFactory 时 API server ID 已经可用。
 //
-// 中文说明：顺序约束来自插件初始化时机——部分插件在获得 informer factory
+// 顺序约束来自插件初始化时机——部分插件在获得 informer factory
 // 时就会构造带标签的指标，因此 ID 必须更早写入。
 func NewAPIServerIDInitializer(apiServerID string) admission.PluginInitializer {
 	return &apiServerIDInitializer{apiServerID: apiServerID}
 }
 
-// Initialize checks whether the plugin implements WantsAPIServerID and injects the ID.
+// Initialize 检查插件是否实现了 WantsAPIServerID，若是则注入 ID。
 //
-// 中文说明：类型断言而非强制要求，保证初始化器对任意插件都安全可复用。
+// 类型断言而非强制要求，保证初始化器对任意插件都安全可复用。
 func (i *apiServerIDInitializer) Initialize(plugin admission.Interface) {
 	if wants, ok := plugin.(WantsAPIServerID); ok {
 		wants.SetAPIServerID(i.apiServerID)

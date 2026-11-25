@@ -247,7 +247,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 					&example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "newpod"}},
 					&example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "oldpod"}},
 				),
-				// name gets overwritten from converted attributes, type gets set explicitly
+				// name 被转换后的属性对象覆盖，type 显式设置
 				VersionedObject:    NewLazyObject(&examplev1.Pod{TypeMeta: metav1.TypeMeta{APIVersion: "example.apiserver.k8s.io/v1", Kind: "Pod"}, ObjectMeta: metav1.ObjectMeta{Name: "newpod"}}),
 				VersionedOldObject: NewLazyObject(&examplev1.Pod{TypeMeta: metav1.TypeMeta{APIVersion: "example.apiserver.k8s.io/v1", Kind: "Pod"}, ObjectMeta: metav1.ObjectMeta{Name: "oldpod"}}),
 				VersionedKind:      examplev1.SchemeGroupVersion.WithKind("Pod"),
@@ -263,7 +263,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 				),
 				VersionedObject:    NewLazyObject(u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"newobjversioned"}}`)),
 				VersionedOldObject: NewLazyObject(u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"oldobjversioned"}}`)),
-				VersionedKind:      gvk("g", "v", "k"), // claim a different current version to trigger conversion
+				VersionedKind:      gvk("g", "v", "k"), // 声明一个不同的当前版本以触发转换
 			},
 			GVK: gvk("mygroup.k8s.io", "v1", "Flunder"),
 			ExpectedAttrs: &VersionedAttributes{
@@ -287,7 +287,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 				),
 				VersionedObject:    NewLazyObject(&examplev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "newpodversioned"}}),
 				VersionedOldObject: NewLazyObject(&examplev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "oldpodversioned"}}),
-				VersionedKind:      gvk("g", "v", "k"), // claim a different current version to trigger conversion
+				VersionedKind:      gvk("g", "v", "k"), // 声明一个不同的当前版本以触发转换
 				Dirty:              true,
 			},
 			GVK: examplev1.SchemeGroupVersion.WithKind("Pod"),
@@ -296,9 +296,9 @@ func TestConvertVersionedAttributes(t *testing.T) {
 					&example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "newpodversioned"}},
 					&example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "oldpod"}},
 				),
-				// new name gets preserved from versioned object, type gets set explicitly
+				// 新对象 name 从版本化对象保留，type 显式设置
 				VersionedObject: NewLazyObject(&examplev1.Pod{TypeMeta: metav1.TypeMeta{APIVersion: "example.apiserver.k8s.io/v1", Kind: "Pod"}, ObjectMeta: metav1.ObjectMeta{Name: "newpodversioned"}}),
-				// old name gets overwritten from converted attributes, type gets set explicitly
+				// 旧对象 name 被转换后的属性对象覆盖，type 显式设置
 				VersionedOldObject: NewLazyObject(&examplev1.Pod{TypeMeta: metav1.TypeMeta{APIVersion: "example.apiserver.k8s.io/v1", Kind: "Pod"}, ObjectMeta: metav1.ObjectMeta{Name: "oldpod"}}),
 				VersionedKind:      examplev1.SchemeGroupVersion.WithKind("Pod"),
 				Dirty:              false,
@@ -314,7 +314,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 				),
 				VersionedObject:    NewLazyObject(u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"newobjversioned"}}`)),
 				VersionedOldObject: NewLazyObject(u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"oldobjversioned"}}`)),
-				VersionedKind:      gvk("g", "v", "k"), // claim a different current version to trigger conversion
+				VersionedKind:      gvk("g", "v", "k"), // 声明一个不同的当前版本以触发转换
 				Dirty:              true,
 			},
 			GVK: gvk("mygroup.k8s.io", "v1", "Flunder"),
@@ -323,9 +323,9 @@ func TestConvertVersionedAttributes(t *testing.T) {
 					u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"newobjversioned"}}`),
 					u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"oldobj"}}`),
 				),
-				// new name gets preserved from versioned object, type gets set explicitly
+				// 新对象 name 从版本化对象保留，type 显式设置
 				VersionedObject: NewLazyObject(u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"newobjversioned"}}`)),
-				// old name gets overwritten from converted attributes, type gets set explicitly
+				// 旧对象 name 被转换后的属性对象覆盖，type 显式设置
 				VersionedOldObject: NewLazyObject(u(`{"apiVersion": "mygroup.k8s.io/v1","kind": "Flunder","metadata":{"name":"oldobj"}}`)),
 				VersionedKind:      gvk("mygroup.k8s.io", "v1", "Flunder"),
 				Dirty:              false,
@@ -341,7 +341,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 				),
 				VersionedObject:    NewLazyObject(&examplev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "newpodversioned"}}),
 				VersionedOldObject: NewLazyObject(nil),
-				VersionedKind:      gvk("g", "v", "k"), // claim a different current version to trigger conversion
+				VersionedKind:      gvk("g", "v", "k"), // 声明一个不同的当前版本以触发转换
 				Dirty:              true,
 			},
 			GVK: examplev1.SchemeGroupVersion.WithKind("Pod"),
@@ -350,7 +350,7 @@ func TestConvertVersionedAttributes(t *testing.T) {
 					&example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "newpodversioned"}},
 					nil,
 				),
-				// new name gets preserved from versioned object, type gets set explicitly
+				// 新对象 name 从版本化对象保留，type 显式设置
 				VersionedObject:    NewLazyObject(&examplev1.Pod{TypeMeta: metav1.TypeMeta{APIVersion: "example.apiserver.k8s.io/v1", Kind: "Pod"}, ObjectMeta: metav1.ObjectMeta{Name: "newpodversioned"}}),
 				VersionedOldObject: NewLazyObject(nil),
 				VersionedKind:      examplev1.SchemeGroupVersion.WithKind("Pod"),
@@ -415,13 +415,13 @@ func TestVersionedAttributesCELObjectsCaching(t *testing.T) {
 		require.NotNil(t, uOldObj)
 		require.Equal(t, "old-rs", getMetaName(uOldObj))
 
-		// 1. Update object
+		// 1. 更新对象
 		updateRS := &example2v1.ReplicaSet{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "example2.apiserver.k8s.io/v1", Kind: "ReplicaSet"},
 			ObjectMeta: metav1.ObjectMeta{Name: "updated-rs"},
 		}
 		vAttrs.UpdateObject(updateRS)
-		// Cache is cleared on update
+		// 更新后缓存被清空
 		require.Nil(t, vAttrs.VersionedObject.celVal)
 
 		uObj, err = vAttrs.VersionedObject.CELValue()

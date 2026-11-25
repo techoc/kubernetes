@@ -41,10 +41,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Interval for refreshing policies.
-// TODO: Consider reducing this to a shorter duration or replacing this entirely
-// with checks that detect when a policy change took effect.
-//
+// 策略刷新间隔。
+// TODO: 考虑缩短该间隔，或完全改为“检测策略变更已生效”的机制。
 // 轮询间隔是“最终一致”的代价：事件只负责把缓存标脏，真正重编译由该循环
 // 触发，因此从策略变更到生效存在一个固定上界。
 const policyRefreshIntervalDefault = 1 * time.Second
@@ -74,15 +72,15 @@ type policySource[P runtime.Object, B runtime.Object, E Evaluator] struct {
 
 	compiler func(P) E
 
-	// Currently compiled list of valid/active policy-binding pairs
+	// 当前已编译的有效/激活 policy-binding 对列表。
 	policies atomic.Pointer[[]PolicyHook[P, B, E]]
-	// Whether the cache of policies is dirty and needs to be recompiled
+	// 策略缓存是否已变脏、需要重新编译。
 	policiesDirty atomic.Bool
 
 	lock             sync.Mutex
 	compiledPolicies map[types.NamespacedName]compiledPolicyEntry[E]
 
-	// Temporary until we use the dynamic informer factory
+	// 过渡方案，直到改用动态 informer factory。
 	paramsCRDControllers map[schema.GroupVersionKind]*paramInfo
 }
 
@@ -90,13 +88,12 @@ type policySource[P runtime.Object, B runtime.Object, E Evaluator] struct {
 type paramInfo struct {
 	mapping meta.RESTMapping
 
-	// When the param is changed, or the informer is done being used, the cancel
-	// func should be called to stop/cleanup the original informer
-	//
+	// param 变更或 informer 不再被使用时，应调用 cancel 函数
+	// 停止并清理原来的 informer。
 	// 取消函数同时用于回收 informer goroutine 和释放 shared factory 的引用。
 	cancelFunc func()
 
-	// The lister for this param
+	// 该 param 的 lister。
 	informer informers.GenericInformer
 }
 
@@ -113,16 +110,15 @@ type PolicyHook[P runtime.Object, B runtime.Object, E Evaluator] struct {
 	Policy   P
 	Bindings []B
 
-	// ParamInformer is the informer for the param CRD for this policy, or nil if
-	// there is no param or if there was a configuration error
-	//
+	// ParamInformer 是该策略 param CRD 的 informer；没有 param 或
+	// 配置有误时为 nil。
 	// ParamScope 决定 param 是命名空间级还是集群级，调度时据此解析引用。
 	ParamInformer informers.GenericInformer
 	ParamScope    meta.RESTScope
 
-	// DynamicClient is used for direct API calls to handle cache misses
+	// DynamicClient 用于缓存未命中时直接调用 API。
 	DynamicClient dynamic.Interface
-	// RESTMapper is used to resolve GVK to GVR for direct API calls
+	// RESTMapper 用于在直接调用 API 前把 GVK 解析为 GVR。
 	RESTMapper meta.RESTMapper
 
 	// ConfigurationError 非空表示该 hook 配置有误（例如 param CRD 找不到），
@@ -161,9 +157,7 @@ func NewPolicySource[P runtime.Object, B runtime.Object, E Evaluator](
 	return res
 }
 
-// SetPolicyRefreshIntervalForTests allows the refresh interval to be overridden during tests.
-// This should only be called from tests.
-//
+// SetPolicyRefreshIntervalForTests 允许在测试期间覆盖刷新间隔；只应从测试调用。
 // 返回值用于恢复默认值，调用方应以 defer 形式使用，避免测试间互相影响。
 func SetPolicyRefreshIntervalForTests(interval time.Duration) func() {
 	policyRefreshIntervalLock.Lock()
@@ -183,8 +177,7 @@ func (s *policySource[P, B, E]) Run(ctx context.Context) error {
 		return fmt.Errorf("policy source already running")
 	}
 
-	// Wait for initial cache sync of policies and informers before reconciling
-	// any
+	// 先等待策略与 informer 的初始缓存同步，再协调任何内容；
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, s.UpstreamHasSynced) {
 		err := ctx.Err()
 		if err == nil {
@@ -195,7 +188,7 @@ func (s *policySource[P, B, E]) Run(ctx context.Context) error {
 
 	s.ctx = ctx
 
-	// Perform initial policy compilation after initial list has finished
+	// 初始 list 完成后执行首次策略编译。
 	s.notify()
 	s.refreshPolicies()
 
@@ -230,10 +223,10 @@ func (s *policySource[P, B, E]) Run(ctx context.Context) error {
 		}
 	}()
 
-	// Start a worker that checks every second to see if policy data is dirty
-	// and needs to be recompiled
+	// 启动一个 worker，定期检查策略数据是否变脏、
+	// 是否需要重新编译。
 	go func() {
-		// Loop every 1 second until context is cancelled, refreshing policies
+		// 每隔 1 秒循环刷新策略，直到 context 被取消。
 		// 每次循环重新读取间隔，使测试中调用 SetPolicyRefreshIntervalForTests
 		// 能够生效。
 		policyRefreshIntervalLock.Lock()
@@ -252,22 +245,20 @@ func (s *policySource[P, B, E]) UpstreamHasSynced() bool {
 	return s.policyInformer.HasSynced() && s.bindingInformer.HasSynced()
 }
 
-// HasSynced implements Source.
+// HasSynced 实现 Source。
 func (s *policySource[P, B, E]) HasSynced() bool {
-	// As an invariant we never store `nil` into the atomic list of processed
-	// policy hooks. If it is nil, then we haven't compiled all the policies
-	// and stored them yet.
+	// 约定：已处理的 policy hooks 原子列表中永远不会存 nil；
+	// 如果为 nil，说明还没有编译并存储全部策略。
 	return s.Hooks() != nil
 }
 
-// Hooks implements Source.
+// Hooks 实现 Source。
 func (s *policySource[P, B, E]) Hooks() []PolicyHook[P, B, E] {
 	res := s.policies.Load()
 
-	// Error case should not happen since evaluation function never
-	// returns error
+	// 加载函数从不返回错误，理论上不会走到错误分支。
 	if res == nil {
-		// Not yet synced
+		// 尚未同步
 		return nil
 	}
 
@@ -285,22 +276,18 @@ func (s *policySource[P, B, E]) refreshPolicies() {
 		return
 	}
 
-	// It is ok the cache gets marked dirty again between us clearing the
-	// flag and us calculating the policies. The dirty flag would be marked again,
-	// and we'd have a no-op after comparing resource versions on the next sync.
+	// 在清脏标记与计算策略之间，缓存再次被标脏也没关系：脏标记会被重新置位，
+	// 下次同步比较 resourceVersion 后发现没有变化，就是一次空操作。
 	klog.Infof("refreshing policies")
 	policies, err := s.calculatePolicyData()
 
-	// Intentionally store policy list regardless of error. There may be
-	// an error returned if there was a configuration error in one of the policies,
-	// but we would still want those policies evaluated
-	// (for instance to return error on failaction). Or if there was an error
-	// listing all policies at all, we would want to wipe the list.
+	// 有意无论是否有错误都存储策略列表：某个策略配置有误时虽会返回错误，
+	// 但仍希望这些策略参与评估（例如 failAction 时需要报错）；
+	// 若整个列表操作都失败了，就应该直接清空列表。
 	s.policies.Store(&policies)
 
 	if err != nil {
-		// An error was generated while syncing policies. Mark it as dirty again
-		// so we can retry later
+		// 同步策略过程中出错：重新标脏，稍后重试。
 		utilruntime.HandleError(fmt.Errorf("encountered error syncing policies: %w. Rescheduling policy sync", err))
 		s.notify()
 	}
@@ -312,13 +299,10 @@ func (s *policySource[P, B, E]) notify() {
 	s.policiesDirty.Store(true)
 }
 
-// calculatePolicyData calculates the list of policies and bindings for each
-// policy. If there is an error in generation, it will return the error and
-// the partial list of policies that were able to be generated. Policies that
-// have an error will have a non-nil ConfigurationError field, but still be
-// included in the result.
-//
-// This function caches the result of the intermediate compilations
+// calculatePolicyData 为每个策略计算其策略与绑定列表。生成过程中出错时，
+// 返回错误以及已成功生成的部分策略列表：出错的策略 ConfigurationError
+// 字段非空，但仍会包含在结果中。
+
 // 注意返回的 error 是“部分失败”：调用方应照常发布 result，让有问题的策略
 // 仍按 failurePolicy 参与评估，而不是整体失效。
 func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], error) {
@@ -326,27 +310,26 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 		return nil, fmt.Errorf("cannot calculate policy data until upstream has synced")
 	}
 
-	// Fat-fingered lock that can be made more fine-tuned if required
+	// 粗粒度加锁，必要时可以细化。
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// Create a local copy of all policies and bindings
 	// 先按“绑定指向的策略名”分组，再从策略 informer 反查；这样即使策略
 	// 与绑定的到达顺序颠倒也能正确处理。
 	policiesToBindings := map[types.NamespacedName][]B{}
 	bindingList, err := s.bindingInformer.List(labels.Everything())
 	if err != nil {
-		// This should never happen unless types are misconfigured
-		// (can't use meta.accessor on them)
+		// 除非类型配置有误（无法使用 meta.Accessor），
+		// 否则不应发生。
 		return nil, err
 	}
 
-	// Gather a list of all active policy bindings
+	// 收集所有激活策略绑定的列表。
 	for _, bindingSpec := range bindingList {
 		bindingAccessor := s.newBindingAccessor(bindingSpec)
 		policyKey := bindingAccessor.GetPolicyName()
 
-		// Add this binding to the list of bindings for this policy
+		// 把该绑定加入对应策略的绑定列表。
 		policiesToBindings[policyKey] = append(policiesToBindings[policyKey], bindingSpec)
 	}
 
@@ -362,17 +345,16 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 		}
 		policySpec, err := inf.Get(policyKey.Name)
 		if errors.IsNotFound(err) {
-			// Policy for bindings doesn't exist. This can happen if the policy
-			// was deleted before the binding, or the binding was created first.
+			// 绑定所指的策略不存在：可能是策略先于绑定被删除，
+			// 也可能是绑定先被创建。
 			//
-			// Just skip bindings that refer to non-existent policies
-			// If the policy is recreated, the cache will be marked dirty and
-			// this function will run again.
+			// 直接跳过引用了不存在策略的绑定；
+			// 如果策略被重建，缓存会被标脏，
+			// 本函数会再次运行。
 			continue
 		} else if err != nil {
-			// This should never happen since fetching from a cache should never
-			// fail and this function checks that the cache was synced before
-			// even getting to this point.
+			// 从缓存取值不应失败，且本函数在此之前已确认缓存同步完成，
+			// 所以这里理论上不会发生。
 			errs = append(errs, err)
 			continue
 		}
@@ -392,7 +374,7 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 				Kind:    paramKind.Kind,
 			}
 
-			// TEMPORARY UNTIL WE HAVE SHARED PARAM INFORMERS
+			// 临时做法：等共享 param informer 就绪后移除。
 			usedParams[*parsedParamKind] = struct{}{}
 		}
 
@@ -408,16 +390,15 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 			ConfigurationError: configurationError,
 		})
 
-		// Should queue a re-sync for policy sync error. If our shared param
-		// informer can notify us when CRD discovery changes we can remove this
-		// and just rely on the informer to notify us when the CRDs change
+		// 策略同步出错时应排队重新同步。若共享的 param informer 将来能在
+		// CRD discovery 变化时通知我们，就可以去掉这段逻辑，完全依赖
+		// informer 的通知。
 		if configurationError != nil {
 			errs = append(errs, configurationError)
 		}
 	}
 
-	// Clean up orphaned policies by replacing the old cache of compiled policies
-	// (the map of used policies is updated by `compilePolicy`)
+	// 通过替换旧的已编译策略缓存来清理成为孤儿的策略
 	// 注意判断依据是 policiesToBindings：没有绑定的策略不会被评估，其编译
 	// 产物也就没有保留价值。
 	for policyKey := range s.compiledPolicies {
@@ -426,7 +407,7 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 		}
 	}
 
-	// Clean up orphaned param informers
+	// 清理成为孤儿的 param informer。
 	// 回收必须调用 cancelFunc，否则会泄漏 informer goroutine 和 API 连接。
 	for paramKind, info := range s.paramsCRDControllers {
 		if _, wasSeen := usedParams[paramKind]; !wasSeen {
@@ -442,10 +423,8 @@ func (s *policySource[P, B, E]) calculatePolicyData() ([]PolicyHook[P, B, E], er
 	return result, err
 }
 
-// ensureParamsForPolicyLocked ensures that the informer for the paramKind is
-// started and returns the informer and the scope of the paramKind.
-//
-// Must be called under write lock
+// ensureParamsForPolicyLocked 确保 paramKind 的 informer 已启动，
+// 并返回该 informer 与 paramKind 的作用域。必须在持写锁时调用。
 // 返回的错误会写入 PolicyHook.ConfigurationError，而不是让整个计算失败，
 // 因此找不到 param CRD 时仍能对已存在部分完成评估。
 func (s *policySource[P, B, E]) ensureParamsForPolicyLocked(paramSource *schema.GroupVersionKind) (informers.GenericInformer, meta.RESTScope, error) {
@@ -461,39 +440,36 @@ func (s *policySource[P, B, E]) ensureParamsForPolicyLocked(paramSource *schema.
 	}, paramSource.Version)
 
 	if err != nil {
-		// Failed to resolve. Return error so we retry again (rate limited)
-		// Save a record of this definition with an evaluator that unconditionally
+		// 解析失败：返回错误以便（限流的）重试。
+		// TODO(unconditional-evaluator): 原本想为该定义记录一个无条件报错的 evaluator
 		return nil, nil, fmt.Errorf("failed to find resource referenced by paramKind: '%v'", *paramSource)
 	}
 
-	// We are not watching this param. Start an informer for it.
+	// 当前没有监听这个 param，为它启动一个 informer。
 	// 每个 param GVK 使用独立的子 context，便于在不再被引用时精确回收；
 	// 它同时继承 s.ctx，因此 apiserver 关闭时也能级联停止。
 	instanceContext, instanceCancel := context.WithCancel(s.ctx)
 
 	var informer informers.GenericInformer
 
-	// Try to see if our provided informer factory has an informer for this type.
-	// We assume the informer is already started, and starts all types associated
-	// with it.
+	// 尝试查看给定的 informer factory 是否已有该类型的 informer；
+	// 假定该 informer 已启动、并会启动与其关联的所有类型。
 	if genericInformer, err := s.informerFactory.ForResource(mapping.Resource); err == nil {
 		informer = genericInformer
 
-		// Start the informer
+		// 启动 informer。
 		s.informerFactory.Start(instanceContext.Done())
 
 	} else {
-		// Dynamic JSON informer fallback.
-		// Cannot use shared dynamic informer since it would be impossible
-		// to clean CRD informers properly with multiple dependents
-		// (cannot start ahead of time, and cannot track dependencies via stopCh)
-		//
+		// 退化为动态 JSON informer。不能使用共享的动态 informer：
+		// 存在多个依赖方时无法正确清理 CRD informer
+		// （既不能提前启动，也无法通过 stopCh 跟踪依赖）。
 		// 因此这里每次按需新建一个独立 informer，并由 instanceCancel 单独停止。
 		informer = dynamicinformer.NewFilteredDynamicInformer(
 			s.dynamicClient,
 			mapping.Resource,
 			corev1.NamespaceAll,
-			// Use same interval as is used for k8s typed sharedInformerFactory
+			// 与 k8s 类型化 sharedInformerFactory 使用相同的 resync 间隔：
 			// https://github.com/kubernetes/kubernetes/blob/7e0923899fed622efbc8679cca6b000d43633e38/cmd/kube-apiserver/app/server.go#L430
 			10*time.Minute,
 			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
@@ -512,7 +488,7 @@ func (s *policySource[P, B, E]) ensureParamsForPolicyLocked(paramSource *schema.
 	return ret.informer, mapping.Scope, nil
 }
 
-// For testing
+// 仅用于测试。
 // getParamInformer 读取当前为该 param GVK 启动的 informer，不存在时返回 nil。
 func (s *policySource[P, B, E]) getParamInformer(param schema.GroupVersionKind) (informers.GenericInformer, meta.RESTScope) {
 	s.lock.Lock()
@@ -525,19 +501,15 @@ func (s *policySource[P, B, E]) getParamInformer(param schema.GroupVersionKind) 
 	return nil, nil
 }
 
-// compilePolicyLocked compiles the policy and returns the evaluator for it.
-// If the policy has not changed since the last compilation, it will return
-// the cached evaluator.
-//
-// Must be called under write lock
+// compilePolicyLocked 编译策略并返回其 evaluator；若策略自上次编译以来
+// 没有变化，则返回缓存的 evaluator。必须在持写锁时调用。
 // 缓存键是 resourceVersion 而非 spec 内容：只要对象被写入过（哪怕内容等价），
 // 也会触发重编译，换来实现简单和绝不返回陈旧 evaluator 的保证。
 func (s *policySource[P, B, E]) compilePolicyLocked(policySpec P) E {
 	policyMeta, err := meta.Accessor(policySpec)
 	if err != nil {
-		// This should not happen if P, and B have ObjectMeta, but
-		// unfortunately there is no way to express "able to call
-		// meta.Accessor" as a type constraint
+		// 只要 P 与 B 含 ObjectMeta 就不该发生，但遗憾的是
+		// 目前无法用类型约束表达“可调用 meta.Accessor”。
 		utilruntime.HandleError(err)
 		var emptyEvaluator E
 		return emptyEvaluator
@@ -549,9 +521,8 @@ func (s *policySource[P, B, E]) compilePolicyLocked(policySpec P) E {
 
 	compiledPolicy, wasCompiled := s.compiledPolicies[key]
 
-	// If the policy or binding has changed since it was last compiled,
-	// and if there is no configuration error (like a missing param CRD)
-	// then we recompile
+	// 如果策略或绑定自上次编译后发生了变化，
+	// 且没有配置错误（如 param CRD 缺失），则重新编译。
 	if !wasCompiled ||
 		compiledPolicy.policyVersion != policyMeta.GetResourceVersion() {
 

@@ -23,21 +23,17 @@ import (
 )
 
 const (
-	// timeToWaitForReady is the amount of time to wait to let an admission controller to be ready to satisfy a request.
-	// this is useful when admission controllers need to warm their caches before letting requests through.
+	// timeToWaitForReady 是给准入控制器预留的就绪等待时长，用于满足请求前的预热。
+	// 适用于准入控制器需要在放行请求前先预热缓存的场景。
 	timeToWaitForReady = 10 * time.Second
 )
 
-// ReadyFunc is a function that returns true if the admission controller is ready to handle requests.
-//
 // ReadyFunc 用于判定准入控制器是否已经完成预热（例如 informer 缓存已同步），
 // 只有返回 true 时才会放行请求。
 type ReadyFunc func() bool
 
-// Handler is a base for admission control handlers that
-// support a predefined set of operations
-//
-// Handler 保存插件支持的 Operation 集合，并可选地持有一个就绪回调。
+// Handler 是支持固定 Operation 集合的准入控制 handler 基类，
+// 保存插件支持的 Operation 集合，并可选地持有一个就绪回调。
 // 它可被嵌入到具体插件中，避免每个插件重复实现 Handles 逻辑。
 type Handler struct {
 	// operations 以字符串形式保存 Operation，方便 sets.Set 去重与快速查找。
@@ -46,13 +42,12 @@ type Handler struct {
 	readyFunc ReadyFunc
 }
 
-// Handles returns true for methods that this handler supports
+// Handles 在本 handler 支持的操作上返回 true
 func (h *Handler) Handles(operation Operation) bool {
 	return h.operations.Has(string(operation))
 }
 
-// NewHandler creates a new base handler that handles the passed
-// in operations
+// NewHandler 创建一个新的基础 handler，处理传入的 operations
 func NewHandler(ops ...Operation) *Handler {
 	// 去重后存储，调用方重复传入同一 Operation 不会导致语义变化。
 	operations := sets.New[string]()
@@ -64,7 +59,7 @@ func NewHandler(ops ...Operation) *Handler {
 	}
 }
 
-// SetReadyFunc allows late registration of a ReadyFunc to know if the handler is ready to process requests.
+// SetReadyFunc 允许延迟注册一个 ReadyFunc，用于判断 handler 是否已准备好处理请求。
 //
 // 延迟注册是为了让插件在构造时无需依赖尚未创建的外部组件（如 informer factory）；
 // 注意该方法不保证并发安全，应在插件启动前调用。
@@ -72,9 +67,9 @@ func (h *Handler) SetReadyFunc(readyFunc ReadyFunc) {
 	h.readyFunc = readyFunc
 }
 
-// WaitForReady will wait for the readyFunc (if registered) to return ready, and in case of timeout, will return false.
+// WaitForReady 会等待 readyFunc（若已注册）返回就绪，超时则返回 false。
 func (h *Handler) WaitForReady() bool {
-	// there is no ready func configured, so we return immediately
+	// 未配置 readyFunc，直接返回
 	if h.readyFunc == nil {
 		return true
 	}

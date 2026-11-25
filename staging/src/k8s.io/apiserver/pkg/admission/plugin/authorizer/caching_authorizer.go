@@ -35,7 +35,7 @@ type authzResult struct {
 	err        error
 }
 
-// For now, secondary authorization checks in admission only support unconditional authorization
+// 目前准入中的二级授权检查仅支持无条件授权（unconditional authorization）。
 var _ = authorizer.UnconditionalAuthorizer(&cachingAuthorizer{})
 
 // cachingAuthorizer 为单次准入链内的重复授权检查做结果缓存。
@@ -46,9 +46,9 @@ type cachingAuthorizer struct {
 	decisions  map[string]authzResult
 }
 
-// NewCachingAuthorizer returns an authorizer that caches decisions for the duration
-// of the authorizers use.  Intended to be used for short-lived operations such as
-// the handling of a request in the admission chain, and then discarded.
+// NewCachingAuthorizer 返回一个在其使用期间缓存决策的 authorizer。
+// 预期用于短生命周期操作，例如在准入链中处理单个请求，
+// 用完即弃。
 //
 // 之所以不做长期缓存：授权结果会随 RBAC 规则变化而失效，长期缓存需要
 // 复杂的失效机制，而准入链内的重复检查在单次请求生命周期内即可获益。
@@ -59,8 +59,8 @@ func NewCachingAuthorizer(in authorizer.UnconditionalAuthorizer) authorizer.Unco
 	}
 }
 
-// The attribute accessors known to cache key construction. If this fails to compile, the cache
-// implementation may need to be updated.
+// 构造缓存键时会用到的属性访问器。若此处编译失败，
+// 说明缓存实现可能需要更新。
 var _ authorizer.Attributes = (interface {
 	GetUser() user.Info
 	GetVerb() string
@@ -77,8 +77,8 @@ var _ authorizer.Attributes = (interface {
 	GetLabelSelector() (labels.Requirements, error)
 })(nil)
 
-// The user info accessors known to cache key construction. If this fails to compile, the cache
-// implementation may need to be updated.
+// 构造缓存键时会用到的 user info 访问器。若此处编译失败，
+// 说明缓存实现可能需要更新。
 var _ user.Info = (interface {
 	GetName() string
 	GetUID() string
@@ -86,8 +86,8 @@ var _ user.Info = (interface {
 	GetExtra() map[string][]string
 })(nil)
 
-// Authorize returns an authorization decision by delegating to another Authorizer. If an equivalent
-// check has already been performed, a cached result is returned. Not safe for concurrent use.
+// Authorize 通过委托给另一个 Authorizer 返回授权决策。若已执行过等价的
+// 检查，则直接返回缓存结果。不可并发使用。
 //
 // 缓存键由属性与用户信息序列化得到。构造键时对 groups/extra 排序并
 // 丢弃不可序列化的部分，是为了让语义等价的检查命中同一键；字段选择器
@@ -111,12 +111,12 @@ func (ca *cachingAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 			Path:            a.GetPath(),
 		},
 	}
-	// in the error case, we won't honor this field selector, so the cache doesn't need it.
+	// 出错情况下不会遵循该字段选择器，因此缓存不需要它。
 	if fieldSelector, err := a.GetFieldSelector(); len(fieldSelector) > 0 {
 		serializableAttributes.FieldSelectorRequirements, serializableAttributes.FieldSelectorParsingErr = fieldSelector, err
 	}
 	if labelSelector, _ := a.GetLabelSelector(); len(labelSelector) > 0 {
-		// the labels requirements have private elements so those don't help us serialize to a unique key
+		// labels requirements 含有私有元素，无法帮助序列化成唯一键
 		serializableAttributes.LabelSelector = labelSelector.String()
 	}
 
@@ -126,8 +126,8 @@ func (ca *cachingAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 			UID:  u.GetUID(),
 		}
 
-		// Differently-ordered groups or extras could cause otherwise-equivalent checks to
-		// have distinct cache keys.
+		// groups 或 extras 的顺序不同，可能让本应等价的检查
+		// 产生不同的缓存键。
 		if groups := u.GetGroups(); len(groups) > 0 {
 			di.Groups = make([]string, len(groups))
 			copy(di.Groups, groups)

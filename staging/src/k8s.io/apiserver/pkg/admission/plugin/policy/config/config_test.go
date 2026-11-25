@@ -31,7 +31,7 @@ import (
 // TestLoadValidatingConfig 验证 ValidatingAdmissionPolicyConfiguration 的加载与
 // staticManifestsDir 校验。
 //
-// 中文说明：与 webhook 配置同理，目录必须为绝对路径、存在且是目录；
+// 与 webhook 配置同理，目录必须为绝对路径、存在且是目录；
 // 特性门控关闭时该字段直接 Forbidden，避免在未启用功能的版本上接受无效配置。
 // 空目录字段是合法的——表示不加载静态清单，仅使用 API 对象定义策略。
 func TestLoadValidatingConfig(t *testing.T) {
@@ -143,7 +143,7 @@ staticManifestsDir: ` + notADirFile + `
 }
 
 // TestLoadMutatingConfig 验证 MutatingAdmissionPolicyConfiguration 的加载。
-// 中文说明：校验规则与 validating 版本完全一致，两处实现需保持同步，
+// 校验规则与 validating 版本完全一致，两处实现需保持同步，
 // 否则同一配置在不同策略类型下行为不同。
 func TestLoadMutatingConfig(t *testing.T) {
 	validDir := t.TempDir()

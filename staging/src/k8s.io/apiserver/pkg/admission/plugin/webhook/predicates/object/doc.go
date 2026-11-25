@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package object defines the utilities that are used by the webhook plugin to
-// decide if a webhook should run, as long as either the old object or the new
-// object has labels matching the webhook config's objectSelector.
+// Package object 定义 webhook 插件使用的工具，用于判断是否应当运行某个
+// webhook：只要旧对象或新对象的标签命中 webhook 配置的 objectSelector，
+// 就应当运行。
 //
 // Package object 提供 webhook 插件的 objectSelector 判定工具：只要旧对象
 // 或新对象之一的标签与配置匹配，webhook 就应执行。对 UPDATE 同时检查

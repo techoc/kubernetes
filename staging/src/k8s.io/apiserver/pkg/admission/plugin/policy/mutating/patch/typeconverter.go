@@ -36,13 +36,12 @@ import (
 
 // TypeConverterManager 按 GVK 提供类型转换器，并在后台持续刷新 CRD 的 schema 缓存。
 //
-// 中文说明：内置类型使用静态转换器（编译期 schema，零网络开销）；
+// 内置类型使用静态转换器（编译期 schema，零网络开销）；
 // CRD 等动态类型需要从 /openapi/v3 拉取 schema，因此必须有缓存与失效机制，
 // 否则每次 apply 都会触发一次网络往返，成本不可接受。
 type TypeConverterManager interface {
-	// GetTypeConverter returns a type converter for the given GVK
-	//
-	// 中文说明：返回 nil 表示当前无法为该校验/转换提供 schema，
+	// GetTypeConverter 返回适用于给定 GVK 的类型转换器，
+	// 返回 nil 表示当前无法为该校验/转换提供 schema，
 	// 调用方需按失败处理，而不是假定存在转换器。
 	GetTypeConverter(gvk schema.GroupVersionKind) managedfields.TypeConverter
 	// Run 启动后台轮询；ctx 取消后退出。
@@ -69,19 +68,18 @@ type typeConverterCacheEntry struct {
 	entry         openapi.GroupVersion
 }
 
-// typeConverterManager helps us make sure we have an up to date schema and
-// type converter for our openapi models. It should be connfigured to use a
-// static type converter for natively typed schemas, and fetches the schema
-// for CRDs/other over the network on demand (trying to reduce network calls where necessary)
+// typeConverterManager 用于确保 openapi 模型始终拥有最新的 schema 与类型转换器。
+// 它应被配置为对原生类型使用静态类型转换器，并按需通过网络为 CRD/其他类型
+// 拉取 schema（尽量避免不必要的网络调用）。
 //
-// 中文说明：并发模型为「读多写少」：GetTypeConverter 用 RLock 快路径，
+// 并发模型为「读多写少」：GetTypeConverter 用 RLock 快路径，
 // 只有真正重建转换器时才升级为写锁；Run 的轮询只用写锁替换版本表。
 // 注意网络请求发生在锁外，避免阻塞其他 GVK 的读取。
 type typeConverterManager struct {
-	// schemaCache is used to cache the schema for a given GVK
+	// schemaCache 用于缓存给定 GVK 的 schema
 	staticTypeConverter managedfields.TypeConverter
 
-	// discoveryClient is used to fetch the schema for a given GVK
+	// discoveryClient 用于获取给定 GVK 的 schema
 	openapiClient openapi.Client
 
 	lock sync.RWMutex
@@ -91,12 +89,12 @@ type typeConverterManager struct {
 }
 
 // Run 每 5 秒轮询一次 /openapi/v3 的路径列表，记录每个 GV 的 schema 版本。
-// 中文说明：底层依赖 e-tag/304，因此轮询本身开销很小；这里不直接拉取 schema，
+// 底层依赖 e-tag/304，因此轮询本身开销很小；这里不直接拉取 schema，
 // 只更新「版本号」映射，真正的重建推迟到下一次 GetTypeConverter。
 // 出错时返回 (false, nil) 继续轮询，因为 schema 服务可能短暂不可用。
 func (t *typeConverterManager) Run(ctx context.Context) {
-	// Loop every 5s refershing the OpenAPI schema list to know which
-	// schemas have been invalidated. This should use e-tags under the hood
+	// 每 5 秒刷新一次 OpenAPI schema 列表，以得知哪些 schema 已失效。
+	// 底层应会使用 e-tag 做增量判断
 	_ = wait.PollUntilContextCancel(ctx, 5*time.Second, true, func(_ context.Context) (done bool, err error) {
 		paths, err := t.openapiClient.Paths()
 		if err != nil {
@@ -104,10 +102,9 @@ func (t *typeConverterManager) Run(ctx context.Context) {
 			return false, nil
 		}
 
-		// The /openapi/v3 endpoint contains a list of paths whose ServerRelativeURL
-		// value changes every time the schema is updated. So we poll /openapi/v3
-		// to get the "version number" for each schema, and invalidate our cache
-		// if the version number has changed since we pulled it.
+		// /openapi/v3 端点返回一组路径，其 ServerRelativeURL 在 schema 每次更新时
+		// 都会变化。因此我们轮询 /openapi/v3 拿到每个 schema 的「版本号」，
+		// 版本号与拉取时不一致就使缓存失效。
 		parsedPaths := make(map[schema.GroupVersion]openapi.GroupVersion, len(paths))
 		for path, entry := range paths {
 			// 只关心 API 路径；排除 openapi 自身等非资源条目。
@@ -135,16 +132,15 @@ func (t *typeConverterManager) Run(ctx context.Context) {
 }
 
 // GetTypeConverter 返回适用于 gvk 的转换器，必要时拉取 schema 并重建。
-// 中文说明：先用静态转换器尝试「转换一个空对象」来探测其是否支持该 GVK——
+// 先用静态转换器尝试「转换一个空对象」来探测其是否支持该 GVK——
 // 这是对缺少存在性查询接口的临时绕行；成功即说明静态转换器覆盖了该类型，
 // 从而避免任何网络调用。
 // 缓存键是 GroupVersion 而非 GVK：同一 GV 下所有 kind 共享一份 schema。
 func (t *typeConverterManager) GetTypeConverter(gvk schema.GroupVersionKind) managedfields.TypeConverter {
-	// Check to see if the static type converter handles this GVK
+	// 检查静态类型转换器是否处理该 GVK
 	if t.staticTypeConverter != nil {
-		//!TODO: Add ability to check existence to type converter
-		// working around for now but seeing if getting a typed version of an
-		// empty object returns error
+		//!TODO: 为 type converter 增加存在性检查能力
+		// 暂时用绕行方案：尝试获取空对象的类型化版本，看是否报错
 		stub := &unstructured.Unstructured{}
 		stub.SetGroupVersionKind(gvk)
 
@@ -159,18 +155,16 @@ func (t *typeConverterManager) GetTypeConverter(gvk schema.GroupVersionKind) man
 		t.lock.RLock()
 		defer t.lock.RUnlock()
 
-		// If schema is not supported by static type converter, ask discovery
-		// for the schema
+		// 若静态类型转换器不支持该 schema，则向 discovery 请求 schema
 		entry, ok := t.lastFetchedPaths[gv]
 		if !ok {
-			// If we can't get the schema, we can't do anything
+			// 拿不到 schema 就无能为力
 			return nil, nil, fmt.Errorf("no schema for %v", gvk)
 		}
 
-		// If the entry schema has not changed, used the same type converter
-		// 中文说明：ServerRelativeURL 内含内容哈希/版本，变化即表示 schema 已更新。
+		// ServerRelativeURL 内含内容哈希/版本，变化即表示 schema 已更新。
 		if existing, ok := t.typeConverterMap[gv]; ok && existing.entry.ServerRelativeURL() == entry.ServerRelativeURL() {
-			// If we have a type converter for this GVK, return it
+			// 若已有该 GVK 的类型转换器，直接返回
 			return existing.typeConverter, existing.entry, nil
 		}
 
@@ -196,8 +190,7 @@ func (t *typeConverterManager) GetTypeConverter(gvk schema.GroupVersionKind) man
 		return nil
 	}
 
-	// The schema has changed, or there is no entry for it, generate
-	// a new type converter for this GV
+	// schema 已变化或尚无对应条目，为该 GV 生成新的类型转换器
 	tc, err := managedfields.NewTypeConverter(sch.Components.Schemas, false)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("failed to create type converter for %v: %w", gvk, err))

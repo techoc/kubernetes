@@ -23,7 +23,7 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
-// expectFindMetric find a metric with the given name nad labels or reports a fatal test error.
+// expectFindMetric 按名称与标签查找指标，找不到则上报致命测试错误。
 // 注意：本函数只校验标签数量是否与期望一致，并不断言该指标确实存在，
 // 因此它更适合做“标签集合是否被意外扩展”的守卫，而不是存在性检查。
 func expectFindMetric(t *testing.T, name string, expectedLabels map[string]string) {
@@ -56,8 +56,7 @@ func expectFindMetric(t *testing.T, name string, expectedLabels map[string]strin
 	}
 }
 
-// expectHistogramCountTotal ensures that the sum of counts of metrics matching the labelFilter is as
-// expected.
+// expectHistogramCountTotal 断言匹配 labelFilter 的各指标样本计数之和与期望一致。
 // 直方图按标签组合拆成多个样本，因此这里累加所有匹配样本的 SampleCount，
 // 用于验证“某类调用共发生了多少次”，而不关心具体落在哪个桶。
 func expectHistogramCountTotal(t *testing.T, name string, labelFilter map[string]string, wantCount int) {
@@ -69,7 +68,7 @@ func expectHistogramCountTotal(t *testing.T, name string, labelFilter map[string
 	counterSum := 0
 	for _, mf := range metrics {
 		if mf.GetName() != name {
-			continue // Ignore other metrics.
+			continue // 忽略其他指标
 		}
 		for _, metric := range mf.GetMetric() {
 			if !testutil.LabelsMatch(metric, labelFilter) {
@@ -91,8 +90,7 @@ func expectHistogramCountTotal(t *testing.T, name string, labelFilter map[string
 	}
 }
 
-// expectCounterValue ensures that the counts of metrics matching the labelFilter is as
-// expected.
+// expectCounterValue 断言匹配 labelFilter 的各指标计数之和与期望一致。
 // 与直方图版本不同，这里累加的是 Counter 的值：同一指标的不同标签组合
 // 各自维护独立计数器，断言总和对标签划分方式不敏感。
 func expectCounterValue(t *testing.T, name string, labelFilter map[string]string, wantCount int) {
@@ -104,7 +102,7 @@ func expectCounterValue(t *testing.T, name string, labelFilter map[string]string
 	counterSum := 0
 	for _, mf := range metrics {
 		if mf.GetName() != name {
-			continue // Ignore other metrics.
+			continue // 忽略其他指标
 		}
 		for _, metric := range mf.GetMetric() {
 			if !testutil.LabelsMatch(metric, labelFilter) {

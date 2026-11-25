@@ -25,10 +25,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// logExcludedResourcesForValidatingWebhook logs an advisory for a ValidatingWebhookConfiguration whose rules name resources excluded from admission webhooks.
-// It is a no-op when excludedWebhookResources is empty.
-//
-// 中文说明：被排除的资源（例如租约类资源）即使出现在 webhook 规则里也不会触发调用，
+// logExcludedResourcesForValidatingWebhook 针对规则中点名了「被准入 webhook 排除资源」的
+// ValidatingWebhookConfiguration 输出一条提示日志；excludedWebhookResources 为空时什么都不做。
+// 被排除的资源（例如租约类资源）即使出现在 webhook 规则里也不会触发调用，
 // 这里只记录日志而不拒绝配置，避免破坏既有清单的可用性。
 func logExcludedResourcesForValidatingWebhook(name string, webhooks []v1.ValidatingWebhook, excludedWebhookResources sets.Set[schema.GroupResource]) {
 	// 排除集合为空说明当前没有任何资源被排除，无需扫描规则。
@@ -42,10 +41,9 @@ func logExcludedResourcesForValidatingWebhook(name string, webhooks []v1.Validat
 	logExcludedWebhookResources("ValidatingWebhookConfiguration", name, rules, excludedWebhookResources)
 }
 
-// logExcludedResourcesForMutatingWebhook logs an advisory for a MutatingWebhookConfiguration whose rules name resources excluded from admission webhooks.
-// It is a no-op when excludedWebhookResources is empty.
-//
-// 中文说明：与 validating 版本对称，仅提示配置中的规则不会生效。
+// logExcludedResourcesForMutatingWebhook 针对规则中点名了「被准入 webhook 排除资源」的
+// MutatingWebhookConfiguration 输出一条提示日志；excludedWebhookResources 为空时什么都不做。
+// 与 validating 版本对称，仅提示配置中的规则不会生效。
 func logExcludedResourcesForMutatingWebhook(name string, webhooks []v1.MutatingWebhook, excludedWebhookResources sets.Set[schema.GroupResource]) {
 	if excludedWebhookResources.Len() == 0 {
 		return
@@ -77,13 +75,10 @@ func logExcludedWebhookResources(kind, name string, rules []v1.RuleWithOperation
 		"kind", kind, "name", name, "excludedResources", resources)
 }
 
-// excludedResourcesNamedByRule returns the excluded GroupResources a rule explicitly names.
-// A rule that uses a wildcard ("*") in apiGroups or resources is not flagged because its intent
-// toward the excluded resource is ambiguous. apiVersions are not considered because all versions
-// of an excluded resource are excluded.
-//
-// 中文说明：只有显式命名的资源才会被提示，通配符规则可能是有意覆盖全部资源，
-// 提示它只会制造噪音；版本无关是因为排除按 GroupResource 粒度生效。
+// excludedResourcesNamedByRule 返回某条规则显式点名的那些被排除 GroupResource。
+// 若在 apiGroups 或 resources 中使用了通配符 "*"，则不提示：通配符规则对被排除资源的意图并不明确，
+// 可能是有意覆盖全部资源，提示它只会制造噪音。
+// 也不看 apiVersions，因为排除按 GroupResource 粒度生效，资源的各个版本都被排除。
 func excludedResourcesNamedByRule(apiGroups, resources []string, excludedWebhookResources sets.Set[schema.GroupResource]) []schema.GroupResource {
 	// 通配符规则语义含糊，跳过。
 	if slices.Contains(apiGroups, "*") || slices.Contains(resources, "*") {

@@ -58,7 +58,7 @@ type fakeCelFilter struct {
 // ForInput 模拟单次求值：预算耗尽时返回与真实实现一致的 ErrOutOfBudget 错误，
 // 保证 validator 对预算耗尽的处理分支能被覆盖。
 func (f *fakeCelFilter) ForInput(ctx context.Context, versionedAttr *admission.VersionedAttributes, request *admissionv1.AdmissionRequest, optionalVars cel.OptionalVariableBindings, namespace *corev1.Namespace, costBudget int64) ([]cel.EvaluationResult, int64, error) {
-	if costBudget <= 0 { // this filter will cost 1, so cost = 0 means fail.
+	if costBudget <= 0 { // 该过滤器每次消耗 1 点预算，cost = 0 即失败。
 		return nil, -1, &apiservercel.Error{
 			Type:   apiservercel.ErrorTypeInvalid,
 			Detail: "validation failed due to running out of cost budget, no further validation rules will be run",
@@ -118,7 +118,7 @@ func TestValidate(t *testing.T) {
 		policyDecision     []PolicyDecision
 		auditAnnotations   []PolicyAuditAnnotation
 		throwError         bool
-		costBudget         int64 // leave zero to use default
+		costBudget         int64 // 留零表示使用默认预算
 	}{
 		{
 			name: "test pass",
@@ -694,7 +694,7 @@ func TestValidate(t *testing.T) {
 			},
 			auditAnnotations: []PolicyAuditAnnotation{
 				{
-					Action:  AuditAnnotationActionExclude, // TODO: is this right?
+					Action:  AuditAnnotationActionExclude, // TODO: 这样对吗？
 					Error:   "valueExpression ''this is not valid CEL' resulted in error: <nil>",
 					Elapsed: 2 * time.Millisecond,
 				},
@@ -827,7 +827,7 @@ func TestValidate(t *testing.T) {
 			policyDecision: []PolicyDecision{
 				{
 					Action:  ActionDeny,
-					Message: "test1", // original message used
+					Message: "test1", // 使用原始 message
 					Reason:  forbiddenReason,
 					Elapsed: time.Millisecond,
 				},
@@ -966,7 +966,7 @@ func TestValidate(t *testing.T) {
 			},
 			messageEvaluations: []cel.EvaluationResult{
 				{
-					EvalResult: celtypes.StringType, // does not matter
+					EvalResult: celtypes.StringType, // 无关紧要
 				},
 			},
 			policyDecision: []PolicyDecision{
@@ -976,7 +976,7 @@ func TestValidate(t *testing.T) {
 					Elapsed: time.Millisecond,
 				},
 			},
-			costBudget: 1, // shared between expression and messageExpression, needs 1 + 1 = 2 in total
+			costBudget: 1, // 由表达式与 messageExpression 共享，共需 1 + 1 = 2
 		},
 		{
 			// matchConditions 不匹配时，即便校验表达式报错也不产生决策：

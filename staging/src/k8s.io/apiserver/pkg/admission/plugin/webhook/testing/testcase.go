@@ -62,7 +62,8 @@ var sideEffectsNoneOnDryRun = registrationv1.SideEffectClassNoneOnDryRun
 var reinvokeNever = registrationv1.NeverReinvocationPolicy
 var reinvokeIfNeeded = registrationv1.IfNeededReinvocationPolicy
 
-// NewFakeValidatingDataSource returns a mock client and informer returning the given webhooks.
+// NewFakeValidatingDataSource 返回一个 mock 客户端与 informer，
+// 提供给定的 validating webhooks。
 //
 // 同时创建一个带 runlevel=0 标签的命名空间，供 namespaceSelector 用例使用。
 func NewFakeValidatingDataSource(name string, webhooks []registrationv1.ValidatingWebhook, stopCh <-chan struct{}) (clientset kubernetes.Interface, factory informers.SharedInformerFactory) {
@@ -89,7 +90,8 @@ func NewFakeValidatingDataSource(name string, webhooks []registrationv1.Validati
 	return client, informerFactory
 }
 
-// NewFakeMutatingDataSource returns a mock client and informer returning the given webhooks.
+// NewFakeMutatingDataSource 返回一个 mock 客户端与 informer，
+// 提供给定的 mutating webhooks。
 func NewFakeMutatingDataSource(name string, webhooks []registrationv1.MutatingWebhook, stopCh <-chan struct{}) (clientset kubernetes.Interface, factory informers.SharedInformerFactory) {
 	var objs = []runtime.Object{
 		&corev1.Namespace{
@@ -142,7 +144,7 @@ func newAttributesRecord(object metav1.Object, oldObject metav1.Object, kind sch
 	}
 }
 
-// FakeAttributes decorate admission.Attributes. It's used to trace the added annotations.
+// FakeAttributes 装饰 admission.Attributes，用于追踪被添加的注解。
 //
 // 除底层属性外，额外记录本插件写入的注解，便于断言“哪些注解由当前 webhook 产生”。
 // mutex 是必要的：插件可能并发处理请求，而测试会同时读取记录。
@@ -152,12 +154,11 @@ type FakeAttributes struct {
 	mutex       sync.Mutex
 }
 
-// AddAnnotation adds an annotation key value pair to FakeAttributes
+// AddAnnotation 向 FakeAttributes 添加一对注解键值。
 func (f *FakeAttributes) AddAnnotation(k, v string) error {
 	return f.AddAnnotationWithLevel(k, v, auditinternal.LevelMetadata)
 }
 
-// AddAnnotationWithLevel adds an annotation key value pair to FakeAttributes
 // AddAnnotationWithLevel 写入注解并记录；level 参数在测试中不使用，因为记录的是全部注解。
 func (f *FakeAttributes) AddAnnotationWithLevel(k, v string, _ auditinternal.Level) error {
 	f.mutex.Lock()
@@ -172,16 +173,16 @@ func (f *FakeAttributes) AddAnnotationWithLevel(k, v string, _ auditinternal.Lev
 	return nil
 }
 
-// GetAnnotations reads annotations from FakeAttributes
+// GetAnnotations 读取 FakeAttributes 中的注解。
 func (f *FakeAttributes) GetAnnotations(level auditinternal.Level) map[string]string {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	return f.annotations
 }
 
-// NewAttribute returns static admission Attributes for testing.
+// NewAttribute 返回用于测试的静态准入 Attributes。
 func NewAttribute(namespace string, labels map[string]string, dryRun bool) admission.Attributes {
-	// Set up a test object for the call
+	// 为本次调用准备一个测试对象
 	object := corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -195,9 +196,9 @@ func NewAttribute(namespace string, labels map[string]string, dryRun bool) admis
 	return newAttributesRecord(&object, &oldObject, kind, namespace, name, "pod", labels, dryRun)
 }
 
-// NewAttributeUnstructured returns static admission Attributes for testing with custom resources.
+// NewAttributeUnstructured 返回用于自定义资源测试的静态准入 Attributes。
 func NewAttributeUnstructured(namespace string, labels map[string]string, dryRun bool) admission.Attributes {
-	// Set up a test object for the call
+	// 为本次调用准备一个测试对象
 	object := unstructured.Unstructured{}
 	object.SetKind("TestCRD")
 	object.SetAPIVersion("custom.resource/v1")
@@ -226,7 +227,7 @@ func (c urlConfigGenerator) ccfgURL(urlPath string) registrationv1.WebhookClient
 	}
 }
 
-// ValidatingTest is a validating webhook test case.
+// ValidatingTest 是一个 validating webhook 测试用例。
 type ValidatingTest struct {
 	Name                   string
 	Webhooks               []registrationv1.ValidatingWebhook
@@ -244,7 +245,7 @@ type ValidatingTest struct {
 	ExpectReinvokeWebhooks map[string]bool
 }
 
-// MutatingTest is a mutating webhook test case.
+// MutatingTest 是一个 mutating webhook 测试用例。
 type MutatingTest struct {
 	Name                   string
 	Webhooks               []registrationv1.MutatingWebhook
@@ -262,8 +263,8 @@ type MutatingTest struct {
 	ExpectReinvokeWebhooks map[string]bool
 }
 
-// DurationTest is webhook duration test case, used both in mutating and
-// validating plugin test cases.
+// DurationTest 是 webhook 耗时测试用例，
+// 同时用于 mutating 与 validating 插件的测试。
 type DurationTest struct {
 	Name                string
 	Webhooks            []registrationv1.ValidatingWebhook
@@ -273,7 +274,7 @@ type DurationTest struct {
 	ExpectedDurationMax time.Duration
 }
 
-// ConvertToMutatingTestCases converts a validating test case to a mutating one for test purposes.
+// ConvertToMutatingTestCases 出于测试目的把 validating 测试用例转换为 mutating 用例。
 //
 // 复用同一套用例同时覆盖 mutating 与 validating 插件，减少重复；转换时需要
 // 把 validating 特有的 failed-open 注解前缀改写为 mutation 的，并补上预期的
@@ -285,7 +286,7 @@ func ConvertToMutatingTestCases(tests []ValidatingTest, configurationName string
 			if t.ExpectAnnotations == nil {
 				t.ExpectAnnotations = map[string]string{}
 			}
-			// Add expected annotation if the converted webhook is intended to match
+			// 若转换后的 webhook 预期应当匹配，则添加预期的注解
 			if reflect.DeepEqual(hook.NamespaceSelector, &metav1.LabelSelector{}) &&
 				reflect.DeepEqual(hook.ObjectSelector, &metav1.LabelSelector{}) &&
 				reflect.DeepEqual(hook.Rules, matchEverythingRules) {
@@ -293,12 +294,12 @@ func ConvertToMutatingTestCases(tests []ValidatingTest, configurationName string
 				value := mutationAnnotationValue(configurationName, hook.Name, false)
 				t.ExpectAnnotations[key] = value
 			}
-			// Break if the converted webhook is intended to fail close
+			// 若转换后的 webhook 预期为 fail close，则跳出
 			if strings.Contains(hook.Name, "internalErr") && (hook.FailurePolicy == nil || *hook.FailurePolicy == registrationv1.Fail) {
 				break
 			}
 		}
-		// Change annotation keys for Validating's fail open to Mutating's fail open.
+		// 把 Validating 的 fail open 注解键换成 Mutating 的 fail open 注解键。
 		failOpenAnnotations := map[string]string{}
 		for key, value := range t.ExpectAnnotations {
 			if strings.HasPrefix(key, "failed-open.validating.webhook.admission.k8s.io/") {
@@ -316,7 +317,7 @@ func ConvertToMutatingTestCases(tests []ValidatingTest, configurationName string
 	return r
 }
 
-// ConvertToMutatingWebhooks converts a validating webhook to a mutating one for test purposes.
+// ConvertToMutatingWebhooks 出于测试目的把 validating webhook 转换为 mutating webhook。
 //
 // 仅复制两边共有的字段；mutating 专有的 reinvocationPolicy 由用例自行设置。
 func ConvertToMutatingWebhooks(webhooks []registrationv1.ValidatingWebhook) []registrationv1.MutatingWebhook {
@@ -338,10 +339,10 @@ func ConvertToMutatingWebhooks(webhooks []registrationv1.ValidatingWebhook) []re
 	return mutating
 }
 
-// NewNonMutatingTestCases returns test cases with a given base url.
-// All test cases in NewNonMutatingTestCases have no Patch set in
-// AdmissionResponse. The test cases are used by both MutatingAdmissionWebhook
-// and ValidatingAdmissionWebhook.
+// NewNonMutatingTestCases 返回使用给定 base url 的测试用例。
+// NewNonMutatingTestCases 中的所有用例都不在 AdmissionResponse 中
+// 设置 Patch。这些用例同时被 MutatingAdmissionWebhook 与
+// ValidatingAdmissionWebhook 使用。
 //
 // 用例覆盖：规则/选择器匹配、allow/deny、failurePolicy 的 fail-open/fail-close、
 // clientConfig 错误、dry-run 与 sideEffects 组合、注解格式与 objectSelector 跳过。
@@ -753,14 +754,14 @@ func NewNonMutatingTestCases(url *url.URL) []ValidatingTest {
 			ExpectAllow:       true,
 			ExpectAnnotations: map[string]string{"allow.example.com/key1": "value1"},
 		},
-		// No need to test everything with the url case, since only the
-		// connection is different.
+		// 无需对 url 场景测试所有内容，因为不同的
+		// 只是连接方式。
 	}
 }
 
-// NewNonMutatingPanicTestCases returns test cases with a given base url.
-// All test cases in NewNonMutatingTestCases have no Patch set in
-// AdmissionResponse. The expected responses are set for panic handling.
+// NewNonMutatingPanicTestCases 返回使用给定 base url 的测试用例。
+// NewNonMutatingTestCases 中的所有用例都不在 AdmissionResponse 中
+// 设置 Patch。预期响应是为 panic 处理准备的。
 //
 // 插件 panic 必须被转换为 500 或按 failurePolicy 放行，绝不能让 apiserver 崩溃。
 func NewNonMutatingPanicTestCases(url *url.URL) []ValidatingTest {
@@ -863,9 +864,9 @@ func patchAnnotationValue(configuration, webhook string, patch string) string {
 	return strings.Replace(fmt.Sprintf(`{"configuration": "%s", "webhook": "%s", "patch": %s, "patchType": "JSONPatch"}`, configuration, webhook, patch), " ", "", -1)
 }
 
-// NewMutatingTestCases returns test cases with a given base url.
-// All test cases in NewMutatingTestCases have Patch set in
-// AdmissionResponse. The test cases are only used by both MutatingAdmissionWebhook.
+// NewMutatingTestCases 返回使用给定 base url 的测试用例。
+// NewMutatingTestCases 中的所有用例都会在 AdmissionResponse 中
+// 设置 Patch。这些用例仅被 MutatingAdmissionWebhook 使用。
 //
 // 用例覆盖补丁应用、CRD、非法补丁、reinvocationPolicy 以及“前一个 webhook 改标签后
 // 后一个不应再被调用”的选择器重算行为。
@@ -1116,8 +1117,8 @@ func NewMutatingTestCases(url *url.URL, configurationName string) []MutatingTest
 				"patch.webhook.admission.k8s.io/round_0_index_0":    patchAnnotationValue(configurationName, "removelabel.example.com", `[{"op": "remove", "path": "/metadata/labels/remove"}]`),
 			},
 		},
-		// No need to test everything with the url case, since only the
-		// connection is different.
+		// 无需对 url 场景测试所有内容，因为不同的
+		// 只是连接方式。
 		{
 			Name: "match & reinvoke if needed policy",
 			Webhooks: []registrationv1.MutatingWebhook{{
@@ -1200,7 +1201,7 @@ func NewMutatingTestCases(url *url.URL, configurationName string) []MutatingTest
 	}
 }
 
-// CachedTest is a test case for the client manager.
+// CachedTest 是针对 client manager 的测试用例。
 //
 // ExpectCacheMiss 用于区分“首次访问必然 miss”与“相同 clientConfig 应命中缓存”。
 type CachedTest struct {
@@ -1210,7 +1211,7 @@ type CachedTest struct {
 	ExpectCacheMiss bool
 }
 
-// NewCachedClientTestcases returns a set of client manager test cases.
+// NewCachedClientTestcases 返回一组 client manager 测试用例。
 //
 // 用例顺序有意义：先 miss 再同配置访问，才能验证客户端缓存确实生效。
 func NewCachedClientTestcases(url *url.URL) []CachedTest {
@@ -1291,7 +1292,7 @@ func NewCachedClientTestcases(url *url.URL) []CachedTest {
 	}
 }
 
-// ccfgSVC returns a client config using the service reference mechanism.
+// ccfgSVC 返回使用 service 引用机制的 client config。
 //
 // Service 方式由 apiserver 通过集群内 Service 解析地址，与 URL 方式走不同的
 // 客户端构造路径，因此两类用例都需要覆盖。
@@ -1319,14 +1320,14 @@ func newMatchEverythingRules() []registrationv1.RuleWithOperations {
 	}}
 }
 
-// NewObjectInterfacesForTest returns an ObjectInterfaces appropriate for test cases in this file.
+// NewObjectInterfacesForTest 返回适合本文件测试用例的 ObjectInterfaces。
 func NewObjectInterfacesForTest() admission.ObjectInterfaces {
 	scheme := runtime.NewScheme()
 	corev1.AddToScheme(scheme)
 	return admission.NewObjectInterfacesFromScheme(scheme)
 }
 
-// NewValidationDurationTestCases returns test cases for webhook duration test
+// NewValidationDurationTestCases 返回 webhook 耗时测试所用的测试用例。
 //
 // 假 webhook 在路径中编码了延迟（如 allow/100 表示 100ms），用于验证：
 // 只有真正调用了 webhook 才累计耗时；dry-run 与未初始化 context 时不统计。

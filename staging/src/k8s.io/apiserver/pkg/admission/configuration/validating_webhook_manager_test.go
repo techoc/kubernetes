@@ -31,11 +31,11 @@ import (
 
 // TestGetValidatingWebhookConfig 验证管理器能从 informer 缓存中读出
 // ValidatingWebhookConfiguration 并转换为访问器。
-// 中文说明：使用 synctest 让 informer 的异步通知在虚拟时间下确定性地完成，
+// 使用 synctest 让 informer 的异步通知在虚拟时间下确定性地完成，
 // 避免 sleep 造成的偶发失败。创建前应为空，创建后应出现且内容一致。
 func TestGetValidatingWebhookConfig(t *testing.T) { synctest.Test(t, testGetValidatingWebhookConfig) }
 func testGetValidatingWebhookConfig(t *testing.T) {
-	// Build a test client that the admission plugin can use to look up the ValidatingWebhookConfiguration
+	// 构造测试客户端，供准入插件查询 ValidatingWebhookConfiguration。
 	client := fake.NewSimpleClientset()
 	informerFactory := informers.NewSharedInformerFactory(client, 0)
 	stop := make(chan struct{})
@@ -45,7 +45,7 @@ func testGetValidatingWebhookConfig(t *testing.T) {
 	informerFactory.Start(stop)
 	informerFactory.WaitForCacheSync(stop)
 
-	// no configurations
+	// 尚未创建任何配置
 	synctest.Wait()
 	if configurations := manager.Webhooks(); len(configurations) != 0 {
 		t.Errorf("expected empty webhooks, but got %v", configurations)
@@ -61,11 +61,11 @@ func testGetValidatingWebhookConfig(t *testing.T) {
 		ValidatingWebhookConfigurations().
 		Create(context.TODO(), webhookConfiguration, metav1.CreateOptions{})
 
-	// Wait for the notification to be delivered.
+	// 等待通知送达 informer。
 	synctest.Wait()
 	configurations := manager.Webhooks()
 
-	// verify presence
+	// 校验 webhook 已存在
 	if len(configurations) == 0 {
 		t.Errorf("expected non empty webhooks")
 	}
@@ -81,11 +81,10 @@ func testGetValidatingWebhookConfig(t *testing.T) {
 	}
 }
 
-// mockCreateValidatingWebhookAccessor is a struct used to compute how many times
-// the function webhook.NewValidatingWebhookAccessor is being called when refreshing
-// webhookAccessors.
+// mockCreateValidatingWebhookAccessor 用于统计刷新 webhookAccessors 时
+// webhook.NewValidatingWebhookAccessor 被调用了多少次。
 //
-// NOTE: Maybe there some testing help that we can import and reuse instead.
+// 注意：也许有现成的测试辅助工具可以直接复用，而不必自己写。
 type mockCreateValidatingWebhookAccessor struct {
 	numberOfCalls int
 }
@@ -111,7 +110,7 @@ func configurationTotalWebhooks(configurations []*v1.ValidatingWebhookConfigurat
 
 // TestGetValidatingWebhookConfigSmartReload 验证配置更新时只重建受影响的访问器。
 //
-// 中文说明：「智能重载」的意义在于：未变化的 webhook 复用已有访问器，
+// 「智能重载」的意义在于：未变化的 webhook 复用已有访问器，
 // 避免每次配置变更都重建全部对象（重建会丢弃内部缓存与状态）。
 // 用例通过统计构造器调用次数来量化：numberOfCreations 是首次创建数，
 // numberOfRefreshes 是更新阶段的重建数，后者应只覆盖真正变化的条目。
@@ -124,8 +123,7 @@ func TestGetValidatingWebhookConfigSmartReload(t *testing.T) {
 		name              string
 		args              args
 		numberOfCreations int
-		// number of refreshes are number of times we recrated a webhook accessor
-		// instead of pulling from the cache.
+		// 刷新次数指没有复用缓存、而是重新创建 webhook 访问器的次数。
 		numberOfRefreshes             int
 		finalNumberOfWebhookAccessors int
 	}{
@@ -231,7 +229,7 @@ func TestGetValidatingWebhookConfigSmartReload(t *testing.T) {
 				informerFactory.Start(stop)
 				informerFactory.WaitForCacheSync(stop)
 
-				// Create webhooks
+				// 创建 webhook 配置
 				for _, configurations := range tt.args.createWebhookConfigurations {
 					client.
 						AdmissionregistrationV1().
@@ -247,7 +245,7 @@ func TestGetValidatingWebhookConfigSmartReload(t *testing.T) {
 						len(webhooks),
 					)
 				}
-				// assert creations
+				// 校验首次创建的访问器数量
 				if tt.numberOfCreations != fakeWebhookAccessorCreator.calledNTimes() {
 					t.Errorf(
 						"Expected number of creations %d received %d",
@@ -255,10 +253,10 @@ func TestGetValidatingWebhookConfigSmartReload(t *testing.T) {
 					)
 				}
 
-				// reset mock counter
+				// 重置 mock 计数器
 				fakeWebhookAccessorCreator.resetCounter()
 
-				// Update webhooks
+				// 更新 webhook 配置
 				for _, configurations := range tt.args.updateWebhookConfigurations {
 					client.
 						AdmissionregistrationV1().
@@ -274,14 +272,14 @@ func TestGetValidatingWebhookConfigSmartReload(t *testing.T) {
 					)
 				}
 
-				// assert updates
+				// 校验更新阶段重建的访问器数量
 				if tt.numberOfRefreshes != fakeWebhookAccessorCreator.calledNTimes() {
 					t.Errorf(
 						"Expected number of refreshes %d received %d",
 						tt.numberOfRefreshes, fakeWebhookAccessorCreator.calledNTimes(),
 					)
 				}
-				// reset mock counter for the next test cases
+				// 为后续用例重置 mock 计数器
 				fakeWebhookAccessorCreator.resetCounter()
 			})
 		})

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package source provides a Source implementation that loads policy configurations from manifest files.
+// 本包提供从清单文件加载策略配置的 Source 实现。
 //
 // 该包把磁盘上的清单文件视为唯一事实来源，通过轮询目录 mtime/内容哈希实现热加载；
 // 加载与编译失败时保留上一份可用的 hooks，避免把配置错误放大成请求失败。
@@ -33,11 +33,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// defaultReloadInterval is the default interval at which the manifest directory is checked for changes.
+// defaultReloadInterval 是检查清单目录是否发生变化的默认轮询间隔。
 // 1 分钟在“配置生效延迟”和“目录扫描开销”之间取折中；测试可临时覆盖。
 var defaultReloadInterval = 1 * time.Minute
 
-// SetReloadIntervalForTests sets the reload interval for testing and returns a function to restore the original value.
+// SetReloadIntervalForTests 设置测试用的重载间隔，并返回一个恢复原值的函数。
 // 返回恢复函数而不是依赖 defer 内的全局状态，避免测试间相互污染。
 func SetReloadIntervalForTests(interval time.Duration) func() {
 	original := defaultReloadInterval
@@ -47,19 +47,19 @@ func SetReloadIntervalForTests(interval time.Duration) func() {
 	}
 }
 
-// PolicyLoadFunc loads policy and binding manifests from a directory.
+// PolicyLoadFunc 从目录中加载策略与绑定清单。
 // 返回加载到的策略、绑定以及内容哈希；哈希用于在内容未变时跳过重新编译。
 type PolicyLoadFunc[P, B runtime.Object] func(dir string) ([]P, []B, string, error)
 
-// PolicyCompiler compiles a policy into an Evaluator.
+// PolicyCompiler 把策略编译为 Evaluator。
 // 编译可能失败（例如 CEL 表达式非法），此时整个清单集视为无效。
 type PolicyCompiler[P runtime.Object, E generic.Evaluator] func(P) (E, error)
 
-// BindingPolicyName extracts the policy name referenced by a binding.
+// BindingPolicyName 提取绑定所引用的策略名。
 // 绑定通过策略名与策略关联，而非通过对象引用，以保持清单文件可独立编辑。
 type BindingPolicyName[B runtime.Object] func(B) string
 
-// StaticPolicySource provides policy configurations loaded from manifest files.
+// StaticPolicySource 提供从清单文件加载的策略配置。
 //
 // 所有可变状态都通过 atomic 发布：读请求只 Load 不可变快照，
 // 后台 reload 构造新切片后整体替换指针，因此 Hooks 无需加锁即可并发调用。
@@ -74,11 +74,11 @@ type StaticPolicySource[P, B runtime.Object, E generic.Evaluator] struct {
 
 	// current 指向当前生效的 hooks 切片；先完成编译再一次性发布，读者不会看到半成品。
 	current      atomic.Pointer[[]generic.PolicyHook[P, B, E]]
-	lastReadHash atomic.Pointer[string] // hash of last file content read (for short-circuiting)
+	lastReadHash atomic.Pointer[string] // 上次读取的文件内容哈希（用于短路跳过）
 	hasSynced    atomic.Bool
 }
 
-// NewStaticPolicySource creates a new static policy source that loads configurations from the specified directory.
+// NewStaticPolicySource 创建从指定目录加载配置的静态策略源。
 // 构造函数不做 IO：初次加载由 LoadInitial 完成，便于调用方在启动失败时统一处理错误。
 func NewStaticPolicySource[P, B runtime.Object, E generic.Evaluator](
 	manifestsDir, apiServerID string,
@@ -99,8 +99,8 @@ func NewStaticPolicySource[P, B runtime.Object, E generic.Evaluator](
 	}
 }
 
-// LoadInitial performs the initial load of manifests.
-// This should be called during API server startup and will fail if the manifests cannot be loaded.
+// LoadInitial 执行清单的首次加载。应在 API server 启动期间调用；
+// 清单加载失败时返回错误。
 func (s *StaticPolicySource[P, B, E]) LoadInitial() error {
 	policies, bindings, hash, err := s.loadFunc(s.manifestsDir)
 	if err != nil {
@@ -122,8 +122,8 @@ func (s *StaticPolicySource[P, B, E]) LoadInitial() error {
 	return nil
 }
 
-// RunReloadLoop watches for configuration changes and reloads when detected.
-// It blocks until ctx is canceled.
+// RunReloadLoop 监听配置变化并在检测到时重载。
+// 该方法会阻塞直到 ctx 被取消。
 func (s *StaticPolicySource[P, B, E]) RunReloadLoop(ctx context.Context) {
 	// WatchUntil 负责按 reloadInterval 周期性触发回调，并在 ctx 取消时退出。
 	filesystem.WatchUntil(
@@ -182,7 +182,7 @@ func (s *StaticPolicySource[P, B, E]) checkAndReload() {
 		return
 	}
 
-	// Short-circuit if file content hasn't changed since last read.
+	// 短路：文件内容与上次读取相比没有变化。
 	// 目录扫描本身有成本，内容哈希相同则跳过解析与编译。
 	if last := s.lastReadHash.Load(); last != nil && hash == *last {
 		return
@@ -203,12 +203,12 @@ func (s *StaticPolicySource[P, B, E]) checkAndReload() {
 	metrics.RecordAutomaticReloadSuccess(s.manifestType, s.apiServerID, hash)
 }
 
-// HasSynced returns true if the initial load has completed.
+// HasSynced 在初次加载完成后返回 true。
 func (s *StaticPolicySource[P, B, E]) HasSynced() bool {
 	return s.hasSynced.Load()
 }
 
-// Hooks returns the list of policy hooks.
+// Hooks 返回策略 hook 列表。
 // 返回的快照只读，调用方不得修改其元素。
 func (s *StaticPolicySource[P, B, E]) Hooks() []generic.PolicyHook[P, B, E] {
 	current := s.current.Load()

@@ -21,38 +21,36 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// PolicyAccessor is the narrow view of an admission policy that the generic
-// dispatcher needs. Both ValidatingAdmissionPolicy and MutatingAdmissionPolicy
-// implement it, so the dispatcher logic can be shared between the two plugins.
+// PolicyAccessor 是通用分发器所需的准入策略的窄视图。
+// ValidatingAdmissionPolicy 与 MutatingAdmissionPolicy 都实现了它，
+// 因此两个插件可以共享同一套分发器逻辑。
 type PolicyAccessor interface {
-	// GetName returns the policy name (cluster-scoped).
+	// GetName 返回策略名称（集群级）。
 	GetName() string
-	// GetNamespace is always empty for current cluster-scoped policies; it is
-	// present so a future namespaced policy variant can reuse this interface.
+	// 对现有集群级策略而言 GetNamespace 恒为空；保留它是为了将来
+	// 出现命名空间级策略变体时可以复用该接口。
 	GetNamespace() string
-	// GetParamKind describes the Kind of the policy's param resource, or nil
-	// when the policy takes no parameters.
+	// GetParamKind 描述策略 param 资源的 Kind；策略不带参数时为 nil。
 	GetParamKind() *v1.ParamKind
-	// GetMatchConstraints restricts which requests the policy applies to.
+	// GetMatchConstraints 限定策略适用于哪些请求。
 	GetMatchConstraints() *v1.MatchResources
-	// GetFailurePolicy decides behavior when evaluation fails; nil means Fail.
+	// GetFailurePolicy 决定求值失败时的行为；nil 表示 Fail。
 	GetFailurePolicy() *v1.FailurePolicyType
 }
 
-// BindingAccessor is the narrow view of a policy binding that the generic
-// dispatcher needs. ValidatingAdmissionPolicyBinding and
-// MutatingAdmissionPolicyBinding both implement it.
+// BindingAccessor 是通用分发器所需的策略绑定的窄视图。
+// ValidatingAdmissionPolicyBinding 与 MutatingAdmissionPolicyBinding
+// 都实现了它。
 type BindingAccessor interface {
 	GetName() string
 	GetNamespace() string
 
-	// GetPolicyName returns the name of the (Validating/Mutating)AdmissionPolicy,
-	// which is cluster-scoped, so namespace is usually left blank.
-	// But we leave the door open to add a namespaced vesion in the future
+	// GetPolicyName 返回 (Validating/Mutating)AdmissionPolicy 的名字；该策略
+	// 是集群级的，因此命名空间通常留空，但也为将来的命名空间级版本留了余地。
 	GetPolicyName() types.NamespacedName
-	// GetParamRef points at the param object this binding supplies, if any.
+	// GetParamRef 指向该绑定所提供的 param 对象（若有）。
 	GetParamRef() *v1.ParamRef
 
-	// GetMatchResources further narrows the policy's match constraints.
+	// GetMatchResources 在策略的匹配约束基础上进一步收窄范围。
 	GetMatchResources() *v1.MatchResources
 }

@@ -35,12 +35,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Type for test injection.
+// 该函数类型用于测试注入。
 //
 // 作为字段而非直接调用包函数，测试可替换为桩实现来断言 UID 生成逻辑。
 type mutatingWebhookAccessorCreator func(uid string, configurationName string, h *v1.MutatingWebhook) webhook.WebhookAccessor
 
-// mutatingWebhookConfigurationManager collects the mutating webhook objects so that they can be called.
+// mutatingWebhookConfigurationManager 收集 mutating webhook 对象以便调用。
 //
 // 该类型实现 generic.Source：把 MutatingWebhookConfiguration informer 的内容
 // 转换成按确定顺序排列的 accessor 列表。lazy 负责缓存整体结果，
@@ -50,9 +50,8 @@ type mutatingWebhookConfigurationManager struct {
 	hasSynced           func() bool
 	lazy                synctrack.Lazy[[]webhook.WebhookAccessor]
 	configurationsCache sync.Map
-	// createMutatingWebhookAccessor is used to instantiate webhook accessors.
-	// This function is defined as field instead of a struct method to allow injection
-	// during tests
+	// createMutatingWebhookAccessor 用于实例化 webhook 访问器。把它定义为字段
+	// 而非结构体方法，以便在测试中进行注入。
 	createMutatingWebhookAccessor mutatingWebhookAccessorCreator
 	excludedWebhookResources      sets.Set[schema.GroupResource]
 }
@@ -103,7 +102,7 @@ func NewMutatingWebhookConfigurationManager(f informers.SharedInformerFactory, e
 	return manager
 }
 
-// Webhooks returns the merged MutatingWebhookConfiguration.
+// Webhooks 返回合并后的 MutatingWebhookConfiguration。
 //
 // 出错时不中断请求，仅记录错误并返回可能为空的列表——准入链必须在配置异常时保持可用。
 func (m *mutatingWebhookConfigurationManager) Webhooks() []webhook.WebhookAccessor {
@@ -114,8 +113,7 @@ func (m *mutatingWebhookConfigurationManager) Webhooks() []webhook.WebhookAccess
 	return out
 }
 
-// HasSynced returns true if the initial set of mutating webhook configurations
-// has been loaded.
+// HasSynced 在初始的 mutating webhook 配置集加载完成后返回 true。
 func (m *mutatingWebhookConfigurationManager) HasSynced() bool { return m.hasSynced() }
 
 // getConfiguration 从 lister 全量读取并转换，是 lazy 的求值函数。
@@ -127,17 +125,14 @@ func (m *mutatingWebhookConfigurationManager) getConfiguration() ([]webhook.Webh
 	return m.getMutatingWebhookConfigurations(configurations), nil
 }
 
-// getMutatingWebhookConfigurations returns the webhook accessors for a given list of
-// mutating webhook configurations.
-//
-// This function will, first, try to load the webhook accessors from the cache and avoid
-// recreating them, which can be expessive (requiring CEL expression recompilation).
+// getMutatingWebhookConfigurations 返回给定 mutating webhook 配置列表对应的
+// webhook 访问器。该函数会优先从缓存加载访问器，避免重建带来的开销
+// （重建代价较高，需要重新编译 CEL 表达式）。
 //
 // 注意：这里会对传入切片做原地排序，调用方需确保该切片归本函数所有。
 func (m *mutatingWebhookConfigurationManager) getMutatingWebhookConfigurations(configurations []*v1.MutatingWebhookConfiguration) []webhook.WebhookAccessor {
-	// The internal order of webhooks for each configuration is provided by the user
-	// but configurations themselves can be in any order. As we are going to run these
-	// webhooks in serial, they are sorted here to have a deterministic order.
+	// 每条配置内部 webhook 的顺序由用户指定，但配置之间的顺序是任意的。由于这些
+	// webhook 将串行执行，这里对配置排序以获得确定的顺序。
 	//
 	// 配置之间按名字排序，保证多个 webhook 串行执行时顺序稳定、可复现。
 	sort.SliceStable(configurations, MutatingWebhookConfigurationSorter(configurations).ByName)
@@ -151,15 +146,14 @@ func (m *mutatingWebhookConfigurationManager) getMutatingWebhookConfigurations(c
 	for _, c := range configurations {
 		cachedConfigurationAccessors, ok := m.configurationsCache.Load(c.Name)
 		if ok {
-			// Pick an already cached webhookAccessor
+			// 直接使用已缓存的 webhookAccessor。
 			accessors = append(accessors, cachedConfigurationAccessors.([]webhook.WebhookAccessor)...)
 			continue
 		}
 
 		logExcludedResourcesForMutatingWebhook(c.Name, c.Webhooks, m.excludedWebhookResources)
 
-		// webhook names are not validated for uniqueness, so we check for duplicates and
-		// add a int suffix to distinguish between them
+		// webhook 名称没有做唯一性校验，因此这里检查重复并追加整数后缀加以区分。
 		//
 		// UID 形如 "<config>/<webhook>/<n>"，n 为同名 webhook 的出现序号；
 		// 该 UID 会用于指标与日志，必须稳定可复现。

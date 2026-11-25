@@ -35,7 +35,7 @@ import (
 // splitYAMLDocuments splits a multi-document YAML byte slice into individual documents.
 // Empty documents are skipped.
 //
-// 中文说明：按 `---` 分隔符流式读取而非一次性解析，避免大文件全部载入内存；
+// 按 `---` 分隔符流式读取而非一次性解析，避免大文件全部载入内存；
 // 跳过空文档是因为尾部 `---` 和纯注释文件在 YAML 中合法但没有语义。
 func splitYAMLDocuments(data []byte) ([][]byte, error) {
 	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
@@ -59,7 +59,7 @@ func splitYAMLDocuments(data []byte) ([][]byte, error) {
 
 // FileDoc holds a decoded YAML document and the file it came from.
 //
-// 中文说明：保留来源路径是为了在解码/校验失败时给出可定位的错误信息；
+// 保留来源路径是为了在解码/校验失败时给出可定位的错误信息；
 // 一个文件可能产生多个 FileDoc。
 type FileDoc struct {
 	FilePath string
@@ -71,7 +71,7 @@ type FileDoc struct {
 // sha256-prefixed hash of the file contents for change detection.
 // Files are processed in alphabetical order for deterministic behavior.
 //
-// 中文说明：返回的哈希覆盖文件名顺序与内容，任何增删改都会改变哈希；
+// 返回的哈希覆盖文件名顺序与内容，任何增删改都会改变哈希；
 // 但哈希不含路径本身，目录整体搬迁不会触发无谓的重新加载。
 func LoadFiles(dir string) ([]FileDoc, string, error) {
 	if len(dir) == 0 {

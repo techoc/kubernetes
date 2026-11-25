@@ -40,8 +40,8 @@ type PolicyMatcher interface {
 	// BindingMatches 判断策略绑定是否匹配给定的准入资源请求。
 	BindingMatches(a admission.Attributes, o admission.ObjectInterfaces, binding BindingAccessor) (bool, error)
 
-	// GetNamespace retrieves the Namespace resource by the given name. The name may be empty, in which case
-	// GetNamespace must return nil, NotFound
+	// GetNamespace 按给定名称查找 Namespace 资源。name 可以为空，
+	// 此时 GetNamespace 必须返回 nil 与 NotFound。
 	GetNamespace(ctx context.Context, name string) (*corev1.Namespace, error)
 }
 

@@ -50,11 +50,11 @@ import (
 )
 
 const (
-	// PluginName indicates the name of admission plug-in
+	// PluginName 表示准入插件的名字。
 	PluginName = "MutatingAdmissionPolicy"
 )
 
-// Register registers a plugin
+// Register 注册一个准入插件。
 //
 // 准入插件的注册入口：名字必须与 --enable-admission-plugins 中使用的值一致。
 func Register(plugins *admission.Plugins) {
@@ -98,7 +98,7 @@ type PolicyEvaluator struct {
 	Error              error
 }
 
-// Plugin is an implementation of admission.Interface.
+// Plugin 是 admission.Interface 的一种实现。
 //
 // 大部分逻辑委托给泛型 Plugin：本类型只负责 MutatingAdmissionPolicy 特有的
 // 编译、分发与特性门控。
@@ -112,7 +112,7 @@ var _ admission.Interface = &Plugin{}
 var _ admission.MutationInterface = &Plugin{}
 var _ initializer.WantsManifestLoaders = &Plugin{}
 
-// SetManifestLoaders provides the manifest load functions for scheme-based defaulting and validation.
+// SetManifestLoaders 注入基于 scheme 的默认化与校验所需的清单加载函数。
 //
 // 静态 manifest 模式用于在没有 API server 存储的情况下从目录加载策略；
 // 这里注入加载函数，使 source 包无需直接依赖 initializer。
@@ -146,7 +146,7 @@ func (a *Plugin) SetManifestLoaders(loaders *initializer.ManifestLoaders) {
 	})
 }
 
-// NewPlugin returns a generic admission webhook plugin.
+// NewPlugin 返回一个泛型准入插件。
 //
 // 读取插件配置后，装配数据源（informer 或静态 manifest）与分发器。
 func NewPlugin(configFile io.Reader) (*Plugin, error) {
@@ -155,7 +155,7 @@ func NewPlugin(configFile io.Reader) (*Plugin, error) {
 		return nil, err
 	}
 
-	// There is no request body to mutate for DELETE, so this plugin never handles that operation.
+	// DELETE 没有可供变更的请求体，因此本插件从不处理该操作。
 	//
 	// CONNECT 也需要处理，因为 exec/portforward 等子资源可能被策略改写或校验。
 	handler := admission.NewHandler(admission.Create, admission.Update, admission.Connect)
@@ -169,8 +169,8 @@ func NewPlugin(configFile io.Reader) (*Plugin, error) {
 				NewMutatingAdmissionPolicyAccessor,
 				NewMutatingAdmissionPolicyBindingAccessor,
 				compilePolicy,
-				//!TODO: Create a way to share param informers between
-				// mutating/validating plugins
+				//!TODO: 提供一种在 mutating/validating 插件之间
+				// 共享 param informer 的机制
 				f,
 				dynamicClient,
 				restMapper,
@@ -185,7 +185,7 @@ func NewPlugin(configFile io.Reader) (*Plugin, error) {
 	return res, nil
 }
 
-// Admit makes an admission decision based on the request attributes.
+// Admit 根据请求属性做出准入决策。
 func (a *Plugin) Admit(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) error {
 	return a.Plugin.Dispatch(ctx, attr, o)
 }
@@ -196,7 +196,7 @@ func (a *Plugin) InspectFeatureGates(featureGates featuregate.FeatureGate) {
 	a.Plugin.SetEnabled(featureGates.Enabled(features.MutatingAdmissionPolicy))
 }
 
-// Variable is a named expression for composition.
+// Variable 是用于组合复用的具名表达式。
 //
 // 用于 CEL 组合表达式（composited variables），允许一个表达式引用另一个命名表达式。
 type Variable struct {

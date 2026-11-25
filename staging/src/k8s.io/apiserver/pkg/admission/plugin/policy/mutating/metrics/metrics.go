@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package metrics 定义 MutatingAdmissionPolicy 的 Prometheus 指标。
 //
-// 中文说明：指标按 policy/policy_binding 双标签聚合，便于区分"策略本身写得慢"
+// 指标按 policy/policy_binding 双标签聚合，便于区分"策略本身写得慢"
 // 与"某个绑定引入了昂贵参数"；标签基数受限于策略对象数量。
 package metrics
 
@@ -34,36 +34,34 @@ const (
 	metricsSubsystem = "mutating_admission_policy"
 )
 
-// MutationErrorType defines different error types that happen to a mutation expression
+// MutationErrorType 定义了变更表达式执行时出现的不同错误类型。
 //
-// 中文说明：错误类型作为标签而非独立指标，避免指标数量随错误种类膨胀。
+// 错误类型作为标签而非独立指标，避免指标数量随错误种类膨胀。
 type MutationErrorType string
 
 const (
-	// MutationCompileError indicates that the expression fails to compile.
-	// 中文说明：编译错误通常源于策略作者，可通过重新提交策略修复。
+	// MutationCompileError 表示表达式编译失败。
+	// 编译错误通常源于策略作者，可通过重新提交策略修复。
 	MutationCompileError MutationErrorType = "compile_error"
-	// MutatingInvalidError indicates that the expression fails due to internal
-	// errors that are out of the control of the user.
-	// 中文说明：此类错误不应归咎于策略作者，告警时应与用户错误分开统计。
+	// MutatingInvalidError 表示表达式因用户无法控制的内部错误而失败。
+	// 此类错误不应归咎于策略作者，告警时应与用户错误分开统计。
 	MutatingInvalidError MutationErrorType = "invalid_error"
-	// MutatingOutOfBudget indicates that the expression fails due to running
-	// out of cost budget, or the budget cannot be obtained.
-	// 中文说明：超出 CEL 成本预算意味着表达式被判定为过于昂贵而拒绝执行。
+	// MutatingOutOfBudget 表示表达式因耗尽成本预算或无法获取预算而失败。
+	// 超出 CEL 成本预算意味着表达式被判定为过于昂贵而拒绝执行。
 	MutatingOutOfBudget MutationErrorType = "out_of_budget"
-	// MutationNoError indicates that the expression returns without an error.
-	// 中文说明：作为"成功"标签值，让成功率可以直接用同一指标计算。
+	// MutationNoError 表示表达式无错误地返回。
+	// 作为"成功"标签值，让成功率可以直接用同一指标计算。
 	MutationNoError MutationErrorType = "no_error"
 )
 
 var (
-	// Metrics provides access to mutation admission metrics.
+	// Metrics 提供对变更准入指标的访问。
 	//
-	// 中文说明：包级单例，注册到 legacyregistry 供 /metrics 直接暴露。
+	// 包级单例，注册到 legacyregistry 供 /metrics 直接暴露。
 	Metrics = newMutationAdmissionMetrics()
 )
 
-// MutatingAdmissionPolicyMetrics aggregates Prometheus metrics related to mutation admission control.
+// MutatingAdmissionPolicyMetrics 聚合与变更准入控制相关的 Prometheus 指标。
 type MutatingAdmissionPolicyMetrics struct {
 	policyCheck   *metrics.CounterVec
 	policyLatency *metrics.HistogramVec
@@ -87,14 +85,12 @@ func newMutationAdmissionMetrics() *MutatingAdmissionPolicyMetrics {
 		Subsystem: metricsSubsystem,
 		Name:      "check_duration_seconds",
 		Help:      "Mutation admission latency for individual mutation expressions in seconds, labeled by policy and binding.",
-		// the bucket distribution here is based oo the benchmark suite at
-		// github.com/DangerOnTheRanger/cel-benchmark performed on 16-core Intel Xeon
-		// the lowest bucket was based around the 180ns/op figure for BenchmarkAccess,
-		// plus some additional leeway to account for the apiserver doing other things
-		// the largest bucket was chosen based on the fact that benchmarks indicate the
-		// same Xeon running a CEL expression close to the estimated cost limit takes
-		// around 760ms, so that bucket should only ever have the slowest CEL expressions
-		// in it
+		// 此处的桶分布基于在 16 核 Intel Xeon 上运行的
+		// github.com/DangerOnTheRanger/cel-benchmark 基准测试套件；
+		// 最小桶基于 BenchmarkAccess 约 180ns/op 的数值，
+		// 并预留了一些余量以容纳 apiserver 的其他工作；
+		// 最大桶的选取依据是：基准测试显示同一 Xeon 求值接近成本预算上限的
+		// CEL 表达式约需 760ms，因此该桶只会落入最慢的 CEL 表达式。
 		Buckets:        []float64{0.0000005, 0.001, 0.01, 0.1, 1.0},
 		StabilityLevel: metrics.ALPHA,
 	},
@@ -106,25 +102,25 @@ func newMutationAdmissionMetrics() *MutatingAdmissionPolicyMetrics {
 	return &MutatingAdmissionPolicyMetrics{policyCheck: check, policyLatency: latency}
 }
 
-// Reset resets all mutation admission-related Prometheus metrics.
+// Reset 重置所有变更准入相关的 Prometheus 指标。
 //
-// 中文说明：仅供测试使用，重置可避免用例间指标互相污染。
+// 仅供测试使用，重置可避免用例间指标互相污染。
 func (m *MutatingAdmissionPolicyMetrics) Reset() {
 	m.policyCheck.Reset()
 	m.policyLatency.Reset()
 }
 
-// ObserveAdmission observes a policy mutation, with an optional error to indicate the error that may occur but ignored.
+// ObserveAdmission 记录一次策略变更，errorType 可为被忽略的错误。
 //
-// 中文说明：计数值与延迟同时记录，确保任何一次检查都能在两张图上对应起来。
+// 计数值与延迟同时记录，确保任何一次检查都能在两张图上对应起来。
 func (m *MutatingAdmissionPolicyMetrics) ObserveAdmission(ctx context.Context, elapsed time.Duration, policy, binding string, errorType MutationErrorType) {
 	m.policyCheck.WithContext(ctx).WithLabelValues(policy, binding, string(errorType)).Inc()
 	m.policyLatency.WithContext(ctx).WithLabelValues(policy, binding, string(errorType)).Observe(elapsed.Seconds())
 }
 
-// ObserveRejection observes a policy mutation error that was at least one of the reasons for a deny.
+// ObserveRejection 记录至少构成某次拒绝原因之一的策略变更错误。
 //
-// 中文说明：与 ObserveAdmission 写入相同指标，区别只在调用语义；拒绝会被
+// 与 ObserveAdmission 写入相同指标，区别只在调用语义；拒绝会被
 // 计入带具体 error_type 的计数，因此拒绝率可直接由 error_type != no_error 得出。
 func (m *MutatingAdmissionPolicyMetrics) ObserveRejection(ctx context.Context, elapsed time.Duration, policy, binding string, errorType MutationErrorType) {
 	m.policyCheck.WithContext(ctx).WithLabelValues(policy, binding, string(errorType)).Inc()
