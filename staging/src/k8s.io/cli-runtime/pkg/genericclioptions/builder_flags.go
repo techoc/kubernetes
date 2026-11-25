@@ -24,9 +24,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// ResourceBuilderFlags are flags for finding resources
-// TODO(juanvallejo): wire --local flag from commands through
-//
 // ResourceBuilderFlags 聚合了“定位资源”所需的一组可选 flag。
 // 字段为指针是关键设计：只有非 nil 的字段才会被注册为 flag，
 // 从而允许不同命令按需裁剪（例如 apply 需要 -f，而 get 需要 selector）。
@@ -47,9 +44,7 @@ type ResourceBuilderFlags struct {
 	StopOnFirstError bool // true 时遇错即停止，默认继续处理后续资源
 }
 
-// NewResourceBuilderFlags returns a default ResourceBuilderFlags
-//
-// 默认只启用文件来源 flag，且 -R 默认开启；其余 flag 需通过 With* 方法显式开启。
+// NewResourceBuilderFlags 返回默认配置：只启用文件来源 flag，且 -R 默认开启；其余 flag 需通过 With* 方法显式开启。
 func NewResourceBuilderFlags() *ResourceBuilderFlags {
 	filenames := []string{}
 
@@ -62,11 +57,7 @@ func NewResourceBuilderFlags() *ResourceBuilderFlags {
 	}
 }
 
-// WithFile sets the FileNameFlags.
-// If recurse is set, it will process directory recursively. Useful when you want to manage related manifests
-// organized within the same directory.
-//
-// 覆盖默认的文件 flag 配置（默认 -R 为 true，这里以传入值为准）。
+// WithFile 覆盖默认的文件 flag 配置（默认 -R 为 true，这里以传入值为准）。
 func (o *ResourceBuilderFlags) WithFile(recurse bool, kustomize *string, files ...string) *ResourceBuilderFlags {
 	o.FileNameFlags = &FileNameFlags{
 		Usage:     "identifying the resource.",
@@ -78,55 +69,55 @@ func (o *ResourceBuilderFlags) WithFile(recurse bool, kustomize *string, files .
 	return o
 }
 
-// WithLabelSelector sets the LabelSelector flag
+// WithLabelSelector 启用标签选择器 flag，并设置默认值。
 func (o *ResourceBuilderFlags) WithLabelSelector(selector string) *ResourceBuilderFlags {
 	o.LabelSelector = &selector
 	return o
 }
 
-// WithFieldSelector sets the FieldSelector flag
+// WithFieldSelector 启用字段选择器 flag，并设置默认值。
 func (o *ResourceBuilderFlags) WithFieldSelector(selector string) *ResourceBuilderFlags {
 	o.FieldSelector = &selector
 	return o
 }
 
-// WithAllNamespaces sets the AllNamespaces flag
+// WithAllNamespaces 启用跨命名空间 flag，并设置默认值。
 func (o *ResourceBuilderFlags) WithAllNamespaces(defaultVal bool) *ResourceBuilderFlags {
 	o.AllNamespaces = &defaultVal
 	return o
 }
 
-// WithAll sets the All flag
+// WithAll 启用选择全部资源的 flag，并设置默认值。
 func (o *ResourceBuilderFlags) WithAll(defaultVal bool) *ResourceBuilderFlags {
 	o.All = &defaultVal
 	return o
 }
 
-// WithLocal sets the Local flag
+// WithLocal 启用本地模式 flag，并设置默认值。
 func (o *ResourceBuilderFlags) WithLocal(defaultVal bool) *ResourceBuilderFlags {
 	o.Local = &defaultVal
 	return o
 }
 
-// WithScheme sets the Scheme flag
+// WithScheme 设置用于类型化解析的 Scheme。
 func (o *ResourceBuilderFlags) WithScheme(scheme *runtime.Scheme) *ResourceBuilderFlags {
 	o.Scheme = scheme
 	return o
 }
 
-// WithLatest sets the Latest flag
+// WithLatest 启用从服务端获取最新版本的语义。
 func (o *ResourceBuilderFlags) WithLatest() *ResourceBuilderFlags {
 	o.Latest = true
 	return o
 }
 
-// StopOnError sets the StopOnFirstError flag
+// StopOnError 启用遇到首个错误即停止的行为。
 func (o *ResourceBuilderFlags) StopOnError() *ResourceBuilderFlags {
 	o.StopOnFirstError = true
 	return o
 }
 
-// AddFlags registers flags for finding resources
+// AddFlags 注册用于定位资源的 flag。
 //
 // 这里按字段是否为 nil 决定注册哪些 flag；帮助文本直接面向终端用户，
 // 因此措辞需与 kubectl 保持一致，避免不同命令出现不一致的 flag 语义。
@@ -151,7 +142,7 @@ func (o *ResourceBuilderFlags) AddFlags(flagset *pflag.FlagSet) {
 	}
 }
 
-// ToBuilder gives you back a resource finder to visit resources that are located
+// ToBuilder 依据当前 flag 取值返回一个 ResourceFinder，用于访问所定位到的资源。
 //
 // 该方法是整个 flag 集合的落地点：把各 flag 的当前值翻译成 resource.Builder
 // 上对应的配置。注意 local 与非 local 的互斥关系——本地模式下没有 API server，
@@ -182,21 +173,21 @@ func (o *ResourceBuilderFlags) ToBuilder(restClientGetter RESTClientGetter, reso
 	}
 
 	if o.Local == nil || !*o.Local {
-		// resource type/name tuples only work non-local
+		// 仅当服务端可用时才接受 type/name 参数与各类选择器。
 		if o.All != nil {
 			builder.ResourceTypeOrNameArgs(*o.All, resources...)
 		} else {
 			builder.ResourceTypeOrNameArgs(false, resources...)
 		}
-		// label selectors only work non-local (for now)
+		// 标签选择器由服务端过滤，字段选择器仅支持每种类型的少量字段。
 		if o.LabelSelector != nil {
 			builder.LabelSelectorParam(*o.LabelSelector)
 		}
-		// field selectors only work non-local (forever)
+		// 字段选择器需要在服务端索引中存在，否则查询会失败。
 		if o.FieldSelector != nil {
 			builder.FieldSelectorParam(*o.FieldSelector)
 		}
-		// latest only works non-local (forever)
+		// latest 表示忽略文件中记录的 resourceVersion，强制读取服务端最新对象。
 		if o.Latest {
 			builder.Latest()
 		}
@@ -218,12 +209,12 @@ func (o *ResourceBuilderFlags) ToBuilder(restClientGetter RESTClientGetter, reso
 
 	return &ResourceFindBuilderWrapper{
 		builder: builder.
-			Flatten(). // I think we're going to recommend this everywhere
+			Flatten().
 			AddError(namespaceErr),
 	}
 }
 
-// ResourceFindBuilderWrapper wraps a builder in an interface
+// ResourceFindBuilderWrapper 把 *resource.Builder 包装成 ResourceFinder 接口。
 //
 // 之所以需要包装，是因为 ResourceFinder 只需要 Do() 一个方法，
 // 而 *resource.Builder 还暴露了大量链式配置方法。
@@ -231,13 +222,12 @@ type ResourceFindBuilderWrapper struct {
 	builder *resource.Builder
 }
 
-// Do finds you resources to check
+// Do 返回 builder 构建出的资源访问器，此时才真正开始遍历资源。
 func (b *ResourceFindBuilderWrapper) Do() resource.Visitor {
 	return b.builder.Do()
 }
 
-// ResourceFinder allows mocking the resource builder
-// TODO resource builders needs to become more interfacey
+// ResourceFinder 允许在测试中用假实现替换 resource builder。
 //
 // ResourceFinder 是本包对外暴露的最小抽象，便于测试时替换为假实现
 // （参见 FakeResourceFinder）。
@@ -245,15 +235,15 @@ type ResourceFinder interface {
 	Do() resource.Visitor
 }
 
-// ResourceFinderFunc is a handy way to make a  ResourceFinder
+// ResourceFinderFunc 把普通函数适配成 ResourceFinder。
 type ResourceFinderFunc func() resource.Visitor
 
-// Do implements ResourceFinder
+// Do 调用被适配的函数并返回其 Visitor。
 func (fn ResourceFinderFunc) Do() resource.Visitor {
 	return fn()
 }
 
-// ResourceFinderForResult skins a visitor for re-use as a ResourceFinder
+// ResourceFinderForResult 把一个 Visitor 复用为 ResourceFinder。
 //
 // 把已经构建好的 Visitor 直接当找源使用：每次 Do() 返回同一个 Visitor。
 // 仅用于结果已确定、无需重新构建的场景。

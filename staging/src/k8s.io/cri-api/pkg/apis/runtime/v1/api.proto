@@ -107,10 +107,10 @@ service RuntimeService {
   // CheckpointContainer RPC：将单个容器检查点导出到指定位置，用于容器状态的保存/恢复。
     rpc CheckpointContainer(CheckpointContainerRequest) returns (CheckpointContainerResponse) {}
 
-  // CheckpointPod RPC：对整个 pod（沙箱及选中的容器）创建一致性检查点。调用方必须设置 deadline；沙箱不存在、超时或检查点失败均返回错误。调用开始时沙箱与容器必须处于运行状态；运行时必须在捕获前暂停所有选中的容器，保持暂停直到全部捕获完成，并在成功、失败或超时前恢复全部容器，从而产生一个一致的全 pod 快照且绝不向调用方返回冻结的 pod。
+  // CheckpointPod RPC：对整个 pod（沙箱及选中的容器）创建一致性检查点。调用方必须设置截止时间；沙箱不存在、超时或检查点失败均返回错误。调用开始时沙箱与容器必须处于运行状态；运行时必须在捕获前暂停所有选中的容器，保持暂停直到全部捕获完成，并在成功、失败或超时前恢复全部容器，从而产生一个一致的全 pod 快照且绝不向调用方返回冻结的 pod。
     rpc CheckpointPod(CheckpointPodRequest) returns (CheckpointPodResponse) {}
 
-  // RestorePod RPC：根据检查点恢复 pod 沙箱及其容器。调用方必须设置 deadline；成功时返回的所有容器必须处于 CREATED 状态且尚未执行恢复出的进程，由调用方先执行 pre-start hook，再对每个返回的 ID 调用 StartContainer；失败时运行时必须在返回前清理本次调用创建的沙箱与容器。
+  // RestorePod RPC：根据检查点恢复 pod 沙箱及其容器。调用方必须设置截止时间；成功时返回的所有容器必须处于 CREATED 状态且尚未执行恢复出的进程，由调用方先执行启动前钩子，再对每个返回的 ID 调用 StartContainer；失败时运行时必须在返回前清理本次调用创建的沙箱与容器。
     rpc RestorePod(RestorePodRequest) returns (RestorePodResponse) {}
 
   // GetContainerEvents RPC：建立一个服务端流，持续从 CRI 运行时接收容器事件（创建/启动/停止/删除），kubelet 借此及时感知容器生命周期变化。
@@ -131,7 +131,7 @@ service RuntimeService {
   // RuntimeConfig RPC：返回运行时的配置信息（如 cgroup 驱动）。注意：RuntimeConfigRequest/Response 与 UpdateRuntimeConfigRequest 含义相反——前者由运行时告知 kubelet 该如何做，后者由 kubelet 告知运行时。kubelet 期望这些字段在其生命周期内保持不变，启动时获取一次后不再重新请求，CRI 实现也应避免在没有整节点重启的情况下改动它们。
     rpc RuntimeConfig(RuntimeConfigRequest) returns (RuntimeConfigResponse) {}
 
-  // UpdatePodSandboxResources RPC：在 kubelet 重新配置 pod 级 cgroup 之后，同步用 pod 级资源配置更新 PodSandboxConfig。该请求按尽力而为（best effort）处理，失败不会阻塞 kubelet 继续进行 resize。
+  // UpdatePodSandboxResources RPC：在 kubelet 重新配置 pod 级 cgroup 之后，同步用 pod 级资源配置更新 PodSandboxConfig。该请求按尽力而为处理，失败不会阻塞 kubelet 继续调整资源。
     rpc UpdatePodSandboxResources(UpdatePodSandboxResourcesRequest) returns (UpdatePodSandboxResourcesResponse) {}
 }
 
@@ -279,9 +279,9 @@ message UserNamespace {
 
 // NamespaceOption 提供 Linux namespace 的配置选项，用于沙箱或容器。
 message NamespaceOption {
-  // 该容器/沙箱的 Network namespace。注意：Kubernetes API 目前无法设置 CONTAINER 级别的网络 namespace；kubelet 当前可设置 POD、NODE。
+  // 该容器/沙箱的网络 namespace。注意：Kubernetes API 目前无法设置 CONTAINER 级别的网络 namespace；kubelet 当前可设置 POD、NODE。
     NamespaceMode network = 1;
-  // 该容器/沙箱的 PID namespace。注意：CRI 默认是 POD，而 v1.PodSpec 默认是 CONTAINER，kubelet 的 runtime manager 会为 v1 pod 显式设为 CONTAINER。kubelet 当前可设置 POD、CONTAINER、NODE、TARGET。
+  // 该容器/沙箱的 PID namespace。注意：CRI 默认是 POD，而 v1.PodSpec 默认是 CONTAINER，kubelet 的运行时管理器会为 v1 pod 显式设为 CONTAINER。kubelet 当前可设置 POD、CONTAINER、NODE、TARGET。
     NamespaceMode pid = 2;
   // 该容器/沙箱的 IPC namespace。注意：Kubernetes API 目前无法设置 CONTAINER 级别的 IPC namespace；kubelet 当前可设置 POD、NODE。
     NamespaceMode ipc = 3;
@@ -291,7 +291,7 @@ message NamespaceOption {
     UserNamespace userns_options = 5;
 }
 
-// SupplementalGroupsPolicy 枚举定义容器首个进程的附加组（supplemental groups）如何计算。
+// SupplementalGroupsPolicy 枚举定义容器首个进程的附加组如何计算。
 enum SupplementalGroupsPolicy {
   // Merge：将容器提供的 SupplementalGroups 与 SecurityContext 中的 FsGroup，同容器镜像中定义的主用户所属组（/etc/group）合并。
     Merge = 0;
@@ -380,7 +380,7 @@ message PodSandboxConfig {
     PodSandboxMetadata metadata = 1;
   // 沙箱的主机名；仅当 pod 网络 namespace 为 NODE 时才可为空。
     string hostname = 2;
-  // 宿主机上存放容器日志文件的目录路径。默认容器日志会连接到 STDOUT/STDERR；该目录也可包含结构化日志的二进制文件（如换行分隔的 JSON、systemd-journald journal、gRPC trace 等）。例如 LogDirectory=/var/log/pods/<NAMESPACE>_<NAME>_<UID>/，ContainerConfig.LogPath=containerName/Instance#.log。
+  // 宿主机上存放容器日志文件的目录路径。默认容器日志会连接到 STDOUT/STDERR；该目录也可包含结构化日志的二进制文件（如换行分隔的 JSON、systemd-journald 日志、gRPC 跟踪记录等）。例如 LogDirectory=/var/log/pods/<NAMESPACE>_<NAME>_<UID>/，ContainerConfig.LogPath=containerName/Instance#.log。
     string log_directory = 3;
   // 沙箱的 DNS 配置。
     DNSConfig dns_config = 4;
@@ -495,7 +495,7 @@ message PodSandboxStatus {
 message PodSandboxStatusResponse {
   // 沙箱的状态。
     PodSandboxStatus status = 1;
-  // 沙箱的额外信息，key 为任意字符串、value 应为 JSON 格式，可含调试信息（如 Linux 容器的网络 namespace）。仅当 verbose=true 时才返回非空。
+  // 沙箱的额外信息，键为任意字符串、值应为 JSON 格式，可含调试信息（如 Linux 容器的网络 namespace）。仅当 verbose=true 时才返回非空。
     map<string, string> info = 2;
   // 沙箱内各容器的状态列表。
     repeated ContainerStatus containers_statuses = 3;
@@ -859,7 +859,7 @@ message LinuxContainerUser {
 
 // WindowsNamespaceOption 提供 Windows namespace 的配置选项。
 message WindowsNamespaceOption {
-  // 该容器/沙箱的 Network namespace；kubelet 目前从不设置该字段。
+  // 该容器/沙箱的网络 namespace；kubelet 目前从不设置该字段。
     NamespaceMode network = 1;
 }
 
@@ -947,7 +947,7 @@ message Device {
     string permissions = 3;
 }
 
-// CDIDevice 描述 CDI（Container Device Interface）设备信息。
+// CDIDevice 描述容器设备接口（CDI）的设备信息。
 message CDIDevice {
   // 完全限定的 CDI 设备名，如 vendor.com/gpu=gpudevice1。
   // 参见 CDI 规范：https://github.com/container-orchestrated-devices/container-device-interface/blob/main/SPEC.md。
@@ -1312,7 +1312,7 @@ message ContainerStatus {
 message ContainerStatusResponse {
   // 容器状态。
     ContainerStatus status = 1;
-  // 容器的额外信息，key 任意、value 应为 JSON，可含调试信息（如 Linux 容器的 pid）；仅当 verbose=true 时返回非空。
+  // 容器的额外信息，键任意、值应为 JSON，可含调试信息（如 Linux 容器的 pid）；仅当 verbose=true 时返回非空。
     map<string, string> info = 2;
 }
 
@@ -1488,7 +1488,7 @@ message ImageStatusRequest {
 message ImageStatusResponse {
   // 镜像状态（镜像不存在时为 nil）。
     Image image = 1;
-  // 镜像的额外信息，key 任意、value 应为 JSON，可含调试信息（如 OCI 镜像的 config）；仅当 verbose=true 时返回非空。
+  // 镜像的额外信息，键任意、值应为 JSON，可含调试信息（如 OCI 镜像的 config）；仅当 verbose=true 时返回非空。
     map<string, string> info = 2;
 }
 
@@ -1502,9 +1502,9 @@ message AuthConfig {
     string auth = 3 [debug_redact = true];
   // 镜像仓库服务地址。
     string server_address = 4;
-  // 用于对用户进行认证并获取仓库访问令牌的 identity token（敏感字段）。
+  // 用于对用户进行认证并获取仓库访问令牌的身份令牌（敏感字段）。
     string identity_token = 5 [debug_redact = true];
-  // 发送给仓库的 bearer token（敏感字段）。
+  // 发送给仓库的持有者令牌（敏感字段）。
     string registry_token = 6 [debug_redact = true];
 }
 
@@ -1580,7 +1580,7 @@ message StatusRequest {
     bool verbose = 1;
 }
 
-// RuntimeHandlerFeatures 描述某个运行时处理器（runtime handler）所支持的可选特性。
+// RuntimeHandlerFeatures 描述某个运行时处理器所支持的可选特性。
 message RuntimeHandlerFeatures {
   // 该运行时处理器是否支持递归只读挂载。对 runc 兼容的运行时，可通过内核版本 >= 5.12，
   // 且 `runc features | jq .mountOptions` 的输出包含 "rro" 来判定。
@@ -1602,7 +1602,7 @@ message RuntimeHandler {
 message RuntimeFeatures {
   // 运行时是否支持 SupplementalGroupsPolicy 与 ContainerUser。
     bool supplemental_groups_policy = 1;
-  // 运行时是否支持容器同时使用 host 网络与 user namespace。
+  // 运行时是否支持容器同时使用宿主机网络与 user namespace。
     bool user_namespaces_host_network = 2;
   // 运行时是否支持在容器挂载上使用额外的绑定挂载选项（noexec、nodev、nosuid）。
     bool mount_options = 3;
@@ -1612,7 +1612,7 @@ message RuntimeFeatures {
 message StatusResponse {
   // 运行时状态。
     RuntimeStatus status = 1;
-  // 运行时的额外信息，key 任意、value 应为 JSON，可含调试信息（如运行时使用的插件）；仅当 verbose=true 时返回非空。
+  // 运行时的额外信息，键任意、值应为 JSON，可含调试信息（如运行时使用的插件）；仅当 verbose=true 时返回非空。
     map<string, string> info = 2;
   // 运行时处理器列表。
     repeated RuntimeHandler runtime_handlers = 3;
@@ -1751,7 +1751,7 @@ message WindowsContainerStats {
     WindowsFilesystemUsage writable_layer = 4;
 }
 
-// PsiStats 保存单个资源的 PSI（Pressure Stall Information，压力停滞信息）统计，分别统计全部任务与部分任务。
+// PsiStats 保存单个资源的 PSI（压力停滞信息）统计，分别统计全部任务与部分任务。
 message PsiStats {
   // cgroup 中所有任务因资源压力而停滞的 PSI 数据。
 	PsiData Full = 1;
@@ -1803,11 +1803,11 @@ message MemoryUsage {
     UInt64Value available_bytes = 3;
   // 总使用内存，包含所有内存（不论何时被访问）。
     UInt64Value usage_bytes = 4;
-  // 匿名页与 swap cache 内存量（含透明大页）。
+  // 匿名页与交换缓存内存量（含透明大页）。
     UInt64Value rss_bytes = 5;
-  // 累计次要缺页（minor page fault）次数。
+  // 累计次要缺页次数。
     UInt64Value page_faults = 6;
-  // 累计主要缺页（major page fault）次数。
+  // 累计主要缺页次数。
     UInt64Value major_page_faults = 7;
   // 内存的 PSI 统计。
     PsiStats psi = 8;
@@ -1876,7 +1876,7 @@ message CheckpointPodRequest {
     string output_path = 2;
   // 要纳入检查点的容器 ID 列表。必须非空、无重复，且恰为调用方选定的运行中容器；每个容器都必须属于 pod_sandbox_id 且处于运行状态，否则运行时必须失败且不生成检查点。
     repeated string container_ids = 3;
-  // 可选：CRI 调用方提供的运行时特有检查点选项（不透明键值对）。键在沙箱 runtime handler 的范围内解释；Kubernetes alpha API 不暴露这些选项，kubelet 发送空 map。直接 CRI 调用方可设置运行时文档化的键；运行时必须拒绝不支持/无效的键值而非静默忽略；选项中不得包含机密信息。
+  // 可选：CRI 调用方提供的运行时特有检查点选项（不透明键值对）。键在沙箱运行时处理器的范围内解释；Kubernetes alpha API 不暴露这些选项，kubelet 发送空 map。直接 CRI 调用方可设置运行时文档化的键；运行时必须拒绝不支持/无效的键值而非静默忽略；选项中不得包含机密信息。
     map<string, string> options = 4;
 }
 
@@ -1887,7 +1887,7 @@ message CheckpointPodResponse {}
 message RestorePodRequest {
   // 包含待恢复检查点数据的目录绝对路径。运行时不得修改检查点数据，其格式与布局由运行时定义。
     string checkpoint_path = 1;
-  // kubelet 提供的沙箱配置，含恢复时的节点本地更新（新的 Pod UID、cgroup parent 路径、日志目录）。现网 Pod 与被引用 PodCheckpoint 的 status.checkpointedPodTemplate 之间 pod spec 的一致性由 API server 准入时强制（kubelet 调用前会再次检查），不允许任意用户覆盖。
+  // kubelet 提供的沙箱配置，含恢复时的节点本地更新（新的 Pod UID、父 cgroup 路径、日志目录）。现网 Pod 与被引用 PodCheckpoint 的 status.checkpointedPodTemplate 之间 Pod spec 的一致性由 API 服务器准入时强制（kubelet 调用前会再次检查），不允许任意用户覆盖。
     PodSandboxConfig config = 2;
   // 恢复沙箱及其容器所用的运行时处理器，选择能解释运行时特有检查点数据的实现；所选处理器必须与检查点兼容，运行时必须拒绝无法恢复的检查点。空值选择默认处理器（同 RunPodSandboxRequest），未知的非空处理器必须拒绝。
     string runtime_handler = 3;
@@ -2010,7 +2010,7 @@ message Metric {
     string name = 1;
   // 若指标为实时采集则应为 0；若为缓存值，则应为采集时的纳秒时间戳。
     int64 timestamp = 2;
-  // 指标类型（counter 或 gauge）。
+  // 指标类型（计数器或仪表）。
     MetricType metric_type = 3;
   // 与 MetricDescriptor 中 label_keys 对应的标签值。运行时负责对键和值分别保持排序；两个切片长度不同时行为未定义。
     repeated string label_values = 4;
@@ -2031,7 +2031,7 @@ message RuntimeConfigRequest {}
 
 // RuntimeConfigResponse 是 RuntimeConfig RPC 的响应。
 message RuntimeConfigResponse {
-  // 基于 Linux 的运行时的配置信息，包含不特定于具体 runtime handler 的全局选项。
+  // 基于 Linux 的运行时的配置信息，包含不特定于具体运行时处理器的全局选项。
     LinuxRuntimeConfiguration linux = 1;
 }
 
