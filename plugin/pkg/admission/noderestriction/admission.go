@@ -710,7 +710,7 @@ func (p *Plugin) admitServiceAccount(ctx context.Context, nodeName string, a adm
 
 	// 注意：令牌同一时刻只能绑定一个对象。强制绑定 Pod 可杜绝伪造 Node 绑定；
 	// kube-apiserver 在收到 Pod 绑定后会自动推断并设置 Node 绑定。详见：
-	// https://github.com/kubernetes/kubernetes/issues/121723 for more info.
+	// https://github.com/kubernetes/kubernetes/issues/121723 了解更多。
 
 	return nil
 }
@@ -770,9 +770,9 @@ func (p *Plugin) podReferencesAudience(ctx context.Context, pod *v1.Pod, audienc
 		}
 
 		// 也允许经由 CSI 驱动请求令牌的 audience，覆盖以下链路：
-		// - pod --> ephemeral --> pvc --> pv --> csi --> driver --> tokenrequest with audience
-		// - pod --> pvc --> pv --> csi --> driver --> tokenrequest with audience
-		// - pod --> csi --> driver --> tokenrequest with audience
+		// - pod --> ephemeral --> pvc --> pv --> csi --> driver --> 指定 audience 的 tokenrequest
+		// - pod --> pvc --> pv --> csi --> driver --> 指定 audience 的 tokenrequest
+		// - pod --> csi --> driver --> 指定 audience 的 tokenrequest
 		var driverName string
 		var err error
 		switch {

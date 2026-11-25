@@ -235,17 +235,17 @@ func TestAdmission(t *testing.T) {
 			informerFactory.Storage().V1().StorageClasses().Informer().GetStore().Add(c)
 		}
 		attrs := admission.NewAttributesRecord(
-			claim, // new object
-			nil,   // old object
+			claim, // 新对象
+			nil,   // 旧对象
 			api.Kind("PersistentVolumeClaim").WithVersion("version"),
 			claim.Namespace,
 			claim.Name,
 			api.Resource("persistentvolumeclaims").WithVersion("version"),
-			"", // subresource
+			"", // 子资源
 			admission.Create,
 			&metav1.CreateOptions{},
-			false, // dryRun
-			nil,   // userInfo
+			false, // 演练模式
+			nil,   // 用户信息
 		)
 		err := admissiontesting.WithReinvocationTesting(t, ctrl).Admit(context.TODO(), attrs, nil)
 		klog.Infof("Got %v", err)

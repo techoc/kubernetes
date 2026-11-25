@@ -20,7 +20,7 @@ package node
 // 用于 destinationEdgeIndex 中记录每个顶点可达的 Node ID 集合。
 // 通过引用计数支持多条路径到达同一 Node 的情况。
 type intSet struct {
-	// members is a map of id to refcounts
+	// members 保存 ID 到引用计数的映射。
 	members map[int]int
 }
 

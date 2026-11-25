@@ -36,6 +36,7 @@ import (
 	rbacregistryvalidation "k8s.io/kubernetes/pkg/registry/rbac/validation"
 )
 
+// RequestToRuleMapper 将主体和命名空间映射为适用的 RBAC 规则。
 type RequestToRuleMapper interface {
 	// RulesFor 返回所有已知的 PolicyRule 和查找过程中遇到的错误。
 	// 返回的规则仍然有效，因为默认拒绝。如果提供的规则足以通过验证，
@@ -50,6 +51,8 @@ type RequestToRuleMapper interface {
 var _ = authorizer.Authorizer(&RBACAuthorizer{})
 var _ = authorizer.RuleResolver(&RBACAuthorizer{})
 
+// RBACAuthorizer 通过遍历适用于请求主体的规则实现授权。
+// 找到允许规则时立即放行；否则返回 NoOpinion，遵循默认拒绝语义。
 type RBACAuthorizer struct {
 	authorizationRuleResolver RequestToRuleMapper // 将请求映射到适用规则的解析器
 }
@@ -76,6 +79,7 @@ func (v *authorizingVisitor) visit(source fmt.Stringer, rule *rbacv1.PolicyRule,
 	return true
 }
 
+// Authorize 检查是否存在允许请求的 RBAC 规则，并返回允许来源或规则解析错误。
 func (r *RBACAuthorizer) Authorize(ctx context.Context, requestAttributes authorizer.Attributes) (authorizer.Decision, string, error) {
 	ruleCheckingVisitor := &authorizingVisitor{requestAttributes: requestAttributes}
 
@@ -140,6 +144,8 @@ func (*RBACAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.Condit
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
+// RulesFor 返回指定主体在命名空间内可枚举的资源和非资源规则。
+// 规则解析出错时仍返回已获得的规则，并同时返回错误。
 func (r *RBACAuthorizer) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	var (
 		resourceRules    []authorizer.ResourceRuleInfo
@@ -221,6 +227,7 @@ type RoleGetter struct {
 	Lister rbaclisters.RoleLister
 }
 
+// GetRole 从底层 lister 获取指定命名空间中的 Role。
 func (g *RoleGetter) GetRole(ctx context.Context, namespace, name string) (*rbacv1.Role, error) {
 	return g.Lister.Roles(namespace).Get(name)
 }
@@ -230,6 +237,7 @@ type RoleBindingLister struct {
 	Lister rbaclisters.RoleBindingLister
 }
 
+// ListRoleBindings 列出指定命名空间中的全部 RoleBinding。
 func (l *RoleBindingLister) ListRoleBindings(ctx context.Context, namespace string) ([]*rbacv1.RoleBinding, error) {
 	return l.Lister.RoleBindings(namespace).List(labels.Everything())
 }
@@ -239,6 +247,7 @@ type ClusterRoleGetter struct {
 	Lister rbaclisters.ClusterRoleLister
 }
 
+// GetClusterRole 从底层 lister 获取指定 ClusterRole。
 func (g *ClusterRoleGetter) GetClusterRole(ctx context.Context, name string) (*rbacv1.ClusterRole, error) {
 	return g.Lister.Get(name)
 }
@@ -248,6 +257,7 @@ type ClusterRoleBindingLister struct {
 	Lister rbaclisters.ClusterRoleBindingLister
 }
 
+// ListClusterRoleBindings 列出集群中的全部 ClusterRoleBinding。
 func (l *ClusterRoleBindingLister) ListClusterRoleBindings(ctx context.Context) ([]*rbacv1.ClusterRoleBinding, error) {
 	return l.Lister.List(labels.Everything())
 }

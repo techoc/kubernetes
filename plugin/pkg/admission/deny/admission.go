@@ -59,8 +59,8 @@ func (alwaysDeny) Handles(operation admission.Operation) bool {
 
 // NewAlwaysDeny 创建始终拒绝的准入处理器，并记录弃用警告。
 func NewAlwaysDeny() admission.Interface {
-	// DEPRECATED: AlwaysDeny denys all admission request, it is no use.
-	// 该插件已弃用：全量拒绝毫无实际用途，仅保留兼容旧配置。
+	// DEPRECATED: AlwaysDeny 拒绝所有准入请求，已无实际用途。
+	// 该插件已弃用，仅保留兼容旧配置。
 	klog.Warningf("%s admission controller is deprecated. "+
 		"Please remove this controller from your configuration files and scripts.", PluginName)
 	return new(alwaysDeny)

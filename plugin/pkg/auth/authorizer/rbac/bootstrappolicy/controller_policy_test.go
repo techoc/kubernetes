@@ -29,8 +29,9 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// rolesWithAllowStar are the controller roles which are allowed to contain a *.  These are
-// namespace lifecycle and GC which have to delete anything.  If you're adding to this list
+// rolesWithAllowStar 列出允许规则包含 * 的控制器角色。
+// 命名空间生命周期和垃圾回收控制器必须能够删除任意资源。
+// 向此列表添加角色时，请通知 sig-auth。
 // tag sig-auth
 var rolesWithAllowStar = sets.NewString(
 	saRolePrefix+"namespace-controller",
@@ -42,16 +43,15 @@ var rolesWithAllowStar = sets.NewString(
 	saRolePrefix+"storage-version-migrator-controller",
 )
 
-// rolesWithAllowListWithoutWatch are the controller roles which are allowed to contain a
-// List verb without a Watch verb. If you're adding to this list tag sig-auth
+// rolesWithAllowListWithoutWatch 列出允许只有 List 而没有 Watch 的控制器角色。
+// 向此列表添加角色时，请通知 sig-auth。
 var rolesWithAllowListWithoutWatch = sets.NewString(
 	saRolePrefix + "storage-version-migrator-controller",
 )
 
-// TestNoStarsForControllers confirms that no controller role has star verbs, groups,
-// or resources. There are three known exceptions: namespace lifecycle and GC which have to
-// delete anything, and HPA, which has the power to read metrics associated
-// with any object.
+// TestNoStarsForControllers 确认控制器角色未使用通配 verb、组或资源。
+// 已知例外有三个：命名空间生命周期和垃圾回收需要删除任意资源，
+// HPA 需要读取任意对象关联的指标。
 func TestNoStarsForControllers(t *testing.T) {
 	for _, role := range ControllerRoles() {
 		if rolesWithAllowStar.Has(role.Name) {

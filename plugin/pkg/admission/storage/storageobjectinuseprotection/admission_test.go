@@ -168,8 +168,8 @@ func TestAdmit(t *testing.T) {
 				"", // 子资源
 				admission.Create,
 				&metav1.CreateOptions{},
-				false, // dryRun
-				nil,   // userInfo
+				false, // 演练模式
+				nil,   // 用户信息
 			)
 
 			err := ctrl.Admit(context.TODO(), attrs, nil)

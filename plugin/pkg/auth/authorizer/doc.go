@@ -19,7 +19,7 @@ limitations under the License.
 //   - rbac：RBAC 授权器，基于 Role/ClusterRole 和 RoleBinding/ClusterRoleBinding 进行访问控制。
 //
 //   - node：Node 授权器，使用有向图限制 kubelet 只能访问与其关联的资源（Pod、Secret、PVC 等）。
-//     与 NodeRestriction admission plugin 配合，形成双层防护。
+//     与 NodeRestriction 准入插件配合，形成双层防护。
 //
 //   - rbac/bootstrappolicy：集群启动时自动创建的默认 RBAC 策略，包括内置角色和绑定。
 package authorizer

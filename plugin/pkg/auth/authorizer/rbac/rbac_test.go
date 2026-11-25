@@ -60,7 +60,7 @@ func newClusterRoleBinding(roleName string, subjects ...string) *rbacv1.ClusterR
 		ObjectMeta: metav1.ObjectMeta{},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
-			Kind:     "ClusterRole", // ClusterRoleBindings can only refer to ClusterRole
+			Kind:     "ClusterRole", // ClusterRoleBinding 只能引用 ClusterRole。
 			Name:     roleName,
 		},
 	}
@@ -176,7 +176,7 @@ func TestAuthorizer(t *testing.T) {
 			},
 		},
 		{
-			// Non-resource-url tests
+			// 非资源 URL 测试。
 			clusterRoles: []*rbacv1.ClusterRole{
 				newClusterRole("non-resource-url-getter", newRule("get", "", "", "/apis")),
 				newClusterRole("non-resource-url", newRule("*", "", "", "/apis")),
@@ -201,23 +201,24 @@ func TestAuthorizer(t *testing.T) {
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Groups: []string{"prefixed"}}, Verb: "get", Path: "/apis/v1/foorbar"},
 			},
 			shouldFail: []authorizer.Attributes{
-				// wrong verb
+				// verb 不匹配。
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "foo"}, Verb: "watch", Path: "/apis"},
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Groups: []string{"bar"}}, Verb: "watch", Path: "/apis"},
 
-				// wrong path
+				// 路径不匹配。
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "foo"}, Verb: "get", Path: "/api/v1"},
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Groups: []string{"bar"}}, Verb: "get", Path: "/api/v1"},
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "admin"}, Verb: "get", Path: "/api/v1"},
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Groups: []string{"admin"}}, Verb: "get", Path: "/api/v1"},
 
-				// not covered by prefix
+				// 不在通配前缀覆盖范围内。
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "prefixed"}, Verb: "get", Path: "/api/v1"},
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Groups: []string{"prefixed"}}, Verb: "get", Path: "/api/v1"},
 			},
 		},
 		{
-			// test subresource resolution
+			// 测试子资源解析。
+
 			clusterRoles: []*rbacv1.ClusterRole{
 				newClusterRole("admin", newRule("*", "*", "pods", "*")),
 			},
@@ -232,7 +233,8 @@ func TestAuthorizer(t *testing.T) {
 			},
 		},
 		{
-			// test subresource resolution
+			// 测试子资源解析。
+
 			clusterRoles: []*rbacv1.ClusterRole{
 				newClusterRole("admin",
 					newRule("*", "*", "pods/status", "*"),

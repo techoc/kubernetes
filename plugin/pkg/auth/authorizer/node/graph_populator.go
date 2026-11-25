@@ -82,7 +82,7 @@ func AddGraphEventHandlers(
 	if slices != nil {
 		sliceHandler, _ := slices.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    g.addResourceSlice,
-			UpdateFunc: nil, // Not needed, NodeName is immutable.
+			UpdateFunc: nil, // 无需处理更新，NodeName 不可变。
 			DeleteFunc: g.deleteResourceSlice,
 		})
 		synced = append(synced, sliceHandler.HasSynced)
@@ -91,7 +91,7 @@ func AddGraphEventHandlers(
 	if pcrs != nil {
 		pcrHandler, _ := pcrs.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    g.addPCR,
-			UpdateFunc: nil, // Not needed, spec fields are immutable.
+			UpdateFunc: nil, // 无需处理更新，spec 字段不可变。
 			DeleteFunc: g.deletePCR,
 		})
 		synced = append(synced, pcrHandler.HasSynced)

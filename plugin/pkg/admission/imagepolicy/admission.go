@@ -111,7 +111,7 @@ func (a *Plugin) webhookError(pod *api.Pod, attributes admission.Attributes, err
 		klog.V(2).Infof("error contacting webhook backend: %s", err)
 		if a.defaultAllow {
 			attributes.AddAnnotation(AuditKeyPrefix+ImagePolicyFailedOpenKeySuffix, "true")
-			// TODO(wteiken): Remove the annotation code for the 1.13 release
+			// TODO(wteiken): 在 1.13 版本中移除该注解逻辑。
 			annotations := pod.GetAnnotations()
 			if annotations == nil {
 				annotations = make(map[string]string)
@@ -256,7 +256,7 @@ func NewImagePolicyWebhook(configFile io.Reader) (*Plugin, error) {
 		return nil, fmt.Errorf("no config specified")
 	}
 
-	// TODO: move this to a versioned configuration file format
+	// TODO: 将配置迁移到带版本号的配置文件格式。
 	var config AdmissionConfig
 	d := yaml.NewYAMLOrJSONDecoder(configFile, 4096)
 	err := d.Decode(&config)

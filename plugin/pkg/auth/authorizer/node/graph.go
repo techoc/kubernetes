@@ -46,14 +46,14 @@ import (
 // 如果存在路径，则允许访问；否则拒绝。
 type Graph struct {
 	lock sync.RWMutex // 保护图的并发访问
-	// Calling graph.SetEdge is restricted to the addEdgeLocked method of Graph.
+	// graph.SetEdge 仅允许由 Graph.addEdgeLocked 调用，以确保边和索引同步更新。
 	graph *simple.DirectedAcyclicGraph // 底层有向无环图实现
-	// vertices is a map of type -> namespace -> name -> vertex
+	// vertices 按 类型 -> 命名空间 -> 名称 -> 顶点 组织，用于快速查找。
 	vertices map[vertexType]namespaceVertexMapping // 快速查找顶点：类型 -> 命名空间 -> 名称 -> 顶点
 
-	// destinationEdgeIndex is a map of vertex -> set of destination IDs
+	// destinationEdgeIndex 保存 顶点 -> 可达目标 Node ID 集合 的映射。
 	destinationEdgeIndex map[int]*intSet // 优化：缓存每个顶点可达的 Node ID 集合，避免重复 DFS
-	// destinationEdgeThreshold is the minimum number of distinct destination IDs at which to maintain an index
+	// destinationEdgeThreshold 是维护索引所需的最少不同目标 ID 数。
 	destinationEdgeThreshold int // 只有当顶点的出边数超过此阈值时，才维护 destinationEdgeIndex（节省内存）
 }
 
@@ -107,6 +107,7 @@ type namespaceVertexMapping map[string]nameVertexMapping
 // nameVertexMapping 表示 名称 -> 顶点 的映射
 type nameVertexMapping map[string]*namedVertex
 
+// NewGraph 创建用于 Node 授权检查的空资源依赖图。
 func NewGraph() *Graph {
 	return &Graph{
 		vertices: map[vertexType]namespaceVertexMapping{},
@@ -209,11 +210,11 @@ func (g *Graph) deleteVertexLocked(vertexType vertexType, namespace, name string
 		return
 	}
 
-	// find existing neighbors with a single edge (meaning we are their only neighbor)
+	// 查找只有一条边的现有邻居，即仅与被删除顶点相邻的节点。
 	neighborsToRemove := []graph.Node{}
 	edgesToRemoveFromIndexes := []graph.Edge{}
 	g.graph.VisitFrom(vertex, func(neighbor graph.Node) bool {
-		// this downstream neighbor has only one edge (which must be from us), so remove them as well
+		// 下游邻居只有一条边，该边必来自当前顶点，因此一并删除。
 		if g.graph.Degree(neighbor) == 1 {
 			neighborsToRemove = append(neighborsToRemove, neighbor)
 		}
@@ -221,24 +222,24 @@ func (g *Graph) deleteVertexLocked(vertexType vertexType, namespace, name string
 	})
 	g.graph.VisitTo(vertex, func(neighbor graph.Node) bool {
 		if g.graph.Degree(neighbor) == 1 {
-			// this upstream neighbor has only one edge (which must be to us), so remove them as well
+			// 上游邻居只有一条边，该边必指向当前顶点，因此一并删除。
 			neighborsToRemove = append(neighborsToRemove, neighbor)
 		} else {
-			// decrement the destination edge index on this neighbor if the edge between us was a destination edge
+			// 若两顶点间的边是 destination edge，递减该邻居索引中的目标 ID 计数。
 			edgesToRemoveFromIndexes = append(edgesToRemoveFromIndexes, g.graph.EdgeBetween(vertex, neighbor))
 		}
 		return true
 	})
 
-	// remove the vertex
+	// 删除顶点。
 	g.removeVertexLocked(vertex)
 
-	// remove neighbors that are now edgeless
+	// 删除因此失去所有边的邻居。
 	for _, neighbor := range neighborsToRemove {
 		g.removeVertexLocked(neighbor.(*namedVertex))
 	}
 
-	// remove edges from destination indexes for neighbors that dropped outbound edges
+	// 从目标索引中移除因出边减少而受影响的边。
 	for _, edge := range edgesToRemoveFromIndexes {
 		g.removeEdgeFromDestinationIndexLocked(edge)
 	}
@@ -248,13 +249,13 @@ func (g *Graph) deleteVertexLocked(vertexType vertexType, namespace, name string
 // deleteEdgesLocked 删除从指定类型的顶点到目标顶点的所有边。
 // 会删除孤立的源顶点，但不会删除目标顶点本身。
 func (g *Graph) deleteEdgesLocked(fromType, toType vertexType, toNamespace, toName string) {
-	// get the "to" side
+	// 查找目标顶点。
 	toVert, exists := g.getVertexRLocked(toType, toNamespace, toName)
 	if !exists {
 		return
 	}
 
-	// delete all edges between vertices of fromType and toVert
+	// 删除 fromType 类型顶点与目标顶点之间的所有边。
 	neighborsToRemove := []*namedVertex{}
 	edgesToRemove := []graph.Edge{}
 	g.graph.VisitTo(toVert, func(from graph.Node) bool {
@@ -262,7 +263,7 @@ func (g *Graph) deleteEdgesLocked(fromType, toType vertexType, toNamespace, toNa
 		if fromVert.vertexType != fromType {
 			return true
 		}
-		// this neighbor has only one edge (which must be to us), so remove them as well
+		// 该邻居只有一条边，且必指向目标顶点，因此一并删除。
 		if g.graph.Degree(fromVert) == 1 {
 			neighborsToRemove = append(neighborsToRemove, fromVert)
 		} else {
@@ -271,12 +272,12 @@ func (g *Graph) deleteEdgesLocked(fromType, toType vertexType, toNamespace, toNa
 		return true
 	})
 
-	// clean up orphaned verts
+	// 清理孤立顶点。
 	for _, v := range neighborsToRemove {
 		g.removeVertexLocked(v)
 	}
 
-	// remove edges and decrement destination indexes for neighbors that dropped outbound edges
+	// 删除边，并递减因出边减少而受影响的邻居索引。
 	for _, edge := range edgesToRemove {
 		g.graph.RemoveEdge(edge)
 		g.removeEdgeFromDestinationIndexLocked(edge)
@@ -287,14 +288,15 @@ func (g *Graph) deleteEdgesLocked(fromType, toType vertexType, toNamespace, toNa
 // 仅更新索引中受影响的目标 ID 引用计数，避免全量重算。
 func (g *Graph) removeEdgeFromDestinationIndexLocked(e graph.Edge) {
 	n := e.From()
-	// don't maintain indices for nodes with few edges
+	// 边数较少的顶点不维护索引。
+
 	edgeCount := g.graph.Degree(n)
 	if edgeCount < g.destinationEdgeThreshold {
 		delete(g.destinationEdgeIndex, n.ID())
 		return
 	}
 
-	// decrement the nodeID->destinationID refcount in the index, if the index exists
+	// 若索引存在，递减其中 nodeID -> destinationID 的引用计数。
 	index := g.destinationEdgeIndex[n.ID()]
 	if index == nil {
 		return
@@ -310,11 +312,11 @@ func (g *Graph) addEdgeToDestinationIndexLocked(e graph.Edge) {
 	n := e.From()
 	index := g.destinationEdgeIndex[n.ID()]
 	if index == nil {
-		// There is no index, use the full index computation method
+		// 索引不存在，改用全量计算。
 		g.recomputeDestinationIndexLocked(n)
 		return
 	}
-	// fast-add the new edge to an existing index
+	// 将新边快速加入已有索引。
 	if destinationEdge, ok := e.(*destinationEdge); ok {
 		index.increment(destinationEdge.DestinationID())
 	}
@@ -335,14 +337,15 @@ func (g *Graph) removeVertexLocked(v *namedVertex) {
 // recomputeDestinationIndexLocked 重新计算指定顶点的 destination ID 索引。
 // 仅当顶点的出边数超过 destinationEdgeThreshold 时才维护索引。
 func (g *Graph) recomputeDestinationIndexLocked(n graph.Node) {
-	// don't maintain indices for nodes with few edges
+	// 边数较少的顶点不维护索引。
+
 	edgeCount := g.graph.Degree(n)
 	if edgeCount < g.destinationEdgeThreshold {
 		delete(g.destinationEdgeIndex, n.ID())
 		return
 	}
 
-	// get or create the index
+	// 获取或创建索引。
 	index := g.destinationEdgeIndex[n.ID()]
 	if index == nil {
 		index = newIntSet()
@@ -350,7 +353,7 @@ func (g *Graph) recomputeDestinationIndexLocked(n graph.Node) {
 		index.reset()
 	}
 
-	// populate the index
+	// 填充索引。
 	g.graph.VisitFrom(n, func(dest graph.Node) bool {
 		if destinationEdge, ok := g.graph.EdgeBetween(n, dest).(*destinationEdge); ok {
 			index.increment(destinationEdge.DestinationID())
@@ -381,12 +384,12 @@ func (g *Graph) AddPod(pod *corev1.Pod) {
 	g.deleteVertexLocked(podVertexType, pod.Namespace, pod.Name)
 	podVertex := g.getOrCreateVertexLocked(podVertexType, pod.Namespace, pod.Name)
 	nodeVertex := g.getOrCreateVertexLocked(nodeVertexType, "", pod.Spec.NodeName)
-	// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+	// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 	g.addEdgeLocked(podVertex, nodeVertex, nodeVertex)
 
 	// 对于 mirror pod，不添加到其他资源的边。
 	// 节点绝不能通过创建 mirror pod 来获得对其他 API 对象的权限。
-	// NodeRestriction admission plugin 已经阻止创建此类 Pod，这里短路是纵深防御（defense in depth）。
+	// NodeRestriction 准入插件 已经阻止创建此类 Pod，这里短路是纵深防御。
 	if _, isMirrorPod := pod.Annotations[corev1.MirrorPodAnnotationKey]; isMirrorPod {
 		return
 	}
@@ -395,20 +398,20 @@ func (g *Graph) AddPod(pod *corev1.Pod) {
 	// 未来可以根据 Pod 是否实际挂载了 ServiceAccount token 或 PodCertificate 来限制此访问。
 	if len(pod.Spec.ServiceAccountName) > 0 {
 		serviceAccountVertex := g.getOrCreateVertexLocked(serviceAccountVertexType, pod.Namespace, pod.Spec.ServiceAccountName)
-		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+		// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 		g.addEdgeLocked(serviceAccountVertex, podVertex, nodeVertex)
 	}
 
 	podutil.VisitPodSecretNames(pod, func(secret string) bool {
 		secretVertex := g.getOrCreateVertexLocked(secretVertexType, pod.Namespace, secret)
-		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+		// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 		g.addEdgeLocked(secretVertex, podVertex, nodeVertex)
 		return true
 	})
 
 	podutil.VisitPodConfigmapNames(pod, func(configmap string) bool {
 		configmapVertex := g.getOrCreateVertexLocked(configMapVertexType, pod.Namespace, configmap)
-		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+		// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 		g.addEdgeLocked(configmapVertex, podVertex, nodeVertex)
 		return true
 	})
@@ -422,7 +425,7 @@ func (g *Graph) AddPod(pod *corev1.Pod) {
 		}
 		if claimName != "" {
 			pvcVertex := g.getOrCreateVertexLocked(pvcVertexType, pod.Namespace, claimName)
-			// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+			// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 			g.addEdgeLocked(pvcVertex, podVertex, nodeVertex)
 		}
 	}
@@ -431,7 +434,7 @@ func (g *Graph) AddPod(pod *corev1.Pod) {
 	// PodClaims 会跳过尚未创建或故意不创建的 claim（因为不需要）。
 	for claimName := range resourceclaim.PodClaims(pod) {
 		claimVertex := g.getOrCreateVertexLocked(resourceClaimVertexType, pod.Namespace, claimName)
-		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+		// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 		g.addEdgeLocked(claimVertex, podVertex, nodeVertex)
 	}
 }
@@ -456,6 +459,7 @@ func (g *Graph) addEdgeLocked(from, to, destination *namedVertex) {
 	g.graph.SetEdge(simple.Edge{F: from, T: to})
 }
 
+// DeletePod 移除指定 Pod 顶点及其关联边，并清理因此孤立的资源顶点。
 func (g *Graph) DeletePod(name, namespace string) {
 	start := time.Now()
 	defer func() {
@@ -476,7 +480,7 @@ func (g *Graph) DeletePod(name, namespace string) {
 //   - PCR -> Node
 //
 // 只添加直接的 PCR -> Node 边，因为授权检查已经足够，且图遍历路径更短。
-// noderestriction admission plugin 确保所有 PCR 都有有效的 node、serviceaccount 和 pod 组合。
+// noderestriction 准入插件 确保所有 PCR 都有有效的 node、serviceaccount 和 pod 组合。
 func (g *Graph) AddPodCertificateRequest(pcr *certsv1.PodCertificateRequest) {
 	start := time.Now()
 	defer func() {
@@ -531,13 +535,15 @@ func (g *Graph) AddPV(pv *corev1.PersistentVolume) {
 		pvutil.VisitPVSecretNames(pv, func(namespace, secret string, kubeletVisible bool) bool {
 			// 只授予 kubelet 可见的 secret 的访问权限（在 PVC 所在命名空间中）
 			if kubeletVisible {
-				// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+				// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 				g.addEdgeLocked(g.getOrCreateVertexLocked(secretVertexType, namespace, secret), pvVertex, nil)
 			}
 			return true
 		})
 	}
 }
+
+// DeletePV 移除指定 PV 顶点及其关联边，并清理因此孤立的资源顶点。
 func (g *Graph) DeletePV(name string) {
 	start := time.Now()
 	defer func() {
@@ -567,10 +573,12 @@ func (g *Graph) AddVolumeAttachment(attachmentName, nodeName string) {
 	if len(nodeName) > 0 {
 		vaVertex := g.getOrCreateVertexLocked(vaVertexType, "", attachmentName)
 		nodeVertex := g.getOrCreateVertexLocked(nodeVertexType, "", nodeName)
-		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+		// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 		g.addEdgeLocked(vaVertex, nodeVertex, nodeVertex)
 	}
 }
+
+// DeleteVolumeAttachment 移除指定 VolumeAttachment 顶点及其到 Node 的边。
 func (g *Graph) DeleteVolumeAttachment(name string) {
 	start := time.Now()
 	defer func() {
@@ -600,10 +608,12 @@ func (g *Graph) AddResourceSlice(sliceName, nodeName string) {
 	if len(nodeName) > 0 {
 		sliceVertex := g.getOrCreateVertexLocked(sliceVertexType, "", sliceName)
 		nodeVertex := g.getOrCreateVertexLocked(nodeVertexType, "", nodeName)
-		// Edge adds must be handled by addEdgeLocked instead of direct g.graph.SetEdge calls.
+		// 添加边必须通过 addEdgeLocked，不能直接调用 g.graph.SetEdge。
 		g.addEdgeLocked(sliceVertex, nodeVertex, nodeVertex)
 	}
 }
+
+// DeleteResourceSlice 移除指定 ResourceSlice 顶点及其到 Node 的边。
 func (g *Graph) DeleteResourceSlice(sliceName string) {
 	start := time.Now()
 	defer func() {

@@ -98,17 +98,17 @@ func TestAdmission(t *testing.T) {
 			}
 
 			attrs := admission.NewAttributesRecord(
-				tc.newSvc, // new object
-				tc.oldSvc, // old object
+				tc.newSvc, // 新对象
+				tc.oldSvc, // 旧对象
 				core.Kind("Service").WithVersion("version"),
 				tc.newSvc.Namespace,
 				tc.newSvc.Name,
 				corev1.Resource("services").WithVersion("version"),
-				"", // subresource
+				"", // 子资源
 				op,
 				opt,
-				false, // dryRun
-				nil,   // userInfo
+				false, // 演练模式
+				nil,   // 用户信息
 			)
 
 			err := ctrl.Validate(context.TODO(), attrs, nil)

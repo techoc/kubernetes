@@ -28,7 +28,7 @@ const GroupName = "podtolerationrestriction.admission.k8s.io"
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 移至 k8s.io/api。
 	// localSchemeBuilder 和 AddToScheme 将保留在 k8s.io/kubernetes 中。
 
 	// SchemeBuilder 是用于调用 AddToScheme 的指针。

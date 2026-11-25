@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package ctbattest 提供 ClusterTrustBundleAttest 准入控制器：
-// 校验用户是否有权为指定 signerName attest ClusterTrustBundle。
+// 校验用户是否有权为指定 signerName 的 ClusterTrustBundle 出具证明（attest）。
 package ctbattest
 
 import (

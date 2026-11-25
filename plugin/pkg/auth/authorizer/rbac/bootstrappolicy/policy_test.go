@@ -42,8 +42,7 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac/bootstrappolicy"
 )
 
-// semanticRoles is a few enumerated roles for which the relationships are well established
-// and we want to maintain symmetric roles
+// semanticRoles 保存关系已明确、需要保持对称性的内置角色。
 type semanticRoles struct {
 	admin *rbacv1.ClusterRole
 	edit  *rbacv1.ClusterRole
@@ -66,8 +65,7 @@ func getSemanticRoles(roles []rbacv1.ClusterRole) semanticRoles {
 	return ret
 }
 
-// viewEscalatingNamespaceResources is the list of rules that would allow privilege escalation attacks based on
-// ability to view (GET) them
+// viewEscalatingNamespaceResources 列出仅允许 GET 读取就可能助长提权攻击的规则。
 var viewEscalatingNamespaceResources = []rbacv1.PolicyRule{
 	rbacv1helpers.NewRule(bootstrappolicy.Read...).Groups("").Resources("pods/attach").RuleOrDie(),
 	rbacv1helpers.NewRule(bootstrappolicy.Read...).Groups("").Resources("pods/proxy").RuleOrDie(),
@@ -77,8 +75,8 @@ var viewEscalatingNamespaceResources = []rbacv1.PolicyRule{
 	rbacv1helpers.NewRule(bootstrappolicy.Read...).Groups("").Resources("services/proxy").RuleOrDie(),
 }
 
-// ungettableResources is the list of rules that don't allow to view (GET) them
-// this is purposefully separate list to distinguish from escalating privs
+// ungettableResources 列出不允许通过 GET 读取的规则；
+// 单独维护此列表是为了与提权风险区分。
 var ungettableResources = []rbacv1.PolicyRule{
 	rbacv1helpers.NewRule(bootstrappolicy.Read...).Groups("apps", "extensions").Resources("deployments/rollback").RuleOrDie(),
 }
@@ -87,7 +85,7 @@ func TestEditViewRelationship(t *testing.T) {
 	readVerbs := sets.NewString(bootstrappolicy.Read...)
 	semanticRoles := getSemanticRoles(bootstrappolicy.ClusterRoles())
 
-	// modify the edit role rules to make then read-only for comparison against view role rules
+	// 将 edit 角色改为只读规则，以便与 view 角色比较。
 	for i := range semanticRoles.edit.Rules {
 		rule := semanticRoles.edit.Rules[i]
 		remainingVerbs := []string{}
@@ -100,7 +98,7 @@ func TestEditViewRelationship(t *testing.T) {
 		semanticRoles.edit.Rules[i] = rule
 	}
 
-	// confirm that the view role doesn't already have extra powers
+	// 确认 view 角色未预先拥有额外权限。
 	for _, rule := range viewEscalatingNamespaceResources {
 		if covers, _ := validation.Covers(semanticRoles.view.Rules, []rbacv1.PolicyRule{rule}); covers {
 			t.Errorf("view has extra powers: %#v", rule)
@@ -108,7 +106,7 @@ func TestEditViewRelationship(t *testing.T) {
 	}
 	semanticRoles.view.Rules = append(semanticRoles.view.Rules, viewEscalatingNamespaceResources...)
 
-	// confirm that the view role doesn't have ungettable resources
+	// 确认 view 角色不包含不可 GET 的资源。
 	for _, rule := range ungettableResources {
 		if covers, _ := validation.Covers(semanticRoles.view.Rules, []rbacv1.PolicyRule{rule}); covers {
 			t.Errorf("view has ungettable resource: %#v", rule)

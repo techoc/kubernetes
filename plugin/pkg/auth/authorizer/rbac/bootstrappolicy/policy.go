@@ -76,7 +76,7 @@ const (
 func addDefaultMetadata(obj runtime.Object) {
 	metadata, err := meta.Accessor(obj)
 	if err != nil {
-		// if this happens, then some static code is broken
+		// 若出现此错误，说明静态代码存在缺陷。
 		panic(err)
 	}
 
@@ -124,8 +124,8 @@ func viewRules() []rbacv1.PolicyRule {
 			"services", "services/status", "endpoints", "persistentvolumeclaims", "persistentvolumeclaims/status", "configmaps").RuleOrDie(),
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("limitranges", "resourcequotas", "bindings",
 			"pods/status", "resourcequotas/status", "namespaces/status", "replicationcontrollers/status", "pods/log").RuleOrDie(),
-		// read access to namespaces at the namespace scope means you can read *this* namespace.  This can be used as an
-		// indicator of which namespaces you have access to.
+		// 在命名空间范围内读取 namespaces，表示可以读取当前命名空间，
+		// 可用于判断主体有权访问哪些命名空间。
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("namespaces").RuleOrDie(),
 
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup, eventsGroup).Resources("events").RuleOrDie(),
@@ -172,7 +172,7 @@ func viewRules() []rbacv1.PolicyRule {
 // 不包括系统级资源（如 status 子资源、quota、limits）。
 func editRules() []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
-		// Allow read on escalating resources
+		// 允许读取可能提升权限的资源。
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("pods/attach", "pods/proxy", "pods/exec", "pods/portforward", "secrets", "services/proxy").RuleOrDie(),
 		rbacv1helpers.NewRule("impersonate").Groups(legacyGroup).Resources("serviceaccounts").RuleOrDie(),
 
@@ -215,7 +215,8 @@ func editRules() []rbacv1.PolicyRule {
 		rules = append(rules, rbacv1helpers.NewRule(Write...).Groups(schedulingGroup).Resources("compositepodgroups").RuleOrDie())
 	}
 	if utilfeature.DefaultFeatureGate.Enabled(features.EvictionRequestAPI) {
-		// "evictions" are in the domain of the system and should be only updated by the evictionrequest-controller. "evictionrequests" are user-scoped.
+		// evictions 属于系统领域，只能由 evictionrequest-controller 更新；
+		// evictionrequests 则面向用户。
 		rules = append(rules, rbacv1helpers.NewRule(Write...).Groups(lifecycleGroup).Resources("evictionrequests").RuleOrDie())
 	}
 	return rules
@@ -223,100 +224,99 @@ func editRules() []rbacv1.PolicyRule {
 
 // NodeRules 返回 system:node 角色的规则，定义 kubelet 的权限。
 // kubelet 需要访问 Node、Pod、Secret、ConfigMap、PVC、PV 等资源，
-// 但通过 Node authorizer 和 NodeRestriction admission plugin 进行细粒度限制。
+// 但通过 Node 授权器和 NodeRestriction 准入插件进行细粒度限制。
 func NodeRules() []rbacv1.PolicyRule {
 	nodePolicyRules := []rbacv1.PolicyRule{
-		// Needed to check API access.  These creates are non-mutating
+		// 检查 API 访问权限所需；这些 create 操作不会修改对象。
 		rbacv1helpers.NewRule("create").Groups(authenticationGroup).Resources("tokenreviews").RuleOrDie(),
 		rbacv1helpers.NewRule("create").Groups(authorizationGroup).Resources("subjectaccessreviews", "localsubjectaccessreviews").RuleOrDie(),
 
-		// Needed to build serviceLister, to populate env vars for services
+		// 构建 serviceLister，为 Service 填充环境变量。
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("services").RuleOrDie(),
 
-		// Nodes can register Node API objects and report status.
-		// Use the NodeRestriction admission plugin to limit a node to creating/updating its own API object.
+		// 节点可以注册 Node API 对象并上报状态。
+		// 使用 NodeRestriction 准入插件限制节点只能创建/更新自己的对象。
 		rbacv1helpers.NewRule("create", "get", "list", "watch").Groups(legacyGroup).Resources("nodes").RuleOrDie(),
 		rbacv1helpers.NewRule("update", "patch").Groups(legacyGroup).Resources("nodes/status").RuleOrDie(),
 		rbacv1helpers.NewRule("update", "patch").Groups(legacyGroup).Resources("nodes").RuleOrDie(),
 
-		// TODO: restrict to the bound node as creator in the NodeRestrictions admission plugin
+		// TODO：在 NodeRestriction 准入插件中将事件创建者限制为所属节点。
 		rbacv1helpers.NewRule("create", "update", "patch").Groups(legacyGroup, eventsGroup).Resources("events").RuleOrDie(),
 
-		// Use the Node authorizer to limit get to pods related to the node, and to limit list/watch to field selectors related to the node.
+		// 使用 Node 授权器 将 get 限制为与节点相关的 Pod，
+		// 并将 list/watch 限制为带有节点字段选择器的请求。
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("pods").RuleOrDie(),
 
-		// Needed for the node to create/delete mirror pods.
-		// Use the NodeRestriction admission plugin to limit a node to creating/deleting mirror pods bound to itself.
+		// 节点需要创建/删除 mirror pod。
+		// 使用 NodeRestriction 准入插件限制节点只能创建/删除绑定到自身的 mirror pod。
 		rbacv1helpers.NewRule("create", "delete").Groups(legacyGroup).Resources("pods").RuleOrDie(),
-		// Needed for the node to report status of pods it is running.
-		// Use the NodeRestriction admission plugin to limit a node to updating status of pods bound to itself.
+		// 节点需要上报其运行 Pod 的状态。
+		// 使用 NodeRestriction 准入插件限制节点只能更新绑定到自身的 Pod 状态。
 		rbacv1helpers.NewRule("update", "patch").Groups(legacyGroup).Resources("pods/status").RuleOrDie(),
-		// Needed for the node to create pod evictions.
-		// Use the NodeRestriction admission plugin to limit a node to creating evictions for pods bound to itself.
+		// 节点需要创建 Pod 驱逐请求。
+		// 使用 NodeRestriction 准入插件限制节点只能驱逐绑定到自身的 Pod。
 		rbacv1helpers.NewRule("create").Groups(legacyGroup).Resources("pods/eviction").RuleOrDie(),
 
-		// Needed for imagepullsecrets, rbd/ceph and secret volumes, and secrets in envs
-		// Needed for configmap volume and envs
-		// Use the Node authorization mode to limit a node to get secrets/configmaps referenced by pods bound to itself.
+		// imagePullSecrets、rbd/ceph 和 Secret 卷以及环境变量中的 Secret 需要此权限。
+		// ConfigMap 卷和环境变量中的 ConfigMap 也需要此权限。
+		// 使用节点授权模式将节点可 get 的 Secret/ConfigMap 限制为绑定到自身的 Pod 所引用的对象。
 		rbacv1helpers.NewRule("get", "list", "watch").Groups(legacyGroup).Resources("secrets", "configmaps").RuleOrDie(),
-		// Needed for persistent volumes
-		// Use the Node authorization mode to limit a node to get pv/pvc objects referenced by pods bound to itself.
+		// 持久卷需要此权限。
+		// 使用节点授权模式将节点可 get 的 PV/PVC 限制为绑定到自身的 Pod 所引用的对象。
 		rbacv1helpers.NewRule("get").Groups(legacyGroup).Resources("persistentvolumeclaims", "persistentvolumes").RuleOrDie(),
 
-		// TODO: add to the Node authorizer and restrict to endpoints referenced by pods or PVs bound to the node
-		// Needed for glusterfs volumes
+		// TODO：将该权限纳入 Node 授权器，并限制为绑定到节点的 Pod 或 PV 所引用的 Endpoint。
+		// glusterfs 卷需要此权限。
 		rbacv1helpers.NewRule("get").Groups(legacyGroup).Resources("endpoints").RuleOrDie(),
-		// Used to create a certificatesigningrequest for a node-specific client certificate, and watch
-		// for it to be signed. This allows the kubelet to rotate it's own certificate.
+		// 用于为节点创建专属客户端证书的 CertificateSigningRequest，并监听其签名结果。
+		// kubelet 借此轮换自己的证书。
 		rbacv1helpers.NewRule("create", "get", "list", "watch").Groups(certificatesGroup).Resources("certificatesigningrequests").RuleOrDie(),
 
-		// Leases
+		// Lease。
 		rbacv1helpers.NewRule("get", "create", "update", "patch", "delete").Groups("coordination.k8s.io").Resources("leases").RuleOrDie(),
 
-		// CSI
+		// CSI 存储。
 		rbacv1helpers.NewRule("get").Groups(storageGroup).Resources("volumeattachments").RuleOrDie(),
 
-		// Use the Node authorization to limit a node to create tokens for service accounts running on that node
-		// Use the NodeRestriction admission plugin to limit a node to create tokens bound to pods on that node
+		// 使用 NodeRestriction 准入插件将节点可创建的令牌限制为绑定到该节点 Pod 的 ServiceAccount。
 		rbacv1helpers.NewRule("create").Groups(legacyGroup).Resources("serviceaccounts/token").RuleOrDie(),
 	}
 
-	// Use the Node authorization mode to limit a node to update status of pvc objects referenced by pods bound to itself.
-	// Use the NodeRestriction admission plugin to limit a node to just update the status stanza.
+	// 使用节点授权模式将节点可更新的 PVC 状态限制为绑定到自身的 Pod 所引用的 PVC。
+	// 使用 NodeRestriction 准入插件限制节点只能更新 status 字段。
 	pvcStatusPolicyRule := rbacv1helpers.NewRule("get", "update", "patch").Groups(legacyGroup).Resources("persistentvolumeclaims/status").RuleOrDie()
 	nodePolicyRules = append(nodePolicyRules, pvcStatusPolicyRule)
 
-	// CSI
+	// CSI 存储。
 	csiDriverRule := rbacv1helpers.NewRule("get", "watch", "list").Groups("storage.k8s.io").Resources("csidrivers").RuleOrDie()
 	nodePolicyRules = append(nodePolicyRules, csiDriverRule)
 	csiNodeInfoRule := rbacv1helpers.NewRule("get", "create", "update", "patch", "delete").Groups("storage.k8s.io").Resources("csinodes").RuleOrDie()
 	nodePolicyRules = append(nodePolicyRules, csiNodeInfoRule)
-	// Use the Node authorization mode to limit a node to update status of its own CSINode.
-	// Use the NodeRestriction admission plugin to limit a node to just update the status stanza.
+	// 使用 节点授权模式 限制节点只能更新自己的 CSINode 状态。
+	// 使用 NodeRestriction 准入插件限制节点只能更新 status 字段。
 	if utilfeature.DefaultFeatureGate.Enabled(features.CSIVolumeHealth) {
 		csiNodeStatusRule := rbacv1helpers.NewRule("get", "update", "patch").Groups("storage.k8s.io").Resources("csinodes/status").RuleOrDie()
 		nodePolicyRules = append(nodePolicyRules, csiNodeStatusRule)
 	}
 
-	// RuntimeClass
+	// RuntimeClass。
 	nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("get", "list", "watch").Groups("node.k8s.io").Resources("runtimeclasses").RuleOrDie())
 
-	// DRA Resource Claims
+	// DRA ResourceClaim。
 	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
 		nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("get").Groups(resourceGroup).Resources("resourceclaims").RuleOrDie())
 		nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("deletecollection").Groups(resourceGroup).Resources("resourceslices").RuleOrDie())
 	}
-	// Kubelet needs access to ClusterTrustBundles to support the pemTrustAnchors volume type.
+	// kubelet 需要访问 ClusterTrustBundle，以支持 pemTrustAnchors 卷类型。
 	if utilfeature.DefaultFeatureGate.Enabled(features.ClusterTrustBundle) {
 		nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("get", "list", "watch").Groups(certificatesGroup).Resources("clustertrustbundles").RuleOrDie())
 	}
-	// Kubelet needs access to ServiceAccounts to support sending service account tokens to the credential provider.
-	// Use the Node authorizer to limit get to service accounts related to the node.
+	// kubelet 需要访问 ServiceAccount，以向凭据提供程序发送 ServiceAccount token。
+	// 使用 Node 授权器 将 get 限制为与节点相关的 ServiceAccount。
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeletServiceAccountTokenForCredentialProviders) {
 		nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("get").Groups(legacyGroup).Resources("serviceaccounts").RuleOrDie())
 	}
-	// Kubelet needs to create arbitrary PodCertificateRequests to implement
-	// podCertificate volumes.
+	// kubelet 需要创建任意 PodCertificateRequest 以实现 podCertificate 卷。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodCertificateRequest) {
 		nodePolicyRules = append(nodePolicyRules, rbacv1helpers.NewRule("get", "list", "watch", "create").Groups(certificatesGroup).Resources("podcertificaterequests").RuleOrDie())
 	}
@@ -346,13 +346,13 @@ func ClusterRoles() []rbacv1.ClusterRole {
 	monitoringRules := []rbacv1.PolicyRule{
 		rbacv1helpers.NewRule("get").URLs(monitoringURLs...).RuleOrDie(),
 
-		// Needed for kubelet metrics
+		// kubelet 指标需要此权限。
 		rbacv1helpers.NewRule("get").Groups(legacyGroup).Resources("nodes/metrics").RuleOrDie(),
 	}
 
 	roles := []rbacv1.ClusterRole{
 		{
-			// a "root" role which can do absolutely anything
+			// 可执行任意操作的 root 角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster-admin"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("*").Groups("*").Resources("*").RuleOrDie(),
@@ -360,8 +360,7 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role which provides just enough power to determine if the server is
-			// ready and discover API versions for negotiation
+			// 仅提供判断服务端就绪和发现 API 版本所需的最小权限，供协商使用。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:discovery"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("get").URLs(
@@ -374,10 +373,8 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role which provides minimal read access to the monitoring endpoints
-			// (i.e. /metrics, /livez/*, /readyz/*, /healthz/*, /livez, /readyz, /healthz)
-			// The splatted health check endpoints allow read access to individual health check
-			// endpoints which may contain more sensitive cluster information information
+			// 仅提供监控端点的最小读取权限。
+			// 通配健康检查端点允许读取单个检查项，这些端点可能包含更敏感的集群信息。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:monitoring"},
 			Rules:      monitoringRules,
 		},
@@ -390,12 +387,12 @@ func ClusterRoles() []rbacv1.ClusterRole {
 
 	roles = append(roles, []rbacv1.ClusterRole{
 		{
-			// a role which provides minimal resource access to allow a "normal" user to learn information about themselves
+			// 提供最小资源访问权限，让普通用户查询自身信息。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:basic-user"},
 			Rules:      basicUserRules,
 		},
 		{
-			// a role which provides just enough power read insensitive cluster information
+			// 仅提供读取不敏感集群信息所需的权限。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:public-info-viewer"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("get").URLs(
@@ -404,7 +401,7 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role for a namespace level admin.  It is `edit` plus the power to grant permissions to other users.
+			// 命名空间管理员角色：拥有 edit 的全部权限，并可以向其他用户授权。
 			ObjectMeta: metav1.ObjectMeta{Name: "admin"},
 			AggregationRule: &rbacv1.AggregationRule{
 				ClusterRoleSelectors: []metav1.LabelSelector{
@@ -413,9 +410,8 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role for a namespace level editor.  It grants access to all user level actions in a namespace.
-			// It does not grant powers for "privileged" resources which are domain of the system: `/status`
-			// subresources or `quota`/`limits` which are used to control namespaces
+			// 命名空间编辑角色：拥有命名空间内所有用户级操作的权限。
+			// 不包含系统专属的 /status 子资源以及用于控制命名空间的 quota/limits。
 			ObjectMeta: metav1.ObjectMeta{Name: "edit", Labels: map[string]string{"rbac.authorization.k8s.io/aggregate-to-admin": "true"}},
 			AggregationRule: &rbacv1.AggregationRule{
 				ClusterRoleSelectors: []metav1.LabelSelector{
@@ -424,8 +420,7 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role for namespace level viewing.  It grants Read-only access to non-escalating resources in
-			// a namespace.
+			// 命名空间只读角色：仅允许读取命名空间内不会提升权限的资源。
 			ObjectMeta: metav1.ObjectMeta{Name: "view", Labels: map[string]string{"rbac.authorization.k8s.io/aggregate-to-edit": "true"}},
 			AggregationRule: &rbacv1.AggregationRule{
 				ClusterRoleSelectors: []metav1.LabelSelector{
@@ -434,29 +429,27 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role for a namespace level admin.  It is `edit` plus the power to grant permissions to other users.
+			// 命名空间管理员角色：拥有 edit 的全部权限，并可以向其他用户授权。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:aggregate-to-admin", Labels: map[string]string{"rbac.authorization.k8s.io/aggregate-to-admin": "true"}},
 			Rules: []rbacv1.PolicyRule{
-				// additional admin powers
+				// 管理员角色的额外权限。
 				rbacv1helpers.NewRule("create").Groups(authorizationGroup).Resources("localsubjectaccessreviews").RuleOrDie(),
 				rbacv1helpers.NewRule(ReadWrite...).Groups(rbacGroup).Resources("roles", "rolebindings").RuleOrDie(),
 			},
 		},
 		{
-			// a role for a namespace level editor.  It grants access to all user level actions in a namespace.
-			// It does not grant powers for "privileged" resources which are domain of the system: `/status`
-			// subresources or `quota`/`limits` which are used to control namespaces
+			// 命名空间编辑角色：拥有命名空间内所有用户级操作的权限。
+			// 不包含系统专属的 /status 子资源以及用于控制命名空间的 quota/limits。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:aggregate-to-edit", Labels: map[string]string{"rbac.authorization.k8s.io/aggregate-to-edit": "true"}},
 			Rules:      editRules(),
 		},
 		{
-			// a role for namespace level viewing.  It grants Read-only access to non-escalating resources in
-			// a namespace.
+			// 命名空间只读角色：仅允许读取命名空间内不会提升权限的资源。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:aggregate-to-view", Labels: map[string]string{"rbac.authorization.k8s.io/aggregate-to-view": "true"}},
 			Rules:      viewRules(),
 		},
 		{
-			// a role to use for heapster's connections back to the API server
+			// 供 heapster 连接 API 服务器使用的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:heapster"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("events", "pods", "nodes", "namespaces").RuleOrDie(),
@@ -464,13 +457,12 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role for nodes to use to have the access they need for running pods
+			// 节点运行 Pod 所需的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: systemNodeRoleName},
 			Rules:      NodeRules(),
 		},
 		{
-			// a role to use for node-problem-detector access.  It does not get bound to default location since
-			// deployment locations can reasonably vary.
+			// 供 node-problem-detector 使用的角色；部署位置可能不同，因此不绑定到默认位置。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:node-problem-detector"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("get").Groups(legacyGroup).Resources("nodes").RuleOrDie(),
@@ -479,83 +471,83 @@ func ClusterRoles() []rbacv1.ClusterRole {
 			},
 		},
 		{
-			// a role to use for bootstrapping a node's client certificates
+			// 用于引导节点客户端证书的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:node-bootstrapper"},
 			Rules: []rbacv1.PolicyRule{
-				// used to create a certificatesigningrequest for a node-specific client certificate, and watch for it to be signed
+				// 用于创建节点专属客户端证书的 CertificateSigningRequest，并监听签名结果。
 				rbacv1helpers.NewRule("create", "get", "list", "watch").Groups(certificatesGroup).Resources("certificatesigningrequests").RuleOrDie(),
 			},
 		},
 		{
-			// a role to use for allowing authentication and authorization delegation
+			// 用于认证和授权委托的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:auth-delegator"},
 			Rules: []rbacv1.PolicyRule{
-				// These creates are non-mutating
+				// 这些 create 操作不会修改对象。
 				rbacv1helpers.NewRule("create").Groups(authenticationGroup).Resources("tokenreviews").RuleOrDie(),
 				rbacv1helpers.NewRule("create").Groups(authorizationGroup).Resources("subjectaccessreviews").RuleOrDie(),
 			},
 		},
 		{
-			// a role to use for the API registry, summarization, and proxy handling
+			// 用于 API 注册、聚合和代理处理的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:kube-aggregator"},
 			Rules: []rbacv1.PolicyRule{
-				// it needs to see all services so that it knows whether the ones it points to exist or not
+				// 需要查看所有 Service，以确认其引用的后端是否存在。
 				rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("services", "endpoints").RuleOrDie(),
 			},
 		},
 		{
-			// a role to use for bootstrapping the kube-controller-manager so it can create the shared informers
-			// service accounts, and secrets that we need to create separate identities for other controllers
+			// 用于引导 kube-controller-manager，使其能创建其他控制器所需的
+			// 共享 informer、ServiceAccount 和 Secret 独立身份。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:kube-controller-manager"},
 			Rules: []rbacv1.PolicyRule{
 				eventsRule(),
-				// Needed for leader election.
+				// 领导者选举需要此权限。
 				rbacv1helpers.NewRule("create").Groups(coordinationGroup).Resources("leases").RuleOrDie(),
 				rbacv1helpers.NewRule("get", "update").Groups(coordinationGroup).Resources("leases").Names("kube-controller-manager").RuleOrDie(),
-				// Fundamental resources.
+				// 基础资源。
 				rbacv1helpers.NewRule("create").Groups(legacyGroup).Resources("secrets", "serviceaccounts").RuleOrDie(),
 				rbacv1helpers.NewRule("delete").Groups(legacyGroup).Resources("secrets").RuleOrDie(),
 				rbacv1helpers.NewRule("get").Groups(legacyGroup).Resources("namespaces", "secrets", "serviceaccounts", "configmaps").RuleOrDie(),
 				rbacv1helpers.NewRule("update").Groups(legacyGroup).Resources("secrets", "serviceaccounts").RuleOrDie(),
-				// Needed to check API access.  These creates are non-mutating
+				// 检查 API 访问权限所需；这些 create 操作不会修改对象。
 				rbacv1helpers.NewRule("create").Groups(authenticationGroup).Resources("tokenreviews").RuleOrDie(),
 				rbacv1helpers.NewRule("create").Groups(authorizationGroup).Resources("subjectaccessreviews").RuleOrDie(),
-				// Needed for all shared informers
+				// 所有共享 informer 需要此权限。
 				rbacv1helpers.NewRule("list", "watch").Groups("*").Resources("*").RuleOrDie(),
 				rbacv1helpers.NewRule("create").Groups(legacyGroup).Resources("serviceaccounts/token").RuleOrDie(),
 			},
 		},
 		{
-			// a role to use for the kube-dns pod
+			// 供 kube-dns Pod 使用的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:kube-dns"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("list", "watch").Groups(legacyGroup).Resources("endpoints", "services").RuleOrDie(),
 			},
 		},
 		{
-			// a role for an external/out-of-tree persistent volume provisioner
+			// 供仓库外的持久卷供应器使用的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:persistent-volume-provisioner"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("get", "list", "watch", "create", "delete").Groups(legacyGroup).Resources("persistentvolumes").RuleOrDie(),
-				// update is needed in addition to read access for setting lock annotations on PVCs
+				// 除读取外还需要 update，以便在 PVC 上设置锁注解。
 				rbacv1helpers.NewRule("get", "list", "watch", "update").Groups(legacyGroup).Resources("persistentvolumeclaims").RuleOrDie(),
 				rbacv1helpers.NewRule(Read...).Groups(storageGroup).Resources("storageclasses").RuleOrDie(),
 
-				// Needed for watching provisioning success and failure events
+				// 监听供给成功和失败事件需要此权限。
 				rbacv1helpers.NewRule("watch").Groups(legacyGroup).Resources("events").RuleOrDie(),
 
 				eventsRule(),
 			},
 		},
 		{
-			// a role making the csrapprover controller approve a node client CSR
+			// 允许 csrapprover 控制器批准节点客户端 CSR 的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:certificates.k8s.io:certificatesigningrequests:nodeclient"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("create").Groups(certificatesGroup).Resources("certificatesigningrequests/nodeclient").RuleOrDie(),
 			},
 		},
 		{
-			// a role making the csrapprover controller approve a node client CSR requested by the node itself
+			// 允许 csrapprover 控制器批准由节点自身申请的客户端 CSR 的角色。
 			ObjectMeta: metav1.ObjectMeta{Name: "system:certificates.k8s.io:certificatesigningrequests:selfnodeclient"},
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("create").Groups(certificatesGroup).Resources("certificatesigningrequests/selfnodeclient").RuleOrDie(),
@@ -595,8 +587,8 @@ func ClusterRoles() []rbacv1.ClusterRole {
 		},
 	}...)
 
-	// Add the cluster role for reading the ServiceAccountIssuerDiscovery endpoints
-	// Also allow slash-ended URLs to allow clients generated from published openapi docs prior to fixing the trailing slash to work properly
+	// 添加读取 ServiceAccountIssuerDiscovery 端点的集群角色。
+	// 同时允许以斜杠结尾的 URL，兼容基于修复尾斜杠前发布的 OpenAPI 文档生成的客户端。
 	roles = append(roles, rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: "system:service-account-issuer-discovery"},
 		Rules: []rbacv1.PolicyRule{
@@ -609,11 +601,11 @@ func ClusterRoles() []rbacv1.ClusterRole {
 		},
 	})
 
-	// Add the cluster role system:kubelet-api-admin
+	// 添加集群角色 system:kubelet-api-admin。
 	kubeletAPIAdminRules := []rbacv1.PolicyRule{
-		// Allow read-only access to the Node API objects
+		// 允许只读访问 Node API 对象。
 		rbacv1helpers.NewRule("get", "list", "watch").Groups(legacyGroup).Resources("nodes").RuleOrDie(),
-		// Allow all API calls to the nodes
+		// 允许针对节点发起全部 API 调用。
 		rbacv1helpers.NewRule("proxy").Groups(legacyGroup).Resources("nodes").RuleOrDie(),
 		rbacv1helpers.NewRule("*").Groups(legacyGroup).Resources("nodes/proxy", "nodes/metrics", "nodes/stats", "nodes/log").RuleOrDie(),
 	}
@@ -623,12 +615,12 @@ func ClusterRoles() []rbacv1.ClusterRole {
 	}
 
 	roles = append(roles, rbacv1.ClusterRole{
-		// a role to use for full access to the kubelet API
+		// 供完整访问 kubelet API 的角色使用。
 		ObjectMeta: metav1.ObjectMeta{Name: "system:kubelet-api-admin"},
 		Rules:      kubeletAPIAdminRules,
 	})
 
-	// node-proxier role is used by kube-proxy.
+	// node-proxier 角色供 kube-proxy 使用。
 	nodeProxierRules := []rbacv1.PolicyRule{
 		rbacv1helpers.NewRule("list", "watch").Groups(legacyGroup).Resources("services", "endpoints").RuleOrDie(),
 		rbacv1helpers.NewRule("get", "list", "watch").Groups(legacyGroup).Resources("nodes").RuleOrDie(),
@@ -647,36 +639,36 @@ func ClusterRoles() []rbacv1.ClusterRole {
 
 	kubeSchedulerRules := []rbacv1.PolicyRule{
 		eventsRule(),
-		// This is for leaderlease access
-		// TODO: scope this to the kube-system namespace
+		// 用于访问 leader lease。
+		// TODO：将权限限制到 kube-system 命名空间。
 		rbacv1helpers.NewRule("create").Groups(coordinationGroup).Resources("leases").RuleOrDie(),
 		rbacv1helpers.NewRule("get", "update", "list", "watch").Groups(coordinationGroup).Resources("leases").Names("kube-scheduler").RuleOrDie(),
 		rbacv1helpers.NewRule(ReadWrite...).Groups(coordinationGroup).Resources("leasecandidates").RuleOrDie(),
 
-		// Fundamental resources
+		// 基础资源。
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("nodes").RuleOrDie(),
 		rbacv1helpers.NewRule("get", "list", "watch", "delete").Groups(legacyGroup).Resources("pods").RuleOrDie(),
 		rbacv1helpers.NewRule("create").Groups(legacyGroup).Resources("pods/binding", "bindings").RuleOrDie(),
 		rbacv1helpers.NewRule("patch", "update").Groups(legacyGroup).Resources("pods/status").RuleOrDie(),
-		// Things that select pods
+		// 用于选择 Pod 的资源
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("services", "replicationcontrollers").RuleOrDie(),
 		rbacv1helpers.NewRule(Read...).Groups(appsGroup, extensionsGroup).Resources("replicasets").RuleOrDie(),
 		rbacv1helpers.NewRule(Read...).Groups(appsGroup).Resources("statefulsets").RuleOrDie(),
-		// Things that pods use or applies to them
+		// Pod 使用或应用于 Pod 的资源
 		rbacv1helpers.NewRule(Read...).Groups(policyGroup).Resources("poddisruptionbudgets").RuleOrDie(),
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("persistentvolumeclaims", "persistentvolumes").RuleOrDie(),
-		// Needed to check API access. These creates are non-mutating
+		// 检查 API 访问权限所需；这些 create 操作不会修改对象
 		rbacv1helpers.NewRule("create").Groups(authenticationGroup).Resources("tokenreviews").RuleOrDie(),
 		rbacv1helpers.NewRule("create").Groups(authorizationGroup).Resources("subjectaccessreviews").RuleOrDie(),
-		// Needed for volume limits
+		// 卷限制需要此权限
 		rbacv1helpers.NewRule(Read...).Groups(storageGroup).Resources("csinodes").RuleOrDie(),
 		rbacv1helpers.NewRule("get", "list", "watch").Groups(storageGroup).Resources("volumeattachments").RuleOrDie(),
-		// Needed for namespaceSelector feature in pod affinity
+		// Pod 亲和性中的 namespaceSelector 功能需要此权限
 		rbacv1helpers.NewRule(Read...).Groups(legacyGroup).Resources("namespaces").RuleOrDie(),
 		rbacv1helpers.NewRule(Read...).Groups(storageGroup).Resources("csidrivers").RuleOrDie(),
 		rbacv1helpers.NewRule(Read...).Groups(storageGroup).Resources("csistoragecapacities").RuleOrDie(),
 	}
-	// Needed for dynamic resource allocation.
+	// 动态资源分配需要此权限。
 	if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
 		kubeSchedulerRules = append(kubeSchedulerRules,
 			rbacv1helpers.NewRule(Read...).Groups(resourceGroup).Resources("deviceclasses").RuleOrDie(),
@@ -708,12 +700,12 @@ func ClusterRoles() []rbacv1.ClusterRole {
 		kubeSchedulerRules = append(kubeSchedulerRules, rbacv1helpers.NewRule("patch", "update").Groups(schedulingGroup).Resources("compositepodgroups/status").RuleOrDie())
 	}
 	roles = append(roles, rbacv1.ClusterRole{
-		// a role to use for the kube-scheduler
+		// 供 kube-scheduler 使用的角色。
 		ObjectMeta: metav1.ObjectMeta{Name: "system:kube-scheduler"},
 		Rules:      kubeSchedulerRules,
 	})
 
-	// Default ClusterRole to allow reading ClusterTrustBundle objects
+	// 默认 ClusterRole，允许读取 ClusterTrustBundle 对象。
 	if utilfeature.DefaultFeatureGate.Enabled(features.ClusterTrustBundle) {
 		roles = append(roles, rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{Name: "system:cluster-trust-bundle-discovery"},
@@ -744,8 +736,8 @@ func ClusterRoleBindings() []rbacv1.ClusterRoleBinding {
 		rbacv1helpers.NewClusterBinding("system:kube-scheduler").Users(user.KubeScheduler).BindingOrDie(),
 		rbacv1helpers.NewClusterBinding("system:volume-scheduler").Users(user.KubeScheduler).BindingOrDie(),
 
-		// This default binding of the system:node role to the system:nodes group is deprecated in 1.7 with the availability of the Node authorizer.
-		// This leaves the binding, but with an empty set of subjects, so that tightening reconciliation can remove the subject.
+		// 自 1.7 提供 Node 授权器 起，system:node 角色到 system:nodes 组的默认绑定已弃用。
+		// 保留该绑定，但 subjects 为空，以便收紧协调逻辑时可以移除该主体。
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: systemNodeRoleName},
 			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: systemNodeRoleName},
@@ -754,7 +746,7 @@ func ClusterRoleBindings() []rbacv1.ClusterRoleBinding {
 
 	// 允许所有集群内工作负载（通过其 ServiceAccount）读取 OIDC 发现端点。
 	// 具有某些写权限（创建 Pod、Secret、ServiceAccount 等）的用户可以获得
-	// ServiceAccount 身份，从而访问这些信息。issuer URL 已经包含在 SA token JWT 中，
+	// ServiceAccount 身份，从而访问这些信息。issuer URL 已经包含在 SA 令牌 JWT 中，
 	// SA 也可以通过检查自己的 token 获得相同信息。因此 SA 应该有此访问权限。
 	rolebindings = append(rolebindings,
 		rbacv1helpers.NewClusterBinding("system:service-account-issuer-discovery").Groups(serviceaccount.AllServiceAccountsGroup).BindingOrDie(),

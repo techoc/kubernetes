@@ -67,7 +67,7 @@ func TestSubjectLocator(t *testing.T) {
 					},
 				},
 				{
-					// cluster role matches star in namespace
+					// 集群角色通过命名空间内的通配符匹配。
 					&defaultAttributes{"", "", "*", "Pods", "", "*", ""},
 					[]rbacv1.Subject{
 						{Kind: rbacv1.GroupKind, APIGroup: rbacv1.GroupName, Name: user.SystemPrivilegedGroup},
@@ -76,7 +76,7 @@ func TestSubjectLocator(t *testing.T) {
 					},
 				},
 				{
-					// empty ns
+					// 空命名空间。
 					&defaultAttributes{"", "", "*", "Pods", "", "", ""},
 					[]rbacv1.Subject{
 						{Kind: rbacv1.GroupKind, APIGroup: rbacv1.GroupName, Name: user.SystemPrivilegedGroup},
@@ -114,7 +114,7 @@ func TestSubjectLocator(t *testing.T) {
 					},
 				},
 				{
-					// verb matchies correctly
+					// verb 匹配正确。
 					&defaultAttributes{"", "", "create", "Pods", "", "ns1", ""},
 					[]rbacv1.Subject{
 						{Kind: rbacv1.GroupKind, APIGroup: rbacv1.GroupName, Name: user.SystemPrivilegedGroup},
@@ -124,7 +124,7 @@ func TestSubjectLocator(t *testing.T) {
 					},
 				},
 				{
-					// binding only works in correct ns
+					// 绑定仅在正确的命名空间中生效。
 					&defaultAttributes{"", "", "get", "Pods", "", "ns2", ""},
 					[]rbacv1.Subject{
 						{Kind: rbacv1.GroupKind, APIGroup: rbacv1.GroupName, Name: user.SystemPrivilegedGroup},

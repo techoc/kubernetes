@@ -647,8 +647,8 @@ func TestNodeAuthorizer(t *testing.T) {
 			expect: authorizer.DecisionAllow,
 		},
 
-		// pods
-		// get pods
+		// Pod
+		// 获取 Pod
 		{
 			name:   "get related pod",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "get", Resource: "pods", APIGroup: "", Name: "pod0-node0", Namespace: "ns0"},
@@ -661,7 +661,7 @@ func TestNodeAuthorizer(t *testing.T) {
 			features:     nil,
 			expectReason: "no relationship found between node 'node0' and this object",
 		},
-		// list pods
+		// 列出 Pod
 		{
 			name:   "list related pods",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "list", Resource: "pods", APIGroup: "", FieldSelectorRequirements: mustParseFields("spec.nodeName=node0")},
@@ -684,7 +684,7 @@ func TestNodeAuthorizer(t *testing.T) {
 			features:     nil,
 			expectReason: "can only list/watch pods with spec.nodeName field selector",
 		},
-		// watch pods
+		// 监听 Pod
 		{
 			name:   "watch related pods",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "watch", Resource: "pods", APIGroup: "", FieldSelectorRequirements: mustParseFields("spec.nodeName=node0")},
@@ -707,7 +707,7 @@ func TestNodeAuthorizer(t *testing.T) {
 			features:     nil,
 			expectReason: "can only list/watch pods with spec.nodeName field selector",
 		},
-		// create, delete pods
+		// 创建、删除 Pod
 		{
 			name:   "create unnamed pod",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "create", Resource: "pods", APIGroup: "", Namespace: "ns0"},
@@ -726,14 +726,14 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "delete unrelated pod",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "delete", Resource: "pods", Name: "pod0-node1", APIGroup: "", Namespace: "ns0"},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
 		{
 			name:   "delete pod proxy subresource forbidden",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "delete", Resource: "pods", Name: "pod0-node0", Subresource: "proxy", APIGroup: "", Namespace: "ns0"},
 			expect: authorizer.DecisionNoOpinion,
 		},
-		// update/patch pod status
+		// 更新/修补 Pod 状态
 		{
 			name:   "update related pod status",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "update", Resource: "pods", Subresource: "status", Name: "pod0-node0", APIGroup: "", Namespace: "ns0"},
@@ -742,7 +742,7 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "update unrelated pod status",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "update", Resource: "pods", Subresource: "status", Name: "pod0-node1", APIGroup: "", Namespace: "ns0"},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
 		{
 			name:   "patch related pod status",
@@ -752,14 +752,14 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "patch unrelated pod status",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "patch", Resource: "pods", Subresource: "status", Name: "pod0-node1", APIGroup: "", Namespace: "ns0"},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
 		{
 			name:   "get pod status",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "get", Resource: "pods", Subresource: "status", Name: "pod0-node0", APIGroup: "", Namespace: "ns0"},
-			expect: authorizer.DecisionNoOpinion, // get status not allowed before or after selector feature
+			expect: authorizer.DecisionNoOpinion, // 无论选择器功能是否启用，都不允许获取 status
 		},
-		// create pod eviction
+		// 创建 Pod 驱逐
 		{
 			name:   "create related pod eviction",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "create", Resource: "pods", Subresource: "eviction", Name: "pod0-node0", APIGroup: "", Namespace: "ns0"},
@@ -768,11 +768,11 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "create unrelated pod eviction",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "create", Resource: "pods", Subresource: "eviction", Name: "pod0-node1", APIGroup: "", Namespace: "ns0"},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
 
-		// nodes
-		// get nodes
+		// Node
+		// 获取 Node
 		{
 			name:   "get related unregistered node",
 			attrs:  authorizer.AttributesRecord{User: nodeunregistered, ResourceRequest: true, Verb: "get", Resource: "nodes", APIGroup: "", Name: "nodeunregistered"},
@@ -790,7 +790,7 @@ func TestNodeAuthorizer(t *testing.T) {
 			features:     nil,
 			expectReason: "node 'node0' cannot read 'node1', only its own Node object",
 		},
-		// list nodes
+		// 列出 Node
 		{
 			name:   "list single related node",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "list", Resource: "nodes", APIGroup: "", Name: "node0"},
@@ -810,7 +810,7 @@ func TestNodeAuthorizer(t *testing.T) {
 			features:     nil,
 			expectReason: "node 'node0' cannot read all nodes, only its own Node object",
 		},
-		// watch nodes
+		// 监听 Node
 		{
 			name:   "watch single related node",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "watch", Resource: "nodes", APIGroup: "", Name: "node0"},
@@ -830,13 +830,13 @@ func TestNodeAuthorizer(t *testing.T) {
 			features:     nil,
 			expectReason: "node 'node0' cannot read all nodes, only its own Node object",
 		},
-		// create nodes
+		// 创建 Node
 		{
 			name:   "create node",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "create", Resource: "nodes", APIGroup: ""},
 			expect: authorizer.DecisionAllow,
 		},
-		// update/patch nodes
+		// 更新/修补 Node
 		{
 			name:   "update related node",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "update", Resource: "nodes", Name: "node0", APIGroup: ""},
@@ -845,7 +845,7 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "update unrelated node",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "update", Resource: "nodes", Name: "node1", APIGroup: ""},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
 		{
 			name:   "patch related node",
@@ -855,9 +855,9 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "patch unrelated node",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "patch", Resource: "nodes", Name: "node1", APIGroup: ""},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
-		// update/patch node status
+		// 更新/修补 Node 状态
 		{
 			name:   "update related node status",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "update", Resource: "nodes", Subresource: "status", Name: "node0", APIGroup: ""},
@@ -866,7 +866,7 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "update unrelated node status",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "update", Resource: "nodes", Subresource: "status", Name: "node1", APIGroup: ""},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
 		{
 			name:   "patch related node status",
@@ -876,7 +876,7 @@ func TestNodeAuthorizer(t *testing.T) {
 		{
 			name:   "patch unrelated node status",
 			attrs:  authorizer.AttributesRecord{User: node0, ResourceRequest: true, Verb: "patch", Resource: "nodes", Subresource: "status", Name: "node1", APIGroup: ""},
-			expect: authorizer.DecisionAllow, // guarded by NodeRestriction admission
+			expect: authorizer.DecisionAllow, // 由 NodeRestriction 准入插件约束
 		},
 	}
 
@@ -1011,7 +1011,7 @@ func TestNodeAuthorizerSharedResources(t *testing.T) {
 			t.Error("expected allowed")
 		}
 
-		// should trigger recalculation of the shared secret index
+		// 应触发共享 Secret 索引重新计算
 		pod3.Spec.Volumes = nil
 		g.AddPod(pod3)
 
@@ -1137,20 +1137,19 @@ func TestNodeAuthorizerAddEphemeralContainers(t *testing.T) {
 	}
 }
 
-// TestNodeAuthorizerUpdateExtendedResourceClaim checks that a node gains
-// authorization to read its pod's synthesized ResourceClaim once the scheduler
-// writes ExtendedResourceClaimStatus into the pod — even when the pod carries
-// no standard Spec.ResourceClaims entries.
+// TestNodeAuthorizerUpdateExtendedResourceClaim 验证调度器将
+// ExtendedResourceClaimStatus 写入 Pod 后，节点获得读取其 Pod 合成的
+// ResourceClaim 的权限；即使 Pod 没有标准的
+// Spec.ResourceClaims 条目，也是如此。
 //
-// Background: the graph populator's updatePod has a fast-path that skips
-// AddPod when the pod's node assignment, UID, ephemeral containers, and
-// ResourceClaimStatuses are all unchanged. For pods that use the
-// DRAExtendedResource path (e.g. a plain nvidia.com/gpu request),
-// ResourceClaimStatuses is nil both before and after the scheduler writes
-// the synthesized claim name, and ExtendedResourceClaimStatus may change
-// under rare condition after a pod is bound to a node, so the fast-path
-// would fire prematurely and the claim→pod→node edge would never be added
-// to the authorization graph.
+// 背景：graph populator 的 updatePod 有一条快速路径：
+// 当 Pod 的节点分配、UID、临时容器和 ResourceClaimStatuses 均未变化时，
+// 会跳过 AddPod。对于使用 DRAExtendedResource 路径的 Pod
+// （例如直接请求 nvidia.com/gpu），在调度器写入合成的 claim 名称前后，
+// ResourceClaimStatuses 都为 nil。尽管 Pod 已绑定到节点，
+// ExtendedResourceClaimStatus 仍可能在极少数情况下变化，因此快速路径
+// 会过早触发，导致 claim→pod→node 边永远不会加入
+// 授权图。
 func TestNodeAuthorizerUpdateExtendedResourceClaim(t *testing.T) {
 	g := NewGraph()
 	identifier := nodeidentifier.NewDefaultNodeIdentifier()
@@ -1158,10 +1157,10 @@ func TestNodeAuthorizerUpdateExtendedResourceClaim(t *testing.T) {
 
 	node1 := &user.DefaultInfo{Name: "system:node:node1", Groups: []string{"system:nodes"}}
 
-	// The pod has been bound to node1, but the scheduler has written
-	// extended-claim-0, not extended-claim-1, to ExtendedResourceClaimStatus.
-	// There are no standard Spec.ResourceClaims, so ResourceClaimStatuses
-	// stays nil throughout.
+	// Pod 已绑定到 node1，但调度器写入 ExtendedResourceClaimStatus 的是
+	// extended-claim-0，而不是 extended-claim-1。
+	// Pod 没有标准的 Spec.ResourceClaims，因此 ResourceClaimStatuses
+	// 始终为 nil。
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pod1",
@@ -1189,8 +1188,8 @@ func TestNodeAuthorizerUpdateExtendedResourceClaim(t *testing.T) {
 	p.graph = g
 	p.addPod(pod)
 
-	// Before the scheduler swaps the synthesized claim name, extended-claim-1
-	// is not in the graph and node1 should have no opinion on it.
+	// 调度器替换合成的 claim 名称之前，extended-claim-1 不在图中，
+	// node1 应对其不发表授权意见。
 	decision, _, err := authz.Authorize(context.Background(), authorizer.AttributesRecord{
 		User:            node1,
 		ResourceRequest: true,
@@ -1207,15 +1206,15 @@ func TestNodeAuthorizerUpdateExtendedResourceClaim(t *testing.T) {
 		t.Errorf("before ExtendedResourceClaimStatus is updated to extended-claim-1: want NoOpinion, got %v", decision)
 	}
 
-	// The scheduler swaps the synthesized ResourceClaim from extended-claim-0
-	// to extended-claim-1. updatePod must recognize that ExtendedResourceClaimStatus
-	// changed and rebuild the graph edge rather than taking the fast-path early
-	// exit.
+	// 调度器将合成的 ResourceClaim 从 extended-claim-0
+	// 替换为 extended-claim-1。updatePod 必须识别 ExtendedResourceClaimStatus
+	// 已变化并重建图边，而不能通过快速路径
+	// 提前退出。
 	updatedPod := pod.DeepCopy()
 	updatedPod.Status.ExtendedResourceClaimStatus.ResourceClaimName = "extended-claim-1"
 	p.updatePod(pod, updatedPod)
 
-	// The node that hosts the pod should now be permitted to read the claim.
+	// 托管该 Pod 的节点现在应有权读取该 claim。
 	decision, _, err = authz.Authorize(context.Background(), authorizer.AttributesRecord{
 		User:            node1,
 		ResourceRequest: true,
@@ -1232,7 +1231,7 @@ func TestNodeAuthorizerUpdateExtendedResourceClaim(t *testing.T) {
 		t.Errorf("after ExtendedResourceClaimStatus is updated to extended-claim-1: want Allow, got %v", decision)
 	}
 
-	// A node that does not host the pod must not gain access to the claim.
+	// 不托管该 Pod 的节点不得获得访问该 claim 的权限。
 	node2 := &user.DefaultInfo{Name: "system:node:node2", Groups: []string{"system:nodes"}}
 	decision, _, err = authz.Authorize(context.Background(), authorizer.AttributesRecord{
 		User:            node2,
@@ -1258,17 +1257,17 @@ type sampleDataOpts struct {
 
 	attachmentsPerNode int
 
-	// sharedConfigMapsPerNamespaces defines number of shared configmaps in a given
-	// namespace. Each pod then mounts a random set of size `sharedConfigMapsPerPod`
-	// from that set. sharedConfigMapsPerPod is used if greater.
+	// sharedConfigMapsPerNamespace 定义给定命名空间中共享 ConfigMap 的数量。
+	// 每个 Pod 从中随机挂载 `sharedConfigMapsPerPod` 个对象。
+	// 如果 `sharedConfigMapsPerPod` 更大，则使用该值。
 	sharedConfigMapsPerNamespace int
-	// sharedSecretsPerNamespaces defines number of shared secrets in a given
-	// namespace. Each pod then mounts a random set of size `sharedSecretsPerPod`
-	// from that set. sharedSecretsPerPod is used if greater.
+	// sharedSecretsPerNamespace 定义给定命名空间中共享 Secret 的数量。
+	// 每个 Pod 从中随机挂载 `sharedSecretsPerPod` 个对象。
+	// 如果 `sharedSecretsPerPod` 更大，则使用该值。
 	sharedSecretsPerNamespace int
-	// sharedPVCsPerNamespaces defines number of shared pvcs in a given
-	// namespace. Each pod then mounts a random set of size `sharedPVCsPerPod`
-	// from that set. sharedPVCsPerPod is used if greater.
+	// sharedPVCsPerNamespace 定义给定命名空间中共享 PVC 的数量。
+	// 每个 Pod 从中随机挂载 `sharedPVCsPerPod` 个对象。
+	// 如果 `sharedPVCsPerPod` 更大，则使用该值。
 	sharedPVCsPerNamespace int
 
 	sharedConfigMapsPerPod int
@@ -1320,10 +1319,10 @@ func BenchmarkPopulationAllocation(b *testing.B) {
 
 func BenchmarkPopulationRetention(b *testing.B) {
 
-	// Run with:
+	// 运行方式：
 	// go test ./plugin/pkg/auth/authorizer/node -benchmem -bench . -run None -v -o node.test -timeout 300m
 
-	// Evaluate retained memory with:
+	// 评估保留内存：
 	// go tool pprof --inuse_space node.test plugin/pkg/auth/authorizer/node/BenchmarkPopulationRetention.profile
 	// list populate
 
@@ -1341,7 +1340,7 @@ func BenchmarkPopulationRetention(b *testing.B) {
 	}
 
 	nodes, pods, pvs, attachments, slices, pcrs := generate(opts)
-	// Garbage collect before the first iteration
+	// 首次迭代前执行垃圾回收
 	runtime.GC()
 	b.ResetTimer()
 
@@ -1354,7 +1353,7 @@ func BenchmarkPopulationRetention(b *testing.B) {
 			runtime.GC()
 			pprof.WriteHeapProfile(f)
 			f.Close()
-			// reference the graph to keep it from getting garbage collected
+			// 引用该图，防止其被垃圾回收
 			_ = fmt.Sprintf("%T\n", g)
 		}
 	}
@@ -1362,11 +1361,11 @@ func BenchmarkPopulationRetention(b *testing.B) {
 
 func BenchmarkWriteIndexMaintenance(b *testing.B) {
 
-	// Run with:
+	// 运行方式：
 	// go test ./plugin/pkg/auth/authorizer/node -benchmem -bench BenchmarkWriteIndexMaintenance -run None
 
 	opts := &sampleDataOpts{
-		// simulate high replication in a small number of namespaces:
+		// 模拟少量命名空间中的高复制率：
 		nodes:                  5000,
 		namespaces:             1,
 		podsPerNode:            1,
@@ -1381,7 +1380,7 @@ func BenchmarkWriteIndexMaintenance(b *testing.B) {
 	nodes, pods, pvs, attachments, slices, pcrs := generate(opts)
 	g := NewGraph()
 	populate(g, nodes, pods, pvs, attachments, slices, pcrs)
-	// Garbage collect before the first iteration
+	// 首次迭代前执行垃圾回收
 	runtime.GC()
 	b.ResetTimer()
 
@@ -1395,7 +1394,7 @@ func BenchmarkWriteIndexMaintenance(b *testing.B) {
 
 func BenchmarkUnauthorizedRequests(b *testing.B) {
 
-	// Run with:
+	// 运行方式：
 	// go test ./plugin/pkg/auth/authorizer/node -benchmem -bench BenchmarkUnauthorizedRequests -run None
 
 	opts := &sampleDataOpts{
@@ -1406,8 +1405,8 @@ func BenchmarkUnauthorizedRequests(b *testing.B) {
 	}
 	nodes, pods, pvs, attachments, slices, pcrs := generate(opts)
 
-	// Create an additional Node that doesn't have access to a shared ConfigMap
-	// that all the other Nodes are authorized to read.
+	// 创建一个额外的 Node，它无权读取其他所有 Node
+	// 均有权读取的共享 ConfigMap。
 	additionalNodeName := "nodeX"
 	nsName := "ns0"
 	additionalNode := &user.DefaultInfo{Name: fmt.Sprintf("system:node:%s", additionalNodeName), Groups: []string{"system:nodes"}}
@@ -1441,7 +1440,7 @@ func BenchmarkAuthorization(b *testing.B) {
 	g := NewGraph()
 
 	opts := &sampleDataOpts{
-		// To simulate high replication in a small number of namespaces:
+		// 若要在少量命名空间中模拟高复制率：
 		// nodes:       5000,
 		// namespaces:  10,
 		// podsPerNode: 10,
@@ -1542,7 +1541,7 @@ func BenchmarkAuthorization(b *testing.B) {
 		contentionPrefix := ""
 		if testWriteContention {
 			contentionPrefix = "contentious "
-			// Start a writer pushing graph modifications 100x a second
+			// 启动一个写入协程，每秒执行 100 次图修改
 			go func() {
 				for shouldWrite == 1 {
 					go func() {
@@ -1583,7 +1582,7 @@ func BenchmarkAuthorization(b *testing.B) {
 				authz.features = tc.features
 			}
 			b.Run(contentionPrefix+tc.name, func(b *testing.B) {
-				// Run authorization checks in parallel
+				// 并行执行授权检查
 				b.SetParallelism(5000)
 				b.RunParallel(func(pb *testing.PB) {
 					for pb.Next() {
@@ -1633,10 +1632,10 @@ func randomSubset(a, b int, randPerm func(int) []int) []int {
 	return randPerm(b)[:a]
 }
 
-// generate creates sample pods and persistent volumes based on the provided options.
-// the secret/configmap/pvc/node references in the pod and pv objects are named to indicate the connections between the objects.
-// for example, secret0-pod0-node0 is a secret referenced by pod0 which is bound to node0.
-// when populated into the graph, the node authorizer should allow node0 to access that secret, but not node1.
+// generate 根据给定选项创建示例 Pod 和持久卷。
+// Pod 和 PV 对象中的 secret/configmap/pvc/node 引用通过命名表示对象之间的连接关系。
+// 例如，secret0-pod0-node0 是被绑定到 node0 的 pod0 引用的 Secret。
+// 填充图后，节点授权器应允许 node0 访问该 Secret，而不允许 node1 访问。
 func generate(opts *sampleDataOpts) ([]*corev1.Node, []*corev1.Pod, []*corev1.PersistentVolume, []*storagev1.VolumeAttachment, []*resourceapi.ResourceSlice, []*certsv1.PodCertificateRequest) {
 	nodes := make([]*corev1.Node, 0, opts.nodes)
 	pods := make([]*corev1.Pod, 0, opts.nodes*opts.podsPerNode)
@@ -1700,7 +1699,7 @@ func generatePod(name, namespace, nodeName, svcAccountName string, opts *sampleD
 			Secret: &corev1.SecretVolumeSource{SecretName: fmt.Sprintf("secret%d-%s", i, pod.Name)},
 		}})
 	}
-	// Choose shared secrets randomly from shared secrets in a namespace.
+	// 从命名空间中的共享 Secret 里随机选择。
 	subset := randomSubset(opts.sharedSecretsPerPod, opts.sharedSecretsPerNamespace, randPerm)
 	for _, i := range subset {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{VolumeSource: corev1.VolumeSource{
@@ -1713,7 +1712,7 @@ func generatePod(name, namespace, nodeName, svcAccountName string, opts *sampleD
 			ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: fmt.Sprintf("configmap%d-%s", i, pod.Name)}},
 		}})
 	}
-	// Choose shared configmaps randomly from shared configmaps in a namespace.
+	// 从命名空间中的共享 ConfigMap 里随机选择。
 	subset = randomSubset(opts.sharedConfigMapsPerPod, opts.sharedConfigMapsPerNamespace, randPerm)
 	for _, i := range subset {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{VolumeSource: corev1.VolumeSource{
@@ -1760,7 +1759,7 @@ func generatePod(name, namespace, nodeName, svcAccountName string, opts *sampleD
 			ResourceClaimName: &claimName,
 		})
 	}
-	// Choose shared pvcs randomly from shared pvcs in a namespace.
+	// 从命名空间中的共享 PVC 里随机选择。
 	subset = randomSubset(opts.sharedPVCsPerPod, opts.sharedPVCsPerNamespace, randPerm)
 	for _, i := range subset {
 		pv := &corev1.PersistentVolume{}

@@ -225,7 +225,7 @@ func TestPodTopology(t *testing.T) {
 // newHandlerForTest 创建并完成测试用准入控制器的初始化。
 func newHandlerForTest(c kubernetes.Interface) (*Plugin, informers.SharedInformerFactory, error) {
 	factory := informers.NewSharedInformerFactory(c, 5*time.Minute)
-	handler := NewPodTopologyPlugin(defaultConfig) // todo: write additional test cases with non-default config.
+	handler := NewPodTopologyPlugin(defaultConfig) // TODO: 补充使用非默认配置的测试用例。
 	pluginInitializer := genericadmissioninitializer.New(c, nil, factory, nil, feature.DefaultFeatureGate, nil, nil, nil)
 	pluginInitializer.Initialize(handler)
 	return handler, factory, admission.ValidateInitialization(handler)

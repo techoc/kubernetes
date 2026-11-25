@@ -84,7 +84,7 @@ func init() {
 		// 允许读取 API Server 的认证配置 ConfigMap
 		ObjectMeta: metav1.ObjectMeta{Name: "extension-apiserver-authentication-reader"},
 		Rules: []rbacv1.PolicyRule{
-			// this particular config map is exposed and contains authentication configuration information
+			// 该 ConfigMap 对外暴露，包含 API Server 的认证配置信息。
 			rbacv1helpers.NewRule("get", "list", "watch").Groups(legacyGroup).Resources("configmaps").Names("extension-apiserver-authentication").RuleOrDie(),
 		},
 	})

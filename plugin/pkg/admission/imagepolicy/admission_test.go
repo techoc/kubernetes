@@ -417,7 +417,7 @@ func newImagePolicyWebhook(callbackURL string, clientCert, clientKey, ca []byte,
 		return nil, fmt.Errorf("failed to execute test template: %v", err)
 	}
 
-	// Create a new admission controller
+	// 创建新的准入控制器。
 	configFile, err := os.Open(pc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read test config: %v", err)

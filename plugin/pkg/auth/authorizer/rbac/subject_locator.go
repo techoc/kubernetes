@@ -28,9 +28,10 @@ import (
 	rbacregistryvalidation "k8s.io/kubernetes/pkg/registry/rbac/validation"
 )
 
+// RoleToRuleMapper 将 RoleBinding 或 ClusterRoleBinding 中的角色引用解析为规则。
 type RoleToRuleMapper interface {
 	// GetRoleReferenceRules 尝试解析 RoleBinding 或 ClusterRoleBinding 的角色引用。
-	// 传入的 namespace 是 role binding 的命名空间，如果是 cluster role binding 则为空字符串。
+	// 传入的 namespace 是 RoleBinding 的命名空间；ClusterRoleBinding 时为空字符串。
 	GetRoleReferenceRules(ctx context.Context, roleRef rbacv1.RoleRef, namespace string) ([]rbacv1.PolicyRule, error)
 }
 

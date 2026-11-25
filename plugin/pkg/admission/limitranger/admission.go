@@ -168,7 +168,7 @@ func (l *LimitRanger) GetLimitRanges(a admission.Attributes) ([]*corev1.LimitRan
 	if len(items) == 0 {
 		lruItemObj, ok := l.liveLookupCache.Get(a.GetNamespace())
 		if !ok || lruItemObj.(liveLookupEntry).expiry.Before(time.Now()) {
-			// Fixed: #22422
+			// 修复：#22422
 			// 使用 singleflight 合并同一命名空间的并发查询，避免缓存击穿。
 			lruItemObj, err, _ = l.group.Do(a.GetNamespace(), func() (interface{}, error) {
 				liveList, err := l.client.CoreV1().LimitRanges(a.GetNamespace()).List(context.TODO(), metav1.ListOptions{})
@@ -554,13 +554,11 @@ type podResourcesOptions struct {
 
 // podRequests 是 pkg/api/v1/resource/PodRequests 针对 core 版本 Pod 的简化实现；
 // 上游计算方式若有变更，这里需同步。
-// NOTE: We do not want to check status resources here, only the spec. This is equivalent to setting
-// UseStatusResources=false in the common helper.
-// TODO: Maybe we can consider doing a partial conversion of the pod to a v1
-// type and then using the pkg/api/v1/resource/PodRequests.
-// TODO(ndixita): PodRequests method exists in
-// staging/src/k8s.io/component-helpers/resource/helpers.go. Refactor the code to
-// avoid duplicating podRequests method.
+// 此处只检查 spec，不检查 status 资源，等价于在通用辅助函数中设置
+// UseStatusResources=false。
+// TODO: 考虑将 Pod 部分转换为 v1 类型，再复用 pkg/api/v1/resource/PodRequests。
+// TODO(ndixita): staging/src/k8s.io/component-helpers/resource/helpers.go
+// 中已有 PodRequests 方法，应重构代码以避免重复实现。
 func podRequests(pod *api.Pod, opts podResourcesOptions) api.ResourceList {
 	reqs := api.ResourceList{}
 
@@ -572,7 +570,7 @@ func podRequests(pod *api.Pod, opts podResourcesOptions) api.ResourceList {
 	restartableInitCotnainerReqs := api.ResourceList{}
 	initContainerReqs := api.ResourceList{}
 	// init 容器决定资源需求的下界。
-	// Note: In-place resize is not allowed for InitContainers, so no need to check for ResizeStatus value
+	// 注意：InitContainers 不允许原地调整大小，因此无需检查 ResizeStatus。
 	for _, container := range pod.Spec.InitContainers {
 		containerReqs := container.Resources.Requests
 
@@ -610,13 +608,11 @@ func podRequests(pod *api.Pod, opts podResourcesOptions) api.ResourceList {
 
 // podLimits 是 pkg/api/v1/resource/PodLimits 针对 core 版本 Pod 的简化实现；
 // 上游计算方式若有变更，这里需同步。
-// NOTE: We do not want to check status resources here, only the spec. This is equivalent to setting
-// UseStatusResources=false in the common helper.
-// TODO: Maybe we can consider doing a partial conversion of the pod to a v1
-// type and then using the pkg/api/v1/resource/PodLimits.
-// TODO(ndixita): PodLimits method exists in
-// staging/src/k8s.io/component-helpers/resource/helpers.go. Refactor the code to
-// avoid duplicating podLimits method.
+// 此处只检查 spec，不检查 status 资源，等价于在通用辅助函数中设置
+// UseStatusResources=false。
+// TODO: 考虑将 Pod 部分转换为 v1 类型，再复用 pkg/api/v1/resource/PodLimits。
+// TODO(ndixita): staging/src/k8s.io/component-helpers/resource/helpers.go
+// 中已有 PodLimits 方法，应重构代码以避免重复实现。
 func podLimits(pod *api.Pod, opts podResourcesOptions) api.ResourceList {
 	limits := api.ResourceList{}
 
@@ -663,11 +659,9 @@ func podLimits(pod *api.Pod, opts podResourcesOptions) api.ResourceList {
 var supportedPodLevelResources = sets.New(api.ResourceCPU, api.ResourceMemory)
 
 // isSupportedPodLevelResource 判断指定资源是否受 PodLevelResources 特性支持。
-// isSupportedPodLevelResource method exists in
-// staging/src/k8s.io/component-helpers/resource/helpers.go.
-// isSupportedPodLevelResource is added here to avoid conversion of v1.
-// Pod to api.Pod.
-// TODO(ndixita): Find alternatives to avoid duplicating the code.
+// staging/src/k8s.io/component-helpers/resource/helpers.go 中已有同名判断；
+// 此处重复实现是为了避免将 v1.Pod 转换为 api.Pod。
+// TODO(ndixita): 寻找避免重复代码的方案。
 func isSupportedPodLevelResource(name api.ResourceName) bool {
 	return supportedPodLevelResources.Has(name)
 }

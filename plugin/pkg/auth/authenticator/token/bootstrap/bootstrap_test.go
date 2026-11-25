@@ -48,9 +48,9 @@ func (l *lister) Get(name string) (*corev1.Secret, error) {
 }
 
 const (
-	// Fake values for testing.
-	tokenID     = "foobar"           // 6 letters
-	tokenSecret = "circumnavigation" // 16 letters
+	// 用于测试的固定值。
+	tokenID     = "foobar"           // 6 个字母
+	tokenSecret = "circumnavigation" // 16 个字母
 )
 
 func TestTokenAuthenticator(t *testing.T) {
@@ -255,7 +255,7 @@ func TestTokenAuthenticator(t *testing.T) {
 					Type: "bootstrap.kubernetes.io/token",
 				},
 			},
-			// Token ID must be 6 characters.
+			// Token ID 必须包含 6 个字符。
 			token:        "foo" + "." + tokenSecret,
 			wantNotFound: true,
 		},

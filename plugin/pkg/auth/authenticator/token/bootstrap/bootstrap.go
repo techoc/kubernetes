@@ -42,12 +42,11 @@ import (
 	bootstraptokenutil "k8s.io/cluster-bootstrap/util/tokens"
 )
 
-// TODO: A few methods in this package is copied from other sources. Either
-// because the existing functionality isn't exported or because it is in a
-// package that shouldn't be directly imported by this packages.
+// TODO: 本包的部分方法复制自其他来源；要么是现有功能未导出，
+// 要么是所属包不应被本包直接导入。
 
 // NewTokenAuthenticator 创建一个新的 bootstrap token 认证器。
-// lister 应该指向 kube-system 命名空间，因为 bootstrap token secret 只存储在那里。
+// lister 应指向 kube-system 命名空间，因为 bootstrap token Secret 只存储在那里。
 func NewTokenAuthenticator(lister corev1listers.SecretNamespaceLister) *TokenAuthenticator {
 	return &TokenAuthenticator{lister}
 }
@@ -82,7 +81,7 @@ func tokenErrorf(s *corev1.Secret, format string, i ...interface{}) {
 func (t *TokenAuthenticator) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	tokenID, tokenSecret, err := bootstraptokenutil.ParseToken(token)
 	if err != nil {
-		// Token isn't of the correct form, ignore it.
+		// token 格式不正确，直接忽略。
 		return nil, false, nil
 	}
 
@@ -119,7 +118,7 @@ func (t *TokenAuthenticator) AuthenticateToken(ctx context.Context, token string
 	}
 
 	if bootstrapsecretutil.HasExpired(secret, time.Now()) {
-		// logging done in isSecretExpired method.
+		// isSecretExpired 方法已记录相关日志。
 		return nil, false, nil
 	}
 

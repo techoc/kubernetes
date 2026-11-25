@@ -61,7 +61,7 @@ type NodeAuthorizer struct {
 	identifier nodeidentifier.NodeIdentifier // 从用户信息中提取节点名称
 	nodeRules  []rbacv1.PolicyRule           // 静态节点规则，用于非细分资源的授权
 
-	// allows overriding for testing
+	// 允许在测试中覆盖功能门控。
 	features featuregate.FeatureGate // 功能门控，用于测试时覆盖默认值
 }
 
@@ -96,6 +96,7 @@ var (
 	pcrResource           = certsapi.Resource("podcertificaterequests")
 )
 
+// RulesFor 对节点用户返回 incomplete=true：节点权限取决于动态图关系，无法完整枚举。
 func (r *NodeAuthorizer) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	if _, isNode := r.identifier.NodeIdentity(user); isNode {
 		// 节点没有完全枚举的权限，因为权限取决于图结构（动态变化）
@@ -114,6 +115,8 @@ func (*NodeAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.Condit
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
+// Authorize 根据请求者身份和资源到节点的图关系作出授权决定。
+// 非节点请求返回 NoOpinion，以交由其他授权器处理。
 func (r *NodeAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	nodeName, isNode := r.identifier.NodeIdentity(attrs.GetUser())
 	if !isNode {
@@ -177,7 +180,7 @@ func (r *NodeAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attribu
 func (r *NodeAuthorizer) authorizeStatusUpdate(nodeName string, startingType vertexType, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	switch attrs.GetVerb() {
 	case "update", "patch":
-		// ok
+		// 允许。
 	default:
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 		return authorizer.DecisionNoOpinion, "can only get/update/patch this type", nil
@@ -209,7 +212,7 @@ func (r *NodeAuthorizer) authorizeGet(nodeName string, startingType vertexType, 
 func (r *NodeAuthorizer) authorizeReadNamespacedObject(nodeName string, startingType vertexType, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	switch attrs.GetVerb() {
 	case "get", "list", "watch":
-		// ok
+		// 允许。
 	default:
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 		return authorizer.DecisionNoOpinion, "can only read resources of this type", nil
@@ -290,11 +293,11 @@ func (r *NodeAuthorizer) authorizeCreateToken(nodeName string, startingType vert
 // authorizeLease 授权节点对 coordination.k8s.io/leases 的请求。
 // 节点只能访问 kube-node-lease 命名空间中与自己同名的 Lease，用于心跳保活。
 func (r *NodeAuthorizer) authorizeLease(nodeName string, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
-	// allowed verbs: get, create, update, patch, delete
+	// 允许的 verb：get、create、update、patch、delete。
 	verb := attrs.GetVerb()
 	switch verb {
 	case "get", "create", "update", "patch", "delete":
-		// ok
+		// 允许。
 	default:
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 		return authorizer.DecisionNoOpinion, "can only get, create, update, patch, or delete a node lease", nil
@@ -308,7 +311,7 @@ func (r *NodeAuthorizer) authorizeLease(nodeName string, attrs authorizer.Attrib
 
 	// 请求必须来自与 Lease 同名的节点
 	// 对 create 操作跳过此检查，因为授权器在创建时不知道名称
-	// noderestriction admission plugin 可以在创建时执行此检查
+	// noderestriction 准入插件 可以在创建时执行此检查
 	if verb != "create" && attrs.GetName() != nodeName {
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 		return authorizer.DecisionNoOpinion, "can only access node lease with the same name as the requesting node", nil
@@ -323,10 +326,10 @@ func (r *NodeAuthorizer) authorizeCSINode(nodeName string, attrs authorizer.Attr
 	verb := attrs.GetVerb()
 	switch attrs.GetSubresource() {
 	case "":
-		// allowed verbs: get, create, update, patch, delete
+		// 允许的 verb：get、create、update、patch、delete。
 		switch verb {
 		case "get", "create", "update", "patch", "delete":
-			// ok
+			// 允许。
 		default:
 			klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 			return authorizer.DecisionNoOpinion, "can only get, create, update, patch, or delete a CSINode", nil
@@ -336,10 +339,10 @@ func (r *NodeAuthorizer) authorizeCSINode(nodeName string, attrs authorizer.Attr
 			klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 			return authorizer.DecisionNoOpinion, "CSINode status access requires CSIVolumeHealth feature", nil
 		}
-		// allowed verbs: get, update, patch (for CSI volume health reporting)
+		// 允许的 verb：get、update、patch（用于 CSI 卷健康状态上报）。
 		switch verb {
 		case "get", "update", "patch":
-			// ok
+			// 允许。
 		default:
 			klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 			return authorizer.DecisionNoOpinion, "can only get, update, or patch CSINode status", nil
@@ -351,7 +354,7 @@ func (r *NodeAuthorizer) authorizeCSINode(nodeName string, attrs authorizer.Attr
 
 	// 请求必须来自与 CSINode 同名的节点
 	// 对 create 操作跳过此检查，因为授权器在创建时不知道名称
-	// noderestriction admission plugin 可以在创建时执行此检查
+	// noderestriction 准入插件 可以在创建时执行此检查
 	if verb != "create" && attrs.GetName() != nodeName {
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 		return authorizer.DecisionNoOpinion, "can only access CSINode with the same name as the requesting node", nil
@@ -368,11 +371,11 @@ func (r *NodeAuthorizer) authorizeResourceSlice(nodeName string, attrs authorize
 		return authorizer.DecisionNoOpinion, "cannot authorize ResourceSlice subresources", nil
 	}
 
-	// allowed verbs: get, create, update, patch, delete, watch, list, deletecollection
+	// 允许的 verb：get、create、update、patch、delete、watch、list、deletecollection。
 	verb := attrs.GetVerb()
 	switch verb {
 	case "create":
-		// 创建请求由 noderestriction admission plugin 检查 ResourceSlice.NodeName 字段。
+		// 创建请求由 noderestriction 准入插件 检查 ResourceSlice.NodeName 字段。
 		// 授权器无法访问新对象的内容，所以直接允许。
 		return authorizer.DecisionAllow, "", nil
 	case "get", "update", "patch", "delete":
@@ -386,7 +389,7 @@ func (r *NodeAuthorizer) authorizeResourceSlice(nodeName string, attrs authorize
 				return authorizer.DecisionAllow, "", nil
 			}
 		}
-		// deny otherwise
+		// 否则拒绝。
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 		return authorizer.DecisionNoOpinion, "can only list/watch/deletecollection resourceslices with nodeName field selector", nil
 	default:
@@ -402,7 +405,7 @@ func (r *NodeAuthorizer) authorizePodCertificateRequest(nodeName string, attrs a
 
 	switch attrs.GetVerb() {
 	case "create":
-		// 创建请求由 noderestriction admission plugin 进一步限制
+		// 创建请求由 noderestriction 准入插件 进一步限制
 		return authorizer.DecisionAllow, "", nil
 	case "get":
 		return r.authorize(nodeName, pcrVertexType, attrs)
@@ -414,7 +417,7 @@ func (r *NodeAuthorizer) authorizePodCertificateRequest(nodeName string, attrs a
 				return authorizer.DecisionAllow, "", nil
 			}
 		}
-		// deny otherwise
+		// 否则拒绝。
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 		return authorizer.DecisionNoOpinion, "can only list/watch podcertificaterequests with nodeName field selector", nil
 	}
@@ -430,7 +433,7 @@ func (r *NodeAuthorizer) authorizeNode(nodeName string, attrs authorizer.Attribu
 	case "":
 		switch attrs.GetVerb() {
 		case "create", "update", "patch":
-			// 使用 NodeRestriction admission plugin 限制节点只能创建/更新自己的 API 对象
+			// 使用 NodeRestriction 准入插件 限制节点只能创建/更新自己的 API 对象
 			return authorizer.DecisionAllow, "", nil
 		case "get", "list", "watch":
 			// 直接比较名称，而不是使用图，
@@ -449,7 +452,7 @@ func (r *NodeAuthorizer) authorizeNode(nodeName string, attrs authorizer.Attribu
 	case "status":
 		switch attrs.GetVerb() {
 		case "update", "patch":
-			// 使用 NodeRestriction admission plugin 限制节点只能更新自己的 Node 状态
+			// 使用 NodeRestriction 准入插件 限制节点只能更新自己的 Node 状态
 			return authorizer.DecisionAllow, "", nil
 		}
 	}
@@ -479,13 +482,13 @@ func (r *NodeAuthorizer) authorizePod(nodeName string, attrs authorizer.Attribut
 			if attrs.GetName() != "" {
 				return r.authorize(nodeName, podVertexType, attrs)
 			}
-			// deny otherwise
+			// 否则拒绝。
 			klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
 			return authorizer.DecisionNoOpinion, "can only list/watch pods with spec.nodeName field selector", nil
 
 		case "create", "delete":
 			// 节点需要创建/删除 mirror pod
-			// 使用 NodeRestriction admission plugin 限制节点只能创建/删除绑定到自己的 mirror pod
+			// 使用 NodeRestriction 准入插件 限制节点只能创建/删除绑定到自己的镜像 Pod
 			return authorizer.DecisionAllow, "", nil
 		}
 
@@ -493,14 +496,14 @@ func (r *NodeAuthorizer) authorizePod(nodeName string, attrs authorizer.Attribut
 		switch attrs.GetVerb() {
 		case "update", "patch":
 			// 节点需要报告运行在其上的 Pod 的状态
-			// 使用 NodeRestriction admission plugin 限制节点只能更新绑定到自己的 Pod 的状态
+			// 使用 NodeRestriction 准入插件 限制节点只能更新绑定到自己的 Pod 的状态
 			return authorizer.DecisionAllow, "", nil
 		}
 
 	case "eviction":
 		if attrs.GetVerb() == "create" {
 			// 节点需要驱逐运行在其上的 Pod
-			// 使用 NodeRestriction admission plugin 限制节点只能驱逐绑定到自己的 Pod
+			// 使用 NodeRestriction 准入插件 限制节点只能驱逐绑定到自己的 Pod
 			return authorizer.DecisionAllow, "", nil
 		}
 	}

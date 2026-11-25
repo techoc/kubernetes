@@ -42,7 +42,7 @@ func TestDeleteEdgesLocked(t *testing.T) {
 		expect      *Graph
 	}{
 		{
-			// single edge from a configmap to a node, will delete edge and orphaned configmap
+			// configmap 到 node 的单条边；删除该边和孤立的 configmap。
 			desc:        "edges and source orphans are deleted, destination orphans are preserved",
 			fromType:    configMapVertexType,
 			toType:      nodeVertexType,
@@ -64,7 +64,7 @@ func TestDeleteEdgesLocked(t *testing.T) {
 			}(),
 		},
 		{
-			// two edges from the same configmap to distinct nodes, will delete one of the edges
+			// 同一 configmap 到两个不同 node 的边；只删除其中一条。
 			desc:        "edges are deleted, non-orphans and destination orphans are preserved",
 			fromType:    configMapVertexType,
 			toType:      nodeVertexType,
@@ -146,11 +146,10 @@ func TestDeleteEdgesLocked(t *testing.T) {
 		t.Run(c.desc, func(t *testing.T) {
 			c.start.deleteEdgesLocked(c.fromType, c.toType, c.toNamespace, c.toName)
 
-			// Note: We assert on substructures (graph.Nodes(), graph.Edges()) because the graph tracks
-			// freed IDs for reuse, which results in an irrelevant inequality between start and expect.
+			// 注意：图会记录已释放 ID 以供复用，导致 start 与 expect 整体比较出现无关差异，
+			// 因此这里只断言节点和边等子结构。
 
-			// sort the nodes by ID
-			// (the slices we get back are from map iteration, where order is not guaranteed)
+			// 按 ID 排序节点；返回切片来自 map 遍历，顺序不保证。
 			expectNodes := c.expect.graph.Nodes()
 			sort.Slice(expectNodes, func(i, j int) bool {
 				return expectNodes[i].ID() < expectNodes[j].ID()
@@ -161,8 +160,7 @@ func TestDeleteEdgesLocked(t *testing.T) {
 			})
 			assert.Equal(t, expectNodes, startNodes)
 
-			// sort the edges by from ID, then to ID
-			// (the slices we get back are from map iteration, where order is not guaranteed)
+			// 按起点 ID、再按终点 ID 排序边；返回切片来自 map 遍历，顺序不保证。
 			expectEdges := c.expect.graph.Edges()
 			sort.Slice(expectEdges, func(i, j int) bool {
 				if expectEdges[i].From().ID() == expectEdges[j].From().ID() {
@@ -179,7 +177,7 @@ func TestDeleteEdgesLocked(t *testing.T) {
 			})
 			assert.Equal(t, expectEdges, startEdges)
 
-			// vertices is a recursive map, no need to sort
+			// vertices 是递归 map，无需排序。
 			assert.Equal(t, c.expect.vertices, c.start.vertices)
 		})
 	}
@@ -264,7 +262,7 @@ func TestIndex(t *testing.T) {
 	for i := 1; i <= g.destinationEdgeThreshold; i++ {
 		addPod(i, i)
 		if i < g.destinationEdgeThreshold {
-			// if we're under the threshold, no index expected
+			// 未达到阈值时不预期存在索引。
 			expectIndex(map[string][]string{})
 		}
 	}
@@ -287,7 +285,7 @@ func TestIndex(t *testing.T) {
 		"serviceAccount:ns/sa1": {"node:node1=1", "node:node2=1", "node:node3=1"},
 	})
 
-	// delete one to drop below the threshold
+	// 删除一个 Pod，使边数低于阈值。
 	g.DeletePod("pod1", "ns")
 	expectGraph(map[string][]string{
 		"node:node2":            {},
@@ -301,7 +299,7 @@ func TestIndex(t *testing.T) {
 	})
 	expectIndex(map[string][]string{})
 
-	// add two to get above the threshold
+	// 再添加两个 Pod，使边数高于阈值。
 	addPod(1, 1)
 	addPod(4, 1)
 	expectGraph(map[string][]string{
@@ -324,7 +322,7 @@ func TestIndex(t *testing.T) {
 		"serviceAccount:ns/sa1": {"node:node1=2", "node:node2=1", "node:node3=1"},
 	})
 
-	// delete one to remain above the threshold
+	// 删除一个 Pod，边数仍高于阈值。
 	g.DeletePod("pod1", "ns")
 	expectGraph(map[string][]string{
 		"node:node1":            {},

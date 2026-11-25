@@ -68,9 +68,9 @@ func eventsRule() rbacv1.PolicyRule {
 // bootstrap-signer、token-cleaner、node-ipam、endpoint、
 // resourceclaim、podgc 等控制器的权限。
 func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) {
-	// controllerRoles is a slice of roles used for controllers
+	// controllerRoles 保存控制器使用的 ClusterRole 的切片。
 	controllerRoles := []rbacv1.ClusterRole{}
-	// controllerRoleBindings is a slice of roles used for controllers
+	// controllerRoleBindings 保存控制器使用的 ClusterRoleBinding 的切片。
 	controllerRoleBindings := []rbacv1.ClusterRoleBinding{}
 
 	addControllerRole(&controllerRoles, &controllerRoleBindings, func() rbacv1.ClusterRole {
@@ -95,7 +95,7 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 	addControllerRole(&controllerRoles, &controllerRoleBindings, rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "clusterrole-aggregation-controller"},
 		Rules: []rbacv1.PolicyRule{
-			// this controller must have full permissions on clusterroles to allow it to mutate them in any way
+			// 此控制器必须拥有 clusterroles 的完整权限，以便以任意方式修改它们。
 			rbacv1helpers.NewRule("escalate", "get", "list", "watch", "update", "patch").Groups(rbacGroup).Resources("clusterroles").RuleOrDie(),
 		},
 	})
@@ -130,8 +130,8 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 			rbacv1helpers.NewRule("update").Groups(extensionsGroup, appsGroup).Resources("deployments/status").RuleOrDie(),
 			rbacv1helpers.NewRule("update").Groups(extensionsGroup, appsGroup).Resources("deployments/finalizers").RuleOrDie(),
 			rbacv1helpers.NewRule("get", "list", "watch", "create", "update", "patch", "delete").Groups(appsGroup, extensionsGroup).Resources("replicasets").RuleOrDie(),
-			// TODO: remove "update" once
-			// https://github.com/kubernetes/kubernetes/issues/36897 is resolved.
+			// TODO: 在以下问题解决后移除 "update" 权限：
+			// https://github.com/kubernetes/kubernetes/issues/36897
 			rbacv1helpers.NewRule("get", "list", "watch", "update").Groups(legacyGroup).Resources("pods").RuleOrDie(),
 			eventsRule(),
 		},
@@ -167,8 +167,8 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 		ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "endpointslice-controller"},
 		Rules: []rbacv1.PolicyRule{
 			rbacv1helpers.NewRule("get", "list", "watch").Groups(legacyGroup).Resources("services", "pods", "nodes").RuleOrDie(),
-			// The controller needs to be able to set a service's finalizers to be able to create an EndpointSlice
-			// resource that is owned by the service and sets blockOwnerDeletion=true in its ownerRef.
+			// 控制器需要能够设置 Service 的 finalizers，以创建 EndpointSlice
+			// 资源；该资源由 Service 所有，并在 ownerRef 中设置 blockOwnerDeletion=true。
 			rbacv1helpers.NewRule("update").Groups(legacyGroup).Resources("services/finalizers").RuleOrDie(),
 			rbacv1helpers.NewRule("get", "list", "watch", "create", "update", "delete").Groups(discoveryGroup).Resources("endpointslices").RuleOrDie(),
 			eventsRule(),
@@ -179,12 +179,12 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 		ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "endpointslicemirroring-controller"},
 		Rules: []rbacv1.PolicyRule{
 			rbacv1helpers.NewRule("get", "list", "watch").Groups(legacyGroup).Resources("services", "endpoints").RuleOrDie(),
-			// The controller needs to be able to set a service's finalizers to be able to create an EndpointSlice
-			// resource that is owned by the service and sets blockOwnerDeletion=true in its ownerRef.
+			// 控制器需要能够设置 Service 的 finalizers，以创建 EndpointSlice
+			// 资源；该资源由 Service 所有，并在 ownerRef 中设置 blockOwnerDeletion=true。
 			rbacv1helpers.NewRule("update").Groups(legacyGroup).Resources("services/finalizers").RuleOrDie(),
-			// The controller needs to be able to set a service's finalizers to be able to create an EndpointSlice
-			// resource that is owned by the endpoint and sets blockOwnerDeletion=true in its ownerRef.
-			// see https://github.com/openshift/kubernetes/blob/8691466059314c3f7d6dcffcbb76d14596ca716c/pkg/controller/endpointslicemirroring/utils.go#L87-L88
+			// 控制器需要能够设置 Service 的 finalizers，以创建 EndpointSlice
+			// 资源；该资源由 Endpoint 所有，并在 ownerRef 中设置 blockOwnerDeletion=true。
+			// 参见 https://github.com/openshift/kubernetes/blob/8691466059314c3f7d6dcffcbb76d14596ca716c/pkg/controller/endpointslicemirroring/utils.go#L87-L88
 			rbacv1helpers.NewRule("update").Groups(legacyGroup).Resources("endpoints/finalizers").RuleOrDie(),
 			rbacv1helpers.NewRule("get", "list", "watch", "create", "update", "delete").Groups(discoveryGroup).Resources("endpointslices").RuleOrDie(),
 			eventsRule(),
@@ -237,11 +237,11 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 		})
 		if utilfeature.DefaultFeatureGate.Enabled(features.DRADeviceTaints) {
 			rules := []rbacv1.PolicyRule{
-				// Deletes pods to evict them.
+				// 删除 Pod 以将其驱逐。
 				rbacv1helpers.NewRule("get", "list", "watch", "delete").Groups(legacyGroup).Resources("pods").RuleOrDie(),
-				// Sets pod conditions.
+				// 设置 Pod 条件。
 				rbacv1helpers.NewRule("update", "patch").Groups(legacyGroup).Resources("pods/status").RuleOrDie(),
-				// The rest is read-only.
+				// 其余权限均为只读。
 				rbacv1helpers.NewRule("get", "list", "watch").Groups(resourceGroup).Resources("resourceclaims").RuleOrDie(),
 				rbacv1helpers.NewRule("get", "list", "watch").Groups(resourceGroup).Resources("resourceslices").RuleOrDie(),
 				rbacv1helpers.NewRule("get", "list", "watch").Groups(resourceGroup).Resources("deviceclasses").RuleOrDie(),
@@ -250,33 +250,33 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 
 			if utilfeature.DefaultFeatureGate.Enabled(features.DRADeviceTaintRules) {
 				rules = append(rules,
-					// Sets DeviceTaintRule conditions.
+					// 设置 DeviceTaintRule 条件。
 					rbacv1helpers.NewRule("update", "patch").Groups(resourceGroup).Resources("devicetaintrules/status").RuleOrDie(),
-					// Read-only for spec.
+					// spec 为只读。
 					rbacv1helpers.NewRule("get", "list", "watch").Groups(resourceGroup).Resources("devicetaintrules").RuleOrDie(),
 				)
 			}
 
 			addControllerRole(&controllerRoles, &controllerRoleBindings, rbacv1.ClusterRole{
-				// Same name as in k8s.io/kubernetes/cmd/kube-controller-manager/names.
+				// 名称与 k8s.io/kubernetes/cmd/kube-controller-manager/names 中相同。
 				ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "device-taint-eviction-controller"},
 				Rules:      rules,
 			})
 		}
 		if utilfeature.DefaultFeatureGate.Enabled(features.DRAResourcePoolStatus) {
 			addControllerRole(&controllerRoles, &controllerRoleBindings, rbacv1.ClusterRole{
-				// Same name as in k8s.io/kubernetes/cmd/kube-controller-manager/names.
+				// 名称与 k8s.io/kubernetes/cmd/kube-controller-manager/names 中相同。
 				ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "resourcepoolstatusrequest-controller"},
 				Rules: []rbacv1.PolicyRule{
-					// Read and delete ResourcePoolStatusRequests (delete needed for TTL cleanup)
+					// 读取和删除 ResourcePoolStatusRequest（TTL 清理需要删除权限）
 					rbacv1helpers.NewRule("get", "list", "watch", "delete").Groups(resourceGroup).Resources("resourcepoolstatusrequests").RuleOrDie(),
-					// Update status after processing
+					// 处理后更新状态
 					rbacv1helpers.NewRule("update", "patch").Groups(resourceGroup).Resources("resourcepoolstatusrequests/status").RuleOrDie(),
-					// Read ResourceSlices to calculate pool status
+					// 读取 ResourceSlice 以计算资源池状态
 					rbacv1helpers.NewRule("get", "list", "watch").Groups(resourceGroup).Resources("resourceslices").RuleOrDie(),
-					// Read ResourceClaims to calculate allocation counts
+					// 读取 ResourceClaim 以计算分配数量
 					rbacv1helpers.NewRule("get", "list", "watch").Groups(resourceGroup).Resources("resourceclaims").RuleOrDie(),
-					// Read DeviceTaintRules to count tainted devices as unavailable
+					// 读取 DeviceTaintRule，将有污点设备计为不可用
 					rbacv1helpers.NewRule("get", "list", "watch").Groups(resourceGroup).Resources("devicetaintrules").RuleOrDie(),
 					eventsRule(),
 				},
@@ -287,7 +287,7 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 	addControllerRole(&controllerRoles, &controllerRoleBindings, rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "generic-garbage-collector"},
 		Rules: []rbacv1.PolicyRule{
-			// the GC controller needs to run list/watches, selective gets, and updates against any resource
+			// GC 控制器需要对任意资源执行 list/watch、选择性 get 和 update
 			rbacv1helpers.NewRule("get", "list", "watch", "patch", "update", "delete").Groups("*").Resources("*").RuleOrDie(),
 			eventsRule(),
 		},
@@ -299,7 +299,7 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 			rbacv1helpers.NewRule("update").Groups(autoscalingGroup).Resources("horizontalpodautoscalers/status").RuleOrDie(),
 			rbacv1helpers.NewRule("get", "update").Groups("*").Resources("*/scale").RuleOrDie(),
 			rbacv1helpers.NewRule("list", "watch").Groups(legacyGroup).Resources("pods").RuleOrDie(),
-			// allow listing resource, custom, and external metrics
+			// 允许列出 resource、custom 和 external 指标
 			rbacv1helpers.NewRule("list", "watch").Groups(resMetricsGroup).Resources("pods").RuleOrDie(),
 			rbacv1helpers.NewRule("get", "list", "watch").Groups(customMetricsGroup).Resources("*").RuleOrDie(),
 			rbacv1helpers.NewRule("get", "list", "watch").Groups(externalMetricsGroup).Resources("*").RuleOrDie(),
@@ -336,7 +336,7 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 			Rules: []rbacv1.PolicyRule{
 				rbacv1helpers.NewRule("get", "list", "watch", "update", "delete", "patch").Groups(legacyGroup).Resources("nodes").RuleOrDie(),
 				rbacv1helpers.NewRule("patch", "update").Groups(legacyGroup).Resources("nodes/status").RuleOrDie(),
-				// used for pod deletion
+				// 用于删除 Pod
 				rbacv1helpers.NewRule("patch", "update").Groups(legacyGroup).Resources("pods/status").RuleOrDie(),
 				rbacv1helpers.NewRule("list", "watch", "get", "delete").Groups(legacyGroup).Resources("pods").RuleOrDie(),
 				rbacv1helpers.NewRule("get", "list", "watch").Groups(coordinationGroup).Resources("leases").RuleOrDie(),
@@ -385,7 +385,7 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 	addControllerRole(&controllerRoles, &controllerRoleBindings, rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "replication-controller"},
 		Rules: []rbacv1.PolicyRule{
-			// 1.0 controllers needed get, update, so without these old controllers break on new servers
+			// 1.0 控制器需要 get 和 update 权限；缺少这些权限会导致旧控制器无法在新服务端上运行
 			rbacv1helpers.NewRule("get", "list", "watch", "update").Groups(legacyGroup).Resources("replicationcontrollers").RuleOrDie(),
 			rbacv1helpers.NewRule("update").Groups(legacyGroup).Resources("replicationcontrollers/status").RuleOrDie(),
 			rbacv1helpers.NewRule("update").Groups(legacyGroup).Resources("replicationcontrollers/finalizers").RuleOrDie(),
@@ -396,7 +396,7 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 	addControllerRole(&controllerRoles, &controllerRoleBindings, rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: saRolePrefix + "resourcequota-controller"},
 		Rules: []rbacv1.PolicyRule{
-			// quota can count quota on anything for reconciliation, so it needs full viewing powers
+			// 配额控制器需要对任意资源计量配额以进行协调，因此需要完整的查看权限
 			rbacv1helpers.NewRule("list", "watch").Groups("*").Resources("*").RuleOrDie(),
 			rbacv1helpers.NewRule("update").Groups(legacyGroup).Resources("resourcequotas/status").RuleOrDie(),
 			eventsRule(),
@@ -591,8 +591,8 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 				Name: saRolePrefix + "storage-version-migrator-controller",
 			},
 			Rules: []rbacv1.PolicyRule{
-				// need list to get current RV for any resource
-				// need patch for any resource to perform migration
+				// 需要对任意资源执行 list 以获取当前 RV
+				// 需要对任意资源执行 patch 以执行迁移
 				rbacv1helpers.NewRule("list", "patch").Groups("*").Resources("*").RuleOrDie(),
 				rbacv1helpers.NewRule("get").Groups("apiextensions.k8s.io").Resources("customresourcedefinitions").RuleOrDie(),
 				rbacv1helpers.NewRule("patch").Groups("apiextensions.k8s.io").Resources("customresourcedefinitions/status").RuleOrDie(),
@@ -617,13 +617,13 @@ func buildControllerRoles() ([]rbacv1.ClusterRole, []rbacv1.ClusterRoleBinding) 
 	return controllerRoles, controllerRoleBindings
 }
 
-// ControllerRoles returns the cluster roles used by controllers
+// ControllerRoles 返回控制器使用的 ClusterRole。
 func ControllerRoles() []rbacv1.ClusterRole {
 	controllerRoles, _ := buildControllerRoles()
 	return controllerRoles
 }
 
-// ControllerRoleBindings returns the role bindings used by controllers
+// ControllerRoleBindings 返回控制器使用的 ClusterRoleBinding。
 func ControllerRoleBindings() []rbacv1.ClusterRoleBinding {
 	_, controllerRoleBindings := buildControllerRoles()
 	return controllerRoleBindings

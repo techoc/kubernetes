@@ -31,26 +31,26 @@ func TestIntSet(t *testing.T) {
 	assert.False(t, i.has(4))
 
 	i.reset()
-	i.increment(1) // to 1
-	i.increment(2) // to 1
+	i.increment(1) // 变为 1
+	i.increment(2) // 变为 1
 
 	assert.True(t, i.has(1))
 	assert.True(t, i.has(2))
 	assert.False(t, i.has(3))
 	assert.False(t, i.has(4))
 
-	i.decrement(1) // to 0
-	i.increment(3) // to 1
+	i.decrement(1) // 变为 0
+	i.increment(3) // 变为 1
 
-	assert.False(t, i.has(1)) // removed
-	assert.True(t, i.has(2))  // still present
-	assert.True(t, i.has(3))  // added
-	assert.False(t, i.has(4)) // not yet present
+	assert.False(t, i.has(1)) // 已移除
+	assert.True(t, i.has(2))  // 仍存在
+	assert.True(t, i.has(3))  // 已添加
+	assert.False(t, i.has(4)) // 尚未存在
 
-	i.decrement(2) // to 0
-	i.increment(3) // to 2
-	i.decrement(3) // to 1
-	i.increment(4) // to 1
+	i.decrement(2) // 变为 0
+	i.increment(3) // 变为 2
+	i.decrement(3) // 变为 1
+	i.increment(4) // 变为 1
 
 	assert.False(t, i.has(1))
 	assert.False(t, i.has(2))

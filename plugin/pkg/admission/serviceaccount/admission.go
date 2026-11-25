@@ -96,13 +96,13 @@ var _ = genericadmissioninitializer.WantsExternalKubeInformerFactory(&Plugin{})
 // 2. 确保 Pod 引用的 ServiceAccount 存在。
 // 3. LimitSecretReferences 为 true 时，拒绝引用了 ServiceAccount 未声明 Secret 的 Pod。
 // 4. Pod 未声明任何 ImagePullSecrets 时，补上服务账号的 ImagePullSecrets。
-// 5. MountServiceAccountToken 为 true 时，为容器添加挂载服务账号 API token Secret 的 VolumeMount。
+// 5. MountServiceAccountToken 为 true 时，为容器添加挂载服务账号 API 令牌 Secret 的 VolumeMount。
 func NewServiceAccount() *Plugin {
 	return &Plugin{
 		Handler: admission.NewHandler(admission.Create, admission.Update),
 		// TODO: 待梳理完 Secret 使用情况、补上服务账号的 Secret 引用后再启用
 		LimitSecretReferences: false,
-		// 自动挂载服务账号的 API token Secret。
+		// 自动挂载服务账号的 API 令牌 Secret。
 		MountServiceAccountToken: true,
 
 		generateName: names.SimpleNameGenerator.GenerateName,
