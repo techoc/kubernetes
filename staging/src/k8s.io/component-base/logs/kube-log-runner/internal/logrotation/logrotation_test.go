@@ -108,7 +108,7 @@ func TestLogrotationWrite(t *testing.T) {
 				t.Errorf("Expected to write %d bytes, but wrote %d bytes", len(testData), n)
 			}
 
-			// Check if data is written to the file
+			// 检查数据是否写入文件。
 			content, err := os.ReadFile(logFilePath)
 			if err != nil {
 				t.Fatalf("Failed to read log file: %v", err)
@@ -117,7 +117,7 @@ func TestLogrotationWrite(t *testing.T) {
 				t.Errorf("Expected log file content to be %q, but got %q", string(testData), string(content))
 			}
 
-			// Write more data to trigger rotation
+			// 写入更多数据以触发轮转。
 			// 写入 1MB 使总大小超过 maxSize（同样是 1MB），断言在写入后发生轮转。
 			largeData := make([]byte, 1024*1024) // 1 MB
 			n, err = rotationFile.Write(largeData)
@@ -128,7 +128,7 @@ func TestLogrotationWrite(t *testing.T) {
 				t.Errorf("Expected to write %d bytes, but wrote %d bytes", len(largeData), n)
 			}
 
-			// Check if rotation happened
+			// 检查是否发生轮转。
 			rotatedFiles, err := filepath.Glob(filepath.Join(tmpDir, "test-*.log"))
 			if err != nil {
 				t.Fatalf("Failed to list rotated files: %v", err)
@@ -140,18 +140,18 @@ func TestLogrotationWrite(t *testing.T) {
 					t.Errorf("Expected %d rotated log files, but found %d", numberFiles, len(rotatedFiles))
 				}
 
-				// Check if new log file is created
+				// 检查是否创建了新日志文件。
 				newContent, err := os.ReadFile(logFilePath)
 				if err != nil {
 					t.Fatalf("Failed to read new log file: %v", err)
 				}
-				// Rotation after the write, new log file should be empty
+				// 写入后发生轮转，新日志文件应为空。
 				// 轮转在写入完成后触发，数据都落在轮转文件里，新文件保持为空。
 				if len(newContent) != 0 {
 					t.Errorf("Expected new log file content to be 0 bytes, but got %d bytes", len(newContent))
 				}
 
-				// Check if content is append to the rotated log file
+				// 检查内容是否追加到轮转后的日志文件。
 				content, err := os.ReadFile(rotatedFiles[0])
 				if err != nil {
 					t.Fatalf("Failed to read log file: %v", err)
@@ -165,7 +165,7 @@ func TestLogrotationWrite(t *testing.T) {
 					t.Errorf("Expected %d rotated log files, but found %d", numberFiles, len(rotatedFiles))
 				}
 
-				// Check if content is append to the existing log file
+				// 检查内容是否追加到现有日志文件。
 				content, err := os.ReadFile(logFilePath)
 				if err != nil {
 					t.Fatalf("Failed to read log file: %v", err)
@@ -175,7 +175,7 @@ func TestLogrotationWrite(t *testing.T) {
 				}
 			}
 
-			// Check if rotated file was able to be cleaned up
+			// 检查轮转文件是否能够被清理。
 			// 把已有轮转文件的 mtime 改到 10 天前，使其超过 maxAge，供下一轮清理删除。
 			if len(rotatedFiles) != 0 {
 				err = os.Chtimes(rotatedFiles[0], time.Now(), time.Now().AddDate(0, 0, -10))
@@ -184,7 +184,7 @@ func TestLogrotationWrite(t *testing.T) {
 				}
 			}
 
-			// Trigger another rotation and check if the old rotated file has been cleaned up
+			// 再次触发轮转，并检查旧轮转文件是否已被清理。
 			time.Sleep(1 * time.Second)
 			largeData2 := make([]byte, 1024*1025)
 			_, err = rotationFile.Write(largeData2)
@@ -196,7 +196,7 @@ func TestLogrotationWrite(t *testing.T) {
 				t.Fatalf("Failed to list rotated files: %v", err)
 			}
 
-			// Read the content of the log file
+			// 读取日志文件内容。
 			content, err = os.ReadFile(logFilePath)
 			if err != nil {
 				t.Fatalf("Failed to read log file: %v", err)
@@ -211,7 +211,7 @@ func TestLogrotationWrite(t *testing.T) {
 				}
 			} else {
 				if tt.cleanupExpected {
-					// clean up is performed in a async goroutine, wait for it to finish
+					// 清理在异步 goroutine 中执行，等待其完成。
 					// 清理是异步的，轮询等待文件数降到 1，最多 5 秒；固定 sleep 会让测试不稳定。
 					end := time.Now().Add(5 * time.Second)
 					for time.Now().Before(end) {
@@ -237,7 +237,7 @@ func TestLogrotationWrite(t *testing.T) {
 				} else if len(rotatedFiles2) != 2 {
 					t.Errorf("Expected rotated log files to be 2, but found %d", len(rotatedFiles2))
 				}
-				// Rotation after the write, new log file should be empty
+				// 写入后发生轮转，新日志文件应为空。
 				if len(content) != 0 {
 					t.Errorf("Expected new log file content to be 0 bytes, but got %d bytes", len(content))
 				}

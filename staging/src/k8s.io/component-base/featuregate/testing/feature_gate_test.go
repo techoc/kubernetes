@@ -154,7 +154,7 @@ func TestSetFeatureGateInTest(t *gotest.T) {
 
 	t.Run("ParallelSubtest", func(t *gotest.T) {
 		assert.True(t, gate.Enabled("feature"))
-		// Calling t.Parallel in subtest will resume the main test body
+		// 子测试调用 t.Parallel 后会恢复执行主测试主体。
 		// 父测试会在子测试暂停后继续执行，因此这里仍能看到覆盖值。
 		t.Parallel()
 		assert.True(t, gate.Enabled("feature"))
@@ -266,7 +266,7 @@ func TestSetFeatureGatesInTestWithDependencies(t *gotest.T) {
 	}, {
 		name: "Error when disabling dependency",
 		overrides: FeatureOverrides{
-			betaOnFeature:    true, // Explicitly enabled so it's not automatically disabled.
+			betaOnFeature:    true, // 显式启用，避免被自动禁用。
 			betaOnFeatureDep: false,
 		},
 		expectError: true,
@@ -280,7 +280,7 @@ func TestSetFeatureGatesInTestWithDependencies(t *gotest.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *gotest.T) {
-			// Separate inner test so we can verify cleanup in the outer test.
+			// 使用独立内层测试，以便在外层测试验证清理行为。
 			t.Run("Set", func(t *gotest.T) {
 				if test.expectError {
 					fakeT := &ignoreErrorT{ignoreFatalT: &ignoreFatalT{T: t}}
@@ -294,7 +294,7 @@ func TestSetFeatureGatesInTestWithDependencies(t *gotest.T) {
 					expect(t, gate, expectedState)
 				}
 			})
-			// Verify revert in cleanup.
+			// 验证清理时恢复原值。
 			expect(t, gate, initialState)
 		})
 	}
@@ -411,16 +411,16 @@ func TestDetectLeakToMainTest(t *gotest.T) {
 	})
 	require.NoError(t, err)
 
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run("LeakingSubtest", func(t *gotest.T) {
 		fakeT := &ignoreFatalT{T: t}
 		SetFeatureGateDuringTest(fakeT, gate, "feature", true)
-		// Calling t.Parallel in subtest will resume the main test body
+		// 子测试调用 t.Parallel 后会恢复执行主测试主体。
 		t.Parallel()
-		// Leaked false from main test
+		// 从主测试泄漏的 false
 		assert.False(t, gate.Enabled("feature"))
 	})
-	// Leaked true from subtest
+	// 从子测试泄漏的 true
 	assert.True(t, gate.Enabled("feature"))
 	fakeT := &ignoreFatalT{T: t}
 	SetFeatureGateDuringTest(fakeT, gate, "feature", false)
@@ -438,15 +438,15 @@ func TestDetectLeakToOtherSubtest(t *gotest.T) {
 	require.NoError(t, err)
 
 	subtestName := "Subtest"
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run(subtestName, func(t *gotest.T) {
 		fakeT := &ignoreFatalT{T: t}
 		SetFeatureGateDuringTest(fakeT, gate, "feature", true)
 		t.Parallel()
 	})
-	// Add suffix to name to prevent tests with the same prefix.
+	// 给名称添加后缀，避免与同前缀测试重名。
 	t.Run(subtestName+"Suffix", func(t *gotest.T) {
-		// Leaked true
+		// 泄漏的 true
 		assert.True(t, gate.Enabled("feature"))
 
 		fakeT := &ignoreFatalT{T: t}
@@ -466,12 +466,12 @@ func TestCannotDetectLeakFromSubtest(t *gotest.T) {
 	require.NoError(t, err)
 
 	SetFeatureGateDuringTest(t, gate, "feature", false)
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run("Subtest", func(t *gotest.T) {
 		SetFeatureGateDuringTest(t, gate, "feature", true)
 		t.Parallel()
 	})
-	// Leaked true
+	// 泄漏的 true
 	assert.True(t, gate.Enabled("feature"))
 }
 
@@ -489,19 +489,19 @@ func TestCannotDetectLeakFromTwoSubtestsWithDifferentFeatures(t *gotest.T) {
 	assert.False(t, gate.Enabled("feature1"))
 	assert.False(t, gate.Enabled("feature2"))
 	subtestName := "Subtest"
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run(subtestName, func(t *gotest.T) {
 		SetFeatureGateDuringTest(t, gate, "feature1", true)
 		t.Parallel()
 		assert.True(t, gate.Enabled("feature1"))
 		assert.False(t, gate.Enabled("feature2"))
 	})
-	// Leaked true
+	// 泄漏的 true
 	assert.True(t, gate.Enabled("feature1"))
 	assert.False(t, gate.Enabled("feature2"))
-	// Add suffix to name to prevent tests with the same prefix.
+	// 给名称添加后缀，避免与同前缀测试重名。
 	t.Run(subtestName+"Suffix", func(t *gotest.T) {
-		// Leaked true
+		// 泄漏的 true
 		assert.True(t, gate.Enabled("feature1"))
 		assert.False(t, gate.Enabled("feature2"))
 		SetFeatureGateDuringTest(t, gate, "feature2", true)
@@ -519,16 +519,16 @@ func TestDetectEmulationVersionLeakToMainTest(t *gotest.T) {
 	gate := featuregate.NewVersionedFeatureGate(originalEmulationVersion)
 	assert.True(t, gate.EmulationVersion().EqualTo(originalEmulationVersion))
 
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run("LeakingSubtest", func(t *gotest.T) {
 		fakeT := &ignoreFatalT{T: t}
 		SetFeatureGateEmulationVersionDuringTest(fakeT, gate, newEmulationVersion)
-		// Calling t.Parallel in subtest will resume the main test body
+		// 子测试调用 t.Parallel 后会恢复执行主测试主体。
 		t.Parallel()
-		// Leaked from main test
+		// 从主测试泄漏的值
 		assert.True(t, gate.EmulationVersion().EqualTo(originalEmulationVersion))
 	})
-	// Leaked from subtest
+	// 从子测试泄漏的值
 	assert.True(t, gate.EmulationVersion().EqualTo(newEmulationVersion))
 	fakeT := &ignoreFatalT{T: t}
 	SetFeatureGateEmulationVersionDuringTest(fakeT, gate, originalEmulationVersion)
@@ -544,15 +544,15 @@ func TestNoLeakFromSameEmulationVersionToMainTest(t *gotest.T) {
 	gate := featuregate.NewVersionedFeatureGate(originalEmulationVersion)
 	assert.True(t, gate.EmulationVersion().EqualTo(originalEmulationVersion))
 
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run("LeakingSubtest", func(t *gotest.T) {
 		SetFeatureGateEmulationVersionDuringTest(t, gate, newEmulationVersion)
-		// Calling t.Parallel in subtest will resume the main test body
+		// 子测试调用 t.Parallel 后会恢复执行主测试主体。
 		t.Parallel()
-		// Leaked from main test
+		// 从主测试泄漏的值
 		assert.True(t, gate.EmulationVersion().EqualTo(originalEmulationVersion))
 	})
-	// Leaked from subtest
+	// 从子测试泄漏的值
 	assert.True(t, gate.EmulationVersion().EqualTo(newEmulationVersion))
 	SetFeatureGateEmulationVersionDuringTest(t, gate, originalEmulationVersion)
 }
@@ -567,15 +567,15 @@ func TestDetectEmulationVersionLeakToOtherSubtest(t *gotest.T) {
 	assert.True(t, gate.EmulationVersion().EqualTo(originalEmulationVersion))
 
 	subtestName := "Subtest"
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run(subtestName, func(t *gotest.T) {
 		fakeT := &ignoreFatalT{T: t}
 		SetFeatureGateEmulationVersionDuringTest(fakeT, gate, newEmulationVersion)
 		t.Parallel()
 	})
-	// Add suffix to name to prevent tests with the same prefix.
+	// 给名称添加后缀，避免与同前缀测试重名。
 	t.Run(subtestName+"Suffix", func(t *gotest.T) {
-		// Leaked newEmulationVersion
+		// 泄漏的 newEmulationVersion
 		assert.True(t, gate.EmulationVersion().EqualTo(newEmulationVersion))
 
 		fakeT := &ignoreFatalT{T: t}
@@ -637,17 +637,17 @@ func TestDetectVersionsLeakToMainTest(t *gotest.T) {
 	newEmuVer := version.MustParse("1.29")
 	newMinCompatVer := version.MustParse("1.28")
 
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run("LeakingSubtest", func(t *gotest.T) {
 		fakeT := &ignoreFatalT{T: t}
 		SetFeatureGateVersionsDuringTest(fakeT, gate, newEmuVer, newMinCompatVer)
-		// Calling t.Parallel in subtest will resume the main test body
+		// 子测试调用 t.Parallel 后会恢复执行主测试主体。
 		t.Parallel()
-		// Leaked from main test
+		// 从主测试泄漏的值
 		assert.True(t, gate.EmulationVersion().EqualTo(originalEmuVer))
 		assert.True(t, gate.MinCompatibilityVersion().EqualTo(originalMinCompatVer))
 	})
-	// Leaked from subtest
+	// 从子测试泄漏的值
 	assert.True(t, gate.EmulationVersion().EqualTo(newEmuVer))
 	assert.True(t, gate.MinCompatibilityVersion().EqualTo(newMinCompatVer))
 	fakeT := &ignoreFatalT{T: t}
@@ -667,16 +667,16 @@ func TestNoLeakFromSameVersionsToMainTest(t *gotest.T) {
 	newEmuVer := version.MustParse("1.31")
 	newMinCompatVer := version.MustParse("1.30")
 
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run("LeakingSubtest", func(t *gotest.T) {
 		SetFeatureGateVersionsDuringTest(t, gate, newEmuVer, newMinCompatVer)
-		// Calling t.Parallel in subtest will resume the main test body
+		// 子测试调用 t.Parallel 后会恢复执行主测试主体。
 		t.Parallel()
-		// Leaked from main test
+		// 从主测试泄漏的值
 		assert.True(t, gate.EmulationVersion().EqualTo(originalEmuVer))
 		assert.True(t, gate.MinCompatibilityVersion().EqualTo(originalMinCompatVer))
 	})
-	// Leaked from subtest
+	// 从子测试泄漏的值
 	assert.True(t, gate.EmulationVersion().EqualTo(newEmuVer))
 	assert.True(t, gate.MinCompatibilityVersion().EqualTo(newMinCompatVer))
 	SetFeatureGateVersionsDuringTest(t, gate, originalEmuVer, originalMinCompatVer)
@@ -696,15 +696,15 @@ func TestDetectVersionsLeakToOtherSubtest(t *gotest.T) {
 	newEmuVer := version.MustParse("1.29")
 	newMinCompatVer := version.MustParse("1.28")
 
-	// Subtest setting feature gate and calling parallel will leak it out
+	// 子测试设置特性门控并调用 parallel 会使其泄漏到外层
 	t.Run(subtestName, func(t *gotest.T) {
 		fakeT := &ignoreFatalT{T: t}
 		SetFeatureGateVersionsDuringTest(fakeT, gate, newEmuVer, newMinCompatVer)
 		t.Parallel()
 	})
-	// Add suffix to name to prevent tests with the same prefix.
+	// 给名称添加后缀，避免与同前缀测试重名。
 	t.Run(subtestName+"Suffix", func(t *gotest.T) {
-		// Leaked newEmulationVersion and newMinCompatibilityVersion
+		// 泄漏的 newEmulationVersion 和 newMinCompatibilityVersion
 		assert.True(t, gate.EmulationVersion().EqualTo(newEmuVer))
 		assert.True(t, gate.MinCompatibilityVersion().EqualTo(newMinCompatVer))
 

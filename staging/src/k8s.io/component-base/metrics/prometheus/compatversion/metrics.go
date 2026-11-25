@@ -26,8 +26,8 @@ import (
 )
 
 var (
-	// compatVersionInfo is a Prometheus Gauge metrics used for recording the current emulation and binary version of a component.
-	// 以恒为 1 的 gauge 携带版本标签，便于用 PromQL 做版本分布统计。
+	// compatVersionInfo 是以恒为 1 的 gauge 携带组件的模拟版本与二进制版本标签，
+	// 便于用 PromQL 做版本分布统计。
 	compatVersionInfo = k8smetrics.NewGaugeVec(
 		&k8smetrics.GaugeOpts{
 			Name: "version_info",

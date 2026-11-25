@@ -33,10 +33,7 @@ var processStartTime = NewGaugeVec(
 	[]string{},
 )
 
-// RegisterProcessStartTime registers the process_start_time_seconds to
-// a prometheus registry. This metric needs to be included to ensure counter
-// data fidelity.
-//
+// RegisterProcessStartTime 将 process_start_time_seconds 注册到 prometheus registry，以确保计数器数据完整。
 // RegisterProcessStartTime 把进程启动时间注册到给定 registry。
 // 该指标用于推算进程生命周期内的计数器总量：仅凭 counter 的当前值
 // 无法判断进程是否重启过导致了计数回退。
@@ -47,8 +44,7 @@ func RegisterProcessStartTime(registrationFunc func(Registerable) error) error {
 		klog.Errorf("Could not get process start time, %v", err)
 		start = float64(time.Now().Unix())
 	}
-	// processStartTime is a lazy metric which only get initialized after registered.
-	// so we need to register the metric first and then set the value for it
+	// processStartTime 是延迟指标，注册后才会初始化，因此必须先注册再设置值。
 	if err = registrationFunc(processStartTime); err != nil {
 		return err
 	}

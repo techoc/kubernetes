@@ -31,15 +31,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// APIVersionRegexp is the regular expression that matches with valid apiversion
-//
+// APIVersionRegexp 是匹配合法 API 版本的正则表达式。
 // 只接受 vN、vNalphaM、vNbetaM 三种形式，用于拒绝内部版本和随意命名的版本。
 var APIVersionRegexp = regexp.MustCompile(`^v\d+((alpha|beta){1}\d+)?$`)
 
-// ComponentConfigPackage is used in APIGroup Testing
-//
-// 描述待校验的组件配置包；AllowedTags 与 AllowedNonstandardJSONNames 用于白名单
-// 那些因历史原因无法满足命名约定的字段。
+// ComponentConfigPackage 用于 API 组测试，描述待校验的组件配置包。
+// AllowedTags 与 AllowedNonstandardJSONNames 用于白名单那些因历史原因无法满足命名约定的字段。
 type ComponentConfigPackage struct {
 	ComponentName      string
 	GroupName          string
@@ -72,14 +69,10 @@ var testingFuncs = map[string]testingFunc{
 	verifyCorrectGroupName: verifyCorrectGroupNameFunc,
 }
 
-// VerifyExternalTypePackage tests if external component config package is defined correctly
-// Test tag naming (json name should match Go name)
-// Test that GroupName has the k8s.io suffix
-// Test that GroupName == SchemeGroupVersion.GroupName
-// Test that the API version follows the right pattern and isn't internal
-// Test that addKnownTypes and AddToScheme registers at least one type and doesn't error
-// Test that the GroupName is named correctly (based on ComponentName), and there is a {Component}Configuration kind in the scheme
-//
+// VerifyExternalTypePackage 校验外部组件配置包的定义是否正确：
+// 检查标签命名（json 名称应与 Go 名称一致）、GroupName 的 k8s.io 后缀与匹配关系、
+// API 版本模式且非内部版本、addKnownTypes 与 AddToScheme 至少注册一个类型且不报错，
+// 以及 GroupName 命名正确且 scheme 中存在 {Component}Configuration 类型。
 // 外部版本额外要求版本号符合 vN(alpha|beta)M 模式。
 func VerifyExternalTypePackage(pkginfo *ComponentConfigPackage) error {
 	scheme, err := setup(pkginfo)
@@ -92,15 +85,10 @@ func VerifyExternalTypePackage(pkginfo *ComponentConfigPackage) error {
 	return runFuncs(scheme, pkginfo, extraFns)
 }
 
-// VerifyInternalTypePackage tests if internal component config package is defined correctly
-// Test tag naming (no tags allowed)
-// Test that GroupName has the k8s.io suffix
-// Test that GroupName == SchemeGroupVersion.GroupName
-// API version should be internal
-// Test that addKnownTypes and AddToScheme registers at least one type and doesn't error
-// Test that the GroupName is named correctly (based on ComponentName), and there is a {Component}Configuration kind in the scheme
-//
-// 内部版本不允许 json 标签、版本号必须为 __internal，并且必须存在 {Component}Configuration 类型。
+// VerifyInternalTypePackage 校验内部组件配置包的定义是否正确：
+// 检查标签命名（不允许标签）、GroupName 的 k8s.io 后缀与匹配关系、API 版本为内部版本、
+// addKnownTypes 与 AddToScheme 至少注册一个类型且不报错，以及 GroupName 命名正确且 scheme 中
+// 存在 {Component}Configuration 类型。内部版本不允许 json 标签，版本号必须为 __internal。
 func VerifyInternalTypePackage(pkginfo *ComponentConfigPackage) error {
 	scheme, err := setup(pkginfo)
 	if err != nil {

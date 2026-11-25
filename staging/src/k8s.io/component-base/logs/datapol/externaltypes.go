@@ -29,8 +29,7 @@ var (
 	x509Certificate = reflect.TypeOf(x509.Certificate{})
 )
 
-// GlobalDatapolicyMapping returns the list of sensitive datatypes are embedded
-// in types not native to Kubernetes.
+// GlobalDatapolicyMapping 返回非 Kubernetes 原生类型中内嵌的敏感数据类型列表。
 //
 // 标准库类型无法携带 datapolicy 标签，因此在此集中声明其敏感字段类别，
 // 供日志脱敏检查识别。

@@ -65,22 +65,22 @@ func TestAddGlobalFlags(t *testing.T) {
 		matchExpected bool
 	}{
 		{
-			// Happy case
+			// 正常情况
 			expectedFlag:  []string{"help", "log-flush-frequency", "v", "vmodule"},
 			matchExpected: false,
 		},
 		{
-			// Missing flag
+			// 缺少标志
 			expectedFlag:  []string{"logtostderr", "log-dir"},
 			matchExpected: true,
 		},
 		{
-			// Empty flag
+			// 空标志
 			expectedFlag:  []string{},
 			matchExpected: true,
 		},
 		{
-			// Invalid flag
+			// 无效标志
 			expectedFlag:  []string{"foo"},
 			matchExpected: true,
 		},

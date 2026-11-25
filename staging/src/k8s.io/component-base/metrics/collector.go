@@ -23,49 +23,44 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// StableCollector extends the prometheus.Collector interface to allow customization of the
-// metric registration process, it's especially intend to be used in scenario of custom collector.
+// StableCollector 扩展 prometheus.Collector，允许自定义注册流程，尤其适用于自定义 collector。
 // 在注册时由 registry 调用 Create，按当前版本决定描述符是注册、隐藏还是忽略。
 type StableCollector interface {
 	prometheus.Collector
 
-	// DescribeWithStability sends the super-set of all possible metrics.Desc collected
-	// by this StableCollector to the provided channel.
+	// DescribeWithStability 将该 StableCollector 能收集的全部 metrics.Desc 超集发送到给定通道。
 	// 实现者需在 Create 前上报全部描述符，registry 才能统一做稳定性筛选。
 	DescribeWithStability(chan<- *Desc)
 
-	// CollectWithStability sends each collected metrics.Metric via the provide channel.
+	// CollectWithStability 通过给定通道发送每个收集到的 metrics.Metric。
 	CollectWithStability(chan<- Metric)
 
-	// Create will initialize all Desc and it intends to be called by registry.
+	// Create 初始化所有 Desc，供 registry 调用。
 	Create(version *semver.Version, self StableCollector) bool
 
-	// ClearState will clear all the states marked by Create.
+	// ClearState 清除 Create 设置的所有状态。
 	ClearState()
 
-	// HiddenMetrics tells the list of hidden metrics with fqName.
+	// HiddenMetrics 返回以 fqName 表示的隐藏指标列表。
 	HiddenMetrics() []string
 }
 
-// BaseStableCollector which implements almost all methods defined by StableCollector
-// is a convenient assistant for custom collectors.
-// It is recommended to inherit BaseStableCollector when implementing custom collectors.
+// BaseStableCollector 实现 StableCollector 的几乎所有方法，为自定义 collector 提供便捷基类。
+// 建议实现自定义 collector 时继承 BaseStableCollector。
 type BaseStableCollector struct {
-	descriptors  map[string]*Desc // stores all descriptors by pair<fqName, Desc>, these are collected from DescribeWithStability().
-	registerable map[string]*Desc // stores registerable descriptors by pair<fqName, Desc>, is a subset of descriptors.
-	hidden       map[string]*Desc // stores hidden descriptors by pair<fqName, Desc>, is a subset of descriptors.
+	descriptors  map[string]*Desc // 按 <fqName, Desc> 保存 DescribeWithStability() 收集到的全部描述符。
+	registerable map[string]*Desc // 按 <fqName, Desc> 保存可注册描述符，是 descriptors 的子集。
+	hidden       map[string]*Desc // 按 <fqName, Desc> 保存隐藏描述符，是 descriptors 的子集。
 	// self 指回外层 collector，用于回调其 DescribeWithStability/CollectWithStability。
 	self StableCollector
 }
 
-// DescribeWithStability sends all descriptors to the provided channel.
-// Every custom collector should over-write this method.
+// DescribeWithStability 将全部描述符发送到给定通道，自定义 collector 应重写此方法。
 func (bsc *BaseStableCollector) DescribeWithStability(ch chan<- *Desc) {
 	panic(fmt.Errorf("custom collector should over-write DescribeWithStability method"))
 }
 
-// Describe sends all descriptors to the provided channel.
-// It intended to be called by prometheus registry.
+// Describe 将全部描述符发送到给定通道，供 prometheus registry 调用。
 // 只发送已通过稳定性筛选的描述符，隐藏指标不会出现在这里。
 func (bsc *BaseStableCollector) Describe(ch chan<- *prometheus.Desc) {
 	for _, d := range bsc.registerable {
@@ -73,13 +68,12 @@ func (bsc *BaseStableCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 }
 
-// CollectWithStability sends all metrics to the provided channel.
-// Every custom collector should over-write this method.
+// CollectWithStability 将全部指标发送到给定通道，自定义 collector 应重写此方法。
 func (bsc *BaseStableCollector) CollectWithStability(ch chan<- Metric) {
 	panic(fmt.Errorf("custom collector should over-write CollectWithStability method"))
 }
 
-// Collect is called by the Prometheus registry when collecting metrics.
+// Collect 由 Prometheus registry 在收集指标时调用。
 // 用 goroutine 桥接回调式接口与通道式 Collect，同时过滤隐藏指标（nil）。
 func (bsc *BaseStableCollector) Collect(ch chan<- prometheus.Metric) {
 	mch := make(chan Metric)
@@ -90,7 +84,7 @@ func (bsc *BaseStableCollector) Collect(ch chan<- prometheus.Metric) {
 	}()
 
 	for m := range mch {
-		// nil Metric usually means hidden metrics
+		// nil Metric 通常表示隐藏指标。
 		if m == nil {
 			continue
 		}
@@ -116,14 +110,14 @@ func (bsc *BaseStableCollector) add(d *Desc) {
 	bsc.descriptors[d.fqName] = d
 }
 
-// Init intends to be called by registry.
+// init 供 registry 调用。
 // 通过通道收集实现方上报的描述符，允许实现方在独立 goroutine 中生产。
 func (bsc *BaseStableCollector) init(self StableCollector) {
 	bsc.self = self
 
 	dch := make(chan *Desc)
 
-	// collect all possible descriptions from custom side
+	// 收集自定义实现方可能上报的全部描述符。
 	go func() {
 		bsc.self.DescribeWithStability(dch)
 		close(dch)
@@ -152,9 +146,7 @@ func (bsc *BaseStableCollector) trackHiddenDescriptor(d *Desc) {
 	bsc.hidden[d.fqName] = d
 }
 
-// Create intends to be called by registry.
-// Create will return true as long as there is one or more metrics not be hidden.
-// Otherwise return false, that means the whole collector will be ignored by registry.
+// Create 供 registry 调用；只要至少一个指标未被隐藏就返回 true，否则返回 false，表示 registry 将忽略整个 collector。
 func (bsc *BaseStableCollector) Create(version *semver.Version, self StableCollector) bool {
 	bsc.init(self)
 
@@ -176,8 +168,7 @@ func (bsc *BaseStableCollector) Create(version *semver.Version, self StableColle
 	return false
 }
 
-// ClearState will clear all the states marked by Create.
-// It intends to be used for re-register a hidden metric.
+// ClearState 清除 Create 设置的所有状态，以便重新注册隐藏指标。
 func (bsc *BaseStableCollector) ClearState() {
 	for _, d := range bsc.descriptors {
 		d.ClearState()
@@ -190,7 +181,7 @@ func (bsc *BaseStableCollector) ClearState() {
 	bsc.self = nil
 }
 
-// HiddenMetrics tells the list of hidden metrics with fqName.
+// HiddenMetrics 返回以 fqName 表示的隐藏指标列表。
 func (bsc *BaseStableCollector) HiddenMetrics() (fqNames []string) {
 	// 对 map 做 range 顺序不确定，调用方若需稳定顺序应自行排序。
 	for i := range bsc.hidden {
@@ -199,5 +190,5 @@ func (bsc *BaseStableCollector) HiddenMetrics() (fqNames []string) {
 	return
 }
 
-// Check if our BaseStableCollector implements necessary interface
+// 检查 BaseStableCollector 是否实现所需接口。
 var _ StableCollector = &BaseStableCollector{}

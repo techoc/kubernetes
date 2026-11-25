@@ -50,7 +50,7 @@ func TestEffectiveVersionRegistry(t *testing.T) {
 	if !r.EffectiveVersionFor(testComponent).EqualTo(ver1) {
 		t.Fatalf("expected EffectiveVersionFor to return the version registered")
 	}
-	// overwrite
+	// 覆盖
 	if err := r.Register(testComponent, ver2, nil); err == nil {
 		t.Fatalf("expected error to register existing component when override is false")
 	}
@@ -361,7 +361,7 @@ func TestFlags(t *testing.T) {
 			r.AddFlags(fs)
 			err := fs.Parse(test.flags)
 			if err == nil {
-				// AddFlags again to check whether there is no resetting on the config.
+				// 再次调用 AddFlags，确认配置不会被重置。
 				// 第二次 AddFlags 不得清空已解析的配置。
 				fs = pflag.NewFlagSet("testflag2", pflag.ContinueOnError)
 				r.AddFlags(fs)

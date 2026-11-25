@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testinit adds logging flags to a Ginkgo or Go test program during
-// initialization, something that the logs package itself no longer does.
+// Package testinit 在初始化期间为 Ginkgo 或 Go 测试程序添加日志 flag，
+// 而 logs 包本身已不再执行此操作。
 //
-// Normal commands should not use this and instead manage logging flags with
-// logs.Options and/or cli.Run.
+// 普通命令不应使用本包，应通过 logs.Options 和/或 cli.Run 管理日志 flag。
 package testinit
 
 import (

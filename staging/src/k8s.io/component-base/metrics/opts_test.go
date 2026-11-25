@@ -281,7 +281,7 @@ func TestToPromHistogramOptsWithNativeHistograms(t *testing.T) {
 			assert.Equal(t, tc.expectedNativeHistogramMaxBuckets, promOpts.NativeHistogramMaxBucketNumber,
 				"NativeHistogramMaxBucketNumber mismatch")
 
-			// Verify classic buckets are always present
+			// 验证经典桶始终存在。
 			assert.Equal(t, opts.Buckets, promOpts.Buckets, "Classic buckets should always be present")
 		})
 	}

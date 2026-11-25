@@ -14,13 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package setverbositylevel stores callbacks that will be invoked by logs.GlogLevel.
-//
-// This is a separate package to avoid a dependency from
-// k8s.io/component-base/logs (uses the callbacks) to
-// k8s.io/component-base/logs/api/v1 (adds them). Not all users of the logs
-// package also use the API.
-//
 // Package setverbositylevel 存放由 logs.GlogLevel 触发的回调。单独成包是为了
 // 避免 logs（消费方）反向依赖 logs/api/v1（注册方）造成循环依赖；
 // 并非所有 logs 的使用者都同时使用配置 API。
@@ -31,7 +24,7 @@ import (
 )
 
 var (
-	// Mutex controls access to the callbacks.
+	// Mutex 控制对回调的访问。
 	// 调用方在读写 Callbacks 前后都必须持有该锁：回调可能在运行期被注册，
 	// 而 GlogLevel 读取时没有其他同步手段。
 	Mutex sync.Mutex

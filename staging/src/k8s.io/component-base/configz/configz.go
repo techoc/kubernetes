@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package configz serves ComponentConfig objects from running components.
-//
-// Each component that wants to serve its ComponentConfig creates a Config
-// object, and the program should call InstallHandler once. e.g.,
+// Package configz 从运行中的组件提供 ComponentConfig 对象。
+// 需要提供配置的组件创建一个 Config 对象，程序调用一次 InstallHandler。例如：
 //
 //	func main() {
 //		if err := setupConfigz(); err != nil {
@@ -68,15 +66,13 @@ var (
 	configs      = map[string]*Config{}
 )
 
-// Config is a handle to a ComponentConfig object. Don't create these directly;
-// use New() instead.
+// Config 是 ComponentConfig 对象的句柄，不应直接创建，请使用 New()。
 type Config struct {
 	val runtime.Object
 }
 
-// InstallHandler adds an HTTP handler on the given mux for the "/configz"
-// endpoint which serves all registered ComponentConfigs in JSON format.
-// 可多次调用（例如不同 mux），注册的是同一个全局处理逻辑。
+// InstallHandler 在给定 mux 上为 "/configz" 端点添加 HTTP 处理函数，以 JSON 格式
+// 提供全部已注册 ComponentConfig。可多次调用（例如不同 mux），注册的是同一个全局处理逻辑。
 func InstallHandler(m mux) {
 	m.Handle(DefaultConfigzPath, http.HandlerFunc(handle))
 }
@@ -86,8 +82,7 @@ type mux interface {
 	Handle(string, http.Handler)
 }
 
-// New creates a Config object with the given name. Each Config is registered
-// with this package's "/configz" handler.
+// New 创建具有给定名称的 Config 对象，并注册到本包的 "/configz" 处理函数。
 // 名称重复会报错，避免同一组件配置被两处覆盖。
 func New(name string) (*Config, error) {
 	configsGuard.Lock()
@@ -100,17 +95,15 @@ func New(name string) (*Config, error) {
 	return &newConfig, nil
 }
 
-// Delete removes the named ComponentConfig from this package's "/configz"
-// handler.
+// Delete 从本包的 "/configz" 处理函数中删除指定名称的 ComponentConfig。
 func Delete(name string) {
 	configsGuard.Lock()
 	defer configsGuard.Unlock()
 	delete(configs, name)
 }
 
-// Set sets the ComponentConfig for this Config.
-// 只接受带外部 GroupVersion 的对象：内部版本没有稳定的 JSON 表示，
-// 直接暴露会随实现变化而破坏消费者。
+// Set 设置此 Config 的 ComponentConfig，只接受带外部 GroupVersion 的对象。
+// 内部版本没有稳定的 JSON 表示，直接暴露会随实现变化而破坏消费者。
 func (v *Config) Set(val runtime.Object) error {
 	configsGuard.Lock()
 	defer configsGuard.Unlock()
@@ -131,7 +124,7 @@ func (v *Config) Set(val runtime.Object) error {
 	return nil
 }
 
-// MarshalJSON marshals the ComponentConfig as JSON data.
+// MarshalJSON 将 ComponentConfig 序列化为 JSON 数据。
 func (v *Config) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.val)
 }

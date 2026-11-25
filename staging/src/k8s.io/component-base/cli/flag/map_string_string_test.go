@@ -56,7 +56,7 @@ func TestSetMapStringString(t *testing.T) {
 		expect *MapStringString
 		err    string
 	}{
-		// we initialize the map with a default key that should be cleared by Set
+		// 初始化一个默认键，Set 应将其清除。
 		{"clears defaults", []string{""},
 			NewMapStringString(&map[string]string{"default": ""}),
 			&MapStringString{
@@ -64,7 +64,7 @@ func TestSetMapStringString(t *testing.T) {
 				Map:         &map[string]string{},
 				NoSplit:     false,
 			}, ""},
-		// make sure we still allocate for "initialized" maps where Map was initially set to a nil map
+		// 确保 Map 初始为 nil map 时仍能分配空间。
 		{"allocates map if currently nil", []string{""},
 			&MapStringString{initialized: true, Map: &nilMap},
 			&MapStringString{
@@ -72,7 +72,7 @@ func TestSetMapStringString(t *testing.T) {
 				Map:         &map[string]string{},
 				NoSplit:     false,
 			}, ""},
-		// for most cases, we just reuse nilMap, which should be allocated by Set, and is reset before each test case
+		// 多数用例复用 nilMap，由 Set 分配空间，并在每个用例前重置。
 		{"empty", []string{""},
 			NewMapStringString(&nilMap),
 			&MapStringString{

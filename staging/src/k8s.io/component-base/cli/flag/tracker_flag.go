@@ -20,14 +20,14 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// TrackerValue wraps a non-boolean value and stores true in the provided boolean when it is set.
+// TrackerValue 包装非布尔值，设置时把提供的布尔变量置为 true。
 // 用于区分“用户显式设置”与“使用默认值”，例如只有显式给出 --v 时才覆盖配置。
 type TrackerValue struct {
 	value    pflag.Value
 	provided *bool
 }
 
-// BoolTrackerValue wraps a boolean value and stores true in the provided boolean when it is set.
+// BoolTrackerValue 包装布尔值，设置时把提供的布尔变量置为 true。
 // 布尔标志单独包装，因为 pflag 依赖 IsBoolFlag 决定是否允许省略值。
 type BoolTrackerValue struct {
 	boolValue
@@ -43,7 +43,7 @@ type boolValue interface {
 var _ pflag.Value = &TrackerValue{}
 var _ boolValue = &BoolTrackerValue{}
 
-// NewTracker returns a Value wrapping the given value which stores true in the provided boolean when it is set.
+// NewTracker 返回包装给定值的 Value，设置时把提供的布尔变量置为 true。
 func NewTracker(value pflag.Value, provided *bool) pflag.Value {
 	if value == nil {
 		panic("value must not be nil")

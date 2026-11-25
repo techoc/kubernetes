@@ -33,8 +33,7 @@ import (
 	v1 "k8s.io/component-base/tracing/api/v1"
 )
 
-// TracerProvider is an OpenTelemetry TracerProvider which can be shut down
-// 在 otel 接口上补充 Shutdown，使组件可以在退出时冲刷并关闭 exporter。
+// TracerProvider 在 otel 接口上补充 Shutdown，使组件可以在退出时冲刷并关闭 exporter。
 type TracerProvider interface {
 	oteltrace.TracerProvider
 	Shutdown(context.Context) error
@@ -56,7 +55,7 @@ func NewNoopTracerProvider() TracerProvider {
 	return &noopTracerProvider{TracerProvider: noopoteltrace.NewTracerProvider()}
 }
 
-// NewProvider creates a TracerProvider in a component, and enforces recommended tracing behavior
+// NewProvider 在组件中创建 TracerProvider，并落实推荐的追踪行为。
 func NewProvider(ctx context.Context,
 	tracingConfig *v1.TracingConfiguration,
 	addedOpts []otlptracegrpc.Option,
@@ -82,15 +81,13 @@ func NewProvider(ctx context.Context,
 		return nil, err
 	}
 
-	// sampler respects parent span's sampling rate or
-	// otherwise never samples.
 	// 默认不采样：tracing 是可选能力，未显式配置时避免产生额外开销。
 	sampler := sdktrace.NeverSample()
-	// Or, emit spans for a fraction of transactions
+	// 也可以只采集一部分事务的 span。
 	if tracingConfig.SamplingRatePerMillion != nil && *tracingConfig.SamplingRatePerMillion > 0 {
 		sampler = sdktrace.TraceIDRatioBased(float64(*tracingConfig.SamplingRatePerMillion) / float64(1000000))
 	}
-	// batch span processor to aggregate spans before export.
+	// 批量 span 处理器会在导出前聚合 span。
 	bsp := sdktrace.NewBatchSpanProcessor(exporter)
 	// ParentBased 保证已采样链路的子 span 跟随父决策，避免断链。
 	tp := sdktrace.NewTracerProvider(
@@ -101,28 +98,28 @@ func NewProvider(ctx context.Context,
 	return tp, nil
 }
 
-// WithTracing adds tracing to requests if the incoming request is sampled
+// 当传入请求已被采样时，WithTracing 为其添加追踪。
 func WithTracing(handler http.Handler, tp oteltrace.TracerProvider, spanName string) http.Handler {
 	opts := []otelhttp.Option{
 		otelhttp.WithPropagators(Propagators()),
 		otelhttp.WithTracerProvider(tp),
 	}
 	wrappedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Add the http.target attribute to the otelhttp span
-		// Workaround for https://github.com/open-telemetry/opentelemetry-go-contrib/issues/3743
+		// 为 otelhttp 的 span 添加 http.target 属性，以规避其未自动补充该属性的缺陷：
+		// https://github.com/open-telemetry/opentelemetry-go-contrib/issues/3743
 		// otelhttp 目前不会自动补充 http.target，这里手动设置以保留原始的请求 URI。
 		if r.URL != nil {
 			oteltrace.SpanFromContext(r.Context()).SetAttributes(attribute.Key("http.target").String(r.URL.RequestURI()))
 		}
 		handler.ServeHTTP(w, r)
 	})
-	// With Noop TracerProvider, the otelhttp still handles context propagation.
-	// See https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
+	// 即使 TracerProvider 为 noop，otelhttp 仍会处理 context 传播。
+	// 参考 https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
 	return otelhttp.NewHandler(wrappedHandler, spanName, opts...)
 }
 
-// WrapperFor can be used to add tracing to a *rest.Config.
-// Example usage:
+// WrapperFor 用于为 *rest.Config 添加追踪。
+// 使用示例：
 // tp := NewProvider(...)
 // config, _ := rest.InClusterConfig()
 // config.Wrap(WrapperFor(tp))
@@ -133,14 +130,12 @@ func WrapperFor(tp oteltrace.TracerProvider) transport.WrapperFunc {
 			otelhttp.WithPropagators(Propagators()),
 			otelhttp.WithTracerProvider(tp),
 		}
-		// With Noop TracerProvider, the otelhttp still handles context propagation.
-		// See https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
 		// 即使 provider 为 noop，也保留 traceparent/baggage 的透传。
+		// 参考 https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
 		return otelhttp.NewTransport(rt, opts...)
 	}
 }
 
-// Propagators returns the recommended set of propagators.
 // 使用 W3C TraceContext + Baggage，与 otel 生态的默认互操作格式一致。
 func Propagators() propagation.TextMapPropagator {
 	return propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})

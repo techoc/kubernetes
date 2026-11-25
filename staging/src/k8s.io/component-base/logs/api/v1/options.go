@@ -42,88 +42,78 @@ import (
 )
 
 const (
-	// LogFlushFreqDefault is the default for the corresponding command line
-	// parameter.
+	// LogFlushFreqDefault 是相应命令行参数的默认值。
 	// 5 秒是在日志时效性与 I/O 开销之间的折中，也是历史默认值。
 	LogFlushFreqDefault = 5 * time.Second
 )
 
 const (
-	// LogFlushFreqFlagName is the name of the command line parameter.
-	// Depending on how flags get added, it is either a stand-alone
-	// value (logs.AddFlags) or part of LoggingConfiguration.
+	// LogFlushFreqFlagName 是命令行参数的名称。
+	// 根据 flag 的添加方式，它既可以是独立值（logs.AddFlags），
+	// 也可以是 LoggingConfiguration 的一部分。
 	LogFlushFreqFlagName = "log-flush-frequency"
 )
 
-// NewLoggingConfiguration returns a struct holding the default logging configuration.
+// NewLoggingConfiguration 返回包含默认日志配置的结构体。
 func NewLoggingConfiguration() *LoggingConfiguration {
 	c := LoggingConfiguration{}
 	SetRecommendedLoggingConfiguration(&c)
 	return &c
 }
 
-// Applying configurations multiple times is not safe unless it's guaranteed that there
-// are no goroutines which might call logging functions. The default for ValidateAndApply
-// and ValidateAndApplyWithOptions is to return an error when called more than once.
-// Binaries and unit tests can override that behavior.
+// 除非能够保证没有 goroutine 调用日志函数，否则多次应用配置并不安全。
+// ValidateAndApply 与 ValidateAndApplyWithOptions 默认在重复调用时返回错误，
+// 但程序和单元测试可以覆盖该行为。
 var ReapplyHandling = ReapplyHandlingError
 
 // ReapplyHandlingType 控制重复调用 ValidateAndApply 时的策略。
 type ReapplyHandlingType int
 
 const (
-	// ReapplyHandlingError is the default: calling ValidateAndApply or
-	// ValidateAndApplyWithOptions again returns an error.
+	// ReapplyHandlingError 是默认值：再次调用 ValidateAndApply 或
+	// ValidateAndApplyWithOptions 会返回错误。
 	// 默认拒绝重复应用：日志配置涉及全局 logger，热切换可能导致数据竞争。
 	ReapplyHandlingError ReapplyHandlingType = iota
-	// ReapplyHandlingIgnoreUnchanged silently ignores any additional calls of
-	// ValidateAndApply or ValidateAndApplyWithOptions if the configuration
-	// is unchanged, otherwise they return an error.
+	// ReapplyHandlingIgnoreUnchanged 在配置未变化时静默忽略对 ValidateAndApply
+	// 或 ValidateAndApplyWithOptions 的额外调用，否则返回错误。
 	ReapplyHandlingIgnoreUnchanged
 )
 
-// ValidateAndApply combines validation and application of the logging configuration.
-// This should be invoked as early as possible because then the rest of the program
-// startup (including validation of other options) will already run with the final
-// logging configuration.
+// ValidateAndApply 校验并应用日志配置。
+// 应尽早调用，这样程序启动的其余部分（包括其他选项的校验）
+// 就已经使用最终的日志配置。
 //
-// The optional FeatureGate controls logging features. If nil, the default for
-// these features is used.
+// 可选的 FeatureGate 控制日志特性；为 nil 时使用这些特性的默认值。
 //
-// Logging options must be applied as early as possible during the program
-// startup. Some changes are global and cannot be done safely when there are
-// already goroutines running.
+// 日志选项必须在程序启动期间尽早应用。有些修改是全局性的，
+// 在已有 goroutine 运行时无法安全完成。
 func ValidateAndApply(c *LoggingConfiguration, featureGate featuregate.FeatureGate) error {
 	return validateAndApply(c, nil, featureGate, nil)
 }
 
-// ValidateAndApplyWithOptions is a variant of ValidateAndApply which accepts
-// additional options beyond those that can be configured through the API. This
-// is meant for testing.
+// ValidateAndApplyWithOptions 是 ValidateAndApply 的变体，接受 API 无法配置的
+// 额外选项，主要用于测试。
 //
-// Logging options must be applied as early as possible during the program
-// startup. Some changes are global and cannot be done safely when there are
-// already goroutines running.
+// 日志选项必须在程序启动期间尽早应用。有些修改是全局性的，
+// 在已有 goroutine 运行时无法安全完成。
 func ValidateAndApplyWithOptions(c *LoggingConfiguration, options *LoggingOptions, featureGate featuregate.FeatureGate) error {
 	return validateAndApply(c, options, featureGate, nil)
 }
 
 // +k8s:deepcopy-gen=false
 
-// LoggingOptions can be used with ValidateAndApplyWithOptions to override
-// certain global defaults.
+// LoggingOptions 可与 ValidateAndApplyWithOptions 一起使用，以覆盖某些全局默认值。
 // 通过注入 writer 让测试能够捕获输出，而不去重定向进程的 stdout/stderr。
 type LoggingOptions struct {
-	// ErrorStream can be used to override the os.Stderr default.
+	// ErrorStream 可用于覆盖 os.Stderr 默认值。
 	ErrorStream io.Writer
 
-	// InfoStream can be used to override the os.Stdout default.
+	// InfoStream 可用于覆盖 os.Stdout 默认值。
 	InfoStream io.Writer
 }
 
-// ValidateAndApplyAsField is a variant of ValidateAndApply that should be used
-// when the LoggingConfiguration is embedded in some larger configuration
-// structure.
+// 当 LoggingConfiguration 嵌入更大的配置结构时，应使用 ValidateAndApplyAsField
+// 这一 ValidateAndApply 变体。
 // fldPath 用于把错误定位到外层配置结构中的具体字段。
 func ValidateAndApplyAsField(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldPath *field.Path) error {
 	return validateAndApply(c, nil, featureGate, fldPath)
@@ -138,18 +128,16 @@ func validateAndApply(c *LoggingConfiguration, options *LoggingOptions, featureG
 	return apply(c, options, featureGate)
 }
 
-// Validate can be used to check for invalid settings without applying them.
-// Most binaries should validate and apply the logging configuration as soon
-// as possible via ValidateAndApply. The field path is optional: nil
-// can be passed when the struct is not embedded in some larger struct.
+// Validate 可检查无效设置而不应用配置。
+// 大多数程序应通过 ValidateAndApply 尽早校验并应用日志配置。
+// 字段路径是可选的；结构体未嵌入更大的结构时可传入 nil。
 func Validate(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if c.FlushFrequency.Duration.Duration <= 0 {
 		errs = append(errs, field.Invalid(fldPath.Child("flushFrequency"), c.FlushFrequency, "Must be greater than zero"))
 	}
 	if c.Format != DefaultLogFormat {
-		// WordSepNormalizeFunc is just a guess. Commands should use it,
-		// but we cannot know for sure.
+		// WordSepNormalizeFunc 只是一种推测，命令应当使用它，但无法确定。
 		// 非 text 格式会忽略 -v 之外的 klog flag，这里把“用户设置了却不会生效”的 flag 报错。
 		allFlags := unsupportedLoggingFlags(cliflag.WordSepNormalizeFunc)
 		for _, f := range allFlags {
@@ -174,7 +162,7 @@ func Validate(c *LoggingConfiguration, featureGate featuregate.FeatureGate, fldP
 		}
 	}
 
-	// The type in our struct is uint32, but klog only accepts positive int32.
+	// 结构体中的类型是 uint32，但 klog 只接受正整数 int32。
 	if c.Verbosity > math.MaxInt32 {
 		errs = append(errs, field.Invalid(fldPath.Child("verbosity"), c.Verbosity, fmt.Sprintf("Must be <= %d", math.MaxInt32)))
 	}
@@ -271,7 +259,7 @@ func apply(c *LoggingConfiguration, options *LoggingOptions, featureGate feature
 	}
 	applyParameters.Store(p)
 
-	// if log format not exists, use nil loggr
+	// 若日志格式不存在，则使用 nil logger。
 	// 未注册的格式（理论上已被 Validate 拦截）退回 klog 默认 logger。
 	format, _ := logRegistry.get(c.Format)
 	if format.factory == nil {
@@ -324,44 +312,43 @@ type parameters struct {
 
 var applyParameters atomic.Pointer[parameters]
 
-// ResetForTest restores the default settings. This is not thread-safe and should only
-// be used when there are no goroutines running. The intended users are unit
-// tests in other packages.
+// ResetForTest 恢复默认设置。该函数不是线程安全的，只能在没有 goroutine 运行时使用，
+// 主要供其他包的单元测试调用。
 func ResetForTest(featureGate featuregate.FeatureGate) error {
 	oldP := applyParameters.Load()
 	if oldP == nil {
-		// Nothing to do.
+		// 无需处理。
 		return nil
 	}
 
-	// This makes it possible to call apply again without triggering errors.
+	// 清空快照后可再次调用 apply，不会触发错误。
 	// 先清空快照，再应用默认配置，否则会触发“重复应用”错误。
 	applyParameters.Store(nil)
 
-	// Restore defaults. Shouldn't fail, but check anyway.
+	// 恢复默认配置；正常不应失败，但仍需检查。
 	config := NewLoggingConfiguration()
 	if err := ValidateAndApply(config, featureGate); err != nil {
 		return fmt.Errorf("apply default configuration: %v", err)
 	}
 
-	// And again...
+	// 再次清空快照，让后续测试可以重新应用配置。
 	applyParameters.Store(nil)
 
 	return nil
 }
 
-// AddFlags adds command line flags for the configuration.
+// AddFlags 为配置添加命令行 flag。
 func AddFlags(c *LoggingConfiguration, fs *pflag.FlagSet) {
 	addFlags(c, fs)
 }
 
-// AddGoFlags is a variant of AddFlags for a standard FlagSet.
+// AddGoFlags 是 AddFlags 针对标准库 FlagSet 的变体。
 func AddGoFlags(c *LoggingConfiguration, fs *flag.FlagSet) {
 	addFlags(c, goFlagSet{FlagSet: fs})
 }
 
-// flagSet is the interface implemented by pflag.FlagSet, with
-// just those methods defined which are needed by addFlags.
+// flagSet 是 pflag.FlagSet 实现的接口，
+// 仅定义 addFlags 所需的方法。
 type flagSet interface {
 	BoolVar(p *bool, name string, value bool, usage string)
 	DurationVar(p *time.Duration, name string, value time.Duration, usage string)
@@ -370,7 +357,7 @@ type flagSet interface {
 	VarP(value pflag.Value, name, shorthand, usage string)
 }
 
-// goFlagSet implements flagSet for a stdlib flag.FlagSet.
+// goFlagSet 为标准库 flag.FlagSet 实现 flagSet。
 // goFlagSet 把标准库 FlagSet 适配为 flagSet；
 // 标准库不支持 shorthand，VarP 退化为 Var。
 type goFlagSet struct {
@@ -382,16 +369,16 @@ func (fs goFlagSet) Var(value pflag.Value, name string, usage string) {
 }
 
 func (fs goFlagSet) VarP(value pflag.Value, name, shorthand, usage string) {
-	// Ignore shorthand, it's not needed and not supported.
+	// 忽略 shorthand，因为此处既不需要也不支持。
 	fs.FlagSet.Var(value, name, usage)
 }
 
-// addFlags can be used with both flag.FlagSet and pflag.FlagSet. The internal
-// interface definition avoids duplicating this code.
+// addFlags 可用于 flag.FlagSet 和 pflag.FlagSet；
+// 内部接口定义避免了重复代码。
 func addFlags(c *LoggingConfiguration, fs flagSet) {
 	formats := logRegistry.list()
 	fs.StringVar(&c.Format, "logging-format", c.Format, fmt.Sprintf("Sets the log format. Permitted formats: %s.", formats))
-	// No new log formats should be added after generation is of flag options
+	// 生成 flag 选项后不应再添加新的日志格式。
 	// 冻结注册表，确保 --help 展示的格式集合与后续实际可选集合一致。
 	logRegistry.freeze()
 
@@ -402,8 +389,8 @@ func addFlags(c *LoggingConfiguration, fs flagSet) {
 	fs.BoolVar(&c.Options.Text.SplitStream, "log-text-split-stream", false, "[Alpha] In text format, write error messages to stderr and info messages to stdout. The default is to write a single stream to stdout. Enable the LoggingAlphaOptions feature gate to use this.")
 	fs.Var(&c.Options.Text.InfoBufferSize, "log-text-info-buffer-size", "[Alpha] In text format with split output streams, the info messages can be buffered for a while to increase performance. The default value of zero bytes disables buffering. The size can be specified as number of bytes (512), multiples of 1000 (1K), multiples of 1024 (2Ki), or powers of those (3M, 4G, 5Mi, 6Gi). Enable the LoggingAlphaOptions feature gate to use this.")
 
-	// JSON options. We only register them if "json" is a valid format. The
-	// config file API however always has them.
+	// JSON 选项仅在 "json" 是有效格式时才注册，
+	// 但配置文件 API 始终包含这些选项。
 	// JSON 格式由可选包注册，未导入时不要暴露无效 flag。
 	if _, err := logRegistry.get("json"); err == nil {
 		fs.BoolVar(&c.Options.JSON.SplitStream, "log-json-split-stream", false, "[Alpha] In JSON format, write error messages to stderr and info messages to stdout. The default is to write a single stream to stdout. Enable the LoggingAlphaOptions feature gate to use this.")
@@ -411,12 +398,10 @@ func addFlags(c *LoggingConfiguration, fs flagSet) {
 	}
 }
 
-// SetRecommendedLoggingConfiguration sets the default logging configuration
-// for fields that are unset.
+// SetRecommendedLoggingConfiguration 为未设置的字段填充默认日志配置。
 //
-// Consumers who embed LoggingConfiguration in their own configuration structs
-// may set custom defaults and then should call this function to add the
-// global defaults.
+// 将 LoggingConfiguration 嵌入自身配置结构的使用者可先设置自定义默认值，
+// 再调用本函数补充全局默认值。
 func SetRecommendedLoggingConfiguration(c *LoggingConfiguration) {
 	// 只在未设置时填充，允许调用方先设置自定义默认值。
 	if c.Format == "" {
@@ -435,18 +420,16 @@ func setRecommendedOutputRouting(o *OutputRoutingOptions) {
 	if o.InfoBufferSize == empty {
 		// 显式构造 0 而非保留零值，确保 JSON 序列化为 "0" 且反射比较一致。
 		o.InfoBufferSize = resource.QuantityValue{
-			// This is similar, but not quite the same as a default
-			// constructed instance.
+			// 这与默认构造的实例相似，但不完全相同。
 			Quantity: *resource.NewQuantity(0, resource.DecimalSI),
 		}
-		// This sets the unexported Quantity.s which will be compared
-		// by reflect.DeepEqual in some tests.
+		// 这会设置未导出的 Quantity.s，某些测试会通过 reflect.DeepEqual 比较它。
 		_ = o.InfoBufferSize.String()
 	}
 }
 
-// loggingFlags captures the state of the logging flags, in particular their default value
-// before flag parsing. It is used by unsupportedLoggingFlags.
+// loggingFlags 保存日志 flag 的状态，尤其是解析前的默认值，
+// 供 unsupportedLoggingFlags 使用。
 var loggingFlags pflag.FlagSet
 
 func init() {
@@ -456,25 +439,24 @@ func init() {
 	loggingFlags.AddGoFlagSet(&fs)
 }
 
-// List of logs (k8s.io/klog + k8s.io/component-base/logs) flags supported by all logging formats
+// 所有日志格式都支持的日志 flag 列表（k8s.io/klog + k8s.io/component-base/logs）。
 var supportedLogsFlags = map[string]struct{}{
 	"v": {},
 }
 
-// unsupportedLoggingFlags lists unsupported logging flags. The normalize
-// function is optional.
+// unsupportedLoggingFlags 列出不支持的日志 flag，normalize 函数是可选的。
 func unsupportedLoggingFlags(normalizeFunc func(f *pflag.FlagSet, name string) pflag.NormalizedName) []*pflag.Flag {
-	// k8s.io/component-base/logs and klog flags
+	// k8s.io/component-base/logs 和 klog 的 flag。
 	pfs := &pflag.FlagSet{}
 	loggingFlags.VisitAll(func(flag *pflag.Flag) {
 		if _, found := supportedLogsFlags[flag.Name]; !found {
-			// Normalization changes flag.Name, so make a copy.
+			// 规范化会修改 flag.Name，因此先复制。
 			clone := *flag
 			pfs.AddFlag(&clone)
 		}
 	})
 
-	// Apply normalization.
+	// 应用规范化。
 	pfs.SetNormalizeFunc(normalizeFunc)
 
 	var allFlags []*pflag.Flag

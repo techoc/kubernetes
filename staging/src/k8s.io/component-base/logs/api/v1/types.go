@@ -24,57 +24,55 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Supported output formats.
+// 支持的输出格式。
 const (
-	// DefaultLogFormat is the traditional klog output format.
+	// DefaultLogFormat 是传统的 klog 输出格式。
 	DefaultLogFormat = "text"
 
-	// JSONLogFormat emits each log message as a JSON struct.
+	// JSONLogFormat 将每条日志消息输出为 JSON 结构体。
 	JSONLogFormat = "json"
 )
 
-// The alpha or beta level of structs is the highest stability level of any field
-// inside it. Feature gates will get checked during LoggingConfiguration.ValidateAndApply.
+// 结构体的 alpha/beta 级别取其内部字段中最不稳定的级别，
+// LoggingConfiguration.ValidateAndApply 会检查相应特性门控。
 //
 // 结构体的 alpha/beta 级别取其内部字段的最高不稳定级别；
 // LoggingConfiguration.ValidateAndApply 会据此检查特性门控是否允许启用。
 
-// LoggingConfiguration contains logging options.
+// LoggingConfiguration 包含日志选项。
 //
 // LoggingConfiguration 描述组件的日志行为，通常由 --config 或命令行标志填充。
 type LoggingConfiguration struct {
-	// Format Flag specifies the structure of log messages.
-	// default value of format is `text`
+	// Format 指定日志消息的结构。
+	// 默认值为 `text`。
 	Format string `json:"format,omitempty"`
-	// Maximum time between log flushes.
-	// If a string, parsed as a duration (i.e. "1s")
-	// If an int, the maximum number of nanoseconds (i.e. 1s = 1000000000).
-	// Ignored if the selected logging backend writes log messages without buffering.
+	// 日志刷新之间的最大时间间隔。
+	// 字符串按时长解析（例如 "1s"），
+	// 整数表示最大纳秒数（例如 1s = 1000000000）。
+	// 若所选日志后端无缓冲地写入消息，则忽略此字段。
 	FlushFrequency TimeOrMetaDuration `json:"flushFrequency"`
-	// Verbosity is the threshold that determines which log messages are
-	// logged. Default is zero which logs only the most important
-	// messages. Higher values enable additional messages. Error messages
-	// are always logged.
+	// Verbosity 是决定记录哪些日志消息的阈值。
+	// 默认值为 0，只记录最重要的消息；值越大，启用的消息越多。
+	// 错误消息始终记录。
 	Verbosity VerbosityLevel `json:"verbosity"`
-	// VModule overrides the verbosity threshold for individual files.
-	// Only supported for "text" log format.
+	// VModule 覆盖单个文件的详细程度阈值。
+	// 仅支持 "text" 日志格式。
 	VModule VModuleConfiguration `json:"vmodule,omitempty"`
-	// [Alpha] Options holds additional parameters that are specific
-	// to the different logging formats. Only the options for the selected
-	// format get used, but all of them get validated.
-	// Only available when the LoggingAlphaOptions feature gate is enabled.
+	// [Alpha] Options 保存各日志格式特有的额外参数。
+	// 仅使用所选格式的选项，但会校验全部选项。
+	// 仅在启用 LoggingAlphaOptions 特性门控时可用。
 	Options FormatOptions `json:"options,omitempty"`
 }
 
-// TimeOrMetaDuration is present only for backwards compatibility for the
-// flushFrequency field, and new fields should use metav1.Duration.
+// TimeOrMetaDuration 仅为 flushFrequency 字段的向后兼容而保留，
+// 新字段应使用 metav1.Duration。
 //
 // TimeOrMetaDuration 仅为 flushFrequency 字段的向后兼容而保留：
 // 旧版本接受整数纳秒，新版本同时接受时长字符串。
 type TimeOrMetaDuration struct {
-	// Duration holds the duration
+	// Duration 保存时长。
 	Duration metav1.Duration
-	// SerializeAsString controls whether the value is serialized as a string or an integer
+	// SerializeAsString 控制值序列化为字符串还是整数。
 	SerializeAsString bool `json:"-"`
 }
 
@@ -84,7 +82,7 @@ func (t TimeOrMetaDuration) MarshalJSON() ([]byte, error) {
 	if t.SerializeAsString {
 		return t.Duration.MarshalJSON()
 	} else {
-		// Marshal as integer for backwards compatibility
+		// 为向后兼容而序列化为整数。
 		return json.Marshal(t.Duration.Duration)
 	}
 }
@@ -92,7 +90,7 @@ func (t TimeOrMetaDuration) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON 依据首字符是否为引号区分新旧两种编码。
 func (t *TimeOrMetaDuration) UnmarshalJSON(b []byte) error {
 	if len(b) > 0 && b[0] == '"' {
-		// string values unmarshal as metav1.Duration
+		// 字符串值按 metav1.Duration 解析。
 		t.SerializeAsString = true
 		return json.Unmarshal(b, &t.Duration)
 	}
@@ -103,63 +101,58 @@ func (t *TimeOrMetaDuration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// FormatOptions contains options for the different logging formats.
+// FormatOptions 包含各日志格式的选项。
 //
 // 所有格式的选项都放在同一结构体里并全部校验，但只有被选中格式的选项会生效。
 type FormatOptions struct {
-	// [Alpha] Text contains options for logging format "text".
-	// Only available when the LoggingAlphaOptions feature gate is enabled.
+	// [Alpha] Text 包含 "text" 日志格式的选项。
+	// 仅在启用 LoggingAlphaOptions 特性门控时可用。
 	Text TextOptions `json:"text,omitempty"`
-	// [Alpha] JSON contains options for logging format "json".
-	// Only available when the LoggingAlphaOptions feature gate is enabled.
+	// [Alpha] JSON 包含 "json" 日志格式的选项。
+	// 仅在启用 LoggingAlphaOptions 特性门控时可用。
 	JSON JSONOptions `json:"json,omitempty"`
 }
 
-// TextOptions contains options for logging format "text".
+// TextOptions 包含 "text" 日志格式的选项。
 type TextOptions struct {
 	// 内嵌输出路由选项，JSON 中直接展开为 splitStream 等字段。
 	OutputRoutingOptions `json:""`
 }
 
-// JSONOptions contains options for logging format "json".
+// JSONOptions 包含 "json" 日志格式的选项。
 type JSONOptions struct {
 	// 与 text 共用输出路由选项，保证两种格式的流分离语义一致。
 	OutputRoutingOptions `json:""`
 }
 
-// OutputRoutingOptions contains options that are supported by both "text" and "json".
+// OutputRoutingOptions 包含 "text" 和 "json" 都支持的选项。
 type OutputRoutingOptions struct {
-	// [Alpha] SplitStream redirects error messages to stderr while
-	// info messages go to stdout, with buffering. The default is to write
-	// both to stdout, without buffering. Only available when
-	// the LoggingAlphaOptions feature gate is enabled.
+	// [Alpha] SplitStream 将错误消息重定向到 stderr，将 info 消息缓冲后写入 stdout。
+	// 默认将两者无缓冲地写入 stdout。
+	// 仅在启用 LoggingAlphaOptions 特性门控时可用。
 	SplitStream bool `json:"splitStream,omitempty"`
-	// [Alpha] InfoBufferSize sets the size of the info stream when
-	// using split streams. The default is zero, which disables buffering.
-	// Only available when the LoggingAlphaOptions feature gate is enabled.
+	// [Alpha] InfoBufferSize 设置使用分离流时 info 流的大小。
+	// 默认值为 0，表示禁用缓冲。
+	// 仅在启用 LoggingAlphaOptions 特性门控时可用。
 	InfoBufferSize resource.QuantityValue `json:"infoBufferSize,omitempty"`
 }
 
-// VModuleConfiguration is a collection of individual file names or patterns
-// and the corresponding verbosity threshold.
+// VModuleConfiguration 是单个文件名或模式及其对应详细程度阈值的集合。
 //
 // 列表按顺序生效；同名模式重复出现时由 klog 的 vmodule 解析决定优先级。
 type VModuleConfiguration []VModuleItem
 
-// VModuleItem defines verbosity for one or more files which match a certain
-// glob pattern.
+// VModuleItem 定义匹配某个 glob 模式的一个或多个文件的详细程度。
 type VModuleItem struct {
-	// FilePattern is a base file name (i.e. minus the ".go" suffix and
-	// directory) or a "glob" pattern for such a name. It must not contain
-	// comma and equal signs because those are separators for the
-	// corresponding klog command line argument.
+	// FilePattern 是基础文件名（即去掉 ".go" 后缀和目录），
+	// 或针对该名称的 "glob" 模式。不能包含逗号和等号，
+	// 因为它们是相应 klog 命令行参数的分隔符。
 	FilePattern string `json:"filePattern"`
-	// Verbosity is the threshold for log messages emitted inside files
-	// that match the pattern.
+	// Verbosity 是匹配该模式的文件中日志消息的阈值。
 	Verbosity VerbosityLevel `json:"verbosity"`
 }
 
-// VerbosityLevel represents a klog or logr verbosity threshold.
+// VerbosityLevel 表示 klog 或 logr 的详细程度阈值。
 //
 // 数值越大日志越详细；0 只输出最重要的消息，错误消息不受该阈值影响。
 type VerbosityLevel uint32

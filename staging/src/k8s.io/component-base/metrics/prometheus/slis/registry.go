@@ -21,8 +21,7 @@ import (
 )
 
 var (
-	// Registry exposes the SLI registry so that additional SLIs can be
-	// added on a per-component basis.
+	// Registry 暴露 SLI 注册表，使各组件可以添加自己的 SLI。
 	//
 	// 独立于全局 legacyregistry：SLI 只应出现在专用的 /metrics/slis 端点，
 	// 避免与普通指标混在一起。

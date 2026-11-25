@@ -80,12 +80,12 @@ func exerciseTimingHistogramCollector(t *testing.T, collect func(chan<- promethe
 var thTestBuckets = []float64{0, 0.5, 1}
 var thTestV0 float64 = 0.25
 
-// exerciseTimingHistogramData takes the given histogram through the following points in (time,value) space.
-// t0 is the clock time of the histogram's construction
-// value=v0 for t0 <= t <= t1 where v0 = 0.25 and t1 = t0 + 1 ns
-// value=v1 for t1 <= t <= t2 where v1 = 0.75 and t2 = t1 + 1 microsecond
-// value=v2 for t2 <= t <= t3 where v2 = 1.25 and t3 = t2 + 1 millisecond
-// value=v3 for t3 <= t <= t4 where v3 = 0.65 and t4 = t3 + 1 second
+// exerciseTimingHistogramData 驱动给定直方图经过 (time, value) 空间中的以下时间点。
+// t0 是直方图构造时的时钟时间。
+// 在 t0 <= t <= t1 时 value=v0，其中 v0 = 0.25，t1 = t0 + 1 ns。
+// 在 t1 <= t <= t2 时 value=v1，其中 v1 = 0.75，t2 = t1 + 1 microsecond。
+// 在 t2 <= t <= t3 时 value=v2，其中 v2 = 1.25，t3 = t2 + 1 millisecond。
+// 在 t3 <= t <= t4 时 value=v3，其中 v3 = 0.65，t4 = t3 + 1 second。
 //
 // 预期样本计数等于经过的总纳秒数，样本和等于每段“值×时长”之和；
 // 桶的累计计数按值落入的区间累加，用以验证时间积分而非简单观测计数。
@@ -140,7 +140,7 @@ func exerciseTimingHistogramData(t *testing.T, th GaugeOps, t0 time.Time, clk *u
 	}
 }
 
-// tDiff returns a time difference as float
+// tDiff 以 float64 形式返回时间差。
 func tDiff(hi, lo time.Time) float64 { return float64(hi.Sub(lo)) }
 
 func findAndRemove(metrics []GaugeOps, seek GaugeOps) ([]GaugeOps, bool) {
@@ -207,10 +207,12 @@ type unsyncFakeClock struct {
 	now time.Time
 }
 
+// Now 返回假时钟的当前时间。
 func (ufc *unsyncFakeClock) Now() time.Time {
 	return ufc.now
 }
 
+// SetTime 设置假时钟的当前时间。
 func (ufc *unsyncFakeClock) SetTime(now time.Time) {
 	ufc.now = now
 }

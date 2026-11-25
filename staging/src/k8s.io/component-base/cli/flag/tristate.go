@@ -21,9 +21,7 @@ import (
 	"strconv"
 )
 
-// Tristate is a flag compatible with flags and pflags that
-// keeps track of whether it had a value supplied or not.
-//
+// Tristate 是兼容 flag/pflag 的标志，记录用户是否提供过值。
 // 三态（未设置/真/假）用于区分“用户显式关闭”和“未配置，采用默认策略”；
 // 普通 bool 标志无法表达这一差异。
 type Tristate int

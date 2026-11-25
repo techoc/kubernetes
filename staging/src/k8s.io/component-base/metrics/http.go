@@ -34,30 +34,22 @@ func init() {
 	processStartedAt = time.Now()
 }
 
-// These constants cause handlers serving metrics to behave as described if
-// errors are encountered.
+// 这些常量决定提供指标服务的 handler 在遇到错误时的行为。
 const (
-	// HTTPErrorOnError serve an HTTP status code 500 upon the first error
-	// encountered. Report the error message in the body.
+	// HTTPErrorOnError 遇到首个错误时返回 HTTP 500 状态码，并在响应体中报告错误信息。
 	HTTPErrorOnError promhttp.HandlerErrorHandling = iota
 
-	// ContinueOnError ignore errors and try to serve as many metrics as possible.
-	// However, if no metrics can be served, serve an HTTP status code 500 and the
-	// last error message in the body. Only use this in deliberate "best
-	// effort" metrics collection scenarios. In this case, it is highly
-	// recommended to provide other means of detecting errors: By setting an
-	// ErrorLog in HandlerOpts, the errors are logged. By providing a
-	// Registry in HandlerOpts, the exposed metrics include an error counter
-	// "promhttp_metric_handler_errors_total", which can be used for
-	// alerts.
+	// ContinueOnError 忽略错误并尽量提供更多指标；若无法提供任何指标，则返回 HTTP 500 状态码，
+	// 并在响应体中报告最后一个错误。仅用于有意采用“尽力而为”策略的指标收集场景。
+	// 强烈建议同时提供其他错误检测手段：在 HandlerOpts 中设置 ErrorLog 可记录错误；
+	// 提供 Registry 可暴露错误计数器 "promhttp_metric_handler_errors_total"，用于告警。
 	ContinueOnError
 
-	// PanicOnError panics upon the first error encountered (useful for "crash only" apps).
+	// PanicOnError 遇到首个错误时 panic，适用于“出错即崩溃”的应用。
 	PanicOnError
 )
 
-// HandlerOpts specifies options how to serve metrics via an http.Handler. The
-// zero value of HandlerOpts is a reasonable default.
+// HandlerOpts 指定通过 http.Handler 提供指标服务的选项，其零值是合理的默认配置。
 type HandlerOpts promhttp.HandlerOpts
 
 // toPromhttpHandlerOpts 把内部类型转回 promhttp 类型，并注入进程启动时间。
@@ -66,18 +58,14 @@ func (ho *HandlerOpts) toPromhttpHandlerOpts() promhttp.HandlerOpts {
 	return promhttp.HandlerOpts(*ho)
 }
 
-// HandlerFor returns an uninstrumented http.Handler for the provided
-// Gatherer. The behavior of the Handler is defined by the provided
-// HandlerOpts. Thus, HandlerFor is useful to create http.Handlers for custom
-// Gatherers, with non-default HandlerOpts, and/or with custom (or no)
-// instrumentation. Use the InstrumentMetricHandler function to apply the same
-// kind of instrumentation as it is used by the Handler function.
+// HandlerFor 为给定 Gatherer 返回未插桩的 http.Handler，其行为由 HandlerOpts 决定。
+// 适用于自定义 Gatherer、非默认 HandlerOpts、自定义插桩或不插桩的场景；
+// 可使用 InstrumentMetricHandler 添加与 Handler 函数相同的插桩。
 func HandlerFor(reg Gatherer, opts HandlerOpts) http.Handler {
 	return promhttp.HandlerFor(reg, opts.toPromhttpHandlerOpts())
 }
 
-// HandlerWithReset return an http.Handler with Reset
-//
+// HandlerWithReset 返回支持 Reset 的 http.Handler。
 // DELETE 请求会清空注册表中的指标，仅用于测试或调试；生产端点通常不应暴露此能力。
 func HandlerWithReset(reg KubeRegistry, opts HandlerOpts) http.Handler {
 	defaultHandler := promhttp.HandlerFor(reg, opts.toPromhttpHandlerOpts())

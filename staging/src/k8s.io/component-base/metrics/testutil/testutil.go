@@ -39,17 +39,16 @@ type TB interface {
 	Fatalf(format string, args ...any)
 }
 
-// MetricFamily is a type alias which enables writing gatherers in tests
-// without importing prometheus directly (https://github.com/kubernetes/kubernetes/issues/99876).
+// MetricFamily 是类型别名，便于测试编写收集器时无需直接导入 Prometheus
+// （https://github.com/kubernetes/kubernetes/issues/99876）。
 type MetricFamily = dto.MetricFamily
 
-// GathererFunc is a type alias which enables writing gatherers as a function in tests
-// without importing prometheus directly (https://github.com/kubernetes/kubernetes/issues/99876).
+// GathererFunc 是类型别名，便于测试以函数形式编写收集器时无需直接导入 Prometheus
+// （https://github.com/kubernetes/kubernetes/issues/99876）。
 type GathererFunc = prometheus.GathererFunc
 
-// CollectAndCompare registers the provided Collector with a newly created
-// pedantic Registry. It then does the same as GatherAndCompare, gathering the
-// metrics from the pedantic Registry.
+// CollectAndCompare 将传入的 Collector 注册到新建的严格注册表，并从该注册表收集指标，
+// 后续处理与 GatherAndCompare 相同。
 //
 // 先 lint 再比较：格式不规范的指标即使数值正确也会让测试失败，以便尽早发现。
 func CollectAndCompare(c metrics.Collector, expected io.Reader, metricNames ...string) error {
@@ -64,10 +63,8 @@ func CollectAndCompare(c metrics.Collector, expected io.Reader, metricNames ...s
 	return testutil.CollectAndCompare(c, expected, metricNames...)
 }
 
-// GatherAndCompare gathers all metrics from the provided Gatherer and compares
-// it to an expected output read from the provided Reader in the Prometheus text
-// exposition format. If any metricNames are provided, only metrics with those
-// names are compared.
+// GatherAndCompare 从传入的 Gatherer 获取全部指标，并与 Reader 中 Prometheus 文本
+// 展示格式的预期输出比较；若指定 metricNames，则只比较这些名称的指标。
 //
 // 同样先执行 lint，保证测试使用的期望文本符合 Prometheus 命名与 HELP 规范。
 func GatherAndCompare(g metrics.Gatherer, expected io.Reader, metricNames ...string) error {
@@ -82,9 +79,8 @@ func GatherAndCompare(g metrics.Gatherer, expected io.Reader, metricNames ...str
 	return testutil.GatherAndCompare(g, expected, metricNames...)
 }
 
-// CustomCollectAndCompare registers the provided StableCollector with a newly created
-// registry. It then does the same as GatherAndCompare, gathering the
-// metrics from the pedantic Registry.
+// CustomCollectAndCompare 将传入的 StableCollector 注册到新建的严格注册表，
+// 并从该注册表收集指标，后续处理与 GatherAndCompare 相同。
 func CustomCollectAndCompare(c metrics.StableCollector, expected io.Reader, metricNames ...string) error {
 	// 使用新注册表隔离，避免与其他测试共享的全局指标互相干扰。
 	registry := metrics.NewKubeRegistry()
@@ -93,16 +89,14 @@ func CustomCollectAndCompare(c metrics.StableCollector, expected io.Reader, metr
 	return GatherAndCompare(registry, expected, metricNames...)
 }
 
-// ScrapeAndCompare calls a remote exporter's endpoint which is expected to return some metrics in
-// plain text format. Then it compares it with the results that the `expected` would return.
-// If the `metricNames` is not empty it would filter the comparison only to the given metric names.
+// ScrapeAndCompare 调用远程 exporter 的端点，将其返回的纯文本指标与 expected 中的预期输出比较。
+// 若 metricNames 非空，则只比较指定名称的指标。
 func ScrapeAndCompare(url string, expected io.Reader, metricNames ...string) error {
 	return testutil.ScrapeAndCompare(url, expected, metricNames...)
 }
 
-// NewFakeKubeRegistry creates a fake `KubeRegistry` that takes the input version as `build in version`.
-// It should only be used in testing scenario especially for the deprecated metrics.
-// The input version format should be `major.minor.patch`, e.g. '1.18.0'.
+// NewFakeKubeRegistry 创建一个以输入版本作为构建版本的模拟 KubeRegistry。
+// 仅应用于测试，尤其是测试已弃用指标；版本格式为 major.minor.patch，如 1.18.0。
 func NewFakeKubeRegistry(ver string) metrics.KubeRegistry {
 	// 临时替换 BuildVersion，创建后立即恢复，避免影响并发创建的注册表。
 	backup := metrics.BuildVersion
@@ -130,7 +124,7 @@ func AssertVectorCount(t TB, name string, labelFilter map[string]string, wantCou
 	counterSum := 0
 	for _, mf := range metrics {
 		if mf.GetName() != name {
-			continue // Ignore other metrics.
+			continue // 忽略其他指标。
 		}
 		for _, metric := range mf.GetMetric() {
 			if !LabelsMatch(metric, labelFilter) {
@@ -160,7 +154,7 @@ func AssertHistogramTotalCount(t TB, name string, labelFilter map[string]string,
 	counterSum := 0
 	for _, mf := range metrics {
 		if mf.GetName() != name {
-			continue // Ignore other metrics.
+			continue // 忽略其他指标。
 		}
 		for _, metric := range mf.GetMetric() {
 			if !LabelsMatch(metric, labelFilter) {
@@ -181,7 +175,7 @@ func AssertHistogramTotalCount(t TB, name string, labelFilter map[string]string,
 	}
 }
 
-// AssertHasNativeHistogram verifies that a native histogram metric with the given labels exists and has valid data.
+// AssertHasNativeHistogram 验证具有指定标签的原生直方图指标存在且数据有效。
 func AssertHasNativeHistogram(t TB, mf *dto.MetricFamily, labelFilter map[string]string) {
 	if mf.GetType() != dto.MetricType_HISTOGRAM {
 		t.Errorf("metric %q is not a histogram", mf.GetName())
@@ -202,7 +196,7 @@ func AssertHasNativeHistogram(t TB, mf *dto.MetricFamily, labelFilter map[string
 			t.Errorf("expected native histogram data to be present for metric %q with labels %v", mf.GetName(), labelFilter)
 		}
 
-		// If there are observations, PositiveSpan should have data for positive durations
+		// 存在观测值时，PositiveSpan 应包含正时长的数据
 		if h.GetSampleCount() > 0 && len(h.GetPositiveSpan()) == 0 {
 			t.Errorf("expected PositiveSpan data for histogram with observations")
 		}
@@ -212,9 +206,8 @@ func AssertHasNativeHistogram(t TB, mf *dto.MetricFamily, labelFilter map[string
 	t.Errorf("metric %q with labels %v not found", mf.GetName(), labelFilter)
 }
 
-// ScrapeMetricsProto scrapes metrics from a URL using protobuf format.
-// This is necessary for native histograms as they are only fully exposed in protobuf format.
-// Returns a map of metric families keyed by metric name.
+// ScrapeMetricsProto 使用 protobuf 格式从 URL 抓取指标，返回以指标名称为键的指标族映射。
+// 原生直方图只有在 protobuf 格式中才能完整表达，因此必须使用此格式。
 func ScrapeMetricsProto(url string, client *http.Client) (map[string]*dto.MetricFamily, error) {
 	if client == nil {
 		return nil, fmt.Errorf("http client is required")
@@ -223,7 +216,6 @@ func ScrapeMetricsProto(url string, client *http.Client) (map[string]*dto.Metric
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	// Request protobuf format to get native histogram data
 	// 文本格式无法完整表达原生直方图的 span/schema，因此必须协商 protobuf。
 	req.Header.Set("Accept", string(expfmt.NewFormat(expfmt.TypeProtoDelim)))
 
@@ -237,7 +229,7 @@ func ScrapeMetricsProto(url string, client *http.Client) (map[string]*dto.Metric
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Parse protobuf format
+	// 解析 protobuf 格式
 	decoder := expfmt.NewDecoder(resp.Body, expfmt.ResponseFormat(resp.Header))
 	result := make(map[string]*dto.MetricFamily)
 	for {

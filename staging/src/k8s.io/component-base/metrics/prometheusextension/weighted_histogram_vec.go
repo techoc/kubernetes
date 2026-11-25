@@ -20,19 +20,24 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// WeightedObserverVec is a bunch of WeightedObservers that have the same
-// Desc and are distinguished by the values for their variable labels.
-// 与 prometheus.HistogramVec 的区别仅在于 Observe 接受带权重的样本。
+// WeightedObserverVec 是一组共享同一 Desc、按变量标签区分的 WeightedObserver。
+// 与 prometheus.HistogramVec 的区别仅在于 ObserveWithWeight 接受带权重的样本。
 type WeightedObserverVec interface {
+	// GetMetricWith 按完整标签集合获取带权重观察器。
 	GetMetricWith(prometheus.Labels) (WeightedObserver, error)
+	// GetMetricWithLabelValues 按位置标签值获取带权重观察器。
 	GetMetricWithLabelValues(lvs ...string) (WeightedObserver, error)
+	// With 获取带权重观察器，出错时 panic。
 	With(prometheus.Labels) WeightedObserver
+	// WithLabelValues 按位置标签值获取带权重观察器，出错时 panic。
 	WithLabelValues(...string) WeightedObserver
+	// CurryWith 预绑定部分标签并返回新的向量接口。
 	CurryWith(prometheus.Labels) (WeightedObserverVec, error)
+	// MustCurryWith 是 CurryWith 的 panic 版本。
 	MustCurryWith(prometheus.Labels) WeightedObserverVec
 }
 
-// WeightedHistogramVec implements WeightedObserverVec
+// WeightedHistogramVec 实现 WeightedObserverVec。
 type WeightedHistogramVec struct {
 	*prometheus.MetricVec
 }
@@ -53,7 +58,7 @@ func NewWeightedHistogramVec(opts WeightedHistogramOpts, labelNames ...string) *
 		MetricVec: prometheus.NewMetricVec(desc, func(lvs ...string) prometheus.Metric {
 			metric, err := newWeightedHistogram(desc, opts, lvs...)
 			if err != nil {
-				panic(err) // like in prometheus.newHistogram
+				panic(err) // 与 prometheus.newHistogram 的行为一致
 			}
 			return metric
 		}),

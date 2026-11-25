@@ -25,17 +25,13 @@ import (
 	promext "k8s.io/component-base/metrics/prometheusextension"
 )
 
-// PrometheusTimingHistogram is the abstraction of the underlying histogram
-// that we want to promote from the wrapper.
-//
-// 只暴露 GaugeMetric（Set/Add），因为 timing histogram 记录的是
-// “当前值 × 持续时长”的积分，而非离散观测。
+// PrometheusTimingHistogram 从包装器提升底层计时直方图，仅暴露 GaugeMetric。
+// timing histogram 记录“当前值 × 持续时长”的积分，而非离散观测。
 type PrometheusTimingHistogram interface {
 	GaugeMetric
 }
 
-// TimingHistogram is our internal representation for our wrapping struct around
-// timing histograms. It implements both kubeCollector and GaugeMetric
+// TimingHistogram 是计时直方图的内部包装结构，实现 kubeCollector 和 GaugeMetric。
 type TimingHistogram struct {
 	PrometheusTimingHistogram
 	*TimingHistogramOpts
@@ -48,18 +44,13 @@ var _ GaugeMetric = &TimingHistogram{}
 var _ Registerable = &TimingHistogram{}
 var _ kubeCollector = &TimingHistogram{}
 
-// NewTimingHistogram returns an object which is TimingHistogram-like. However, nothing
-// will be measured until the histogram is registered somewhere.
-//
-// NewTimingHistogram 使用真实时钟；测试需注入时钟时请用
-// NewTestableTimingHistogram。
+// NewTimingHistogram 创建类似 TimingHistogram 的对象，注册前不会进行测量。
+// 它使用真实时钟；测试需注入时钟时请用 NewTestableTimingHistogram。
 func NewTimingHistogram(opts *TimingHistogramOpts) *TimingHistogram {
 	return NewTestableTimingHistogram(time.Now, opts)
 }
 
-// NewTestableTimingHistogram adds injection of the clock
-//
-// 注入 nowFunc 后可以精确构造“某值持续了多久”的场景，
+// NewTestableTimingHistogram 允许注入时钟，以精确构造“某值持续了多久”的场景，
 // 避免测试依赖真实时间而变得不稳定。
 func NewTestableTimingHistogram(nowFunc func() time.Time, opts *TimingHistogramOpts) *TimingHistogram {
 	opts.StabilityLevel.setDefaults()
@@ -74,47 +65,41 @@ func NewTestableTimingHistogram(nowFunc func() time.Time, opts *TimingHistogramO
 	return h
 }
 
-// setPrometheusHistogram sets the underlying KubeGauge object, i.e. the thing that does the measurement.
+// setPrometheusHistogram 设置执行实际测量的底层计时直方图。
 func (h *TimingHistogram) setPrometheusHistogram(histogram promext.TimingHistogram) {
 	h.PrometheusTimingHistogram = histogram
 	h.initSelfCollection(histogram)
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
-//
-// 解析 DeprecatedVersion 字符串；未设置时返回 nil，表示未弃用。
+// DeprecatedVersion 解析 DeprecatedVersion 字符串；未设置时返回 nil，表示未弃用。
 func (h *TimingHistogram) DeprecatedVersion() *semver.Version {
 	return parseSemver(h.TimingHistogramOpts.DeprecatedVersion)
 }
 
-// initializeMetric invokes the actual prometheus.Histogram object instantiation
-// and stores a reference to it
-//
+// initializeMetric 创建底层 prometheus 计时直方图并保存引用。
 // 创建失败通常是桶配置非法；与标准 Histogram 保持一致，直接 panic。
 func (h *TimingHistogram) initializeMetric() {
 	h.TimingHistogramOpts.annotateStabilityLevel()
-	// this actually creates the underlying prometheus gauge.
+	// 这里实际创建底层 prometheus gauge。
 	histogram, err := promext.NewTestableTimingHistogram(h.nowFunc, h.TimingHistogramOpts.toPromHistogramOpts())
 	if err != nil {
-		panic(err) // handle as for regular histograms
+		panic(err) // 与普通直方图的处理方式一致
 	}
 	h.setPrometheusHistogram(histogram)
 }
 
-// initializeDeprecatedMetric invokes the actual prometheus.Histogram object instantiation
-// but modifies the Help description prior to object instantiation.
+// initializeDeprecatedMetric 先修改 Help 中的弃用说明，再创建底层 prometheus 计时直方图。
 func (h *TimingHistogram) initializeDeprecatedMetric() {
 	h.TimingHistogramOpts.markDeprecated()
 	h.initializeMetric()
 }
 
-// WithContext allows the normal TimingHistogram metric to pass in context. The context is no-op now.
+// WithContext 允许普通 TimingHistogram 指标传入 context；目前 context 不产生实际作用。
 func (h *TimingHistogram) WithContext(ctx context.Context) GaugeMetric {
 	return h.PrometheusTimingHistogram
 }
 
-// TimingHistogramVec is the internal representation of our wrapping struct around prometheus
-// TimingHistogramVecs.
+// TimingHistogramVec 是 prometheus TimingHistogramVec 的内部包装结构。
 type TimingHistogramVec struct {
 	*promext.TimingHistogramVec
 	*TimingHistogramOpts
@@ -127,16 +112,14 @@ var _ GaugeVecMetric = &TimingHistogramVec{}
 var _ Registerable = &TimingHistogramVec{}
 var _ kubeCollector = &TimingHistogramVec{}
 
-// NewTimingHistogramVec returns an object which satisfies the kubeCollector, Registerable, and GaugeVecMetric interfaces
-// and wraps an underlying promext.TimingHistogramVec object.  Note well the way that
-// behavior depends on registration and whether this is hidden.
-//
-// 未注册时底层是 noopTimingHistogramVec；注册后才替换为真实实现。
+// NewTimingHistogramVec 创建实现 kubeCollector、Registerable 和 GaugeVecMetric
+// 接口的包装对象，内部封装 promext.TimingHistogramVec。
+// 未注册时底层是 noopTimingHistogramVec；隐藏指标注册后仍不会对外暴露。
 func NewTimingHistogramVec(opts *TimingHistogramOpts, labels []string) *TimingHistogramVec {
 	return NewTestableTimingHistogramVec(time.Now, opts, labels)
 }
 
-// NewTestableTimingHistogramVec adds injection of the clock.
+// NewTestableTimingHistogramVec 创建允许注入时钟的 TimingHistogramVec。
 func NewTestableTimingHistogramVec(nowFunc func() time.Time, opts *TimingHistogramOpts, labels []string) *TimingHistogramVec {
 	opts.StabilityLevel.setDefaults()
 
@@ -153,7 +136,7 @@ func NewTestableTimingHistogramVec(nowFunc func() time.Time, opts *TimingHistogr
 	return v
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 解析 DeprecatedVersion 字符串；未设置时返回 nil，表示未弃用。
 func (v *TimingHistogramVec) DeprecatedVersion() *semver.Version {
 	return parseSemver(v.TimingHistogramOpts.DeprecatedVersion)
 }
@@ -170,18 +153,10 @@ func (v *TimingHistogramVec) initializeDeprecatedMetric() {
 	v.initializeMetric()
 }
 
-// WithLabelValuesChecked, if called before this vector has been registered in
-// at least one registry, will return a noop gauge and
-// an error that passes ErrIsNotRegistered.
-// If called on a hidden vector,
-// will return a noop gauge and a nil error.
-// If called with a syntactic problem in the labels, will
-// return a noop gauge and an error about the labels.
-// If none of the above apply, this method will return
-// the appropriate vector member and a nil error.
-//
-// 带 Checked 的版本把“未注册”与“label 错误”交给调用方决定，
-// 非 Checked 版本只对前者静默。
+// WithLabelValuesChecked 按位置标签返回子 gauge：
+// 未注册时返回 noop 和可通过 ErrIsNotRegistered 识别的错误；
+// 隐藏向量返回 noop 和 nil；标签语法错误返回 noop 和相应错误；
+// 其他情况返回对应子指标和 nil。
 func (v *TimingHistogramVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 	if !v.IsCreated() {
 		if v.IsHidden() {
@@ -190,7 +165,7 @@ func (v *TimingHistogramVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric,
 		return noop, errNotRegistered
 	}
 
-	// Initialize label allow lists if not already initialized
+	// 尚未初始化时，加载标签值允许列表。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -199,7 +174,7 @@ func (v *TimingHistogramVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric,
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label values to allowed values
+	// 将位置标签值限制在允许集合内。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainToAllowedList(v.originalLabels, lvs)
 	}
@@ -210,11 +185,8 @@ func (v *TimingHistogramVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric,
 	return ops.(GaugeMetric), err
 }
 
-// WithLabelValues calls WithLabelValuesChecked
-// and handles errors as follows.
-// An error that passes ErrIsNotRegistered is ignored
-// and the noop gauge is returned;
-// all other errors cause a panic.
+// WithLabelValues 调用 WithLabelValuesChecked：
+// 忽略可通过 ErrIsNotRegistered 识别的错误并返回 noop，其他错误触发 panic。
 func (v *TimingHistogramVec) WithLabelValues(lvs ...string) GaugeMetric {
 	ans, err := v.WithLabelValuesChecked(lvs...)
 	if err == nil || ErrIsNotRegistered(err) {
@@ -223,15 +195,10 @@ func (v *TimingHistogramVec) WithLabelValues(lvs ...string) GaugeMetric {
 	panic(err)
 }
 
-// WithChecked, if called before this vector has been registered in
-// at least one registry, will return a noop gauge and
-// an error that passes ErrIsNotRegistered.
-// If called on a hidden vector,
-// will return a noop gauge and a nil error.
-// If called with a syntactic problem in the labels, will
-// return a noop gauge and an error about the labels.
-// If none of the above apply, this method will return
-// the appropriate vector member and a nil error.
+// WithChecked 按 map 标签返回子 gauge：
+// 未注册时返回 noop 和可通过 ErrIsNotRegistered 识别的错误；
+// 隐藏向量返回 noop 和 nil；标签语法错误返回 noop 和相应错误；
+// 其他情况返回对应子指标和 nil。
 func (v *TimingHistogramVec) WithChecked(labels map[string]string) (GaugeMetric, error) {
 	if !v.IsCreated() {
 		if v.IsHidden() {
@@ -240,7 +207,7 @@ func (v *TimingHistogramVec) WithChecked(labels map[string]string) (GaugeMetric,
 		return noop, errNotRegistered
 	}
 
-	// Initialize label allow lists if not already initialized
+	// 尚未初始化时，加载标签值允许列表。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -249,7 +216,7 @@ func (v *TimingHistogramVec) WithChecked(labels map[string]string) (GaugeMetric,
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label map to allowed values
+	// 将 map 标签值限制在允许集合内。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainLabelMap(labels)
 	}
@@ -260,10 +227,8 @@ func (v *TimingHistogramVec) WithChecked(labels map[string]string) (GaugeMetric,
 	return ops.(GaugeMetric), err
 }
 
-// With calls WithChecked and handles errors as follows.
-// An error that passes ErrIsNotRegistered is ignored
-// and the noop gauge is returned;
-// all other errors cause a panic.
+// With 调用 WithChecked：
+// 忽略可通过 ErrIsNotRegistered 识别的错误并返回 noop，其他错误触发 panic。
 func (v *TimingHistogramVec) With(labels map[string]string) GaugeMetric {
 	ans, err := v.WithChecked(labels)
 	if err == nil || ErrIsNotRegistered(err) {
@@ -272,21 +237,17 @@ func (v *TimingHistogramVec) With(labels map[string]string) GaugeMetric {
 	panic(err)
 }
 
-// Delete deletes the metric where the variable labels are the same as those
-// passed in as labels. It returns true if a metric was deleted.
-//
-// It is not an error if the number and names of the Labels are inconsistent
-// with those of the VariableLabels in Desc. However, such inconsistent Labels
-// can never match an actual metric, so the method will always return false in
-// that case.
+// Delete 删除可变标签与给定标签匹配的指标，删除成功时返回 true。
+// 标签数量或名称与 Desc 中的 VariableLabels 不一致不会报错，但无法匹配任何指标，
+// 因此始终返回 false。
 func (v *TimingHistogramVec) Delete(labels map[string]string) bool {
 	if !v.IsCreated() {
-		return false // since we haven't created the metric, we haven't deleted a metric with the passed in values
+		return false // 指标尚未创建，因此未删除任何与给定标签匹配的指标
 	}
 	return v.TimingHistogramVec.Delete(labels)
 }
 
-// Reset deletes all metrics in this vector.
+// Reset 删除此向量中的所有指标。
 func (v *TimingHistogramVec) Reset() {
 	if !v.IsCreated() {
 		return
@@ -295,17 +256,15 @@ func (v *TimingHistogramVec) Reset() {
 	v.TimingHistogramVec.Reset()
 }
 
-// ResetLabelAllowLists resets the label allow list for the TimingHistogramVec.
-// NOTE: This should only be used in test.
+// ResetLabelAllowLists 重置 TimingHistogramVec 的标签值允许列表。
+// 注意：仅应在测试中使用。
 func (v *TimingHistogramVec) ResetLabelAllowLists() {
 	v.initializeLabelAllowListsOnce = sync.Once{}
 	v.LabelValueAllowLists = nil
 }
 
-// InterfaceWithContext returns wrapped TimingHistogramVec with context
-//
-// 方法名带 Interface 是为了避免与内嵌类型的 WithContext 冲突；
-// 当前 context 只保存不使用。
+// InterfaceWithContext 返回携带 context 的 TimingHistogramVec 包装器。
+// 方法名带 Interface 是为了避免与内嵌类型的 WithContext 冲突；当前 context 只保存不使用。
 func (v *TimingHistogramVec) InterfaceWithContext(ctx context.Context) GaugeVecMetric {
 	return &TimingHistogramVecWithContext{
 		ctx:                ctx,
@@ -313,8 +272,8 @@ func (v *TimingHistogramVec) InterfaceWithContext(ctx context.Context) GaugeVecM
 	}
 }
 
-// TimingHistogramVecWithContext is the wrapper of TimingHistogramVec with context.
-// Currently the context is ignored.
+// TimingHistogramVecWithContext 是携带 context 的 TimingHistogramVec 包装器。
+// 当前 context 会被忽略。
 type TimingHistogramVecWithContext struct {
 	*TimingHistogramVec
 	ctx context.Context

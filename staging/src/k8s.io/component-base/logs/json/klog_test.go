@@ -141,7 +141,7 @@ func TestKlogIntegration(t *testing.T) {
 			fun: func() {
 				klog.V(3).InfoS("test", "count", 1)
 			},
-			// no output because of threshold 2
+			// 阈值为 2，因此没有输出。
 		},
 		{
 			name: "InfoSDepth",
@@ -245,7 +245,7 @@ func TestKlogIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var buffer bytes.Buffer
 			writer := zapcore.AddSync(&buffer)
-			// This level is high enough to enable all log messages from this test.
+			// 该级别足以启用此测试中的所有日志消息。
 			verbosityLevel := logsapi.VerbosityLevel(100)
 			logger, _ := NewJSONLogger(verbosityLevel, writer, nil, nil)
 			klog.SetLogger(logger)
@@ -274,7 +274,7 @@ func TestKlogIntegration(t *testing.T) {
 	}
 }
 
-// TestKlogV test klog -v(--verbose) func available with json logger
+// TestKlogV 测试 JSON logger 下 klog -v（--verbose）功能是否可用。
 // 设置 -v 后逐级调用，验证只有 V(j) <= v 时才写出。
 func TestKlogV(t *testing.T) {
 	var buffer testBuff

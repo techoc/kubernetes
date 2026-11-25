@@ -36,7 +36,7 @@ import (
 )
 
 func main() {
-	// Set up command line, including a feature gate parameter and logging options.
+	// 设置命令行，包括特性门控参数和日志选项。
 	// 使用独立的 FeatureGate 实例而非全局默认值，示例之间互不影响。
 	featureGate := featuregate.NewFeatureGate()
 	runtime.Must(logsapi.AddFeatureGates(featureGate))
@@ -46,9 +46,8 @@ func main() {
 	c := logsapi.NewLoggingConfiguration()
 	logsapi.AddGoFlags(c, flag.CommandLine)
 
-	// Parse flags and apply the result. logs.InitLogs disables contextual
-	// logging while it is still alpha. The feature gate parameter must be
-	// used to enable it explicitly.
+	// 解析 flag 并应用结果。日志上下文功能仍为 alpha 时，logs.InitLogs 会禁用它，
+	// 必须通过特性门控参数显式启用。
 	flag.Parse()
 	logs.InitLogs()
 	if err := logsapi.ValidateAndApply(c, featureGate); err != nil {
@@ -62,11 +61,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize contextual logging.
+	// 初始化上下文日志。
 	// 给 logger 取名字并附加固定字段，演示回调和调用链中的上下文传递。
 	logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "example"), "foo", "bar")
 	ctx := klog.NewContext(context.Background(), logger)
 
-	// Produce some output.
+	// 生成一些输出。
 	example.Run(ctx)
 }

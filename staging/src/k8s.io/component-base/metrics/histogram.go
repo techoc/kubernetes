@@ -26,9 +26,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Histogram is our internal representation for our wrapping struct around prometheus
-// histograms. Summary implements both kubeCollector and ObserverMetric
-// Histogram 是对 prometheus Histogram 的包装，同时实现 kubeCollector 与 ObserverMetric。
+// Histogram 是对 prometheus.Histogram 的内部包装，同时实现 kubeCollector 与 ObserverMetric。
 // 注册前为 noop，首次注册时才真正创建底层直方图。
 type Histogram struct {
 	ObserverMetric
@@ -37,7 +35,7 @@ type Histogram struct {
 	selfCollector
 }
 
-// exemplarHistogramMetric holds a context to extract exemplar labels from, and a historgram metric to attach them to. It implements the metricWithExemplar interface.
+// exemplarHistogramMetric 保存用于提取 exemplar 标签的 context，以及承载 exemplar 的直方图；实现 metricWithExemplar 接口。
 type exemplarHistogramMetric struct {
 	ctx      context.Context
 	delegate ObserverMetric
@@ -49,8 +47,7 @@ type exemplarHistogramVec struct {
 	observer prometheus.Observer
 }
 
-// Observe attaches an exemplar to the metric and then calls the delegate.
-// Observe 在 context 中存在已采样 span 时附上 trace_id/span_id，否则普通观测。
+// Observe 在 context 中存在已采样 span 时附上 trace_id/span_id，否则执行普通观测。
 func (e *exemplarHistogramMetric) Observe(v float64) {
 	if m, ok := e.delegate.(prometheus.ExemplarObserver); ok {
 		maybeSpanCtx := trace.SpanContextFromContext(e.ctx)
@@ -67,8 +64,7 @@ func (e *exemplarHistogramMetric) Observe(v float64) {
 	e.delegate.Observe(v)
 }
 
-// NewHistogram returns an object which is Histogram-like. However, nothing
-// will be measured until the histogram is registered somewhere.
+// NewHistogram 返回一个类似 Histogram 的对象；注册前不会记录任何观测。
 func NewHistogram(opts *HistogramOpts) *Histogram {
 	opts.StabilityLevel.setDefaults()
 
@@ -81,40 +77,36 @@ func NewHistogram(opts *HistogramOpts) *Histogram {
 	return h
 }
 
-// setPrometheusHistogram sets the underlying KubeGauge object, i.e. the thing that does the measurement.
+// setPrometheusHistogram 设置执行实际观测的底层 prometheus.Histogram。
 func (h *Histogram) setPrometheusHistogram(histogram prometheus.Histogram) {
 	h.ObserverMetric = histogram
 	h.initSelfCollection(histogram)
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 返回已解析的弃用版本；未设置时返回 nil。
 func (h *Histogram) DeprecatedVersion() *semver.Version {
 	return parseSemver(h.HistogramOpts.DeprecatedVersion)
 }
 
-// initializeMetric invokes the actual prometheus.Histogram object instantiation
-// and stores a reference to it
+// initializeMetric 创建并保存底层 prometheus.Histogram。
 func (h *Histogram) initializeMetric() {
 	h.HistogramOpts.annotateStabilityLevel()
 	// 这里才真正创建底层 prometheus histogram。
 	h.setPrometheusHistogram(prometheus.NewHistogram(h.HistogramOpts.toPromHistogramOpts()))
 }
 
-// initializeDeprecatedMetric invokes the actual prometheus.Histogram object instantiation
-// but modifies the Help description prior to object instantiation.
+// initializeDeprecatedMetric 先修改 Help 中的弃用说明，再创建 prometheus.Histogram。
 func (h *Histogram) initializeDeprecatedMetric() {
 	h.HistogramOpts.markDeprecated()
 	h.initializeMetric()
 }
 
-// WithContext allows the normal Histogram metric to pass in context. The context is no-op now.
 // WithContext 返回带 context 的包装，观测时可携带 trace exemplar。
 func (h *Histogram) WithContext(ctx context.Context) ObserverMetric {
 	return &exemplarHistogramMetric{ctx: ctx, delegate: h.ObserverMetric}
 }
 
-// HistogramVec is the internal representation of our wrapping struct around prometheus
-// histogramVecs.
+// HistogramVec 是对 prometheus.HistogramVec 的内部包装。
 type HistogramVec struct {
 	*prometheus.HistogramVec
 	*HistogramOpts
@@ -122,11 +114,8 @@ type HistogramVec struct {
 	originalLabels []string
 }
 
-// NewHistogramVec returns an object which satisfies kubeCollector and wraps the
-// prometheus.HistogramVec object. However, the object returned will not measure
-// anything unless the collector is first registered, since the metric is lazily instantiated,
-// and only members extracted after
-// registration will actually measure anything.
+// NewHistogramVec 返回实现 kubeCollector 的 prometheus.HistogramVec 包装。
+// 指标采用懒创建；只有注册后获取的成员才会记录观测。
 
 func NewHistogramVec(opts *HistogramOpts, labels []string) *HistogramVec {
 	opts.StabilityLevel.setDefaults()
@@ -143,7 +132,7 @@ func NewHistogramVec(opts *HistogramOpts, labels []string) *HistogramVec {
 	return v
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 返回已解析的弃用版本；未设置时返回 nil。
 func (v *HistogramVec) DeprecatedVersion() *semver.Version {
 	return parseSemver(v.HistogramOpts.DeprecatedVersion)
 }
@@ -160,21 +149,15 @@ func (v *HistogramVec) initializeDeprecatedMetric() {
 	v.initializeMetric()
 }
 
-// Default Prometheus Vec behavior is that member extraction results in creation of a new element
-// if one with the unique label values is not found in the underlying stored metricMap.
-// This means  that if this function is called but the underlying metric is not registered
-// (which means it will never be exposed externally nor consumed), the metric will exist in memory
-// for perpetuity (i.e. throughout application lifecycle).
+// Prometheus Vec 默认会在提取成员时，为底层 metricMap 中不存在的标签组合创建元素。
+// 若指标尚未注册，该元素永远不会对外暴露或被消费，却会一直占用内存。
 //
-// For reference: https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/histogram.go#L460-L470
+// 参考：https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/histogram.go#L460-L470
 //
-// In contrast, the Vec behavior in this package is that member extraction before registration
-// returns a permanent noop object.
+// 本包的 Vec 在注册前提取成员时只返回永久的 noop 对象。
 
-// WithLabelValues returns the ObserverMetric for the given slice of label
-// values (same order as the VariableLabels in Desc). If that combination of
-// label values is accessed for the first time, a new ObserverMetric is created IFF the HistogramVec
-// has been registered to a metrics registry.
+// WithLabelValues 返回给定标签值序列对应的 ObserverMetric，顺序须与 Desc 中的
+// VariableLabels 一致。首次访问该组合时，仅当 HistogramVec 已注册才创建成员。
 func (v *HistogramVec) WithLabelValues(lvs ...string) ObserverMetric {
 	if !v.IsCreated() {
 		return noop
@@ -196,10 +179,8 @@ func (v *HistogramVec) WithLabelValues(lvs ...string) ObserverMetric {
 	return v.HistogramVec.WithLabelValues(lvs...)
 }
 
-// With returns the ObserverMetric for the given Labels map (the label names
-// must match those of the VariableLabels in Desc). If that label map is
-// accessed for the first time, a new ObserverMetric is created IFF the HistogramVec has
-// been registered to a metrics registry.
+// With 返回给定 Labels 映射对应的 ObserverMetric，标签名须与 Desc 中的
+// VariableLabels 一致。首次访问该组合时，仅当 HistogramVec 已注册才创建成员。
 func (v *HistogramVec) With(labels map[string]string) ObserverMetric {
 	if !v.IsCreated() {
 		return noop
@@ -221,15 +202,13 @@ func (v *HistogramVec) With(labels map[string]string) ObserverMetric {
 	return v.HistogramVec.With(labels)
 }
 
-// ObserveSince returns a function that observes the duration since the given start time.
-// This is intended to be used with defer to measure the time elapsed since a given point:
+// ObserveSince 返回一个记录自 start 起经过时长的函数，可配合 defer 测量耗时：
 //
 //	start := time.Now()
 //	defer metricVec.ObserveSince(start, "label1", "label2")()
 //
-// The returned function must be called (typically via defer) to record the observation.
-// This pattern avoids the common pitfall where arguments to deferred functions are evaluated
-// immediately, which would result in incorrect timing measurements.
+// 必须调用返回的函数（通常通过 defer）才能记录观测。
+// 这种写法避免 defer 的参数立即求值，导致耗时测量不正确。
 func (v *HistogramVec) ObserveSince(start time.Time, lvs ...string) func() {
 	// 真正的耗时在返回函数被调用时计算，而不是在 defer 时；否则测到的只是零。
 	return func() {
@@ -237,13 +216,10 @@ func (v *HistogramVec) ObserveSince(start time.Time, lvs ...string) func() {
 	}
 }
 
-// Delete deletes the metric where the variable labels are the same as those
-// passed in as labels. It returns true if a metric was deleted.
+// Delete 删除可变标签与给定 Labels 匹配的成员，删除成功时返回 true。
 //
-// It is not an error if the number and names of the Labels are inconsistent
-// with those of the VariableLabels in Desc. However, such inconsistent Labels
-// can never match an actual metric, so the method will always return false in
-// that case.
+// Labels 的数量或名称与 Desc 中的 VariableLabels 不一致不会报错，
+// 但这样的 Labels 无法匹配实际成员，因此始终返回 false。
 func (v *HistogramVec) Delete(labels map[string]string) bool {
 	if !v.IsCreated() {
 		return false // 未创建指标，自然也没有删除任何成员
@@ -251,7 +227,7 @@ func (v *HistogramVec) Delete(labels map[string]string) bool {
 	return v.HistogramVec.Delete(labels)
 }
 
-// Reset deletes all metrics in this vector.
+// Reset 删除该 vector 中的所有成员。
 func (v *HistogramVec) Reset() {
 	if !v.IsCreated() {
 		return
@@ -260,14 +236,14 @@ func (v *HistogramVec) Reset() {
 	v.HistogramVec.Reset()
 }
 
-// ResetLabelAllowLists resets the label allow list for the HistogramVec.
-// NOTE: This should only be used in test.
+// ResetLabelAllowLists 重置 HistogramVec 的标签允许列表。
+// 注意：仅供测试使用。
 func (v *HistogramVec) ResetLabelAllowLists() {
 	v.initializeLabelAllowListsOnce = sync.Once{}
 	v.LabelValueAllowLists = nil
 }
 
-// WithContext returns wrapped HistogramVec with context
+// WithContext 返回带 context 的 HistogramVec 包装。
 func (v *HistogramVec) WithContext(ctx context.Context) *HistogramVecWithContext {
 	return &HistogramVecWithContext{
 		ctx:          ctx,
@@ -275,7 +251,7 @@ func (v *HistogramVec) WithContext(ctx context.Context) *HistogramVecWithContext
 	}
 }
 
-// HistogramVecWithContext is the wrapper of HistogramVec with context.
+// HistogramVecWithContext 是带 context 的 HistogramVec 包装。
 type HistogramVecWithContext struct {
 	*HistogramVec
 	ctx context.Context
@@ -303,7 +279,7 @@ func (h *exemplarHistogramVec) withExemplar(v float64) {
 	h.observer.Observe(v)
 }
 
-// WithLabelValues is the wrapper of HistogramVec.WithLabelValues.
+// WithLabelValues 包装 HistogramVec.WithLabelValues，并保留 context 以附加 exemplar。
 func (vc *HistogramVecWithContext) WithLabelValues(lvs ...string) *exemplarHistogramVec {
 	return &exemplarHistogramVec{
 		HistogramVecWithContext: vc,
@@ -311,7 +287,7 @@ func (vc *HistogramVecWithContext) WithLabelValues(lvs ...string) *exemplarHisto
 	}
 }
 
-// With is the wrapper of HistogramVec.With.
+// With 包装 HistogramVec.With，并保留 context 以附加 exemplar。
 func (vc *HistogramVecWithContext) With(labels map[string]string) *exemplarHistogramVec {
 	return &exemplarHistogramVec{
 		HistogramVecWithContext: vc,
@@ -319,7 +295,7 @@ func (vc *HistogramVecWithContext) With(labels map[string]string) *exemplarHisto
 	}
 }
 
-// ObserveSince is the wrapper of HistogramVec.ObserveSince.
+// ObserveSince 包装 HistogramVec.ObserveSince，返回记录经过时长的函数。
 func (vc *HistogramVecWithContext) ObserveSince(start time.Time, lvs ...string) func() {
 	return vc.HistogramVec.ObserveSince(start, lvs...)
 }

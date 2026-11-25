@@ -150,10 +150,8 @@ func (w *rotationFile) rotate() error {
 	return nil
 }
 
-// Clean up the old log files in the format of
-// <basename>-<timestamp><ext>.
-// This should be safe enough to avoid false deletion.
-// This will work for multiple restarts of the same program.
+// 清理格式为 <basename>-<timestamp><ext> 的旧日志文件。
+// 该方式足以避免误删，并适用于同一程序的多次重启。
 // clean 只删除文件名中时间戳可解析且修改时间早于 maxAge 的归档文件，
 // 从而避免误删同目录下的其他文件。
 func (w *rotationFile) clean(pathWithoutExt string, ext string) error {

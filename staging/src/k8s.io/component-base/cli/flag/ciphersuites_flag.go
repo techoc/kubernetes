@@ -27,9 +27,8 @@ import (
 )
 
 var (
-	// ciphers maps strings into tls package cipher constants in
+	// ciphers 将密码套件名称映射到 crypto/tls 常量，定义见：
 	// https://golang.org/pkg/crypto/tls/#pkg-constants
-	//
 	// 仅收录 crypto/tls 认为安全、默认允许使用的套件。
 	ciphers         = map[string]uint16{}
 	insecureCiphers = map[string]uint16{}
@@ -41,8 +40,7 @@ func init() {
 	for _, suite := range tls.CipherSuites() {
 		ciphers[suite.Name] = suite.ID
 	}
-	// keep legacy names for backward compatibility
-	// 早期版本接受省略 SHA256 后缀的套件名，当前仍在用；保留别名以免破坏既有配置。
+	// 早期版本接受省略 SHA256 后缀的套件名，当前仍在用；保留别名以维持向后兼容。
 	ciphers["TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"] = tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
 	ciphers["TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305"] = tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
 
@@ -51,9 +49,7 @@ func init() {
 	}
 }
 
-// InsecureTLSCiphers returns the cipher suites implemented by crypto/tls which have
-// security issues.
-//
+// InsecureTLSCiphers 返回 crypto/tls 实现的、存在安全问题的密码套件。
 // 返回副本而不是内部 map，避免调用方修改影响包级状态。
 func InsecureTLSCiphers() map[string]uint16 {
 	cipherKeys := make(map[string]uint16, len(insecureCiphers))
@@ -63,9 +59,7 @@ func InsecureTLSCiphers() map[string]uint16 {
 	return cipherKeys
 }
 
-// InsecureTLSCipherNames returns a list of cipher suite names implemented by crypto/tls
-// which have security issues.
-//
+// InsecureTLSCipherNames 返回 crypto/tls 实现的、存在安全问题的密码套件名称列表。
 // 主要用于 --tls-cipher-suites 的帮助文本，向用户展示“不推荐但可显式启用”的取值。
 func InsecureTLSCipherNames() []string {
 	// sets.NewString 保证结果有序且去重，便于生成稳定的帮助输出。
@@ -76,8 +70,7 @@ func InsecureTLSCipherNames() []string {
 	return cipherKeys.List()
 }
 
-// PreferredTLSCipherNames returns a list of cipher suite names implemented by crypto/tls.
-//
+// PreferredTLSCipherNames 返回 crypto/tls 实现的优选密码套件名称列表。
 // “Preferred” 指 crypto/tls 默认启用、未标记为不安全的套件。
 func PreferredTLSCipherNames() []string {
 	cipherKeys := sets.NewString()
@@ -100,9 +93,8 @@ func allCiphers() map[string]uint16 {
 	return acceptedCiphers
 }
 
-// TLSCipherPossibleValues returns all acceptable cipher suite names.
-// This is a combination of both InsecureTLSCipherNames() and PreferredTLSCipherNames().
-//
+// TLSCipherPossibleValues 返回全部可接受的密码套件名称，
+// 即 InsecureTLSCipherNames() 与 PreferredTLSCipherNames() 的并集。
 // 供 pflag 生成 --tls-cipher-suites 的枚举提示。
 func TLSCipherPossibleValues() []string {
 	cipherKeys := sets.NewString()
@@ -113,8 +105,7 @@ func TLSCipherPossibleValues() []string {
 	return cipherKeys.List()
 }
 
-// TLSCipherSuites returns a list of cipher suite IDs from the cipher suite names passed.
-//
+// TLSCipherSuites 将传入的密码套件名称转换为密码套件 ID 列表。
 // 空输入返回 nil，表示“使用 Go 默认值”而非“禁用所有套件”；这一语义被
 // TLS 配置调用方依赖，不能改成空切片。
 func TLSCipherSuites(cipherNames []string) ([]uint16, error) {
@@ -142,8 +133,7 @@ var versions = map[string]uint16{
 	"VersionTLS13": tls.VersionTLS13,
 }
 
-// TLSPossibleVersions returns all acceptable values for TLS Version.
-//
+// TLSPossibleVersions 返回全部可接受的 TLS 版本值。
 // 结果有序，便于稳定地出现在帮助文本中。
 func TLSPossibleVersions() []string {
 	versionsKeys := sets.NewString()
@@ -153,8 +143,7 @@ func TLSPossibleVersions() []string {
 	return versionsKeys.List()
 }
 
-// TLSVersion returns the TLS Version ID for the version name passed.
-//
+// TLSVersion 返回传入版本名称对应的 TLS 版本 ID。
 // 空字符串视为未指定，回落到默认版本，方便调用方统一处理零值。
 func TLSVersion(versionName string) (uint16, error) {
 	if len(versionName) == 0 {
@@ -166,12 +155,10 @@ func TLSVersion(versionName string) (uint16, error) {
 	return 0, fmt.Errorf("unknown tls version %q", versionName)
 }
 
-// DefaultTLSVersion defines the default TLS Version.
-//
+// DefaultTLSVersion 定义默认 TLS 版本。
 // 默认 TLS 1.2：更新版本可能尚未被所有对端支持，更旧版本存在已知攻击面。
 func DefaultTLSVersion() uint16 {
-	// Can't use SSLv3 because of POODLE and BEAST
-	// Can't use TLSv1.0 because of POODLE and BEAST using CBC cipher
-	// Can't use TLSv1.1 because of RC4 cipher usage
+	// SSLv3 和 TLSv1.0 易受 POODLE、BEAST 攻击，TLSv1.0 尤其涉及 CBC 密码。
+	// TLSv1.1 使用 RC4 密码，因此均不默认启用。
 	return tls.VersionTLS12
 }

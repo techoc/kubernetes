@@ -16,19 +16,15 @@ limitations under the License.
 
 package v1
 
-// TracingConfiguration provides versioned configuration for OpenTelemetry tracing clients.
+// TracingConfiguration 为 OpenTelemetry 追踪客户端提供带版本的配置。
 type TracingConfiguration struct {
-	// Endpoint of the collector this component will report traces to.
-	// The connection is insecure, and does not currently support TLS.
-	// Recommended is unset, and endpoint is the otlp grpc default, localhost:4317.
 	// +optional
 	//
 	// 接受 host:port、dns:// 与 unix:// 形式；http(s):// 前缀会被校验拒绝。
+	// 当前连接未加密，尚不支持 TLS。建议不设置该字段，此时使用 OTLP gRPC 默认端点 localhost:4317。
 	Endpoint *string `json:"endpoint,omitempty"`
 
-	// SamplingRatePerMillion is the number of samples to collect per million spans.
-	// Recommended is unset. If unset, sampler respects its parent span's sampling
-	// rate, but otherwise never samples.
+	// SamplingRatePerMillion 表示每百万个 span 中采集的样本数。
 	// +optional
 	//
 	// 未设置时沿用父 span 的采样决策；取值超出 [0,1000000] 会被校验拒绝。

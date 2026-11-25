@@ -32,37 +32,56 @@ import (
 )
 
 var (
-	// MetricNameLabel is label under which model.Sample stores metric name
+	// MetricNameLabel 是 model.Sample 存储指标名称所用的标签。
 	MetricNameLabel model.LabelName = model.MetricNameLabel
-	// QuantileLabel is label under which model.Sample stores latency quantile value
+	// QuantileLabel 是 model.Sample 存储延迟分位数值所用的标签。
 	QuantileLabel model.LabelName = model.QuantileLabel
 )
 
-// Metrics is generic metrics for other specific metrics.
-// This directly exposes Prometheus types. Test code may
-// use those via type aliases provided by this package
-// instead of imorting the Prometheus packages (https://github.com/kubernetes/kubernetes/issues/89267).
+// Metrics 是通用指标样本集合。
+//
+// 本包直接提供 Prometheus 类型的别名，测试代码无需自行导入 Prometheus 包
+// （https://github.com/kubernetes/kubernetes/issues/89267）。
 // 以指标名分组的样本集合，便于按名字断言而不必处理完整 MetricFamily。
 type Metrics map[string]Samples
+
+// Samples 是 model.Samples 的别名。
 type Samples = model.Samples
+
+// Sample 是 model.Sample 的别名。
 type Sample = model.Sample
+
+// Time 是 model.Time 的别名。
 type Time = model.Time
+
+// Metric 是 model.Metric 的别名。
 type Metric = model.Metric
+
+// LabelValue 是 model.LabelValue 的别名。
 type LabelValue = model.LabelValue
+
+// LabelName 是 model.LabelName 的别名。
 type LabelName = model.LabelName
+
+// SampleHistogram 是 model.SampleHistogram 的别名。
 type SampleHistogram = model.SampleHistogram
+
+// FloatString 是 model.FloatString 的别名。
 type FloatString = model.FloatString
+
+// HistogramBuckets 是 model.HistogramBuckets 的别名。
 type HistogramBuckets = model.HistogramBuckets
+
+// HistogramBucket 是 model.HistogramBucket 的别名。
 type HistogramBucket = model.HistogramBucket
 
-// GatheredMetrics is a point-in-time snapshot of a Gatherer. Use it to extract
-// multiple metric/label-value combinations without re-gathering the whole
-// registry for every lookup.
+// GatheredMetrics 保存 Gatherer 在某一时刻的快照，可在不重复收集整个注册表的情况下
+// 查询多个指标与标签值组合。
 type GatheredMetrics struct {
 	families []*dto.MetricFamily
 }
 
-// Equal returns true if all metrics are the same as the arguments.
+// Equal 判断所有指标是否与参数相同。
 func (m *Metrics) Equal(o Metrics) bool {
 	var leftKeySet []string
 	var rightKeySet []string
@@ -85,13 +104,13 @@ func (m *Metrics) Equal(o Metrics) bool {
 	return true
 }
 
-// NewMetrics returns new metrics which are initialized.
+// NewMetrics 返回一个已初始化的空 Metrics。
 func NewMetrics() Metrics {
 	result := make(Metrics)
 	return result
 }
 
-// ParseMetrics parses Metrics from data returned from prometheus endpoint
+// ParseMetrics 从 Prometheus 端点返回的数据中解析指标样本。
 func ParseMetrics(data string, output *Metrics) error {
 	dec := expfmt.NewDecoder(strings.NewReader(data), expfmt.NewFormat(expfmt.TypeTextPlain))
 	decoder := expfmt.SampleDecoder{
@@ -103,7 +122,7 @@ func ParseMetrics(data string, output *Metrics) error {
 		var v model.Vector
 		if err := decoder.Decode(&v); err != nil {
 			if err == io.EOF {
-				// Expected loop termination condition.
+				// 读取到输入末尾，正常结束循环。
 				return nil
 			}
 			// 非 EOF 错误目前被忽略：文本格式中不认识的样本不应中断整个断言。
@@ -116,10 +135,8 @@ func ParseMetrics(data string, output *Metrics) error {
 	}
 }
 
-// TextToMetricFamilies reads 'in' as the simple and flat text-based exchange
-// format and creates MetricFamily proto messages. It returns the MetricFamily
-// proto messages in a map where the metric names are the keys, along with any
-// error encountered.
+// TextToMetricFamilies 将 in 中的简单扁平文本交换格式解析为 MetricFamily protobuf，
+// 返回以指标名称为键的映射以及解析过程中遇到的错误。
 func TextToMetricFamilies(in io.Reader) (map[string]*dto.MetricFamily, error) {
 	// UTF8Validation 允许指标名包含 Prometheus 新规范中的 UTF-8 字符。
 	textParser := expfmt.NewTextParser(model.UTF8Validation)
@@ -131,13 +148,11 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 	return expfmt.MetricFamilyToText(out, in)
 }
 
-// PrintSample returns formatted representation of metric Sample
+// PrintSample 返回指标 Sample 的格式化表示。
 func PrintSample(sample *model.Sample) string {
 	buf := make([]string, 0)
-	// Id is a VERY special label. For 'normal' container it's useless, but it's necessary
-	// for 'system' containers (e.g. /docker-daemon, /kubelet, etc.). We know if that's the
-	// case by checking if there's a label "kubernetes_container_name" present. It's hacky
-	// but it works...
+	// Id 是特殊标签：普通容器不需要它，系统容器（如 /docker-daemon、/kubelet）需要它。
+	// 通过是否存在 "kubernetes_container_name" 标签区分两者；实现虽取巧但有效。
 	_, normalContainer := sample.Metric["kubernetes_container_name"]
 	for k, v := range sample.Metric {
 		if strings.HasPrefix(string(k), "__") {
@@ -152,8 +167,7 @@ func PrintSample(sample *model.Sample) string {
 	return fmt.Sprintf("[%v] = %v", strings.Join(buf, ","), sample.Value)
 }
 
-// ComputeHistogramDelta computes the change in histogram metric for a selected label.
-// Results are stored in after samples
+// ComputeHistogramDelta 计算指定标签下直方图指标的变化量，并将结果写回 after 样本。
 func ComputeHistogramDelta(before, after model.Samples, label model.LabelName) {
 	// 以“目标标签 + le”为键对齐前后样本，只对能匹配上的桶求差。
 	beforeSamplesMap := make(map[string]*model.Sample)
@@ -172,7 +186,7 @@ func makeKey(a, b model.LabelValue) string {
 	return string(a) + "___" + string(b)
 }
 
-// GetMetricValuesForLabel returns value of metric for a given dimension
+// GetMetricValuesForLabel 返回指定指标在各个维度标签取值下的指标值。
 func GetMetricValuesForLabel(ms Metrics, metricName, label string) map[string]int64 {
 	samples, found := ms[metricName]
 	result := make(map[string]int64, len(samples))
@@ -187,7 +201,7 @@ func GetMetricValuesForLabel(ms Metrics, metricName, label string) map[string]in
 	return result
 }
 
-// ValidateMetrics verifies if every sample of metric has all expected labels
+// ValidateMetrics 验证指定指标的每个样本都包含全部预期标签。
 func ValidateMetrics(metrics Metrics, metricName string, expectedLabels ...string) error {
 	samples, ok := metrics[metricName]
 	if !ok {
@@ -203,16 +217,15 @@ func ValidateMetrics(metrics Metrics, metricName string, expectedLabels ...strin
 	return nil
 }
 
-// Histogram wraps prometheus histogram DTO (data transfer object)
+// Histogram 封装 Prometheus 直方图 DTO（数据传输对象）。
 type Histogram struct {
 	*dto.Histogram
 }
 
-// HistogramVec wraps a slice of Histogram.
-// Note that each Histogram must have the same number of buckets.
+// HistogramVec 封装一个 Histogram 切片，其中每个直方图的桶数量必须相同。
 type HistogramVec []*Histogram
 
-// GetAggregatedSampleCount aggregates the sample count of each inner Histogram.
+// GetAggregatedSampleCount 汇总切片中每个直方图的样本计数。
 func (vec HistogramVec) GetAggregatedSampleCount() uint64 {
 	var count uint64
 	for _, hist := range vec {
@@ -221,7 +234,7 @@ func (vec HistogramVec) GetAggregatedSampleCount() uint64 {
 	return count
 }
 
-// GetAggregatedSampleSum aggregates the sample sum of each inner Histogram.
+// GetAggregatedSampleSum 汇总切片中每个直方图的样本总和。
 func (vec HistogramVec) GetAggregatedSampleSum() float64 {
 	var sum float64
 	for _, hist := range vec {
@@ -230,8 +243,7 @@ func (vec HistogramVec) GetAggregatedSampleSum() float64 {
 	return sum
 }
 
-// Quantile first aggregates inner buckets of each Histogram, and then
-// computes q-th quantile of a cumulative histogram.
+// Quantile 先汇总切片中各直方图的桶，再计算累积直方图的 q 分位数。
 func (vec HistogramVec) Quantile(q float64) float64 {
 	var buckets []bucket
 
@@ -250,8 +262,7 @@ func (vec HistogramVec) Quantile(q float64) float64 {
 	}
 
 	if len(buckets) == 0 || buckets[len(buckets)-1].upperBound != math.Inf(+1) {
-		// The list of buckets in dto.Histogram doesn't include the final +Inf bucket, so we
-		// add it here for the rest of the samples.
+		// dto.Histogram 的桶列表不包含最后的 +Inf 桶，这里补上以容纳其余样本。
 		buckets = append(buckets, bucket{
 			count:      float64(vec.GetAggregatedSampleCount()),
 			upperBound: math.Inf(+1),
@@ -261,13 +272,13 @@ func (vec HistogramVec) Quantile(q float64) float64 {
 	return bucketQuantile(q, buckets)
 }
 
-// Average computes wrapped histograms' average value.
+// Average 计算切片中各直方图的样本平均值。
 func (vec HistogramVec) Average() float64 {
 	// 空直方图时返回 NaN（0/0），提醒调用方数据缺失。
 	return vec.GetAggregatedSampleSum() / float64(vec.GetAggregatedSampleCount())
 }
 
-// Validate makes sure the wrapped histograms have all necessary fields set and with valid values.
+// Validate 确保切片中各直方图的必要字段均已设置且取值有效。
 func (vec HistogramVec) Validate() error {
 	bucketSize := 0
 	// 所有子直方图必须桶数一致，否则聚合与分位数计算会错位。
@@ -284,7 +295,7 @@ func (vec HistogramVec) Validate() error {
 	return nil
 }
 
-// GatherMetrics collects all metric families from the given gatherer.
+// GatherMetrics 从指定收集器获取全部指标族。
 func GatherMetrics(gatherer metrics.Gatherer) (*GatheredMetrics, error) {
 	families, err := gatherer.Gather()
 	if err != nil {
@@ -293,15 +304,14 @@ func GatherMetrics(gatherer metrics.Gatherer) (*GatheredMetrics, error) {
 	return &GatheredMetrics{families: families}, nil
 }
 
-// GetHistogramVec returns the histograms for metricName whose labels match lvMap
-// from the snapshot taken by GatherMetrics().
+// GetHistogramVec 从 GatherMetrics 获取的快照中返回标签匹配 lvMap 的指定指标直方图。
 func (g *GatheredMetrics) GetHistogramVec(metricName string, lvMap map[string]string) (HistogramVec, error) {
 	return histogramVecFromMetricFamilies(g.families, metricName, lvMap)
 }
 
-// GetHistogramVecFromGatherer collects a metric, that matches the input labelValue map,
-// from a gatherer implementing k8s.io/component-base/metrics.Gatherer interface.
-// Used only for testing purposes where we need to gather metrics directly from a running binary (without metrics endpoint).
+// GetHistogramVecFromGatherer 从实现 k8s.io/component-base/metrics.Gatherer 接口的收集器中，
+// 获取标签匹配输入映射的指标直方图。
+// 仅用于测试中直接向运行中的二进制获取指标，而不经过指标端点。
 func GetHistogramVecFromGatherer(gatherer metrics.Gatherer, metricName string, lvMap map[string]string) (HistogramVec, error) {
 	m, err := gatherer.Gather()
 	if err != nil {
@@ -334,7 +344,7 @@ func histogramVecFromMetricFamilies(metricFamilies []*dto.MetricFamily, metricNa
 	return vec, nil
 }
 
-// Bucket of a histogram
+// bucket 表示直方图的一个桶。
 type bucket struct {
 	upperBound float64
 	count      float64
@@ -364,7 +374,6 @@ func bucketQuantile(q float64, buckets []bucket) float64 {
 		return buckets[len(buckets)-2].upperBound
 	}
 
-	// linear approximation of b-th bucket
 	// 在目标桶内按计数比例做线性插值；这是 Prometheus 的既有近似策略。
 	brank := rank - buckets[b-1].count
 	bSize := buckets[b].upperBound - buckets[b-1].upperBound
@@ -373,8 +382,7 @@ func bucketQuantile(q float64, buckets []bucket) float64 {
 	return buckets[b-1].upperBound + bSize*(brank/bCount)
 }
 
-// Quantile computes q-th quantile of a cumulative histogram.
-// It's expected the histogram is valid (by calling Validate)
+// Quantile 计算累积直方图的 q 分位数，调用前应通过 Validate 确保直方图有效。
 func (hist *Histogram) Quantile(q float64) float64 {
 	var buckets []bucket
 
@@ -386,8 +394,7 @@ func (hist *Histogram) Quantile(q float64) float64 {
 	}
 
 	if len(buckets) == 0 || buckets[len(buckets)-1].upperBound != math.Inf(+1) {
-		// The list of buckets in dto.Histogram doesn't include the final +Inf bucket, so we
-		// add it here for the rest of the samples.
+		// dto.Histogram 的桶列表不包含最后的 +Inf 桶，这里补上以容纳其余样本。
 		buckets = append(buckets, bucket{
 			count:      float64(hist.GetSampleCount()),
 			upperBound: math.Inf(+1),
@@ -397,12 +404,12 @@ func (hist *Histogram) Quantile(q float64) float64 {
 	return bucketQuantile(q, buckets)
 }
 
-// Average computes histogram's average value
+// Average 计算直方图的样本平均值。
 func (hist *Histogram) Average() float64 {
 	return hist.GetSampleSum() / float64(hist.GetSampleCount())
 }
 
-// Validate makes sure the wrapped histogram has all necessary fields set and with valid values.
+// Validate 确保直方图的必要字段均已设置且取值有效。
 func (hist *Histogram) Validate() error {
 	// 计数/总和为零通常意味着指标未被使用或采集失败，测试中视为无效数据。
 	if hist.SampleCount == nil || hist.GetSampleCount() == 0 {
@@ -425,7 +432,7 @@ func (hist *Histogram) Validate() error {
 	return nil
 }
 
-// GetGaugeMetricValue extracts metric value from GaugeMetric
+// GetGaugeMetricValue 提取 GaugeMetric 的指标值。
 func GetGaugeMetricValue(m metrics.GaugeMetric) (float64, error) {
 	metricProto := &dto.Metric{}
 	if err := m.Write(metricProto); err != nil {
@@ -434,7 +441,7 @@ func GetGaugeMetricValue(m metrics.GaugeMetric) (float64, error) {
 	return metricProto.Gauge.GetValue(), nil
 }
 
-// GetCounterMetricValue extracts metric value from CounterMetric
+// GetCounterMetricValue 提取 CounterMetric 的指标值。
 func GetCounterMetricValue(m metrics.CounterMetric) (float64, error) {
 	metricProto := &dto.Metric{}
 	if err := m.(metrics.Metric).Write(metricProto); err != nil {
@@ -443,7 +450,7 @@ func GetCounterMetricValue(m metrics.CounterMetric) (float64, error) {
 	return metricProto.Counter.GetValue(), nil
 }
 
-// GetHistogramMetricValue extracts sum of all samples from ObserverMetric
+// GetHistogramMetricValue 提取 ObserverMetric 中全部样本的总和。
 func GetHistogramMetricValue(m metrics.ObserverMetric) (float64, error) {
 	metricProto := &dto.Metric{}
 	if err := m.(metrics.Metric).Write(metricProto); err != nil {
@@ -452,7 +459,7 @@ func GetHistogramMetricValue(m metrics.ObserverMetric) (float64, error) {
 	return metricProto.Histogram.GetSampleSum(), nil
 }
 
-// GetHistogramMetricCount extracts count of all samples from ObserverMetric
+// GetHistogramMetricCount 提取 ObserverMetric 中全部样本的计数。
 func GetHistogramMetricCount(m metrics.ObserverMetric) (uint64, error) {
 	metricProto := &dto.Metric{}
 	if err := m.(metrics.Metric).Write(metricProto); err != nil {
@@ -461,7 +468,7 @@ func GetHistogramMetricCount(m metrics.ObserverMetric) (uint64, error) {
 	return metricProto.Histogram.GetSampleCount(), nil
 }
 
-// LabelsMatch returns true if metric has all expected labels otherwise false
+// LabelsMatch 判断指标是否包含全部预期标签及其对应值。
 func LabelsMatch(metric *dto.Metric, labelFilter map[string]string) bool {
 	metricLabels := map[string]string{}
 
@@ -469,7 +476,6 @@ func LabelsMatch(metric *dto.Metric, labelFilter map[string]string) bool {
 		metricLabels[labelPair.GetName()] = labelPair.GetValue()
 	}
 
-	// length comparison then match key to values in the maps
 	// 过滤条件是子集语义：指标可以带额外标签。
 	if len(labelFilter) > len(metricLabels) {
 		return false
@@ -484,12 +490,10 @@ func LabelsMatch(metric *dto.Metric, labelFilter map[string]string) bool {
 	return true
 }
 
-// GetCounterVecFromGatherer collects a counter that matches the given name
-// from a gatherer implementing k8s.io/component-base/metrics.Gatherer interface.
-// It returns all counter values that had a label with a certain name in a map
-// that uses the label value as keys.
+// GetCounterValuesFromGatherer 从实现 k8s.io/component-base/metrics.Gatherer 接口的收集器中，
+// 获取指定名称且标签匹配的 counter，并以标签值作为键返回全部计数值。
 //
-// Used only for testing purposes where we need to gather metrics directly from a running binary (without metrics endpoint).
+// 仅用于测试中直接向运行中的二进制获取指标，而不经过指标端点。
 func GetCounterValuesFromGatherer(gatherer metrics.Gatherer, metricName string, lvMap map[string]string, labelName string) (map[string]float64, error) {
 	m, err := gatherer.Gather()
 	if err != nil {

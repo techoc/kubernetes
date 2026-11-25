@@ -16,14 +16,12 @@ limitations under the License.
 
 package flag
 
-// StringFlag is a string flag compatible with flags and pflags that keeps track of whether it had a value supplied or not.
-//
 // StringFlag 是兼容 flag/pflag 的字符串标志，额外记录用户是否显式设置过：
 // 组件常需要区分“未提供”与“提供了默认值”，二者在配置合并时含义不同。
 type StringFlag struct {
-	// If Set has been invoked this value is true
+	// 调用过 Set 时为 true。
 	provided bool
-	// The exact value provided on the flag
+	// 标志中提供的原始值。
 	value string
 }
 

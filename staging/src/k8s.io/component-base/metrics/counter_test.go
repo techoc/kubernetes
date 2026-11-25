@@ -49,7 +49,7 @@ func TestCounter(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
-		// Non-deprecated metrics
+		// 非弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			CounterOpts: &CounterOpts{
@@ -86,7 +86,7 @@ func TestCounter(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] counter help",
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			CounterOpts: &CounterOpts{
@@ -126,7 +126,7 @@ func TestCounter(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] (Deprecated since 1.14.0) counter help",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			CounterOpts: &CounterOpts{
@@ -169,10 +169,10 @@ func TestCounter(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			registry := newKubeRegistry(version1_15Alpha1)
-			// c is a pointer to a Counter
+			// c 是 Counter 指针。
 			c := NewCounter(test.CounterOpts)
 			registry.MustRegister(c)
-			// mfs is a pointer to a dto.MetricFamily slice
+			// mfs 是 dto.MetricFamily 指针切片。
 			mfs, err := registry.Gather()
 			var buf bytes.Buffer
 			enc := expfmt.NewEncoder(&buf, "text/plain; version=0.0.4; charset=utf-8")
@@ -184,7 +184,7 @@ func TestCounter(t *testing.T) {
 				assert.Equalf(t, test.expectedHelp, metric.GetHelp(), "Got %s as help message, want %s", metric.GetHelp(), test.expectedHelp)
 			}
 
-			// increment the counter N number of times and verify that the metric retains the count correctly
+			// 将 Counter 累加 N 次，验证指标正确保留计数值。
 			numberOfTimesToIncrement := 3
 			for i := 0; i < numberOfTimesToIncrement; i++ {
 				c.Inc()
@@ -218,7 +218,7 @@ func TestCounterVec(t *testing.T) {
 		expectedMetricFamilyCount int
 		expectedHelp              string
 	}{
-		// Non-deprecated metrics
+		// 非弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			CounterOpts: &CounterOpts{
@@ -258,7 +258,7 @@ func TestCounterVec(t *testing.T) {
 			expectedMetricFamilyCount: 1,
 			expectedHelp:              "[STABLE] counter help",
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			CounterOpts: &CounterOpts{
@@ -301,7 +301,7 @@ func TestCounterVec(t *testing.T) {
 			expectedMetricFamilyCount: 1,
 			expectedHelp:              "[STABLE] (Deprecated since 1.15.0) counter help",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			CounterOpts: &CounterOpts{
@@ -356,19 +356,19 @@ func TestCounterVec(t *testing.T) {
 			assert.Lenf(t, mfs, test.expectedMetricFamilyCount, "Got %v metric families, Want: %v metric families", len(mfs), test.expectedMetricFamilyCount)
 			require.NoError(t, err, "Gather failed %v", err)
 
-			// this no-opts here when there are no metric families (i.e. when the metric is hidden)
+			// 指标隐藏时没有指标族，因此无需处理。
 			for _, mf := range mfs {
 				assert.Lenf(t, mf.GetMetric(), 1, "Got %v metrics, wanted 1 as the count", len(mf.GetMetric()))
 				assert.Equalf(t, test.expectedHelp, mf.GetHelp(), "Got %s as help message, want %s", mf.GetHelp(), test.expectedHelp)
 			}
 
-			// let's increment the counter and verify that the metric still works
+			// 继续累加 Counter，验证指标仍能正常工作。
 			c.WithLabelValues("1", "3").Inc()
 			c.WithLabelValues("2", "3").Inc()
 			mfs, err = registry.Gather()
 			require.NoError(t, err, "Gather failed %v", err)
 
-			// this no-opts here when there are no metric families (i.e. when the metric is hidden)
+			// 指标隐藏时没有指标族，因此无需处理。
 			for _, mf := range mfs {
 				assert.Lenf(t, mf.GetMetric(), 3, "Got %v metrics, wanted 3 as the count", len(mf.GetMetric()))
 			}
@@ -461,7 +461,7 @@ func TestCounterWithLabelValueAllowList(t *testing.T) {
 // TestCounterWithExemplar 验证 WithContext 会把 trace/span 信息作为
 // exemplar 附加到指标上，供监控系统关联调用链。
 func TestCounterWithExemplar(t *testing.T) {
-	// Set exemplar.
+	// 设置 exemplar。
 	// 生成 16 字节的确定 ID；offset 用于让 traceID 与 spanID 不同。
 	fn := func(offset int) []byte {
 		arr := make([]byte, 16)
@@ -479,13 +479,13 @@ func TestCounterWithExemplar(t *testing.T) {
 	}))
 	toAdd := float64(40)
 
-	// Create contextual counter.
+	// 创建带上下文的 Counter。
 	counter := NewCounter(&CounterOpts{
 		Name: "metric_exemplar_test",
 		Help: "helpless",
 	})
 
-	// Register counter.
+	// 注册 Counter。
 	registry := newKubeRegistry(apimachineryversion.Info{
 		Major:      "1",
 		Minor:      "15",
@@ -493,13 +493,13 @@ func TestCounterWithExemplar(t *testing.T) {
 	})
 	registry.MustRegister(counter)
 
-	// Call underlying exemplar methods.
+	// 调用底层 exemplar 方法。
 	// 三种调用方式都应命中同一个 counter 并携带 exemplar。
 	counter.WithContext(ctxForSpanCtx).Add(toAdd)
 	counter.WithContext(ctxForSpanCtx).Inc()
 	counter.WithContext(ctxForSpanCtx).Inc()
 
-	// Gather.
+	// 采集指标。
 	mfs, err := registry.Gather()
 	if err != nil {
 		t.Fatalf("Gather failed %v", err)
@@ -508,7 +508,7 @@ func TestCounterWithExemplar(t *testing.T) {
 		t.Fatalf("Got %v metric families, Want: 1 metric family", len(mfs))
 	}
 
-	// Verify metric type.
+	// 验证指标类型。
 	mf := mfs[0]
 	var m *dto.Metric
 	switch mf.GetType() {
@@ -518,14 +518,14 @@ func TestCounterWithExemplar(t *testing.T) {
 		t.Fatalf("Got %v metric type, Want: %v metric type", mf.GetType(), dto.MetricType_COUNTER)
 	}
 
-	// Verify value.
+	// 验证数值。
 	want := toAdd + 2
 	got := m.GetCounter().GetValue()
 	if got != want {
 		t.Fatalf("Got %f, wanted %f as the count", got, want)
 	}
 
-	// Verify exemplars.
+	// 验证 exemplar。
 	e := m.GetCounter().GetExemplar()
 	if e == nil {
 		t.Fatalf("Got nil exemplar, wanted an exemplar")
@@ -553,9 +553,9 @@ func TestCounterWithExemplar(t *testing.T) {
 	}
 }
 
-// TestCounterConcurrentWithContextRace reproduces the race condition in Counter.WithContext
-// where c.ctx is written concurrently with reads in withExemplar method.
-// This test simulates the real authentication flow that triggers the race:
+// TestCounterConcurrentWithContextRace 复现 Counter.WithContext 中的数据竞争：
+// withExemplar 方法读取 c.ctx 时，会与并发写入发生冲突。
+// 该测试模拟触发竞争的实际认证流程：
 // x509.AuthenticateRequest -> union.AuthenticateRequest -> group.AuthenticateRequest
 //
 // 该测试必须在 -race 下运行才有意义：它并发地写 WithContext 的 ctx
@@ -570,31 +570,31 @@ func TestCounterConcurrentWithContextRace(t *testing.T) {
 
 	c := NewCounter(opts)
 
-	// Force initialization by calling initializeMetric directly
+	// 直接调用 initializeMetric 强制初始化。
 	c.initializeMetric()
 
-	// Create contexts with trace spans to trigger exemplar code path
+	// 创建带 trace span 的上下文，触发 exemplar 代码路径。
 	ctx1, span1 := createContextWithSpanCounter("x509-auth", "authenticate-request")
 	defer span1.End()
 	ctx2, span2 := createContextWithSpanCounter("union-auth", "union-authenticate")
 	defer span2.End()
 
 	var wg sync.WaitGroup
-	iterations := 10000 // Increase iterations to make race more likely
+	iterations := 10000 // 增加迭代次数，提高触发数据竞争的概率
 
-	// Goroutine 1: Simulate x509 Authenticator calling WithContext
-	// This matches: x509.(*Authenticator).AuthenticateRequest() calling WithContext
+	// 协程 1：模拟 x509 Authenticator 调用 WithContext
+	// 对应调用路径：x509.(*Authenticator).AuthenticateRequest() 调用 WithContext
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			// Simulate authentication request processing
+			// 模拟认证请求处理
 			simulateX509AuthenticateRequestCounter(c, ctx1, i)
 		}
 	}()
 
-	// Goroutine 2: Simulate concurrent Add/Inc calls (metrics collection)
-	// This matches the withExemplar/Add path that reads c.ctx
+	// 协程 2：模拟并发 Add/Inc 调用（指标采集）
+	// 对应读取 c.ctx 的 withExemplar/Add 路径
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -606,24 +606,24 @@ func TestCounterConcurrentWithContextRace(t *testing.T) {
 		}
 	}()
 
-	// Goroutine 3: Simulate union AuthenticateRequest calling WithContext
-	// This matches: union.(*unionAuthRequestHandler).AuthenticateRequest()
+	// 协程 3：模拟 union AuthenticateRequest 调用 WithContext
+	// 对应调用路径：union.(*unionAuthRequestHandler).AuthenticateRequest()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			// Simulate union authentication processing
+			// 模拟 union 认证处理
 			simulateUnionAuthenticateRequestCounter(c, ctx2, i)
 		}
 	}()
 
-	// Goroutine 4: Simulate group AuthenticateRequest calling WithContext
-	// This matches: group.(*AuthenticatedGroupAdder).AuthenticateRequest()
+	// 协程 4：模拟 group AuthenticateRequest 调用 WithContext
+	// 对应调用路径：group.(*AuthenticatedGroupAdder).AuthenticateRequest()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			// Simulate group authentication processing
+			// 模拟 group 认证处理
 			simulateGroupAuthenticateRequestCounter(c, ctx1, ctx2, i)
 		}
 	}()
@@ -631,24 +631,23 @@ func TestCounterConcurrentWithContextRace(t *testing.T) {
 	wg.Wait()
 }
 
-// simulateX509AuthenticateRequestCounter simulates the call path from x509 authenticator
+// simulateX509AuthenticateRequestCounter 模拟 x509 认证器的调用路径。
 func simulateX509AuthenticateRequestCounter(c CounterMetric, ctx context.Context, iteration int) {
 	if cWithCtx, ok := c.(*Counter); ok {
 		cWithCtx.WithContext(ctx)
 	}
 }
 
-// simulateUnionAuthenticateRequestCounter simulates the call path from union authenticator
+// simulateUnionAuthenticateRequestCounter 模拟 union 认证器的调用路径。
 func simulateUnionAuthenticateRequestCounter(c CounterMetric, ctx context.Context, iteration int) {
-	// Simulate union authentication processing
 	if cWithCtx, ok := c.(*Counter); ok {
 		cWithCtx.WithContext(ctx)
 	}
 }
 
-// simulateGroupAuthenticateRequestCounter simulates the call path from group authenticator
+// simulateGroupAuthenticateRequestCounter 模拟 group 认证器的调用路径。
 func simulateGroupAuthenticateRequestCounter(c CounterMetric, ctx1, ctx2 context.Context, iteration int) {
-	// Alternate between contexts to simulate different authentication scenarios
+	// 在两个上下文之间交替，模拟不同的认证场景。
 	ctx := ctx1
 	if iteration%3 == 0 {
 		ctx = ctx2
@@ -659,11 +658,11 @@ func simulateGroupAuthenticateRequestCounter(c CounterMetric, ctx1, ctx2 context
 	}
 }
 
-// Helper function to create a context with a valid trace span
+// 辅助函数：创建带有效 trace span 的上下文。
 func createContextWithSpanCounter(traceID, spanID string) (context.Context, trace.Span) {
 	ctx := context.Background()
 
-	// Create a noop tracer and span for testing
+	// 创建用于测试的 noop tracer 和 span。
 	tracer := tracenoop.NewTracerProvider().Tracer("test")
 	ctx, span := tracer.Start(ctx, "test-span")
 

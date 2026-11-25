@@ -24,8 +24,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// StringSlice implements goflag.Value and plfag.Value,
-// and allows set to be invoked repeatedly to accumulate values.
+// StringSlice 实现 goflag.Value 和 pflag.Value，允许重复调用 Set 累积值。
 // 首次 Set 会清空初始值，之后每次追加；这使得“默认值 + 多次命令行参数”语义可预期。
 type StringSlice struct {
 	value   *[]string

@@ -37,7 +37,6 @@ type mux interface {
 // SLIMetrics 以只读方式暴露 SLI 指标。
 type SLIMetrics struct{}
 
-// Install adds the DefaultMetrics handler
 // Install 在 /metrics/slis 路径挂载 SLI 指标；Register 通过 sync.Once 保证只执行一次。
 func (s SLIMetrics) Install(m mux) {
 	installOnce.Do(func() {
@@ -49,7 +48,6 @@ func (s SLIMetrics) Install(m mux) {
 // SLIMetricsWithReset 在 DELETE 请求时重置 SLI 指标，供测试或运维清理使用。
 type SLIMetricsWithReset struct{}
 
-// Install adds the DefaultMetrics handler
 // Install 与 SLIMetrics.Install 类似，但使用支持 DELETE 复位的 handler。
 func (s SLIMetricsWithReset) Install(m mux) {
 	installWithResetOnce.Do(func() {

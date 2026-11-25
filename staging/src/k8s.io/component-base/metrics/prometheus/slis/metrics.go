@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package slis 暴露 Kubernetes SLI（service level indicator）健康检查指标。
+// Package slis 暴露 Kubernetes SLI（服务级别指示器）健康检查指标。
 //
 // 两个指标都是 STABLE：名称与 label 属于对外契约，监控系统依赖其稳定性。
 package slis
@@ -30,12 +30,14 @@ import (
 type HealthcheckStatus string
 
 const (
+	// Success 表示健康检查成功。
 	Success HealthcheckStatus = "success"
-	Error   HealthcheckStatus = "error"
+	// Error 表示健康检查失败。
+	Error HealthcheckStatus = "error"
 )
 
 var (
-	// healthcheck is a Prometheus Gauge metrics used for recording the results of a k8s healthcheck.
+	// healthcheck 是记录 Kubernetes 单次健康检查结果的 Prometheus Gauge。
 	healthcheck = k8smetrics.NewGaugeVec(
 		&k8smetrics.GaugeOpts{
 			Namespace:      "kubernetes",
@@ -46,7 +48,7 @@ var (
 		[]string{"name", "type"},
 	)
 
-	// healthchecksTotal is a Prometheus Counter metrics used for counting the results of a k8s healthcheck.
+	// healthchecksTotal 是累计 Kubernetes 健康检查结果的 Prometheus Counter。
 	healthchecksTotal = k8smetrics.NewCounterVec(
 		&k8smetrics.CounterOpts{
 			Namespace:      "kubernetes",

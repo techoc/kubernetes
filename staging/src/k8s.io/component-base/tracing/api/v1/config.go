@@ -30,8 +30,6 @@ var (
 	maxSamplingRatePerMillion = int32(1000000)
 )
 
-// ValidateTracingConfiguration validates the tracing configuration
-//
 // ValidateTracingConfiguration 只校验显式设置的可选字段；配置为 nil
 // 表示未启用 tracing，直接视为合法。
 // 返回字段路径化的错误，便于在 --config 校验时定位到具体字段。

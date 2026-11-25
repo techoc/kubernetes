@@ -28,8 +28,7 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
-// resetMetricsGlobalState resets all global state used by metrics tests.
-// NOTE: This should be called at the start of tests and in cleanup to ensure test isolation.
+// resetMetricsGlobalState 重置指标测试使用的所有全局状态。
 //
 // 指标实现大量使用包级全局状态（懒加载、隐藏开关、allow list），
 // 因此每个用例前后都必须重置，否则用例之间的结果会互相影响。
@@ -51,10 +50,10 @@ func resetMetricsGlobalState(t *testing.T) {
 		disabledMetricsLock.Unlock()
 	}
 
-	// Reset at the start of tests
+	// 测试开始时重置状态
 	resetter()
 
-	// Register cleanup to reset again after test completes
+	// 注册清理函数，在测试结束后再次重置状态
 	t.Cleanup(resetter)
 }
 
@@ -187,7 +186,7 @@ func TestShouldHide(t *testing.T) {
 			deprecatedVersion: "1.18.0",
 			shouldHide:        false,
 		},
-		// --- Pre-Alpha.0 Tests ---
+		// --- alpha.0 之前阶段的测试 ---
 		{
 			desc:              "INTERNAL metric deprecated in the current minor - should not be hidden",
 			currentVersion:    currentV1_18Alpha0,
@@ -230,7 +229,7 @@ func TestShouldHide(t *testing.T) {
 			deprecatedVersion: "1.17.0",
 			shouldHide:        false,
 		},
-		// --- Pre-Alpha.1 Tests ---
+		// --- alpha.1 之前阶段的测试 ---
 		{
 
 			desc:              "INTERNAL metric in the current minor - should be hidden",
@@ -449,7 +448,7 @@ func TestRegistryReset(t *testing.T) {
 		Name: "reset_metric",
 		Help: "this metric can be reset",
 	}, []string{"label"})
-	// gauges cannot be reset
+	// gauge 无法重置
 	nonResettableMetric := NewGauge(&GaugeOpts{
 		Name: "not_reset_metric",
 		Help: "this metric cannot be reset",

@@ -14,9 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package logger_test demonstrates how to write unit tests with per-test
-// output. Per-test output only works for code which supports contextual
-// logging.
 // Package logger_test 演示如何让单元测试输出按用例隔离；
 // 前提是被测代码使用上下文日志，并能通过 ktesting 注入测试 logger。
 package logger_test
@@ -28,9 +25,8 @@ import (
 
 	"k8s.io/component-base/logs/example"
 	"k8s.io/klog/v2/ktesting"
-	// This import could be used to add command line flags for per-test
-	// output with a default verbosity of 5. This example instead
-	// uses a TestMain where the default verbosity gets lowered.
+	// 导入此包可为每个测试的输出添加命令行 flag，默认详细度为 5。
+	// 本示例改为通过 TestMain 降低默认详细度。
 	// "k8s.io/klog/v2/ktesting/init"
 )
 
@@ -49,9 +45,8 @@ func TestLogger(t *testing.T) {
 // TestMain 把测试日志默认详细度调低到 2，与生产默认级别一致；
 // 用户仍可通过 -testing.v / -testing.vmodule 覆盖。
 func TestMain(m *testing.M) {
-	// Run with verbosity 2, this is the default log level in production.
-	// The name of the flags also could be customized here. The defaults
-	// are -testing.v and -testing.vmodule.
+	// 以详细度 2 运行，这是生产环境的默认日志级别。
+	// 此处也可以自定义 flag 名称，默认名称为 -testing.v 和 -testing.vmodule。
 	ktesting.DefaultConfig = ktesting.NewConfig(ktesting.Verbosity(2))
 	ktesting.DefaultConfig.AddFlags(flag.CommandLine)
 	flag.Parse()

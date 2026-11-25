@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package example shows how a library uses contextual logging.
 // Package example 演示库代码如何正确使用上下文日志（contextual logging）：
 // 从 context 取 logger 并携带键值，而不是依赖全局 logger。
 package example

@@ -17,20 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +k8s:openapi-model-package=io.k8s.component-base.logs.api.v1
 
-// Package v1 contains the configuration API for logging.
-//
-// The intention is to only have a single version of this API, potentially with
-// new fields added over time in a backwards-compatible manner. Fields for
-// alpha or beta features are allowed as long as they are defined so that not
-// changing the defaults leaves those features disabled.
-//
-// The "v1" package name is just a reminder that API compatibility rules apply,
-// not an indication of the stability of all features covered by it.
-
-// The LoggingAlphaOptions and LoggingBetaOptions feature gates control whether
-// these unstable features can get enabled. This can be used to ensure that
-// command invocations do not accidentally rely on unstable features.
-//
 // Package v1 是日志组件的配置 API。单一版本、只做向后兼容的字段追加；
 // 不稳定能力由 LoggingAlphaOptions、LoggingBetaOptions 两个特性门控把关，
 // 避免命令行参数在无意中依赖尚未稳定的行为。

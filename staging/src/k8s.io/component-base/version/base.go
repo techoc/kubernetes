@@ -16,55 +16,34 @@ limitations under the License.
 
 package version
 
-// Base version information.
-//
-// This is the fallback data used when version information from git is not
-// provided via go ldflags. It provides an approximation of the Kubernetes
-// version for ad-hoc builds (e.g. `go build`) that cannot get the version
-// information from git.
-//
-// If you are looking at these fields in the git tree, they look
-// strange. They are set by the build process with ldflags -X. The
-// in-tree values are dummy values used for "git archive", which also
-// works for GitHub tar downloads.
-//
-// 这些包级变量不是运行时配置，而是链接器 -X 注入的目标；
-// 源码中的占位值只在本地 `go build`/`git archive` 场景生效。
+// 基础版本信息：go ldflags 未提供 git 版本信息时使用的回退数据，
+// 为无法从 git 获取版本的临时构建（如 `go build`）提供近似的 Kubernetes 版本。
+// 这些包级变量不是运行时配置，而是构建过程通过 ldflags -X 注入的目标；
+// 源码中的占位值用于 "git archive"（也适用于 GitHub tar 下载）。
 var (
-	// TODO: Deprecate gitMajor and gitMinor, use only gitVersion
-	// instead. First step in deprecation, keep the fields but make
-	// them irrelevant. (Next we'll take it out, which may muck with
-	// scripts consuming the kubectl version output - but most of
-	// these should be looking at gitVersion already anyways.)
+	// TODO：弃用 gitMajor 和 gitMinor，仅使用 gitVersion。弃用第一步是保留字段但不再使用；
+	// 之后可能删除它们，影响读取 kubectl version 输出的旧脚本，不过多数脚本应已使用 gitVersion。
 	// 保留这两个字段仅为兼容旧脚本；新代码应只使用 gitVersion。
-	gitMajor string // major version, always numeric
-	gitMinor string // minor version, numeric possibly followed by "+"
+	gitMajor string // 主版本，始终为数字
+	gitMinor string // 次版本，为数字，可能后跟 "+"
 
-	// semantic version, derived by build scripts (see
+	// 由构建脚本生成的语义版本，详见：
 	// https://github.com/kubernetes/community/blob/master/contributors/design-proposals/release/versioning.md
-	// for a detailed discussion of this field)
-	//
-	// TODO: This field is still called "gitVersion" for legacy
-	// reasons. For prerelease versions, the build metadata on the
-	// semantic version is a git hash, but the version itself is no
-	// longer the direct output of "git describe", but a slight
-	// translation to be semver compliant.
+	// TODO：因历史原因该字段仍名为 "gitVersion"。预发布版本的语义版本构建元数据是 git 哈希，
+	// 但版本本身已不再是 "git describe" 的直接输出，而是为符合 semver 做了少量转换。
 
-	// NOTE: The $Format strings are replaced during 'git archive' thanks to the
-	// companion .gitattributes file containing 'export-subst' in this same
-	// directory.  See also https://git-scm.com/docs/gitattributes
-	// 占位符由 .gitattributes 的 export-subst 在归档时替换，手工修改无效。
+	// 注意：$Format 字符串在 'git archive' 时由同目录 .gitattributes 的 export-subst 替换。
+	// 另见 https://git-scm.com/docs/gitattributes；手工修改占位符无效。
 	gitVersion   = "v0.0.0-master+$Format:%H$"
-	gitCommit    = "$Format:%H$" // sha1 from git, output of $(git rev-parse HEAD)
-	gitTreeState = ""            // state of git tree, either "clean" or "dirty"
+	gitCommit    = "$Format:%H$" // git 的 sha1，输出自 $(git rev-parse HEAD)
+	gitTreeState = ""            // git 工作树状态，"clean" 或 "dirty"
 
-	buildDate = "1970-01-01T00:00:00Z" // build date in ISO8601 format, output of $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+	buildDate = "1970-01-01T00:00:00Z" // ISO8601 格式构建日期，输出自 $(date -u +'%Y-%m-%dT%H:%M:%SZ')
 )
 
 const (
-	// DefaultKubeBinaryVersion is the hard coded k8 binary version based on the latest K8s release.
-	// It is supposed to be consistent with gitMajor and gitMinor, except for local tests, where gitMajor and gitMinor are "".
-	// Should update for each minor release!
-	// 用于在没有注入构建信息时进行特性门控的版本比较；每个 minor 发布都要同步更新。
+	// DefaultKubeBinaryVersion 是基于最新 Kubernetes 发布版硬编码的二进制版本。
+	// 除本地测试中 gitMajor 和 gitMinor 为空外，应与它们一致；每个 minor 发布都要同步更新。
+	// 用于在没有注入构建信息时进行特性门控的版本比较。
 	DefaultKubeBinaryVersion = "1.37"
 )

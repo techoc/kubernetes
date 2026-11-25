@@ -40,8 +40,7 @@ func TestLinter(t *testing.T) {
 				`,
 			expect: `non-counter metrics should not have "_total" suffix`,
 		},
-		// Don't need to test metrics in exception list, they will be covered by e2e test.
-		// In addition, we don't need to update this test when we remove metrics from exception list in the future.
+		// 例外清单中的指标由 e2e 测试覆盖；将来移出清单时也无需更新此单测。
 	}
 
 	for _, test := range tests {
@@ -111,11 +110,11 @@ func TestMergeProblems(t *testing.T) {
 // TestCheckUnusedExceptions 验证例外清单必须“确实有违规”：
 // 清单中存在但当前没有违规的指标会报错，促使清单随问题修复而清理。
 func TestCheckUnusedExceptions(t *testing.T) {
-	// Save original exceptionMetrics
+	// 保存原始 exceptionMetrics
 	origExceptions := exceptionMetrics
 	defer func() { exceptionMetrics = origExceptions }()
 
-	// Set a controlled list for testing
+	// 设置受控清单供测试使用
 	exceptionMetrics = []string{"test_metric_1", "test_metric_2"}
 
 	var tests = []struct {

@@ -75,7 +75,7 @@ func TestObserveHealthcheck(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
 			defer ResetHealthMetrics()
-			// let's first record an error as initial state
+			// 先记录一次 error，作为初始状态
 			err := ObserveHealthcheck(context.Background(), test.name, test.hcType, initialState)
 			if err != nil {
 				t.Errorf("unexpected err: %v", err)
@@ -83,7 +83,7 @@ func TestObserveHealthcheck(t *testing.T) {
 			if err := testutil.GatherAndCompare(registry, strings.NewReader(initialOutput), testedMetrics...); err != nil {
 				t.Fatal(err)
 			}
-			// now record that we successfully purge state
+			// 再记录一次成功结果，验证状态切换和累计计数
 			err = ObserveHealthcheck(context.Background(), test.name, test.hcType, test.hcStatus)
 			if err != nil {
 				t.Errorf("unexpected err: %v", err)

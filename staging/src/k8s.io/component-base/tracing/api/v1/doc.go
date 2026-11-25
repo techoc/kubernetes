@@ -18,16 +18,6 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.component-base.tracing.api.v1
 
-// Package v1 contains the configuration API for tracing.
-//
-// The intention is to only have a single version of this API, potentially with
-// new fields added over time in a backwards-compatible manner. Fields for
-// alpha or beta features are allowed as long as they are defined so that not
-// changing the defaults leaves those features disabled.
-//
-// The "v1" package name is just a reminder that API compatibility rules apply,
-// not an indication of the stability of all features covered by it.
-//
 // Package v1 是 tracing 的配置 API。这里只保留一个版本，后续新增字段必须
 // 向后兼容；alpha/beta 字段可以存在，但默认值必须让特性保持关闭，
 // 这样未显式配置的组件升级后行为不变。

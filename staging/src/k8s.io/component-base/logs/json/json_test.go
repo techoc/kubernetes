@@ -31,7 +31,7 @@ import (
 	logsapi "k8s.io/component-base/logs/api/v1"
 )
 
-// TestZapLoggerInfo test ZapLogger json info format
+// TestZapLoggerInfo 测试 ZapLogger 的 JSON info 格式。
 // 逐条比对固定时间的 JSON 输出，覆盖普通键值、zap 强类型字段、
 // 非法键、duration、WithName、重复键与 NamespacedName 的序列化。
 func TestZapLoggerInfo(t *testing.T) {
@@ -91,10 +91,10 @@ func TestZapLoggerInfo(t *testing.T) {
 		writer := zapcore.AddSync(&buffer)
 		sampleInfoLogger, _ := NewJSONLogger(0, writer, nil, nil)
 		for _, name := range data.names {
-			// nolint:logcheck // This intentionally ignore the feature gate and always tests with a name.
+			// nolint:logcheck // 此处有意忽略特性门控，始终使用名称进行测试。
 			sampleInfoLogger = sampleInfoLogger.WithName(name)
 		}
-		// nolint:logcheck // The linter cannot and doesn't need to check the key/value pairs.
+		// nolint:logcheck // linter 无法检查这些键值对，也无需检查。
 		sampleInfoLogger.Info(data.msg, data.keysValues...)
 		logStr := buffer.String()
 
@@ -122,7 +122,7 @@ func TestZapLoggerInfo(t *testing.T) {
 	}
 }
 
-// TestZapLoggerEnabled test ZapLogger enabled
+// TestZapLoggerEnabled 测试 ZapLogger 是否启用。
 // 验证 V(n).Enabled() 与配置的 verbosity 阈值一致。
 func TestZapLoggerEnabled(t *testing.T) {
 	verbosityLevel := 10
@@ -139,7 +139,7 @@ func TestZapLoggerEnabled(t *testing.T) {
 	}
 }
 
-// TestZapLoggerV test ZapLogger V set log level func
+// TestZapLoggerV 测试 ZapLogger 的 V 日志级别设置功能。
 // 对每个等级检查是否输出，并核对输出中的 v 字段。
 func TestZapLoggerV(t *testing.T) {
 	timeNow = func() time.Time {
@@ -182,7 +182,7 @@ func TestZapLoggerV(t *testing.T) {
 	}
 }
 
-// TestZapLoggerError test ZapLogger json error format
+// TestZapLoggerError 测试 ZapLogger 的 JSON error 格式。
 // error 以 "err" 字段附加，且不包含 v 字段。
 func TestZapLoggerError(t *testing.T) {
 	var buffer bytes.Buffer
@@ -245,12 +245,12 @@ type testBuff struct {
 	writeCount int
 }
 
-// Sync syncs data to file
+// Sync 将数据同步到文件。
 func (b *testBuff) Sync() error {
 	return nil
 }
 
-// Write writes data to buffer
+// Write 将数据写入缓冲区。
 func (b *testBuff) Write(p []byte) (int, error) {
 	b.writeCount++
 	return len(p), nil

@@ -66,24 +66,19 @@ var (
 	registerOnce sync.Once
 )
 
-// init only installs the provider with cache. The actual metric
-// registration with legacyregistry is deferred until the first factory
-// method is called (which happens at runtime when the first informer is
-// constructed). This ensures Create() — and therefore the read of the
-// NativeHistograms feature gate inside toPromHistogramOpts — runs after
-// ApplyFeatureGates has propagated the gate state.
+// init 只向 cache 安装 provider，实际到 legacyregistry 的注册延迟到首次调用 factory
+// 方法（运行时常在首次构造 informer 时发生）。这样可确保 Create() 以及
+// toPromHistogramOpts 中对 NativeHistograms feature gate 的读取发生在
+// ApplyFeatureGates 传播 gate 状态之后。
 //
-// Register() is still exported and idempotent; callers that invoke it
-// directly (instead of relying on first-factory-call activation) get the
-// same behaviour as before.
+// Register 仍然对外导出且幂等；直接调用它而非依赖首次 factory 调用激活的调用方，
+// 行为与之前一致。
 func init() {
 	cache.SetInformerMetricsProvider(informerMetricsProvider{})
 }
 
-// Register registers FIFO metrics and sets the metrics provider. It is
-// safe (and idempotent) to call multiple times. Callers do not normally
-// need to invoke this; importing the package and constructing informers
-// is sufficient.
+// Register 注册 FIFO 指标并设置指标 provider，可安全地重复调用。
+// 调用方通常无需显式调用；导入本包并构造 informer 即可。
 func Register() {
 	registerOnce.Do(func() {
 		legacyregistry.MustRegister(fifoQueuedItems)
@@ -140,9 +135,8 @@ func (informerMetricsProvider) NewStoreResourceVersionMetric(id cache.InformerNa
 	}
 }
 
-// reservedGaugeMetric wraps a gauge and only updates it if the identifier
-// is still reserved. This supports dynamic informers (e.g., GC, ResourceQuota)
-// that may shut down while the process is still running.
+// reservedGaugeMetric 封装 gauge，仅在标识仍被占用时更新。
+// 这支持 GC、ResourceQuota 等可能在进程运行期间关闭的动态 informer。
 type reservedGaugeMetric struct {
 	id    cache.InformerNameAndResource
 	gauge cache.GaugeMetric
@@ -155,9 +149,8 @@ func (r *reservedGaugeMetric) Set(value float64) {
 	}
 }
 
-// reservedHistogramMetric wraps a histogram and only updates it if the identifier
-// is still reserved. This supports dynamic informers (e.g., GC, ResourceQuota)
-// that may shut down while the process is still running.
+// reservedHistogramMetric 封装 histogram，仅在标识仍被占用时记录观测值。
+// 这支持 GC、ResourceQuota 等可能在进程运行期间关闭的动态 informer。
 type reservedHistogramMetric struct {
 	id        cache.InformerNameAndResource
 	histogram cache.HistogramMetric

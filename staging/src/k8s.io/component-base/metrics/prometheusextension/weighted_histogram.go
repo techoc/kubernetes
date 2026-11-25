@@ -29,18 +29,9 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-// WeightedHistogram generalizes Histogram: each observation has
-// an associated _weight_. For a given `x` and `N`,
-// `1` call on `ObserveWithWeight(x, N)` has the same meaning as
-// `N` calls on `ObserveWithWeight(x, 1)`.
-// The weighted sum might differ slightly due to the use of
-// floating point, although the implementation takes some steps
-// to mitigate that.
-// If every weight were 1,
-// this would be the same as the existing Histogram abstraction.
-//
-// WeightedHistogram 在普通 Histogram 上加了一个权重：一次
-// ObserveWithWeight(x, N) 等价于 N 次 ObserveWithWeight(x, 1)。
+// WeightedHistogram 扩展了普通 Histogram，使每次观测都带有一个权重。
+// 对于给定的 x 和 N，一次 ObserveWithWeight(x, N) 等价于 N 次 ObserveWithWeight(x, 1)。
+// 尽管实现采取了措施减小误差，加权总和仍可能因浮点运算而略有差异。
 // 所有观测权重都为 1 时，语义与标准 Histogram 一致。
 type WeightedHistogram interface {
 	prometheus.Metric
@@ -48,18 +39,18 @@ type WeightedHistogram interface {
 	WeightedObserver
 }
 
-// WeightedObserver generalizes the Observer interface.
+// WeightedObserver 扩展了 Observer 接口，使观测值可以带有权重。
 type WeightedObserver interface {
-	// Set the variable to the given value with the given weight.
+	// ObserveWithWeight 以指定权重记录给定值。
 	ObserveWithWeight(value float64, weight uint64)
 }
 
-// WeightedHistogramOpts is the same as for an ordinary Histogram
+// WeightedHistogramOpts 与普通 Histogram 的选项类型相同。
 //
 // 直接复用标准 HistogramOpts，避免维护一份会漂移的平行配置。
 type WeightedHistogramOpts = prometheus.HistogramOpts
 
-// NewWeightedHistogram creates a new WeightedHistogram
+// NewWeightedHistogram 创建一个新的 WeightedHistogram。
 //
 // 返回值实现 prometheus.Metric 与 Collector，可直接交给 registry 注册。
 func NewWeightedHistogram(opts WeightedHistogramOpts) (WeightedHistogram, error) {
@@ -95,7 +86,7 @@ func newWeightedHistogram(desc *prometheus.Desc, opts WeightedHistogramOpts, var
 			}
 		} else {
 			if math.IsInf(upperBound, +1) {
-				// The +Inf bucket is implicit. Remove it here.
+				// +Inf 桶是隐式的，这里将其移除。
 				opts.Buckets = opts.Buckets[:i]
 			}
 		}
@@ -115,40 +106,31 @@ func newWeightedHistogram(desc *prometheus.Desc, opts WeightedHistogramOpts, var
 type weightedHistogram struct {
 	desc                *prometheus.Desc
 	variableLabelValues []string
-	upperBounds         []float64 // exclusive of +Inf
+	upperBounds         []float64 // 不包含 +Inf
 
-	lock sync.Mutex // applies to all the following
+	lock sync.Mutex // 保护以下所有字段
 
-	// buckets is longer by one than upperBounds.
-	// For 0 <= idx < len(upperBounds), buckets[idx] holds the
-	// accumulated time.Duration that value has been <=
-	// upperBounds[idx] but not <= upperBounds[idx-1].
-	// buckets[len(upperBounds)] holds the accumulated
-	// time.Duration when value fit in no other bucket.
+	// buckets 比 upperBounds 多一个元素。
+	// 对于 0 <= idx < len(upperBounds)，buckets[idx] 累计值不超过 upperBounds[idx]，
+	// 且大于上一桶上界（第一桶无下界）的观测权重。
+	// buckets[len(upperBounds)] 累计未落入其他桶的观测权重。
 	buckets []uint64
 
-	// sumHot + sumCold is the weighted sum of value.
-	// Rather than risk loss of precision in one
-	// float64, we do this sum hierarchically.  Many successive
-	// increments are added into sumHot; once in a while
-	// the magnitude of sumHot is compared to the magnitude
-	// of sumCold and, if the ratio is high enough,
-	// sumHot is transferred into sumCold.
+	// sumHot + sumCold 是 value * weight 的加权总和。
+	// 为避免在单个 float64 中累加时丢失精度，采用分层求和：连续增量先加入 sumHot，
+	// 再定期比较 sumHot 与 sumCold 的量级；比例足够大时，将 sumHot 并入 sumCold。
 	sumHot  float64
 	sumCold float64
 
-	transferThreshold float64 // = math.Abs(sumCold) / 2^26 (that's about half of the bits of precision in a float64)
+	transferThreshold float64 // 等于 math.Abs(sumCold) / 2^26，约为 float64 精度位数的一半
 
-	// hotCount is used to decide when to consider dumping sumHot into sumCold.
-	// hotCount counts upward from initialHotCount to zero.
+	// hotCount 用于决定何时考虑将 sumHot 并入 sumCold。
+	// 它从 initialHotCount 向上计数到零。
 	hotCount int
 }
 
-// initialHotCount is the negative of the number of terms
-// that are summed into sumHot before considering whether
-// to transfer to sumCold.  This only has to be big enough
-// to make the extra floating point operations occur in a
-// distinct minority of cases.
+// initialHotCount 是判断是否将 sumHot 并入 sumCold 前，累加项数的相反数。
+// 其绝对值只需大到让额外浮点运算只发生在少数调用中即可。
 //
 // 每累加 15 次才判断一次是否把 sumHot 并入 sumCold，
 // 目的是让高精度合并的开销只出现在少数调用中。

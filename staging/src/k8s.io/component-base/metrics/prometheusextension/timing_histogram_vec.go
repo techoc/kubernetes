@@ -22,17 +22,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// GaugeVecOps is a bunch of Gauge that have the same
-// Desc and are distinguished by the values for their variable labels.
+// GaugeVecOps 是一组共享同一 Desc、按变量标签区分的 Gauge 的操作接口。
 //
 // 该接口与 prometheus.GaugeVec 的方法集对齐，使 TimingHistogramVec 能像普通 GaugeVec
 // 一样被使用（每次采样返回快照型 Gauge）。
 type GaugeVecOps interface {
+	// GetMetricWith 按完整标签集合获取指标。
 	GetMetricWith(prometheus.Labels) (GaugeOps, error)
+	// GetMetricWithLabelValues 按位置标签值获取指标。
 	GetMetricWithLabelValues(lvs ...string) (GaugeOps, error)
+	// With 获取指标，出错时 panic。
 	With(prometheus.Labels) GaugeOps
+	// WithLabelValues 按位置标签值获取指标，出错时 panic。
 	WithLabelValues(...string) GaugeOps
+	// CurryWith 预绑定部分标签并返回新的向量接口。
 	CurryWith(prometheus.Labels) (GaugeVecOps, error)
+	// MustCurryWith 是 CurryWith 的 panic 版本。
 	MustCurryWith(prometheus.Labels) GaugeVecOps
 }
 
@@ -63,7 +68,7 @@ func NewTestableTimingHistogramVec(nowFunc func() time.Time, opts TimingHistogra
 			metric, err := newTimingHistogram(nowFunc, desc, opts, lvs...)
 			if err != nil {
 				// 与 prometheus.newHistogram 行为一致：标签数不匹配属于编程错误，直接 panic。
-				panic(err) // like in prometheus.newHistogram
+				panic(err) // 与 prometheus.newHistogram 的行为一致
 			}
 			return metric
 		}),

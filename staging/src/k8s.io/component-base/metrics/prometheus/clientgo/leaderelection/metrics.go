@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package leaderelection 把 client-go leader election 的指标接入 legacyregistry。
+// Package leaderelection 把 client-go 领导者选举的指标接入 legacyregistry。
 // 注册延迟到首次构造 LeaderMetric 时，避免在 feature gate 尚未生效前创建指标。
 package leaderelection
 
@@ -33,9 +33,6 @@ var (
 		StabilityLevel: k8smetrics.ALPHA,
 		Help:           "Gauge of if the reporting system is master of the relevant lease, 0 indicates backup, 1 indicates master. 'name' is the string used to identify the lease. Please make sure to group by name.",
 	}, []string{"name"})
-	// A cumulative counter should be sufficient to get a rough ratio of slow path
-	// exercised given the leader election frequency is specified explicitly. So that
-	// to avoid the overhead to report a counter exercising fastpath.
 	// 慢路径计数器：按名称累计，用于估算慢路径比例；快路径不计数以省开销。
 	leaderSlowpathCounter = k8smetrics.NewCounterVec(&k8smetrics.CounterOpts{
 		Name:           "leader_election_slowpath_total",
@@ -46,10 +43,8 @@ var (
 
 var registerOnce sync.Once
 
-// init only installs the provider with leaderelection. The actual metric
-// registration with legacyregistry is deferred until the first factory
-// method is called (which happens at runtime when the first leader election
-// manager is constructed).
+// init 只向 leaderelection 安装 provider，实际到 legacyregistry 的注册延迟到首次调用
+// 工厂方法（运行时常在首次构造领导者选举管理器时发生）。
 func init() {
 	leaderelection.SetProvider(prometheusMetricsProvider{})
 }
@@ -57,9 +52,8 @@ func init() {
 // prometheusMetricsProvider 实现 client-go 的 leader election 指标 provider。
 type prometheusMetricsProvider struct{}
 
-// register registers leaderelection metrics with the legacy registry. It is
-// invoked from the provider factory method via registerOnce so that the
-// registration (and thus Create()) happens at runtime.
+// register 向旧版注册表注册 leader election 指标。provider 的 factory 方法通过
+// registerOnce 调用它，使注册（以及 Create）在运行时发生。
 func register() {
 	registerOnce.Do(func() {
 		legacyregistry.MustRegister(leaderGauge)

@@ -33,7 +33,7 @@ import (
 )
 
 var (
-	// timeNow stubbed out for testing
+	// timeNow 在测试中被替换为桩函数。
 	//
 	// 时间编码被单独抽出，测试可固定时间戳以获得确定输出。
 	timeNow = time.Now
@@ -47,11 +47,11 @@ type runtime struct {
 
 // ZapV 把 klog 风格的正向 verbosity 转为 zap 的负值级别。
 func (r *runtime) ZapV() zapcore.Level {
-	// zap levels are inverted: everything with a verbosity >= threshold gets logged.
+	// zap 的级别方向相反：verbosity 大于等于阈值的消息都会被记录。
 	return -zapcore.Level(atomic.LoadUint32(&r.v))
 }
 
-// Enabled implements the zapcore.LevelEnabler interface.
+// Enabled 实现 zapcore.LevelEnabler 接口。
 //
 // 日志级别判断在每次写日志时调用，必须无锁、廉价。
 func (r *runtime) Enabled(level zapcore.Level) bool {
@@ -66,9 +66,8 @@ func (r *runtime) SetVerbosityLevel(v uint32) error {
 
 var _ zapcore.LevelEnabler = &runtime{}
 
-// NewJSONLogger creates a new json logr.Logger and its associated
-// control interface. The separate error stream is optional and may be nil.
-// The encoder config is also optional.
+// NewJSONLogger 创建新的 JSON logr.Logger 及其关联控制接口。
+// 独立的错误流和编码器配置都是可选的，可以为 nil。
 //
 // errorStream 非 nil 时按级别拆分输出：错误写 errorStream，其余写 infoStream，
 // 便于运维只采集错误流或对两者做不同处理。
@@ -124,7 +123,7 @@ func epochMillisTimeEncoder(_ time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendFloat64(millis)
 }
 
-// Factory produces JSON logger instances.
+// Factory 创建 JSON logger 实例。
 type Factory struct{}
 
 var _ logsapi.LogFormatFactory = Factory{}
@@ -136,20 +135,17 @@ func (f Factory) Feature() featuregate.Feature {
 
 // Create 按配置构造日志器；SplitStream 决定是否把错误单独写到 stderr。
 func (f Factory) Create(c logsapi.LoggingConfiguration, o logsapi.LoggingOptions) (logr.Logger, logsapi.RuntimeControl) {
-	// We intentionally avoid all os.File.Sync calls. Output is unbuffered,
-	// therefore we don't need to flush, and calling the underlying fsync
-	// would just slow down writing.
+	// 有意避免所有 os.File.Sync 调用。输出无缓冲，因此无需 flush，
+	// 调用底层 fsync 只会降低写入速度。
 	//
-	// The assumption is that logging only needs to ensure that data gets
-	// written to the output stream before the process terminates, but
-	// doesn't need to worry about data not being written because of a
-	// system crash or powerloss.
+	// 这里假定日志只需保证数据在进程终止前写入输出流，
+	// 无需保证系统崩溃或断电时数据仍然落盘。
 	stderr := zapcore.Lock(AddNopSync(o.ErrorStream))
 	if c.Options.JSON.SplitStream {
 		stdout := zapcore.Lock(AddNopSync(o.InfoStream))
 		size := c.Options.JSON.InfoBufferSize.Value()
 		if size > 0 {
-			// Prevent integer overflow.
+			// 防止整数溢出。
 			// 上限 2GiB，避免 int 转换溢出或分配不合理的大缓冲。
 			if size > 2*1024*1024*1024 {
 				size = 2 * 1024 * 1024 * 1024
@@ -159,15 +155,15 @@ func (f Factory) Create(c logsapi.LoggingConfiguration, o logsapi.LoggingOptions
 				Size: int(size),
 			}
 		}
-		// stdout for info messages, stderr for errors.
+		// info 消息写入 stdout，错误写入 stderr。
 		return NewJSONLogger(c.Verbosity, stdout, stderr, nil)
 	}
-	// Write info messages and errors to stderr to prevent mixing with normal program output.
+	// 将 info 消息和错误写入 stderr，避免与程序的正常输出混合。
 	// 单流模式下全部写 stderr，避免污染组件的正式 stdout 输出（如 kubectl 数据）。
 	return NewJSONLogger(c.Verbosity, stderr, nil, nil)
 }
 
-// AddNoSync adds a NOP Sync implementation.
+// AddNopSync 添加无操作的 Sync 实现。
 //
 // 包一层 no-op Sync 是为了满足 zapcore.WriteSyncer 接口，同时明确不做 fsync。
 func AddNopSync(writer io.Writer) zapcore.WriteSyncer {

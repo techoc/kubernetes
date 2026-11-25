@@ -27,10 +27,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-// Counter is our internal representation for our wrapping struct around prometheus
-// counters. Counter implements both kubeCollector and CounterMetric.
-// Counter 是对 prometheus Counter 的包装，同时实现 kubeCollector 与 CounterMetric。
-// 指标在首次注册前是惰性 noop，未注册时不会真正计数，也不会泄露到内存中。
+// Counter 包装 prometheus Counter，同时实现 kubeCollector 与 CounterMetric。
+// 首次注册前使用惰性 noop：未注册时不会真正计数，也不会驻留内存。
 type Counter struct {
 	CounterMetric
 	*CounterOpts
@@ -38,19 +36,17 @@ type Counter struct {
 	selfCollector
 }
 
-// The implementation of the Metric interface is expected by testutil.GetCounterMetricValue.
+// testutil.GetCounterMetricValue 要求实现 Metric 接口。
 var _ Metric = &Counter{}
 
-// exemplarCounterMetric holds a context to extract exemplar labels from, and a counter metric to attach them to. It implements the metricWithExemplar interface.
-// exemplarCounterMetric 把 context 中的 trace/span 信息作为 exemplar 附加到计数上。
+// exemplarCounterMetric 保存用于提取 exemplar 标签的上下文及目标计数指标，并实现 metricWithExemplar。
 type exemplarCounterMetric struct {
 	ctx      context.Context
 	delegate CounterMetric
 }
 
-// NewCounter returns an object which satisfies the kubeCollector and CounterMetric interfaces.
-// However, the object returned will not measure anything unless the collector is first
-// registered, since the metric is lazily instantiated.
+// NewCounter 返回实现 kubeCollector 与 CounterMetric 的对象。
+// 指标惰性创建，因此注册前不会记录任何数据。
 func NewCounter(opts *CounterOpts) *Counter {
 	opts.StabilityLevel.setDefaults()
 
@@ -74,8 +70,7 @@ func (c *Counter) Write(to *dto.Metric) error {
 	return c.metric.Write(to)
 }
 
-// Reset resets the underlying prometheus Counter to start counting from 0 again
-// Reset 将底层计数器清零；未创建时直接返回，避免无意义地替换 noop。
+// Reset 将底层 prometheus Counter 清零；尚未创建时直接返回，避免无意义地替换 noop。
 func (c *Counter) Reset() {
 	if !c.IsCreated() {
 		return
@@ -83,45 +78,36 @@ func (c *Counter) Reset() {
 	c.setPrometheusCounter(prometheus.NewCounter(c.CounterOpts.toPromCounterOpts()))
 }
 
-// setPrometheusCounter sets the underlying CounterMetric object, i.e. the thing that does the measurement.
-// setPrometheusCounter 同时更新 selfCollector，使 Describe/Collect 指向同一个实现。
+// setPrometheusCounter 设置实际负责计数的 CounterMetric，并同步更新 selfCollector，使 Describe/Collect 使用同一实现。
 func (c *Counter) setPrometheusCounter(counter prometheus.Counter) {
 	c.CounterMetric = counter
 	c.initSelfCollection(counter)
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
 // DeprecatedVersion 解析并返回弃用版本；未配置时返回 nil。
 func (c *Counter) DeprecatedVersion() *semver.Version {
 	return parseSemver(c.CounterOpts.DeprecatedVersion)
 }
 
-// initializeMetric invocation creates the actual underlying Counter. Until this method is called
-// the underlying counter is a no-op.
 // initializeMetric 在注册时创建真正的 prometheus Counter，并在 Help 中标注稳定性级别。
 func (c *Counter) initializeMetric() {
 	c.CounterOpts.annotateStabilityLevel()
-	// 这里才真正创建底层 prometheus counter。
+	// 此处才创建底层 prometheus counter。
 	c.setPrometheusCounter(prometheus.NewCounter(c.CounterOpts.toPromCounterOpts()))
 }
 
-// initializeDeprecatedMetric invocation creates the actual (but deprecated) Counter. Until this method
-// is called the underlying counter is a no-op.
-// initializeDeprecatedMetric 为已弃用指标创建 counters，并在 Help 中追加弃用说明。
+// initializeDeprecatedMetric 创建已弃用的 prometheus Counter，并在 Help 中追加弃用说明。
 func (c *Counter) initializeDeprecatedMetric() {
 	c.CounterOpts.markDeprecated()
 	c.initializeMetric()
 }
 
-// WithContext allows the normal Counter metric to pass in context.
-// WithContext 返回带 context 的包装，用于把 trace 信息作为 exemplar 上报。
+// WithContext 返回带上下文的包装，用于把 trace 信息作为 exemplar 上报。
 func (c *Counter) WithContext(ctx context.Context) CounterMetric {
 	return &exemplarCounterMetric{ctx: ctx, delegate: c.CounterMetric}
 }
 
-// Add attaches an exemplar to the metric and then calls the delegate.
-// Add 先检查 context 中是否有已采样的 span；有则附带 trace_id/span_id 作为 exemplar，
-// 否则退化为普通 Add，避免抽样数据缺失时影响指标本身。
+// Add 先检查上下文中的 span 是否已采样；是则附带 trace_id/span_id 作为 exemplar，否则按普通 Add 处理，避免 exemplar 缺失影响计数。
 func (e *exemplarCounterMetric) Add(v float64) {
 	if m, ok := e.delegate.(prometheus.ExemplarAdder); ok {
 		maybeSpanCtx := trace.SpanContextFromContext(e.ctx)
@@ -138,15 +124,13 @@ func (e *exemplarCounterMetric) Add(v float64) {
 	e.delegate.Add(v)
 }
 
-// Inc attaches an exemplar to the metric and then calls the delegate.
-// Inc 是 Add(1) 的便捷写法。
+// Inc 先附带 exemplar，再委托底层指标执行 Add(1)。
 func (e *exemplarCounterMetric) Inc() {
 	e.Add(1)
 }
 
-// CounterVec is the internal representation of our wrapping struct around prometheus
-// counterVecs. CounterVec implements both kubeCollector and CounterVecMetric.
-// CounterVec 是对 prometheus CounterVec 的包装；注册前成员提取返回固定 noop。
+// CounterVec 包装 prometheus CounterVec，同时实现 kubeCollector 与 CounterVecMetric。
+// 注册前提取成员会返回固定 noop。
 type CounterVec struct {
 	*prometheus.CounterVec
 	*CounterOpts
@@ -156,12 +140,10 @@ type CounterVec struct {
 
 var _ kubeCollector = &CounterVec{}
 
-// TODO: make this true: var _ CounterVecMetric = &CounterVec{}
+// TODO: 使以下断言成立：var _ CounterVecMetric = &CounterVec{}
 
-// NewCounterVec returns an object which satisfies the kubeCollector and (almost) CounterVecMetric interfaces.
-// However, the object returned will not measure anything unless the collector is first
-// registered, since the metric is lazily instantiated, and only members extracted after
-// registration will actually measure anything.
+// NewCounterVec 返回实现 kubeCollector 及大部分 CounterVecMetric 方法的对象。
+// 指标惰性创建，且只有注册后提取的成员才会真正记录数据。
 func NewCounterVec(opts *CounterOpts, labels []string) *CounterVec {
 	opts.StabilityLevel.setDefaults()
 
@@ -177,45 +159,37 @@ func NewCounterVec(opts *CounterOpts, labels []string) *CounterVec {
 	return cv
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 解析并返回弃用版本；未配置时返回 nil。
 func (v *CounterVec) DeprecatedVersion() *semver.Version {
 	return parseSemver(v.CounterOpts.DeprecatedVersion)
 
 }
 
-// initializeMetric invocation creates the actual underlying CounterVec. Until this method is called
-// the underlying counterVec is a no-op.
+// initializeMetric 在注册时创建真正的 CounterVec；创建前底层 counterVec 为 noop。
 func (v *CounterVec) initializeMetric() {
 	v.CounterOpts.annotateStabilityLevel()
 	v.CounterVec = prometheus.NewCounterVec(v.CounterOpts.toPromCounterOpts(), v.originalLabels)
 }
 
-// initializeDeprecatedMetric invocation creates the actual (but deprecated) CounterVec. Until this method is called
-// the underlying counterVec is a no-op.
+// initializeDeprecatedMetric 创建已弃用的 CounterVec，并在 Help 中追加弃用说明。
 func (v *CounterVec) initializeDeprecatedMetric() {
 	v.CounterOpts.markDeprecated()
 	v.initializeMetric()
 }
 
-// Default Prometheus Vec behavior is that member extraction results in creation of a new element
-// if one with the unique label values is not found in the underlying stored metricMap.
-// This means  that if this function is called but the underlying metric is not registered
-// (which means it will never be exposed externally nor consumed), the metric will exist in memory
-// for perpetuity (i.e. throughout application lifecycle).
+// prometheus Vec 默认会在底层 metricMap 中找不到对应标签值时创建新成员。
+// 因此，若在注册前提取成员，该指标虽不会对外暴露或消费，却会永久驻留内存，直到应用结束。
 //
-// For reference: https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/counter.go#L179-L197
+// 参考：https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/counter.go#L179-L197
 //
-// In contrast, the Vec behavior in this package is that member extraction before registration
-// returns a permanent noop object.
+// 相比之下，本包在注册前提取成员时返回永久 noop 对象。
 
-// WithLabelValues returns the Counter for the given slice of label
-// values (same order as the VariableLabels in Desc). If that combination of
-// label values is accessed for the first time, a new Counter is created IFF the counterVec
-// has been registered to a metrics registry.
-// 未注册时返回共享的 noop；注册后才会真正创建成员，并按 allow list 约束标签值。
+// WithLabelValues 按标签值顺序返回 Counter，顺序应与 Desc 中的 VariableLabels 一致。
+// 首次访问某组标签值时，只有 counterVec 已注册才会创建新 Counter。
+// 未注册时返回共享 noop；注册后按 allow list 约束标签值。
 func (v *CounterVec) WithLabelValues(lvs ...string) CounterMetric {
 	if !v.IsCreated() {
-		return noop // 返回 noop counter
+		return noop
 	}
 
 	// 首次使用时从全局 allow list 初始化，避免每次调用都加读锁。
@@ -235,13 +209,12 @@ func (v *CounterVec) WithLabelValues(lvs ...string) CounterMetric {
 	return v.CounterVec.WithLabelValues(lvs...)
 }
 
-// With returns the Counter for the given Labels map (the label names
-// must match those of the VariableLabels in Desc). If that label map is
-// accessed for the first time, a new Counter is created IFF the counterVec has
-// been registered to a metrics registry.
+// With 按标签 map 返回 Counter，标签名必须与 Desc 中的 VariableLabels 一致。
+// 首次访问该标签 map 时，只有 counterVec 已注册才会创建新 Counter。
+// 未注册时返回共享 noop；注册后按允许列表约束标签值。
 func (v *CounterVec) With(labels map[string]string) CounterMetric {
 	if !v.IsCreated() {
-		return noop // 返回 noop counter
+		return noop
 	}
 
 	v.initializeLabelAllowListsOnce.Do(func() {
@@ -260,21 +233,16 @@ func (v *CounterVec) With(labels map[string]string) CounterMetric {
 	return v.CounterVec.With(labels)
 }
 
-// Delete deletes the metric where the variable labels are the same as those
-// passed in as labels. It returns true if a metric was deleted.
-//
-// It is not an error if the number and names of the Labels are inconsistent
-// with those of the VariableLabels in Desc. However, such inconsistent Labels
-// can never match an actual metric, so the method will always return false in
-// that case.
+// Delete 删除变量标签与给定标签 map 相匹配的指标，删除成功时返回 true。
+// 标签数量或名称与 Desc 中的 VariableLabels 不一致不算错误，但不可能匹配实际指标，因此始终返回 false。
 func (v *CounterVec) Delete(labels map[string]string) bool {
 	if !v.IsCreated() {
-		return false // 未创建指标，自然也没有删除任何成员
+		return false // 尚未创建指标，因此也未删除任何成员
 	}
 	return v.CounterVec.Delete(labels)
 }
 
-// Reset deletes all metrics in this vector.
+// Reset 删除向量中的所有指标。
 func (v *CounterVec) Reset() {
 	if !v.IsCreated() {
 		return
@@ -283,15 +251,14 @@ func (v *CounterVec) Reset() {
 	v.CounterVec.Reset()
 }
 
-// ResetLabelAllowLists resets the label allow list for the CounterVec.
-// NOTE: This should only be used in test.
+// ResetLabelAllowLists 重置 CounterVec 的标签允许列表。
+// 注意：仅供测试使用。
 func (v *CounterVec) ResetLabelAllowLists() {
 	v.initializeLabelAllowListsOnce = sync.Once{}
 	v.LabelValueAllowLists = nil
 }
 
-// WithContext returns wrapped CounterVec with context
-// WithContext 返回带 context 的 vec 包装，子指标的 Observe/Add 会携带 exemplar。
+// WithContext 返回带上下文的 CounterVec 包装，使子指标的 Add 携带 exemplar。
 func (v *CounterVec) WithContext(ctx context.Context) *CounterVecWithContext {
 	return &CounterVecWithContext{
 		ctx:        ctx,
@@ -299,18 +266,18 @@ func (v *CounterVec) WithContext(ctx context.Context) *CounterVecWithContext {
 	}
 }
 
-// CounterVecWithContext is the wrapper of CounterVec with context.
+// CounterVecWithContext 是带上下文的 CounterVec 包装。
 type CounterVecWithContext struct {
 	*CounterVec
 	ctx context.Context
 }
 
-// WithLabelValues is the wrapper of CounterVec.WithLabelValues.
+// WithLabelValues 是 CounterVec.WithLabelValues 的包装。
 func (vc *CounterVecWithContext) WithLabelValues(lvs ...string) CounterMetric {
 	return vc.CounterVec.WithLabelValues(lvs...)
 }
 
-// With is the wrapper of CounterVec.With.
+// With 是 CounterVec.With 的包装。
 func (vc *CounterVecWithContext) With(labels map[string]string) CounterMetric {
 	return vc.CounterVec.With(labels)
 }

@@ -14,9 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package prometheus sets the workqueue DefaultMetricsFactory to produce
-// prometheus metrics. To use this package, you just have to import it.
-//
 // Package prometheus 把 workqueue 的默认指标工厂替换为 Prometheus 实现；
 // 作为副作用导入（import _）即完成安装，无需调用方显式初始化。
 package workqueue
@@ -29,19 +26,27 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// Metrics subsystem and keys used by the workqueue.
+// workqueue 使用的指标子系统和键。
 //
 // 指标名与 client-go 约定的 key 一一对应；workqueue 只持有这些字符串，
 // 具体指标类型与 label 由本包决定。
 const (
-	WorkQueueSubsystem         = "workqueue"
-	DepthKey                   = "depth"
-	AddsKey                    = "adds_total"
-	QueueLatencyKey            = "queue_duration_seconds"
-	WorkDurationKey            = "work_duration_seconds"
-	UnfinishedWorkKey          = "unfinished_work_seconds"
+	// WorkQueueSubsystem 是 workqueue 指标的子系统名称。
+	WorkQueueSubsystem = "workqueue"
+	// DepthKey 是队列当前深度指标的名称键。
+	DepthKey = "depth"
+	// AddsKey 是入队次数指标的名称键。
+	AddsKey = "adds_total"
+	// QueueLatencyKey 是条目排队时长指标的名称键。
+	QueueLatencyKey = "queue_duration_seconds"
+	// WorkDurationKey 是条目处理时长指标的名称键。
+	WorkDurationKey = "work_duration_seconds"
+	// UnfinishedWorkKey 是未完成工作时长的名称键。
+	UnfinishedWorkKey = "unfinished_work_seconds"
+	// LongestRunningProcessorKey 是最长运行中处理器时长的名称键。
 	LongestRunningProcessorKey = "longest_running_processor_seconds"
-	RetriesKey                 = "retries_total"
+	// RetriesKey 是重试次数指标的名称键。
+	RetriesKey = "retries_total"
 )
 
 var (
@@ -116,18 +121,15 @@ var (
 type prometheusMetricsProvider struct {
 }
 
-// init only installs the provider with workqueue. The actual metric
-// registration with legacyregistry is deferred until the first factory
-// method is called (which happens at runtime when the first workqueue is
-// constructed). This ensures Create() - and therefore the read of the
-// feature gate - runs after ApplyFeatureGates has propagated the gate state.
+// init 只向 workqueue 安装 provider，实际到 legacyregistry 的注册延迟到首次调用 factory
+// 方法（运行时常在首次构造 workqueue 时发生）。这样可确保 Create() 以及对 feature gate
+// 的读取发生在 ApplyFeatureGates 传播 gate 状态之后。
 func init() {
 	workqueue.SetProvider(prometheusMetricsProvider{})
 }
 
-// register registers all workqueue metrics with the legacy registry. It is
-// invoked from each provider factory method via registerOnce so that the
-// registration (and thus Create()) happens at runtime, post-ApplyFeatureGates.
+// register 向旧版注册表注册全部 workqueue 指标。每个 provider factory 方法均通过
+// registerOnce 调用它，使注册（以及 Create）在 ApplyFeatureGates 之后的运行时发生。
 func register() {
 	registerOnce.Do(func() {
 		for _, m := range metrics {

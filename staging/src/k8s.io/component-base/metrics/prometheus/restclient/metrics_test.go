@@ -26,12 +26,10 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
-// TestMain ensures the deferred restclient registration callback (installed
-// via RegisterOpts.RegisterFn in this package's init()) fires before any test
-// exercises the adapter paths. In production this is triggered by
-// rest.RESTClientForConfigAndClient calling metrics.EnsureRegistered, but
-// these tests bypass rest client construction and write to adapters
-// directly.
+// TestMain 确保本包 init 通过 RegisterOpts.RegisterFn 安装的延迟注册回调，
+// 在任何测试执行适配器路径前触发。生产环境中该回调由
+// rest.RESTClientForConfigAndClient 调用 metrics.EnsureRegistered 触发；
+// 这些测试绕过 REST client 构造，直接写入适配器。
 func TestMain(m *testing.M) {
 	metrics.EnsureRegistered()
 	m.Run()
@@ -101,8 +99,7 @@ func TestClientGOMetrics(t *testing.T) {
 		},
 	}
 
-	// no need to register the metrics here, since the init function of
-	// the package registers all the client-go metrics.
+	// 此处无需注册指标，因为本包的 init 函数已注册全部 client-go 指标。
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
 			resetter, resettable := test.metric.(interface {
@@ -112,10 +109,8 @@ func TestClientGOMetrics(t *testing.T) {
 				t.Fatalf("the metric must be resettaable: %s", test.name)
 			}
 
-			// Since prometheus' gatherer is global, other tests may have updated
-			// metrics already, so we need to reset them prior to running this test.
-			// This also implies that we can't run this test in parallel with other tests.
-			// 全局注册表意味着必须串行执行并先清零，否则计数会与断言期望不一致。
+			// 全局注册表意味着其他测试可能已更新指标，因此必须先清零并串行执行，
+			// 否则计数会与断言期望不一致。
 			resetter.Reset()
 			test.update()
 
@@ -202,8 +197,7 @@ func TestTransportCAReloadsMetric(t *testing.T) {
 				`,
 		},
 	}
-	// no need to register the metrics here, since the init function of
-	// the package registers all the client-go metrics.
+	// 此处无需注册指标，因为本包的 init 函数已注册全部 client-go 指标。
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
 			resetter, resettable := test.metric.(interface {
@@ -213,10 +207,8 @@ func TestTransportCAReloadsMetric(t *testing.T) {
 				t.Fatalf("the metric must be resettaable: %s", test.name)
 			}
 
-			// Since prometheus' gatherer is global, other tests may have updated
-			// metrics already, so we need to reset them prior to running this test.
-			// This also implies that we can't run this test in parallel with other tests.
-			// 全局注册表意味着必须串行执行并先清零，否则计数会与断言期望不一致。
+			// 全局注册表意味着其他测试可能已更新指标，因此必须先清零并串行执行，
+			// 否则计数会与断言期望不一致。
 			resetter.Reset()
 			test.update()
 

@@ -73,20 +73,18 @@ var (
 	)
 )
 
-// Options has all parameters needed for exposing metrics from components
 // Options 汇集暴露组件指标所需的参数，可直接嵌入组件的配置结构。
 type Options struct {
 	// 这里省略配置的序列化：父配置不会嵌入该类型，避免字段重复暴露。
 	v1.MetricsConfiguration `json:"-"`
 }
 
-// NewOptions returns default metrics options
+// NewOptions 返回默认的指标选项。
 func NewOptions() *Options {
 	return &Options{}
 }
 
-// AddFlags adds flags for exposing component metrics.
-// This won't be called in embedded instances within component configurations.
+// AddFlags 添加用于暴露组件指标的标志；组件配置中的嵌入实例不会调用此方法。
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -114,8 +112,7 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 			"Note that the flag --allow-metric-labels will override the manifest file.")
 }
 
-// SetShowHidden will enable showing hidden metrics. This will no-opt
-// after the initial call
+// SetShowHidden 开启隐藏指标展示；首次调用之后不再产生效果。
 func SetShowHidden() {
 	showHiddenOnce.Do(func() {
 		showHidden.Store(true)
@@ -128,15 +125,12 @@ func SetShowHidden() {
 	})
 }
 
-// ShouldShowHidden returns whether showing hidden deprecated metrics is enabled.
-// While the primary use case for this is internal (to determine registration behavior) this can also be used to introspect.
+// ShouldShowHidden 报告是否已开启隐藏弃用指标展示，既可用于内部注册判定，也可用于状态查询。
 func ShouldShowHidden() bool {
 	return showHidden.Load()
 }
 
-// SetDisabledMetric will disable a metric by name.
-// This will also increment the disabled metrics counter.
-// Note that this is a no-op if the metric is already disabled.
+// SetDisabledMetrics 按名称禁用指标，并递增禁用指标计数器；重复禁用同一指标时不产生效果。
 func SetDisabledMetrics(names []string) {
 	for _, name := range names {
 		func(name string) {
@@ -235,7 +229,7 @@ func SetLabelAllowListFromManifest(manifest string) {
 	SetLabelAllowList(allowListMapping)
 }
 
-// Apply applies a MetricsConfiguration into global configuration of metrics.
+// Apply 将 MetricsConfiguration 应用到全局指标配置。
 func Apply(c *v1.MetricsConfiguration) {
 	if c == nil {
 		return
@@ -254,7 +248,7 @@ func Apply(c *v1.MetricsConfiguration) {
 	}
 }
 
-// Apply applies parameters into global configuration of metrics.
+// Apply 将自身参数应用到全局指标配置。
 func (o *Options) Apply() {
 	if o == nil {
 		return
@@ -263,9 +257,9 @@ func (o *Options) Apply() {
 	Apply(&o.MetricsConfiguration)
 }
 
-// ValidateShowHiddenMetricsVersion checks invalid version for which show hidden metrics.
-// TODO: This is kept here for backward compatibility in Kubelet (as metrics configuration fields were exposed on an individual basis earlier).
-// TODO: Revisit this after Kubelet supports the new metrics configuration API.
+// ValidateShowHiddenMetricsVersion 校验用于展示隐藏指标的版本是否合法。
+// TODO: 保留此函数是为了兼容 Kubelet，因为指标配置字段早期曾逐项暴露。
+// TODO: Kubelet 支持新的指标配置 API 后重新评估。
 func ValidateShowHiddenMetricsVersion(v string) []error {
 	err := v1.ValidateShowHiddenMetricsVersionForKubeletBackwardCompatOnly(parseVersion(version.Get()), v)
 	if err != nil {
@@ -275,7 +269,7 @@ func ValidateShowHiddenMetricsVersion(v string) []error {
 	return nil
 }
 
-// Validate validates metrics flags options.
+// Validate 校验指标标志选项。
 func (o *Options) Validate() []error {
 	if o == nil {
 		return nil

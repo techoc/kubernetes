@@ -65,12 +65,12 @@ func NewLoggerCommand() *cobra.Command {
 				os.Exit(1)
 			}
 
-			// Initialize contextual logging.
+			// 初始化上下文日志。
 			// 命名 logger 并附加固定键值，展示如何通过 context 传递，而非依赖全局 logger。
 			logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "example"), "foo", "bar")
 			ctx := klog.NewContext(context.Background(), logger)
 
-			// Produce some output.
+			// 生成一些输出。
 			example.Run(ctx)
 		},
 	}

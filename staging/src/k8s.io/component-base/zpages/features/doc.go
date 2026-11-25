@@ -14,12 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package features contains a separate feature set specifically designed for
-// managing zpages related features. These feature gates control the
-// availability and behavior of various zpages within Kubernetes components.
-// New zpages added to Kubernetes components should utilize this feature set
-// to ensure proper management of their availability.
-//
-// 该特性集独立于组件主特性集，使 zpages 的启停可以单独演进，也便于
-// 在模拟旧版本时关闭新端点。
+// Package features 包含专门用于管理 zpages 相关特性的独立特性集。
+// 这些特性门控控制 Kubernetes 组件中各类 zpages 的可用性与行为。
+// 组件新增 zpages 时应使用此特性集，以正确管理其可用性。
+// 该特性集独立于组件主特性集，使 zpages 的启停可以单独演进，也便于在模拟旧版本时关闭新端点。
 package features

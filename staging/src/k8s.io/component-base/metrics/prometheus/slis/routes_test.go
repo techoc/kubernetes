@@ -43,7 +43,6 @@ func TestSLIMetrics_Install(t *testing.T) {
 	assert.Equal(t, []string{"/metrics/slis"}, m.handledPaths)
 
 	s.Install(m)
-	// Assert that the path is registered twice for the 2 calls made to Install().
-	// 固定记录该行为：路径会重复挂载，而不是被去重。
+	// 固定记录该行为：两次调用 Install 会重复挂载路径，而不是去重。
 	assert.Equal(t, []string{"/metrics/slis", "/metrics/slis"}, m.handledPaths, "Should handle the path twice.")
 }

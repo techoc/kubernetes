@@ -27,40 +27,37 @@ const (
 	// alpha: v1.24
 	// beta: v1.30
 	//
-	// Enables looking up a logger from a context.Context instead of using
-	// the global fallback logger and manipulating the logger that is
-	// used by a call chain.
+	// 允许从 context.Context 查找 logger，并替换调用链使用的 logger，
+	// 而不使用全局兜底 logger。
 	// beta 起默认开启；关闭后组件退回 klog 全局 logger 的旧行为。
 	ContextualLogging featuregate.Feature = "ContextualLogging"
 
-	// Allow fine-tuning of experimental, alpha-quality logging options.
+	// 允许微调实验性、alpha 质量的日志选项。
 	//
-	// Per https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// we want to avoid a proliferation of feature gates. This feature gate:
-	// - will guard *a group* of logging options whose quality level is alpha.
-	// - will never graduate to beta or stable.
+	// 依据 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
+	// 应避免 feature gate 数量膨胀，因此该门控：
+	// - 统一控制一组质量为 alpha 的日志选项。
+	// - 永远不会升级到 beta 或 stable。
 	//
-	// IMPORTANT: Unlike typical feature gates, LoggingAlphaOptions is NOT affected by
-	// emulation version changes. Its behavior remains constant regardless of the
-	// emulation version being used.
+	// 重要：与典型 feature gate 不同，LoggingAlphaOptions 不受
+	// 模拟版本变化影响；无论使用哪个模拟版本，其行为都保持不变。
 	// 注意：它不受 emulation-version 影响，因为调用的配置 API 本身不随版本变化。
 	LoggingAlphaOptions featuregate.Feature = "LoggingAlphaOptions"
 
-	// Allow fine-tuning of experimental, beta-quality logging options.
+	// 允许微调实验性、beta 质量的日志选项。
 	//
-	// Per https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// we want to avoid a proliferation of feature gates. This feature gate:
-	// - will guard *a group* of logging options whose quality level is beta.
-	// - is thus *introduced* as beta
-	// - will never graduate to stable.
+	// 依据 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
+	// 应避免 feature gate 数量膨胀，因此该门控：
+	// - 统一控制一组质量为 beta 的日志选项。
+	// - 因此从引入时起就是 beta 级别。
+	// - 永远不会升级到 stable。
 	//
-	// IMPORTANT: Unlike typical feature gates, LoggingBetaOptions is NOT affected by
-	// emulation version changes. Its behavior remains constant regardless of the
-	// emulation version being used.
+	// 重要：与典型 feature gate 不同，LoggingBetaOptions 不受
+	// 模拟版本变化影响；无论使用哪个模拟版本，其行为都保持不变。
 	// 与 LoggingAlphaOptions 相同，配置 API 不参与版本模拟。
 	LoggingBetaOptions featuregate.Feature = "LoggingBetaOptions"
 
-	// Stable logging options. Always enabled.
+	// 稳定的日志选项，始终启用。
 	// 稳定选项不再受开关控制，保留名称只为让组件注册逻辑保持一致。
 	LoggingStableOptions featuregate.Feature = "LoggingStableOptions"
 )
@@ -82,7 +79,7 @@ func featureGates() map[featuregate.Feature]featuregate.VersionedSpecs {
 	}
 }
 
-// AddFeatureGates adds all feature gates used by this package.
+// AddFeatureGates 添加本包使用的所有特性门控。
 // 组件在构造 FeatureGate 后需调用本函数，否则 AddFlags 与 ValidateAndApply 无法识别这些开关。
 func AddFeatureGates(mutableFeatureGate featuregate.MutableVersionedFeatureGate) error {
 	return mutableFeatureGate.AddVersioned(featureGates())

@@ -67,11 +67,9 @@ func validateAllowListMapping(allowListMapping map[string]string, fldPath *field
 	return errs
 }
 
-// validateAllowListMappingManifest validates the allow list mapping manifest file.
-// This function is used to validate the manifest file provided via the flag --allow-metric-labels-manifest, or the configuration file.
-// In the former case, the path resolution is relative to the current working directory.
-// In the latter case, the path resolution is relative to the configuration file's location, and components are required to pass in the resolved absolute path.
-// NOTE: If its the latter case, components are expected to pass in the *absolute* path to the manifest file.
+// validateAllowListMappingManifest 校验允许值映射清单文件，适用于 --allow-metric-labels-manifest 标志或配置文件提供的清单。
+// 前一种情况按当前工作目录解析路径；后一种情况按配置文件所在目录解析，组件必须传入已解析的绝对路径。
+// 注意：对于后一种情况，组件必须传入清单文件的*绝对*路径。
 func validateAllowListMappingManifest(allowListMappingManifestPath string, fldPath *field.Path) field.ErrorList {
 	errs := field.ErrorList{}
 	if allowListMappingManifestPath == "" {
@@ -126,8 +124,8 @@ func validateShowHiddenMetricsVersion(currentVersion semver.Version, targetVersi
 
 // ValidateShowHiddenMetricsVersionForKubeletBackwardCompatOnly 校验 Kubelet 旧版字段
 // showHiddenMetricsForVersion。保留它是为了兼容 Kubelet 逐字段暴露配置的历史。
-// TODO: This is kept here for backward compatibility in Kubelet (as metrics configuration fields were exposed on an individual basis earlier).
-// TODO: Revisit this after Kubelet supports the new metrics configuration API: https://github.com/kubernetes/kubernetes/pull/123426
+// TODO: 保留此函数是为了兼容 Kubelet，因为指标配置字段早期曾逐项暴露。
+// TODO: Kubelet 支持新的指标配置 API 后重新评估：https://github.com/kubernetes/kubernetes/pull/123426
 func ValidateShowHiddenMetricsVersionForKubeletBackwardCompatOnly(currentVersion semver.Version, targetVersionStr string) error {
 	errs := validateShowHiddenMetricsVersion(currentVersion, targetVersionStr, field.NewPath("showHiddenMetricsForVersion"))
 	if len(errs) > 0 {

@@ -22,8 +22,7 @@ import (
 	"k8s.io/component-base/config"
 )
 
-// BindLeaderElectionFlags binds the LeaderElectionConfiguration struct fields to a flagset
-//
+// BindLeaderElectionFlags 把 LeaderElectionConfiguration 结构体字段绑定到标志集。
 // 每个标志都以结构体当前值作为默认值，因此可以先加载配置文件、再绑定标志，
 // 从而让命令行覆盖配置文件而不是恢复内置默认。
 func BindLeaderElectionFlags(l *config.LeaderElectionConfiguration, fs *pflag.FlagSet) {

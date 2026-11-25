@@ -27,40 +27,37 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-// Float64Slice is a slice of float64 that sorts by magnitude
+// Float64Slice 是按绝对值排序的 float64 切片。
 //
 // 按绝对值排序，使浮点求和结果与顺序无关且可重复（正负抵消对误差影响最小）。
 type Float64Slice []float64
 
+// Len 返回切片长度。
 func (fs Float64Slice) Len() int { return len(fs) }
 
 // Less 比较绝对值而非原值，减少累加时的相消误差。
 func (fs Float64Slice) Less(i, j int) bool { return math.Abs(fs[i]) < math.Abs(fs[j]) }
 
+// Swap 交换两个元素的位置。
 func (fs Float64Slice) Swap(i, j int) { fs[i], fs[j] = fs[j], fs[i] }
 
-// weightedHistogramSpecFunc returns a WeightedHistogram and the upper bounds
-// to expect it to have.
-// Every invocation of the same function returns the same histogram.
+// weightedHistogramSpecFunc 返回一个 WeightedHistogram 及其预期桶上界。
+// 同一函数的每次调用都返回同一个直方图。
 type weightedHistogramSpecFunc func() (wh WeightedObserver, upperBounds []float64)
 
-// exerciseWeightedHistograms exercises a given collection of WeightedHistograms.
-// Each histogram is given by a function that returns it, so that we can test
-// that the Vec functions return the same result for the same input.
-// For each histogram, with N upper bounds, the exercise provides two 2N+1 values:
-// the upper bounds and values halfway between them (extended below the bottom and above
-// the top).  For the Jth value, there are J*m1 calls to ObserveWithWeight with m1
-// chosen so that m1 * sum[1 <= J <= 2N+1] J is large enough to trigger several
-// considerations of spilling from sumHot to sumCold.
-// The ObserveWithWeight calls to the various histograms are interleaved to check
-// that there is no interference between them.
+// exerciseWeightedHistograms 测试一组 WeightedHistogram。每个直方图由返回它的函数提供，
+// 以便验证 Vec 函数对相同输入返回相同结果。
+// 对于有 N 个上界的直方图，测试使用 2N+1 个值：各上界及相邻上界的中点，
+// 并在最低上界下方和最高上界上方各扩展一个值。第 J 个值调用 J*m1 次 ObserveWithWeight，
+// m1 的选取应使多次触发 sumHot 向 sumCold 的合并判断。
+// 各直方图的调用交错执行，以检查彼此之间没有干扰。
 //
 // 期望值按“值与桶上界的关系”独立计算，再与实测的桶计数、样本数、样本和比较；
 // 样本和允许 1e-13 的相对误差（见 issue 120112）。
 func exerciseWeightedHistograms(t *testing.T, whSpecs ...weightedHistogramSpecFunc) {
 	var whos []weightedHistogramObs
 	expectations := []whExerciseExpectation{}
-	// Create expectations and specs of calls ot ObserveWithWeight
+	// 创建 ObserveWithWeight 调用的预期结果与执行计划
 	for whIdx, whSpec := range whSpecs {
 		wh, upperBounds := whSpec()
 		numUBs := len(upperBounds)
@@ -109,7 +106,7 @@ func exerciseWeightedHistograms(t *testing.T, whSpecs ...weightedHistogramSpecFu
 		t.Logf("At idx=%v, adding expectation of buckets=%#+v, upperBounds=%#+v, sum=%v, count=%v", whIdx, ee.buckets, ee.upperBounds, ee.sum, ee.count)
 		expectations = append(expectations, ee)
 	}
-	// Do the planned calls on ObserveWithWeight, in randomized order
+	// 按随机顺序执行计划中的 ObserveWithWeight 调用
 	for len(whos) > 0 {
 		var wi weightedHistogramObs
 		whos, wi = whosPick(whos)
@@ -117,7 +114,7 @@ func exerciseWeightedHistograms(t *testing.T, whSpecs ...weightedHistogramSpecFu
 		wh.ObserveWithWeight(wi.val, wi.weight)
 		// t.Logf("ObserveWithWeight(%v, %v) => %#+v", wi.val, wi.weight, wh)
 	}
-	// Check expectations
+	// 检查实际结果是否符合预期
 	for idx, ee := range expectations {
 		wh := ee.wh
 		whAsMetric := wh.(prometheus.Metric)
@@ -151,21 +148,21 @@ func exerciseWeightedHistograms(t *testing.T, whSpecs ...weightedHistogramSpecFu
 		num := math.Abs(actualSum - ee.sum)
 		den := math.Max(math.Abs(actualSum), math.Abs(ee.sum))
 		relErr := num / den
-		// Issue 120112 reports relative errors as high as 9.55994394104272e-14
+		// issue 120112 报告的最高相对误差为 9.55994394104272e-14
 		if relErr > 1e-13 {
 			t.Errorf("At idx=%d, expected sum %v but got %v, err=%v, relativeErr=%v", idx, ee.sum, actualSum, actualSum-ee.sum, relErr)
 		}
 	}
 }
 
-// weightedHistogramObs prescribes a call on WeightedHistogram::ObserveWithWeight
+// weightedHistogramObs 描述一次 WeightedHistogram.ObserveWithWeight 调用。
 type weightedHistogramObs struct {
 	whSpec weightedHistogramSpecFunc
 	val    float64
 	weight uint64
 }
 
-// whExerciseExpectation is the expected result from exercising a WeightedHistogram
+// whExerciseExpectation 保存测试 WeightedHistogram 时的预期结果。
 type whExerciseExpectation struct {
 	wh          WeightedObserver
 	upperBounds []float64
@@ -189,7 +186,7 @@ func whosPick(whos []weightedHistogramObs) ([]weightedHistogramObs, weightedHist
 // TestOneWeightedHistogram 覆盖固定桶数与随机桶上界两种场景；
 // 随机用例使用递增上界，贴近真实直方图的构造方式。
 func TestOneWeightedHistogram(t *testing.T) {
-	// First, some literal test cases
+	// 先测试固定字面量用例
 	for _, testCase := range []struct {
 		name        string
 		upperBounds []float64
@@ -212,7 +209,7 @@ func TestOneWeightedHistogram(t *testing.T) {
 			exerciseWeightedHistograms(t, func() (WeightedObserver, []float64) { return wh, testCase.upperBounds })
 		})
 	}
-	// Now, some randomized test cases
+	// 再测试随机用例
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf("random_case_%d", i)
 		t.Run(name, func(t *testing.T) {

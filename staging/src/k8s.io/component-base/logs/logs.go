@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package logs contains support for logging options, flags and setup.
-// Commands must explicitly enable command line flags. They no longer
-// get added automatically when importing this package.
+// Package logs 提供日志选项、flag 和初始化支持。
+// 命令必须显式启用命令行 flag，导入本包不再自动添加这些 flag。
 package logs
 
 import (
@@ -39,8 +38,7 @@ var (
 	// packageFlags 保存 klog flag 的定义，作为 AddFlags/AddGoFlags 注册的来源。
 	packageFlags = flag.NewFlagSet("logging", flag.ContinueOnError)
 
-	// Periodic flushing gets configured either via the global flag
-	// in this file or via LoggingConfiguration.
+	// 定期刷新通过本文件中的全局 flag 或 LoggingConfiguration 配置。
 	logFlushFreq time.Duration
 )
 
@@ -58,42 +56,39 @@ type addFlagsOptions struct {
 // Option 是 AddFlags/AddGoFlags 的配置函数。
 type Option func(*addFlagsOptions)
 
-// SkipLoggingConfigurationFlags must be used as option for AddFlags when
-// the program also uses a LoggingConfiguration struct for configuring
-// logging. Then only flags not covered by that get added.
+// 当程序还使用 LoggingConfiguration 结构体配置日志时，
+// 必须将 SkipLoggingConfigurationFlags 作为 AddFlags 的选项。
+// 这样只会添加该结构体未覆盖的 flag。
 func SkipLoggingConfigurationFlags() Option {
 	return func(o *addFlagsOptions) {
 		o.skipLoggingConfigurationFlags = true
 	}
 }
 
-// Options is an alias for LoggingConfiguration to comply with component-base
-// conventions.
+// Options 是 LoggingConfiguration 的别名，以符合 component-base 惯例。
 // 别名（而非新类型）使组件可以按习惯使用 logs.Options 而无需转换。
 type Options = logsapi.LoggingConfiguration
 
-// NewOptions is an alias for NewLoggingConfiguration.
+// NewOptions 是 NewLoggingConfiguration 的别名。
 var NewOptions = logsapi.NewLoggingConfiguration
 
-// AddFlags registers this package's flags on arbitrary FlagSets. This includes
-// the klog flags, with the original underscore as separator between. If
-// commands want hyphens as separators, they can set
-// k8s.io/component-base/cli/flag/WordSepNormalizeFunc as normalization
-// function on the flag set before calling AddFlags.
+// AddFlags 在任意 FlagSet 上注册本包的 flag，包括 klog flag，单词间保留原有下划线。
+// 若命令希望使用连字符分隔，可在调用 AddFlags 前为 flag 集合设置
+// k8s.io/component-base/cli/flag/WordSepNormalizeFunc 作为规范化函数。
 //
-// May be called more than once.
+// 可以多次调用。
 func AddFlags(fs *pflag.FlagSet, opts ...Option) {
 	o := addFlagsOptions{}
 	for _, opt := range opts {
 		opt(&o)
 	}
 
-	// Add all supported flags.
+	// 添加所有受支持的 flag。
 	packageFlags.VisitAll(func(f *flag.Flag) {
 		pf := pflag.PFlagFromGoFlag(f)
 		switch f.Name {
 		case "v", logsapi.LogFlushFreqFlagName:
-			// unchanged, potentially skip it
+			// 保持不变，可视情况跳过。
 			if o.skipLoggingConfigurationFlags {
 				return
 			}
@@ -111,25 +106,23 @@ func AddFlags(fs *pflag.FlagSet, opts ...Option) {
 	})
 }
 
-// AddGoFlags is a variant of AddFlags for traditional Go flag.FlagSet.
-// Commands should use pflag whenever possible for the sake of consistency.
-// Cases where this function is needed include tests (they have to set up flags
-// in flag.CommandLine) and commands that for historic reasons use Go
-// flag.Parse and cannot change to pflag because it would break their command
-// line interface.
+// AddGoFlags 是 AddFlags 针对传统 Go flag.FlagSet 的变体。
+// 为保持一致，命令应尽可能使用 pflag。
+// 需要本函数的场景包括测试（必须在 flag.CommandLine 中设置 flag），
+// 以及因历史原因使用 Go flag.Parse、无法切换到 pflag 的命令，
+// 因为切换会破坏其命令行接口。
 func AddGoFlags(fs *flag.FlagSet, opts ...Option) {
 	o := addFlagsOptions{}
 	for _, opt := range opts {
 		opt(&o)
 	}
 
-	// Add flags with deprecation remark added to the usage text of
-	// some klog flags.
+	// 添加 flag，并在部分 klog flag 的用法文本中加入弃用说明。
 	packageFlags.VisitAll(func(f *flag.Flag) {
 		usage := f.Usage
 		switch f.Name {
 		case "v", logsapi.LogFlushFreqFlagName:
-			// unchanged
+			// 保持不变。
 			if o.skipLoggingConfigurationFlags {
 				return
 			}
@@ -144,58 +137,52 @@ func AddGoFlags(fs *flag.FlagSet, opts ...Option) {
 	})
 }
 
-// KlogWriter serves as a bridge between the standard log package and the glog package.
+// KlogWriter 充当标准 log 包与 glog 包之间的桥接。
 type KlogWriter struct{}
 
-// Write implements the io.Writer interface.
+// Write 实现 io.Writer 接口。
 func (writer KlogWriter) Write(data []byte) (n int, err error) {
 	// 深度 1 跳过本包装层，使 caller 指向实际的 log.Printf 调用点。
 	klog.InfoDepth(1, string(data))
 	return len(data), nil
 }
 
-// InitLogs initializes logs the way we want for Kubernetes.
-// It should be called after parsing flags. If called before that,
-// it will use the default log settings.
+// InitLogs 按 Kubernetes 所需方式初始化日志。
+// 应在解析 flag 后调用；若提前调用，则使用默认日志设置。
 //
-// InitLogs disables support for contextual logging in klog while
-// that Kubernetes feature is not considered stable yet. Commands
-// which want to support contextual logging can:
-//   - call klog.EnableContextualLogging after calling InitLogs,
-//     with a fixed `true` or depending on some command line flag or
-//     a feature gate check
-//   - set up a FeatureGate instance, the advanced logging configuration
-//     with Options and call Options.ValidateAndApply with the FeatureGate;
-//     k8s.io/component-base/logs/example/cmd demonstrates how to do that
+// 在该 Kubernetes 特性被认为稳定之前，InitLogs 会禁用 klog 的上下文日志支持。
+// 希望支持上下文日志的命令可以：
+//   - 在调用 InitLogs 后调用 klog.EnableContextualLogging，
+//     传入固定的 `true`，或根据命令行 flag 或特性门控检查结果决定
+//   - 设置 FeatureGate 实例，通过 Options 使用高级日志配置，
+//     并带上 FeatureGate 调用 Options.ValidateAndApply；
+//     k8s.io/component-base/logs/example/cmd 演示了具体做法
 func InitLogs() {
 	// 让标准库 log 的输出进入 klog，统一格式与级别。
 	log.SetOutput(KlogWriter{})
 	log.SetFlags(0)
 
-	// Start flushing now. If LoggingConfiguration.ApplyAndValidate is
-	// used, it will restart the daemon with the log flush interval defined
-	// there.
+	// 现在启动定期刷新。若使用 LoggingConfiguration.ApplyAndValidate，
+	// 它会按其中定义的日志刷新间隔重启守护进程。
 	klog.StartFlushDaemon(logFlushFreq)
 
-	// This is the default in Kubernetes. Options.ValidateAndApply
-	// will override this with the result of a feature gate check.
+	// 这是 Kubernetes 的默认值，Options.ValidateAndApply 会用特性门控检查结果覆盖它。
 	klog.EnableContextualLogging(false)
 }
 
-// FlushLogs flushes logs immediately. This should be called at the end of
-// the main function via defer to ensure that all pending log messages
-// are printed before exiting the program.
+// FlushLogs 立即刷新日志。应在 main 函数末尾通过 defer 调用，
+// 确保所有待处理日志在程序退出前输出。
 func FlushLogs() {
 	klog.Flush()
 }
 
-// NewLogger creates a new log.Logger which sends logs to klog.Info.
+// NewLogger 创建将日志发送到 klog.Info 的新 log.Logger。
 func NewLogger(prefix string) *log.Logger {
 	return log.New(KlogWriter{}, prefix, 0)
 }
 
-// GlogSetter modifies the verbosity threshold for the entire program.
-// Some components have HTTP-based APIs for invoking this at runtime.
+// GlogSetter 修改整个程序的详细程度阈值。
+// 某些组件提供基于 HTTP 的接口，在运行时调用此功能。
 func GlogSetter(val string) (string, error) {
 	// 先解析为 uint32 以便回调使用，再交给 klog.Level 做实际校验。
 	v, err := strconv.ParseUint(val, 10, 32)

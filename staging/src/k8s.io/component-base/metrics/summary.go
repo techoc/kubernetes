@@ -25,16 +25,17 @@ import (
 )
 
 const (
-	// 以下常量直接转发 Prometheus 的默认值，供调用方在构造 SummaryOpts 时引用。
+	// DefAgeBuckets 是 Prometheus 默认的 Summary 年龄分桶。
+	// DefBufCap 是 Prometheus 默认的 Summary 缓冲区容量。
+	// DefMaxAge 是 Prometheus 默认的 Summary 最大保留时长。
 	DefAgeBuckets = prometheus.DefAgeBuckets
 	DefBufCap     = prometheus.DefBufCap
 	DefMaxAge     = prometheus.DefMaxAge
 )
 
-// Summary is our internal representation for our wrapping struct around prometheus
-// summaries. Summary implements both kubeCollector and ObserverMetric
+// Summary 是对 prometheus.Summary 的内部包装，实现 kubeCollector 与 ObserverMetric。
 //
-// Deprecated: as per the metrics overhaul KEP
+// Deprecated: 根据指标重构 KEP 弃用。
 type Summary struct {
 	ObserverMetric
 	*SummaryOpts
@@ -42,10 +43,9 @@ type Summary struct {
 	selfCollector
 }
 
-// NewSummary returns an object which is Summary-like. However, nothing
-// will be measured until the summary is registered somewhere.
+// NewSummary 返回一个类似 Summary 的对象；注册前不会记录任何观测。
 //
-// Deprecated: as per the metrics overhaul KEP
+// Deprecated: 根据指标重构 KEP 弃用。
 //
 // 构造阶段先把底层实现设为 noop；只有注册后 lazyMetric 才会创建真正的
 // Prometheus Summary，这样未注册的指标不会占用内存。
@@ -61,29 +61,27 @@ func NewSummary(opts *SummaryOpts) *Summary {
 	return s
 }
 
-// setPrometheusSummary sets the underlying KubeGauge object, i.e. the thing that does the measurement.
+// setPrometheusSummary 设置执行实际观测的底层 prometheus.Summary。
 func (s *Summary) setPrometheusSummary(summary prometheus.Summary) {
 	s.ObserverMetric = summary
 	s.initSelfCollection(summary)
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 返回已解析的弃用版本；未设置时返回 nil。
 func (s *Summary) DeprecatedVersion() *semver.Version {
 	return parseSemver(s.SummaryOpts.DeprecatedVersion)
 }
 
-// initializeMetric invokes the actual prometheus.Summary object instantiation
-// and stores a reference to it
+// initializeMetric 创建并保存底层 prometheus.Summary。
 //
 // 注册时调用：先给 Help 打上稳定性前缀，再创建底层对象。
 func (s *Summary) initializeMetric() {
 	s.SummaryOpts.annotateStabilityLevel()
-	// this actually creates the underlying prometheus gauge.
+	// 这里才创建底层 prometheus.Summary。
 	s.setPrometheusSummary(prometheus.NewSummary(s.SummaryOpts.toPromSummaryOpts()))
 }
 
-// initializeDeprecatedMetric invokes the actual prometheus.Summary object instantiation
-// but modifies the Help description prior to object instantiation.
+// initializeDeprecatedMetric 先修改 Help 中的弃用说明，再创建 prometheus.Summary。
 //
 // 弃用指标的 Help 会追加 "(Deprecated since ...)"，便于使用者从 /metrics 直接发现。
 func (s *Summary) initializeDeprecatedMetric() {
@@ -91,15 +89,14 @@ func (s *Summary) initializeDeprecatedMetric() {
 	s.initializeMetric()
 }
 
-// WithContext allows the normal Summary metric to pass in context. The context is no-op now.
+// WithContext 接受供普通 Summary 指标使用的 context；当前实现忽略该参数。
 func (s *Summary) WithContext(ctx context.Context) ObserverMetric {
 	return s.ObserverMetric
 }
 
-// SummaryVec is the internal representation of our wrapping struct around prometheus
-// summaryVecs.
+// SummaryVec 是对 prometheus.SummaryVec 的内部包装。
 //
-// Deprecated: as per the metrics overhaul KEP
+// Deprecated: 根据指标重构 KEP 弃用。
 type SummaryVec struct {
 	*prometheus.SummaryVec
 	*SummaryOpts
@@ -107,13 +104,10 @@ type SummaryVec struct {
 	originalLabels []string
 }
 
-// NewSummaryVec returns an object which satisfies kubeCollector and wraps the
-// prometheus.SummaryVec object. However, the object returned will not measure
-// anything unless the collector is first registered, since the metric is lazily instantiated,
-// and only members extracted after
-// registration will actually measure anything.
+// NewSummaryVec 返回实现 kubeCollector 的 prometheus.SummaryVec 包装。
+// 指标采用懒创建；只有注册后获取的成员才会记录观测。
 //
-// Deprecated: as per the metrics overhaul KEP
+// Deprecated: 根据指标重构 KEP 弃用。
 //
 // 注册前通过 WithLabelValues 拿到的只是永久 noop，不会在内存中累积子指标。
 func NewSummaryVec(opts *SummaryOpts, labels []string) *SummaryVec {
@@ -130,7 +124,7 @@ func NewSummaryVec(opts *SummaryOpts, labels []string) *SummaryVec {
 	return v
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 返回已解析的弃用版本；未设置时返回 nil。
 func (v *SummaryVec) DeprecatedVersion() *semver.Version {
 	return parseSemver(v.SummaryOpts.DeprecatedVersion)
 }
@@ -147,21 +141,15 @@ func (v *SummaryVec) initializeDeprecatedMetric() {
 	v.initializeMetric()
 }
 
-// Default Prometheus Vec behavior is that member extraction results in creation of a new element
-// if one with the unique label values is not found in the underlying stored metricMap.
-// This means  that if this function is called but the underlying metric is not registered
-// (which means it will never be exposed externally nor consumed), the metric will exist in memory
-// for perpetuity (i.e. throughout application lifecycle).
+// Prometheus Vec 默认会在提取成员时，为底层 metricMap 中不存在的标签组合创建元素。
+// 若指标尚未注册，该元素永远不会对外暴露或被消费，却会一直占用内存。
 //
-// For reference: https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/histogram.go#L460-L470
+// 参考：https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/histogram.go#L460-L470
 //
-// In contrast, the Vec behavior in this package is that member extraction before registration
-// returns a permanent noop object.
+// 本包的 Vec 在注册前提取成员时只返回永久的 noop 对象。
 
-// WithLabelValues returns the ObserverMetric for the given slice of label
-// values (same order as the VariableLabels in Desc). If that combination of
-// label values is accessed for the first time, a new ObserverMetric is created IFF the summaryVec
-// has been registered to a metrics registry.
+// WithLabelValues 返回给定标签值序列对应的 ObserverMetric，顺序须与 Desc 中的
+// VariableLabels 一致。首次访问该组合时，仅当 SummaryVec 已注册才创建成员。
 //
 // 未注册时返回 noop；注册后才按 allow list 约束 label 值并创建真实子指标。
 func (v *SummaryVec) WithLabelValues(lvs ...string) ObserverMetric {
@@ -169,8 +157,7 @@ func (v *SummaryVec) WithLabelValues(lvs ...string) ObserverMetric {
 		return noop
 	}
 
-	// Initialize label allow lists if not already initialized
-	// 只读取全局 allow list 快照，加读锁即可。
+	// 首次调用时在读锁下从全局快照初始化标签允许列表。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -179,19 +166,15 @@ func (v *SummaryVec) WithLabelValues(lvs ...string) ObserverMetric {
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label values to allowed values
+	// 将标签值约束为允许值。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainToAllowedList(v.originalLabels, lvs)
 	}
 	return v.SummaryVec.WithLabelValues(lvs...)
 }
 
-// With returns the ObserverMetric for the given Labels map (the label names
-// must match those of the VariableLabels in Desc). If that label map is
-// accessed for the first time, a new ObserverMetric is created IFF the summaryVec has
-// been registered to a metrics registry.
-//
-// With 与 WithLabelValues 语义相同，只是以 map 形式传参。
+// With 返回给定 Labels 映射对应的 ObserverMetric，标签名须与 Desc 中的
+// VariableLabels 一致。首次访问该组合时，仅当 SummaryVec 已注册才创建成员。
 func (v *SummaryVec) With(labels map[string]string) ObserverMetric {
 	if !v.IsCreated() {
 		return noop
@@ -211,21 +194,18 @@ func (v *SummaryVec) With(labels map[string]string) ObserverMetric {
 	return v.SummaryVec.With(labels)
 }
 
-// Delete deletes the metric where the variable labels are the same as those
-// passed in as labels. It returns true if a metric was deleted.
+// Delete 删除可变标签与给定 Labels 匹配的成员，删除成功时返回 true。
 //
-// It is not an error if the number and names of the Labels are inconsistent
-// with those of the VariableLabels in Desc. However, such inconsistent Labels
-// can never match an actual metric, so the method will always return false in
-// that case.
+// Labels 的数量或名称与 Desc 中的 VariableLabels 不一致不会报错，
+// 但这样的 Labels 无法匹配实际成员，因此始终返回 false。
 func (v *SummaryVec) Delete(labels map[string]string) bool {
 	if !v.IsCreated() {
-		return false // since we haven't created the metric, we haven't deleted a metric with the passed in values
+		return false // 指标尚未创建，因此未删除任何匹配成员
 	}
 	return v.SummaryVec.Delete(labels)
 }
 
-// Reset deletes all metrics in this vector.
+// Reset 删除该 vector 中的所有成员。
 func (v *SummaryVec) Reset() {
 	if !v.IsCreated() {
 		return
@@ -234,14 +214,14 @@ func (v *SummaryVec) Reset() {
 	v.SummaryVec.Reset()
 }
 
-// ResetLabelAllowLists resets the label allow list for the SummaryVec.
-// NOTE: This should only be used in test.
+// ResetLabelAllowLists 重置 SummaryVec 的标签允许列表。
+// 注意：仅供测试使用。
 func (v *SummaryVec) ResetLabelAllowLists() {
 	v.initializeLabelAllowListsOnce = sync.Once{}
 	v.LabelValueAllowLists = nil
 }
 
-// WithContext returns wrapped SummaryVec with context
+// WithContext 返回带 context 的 SummaryVec 包装。
 //
 // 当前实现只保存 ctx，为将来接入 exemplar 预留接口。
 func (v *SummaryVec) WithContext(ctx context.Context) *SummaryVecWithContext {
@@ -251,18 +231,18 @@ func (v *SummaryVec) WithContext(ctx context.Context) *SummaryVecWithContext {
 	}
 }
 
-// SummaryVecWithContext is the wrapper of SummaryVec with context.
+// SummaryVecWithContext 是带 context 的 SummaryVec 包装。
 type SummaryVecWithContext struct {
 	*SummaryVec
 	ctx context.Context
 }
 
-// WithLabelValues is the wrapper of SummaryVec.WithLabelValues.
+// WithLabelValues 包装 SummaryVec.WithLabelValues，并保留 context。
 func (vc *SummaryVecWithContext) WithLabelValues(lvs ...string) ObserverMetric {
 	return vc.SummaryVec.WithLabelValues(lvs...)
 }
 
-// With is the wrapper of SummaryVec.With.
+// With 包装 SummaryVec.With，并保留 context。
 func (vc *SummaryVecWithContext) With(labels map[string]string) ObserverMetric {
 	return vc.SummaryVec.With(labels)
 }

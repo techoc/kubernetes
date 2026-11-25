@@ -24,10 +24,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Init is a replacement for klog.InitFlags which only adds those flags
-// that are still supported for Kubernetes components (i.e. -v and -vmodule).
-// See
-// https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components.
+// Init 替代 klog.InitFlags，仅添加 Kubernetes 组件仍支持的 flag（即 -v 和 -vmodule）。
+// 参见
+// https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components
 func Init(fs *flag.FlagSet) {
 	// 先让 klog 把所有 flag 注册到临时集合，再按白名单挑选，避免污染调用方。
 	var allFlags flag.FlagSet

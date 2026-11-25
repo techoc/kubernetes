@@ -33,8 +33,7 @@ import (
 )
 
 var (
-	// requestLatency is a Prometheus Histogram metric type partitioned by
-	// "verb", and "host" labels. It is used for the rest client latency metrics.
+	// requestLatency 是按 "verb" 和 "host" 标签划分的 REST 客户端请求延迟直方图。
 	requestLatency = k8smetrics.NewHistogramVec(
 		&k8smetrics.HistogramOpts{
 			Name:           "rest_client_request_duration_seconds",
@@ -45,8 +44,7 @@ var (
 		[]string{"verb", "host"},
 	)
 
-	// resolverLatency is a Prometheus Histogram metric type partitioned by
-	// "host" labels. It is used for the rest client DNS resolver latency metrics.
+	// resolverLatency 是按 "host" 标签划分的 REST 客户端 DNS 解析延迟直方图。
 	resolverLatency = k8smetrics.NewHistogramVec(
 		&k8smetrics.HistogramOpts{
 			Name:           "rest_client_dns_resolution_duration_seconds",
@@ -64,7 +62,7 @@ var (
 			Name:           "rest_client_request_size_bytes",
 			Help:           "Request size in bytes. Broken down by verb and host.",
 			StabilityLevel: k8smetrics.ALPHA,
-			// 64 bytes to 16MB
+			// 64 字节到 16MB
 			Buckets: []float64{64, 256, 512, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216},
 		},
 		[]string{"verb", "host"},
@@ -75,7 +73,7 @@ var (
 			Name:           "rest_client_response_size_bytes",
 			Help:           "Response size in bytes. Broken down by verb and host.",
 			StabilityLevel: k8smetrics.ALPHA,
-			// 64 bytes to 16MB
+			// 64 字节到 16MB
 			Buckets: []float64{64, 256, 512, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216},
 		},
 		[]string{"verb", "host"},
@@ -140,25 +138,23 @@ var (
 				"plugin client certificate lived before being rotated. " +
 				"If auth exec plugin client certificates are unused, " +
 				"histogram will contain no data.",
-			// There are three sets of ranges these buckets intend to capture:
-			//   - 10-60 minutes: captures a rotation cadence which is
-			//     happening too quickly.
-			//   - 4 hours - 1 month: captures an ideal rotation cadence.
-			//   - 3 months - 4 years: captures a rotation cadence which is
-			//     is probably too slow or much too slow.
+			// 这些桶覆盖三类轮转周期：
+			//   - 10 至 60 分钟：轮转过于频繁。
+			//   - 4 小时至 1 个月：理想的轮转周期。
+			//   - 3 个月至 4 年：轮转可能过慢或非常慢。
 			StabilityLevel: k8smetrics.ALPHA,
 			Buckets: []float64{
-				600,       // 10 minutes
-				1800,      // 30 minutes
-				3600,      // 1  hour
-				14400,     // 4  hours
-				86400,     // 1  day
-				604800,    // 1  week
-				2592000,   // 1  month
-				7776000,   // 3  months
-				15552000,  // 6  months
-				31104000,  // 1  year
-				124416000, // 4  years
+				600,       // 10 分钟
+				1800,      // 30 分钟
+				3600,      // 1 小时
+				14400,     // 4 小时
+				86400,     // 1 天
+				604800,    // 1 周
+				2592000,   // 1 个月
+				7776000,   // 3 个月
+				15552000,  // 6 个月
+				31104000,  // 1 年
+				124416000, // 4 年
 			},
 		},
 	)
@@ -231,11 +227,10 @@ var (
 	)
 )
 
-// init installs the adapter pointers (RequestLatency,
-// ClientCertExpiry, etc.) into client-go/tools/metrics and supplies
-// a RegisterFn callback that performs the legacyregistry.MustRegister calls.
-// The callback fires from metrics.EnsureRegistered which rest.RESTClientForConfigAndClient
-// invokes at first rest client construction.
+// init 将适配器指针（RequestLatency、ClientCertExpiry 等）安装到
+// client-go/tools/metrics，并提供执行 legacyregistry.MustRegister 的 RegisterFn 回调。
+// rest.RESTClientForConfigAndClient 在首次构造 REST client 时调用 metrics.EnsureRegistered，
+// 从而触发该回调。
 func init() {
 	metrics.Register(metrics.RegisterOpts{
 		ClientCertExpiry:             execPluginCertTTLAdapter,

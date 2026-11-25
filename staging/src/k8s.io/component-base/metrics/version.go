@@ -30,7 +30,7 @@ var (
 	)
 )
 
-// RegisterBuildInfo registers the build and version info in a metadata metric in prometheus
+// RegisterBuildInfo 在 prometheus 元数据指标中注册构建与版本信息。
 func RegisterBuildInfo(r KubeRegistry) {
 	info := version.Get()
 	r.MustRegister(buildInfo)

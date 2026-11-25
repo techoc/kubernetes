@@ -581,7 +581,7 @@ func TestGetHistogramVecFromGatherer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buckets := []float64{.5, 2, 5}
-			// HistogramVec has two labels defined.
+			// HistogramVec 定义了两个标签。
 			labels := []string{"label1", "label2"}
 			HistogramOpts := &metrics.HistogramOpts{
 				Namespace: "namespace",
@@ -591,11 +591,11 @@ func TestGetHistogramVecFromGatherer(t *testing.T) {
 				Buckets:   buckets,
 			}
 			vec := metrics.NewHistogramVec(HistogramOpts, labels)
-			// Use local registry
+			// 使用本地注册表
 			var registry = metrics.NewKubeRegistry()
 			var gather metrics.Gatherer = registry
 			registry.MustRegister(vec)
-			// Observe two metrics with same value for label1 but different value of label2.
+			// 记录两个 label1 相同、label2 取值不同的指标。
 			vec.WithLabelValues("value1-0", "value2-0").Observe(1.5)
 			vec.WithLabelValues("value1-0", "value2-1").Observe(2.5)
 			vec.WithLabelValues("value1-1", "value2-0").Observe(3.5)
@@ -618,7 +618,7 @@ func TestGetCounterValuesFromGatherer(t *testing.T) {
 	metricName := fmt.Sprintf("%s_%s_%s", namespace, subsystem, name)
 
 	tests := map[string]struct {
-		metricName string // Empty is replaced with valid name.
+		metricName string // 空名称会被替换为有效名称。
 		lvMap      map[string]string
 		labelName  string
 
@@ -671,7 +671,7 @@ func TestGetCounterValuesFromGatherer(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			// CounterVec has two labels defined.
+			// CounterVec 定义了两个标签。
 			labels := []string{"label1", "label2"}
 			counterOpts := &metrics.CounterOpts{
 				Namespace: "namespace",
@@ -680,19 +680,18 @@ func TestGetCounterValuesFromGatherer(t *testing.T) {
 				Help:      "counter help message",
 			}
 			vec := metrics.NewCounterVec(counterOpts, labels)
-			// Use local registry
+			// 使用本地注册表
 			var registry = metrics.NewKubeRegistry()
 			var gather metrics.Gatherer = registry
 			registry.MustRegister(vec)
-			// Observe two metrics with same value for label1 but different value of label2.
+			// 记录两个 label1 相同、label2 取值不同的指标。
 			vec.WithLabelValues("value1-0", "value2-0").Add(1.5)
 			vec.WithLabelValues("value1-0", "value2-1").Add(2.5)
 			vec.WithLabelValues("value1-1", "value2-0").Add(3.5)
 			vec.WithLabelValues("value1-1", "value2-1").Add(4.5)
 
-			// The check for empty metric apparently cannot be tested: registering
-			// a NewCounterVec with no values has the affect that it doesn't get
-			// returned, leading to "not found".
+			// 空指标似乎无法单独测试：注册没有任何取值的 NewCounterVec 后，
+			// 它不会出现在收集结果中，因而得到 "not found"。
 
 			counterValues, err := GetCounterValuesFromGatherer(gather, tt.metricName, tt.lvMap, tt.labelName)
 			if err != nil {

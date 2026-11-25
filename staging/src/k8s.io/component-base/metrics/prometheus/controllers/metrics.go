@@ -38,13 +38,13 @@ var (
 	)
 )
 
-// ControllerManagerMetrics is a proxy to set controller manager specific metrics.
+// ControllerManagerMetrics 是设置特定 controller manager 指标的代理。
 type ControllerManagerMetrics struct {
 	// manager 标识指标来源（如 kube-controller-manager 或 cloud controller 管理器）。
 	manager string
 }
 
-// NewControllerManagerMetrics create a new ControllerManagerMetrics, with specific manager name.
+// NewControllerManagerMetrics 创建具有指定管理器名称的 ControllerManagerMetrics。
 func NewControllerManagerMetrics(manager string) *ControllerManagerMetrics {
 	controllerMetrics := &ControllerManagerMetrics{
 		manager: manager,
@@ -52,7 +52,7 @@ func NewControllerManagerMetrics(manager string) *ControllerManagerMetrics {
 	return controllerMetrics
 }
 
-// Register controller manager metrics.
+// Register 注册 controller manager 指标。
 //
 // 由组件在初始化时调用；实际注册动作只执行一次。
 func Register() {
@@ -61,14 +61,13 @@ func Register() {
 	})
 }
 
-// ControllerStarted sets the controllerInstanceCount to 1.
-// These values use set instead of inc/dec to avoid accidentally double counting
-// a controller that starts but fails to properly signal when it crashes.
+// ControllerStarted 将 controllerInstanceCount 设置为 1。
+// 使用 Set 而非 Inc/Dec，避免控制器启动后异常退出且未正确上报时被重复计数。
 func (a *ControllerManagerMetrics) ControllerStarted(name string) {
 	controllerInstanceCount.With(k8smetrics.Labels{"name": name, "manager": a.manager}).Set(float64(1))
 }
 
-// ControllerStopped sets the controllerInstanceCount to 0.
+// ControllerStopped 将 controllerInstanceCount 设置为 0。
 //
 // 同样使用 Set 而非 Dec：异常退出可能没有对应的 Started/Stopped 配对，直接归零更可靠。
 func (a *ControllerManagerMetrics) ControllerStopped(name string) {

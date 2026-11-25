@@ -128,32 +128,30 @@ func TestVModule(t *testing.T) {
 	}
 }
 
-// TestCompatibility ensures that a) valid JSON remains valid and has the same
-// effect and b) that new fields are covered by the test data.
+// TestCompatibility 确保有效 JSON 仍然有效且效果不变，
+// 并确保测试数据覆盖新增字段。
 // all-fields 用例通过反射检查确保新增字段被 fixture 覆盖，避免兼容性测试漏测。
 func TestCompatibility(t *testing.T) {
 	testcases := map[string]struct {
-		// fixture holds a representation of a LoggingConfiguration struct in JSON format.
+		// fixture 保存 LoggingConfiguration 结构体的 JSON 表示。
 		fixture string
-		// baseConfig is the struct that Unmarshal writes into.
+		// baseConfig 是 Unmarshal 写入的结构体。
 		baseConfig LoggingConfiguration
-		// expectAllFields enables a reflection check to ensure that the
-		// result has all fields set.
+		// expectAllFields 启用反射检查，确保结果中所有字段均已设置。
 		expectAllFields bool
-		// expectConfig is the intended result.
+		// expectConfig 是预期结果。
 		expectConfig LoggingConfiguration
 	}{
 		"defaults": {
-			// No changes when nothing is specified.
+			// 未指定任何内容时不作修改。
 			fixture:      "{}",
 			baseConfig:   *NewLoggingConfiguration(),
 			expectConfig: *NewLoggingConfiguration(),
 		},
 		"all-fields": {
-			// The JSON fixture includes all fields. The result
-			// must have all fields as non-empty when starting with
-			// an empty base, otherwise the fixture is incomplete
-			// and must be updated for the test case to pass.
+			// JSON fixture 包含所有字段。从空 base 开始时，
+			// 结果中的所有字段都必须非空，否则说明 fixture 不完整，
+			// 必须更新 fixture 才能通过测试。
 			fixture: `{
 	"format": "json",
 	"flushFrequency": 1,
@@ -214,16 +212,15 @@ func TestCompatibility(t *testing.T) {
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			// Beware, not a deep copy. Different test cases must
-			// not share anything.
+			// 注意，这不是深拷贝。不同测试用例不得共享任何数据。
 			config := tc.baseConfig
 			if strictErr, err := json.UnmarshalStrict([]byte(tc.fixture), &config); err != nil {
 				t.Fatalf("unexpected unmarshal error: %v", err)
 			} else if strictErr != nil {
 				t.Fatalf("unexpected strict unmarshal error: %v", strictErr)
 			}
-			// This sets the internal "s" field just like unmarshaling does.
-			// Required for assert.Equal to pass.
+			// 与反序列化一样，这会设置内部 "s" 字段。
+			// assert.Equal 需要通过此操作才能匹配。
 			_ = tc.expectConfig.Options.Text.InfoBufferSize.String()
 			_ = tc.expectConfig.Options.JSON.InfoBufferSize.String()
 			assert.Equal(t, tc.expectConfig, config)
@@ -234,9 +231,8 @@ func TestCompatibility(t *testing.T) {
 	}
 }
 
-// notZero asserts that i is not the zero value for its type
-// and repeats that check recursively for all pointers,
-// structs, maps, arrays, and slices.
+// notZero 断言 i 不是其类型的零值，
+// 并递归检查所有指针、结构体、映射、数组和切片。
 // 跳过未导出字段和 json:"-" 字段，因为它们本就不参与序列化。
 func notZeroRecursive(t *testing.T, i interface{}, path string) bool {
 	typeOfI := reflect.TypeOf(i)
@@ -257,11 +253,11 @@ func notZeroRecursive(t *testing.T, i interface{}, path string) bool {
 	case reflect.Struct:
 		for i := 0; i < typeOfI.NumField(); i++ {
 			if !typeOfI.Field(i).IsExported() {
-				// Cannot access value.
+				// 无法访问该值。
 				continue
 			}
 			if typeOfI.Field(i).Tag.Get("json") == "-" {
-				// unserialized field
+				// 不参与序列化的字段。
 				continue
 			}
 			if !notZeroRecursive(t, value.Field(i).Interface(), path+"."+typeOfI.Field(i).Name) {

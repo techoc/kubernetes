@@ -14,9 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package datapol contains functions to determine if objects contain sensitive
-// data to e.g. make decisions on whether to log them or not.
-//
 // Package datapol 判断对象是否包含敏感数据（如密钥、token），
 // 用于决定能否安全地将其写入日志。
 // 判定依据是字段上的 datapolicy 标签以及值是否为零值。
@@ -29,8 +26,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Verify returns a list of the datatypes contained in the argument that can be
-// considered sensitive w.r.t. to logging
+// Verify 返回参数中可视为对日志敏感的数据类型列表。
 //
 // Verify 返回参数中命中敏感数据标签的类型名列表；nil 表示未发现敏感数据。
 // 反射遍历任意对象可能 panic（例如未导出字段、非法值），因此这里统一 recover：
@@ -38,7 +34,7 @@ import (
 func Verify(value interface{}) []string {
 	defer func() {
 		if r := recover(); r != nil {
-			//TODO maybe export a metric
+			// TODO 可考虑导出指标。
 			klog.Warningf("Error while inspecting arguments for sensitive data: %v", r)
 		}
 	}()
@@ -53,7 +49,7 @@ func Verify(value interface{}) []string {
 // 只检查非零值：零值字段即使带标签也不构成泄露。
 func datatypes(v reflect.Value) []string {
 	if types := byType(v.Type()); len(types) > 0 {
-		// Slices, and maps can be nil or empty, only the nil case is zero
+		// 切片和映射可以为 nil 或空，只有 nil 才是零值。
 		switch v.Kind() {
 		case reflect.Slice, reflect.Map:
 			if !v.IsZero() && v.Len() > 0 {

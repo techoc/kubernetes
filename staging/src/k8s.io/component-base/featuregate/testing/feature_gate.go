@@ -48,13 +48,10 @@ func init() {
 // 允许一次性设置多个门控并统一处理依赖关系。
 type FeatureOverrides = map[featuregate.Feature]bool
 
-// SetFeatureGateDuringTest sets the specified gate to the specified value for duration of the test.
-// Fails when it detects second call to the same flag or is unable to set or restore feature flag.
-// When disabling a feature, this automatically disables all dependents.
-//
-// WARNING: Can leak set variable when called in test calling t.Parallel(), however second attempt to set the same feature flag will cause fatal.
-//
-// Example use:
+// SetFeatureGateDuringTest 在测试期间把指定门控设为指定值。
+// 检测到第二次设置同一标志，或无法设置、恢复特性标志时失败；禁用特性时会自动禁用所有依赖项。
+// 警告：在调用 t.Parallel() 的测试中调用可能泄漏已设置变量，但第二次设置同一特性标志会致命失败。
+// 用法示例：
 //
 // featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.<FeatureName>, true)
 func SetFeatureGateDuringTest(tb TB, gate featuregate.FeatureGate, f featuregate.Feature, value bool) {
@@ -62,13 +59,10 @@ func SetFeatureGateDuringTest(tb TB, gate featuregate.FeatureGate, f featuregate
 	SetFeatureGatesDuringTest(tb, gate, FeatureOverrides{f: value})
 }
 
-// SetFeatureGatesDuringTest sets the specified map of feature gate values for duration of the test.
-// Fails when it detects second call to the same flag or is unable to set or restore feature flag.
-// When disabling a feature, this automatically disables all dependents that weren't explicitly set.
-//
-// WARNING: Can leak set variable when called in test calling t.Parallel(), however second attempt to set the same feature flag will cause fatal.
-//
-// Example use:
+// SetFeatureGatesDuringTest 在测试期间设置指定的特性门控值映射。
+// 检测到第二次设置同一标志，或无法设置、恢复特性标志时失败；禁用特性时会自动禁用所有
+// 未显式设置的依赖项。警告：在调用 t.Parallel() 的测试中调用可能泄漏已设置变量，
+// 但第二次设置同一特性标志会致命失败。用法示例：
 //
 //	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 //		features.<FeatureName>: true,
@@ -83,16 +77,15 @@ func SetFeatureGatesDuringTest(tb TB, gate featuregate.FeatureGate, features Fea
 	var originalUnset []featuregate.Feature
 	overrides := FeatureOverrides{}
 
-	// Specially handle AllAlpha and AllBeta
+	// 特殊处理 AllAlpha 和 AllBeta。
 	allAlphaValue, allAlpha := features["AllAlpha"]
 	allBetaValue, allBeta := features["AllBeta"]
 	if allAlpha || allBeta {
-		// Iterate over individual gates so their individual values get restored
+		// 逐个遍历门控，以便恢复每个门控各自的值。
 		for k, v := range gate.(featuregate.MutableFeatureGate).GetAll() {
 			if (allAlpha && v.PreRelease == featuregate.Alpha) || (allBeta && v.PreRelease == featuregate.Beta) {
-				// Setting AllAlpha or AllBeta on their own only sets unset features, but for
-				// testing we want to override ALL alpha/beta features. So we explicitly set each
-				// alpha/beta feature in addition to AllAlpha/AllBeta
+				// AllAlpha/AllBeta 本身只设置未显式设置的特性，但测试需要覆盖全部
+				// alpha/beta 特性，因此除 AllAlpha/AllBeta 外再显式设置每个特性。
 				if v.PreRelease == featuregate.Alpha {
 					overrides[k] = allAlphaValue
 				} else {
@@ -102,19 +95,18 @@ func SetFeatureGatesDuringTest(tb TB, gate featuregate.FeatureGate, features Fea
 		}
 	}
 
-	// Explicit features take precedence, so merge them in now.
+	// 显式指定的特性优先，现在合并进来。
 	for f, v := range features {
 		overrides[f] = v
 	}
 
-	// Automatically disable dependents when disabling a dependency.
+	// 禁用依赖项时自动禁用依赖它的特性。
 	dependencies := gate.Dependencies()
 	for f := range dependencies {
 		if _, overridden := overrides[f]; overridden || !gate.Enabled(f) {
-			continue // Don't automatically disable features that have been explicitly set.
+			continue // 不自动禁用显式设置过的特性。
 		}
-		// If the feature gate was default-enabled and has an explicitly
-		// disabled dependency, then automatically disable it.
+		// 若特性门控默认启用且其依赖项被显式禁用，则自动禁用该特性。
 		if disabled, disabledDep := hasDisabledDependency(f, dependencies, features); disabled {
 			tb.Logf("Disabling feature %s since it depends on disabled feature %s", f, disabledDep)
 			overrides[f] = false
@@ -153,8 +145,8 @@ func SetFeatureGatesDuringTest(tb TB, gate featuregate.FeatureGate, features Fea
 			tb.Fatalf("change of feature gate emulation version from %s to %s in the chain of SetFeatureGateDuringTest is not allowed\nuse SetFeatureGateEmulationVersionDuringTest to change emulation version in tests",
 				originalEmuVer.String(), emuVer.String())
 		}
-		// To avoid violating feature dependencies, first atomicaly restore all original values,
-		// then reset features that were unset (the value should be unchanged).
+		// 为避免违反特性依赖关系，先一次性恢复全部原值，再重置原本未显式设置的特性
+		// （它们的值应保持不变）。
 		if err := setFromMap(logger, gate, originalValues); err != nil {
 			tb.Errorf("error restoring features %v: %v", originalValues, err)
 		}
@@ -173,15 +165,13 @@ func newLogger(tb TB) klog.Logger {
 	return logger
 }
 
-// testingT is a bridge between what this package traditionally has required (Logf) and
-// what ktesting needs (Log).
+// testingT 在本包传统要求的 Logf 与 ktesting 需要的 Log 之间充当桥接。
 type testingT struct {
 	TB
 }
 
 func (tb testingT) Log(args ...any) {
-	// testing.T.Log emulates fmt.Println, not fmt.Print, i.e. it always
-	// adds spaces between arguments.
+	// testing.T.Log 模拟 fmt.Println 而非 fmt.Print，即总会在参数之间添加空格。
 	tb.Logf("%s", fmt.Sprintln(args...))
 }
 
@@ -207,7 +197,7 @@ func setEmulationVersionAndMinCompatibilityVersion(logger klog.Logger, gate feat
 	return gate.(featuregate.MutableVersionedFeatureGate).SetEmulationVersionAndMinCompatibilityVersion(emulationVersion, minCompatibilityVersion)
 }
 
-// hasDisabledDependency recursively walks the dependencies for feature f, and checks whether any are explicitly disabled in the features map.
+// hasDisabledDependency 递归遍历特性 f 的依赖，检查 features 映射中是否有依赖被显式禁用。
 func hasDisabledDependency(f featuregate.Feature, dependencies map[featuregate.Feature][]featuregate.Feature, features map[featuregate.Feature]bool) (bool, featuregate.Feature) {
 	if enabled, set := features[f]; set {
 		return !enabled, f
@@ -235,20 +225,20 @@ func suggestChangeEmulationVersion(tb TB, gate featuregate.FeatureGate, f featur
 		return ""
 	}
 	if len(versionedSpecs) > 1 {
-		// check if the feature is locked
+		// 检查特性是否被锁定。
 		lastLifecycle := versionedSpecs[len(versionedSpecs)-1]
 		if lastLifecycle.LockToDefault && !lastLifecycle.Version.GreaterThan(emuVer) && lastLifecycle.Default != value {
-			// if the feature is locked, set the emulation version to the previous version when the feature is not locked.
+			// 若特性被锁定，将模拟版本设为该特性尚未锁定的前一个版本。
 			return fmt.Sprintf("Feature %s is locked at version %s. Try adding SetFeatureGateEmulationVersionDuringTest(t, gate, version.MustParse(\"1.%d\")) at the beginning of your test.", f, emuVer.String(), lastLifecycle.Version.SubtractMinor(1).Minor())
 		}
 	}
 	return ""
 }
 
-// SetFeatureGateVersionsDuringTest sets the specified gate to the specified emulation version and min compatibility version for duration of the test.
-// Fails when it detects second call to set a different emulation version or min compatibility version, or is unable to set or restore emulation version and min compatibility version.
-// WARNING: Can leak set variable when called in test calling t.Parallel(), however second attempt to set a different emulation version or min compatibility version will cause fatal.
-// Example use:
+// SetFeatureGateVersionsDuringTest 在测试期间把指定门控设为指定的模拟版本和最低兼容版本。
+// 检测到第二次设置不同版本，或无法设置、恢复这两个版本时失败。
+// 警告：在调用 t.Parallel() 的测试中调用可能泄漏已设置变量，但第二次设置不同版本会致命失败。
+// 用法示例：
 
 // featuregatetesting.SetFeatureGateVersionsDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.31"), version.MustParse("1.31"))
 func SetFeatureGateVersionsDuringTest(tb TB, gate featuregate.FeatureGate, emuVer, minCompatVer *version.Version) {
@@ -274,10 +264,10 @@ func SetFeatureGateVersionsDuringTest(tb TB, gate featuregate.FeatureGate, emuVe
 	})
 }
 
-// SetFeatureGateEmulationVersionDuringTest sets the specified gate to the specified emulation version for duration of the test.
-// Fails when it detects second call to set a different emulation version or is unable to set or restore emulation version.
-// WARNING: Can leak set variable when called in test calling t.Parallel(), however second attempt to set a different emulation version will cause fatal.
-// Example use:
+// SetFeatureGateEmulationVersionDuringTest 在测试期间把指定门控设为指定的模拟版本。
+// 检测到第二次设置不同模拟版本，或无法设置、恢复模拟版本时失败。
+// 警告：在调用 t.Parallel() 的测试中调用可能泄漏已设置变量，但第二次设置不同版本会致命失败。
+// 用法示例：
 
 // featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.31"))
 func SetFeatureGateEmulationVersionDuringTest(tb TB, gate featuregate.FeatureGate, ver *version.Version) {
@@ -340,7 +330,7 @@ func detectParallelOverrideVersions(tb TB, vers string) func() {
 // sameTestOrSubtest 判断 testName 与当前测试是否同属一棵测试树；
 // 子测试名以父名 + "/" 开头，据此识别合法嵌套覆盖。
 func sameTestOrSubtest(tb TB, testName string) bool {
-	// Assumes that "/" is not used in test names.
+	// 假设测试名中不使用 "/"。
 	return tb.Name() == testName || strings.HasPrefix(tb.Name(), testName+"/")
 }
 

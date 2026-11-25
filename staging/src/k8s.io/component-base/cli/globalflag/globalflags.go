@@ -26,14 +26,10 @@ import (
 	"k8s.io/component-base/logs"
 )
 
-// AddGlobalFlags explicitly registers flags that libraries (klog, verflag, etc.) register
-// against the global flagsets from "flag" and "k8s.io/klog/v2".
-// We do this in order to prevent unwanted flags from leaking into the component's flagset.
-//
-// k8s.io/component-base/logs.SkipLoggingConfigurationFlags must be used as
-// option when the program also uses a LoggingConfiguration struct for
-// configuring logging. Then only flags not covered by that get added.
-//
+// AddGlobalFlags 显式注册 klog、verflag 等库添加到 "flag" 和
+// "k8s.io/klog/v2" 全局标志集中的标志，防止不需要的标志泄漏到组件标志集。
+// 程序同时使用 LoggingConfiguration 配置日志时，应传入
+// k8s.io/component-base/logs.SkipLoggingConfigurationFlags 选项，仅添加未被它覆盖的标志。
 // 默认只添加日志与 help 标志；需要其他库标志时用 Register 逐个引入。
 func AddGlobalFlags(fs *pflag.FlagSet, name string, opts ...logs.Option) {
 	logs.AddFlags(fs, opts...)
@@ -42,8 +38,7 @@ func AddGlobalFlags(fs *pflag.FlagSet, name string, opts ...logs.Option) {
 	fs.BoolP("help", "h", false, fmt.Sprintf("help for %s", name))
 }
 
-// Register adds a flag to local that targets the Value associated with the Flag named globalName in flag.CommandLine.
-//
+// Register 向 local 添加一个标志，其目标为 flag.CommandLine 中名为 globalName 的标志值。
 // 找不到全局标志时 panic：这属于编程错误（忘记导入注册包），应在启动期暴露。
 func Register(local *pflag.FlagSet, globalName string) {
 	if f := flag.CommandLine.Lookup(globalName); f != nil {

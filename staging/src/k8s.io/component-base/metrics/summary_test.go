@@ -41,7 +41,6 @@ func TestSummary(t *testing.T) {
 		expectedHelp        string
 	}{
 		// 未弃用指标：Help 只带稳定性前缀。
-		// Non-deprecated metrics
 		{
 			desc: "ALPHA metric non deprecated",
 			SummaryOpts: &SummaryOpts{
@@ -79,7 +78,6 @@ func TestSummary(t *testing.T) {
 			expectedHelp:        "[STABLE] summary help message",
 		},
 		// 弃用指标：Help 追加弃用版本；ALPHA 弃用会被隐藏，其余仍暴露。
-		// Deprecated metrics
 		{
 			desc: "ALPHA metric deprecated",
 			SummaryOpts: &SummaryOpts{
@@ -120,7 +118,6 @@ func TestSummary(t *testing.T) {
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) summary help message",
 		},
 		// 隐藏指标：不再产生任何输出，Help 不会被标注。
-		// Hidden metrics
 		{
 			desc: "ALPHA metric hidden",
 			SummaryOpts: &SummaryOpts{
@@ -177,7 +174,6 @@ func TestSummary(t *testing.T) {
 			}
 
 			// 每次 Observe 都应使样本数递增，验证 summary 真的在统计。
-			// let's increment the counter and verify that the metric still works
 			c.Observe(1)
 			c.Observe(2)
 			c.Observe(3)
@@ -212,7 +208,6 @@ func TestSummaryVec(t *testing.T) {
 		expectedHelp        string
 	}{
 		// 未弃用指标：Help 只带稳定性前缀。
-		// Non-deprecated metrics
 		{
 			desc: "ALPHA metric non deprecated",
 			SummaryOpts: &SummaryOpts{
@@ -253,7 +248,6 @@ func TestSummaryVec(t *testing.T) {
 			expectedHelp:        "[STABLE] summary help message",
 		},
 		// 弃用指标：Help 追加弃用版本；ALPHA 弃用会被隐藏，其余仍暴露。
-		// Deprecated metrics
 		{
 			desc: "ALPHA metric deprecated",
 			SummaryOpts: &SummaryOpts{
@@ -296,7 +290,6 @@ func TestSummaryVec(t *testing.T) {
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) summary help message",
 		},
 		// 隐藏指标：不再产生任何输出，Help 不会被标注。
-		// Hidden metrics
 		{
 			desc: "ALPHA metric hidden",
 			SummaryOpts: &SummaryOpts{
@@ -356,7 +349,6 @@ func TestSummaryVec(t *testing.T) {
 			}
 
 			// 每个新的标签组合都会创建一个成员，已存在的组合复用。
-			// let's increment the counter and verify that the metric still works
 			c.WithLabelValues("1", "3").Observe(1.0)
 			c.WithLabelValues("2", "3").Observe(1.0)
 			ms, err = registry.Gather()

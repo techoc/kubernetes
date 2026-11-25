@@ -23,13 +23,10 @@ import (
 	"strings"
 )
 
-// TLSCurvePreferences returns a list of Go's crypto/tls CurveID values from the ids passed.
-// The supported values depend on the Go version used.
-// See https://pkg.go.dev/crypto/tls#CurveID for values supported for each Go version.
-//
-// TLSCurvePreferences 把命令行给出的曲线 ID 转换为 tls.CurveID。
-// 可选值与 Go 版本有关，因此这里不维护白名单，而是借助 CurveID.String()
-// 判断当前 Go 是否认识该 ID。
+// TLSCurvePreferences 把传入的 ID 转换为 Go crypto/tls 的 CurveID 值列表。
+// 可选值与 Go 版本有关，各版本支持的值见：
+// https://pkg.go.dev/crypto/tls#CurveID
+// 这里不维护白名单，而是借助 CurveID.String() 判断当前 Go 是否认识该 ID。
 func TLSCurvePreferences(curveIDs []int32) ([]tls.CurveID, error) {
 	// 未配置时返回 nil，交由 crypto/tls 使用其默认曲线集合。
 	if len(curveIDs) == 0 {

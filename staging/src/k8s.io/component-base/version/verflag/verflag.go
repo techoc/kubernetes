@@ -14,10 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package verflag defines utility functions to handle command line flags
-// related to version of Kubernetes.
-//
-// Package verflag 负责 --version 相关命令行标志：
+// Package verflag 提供处理 Kubernetes 版本相关命令行标志的工具函数，负责 --version 标志：
 // 既可打印版本后退出，也允许在启动时覆盖上报的 git 版本，
 // 后者供测试或自定义构建使用。
 package verflag
@@ -90,7 +87,7 @@ func (v *versionValue) String() string {
 	return string(*v)
 }
 
-// The type of the flag as required by the pflag.Value interface
+// Type 返回 pflag.Value 接口要求的标志类型。
 func (v *versionValue) Type() string {
 	return "version"
 }
@@ -99,7 +96,7 @@ func (v *versionValue) Type() string {
 func VersionVar(p *versionValue, name string, value versionValue, usage string) {
 	*p = value
 	flag.Var(p, name, usage)
-	// "--version" will be treated as "--version=true"
+	// "--version" 将被视为 "--version=true"。
 	flag.Lookup(name).NoOptDefVal = "true"
 }
 
@@ -117,23 +114,19 @@ var (
 	programName = "Kubernetes"
 )
 
-// AddFlags registers this package's flags on arbitrary FlagSets, such that they point to the
-// same value as the global flags.
-//
-// AddFlags 把全局 --version 标志挂到给定 FlagSet 上，多个 FlagSet 共享同一份状态。
+// AddFlags 把本包的标志注册到任意 FlagSet，使其指向与全局标志相同的值。
+// 多个 FlagSet 共享同一份状态。
 func AddFlags(fs *flag.FlagSet) {
 	fs.AddFlag(flag.Lookup(versionFlagName))
 }
 
-// variables for unit testing PrintAndExitIfRequested
+// 用于单元测试 PrintAndExitIfRequested 的变量。
 var (
 	output = io.Writer(os.Stdout)
 	exit   = os.Exit
 )
 
-// PrintAndExitIfRequested will check if --version or --version=raw was passed
-// and, if so, print the version and exit.
-//
+// PrintAndExitIfRequested 检查是否传入 --version 或 --version=raw，若是则打印版本并退出。
 // raw 模式用 %#v 打印完整结构，便于脚本解析所有字段；普通模式只打印一行
 // "程序名 版本"。遇到这两个值以外的值（包括被覆盖的 vX.Y.Z）不会退出。
 func PrintAndExitIfRequested() {

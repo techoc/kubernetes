@@ -21,9 +21,7 @@ limitations under the License.
 package cli
 
 // logRaceDetection 在未启用 -race 的构建中是空操作。
-//
 // 同名函数在 withrace.go 中另有实现，只有内建竞态检测时才会打印提示；
 // 用构建标签拆分可以让带 race 与不带 race 的二进制行为各自明确。
 func logRaceDetection() {
-	// NOP. The variant in withrace.go prints a message if race detection is built in.
 }

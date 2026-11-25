@@ -30,9 +30,7 @@ const (
 	// alpha: v1.36
 	// beta: v1.37
 	//
-	// Enables native histogram support for Kubernetes metrics.
-	// When enabled, histogram metrics will be exposed in both classic
-	// and native histogram formats.
+	// NativeHistograms 启用 Kubernetes 指标的原生直方图支持，开启后同时输出经典桶与原生直方图格式。
 	// 开启后同时输出经典桶与原生直方图，便于抓取端逐步迁移而不破坏旧消费者。
 	NativeHistograms featuregate.Feature = "NativeHistograms"
 )
@@ -48,14 +46,12 @@ func featureGates() map[featuregate.Feature]featuregate.VersionedSpecs {
 	}
 }
 
-// AddFeatureGates adds all feature gates used by this package.
+// AddFeatureGates 添加本包使用的全部特性门控。
 func AddFeatureGates(mutableFeatureGate featuregate.MutableVersionedFeatureGate) error {
 	return mutableFeatureGate.AddVersioned(featureGates())
 }
 
-// ApplyFeatureGates propagates the current feature gate state to the metrics
-// subsystem. It must be called after feature gates are finalised and before
-// any histogram metrics are registered.
+// ApplyFeatureGates 将当前特性门控状态传递到 metrics 子系统，必须在特性门控确定后、任何直方图指标注册前调用。
 // 把 gate 状态写入 metrics 内部的原子开关；因此调用时机必须早于直方图注册，
 // 否则已按旧状态创建的指标不会补发原生直方图。
 func ApplyFeatureGates(featureGate featuregate.FeatureGate) {

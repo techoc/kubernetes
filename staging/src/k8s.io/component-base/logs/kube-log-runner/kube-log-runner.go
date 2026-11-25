@@ -87,7 +87,7 @@ func configureAndRun(open OpenFunc) error {
 		return fmt.Errorf("log-file-size must be non-negative quantity")
 	}
 
-	// Check the time.duration is not negative
+	// 检查 time.Duration 是否为负数。
 	if *logFileAge < 0 {
 		return fmt.Errorf("log-file-age must be non-negative")
 	}
@@ -126,7 +126,7 @@ func configureAndRun(open OpenFunc) error {
 		return fmt.Errorf("starting command: %w", err)
 	}
 
-	// Handle signals and shutdown process gracefully.
+	// 处理信号并优雅关闭进程。
 	// 信号转发放到独立 goroutine，主 goroutine 专注等待子进程退出。
 	go setupSigHandler(cmd.Process)
 	if err := cmd.Wait(); err != nil {
@@ -135,7 +135,7 @@ func configureAndRun(open OpenFunc) error {
 	return nil
 }
 
-// cmdInfo generates a useful look at what the command is for printing/debug.
+// cmdInfo 生成便于打印和调试的命令信息。
 //
 // cmdInfo 把实际生效的配置与命令拼成可读文本，方便排查参数未生效的问题。
 func cmdInfo(cmd *exec.Cmd) string {
@@ -148,20 +148,19 @@ Args (comma-delimited): %v`, *flushInterval, *logFilePath, logFileSize.Value(), 
 	)
 }
 
-// setupSigHandler will forward any termination signals to the process
+// setupSigHandler 将终止信号转发给进程。
 //
 // setupSigHandler 接收终止信号并原样转发给子进程；自身不直接退出，
 // 这样保留子进程自己的优雅关闭逻辑（flush、清理临时文件等）。
 func setupSigHandler(process *os.Process) {
-	// terminationSignals are signals that cause the program to exit in the
-	// supported platforms (linux, darwin, windows).
+	// terminationSignals 是使程序在受支持平台（linux、darwin、windows）上退出的信号。
 	terminationSignals := []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT}
 
 	// 带缓冲 1 的 channel 足以容纳一次信号，转发前重复到达也不会阻塞发送方。
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, terminationSignals...)
 
-	// Block until a signal is received.
+	// 阻塞直到收到信号。
 	log.Println("Now listening for interrupts")
 	s := <-c
 	log.Printf("Got signal: %v. Sending down to process (PID: %v)", s, process.Pid)

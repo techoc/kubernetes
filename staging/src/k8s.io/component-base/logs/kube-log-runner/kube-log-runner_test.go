@@ -25,7 +25,7 @@ import (
 	"k8s.io/component-base/logs/kube-log-runner/internal/logrotation"
 )
 
-// TestConfigureAndRun tests configureAndRun with various flag inputs.
+// TestConfigureAndRun 使用不同 flag 输入测试 configureAndRun。
 //
 // 通过管道捕获 stdout，比较“是否设置了日志文件/分流/flush 等标志”时的输出差异。
 // 注意测试使用 OpenStub，它只打印参数而不真正写文件。
@@ -96,7 +96,7 @@ func TestConfigureAndRun(t *testing.T) {
 				t.Fatalf("Failed to parse commandline: %v", err)
 				return
 			}
-			// Capture the log output and compare
+			// 捕获日志输出并比较。
 			originalStdout := os.Stdout
 			reader, writer, err := os.Pipe()
 			if err != nil {
@@ -137,7 +137,7 @@ func TestConfigureAndRun(t *testing.T) {
 				t.Errorf("Expected '%s' but got '%s'", tt.outputWanted, output)
 			}
 
-			// Restore original os.Stdout
+			// 恢复原始 os.Stdout。
 			os.Stdout = originalStdout
 		})
 	}
@@ -191,7 +191,7 @@ func TestNegativeConfigureAndRun(t *testing.T) {
 }
 
 func resetFlags() {
-	// Reinitialize the flag to the default value
+	// 重新初始化 flag 为默认值。
 	// 重建 flag.CommandLine 并重新注册，确保默认值恢复初始状态。
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	initFlags()

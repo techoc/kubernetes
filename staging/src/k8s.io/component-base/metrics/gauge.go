@@ -26,9 +26,8 @@ import (
 	"k8s.io/component-base/version"
 )
 
-// Gauge is our internal representation for our wrapping struct around prometheus
-// gauges. kubeGauge implements both kubeCollector and KubeGauge.
-// 未注册前底层是一个共享的 no-op，注册时才替换为真正的 prometheus.Gauge。
+// Gauge 包装 prometheus Gauge，同时实现 kubeCollector 与 GaugeMetric。
+// 注册前使用共享 noop，注册时才替换为真正的 prometheus.Gauge。
 type Gauge struct {
 	GaugeMetric
 	*GaugeOpts
@@ -40,9 +39,8 @@ var _ GaugeMetric = &Gauge{}
 var _ Registerable = &Gauge{}
 var _ kubeCollector = &Gauge{}
 
-// NewGauge returns an object which satisfies the kubeCollector, Registerable, and Gauge interfaces.
-// However, the object returned will not measure anything unless the collector is first
-// registered, since the metric is lazily instantiated.
+// NewGauge 返回实现 kubeCollector、Registerable 与 GaugeMetric 的对象。
+// 指标惰性创建，因此注册前不会记录任何数据。
 func NewGauge(opts *GaugeOpts) *Gauge {
 	// 空 stability level 默认为 ALPHA，避免未声明稳定性时被当作 STABLE。
 	opts.StabilityLevel.setDefaults()
@@ -56,41 +54,38 @@ func NewGauge(opts *GaugeOpts) *Gauge {
 	return kc
 }
 
-// setPrometheusGauge sets the underlying KubeGauge object, i.e. the thing that does the measurement.
+// setPrometheusGauge 设置实际负责测量的 GaugeMetric，并同步更新 selfCollector。
 func (g *Gauge) setPrometheusGauge(gauge prometheus.Gauge) {
 	g.GaugeMetric = gauge
 	g.initSelfCollection(gauge)
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 解析并返回弃用版本；未配置时返回 nil。
 func (g *Gauge) DeprecatedVersion() *semver.Version {
 	return parseSemver(g.GaugeOpts.DeprecatedVersion)
 }
 
-// initializeMetric invocation creates the actual underlying Gauge. Until this method is called
-// the underlying gauge is a no-op.
+// initializeMetric 在注册时创建真正的 Gauge；创建前底层 gauge 为 noop。
 func (g *Gauge) initializeMetric() {
-	// 稳定性与弃用信息通过 Help 前缀暴露，故必须在构造 prometheus 描述符前附加。
+	// 稳定性与弃用信息通过 Help 前缀暴露，必须在构造 prometheus 描述符前附加。
 	g.GaugeOpts.annotateStabilityLevel()
-	// this actually creates the underlying prometheus gauge.
+	// 此处创建底层 prometheus gauge。
 	g.setPrometheusGauge(prometheus.NewGauge(g.GaugeOpts.toPromGaugeOpts()))
 }
 
-// initializeDeprecatedMetric invocation creates the actual (but deprecated) Gauge. Until this method
-// is called the underlying gauge is a no-op.
+// initializeDeprecatedMetric 创建已弃用的 Gauge，并在 Help 中追加弃用说明。
 func (g *Gauge) initializeDeprecatedMetric() {
 	// 先标记弃用，使 Help 带上弃用版本，再按普通路径创建。
 	g.GaugeOpts.markDeprecated()
 	g.initializeMetric()
 }
 
-// WithContext allows the normal Gauge metric to pass in context. The context is no-op now.
+// WithContext 接收上下文并返回原 GaugeMetric；当前 gauge 操作不使用上下文。
 func (g *Gauge) WithContext(ctx context.Context) GaugeMetric {
 	return g.GaugeMetric
 }
 
-// GaugeVec is the internal representation of our wrapping struct around prometheus
-// gaugeVecs. kubeGaugeVec implements both kubeCollector and KubeGaugeVec.
+// GaugeVec 包装 prometheus GaugeVec，同时实现 kubeCollector 与 GaugeVecMetric。
 type GaugeVec struct {
 	*prometheus.GaugeVec
 	*GaugeOpts
@@ -102,10 +97,8 @@ var _ GaugeVecMetric = &GaugeVec{}
 var _ Registerable = &GaugeVec{}
 var _ kubeCollector = &GaugeVec{}
 
-// NewGaugeVec returns an object which satisfies the kubeCollector, Registerable, and GaugeVecMetric interfaces.
-// However, the object returned will not measure anything unless the collector is first
-// registered, since the metric is lazily instantiated, and only members extracted after
-// registration will actually measure anything.
+// NewGaugeVec 返回实现 kubeCollector、Registerable 与 GaugeVecMetric 的对象。
+// 指标惰性创建，且只有注册后提取的成员才会真正记录数据。
 func NewGaugeVec(opts *GaugeOpts, labels []string) *GaugeVec {
 	// 与 Gauge 相同，未声明稳定性时按 ALPHA 处理。
 	opts.StabilityLevel.setDefaults()
@@ -123,36 +116,34 @@ func NewGaugeVec(opts *GaugeOpts, labels []string) *GaugeVec {
 	return cv
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 解析并返回弃用版本；未配置时返回 nil。
 func (v *GaugeVec) DeprecatedVersion() *semver.Version {
 	return parseSemver(v.GaugeOpts.DeprecatedVersion)
 }
 
-// initializeMetric invocation creates the actual underlying GaugeVec. Until this method is called
-// the underlying gaugeVec is a no-op.
+// initializeMetric 在注册时创建真正的 GaugeVec；创建前底层 gaugeVec 为 noop。
 func (v *GaugeVec) initializeMetric() {
 	v.GaugeOpts.annotateStabilityLevel()
 	v.GaugeVec = prometheus.NewGaugeVec(v.GaugeOpts.toPromGaugeOpts(), v.originalLabels)
 }
 
-// initializeDeprecatedMetric invocation creates the actual (but deprecated) GaugeVec. Until this method is called
-// the underlying gaugeVec is a no-op.
+// initializeDeprecatedMetric 创建已弃用的 GaugeVec，并在 Help 中追加弃用说明。
 func (v *GaugeVec) initializeDeprecatedMetric() {
 	v.GaugeOpts.markDeprecated()
 	v.initializeMetric()
 }
 
+// WithLabelValuesChecked 按标签值顺序返回子 gauge，并检查注册状态及标签是否合法。
+// 隐藏指标返回 noop 且无错误；未注册返回 noop 和 ErrIsNotRegistered。
 func (v *GaugeVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 	if !v.IsCreated() {
-		// 隐藏指标返回 noop 且无错误；未注册返回 noop + ErrIsNotRegistered。
 		if v.IsHidden() {
 			return noop, nil
 		}
-		return noop, errNotRegistered // return no-op gauge
+		return noop, errNotRegistered
 	}
 
-	// Initialize label allow lists if not already initialized
-	// 允许列表可能在指标创建之后才被加载，因此用 Once 延迟绑定。
+	// 允许列表可能在指标创建后才加载，因此用 Once 延迟绑定。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -161,8 +152,7 @@ func (v *GaugeVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label values to allowed values
-	// 把不在允许列表中的标签值替换为 "unexpected"，以限制指标基数。
+	// 将允许列表之外的标签值替换为 "unexpected"，以限制指标基数。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainToAllowedList(v.originalLabels, lvs)
 	}
@@ -170,7 +160,8 @@ func (v *GaugeVec) WithLabelValuesChecked(lvs ...string) (GaugeMetric, error) {
 	return v.GetMetricWithLabelValues(lvs...)
 }
 
-// DeleteLabelValuesChecked 仅在指标已创建时才能删除；未注册时按“无可删”处理。
+// DeleteLabelValuesChecked 仅在指标已创建时删除指定标签值的子指标。
+// 隐藏或未注册向量均视为无可删成员，分别返回 false、nil 或 false、ErrIsNotRegistered。
 func (v *GaugeVec) DeleteLabelValuesChecked(lvs ...string) (bool, error) {
 	if !v.IsCreated() {
 		if v.IsHidden() {
@@ -182,21 +173,15 @@ func (v *GaugeVec) DeleteLabelValuesChecked(lvs ...string) (bool, error) {
 	return v.GaugeVec.DeleteLabelValues(lvs...), nil
 }
 
-// Default Prometheus Vec behavior is that member extraction results in creation of a new element
-// if one with the unique label values is not found in the underlying stored metricMap.
-// This means  that if this function is called but the underlying metric is not registered
-// (which means it will never be exposed externally nor consumed), the metric will exist in memory
-// for perpetuity (i.e. throughout application lifecycle).
+// prometheus Vec 默认会在底层 metricMap 中找不到对应标签值时创建新成员。
+// 因此，若在注册前提取成员，该指标虽不会对外暴露或消费，却会永久驻留内存，直到应用结束。
 //
-// For reference: https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/gauge.go#L190-L208
+// 参考：https://github.com/prometheus/client_golang/blob/v0.9.2/prometheus/gauge.go#L190-L208
 //
-// In contrast, the Vec behavior in this package is that member extraction before registration
-// returns a permanent noop object.
+// 相比之下，本包在注册前提取成员时返回永久 noop 对象。
 
-// WithLabelValues returns the GaugeMetric for the given slice of label
-// values (same order as the VariableLabels in Desc). If that combination of
-// label values is accessed for the first time, a new GaugeMetric is created IFF the gaugeVec
-// has been registered to a metrics registry.
+// WithLabelValues 按标签值顺序返回 GaugeMetric，顺序应与 Desc 中的 VariableLabels 一致。
+// 首次访问某组标签值时，只有 gaugeVec 已注册才会创建新指标。
 func (v *GaugeVec) WithLabelValues(lvs ...string) GaugeMetric {
 	ans, err := v.WithLabelValuesChecked(lvs...)
 	// 未注册不算错误（返回 noop），其它错误（如标签数量不符）则 panic。
@@ -206,7 +191,7 @@ func (v *GaugeVec) WithLabelValues(lvs ...string) GaugeMetric {
 	panic(err)
 }
 
-// DeleteLabelValues 删除指定标签值的子指标；未注册时返回 false。
+// DeleteLabelValues 删除指定标签值的子指标；隐藏或未注册时返回 false。
 func (v *GaugeVec) DeleteLabelValues(lvs ...string) bool {
 	ans, err := v.DeleteLabelValuesChecked(lvs...)
 	if err == nil || ErrIsNotRegistered(err) {
@@ -221,10 +206,10 @@ func (v *GaugeVec) WithChecked(labels map[string]string) (GaugeMetric, error) {
 		if v.IsHidden() {
 			return noop, nil
 		}
-		return noop, errNotRegistered // return no-op gauge
+		return noop, errNotRegistered
 	}
 
-	// Initialize label allow lists if not already initialized
+	// 若尚未初始化，则延迟绑定标签允许列表。
 	v.initializeLabelAllowListsOnce.Do(func() {
 		allowListLock.RLock()
 		if allowList, ok := labelValueAllowLists[v.FQName()]; ok {
@@ -233,7 +218,7 @@ func (v *GaugeVec) WithChecked(labels map[string]string) (GaugeMetric, error) {
 		allowListLock.RUnlock()
 	})
 
-	// Constrain label map to allowed values
+	// 将标签 map 约束到允许值。
 	if v.LabelValueAllowLists != nil {
 		v.LabelValueAllowLists.ConstrainLabelMap(labels)
 	}
@@ -241,10 +226,8 @@ func (v *GaugeVec) WithChecked(labels map[string]string) (GaugeMetric, error) {
 	return v.GetMetricWith(labels)
 }
 
-// With returns the GaugeMetric for the given Labels map (the label names
-// must match those of the VariableLabels in Desc). If that label map is
-// accessed for the first time, a new GaugeMetric is created IFF the gaugeVec has
-// been registered to a metrics registry.
+// With 按标签 map 返回 GaugeMetric，标签名必须与 Desc 中的 VariableLabels 一致。
+// 首次访问该标签 map 时，只有 gaugeVec 已注册才会创建新指标。
 func (v *GaugeVec) With(labels map[string]string) GaugeMetric {
 	ans, err := v.WithChecked(labels)
 	if err == nil || ErrIsNotRegistered(err) {
@@ -253,21 +236,16 @@ func (v *GaugeVec) With(labels map[string]string) GaugeMetric {
 	panic(err)
 }
 
-// Delete deletes the metric where the variable labels are the same as those
-// passed in as labels. It returns true if a metric was deleted.
-//
-// It is not an error if the number and names of the Labels are inconsistent
-// with those of the VariableLabels in Desc. However, such inconsistent Labels
-// can never match an actual metric, so the method will always return false in
-// that case.
+// Delete 删除变量标签与给定标签 map 相匹配的指标，删除成功时返回 true。
+// 标签数量或名称与 Desc 中的 VariableLabels 不一致不算错误，但不可能匹配实际指标，因此始终返回 false。
 func (v *GaugeVec) Delete(labels map[string]string) bool {
 	if !v.IsCreated() {
-		return false // since we haven't created the metric, we haven't deleted a metric with the passed in values
+		return false // 尚未创建指标，因此未删除任何成员
 	}
 	return v.GaugeVec.Delete(labels)
 }
 
-// Reset deletes all metrics in this vector.
+// Reset 删除向量中的所有指标。
 func (v *GaugeVec) Reset() {
 	if !v.IsCreated() {
 		return
@@ -276,8 +254,8 @@ func (v *GaugeVec) Reset() {
 	v.GaugeVec.Reset()
 }
 
-// ResetLabelAllowLists resets the label allow list for the GaugeVec.
-// NOTE: This should only be used in test.
+// ResetLabelAllowLists 重置 GaugeVec 的标签允许列表。
+// 注意：仅供测试使用。
 func (v *GaugeVec) ResetLabelAllowLists() {
 	v.initializeLabelAllowListsOnce = sync.Once{}
 	v.LabelValueAllowLists = nil
@@ -294,19 +272,15 @@ func newGaugeFunc(opts *GaugeOpts, function func() float64, v semver.Version) Ga
 	return prometheus.NewGaugeFunc(g.GaugeOpts.toPromGaugeOpts(), function)
 }
 
-// NewGaugeFunc creates a new GaugeFunc based on the provided GaugeOpts. The
-// value reported is determined by calling the given function from within the
-// Write method. Take into account that metric collection may happen
-// concurrently. If that results in concurrent calls to Write, like in the case
-// where a GaugeFunc is directly registered with Prometheus, the provided
-// function must be concurrency-safe.
+// NewGaugeFunc 根据 GaugeOpts 创建 GaugeFunc，其值在 Write 时调用给定函数获得。
+// 指标采集可能并发进行；若多个 Write 并发调用该函数（例如直接向 prometheus 注册 GaugeFunc），函数必须并发安全。
 func NewGaugeFunc(opts *GaugeOpts, function func() float64) GaugeFunc {
 	v := parseVersion(version.Get())
 
 	return newGaugeFunc(opts, function, v)
 }
 
-// WithContext returns wrapped GaugeVec with context
+// WithContext 返回带上下文的 GaugeVec 包装。
 func (v *GaugeVec) WithContext(ctx context.Context) *GaugeVecWithContext {
 	return &GaugeVecWithContext{
 		ctx:      ctx,
@@ -314,23 +288,24 @@ func (v *GaugeVec) WithContext(ctx context.Context) *GaugeVecWithContext {
 	}
 }
 
+// InterfaceWithContext 返回带上下文的 GaugeVecMetric。
 func (v *GaugeVec) InterfaceWithContext(ctx context.Context) GaugeVecMetric {
 	return v.WithContext(ctx)
 }
 
-// GaugeVecWithContext is the wrapper of GaugeVec with context.
+// GaugeVecWithContext 是带上下文的 GaugeVec 包装。
 // 目前 context 仅被保存而不参与指标操作，保留它是为了 API 一致性。
 type GaugeVecWithContext struct {
 	*GaugeVec
 	ctx context.Context
 }
 
-// WithLabelValues is the wrapper of GaugeVec.WithLabelValues.
+// WithLabelValues 包装 GaugeVec.WithLabelValues。
 func (vc *GaugeVecWithContext) WithLabelValues(lvs ...string) GaugeMetric {
 	return vc.GaugeVec.WithLabelValues(lvs...)
 }
 
-// With is the wrapper of GaugeVec.With.
+// With 包装 GaugeVec.With。
 func (vc *GaugeVecWithContext) With(labels map[string]string) GaugeMetric {
 	return vc.GaugeVec.With(labels)
 }

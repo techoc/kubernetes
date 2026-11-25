@@ -33,9 +33,7 @@ const (
 	// alpha: v1.32
 	// beta: v1.36
 	//
-	// Enables /statusz endpoint for a component making it accessible to
-	// users with the system:monitoring cluster role.
-	//
+	// 为组件启用 /statusz 端点，使具有 system:monitoring 集群角色的用户能够访问。
 	// 1.36 起默认开启，但仅授予 system:monitoring 角色只读访问。
 	ComponentStatusz featuregate.Feature = "ComponentStatusz"
 )
@@ -55,8 +53,7 @@ func featureGates() map[featuregate.Feature]featuregate.VersionedSpecs {
 	}
 }
 
-// AddFeatureGates adds all feature gates used by this package.
-//
+// AddFeatureGates 添加本包使用的全部特性门控。
 // 由组件在初始化时调用；AddVersioned 会按当前模拟版本解析各阶段。
 func AddFeatureGates(mutableFeatureGate featuregate.MutableVersionedFeatureGate) error {
 	return mutableFeatureGate.AddVersioned(featureGates())

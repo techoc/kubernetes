@@ -21,8 +21,7 @@ import (
 )
 
 var (
-	// pre-defined feature gates with the features from this package in a
-	// certain state (default, all enabled, all disabled).
+	// 预定义本包 feature gate 的默认、全部启用和全部禁用三种状态。
 	// 预先构造三种状态，供测试验证“某特性关闭时行为不同”而无需各自搭建 gate。
 	defaultFeatureGate, enabledFeatureGate, disabledFeatureGate featuregate.FeatureGate
 )

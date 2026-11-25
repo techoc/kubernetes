@@ -24,30 +24,26 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-// GaugeOps is the part of `prometheus.Gauge` that is relevant to
-// instrumented code.
-// This factoring should be in prometheus, analogous to the way
-// it already factors out the Observer interface for histograms and summaries.
+// GaugeOps 是 prometheus.Gauge 中与埋点代码相关的方法子集。
+// Prometheus 已从 histogram 和 summary 中拆分出 Observer 接口，这里也采用类似的拆分方式。
 type GaugeOps interface {
-	// Set is the same as Gauge.Set
+	// Set 与 Gauge.Set 相同。
 	Set(float64)
-	// Inc is the same as Gauge.inc
+	// Inc 与 Gauge.Inc 相同。
 	Inc()
-	// Dec is the same as Gauge.Dec
+	// Dec 与 Gauge.Dec 相同。
 	Dec()
-	// Add is the same as Gauge.Add
+	// Add 与 Gauge.Add 相同。
 	Add(float64)
-	// Sub is the same as Gauge.Sub
+	// Sub 与 Gauge.Sub 相同。
 	Sub(float64)
 
-	// SetToCurrentTime the same as Gauge.SetToCurrentTime
+	// SetToCurrentTime 与 Gauge.SetToCurrentTime 相同。
 	SetToCurrentTime()
 }
 
-// A TimingHistogram tracks how long a `float64` variable spends in
-// ranges defined by buckets.  Time is counted in nanoseconds.  The
-// histogram's sum is the integral over time (in nanoseconds, from
-// creation of the histogram) of the variable's value.
+// TimingHistogram 跟踪一个 float64 变量在各桶定义的值区间中停留的时长，时间以纳秒计。
+// 直方图的总和是从创建时刻起，变量值随时间（纳秒）积分的结果。
 // 典型用途是按 bucket 统计“处于某值区间的持续时间”，而不是单次观测次数。
 type TimingHistogram interface {
 	prometheus.Metric
@@ -55,7 +51,7 @@ type TimingHistogram interface {
 	GaugeOps
 }
 
-// TimingHistogramOpts is the parameters of the TimingHistogram constructor
+// TimingHistogramOpts 是 TimingHistogram 构造函数的参数。
 type TimingHistogramOpts struct {
 	Namespace   string
 	Subsystem   string
@@ -63,26 +59,22 @@ type TimingHistogramOpts struct {
 	Help        string
 	ConstLabels prometheus.Labels
 
-	// Buckets defines the buckets into which observations are
-	// accumulated. Each element in the slice is the upper
-	// inclusive bound of a bucket. The values must be sorted in
-	// strictly increasing order. There is no need to add a
-	// highest bucket with +Inf bound. The default value is
-	// prometheus.DefBuckets.
+	// Buckets 定义观测值累计到哪些桶。切片中的每个元素都是一个桶的上界（含该边界），
+	// 取值必须严格递增。无需添加上界为 +Inf 的桶，默认值为 prometheus.DefBuckets。
 	Buckets []float64
 
-	// The initial value of the variable.
+	// InitialValue 是变量的初始值。
 	// 指标从该值开始，自创建起按它累计“时间×值”的积分。
 	InitialValue float64
 }
 
-// NewTimingHistogram creates a new TimingHistogram
+// NewTimingHistogram 创建一个新的 TimingHistogram。
 func NewTimingHistogram(opts TimingHistogramOpts) (TimingHistogram, error) {
 	// 生产实现直接使用系统时钟；测试可通过 NewTestableTimingHistogram 注入假时钟。
 	return NewTestableTimingHistogram(time.Now, opts)
 }
 
-// NewTestableTimingHistogram creates a TimingHistogram that uses a mockable clock
+// NewTestableTimingHistogram 创建一个使用可模拟时钟的 TimingHistogram。
 func NewTestableTimingHistogram(nowFunc func() time.Time, opts TimingHistogramOpts) (TimingHistogram, error) {
 	desc := prometheus.NewDesc(
 		prometheus.BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
@@ -135,14 +127,15 @@ type timingHistogram struct {
 	nowFunc  func() time.Time
 	weighted *weightedHistogram
 
-	// The following fields must only be accessed with weighted's lock held
+	// 以下字段只能在持有 weighted 的锁时访问。
 
-	lastSetTime time.Time // identifies when value was last set
+	lastSetTime time.Time // 记录上次设置值的时间
 	value       float64
 }
 
 var _ TimingHistogram = &timingHistogram{}
 
+// Set 将当前值设置为 newValue，并累计此前时段的积分。
 func (th *timingHistogram) Set(newValue float64) {
 	th.update(func(float64) float64 { return newValue })
 }
@@ -195,7 +188,7 @@ func (th *timingHistogram) Desc() *prometheus.Desc {
 
 // Write 在写出前把“最后一次更新至今”的时段也计入，避免抓取间隔内的积分丢失。
 func (th *timingHistogram) Write(dest *dto.Metric) error {
-	th.Add(0) // account for time since last update
+	th.Add(0) // 计入自上次更新以来经过的时间
 	return th.weighted.Write(dest)
 }
 

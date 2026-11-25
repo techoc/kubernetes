@@ -47,7 +47,7 @@ func TestHistogram(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
-		// Non-deprecated metrics
+		// 未弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			HistogramOpts: &HistogramOpts{
@@ -87,7 +87,7 @@ func TestHistogram(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] histogram help message",
 		},
-		// Deprecated metrics
+		// 弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			HistogramOpts: &HistogramOpts{
@@ -130,7 +130,7 @@ func TestHistogram(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) histogram help message",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			HistogramOpts: &HistogramOpts{
@@ -203,8 +203,7 @@ func TestHistogram(t *testing.T) {
 				assert.Equalf(t, test.expectedHelp, metric.GetHelp(), "Got %s as help message, want %s", metric.GetHelp(), test.expectedHelp)
 			}
 
-			// let's increment the counter and verify that the metric still works
-			// 无论是否隐藏，底层观测都应被记录；隐藏只影响是否暴露。
+			// 无论是否隐藏，四次观测都应被记录；隐藏只影响是否暴露。
 			c.Observe(1)
 			c.Observe(2)
 			c.Observe(3)
@@ -238,7 +237,7 @@ func TestHistogramVec(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
-		// Non-deprecated metrics
+		// 未弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			HistogramOpts: &HistogramOpts{
@@ -280,7 +279,7 @@ func TestHistogramVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] histogram help message",
 		},
-		// Deprecated metrics
+		// 弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			HistogramOpts: &HistogramOpts{
@@ -327,7 +326,7 @@ func TestHistogramVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) histogram help message",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			HistogramOpts: &HistogramOpts{
@@ -396,7 +395,7 @@ func TestHistogramVec(t *testing.T) {
 				}
 			}
 
-			// let's increment the counter and verify that the metric still works
+			// 观测另外两个标签组合，确认各成员独立计数。
 			c.WithLabelValues("1", "3").Observe(1.0)
 			c.WithLabelValues("2", "3").Observe(1.0)
 			ms, err = registry.Gather()
@@ -495,7 +494,7 @@ func TestHistogramWithLabelValueAllowList(t *testing.T) {
 // TestHistogramWithExemplar 验证 WithContext 把 trace/span 附着到
 // 观测值落入的桶上。
 func TestHistogramWithExemplar(t *testing.T) {
-	// Arrange.
+	// 准备。
 	traceID := trace.TraceID([]byte("trace-0000-xxxxx"))
 	spanID := trace.SpanID([]byte("span-0000-xxxxx"))
 	ctxForSpanCtx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{
@@ -518,10 +517,10 @@ func TestHistogramWithExemplar(t *testing.T) {
 	})
 	registry.MustRegister(histogram)
 
-	// Act.
+	// 执行。
 	histogram.WithContext(ctxForSpanCtx).Observe(value)
 
-	// Assert.
+	// 断言。
 	mfs, err := registry.Gather()
 	if err != nil {
 		t.Fatalf("Gather failed %v", err)
@@ -584,7 +583,7 @@ func TestHistogramWithExemplar(t *testing.T) {
 // TestHistogramVecWithExemplar 验证带 label 的 histogram 也能正确
 // 携带 exemplar（WithContext 返回的包装器需把 ctx 传到底层）。
 func TestHistogramVecWithExemplar(t *testing.T) {
-	// Arrange.
+	// 准备。
 	traceID := trace.TraceID([]byte("trace-0000-xxxxx"))
 	spanID := trace.SpanID([]byte("span-0000-xxxxx"))
 	ctxForSpanCtx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{
@@ -608,10 +607,10 @@ func TestHistogramVecWithExemplar(t *testing.T) {
 	})
 	registry.MustRegister(histogramVec)
 
-	// Act.
+	// 执行。
 	h.WithLabelValues("foo").Observe(value)
 
-	// Assert.
+	// 断言。
 	mfs, err := registry.Gather()
 	if err != nil {
 		t.Fatalf("Gather failed %v", err)
@@ -671,9 +670,9 @@ func TestHistogramVecWithExemplar(t *testing.T) {
 	}
 }
 
-// TestHistogramConcurrentWithContextRace reproduces the race condition in Histogram.WithContext
-// where h.ctx is written concurrently with reads in withExemplar method.
-// This test simulates the real authentication flow that triggers the race:
+// TestHistogramConcurrentWithContextRace 复现 Histogram.WithContext 中
+// h.ctx 与 withExemplar 并发读写的竞争。
+// 测试模拟触发竞争的真实认证调用链：
 // x509.AuthenticateRequest -> union.AuthenticateRequest -> group.AuthenticateRequest
 //
 // 与 Counter 的版本相同：在 -race 下并发读写 ctx，验证竞争已消除。
@@ -688,31 +687,31 @@ func TestHistogramConcurrentWithContextRace(t *testing.T) {
 
 	h := NewHistogram(opts)
 
-	// Force initialization by calling initializeMetric directly
+	// 直接调用 initializeMetric，强制完成初始化。
 	h.initializeMetric()
 
-	// Create contexts with trace spans to trigger exemplar code path
+	// 创建带 trace span 的 context，以触发 exemplar 代码路径。
 	ctx1, span1 := createContextWithSpan("x509-auth", "authenticate-request")
 	defer span1.End()
 	ctx2, span2 := createContextWithSpan("union-auth", "union-authenticate")
 	defer span2.End()
 
 	var wg sync.WaitGroup
-	iterations := 10000 // Increase iterations to make race more likely
+	iterations := 10000 // 增加迭代次数，提高触发竞争的概率
 
-	// Goroutine 1: Simulate x509 Authenticator calling WithContext
-	// This matches: x509.(*Authenticator).AuthenticateRequest() calling WithContext
+	// goroutine 1：模拟 x509 Authenticator 调用 WithContext。
+	// 对应 x509.(*Authenticator).AuthenticateRequest() 中的 WithContext 调用。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			// Simulate authentication request processing
+			// 模拟认证请求处理。
 			simulateX509AuthenticateRequest(h, ctx1, i)
 		}
 	}()
 
-	// Goroutine 2: Simulate concurrent Observe calls (metrics collection)
-	// This matches the withExemplar/Observe path that reads h.ctx
+	// goroutine 2：模拟并发 Observe 调用（指标采集）。
+	// 对应读取 h.ctx 的 withExemplar/Observe 路径。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -721,24 +720,24 @@ func TestHistogramConcurrentWithContextRace(t *testing.T) {
 		}
 	}()
 
-	// Goroutine 3: Simulate union AuthenticateRequest calling WithContext
-	// This matches: union.(*unionAuthRequestHandler).AuthenticateRequest()
+	// goroutine 3：模拟 union AuthenticateRequest 调用 WithContext。
+	// 对应 union.(*unionAuthRequestHandler).AuthenticateRequest()。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			// Simulate union authentication processing
+			// 模拟 union 认证处理。
 			simulateUnionAuthenticateRequest(h, ctx2, i)
 		}
 	}()
 
-	// Goroutine 4: Simulate group AuthenticateRequest calling WithContext
-	// This matches: group.(*AuthenticatedGroupAdder).AuthenticateRequest()
+	// goroutine 4：模拟 group AuthenticateRequest 调用 WithContext。
+	// 对应 group.(*AuthenticatedGroupAdder).AuthenticateRequest()。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			// Simulate group authentication processing
+			// 模拟 group 认证处理。
 			simulateGroupAuthenticateRequest(h, ctx1, ctx2, i)
 		}
 	}()
@@ -746,25 +745,25 @@ func TestHistogramConcurrentWithContextRace(t *testing.T) {
 	wg.Wait()
 }
 
-// simulateX509AuthenticateRequest simulates the call path from x509 authenticator
+// simulateX509AuthenticateRequest 模拟 x509 认证器的调用路径。
 func simulateX509AuthenticateRequest(h ObserverMetric, ctx context.Context, iteration int) {
-	// Simulate the authentication request processing that calls WithContext
+	// 模拟会调用 WithContext 的认证请求处理。
 	if hWithCtx, ok := h.(*Histogram); ok {
 		hWithCtx.WithContext(ctx)
 	}
 }
 
-// simulateUnionAuthenticateRequest simulates the call path from union authenticator
+// simulateUnionAuthenticateRequest 模拟 union 认证器的调用路径。
 func simulateUnionAuthenticateRequest(h ObserverMetric, ctx context.Context, iteration int) {
-	// Simulate union authentication processing
+	// 模拟 union 认证处理。
 	if hWithCtx, ok := h.(*Histogram); ok {
 		hWithCtx.WithContext(ctx)
 	}
 }
 
-// simulateGroupAuthenticateRequest simulates the call path from group authenticator
+// simulateGroupAuthenticateRequest 模拟 group 认证器的调用路径。
 func simulateGroupAuthenticateRequest(h ObserverMetric, ctx1, ctx2 context.Context, iteration int) {
-	// Alternate between contexts to simulate different authentication scenarios
+	// 在两个 context 间轮换，模拟不同认证场景。
 	ctx := ctx1
 	if iteration%3 == 0 {
 		ctx = ctx2
@@ -775,11 +774,11 @@ func simulateGroupAuthenticateRequest(h ObserverMetric, ctx1, ctx2 context.Conte
 	}
 }
 
-// Helper function to create a context with a valid trace span
+// createContextWithSpan 创建带有效 trace span 的 context。
 func createContextWithSpan(traceID, spanID string) (context.Context, trace.Span) {
 	ctx := context.Background()
 
-	// Create a noop tracer and span for testing
+	// 创建用于测试的 noop tracer 和 span。
 	tracer := tracenoop.NewTracerProvider().Tracer("test")
 	ctx, span := tracer.Start(ctx, "test-span")
 
@@ -835,12 +834,12 @@ func TestNativeHistogramMetricCollection(t *testing.T) {
 			})
 			registry.MustRegister(hist)
 
-			// Observe some values
+			// 观测一组样本。
 			for _, v := range tc.observeValues {
 				hist.Observe(v)
 			}
 
-			// Gather metrics
+			// 采集指标。
 			metricFamilies, err := registry.Gather()
 			require.NoError(t, err, "Failed to gather metrics")
 			require.Len(t, metricFamilies, 1, "Expected exactly one metric family")
@@ -851,26 +850,24 @@ func TestNativeHistogramMetricCollection(t *testing.T) {
 			histogram := mf.GetMetric()[0].GetHistogram()
 			require.NotNil(t, histogram, "Expected histogram metric")
 
-			// Verify classic buckets are always present
 			// 经典桶是向后兼容的基础，native 模式不能取代它。
 			assert.NotEmpty(t, histogram.GetBucket(), "Classic buckets should always be present")
 
-			// Verify sample count matches observed values
+			// 确认样本数与观测次数一致。
 			assert.Equal(t, uint64(len(tc.observeValues)), histogram.GetSampleCount(),
 				"Sample count should match number of observed values")
 
-			// Check for native histogram data
-			// Native histograms have Schema set (it's nil when not using native histograms)
+			// 检查原生直方图数据；Schema 非 nil 表示启用了 native histogram。
 			if tc.expectNativeHistogram {
 				assert.NotNil(t, histogram.Schema,
 					"Schema should not be nil when native histograms are enabled")
 				assert.NotEqual(t, int32(0), histogram.GetSchema(),
 					"Native histogram Schema should be non-zero when enabled")
-				// Since we observed positive values, PositiveSpan should have data
+				// 观测值为正，PositiveSpan 应有数据。
 				assert.NotEmpty(t, histogram.GetPositiveSpan(),
 					"PositiveSpan should have data when native histograms are enabled and positive values are observed")
 			} else {
-				// When disabled, native histogram fields should be empty/nil
+				// 未启用时，原生直方图字段应为空或 nil。
 				assert.Nil(t, histogram.Schema, "Schema should be nil when native histograms are disabled")
 				assert.Empty(t, histogram.GetPositiveSpan(), "PositiveSpan should be empty when native histograms are disabled")
 				assert.Empty(t, histogram.GetNegativeSpan(), "NegativeSpan should be empty when native histograms are disabled")

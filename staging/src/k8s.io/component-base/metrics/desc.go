@@ -26,29 +26,26 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Desc is a prometheus.Desc extension.
-//
-// Use NewDesc to create new Desc instances.
+// Desc 是 prometheus.Desc 的扩展，可通过 NewDesc 创建。
 // Desc 扩展了 prometheus.Desc，额外携带稳定性级别与弃用信息。
 // 创建被延迟到注册时，以便注册时才知道当前版本并判断是否隐藏。
 type Desc struct {
-	// fqName has been built from Namespace, Subsystem, and Name.
+	// fqName 由 Namespace、Subsystem 和 Name 拼接而成。
 	fqName string
-	// help provides some helpful information about this metric.
+	// help 提供该指标的说明信息。
 	help string
-	// constLabels is the label names. Their label values are variable.
+	// constLabels 保存标签名，其标签值固定不变。
 	constLabels Labels
-	// variableLabels contains names of labels for which the metric
-	// maintains variable values.
+	// variableLabels 保存指标所维护可变值的标签名。
 	variableLabels []string
 
-	// promDesc is the descriptor used by every Prometheus Metric.
+	// promDesc 是每个 Prometheus Metric 使用的描述符。
 	promDesc      *prometheus.Desc
 	annotatedHelp string
 
-	// stabilityLevel represents the API guarantees for a given defined metric.
+	// stabilityLevel 表示已定义指标的 API 保证级别。
 	stabilityLevel StabilityLevel
-	// deprecatedVersion represents in which version this metric be deprecated.
+	// deprecatedVersion 表示该指标被弃用的版本。
 	deprecatedVersion string
 
 	isDeprecated bool
@@ -63,14 +60,12 @@ type Desc struct {
 	annotateOnce        sync.Once
 }
 
-// NewDesc extends prometheus.NewDesc with stability support.
+// NewDesc 扩展 prometheus.NewDesc，增加稳定性支持。
 //
-// The stabilityLevel should be valid stability label, such as "metrics.ALPHA"
-// and "metrics.STABLE"(Maybe "metrics.BETA" in future). Default value "metrics.ALPHA"
-// will be used in case of empty or invalid stability label.
+// stabilityLevel 应为有效的稳定性标签，如 "metrics.ALPHA" 和 "metrics.STABLE"（未来可能支持
+// "metrics.BETA"）；为空或非法时默认使用 "metrics.ALPHA"。
 //
-// The deprecatedVersion represents in which version this Metric be deprecated.
-// The deprecation policy outlined by the control plane metrics stability KEP.
+// deprecatedVersion 表示该指标的弃用版本，弃用策略遵循控制面指标稳定性 KEP。
 func NewDesc(fqName string, help string, variableLabels []string, constLabels Labels,
 	stabilityLevel StabilityLevel, deprecatedVersion string) *Desc {
 	d := &Desc{
@@ -87,10 +82,8 @@ func NewDesc(fqName string, help string, variableLabels []string, constLabels La
 	return d
 }
 
-// String formats the Desc as a string.
-// The stability metadata maybe annotated in 'HELP' section if called after registry,
-// otherwise not.
-// e.g. "Desc{fqName: "normal_stable_descriptor", help: "[STABLE] this is a stable descriptor", constLabels: {}, variableLabels: []}"
+// String 将 Desc 格式化为字符串；若在 registry 处理后调用，稳定性元数据会标注在 HELP 段，否则不会。
+// 例如："Desc{fqName: "normal_stable_descriptor", help: "[STABLE] this is a stable descriptor", constLabels: {}, variableLabels: []}"
 func (d *Desc) String() string {
 	if d.isCreated {
 		return d.promDesc.String()
@@ -100,12 +93,12 @@ func (d *Desc) String() string {
 	return prometheus.NewDesc(d.fqName, d.help, d.variableLabels, prometheus.Labels(d.constLabels)).String()
 }
 
-// toPrometheusDesc transform self to prometheus.Desc
+// toPrometheusDesc 将自身转换为 prometheus.Desc。
 func (d *Desc) toPrometheusDesc() *prometheus.Desc {
 	return d.promDesc
 }
 
-// DeprecatedVersion returns a pointer to the Version or nil
+// DeprecatedVersion 返回弃用 Version 的指针；未设置时返回 nil。
 func (d *Desc) DeprecatedVersion() *semver.Version {
 	return parseSemver(d.deprecatedVersion)
 
@@ -125,24 +118,24 @@ func (d *Desc) determineDeprecationStatus(currentVersion semver.Version) {
 				klog.Warningf("Hidden metrics(%s) have been manually overridden, showing this very deprecated metric.", d.fqName)
 				return
 			}
-			// TODO(RainbowMango): Remove this log temporarily. https://github.com/kubernetes/kubernetes/issues/85369
+			// TODO(RainbowMango): 暂时移除此日志。https://github.com/kubernetes/kubernetes/issues/85369
 			// klog.Warningf("This metric(%s) has been deprecated for more than one release, hiding.", d.fqName)
 			d.isHidden = true
 		}
 	})
 }
 
-// IsHidden returns if metric will be hidden
+// IsHidden 报告指标是否将被隐藏。
 func (d *Desc) IsHidden() bool {
 	return d.isHidden
 }
 
-// IsDeprecated returns if metric has been deprecated
+// IsDeprecated 报告指标是否已弃用。
 func (d *Desc) IsDeprecated() bool {
 	return d.isDeprecated
 }
 
-// IsCreated returns if metric has been created.
+// IsCreated 报告指标是否已经创建。
 func (d *Desc) IsCreated() bool {
 	d.createLock.RLock()
 	defer d.createLock.RUnlock()
@@ -150,11 +143,8 @@ func (d *Desc) IsCreated() bool {
 	return d.isCreated
 }
 
-// create forces the initialization of Desc which has been deferred until
-// the point at which this method is invoked. This method will determine whether
-// the Desc is deprecated or hidden, no-opting if the Desc should be considered
-// hidden. Furthermore, this function no-opts and returns true if Desc is already
-// created.
+// create 强制完成此前延迟的 Desc 初始化，并判定其是否已弃用或隐藏；应隐藏时不执行创建。
+// 若 Desc 已经创建，则不再操作并返回 true。
 func (d *Desc) create(version *semver.Version) bool {
 	if version != nil {
 		d.determineDeprecationStatus(*version)
@@ -179,8 +169,6 @@ func (d *Desc) create(version *semver.Version) bool {
 	return d.IsCreated()
 }
 
-// ClearState will clear all the states marked by Create.
-// It intends to be used for re-register a hidden metric.
 // 重置所有状态与 Once，使同一个 Desc 可以被重新注册（例如测试中换 registry）。
 func (d *Desc) ClearState() {
 	d.isDeprecated = false
@@ -225,11 +213,11 @@ func (d *Desc) initializeDeprecatedDesc() {
 	d.initialize()
 }
 
-// GetRawDesc will returns a new *Desc with original parameters provided to NewDesc().
+// GetRawDesc 返回使用 NewDesc() 原始参数构造的新 *Desc。
 //
-// It will be useful in testing scenario that the same Desc be registered to different registry.
-//  1. Desc `D` is registered to registry 'A' in TestA (Note: `D` maybe created)
-//  2. Desc `D` is registered to registry 'B' in TestB (Note: since 'D' has been created once, thus will be ignored by registry 'B')
+// 在测试中将同一个 Desc 注册到不同 registry 时很有用：
+//  1. Desc `D` 在 TestA 中注册到 registry 'A'（注意：`D` 可能已经创建）。
+//  2. Desc `D` 在 TestB 中注册到 registry 'B'（注意：`D` 已创建过一次，因此会被 registry 'B' 忽略）。
 func (d *Desc) GetRawDesc() *Desc {
 	return NewDesc(d.fqName, d.help, d.variableLabels, d.constLabels, d.stabilityLevel, d.deprecatedVersion)
 }

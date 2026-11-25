@@ -16,9 +16,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// slog2k8s demonstrates how an application using log/slog for logging
-// can include Kubernetes packages.
-//
 // 该示例演示以 log/slog 作为唯一日志后端的应用如何安全地引入
 // 仍使用 klog 的 Kubernetes 包：两者共享同一个 handler，避免出现两套格式。
 package main
@@ -37,13 +34,12 @@ func main() {
 	textHandler := slog.NewTextHandler(os.Stderr, &options)
 	textLogger := slog.New(textHandler)
 
-	// Use text output as default logger.
+	// 使用文本输出作为默认 logger。
 	slog.SetDefault(textLogger)
 
-	// This also needs to be done through klog to ensure that all code
-	// using klog uses the text handler. klog.Background/TODO/FromContext
-	// will return a thin wrapper around the textHandler, so all that klog
-	// still does is manage the global default and retrieval from contexts.
+	// 还必须通过 klog 设置，确保所有使用 klog 的代码都使用 text handler。
+	// klog.Background/TODO/FromContext 将返回包在 textHandler 外的薄封装，
+	// 因此 klog 只需继续管理全局默认值和从 context 获取 logger。
 	//
 	// 必须再调用 klog.SetSlogLogger：klog 的 Background/TODO/FromContext
 	// 返回的是包在 textHandler 外的薄封装，这样第三方 klog 调用也走同一后端。

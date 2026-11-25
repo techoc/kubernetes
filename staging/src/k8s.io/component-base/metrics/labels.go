@@ -22,7 +22,7 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// Labels represents a collection of label name -> value mappings.
+// Labels 表示标签名到标签值的映射集合。
 // 底层类型与 prometheus.Labels 一致，便于在 metrics 与 prometheus 两套 API 间传递；
 // 但它是独立类型，跨包传递时需显式转换。
 type Labels prometheus.Labels

@@ -42,7 +42,7 @@ func TestGauge(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
-		// Non-deprecated metrics
+		// 非弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			GaugeOpts: &GaugeOpts{
@@ -79,7 +79,7 @@ func TestGauge(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] gauge help",
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			GaugeOpts: &GaugeOpts{
@@ -119,7 +119,7 @@ func TestGauge(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) gauge help",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			GaugeOpts: &GaugeOpts{
@@ -175,8 +175,7 @@ func TestGauge(t *testing.T) {
 				assert.Equalf(t, test.expectedHelp, metric.GetHelp(), "Got %s as help message, want %s", metric.GetHelp(), test.expectedHelp)
 			}
 
-			// let's increment the counter and verify that the metric still works
-			// 虽然注释沿用了 counter 的说法，这里实际验证 Gauge 的 Set 覆盖语义。
+			// 设置 Gauge，验证指标仍能正常工作。
 			c.Set(100)
 			c.Set(101)
 			expected := 101
@@ -209,7 +208,7 @@ func TestGaugeVec(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
-		// Non-deprecated metrics
+		// 非弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			GaugeOpts: &GaugeOpts{
@@ -248,7 +247,7 @@ func TestGaugeVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] gauge help",
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			GaugeOpts: &GaugeOpts{
@@ -290,7 +289,7 @@ func TestGaugeVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "[STABLE] (Deprecated since 1.15.0) gauge help",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			GaugeOpts: &GaugeOpts{
@@ -347,7 +346,7 @@ func TestGaugeVec(t *testing.T) {
 				assert.Equalf(t, test.expectedHelp, metric.GetHelp(), "Got %s as help message, want %s", metric.GetHelp(), test.expectedHelp)
 			}
 
-			// let's increment the counter and verify that the metric still works
+			// 设置 Gauge，验证指标仍能正常工作。
 			c.WithLabelValues("1", "3").Set(1.0)
 			c.WithLabelValues("2", "3").Set(1.0)
 			ms, err = registry.Gather()
@@ -378,7 +377,7 @@ func TestGaugeFunc(t *testing.T) {
 		*GaugeOpts
 		expectedMetrics string
 	}{
-		// Non-deprecated metrics
+		// 非弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			GaugeOpts: &GaugeOpts{
@@ -424,7 +423,7 @@ namespace_subsystem_metric_non_deprecated 1
 namespace_subsystem_metric_non_deprecated 1
 			`,
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			GaugeOpts: &GaugeOpts{
@@ -467,7 +466,7 @@ namespace_subsystem_metric_deprecated 1
 namespace_subsystem_metric_deprecated 1
 			`,
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			GaugeOpts: &GaugeOpts{
@@ -511,7 +510,7 @@ namespace_subsystem_metric_deprecated 1
 		t.Run(test.desc, func(t *testing.T) {
 			registry := newKubeRegistry(version1_15Alpha1)
 			gauge := newGaugeFunc(tc.GaugeOpts, function, parseVersion(version1_15Alpha1))
-			if gauge != nil { // hidden metrics will not be initialize, register is not allowed
+			if gauge != nil { // 隐藏指标不会初始化，也不允许注册
 				registry.RawMustRegister(gauge)
 			}
 
@@ -618,7 +617,7 @@ func TestGaugeVecDeleteLabelValues(t *testing.T) {
 		expectMetricExists bool
 		expectDelete       bool
 	}{
-		// Non-deprecated metrics
+		// 非弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			opts: &GaugeOpts{
@@ -658,7 +657,7 @@ func TestGaugeVecDeleteLabelValues(t *testing.T) {
 			expectMetricExists: true,
 			expectDelete:       true,
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			opts: &GaugeOpts{
@@ -701,7 +700,7 @@ func TestGaugeVecDeleteLabelValues(t *testing.T) {
 			expectMetricExists: true,
 			expectDelete:       true,
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			opts: &GaugeOpts{
@@ -772,7 +771,7 @@ func TestGaugeVecDeleteLabelValues(t *testing.T) {
 			deleted := gv.DeleteLabelValues("foo", "bar")
 			assert.Equal(t, test.expectDelete, deleted, "DeleteLabelValues return mismatch")
 
-			// Confirm it no longer exists
+			// 确认指标已不存在
 			ms, err = registry.Gather()
 			require.NoError(t, err)
 			found = false
@@ -807,7 +806,7 @@ func TestGaugeVecDeleteLabelValuesChecked(t *testing.T) {
 		expectMetricExists bool
 		expectDelete       bool
 	}{
-		// Non-deprecated metrics
+		// 非弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			opts: &GaugeOpts{
@@ -847,7 +846,7 @@ func TestGaugeVecDeleteLabelValuesChecked(t *testing.T) {
 			expectMetricExists: true,
 			expectDelete:       true,
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			opts: &GaugeOpts{
@@ -890,7 +889,7 @@ func TestGaugeVecDeleteLabelValuesChecked(t *testing.T) {
 			expectMetricExists: true,
 			expectDelete:       true,
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			opts: &GaugeOpts{
@@ -962,7 +961,7 @@ func TestGaugeVecDeleteLabelValuesChecked(t *testing.T) {
 			assert.Equal(t, test.expectDelete, deleted, "DeleteLabelValuesChecked return mismatch")
 			require.NoError(t, err, "DeleteLabelValuesChecked should not return error")
 
-			// Confirm it no longer exists
+			// 确认指标已不存在
 			ms, err = registry.Gather()
 			require.NoError(t, err)
 			found = false

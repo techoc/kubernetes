@@ -16,20 +16,16 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// Package v1 contains the configuration API for metrics.
+// Package v1 包含指标配置 API。
 //
-// The intention is to only have a single version of this API, potentially with
-// new fields added over time in a backwards-compatible manner. Fields for
-// alpha or beta features are allowed as long as they are defined so that not
-// changing the defaults leaves those features disabled.
+// 该 API 只保留单一版本，仅以向后兼容的方式逐步新增字段。alpha 或 beta 特性的字段也可以加入，
+// 但必须保证不修改默认值时这些特性保持禁用。
 //
-// The "v1" package name is just a reminder that API compatibility rules apply,
-// not an indication of the stability of all features covered by it.
+// "v1" 包名仅提醒使用者遵守 API 兼容规则，并不表示其中所有特性都具有稳定保证。
 //
-// NOTE: Component owners are advised to rely on `k8s.io/component-base/metrics` to operate upon
-// `k8s.io/component-base/metrics/api/v1.MetricsConfiguration` as the former contains functions to apply and validate
-// the configuration, which in turn rely on members of the same package, which cannot be moved,
-// or imported (cyclic dependency) here.
+// 注意：建议组件维护者通过 `k8s.io/component-base/metrics` 操作
+// `k8s.io/component-base/metrics/api/v1.MetricsConfiguration`，因为前者包含应用和校验配置的函数；
+// 这些函数依赖本包成员，而本包无法移动或导入它们，否则会形成循环依赖。
 //
 // 中文补充：本包只定义配置数据结构，不包含校验与生效逻辑；
 // 后者位于 k8s.io/component-base/metrics，以免形成循环依赖。

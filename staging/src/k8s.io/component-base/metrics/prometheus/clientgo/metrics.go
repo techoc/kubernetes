@@ -21,8 +21,8 @@ package clientgo
 
 // 空白导入的副作用即注册过程：导入顺序不影响结果，各子包自行完成 init 注册。
 import (
-	_ "k8s.io/component-base/metrics/prometheus/clientgo/fifo"           // load fifo metrics
-	_ "k8s.io/component-base/metrics/prometheus/clientgo/leaderelection" // load leaderelection metrics
-	_ "k8s.io/component-base/metrics/prometheus/restclient"              // load restclient metrics
-	_ "k8s.io/component-base/metrics/prometheus/workqueue"               // load the workqueue metrics
+	_ "k8s.io/component-base/metrics/prometheus/clientgo/fifo"           // 加载 FIFO 指标
+	_ "k8s.io/component-base/metrics/prometheus/clientgo/leaderelection" // 加载 leader election 指标
+	_ "k8s.io/component-base/metrics/prometheus/restclient"              // 加载 REST client 指标
+	_ "k8s.io/component-base/metrics/prometheus/workqueue"               // 加载 workqueue 指标
 )

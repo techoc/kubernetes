@@ -24,8 +24,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// VModuleConfigurationPflag implements the pflag.Value interface for a
-// VModuleConfiguration. The value pointer must not be nil.
+// VModuleConfigurationPflag 为 VModuleConfiguration 实现 pflag.Value 接口，
+// 值指针不能为 nil。
 func VModuleConfigurationPflag(value *VModuleConfiguration) pflag.Value {
 	return vmoduleConfigurationPFlag{value}
 }
@@ -35,7 +35,7 @@ type vmoduleConfigurationPFlag struct {
 	value *VModuleConfiguration
 }
 
-// String returns the -vmodule parameter (comma-separated list of pattern=N).
+// String 返回 -vmodule 参数（以逗号分隔的 pattern=N 列表）。
 func (wrapper vmoduleConfigurationPFlag) String() string {
 	if wrapper.value == nil {
 		return ""
@@ -47,13 +47,13 @@ func (wrapper vmoduleConfigurationPFlag) String() string {
 	return strings.Join(patterns, ",")
 }
 
-// Set parses the -vmodule parameter (comma-separated list of pattern=N).
+// Set 解析 -vmodule 参数（以逗号分隔的 pattern=N 列表）。
 func (wrapper vmoduleConfigurationPFlag) Set(value string) error {
-	// This code mirrors https://github.com/kubernetes/klog/blob/9ad246211af1ed84621ee94a26fcce0038b69cd1/klog.go#L287-L313
+	// 此代码对应 https://github.com/kubernetes/klog/blob/9ad246211af1ed84621ee94a26fcce0038b69cd1/klog.go#L287-L313
 
 	for _, pat := range strings.Split(value, ",") {
 		if len(pat) == 0 {
-			// Empty strings such as from a trailing comma can be ignored.
+			// 尾随逗号产生的空字符串等可直接忽略。
 			continue
 		}
 		patLev := strings.Split(pat, "=")
@@ -61,7 +61,7 @@ func (wrapper vmoduleConfigurationPFlag) Set(value string) error {
 			return fmt.Errorf("%q does not have the pattern=N format", pat)
 		}
 		pattern := patLev[0]
-		// 31 instead of 32 to ensure that it also fits into int32.
+		// 使用 31 而非 32，以确保也能容纳在 int32 中。
 		// 与 klog 保持一致，避免超出 int32 范围导致下游截断。
 		v, err := strconv.ParseUint(patLev[1], 10, 31)
 		if err != nil {
@@ -77,8 +77,7 @@ func (wrapper vmoduleConfigurationPFlag) Type() string {
 	return "pattern=N,..."
 }
 
-// VerbosityLevelPflag implements the pflag.Value interface for a verbosity
-// level value.
+// VerbosityLevelPflag 为详细程度等级值实现 pflag.Value 接口。
 func VerbosityLevelPflag(value *VerbosityLevel) pflag.Value {
 	return verbosityLevelPflag{value}
 }
@@ -106,7 +105,7 @@ func (wrapper verbosityLevelPflag) Get() interface{} {
 
 // Set 解析十进制等级；限制为 31 位以与 klog 的 int32 语义兼容。
 func (wrapper verbosityLevelPflag) Set(value string) error {
-	// Limited to int32 for compatibility with klog.
+	// 为兼容 klog，限制在 int32 范围内。
 	v, err := strconv.ParseUint(value, 10, 31)
 	if err != nil {
 		return err

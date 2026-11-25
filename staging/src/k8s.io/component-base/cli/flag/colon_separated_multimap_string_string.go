@@ -22,40 +22,36 @@ import (
 	"strings"
 )
 
-// ColonSeparatedMultimapStringString supports setting a map[string][]string from an encoding
-// that separates keys from values with ':' and separates key-value pairs with ','.
-// A key can be repeated multiple times, in which case the values are appended to a
-// slice of strings associated with that key. Items in the list associated with a given
-// key will appear in the order provided.
-// For example: `a:hello,b:again,c:world,b:beautiful` results in `{"a": ["hello"], "b": ["again", "beautiful"], "c": ["world"]}`
-// The first call to Set will clear the map before adding entries; subsequent calls will simply append to the map.
-// This makes it possible to override default values with a command-line option rather than appending to defaults,
-// while still allowing the distribution of key-value pairs across multiple flag invocations.
-// For example: `--flag "a:hello" --flag "b:again" --flag "b:beautiful" --flag "c:world"` results in `{"a": ["hello"], "b": ["again", "beautiful"], "c": ["world"]}`
+// ColonSeparatedMultimapStringString 从命令行编码解析 map[string][]string：
+// 用 ':' 分隔键和值，用 ',' 分隔键值对。同一个键可以重复，值按出现顺序追加。
+// 例如：`a:hello,b:again,c:world,b:beautiful` 解析为
+// `{"a": ["hello"], "b": ["again", "beautiful"], "c": ["world"]}`。
+// 首次调用 Set 会先清空 map，后续调用只追加。因此命令行选项可以覆盖默认值，
+// 同时仍可把键值对分散到多次标志解析中。例如：
+// `--flag "a:hello" --flag "b:again" --flag "b:beautiful" --flag "c:world"`
+// 解析为 `{"a": ["hello"], "b": ["again", "beautiful"], "c": ["world"]}`。
 type ColonSeparatedMultimapStringString struct {
 	Multimap *map[string][]string
 	// initialized 记录是否已发生过一次 Set；首次 Set 会先清空默认值。
-	initialized          bool // set to true after the first Set call
+	initialized          bool // 首次调用 Set 后设为 true
 	allowDefaultEmptyKey bool
 }
 
-// NewColonSeparatedMultimapStringString takes a pointer to a map[string][]string and returns the
-// ColonSeparatedMultimapStringString flag parsing shim for that map.
-//
+// NewColonSeparatedMultimapStringString 接收 map[string][]string 指针，
+// 返回用于解析该 map 的 ColonSeparatedMultimapStringString。
 // 接收指针而非 map 值，使 pflag 在解析时能就地替换整个 map。
 func NewColonSeparatedMultimapStringString(m *map[string][]string) *ColonSeparatedMultimapStringString {
 	return &ColonSeparatedMultimapStringString{Multimap: m}
 }
 
-// NewColonSeparatedMultimapStringStringAllowDefaultEmptyKey takes a pointer to a map[string][]string and returns the
-// ColonSeparatedMultimapStringString flag parsing shim for that map. It allows default empty key with no colon in the flag.
-//
+// NewColonSeparatedMultimapStringStringAllowDefaultEmptyKey 接收 map[string][]string 指针，
+// 返回允许缺省空键的 ColonSeparatedMultimapStringString：标志中没有冒号时使用空字符串键。
 // 用于那些“无键值”本身有意义的场景：缺省键写成单个值，归入空字符串键。
 func NewColonSeparatedMultimapStringStringAllowDefaultEmptyKey(m *map[string][]string) *ColonSeparatedMultimapStringString {
 	return &ColonSeparatedMultimapStringString{Multimap: m, allowDefaultEmptyKey: true}
 }
 
-// Set implements github.com/spf13/pflag.Value
+// Set 实现 github.com/spf13/pflag.Value。
 //
 // 首次调用清空默认值，之后追加；这样单次 --flag 覆盖默认，而多次 --flag 又能合并。
 func (m *ColonSeparatedMultimapStringString) Set(value string) error {
@@ -64,7 +60,7 @@ func (m *ColonSeparatedMultimapStringString) Set(value string) error {
 		return fmt.Errorf("no target (nil pointer to map[string][]string)")
 	}
 	if !m.initialized || *m.Multimap == nil {
-		// clear default values, or allocate if no existing map
+		// 清空默认值；若尚无 map，则分配一个。
 		*m.Multimap = make(map[string][]string)
 		m.initialized = true
 	}
@@ -91,7 +87,7 @@ func (m *ColonSeparatedMultimapStringString) Set(value string) error {
 	return nil
 }
 
-// String implements github.com/spf13/pflag.Value
+// String 实现 github.com/spf13/pflag.Value。
 //
 // 输出按键排序、键内保持值顺序，保证同一配置的字符串表示稳定（便于测试与日志比对）。
 func (m *ColonSeparatedMultimapStringString) String() string {
@@ -105,7 +101,7 @@ func (m *ColonSeparatedMultimapStringString) String() string {
 			kvs = append(kvs, kv{k: k, v: vs[i]})
 		}
 	}
-	// stable sort by keys, order of values should be preserved
+	// 按键稳定排序，同时保留键内值的顺序。
 	sort.SliceStable(kvs, func(i, j int) bool {
 		return kvs[i].k < kvs[j].k
 	})
@@ -116,16 +112,13 @@ func (m *ColonSeparatedMultimapStringString) String() string {
 	return strings.Join(pairs, ",")
 }
 
-// Type implements github.com/spf13/pflag.Value
-//
+// Type 实现 github.com/spf13/pflag.Value。
 // 名称会出现在帮助文本和错误信息中。
 func (m *ColonSeparatedMultimapStringString) Type() string {
 	return "colonSeparatedMultimapStringString"
 }
 
-// Empty implements OmitEmpty
-//
-// 实现 omitempty 判定：空 map 视为未设置，避免默认空值进入序列化输出。
+// Empty 实现 OmitEmpty：空 map 视为未设置，避免默认空值进入序列化输出。
 func (m *ColonSeparatedMultimapStringString) Empty() bool {
 	return len(*m.Multimap) == 0
 }

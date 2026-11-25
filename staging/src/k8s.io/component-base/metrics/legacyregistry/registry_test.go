@@ -47,8 +47,6 @@ func TestProcessStartTimeHeader(t *testing.T) {
 	}
 }
 
-// processStart must never be reassigned after init.
-// This test ensures processStart doesn't change across calls
 // 若 processStart 被改写，抓取端计算的进程运行时长会出现跳变，因此单独守护。
 func TestProcessStartImmutable(t *testing.T) {
 	if *processStartTestCopy != processStart {

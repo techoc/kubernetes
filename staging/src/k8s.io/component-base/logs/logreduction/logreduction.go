@@ -26,10 +26,8 @@ import (
 // nowfunc 允许测试替换时钟，避免依赖真实时间导致用例不稳定。
 var nowfunc = time.Now
 
-// LogReduction provides a filter for consecutive identical log messages;
-// a message will be printed no more than once per interval.
-// If a string of messages is interrupted by a different message,
-// the interval timer will be reset.
+// LogReduction 为连续相同的日志提供过滤器，每条消息在每个间隔内最多打印一次。
+// 若一串相同消息被不同消息打断，则重置间隔计时器。
 // LogReduction 为连续相同日志提供过滤：同一 parentID 下相同消息在 interval 内
 // 最多打印一次；一旦出现不同消息，计时器重置，新的相同消息会立即打印。
 type LogReduction struct {

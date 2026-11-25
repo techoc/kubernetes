@@ -32,7 +32,7 @@ import (
 func TestGlogSetter(t *testing.T) {
 	testcases := map[string]struct {
 		init func(t *testing.T)
-		// write must write at verbosity level 1.
+		// write 必须在详细度级别 1 写入日志。
 		write func()
 	}{
 		"klog": {
@@ -45,7 +45,7 @@ func TestGlogSetter(t *testing.T) {
 			init: func(t *testing.T) {
 				c := logsapi.NewLoggingConfiguration()
 				c.Format = "json"
-				if err := logsapi.ValidateAndApply(c, nil /* feature gates */); err != nil {
+				if err := logsapi.ValidateAndApply(c, nil /* 特性门控 */); err != nil {
 					t.Fatalf("Unexpected error enabling json output: %v", err)
 				}
 			},
@@ -57,7 +57,7 @@ func TestGlogSetter(t *testing.T) {
 			init: func(t *testing.T) {
 				c := logsapi.NewLoggingConfiguration()
 				c.Format = "text"
-				if err := logsapi.ValidateAndApply(c, nil /* feature gates */); err != nil {
+				if err := logsapi.ValidateAndApply(c, nil /* 特性门控 */); err != nil {
 					t.Fatalf("Unexpected error enabling text output: %v", err)
 				}
 			},
@@ -86,14 +86,14 @@ func TestGlogSetter(t *testing.T) {
 			os.Stderr = newStderr
 
 			defer func() {
-				if err := logsapi.ResetForTest(nil /* feature gates */); err != nil {
+				if err := logsapi.ResetForTest(nil /* 特性门控 */); err != nil {
 					t.Errorf("Unexpected error resetting the logging configuration: %v", err)
 				}
 			}()
 			tc.init(t)
 
 			// 默认 verbosity 为 0，级别 1 的日志不应产生任何输出。
-			// First write with default verbosity level of 0 -> no output.
+			// 默认详细度为 0，首次写入不会产生输出。
 			tc.write()
 			klog.Flush()
 			out, err := os.ReadFile(tmpfile)
@@ -104,12 +104,12 @@ func TestGlogSetter(t *testing.T) {
 				t.Fatalf("Info message should have been discarded, got instead:\n%s", string(out))
 			}
 
-			// Increase verbosity at runtime.
+			// 在运行时提高详细度。
 			if _, err := logs.GlogSetter("1"); err != nil {
 				t.Fatalf("Unexpected error setting verbosity level: %v", err)
 			}
 
-			// Now write again -> output.
+			// 再次写入后会产生输出。
 			tc.write()
 			klog.Flush()
 			out, err = os.ReadFile(tmpfile)

@@ -33,7 +33,7 @@ func OpenStub(filePath string, flushInterval time.Duration, maxSize int64, maxAg
 	return w, nil
 }
 
-// write func to satisfy io.writer interface
+// write 方法用于满足 io.Writer 接口。
 // Write 报告写入成功但不保留任何数据。
 func (w *RotationStub) Write(p []byte) (int, error) {
 	return len(p), nil

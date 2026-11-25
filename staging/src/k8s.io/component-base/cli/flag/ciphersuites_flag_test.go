@@ -32,38 +32,38 @@ func TestStrToUInt16(t *testing.T) {
 		expected_error bool
 	}{
 		{
-			// Happy case
+			// 正常情况
 			flag:           []string{"TLS_RSA_WITH_RC4_128_SHA", "TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_ECDHE_RSA_WITH_RC4_128_SHA", "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"},
 			expected:       []uint16{tls.TLS_RSA_WITH_RC4_128_SHA, tls.TLS_RSA_WITH_AES_128_CBC_SHA, tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA, tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA},
 			expected_error: false,
 		},
 		{
-			// One flag only
+			// 仅一个标志
 			flag:           []string{"TLS_RSA_WITH_RC4_128_SHA"},
 			expected:       []uint16{tls.TLS_RSA_WITH_RC4_128_SHA},
 			expected_error: false,
 		},
 		{
-			// Empty flag
+			// 空标志
 			flag:           []string{},
 			expected:       nil,
 			expected_error: false,
 		},
 		{
-			// Duplicated flag
+			// 重复标志
 			// 重复项不去重：转换函数只做名称到 ID 的映射，保留用户书写顺序。
 			flag:           []string{"TLS_RSA_WITH_RC4_128_SHA", "TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_ECDHE_RSA_WITH_RC4_128_SHA", "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_RC4_128_SHA"},
 			expected:       []uint16{tls.TLS_RSA_WITH_RC4_128_SHA, tls.TLS_RSA_WITH_AES_128_CBC_SHA, tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA, tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA, tls.TLS_RSA_WITH_RC4_128_SHA},
 			expected_error: false,
 		},
 		{
-			// Invalid flag
+			// 无效标志
 			flag:           []string{"foo"},
 			expected:       nil,
 			expected_error: true,
 		},
 		{
-			// All existing cipher suites
+			// 全部现有密码套件
 			// 覆盖各代 Go 仍然接受的全部套件，防止新增/移除常量时映射表失配。
 			flag: []string{
 				"TLS_RSA_WITH_3DES_EDE_CBC_SHA",

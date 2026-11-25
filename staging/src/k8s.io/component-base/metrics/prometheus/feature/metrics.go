@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	// featureInfo is a Prometheus Gauge metrics used for recording the enablement of a k8s feature.
+	// featureInfo 是记录 Kubernetes feature 启用状态的 Prometheus Gauge。
 	// 每条时间序列以 name/stage 为标签，值为 0 或 1。
 	featureInfo = k8smetrics.NewGaugeVec(
 		&k8smetrics.GaugeOpts{

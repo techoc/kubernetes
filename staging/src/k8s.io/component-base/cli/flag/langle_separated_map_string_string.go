@@ -22,26 +22,23 @@ import (
 	"strings"
 )
 
-// LangleSeparatedMapStringString can be set from the command line with the format `--flag "string<string"`.
-// Multiple comma-separated key-value pairs in a single invocation are supported. For example: `--flag "a<foo,b<bar"`.
-// Multiple flag invocations are supported. For example: `--flag "a<foo" --flag "b<foo"`.
-//
-// LangleSeparatedMapStringString 用 "<" 而非 "=" 分隔键值，
-// 适用于值中可能包含 "=" 的场合（例如 HTTP 头之类的映射）。
+// LangleSeparatedMapStringString 可通过 `--flag "string<string"` 从命令行设置。
+// 单次调用支持逗号分隔的多个键值对，例如：`--flag "a<foo,b<bar"`；
+// 也支持多次调用，例如：`--flag "a<foo" --flag "b<foo"`。
+// 它用 "<" 而非 "=" 分隔键值，适用于值中可能包含 "=" 的场合（例如 HTTP 头之类的映射）。
 type LangleSeparatedMapStringString struct {
 	Map         *map[string]string
-	initialized bool // set to true after first Set call
+	initialized bool // 首次调用 Set 后设为 true
 }
 
-// NewLangleSeparatedMapStringString takes a pointer to a map[string]string and returns the
-// LangleSeparatedMapStringString flag parsing shim for that map
-//
+// NewLangleSeparatedMapStringString 接收 map[string]string 指针，
+// 返回用于解析该 map 的 LangleSeparatedMapStringString。
 // 与 MapStringString 一样，首次 Set 会清空调用方提供的默认值。
 func NewLangleSeparatedMapStringString(m *map[string]string) *LangleSeparatedMapStringString {
 	return &LangleSeparatedMapStringString{Map: m}
 }
 
-// String implements github.com/spf13/pflag.Value
+// String 实现 github.com/spf13/pflag.Value。
 //
 // 按键排序输出，保证帮助信息与测试结果稳定。
 func (m *LangleSeparatedMapStringString) String() string {
@@ -53,7 +50,7 @@ func (m *LangleSeparatedMapStringString) String() string {
 	return strings.Join(pairs, ",")
 }
 
-// Set implements github.com/spf13/pflag.Value
+// Set 实现 github.com/spf13/pflag.Value。
 //
 // 支持逗号分隔的多对；每对只按第一个 "<" 切分，值中可以继续包含 "<"。
 func (m *LangleSeparatedMapStringString) Set(value string) error {
@@ -61,7 +58,7 @@ func (m *LangleSeparatedMapStringString) Set(value string) error {
 		return fmt.Errorf("no target (nil pointer to map[string]string)")
 	}
 	if !m.initialized || *m.Map == nil {
-		// clear default values, or allocate if no existing map
+		// 清空默认值；若尚无 map，则分配一个。
 		*m.Map = make(map[string]string)
 		m.initialized = true
 	}
@@ -81,14 +78,12 @@ func (m *LangleSeparatedMapStringString) Set(value string) error {
 	return nil
 }
 
-// Type implements github.com/spf13/pflag.Value
+// Type 实现 github.com/spf13/pflag.Value。
 func (*LangleSeparatedMapStringString) Type() string {
 	return "mapStringString"
 }
 
-// Empty implements OmitEmpty
-//
-// Empty 决定帮助信息是否省略默认值。
+// Empty 实现 OmitEmpty，决定帮助信息是否省略默认值。
 func (m *LangleSeparatedMapStringString) Empty() bool {
 	return len(*m.Map) == 0
 }

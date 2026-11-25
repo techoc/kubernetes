@@ -28,13 +28,13 @@ import (
 
 const instrumentationScope = "k8s.io/component-base/tracing"
 
-// Start creates spans using both OpenTelemetry, and the k8s.io/utils/trace package.
-// It only creates an OpenTelemetry span if the incoming context already includes a span.
+// Start 同时使用 OpenTelemetry 和 k8s.io/utils/trace 创建 span。
+// 仅当传入的 context 已包含 span 时，才创建 OpenTelemetry span。
 func Start(ctx context.Context, name string, attributes ...attribute.KeyValue) (context.Context, *Span) {
-	// If the incoming context already includes an OpenTelemetry span, create a child span with the provided name and attributes.
-	// If the caller is not using OpenTelemetry, or has tracing disabled (e.g. with a component-specific feature flag), this is a noop.
+	// 若传入的 context 已包含 OpenTelemetry span，则使用给定名称和属性创建子 span。
+	// 若调用方未使用 OpenTelemetry，或已通过组件级特性开关禁用追踪，则此操作为空操作。
 	ctx, otelSpan := trace.SpanFromContext(ctx).TracerProvider().Tracer(instrumentationScope).Start(ctx, name, trace.WithAttributes(attributes...))
-	// If there is already a utiltrace span in the context, use that as our parent span.
+	// 若 context 中已有 utiltrace span，则将其用作父 span。
 	utilSpan := utiltrace.FromContext(ctx).Nest(name, attributesToFields(attributes)...)
 	// 把 utiltrace span 放回 context，使后续 Start 调用形成嵌套层级。
 	return utiltrace.ContextWithTrace(ctx, utilSpan), &Span{
@@ -43,16 +43,14 @@ func Start(ctx context.Context, name string, attributes ...attribute.KeyValue) (
 	}
 }
 
-// Span is a component part of a trace. It represents a single named
-// and timed operation of a workflow being observed.
-// This Span is a combination of an OpenTelemetry and k8s.io/utils/trace span
-// to facilitate the migration to OpenTelemetry.
+// Span 是追踪中的一个组件部分，表示被观察工作流中一个有名称、有时长的操作。
+// Span 结合了 OpenTelemetry 与 k8s.io/utils/trace 的 span，以便于迁移到 OpenTelemetry。
 type Span struct {
 	otelSpan trace.Span
 	utilSpan *utiltrace.Trace
 }
 
-// AddEvent adds a point-in-time event with a name and attributes.
+// AddEvent 添加一个带有名称和属性的时间点事件。
 // 事件同时写入两种 span；utilSpan 为 nil 时只写 OpenTelemetry。
 func (s *Span) AddEvent(name string, attributes ...attribute.KeyValue) {
 	s.otelSpan.AddEvent(name, trace.WithAttributes(attributes...))
@@ -61,7 +59,7 @@ func (s *Span) AddEvent(name string, attributes ...attribute.KeyValue) {
 	}
 }
 
-// End ends the span, and logs if the span duration is greater than the logThreshold.
+// End 结束 span；若 span 时长超过 logThreshold，则记录日志。
 // 只对 utiltrace 做阈值日志：OpenTelemetry 的采样由 SDK 决定。
 func (s *Span) End(logThreshold time.Duration) {
 	s.otelSpan.End()
@@ -70,8 +68,8 @@ func (s *Span) End(logThreshold time.Duration) {
 	}
 }
 
-// RecordError will record err as an exception span event for this span.
-// If this span is not being recorded or err is nil then this method does nothing.
+// RecordError 将 err 记录为此 span 的异常事件。
+// 若此 span 未被记录或 err 为 nil，则此方法不执行任何操作。
 func (s *Span) RecordError(err error, attributes ...attribute.KeyValue) {
 	s.otelSpan.RecordError(err, trace.WithAttributes(attributes...))
 }
@@ -87,8 +85,8 @@ func attributesToFields(attributes []attribute.KeyValue) []utiltrace.Field {
 	return fields
 }
 
-// SpanFromContext returns the *Span from the current context. It is composed of the active
-// OpenTelemetry and k8s.io/utils/trace spans.
+// SpanFromContext 从当前 context 返回 *Span，其中包含处于活动状态的
+// OpenTelemetry 和 k8s.io/utils/trace span。
 func SpanFromContext(ctx context.Context) *Span {
 	return &Span{
 		otelSpan: trace.SpanFromContext(ctx),
@@ -96,7 +94,7 @@ func SpanFromContext(ctx context.Context) *Span {
 	}
 }
 
-// ContextWithSpan returns a context with the Span included in the context.
+// ContextWithSpan 返回包含该 Span 的 context。
 // 两种 span 必须同时写入，否则后续 SpanFromContext 只能拿到其中一种。
 func ContextWithSpan(ctx context.Context, s *Span) context.Context {
 	return trace.ContextWithSpan(utiltrace.ContextWithTrace(ctx, s.utilSpan), s.otelSpan)

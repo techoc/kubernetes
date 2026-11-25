@@ -37,7 +37,7 @@ import (
 // 默认值生效、AllAlpha/AllBeta 批量开关、单项覆盖批量开关（与先后顺序无关）、
 // 已锁定 gate 无法被改动、未知 gate 报错。
 func TestFeatureGateFlag(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 	const testDeprecatedGate Feature = "TestDeprecated"
@@ -290,7 +290,7 @@ func TestFeatureGateOverride(t *testing.T) {
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 
-	// Don't parse the flag, assert defaults are used.
+	// 不解析标志，断言使用默认值。
 	var f *featureGate = NewFeatureGate()
 	err := f.Add(map[Feature]FeatureSpec{
 		testAlphaGate: {Default: false, PreRelease: Alpha},
@@ -323,11 +323,11 @@ func TestFeatureGateOverride(t *testing.T) {
 
 // TestFeatureGateFlagDefaults 验证未解析 flag 时直接使用各 gate 的 Default。
 func TestFeatureGateFlagDefaults(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 
-	// Don't parse the flag, assert defaults are used.
+	// 不解析标志，断言使用默认值。
 	var f *featureGate = NewFeatureGate()
 	err := f.Add(map[Feature]FeatureSpec{
 		testAlphaGate: {Default: false, PreRelease: Alpha},
@@ -346,7 +346,7 @@ func TestFeatureGateFlagDefaults(t *testing.T) {
 // TestFeatureGateKnownFeatures 验证 KnownFeatures 只列出 Alpha/Beta gate，
 // 已 GA 与 Deprecated 的 gate 不再出现在用户可见列表中。
 func TestFeatureGateKnownFeatures(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const (
 		testAlphaGate      Feature = "TestAlpha"
 		testBetaGate       Feature = "TestBeta"
@@ -354,7 +354,7 @@ func TestFeatureGateKnownFeatures(t *testing.T) {
 		testDeprecatedGate Feature = "TestDeprecated"
 	)
 
-	// Don't parse the flag, assert defaults are used.
+	// 不解析标志，断言使用默认值。
 	var f *featureGate = NewFeatureGate()
 	err := f.Add(map[Feature]FeatureSpec{
 		testAlphaGate:      {Default: false, PreRelease: Alpha},
@@ -374,7 +374,7 @@ func TestFeatureGateKnownFeatures(t *testing.T) {
 // TestFeatureGateSetFromMap 验证 SetFromMap 的 map 形式设置：未知 gate 报错，
 // 锁定 gate 设置成非锁定值时拒绝，锁定值本身则允许（无变化）。
 func TestFeatureGateSetFromMap(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 	const testLockedTrueGate Feature = "TestLockedTrue"
@@ -494,7 +494,7 @@ func TestFeatureGateSetFromMap(t *testing.T) {
 // TestFeatureGateMetrics 验证 AddMetrics 把每个 gate 的阶段与启用状态导出为
 // kubernetes_feature_enabled gauge；先重置指标以免受其他测试注册影响。
 func TestFeatureGateMetrics(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	featuremetrics.ResetFeatureInfoMetric()
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
@@ -530,7 +530,7 @@ func TestFeatureGateMetrics(t *testing.T) {
 // TestFeatureGateString 验证 String() 输出排序后的 "gate=value" 列表，
 // 可直接作为 --feature-gates 的值复用。
 func TestFeatureGateString(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 	const testGAGate Feature = "TestGA"
@@ -733,7 +733,7 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 // 二进制版本 1.29 下的 flag 解析：每个 gate 的默认值/阶段按模拟版本选取，
 // 模拟版本中仍是 PreAlpha 的 gate 不能被设置，锁定 gate 仍不可改。
 func TestVersionedFeatureGateFlag(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testGAGate Feature = "TestGA"
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
@@ -1054,7 +1054,7 @@ func TestVersionedFeatureGateOverride(t *testing.T) {
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 
-	// Don't parse the flag, assert defaults are used.
+	// 不解析标志，断言使用默认值。
 	f := NewVersionedFeatureGate(version.MustParse("1.29"))
 
 	err := f.AddVersioned(map[Feature]VersionedSpecs{
@@ -1105,12 +1105,12 @@ func TestVersionedFeatureGateOverride(t *testing.T) {
 // 选取到的是 1.28 对应的规格（包括还未进入 Beta 而显示为 PreAlpha/0.0 的情况），
 // 并检查 GetAll 的返回集合。
 func TestVersionedFeatureGateFlagDefaults(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testGAGate Feature = "TestGA"
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 
-	// Don't parse the flag, assert defaults are used.
+	// 不解析标志，断言使用默认值。
 	f := NewVersionedFeatureGate(version.MustParse("1.29"))
 	require.NoError(t, f.SetEmulationVersion(version.MustParse("1.28")))
 
@@ -1168,7 +1168,7 @@ func TestVersionedFeatureGateFlagDefaults(t *testing.T) {
 // 未来版本的 PreAlpha 与已 GA/Deprecated 的 gate 不列出；带最小兼容版本要求的 gate
 // 会附加 "--min-compatibility-version>=x.y" 提示。
 func TestVersionedFeatureGateKnownFeatures(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const (
 		testPreAlphaGate            Feature = "TestPreAlpha"
 		testAlphaGate               Feature = "TestAlpha"
@@ -1183,7 +1183,7 @@ func TestVersionedFeatureGateKnownFeatures(t *testing.T) {
 		testDeprecatedGateNoVersion Feature = "TestDeprecatedNoVersion"
 	)
 
-	// Don't parse the flag, assert defaults are used.
+	// 不解析标志，断言使用默认值。
 	f := NewVersionedFeatureGate(version.MustParse("1.29"))
 	require.NoError(t, f.SetEmulationVersion(version.MustParse("1.28")))
 	err := f.AddVersioned(map[Feature]VersionedSpecs{
@@ -1241,7 +1241,7 @@ func TestVersionedFeatureGateKnownFeatures(t *testing.T) {
 // 同一个 gate 在不同最小兼容版本下会展示不同的默认值/阶段描述，
 // 从而让用户清楚模拟不同版本时 gate 的可用性差异。
 func TestVersionedFeatureGateKnownFeaturesWithMinCompatVersion(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const (
 		testPreAlphaGate            Feature = "TestPreAlpha"
 		testAlphaGate               Feature = "TestAlpha"
@@ -1255,7 +1255,7 @@ func TestVersionedFeatureGateKnownFeaturesWithMinCompatVersion(t *testing.T) {
 		testBetaGateNoVersion       Feature = "TestBetaNoVersion"
 		testDeprecatedGateNoVersion Feature = "TestDeprecatedNoVersion"
 	)
-	// Don't parse the flag, assert defaults are used.
+	// 不解析标志，断言使用默认值。
 	f := NewVersionedFeatureGate(version.MustParse("1.29"))
 	err := f.AddVersioned(map[Feature]VersionedSpecs{
 		testGAGate: {
@@ -1335,7 +1335,7 @@ func TestVersionedFeatureGateKnownFeaturesWithMinCompatVersion(t *testing.T) {
 // TestVersionedFeatureGateMetrics 验证带版本 gate 导出的指标阶段取自模拟版本对应的
 // 规格（例如 1.28 下仍为 ALPHA 的 gate），而不是二进制版本对应的阶段。
 func TestVersionedFeatureGateMetrics(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	featuremetrics.ResetFeatureInfoMetric()
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
@@ -1658,7 +1658,7 @@ func TestFeatureGateMinCompatibilityVersion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// KnownFeatures should show min-compatibility-version requirement.
+	// KnownFeatures 应展示最低兼容版本要求。
 	knownExpected := []string{
 		"AllAlpha=true|false (ALPHA - default=false)",
 		"AllBeta=true|false (BETA - default=false)",
@@ -1668,28 +1668,28 @@ func TestFeatureGateMinCompatibilityVersion(t *testing.T) {
 	}
 	assert.ElementsMatch(t, f.KnownFeatures(), knownExpected)
 
-	// Gate is Alpha min compat version is 1.29, feature's is 1.30. Feature should be disabled.
+	// 门控为 Alpha、最低兼容版本为 1.29，而特性要求 1.30，特性应被禁用。
 	assert.False(t, f.Enabled(testCompatGateA), "TestCompatA should be disabled at Alpha stage")
 	assert.False(t, f.Enabled(testCompatGateB), "TestCompatB should be disabled when its min compat version is too high")
 	assert.False(t, f.Enabled(testCompatGateC), "TestCompatC should be disabled when its min compat version is too high")
-	// Trying to override TestCompatA default should work.
+	// 覆盖 TestCompatA 默认值应成功。
 	require.NoError(t, f.OverrideDefault(testCompatGateA, true))
 	assert.True(t, f.Enabled(testCompatGateA), "TestCompatA should be enabled after overriding default")
-	// Trying to enable TestCompatA should work.
+	// 显式设置 TestCompatA 应成功。
 	require.NoError(t, f.Set(string(testCompatGateA)+"=false"))
 	assert.False(t, f.Enabled(testCompatGateA), "TestCompatA should be enabled after setting it explicitly")
-	// Trying to override TestCompatB, TestCompatC default should fail.
+	// 覆盖 TestCompatB、TestCompatC 默认值应失败。
 	require.NoError(t, f.OverrideDefault(testCompatGateB, false))
 	require.NoError(t, f.OverrideDefault(testCompatGateC, false))
-	// Trying to enable TestCompatB, TestCompatC should work.
+	// 显式启用 TestCompatB、TestCompatC 应成功。
 	require.NoError(t, f.Set(string(testCompatGateB)+"=true"))
 	require.NoError(t, f.Set(string(testCompatGateC)+"=true"))
 
-	// reset the feature gate first so no overrides or raw flags are carried over.
+	// 先重置门控，避免沿用覆盖值或原始标志。
 	f = f.DeepCopyAndReset().(*featureGate)
-	// Now, update the gate's min compat version.
+	// 现在更新门控的最低兼容版本。
 	require.NoError(t, f.SetEmulationVersionAndMinCompatibilityVersion(version.MustParse("1.30"), version.MustParse("1.30")))
-	// KnownFeatures should not show the min-compatibility-version requirement anymore.
+	// KnownFeatures 不应再展示最低兼容版本要求。
 	knownExpected = []string{
 		"AllAlpha=true|false (ALPHA - default=false)",
 		"AllBeta=true|false (BETA - default=false)",
@@ -1698,12 +1698,12 @@ func TestFeatureGateMinCompatibilityVersion(t *testing.T) {
 	}
 	assert.ElementsMatch(t, f.KnownFeatures(), knownExpected)
 
-	// Feature should now be enabled by default.
+	// 特性现在应默认启用。
 	assert.True(t, f.Enabled(testCompatGateA), "TestCompatA should be Beta and enabled when its min compat version is met")
 	assert.True(t, f.Enabled(testCompatGateB), "TestCompatB should be enabled when its min compat version is met")
 	assert.True(t, f.Enabled(testCompatGateC), "TestCompatC should be enabled when its min compat version is met")
 
-	// Trying to disable feature should succeed.
+	// 禁用特性应成功。
 	require.NoError(t, f.Set(string(testCompatGateA)+"=false"))
 	assert.False(t, f.Enabled(testCompatGateA), "feature should be disabled")
 	require.NoError(t, f.Set(string(testCompatGateB)+"=false"))
@@ -1711,10 +1711,10 @@ func TestFeatureGateMinCompatibilityVersion(t *testing.T) {
 
 	require.NoError(t, f.ResetFeatureValueToDefault(testCompatGateB))
 	assert.True(t, f.Enabled(testCompatGateB), "feature should be enabled after resetting to default")
-	// Trying to override default should now succeed.
+	// 现在覆盖默认值应成功。
 	require.NoError(t, f.OverrideDefault(testCompatGateB, false))
 	assert.False(t, f.Enabled(testCompatGateB), "feature should be disabled by default after override default to false")
-	// Trying to override GA default should fail.
+	// 覆盖 GA 默认值应失败。
 	require.Error(t, f.OverrideDefault(testCompatGateC, false))
 	require.Error(t, f.Set(string(testCompatGateC)+"=false"))
 }
@@ -1811,7 +1811,7 @@ func TestCopyKnownFeatures(t *testing.T) {
 // TestExplicitlySet 验证 ExplicitlySet 只对命令行中直接出现的 gate 返回 true；
 // AllAlpha/AllBeta 只改变被批量覆盖的 gate 的值，不让它们变为“显式设置”。
 func TestExplicitlySet(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 
@@ -1906,7 +1906,7 @@ func TestExplicitlySet(t *testing.T) {
 // TestResetFeatureValueToDefault 验证 ResetFeatureValueToDefault 只清除某个 gate
 // 的显式设置而保留其他 gate；切换模拟版本后会重新按新版本计算默认值。
 func TestResetFeatureValueToDefault(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testAlphaGate Feature = "TestAlpha"
 	const testBetaGate Feature = "TestBeta"
 
@@ -1964,7 +1964,7 @@ func TestResetFeatureValueToDefault(t *testing.T) {
 // 阶段只能单向推进、版本必须递增且不含 patch、同一版本可有多条但只有
 // MinCompatibilityVersion 不同、锁定状态不可回退、未知格式一律报错。
 func TestAddVersioned(t *testing.T) {
-	// gates for testing
+	// 用于测试的门控
 	const testAGate Feature = "TestA"
 	const testBGate Feature = "TestB"
 	// 表中每个用例描述一种规格序列；expectError 为 true 表示该序列应被拒绝。
@@ -2317,7 +2317,7 @@ func TestAddVersioned(t *testing.T) {
 // 与默认启用状态不出现“高级依赖低级”的倒置，并禁止闭合后再新增依赖。
 func TestAddDependencies(t *testing.T) {
 	const (
-		// Test features
+		// 测试特性
 		fA       Feature = "FeatureA"
 		fB       Feature = "FeatureB"
 		fC       Feature = "FeatureC"
@@ -2550,7 +2550,7 @@ func TestAddDependencies(t *testing.T) {
 				}
 				assert.Equal(t, finalDeps, deps)
 
-				// Verify that DeepCopy clones dependencies.
+				// 验证 DeepCopy 克隆依赖关系。
 				clone := f.DeepCopy().Dependencies()
 				assert.Equal(t, deps, clone, "dependencies should identical after DeepCopy")
 			}

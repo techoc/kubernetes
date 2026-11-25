@@ -25,8 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// DefaultingTest run defaulting tests for given scheme
-//
+// DefaultingTest 对给定 scheme 运行默认化测试。
 // 测试数据位于各包 testdata/<Kind>/before|after/<version>.yaml，
 // 通过 YAML 解码比较默认化前后结果，覆盖编解码与默认化两条路径。
 func DefaultingTest(t *testing.T, scheme *runtime.Scheme, codecs serializer.CodecFactory) {
@@ -34,8 +33,7 @@ func DefaultingTest(t *testing.T, scheme *runtime.Scheme, codecs serializer.Code
 	RunTestsOnYAMLData(t, cases)
 }
 
-// GetDefaultingTestCases returns defaulting testcases for given scheme
-//
+// GetDefaultingTestCases 返回给定 scheme 的默认化测试用例。
 // 内部版本跳过：它们不是用户可见的序列化格式，默认化通过外部版本完成。
 func GetDefaultingTestCases(t *testing.T, scheme *runtime.Scheme, codecs serializer.CodecFactory) []TestCase {
 	cases := []TestCase{}

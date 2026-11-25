@@ -38,7 +38,7 @@ func TestReapply(t *testing.T) {
 	oldReapplyHandling := ReapplyHandling
 	defer func() {
 		ReapplyHandling = oldReapplyHandling
-		if err := ResetForTest(nil /* feature gates */); err != nil {
+		if err := ResetForTest(nil /* 特性门控 */); err != nil {
 			t.Errorf("Unexpected error resetting the logging configuration: %v", err)
 		}
 	}()
@@ -108,11 +108,11 @@ func TestOptions(t *testing.T) {
 				t.Errorf("Wrong Validate() result for %q. expect %v, got %v", tc.name, tc.want, c)
 			}
 			defer func() {
-				if err := ResetForTest(nil /* feature gates */); err != nil {
+				if err := ResetForTest(nil /* 特性门控 */); err != nil {
 					t.Errorf("Unexpected error resetting the logging configuration: %v", err)
 				}
 			}()
-			errs := ValidateAndApply(c, nil /* We don't care about feature gates here. */)
+			errs := ValidateAndApply(c, nil /* 此处不关心特性门控。 */)
 			defer klog.StopFlushDaemon()
 			if !assert.ElementsMatch(t, tc.errs, errs) {
 				t.Errorf("Wrong Validate() result for %q.\n expect:\t%+v\n got:\t%+v", tc.name, tc.errs, errs)
@@ -131,7 +131,7 @@ func TestFlagSet(t *testing.T) {
 		var buffer bytes.Buffer
 		fs.SetOutput(&buffer)
 		fs.PrintDefaults()
-		// Expected (Go 1.19, pflag v1.0.5):
+		// 预期输出（Go 1.19，pflag v1.0.5）：
 		//     --logging-format string          Sets the log format. Permitted formats: "text". (default "text")
 		//     --log-flush-frequency duration   Maximum number of seconds between log flushes (default 5s)
 		// -v, --v Level                        number for the log level verbosity
@@ -158,7 +158,7 @@ $`, buffer.String())
 		var buffer bytes.Buffer
 		fs.SetOutput(&buffer)
 		fs.PrintDefaults()
-		// Expected (Go 1.19):
+		// 预期输出（Go 1.19）：
 		// -log-flush-frequency value
 		//   	Maximum number of seconds between log flushes (default 5s)
 		// -log-text-info-buffer-size value
@@ -193,8 +193,7 @@ $`, buffer.String())
 		AddGoFlags(newOptions, &fs)
 		fs.SetOutput(&buffer)
 		fs.PrintDefaults()
-		// In contrast to copying through VisitAll, the type of some options is now
-		// known:
+		// 与通过 VisitAll 复制不同，现在可以知道部分选项的类型：
 		// -log-flush-frequency duration
 		//   	Maximum number of seconds between log flushes (default 5s)
 		// -log-text-info-buffer-size value
@@ -246,7 +245,7 @@ func testContextualLogging(t *testing.T, enabled bool) {
 	err = featureGate.SetFromMap(map[string]bool{string(ContextualLogging): enabled})
 	require.NoError(t, err)
 	defer func() {
-		if err := ResetForTest(nil /* feature gates */); err != nil {
+		if err := ResetForTest(nil /* 特性门控 */); err != nil {
 			t.Errorf("Unexpected error resetting the logging configuration: %v", err)
 		}
 	}()
@@ -256,9 +255,9 @@ func testContextualLogging(t *testing.T, enabled bool) {
 	defer klog.EnableContextualLogging(true)
 
 	ctx := context.Background()
-	// nolint:logcheck // This intentionally adds a name independently of the feature gate.
+	// nolint:logcheck // 此处有意独立于特性门控添加名称。
 	logger := klog.NewKlogr().WithName("contextual")
-	// nolint:logcheck // This intentionally creates a new context independently of the feature gate.
+	// nolint:logcheck // 此处有意独立于特性门控创建新上下文。
 	ctx = logr.NewContext(ctx, logger)
 	if enabled {
 		assert.Equal(t, logger, klog.FromContext(ctx), "FromContext")

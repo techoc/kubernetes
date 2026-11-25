@@ -194,7 +194,7 @@ func TestSetMinCompatibilityVersion(t *testing.T) {
 			if !effective.MinCompatibilityVersion().EqualTo(minCompatibilityVersion) {
 				t.Errorf("expected minCompatibilityVersion %s, got %s", minCompatibilityVersion.String(), effective.MinCompatibilityVersion().String())
 			}
-			// verify emulationVersion is not changed
+			// 验证 emulationVersion 未改变。
 			if !effective.EmulationVersion().EqualTo(emulationVersion) {
 				t.Errorf("expected emulationVersion %s, got %s", emulationVersion.String(), effective.EmulationVersion().String())
 			}
@@ -203,7 +203,7 @@ func TestSetMinCompatibilityVersion(t *testing.T) {
 				t.Fatalf("expected no Validate errors, errors found %+v", errs)
 				return
 			}
-			// if SetEmulationVersion is called again, it would change the minCompatibilityVersion back to emulationVersion - 1
+			// 再次调用 SetEmulationVersion 会将 minCompatibilityVersion 改回 emulationVersion - 1。
 			effective.SetEmulationVersion(emulationVersion)
 			if !effective.EmulationVersion().EqualTo(emulationVersion) {
 				t.Errorf("expected emulationVersion %s, got %s", emulationVersion.String(), effective.EmulationVersion().String())
@@ -246,7 +246,7 @@ func TestInfo(t *testing.T) {
 			name:             "default min compatibility version is emulation version - 1",
 			binaryVersion:    "v1.34.0",
 			emulationVersion: "v1.32.0",
-			// minCompatibilityVersion not set, should default to v1.31.0
+			// 未设置 minCompatibilityVersion，默认值应为 v1.31.0。
 			expectedMajor:                 "1",
 			expectedMinor:                 "34",
 			expectedEmulationMajor:        "1",
@@ -258,7 +258,7 @@ func TestInfo(t *testing.T) {
 			name:             "emulation version same as binary version",
 			binaryVersion:    "v1.34.0",
 			emulationVersion: "v1.34.0",
-			// minCompatibilityVersion not set, should default to v1.33.0
+			// 未设置 minCompatibilityVersion，默认值应为 v1.33.0。
 			expectedMajor:                 "1",
 			expectedMinor:                 "34",
 			expectedEmulationMajor:        "1",
@@ -274,7 +274,7 @@ func TestInfo(t *testing.T) {
 			name:             "with pre-release and build metadata",
 			binaryVersion:    "v1.34.0-alpha.1+abc123",
 			emulationVersion: "v1.32.0",
-			// minCompatibilityVersion not set, should default to v1.31.0
+			// 未设置 minCompatibilityVersion，默认值应为 v1.31.0。
 			expectedMajor:                 "1",
 			expectedMinor:                 "34",
 			expectedEmulationMajor:        "1",
@@ -286,7 +286,7 @@ func TestInfo(t *testing.T) {
 			name:                          "override default min compatibility version",
 			binaryVersion:                 "v1.34.0",
 			emulationVersion:              "v1.32.0",
-			minCompatibilityVersion:       "v1.32.0", // explicitly set to same as emulation version
+			minCompatibilityVersion:       "v1.32.0", // 显式设置为与模拟版本相同。
 			expectedMajor:                 "1",
 			expectedMinor:                 "34",
 			expectedEmulationMajor:        "1",

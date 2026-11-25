@@ -39,9 +39,7 @@ var (
 	)
 )
 
-// RegisterBuildInfo registers the build and version info in a metadata metric in prometheus
-//
-// init 在包导入时完成注册并立即写入唯一一条样本：
+// init 在包导入时注册构建信息元指标，并立即写入唯一一条样本：
 // 构建信息在进程生命周期内不会变化，因此不存在后续更新。
 func init() {
 	info := version.Get()

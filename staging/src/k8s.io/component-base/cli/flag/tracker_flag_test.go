@@ -209,7 +209,7 @@ func TestTrackerValue_MultipleSetCalls(t *testing.T) {
 		t.Error("Expected 'provided' to be true, got false")
 	}
 
-	provided = false // reset
+	provided = false // 重置
 	mock.err = fmt.Errorf("set error")
 	err = tracker.Set("failed set")
 

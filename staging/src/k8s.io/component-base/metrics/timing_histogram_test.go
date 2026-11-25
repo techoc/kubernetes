@@ -43,7 +43,7 @@ func TestTimingHistogram(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
-		// Non-deprecated metrics
+		// 未弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			TimingHistogramOpts: &TimingHistogramOpts{
@@ -86,7 +86,7 @@ func TestTimingHistogram(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "EXPERIMENTAL: [STABLE] histogram help message",
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			TimingHistogramOpts: &TimingHistogramOpts{
@@ -132,7 +132,7 @@ func TestTimingHistogram(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "EXPERIMENTAL: [STABLE] (Deprecated since 1.15.0) histogram help message",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			TimingHistogramOpts: &TimingHistogramOpts{
@@ -213,7 +213,6 @@ func TestTimingHistogram(t *testing.T) {
 				assert.Equalf(t, test.expectedHelp, metric.GetHelp(), "Got %s as help message, want %s", metric.GetHelp(), test.expectedHelp)
 			}
 
-			// let's exercise the metric and check that it still works
 			// 三段不同持续时间/值：计数为各段纳秒数之和，总和为“值×时长”的积分。
 			v0 := test.TimingHistogramOpts.InitialValue
 			dt1 := time.Nanosecond
@@ -262,7 +261,7 @@ func TestTimingHistogramVec(t *testing.T) {
 		expectedMetricCount int
 		expectedHelp        string
 	}{
-		// Non-deprecated metrics
+		// 未弃用指标
 		{
 			desc: "ALPHA metric non deprecated",
 			TimingHistogramOpts: &TimingHistogramOpts{
@@ -309,7 +308,7 @@ func TestTimingHistogramVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "EXPERIMENTAL: [STABLE] histogram help message",
 		},
-		// Deprecated metrics
+		// 已弃用指标
 		{
 			desc: "ALPHA metric deprecated",
 			TimingHistogramOpts: &TimingHistogramOpts{
@@ -358,7 +357,7 @@ func TestTimingHistogramVec(t *testing.T) {
 			expectedMetricCount: 1,
 			expectedHelp:        "EXPERIMENTAL: [STABLE] (Deprecated since 1.15.0) histogram help message",
 		},
-		// Hidden metrics
+		// 隐藏指标
 		{
 			desc: "ALPHA metric hidden",
 			TimingHistogramOpts: &TimingHistogramOpts{
@@ -447,7 +446,7 @@ func TestTimingHistogramVec(t *testing.T) {
 				}
 			}
 
-			// let's exercise the metric and verify it still works
+			// 操作指标并验证其仍能正常累计。
 			c.WithLabelValues("1", "3").Set(v0)
 			c.WithLabelValues("2", "3").Set(v0)
 			dt1 := time.Nanosecond

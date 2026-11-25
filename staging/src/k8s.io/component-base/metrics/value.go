@@ -22,10 +22,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// ValueType is an enumeration of metric types that represent a simple value.
+// ValueType 是表示简单值的指标类型枚举。
 type ValueType int
 
-// Possible values for the ValueType enum.
 // 取值刻意与 prometheus.ValueType 对齐，以便直接做类型转换。
 const (
 	_ ValueType = iota
@@ -39,9 +38,7 @@ func (vt *ValueType) toPromValueType() prometheus.ValueType {
 	return prometheus.ValueType(*vt)
 }
 
-// NewLazyConstMetric is a helper of MustNewConstMetric.
-//
-// Note: If the metrics described by the desc is hidden, the metrics will not be created.
+// NewLazyConstMetric 是 MustNewConstMetric 的辅助函数。
 // 隐藏指标返回 nil，调用方需要容忍 nil，避免把已弃用指标重新暴露出来。
 func NewLazyConstMetric(desc *Desc, valueType ValueType, value float64, labelValues ...string) Metric {
 	if desc.IsHidden() {
@@ -50,9 +47,7 @@ func NewLazyConstMetric(desc *Desc, valueType ValueType, value float64, labelVal
 	return prometheus.MustNewConstMetric(desc.toPrometheusDesc(), valueType.toPromValueType(), value, labelValues...)
 }
 
-// NewConstMetric is a helper of NewConstMetric.
-//
-// Note: If the metrics described by the desc is hidden, the metrics will not be created.
+// NewConstMetric 是 prometheus.NewConstMetric 的辅助函数。
 // 隐藏指标返回 (nil, nil)，表示“按策略不创建”，而不是错误。
 func NewConstMetric(desc *Desc, valueType ValueType, value float64, labelValues ...string) (Metric, error) {
 	if desc.IsHidden() {
@@ -61,10 +56,8 @@ func NewConstMetric(desc *Desc, valueType ValueType, value float64, labelValues 
 	return prometheus.NewConstMetric(desc.toPrometheusDesc(), valueType.toPromValueType(), value, labelValues...)
 }
 
-// NewLazyMetricWithTimestamp is a helper of NewMetricWithTimestamp.
-//
-// Warning: the Metric 'm' must be the one created by NewLazyConstMetric(),
-// otherwise, no stability guarantees would be offered.
+// NewLazyMetricWithTimestamp 是 NewMetricWithTimestamp 的辅助函数。
+// 注意：Metric 'm' 必须由 NewLazyConstMetric() 创建，否则不提供稳定性保证。
 // 因为 NewLazyConstMetric 可能返回 nil，这里显式短路，避免把 nil 传给 prometheus。
 func NewLazyMetricWithTimestamp(t time.Time, m Metric) Metric {
 	if m == nil {

@@ -25,15 +25,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// setSlogDefaultLogger sets the global slog default logger to the same default
-// that klog currently uses.
+// setSlogDefaultLogger 将全局 slog 默认 logger 设置为 klog 当前使用的默认 logger。
 //
 // 让直接使用 log/slog 的第三方库与 klog 输出到同一目标、遵循同一格式，
 // 避免出现两套互不相干的日志管道。
 func setSlogDefaultLogger() {
-	// klog.Background() always returns a valid logr.Logger, regardless of
-	// how logging was configured. We just need to turn it into a
-	// slog.Handler. SetDefault then needs a slog.Logger.
+	// 无论日志如何配置，klog.Background() 总会返回有效的 logr.Logger。
+	// 只需将其转换为 slog.Handler，再用 slog.Logger 包装并调用 SetDefault。
 	// 经 logr 桥接而非重新构造 handler，确保动态级别与输出目标保持一致。
 	handler := logr.ToSlogHandler(klog.Background())
 	slog.SetDefault(slog.New(handler))

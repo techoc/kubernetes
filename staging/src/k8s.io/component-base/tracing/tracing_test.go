@@ -41,35 +41,35 @@ func init() {
 // TestOpenTelemetryTracing 验证 Start/AddEvent/RecordError/ContextWithSpan 在
 // OpenTelemetry 下生成正确的父子层级与事件序列。
 func TestOpenTelemetryTracing(t *testing.T) {
-	// Setup OpenTelemetry for testing
+	// 为测试配置 OpenTelemetry
 	fakeRecorder := tracetest.NewSpanRecorder()
 	otelTracer := trace.NewTracerProvider(trace.WithSpanProcessor(fakeRecorder)).Tracer(instrumentationScope)
 
 	func() {
 		ctx := context.Background()
-		// Create a parent OpenTelemetry span
+		// 创建父 OpenTelemetry span
 		ctx, span := otelTracer.Start(ctx, "parent otel span")
 		defer span.End()
 
-		// Creates a child span
+		// 创建子 span
 		_, tr := Start(ctx, "frobber", attribute.String("foo", "bar"))
 		defer tr.End(10 * time.Second)
 
 		time.Sleep(5 * time.Millisecond)
-		// Add one event to the frobber span
-		tr.AddEvent("reticulated splines", attribute.Bool("should I do it?", false)) // took 5ms
+		// 为 frobber span 添加一个事件
+		tr.AddEvent("reticulated splines", attribute.Bool("should I do it?", false)) // 耗时 5ms
 		time.Sleep(10 * time.Millisecond)
 
-		// Add error event to the frobber span
+		// 为 frobber span 添加错误事件
 		tr.RecordError(fmt.Errorf("something went wrong"))
 
-		// Ensure setting context with span makes the next span a child
+		// 确认将 span 写入 context 后，下一个 span 会成为其子 span
 		ctx = ContextWithSpan(context.Background(), tr)
 
-		// Add another event to the frobber span after getting the span from context
-		SpanFromContext(ctx).AddEvent("sequenced particles", attribute.Int("inches in foot", 12)) // took 10ms
+		// 从 context 取出 span 后，为 frobber span 添加另一个事件
+		SpanFromContext(ctx).AddEvent("sequenced particles", attribute.Int("inches in foot", 12)) // 耗时 10ms
 
-		// Creates a nested child span
+		// 创建嵌套的子 span
 		_, tr = Start(ctx, "nested child span")
 		defer tr.End(10 * time.Second)
 	}()
@@ -78,12 +78,12 @@ func TestOpenTelemetryTracing(t *testing.T) {
 	if len(output) != 3 {
 		t.Fatalf("got %d; expected len(output) == 3", len(output))
 	}
-	// Nested child span is ended first
+	// 嵌套的子 span 最先结束
 	nestedChild := output[0]
 	if nestedChild.Name() != "nested child span" {
 		t.Fatalf("got %s; expected nestedChild.Name() == nested child span", nestedChild.Name())
 	}
-	// Child span is ended second
+	// 子 span 第二个结束
 	child := output[1]
 	if !nestedChild.Parent().Equal(child.SpanContext()) {
 		t.Errorf("got child: %v, parent: %v; expected child.Parent() == parent.SpanContext()", nestedChild.Parent(), child.SpanContext())
@@ -115,7 +115,7 @@ func TestOpenTelemetryTracing(t *testing.T) {
 	if len(child.Events()[2].Attributes) != 1 {
 		t.Errorf("got event %v; expected 1 attribute in child.Events()[2].Attributes", child.Events()[2])
 	}
-	// Parent span is ended last
+	// 父 span 最后结束
 	parent := output[2]
 	if !child.Parent().Equal(parent.SpanContext()) {
 		t.Fatalf("got child: %v, parent: %v; expected child.Parent() == parent.SpanContext()", child.Parent(), parent.SpanContext())
@@ -135,37 +135,37 @@ func TestUtilTracing(t *testing.T) {
 	klog.SetOutput(&buf)
 
 	ctx := context.Background()
-	// Create a utiltracing span
+	// 创建 utiltrace span
 	tr0 := utiltrace.New("parent utiltrace span")
 	ctx = utiltrace.ContextWithTrace(ctx, tr0)
 
-	// Creates a child span
+	// 创建子 span
 	_, tr1 := Start(ctx, "frobber", attribute.String("foo", "bar"))
 
 	time.Sleep(5 * time.Millisecond)
-	// Add one event to the frobber span
-	tr1.AddEvent("reticulated splines", attribute.Bool("should I do it?", false)) // took 5ms
+	// 为 frobber span 添加一个事件
+	tr1.AddEvent("reticulated splines", attribute.Bool("should I do it?", false)) // 耗时 5ms
 
 	time.Sleep(10 * time.Millisecond)
 
-	// Ensure setting context with span makes the next span a child
+	// 确认将 span 写入 context 后，下一个 span 会成为其子 span
 	ctx = ContextWithSpan(context.Background(), tr1)
 
-	// Add another event to the frobber span after getting the span from context
-	SpanFromContext(ctx).AddEvent("sequenced particles", attribute.Int("inches in foot", 12)) // took 10ms
+	// 从 context 取出 span 后，为 frobber span 添加另一个事件
+	SpanFromContext(ctx).AddEvent("sequenced particles", attribute.Int("inches in foot", 12)) // 耗时 10ms
 
-	// Creates a nested child span
+	// 创建嵌套的子 span
 	_, tr2 := Start(ctx, "nested child span")
-	// always log
+	// 始终记录日志
 	tr2.End(0 * time.Second)
 	tr1.End(0 * time.Second)
 
-	// Since all traces are nested, no logging should have occurred yet
+	// 所有追踪均为嵌套关系，因此此时不应产生日志
 	if buf.String() != "" {
 		t.Errorf("child traces were printed out before the parent span completed: %v", buf.String())
 	}
 
-	// Now, end the parent span to cause logging to occur
+	// 结束父 span，触发日志输出
 	tr0.Log()
 
 	expected := []string{
@@ -185,7 +185,7 @@ func TestUtilTracing(t *testing.T) {
 // TestContextNoPanic 验证空 context 取出的 span 可安全调用，不会触发 nil panic。
 func TestContextNoPanic(t *testing.T) {
 	ctx := context.Background()
-	// Make sure calling functions on spans from context doesn't panic
+	// 确认对从 context 取出的 span 调用方法不会触发 panic
 	SpanFromContext(ctx).AddEvent("foo")
 	SpanFromContext(ctx).End(time.Minute)
 }

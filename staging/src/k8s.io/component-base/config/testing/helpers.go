@@ -29,15 +29,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// TestCase defines a testcase for roundtrip and defaulting tests
+// TestCase 定义往返与默认化测试用例。
 // name 用作子测试名；in/out 为相对测试数据目录的 YAML 文件路径。
 type TestCase struct {
 	name, in, out string
 	codec         runtime.Codec
 }
 
-// RunTestsOnYAMLData decodes the yaml file from specified path, encodes the object and matches
-// with expected yaml in specified path
+// RunTestsOnYAMLData 解码指定路径的 YAML 文件，重新编码对象并与指定路径的期望 YAML 比较。
 func RunTestsOnYAMLData(t *testing.T, tests []TestCase) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,7 +52,7 @@ func decodeYAML(t *testing.T, path string, codec runtime.Codec) runtime.Object {
 		t.Fatal(err)
 	}
 
-	// decode to internal type
+	// 解码为内部类型。
 	object, err := runtime.Decode(codec, content)
 	if err != nil {
 		t.Fatal(err)
