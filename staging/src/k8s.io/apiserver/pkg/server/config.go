@@ -89,53 +89,52 @@ import (
 	"k8s.io/utils/clock"
 	utilsnet "k8s.io/utils/net"
 
-	// install apis
+	// 安装 apis
 	_ "k8s.io/apiserver/pkg/apis/apiserver/install"
 )
 
-// hostnameFunc is a function to set the hostnameFunc of this apiserver.
-// To be used for testing purpose only, to simulate scenarios where multiple apiservers
-// exist. In such cases we want to ensure unique apiserver IDs which are a hash of hostnameFunc.
+// hostnameFunc 用于设置本 apiserver 的 hostnameFunc。
+// 仅供测试使用，用来模拟存在多个 apiserver 的场景。
+// 这种情况下我们需要保证 apiserver ID 唯一，而它是 hostnameFunc 的哈希值。
 var (
 	hostnameFunc = os.Hostname
 )
 
 const (
-	// DefaultLegacyAPIPrefix is where the legacy APIs will be located.
+	// DefaultLegacyAPIPrefix 是 legacy API 所在的路径前缀。
 	DefaultLegacyAPIPrefix = "/api"
 
-	// APIGroupPrefix is where non-legacy API group will be located.
+	// APIGroupPrefix 是非 legacy API group 所在的路径前缀。
 	APIGroupPrefix = "/apis"
 )
 
-// Config is a structure used to configure a GenericAPIServer.
-// Its members are sorted roughly in order of importance for composers.
+// Config 是用于配置 GenericAPIServer 的结构体。
+// 其成员大致按照对组装者（composers）的重要程度排序。
 //
 // Config 由各聚合 apiserver 在启动时填充；Complete 会补齐可推导字段，之后应视为只读。
 type Config struct {
-	// SecureServing is required to serve https
+	// SecureServing 是提供 https 服务所必需的
 	SecureServing *SecureServingInfo
 
-	// Authentication is the configuration for authentication
+	// Authentication 是认证（authentication）相关的配置
 	Authentication AuthenticationInfo
 
-	// Authorization is the configuration for authorization
+	// Authorization 是授权（authorization）相关的配置
 	Authorization AuthorizationInfo
 
 	// LoopbackClientConfig 是到 API 服务器的特权回环连接的客户端配置，GenericAPIServer 上的 PostStartHooks 必须依赖它才能正常工作。
 	// 回环客户端使用特权令牌，仅用于服务器内部组件（如 post-start hook）调用自身。
-	// TODO: move into SecureServing(WithLoopback) as soon as insecure serving is gone
+	// TODO: 一旦不安全服务（insecure serving）被移除，就把这里移入 SecureServing(WithLoopback)
 	LoopbackClientConfig *restclient.Config
 
-	// EgressSelector provides a lookup mechanism for dialing outbound connections.
-	// It does so based on a EgressSelectorConfiguration which was read at startup.
+	// EgressSelector 提供用于拨出（outbound）连接的查找机制。
+	// 它依据启动时读取的 EgressSelectorConfiguration 来决定如何拨号。
 	EgressSelector *egressselector.EgressSelector
 
-	// RuleResolver is required to get the list of rules that apply to a given user
-	// in a given namespace
+	// RuleResolver 是获取“在给定命名空间下作用于给定用户”的规则列表所必需的
 	RuleResolver authorizer.RuleResolver
-	// AdmissionControl performs deep inspection of a given request (including content)
-	// to set values and determine whether its allowed
+	// AdmissionControl 对给定请求（包括请求内容）做深入检查，
+	// 以设置取值并判断其是否被允许
 	AdmissionControl      admission.Interface
 	CorsAllowedOriginList []string
 	HSTSDirectives        []string
@@ -147,16 +146,16 @@ type Config struct {
 	DebugSocketPath string
 	EnableDiscovery bool
 
-	// Requires generic profiling enabled
+	// 需要先启用通用 profiling（EnableProfiling）
 	EnableContentionProfiling bool
 	EnableMetrics             bool
 
 	DisabledPostStartHooks sets.String
-	// done values in this values for this map are ignored.
+	// 该 map 中值的 done 字段会被忽略。
 	PostStartHooks map[string]PostStartHookConfigEntry
 
-	// EffectiveVersion determines which apis and features are available
-	// based on when the api/feature lifecyle.
+	// EffectiveVersion 依据 API/特性的生命周期（lifecycle）
+	// 决定哪些 apis 和 features 可用。
 	EffectiveVersion basecompatibility.EffectiveVersion
 	// EmulationForwardCompatible 是一个隐式启用所有在模拟版本之后引入、且优先级高于模拟版本下已启用的同组同资源 API 的选项。
 	// 为 true 时，所有优先级高于模拟版本下已启用的同组同资源 API（beta+）的 API 都会被安装。
@@ -167,62 +166,62 @@ type Config struct {
 	// 为 true 时，--runtime-config 中按 group/version 启用的 API 即使晚于模拟版本引入也会被安装；为 false 时，若 --runtime-config 显式启用了此类晚于模拟版本的 API 则会报错。
 	// 聚合型取值（如 api/all、api/ga、api/beta）不受该开关影响，只启用当前模拟版本已有的 API。
 	RuntimeConfigEmulationForwardCompatible bool
-	// FeatureGate is a way to plumb feature gate through if you have them.
+	// FeatureGate 是把你持有的 feature gate 传递进来的方式。
 	FeatureGate featuregate.FeatureGate
-	// AuditBackend is where audit events are sent to.
+	// AuditBackend 是审计事件发送的目标。
 	AuditBackend audit.Backend
-	// AuditPolicyRuleEvaluator makes the decision of whether and how to audit log a request.
+	// AuditPolicyRuleEvaluator 决定是否审计记录一次请求、以及如何记录。
 	AuditPolicyRuleEvaluator audit.PolicyRuleEvaluator
-	// ExternalAddress is the host name to use for external (public internet) facing URLs (e.g. Swagger)
-	// Will default to a value based on secure serving info and available ipv4 IPs.
+	// ExternalAddress 是对外（公网）URL（例如 Swagger）所使用的宿主名。
+	// 缺省时会取一个基于 secure serving 信息和可用 IPv4 地址的值。
 	ExternalAddress string
 
-	// TracerProvider can provide a tracer, which records spans for distributed tracing.
+	// TracerProvider 可以提供一个 tracer，用于为分布式追踪记录 span。
 	TracerProvider tracing.TracerProvider
 
 	//===========================================================================
-	// Fields you probably don't care about changing
+	// 这些字段你大概不关心改不改
 	//===========================================================================
 
-	// BuildHandlerChainFunc allows you to build custom handler chains by decorating the apiHandler.
+	// BuildHandlerChainFunc 允许你通过装饰 apiHandler 来构建自定义的 handler 链。
 	BuildHandlerChainFunc func(apiHandler http.Handler, c *Config) (secure http.Handler)
-	// NonLongRunningRequestWaitGroup allows you to wait for all chain
-	// handlers associated with non long-running requests
-	// to complete while the server is shuting down.
+	// NonLongRunningRequestWaitGroup 让你在服务器关闭期间等待
+	// 所有与非长时运行（non long-running）请求
+	// 相关的链上 handler 执行完毕。
 	NonLongRunningRequestWaitGroup *utilwaitgroup.SafeWaitGroup
-	// WatchRequestWaitGroup allows us to wait for all chain
-	// handlers associated with active watch requests to
-	// complete while the server is shuting down.
+	// WatchRequestWaitGroup 让我们在服务器关闭期间等待
+	// 所有与处于活动状态的 watch 请求相关的
+	// 链上 handler 执行完毕。
 	WatchRequestWaitGroup *utilwaitgroup.RateLimitedSafeWaitGroup
-	// DiscoveryAddresses is used to build the IPs pass to discovery. If nil, the ExternalAddress is
-	// always reported
+	// DiscoveryAddresses 用于构造传给 discovery 的 IP。若为 nil，则
+	// 始终上报 ExternalAddress
 	DiscoveryAddresses discovery.Addresses
-	// The default set of healthz checks. There might be more added via AddHealthChecks dynamically.
+	// 默认的 healthz 检查集合。后续还可以通过 AddHealthChecks 动态添加更多。
 	HealthzChecks []healthz.HealthChecker
-	// The default set of livez checks. There might be more added via AddHealthChecks dynamically.
+	// 默认的 livez 检查集合。后续还可以通过 AddHealthChecks 动态添加更多。
 	LivezChecks []healthz.HealthChecker
-	// The default set of readyz-only checks. There might be more added via AddReadyzChecks dynamically.
+	// 默认仅用于 readyz 的检查集合。后续还可以通过 AddReadyzChecks 动态添加更多。
 	ReadyzChecks []healthz.HealthChecker
 	Flagz        flagz.Reader
-	// LegacyAPIGroupPrefixes is used to set up URL parsing for authorization and for validating requests
-	// to InstallLegacyAPIGroup. New API servers don't generally have legacy groups at all.
+	// LegacyAPIGroupPrefixes 用于设置授权所用的 URL 解析，以及校验发往
+	// InstallLegacyAPIGroup 的请求。新的 API 服务器一般根本没有 legacy group。
 	LegacyAPIGroupPrefixes sets.String
-	// RequestInfoResolver is used to assign attributes (used by admission and authorization) based on a request URL.
-	// Use-cases that are like kubelets may need to customize this.
+	// RequestInfoResolver 用于依据请求 URL 赋值那些属性（被 admission 和 authorization 使用）。
+	// 类似 kubelet 的使用场景可能需要自定义它。
 	RequestInfoResolver apirequest.RequestInfoResolver
-	// Serializer is required and provides the interface for serializing and converting objects to and from the wire
-	// The default (api.Codecs) usually works fine.
+	// Serializer 是必需的，它提供把对象序列化/反序列化并与线上格式互转的接口。
+	// 默认值（api.Codecs）通常就够用了。
 	Serializer runtime.NegotiatedSerializer
-	// OpenAPIConfig will be used in generating OpenAPI spec. This is nil by default. Use DefaultOpenAPIConfig for "working" defaults.
+	// OpenAPIConfig 将用于生成 OpenAPI spec。默认为 nil。想要“可用”的默认值请使用 DefaultOpenAPIConfig。
 	OpenAPIConfig *openapicommon.Config
-	// OpenAPIV3Config will be used in generating OpenAPI V3 spec. This is nil by default. Use DefaultOpenAPIV3Config for "working" defaults.
+	// OpenAPIV3Config 将用于生成 OpenAPI V3 spec。默认为 nil。想要“可用”的默认值请使用 DefaultOpenAPIV3Config。
 	OpenAPIV3Config *openapicommon.OpenAPIV3Config
-	// SkipOpenAPIInstallation avoids installing the OpenAPI handler if set to true.
+	// SkipOpenAPIInstallation 为 true 时，不会安装 OpenAPI handler。
 	SkipOpenAPIInstallation bool
 
-	// ResourceTransformers are used to transform resources from and to etcd, e.g. encryption.
+	// ResourceTransformers 用于在资源与 etcd 之间来回转换，例如做加密。
 	ResourceTransformers storagevalue.ResourceTransformers
-	// RESTOptionsGetter is used to construct RESTStorage types via the generic registry.
+	// RESTOptionsGetter 用于通过通用 registry 构造 RESTStorage 类型。
 	RESTOptionsGetter genericregistry.RESTOptionsGetter
 
 	// RequestTimeout 指定后，除匹配 LongRunningFunc 谓词的请求外，所有请求超过该时长即超时。
@@ -232,50 +231,50 @@ type Config struct {
 	// 随机化可避免大量 watch 同时超时重连，形成惊群。
 	MinRequestTimeout int
 
-	// StorageInitializationTimeout defines the maximum amount of time to wait for storage initialization
-	// before declaring apiserver ready.
+	// StorageInitializationTimeout 定义在宣告 apiserver 就绪之前，
+	// 等待存储初始化的最长时间。
 	StorageInitializationTimeout time.Duration
 
-	// This represents the maximum amount of time it should take for apiserver to complete its startup
-	// sequence and become healthy. From apiserver's start time to when this amount of time has
-	// elapsed, /livez will assume that unfinished post-start hooks will complete successfully and
-	// therefore return true.
+	// 它表示 apiserver 完成启动流程并变为健康状态所应当花费的最长时间。
+	// 从 apiserver 启动时刻起，到该时长耗尽之前，/livez 会认为
+	// 尚未完成的 post-start hook 会成功完成，
+	// 因而返回 true。
 	LivezGracePeriod time.Duration
 	// ShutdownDelayDuration 允许推迟关闭一段时间，例如直到指向本 API 服务器的 endpoints 在所有节点上收敛。在此期间 API 服务器持续服务，/healthz 返回 200，但 /readyz 返回失败。
 	// 该延迟让负载均衡器有时间把流量切走，减少滚动更新时的连接错误。
 	ShutdownDelayDuration time.Duration
 
-	// The limit on the total size increase all "copy" operations in a json
-	// patch may cause.
-	// This affects all places that applies json patch in the binary.
+	// 限制一次 json patch 中所有 "copy" 操作可能造成的
+	// 总体积增长上限。
+	// 它作用于该二进制中所有应用 json patch 的地方。
 	JSONPatchMaxCopyBytes int64
 	// MaxRequestBodyBytes 限制写请求可接受并解码的请求体大小；0 表示不限制。
 	// 默认 3MB，用于防止超大请求耗尽内存；etcd 侧推荐的请求上限为 1.5MB。
 	MaxRequestBodyBytes int64
-	// MaxRequestsInFlight is the maximum number of parallel non-long-running requests. Every further
-	// request has to wait. Applies only to non-mutating requests.
+	// MaxRequestsInFlight 是并行处理的非长时运行请求的最大数量，超出的
+	// 请求必须等待。它只适用于非变更（non-mutating）请求。
 	MaxRequestsInFlight int
-	// MaxMutatingRequestsInFlight is the maximum number of parallel mutating requests. Every further
-	// request has to wait.
+	// MaxMutatingRequestsInFlight 是并行处理的变更（mutating）请求的最大数量，
+	// 超出的请求必须等待。
 	MaxMutatingRequestsInFlight int
-	// Predicate which is true for paths of long-running http requests
+	// 对于长时运行的 http 请求路径，该谓词返回 true
 	LongRunningFunc apirequest.LongRunningRequestCheck
 
 	// GoawayChance 是向 HTTP/2 客户端发送 GOAWAY 的概率：收到 GOAWAY 后客户端在途请求不受影响，新请求会新建 TCP 连接，从而触发负载均衡到后端另一台服务器。
 	// 默认为 0，表示从不发送 GOAWAY；上限为 0.02，以免压垮 apiserver。概率性 GOAWAY 用于推动客户端重新建连，从而在负载均衡后端之间再平衡。
 	GoawayChance float64
 
-	// MergedResourceConfig indicates which groupVersion enabled and its resources enabled/disabled.
-	// This is composed of genericapiserver defaultAPIResourceConfig and those parsed from flags.
-	// If not specify any in flags, then genericapiserver will only enable defaultAPIResourceConfig.
+	// MergedResourceConfig 指明哪些 groupVersion 被启用，以及其中的资源是启用还是禁用。
+	// 它由 genericapiserver 的 defaultAPIResourceConfig 与从命令行 flag 解析出的配置合并而成。
+	// 如果 flag 中没有指定任何配置，genericapiserver 只会启用 defaultAPIResourceConfig。
 	MergedResourceConfig *serverstore.ResourceConfig
 
 	// lifecycleSignals 提供对 API 服务器生命周期中各个信号的访问。
 	// 该字段有意声明为私有，绝不应被外部覆盖；生命周期信号驱动优雅关闭的各个阶段。
 	lifecycleSignals lifecycleSignals
 
-	// StorageObjectCountTracker is used to keep track of the total number of objects
-	// in the storage per resource, so we can estimate width of incoming requests.
+	// StorageObjectCountTracker 用于统计存储中每种资源的对象总数，
+	// 这样我们就能估算进入请求的宽度（width）。
 	StorageObjectCountTracker flowcontrolrequest.StorageObjectCountTracker
 
 	// ShutdownSendRetryAfter 决定 API 服务器优雅终止期间何时启动 HTTP Server 关闭：为 true 时，先排空在途的非长时请求再发起关闭；为 false 时，ShutdownDelayDuration 一到就立即发起关闭。
@@ -284,25 +283,25 @@ type Config struct {
 	ShutdownSendRetryAfter bool
 
 	//===========================================================================
-	// values below here are targets for removal
+	// 以下这些值是计划移除的对象
 	//===========================================================================
 
-	// PublicAddress is the IP address where members of the cluster (kubelet,
-	// kube-proxy, services, etc.) can reach the GenericAPIServer.
-	// If nil or 0.0.0.0, the host's default interface will be used.
+	// PublicAddress 是集群成员（kubelet、kube-proxy、Service 等）
+	// 访问 GenericAPIServer 时使用的 IP 地址。
+	// 若为 nil 或 0.0.0.0，则使用主机的默认网卡。
 	PublicAddress net.IP
 
-	// EquivalentResourceRegistry provides information about resources equivalent to a given resource,
-	// and the kind associated with a given resource. As resources are installed, they are registered here.
+	// EquivalentResourceRegistry 提供“与给定资源等价的资源”以及“给定资源对应的 kind”
+	// 相关信息。随着资源被安装，它们会在此处注册。
 	EquivalentResourceRegistry runtime.EquivalentResourceRegistry
 
-	// APIServerID is the ID of this API server
+	// APIServerID 是本 API 服务器的 ID
 	APIServerID string
 
-	// StorageVersionManager holds the storage versions of the API resources installed by this server.
+	// StorageVersionManager 保存本服务器安装的 API 资源的存储版本。
 	StorageVersionManager storageversion.Manager
 
-	// AggregatedDiscoveryGroupManager serves /apis in an aggregated form.
+	// AggregatedDiscoveryGroupManager 以聚合形式提供 /apis 服务。
 	AggregatedDiscoveryGroupManager discoveryendpoint.ResourceManager
 	// ShutdownWatchTerminationGracePeriod 为正值时，表示 API 服务器等待所有活跃 watch 请求排空的最长时长；宽限期一到，服务器便不再等待在途的活跃 watch，直接继续优雅关闭流程的下一步。
 	// 设置为正值后，API 服务器会跟踪在途活跃 watch 请求的数量，并在关闭时最多等待指定时长，让这些活跃 watch 请求在限速生效的情况下排空。
@@ -316,61 +315,61 @@ type Config struct {
 type RecommendedConfig struct {
 	Config
 
-	// SharedInformerFactory provides shared informers for Kubernetes resources. This value is set by
-	// RecommendedOptions.CoreAPI.ApplyTo called by RecommendedOptions.ApplyTo. It uses an in-cluster client config
-	// by default, or the kubeconfig given with kubeconfig command line flag.
+	// SharedInformerFactory 为 Kubernetes 资源提供共享 informer。该值由
+	// RecommendedOptions.ApplyTo 调用的 RecommendedOptions.CoreAPI.ApplyTo 设置。
+	// 默认使用集群内（in-cluster）客户端配置，或使用 kubeconfig 命令行 flag 指定的 kubeconfig。
 	SharedInformerFactory informers.SharedInformerFactory
 
-	// ClientConfig holds the kubernetes client configuration.
-	// This value is set by RecommendedOptions.CoreAPI.ApplyTo called by RecommendedOptions.ApplyTo.
-	// By default in-cluster client config is used.
+	// ClientConfig 保存 Kubernetes 客户端配置。
+	// 该值由 RecommendedOptions.ApplyTo 调用的 RecommendedOptions.CoreAPI.ApplyTo 设置。
+	// 默认使用集群内（in-cluster）客户端配置。
 	ClientConfig *restclient.Config
 }
 
 // SecureServingInfo 描述安全（HTTPS）监听的网络与 TLS 参数。
 type SecureServingInfo struct {
-	// Listener is the secure server network listener.
+	// Listener 是安全服务的网络监听器。
 	Listener net.Listener
 
-	// Cert is the main server cert which is used if SNI does not match. Cert must be non-nil and is
-	// allowed to be in SNICerts.
+	// Cert 是主服务器证书，当 SNI 不匹配时使用。Cert 必须非 nil，
+	// 并且允许同时出现在 SNICerts 中。
 	Cert dynamiccertificates.CertKeyContentProvider
 
-	// SNICerts are the TLS certificates used for SNI.
+	// SNICerts 是用于 SNI 的 TLS 证书。
 	SNICerts []dynamiccertificates.SNICertKeyContentProvider
 
-	// ClientCA is the certificate bundle for all the signers that you'll recognize for incoming client certificates
+	// ClientCA 是证书集合，包含你会认可的所有签发者，用于校验进来的客户端证书
 	ClientCA dynamiccertificates.CAContentProvider
 
-	// MinTLSVersion optionally overrides the minimum TLS version supported.
-	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	// MinTLSVersion 可以选择性地覆盖所支持的最小 TLS 版本。
+	// 取值来自 tls 包的常量（https://golang.org/pkg/crypto/tls/#pkg-constants）。
 	MinTLSVersion uint16
 
-	// CipherSuites optionally overrides the list of allowed cipher suites for the server.
-	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	// CipherSuites 可以选择性地覆盖服务器允许的加密套件列表。
+	// 取值来自 tls 包的常量（https://golang.org/pkg/crypto/tls/#pkg-constants）。
 	CipherSuites []uint16
 
-	// CurvePreferences optionally specifies the set of allowed key exchange mechanisms for the server.
-	// The order of the list is ignored, and key exchange mechanisms
-	// are chosen by Go from this list using an internal preference order.
-	// If empty, the default Go curves will be used.
-	// Values are from the Go crypto/tls CurveID constants (https://golang.org/pkg/crypto/tls/#CurveID).
+	// CurvePreferences 可以选择性地指定服务器允许的密钥交换机制集合。
+	// 列表顺序会被忽略，Go 会按照内部偏好顺序
+	// 从该列表中挑选密钥交换机制。
+	// 若为空，则使用 Go 的默认曲线。
+	// 取值来自 Go crypto/tls 的 CurveID 常量（https://golang.org/pkg/crypto/tls/#CurveID）。
 	CurvePreferences []tls.CurveID
 
-	// HTTP2MaxStreamsPerConnection is the limit that the api server imposes on each client.
-	// A value of zero means to use the default provided by golang's HTTP/2 support.
+	// HTTP2MaxStreamsPerConnection 是 api server 对每个客户端施加的上限。
+	// 取值为零表示使用 Go 的 HTTP/2 支持所提供的默认值。
 	HTTP2MaxStreamsPerConnection int
 
-	// DisableHTTP2 indicates that http2 should not be enabled.
+	// DisableHTTP2 表示不应启用 http2。
 	DisableHTTP2 bool
 }
 
 // AuthenticationInfo 汇总认证所需的认证器、受众标识与请求头配置。
 type AuthenticationInfo struct {
-	// APIAudiences is a list of identifier that the API identifies as. This is
-	// used by some authenticators to validate audience bound credentials.
+	// APIAudiences 是 API 对外声明自身身份的标识列表，某些
+	// 认证器用它校验绑定了受众（audience）的凭据。
 	APIAudiences authenticator.Audiences
-	// Authenticator determines which subject is making the request
+	// Authenticator 判定发起请求的是哪个主体
 	Authenticator authenticator.Request
 
 	RequestHeaderConfig *authenticatorfactory.RequestHeaderConfig
@@ -378,8 +377,8 @@ type AuthenticationInfo struct {
 
 // AuthorizationInfo 汇总授权所需的授权器。
 type AuthorizationInfo struct {
-	// Authorizer determines whether the subject is allowed to make the request based only
-	// on the RequestURI
+	// Authorizer 仅依据 RequestURI 判断该主体
+	// 是否被允许发起本次请求
 	Authorizer authorizer.Authorizer
 }
 
@@ -387,7 +386,7 @@ func init() {
 	utilruntime.Must(features.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
 
-// NewConfig returns a Config struct with the default values
+// NewConfig 返回一个带有默认取值的 Config 结构体
 func NewConfig(codecs serializer.CodecFactory) *Config {
 	defaultHealthChecks := []healthz.HealthChecker{healthz.PingHealthz, healthz.LogHealthz}
 	var id string
@@ -398,10 +397,10 @@ func NewConfig(codecs serializer.CodecFactory) *Config {
 			klog.Fatalf("error getting hostname for apiserver identity: %v", err)
 		}
 
-		// Since the hash needs to be unique across each kube-apiserver and aggregated apiservers,
-		// the hash used for the identity should include both the hostname and the identity value.
-		// TODO: receive the identity value as a parameter once the apiserver identity lease controller
-		// post start hook is moved to generic apiserver.
+		// 由于哈希需要在每个 kube-apiserver 和各聚合 apiserver 之间保持唯一，
+		// 因此身份所用的哈希应当同时包含 hostname 和 identity 取值。
+		// TODO: 一旦 generic apiserver 接管了 apiserver identity lease 控制器的
+		// post start hook，就把 identity 取值作为参数接收进来。
 		// 长度前缀编码避免 hostname 与固定字符串拼接产生歧义。
 		b := cryptobyte.NewBuilder(nil)
 		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
@@ -443,26 +442,25 @@ func NewConfig(codecs serializer.CodecFactory) *Config {
 		StorageInitializationTimeout:   time.Minute,
 		LivezGracePeriod:               time.Duration(0),
 		ShutdownDelayDuration:          time.Duration(0),
-		// 1.5MB is the default client request size in bytes
-		// the etcd server should accept. See
-		// https://github.com/etcd-io/etcd/blob/release-3.4/embed/config.go#L56.
-		// A request body might be encoded in json, and is converted to
-		// proto when persisted in etcd, so we allow 2x as the largest size
-		// increase the "copy" operations in a json patch may cause.
+		// 1.5MB 是 etcd 服务端应当接受的客户端请求大小默认字节数，
+		// 参见
+		// https://github.com/etcd-io/etcd/blob/release-3.4/embed/config.go#L56。
+		// 请求体可能以 json 编码，持久化到 etcd 时会被转换为 proto，
+		// 因此我们把 json patch 中所有 "copy" 操作可能造成的最大
+		// 体积增长放宽到 2 倍。
 		JSONPatchMaxCopyBytes: int64(3 * 1024 * 1024),
-		// 1.5MB is the recommended client request size in byte
-		// the etcd server should accept. See
-		// https://github.com/etcd-io/etcd/blob/release-3.4/embed/config.go#L56.
-		// A request body might be encoded in json, and is converted to
-		// proto when persisted in etcd, so we allow 2x as the largest request
-		// body size to be accepted and decoded in a write request.
-		// If this constant is changed, DefaultMaxRequestSizeBytes in k8s.io/apiserver/pkg/cel/limits.go
-		// should be changed to reflect the new value, if the two haven't
-		// been wired together already somehow.
+		// 1.5MB 是推荐 etcd 服务端接受的客户端请求大小字节数，
+		// 参见
+		// https://github.com/etcd-io/etcd/blob/release-3.4/embed/config.go#L56。
+		// 请求体可能以 json 编码，持久化到 etcd 时会被转换为 proto，
+		// 因此我们把写请求可接受并解码的最大请求体大小放宽到 2 倍。
+		// 如果修改了该常量，k8s.io/apiserver/pkg/cel/limits.go 中的
+		// DefaultMaxRequestSizeBytes 也应当同步修改以反映新取值，
+		// 除非两者已经以某种方式关联在一起。
 		MaxRequestBodyBytes: int64(3 * 1024 * 1024),
 
-		// Default to treating watch as a long-running operation
-		// Generic API servers have no inherent long-running subresources
+		// 默认把 watch 视为长时运行操作
+		// 通用 API 服务器没有固有的长时运行子资源
 		LongRunningFunc:                     genericfilters.BasicLongRunningRequestCheck(sets.NewString("watch"), sets.NewString()),
 		lifecycleSignals:                    lifecycleSignals,
 		StorageObjectCountTracker:           flowcontrolrequest.NewStorageObjectCountTracker(),
@@ -474,14 +472,14 @@ func NewConfig(codecs serializer.CodecFactory) *Config {
 	}
 }
 
-// NewRecommendedConfig returns a RecommendedConfig struct with the default values
+// NewRecommendedConfig 返回一个带有默认取值的 RecommendedConfig 结构体
 func NewRecommendedConfig(codecs serializer.CodecFactory) *RecommendedConfig {
 	return &RecommendedConfig{
 		Config: *NewConfig(codecs),
 	}
 }
 
-// DefaultOpenAPIConfig provides the default OpenAPIConfig used to build the OpenAPI V2 spec
+// DefaultOpenAPIConfig 提供用于构建 OpenAPI V2 spec 的默认 OpenAPIConfig
 func DefaultOpenAPIConfig(getDefinitions openapicommon.GetOpenAPIDefinitions, defNamer *apiopenapi.DefinitionNamer) *openapicommon.Config {
 	return &openapicommon.Config{
 		ProtocolList:   []string{"https"},
@@ -502,7 +500,7 @@ func DefaultOpenAPIConfig(getDefinitions openapicommon.GetOpenAPIDefinitions, de
 	}
 }
 
-// DefaultOpenAPIV3Config provides the default OpenAPIV3Config used to build the OpenAPI V3 spec
+// DefaultOpenAPIV3Config 提供用于构建 OpenAPI V3 spec 的默认 OpenAPIV3Config
 func DefaultOpenAPIV3Config(getDefinitions openapicommon.GetOpenAPIDefinitions, defNamer *apiopenapi.DefinitionNamer) *openapicommon.OpenAPIV3Config {
 	defaultConfig := &openapicommon.OpenAPIV3Config{
 		IgnorePrefixes: []string{},
@@ -552,17 +550,17 @@ type completedConfig struct {
 	*Config
 
 	//===========================================================================
-	// values below here are filled in during completion
+	// 以下这些值在完成（completion）阶段被填充
 	//===========================================================================
 
-	// SharedInformerFactory provides shared informers for resources
+	// SharedInformerFactory 为资源提供共享 informer
 	SharedInformerFactory informers.SharedInformerFactory
 }
 
 // CompletedConfig 把 completedConfig 藏在私有指针后，保证只能由本包生成，
 // 调用方无法手工构造一个未完成初始化的配置。
 type CompletedConfig struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
+	// 嵌入一个私有指针，该指针无法在本包之外实例化。
 	*completedConfig
 }
 
@@ -574,26 +572,26 @@ func (c *Config) AddHealthChecks(healthChecks ...healthz.HealthChecker) {
 	c.ReadyzChecks = append(c.ReadyzChecks, healthChecks...)
 }
 
-// AddHealthzChecks adds the provided health checks to our config to be exposed by the
-// healthz endpoint of our configured apiserver.
+// AddHealthzChecks 把给定的健康检查加入我们的配置，
+// 由所配置的 apiserver 的 healthz 端点暴露。
 func (c *Config) AddHealthzChecks(healthChecks ...healthz.HealthChecker) {
 	c.HealthzChecks = append(c.HealthzChecks, healthChecks...)
 }
 
-// AddLivezChecks adds the provided health checks to our config to be exposed by the
-// livez endpoint of our configured apiserver.
+// AddLivezChecks 把给定的健康检查加入我们的配置，
+// 由所配置的 apiserver 的 livez 端点暴露。
 func (c *Config) AddLivezChecks(healthChecks ...healthz.HealthChecker) {
 	c.LivezChecks = append(c.LivezChecks, healthChecks...)
 }
 
-// AddReadyzChecks adds a health check to our config to be exposed by the readyz endpoint
-// of our configured apiserver.
+// AddReadyzChecks 把健康检查加入我们的配置，由所配置的
+// apiserver 的 readyz 端点暴露。
 func (c *Config) AddReadyzChecks(healthChecks ...healthz.HealthChecker) {
 	c.ReadyzChecks = append(c.ReadyzChecks, healthChecks...)
 }
 
-// AddPostStartHook allows you to add a PostStartHook that will later be added to the server itself in a New call.
-// Name conflicts will cause an error.
+// AddPostStartHook 允许你添加一个 PostStartHook，它稍后会在 New 调用中被加入服务器本身。
+// 名称冲突会导致错误。
 func (c *Config) AddPostStartHook(name string, hook PostStartHookFunc) error {
 	if len(name) == 0 {
 		return fmt.Errorf("missing name")
@@ -616,7 +614,7 @@ func (c *Config) AddPostStartHook(name string, hook PostStartHookFunc) error {
 	return nil
 }
 
-// AddPostStartHookOrDie allows you to add a PostStartHook, but dies on failure.
+// AddPostStartHookOrDie 允许你添加一个 PostStartHook，失败时直接退出进程。
 func (c *Config) AddPostStartHookOrDie(name string, hook PostStartHookFunc) {
 	if err := c.AddPostStartHook(name, hook); err != nil {
 		klog.Fatalf("Error registering PostStartHook %q: %v", name, err)
@@ -650,7 +648,7 @@ func completeOpenAPI(config *openapicommon.Config, version *version.Version) {
 			}
 		}
 	}
-	// make sure we populate info, and info.version, if not manually set
+	// 如果不是手工设置的，就要保证把 info 以及 info.version 填上
 	if config.Info == nil {
 		config.Info = &spec.Info{}
 	}
@@ -670,7 +668,7 @@ func completeOpenAPIV3(config *openapicommon.OpenAPIV3Config, version *version.V
 		return
 	}
 	if config.SecuritySchemes != nil {
-		// Setup OpenAPI security: all APIs will have the same authentication for now.
+		// 设置 OpenAPI security：目前所有 API 使用相同的认证方式。
 		config.DefaultSecurity = []map[string][]string{}
 		keys := []string{}
 		for k := range config.SecuritySchemes {
@@ -691,7 +689,7 @@ func completeOpenAPIV3(config *openapicommon.OpenAPIV3Config, version *version.V
 			}
 		}
 	}
-	// make sure we populate info, and info.version, if not manually set
+	// 如果不是手工设置的，就要保证把 info 以及 info.version 填上
 	if config.Info == nil {
 		config.Info = &spec.Info{}
 	}
@@ -710,13 +708,13 @@ func (c *Config) DrainedNotify() <-chan struct{} {
 	return c.lifecycleSignals.InFlightRequestsDrained.Signaled()
 }
 
-// ShutdownInitiated returns a lifecycle signal of apiserver shutdown having been initiated.
+// ShutdownInitiated 返回一个生命周期信号，表示 apiserver 已经发起关闭流程。
 func (c *Config) ShutdownInitiatedNotify() <-chan struct{} {
 	return c.lifecycleSignals.ShutdownInitiated.Signaled()
 }
 
-// Complete fills in any fields not set that are required to have valid data and can be derived
-// from other fields. If you're going to `ApplyOptions`, do that first. It's mutating the receiver.
+// Complete 会把那些未设置、但必须拥有有效数据且可以从其他字段推导出来的
+// 字段补齐。如果你打算调用 `ApplyOptions`，请先调用它。该方法会修改接收者本身。
 func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedConfig {
 	if c.FeatureGate == nil {
 		c.FeatureGate = utilfeature.DefaultFeatureGate
@@ -755,11 +753,11 @@ func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedCo
 		} else {
 			// 有存储时用存储前缀作为等价资源标识，避免不同组下同名的资源互相混淆。
 			c.EquivalentResourceRegistry = runtime.NewEquivalentResourceRegistryWithIdentity(func(groupResource schema.GroupResource) string {
-				// use the storage prefix as the key if possible
+				// 尽可能使用存储前缀作为键
 				if opts, err := c.RESTOptionsGetter.GetRESTOptions(groupResource, nil); err == nil {
 					return opts.ResourcePrefix
 				}
-				// otherwise return "" to use the default key (parent GV name)
+				// 否则返回 ""，以使用默认的键（父 group/version 名）
 				return ""
 			})
 		}
@@ -768,8 +766,8 @@ func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedCo
 	return CompletedConfig{&completedConfig{c, informers}}
 }
 
-// Complete fills in any fields not set that are required to have valid data and can be derived
-// from other fields. If you're going to `ApplyOptions`, do that first. It's mutating the receiver.
+// Complete 会把那些未设置、但必须拥有有效数据且可以从其他字段推导出来的
+// 字段补齐。如果你打算调用 `ApplyOptions`，请先调用它。该方法会修改接收者本身。
 //
 // RecommendedConfig 复用内嵌 Config 的完成逻辑，并带上推荐选项创建的 informer 工厂。
 func (c *RecommendedConfig) Complete() CompletedConfig {
@@ -782,9 +780,9 @@ var defaultAllowedMediaTypes = []string{
 	runtime.ContentTypeProtobuf,
 }
 
-// New creates a new server which logically combines the handling chain with the passed server.
-// name is used to differentiate for logging. The handler chain in particular can be difficult as it starts delegating.
-// delegationTarget may not be nil.
+// New 创建一个新服务器，它在逻辑上把处理链与传入的服务器组合在一起。
+// name 用于在日志中区分实例。handler 链尤其难以把握，因为它会开始委托（delegating）。
+// delegationTarget 不得为 nil。
 func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*GenericAPIServer, error) {
 	if c.Serializer == nil {
 		return nil, fmt.Errorf("Genericapiserver.New() called with config.Serializer == nil")
@@ -910,7 +908,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		s.preShutdownHooks[k] = v
 	}
 
-	// add poststarthooks that were preconfigured.  Using the add method will give us an error if the same name has already been registered.
+	// 添加预先配置好的 poststarthooks。使用 add 方法可以在同名 hook 已被注册时得到错误。
 	for name, preconfiguredPostStartHook := range c.PostStartHooks {
 		if err := s.AddPostStartHook(name, preconfiguredPostStartHook.hook); err != nil {
 			return nil, err
@@ -936,7 +934,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 				return nil, err
 			}
 		}
-		// TODO: Once we get rid of /healthz consider changing this to post-start-hook.
+		// TODO: 等我们去掉 /healthz 之后，可以考虑把它改成 post-start-hook。
 		err := s.AddReadyzChecks(healthz.NewInformerSyncHealthz(c.SharedInformerFactory))
 		if err != nil {
 			return nil, err
@@ -953,7 +951,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		if err != nil {
 			return nil, err
 		}
-		// TODO(yue9944882): plumb pre-shutdown-hook for request-management system?
+		// TODO(yue9944882): 为请求管理系统（request-management system）接上 pre-shutdown-hook？
 	} else {
 		klog.V(3).Infof("Not requested to run hook %s", priorityAndFairnessConfigConsumerHookName)
 	}
@@ -984,7 +982,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		}
 	}
 
-	// Add PostStartHook for maintenaing the object count tracker.
+	// 添加用于维护对象计数跟踪器（object count tracker）的 PostStartHook。
 	if c.StorageObjectCountTracker != nil {
 		const storageObjectCountTrackerHookName = "storage-object-count-tracker-hook"
 		if !s.isPostStartHookRegistered(storageObjectCountTrackerHookName) {
@@ -1021,8 +1019,8 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 
 	installAPI(name, s, c.Config)
 
-	// use the UnprotectedHandler from the delegation target to ensure that we don't attempt to double authenticator, authorize,
-	// or some other part of the filter chain in delegation cases.
+	// 使用委托目标的 UnprotectedHandler，以保证在委托场景下我们不会
+	// 重复执行认证、授权或过滤器链中的其他环节。
 	if delegationTarget.UnprotectedHandler() == nil && c.EnableIndex {
 		s.Handler.NonGoRestfulMux.NotFoundHandler(routes.IndexLister{
 			StatusCode:   http.StatusNotFound,
@@ -1036,7 +1034,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 // BuildHandlerChainWithStorageVersionPrecondition 在默认链之外增加存储版本前置校验，
 // 防止客户端在存储版本迁移期间读到不支持的版本。
 func BuildHandlerChainWithStorageVersionPrecondition(apiHandler http.Handler, c *Config) http.Handler {
-	// WithStorageVersionPrecondition needs the WithRequestInfo to run first
+	// WithStorageVersionPrecondition 需要先让 WithRequestInfo 跑起来
 	handler := genericapifilters.WithStorageVersionPrecondition(apiHandler, c.StorageVersionManager, c.Serializer)
 	return DefaultBuildHandlerChain(handler, c)
 }
@@ -1083,8 +1081,8 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	failedHandler := genericapifilters.Unauthorized(c.Serializer)
 	failedHandler = genericapifilters.WithFailedAuthenticationAudit(failedHandler, c.AuditBackend, c.AuditPolicyRuleEvaluator)
 
-	// WithTracing comes after authentication so we can allow authenticated
-	// clients to influence sampling.
+	// WithTracing 放在认证之后，这样我们允许已通过认证的
+	// 客户端影响采样决策。
 	handler = genericapifilters.WithTracing(handler, c.TracerProvider)
 	failedHandler = filterlatency.TrackCompleted(failedHandler)
 	handler = filterlatency.TrackCompleted(handler)
@@ -1093,12 +1091,12 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 
 	handler = genericfilters.WithCORS(handler, c.CorsAllowedOriginList, nil, nil, nil, "true")
 
-	// WithWarningRecorder must be wrapped by the timeout handler
-	// to make the addition of warning headers threadsafe
+	// WithWarningRecorder 必须被 timeout handler 包裹，
+	// 这样才能让添加 warning 响应头的操作是线程安全的。
 	handler = genericapifilters.WithWarningRecorder(handler)
 
-	// WithTimeoutForNonLongRunningRequests will call the rest of the request handling in a go-routine with the
-	// context with deadline. The go-routine can keep running, while the timeout logic will return a timeout to the client.
+	// WithTimeoutForNonLongRunningRequests 会在一个 goroutine 中、使用带截止时间（deadline）的
+	// context 调用其余的请求处理逻辑。该 goroutine 可以继续运行，而超时逻辑会向客户端返回超时。
 	handler = genericfilters.WithTimeoutForNonLongRunningRequests(handler, c.LongRunningFunc)
 
 	handler = genericapifilters.WithRequestDeadline(handler, c.AuditBackend, c.AuditPolicyRuleEvaluator,
@@ -1117,9 +1115,9 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	}
 	handler = genericfilters.WithHTTPLogging(handler)
 	handler = genericapifilters.WithLatencyTrackers(handler)
-	// WithRoutine will execute future handlers in a separate goroutine and serving
-	// handler in current goroutine to minimize the stack memory usage. It must be
-	// after WithPanicRecover() to be protected from panics.
+	// WithRoutine 会在一个独立的 goroutine 中执行后续的 handler，而在当前
+	// goroutine 中执行 serving handler，从而把栈内存用量降到最低。它必须位于
+	// WithPanicRecover() 之后，才能受到 panic 保护。
 	if c.FeatureGate.Enabled(genericfeatures.APIServingWithRoutine) {
 		handler = routine.WithRoutine(handler, c.LongRunningFunc)
 	}
@@ -1142,7 +1140,7 @@ func installAPI(name string, s *GenericAPIServer, c *Config) {
 			// 1 表示以采样方式记录所有阻塞事件，开销显著，仅用于排障。
 			goruntime.SetBlockProfileRate(1)
 		}
-		// so far, only logging related endpoints are considered valid to add for these debug flags.
+		// 到目前为止，这些调试开关只认为适合添加到与日志相关的端点上。
 		routes.DebugFlags{}.Install(s.Handler.NonGoRestfulMux, "v", routes.StringFlagPutHandler(logs.GlogSetter))
 	}
 	if s.UnprotectedDebugSocket != nil {
@@ -1179,8 +1177,8 @@ func installAPI(name string, s *GenericAPIServer, c *Config) {
 // NewRequestInfoResolver 根据配置中的 API 前缀构造请求信息解析器。
 // GrouplessAPIPrefixes 中的前缀（默认 /api）走无组路径，其余（/apis）必须带组。
 func NewRequestInfoResolver(c *Config) *apirequest.RequestInfoFactory {
-	apiPrefixes := sets.NewString(strings.Trim(APIGroupPrefix, "/")) // all possible API prefixes
-	legacyAPIPrefixes := sets.String{}                               // APIPrefixes that won't have groups (legacy)
+	apiPrefixes := sets.NewString(strings.Trim(APIGroupPrefix, "/")) // 所有可能的 API 前缀
+	legacyAPIPrefixes := sets.String{}                               // 不带 group 的 APIPrefixes（legacy）
 	for legacyAPIPrefix := range c.LegacyAPIGroupPrefixes {
 		apiPrefixes.Insert(strings.Trim(legacyAPIPrefix, "/"))
 		legacyAPIPrefixes.Insert(strings.Trim(legacyAPIPrefix, "/"))
@@ -1209,9 +1207,9 @@ func (s *SecureServingInfo) HostPort() (string, int, error) {
 	return host, port, nil
 }
 
-// AuthorizeClientBearerToken wraps the authenticator and authorizer in loopback authentication logic
-// if the loopback client config is specified AND it has a bearer token. Note that if either authn or
-// authz is nil, this function won't add a token authenticator or authorizer.
+// AuthorizeClientBearerToken 在指定了回环（loopback）客户端配置、并且它带有 bearer token 时，
+// 把认证器和授权器包装上回环认证逻辑。注意：只要 authn 或 authz 为 nil，
+// 本函数就不会添加 token 认证器或授权器。
 //
 // 回环令牌被映射为 system:masters，仅用于服务器内部调用；它只加入认证链前端，
 // 仍需经过授权链（特权组会放行）。
@@ -1220,12 +1218,12 @@ func AuthorizeClientBearerToken(loopback *restclient.Config, authn *Authenticati
 		return
 	}
 	if authn == nil || authz == nil {
-		// prevent nil pointer panic
+		// 避免空指针 panic
 		return
 	}
 	if authn.Authenticator == nil || authz.Authorizer == nil {
-		// authenticator or authorizer might be nil if we want to bypass authz/authn
-		// and we also do nothing in this case.
+		// 当我们希望绕过 authz/authn 时，authenticator 或 authorizer 可能为 nil，
+		// 这种情况下我们同样什么都不做。
 		return
 	}
 
@@ -1243,7 +1241,7 @@ func AuthorizeClientBearerToken(loopback *restclient.Config, authn *Authenticati
 	authn.Authenticator = authenticatorunion.New(tokenAuthenticator, authn.Authenticator)
 }
 
-// For testing purpose only
+// 仅供测试使用
 func SetHostnameFuncForTests(name string) {
 	hostnameFunc = func() (host string, err error) {
 		host = name
