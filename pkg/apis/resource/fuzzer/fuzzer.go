@@ -45,7 +45,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(r *resource.DeviceSubRequest, c randfill.Continue) {
-			c.FillNoCustom(r) // fuzz self without calling this function again
+			c.FillNoCustom(r) // 对本结构体做模糊填充，但不再递归调用本函数
 
 			if r.AllocationMode == "" {
 				r.AllocationMode = []resource.DeviceAllocationMode{
@@ -75,32 +75,32 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		func(r *resource.DeviceTaint, c randfill.Continue) {
 			c.FillNoCustom(r)
 			if r.TimeAdded == nil {
-				// Current time is more or less random.
-				// Truncate to seconds because sub-second resolution
-				// does not survive round-tripping.
+				// 当前时间是随机的。
+				// 截断到秒级，因为亚秒级精度
+				// 无法在往返转换中保持不变。
 				r.TimeAdded = &metav1.Time{Time: time.Now().Truncate(time.Second)}
 			}
 		},
 		func(r *resource.OpaqueDeviceConfiguration, c randfill.Continue) {
 			c.FillNoCustom(r)
-			// Match the fuzzer default content for runtime.Object.
+			// 与 fuzzer 对 runtime.Object 生成的默认内容保持一致。
 			//
-			// This is necessary because randomly generated content
-			// might be valid JSON which changes during re-encoding.
+			// 这样做是必要的，因为随机生成的内容
+			// 可能是合法 JSON，而它在重新编码时会发生变化。
 			r.Parameters = runtime.RawExtension{Raw: []byte(`{"apiVersion":"unknown.group/unknown","kind":"Something","someKey":"someValue"}`)}
 		},
 		func(r *resource.AllocatedDeviceStatus, c randfill.Continue) {
 			c.FillNoCustom(r)
-			// Match the fuzzer default content for runtime.Object.
+			// 与 fuzzer 对 runtime.Object 生成的默认内容保持一致。
 			//
-			// This is necessary because randomly generated content
-			// might be valid JSON which changes during re-encoding.
+			// 这样做是必要的，因为随机生成的内容
+			// 可能是合法 JSON，而它在重新编码时会发生变化。
 			r.Data = &runtime.RawExtension{Raw: []byte(`{"apiVersion":"unknown.group/unknown","kind":"Something","someKey":"someValue"}`)}
 		},
 		func(r *resource.ResourceSliceSpec, c randfill.Continue) {
 			c.FillNoCustom(r)
-			// Setting AllNodes to false is not allowed. It must be
-			// either true or nil.
+			// 将 AllNodes 设置为 false 是不允许的。它必须
+			// 为 true 或 nil。
 			if r.AllNodes != nil && !*r.AllNodes {
 				r.AllNodes = nil
 			}
@@ -110,8 +110,8 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		},
 		func(r *resource.ResourcePoolStatusRequestStatus, c randfill.Continue) {
 			c.FillNoCustom(r)
-			// Empty slices become nil after round-tripping through JSON.
-			// Ensure they are either nil or have at least one element.
+			// 空切片经过 JSON 往返后会变为 nil。
+			// 确保它们要么为 nil，要么至少包含一个元素。
 			if len(r.Pools) == 0 {
 				r.Pools = nil
 			}
@@ -121,8 +121,8 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		},
 		func(r *resource.ResourcePoolStatusRequestSpec, c randfill.Continue) {
 			c.FillNoCustom(r)
-			// Limit has a default value of 100, so ensure it's set
-			// to prevent defaulting during round-trip.
+			// Limit 的默认值为 100，因此确保其被设置，
+			// 以避免往返过程中触发默认值设置。
 			if r.Limit == nil {
 				limit := int32(c.Int31n(1000) + 1)
 				r.Limit = &limit

@@ -48,7 +48,7 @@ import (
 
 	// 确保相关类型已注册到 scheme。
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
-	// ensure types are installed corereplicationcontroller<->replicaset conversions
+	// 确保相关类型已注册到 scheme，用于 corereplicationcontroller<->replicaset 转换
 	_ "k8s.io/kubernetes/pkg/apis/apps/install"
 )
 
@@ -101,7 +101,7 @@ func TestPodLogOptions(t *testing.T) {
 
 	codec := runtime.NewParameterCodec(legacyscheme.Scheme)
 
-	// unversioned -> query params
+	// unversioned 编码为 query params
 	{
 		actualParameters, err := codec.EncodeParameters(unversionedLogOptions, v1.SchemeGroupVersion)
 		if err != nil {
@@ -112,7 +112,7 @@ func TestPodLogOptions(t *testing.T) {
 		}
 	}
 
-	// versioned -> query params
+	// versioned 编码为 query params
 	{
 		actualParameters, err := codec.EncodeParameters(versionedLogOptions, v1.SchemeGroupVersion)
 		if err != nil {
@@ -123,7 +123,7 @@ func TestPodLogOptions(t *testing.T) {
 		}
 	}
 
-	// query params -> versioned
+	// query params 解码为 versioned
 	{
 		convertedLogOptions := &v1.PodLogOptions{}
 		err := codec.DecodeParameters(expectedParameters, v1.SchemeGroupVersion, convertedLogOptions)
@@ -135,7 +135,7 @@ func TestPodLogOptions(t *testing.T) {
 		}
 	}
 
-	// query params -> unversioned
+	// query params 解码为 unversioned
 	{
 		convertedLogOptions := &core.PodLogOptions{}
 		err := codec.DecodeParameters(expectedParameters, v1.SchemeGroupVersion, convertedLogOptions)
@@ -148,9 +148,9 @@ func TestPodLogOptions(t *testing.T) {
 	}
 }
 
-// TestPodSpecConversion tests that ServiceAccountName and its deprecated alias
-// are preserved verbatim by conversion in both directions (keeping them in
-// sync is handled by defaulting and the pod registry strategy, not conversion).
+// TestPodSpecConversion 测试 ServiceAccountName 及其已弃用的别名在双向转换中
+// 都被原样保留（保持两者同步由默认值设置和 pod registry 策略负责，
+// 而不是转换逻辑）。
 func TestPodSpecConversion(t *testing.T) {
 	name, other := "foo", "bar"
 
@@ -213,12 +213,12 @@ func TestPodSpecHostNamespaceSecurityContextRoundTrip(t *testing.T) {
 				t.Errorf("securityContext must default to non-nil")
 			}
 
-			// v1 -> internal
+			// v1 转为 internal
 			internal := &core.Pod{}
 			if err := legacyscheme.Scheme.Convert(in, internal, nil); err != nil {
 				t.Fatal(err)
 			}
-			// compare across types
+			// 跨类型比较
 			if internal.Spec.HostNetwork != in.Spec.HostNetwork ||
 				internal.Spec.HostPID != in.Spec.HostPID ||
 				internal.Spec.HostIPC != in.Spec.HostIPC ||
@@ -227,7 +227,7 @@ func TestPodSpecHostNamespaceSecurityContextRoundTrip(t *testing.T) {
 				t.Errorf("v1 -> internal:\n%s", cmp.Diff(in.Spec, internal.Spec))
 			}
 
-			// internal -> v1
+			// internal 转为 v1
 			out := &v1.Pod{}
 			if err := legacyscheme.Scheme.Convert(internal, out, nil); err != nil {
 				t.Fatal(err)
@@ -235,7 +235,7 @@ func TestPodSpecHostNamespaceSecurityContextRoundTrip(t *testing.T) {
 			if out.Spec.SecurityContext == nil {
 				t.Errorf("securityContext must be an non-nil")
 			}
-			// compare round-tripped
+			// 比较往返后的结果
 			if !reflect.DeepEqual(in.Spec, out.Spec) {
 				t.Errorf("internal -> v1:\n%s", cmp.Diff(in.Spec, out.Spec))
 			}
@@ -353,7 +353,7 @@ func TestResourceListConversion(t *testing.T) {
 		input    v1.ResourceList
 		expected core.ResourceList
 	}{
-		{ // No changes necessary.
+		{ // 无需任何变更。
 			input: v1.ResourceList{
 				v1.ResourceMemory:  resource.MustParse("30M"),
 				v1.ResourceCPU:     resource.MustParse("100m"),
@@ -365,7 +365,7 @@ func TestResourceListConversion(t *testing.T) {
 				core.ResourceStorage: resource.MustParse("1G"),
 			},
 		},
-		{ // Nano-scale values should be rounded up to milli-scale.
+		{ // 纳量级（Nano-scale）的值应当向上取整到毫量级（milli-scale）。
 			input: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("3.000023m"),
 				v1.ResourceMemory: resource.MustParse("500.000050m"),
@@ -375,7 +375,7 @@ func TestResourceListConversion(t *testing.T) {
 				core.ResourceMemory: resource.MustParse("501m"),
 			},
 		},
-		{ // Large values should still be accurate.
+		{ // 大数值仍应保持精确。
 			input: v1.ResourceList{
 				v1.ResourceCPU:     bigMilliQuantity.DeepCopy(),
 				v1.ResourceStorage: bigMilliQuantity.DeepCopy(),
@@ -390,8 +390,8 @@ func TestResourceListConversion(t *testing.T) {
 	for i, test := range tests {
 		output := core.ResourceList{}
 
-		// defaulting is a separate step from conversion that is applied when reading from the API or from etcd.
-		// perform that step explicitly.
+		// 默认值设置是与转换分离的独立步骤，在从 API 或 etcd 读取时应用。
+		// 这里显式执行该步骤。
 		corev1.SetDefaults_ResourceList(&test.input)
 
 		err := legacyscheme.Scheme.Convert(&test.input, &output, nil)
@@ -405,7 +405,7 @@ func TestResourceListConversion(t *testing.T) {
 }
 
 func TestReplicationControllerConversion(t *testing.T) {
-	// If we start with a RC, we should always have round-trip fidelity.
+	// 如果从 RC 出发，往返转换应当始终保持保真。
 	inputs := []*v1.ReplicationController{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -449,38 +449,38 @@ func TestReplicationControllerConversion(t *testing.T) {
 		},
 	}
 
-	// Add some fuzzed RCs.
+	// 添加一些模糊生成的 RC。
 	apiObjectFuzzer := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, corefuzzer.Funcs), rand.NewSource(152), legacyscheme.Codecs)
 	for i := 0; i < 100; i++ {
 		rc := &v1.ReplicationController{}
 		apiObjectFuzzer.Fill(rc)
-		// Sometimes the fuzzer decides to leave Spec.Template nil.
-		// We can't support that because Spec.Template is not a pointer in RS,
-		// so it will round-trip as non-nil but empty.
+		// fuzzer 有时会选择不设置 Spec.Template。
+		// 我们无法支持这种情况，因为 RS 中的 Spec.Template 不是指针，
+		// 所以它会以非 nil 但为空的形式往返。
 		if rc.Spec.Template == nil {
 			rc.Spec.Template = &v1.PodTemplateSpec{}
 		}
-		// Sometimes the fuzzer decides to insert an empty label key.
-		// This doesn't round-trip properly because it's invalid.
+		// fuzzer 有时会插入空的 label key。
+		// 这是非法值，无法正确往返。
 		if rc.Spec.Selector != nil {
 			delete(rc.Spec.Selector, "")
 		}
 		inputs = append(inputs, rc)
 	}
 
-	// Round-trip the input RCs before converting to RS.
+	// 先对输入的 RC 做往返转换，再转换为 RS。
 	for i := range inputs {
 		inputs[i] = roundTrip(t, inputs[i]).(*v1.ReplicationController)
 	}
 
 	for _, in := range inputs {
 		rs := &apps.ReplicaSet{}
-		// Use in.DeepCopy() to avoid sharing pointers with `in`.
+		// 使用 in.DeepCopy() 以避免与 `in` 共享指针。
 		if err := corev1.Convert_v1_ReplicationController_To_apps_ReplicaSet(in.DeepCopy(), rs, nil); err != nil {
 			t.Errorf("can't convert RC to RS: %v", err)
 			continue
 		}
-		// Round-trip RS before converting back to RC.
+		// 转换回 RC 之前先对 RS 做往返转换。
 		rs = roundTripRS(t, rs)
 		out := &v1.ReplicationController{}
 		if err := corev1.Convert_apps_ReplicaSet_To_v1_ReplicationController(rs, out, nil); err != nil {
@@ -501,7 +501,7 @@ func TestReplicaSetConversion(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "name",
 				Namespace: "namespace",
-				Labels:    map[string]string{"foo": "bar", "bar": "foo"}, // labels have to be defined everywhere not to trigger RC defaulting
+				Labels:    map[string]string{"foo": "bar", "bar": "foo"}, // labels 必须在所有位置都有定义，以免触发 RC 默认值设置
 			},
 			Spec: apps.ReplicaSetSpec{
 				Replicas:        1,
@@ -528,7 +528,7 @@ func TestReplicaSetConversion(t *testing.T) {
 				FullyLabeledReplicas: 2,
 				ReadyReplicas:        3,
 				AvailableReplicas:    4,
-				TerminatingReplicas:  nil, // ReplicationController does not support .status.terminatingReplicas
+				TerminatingReplicas:  nil, // ReplicationController 不支持 .status.terminatingReplicas
 				ObservedGeneration:   5,
 				Conditions: []apps.ReplicaSetCondition{
 					{
@@ -543,16 +543,16 @@ func TestReplicaSetConversion(t *testing.T) {
 		},
 	}
 
-	// Add some fuzzed ReplicaSets.
+	// 添加一些模糊生成的 ReplicaSet。
 	apiObjectFuzzer := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, corefuzzer.Funcs), rand.NewSource(152), legacyscheme.Codecs)
 	for i := 0; i < 100; i++ {
 		rs := &apps.ReplicaSet{}
 		apiObjectFuzzer.Fill(rs)
-		// if we have labels, they have to be set to satisfy RC defaulting
+		// 若存在 labels，则必须设置它们以满足 RC 默认值设置的要求
 		if labels := rs.Spec.Template.Labels; len(labels) > 0 {
 			rs.Labels = labels
 
-			// forcefully set label selector, since the RC has only partial selector support (MatchLabels)
+			// 强制设置 label selector，因为 RC 仅部分支持 selector（MatchLabels）
 			rs.Spec.Selector = &metav1.LabelSelector{
 				MatchLabels: labels,
 			}
@@ -560,26 +560,26 @@ func TestReplicaSetConversion(t *testing.T) {
 			rs.Spec.Selector = nil
 		}
 
-		// ReplicationController does not support .status.terminatingReplicas
+		// ReplicationController 不支持 .status.terminatingReplicas
 		if rs.Status.TerminatingReplicas != nil {
 			rs.Status.TerminatingReplicas = nil
 		}
 		inputs = append(inputs, rs)
 	}
 
-	// Round-trip the input RSs before converting to RC.
+	// 先对输入的 RS 做往返转换，再转换为 RC。
 	for i := range inputs {
 		inputs[i] = roundTripRS(t, inputs[i])
 	}
 
 	for _, in := range inputs {
 		rc := &v1.ReplicationController{}
-		// Use in.DeepCopy() to avoid sharing pointers with `in`.
+		// 使用 in.DeepCopy() 以避免与 `in` 共享指针。
 		if err := corev1.Convert_apps_ReplicaSet_To_v1_ReplicationController(in.DeepCopy(), rc, nil); err != nil {
 			t.Errorf("can't convert RS to RC: %v", err)
 			continue
 		}
-		// Round-trip RC before converting back to RS.
+		// 转换回 RS 之前先对 RC 做往返转换。
 		rc = roundTrip(t, rc).(*v1.ReplicationController)
 		out := &apps.ReplicaSet{}
 		if err := corev1.Convert_v1_ReplicationController_To_apps_ReplicaSet(rc, out, nil); err != nil {
@@ -638,7 +638,7 @@ func TestPodStatusConversion(t *testing.T) {
 }
 
 func Test_core_NodeSpec_to_v1_NodeSpec(t *testing.T) {
-	// core to v1
+	// core 转为 v1
 	testInputs := []core.NodeSpec{
 		{
 			PodCIDRs: []string{"10.0.0.0/24", "10.0.1.0/24"},
@@ -662,21 +662,21 @@ func Test_core_NodeSpec_to_v1_NodeSpec(t *testing.T) {
 
 	for i, testInput := range testInputs {
 		v1NodeSpec := v1.NodeSpec{}
-		// convert
+		// 执行转换
 		if err := corev1.Convert_core_NodeSpec_To_v1_NodeSpec(&testInput, &v1NodeSpec, nil); nil != err {
 			t.Errorf("%v: Convert core.NodeSpec to v1.NodeSpec failed with error %v", i, err.Error())
 		}
 
 		if len(testInput.PodCIDRs) == 0 {
-			continue // no more work needed
+			continue // 无需继续处理
 		}
 
-		// validate results
+		// 校验结果
 		if v1NodeSpec.PodCIDR != testInput.PodCIDRs[0] {
 			t.Errorf("%v: Convert core.NodeSpec to v1.NodeSpec failed. Expected v1.PodCIDR=%v but found %v", i, testInput.PodCIDRs[0], v1NodeSpec.PodCIDR)
 		}
 
-		// match v1.PodIPs to core.PodIPs
+		// 将 v1.PodIPs 与 core.PodIPs 逐一比对
 		for idx := range testInput.PodCIDRs {
 			if v1NodeSpec.PodCIDRs[idx] != testInput.PodCIDRs[idx] {
 				t.Errorf("%v: Convert core.NodeSpec to v1.NodeSpec failed. Expected v1.NodeSpec[%v]=%v but found %v", i, idx, testInput.PodCIDRs[idx], v1NodeSpec.PodCIDRs[idx])
@@ -724,54 +724,54 @@ func Test_v1_NodeSpec_to_core_NodeSpec(t *testing.T) {
 	}
 
 	testInputs := []v1.NodeSpec{
-		// cidr only - 4
+		// 仅有 cidr - 4
 		{
 			PodCIDR: "10.0.1.0/24",
 		},
-		// cidr only - 6
+		// 仅有 cidr - 6
 		{
 			PodCIDR: "ace:cab:deca::/8",
 		},
-		// Both are provided
+		// 两者都提供
 		{
 			PodCIDR:  "10.0.1.0/24",
 			PodCIDRs: []string{"10.0.1.0/24", "ace:cab:deca::/8"},
 		},
-		// list only
+		// 仅提供 list
 		{
 			PodCIDRs: []string{"10.0.1.0/24", "ace:cab:deca::/8"},
 		},
-		// Both are provided 4,6
+		// 两者都提供 4,6
 		{
 			PodCIDR:  "10.0.1.0/24",
 			PodCIDRs: []string{"10.0.1.0/24", "ace:cab:deca::/8"},
 		},
-		// Both are provided 6,4
+		// 两者都提供 6,4
 		{
 			PodCIDR:  "ace:cab:deca::/8",
 			PodCIDRs: []string{"ace:cab:deca::/8", "10.0.1.0/24"},
 		},
-		// list only 4,6
+		// 仅提供 list 4,6
 		{
 			PodCIDRs: []string{"10.0.1.0/24", "ace:cab:deca::/8"},
 		},
-		// list only 6,4
+		// 仅提供 list 6,4
 		{
 			PodCIDRs: []string{"ace:cab:deca::/8", "10.0.1.0/24"},
 		},
-		// no cidr and no cidrs
+		// cidr 和 cidrs 均未提供
 		{
 			PodCIDR:  "",
 			PodCIDRs: nil,
 		},
 	}
 
-	// run asymmetric cases
+	// 运行非对称用例
 	for _, tc := range asymmetricInputs {
 		testInput := tc.in
 
 		coreNodeSpec := core.NodeSpec{}
-		// convert..
+		// 执行转换……
 		if err := corev1.Convert_v1_NodeSpec_To_core_NodeSpec(&testInput, &coreNodeSpec, nil); err != nil {
 			t.Errorf("%s: Convert v1.NodeSpec to core.NodeSpec failed with error:%v for input %+v", tc.name, err.Error(), testInput)
 		}
@@ -786,12 +786,12 @@ func Test_v1_NodeSpec_to_core_NodeSpec(t *testing.T) {
 			t.Errorf("%v:Convert v1.NodeSpec to core.NodeSpec failed with error:%v", i, err.Error())
 		}
 		if len(testInput.PodCIDRs) == 0 && len(testInput.PodCIDR) == 0 {
-			continue // no more work needed
+			continue // 无需继续处理
 		}
 		if len(testInput.PodCIDR) > 0 && coreNodeSpec.PodCIDRs[0] != testInput.PodCIDR {
 			t.Errorf("%v:Convert v1.NodeSpec to core.NodeSpec failed. expected coreNodeSpec.PodCIDRs[0]=%v found %v", i, testInput.PodCIDR, coreNodeSpec.PodCIDRs[0])
 		}
-		// match ip list
+		// 比对 IP 列表
 		for idx := range testInput.PodCIDRs {
 			if coreNodeSpec.PodCIDRs[idx] != testInput.PodCIDRs[idx] {
 				t.Errorf("%v:Convert v1.NodeSpec to core.NodeSpec failed core.PodCIDRs[%v]=%v expected %v", i, idx, coreNodeSpec.PodCIDRs[idx], testInput.PodCIDRs[idx])
@@ -822,8 +822,8 @@ func TestConvert_v1_Pod_To_core_Pod(t *testing.T) {
 			},
 			wantOut: &core.Pod{
 				Spec: core.PodSpec{
-					// This is impossible in practice because defaulting will coherce a negative value to 1.
-					// We test it here to ensure faithful conversion.
+					// 实际场景中不可能出现，因为默认值设置会将负值强制为 1。
+					// 在此测试是为了确保转换的忠实性。
 					TerminationGracePeriodSeconds: ptr.To[int64](-1),
 				},
 			},
@@ -863,8 +863,8 @@ func TestConvert_core_Pod_To_v1_Pod(t *testing.T) {
 			},
 			wantOut: &v1.Pod{
 				Spec: v1.PodSpec{
-					// This is impossible in practice because defaulting will coherce a negative value to 1.
-					// We test it here to ensure faithful conversion.
+					// 实际场景中不可能出现，因为默认值设置会将负值强制为 1。
+					// 在此测试是为了确保转换的忠实性。
 					TerminationGracePeriodSeconds: ptr.To[int64](-1),
 				},
 			},
@@ -882,9 +882,8 @@ func TestConvert_core_Pod_To_v1_Pod(t *testing.T) {
 	}
 }
 
-// TestPodMemoryIdenticalConversion ensures the internal and v1 Pod types
-// remain memory-identical. These types must be kept memory-identical
-// for performance reasons.
+// TestPodMemoryIdenticalConversion 确保 internal 与 v1 的 Pod 类型保持内存布局一致。
+// 出于性能原因，这些类型必须保持内存布局完全一致。
 func TestPodMemoryIdenticalConversion(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, corefuzzer.Funcs), rand.NewSource(1), legacyscheme.Codecs).NilChance(0).NumElements(1, 1)
 	t.Run("v1 to internal", func(t *testing.T) {
@@ -907,7 +906,7 @@ func TestPodMemoryIdenticalConversion(t *testing.T) {
 	})
 }
 
-// TestPodTemplateSpecMemoryIdenticalConversion ensures the internal and v1 PodTemplateSpec types are identical
+// TestPodTemplateSpecMemoryIdenticalConversion 确保 internal 与 v1 的 PodTemplateSpec 类型完全一致
 func TestPodTemplateSpecMemoryIdenticalConversion(t *testing.T) {
 	scheme := legacyscheme.Scheme
 	out := &core.PodTemplateSpec{}
@@ -924,7 +923,7 @@ func TestPodTemplateSpecMemoryIdenticalConversion(t *testing.T) {
 	assertMemoryIdentical(t, "PodTemplateSpec", reflect.ValueOf(in).Elem(), reflect.ValueOf(out2).Elem())
 }
 
-// TestServiceSpecMemoryIdenticalConversion ensures the internal and v1 ServiceSpec types are identical
+// TestServiceSpecMemoryIdenticalConversion 确保 internal 与 v1 的 ServiceSpec 类型完全一致
 func TestServiceSpecMemoryIdenticalConversion(t *testing.T) {
 	scheme := legacyscheme.Scheme
 	out := &core.ServiceSpec{}
@@ -941,7 +940,7 @@ func TestServiceSpecMemoryIdenticalConversion(t *testing.T) {
 	assertMemoryIdentical(t, "ServiceSpec", reflect.ValueOf(in).Elem(), reflect.ValueOf(out2).Elem())
 }
 
-// TestPersistentVolumeSourceMemoryIdenticalConversion ensures the internal and v1 PersistentVolumeSource types are identical
+// TestPersistentVolumeSourceMemoryIdenticalConversion 确保 internal 与 v1 的 PersistentVolumeSource 类型完全一致
 func TestPersistentVolumeSourceMemoryIdenticalConversion(t *testing.T) {
 	scheme := legacyscheme.Scheme
 	out := &core.PersistentVolumeSource{}
@@ -958,7 +957,7 @@ func TestPersistentVolumeSourceMemoryIdenticalConversion(t *testing.T) {
 	assertMemoryIdentical(t, "PersistentVolumeSource", reflect.ValueOf(in).Elem(), reflect.ValueOf(out2).Elem())
 }
 
-// TestReplicationControllerMemoryIdenticalConversion ensures the internal and v1 ReplicationController types are identical
+// TestReplicationControllerMemoryIdenticalConversion 确保 internal 与 v1 的 ReplicationController 类型完全一致
 func TestReplicationControllerMemoryIdenticalConversion(t *testing.T) {
 	scheme := legacyscheme.Scheme
 	out := &core.ReplicationController{}
@@ -982,7 +981,7 @@ func assertMemoryIdentical(t *testing.T, path string, a, b reflect.Value) {
 		return
 	}
 	switch a.Kind() {
-	case reflect.Struct: // allow for copied structs since conversion copies status/spec today
+	case reflect.Struct: // 允许结构体被复制，因为当前的转换会复制 status/spec
 		if a.Type().Size() != b.Type().Size() {
 			t.Errorf("%s: unexpected struct size mismatch: %d, %d", path, a.Type().Size(), b.Type().Size())
 			return

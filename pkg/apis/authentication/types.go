@@ -37,37 +37,31 @@ const (
 	// 多个 map 键可重复多次该请求头；同一个键也可重复多次，以为该键下的切片提供多个元素。
 	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
 
-	// AttestationAdmissionReviewAPIGroups is the map key for the
-	// admissionReviewAPIGroups claim. It represents the APIGroup that a token
-	// authorizes its bearer to query admission webhooks about. The value
-	// corresponding to this key must be a slice of length 1, and the first and
-	// only element of this slice must match the APIGroup of the AdmissionReview
-	// request being made of the webhook. The empty string is invalid as the
-	// first and only element of the value slice. The special value "*" means
-	// "all api groups", and requires matching permissions (described below).
+	// AttestationAdmissionReviewAPIGroups 是 admissionReviewAPIGroups 声明的 map 键。
+	// 它表示该令牌授权其持有者可以就哪些 APIGroup 查询准入 webhook。与该键对应的值
+	// 必须是长度为 1 的切片，并且该切片的第一个也是唯一一个元素必须与向该
+	// webhook 发起的 AdmissionReview 请求的 APIGroup 匹配。值切片的第一个也是唯一一个
+	// 元素不能为空字符串。特殊值 "*" 表示"所有 api group"，
+	// 并要求具备匹配的权限（见下文描述）。
 	//
-	// For this claim to be considered valid, the TokenRequest must meet two
-	// conditions. First, the BoundObjectRef must be one of
-	// ValidatingWebhookConfiguration or MutatingWebhookConfiguration; the
-	// Webhook Configuration in question must have a Rule governing a resource
-	// under the APIGroup named in the value to this key. Second, the requested
-	// audience must match one of the following patterns:
-	//   1. When the webhook is configured with a URL, the audience must match
-	//      the URL field exactly.
-	//   2. When the webhook is configured with a service, the audience must
-	//      match the pattern `https://$name.$namespace.svc:$port[/$path]`, where
-	//      `/$path` is optional.
+	// 要使该声明被视为合法，TokenRequest 必须满足两个条件。
+	// 第一，BoundObjectRef 必须是 ValidatingWebhookConfiguration 或
+	// MutatingWebhookConfiguration 之一；相应的 Webhook Configuration 必须有一条
+	// Rule 管辖该键值中所指 APIGroup 下的资源。第二，请求的 audience 必须匹配
+	// 以下模式之一：
+	//   1. 当 webhook 以 URL 配置时，audience 必须与 URL 字段完全一致。
+	//   2. 当 webhook 以 service 配置时，audience 必须匹配模式
+	//      `https://$name.$namespace.svc:$port[/$path]`，其中 `/$path` 是可选的。
 	//
-	// The service account for which the TokenRequest is being made must have
-	// "attest" permissions on group "authentication.k8s.io", resource
-	// "admissionReviewAPIGroups, and a resource name matching exactly either
-	// "*", or the api group named in the value to this key.
+	// 发起 TokenRequest 的 service account 必须在组 "authentication.k8s.io"、
+	// 资源 "admissionReviewAPIGroups 上拥有 "attest" 权限，并且资源名称必须与
+	// "*" 或该键值中所指的 api group 完全一致。
 	AttestationAdmissionReviewAPIGroups = "admissionReviewAPIGroups"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TokenReview attempts to authenticate a token to a known user.
+// TokenReview 尝试将某个令牌认证为已知用户。
 type TokenReview struct {
 	metav1.TypeMeta
 	// ObjectMeta 实现 metav1.ObjectMetaAccessor 接口，以便标准
@@ -91,8 +85,7 @@ type TokenReviewSpec struct {
 	Audiences []string
 }
 
-// TokenReviewStatus 是令牌认证请求的结果。
-// This type mirrors the authentication.Token interface
+// TokenReviewStatus 是令牌认证请求的结果。该类型与 authentication.Token 接口相对应。
 type TokenReviewStatus struct {
 	// authenticated 表示令牌与某个已知用户相关联。
 	Authenticated bool
@@ -109,14 +102,12 @@ type TokenReviewStatus struct {
 	Error string
 }
 
-// UserInfo holds the information about the user needed to implement the
-// user.Info interface.
+// UserInfo 保存实现 user.Info 接口所需的用户信息。
 type UserInfo struct {
 	// username 是在所有活跃用户中唯一标识该用户的名称。
 	Username string
-	// A unique value that identifies this user across time. If this user is
-	// deleted and another user by the same name is added, they will have
-	// different UIDs.
+	// UID 是在时间维度上唯一标识该用户的值。若该用户被删除后又添加了
+	// 同名用户，两者的 UID 将不同。
 	UID string
 	// groups 是该用户所属组的名称。
 	Groups []string
@@ -150,16 +141,14 @@ type TokenRequestSpec struct {
 	// audience 认证，但这意味着目标 audience 之间存在高度信任。
 	Audiences []string
 
-	// ExpirationSeconds is the requested duration of validity of the request. The
-	// token issuer may return a token with a different validity duration so a
-	// client needs to check the 'expiration' field in a response.
+	// ExpirationSeconds 是请求的令牌有效期时长。令牌签发方可能返回有效期不同的令牌，
+	// 因此客户端需要检查响应中的 'expiration' 字段。
 	ExpirationSeconds int64
 
-	// BoundObjectRef is a reference to an object that the token will be bound to.
-	// The token will only be valid for as long as the bound object exists.
-	// NOTE: The API server's TokenReview endpoint will validate the
-	// BoundObjectRef, but other audiences may not. Keep ExpirationSeconds
-	// small if you want prompt revocation.
+	// BoundObjectRef 是对令牌所绑定对象的引用。只有被绑定对象存在期间令牌才有效。
+	// NOTE: API 服务器的 TokenReview 端点会校验 BoundObjectRef，
+	// 但其他 audience 可能不会。若希望快速吊销，请将 ExpirationSeconds
+	// 保持在较小值。
 	BoundObjectRef *BoundObjectReference
 
 	// attestations 是已知键到字符串切片值的映射。
@@ -172,20 +161,20 @@ type TokenRequestSpec struct {
 type TokenRequestStatus struct {
 	// Token 是不透明的 bearer token。
 	Token string `datapolicy:"token"`
-	// ExpirationTimestamp is the time of expiration of the returned token.
+	// ExpirationTimestamp 是返回令牌的过期时间。
 	ExpirationTimestamp metav1.Time
 }
 
 // BoundObjectReference 指向令牌所绑定的对象。
 type BoundObjectReference struct {
-	// Kind of the referent. Valid kinds are 'Pod' and 'Secret'.
+	// Kind 是被引用对象的类别。合法取值为 'Pod' 和 'Secret'。
 	Kind string
-	// API version of the referent.
+	// APIVersion 是被引用对象的 API 版本。
 	APIVersion string
 
 	// 被引用对象的 name。
 	Name string
-	// UID of the referent.
+	// UID 是被引用对象的 UID。
 	UID types.UID
 }
 
@@ -196,8 +185,8 @@ type BoundObjectReference struct {
 // 任何额外键都会忽略大小写并以小写形式返回。
 type SelfSubjectReview struct {
 	metav1.TypeMeta
-	// ObjectMeta fulfills the metav1.ObjectMetaAccessor interface so that the stock.
-	// REST handler paths work.
+	// ObjectMeta 实现 metav1.ObjectMetaAccessor 接口，以便标准
+	// REST handler 路径能够正常工作。
 	metav1.ObjectMeta
 	// status 由服务端填入用户属性。
 	Status SelfSubjectReviewStatus
@@ -205,6 +194,6 @@ type SelfSubjectReview struct {
 
 // SelfSubjectReviewStatus 由 kube-apiserver 填入并返回给用户。
 type SelfSubjectReviewStatus struct {
-	// User attributes of the user making this request.
+	// UserInfo 是发起该请求的用户的属性。
 	UserInfo UserInfo
 }

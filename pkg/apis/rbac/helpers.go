@@ -24,10 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// ResourceMatches returns the result of the rule.Resources matching.
+// ResourceMatches 返回 rule.Resources 的匹配结果。
 func ResourceMatches(rule *PolicyRule, combinedRequestedResource, requestedSubresource string) bool {
 	for _, ruleResource := range rule.Resources {
-		// if everything is allowed, we match
+		// 如果允许全部资源，则直接匹配
 		if ruleResource == ResourceAll {
 			return true
 		}
@@ -53,7 +53,7 @@ func ResourceMatches(rule *PolicyRule, combinedRequestedResource, requestedSubre
 	return false
 }
 
-// SubjectsStrings returns users, groups, serviceaccounts, unknown for display purposes.
+// SubjectsStrings 返回 users、groups、serviceaccounts 及未知类型的主体，用于展示。
 func SubjectsStrings(subjects []Subject) ([]string, []string, []string, []string) {
 	users := []string{}
 	groups := []string{}
@@ -112,45 +112,45 @@ func (r PolicyRule) CompactString() string {
 }
 
 // PolicyRuleBuilder 允许挂接方法，这在普通 API 类型上是不允许的。
-// We use it to construct rules in code.  It's more compact than trying to write them
-// out in a literal and allows us to perform some basic checking during construction
+// 我们用它在代码中构造规则：比字面量写法更紧凑，
+// 并且允许在构造过程中执行一些基本检查。
 // +k8s:deepcopy-gen=false
 type PolicyRuleBuilder struct {
 	PolicyRule PolicyRule
 }
 
-// NewRule returns new PolicyRule made by input verbs.
+// NewRule 返回由输入 verbs 构造的新 PolicyRule。
 func NewRule(verbs ...string) *PolicyRuleBuilder {
 	return &PolicyRuleBuilder{
 		PolicyRule: PolicyRule{Verbs: sets.NewString(verbs...).List()},
 	}
 }
 
-// Groups combines the PolicyRule.APIGroups and input groups.
+// Groups 合并 PolicyRule.APIGroups 与输入的 groups。
 func (r *PolicyRuleBuilder) Groups(groups ...string) *PolicyRuleBuilder {
 	r.PolicyRule.APIGroups = combine(r.PolicyRule.APIGroups, groups)
 	return r
 }
 
-// Resources combines the PolicyRule.Rule and input resources.
+// Resources 合并 PolicyRule.Resources 与输入的 resources。
 func (r *PolicyRuleBuilder) Resources(resources ...string) *PolicyRuleBuilder {
 	r.PolicyRule.Resources = combine(r.PolicyRule.Resources, resources)
 	return r
 }
 
-// Names combines the PolicyRule.ResourceNames and input names.
+// Names 合并 PolicyRule.ResourceNames 与输入的 names。
 func (r *PolicyRuleBuilder) Names(names ...string) *PolicyRuleBuilder {
 	r.PolicyRule.ResourceNames = combine(r.PolicyRule.ResourceNames, names)
 	return r
 }
 
-// URLs combines the PolicyRule.NonResourceURLs and input urls.
+// URLs 合并 PolicyRule.NonResourceURLs 与输入的 urls。
 func (r *PolicyRuleBuilder) URLs(urls ...string) *PolicyRuleBuilder {
 	r.PolicyRule.NonResourceURLs = combine(r.PolicyRule.NonResourceURLs, urls)
 	return r
 }
 
-// RuleOrDie calls the binding method and panics if there is an error.
+// RuleOrDie 调用 binding 方法，若出错则 panic。
 func (r *PolicyRuleBuilder) RuleOrDie() PolicyRule {
 	ret, err := r.Rule()
 	if err != nil {
@@ -165,7 +165,7 @@ func combine(s1, s2 []string) []string {
 	return s.List()
 }
 
-// Rule returns PolicyRule and error.
+// Rule 返回 PolicyRule 及错误。
 func (r *PolicyRuleBuilder) Rule() (PolicyRule, error) {
 	if len(r.PolicyRule.Verbs) == 0 {
 		return PolicyRule{}, fmt.Errorf("verbs are required: %#v", r.PolicyRule)
@@ -177,15 +177,15 @@ func (r *PolicyRuleBuilder) Rule() (PolicyRule, error) {
 			return PolicyRule{}, fmt.Errorf("non-resource rule may not have apiGroups, resources, or resourceNames: %#v", r.PolicyRule)
 		}
 	case len(r.PolicyRule.Resources) > 0:
-		// resource rule may not have nonResourceURLs
+		// 资源规则不能带有 nonResourceURLs
 
 		if len(r.PolicyRule.APIGroups) == 0 {
 			// 这是一个常见错误。
 			return PolicyRule{}, fmt.Errorf("resource rule must have apiGroups: %#v", r.PolicyRule)
 		}
-		// if resource names are set, then the verb must not be list, watch, create, or deletecollection
-		// since verbs are largely opaque, we don't want to accidentally prevent things like "impersonate", so
-		// we will backlist common mistakes, not whitelist acceptable options.
+		// 如果设置了 resource names，则 verb 不得为 list、watch、create 或 deletecollection。
+		// 由于 verbs 在很大程度上是不透明的，我们不希望意外阻止诸如 "impersonate" 之类的用法，因此
+		// 这里采用黑名单列出常见错误，而不是用白名单列出允许的选项。
 		if len(r.PolicyRule.ResourceNames) != 0 {
 			illegalVerbs := []string{}
 			for _, verb := range r.PolicyRule.Verbs {
@@ -206,18 +206,16 @@ func (r *PolicyRuleBuilder) Rule() (PolicyRule, error) {
 	return r.PolicyRule, nil
 }
 
-// ClusterRoleBindingBuilder let's us attach methods.  A no-no for API types.
-// We use it to construct bindings in code.  It's more compact than trying to write them
-// out in a literal.
+// ClusterRoleBindingBuilder 允许挂接方法，这在 API 类型上是不允许的。
+// 我们用它在代码中构造 binding，比字面量写法更紧凑。
 // +k8s:deepcopy-gen=false
 type ClusterRoleBindingBuilder struct {
 	ClusterRoleBinding ClusterRoleBinding
 }
 
-// NewClusterBinding creates a ClusterRoleBinding builder that can be used
-// to define the subjects of a cluster role binding. At least one of
-// the `Groups`, `Users` or `SAs` method must be called before
-// calling the `Binding*` methods.
+// NewClusterBinding 创建一个 ClusterRoleBinding builder，可用于定义
+// 集群角色 binding 的主体。在调用 `Binding*` 方法之前，
+// 必须至少调用 `Groups`、`Users` 或 `SAs` 方法中的一个。
 func NewClusterBinding(clusterRoleName string) *ClusterRoleBindingBuilder {
 	return &ClusterRoleBindingBuilder{
 		ClusterRoleBinding: ClusterRoleBinding{
@@ -231,7 +229,7 @@ func NewClusterBinding(clusterRoleName string) *ClusterRoleBindingBuilder {
 	}
 }
 
-// Groups adds the specified groups as the subjects of the ClusterRoleBinding.
+// Groups 将指定的 groups 添加为 ClusterRoleBinding 的主体。
 func (r *ClusterRoleBindingBuilder) Groups(groups ...string) *ClusterRoleBindingBuilder {
 	for _, group := range groups {
 		r.ClusterRoleBinding.Subjects = append(r.ClusterRoleBinding.Subjects, Subject{Kind: GroupKind, APIGroup: GroupName, Name: group})
@@ -239,7 +237,7 @@ func (r *ClusterRoleBindingBuilder) Groups(groups ...string) *ClusterRoleBinding
 	return r
 }
 
-// Users adds the specified users as the subjects of the ClusterRoleBinding.
+// Users 将指定的 users 添加为 ClusterRoleBinding 的主体。
 func (r *ClusterRoleBindingBuilder) Users(users ...string) *ClusterRoleBindingBuilder {
 	for _, user := range users {
 		r.ClusterRoleBinding.Subjects = append(r.ClusterRoleBinding.Subjects, Subject{Kind: UserKind, APIGroup: GroupName, Name: user})
@@ -247,7 +245,7 @@ func (r *ClusterRoleBindingBuilder) Users(users ...string) *ClusterRoleBindingBu
 	return r
 }
 
-// SAs adds the specified sas as the subjects of the ClusterRoleBinding.
+// SAs 将指定的 service account 添加为 ClusterRoleBinding 的主体。
 func (r *ClusterRoleBindingBuilder) SAs(namespace string, serviceAccountNames ...string) *ClusterRoleBindingBuilder {
 	for _, saName := range serviceAccountNames {
 		r.ClusterRoleBinding.Subjects = append(r.ClusterRoleBinding.Subjects, Subject{Kind: ServiceAccountKind, Namespace: namespace, Name: saName})
@@ -255,7 +253,7 @@ func (r *ClusterRoleBindingBuilder) SAs(namespace string, serviceAccountNames ..
 	return r
 }
 
-// BindingOrDie calls the binding method and panics if there is an error.
+// BindingOrDie 调用 binding 方法，若出错则 panic。
 func (r *ClusterRoleBindingBuilder) BindingOrDie() ClusterRoleBinding {
 	ret, err := r.Binding()
 	if err != nil {
@@ -264,8 +262,7 @@ func (r *ClusterRoleBindingBuilder) BindingOrDie() ClusterRoleBinding {
 	return ret
 }
 
-// Binding builds and returns the ClusterRoleBinding API object from the builder
-// object.
+// Binding 从 builder 对象构建并返回 ClusterRoleBinding API 对象。
 func (r *ClusterRoleBindingBuilder) Binding() (ClusterRoleBinding, error) {
 	if len(r.ClusterRoleBinding.Subjects) == 0 {
 		return ClusterRoleBinding{}, fmt.Errorf("subjects are required: %#v", r.ClusterRoleBinding)
@@ -274,17 +271,16 @@ func (r *ClusterRoleBindingBuilder) Binding() (ClusterRoleBinding, error) {
 	return r.ClusterRoleBinding, nil
 }
 
-// RoleBindingBuilder let's us attach methods. It is similar to
-// ClusterRoleBindingBuilder above.
+// RoleBindingBuilder 允许挂接方法，与上面的
+// ClusterRoleBindingBuilder 类似。
 // +k8s:deepcopy-gen=false
 type RoleBindingBuilder struct {
 	RoleBinding RoleBinding
 }
 
-// NewRoleBinding creates a RoleBinding builder that can be used
-// to define the subjects of a role binding. At least one of
-// the `Groups`, `Users` or `SAs` method must be called before
-// calling the `Binding*` methods.
+// NewRoleBinding 创建一个 RoleBinding builder，可用于定义
+// 角色 binding 的主体。在调用 `Binding*` 方法之前，
+// 必须至少调用 `Groups`、`Users` 或 `SAs` 方法中的一个。
 func NewRoleBinding(roleName, namespace string) *RoleBindingBuilder {
 	return &RoleBindingBuilder{
 		RoleBinding: RoleBinding{
@@ -301,10 +297,9 @@ func NewRoleBinding(roleName, namespace string) *RoleBindingBuilder {
 	}
 }
 
-// NewRoleBindingForClusterRole creates a RoleBinding builder that can be used
-// to define the subjects of a cluster role binding. At least one of
-// the `Groups`, `Users` or `SAs` method must be called before
-// calling the `Binding*` methods.
+// NewRoleBindingForClusterRole 创建一个 RoleBinding builder，可用于定义
+// 集群角色 binding 的主体。在调用 `Binding*` 方法之前，
+// 必须至少调用 `Groups`、`Users` 或 `SAs` 方法中的一个。
 func NewRoleBindingForClusterRole(roleName, namespace string) *RoleBindingBuilder {
 	return &RoleBindingBuilder{
 		RoleBinding: RoleBinding{
@@ -321,7 +316,7 @@ func NewRoleBindingForClusterRole(roleName, namespace string) *RoleBindingBuilde
 	}
 }
 
-// Groups adds the specified groups as the subjects of the RoleBinding.
+// Groups 将指定的 groups 添加为 RoleBinding 的主体。
 func (r *RoleBindingBuilder) Groups(groups ...string) *RoleBindingBuilder {
 	for _, group := range groups {
 		r.RoleBinding.Subjects = append(r.RoleBinding.Subjects, Subject{Kind: GroupKind, APIGroup: GroupName, Name: group})
@@ -329,7 +324,7 @@ func (r *RoleBindingBuilder) Groups(groups ...string) *RoleBindingBuilder {
 	return r
 }
 
-// Users adds the specified users as the subjects of the RoleBinding.
+// Users 将指定的 users 添加为 RoleBinding 的主体。
 func (r *RoleBindingBuilder) Users(users ...string) *RoleBindingBuilder {
 	for _, user := range users {
 		r.RoleBinding.Subjects = append(r.RoleBinding.Subjects, Subject{Kind: UserKind, APIGroup: GroupName, Name: user})
@@ -337,8 +332,7 @@ func (r *RoleBindingBuilder) Users(users ...string) *RoleBindingBuilder {
 	return r
 }
 
-// SAs adds the specified service accounts as the subjects of the
-// RoleBinding.
+// SAs 将指定的 service accounts 添加为 RoleBinding 的主体。
 func (r *RoleBindingBuilder) SAs(namespace string, serviceAccountNames ...string) *RoleBindingBuilder {
 	for _, saName := range serviceAccountNames {
 		r.RoleBinding.Subjects = append(r.RoleBinding.Subjects, Subject{Kind: ServiceAccountKind, Namespace: namespace, Name: saName})
@@ -346,7 +340,7 @@ func (r *RoleBindingBuilder) SAs(namespace string, serviceAccountNames ...string
 	return r
 }
 
-// BindingOrDie calls the binding method and panics if there is an error.
+// BindingOrDie 调用 binding 方法，若出错则 panic。
 func (r *RoleBindingBuilder) BindingOrDie() RoleBinding {
 	ret, err := r.Binding()
 	if err != nil {
@@ -355,8 +349,7 @@ func (r *RoleBindingBuilder) BindingOrDie() RoleBinding {
 	return ret
 }
 
-// Binding builds and returns the RoleBinding API object from the builder
-// object.
+// Binding 从 builder 对象构建并返回 RoleBinding API 对象。
 func (r *RoleBindingBuilder) Binding() (RoleBinding, error) {
 	if len(r.RoleBinding.Subjects) == 0 {
 		return RoleBinding{}, fmt.Errorf("subjects are required: %#v", r.RoleBinding)
@@ -365,7 +358,7 @@ func (r *RoleBindingBuilder) Binding() (RoleBinding, error) {
 	return r.RoleBinding, nil
 }
 
-// SortableRuleSlice is the slice of PolicyRule.
+// SortableRuleSlice 是 PolicyRule 的切片。
 type SortableRuleSlice []PolicyRule
 
 func (s SortableRuleSlice) Len() int      { return len(s) }

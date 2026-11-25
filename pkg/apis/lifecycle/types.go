@@ -82,7 +82,7 @@ type EvictionRequestSpec struct {
 	// - Eviction 表示请求者希望对目标执行驱逐。
 	// - Withdrawn 表示请求者不再希望对目标执行驱逐。
 	// 如果同一 target 的所有 requester 的 intent 都变为 Withdrawn，驱逐将被取消。
-	//   Cancellation consequences:
+	//   取消驱逐的后果：
 	// - Inactive 的 responder 永远不会运行。
 	// - Active 的 responder 应当取消驱逐。
 	// - Completed 或 Interrupted 的 responder 不应采取任何动作。
@@ -98,8 +98,7 @@ type EvictionRequestTarget struct {
 	Pod *EvictionRequestPodReference
 }
 
-// EvictionRequestPodReference contains enough information to locate the referenced pod inside the
-// same namespace.
+// EvictionRequestPodReference 包含足够信息，用于在同一 namespace 内定位所引用的 Pod。
 type EvictionRequestPodReference struct {
 	// 目标名称。
 	// 该字段必填。
@@ -131,18 +130,18 @@ const (
 
 // EvictionRequestStatus 表示最近观测到的 eviction request 状态。
 type EvictionRequestStatus struct {
-	// conditions contain information about the eviction request.
+	// conditions 包含有关该 eviction request 的信息。
 	//
-	// EvictionRequest specific conditions are: TargetEvicted or Failed (managed by evictionrequest-controller).
-	// - Failed means that the eviction request is no longer being processed
-	//   by any eviction responder. This can happen if the request is canceled or if no responder
-	//   managed to evict the target (e.g. terminate or delete a pod).
-	// - TargetEvicted means that the target has been evicted (e.g. a pod has been terminated or deleted).
+	// EvictionRequest 专有的 conditions 为：TargetEvicted 或 Failed（由 evictionrequest-controller 管理）。
+	// - Failed 表示该驱逐请求不再被任何 eviction responder 处理。
+	//   当请求被取消、或没有任何 responder 成功驱逐目标
+	//   （例如终止或删除 Pod）时，会出现这种情况。
+	// - TargetEvicted 表示目标已被驱逐（例如 Pod 已被终止或删除）。
 	//
-	// These conditions can be reset if the eviction was unsuccessful and a new Eviction intent has
-	// been submitted.
+	// 如果驱逐未成功且又提交了新的 Eviction intent，这些
+	// conditions 可以被重置。
 	//
-	// The maximum length of the conditions list is 100.
+	// conditions 列表的最大长度为 100。
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -230,7 +229,7 @@ type Eviction struct {
 type EvictionParticipantRole string
 
 const (
-	// EvictionParticipantRoleRequester identifies a requester which creates EvictionRequests.
+	// EvictionParticipantRoleRequester 标识创建 EvictionRequest 的 requester。
 	EvictionParticipantRoleRequester EvictionParticipantRole = "requester"
 
 	// EvictionParticipantRoleResponder 标识响应 Eviction 的 responder。
@@ -257,8 +256,7 @@ type EvictionTarget struct {
 	Pod *EvictionPodReference
 }
 
-// EvictionPodReference contains enough information to locate the referenced pod inside the same
-// namespace.
+// EvictionPodReference 包含足够信息，用于在同一 namespace 内定位所引用的 Pod。
 type EvictionPodReference struct {
 	// 目标名称。
 	// 该字段必填。
@@ -273,15 +271,15 @@ type EvictionPodReference struct {
 
 // EvictionStatus 表示最近观测到的 eviction request 状态。
 type EvictionStatus struct {
-	// conditions contain information about the eviction request.
+	// conditions 包含有关该 eviction request 的信息。
 	//
-	// Eviction specific conditions are: TargetEvicted or Failed (managed by evictionrequest-controller).
-	// - Failed means that the eviction request is no longer being processed
-	//   by any eviction responder. This can happen if the request is canceled or if no responder
-	//   managed to evict the target (e.g. terminate or delete a pod).
-	// - TargetEvicted means that the target has been evicted (e.g. a pod has been terminated or deleted).
+	// Eviction 专有的 conditions 为：TargetEvicted 或 Failed（由 evictionrequest-controller 管理）。
+	// - Failed 表示该驱逐请求不再被任何 eviction responder 处理。
+	//   当请求被取消、或没有任何 responder 成功驱逐目标
+	//   （例如终止或删除 Pod）时，会出现这种情况。
+	// - TargetEvicted 表示目标已被驱逐（例如 Pod 已被终止或删除）。
 	//
-	// 	The maximum length of the conditions list is 100.
+	// 	conditions 列表的最大长度为 100。
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -350,13 +348,12 @@ type EvictionConditionType string
 
 // 以下是 eviction request 内置的 conditions。
 const (
-	// EvictionConditionFailed means that the eviction request is no longer being processed
-	// by any eviction responder. This can happen if the request is canceled or if no responder
-	// managed to evict the target (e.g. terminate or delete a pod).
+	// EvictionConditionFailed 表示该驱逐请求不再被任何 eviction responder 处理。
+	// 当请求被取消、或没有任何 responder 成功驱逐目标（例如终止或删除 Pod）时，
+	// 会出现这种情况。
 	EvictionConditionFailed EvictionConditionType = "Failed"
 
-	// EvictionConditionTargetEvicted means that the target has been evicted (e.g. a pod has been
-	// terminated or deleted).
+	// EvictionConditionTargetEvicted 表示目标已被驱逐（例如 Pod 已被终止或删除）。
 	EvictionConditionTargetEvicted EvictionConditionType = "TargetEvicted"
 )
 
@@ -409,7 +406,7 @@ type Requester struct {
 	// - Eviction 表示请求者希望对目标执行驱逐。
 	// - Withdrawn 表示请求者不再希望对目标执行驱逐。
 	// 如果所有 requester 的 intent 都变为 Withdrawn，驱逐将被取消。
-	//   Cancellation consequences:
+	//   取消驱逐的后果：
 	// - Inactive 的 responder 永远不会运行。
 	// - Active 的 responder 应当取消驱逐。
 	// - Completed 或 Interrupted 的 responder 不应采取任何动作。

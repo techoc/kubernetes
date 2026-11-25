@@ -789,21 +789,21 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 		Namespace: "default",
 	}
 
-	// shortSecretRef refers to the secretRefs which are validated with IsDNS1035Label
+	// shortSecretRef 引用的 secretRef 使用 IsDNS1035Label 校验
 	shortSecretName := "key-name"
 	shortSecretRef := &core.SecretReference{
 		Name:      shortSecretName,
 		Namespace: "default",
 	}
 
-	// longSecretRef refers to the secretRefs which are validated with IsDNS1123Subdomain
+	// longSecretRef 引用的 secretRef 使用 IsDNS1123Subdomain 校验
 	longSecretName := "key-name.example.com"
 	longSecretRef := &core.SecretReference{
 		Name:      longSecretName,
 		Namespace: "default",
 	}
 
-	// invalidSecrets missing name, namespace and both
+	// invalidSecrets 缺少 name、namespace 以及两者都缺少
 	inValidSecretRef := &core.SecretReference{
 		Name:      "",
 		Namespace: "",
@@ -856,7 +856,7 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "controllerExpand"),
 		},
 		"csi-expansion-enabled-with-longSecretRef": {
-			isExpectedFailure: false, // updating controllerExpandSecretRef is allowed only from nil
+			isExpectedFailure: false, // 仅当 controllerExpandSecretRef 原值为 nil 时才允许更新
 			oldVolume:         validCSIVolume,
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "controllerExpand"),
 		},
@@ -866,7 +866,7 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "controllerExpand"),
 		},
 		"csi-expansion-enabled-from-shortSecretRef-to-longSecretRef": {
-			isExpectedFailure: true, // updating controllerExpandSecretRef is allowed only from nil
+			isExpectedFailure: true, // 仅当 controllerExpandSecretRef 原值为 nil 时才允许更新
 			oldVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "controllerExpand"),
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "controllerExpand"),
 		},
@@ -876,12 +876,12 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "controllerExpand"),
 		},
 		"csi-cntrlpublish-enabled-with-shortSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         validCSIVolume,
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "controllerPublish"),
 		},
 		"csi-cntrlpublish-enabled-with-longSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         validCSIVolume,
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "controllerPublish"),
 		},
@@ -891,7 +891,7 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "controllerPublish"),
 		},
 		"csi-cntrlpublish-enabled-from-shortSecretRef-to-longSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "controllerPublish"),
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "controllerPublish"),
 		},
@@ -901,12 +901,12 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "controllerPublish"),
 		},
 		"csi-nodepublish-enabled-with-shortSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         validCSIVolume,
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "nodePublish"),
 		},
 		"csi-nodepublish-enabled-with-longSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         validCSIVolume,
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "nodePublish"),
 		},
@@ -926,24 +926,24 @@ func TestValidatePersistentVolumeSourceUpdate(t *testing.T) {
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "nodePublish"),
 		},
 		"csi-nodestage-enabled-with-shortSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         validCSIVolume,
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "nodeStage"),
 		},
 		"csi-nodestage-enabled-with-longSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         validCSIVolume,
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "nodeStage"),
 		},
 		"csi-nodestage-enabled-from-shortSecretRef-to-longSecretRef": {
-			isExpectedFailure: true, // updating secretRef will fail as the object is immutable eventhough the secretRef is valid
+			isExpectedFailure: true, // 尽管 secretRef 本身合法，但对象不可变，更新 secretRef 会失败
 			oldVolume:         getCSIVolumeWithSecret(validCSIVolume, shortSecretRef, "nodeStage"),
 			newVolume:         getCSIVolumeWithSecret(validCSIVolume, longSecretRef, "nodeStage"),
 		},
 
-		// At present, there is no validation exist for nodeStage secretRef in
-		// ValidatePersistentVolumeSpec->validateCSIPersistentVolumeSource, due to that, below
-		// checks/validations pass!
+		// 目前 ValidatePersistentVolumeSpec->validateCSIPersistentVolumeSource
+		// 中并没有对 nodeStage secretRef 的校验，因此以下
+		// 检查/校验都能通过！
 
 		"csi-nodestage-enabled-from-invalidSecretRef-to-invalidSecretRef": {
 			isExpectedFailure: false,
@@ -1804,7 +1804,7 @@ func testValidatePVC(t *testing.T, ephemeral bool) {
 	goodName := "foo"
 	goodNS := "ns"
 	if ephemeral {
-		// Must be empty for ephemeral inline volumes.
+		// 临时（ephemeral）内联卷必须为空。
 		goodName = ""
 		goodNS = ""
 	}
@@ -2343,7 +2343,7 @@ func TestAlphaPVVolumeModeUpdate(t *testing.T) {
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
 			opts := ValidationOptionsForPersistentVolume(scenario.newPV, scenario.oldPV)
-			// ensure we have a resource version specified for updates
+			// 确保更新时指定了 resource version
 			errs := ValidatePersistentVolumeUpdate(scenario.newPV, scenario.oldPV, opts)
 			if len(errs) == 0 && scenario.isExpectedFailure {
 				t.Errorf("Unexpected success for scenario: %s", name)
@@ -3680,7 +3680,7 @@ func TestValidateCSIPersistentVolumeSource(t *testing.T) {
 		csi:  &core.CSIPersistentVolumeSource{Driver: "com.google.gcepd", VolumeHandle: "foobar", NodePublishSecretRef: &core.SecretReference{Name: "foobar", Namespace: "default"}},
 	},
 
-		// tests with allowDNSSubDomainSecretName flag on/off
+		// 在 allowDNSSubDomainSecretName 开关开启/关闭的情况下测试
 		{
 			name: "valid nodeExpandSecretRef",
 			csi:  &core.CSIPersistentVolumeSource{Driver: "com.google.gcepd", VolumeHandle: "foobar", NodeExpandSecretRef: &core.SecretReference{Name: strings.Repeat("g", 63), Namespace: "default"}},
@@ -3734,9 +3734,9 @@ func TestValidateCSIPersistentVolumeSource(t *testing.T) {
 	}
 }
 
-// This test is a little too top-to-bottom.  Ideally we would test each volume
-// type on its own, but we want to also make sure that the logic works through
-// the one-of wrapper, so we just do it all in one place.
+// 这个测试有点过于自上而下。理想情况下我们会对每种卷类型
+// 单独测试，但同时也想确保逻辑在 one-of 包装器中
+// 正常工作，因此把所有内容放在一处测试。
 func TestValidateVolumes(t *testing.T) {
 	validInitiatorName := "iqn.2015-02.example.com:init"
 	invalidInitiatorName := "2015-02.example.com:init"
@@ -3753,7 +3753,7 @@ func TestValidateVolumes(t *testing.T) {
 		errs []verr
 		opts PodValidationOptions
 	}{
-		// EmptyDir and basic volume names
+		// EmptyDir 和基本卷名
 		{
 			name: "valid alpha name",
 			vol: core.Volume{
@@ -3830,7 +3830,7 @@ func TestValidateVolumes(t *testing.T) {
 				detail: dnsLabelErrMsg,
 			}},
 		},
-		// More than one source field specified.
+		// 指定了多个 source 字段。
 		{
 			name: "more than one source",
 			vol: core.Volume{
@@ -3849,7 +3849,7 @@ func TestValidateVolumes(t *testing.T) {
 				detail: "may not specify more than 1 volume",
 			}},
 		},
-		// HostPath Default
+		// HostPath：Default
 		{
 			name: "default HostPath",
 			vol: core.Volume{
@@ -3862,7 +3862,7 @@ func TestValidateVolumes(t *testing.T) {
 				},
 			},
 		},
-		// HostPath Supported
+		// HostPath：Supported
 		{
 			name: "valid HostPath",
 			vol: core.Volume{
@@ -3875,7 +3875,7 @@ func TestValidateVolumes(t *testing.T) {
 				},
 			},
 		},
-		// HostPath Invalid
+		// HostPath：Invalid
 		{
 			name: "invalid HostPath",
 			vol: core.Volume{
@@ -6173,10 +6173,10 @@ func TestValidateVolumes(t *testing.T) {
 		t.Errorf("expected error type %v, got %v", field.ErrorTypeDuplicate, errs[0].Type)
 	}
 
-	// Validate HugePages medium type for EmptyDir
+	// 校验 EmptyDir 的 HugePages medium 类型
 	hugePagesCase := core.VolumeSource{EmptyDir: &core.EmptyDirVolumeSource{Medium: core.StorageMediumHugePages}}
 
-	// Enable HugePages
+	// 启用 HugePages
 	if errs := validateVolumeSource(&hugePagesCase, field.NewPath("field").Index(0), "working", nil, PodValidationOptions{}); len(errs) != 0 {
 		t.Errorf("Unexpected error when HugePages feature is enabled.")
 	}
@@ -6353,7 +6353,7 @@ func TestPVCVolumeMode(t *testing.T) {
 	fake := core.PersistentVolumeMode("fake")
 	empty := core.PersistentVolumeMode("")
 
-	// Success Cases
+	// 成功用例
 	successCasesPVC := map[string]*core.PersistentVolumeClaim{
 		"valid block value":      createTestVolModePVC(&block),
 		"valid filesystem value": createTestVolModePVC(&file),
@@ -6366,7 +6366,7 @@ func TestPVCVolumeMode(t *testing.T) {
 		}
 	}
 
-	// Error Cases
+	// 错误用例
 	errorCasesPVC := map[string]*core.PersistentVolumeClaim{
 		"invalid value": createTestVolModePVC(&fake),
 		"empty value":   createTestVolModePVC(&empty),
@@ -6385,7 +6385,7 @@ func TestPVVolumeMode(t *testing.T) {
 	fake := core.PersistentVolumeMode("fake")
 	empty := core.PersistentVolumeMode("")
 
-	// Success Cases
+	// 成功用例
 	successCasesPV := map[string]*core.PersistentVolume{
 		"valid block value":      createTestVolModePV(&block),
 		"valid filesystem value": createTestVolModePV(&file),
@@ -6398,7 +6398,7 @@ func TestPVVolumeMode(t *testing.T) {
 		}
 	}
 
-	// Error Cases
+	// 错误用例
 	errorCasesPV := map[string]*core.PersistentVolume{
 		"invalid value": createTestVolModePV(&fake),
 		"empty value":   createTestVolModePV(&empty),
@@ -6435,7 +6435,7 @@ func createTestVolModePVC(vmode *core.PersistentVolumeMode) *core.PersistentVolu
 
 func createTestVolModePV(vmode *core.PersistentVolumeMode) *core.PersistentVolume {
 
-	// PersistentVolume with VolumeMode set (valid and invalid)
+	// 设置了 VolumeMode 的 PersistentVolume（合法与非法）
 	pv := core.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
@@ -6461,7 +6461,7 @@ func createTestVolModePV(vmode *core.PersistentVolumeMode) *core.PersistentVolum
 
 func createTestPV() *core.PersistentVolume {
 
-	// PersistentVolume with VolumeMode set (valid and invalid)
+	// 设置了 VolumeMode 的 PersistentVolume（合法与非法）
 	pv := core.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
@@ -6684,7 +6684,7 @@ func TestHugePagesEnv(t *testing.T) {
 		},
 	},
 	}
-	// enable gate
+	// 启用 feature gate
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
 			opts := PodValidationOptions{}
@@ -8294,62 +8294,62 @@ func TestValidateMountPropagation(t *testing.T) {
 		container   *core.Container
 		expectError bool
 	}{{
-		// implicitly non-privileged container + no propagation
+		// 隐式非特权容器 + 无 propagation
 		core.VolumeMount{Name: "foo", MountPath: "/foo"},
 		defaultContainer,
 		false,
 	}, {
-		// implicitly non-privileged container + HostToContainer
+		// 隐式非特权容器 + HostToContainer
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationHostToContainer},
 		defaultContainer,
 		false,
 	}, {
-		// non-privileged container + None
+		// 非特权容器 + None
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationNone},
 		defaultContainer,
 		false,
 	}, {
-		// error: implicitly non-privileged container + Bidirectional
+		// 错误：隐式非特权容器 + Bidirectional
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationBidirectional},
 		defaultContainer,
 		true,
 	}, {
-		// explicitly non-privileged container + no propagation
+		// 显式非特权容器 + 无 propagation
 		core.VolumeMount{Name: "foo", MountPath: "/foo"},
 		nonPrivilegedContainer,
 		false,
 	}, {
-		// explicitly non-privileged container + HostToContainer
+		// 显式非特权容器 + HostToContainer
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationHostToContainer},
 		nonPrivilegedContainer,
 		false,
 	}, {
-		// explicitly non-privileged container + HostToContainer
+		// 显式非特权容器 + HostToContainer
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationBidirectional},
 		nonPrivilegedContainer,
 		true,
 	}, {
-		// privileged container + no propagation
+		// 特权容器 + 无 propagation
 		core.VolumeMount{Name: "foo", MountPath: "/foo"},
 		privilegedContainer,
 		false,
 	}, {
-		// privileged container + HostToContainer
+		// 特权容器 + HostToContainer
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationHostToContainer},
 		privilegedContainer,
 		false,
 	}, {
-		// privileged container + Bidirectional
+		// 特权容器 + Bidirectional
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationBidirectional},
 		privilegedContainer,
 		false,
 	}, {
-		// error: privileged container + invalid mount propagation
+		// 错误：特权容器 + 非法的 mount propagation
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationInvalid},
 		privilegedContainer,
 		true,
 	}, {
-		// no container + Bidirectional
+		// 无容器 + Bidirectional
 		core.VolumeMount{Name: "foo", MountPath: "/foo", MountPropagation: &propagationBidirectional},
 		nil,
 		false,
@@ -8428,14 +8428,14 @@ func TestAlphaValidateVolumeDevices(t *testing.T) {
 		{Name: "abc-123", MountPath: "/this/path/exists"},
 	}
 
-	// Success Cases:
-	// Validate normal success cases - only PVC volumeSource or generic ephemeral volume
+	// 成功用例：
+	// 校验正常的成功用例——仅 PVC volumeSource 或通用临时卷
 	if errs := ValidateVolumeDevices(successCase, GetVolumeMountMap(goodVolumeMounts), vols, field.NewPath("field")); len(errs) != 0 {
 		t.Errorf("expected success: %v", errs)
 	}
 
-	// Error Cases:
-	// Validate normal error cases - only PVC volumeSource
+	// 错误用例：
+	// 校验正常的错误用例——仅 PVC volumeSource
 	for k, v := range errorCases {
 		if errs := ValidateVolumeDevices(v, GetVolumeMountMap(badVolumeMounts), vols, field.NewPath("field")); len(errs) == 0 {
 			t.Errorf("expected failure for %s", k)
@@ -8445,7 +8445,7 @@ func TestAlphaValidateVolumeDevices(t *testing.T) {
 
 func TestValidateProbe(t *testing.T) {
 	handler := core.ProbeHandler{Exec: &core.ExecAction{Command: []string{"echo"}}}
-	// These fields must be positive.
+	// 这些字段必须为正数。
 	positiveFields := [...]string{"InitialDelaySeconds", "TimeoutSeconds", "PeriodSeconds", "SuccessThreshold", "FailureThreshold"}
 	successCases := []*core.Probe{nil}
 	for _, field := range positiveFields {
@@ -8919,7 +8919,7 @@ func TestValidateEphemeralContainers(t *testing.T) {
 		"vol": {EmptyDir: &core.EmptyDirVolumeSource{}},
 	}
 
-	// Success Cases
+	// 成功用例
 	for title, ephemeralContainers := range map[string][]core.EphemeralContainer{
 		"Empty Ephemeral Containers": {},
 		"Single Container": {
@@ -8987,7 +8987,7 @@ func TestValidateEphemeralContainers(t *testing.T) {
 		}
 	}
 
-	// Failure Cases
+	// 失败用例
 	tcs := []struct {
 		title, line         string
 		ephemeralContainers []core.EphemeralContainer
@@ -9436,7 +9436,7 @@ func TestValidateContainers(t *testing.T) {
 
 	successCase := []core.Container{
 		{Name: "abc", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"},
-		// backwards compatibility to ensure containers in pod template spec do not check for this
+		// 向后兼容：确保 pod template spec 中的容器不检查此项
 		{Name: "def", Image: " ", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"},
 		{Name: "ghi", Image: " some  ", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"},
 		{Name: "123", Image: "image", ImagePullPolicy: "IfNotPresent", TerminationMessagePolicy: "File"},
@@ -9964,7 +9964,7 @@ func TestValidateContainers(t *testing.T) {
 			{Type: field.ErrorTypeInvalid, Field: "containers[0].readinessProbe.periodSeconds"},
 			{Type: field.ErrorTypeInvalid, Field: "containers[0].readinessProbe.successThreshold"},
 			{Type: field.ErrorTypeInvalid, Field: "containers[0].readinessProbe.failureThreshold"},
-			// terminationGracePeriodSeconds returns multiple validation errors here:
+			// terminationGracePeriodSeconds 在此会返回多个校验错误：
 			// containers[0].readinessProbe.terminationGracePeriodSeconds: Invalid value: -1: must be greater than 0
 			{Type: field.ErrorTypeInvalid, Field: "containers[0].readinessProbe.terminationGracePeriodSeconds"},
 			// containers[0].readinessProbe.terminationGracePeriodSeconds: Invalid value: -1: must not be set for readinessProbes
@@ -10903,7 +10903,7 @@ func TestValidatePodDNSConfig(t *testing.T) {
 	}, {
 		desc: "valid: 256 characters in search path list(legacy)",
 		dnsConfig: &core.PodDNSConfig{
-			// We can have 256 - (6 - 1) = 251 characters in total for 6 search paths.
+			// 6 个搜索路径总共可有 256 - (6 - 1) = 251 个字符。
 			Searches: []string{
 				generateTestSearchPathFunc(1),
 				generateTestSearchPathFunc(50),
@@ -10917,7 +10917,7 @@ func TestValidatePodDNSConfig(t *testing.T) {
 	}, {
 		desc: "valid: 2048 characters in search path list",
 		dnsConfig: &core.PodDNSConfig{
-			// We can have 2048 - (32 - 1) = 2017 characters in total for 32 search paths.
+			// 32 个搜索路径总共可有 2048 - (32 - 1) = 2017 个字符。
 			Searches: []string{
 				generateTestSearchPathFunc(64),
 				generateTestSearchPathFunc(63),
@@ -10980,7 +10980,7 @@ func TestValidatePodDNSConfig(t *testing.T) {
 	}, {
 		desc: "valid: 257 characters in search path list",
 		dnsConfig: &core.PodDNSConfig{
-			// We can have 256 - (6 - 1) = 251 characters in total for 6 search paths.
+			// 6 个搜索路径总共可有 256 - (6 - 1) = 251 个字符。
 			Searches: []string{
 				generateTestSearchPathFunc(2),
 				generateTestSearchPathFunc(50),
@@ -10993,7 +10993,7 @@ func TestValidatePodDNSConfig(t *testing.T) {
 	}, {
 		desc: "invalid: 2049 characters in search path list",
 		dnsConfig: &core.PodDNSConfig{
-			// We can have 2048 - (32 - 1) = 2017 characters in total for 32 search paths.
+			// 32 个搜索路径总共可有 2048 - (32 - 1) = 2017 个字符。
 			Searches: []string{
 				generateTestSearchPathFunc(65),
 				generateTestSearchPathFunc(63),
@@ -11544,8 +11544,8 @@ func TestValidatePod(t *testing.T) {
 		),
 		"serialized node affinity requirements": *podtest.MakePod("123",
 			podtest.SetAffinity(
-				// TODO: Uncomment and move this block and move inside NodeAffinity once
-				// RequiredDuringSchedulingRequiredDuringExecution is implemented
+				// TODO: 一旦下述功能实现，取消注释此块并将其移入 NodeAffinity 内部
+				// （RequiredDuringSchedulingRequiredDuringExecution 实现后）
 				//		RequiredDuringSchedulingRequiredDuringExecution: &core.NodeSelector{
 				//			NodeSelectorTerms: []core.NodeSelectorTerm{
 				//				{
@@ -11589,8 +11589,8 @@ func TestValidatePod(t *testing.T) {
 		),
 		"serialized node affinity requirements, II": *podtest.MakePod("123",
 			podtest.SetAffinity(
-				// TODO: Uncomment and move this block and move inside NodeAffinity once
-				// RequiredDuringSchedulingRequiredDuringExecution is implemented
+				// TODO: 一旦下述功能实现，取消注释此块并将其移入 NodeAffinity 内部
+				// （RequiredDuringSchedulingRequiredDuringExecution 实现后）
 				//		RequiredDuringSchedulingRequiredDuringExecution: &core.NodeSelector{
 				//			NodeSelectorTerms: []core.NodeSelectorTerm{
 				//				{
@@ -11622,8 +11622,8 @@ func TestValidatePod(t *testing.T) {
 		),
 		"serialized pod affinity in affinity requirements in annotations": *podtest.MakePod("123",
 			podtest.SetAffinity(
-				// TODO: Uncomment and move this block into Annotations map once
-				// RequiredDuringSchedulingRequiredDuringExecution is implemented
+				// TODO: 待下述功能实现后，取消注释此块并将其移入 Annotations map：
+				// （RequiredDuringSchedulingRequiredDuringExecution 实现后）
 				//		"requiredDuringSchedulingRequiredDuringExecution": [{
 				//			"labelSelector": {
 				//				"matchExpressions": [{
@@ -11674,8 +11674,8 @@ func TestValidatePod(t *testing.T) {
 		),
 		"serialized pod anti affinity with different Label Operators in affinity requirements in annotations": *podtest.MakePod("123",
 			podtest.SetAffinity(
-				// TODO: Uncomment and move this block into Annotations map once
-				// RequiredDuringSchedulingRequiredDuringExecution is implemented
+				// TODO: 待下述功能实现后，取消注释此块并将其移入 Annotations map：
+				// （RequiredDuringSchedulingRequiredDuringExecution 实现后）
 				//		"requiredDuringSchedulingRequiredDuringExecution": [{
 				//			"labelSelector": {
 				//				"matchExpressions": [{
@@ -12227,7 +12227,7 @@ func TestValidatePod(t *testing.T) {
 		),
 		"LabelSelector can have the same key as MismatchLabelKeys": *podtest.MakePod("123",
 			podtest.SetAffinity(&core.Affinity{
-				// Note: On the contrary, in case of matchLabelKeys, keys in matchLabelKeys are not allowed to be specified in labelSelector by users.
+				// Note: 相反，对于 matchLabelKeys，用户不允许在 labelSelector 中指定 matchLabelKeys 里的键。
 				PodAffinity: &core.PodAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: []core.PodAffinityTerm{
 						{
@@ -12239,8 +12239,8 @@ func TestValidatePod(t *testing.T) {
 										Values:   []string{"value1", "value2"},
 									},
 									{
-										// This is the same key as in MismatchLabelKeys
-										// but it's allowed.
+										// 这与 MismatchLabelKeys 中的是同一个键
+										// 但这里是允许的。
 										Key:      "key2",
 										Operator: metav1.LabelSelectorOpIn,
 										Values:   []string{"value1"},
@@ -15569,7 +15569,7 @@ func TestValidatePodUpdate(t *testing.T) {
 		test.new.ObjectMeta.ResourceVersion = "1"
 		test.old.ObjectMeta.ResourceVersion = "1"
 
-		// set required fields if old and new match and have no opinion on the value
+		// 若 old 与 new 匹配且对该值无要求，则设置必填字段
 		if test.new.Name == "" && test.old.Name == "" {
 			test.new.Name = "name"
 			test.old.Name = "name"
@@ -17642,8 +17642,8 @@ func TestValidatePodEphemeralContainersUpdate(t *testing.T) {
 		)
 	}
 
-	// Some tests use Windows host pods as an example of fields that might
-	// conflict between an ephemeral container and the rest of the pod.
+	// 一些测试使用 Windows 宿主 Pod 作为可能与临时容器
+	// 及 Pod 其余部分冲突的字段示例。
 	capabilities.ResetForTest()
 	capabilities.Initialize(capabilities.Capabilities{
 		AllowPrivileged: true,
@@ -17997,7 +17997,7 @@ func TestValidateServiceCreate(t *testing.T) {
 
 	testCases := []struct {
 		name                       string
-		tweakSvc                   func(svc *core.Service) // given a basic valid service, each test case can customize it
+		tweakSvc                   func(svc *core.Service) // 基于一个基本合法的服务，各测试用例可自行定制
 		numErrs                    int
 		legacyIPs                  bool
 		disableNewTrafficDist      bool
@@ -18197,8 +18197,8 @@ func TestValidateServiceCreate(t *testing.T) {
 			s.Spec.ClusterIP = core.ClusterIPNone
 			s.Spec.ClusterIPs = []string{core.ClusterIPNone}
 		},
-		// in the v1 API, targetPorts on headless services were tolerated.
-		// once we have version-specific validation, we can reject this on newer API versions, but until then, we have to tolerate it for compatibility.
+		// 在 v1 API 中，headless 服务上的 targetPorts 是被容忍的。
+		// 一旦有了版本相关的校验，我们可以在较新的 API 版本上拒绝它，但在此之前，为了兼容性必须容忍它。
 		// numErrs: 1,
 		numErrs: 0,
 	}, {
@@ -18209,8 +18209,8 @@ func TestValidateServiceCreate(t *testing.T) {
 			s.Spec.ClusterIP = core.ClusterIPNone
 			s.Spec.ClusterIPs = []string{core.ClusterIPNone}
 		},
-		// in the v1 API, targetPorts on headless services were tolerated.
-		// once we have version-specific validation, we can reject this on newer API versions, but until then, we have to tolerate it for compatibility.
+		// 在 v1 API 中，headless 服务上的 targetPorts 是被容忍的。
+		// 一旦有了版本相关的校验，我们可以在较新的 API 版本上拒绝它，但在此之前，为了兼容性必须容忍它。
 		// numErrs: 1,
 		numErrs: 0,
 	}, {
@@ -18300,7 +18300,7 @@ func TestValidateServiceCreate(t *testing.T) {
 	}, {
 		name: "valid 1",
 		tweakSvc: func(s *core.Service) {
-			// do nothing
+			// 什么都不做
 		},
 		numErrs: 0,
 	}, {
@@ -18501,7 +18501,7 @@ func TestValidateServiceCreate(t *testing.T) {
 		},
 		numErrs: 0,
 	}, {
-		// Remove the limitation on exposing port 10250 externally
+		// 移除对外暴露端口 10250 的限制
 		name: "valid port type=LoadBalancer",
 		tweakSvc: func(s *core.Service) {
 			s.Spec.Type = core.ServiceTypeLoadBalancer
@@ -18716,7 +18716,7 @@ func TestValidateServiceCreate(t *testing.T) {
 		},
 		numErrs: 1,
 	},
-		// ESIPP section begins.
+		// ESIPP 部分开始。
 		{
 			name: "invalid externalTraffic field",
 			tweakSvc: func(s *core.Service) {
@@ -18740,10 +18740,10 @@ func TestValidateServiceCreate(t *testing.T) {
 			},
 			numErrs: 0,
 		}, {
-			// Typically this should fail validation, but in v1.22 we have existing clusters
-			// that may have allowed internalTrafficPolicy when Type=ExternalName.
-			// This test case ensures we don't break compatibility for internalTrafficPolicy
-			// when Type=ExternalName
+			// 通常这应当校验失败，但在 v1.22 中存在
+			// 可能已允许 Type=ExternalName 时设置 internalTrafficPolicy 的集群。
+			// 此测试用例确保我们不破坏 Type=ExternalName 时
+			// internalTrafficPolicy 的兼容性
 			name: "internalTrafficPolicy field is set when type is ExternalName",
 			tweakSvc: func(s *core.Service) {
 				cluster := core.ServiceInternalTrafficPolicyCluster
@@ -18792,7 +18792,7 @@ func TestValidateServiceCreate(t *testing.T) {
 			},
 			numErrs: 0,
 		},
-		// ESIPP section ends.
+		// ESIPP 部分结束。
 		{
 			name: "invalid timeoutSeconds field",
 			tweakSvc: func(s *core.Service) {
@@ -18820,7 +18820,7 @@ func TestValidateServiceCreate(t *testing.T) {
 			},
 			numErrs: 1,
 		},
-		/* ip families validation */
+		/* IP 协议族校验 */
 		{
 			name: "invalid, service with invalid ipFamilies",
 			tweakSvc: func(s *core.Service) {
@@ -18842,7 +18842,7 @@ func TestValidateServiceCreate(t *testing.T) {
 				s.Spec.IPFamilyPolicy = &singleStack
 				s.Spec.IPFamilies = []core.IPFamily{core.IPv4Protocol, core.IPv6Protocol}
 			},
-			numErrs: 0, // this validated in alloc code.
+			numErrs: 0, // 此项在 alloc 代码中校验。
 		}, {
 			name: "valid, IPFamilyPolicy(preferDualStack) is set for two families (note: alloc sets families)",
 			tweakSvc: func(s *core.Service) {
@@ -18906,7 +18906,7 @@ func TestValidateServiceCreate(t *testing.T) {
 			},
 			numErrs: 0,
 		},
-		/* cluster IPs. some tests are redundant */
+		/* cluster IPs。部分测试是冗余的 */
 		{
 			name: "invalid, garbage single ip",
 			tweakSvc: func(s *core.Service) {
@@ -19334,7 +19334,7 @@ func TestValidateServiceCreate(t *testing.T) {
 func TestValidateServiceExternalTrafficPolicy(t *testing.T) {
 	testCases := []struct {
 		name     string
-		tweakSvc func(svc *core.Service) // Given a basic valid service, each test case can customize it.
+		tweakSvc func(svc *core.Service) // 基于一个基本合法的服务，各测试用例可自行定制。
 		numErrs  int
 	}{{
 		name: "valid loadBalancer service with externalTrafficPolicy and healthCheckNodePort set",
@@ -19613,7 +19613,7 @@ func TestValidateReplicationControllerStatusUpdate(t *testing.T) {
 
 }
 
-// Helper function for RC tests.
+// RC 测试的辅助函数。
 func mkValidReplicationController(tweaks ...func(rc *core.ReplicationController)) core.ReplicationController {
 	rc := core.ReplicationController{
 		ObjectMeta: metav1.ObjectMeta{Name: "abc", Namespace: metav1.NamespaceDefault},
@@ -19984,7 +19984,7 @@ func TestValidateNode(t *testing.T) {
 			},
 		},
 		Spec: core.NodeSpec{
-			// Add a valid taint to a node
+			// 为节点添加一个合法的污点（taint）
 			Taints: []core.Taint{{Key: "GPU", Value: "true", Effect: "NoSchedule"}},
 		},
 	}, {
@@ -20106,7 +20106,7 @@ func TestValidateNode(t *testing.T) {
 				Name: "dedicated-node1",
 			},
 			Spec: core.NodeSpec{
-				// Add a taint with an empty key to a node
+				// 为节点添加一个 key 为空的污点
 				Taints: []core.Taint{{Key: "", Value: "special-user-1", Effect: "NoSchedule"}},
 			},
 		},
@@ -20115,7 +20115,7 @@ func TestValidateNode(t *testing.T) {
 				Name: "dedicated-node1",
 			},
 			Spec: core.NodeSpec{
-				// Add a taint with an invalid  key to a node
+				// 为节点添加一个 key 非法的污点
 				Taints: []core.Taint{{Key: "NoUppercaseOrSpecialCharsLike=Equals", Value: "special-user-1", Effect: "NoSchedule"}},
 			},
 		},
@@ -20133,7 +20133,7 @@ func TestValidateNode(t *testing.T) {
 				},
 			},
 			Spec: core.NodeSpec{
-				// Add a taint with a bad value to a node
+				// 为节点添加一个 value 非法的污点
 				Taints: []core.Taint{{Key: "dedicated", Value: "some\\bad\\value", Effect: "NoSchedule"}},
 			},
 		},
@@ -20151,7 +20151,7 @@ func TestValidateNode(t *testing.T) {
 				},
 			},
 			Spec: core.NodeSpec{
-				// Add a taint with an empty effect to a node
+				// 为节点添加一个 effect 为空的污点
 				Taints: []core.Taint{{Key: "dedicated", Value: "special-user-3", Effect: ""}},
 			},
 		},
@@ -20169,7 +20169,7 @@ func TestValidateNode(t *testing.T) {
 				},
 			},
 			Spec: core.NodeSpec{
-				// Add a taint with NoExecute effect to a node
+				// 为节点添加一个 NoExecute 效应的污点
 				Taints: []core.Taint{{Key: "dedicated", Value: "special-user-3", Effect: "NoScheduleNoAdmit"}},
 			},
 		},
@@ -20178,7 +20178,7 @@ func TestValidateNode(t *testing.T) {
 				Name: "dedicated-node1",
 			},
 			Spec: core.NodeSpec{
-				// Add two taints to the node with the same key and effect; should be rejected.
+				// 为节点添加两个 key 和 effect 相同的污点；应当被拒绝。
 				Taints: []core.Taint{
 					{Key: "dedicated", Value: "special-user-1", Effect: "NoSchedule"},
 					{Key: "dedicated", Value: "special-user-2", Effect: "NoSchedule"},
@@ -20765,13 +20765,13 @@ func TestValidateServiceUpdate(t *testing.T) {
 	singleStack := core.IPFamilyPolicySingleStack
 	testCases := []struct {
 		name                       string
-		tweakSvc                   func(oldSvc, newSvc *core.Service) // given basic valid services, each test case can customize them
+		tweakSvc                   func(oldSvc, newSvc *core.Service) // 基于基本合法的服务，各测试用例可自行定制
 		numErrs                    int
 		disableRelaxedServiceNames bool
 	}{{
 		name: "no change",
 		tweakSvc: func(oldSvc, newSvc *core.Service) {
-			// do nothing
+			// 什么都不做
 		},
 		numErrs: 0,
 	}, {
@@ -21245,7 +21245,7 @@ func TestValidateServiceUpdate(t *testing.T) {
 			},
 			numErrs: 1,
 		},
-		/* Service IP Family */
+		/* Service IP 协议族 */
 		{
 			name: "convert from ExternalName",
 			tweakSvc: func(oldSvc, newSvc *core.Service) {
@@ -21267,9 +21267,9 @@ func TestValidateServiceUpdate(t *testing.T) {
 				newSvc.Spec.Type = core.ServiceTypeExternalName
 				newSvc.Spec.ExternalName = "foo"
 				/*
-					not removing these fields is a validation error
-					strategy takes care of resetting Families & Policy if ClusterIPs
-					were reset. But it does not get called in validation testing.
+					不移除这些字段属于校验错误
+					strategy 会在 ClusterIPs 被重置时负责重置 Families 与
+					Policy。但校验测试中不会调用它。
 				*/
 				newSvc.Spec.ClusterIP = "10.0.0.10"
 				newSvc.Spec.ClusterIPs = []string{"10.0.0.10"}
@@ -21387,7 +21387,7 @@ func TestValidateServiceUpdate(t *testing.T) {
 			},
 			numErrs: 2,
 		},
-		/* upgrade + downgrade from/to dualstack tests */
+		/* 双栈升级 + 降级测试 */
 		{
 			name: "valid: upgrade to dual stack with requiredDualStack",
 			tweakSvc: func(oldSvc, newSvc *core.Service) {
@@ -21584,7 +21584,7 @@ func TestValidateServiceUpdate(t *testing.T) {
 				newSvc.Spec.IPFamilyPolicy = &singleStack
 				newSvc.Spec.IPFamilies = []core.IPFamily{core.IPv4Protocol, core.IPv6Protocol}
 			},
-			numErrs: 0, // families and ips are trimmed in strategy
+			numErrs: 0, // families 和 ips 在 strategy 中被裁剪
 		}, {
 			name: "invalid, downgrade without changing to singleStack",
 			tweakSvc: func(oldSvc, newSvc *core.Service) {
@@ -21830,8 +21830,8 @@ func TestValidateServiceUpdate(t *testing.T) {
 			numErrs: 1,
 		},
 
-		// IP validation ratcheting tests. Note: this is tested for
-		// LoadBalancerStatus in TestValidateLoadBalancerStatus.
+		// IP 校验的棘轮（ratcheting）测试。注意：
+		// LoadBalancerStatus 的部分在 TestValidateLoadBalancerStatus 中已测试。
 		{
 			name: "pre-existing invalid clusterIP ignored when updating other fields",
 			tweakSvc: func(oldSvc, newSvc *core.Service) {
@@ -23140,7 +23140,7 @@ func TestValidatePersistentVolumeClaimStatusUpdate(t *testing.T) {
 
 			validateOpts := ValidationOptionsForPersistentVolumeClaim(scenario.newClaim, scenario.oldClaim)
 
-			// ensure we have a resource version specified for updates
+			// 确保更新时指定了 resource version
 			scenario.oldClaim.ResourceVersion = "1"
 			scenario.newClaim.ResourceVersion = "1"
 			errs := ValidatePersistentVolumeClaimStatusUpdate(scenario.newClaim, scenario.oldClaim, validateOpts)
@@ -23247,7 +23247,7 @@ func TestValidateResourceQuota(t *testing.T) {
 			core.ResourceConfigMaps:             resource.MustParse("10"),
 			core.ResourceSecrets:                resource.MustParse("10"),
 
-			// These are unknown and not enforced unless DRA is enabled, but not invalid.
+			// 除非启用 DRA，否则这些值未知且不被强制，但并非非法。
 			"count/resourceclaims.resource.k8s.io":     resource.MustParse("1"),
 			"gold.deviceclass.resource.k8s.io/devices": resource.MustParse("1"),
 		},
@@ -23300,7 +23300,7 @@ func TestValidateResourceQuota(t *testing.T) {
 		},
 	}
 
-	// storage is not yet supported as a quota tracked resource
+	// storage 目前尚未作为配额跟踪资源获得支持
 	invalidQuotaResourceSpec := core.ResourceQuotaSpec{
 		Hard: core.ResourceList{
 			core.ResourceStorage: resource.MustParse("10"),
@@ -23621,7 +23621,7 @@ func TestValidateNamespaceStatusUpdate(t *testing.T) {
 				Phase: core.NamespaceActive,
 			},
 		}, true},
-		// Cannot set deletionTimestamp via status update
+		// 不能通过 status 更新设置 deletionTimestamp
 		{core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "foo"}},
@@ -23633,7 +23633,7 @@ func TestValidateNamespaceStatusUpdate(t *testing.T) {
 					Phase: core.NamespaceTerminating,
 				},
 			}, false},
-		// Can update phase via status update
+		// 可以通过 status 更新 phase
 		{core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              "foo",
@@ -23771,7 +23771,7 @@ func TestValidateNamespaceUpdate(t *testing.T) {
 }
 
 func TestValidateSecret(t *testing.T) {
-	// Opaque secret validation
+	// Opaque secret 校验
 	validSecret := func() core.Secret {
 		return core.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "bar"},
@@ -23805,7 +23805,7 @@ func TestValidateSecret(t *testing.T) {
 	dotKey.Data["."] = []byte("bar")
 	doubleDotKey.Data[".."] = []byte("bar")
 
-	// kubernetes.io/service-account-token secret validation
+	// kubernetes.io/service-account-token secret 校验
 	validServiceAccountTokenSecret := func() core.Secret {
 		return core.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -24366,7 +24366,7 @@ func TestValidateEndpointsCreate(t *testing.T) {
 		t.Run(k, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StrictIPCIDRValidation, true)
 			errs := ValidateEndpointsCreate(&v.endpoints)
-			// TODO: set .RequireOriginWhenInvalid() once metadata is done
+			// TODO: 待 metadata 完成后设置 .RequireOriginWhenInvalid()
 			matcher := field.ErrorMatcher{}.ByType().ByField().ByOrigin()
 			matcher.Test(t, v.expectedErrs, errs)
 		})
@@ -24474,12 +24474,12 @@ func TestValidateWindowsSecurityContext(t *testing.T) {
 }
 
 func TestValidateOSFields(t *testing.T) {
-	// Contains the list of OS specific fields within pod spec.
-	// All the fields in pod spec should be either osSpecific or osNeutral field
-	// To make a field OS specific:
-	// - Add documentation to the os specific field indicating which os it can/cannot be set for
-	// - Add documentation to the os field in the api
-	// - Add validation logic validateLinux, validateWindows functions to make sure the field is only set for eligible OSes
+	// 包含 pod spec 中 OS 专有字段的列表。
+	// pod spec 中的所有字段应当要么为 osSpecific，要么为 osNeutral 字段
+	// 将字段设为 OS 专有的方法：
+	// - 在该 OS 专有字段的文档中说明它可以/不可以用于哪个 os
+	// - 在 API 的 os 字段中添加文档说明
+	// - 在 validateLinux、validateWindows 函数中添加校验逻辑，确保该字段只为符合条件的 OS 设置
 	osSpecificFields := sets.NewString(
 		"Containers[*].SecurityContext.AppArmorProfile",
 		"Containers[*].SecurityContext.AllowPrivilegeEscalation",
@@ -24663,9 +24663,9 @@ func TestValidateOSFields(t *testing.T) {
 	result := collectResourcePaths(t, expect, reflect.TypeOf(&core.PodSpec{}), nil)
 
 	if !expect.Equal(result) {
-		// expected fields missing from result
+		// 结果中缺少预期字段
 		missing := expect.Difference(result)
-		// unexpected fields in result but not specified in expect
+		// 结果中出现了 expect 未声明的字段
 		unexpected := result.Difference(expect)
 		if len(missing) > 0 {
 			t.Errorf("the following fields were expected, but missing from the result. "+
@@ -24752,7 +24752,7 @@ func TestValidateSchedulingGates(t *testing.T) {
 	}
 }
 
-// collectResourcePaths traverses the object, computing all the struct paths.
+// collectResourcePaths 遍历对象，计算所有结构体路径。
 func collectResourcePaths(t *testing.T, skipRecurseList sets.String, tp reflect.Type, path *field.Path) sets.String {
 	if pathStr := path.String(); len(pathStr) > 0 && skipRecurseList.Has(pathStr) {
 		return sets.NewString(pathStr)
@@ -24772,7 +24772,7 @@ func collectResourcePaths(t *testing.T, skipRecurseList sets.String, tp reflect.
 	case reflect.Interface:
 		t.Fatalf("unexpected interface{} field %s", path.String())
 	default:
-		// if we hit a primitive type, we're at a leaf
+		// 若遇到基本类型，说明已到达叶子节点
 		paths.Insert(path.String())
 	}
 	return paths
@@ -24896,7 +24896,7 @@ func TestValidateSecurityContext(t *testing.T) {
 		}
 	}
 
-	// setup data
+	// 准备数据
 	allSettings := fullValidSC()
 	noCaps := fullValidSC()
 	noCaps.Capabilities = nil
@@ -24996,8 +24996,8 @@ func TestValidateSecurityContext(t *testing.T) {
 		capabilities.Initialize(capabilities.Capabilities{
 			AllowPrivileged: v.capAllowPriv,
 		})
-		// note the unconditional `true` here for hostUsers. The failure case to test for ProcMount only includes it being true,
-		// and the field is ignored if ProcMount isn't set. Thus, we can unconditionally set to `true` and simplify the test matrix setup.
+		// 注意这里 hostUsers 无条件为 `true`。ProcMount 要测试的失败场景仅包括它为 true 的情况，
+		// 且未设置 ProcMount 时该字段会被忽略。因此可以无条件设为 `true`，以简化测试矩阵的搭建。
 		if errs := ValidateSecurityContext(v.sc, field.NewPath("field"), true, false); len(errs) == 0 || errs[0].Type != v.errorType || !strings.Contains(errs[0].Detail, v.errorDetail) {
 			t.Errorf("[%s] Expected error type %q with detail %q, got %v", k, v.errorType, v.errorDetail, errs)
 		}
@@ -25497,8 +25497,8 @@ func newNodeNameEndpoint(nodeName string) *core.Endpoints {
 func TestEndpointAddressNodeNameUpdateRestrictions(t *testing.T) {
 	oldEndpoint := newNodeNameEndpoint("kubernetes-node-setup-by-backend")
 	updatedEndpoint := newNodeNameEndpoint("kubernetes-changed-nodename")
-	// Check that NodeName can be changed during update, this is to accommodate the case where nodeIP or PodCIDR is reused.
-	// The same ip will now have a different nodeName.
+	// 检查更新期间 NodeName 可以被修改，这是为了适配 nodeIP 或 PodCIDR 被复用的场景。
+	// 同一 IP 现在会对应不同的 nodeName。
 	errList := ValidateEndpoints(updatedEndpoint, oldEndpoint)
 	errList = append(errList, ValidateEndpointsUpdate(updatedEndpoint, oldEndpoint)...)
 	if len(errList) != 0 {
@@ -25507,7 +25507,7 @@ func TestEndpointAddressNodeNameUpdateRestrictions(t *testing.T) {
 }
 
 func TestEndpointAddressNodeNameInvalidDNSSubdomain(t *testing.T) {
-	// Check NodeName DNS validation
+	// 检查 NodeName 的 DNS 校验
 	endpoint := newNodeNameEndpoint("illegal*.nodename")
 	errList := ValidateEndpoints(endpoint, nil)
 	if len(errList) == 0 {
@@ -25544,12 +25544,12 @@ func TestValidateFlexVolumeSource(t *testing.T) {
 			source: &core.FlexVolumeSource{
 				Driver: "foo",
 				Options: map[string]string{
-					// valid options
+					// 合法选项
 					"myns.io":               "A",
 					"myns.io/bar":           "A",
 					"myns.io/kubernetes.io": "A",
 
-					// invalid options
+					// 非法选项
 					"KUBERNETES.IO":     "A",
 					"kubernetes.io":     "A",
 					"kubernetes.io/":    "A",
@@ -25685,7 +25685,7 @@ func TestValidateWindowsSecurityContextOptions(t *testing.T) {
 	}, {
 		testName: "a GMSA cred spec name that is not a valid resource name",
 		windowsOptions: &core.WindowsSecurityContextOptions{
-			// invalid because of the underscore
+			// 因包含下划线而非法
 			GMSACredentialSpecName: ptr.To("not_a-valid-gmsa-crep-spec-name"),
 		},
 		expectedErrorSubstring: dnsSubdomainLabelErrMsg,
@@ -25770,7 +25770,7 @@ func TestValidateWindowsSecurityContextOptions(t *testing.T) {
 	}, {
 		testName: "RunAsUserName's DNS Domain is too long",
 		windowsOptions: &core.WindowsSecurityContextOptions{
-			// even if this tests the max Domain length, the Domain should still be "valid".
+			// 即使此处测试的是 Domain 最大长度，该 Domain 仍应当是 "valid" 的。
 			RunAsUserName: ptr.To(strings.Repeat(strings.Repeat("a", 63)+".", 4)[:253] + ".com\\user"),
 		},
 		expectedErrorSubstring: "runAsUserName's Domain length must be under",
@@ -26352,7 +26352,7 @@ func TestValidateTopologySpreadConstraints(t *testing.T) {
 				},
 			},
 		}},
-		// TODO: This expected message is not perfect, and will be fixed in #129900.
+		// TODO: 此预期消息并不完美，将在 #129900 中修复。
 		wantFieldErrors: field.ErrorList{field.Invalid(subFldPath0.Index(0), nil, "").WithOrigin("duplicatedLabelKeys")},
 		opts: PodValidationOptions{
 			AllowMatchLabelKeysInPodTopologySpread:              true,
@@ -26482,7 +26482,7 @@ func TestValidateTopologySpreadConstraints(t *testing.T) {
 				},
 			},
 		}},
-		// TODO: This expected message is not perfect, and will be fixed in #129900.
+		// TODO: 此预期消息并不完美，将在 #129900 中修复。
 		wantFieldErrors: field.ErrorList{field.Invalid(subFldPath0.Index(0), nil, "").WithOrigin("duplicatedLabelKeys")},
 		opts: PodValidationOptions{
 			AllowMatchLabelKeysInPodTopologySpread:              true,
@@ -26680,7 +26680,7 @@ func TestValidateOverhead(t *testing.T) {
 	}
 }
 
-// helper creates a pod with name, namespace, the singular podIP and the podIPs list.
+// helper 创建一个带有 name、namespace、单个 podIP 以及 podIPs 列表的 pod。
 func makePod(podName string, podNamespace string, podIP string, podIPs []core.PodIP) core.Pod {
 	return core.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: podNamespace},
@@ -26698,9 +26698,9 @@ func makePod(podName string, podNamespace string, podIP string, podIPs []core.Po
 	}
 }
 func TestPodIPsValidation(t *testing.T) {
-	// We test updating every pod in testCases to every other pod in testCases.
-	// expectError is true if we expect an error when updating *to* that pod.
-	// allowNoOpUpdate is true if we expect a no-op update to succeed.
+	// 我们测试将 testCases 中的每个 pod 更新为其他任意 pod。
+	// expectError 为 true 表示更新为*该 pod* 时预期出错。
+	// allowNoOpUpdate 为 true 表示预期空更新应当成功。
 
 	testCases := []struct {
 		pod             core.Pod
@@ -26731,7 +26731,7 @@ func TestPodIPsValidation(t *testing.T) {
 			legacyIPs:   true,
 			pod:         makePod("legacy-pod-ip-with-legacy-validation", "ns", "001.002.003.004", []core.PodIP{{IP: "001.002.003.004"}}),
 		},
-		/* failure cases start here */
+		/* 失败用例从这里开始 */
 		{
 			expectError:     true,
 			allowNoOpUpdate: true,
@@ -26827,9 +26827,9 @@ func makePodWithHostIPs(podName string, podNamespace string, hostIPs []core.Host
 }
 
 func TestHostIPsValidation(t *testing.T) {
-	// We test updating every pod in testCases to every other pod in testCases.
-	// expectError is true if we expect an error when updating *to* that pod.
-	// allowNoOpUpdate is true if we expect a no-op update to succeed.
+	// 我们测试将 testCases 中的每个 pod 更新为其他任意 pod。
+	// expectError 为 true 表示更新为*该 pod* 时预期出错。
+	// allowNoOpUpdate 为 true 表示预期空更新应当成功。
 
 	testCases := []struct {
 		pod             core.Pod
@@ -26866,7 +26866,7 @@ func TestHostIPsValidation(t *testing.T) {
 			legacyIPs:   true,
 			pod:         makePodWithHostIPs("legacy-host-ip-with-legacy-validation", "ns", []core.HostIP{{IP: "001.002.003.004"}}),
 		},
-		/* failure cases start here */
+		/* 失败用例从这里开始 */
 		{
 			expectError:     true,
 			allowNoOpUpdate: true,
@@ -26936,7 +26936,7 @@ func TestHostIPsValidation(t *testing.T) {
 	}
 }
 
-// makes a node with pod cidr and a name
+// 创建一个带有 pod cidr 和名称的 node
 func makeNode(nodeName string, podCIDRs []string) core.Node {
 	return core.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -26981,7 +26981,7 @@ func TestValidateNodeCIDRs(t *testing.T) {
 			expectError: false,
 			node:        makeNode("multi-pod-cidr-4-6", []string{"192.168.0.0/16", "2000::/10"}),
 		},
-		// error cases starts here
+		// 错误用例从这里开始
 		{
 			expectError: true,
 			node:        makeNode("invalid-pod-cidr", []string{"this-is-not-a-valid-cidr"}),
@@ -27411,8 +27411,8 @@ func TestValidatePodTemplateSpecSeccomp(t *testing.T) {
 
 func TestValidateResourceRequirements(t *testing.T) {
 	path := field.NewPath("resources")
-	// TODO(ndixita): refactor the tests to check the expected errors are equal to
-	// got errors.
+	// TODO(ndixita): 重构测试，检查预期错误是否等于
+	// 实际得到的错误。
 	tests := []struct {
 		name         string
 		requirements core.ResourceRequirements
@@ -27637,7 +27637,7 @@ func TestValidateResourceRequirements(t *testing.T) {
 func TestValidateEndpointIP(t *testing.T) {
 	fp := field.NewPath("ip")
 
-	// Valid values.
+	// 合法值。
 	for _, tc := range []struct {
 		desc string
 		ip   string
@@ -27646,7 +27646,7 @@ func TestValidateEndpointIP(t *testing.T) {
 		{"ipv4 class E", "244.1.2.3"},
 		{"ipv6", "2000::1"},
 
-		// These probably should not have been allowed, but they are
+		// 这些可能本不应被允许，但事实上是被允许的
 		{"ipv4 multicast", "239.255.255.253"},
 		{"ipv6 multicast", "ff05::1:3"},
 	} {
@@ -27657,7 +27657,7 @@ func TestValidateEndpointIP(t *testing.T) {
 			}
 		})
 	}
-	// Invalid cases
+	// 非法用例
 	for _, tc := range []struct {
 		desc string
 		ip   string
@@ -28419,7 +28419,7 @@ func TestValidateAppArmorProfileFormat(t *testing.T) {
 		{"", true},
 		{v1.DeprecatedAppArmorBetaProfileRuntimeDefault, true},
 		{v1.DeprecatedAppArmorBetaProfileNameUnconfined, true},
-		{"baz", false}, // Missing local prefix.
+		{"baz", false}, // 缺少本地前缀。
 		{v1.DeprecatedAppArmorBetaProfileNamePrefix + "/usr/sbin/ntpd", true},
 		{v1.DeprecatedAppArmorBetaProfileNamePrefix + "foo-bar", true},
 	}
@@ -29719,7 +29719,7 @@ func TestValidatePodResize(t *testing.T) {
 				),
 			),
 		}
-		// Prepend the SetContainers call so TweakContainers can be used.
+		// 将 SetContainers 调用提前，以便可以使用 TweakContainers。
 		allTweaks = append(allTweaks, tweaks...)
 		return podtest.MakePod("pod", allTweaks...)
 	}
@@ -29739,7 +29739,7 @@ func TestValidatePodResize(t *testing.T) {
 				),
 			),
 		}
-		// Prepend the SetInitContainers call so TweakContainers can be used.
+		// 将 SetInitContainers 调用提前，以便可以使用 TweakContainers。
 		allTweaks = append(allTweaks, tweaks...)
 		return podtest.MakePod("pod", allTweaks...)
 	}
@@ -31034,8 +31034,8 @@ func TestValidatePodResize(t *testing.T) {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScalingInitContainers, false)
 			} else {
-				// This is in an else block because we cannot set the InPlacePodVerticalScalingMemoryBackedVolumes feature gate
-				// when we are emulating v1.36 (which does not have it)
+				// 这里位于 else 分支，因为在模拟 v1.36
+				// （没有该 feature gate）时，无法设置 InPlacePodVerticalScalingMemoryBackedVolumes
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScalingMemoryBackedVolumes, test.enableMemoryBackedVolumesResize)
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, true)
@@ -31044,7 +31044,7 @@ func TestValidatePodResize(t *testing.T) {
 			test.new.ObjectMeta.ResourceVersion = "1"
 			test.old.ObjectMeta.ResourceVersion = "1"
 
-			// set required fields if old and new match and have no opinion on the value
+			// 若 old 与 new 匹配且对该值无要求，则设置必填字段
 			if test.new.Name == "" && test.old.Name == "" {
 				test.new.Name = "name"
 				test.old.Name = "name"
@@ -32008,7 +32008,7 @@ func TestValidateContainerRestartPolicy(t *testing.T) {
 	}
 
 	containerRestartPolicyAlways := core.ContainerRestartPolicyAlways
-	// test cases init containers
+	// 测试用例：init containers
 	cases := []struct {
 		title              string
 		restartPolicy      *core.ContainerRestartPolicy
@@ -32612,7 +32612,7 @@ func TestNumericTolerationsWithFeatureGate(t *testing.T) {
 			toleration: core.Toleration{
 				Key:      "test-key",
 				Operator: core.TolerationOpGt,
-				Value:    "9223372036854775808", // max int64 + 1
+				Value:    "9223372036854775808", // int64 最大值 + 1
 				Effect:   core.TaintEffectNoSchedule,
 			},
 			featureGateOn: true,
@@ -32645,13 +32645,13 @@ func TestNumericTolerationsWithFeatureGate(t *testing.T) {
 }
 
 func TestAllRegistedNodeDeclaredFeatures(t *testing.T) {
-	// Test that feature registry is valid.
+	// 测试 feature registry 合法。
 	for _, feature := range ndf.AllFeatures {
 		if err := validateNodeDeclaredFeatureName(feature.Name()); err != nil {
 			t.Fatalf("ValidateFeatures() = %v, want nil", err)
 		}
 	}
-	// Soft limit to catch potential uncontrolled growth of node registered features.
+	// 软限制，用于发现节点注册特性可能的失控增长。
 	const maxNodeDeclaredFeatures = 128
 	if len(ndf.AllFeatures) > maxNodeDeclaredFeatures {
 		t.Errorf("Number of registered node declared features (%d) exceeds the limit of %d. Please review if this is expected and update the threshold if necessary.", len(ndf.AllFeatures), maxNodeDeclaredFeatures)

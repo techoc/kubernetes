@@ -34,15 +34,15 @@ import (
 	apivalidation "k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
-// StatefulSetValidationOptions is a struct that can be passed to ValidateStatefulSetSpec to record the validate options
+// StatefulSetValidationOptions 是可以传入 ValidateStatefulSetSpec 的结构体，用于记录校验选项
 type StatefulSetValidationOptions struct {
-	// Allow invalid DNS1123 ServiceName
+	// 允许非合法的 DNS1123 ServiceName
 	AllowInvalidServiceName bool
-	// Skip validating pod template spec, which is used for StatefulSet update
+	// 跳过对 Pod 模板规格的校验，用于 StatefulSet 更新场景
 	SkipValidatePodTemplateSpec bool
-	// Skip validating volume claim templates, which is used for StatefulSet update
+	// 跳过对 volume claim 模板的校验，用于 StatefulSet 更新场景
 	SkipValidateVolumeClaimTemplates bool
-	// Allow setting Recreate strategy to StatefulSet update strategy
+	// 允许将 StatefulSet 的更新策略设置为 Recreate
 	AllowStatefulSetRecreateStrategy bool
 }
 
@@ -50,13 +50,13 @@ type StatefulSetValidationOptions struct {
 // Prefix 表示该名称将作为生成名字的一部分使用，此时
 // 允许结尾的连字符。
 func ValidateStatefulSetName(name string, prefix bool) []string {
-	// TODO: Validate that there's room for the suffix inserted by the pods.
-	// Currently this is just "-index". In the future we may allow a user
-	// specified list of suffixes and we need  to validate the longest one.
+	// TODO: 校验是否有空间容纳 Pod 插入的后缀。
+	// 目前这个后缀只是 "-index"。未来我们可能允许用户
+	// 指定一组后缀列表，届时需要校验最长的那个。
 	return apimachineryvalidation.NameIsDNSLabel(name, prefix)
 }
 
-// ValidatePodTemplateSpecForStatefulSet validates the given template and ensures that it is in accordance with the desired selector.
+// ValidatePodTemplateSpecForStatefulSet 校验给定的模板，确保其与期望的 selector 一致。
 func ValidatePodTemplateSpecForStatefulSet(template *api.PodTemplateSpec, selector labels.Selector, fldPath *field.Path, opts apivalidation.PodValidationOptions,
 	setOpts StatefulSetValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
@@ -64,7 +64,7 @@ func ValidatePodTemplateSpecForStatefulSet(template *api.PodTemplateSpec, select
 		allErrs = append(allErrs, field.Required(fldPath, ""))
 	} else {
 		if !selector.Empty() {
-			// Verify that the StatefulSet selector matches the labels in template.
+			// 校验 StatefulSet 的 selector 与模板中的 labels 相匹配。
 			labels := labels.Set(template.Labels)
 			if !selector.Matches(labels) {
 				allErrs = append(allErrs, field.Invalid(fldPath.Child("metadata", "labels"), template.Labels, "`selector` does not match template `labels`"))
@@ -125,7 +125,7 @@ func validateVolumeClaimTemplates(volumeClaimTemplates []api.PersistentVolumeCla
 	return allErrs
 }
 
-// ValidateStatefulSetSpec tests if required fields in the StatefulSet spec are set.
+// ValidateStatefulSetSpec 测试 StatefulSet spec 中的必填字段是否已设置。
 func ValidateStatefulSetSpec(spec *apps.StatefulSetSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions, setOpts StatefulSetValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -189,7 +189,7 @@ func ValidateStatefulSetSpec(spec *apps.StatefulSetSpec, fldPath *field.Path, op
 	if spec.Selector == nil {
 		allErrs = append(allErrs, field.Required(fldPath.Child("selector"), "").MarkCoveredByDeclarative())
 	} else {
-		// validate selector strictly, spec.selector was always required to pass LabelSelectorAsSelector below
+		// 严格校验 selector，spec.selector 一直是必填项，才能通过下面的 LabelSelectorAsSelector
 		allErrs = append(allErrs, unversionedvalidation.ValidateLabelSelector(spec.Selector, unversionedvalidation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: false}, fldPath.Child("selector"))...)
 		if len(spec.Selector.MatchLabels)+len(spec.Selector.MatchExpressions) == 0 {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("selector"), spec.Selector, "empty selector is invalid for statefulset"))
@@ -203,9 +203,9 @@ func ValidateStatefulSetSpec(spec *apps.StatefulSetSpec, fldPath *field.Path, op
 		templateToValidate := &spec.Template
 		if len(spec.Template.Spec.Subdomain) > 0 || len(spec.Template.Spec.Hostname) > 0 || len(spec.VolumeClaimTemplates) > 0 {
 			templateToValidate = templateToValidate.DeepCopy()
-			// overwritten by controller to spec.ServiceName in initIdentity, don't validate
+			// 在 initIdentity 中会被控制器覆盖为 spec.ServiceName，因此不校验
 			templateToValidate.Spec.Subdomain = ""
-			// overwritten by controller to pod.Name in initIdentity, don't validate
+			// 在 initIdentity 中会被控制器覆盖为 pod.Name，因此不校验
 			templateToValidate.Spec.Hostname = ""
 			if len(spec.VolumeClaimTemplates) > 0 {
 				templateVolumes := volumesToAddForTemplates(spec)
@@ -234,24 +234,23 @@ func ValidateStatefulSetSpec(spec *apps.StatefulSetSpec, fldPath *field.Path, op
 	return allErrs
 }
 
-// ValidateStatefulSet validates a StatefulSet.
+// ValidateStatefulSet 校验一个 StatefulSet。
 func ValidateStatefulSet(statefulSet *apps.StatefulSet, setOpts StatefulSetValidationOptions, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMeta(&statefulSet.ObjectMeta, true, ValidateStatefulSetName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateStatefulSetSpec(&statefulSet.Spec, field.NewPath("spec"), opts, setOpts)...)
 	return allErrs
 }
 
-// ValidateStatefulSetUpdate tests if required fields in the StatefulSet are set.
+// ValidateStatefulSetUpdate 测试 StatefulSet 中的必填字段是否已设置。
 func ValidateStatefulSetUpdate(statefulSet, oldStatefulSet *apps.StatefulSet, setOpts StatefulSetValidationOptions, opts apivalidation.PodValidationOptions) field.ErrorList {
-	// First, validate that the new statefulset is valid.  Don't call
-	// ValidateStatefulSet() because we don't want to revalidate the name on
-	// update.  This is important here because we used to allow DNS subdomain
-	// for name, but that can't actually create pods.  The only reasonable
-	// thing to do it delete such an instance, but if there is a finalizer, it
-	// would need to pass update validation.  Name can't change anyway.
+	// 首先校验新的 statefulset 是合法的。不要调用
+	// ValidateStatefulSet()，因为我们不希望在更新时重新校验名称。
+	// 这里很重要，因为我们过去允许名称使用 DNS subdomain，
+	// 但这种名称实际上无法创建 Pod。唯一合理的做法是删除这样的实例，
+	// 但如果存在 finalizer，它需要通过更新校验。而且名称本来就不能更改。
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&statefulSet.ObjectMeta, &oldStatefulSet.ObjectMeta, field.NewPath("metadata"))
 
-	// In order to tolerate the existing sts, we choose to skip the validation error of old sts podTemplateSpec.
+	// 为了兼容已存在的 sts，我们选择跳过旧 sts 的 podTemplateSpec 的校验错误。
 	if len(ValidateStatefulSetSpec(&oldStatefulSet.Spec, nil, opts, setOpts)) > 0 {
 		setOpts.SkipValidatePodTemplateSpec = true
 	}
@@ -266,7 +265,7 @@ func ValidateStatefulSetUpdate(statefulSet, oldStatefulSet *apps.StatefulSet, se
 	return allErrs
 }
 
-// ValidateStatefulSetStatus validates a StatefulSetStatus.
+// ValidateStatefulSetStatus 校验一个 StatefulSetStatus。
 func ValidateStatefulSetStatus(status *apps.StatefulSetStatus, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -301,12 +300,12 @@ func ValidateStatefulSetStatus(status *apps.StatefulSetStatus, fieldPath *field.
 	return allErrs
 }
 
-// ValidateStatefulSetStatusUpdate tests if required fields in the StatefulSet are set.
+// ValidateStatefulSetStatusUpdate 测试 StatefulSet 中的必填字段是否已设置。
 func ValidateStatefulSetStatusUpdate(statefulSet, oldStatefulSet *apps.StatefulSet) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateStatefulSetStatus(&statefulSet.Status, field.NewPath("status"))...)
 	allErrs = append(allErrs, apivalidation.ValidateObjectMetaUpdate(&statefulSet.ObjectMeta, &oldStatefulSet.ObjectMeta, field.NewPath("metadata"))...)
-	// TODO: Validate status.
+	// TODO: 校验 status。
 	if apivalidation.IsDecremented(statefulSet.Status.CollisionCount, oldStatefulSet.Status.CollisionCount) {
 		value := int32(0)
 		if statefulSet.Status.CollisionCount != nil {
@@ -322,9 +321,9 @@ func ValidateStatefulSetStatusUpdate(statefulSet, oldStatefulSet *apps.StatefulS
 // 允许结尾的连字符。
 var ValidateControllerRevisionName = apimachineryvalidation.NameIsDNSSubdomain
 
-// validateControllerRevision collects errors for the fields of state and returns those errors as an ErrorList. If the
-// returned list is empty, state is valid. Validation is performed to ensure that state is a valid ObjectMeta, its name
-// is valid, and that it doesn't exceed the MaxControllerRevisionSize.
+// validateControllerRevision 收集 state 各字段的错误，并以 ErrorList 形式返回这些错误。如果返回的
+// 列表为空，则 state 合法。校验内容包括：state 是一个合法的 ObjectMeta、其名称
+// 合法，且不超过 MaxControllerRevisionSize。
 func validateControllerRevision(revision *apps.ControllerRevision) field.ErrorList {
 	errs := field.ErrorList{}
 	errs = append(errs, apivalidation.ValidateObjectMeta(&revision.ObjectMeta, true, ValidateControllerRevisionName, field.NewPath("metadata"))...)
@@ -350,9 +349,9 @@ func ValidateControllerRevisionCreate(revision *apps.ControllerRevision) field.E
 	return errs
 }
 
-// ValidateControllerRevisionUpdate collects errors pertaining to the mutation of an ControllerRevision Object. If the
-// returned ErrorList is empty the update operation is valid. Any mutation to the ControllerRevision's Data or Revision
-// is considered to be invalid.
+// ValidateControllerRevisionUpdate 收集与 ControllerRevision 对象变更相关的错误。如果返回的
+// ErrorList 为空，则更新操作合法。对 ControllerRevision 的 Data 或 Revision
+// 的任何变更都被视为非法。
 func ValidateControllerRevisionUpdate(newHistory, oldHistory *apps.ControllerRevision) field.ErrorList {
 	errs := field.ErrorList{}
 
@@ -362,14 +361,14 @@ func ValidateControllerRevisionUpdate(newHistory, oldHistory *apps.ControllerRev
 	return errs
 }
 
-// ValidateDaemonSet tests if required fields in the DaemonSet are set.
+// ValidateDaemonSet 测试 DaemonSet 中的必填字段是否已设置。
 func ValidateDaemonSet(ds *apps.DaemonSet, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMeta(&ds.ObjectMeta, true, ValidateDaemonSetName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateDaemonSetSpec(&ds.Spec, field.NewPath("spec"), opts)...)
 	return allErrs
 }
 
-// ValidateDaemonSetUpdate tests if required fields in the DaemonSet are set.
+// ValidateDaemonSetUpdate 测试 DaemonSet 中的必填字段是否已设置。
 func ValidateDaemonSetUpdate(ds, oldDS *apps.DaemonSet, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&ds.ObjectMeta, &oldDS.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateDaemonSetSpecUpdate(&ds.Spec, &oldDS.Spec, field.NewPath("spec"))...)
@@ -377,16 +376,16 @@ func ValidateDaemonSetUpdate(ds, oldDS *apps.DaemonSet, opts apivalidation.PodVa
 	return allErrs
 }
 
-// ValidateDaemonSetSpecUpdate tests if an update to a DaemonSetSpec is valid.
+// ValidateDaemonSetSpecUpdate 测试对 DaemonSetSpec 的更新是否合法。
 func ValidateDaemonSetSpecUpdate(newSpec, oldSpec *apps.DaemonSetSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	// TemplateGeneration shouldn't be decremented
+	// TemplateGeneration 不应当被递减
 	if newSpec.TemplateGeneration < oldSpec.TemplateGeneration {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("templateGeneration"), newSpec.TemplateGeneration, "must not be decremented"))
 	}
 
-	// TemplateGeneration should be increased when and only when template is changed
+	// TemplateGeneration 应当且仅当模板发生变更时才递增
 	templateUpdated := !apiequality.Semantic.DeepEqual(newSpec.Template, oldSpec.Template)
 	if newSpec.TemplateGeneration == oldSpec.TemplateGeneration && templateUpdated {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("templateGeneration"), newSpec.TemplateGeneration, "must be incremented upon template update"))
@@ -394,13 +393,13 @@ func ValidateDaemonSetSpecUpdate(newSpec, oldSpec *apps.DaemonSetSpec, fldPath *
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("templateGeneration"), newSpec.TemplateGeneration, "must not be incremented without template update"))
 	}
 
-	// Spec.Selector is immutable
+	// Spec.Selector 不可变
 	allErrs = append(allErrs, apivalidation.ValidateImmutableField(newSpec.Selector, oldSpec.Selector, field.NewPath("spec").Child("selector"))...)
 
 	return allErrs
 }
 
-// validateDaemonSetStatus validates a DaemonSetStatus
+// validateDaemonSetStatus 校验一个 DaemonSetStatus
 func validateDaemonSetStatus(status *apps.DaemonSetStatus, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(status.CurrentNumberScheduled), fldPath.Child("currentNumberScheduled"))...)
@@ -417,7 +416,7 @@ func validateDaemonSetStatus(status *apps.DaemonSetStatus, fldPath *field.Path) 
 	return allErrs
 }
 
-// ValidateDaemonSetStatusUpdate tests if required fields in the DaemonSet Status section
+// ValidateDaemonSetStatusUpdate 测试 DaemonSet Status 部分的必填字段是否已设置
 func ValidateDaemonSetStatusUpdate(ds, oldDS *apps.DaemonSet) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&ds.ObjectMeta, &oldDS.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateDaemonSetStatus(&ds.Status, field.NewPath("status"))...)
@@ -431,7 +430,7 @@ func ValidateDaemonSetStatusUpdate(ds, oldDS *apps.DaemonSet) field.ErrorList {
 	return allErrs
 }
 
-// ValidateDaemonSetSpec tests if required fields in the DaemonSetSpec are set.
+// ValidateDaemonSetSpec 测试 DaemonSetSpec 中的必填字段是否已设置。
 func ValidateDaemonSetSpec(spec *apps.DaemonSetSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	labelSelectorValidationOpts := unversionedvalidation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: opts.AllowInvalidLabelValueInSelector}
@@ -447,7 +446,7 @@ func ValidateDaemonSetSpec(spec *apps.DaemonSetSpec, fldPath *field.Path, opts a
 	}
 
 	allErrs = append(allErrs, apivalidation.ValidatePodTemplateSpec(&spec.Template, fldPath.Child("template"), opts)...)
-	// RestartPolicy has already been first-order validated as per ValidatePodTemplateSpec().
+	// RestartPolicy 已按照 ValidatePodTemplateSpec() 完成了一阶校验。
 	if spec.Template.Spec.RestartPolicy != api.RestartPolicyAlways {
 		allErrs = append(allErrs, field.NotSupported(fldPath.Child("template", "spec", "restartPolicy"), spec.Template.Spec.RestartPolicy, []string{string(api.RestartPolicyAlways)}))
 	}
@@ -459,25 +458,25 @@ func ValidateDaemonSetSpec(spec *apps.DaemonSetSpec, fldPath *field.Path, opts a
 
 	allErrs = append(allErrs, ValidateDaemonSetUpdateStrategy(&spec.UpdateStrategy, fldPath.Child("updateStrategy"))...)
 	if spec.RevisionHistoryLimit != nil {
-		// zero is a valid RevisionHistoryLimit
+		// 零是合法的 RevisionHistoryLimit
 		allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(*spec.RevisionHistoryLimit), fldPath.Child("revisionHistoryLimit"))...)
 	}
 	return allErrs
 }
 
-// ValidateRollingUpdateDaemonSet validates a given RollingUpdateDaemonSet.
+// ValidateRollingUpdateDaemonSet 校验给定的 RollingUpdateDaemonSet。
 func ValidateRollingUpdateDaemonSet(rollingUpdate *apps.RollingUpdateDaemonSet, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Validate both fields are positive ints or have a percentage value
+	// 校验两个字段的值都是正整数或百分比值
 	allErrs = append(allErrs, ValidatePositiveIntOrPercent(rollingUpdate.MaxUnavailable, fldPath.Child("maxUnavailable"))...)
 	allErrs = append(allErrs, ValidatePositiveIntOrPercent(rollingUpdate.MaxSurge, fldPath.Child("maxSurge"))...)
 
-	// Validate that MaxUnavailable and MaxSurge are not more than 100%.
+	// 校验 MaxUnavailable 和 MaxSurge 不超过 100%。
 	allErrs = append(allErrs, IsNotMoreThan100Percent(rollingUpdate.MaxUnavailable, fldPath.Child("maxUnavailable"))...)
 	allErrs = append(allErrs, IsNotMoreThan100Percent(rollingUpdate.MaxSurge, fldPath.Child("maxSurge"))...)
 
-	// Validate exactly one of MaxSurge or MaxUnavailable is non-zero
+	// 校验 MaxSurge 和 MaxUnavailable 中恰好有一个非零
 	hasUnavailable := getIntOrPercentValue(rollingUpdate.MaxUnavailable) != 0
 	hasSurge := getIntOrPercentValue(rollingUpdate.MaxSurge) != 0
 	switch {
@@ -490,7 +489,7 @@ func ValidateRollingUpdateDaemonSet(rollingUpdate *apps.RollingUpdateDaemonSet, 
 	return allErrs
 }
 
-// validateRollingUpdateStatefulSet validates a given RollingUpdateStatefulSet.
+// validateRollingUpdateStatefulSet 校验给定的 RollingUpdateStatefulSet。
 func validateRollingUpdateStatefulSet(rollingUpdate *apps.RollingUpdateStatefulSetStrategy, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	fldPathMaxUn := fldPath.Child("maxUnavailable")
@@ -501,22 +500,22 @@ func validateRollingUpdateStatefulSet(rollingUpdate *apps.RollingUpdateStatefulS
 	if rollingUpdate.MaxUnavailable != nil {
 		allErrs = append(allErrs, ValidatePositiveIntOrPercent(*rollingUpdate.MaxUnavailable, fldPathMaxUn)...)
 		if getIntOrPercentValue(*rollingUpdate.MaxUnavailable) == 0 {
-			// MaxUnavailable cannot be 0.
+			// MaxUnavailable 不能为 0。
 			allErrs = append(allErrs, field.Invalid(fldPathMaxUn, *rollingUpdate.MaxUnavailable, "cannot be 0"))
 		}
-		// Validate that MaxUnavailable is not more than 100%.
+		// 校验 MaxUnavailable 不超过 100%。
 		allErrs = append(allErrs, IsNotMoreThan100Percent(*rollingUpdate.MaxUnavailable, fldPathMaxUn)...)
 	}
 	return allErrs
 }
 
-// ValidateDaemonSetUpdateStrategy validates a given DaemonSetUpdateStrategy.
+// ValidateDaemonSetUpdateStrategy 校验给定的 DaemonSetUpdateStrategy。
 func ValidateDaemonSetUpdateStrategy(strategy *apps.DaemonSetUpdateStrategy, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	switch strategy.Type {
 	case apps.OnDeleteDaemonSetStrategyType:
 	case apps.RollingUpdateDaemonSetStrategyType:
-		// Make sure RollingUpdate field isn't nil.
+		// 确保 RollingUpdate 字段不为 nil。
 		if strategy.RollingUpdate == nil {
 			allErrs = append(allErrs, field.Required(fldPath.Child("rollingUpdate"), ""))
 			return allErrs
@@ -534,11 +533,11 @@ func ValidateDaemonSetUpdateStrategy(strategy *apps.DaemonSetUpdateStrategy, fld
 // 允许结尾的连字符。
 var ValidateDaemonSetName = apimachineryvalidation.NameIsDNSSubdomain
 
-// ValidateDeploymentName validates that the given name can be used as a deployment name.
+// ValidateDeploymentName 校验给定的名称可以用作 deployment 名称。
 var ValidateDeploymentName = apimachineryvalidation.NameIsDNSSubdomain
 
-// ValidatePositiveIntOrPercent tests if a given value is a valid int or
-// percentage.
+// ValidatePositiveIntOrPercent 测试给定值是否为合法的整数或
+// 百分比。
 func ValidatePositiveIntOrPercent(intOrPercent intstr.IntOrString, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	switch intOrPercent.Type {
@@ -573,8 +572,8 @@ func getIntOrPercentValue(intOrStringValue intstr.IntOrString) int {
 	return intOrStringValue.IntValue()
 }
 
-// IsNotMoreThan100Percent tests is a value can be represented as a percentage
-// and if this value is not more than 100%.
+// IsNotMoreThan100Percent 测试某个值是否可以表示为百分比，
+// 且该值不超过 100%。
 func IsNotMoreThan100Percent(intOrStringValue intstr.IntOrString, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	value, isPercent := getPercentValue(intOrStringValue)
@@ -585,21 +584,21 @@ func IsNotMoreThan100Percent(intOrStringValue intstr.IntOrString, fldPath *field
 	return allErrs
 }
 
-// ValidateRollingUpdateDeployment validates a given RollingUpdateDeployment.
+// ValidateRollingUpdateDeployment 校验给定的 RollingUpdateDeployment。
 func ValidateRollingUpdateDeployment(rollingUpdate *apps.RollingUpdateDeployment, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidatePositiveIntOrPercent(rollingUpdate.MaxUnavailable, fldPath.Child("maxUnavailable"))...)
 	allErrs = append(allErrs, ValidatePositiveIntOrPercent(rollingUpdate.MaxSurge, fldPath.Child("maxSurge"))...)
 	if getIntOrPercentValue(rollingUpdate.MaxUnavailable) == 0 && getIntOrPercentValue(rollingUpdate.MaxSurge) == 0 {
-		// Both MaxSurge and MaxUnavailable cannot be zero.
+		// MaxSurge 和 MaxUnavailable 不能同时为零。
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("maxUnavailable"), rollingUpdate.MaxUnavailable, "may not be 0 when `maxSurge` is 0"))
 	}
-	// Validate that MaxUnavailable is not more than 100%.
+	// 校验 MaxUnavailable 不超过 100%。
 	allErrs = append(allErrs, IsNotMoreThan100Percent(rollingUpdate.MaxUnavailable, fldPath.Child("maxUnavailable"))...)
 	return allErrs
 }
 
-// ValidateDeploymentStrategy validates given DeploymentStrategy.
+// ValidateDeploymentStrategy 校验给定的 DeploymentStrategy。
 func ValidateDeploymentStrategy(strategy *apps.DeploymentStrategy, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	switch strategy.Type {
@@ -608,7 +607,7 @@ func ValidateDeploymentStrategy(strategy *apps.DeploymentStrategy, fldPath *fiel
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("rollingUpdate"), "may not be specified when strategy `type` is '"+string(apps.RecreateDeploymentStrategyType+"'")))
 		}
 	case apps.RollingUpdateDeploymentStrategyType:
-		// This should never happen since it's set and checked in defaults.go
+		// 这种情况不应发生，因为它在 defaults.go 中被设置并检查
 		if strategy.RollingUpdate == nil {
 			allErrs = append(allErrs, field.Required(fldPath.Child("rollingUpdate"), "this should be defaulted and never be nil"))
 		} else {
@@ -621,7 +620,7 @@ func ValidateDeploymentStrategy(strategy *apps.DeploymentStrategy, fldPath *fiel
 	return allErrs
 }
 
-// ValidateRollback validates given RollbackConfig.
+// ValidateRollback 校验给定的 RollbackConfig。
 func ValidateRollback(rollback *apps.RollbackConfig, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	v := rollback.Revision
@@ -629,7 +628,7 @@ func ValidateRollback(rollback *apps.RollbackConfig, fldPath *field.Path) field.
 	return allErrs
 }
 
-// ValidateDeploymentSpec validates given deployment spec.
+// ValidateDeploymentSpec 校验给定的 deployment spec。
 func ValidateDeploymentSpec(spec, oldSpec *apps.DeploymentSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(spec.Replicas), fldPath.Child("replicas"))...)
@@ -637,7 +636,7 @@ func ValidateDeploymentSpec(spec, oldSpec *apps.DeploymentSpec, fldPath *field.P
 	if spec.Selector == nil {
 		allErrs = append(allErrs, field.Required(fldPath.Child("selector"), ""))
 	} else {
-		// validate selector strictly, spec.selector was always required to pass LabelSelectorAsSelector below
+		// 严格校验 selector，spec.selector 一直是必填项，才能通过下面的 LabelSelectorAsSelector
 		allErrs = append(allErrs, unversionedvalidation.ValidateLabelSelector(spec.Selector, unversionedvalidation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: false}, fldPath.Child("selector"))...)
 		if len(spec.Selector.MatchLabels)+len(spec.Selector.MatchExpressions) == 0 {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("selector"), spec.Selector, "empty selector is invalid for deployment"))
@@ -654,7 +653,7 @@ func ValidateDeploymentSpec(spec, oldSpec *apps.DeploymentSpec, fldPath *field.P
 	allErrs = append(allErrs, ValidateDeploymentStrategy(&spec.Strategy, fldPath.Child("strategy"))...)
 	allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(spec.MinReadySeconds), fldPath.Child("minReadySeconds"))...)
 	if spec.RevisionHistoryLimit != nil {
-		// zero is a valid RevisionHistoryLimit
+		// 零是合法的 RevisionHistoryLimit
 		allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(*spec.RevisionHistoryLimit), fldPath.Child("revisionHistoryLimit"))...)
 	}
 	if spec.RollbackTo != nil {
@@ -669,7 +668,7 @@ func ValidateDeploymentSpec(spec, oldSpec *apps.DeploymentSpec, fldPath *field.P
 	return allErrs
 }
 
-// ValidateDeploymentStatus validates given deployment status.
+// ValidateDeploymentStatus 校验给定的 deployment status。
 func ValidateDeploymentStatus(status *apps.DeploymentStatus, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(status.ObservedGeneration, fldPath.Child("observedGeneration"))...)
@@ -700,7 +699,7 @@ func ValidateDeploymentStatus(status *apps.DeploymentStatus, fldPath *field.Path
 	return allErrs
 }
 
-// ValidateDeploymentUpdate tests if an update to a Deployment is valid.
+// ValidateDeploymentUpdate 测试对 Deployment 的更新是否合法。
 func ValidateDeploymentUpdate(update, old *apps.Deployment, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&update.ObjectMeta, &old.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateDeploymentSpec(&update.Spec, &old.Spec, field.NewPath("spec"), opts)...)
@@ -708,8 +707,8 @@ func ValidateDeploymentUpdate(update, old *apps.Deployment, opts apivalidation.P
 	return allErrs
 }
 
-// ValidateDeploymentStatusUpdate tests if a an update to a Deployment status
-// is valid.
+// ValidateDeploymentStatusUpdate 测试对 Deployment status
+// 的更新是否合法。
 func ValidateDeploymentStatusUpdate(update, old *apps.Deployment) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&update.ObjectMeta, &old.ObjectMeta, field.NewPath("metadata"))
 	fldPath := field.NewPath("status")
@@ -724,14 +723,14 @@ func ValidateDeploymentStatusUpdate(update, old *apps.Deployment) field.ErrorLis
 	return allErrs
 }
 
-// ValidateDeployment validates a given Deployment.
+// ValidateDeployment 校验给定的 Deployment。
 func ValidateDeployment(obj *apps.Deployment, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMeta(&obj.ObjectMeta, true, ValidateDeploymentName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateDeploymentSpec(&obj.Spec, nil, field.NewPath("spec"), opts)...)
 	return allErrs
 }
 
-// ValidateDeploymentRollback validates a given DeploymentRollback.
+// ValidateDeploymentRollback 校验给定的 DeploymentRollback。
 func ValidateDeploymentRollback(obj *apps.DeploymentRollback) field.ErrorList {
 	allErrs := apivalidation.ValidateAnnotations(obj.UpdatedAnnotations, field.NewPath("updatedAnnotations"))
 	if len(obj.Name) == 0 {
@@ -746,14 +745,14 @@ func ValidateDeploymentRollback(obj *apps.DeploymentRollback) field.ErrorList {
 // 允许结尾的连字符。
 var ValidateReplicaSetName = apimachineryvalidation.NameIsDNSSubdomain
 
-// ValidateReplicaSet tests if required fields in the ReplicaSet are set.
+// ValidateReplicaSet 测试 ReplicaSet 中的必填字段是否已设置。
 func ValidateReplicaSet(rs *apps.ReplicaSet, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMeta(&rs.ObjectMeta, true, ValidateReplicaSetName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateReplicaSetSpec(&rs.Spec, nil, field.NewPath("spec"), opts)...)
 	return allErrs
 }
 
-// ValidateReplicaSetUpdate tests if required fields in the ReplicaSet are set.
+// ValidateReplicaSetUpdate 测试 ReplicaSet 中的必填字段是否已设置。
 func ValidateReplicaSetUpdate(rs, oldRs *apps.ReplicaSet, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, apivalidation.ValidateObjectMetaUpdate(&rs.ObjectMeta, &oldRs.ObjectMeta, field.NewPath("metadata"))...)
@@ -762,7 +761,7 @@ func ValidateReplicaSetUpdate(rs, oldRs *apps.ReplicaSet, opts apivalidation.Pod
 	return allErrs
 }
 
-// ValidateReplicaSetStatusUpdate tests if required fields in the ReplicaSet are set.
+// ValidateReplicaSetStatusUpdate 测试 ReplicaSet 中的必填字段是否已设置。
 func ValidateReplicaSetStatusUpdate(rs, oldRs *apps.ReplicaSet) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, apivalidation.ValidateObjectMetaUpdate(&rs.ObjectMeta, &oldRs.ObjectMeta, field.NewPath("metadata"))...)
@@ -770,7 +769,7 @@ func ValidateReplicaSetStatusUpdate(rs, oldRs *apps.ReplicaSet) field.ErrorList 
 	return allErrs
 }
 
-// ValidateReplicaSetStatus validates a given ReplicaSetStatus.
+// ValidateReplicaSetStatus 校验给定的 ReplicaSetStatus。
 func ValidateReplicaSetStatus(status apps.ReplicaSetStatus, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(status.Replicas), fldPath.Child("replicas"))...)
@@ -797,7 +796,7 @@ func ValidateReplicaSetStatus(status apps.ReplicaSetStatus, fldPath *field.Path)
 	return allErrs
 }
 
-// ValidateReplicaSetSpec tests if required fields in the ReplicaSet spec are set.
+// ValidateReplicaSetSpec 测试 ReplicaSet spec 中的必填字段是否已设置。
 func ValidateReplicaSetSpec(spec, oldSpec *apps.ReplicaSetSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -807,7 +806,7 @@ func ValidateReplicaSetSpec(spec, oldSpec *apps.ReplicaSetSpec, fldPath *field.P
 	if spec.Selector == nil {
 		allErrs = append(allErrs, field.Required(fldPath.Child("selector"), ""))
 	} else {
-		// validate selector strictly, spec.selector was always required to pass LabelSelectorAsSelector below
+		// 严格校验 selector，spec.selector 一直是必填项，才能通过下面的 LabelSelectorAsSelector
 		allErrs = append(allErrs, unversionedvalidation.ValidateLabelSelector(spec.Selector, unversionedvalidation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: false}, fldPath.Child("selector"))...)
 		if len(spec.Selector.MatchLabels)+len(spec.Selector.MatchExpressions) == 0 {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("selector"), spec.Selector, "empty selector is invalid for deployment"))
@@ -823,21 +822,21 @@ func ValidateReplicaSetSpec(spec, oldSpec *apps.ReplicaSetSpec, fldPath *field.P
 	return allErrs
 }
 
-// ValidatePodTemplateSpecForReplicaSet validates the given template and ensures that it is in accordance with the desired selector and replicas.
+// ValidatePodTemplateSpecForReplicaSet 校验给定的模板，确保其与期望的 selector 和副本数一致。
 func ValidatePodTemplateSpecForReplicaSet(template *api.PodTemplateSpec, selector labels.Selector, replicas int32, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if template == nil {
 		allErrs = append(allErrs, field.Required(fldPath, ""))
 	} else {
 		if !selector.Empty() {
-			// Verify that the ReplicaSet selector matches the labels in template.
+			// 校验 ReplicaSet 的 selector 与模板中的 labels 相匹配。
 			labels := labels.Set(template.Labels)
 			if !selector.Matches(labels) {
 				allErrs = append(allErrs, field.Invalid(fldPath.Child("metadata", "labels"), template.Labels, "`selector` does not match template `labels`"))
 			}
 		}
 		allErrs = append(allErrs, apivalidation.ValidatePodTemplateSpec(template, fldPath, opts)...)
-		// RestartPolicy has already been first-order validated as per ValidatePodTemplateSpec().
+		// RestartPolicy 已按照 ValidatePodTemplateSpec() 完成了一阶校验。
 		if template.Spec.RestartPolicy != api.RestartPolicyAlways {
 			allErrs = append(allErrs, field.NotSupported(fldPath.Child("spec", "restartPolicy"), template.Spec.RestartPolicy, []string{string(api.RestartPolicyAlways)}))
 		}

@@ -25,7 +25,7 @@ import (
 // 2. 评估所请求命名空间中的 RoleBindings——命中即短路
 // 3. 默认拒绝（deny by default）
 
-// APIGroupAll and these consts are default values for rbac authorization.
+// APIGroupAll 以及这些常量是 rbac 授权的默认值。
 const (
 	APIGroupAll    = "*"
 	ResourceAll    = "*"
@@ -40,19 +40,20 @@ const (
 	AutoUpdateAnnotationKey = "rbac.authorization.kubernetes.io/autoupdate"
 )
 
-// PolicyRule holds information that describes a policy rule, but does not contain information
-// about who the rule applies to or which namespace the rule applies to.
+// PolicyRule 持有描述一条策略规则的信息，但不包含该规则
+// 适用于谁或适用于哪个命名空间的信息。
 type PolicyRule struct {
-	// Verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs.
+	// Verbs 是应用于本规则所含全部 ResourceKinds 的 Verb 列表。'*' 表示所有 verb。
 	Verbs []string
 
-	// APIGroups is the name of the APIGroup that contains the resources.
-	// If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed. "" represents the core API group and "*" represents all API groups.
+	// APIGroups 是包含这些资源的 APIGroup 的名称。
+	// 若指定了多个 API group，则针对任意 API group 中枚举资源的任何操作请求都将被允许。
+	// "" 表示 core API group，"*" 表示所有 API group。
 	APIGroups []string
 	// resources 是本规则适用的资源列表。'*' 表示指定 apiGroups 中的所有资源。
 	// '*/foo' 表示指定 apiGroups 中所有资源的子资源 'foo'。
 	Resources []string
-	// ResourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.
+	// ResourceNames 是本规则适用的名称白名单（可选）。空集合表示允许一切。
 	ResourceNames []string
 
 	// NonResourceURLs 是用户应有权访问的部分 URL 集合。允许使用 *，
@@ -70,11 +71,11 @@ type Subject struct {
 	// 被引用对象的 kind。本 API 组定义的值为 "User"、"Group" 和 "ServiceAccount"。
 	// 如果 Authorizer 无法识别该 kind 值，应报告错误。
 	Kind string
-	// APIGroup holds the API group of the referenced subject.
-	// Defaults to "" for ServiceAccount subjects.
-	// Defaults to "rbac.authorization.k8s.io" for User and Group subjects.
+	// APIGroup 保存所引用主体的 API group。
+	// ServiceAccount 主体默认为 ""。
+	// User 和 Group 主体默认为 "rbac.authorization.k8s.io"。
 	APIGroup string
-	// Name of the object being referenced.
+	// 被引用对象的名称。
 	Name string
 	// 被引用对象所在的命名空间。若对象为非命名空间类型（如 "User" 或 "Group"）而此值非空，
 	// 授权器应报错
@@ -83,7 +84,7 @@ type Subject struct {
 
 // RoleRef 包含指向所用角色的信息。
 type RoleRef struct {
-	// APIGroup is the group for the resource being referenced
+	// APIGroup 是被引用资源所属的 group
 	APIGroup string
 	// kind 为被引用资源的类型。
 	Kind string
@@ -99,7 +100,7 @@ type Role struct {
 	// 标准的对象元数据。
 	metav1.ObjectMeta
 
-	// Rules holds all the PolicyRules for this Role
+	// Rules 包含本 Role 的全部 PolicyRules
 	Rules []PolicyRule
 }
 
@@ -123,19 +124,19 @@ type RoleBinding struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RoleBindingList is a collection of RoleBindings
+// RoleBindingList 是 RoleBindings 的集合
 type RoleBindingList struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
 	metav1.ListMeta
 
-	// Items is a list of roleBindings
+	// Items 是 roleBindings 列表
 	Items []RoleBinding
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RoleList is a collection of Roles
+// RoleList 是 Roles 的集合
 type RoleList struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
@@ -153,19 +154,19 @@ type ClusterRole struct {
 	// 标准的对象元数据。
 	metav1.ObjectMeta
 
-	// Rules holds all the PolicyRules for this ClusterRole
+	// Rules 包含本 ClusterRole 的全部 PolicyRules
 	Rules []PolicyRule
 
-	// AggregationRule is an optional field that describes how to build the Rules for this ClusterRole.
-	// If AggregationRule is set, then the Rules are controller managed and direct changes to Rules will be
-	// stomped by the controller.
+	// AggregationRule 是可选字段，描述如何为本 ClusterRole 构建 Rules。
+	// 若设置了 AggregationRule，则 Rules 由控制器管理，对 Rules 的直接修改
+	// 会被控制器覆盖。
 	AggregationRule *AggregationRule
 }
 
 // AggregationRule 描述如何定位要聚合进本 ClusterRole 的其他 ClusterRole
 type AggregationRule struct {
-	// ClusterRoleSelectors holds a list of selectors which will be used to find ClusterRoles and create the rules.
-	// If any of the selectors match, then the ClusterRole's permissions will be added
+	// ClusterRoleSelectors 持有一组 selector，用于查找 ClusterRoles 并创建规则。
+	// 只要其中任一 selector 匹配，该 ClusterRole 的权限就会被聚合进来
 	ClusterRoleSelectors []metav1.LabelSelector
 }
 
@@ -189,24 +190,24 @@ type ClusterRoleBinding struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterRoleBindingList is a collection of ClusterRoleBindings
+// ClusterRoleBindingList 是 ClusterRoleBindings 的集合
 type ClusterRoleBindingList struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
 	metav1.ListMeta
 
-	// Items is a list of ClusterRoleBindings
+	// Items 是 ClusterRoleBindings 列表
 	Items []ClusterRoleBinding
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterRoleList is a collection of ClusterRoles
+// ClusterRoleList 是 ClusterRoles 的集合
 type ClusterRoleList struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
 	metav1.ListMeta
 
-	// Items is a list of ClusterRoles
+	// Items 是 ClusterRoles 列表
 	Items []ClusterRole
 }

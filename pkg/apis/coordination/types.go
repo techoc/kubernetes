@@ -70,9 +70,9 @@ type LeaseSpec struct {
 	// +featureGate=CoordinatedLeaderElection
 	// +optional
 	Strategy *CoordinatedLeaseStrategy
-	// PreferredHolder signals to a lease holder that the lease has a
-	// more optimal holder and should be given up.
-	// This field can only be set if Strategy is also set.
+	// PreferredHolder 向 lease 持有者发出信号：该 lease 存在
+	// 更优的持有者，应当让出。
+	// 仅当 Strategy 也已设置时，才可以设置此字段。
 	// +featureGate=CoordinatedLeaderElection
 	// +optional
 	PreferredHolder *string
@@ -109,27 +109,27 @@ type LeaseCandidateSpec struct {
 	// 该字段不可变。
 	// +required
 	LeaseName string
-	// PingTime is the last time that the server has requested the LeaseCandidate
-	// to renew. It is only done during leader election to check if any
-	// LeaseCandidates have become ineligible. When PingTime is updated, the
-	// LeaseCandidate will respond by updating RenewTime.
+	// PingTime 是服务端最后一次要求该 LeaseCandidate 续期的时间。
+	// 它仅在 leader election 期间进行，用于检查是否有 LeaseCandidate
+	// 已不再符合条件。PingTime 更新后，LeaseCandidate 会通过
+	// 更新 RenewTime 作出响应。
 	// +optional
 	PingTime *metav1.MicroTime
-	// RenewTime is the time that the LeaseCandidate was last updated. Any time
-	// a Lease needs to do leader election, the PingTime field is updated to
-	// signal to the LeaseCandidate that they should update the RenewTime. The
-	// PingTime field is also updated regularly and LeaseCandidates must update
-	// RenewTime to prevent garbage collection for still active LeaseCandidates.
-	// Old LeaseCandidate objects are periodically garbage collected.
+	// RenewTime 是该 LeaseCandidate 最近一次被更新的时间。每当某个
+	// Lease 需要进行 leader election 时，PingTime 字段会被更新，以向
+	// LeaseCandidate 发出应当更新 RenewTime 的信号。PingTime 字段也会
+	// 定期更新，LeaseCandidates 必须更新 RenewTime，以防止仍活跃的
+	// LeaseCandidates 被垃圾回收。
+	// 旧的 LeaseCandidate 对象会被周期性地垃圾回收。
 	// +optional
 	RenewTime *metav1.MicroTime
 	// BinaryVersion 是二进制版本，必须为不带前导 `v` 的 semver 格式。
 	// 该字段必填。
 	// +required
 	BinaryVersion string
-	// EmulationVersion is the emulation version. It must be in a semver format without leading `v`.
-	// EmulationVersion must be less than or equal to BinaryVersion.
-	// This field is required when strategy is "OldestEmulationVersion"
+	// EmulationVersion 是仿真版本，必须为不带前导 `v` 的 semver 格式。
+	// EmulationVersion 必须小于或等于 BinaryVersion。
+	// 当 strategy 为 "OldestEmulationVersion" 时该字段必填。
 	// +optional
 	EmulationVersion string
 	// strategy 是协调式 leader election 用于挑选 leader 的策略。
@@ -142,7 +142,7 @@ type LeaseCandidateSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LeaseCandidateList is a list of LeaseCandidate objects.
+// LeaseCandidateList 是 LeaseCandidate 对象的列表。
 type LeaseCandidateList struct {
 	metav1.TypeMeta
 	// +optional

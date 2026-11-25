@@ -24,21 +24,20 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EndpointSlice represents a subset of the endpoints that implement a service.
-// For a given service there may be multiple EndpointSlice objects, selected by
-// labels, which must be joined to produce the full set of endpoints.
+// EndpointSlice 表示实现某个服务的端点的一个子集。
+// 对于给定服务可能存在多个 EndpointSlice 对象，通过
+// labels 选择，这些切片必须合并起来才能得到完整的端点集合。
 type EndpointSlice struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
 	// +optional
 	metav1.ObjectMeta
-	// addressType specifies the type of address carried by this EndpointSlice.
-	// All addresses in this slice must be the same type. This field is
-	// immutable after creation. The following address types are currently
-	// supported:
-	// * IPv4: Represents an IPv4 Address.
-	// * IPv6: Represents an IPv6 Address.
-	// * FQDN: Represents a Fully Qualified Domain Name. [DEPRECATED]
+	// addressType 指定此 EndpointSlice 所承载地址的类型。
+	// 此切片中的所有地址必须是同一类型。该字段创建后
+	// 不可变。目前支持以下地址类型：
+	// * IPv4：表示 IPv4 地址。
+	// * IPv6：表示 IPv6 地址。
+	// * FQDN：表示完全限定域名（Fully Qualified Domain Name）。[DEPRECATED]
 	AddressType AddressType
 	// endpoints 是此切片中唯一端点的列表，每个切片最多可包含 1000 个端点。
 	// +listType=atomic
@@ -59,7 +58,7 @@ const (
 	AddressTypeIPv4 = AddressType(api.IPv4Protocol)
 	// AddressTypeIPv6 表示 IPv6 地址。
 	AddressTypeIPv6 = AddressType(api.IPv6Protocol)
-	// AddressTypeFQDN represents a FQDN.
+	// AddressTypeFQDN 表示 FQDN。
 	AddressTypeFQDN = AddressType("FQDN")
 )
 
@@ -80,9 +79,8 @@ type Endpoint struct {
 	// targetRef 是指向表示此端点的 Kubernetes 对象的引用。
 	// +optional
 	TargetRef *api.ObjectReference
-	// deprecatedTopology is deprecated and only retained for round-trip
-	// compatibility with v1beta1 Topology field.  When v1beta1 is removed, this
-	// should be removed, too.
+	// deprecatedTopology 已弃用，仅为与 v1beta1 Topology 字段的往返
+	// 兼容而保留。当 v1beta1 移除时，该字段也应一并移除。
 	// +optional
 	DeprecatedTopology map[string]string
 	// nodeName 表示承载此端点的节点名称，可用于确定节点本地的端点。
@@ -99,13 +97,11 @@ type Endpoint struct {
 
 // EndpointConditions 表示端点的当前状况。
 type EndpointConditions struct {
-	// ready indicates that this endpoint is prepared to receive traffic,
-	// according to whatever system is managing the endpoint. A nil value
-	// indicates an unknown state. In most cases consumers should interpret this
-	// unknown state as ready. For compatibility reasons, ready should never be
-	// "true" for terminating endpoints, except when the normal readiness
-	// behavior is being explicitly overridden, for example when the associated
-	// Service has set the publishNotReadyAddresses flag.
+	// ready 依据管理该端点的任何系统所持有的状态，表示此端点是否已准备好
+	// 接收流量。nil 表示状态未知。在多数情况下，消费方应将未知状态
+	// 理解为 ready。出于兼容性原因，对于正在终止的端点，ready 不应为
+	// "true"，除非正常就绪行为被显式覆盖，例如其关联的
+	// Service 设置了 publishNotReadyAddresses 标志。
 	Ready *bool
 
 	// serving 与 ready 相同，但不考虑端点的终止状态。
@@ -143,7 +139,7 @@ type ForNode struct {
 	Name string
 }
 
-// EndpointPort represents a Port used by an EndpointSlice.
+// EndpointPort 表示 EndpointSlice 使用的一个端口。
 type EndpointPort struct {
 	// name 表示此端口的名称，EndpointSlice 中所有端口名必须唯一。
 	// 若 EndpointSlice 源自 Kubernetes Service，则对应 Service.ports[].name。
@@ -172,12 +168,12 @@ type EndpointPort struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EndpointSliceList represents a list of endpoint slices.
+// EndpointSliceList 表示端点切片（endpoint slices）的列表。
 type EndpointSliceList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
-	// List of endpoint slices
+	// 端点切片（endpoint slices）列表
 	Items []EndpointSlice
 }

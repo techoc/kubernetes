@@ -30,8 +30,8 @@ import (
 // +k8s:deepcopy-gen=false
 
 // PolicyRuleBuilder 允许挂接方法，这在普通 API 类型上是不允许的。
-// We use it to construct rules in code.  It's more compact than trying to write them
-// out in a literal and allows us to perform some basic checking during construction
+// 我们用它在代码中构造规则：比字面量写法更紧凑，
+// 并且允许在构造过程中执行一些基本检查。
 type PolicyRuleBuilder struct {
 	PolicyRule rbacv1.PolicyRule `protobuf:"bytes,1,opt,name=policyRule"`
 }
@@ -108,9 +108,8 @@ func (r *PolicyRuleBuilder) Rule() (rbacv1.PolicyRule, error) {
 
 // +k8s:deepcopy-gen=false
 
-// ClusterRoleBindingBuilder let's us attach methods.  A no-no for API types.
-// We use it to construct bindings in code.  It's more compact than trying to write them
-// out in a literal.
+// ClusterRoleBindingBuilder 允许挂接方法，这在 API 类型上是不允许的。
+// 我们用它在代码中构造 binding，比字面量写法更紧凑。
 type ClusterRoleBindingBuilder struct {
 	ClusterRoleBinding rbacv1.ClusterRoleBinding `protobuf:"bytes,1,opt,name=clusterRoleBinding"`
 }
@@ -167,16 +166,15 @@ func (r *ClusterRoleBindingBuilder) Binding() (rbacv1.ClusterRoleBinding, error)
 
 // +k8s:deepcopy-gen=false
 
-// RoleBindingBuilder let's us attach methods. It is similar to
-// ClusterRoleBindingBuilder above.
+// RoleBindingBuilder 允许挂接方法，与上面的
+// ClusterRoleBindingBuilder 类似。
 type RoleBindingBuilder struct {
 	RoleBinding rbacv1.RoleBinding
 }
 
-// NewRoleBinding creates a RoleBinding builder that can be used
-// to define the subjects of a role binding. At least one of
-// the `Groups`, `Users` or `SAs` method must be called before
-// calling the `Binding*` methods.
+// NewRoleBinding 创建一个 RoleBinding builder，可用于定义
+// 角色 binding 的主体。在调用 `Binding*` 方法之前，
+// 必须至少调用 `Groups`、`Users` 或 `SAs` 方法中的一个。
 func NewRoleBinding(roleName, namespace string) *RoleBindingBuilder {
 	return &RoleBindingBuilder{
 		RoleBinding: rbacv1.RoleBinding{
@@ -193,7 +191,7 @@ func NewRoleBinding(roleName, namespace string) *RoleBindingBuilder {
 	}
 }
 
-// Groups adds the specified groups as the subjects of the RoleBinding.
+// Groups 将指定的 groups 添加为 RoleBinding 的主体。
 func (r *RoleBindingBuilder) Groups(groups ...string) *RoleBindingBuilder {
 	for _, group := range groups {
 		r.RoleBinding.Subjects = append(r.RoleBinding.Subjects, rbacv1.Subject{Kind: rbacv1.GroupKind, APIGroup: GroupName, Name: group})
@@ -201,7 +199,7 @@ func (r *RoleBindingBuilder) Groups(groups ...string) *RoleBindingBuilder {
 	return r
 }
 
-// Users adds the specified users as the subjects of the RoleBinding.
+// Users 将指定的 users 添加为 RoleBinding 的主体。
 func (r *RoleBindingBuilder) Users(users ...string) *RoleBindingBuilder {
 	for _, user := range users {
 		r.RoleBinding.Subjects = append(r.RoleBinding.Subjects, rbacv1.Subject{Kind: rbacv1.UserKind, APIGroup: GroupName, Name: user})
@@ -209,8 +207,7 @@ func (r *RoleBindingBuilder) Users(users ...string) *RoleBindingBuilder {
 	return r
 }
 
-// SAs adds the specified service accounts as the subjects of the
-// RoleBinding.
+// SAs 将指定的 service accounts 添加为 RoleBinding 的主体。
 func (r *RoleBindingBuilder) SAs(namespace string, serviceAccountNames ...string) *RoleBindingBuilder {
 	for _, saName := range serviceAccountNames {
 		r.RoleBinding.Subjects = append(r.RoleBinding.Subjects, rbacv1.Subject{Kind: rbacv1.ServiceAccountKind, Namespace: namespace, Name: saName})
@@ -218,7 +215,7 @@ func (r *RoleBindingBuilder) SAs(namespace string, serviceAccountNames ...string
 	return r
 }
 
-// BindingOrDie calls the binding method and panics if there is an error.
+// BindingOrDie 调用 binding 方法，若出错则 panic。
 func (r *RoleBindingBuilder) BindingOrDie() rbacv1.RoleBinding {
 	ret, err := r.Binding()
 	if err != nil {
@@ -227,8 +224,7 @@ func (r *RoleBindingBuilder) BindingOrDie() rbacv1.RoleBinding {
 	return ret
 }
 
-// Binding builds and returns the RoleBinding API object from the builder
-// object.
+// Binding 从 builder 对象构建并返回 RoleBinding API 对象。
 func (r *RoleBindingBuilder) Binding() (rbacv1.RoleBinding, error) {
 	if len(r.RoleBinding.Subjects) == 0 {
 		return rbacv1.RoleBinding{}, fmt.Errorf("subjects are required: %#v", r.RoleBinding)

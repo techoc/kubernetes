@@ -23,22 +23,19 @@ import (
 
 // PodDisruptionBudgetSpec 描述 PodDisruptionBudget 的期望配置。
 type PodDisruptionBudgetSpec struct {
-	// An eviction is allowed if at least "minAvailable" pods selected by
-	// "selector" will still be available after the eviction, i.e. even in the
-	// absence of the evicted pod.  So for example you can prevent all voluntary
-	// evictions by specifying "100%".
+	// 仅当驱逐后，"selector" 选出的 Pod 中至少仍有 "minAvailable" 个可用
+	// （即即使被驱逐的 Pod 不存在也仍然可用）时，才允许驱逐。
+	// 例如，指定 "100%" 即可阻止所有自愿驱逐。
 	// +optional
 	MinAvailable *intstr.IntOrString
 
-	// Label query over pods whose evictions are managed by the disruption
-	// budget.
+	// 对该中断预算所管理的驱逐涉及的 Pod 进行 label 查询。
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// An eviction is allowed if at most "maxUnavailable" pods selected by
-	// "selector" are unavailable after the eviction, i.e. even in absence of
-	// the evicted pod. For example, one can prevent all voluntary evictions
-	// by specifying 0. This is a mutually exclusive setting with "minAvailable".
+	// 仅当驱逐后，"selector" 选出的 Pod 中不可用的数量至多为 "maxUnavailable" 个
+	// （即即使被驱逐的 Pod 不存在也计入）时，才允许驱逐。
+	// 例如，指定 0 即可阻止所有自愿驱逐。该设置与 "minAvailable" 互斥。
 	// +optional
 	MaxUnavailable *intstr.IntOrString
 
@@ -67,8 +64,7 @@ type PodDisruptionBudgetSpec struct {
 	UnhealthyPodEvictionPolicy *UnhealthyPodEvictionPolicyType
 }
 
-// UnhealthyPodEvictionPolicyType defines the criteria for when unhealthy pods
-// should be considered for eviction.
+// UnhealthyPodEvictionPolicyType 定义何时应将不健康 Pod 纳入驱逐考量的标准。
 // +enum
 type UnhealthyPodEvictionPolicyType string
 
@@ -86,25 +82,22 @@ const (
 	AlwaysAllow UnhealthyPodEvictionPolicyType = "AlwaysAllow"
 )
 
-// PodDisruptionBudgetStatus represents information about the status of a
-// PodDisruptionBudget. Status may trail the actual state of a system.
+// PodDisruptionBudgetStatus 表示 PodDisruptionBudget 的状态信息。
+// Status 可能滞后于系统的实际状态。
 type PodDisruptionBudgetStatus struct {
-	// Most recent generation observed when updating this PDB status. DisruptionsAllowed and other
-	// status information is valid only if observedGeneration equals to PDB's object generation.
+	// 更新此 PDB status 时观察到的最近 generation。仅当 observedGeneration 等于
+	// PDB 对象的 generation 时，DisruptionsAllowed 及其他状态信息才有效。
 	// +optional
 	ObservedGeneration int64
 
-	// DisruptedPods contains information about pods whose eviction was
-	// processed by the API server eviction subresource handler but has not
-	// yet been observed by the PodDisruptionBudget controller.
-	// A pod will be in this map from the time when the API server processed the
-	// eviction request to the time when the pod is seen by PDB controller
-	// as having been marked for deletion (or after a timeout). The key in the map is the name of the pod
-	// and the value is the time when the API server processed the eviction request. If
-	// the deletion didn't occur and a pod is still there it will be removed from
-	// the list automatically by PodDisruptionBudget controller after some time.
-	// If everything goes smooth this map should be empty for the most of the time.
-	// Large number of entries in the map may indicate problems with pod deletions.
+	// DisruptedPods 包含这样的 Pod 信息：其驱逐请求已被 API 服务器的 eviction
+	// 子资源处理器处理，但尚未被 PodDisruptionBudget 控制器观察到。
+	// 从 API 服务器处理驱逐请求开始，到 PDB 控制器看到该 Pod 被标记为删除
+	// （或超时）为止，该 Pod 会一直存在于这个 map 中。map 的 key 是 Pod 名称，
+	// value 是 API 服务器处理驱逐请求的时间。如果删除没有发生、Pod 仍然存在，
+	// PodDisruptionBudget 控制器会在一段时间后自动将其从列表中移除。
+	// 如果一切顺利，这个 map 在大多数时间应当为空。
+	// map 中出现大量条目可能表明 Pod 删除存在问题。
 	// +optional
 	DisruptedPods map[string]metav1.Time
 
@@ -120,7 +113,7 @@ type PodDisruptionBudgetStatus struct {
 	// 本中断预算计入的 Pod 总数。
 	ExpectedPods int32
 
-	// Conditions contain conditions for PDB
+	// Conditions 包含 PDB 的条件。
 	// +optional
 	Conditions []metav1.Condition
 }
@@ -133,10 +126,10 @@ type PodDisruptionBudget struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Specification of the desired behavior of the PodDisruptionBudget.
+	// PodDisruptionBudget 期望行为的规格。
 	// +optional
 	Spec PodDisruptionBudgetSpec
-	// Most recently observed status of the PodDisruptionBudget.
+	// PodDisruptionBudget 最近观察到的状态。
 	// +optional
 	Status PodDisruptionBudgetStatus
 }
@@ -153,17 +146,17 @@ type PodDisruptionBudgetList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Eviction evicts a pod from its node subject to certain policies and safety constraints.
-// This is a subresource of Pod.  A request to cause such an eviction is
-// created by POSTing to .../pods/<pod name>/eviction.
+// Eviction 在满足特定策略和安全约束的前提下，将 Pod 从其所在节点驱逐。
+// 这是 Pod 的一个子资源。发起此类驱逐请求的方式是向
+// .../pods/<pod name>/eviction 发送 POST 请求。
 type Eviction struct {
 	metav1.TypeMeta
 
-	// ObjectMeta describes the pod that is being evicted.
+	// ObjectMeta 描述被驱逐的 Pod。
 	// +optional
 	metav1.ObjectMeta
 
-	// DeleteOptions may be provided
+	// 可以提供 DeleteOptions。
 	// +optional
 	DeleteOptions *metav1.DeleteOptions
 }
