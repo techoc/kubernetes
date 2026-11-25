@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// Tests that the apiserver limits the number of operations in a json patch.
+// 测试 apiserver 会限制 json patch 中的操作数量。
 func TestMaxJSONPatchOperations(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -45,7 +45,7 @@ func TestMaxJSONPatchOperations(t *testing.T) {
 	hugePatch := []byte("[" + strings.Repeat(p+",", 10000) + p + "]")
 
 	c := clientSet.CoreV1().RESTClient()
-	// Create a secret so we can patch it.
+	// 创建一个 secret，以便对其进行 patch。
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",

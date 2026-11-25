@@ -42,8 +42,8 @@ type FakeService interface {
 	Name() string
 }
 
-// Creates and registers an in-process Service capable of communicating with the
-// kubernetes integration test apiserver
+// 创建并注册一个进程内 Service，它能够与
+// kubernetes 集成测试 apiserver 通信
 type fakeService struct {
 	name    string
 	client  kubernetes.Interface
@@ -68,19 +68,19 @@ func (f *fakeService) Run(ctx context.Context) error {
 
 	serverURL, err := url.Parse(aggregatedServer.URL)
 	if err != nil {
-		// This should never occur
+		// 这不应发生
 		panic(err)
 	}
 
 	serverPort, err := strconv.Atoi(serverURL.Port())
 	if err != nil {
-		// This should never occur
+		// 这不应发生
 		panic(err)
 	}
 
 	port := int32(serverPort)
 
-	// Install service into the cluster
+	// 将 service 安装到集群中
 	service, err := f.client.CoreV1().Services("default").Apply(
 		ctx,
 		corev1apply.Service(f.name, "default").
@@ -108,7 +108,7 @@ func (f *fakeService) Run(ctx context.Context) error {
 	f.activePort = nil
 	f.lock.Unlock()
 
-	// Uninstall service from the cluser
+	// 从集群中卸载 service
 	err = f.client.CoreV1().Services("default").Delete(ctx, service.Name, metav1.DeleteOptions{})
 	if errors.Is(err, context.Canceled) {
 		err = nil
@@ -131,8 +131,8 @@ func (f *fakeService) WaitForReady(ctx context.Context) error {
 }
 
 func (f *fakeService) Port() *int32 {
-	// Returns the port of the server if it is running or nil
-	// if it is not running
+	// 如果 server 正在运行，返回其端口；
+	// 如果未运行，则返回 nil
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return f.activePort

@@ -52,7 +52,7 @@ func setup(t testing.TB, maxReadonlyRequestsInFlight, maxMutatingRequestsInFligh
 
 	_, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Ensure all clients are allowed to send requests.
+			// 确保所有客户端都被允许发送请求。
 			opts.Authorization.Modes = []string{"AlwaysAllow"}
 			opts.GenericServerRunOptions.MaxRequestsInFlight = maxReadonlyRequestsInFlight
 			opts.GenericServerRunOptions.MaxMutatingRequestsInFlight = maxMutatingRequestsInFlight
@@ -124,7 +124,7 @@ func TestPriorityLevelIsolation(t *testing.T) {
 		}
 	}, &wg, stopCh)
 
-	time.Sleep(time.Second * 10) // running in background for a while
+	time.Sleep(time.Second * 10) // 在后台运行一段时间
 
 	allDispatchedReqCounts, rejectedReqCounts, err := getRequestCountOfPriorityLevel(loopbackClient)
 	if err != nil {
@@ -141,8 +141,8 @@ func TestPriorityLevelIsolation(t *testing.T) {
 		t.Errorf(`%v requests from the "mouse" stream were rejected unexpectedly`, rejectedReqCounts[priorityLevelNoxu2.Name])
 	}
 
-	// Theoretically, the actual expected value of request counts upon the two priority-level should be
-	// the equal. We're deliberately lax to make flakes super rare.
+	// 理论上，两个 priority level 的请求计数实际期望值应
+	// 相等。我们故意放宽条件，以使测试极难出现不稳定。
 	if (noxu1RequestCount/2) > noxu2RequestCount || (noxu2RequestCount/2) > noxu1RequestCount {
 		t.Errorf("imbalanced requests made by noxu1/2: (%d:%d)", noxu1RequestCount, noxu2RequestCount)
 	}
@@ -185,7 +185,7 @@ func getNominalConcurrencyOfPriorityLevel(c clientset.Interface) (map[string]int
 		var v model.Vector
 		if err := decoder.Decode(&v); err != nil {
 			if err == io.EOF {
-				// Expected loop termination condition.
+				// 预期的循环终止条件。
 				return concurrency, nil
 			}
 			return nil, fmt.Errorf("failed decoding metrics: %v", err)
@@ -217,7 +217,7 @@ func getRequestCountOfPriorityLevel(c clientset.Interface) (map[string]int, map[
 		var v model.Vector
 		if err := decoder.Decode(&v); err != nil {
 			if err == io.EOF {
-				// Expected loop termination condition.
+				// 预期的循环终止条件。
 				return allReqCounts, rejectReqCounts, nil
 			}
 			return nil, nil, fmt.Errorf("failed decoding metrics: %v", err)

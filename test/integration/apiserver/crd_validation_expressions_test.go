@@ -39,8 +39,8 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestCustomResourceValidators tests x-kubernetes-validations compile and validate as expected when the feature gate
-// is enabled.
+// TestCustomResourceValidators 测试在 feature gate 启用时，
+// x-kubernetes-validations 能够按预期编译和校验。
 func TestCustomResourceValidators(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, framework.SharedEtcd())
 	if err != nil {
@@ -92,7 +92,7 @@ func TestCustomResourceValidators(t *testing.T) {
 		t.Run("custom resource create and update MUST NOT allow data that is invalid according to x-kubernetes-validations if the feature gate is enabled", func(t *testing.T) {
 			name1 := names.SimpleNameGenerator.GenerateName("cr-1")
 
-			// a spec create that is invalid MUST fail validation
+			// 无效的 spec 创建必须校验失败
 			cr := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": gvr.Group + "/" + gvr.Version,
 				"kind":       crd.Spec.Names.Kind,
@@ -105,7 +105,7 @@ func TestCustomResourceValidators(t *testing.T) {
 				},
 			}}
 
-			// a spec create that is invalid MUST fail validation
+			// 无效的 spec 创建必须校验失败
 			_, err = crClient.Create(context.TODO(), cr, metav1.CreateOptions{})
 			if err == nil {
 				t.Fatal("Expected create of invalid custom resource to fail")
@@ -115,7 +115,7 @@ func TestCustomResourceValidators(t *testing.T) {
 				}
 			}
 
-			// a spec create that is valid MUST pass validation
+			// 有效的 spec 创建必须通过校验
 			cr.Object["spec"] = map[string]interface{}{
 				"x":     int64(2),
 				"y":     int64(2),
@@ -138,7 +138,7 @@ func TestCustomResourceValidators(t *testing.T) {
 				t.Fatalf("Unexpected error creating custom resource: %v", err)
 			}
 
-			// spec updates that are invalid MUST fail validation
+			// 无效的 spec 更新必须校验失败
 			cases := []struct {
 				name string
 				spec map[string]interface{}
@@ -192,7 +192,7 @@ func TestCustomResourceValidators(t *testing.T) {
 				})
 			}
 
-			// a status update that is invalid MUST fail validation
+			// 无效的 status 更新必须校验失败
 			cr.Object["status"] = map[string]interface{}{
 				"z": int64(5),
 			}
@@ -205,7 +205,7 @@ func TestCustomResourceValidators(t *testing.T) {
 				}
 			}
 
-			// a status update this is valid MUST pass validation
+			// 有效的 status 更新必须通过校验
 			cr.Object["status"] = map[string]interface{}{
 				"z": int64(3),
 			}
@@ -217,12 +217,12 @@ func TestCustomResourceValidators(t *testing.T) {
 		})
 	})
 	t.Run("CRD writes MUST fail for a non-structural schema containing x-kubernetes-validations", func(t *testing.T) {
-		// The only way for a non-structural schema to exist is for it to already be persisted in etcd as a non-structural CRD.
+		// 非结构化 schema 存在的唯一方式是它已作为非结构化 CRD 持久化在 etcd 中。
 		nonStructuralCRD, err := fixtures.CreateCRDUsingRemovedAPI(server.EtcdClient, server.EtcdStoragePrefix, nonStructuralCrdWithValidations(), apiExtensionClient, dynamicClient)
 		if err != nil {
 			t.Fatalf("Unexpected error non-structural CRD by writing directly to etcd: %v", err)
 		}
-		// Double check that the schema is non-structural
+		// 再次确认该 schema 是非结构化的
 		crd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), nonStructuralCRD.Name, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
@@ -237,7 +237,7 @@ func TestCustomResourceValidators(t *testing.T) {
 			t.Fatal("Expected CRD to be non-structural")
 		}
 
-		//Try to change it
+		// 尝试修改它
 		crd.Spec.Versions[0].Schema.OpenAPIV3Schema.XValidations = apiextensionsv1.ValidationRules{
 			{
 				Rule: "has(self.foo)",
@@ -420,8 +420,8 @@ func TestCustomResourceValidators(t *testing.T) {
 	})
 }
 
-// TestCustomResourceValidatorsWithBlockingErrors tests x-kubernetes-validations is skipped when
-// blocking errors occurred.
+// TestCustomResourceValidatorsWithBlockingErrors 测试当出现 blocking 错误时，
+// x-kubernetes-validations 会被跳过。
 func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, framework.SharedEtcd())
 	if err != nil {
@@ -473,7 +473,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 		t.Run("custom resource create and update MUST NOT allow data if failed validation", func(t *testing.T) {
 			name1 := names.SimpleNameGenerator.GenerateName("cr-1")
 
-			// a spec create that is invalid MUST fail validation
+			// 无效的 spec 创建必须校验失败
 			cr := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": gvr.Group + "/" + gvr.Version,
 				"kind":       crd.Spec.Names.Kind,
@@ -486,7 +486,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 				},
 			}}
 
-			// a spec create that is invalid MUST fail validation
+			// 无效的 spec 创建必须校验失败
 			_, err = crClient.Create(context.TODO(), cr, metav1.CreateOptions{})
 			if err == nil {
 				t.Fatal("Expected create of invalid custom resource to fail")
@@ -499,7 +499,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 		t.Run("custom resource create and update MUST NOT allow data if there is blocking error of MaxLength", func(t *testing.T) {
 			name2 := names.SimpleNameGenerator.GenerateName("cr-2")
 
-			// a spec create that has maxLengh err MUST fail validation
+			// 存在 maxLength 错误的 spec 创建必须校验失败
 			cr := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": gvr.Group + "/" + gvr.Version,
 				"kind":       crd.Spec.Names.Kind,
@@ -525,7 +525,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 		})
 		t.Run("custom resource create and update MUST NOT allow data if there is blocking error of MaxItems", func(t *testing.T) {
 			name2 := names.SimpleNameGenerator.GenerateName("cr-2")
-			// a spec create that has maxItem err MUST fail validation
+			// 存在 maxItem 错误的 spec 创建必须校验失败
 			cr := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": gvr.Group + "/" + gvr.Version,
 				"kind":       crd.Spec.Names.Kind,
@@ -559,7 +559,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 		})
 		t.Run("custom resource create and update MUST NOT allow data if there is blocking error of MaxProperties", func(t *testing.T) {
 			name2 := names.SimpleNameGenerator.GenerateName("cr-2")
-			// a spec create that has maxItem err MUST fail validation
+			// 存在 maxItem 错误的 spec 创建必须校验失败
 			cr := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": gvr.Group + "/" + gvr.Version,
 				"kind":       crd.Spec.Names.Kind,
@@ -591,7 +591,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 		})
 		t.Run("custom resource create and update MUST NOT allow data if there is blocking error of missing required field", func(t *testing.T) {
 			name2 := names.SimpleNameGenerator.GenerateName("cr-2")
-			// a spec create that has required err MUST fail validation
+			// 存在 required 错误的 spec 创建必须校验失败
 			cr := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": gvr.Group + "/" + gvr.Version,
 				"kind":       crd.Spec.Names.Kind,
@@ -621,7 +621,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 		})
 		t.Run("custom resource create and update MUST NOT allow data if there is blocking error of type", func(t *testing.T) {
 			name2 := names.SimpleNameGenerator.GenerateName("cr-2")
-			// a spec create that has required err MUST fail validation
+			// 存在 required 错误的 spec 创建必须校验失败
 			cr := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": gvr.Group + "/" + gvr.Version,
 				"kind":       crd.Spec.Names.Kind,
@@ -653,7 +653,7 @@ func TestCustomResourceValidatorsWithBlockingErrors(t *testing.T) {
 	})
 }
 
-// TestCustomResourceValidatorsWithSchemaConversion tests CRD replacement with schema conversion issue should not panic.
+// TestCustomResourceValidatorsWithSchemaConversion 测试存在 schema 转换问题的 CRD 替换不应 panic。
 func TestCustomResourceValidatorsWithSchemaConversion(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, framework.SharedEtcd())
 	if err != nil {
@@ -671,7 +671,7 @@ func TestCustomResourceValidatorsWithSchemaConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create CRD with normal items+array schema
+	// 使用正常的 items + array schema 创建 CRD
 	structuralWithValidators := crdWithSchema(t, "Structural", structuralSchemaWithItemsUnderArray)
 	crd, err := fixtures.CreateNewV1CustomResourceDefinition(structuralWithValidators, apiExtensionClient, dynamicClient)
 	if err != nil {
@@ -684,7 +684,7 @@ func TestCustomResourceValidatorsWithSchemaConversion(t *testing.T) {
 	}
 	crClient := dynamicClient.Resource(gvr)
 
-	// Create a valid CR instance
+	// 创建一个有效的 CR 实例
 	name1 := names.SimpleNameGenerator.GenerateName("cr-1")
 	_, err = crClient.Create(context.TODO(), &unstructured.Unstructured{Object: map[string]interface{}{
 		"apiVersion": gvr.Group + "/" + gvr.Version,
@@ -709,13 +709,13 @@ func TestCustomResourceValidatorsWithSchemaConversion(t *testing.T) {
 	}
 	structuralSchemaWithItemsUnderObject := crdWithSchema(t, "Structural", structuralSchemaWithItemsUnderObject)
 	structuralSchemaWithItemsUnderObject.SetResourceVersion(crd.GetResourceVersion())
-	// Update CRD with invalid schema items under object
+	// 使用 object 下带有无效 schema items 的内容更新 CRD
 	crd, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Update(context.TODO(), structuralSchemaWithItemsUnderObject, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Make an unrelated update to the previous persisted CR instance to make sure CRD handler doesn't panic
-	// It may take some time for the CRD schema update to be processed by the API Server's internal validation cache.
+	// 对之前持久化的 CR 实例进行一个无关更新，确保 CRD handler 不会 panic
+	// API Server 的内部校验缓存可能需要一些时间来处理 CRD schema 的更新。
 	var lastErr error
 	err = wait.PollUntilContextTimeout(context.TODO(), 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
 		oldCR, err := crClient.Get(ctx, name1, metav1.GetOptions{})
@@ -736,7 +736,7 @@ func TestCustomResourceValidatorsWithSchemaConversion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expect error to contain \"rule compiler initialization error: failed to convert to declType for CEL validation rules\" but get: %v", lastErr)
 	}
-	// Create another CR instance with an array and be rejected
+	// 创建另一个带有 array 的 CR 实例，预期被拒绝
 	name2 := names.SimpleNameGenerator.GenerateName("cr-2")
 	_, err = crClient.Create(context.TODO(), &unstructured.Unstructured{Object: map[string]interface{}{
 		"apiVersion": gvr.Group + "/" + gvr.Version,
@@ -755,7 +755,7 @@ func TestCustomResourceValidatorsWithSchemaConversion(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Invalid value: \"array\": spec.backend in body must be of type object: \"array\"") {
 		t.Fatalf("expect error to contain \"Invalid value: \"array\": spec.backend in body must be of type object: \"array\"\" but get: %v", err)
 	}
-	// Delete the CRD
+	// 删除 CRD
 	err = fixtures.DeleteV1CustomResourceDefinition(structuralWithValidators, apiExtensionClient)
 	if err != nil {
 		t.Fatal(err)

@@ -47,8 +47,8 @@ const acceptV1JSON = "application/json"
 const acceptV2JSON = "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList"
 const acceptV2JSONNoPeer = "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList;profile=nopeer"
 
-// Discovery integration tests frequently need to wait through aggregator,
-// API registration, and discovery document convergence on contended CI nodes.
+// Discovery 集成测试经常需要在资源紧张的 CI 节点上等待 aggregator、
+// API 注册和 discovery 文档收敛。
 const maxTimeout = 120 * time.Second
 
 type testClient interface {
@@ -58,16 +58,16 @@ type testClient interface {
 	dynamic.Interface
 }
 
-// declarative framework for discovery integration tests
-// each test has metadata and a list of actions which each must pass for the
-// test to pass
+// discovery 集成测试的声明式框架
+// 每个测试都有元数据和一系列 action，每个 action 都必须通过，
+// 测试才算通过
 type testCase struct {
 	Name    string
 	Actions []testAction
 }
 
-// interface defining a function that does something with the integration test
-// api server and returns an error. the test fails if the error is non nil
+// 定义一个接口，其中的函数对集成测试 api server 执行某些操作并返回错误。
+// 错误非 nil 时测试失败
 type testAction interface {
 	Do(ctx context.Context, client testClient) error
 }
@@ -77,7 +77,7 @@ type cleaningAction interface {
 	Cleanup(ctx context.Context, client testClient) error
 }
 
-// apply an apiservice to the cluster
+// 向集群应用一个 apiservice
 type applyAPIService apiregistrationv1.APIServiceSpec
 
 type applyCRD apiextensionsv1.CustomResourceDefinitionSpec
@@ -88,16 +88,16 @@ type deleteObject struct {
 	Name      string
 }
 
-// Wait for groupversions to appear in v1 discovery
+// 等待 groupversion 出现在 v1 discovery 中
 type waitForGroupVersionsV1 []metav1.GroupVersion
 
-// Wait for groupversions to disappear from v2 discovery
+// 等待 groupversion 从 v1 discovery 中消失
 type waitForAbsentGroupVersionsV1 []metav1.GroupVersion
 
-// Wait for groupversions to appear in v2 discovery
+// 等待 groupversion 出现在 v2 discovery 中
 type waitForGroupVersionsV2 []metav1.GroupVersion
 
-// Wait for groupversions to disappear from v2 discovery
+// 等待 groupversion 从 v2 discovery 中消失
 type waitForAbsentGroupVersionsV2 []metav1.GroupVersion
 
 type waitForStaleGroupVersionsV2 []metav1.GroupVersion
@@ -109,12 +109,12 @@ type waitForResourcesAbsentV1 []metav1.GroupVersionResource
 type waitForResourcesV2 []metav1.GroupVersionResource
 type waitForResourcesAbsentV2 []metav1.GroupVersionResource
 
-// Assert something about the current state of v2 discovery
+// 断言 v2 discovery 当前状态的某些内容
 type inlineAction func(ctx context.Context, client testClient) error
 
 func (a applyAPIService) Do(ctx context.Context, client testClient) error {
-	// using dynamic client since the typed client does not support `Apply`
-	// operation?
+	// 使用 dynamic client，因为 typed client 不支持 `Apply`
+	// 操作？
 	obj := &apiregistrationv1.APIService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: a.Version + "." + a.Group,
@@ -143,7 +143,7 @@ func (a applyAPIService) Do(ctx context.Context, client testClient) error {
 func (a applyAPIService) Cleanup(ctx context.Context, client testClient) error {
 	name := a.Version + "." + a.Group
 
-	// Capture the UID of the existing object (if it exists)
+	// 记录现有对象（如果存在）的 UID
 	var uid types.UID
 	if obj, err := client.ApiregistrationV1().APIServices().Get(ctx, name, metav1.GetOptions{}); err == nil {
 		uid = obj.UID
@@ -164,16 +164,16 @@ func (a applyAPIService) Cleanup(ctx context.Context, client testClient) error {
 			obj, err := client.ApiregistrationV1().APIServices().Get(ctx, name, metav1.GetOptions{})
 			switch {
 			case errors.IsNotFound(err):
-				// object is gone
+				// 对象已消失
 				return true, nil
 			case err == nil && obj.UID != uid:
-				// the instance we were waiting for is gone
+				// 我们等待的实例已消失
 				return true, nil
 			case err != nil:
-				// some other error occurred
+				// 发生了其他错误
 				return false, err
 			default:
-				// the instance we were waiting for is still around
+				// 我们等待的实例仍然存在
 				return false, nil
 			}
 		},
@@ -187,8 +187,8 @@ func (a applyAPIService) Cleanup(ctx context.Context, client testClient) error {
 }
 
 func (a applyCRD) Do(ctx context.Context, client testClient) error {
-	// using dynamic client since the typed client does not support `Apply`
-	// operation?
+	// 使用 dynamic client，因为 typed client 不支持 `Apply`
+	// 操作？
 	name := a.Names.Plural + "." + a.Group
 	obj := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -225,7 +225,7 @@ func (a applyCRD) Do(ctx context.Context, client testClient) error {
 func (a applyCRD) Cleanup(ctx context.Context, client testClient) error {
 	name := a.Names.Plural + "." + a.Group
 
-	// Capture the UID of the existing object (if it exists)
+	// 记录现有对象（如果存在）的 UID
 	var uid types.UID
 	if obj, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{}); err == nil {
 		uid = obj.UID
@@ -246,16 +246,16 @@ func (a applyCRD) Cleanup(ctx context.Context, client testClient) error {
 			obj, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
 			switch {
 			case errors.IsNotFound(err):
-				// object is gone
+				// 对象已消失
 				return true, nil
 			case err == nil && obj.UID != uid:
-				// the instance we were waiting for is gone
+				// 我们等待的实例已消失
 				return true, nil
 			case err != nil:
-				// some other error occurred
+				// 发生了其他错误
 				return false, err
 			default:
-				// the instance we were waiting for is still around
+				// 我们等待的实例仍然存在
 				return false, nil
 			}
 		},
@@ -649,8 +649,8 @@ func WaitForGroups(ctx context.Context, client testClient, groups ...apidiscover
 }
 
 func WaitForResultWithCondition(ctx context.Context, client testClient, condition func(result apidiscoveryv2.APIGroupDiscoveryList) bool) error {
-	// Keep repeatedly fetching document from aggregator.
-	// Check to see if it contains our service within a reasonable amount of time
+	// 持续从 aggregator 获取文档。
+	// 检查它在合理时间内是否包含我们的 service
 	return wait.PollUntilContextTimeout(
 		ctx,
 		250*time.Millisecond,
@@ -671,8 +671,8 @@ func WaitForResultWithCondition(ctx context.Context, client testClient, conditio
 }
 
 func WaitForV1GroupsWithCondition(ctx context.Context, client testClient, condition func(result metav1.APIGroupList) bool) error {
-	// Keep repeatedly fetching document from aggregator.
-	// Check to see if it contains our service within a reasonable amount of time
+	// 持续从 aggregator 获取文档。
+	// 检查它在合理时间内是否包含我们的 service
 	return wait.PollUntilContextTimeout(
 		ctx,
 		250*time.Millisecond,
@@ -694,8 +694,8 @@ func WaitForV1GroupsWithCondition(ctx context.Context, client testClient, condit
 }
 
 func WaitForV1ResourcesWithCondition(ctx context.Context, client testClient, gv metav1.GroupVersion, condition func(result metav1.APIResourceList) bool) error {
-	// Keep repeatedly fetching document from aggregator.
-	// Check to see if it contains our service within a reasonable amount of time
+	// 持续从 aggregator 获取文档。
+	// 检查它在合理时间内是否包含我们的 service
 	return wait.PollUntilContextTimeout(
 		ctx,
 		250*time.Millisecond,
@@ -748,7 +748,7 @@ func FindGroupVersionV2(discovery apidiscoveryv2.APIGroupDiscoveryList, gv metav
 	return nil
 }
 
-// FetchNoPeerDiscovery explicitly requests no-peer discovery
+// FetchNoPeerDiscovery 显式请求 no-peer discovery
 func FetchNoPeerDiscovery(ctx context.Context, client testClient) (apidiscoveryv2.APIGroupDiscoveryList, error) {
 	result, err := client.
 		Discovery().
@@ -772,7 +772,7 @@ func FetchNoPeerDiscovery(ctx context.Context, client testClient) (apidiscoveryv
 	return groupList, nil
 }
 
-// FetchPeerAggregatedDiscovery explicitly requests peer-aggregated discovery
+// FetchPeerAggregatedDiscovery 显式请求 peer-aggregated discovery
 func FetchPeerAggregatedDiscovery(ctx context.Context, client testClient) (apidiscoveryv2.APIGroupDiscoveryList, error) {
 	result, err := client.
 		Discovery().
@@ -796,7 +796,7 @@ func FetchPeerAggregatedDiscovery(ctx context.Context, client testClient) (apidi
 	return groupList, nil
 }
 
-// WaitForPeerAggregatedDiscoveryWithCondition waits for peer-aggregated discovery to satisfy a condition.
+// WaitForPeerAggregatedDiscoveryWithCondition 等待 peer-aggregated discovery 满足条件。
 func WaitForPeerAggregatedDiscoveryWithCondition(ctx context.Context, client testClient, condition func(result apidiscoveryv2.APIGroupDiscoveryList) bool) error {
 	return wait.PollUntilContextTimeout(
 		ctx,

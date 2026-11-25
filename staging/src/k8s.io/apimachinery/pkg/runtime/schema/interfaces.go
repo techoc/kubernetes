@@ -16,7 +16,7 @@ limitations under the License.
 
 package schema
 
-// 所有被序列化的对象都会在 Scheme 中编码类型信息。序列化过程通过该接口
+// ObjectKind 所有被序列化的对象都会在 Scheme 中编码类型信息。序列化过程通过该接口
 // 把 Scheme 中的类型信息写入对象的序列化形式。对于无法序列化或有特殊
 // 需求的对象，该接口可以是空实现。
 type ObjectKind interface {

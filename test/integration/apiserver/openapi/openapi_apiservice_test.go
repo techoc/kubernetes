@@ -51,7 +51,7 @@ func TestSlowAPIServiceOpenAPIDoesNotBlockHealthCheck(t *testing.T) {
 		if r.URL.Path != "/openapi/v2" {
 			return
 		}
-		// Effectively let the APIService block until request timeout.
+		// 实际上让 APIService 阻塞到请求超时。
 		<-ctx.Done()
 		openapi := &spec.Swagger{
 			SwaggerProps: spec.SwaggerProps{
@@ -163,8 +163,8 @@ func TestFetchingOpenAPIBeforeReady(t *testing.T) {
 
 }
 
-// These definitions were copied from k8s.io/kubernetes/test/integation/apiserver/discovery
-// and should be consolidated.
+// 这些定义复制自 k8s.io/kubernetes/test/integation/apiserver/discovery，
+// 应当合并整理。
 type kubeClientSet = kubernetes.Interface
 
 type aggegatorClientSet = aggregator.Interface
@@ -220,7 +220,7 @@ func registerAPIService(ctx context.Context, client aggregator.Interface, gv met
 	if port == nil {
 		return errors.New("service not yet started")
 	}
-	// Register the APIService
+	// 注册 APIService
 	patch := apiregistrationv1.APIService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: gv.Version + "." + gv.Group,

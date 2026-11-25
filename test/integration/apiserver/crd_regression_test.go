@@ -34,7 +34,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Regression test for https://issues.k8s.io/109099
+// 针对 https://issues.k8s.io/109099 的回归测试
 func TestCRDExponentialRecursionBug(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, framework.SharedEtcd())
 	if err != nil {
@@ -87,7 +87,7 @@ func TestCRDExponentialRecursionBug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait until the CRD exist in discovery
+	// 等待 CRD 出现在 discovery 中
 	err = wait.PollImmediate(100*time.Millisecond, 15*time.Second, func() (bool, error) {
 		groupResource, err := apiExtensionClient.Discovery().ServerResourcesForGroupVersion(crd.Spec.Group + "/" + crd.Spec.Versions[0].Name)
 		if err != nil {
@@ -123,7 +123,7 @@ func TestCRDExponentialRecursionBug(t *testing.T) {
 		},
 	}
 
-	// create a object with nested fields to trigger the bug
+	// 创建一个带有嵌套字段的对象以触发该 bug
 	var m map[string]interface{}
 	m = instance.Object["spec"].(map[string]interface{})
 	for i := range 50 {

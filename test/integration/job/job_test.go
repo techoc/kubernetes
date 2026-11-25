@@ -2218,7 +2218,7 @@ func TestManagedBy_RecreatedJob(t *testing.T) {
 
 	jobClient := clientSet.BatchV1().Jobs(jobObj.Namespace)
 	if err = jobClient.Delete(ctx, jobObj.Name, metav1.DeleteOptions{
-		// Use propagationPolicy=background so that we don't need to wait for the job object to be gone.
+		// 使用 propagationPolicy=background，这样无需等待 Job 对象被删除。
 		PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
 	}); err != nil {
 		t.Fatalf("Error %v when deleting the job %v", err, klog.KObj(jobObj))
@@ -5786,12 +5786,12 @@ func TestJobDelegatedPodGroup(t *testing.T) {
 		t.Fatalf("Failed to create delegated Job: %v", err)
 	}
 
-	// The controller creates a PodGroup owned by the Job, but never a Workload
-	// (the parent owns the only Workload).
+	// 控制器会创建一个由该 Job 拥有的 PodGroup，但从不创建 Workload
+	// （唯一的工作负载由父级拥有）。
 	podGroup := waitForPodGroup(ctx, t, clientSet, jobObj, false, wait.ForeverTestTimeout)
 	waitForWorkload(ctx, t, clientSet, jobObj, true, 10*time.Second)
 
-	// The PodGroup is materialized from the parent's persisted template.
+	// 该 PodGroup 从父级持久化的模板具化而来。
 	if podGroup.Spec.WorkloadRef == nil ||
 		podGroup.Spec.WorkloadRef.WorkloadName != parentWorkload.Name ||
 		podGroup.Spec.WorkloadRef.TemplateName != templateName {
@@ -5802,8 +5802,8 @@ func TestJobDelegatedPodGroup(t *testing.T) {
 		t.Errorf("PodGroup gang = %+v, want minCount 3", podGroup.Spec.SchedulingPolicy.Gang)
 	}
 
-	// The PodGroup carries a controller ownerRef to the Job and does NOT link the
-	// parent-owned Workload as an owner (delegated mode).
+	// 该 PodGroup 带有指向 Job 的 controller ownerRef，但不会将父级拥有的
+	// Workload 链接为 owner（委托模式）。
 	var hasJobController bool
 	for _, ref := range podGroup.OwnerReferences {
 		if ref.Kind == "Workload" {
@@ -5817,7 +5817,7 @@ func TestJobDelegatedPodGroup(t *testing.T) {
 		t.Errorf("PodGroup missing controller ownerReference to Job %q; got %+v", jobObj.Name, podGroup.OwnerReferences)
 	}
 
-	// The delegated Job never takes ownership of the parent Workload.
+	// 委托的 Job 从不取得父级 Workload 的所有权。
 	gotParent, err := clientSet.SchedulingV1beta1().Workloads(ns.Name).Get(ctx, parentWorkload.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to get parent Workload: %v", err)

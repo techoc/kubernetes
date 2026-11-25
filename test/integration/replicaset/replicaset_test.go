@@ -999,7 +999,7 @@ func TestFullyLabeledReplicas(t *testing.T) {
 		pod.Labels = extraLabelMap
 	})
 
-	// Verify only one pod is fully labeled
+	// 验证只有一个 Pod 带有完整标签
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		newRS, err := rsClient.Get(tCtx, rs.Name, metav1.GetOptions{})
 		if err != nil {
@@ -1039,7 +1039,7 @@ func TestReplicaSetsAppsV1DefaultGCPolicy(t *testing.T) {
 		t.Fatalf("Failed to delete rs: %v", err)
 	}
 
-	// Verify no new finalizer has been added
+	// 验证没有添加新的 finalizer
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		newRS, err := rsClient.Get(tCtx, rs.Name, metav1.GetOptions{})
 		if err != nil {
@@ -1058,7 +1058,7 @@ func TestReplicaSetsAppsV1DefaultGCPolicy(t *testing.T) {
 
 	updateRS(t, c.AppsV1().ReplicaSets(ns.Name), rs.Name, func(rs *apps.ReplicaSet) {
 		var finalizers []string
-		// remove fakeFinalizer
+		// 移除 fakeFinalizer
 		for _, finalizer := range rs.Finalizers {
 			if finalizer != fakeFinalizer {
 				finalizers = append(finalizers, finalizer)
@@ -1097,7 +1097,7 @@ func TestTerminatingReplicas(t *testing.T) {
 	}
 	setPodsReadyCondition(t, c, pods, v1.ConditionTrue, time.Now())
 
-	// should not update terminating pods when feature gate is disabled
+	// 当 feature gate 禁用时，不应更新终止中的 Pod
 	if err := podClient.Delete(tCtx, pods.Items[0].Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -1106,7 +1106,7 @@ func TestTerminatingReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// should update terminating pods when feature gate is enabled
+	// 当 feature gate 启用时，应更新终止中的 Pod
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DeploymentReplicaSetTerminatingReplicas, true)
 	if err := podClient.Delete(tCtx, pods.Items[1].Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
@@ -1115,7 +1115,7 @@ func TestTerminatingReplicas(t *testing.T) {
 	if err := waitForTerminatingPods(c, tCtx, rs, ptr.To[int32](2)); err != nil {
 		t.Fatal(err)
 	}
-	// should update status when the pod is removed
+	// 当 Pod 被移除时，应更新 status
 	if err := podClient.Delete(tCtx, pods.Items[0].Name, metav1.DeleteOptions{GracePeriodSeconds: ptr.To(int64(0))}); err != nil {
 		t.Fatal(err)
 	}
@@ -1123,7 +1123,7 @@ func TestTerminatingReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// should revert terminating pods to 0 when feature gate is disabled
+	// 当 feature gate 禁用时，应将终止中的 Pod 数恢复为 0
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DeploymentReplicaSetTerminatingReplicas, false)
 	if err := podClient.Delete(tCtx, pods.Items[2].Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
@@ -1133,7 +1133,7 @@ func TestTerminatingReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 	pods = getPods(t, podClient, labelMap())
-	// 5 non-terminating, 2 terminating
+	// 5 个非终止中，2 个终止中
 	if len(pods.Items) != 7 {
 		t.Fatalf("len(pods) = %d, want 7", len(pods.Items))
 	}

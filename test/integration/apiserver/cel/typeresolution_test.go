@@ -81,7 +81,7 @@ func TestTypeResolver(t *testing.T) {
 	}(crd)
 	discoveryResolver := &resolver.ClientDiscoveryResolver{Discovery: client.Discovery()}
 	definitionsResolver := resolver.NewDefinitionsSchemaResolver(openapi.GetOpenAPIDefinitions, k8sscheme.Scheme, apiextensionsscheme.Scheme)
-	// wait until the CRD schema is published at the OpenAPI v3 endpoint
+	// 等待 CRD schema 在 OpenAPI v3 endpoint 发布
 	err = wait.PollImmediate(time.Second, time.Minute, func() (done bool, err error) {
 		p, err := client.OpenAPIV3().Paths()
 		if err != nil {
@@ -124,7 +124,7 @@ func TestTypeResolver(t *testing.T) {
 			expectEvalErr:       false,
 			resolvers:           []resolver.SchemaResolver{definitionsResolver, discoveryResolver},
 
-			// expect a boolean, which is `true`.
+			// 期望一个布尔值，即 `true`。
 			expectedResult: true,
 		},
 		{
@@ -160,7 +160,7 @@ func TestTypeResolver(t *testing.T) {
 			expectEvalErr:       false,
 			resolvers:           []resolver.SchemaResolver{discoveryResolver},
 
-			// expect a boolean, which is `true`.
+			// 期望一个布尔值，即 `true`。
 			expectedResult: true,
 		},
 		{
@@ -198,8 +198,8 @@ func TestTypeResolver(t *testing.T) {
 		{
 			name: "items population",
 			obj:  sampleReplicatedDeployment(),
-			// `containers` is an array whose items are of `Container` type
-			// `ports` is an array of `ContainerPort`
+			// `containers` 是一个数组，其元素类型为 `Container`
+			// `ports` 是一个 `ContainerPort` 数组
 			expression: "size(self.spec.template.spec.containers) > 0 &&" +
 				"self.spec.template.spec.containers.all(c, c.ports.all(p, p.containerPort < 1024))",
 			expectResolutionErr: false,
@@ -307,10 +307,10 @@ func TestTypeResolver(t *testing.T) {
 
 }
 
-// TestBuiltinResolution asserts that all resolver implementations should
-// resolve Kubernetes built-in types without error.
+// TestBuiltinResolution 断言所有 resolver 实现都应该
+// 无错误地解析 Kubernetes 内置类型。
 func TestBuiltinResolution(t *testing.T) {
-	// before all, setup server and client
+	// 首先，设置 server 和 client
 	server, err := apiservertesting.StartTestServer(t, nil, nil, framework.SharedEtcd())
 	if err != nil {
 		t.Fatal(err)
@@ -342,24 +342,24 @@ func TestBuiltinResolution(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for gvk := range tc.scheme.AllKnownTypes() {
-				// skip aliases to metav1
+				// 跳过 metav1 的别名
 				if gvk.Kind == "APIGroup" || gvk.Kind == "APIGroupList" || gvk.Kind == "APIVersions" ||
 					strings.HasSuffix(gvk.Kind, "Options") || strings.HasSuffix(gvk.Kind, "Event") {
 					continue
 				}
-				// skip private, reference, and alias types that cannot appear in the wild
+				// 跳过不会实际出现的私有类型、引用类型和别名类型
 				if gvk.Kind == "SerializedReference" || gvk.Kind == "List" || gvk.Kind == "RangeAllocation" {
 					continue
 				}
-				// skip internal types
+				// 跳过内部类型
 				if gvk.Version == "__internal" {
 					continue
 				}
-				// apiextensions.k8s.io/v1beta1 not published
+				// apiextensions.k8s.io/v1beta1 未发布
 				if tc.name == "discovery" && gvk.Group == "apiextensions.k8s.io" && gvk.Version == "v1beta1" {
 					continue
 				}
-				// apiextensions.k8s.io ConversionReview not published
+				// apiextensions.k8s.io 的 ConversionReview 未发布
 				if tc.name == "discovery" && gvk.Group == "apiextensions.k8s.io" && gvk.Kind == "ConversionReview" {
 					continue
 				}
@@ -372,9 +372,9 @@ func TestBuiltinResolution(t *testing.T) {
 	}
 }
 
-// simpleCompileCEL compiles the CEL expression against the schema
-// with the practical defaults.
-// `self` is defined as the object being evaluated against.
+// simpleCompileCEL 根据 schema 编译 CEL 表达式，
+// 使用实际的默认值。
+// `self` 定义为被求值的对象。
 func simpleCompileCEL(schema *spec.Schema, expression string) (cel.Program, error) {
 	env, err := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()).Env(environment.NewExpressions)
 	if err != nil {
@@ -399,9 +399,9 @@ func simpleCompileCEL(schema *spec.Schema, expression string) (cel.Program, erro
 	return env.Program(ast)
 }
 
-// sampleReplicatedDeployment returns a sample Deployment with 2 replicas.
-// The object is not inlined because the schema of Deployment is well-known
-// and thus requires no reference when reading the test cases.
+// sampleReplicatedDeployment 返回一个包含 2 个副本的示例 Deployment。
+// 该对象没有内联，因为 Deployment 的 schema 是众所周知的，
+// 因此在阅读测试用例时无需参考它。
 func sampleReplicatedDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -445,7 +445,7 @@ func sampleReplicatedDeployment() *appsv1.Deployment {
 }
 
 func installCRD(apiExtensionClient extclientset.Interface) (*apiextensionsv1.CustomResourceDefinition, error) {
-	// CRD borrowed from https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/
+	// CRD 借鉴自 https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "crontabs.apis.example.com",
@@ -507,7 +507,7 @@ func (a *simpleActivation) Parent() interpreter.Activation {
 }
 
 func buildTestScheme() *runtime.Scheme {
-	// hand-picked schemes that the test API server serves
+	// 精心挑选的测试 API server 提供的 scheme
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)

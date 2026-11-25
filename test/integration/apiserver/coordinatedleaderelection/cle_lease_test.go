@@ -37,16 +37,16 @@ import (
 )
 
 func TestCoordinatedLeaderElectionLeaseTransfer(t *testing.T) {
-	// Use shorter interval for lease duration in integration test
+	// 集成测试中使用较短的 lease 持续时间间隔
 	timers := leaderelection.LeaderElectionTimers{
 		LeaseDuration: 5 * time.Second,
 		RenewDeadline: 3 * time.Second,
-		// RetryPeriod is intentionally set low because integration tests
-		// have a 10s timeout limit for wait.Poll(...) operations.
-		// This test forces an apiserver to give up its lease and enter a state of
-		// backoff when attempting to acquire the lease. Given the default JitterFactor of 1.2
-		// the maximum delay in renewal is 1 * (1 + 1.2) = 2.2s
-		// providing multiple renewal chances to minimize test flake.
+		// RetryPeriod 特意设置得较低，因为集成测试对 wait.Poll(...) 操作
+		// 有 10 秒的超时限制。
+		// 本测试会强制某个 apiserver 放弃其 lease，并在尝试获取 lease 时
+		// 进入 backoff 状态。鉴于默认的 JitterFactor 为 1.2，
+		// 续约的最大延迟为 1 * (1 + 1.2) = 2.2 秒，
+		// 从而提供多次续约机会，尽量减少测试的不稳定性。
 		RetryPeriod: 1 * time.Second,
 	}
 
@@ -54,7 +54,7 @@ func TestCoordinatedLeaderElectionLeaseTransfer(t *testing.T) {
 	etcd := framework.SharedEtcd()
 
 	flags := []string{fmt.Sprintf("--runtime-config=%s=true", v1beta1.SchemeGroupVersion)}
-	// Set the timers on the apiserver .
+	// 在 apiserver 上设置定时器。
 	flags = append(flags, fmt.Sprintf("--coordinated-leadership-lease-duration=%s", timers.LeaseDuration.String()), fmt.Sprintf("--coordinated-leadership-renew-deadline=%s", timers.RenewDeadline.String()), fmt.Sprintf("--coordinated-leadership-retry-period=%s", timers.RetryPeriod.String()))
 	server := apiservertesting.StartTestServerOrDie(t, apiservertesting.NewDefaultTestServerOptions(), flags, etcd)
 	defer server.TearDownFn()
@@ -125,7 +125,7 @@ func TestCoordinatedLeaderElectionLeaseTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait until the first apiserver releases the lease and second apiserver takes over the lock
+	// 等待第一个 apiserver 释放 lease，第二个 apiserver 接管锁
 	err = wait.PollUntilContextTimeout(ctx, 1000*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		lease, err := clientset.CoordinationV1().Leases("kube-system").Get(ctx, "leader-election-controller", metav1.GetOptions{})
 		if err != nil {
@@ -138,11 +138,11 @@ func TestCoordinatedLeaderElectionLeaseTransfer(t *testing.T) {
 		t.Error("Expected the cle lease lock to transition to the second apiserver")
 	}
 
-	// Shutdown the second apiserver
+	// 关闭第二个 apiserver
 	server2.TearDownFn()
 
-	// Forcefully expire the lease so the transition will be faster. Waiting the full duration could cause flakes.
-	// This must be done before the VAP on the first apiserver is removed to avoid conflicts in updating.
+	// 强制让 lease 过期，以便更快完成切换。等待完整时长可能导致测试不稳定。
+	// 这必须在移除第一个 apiserver 上的 VAP 之前完成，以避免更新时发生冲突。
 	lease, err = clientset.CoordinationV1().Leases("kube-system").Get(ctx, "leader-election-controller", metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestCoordinatedLeaderElectionLeaseTransfer(t *testing.T) {
 		}
 	}
 
-	// Allow writes again from the first apiserver
+	// 允许第一个 apiserver 再次写入
 	err = clientset.AdmissionregistrationV1().ValidatingAdmissionPolicies().Delete(ctx, vap.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestCoordinatedLeaderElectionLeaseTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ensure that the first apiserver is able to reacquire the CLE leader lease
+	// 确保第一个 apiserver 能够重新获取 CLE leader lease
 	err = wait.PollUntilContextTimeout(ctx, 1000*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		lease, err := clientset.CoordinationV1().Leases("kube-system").Get(ctx, "leader-election-controller", metav1.GetOptions{})
 		if err != nil {

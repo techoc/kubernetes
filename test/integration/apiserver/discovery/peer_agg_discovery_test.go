@@ -44,18 +44,18 @@ func TestPeerAggregatedDiscovery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Enable feature gates for peer-aggregated discovery and peer proxy.
+	// 为 peer-aggregated discovery 和 peer proxy 启用 feature gate。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.APIServerIdentity, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.UnknownVersionInteroperabilityProxy, true)
 
-	// Create shared etcd.
+	// 创建共享 etcd。
 	etcd := framework.SharedEtcd()
 
-	// Create certificates for aggregation and client-cert auth.
+	// 为聚合和 client-cert 认证创建证书。
 	proxyCA, err := createProxyCertContent()
 	require.NoError(t, err)
 
-	// Start two API servers with different API configurations.
+	// 启动两个具有不同 API 配置的 API server。
 	server.SetHostnameFuncForTests("test-server-a")
 	serverA := kubeapiservertesting.StartTestServerOrDie(t, &kubeapiservertesting.TestServerInstanceOptions{
 		EnableCertAuth: true,
@@ -80,7 +80,7 @@ func TestPeerAggregatedDiscovery(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("CheckIdentityLeases", func(t *testing.T) {
-		// Check for identity leases in the kube-system namespace
+		// 检查 kube-system namespace 中的 identity lease
 		leases, err := clientA.CoordinationV1().Leases("kube-system").List(ctx, metav1.ListOptions{
 			LabelSelector: "apiserver.kubernetes.io/identity=kube-apiserver",
 		})
@@ -104,18 +104,18 @@ func TestPeerAggregatedDiscoveryWithCRD(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Enable feature gates for peer-aggregated discovery and peer proxy.
+	// 为 peer-aggregated discovery 和 peer proxy 启用 feature gate。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.APIServerIdentity, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.UnknownVersionInteroperabilityProxy, true)
 
-	// Create shared etcd.
+	// 创建共享 etcd。
 	etcd := framework.SharedEtcd()
 
-	// Create certificates for aggregation and client-cert auth.
+	// 为聚合和 client-cert 认证创建证书。
 	proxyCA, err := createProxyCertContent()
 	require.NoError(t, err)
 
-	// Start two API servers with different API configurations.
+	// 启动两个具有不同 API 配置的 API server。
 	server.SetHostnameFuncForTests("test-server-a")
 	serverA := kubeapiservertesting.StartTestServerOrDie(t, &kubeapiservertesting.TestServerInstanceOptions{
 		EnableCertAuth: true,
@@ -143,7 +143,7 @@ func TestPeerAggregatedDiscoveryWithCRD(t *testing.T) {
 	_, err = apiextensionsclient.NewForConfig(serverB.ClientConfig)
 	require.NoError(t, err)
 
-	// Create a new CRD in serverA
+	// 在 serverA 中创建一个新的 CRD
 	crdName := "foos.example.com"
 	crdSpec := makeCRDSpec("example.com", "Foo", false, []string{"v1"})
 	crd := &apiextensionsv1.CustomResourceDefinition{
@@ -155,7 +155,7 @@ func TestPeerAggregatedDiscoveryWithCRD(t *testing.T) {
 	_, err = crdClientA.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
 	require.NoError(t, err, "Failed to create CRD %s", crdName)
 
-	// Wait for peer-aggregated discovery to reflect the new group on both servers
+	// 等待两个 server 上的 peer-aggregated discovery 反映新 group
 	for _, tc := range []struct {
 		name   string
 		client kubernetes.Interface
@@ -181,14 +181,14 @@ func TestPeerAggregatedDiscoveryWithCRD(t *testing.T) {
 		})
 	}
 
-	// Now delete the CRD and verify it gets removed from peer-aggregated discovery
+	// 现在删除 CRD，并验证它从 peer-aggregated discovery 中移除
 	t.Log("Deleting CRD from serverA...")
 	err = crdClientA.ApiextensionsV1().CustomResourceDefinitions().Delete(ctx, crdName, metav1.DeleteOptions{})
 	require.NoError(t, err, "Failed to delete CRD %s", crdName)
 
-	// Wait for peer-aggregated discovery to reflect the deletion on both servers
-	// The CRD should be excluded from local discovery and therefore should NOT appear
-	// in peer-aggregated discovery from ANY peer.
+	// 等待两个 server 上的 peer-aggregated discovery 反映删除操作
+	// 该 CRD 应从本地 discovery 中排除，因此不应出现在
+	// 任何 peer 的 peer-aggregated discovery 中。
 	for _, tc := range []struct {
 		name   string
 		client kubernetes.Interface
@@ -201,19 +201,19 @@ func TestPeerAggregatedDiscoveryWithCRD(t *testing.T) {
 			testCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 
-			// Wait for the CRD group to be removed from peer-aggregated discovery
-			// This validates:
-			// 1. The exclusion filter properly removes the CRD from local server's discovery
-			// 2. The grace period mechanism works (waits for peers to also see the deletion)
-			// 3. The peer-aggregated discovery doesn't show stale CRD data from any peer
+			// 等待 CRD group 从 peer-aggregated discovery 中移除
+			// 这验证了：
+			// 1. 排除过滤器能正确地将 CRD 从本地 server 的 discovery 中移除
+			// 2. 宽限期机制有效（等待 peers 也能看到删除操作）
+			// 3. peer-aggregated discovery 不会显示任何 peer 的陈旧 CRD 数据
 			err := WaitForPeerAggregatedDiscoveryWithCondition(testCtx, testClientSet, func(result apidiscoveryv2.APIGroupDiscoveryList) bool {
 				for _, group := range result.Items {
 					if group.Name == "example.com" {
-						// Still finding the group - not yet removed
+						// 仍能找到该 group —— 尚未移除
 						return false
 					}
 				}
-				// Group not found - successfully removed
+				// 未找到该 group —— 已成功移除
 				return true
 			})
 			require.NoError(t, err, "Peer-aggregated discovery should not show deleted CRD group on %s", tc.name)
@@ -221,8 +221,8 @@ func TestPeerAggregatedDiscoveryWithCRD(t *testing.T) {
 		})
 	}
 
-	// Additionally verify that no-peer discovery also doesn't show the CRD
-	// This ensures the CRD is truly removed and not just filtered from peer-aggregated discovery
+	// 另外验证 no-peer discovery 也不显示该 CRD
+	// 这确保 CRD 被真正移除，而不仅仅是从 peer-aggregated discovery 中过滤掉
 	for _, tc := range []struct {
 		name   string
 		client kubernetes.Interface
@@ -253,7 +253,7 @@ func testNoPeerDiscovery(t *testing.T, ctx context.Context, clientA, clientB kub
 	testClientA := testClientSet{kubeClientSet: clientA}
 	testClientB := testClientSet{kubeClientSet: clientB}
 
-	// Verify serverA does NOT have apps/v1 in no-peer discovery (disabled via runtime-config)
+	// 验证 serverA 的 no-peer discovery 中不含 apps/v1（通过 runtime-config 禁用）
 	resultA, err := FetchNoPeerDiscovery(ctx, testClientA)
 	require.NoError(t, err, "Should be able to fetch no-peer discovery from serverA")
 
@@ -270,7 +270,7 @@ func testNoPeerDiscovery(t *testing.T, ctx context.Context, clientA, clientB kub
 	}
 	require.False(t, hasAppsV1InA, "ServerA should NOT have apps/v1 in no-peer discovery (disabled via runtime-config)")
 
-	// Verify serverB does NOT have batch/v1 in no-peer discovery (disabled via runtime-config)
+	// 验证 serverB 的 no-peer discovery 中不含 batch/v1（通过 runtime-config 禁用）
 	resultB, err := FetchNoPeerDiscovery(ctx, testClientB)
 	require.NoError(t, err, "Should be able to fetch no-peer discovery from serverB")
 
@@ -287,7 +287,7 @@ func testNoPeerDiscovery(t *testing.T, ctx context.Context, clientA, clientB kub
 	}
 	require.False(t, hasBatchV1InB, "ServerB should NOT have batch/v1 in no-peer discovery (disabled via runtime-config)")
 
-	// Verify serverA HAS batch/v1 in no-peer discovery (should be enabled by default)
+	// 验证 serverA 的 no-peer discovery 中包含 batch/v1（默认应启用）
 	hasBatchV1InA := false
 	var foundGroupsA []string
 	for _, group := range resultA.Items {
@@ -304,7 +304,7 @@ func testNoPeerDiscovery(t *testing.T, ctx context.Context, clientA, clientB kub
 	t.Logf("ServerA no-peer discovery has groups: %v", foundGroupsA)
 	require.True(t, hasBatchV1InA, "ServerA should have batch/v1 in no-peer discovery (enabled by default)")
 
-	// Verify serverB HAS apps/v1 in no-peer discovery (should be enabled by default)
+	// 验证 serverB 的 no-peer discovery 中包含 apps/v1（默认应启用）
 	hasAppsV1InB := false
 	var foundGroupsB []string
 	for _, group := range resultB.Items {
@@ -341,7 +341,7 @@ func testPeerAggregatedDiscoveryEndpoint(t *testing.T, ctx context.Context, clie
 			testCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 			defer cancel()
 
-			// Wait for peer-aggregated discovery to contain both apps and batch groups.
+			// 等待 peer-aggregated discovery 同时包含 apps 和 batch group。
 			err := WaitForPeerAggregatedDiscoveryWithCondition(testCtx, testClientSet, func(result apidiscoveryv2.APIGroupDiscoveryList) bool {
 				hasApps, hasBatch := false, false
 

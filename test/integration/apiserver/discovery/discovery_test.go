@@ -110,7 +110,7 @@ var (
 						Verbs:      []string{"create", "list", "watch", "delete"},
 						ShortNames: []string{"jz"},
 						Categories: []string{"all"},
-						// aggregator will populate this with a non-nil value
+						// aggregator 会为此填充一个非 nil 值
 						ResponseKind: &metav1.GroupVersionKind{},
 					},
 				},
@@ -140,7 +140,7 @@ var (
 )
 
 func init() {
-	// Add all builtin types to scheme
+	// 将所有内置类型添加到 scheme
 	utilruntime.Must(k8sscheme.AddToScheme(scheme))
 	utilruntime.Must(aggregatorclientsetscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
@@ -153,8 +153,8 @@ func init() {
 	serialize = runtime.NewSimpleNegotiatedSerializer(info)
 }
 
-// Spins up an api server which is cleaned up at the end up the test
-// Returns some kubernetes clients
+// 启动一个 api server，并在测试结束时清理
+// 返回一些 kubernetes clients
 func setup(t *testing.T) (context.Context, testClientSet, context.CancelFunc) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
@@ -162,7 +162,7 @@ func setup(t *testing.T) (context.Context, testClientSet, context.CancelFunc) {
 	t.Cleanup(server.TearDownFn)
 
 	cfg := rest.CopyConfig(server.ClientConfig)
-	// Discovery integration tests can poll very frequently and should not flake due to client-side throttling.
+	// Discovery 集成测试可能非常频繁地轮询，不应因客户端限流而产生不稳定。
 	cfg.QPS = 50
 	cfg.Burst = 100
 	cfg.RateLimiter = nil
@@ -189,32 +189,32 @@ func setup(t *testing.T) (context.Context, testClientSet, context.CancelFunc) {
 }
 
 func TestReadinessAggregatedAPIServiceDiscovery(t *testing.T) {
-	// Keep any goroutines spawned from running past the execution of this test
+	// 防止本测试执行结束后仍有 goroutine 在运行
 	ctx, client, cleanup := setup(t)
 	defer cleanup()
 
-	// Create a resource manager whichs serves our GroupVersion
+	// 创建一个 resource manager 来提供我们的 GroupVersion
 	resourceManager := discoveryendpoint.NewResourceManager("apis")
 	resourceManager.SetGroups([]apidiscoveryv2.APIGroupDiscovery{basicTestGroup})
 
 	apiServiceWaitCh := make(chan struct{})
 
-	// Install our ResourceManager as an Aggregated APIService to the
-	// test server
+	// 将我们的 ResourceManager 作为 Aggregated APIService
+	// 安装到测试 server
 	service := NewFakeService("test-server", client, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/apis/stable.example.com") {
-			// Return invalid response so APIService can be marked as "available"
+			// 返回无效响应，以便 APIService 能被标记为 "available"
 			w.WriteHeader(http.StatusOK)
 		} else if strings.HasPrefix(r.URL.Path, "/apis") {
 			select {
 			case <-apiServiceWaitCh:
-				// Hang responding to discovery until aggregated discovery document contains the aggregated group marked as Stale.
+				// 暂停响应 discovery，直到 aggregated discovery 文档将聚合组标记为 Stale。
 				resourceManager.ServeHTTP(w, r)
 			case <-ctx.Done():
 				return
 			}
 		} else {
-			// reject openapi/v2, openapi/v3, apis/<group>/<version>
+			// 拒绝 openapi/v2、openapi/v3、apis/<group>/<version>
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
@@ -225,8 +225,8 @@ func TestReadinessAggregatedAPIServiceDiscovery(t *testing.T) {
 	}()
 	require.NoError(t, service.WaitForReady(ctx))
 
-	// For each groupversion served by our resourcemanager, create an APIService
-	// object connected to our fake APIServer
+	// 为 resourcemanager 提供的每个 groupversion 创建一个
+	// 连接到我们伪造 APIServer 的 APIService 对象
 	for _, versionInfo := range basicTestGroup.Versions {
 		groupVersion := metav1.GroupVersion{
 			Group:   basicTestGroup.Name,
@@ -236,12 +236,12 @@ func TestReadinessAggregatedAPIServiceDiscovery(t *testing.T) {
 		require.NoError(t, registerAPIService(ctx, client, groupVersion, service))
 	}
 
-	// Keep repeatedly fetching document from aggregator.
-	// Check to see if it initially contains the aggregated group as stale
+	// 持续从 aggregator 获取文档。
+	// 检查它最初是否将聚合组包含为 stale
 	require.NoError(t, WaitForGroups(ctx, client, basicTestGroupStale))
 	require.NoError(t, WaitForRootPaths(t, ctx, client, sets.New("/apis/"+basicTestGroup.Name), nil))
 
-	// Allow the APIService to start responding and ensure that Freshness is updated when the APIService is reacheable.
+	// 允许 APIService 开始响应，并确保 APIService 可访问时 Freshness 会更新。
 	close(apiServiceWaitCh)
 	require.NoError(t, WaitForGroups(ctx, client, basicTestGroupWithFixup))
 }
@@ -251,7 +251,7 @@ func registerAPIService(ctx context.Context, client aggregator.Interface, gv met
 	if port == nil {
 		return errors.New("service not yet started")
 	}
-	// Register the APIService
+	// 注册 APIService
 	patch := apiregistrationv1.APIService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: gv.Version + "." + gv.Group,
@@ -286,24 +286,24 @@ func unregisterAPIService(ctx context.Context, client aggregator.Interface, gv m
 }
 
 func TestAggregatedAPIServiceDiscovery(t *testing.T) {
-	// Keep any goroutines spawned from running past the execution of this test
+	// 防止本测试执行结束后仍有 goroutine 在运行
 	ctx, client, cleanup := setup(t)
 	defer cleanup()
 
-	// Create a resource manager whichs serves our GroupVersion
+	// 创建一个 resource manager 来提供我们的 GroupVersion
 	resourceManager := discoveryendpoint.NewResourceManager("apis")
 	resourceManager.SetGroups([]apidiscoveryv2.APIGroupDiscovery{basicTestGroup})
 
-	// Install our ResourceManager as an Aggregated APIService to the
-	// test server
+	// 将我们的 ResourceManager 作为 Aggregated APIService
+	// 安装到测试 server
 	service := NewFakeService("test-server", client, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/apis") {
 			resourceManager.ServeHTTP(w, r)
 		} else if strings.HasPrefix(r.URL.Path, "/apis/stable.example.com") {
-			// Return invalid response so APIService can be marked as "available"
+			// 返回无效响应，以便 APIService 能被标记为 "available"
 			w.WriteHeader(http.StatusOK)
 		} else {
-			// reject openapi/v2, openapi/v3, apis/<group>/<version>
+			// 拒绝 openapi/v2、openapi/v3、apis/<group>/<version>
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
@@ -314,8 +314,8 @@ func TestAggregatedAPIServiceDiscovery(t *testing.T) {
 	}()
 	require.NoError(t, service.WaitForReady(ctx))
 
-	// For each groupversion served by our resourcemanager, create an APIService
-	// object connected to our fake APIServer
+	// 为 resourcemanager 提供的每个 groupversion 创建一个
+	// 连接到我们伪造 APIServer 的 APIService 对象
 	var groupVersions []metav1.GroupVersion
 	for _, versionInfo := range basicTestGroup.Versions {
 		groupVersion := metav1.GroupVersion{
@@ -327,12 +327,12 @@ func TestAggregatedAPIServiceDiscovery(t *testing.T) {
 		groupVersions = append(groupVersions, groupVersion)
 	}
 
-	// Keep repeatedly fetching document from aggregator.
-	// Check to see if it contains our service within a reasonable amount of time
+	// 持续从 aggregator 获取文档。
+	// 检查它在合理时间内是否包含我们的 service
 	require.NoError(t, WaitForGroups(ctx, client, basicTestGroupWithFixup))
 	require.NoError(t, WaitForRootPaths(t, ctx, client, sets.New("/apis/"+basicTestGroup.Name), nil))
 
-	// Unregister and ensure the group gets dropped from root paths
+	// 取消注册，并确保该 group 从 root paths 中移除
 	for _, groupVersion := range groupVersions {
 		require.NoError(t, unregisterAPIService(ctx, client, groupVersion))
 	}
@@ -340,12 +340,12 @@ func TestAggregatedAPIServiceDiscovery(t *testing.T) {
 }
 
 func runTestCases(t *testing.T, cases []testCase) {
-	// Keep any goroutines spawned from running past the execution of this test
+	// 防止本测试执行结束后仍有 goroutine 在运行
 	ctx, client, cleanup := setup(t)
 	defer cleanup()
 
-	// Fetch the original discovery information so we can wait for it to
-	// reset between tests
+	// 获取原始 discovery 信息，以便在各测试之间
+	// 等待其重置
 	originalV1, err := FetchV1DiscoveryGroups(ctx, client)
 	require.NoError(t, err)
 
@@ -384,12 +384,12 @@ func runTestCases(t *testing.T, cases []testCase) {
 	}
 }
 
-// Declarative tests targeting CRD integration
+// 针对 CRD 集成的声明式测试
 func TestCRD(t *testing.T) {
 	runTestCases(t, []testCase{
 		{
-			// Show that when a CRD is added it gets included on the discovery doc
-			// within a reasonable amount of time
+			// 验证添加 CRD 后，它会在合理时间内
+			// 被包含在 discovery 文档中
 			Name: "CRDInclusion",
 			Actions: []testAction{
 				applyCRD(makeCRDSpec(stableGroup, "Foo", false, []string{"v1", "v1alpha1", "v1beta1", "v2"})),
@@ -398,7 +398,7 @@ func TestCRD(t *testing.T) {
 			},
 		},
 		{
-			// Show that a CRD added to the discovery doc can also be removed
+			// 验证添加到 discovery 文档中的 CRD 也可以被移除
 			Name: "CRDRemoval",
 			Actions: []testAction{
 				applyCRD(makeCRDSpec(stableGroup, "Foo", false, []string{"v1", "v1alpha1", "v1beta1", "v2"})),
@@ -413,11 +413,11 @@ func TestCRD(t *testing.T) {
 			},
 		},
 		{
-			// Show that if CRD and APIService share a groupversion, and the
-			// APIService is deleted, and CRD updated, the APIService remains in
-			// discovery.
-			// This test simulates a resync of CRD controler to show that eventually
-			// APIService is recreated
+			// 验证如果 CRD 与 APIService 共享 groupversion，
+			// 且 APIService 被删除、CRD 得到更新，
+			// APIService 仍保留在 discovery 中。
+			// 本测试模拟 CRD controller 的重新同步，
+			// 以表明最终 APIService 会被重新创建
 			Name: "CRDAPIServiceOverlap",
 			Actions: []testAction{
 				applyAPIService(
@@ -434,41 +434,41 @@ func TestCRD(t *testing.T) {
 					},
 				),
 
-				// Wait for GV to appear in both discovery documents
+				// 等待 GV 出现在两个 discovery 文档中
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1}),
 
 				applyCRD(makeCRDSpec(stableGroup, "Bar", false, []string{"v1", "v2"})),
 
-				// Show that we have v1 and v2 but v1 is stale
+				// 验证存在 v1 和 v2，但 v1 是 stale
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV2}),
 				waitForStaleGroupVersionsV2([]metav1.GroupVersion{stableV1}),
 				waitForFreshGroupVersionsV2([]metav1.GroupVersion{stableV2}),
 
-				// Delete APIService shared by the aggregated apiservice and
-				// CRD
+				// 删除 aggregated apiservice 与 CRD
+				// 共享的 APIService
 				deleteObject{
 					GroupVersionResource: metav1.GroupVersionResource(apiregistrationv1.SchemeGroupVersion.WithResource("apiservices")),
 					Name:                 "v1.stable.example.com",
 				},
 
-				// Update CRD to trigger a resync by adding a category and new groupversion
+				// 通过添加 category 和新的 groupversion 来更新 CRD，以触发重新同步
 				applyCRD(makeCRDSpec(stableGroup, "Bar", false, []string{"v1", "v2", "v1alpha1"}, "all")),
 
-				// Show that the groupversion is re-added back
+				// 验证该 groupversion 被重新添加回来
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV2, stableV1alpha1}),
 				waitForFreshGroupVersionsV2([]metav1.GroupVersion{stableV1, stableV2, stableV1alpha1}),
 			},
 		},
 		{
-			// Show that if CRD and Aggregated APIservice share a groupversiom,
-			// The aggregated apiservice's discovery information is shown in both
-			// v1 and v2 discovery
+			// 验证如果 CRD 与 Aggregated APIService 共享 groupversion，
+			// aggregated apiservice 的 discovery 信息会同时显示在
+			// v1 和 v2 discovery 中
 			Name: "CRDAPIServiceSameGroupDifferentVersions",
 			Actions: []testAction{
-				// Wait for CRD to apply
+				// 等待 CRD 生效
 				applyCRD(makeCRDSpec(stableGroup, "Bar", false, []string{"v2", "v1alpha1"})),
-				// Wait for GV to appear in both discovery documents
+				// 等待 GV 出现在两个 discovery 文档中
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV2, stableV1alpha1}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV2, stableV1alpha1}),
 
@@ -486,22 +486,22 @@ func TestCRD(t *testing.T) {
 					},
 				),
 
-				// We should now have stable v1 available
+				// 现在应该有 stable v1 可用
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1}),
 
-				// The CRD group-versions not served by the aggregated
-				// apiservice should still be availablee
+				// aggregated apiservice 不提供的
+				// CRD group-version 仍应可用
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV2, stableV1alpha1}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV2, stableV1alpha1}),
 
-				// Remove API service. Show we have switched to CRD
+				// 移除 API service。验证已切换到 CRD
 				deleteObject{
 					GroupVersionResource: metav1.GroupVersionResource(apiregistrationv1.SchemeGroupVersion.WithResource("apiservices")),
 					Name:                 "v1.stable.example.com",
 				},
 
-				// Show that we still have stable v1 since it is in the CRD
+				// 验证由于 CRD 中包含 stable v1，它仍然存在
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV2, stableV1alpha1}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV2, stableV1alpha1}),
 
@@ -510,19 +510,19 @@ func TestCRD(t *testing.T) {
 			},
 		},
 		{
-			// Show that if CRD and a builtin share a group version,
-			// the builtin takes precedence in both versions of discovery
+			// 验证如果 CRD 与内置类型共享 group version，
+			// 内置类型在两个版本的 discovery 中都优先
 			Name: "CRDBuiltinOverlapPrecence",
 			Actions: []testAction{
-				// Create CRD that overrides a builtin
+				// 创建覆盖内置类型的 CRD
 				applyCRD(makeCRDSpec("apiextensions.k8s.io", "Bar", true, []string{"v1", "v2", "vfake"})),
 
 				waitForGroupVersionsV1([]metav1.GroupVersion{{Group: "apiextensions.k8s.io", Version: "vfake"}}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{{Group: "apiextensions.k8s.io", Version: "vfake"}}),
 
-				// Show that the builtin group-version is still used for V1
-				// By showing presence of v1.CustomResourceDefinition
-				// and absence of v1.Bar
+				// 验证 V1 仍使用内置 group-version：
+				// 显示存在 v1.CustomResourceDefinition，
+				// 且不存在 v1.Bar
 				waitForResourcesV1([]metav1.GroupVersionResource{
 					{
 						Group:    "apiextensions.k8s.io",
@@ -565,28 +565,28 @@ func TestCRD(t *testing.T) {
 			},
 		},
 		{
-			// Tests that a race discovered during alpha phase of the feature is fixed.
-			// Rare race would occur if a CRD was synced before the removal of an aggregated
-			// APIService could be synced.
-			// To test this we:
-			//  1. Add CRD to apiserver
-			// 	2. Wait for it to sync
-			//  3. Add aggregated APIService with same groupversion
-			//  4. Remove aggregated apiservice
-			//  5. Check that we have CRD GVs in discovery document
-			// Show that if CRD and APIService share a groupversion, and the
-			// APIService is deleted, and CRD updated, the groupversion from
-			// the CRD remains in discovery.
+			// 测试在该功能 alpha 阶段发现的竞态问题已修复。
+			// 如果 CRD 在 aggregated APIService 的移除完成同步之前
+			// 就完成同步，则很少会发生竞态。
+			// 测试方法：
+			//  1. 向 apiserver 添加 CRD
+			// 	2. 等待它完成同步
+			//  3. 添加具有相同 groupversion 的 aggregated APIService
+			//  4. 移除 aggregated apiservice
+			//  5. 检查 discovery 文档中存在 CRD 的 GV
+			// 验证如果 CRD 与 APIService 共享 groupversion，
+			// 且 APIService 被删除、CRD 得到更新，
+			// 来自 CRD 的 groupversion 仍保留在 discovery 中。
 			Name: "Race",
 			Actions: []testAction{
-				// Create CRD with the same GV as the aggregated APIService
+				// 创建与 aggregated APIService 具有相同 GV 的 CRD
 				applyCRD(makeCRDSpec(stableGroup, "Bar", false, []string{"v1", "v2"})),
 
-				// only CRD has stable v2,  this will show that CRD has been synced
+				// 只有 CRD 提供 stable v2，这表明 CRD 已完成同步
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV2}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1, stableV2}),
 
-				// Add Aggregated APIService that overlaps the CRD.
+				// 添加与 CRD 重叠的 Aggregated APIService。
 				applyAPIService(
 					apiregistrationv1.APIServiceSpec{
 						Group:                 stableGroup,
@@ -601,14 +601,14 @@ func TestCRD(t *testing.T) {
 					},
 				),
 
-				// Delete APIService shared by the aggregated apiservice and
-				// CRD
+				// 删除 aggregated apiservice 与 CRD
+				// 共享的 APIService
 				deleteObject{
 					GroupVersionResource: metav1.GroupVersionResource(apiregistrationv1.SchemeGroupVersion.WithResource("apiservices")),
 					Name:                 "v1.stable.example.com",
 				},
 
-				// Show the CRD (with stablev2) is the one which is now advertised
+				// 验证现在对外公布的是 CRD（带有 stablev2）
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV2}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1, stableV2}),
 			},
@@ -624,10 +624,10 @@ func TestFreshness(t *testing.T) {
 				return nil
 			}
 
-			// Track the stale gvs in array for nice diff output upon test failure
+			// 将 stale 的 gv 记录在数组中，以便测试失败时输出清晰的 diff
 			staleGVs := []metav1.GroupVersion{}
 
-			// Iterate through input so order does not matter
+			// 遍历输入，因此顺序无关紧要
 			for _, targetGv := range gvs {
 				entry := FindGroupVersionV2(document, targetGv)
 				if entry == nil {
@@ -636,7 +636,7 @@ func TestFreshness(t *testing.T) {
 
 				switch entry.Freshness {
 				case apidiscoveryv2.DiscoveryFreshnessCurrent:
-					// Skip
+					// 跳过
 				case apidiscoveryv2.DiscoveryFreshnessStale:
 					staleGVs = append(staleGVs, targetGv)
 				default:
@@ -657,30 +657,30 @@ func TestFreshness(t *testing.T) {
 		{
 			Name: "BuiltinsFresh",
 			Actions: []testAction{
-				// Wait for discovery ready
+				// 等待 discovery 就绪
 				waitForGroupVersionsV2{metav1.GroupVersion(apiregistrationv1.SchemeGroupVersion)},
-				// Require there are no stale groupversions and no unrecognized
-				// GVs
+				// 要求不存在 stale 的 groupversion，也不存在无法识别的
+				// GV
 				requireStaleGVs(),
 			},
 		},
 		{
-			// CRD freshness is always current
+			// CRD 的 freshness 始终是 current
 			Name: "CRDFresh",
 			Actions: []testAction{
-				// Add a CRD and wait for it to appear in discovery
+				// 添加 CRD 并等待它出现在 discovery 中
 				applyCRD(makeCRDSpec(stableGroup, "Foo", false, []string{"v1", "v1alpha1", "v1beta1", "v2"})),
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1beta1, stableV2}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1beta1, stableV2}),
 
-				// Test CRD is current by requiring there is nothing stale
+				// 通过要求没有 stale 项来测试 CRD 是 current
 				requireStaleGVs(),
 			},
 		},
 		{
-			// Make an aggregated APIService that's unreachable and show
-			// that its groupversion is included in the discovery document as
-			// stale
+			// 创建一个不可达的 aggregated APIService，验证
+			// 其 groupversion 会以 stale 状态
+			// 包含在 discovery 文档中
 			Name: "AggregatedUnreachable",
 			Actions: []testAction{
 				applyAPIService{
@@ -694,7 +694,7 @@ func TestFreshness(t *testing.T) {
 					},
 				},
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1}),
-				// Require there is one and only one stale GV and it is stableV1
+				// 要求有且仅有一个 stale GV，即 stableV1
 				requireStaleGVs(stableV1),
 			},
 		},
@@ -702,8 +702,8 @@ func TestFreshness(t *testing.T) {
 
 }
 
-// Shows a group for which multiple APIServices specify a GroupPriorityMinimum,
-// it is sorted the same in both versions of discovery
+// 展示当多个 APIService 为某个 group 指定 GroupPriorityMinimum 时，
+// 它在两个版本的 discovery 中排序相同
 func TestGroupPriority(t *testing.T) {
 	makeApiServiceSpec := func(gv metav1.GroupVersion, groupPriorityMin, versionPriority int) apiregistrationv1.APIServiceSpec {
 		return apiregistrationv1.APIServiceSpec{
@@ -720,9 +720,9 @@ func TestGroupPriority(t *testing.T) {
 	}
 
 	checkGVOrder := inlineAction(func(ctx context.Context, client testClient) (err error) {
-		// Fetch v1 document and v2 document, and ensure they have
-		// equal orderings of groupversions. and nothing missing or
-		// extra.
+		// 获取 v1 和 v2 文档，确保它们的 groupversion
+		// 顺序相同，且没有缺失或
+		// 多余的项。
 		v1GroupsAndVersions, err := FetchV1DiscoveryGroups(ctx, client)
 		if err != nil {
 			return err
@@ -762,8 +762,8 @@ func TestGroupPriority(t *testing.T) {
 
 	runTestCases(t, []testCase{
 		{
-			// Show that the legacy and aggregated discovery docs have the same
-			// set of builtin groupversions
+			// 验证 legacy 和 aggregated discovery 文档具有相同
+			// 的内置 groupversion 集合
 			Name: "BuiltinsAndOrdering",
 			Actions: []testAction{
 				waitForGroupVersionsV1{metav1.GroupVersion(apiregistrationv1.SchemeGroupVersion)},
@@ -772,33 +772,33 @@ func TestGroupPriority(t *testing.T) {
 			},
 		},
 		{
-			// Show that a very high priority group is sorted first (below apiregistration v1)
-			// Also show the ordering is same for both v1 and v2 discovery apis
-			// Does not vary version priority
+			// 验证优先级非常高的 group 排在首位（位于 apiregistration v1 之后）
+			// 同时验证 v1 和 v2 discovery API 的排序相同
+			// 不变更 version priority
 			Name: "HighGroupPriority",
 			Actions: []testAction{
-				// A VERY high priority which should take precedence
-				// 20000 is highest possible priority
+				// 非常高的优先级，应当优先
+				// 20000 是可能的最高优先级
 				applyAPIService(makeApiServiceSpec(stableV1, 20000, 15)),
-				// A VERY low priority which should be ignored
+				// 非常低的优先级，应当被忽略
 				applyAPIService(makeApiServiceSpec(stableV1alpha1, 1, 15)),
-				// A medium-high priority (that conflicts with k8s) which should be ignored
+				// 中高优先级（与 k8s 冲突），应当被忽略
 				applyAPIService(makeApiServiceSpec(stableV1alpha2, 17300, 15)),
-				// Wait for all the added group-versions to appear in both discovery documents
+				// 等待所有添加的 group-version 出现在两个 discovery 文档中
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1alpha2}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1alpha2}),
-				// Check that both v1 and v2 endpoints have exactly the same
-				// sets of groupversions
+				// 检查 v1 和 v2 endpoint 的 groupversion
+				// 集合完全相同
 				checkGVOrder,
-				// Check that the first group-version is the one with the highest
-				// priority
+				// 检查第一个 group-version 是优先级
+				// 最高的那个
 				inlineAction(func(ctx context.Context, client testClient) error {
 					v2GroupsAndVersions, err := FetchV2Discovery(ctx, client)
 					if err != nil {
 						return err
 					}
 
-					// First group should always be apiregistration.k8s.io
+					// 第一个 group 应始终是 apiregistration.k8s.io
 					secondGV := metav1.GroupVersion{
 						Group:   v2GroupsAndVersions.Items[1].Name,
 						Version: v2GroupsAndVersions.Items[1].Versions[0].Version,
@@ -813,15 +813,15 @@ func TestGroupPriority(t *testing.T) {
 			},
 		},
 		{
-			// Show that a very low group priority is ordered last
+			// 验证 group 优先级非常低的排在最后
 			Name: "LowGroupPriority",
 			Actions: []testAction{
-				// A minimal priority
+				// 最低优先级
 				applyAPIService(makeApiServiceSpec(stableV1alpha1, 1, 15)),
-				// Wait for all the added group-versions to appear in v2 discovery
+				// 等待所有添加的 group-version 出现在 v2 discovery 中
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1alpha1}),
-				// Check that the last group-version is the one with the lowest
-				// priority
+				// 检查最后一个 group-version 是优先级
+				// 最低的那个
 				inlineAction(func(ctx context.Context, client testClient) error {
 					v2GroupsAndVersions, err := FetchV2Discovery(ctx, client)
 					if err != nil {
@@ -840,35 +840,35 @@ func TestGroupPriority(t *testing.T) {
 
 					return nil
 				}),
-				// Wait for all the added group-versions to appear in both discovery documents
+				// 等待所有添加的 group-version 出现在两个 discovery 文档中
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1alpha1}),
-				// Check that both v1 and v2 endpoints have exactly the same
-				// sets of groupversions
+				// 检查 v1 和 v2 endpoint 的 groupversion
+				// 集合完全相同
 				checkGVOrder,
 			},
 		},
 		{
-			// Show that versions within a group are sorted by priority
+			// 验证 group 内的版本按优先级排序
 			Name: "VersionPriority",
 			Actions: []testAction{
 				applyAPIService(makeApiServiceSpec(stableV1, 1000, 2)),
 				applyAPIService(makeApiServiceSpec(stableV1alpha1, 1000, 1)),
 				applyAPIService(makeApiServiceSpec(stableV1alpha2, 1000, 3)),
-				// Wait for all the added group-versions to appear in both discovery documents
+				// 等待所有添加的 group-version 出现在两个 discovery 文档中
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1alpha2}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1alpha2}),
-				// Check that both v1 and v2 endpoints have exactly the same
-				// sets of groupversions
+				// 检查 v1 和 v2 endpoint 的 groupversion
+				// 集合完全相同
 				checkGVOrder,
 				inlineAction(func(ctx context.Context, client testClient) error {
-					// Find the entry for stable.example.com
-					// and show the versions are ordered how we expect
+					// 查找 stable.example.com 对应的条目，
+					// 验证版本顺序符合预期
 					v2GroupsAndVersions, err := FetchV2Discovery(ctx, client)
 					if err != nil {
 						return err
 					}
 
-					// Should be ordered last for this test
+					// 在本测试中应排在最后
 					group := v2GroupsAndVersions.Items[len(v2GroupsAndVersions.Items)-1]
 					if group.Name != stableGroup {
 						return fmt.Errorf("group is not where we expect: found %v, expected %v", group.Name, stableGroup)
@@ -894,9 +894,9 @@ func TestGroupPriority(t *testing.T) {
 			},
 		},
 		{
-			// Show that versions within a group are sorted by priority
-			// and that equal versions will be sorted by a kube-aware version
-			// comparator
+			// 验证 group 内的版本按优先级排序，
+			// 且优先级相同的版本将按 Kubernetes 感知的版本
+			// 比较器排序
 			Name: "VersionPriorityTiebreaker",
 			Actions: []testAction{
 				applyAPIService(makeApiServiceSpec(stableV1, 1000, 15)),
@@ -904,21 +904,21 @@ func TestGroupPriority(t *testing.T) {
 				applyAPIService(makeApiServiceSpec(stableV1alpha2, 1000, 15)),
 				applyAPIService(makeApiServiceSpec(stableV1beta1, 1000, 15)),
 				applyAPIService(makeApiServiceSpec(stableV2, 1000, 15)),
-				// Wait for all the added group-versions to appear in both discovery documents
+				// 等待所有添加的 group-version 出现在两个 discovery 文档中
 				waitForGroupVersionsV1([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1alpha2, stableV1beta1, stableV2}),
 				waitForGroupVersionsV2([]metav1.GroupVersion{stableV1, stableV1alpha1, stableV1alpha2, stableV1beta1, stableV2}),
-				// Check that both v1 and v2 endpoints have exactly the same
-				// sets of groupversions
+				// 检查 v1 和 v2 endpoint 的 groupversion
+				// 集合完全相同
 				checkGVOrder,
 				inlineAction(func(ctx context.Context, client testClient) error {
-					// Find the entry for stable.example.com
-					// and show the versions are ordered how we expect
+					// 查找 stable.example.com 对应的条目，
+					// 验证版本顺序符合预期
 					v2GroupsAndVersions, err := FetchV2Discovery(ctx, client)
 					if err != nil {
 						return err
 					}
 
-					// Should be ordered last for this test
+					// 在本测试中应排在最后
 					group := v2GroupsAndVersions.Items[len(v2GroupsAndVersions.Items)-1]
 					if group.Name != stableGroup {
 						return fmt.Errorf("group is not where we expect: found %v, expected %v", group.Name, stableGroup)

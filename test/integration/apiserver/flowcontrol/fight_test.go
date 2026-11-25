@@ -38,23 +38,23 @@ import (
 )
 
 /*
-fightTest configures a test of how API Priority and Fairness config
+fightTest 配置一个测试，用于观察 API Priority and Fairness 配置
 
-	controllers fight when they disagree on how to set FlowSchemaStatus.
-	In particular, they set the condition that indicates integrity of
-	the reference to the PriorityLevelConfiguration.  The scenario tested is
-	two teams of controllers, where the controllers in one team set the
-	condition normally and the controllers in the other team set the condition
-	to the opposite value.
+	controller 在如何设置 FlowSchemaStatus 存在分歧时如何相互争用。
+	具体而言，它们设置用于指示对 PriorityLevelConfiguration
+	的引用是否完整的 condition。所测试的场景是
+	两组 controller，其中一组正常设置该 condition，
+	另一组 controller 则设置
+	相反的值。
 
-	This is a behavioral test: it instantiates these controllers and runs them
-	almost normally.  The test aims to run the controllers for a little under
-	2 minutes.  The test takes clock readings to get upper and lower bounds on
-	how long each controller ran, and calculates consequent bounds on the number
-	of writes that should happen to each FlowSchemaStatus.  The test creates
-	an informer to observe the writes.  The calculated lower bound on the
-	number of writes is very lax, assuming only that one write can be done
-	every 10 seconds.
+	这是一个行为测试：它实例化这些 controller 并让它们
+	近乎正常地运行。测试目标是让 controller
+	运行略少于 2 分钟。测试通过读取时钟来获取
+	每个 controller 运行时长的上下界，并据此计算
+	每个 FlowSchemaStatus 应发生的写入次数的界限。
+	测试创建一个 informer 来观察写入。计算出的
+	写入次数下界非常宽松，只假设每 10 秒可以完成
+	一次写入。
 */
 type fightTest struct {
 	t              *testing.T
@@ -68,7 +68,7 @@ type fightTest struct {
 
 	countsMutex sync.Mutex
 
-	// writeCounts maps FlowSchema.Name to number of writes
+	// writeCounts 将 FlowSchema.Name 映射到写入次数
 	writeCounts map[string]int
 }
 
@@ -136,7 +136,7 @@ func (ft *fightTest) createController(invert bool, i int) {
 		AsFieldManager:         fieldMgr,
 		InformerFactory:        informerFactory,
 		FlowcontrolClient:      fcIfc,
-		ServerConcurrencyLimit: 200, // server concurrency limit
+		ServerConcurrencyLimit: 200, // server 并发限制
 		ReqsGaugeVec:           metrics.PriorityLevelConcurrencyGaugeVec,
 		ExecSeatsGaugeVec:      metrics.PriorityLevelExecutionSeatsGaugeVec,
 		QueueSetFactory:        fqtesting.NewNoRestraintFactory(),
@@ -182,8 +182,8 @@ func TestConfigConsumerFight(t *testing.T) {
 
 func (ft *fightTest) foreach(visit func(invert bool, i int)) {
 	for i := 0; i < ft.teamSize; i++ {
-		// The order of the following enumeration is not deterministic,
-		// and that is good.
+		// 以下枚举的顺序不是确定的，
+		// 这样很好。
 		invert := rand.Intn(2) == 0
 		visit(invert, i)
 		visit(!invert, i)
