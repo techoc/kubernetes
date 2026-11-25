@@ -60,30 +60,27 @@ const (
 	csiResizeWaitPeriod        = 5 * time.Minute
 	csiVolumeAttachmentTimeout = 7 * time.Minute
 	csiDriverTimeout           = 2 * time.Minute
-	// how long to wait for GetVolumeStats
+	// 等待 GetVolumeStats 的时长
 	csiNodeVolumeStatWaitPeriod = 2 * time.Minute
-	// how long to wait for Resizing Condition on PVC to appear
+	// 等待 PVC 上出现 Resizing Condition 的时长
 	csiResizingConditionWait = 2 * time.Minute
 
-	// Time for starting a pod with a volume.
+	// 启动带 volume 的 pod 的超时时间。
 	csiPodRunningTimeout = 5 * time.Minute
 
-	// How log to wait for kubelet to unstage a volume after a pod is deleted
+	// pod 删除后等待 kubelet unstage volume 的时长
 	csiUnstageWaitTimeout = 1 * time.Minute
 )
 
-// csiCall represents an expected call from Kubernetes to CSI mock driver and
-// expected return value.
-// When matching expected csiCall with a real CSI mock driver output, one csiCall
-// matches *one or more* calls with the same method and error code.
-// This is due to exponential backoff in Kubernetes, where the test cannot expect
-// exact number of call repetitions.
+// csiCall 表示期望从 Kubernetes 发往 CSI mock driver 的一次调用及其返回值。
+// 将 csiCall 与 mock driver 的实际输出匹配时，一个 csiCall 可匹配
+// 一个或多个方法名和错误码相同的调用。
+// 这是因为 Kubernetes 采用指数 backoff，测试无法预期调用重复的确切次数。
 type csiCall struct {
 	expectedMethod string
 	expectedError  codes.Code
 	expectedSecret map[string]string
-	// This is a mark for the test itself to delete the tested pod *after*
-	// this csiCall is received.
+	// 标记测试在收到此 csiCall *之后* 删除被测 pod。
 	deletePod bool
 }
 
@@ -95,19 +92,19 @@ type testParameters struct {
 	enableTopology      bool
 	podInfo             *bool
 	storageCapacity     *bool
-	scName              string // pre-selected storage class name; must be unique in the cluster
-	enableResizing      bool   // enable resizing for both CSI mock driver and storageClass.
-	enableNodeExpansion bool   // enable node expansion for CSI mock driver
-	// just disable resizing on driver it overrides enableResizing flag for CSI mock driver
+	scName              string // 预选的 storage class 名称；在集群中必须唯一
+	enableResizing      bool   // 同时为 CSI mock driver 和 storageClass 启用 resizing
+	enableNodeExpansion bool   // 为 CSI mock driver 启用 node expansion
+	// 只禁用 driver 上的 resizing，会覆盖 CSI mock driver 的 enableResizing 标志
 	disableResizingOnDriver      bool
 	disableControllerExpansion   bool
 	enableSnapshot               bool
-	enableVolumeMountGroup       bool // enable the VOLUME_MOUNT_GROUP node capability in the CSI mock driver.
+	enableVolumeMountGroup       bool // 在 CSI mock driver 中启用 VOLUME_MOUNT_GROUP node capability
 	enableNodeVolumeCondition    bool
 	enableNodeStorageHealth      bool
 	hooks                        *drivers.Hooks
 	tokenRequests                []storagev1.TokenRequest
-	serviceAccountTokenInSecrets *bool // if true, the service account token should be passed only via secrets
+	serviceAccountTokenInSecrets *bool // 为 true 时，service account token 只能通过 secret 传递
 	requiresRepublish            *bool
 	fsGroupPolicy                *storagev1.FSGroupPolicy
 	enableSELinuxMount           *bool
@@ -190,25 +187,20 @@ func (m *mockDriverSetup) init(ctx context.Context, tp testParameters) {
 		ServiceAccountTokenInSecrets: tp.serviceAccountTokenInSecrets,
 	}
 
-	// At the moment, only tests which need hooks are
-	// using the embedded CSI mock driver. The rest run
-	// the driver inside the cluster although they could
-	// changed to use embedding merely by setting
-	// driverOpts.embedded to true.
+	// 目前只有需要 hook 的测试使用嵌入式 CSI mock driver，
+	// 其余测试仍在集群内运行 driver，尽管只需设置
+	// driverOpts.embedded 为 true 就能改用嵌入式。
 	//
-	// Not enabling it for all tests minimizes
-	// the risk that the introduction of embedded breaks
-	// some existings tests and avoids a dependency
-	// on port forwarding, which is important if some of
-	// these tests are supposed to become part of
-	// conformance testing (port forwarding isn't
-	// currently required).
+	// 不对所有测试启用嵌入式，是为了降低引入嵌入式后破坏
+	// 现有测试的风险，同时避免依赖 port forwarding —— 如果
+	// 其中某些测试要纳入 conformance 测试，这一点很重要
+	//（目前并不要求 port forwarding）。
 	if tp.hooks != nil {
 		driverOpts.Embedded = true
 		driverOpts.Hooks = *tp.hooks
 	}
 
-	// this just disable resizing on driver, keeping resizing on SC enabled.
+	// 只禁用 driver 上的 resizing，保持 SC 上的 resizing 开启。
 	if tp.disableResizingOnDriver {
 		driverOpts.EnableResizing = false
 	}
@@ -224,8 +216,8 @@ func (m *mockDriverSetup) init(ctx context.Context, tp testParameters) {
 		ginkgo.DeferCleanup(destroyCSIDriver, m.cs, m.config.GetUniqueDriverName())
 	}
 
-	// Wait for the CSIDriver actually get deployed and CSINode object to be generated.
-	// This indicates the mock CSI driver pod is up and running healthy.
+	// 等待 CSIDriver 真正部署完成并生成 CSINode 对象，
+	// 这表明 mock CSI driver pod 已健康启动并运行。
 	err = drivers.WaitForCSIDriverRegistrationOnNode(ctx, m.config.ClientNodeSelection.Name, m.config.GetUniqueDriverName(), m.cs)
 	framework.ExpectNoError(err, "Failed to register CSIDriver %v", m.config.GetUniqueDriverName())
 }
@@ -320,7 +312,7 @@ func (m *mockDriverSetup) createPod(ctx context.Context, withVolume volumeType) 
 		ReclaimPolicy:        m.tp.reclaimPolicy,
 	}
 
-	// The mock driver only works when everything runs on a single node.
+	// mock driver 只有在所有组件运行于单个 node 上时才有效。
 	nodeSelection := m.config.ClientNodeSelection
 	switch withVolume {
 	case csiEphemeral:
@@ -348,7 +340,7 @@ func (m *mockDriverSetup) createPod(ctx context.Context, withVolume volumeType) 
 	if pod != nil {
 		m.pods = append(m.pods, pod)
 	}
-	return // result variables set above
+	return // 结果变量已在上方设置
 }
 
 func (m *mockDriverSetup) createPVC(ctx context.Context) (class *storagev1.StorageClass, claim *v1.PersistentVolumeClaim) {
@@ -380,7 +372,7 @@ func (m *mockDriverSetup) createPVC(ctx context.Context) (class *storagev1.Stora
 		ReclaimPolicy:        m.tp.reclaimPolicy,
 	}
 
-	// The mock driver only works when everything runs on a single node.
+	// mock driver 只有在所有组件运行于单个 node 上时才有效。
 	nodeSelection := m.config.ClientNodeSelection
 	class, claim = createClaim(ctx, f.ClientSet, scTest, nodeSelection, m.tp.scName, f.Namespace.Name, nil)
 	if class != nil {
@@ -422,7 +414,7 @@ func (m *mockDriverSetup) createPVPVC(ctx context.Context) (class *storagev1.Sto
 		ReclaimPolicy:        m.tp.reclaimPolicy,
 	}
 
-	// The mock driver only works when everything runs on a single node.
+	// mock driver 只有在所有组件运行于单个 node 上时才有效。
 	nodeSelection := m.config.ClientNodeSelection
 	class, volume, claim = createVolumeAndClaim(ctx, f.ClientSet, scTest, nodeSelection, m.tp.scName, f.Namespace.Name, nil)
 	if class != nil {
@@ -554,18 +546,18 @@ func (m *mockDriverSetup) waitForResourceQuota(ctx context.Context, ns, quotaNam
 }
 
 func haveUsedResources(used v1.ResourceList, lastResourceQuota **v1.ResourceQuota) gomegatypes.GomegaMatcher {
-	// The template emits the actual ResourceQuota object as YAML.
-	// In particular the ManagedFields are interesting because both
-	// kube-apiserver and kube-controller-manager set the status.
+	// 模板会以 YAML 输出实际的 ResourceQuota 对象。
+	// 其中 ManagedFields 尤其值得关注，因为 kube-apiserver 和
+	// kube-controller-manager 都会设置 status。
 	return gcustom.MakeMatcher(func(resourceQuota *v1.ResourceQuota) (bool, error) {
 		if lastResourceQuota != nil {
 			*lastResourceQuota = resourceQuota
 		}
-		// used may not yet be calculated
+		// used 可能还未计算出来
 		if resourceQuota.Status.Used == nil {
 			return false, nil
 		}
-		// verify that the quota shows the expected used resource values
+		// 验证 quota 显示的 used 资源值与期望一致
 		for k, v := range used {
 			if actualValue, found := resourceQuota.Status.Used[k]; !found || (actualValue.Cmp(v) != 0) {
 				return false, nil
@@ -592,7 +584,7 @@ func destroyCSIDriver(cs clientset.Interface, driverName string) {
 	driverGet, err := cs.StorageV1().CSIDrivers().Get(context.TODO(), driverName, metav1.GetOptions{})
 	if err == nil {
 		framework.Logf("deleting %s.%s: %s", driverGet.TypeMeta.APIVersion, driverGet.TypeMeta.Kind, driverGet.ObjectMeta.Name)
-		// Uncomment the following line to get full dump of CSIDriver object
+		// 取消下一行注释可输出 CSIDriver 对象的完整内容
 		// framework.Logf("%s", framework.PrettyPrint(driverGet))
 		cs.StorageV1().CSIDrivers().Delete(context.TODO(), driverName, metav1.DeleteOptions{})
 	}
@@ -615,7 +607,7 @@ func newStorageClass(t testsuites.StorageClassTest, ns string, prefix string) *s
 	}
 
 	if framework.NodeOSDistroIs("windows") {
-		// fstype might be forced from outside, in that case skip setting a default
+		// fstype 可能由外部强制指定，此时不设置默认值
 		if _, exists := t.Parameters["fstype"]; !exists {
 			t.Parameters["fstype"] = e2epv.GetDefaultFSType()
 			framework.Logf("settings a default fsType=%s in the storage class", t.Parameters["fstype"])
@@ -647,7 +639,7 @@ func getStorageClass(
 			Kind: "StorageClass",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			// Name must be unique, so let's base it on namespace name and the prefix (the prefix is test specific)
+			// 名称必须唯一，因此基于 namespace 名称和前缀生成（前缀与测试相关）
 			GenerateName: ns + "-" + prefix,
 		},
 		Provisioner:       provisioner,
@@ -933,7 +925,7 @@ func startPausePodWithSELinuxOptions(
 		},
 	}
 	if node.Name != "" {
-		// Force schedule the pod to skip scheduler RWOP checks
+		// 强制调度 pod 以跳过 scheduler 的 RWOP 检查
 		framework.Logf("Forcing node name %s", node.Name)
 		pod.Spec.NodeName = node.Name
 	}
@@ -941,8 +933,8 @@ func startPausePodWithSELinuxOptions(
 	return cs.CoreV1().Pods(ns).Create(context.TODO(), pod, metav1.CreateOptions{})
 }
 
-// checkExpectedValues checks if all expected key-value pairs are present in the actual map
-// and returns the set of keys that were found matching.
+// checkExpectedValues 检查 actual map 中是否包含所有期望的键值对，
+// 并返回匹配成功的键集合。
 func checkExpectedValues(expected map[string]string, actual map[string]string) sets.Set[string] {
 	found := sets.New[string]()
 	for k, v := range expected {
@@ -954,8 +946,8 @@ func checkExpectedValues(expected map[string]string, actual map[string]string) s
 	return found
 }
 
-// checkUnexpectedValues checks if any unexpected keys are present in the actual map
-// and returns a map of unexpected key-value pairs.
+// checkUnexpectedValues 检查 actual map 中是否存在非预期的键，
+// 并返回这些非预期键值对的 map。
 func checkUnexpectedValues(unexpectedKeys sets.Set[string], actual map[string]string) map[string]string {
 	unexpected := make(map[string]string)
 	for k := range actual {
@@ -966,8 +958,9 @@ func checkUnexpectedValues(unexpectedKeys sets.Set[string], actual map[string]st
 	return unexpected
 }
 
-// checkNodePublishVolume goes through all calls to the mock driver and checks that at least one NodePublishVolume call had expected attributes and secrets.
-// If a matched call is found but it has unexpected attributes or secrets, checkNodePublishVolume skips it and continues searching.
+// checkNodePublishVolume 遍历 mock driver 的所有调用，检查是否至少有一次
+// NodePublishVolume 调用带有期望的 attributes 和 secret。
+// 如果调用匹配但包含非预期的 attributes 或 secret，则跳过并继续查找。
 func checkNodePublishVolume(ctx context.Context, getCalls func(ctx context.Context) ([]drivers.MockCSICall, error), pod *v1.Pod, expectPodInfo, ephemeralVolume, csiInlineVolumesEnabled, csiServiceAccountTokenEnabled, serviceAccountTokenInSecrets bool) error {
 	expectedAttributes := map[string]string{}
 	unexpectedAttributeKeys := sets.New[string]()
@@ -986,7 +979,7 @@ func checkNodePublishVolume(ctx context.Context, getCalls func(ctx context.Conte
 		unexpectedAttributeKeys.Insert("csi.storage.k8s.io/serviceAccount.name")
 	}
 	if csiInlineVolumesEnabled {
-		// This is only passed in 1.15 when the CSIInlineVolume feature gate is set.
+		// 该字段仅在 1.15 中设置 CSIInlineVolume feature gate 时才会传递。
 		expectedAttributes["csi.storage.k8s.io/ephemeral"] = strconv.FormatBool(ephemeralVolume)
 	} else {
 		unexpectedAttributeKeys.Insert("csi.storage.k8s.io/ephemeral")
@@ -995,15 +988,15 @@ func checkNodePublishVolume(ctx context.Context, getCalls func(ctx context.Conte
 	tokenKey := "csi.storage.k8s.io/serviceAccount.tokens"
 	switch {
 	case csiServiceAccountTokenEnabled && serviceAccountTokenInSecrets:
-		// Token should be in secrets field (if opted in by CSI driver)
+		// Token 应位于 secrets 字段中（由 CSI driver 选择启用时）
 		expectedSecrets[tokenKey] = "<nonempty>"
 		unexpectedAttributeKeys.Insert(tokenKey)
 	case csiServiceAccountTokenEnabled:
-		// Token should be in attributes (legacy behavior)
+		// Token 应位于 attributes 中（旧行为）
 		expectedAttributes[tokenKey] = "<nonempty>"
 		unexpectedSecretKeys.Insert(tokenKey)
 	default:
-		// Token should not be present anywhere
+		// Token 不应出现在任何地方
 		unexpectedAttributeKeys.Insert(tokenKey)
 		unexpectedSecretKeys.Insert(tokenKey)
 	}
@@ -1022,14 +1015,14 @@ func checkNodePublishVolume(ctx context.Context, getCalls func(ctx context.Conte
 
 		volumeCtx := call.Request.VolumeContext
 
-		// Check that NodePublish had expected attributes
+		// 检查 NodePublish 是否带有期望的 attributes
 		foundAttributes := checkExpectedValues(expectedAttributes, volumeCtx)
 		if foundAttributes.Len() != len(expectedAttributes) {
 			framework.Logf("Skipping the NodePublishVolume call: expected attribute %+v, got %+v", format.Object(expectedAttributes, 1), format.Object(volumeCtx, 1))
 			continue
 		}
 
-		// Check that NodePublish had no unexpected attributes
+		// 检查 NodePublish 是否不带非预期的 attributes
 		unexpectedAttributes := checkUnexpectedValues(unexpectedAttributeKeys, volumeCtx)
 		if len(unexpectedAttributes) != 0 {
 			framework.Logf("Skipping the NodePublishVolume call because it contains unexpected attributes %+v", format.Object(unexpectedAttributes, 1))
@@ -1038,14 +1031,14 @@ func checkNodePublishVolume(ctx context.Context, getCalls func(ctx context.Conte
 
 		secrets := call.Request.Secrets
 
-		// Check that NodePublish had expected secrets
+		// 检查 NodePublish 是否带有期望的 secret
 		foundSecrets := checkExpectedValues(expectedSecrets, secrets)
 		if foundSecrets.Len() != len(expectedSecrets) {
 			framework.Logf("Skipping the NodePublishVolume call: expected secret %+v, got %+v", format.Object(expectedSecrets, 1), format.Object(secrets, 1))
 			continue
 		}
 
-		// Check that NodePublish had no unexpected secrets
+		// 检查 NodePublish 是否不带非预期的 secret
 		unexpectedSecrets := checkUnexpectedValues(unexpectedSecretKeys, secrets)
 		if len(unexpectedSecrets) != 0 {
 			framework.Logf("Skipping the NodePublishVolume call because it contains unexpected secrets %+v", format.Object(unexpectedSecrets, 1))
@@ -1062,8 +1055,8 @@ func checkNodePublishVolume(ctx context.Context, getCalls func(ctx context.Conte
 	return fmt.Errorf("NodePublishVolume was called %d times, but no call had expected attributes %s and secrets %s, or calls have unwanted attributes keys %+v or secret keys %+v", nodePublishCallCount, format.Object(expectedAttributes, 1), format.Object(expectedSecrets, 1), unexpectedAttributeKeys.UnsortedList(), unexpectedSecretKeys.UnsortedList())
 }
 
-// createFSGroupRequestPreHook creates a hook that records the fsGroup passed in
-// through NodeStageVolume and NodePublishVolume calls.
+// createFSGroupRequestPreHook 创建一个 hook，记录通过 NodeStageVolume 和
+// NodePublishVolume 调用传入的 fsGroup。
 func createFSGroupRequestPreHook(nodeStageFsGroup, nodePublishFsGroup *string) *drivers.Hooks {
 	return &drivers.Hooks{
 		Pre: func(ctx context.Context, fullMethod string, request interface{}) (reply interface{}, err error) {
@@ -1086,7 +1079,7 @@ func createFSGroupRequestPreHook(nodeStageFsGroup, nodePublishFsGroup *string) *
 	}
 }
 
-// createPreHook counts invocations of a certain method (identified by a substring in the full gRPC method name).
+// createPreHook 统计某个方法的调用次数（通过完整 gRPC 方法名中的子串识别）。
 func createPreHook(method string, callback func(counter int64) error) *drivers.Hooks {
 	var counter atomic.Int64
 
@@ -1103,14 +1096,13 @@ func createPreHook(method string, callback func(counter int64) error) *drivers.H
 	}
 }
 
-// compareCSICalls compares expectedCalls with logs of the mock driver.
-// It returns index of the first expectedCall that was *not* received
-// yet or error when calls do not match.
-// All repeated calls to the CSI mock driver (e.g. due to exponential backoff)
-// are squashed and checked against single expectedCallSequence item.
+// compareCSICalls 将 expectedCalls 与 mock driver 的日志进行比较，
+// 返回第一个尚未收到的 expectedCall 的索引；调用不匹配时返回错误。
+// 对 CSI mock driver 的重复调用（例如由指数 backoff 导致）会被压缩，
+// 只与 expectedCallSequence 中的单个条目比对。
 //
-// Only permanent errors are returned. Other errors are logged and no
-// calls are returned. The caller is expected to retry.
+// 只返回永久性错误，其他错误仅记录日志且不返回调用结果，
+// 由调用方负责重试。
 func compareCSICalls(ctx context.Context, trackedCalls []string, expectedCallSequence []csiCall, getCalls func(ctx context.Context) ([]drivers.MockCSICall, error)) ([]drivers.MockCSICall, int, error) {
 	allCalls, err := getCalls(ctx)
 	if err != nil {
@@ -1118,7 +1110,7 @@ func compareCSICalls(ctx context.Context, trackedCalls []string, expectedCallSeq
 		return nil, 0, nil
 	}
 
-	// Remove all repeated and ignored calls
+	// 去掉所有重复和被忽略的调用
 	tracked := sets.NewString(trackedCalls...)
 	var calls []drivers.MockCSICall
 	var last drivers.MockCSICall
@@ -1130,23 +1122,23 @@ func compareCSICalls(ctx context.Context, trackedCalls []string, expectedCallSeq
 			last = c
 			calls = append(calls, c)
 		}
-		// This call is the same as the last one, ignore it.
+		// 这次调用与上一次相同，忽略。
 	}
 
 	for i, c := range calls {
 		if i >= len(expectedCallSequence) {
-			// Log all unexpected calls first, return error below outside the loop.
+			// 先把所有非预期的调用记录到日志，循环结束后再返回错误。
 			framework.Logf("Unexpected CSI driver call: %s (%v)", c.Method, c.FullError)
 			continue
 		}
 
-		// Compare current call with expected call
+		// 将当前调用与期望的调用比较
 		expectedCall := expectedCallSequence[i]
 		if c.Method != expectedCall.expectedMethod || c.FullError.Code != expectedCall.expectedError {
 			return allCalls, i, fmt.Errorf("Unexpected CSI call %d: expected %s (%d), got %s (%d)", i, expectedCall.expectedMethod, expectedCall.expectedError, c.Method, c.FullError.Code)
 		}
 
-		// if the secret is not nil, compare it
+		// secret 不为 nil 时才进行比较
 		if expectedCall.expectedSecret != nil {
 			if !reflect.DeepEqual(expectedCall.expectedSecret, c.Request.Secrets) {
 				return allCalls, i, fmt.Errorf("Unexpected secret: expected %v, got %v", expectedCall.expectedSecret, c.Request.Secrets)
@@ -1157,13 +1149,13 @@ func compareCSICalls(ctx context.Context, trackedCalls []string, expectedCallSeq
 	if len(calls) > len(expectedCallSequence) {
 		return allCalls, len(expectedCallSequence), fmt.Errorf("Received %d unexpected CSI driver calls", len(calls)-len(expectedCallSequence))
 	}
-	// All calls were correct
+	// 所有调用均符合预期
 	return allCalls, len(calls), nil
 
 }
 
-// createSELinuxMountPreHook creates a hook that records the mountOptions passed in
-// through NodeStageVolume and NodePublishVolume calls.
+// createSELinuxMountPreHook 创建一个 hook，记录通过 NodeStageVolume 和
+// NodePublishVolume 调用传入的 mountOptions。
 func createSELinuxMountPreHook(nodeStageMountOpts, nodePublishMountOpts *[]string, stageCalls, unstageCalls, publishCalls, unpublishCalls *atomic.Int32) *drivers.Hooks {
 	return &drivers.Hooks{
 		Pre: func(ctx context.Context, fullMethod string, request interface{}) (reply interface{}, err error) {
@@ -1190,8 +1182,7 @@ func createSELinuxMountPreHook(nodeStageMountOpts, nodePublishMountOpts *[]strin
 	}
 }
 
-// A lot of this code was copied from e2e/framework. It would be nicer
-// if it could be reused - see https://github.com/kubernetes/kubernetes/issues/92754
+// 这段代码大部分复制自 e2e/framework，能复用会更好 —— 参见 https://github.com/kubernetes/kubernetes/issues/92754
 func podRunning(ctx context.Context, c clientset.Interface, podName, namespace string) wait.ConditionFunc {
 	return func() (bool, error) {
 		pod, err := c.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
@@ -1209,7 +1200,7 @@ func podRunning(ctx context.Context, c clientset.Interface, podName, namespace s
 }
 
 func podHasStorage(ctx context.Context, c clientset.Interface, podName, namespace string, when time.Time) wait.ConditionFunc {
-	// Check for events of this pod. Copied from test/e2e/common/container_probe.go.
+	// 检查该 pod 的 event。复制自 test/e2e/common/container_probe.go。
 	expectedEvent := fields.Set{
 		"involvedObject.kind":      "Pod",
 		"involvedObject.name":      podName,
@@ -1219,10 +1210,10 @@ func podHasStorage(ctx context.Context, c clientset.Interface, podName, namespac
 	options := metav1.ListOptions{
 		FieldSelector: expectedEvent,
 	}
-	// copied from test/e2e/framework/events/events.go
+	// 复制自 test/e2e/framework/events/events.go
 	return func() (bool, error) {
-		// We cannot be sure here whether it has enough storage, only when
-		// it hasn't. In that case we abort waiting with a special error.
+		// 这里只能确定存储不足，无法确定存储充足；
+		// 不足时以特定错误中止等待。
 		events, err := c.CoreV1().Events(namespace).List(ctx, options)
 		if err != nil {
 			return false, fmt.Errorf("got error while getting events: %w", err)
@@ -1259,8 +1250,8 @@ func waitForMaxVolumeCondition(pod *v1.Pod, cs clientset.Interface) error {
 			return false, err
 		}
 		for _, c := range pod.Status.Conditions {
-			// Conformance tests cannot rely on specific output of optional fields (e.g., Reason
-			// and Message) because these fields are not suject to the deprecation policy.
+			// conformance 测试不能依赖可选字段的具体输出（如 Reason
+			// 和 Message），因为这些字段不受 deprecation policy 约束。
 			if c.Type == v1.PodScheduled && c.Status == v1.ConditionFalse && c.Reason != "" && c.Message != "" {
 				return true, nil
 			}

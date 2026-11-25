@@ -104,7 +104,7 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 		ginkgo.By("scheduling a pod with a container that verifies %COMPUTERNAME% matches selected node name")
 		image := imageutils.GetConfig(imageutils.BusyBox)
 		podName := "host-process-test-pod"
-		// We're passing this to powershell.exe -Command. Inside, we must use apostrophes for strings.
+		// 这段命令会传给 powershell.exe -Command，其中的字符串必须用单引号。
 		command := fmt.Sprintf(`& {if ('%s' -ine "$(hostname)") { exit -1 }}`, targetNode.Name)
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -207,12 +207,10 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 
 	ginkgo.It("container command path validation", func(ctx context.Context) {
 
-		// The way hostprocess containers are created is being updated in container
-		// v1.7 to better support volume mounts and part of these changes include
-		// updates how the container's starting process is invoked.
-		// These test cases are only valid for containerd v1.6.
-		// See https://github.com/kubernetes/enhancements/blob/master/keps/sig-windows/1981-windows-privileged-container-support/README.md
-		// for more details.
+		// containerd v1.7 调整了 HostProcess 容器的创建方式以更好地支持卷挂载，
+		// 其中包括容器启动进程的调用方式。
+		// 因此这些测试用例仅适用于 containerd v1.6。
+		// 详见 https://github.com/kubernetes/enhancements/blob/master/keps/sig-windows/1981-windows-privileged-container-support/README.md
 		ginkgo.By("Ensuring Windows nodes are running containerd v1.6.x")
 		windowsNode, err := findWindowsNode(ctx, f)
 		framework.ExpectNoError(err, "error finding Windows node")
@@ -229,10 +227,10 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 			e2eskipper.Skipf("container runtime is >= 1.7.0")
 		}
 
-		// The following test cases are broken into batches to speed up the test.
-		// Each batch will be scheduled as a single pod with a container for each test case.
-		// Pods will be scheduled sequentially since the start-up cost of containers is high
-		// on Windows and ginkgo may also schedule test cases in parallel.
+		// 为加快测试，以下用例被拆成多批：
+		// 每批作为一个 pod 调度，每个用例对应其中一个容器。
+		// 各批 pod 顺序调度，因为 Windows 上容器启动开销较大，
+		// 而 Ginkgo 也可能并行调度测试用例。
 		tests := [][]struct {
 			command    []string
 			args       []string
@@ -611,8 +609,8 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 		framework.Logf("Subsequent HostProcess container metrics -- StartedContainers: %v, StartedContainersErrors: %v, StartedInitContainers: %v, StartedInitContainersErrors: %v",
 			afterMetrics.StartedContainersCount, afterMetrics.StartedContainersErrorCount, afterMetrics.StartedInitContainersCount, afterMetrics.StartedInitContainersErrorCount)
 
-		// Note: This test performs relative comparisons to ensure metrics values were logged and does not validate specific values.
-		// This done so the test can be run in parallel with other tests which may start HostProcess containers on the same node.
+		// 注意：本测试只做相对比较，确认指标有被记录，不校验具体数值，
+		// 这样即使与其他会在同一节点启动 HostProcess 容器的测试并行运行也不会互相干扰。
 		ginkgo.By("Ensuring metrics were updated")
 		gomega.Expect(beforeMetrics.StartedContainersCount).To(gomega.BeNumerically("<", afterMetrics.StartedContainersCount), "Count of started HostProcess containers should increase")
 		gomega.Expect(beforeMetrics.StartedContainersErrorCount).To(gomega.BeNumerically("<", afterMetrics.StartedContainersErrorCount), "Count of started HostProcess errors containers should increase")
@@ -673,7 +671,7 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 	})
 
 	ginkgo.It("should support querying api-server using in-cluster config", func(ctx context.Context) {
-		// This functionality is only support on containerd  v1.7+
+		// 此功能仅在 containerd v1.7+ 上受支持
 		skipUnlessContainerdOneSevenOrGreater(ctx, f)
 
 		ginkgo.By("Scheduling a pod that runs agnhost inclusterclient")
@@ -694,10 +692,10 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 					{
 						Image: imageutils.GetE2EImage(imageutils.Agnhost),
 						Name:  "hpc-agnhost",
-						// TODO: Figure out why we need to copy agnhost as agnhost.exe here
-						// Possibly related to https://github.com/microsoft/hcsshim/issues/1128 and
-						// https://github.com/microsoft/hcsshim/pull/1174 updating PATHEXT here doesn't
-						// seem address the issue.
+						// TODO: 查明这里为何要把 agnhost 复制成 agnhost.exe。
+						// 可能与 https://github.com/microsoft/hcsshim/issues/1128 和
+						// https://github.com/microsoft/hcsshim/pull/1174 有关；在这里更新 PATHEXT
+						// 似乎并不能解决问题。
 						Command: []string{"cmd", "/C", "copy", "c:\\hpc\\agnhost", "c:\\hpc\\agnhost.exe", "&&", "c:\\hpc\\agnhost.exe", "inclusterclient"},
 					},
 				},
@@ -716,9 +714,9 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 		framework.ExpectNoError(err)
 
 		ginkgo.By("Waiting for 60 seconds")
-		// We wait an additional 60 seconds after the pod is Running because the
-		// `InClusterClient` app in the agnhost image waits 30 seconds before
-		// starting to make queries - https://github.com/kubernetes/kubernetes/blob/ceee3783ed963497db669504241af2ca6a11610f/test/images/agnhost/inclusterclient/main.go#L51
+		// pod 进入 Running 后仍需额外等待 60 秒：agnhost 镜像中的
+		// `InClusterClient` 应用会先等 30 秒才开始发起查询 —
+		// https://github.com/kubernetes/kubernetes/blob/ceee3783ed963497db669504241af2ca6a11610f/test/images/agnhost/inclusterclient/main.go#L51
 		time.Sleep(60 * time.Second)
 
 		ginkgo.By("Ensuring the test app was able to successfully query the api-server")
@@ -733,7 +731,7 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 	})
 
 	ginkgo.It("should run as localgroup accounts", func(ctx context.Context) {
-		// This functionality is only supported on containerd v1.7+
+		// 此功能仅在 containerd v1.7+ 上受支持
 		skipUnlessContainerdOneSevenOrGreater(ctx, f)
 
 		ginkgo.By("Scheduling a pod that creates a localgroup from an init container then starts a container using that group")
@@ -791,10 +789,9 @@ var _ = sigDescribe(feature.WindowsHostProcessContainers, "HostProcess container
 		framework.ExpectNoError(err, "error retrieving pod")
 		gomega.Expect(p.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 
-		// whoami will output %COMPUTER_NAME%/{randomly generated username} here.
-		// It is sufficient to just check that the logs do not container `nt authority`
-		// because all of the 'built-in' accounts that can be used with HostProcess
-		// are prefixed with this.
+		// 这里 whoami 会输出 %COMPUTER_NAME%/{随机生成的用户名}。
+		// 只需检查日志中不含 `nt authority` 即可，因为 HostProcess
+		// 可用的所有“内置”账户都带这个前缀。
 		ginkgo.By("Then ensuring pod was not running as a system account")
 		logs, err := e2epod.GetPodLogs(ctx, f.ClientSet, f.Namespace.Name, podName, "localgroup-container")
 		framework.ExpectNoError(err, "error retrieving container logs")
@@ -940,7 +937,7 @@ type HostProcessContainersMetrics struct {
 	StartedInitContainersErrorCount int64
 }
 
-// ensurePodsStatsOnNode returns a boolean after checking Pods statistics on a particular node
+// ensurePodsStatsOnNode 检查指定节点上的 Pod 统计信息并返回布尔结果
 func ensurePodsStatsOnNode(ctx context.Context, c clientset.Interface, namespace, nodeName string, statsChecked *bool) (bool, error) {
 	nodeStats, err := e2ekubelet.GetStatsSummary(ctx, c, nodeName)
 	framework.ExpectNoError(err, "Error getting node stats")
@@ -950,7 +947,7 @@ func ensurePodsStatsOnNode(ctx context.Context, c clientset.Interface, namespace
 			continue
 		}
 
-		// check various pod stats
+		// 检查各项 Pod 统计指标
 		if *podStats.CPU.UsageCoreNanoSeconds <= 0 {
 			framework.Logf("Pod %s/%s stats report cpu usage equal to %v but should be greater than 0", podStats.PodRef.Namespace, podStats.PodRef.Name, *podStats.CPU.UsageCoreNanoSeconds)
 			return false, nil
@@ -963,7 +960,7 @@ func ensurePodsStatsOnNode(ctx context.Context, c clientset.Interface, namespace
 		for _, containerStats := range podStats.Containers {
 			*statsChecked = true
 
-			// check various container stats
+			// 检查各项容器统计指标
 			if *containerStats.CPU.UsageCoreNanoSeconds <= 0 {
 				framework.Logf("Container %s stats report cpu usage equal to %v but should be greater than 0", containerStats.Name, *containerStats.CPU.UsageCoreNanoSeconds)
 				return false, nil
@@ -981,8 +978,8 @@ func ensurePodsStatsOnNode(ctx context.Context, c clientset.Interface, namespace
 	return true, nil
 }
 
-// getCurrentHostProcessMetrics returns a HostPRocessContainersMetrics object. Any metrics that do not have any
-// values reported will be set to 0.
+// getCurrentHostProcessMetrics 返回 HostProcessContainersMetrics 对象。
+// 未上报任何值的指标会被置为 0。
 func getCurrentHostProcessMetrics(ctx context.Context, f *framework.Framework, nodeName string) (HostProcessContainersMetrics, error) {
 	var result HostProcessContainersMetrics
 
@@ -1000,8 +997,7 @@ func getCurrentHostProcessMetrics(ctx context.Context, f *framework.Framework, n
 		}
 	}
 
-	// note: accumulate failures of all types (ErrImagePull, RunContainerError, etc)
-	// for each container type here.
+	// 注意：这里按容器类型累加所有类型的失败（ErrImagePull、RunContainerError 等）。
 	for _, sample := range metrics["started_host_process_containers_errors_total"] {
 		switch sample.Metric["container_type"] {
 		case "container":

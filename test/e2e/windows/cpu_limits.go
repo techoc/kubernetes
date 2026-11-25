@@ -40,7 +40,7 @@ var _ = sigDescribe(feature.Windows, "Cpu Resources", framework.WithSerial(), sk
 	f := framework.NewDefaultFramework("cpu-resources-test-windows")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// The Windows 'BusyBox' image is PowerShell plus a collection of scripts and utilities to mimic common busybox commands
+	// Windows 版 'BusyBox' 镜像是 PowerShell 加上一组模拟常见 busybox 命令的脚本和工具
 	powershellImage := imageutils.GetConfig(imageutils.BusyBox)
 
 	ginkgo.Context("Container limits", func() {
@@ -95,8 +95,8 @@ var _ = sigDescribe(feature.Windows, "Cpu Resources", framework.WithSerial(), sk
 				if cpuUsage <= 0 {
 					framework.Failf("Pod %s/%s reported usage is %v, but it should be greater than 0", p.Namespace, p.Name, cpuUsage)
 				}
-				// Jobs can potentially exceed the limit for a variety of reasons on Windows.
-				// Softening the limit margin to 8% and allow a occasional overload.
+				// 在 Windows 上，Job 可能因各种原因超出 limit。
+				// 因此将 limit 余量放宽到 8%，允许偶尔超限。
 				// https://github.com/kubernetes/kubernetes/issues/124643
 				if cpuUsage >= .8*1.05 {
 					framework.Failf("Pod %s/%s reported usage is %v, but it should not exceed limit by > 8%%", p.Namespace, p.Name, cpuUsage)
@@ -106,7 +106,7 @@ var _ = sigDescribe(feature.Windows, "Cpu Resources", framework.WithSerial(), sk
 	})
 }))
 
-// newCPUBurnPods creates a list of pods (specification) with a workload that will consume all available CPU resources up to container limit
+// newCPUBurnPods 创建一组 pod 规格，其工作负载会消耗所有可用的 CPU 资源，直至达到容器 limit
 func newCPUBurnPods(numPods int, image imageutils.Config, cpuLimit string, memoryLimit string) []*v1.Pod {
 	var pods []*v1.Pod
 
@@ -128,7 +128,7 @@ func newCPUBurnPods(numPods int, image imageutils.Config, cpuLimit string, memor
 				},
 			},
 			Spec: v1.PodSpec{
-				// Restart policy is always (default).
+				// 重启策略为 always（默认值）。
 				Containers: []v1.Container{
 					{
 						Image: image.GetE2EImage(),

@@ -14,14 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testfiles provides a wrapper around various optional ways
-// of retrieving additional files needed during a test run:
-// - builtin bindata
-// - filesystem access
+// Package testfiles 封装了多种获取测试运行所需额外文件的方式：
+// - 内置 bindata
+// - 文件系统访问
 //
-// Because it is a is self-contained package, it can be used by
-// test/e2e/framework and test/e2e/manifest without creating
-// a circular dependency.
+// 由于是自包含的包，test/e2e/framework 和 test/e2e/manifest 都可以使用它，
+// 而不会产生循环依赖。
 package testfiles
 
 import (
@@ -37,35 +35,28 @@ import (
 
 var filesources []FileSource
 
-// AddFileSource registers another provider for files that may be
-// needed at runtime. Should be called during initialization of a test
-// binary.
+// AddFileSource 注册一个运行时可能需要的文件提供者。
+// 应在测试二进制初始化期间调用。
 func AddFileSource(filesource FileSource) {
 	filesources = append(filesources, filesource)
 }
 
-// FileSource implements one way of retrieving test file content.  For
-// example, one file source could read from the original source code
-// file tree, another from bindata compiled into a test executable.
+// FileSource 实现一种获取测试文件内容的方式。
+// 例如，一个文件源可以从原始源码目录树读取，另一个则从编译进测试二进制的 bindata 读取。
 type FileSource interface {
-	// ReadTestFile retrieves the content of a file that gets maintained
-	// alongside a test's source code. Files are identified by the
-	// relative path inside the repository containing the tests, for
-	// example "cluster/gce/upgrade.sh" inside kubernetes/kubernetes.
+	// ReadTestFile 获取与测试源码一起维护的文件内容。
+	// 文件通过其在包含测试的仓库中的相对路径标识，
+	// 例如 kubernetes/kubernetes 中的 "cluster/gce/upgrade.sh"。
 	//
-	// When the file is not found, a nil slice is returned. An error is
-	// returned for all fatal errors.
+	// 文件未找到时返回 nil slice；发生致命错误时返回 error。
 	ReadTestFile(filePath string) ([]byte, error)
 
-	// DescribeFiles returns a multi-line description of which
-	// files are available via this source. It is meant to be
-	// used as part of the error message when a file cannot be
-	// found.
+	// DescribeFiles 返回多行描述，说明该来源可以提供哪些文件。
+	// 用于在找不到文件时拼进错误信息，帮助用户定位问题。
 	DescribeFiles() string
 }
 
-// Read tries to retrieve the desired file content from
-// one of the registered file sources.
+// Read 尝试从已注册的文件源中获取所需文件内容。
 func Read(filePath string) ([]byte, error) {
 	if len(filesources) == 0 {
 		return nil, fmt.Errorf("no file sources registered (yet?), cannot retrieve test file %s", filePath)
@@ -79,8 +70,7 @@ func Read(filePath string) ([]byte, error) {
 			return data, nil
 		}
 	}
-	// Here we try to generate an error that points test authors
-	// or users in the right direction for resolving the problem.
+	// 这里生成错误信息时尽量给出提示，帮助测试作者或用户找到解决问题的方向。
 	err := fmt.Sprintf("Test file %q was not found.\n", filePath)
 	for _, filesource := range filesources {
 		err += filesource.DescribeFiles()
@@ -89,9 +79,8 @@ func Read(filePath string) ([]byte, error) {
 	return nil, errors.New(err)
 }
 
-// Exists checks whether a file could be read. Unexpected errors
-// are handled by calling the fail function, which then should
-// abort the current test.
+// Exists 检查文件是否可读取。意外错误由调用方的 fail 函数处理，
+// 该函数应终止当前测试。
 func Exists(filePath string) (bool, error) {
 	for _, filesource := range filesources {
 		data, err := filesource.ReadTestFile(filePath)
@@ -105,15 +94,13 @@ func Exists(filePath string) (bool, error) {
 	return false, nil
 }
 
-// RootFileSource looks for files relative to a root directory.
+// RootFileSource 相对于指定根目录查找文件。
 type RootFileSource struct {
 	Root string
 }
 
-// ReadTestFile looks for the file relative to the configured
-// root directory. If the path is already absolute, for example
-// in a test that has its own method of determining where
-// files are, then the path will be used directly.
+// ReadTestFile 相对于配置的根目录查找文件。
+// 如果路径已是绝对路径（例如测试自己有确定文件位置的方式），则直接使用该路径。
 func (r RootFileSource) ReadTestFile(filePath string) ([]byte, error) {
 	var fullPath string
 	if path.IsAbs(filePath) {
@@ -123,21 +110,18 @@ func (r RootFileSource) ReadTestFile(filePath string) ([]byte, error) {
 	}
 	data, err := os.ReadFile(fullPath)
 	if os.IsNotExist(err) {
-		// Not an error (yet), some other provider may have the file.
+		// 暂时不算错误，其他文件源可能提供该文件。
 		return nil, nil
 	}
 	return data, err
 }
 
-// DescribeFiles explains that it looks for files inside a certain
-// root directory.
+// DescribeFiles 说明它在指定根目录下查找文件。
 func (r RootFileSource) DescribeFiles() string {
 	description := fmt.Sprintf("Test files are expected in %q", r.Root)
 	if !path.IsAbs(r.Root) {
-		// The default in test_context.go is the relative path
-		// ../../, which doesn't really help locating the
-		// actual location. Therefore we add also the absolute
-		// path if necessary.
+		// test_context.go 中的默认值是相对路径 ../../，
+		// 对定位实际位置帮助不大。因此必要时也补上绝对路径。
 		abs, err := filepath.Abs(r.Root)
 		if err == nil {
 			description += fmt.Sprintf(" = %q", abs)
@@ -147,14 +131,14 @@ func (r RootFileSource) DescribeFiles() string {
 	return description
 }
 
-// EmbeddedFileSource handles files stored in a package generated with bindata.
+// EmbeddedFileSource 处理使用 bindata 生成的包中存储的文件。
 type EmbeddedFileSource struct {
 	EmbeddedFS embed.FS
 	Root       string
 	fileList   []string
 }
 
-// ReadTestFile looks for an embedded file with the given path.
+// ReadTestFile 按给定路径查找内嵌文件。
 func (e EmbeddedFileSource) ReadTestFile(filepath string) ([]byte, error) {
 	relativePath := strings.TrimPrefix(filepath, fmt.Sprintf("%s/", e.Root))
 
@@ -169,7 +153,7 @@ func (e EmbeddedFileSource) ReadTestFile(filepath string) ([]byte, error) {
 	return b, nil
 }
 
-// DescribeFiles explains that it is looking inside an embedded filesystem
+// DescribeFiles 说明它在内嵌文件系统中查找
 func (e EmbeddedFileSource) DescribeFiles() string {
 	var lines []string
 	lines = append(lines, "The following files are embedded into the test executable:")

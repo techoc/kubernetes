@@ -83,15 +83,15 @@ var _ = SIGDescribe("client-go should negotiate", func() {
 			o.Expect(ok).To(o.BeTrueBecause("unexpected watch event: %v, %#v", evt.Type, evt.Object))
 			switch evt.Type {
 			case watch.Added, watch.Modified:
-				// this is allowed
+				// 允许该情况
 			case watch.Error:
 				err := apierrors.FromObject(evt.Object)
-				// In Kubernetes 1.17 and earlier, the api server returns both apierrors.StatusReasonExpired and
-				// apierrors.StatusReasonGone for HTTP 410 (Gone) status code responses. In 1.18 the kube server is more consistent
-				// and always returns apierrors.StatusReasonExpired. For backward compatibility we can only remove the apierrs.IsGone
-				// check when we fully drop support for Kubernetes 1.17 servers from reflectors.
+				// Kubernetes 1.17 及更早版本中，apiserver 对 HTTP 410 (Gone) 响应会同时返回
+				// apierrors.StatusReasonExpired 和 apierrors.StatusReasonGone。1.18 起 kube server 更一致，
+				// 总是返回 apierrors.StatusReasonExpired。为向后兼容，只有 reflector 完全停止支持
+				// Kubernetes 1.17 server 后，才能移除 apierrs.IsGone 检查。
 				if apierrors.IsGone(err) || apierrors.IsResourceExpired(err) {
-					// this is allowed, since the kubernetes object could be very old
+					// 允许该情况，因为 kubernetes 对象可能已经很旧
 					break
 				}
 				if apierrors.IsUnexpectedObjectError(err) {
@@ -109,7 +109,7 @@ var _ = SIGDescribe("CBOR", feature.CBOR, func() {
 	f := framework.NewDefaultFramework("cbor")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
-	// Must be serial to avoid conflict with other tests that set up a sample apiserver.
+	// 必须串行运行，避免与同样启动 sample apiserver 的其他测试冲突。
 	f.It("clients remain compatible with the 1.17 sample-apiserver", f.WithSerial(), func(ctx context.Context) {
 		clientfeaturestesting.SetFeatureDuringTest(g.GinkgoTB(), clientfeatures.ClientsAllowCBOR, true)
 		clientfeaturestesting.SetFeatureDuringTest(g.GinkgoTB(), clientfeatures.ClientsPreferCBOR, true)

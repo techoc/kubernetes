@@ -20,8 +20,8 @@ import (
 	"sync"
 )
 
-// waitGroup, in contrast to sync.WaitGroup, supports races between
-// go and wait. Once wait is called, no new goroutines are started.
+// 与 sync.WaitGroup 不同，waitGroup 支持 go 和 wait 之间的竞态。
+// 一旦调用 wait，就不会再启动新的 goroutine。
 type waitGroup struct {
 	mutex sync.Mutex
 	cond  *sync.Cond
@@ -60,8 +60,8 @@ func (wg *waitGroup) done() {
 	wg.cond.Broadcast()
 }
 
-// goIfNotShuttingDown executes the callback in a goroutine if the wait group
-// is not already shutting down. It always calls the cleanup callback once, either way.
+// 如果 waitGroup 尚未进入关闭流程，goIfNotShuttingDown 会在 goroutine 中执行回调。
+// 无论哪种情况，cleanup 回调都保证只调用一次。
 func (wg *waitGroup) goIfNotShuttingDown(cleanup, cb func()) {
 	wg.mutex.Lock()
 	defer wg.mutex.Unlock()
@@ -71,7 +71,7 @@ func (wg *waitGroup) goIfNotShuttingDown(cleanup, cb func()) {
 	}
 
 	if wg.shuttingDown {
-		// Clean up directly.
+		// 直接清理。
 		cleanup()
 		return
 	}

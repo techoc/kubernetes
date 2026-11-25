@@ -34,9 +34,9 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// This test requires that --terminated-pod-gc-threshold=100 be set on the controller manager
+// 本测试要求 controller manager 设置 --terminated-pod-gc-threshold=100
 //
-// Slow by design (7 min)
+// 设计上很慢（7 分钟）
 var _ = SIGDescribe("Pod garbage collector", feature.PodGarbageCollector, framework.WithSlow(), func() {
 	f := framework.NewDefaultFramework("pod-garbage-collector")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -62,8 +62,8 @@ var _ = SIGDescribe("Pod garbage collector", feature.PodGarbageCollector, framew
 
 		framework.Logf("created: %v", count)
 
-		// The gc controller polls every 30s and fires off a goroutine per
-		// pod to terminate.
+		// gc controller 每 30 秒轮询一次，并为每个待终止的 pod
+		// 启动一个 goroutine。
 		var err error
 		var pods *v1.PodList
 		timeout := 2 * time.Minute

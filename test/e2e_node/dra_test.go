@@ -15,9 +15,9 @@ limitations under the License.
 */
 
 /*
-E2E Node test for DRA (Dynamic Resource Allocation)
-This test covers node-specific aspects of DRA
-The test can be run locally on Linux this way:
+DRA (Dynamic Resource Allocation) 的 E2E Node 测试
+覆盖 DRA 中与 node 相关的部分
+可在 Linux 上按如下方式本地运行：
     make test-e2e-node FOCUS='\[Feature:DynamicResourceAllocation\]' SKIP='\[Flaky\]' PARALLELISM=1 \
        TEST_ARGS='--feature-gates="DynamicResourceAllocation=true,ResourceHealthStatus=true,DRAConsumableCapacity=true" --service-feature-gates="DynamicResourceAllocation=true,ResourceHealthStatus=true,DRAConsumableCapacity=true" --runtime-config=api/all=true'
 */
@@ -75,36 +75,31 @@ const (
 	kubeletPlugin1Name        = "test-driver1.cdi.k8s.io"
 	kubeletPlugin2Name        = "test-driver2.cdi.k8s.io"
 	cdiDir                    = "/var/run/cdi"
-	pluginRegistrationTimeout = time.Second * 60 // how long to wait for a node plugin to be registered
-	podInPendingStateTimeout  = time.Second * 60 // how long to wait for a pod to stay in pending state
+	pluginRegistrationTimeout = time.Second * 60 // 等待 node plugin 注册的时长
+	podInPendingStateTimeout  = time.Second * 60 // 等待 pod 保持 pending 状态的时长
 
-	// kubeletRetryPeriod reflects how often the kubelet tries to start a container after
-	// some non-fatal failure. This does not not include the time it took for the last attempt
-	// itself (?!).
+	// kubeletRetryPeriod 是 kubelet 在遇到非致命失败后重试启动容器的间隔。
+	// 不包含上一次尝试本身的耗时（?!）。
 	//
-	// Value from https://github.com/kubernetes/kubernetes/commit/0449cef8fd5217d394c5cd331d852bd50983e6b3.
+	// 取值来自 https://github.com/kubernetes/kubernetes/commit/0449cef8fd5217d394c5cd331d852bd50983e6b3.
 	kubeletRetryPeriod = 90 * time.Second
 
-	// retryTestTimeout is the maximum duration that a test takes for one
-	// failed attempt to start a pod followed by another successful
-	// attempt.
+	// retryTestTimeout 是一次 pod 启动失败后再成功所需的最长时长。
 	//
-	// Also used as timeout in other tests because it's a good upper bound
-	// even when the test normally completes faster.
+	// 其他测试也用它作为超时，因为即使测试通常更快完成，它也是合理的上限。
 	retryTestTimeout = kubeletRetryPeriod + 30*time.Second
 )
 
-// Tests depend on container runtime support for CDI and the DRA feature gate.
-// The "DRA" label is used to select tests related to DRA in a Ginkgo label filter.
+// 测试依赖容器运行时的 CDI 支持以及 DRA feature gate。
+// "DRA" label 用于在 Ginkgo label filter 中筛选 DRA 相关测试。
 var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.DynamicResourceAllocation, framework.WithFeatureGate(features.DynamicResourceAllocation), func() {
 	f := framework.NewDefaultFramework("dra-node")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
 	ginkgo.BeforeEach(func() {
 		ginkgo.DeferCleanup(func(ctx context.Context) {
-			// When plugin and kubelet get killed at the end of the tests, they leave ResourceSlices behind.
-			// Perhaps garbage collection would eventually remove them (not sure how the node instance
-			// is managed), but this could take time. Let's clean up explicitly.
+			// 测试结束时 plugin 和 kubelet 被杀掉，会留下 ResourceSlices。
+			// 垃圾回收也许最终会清理它们（不确定 node 实例如何管理），但可能要等很久，所以显式清理。
 			framework.ExpectNoError(f.ClientSet.ResourceV1().ResourceSlices().DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
 		})
 	})
@@ -137,8 +132,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(pluginRegistrationTimeout).Should(testdrivergomega.BeRegistered)
 		})
 
-		// Test that the kubelet plugin manager retries plugin registration
-		// when the GetInfo call fails, and succeeds once the call passes.
+		// 验证 kubelet plugin manager 在 GetInfo 调用失败时会重试注册，
+		// 调用恢复后能注册成功。
 		ginkgo.It("must recover and register after registration failure", func(ctx context.Context) {
 			kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
 
@@ -160,8 +155,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			gomega.Eventually(kubeletPlugin.GetGRPCCalls).WithTimeout(pluginRegistrationTimeout).Should(testdrivergomega.BeRegistered)
 		})
 
-		// Test that the kubelet plugin manager retries plugin registration
-		// when the NotifyRegistrationStatus call fails, and succeeds once the call passes.
+		// 验证 kubelet plugin manager 在 NotifyRegistrationStatus 调用失败时会重试注册，
+		// 调用恢复后能注册成功。
 		ginkgo.It("must recover and register after NotifyRegistrationStatus failure", func(ctx context.Context) {
 			kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
 
@@ -186,18 +181,18 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 		ginkgo.It("must process pod created when kubelet is not running", func(ctx context.Context) {
 			newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
 
-			// Stop Kubelet
+			// 停止 Kubelet
 			ginkgo.By("stop kubelet")
 			restartKubelet := mustStopKubelet(ctx, f)
 			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drapod", true, []string{driverName})
-			// Pod must be in pending state
+			// Pod 必须处于 pending 状态
 			err := e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, pod.Name, "Pending", framework.PodStartShortTimeout, func(pod *v1.Pod) (bool, error) {
 				return pod.Status.Phase == v1.PodPending, nil
 			})
 			framework.ExpectNoError(err)
 			ginkgo.By("restart kubelet")
 			restartKubelet(ctx)
-			// Pod should succeed
+			// Pod 应成功启动
 			err = e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, f.ClientSet, pod.Name, f.Namespace.Name, framework.PodStartShortTimeout)
 			framework.ExpectNoError(err)
 		})
@@ -215,8 +210,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			})
 			framework.ExpectNoError(err)
 
-			// TODO: Check condition or event when implemented
-			// see https://github.com/kubernetes/kubernetes/issues/118468 for details
+			// TODO: 实现后检查 condition 或 event
+			// 详见 https://github.com/kubernetes/kubernetes/issues/118468
 			ginkgo.By("check that pod is consistently in Pending state")
 			gomega.Consistently(ctx, e2epod.Get(f.ClientSet, pod)).WithTimeout(podInPendingStateTimeout).Should(e2epod.BeInPhase(v1.PodPending),
 				"Pod should be in Pending state as resource preparation time outed")
@@ -456,7 +451,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			ginkgo.By("start DRA plugin service")
 			draService := newDRAService(ctx, f.ClientSet, f.Namespace.Name, nodeName, driverName, datadir, opts...)
 
-			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drasleeppod" /* enables sleeping */, false /* pod is deleted below */, []string{driverName})
+			pod := createTestObjects(ctx, f.ClientSet, getNodeName(ctx, f), f.Namespace.Name, "draclass", "external-claim", "drasleeppod" /* 启用休眠 */, false /* 下面会删除 pod */, []string{driverName})
 
 			ginkgo.By("wait for NodePrepareResources call to succeed")
 			gomega.Eventually(draService.GetGRPCCalls).WithTimeout(retryTestTimeout).Should(testdrivergomega.NodePrepareResourcesSucceeded)
@@ -528,9 +523,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			gomega.Eventually(tCtx.Err).Should(gomega.MatchError(gomega.ContainSubstring("context canceled")), "Context should be canceled by the error handler")
 			gomega.Expect(context.Cause(tCtx).Error()).To(gomega.ContainSubstring(errorMsg), "Context should be canceled with the expected cause")
 		}
-		// The wrappedNewRegistrar function is used to create a new registrar
-		// with the same signature as the newDRAService function, so that it can be
-		// used in the DescribeTable.
+		// wrappedNewRegistrar 用与 newDRAService 相同的签名创建 registrar，
+		// 以便两者都能放进 DescribeTable。
 		wrappedNewRegistrar := func(ctx context.Context, clientSet kubernetes.Interface, testNamespace, nodeName, driverName, datadir string, opts ...any) *testdriver.ExamplePlugin {
 			return newRegistrar(ctx, clientSet, nodeName, driverName, opts...)
 		}
@@ -540,15 +534,13 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			ginkgo.Entry("for DRA service", newDRAService, kubeletplugin.PluginListener),
 		)
 
-		// This test verifies that the Kubelet establishes only a single gRPC connection
-		// with the DRA plugin throughout the plugin lifecycle.
+		// 验证 Kubelet 在整个 plugin 生命周期内与 DRA plugin 只建立一条 gRPC 连接。
 		//
-		// It does so by:
-		// - Using a custom gRPC listener that counts accepted connections.
-		// - Sequentially creating pods that trigger NodePrepareResources and NodeUnprepareResources.
-		// - Asserting that only one connection was accepted by the listener — since each
-		// call to net.Listener.Accept() corresponds to a new incoming connection —
-		// ensures that the plugin reused the same gRPC connection for all calls.
+		// 方法是：
+		// - 使用自定义 gRPC listener 统计接受的连接数。
+		// - 依次创建 pod，触发 NodePrepareResources 和 NodeUnprepareResources。
+		// - 断言 listener 只接受了一条连接 —— 因为每次 net.Listener.Accept() 调用
+		// 都对应一个新传入连接 —— 从而确保所有调用复用了同一条 gRPC 连接。
 		ginkgo.It("must use one gRPC connection for all service calls", func(ctx context.Context) {
 			var listener *countingListener
 			var err error
@@ -591,7 +583,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 	})
 
 	f.Context("Two resource Kubelet Plugins", f.WithSerial(), func() {
-		// start creates plugins which will get stopped when the context gets canceled.
+		// start 创建 plugin，context 取消时它们会被停止。
 		start := func(ctx context.Context) (*testdriver.ExamplePlugin, *testdriver.ExamplePlugin) {
 			kubeletPlugin1 := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), kubeletPlugin1Name)
 			kubeletPlugin2 := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), kubeletPlugin2Name)
@@ -872,10 +864,9 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			ginkgo.By("stop plugin")
 			kubeletPlugin.Stop()
 
-			// We know from the "must be removed if plugin is unresponsive after registration" that the kubelet
-			// eventually notices the dropped connection. We cannot observe when that happens, we would need
-			// a new metric for that ("registered DRA plugins"). Let's give it a few seconds, which is significantly
-			// less than the wiping delay.
+			// 从 "must be removed if plugin is unresponsive after registration" 可知 kubelet
+			// 最终会发现连接断开，但无法确定具体时刻（需要新增 "registered DRA plugins" 指标才能观测）。
+			// 稍等几秒即可，这远短于清理延迟。
 			time.Sleep(5 * time.Second)
 
 			ginkgo.By("restarting plugin")
@@ -898,11 +889,9 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 
 	f.Context("Resource Health", framework.WithFeatureGate(features.ResourceHealthStatus), f.WithSerial(), func() {
 
-		// testHealthTransitions verifies that device health transitions
-		// (Healthy -> Unhealthy -> Healthy) reported by a DRA plugin are
-		// correctly reflected in the Pod's status, and that the kubelet
-		// consumed them through the expected DRAResourceHealth gRPC API
-		// version.
+		// testHealthTransitions 验证 DRA plugin 上报的设备健康状态变化
+		// (Healthy -> Unhealthy -> Healthy) 能正确反映到 Pod status，
+		// 且 kubelet 通过预期的 DRAResourceHealth gRPC API 版本消费了这些状态。
 		testHealthTransitions := func(ctx context.Context, prefix string, expectedHealthMethod string, opts ...pluginOption) {
 			ginkgo.By("Starting the test driver with channel-based control")
 			kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName, opts...)
@@ -941,15 +930,13 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 		}
 
 		ginkgo.It("should reflect device health changes in the Pod's status", func(ctx context.Context) {
-			// The kubelet picks the most recent version when the plugin
-			// serves several, which is the default.
+			// plugin 同时提供多个版本时 kubelet 会选择最新版本，这是默认行为
 			testHealthTransitions(ctx, "health-test", nodeWatchResourcesV1Method)
 		})
 
 		ginkgo.It("should reflect device health changes for a plugin which only supports the v1alpha1 health API", func(ctx context.Context) {
-			// Like a driver which shipped before the v1 API existed.
-			// TODO(harche): remove in 1.40 together with the kubelet's
-			// v1alpha1 client support.
+			// 模拟在 v1 API 出现之前发布的 driver。
+			// TODO(harche): 1.40 时随 kubelet 的 v1alpha1 client 支持一起移除。
 			testHealthTransitions(ctx, "health-v1alpha1", nodeWatchResourcesV1Alpha1Method, withoutHealthV1())
 		})
 
@@ -957,18 +944,16 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			testHealthTransitions(ctx, "health-v1", nodeWatchResourcesV1Method, withoutHealthV1alpha1())
 		})
 
-		// This test verifies that the Kubelet establishes only a single gRPC connection
-		// with the DRA plugin throughout the plugin lifecycle.
+		// 验证 Kubelet 在整个 plugin 生命周期内与 DRA plugin 只建立一条 gRPC 连接。
 		//
-		// It does so by:
-		// - Using a custom gRPC listener that counts accepted connections.
-		// - Sequentially creating pods that trigger NodePrepareResources and NodeUnprepareResources.
-		// - Asserting that only one connection was accepted by the listener — since each
-		// call to net.Listener.Accept() corresponds to a new incoming connection —
-		// ensures that the plugin reused the same gRPC connection for all calls.
+		// 方法是：
+		// - 使用自定义 gRPC listener 统计接受的连接数。
+		// - 依次创建 pod，触发 NodePrepareResources 和 NodeUnprepareResources。
+		// - 断言 listener 只接受了一条连接 —— 因为每次 net.Listener.Accept() 调用
+		// 都对应一个新传入连接 —— 从而确保所有调用复用了同一条 gRPC 连接。
 		//
-		// NOTE: This is a copy of a similar test to test service connection reuse with enabled
-		// ResourceHealth. It should be merged with the original test when the ResourceHealth feature matures.
+		// NOTE: 这是启用 ResourceHealth 时测试 service 连接复用的类似用例的复制版本。
+		// ResourceHealth feature 成熟后应与原测试合并。
 		ginkgo.It("must reuse one gRPC connection for service and health-monitoring calls", func(ctx context.Context) {
 			var listener *countingListener
 			var err error
@@ -1005,8 +990,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			}
 		})
 
-		// Verifies that device health transitions to "Unknown" when a DRA plugin
-		// stops and recovers to "Healthy" upon plugin restart.
+		// 验证 DRA plugin 停止时设备健康状态变为 "Unknown"，重启后恢复为 "Healthy"
 		ginkgo.It("should update health to Unknown when plugin stops and recover upon restart", func(ctx context.Context) {
 			ginkgo.By("Starting the test driver")
 			kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
@@ -1025,7 +1009,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			}).WithTimeout(2*time.Minute).WithPolling(5*time.Second).Should(gomega.Equal("Unknown"), "Device health should become Unknown after plugin stops")
 
 			ginkgo.By("Restarting the DRA plugin to simulate recovery")
-			// Re-initialize the plugin, which will re-register with the Kubelet.
+			// 重新初始化 plugin，它会向 Kubelet 重新注册
 			kubeletPlugin = newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
 
 			ginkgo.By("Forcing a 'Healthy' status update after restart")
@@ -1041,7 +1025,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			}).WithTimeout(60*time.Second).WithPolling(2*time.Second).Should(gomega.Equal("Healthy"), "Device health should recover to Healthy after plugin restarts")
 		})
 
-		// Reconnection verification after connection drop
+		// 验证连接断开后的重连
 		ginkgo.It("should automatically reconnect both DRA and Health API after connection drop", func(ctx context.Context) {
 			ginkgo.By("Starting the test driver")
 			kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
@@ -1087,7 +1071,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 				"Health API should continue working after reconnection")
 		})
 
-		// Concurrent operations verification
+		// 验证并发操作
 		ginkgo.It("should handle concurrent DRA operations and health monitoring without connection issues", func(ctx context.Context) {
 			ginkgo.By("Starting the test driver")
 			kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
@@ -1167,9 +1151,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 		})
 	})
 
-	// This matches the "Resource Health" context above, except that it contains tests which need to run
-	// when the feature gate is disabled. This has to be checked at runtime because there is no generic
-	// way to filter out such tests in advance.
+	// 与上面的 "Resource Health" context 对应，但这里包含需要在 feature gate 关闭时运行的测试。
+	// 由于没有通用方法提前过滤这类测试，只能在运行时检查。
 	f.Context("Resource Health", f.WithSerial(), func() {
 
 		ginkgo.BeforeEach(func() {
@@ -1178,8 +1161,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			}
 		})
 
-		// Verifies that the Kubelet adds no health status to the Pod when the
-		// ResourceHealthStatus feature gate is disabled.
+		// 验证 ResourceHealthStatus feature gate 关闭时 Kubelet 不会向 Pod 添加健康状态
 		ginkgo.It("should not add health status to Pod when feature gate is disabled", func(ctx context.Context) {
 
 			ginkgo.By("Starting a test driver")
@@ -1214,12 +1196,11 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 			}).WithContext(ctx).WithTimeout(30*time.Second).WithPolling(2*time.Second).Should(gomega.Succeed(), "The allocatedResourcesStatus field should be absent when the feature gate is disabled")
 		})
 
-		// These tests validate that health status reporting works correctly for devices
-		// allocated with ShareID, ensuring both features integrate properly.
+		// 这些测试验证使用 ShareID 分配的设备也能正确上报健康状态，确保两个 feature 正常协作
 		f.Context("Resource Health with ShareID", framework.WithFeatureGate(features.ResourceHealthStatus), framework.WithFeatureGate(features.DRAConsumableCapacity), f.WithSerial(), func() {
 
 			ginkgo.BeforeEach(func() {
-				// Skip if feature gates are already enabled (we need to enable them ourselves)
+				// feature gate 已启用时跳过（本测试需要自己启用它们）
 				if e2eskipper.IsFeatureGateEnabled(features.ResourceHealthStatus) {
 					e2eskipper.Skipf("feature %s is already enabled", features.ResourceHealthStatus)
 				}
@@ -1228,8 +1209,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 				}
 			})
 
-			// Verifies that device health transitions are correctly reflected in Pod status
-			// for devices allocated with ShareID.
+			// 验证使用 ShareID 分配的设备健康状态变化能正确反映到 Pod status
 			ginkgo.It("should reflect device health changes for devices with ShareID", func(ctx context.Context) {
 				ginkgo.By("Starting the test driver")
 				kubeletPlugin := newKubeletPlugin(ctx, f.ClientSet, f.Namespace.Name, getNodeName(ctx, f), driverName)
@@ -1241,7 +1221,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 				deviceName := "shareid-health-device"
 				testShareID := uuid.NewUUID()
 
-				// Create test objects with ShareID in the allocation result
+				// 创建 allocation result 中包含 ShareID 的测试对象
 				pod := createTestObjectsWithShareID(ctx, f, driverName, "shareid-health-class", "shareid-health-claim", "shareid-health-pod", poolName, deviceName, &testShareID)
 
 				ginkgo.By("wait for NodePrepareResources call to succeed")
@@ -1357,52 +1337,48 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), feature.Dynami
 	})
 })
 
-// pluginOption defines a functional option for configuring the test driver.
+// pluginOption 定义用于配置 test driver 的 functional option
 type pluginOption func(*testdriver.Options)
 
-// withHealthService is a pluginOption to explicitly enable or disable the health service.
+// withHealthService 是显式启用或禁用 health service 的 pluginOption
 func withHealthService(enabled bool) pluginOption {
 	return func(o *testdriver.Options) {
 		o.EnableHealthService = enabled
 	}
 }
 
-// withoutHealthV1 restricts the driver to the v1alpha1 DRAResourceHealth
-// gRPC API, like a driver which shipped before the v1 API existed. The
-// kubelet keeps consuming v1alpha1 for three releases of transition.
+// withoutHealthV1 将 driver 限制为 v1alpha1 DRAResourceHealth gRPC API，
+// 模拟在 v1 API 出现之前发布的 driver。过渡期内 kubelet 会继续消费 v1alpha1 三个版本。
 func withoutHealthV1() pluginOption {
 	return func(o *testdriver.Options) {
 		o.DisableHealthV1 = true
 	}
 }
 
-// withoutHealthV1alpha1 restricts the driver to the v1 DRAResourceHealth
-// gRPC API, like a driver which has dropped v1alpha1 support.
+// withoutHealthV1alpha1 将 driver 限制为 v1 DRAResourceHealth gRPC API，
+// 模拟已放弃 v1alpha1 支持的 driver
 func withoutHealthV1alpha1() pluginOption {
 	return func(o *testdriver.Options) {
 		o.DisableHealthV1alpha1 = true
 	}
 }
 
-// The gRPC methods on which the kubelet subscribes to device health updates,
-// depending on the negotiated DRAResourceHealth API version.
+// kubelet 订阅设备健康更新所用的 gRPC 方法，取决于协商出的 DRAResourceHealth API 版本
 const (
 	nodeWatchResourcesV1Alpha1Method = "/" + drahealthv1alpha1.DRAResourceHealthService + "/NodeWatchResources"
 	nodeWatchResourcesV1Method       = "/" + drahealthv1.DRAResourceHealthService + "/NodeWatchResources"
 )
 
-// Run Kubelet plugin and wait until it's registered
+// 启动 Kubelet plugin 并等待注册完成
 func newKubeletPlugin(ctx context.Context, clientSet kubernetes.Interface, testNamespace string, nodeName, driverName string, options ...pluginOption) *testdriver.ExamplePlugin {
 	ginkgo.By("start Kubelet plugin")
 	logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "DRA kubelet plugin "+driverName), "node", nodeName)
 	ctx = klog.NewContext(ctx, logger)
 
-	// Ensure that directories exist, creating them if necessary. We want
-	// to know early if there is a setup problem that would prevent
-	// creating those directories.
+	// 确保目录存在，必要时创建。尽早发现 setup 问题，避免后续无法创建目录。
 	err := os.MkdirAll(cdiDir, os.FileMode(0750))
 	framework.ExpectNoError(err, "create CDI directory")
-	datadir := path.Join(kubeletplugin.KubeletPluginsDir, driverName) // The default, not set below.
+	datadir := path.Join(kubeletplugin.KubeletPluginsDir, driverName) // 使用默认值，下面不会覆盖
 	err = os.MkdirAll(datadir, 0750)
 	framework.ExpectNoError(err, "create DRA socket directory")
 
@@ -1414,7 +1390,7 @@ func newKubeletPlugin(ctx context.Context, clientSet kubernetes.Interface, testN
 	}
 
 	plugin, err := testdriver.StartPlugin(
-		context.WithoutCancel(ctx), // Stopping is handled in draServiceCleanup.
+		context.WithoutCancel(ctx), // 停止操作由 draServiceCleanup 负责
 		cdiDir,
 		driverName,
 		clientSet,
@@ -1445,16 +1421,15 @@ func newKubeletPlugin(ctx context.Context, clientSet kubernetes.Interface, testN
 	return plugin
 }
 
-// newRegistrar starts a registrar for the specified DRA driver, without the DRA gRPC service.
+// newRegistrar 为指定 DRA driver 启动 registrar，不启动 DRA gRPC service
 func newRegistrar(ctx context.Context, clientSet kubernetes.Interface, nodeName, driverName string, opts ...any) *testdriver.ExamplePlugin {
 	ginkgo.By("start only Kubelet plugin registrar")
 	logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "kubelet plugin registrar "+driverName))
 	ctx = klog.NewContext(ctx, logger)
 
 	allOpts := []any{
-		// In split deployments the registrar's registration is what the
-		// kubelet negotiates the health service from, so it must advertise
-		// health even though a separate service instance serves it.
+		// 拆分部署场景下，kubelet 根据 registrar 的注册信息协商 health service，
+		// 因此即使由独立 service 实例提供服务，registrar 也必须声明 health 能力。
 		testdriver.Options{EnableHealthService: true},
 		kubeletplugin.DRAService(false),
 	}
@@ -1462,7 +1437,7 @@ func newRegistrar(ctx context.Context, clientSet kubernetes.Interface, nodeName,
 	allOpts = append(allOpts, opts...)
 
 	registrar, err := testdriver.StartPlugin(
-		context.WithoutCancel(ctx), // It gets stopped during test cleanup or when requested earlier.
+		context.WithoutCancel(ctx), // 在测试清理或提前请求时停止
 		cdiDir,
 		driverName,
 		clientSet,
@@ -1475,21 +1450,20 @@ func newRegistrar(ctx context.Context, clientSet kubernetes.Interface, nodeName,
 	return registrar
 }
 
-// newDRAService starts the DRA gRPC service for the specified node and driver.
-// It ensures that necessary directories exist, starts the plugin and registers
-// cleanup functions to remove created resources after the test.
-// Parameters:
-//   - ctx: The context for controlling cancellation and logging.
-//   - clientSet: Kubernetes client interface for interacting with the cluster.
-//   - nodeName: The name of the node where the plugin will run.
-//   - driverName: The name of the DRA driver.
-//   - datadir: The directory for the DRA socket and state files.
-//     Must match what is specified via [kubeletplugin.PluginDataDirectoryPath].
-//     May be empty if that option is not used, then the default path is used.
-//   - opts: Additional options for plugin configuration.
+// newDRAService 为指定 node 和 driver 启动 DRA gRPC service。
+// 它会确保所需目录存在，启动 plugin，并注册清理函数以在测试后删除创建的资源。
+// 参数：
+//   - ctx: 用于控制取消和日志的 context。
+//   - clientSet: 用于与集群交互的 Kubernetes client 接口。
+//   - nodeName: plugin 运行的 node 名称。
+//   - driverName: DRA driver 名称。
+//   - datadir: DRA socket 和状态文件所在目录。
+//     必须与通过 [kubeletplugin.PluginDataDirectoryPath] 指定的路径一致。
+//     未使用该 option 时可留空，此时使用默认路径。
+//   - opts: plugin 配置的其他选项。
 //
-// Returns:
-//   - A pointer to the started ExamplePlugin instance.
+// 返回值：
+//   - 指向已启动 ExamplePlugin 实例的指针。
 func newDRAService(ctx context.Context, clientSet kubernetes.Interface, testNamespace, nodeName, driverName, datadir string, opts ...any) *testdriver.ExamplePlugin {
 	ginkgo.By("start only Kubelet plugin")
 	logger := klog.LoggerWithValues(klog.LoggerWithName(klog.Background(), "kubelet plugin "+driverName), "node", nodeName)
@@ -1501,13 +1475,11 @@ func newDRAService(ctx context.Context, clientSet kubernetes.Interface, testName
 	}
 	allOpts = append(allOpts, opts...)
 
-	// Ensure that directories exist, creating them if necessary. We want
-	// to know early if there is a setup problem that would prevent
-	// creating those directories.
+	// 确保目录存在，必要时创建。尽早发现 setup 问题，避免后续无法创建目录。
 	err := os.MkdirAll(cdiDir, os.FileMode(0750))
 	framework.ExpectNoError(err, "create CDI directory")
 
-	// If datadir is not provided, set it to the default and ensure it exists.
+	// 未提供 datadir 时使用默认路径，并确保其存在
 	if datadir == "" {
 		datadir = path.Join(kubeletplugin.KubeletPluginsDir, driverName)
 	}
@@ -1516,7 +1488,7 @@ func newDRAService(ctx context.Context, clientSet kubernetes.Interface, testName
 	framework.ExpectNoError(err, "create DRA socket directory")
 
 	plugin, err := testdriver.StartPlugin(
-		context.WithoutCancel(ctx), // Stopping is handled in draServiceCleanup.
+		context.WithoutCancel(ctx), // 停止操作由 draServiceCleanup 负责
 		cdiDir,
 		driverName,
 		clientSet,
@@ -1546,33 +1518,30 @@ func newDRAService(ctx context.Context, clientSet kubernetes.Interface, testName
 }
 
 func draServiceCleanup(ctx context.Context, clientSet kubernetes.Interface, driverName string, testNamespace string, plugin *testdriver.ExamplePlugin) {
-	// Always stop at the end, even in the case of failures.
+	// 无论成功失败，最后都要停止
 	defer func() {
 		ginkgo.By("Stopping the driver and deleting ResourceSlices...")
 		plugin.Stop()
 
-		// kubelet should do this eventually, but better make sure.
-		// A separate test checks this explicitly.
+		// kubelet 最终应该会做这件事，但这里还是显式确保。
+		// 另有专门的测试检查这一点。
 		framework.ExpectNoError(clientSet.ResourceV1().ResourceSlices().DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{FieldSelector: resourceapi.ResourceSliceSelectorDriver + "=" + driverName}))
 	}()
 
-	// Some test was leaking an in-use ResourceClaim
-	// (https://github.com/kubernetes/kubernetes/issues/133304) because it
-	// didn't delete its pod before the driver shutdown. The namespace
-	// deletion usually takes care of this, but that happens later and
-	// without the driver the pods stay pending. Therefore we delete all of
-	// the pods in the test namespace *before* proceeding with the driver
-	// shutdown.
+	// 曾有测试在 driver 关闭前没删除 pod，导致泄漏使用中的 ResourceClaim
+	// (https://github.com/kubernetes/kubernetes/issues/133304)。namespace 删除通常会处理，
+	// 但那发生在稍后，而且没有 driver 时 pod 会一直 pending。因此在关闭 driver *之前*
+	// 先删除测试 namespace 中的所有 pod。
 	ginkgo.By("Deleting pods and waiting for ResourceClaims to be released...")
 	framework.ExpectNoError(clientSet.CoreV1().Pods(testNamespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}))
 
-	// Failing here is a bit more obvious than in the metric check below.
-	// The metrics get checked, too, because we want to be certain that those go down.
+	// 在这里失败比下面的指标检查更直观。
+	// 但仍会检查指标，以确保它们确实下降。
 	gomega.Eventually(ctx, framework.ListObjects(clientSet.CoreV1().Pods(testNamespace).List, metav1.ListOptions{})).Should(gomega.HaveField("Items", gomega.BeEmpty()), "All pods should be deleted, shut down and removed.")
 
-	// We allow for a delay because it takes a while till the kubelet fully deals with pod deletion.
-	// Typically there is no dra_resource_claims_in_use entry for the driver (covered by gstruct.IgnoreMissing).
-	// If there is one, it must be zero.
+	// kubelet 完全处理完 pod 删除需要一段时间，因此允许延迟。
+	// 通常 driver 不会有 dra_resource_claims_in_use 条目（由 gstruct.IgnoreMissing 处理）。
+	// 如果存在，其值必须为 0。
 	gomega.Eventually(ctx, getKubeletMetrics).Should(gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 		"dra_resource_claims_in_use": gstruct.MatchElements(driverNameLabelKey, gstruct.IgnoreExtras|gstruct.IgnoreMissing, gstruct.Elements{
 			driverName: timelessSample(0),
@@ -1580,15 +1549,14 @@ func draServiceCleanup(ctx context.Context, clientSet kubernetes.Interface, driv
 	}), "The test should have deleted all pods.\nInstead some claims prepared by the driver %s are still in use at the time when the driver gets uninstalled.", driverName)
 }
 
-// createTestObjects creates objects required by the test
-// NOTE: as scheduler and controller manager are not running by the Node e2e,
-// the objects must contain all required data to be processed correctly by the API server
-// and placed on the node without involving the scheduler and the DRA controller.
+// createTestObjects 创建测试所需的对象
+// NOTE: Node e2e 不运行 scheduler 和 controller manager，因此对象必须自带全部数据，
+// 以便 API server 正确处理并在不依赖 scheduler 和 DRA controller 的情况下落到 node 上。
 //
-// Instead adding more parameters, the podName determines what the pod does.
+// 不增加更多参数，而是通过 podName 决定 pod 的行为。
 func createTestObjects(ctx context.Context, clientSet kubernetes.Interface, nodename, namespace, className, claimName, podName string, deferPodDeletion bool, driverNames []string,
 	deviceRequestResults ...resourceapi.DeviceRequestAllocationResult) *v1.Pod {
-	// DeviceClass
+	// 先建 DeviceClass，驱动才能据此上报设备
 	class := &resourceapi.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: className,
@@ -1599,7 +1567,7 @@ func createTestObjects(ctx context.Context, clientSet kubernetes.Interface, node
 
 	ginkgo.DeferCleanup(clientSet.ResourceV1().DeviceClasses().Delete, className, metav1.DeleteOptions{})
 
-	// ResourceClaim
+	// 创建 ResourceClaim
 	podClaimName := "resource-claim"
 	claim := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1621,10 +1589,8 @@ func createTestObjects(ctx context.Context, clientSet kubernetes.Interface, node
 
 	ginkgo.DeferCleanup(clientSet.ResourceV1().ResourceClaims(namespace).Delete, claimName, metav1.DeleteOptions{})
 
-	// The pod checks its own env with grep. Each driver injects its own parameters,
-	// with the driver name as part of the variable name. Sorting ensures that a
-	// single grep can match the output of env when that gets turned into a single
-	// line because the order is deterministic.
+	// pod 用 grep 检查自身 env。每个 driver 注入自己的参数，变量名包含 driver 名称。
+	// 排序让顺序确定，这样 env 输出合并为一行后单个 grep 就能匹配。
 	nameToEnv := func(driverName string) string {
 		return "DRA_" + regexp.MustCompile(`[^a-z0-9]`).ReplaceAllString(driverName, "_")
 	}
@@ -1640,7 +1606,7 @@ func createTestObjects(ctx context.Context, clientSet kubernetes.Interface, node
 			Namespace: namespace,
 		},
 		Spec: v1.PodSpec{
-			NodeName: nodename, // Assign the node as the scheduler is not running
+			NodeName: nodename, // scheduler 未运行，直接指定 node
 			ResourceClaims: []v1.PodResourceClaim{
 				{
 					Name:              podClaimName,
@@ -1654,8 +1620,8 @@ func createTestObjects(ctx context.Context, clientSet kubernetes.Interface, node
 					Resources: v1.ResourceRequirements{
 						Claims: []v1.ResourceClaim{{Name: podClaimName}},
 					},
-					// If injecting env variables fails, the pod fails and this error shows up in
-					// ... Terminated:&ContainerStateTerminated{ExitCode:1,Signal:0,Reason:Error,Message:ERROR: ...
+					// env 注入失败时 pod 会失败，错误信息会出现在
+					// ... Terminated:&ContainerStateTerminated{ExitCode:1,Signal:0,Reason:Error,Message:ERROR: ... 中
 					Command: []string{"/bin/sh", "-c", "if ! echo $(env) | grep -q " + strings.Join(expectedEnv, ".*") + "; then echo ERROR: unexpected env: $(env) >/dev/termination-log; exit 1 ; fi"},
 				},
 			},
@@ -1663,7 +1629,7 @@ func createTestObjects(ctx context.Context, clientSet kubernetes.Interface, node
 		},
 	}
 	if podName == "drasleeppod" {
-		// As above, plus infinite sleep.
+		// 与上面相同，额外无限休眠
 		pod.Spec.Containers[0].Command[2] += "&& sleep 100000"
 	}
 	createdPod, err := clientSet.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
@@ -1673,15 +1639,15 @@ func createTestObjects(ctx context.Context, clientSet kubernetes.Interface, node
 		ginkgo.DeferCleanup(clientSet.CoreV1().Pods(namespace).Delete, podName, metav1.DeleteOptions{})
 	}
 
-	// Update claim status: set ReservedFor and AllocationResult
-	// NOTE: This is usually done by the DRA controller or the scheduler.
+	// 更新 claim status：设置 ReservedFor 和 AllocationResult
+	// NOTE: 通常由 DRA controller 或 scheduler 完成
 
 	var results []resourceapi.DeviceRequestAllocationResult
 	if len(deviceRequestResults) > 0 {
-		// Specify DeviceRequestAllocationResult to test specific condition of allocation result such as ShareID
+		// 指定 DeviceRequestAllocationResult，以测试 ShareID 等特定的 allocation result 场景
 		results = deviceRequestResults
 	} else {
-		// Generate `some-device` DeviceRequestAllocationResult for each driver
+		// 为每个 driver 生成 `some-device` 的 DeviceRequestAllocationResult
 		results = make([]resourceapi.DeviceRequestAllocationResult, len(driverNames))
 		for i, driverName := range driverNames {
 			results[i] = resourceapi.DeviceRequestAllocationResult{
@@ -1777,9 +1743,9 @@ func matchResourcesByNodeName(nodeName string) types.GomegaMatcher {
 	return gomega.HaveField("Spec.NodeName", gstruct.PointTo(gomega.Equal(nodeName)))
 }
 
-// This helper function queries the main API server for the pod's status.
+// 从主 API server 查询 pod status 的辅助函数
 func getDeviceHealthFromAPIServer(f *framework.Framework, namespace, podName, driverName, claimName, poolName, deviceName string) (string, error) {
-	// Get the Pod object from the API server
+	// 从 API server 获取 Pod 对象
 	pod, err := f.ClientSet.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -1788,13 +1754,13 @@ func getDeviceHealthFromAPIServer(f *framework.Framework, namespace, podName, dr
 		return "", fmt.Errorf("failed to get pod %s/%s: %w", namespace, podName, err)
 	}
 
-	// This is the unique ID for the device based on how Kubelet manager code constructs it.
+	// 按照 Kubelet manager 代码的构造方式生成 device 的唯一 ID
 	expectedResourceID := v1.ResourceID(fmt.Sprintf("%s/%s/%s", driverName, poolName, deviceName))
 
 	expectedResourceStatusNameSimple := v1.ResourceName(fmt.Sprintf("claim:%s", claimName))
 	expectedResourceStatusNameWithRequest := v1.ResourceName(fmt.Sprintf("claim:%s/%s", claimName, "my-request"))
 
-	// Loop through container statuses.
+	// 遍历 container statuses
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.AllocatedResourcesStatus != nil {
 			for _, resourceStatus := range containerStatus.AllocatedResourcesStatus {
@@ -1813,9 +1779,9 @@ func getDeviceHealthFromAPIServer(f *framework.Framework, namespace, podName, dr
 	return "NotFound", nil
 }
 
-// createHealthTestPodAndClaim is a specialized helper for the Resource Health test.
-// It creates all necessary objects (DeviceClass, ResourceClaim, Pod) and ensures
-// the pod is long-running and the claim is allocated from the specified pool.
+// createHealthTestPodAndClaim 是 Resource Health 测试的专用辅助函数。
+// 它创建所有必需对象（DeviceClass、ResourceClaim、Pod），并确保 pod 长时间运行、
+// claim 从指定 pool 分配。
 func createHealthTestPodAndClaim(ctx context.Context, f *framework.Framework, driverName, podName, claimName, className, poolName, deviceName string) *v1.Pod {
 	ginkgo.By(fmt.Sprintf("Creating DeviceClass %q", className))
 	dc := &resourceapi.DeviceClass{
@@ -1880,14 +1846,14 @@ func createHealthTestPodAndClaim(ctx context.Context, f *framework.Framework, dr
 			},
 		},
 	}
-	// Create the pod on the API server to assign the real UID.
+	// 在 API server 上创建 pod，以获得真实 UID
 	createdPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{})
 	framework.ExpectNoError(err, "failed to create Pod "+podName)
 	ginkgo.DeferCleanup(func(ctx context.Context) {
 		e2epod.DeletePodOrFail(ctx, f.ClientSet, createdPod.Namespace, createdPod.Name)
 	})
 
-	// Patch the Pod's status to include the ResourceClaimStatuses, mimicking the scheduler.
+	// patch Pod status 加入 ResourceClaimStatuses，模拟 scheduler 的行为
 	patch, err := json.Marshal(v1.Pod{
 		Status: v1.PodStatus{
 			ResourceClaimStatuses: []v1.PodResourceClaimStatus{
@@ -1900,11 +1866,11 @@ func createHealthTestPodAndClaim(ctx context.Context, f *framework.Framework, dr
 	framework.ExpectNoError(err, "failed to patch Pod status with ResourceClaimStatuses")
 
 	ginkgo.By(fmt.Sprintf("Allocating claim %q to pod %q with its real UID", claimName, podName))
-	// Get the created claim to ensure the latest version before updating.
+	// 获取刚创建的 claim，确保更新时拿到最新版本
 	claimToUpdate, err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Get(ctx, claimName, metav1.GetOptions{})
 	framework.ExpectNoError(err, "failed to get latest version of ResourceClaim "+claimName)
 
-	// Update the claims status to reserve it for the *real* pod UID.
+	// 更新 claim status，将其 ReserveFor 为 *真实* 的 pod UID
 	claimToUpdate.Status = resourceapi.ResourceClaimStatus{
 		ReservedFor: []resourceapi.ResourceClaimConsumerReference{
 			{Resource: "pods", Name: createdPod.Name, UID: createdPod.UID},
@@ -1928,9 +1894,9 @@ func createHealthTestPodAndClaim(ctx context.Context, f *framework.Framework, dr
 	return createdPod
 }
 
-// setupAndVerifyHealthyPod creates a test pod with health monitoring and verifies it reaches a healthy state.
-// It encapsulates the repeated pattern of pod creation, waiting for NodePrepareResources,
-// pod startup, and health verification that appears throughout the health monitoring tests.
+// setupAndVerifyHealthyPod 创建带健康监控的测试 pod，并验证其达到 healthy 状态。
+// 它封装了健康监控测试中反复出现的流程：创建 pod、等待 NodePrepareResources、
+// 启动 pod、验证健康状态。
 func setupAndVerifyHealthyPod(
 	ctx context.Context,
 	f *framework.Framework,
@@ -1965,8 +1931,8 @@ func setupAndVerifyHealthyPod(
 	return pod, claimName, poolName, deviceName
 }
 
-// createTestObjectsWithShareID creates test objects (DeviceClass, ResourceClaim, Pod) for testing
-// ShareID with health status integration. The ShareID is included in the device allocation result.
+// createTestObjectsWithShareID 创建测试 ShareID 与健康状态集成的对象
+// (DeviceClass、ResourceClaim、Pod)，ShareID 包含在 device allocation result 中
 func createTestObjectsWithShareID(ctx context.Context, f *framework.Framework, driverName, className, claimName, podName, poolName, deviceName string, shareID *apitypes.UID) *v1.Pod {
 	ginkgo.By(fmt.Sprintf("Creating DeviceClass %q", className))
 	dc := &resourceapi.DeviceClass{
@@ -2040,7 +2006,7 @@ func createTestObjectsWithShareID(ctx context.Context, f *framework.Framework, d
 		e2epod.DeletePodOrFail(ctx, f.ClientSet, createdPod.Namespace, createdPod.Name)
 	})
 
-	// Patch the Pod's status to include the ResourceClaimStatuses
+	// patch Pod status 加入 ResourceClaimStatuses
 	patch, err := json.Marshal(v1.Pod{
 		Status: v1.PodStatus{
 			ResourceClaimStatuses: []v1.PodResourceClaimStatus{
@@ -2056,7 +2022,7 @@ func createTestObjectsWithShareID(ctx context.Context, f *framework.Framework, d
 	claimToUpdate, err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Get(ctx, claimName, metav1.GetOptions{})
 	framework.ExpectNoError(err, "failed to get latest version of ResourceClaim "+claimName)
 
-	// Update the claims status with ShareID in the allocation result
+	// 更新 claim status，在 allocation result 中包含 ShareID
 	claimToUpdate.Status = resourceapi.ResourceClaimStatus{
 		ReservedFor: []resourceapi.ResourceClaimConsumerReference{
 			{Resource: "pods", Name: createdPod.Name, UID: createdPod.UID},
@@ -2069,7 +2035,7 @@ func createTestObjectsWithShareID(ctx context.Context, f *framework.Framework, d
 						Pool:    poolName,
 						Device:  deviceName,
 						Request: "my-request",
-						ShareID: shareID, // Include ShareID in allocation
+						ShareID: shareID, // 在 allocation 中包含 ShareID
 					},
 				},
 			},
@@ -2081,19 +2047,18 @@ func createTestObjectsWithShareID(ctx context.Context, f *framework.Framework, d
 	return createdPod
 }
 
-// errorOnCloseListener is a mock net.Listener that blocks on Accept()
-// until Close() is called, at which point Accept() returns a predefined error.
+// errorOnCloseListener 是 mock net.Listener，Accept() 会一直阻塞直到 Close() 被调用，
+// 随后 Accept() 返回预设错误。
 //
-// This is useful in tests or simulated environments to trigger grpc.Server.Serve()
-// to exit cleanly with a known error, without needing real network activity.
+// 这在测试或模拟环境中很有用：无需真实网络活动即可让 grpc.Server.Serve()
+// 带着已知错误干净退出。
 type errorOnCloseListener struct {
 	ch     chan struct{}
 	closed atomic.Bool
 	err    error
 }
 
-// newErrorOnCloseListener creates a new listener that causes Accept to fail
-// with the given error after Close is called.
+// newErrorOnCloseListener 创建一个 listener，Close 被调用后 Accept 会返回指定错误
 func newErrorOnCloseListener(err error) *errorOnCloseListener {
 	return &errorOnCloseListener{
 		ch:  make(chan struct{}),
@@ -2101,44 +2066,42 @@ func newErrorOnCloseListener(err error) *errorOnCloseListener {
 	}
 }
 
-// Accept blocks until Close is called, then returns the configured error.
+// Accept 一直阻塞到 Close 被调用，然后返回配置的错误
 func (l *errorOnCloseListener) Accept() (net.Conn, error) {
 	<-l.ch
 	return nil, l.err
 }
 
-// Close unblocks Accept and causes it to return the configured error.
-// It is safe to call multiple times.
+// Close 解除 Accept 的阻塞，使其返回配置的错误。可安全重复调用
 func (l *errorOnCloseListener) Close() error {
 	if l.closed.Swap(true) {
-		return nil // already closed
+		return nil // 已关闭
 	}
 	close(l.ch)
 	return nil
 }
 
-// Addr returns a dummy Unix address. Required to satisfy net.Listener.
+// Addr 返回占位的 Unix 地址，仅用于满足 net.Listener 接口
 func (*errorOnCloseListener) Addr() net.Addr {
 	return &net.UnixAddr{Name: "errorOnCloseListener", Net: "unix"}
 }
 
-// driverNameLabelKey maps metric samples to their driver_name label value.
-// Used with gstruct.MatchAllElements.
+// driverNameLabelKey 将 metric sample 映射到其 driver_name label 值。
+// 与 gstruct.MatchAllElements 配合使用
 func driverNameLabelKey(element any) string {
 	el := element.(*testutil.Sample)
 	return string(el.Metric[testutil.LabelName("driver_name")])
 }
 
-// countingListener is a wrapper around net.Listener that counts the number of times
-// Accept method is called. It embeds a net.Listener and uses atomic counters
-// to safely track the number of accept operations.
+// countingListener 是 net.Listener 的包装，统计 Accept 被调用的次数。
+// 它嵌入 net.Listener，并用 atomic 计数器安全记录 accept 操作次数
 type countingListener struct {
 	net.Listener
 	acceptCalls atomic.Int32
 }
 
-// newCountingListener creates a new Unix domain socket listener
-// wrapped in a countingListener to track accepted connections.
+// newCountingListener 创建 Unix domain socket listener，
+// 并用 countingListener 包装以统计接受的连接数
 func newCountingListener(socketPath string) (*countingListener, error) {
 	addr, err := net.ResolveUnixAddr("unix", socketPath)
 	if err != nil {
@@ -2153,8 +2116,7 @@ func newCountingListener(socketPath string) (*countingListener, error) {
 	return &countingListener{Listener: l}, nil
 }
 
-// Accept waits for and returns the accepted connection.
-// It increments the acceptCalls counter each time the call succeeded.
+// Accept 等待并返回接受的连接，成功时递增 acceptCalls 计数器
 func (l *countingListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err == nil {
@@ -2163,8 +2125,7 @@ func (l *countingListener) Accept() (net.Conn, error) {
 	return conn, err
 }
 
-// acceptCount returns the number of times the accept method
-// has been called on the listener.
+// acceptCount 返回 listener 上 accept 方法被调用的次数
 func (l *countingListener) acceptCount() int {
 	return int(l.acceptCalls.Load())
 }

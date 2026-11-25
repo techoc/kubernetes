@@ -43,9 +43,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// CriProxy injector is used to simulate and verify the image pull behavior.
-// These tests need to run in serial to prevent caching of the images by other tests
-// and to prevent the wait time of image pulls to be increased by other images.
+// CriProxy injector 用于模拟并验证 image pull 行为。
+// 这些测试必须串行运行，避免其他测试缓存 image，也避免其他 image 拉长 image pull 的等待时间。
 var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func() {
 
 	f := framework.NewDefaultFramework("parallel-pull-image-test")
@@ -81,7 +80,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 					callStatus[callID] = callCh
 					mu.Unlock()
 					if callID == 0 {
-						// wait for next call
+						// 等待下一次调用
 						select {
 						case <-callCh:
 							return nil
@@ -89,7 +88,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 							return fmt.Errorf("no parallel image pull after %s", timeout)
 						}
 					} else {
-						// send a signal to the first call
+						// 通知第一次调用
 						callCh <- struct{}{}
 					}
 				}
@@ -109,9 +108,9 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 
 			for _, img := range imagePulled {
 				framework.Logf("Pod pull duration including waiting is %v, and the pulled duration is %v", img.pulledIncludeWaitingDuration, img.pulledDuration)
-				// if a pod image pull hanged for more than 50%, it is a delayed pull.
+				// 如果 pod image pull 的等待时间超过实际拉取时间 50%，说明发生了延迟拉取
 				if float32(img.pulledIncludeWaitingDuration.Milliseconds())/float32(img.pulledDuration.Milliseconds()) > 1.5 {
-					// as this is parallel image pulling, the waiting duration should be similar with the pulled duration.
+					// 并行拉取时，等待时间应与实际拉取时间接近
 					framework.Failf("There is a delayed image pulling, which is not expected for parallel image pulling.")
 				}
 			}
@@ -126,7 +125,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.Context("serialize image pull", func() {
-		// this is the default behavior now.
+		// 当前默认行为
 		tempSetCurrentKubeletConfig(f, func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration) {
 			initialConfig.SerializeImagePulls = true
 			initialConfig.MaxParallelImagePulls = ptr.To[int32](1)
@@ -146,7 +145,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 		})
 
 		ginkgo.It("should be waiting more", func(ctx context.Context) {
-			// all serialize image pulls should timeout
+			// 串行 image pull 应该全部超时
 			timeout := 20 * time.Second
 			var mu sync.Mutex
 			callCh := make(chan struct{})
@@ -158,7 +157,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 					callStatus[callID] = callCh
 					mu.Unlock()
 					if callID == 0 {
-						// wait for next call
+						// 等待下一次调用
 						select {
 						case <-callCh:
 							return errors.New("parallel image pull detected")
@@ -166,7 +165,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 							return nil
 						}
 					} else {
-						// send a signal to the first call
+						// 通知第一次调用
 						select {
 						case callCh <- struct{}{}:
 							return errors.New("parallel image pull detected")
@@ -201,7 +200,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 
 			checkPodPullingOverlap(podStartTime, podEndTime, testpods)
 
-			// if a pod image pull hanged for more than 50%, it is a delayed pull.
+			// 如果 pod image pull 的等待时间超过实际拉取时间 50%，说明发生了延迟拉取
 			var anyDelayedPull bool
 			for _, img := range imagePulled {
 				framework.Logf("Pod pull duration including waiting is %v, and the pulled duration is %v", img.pulledIncludeWaitingDuration, img.pulledDuration)
@@ -209,8 +208,8 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 					anyDelayedPull = true
 				}
 			}
-			// as this is serialize image pulling, the waiting duration should be almost double the duration with the pulled duration.
-			// use 1.5 as a common ratio to avoid some overlap during pod creation
+			// 串行拉取时，等待时间应接近实际拉取时间的两倍
+			// 用 1.5 作为通用阈值，容忍 pod 创建过程中出现的少量重叠
 			if !anyDelayedPull {
 				framework.Failf("All image pullings are not delayed, which is not expected for serilized image pull")
 			}
@@ -223,7 +222,7 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 			ginkgo.Skip("Skip the test since the CRI Proxy is undefined.")
 		}
 
-		// inject PullImage failed to trigger backoff
+		// 注入 PullImage 失败以触发 backoff
 		expectedErr := fmt.Errorf("PullImage failed")
 		err := addCRIProxyInjector(e2eCriProxy, func(apiName string) error {
 			if apiName == criproxy.PullImage {
@@ -247,14 +246,14 @@ var _ = SIGDescribe("Pull Image", feature.CriProxy, framework.WithSerial(), func
 		isExpectedErrMsg := strings.Contains(eventMsg, expectedErr.Error())
 		gomega.Expect(isExpectedErrMsg).To(gomega.BeTrueBecause("we injected an exception into the PullImage interface of the cri proxy"))
 
-		// Hard wait 30 seconds for image pulls to repeatedly back off.
+		// 固定等待 30 秒，让 image pull 反复 backoff
 		time.Sleep(30 * time.Second)
 
 		e, err := getImagePullAttempts(ctx, f, pod.Name)
 		framework.ExpectNoError(err)
-		// 3 would take 10s best case.
+		// 理想情况下 3 次约需 10s
 		gomega.Expect(e.Count).Should(gomega.BeNumerically(">=", 3))
-		// 7 would take 310s best case, if the infra went slow.
+		// 基础设施较慢时，理想情况下 7 次约需 310s
 		gomega.Expect(e.Count).Should(gomega.BeNumerically("<=", 7))
 
 	})
@@ -292,7 +291,7 @@ func getPodImagePullDurations(ctx context.Context, f *framework.Framework, testp
 	return imagePulled, podStartTime, podEndTime, nil
 }
 
-// as pods are created at the same time and image pull will delay 15s, the image pull time should be overlapped
+// pod 同时创建且 image pull 会延迟 15s，因此拉取时间应相互重叠
 func checkPodPullingOverlap(podStartTime map[string]metav1.Time, podEndTime map[string]metav1.Time, testpods []*v1.Pod) {
 	if podStartTime[testpods[0].Name].Time.Before(podStartTime[testpods[1].Name].Time) && podEndTime[testpods[0].Name].Time.Before(podStartTime[testpods[1].Name].Time) {
 		framework.Failf("%v pulling time and %v pulling time are not overlapped", testpods[0].Name, testpods[1].Name)
@@ -302,7 +301,7 @@ func checkPodPullingOverlap(podStartTime map[string]metav1.Time, podEndTime map[
 }
 
 func prepareAndCleanup(ctx context.Context, f *framework.Framework) (testpods []*v1.Pod) {
-	// cuda images are > 2Gi and it will reduce the flaky rate
+	// cuda image 超过 2Gi，可降低 flaky 概率
 	image1 := imageutils.GetE2EImage(imageutils.AgnhostPrev)
 	image2 := imageutils.GetE2EImage(imageutils.Agnhost)
 	node := getNodeName(ctx, f)
@@ -351,8 +350,8 @@ type pulledStruct struct {
 	pulledIncludeWaitingDuration time.Duration
 }
 
-// getDurationsFromPulledEventMsg will parse two durations in the pulled message
-// Example msg: `Successfully pulled image \"busybox:1.28\" in 39.356s (49.356s including waiting). Image size: 41901587 bytes.`
+// getDurationsFromPulledEventMsg 从 pulled 消息中解析两个时长
+// 示例消息：`Successfully pulled image \"busybox:1.28\" in 39.356s (49.356s including waiting). Image size: 41901587 bytes.`
 func getDurationsFromPulledEventMsg(msg string) (*pulledStruct, error) {
 	splits := strings.Split(msg, " ")
 	if len(splits) != 13 {
@@ -362,7 +361,7 @@ func getDurationsFromPulledEventMsg(msg string) (*pulledStruct, error) {
 	if err != nil {
 		return nil, err
 	}
-	// to skip '('
+	// 跳过 '('
 	pulledIncludeWaitingDuration, err := time.ParseDuration(splits[6][1:])
 	if err != nil {
 		return nil, err

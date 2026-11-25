@@ -16,13 +16,13 @@ limitations under the License.
 
 package framework
 
-// NOTE: constants in this file are copied from pkg/cluster/ports/ports.go
+// NOTE: 本文件中的常量复制自 pkg/cluster/ports/ports.go
 
 const (
-	// KubeletPort is the default port for the kubelet server on each host machine.
-	// May be overridden by a flag at startup.
+	// KubeletPort 是每台主机上 kubelet server 的默认端口。
+	// 启动时可通过 flag 覆盖。
 	KubeletPort = 10250
-	// KubeControllerManagerPort is the default port for the controller manager status server.
-	// May be overridden by a flag at startup.
+	// KubeControllerManagerPort 是 controller manager status server 的默认端口。
+	// 启动时可通过 flag 覆盖。
 	KubeControllerManagerPort = 10257
 )

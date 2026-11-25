@@ -49,7 +49,7 @@ import (
 
 var (
 	customIDsPerPod int64 = 65536 * 2
-	// kubelet user used for userns mapping.
+	// 用于 userns 映射的 kubelet 用户
 	kubeletUserForUsernsMapping = "kubelet"
 	getsubuidsBinary            = "getsubids"
 )
@@ -62,8 +62,8 @@ var _ = SIGDescribe("user namespaces kubeconfig tests", "[LinuxOnly]", feature.U
 			if hasMappings, err := hasKubeletUsernsMappings(); err != nil {
 				framework.Failf("failed to check kubelet user namespace mappings: %v", err)
 			} else if hasMappings {
-				// idsPerPod needs to be in sync with the kubelet's user namespace
-				// mappings. Let's skip the test if there are mappings present.
+				// idsPerPod 必须与 kubelet 的 user namespace 映射保持一致，
+				// 因此存在自定义映射时跳过该测试
 				e2eskipper.Skipf("kubelet is configured with custom user namespace mappings, skipping test")
 			}
 		})
@@ -86,7 +86,7 @@ var _ = SIGDescribe("user namespaces kubeconfig tests", "[LinuxOnly]", feature.U
 						{
 							Name:  "container",
 							Image: imageutils.GetE2EImage(imageutils.BusyBox),
-							// The third field is the mapping length, that must be equal to idsPerPod.
+							// 第三个字段是映射长度，必须等于 idsPerPod
 							Command: []string{"awk", "NR != 1 { exit 1 } { print $3 }", "/proc/self/uid_map"},
 						},
 					},
@@ -99,16 +99,12 @@ var _ = SIGDescribe("user namespaces kubeconfig tests", "[LinuxOnly]", feature.U
 			ginkgo.DeferCleanup(func(ctx context.Context) {
 				ginkgo.By("delete the pod")
 				podClient.DeleteSync(ctx, createdPod.Name, metav1.DeleteOptions{GracePeriodSeconds: ptr.To(int64(0))}, f.Timeouts.PodDelete)
-				// DeleteSync waits until the pod is deleted from the API server.
-				// But we need the pod dir to removed from the node before we
-				// continue. The pod dir is not deleted with the pod, but left for
-				// the periodic run of the cleanup function to delete it later. So,
-				// let's wait until the dir is removed.
-				// The reason we need to wait for the dir to be removed is because
-				// tempSetCurrentKubeletConfig's AfterEach will restart the kubelet
-				// with the original idsPerPod. If the pod directory is still on
-				// disk, the kubelet will fail to start as the new kubelet config
-				// can't be honored if we have pods on disk with another config.
+				// DeleteSync 只等待 pod 从 apiserver 删除，但这里还需要等节点上的
+				// pod 目录被移除后才能继续。pod 目录不会随 pod 一起删除，而是留给
+				// 定期清理函数稍后删除，因此这里要等目录消失。
+				// 之所以必须等待，是因为 tempSetCurrentKubeletConfig 的 AfterEach 会用
+				// 原来的 idsPerPod 重启 kubelet；若磁盘上仍存在使用其他配置的 pod 目录，
+				// 新配置无法生效，kubelet 会启动失败
 				podDir := filepath.Join(services.KubeletRootDirectory, kubeletconfigpaths.DefaultKubeletPodsDirName, string(createdPod.UID))
 				gomega.Eventually(ctx, func() bool {
 					_, err := os.Stat(podDir)
@@ -160,11 +156,10 @@ func hasKubeletUsernsMappings() (bool, error) {
 	return true, nil
 }
 
-// getsubids runs the getsubids command to fetch subuid mappings for a user.
-// If the command fails with "Error fetching ranges", it returns an empty string
-// to indicate that no subuid mappings were found, which is not considered an error.
-// Otherwise, it returns the output of the command as a string.
-// (e.g., "0: user 100000 65536")
+// getsubids 运行 getsubids 命令获取用户的 subuid 映射。
+// 命令报 "Error fetching ranges" 时返回空字符串，表示没有 subuid 映射，不算错误。
+// 其他情况下返回命令输出字符串。
+// 例如 "0: user 100000 65536"
 func getsubids(cmdBin string, cmdArgs ...string) (string, error) {
 	var stderr bytes.Buffer
 	cmd := exec.Command(cmdBin, cmdArgs...)
@@ -172,7 +167,7 @@ func getsubids(cmdBin string, cmdArgs ...string) (string, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		if strings.TrimSpace(stderr.String()) == "Error fetching ranges" {
-			return "", nil // No subuid mappings found, this is not an error
+			return "", nil // 未找到 subuid 映射，不算错误
 		}
 		return "", fmt.Errorf("failed to run %v: %w (stderr=%q)", cmd.Args, err, stderr.String())
 	}

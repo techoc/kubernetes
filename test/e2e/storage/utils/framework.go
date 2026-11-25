@@ -18,5 +18,5 @@ package utils
 
 import "k8s.io/kubernetes/test/e2e/framework"
 
-// SIGDescribe annotates the test with the SIG label.
+// SIGDescribe 为测试标注 SIG 标签。
 var SIGDescribe = framework.SIGDescribe("storage")

@@ -90,13 +90,13 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 				framework.ExpectNoError(err, "Failed to create class: %v", err)
 				m.sc[class.Name] = class
 				claim := e2epv.MakePersistentVolumeClaim(e2epv.PersistentVolumeClaimConfig{
-					// Use static name so that the volumesnapshot can be created before the pvc.
+					// 使用固定名称，以便先于 PVC 创建 volumesnapshot。
 					Name:             "snapshot-test-pvc",
 					StorageClassName: &(class.Name),
 				}, f.Namespace.Name)
 
 				ginkgo.By("Creating snapshot")
-				// TODO: Test VolumeSnapshots with Retain policy
+				// TODO: 测试使用 Retain policy 的 VolumeSnapshot
 				parameters := map[string]string{}
 				snapshotClass, snapshot := storageframework.CreateSnapshot(ctx, sDriver, m.config, storageframework.DynamicSnapshotDelete, claim.Name, claim.Namespace, f.Timeouts, parameters)
 				framework.ExpectNoError(err, "failed to create snapshot")
@@ -150,9 +150,9 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 					framework.Failf("Expected deletion timestamp to be set on snapshotcontent")
 				}
 
-				// If the claim is non existent, the Get() call on the API server returns
-				// an non-nil claim object with all fields unset.
-				// Refer https://github.com/kubernetes/kubernetes/pull/99167#issuecomment-781670012
+				// 如果 claim 不存在，API server 的 Get() 调用会返回一个
+				// 非 nil、但所有字段都未设置的 claim 对象。
+				// 参见 https://github.com/kubernetes/kubernetes/pull/99167#issuecomment-781670012
 				if claim != nil && claim.Spec.VolumeName != "" {
 					ginkgo.By(fmt.Sprintf("Wait for PV %s to be deleted", claim.Spec.VolumeName))
 					err = e2epv.WaitForPersistentVolumeDeleted(ctx, m.cs, claim.Spec.VolumeName, framework.Poll, 3*time.Minute)
@@ -177,16 +177,16 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 	f.Context("CSI Volume Snapshots secrets", feature.VolumeSnapshotDataSource, func() {
 
 		var (
-			// CSISnapshotterSecretName is the name of the secret to be created
+			// CSISnapshotterSecretName 是要创建的 secret 的名称
 			CSISnapshotterSecretName string = "snapshot-secret"
 
-			// CSISnapshotterSecretNameAnnotation is the annotation key for the CSI snapshotter secret name in VolumeSnapshotClass.parameters
+			// CSISnapshotterSecretNameAnnotation 是 VolumeSnapshotClass.parameters 中 CSI snapshotter secret 名称的 annotation key
 			CSISnapshotterSecretNameAnnotation string = "csi.storage.k8s.io/snapshotter-secret-name"
 
-			// CSISnapshotterSecretNamespaceAnnotation is the annotation key for the CSI snapshotter secret namespace in VolumeSnapshotClass.parameters
+			// CSISnapshotterSecretNamespaceAnnotation 是 VolumeSnapshotClass.parameters 中 CSI snapshotter secret namespace 的 annotation key
 			CSISnapshotterSecretNamespaceAnnotation string = "csi.storage.k8s.io/snapshotter-secret-namespace"
 
-			// anotations holds the annotations object
+			// anotations 保存 annotations 对象
 			annotations interface{}
 		)
 
@@ -195,9 +195,9 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 			createSnapshotHook func(counter int64) error
 		}{
 			{
-				// volume snapshot should be created using secrets successfully even if there is a failure in the first few attempts,
+				// 即使前几次尝试失败，也应能使用 secret 成功创建 volume snapshot，
 				name: "volume snapshot create/delete with secrets",
-				// Fail the first 8 calls to create snapshot and succeed the  9th call.
+				// 前 8 次创建 snapshot 的调用失败，第 9 次成功。
 				createSnapshotHook: func(counter int64) error {
 					if counter < 8 {
 						return status.Error(codes.DeadlineExceeded, "fake error")
@@ -273,10 +273,10 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 					framework.Failf("Unable to get volume snapshot content annotations")
 				}
 
-				// checks if delete snapshot secrets annotation is applied to the VolumeSnapshotContent.
+				// 检查 delete snapshot secret 的 annotation 是否应用到 VolumeSnapshotContent。
 				checkDeleteSnapshotSecrets(m.cs, annotations)
 
-				// delete the snapshot and check if the snapshot is deleted.
+				// 删除 snapshot 并检查其是否已被删除。
 				deleteSnapshot(m.cs, m.config, snapshot)
 			})
 		}
@@ -315,7 +315,7 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 					framework.Failf("Error creating metrics grabber : %v", err)
 				}
 
-				// Grab initial metrics - if this fails, snapshot controller metrics are not setup. Skip in this case.
+				// 先获取初始 metrics；如果失败，说明 snapshot controller 的 metrics 未配置，跳过测试。
 				_, err = metricsGrabber.GrabFromSnapshotController(ctx, framework.TestContext.SnapshotControllerPodName, framework.TestContext.SnapshotControllerHTTPPort)
 				if err != nil {
 					e2eskipper.Skipf("Snapshot controller metrics not found -- skipping")
@@ -373,7 +373,7 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 				framework.ExpectNoError(err, "failed to wait for snapshot ready")
 				createSnapshotAndReadyMetrics.waitForSnapshotControllerMetric(ctx, originalCreateSnapshotAndReadyCount+1.0, f.Timeouts.SnapshotControllerMetrics)
 
-				// delete the snapshot and check if the snapshot is deleted
+				// 删除 snapshot 并检查其是否已被删除
 				deleteSnapshot(m.cs, m.config, sr.Vs)
 
 				ginkgo.By("check for delete metrics")
@@ -384,7 +384,7 @@ var _ = utils.SIGDescribe("CSI Mock volume snapshot", func() {
 	})
 })
 
-// checkDeleteSnapshotSecrets checks if delete snapshot secrets annotation is applied to the VolumeSnapshotContent.
+// checkDeleteSnapshotSecrets 检查 delete snapshot secret 的 annotation 是否应用到 VolumeSnapshotContent。
 func checkDeleteSnapshotSecrets(cs clientset.Interface, annotations interface{}) error {
 	ginkgo.By("checking if delete snapshot secrets annotation is applied to the VolumeSnapshotContent")
 
@@ -394,10 +394,10 @@ func checkDeleteSnapshotSecrets(cs clientset.Interface, annotations interface{})
 		ok                         bool
 		err                        error
 
-		// CSISnapshotterDeleteSecretNameAnnotation is the annotation key for the CSI snapshotter delete secret name in VolumeSnapshotClass.parameters
+		// CSISnapshotterDeleteSecretNameAnnotation 是 VolumeSnapshotClass.parameters 中 CSI snapshotter 删除 secret 名称的 annotation key
 		CSISnapshotterDeleteSecretNameAnnotation string = "snapshot.storage.kubernetes.io/deletion-secret-name"
 
-		// CSISnapshotterDeleteSecretNamespaceAnnotation is the annotation key for the CSI snapshotter delete secret namespace in VolumeSnapshotClass.parameters
+		// CSISnapshotterDeleteSecretNamespaceAnnotation 是 VolumeSnapshotClass.parameters 中 CSI snapshotter 删除 secret namespace 的 annotation key
 		CSISnapshotterDeleteSecretNamespaceAnnotation string = "snapshot.storage.kubernetes.io/deletion-secret-namespace"
 	)
 
@@ -413,7 +413,7 @@ func checkDeleteSnapshotSecrets(cs clientset.Interface, annotations interface{})
 		framework.Failf("unable to get secret annotation namespace")
 	}
 
-	// verify if secrets exists
+	// 验证 secret 是否存在
 	if _, err = cs.CoreV1().Secrets(annDeletionSecretNamespace).Get(context.TODO(), annDeletionSecretName, metav1.GetOptions{}); err != nil {
 		framework.Failf("unable to get test secret %s: %v", annDeletionSecretName, err)
 	}
@@ -422,18 +422,18 @@ func checkDeleteSnapshotSecrets(cs clientset.Interface, annotations interface{})
 }
 
 func deleteSnapshot(cs clientset.Interface, config *storageframework.PerTestConfig, snapshot *unstructured.Unstructured) {
-	// delete the given snapshot
+	// 删除指定的 snapshot
 	dc := config.Framework.DynamicClient
 	err := dc.Resource(utils.SnapshotGVR).Namespace(snapshot.GetNamespace()).Delete(context.TODO(), snapshot.GetName(), metav1.DeleteOptions{})
 	framework.ExpectNoError(err)
 
-	// check if the snapshot is deleted
+	// 检查 snapshot 是否已被删除
 	_, err = dc.Resource(utils.SnapshotGVR).Get(context.TODO(), snapshot.GetName(), metav1.GetOptions{})
 	gomega.Expect(err).To(gomega.MatchError(apierrors.IsNotFound, "the snapshot is not deleted"))
 }
 
 type snapshotMetricsTestConfig struct {
-	// expected values
+	// 期望值
 	metricName      string
 	metricType      string
 	driverName      string
@@ -444,11 +444,11 @@ type snapshotMetricsTestConfig struct {
 }
 
 type snapshotControllerMetrics struct {
-	// configuration for metric
+	// metric 的配置
 	cfg            snapshotMetricsTestConfig
 	metricsGrabber *e2emetrics.Grabber
 
-	// results
+	// 结果
 	countMetrics  map[string]float64
 	sumMetrics    map[string]float64
 	bucketMetrics map[string]float64
@@ -492,14 +492,13 @@ func newSnapshotControllerMetrics(cfg snapshotMetricsTestConfig, metricsGrabber 
 func (scm *snapshotControllerMetrics) waitForSnapshotControllerMetric(ctx context.Context, expectedValue float64, timeout time.Duration) {
 	metricKey := scm.getMetricKey()
 	if successful := utils.WaitUntil(10*time.Second, timeout, func() bool {
-		// get metric value
+		// 获取 metric 值
 		actualValue, err := scm.getSnapshotControllerMetricValue(ctx)
 		if err != nil {
 			return false
 		}
 
-		// Another operation could have finished from a previous test,
-		// so we check if we have at least the expected value.
+		// 前一个测试的操作可能已完成，因此只要求当前值不低于期望值。
 		if actualValue < expectedValue {
 			return false
 		}
@@ -516,7 +515,7 @@ func (scm *snapshotControllerMetrics) waitForSnapshotControllerMetric(ctx contex
 func (scm *snapshotControllerMetrics) getSnapshotControllerMetricValue(ctx context.Context) (float64, error) {
 	metricKey := scm.getMetricKey()
 
-	// grab and parse into readable format
+	// 抓取并解析为可读格式
 	err := scm.grabSnapshotControllerMetrics(ctx)
 	if err != nil {
 		return 0, err
@@ -557,7 +556,7 @@ func (scm *snapshotControllerMetrics) showMetricsFailure(metricKey string) {
 }
 
 func (scm *snapshotControllerMetrics) grabSnapshotControllerMetrics(ctx context.Context) error {
-	// pull all metrics
+	// 拉取所有 metrics
 	metrics, err := scm.metricsGrabber.GrabFromSnapshotController(ctx, framework.TestContext.SnapshotControllerPodName, framework.TestContext.SnapshotControllerHTTPPort)
 	if err != nil {
 		return err
@@ -602,7 +601,7 @@ func (scm *snapshotControllerMetrics) getMetricKey() string {
 func snapshotMetricKey(metricName, driverName, operationName, operationStatus, snapshotType, le string) string {
 	key := driverName
 
-	// build key for shorthand metrics storage
+	// 构造用于简化 metrics 存储的 key
 	for _, s := range []string{metricName, operationName, operationStatus, snapshotType, le} {
 		if s != "" {
 			key = fmt.Sprintf("%s_%s", key, s)

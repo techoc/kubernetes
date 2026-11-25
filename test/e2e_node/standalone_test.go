@@ -233,7 +233,7 @@ var _ = SIGDescribe(feature.StandaloneMode, func() {
 				return nil
 			}, f.Timeouts.PodStart, time.Second*5).Should(gomega.BeNil())
 
-			// Upgrade the pod
+			// 升级 pod
 			podSpec.Spec.Containers[0].Name = "upgraded"
 			err = scheduleStaticPod(podPath, staticPodName, ns, podSpec)
 			framework.ExpectNoError(err)
@@ -259,7 +259,7 @@ var _ = SIGDescribe(feature.StandaloneMode, func() {
 			}, f.Timeouts.PodStart, time.Second*5).Should(gomega.BeNil())
 		})
 
-		// the test below is not working - pod update fails with the "Predicate NodePorts failed: node(s) didn't have free ports for the requested pod ports"
+		// 下面的测试当前无法工作：pod 更新会失败，报 "Predicate NodePorts failed: node(s) didn't have free ports for the requested pod ports"
 		// ginkgo.It("the pod with the port on host network should be running and can be upgraded when namespace of a Pod changes", func(ctx context.Context) {
 		// 	ns = f.Namespace.Name
 		// 	staticPodName = "static-pod-" + string(uuid.NewUUID())
@@ -293,11 +293,11 @@ var _ = SIGDescribe(feature.StandaloneMode, func() {
 		// 		return nil
 		// 	}, f.Timeouts.PodStart, time.Second*5).Should(gomega.BeNil())
 
-		// 	// Upgrade the pod
+		// 	// 升级 pod
 		// 	upgradedNs := ns + "-upgraded"
 		// 	podSpec.Namespace = upgradedNs
 
-		// 	// use old namespace as it uses ns in a file name
+		// 	// 仍使用旧的 namespace，因为文件名中用到了 ns
 		// 	err = scheduleStaticPod(podPath, staticPodName, ns, podSpec)
 		// 	framework.ExpectNoError(err)
 
@@ -376,7 +376,7 @@ var _ = SIGDescribe(feature.StandaloneMode, func() {
 					g.Expect(err).Should(gomega.Succeed())
 					g.Expect(pod.Status.InitContainerStatuses).To(gomega.HaveLen(1))
 					cstatus := pod.Status.InitContainerStatuses[0]
-					// Wait until the init container is terminated.
+					// 等待 init container 终止
 					g.Expect(cstatus.State.Terminated).NotTo(gomega.BeNil())
 					g.Expect(cstatus.State.Terminated.ContainerID).NotTo(gomega.BeEmpty())
 					initCtrID = cstatus.ContainerID
@@ -400,7 +400,7 @@ var _ = SIGDescribe(feature.StandaloneMode, func() {
 					g.Expect(pod.Status.StartTime.Equal(startTime)).To(gomega.BeFalseBecause("startTime should not be equal"))
 					g.Expect(pod.Status.InitContainerStatuses).To(gomega.HaveLen(1))
 					cstatus := pod.Status.InitContainerStatuses[0]
-					// Init container should be completed.
+					// init container 应已完成
 					g.Expect(cstatus.State.Terminated).NotTo(gomega.BeNil())
 					g.Expect(cstatus.State.Terminated.Reason).To(gomega.Equal("Completed"))
 					g.Expect(cstatus.State.Terminated.ExitCode).To(gomega.BeZero())
@@ -574,7 +574,7 @@ func scheduleStaticPod(dir, name, namespace string, podSpec *v1.Pod) error {
 
 func getPodFromStandaloneKubelet(ctx context.Context, podNamespace string, podName string) (*v1.Pod, error) {
 	endpoint := fmt.Sprintf("http://127.0.0.1:%d/pods", ports.KubeletReadOnlyPort)
-	// TODO: we do not need TLS and bearer token for this test
+	// TODO: 这个测试不需要 TLS 和 bearer token
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -607,7 +607,7 @@ func getPodFromStandaloneKubelet(ctx context.Context, podNamespace string, podNa
 	}
 
 	for _, p := range pods.Items {
-		// Static pods has a node name suffix so comparing as substring
+		// static pod 名称带有 node name 后缀，因此用子串比较
 		if strings.Contains(p.Name, podName) && strings.Contains(p.Namespace, podNamespace) {
 			return &p, nil
 		}
@@ -646,9 +646,9 @@ func getPodLogsFromStandaloneKubelet(ctx context.Context, podNamespace string, p
 	return string(content), nil
 }
 
-// Decodes the http response from /configz and returns a kubeletconfig.KubeletConfiguration (internal type).
+// 解码 /configz 的 HTTP 响应，返回 kubeletconfig.KubeletConfiguration（内部类型）
 func decodePods(respBody []byte) (*v1.PodList, error) {
-	// This hack because /pods reports the following structure:
+	// 这是因为 /pods 返回如下结构：
 	// {"kind":"PodList","apiVersion":"v1","metadata":{},"items":[{"metadata":{"name":"kube-dns-autoscaler-758c4689b9-htpqj","generateName":"kube-dns-autoscaler-758c4689b9-",
 
 	var pods v1.PodList

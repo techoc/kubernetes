@@ -27,11 +27,11 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 )
 
-// Action is a function to be performed by the system.
+// Action 是系统要执行的函数。
 type Action func() error
 
-// WaitTimeoutForEvent waits the given timeout duration for an event to occur.
-// Please note delivery of events is not guaranteed. Asserting on events can lead to flaky tests.
+// WaitTimeoutForEvent 在给定超时时间内等待事件发生。
+// 注意 event 的送达不保证，对 event 做断言可能导致测试不稳定。
 func WaitTimeoutForEvent(ctx context.Context, c clientset.Interface, namespace, eventSelector, msg string, timeout time.Duration) error {
 	interval := 2 * time.Second
 	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, eventOccurred(c, namespace, eventSelector, msg))

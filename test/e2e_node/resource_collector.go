@@ -46,11 +46,11 @@ import (
 )
 
 const (
-	// resource monitoring
+	// 资源监控
 	cadvisorImageName = "gcr.io/cadvisor/cadvisor:v0.47.2"
 	cadvisorPodName   = "cadvisor"
 	cadvisorPort      = 8090
-	// housekeeping interval of Cadvisor (second)
+	// cAdvisor 的 housekeeping 间隔（秒）
 	houseKeepingInterval = 1
 )
 
@@ -58,8 +58,7 @@ var (
 	systemContainers map[string]string
 )
 
-// ResourceCollector is a collector object which collects
-// resource usage periodically from Cadvisor.
+// ResourceCollector 定期从 cAdvisor 采集资源使用情况
 type ResourceCollector struct {
 	pollingInterval time.Duration
 	buffers         map[string][]*e2ekubelet.ContainerResourceUsage
@@ -67,10 +66,9 @@ type ResourceCollector struct {
 	stopCh          chan struct{}
 }
 
-// cadvisorContainerInfo / cadvisorContainerStats are the minimal subset of the
-// standalone cAdvisor pod's v2 /api/v2.1/stats response that this collector
-// reads. Decoding into these local types keeps test/e2e_node free of both the
-// cAdvisor Go client and its v2 API types -- it talks to the pod over HTTP+JSON.
+// cadvisorContainerInfo / cadvisorContainerStats 是本采集器从独立 cAdvisor pod 的
+// v2 /api/v2.1/stats 响应中读取的最小子集。解码到这些本地类型可以避免
+// test/e2e_node 依赖 cAdvisor Go client 及其 v2 API 类型，直接通过 HTTP+JSON 与 pod 通信
 type cadvisorContainerInfo struct {
 	Stats []*cadvisorContainerStats `json:"stats"`
 }
@@ -89,8 +87,8 @@ type cadvisorContainerStats struct {
 	} `json:"memory"`
 }
 
-// cadvisorStats fetches the latest stats sample for a container from the
-// standalone cAdvisor pod's v2 REST API (replacing the cAdvisor v2 Go client).
+// cadvisorStats 从独立 cAdvisor pod 的 v2 REST API 获取容器的最新 stats 样本
+// （取代 cAdvisor v2 Go client）
 func cadvisorStats(name string) (map[string]*cadvisorContainerInfo, error) {
 	u := fmt.Sprintf("http://localhost:%d/api/v2.1/stats%s?count=1&type=name&recursive=false", cadvisorPort, name)
 	resp, err := http.Get(u)
@@ -108,8 +106,7 @@ func cadvisorStats(name string) (map[string]*cadvisorContainerInfo, error) {
 	return out, nil
 }
 
-// NewResourceCollector creates a resource collector object which collects
-// resource usage periodically from Cadvisor
+// NewResourceCollector 创建一个定期从 cAdvisor 采集资源使用情况的采集器
 func NewResourceCollector(interval time.Duration) *ResourceCollector {
 	buffers := make(map[string][]*e2ekubelet.ContainerResourceUsage)
 	return &ResourceCollector{
@@ -118,10 +115,9 @@ func NewResourceCollector(interval time.Duration) *ResourceCollector {
 	}
 }
 
-// Start starts resource collector and connects to the standalone Cadvisor pod
-// then repeatedly runs collectStats.
+// Start 启动采集器并连接独立 cAdvisor pod，随后反复运行 collectStats
 func (r *ResourceCollector) Start() {
-	// Get the cgroup container names for kubelet and runtime
+	// 获取 kubelet 和 runtime 对应的 cgroup 容器名
 	kubeletContainer, err1 := getContainerNameForProcess(kubeletProcessName, "")
 	runtimeContainer, err2 := getContainerNameForProcess(framework.TestContext.ContainerRuntimeProcessName, framework.TestContext.ContainerRuntimePidFile)
 	if err1 == nil && err2 == nil && kubeletContainer != "" && runtimeContainer != "" {
@@ -133,7 +129,7 @@ func (r *ResourceCollector) Start() {
 		framework.Failf("Failed to get runtime container name in test-e2e-node resource collector.")
 	}
 
-	// Wait for the standalone cAdvisor pod's v2 REST API to be reachable.
+	// 等待独立 cAdvisor pod 的 v2 REST API 可访问
 	err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 1*time.Minute, false, func(context.Context) (bool, error) {
 		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/v2.1/machine", cadvisorPort))
 		if err != nil {
@@ -150,12 +146,12 @@ func (r *ResourceCollector) Start() {
 	go wait.Until(func() { r.collectStats(oldStatsMap) }, r.pollingInterval, r.stopCh)
 }
 
-// Stop stops resource collector collecting stats. It does not clear the buffer
+// Stop 停止采集器采集 stats，但不清空缓冲区
 func (r *ResourceCollector) Stop() {
 	close(r.stopCh)
 }
 
-// Reset clears the stats buffer of resource collector.
+// Reset 清空采集器的 stats 缓冲区
 func (r *ResourceCollector) Reset() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -164,7 +160,7 @@ func (r *ResourceCollector) Reset() {
 	}
 }
 
-// GetCPUSummary gets CPU usage in percentile.
+// GetCPUSummary 按百分位返回 CPU 使用量
 func (r *ResourceCollector) GetCPUSummary() e2ekubelet.ContainersCPUSummary {
 	result := make(e2ekubelet.ContainersCPUSummary)
 	for key, name := range systemContainers {
@@ -174,7 +170,7 @@ func (r *ResourceCollector) GetCPUSummary() e2ekubelet.ContainersCPUSummary {
 	return result
 }
 
-// LogLatest logs the latest resource usage.
+// LogLatest 记录最新的资源使用情况
 func (r *ResourceCollector) LogLatest() {
 	summary, err := r.GetLatest()
 	if err != nil {
@@ -183,7 +179,7 @@ func (r *ResourceCollector) LogLatest() {
 	framework.Logf("%s", formatResourceUsageStats(summary))
 }
 
-// collectStats collects resource usage from Cadvisor.
+// collectStats 从 cAdvisor 采集资源使用情况
 func (r *ResourceCollector) collectStats(oldStatsMap map[string]*cadvisorContainerStats) {
 	for _, name := range systemContainers {
 		ret, err := cadvisorStats(name)
@@ -206,7 +202,7 @@ func (r *ResourceCollector) collectStats(oldStatsMap map[string]*cadvisorContain
 	}
 }
 
-// computeContainerResourceUsage computes resource usage based on new data sample.
+// computeContainerResourceUsage 根据新的数据样本计算资源使用量
 func computeContainerResourceUsage(name string, oldStats, newStats *cadvisorContainerStats) *e2ekubelet.ContainerResourceUsage {
 	return &e2ekubelet.ContainerResourceUsage{
 		Name:                    name,
@@ -219,7 +215,7 @@ func computeContainerResourceUsage(name string, oldStats, newStats *cadvisorCont
 	}
 }
 
-// GetLatest gets the latest resource usage from stats buffer.
+// GetLatest 从 stats 缓冲区获取最新的资源使用量
 func (r *ResourceCollector) GetLatest() (e2ekubelet.ResourceUsagePerContainer, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -240,17 +236,17 @@ func (r resourceUsageByCPU) Len() int           { return len(r) }
 func (r resourceUsageByCPU) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r resourceUsageByCPU) Less(i, j int) bool { return r[i].CPUUsageInCores < r[j].CPUUsageInCores }
 
-// The percentiles to report.
+// 要报告的百分位
 var percentiles = [...]float64{0.50, 0.90, 0.95, 0.99, 1.00}
 
-// GetBasicCPUStats returns the percentiles the cpu usage in cores for
-// containerName. This method examines all data currently in the buffer.
+// GetBasicCPUStats 返回 containerName 的 CPU 使用量（核数）百分位。
+// 该方法检查缓冲区中当前的所有数据
 func (r *ResourceCollector) GetBasicCPUStats(containerName string) map[float64]float64 {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	result := make(map[float64]float64, len(percentiles))
 
-	// We must make a copy of array, otherwise the timeseries order is changed.
+	// 必须复制数组，否则会改变时间序列的顺序
 	usages := make([]*e2ekubelet.ContainerResourceUsage, 0)
 	usages = append(usages, r.buffers[containerName]...)
 
@@ -258,7 +254,7 @@ func (r *ResourceCollector) GetBasicCPUStats(containerName string) map[float64]f
 	for _, q := range percentiles {
 		index := int(float64(len(usages))*q) - 1
 		if index < 0 {
-			// We don't have enough data.
+			// 数据不足
 			result[q] = 0
 			continue
 		}
@@ -286,7 +282,7 @@ func formatResourceUsageStats(containerStats e2ekubelet.ResourceUsagePerContaine
 }
 
 func formatCPUSummary(summary e2ekubelet.ContainersCPUSummary) string {
-	// Example output for a node (the percentiles may differ):
+	// 某个节点的输出示例（百分位可能不同）：
 	// CPU usage of containers:
 	// container        5th%  50th% 90th% 95th%
 	// "/"              0.051 0.159 0.387 0.455
@@ -323,15 +319,15 @@ func formatCPUSummary(summary e2ekubelet.ContainersCPUSummary) string {
 	return strings.Join(summaryStrings, "\n")
 }
 
-// createCadvisorPod creates a standalone cadvisor pod for fine-grain resource monitoring.
+// getCadvisorPod 创建一个独立 cAdvisor pod，用于细粒度资源监控
 func getCadvisorPod() *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cadvisorPodName,
 		},
 		Spec: v1.PodSpec{
-			// It uses a host port for the tests to collect data.
-			// Currently we can not use port mapping in test-e2e-node.
+			// 使用 host port 供测试采集数据；
+			// test-e2e-node 目前无法使用端口映射
 			HostNetwork:     true,
 			SecurityContext: &v1.PodSecurityContext{},
 			Containers: []v1.Container{
@@ -397,7 +393,7 @@ func getCadvisorPod() *v1.Pod {
 	}
 }
 
-// deletePodsSync deletes a list of pods and block until pods disappear.
+// deletePodsSync 删除一组 pod，并阻塞等待它们消失
 func deletePodsSync(ctx context.Context, f *framework.Framework, pods []*v1.Pod) {
 	var wg sync.WaitGroup
 	for i := range pods {
@@ -414,7 +410,7 @@ func deletePodsSync(ctx context.Context, f *framework.Framework, pods []*v1.Pod)
 	return
 }
 
-// newTestPods creates a list of pods (specification) for test.
+// newTestPods 为测试创建一组 pod spec
 func newTestPods(numPods int, volume bool, imageName, podType string) []*v1.Pod {
 	var pods []*v1.Pod
 	for range numPods {
@@ -431,7 +427,7 @@ func newTestPods(numPods int, volume bool, imageName, podType string) []*v1.Pod 
 						Labels: labels,
 					},
 					Spec: v1.PodSpec{
-						// Restart policy is always (default).
+						// 重启策略使用默认的 Always
 						Containers: []v1.Container{
 							{
 								Image: imageName,
@@ -454,7 +450,7 @@ func newTestPods(numPods int, volume bool, imageName, podType string) []*v1.Pod 
 						Labels: labels,
 					},
 					Spec: v1.PodSpec{
-						// Restart policy is always (default).
+						// 重启策略使用默认的 Always
 						Containers: []v1.Container{
 							{
 								Image: imageName,
@@ -469,7 +465,7 @@ func newTestPods(numPods int, volume bool, imageName, podType string) []*v1.Pod 
 	return pods
 }
 
-// GetResourceTimeSeries gets the time series of resource usage of each container.
+// GetResourceTimeSeries 获取每个容器资源使用情况的时间序列
 func (r *ResourceCollector) GetResourceTimeSeries() map[string]*perftype.ResourceSeries {
 	resourceSeries := make(map[string]*perftype.ResourceSeries)
 	for key, name := range systemContainers {
@@ -504,9 +500,9 @@ func getContainerNameForProcess(name, pidFile string) (string, error) {
 	return cont, nil
 }
 
-// getContainer returns the cgroup associated with the specified pid.
-// It enforces a unified hierarchy for memory and cpu cgroups.
-// On systemd environments, it uses the name=systemd cgroup for the specified pid.
+// getContainer 返回指定 pid 关联的 cgroup。
+// 它要求 memory 和 cpu cgroup 处于统一的层级结构中。
+// 在 systemd 环境中，使用指定 pid 的 name=systemd cgroup
 func getContainer(pid int) (string, error) {
 	cgs, err := cgroups.ParseCgroupFile(fmt.Sprintf("/proc/%d/cgroup", pid))
 	if err != nil {
@@ -530,20 +526,20 @@ func getContainer(pid int) (string, error) {
 		return "", cgroups.NewNotFoundError("memory")
 	}
 
-	// since we use this container for accounting, we need to ensure it is a unified hierarchy.
+	// 由于要用这个 cgroup 做资源核算，必须确保它是统一的层级结构
 	if cpu != memory {
 		return "", fmt.Errorf("cpu and memory cgroup hierarchy not unified.  cpu: %s, memory: %s", cpu, memory)
 	}
 
-	// on systemd, every pid is in a unified cgroup hierarchy (name=systemd as seen in systemd-cgls)
-	// cpu and memory accounting is off by default, users may choose to enable it per unit or globally.
-	// users could enable CPU and memory accounting globally via /etc/systemd/system.conf (DefaultCPUAccounting=true DefaultMemoryAccounting=true).
-	// users could also enable CPU and memory accounting per unit via CPUAccounting=true and MemoryAccounting=true
-	// we only warn if accounting is not enabled for CPU or memory so as to not break local development flows where kubelet is launched in a terminal.
-	// for example, the cgroup for the user session will be something like /user.slice/user-X.slice/session-X.scope, but the cpu and memory
-	// cgroup will be the closest ancestor where accounting is performed (most likely /) on systems that launch docker containers.
-	// as a result, on those systems, you will not get cpu or memory accounting statistics for kubelet.
-	// in addition, you would not get memory or cpu accounting for the runtime unless accounting was enabled on its unit (or globally).
+	// 在 systemd 上，每个 pid 都位于统一的 cgroup 层级中（在 systemd-cgls 中显示为 name=systemd）；
+	// cpu 和 memory accounting 默认关闭，用户可以按 unit 或全局启用。
+	// 可通过 /etc/systemd/system.conf 全局启用（DefaultCPUAccounting=true DefaultMemoryAccounting=true），
+	// 也可通过 CPUAccounting=true 和 MemoryAccounting=true 为单个 unit 启用。
+	// 这里仅在 CPU 或 memory accounting 未启用时告警，以免破坏在终端启动 kubelet 的本地开发流程。
+	// 例如用户会话的 cgroup 类似 /user.slice/user-X.slice/session-X.scope，但在运行 docker 容器的系统上，
+	// cpu 和 memory cgroup 是实际执行 accounting 的最近祖先（很可能是 /）。
+	// 因此在这些系统上拿不到 kubelet 的 cpu 或 memory accounting 统计。
+	// 此外，除非 runtime 所在的 unit（或全局）启用了 accounting，否则也拿不到 runtime 的统计
 	if systemd, found := cgs["name=systemd"]; found {
 		if systemd != cpu {
 			log.Printf("CPUAccounting not enabled for pid: %d", pid)

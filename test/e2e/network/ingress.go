@@ -55,7 +55,7 @@ var _ = common.SIGDescribe("Ingress API", func() {
 	*/
 
 	framework.ConformanceIt("should support creating Ingress API operations", func(ctx context.Context) {
-		// Setup
+		// 准备
 		ns := f.Namespace.Name
 		ingVersion := "v1"
 		ingClient := f.ClientSet.NetworkingV1().Ingresses(ns)
@@ -111,7 +111,7 @@ var _ = common.SIGDescribe("Ingress API", func() {
 		ingress3 := ingTemplate.DeepCopy()
 		ingress3.Spec.Rules[0].Host = "host3.bar.com"
 
-		// Discovery
+		// 验证 API 发现端点能暴露新建的 ingress 资源
 		ginkgo.By("getting /apis")
 		{
 			discoveryGroups, err := f.ClientSet.Discovery().ServerGroups()
@@ -165,7 +165,7 @@ var _ = common.SIGDescribe("Ingress API", func() {
 			}
 		}
 
-		// Ingress resource create/read/update/watch verbs
+		// Ingress 资源的 create/read/update/watch 操作
 		ginkgo.By("creating")
 		_, err := ingClient.Create(ctx, ingress1, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
@@ -190,7 +190,7 @@ var _ = common.SIGDescribe("Ingress API", func() {
 		ingWatch, err := ingClient.Watch(ctx, metav1.ListOptions{ResourceVersion: ings.ResourceVersion, LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
 
-		// Test cluster-wide list and watch
+		// 测试集群范围的 list 和 watch
 		clusterIngClient := f.ClientSet.NetworkingV1().Ingresses("")
 		ginkgo.By("cluster-wide listing")
 		clusterIngs, err := clusterIngClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
@@ -246,7 +246,7 @@ var _ = common.SIGDescribe("Ingress API", func() {
 			}
 		}
 
-		// /status subresource operations
+		// /status 子资源操作
 		ginkgo.By("patching /status")
 		lbStatus := networkingv1.IngressLoadBalancerStatus{
 			Ingress: []networkingv1.IngressLoadBalancerIngress{{IP: "169.1.1.1"}},
@@ -284,7 +284,7 @@ var _ = common.SIGDescribe("Ingress API", func() {
 		framework.ExpectNoError(err)
 		gomega.Expect(string(createdIngress.UID)).To(gomega.Equal(statusUID), "createdIngress.UID: %v expected to match statusUID: %v ", createdIngress.UID, statusUID)
 
-		// Ingress resource delete operations
+		// Ingress 资源删除操作
 		ginkgo.By("deleting")
 
 		expectFinalizer := func(ing *networkingv1.Ingress, msg string) {
@@ -297,7 +297,7 @@ var _ = common.SIGDescribe("Ingress API", func() {
 		err = ingClient.Delete(ctx, createdIngress.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 		ing, err := ingClient.Get(ctx, createdIngress.Name, metav1.GetOptions{})
-		// If ingress controller does not support finalizers, we expect a 404.  Otherwise we validate finalizer behavior.
+		// 如果 ingress controller 不支持 finalizer，预期返回 404；否则校验 finalizer 行为。
 		if err == nil {
 			expectFinalizer(ing, "deleting createdIngress")
 		} else {
@@ -307,11 +307,11 @@ var _ = common.SIGDescribe("Ingress API", func() {
 		}
 		ings, err = ingClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
-		// Should have <= 3 items since some ingresses might not have been deleted yet due to finalizers
+		// 结果应不超过 3 个，因为有些 ingress 可能因 finalizer 尚未被删除
 		if len(ings.Items) > 3 {
 			framework.Fail("filtered list should have <= 3 items")
 		}
-		// Validate finalizer on the deleted ingress
+		// 校验被删除 ingress 上的 finalizer
 		for _, ing := range ings.Items {
 			if ing.Namespace == createdIngress.Namespace && ing.Name == createdIngress.Name {
 				expectFinalizer(&ing, "listing after deleting createdIngress")
@@ -323,11 +323,11 @@ var _ = common.SIGDescribe("Ingress API", func() {
 		framework.ExpectNoError(err)
 		ings, err = ingClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
-		// Should have <= 3 items since some ingresses might not have been deleted yet due to finalizers
+		// 结果应不超过 3 个，因为有些 ingress 可能因 finalizer 尚未被删除
 		if len(ings.Items) > 3 {
 			framework.Fail("filtered list should have <= 3 items")
 		}
-		// Validate finalizers
+		// 校验 finalizer
 		for _, ing := range ings.Items {
 			expectFinalizer(&ing, "deleting ingress collection")
 		}

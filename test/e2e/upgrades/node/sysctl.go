@@ -36,23 +36,22 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// SysctlUpgradeTest tests that a pod with sysctls runs before and after an upgrade. During
-// a master upgrade, the exact pod is expected to stay running. A pod with unsafe sysctls is
-// expected to keep failing before and after the upgrade.
+// SysctlUpgradeTest 验证带 sysctl 的 pod 在升级前后都能运行。
+// master 升级期间，该 pod 预期保持运行；带不安全 sysctl 的 pod
+// 在升级前后都应持续失败。
 type SysctlUpgradeTest struct {
 	validPod   *v1.Pod
 	invalidPod *v1.Pod
 }
 
-// Setup creates two pods: one with safe sysctls, one with unsafe sysctls. It checks that the former
-// launched and the later is rejected.
+// Setup 创建两个 pod：一个带安全 sysctl，一个带不安全 sysctl，
+// 并检查前者成功启动、后者被拒绝。
 func (t *SysctlUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	t.validPod = t.verifySafeSysctlWork(ctx, f)
 	t.invalidPod = t.verifyUnsafeSysctlsAreRejected(ctx, f)
 }
 
-// Test waits for the upgrade to complete, and then verifies that a
-// pod can still consume the ConfigMap.
+// Test 等待升级完成，然后验证 pod 仍能使用该 ConfigMap。
 func (t *SysctlUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	<-done
 	switch upgrade {
@@ -76,9 +75,9 @@ func (t *SysctlUpgradeTest) Test(ctx context.Context, f *framework.Framework, do
 	t.verifyUnsafeSysctlsAreRejected(ctx, f)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *SysctlUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依赖 namespace 删除来清理所有资源
 }
 
 func (t *SysctlUpgradeTest) verifySafeSysctlWork(ctx context.Context, f *framework.Framework) *v1.Pod {

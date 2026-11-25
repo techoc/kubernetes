@@ -34,20 +34,20 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// makePodToVerifyCgroups returns a pod that verifies the existence of the specified cgroups.
+// makePodToVerifyCgroupSize 返回一个 pod，用于验证指定 cgroup 的大小
 func makePodToVerifyCgroupSize(cgroupNames []string, expectedCPU string, expectedMemory string) *v1.Pod {
-	// convert the names to their literal cgroupfs forms...
+	// 将名称转换为 cgroupfs 中的实际形式
 	cgroupFsNames := []string{}
 	rootCgroupName := cm.NewCgroupName(cm.RootCgroupName, defaultNodeAllocatableCgroup)
 	for _, baseName := range cgroupNames {
-		// Add top level cgroup used to enforce node allocatable.
+		// 加上用于强制 node allocatable 的顶层 cgroup
 		cgroupComponents := strings.Split(baseName, "/")
 		cgroupName := cm.NewCgroupName(rootCgroupName, cgroupComponents...)
 		cgroupFsNames = append(cgroupFsNames, toCgroupFsName(cgroupName))
 	}
 	framework.Logf("expecting %v cgroups to be found", cgroupFsNames)
 
-	// build the pod command to verify cgroup sizing
+	// 构建用于验证 cgroup 大小的 pod 命令
 	command := ""
 	for _, cgroupFsName := range cgroupFsNames {
 		memLimitCgroup := filepath.Join("/host_cgroups/memory", cgroupFsName, "memory.limit_in_bytes")

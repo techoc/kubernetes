@@ -63,7 +63,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 	/*
 		Release : v1.21
 		Testname: Server Side Apply, Create
-		Description: Apply an object. An apply on an object that does not exist MUST create the object.
+		Description: apply 一个对象。对不存在的对象执行 apply，MUST 创建该对象。
 	*/
 	ginkgo.It("should create an applied object if it does not already exist", func(ctx context.Context) {
 		testCases := []struct {
@@ -127,7 +127,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 				framework.Failf("Failed to retrieve object: %v", err)
 			}
 
-			// Test that we can re apply with a different field manager and don't get conflicts
+			// 验证使用不同的 field manager 重新 apply 不会产生冲突
 			obj, err := client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 				Namespace(ns).
 				Resource(tc.resource).
@@ -140,7 +140,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 				framework.Failf("Failed to re-apply object using Apply patch: %v", err)
 			}
 
-			// Verify that both appliers own the fields
+			// 确认两个 applier 各自拥有相应的字段
 			accessor, err := meta.Accessor(obj)
 			framework.ExpectNoError(err, "getting ObjectMeta")
 			managedFields := accessor.GetManagedFields()
@@ -157,7 +157,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 	/*
 		Release : v1.21
 		Testname: Server Side Apply, Subresource
-		Description: Apply a resource and issue a subsequent apply on a subresource. The subresource MUST be updated with the applied object contents.
+		Description: apply 一个资源，随后对其 subresource 执行 apply。该 subresource MUST 被更新为 apply 对象中的内容。
 	*/
 	ginkgo.It("should work for subresources", func(ctx context.Context) {
 		{
@@ -211,7 +211,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 					framework.Failf("Failed to retrieve object: %v", err)
 				}
 
-				// Test that apply does not update subresources unless directed at a subresource endpoint
+				// 验证除非明确指向 subresource endpoint，否则 apply 不会更新 subresource
 				_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 					Namespace(ns).
 					Resource(tc.resource).
@@ -231,7 +231,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 					}
 				}
 
-				// Test that apply to subresource updates the subresource
+				// 验证对 subresource 的 apply 会更新该 subresource
 				_, err = client.CoreV1().RESTClient().Patch(types.ApplyPatchType).
 					Namespace(ns).
 					Resource(tc.resource).
@@ -265,7 +265,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 	/*
 		Release : v1.21
 		Testname: Server Side Apply, unset field
-		Description: Apply an object. Issue a subsequent apply that removes a field. The particular field MUST be removed.
+		Description: apply 一个对象，随后再次 apply 以移除某个字段。该字段 MUST 被删除。
 	*/
 	ginkgo.It("should remove a field if it is owned but removed in the apply request", func(ctx context.Context) {
 		obj := []byte(`{
@@ -368,11 +368,11 @@ var _ = SIGDescribe("ServerSideApply", func() {
 	/*
 		Release : v1.21
 		Testname: Server Side Apply, unset field shared
-		Description: Apply an object. Unset ownership of a field that is also owned by other managers and make a subsequent apply request. The unset field MUST not be removed from the object.
+		Description: apply 一个对象。取消某个同时被其他 manager 拥有的字段的所有权，然后再次 apply。该字段 MUST NOT 从对象中被移除。
 	*/
 	ginkgo.It("should not remove a field if an owner unsets the field but other managers still have ownership of the field", func(ctx context.Context) {
-		// spec.replicas is a optional, defaulted field
-		// spec.template.spec.hostname is an optional, non-defaulted field
+		// spec.replicas 是可选的、会被默认值填充的字段
+		// spec.template.spec.hostname 是可选的、不会被默认值填充的字段
 		apply := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -419,7 +419,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 			}
 		}
 
-		// unset spec.replicas and spec.template.spec.hostname
+		// 移除 spec.replicas 和 spec.template.spec.hostname
 		apply = []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -477,7 +477,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 	/*
 		Release : v1.21
 		Testname: Server Side Apply, Force Apply
-		Description: Apply an object. Force apply a modified version of the object such that a conflict will exist in the managed fields. The force apply MUST successfully update the object.
+		Description: apply 一个对象。强制 apply 该对象的修改版本，使其与 managedFields 产生冲突。强制 apply MUST 成功更新该对象。
 	*/
 	ginkgo.It("should ignore conflict errors if force apply is used", func(ctx context.Context) {
 		obj := []byte(`{
@@ -564,7 +564,7 @@ var _ = SIGDescribe("ServerSideApply", func() {
 	/*
 		Release : v1.21
 		Testname: Server Side Apply, CRD
-		Description: Create a CRD and apply a CRD resource. Subsequent apply requests that do not conflict with the previous ones should update the object. Apply requests that cause conflicts should fail.
+		Description: 创建 CRD 并 apply 一个自定义资源。后续不与之前请求冲突的 apply 应更新对象；引起冲突的 apply 应失败。
 	*/
 	ginkgo.It("should work for CRDs", func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -684,7 +684,7 @@ spec:
 		verifyReplicas(result, 1)
 		verifyNumPorts(result, 1)
 
-		// Ensure that apply works with multiple resource versions
+		// 验证 apply 在存在多个 resourceVersion 时仍能工作
 		apiVersionBeta := noxuDefinition.Spec.Group + "/" + noxuDefinition.Spec.Versions[1].Name
 		yamlBodyBeta := []byte(fmt.Sprintf(`
 apiVersion: %s
@@ -710,7 +710,7 @@ spec:
 		verifyReplicas(result, 1)
 		verifyNumPorts(result, 1)
 
-		// Reset the finalizers after the test so the objects can be deleted
+		// 测试结束后重置 finalizer，确保对象可被删除
 		defer func() {
 			result, err = rest.Patch(types.MergePatchType).
 				AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
@@ -722,7 +722,7 @@ spec:
 			}
 		}()
 
-		// Patch object to add another finalizer to the finalizers list
+		// patch 对象，向 finalizer 列表添加另一个 finalizer
 		result, err = rest.Patch(types.MergePatchType).
 			AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 			Name(name).
@@ -735,7 +735,7 @@ spec:
 		verifyFinalizersIncludes(result, "test-finalizer")
 		verifyFinalizersIncludes(result, "another-one")
 
-		// Re-apply the same config, should work fine, since finalizers should have the list-type extension 'set'.
+		// 重新 apply 相同配置应正常成功，因为 finalizer 带有 list 类型扩展 'set'
 		result, err = rest.Patch(types.ApplyPatchType).
 			AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 			Name(name).
@@ -750,7 +750,7 @@ spec:
 		verifyFinalizersIncludes(result, "test-finalizer")
 		verifyFinalizersIncludes(result, "another-one")
 
-		// Patch object to change the number of replicas
+		// patch 对象以修改副本数
 		result, err = rest.Patch(types.MergePatchType).
 			AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 			Name(name).
@@ -761,7 +761,7 @@ spec:
 		}
 		verifyReplicas(result, 5)
 
-		// Re-apply, we should get conflicts now, since the number of replicas was changed.
+		// 再次 apply 应产生冲突，因为副本数已被修改
 		result, err = rest.Patch(types.ApplyPatchType).
 			AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 			Name(name).
@@ -779,7 +779,7 @@ spec:
 			framework.Failf("Expecting to get one conflict when applying object after updating replicas, got: %v", status.Status().Details.Causes)
 		}
 
-		// Re-apply with force, should work fine.
+		// 强制重新 apply 应正常成功
 		result, err = rest.Patch(types.ApplyPatchType).
 			AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 			Name(name).
@@ -792,7 +792,7 @@ spec:
 		}
 		verifyReplicas(result, 1)
 
-		// New applier tries to edit an existing list item, we should get conflicts.
+		// 新的 applier 尝试修改已有列表项，应产生冲突
 		result, err = rest.Patch(types.ApplyPatchType).
 			AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 			Name(name).
@@ -819,7 +819,7 @@ spec:
 			framework.Failf("Expecting to get one conflict when a different applier updates existing list item, got: %v", status.Status().Details.Causes)
 		}
 
-		// New applier tries to add a new list item, should work fine.
+		// 新的 applier 尝试添加新列表项，应正常成功
 		result, err = rest.Patch(types.ApplyPatchType).
 			AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 			Name(name).
@@ -841,7 +841,7 @@ spec:
 		}
 		verifyNumPorts(result, 2)
 
-		// UpdateOnCreate
+		// UpdateOnCreate 场景
 		notExistingYAMLBody := []byte(fmt.Sprintf(`
 	{
 		"apiVersion": "%s",
@@ -874,7 +874,7 @@ spec:
 			framework.Failf("create on update should fail with notFound, got %v", err)
 		}
 
-		// Create a CRD to test atomic lists
+		// 创建 CRD 以测试 atomic list
 		crd := fixtures.NewRandomNameV1CustomResourceDefinition(apiextensionsv1.ClusterScoped)
 		err = json.Unmarshal([]byte(`{
 		"openAPIV3Schema": {
@@ -955,17 +955,17 @@ spec:
 			framework.Failf("failed to create custom resource with apply: %v:\n%v", err, string(result))
 		}
 
-		// Since the list is atomic the contents of the list must completely be replaced by the latest apply
+		// 由于是 atomic list，其内容必须被最近一次 apply 整体替换
 		verifyList(result, []interface{}{"item2"})
 	})
 
 	/*
 		Release : v1.21
 		Testname: Server Side Apply, Update take ownership
-		Description: Apply an object. Send an Update request which should take ownership of a field. The field should be owned by the new manager and a subsequent apply from the original manager MUST not change the field it does not have ownership of.
+		Description: apply 一个对象，然后发送 Update 请求获取某字段的所有权。该字段应归新 manager 所有，原 manager 再次 apply MUST NOT 修改其已不拥有的字段。
 	*/
 	ginkgo.It("should give up ownership of a field if forced applied by a controller", func(ctx context.Context) {
-		// Applier creates a deployment with replicas set to 3
+		// applier 创建副本数为 3 的 deployment
 		apply := []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -1015,7 +1015,7 @@ spec:
 		})
 		framework.ExpectNoError(err)
 
-		// applier omits replicas
+		// applier 省略 replicas 字段
 		apply = []byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -1058,7 +1058,7 @@ spec:
 			framework.Failf("Failed to create object using Apply patch: %v", err)
 		}
 
-		// ensure the container is deleted even though a controller updated a field of the container
+		// 即使 controller 修改了容器的某个字段，也要确保容器被删除
 		deployment, ok := patched.(*appsv1.Deployment)
 		if !ok {
 			framework.Failf("Failed to convert response object to Deployment")
@@ -1069,7 +1069,7 @@ spec:
 	})
 })
 
-// verifyNumFinalizers checks that len(.metadata.finalizers) == n
+// verifyNumFinalizers 检查 len(.metadata.finalizers) == n
 func verifyNumFinalizers(b []byte, n int) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -1081,7 +1081,7 @@ func verifyNumFinalizers(b []byte, n int) {
 	}
 }
 
-// verifyFinalizersIncludes checks that .metadata.finalizers includes e
+// verifyFinalizersIncludes 检查 .metadata.finalizers 包含 e
 func verifyFinalizersIncludes(b []byte, e string) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -1096,7 +1096,7 @@ func verifyFinalizersIncludes(b []byte, e string) {
 	framework.Failf("expected finalizers to include %q but got: %v", e, obj.GetFinalizers())
 }
 
-// verifyReplicas checks that .spec.replicas == r
+// verifyReplicas 检查 .spec.replicas == r
 func verifyReplicas(b []byte, r int) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -1124,7 +1124,7 @@ func verifyReplicas(b []byte, r int) {
 	}
 }
 
-// verifyNumPorts checks that len(.spec.ports) == n
+// verifyNumPorts 检查 len(.spec.ports) == n
 func verifyNumPorts(b []byte, n int) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -1152,7 +1152,7 @@ func verifyNumPorts(b []byte, n int) {
 	}
 }
 
-// verifyList checks that .spec.atomicList is the exact same as the expectedList provided
+// verifyList 检查 .spec.atomicList 与传入的 expectedList 完全一致
 func verifyList(b []byte, expectedList []interface{}) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)

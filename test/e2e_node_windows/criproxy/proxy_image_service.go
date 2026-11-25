@@ -28,13 +28,13 @@ const (
 	PullImage   = "PullImage"
 	RemoveImage = "RemoveImage"
 	ImageFsInfo = "ImageFsInfo"
-	// Streaming APIs
+	// 流式 API
 	StreamImages = "StreamImages"
-	// Per-send injection point for streaming APIs, called before each stream.Send().
+	// 流式 API 的每次发送注入点，在每次 stream.Send() 之前调用
 	StreamImagesSend = "StreamImagesSend"
 )
 
-// ListImages lists existing images.
+// ListImages 列出现有镜像
 func (p *RemoteRuntime) ListImages(ctx context.Context, req *kubeapi.ListImagesRequest) (*kubeapi.ListImagesResponse, error) {
 	if err := p.runInjectors(ListImages); err != nil {
 		return nil, err
@@ -49,9 +49,8 @@ func (p *RemoteRuntime) ListImages(ctx context.Context, req *kubeapi.ListImagesR
 	}, nil
 }
 
-// ImageStatus returns the status of the image. If the image is not
-// present, returns a response with ImageStatusResponse.Image set to
-// nil.
+// ImageStatus 返回镜像状态；镜像不存在时返回
+// ImageStatusResponse.Image 为 nil 的响应
 func (p *RemoteRuntime) ImageStatus(ctx context.Context, req *kubeapi.ImageStatusRequest) (*kubeapi.ImageStatusResponse, error) {
 	if err := p.runInjectors(ImageStatus); err != nil {
 		return nil, err
@@ -64,7 +63,7 @@ func (p *RemoteRuntime) ImageStatus(ctx context.Context, req *kubeapi.ImageStatu
 	return resp, nil
 }
 
-// PullImage pulls an image with authentication config.
+// PullImage 使用认证配置拉取镜像
 func (p *RemoteRuntime) PullImage(ctx context.Context, req *kubeapi.PullImageRequest) (*kubeapi.PullImageResponse, error) {
 	if err := p.runInjectors(PullImage); err != nil {
 		return nil, err
@@ -79,9 +78,8 @@ func (p *RemoteRuntime) PullImage(ctx context.Context, req *kubeapi.PullImageReq
 	}, nil
 }
 
-// RemoveImage removes the image.
-// This call is idempotent, and must not return an error if the image has
-// already been removed.
+// RemoveImage 删除镜像。
+// 该调用是幂等的，镜像已被删除时也不能返回错误
 func (p *RemoteRuntime) RemoveImage(ctx context.Context, req *kubeapi.RemoveImageRequest) (*kubeapi.RemoveImageResponse, error) {
 	if err := p.runInjectors(RemoveImage); err != nil {
 		return nil, err
@@ -94,7 +92,7 @@ func (p *RemoteRuntime) RemoveImage(ctx context.Context, req *kubeapi.RemoveImag
 	return &kubeapi.RemoveImageResponse{}, nil
 }
 
-// ImageFsInfo returns information of the filesystem that is used to store images.
+// ImageFsInfo 返回用于存储镜像的文件系统信息
 func (p *RemoteRuntime) ImageFsInfo(ctx context.Context, req *kubeapi.ImageFsInfoRequest) (*kubeapi.ImageFsInfoResponse, error) {
 	if err := p.runInjectors(ImageFsInfo); err != nil {
 		return nil, err
@@ -107,7 +105,7 @@ func (p *RemoteRuntime) ImageFsInfo(ctx context.Context, req *kubeapi.ImageFsInf
 	return resp, nil
 }
 
-// StreamImages returns a stream of images.
+// StreamImages 返回镜像流
 func (p *RemoteRuntime) StreamImages(req *kubeapi.StreamImagesRequest, stream kubeapi.ImageService_StreamImagesServer) error {
 	if err := p.runInjectors(StreamImages); err != nil {
 		return err

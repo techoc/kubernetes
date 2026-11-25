@@ -29,11 +29,11 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// pytorchWideDeepWorkload defines a workload to run a PyTorch Wide-Deep
-// model training benchmark for CPU Manager validation.
+// pytorchWideDeepWorkload 定义运行 PyTorch Wide-Deep 模型训练基准的 workload，
+// 用于验证 CPU Manager
 type pytorchWideDeepWorkload struct{}
 
-// Ensure pytorchWideDeepWorkload implements NodePerfWorkload interface.
+// 确保 pytorchWideDeepWorkload 实现 NodePerfWorkload 接口
 var _ NodePerfWorkload = &pytorchWideDeepWorkload{}
 
 func (w pytorchWideDeepWorkload) Name() string {
@@ -55,7 +55,7 @@ func (w pytorchWideDeepWorkload) PodSpec() v1.PodSpec {
 				v1.ResourceName(v1.ResourceMemory): resource.MustParse("16Gi"),
 			},
 		},
-		// The container entrypoint already runs: time -p python /train_wide_deep.py
+		// 容器入口已运行：`time -p python /train_wide_deep.py`
 	}
 	containers = append(containers, ctn)
 
@@ -70,16 +70,15 @@ func (w pytorchWideDeepWorkload) Timeout() time.Duration {
 }
 
 func (w pytorchWideDeepWorkload) KubeletConfig(oldCfg *kubeletconfig.KubeletConfiguration) (newCfg *kubeletconfig.KubeletConfiguration, err error) {
-	// Enable CPU Manager in Kubelet with static policy.
+	// 在 kubelet 中以 static 策略启用 CPU Manager
 	newCfg = oldCfg.DeepCopy()
-	// Set the CPU Manager policy to static.
+	// 将 CPU Manager 策略设为 static
 	newCfg.CPUManagerPolicy = string(cpumanager.PolicyStatic)
-	// Set the CPU Manager reconcile period to 10 second.
+	// 将 CPU Manager 的 reconcile 周期设为 10 秒
 	newCfg.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Second}
 
-	// The Kubelet panics if either kube-reserved or system-reserved is not set
-	// when static CPU Manager is enabled. Set cpu in kube-reserved > 0 so that
-	// kubelet doesn't panic.
+	// 启用 static CPU Manager 时，如果未设置 kube-reserved 或 system-reserved，
+	// kubelet 会 panic。因此在 kube-reserved 中将 cpu 设为 > 0，避免 panic
 	if newCfg.KubeReserved == nil {
 		newCfg.KubeReserved = map[string]string{}
 	}

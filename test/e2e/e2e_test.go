@@ -26,10 +26,9 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	yaml "go.yaml.in/yaml/v2"
 
-	// Never, ever remove the line with "/ginkgo". Without it,
-	// the ginkgo test runner will not detect that this
-	// directory contains a Ginkgo test suite.
-	// See https://github.com/kubernetes/kubernetes/issues/74827
+	// 永远不要删掉含 "/ginkgo" 的这一行。少了它，
+	// ginkgo test runner 就无法识别这个目录包含 Ginkgo 测试套件。
+	// 见 https://github.com/kubernetes/kubernetes/issues/74827
 	// "github.com/onsi/ginkgo/v2"
 
 	"k8s.io/component-base/version"
@@ -41,10 +40,10 @@ import (
 	e2etestingmanifests "k8s.io/kubernetes/test/e2e/testing-manifests"
 	testfixtures "k8s.io/kubernetes/test/fixtures"
 
-	// define and freeze constants
+	// 定义并冻结常量
 	_ "k8s.io/kubernetes/test/e2e/feature"
 
-	// test sources
+	// 测试源码
 	_ "k8s.io/kubernetes/test/e2e/apimachinery"
 	_ "k8s.io/kubernetes/test/e2e/apps"
 	_ "k8s.io/kubernetes/test/e2e/architecture"
@@ -64,14 +63,14 @@ import (
 	_ "k8s.io/kubernetes/test/e2e/storage/external"
 	_ "k8s.io/kubernetes/test/e2e/windows"
 
-	// reconfigure framework
+	// 重新配置 framework
 	_ "k8s.io/kubernetes/test/e2e/framework/debug/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/metrics/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/node/init"
 	_ "k8s.io/kubernetes/test/utils/ktesting/format"
 )
 
-// handleFlags sets up all flags and parses the command line.
+// handleFlags 注册所有 flag 并解析命令行。
 func handleFlags() {
 	config.CopyFlags(config.Flags, flag.CommandLine)
 	framework.RegisterCommonFlags(flag.CommandLine)
@@ -85,7 +84,7 @@ func TestMain(m *testing.M) {
 	flag.CommandLine.BoolVar(&versionFlag, "version", false, "Displays version information.")
 	listConformanceTests := flag.CommandLine.Bool("list-conformance-tests", false, "If true, will show list of conformance tests.")
 
-	// Register test flags, then parse flags.
+	// 先注册测试 flag，再解析。
 	handleFlags()
 
 	if versionFlag {
@@ -98,7 +97,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Enable embedded FS file lookup as fallback
+	// 启用嵌入式 FS 作为文件查找的后备来源
 	testfiles.AddFileSource(e2etestingmanifests.GetE2ETestingManifestsFS())
 	testfiles.AddFileSource(testfixtures.GetTestFixturesFS())
 	testfiles.AddFileSource(conformancetestdata.GetConformanceTestdataFS())
@@ -130,11 +129,11 @@ func TestMain(m *testing.M) {
 
 	framework.AfterReadingAllFlags(&framework.TestContext)
 
-	// TODO: Deprecating repo-root over time... instead just use gobindata_util.go , see #23987.
-	// Right now it is still needed, for example by
+	// TODO: 逐步弃用 repo-root，改为只用 gobindata_util.go，见 #23987。
+	// 目前仍需要它，例如：
 	// test/e2e/framework/ingress/ingress_utils.go
-	// for providing the optional secret.yaml file and by
-	// test/e2e/framework/util.go for cluster/log-dump.
+	// 用它提供可选的 secret.yaml 文件；
+	// test/e2e/framework/util.go 用它做 cluster/log-dump。
 	if framework.TestContext.RepoRoot != "" {
 		testfiles.AddFileSource(testfiles.RootFileSource{Root: framework.TestContext.RepoRoot})
 	}
@@ -156,8 +155,8 @@ var _ = ginkgo.ReportBeforeSuite(func(report ginkgo.Report) {
 
 var _ = ginkgo.ReportAfterSuite("Kubernetes e2e suite report", func(report ginkgo.Report) {
 	var err error
-	// The DetailsRepoerter will output details about every test (name, files, lines, etc) which helps
-	// when documenting our tests.
+	// DetailsRepoerter 会输出每个测试的详细信息（名称、文件、行号等），
+	// 便于为测试编写文档。
 	if len(framework.TestContext.SpecSummaryOutput) <= 0 {
 		return
 	}
@@ -185,7 +184,7 @@ var _ = ginkgo.ReportAfterSuite("Kubernetes e2e suite report", func(report ginkg
 			klog.Errorf("Error saving test details in detail reporter: %v", err)
 			return
 		}
-		// Printing newline between records for easier viewing in various tools.
+		// 记录之间打印换行，方便各种工具查看。
 		_, err = fmt.Fprintln(f, "")
 		if err != nil {
 			klog.Errorf("Error saving test details in detail reporter: %v", err)

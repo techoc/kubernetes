@@ -46,7 +46,7 @@ var _ = sigDescribe(feature.GPUDevicePlugin, "Device Plugin", skipUnlessWindows(
 	var cs clientset.Interface
 
 	ginkgo.BeforeEach(func() {
-		//Only for Windows containers
+		// 本包测试仅适用于 Windows 容器
 		e2eskipper.SkipUnlessNodeOSDistroIs("windows")
 		cs = f.ClientSet
 	})
@@ -98,8 +98,8 @@ var _ = sigDescribe(feature.GPUDevicePlugin, "Device Plugin", skipUnlessWindows(
 		_, err := cs.AppsV1().DaemonSets(sysNs).Create(ctx, ds, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		// Windows device plugin tests require the *full* windows image (not nanoserver or servercore)
-		// because those images do not contain the necessary DirectX components.
+		// Windows device plugin 测试必须使用完整 Windows 镜像（而非 nanoserver 或 servercore）：
+		// 那两种镜像缺少所需的 DirectX 组件。
 		fullWindowsContainerImage := "mcr.microsoft.com/windows:ltsc2019"
 
 		ginkgo.By("creating Windows testing Pod")
@@ -116,8 +116,7 @@ var _ = sigDescribe(feature.GPUDevicePlugin, "Device Plugin", skipUnlessWindows(
 
 		ginkgo.By("verifying device access in Windows testing Pod")
 		dxdiagCommand := []string{"cmd.exe", "/c", "dxdiag", "/t", "dxdiag_output.txt", "&", "type", "dxdiag_output.txt"}
-		//If DirectX version issues caused by supsequent windows releases occur, these tests need to do version checks
-		//based on  the windows version running the test.
+		// 后续 Windows 版本若导致 DirectX 版本问题，需要根据运行测试的 Windows 版本做版本检查。
 		dxdiagDirectxVersion := "DirectX Version: DirectX 12"
 		defaultNs := f.Namespace.Name
 		_, dxdiagDirectxVersionErr := e2eoutput.LookForStringInPodExec(defaultNs, windowsPod.Name, dxdiagCommand, dxdiagDirectxVersion, time.Minute)

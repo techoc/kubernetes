@@ -36,7 +36,7 @@ import (
 var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func() {
 
 	ginkgo.BeforeEach(func() {
-		// sysctl is not supported on Windows.
+		// Windows 不支持 sysctl。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 	})
 
@@ -72,9 +72,9 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 	/*
 	  Release: v1.21
 	  Testname: Sysctl, test sysctls
-	  Description: Pod is created with kernel.shm_rmid_forced sysctl. Kernel.shm_rmid_forced must be set to 1
-	  [LinuxOnly]: This test is marked as LinuxOnly since Windows does not support sysctls
-	  [Environment:NotInUserNS]: The test fails in UserNS (as expected): `open /proc/sys/kernel/shm_rmid_forced: permission denied`
+	  Description: 创建设置了 kernel.shm_rmid_forced sysctl 的 Pod。kernel.shm_rmid_forced 必须设为 1
+	  [LinuxOnly]: 该测试标记为 LinuxOnly，因为 Windows 不支持 sysctls
+	  [Environment:NotInUserNS]: 该测试在 UserNS 中会失败（符合预期）：`open /proc/sys/kernel/shm_rmid_forced: permission denied`
 	*/
 	framework.ConformanceIt("should support sysctls", environment.NotInUserNS, func(ctx context.Context) {
 		pod := testPod()
@@ -92,9 +92,8 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 		pod = podClient.Create(ctx, pod)
 
 		ginkgo.By("Watching for error events or started pod")
-		// watch for events instead of termination of pod because the kubelet deletes
-		// failed pods without running containers. This would create a race as the pod
-		// might have already been deleted here.
+		// 监听事件而非等待 pod 终止：kubelet 会删除没有运行中容器的失败 pod，
+		// 这里可能读到已被删除的 pod，从而产生竞态。
 		ev, err := e2epod.NewPodClient(f).WaitForErrorEventOrSuccess(ctx, pod)
 		framework.ExpectNoError(err)
 		gomega.Expect(ev).To(gomega.BeNil())
@@ -119,14 +118,14 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 	/*
 	  Release: v1.21
 	  Testname: Sysctls, reject invalid sysctls
-	  Description: Pod is created with one valid and two invalid sysctls. Pod should not apply invalid sysctls.
-	  [LinuxOnly]: This test is marked as LinuxOnly since Windows does not support sysctls
+	  Description: 创建带一个有效、两个无效 sysctl 的 Pod。Pod 不应应用无效的 sysctl。
+	  [LinuxOnly]: 该测试标记为 LinuxOnly，因为 Windows 不支持 sysctls
 	*/
 	framework.ConformanceIt("should reject invalid sysctls", func(ctx context.Context) {
 		pod := testPod()
 		pod.Spec.SecurityContext = &v1.PodSecurityContext{
 			Sysctls: []v1.Sysctl{
-				// Safe parameters
+				// 安全参数
 				{
 					Name:  "foo-",
 					Value: "bar",
@@ -158,7 +157,7 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 		)))
 	})
 
-	// Pod is created with kernel.msgmax, an unsafe sysctl.
+	// 创建设置了不安全 sysctl kernel.msgmax 的 Pod。
 	ginkgo.It("should not launch unsafe, but not explicitly enabled sysctls on the node", func(ctx context.Context) {
 		pod := testPod()
 		pod.Spec.SecurityContext = &v1.PodSecurityContext{
@@ -174,7 +173,7 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 		pod = podClient.Create(ctx, pod)
 
 		ginkgo.By("Wait for pod failed reason")
-		// watch for pod failed reason instead of termination of pod
+		// 监听 pod 失败原因，而非等待 pod 终止
 		err := e2epod.WaitForPodFailedReason(ctx, f.ClientSet, pod, "SysctlForbidden", f.Timeouts.PodStart)
 		framework.ExpectNoError(err)
 	})
@@ -182,9 +181,9 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 	/*
 	  Release: v1.23
 	  Testname: Sysctl, test sysctls supports slashes
-	  Description: Pod is created with kernel/shm_rmid_forced sysctl. Support slashes as sysctl separator. The '/' separator is also accepted in place of a '.'
-	  [LinuxOnly]: This test is marked as LinuxOnly since Windows does not support sysctls
-	  [Environment:NotInUserNS]: The test fails in UserNS (as expected): `open /proc/sys/kernel/shm_rmid_forced: permission denied`
+	  Description: 创建设置了 kernel/shm_rmid_forced sysctl 的 Pod。支持用斜杠作为 sysctl 分隔符，'/' 可替代 '.'
+	  [LinuxOnly]: 该测试标记为 LinuxOnly，因为 Windows 不支持 sysctls
+	  [Environment:NotInUserNS]: 该测试在 UserNS 中会失败（符合预期）：`open /proc/sys/kernel/shm_rmid_forced: permission denied`
 	*/
 	f.It("should support sysctls with slashes as separator", environment.NotInUserNS, func(ctx context.Context) {
 		pod := testPod()
@@ -202,9 +201,8 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 		pod = podClient.Create(ctx, pod)
 
 		ginkgo.By("Watching for error events or started pod")
-		// watch for events instead of termination of pod because the kubelet deletes
-		// failed pods without running containers. This would create a race as the pod
-		// might have already been deleted here.
+		// 监听事件而非等待 pod 终止：kubelet 会删除没有运行中容器的失败 pod，
+		// 这里可能读到已被删除的 pod，从而产生竞态。
 		ev, err := e2epod.NewPodClient(f).WaitForErrorEventOrSuccess(ctx, pod)
 		framework.ExpectNoError(err)
 		gomega.Expect(ev).To(gomega.BeNil())
@@ -223,12 +221,12 @@ var _ = SIGDescribe("Sysctls [LinuxOnly]", framework.WithNodeConformance(), func
 		framework.ExpectNoError(err)
 
 		ginkgo.By("Checking that the sysctl is actually updated")
-		// Note that either "/" or "."  may be used as separators within sysctl variable names.
-		// "kernel.shm_rmid_forced=1" and "kernel/shm_rmid_forced=1" are equivalent.
-		// Run "/bin/sysctl kernel/shm_rmid_forced" command on Linux system
-		// The displayed result is "kernel.shm_rmid_forced=1"
-		// Therefore, the substring that needs to be checked for the obtained pod log is
-		// "kernel.shm_rmid_forced=1" instead of "kernel/shm_rmid_forced=1".
+		// 注意 sysctl 变量名中 "/" 和 "." 都可用作分隔符。
+		// "kernel.shm_rmid_forced=1" 与 "kernel/shm_rmid_forced=1" 等价。
+		// 在 Linux 上执行 "/bin/sysctl kernel/shm_rmid_forced" 命令，
+		// 显示结果为 "kernel.shm_rmid_forced=1"。
+		// 因此检查 pod 日志时要找的子串是
+		// "kernel.shm_rmid_forced=1"，而不是 "kernel/shm_rmid_forced=1"。
 		gomega.Expect(log).To(gomega.ContainSubstring("kernel.shm_rmid_forced = 1"))
 	})
 })

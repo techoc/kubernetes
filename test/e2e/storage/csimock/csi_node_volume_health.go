@@ -48,8 +48,8 @@ var _ = utils.SIGDescribe("CSI Mock Node Volume Health", framework.WithFeatureGa
 	m := newMockDriverSetup(f)
 
 	f.Context("CSI Mock Node Volume Health", f.WithSlow(), func() {
-		// NodeGetVolumeHealth is probed by the volumehealth manager independently of
-		// NodeGetVolumeStats, so call order is not guaranteed.
+		// volumehealth manager 探测 NodeGetVolumeHealth 时不依赖 NodeGetVolumeStats，
+		// 因此调用顺序无法保证。
 		trackedCalls := []string{
 			"NodeGetVolumeStats",
 			"NodeGetVolumeHealth",
@@ -116,7 +116,7 @@ var _ = utils.SIGDescribe("CSI Mock Node Volume Health", framework.WithFeatureGa
 				if pod == nil {
 					return
 				}
-				// Wait for PVC to get bound to make sure the CSI driver is fully started.
+				// 等待 PVC 完成绑定，确保 CSI driver 已完全启动。
 				err := e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, f.ClientSet, f.Namespace.Name, claim.Name, time.Second, framework.ClaimProvisionTimeout)
 				framework.ExpectNoError(err, "while waiting for PVC to get provisioned")
 
@@ -128,8 +128,8 @@ var _ = utils.SIGDescribe("CSI Mock Node Volume Health", framework.WithFeatureGa
 					return expectedCSICallsSeen(ctx, trackedCalls, test.expectedCalls, test.forbiddenCalls, m.driver.GetCalls)
 				})
 				framework.ExpectNoError(err, "while waiting for all CSI calls")
-				// try to use ```csi.NewMetricsCsi(pv.handler).GetMetrics()``` to get metrics from csimock driver but failed.
-				// the mocked csidriver register doesn't regist itself to normal csidriver.
+				// 曾尝试使用 ```csi.NewMetricsCsi(pv.handler).GetMetrics()``` 从 csimock driver 获取 metrics，但失败了。
+				// mock 的 csidriver register 没有把自己注册到普通的 csidriver 上。
 				if test.nodeVolumeHealthRequired {
 					pod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 					framework.ExpectNoError(err, "get running pod")
@@ -188,9 +188,9 @@ var _ = utils.SIGDescribe("CSI Mock Node Volume Health", framework.WithFeatureGa
 	})
 })
 
-// expectedCSICallsSeen reports whether every expected CSI method has been observed
-// (order-independent) and that no forbidden methods appear. Health and stats are
-// probed on independent kubelet paths, so ordered matching is not reliable.
+// expectedCSICallsSeen 判断所有期望的 CSI 方法是否都已出现（与顺序无关），
+// 且没有出现禁止的方法。health 和 stats 由 kubelet 的独立路径探测，
+// 按顺序匹配并不可靠。
 func expectedCSICallsSeen(
 	ctx context.Context,
 	trackedCalls []string,
@@ -238,7 +238,7 @@ func podVolumeHealthMatches(pod *v1.Pod, abnormal bool) bool {
 		}
 	}
 	if !abnormal {
-		// Healthy: either no VolumeHealth entry, or an entry with empty conditions.
+		// 健康：要么没有 VolumeHealth 条目，要么条目的 conditions 为空。
 		return entry == nil || len(entry.HealthConditions) == 0
 	}
 	if entry == nil || len(entry.HealthConditions) == 0 {

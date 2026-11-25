@@ -32,7 +32,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 )
 
-// SnapshotResource represents a snapshot class, a snapshot and its bound snapshot contents for a specific test case
+// SnapshotResource 表示某个测试用例对应的 snapshot class、snapshot 及其绑定的 snapshot content。
 type SnapshotResource struct {
 	Config  *PerTestConfig
 	Pattern TestPattern
@@ -42,9 +42,9 @@ type SnapshotResource struct {
 	Vsclass   *unstructured.Unstructured
 }
 
-// CreateSnapshot creates a VolumeSnapshotClass with given SnapshotDeletionPolicy and a VolumeSnapshot
-// from the VolumeSnapshotClass using a dynamic client.
-// Returns the unstructured VolumeSnapshotClass and VolumeSnapshot objects.
+// CreateSnapshot 通过 dynamic client 创建带有指定 SnapshotDeletionPolicy 的
+// VolumeSnapshotClass，以及基于该 class 的 VolumeSnapshot。
+// 返回 unstructured 的 VolumeSnapshotClass 和 VolumeSnapshot 对象。
 func CreateSnapshot(ctx context.Context, sDriver SnapshottableTestDriver, config *PerTestConfig, pattern TestPattern, pvcName string, pvcNamespace string, timeouts *framework.TimeoutContext, parameters map[string]string) (*unstructured.Unstructured, *unstructured.Unstructured) {
 	defer ginkgo.GinkgoRecover()
 	var err error
@@ -68,7 +68,7 @@ func CreateSnapshot(ctx context.Context, sDriver SnapshottableTestDriver, config
 	framework.ExpectNoError(err)
 
 	ginkgo.By("creating a dynamic VolumeSnapshot")
-	// prepare a dynamically provisioned volume snapshot with certain data
+	// 准备一个包含特定数据的动态 provision 卷快照
 	snapshot := getSnapshot(pvcName, pvcNamespace, sclass.GetName())
 
 	snapshot, err = dc.Resource(utils.SnapshotGVR).Namespace(snapshot.GetNamespace()).Create(ctx, snapshot, metav1.CreateOptions{})
@@ -77,8 +77,8 @@ func CreateSnapshot(ctx context.Context, sDriver SnapshottableTestDriver, config
 	return sclass, snapshot
 }
 
-// CreateSnapshotResource creates a snapshot resource for the current test. It knows how to deal with
-// different test pattern snapshot provisioning and deletion policy
+// CreateSnapshotResource 为当前测试创建 snapshot 资源，
+// 并能处理不同测试 pattern 下的 snapshot provisioning 和 deletion policy。
 func CreateSnapshotResource(ctx context.Context, sDriver SnapshottableTestDriver, config *PerTestConfig, pattern TestPattern, pvcName string, pvcNamespace string, timeouts *framework.TimeoutContext, parameters map[string]string) *SnapshotResource {
 	var err error
 	r := SnapshotResource{
@@ -92,11 +92,10 @@ func CreateSnapshotResource(ctx context.Context, sDriver SnapshottableTestDriver
 	r.Vscontent = utils.GetSnapshotContentFromSnapshot(ctx, dc, r.Vs, timeouts.SnapshotCreate)
 
 	if pattern.SnapshotType == PreprovisionedCreatedSnapshot {
-		// prepare a pre-provisioned VolumeSnapshotContent with certain data
-		// Because this could be run with an external CSI driver, we have no way
-		// to pre-provision the snapshot as we normally would using their API.
-		// We instead dynamically take a snapshot (above step), delete the old snapshot,
-		// and create another snapshot using the first snapshot's snapshot handle.
+		// 准备一个包含特定数据的预置 VolumeSnapshotContent。
+		// 由于测试可能对接外部 CSI driver，无法通过其 API 按常规方式预置 snapshot。
+		// 因此先动态创建快照（上述步骤），删除旧快照，
+		// 再用第一个快照的 snapshot handle 创建新的快照。
 
 		ginkgo.By("updating the snapshot content deletion policy to retain")
 		r.Vscontent.Object["spec"].(map[string]interface{})["deletionPolicy"] = "Retain"
@@ -113,10 +112,9 @@ func CreateSnapshotResource(ctx context.Context, sDriver SnapshottableTestDriver
 		framework.Logf("Recording snapshot driver: %s", csiDriverName)
 		snapshotClassName := r.Vsclass.GetName()
 
-		// If the deletion policy is retain on vscontent:
-		// when vs is deleted vscontent will not be deleted
-		// when the vscontent is manually deleted then the underlying snapshot resource will not be deleted.
-		// We exploit this to create a snapshot resource from which we can create a preprovisioned snapshot
+		// 当 vscontent 的 deletion policy 为 Retain 时：
+		// 删除 vs 不会删除 vscontent，手动删除 vscontent 也不会删除底层 snapshot 资源。
+		// 利用这一点构造一个 snapshot 资源，再从中创建预置快照。
 		ginkgo.By("deleting the snapshot and snapshot content")
 		err = dc.Resource(utils.SnapshotGVR).Namespace(r.Vs.GetNamespace()).Delete(ctx, r.Vs.GetName(), metav1.DeleteOptions{})
 		if apierrors.IsNotFound(err) {
@@ -166,7 +164,7 @@ func CreateSnapshotResource(ctx context.Context, sDriver SnapshottableTestDriver
 	return &r
 }
 
-// CleanupResource cleans up the snapshot resource and ignores not found errors
+// CleanupResource 清理 snapshot 资源，并忽略 not found 错误。
 func (sr *SnapshotResource) CleanupResource(ctx context.Context, timeouts *framework.TimeoutContext) error {
 	var err error
 	var cleanupErrs []error
@@ -188,9 +186,9 @@ func (sr *SnapshotResource) CleanupResource(ctx context.Context, timeouts *frame
 			switch {
 			case err == nil:
 				if boundVsContent.Object["spec"].(map[string]interface{})["deletionPolicy"] != "Delete" {
-					// The purpose of this block is to prevent physical snapshotContent leaks.
-					// We must update the SnapshotContent to have Delete Deletion policy,
-					// or else the physical snapshot content will be leaked.
+					// 这段代码是为了防止物理 snapshotContent 泄漏。
+					// 必须把 SnapshotContent 的 deletion policy 改为 Delete，
+					// 否则物理 snapshot content 会残留。
 					boundVsContent.Object["spec"].(map[string]interface{})["deletionPolicy"] = "Delete"
 					boundVsContent, err = dc.Resource(utils.SnapshotContentGVR).Update(ctx, boundVsContent, metav1.UpdateOptions{})
 					framework.ExpectNoError(err)
@@ -205,7 +203,7 @@ func (sr *SnapshotResource) CleanupResource(ctx context.Context, timeouts *frame
 				framework.ExpectNoError(err)
 
 			case apierrors.IsNotFound(err):
-				// the volume snapshot is not bound to snapshot content yet
+				// volume snapshot 还未绑定到 snapshot content
 				err = dc.Resource(utils.SnapshotGVR).Namespace(sr.Vs.GetNamespace()).Delete(ctx, sr.Vs.GetName(), metav1.DeleteOptions{})
 				if apierrors.IsNotFound(err) {
 					err = nil
@@ -218,7 +216,7 @@ func (sr *SnapshotResource) CleanupResource(ctx context.Context, timeouts *frame
 				cleanupErrs = append(cleanupErrs, err)
 			}
 		case apierrors.IsNotFound(err):
-			// Hope that the underlying snapshot content and resource is gone already
+			// 假定底层 snapshot content 和资源已被删除
 		default:
 			cleanupErrs = append(cleanupErrs, err)
 		}
@@ -230,9 +228,9 @@ func (sr *SnapshotResource) CleanupResource(ctx context.Context, timeouts *frame
 		switch {
 		case err == nil:
 			if sr.Vscontent.Object["spec"].(map[string]interface{})["deletionPolicy"] != "Delete" {
-				// The purpose of this block is to prevent physical snapshotContent leaks.
-				// We must update the SnapshotContent to have Delete Deletion policy,
-				// or else the physical snapshot content will be leaked.
+				// 这段代码是为了防止物理 snapshotContent 泄漏。
+				// 必须把 SnapshotContent 的 deletion policy 改为 Delete，
+				// 否则物理 snapshot content 会残留。
 				sr.Vscontent.Object["spec"].(map[string]interface{})["deletionPolicy"] = "Delete"
 				sr.Vscontent, err = dc.Resource(utils.SnapshotContentGVR).Update(ctx, sr.Vscontent, metav1.UpdateOptions{})
 				framework.ExpectNoError(err)
@@ -246,14 +244,14 @@ func (sr *SnapshotResource) CleanupResource(ctx context.Context, timeouts *frame
 			err = utils.WaitForGVRDeletion(ctx, dc, utils.SnapshotContentGVR, sr.Vscontent.GetName(), framework.Poll, timeouts.SnapshotDelete)
 			framework.ExpectNoError(err)
 		case apierrors.IsNotFound(err):
-			// Hope the underlying physical snapshot resource has been deleted already
+			// 假定底层物理 snapshot 资源已被删除
 		default:
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}
 	if sr.Vsclass != nil {
 		framework.Logf("deleting snapshot class %q", sr.Vsclass.GetName())
-		// typically this snapshot class has already been deleted
+		// 通常这个 snapshot class 已经被删除
 		err = dc.Resource(utils.SnapshotClassGVR).Delete(ctx, sr.Vsclass.GetName(), metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
 			framework.Failf("Error deleting snapshot class %q. Error: %v", sr.Vsclass.GetName(), err)

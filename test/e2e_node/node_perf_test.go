@@ -38,7 +38,7 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// makeNodePerfPod returns a pod with the information provided from the workload.
+// makeNodePerfPod 根据 workload 提供的信息创建 pod
 func makeNodePerfPod(w workloads.NodePerfWorkload) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -50,7 +50,7 @@ func makeNodePerfPod(w workloads.NodePerfWorkload) *v1.Pod {
 
 func setKubeletConfig(ctx context.Context, f *framework.Framework, cfg *kubeletconfig.KubeletConfiguration) {
 	if cfg != nil {
-		// Update the Kubelet configuration.
+		// 更新 kubelet 配置
 		ginkgo.By("Stopping the kubelet")
 		restartKubelet := mustStopKubelet(ctx, f)
 
@@ -60,7 +60,7 @@ func setKubeletConfig(ctx context.Context, f *framework.Framework, cfg *kubeletc
 		restartKubelet(ctx)
 	}
 
-	// Wait for the Kubelet to be ready.
+	// 等待 kubelet 就绪，配置变更后节点需要重新上报 Ready
 	gomega.Eventually(ctx, func(ctx context.Context) bool {
 		nodes, err := e2enode.TotalReady(ctx, f.ClientSet)
 		framework.ExpectNoError(err)
@@ -68,8 +68,8 @@ func setKubeletConfig(ctx context.Context, f *framework.Framework, cfg *kubeletc
 	}, time.Minute, time.Second).Should(gomega.BeTrueBecause("expected kubelet to be in ready state"))
 }
 
-// Serial because the test updates kubelet configuration.
-// Slow by design.
+// 串行执行，因为测试会修改 kubelet 配置。
+// 设计上就标记为慢测试。
 var _ = SIGDescribe("Node Performance Testing", framework.WithSerial(), framework.WithSlow(), func() {
 	f := framework.NewDefaultFramework("node-performance-testing")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -96,13 +96,9 @@ var _ = SIGDescribe("Node Performance Testing", framework.WithSerial(), framewor
 		}
 		e2epod.NewPodClient(f).DeleteSync(ctx, pod.Name, delOpts, f.Timeouts.PodDelete)
 
-		// We are going to give some more time for the CPU manager to do any clean
-		// up it needs to do now that the pod has been deleted. Otherwise we may
-		// run into a data race condition in which the PostTestExec function
-		// deletes the CPU manager's checkpoint file while the CPU manager is still
-		// doing work and we end with a new checkpoint file after PosttestExec has
-		// finished. This issues would result in the kubelet panicking after we try
-		// and set the kubelet config.
+		// pod 删除后给 CPU manager 留出清理时间，否则 PostTestExec 可能在 CPU manager
+		// 仍在工作时删除其 checkpoint 文件，随后又生成新的 checkpoint，导致 kubelet
+		// 在下次设置配置时崩溃
 		time.Sleep(15 * time.Second)
 		ginkgo.By("running the post test exec from the workload")
 		err := wl.PostTestExec()
@@ -112,12 +108,11 @@ var _ = SIGDescribe("Node Performance Testing", framework.WithSerial(), framewor
 
 	runWorkload := func(ctx context.Context) {
 		ginkgo.By("running the workload and waiting for success")
-		// Make the pod for the workload.
+		// 为 workload 创建 pod
 		pod = makeNodePerfPod(wl)
-		// Create the pod.
+		// 创建 pod
 		pod = e2epod.NewPodClient(f).CreateSync(ctx, pod)
-		// Wait for pod success.
-		// but avoid using WaitForSuccess because we want the container logs upon failure #109295
+		// 等待 pod 成功；但不用 WaitForSuccess，失败时需要打印容器日志 #109295
 		podErr := e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, pod.Name, fmt.Sprintf("%s or %s", v1.PodSucceeded, v1.PodFailed), wl.Timeout(),
 			func(pod *v1.Pod) (bool, error) {
 				switch pod.Status.Phase {
@@ -139,7 +134,7 @@ var _ = SIGDescribe("Node Performance Testing", framework.WithSerial(), framewor
 		perf, err := wl.ExtractPerformanceFromLogs(podLogs)
 		framework.ExpectNoError(err)
 		framework.Logf("Time to complete workload %s: %v", wl.Name(), perf)
-		// using framework.ExpectNoError for consistency would cause changes the output format
+		// 这里不用 framework.ExpectNoError 保持一致，因为那会改变输出格式
 		gomega.Expect(podErr).To(gomega.Succeed(), "wait for pod %q to succeed", pod.Name)
 	}
 

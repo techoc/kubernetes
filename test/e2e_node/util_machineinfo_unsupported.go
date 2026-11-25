@@ -24,7 +24,7 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// IsCgroup2UnifiedMode returns whether we are running in cgroup v2 unified mode.
+// IsCgroup2UnifiedMode 返回当前是否运行在 cgroup v2 unified 模式
 func IsCgroup2UnifiedMode() bool {
 	return false
 }
@@ -49,7 +49,7 @@ func getCoreSiblingList(cpuRes int64) string {
 	return ""
 }
 
-// getNumaNodeCPUs retrieves CPUs for each NUMA node.
+// getNumaNodeCPUs 获取每个 NUMA node 上的 CPU
 func getNumaNodeCPUs() (map[int]cpuset.CPUSet, error) {
 	return nil, errors.New("not implemented")
 }

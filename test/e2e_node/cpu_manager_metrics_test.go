@@ -70,12 +70,12 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			_, cpuAlloc, _ := getLocalNodeCPUDetails(ctx, f)
 			smtLevel = smtLevelFromSysFS()
 
-			// strict SMT alignment is trivially verified and granted on non-SMT systems
+			// 非 SMT 系统上，严格的 SMT 对齐无需验证即可直接满足
 			if smtLevel < 2 {
 				e2eskipper.Skipf("Skipping CPU Manager %s tests since SMT disabled", fullCPUsOnlyOpt)
 			}
 
-			// our tests want to allocate up to a full core, so we need at last 2*2=4 virtual cpus
+			// 测试需要分配最多一个完整核心，因此至少需要 2*2=4 个虚拟 CPU
 			if cpuAlloc < int64(smtLevel*2) {
 				e2eskipper.Skipf("Skipping CPU Manager %s tests since the CPU capacity < 4", fullCPUsOnlyOpt)
 			}
@@ -86,15 +86,13 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			if uncoreGroupSize == 0 {
 				hasSplitUncore = false
 			} else {
-				// check we do physically have split Uncore but also we have enough CPUs available to run
-				// meaningful tests. We need them both.
+				// 既要有物理上拆分的 Uncore，也要有足够的 CPU 跑出有意义的测试结果，二者缺一不可
 				hasSplitUncore = (cpuAlloc > int64(uncoreGroupSize))
 			}
 
 			framework.Logf("Uncore Group Size %d; Split Uncore detected=%v", uncoreGroupSize, hasSplitUncore)
 
-			// TODO: we assume the first available CPUID is 0, which is pretty fair, but we should probably
-			// check what we do have in the node.
+			// TODO: 这里假设第一个可用的 CPUID 是 0，大体合理，但还是应该检查节点上的实际情况
 			cpuPolicyOptions := map[string]string{
 				cpumanager.FullPCPUsOnlyOption:            "true",
 				cpumanager.PreferAlignByUnCoreCacheOption: strconv.FormatBool(hasSplitUncore),
@@ -119,8 +117,8 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 		})
 
 		ginkgo.It("should report zero pinning counters after a fresh restart", func(ctx context.Context) {
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// BeforeEach 中已更新 kubelet 配置，因此可认为是从干净状态开始。
+			// 由于是 [Serial]，也不会有其他测试同时运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with no pods running")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -146,8 +144,8 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			ginkgo.By("Creating the test pod which will be rejected for SMTAlignmentError")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("smt-align-err", 1))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// BeforeEach 中已更新 kubelet 配置，因此可认为是从干净状态开始。
+			// 由于是 [Serial]，也不会有其他测试同时运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with pod failed to admit")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -173,8 +171,8 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			ginkgo.By("Creating the test pod")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("smt-align-ok", smtLevel))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// BeforeEach 中已更新 kubelet 配置，因此可认为是从干净状态开始。
+			// 由于是 [Serial]，也不会有其他测试同时运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with pod should be admitted")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -200,8 +198,8 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			ginkgo.By("Creating the test pod")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("count-align-smt-ok", smtLevel))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// BeforeEach 中已更新 kubelet 配置，因此可认为是从干净状态开始。
+			// 由于是 [Serial]，也不会有其他测试同时运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with pod should be admitted")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -314,17 +312,16 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 				e2eskipper.Skip("Skipping CPU Manager uncore alignment test - not split Uncore detected")
 			}
 			if smtLevel >= uncoreGroupSize {
-				// this doesn't make sense according to the very definition of uncore cache (a cache which spans across core blocks,
-				// and thread siblings belong to the same block and they share a exclusive cache block)
-				// so it has to be a configuration or detection issue. Fail loudly.
+				// 按照 uncore cache 的定义（跨核心块共享的缓存，同一块内的超线程共享独占缓存块），
+				// 这种情况说不通，必然是配置或探测出了问题，直接失败以暴露问题
 				framework.Failf("Failed preconditions for CPU Manager uncore alignment test - SMT level more than Uncore group size - this is unexpected")
 			}
 
 			ginkgo.By("Creating the test pod")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("count-align-uncore-ok", smtLevel))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// BeforeEach 中已更新 kubelet 配置，因此可认为是从干净状态开始。
+			// 由于是 [Serial]，也不会有其他测试同时运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with pod should be admitted")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -348,8 +345,8 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			ginkgo.By("Creating the test pod")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("count-align-uncore-ok", uncoreGroupSize))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// BeforeEach 中已更新 kubelet 配置，因此可认为是从干净状态开始。
+			// 由于是 [Serial]，也不会有其他测试同时运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with pod should be admitted")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -376,8 +373,8 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			ginkgo.By("Creating the test pod")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("count-align-uncore-ok", uncoreGroupSize+smtLevel))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// BeforeEach 中已更新 kubelet 配置，因此可认为是从干净状态开始。
+			// 由于是 [Serial]，也不会有其他测试同时运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with pod should be admitted")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -469,16 +466,16 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			framework.ExpectNoError(err, "failed to get the kubelet allocatable resources")
 			allocatableCPUs, _ := demuxCPUsAndDevicesFromGetAllocatableResources(resp)
 
-			// 'distribute-cpus-across-numa' policy option ensures that CPU allocations are evenly distributed
-			//  across NUMA nodes in cases where more than one NUMA node is required to satisfy the allocation.
-			// So, we want to ensure that the CPU Request exceeds the number of CPUs that can fit within a single
-			// NUMA node. We have to pick cpuRequest such that:
+			// 'distribute-cpus-across-numa' 策略选项保证当分配需要跨多个 NUMA node 时，
+			// CPU 会均匀分布在各个 NUMA node 上。
+			// 因此要保证 CPU request 超过单个 NUMA node 所能容纳的 CPU 数量。
+			// cpuRequest 的选择需满足：
 			// 1. CPURequest > cpusNumPerNUMA
-			// 2. Not occupy all the CPUs on the node ande leave room for reserved CPU
-			// 3. CPURequest is a multiple if number of NUMA nodes to allow equal CPU distribution across NUMA nodes
+			// 2. 不占满节点所有 CPU，为 reserved CPU 留出空间
+			// 3. CPURequest 是 NUMA node 数量的倍数，才能在各 NUMA node 间均匀分配
 			//
-			// In summary: cpusNumPerNUMA < CPURequest < ((cpusNumPerNuma * numaNodes) - reservedCPUscount)
-			// Considering all these constraints we select: CPURequest= (cpusNumPerNUMA-smtLevel)*numaNodes
+			// 总结：cpusNumPerNUMA < CPURequest < ((cpusNumPerNuma * numaNodes) - reservedCPUscount)
+			// 综合这些约束，取 CPURequest= (cpusNumPerNUMA-smtLevel)*numaNodes
 			cpuRequest := (cpusNumPerNUMA - smtLevel) * numaNodes
 			if cpuRequest > allocatableCPUs.Size() {
 				e2eskipper.Skipf("Pod requesting %d CPUs which is more than allocatable CPUs:%d", cpuRequest, allocatableCPUs.Size())
@@ -492,7 +489,7 @@ var _ = SIGDescribe("CPU Manager Metrics", framework.WithSerial(), feature.CPUMa
 			keys := make(map[interface{}]types.GomegaMatcher)
 			idFn := makeCustomLabelID(metrics.AlignedNUMANode)
 
-			// On a clean environment with no other pods running if distribute-across-numa policy option is enabled
+			// 在干净环境且没有其他 pod 运行时，若启用了 distribute-across-numa 策略选项
 			for i := range numaNodes {
 				keys["kubelet_cpu_manager_allocation_per_numa"] = gstruct.MatchAllElements(idFn, gstruct.Elements{
 					fmt.Sprintf("%d", i): timelessSample(2),
@@ -541,7 +538,7 @@ func makeGuaranteedCPUExclusiveSleeperPod(name string, cpus int) *v1.Pod {
 
 func timelessSample(value interface{}) types.GomegaMatcher {
 	return gstruct.PointTo(gstruct.MatchAllFields(gstruct.Fields{
-		// We already check Metric when matching the Id
+		// Metric 已在匹配 Id 时校验过
 		"Metric":    gstruct.Ignore(),
 		"Value":     gomega.BeNumerically("==", value),
 		"Timestamp": gstruct.Ignore(),
@@ -674,10 +671,10 @@ var _ = SIGDescribe("CPU Manager Metrics Pod Level Resources", ginkgo.Ordered, g
 				return err
 			}
 
-			// Expected metric deltas for pod scope with 2 containers (1 exclusive, 1 shared):
-			// - 2 allocations: processed for each container during pod-level resource manager allocation.
-			// - 1 pod_exclusive assignment: assigned to the container requesting exclusive CPUs.
-			// - 1 pod_shared assignment: assigned to the container using the shared pod pool.
+			// pod scope 下 2 个容器（1 个 exclusive、1 个 shared）预期的指标增量：
+			// - 2 次 allocation：pod 级资源管理器分配时为每个容器各处理一次。
+			// - 1 次 pod_exclusive assignment：分配给请求独占 CPU 的容器。
+			// - 1 次 pod_shared assignment：分配给使用 pod 共享池的容器。
 			if allocations-baseAllocations != 2 {
 				return fmt.Errorf("expected 2 new allocations, got %v", allocations-baseAllocations)
 			}
@@ -779,9 +776,9 @@ var _ = SIGDescribe("CPU Manager Metrics Pod Level Resources", ginkgo.Ordered, g
 				return err
 			}
 
-			// Expected metric deltas for container scope with 2 containers (1 exclusive, 1 without requests):
-			// - 1 allocation: containers requesting no resources skip allocation in container scope.
-			// - 1 node_exclusive assignment: assigned to the container requesting exclusive CPUs.
+			// container scope 下 2 个容器（1 个 exclusive、1 个未声明 request）预期的指标增量：
+			// - 1 次 allocation：container scope 下未声明资源请求的容器不参与分配。
+			// - 1 次 node_exclusive assignment：分配给请求独占 CPU 的容器。
 			if allocations-baseAllocations != 1 {
 				return fmt.Errorf("expected 1 new allocation, got %v", allocations-baseAllocations)
 			}

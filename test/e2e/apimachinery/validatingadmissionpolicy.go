@@ -63,10 +63,8 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 	})
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
-		// Make sure the namespace created for the test is labeled to be selected
-		// in binding.spec.matchResources.namespaceSelector.matchLabels
-		// By containing the tests within the marked namespace, they will not
-		// disturb concurrent tests that run in other namespaces.
+		// 确保为测试创建的 namespace 带有 binding.spec.matchResources.namespaceSelector.matchLabels
+		// 所需的 label。将测试限制在该 namespace 内，就不会干扰其他 namespace 中并发运行的测试。
 		labelNamespace(ctx, f, f.Namespace.Name)
 	})
 
@@ -74,7 +72,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 	   Release: v1.30
 	   Testname: ValidatingAdmissionPolicy
 	   Description:
-	   The ValidatingAdmissionPolicy should validate a deployment as the expression defined inside the policy.
+	   ValidatingAdmissionPolicy MUST 按 policy 中定义的表达式校验 deployment。
 	*/
 	framework.ConformanceIt("should validate against a Deployment", func(ctx context.Context) {
 		ginkgo.By("creating the policy", func() {
@@ -137,7 +135,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 	   Release: v1.30
 	   Testname: ValidatingAdmissionPolicy
 	   Description:
-	   The ValidatingAdmissionPolicy should type check the expressions defined inside policy.
+	   ValidatingAdmissionPolicy 应对 policy 中定义的表达式做类型检查。
 	*/
 	framework.It("should type check validation expressions", func(ctx context.Context) {
 		var policy *admissionregistrationv1.ValidatingAdmissionPolicy
@@ -203,7 +201,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 			})
 			framework.ExpectNoError(err, "wait for type checking")
 
-			// assert it to contain 2 warnings, first for expression and second for messageExpression
+			// 断言包含 2 条 warning，第一条对应 expression，第二条对应 messageExpression
 			gomega.Expect(policy.Status.TypeChecking.ExpressionWarnings).To(gomega.HaveLen(2))
 			warning := policy.Status.TypeChecking.ExpressionWarnings[0]
 			gomega.Expect(warning.FieldRef).To(gomega.Equal("spec.validations[0].expression"))
@@ -218,7 +216,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 	   Release: v1.30
 	   Testname: ValidatingAdmissionPolicy
 	   Description:
-	   The ValidatingAdmissionPolicy should allow expressions to refer variables.
+	   ValidatingAdmissionPolicy 应允许表达式引用变量。
 	*/
 	framework.ConformanceIt("should allow expressions to refer variables.", func(ctx context.Context) {
 		ginkgo.By("creating a policy with variables", func() {
@@ -287,7 +285,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 	   Release: v1.30
 	   Testname: ValidatingAdmissionPolicy
 	   Description:
-	   The ValidatingAdmissionPolicy should type check a CRD.
+	   ValidatingAdmissionPolicy 应对 CRD 做类型检查。
 	*/
 	framework.It("should type check a CRD", func(ctx context.Context) {
 		crd := crontabExampleCRD()
@@ -299,7 +297,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 			crd, err = extensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
 			framework.ExpectNoError(err, "create CRD")
 			err = wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
-				// wait for the CRD to be published.
+				// 等待 CRD 发布
 				root := openapi3.NewRoot(client.Discovery().OpenAPIV3())
 				_, err = root.GVSpec(schema.GroupVersion{Group: crd.Spec.Group, Version: "v1"})
 				return err == nil, nil
@@ -365,11 +363,11 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 					return false, err
 				}
 				if policy.Status.TypeChecking != nil {
-					// TODO(#123829) Remove once the schema watcher is merged.
-					// If the warnings are empty, touch the policy to retry type checking
+					// TODO(#123829) schema watcher 合入后移除。
+					// warning 为空时改动 policy，触发重新类型检查
 					if len(policy.Status.TypeChecking.ExpressionWarnings) == 0 {
 						randomValue := fmt.Sprintf(`"%d"`, rand.Int())
-						// Use a fixed key and change only the value
+						// 固定 key，只改动 value
 						applyConfig := applyadmissionregistrationv1.ValidatingAdmissionPolicy(policy.Name).
 							WithSpec(applyadmissionregistrationv1.ValidatingAdmissionPolicySpec().
 								WithAuditAnnotations(applyadmissionregistrationv1.AuditAnnotation().
@@ -400,15 +398,13 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 	   Release: v1.30
 	   Testname: ValidatingAdmissionPolicy API
 	   Description:
-	   The admissionregistration.k8s.io API group MUST exist in the
-	     /apis discovery document.
-	   The admissionregistration.k8s.io/v1 API group/version MUST exist
-	     in the /apis/admissionregistration.k8s.io discovery document.
-	   The validatingadmisionpolicy and validatingadmissionpolicy/status
-	     resources MUST exist in the
-	     /apis/admissionregistration.k8s.io/v1 discovery document.
-	   The validatingadmisionpolicy resource must support create, get,
-	     list, watch, update, patch, delete, and deletecollection.
+	   /apis discovery 文档中 MUST 存在 admissionregistration.k8s.io API group。
+	   /apis/admissionregistration.k8s.io discovery 文档中 MUST 存在
+	     admissionregistration.k8s.io/v1 API group/version。
+	   /apis/admissionregistration.k8s.io/v1 discovery 文档中 MUST 存在
+	     validatingadmisionpolicy 和 validatingadmissionpolicy/status 资源。
+	   validatingadmisionpolicy 资源 must 支持 create、get、list、watch、
+	     update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support ValidatingAdmissionPolicy API operations", func(ctx context.Context) {
 		vapVersion := "v1"
@@ -632,11 +628,11 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 		vapTmp, err := client.Get(ctx, vapCreated.Name, metav1.GetOptions{})
 		switch {
 		case err == nil && vapTmp.GetDeletionTimestamp() != nil && len(vapTmp.GetFinalizers()) > 0:
-			// deletion requested successfully, object is blocked by finalizers
+			// 删除请求已成功提交，对象因 finalizer 而尚未删除
 		case err == nil:
 			framework.Failf("expected deleted object, got %#v", vapTmp)
 		case apierrors.IsNotFound(err):
-			// deleted successfully
+			// 删除成功
 		default:
 			framework.Failf("expected 404, got %#v", err)
 		}
@@ -670,14 +666,13 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 	   Release: v1.30
 	   Testname: ValidatingadmissionPolicyBinding API
 	   Description:
-	   The admissionregistration.k8s.io API group MUST exist in the
-	     /apis discovery document.
-	   The admissionregistration.k8s.io/v1 API group/version MUST exist
-	     in the /apis/admissionregistration.k8s.io discovery document.
-	   The ValidatingadmissionPolicyBinding resources MUST exist in the
-	     /apis/admissionregistration.k8s.io/v1 discovery document.
-	   The ValidatingadmissionPolicyBinding resource must support create, get,
-	     list, watch, update, patch, delete, and deletecollection.
+	   /apis discovery 文档中 MUST 存在 admissionregistration.k8s.io API group。
+	   /apis/admissionregistration.k8s.io discovery 文档中 MUST 存在
+	     admissionregistration.k8s.io/v1 API group/version。
+	   /apis/admissionregistration.k8s.io/v1 discovery 文档中 MUST 存在
+	     ValidatingadmissionPolicyBinding 资源。
+	   ValidatingadmissionPolicyBinding 资源 must 支持 create、get、list、watch、
+	     update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support ValidatingAdmissionPolicyBinding API operations", func(ctx context.Context) {
 		vapbVersion := "v1"
@@ -832,11 +827,11 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy [Privileged:ClusterAdmin]", func(
 		vapbTmp, err := client.Get(ctx, vapbCreated.Name, metav1.GetOptions{})
 		switch {
 		case err == nil && vapbTmp.GetDeletionTimestamp() != nil && len(vapbTmp.GetFinalizers()) > 0:
-			// deletion requested successfully, object is blocked by finalizers
+			// 删除请求已成功提交，对象因 finalizer 而尚未删除
 		case err == nil:
 			framework.Failf("expected deleted object, got %#v", vapbTmp)
 		case apierrors.IsNotFound(err):
-			// deleted successfully
+			// 删除成功
 		default:
 			framework.Failf("expected 404, got %#v", err)
 		}

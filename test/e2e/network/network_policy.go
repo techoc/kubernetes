@@ -17,6 +17,6 @@ limitations under the License.
 package network
 
 import (
-	// synthetic import of netpol suite, until these tests are replaced entirely, so that its included properly
+	// 在这些测试被完全替换之前，先占位式地引入 netpol suite，确保它被正确包含
 	_ "k8s.io/kubernetes/test/e2e/network/netpol"
 )

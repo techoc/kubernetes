@@ -16,10 +16,10 @@ limitations under the License.
 
 package framework
 
-// AppendContainerCommandGroupIfNeeded returns container command group parameter if necessary.
+// AppendContainerCommandGroupIfNeeded 在需要时返回容器命令组参数。
 func AppendContainerCommandGroupIfNeeded(args []string) []string {
 	if TestContext.CloudConfig.Region != "" {
-		// TODO(wojtek-t): Get rid of it once Regional Clusters go to GA.
+		// TODO(wojtek-t): Regional Clusters 进入 GA 后去掉这段逻辑。
 		return append([]string{"beta"}, args...)
 	}
 	return args

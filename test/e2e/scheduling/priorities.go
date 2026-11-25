@@ -44,7 +44,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Resource is a collection of compute resource.
+// Resource 是一组计算资源。
 type Resource struct {
 	MilliCPU int64
 	Memory   int64
@@ -52,7 +52,7 @@ type Resource struct {
 
 var balancePodLabel = map[string]string{"podname": "priority-balanced-memory"}
 
-// track min memory limit based on crio minimum. pods cannot set a limit lower than this
+// 根据 cri-o 的最小值记录最小 memory limit，pod 的 limit 不能低于该值
 // see: https://github.com/cri-o/cri-o/blob/29805b13e9a43d9d22628553db337ce1c1bec0a8/internal/config/cgmgr/cgmgr.go#L23
 // see: https://bugzilla.redhat.com/show_bug.cgi?id=1595256
 var crioMinMemLimit = 12 * 1024 * 1024
@@ -68,9 +68,9 @@ var podRequestedResource = &v1.ResourceRequirements{
 	},
 }
 
-// nodesAreTooUtilized ensures that each node can support 2*crioMinMemLimit
-// We check for double because it needs to support at least the cri-o minimum
-// plus whatever delta between node usages (which could be up to or at least crioMinMemLimit)
+// nodesAreTooUtilized 确保每个 node 都能承载 2*crioMinMemLimit。
+// 按两倍检查是因为除了 cri-o 的最小内存外，还要能容纳
+// 各 node 使用量之间的差值（该差值最多或至少为 crioMinMemLimit）。
 func nodesAreTooUtilized(ctx context.Context, cs clientset.Interface, nodeList *v1.NodeList) bool {
 	nodeNameToPodList := podListForEachNode(ctx, cs)
 	for _, node := range nodeList.Items {
@@ -82,7 +82,7 @@ func nodesAreTooUtilized(ctx context.Context, cs clientset.Interface, nodeList *
 	return false
 }
 
-// This test suite is used to verifies scheduler priority functions based on the default provider
+// 该测试套件用于验证基于默认 provider 的 scheduler priority 函数。
 var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 	var cs clientset.Interface
 	var nodeList *v1.NodeList
@@ -109,8 +109,8 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 		err = e2epod.WaitForPodsRunningReady(ctx, cs, metav1.NamespaceSystem, systemPodsNo, framework.PodReadyBeforeTimeout)
 		framework.ExpectNoError(err)
 
-		// skip if the most utilized node has less than the cri-o minMemLimit available
-		// otherwise we will not be able to run the test pod once all nodes are balanced
+		// 如果使用率最高的 node 可用内存不足 cri-o 的 minMemLimit，则跳过，
+		// 否则各 node 均衡后将无法运行测试 pod
 		if nodesAreTooUtilized(ctx, cs, nodeList) {
 			ginkgo.Skip("nodes are too utilized to schedule test pods")
 		}
@@ -132,7 +132,7 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 		node, err := cs.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		if _, hasLabel := node.Labels[k]; !hasLabel {
-			// If the label is not exists, label all nodes for testing.
+			// 如果该 label 不存在，则为所有 node 打上标签以便测试。
 
 			ginkgo.By("Trying to apply a label on the found node.")
 			k = "kubernetes.io/e2e-node-topologyKey"
@@ -152,7 +152,7 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 			}
 		}
 
-		// make the nodes have balanced cpu,mem usage
+		// 让各 node 的 cpu、mem 使用量保持均衡
 		err = createBalancedPodForNodes(ctx, f, cs, ns, nodeList.Items, podRequestedResource, 0.6)
 		framework.ExpectNoError(err)
 		ginkgo.By("Trying to launch the pod with podAntiAffinity.")
@@ -200,14 +200,14 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 	})
 
 	ginkgo.It("Pod should be preferably scheduled to nodes pod can tolerate", func(ctx context.Context) {
-		// make the nodes have balanced cpu,mem usage ratio
+		// 让各 node 的 cpu、mem 使用率保持均衡
 		err := createBalancedPodForNodes(ctx, f, cs, ns, nodeList.Items, podRequestedResource, 0.5)
 		framework.ExpectNoError(err)
-		// Apply 10 taints to first node
+		// 给第一个 node 施加 10 个 taint
 		nodeName := nodeList.Items[0].Name
 
-		// First, create a set of tolerable taints (+tolerations) for the first node.
-		// Generate 10 tolerable taints for the first node (and matching tolerations)
+		// 首先为第一个 node 创建一组可容忍的 taint（及对应的 toleration）。
+		// 生成 10 个可容忍的 taint（及匹配的 toleration）。
 		tolerableTaints := make([]v1.Taint, 0)
 		var tolerations []v1.Toleration
 		for range 10 {
@@ -215,7 +215,7 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 			tolerableTaints = append(tolerableTaints, testTaint)
 			tolerations = append(tolerations, v1.Toleration{Key: testTaint.Key, Value: testTaint.Value, Effect: testTaint.Effect})
 		}
-		// Generate 10 intolerable taints for each of the remaining nodes
+		// 为其余每个 node 生成 10 个不可容忍的 taint
 		intolerableTaints := make(map[string][]v1.Taint)
 		for i := 1; i < len(nodeList.Items); i++ {
 			nodeTaints := make([]v1.Taint, 0)
@@ -225,15 +225,15 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 			intolerableTaints[nodeList.Items[i].Name] = nodeTaints
 		}
 
-		// Apply the tolerable taints generated above to the first node
+		// 把上面生成的可容忍 taint 施加到第一个 node
 		ginkgo.By("Trying to apply 10 (tolerable) taints on the first node.")
-		// We immediately defer the removal of these taints because addTaintToNode can
-		// panic and RemoveTaintsOffNode does not return an error if the taint does not exist.
+		// 立即登记清理这些 taint，因为 addTaintToNode 可能 panic，
+		// 而 taint 不存在时 RemoveTaintsOffNode 不会返回错误。
 		ginkgo.DeferCleanup(e2enode.RemoveTaintsOffNode, cs, nodeName, tolerableTaints)
 		for _, taint := range tolerableTaints {
 			addTaintToNode(ctx, cs, nodeName, taint)
 		}
-		// Apply the intolerable taints to each of the following nodes
+		// 把不可容忍的 taint 施加到其余每个 node
 		ginkgo.By("Adding 10 intolerable taints to all other nodes")
 		for i := 1; i < len(nodeList.Items); i++ {
 			node := nodeList.Items[i]
@@ -286,7 +286,7 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 				nodes = append(nodes, *node)
 			}
 
-			// Make the nodes have balanced cpu,mem usage.
+			// 让各 node 的 cpu、mem 使用量保持均衡。
 			err := createBalancedPodForNodes(ctx, f, cs, ns, nodes, podRequestedResource, 0.5)
 			framework.ExpectNoError(err)
 
@@ -304,12 +304,12 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 			}
 			runPauseRS(ctx, f, rsConfig)
 
-			// Run a Pod with WhenUnsatisfiable:ScheduleAnyway.
+			// 运行一个 WhenUnsatisfiable:ScheduleAnyway 的 Pod。
 			podCfg := pausePodConfig{
 				Name:      "test-pod",
 				Namespace: ns,
-				// The labels shouldn't match the preceding ReplicaSet, otherwise it will
-				// be claimed as orphan of the ReplicaSet.
+				// label 不能匹配前面的 ReplicaSet，否则会被
+				// 当作该 ReplicaSet 的孤儿对象接管。
 				Labels: map[string]string{podLabel: "bar"},
 				Affinity: &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
@@ -351,10 +351,10 @@ var _ = SIGDescribe("SchedulerPriorities", framework.WithSerial(), func() {
 	})
 })
 
-// createBalancedPodForNodes creates a pod per node that asks for enough resources to make all nodes have the same mem/cpu usage ratio.
+// createBalancedPodForNodes 为每个 node 创建一个 pod，申请足够资源使所有 node 的 mem/cpu 使用率一致。
 func createBalancedPodForNodes(ctx context.Context, f *framework.Framework, cs clientset.Interface, ns string, nodes []v1.Node, requestedResource *v1.ResourceRequirements, ratio float64) error {
 	cleanUp := func(ctx context.Context) {
-		// Delete all remaining pods
+		// 删除所有剩余的 pod
 		err := cs.CoreV1().Pods(ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 			LabelSelector: labels.SelectorFromSet(labels.Set(balancePodLabel)).String(),
 		})
@@ -381,12 +381,12 @@ func createBalancedPodForNodes(ctx context.Context, f *framework.Framework, cs c
 	}
 	ginkgo.DeferCleanup(cleanUp)
 
-	// find the max, if the node has the max,use the one, if not,use the ratio parameter
+	// 找出最大值，若 node 已达到最大值则用它，否则使用 ratio 参数
 	var maxCPUFraction, maxMemFraction float64 = ratio, ratio
 	var cpuFractionMap = make(map[string]float64)
 	var memFractionMap = make(map[string]float64)
 
-	// For each node, stores its pods info
+	// 记录每个 node 上的 pod 信息
 	nodeNameToPodList := podListForEachNode(ctx, cs)
 
 	for _, node := range nodes {
@@ -404,7 +404,7 @@ func createBalancedPodForNodes(ctx context.Context, f *framework.Framework, cs c
 	errChan := make(chan error, len(nodes))
 	var wg sync.WaitGroup
 
-	// we need the max one to keep the same cpu/mem use rate
+	// 取最大值才能保持各 node 的 cpu/mem 使用率一致
 	ratio = math.Max(maxCPUFraction, maxMemFraction)
 	for _, node := range nodes {
 		memAllocatable, found := node.Status.Allocatable[v1.ResourceMemory]
@@ -424,7 +424,7 @@ func createBalancedPodForNodes(ctx context.Context, f *framework.Framework, cs c
 		memFraction := memFractionMap[node.Name]
 		needCreateResource[v1.ResourceCPU] = *resource.NewMilliQuantity(int64((ratio-cpuFraction)*float64(cpuAllocatableMil)), resource.DecimalSI)
 
-		// add crioMinMemLimit to ensure that all pods are setting at least that much for a limit, while keeping the same ratios
+		// 加上 crioMinMemLimit，确保每个 pod 的 limit 至少为该值，同时保持相同的比例
 		needCreateResource[v1.ResourceMemory] = *resource.NewQuantity(int64((ratio-memFraction)*float64(memAllocatableVal)+float64(crioMinMemLimit)), resource.BinarySI)
 
 		podConfig := &pausePodConfig{
@@ -498,7 +498,7 @@ func computeCPUMemFraction(node v1.Node, resource *v1.ResourceRequirements, pods
 
 	for _, pod := range pods {
 		framework.Logf("Pod for on the node: %v, Cpu: %v, Mem: %v", pod.Name, getNonZeroRequests(pod).MilliCPU, getNonZeroRequests(pod).Memory)
-		// Ignore best effort pods while computing fractions as they won't be taken in account by scheduler.
+		// 计算使用比例时忽略 best effort pod，scheduler 不会考虑它们。
 		if v1qos.GetPodQOS(pod) == v1.PodQOSBestEffort {
 			continue
 		}
@@ -558,21 +558,21 @@ func addTaintToNode(ctx context.Context, cs clientset.Interface, nodeName string
 	e2enode.ExpectNodeHasTaint(ctx, cs, nodeName, &testTaint)
 }
 
-// getNonZeroRequestForResource returns the requested values,
-// if the resource has undefined request for CPU or memory, it returns a default value.
+// getNonZeroRequestForResource 返回请求值；
+// 如果 CPU 或 memory 未定义 request，则返回默认值。
 func getNonZeroRequestForResource(resourceName v1.ResourceName, requests *v1.ResourceList) resource.Quantity {
 	if requests == nil {
 		return resource.Quantity{}
 	}
 	switch resourceName {
 	case v1.ResourceCPU:
-		// Override if un-set, but not if explicitly set to zero
+		// 未设置时覆盖为默认值，显式设为零则不覆盖
 		if _, found := (*requests)[v1.ResourceCPU]; !found {
 			return *resource.NewMilliQuantity(schedutil.DefaultMilliCPURequest, resource.DecimalSI)
 		}
 		return requests.Cpu().DeepCopy()
 	case v1.ResourceMemory:
-		// Override if un-set, but not if explicitly set to zero
+		// 未设置时覆盖为默认值，显式设为零则不覆盖
 		if _, found := (*requests)[v1.ResourceMemory]; !found {
 			return *resource.NewQuantity(schedutil.DefaultMemoryRequest, resource.DecimalSI)
 		}

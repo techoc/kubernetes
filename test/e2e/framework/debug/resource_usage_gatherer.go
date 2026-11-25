@@ -44,20 +44,20 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// ResourceConstraint is a struct to hold constraints.
+// ResourceConstraint 保存资源上限约束。
 type ResourceConstraint struct {
 	CPUConstraint    float64
 	MemoryConstraint uint64
 }
 
-// SingleContainerSummary is a struct to hold single container summary.
+// SingleContainerSummary 保存单个容器的资源使用摘要。
 type SingleContainerSummary struct {
 	Name string
 	CPU  float64
 	Mem  uint64
 }
 
-// ContainerResourceUsage is a structure for gathering container resource usage.
+// ContainerResourceUsage 保存采集到的容器资源使用数据。
 type ContainerResourceUsage struct {
 	Name                    string
 	Timestamp               time.Time
@@ -65,18 +65,18 @@ type ContainerResourceUsage struct {
 	MemoryUsageInBytes      uint64
 	MemoryWorkingSetInBytes uint64
 	MemoryRSSInBytes        uint64
-	// The interval used to calculate CPUUsageInCores.
+	// 计算 CPUUsageInCores 时采用的时间区间。
 	CPUInterval time.Duration
 }
 
-// ResourceUsagePerContainer is map of ContainerResourceUsage
+// ResourceUsagePerContainer 是按容器名索引的 ContainerResourceUsage map。
 type ResourceUsagePerContainer map[string]*ContainerResourceUsage
 
-// ResourceUsageSummary is a struct to hold resource usage summary.
-// we can't have int here, as JSON does not accept integer keys.
+// ResourceUsageSummary 保存资源使用摘要。
+// 这里的 key 不能用 int，因为 JSON 不接受整数 key。
 type ResourceUsageSummary map[string][]SingleContainerSummary
 
-// PrintHumanReadable prints resource usage summary in human readable.
+// PrintHumanReadable 以易读格式输出资源使用摘要。
 func (s *ResourceUsageSummary) PrintHumanReadable() string {
 	buf := &bytes.Buffer{}
 	w := tabwriter.NewWriter(buf, 1, 0, 1, ' ', 0)
@@ -91,12 +91,12 @@ func (s *ResourceUsageSummary) PrintHumanReadable() string {
 	return buf.String()
 }
 
-// PrintJSON prints resource usage summary in JSON.
+// PrintJSON 以 JSON 格式输出资源使用摘要。
 func (s *ResourceUsageSummary) PrintJSON() string {
 	return framework.PrettyPrintJSON(*s)
 }
 
-// SummaryKind returns string of ResourceUsageSummary
+// SummaryKind 返回 ResourceUsageSummary 的类别名。
 func (s *ResourceUsageSummary) SummaryKind() string {
 	return "ResourceUsageSummary"
 }
@@ -213,23 +213,17 @@ func (w *resourceGatherWorker) singleProbe(ctx context.Context) {
 	w.dataSeries = append(w.dataSeries, data)
 }
 
-// getOneTimeResourceUsageOnNode queries the node's /stats/summary endpoint
-// and returns the resource usage of all containerNames for the past
-// cpuInterval.
-// The acceptable range of the interval is 2s~120s. Be warned that as the
-// interval (and #containers) increases, the size of kubelet's response
-// could be significant. E.g., the 60s interval stats for ~20 containers is
-// ~1.5MB. Don't hammer the node with frequent, heavy requests.
+// getOneTimeResourceUsageOnNode 查询节点的 /stats/summary 端点，
+// 返回过去 cpuInterval 内所有 containerNames 的资源使用情况。
+// interval 的允许范围是 2s~120s。注意 interval 和容器数越大，kubelet 的响应
+// 可能越大：例如约 20 个容器的 60s 统计约有 1.5MB。不要用频繁的大请求压垮节点。
 //
-// cadvisor records cumulative cpu usage in nanoseconds, so we need to have two
-// stats points to compute the cpu usage over the interval. Assuming cadvisor
-// polls every second, we'd need to get N stats points for N-second interval.
-// Note that this is an approximation and may not be accurate, hence we also
-// write the actual interval used for calculation (based on the timestamps of
-// the stats points in ContainerResourceUsage.CPUInterval.
+// cadvisor 以纳秒记录累计 CPU 使用量，因此需要两个统计点才能算出区间内的
+// CPU 使用量。假设 cadvisor 每秒轮询一次，N 秒区间就需要 N 个统计点。
+// 这只是近似值，可能不准确，所以我们也会记录实际用于计算的时间区间
+// （依据统计点的时间戳，见 ContainerResourceUsage.CPUInterval）。
 //
-// containerNames is a function returning a collection of container names in which
-// user is interested in.
+// containerNames 返回用户关心的容器名集合。
 func getOneTimeResourceUsageOnNode(
 	c clientset.Interface,
 	nodeName string,
@@ -237,9 +231,9 @@ func getOneTimeResourceUsageOnNode(
 	containerNames func() []string,
 ) (ResourceUsagePerContainer, error) {
 	const (
-		// cadvisor records stats about every second.
+		// cadvisor 大约每秒记录一次统计。
 		cadvisorStatsPollingIntervalInSeconds float64 = 1.0
-		// cadvisor caches up to 2 minutes of stats (configured by kubelet).
+		// cadvisor 最多缓存 2 分钟的统计（由 kubelet 配置）。
 		maxNumStatsToRequest int = 120
 	)
 
@@ -247,7 +241,7 @@ func getOneTimeResourceUsageOnNode(
 	if numStats < 2 || numStats > maxNumStatsToRequest {
 		return nil, fmt.Errorf("numStats needs to be > 1 and < %d", maxNumStatsToRequest)
 	}
-	// Get information of all containers on the node.
+	// 获取节点上所有容器的信息。
 	summary, err := getStatsSummary(c, nodeName)
 	if err != nil {
 		return nil, err
@@ -267,7 +261,7 @@ func getOneTimeResourceUsageOnNode(
 			CPUInterval:             0,
 		}
 	}
-	// Process container infos that are relevant to us.
+	// 只处理我们关心的容器信息。
 	containers := containerNames()
 	usageMap := make(ResourceUsagePerContainer, len(containers))
 	for _, pod := range summary.Pods {
@@ -290,7 +284,7 @@ func getOneTimeResourceUsageOnNode(
 	return usageMap, nil
 }
 
-// getStatsSummary contacts kubelet for the container information.
+// getStatsSummary 向 kubelet 请求容器信息。
 func getStatsSummary(c clientset.Interface, nodeName string) (*kubeletstatsv1alpha1.Summary, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), framework.SingleCallTimeout)
 	defer cancel()
@@ -339,7 +333,7 @@ func (w *resourceGatherWorker) gather(ctx context.Context, initialSleep time.Dur
 	}
 }
 
-// ContainerResourceGatherer is a struct for gathering container resource.
+// ContainerResourceGatherer 负责采集容器资源使用数据。
 type ContainerResourceGatherer struct {
 	client       clientset.Interface
 	stopCh       chan struct{}
@@ -349,7 +343,7 @@ type ContainerResourceGatherer struct {
 	options      ResourceGathererOptions
 }
 
-// ResourceGathererOptions is a struct to hold options for resource.
+// ResourceGathererOptions 保存资源采集的选项。
 type ResourceGathererOptions struct {
 	InKubemark                  bool
 	Nodes                       NodesSet
@@ -358,20 +352,20 @@ type ResourceGathererOptions struct {
 	PrintVerboseLogs            bool
 }
 
-// NodesSet is a value of nodes set.
+// NodesSet 表示要采集的节点集合。
 type NodesSet int
 
 const (
-	// AllNodes means all containers on all nodes.
+	// AllNodes 表示所有节点上的所有容器。
 	AllNodes NodesSet = 0
-	// MasterNodes means all containers on Master nodes only.
+	// MasterNodes 表示只采集 Master 节点上的所有容器。
 	MasterNodes NodesSet = 1
-	// MasterAndDNSNodes means all containers on Master nodes and DNS containers on other nodes.
+	// MasterAndDNSNodes 表示 Master 节点上的所有容器以及其他节点上的 DNS 容器。
 	MasterAndDNSNodes NodesSet = 2
 )
 
-// nodeHasControlPlanePods returns true if specified node has control plane pods
-// (kube-scheduler and/or kube-controller-manager).
+// nodeHasControlPlanePods 在指定节点上运行着 control plane pod
+// （kube-scheduler 和/或 kube-controller-manager）时返回 true。
 func nodeHasControlPlanePods(ctx context.Context, c clientset.Interface, nodeName string) (bool, error) {
 	regKubeScheduler := regexp.MustCompile("kube-scheduler-.*")
 	regKubeControllerManager := regexp.MustCompile("kube-controller-manager-.*")
@@ -393,7 +387,7 @@ func nodeHasControlPlanePods(ctx context.Context, c clientset.Interface, nodeNam
 	return false, nil
 }
 
-// NewResourceUsageGatherer returns a new ContainerResourceGatherer.
+// NewResourceUsageGatherer 返回一个新的 ContainerResourceGatherer。
 func NewResourceUsageGatherer(ctx context.Context, c clientset.Interface, options ResourceGathererOptions, pods *v1.PodList) (*ContainerResourceGatherer, error) {
 	g := ContainerResourceGatherer{
 		client:       c,
@@ -416,7 +410,7 @@ func NewResourceUsageGatherer(ctx context.Context, c clientset.Interface, option
 		return &g, nil
 	}
 
-	// Tracks kube-system pods if no valid PodList is passed in.
+	// 没有传入有效 PodList 时，跟踪 kube-system 下的 pod。
 	var err error
 	if pods == nil {
 		pods, err = c.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{})
@@ -488,8 +482,8 @@ func NewResourceUsageGatherer(ctx context.Context, c clientset.Interface, option
 	return &g, nil
 }
 
-// StartGatheringData starts a stat gathering worker blocks for each node to track,
-// and blocks until StopAndSummarize is called.
+// StartGatheringData 为每个要跟踪的节点启动一个统计采集 worker，
+// 并阻塞直到 StopAndSummarize 被调用。
 func (g *ContainerResourceGatherer) StartGatheringData(ctx context.Context) {
 	if len(g.workers) == 0 {
 		return
@@ -503,10 +497,9 @@ func (g *ContainerResourceGatherer) StartGatheringData(ctx context.Context) {
 	g.workerWg.Wait()
 }
 
-// StopAndSummarize stops stat gathering workers, processes the collected stats,
-// generates resource summary for the passed-in percentiles, and returns the summary.
-// It returns an error if the resource usage at any percentile is beyond the
-// specified resource constraints.
+// StopAndSummarize 停止统计采集 worker，处理采集到的数据，
+// 按传入的百分位生成资源摘要并返回。
+// 任一百分位的资源使用超出指定约束时返回错误。
 func (g *ContainerResourceGatherer) StopAndSummarize(percentiles []int, constraints map[string]ResourceConstraint) (*ResourceUsageSummary, error) {
 	close(g.stopCh)
 	framework.Logf("Closed stop channel. Waiting for %v workers", len(g.workers))
@@ -540,7 +533,7 @@ func (g *ContainerResourceGatherer) StopAndSummarize(percentiles []int, constrai
 		}
 	}
 
-	// Workers has been stopped. We need to gather data stored in them.
+	// worker 已停止，现在需要汇总它们保存的数据。
 	sortedKeys := []string{}
 	for name := range data[percentiles[0]] {
 		sortedKeys = append(sortedKeys, name)
@@ -557,11 +550,11 @@ func (g *ContainerResourceGatherer) StopAndSummarize(percentiles []int, constrai
 				Mem:  usage.MemoryWorkingSetInBytes,
 			})
 
-			// Verifying 99th percentile of resource usage
+			// 校验资源使用的第 99 百分位
 			if perc != 99 {
 				continue
 			}
-			// Name has a form: <pod_name>/<container_name>
+			// 名称格式为：<pod_name>/<container_name>
 			containerName := strings.Split(name, "/")[1]
 			constraint, ok := constraints[containerName]
 			if !ok {
@@ -595,7 +588,7 @@ func (g *ContainerResourceGatherer) StopAndSummarize(percentiles []int, constrai
 	return &summary, nil
 }
 
-// kubemarkResourceUsage is a struct for tracking the resource usage of kubemark.
+// kubemarkResourceUsage 跟踪 kubemark 的资源使用情况。
 type kubemarkResourceUsage struct {
 	Name                    string
 	MemoryWorkingSetInBytes uint64
@@ -610,10 +603,11 @@ func getMasterUsageByPrefix(ctx context.Context, prefix string) (string, error) 
 	return sshResult.Stdout, nil
 }
 
-// getKubemarkMasterComponentsResourceUsage returns the resource usage of kubemark which contains multiple combinations of cpu and memory usage for each pod name.
+// getKubemarkMasterComponentsResourceUsage 返回 kubemark 的资源使用情况，
+// 其中包含每个 pod 名称对应的多组 CPU 和内存使用数据。
 func getKubemarkMasterComponentsResourceUsage(ctx context.Context) map[string]*kubemarkResourceUsage {
 	result := make(map[string]*kubemarkResourceUsage)
-	// Get kubernetes component resource usage
+	// 获取 Kubernetes 组件的资源使用情况
 	sshResult, err := getMasterUsageByPrefix(ctx, "kube")
 	if err != nil {
 		framework.Logf("Error when trying to SSH to master machine. Skipping probe. %v", err)
@@ -626,12 +620,12 @@ func getKubemarkMasterComponentsResourceUsage(ctx context.Context) map[string]*k
 		var name string
 		fmt.Sscanf(strings.TrimSpace(scanner.Text()), "%f %d /usr/local/bin/kube-%s", &cpu, &mem, &name)
 		if name != "" {
-			// Gatherer expects pod_name/container_name format
+			// gatherer 要求 pod_name/container_name 格式
 			fullName := name + "/" + name
 			result[fullName] = &kubemarkResourceUsage{Name: fullName, MemoryWorkingSetInBytes: mem * 1024, CPUUsageInCores: cpu / 100}
 		}
 	}
-	// Get etcd resource usage
+	// 获取 etcd 的资源使用情况
 	sshResult, err = getMasterUsageByPrefix(ctx, "bin/etcd")
 	if err != nil {
 		framework.Logf("Error when trying to SSH to master machine. Skipping probe")
@@ -649,7 +643,7 @@ func getKubemarkMasterComponentsResourceUsage(ctx context.Context) map[string]*k
 		}
 		fmt.Sscanf(scanner.Text()[dataDirStart:], "--data-dir=/var/%s", &etcdKind)
 		if etcdKind != "" {
-			// Gatherer expects pod_name/container_name format
+			// gatherer 要求 pod_name/container_name 格式
 			fullName := "etcd/" + etcdKind
 			result[fullName] = &kubemarkResourceUsage{Name: fullName, MemoryWorkingSetInBytes: mem * 1024, CPUUsageInCores: cpu / 100}
 		}

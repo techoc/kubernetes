@@ -33,15 +33,14 @@ import (
 	"time"
 )
 
-// defaultPollIntervalSeconds [seconds] is the default value for which the Prober will wait before attempting next attempt.
+// defaultPollIntervalSeconds [秒] 是 Prober 在下次尝试前等待的默认时长。
 const defaultPollIntervalSeconds = 1
 
-// defaultPollTimeoutSeconds [seconds] is the default timeout when polling on probes.
+// defaultPollTimeoutSeconds [秒] 是探测轮询的默认超时时间。
 const defaultPollTimeoutSeconds = 10
 
-// TestPod represents an actual running pod. For each Pod defined by the model,
-// there will be a corresponding TestPod. TestPod includes some runtime info
-// (namespace name, service IP) which is not available in the model.
+// TestPod 表示实际运行中的 pod。model 中定义的每个 Pod 都有一个对应的 TestPod。
+// TestPod 包含 model 中没有的一些运行时信息（namespace 名称、service IP）。
 type TestPod struct {
 	Namespace string
 	Name      string
@@ -52,10 +51,10 @@ func (pod TestPod) PodString() PodString {
 	return NewPodString(pod.Namespace, pod.Name)
 }
 
-// kubeManager provides a convenience interface to kube functionality that we leverage for polling NetworkPolicy connections.
-// Its responsibilities are:
-//   - creating resources (pods, deployments, namespaces, services, network policies)
-//   - modifying and cleaning up resources
+// kubeManager 对轮询 NetworkPolicy 连通性用到的 kube 功能做了便捷封装。
+// 职责包括：
+//   - 创建资源（pod、deployment、namespace、service、network policy）
+//   - 修改和清理资源
 type kubeManager struct {
 	framework      *framework.Framework
 	clientSet      clientset.Interface
@@ -65,7 +64,7 @@ type kubeManager struct {
 	dnsDomain      string
 }
 
-// newKubeManager is a utility function that wraps creation of the kubeManager instance.
+// newKubeManager 是创建 kubeManager 实例的便捷函数。
 func newKubeManager(framework *framework.Framework, dnsDomain string) *kubeManager {
 	return &kubeManager{
 		framework: framework,
@@ -74,11 +73,11 @@ func newKubeManager(framework *framework.Framework, dnsDomain string) *kubeManag
 	}
 }
 
-// initializeCluster initialized the cluster, creating namespaces pods and services as needed.
+// initializeCluster 初始化集群，按需创建 namespace、pod 和 service。
 func (k *kubeManager) initializeClusterFromModel(ctx context.Context, model *Model) error {
 	var createdPods []*v1.Pod
 	for _, ns := range model.Namespaces {
-		// no labels needed, we just need the default kubernetes.io/metadata.name label
+		// 不需要额外 label，默认的 kubernetes.io/metadata.name 就够了
 		namespace, err := k.framework.CreateNamespace(ctx, ns.Name, nil)
 		if err != nil {
 			return err
@@ -89,8 +88,8 @@ func (k *kubeManager) initializeClusterFromModel(ctx context.Context, model *Mod
 		for _, pod := range ns.Pods {
 			framework.Logf("creating pod %s/%s with matching service", namespaceName, pod.Name)
 
-			// note that we defer the logic of pod (i.e. node selector) specifics to the model
-			// which is aware of linux vs windows pods
+			// pod 的细节逻辑（如 node selector）交给 model 处理，
+			// 因为它清楚 pod 是 Linux 还是 Windows
 			kubePod, err := k.createPod(ctx, pod.KubePod(namespaceName))
 			if err != nil {
 				return err
@@ -140,7 +139,7 @@ func (k *kubeManager) NamespaceNames() []string {
 	return k.namespaceNames
 }
 
-// getPod gets a pod by namespace and name.
+// getPod 根据 namespace 和名称获取 pod。
 func (k *kubeManager) getPod(ctx context.Context, ns string, name string) (*v1.Pod, error) {
 	kubePod, err := k.clientSet.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -149,8 +148,8 @@ func (k *kubeManager) getPod(ctx context.Context, ns string, name string) (*v1.P
 	return kubePod, nil
 }
 
-// probeConnectivity execs into a pod and checks its connectivity to another pod.
-// Implements the Prober interface.
+// probeConnectivity 进入 pod 执行探测，检查它与另一个 pod 的连通性。
+// 实现了 Prober 接口。
 func (k *kubeManager) probeConnectivity(args *probeConnectivityArgs) (bool, string, error) {
 	port := strconv.Itoa(args.toPort)
 	if args.addrTo == "" {
@@ -178,40 +177,40 @@ func (k *kubeManager) probeConnectivity(args *probeConnectivityArgs) (bool, stri
 
 	attempt := 0
 
-	// NOTE: The return value of this function[probeConnectivity] should be true if the probe is successful and false otherwise.
+	// NOTE: probeConnectivity 的返回值在探测成功时应为 true，否则为 false。
 
-	// probeError will be the return value of this function[probeConnectivity] call.
+	// probeError 将作为本次 probeConnectivity 调用的返回值。
 	var probeError error
 	var stderr string
 
-	// Instead of re-running the job on connectivity failure, the following conditionFunc when passed to PollImmediate, reruns
-	// the job when the observed value don't match the expected value, so we don't rely on return value of PollImmediate, we
-	// simply discard it and use probeError, defined outside scope of conditionFunc, for returning the result of probeConnectivity.
+	// 传给 PollImmediate 的 conditionFunc 不会在连通性失败时重跑任务，
+	// 而是在观测值与预期不符时重跑，所以我们不依赖 PollImmediate 的返回值，
+	// 而是直接使用定义在 conditionFunc 作用域外的 probeError 作为 probeConnectivity 的结果。
 	conditionFunc := func() (bool, error) {
 		_, stderr, probeError = k.executeRemoteCommand(args.nsFrom, args.podFrom, cmd)
-		// retry should only occur if expected and observed value don't match.
+		// 只有在观测值与预期不符时才重试。
 		if args.expectConnectivity {
 			if probeError != nil {
-				// since we expect connectivity here, we fail the condition for PollImmediate to reattempt the probe.
-				// this happens in the cases where network is congested, we don't have any policy rejecting traffic
-				// from "podFrom" to "podTo" and probes from "podFrom" to "podTo" are failing.
+				// 这里预期有连通性，所以让 PollImmediate 的条件失败以重试探测。
+				// 这种情况可能发生在网络拥塞时：并没有策略拒绝 "podFrom" 到 "podTo" 的流量，
+				// 但探测却失败了。
 				framework.Logf("probe #%d :: connectivity expected :: %s/%s -> %s :: stderr - %s",
 					attempt+1, args.nsFrom, args.podFrom, args.addrTo, stderr,
 				)
 				attempt++
 				return false, nil
 			} else {
-				// we got the expected results, exit immediately.
+				// 结果符合预期，立即退出。
 				return true, nil
 			}
 		} else {
 			if probeError != nil {
-				// we got the expected results, exit immediately.
+				// 结果符合预期，立即退出。
 				return true, nil
 			} else {
-				// since we don't expect connectivity here, we fail the condition for PollImmediate to reattempt the probe.
-				// this happens in the cases where we have policy rejecting traffic from "podFrom" to "podTo", but CNI takes
-				// time to implement the policy and probe from "podFrom" to "podTo" was successful in that window.
+				// 这里预期没有连通性，所以让 PollImmediate 的条件失败以重试探测。
+				// 这种情况可能发生在已有策略拒绝 "podFrom" 到 "podTo" 的流量，
+				// 但 CNI 需要时间落实策略，在该时间窗口内探测仍然成功。
 				framework.Logf(" probe #%d :: connectivity not expected :: %s/%s -> %s",
 					attempt+1, args.nsFrom, args.podFrom, args.addrTo,
 				)
@@ -221,7 +220,7 @@ func (k *kubeManager) probeConnectivity(args *probeConnectivityArgs) (bool, stri
 		}
 	}
 
-	// ignore the result of PollImmediate, we are only concerned with probeError.
+	// 忽略 PollImmediate 的返回值，我们只关心 probeError。
 	_ = wait.PollImmediate(
 		time.Duration(args.pollIntervalSeconds)*time.Second,
 		time.Duration(args.pollTimeoutSeconds)*time.Second,
@@ -234,7 +233,7 @@ func (k *kubeManager) probeConnectivity(args *probeConnectivityArgs) (bool, stri
 	return true, commandDebugString, nil
 }
 
-// executeRemoteCommand executes a remote shell command on the given pod.
+// executeRemoteCommand 在指定 pod 上执行远程 shell 命令。
 func (k *kubeManager) executeRemoteCommand(namespace string, pod string, command []string) (string, string, error) {
 	return e2epod.Exec(k.framework.TContext(context.Background()), e2epod.ExecOptions{
 		Command:            command,
@@ -247,7 +246,7 @@ func (k *kubeManager) executeRemoteCommand(namespace string, pod string, command
 	})
 }
 
-// createService is a convenience function for service setup.
+// createService 是创建 service 的便捷函数。
 func (k *kubeManager) createService(ctx context.Context, service *v1.Service) (*v1.Service, error) {
 	ns := service.Namespace
 	name := service.Name
@@ -259,7 +258,7 @@ func (k *kubeManager) createService(ctx context.Context, service *v1.Service) (*
 	return createdService, nil
 }
 
-// createPod is a convenience function for pod setup.
+// createPod 是创建 pod 的便捷函数。
 func (k *kubeManager) createPod(ctx context.Context, pod *v1.Pod) (*v1.Pod, error) {
 	ns := pod.Namespace
 	framework.Logf("creating pod %s/%s", ns, pod.Name)
@@ -271,7 +270,7 @@ func (k *kubeManager) createPod(ctx context.Context, pod *v1.Pod) (*v1.Pod, erro
 	return createdPod, nil
 }
 
-// cleanNetworkPolicies is a convenience function for deleting network policies before startup of any new test.
+// cleanNetworkPolicies 是便捷函数，在新测试开始前删除所有 network policy。
 func (k *kubeManager) cleanNetworkPolicies(ctx context.Context) error {
 	for _, ns := range k.namespaceNames {
 		framework.Logf("deleting policies in %s ..........", ns)
@@ -290,7 +289,7 @@ func (k *kubeManager) cleanNetworkPolicies(ctx context.Context) error {
 	return nil
 }
 
-// createNetworkPolicy is a convenience function for creating network policies.
+// createNetworkPolicy 是创建 network policy 的便捷函数。
 func (k *kubeManager) createNetworkPolicy(ctx context.Context, ns string, netpol *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, error) {
 	framework.Logf("creating network policy %s/%s", ns, netpol.Name)
 	netpol.ObjectMeta.Namespace = ns
@@ -301,7 +300,7 @@ func (k *kubeManager) createNetworkPolicy(ctx context.Context, ns string, netpol
 	return np, nil
 }
 
-// updateNetworkPolicy is a convenience function for updating network policies.
+// updateNetworkPolicy 是更新 network policy 的便捷函数。
 func (k *kubeManager) updateNetworkPolicy(ctx context.Context, ns string, netpol *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, error) {
 	framework.Logf("updating network policy %s/%s", ns, netpol.Name)
 	netpol.ObjectMeta.Namespace = ns
@@ -312,7 +311,7 @@ func (k *kubeManager) updateNetworkPolicy(ctx context.Context, ns string, netpol
 	return np, nil
 }
 
-// getNamespace gets a namespace object from kubernetes.
+// getNamespace 从 kubernetes 获取 namespace 对象。
 func (k *kubeManager) getNamespace(ctx context.Context, ns string) (*v1.Namespace, error) {
 	selectedNameSpace, err := k.clientSet.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil {
@@ -321,28 +320,26 @@ func (k *kubeManager) getNamespace(ctx context.Context, ns string) (*v1.Namespac
 	return selectedNameSpace, nil
 }
 
-// getProbeTimeoutSeconds returns a timeout for how long the probe should work before failing a
-// check. The 3-second timeout not only ensures probe reliability across different platforms,
-// but also serves as an assertion on the non-functional requirement that the dataplane must
-// program network policies within an acceptable latency. This is especially critical for
-// network policy features where slow dataplane programming could impact connectivity and security.
-// The 3-second threshold was determined through empirical evidence as the maximum acceptable
-// latency for network policy enforcement.
+// getProbeTimeoutSeconds 返回探测在判定失败前的超时时长。3 秒超时既保证了
+// 探测在不同平台上的可靠性，也隐含断言了 dataplane 必须在可接受的延迟内
+// 下发 network policy。对于网络策略功能来说这一点尤其关键，因为下发过慢
+// 可能影响连通性和安全性。3 秒阈值是根据经验数据确定的、可接受的最大
+// 策略生效延迟。
 func getProbeTimeoutSeconds() int {
 	return 3
 }
 
-// getWorkers returns the number of workers suggested to run when testing.
+// getWorkers 返回测试时建议运行的 worker 数量。
 func getWorkers() int {
 	return 3
 }
 
-// getPollInterval returns the value for which the Prober will wait before attempting next attempt.
+// getPollInterval 返回 Prober 在下次尝试前等待的时长。
 func getPollIntervalSeconds() int {
 	return defaultPollIntervalSeconds
 }
 
-// getPollTimeout returns the timeout for polling on probes, and takes windows heuristics into account, where requests can take longer sometimes.
+// getPollTimeout 返回探测轮询的超时时间，并针对 Windows 做了经验性调整，因为那里的请求有时会更慢。
 func getPollTimeoutSeconds() int {
 	if framework.NodeOSDistroIs("windows") {
 		return defaultPollTimeoutSeconds * 2

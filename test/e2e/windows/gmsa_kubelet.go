@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This test only makes sure that the kubelet correctly passes down GMSA cred specs
-// down to the runtime.
-// It's a much lighter test than gmsa_full, that tests the whole GMSA process, but
-// also requires a heavy weight setup to run.
+// 本测试只验证 kubelet 能否正确地将 GMSA 凭据规格传递给运行时。
+// 相比覆盖完整 GMSA 流程但需要繁重环境搭建的 gmsa_full，这个测试轻量得多。
 
 package windows
 
@@ -110,9 +108,9 @@ var _ = sigDescribe(feature.Windows, "GMSA Kubelet", framework.WithSlow(), skipU
 					)
 
 					containerOption := fmt.Sprintf("--container=%s", containerName)
-					// even for bogus creds, `nltest /PARENTDOMAIN` simply returns the AD domain, which is enough for our purpose here.
-					// note that the "eventually" part seems to be needed to account for the fact that powershell containers
-					// are a bit slow to become responsive, even when docker reports them as running.
+					// 即使是无效凭据，`nltest /PARENTDOMAIN` 也会返回 AD 域，这已足够满足这里的验证目的。
+					// 使用 Eventually 是因为 powershell 容器即使被 docker 报告为运行中，
+					// 响应请求也往往偏慢。
 					gomega.Eventually(ctx, func() error {
 						output, err = e2ekubectl.RunKubectl(f.Namespace.Name, "exec", namespaceOption, podName, containerOption, "--", "nltest", "/PARENTDOMAIN")
 						if err != nil {
@@ -131,9 +129,8 @@ var _ = sigDescribe(feature.Windows, "GMSA Kubelet", framework.WithSlow(), skipU
 					}
 				}
 
-				// If this was an e2e_node test, we could also check that the registry keys used to pass down the cred specs to Docker
-				// have been properly cleaned up - but as of right now, e2e_node tests don't support Windows. We should migrate this
-				// test to an e2e_node test when they start supporting Windows.
+				// 若这是 e2e_node 测试，还可以检查用于向 Docker 传递凭据规格的注册表项
+				// 是否已清理；但目前 e2e_node 测试尚不支持 Windows。等其支持后应迁移该测试。
 			})
 		})
 	})

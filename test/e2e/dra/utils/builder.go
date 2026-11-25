@@ -51,14 +51,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// ExtendedResourceName returns extended resource name with a variable suffix.
-// Example: b.ExtendedResourceName("gpu") returns "driver-name/resource-gpu"
+// ExtendedResourceName 返回带可变后缀的 extended resource 名称。
+// 例如：b.ExtendedResourceName("gpu") 返回 "driver-name/resource-gpu"
 func (b *Builder) ExtendedResourceName(suffix string) string {
 	return b.Driver.Name + "/resource-" + suffix
 }
 
-// Builder contains a running counter to make objects unique within their
-// namespace.
+// Builder 内含递增计数器，保证其创建的对象在 namespace 内名称唯一。
 type Builder struct {
 	namespace               string
 	Driver                  *Driver
@@ -72,24 +71,23 @@ type Builder struct {
 	SkipCleanup     bool
 }
 
-// DeviceClassWrapper is a wrapper around DeviceClass that allows
-// adding builder-style functions that modify the class before creation.
+// DeviceClassWrapper 包装 DeviceClass，便于用 builder 风格的函数
+// 在创建前修改 class。
 type DeviceClassWrapper struct {
 	*resourceapi.DeviceClass
 }
 
-// ClassName returns the default device class name.
+// ClassName 返回默认的 device class 名称。
 func (b *Builder) ClassName() string {
 	return b.namespace + b.Driver.NameSuffix + "-class"
 }
 
-// DriverName returns the default device driver name.
+// DriverName 返回默认的 device driver 名称。
 func (b *Builder) DriverName() string {
 	return b.Driver.Name
 }
 
-// Class returns the device Class that the builder's other objects
-// reference.
+// Class 返回 builder 中其他对象所引用的 device Class。
 func (b *Builder) Class() *DeviceClassWrapper {
 	name := b.ClassName()
 	class := &resourceapi.DeviceClass{
@@ -115,30 +113,29 @@ func (b *Builder) Class() *DeviceClassWrapper {
 	return &DeviceClassWrapper{DeviceClass: class}
 }
 
-// ClassWithExtendedResource returns a device class with the extended resource name set to the provided value.
-// The class name is suffixed with the last part of the extended resource name to make it unique.
+// ClassWithExtendedResource 返回一个 device class，其 extended resource 名称设为给定值。
+// class 名称会追加 extended resource 名称的最后一段以保证唯一。
 func (b *Builder) ClassWithExtendedResource(extendedResource string) *resourceapi.DeviceClass {
 	suffix := extendedResource[strings.LastIndex(extendedResource, "/")+1:]
 	return b.Class().WithName(b.ClassName() + "-" + suffix).WithExtendedResource(extendedResource).DeviceClass
 }
 
-// WithName sets the name of the device class.
+// WithName 设置 device class 的名称。
 func (dcw *DeviceClassWrapper) WithName(name string) *DeviceClassWrapper {
 	dcw.ObjectMeta.Name = name
 	return dcw
 }
 
-// WithExtendedResource sets the extended resource name of the device class.
+// WithExtendedResource 设置 device class 的 extended resource 名称。
 func (dcw *DeviceClassWrapper) WithExtendedResource(extendedResourceName string) *DeviceClassWrapper {
 	dcw.Spec.ExtendedResourceName = &extendedResourceName
 	return dcw
 }
 
-// ExternalClaim returns external resource claim
-// that test pods can reference
+// ExternalClaim 返回供测试 pod 引用的 external resource claim。
 func (b *Builder) ExternalClaim() *resourceapi.ResourceClaim {
 	b.claimCounter++
-	name := "external-claim" + b.Driver.NameSuffix // This is what podExternal expects.
+	name := "external-claim" + b.Driver.NameSuffix // podExternal 期望这个名字
 	if b.claimCounter > 1 {
 		name += fmt.Sprintf("-%d", b.claimCounter)
 	}
@@ -150,8 +147,8 @@ func (b *Builder) ExternalClaim() *resourceapi.ResourceClaim {
 	}
 }
 
-// claimSpec returns the device request for a claim or claim template
-// with the associated config using the v1beta1 API.
+// claimSpecWithV1beta1 用 v1beta1 API 构造 claim 或 claim template 的
+// device request 及相应 config。
 func (b *Builder) claimSpecWithV1beta1() resourcev1beta1.ResourceClaimSpec {
 	parameters, _ := b.ParametersEnv()
 	spec := resourcev1beta1.ResourceClaimSpec{
@@ -176,8 +173,8 @@ func (b *Builder) claimSpecWithV1beta1() resourcev1beta1.ResourceClaimSpec {
 	return spec
 }
 
-// claimSpec returns the device request for a claim or claim template
-// with the associated config using the v1beta1 API.
+// claimSpecWithV1beta2 用 v1beta2 API 构造 claim 或 claim template 的
+// device request 及相应 config。
 func (b *Builder) claimSpecWithV1beta2() resourcev1beta2.ResourceClaimSpec {
 	parameters, _ := b.ParametersEnv()
 	spec := resourcev1beta2.ResourceClaimSpec{
@@ -204,8 +201,8 @@ func (b *Builder) claimSpecWithV1beta2() resourcev1beta2.ResourceClaimSpec {
 	return spec
 }
 
-// claimSpecWithV1beta2 returns the device request for a claim or claim template
-// with the associated config using the latest API.
+// ClaimSpec 用最新 API 构造 claim 或 claim template 的
+// device request 及相应 config。
 func (b *Builder) ClaimSpec() resourceapi.ResourceClaimSpec {
 	parameters, _ := b.ParametersEnv()
 	spec := resourceapi.ResourceClaimSpec{
@@ -232,21 +229,19 @@ func (b *Builder) ClaimSpec() resourceapi.ResourceClaimSpec {
 	return spec
 }
 
-// ParametersEnv returns the default user env variables as JSON (config) and key/value list (pod env).
+// ParametersEnv 返回默认的用户环境变量，分别以 JSON（config）和 key/value 列表（pod env）形式给出。
 func (b *Builder) ParametersEnv() (string, []string) {
 	return `{"a":"b"}`,
 		[]string{"user_a", "b"}
 }
 
-// makePod returns a simple Pod with no resource claims.
-// The Pod prints its env and waits.
+// Pod 返回一个不带 resource claim 的简单 Pod，它会打印环境变量然后等待。
 func (b *Builder) Pod() *v1.Pod {
-	// The e2epod.InfiniteSleepCommand was changed so that it reacts to SIGTERM,
-	// causing the pod to shut down immediately. This is better than the previous approach
-	// with `terminationGraceperiodseconds: 1` because that still caused a one second delay.
+	// e2epod.InfiniteSleepCommand 已改为响应 SIGTERM，让 pod 立即退出。
+	// 这比之前用 `terminationGraceperiodseconds: 1` 更好，后者仍会造成一秒延迟。
 	//
-	// It is tempting to use `terminationGraceperiodSeconds: 0`, but that is a very bad
-	// idea because it removes the pod before the kubelet had a chance to react (https://github.com/kubernetes/kubernetes/issues/120671).
+	// 虽然用 `terminationGraceperiodSeconds: 0` 很有诱惑，但这是个坏主意：
+	// pod 会在 kubelet 来得及响应之前就被删除（https://github.com/kubernetes/kubernetes/issues/120671）。
 	pod := e2epod.MakePod(b.namespace, nil, nil, admissionapi.LevelRestricted, "" /* no command = pause */)
 	pod.Labels = make(map[string]string)
 	pod.Spec.RestartPolicy = v1.RestartPolicyNever
@@ -256,7 +251,7 @@ func (b *Builder) Pod() *v1.Pod {
 	return pod
 }
 
-// makePodInline adds an inline resource claim with default class name and parameters.
+// PodInline 添加一个使用默认 class 名称和参数的 inline resource claim。
 func (b *Builder) PodInline() (*v1.Pod, *resourceapi.ResourceClaimTemplate) {
 	pod := b.Pod()
 	pod.Spec.Containers[0].Name = "with-resource"
@@ -316,7 +311,7 @@ func (b *Builder) PodInlineMultiple() (*v1.Pod, *resourceapi.ResourceClaimTempla
 	return pod, template
 }
 
-// PodExternal adds a pod that references the named resource claim.
+// PodExternal 添加一个引用指定 resource claim 的 pod。
 func (b *Builder) PodExternal(externalClaimName string) *v1.Pod {
 	pod := b.Pod()
 	pod.Spec.Containers[0].Name = "with-resource"
@@ -331,7 +326,7 @@ func (b *Builder) PodExternal(externalClaimName string) *v1.Pod {
 	return pod
 }
 
-// podShared returns a pod with 3 containers that reference the named external resource claim.
+// PodExternalMultiple 返回一个包含 3 个容器、均引用指定 external resource claim 的 pod。
 func (b *Builder) PodExternalMultiple(externalClaimName string) *v1.Pod {
 	pod := b.PodExternal(externalClaimName)
 	pod.Spec.Containers = append(pod.Spec.Containers, *pod.Spec.Containers[0].DeepCopy(), *pod.Spec.Containers[0].DeepCopy())
@@ -340,7 +335,7 @@ func (b *Builder) PodExternalMultiple(externalClaimName string) *v1.Pod {
 	return pod
 }
 
-// GroupedPodWithClaims returns a pod that is a member of the given PodGroup.
+// GroupedPodWithClaims 返回一个属于给定 PodGroup 的 pod。
 func (b *Builder) GroupedPodWithClaims(podGroup *schedulingv1beta1.PodGroup) *v1.Pod {
 	pod := b.Pod()
 	pod.Spec.SchedulingGroup = &v1.PodSchedulingGroup{
@@ -357,7 +352,7 @@ func (b *Builder) GroupedPodWithClaims(podGroup *schedulingv1beta1.PodGroup) *v1
 	return pod
 }
 
-// Workload creates a Workload with one PodGroupTemplate and no ResourceClaims.
+// Workload 创建一个包含一个 PodGroupTemplate、不带 ResourceClaim 的 Workload。
 func (b *Builder) Workload() *schedulingv1beta1.Workload {
 	workload := &schedulingv1beta1.Workload{
 		ObjectMeta: metav1.ObjectMeta{
@@ -379,8 +374,8 @@ func (b *Builder) Workload() *schedulingv1beta1.Workload {
 	return workload
 }
 
-// WorkloadExternal creates a Workload with one PodGroupTemplate that refers to
-// one ResourceClaim with the given name.
+// WorkloadExternal 创建一个 Workload，其中的 PodGroupTemplate 引用
+// 指定名称的一个 ResourceClaim。
 func (b *Builder) WorkloadExternal(externalClaimName string) *schedulingv1beta1.Workload {
 	workload := b.Workload()
 	workload.Spec.PodGroupTemplates[0].ResourceClaims = []schedulingv1beta1.PodGroupResourceClaim{
@@ -392,8 +387,8 @@ func (b *Builder) WorkloadExternal(externalClaimName string) *schedulingv1beta1.
 	return workload
 }
 
-// WorkloadInline creates a ResourceClaimTemplate and a Workload with one
-// PodGroupTemplate that refers to that ResourceClaimTemplate.
+// WorkloadInline 创建一个 ResourceClaimTemplate 和一个 Workload，
+// Workload 中的 PodGroupTemplate 引用该 ResourceClaimTemplate。
 func (b *Builder) WorkloadInline() (*schedulingv1beta1.Workload, *resourceapi.ResourceClaimTemplate) {
 	workload := b.Workload()
 	podGroupClaimName := "my-inline-claim"
@@ -415,8 +410,7 @@ func (b *Builder) WorkloadInline() (*schedulingv1beta1.Workload, *resourceapi.Re
 	return workload, template
 }
 
-// PodGroup returns a simple PodGroup owned by the given Workload with no
-// resource claims.
+// PodGroup 返回一个由给定 Workload 持有、不带 resource claim 的简单 PodGroup。
 func (b *Builder) PodGroup(workload *schedulingv1beta1.Workload, template schedulingv1beta1.PodGroupTemplate) *schedulingv1beta1.PodGroup {
 	podGroup := &schedulingv1beta1.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{
@@ -436,7 +430,7 @@ func (b *Builder) PodGroup(workload *schedulingv1beta1.Workload, template schedu
 	return podGroup
 }
 
-// Create takes a bunch of objects and calls their Create function.
+// Create 接收一组对象并分别调用它们的 Create。
 func (b *Builder) Create(tCtx ktesting.TContext, objs ...klog.KMetadata) []klog.KMetadata {
 	tCtx.Helper()
 	cleanupCtx := tCtx.CleanupCtx
@@ -500,7 +494,7 @@ func (b *Builder) Create(tCtx ktesting.TContext, objs ...klog.KMetadata) []klog.
 			})
 		case *appsv1.DaemonSet:
 			createdObj, err = tCtx.Client().AppsV1().DaemonSets(b.namespace).Create(tCtx, obj, metav1.CreateOptions{})
-			// Cleanup not really needed, but speeds up namespace shutdown.
+			// 其实不必清理，但主动删除可以加快 namespace 关闭。
 			cleanupCtx(func(tCtx ktesting.TContext) {
 				err := tCtx.Client().AppsV1().DaemonSets(b.namespace).Delete(tCtx, obj.Name, metav1.DeleteOptions{})
 				tCtx.ExpectNoError(err, "delete daemonset")
@@ -522,17 +516,17 @@ func (b *Builder) DeletePodAndWaitForNotFound(tCtx ktesting.TContext, pod *v1.Po
 	tCtx.Helper()
 	err := tCtx.Client().CoreV1().Pods(b.namespace).Delete(tCtx, pod.Name, metav1.DeleteOptions{})
 	tCtx.ExpectNoError(err, "delete %T", pod)
-	/* TODO: add timeouts to TContext? */
+	/* TODO: 给 TContext 加上超时设置？ */
 	err = e2epod.WaitForPodNotFoundInNamespace(tCtx, tCtx.Client(), pod.Name, pod.Namespace, 5*time.Minute /* former b.f.Timeouts.PodDelete */)
 	tCtx.ExpectNoError(err, "terminate %T", pod)
 }
 
-// TestPod runs pod and checks if container logs contain expected environment variables
+// TestPod 运行 pod，并检查容器日志中是否包含预期的环境变量。
 func (b *Builder) TestPod(tCtx ktesting.TContext, pod *v1.Pod, env ...string) {
 	tCtx.Helper()
 
 	if !b.Driver.WithKubelet {
-		// Less testing when we cannot rely on the kubelet to actually run the pod.
+		// 不能依赖 kubelet 真正运行 pod 时，就少做一些检查。
 		err := e2epod.WaitForPodScheduled(tCtx, tCtx.Client(), pod.Namespace, pod.Name)
 		tCtx.ExpectNoError(err, "schedule pod")
 		return
@@ -549,7 +543,7 @@ func (b *Builder) TestPod(tCtx ktesting.TContext, pod *v1.Pod, env ...string) {
 	}
 }
 
-// envLineRE matches env output with variables set by test/e2e/dra/test-driver.
+// envLineRE 匹配 test/e2e/dra/test-driver 设置的环境变量输出行。
 var envLineRE = regexp.MustCompile(`^(?:admin|user|claim)_[a-zA-Z0-9_]*=.*$`)
 
 func TestContainerEnv(tCtx ktesting.TContext, pod *v1.Pod, containerName string, fullMatch bool, env ...string) {
@@ -566,7 +560,7 @@ func TestContainerEnv(tCtx ktesting.TContext, pod *v1.Pod, containerName string,
 	tCtx.ExpectNoError(err, fmt.Sprintf("get env output for container %s", containerName))
 	tCtx.Expect(stderr).To(gomega.BeEmpty(), fmt.Sprintf("env stderr for container %s", containerName))
 	if fullMatch {
-		// Find all env variables set by the test driver.
+		// 找出 test driver 设置的所有环境变量。
 		var actualEnv, expectEnv []string
 		for _, line := range strings.Split(stdout, "\n") {
 			if envLineRE.MatchString(line) {
@@ -611,7 +605,7 @@ func (b *Builder) setUp(tCtx ktesting.TContext) {
 	tCtx.CleanupCtx(b.tearDown)
 }
 
-// ClientV1 returns a wrapper for client-go which provides the V1 API on top of whatever is enabled in the cluster.
+// ClientV1 返回 client-go 的包装，在集群启用的 API 之上提供 V1 API。
 func (b *Builder) ClientV1(tCtx ktesting.TContext) cgoresource.ResourceV1Interface {
 	return draclient.New(tCtx.Client())
 }
@@ -619,10 +613,8 @@ func (b *Builder) ClientV1(tCtx ktesting.TContext) cgoresource.ResourceV1Interfa
 func (b *Builder) tearDown(tCtx ktesting.TContext) {
 	client := b.ClientV1(tCtx)
 
-	// Before we allow the namespace and all objects in it do be deleted by
-	// the framework, we must ensure that test pods and the claims that
-	// they use are deleted. Otherwise the driver might get deleted first,
-	// in which case deleting the claims won't work anymore.
+	// 在 framework 删除 namespace 及其中的所有对象之前，必须先删掉测试 pod
+	// 以及它们使用的 claim。否则 driver 可能先被删除，届时 claim 就无法再删除了。
 	tCtx.Log("delete pods, podgroups, and claims")
 	pods, err := b.listTestPods(tCtx)
 	tCtx.ExpectNoError(err, "list pods")
@@ -633,7 +625,7 @@ func (b *Builder) tearDown(tCtx ktesting.TContext) {
 		tCtx.Logf("Deleting %T %s", &pod, klog.KObj(&pod))
 		options := metav1.DeleteOptions{}
 		if !b.Driver.WithRealNodes {
-			// Force-delete, no kubelet.
+			// 强制删除，因为没有 kubelet。
 			options.GracePeriodSeconds = ptr.To(int64(0))
 		}
 		err := tCtx.Client().CoreV1().Pods(b.namespace).Delete(tCtx, pod.Name, options)
@@ -645,7 +637,7 @@ func (b *Builder) tearDown(tCtx ktesting.TContext) {
 		return b.listTestPods(tCtx)
 	}).WithTimeout(time.Minute).Should(gomega.BeEmpty(), "remaining pods despite deletion")
 
-	// Clean up PodGroups to release claims allocated for them.
+	// 清理 PodGroup，释放为它们分配的 claim。
 	podGroups, err := b.listTestPodGroups(tCtx)
 	tCtx.ExpectNoError(err, "list podgroups")
 	for _, podGroup := range podGroups {
@@ -705,7 +697,7 @@ func (b *Builder) listTestPods(tCtx ktesting.TContext) ([]v1.Pod, error) {
 func (b *Builder) listTestPodGroups(tCtx ktesting.TContext) ([]schedulingv1beta1.PodGroup, error) {
 	podGroups, err := tCtx.Client().SchedulingV1beta1().PodGroups(b.namespace).List(tCtx, metav1.ListOptions{})
 	if apierrors.IsNotFound(err) {
-		// API is disabled
+		// API 未启用
 		return nil, nil
 	}
 	if err != nil {
@@ -767,8 +759,8 @@ func NetworkResources(maxAllocations int, tainted bool) driverResourcesGenFunc {
 					}},
 					NodeSelector: &v1.NodeSelector{
 						NodeSelectorTerms: []v1.NodeSelectorTerm{{
-							// MatchExpressions allow multiple values,
-							// MatchFields don't.
+							// MatchExpressions 支持多值，
+							// MatchFields 不支持。
 							MatchExpressions: []v1.NodeSelectorRequirement{{
 								Key:      "kubernetes.io/hostname",
 								Operator: v1.NodeSelectorOpIn,
@@ -784,18 +776,17 @@ func NetworkResources(maxAllocations int, tainted bool) driverResourcesGenFunc {
 	}
 }
 
-// PartitionProfileAttribute is the fully qualified device attribute whose value
-// labels each device's partition type in PartitionableResources.
+// PartitionProfileAttribute 是完全限定的 device attribute，其取值在
+// PartitionableResources 中标识每台设备的分区类型。
 const PartitionProfileAttribute = resourceapi.FullyQualifiedName("dra.e2e.example.com/profile")
 
-// PartitionableResources publishes one pool "partitioned" split into a
-// shared-counter slice and a device slice whose devices consume those counters.
-// Each device carries the PartitionProfileAttribute ("Full"/"Half"). When
-// withPartitionType is true the device slice declares PartitionTypeAttribute,
-// which opts the pool into the typed partitionSummary view; otherwise the pool
-// falls back to the counterSets view. The attribute goes only on the device
-// slice: it may not be set on a slice without counter-consuming devices.
-// Node-selected for control-plane use.
+// PartitionableResources 发布一个名为 "partitioned" 的 pool，拆成一个
+// 共享计数器 slice 和一个设备 slice，设备消耗这些计数器。
+// 每台设备带有 PartitionProfileAttribute（"Full"/"Half"）。
+// withPartitionType 为 true 时，设备 slice 声明 PartitionTypeAttribute，
+// 让该 pool 使用带类型的 partitionSummary 视图；否则回退到 counterSets 视图。
+// 该 attribute 只能设在设备 slice 上：没有消耗计数器的设备时不能设置它。
+// 用 node selector 限定节点，供 control-plane 场景使用。
 func PartitionableResources(withPartitionType bool) driverResourcesGenFunc {
 	return func(nodes *Nodes) map[string]resourceslice.DriverResources {
 		full := "Full"
@@ -830,8 +821,8 @@ func PartitionableResources(withPartitionType bool) driverResourcesGenFunc {
 	}
 }
 
-// partitionDevice builds a device that consumes "memory" counters from gpu-0 and
-// carries the partition-type attribute.
+// partitionDevice 构造一台设备，消耗 gpu-0 中的 "memory" 计数器，
+// 并带有分区类型 attribute。
 func partitionDevice(name, profile, memory string) resourceapi.Device {
 	return resourceapi.Device{
 		Name:       name,
@@ -843,9 +834,9 @@ func partitionDevice(name, profile, memory string) resourceapi.Device {
 	}
 }
 
-// ShareableResources publishes one pool "shareable" with count shareable devices
-// (AllowMultipleAllocations), each carrying "memory" capacity, exercising the
-// shareableSummary view. Node-selected for control-plane use.
+// ShareableResources 发布一个名为 "shareable" 的 pool，包含 count 台可共享设备
+// （AllowMultipleAllocations），每台都有 "memory" 容量，用于覆盖 shareableSummary 视图。
+// 用 node selector 限定节点，供 control-plane 场景使用。
 func ShareableResources(count int) driverResourcesGenFunc {
 	return func(nodes *Nodes) map[string]resourceslice.DriverResources {
 		devices := make([]resourceapi.Device, count)
@@ -870,7 +861,7 @@ func ShareableResources(count int) driverResourcesGenFunc {
 	}
 }
 
-// hostnameSelector selects all of the test's nodes by hostname.
+// hostnameSelector 按 hostname 选中本次测试的所有节点。
 func hostnameSelector(nodes *Nodes) *v1.NodeSelector {
 	return &v1.NodeSelector{
 		NodeSelectorTerms: []v1.NodeSelectorTerm{{

@@ -29,10 +29,10 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
-// TestCheckReadyForTests specifically is concerned about the multi-node logic
-// since single node checks are in TestReadyForTests.
+// TestCheckReadyForTests 专门覆盖多节点逻辑，
+// 单节点检查由 TestReadyForTests 负责。
 func TestCheckReadyForTests(t *testing.T) {
-	// This is a duplicate definition of the constant in pkg/controller/service/controller.go
+	// 这是 pkg/controller/service/controller.go 中常量的重复定义
 	labelNodeRoleControlPlane := "node-role.kubernetes.io/control-plane"
 
 	fromVanillaNode := func(f func(*v1.Node)) v1.Node {
@@ -159,7 +159,7 @@ func TestCheckReadyForTests(t *testing.T) {
 		},
 	}
 
-	// Only determines some logging functionality; not relevant so set to a large value.
+	// 只影响部分日志行为，与本测试无关，设个大值即可。
 	testLargeClusterThreshold := 1000
 
 	for _, tc := range tcs {
@@ -170,9 +170,8 @@ func TestCheckReadyForTests(t *testing.T) {
 				return true, nodeList, tc.nodeListErr
 			})
 			checkFunc := CheckReadyForTests(context.Background(), c, tc.nonblockingTaints, tc.allowedNotReadyNodes, testLargeClusterThreshold)
-			// The check function returns "false, nil" during its
-			// first two calls, therefore we have to try several
-			// times until we get the expected error.
+			// 检查函数前两次调用会返回 "false, nil"，
+			// 所以要重试几次才能拿到预期的错误。
 			for attempt := 0; attempt <= 3; attempt++ {
 				out, err := checkFunc(context.Background())
 				expected := tc.expected

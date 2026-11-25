@@ -44,7 +44,7 @@ var _ = common.SIGDescribe("Topology Hints", func() {
 	f := framework.NewDefaultFramework("topology-hints")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// filled in BeforeEach
+	// 在 BeforeEach 中赋值
 	var c clientset.Interface
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
@@ -87,7 +87,7 @@ var _ = common.SIGDescribe("Topology Hints", func() {
 		})
 		framework.ExpectNoError(err, "timed out waiting for DaemonSets to be ready")
 
-		// All Nodes should have same allocatable CPUs. If not, then skip the test.
+		// 所有节点的可分配 CPU 应相同，否则跳过该测试。
 		schedulableNodes := map[string]*v1.Node{}
 		for _, nodeName := range e2edaemonset.SchedulableNodes(ctx, c, ds) {
 			schedulableNodes[nodeName] = nil

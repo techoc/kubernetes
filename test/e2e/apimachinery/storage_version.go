@@ -36,7 +36,7 @@ const (
 	idNonExist = "id-non-exist"
 )
 
-// This test requires that --feature-gates=APIServerIdentity=true,StorageVersionAPI=true be set on the apiserver and the controller manager
+// 本测试要求 apiserver 和 controller manager 设置 --feature-gates=APIServerIdentity=true,StorageVersionAPI=true。
 var _ = SIGDescribe("StorageVersion resources", feature.StorageVersionAPI, func() {
 	f := framework.NewDefaultFramework("storage-version")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -51,7 +51,7 @@ var _ = SIGDescribe("StorageVersion resources", feature.StorageVersionAPI, func(
 		createdSV, err := client.InternalV1alpha1().StorageVersions().Create(ctx, sv, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "creating storage version")
 
-		// update the created sv with server storage version
+		// 用 server 的 storage version 更新已创建的 sv
 		version := "v1"
 		createdSV.Status = apiserverinternalv1alpha1.StorageVersionStatus{
 			StorageVersions: []apiserverinternalv1alpha1.ServerStorageVersion{
@@ -67,7 +67,7 @@ var _ = SIGDescribe("StorageVersion resources", feature.StorageVersionAPI, func(
 			ctx, createdSV, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "updating storage version")
 
-		// wait for sv to be GC'ed
+		// 等待 sv 被 GC
 		framework.Logf("Waiting for storage version %v to be garbage collected", createdSV.Name)
 		err = wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 			_, err := client.InternalV1alpha1().StorageVersions().Get(

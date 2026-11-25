@@ -92,7 +92,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		client = f.ClientSet
 		namespaceName = f.Namespace.Name
 
-		// Make sure the namespace created for the test is labeled to be selected by the webhooks
+		// 确保为测试创建的 namespace 带有 webhook 可选择到的 label
 		labelNamespace(ctx, f, f.Namespace.Name)
 		markersNamespaceName = createWebhookConfigurationReadyNamespace(ctx, f)
 
@@ -110,10 +110,10 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, discovery document
-		Description: The admissionregistration.k8s.io API group MUST exists in the /apis discovery document.
-		The admissionregistration.k8s.io/v1 API group/version MUST exists in the /apis discovery document.
-		The mutatingwebhookconfigurations and validatingwebhookconfigurations resources MUST exist in the
-		/apis/admissionregistration.k8s.io/v1 discovery document.
+		Description: /apis discovery 文档中 MUST 存在 admissionregistration.k8s.io API group。
+		/apis discovery 文档中 MUST 存在 admissionregistration.k8s.io/v1 API group/version。
+		/apis/admissionregistration.k8s.io/v1 discovery 文档中 MUST 存在
+		mutatingwebhookconfigurations 和 validatingwebhookconfigurations 资源。
 	*/
 	framework.ConformanceIt("should include webhook resources in discovery documents", func(ctx context.Context) {
 		{
@@ -189,11 +189,10 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, deny create
-		Description: Register an admission webhook configuration that admits pod and configmap. Attempts to create
-		non-compliant pods and configmaps, or update/patch compliant pods and configmaps to be non-compliant MUST
-		be denied. An attempt to create a pod that causes a webhook to hang MUST result in a webhook timeout error,
-		and the pod creation MUST be denied. An attempt to create a non-compliant configmap in a whitelisted
-		namespace based on the webhook namespace selector MUST be allowed.
+		Description: 注册一个放行 pod 和 configmap 的 admission webhook 配置。创建不符合要求的 pod/configmap，
+		或将合规对象 update/patch 为不合规，MUST 被拒绝。创建会让 webhook 挂起的 pod MUST 触发 webhook 超时错误，
+		且 pod 创建 MUST 被拒绝。在 webhook namespace selector 白名单内的 namespace 中创建不合规 configmap
+		MUST 被放行。
 	*/
 	framework.ConformanceIt("should be able to deny pod and configmap creation", func(ctx context.Context) {
 		registerWebhook(ctx, f, markersNamespaceName, f.UniqueName, certCtx, servicePort)
@@ -203,8 +202,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, deny attach
-		Description: Register an admission webhook configuration that denies connecting to a pod's attach sub-resource.
-		Attempts to attach MUST be denied.
+		Description: 注册一个拒绝连接 pod attach sub-resource 的 admission webhook 配置。
+		尝试 attach MUST 被拒绝。
 	*/
 	framework.ConformanceIt("should be able to deny attaching pod", func(ctx context.Context) {
 		registerWebhookForAttachingPod(ctx, f, markersNamespaceName, f.UniqueName, certCtx, servicePort)
@@ -214,8 +213,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, deny custom resource create and delete
-		Description: Register an admission webhook configuration that denies creation, update and deletion of
-		custom resources. Attempts to create, update and delete custom resources MUST be denied.
+		Description: 注册一个拒绝自定义资源 create、update 和 delete 的 admission webhook 配置。
+		尝试 create、update、delete 自定义资源 MUST 被拒绝。
 	*/
 	framework.ConformanceIt("should be able to deny custom resource creation, update and deletion", func(ctx context.Context) {
 		testcrd, err := crd.CreateTestCRD(f)
@@ -231,8 +230,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, fail closed
-		Description: Register a webhook with a fail closed policy and without CA bundle so that it cannot be called.
-		Attempt operations that require the admission webhook; all MUST be denied.
+		Description: 注册一个 failure policy 为 fail-closed 且没有 CA bundle 的 webhook，使其无法被调用。
+		尝试需要该 admission webhook 的操作；所有操作 MUST 被拒绝。
 	*/
 	framework.ConformanceIt("should unconditionally reject operations on fail closed webhook", func(ctx context.Context) {
 		registerFailClosedWebhook(ctx, f, markersNamespaceName, f.UniqueName, certCtx, servicePort)
@@ -242,9 +241,9 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, ordered mutation
-		Description: Register a mutating webhook configuration with two webhooks that admit configmaps, one that
-		adds a data key if the configmap already has a specific key, and another that adds a key if the key added by
-		the first webhook is present. Attempt to create a config map; both keys MUST be added to the config map.
+		Description: 注册一个包含两个 webhook 的 mutating webhook 配置，二者都放行 configmap：
+		第一个在 configmap 已有特定 key 时添加一个 data key，第二个在第一个 webhook 添加的 key 存在时再添加一个 key。
+		尝试创建 configmap；两个 key MUST 都被加入该 configmap。
 	*/
 	framework.ConformanceIt("should mutate configmap", func(ctx context.Context) {
 		registerMutatingWebhookForConfigMap(ctx, f, markersNamespaceName, f.UniqueName, certCtx, servicePort)
@@ -254,8 +253,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, mutation with defaulting
-		Description: Register a mutating webhook that adds an InitContainer to pods. Attempt to create a pod;
-		the InitContainer MUST be added the TerminationMessagePolicy MUST be defaulted.
+		Description: 注册一个向 pod 添加 InitContainer 的 mutating webhook。尝试创建 pod；
+		MUST 添加该 InitContainer，且 TerminationMessagePolicy MUST 被默认值填充。
 	*/
 	framework.ConformanceIt("should mutate pod and apply defaults after mutation", func(ctx context.Context) {
 		registerMutatingWebhookForPod(ctx, f, markersNamespaceName, f.UniqueName, certCtx, servicePort)
@@ -265,9 +264,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, admission control not allowed on webhook configuration objects
-		Description: Register webhooks that mutate and deny deletion of webhook configuration objects. Attempt to create
-		and delete a webhook configuration object; both operations MUST be allowed and the webhook configuration object
-		MUST NOT be mutated the webhooks.
+		Description: 注册用于修改和拒绝删除 webhook 配置对象的 webhook。尝试创建和删除 webhook 配置对象；
+		两个操作 MUST 都被允许，且 webhook 配置对象 MUST NOT 被这些 webhook 修改。
 	*/
 	framework.ConformanceIt("should not be able to mutate or prevent deletion of webhook configuration objects", func(ctx context.Context) {
 		registerValidatingWebhookForWebhookConfigurations(ctx, f, markersNamespaceName, f.UniqueName+"blocking", certCtx, servicePort)
@@ -278,8 +276,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, mutate custom resource
-		Description: Register a webhook that mutates a custom resource. Attempt to create custom resource object;
-		the custom resource MUST be mutated.
+		Description: 注册一个修改自定义资源的 webhook。尝试创建自定义资源对象；
+		该资源 MUST 被修改。
 	*/
 	framework.ConformanceIt("should mutate custom resource", func(ctx context.Context) {
 		testcrd, err := crd.CreateTestCRD(f)
@@ -294,8 +292,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, deny custom resource definition
-		Description: Register a webhook that denies custom resource definition create. Attempt to create a
-		custom resource definition; the create request MUST be denied.
+		Description: 注册一个拒绝创建 CRD 的 webhook。尝试创建 CRD；该创建请求 MUST 被拒绝。
 	*/
 	framework.ConformanceIt("should deny crd creation", func(ctx context.Context) {
 		registerValidatingWebhookForCRD(ctx, f, markersNamespaceName, f.UniqueName, certCtx, servicePort)
@@ -306,10 +303,9 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, mutate custom resource with different stored version
-		Description: Register a webhook that mutates custom resources on create and update. Register a custom resource
-		definition using v1 as stored version. Create a custom resource. Patch the custom resource definition to use v2 as
-		the stored version. Attempt to patch the custom resource with a new field and value; the patch MUST be applied
-		successfully.
+		Description: 注册一个在 create 和 update 时修改自定义资源的 webhook。注册以 v1 为存储版本的 CRD，
+		创建一个自定义资源。将该 CRD 的存储版本 patch 为 v2。尝试用新字段和值 patch 该自定义资源；
+		patch MUST 成功应用。
 	*/
 	framework.ConformanceIt("should mutate custom resource with different stored version", func(ctx context.Context) {
 		testcrd, err := createAdmissionWebhookMultiVersionTestCRDWithV1Storage(f)
@@ -324,9 +320,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, mutate custom resource with pruning
-		Description: Register mutating webhooks that adds fields to custom objects. Register a custom resource definition
-		with a schema that includes only one of the data keys added by the webhooks. Attempt to a custom resource;
-		the fields included in the schema MUST be present and field not included in the schema MUST NOT be present.
+		Description: 注册向自定义对象添加字段的 mutating webhook。注册一个 schema 仅包含 webhook 所添加 data key
+		之一的 CRD。尝试创建自定义资源；schema 中定义的字段 MUST 存在，未定义的字段 MUST NOT 存在。
 	*/
 	framework.ConformanceIt("should mutate custom resource with pruning", func(ctx context.Context) {
 		const prune = true
@@ -342,7 +337,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 								Properties: map[string]apiextensionsv1.JSONSchemaProps{
 									"mutation-start":   {Type: "string"},
 									"mutation-stage-1": {Type: "string"},
-									// mutation-stage-2 is intentionally missing such that it is pruned
+									// 故意省略 mutation-stage-2，以验证它会被裁剪掉
 								},
 							},
 						},
@@ -361,11 +356,10 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, honor timeout
-		Description: Using a webhook that waits 5 seconds before admitting objects, configure the webhook with combinations
-		of timeouts and failure policy values. Attempt to create a config map with each combination. Requests MUST
-		timeout if the configured webhook timeout is less than 5 seconds and failure policy is fail. Requests must not timeout if
-		the failure policy is ignore. Requests MUST NOT timeout if configured webhook timeout is 10 seconds (much longer
-		than the webhook wait duration).
+		Description: 使用一个在放行对象前等待 5 秒的 webhook，配置不同的 timeout 和 failure policy 组合。
+		对每种组合尝试创建 configmap。若 webhook timeout 小于 5 秒且 failure policy 为 fail，请求 MUST 超时；
+		failure policy 为 ignore 时请求不应超时。webhook timeout 为 10 秒（远长于 webhook 等待时长）时，
+		请求 MUST NOT 超时。
 	*/
 	framework.ConformanceIt("should honor timeout", func(ctx context.Context) {
 		policyFail := admissionregistrationv1.Fail
@@ -395,9 +389,9 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.31
 		Testname: Admission webhook, connection pool isolation on pod restart
-		Description: Verify that the admission webhook connection pool is isolated by resolved IP address.
-		When the backend pod behind the service is recreated and its IP address changes, subsequent admission
-		requests must successfully route to the new pod IP address without hitting the old connection pool.
+		Description: 验证 admission webhook 的连接池按解析出的 IP 地址隔离。
+		service 后的 backend pod 重建并改变 IP 后，后续 admission 请求 must 成功路由到新 pod IP，
+		而不会命中旧连接池。
 	*/
 	ginkgo.It("should isolate connection pool by resolved backend IP address on pod restart", func(ctx context.Context) {
 		client := f.ClientSet
@@ -405,7 +399,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		ginkgo.By("Registering a validating webhook")
 		registerWebhook(ctx, f, markersNamespaceName, f.UniqueName, certCtx, servicePort)
 
-		// Get the active webhook pod details
+		// 获取活跃 webhook pod 的详情
 		ginkgo.By("Getting the current webhook pod details")
 		pods, err := client.CoreV1().Pods(f.Namespace.Name).List(ctx, metav1.ListOptions{LabelSelector: "app=sample-webhook"})
 		framework.ExpectNoError(err)
@@ -414,12 +408,12 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		oldIP := oldPod.Status.PodIP
 		framework.Logf("Webhook currently running on pod %s with IP %s", oldPod.Name, oldIP)
 
-		// Recreate/restart the webhook pod by rolling out a change to the deployment
+		// 通过滚动更新 deployment 来重建/重启 webhook pod
 		ginkgo.By("Triggering a rolling update of the webhook deployment")
 		deployment, err := client.AppsV1().Deployments(f.Namespace.Name).Get(ctx, deploymentName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 
-		// Update the deployment template labels or env to trigger a rolling update
+		// 修改 deployment template 的 label 或 env 以触发滚动更新
 		if deployment.Spec.Template.Annotations == nil {
 			deployment.Spec.Template.Annotations = make(map[string]string)
 		}
@@ -432,7 +426,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		err = e2edeployment.WaitForDeploymentComplete(client, deployment)
 		framework.ExpectNoError(err)
 
-		// Get the new webhook pod details
+		// 获取新 webhook pod 的详情
 		ginkgo.By("Getting the new webhook pod details")
 		newPods, err := client.CoreV1().Pods(f.Namespace.Name).List(ctx, metav1.ListOptions{LabelSelector: "app=sample-webhook"})
 		framework.ExpectNoError(err)
@@ -441,10 +435,10 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		newIP := newPod.Status.PodIP
 		framework.Logf("Webhook now running on pod %s with IP %s", newPod.Name, newIP)
 
-		// Make sure the IP actually changed (or at least the pod was recreated)
+		// 确认 IP 确实发生了变化（至少 pod 已被重建）
 		gomega.Expect(newPod.Name).ToNot(gomega.Equal(oldPod.Name), "expected webhook pod to be recreated")
 
-		// Execute new admission request and verify it succeeds
+		// 发起新的 admission 请求并验证其成功
 		ginkgo.By("Sending a new admission request to verify the webhook connection pool successfully routes to the new pod IP")
 		err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			cm := &v1.ConfigMap{
@@ -466,9 +460,9 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, update validating webhook
-		Description: Register a validating admission webhook configuration. Update the webhook to not apply to the create
-		operation and attempt to create an object; the webhook MUST NOT deny the create. Patch the webhook to apply to the
-		create operation again and attempt to create an object; the webhook MUST deny the create.
+		Description: 注册一个 validating admission webhook 配置。更新 webhook 使其不作用于 create 操作，
+		然后尝试创建对象；webhook MUST NOT 拒绝该 create。再 patch webhook 使其重新作用于 create，
+		尝试创建对象；webhook MUST 拒绝该 create。
 	*/
 	framework.ConformanceIt("patching/updating a validating webhook should work", func(ctx context.Context) {
 		client := f.ClientSet
@@ -491,7 +485,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 			framework.ExpectNoError(err, "Deleting validating webhook configuration")
 		}()
 
-		// ensure backend is ready before proceeding
+		// 继续之前先确认 backend 已就绪
 		err = waitWebhookConfigurationReady(ctx, f, markersNamespaceName)
 		framework.ExpectNoError(err, "waiting for webhook configuration to be ready")
 
@@ -561,9 +555,9 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, update mutating webhook
-		Description: Register a mutating admission webhook configuration. Update the webhook to not apply to the create
-		operation and attempt to create an object; the webhook MUST NOT mutate the object. Patch the webhook to apply to the
-		create operation again and attempt to create an object; the webhook MUST mutate the object.
+		Description: 注册一个 mutating admission webhook 配置。更新 webhook 使其不作用于 create 操作，
+		然后尝试创建对象；webhook MUST NOT 修改该对象。再 patch webhook 使其重新作用于 create，
+		尝试创建对象；webhook MUST 修改该对象。
 	*/
 	framework.ConformanceIt("patching/updating a mutating webhook should work", func(ctx context.Context) {
 		client := f.ClientSet
@@ -586,7 +580,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 			framework.ExpectNoError(err, "Deleting mutating webhook configuration")
 		}()
 
-		// ensure backend is ready before proceeding
+		// 继续之前先确认 backend 已就绪
 		err = waitWebhookConfigurationReady(ctx, f, markersNamespaceName)
 		framework.ExpectNoError(err, "waiting for webhook configuration to be ready")
 
@@ -637,10 +631,9 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, list validating webhooks
-		Description: Create 10 validating webhook configurations, all with a label. Attempt to list the webhook
-		configurations matching the label; all the created webhook configurations MUST be present. Attempt to create an
-		object; the create MUST be denied. Attempt to remove the webhook configurations matching the label with deletecollection;
-		all webhook configurations MUST be deleted. Attempt to create an object; the create MUST NOT be denied.
+		Description: 创建 10 个都带同一 label 的 validating webhook 配置。按该 label 列出 webhook 配置；
+		所有已创建的配置 MUST 都在结果中。尝试创建对象；create MUST 被拒绝。用 deletecollection 删除
+		匹配该 label 的 webhook 配置；所有配置 MUST 被删除。再次尝试创建对象；create MUST NOT 被拒绝。
 	*/
 	framework.ConformanceIt("listing validating webhooks should work", func(ctx context.Context) {
 		testListSize := 10
@@ -667,7 +660,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		framework.ExpectNoError(err, "Listing validating webhook configurations")
 		gomega.Expect(list.Items).To(gomega.HaveLen(testListSize))
 
-		// ensure backend is ready before proceeding
+		// 继续之前先确认 backend 已就绪
 		err = waitWebhookConfigurationReady(ctx, f, markersNamespaceName)
 		framework.ExpectNoError(err, "waiting for webhook configuration to be ready")
 
@@ -711,10 +704,9 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.16
 		Testname: Admission webhook, list mutating webhooks
-		Description: Create 10 mutating webhook configurations, all with a label. Attempt to list the webhook
-		configurations matching the label; all the created webhook configurations MUST be present. Attempt to create an
-		object; the object MUST be mutated. Attempt to remove the webhook configurations matching the label with deletecollection;
-		all webhook configurations MUST be deleted. Attempt to create an object; the object MUST NOT be mutated.
+		Description: 创建 10 个都带同一 label 的 mutating webhook 配置。按该 label 列出 webhook 配置；
+		所有已创建的配置 MUST 都在结果中。尝试创建对象；该对象 MUST 被修改。用 deletecollection 删除
+		匹配该 label 的 webhook 配置；所有配置 MUST 被删除。再次尝试创建对象；该对象 MUST NOT 被修改。
 	*/
 	framework.ConformanceIt("listing mutating webhooks should work", func(ctx context.Context) {
 		testListSize := 10
@@ -741,7 +733,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		framework.ExpectNoError(err, "Listing mutating webhook configurations")
 		gomega.Expect(list.Items).To(gomega.HaveLen(testListSize))
 
-		// ensure backend is ready before proceeding
+		// 继续之前先确认 backend 已就绪
 		err = waitWebhookConfigurationReady(ctx, f, markersNamespaceName)
 		framework.ExpectNoError(err, "waiting for webhook configuration to be ready")
 
@@ -781,9 +773,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.28
 		Testname: Validating Admission webhook, create and update validating webhook configuration with matchConditions
-		Description: Register a validating webhook configuration. Verify that the match conditions field are
-		properly stored in the api-server.  Update the validating webhook configuration and retrieve it; the
-		retrieved object must contain the newly update matchConditions fields.
+		Description: 注册一个 validating webhook 配置。验证 matchConditions 字段被 apiserver 正确存储。
+		更新该 validating webhook 配置后再次获取；取回的对象 must 包含新更新的 matchConditions 字段。
 	*/
 	framework.ConformanceIt("should be able to create and update validating webhook configurations with match conditions", func(ctx context.Context) {
 		initalMatchConditions := []admissionregistrationv1.MatchCondition{
@@ -835,9 +826,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.28
 		Testname: Mutating Admission webhook, create and update mutating webhook configuration with matchConditions
-		Description: Register a mutating webhook configuration. Verify that the match conditions field are
-		properly stored in the api-server.  Update the mutating webhook configuration and retrieve it; the
-		retrieved object must contain the newly update matchConditions fields.
+		Description: 注册一个 mutating webhook 配置。验证 matchConditions 字段被 apiserver 正确存储。
+		更新该 mutating webhook 配置后再次获取；取回的对象 must 包含新更新的 matchConditions 字段。
 	*/
 	framework.ConformanceIt("should be able to create and update mutating webhook configurations with match conditions", func(ctx context.Context) {
 		initalMatchConditions := []admissionregistrationv1.MatchCondition{
@@ -889,9 +879,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.28
 		Testname: Validing Admission webhook, reject validating webhook configurations with invalid matchConditions
-		Description: Creates a validating webhook configuration with an invalid CEL expression in it's
-		matchConditions field. The api-server server should reject the create request with a "compilation
-		failed" error message.
+		Description: 创建一个 matchConditions 字段中含无效 CEL 表达式的 validating webhook 配置。
+		apiserver 应拒绝该创建请求，并返回 "compilation failed" 错误消息。
 	*/
 	framework.ConformanceIt("should reject validating webhook configurations with invalid match conditions", func(ctx context.Context) {
 		initalMatchConditions := []admissionregistrationv1.MatchCondition{
@@ -913,9 +902,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.28
 		Testname: Mutating Admission webhook, reject mutating webhook configurations with invalid matchConditions
-		Description: Creates a mutating webhook configuration with an invalid CEL expression in it's
-		matchConditions field. The api-server server should reject the create request with a "compilation
-		failed" error message.
+		Description: 创建一个 matchConditions 字段中含无效 CEL 表达式的 mutating webhook 配置。
+		apiserver 应拒绝该创建请求，并返回 "compilation failed" 错误消息。
 	*/
 	framework.ConformanceIt("should reject mutating webhook configurations with invalid match conditions", func(ctx context.Context) {
 		initalMatchConditions := []admissionregistrationv1.MatchCondition{
@@ -937,10 +925,8 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 	/*
 		Release: v1.28
 		Testname: Mutating Admission webhook, mutating webhook excluding object with specific name
-		Description: Create a mutating webhook configuration with matchConditions field that
-		will reject all resources except ones with a specific name 'skip-me'. Create
-		a configMap with the name 'skip-me' and verify that it's mutated. Create a
-		configMap with a different name than 'skip-me' and verify that it's mustated.
+		Description: 创建一个带 matchConditions 字段的 mutating webhook 配置，拒绝除名为 'skip-me' 的对象外的所有资源。
+		创建名为 'skip-me' 的 configmap 并验证它被修改。再创建名称不是 'skip-me' 的 configmap，验证它也被修改。
 	*/
 	framework.ConformanceIt("should mutate everything except 'skip-me' configmaps", func(ctx context.Context) {
 		skipMeMatchConditions := []admissionregistrationv1.MatchCondition{
@@ -961,7 +947,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 			},
 			Webhooks: []admissionregistrationv1.MutatingWebhook{
 				mutatingWebhook1,
-				// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+				// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 				newMutatingIsReadyWebhookFixture(f, certCtx, servicePort),
 			},
 		})
@@ -975,7 +961,7 @@ var _ = SIGDescribe("AdmissionWebhook [Privileged:ClusterAdmin]", func() {
 		framework.ExpectNoError(err, "waiting for webhook configuration to be ready")
 		ginkgo.DeferCleanup(framework.IgnoreNotFound(client.AdmissionregistrationV1().MutatingWebhookConfigurations().Delete), f.UniqueName, metav1.DeleteOptions{})
 
-		// ensure backend is ready before proceeding
+		// 继续之前先确认 backend 已就绪
 		err = waitWebhookConfigurationReady(ctx, f, markersNamespaceName)
 		framework.ExpectNoError(err, "waiting for webhook configuration to be ready")
 
@@ -1039,7 +1025,7 @@ func newValidatingWebhookWithMatchConditions(
 				SideEffects:             &sideEffects,
 				MatchPolicy:             &equivalent,
 				AdmissionReviewVersions: []string{"v1"},
-				// Scope the webhook to just the markers namespace
+				// 将 webhook 作用域限制在 markers namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
@@ -1083,7 +1069,7 @@ func newMutatingWebhookWithMatchConditions(
 				},
 				SideEffects:             &sideEffects,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
@@ -1097,7 +1083,7 @@ func newMutatingWebhookWithMatchConditions(
 func createAuthReaderRoleBinding(ctx context.Context, f *framework.Framework, namespace string) {
 	ginkgo.By("Create role binding to let webhook read extension-apiserver-authentication")
 	client := f.ClientSet
-	// Create the role binding to allow the webhook read the extension-apiserver-authentication configmap
+	// 创建 role binding，允许 webhook 读取 extension-apiserver-authentication configmap
 	_, err := client.RbacV1().RoleBindings("kube-system").Create(ctx, &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: roleBindingName,
@@ -1130,7 +1116,7 @@ func deployWebhookAndService(ctx context.Context, f *framework.Framework, image 
 	ginkgo.By("Deploying the webhook pod")
 	client := f.ClientSet
 
-	// Creating the secret that contains the webhook's cert.
+	// 创建存放 webhook 证书的 secret
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: secretName,
@@ -1145,7 +1131,7 @@ func deployWebhookAndService(ctx context.Context, f *framework.Framework, image 
 	_, err := client.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	framework.ExpectNoError(err, "creating secret %q in namespace %q", secretName, namespace)
 
-	// Create the deployment of the webhook
+	// 创建 webhook 的 deployment
 	podLabels := map[string]string{"app": "sample-webhook", "webhook": "true"}
 	replicas := int32(1)
 	mounts := []v1.VolumeMount{
@@ -1172,7 +1158,7 @@ func deployWebhookAndService(ctx context.Context, f *framework.Framework, image 
 				"--tls-cert-file=/webhook.local.config/certificates/tls.crt",
 				"--tls-private-key-file=/webhook.local.config/certificates/tls.key",
 				"-v=4",
-				// Use a non-default port for containers.
+				// 容器使用非默认端口
 				fmt.Sprintf("--port=%d", containerPort),
 			},
 			ReadinessProbe: &v1.Probe{
@@ -1236,7 +1222,7 @@ func registerWebhook(ctx context.Context, f *framework.Framework, markersNamespa
 	ginkgo.By("Registering the webhook via the AdmissionRegistration API")
 
 	namespace := f.Namespace.Name
-	// A webhook that cannot talk to server, with fail-open policy
+	// 一个无法与 server 通信、且采用 fail-open 策略的 webhook
 	failOpenHook := failingWebhook(namespace, "fail-open.k8s.io", servicePort)
 	policyIgnore := admissionregistrationv1.Ignore
 	failOpenHook.FailurePolicy = &policyIgnore
@@ -1251,11 +1237,11 @@ func registerWebhook(ctx context.Context, f *framework.Framework, markersNamespa
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{
 			newDenyPodWebhookFixture(f, certCtx, servicePort),
 			newDenyConfigMapWebhookFixture(f, certCtx, servicePort),
-			// Server cannot talk to this webhook, so it always fails.
-			// Because this webhook is configured fail-open, request should be admitted after the call fails.
+			// server 无法与该 webhook 通信，因此调用总是失败。
+			// 由于该 webhook 配置为 fail-open，调用失败后请求应被放行。
 			failOpenHook,
 
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1300,12 +1286,12 @@ func registerWebhookForAttachingPod(ctx context.Context, f *framework.Framework,
 				},
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1330,7 +1316,7 @@ func registerMutatingWebhookForConfigMap(ctx context.Context, f *framework.Frame
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			newMutateConfigMapWebhookFixture(f, certCtx, 1, servicePort),
 			newMutateConfigMapWebhookFixture(f, certCtx, 2, servicePort),
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newMutatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1390,12 +1376,12 @@ func registerMutatingWebhookForPod(ctx context.Context, f *framework.Framework, 
 				},
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newMutatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1443,7 +1429,7 @@ func toBeMutatedPod(f *framework.Framework) *v1.Pod {
 func testWebhook(ctx context.Context, f *framework.Framework) {
 	ginkgo.By("create a pod that should be denied by the webhook")
 	client := f.ClientSet
-	// Creating the pod, the request should be rejected
+	// 创建 pod，该请求应被拒绝
 	pod := nonCompliantPod(f)
 	_, err := client.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{})
 	gomega.Expect(err).To(gomega.HaveOccurred(), "create pod %s in namespace %s should have been denied by webhook", pod.Name, f.Namespace.Name)
@@ -1458,25 +1444,25 @@ func testWebhook(ctx context.Context, f *framework.Framework) {
 
 	ginkgo.By("create a pod that causes the webhook to hang")
 	client = f.ClientSet
-	// Creating the pod, the request should be rejected
+	// 创建 pod，该请求应被拒绝
 	pod = hangingPod(f)
 	_, err = client.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{})
 	gomega.Expect(err).To(gomega.HaveOccurred(), "create pod %s in namespace %s should have caused webhook to hang", pod.Name, f.Namespace.Name)
-	// ensure the error is webhook-related, not client-side
+	// 确认错误来自 webhook，而非客户端
 	if !strings.Contains(err.Error(), "webhook") {
 		framework.Failf("expect error %q, got %q", "webhook", err.Error())
 	}
-	// ensure the error is a timeout
+	// 确认错误是超时
 	if !strings.Contains(err.Error(), "deadline") {
 		framework.Failf("expect error %q, got %q", "deadline", err.Error())
 	}
-	// ensure the pod was not actually created
+	// 确认 pod 实际上并未创建
 	if _, err := client.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		framework.Failf("expect notfound error looking for rejected pod, got %v", err)
 	}
 
 	ginkgo.By("create a configmap that should be denied by the webhook")
-	// Creating the configmap, the request should be rejected
+	// 创建 configmap，该请求应被拒绝
 	configmap := nonCompliantConfigMap(f)
 	_, err = client.CoreV1().ConfigMaps(f.Namespace.Name).Create(ctx, configmap, metav1.CreateOptions{})
 	gomega.Expect(err).To(gomega.HaveOccurred(), "create configmap %s in namespace %s should have been denied by the webhook", configmap.Name, f.Namespace.Name)
@@ -1486,7 +1472,7 @@ func testWebhook(ctx context.Context, f *framework.Framework) {
 	}
 
 	ginkgo.By("create a configmap that should be admitted by the webhook")
-	// Creating the configmap, the request should be admitted
+	// 创建 configmap，该请求应被放行
 	configmap = &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: allowedConfigMapName,
@@ -1520,7 +1506,7 @@ func testWebhook(ctx context.Context, f *framework.Framework) {
 	}
 
 	ginkgo.By("create a namespace that bypass the webhook")
-	// skipNamespace will be deleted by framework at the end of the test
+	// 测试结束时 framework 会删除 skipNamespace
 	skipNamespace, err := f.CreateNamespace(ctx, skipNamespaceBaseName, map[string]string{
 		skipNamespaceLabelKey: skipNamespaceLabelValue,
 		f.UniqueName:          "true",
@@ -1553,8 +1539,8 @@ func testAttachingPodWebhook(ctx context.Context, f *framework.Framework) {
 	}
 }
 
-// failingWebhook returns a webhook with rule of create configmaps,
-// but with an invalid client config so that server cannot communicate with it
+// failingWebhook 返回一个规则为 create configmap 的 webhook，
+// 但其 client 配置无效，server 无法与之通信
 func failingWebhook(namespace, name string, servicePort int32) admissionregistrationv1.ValidatingWebhook {
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 
@@ -1575,7 +1561,7 @@ func failingWebhook(namespace, name string, servicePort int32) admissionregistra
 				Path:      ptr.To("/configmaps"),
 				Port:      ptr.To[int32](servicePort),
 			},
-			// Without CA bundle, the call to webhook always fails
+			// 没有 CA bundle 时，对 webhook 的调用总是失败
 			CABundle: nil,
 		},
 		SideEffects:             &sideEffectsNone,
@@ -1587,7 +1573,7 @@ func registerFailClosedWebhook(ctx context.Context, f *framework.Framework, mark
 	ginkgo.By("Registering a webhook that server cannot talk to, with fail closed policy, via the AdmissionRegistration API")
 
 	namespace := f.Namespace.Name
-	// A webhook that cannot talk to server, with fail-closed policy
+	// 一个无法与 server 通信、且采用 fail-closed 策略的 webhook
 	policyFail := admissionregistrationv1.Fail
 	hook := failingWebhook(namespace, "fail-closed.k8s.io", servicePort)
 	hook.FailurePolicy = &policyFail
@@ -1607,10 +1593,10 @@ func registerFailClosedWebhook(ctx context.Context, f *framework.Framework, mark
 			Name: configName,
 		},
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{
-			// Server cannot talk to this webhook, so it always fails.
-			// Because this webhook is configured fail-closed, request should be rejected after the call fails.
+			// server 无法与该 webhook 通信，因此调用总是失败。
+			// 由于该 webhook 配置为 fail-closed，调用失败后请求应被拒绝。
 			hook,
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1624,7 +1610,7 @@ func registerFailClosedWebhook(ctx context.Context, f *framework.Framework, mark
 func testFailClosedWebhook(ctx context.Context, f *framework.Framework) {
 	client := f.ClientSet
 	ginkgo.By("create a namespace for the webhook")
-	// failNamespace will be deleted by framework at the end of the test
+	// 测试结束时 framework 会删除 failNamespace
 	failNamespace, err := f.CreateNamespace(ctx, failNamespaceBaseName, map[string]string{
 		failNamespaceLabelKey: failNamespaceLabelValue,
 		f.UniqueName:          "true",
@@ -1654,9 +1640,8 @@ func registerValidatingWebhookForWebhookConfigurations(ctx context.Context, f *f
 	failurePolicy := admissionregistrationv1.Fail
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 
-	// This webhook denies all requests to Delete validating webhook configuration and
-	// mutating webhook configuration objects. It should never be called, however, because
-	// dynamic admission webhooks should not be called on requests involving webhook configuration objects.
+	// 该 webhook 拒绝所有删除 validating/mutating webhook 配置对象的请求。
+	// 但它不应被调用，因为涉及 webhook 配置对象的请求不会触发动态 admission webhook。
 	_, err = createValidatingWebhookConfiguration(ctx, f, &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: configName,
@@ -1687,12 +1672,12 @@ func registerValidatingWebhookForWebhookConfigurations(ctx context.Context, f *f
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
 				FailurePolicy:           &failurePolicy,
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1712,9 +1697,8 @@ func registerMutatingWebhookForWebhookConfigurations(ctx context.Context, f *fra
 	failurePolicy := admissionregistrationv1.Fail
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 
-	// This webhook adds a label to all requests create to validating webhook configuration and
-	// mutating webhook configuration objects. It should never be called, however, because
-	// dynamic admission webhooks should not be called on requests involving webhook configuration objects.
+	// 该 webhook 给所有创建 validating/mutating webhook 配置对象的请求添加 label。
+	// 但它不应被调用，因为涉及 webhook 配置对象的请求不会触发动态 admission webhook。
 	_, err = createMutatingWebhookConfiguration(ctx, f, &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: configName,
@@ -1745,12 +1729,12 @@ func registerMutatingWebhookForWebhookConfigurations(ctx context.Context, f *fra
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
 				FailurePolicy:           &failurePolicy,
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newMutatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1761,9 +1745,8 @@ func registerMutatingWebhookForWebhookConfigurations(ctx context.Context, f *fra
 	ginkgo.DeferCleanup(framework.IgnoreNotFound(client.AdmissionregistrationV1().MutatingWebhookConfigurations().Delete), configName, metav1.DeleteOptions{})
 }
 
-// This test assumes that the deletion-rejecting webhook defined in
-// registerValidatingWebhookForWebhookConfigurations and the webhook-config-mutating
-// webhook defined in registerMutatingWebhookForWebhookConfigurations already exist.
+// 该测试假设 registerValidatingWebhookForWebhookConfigurations 中定义的拒绝删除 webhook，
+// 以及 registerMutatingWebhookForWebhookConfigurations 中定义的配置修改 webhook 均已存在。
 func testWebhooksForWebhookConfigurations(ctx context.Context, f *framework.Framework, markersNamespaceName string, configName string, certCtx *certContext, servicePort int32) {
 	var err error
 	client := f.ClientSet
@@ -1782,7 +1765,7 @@ func testWebhooksForWebhookConfigurations(ctx context.Context, f *framework.Fram
 				Name: "dummy-validating-webhook.k8s.io",
 				Rules: []admissionregistrationv1.RuleWithOperations{{
 					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
-					// This will not match any real resources so this webhook should never be called.
+					// 该规则不会匹配任何真实资源，因此该 webhook 不应被调用。
 					Rule: admissionregistrationv1.Rule{
 						APIGroups:   []string{""},
 						APIVersions: []string{"v1"},
@@ -1793,10 +1776,8 @@ func testWebhooksForWebhookConfigurations(ctx context.Context, f *framework.Fram
 					Service: &admissionregistrationv1.ServiceReference{
 						Namespace: namespace,
 						Name:      serviceName,
-						// This path not recognized by the webhook service,
-						// so the call to this webhook will always fail,
-						// but because the failure policy is ignore, it will
-						// have no effect on admission requests.
+						// webhook service 不识别该路径，因此对该 webhook 的调用总是失败；
+						// 但 failure policy 为 ignore，因此不会影响 admission 请求。
 						Path: ptr.To(""),
 						Port: ptr.To[int32](servicePort),
 					},
@@ -1805,12 +1786,12 @@ func testWebhooksForWebhookConfigurations(ctx context.Context, f *framework.Fram
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
 				FailurePolicy:           &failurePolicy,
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1838,7 +1819,7 @@ func testWebhooksForWebhookConfigurations(ctx context.Context, f *framework.Fram
 				Name: "dummy-mutating-webhook.k8s.io",
 				Rules: []admissionregistrationv1.RuleWithOperations{{
 					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
-					// This will not match any real resources so this webhook should never be called.
+					// 该规则不会匹配任何真实资源，因此该 webhook 不应被调用。
 					Rule: admissionregistrationv1.Rule{
 						APIGroups:   []string{""},
 						APIVersions: []string{"v1"},
@@ -1849,10 +1830,8 @@ func testWebhooksForWebhookConfigurations(ctx context.Context, f *framework.Fram
 					Service: &admissionregistrationv1.ServiceReference{
 						Namespace: namespace,
 						Name:      serviceName,
-						// This path not recognized by the webhook service,
-						// so the call to this webhook will always fail,
-						// but because the failure policy is ignore, it will
-						// have no effect on admission requests.
+						// webhook service 不识别该路径，因此对该 webhook 的调用总是失败；
+						// 但 failure policy 为 ignore，因此不会影响 admission 请求。
 						Path: ptr.To(""),
 						Port: ptr.To[int32](servicePort),
 					},
@@ -1861,12 +1840,12 @@ func testWebhooksForWebhookConfigurations(ctx context.Context, f *framework.Fram
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
 				FailurePolicy:           &failurePolicy,
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newMutatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -1985,7 +1964,7 @@ func updateConfigMap(ctx context.Context, c clientset.Interface, ns, name string
 		if cm, err = c.CoreV1().ConfigMaps(ns).Update(ctx, cm, metav1.UpdateOptions{}); err == nil {
 			return true, nil
 		}
-		// Only retry update on conflict
+		// 仅在发生冲突时重试 update
 		if !apierrors.IsConflict(err) {
 			return false, err
 		}
@@ -2039,7 +2018,7 @@ func updateCustomResource(ctx context.Context, c dynamic.ResourceInterface, ns, 
 		if cr, err = c.Update(ctx, cr, metav1.UpdateOptions{}); err == nil {
 			return true, nil
 		}
-		// Only retry update on conflict
+		// 仅在发生冲突时重试 update
 		if !apierrors.IsConflict(err) {
 			return false, err
 		}
@@ -2088,12 +2067,12 @@ func registerWebhookForCustomResource(ctx context.Context, f *framework.Framewor
 				},
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -2137,7 +2116,7 @@ func registerMutatingWebhookForCustomResource(ctx context.Context, f *framework.
 				},
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
@@ -2163,12 +2142,12 @@ func registerMutatingWebhookForCustomResource(ctx context.Context, f *framework.
 				},
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newMutatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -2364,10 +2343,8 @@ func registerValidatingWebhookForCRD(ctx context.Context, f *framework.Framework
 	namespace := f.Namespace.Name
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 
-	// This webhook will deny the creation of CustomResourceDefinitions which have the
-	// label "webhook-e2e-test":"webhook-disallow"
-	// NOTE: Because tests are run in parallel and in an unpredictable order, it is critical
-	// that no other test attempts to create CRD with that label.
+	// 该 webhook 拒绝创建带有 label "webhook-e2e-test":"webhook-disallow" 的 CRD。
+	// 注意：测试并行运行且顺序不可预测，其他测试绝不能创建带该 label 的 CRD。
 	_, err := createValidatingWebhookConfiguration(ctx, f, &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: configName,
@@ -2394,12 +2371,12 @@ func registerValidatingWebhookForCRD(ctx context.Context, f *framework.Framework
 				},
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
-				// Scope the webhook to just this test
+				// 将 webhook 作用域限制在该测试
 				ObjectSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -2429,7 +2406,7 @@ func testCRDDenyWebhook(ctx context.Context, f *framework.Framework) {
 		},
 	}
 
-	// Creating a custom resource definition for use by assorted tests.
+	// 创建供多个测试共用的 CRD
 	config, err := framework.LoadConfig()
 	if err != nil {
 		framework.Failf("failed to load config: %v", err)
@@ -2444,9 +2421,9 @@ func testCRDDenyWebhook(ctx context.Context, f *framework.Framework) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name + "s." + group,
 			Labels: map[string]string{
-				// this label ensures our object is routed to this test's webhook
+				// 该 label 确保对象被路由到本测试的 webhook
 				f.UniqueName: "true",
-				// this is the label the webhook disallows
+				// 这是 webhook 所禁止的 label
 				"webhook-e2e-test": "webhook-disallow",
 			},
 		},
@@ -2463,7 +2440,7 @@ func testCRDDenyWebhook(ctx context.Context, f *framework.Framework) {
 		},
 	}
 
-	// create CRD
+	// 创建 CRD
 	_, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crd, metav1.CreateOptions{})
 	gomega.Expect(err).To(gomega.HaveOccurred(), "create custom resource definition %s should be denied by webhook", crd.Name)
 	expectedErrMsg := "the crd contains unwanted label"
@@ -2475,7 +2452,7 @@ func testCRDDenyWebhook(ctx context.Context, f *framework.Framework) {
 func labelNamespace(ctx context.Context, f *framework.Framework, namespace string) {
 	client := f.ClientSet
 
-	// Add a unique label to the namespace
+	// 为 namespace 添加唯一 label
 	nsPatch, err := json.Marshal(map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"labels": map[string]string{f.UniqueName: "true"},
@@ -2517,7 +2494,7 @@ func registerSlowWebhook(ctx context.Context, f *framework.Framework, markersNam
 					},
 					CABundle: certCtx.signingCert,
 				},
-				// Scope the webhook to just this namespace
+				// 将 webhook 作用域限制在该 namespace
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{f.UniqueName: "true"},
 				},
@@ -2526,7 +2503,7 @@ func registerSlowWebhook(ctx context.Context, f *framework.Framework, markersNam
 				SideEffects:             &sideEffectsNone,
 				AdmissionReviewVersions: []string{"v1", "v1beta1"},
 			},
-			// Register a webhook that can be probed by marker requests to detect when the configuration is ready.
+			// 注册一个可通过 marker 请求探测的 webhook，以判断配置何时就绪。
 			newValidatingIsReadyWebhookFixture(f, certCtx, servicePort),
 		},
 	})
@@ -2542,8 +2519,7 @@ func registerSlowWebhook(ctx context.Context, f *framework.Framework, markersNam
 		}
 	}
 
-	// We clean up ourselves if the caller doesn't get to it, but we also
-	// give the caller a chance to do it in the middle of the test.
+	// 调用方未清理时我们自己兜底清理，但也给调用方在测试中途清理的机会
 	ginkgo.DeferCleanup(cleanup)
 	return cleanup
 }
@@ -2554,8 +2530,8 @@ func testSlowWebhookTimeoutFailEarly(ctx context.Context, f *framework.Framework
 	name := "e2e-test-slow-webhook-configmap"
 	_, err := client.CoreV1().ConfigMaps(f.Namespace.Name).Create(ctx, &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name}}, metav1.CreateOptions{})
 	gomega.Expect(err).To(gomega.HaveOccurred(), "create configmap in namespace %s should have timed-out reaching slow webhook", f.Namespace.Name)
-	// http timeout message: context deadline exceeded
-	// dial timeout message: dial tcp {address}: i/o timeout
+	// http 超时消息：context deadline exceeded
+	// dial 超时消息：dial tcp {address}: i/o timeout
 	isTimeoutError := strings.Contains(err.Error(), `context deadline exceeded`) || strings.Contains(err.Error(), `timeout`)
 	isErrorQueryingWebhook := strings.Contains(err.Error(), `/always-allow-delay-5s?timeout=1s`)
 	if !isTimeoutError || !isErrorQueryingWebhook {
@@ -2572,8 +2548,7 @@ func testSlowWebhookTimeoutNoError(ctx context.Context, f *framework.Framework) 
 	framework.ExpectNoError(err)
 }
 
-// createAdmissionWebhookMultiVersionTestCRDWithV1Storage creates a new CRD specifically
-// for the admission webhook calling test.
+// createAdmissionWebhookMultiVersionTestCRDWithV1Storage 专门为 admission webhook 调用测试创建 CRD
 func createAdmissionWebhookMultiVersionTestCRDWithV1Storage(f *framework.Framework, opts ...crd.Option) (*crd.TestCrd, error) {
 	group := fmt.Sprintf("%s.example.com", f.BaseName)
 	return crd.CreateMultiVersionTestCRD(f, group, append([]crd.Option{func(crd *apiextensionsv1.CustomResourceDefinition) {
@@ -2604,7 +2579,7 @@ func createAdmissionWebhookMultiVersionTestCRDWithV1Storage(f *framework.Framewo
 	}}, opts...)...)
 }
 
-// servedAPIVersions returns the API versions served by the CRD.
+// servedAPIVersions 返回 CRD 提供服务的 API 版本
 func servedAPIVersions(crd *apiextensionsv1.CustomResourceDefinition) []string {
 	ret := []string{}
 	for _, v := range crd.Spec.Versions {
@@ -2615,8 +2590,8 @@ func servedAPIVersions(crd *apiextensionsv1.CustomResourceDefinition) []string {
 	return ret
 }
 
-// createValidatingWebhookConfiguration ensures the webhook config scopes object or namespace selection
-// to avoid interfering with other tests, then creates the config.
+// createValidatingWebhookConfiguration 确保 webhook 配置限定了 object/namespace 选择范围，
+// 避免干扰其他测试，然后创建该配置
 func createValidatingWebhookConfiguration(ctx context.Context, f *framework.Framework, config *admissionregistrationv1.ValidatingWebhookConfiguration) (*admissionregistrationv1.ValidatingWebhookConfiguration, error) {
 	for _, webhook := range config.Webhooks {
 		if webhook.NamespaceSelector != nil && webhook.NamespaceSelector.MatchLabels[f.UniqueName] == "true" {
@@ -2630,8 +2605,8 @@ func createValidatingWebhookConfiguration(ctx context.Context, f *framework.Fram
 	return f.ClientSet.AdmissionregistrationV1().ValidatingWebhookConfigurations().Create(ctx, config, metav1.CreateOptions{})
 }
 
-// createMutatingWebhookConfiguration ensures the webhook config scopes object or namespace selection
-// to avoid interfering with other tests, then creates the config.
+// createMutatingWebhookConfiguration 确保 webhook 配置限定了 object/namespace 选择范围，
+// 避免干扰其他测试，然后创建该配置
 func createMutatingWebhookConfiguration(ctx context.Context, f *framework.Framework, config *admissionregistrationv1.MutatingWebhookConfiguration) (*admissionregistrationv1.MutatingWebhookConfiguration, error) {
 	for _, webhook := range config.Webhooks {
 		if webhook.NamespaceSelector != nil && webhook.NamespaceSelector.MatchLabels[f.UniqueName] == "true" {
@@ -2668,7 +2643,7 @@ func newDenyPodWebhookFixture(f *framework.Framework, certCtx *certContext, serv
 		},
 		SideEffects:             &sideEffectsNone,
 		AdmissionReviewVersions: []string{"v1", "v1beta1"},
-		// Scope the webhook to just this namespace
+		// 将 webhook 作用域限制在该 namespace
 		NamespaceSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{f.UniqueName: "true"},
 		},
@@ -2687,7 +2662,7 @@ func newDenyConfigMapWebhookFixture(f *framework.Framework, certCtx *certContext
 				Resources:   []string{"configmaps"},
 			},
 		}},
-		// The webhook skips the namespace that has label "skip-webhook-admission":"yes"
+		// webhook 会跳过带有 label "skip-webhook-admission":"yes" 的 namespace
 		NamespaceSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{f.UniqueName: "true"},
 			MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -2735,18 +2710,18 @@ func newMutateConfigMapWebhookFixture(f *framework.Framework, certCtx *certConte
 		},
 		SideEffects:             &sideEffectsNone,
 		AdmissionReviewVersions: []string{"v1", "v1beta1"},
-		// Scope the webhook to just this namespace
+		// 将 webhook 作用域限制在该 namespace
 		NamespaceSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{f.UniqueName: "true"},
 		},
 	}
 }
 
-// createWebhookConfigurationReadyNamespace creates a separate namespace for webhook configuration ready markers to
-// prevent cross-talk with webhook configurations being tested. It returns the name of the created namespace.
+// createWebhookConfigurationReadyNamespace 为 webhook 配置就绪 marker 单独创建 namespace，
+// 避免与被测的 webhook 配置互相干扰。返回所创建 namespace 的名称。
 func createWebhookConfigurationReadyNamespace(ctx context.Context, f *framework.Framework) string {
 	baseName := f.BaseName + "-markers"
-	// the framework will taker care of deleting the namespace
+	// framework 会负责删除该 namespace
 	ns, err := f.CreateNamespace(ctx, baseName, map[string]string{
 		f.UniqueName + "-markers": "true",
 	})
@@ -2754,9 +2729,9 @@ func createWebhookConfigurationReadyNamespace(ctx context.Context, f *framework.
 	return ns.Name
 }
 
-// waitWebhookConfigurationReady sends "marker" requests until a webhook configuration is ready.
-// A webhook created with newValidatingIsReadyWebhookFixture or newMutatingIsReadyWebhookFixture should first be added to
-// the webhook configuration.
+// waitWebhookConfigurationReady 持续发送 "marker" 请求，直到 webhook 配置就绪。
+// 使用 newValidatingIsReadyWebhookFixture 或 newMutatingIsReadyWebhookFixture 创建的 webhook
+// 应先加入该 webhook 配置。
 func waitWebhookConfigurationReady(ctx context.Context, f *framework.Framework, markersNamespaceName string) error {
 	cmClient := f.ClientSet.CoreV1().ConfigMaps(markersNamespaceName)
 	return wait.PollImmediate(100*time.Millisecond, 30*time.Second, func() (bool, error) {
@@ -2770,21 +2745,21 @@ func waitWebhookConfigurationReady(ctx context.Context, f *framework.Framework, 
 		}
 		_, err := cmClient.Create(ctx, marker, metav1.CreateOptions{})
 		if err != nil {
-			// The always-deny webhook does not provide a reason, so check for the error string we expect
+			// always-deny webhook 不提供原因，因此检查预期的错误字符串
 			if strings.Contains(err.Error(), "denied") {
 				return true, nil
 			}
 			return false, err
 		}
-		// best effort cleanup of markers that are no longer needed
+		// 尽力清理不再需要的 marker
 		_ = cmClient.Delete(ctx, marker.GetName(), metav1.DeleteOptions{})
 		framework.Logf("Waiting for webhook configuration to be ready...")
 		return false, nil
 	})
 }
 
-// newValidatingIsReadyWebhookFixture creates a validating webhook that can be added to a webhook configuration and then probed
-// with "marker" requests via waitWebhookConfigurationReady to wait for a webhook configuration to be ready.
+// newValidatingIsReadyWebhookFixture 创建一个 validating webhook，可加入 webhook 配置后，
+// 由 waitWebhookConfigurationReady 通过 "marker" 请求探测其是否就绪
 func newValidatingIsReadyWebhookFixture(f *framework.Framework, certCtx *certContext, servicePort int32) admissionregistrationv1.ValidatingWebhook {
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 	failOpen := admissionregistrationv1.Ignore
@@ -2807,23 +2782,23 @@ func newValidatingIsReadyWebhookFixture(f *framework.Framework, certCtx *certCon
 			},
 			CABundle: certCtx.signingCert,
 		},
-		// network failures while the service network routing is being set up should be ignored by the marker
+		// service 网络路由建立期间的网络失败应被 marker 忽略
 		FailurePolicy:           &failOpen,
 		SideEffects:             &sideEffectsNone,
 		AdmissionReviewVersions: []string{"v1", "v1beta1"},
-		// Scope the webhook to just the markers namespace
+		// 将 webhook 作用域限制在 markers namespace
 		NamespaceSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{f.UniqueName + "-markers": "true"},
 		},
-		// appease createValidatingWebhookConfiguration isolation requirements
+		// 满足 createValidatingWebhookConfiguration 的隔离要求
 		ObjectSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{f.UniqueName: "true"},
 		},
 	}
 }
 
-// newMutatingIsReadyWebhookFixture creates a mutating webhook that can be added to a webhook configuration and then probed
-// with "marker" requests via waitWebhookConfigurationReady to wait for a webhook configuration to be ready.
+// newMutatingIsReadyWebhookFixture 创建一个 mutating webhook，可加入 webhook 配置后，
+// 由 waitWebhookConfigurationReady 通过 "marker" 请求探测其是否就绪
 func newMutatingIsReadyWebhookFixture(f *framework.Framework, certCtx *certContext, servicePort int32) admissionregistrationv1.MutatingWebhook {
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 	failOpen := admissionregistrationv1.Ignore
@@ -2846,15 +2821,15 @@ func newMutatingIsReadyWebhookFixture(f *framework.Framework, certCtx *certConte
 			},
 			CABundle: certCtx.signingCert,
 		},
-		// network failures while the service network routing is being set up should be ignored by the marker
+		// service 网络路由建立期间的网络失败应被 marker 忽略
 		FailurePolicy:           &failOpen,
 		SideEffects:             &sideEffectsNone,
 		AdmissionReviewVersions: []string{"v1", "v1beta1"},
-		// Scope the webhook to just the markers namespace
+		// 将 webhook 作用域限制在 markers namespace
 		NamespaceSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{f.UniqueName + "-markers": "true"},
 		},
-		// appease createMutatingWebhookConfiguration isolation requirements
+		// 满足 createMutatingWebhookConfiguration 的隔离要求
 		ObjectSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{f.UniqueName: "true"},
 		},

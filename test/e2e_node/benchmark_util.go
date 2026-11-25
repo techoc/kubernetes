@@ -37,14 +37,13 @@ import (
 )
 
 const (
-	// TimeSeriesTag is the tag for time series.
+	// TimeSeriesTag 是时间序列的起始标记。
 	TimeSeriesTag = "[Result:TimeSeries]"
-	// TimeSeriesEnd is the end tag for time series.
+	// TimeSeriesEnd 是时间序列的结束标记。
 	TimeSeriesEnd = "[Finish:TimeSeries]"
 )
 
-// dumpDataToFile inserts the current timestamp into the labels and writes the
-// data for the test into the file with the specified prefix.
+// dumpDataToFile 在 labels 中插入当前时间戳，并将测试数据写入以指定前缀命名的文件
 func dumpDataToFile(data interface{}, labels map[string]string, prefix string) {
 	testName := labels["test"]
 	fileName := path.Join(framework.TestContext.ReportDir, fmt.Sprintf("%s-%s-%s.json", prefix, framework.TestContext.ReportPrefix, testName))
@@ -55,10 +54,9 @@ func dumpDataToFile(data interface{}, labels map[string]string, prefix string) {
 	}
 }
 
-// logPerfData writes the perf data to a standalone json file if the
-// framework.TestContext.ReportDir is non-empty, or to the general build log
-// otherwise. The perfType identifies which type of the perf data it is, such
-// as "cpu" and "memory". If an error occurs, no perf data will be logged.
+// logPerfData 在 framework.TestContext.ReportDir 非空时将性能数据写入独立的 json 文件，
+// 否则写入常规构建日志。perfType 标识性能数据的类型，例如 "cpu" 和 "memory"。
+// 发生错误时不会记录任何性能数据。
 func logPerfData(p *perftype.PerfData, perfType string) {
 	if framework.TestContext.ReportDir == "" {
 		printPerfData(p)
@@ -67,21 +65,20 @@ func logPerfData(p *perftype.PerfData, perfType string) {
 	dumpDataToFile(p, p.Labels, "performance-"+perfType)
 }
 
-// logDensityTimeSeries writes the time series data of operation and resource
-// usage to a standalone json file if the framework.TestContext.ReportDir is
-// non-empty, or to the general build log otherwise. If an error occurs,
-// no perf data will be logged.
+// logDensityTimeSeries 在 framework.TestContext.ReportDir 非空时将操作与资源使用量的
+// 时间序列写入独立的 json 文件，否则写入常规构建日志。
+// 发生错误时不会记录任何性能数据。
 func logDensityTimeSeries(rc *ResourceCollector, create, watch map[string]metav1.Time, testInfo map[string]string) {
 	timeSeries := &nodeperftype.NodeTimeSeries{
 		Labels:  testInfo,
 		Version: e2eperf.CurrentKubeletPerfMetricsVersion,
 	}
-	// Attach operation time series.
+	// 附上操作时间序列
 	timeSeries.OperationData = map[string][]int64{
 		"create":  getCumulatedPodTimeSeries(create),
 		"running": getCumulatedPodTimeSeries(watch),
 	}
-	// Attach resource time series.
+	// 附上资源时间序列
 	timeSeries.ResourceData = rc.GetResourceTimeSeries()
 
 	if framework.TestContext.ReportDir == "" {
@@ -97,18 +94,18 @@ func (a int64arr) Len() int           { return len(a) }
 func (a int64arr) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a int64arr) Less(i, j int) bool { return a[i] < a[j] }
 
-// getCumulatedPodTimeSeries gets the cumulative pod number time series.
+// getCumulatedPodTimeSeries 返回累计 pod 数量的时间序列
 func getCumulatedPodTimeSeries(timePerPod map[string]metav1.Time) []int64 {
 	timeSeries := make(int64arr, 0)
 	for _, ts := range timePerPod {
 		timeSeries = append(timeSeries, ts.Time.UnixNano())
 	}
-	// Sort all timestamps.
+	// 对所有时间戳排序
 	sort.Sort(timeSeries)
 	return timeSeries
 }
 
-// getLatencyPerfData returns perf data of pod startup latency.
+// getLatencyPerfData 返回 pod 启动延迟的性能数据
 func getLatencyPerfData(latency e2emetrics.LatencyMetric, testInfo map[string]string) *perftype.PerfData {
 	return &perftype.PerfData{
 		Version: e2eperf.CurrentKubeletPerfMetricsVersion,
@@ -131,7 +128,7 @@ func getLatencyPerfData(latency e2emetrics.LatencyMetric, testInfo map[string]st
 	}
 }
 
-// getThroughputPerfData returns perf data of pod creation startup throughput.
+// getThroughputPerfData 返回 pod 创建启动吞吐量的性能数据
 func getThroughputPerfData(batchLag time.Duration, e2eLags []e2emetrics.PodLatencyData, podsNr int, testInfo map[string]string) *perftype.PerfData {
 	return &perftype.PerfData{
 		Version: e2eperf.CurrentKubeletPerfMetricsVersion,
@@ -152,9 +149,8 @@ func getThroughputPerfData(batchLag time.Duration, e2eLags []e2emetrics.PodLaten
 	}
 }
 
-// getTestNodeInfo returns a label map containing the test name and
-// description, the name of the node on which the test will be run, the image
-// name of the node, and the node capacities.
+// getTestNodeInfo 返回一个 label map，包含测试名称和描述、运行测试的节点名称、
+// 节点镜像名称以及节点容量
 func getTestNodeInfo(f *framework.Framework, testName, testDesc string) map[string]string {
 	nodeName := framework.TestContext.NodeName
 	node, err := f.ClientSet.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
@@ -193,10 +189,10 @@ func getTestNodeInfo(f *framework.Framework, testName, testDesc string) map[stri
 	}
 }
 
-// printPerfData prints the perfdata in json format with PerfResultTag prefix.
-// If an error occurs, nothing will be printed.
+// printPerfData 以 json 格式输出性能数据，并加上 PerfResultTag 前缀。
+// 发生错误时不输出任何内容。
 func printPerfData(p *perftype.PerfData) {
-	// Notice that we must make sure the perftype.PerfResultEnd is in a new line.
+	// 必须确保 perftype.PerfResultEnd 位于新的一行
 	if str := framework.PrettyPrintJSON(p); str != "" {
 		framework.Logf("%s %s\n%s", perftype.PerfResultTag, str, perftype.PerfResultEnd)
 	}

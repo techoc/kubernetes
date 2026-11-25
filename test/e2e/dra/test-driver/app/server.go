@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app does all of the work necessary to configure and run a
-// Kubernetes app process.
+// Package app 完成配置和启动 Kubernetes app 进程所需的全部工作。
 package app
 
 import (
@@ -52,7 +51,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NewCommand creates a *cobra.Command object with default parameters.
+// NewCommand 创建一个带默认参数的 *cobra.Command。
 func NewCommand() *cobra.Command {
 	o := logsapi.NewLoggingConfiguration()
 	var clientset kubernetes.Interface
@@ -96,14 +95,13 @@ func NewCommand() *cobra.Command {
 	mux := http.NewServeMux()
 
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// Activate logging as soon as possible, after that
-		// show flags with the final logging configuration.
+		// 尽早启用日志，之后再用最终日志配置展示各 flag。
 
 		if err := logsapi.ValidateAndApply(o, featureGate); err != nil {
 			return err
 		}
 
-		// get the KUBECONFIG from env if specified (useful for local/debug cluster)
+		// 如果设置了环境变量 KUBECONFIG 就使用它（便于本地/调试集群）
 		kubeconfigEnv := os.Getenv("KUBECONFIG")
 
 		if kubeconfigEnv != "" {
@@ -133,11 +131,11 @@ func NewCommand() *cobra.Command {
 
 		if *httpEndpoint != "" {
 			if *metricsPath != "" {
-				// For workqueue and leader election metrics, set up via the anonymous imports of:
+				// workqueue 和 leader election 的指标通过下面的匿名导入注册：
 				// https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/component-base/metrics/prometheus/workqueue/metrics.go
 				// https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/component-base/metrics/prometheus/clientgo/leaderelection/metrics.go
 				//
-				// Also to happens to include Go runtime and process metrics:
+				// 其中也顺带包含了 Go runtime 和进程指标：
 				// https://github.com/kubernetes/kubernetes/blob/9780d88cb6a4b5b067256ecb4abf56892093ee87/staging/src/k8s.io/component-base/metrics/legacyregistry/registry.go#L46-L49
 				gatherer := legacyregistry.DefaultGatherer
 				actualPath := path.Join("/", *metricsPath)
@@ -195,9 +193,8 @@ func NewCommand() *cobra.Command {
 		fs.AddFlagSet(f)
 	}
 	kubeletPlugin.RunE = func(cmd *cobra.Command, args []string) error {
-		// Ensure that directories exist, creating them if necessary. We want
-		// to know early if there is a setup problem that would prevent
-		// creating those directories.
+		// 确保目录存在，必要时创建。这样能尽早发现会导致创建失败的
+		// 环境问题。
 		if err := os.MkdirAll(*cdiDir, os.FileMode(0750)); err != nil {
 			return fmt.Errorf("create CDI directory: %w", err)
 		}
@@ -239,8 +236,7 @@ func NewCommand() *cobra.Command {
 			return fmt.Errorf("start example plugin: %w", err)
 		}
 
-		// Handle graceful shutdown. We need to delete Unix domain
-		// sockets.
+		// 处理优雅退出：需要删除 Unix domain socket。
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 		logger.Info("Waiting for signal.")
@@ -251,9 +247,8 @@ func NewCommand() *cobra.Command {
 	}
 	cmd.AddCommand(kubeletPlugin)
 
-	// SetUsageAndHelpFunc takes care of flag grouping. However,
-	// it doesn't support listing child commands. We add those
-	// to cmd.Use.
+	// SetUsageAndHelpFunc 负责 flag 分组，但不支持列出子命令，
+	// 所以这里手动把它们加到 cmd.Use。
 	cols, _, _ := term.TerminalSize(cmd.OutOrStdout())
 	cliflag.SetUsageAndHelpFunc(cmd, sharedFlagSets, cols)
 	var children []string

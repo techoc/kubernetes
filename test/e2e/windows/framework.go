@@ -23,20 +23,18 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// sigDescribe annotates the test with the SIG label.
-// Use this together with skipUnlessWindows to define
-// tests that only run if the node OS is Windows:
+// sigDescribe 为测试标注 SIG 标签。
+// 与 skipUnlessWindows 配合使用，可定义仅在节点操作系统为 Windows 时运行的测试：
 //
 //	sigDescribe("foo", skipUnlessWindows(func() { ... }))
 var sigDescribe = framework.SIGDescribe("windows")
 
-// skipUnlessWindows wraps some other Ginkgo callback such that
-// a BeforeEach runs before tests defined by that callback which
-// skips those tests unless the node OS is Windows.
+// skipUnlessWindows 包装其他 Ginkgo 回调，在其定义的测试前插入 BeforeEach，
+// 当节点操作系统不是 Windows 时跳过这些测试。
 func skipUnlessWindows(cb func()) func() {
 	return func() {
 		ginkgo.BeforeEach(func() {
-			// all tests in this package are Windows specific
+			// 本包所有测试均特定于 Windows
 			e2eskipper.SkipUnlessNodeOSDistroIs("windows")
 		})
 

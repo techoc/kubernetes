@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package e2enode contains e2e tests specific to the node
+// Package e2enode 包含特定于 node 的 e2e 测试
 package e2enode

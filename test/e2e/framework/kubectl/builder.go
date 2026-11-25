@@ -34,19 +34,18 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// KubectlBuilder is used to build, customize and execute a kubectl Command.
-// Add more functions to customize the builder as needed.
+// KubectlBuilder 用于构建、定制并执行 kubectl 命令。
+// 需要更多定制能力时，继续往 builder 上加函数。
 type KubectlBuilder struct {
 	cmd *exec.Cmd
-	// appendEnv contains only AppendEnv(...) values and NOT os.Environ()
-	// logging os.Environ is ~redundant and noisy
-	// logging the env we modified is important to understand what we're running
-	// versus the defaults
+	// appendedEnv 只含 AppendEnv(...) 设置的值，不含 os.Environ()
+	// 打印 os.Environ 基本是冗余且嘈杂的
+	// 打印我们改动的环境变量，才能看清实际运行环境和默认环境的差异
 	appendedEnv []string
 	timeout     <-chan time.Time
 }
 
-// NewKubectlCommand returns a KubectlBuilder for running kubectl.
+// NewKubectlCommand 返回一个用于运行 kubectl 的 KubectlBuilder。
 func NewKubectlCommand(namespace string, args ...string) *KubectlBuilder {
 	b := new(KubectlBuilder)
 	tk := NewTestKubeconfig(framework.TestContext.CertDir, framework.TestContext.Host, framework.TestContext.KubeConfig, framework.TestContext.KubeContext, framework.TestContext.KubectlPath, namespace)
@@ -54,7 +53,7 @@ func NewKubectlCommand(namespace string, args ...string) *KubectlBuilder {
 	return b
 }
 
-// AppendEnv appends the given environment and returns itself.
+// AppendEnv 追加给定的环境变量并返回自身。
 func (b *KubectlBuilder) AppendEnv(env []string) *KubectlBuilder {
 	if b.cmd.Env == nil {
 		b.cmd.Env = os.Environ()
@@ -64,29 +63,29 @@ func (b *KubectlBuilder) AppendEnv(env []string) *KubectlBuilder {
 	return b
 }
 
-// WithTimeout sets the given timeout and returns itself.
+// WithTimeout 设置给定的超时并返回自身。
 func (b *KubectlBuilder) WithTimeout(t <-chan time.Time) *KubectlBuilder {
 	b.timeout = t
 	return b
 }
 
-// WithStdinData sets the given data to stdin and returns itself.
+// WithStdinData 把给定数据设为 stdin 并返回自身。
 func (b KubectlBuilder) WithStdinData(data string) *KubectlBuilder {
 	b.cmd.Stdin = strings.NewReader(data)
 	return &b
 }
 
-// WithStdinReader sets the given reader and returns itself.
+// WithStdinReader 设置给定的 reader 并返回自身。
 func (b KubectlBuilder) WithStdinReader(reader io.Reader) *KubectlBuilder {
 	b.cmd.Stdin = reader
 	return &b
 }
 
-// ExecOrDie runs the kubectl executable or dies if error occurs.
+// ExecOrDie 运行 kubectl 可执行文件，出错时终止测试。
 func (b KubectlBuilder) ExecOrDie(namespace string) string {
 	str, err := b.Exec()
-	// In case of i/o timeout error, try talking to the apiserver again after 2s before dying.
-	// Note that we're still dying after retrying so that we can get visibility to triage it further.
+	// 遇到 I/O 超时错误时，先等 2s 再访问一次 apiserver，然后再决定是否终止。
+	// 重试后仍会终止，但这样可以留下更多线索供进一步排查。
 	if isTimeout(err) {
 		framework.Logf("Hit i/o timeout error, talking to the server 2s later to see if it's temporary.")
 		time.Sleep(2 * time.Second)
@@ -112,22 +111,22 @@ func isTimeout(err error) bool {
 	return false
 }
 
-// Exec runs the kubectl executable.
+// Exec 运行 kubectl 可执行文件。
 func (b KubectlBuilder) Exec() (string, error) {
 	stdout, _, err := b.ExecWithFullOutput()
 	return stdout, err
 }
 
-// ExecWithFullOutput runs the kubectl executable, and returns the stdout and stderr.
+// ExecWithFullOutput 运行 kubectl 可执行文件，返回 stdout 和 stderr。
 func (b KubectlBuilder) ExecWithFullOutput() (string, string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd := b.cmd
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 
 	if len(b.appendedEnv) > 0 {
-		framework.Logf("Running '%s %s %s'", strings.Join(b.appendedEnv, " "), cmd.Path, strings.Join(cmd.Args[1:], " ")) // skip arg[0] as it is printed separately
+		framework.Logf("Running '%s %s %s'", strings.Join(b.appendedEnv, " "), cmd.Path, strings.Join(cmd.Args[1:], " ")) // 跳过 arg[0]，因为它会单独打印
 	} else {
-		framework.Logf("Running '%s %s'", cmd.Path, strings.Join(cmd.Args[1:], " ")) // skip arg[0] as it is printed separately
+		framework.Logf("Running '%s %s'", cmd.Path, strings.Join(cmd.Args[1:], " ")) // 跳过 arg[0]，因为它会单独打印
 	}
 	if err := cmd.Start(); err != nil {
 		return "", "", fmt.Errorf("error starting %v:\nCommand stdout:\n%v\nstderr:\n%v\nerror:\n%v", cmd, cmd.Stdout, cmd.Stderr, err)
@@ -158,33 +157,33 @@ func (b KubectlBuilder) ExecWithFullOutput() (string, string, error) {
 	return stdout.String(), stderr.String(), nil
 }
 
-// RunKubectlOrDie is a convenience wrapper over kubectlBuilder
+// RunKubectlOrDie 是 kubectlBuilder 的便捷包装。
 func RunKubectlOrDie(namespace string, args ...string) string {
 	return NewKubectlCommand(namespace, args...).ExecOrDie(namespace)
 }
 
-// RunKubectl is a convenience wrapper over kubectlBuilder
+// RunKubectl 是 kubectlBuilder 的便捷包装。
 func RunKubectl(namespace string, args ...string) (string, error) {
 	return NewKubectlCommand(namespace, args...).Exec()
 }
 
-// RunKubectlWithFullOutput is a convenience wrapper over kubectlBuilder
-// It will also return the command's stderr.
+// RunKubectlWithFullOutput 是 kubectlBuilder 的便捷包装，
+// 同时返回命令的 stderr。
 func RunKubectlWithFullOutput(namespace string, args ...string) (string, string, error) {
 	return NewKubectlCommand(namespace, args...).ExecWithFullOutput()
 }
 
-// RunKubectlOrDieInput is a convenience wrapper over kubectlBuilder that takes input to stdin
+// RunKubectlOrDieInput 是 kubectlBuilder 的便捷包装，接受 stdin 输入。
 func RunKubectlOrDieInput(namespace string, data string, args ...string) string {
 	return NewKubectlCommand(namespace, args...).WithStdinData(data).ExecOrDie(namespace)
 }
 
-// RunKubectlInput is a convenience wrapper over kubectlBuilder that takes input to stdin
+// RunKubectlInput 是 kubectlBuilder 的便捷包装，接受 stdin 输入。
 func RunKubectlInput(namespace string, data string, args ...string) (string, error) {
 	return NewKubectlCommand(namespace, args...).WithStdinData(data).Exec()
 }
 
-// RunKubemciWithKubeconfig is a convenience wrapper over RunKubemciCmd
+// RunKubemciWithKubeconfig 是 RunKubemciCmd 的便捷包装，会带上 kubeconfig 参数。
 func RunKubemciWithKubeconfig(args ...string) (string, error) {
 	if framework.TestContext.KubeConfig != "" {
 		args = append(args, "--"+clientcmd.RecommendedConfigPathFlag+"="+framework.TestContext.KubeConfig)
@@ -192,10 +191,10 @@ func RunKubemciWithKubeconfig(args ...string) (string, error) {
 	return RunKubemciCmd(args...)
 }
 
-// RunKubemciCmd is a convenience wrapper over kubectlBuilder to run kubemci.
-// It assumes that kubemci exists in PATH.
+// RunKubemciCmd 是 kubectlBuilder 的便捷包装，用于运行 kubemci。
+// 假定 kubemci 已在 PATH 中。
 func RunKubemciCmd(args ...string) (string, error) {
-	// kubemci is assumed to be in PATH.
+	// 假定 kubemci 在 PATH 中。
 	kubemci := "kubemci"
 	b := new(KubectlBuilder)
 	args = append(args, "--gcp-project="+framework.TestContext.CloudConfig.ProjectID)

@@ -33,13 +33,13 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/internal/output"
 )
 
-// The line number of the following code is checked in TestFailureOutput below.
-// Be careful when moving it around or changing the import statements above.
-// Here are some intentionally blank lines that can be removed to compensate
-// for future additional import statements.
-// This must be line #40.
+// 下面代码的行号会在 TestFailureOutput 中校验。
+// 移动这段代码或修改上面的 import 时要格外小心。
+// 这里特意留了几个空行，将来新增 import 时可以删掉它们
+// 来补偿行数变化。
+// 这必须是第 40 行。
 
-// This is included in a stack backtrace.
+// 这行会出现在 stack backtrace 里。
 func failHelper(msg string) {
 	framework.Fail(msg)
 }
@@ -252,8 +252,8 @@ In [AfterEach] at: log_test.go:53 <time>
 		},
 	}
 
-	// Simulate the test setup as in a normal e2e test which uses the
-	// framework, but remember to restore klog settings when we are done.
+	// 模拟普通 e2e 测试使用 framework 时的初始化过程，
+	// 但结束后要记得恢复 klog 设置。
 	state := klog.CaptureState()
 	defer state.Restore()
 	var testContext framework.TestContextType

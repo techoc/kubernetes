@@ -27,11 +27,11 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// npbISWorkload defines a workload to run the integer sort (IS) workload
-// from NAS parallel benchmark (NPB) suite.
+// npbISWorkload 定义运行 NAS parallel benchmark (NPB) 套件中
+// integer sort (IS) 工作负载的 workload
 type npbISWorkload struct{}
 
-// Ensure npbISWorkload implements NodePerfWorkload interface.
+// 确保 npbISWorkload 实现 NodePerfWorkload 接口
 var _ NodePerfWorkload = &npbISWorkload{}
 
 func (w npbISWorkload) Name() string {

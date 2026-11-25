@@ -40,8 +40,7 @@ type capacityTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomCapacityTestSuite returns capacityTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomCapacityTestSuite 返回使用自定义测试 pattern、实现了 TestSuite 接口的 capacityTestSuite。
 func InitCustomCapacityTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &capacityTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -54,8 +53,7 @@ func InitCustomCapacityTestSuite(patterns []storageframework.TestPattern) storag
 	}
 }
 
-// InitCapacityTestSuite returns capacityTestSuite that implements TestSuite interface\
-// using test suite default patterns
+// InitCapacityTestSuite 返回使用测试套件默认 pattern、实现了 TestSuite 接口的 capacityTestSuite。
 func InitCapacityTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -68,7 +66,7 @@ func (p *capacityTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 }
 
 func (p *capacityTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) string {
-	// Check preconditions.
+	// 检查前置条件。
 	if pattern.VolType != storageframework.DynamicPV {
 		return fmt.Sprintf("Suite %q does not support %v", p.tsInfo.Name, pattern.VolType)
 	}
@@ -86,14 +84,14 @@ func (p *capacityTestSuite) DefineTests(driver storageframework.TestDriver, patt
 		sc      *storagev1.StorageClass
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意，它还会注册一个 AfterEach，使 f 变得不可用。
+	// 任何使用 f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("capacity", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	init := func(ctx context.Context) {
 		dDriver, _ = driver.(storageframework.DynamicPVTestDriver)
-		// Now do the more expensive test initialization.
+		// 在这里执行开销较大的测试初始化。
 		config := driver.PrepareTest(ctx, f)
 		sc = dDriver.GetDynamicProvisionStorageClass(ctx, config, pattern.FsType)
 		if sc == nil {
@@ -111,31 +109,24 @@ func (p *capacityTestSuite) DefineTests(driver storageframework.TestDriver, patt
 			return f.ClientSet.StorageV1().CSIStorageCapacities("").List(ctx, metav1.ListOptions{})
 		}, timeout, pollInterval)
 
-		// If we have further information about what storage
-		// capacity information to expect from the driver,
-		// then we can make the check more specific. The baseline
-		// is that it provides some arbitrary capacity for the
-		// storage class.
+		// 如果掌握了 driver 应提供哪些 capacity 信息的更多信息，
+		// 就可以做更精确的检查。基线要求是它为 storage class
+		// 提供任意容量信息。
 		matcher := matchSC
 		if len(dInfo.TopologyKeys) == 1 {
-			// We can construct topology segments by
-			// collecting all values for this one key and
-			// then expect one CSIStorageCapacity object
-			// per value for the storage class.
+			// 收集这个唯一 key 的所有取值即可构造 topology segment，
+			// 然后期望该 storage class 的每个取值对应一个 CSIStorageCapacity 对象。
 			//
-			// Local storage on a node will be covered by
-			// this checking. A more complex approach for
-			// drivers with multiple keys might be
-			// possible, too, but is not currently
-			// implemented.
+			// 这种检查能覆盖 node 上的本地存储。对有多个 key 的 driver
+			// 也可以采用更复杂的方式，但目前尚未实现。
 			matcher = HaveCapacitiesForClassAndNodes(ctx, f.ClientSet, sc.Provisioner, sc.Name, dInfo.TopologyKeys[0])
 		}
 
-		// Create storage class and wait for capacity information.
+		// 创建 storage class 并等待 capacity 信息。
 		sc := SetupStorageClass(ctx, f.ClientSet, sc)
 		listAll.Should(MatchCapacities(matcher), "after creating storage class")
 
-		// Delete storage class again and wait for removal of storage capacity information.
+		// 再次删除 storage class，并等待 capacity 信息被移除。
 		err := f.ClientSet.StorageV1().StorageClasses().Delete(ctx, sc.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "delete storage class")
 		listAll.ShouldNot(MatchCapacities(matchSC), "after deleting storage class")
@@ -150,8 +141,8 @@ func formatCapacities(capacities []storagev1.CSIStorageCapacity) []string {
 	return lines
 }
 
-// MatchCapacities runs some kind of check against *storagev1.CSIStorageCapacityList.
-// In case of failure, all actual objects are appended to the failure message.
+// MatchCapacities 对 *storagev1.CSIStorageCapacityList 执行某种检查。
+// 失败时，会把所有实际对象附加到失败消息中。
 func MatchCapacities(match types.GomegaMatcher) types.GomegaMatcher {
 	return matchCSIStorageCapacities{match: match}
 }
@@ -186,18 +177,16 @@ func (m matchCSIStorageCapacities) dump(actual interface{}) string {
 	return strings.Join(lines, "\n")
 }
 
-// CapacityMatcher can be used to compose different matchers where one
-// adds additional checks for CSIStorageCapacity objects already checked
-// by another.
+// CapacityMatcher 用于组合不同的 matcher，其中一个 matcher 可以对
+// 另一个已检查过的 CSIStorageCapacity 对象追加检查。
 type CapacityMatcher interface {
 	types.GomegaMatcher
-	// MatchedCapacities returns all CSICapacityObjects which were
-	// found during the preceding Match call.
+	// MatchedCapacities 返回上一次 Match 调用中找到的所有 CSICapacityObject。
 	MatchedCapacities() []storagev1.CSIStorageCapacity
 }
 
-// HaveCapacitiesForClass filters all storage capacity objects in a *storagev1.CSIStorageCapacityList
-// by storage class. Success is when when there is at least one.
+// HaveCapacitiesForClass 按 storage class 过滤 *storagev1.CSIStorageCapacityList 中的
+// 所有 storage capacity 对象，至少找到一个即匹配成功。
 func HaveCapacitiesForClass(scName string) CapacityMatcher {
 	return &haveCSIStorageCapacities{scName: scName}
 }
@@ -238,8 +227,8 @@ func (h *haveCSIStorageCapacities) NegatedFailureMessage(actual interface{}) (me
 	)
 }
 
-// HaveCapacitiesForClassAndNodes matches objects by storage class name. It finds
-// all nodes on which the driver runs and expects one object per node.
+// HaveCapacitiesForClassAndNodes 按 storage class 名称匹配对象。
+// 它会找出 driver 运行的所有 node，并期望每个 node 对应一个对象。
 func HaveCapacitiesForClassAndNodes(ctx context.Context, client kubernetes.Interface, driverName, scName, topologyKey string) CapacityMatcher {
 	return &haveLocalStorageCapacities{
 		ctx:         ctx,
@@ -271,14 +260,14 @@ func (h *haveLocalStorageCapacities) Match(actual interface{}) (success bool, er
 	h.unexpectedCapacities = nil
 	h.missingTopologyValues = nil
 
-	// First check with underlying matcher.
+	// 先用底层 matcher 检查。
 	success, err = h.match.Match(actual)
 	h.matchSuccess = success
 	if !success || err != nil {
 		return
 	}
 
-	// Find all nodes on which the driver runs.
+	// 找出 driver 运行的所有 node。
 	csiNodes, err := h.client.StorageV1().CSINodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return false, err
@@ -308,7 +297,7 @@ func (h *haveLocalStorageCapacities) Match(actual interface{}) (success bool, er
 		return false, fmt.Errorf("driver %q not running on any node", h.driverName)
 	}
 
-	// Now check that for each topology value there is exactly one CSIStorageCapacity object.
+	// 然后检查每个 topology 取值是否恰好对应一个 CSIStorageCapacity 对象。
 	remainingTopologyValues := map[string]bool{}
 	for value := range topologyValues {
 		remainingTopologyValues[value] = true
@@ -326,7 +315,7 @@ func (h *haveLocalStorageCapacities) Match(actual interface{}) (success bool, er
 		h.expectedCapacities = append(h.expectedCapacities, capacity)
 	}
 
-	// Success is when there were no unexpected capacities and enough expected ones.
+	// 没有多余的 capacity，且期望的 capacity 都齐全时才算成功。
 	for value, remaining := range remainingTopologyValues {
 		if remaining {
 			h.missingTopologyValues = append(h.missingTopologyValues, value)
@@ -360,7 +349,7 @@ func (h *haveLocalStorageCapacities) NegatedFailureMessage(actual interface{}) (
 	if h.matchSuccess {
 		return h.match.NegatedFailureMessage(actual)
 	}
-	// It's not entirely clear whether negating this check is useful. Just dump all info that we have.
+	// 取反这个检查是否有用尚不明确，这里直接输出所有已知信息。
 	var lines []string
 	if len(h.expectedCapacities) != 0 {
 		lines = append(lines, "expected CSIStorageCapacity objects:")

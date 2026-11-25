@@ -27,9 +27,9 @@ import (
 	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 )
 
-// RestartControllerManager restarts the kube-controller-manager.
+// RestartControllerManager 重启 kube-controller-manager。
 func RestartControllerManager(ctx context.Context) error {
-	// TODO: Make it work for all providers and distros.
+	// TODO: 让它支持所有 provider 和发行版。
 	if !framework.ProviderIs("gce", "aws") {
 		return fmt.Errorf("unsupported provider for RestartControllerManager: %s", framework.TestContext.Provider)
 	}
@@ -46,7 +46,7 @@ func RestartControllerManager(ctx context.Context) error {
 	return nil
 }
 
-// WaitForControllerManagerUp waits for the kube-controller-manager to be up.
+// WaitForControllerManagerUp 等待 kube-controller-manager 启动。
 func WaitForControllerManagerUp(ctx context.Context) error {
 	cmd := "curl -k https://localhost:" + strconv.Itoa(framework.KubeControllerManagerPort) + "/healthz"
 	for start := time.Now(); time.Since(start) < time.Minute && ctx.Err() == nil; time.Sleep(5 * time.Second) {

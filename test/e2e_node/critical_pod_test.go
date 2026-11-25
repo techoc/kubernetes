@@ -49,9 +49,9 @@ var _ = SIGDescribe("CriticalPod", framework.WithSerial(), framework.WithDisrupt
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 	ginkgo.Context("when we need to admit a critical pod", func() {
 		ginkgo.It("should be able to create and delete a critical pod", func(ctx context.Context) {
-			// because admission Priority enable, If the priority class is not found, the Pod is rejected.
+			// 启用了 Priority 准入插件，找不到 priority class 时 Pod 会被拒绝
 			node := getNodeName(ctx, f)
-			// Define test pods
+			// 定义测试 pod
 			nonCriticalGuaranteed := getTestPod(false, guaranteedPodName, v1.ResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
@@ -70,16 +70,15 @@ var _ = SIGDescribe("CriticalPod", framework.WithSerial(), framework.WithDisrupt
 			}, node)
 			nonCriticalBestEffort := getTestPod(false, bestEffortPodName, v1.ResourceRequirements{}, node)
 			criticalPod := getTestPod(true, criticalPodName, v1.ResourceRequirements{
-				// request the entire resource capacity of the node, so that
-				// admitting this pod requires the other pod to be preempted
+				// 请求节点的全部资源容量，迫使其他 pod 被抢占后才能接纳该 pod
 				Requests: getNodeCPUAndMemoryCapacity(ctx, f),
 			}, node)
 
-			// Create pods, starting with non-critical so that the critical preempts the other pods.
+			// 先创建非关键 pod，再创建关键 pod 以抢占它们
 			e2epod.NewPodClient(f).CreateBatch(ctx, []*v1.Pod{nonCriticalBestEffort, nonCriticalBurstable, nonCriticalGuaranteed})
 			e2epod.PodClientNS(f, kubeapi.NamespaceSystem).CreateSync(ctx, criticalPod)
 
-			// Check that non-critical pods other than the besteffort have been evicted
+			// 检查除 besteffort 之外的非关键 pod 都已被驱逐
 			updatedPodList, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 			for _, p := range updatedPodList.Items {
@@ -92,7 +91,7 @@ var _ = SIGDescribe("CriticalPod", framework.WithSerial(), framework.WithDisrupt
 		})
 
 		f.It("should add DisruptionTarget condition to the preempted pod", func(ctx context.Context) {
-			// because admission Priority enable, If the priority class is not found, the Pod is rejected.
+			// 启用了 Priority 准入插件，找不到 priority class 时 Pod 会被拒绝
 			node := getNodeName(ctx, f)
 			nonCriticalGuaranteed := getTestPod(false, guaranteedPodName, v1.ResourceRequirements{
 				Requests: v1.ResourceList{
@@ -106,8 +105,7 @@ var _ = SIGDescribe("CriticalPod", framework.WithSerial(), framework.WithDisrupt
 			}, node)
 
 			criticalPod := getTestPod(true, criticalPodName, v1.ResourceRequirements{
-				// request the entire resource capacity of the node, so that
-				// admitting this pod requires the other pod to be preempted
+				// 请求节点的全部资源容量，迫使其他 pod 被抢占后才能接纳该 pod
 				Requests: getNodeCPUAndMemoryCapacity(ctx, f),
 			}, node)
 			criticalPod.Namespace = kubeapi.NamespaceSystem
@@ -122,7 +120,7 @@ var _ = SIGDescribe("CriticalPod", framework.WithSerial(), framework.WithDisrupt
 			err := e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, criticalPod.Name, kubeapi.NamespaceSystem)
 			framework.ExpectNoError(err, "Failed to await for the pod to be running: %q", klog.KObj(criticalPod))
 
-			// Check that non-critical pods other than the besteffort have been evicted
+			// 检查除 besteffort 之外的非关键 pod 都已被驱逐
 			updatedPodList, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 			for _, p := range updatedPodList.Items {
@@ -134,12 +132,12 @@ var _ = SIGDescribe("CriticalPod", framework.WithSerial(), framework.WithDisrupt
 			}
 		})
 		ginkgo.AfterEach(func(ctx context.Context) {
-			// Delete Pods
+			// 删除 pod
 			e2epod.NewPodClient(f).DeleteSync(ctx, guaranteedPodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			e2epod.NewPodClient(f).DeleteSync(ctx, burstablePodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			e2epod.NewPodClient(f).DeleteSync(ctx, bestEffortPodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			e2epod.PodClientNS(f, kubeapi.NamespaceSystem).DeleteSync(ctx, criticalPodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
-			// Log Events
+			// 记录事件
 			logPodEvents(ctx, f)
 			logNodeEvents(ctx, f)
 
@@ -152,9 +150,9 @@ var _ = SIGDescribe("CriticalPodWithPodLevelResources", framework.WithSerial(), 
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 	ginkgo.Context("when we need to admit a critical pod", func() {
 		ginkgo.It("should be able to create and delete a critical pod", func(ctx context.Context) {
-			// because admission Priority enable, If the priority class is not found, the Pod is rejected.
+			// 启用了 Priority 准入插件，找不到 priority class 时 Pod 会被拒绝
 			node := getNodeName(ctx, f)
-			// Define test pods
+			// 定义测试 pod
 			nonCriticalGuaranteed := getTestPodWithPodLevelResources(false, guaranteedPodName, v1.ResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
@@ -173,16 +171,15 @@ var _ = SIGDescribe("CriticalPodWithPodLevelResources", framework.WithSerial(), 
 			}, v1.ResourceRequirements{}, node)
 			nonCriticalBestEffort := getTestPod(false, bestEffortPodName, v1.ResourceRequirements{}, node)
 			criticalPod := getTestPodWithPodLevelResources(true, criticalPodName, v1.ResourceRequirements{
-				// request the entire resource capacity of the node, so that
-				// admitting this pod requires the other pod to be preempted
+				// 请求节点的全部资源容量，迫使其他 pod 被抢占后才能接纳该 pod
 				Requests: getNodeCPUAndMemoryCapacity(ctx, f),
 			}, v1.ResourceRequirements{}, node)
 
-			// Create pods, starting with non-critical so that the critical preempts the other pods.
+			// 先创建非关键 pod，再创建关键 pod 以抢占它们
 			e2epod.NewPodClient(f).CreateBatch(ctx, []*v1.Pod{nonCriticalBestEffort, nonCriticalBurstable, nonCriticalGuaranteed})
 			e2epod.PodClientNS(f, kubeapi.NamespaceSystem).CreateSync(ctx, criticalPod)
 
-			// Check that non-critical pods other than the besteffort have been evicted
+			// 检查除 besteffort 之外的非关键 pod 都已被驱逐
 			updatedPodList, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 			for _, p := range updatedPodList.Items {
@@ -194,12 +191,12 @@ var _ = SIGDescribe("CriticalPodWithPodLevelResources", framework.WithSerial(), 
 			}
 		})
 		ginkgo.AfterEach(func(ctx context.Context) {
-			// Delete Pods
+			// 删除 pod
 			e2epod.NewPodClient(f).DeleteSync(ctx, guaranteedPodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			e2epod.NewPodClient(f).DeleteSync(ctx, burstablePodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			e2epod.NewPodClient(f).DeleteSync(ctx, bestEffortPodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			e2epod.PodClientNS(f, kubeapi.NamespaceSystem).DeleteSync(ctx, criticalPodName, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
-			// Log Events
+			// 记录事件
 			logPodEvents(ctx, f)
 			logNodeEvents(ctx, f)
 
@@ -210,7 +207,7 @@ var _ = SIGDescribe("CriticalPodWithPodLevelResources", framework.WithSerial(), 
 func getNodeCPUAndMemoryCapacity(ctx context.Context, f *framework.Framework) v1.ResourceList {
 	nodeList, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err)
-	// Assuming that there is only one node, because this is a node e2e test.
+	// node e2e 测试中只有一个节点
 	gomega.Expect(nodeList.Items).To(gomega.HaveLen(1))
 	capacity := nodeList.Items[0].Status.Allocatable
 	return v1.ResourceList{
@@ -222,7 +219,7 @@ func getNodeCPUAndMemoryCapacity(ctx context.Context, f *framework.Framework) v1
 func getNodeName(ctx context.Context, f *framework.Framework) string {
 	nodeList, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err)
-	// Assuming that there is only one node, because this is a node e2e test.
+	// node e2e 测试中只有一个节点
 	gomega.Expect(nodeList.Items).To(gomega.HaveLen(1))
 	return nodeList.Items[0].GetName()
 }

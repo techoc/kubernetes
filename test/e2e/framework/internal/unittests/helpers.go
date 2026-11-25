@@ -25,12 +25,11 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// GetFrameworkOutput captures writes to framework.Output during a test suite setup
-// and returns it together with any explicit Exit call code, -1 if none.
-// May only be called once per test binary.
+// GetFrameworkOutput 捕获测试套件初始化期间写入 framework.Output 的内容，
+// 连同显式 Exit 调用的代码一起返回；没有调用则返回 -1。
+// 每个测试二进制只能调用一次。
 func GetFrameworkOutput(t *testing.T, flags map[string]string) (output string, finalExitCode int) {
-	// This simulates how test/e2e uses the framework and how users
-	// invoke test/e2e.
+	// 模拟 test/e2e 使用 framework 以及用户调用 test/e2e 的方式。
 	framework.RegisterCommonFlags(flag.CommandLine)
 	framework.RegisterClusterFlags(flag.CommandLine)
 	for flagname, value := range flags {
@@ -54,7 +53,7 @@ func GetFrameworkOutput(t *testing.T, flags map[string]string) (output string, f
 	}()
 	framework.AfterReadingAllFlags(&framework.TestContext)
 
-	// Results set by defer.
+	// 结果由 defer 设置。
 	return
 }
 

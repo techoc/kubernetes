@@ -23,9 +23,8 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// Get creates a function which retrieves the pod anew each time the function
-// is called. Fatal errors are detected by framework.GetObject and cause
-// polling to stop.
+// Get 创建一个函数，每次调用时都重新获取 pod。
+// 致命错误由 framework.GetObject 检测，并会终止轮询。
 func Get(c clientset.Interface, pod framework.NamedObject) framework.GetFunc[*v1.Pod] {
 	return framework.GetObject(c.CoreV1().Pods(pod.GetNamespace()).Get, pod.GetName(), metav1.GetOptions{})
 }

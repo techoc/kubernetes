@@ -44,8 +44,7 @@ type bindingsGetter interface {
 	v1rbac.ClusterRolesGetter
 }
 
-// WaitForAuthzUpdate checks if the give user can perform named verb and action
-// on a resource or subresource.
+// WaitForAuthzUpdate 检查给定用户能否对资源或子资源执行指定的 verb 和 action。
 func WaitForAuthzUpdate(ctx context.Context, c v1authorization.SubjectAccessReviewsGetter, user string, groups []string, ra *authorizationv1.ResourceAttributes, allowed bool) error {
 	review := &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
@@ -68,14 +67,14 @@ func WaitForAuthzUpdate(ctx context.Context, c v1authorization.SubjectAccessRevi
 	return err
 }
 
-// WaitForAuthorizationUpdate checks if the given user can perform the named verb and action.
-// If policyCachePollTimeout is reached without the expected condition matching, an error is returned
+// WaitForAuthorizationUpdate 检查给定用户能否执行指定的 verb 和 action。
+// 超过 policyCachePollTimeout 仍未匹配到预期结果时返回错误。
 func WaitForAuthorizationUpdate(ctx context.Context, c v1authorization.SubjectAccessReviewsGetter, user, namespace, verb string, resource schema.GroupResource, allowed bool) error {
 	return WaitForNamedAuthorizationUpdate(ctx, c, user, namespace, verb, "", resource, allowed)
 }
 
-// WaitForNamedAuthorizationUpdate checks if the given user can perform the named verb and action on the named resource.
-// If policyCachePollTimeout is reached without the expected condition matching, an error is returned
+// WaitForNamedAuthorizationUpdate 检查给定用户能否对指定资源执行指定的 verb 和 action。
+// 超过 policyCachePollTimeout 仍未匹配到预期结果时返回错误。
 func WaitForNamedAuthorizationUpdate(ctx context.Context, c v1authorization.SubjectAccessReviewsGetter, user, namespace, verb, resourceName string, resource schema.GroupResource, allowed bool) error {
 	review := &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
@@ -103,14 +102,13 @@ func WaitForNamedAuthorizationUpdate(ctx context.Context, c v1authorization.Subj
 	return err
 }
 
-// BindClusterRole binds the cluster role at the cluster scope. If RBAC is not enabled, nil
-// is returned with no action.
+// BindClusterRole 在 cluster 作用域绑定 cluster role。RBAC 未启用时不执行任何操作，返回 nil。
 func BindClusterRole(ctx context.Context, c bindingsGetter, clusterRole, ns string, subjects ...rbacv1.Subject) (func(ctx context.Context), error) {
 	if !IsRBACEnabled(ctx, c) {
 		return func(ctx context.Context) {}, nil
 	}
 
-	// Since the namespace names are unique, we can leave this lying around so we don't have to race any caches
+	// namespace 名称唯一，所以可以留着绑定不去清理，避免和各类缓存的更新竞争。
 	clusterRoleBinding, err := c.ClusterRoleBindings().Create(ctx, &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns + "--" + clusterRole,
@@ -135,14 +133,12 @@ func BindClusterRole(ctx context.Context, c bindingsGetter, clusterRole, ns stri
 	return cleanupFunc, nil
 }
 
-// BindClusterRoleInNamespace binds the cluster role at the namespace scope. If RBAC is not enabled, nil
-// is returned with no action.
+// BindClusterRoleInNamespace 在 namespace 作用域绑定 cluster role。RBAC 未启用时不执行任何操作，返回 nil。
 func BindClusterRoleInNamespace(ctx context.Context, c bindingsGetter, clusterRole, ns string, subjects ...rbacv1.Subject) error {
 	return bindInNamespace(ctx, c, "ClusterRole", clusterRole, ns, subjects...)
 }
 
-// BindRoleInNamespace binds the role at the namespace scope. If RBAC is not enabled, nil
-// is returned with no action.
+// BindRoleInNamespace 在 namespace 作用域绑定 role。RBAC 未启用时不执行任何操作，返回 nil。
 func BindRoleInNamespace(ctx context.Context, c bindingsGetter, role, ns string, subjects ...rbacv1.Subject) error {
 	return bindInNamespace(ctx, c, "Role", role, ns, subjects...)
 }
@@ -152,7 +148,7 @@ func bindInNamespace(ctx context.Context, c bindingsGetter, roleType, role, ns s
 		return nil
 	}
 
-	// Since the namespace names are unique, we can leave this lying around so we don't have to race any caches
+	// namespace 名称唯一，所以可以留着绑定不去清理，避免和各类缓存的更新竞争。
 	_, err := c.RoleBindings(ns).Create(ctx, &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns + "--" + role,
@@ -177,7 +173,7 @@ var (
 	isRBACEnabled     bool
 )
 
-// IsRBACEnabled returns true if RBAC is enabled. Otherwise false.
+// IsRBACEnabled 在 RBAC 启用时返回 true，否则返回 false。
 func IsRBACEnabled(ctx context.Context, crGetter v1rbac.ClusterRolesGetter) bool {
 	isRBACEnabledOnce.Do(func() {
 		crs, err := crGetter.ClusterRoles().List(ctx, metav1.ListOptions{})

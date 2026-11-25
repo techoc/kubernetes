@@ -32,15 +32,13 @@ func workloadResourceClaimsDriverResources(nodes *drautils.Nodes) map[string]res
 	return drautils.DriverResourcesNow(nodes, 1)
 }
 
-// workloadResourceClaimsGateCycle implements the DRAWorkloadResourceClaims feature gate ON→OFF→ON cycle test:
+// workloadResourceClaimsGateCycle 实现 DRAWorkloadResourceClaims feature gate 的 ON→OFF→ON 循环测试：
 //
-//   - Phase 0 (gate ON): create a PodGroup with 2 member Pods sharing a
-//     ResourceClaim reserved for the PodGroup.
-//   - Phase 1 (gate OFF): The ResourceClaim remains reserved for
-//     the PodGroup and no new ResourceClaims are created. Pods using claims
-//     reserved for a PodGroup can still be deleted.
-//   - Phase 2 (gate ON again): A new Pod added to the group can share the
-//     ResourceClaim initially allocated in phase 0.
+//   - 阶段 0（gate 开启）：创建一个 PodGroup，其中 2 个成员 Pod 共享为该
+//     PodGroup 预留的 ResourceClaim。
+//   - 阶段 1（gate 关闭）：ResourceClaim 仍为该 PodGroup 预留，且不会创建新的
+//     ResourceClaim。使用 PodGroup 预留 claim 的 Pod 仍可被删除。
+//   - 阶段 2（gate 重新开启）：新加入组的 Pod 可以共享阶段 0 初次分配的 ResourceClaim。
 func workloadResourceClaimsGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gateOffFunc {
 	namespace := tCtx.Namespace()
 	workload, template := b.WorkloadInline()
@@ -89,17 +87,14 @@ func workloadResourceClaimsGateCycle(tCtx ktesting.TContext, b *drautils.Builder
 	}
 
 	return func(tCtx ktesting.TContext) gateOnAgainFunc {
-		// A new Pod in the PodGroup making the same claim as the other Pods
-		// will not be able to schedule because the ResourceClaim controller
-		// will not associate the PodGroup claim with the Pod when the feature
-		// is disabled. Kubernetes 1.36 would have created a new ResourceClaim
-		// for the Pod, which we want to verify does *not* happen.
+		// 功能禁用时，PodGroup 中新加入的 Pod 即使请求与其他 Pod 相同的 claim
+		// 也无法调度：ResourceClaim controller 不会把 PodGroup 的 claim 与该 Pod 关联。
+		// Kubernetes 1.36 会为该 Pod 创建新的 ResourceClaim，这里要验证这种行为*不会*再出现。
 		stuckPod := b.GroupedPodWithClaims(podGroup)
 		b.Create(tCtx, stuckPod)
 		checkClaimsStable(tCtx)
 
-		// Pods created before or after the feature was disabled should still
-		// be able to be deleted.
+		// 无论 Pod 是在功能禁用前还是禁用后创建，都应能被删除。
 		b.DeletePodAndWaitForNotFound(tCtx, stuckPod)
 		b.DeletePodAndWaitForNotFound(tCtx, podToDelete)
 

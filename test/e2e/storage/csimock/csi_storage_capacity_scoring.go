@@ -42,7 +42,7 @@ var _ = utils.SIGDescribe("CSI Mock volume storage capacity scoring", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 	m := newMockDriverSetup(f)
 
-	// createCSIStorageCapacity creates a CSIStorageCapacity object for a specific node.
+	// createCSIStorageCapacity 为指定 node 创建 CSIStorageCapacity 对象。
 	createCSIStorageCapacity := func(ctx context.Context, cs clientset.Interface, ns, scName, nodeName string, capacityStr string) *storagev1.CSIStorageCapacity {
 		capacityQuantity := resource.MustParse(capacityStr)
 		capacity := &storagev1.CSIStorageCapacity{
@@ -63,10 +63,10 @@ var _ = utils.SIGDescribe("CSI Mock volume storage capacity scoring", func() {
 		return createdCapacity
 	}
 
-	// These tests cover StorageCapacityScoring with dynamic provisioning only.
+	// 这些测试只覆盖动态 provisioning 场景下的 StorageCapacityScoring。
 	//
-	// The mock CSI driver is deployed on one node. To keep the tests deterministic,
-	// capacities are configured so that scoring prefers that node.
+	// mock CSI driver 部署在一个 node 上。为了让测试结果确定，
+	// 配置的容量会让打分优先选择该 node。
 	ginkgo.Context("storage capacity scoring", e2efeature.StorageCapacityScoring, func() {
 		var (
 			yes = true
@@ -164,7 +164,7 @@ var _ = utils.SIGDescribe("CSI Mock volume storage capacity scoring", func() {
 						createCSIStorageCapacity(ctx, f.ClientSet, f.Namespace.Name, scName, node.Name, capacity)
 					}
 
-					// Allow the scheduler to sync CSIStorageCapacity objects.
+					// 留出时间让 scheduler 同步 CSIStorageCapacity 对象。
 					syncDelay := 5 * time.Second
 					time.Sleep(syncDelay)
 
@@ -186,13 +186,13 @@ var _ = utils.SIGDescribe("CSI Mock volume storage capacity scoring", func() {
 					ginkgo.By("Deleting the first pod")
 					err = e2epod.DeletePodWithWait(ctx, f.ClientSet, pod)
 					framework.ExpectNoError(err, "delete first pod")
-					// Remove from cleanup lists to avoid double cleanup.
+					// 从清理列表中移除，避免重复清理。
 					m.pods = m.pods[:len(m.pods)-1]
 
 					ginkgo.By("Deleting the first PVC")
 					err = f.ClientSet.CoreV1().PersistentVolumeClaims(f.Namespace.Name).Delete(ctx, claim.Name, metav1.DeleteOptions{})
 					framework.ExpectNoError(err, "delete first PVC")
-					// Remove from cleanup lists to avoid double cleanup.
+					// 从清理列表中移除，避免重复清理。
 					m.pvcs = m.pvcs[:len(m.pvcs)-1]
 
 					ginkgo.By("Creating a second pod with a new PVC")

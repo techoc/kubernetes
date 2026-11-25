@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This test checks that various VolumeSources are working.
+// 本测试检查各种 VolumeSource 是否正常工作。
 
 package testsuites
 
@@ -44,8 +44,7 @@ type volumesTestSuite struct {
 
 var _ storageframework.TestSuite = &volumesTestSuite{}
 
-// InitCustomVolumesTestSuite returns volumesTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumesTestSuite 返回使用自定义测试 pattern、实现了 TestSuite 接口的 volumesTestSuite。
 func InitCustomVolumesTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumesTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -58,11 +57,10 @@ func InitCustomVolumesTestSuite(patterns []storageframework.TestPattern) storage
 	}
 }
 
-// InitVolumesTestSuite returns volumesTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumesTestSuite 返回使用测试套件默认 pattern、实现了 TestSuite 接口的 volumesTestSuite。
 func InitVolumesTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
-		// Default fsType
+		// 默认 fsType
 		storageframework.DefaultFsInlineVolume,
 		storageframework.DefaultFsPreprovisionedPV,
 		storageframework.DefaultFsDynamicPV,
@@ -82,7 +80,7 @@ func InitVolumesTestSuite() storageframework.TestSuite {
 		storageframework.NtfsInlineVolume,
 		storageframework.NtfsPreprovisionedPV,
 		storageframework.NtfsDynamicPV,
-		// block volumes
+		// 块卷
 		storageframework.BlockVolModePreprovisionedPV,
 		storageframework.BlockVolModeDynamicPV,
 	}
@@ -119,15 +117,15 @@ func (t *volumesTestSuite) DefineTests(driver storageframework.TestDriver, patte
 	var dInfo = driver.GetDriverInfo()
 	var l local
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意，它还会注册一个 AfterEach，使 f 变得不可用。
+	// 任何使用 f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("volume", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	init := func(ctx context.Context) {
 		l = local{}
 
-		// Now do the more expensive test initialization.
+		// 在这里执行开销较大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.migrationCheck = newMigrationOpCheck(ctx, f.ClientSet, f.ClientConfig(), dInfo.InTreePluginName)
 		testVolumeSizeRange := t.GetTestSuiteInfo().SupportedSizeRange
@@ -158,7 +156,7 @@ func (t *volumesTestSuite) DefineTests(driver storageframework.TestDriver, patte
 				Volume: *l.resource.VolSource,
 				Mode:   pattern.VolMode,
 				File:   "index.html",
-				// Must match content
+				// 必须与写入的内容一致
 				ExpectedContent: fmt.Sprintf("Hello from %s from namespace %s",
 					dInfo.Name, f.Namespace.Name),
 			},
@@ -169,10 +167,9 @@ func (t *volumesTestSuite) DefineTests(driver storageframework.TestDriver, patte
 			fsGroupVal := int64(1234)
 			fsGroup = &fsGroupVal
 		}
-		// We set same fsGroup for both pods, because for same volumes (e.g.
-		// local), plugin skips setting fsGroup if volume is already mounted
-		// and we don't have reliable way to detect volumes are unmounted or
-		// not before starting the second pod.
+		// 两个 pod 使用相同的 fsGroup：对于同一个卷（如 local），
+		// 如果卷已被挂载，插件会跳过设置 fsGroup，而我们也无法在启动
+		// 第二个 pod 前可靠地检测卷是否已卸载。
 		e2evolume.InjectContent(ctx, f, config, fsGroup, pattern.FsType, tests)
 		if driver.GetDriverInfo().Capabilities[storageframework.CapPersistence] {
 			e2evolume.TestVolumeClient(ctx, f, config, fsGroup, pattern.FsType, tests)
@@ -181,7 +178,7 @@ func (t *volumesTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		}
 	})
 
-	// Exec works only on filesystem volumes
+	// exec 只适用于 filesystem volume
 	if pattern.VolMode != v1.PersistentVolumeBlock &&
 		driver.GetDriverInfo().Capabilities[storageframework.CapExec] {
 		ginkgo.It("should allow exec of files on the volume", func(ctx context.Context) {
@@ -250,11 +247,10 @@ func testScriptInPod(
 	framework.ExpectNoError(err, "while deleting pod")
 }
 
-// generateWriteandExecuteScriptFileCmd generates the corresponding command lines to write a file with the given file path
-// and also execute this file.
-// Depending on the Node OS is Windows or linux, the command will use powershell or /bin/sh
+// generateWriteandExecuteScriptFileCmd 生成相应的命令行，把给定内容写入指定路径的文件并执行。
+// 根据 Node 操作系统是 Windows 还是 Linux，命令会使用 powershell 或 /bin/sh。
 func generateWriteandExecuteScriptFileCmd(content, fileName, filePath string) []string {
-	// for windows cluster, modify the Pod spec.
+	// Windows 集群需要调整 Pod spec。
 	if framework.NodeOSDistroIs("windows") {
 		scriptName := fmt.Sprintf("%s.ps1", fileName)
 		fullPath := filepath.Join(filePath, scriptName)

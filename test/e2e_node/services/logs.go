@@ -22,46 +22,44 @@ import (
 	"fmt"
 )
 
-// LogFileData holds data about logfiles to fetch with a journalctl command or
-// file from a node's file system.
+// LogFileData 描述要通过 journalctl 命令或从节点文件系统获取的日志文件
 type LogFileData struct {
-	// Name of the log file.
+	// 日志文件名
 	Name string `json:"name"`
-	// Files are possible absolute paths of the log file.
+	// Files 是日志文件可能的绝对路径
 	Files []string `json:"files"`
-	// JournalctlCommand is the journalctl command to get log.
+	// JournalctlCommand 是获取日志的 journalctl 命令
 	JournalctlCommand []string `json:"journalctl"`
 }
 
-// logFiles are the type used to collect all log files. The key is the expected
-// name of the log file after collected.
+// logFiles 用于收集所有日志文件，key 是收集后日志文件的预期名称
 type logFiles map[string]LogFileData
 
-// String function of flag.Value
+// String 实现 flag.Value 接口
 func (l *logFiles) String() string {
 	return fmt.Sprint(*l)
 }
 
-// Set function of flag.Value
+// Set 实现 flag.Value 的 Set 方法
 func (l *logFiles) Set(value string) error {
 	var log LogFileData
 	if err := json.Unmarshal([]byte(value), &log); err != nil {
 		return err
 	}
-	// Note that we assume all white space in flag string is separating fields
+	// 这里假设 flag 字符串中的所有空白都是字段分隔符
 	logs := *l
 	logs[log.Name] = log
 	return nil
 }
 
-// extraLogs is the extra logs specified by the test runner.
+// extraLogs 是测试运行器指定的额外日志
 var extraLogs = make(logFiles)
 
 func init() {
 	flag.Var(&extraLogs, "extra-log", "Extra log to collect after test in the json format of LogFile.")
 }
 
-// requiredLogs is the required logs to collect after the test.
+// requiredLogs 是测试后必须收集的日志
 var requiredLogs = []LogFileData{
 	{
 		Name:              "kern.log",
@@ -84,7 +82,7 @@ var requiredLogs = []LogFileData{
 	},
 }
 
-// getLogFiles get all logs to collect after the test.
+// getLogFiles 获取测试后需要收集的所有日志
 func getLogFiles() logFiles {
 	logs := make(logFiles)
 	for _, l := range requiredLogs {

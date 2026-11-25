@@ -33,12 +33,12 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// UpdateDeploymentWithRetries updates the specified deployment with retries.
+// UpdateDeploymentWithRetries 带重试地更新指定的 deployment。
 func UpdateDeploymentWithRetries(c clientset.Interface, namespace, name string, applyUpdate testutils.UpdateDeploymentFunc) (*appsv1.Deployment, error) {
 	return testutils.UpdateDeploymentWithRetries(c, namespace, name, applyUpdate, framework.Logf, poll, pollShortTimeout)
 }
 
-// NewDeployment returns a deployment spec with the specified argument.
+// NewDeployment 按指定参数返回一个 deployment spec。
 func NewDeployment(deploymentName string, replicas int32, podLabels map[string]string, containerName, image string, strategyType appsv1.DeploymentStrategyType) *appsv1.Deployment {
 	zero := int64(0)
 	return &appsv1.Deployment{
@@ -71,7 +71,7 @@ func NewDeployment(deploymentName string, replicas int32, podLabels map[string]s
 	}
 }
 
-// CreateDeployment creates a deployment.
+// CreateDeployment 创建一个 deployment。
 func CreateDeployment(ctx context.Context, client clientset.Interface, replicas int32, podLabels map[string]string, nodeSelector map[string]string, namespace string, pvclaims []*v1.PersistentVolumeClaim, securityLevel admissionapi.Level, command string) (*appsv1.Deployment, error) {
 	deploymentSpec := testDeployment(replicas, podLabels, nodeSelector, namespace, pvclaims, securityLevel, command)
 	deployment, err := client.AppsV1().Deployments(namespace).Create(ctx, deploymentSpec, metav1.CreateOptions{})
@@ -86,7 +86,7 @@ func CreateDeployment(ctx context.Context, client clientset.Interface, replicas 
 	return deployment, nil
 }
 
-// GetPodsForDeployment gets pods for the given deployment
+// GetPodsForDeployment 获取给定 deployment 下的 pod。
 func GetPodsForDeployment(ctx context.Context, client clientset.Interface, deployment *appsv1.Deployment) (*v1.PodList, error) {
 	replicaSetSelector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {
@@ -108,24 +108,22 @@ func GetPodsForDeployment(ctx context.Context, client clientset.Interface, deplo
 		ownedReplicaSets = append(ownedReplicaSets, &allReplicaSets.Items[i])
 	}
 
-	// We ignore pod-template-hash because:
-	// 1. The hash result would be different upon podTemplateSpec API changes
-	//    (e.g. the addition of a new field will cause the hash code to change)
-	// 2. The deployment template won't have hash labels
+	// 忽略 pod-template-hash，因为：
+	// 1. podTemplateSpec API 变化（例如新增字段）会导致 hash 结果改变
+	// 2. deployment 模板本身没有 hash label
 	podTemplatesEqualsIgnoringHash := func(template1, template2 *v1.PodTemplateSpec) bool {
 		t1Copy := template1.DeepCopy()
 		t2Copy := template2.DeepCopy()
-		// Remove hash labels from template.Labels before comparing
+		// 比较前先从 template.Labels 中去掉 hash label
 		delete(t1Copy.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
 		delete(t2Copy.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
 		return apiequality.Semantic.DeepEqual(t1Copy, t2Copy)
 	}
 
 	var replicaSet *appsv1.ReplicaSet
-	// In rare cases, such as after cluster upgrades, Deployment may end up with
-	// having more than one new ReplicaSets that have the same template as its template,
-	// see https://github.com/kubernetes/kubernetes/issues/40415
-	// We deterministically choose the oldest new ReplicaSet.
+	// 极少数情况下（例如集群升级后），Deployment 可能出现多个模板相同的新
+	// ReplicaSet，见 https://github.com/kubernetes/kubernetes/issues/40415
+	// 这里确定性地选择最早创建的那个。
 	sort.Sort(replicaSetsByCreationTimestamp(ownedReplicaSets))
 	for i, rs := range ownedReplicaSets {
 		if !podTemplatesEqualsIgnoringHash(&ownedReplicaSets[i].Spec.Template, &deployment.Spec.Template) {
@@ -162,7 +160,7 @@ func GetPodsForDeployment(ctx context.Context, client clientset.Interface, deplo
 	return ownedPods, nil
 }
 
-// replicaSetsByCreationTimestamp sorts a list of ReplicaSet by creation timestamp, using their names as a tie breaker.
+// replicaSetsByCreationTimestamp 按创建时间排序 ReplicaSet 列表，时间相同时以名称为 tie breaker。
 type replicaSetsByCreationTimestamp []*appsv1.ReplicaSet
 
 func (o replicaSetsByCreationTimestamp) Len() int      { return len(o) }
@@ -174,8 +172,8 @@ func (o replicaSetsByCreationTimestamp) Less(i, j int) bool {
 	return o[i].CreationTimestamp.Before(&o[j].CreationTimestamp)
 }
 
-// testDeployment creates a deployment definition based on the namespace. The deployment references the PVC's
-// name.  A slice of BASH commands can be supplied as args to be run by the pod
+// testDeployment 在指定 namespace 下创建 deployment 定义，引用给定 PVC 的名称。
+// 可传入一组 BASH 命令作为 pod 要执行的参数。
 func testDeployment(replicas int32, podLabels map[string]string, nodeSelector map[string]string, namespace string, pvclaims []*v1.PersistentVolumeClaim, securityLevel admissionapi.Level, command string) *appsv1.Deployment {
 	if len(command) == 0 {
 		command = e2epod.InfiniteSleepCommand

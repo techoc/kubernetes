@@ -28,10 +28,9 @@ import (
 	e2eskipper "k8s.io/kubernetes/test/e2e/framework/skipper"
 )
 
-// The line number of the following code is checked in TestFailureOutput below.
-// Be careful when moving it around or changing the import statements above.
-// Here are some intentionally blank lines that can be removed to compensate
-// for future additional import statements.
+// 下面代码的行号会在 TestFailureOutput 中校验。
+// 移动这段代码或修改上面的 import 时要小心。
+// 这里特意留了一些空行，将来新增 import 时可以删掉这些空行来补偿行数。
 //
 //
 //
@@ -48,7 +47,7 @@ import (
 //
 //
 //
-// This must be line #50.
+// 这里必须是第 50 行。
 
 var _ = ginkgo.Describe("e2e", func() {
 	ginkgo.It("skips", func() {
@@ -57,12 +56,11 @@ var _ = ginkgo.Describe("e2e", func() {
 })
 
 func TestSkip(t *testing.T) {
-	// This simulates how test/e2e uses the framework and how users
-	// invoke test/e2e.
+	// 模拟 test/e2e 使用 framework 的方式，以及用户调用 test/e2e 的方式。
 	framework.RegisterCommonFlags(flag.CommandLine)
 	framework.RegisterClusterFlags(flag.CommandLine)
 	for flagname, value := range map[string]string{
-		// This simplifies the text comparison.
+		// 简化文本比较。
 		"ginkgo.no-color": "true",
 	} {
 		if err := flag.Set(flagname, value); err != nil {

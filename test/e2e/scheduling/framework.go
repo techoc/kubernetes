@@ -32,14 +32,14 @@ var (
 	timeout  = 10 * time.Minute
 	waitTime = 2 * time.Second
 
-	// SIGDescribe annotates the test with the SIG label.
+	// SIGDescribe 为测试标注 SIG 标签。
 	SIGDescribe = framework.SIGDescribe("scheduling")
 )
 
-// WaitForStableCluster waits until all existing pods are scheduled and returns their amount.
+// WaitForStableCluster 等待所有现有 pod 完成调度，并返回其数量。
 func WaitForStableCluster(c clientset.Interface, workerNodes sets.Set[string]) int {
 	startTime := time.Now()
-	// Wait for all pods to be scheduled.
+	// 等待所有 pod 完成调度。
 	allScheduledPods, allNotScheduledPods := getScheduledAndUnscheduledPods(c, workerNodes)
 	for len(allNotScheduledPods) != 0 {
 		time.Sleep(waitTime)
@@ -56,12 +56,12 @@ func WaitForStableCluster(c clientset.Interface, workerNodes sets.Set[string]) i
 	return len(allScheduledPods)
 }
 
-// getScheduledAndUnscheduledPods lists scheduled and not scheduled pods in all namespaces, with succeeded and failed pods filtered out.
+// getScheduledAndUnscheduledPods 列出所有 namespace 中已调度和未调度的 pod，并过滤掉成功和失败的 pod。
 func getScheduledAndUnscheduledPods(c clientset.Interface, workerNodes sets.Set[string]) (scheduledPods, notScheduledPods []v1.Pod) {
 	pods, err := c.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	framework.ExpectNoError(err, fmt.Sprintf("listing all pods in namespace %q while waiting for stable cluster", metav1.NamespaceAll))
 
-	// API server returns also Pods that succeeded. We need to filter them out.
+	// API server 还会返回已成功的 Pod，需要将其过滤掉。
 	filteredPods := make([]v1.Pod, 0, len(pods.Items))
 	for _, p := range pods.Items {
 		if !podTerminated(p) {

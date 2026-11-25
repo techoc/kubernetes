@@ -54,25 +54,25 @@ var _ = SIGDescribe("Discovery", func() {
 	})
 
 	ginkgo.It("should accurately determine present and missing resources", func(ctx context.Context) {
-		// checks that legacy api group resources function
+		// 检查 legacy api group 的资源是否工作
 		ok, err := clientdiscovery.IsResourceEnabled(f.ClientSet.Discovery(), schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"})
 		framework.ExpectNoError(err)
 		if !ok {
 			framework.Failf("namespace.v1 should always be present")
 		}
-		// checks that non-legacy api group resources function
+		// 检查非 legacy api group 的资源是否工作
 		ok, err = clientdiscovery.IsResourceEnabled(f.ClientSet.Discovery(), schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"})
 		framework.ExpectNoError(err)
 		if !ok {
 			framework.Failf("deployments.v1.apps should always be present")
 		}
-		// checks that nonsense resources in existing api groups function
+		// 检查已有 api group 中无意义的资源名是否按预期处理
 		ok, err = clientdiscovery.IsResourceEnabled(f.ClientSet.Discovery(), schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "please-dont-ever-create-this"})
 		framework.ExpectNoError(err)
 		if ok {
 			framework.Failf("please-dont-ever-create-this.v1.apps should never be present")
 		}
-		// checks that resources resources in nonsense api groups function
+		// 检查无意义 api group 中的资源是否按预期处理
 		ok, err = clientdiscovery.IsResourceEnabled(f.ClientSet.Discovery(), schema.GroupVersionResource{Group: "not-these-apps", Version: "v1", Resource: "deployments"})
 		framework.ExpectNoError(err)
 		if ok {
@@ -98,10 +98,8 @@ var _ = SIGDescribe("Discovery", func() {
 				storageVersion = v.Name
 			}
 		}
-		// DISCLAIMER: the algorithm of deriving the storageVersionHash
-		// is an implementation detail, which shouldn't be relied on by
-		// the clients. The following calculation is for test purpose
-		// only.
+		// 免责声明：storageVersionHash 的推导算法属于实现细节，
+		// 客户端不应依赖它。以下计算仅用于测试。
 		expected := discovery.StorageVersionHash(spec.Group, storageVersion, spec.Names.Kind)
 
 		for _, r := range resources.APIResources {
@@ -120,12 +118,12 @@ var _ = SIGDescribe("Discovery", func() {
 	/*
 	   Release : v1.19
 	   Testname: Discovery, confirm the PreferredVersion for each api group
-	   Description: Ensure that a list of apis is retrieved.
-	   Each api group found MUST return a valid PreferredVersion unless the group suffix is example.com.
+	   Description: 确保能取到 api 列表。
+	   除后缀为 example.com 的 group 外，每个 api group MUST 返回有效的 PreferredVersion。
 	*/
 	framework.ConformanceIt("should validate PreferredVersion for each APIGroup", func(ctx context.Context) {
 
-		// get list of APIGroup endpoints
+		// 获取 APIGroup endpoint 列表
 		list := &metav1.APIGroupList{}
 		err := f.ClientSet.Discovery().RESTClient().Get().AbsPath("/apis/").Do(ctx).Into(list)
 		framework.ExpectNoError(err, "Failed to find /apis/")
@@ -133,12 +131,12 @@ var _ = SIGDescribe("Discovery", func() {
 
 		for _, group := range list.Groups {
 			if strings.HasSuffix(group.Name, ".example.com") {
-				// ignore known example dynamic API groups that are added/removed during the e2e test run
+				// 忽略 e2e 测试运行期间动态增删的已知示例 API group
 				continue
 			}
 			framework.Logf("Checking APIGroup: %v", group.Name)
 
-			// locate APIGroup endpoint
+			// 定位 APIGroup endpoint
 			checkGroup := &metav1.APIGroup{}
 			apiPath := "/apis/" + group.Name + "/"
 			err = f.ClientSet.Discovery().RESTClient().Get().AbsPath(apiPath).Do(ctx).Into(checkGroup)
@@ -147,7 +145,7 @@ var _ = SIGDescribe("Discovery", func() {
 			framework.Logf("PreferredVersion.GroupVersion: %s", checkGroup.PreferredVersion.GroupVersion)
 			framework.Logf("Versions found %v", checkGroup.Versions)
 
-			// confirm that the PreferredVersion is a valid version
+			// 确认 PreferredVersion 是列出的有效版本之一
 			match := false
 			for _, version := range checkGroup.Versions {
 				if version.GroupVersion == checkGroup.PreferredVersion.GroupVersion {
@@ -165,9 +163,9 @@ var _ = SIGDescribe("Discovery", func() {
 	/*
 		Release: v1.28
 		Testname: Discovery, confirm the groupVerion and a resourcefrom each apiGroup
-		Description: A resourceList MUST be found for each apiGroup that is retrieved.
-		For each apiGroup the groupVersion MUST equal the groupVersion as reported by
-		the schema. From each resourceList a valid resource MUST be found.
+		Description: 取到的每个 apiGroup MUST 都能找到对应的 resourceList。
+		每个 apiGroup 的 groupVersion MUST 与 schema 报告的一致。
+		每个 resourceList 中 MUST 能找到至少一个有效资源。
 	*/
 	framework.ConformanceIt("should locate the groupVersion and a resource within each APIGroup", func(ctx context.Context) {
 

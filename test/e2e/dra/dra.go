@@ -73,21 +73,19 @@ import (
 )
 
 const (
-	// podStartTimeout is how long to wait for the pod to be started.
+	// podStartTimeout 是等待 pod 启动的最长时间。
 	podStartTimeout = 5 * time.Minute
 )
 
-// The "DRA" label is used to select tests related to DRA in a Ginkgo label filter.
+// "DRA" label 用于在 Ginkgo label filter 中筛选 DRA 相关测试。
 //
-// Sub-tests starting with "control plane" when testing only the control plane components, without depending
-// on DRA support in the kubelet.
+// 以 "control plane" 开头的子测试只测 control plane 组件，不依赖 kubelet 的 DRA 支持。
 //
-// Sub-tests starting with "kubelet" depend on DRA and plugin support in the kubelet.
+// 以 "kubelet" 开头的子测试依赖 kubelet 对 DRA 和插件的支持。
 var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 	f := framework.NewDefaultFramework("dra")
 
-	// The driver containers have to run with sufficient privileges to
-	// modify /var/lib/kubelet/plugins.
+	// driver 容器需要足够的权限才能修改 /var/lib/kubelet/plugins。
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	f.Context("CRUD Tests", func() {
@@ -105,13 +103,13 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						Spec: resourceapi.DeviceClassSpec{
 							Selectors: []resourceapi.DeviceSelector{{
 								CEL: &resourceapi.CELDeviceSelector{
-									Expression: "false", // Matches no devices
+									Expression: "false", // 不匹配任何设备
 								},
 							}},
 						},
 					},
 					UpdateSpec: func(obj *resourceapi.DeviceClass) *resourceapi.DeviceClass {
-						obj.Spec.Selectors[0].CEL.Expression = "1 == 0" // Still matches no devices.
+						obj.Spec.Selectors[0].CEL.Expression = "1 == 0" // 仍不匹配任何设备
 						return obj
 					},
 					StrategicMergePatchSpec: `{"spec": {"selectors": [{"cel": {"expression": "1 == 0"}}]}}`,
@@ -134,7 +132,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					Namespaced: ptr.To(false),
 					InitialSpec: &resourceapi.DeviceTaintRule{
 						Spec: resourceapi.DeviceTaintRuleSpec{
-							// Empty DeviceSelector => no devices selected, so this test is safe.
+							// 空的 DeviceSelector 不会选中任何设备，所以这个测试是安全的。
 							Taint: resourceapi.DeviceTaint{
 								Key:    "testing",
 								Effect: resourceapi.DeviceTaintEffectNone,
@@ -184,7 +182,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						},
 					},
 					UpdateSpec: func(obj *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
-						// The spec is immutable, so let's add a label instead.
+						// spec 不可变，所以改为添加一个 label。
 						if obj.Labels == nil {
 							obj.Labels = make(map[string]string)
 						}
@@ -192,16 +190,16 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						return obj
 					},
 					UpdateStatus: func(obj *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
-						// Nothing allocated" is a valid allocation result.
+						// "Nothing allocated" 也是合法的 allocation 结果。
 						obj.Status.Allocation = &resourceapi.AllocationResult{}
 						return obj
 					},
 
-					// This test case uses all available patch types to demonstrate what this looks like
-					// and that TestResource supports them. Strategic merge patch, apply patch, and JSON
-					// merge patch are identical for these simple modifications.
+					// 这个用例用上所有 patch 类型，既展示它们的写法，也验证 TestResource 都支持。
+					// 对于这些简单修改，strategic merge patch、apply patch 和 JSON merge patch
+					// 的效果完全相同。
 					//
-					// Testing with only one patch type would be sufficient for conformance.
+					// 从 conformance 角度只测一种 patch 类型就够了。
 					ApplyPatchSpec:            `{"metadata": {"labels": {"test.dra.example.com": "test"}}}`,
 					StrategicMergePatchSpec:   `{"metadata": {"labels": {"test.dra.example.com": "test"}}}`,
 					JSONMergePatchSpec:        `{"metadata": {"labels": {"test.dra.example.com": "test"}}}`,
@@ -238,7 +236,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						},
 					},
 					UpdateSpec: func(obj *resourceapi.ResourceClaimTemplate) *resourceapi.ResourceClaimTemplate {
-						// The spec is immutable, so let's add a label instead.
+						// spec 不可变，所以改为添加一个 label。
 						if obj.Labels == nil {
 							obj.Labels = make(map[string]string)
 						}
@@ -269,7 +267,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 								ResourceSliceCount: 1,
 							},
 							NodeName: ptr.To("no-such-node"),
-							// The pool is empty -> no devices.
+							// pool 为空，因此没有设备。
 						},
 					},
 					UpdateSpec: func(obj *resourceapi.ResourceSlice) *resourceapi.ResourceSlice {
@@ -291,7 +289,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						},
 					},
 					UpdateSpec: func(obj *resourcealphaapi.ResourcePoolStatusRequest) *resourcealphaapi.ResourcePoolStatusRequest {
-						// The spec is immutable, so add a label instead.
+						// spec 不可变，所以改为添加一个 label。
 						if obj.Labels == nil {
 							obj.Labels = make(map[string]string)
 						}
@@ -300,7 +298,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					},
 					StrategicMergePatchSpec: `{"metadata": {"labels": {"test.dra.example.com": "test"}}}`,
 
-					// UpdateStatus is missing here. Needs to be added before graduation.
+					// 这里缺少 UpdateStatus，晋升为正式特性前需要补上。
 				},
 			)
 		})
@@ -316,8 +314,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 
 		ginkgo.It("must retry NodePrepareResources", func(ctx context.Context) {
-			// We have exactly one host. The API version depends on the kubelet
-			// we test with (version skew!), so we need to be a bit flexible.
+			// 只有一个 host，但 API 版本取决于测试所用的 kubelet（有版本偏差！），
+			// 所以要灵活处理。
 			mV1Beta1 := drautils.MethodInstance{NodeName: driver.Nodenames()[0], FullMethod: "/k8s.io.kubelet.pkg.apis.dra.v1beta1.DRAPlugin/NodePrepareResources"}
 			mV1 := drautils.MethodInstance{NodeName: driver.Nodenames()[0], FullMethod: "/k8s.io.kubelet.pkg.apis.dra.v1.DRAPlugin/NodePrepareResources"}
 
@@ -353,10 +351,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			b.Create(f.TContext(ctx), claim)
 			pod := b.PodExternal(claim.Name)
 
-			// This bypasses scheduling and therefore the pod gets
-			// to run on the node although the claim is not ready.
-			// Because the parameters are missing, the claim
-			// also cannot be allocated later.
+			// 这里绕过调度，所以即便 claim 尚未就绪，pod 也能在节点上运行。
+			// 由于缺少参数，该 claim 之后也无法被分配。
 			pod.Spec.NodeName = nodes.NodeNames[0]
 			b.Create(f.TContext(ctx), pod)
 
@@ -407,8 +403,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 
 		ginkgo.It("must map configs and devices to the right containers", func(ctx context.Context) {
-			// Several claims, each with three requests and three configs.
-			// One config applies to all requests, the other two only to one request each.
+			// 有多个 claim，每个都包含三个 request 和三个 config。
+			// 其中一个 config 作用于所有 request，另外两个各只作用于一个 request。
 			claimForAllContainers := b.ExternalClaim()
 			claimForAllContainers.Name = "all"
 			claimForAllContainers.Spec.Devices.Requests = append(claimForAllContainers.Spec.Devices.Requests,
@@ -456,17 +452,16 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				},
 			}
 
-			// Add a second container.
+			// 添加第二个容器。
 			pod.Spec.Containers = append(pod.Spec.Containers, *pod.Spec.Containers[0].DeepCopy())
 			pod.Spec.Containers[0].Name = "container0"
 			pod.Spec.Containers[1].Name = "container1"
 
-			// All claims use unique env variables which can be used to verify that they
-			// have been mapped into the right containers. In addition, the test driver
-			// also sets "claim_<claim name>_<request name>=true" with non-alphanumeric
-			// replaced by underscore.
+			// 每个 claim 使用唯一的环境变量，便于验证它们被映射到了正确的容器。
+			// 此外 test driver 还会设置 "claim_<claim name>_<request name>=true"，
+			// 其中非字母数字字符会被替换为下划线。
 
-			// Both requests (claim_*_req*) and all user configs (user_*_config*).
+			// 包括所有 request（claim_*_req*）和所有 user config（user_*_config*）。
 			allContainersEnv := []string{
 				"user_all_config0", "true",
 				"user_all_config1", "true",
@@ -476,7 +471,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				"claim_all_req2", "true",
 			}
 
-			// Everything from the "all" claim and everything from the "container0" claim.
+			// "all" claim 和 "container0" claim 中的全部内容。
 			pod.Spec.Containers[0].Resources.Claims = []v1.ResourceClaim{{Name: "all"}, {Name: "container0"}}
 			container0Env := []string{
 				"user_container0_config0", "true",
@@ -488,13 +483,13 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			}
 			container0Env = append(container0Env, allContainersEnv...)
 
-			// Everything from the "all" claim, but only the second request from the "container1" claim.
-			// The first two configs apply.
+			// "all" claim 的全部内容，但 "container1" claim 只取第二个 request。
+			// 前两个 config 生效。
 			pod.Spec.Containers[1].Resources.Claims = []v1.ResourceClaim{{Name: "all"}, {Name: "container1", Request: "req1"}}
 			container1Env := []string{
 				"user_container1_config0", "true",
 				"user_container1_config1", "true",
-				// Does not apply: user_container1_config2
+				// 不生效：user_container1_config2
 				"claim_container1_req1", "true",
 			}
 			container1Env = append(container1Env, allContainersEnv...)
@@ -507,22 +502,16 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			drautils.TestContainerEnv(f.TContext(ctx), pod, pod.Spec.Containers[1].Name, true, container1Env...)
 		})
 
-		// https://github.com/kubernetes/kubernetes/issues/131513 was fixed in master for 1.34 and not backported,
-		// so this test only passes for kubelet >= 1.34.
+		// https://github.com/kubernetes/kubernetes/issues/131513 在 master 上于 1.34 修复且未回 cherry-pick，
+		// 所以本测试仅在 kubelet >= 1.34 时通过。
 		f.It("blocks new pod after force-delete", f.WithKubeletMinVersion("1.34"), func(ctx context.Context) {
-			// The problem with a force-deleted pod is that kubelet
-			// is not necessarily done yet with tearing down the
-			// pod at the time when the pod and its claim are
-			// already removed. The user can replace the claim and
-			// pod with new instances under the same name.  The
-			// kubelet then needs to detect that the new claim is
-			// not the same as the one that kubelet currently works
-			// on and that the new pod cannot start until the old
-			// one is torn down.
+			// 强制删除 pod 的问题在于：pod 和 claim 已经被移除时，kubelet
+			// 可能还没完成旧 pod 的拆除。用户可以用同名的新实例替换 claim 和 pod，
+			// kubelet 需要识别出新旧 claim 并非同一个，并且在旧实例拆除完成前
+			// 不让新 pod 启动。
 			//
-			// This test delays termination of the first pod to ensure
-			// that the race goes bad (old pod pending shutdown when
-			// new one arrives) and always schedules to the same node.
+			// 本测试刻意延迟第一个 pod 的终止，以触发这种竞态（新 pod 到来时
+			// 旧 pod 仍待关闭），并始终把 pod 调度到同一个节点。
 			claim := b.ExternalClaim()
 			pod := b.PodExternal(claim.Name)
 			node := nodes.NodeNames[0]
@@ -534,17 +523,17 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			forceDelete := metav1.DeleteOptions{GracePeriodSeconds: ptr.To(int64(0))}
 			framework.ExpectNoError(f.ClientSet.CoreV1().Pods(f.Namespace.Name).Delete(ctx, pod.Name, forceDelete))
 
-			// Fail NodeUnprepareResources to simulate long grace period
+			// 让 NodeUnprepareResources 失败，模拟较长的优雅退出期
 			unprepareResources := drautils.MethodInstance{NodeName: node, FullMethod: "/k8s.io.kubelet.pkg.apis.dra.v1.DRAPlugin/NodeUnprepareResources"}
 			driver.Fail(unprepareResources, true)
 
-			// The pod should get deleted immediately.
+			// pod 应该立即被删除。
 			_, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 			if !apierrors.IsNotFound(err) {
 				framework.Failf("Expected 'not found' error, got: %v", err)
 			}
 
-			// The claim may take a bit longer because of the allocation and finalizer.
+			// 因为涉及分配和 finalizer，claim 的删除可能稍慢一些。
 			framework.ExpectNoError(f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Delete(ctx, claim.Name, forceDelete))
 			gomega.Eventually(ctx, func(ctx context.Context) (*resourceapi.ResourceClaim, error) {
 				claim, err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
@@ -558,9 +547,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			ginkgo.By("Re-creating the same claim and pod")
 			newClaim := b.Create(f.TContext(ctx), claim, pod)[0].(*resourceapi.ResourceClaim)
 
-			// Keep blocking NodeUnprepareResources for the old pod
-			// until the new pod calls NodePrepareResources and fails.
-			// This ensures that the race is triggered.
+			// 持续让旧 pod 的 NodeUnprepareResources 失败，直到新 pod
+			// 调用 NodePrepareResources 并失败，确保竞态一定被触发。
 			expectedEvent := fields.Set{
 				"involvedObject.kind":      "Pod",
 				"involvedObject.name":      pod.Name,
@@ -568,9 +556,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				"reason":                   events.FailedPrepareDynamicResources,
 			}.AsSelector().String()
 
-			// 10 min timeout (PodStartTimeout * 2) should be enough
-			// for Kubelet to emit multiple events, so the test should
-			// be able to catch at least one of them.
+			// 10 分钟超时（PodStartTimeout * 2）足以让 kubelet 发出多条 event，
+			// 因此测试应该能捕获到至少一条。
 			framework.ExpectNoError(e2eevents.WaitTimeoutForEvent(
 				ctx,
 				f.ClientSet,
@@ -583,13 +570,13 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 			b.TestPod(f.TContext(ctx), pod)
 
-			// The pod must not have started before NodeUnprepareResources was called for the old one,
-			// i.e. what is prepared now must be the new claim.
+			// 在旧 pod 的 NodeUnprepareResources 被调用之前，新 pod 不能启动，
+			// 也就是说当前 prepared 的必须是新 claim。
 			gomega.Expect(driver.Nodes[node].GetPreparedResources()).Should(gomega.Equal([]testdriverapp.ClaimID{{Name: newClaim.Name, UID: newClaim.UID}}), "Only new claim should be prepared now because new pod is running.")
 		})
 
 		f.It("DaemonSet with admin access", func(ctx context.Context) {
-			// Ensure namespace has the dra admin label.
+			// 确保 namespace 带有 dra admin label。
 			_, err := f.ClientSet.CoreV1().Namespaces().Apply(ctx,
 				applyv1.Namespace(f.Namespace.Name).WithLabels(map[string]string{"resource.kubernetes.io/admin-access": "true"}),
 				metav1.ApplyOptions{FieldManager: f.UniqueName})
@@ -597,7 +584,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 			pod, template := b.PodInline()
 			template.Spec.Spec.Devices.Requests[0].Exactly.AdminAccess = ptr.To(true)
-			// Limit the daemon set to the one node where we have the driver.
+			// 把 daemon set 限制在运行 driver 的那个节点上。
 			nodeName := nodes.NodeNames[0]
 			pod.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": nodeName}
 			pod.Spec.RestartPolicy = v1.RestartPolicyAlways
@@ -632,7 +619,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 	})
 
-	// ResourcePoolStatusRequest tests with network resources - no kubelet needed.
+	// 用 network 资源测试 ResourcePoolStatusRequest，不需要 kubelet。
 	framework.Context("control plane", f.WithFeatureGate(features.DRAResourcePoolStatus), func() {
 		nodes := drautils.NewNodes(f, 1, 1)
 		driver := drautils.NewDriver(f, nodes, drautils.NetworkResources(10, false))
@@ -650,7 +637,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				framework.ExpectNoError(err)
 				defer func() { _ = client.Delete(ctx, request.Name, metav1.DeleteOptions{}) }()
 
-				// Wait for controller to set status and validate.
+				// 等待 controller 写入 status 并校验。
 				g.Eventually(ctx, framework.GetObject(client.Get, request.Name, metav1.GetOptions{})).
 					WithTimeout(15 * time.Second).
 					Should(gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -699,7 +686,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				framework.ExpectNoError(err)
 				defer func() { _ = client.Delete(ctx, request.Name, metav1.DeleteOptions{}) }()
 
-				// Wait for controller to set status and validate.
+				// 等待 controller 写入 status 并校验。
 				g.Eventually(ctx, framework.GetObject(client.Get, request.Name, metav1.GetOptions{})).
 					WithTimeout(15 * time.Second).
 					Should(gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -733,8 +720,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 	})
 
-	// ResourcePoolStatusRequest advanced views. Own driver-less context so each
-	// sub-context's driver is the only one that sets up.
+	// ResourcePoolStatusRequest 的高级视图。使用独立的无 driver context，
+	// 让每个子 context 各自只初始化自己的 driver。
 	framework.Context("control plane views", f.WithFeatureGate(features.DRAResourcePoolStatus), func() {
 		expectPool := func(ctx context.Context, driverName string, poolMatcher any) {
 			client := f.ClientSet.ResourceV1alpha3().ResourcePoolStatusRequests()
@@ -858,7 +845,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			json.NewDecoder(strings.NewReader(stdout)), &md,
 			devicemetadata.DecodeMetadataWithValidationResult(&validationResult),
 			devicemetadata.DecodeMetadataStoreGVKResult(&gvk),
-			// Validation is on by default.
+			// 默认启用校验。
 		), "decode metadata file %s", filePath)
 		tCtx.ExpectNoError(validationResult, "validation of metadata file %s", filePath)
 
@@ -989,7 +976,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 	}
 	f.Context("metadata", feature.DynamicResourceAllocation, func() {
-		// v1alpha1 alone not supported!
+		// 不支持单独使用 v1alpha1！
 		f.Context("v1beta1", func() {
 			testMetadata(metadatav1beta1.SchemeGroupVersion /* <- expected, enabled: */, metadatav1beta1.SchemeGroupVersion)
 		})
@@ -1068,7 +1055,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 	})
 
-	// Same "kubelet" context as above, but now with per-node resources.
+	// 与上面的 "kubelet" context 相同，但这里使用每节点独立的资源。
 	f.Context("kubelet", feature.DynamicResourceAllocation, func() {
 		nodes := drautils.NewNodes(f, 1, 4)
 		driver := drautils.NewDriver(f, nodes, drautils.DriverResources(1))
@@ -1077,7 +1064,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		f.It("must manage ResourceSlices", func(ctx context.Context) {
 			driverName := driver.Name
 
-			// Now check for exactly the right set of objects for all nodes.
+			// 现在检查所有节点上的对象集合是否完全符合预期。
 			ginkgo.By("check if ResourceSlice object(s) exist on the API server")
 			resourceClient := f.ClientSet.ResourceV1().ResourceSlices()
 			var expectedObjects []any
@@ -1099,8 +1086,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 								}),
 							),
 						}),
-						// Ignoring some fields, like SharedCounters, because we don't run this test
-						// for PRs (it's slow) and don't want CI breaks when fields get added or renamed.
+						// 忽略 SharedCounters 等字段：这个测试较慢，不会在 PR 中运行，
+						// 也不希望字段新增或重命名时导致 CI 失败。
 						"Spec": gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
 							"Driver":       gomega.Equal(driver.Name),
 							"NodeName":     gomega.Equal(ptr.To(nodeName)),
@@ -1127,7 +1114,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			gomega.Eventually(ctx, getSlices).WithTimeout(20 * time.Second).Should(matchSlices)
 			gomega.Consistently(ctx, getSlices).WithTimeout(20 * time.Second).Should(matchSlices)
 
-			// Removal of node resource slice is tested by the general driver removal code.
+			// 节点 resource slice 的删除由通用的 driver 移除逻辑覆盖。
 		})
 
 		ginkgo.It("supports init containers with external claims", func(ctx context.Context) {
@@ -1135,7 +1122,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod := b.PodExternal(claim.Name)
 			pod.Spec.InitContainers = []v1.Container{pod.Spec.Containers[0]}
 			pod.Spec.InitContainers[0].Name += "-init"
-			// This must succeed for the pod to start.
+			// 这一步必须成功，pod 才能启动。
 			pod.Spec.InitContainers[0].Command = []string{"sh", "-c", "env | grep user_a=b"}
 			b.Create(f.TContext(ctx), pod, claim)
 
@@ -1243,7 +1230,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 	})
 
-	// kubelet tests with individual configurations.
+	// 带独立配置的 kubelet 测试。
 	f.Context("kubelet", feature.DynamicResourceAllocation, func() {
 		ginkgo.It("runs pod after driver starts", func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
@@ -1255,22 +1242,21 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod)
 
-			// Cannot run pod, no devices.
+			// 没有设备，pod 无法运行。
 			framework.ExpectNoError(e2epod.WaitForPodNameUnschedulableInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace))
 
-			// Set up driver, which makes devices available.
+			// 启动 driver，让设备变得可用。
 			driver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesNow(nodes, 1))
 
-			// Now it should run.
+			// 现在 pod 应该能运行了。
 			b.TestPod(tCtx, pod)
 
-			// We need to clean up explicitly because the normal
-			// cleanup doesn't work (driver shuts down first).
+			// 必须显式清理，因为常规清理不生效（driver 会先关闭）。
 			framework.ExpectNoError(f.ClientSet.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}))
 			framework.ExpectNoError(e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace, f.Timeouts.PodDelete))
 		})
 
-		// Seamless upgrade support was added in Kubernetes 1.33.
+		// 无缝升级支持在 Kubernetes 1.33 中引入。
 		f.It("rolling update", f.WithKubeletMinVersion("1.33"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
 			nodes := drautils.NewNodesNow(tCtx, 1, 1)
@@ -1280,40 +1266,39 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			oldDriver.RollingUpdate = true
 			oldDriver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesNow(nodes, 1))
 
-			// We expect one ResourceSlice per node from the driver.
+			// driver 应为每个节点上报一个 ResourceSlice。
 			getSlices := oldDriver.NewGetSlices()
 			tCtx.Eventually(getSlices).Should(gomega.HaveField("Items", gomega.HaveLen(len(nodes.NodeNames))))
 			initialSlices := getSlices(tCtx)
 
-			// Same driver name, different socket paths because of rolling update.
+			// driver 名称相同，但滚动更新使 socket 路径不同。
 			newDriver := drautils.NewDriverInstance(tCtx)
 			newDriver.InstanceSuffix = "-new"
 			newDriver.RollingUpdate = true
 			newDriver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesNow(nodes, 1))
 
-			// Stop old driver instance.
+			// 停止旧 driver 实例。
 			oldDriver.TearDown(tCtx)
 
-			// Build behaves the same for both driver instances.
+			// 两个 driver 实例上报的内容相同。
 			b := drautils.NewBuilderNow(tCtx, oldDriver)
 			claim := b.ExternalClaim()
 			pod := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod)
 			b.TestPod(tCtx, pod)
 
-			// The exact same slices should still exist.
+			// 原先那些 slice 应该仍然存在。
 			finalSlices := getSlices(tCtx)
 			gomega.Expect(finalSlices.Items).Should(gomega.Equal(initialSlices.Items))
 
-			// We need to clean up explicitly because the normal
-			// cleanup doesn't work (driver shuts down first).
+			// 必须显式清理，因为常规清理不生效（driver 会先关闭）。
 			framework.ExpectNoError(f.ClientSet.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}))
 			framework.ExpectNoError(e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace, f.Timeouts.PodDelete))
 		})
 
-		// Regression test for https://github.com/kubernetes/kubernetes/issues/139166:
-		// rolling-update registration sockets must stay within AF_UNIX path limits
-		// even when the driver name is longer than 28 characters.
+		// 回归测试，针对 https://github.com/kubernetes/kubernetes/issues/139166：
+		// 即使 driver 名称超过 28 个字符，滚动更新的注册 socket 也必须在
+		// AF_UNIX 路径长度限制之内。
 		f.It("rolling update with long driver name", f.WithKubeletMinVersion("1.33"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
 			nodes := drautils.NewNodesNow(tCtx, 1, 1)
@@ -1349,7 +1334,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			framework.ExpectNoError(e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace, f.Timeouts.PodDelete))
 		})
 
-		// Seamless upgrade support was added in Kubernetes 1.33.
+		// 无缝升级支持在 Kubernetes 1.33 中引入。
 		f.It("failed update", f.WithKubeletMinVersion("1.33"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
 			nodes := drautils.NewNodesNow(tCtx, 1, 1)
@@ -1359,50 +1344,49 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			oldDriver.RollingUpdate = true
 			oldDriver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesNow(nodes, 1))
 
-			// We expect one ResourceSlice per node from the driver.
+			// driver 应为每个节点上报一个 ResourceSlice。
 			getSlices := oldDriver.NewGetSlices()
 			tCtx.Eventually(getSlices).Should(gomega.HaveField("Items", gomega.HaveLen(len(nodes.NodeNames))))
 			initialSlices := getSlices(tCtx)
 
-			// Same driver name, different socket paths because of rolling update.
+			// driver 名称相同，但滚动更新使 socket 路径不同。
 			newDriver := drautils.NewDriverInstance(tCtx)
 			newDriver.InstanceSuffix = "-new"
 			newDriver.RollingUpdate = true
 			newDriver.ExpectResourceSliceRemoval = false
 			newDriver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesNow(nodes, 1))
 
-			// Stop new driver instance, simulating the failure of the new instance.
-			// The kubelet should still have the old instance.
+			// 停止新 driver 实例，模拟新实例启动失败。
+			// kubelet 应该仍保留旧实例。
 			newDriver.TearDown(tCtx)
 
-			// Build behaves the same for both driver instances.
+			// 两个 driver 实例上报的内容相同。
 			b := drautils.NewBuilderNow(tCtx, oldDriver)
 			claim := b.ExternalClaim()
 			pod := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod)
 			b.TestPod(tCtx, pod)
 
-			// The exact same slices should still exist.
+			// 原先那些 slice 应该仍然存在。
 			finalSlices := getSlices(tCtx)
 			gomega.Expect(finalSlices.Items).Should(gomega.Equal(initialSlices.Items))
 
-			// We need to clean up explicitly because the normal
-			// cleanup doesn't work (driver shuts down first).
+			// 必须显式清理，因为常规清理不生效（driver 会先关闭）。
 			framework.ExpectNoError(f.ClientSet.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}))
 			framework.ExpectNoError(e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace, f.Timeouts.PodDelete))
 		})
 
-		// Seamless upgrade support was added in Kubernetes 1.33.
+		// 无缝升级支持在 Kubernetes 1.33 中引入。
 		f.It("sequential update with pods replacing each other", f.WithKubeletMinVersion("1.33"), framework.WithSlow(), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
 			nodes := drautils.NewNodesNow(tCtx, 1, 1)
 
-			// Same driver name, same socket path.
+			// driver 名称和 socket 路径都相同。
 			oldDriver := drautils.NewDriverInstance(tCtx)
 			oldDriver.InstanceSuffix = "-old"
 			oldDriver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesNow(nodes, 1))
 
-			// Collect set of resource slices for that driver.
+			// 收集该 driver 的 resource slice 集合。
 			listSlices := oldDriver.NewGetSlices()
 			tCtx.Eventually(listSlices).Should(gomega.HaveField("Items", gomega.Not(gomega.BeEmpty())), "driver should have published ResourceSlices, got none")
 			oldSlices := listSlices(tCtx)
@@ -1410,9 +1394,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				framework.Fail("driver should have published ResourceSlices, got none")
 			}
 
-			// "Update" the driver by taking it down and bringing up a new one.
-			// Pods never run in parallel, similar to how a DaemonSet would update
-			// its pods when maxSurge is zero.
+			// 先停掉旧 driver 再启动新 driver，以此模拟 "更新"。
+			// pod 不会并行运行，类似 DaemonSet 在 maxSurge 为零时的更新方式。
 			ginkgo.By("reinstall driver")
 			start := time.Now()
 			oldDriver.TearDown(tCtx)
@@ -1421,17 +1404,17 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			newDriver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesNow(nodes, 1))
 			updateDuration := time.Since(start)
 
-			// Build behaves the same for both driver instances.
+			// 两个 driver 实例上报的内容相同。
 			b := drautils.NewBuilderNow(tCtx, oldDriver)
 			claim := b.ExternalClaim()
 			pod := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod)
 			b.TestPod(tCtx, pod)
 
-			// The slices should have survived the update, but only if it happened
-			// quickly enough. If it took too long (= wipingDelay of 30 seconds in pkg/kubelet/cm/dra/manager.go,
-			// https://github.com/kubernetes/kubernetes/blob/03763fd1abdf0f5d3dfceb3a6b138bb643e37411/pkg/kubelet/cm/dra/manager.go#L113),
-			// the kubelet considered the driver gone and removed them.
+			// slice 应该能挺过更新，但前提是更新足够快。若耗时过长
+			//（即 pkg/kubelet/cm/dra/manager.go 中的 wipingDelay 30 秒，
+			// https://github.com/kubernetes/kubernetes/blob/03763fd1abdf0f5d3dfceb3a6b138bb643e37411/pkg/kubelet/cm/dra/manager.go#L113），
+			// kubelet 会认为 driver 已消失并删除这些 slice。
 			if updateDuration <= 25*time.Second {
 				framework.Logf("Checking resource slices after downtime of %s.", updateDuration)
 				newSlices := listSlices(tCtx)
@@ -1440,33 +1423,33 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				framework.Logf("Not checking resource slices, downtime was too long with %s.", updateDuration)
 			}
 
-			// We need to clean up explicitly because the normal
-			// cleanup doesn't work (driver shuts down first).
+			// 必须显式清理，因为常规清理不生效（driver 会先关闭）。
 			framework.ExpectNoError(f.ClientSet.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}))
 			framework.ExpectNoError(e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace, f.Timeouts.PodDelete))
 
-			// Now shut down for good and wait for the kubelet to react.
-			// This takes time...
+			// 现在彻底关闭 driver，等待 kubelet 响应。
+			// 这需要一些时间……
 			ginkgo.By("uninstalling driver and waiting for ResourceSlice wiping")
 			newDriver.TearDown(tCtx)
 			newDriver.IsGone(tCtx)
 		})
 	})
 
-	// Tests that have the `withKubelet` argument can run with or without kubelet support for plugins and DRA, aka feature.DynamicResourceAllocation.
-	// Without it, the test driver publishes ResourceSlices, but does not attempt to register itself.
-	// Tests only expect pods to get scheduled, but not to become running.
+	// 带 `withKubelet` 参数的测试可在启用或不启用 kubelet 插件与 DRA 支持
+	//（即 feature.DynamicResourceAllocation）的情况下运行。
+	// 不启用时，test driver 只发布 ResourceSlice，不会注册自身。
+	// 此时测试只要求 pod 被调度，不要求进入 running 状态。
 	//
-	// TODO before conformance promotion: add https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md#sample-conformance-test meta data
+	// TODO 晋升 conformance 前需补充元数据：https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md#sample-conformance-test
 
 	singleNodeTests := func(withKubelet bool) {
 		nodes := drautils.NewNodes(f, 1, 1)
 		maxAllocations := 1
 		numPods := 5
-		driver := drautils.NewDriver(f, nodes, drautils.DriverResources(maxAllocations)) // All tests get their own driver instance.
+		driver := drautils.NewDriver(f, nodes, drautils.DriverResources(maxAllocations)) // 每个测试使用各自的 driver 实例。
 		driver.WithKubelet = withKubelet
 		b := drautils.NewBuilder(f, driver)
-		// We have to set the parameters *before* creating the class.
+		// 必须在创建 class *之前*设置参数。
 		b.ClassParameters = `{"x":"y"}`
 		expectedEnv := []string{"admin_x", "y"}
 		_, expected := b.ParametersEnv()
@@ -1491,7 +1474,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 			b.Create(tCtx, objects...)
 
-			// We don't know the order. All that matters is that all of them get scheduled eventually.
+			// 无法确定调度顺序，只要最终所有 pod 都被调度即可。
 			var wg sync.WaitGroup
 			wg.Add(numPods)
 			for i := range numPods {
@@ -1522,7 +1505,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 			b.Create(tCtx, objects...)
 
-			// We don't know the order. All that matters is that all of them get scheduled eventually.
+			// 无法确定调度顺序，只要最终所有 pod 都被调度即可。
 			f.Timeouts.PodStartSlow *= time.Duration(numPods)
 			var wg sync.WaitGroup
 			wg.Add(numPods)
@@ -1564,7 +1547,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			var objects []klog.KMetadata
 			pod, template := b.PodInline()
 
-			// First modify the class so that it matches no nodes (for classic DRA) and no devices (structured parameters).
+			// 先把 class 改成不匹配任何节点（classic DRA）或任何设备（结构化参数），
 			deviceClassName := template.Spec.Spec.Devices.Requests[0].Exactly.DeviceClassName
 			class, err := f.ClientSet.ResourceV1().DeviceClasses().Get(ctx, deviceClassName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
@@ -1577,13 +1560,13 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			class, err = f.ClientSet.ResourceV1().DeviceClasses().Update(ctx, class, metav1.UpdateOptions{})
 			framework.ExpectNoError(err)
 
-			// Now create the pod.
+			// 现在创建 pod。
 			objects = append(objects, template, pod)
 			b.Create(tCtx, objects...)
 
 			framework.ExpectNoError(e2epod.WaitForPodNameUnschedulableInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace))
 
-			// Unblock the pod.
+			// 解除对 pod 的阻塞。
 			class.Spec.Selectors = originalClass.Spec.Selectors
 			_, err = f.ClientSet.ResourceV1().DeviceClasses().Update(ctx, class, metav1.UpdateOptions{})
 			framework.ExpectNoError(err)
@@ -1597,11 +1580,9 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			created := b.Create(tCtx, pod)
 			pod = created[0].(*v1.Pod)
 
-			// Normally, this pod would be stuck because the
-			// ResourceClaim cannot be created without the
-			// template. We allow it to run by communicating
-			// through the status that the ResourceClaim is not
-			// needed.
+			// 正常情况下，这个 pod 会卡住，因为没有 template 就无法创建
+			// ResourceClaim。我们通过 status 表明不需要该 ResourceClaim，
+			// 从而允许它运行。
 			pod.Status.ResourceClaimStatuses = []v1.PodResourceClaimStatus{
 				{Name: pod.Spec.ResourceClaims[0].Name, ResourceClaimName: nil},
 			}
@@ -1663,7 +1644,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod, template := b.PodInline()
 			pod.Spec.InitContainers = []v1.Container{pod.Spec.Containers[0]}
 			pod.Spec.InitContainers[0].Name += "-init"
-			// This must succeed for the pod to start.
+			// 这一步必须成功，pod 才能启动。
 			pod.Spec.InitContainers[0].Command = []string{"sh", "-c", "env | grep user_a=b"}
 			b.Create(tCtx, pod, template)
 
@@ -1692,7 +1673,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 
 		if withKubelet {
-			// Serial because the example device plugin can only be deployed with one instance at a time.
+			// 标记为 serial，因为 example device plugin 一次只能部署一个实例。
 			f.It("supports extended resources together with ResourceClaim", f.WithSerial(), func(ctx context.Context) {
 				tCtx := f.TContext(ctx)
 				extendedResourceName := deployDevicePlugin(tCtx, f, nodes.NodeNames[0:1], false)
@@ -1710,14 +1691,14 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 	singleNodeMultipleClaimsTests := func() {
 		nodes := drautils.NewNodes(f, 1, 1)
-		// Allow allocating more than one device so that multiple claims can be prepared on the same node.
+		// 允许分配多台设备，这样同一节点上可以 prepared 多个 claim。
 		maxAllocations := 2
-		driver := drautils.NewDriver(f, nodes, drautils.DriverResources(maxAllocations)) // All tests get their own driver instance.
+		driver := drautils.NewDriver(f, nodes, drautils.DriverResources(maxAllocations)) // 每个测试使用各自的 driver 实例。
 		driver.WithKubelet = true
 		b := drautils.NewBuilder(f, driver)
 
 		f.It("requests an already allocated and a new claim for a pod", func(ctx context.Context) {
-			// This test covers a situation when a pod references a mix of already-prepared and new claims.
+			// 本测试覆盖 pod 同时引用已 prepared 和全新 claim 的场景。
 			tCtx := f.TContext(ctx)
 
 			firstClaim := b.ExternalClaim()
@@ -1725,12 +1706,12 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 			b.Create(tCtx, firstClaim, secondClaim)
 
-			// First pod uses only firstClaim
+			// 第一个 pod 只使用 firstClaim
 			firstPod := b.PodExternal(firstClaim.Name)
 			b.Create(tCtx, firstPod)
 			b.TestPod(tCtx, firstPod)
 
-			// Second pod uses firstClaim (already prepared) + secondClaim (new)
+			// 第二个 pod 使用 firstClaim（已 prepared）+ secondClaim（新）
 			secondPod := b.PodExternal("")
 			secondPod.Spec.ResourceClaims = []v1.PodResourceClaim{
 				{
@@ -1753,8 +1734,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 	}
 
-	// The following tests only make sense when there is more than one node.
-	// They get skipped when there's only one node.
+	// 下面的测试只有在节点数大于 1 时才有意义，
+	// 单节点集群会跳过。
 	multiNodeTests := func(withKubelet bool) {
 		nodes := drautils.NewNodes(f, 2, 8)
 
@@ -1762,18 +1743,18 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			firstDevice := "pre-defined-device-01"
 			secondDevice := "pre-defined-device-02"
 			devicesPerNode := []map[string]map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				// First node:
+				// 第一个节点：
 				{
 					firstDevice: {
 						"healthy": {BoolValue: ptr.To(true)},
 						"exists":  {BoolValue: ptr.To(true)},
 					},
 				},
-				// Second node:
+				// 第二个节点：
 				{
 					secondDevice: {
 						"healthy": {BoolValue: ptr.To(false)},
-						// Has no "exists" attribute!
+						// 没有 "exists" attribute！
 					},
 				},
 			}
@@ -1784,13 +1765,11 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			ginkgo.It("keeps pod pending because of CEL runtime errors", func(ctx context.Context) {
 				tCtx := f.TContext(ctx)
 
-				// When pod scheduling encounters CEL runtime errors for some nodes, but not all,
-				// it should still not schedule the pod because there is something wrong with it.
-				// Scheduling it would make it harder to detect that there is a problem.
+				// 即使 CEL runtime error 只出现在部分节点上，调度器也不应调度该 pod，
+				// 因为这说明 pod 本身有问题。调度成功反而会让问题更难发现。
 				//
-				// This matches the "CEL-runtime-error-for-subset-of-nodes" unit test, except that
-				// here we try it in combination with the actual scheduler and can extend it with
-				// other checks, like event handling (future extension).
+				// 这与 "CEL-runtime-error-for-subset-of-nodes" 单元测试对应，
+				// 但这里结合实际调度器验证，后续还可以扩展 event 处理等检查。
 
 				gomega.Eventually(ctx, framework.ListObjects(f.ClientSet.ResourceV1().ResourceSlices().List,
 					metav1.ListOptions{
@@ -1813,7 +1792,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				template.Spec.Spec.Devices.Requests[0].Exactly.Selectors = append(template.Spec.Spec.Devices.Requests[0].Exactly.Selectors,
 					resourceapi.DeviceSelector{
 						CEL: &resourceapi.CELDeviceSelector{
-							// Runtime error on one node, but not all.
+							// 只有部分节点会触发 runtime error。
 							Expression: fmt.Sprintf(`device.attributes["%s"].exists`, driver.Name),
 						},
 					},
@@ -1827,7 +1806,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 								gomega.StopTrying("pod got scheduled unexpectedly").Now()
 							}
 							if strings.Contains(condition.Message, "CEL runtime error") {
-								// This is what we are waiting for.
+								// 这正是我们要等待的结果。
 								return true, nil
 							}
 						}
@@ -1863,16 +1842,11 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					}
 				}
 
-				// The pods all should run on different
-				// nodes because the maximum number of
-				// claims per node was limited to 1 for
-				// this test.
+				// 本测试将每节点可分配的 claim 数限制为 1，
+				// 因此所有 pod 应该运行在不同节点上。
 				//
-				// We cannot know for sure why the pods
-				// ran on two different nodes (could
-				// also be a coincidence) but if they
-				// don't cover all nodes, then we have
-				// a problem.
+				// 无法确定这些 pod 为何恰好落在不同节点（也可能是巧合），
+				// 但如果它们没有覆盖所有节点，就说明有问题。
 				used := make(map[string]*v1.Pod)
 				for _, pod := range pods {
 					pod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
@@ -2185,7 +2159,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 										Name:            "sub-request-1",
 										DeviceClassName: b1.ClassName(),
 										AllocationMode:  resourceapi.DeviceAllocationModeExactCount,
-										Count:           20, // Requests more than are available.
+										Count:           20, // 请求数量超过可用数量
 									},
 									{
 										Name:            "sub-request-2",
@@ -2305,7 +2279,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		maxAllocations := 1
 		driver := drautils.NewDriver(f, nodes, drautils.DriverResources(maxAllocations))
 		b := drautils.NewBuilder(f, driver)
-		// We have to set the parameters *before* creating the class.
+		// 必须在创建 class *之前*设置参数。
 		b.ClassParameters = `{"x":"y"}`
 		expectedEnv := []string{"admin_x", "y"}
 		_, expected := b.ParametersEnv()
@@ -2386,7 +2360,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		maxAllocations := 1
 		driver := drautils.NewDriver(f, nodes, drautils.DriverResources(maxAllocations))
 		b := drautils.NewBuilder(f, driver)
-		// We have to set the parameters *before* creating the class.
+		// 必须在创建 class *之前*设置参数。
 		b.ClassParameters = `{"x":"y"}`
 		expectedEnv := []string{"admin_x", "y"}
 		_, expected := b.ParametersEnv()
@@ -2508,17 +2482,16 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 		f.It("must consume and free up counters", func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
-			// The first pod will use one of the devices. Since both devices are
-			// available, there should be sufficient counters left to allocate
-			// a device.
+			// 第一个 pod 会占用其中一台设备。由于共有两台设备，
+			// 计数器仍有余量可供再分配一台。
 			claim := b.ExternalClaim()
 			pod := b.PodExternal(claim.Name)
 			pod.Spec.ResourceClaims[0].ResourceClaimName = &claim.Name
 			b.Create(tCtx, claim, pod)
 			b.TestPod(tCtx, pod)
 
-			// For the second pod, there should not be sufficient counters left, so
-			// it should not succeed. This means the pod should remain in the pending state.
+			// 对于第二个 pod，计数器余量应已不足，因此分配不会成功，
+			// pod 应保持 pending 状态。
 			claim2 := b.ExternalClaim()
 			pod2 := b.PodExternal(claim2.Name)
 			b.Create(tCtx, claim2, pod2)
@@ -2534,17 +2507,17 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return nil
 			}, 20*time.Second, 200*time.Millisecond).Should(gomega.Succeed())
 
-			// Delete the first pod
+			// 删除第一个 pod
 			b.DeletePodAndWaitForNotFound(tCtx, pod)
 
-			// There shoud not be available devices for pod2.
+			// 现在应该有可用设备供 pod2 使用。
 			b.TestPod(tCtx, pod2)
 		})
 	}
 
 	consumableCapacityTests := func() {
 		nodes := drautils.NewNodes(f, 1, 1)
-		// single device which allows multiple allocations and has 80Gi consumable memory.
+		// 单台设备，允许重复分配，拥有 80Gi 可消耗内存。
 		driver := drautils.NewDriver(f, nodes, drautils.ToDriverResources(
 			[]resourceapi.CounterSet{},
 			[]resourceapi.Device{
@@ -2569,7 +2542,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 		f.It("must allow multiple allocations and consume capacity", f.WithKubeletMinVersion("1.34"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
-			// The first pod will use 4Gi of the device.
+			// 第一个 pod 使用该设备的 4Gi。
 			claim := b.ExternalClaim()
 			claim.Spec.Devices.Requests[0].Exactly.Capacity = &resourceapi.CapacityRequirements{
 				Requests: map[resourceapi.QualifiedName]resource.Quantity{
@@ -2580,7 +2553,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			b.Create(tCtx, claim, pod)
 			b.TestPod(tCtx, pod)
 
-			// The second pod will be failed to request 8Gi capacity.
+			// 第二个 pod 请求 8Gi 容量应该失败。
 			claim2 := b.ExternalClaim()
 			claim2.Spec.Devices.Requests[0].Exactly.Capacity = &resourceapi.CapacityRequirements{
 				Requests: map[resourceapi.QualifiedName]resource.Quantity{
@@ -2590,7 +2563,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod2 := b.PodExternal(claim2.Name)
 			b.Create(tCtx, claim2, pod2)
 
-			// The third pod should be able to use the rest 4Gi of the device.
+			// 第三个 pod 应该能使用设备剩余的 4Gi。
 			claim3 := b.ExternalClaim()
 			claim3.Spec.Devices.Requests[0].Exactly.Capacity = &resourceapi.CapacityRequirements{
 				Requests: map[resourceapi.QualifiedName]resource.Quantity{
@@ -2612,11 +2585,11 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return nil
 			}, 20*time.Second, 200*time.Millisecond).Should(gomega.Succeed())
 
-			// Delete the first and third pod
+			// 删除第一个和第三个 pod
 			b.DeletePodAndWaitForNotFound(tCtx, pod)
 			b.DeletePodAndWaitForNotFound(tCtx, pod3)
 
-			// There should be available capacity for pod2 now.
+			// 现在应该有足够容量供 pod2 使用。
 			b.TestPod(tCtx, pod2)
 		})
 	}
@@ -2663,12 +2636,12 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				driver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesWithSkipNodeOperationsNow(nodes, 1, resourceapi.SkipNodeOperationAll))
 
 				b.Create(tCtx, claim, pod)
-				// TestPod returns early when !driver.WithKubelet, so explicitly wait for the pod to be running.
+				// !driver.WithKubelet 时 TestPod 会提前返回，所以这里显式等待 pod 进入 running。
 				err := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 				framework.ExpectNoError(err, "start pod")
 
-				// driver.Nodes contains in-memory test driver handles. With WithKubelet = false,
-				// the driver uses a null socket listener, so kubelet cannot discover or register it.
+				// driver.Nodes 保存的是内存中的 test driver 句柄。WithKubelet = false 时
+				// driver 使用空 socket listener，kubelet 无法发现或注册它。
 				scheduledPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "get scheduled pod")
 				plugin, ok := driver.Nodes[scheduledPod.Spec.NodeName]
@@ -2703,8 +2676,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				err := e2epod.WaitForPodScheduled(ctx, f.ClientSet, pod.Namespace, pod.Name)
 				framework.ExpectNoError(err, "schedule pod")
 
-				// driver.Nodes contains in-memory test driver handles. With WithKubelet = false,
-				// the driver uses a null socket listener, so kubelet cannot discover or register it.
+				// driver.Nodes 保存的是内存中的 test driver 句柄。WithKubelet = false 时
+				// driver 使用空 socket listener，kubelet 无法发现或注册它。
 				scheduledPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "get scheduled pod")
 				plugin, ok := driver.Nodes[scheduledPod.Spec.NodeName]
@@ -2746,8 +2719,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				err := e2epod.WaitForPodScheduled(ctx, f.ClientSet, pod.Namespace, pod.Name)
 				framework.ExpectNoError(err, "schedule pod")
 
-				// driver.Nodes contains in-memory test driver handles. With WithKubelet = false,
-				// the driver uses a null socket listener, so kubelet cannot discover or register it.
+				// driver.Nodes 保存的是内存中的 test driver 句柄。WithKubelet = false 时
+				// driver 使用空 socket listener，kubelet 无法发现或注册它。
 				scheduledPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "get scheduled pod")
 				plugin, ok := driver.Nodes[scheduledPod.Spec.NodeName]
@@ -2787,8 +2760,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				driver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, drautils.DriverResourcesWithSkipNodeOperationsNow(nodes, 1, resourceapi.SkipNodeOperationAll))
 
 				b.Create(tCtx, claim, pod)
-				// Explicitly wait for pod running instead of calling TestPod, because TestPod asserts that
-				// driver-injected environment variables are present, which are omitted when NodePrepareResources is skipped.
+				// 这里显式等待 pod running 而不调用 TestPod，因为 TestPod 会断言
+				// driver 注入的环境变量存在，而跳过 NodePrepareResources 时这些变量不会出现。
 				err := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 				framework.ExpectNoError(err, "start pod")
 
@@ -2836,8 +2809,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				gomega.Expect(calls).NotTo(testdrivergomega.NodeUnprepareResourcesSucceeded, "NodeUnprepareResources should not be called")
 				gomega.Expect(calls).NotTo(testdrivergomega.NodeUnprepareResourcesFailed, "NodeUnprepareResources should not be called")
 
-				// Fetch the claim from the API server to get the server-assigned UID; otherwise,
-				// plugin unprepare fails to locate the prepared claim in its internal map.
+				// 从 API server 获取 claim 以拿到服务端分配的 UID；否则 plugin 执行
+				// unprepare 时无法在其内部 map 中找到对应的 prepared claim。
 				claim, err = b.ClientV1(tCtx).ResourceClaims(f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "get claim from API server")
 				err = plugin.UnprepareClaim(ctx, claim)
@@ -2846,8 +2819,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		})
 	}
 
-	// It is okay to use the same context multiple times (like "control plane"),
-	// as long as the test names the still remain unique overall.
+	// 同一个 context 可以多次使用（比如 "control plane"），
+	// 只要最终所有测试名称仍保持唯一即可。
 
 	framework.Context("control plane", func() { singleNodeTests(false) })
 	framework.Context("kubelet", feature.DynamicResourceAllocation, "on single node", func() { singleNodeTests(true) })
@@ -2891,7 +2864,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			template.Spec.Spec.Devices.Requests[0].Exactly.Tolerations = []resourceapi.DeviceToleration{{
 				Effect:   resourceapi.DeviceTaintEffectNoSchedule,
 				Operator: resourceapi.DeviceTolerationOpExists,
-				// No key: tolerate *all* taints with this effect.
+				// 不指定 key：容忍具有此 effect 的*所有* taint。
 			}}
 			b.Create(tCtx, pod, template)
 			b.TestPod(tCtx, pod)
@@ -2903,15 +2876,15 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			template.Spec.Spec.Devices.Requests[0].Exactly.Tolerations = []resourceapi.DeviceToleration{{
 				Effect:   resourceapi.DeviceTaintEffectNoSchedule,
 				Operator: resourceapi.DeviceTolerationOpExists,
-				// No key: tolerate *all* taints with this effect.
+				// 不指定 key：容忍具有此 effect 的*所有* taint。
 			}}
-			// Add a finalizer to ensure that we get a chance to test the pod status after eviction (= deletion).
+			// 添加 finalizer，确保我们有机会在驱逐（即删除）后检查 pod 状态。
 			pod.Finalizers = []string{"e2e-test/dont-delete-me"}
 			b.Create(tCtx, pod, template)
 			b.TestPod(tCtx, pod)
 			ginkgo.DeferCleanup(func(ctx context.Context) {
 				gomega.Eventually(ctx, func(ctx context.Context) error {
-					// Unblock shutdown by removing the finalizer.
+					// 移除 finalizer，让关闭流程继续。
 					pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 					if err != nil {
 						return fmt.Errorf("get pod: %w", err)
@@ -2925,14 +2898,14 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				}).WithTimeout(30*time.Second).WithPolling(1*time.Second).Should(gomega.Succeed(), "Failed to remove finalizers")
 			})
 
-			// Now evict it.
+			// 现在驱逐它。
 			ginkgo.By("Evicting pod...")
 			taint := &resourceapi.DeviceTaintRule{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "device-taint-rule-" + f.UniqueName + "-",
 				},
 				Spec: resourceapi.DeviceTaintRuleSpec{
-					// All devices of the current driver instance.
+					// 当前 driver 实例的全部设备。
 					DeviceSelector: &resourceapi.DeviceTaintSelector{
 						Driver: &driver.Name,
 					},
@@ -2940,18 +2913,18 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						Effect: resourceapi.DeviceTaintEffectNoExecute,
 						Key:    "test.example.com/evict",
 						Value:  "now",
-						// No TimeAdded, gets defaulted.
+						// 不设置 TimeAdded，由默认值填充。
 					},
 				},
 			}
 			createdTaint := b.Create(tCtx, taint)
 			taint = createdTaint[0].(*resourceapi.DeviceTaintRule)
-			gomega.Expect(*taint).Should(gomega.HaveField("Spec.Taint.TimeAdded.Time", gomega.BeTemporally("~", time.Now(), time.Minute /* allow for some clock drift and delays */)))
+			gomega.Expect(*taint).Should(gomega.HaveField("Spec.Taint.TimeAdded.Time", gomega.BeTemporally("~", time.Now(), time.Minute /* 容忍一定的时钟偏差和延迟 */)))
 			framework.ExpectNoError(e2epod.WaitForPodTerminatingInNamespaceTimeout(ctx, f.ClientSet, pod.Name, f.Namespace.Name, f.Timeouts.PodStart))
 			pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "get pod")
 			gomega.Expect(pod).Should(gomega.HaveField("Status.Conditions", gomega.ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
-				// LastTransitionTime is unknown.
+				// LastTransitionTime 的值不确定。
 				"Type":    gomega.Equal(v1.DisruptionTarget),
 				"Status":  gomega.Equal(v1.ConditionTrue),
 				"Reason":  gomega.Equal("DeletionByDeviceTaintManager"),
@@ -2975,7 +2948,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				template.Spec.Spec.Devices.Requests[0].Exactly.Tolerations = []resourceapi.DeviceToleration{{
 					Effect:   resourceapi.DeviceTaintEffectNoSchedule,
 					Operator: resourceapi.DeviceTolerationOpExists,
-					// No key: tolerate *all* taints with this effect.
+					// 不指定 key：容忍具有此 effect 的*所有* taint。
 				}}
 				podGroup := b.PodGroup(workload, workload.Spec.PodGroupTemplates[0])
 				pod := b.GroupedPodWithClaims(podGroup)
@@ -2990,17 +2963,17 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				template.Spec.Spec.Devices.Requests[0].Exactly.Tolerations = []resourceapi.DeviceToleration{{
 					Effect:   resourceapi.DeviceTaintEffectNoSchedule,
 					Operator: resourceapi.DeviceTolerationOpExists,
-					// No key: tolerate *all* taints with this effect.
+					// 不指定 key：容忍具有此 effect 的*所有* taint。
 				}}
 				podGroup := b.PodGroup(workload, podGroupTemplate)
 				pod := b.GroupedPodWithClaims(podGroup)
-				// Add a finalizer to ensure that we get a chance to test the pod status after eviction (= deletion).
+				// 添加 finalizer，确保我们有机会在驱逐（即删除）后检查 pod 状态。
 				pod.Finalizers = []string{"e2e-test/dont-delete-me"}
 				b.Create(tCtx, workload, podGroup, pod, template)
 				b.TestPod(tCtx, pod)
 				ginkgo.DeferCleanup(func(ctx context.Context) {
 					gomega.Eventually(ctx, func(ctx context.Context) error {
-						// Unblock shutdown by removing the finalizer.
+						// 移除 finalizer，让关闭流程继续。
 						pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 						if err != nil {
 							return fmt.Errorf("get pod: %w", err)
@@ -3014,14 +2987,14 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					}).WithTimeout(30*time.Second).WithPolling(1*time.Second).Should(gomega.Succeed(), "Failed to remove finalizers")
 				})
 
-				// Now evict it.
+				// 现在驱逐它。
 				ginkgo.By("Evicting pod...")
 				taint := &resourceapi.DeviceTaintRule{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "device-taint-rule-" + f.UniqueName + "-",
 					},
 					Spec: resourceapi.DeviceTaintRuleSpec{
-						// All devices of the current driver instance.
+						// 当前 driver 实例的全部设备。
 						DeviceSelector: &resourceapi.DeviceTaintSelector{
 							Driver: &driver.Name,
 						},
@@ -3029,18 +3002,18 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 							Effect: resourceapi.DeviceTaintEffectNoExecute,
 							Key:    "test.example.com/evict",
 							Value:  "now",
-							// No TimeAdded, gets defaulted.
+							// 不设置 TimeAdded，由默认值填充。
 						},
 					},
 				}
 				createdTaint := b.Create(tCtx, taint)
 				taint = createdTaint[0].(*resourceapi.DeviceTaintRule)
-				gomega.Expect(*taint).Should(gomega.HaveField("Spec.Taint.TimeAdded.Time", gomega.BeTemporally("~", time.Now(), time.Minute /* allow for some clock drift and delays */)))
+				gomega.Expect(*taint).Should(gomega.HaveField("Spec.Taint.TimeAdded.Time", gomega.BeTemporally("~", time.Now(), time.Minute /* 容忍一定的时钟偏差和延迟 */)))
 				framework.ExpectNoError(e2epod.WaitForPodTerminatingInNamespaceTimeout(ctx, f.ClientSet, pod.Name, f.Namespace.Name, f.Timeouts.PodStart))
 				pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "get pod")
 				gomega.Expect(pod).Should(gomega.HaveField("Status.Conditions", gomega.ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
-					// LastTransitionTime is unknown.
+					// LastTransitionTime 的值不确定。
 					"Type":    gomega.Equal(v1.DisruptionTarget),
 					"Status":  gomega.Equal(v1.ConditionTrue),
 					"Reason":  gomega.Equal("DeletionByDeviceTaintManager"),
@@ -3072,13 +3045,13 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			template.Spec.Spec.Devices.Requests[0].Exactly.Tolerations = []resourceapi.DeviceToleration{{
 				Effect:   resourceapi.DeviceTaintEffectNoExecute,
 				Operator: resourceapi.DeviceTolerationOpExists,
-				// No key: tolerate *all* taints with this effect.
+				// 不指定 key：容忍具有此 effect 的*所有* taint。
 			}}
 			b.Create(tCtx, pod, template)
 			b.TestPod(tCtx, pod)
 
-			// Testing the pod is slow enough that the test fails when the pod gets evicted unexpectedly,
-			// We don't need to a "Consistently" here.
+			// 测试 pod 本身足够慢，若 pod 意外被驱逐测试就会失败，
+			// 所以这里不需要用 "Consistently"。
 		})
 	})
 
@@ -3095,18 +3068,18 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		pod.Spec.Containers[0].Resources.Limits = res
 		pod.Spec.InitContainers = []v1.Container{pod.Spec.Containers[0], pod.Spec.Containers[0], pod.Spec.Containers[0]}
 		pod.Spec.InitContainers[0].Name += "-init"
-		// This must succeed for the pod to start.
+		// 这一步必须成功，pod 才能启动。
 		pod.Spec.InitContainers[0].Command = []string{"sh", "-c", "env|grep container_1_request_0=true"}
 		pod.Spec.InitContainers[0].Resources.Requests = res2
 		pod.Spec.InitContainers[0].Resources.Limits = res2
 		pod.Spec.InitContainers[1].Name += "-sidecar"
-		// This must succeed for the pod to start.
+		// 这一步必须成功，pod 才能启动。
 		pod.Spec.InitContainers[1].Command = []string{"sh", "-c", "while true; do env; env|grep container_1_request_0=true; echo $?; sleep 5; done"}
 		pod.Spec.InitContainers[1].RestartPolicy = ptr.To(v1.ContainerRestartPolicyAlways)
 		pod.Spec.InitContainers[1].Resources.Requests = res
 		pod.Spec.InitContainers[1].Resources.Limits = res
 		pod.Spec.InitContainers[2].Name += "-init-1"
-		// This must succeed for the pod to start.
+		// 这一步必须成功，pod 才能启动。
 		pod.Spec.InitContainers[2].Command = []string{"sh", "-c", "env|grep container_3_request_0=true"}
 		pod.Spec.InitContainers[2].Resources.Requests = res
 		pod.Spec.InitContainers[2].Resources.Limits = res
@@ -3162,9 +3135,9 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		}).WithTimeout(time.Minute).Should(gomega.BeTrueBecause("extended resource claim should be automatically deleted when pod %s", cleanupMessage))
 	}
 
-	// Any test using implicit resource names (aka <class>.deviceclass.resource.k8s.io/devices) is limited
-	// to kubelet >= 1.35 because there was a bug in 1.34. Other tests can run with kubelet >= 1.34 when
-	// the feature was introduced.
+	// 任何使用隐式资源名称（即 <class>.deviceclass.resource.k8s.io/devices）的测试
+	// 都要求 kubelet >= 1.35，因为 1.34 中存在 bug。其他测试可在 kubelet >= 1.34
+	// （特性引入版本）上运行。
 	framework.Context(f.WithFeatureGate(features.DRAExtendedResource), feature.DynamicResourceAllocation, func() {
 		nodes := drautils.NewNodes(f, 1, 1)
 		driver := drautils.NewDriver(f, nodes, drautils.NetworkResources(10, false))
@@ -3189,8 +3162,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			}
 			b.Create(tCtx, quota)
 
-			// Wait for the quota controller to initialize the status with zero usage.
-			// This prevents "status unknown for quota" errors when creating pods.
+			// 等待 quota controller 把 status 初始化为零使用量，
+			// 避免创建 pod 时出现 "status unknown for quota" 错误。
 			ginkgo.By("Waiting for ResourceQuota status to be initialized")
 			initialUsedResources := v1.ResourceList{}
 			for resourceName := range hard {
@@ -3204,33 +3177,33 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						Used: initialUsedResources,
 					})})))
 
-			// create a class with an extended resource
+			// 创建一个带 extended resource 的 class
 			b.Create(tCtx, class)
 
 			pod := b.Pod()
 			res := v1.ResourceList{}
 
-			// explicit extended resource name
+			// 显式 extended resource 名称
 			res[v1.ResourceName(resourceName)] = resource.MustParse("1")
-			// implicit extended resource name
+			// 隐式 extended resource 名称
 			res[v1.ResourceName(resourceapi.ResourceDeviceClassPrefix+class.Name)] = resource.MustParse("1")
 
 			pod.Spec.Containers[0].Resources.Requests = res
 			pod.Spec.Containers[0].Resources.Limits = res
 			pod.Spec.InitContainers = []v1.Container{pod.Spec.Containers[0], pod.Spec.Containers[0], pod.Spec.Containers[0]}
 			pod.Spec.InitContainers[0].Name += "-init"
-			// This must succeed for the pod to start.
+			// 这一步必须成功，pod 才能启动。
 			pod.Spec.InitContainers[0].Command = []string{"sh", "-c", "env|grep request_0=true"}
 			pod.Spec.InitContainers[0].Resources.Requests = res
 			pod.Spec.InitContainers[0].Resources.Limits = res
 			pod.Spec.InitContainers[1].Name += "-sidecar"
-			// This must succeed for the pod to start.
+			// 这一步必须成功，pod 才能启动。
 			pod.Spec.InitContainers[1].Command = []string{"sh", "-c", "env|grep container_1_request_0=true; sleep 1"}
 			pod.Spec.InitContainers[1].RestartPolicy = ptr.To(v1.ContainerRestartPolicyAlways)
 			pod.Spec.InitContainers[1].Resources.Requests = res
 			pod.Spec.InitContainers[1].Resources.Limits = res
 			pod.Spec.InitContainers[2].Name += "-init-1"
-			// This must succeed for the pod to start.
+			// 这一步必须成功，pod 才能启动。
 			pod.Spec.InitContainers[2].Command = []string{"sh", "-c", "env|grep request_0=true"}
 			pod.Spec.InitContainers[2].Resources.Requests = res
 			pod.Spec.InitContainers[2].Resources.Limits = res
@@ -3245,33 +3218,33 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			drautils.TestContainerEnv(tCtx, pod, pod.Spec.Containers[0].Name, false, containerEnv...)
 
 			claim := b.ExternalClaim()
-			// Point the claim to the same class, so that it will consume the same extended
-			// resource and we can verify the total consumption in the resource quota.
+			// 让 claim 指向同一个 class，这样它会消耗相同的 extended resource，
+			// 我们就能校验 resource quota 中的总消耗量。
 			claim.Spec.Devices.Requests[0].Exactly.DeviceClassName = class.Name
 			pod2 := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod2)
 			b.TestPod(tCtx, pod2)
 
-			// Expect 5 extended and implicit devices / requests resources to be consumed:
+			// 预期会消耗 5 份 extended / implicit 设备及对应资源：
 			//
-			// - external claim, requesting 1 device:
+			// - external claim，请求 1 台设备：
 			//   - 1 deviceclass
 			//   - 1 extended request
 			//   - 1 implicit deviceclaim request
 			//
-			// - pod, requesting 4 devices:
+			// - pod，请求 4 台设备：
 			//   - sidecar init container
 			//     - 1 extended request
 			//     - 1 implicit deviceclaim request
-			//   - main container
+			//   - 主容器
 			//     - 1 extended request
 			//     - 1 implicit deviceclaim request
-			//   - other init containers reuse the later sidecar/main container resource
+			//   - 其他 init container 复用后面 sidecar/主容器的资源
 			//
-			// - extended resourceclaim auto-created from the pod, requesting 4 devices
-			//   - 4 deviceclasses
-			//   - 2 extended resource requests (4 minus 2 already counted from the pod)
-			//   - 2 implicit deviceclaim requests (4 minus 2 already counted from the pod)
+			// - 由 pod 自动创建的 extended resourceclaim，请求 4 台设备
+			//   - 4 deviceclass
+			//   - 2 extended resource request（4 减去 pod 中已计入的 2）
+			//   - 2 implicit deviceclaim request（4 减去 pod 中已计入的 2）
 			consumedDevices := "5"
 
 			usedResources := v1.ResourceList{}
@@ -3297,9 +3270,9 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			b.Create(tCtx, class)
 
 			extendedResourceTest(ctx, b, f, []string{
-				// implicit extended resource name
+				// 隐式 extended resource 名称
 				resourceapi.ResourceDeviceClassPrefix + class.Name,
-				// explicit extended resource name
+				// 显式 extended resource 名称
 				resourceName,
 			}, []string{
 				"container_3_request_0", "true",
@@ -3314,7 +3287,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			b.Create(tCtx, class)
 
 			extendedResourceTest(ctx, b, f, []string{
-				// explicit extended resource name
+				// 显式 extended resource 名称
 				resourceName,
 			}, []string{
 				"container_3_request_0", "true",
@@ -3323,7 +3296,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 		ginkgo.It("must run a pod with implicit extended resource with one container one resource", f.WithKubeletMinVersion("1.35"), func(ctx context.Context) {
 			extendedResourceTest(ctx, b, f, []string{
-				// implicit extended resource name
+				// 隐式 extended resource 名称
 				resourceapi.ResourceDeviceClassPrefix + b.ClassName(),
 			}, []string{
 				"container_3_request_0", "true",
@@ -3455,7 +3428,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			)
 		})
 
-		// 1.35 because of https://github.com/kubernetes/kubernetes/issues/133488.
+		// 需要 1.35，原因见 https://github.com/kubernetes/kubernetes/issues/133488。
 		f.It("process extended resources after device plugin uninstall", f.WithSerial(), f.WithKubeletMinVersion("1.35"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
 			resourceName := e2enode.SampleDeviceResourceName
@@ -3493,12 +3466,12 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		ginkgo.It("must prevent overcommitment of extended resources", f.WithKubeletMinVersion("1.34"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
 			resourceName := b.ExtendedResourceName("overcommitment")
-			// Create a device class with extended resource
+			// 创建一个带 extended resource 的 device class
 			class := b.ClassWithExtendedResource(resourceName)
-			// Create first pod consuming all available resources
+			// 创建第一个 pod，消耗全部可用资源
 			pod1 := b.Pod()
 			res := v1.ResourceList{
-				v1.ResourceName(resourceName): resource.MustParse("10"), // All available
+				v1.ResourceName(resourceName): resource.MustParse("10"), // 全部可用资源
 			}
 			pod1.Spec.Containers[0].Resources.Requests = res
 			pod1.Spec.Containers[0].Resources.Limits = res
@@ -3512,7 +3485,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			}
 			drautils.TestContainerEnv(tCtx, pod1, pod1.Spec.Containers[0].Name, false, containerEnv...)
 
-			// Second pod should remain unschedulable
+			// 第二个 pod 应保持不可调度
 			pod2 := b.Pod()
 			pod2.Spec.Containers[0].Resources.Requests = res
 			pod2.Spec.Containers[0].Resources.Limits = res
@@ -3520,7 +3493,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 			framework.ExpectNoError(e2epod.WaitForPodNameUnschedulableInNamespace(ctx, f.ClientSet, pod2.Name, f.Namespace.Name))
 
-			// After deleting pod1, pod2 should be schedulable and run successfully
+			// 删除 pod1 后，pod2 应该可以调度并成功运行
 			b.DeletePodAndWaitForNotFound(tCtx, pod1)
 			err = e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod2)
 			framework.ExpectNoError(err, "start pod")
@@ -3565,14 +3538,14 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			}
 			drautils.TestContainerEnv(tCtx, pod, pod.Spec.Containers[0].Name, false, containerEnv...)
 
-			// Verify status
+			// 校验 status
 			updatedPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 
 			gomega.Expect(updatedPod.Status.ExtendedResourceClaimStatus).ShouldNot(gomega.BeNil())
 			gomega.Expect(updatedPod.Status.ExtendedResourceClaimStatus.ResourceClaimName).ShouldNot(gomega.BeEmpty())
 
-			// Verify mappings are correct
+			// 校验映射关系是否正确
 			mappings := updatedPod.Status.ExtendedResourceClaimStatus.RequestMappings
 			gomega.Expect(mappings).Should(gomega.HaveLen(len(res)))
 
@@ -3630,12 +3603,12 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			containerEnv := []string{"container_0_request_0", "true"}
 			drautils.TestContainerEnv(tCtx, pod, pod.Spec.Containers[0].Name, false, containerEnv...)
 		})
-		// When both a device plugin and a DRA driver advertise the same resource
-		// name on the same node, the device-plugin path wins.
-		// 1.35 is required because of https://github.com/kubernetes/kubernetes/issues/133488.
+		// 当 device plugin 和 DRA driver 在同一节点上报同名资源时，
+		// device plugin 路径优先。
+		// 需要 1.35，原因见 https://github.com/kubernetes/kubernetes/issues/133488。
 		f.It("must prefer device plugin over DRA when both advertise the same resource on a node", f.WithSerial(), f.WithKubeletMinVersion("1.35"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
-			// Deploy DP on nodes.NodeNames[0], where the DRA driver is also active.
+			// 在 nodes.NodeNames[0] 上部署 DP，该节点也有 DRA driver 在运行。
 			extendedResourceName := deployDevicePlugin(tCtx, f, nodes.NodeNames[0:1], false)
 			gomega.Expect(string(extendedResourceName)).To(gomega.Equal(e2enode.SampleDeviceResourceName))
 
@@ -3649,7 +3622,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 			pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
-			// Device plugin wins: no special claim created.
+			// device plugin 优先：不会创建特殊 claim。
 			gomega.Expect(pod.Status.ExtendedResourceClaimStatus).To(gomega.BeNil(),
 				"when both DP and DRA advertise the same resource on a node, DP must win and no special claim should be created")
 		})
@@ -3662,17 +3635,17 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		b := drautils.NewBuilder(f, driver)
 		b.UseExtendedResourceName = true
 
-		// This test needs the entire test cluster for itself, one node in the cluster
-		// is deployed device plugin for the test, therefore it is marked as serial.
-		// The test runs two pods, one pod request extended resource backed by DRA,
-		// the other pod requests extended resource by device plugin.
+		// 这个测试需要独占整个测试集群：集群中有一个节点会为测试部署 device plugin，
+		// 因此标记为 serial。
+		// 测试运行两个 pod，一个请求由 DRA 支持的 extended resource，
+		// 另一个请求由 device plugin 提供的 extended resource。
 		//
-		// 1.35 because of https://github.com/kubernetes/kubernetes/issues/133488.
+		// 需要 1.35，原因见 https://github.com/kubernetes/kubernetes/issues/133488。
 		f.It("must run pods with extended resource on dra nodes and device plugin nodes", f.WithSerial(), f.WithKubeletMinVersion("1.35"), func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
 			var objects []klog.KMetadata
 			extendedResourceName := deployDevicePlugin(tCtx, f, nodes.ExtraNodeNames, false)
-			// extendedResourceName should be the same as the one used by Device Plugin
+			// extendedResourceName 应与 Device Plugin 使用的名称一致
 			gomega.Expect(string(extendedResourceName)).To(gomega.Equal(e2enode.SampleDeviceResourceName))
 
 			pod1 := b.Pod()
@@ -3720,11 +3693,9 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 	})
 
 	ginkgo.Context("ResourceSlice Controller", func() {
-		// This is a test for creating some large slices.
-		// Each slice is as large as API limits allow.
+		// 这个测试创建一些大 slice，每个 slice 都达到 API 允许的大小上限。
 		//
-		// Could become a conformance test because it only depends
-		// on the apiserver.
+		// 由于只依赖 apiserver，将来可以转为 conformance 测试。
 		f.It("creates slices", func(ctx context.Context) {
 			dratest.TestCreateResourceSlices(f.TContext(ctx), 10)
 		})
@@ -3737,14 +3708,14 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		b := drautils.NewBuilder(f, driver)
 
 		f.It("validate ResourceClaimTemplate and ResourceClaim for admin access", func(ctx context.Context) {
-			// Attempt to create claim and claim template with admin access. Must fail eventually.
+			// 尝试创建带 admin access 的 claim 和 claim template，最终必须失败。
 			claim := b.ExternalClaim()
 			claim.Spec.Devices.Requests[0].Exactly.AdminAccess = ptr.To(true)
 			_, claimTemplate := b.PodInline()
 			claimTemplate.Spec.Spec.Devices.Requests[0].Exactly.AdminAccess = ptr.To(true)
 			matchValidationError := gomega.MatchError(gomega.ContainSubstring("admin access to devices requires the `resource.kubernetes.io/admin-access: true` label on the containing namespace"))
 			gomega.Eventually(ctx, func(ctx context.Context) error {
-				// First delete, in case that it succeeded earlier.
+				// 先删除，以防之前的尝试意外成功。
 				if err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Delete(ctx, claim.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -3753,7 +3724,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			}).Should(matchValidationError)
 
 			gomega.Eventually(ctx, func(ctx context.Context) error {
-				// First delete, in case that it succeeded earlier.
+				// 先删除，以防之前的尝试意外成功。
 				if err := f.ClientSet.ResourceV1().ResourceClaimTemplates(f.Namespace.Name).Delete(ctx, claimTemplate.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 					return err
 				}
@@ -3761,7 +3732,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return err
 			}).Should(matchValidationError)
 
-			// After labeling the namespace, creation must (eventually...) succeed.
+			// 给 namespace 打上 label 后，创建应该（最终）成功。
 			_, err := f.ClientSet.CoreV1().Namespaces().Apply(ctx,
 				applyv1.Namespace(f.Namespace.Name).WithLabels(map[string]string{"resource.kubernetes.io/admin-access": "true"}),
 				metav1.ApplyOptions{FieldManager: f.UniqueName})
@@ -3820,7 +3791,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			quota, err = f.ClientSet.CoreV1().ResourceQuotas(f.Namespace.Name).Create(ctx, quota, metav1.CreateOptions{})
 			framework.ExpectNoError(err, "create resource quota")
 
-			// Eventually the quota status should consider the existing claim.
+			// 最终 quota status 应计入已存在的 claim。
 			gomega.Eventually(ctx, framework.GetObject(f.ClientSet.CoreV1().ResourceQuotas(quota.Namespace).Get, quota.Name, metav1.GetOptions{})).
 				Should(gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
 					"Status": gomega.Equal(v1.ResourceQuotaStatus{
@@ -3828,11 +3799,11 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						Used: v1.ResourceList{v1.ResourceName(resourceName): resource.MustParse("1")},
 					})})))
 
-			// Now creating another claim should eventually fail. The quota may not be enforced immediately if
-			// it hasn't yet landed in the API server's cache.
+			// 现在再创建另一个 claim 最终应失败。如果 quota 尚未进入 API server 缓存，
+			// 可能不会立即生效。
 			//
-			// If creating a claim erroneously succeeds, we don't want to immediately fail on the next try
-			// with an "already exists" error, so use a new name each time.
+			// 如果创建 claim 意外成功，下一次重试不应因 "already exists" 立即失败，
+			// 所以每次都换一个新名称。
 			claim.GenerateName = "claim-1-"
 			claim.Name = ""
 			gomega.Eventually(ctx, func(ctx context.Context) error {
@@ -3847,7 +3818,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod)
 
-			// Waits for the ResourceClaim to be allocated and the pod to be scheduled.
+			// 等待 ResourceClaim 被分配以及 pod 被调度。
 			b.TestPod(tCtx, pod)
 
 			allocatedResourceClaim, err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
@@ -3878,7 +3849,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					},
 				})
 
-			// Updates the ResourceClaim from the driver on the same node as the pod.
+			// 由与 pod 同节点的 driver 更新 ResourceClaim。
 			plugin, ok := driver.Nodes[scheduledPod.Spec.NodeName]
 			if !ok {
 				framework.Failf("pod got scheduled to node %s without a plugin", scheduledPod.Spec.NodeName)
@@ -3894,7 +3865,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod)
 
-			// Waits for the ResourceClaim to be allocated and the pod to be scheduled.
+			// 等待 ResourceClaim 被分配以及 pod 被调度。
 			b.TestPod(tCtx, pod)
 
 			ginkgo.By("Creating a ServiceAccount and Role to update ResourceClaim status")
@@ -3908,7 +3879,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			_, err := f.ClientSet.CoreV1().ServiceAccounts(f.Namespace.Name).Create(ctx, sa, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
 
-			// Create ClusterRole with 'update' permission on 'resourceclaims/status'
+			// 创建 ClusterRole，授予对 'resourceclaims/status' 的 'update' 权限
 			role := &rbacv1.ClusterRole{
 				ObjectMeta: metav1.ObjectMeta{Name: roleName, Namespace: f.Namespace.Name},
 				Rules: []rbacv1.PolicyRule{
@@ -3918,7 +3889,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 						Verbs:     []string{"update", "patch"},
 					},
 					{
-						// Also need 'get' to fetch the claim for the update operation
+						// 更新操作还需要 'get' 权限来获取 claim
 						APIGroups: []string{resourceapi.SchemeGroupVersion.Group},
 						Resources: []string{"resourceclaims"},
 						Verbs:     []string{"get"},
@@ -3933,7 +3904,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					framework.ExpectNoError(err)
 				}
 			})
-			// Create ClusterRoleBinding
+			// 创建 ClusterRoleBinding
 			binding := &rbacv1.ClusterRoleBinding{
 				ObjectMeta: metav1.ObjectMeta{Name: bindingName, Namespace: f.Namespace.Name},
 				Subjects: []rbacv1.Subject{
@@ -3957,7 +3928,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					framework.ExpectNoError(err)
 				}
 			})
-			// Create a new clientset impersonating the ServiceAccount
+			// 创建一个模拟该 ServiceAccount 的 clientset
 			saClientConfig := rest.CopyConfig(f.ClientConfig())
 			saClientConfig.Impersonate = rest.ImpersonationConfig{
 				UserName: fmt.Sprintf("system:serviceaccount:%s:%s", f.Namespace.Name, saName),
@@ -3965,7 +3936,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			saClient, err := kubernetes.NewForConfig(saClientConfig)
 			framework.ExpectNoError(err)
 
-			// Get the allocated claim using the admin client
+			// 用 admin client 获取已分配的 claim
 			allocatedResourceClaim, err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(allocatedResourceClaim).ToNot(gomega.BeNil())
@@ -3987,14 +3958,14 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					},
 				})
 
-			// Update the ResourceClaim status using the impersonated client
-			// Wait for the initial ClusterRoleBinding to propagate AND for the DRA validation to explicitly reject it.
+			// 用模拟的 client 更新 ResourceClaim status。
+			// 既要等待初始 ClusterRoleBinding 生效，也要等 DRA 校验明确拒绝该更新。
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				_, err := saClient.ResourceV1().ResourceClaims(f.Namespace.Name).UpdateStatus(ctx, allocatedResourceClaim, metav1.UpdateOptions{})
 				if err == nil {
 					return fmt.Errorf("expected request to be rejected by DRA validation, but it succeeded")
 				}
-				// If we get a pure Forbidden (403), the basic RBAC cache hasn't updated yet. Trigger a retry.
+				// 如果得到纯粹的 Forbidden (403)，说明基本 RBAC 缓存尚未更新，触发重试。
 				if apierrors.IsForbidden(err) {
 					return fmt.Errorf("standard RBAC cache not synced yet, got pure 403 Forbidden")
 				}
@@ -4010,17 +3981,17 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				APIGroups:     []string{resourceapi.SchemeGroupVersion.Group},
 				Resources:     []string{"resourceclaims/driver"},
 				Verbs:         []string{"arbitrary-node:update", "arbitrary-node:patch"},
-				ResourceNames: []string{b.DriverName()}, // allow for the specific drivers
+				ResourceNames: []string{b.DriverName()}, // 只允许该特定 driver
 			})
 			_, err = f.ClientSet.RbacV1().ClusterRoles().Update(ctx, newRole, metav1.UpdateOptions{})
 			framework.ExpectNoError(err)
 
-			// Use Eventually to wait for RBAC propagation
+			// 用 Eventually 等待 RBAC 传播完成
 			var updatedResourceClaim *resourceapi.ResourceClaim
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				var updateErr error
 				updatedResourceClaim, updateErr = saClient.ResourceV1().ResourceClaims(f.Namespace.Name).UpdateStatus(ctx, allocatedResourceClaim, metav1.UpdateOptions{})
-				// If it's a forbidden error, the RBAC cache hasn't updated yet, so we return the error to trigger a retry
+				// 如果是 forbidden 错误，说明 RBAC 缓存尚未更新，返回错误以触发重试
 				return updateErr
 			}).WithTimeout(15*time.Second).WithPolling(1*time.Second).Should(gomega.Succeed(), "failed to update ResourceClaim status after adding RBAC rule")
 			gomega.Expect(updatedResourceClaim).ToNot(gomega.BeNil())
@@ -4074,9 +4045,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 		f.It("must apply per-node permission checks", func(ctx context.Context) {
 			tCtx := f.TContext(ctx)
-			// All of the operations use the client set of a kubelet plugin for
-			// a fictional node which both don't exist, so nothing interferes
-			// when we actually manage to create a slice.
+			// 所有操作都使用一个虚构节点上的 kubelet plugin client set，该节点和 plugin
+			// 都不存在，因此真正创建 slice 时不会有其他因素干扰。
 			fictionalNodeName := "dra-fictional-node"
 			gomega.Expect(nodes.NodeNames).NotTo(gomega.ContainElement(fictionalNodeName))
 			fictionalNodeClient := driver.ImpersonateKubeletPlugin(tCtx, &v1.Pod{
@@ -4090,12 +4060,11 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				},
 			})
 
-			// This is for some actual node in the cluster.
+			// 这是集群中某个真实节点的 client。
 			realNodeName := nodes.NodeNames[0]
 			realNodeClient := driver.Nodes[realNodeName].ClientSet
 
-			// This is the slice that we try to create. It needs to be deleted
-			// after testing, if it still exists at that time.
+			// 这是我们要尝试创建的 slice。测试结束后如果它仍存在，需要将其删除。
 			fictionalNodeSlice := &resourceapi.ResourceSlice{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: fictionalNodeName + "-slice",
@@ -4116,7 +4085,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				}
 			})
 
-			// Messages from test-driver/deploy/example/plugin-permissions.yaml
+			// 取自 test-driver/deploy/example/plugin-permissions.yaml 的错误消息
 			matchVAPDeniedError := func(nodeName string, slice *resourceapi.ResourceSlice) types.GomegaMatcher {
 				subStr := fmt.Sprintf("this user running on node '%s' may not modify ", nodeName)
 				switch {
@@ -4165,21 +4134,21 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				gomega.Expect(err).To(matchError, fmt.Sprintf("DELETE: %s + %s", clientName, slice.Name))
 			}
 
-			// Create with different clients, keep it in the end.
+			// 用不同的 client 创建，最后保留下来。
 			mustFailToCreate(realNodeClient, "real plugin", fictionalNodeSlice, matchVAPDeniedError(realNodeName, fictionalNodeSlice))
 			mustCreateAndDelete(fictionalNodeClient, "fictional plugin", fictionalNodeSlice)
 			createdFictionalNodeSlice := mustCreate(f.ClientSet, "admin", fictionalNodeSlice)
 
-			// Update with different clients.
+			// 用不同的 client 更新。
 			mustFailToUpdate(realNodeClient, "real plugin", createdFictionalNodeSlice, matchVAPDeniedError(realNodeName, createdFictionalNodeSlice))
 			createdFictionalNodeSlice = mustUpdate(fictionalNodeClient, "fictional plugin", createdFictionalNodeSlice)
 			createdFictionalNodeSlice = mustUpdate(f.ClientSet, "admin", createdFictionalNodeSlice)
 
-			// Delete with different clients.
+			// 用不同的 client 删除。
 			mustFailToDelete(realNodeClient, "real plugin", createdFictionalNodeSlice, matchVAPDeniedError(realNodeName, createdFictionalNodeSlice))
 			mustDelete(fictionalNodeClient, "fictional plugin", createdFictionalNodeSlice)
 
-			// Now the same for a slice which is not associated with a node.
+			// 对一个不关联节点的 slice 做同样的检查。
 			clusterSlice := &resourceapi.ResourceSlice{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cluster-slice",
@@ -4200,17 +4169,17 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				}
 			})
 
-			// Create with different clients, keep it in the end.
+			// 用不同的 client 创建，最后保留下来。
 			mustFailToCreate(realNodeClient, "real plugin", clusterSlice, matchVAPDeniedError(realNodeName, clusterSlice))
 			mustFailToCreate(fictionalNodeClient, "fictional plugin", clusterSlice, matchVAPDeniedError(fictionalNodeName, clusterSlice))
 			createdClusterSlice := mustCreate(f.ClientSet, "admin", clusterSlice)
 
-			// Update with different clients.
+			// 用不同的 client 更新。
 			mustFailToUpdate(realNodeClient, "real plugin", createdClusterSlice, matchVAPDeniedError(realNodeName, createdClusterSlice))
 			mustFailToUpdate(fictionalNodeClient, "fictional plugin", createdClusterSlice, matchVAPDeniedError(fictionalNodeName, createdClusterSlice))
 			createdClusterSlice = mustUpdate(f.ClientSet, "admin", createdClusterSlice)
 
-			// Delete with different clients.
+			// 用不同的 client 删除。
 			mustFailToDelete(realNodeClient, "real plugin", createdClusterSlice, matchVAPDeniedError(realNodeName, createdClusterSlice))
 			mustFailToDelete(fictionalNodeClient, "fictional plugin", createdClusterSlice, matchVAPDeniedError(fictionalNodeName, createdClusterSlice))
 			mustDelete(f.ClientSet, "admin", createdClusterSlice)
@@ -4222,7 +4191,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod := b.PodExternal(claim.Name)
 			b.Create(tCtx, claim, pod)
 
-			// Waits for the ResourceClaim to be allocated and the pod to be scheduled.
+			// 等待 ResourceClaim 被分配以及 pod 被调度。
 			b.TestPod(tCtx, pod)
 
 			allocatedResourceClaim, err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
@@ -4253,7 +4222,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					},
 				})
 
-			// Updates the ResourceClaim from the driver on the same node as the pod.
+			// 由与 pod 同节点的 driver 更新 ResourceClaim。
 			plugin, ok := driver.Nodes[scheduledPod.Spec.NodeName]
 			if !ok {
 				framework.Failf("pod got scheduled to node %s without a plugin", scheduledPod.Spec.NodeName)
@@ -4330,9 +4299,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			},
 		}
 		if !nodeV1beta1 {
-			// If the v1beta1 gRPC API is disabled, then
-			// kubelet from 1.34 is required because that is
-			// when v1 was introduced.
+			// 如果禁用 v1beta1 gRPC API，则要求 kubelet >= 1.34，
+			// 因为 v1 是在该版本引入的。
 			args = append(args, f.WithKubeletMinVersion("1.34"))
 		}
 		framework.Context(args...)
@@ -4344,7 +4312,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 		multipleDriversContext("using drapbv1beta1 and drapbv1", true, true)
 	})
 
-	// Test for device health reporting with custom messages
+	// 测试带自定义消息的 device health 上报
 	framework.Context("kubelet", feature.DynamicResourceAllocation, func() {
 		nodes := drautils.NewNodes(f, 1, 1)
 		driver := drautils.NewDriver(f, nodes, drautils.NetworkResources(10, false))
@@ -4358,10 +4326,10 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			pod.Spec.ResourceClaims[0].ResourceClaimName = &claim.Name
 			b.Create(f.TContext(ctx), claim, pod)
 
-			// Wait for pod to start running
+			// 等待 pod 进入 running 状态
 			framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod), "start pod")
 
-			// Get the pool name and device name from the allocated claim
+			// 从已分配的 claim 中获取 pool 名和 device 名
 			allocatedClaim, err := f.ClientSet.ResourceV1().ResourceClaims(f.Namespace.Name).Get(ctx, claim.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(allocatedClaim.Status.Allocation).ToNot(gomega.BeNil())
@@ -4370,7 +4338,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 			poolName := allocatedClaim.Status.Allocation.Devices.Results[0].Pool
 			deviceName := allocatedClaim.Status.Allocation.Devices.Results[0].Device
 
-			// Get the plugin for the node where the pod is scheduled
+			// 获取 pod 所在节点上的 plugin
 			scheduledPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			plugin, ok := driver.Nodes[scheduledPod.Spec.NodeName]
@@ -4378,7 +4346,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				framework.Failf("pod got scheduled to node %s without a plugin", scheduledPod.Spec.NodeName)
 			}
 
-			// Test 1: Set and check initial healthy status with message
+			// 测试 1：设置并检查初始健康状态及消息
 			ginkgo.By("Setting initial healthy status with message")
 			plugin.HealthControlChan <- testdriverapp.DeviceHealthUpdate{
 				PoolName:   poolName,
@@ -4406,7 +4374,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return ""
 			}).WithTimeout(30 * time.Second).Should(gomega.Equal("Device operating normally, temperature: 45°C"))
 
-			// Test 2: Mark device as unhealthy with error message
+			// 测试 2：将设备标记为不健康并附带错误消息
 			ginkgo.By("Marking device as unhealthy with error message")
 			plugin.HealthControlChan <- testdriverapp.DeviceHealthUpdate{
 				PoolName:   poolName,
@@ -4415,7 +4383,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				Message:    "ECC error count exceeded threshold (15 errors in last hour)",
 			}
 
-			// First Eventually: Check health status
+			// 第一个 Eventually：检查健康状态
 			gomega.Eventually(ctx, func(ctx context.Context) v1.ResourceHealthStatus {
 				updatedPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				if err != nil {
@@ -4434,7 +4402,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return ""
 			}).WithTimeout(30 * time.Second).Should(gomega.Equal(v1.ResourceHealthStatusUnhealthy))
 
-			// Second Eventually: Check message
+			// 第二个 Eventually：检查消息
 			gomega.Eventually(ctx, func(ctx context.Context) string {
 				updatedPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				if err != nil {
@@ -4453,7 +4421,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return ""
 			}).WithTimeout(30 * time.Second).Should(gomega.Equal("ECC error count exceeded threshold (15 errors in last hour)"))
 
-			// Test 3: Update message while still unhealthy
+			// 测试 3：在仍不健康时更新消息
 			ginkgo.By("Updating message while device remains unhealthy")
 			plugin.HealthControlChan <- testdriverapp.DeviceHealthUpdate{
 				PoolName:   poolName,
@@ -4482,7 +4450,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return ""
 			}).WithTimeout(30 * time.Second).Should(gomega.Equal("Critical: Memory corruption detected"))
 
-			// Test 4: Mark device as healthy with recovery message
+			// 测试 4：将设备标记为健康并附带恢复消息
 			ginkgo.By("Marking device as healthy with recovery message")
 			plugin.HealthControlChan <- testdriverapp.DeviceHealthUpdate{
 				PoolName:   poolName,
@@ -4491,7 +4459,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				Message:    "Recovered after reset, all diagnostics passed",
 			}
 
-			// First Eventually: Check health status
+			// 第一个 Eventually：检查健康状态
 			gomega.Eventually(ctx, func(ctx context.Context) v1.ResourceHealthStatus {
 				updatedPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				if err != nil {
@@ -4510,7 +4478,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				return ""
 			}).WithTimeout(30 * time.Second).Should(gomega.Equal(v1.ResourceHealthStatusHealthy))
 
-			// Second Eventually: Check message
+			// 第二个 Eventually：检查消息
 			gomega.Eventually(ctx, func(ctx context.Context) string {
 				updatedPod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				if err != nil {
@@ -4570,7 +4538,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				client := f.ClientSet.ResourceV1alpha3().ResourcePoolStatusRequests()
 
 				gomega.Eventually(ctx, func(g gomega.Gomega, ctx context.Context) {
-					// First, get all pools to pick one name.
+					// 先获取所有 pool，从中选一个名字。
 					allPoolsRequest, err := client.Create(ctx, &resourcealphaapi.ResourcePoolStatusRequest{
 						ObjectMeta: metav1.ObjectMeta{GenerateName: "e2e-filter-all-"},
 						Spec:       resourcealphaapi.ResourcePoolStatusRequestSpec{Driver: driver.Name},
@@ -4590,7 +4558,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					framework.ExpectNoError(err)
 					poolName := allObj.Status.Pools[0].PoolName
 
-					// Now filter by that pool name.
+					// 再按该 pool 名称过滤。
 					filtered, err := client.Create(ctx, &resourcealphaapi.ResourcePoolStatusRequest{
 						ObjectMeta: metav1.ObjectMeta{GenerateName: "e2e-filter-one-"},
 						Spec: resourcealphaapi.ResourcePoolStatusRequestSpec{
@@ -4685,7 +4653,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					}
 				})
 
-				// Wait for completion.
+				// 等待处理完成。
 				gomega.Eventually(ctx, framework.GetObject(client.Get, request.Name, metav1.GetOptions{})).
 					WithTimeout(30 * time.Second).
 					Should(gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -4696,7 +4664,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 				framework.ExpectNoError(err)
 				initialResourceVersion := obj.ResourceVersion
 
-				// Wait and verify resourceVersion hasn't changed (no reprocessing).
+				// 等待并确认 resourceVersion 未变化（没有重复处理）。
 				time.Sleep(5 * time.Second)
 				obj, err = client.Get(ctx, request.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
@@ -4716,8 +4684,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					framework.ExpectNoError(err)
 					defer func() { _ = client.Delete(ctx, request.Name, metav1.DeleteOptions{}) }()
 
-					// Wait for status to be populated and verify NodeName is set for each pool.
-					// The driver creates per-node pools, so all slices in a pool share the same node.
+					// 等待 status 填充，并确认每个 pool 都设置了 NodeName。
+					// driver 按节点创建 pool，因此同一 pool 中的 slice 都属于同一节点。
 					g.Eventually(ctx, framework.GetObject(client.Get, request.Name, metav1.GetOptions{})).
 						WithTimeout(15 * time.Second).
 						Should(gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -4747,7 +4715,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 
 				mixedPoolName := "mixed-node-pool"
 
-				// Create two ResourceSlices with the same pool but different NodeName values.
+				// 创建两个 ResourceSlice，pool 相同但 NodeName 不同。
 				slice1 := &resourceapi.ResourceSlice{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: fmt.Sprintf("%s-mixed-node-0", driver.Name),
@@ -4797,7 +4765,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), func() {
 					}
 				})
 
-				// Create a request filtered to the mixed-node pool.
+				// 创建一个按混合节点 pool 过滤的 request。
 				gomega.Eventually(ctx, func(g gomega.Gomega, ctx context.Context) {
 					request, err := statusClient.Create(ctx, &resourcealphaapi.ResourcePoolStatusRequest{
 						ObjectMeta: metav1.ObjectMeta{GenerateName: "e2e-nodename-clear-"},

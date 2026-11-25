@@ -72,13 +72,12 @@ var _ = SIGDescribe("Servers with support for API chunking", func() {
 	/*
 		Release: v1.29
 		Testname: API Chunking, server should return chunks of results for list calls
-		Description: Create a large number of PodTemplates. Attempt to retrieve the first chunk with limit set;
-		the server MUST return the chunk of the size not exceeding the limit with RemainingItems set in the response.
-		Attempt to retrieve the remaining items by providing the received continuation token and limit;
-		the server MUST return the remaining items in chunks of the size not exceeding the limit, with appropriately
-		set RemainingItems field in the response and with the ResourceVersion returned in the first response.
-		Attempt to list all objects at once without setting the limit; the server MUST return all items in a single
-		response.
+		Description: 创建大量 PodTemplate。设置 limit 请求第一批数据；
+		server MUST 返回不超过 limit 的一批数据，并在响应中设置 RemainingItems。
+		使用收到的 continuation token 和 limit 请求剩余条目；
+		server MUST 以不超过 limit 的大小分批返回剩余条目，正确设置响应中的 RemainingItems 字段，
+		并使用第一次响应返回的 ResourceVersion。
+		不设置 limit 一次性列出所有对象；server MUST 在单个响应中返回所有条目。
 	*/
 	framework.ConformanceIt("should return chunks of results for list calls", func(ctx context.Context) {
 		ns := f.Namespace.Name
@@ -90,8 +89,8 @@ var _ = SIGDescribe("Servers with support for API chunking", func() {
 			found := 0
 			var lastRV string
 			for {
-				// With numberOfTotalResources=400, we want to ensure that both
-				// number of items per page and number of pages are non-trivial.
+				// numberOfTotalResources=400 时，要确保每页条目数和页数都足够可观，
+				// 否则分页逻辑无法被真正覆盖。
 				opts.Limit = 17
 				list, err := client.List(ctx, opts)
 				framework.ExpectNoError(err, "failed to list pod templates in namespace: %s, given limit: %d", ns, opts.Limit)
@@ -130,16 +129,14 @@ var _ = SIGDescribe("Servers with support for API chunking", func() {
 	/*
 		Release: v1.29
 		Testname: API Chunking, server should support continue listing from the last key even if the original version has been compacted away
-		Description: Create a large number of PodTemplates. Attempt to retrieve the first chunk with limit set;
-		the server MUST return the chunk of the size not exceeding the limit with RemainingItems set in the response.
-		Attempt to retrieve the second page until the continuation token expires; the server MUST return a
-		continuation token for inconsistent list continuation.
-		Attempt to retrieve the second page with the received inconsistent list continuation token; the server
-		MUST return the number of items not exceeding the limit, a new continuation token and appropriately set
-		RemainingItems field in the response.
-		Attempt to retrieve the remaining pages by passing the received continuation token; the server
-		MUST return the remaining items in chunks of the size not exceeding the limit, with appropriately
-		set RemainingItems field in the response and with the ResourceVersion returned as part of the inconsistent list.
+		Description: 创建大量 PodTemplate。设置 limit 请求第一批数据；
+		server MUST 返回不超过 limit 的一批数据，并在响应中设置 RemainingItems。
+		反复请求第二页直到 continuation token 过期；server MUST 返回一个用于不一致列表续传的
+		continuation token。
+		使用收到的不一致列表 continuation token 请求第二页；server MUST 返回不超过 limit 数量的条目、
+		一个新的 continuation token，并正确设置响应中的 RemainingItems 字段。
+		使用收到的 continuation token 请求剩余页面；server MUST 以不超过 limit 的大小分批返回剩余条目，
+		正确设置响应中的 RemainingItems 字段，并使用不一致列表响应中返回的 ResourceVersion。
 	*/
 	framework.ConformanceIt("should support continue listing from the last key if the original version has been compacted away, though the list is inconsistent", f.WithSlow(), func(ctx context.Context) {
 		ns := f.Namespace.Name

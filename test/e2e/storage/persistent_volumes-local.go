@@ -68,34 +68,33 @@ type localTestConfig struct {
 type localVolumeType string
 
 const (
-	// DirectoryLocalVolumeType is the default local volume type, aka a directory
+	// DirectoryLocalVolumeType 是默认的 local volume 类型，即一个目录
 	DirectoryLocalVolumeType localVolumeType = "dir"
-	// DirectoryLinkLocalVolumeType is like DirectoryLocalVolumeType,
-	// but it's a symbolic link to directory
+	// DirectoryLinkLocalVolumeType 类似 DirectoryLocalVolumeType，
+	// 但它是指向目录的符号链接
 	DirectoryLinkLocalVolumeType localVolumeType = "dir-link"
-	// DirectoryBindMountedLocalVolumeType is like DirectoryLocalVolumeType
-	// but bind mounted
+	// DirectoryBindMountedLocalVolumeType 类似 DirectoryLocalVolumeType，
+	// 但以 bind mount 方式挂载
 	DirectoryBindMountedLocalVolumeType localVolumeType = "dir-bindmounted"
-	// DirectoryLinkBindMountedLocalVolumeType is like DirectoryLocalVolumeType,
-	// but it's a symbolic link to self bind mounted directory
-	// Note that bind mounting at symbolic link actually mounts at directory it
-	// links to.
+	// DirectoryLinkBindMountedLocalVolumeType 类似 DirectoryLocalVolumeType，
+	// 但它是指向自身 bind mount 目录的符号链接。
+	// 注意，在符号链接上做 bind mount 实际上挂载的是它指向的目录。
 	DirectoryLinkBindMountedLocalVolumeType localVolumeType = "dir-link-bindmounted"
-	// TmpfsLocalVolumeType creates a tmpfs and mounts it
+	// TmpfsLocalVolumeType 创建一个 tmpfs 并挂载它
 	TmpfsLocalVolumeType localVolumeType = "tmpfs"
-	// GCELocalSSDVolumeType tests based on local ssd at /mnt/disks/by-uuid/
+	// GCELocalSSDVolumeType 基于 /mnt/disks/by-uuid/ 下的本地 SSD 测试
 	GCELocalSSDVolumeType localVolumeType = "gce-localssd-scsi-fs"
-	// BlockLocalVolumeType creates a local file, formats it, and maps it as a block device.
+	// BlockLocalVolumeType 创建一个本地文件，格式化后映射为块设备。
 	BlockLocalVolumeType localVolumeType = "block"
-	// BlockFsWithFormatLocalVolumeType creates a local file serving as the backing for block device,
-	// formats it, and mounts it to use as FS mode local volume.
+	// BlockFsWithFormatLocalVolumeType 创建一个本地文件作为块设备的后端，
+	// 格式化后挂载为 FS 模式的 local volume。
 	BlockFsWithFormatLocalVolumeType localVolumeType = "blockfswithformat"
-	// BlockFsWithoutFormatLocalVolumeType creates a local file serving as the backing for block device,
-	// does not format it manually, and mounts it to use as FS mode local volume.
+	// BlockFsWithoutFormatLocalVolumeType 创建一个本地文件作为块设备的后端，
+	// 不手动格式化，直接挂载为 FS 模式的 local volume。
 	BlockFsWithoutFormatLocalVolumeType localVolumeType = "blockfswithoutformat"
 )
 
-// map to local test resource type
+// 映射到 local 测试资源类型
 var setupLocalVolumeMap = map[localVolumeType]utils.LocalVolumeType{
 	GCELocalSSDVolumeType:                   utils.LocalVolumeGCELocalSSD,
 	TmpfsLocalVolumeType:                    utils.LocalVolumeTmpfs,
@@ -103,48 +102,48 @@ var setupLocalVolumeMap = map[localVolumeType]utils.LocalVolumeType{
 	DirectoryLinkLocalVolumeType:            utils.LocalVolumeDirectoryLink,
 	DirectoryBindMountedLocalVolumeType:     utils.LocalVolumeDirectoryBindMounted,
 	DirectoryLinkBindMountedLocalVolumeType: utils.LocalVolumeDirectoryLinkBindMounted,
-	BlockLocalVolumeType:                    utils.LocalVolumeBlock, // block device in Block mode
+	BlockLocalVolumeType:                    utils.LocalVolumeBlock, // Block 模式下的块设备
 	BlockFsWithFormatLocalVolumeType:        utils.LocalVolumeBlockFS,
-	BlockFsWithoutFormatLocalVolumeType:     utils.LocalVolumeBlock, // block device in Filesystem mode (default in this test suite)
+	BlockFsWithoutFormatLocalVolumeType:     utils.LocalVolumeBlock, // Filesystem 模式下的块设备（本测试套件的默认值）
 }
 
 type localTestVolume struct {
-	// Local test resource
+	// local 测试资源
 	ltr *utils.LocalTestResource
-	// PVC for this volume
+	// 该 volume 对应的 PVC
 	pvc *v1.PersistentVolumeClaim
-	// PV for this volume
+	// 该 volume 对应的 PV
 	pv *v1.PersistentVolume
-	// Type of local volume
+	// local volume 的类型
 	localVolumeType localVolumeType
 }
 
 const (
-	// TODO: This may not be available/writable on all images.
+	// TODO: 并非所有镜像都提供该路径或允许写入。
 	hostBase = "/tmp"
-	// Path to the first volume in the test containers
-	// created via createLocalPod or makeLocalPod
-	// leveraging pv_util.MakePod
+	// 测试容器中第一个 volume 的路径，
+	// 由 createLocalPod 或 makeLocalPod 创建，
+	// 底层使用 pv_util.MakePod
 	volumeDir = "/mnt/volume1"
-	// testFile created in setupLocalVolume
+	// setupLocalVolume 创建的测试文件
 	testFile = "test-file"
-	// testFileContent written into testFile
+	// 写入 testFile 的测试内容
 	testFileContent = "test-file-content"
 	testSCPrefix    = "local-volume-test-storageclass"
 
-	// A sample request size
+	// 示例请求大小
 	testRequestSize = "10Mi"
 
-	// Max number of nodes to use for testing
+	// 测试使用的最大 node 数量
 	maxNodes = 5
 )
 
 var (
-	// storage class volume binding modes
+	// storage class 的 volume binding 模式
 	waitMode      = storagev1.VolumeBindingWaitForFirstConsumer
 	immediateMode = storagev1.VolumeBindingImmediate
 
-	// Common selinux labels
+	// 常用的 selinux 标签
 	selinuxLabel = &v1.SELinuxOptions{
 		Level: "s0:c0,c1"}
 )
@@ -163,7 +162,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 		framework.ExpectNoError(err)
 
 		scName = fmt.Sprintf("%v-%v", testSCPrefix, f.Namespace.Name)
-		// Choose a random node
+		// 随机选择一个 node
 		randomNode := &nodes.Items[rand.Intn(len(nodes.Items))]
 
 		hostExec := utils.NewHostExec(f)
@@ -238,12 +237,12 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 
 				ginkgo.It("should be able to mount volume and read from pod1", func(ctx context.Context) {
 					ginkgo.By("Reading in pod1")
-					// testFileContent was written in BeforeEach
+					// testFileContent 已在 BeforeEach 中写入
 					testReadFileContent(ctx, f, volumeDir, testFile, testFileContent, pod1, testVolType)
 				})
 
 				ginkgo.It("should be able to mount volume and write from pod1", func(ctx context.Context) {
-					// testFileContent was written in BeforeEach
+					// testFileContent 已在 BeforeEach 中写入
 					testReadFileContent(ctx, f, volumeDir, testFile, testFileContent, pod1, testVolType)
 
 					ginkgo.By("Writing in pod1")
@@ -309,7 +308,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 
 	f.Context("Local volume that cannot be mounted", f.WithSlow(), func() {
 		// TODO:
-		// - check for these errors in unit tests instead
+		// - 改为在单元测试中检查这些错误
 		ginkgo.It("should fail due to non-existent path", func(ctx context.Context) {
 			testVol := &localTestVolume{
 				ltr: &utils.LocalTestResource{
@@ -320,8 +319,8 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 			}
 			ginkgo.By("Creating local PVC and PV")
 			createLocalPVCsPVs(ctx, config, []*localTestVolume{testVol}, immediateMode)
-			// createLocalPod will create a pod and wait for it to be running. In this case,
-			// It's expected that the Pod fails to start.
+			// createLocalPod 会创建 pod 并等待其进入 Running；
+			// 这里预期 Pod 启动失败。
 			_, err := createLocalPod(ctx, config, testVol, nil)
 			gomega.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("is not Running")))
 			cleanupLocalPVCsPVs(ctx, config, []*localTestVolume{testVol})
@@ -399,7 +398,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 
 			testVols = map[string][]*localTestVolume{}
 			for i, node := range config.nodes {
-				// The PVCs created here won't be used
+				// 此处创建的 PVC 不会被使用
 				ginkgo.By(fmt.Sprintf("Setting up local volumes on node %q", node.Name))
 				vols := setupLocalVolumesPVCsPVs(ctx, config, DirectoryLocalVolumeType, &config.nodes[i], volsPerNode, waitMode)
 				testVols[node.Name] = vols
@@ -451,7 +450,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 		)
 
 		const (
-			volsPerNode = 10 // Make this non-divisable by volsPerPod to increase changes of partial binding failure
+			volsPerNode = 10 // 让它不能被 volsPerPod 整除，以增加部分绑定失败的概率
 			volsPerPod  = 3
 			podsFactor  = 4
 		)
@@ -515,7 +514,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 						if apierrors.IsNotFound(err) || errors.Is(err, context.Canceled) {
 							continue
 						}
-						// Delete and create a new PV for same local volume storage
+						// 为同一 local volume 存储删除并重建 PV
 						ginkgo.By(fmt.Sprintf("Delete %q and create a new PV for same local volume storage", pv.Name))
 						for _, localVolumes := range allLocalVolumes {
 							for _, localVolume := range localVolumes {
@@ -545,7 +544,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 		ginkgo.It("should be able to process many pods and reuse local volumes", func(ctx context.Context) {
 			var (
 				podsLock sync.Mutex
-				// Have one extra pod pending
+				// 额外保留一个 pending 的 pod
 				numConcurrentPods = volsPerNode/volsPerPod*len(config.nodes) + 1
 				totalPods         = numConcurrentPods * podsFactor
 				numCreated        = 0
@@ -553,8 +552,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 				pods              = map[string]*v1.Pod{}
 			)
 
-			// Create pods gradually instead of all at once because scheduler has
-			// exponential backoff
+			// 逐步创建 pod，而非一次性全部创建，因为 scheduler 有指数 backoff
 			ginkgo.By(fmt.Sprintf("Creating %v pods periodically", numConcurrentPods))
 			stop := make(chan struct{})
 			go wait.Until(func() {
@@ -563,12 +561,12 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 				defer podsLock.Unlock()
 
 				if numCreated >= totalPods {
-					// Created all the pods for the test
+					// 测试所需的 pod 已全部创建
 					return
 				}
 
 				if len(pods) > numConcurrentPods/2 {
-					// Too many outstanding pods
+					// 未完成处理的 pod 过多
 					return
 				}
 
@@ -620,7 +618,7 @@ var _ = utils.SIGDescribe("PersistentVolumes-local", func() {
 
 				for _, pod := range podsList.Items {
 					if pod.Status.Phase == v1.PodSucceeded {
-						// Delete pod and its PVCs
+						// 删除 pod 及其 PVC
 						if err := deletePodAndPVCs(ctx, config, &pod); err != nil {
 							return false, err
 						}
@@ -643,7 +641,7 @@ func deletePodAndPVCs(ctx context.Context, config *localTestConfig, pod *v1.Pod)
 		return err
 	}
 
-	// Delete PVCs
+	// 删除 PVC
 	for _, vol := range pod.Spec.Volumes {
 		pvcSource := vol.VolumeSource.PersistentVolumeClaim
 		if pvcSource != nil {
@@ -668,9 +666,9 @@ func testPodWithNodeConflict(ctx context.Context, config *localTestConfig, testV
 	framework.ExpectNoError(err)
 }
 
-// The tests below are run against multiple mount point types
+// 以下测试针对多种挂载点类型运行
 
-// Test two pods at the same time, write from pod1, and read from pod2
+// 同时运行两个 pod，从 pod1 写入，从 pod2 读取
 func twoPodsReadWriteTest(ctx context.Context, f *framework.Framework, config *localTestConfig, testVol *localTestVolume) {
 	ginkgo.By("Creating pod1 to write to the PV")
 	pod1, pod1Err := createLocalPod(ctx, config, testVol, nil)
@@ -682,7 +680,7 @@ func twoPodsReadWriteTest(ctx context.Context, f *framework.Framework, config *l
 	ginkgo.By("Writing in pod1")
 	podRWCmdExec(ctx, f, pod1, writeCmd)
 
-	// testFileContent was written after creating pod1
+	// testFileContent 在 pod1 创建之后写入
 	testReadFileContent(ctx, f, volumeDir, testFile, testFileContent, pod1, testVol.localVolumeType)
 
 	ginkgo.By("Creating pod2 to read from the PV")
@@ -690,7 +688,7 @@ func twoPodsReadWriteTest(ctx context.Context, f *framework.Framework, config *l
 	framework.ExpectNoError(pod2Err)
 	verifyLocalPod(ctx, config, testVol, pod2, config.randomNode.Name)
 
-	// testFileContent was written after creating pod1
+	// testFileContent 在 pod1 创建之后写入
 	testReadFileContent(ctx, f, volumeDir, testFile, testFileContent, pod2, testVol.localVolumeType)
 
 	writeCmd = createWriteCmd(volumeDir, testFile, testVol.ltr.Path /*writeTestFileContent*/, testVol.localVolumeType)
@@ -707,7 +705,7 @@ func twoPodsReadWriteTest(ctx context.Context, f *framework.Framework, config *l
 	e2epod.DeletePodOrFail(ctx, config.client, config.ns, pod2.Name)
 }
 
-// Test two pods one after other, write from pod1, and read from pod2
+// 先后运行两个 pod，从 pod1 写入，从 pod2 读取
 func twoPodsReadWriteSerialTest(ctx context.Context, f *framework.Framework, config *localTestConfig, testVol *localTestVolume) {
 	ginkgo.By("Creating pod1")
 	pod1, pod1Err := createLocalPod(ctx, config, testVol, nil)
@@ -719,7 +717,7 @@ func twoPodsReadWriteSerialTest(ctx context.Context, f *framework.Framework, con
 	ginkgo.By("Writing in pod1")
 	podRWCmdExec(ctx, f, pod1, writeCmd)
 
-	// testFileContent was written after creating pod1
+	// testFileContent 在 pod1 创建之后写入
 	testReadFileContent(ctx, f, volumeDir, testFile, testFileContent, pod1, testVol.localVolumeType)
 
 	ginkgo.By("Deleting pod1")
@@ -737,7 +735,7 @@ func twoPodsReadWriteSerialTest(ctx context.Context, f *framework.Framework, con
 	e2epod.DeletePodOrFail(ctx, config.client, config.ns, pod2.Name)
 }
 
-// Test creating pod with fsGroup, and check fsGroup is expected fsGroup.
+// 测试创建带 fsGroup 的 pod，并检查其 fsGroup 是否符合预期。
 func createPodWithFsGroupTest(ctx context.Context, config *localTestConfig, testVol *localTestVolume, fsGroup int64, expectedFsGroup int64) *v1.Pod {
 	pod, err := createLocalPod(ctx, config, testVol, &fsGroup)
 	framework.ExpectNoError(err)
@@ -763,13 +761,13 @@ func cleanupStorageClass(ctx context.Context, config *localTestConfig) {
 	framework.ExpectNoError(config.client.StorageV1().StorageClasses().Delete(ctx, config.scName, metav1.DeleteOptions{}))
 }
 
-// podNode wraps RunKubectl to get node where pod is running
+// podNodeName 获取 pod 运行所在的 node
 func podNodeName(ctx context.Context, config *localTestConfig, pod *v1.Pod) (string, error) {
 	runtimePod, runtimePodErr := config.client.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	return runtimePod.Spec.NodeName, runtimePodErr
 }
 
-// setupLocalVolumes sets up directories to use for local PV
+// setupLocalVolumes 准备用作 local PV 的目录
 func setupLocalVolumes(ctx context.Context, config *localTestConfig, localVolumeType localVolumeType, node *v1.Node, count int) []*localTestVolume {
 	vols := []*localTestVolume{}
 	for range count {
@@ -796,7 +794,7 @@ func cleanupLocalPVCsPVs(ctx context.Context, config *localTestConfig, volumes [
 	}
 }
 
-// Deletes the PVC/PV, and launches a pod with hostpath volume to remove the test directory
+// 删除 PVC/PV，并启动一个带 hostpath volume 的 pod 来移除测试目录
 func cleanupLocalVolumes(ctx context.Context, config *localTestConfig, volumes []*localTestVolume) {
 	cleanupLocalPVCsPVs(ctx, config, volumes)
 
@@ -829,7 +827,7 @@ func makeLocalPVCConfig(config *localTestConfig, volumeType localVolumeType) e2e
 }
 
 func makeLocalPVConfig(config *localTestConfig, volume *localTestVolume) e2epv.PersistentVolumeConfig {
-	// TODO: hostname may not be the best option
+	// TODO: hostname 可能不是最佳选择
 	nodeKey := "kubernetes.io/hostname"
 	if volume.ltr.Node.Labels == nil {
 		framework.Failf("Node does not have labels")
@@ -871,7 +869,7 @@ func makeLocalPVConfig(config *localTestConfig, volume *localTestVolume) e2epv.P
 	return pvConfig
 }
 
-// Creates a PVC and PV with prebinding
+// 创建预绑定的 PVC 和 PV
 func createLocalPVCsPVs(ctx context.Context, config *localTestConfig, volumes []*localTestVolume, mode storagev1.VolumeBindingMode) {
 	var err error
 
@@ -888,8 +886,8 @@ func createLocalPVCsPVs(ctx context.Context, config *localTestConfig, volumes []
 			verifyLocalVolume(ctx, config, volume)
 		}
 	} else {
-		// Verify PVCs are not bound by waiting for phase==bound with a timeout and asserting that we hit the timeout.
-		// There isn't really a great way to verify this without making the test be slow...
+		// 通过等待 phase==bound 直到超时来验证 PVC 没有被绑定。
+		// 要想验证这一点又不拖慢测试，实在没有更好的办法……
 		const bindTimeout = 10 * time.Second
 		waitErr := wait.PollImmediate(time.Second, bindTimeout, func() (done bool, err error) {
 			for _, volume := range volumes {
@@ -988,17 +986,17 @@ func createLocalPod(ctx context.Context, config *localTestConfig, volume *localT
 
 func createWriteCmd(testDir string, testFile string, writeTestFileContent string, volumeType localVolumeType) string {
 	if volumeType == BlockLocalVolumeType {
-		// testDir is the block device.
+		// testDir 是块设备。
 		testFileDir := filepath.Join("/tmp", testDir)
 		testFilePath := filepath.Join(testFileDir, testFile)
-		// Create a file containing the testFileContent.
+		// 创建包含 testFileContent 的文件。
 		writeTestFileCmd := fmt.Sprintf("mkdir -p %s; echo %s > %s", testFileDir, writeTestFileContent, testFilePath)
-		// sudo is needed when using ssh exec to node.
-		// sudo is not needed and does not exist in some containers (e.g. busybox), when using pod exec.
+		// 通过 ssh exec 到 node 时需要 sudo。
+		// 使用 pod exec 时不需要 sudo，某些容器（如 busybox）中也不存在 sudo。
 		sudoCmd := fmt.Sprintf("SUDO_CMD=$(which sudo); echo ${SUDO_CMD}")
-		// Write the testFileContent into the block device.
+		// 将 testFileContent 写入块设备。
 		writeBlockCmd := fmt.Sprintf("${SUDO_CMD} dd if=%s of=%s bs=512 count=100", testFilePath, testDir)
-		// Cleanup the file containing testFileContent.
+		// 清理包含 testFileContent 的文件。
 		deleteTestFileCmd := fmt.Sprintf("rm %s", testFilePath)
 		return fmt.Sprintf("%s && %s && %s && %s", writeTestFileCmd, sudoCmd, writeBlockCmd, deleteTestFileCmd)
 	}
@@ -1008,23 +1006,22 @@ func createWriteCmd(testDir string, testFile string, writeTestFileContent string
 
 func createReadCmd(testFileDir string, testFile string, volumeType localVolumeType) string {
 	if volumeType == BlockLocalVolumeType {
-		// Create the command to read the beginning of the block device and print it in ascii.
+		// 构造命令读取块设备开头并以 ASCII 输出。
 		return fmt.Sprintf("hexdump -n 100 -e '100 \"%%_p\"' %s | head -1", testFileDir)
 	}
-	// Create the command to read (aka cat) a file.
+	// 构造读取（即 cat）文件的命令。
 	testFilePath := filepath.Join(testFileDir, testFile)
 	return fmt.Sprintf("cat %s", testFilePath)
 }
 
-// Read testFile and evaluate whether it contains the testFileContent
+// 读取 testFile 并检查其中是否包含 testFileContent
 func testReadFileContent(ctx context.Context, f *framework.Framework, testFileDir string, testFile string, testFileContent string, pod *v1.Pod, volumeType localVolumeType) {
 	readCmd := createReadCmd(testFileDir, testFile, volumeType)
 	readOut := podRWCmdExec(ctx, f, pod, readCmd)
 	gomega.Expect(readOut).To(gomega.ContainSubstring(testFileContent))
 }
 
-// Execute a read or write command in a pod.
-// Fail on error
+// 在 pod 中执行读或写命令，出错则失败。
 func podRWCmdExec(ctx context.Context, f *framework.Framework, pod *v1.Pod, cmd string) string {
 	stdout, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, f, pod.Name, cmd)
 	framework.Logf("podRWCmdExec cmd: %q, out: %q, stderr: %q, err: %v", cmd, stdout, stderr, err)
@@ -1032,8 +1029,7 @@ func podRWCmdExec(ctx context.Context, f *framework.Framework, pod *v1.Pod, cmd 
 	return stdout
 }
 
-// Initialize test volume on node
-// and create local PVC and PV
+// 在 node 上初始化测试 volume，并创建 local PVC 和 PV
 func setupLocalVolumesPVCsPVs(
 	ctx context.Context,
 	config *localTestConfig,
@@ -1051,7 +1047,7 @@ func setupLocalVolumesPVCsPVs(
 	return testVols
 }
 
-// newLocalClaim creates a new persistent volume claim.
+// newLocalClaimWithName 创建一个新的 persistent volume claim。
 func newLocalClaimWithName(config *localTestConfig, name string) *v1.PersistentVolumeClaim {
 	claim := v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1162,14 +1158,14 @@ func validateStatefulSet(ctx context.Context, config *localTestConfig, ss *appsv
 	}
 
 	if anti {
-		// Verify that each pod is on a different node
+		// 验证每个 pod 位于不同的 node 上
 		gomega.Expect(pods.Items).To(gomega.HaveLen(nodes.Len()))
 	} else {
-		// Verify that all pods are on same node.
+		// 验证所有 pod 位于同一个 node 上。
 		gomega.Expect(nodes.Len()).To(gomega.Equal(1))
 	}
 
-	// Validate all PVCs are bound
+	// 验证所有 PVC 都已绑定
 	for _, pod := range pods.Items {
 		for _, volume := range pod.Spec.Volumes {
 			pvcSource := volume.VolumeSource.PersistentVolumeClaim
@@ -1182,8 +1178,8 @@ func validateStatefulSet(ctx context.Context, config *localTestConfig, ss *appsv
 	}
 }
 
-// SkipUnlessLocalSSDExists takes in an ssdInterface (scsi/nvme) and a filesystemType (fs/block)
-// and skips if a disk of that type does not exist on the node
+// SkipUnlessLocalSSDExists 接收 ssdInterface（scsi/nvme）和 filesystemType（fs/block），
+// 如果 node 上不存在该类型的磁盘则跳过测试
 func SkipUnlessLocalSSDExists(ctx context.Context, config *localTestConfig, ssdInterface, filesystemType string, node *v1.Node) {
 	ssdCmd := fmt.Sprintf("ls -1 /mnt/disks/by-uuid/google-local-ssds-%s-%s/ | wc -l", ssdInterface, filesystemType)
 	res, err := config.hostExec.Execute(ctx, ssdCmd, node)

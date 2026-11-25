@@ -44,9 +44,9 @@ var _ storageframework.TestSuite = &pvcDeletionPerformanceTestSuite{}
 
 const pvcDeletionTestTimeout = 30 * time.Minute
 
-// InitPvcDeletionPerformanceTestSuite returns pvcDeletionPerformanceTestSuite that implements TestSuite interface
-// This test suite brings up a number of pods and PVCS (configured upstream), deletes the pods, and then deletes the PVCs.
-// The main goal is to record the duration for the PVC/PV deletion process for each run, and so the test doesn't set explicit expectations to match against.
+// InitPvcDeletionPerformanceTestSuite 返回实现了 TestSuite 接口的 pvcDeletionPerformanceTestSuite。
+// 该测试套件会创建若干 pod 和 PVC（数量由上游配置），先删除 pod，再删除 PVC。
+// 主要目标是记录每次运行中 PVC/PV 删除过程的耗时，因此不设置明确的断言。
 func InitPvcDeletionPerformanceTestSuite() storageframework.TestSuite {
 	return &pvcDeletionPerformanceTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -82,7 +82,7 @@ func (t *pvcDeletionPerformanceTestSuite) DefineTests(driver storageframework.Te
 		l     *local
 	)
 	ginkgo.BeforeEach(func() {
-		// Check preconditions
+		// 检查前置条件
 		dDriver := driver.(storageframework.DynamicPVTestDriver)
 		if dDriver == nil {
 			e2eskipper.Skipf("Test driver does not support dynamically created volumes")
@@ -96,8 +96,8 @@ func (t *pvcDeletionPerformanceTestSuite) DefineTests(driver storageframework.Te
 		}
 	})
 
-	// Set high QPS for the framework to avoid client-side throttling from the test itself,
-	// which can interfere with measuring deletion time
+	// 为 framework 设置较高的 QPS，避免测试自身的客户端限流
+	// 干扰删除耗时的测量
 	frameworkOptions := framework.Options{
 		ClientQPS:   500,
 		ClientBurst: 1000,
@@ -142,8 +142,8 @@ func (t *pvcDeletionPerformanceTestSuite) DefineTests(driver storageframework.Te
 			startTime := time.Now()
 			wg.Add(len(l.pvcs))
 			for _, pvc := range l.pvcs {
-				go func(pvc *v1.PersistentVolumeClaim) { // Start a goroutine for each PVC
-					defer wg.Done() // Decrement the counter when the goroutine finishes
+				go func(pvc *v1.PersistentVolumeClaim) { // 为每个 PVC 启动一个 goroutine
+					defer wg.Done() // goroutine 结束时递减计数器
 					startDeletingPvcTime := time.Now()
 					framework.Logf("Start deleting PVC %v", pvc.GetName())
 					deletingStats.mutex.Lock()
@@ -161,9 +161,9 @@ func (t *pvcDeletionPerformanceTestSuite) DefineTests(driver storageframework.Te
 			}
 			wg.Wait()
 
-			endTime := time.Now() // Capture overall end time
+			endTime := time.Now() // 记录整体结束时间
 			totalDuration := endTime.Sub(startTime)
-			framework.Logf("Deleted all PVC/PVs in %v", totalDuration) // Log total deletion time
+			framework.Logf("Deleted all PVC/PVs in %v", totalDuration) // 记录总删除耗时
 
 			ginkgo.By(fmt.Sprintf("Deleting Storage Class %s", l.scName))
 			err := l.cs.StorageV1().StorageClasses().Delete(ctx, l.scName, metav1.DeleteOptions{})
@@ -192,16 +192,16 @@ func (t *pvcDeletionPerformanceTestSuite) DefineTests(driver storageframework.Te
 		framework.ExpectNoError(err)
 		l.scName = sc.Name
 
-		// Stats for volume provisioning operation; we only need this because imported function newPVCWatch from volumeperf.go requires this as an argument
-		// (this test itself doesn't use these stats)
+		// volume provisioning 操作的统计数据；这里只需要传入，因为
+		// volumeperf.go 中引入的 newPVCWatch 需要该参数（本测试自身不使用这些统计）。
 		provisioningStats := &performanceStats{
 			mutex:             &sync.Mutex{},
 			perObjectInterval: make(map[string]*interval),
 			operationMetrics:  &storageframework.Metrics{},
 		}
-		// Create a controller to watch on PVCs
-		// When all PVCs provisioned by this test are in the Bound state, the controller
-		// sends a signal to the channel
+		// 创建一个 controller 监听 PVC，
+		// 当本测试创建的所有 PVC 都进入 Bound 状态时，
+		// 它会向 channel 发送信号。
 		controller := newPVCWatch(ctx, f, l.options.ProvisioningOptions.Count, provisioningStats)
 		l.stopCh = make(chan struct{})
 		go controller.Run(l.stopCh)
@@ -215,13 +215,13 @@ func (t *pvcDeletionPerformanceTestSuite) DefineTests(driver storageframework.Te
 			}, l.ns.Name)
 			pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(ctx, pvc, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
-			// Store create time for each PVC
+			// 记录每个 PVC 的创建时间
 			provisioningStats.mutex.Lock()
 			provisioningStats.perObjectInterval[pvc.Name] = &interval{
 				create: pvc.CreationTimestamp.Time,
 			}
 			provisioningStats.mutex.Unlock()
-			// Create pods
+			// 创建 pod
 			podConfig := e2epod.Config{
 				NS:           l.ns.Name,
 				SeLinuxLabel: e2epv.SELinuxLabel,

@@ -44,7 +44,7 @@ var _ = SIGDescribe("Secrets", func() {
 	/*
 		Release: v1.9
 		Testname: Secrets, pod environment field
-		Description: Create a secret. Create a Pod with Container that declares a environment variable which references the secret created to extract a key value from the secret. Pod MUST have the environment variable that contains proper value for the key to the secret.
+		Description: 创建 secret。创建一个 Pod，其容器声明了引用该 secret 的环境变量以提取某个 key 的值。Pod MUST 拥有该环境变量，且其值 MUST 为 secret 中对应 key 的正确值。
 	*/
 	framework.ConformanceIt("should be consumable from pods in env vars", f.WithNodeConformance(), func(ctx context.Context) {
 		name := "secret-test-" + string(uuid.NewUUID())
@@ -93,7 +93,7 @@ var _ = SIGDescribe("Secrets", func() {
 	/*
 		Release: v1.9
 		Testname: Secrets, pod environment from source
-		Description: Create a secret. Create a Pod with Container that declares a environment variable using 'EnvFrom' which references the secret created to extract a key value from the secret. Pod MUST have the environment variable that contains proper value for the key to the secret.
+		Description: 创建 secret。创建一个 Pod，其容器通过 'EnvFrom' 声明引用该 secret 的环境变量以提取某个 key 的值。Pod MUST 拥有该环境变量，且其值 MUST 为 secret 中对应 key 的正确值。
 	*/
 	framework.ConformanceIt("should be consumable via the environment", f.WithNodeConformance(), func(ctx context.Context) {
 		name := "secret-test-" + string(uuid.NewUUID())
@@ -138,7 +138,7 @@ var _ = SIGDescribe("Secrets", func() {
 	/*
 	   Release: v1.15
 	   Testname: Secrets, with empty-key
-	   Description: Attempt to create a Secret with an empty key. The creation MUST fail.
+	   Description: 尝试创建带空 key 的 Secret。创建 MUST 失败。
 	*/
 	framework.ConformanceIt("should fail to create secret due to empty secret key", func(ctx context.Context) {
 		secret, err := createEmptyKeySecretForTest(ctx, f)
@@ -148,18 +148,18 @@ var _ = SIGDescribe("Secrets", func() {
 	/*
 			   Release: v1.18
 			   Testname: Secret patching
-			   Description: A Secret is created.
-		           Listing all Secrets MUST return an empty list.
-		           Given the patching and fetching of the Secret, the fields MUST equal the new values.
-		           The Secret is deleted by it's static Label.
-		           Secrets are listed finally, the list MUST NOT include the originally created Secret.
+			   Description: 创建 Secret。
+		           列出所有 Secret MUST 返回空列表。
+		           对 Secret 打 patch 后再次获取，其字段 MUST 等于新值。
+		           通过静态 Label 删除该 Secret。
+		           最后再次列出 Secret，列表中 MUST NOT 包含最初创建的 Secret。
 	*/
 	framework.ConformanceIt("should patch a secret", func(ctx context.Context) {
 		ginkgo.By("creating a secret")
 
 		secretTestName := "test-secret-" + string(uuid.NewUUID())
 
-		// create a secret in the test namespace
+		// 在测试命名空间中创建 secret
 		createdSecret, err := f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Create(ctx, &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: secretTestName,
@@ -176,7 +176,7 @@ var _ = SIGDescribe("Secrets", func() {
 		gomega.Expect(createdSecret).To(apimachineryutils.HaveValidResourceVersion())
 
 		ginkgo.By("listing secrets in all namespaces to ensure that there are more than zero")
-		// list all secrets in all namespaces to ensure endpoint coverage
+		// 列出所有命名空间中的 secret，以覆盖跨命名空间 list endpoint
 		secretsList, err := f.ClientSet.CoreV1().Secrets("").List(ctx, metav1.ListOptions{
 			LabelSelector: "testsecret-constant=true",
 		})
@@ -197,7 +197,7 @@ var _ = SIGDescribe("Secrets", func() {
 		}
 
 		ginkgo.By("patching the secret")
-		// patch the secret in the test namespace
+		// 在测试命名空间中 patch secret
 		secretPatchNewData := base64.StdEncoding.EncodeToString([]byte("value1"))
 		secretPatch, err := json.Marshal(map[string]interface{}{
 			"metadata": map[string]interface{}{
@@ -225,7 +225,7 @@ var _ = SIGDescribe("Secrets", func() {
 		framework.ExpectNoError(err, "failed to delete patched secret")
 
 		ginkgo.By("listing secrets in all namespaces, searching for label name and value in patch")
-		// list all secrets in all namespaces
+		// 列出所有命名空间中的 secret
 		secretsList, err = f.ClientSet.CoreV1().Secrets("").List(ctx, metav1.ListOptions{
 			LabelSelector: "testsecret-constant=true",
 		})
@@ -246,9 +246,9 @@ var _ = SIGDescribe("Secrets", func() {
 	/*
 		Release: v1.34
 		Testname: Secrets, pod environment from source
-		Description: Create a Pod with environment variable values set using values from Secret.
-		Allows users to use envFrom to set prefixes with various printable ASCII characters excluding '=' as environment variable names.
-		This test verifies that different prefixes including digits, special characters, and letters can be correctly used.
+		Description: 创建使用 Secret 中的值设置环境变量的 Pod。
+		允许用户通过 envFrom 使用除 '=' 外的各种可打印 ASCII 字符作为环境变量名的前缀。
+		该测试验证数字、特殊字符和字母等不同前缀都能正确使用。
 	*/
 	framework.ConformanceIt("should be consumable as environment variable names variable names with various prefixes", func(ctx context.Context) {
 		name := "secret-test-" + string(uuid.NewUUID())
@@ -272,26 +272,26 @@ var _ = SIGDescribe("Secrets", func() {
 						Command: []string{"sh", "-c", "env"},
 						EnvFrom: []v1.EnvFromSource{
 							{
-								// No prefix
+								// 无前缀
 								SecretRef: &v1.SecretEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix starting with a digit
+								// 以数字开头的前缀
 								Prefix:    "1-",
 								SecretRef: &v1.SecretEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix with special characters
+								// 含特殊字符的前缀
 								Prefix:    "$_-",
 								SecretRef: &v1.SecretEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix with uppercase letters
+								// 含大写字母的前缀
 								Prefix:    "ABC_",
 								SecretRef: &v1.SecretEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
 							{
-								// Prefix with symbols
+								// 含符号的前缀
 								Prefix:    "#@!",
 								SecretRef: &v1.SecretEnvSource{LocalObjectReference: v1.LocalObjectReference{Name: name}},
 							},
@@ -303,15 +303,15 @@ var _ = SIGDescribe("Secrets", func() {
 		}
 
 		e2epodoutput.TestContainerOutput(ctx, f, "consume secrets", pod, 0, []string{
-			// Original values without prefix
+			// 无前缀的原始值
 			"data-1=value-1", "data-2=value-2", "data-3=value-3",
-			// Values with digit prefix
+			// 带数字前缀的值
 			"1-data-1=value-1", "1-data-2=value-2", "1-data-3=value-3",
-			// Values with special character prefix
+			// 带特殊字符前缀的值
 			"$_-data-1=value-1", "$_-data-2=value-2", "$_-data-3=value-3",
-			// Values with uppercase letter prefix
+			// 带大写字母前缀的值
 			"ABC_data-1=value-1", "ABC_data-2=value-2", "ABC_data-3=value-3",
-			// Values with symbol prefix
+			// 带符号前缀的值
 			"#@!data-1=value-1", "#@!data-2=value-2", "#@!data-3=value-3",
 		})
 	})

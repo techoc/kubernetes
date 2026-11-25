@@ -49,16 +49,15 @@ var (
 	}
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm configures the proxy addon as expected
+// 定义容器，容纳所有用于验证 kubeadm 是否按预期配置 proxy addon 的测试用例
 var _ = Describe("proxy addon", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s 测试框架实例
 	f := framework.NewDefaultFramework("proxy")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 该容器中的测试不会在集群里创建对象，
+	// 因此禁用 namespace 创建以加快执行速度
 	f.SkipNamespaceCreation = true
 
 	ginkgo.Context("kube-proxy ServiceAccount", func() {

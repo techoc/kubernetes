@@ -46,7 +46,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Examples of using CRI proxy
+// CRI proxy 使用示例
 var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 	f := framework.NewDefaultFramework("cri-proxy-example")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -205,7 +205,7 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 		})
 
 		ginkgo.It("should expect error log for image volume with empty Image.Image", func(ctx context.Context) {
-			// This test verifies error handling when imageSpec.Image is empty (curVolumeMount.Image.Image == "").
+			// 该测试验证 imageSpec.Image 为空（curVolumeMount.Image.Image == ""）时的错误处理
 
 			pod := getImageVolumePod()
 			pod = e2epod.NewPodClient(f).Create(ctx, pod)
@@ -255,7 +255,7 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 		})
 	})
 
-	// CRI streaming API tests
+	// CRI streaming API 测试
 	framework.Context("CRI streaming list operations", feature.CriProxy, framework.WithFeatureGate(features.CRIListStreaming), func() {
 		ginkgo.BeforeEach(func() {
 			if err := resetCRIProxyInjector(e2eCriProxy); err != nil {
@@ -267,7 +267,7 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 		})
 
 		ginkgo.It("should use streaming RPCs for listing pods and containers", func(ctx context.Context) {
-			// Track which streaming APIs were called
+			// 记录哪些 streaming API 被调用过
 			apiCalled := make(map[string]bool)
 			err := addCRIProxyInjector(e2eCriProxy, func(apiName string) error {
 				apiCalled[apiName] = true
@@ -275,7 +275,7 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 			})
 			framework.ExpectNoError(err)
 
-			// Wait for kubelet to make list calls (which should use streaming when enabled)
+			// 等待 kubelet 发起 list 调用（启用 streaming 时应走 streaming）
 			gomega.Eventually(func(g gomega.Gomega) {
 				g.Expect(apiCalled[criproxy.StreamContainers]).To(gomega.BeTrueBecause("StreamContainers should be called"))
 				g.Expect(apiCalled[criproxy.StreamPodSandboxes]).To(gomega.BeTrueBecause("StreamPodSandboxes should be called"))
@@ -285,13 +285,11 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 		})
 
 		ginkgo.It("should handle mid-stream errors", func(ctx context.Context) {
-			// Create a pod so that StreamContainersSend is called at least twice
-			// (once per container), allowing us to inject a mid-stream error
-			// after the first item is successfully sent.
+			// 创建多容器 pod，使 StreamContainersSend 至少调用两次（每个容器一次），
+			// 以便在第一条数据成功发送后注入流中途错误
 			e2epod.NewPodClient(f).CreateSync(ctx, newPausePodWithContainers(2))
 
-			// Track per-call send count so we can fail after the first item
-			// is successfully sent, simulating a mid-stream failure.
+			// 按次记录发送数量，以便在第一条数据成功后触发失败，模拟流中途异常
 			var perCallSendCount atomic.Int32
 			var midStreamErrors atomic.Int32
 			var listFallbackCalls atomic.Int32
@@ -299,7 +297,7 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 			err := addCRIProxyInjector(e2eCriProxy, func(apiName string) error {
 				switch apiName {
 				case criproxy.StreamContainers:
-					// Reset per-call counter at the start of each streaming call
+					// 每次 streaming 调用开始时重置计数
 					perCallSendCount.Store(0)
 				case criproxy.StreamContainersSend:
 					if perCallSendCount.Add(1) > 1 {
@@ -313,20 +311,20 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 			})
 			framework.ExpectNoError(err)
 
-			// Wait for the mid-stream error to be triggered at least once
+			// 等待流中途错误至少触发一次
 			gomega.Eventually(func() bool {
 				return midStreamErrors.Load() > 0
 			}).WithPolling(1 * time.Second).WithTimeout(1 * time.Minute).Should(
 				gomega.BeTrueBecause("Expected mid-stream error to be triggered during StreamContainers"))
 
-			// Verify no fallback to unary RPC (Internal errors should NOT trigger fallback)
+			// 确认不会回退到 unary RPC（Internal 错误不应触发回退）
 			gomega.Expect(listFallbackCalls.Load()).To(gomega.Equal(int32(0)),
 				"Non-Unimplemented errors should not trigger fallback to ListContainers")
 		})
 
 		ginkgo.It("should handle streaming timeout", func(ctx context.Context) {
-			// Create a pod so that StreamContainersSend is called at least twice,
-			// allowing us to block on the second send to simulate a timeout.
+			// 创建多容器 pod，使 StreamContainersSend 至少调用两次，
+			// 从而在第二次发送时阻塞以模拟超时
 			e2epod.NewPodClient(f).CreateSync(ctx, newPausePodWithContainers(5))
 
 			var perCallSendCount atomic.Int32
@@ -335,12 +333,11 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 			err := addCRIProxyInjector(e2eCriProxy, func(apiName string) error {
 				switch apiName {
 				case criproxy.StreamContainers:
-					// Reset per-call counter at the start of each streaming call
+					// 每次 streaming 调用开始时重置计数
 					perCallSendCount.Store(0)
 				case criproxy.StreamContainersSend:
-					// Simulate a slow runtime by waiting one minute per item;
-					// the client's context timeout will fire and the Recv()
-					// will return DeadlineExceeded.
+					// 每条数据等待一分钟以模拟缓慢的 runtime；
+					// 客户端 context 超时后会触发，Recv() 将返回 DeadlineExceeded
 					time.Sleep(1 * time.Minute)
 					perCallSendCount.Add(1)
 				case criproxy.ListContainers:
@@ -350,9 +347,8 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 			})
 			framework.ExpectNoError(err)
 
-			// Ensure the number of containers sent per streaming call never exceeds 2,
-			// because the connection timeout is set to 2 mins.
-			// It confirms the client times out behave the same as List methods.
+			// 确认每次 streaming 调用发送的容器数不超过 2，
+			// 因为连接超时设为 2 分钟；这也验证客户端超时行为与 List 方法一致
 			gomega.Eventually(func() bool {
 				return perCallSendCount.Load() > 0
 			}).WithPolling(1 * time.Second).WithTimeout(3 * time.Minute).Should(
@@ -360,23 +356,21 @@ var _ = SIGDescribe(feature.CriProxy, framework.WithSerial(), func() {
 			gomega.Expect(perCallSendCount.Load()).To(gomega.BeNumerically("<=", int32(2)),
 				"Expected no more than 2 containers to be sent before timeout")
 
-			// Wait for the kubelet to log the streaming recv failure caused by the timeout
+			// 等待 kubelet 记录因超时导致的 streaming recv 失败
 			gomega.Eventually(func() error {
 				return verifyErrorInKubeletLogs("StreamContainers recv failed")
 			}).WithPolling(5*time.Second).WithTimeout(3*time.Minute).Should(gomega.Succeed(),
 				"Expected kubelet to log a StreamContainers recv failure due to timeout")
 
-			// Verify no fallback to unary RPC (timeout errors should NOT trigger fallback)
+			// 确认不会回退到 unary RPC（超时错误不应触发回退）
 			gomega.Expect(listFallbackCalls.Load()).To(gomega.Equal(int32(0)),
 				"Timeout errors should not trigger fallback to ListContainers")
 		})
 
-		// Each fallback test restarts the kubelet to ensure a fresh CRI client
-		// with useStreaming=true, since triggering the Unimplemented fallback
-		// permanently disables streaming on the kubelet's CRI client.
+		// 每个回退测试都会重启 kubelet，以获得 useStreaming=true 的新 CRI client；
+		// 因为一旦触发 Unimplemented 回退，kubelet 的 CRI client 会永久禁用 streaming
 		ginkgo.It("should fall back to unary RPC when streaming returns Unimplemented", func(ctx context.Context) {
-			// Restart kubelet on cleanup to reset the useStreaming flag,
-			// which is cached from the first streaming attempt.
+			// 清理时重启 kubelet，以重置首次 streaming 尝试后缓存的 useStreaming 标志
 			ginkgo.DeferCleanup(func(ctx context.Context) error {
 				err := resetCRIProxyInjector(e2eCriProxy)
 				if err != nil {

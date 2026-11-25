@@ -26,25 +26,25 @@ import (
 	"k8s.io/kubernetes/test/utils"
 )
 
-// CAdvisorE2ERemote contains the specific functions in the cadvisor e2e test suite.
+// CAdvisorE2ERemote 包含 cadvisor e2e 测试套件特有的函数
 type CAdvisorE2ERemote struct{}
 
-// init performs initialization for cadvisor remote testing
+// init 完成 cadvisor 远程测试的初始化
 func init() {
 	RegisterTestSuite("cadvisor", &CAdvisorE2ERemote{})
 }
 
-// SetupTestPackage implements TestSuite.SetupTestPackage
+// SetupTestPackage 实现 TestSuite.SetupTestPackage
 func (n *CAdvisorE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 	cadvisorRootDir, err := utils.GetCAdvisorRootDir()
 	if err != nil {
 		return err
 	}
-	// build the cadvisor binary and tests
+	// 构建 cadvisor 二进制和测试
 	if err := runCommand(fmt.Sprintf("%s/build/prow_e2e.sh", cadvisorRootDir)); err != nil {
 		return err
 	}
-	// transfer the entire directory to each node
+	// 将整个目录传输到每个节点
 	if err := runCommand("cp", "-R", cadvisorRootDir, fmt.Sprintf("%s/", tardir)); err != nil {
 		return err
 	}
@@ -62,9 +62,9 @@ func runCommand(command string, args ...string) error {
 	return nil
 }
 
-// RunTest implements TestSuite.RunTest
+// RunTest 实现 TestSuite.RunTest
 func (n *CAdvisorE2ERemote) RunTest(host, workspace, _, _, _, _, _, _, _, _ string, timeout time.Duration) (string, error) {
-	// Kill any running node processes
+	// 终止所有仍在运行的节点进程
 	cleanupNodeProcesses(host)
 
 	klog.V(2).Infof("Starting tests on %q", host)

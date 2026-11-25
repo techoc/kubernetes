@@ -55,8 +55,8 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 		Release: v1.19
 		Testname: CertificateSigningRequest API Client Certificate
 		Description:
-		The certificatesigningrequests resource must accept a request for a certificate signed by kubernetes.io/kube-apiserver-client.
-		The issued certificate must be valid as a client certificate used to authenticate to the kube-apiserver.
+		certificatesigningrequests 资源 must 接受由 kubernetes.io/kube-apiserver-client 签名的证书请求。
+		签发的证书 must 可作为客户端证书用于向 kube-apiserver 认证。
 	*/
 	ginkgo.It("should support building a client with a CSR", func(ctx context.Context) {
 		const commonName = "tester-csr"
@@ -91,13 +91,13 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 			},
 		}
 
-		// Grant permissions to the new user
+		// 为新用户授予权限
 		clusterRole, err := f.ClientSet.RbacV1().ClusterRoles().Create(ctx, &rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{GenerateName: commonName + "-"},
 			Rules:      []rbacv1.PolicyRule{{Verbs: []string{"create"}, APIGroups: []string{"certificates.k8s.io"}, Resources: []string{"certificatesigningrequests"}}},
 		}, metav1.CreateOptions{})
 		if err != nil {
-			// Tolerate RBAC not being enabled
+			// 容忍 RBAC 未启用的情况
 			framework.Logf("error granting permissions to %s, create certificatesigningrequests permissions must be granted out of band: %v", commonName, err)
 		} else {
 			defer func() {
@@ -111,7 +111,7 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 			Subjects:   []rbacv1.Subject{{APIGroup: "rbac.authorization.k8s.io", Kind: "User", Name: commonName}},
 		}, metav1.CreateOptions{})
 		if err != nil {
-			// Tolerate RBAC not being enabled
+			// 容忍 RBAC 未启用的情况
 			framework.Logf("error granting permissions to %s, create certificatesigningrequests permissions must be granted out of band: %v", commonName, err)
 		} else {
 			defer func() {
@@ -170,7 +170,7 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 		framework.ExpectNoError(err)
 		gomega.Expect(certs).To(gomega.HaveLen(1), "expected a single cert, got %#v", certs)
 		cert := certs[0]
-		// make sure the cert is not valid for longer than our requested time (plus allowance for backdating)
+		// 确保证书有效期不超过申请时长（另加少量回溯容差）
 		if e, a := time.Hour+5*time.Minute, cert.NotAfter.Sub(cert.NotBefore); a > e {
 			framework.Failf("expected cert valid for %s or less, got %s: %s", e, a, dynamiccertificates.GetHumanCertDetail(cert))
 		}
@@ -191,17 +191,17 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 		Release: v1.19
 		Testname: CertificateSigningRequest API
 		Description:
-		The certificates.k8s.io API group MUST exists in the /apis discovery document.
-		The certificates.k8s.io/v1 API group/version MUST exist in the /apis/certificates.k8s.io discovery document.
-		The certificatesigningrequests, certificatesigningrequests/approval, and certificatesigningrequests/status
-		  resources MUST exist in the /apis/certificates.k8s.io/v1 discovery document.
-		The certificatesigningrequests resource must support create, get, list, watch, update, patch, delete, and deletecollection.
-		The certificatesigningrequests/approval resource must support get, update, patch.
-		The certificatesigningrequests/status resource must support get, update, patch.
+		/apis discovery 文档中 MUST 存在 certificates.k8s.io API group。
+		/apis/certificates.k8s.io discovery 文档中 MUST 存在 certificates.k8s.io/v1 API group/version。
+		/apis/certificates.k8s.io/v1 discovery 文档中 MUST 存在 certificatesigningrequests、
+		  certificatesigningrequests/approval 和 certificatesigningrequests/status 资源。
+		certificatesigningrequests 资源 must 支持 create、get、list、watch、update、patch、delete 和 deletecollection。
+		certificatesigningrequests/approval 资源 must 支持 get、update、patch。
+		certificatesigningrequests/status 资源 must 支持 get、update、patch。
 	*/
 	framework.ConformanceIt("should support CSR API operations", func(ctx context.Context) {
 
-		// Setup
+		// 准备
 		csrVersion := "v1"
 		csrClient := f.ClientSet.CertificatesV1().CertificateSigningRequests()
 		csrResource := certificatesv1.SchemeGroupVersion.WithResource("certificatesigningrequests")
@@ -228,7 +228,7 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 			},
 		}
 
-		// Discovery
+		// discovery 校验
 
 		ginkgo.By("getting /apis")
 		{
@@ -293,7 +293,7 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 			}
 		}
 
-		// Main resource create/read/update/watch operations
+		// 主资源的 create/read/update/watch 操作
 
 		ginkgo.By("creating")
 		_, err = csrClient.Create(ctx, csrTemplate, metav1.CreateOptions{})
@@ -357,7 +357,7 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 			}
 		}
 
-		// /approval subresource operations
+		// /approval subresource 操作
 
 		ginkgo.By("getting /approval")
 		gottenApproval, err := f.DynamicClient.Resource(csrResource).Get(ctx, createdCSR.Name, metav1.GetOptions{}, "approval")
@@ -387,7 +387,7 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 		gomega.Expect(updatedApproval.Status.Conditions).To(gomega.HaveLen(2), "updated object should have the applied condition, got %#v", updatedApproval.Status.Conditions)
 		gomega.Expect(updatedApproval.Status.Conditions[1].Type).To(gomega.Equal(certificatesv1.CertificateApproved), "updated object should have the approved condition, got %#v", updatedApproval.Status.Conditions)
 
-		// /status subresource operations
+		// /status subresource 操作
 
 		ginkgo.By("getting /status")
 		gottenStatus, err := f.DynamicClient.Resource(csrResource).Get(ctx, createdCSR.Name, metav1.GetOptions{}, "status")
@@ -416,7 +416,7 @@ var _ = SIGDescribe("Certificates API [Privileged:ClusterAdmin]", func() {
 		gomega.Expect(updatedStatus.Status.Conditions).To(gomega.HaveLen(len(statusToUpdate.Status.Conditions)), "updated object should have the applied condition, got %#v", updatedStatus.Status.Conditions)
 		gomega.Expect(string(updatedStatus.Status.Conditions[len(updatedStatus.Status.Conditions)-1].Type)).To(gomega.Equal("StatusUpdate"), "updated object should have the approved condition, got %#v", updatedStatus.Status.Conditions)
 
-		// main resource delete operations
+		// 主资源 delete 操作
 
 		ginkgo.By("deleting")
 		err = csrClient.Delete(ctx, createdCSR.Name, metav1.DeleteOptions{})

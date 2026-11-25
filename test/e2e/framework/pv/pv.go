@@ -43,44 +43,39 @@ const (
 	pdRetryTimeout  = 5 * time.Minute
 	pdRetryPollTime = 5 * time.Second
 
-	// VolumeSelectorKey is the key for volume selector.
+	// VolumeSelectorKey 是 volume selector 的 key。
 	VolumeSelectorKey = "e2e-pv-pool"
 
-	// volumeGidAnnotationKey is the of the annotation on the PersistentVolume
-	// object that specifies a supplemental GID.
-	// it is copied from k8s.io/kubernetes/pkg/volume/util VolumeGidAnnotationKey
+	// volumeGidAnnotationKey 是 PersistentVolume 对象上指定 supplemental GID 的 annotation key。
+	// 复制自 k8s.io/kubernetes/pkg/volume/util 的 VolumeGidAnnotationKey
 	volumeGidAnnotationKey = "pv.beta.kubernetes.io/gid"
 )
 
 var (
-	// SELinuxLabel is common selinux labels.
+	// SELinuxLabel 是通用的 selinux label。
 	SELinuxLabel = &v1.SELinuxOptions{
 		Level: "s0:c0,c1"}
 )
 
 type pvval struct{}
 
-// PVMap is a map of all PVs used in the multi pv-pvc tests. The key is the PV's name, which is
-// guaranteed to be unique. The value is {} (empty struct) since we're only interested
-// in the PV's name and if it is present. We must always Get the pv object before
-// referencing any of its values, eg its ClaimRef.
+// PVMap 保存 multi pv-pvc 测试中用到的所有 PV。key 是 PV 名称，保证唯一。
+// value 是 {}（空结构体），因为我们只关心 PV 名称及其是否存在。
+// 引用 PV 的任何字段（如 ClaimRef）之前，都必须先 Get 该 PV 对象。
 type PVMap map[string]pvval
 
 type pvcval struct{}
 
-// PVCMap is a map of all PVCs used in the multi pv-pvc tests. The key is "namespace/pvc.Name". The
-// value is {} (empty struct) since we're only interested in the PVC's name and if it is
-// present. We must always Get the pvc object before referencing any of its values, eg.
-// its VolumeName.
-// Note: It's unsafe to add keys to a map in a loop. Their insertion in the map is
-//
-//	unpredictable and can result in the same key being iterated over again.
+// PVCMap 保存 multi pv-pvc 测试中用到的所有 PVC。key 是 "namespace/pvc.Name"。
+// value 是 {}（空结构体），因为我们只关心 PVC 名称及其是否存在。
+// 引用 PVC 的任何字段（如 VolumeName）之前，都必须先 Get 该 PVC 对象。
+// 注意：在循环中向 map 添加 key 是不安全的。map 中的插入顺序不可预测，
+// 可能导致同一个 key 被重复遍历。
 type PVCMap map[types.NamespacedName]pvcval
 
-// PersistentVolumeConfig is consumed by MakePersistentVolume() to generate a PV object
-// for varying storage options (NFS, ceph, etc.).
-// (+optional) prebind holds a pre-bound PVC
-// Example pvSource:
+// MakePersistentVolume() 使用 PersistentVolumeConfig 为不同的存储选项（NFS、ceph 等）生成 PV 对象。
+// (+optional) prebind 保存一个预先绑定的 PVC
+// pvSource 示例：
 //
 //	pvSource: api.PersistentVolumeSource{
 //		NFS: &api.NFSVolumeSource{
@@ -88,57 +83,49 @@ type PVCMap map[types.NamespacedName]pvcval
 //	 	},
 //	 }
 type PersistentVolumeConfig struct {
-	// [Optional] NamePrefix defaults to "pv-" if unset
+	// [Optional] NamePrefix 未设置时默认为 "pv-"
 	NamePrefix string
-	// [Optional] Labels contains information used to organize and categorize
-	// objects
+	// [Optional] Labels 包含用于组织和分类对象的信息
 	Labels labels.Set
-	// [Optional] Annotations contains information used to organize and categorize
-	// objects
+	// [Optional] Annotations 包含用于组织和分类对象的信息
 	Annotations map[string]string
-	// PVSource contains the details of the underlying volume and must be set
+	// PVSource 包含底层 volume 的详细信息，必须设置
 	PVSource v1.PersistentVolumeSource
-	// [Optional] Prebind lets you specify a PVC to bind this PV to before
-	// creation
+	// [Optional] Prebind 用于指定在创建前要与此 PV 绑定的 PVC
 	Prebind *v1.PersistentVolumeClaim
-	// [Optiona] ReclaimPolicy defaults to "Reclaim" if unset
+	// [Optiona] ReclaimPolicy 未设置时默认为 "Reclaim"
 	ReclaimPolicy    v1.PersistentVolumeReclaimPolicy
 	StorageClassName string
-	// [Optional] NodeAffinity defines constraints that limit what nodes this
-	// volume can be accessed from.
+	// [Optional] NodeAffinity 定义约束，限制可以从哪些节点访问该 volume。
 	NodeAffinity *v1.VolumeNodeAffinity
-	// [Optional] VolumeMode defaults to "Filesystem" if unset
+	// [Optional] VolumeMode 未设置时默认为 "Filesystem"
 	VolumeMode *v1.PersistentVolumeMode
-	// [Optional] AccessModes defaults to RWO if unset
+	// [Optional] AccessModes 未设置时默认为 RWO
 	AccessModes []v1.PersistentVolumeAccessMode
-	// [Optional] Capacity is the storage capacity in Quantity format. Defaults
-	// to "2Gi" if unset
+	// [Optional] Capacity 是 Quantity 格式的存储容量。未设置时默认为 "2Gi"
 	Capacity string
 }
 
-// PersistentVolumeClaimConfig is consumed by MakePersistentVolumeClaim() to
-// generate a PVC object.
+// MakePersistentVolumeClaim() 使用 PersistentVolumeClaimConfig 生成 PVC 对象。
 type PersistentVolumeClaimConfig struct {
-	// Name of the PVC. If set, overrides NamePrefix
+	// PVC 名称。设置后会覆盖 NamePrefix
 	Name string
-	// NamePrefix defaults to "pvc-" if unspecified
+	// NamePrefix 未指定时默认为 "pvc-"
 	NamePrefix string
-	// ClaimSize must be specified in the Quantity format. Defaults to 2Gi if
-	// unspecified
+	// ClaimSize 必须使用 Quantity 格式。未指定时默认为 2Gi
 	ClaimSize string
-	// AccessModes defaults to RWO if unspecified
+	// AccessModes 未指定时默认为 RWO
 	AccessModes               []v1.PersistentVolumeAccessMode
 	Annotations               map[string]string
 	Selector                  *metav1.LabelSelector
 	StorageClassName          *string
 	VolumeAttributesClassName *string
-	// VolumeMode defaults to nil if unspecified or specified as the empty
-	// string
+	// VolumeMode 未指定或指定为空字符串时默认为 nil
 	VolumeMode *v1.PersistentVolumeMode
 }
 
-// PVPVCCleanup cleans up a pv and pvc in a single pv/pvc test case.
-// Note: delete errors are appended to []error so that we can attempt to delete both the pvc and pv.
+// PVPVCCleanup 清理单个 pv/pvc 测试用例中的 pv 和 pvc。
+// 注意：删除错误会追加到 []error，以便我们同时尝试删除 pvc 和 pv。
 func PVPVCCleanup(ctx context.Context, c clientset.Interface, ns string, pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) []error {
 	var errs []error
 
@@ -161,9 +148,9 @@ func PVPVCCleanup(ctx context.Context, c clientset.Interface, ns string, pv *v1.
 	return errs
 }
 
-// PVPVCMapCleanup Cleans up pvs and pvcs in multi-pv-pvc test cases. Entries found in the pv and claim maps are
-// deleted as long as the Delete api call succeeds.
-// Note: delete errors are appended to []error so that as many pvcs and pvs as possible are deleted.
+// PVPVCMapCleanup 清理 multi-pv-pvc 测试用例中的 pv 和 pvc。只要 Delete API 调用成功，
+// pv 和 pvc map 中的对应条目就会被删除。
+// 注意：删除错误会追加到 []error，以便尽可能多地删除 pvc 和 pv。
 func PVPVCMapCleanup(ctx context.Context, c clientset.Interface, ns string, pvols PVMap, claims PVCMap) []error {
 	var errs []error
 
@@ -187,7 +174,7 @@ func PVPVCMapCleanup(ctx context.Context, c clientset.Interface, ns string, pvol
 	return errs
 }
 
-// DeletePersistentVolume deletes the PV.
+// DeletePersistentVolume 删除 PV。
 func DeletePersistentVolume(ctx context.Context, c clientset.Interface, pvName string) error {
 	if c != nil && len(pvName) > 0 {
 		framework.Logf("Deleting PersistentVolume %q", pvName)
@@ -199,7 +186,7 @@ func DeletePersistentVolume(ctx context.Context, c clientset.Interface, pvName s
 	return nil
 }
 
-// DeletePersistentVolumeClaim deletes the Claim.
+// DeletePersistentVolumeClaim 删除 Claim。
 func DeletePersistentVolumeClaim(ctx context.Context, c clientset.Interface, pvcName string, ns string) error {
 	if c != nil && len(pvcName) > 0 {
 		framework.Logf("Deleting PersistentVolumeClaim %q", pvcName)
@@ -211,9 +198,8 @@ func DeletePersistentVolumeClaim(ctx context.Context, c clientset.Interface, pvc
 	return nil
 }
 
-// DeletePVCandValidatePV deletes the PVC and waits for the PV to enter its expected phase. Validate that the PV
-// has been reclaimed (assumption here about reclaimPolicy). Caller tells this func which
-// phase value to expect for the pv bound to the to-be-deleted claim.
+// DeletePVCandValidatePV 删除 PVC，等待 PV 进入预期阶段，并校验 PV 已被回收
+// （这里假设了 reclaimPolicy）。调用方指定与待删除 PVC 绑定的 PV 应进入哪个阶段。
 func DeletePVCandValidatePV(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, ns string, pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume, expectPVPhase v1.PersistentVolumePhase) error {
 	pvname := pvc.Spec.VolumeName
 	framework.Logf("Deleting PVC %v to trigger reclamation of PV %v", pvc.Name, pvname)
@@ -222,14 +208,14 @@ func DeletePVCandValidatePV(ctx context.Context, c clientset.Interface, timeouts
 		return err
 	}
 
-	// Wait for the PV's phase to return to be `expectPVPhase`
+	// 等待 PV 的阶段回到 `expectPVPhase`
 	framework.Logf("Waiting for reclaim process to complete.")
 	err = WaitForPersistentVolumePhase(ctx, expectPVPhase, c, pv.Name, framework.Poll, timeouts.PVReclaim)
 	if err != nil {
 		return fmt.Errorf("pv %q phase did not become %v: %w", pv.Name, expectPVPhase, err)
 	}
 
-	// examine the pv's ClaimRef and UID and compare to expected values
+	// 检查 PV 的 ClaimRef 和 UID，与预期值比较
 	pv, err = c.CoreV1().PersistentVolumes().Get(ctx, pv.Name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("PV Get API error: %w", err)
@@ -252,12 +238,9 @@ func DeletePVCandValidatePV(ctx context.Context, c clientset.Interface, timeouts
 	return nil
 }
 
-// DeletePVCandValidatePVGroup wraps deletePVCandValidatePV() by calling the function in a loop over the PV map. Only bound PVs
-// are deleted. Validates that the claim was deleted and the PV is in the expected Phase (Released,
-// Available, Bound).
-// Note: if there are more claims than pvs then some of the remaining claims may bind to just made
-//
-//	available pvs.
+// DeletePVCandValidatePVGroup 封装 deletePVCandValidatePV()，在 PV map 上循环调用。只删除已绑定的 PV。
+// 校验 PVC 已被删除，且 PV 处于预期阶段（Released、Available、Bound）。
+// 注意：如果 PVC 多于 PV，剩余的部分 PVC 可能会绑定到刚变为 Available 的 PV。
 func DeletePVCandValidatePVGroup(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, ns string, pvols PVMap, claims PVCMap, expectPVPhase v1.PersistentVolumePhase) error {
 	var boundPVs, deletedPVCs int
 
@@ -267,16 +250,16 @@ func DeletePVCandValidatePVGroup(ctx context.Context, c clientset.Interface, tim
 			return fmt.Errorf("PV Get API error: %w", err)
 		}
 		cr := pv.Spec.ClaimRef
-		// if pv is bound then delete the pvc it is bound to
+		// 如果 PV 已绑定，就删除它绑定的 PVC
 		if cr != nil && len(cr.Name) > 0 {
 			boundPVs++
-			// Assert bound PVC is tracked in this test. Failing this might
-			// indicate external PVCs interfering with the test.
+			// 断言已绑定的 PVC 在本测试中有记录。断言失败可能意味着
+			// 有外部 PVC 干扰了测试。
 			pvcKey := makePvcKey(ns, cr.Name)
 			if _, found := claims[pvcKey]; !found {
 				return fmt.Errorf("internal: claims map is missing pvc %q", pvcKey)
 			}
-			// get the pvc for the delete call below
+			// 获取 PVC，供下面的删除调用使用
 			pvc, err := c.CoreV1().PersistentVolumeClaims(ns).Get(ctx, cr.Name, metav1.GetOptions{})
 			if err == nil {
 				if err = DeletePVCandValidatePV(ctx, c, timeouts, ns, pvc, pv, expectPVPhase); err != nil {
@@ -285,8 +268,8 @@ func DeletePVCandValidatePVGroup(ctx context.Context, c clientset.Interface, tim
 			} else if !apierrors.IsNotFound(err) {
 				return fmt.Errorf("PVC Get API error: %w", err)
 			}
-			// delete pvckey from map even if apierrors.IsNotFound above is true and thus the
-			// claim was not actually deleted here
+			// 即使上面的 apierrors.IsNotFound 为 true（即 PVC 实际上并非在此处删除），
+			// 也从 map 中删除 pvckey
 			delete(claims, pvcKey)
 			deletedPVCs++
 		}
@@ -297,28 +280,28 @@ func DeletePVCandValidatePVGroup(ctx context.Context, c clientset.Interface, tim
 	return nil
 }
 
-// create the PV resource. Fails test on error.
+// 创建 PV 资源。出错时测试失败。
 func createPV(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	var resultPV *v1.PersistentVolume
 	var lastCreateErr error
 	err := wait.PollUntilContextTimeout(ctx, 29*time.Second, timeouts.PVCreate, true, func(ctx context.Context) (done bool, err error) {
 		resultPV, lastCreateErr = c.CoreV1().PersistentVolumes().Create(ctx, pv, metav1.CreateOptions{})
 		if lastCreateErr != nil {
-			// If we hit a quota problem, we are not done and should retry again.  This happens to be the quota failure string for GCP.
-			// If quota failure strings are found for other platforms, they can be added to improve reliability when running
-			// many parallel test jobs in a single cloud account.  This corresponds to controller-like behavior and
-			// to what we would recommend for general clients.
+			// 如果遇到配额问题，说明还没完成，应该重试。这是 GCP 的配额失败字符串。
+			// 如果找到其他平台的配额失败字符串，可以加进来，以提高在同一云账号下
+			// 运行大量并行测试任务时的可靠性。这类似于 controller 的行为，也是我们
+			// 推荐一般客户端采用的作法。
 			if strings.Contains(lastCreateErr.Error(), `googleapi: Error 403: Quota exceeded for quota group`) {
 				return false, nil
 			}
 
-			// if it was not a quota failure, fail immediately
+			// 如果不是配额失败，就立即失败
 			return false, lastCreateErr
 		}
 
 		return true, nil
 	})
-	// if we have an error from creating the PV, use that instead of a timeout error
+	// 如果创建 PV 时出错，优先使用该错误而不是超时错误
 	if lastCreateErr != nil {
 		return nil, fmt.Errorf("PV Create API error: %w", err)
 	}
@@ -329,12 +312,12 @@ func createPV(ctx context.Context, c clientset.Interface, timeouts *framework.Ti
 	return resultPV, nil
 }
 
-// CreatePV creates the PV resource. Fails test on error.
+// CreatePV 创建 PV 资源。出错时测试失败。
 func CreatePV(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	return createPV(ctx, c, timeouts, pv)
 }
 
-// CreatePVC creates the PVC resource. Fails test on error.
+// CreatePVC 创建 PVC 资源。出错时测试失败。
 func CreatePVC(ctx context.Context, c clientset.Interface, ns string, pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
 	pvc, err := c.CoreV1().PersistentVolumeClaims(ns).Create(ctx, pvc, metav1.CreateOptions{})
 	if err != nil {
@@ -343,22 +326,19 @@ func CreatePVC(ctx context.Context, c clientset.Interface, ns string, pvc *v1.Pe
 	return pvc, nil
 }
 
-// CreatePVCPV creates a PVC followed by the PV based on the passed in nfs-server ip and
-// namespace. If the "preBind" bool is true then pre-bind the PV to the PVC
-// via the PV's ClaimRef. Return the pv and pvc to reflect the created objects.
-// Note: in the pre-bind case the real PVC name, which is generated, is not
-//
-//	known until after the PVC is instantiated. This is why the pvc is created
-//	before the pv.
+// CreatePVCPV 根据传入的 nfs-server IP 和 namespace，先创建 PVC 再创建 PV。
+// 如果 "preBind" 为 true，则通过 PV 的 ClaimRef 将 PV 预先绑定到 PVC。
+// 返回创建出的 pv 和 pvc。
+// 注意：在预绑定场景中，PVC 的真实名称是在实例化后才生成的，所以要先创建 PVC。
 func CreatePVCPV(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, pvConfig PersistentVolumeConfig, pvcConfig PersistentVolumeClaimConfig, ns string, preBind bool) (*v1.PersistentVolume, *v1.PersistentVolumeClaim, error) {
-	// make the pvc spec
+	// 构造 PVC spec
 	pvc := MakePersistentVolumeClaim(pvcConfig, ns)
 	preBindMsg := ""
 	if preBind {
 		preBindMsg = " pre-bound"
 		pvConfig.Prebind = pvc
 	}
-	// make the pv spec
+	// 构造 PV spec
 	pv := MakePersistentVolume(pvConfig)
 
 	ginkgo.By(fmt.Sprintf("Creating a PVC followed by a%s PV", preBindMsg))
@@ -367,7 +347,7 @@ func CreatePVCPV(ctx context.Context, c clientset.Interface, timeouts *framework
 		return nil, nil, err
 	}
 
-	// instantiate the pv, handle pre-binding by ClaimRef if needed
+	// 实例化 PV，必要时通过 ClaimRef 处理预绑定
 	if preBind {
 		pv.Spec.ClaimRef.Name = pvc.Name
 	}
@@ -378,14 +358,10 @@ func CreatePVCPV(ctx context.Context, c clientset.Interface, timeouts *framework
 	return pv, pvc, nil
 }
 
-// CreatePVPVC creates a PV followed by the PVC based on the passed in nfs-server ip and
-// namespace. If the "preBind" bool is true then pre-bind the PVC to the PV
-// via the PVC's VolumeName. Return the pv and pvc to reflect the created
-// objects.
-// Note: in the pre-bind case the real PV name, which is generated, is not
-//
-//	known until after the PV is instantiated. This is why the pv is created
-//	before the pvc.
+// CreatePVPVC 根据传入的 nfs-server IP 和 namespace，先创建 PV 再创建 PVC。
+// 如果 "preBind" 为 true，则通过 PVC 的 VolumeName 将 PVC 预先绑定到 PV。
+// 返回创建出的 pv 和 pvc。
+// 注意：在预绑定场景中，PV 的真实名称是在实例化后才生成的，所以要先创建 PV。
 func CreatePVPVC(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, pvConfig PersistentVolumeConfig, pvcConfig PersistentVolumeClaimConfig, ns string, preBind bool) (*v1.PersistentVolume, *v1.PersistentVolumeClaim, error) {
 	preBindMsg := ""
 	if preBind {
@@ -393,16 +369,16 @@ func CreatePVPVC(ctx context.Context, c clientset.Interface, timeouts *framework
 	}
 	framework.Logf("Creating a PV followed by a%s PVC", preBindMsg)
 
-	// make the pv and pvc definitions
+	// 构造 PV 和 PVC 定义
 	pv := MakePersistentVolume(pvConfig)
 	pvc := MakePersistentVolumeClaim(pvcConfig, ns)
 
-	// instantiate the pv
+	// 实例化 PV
 	pv, err := createPV(ctx, c, timeouts, pv)
 	if err != nil {
 		return nil, nil, err
 	}
-	// instantiate the pvc, handle pre-binding by VolumeName if needed
+	// 实例化 PVC，必要时通过 VolumeName 处理预绑定
 	if preBind {
 		pvc.Spec.VolumeName = pv.Name
 	}
@@ -413,14 +389,11 @@ func CreatePVPVC(ctx context.Context, c clientset.Interface, timeouts *framework
 	return pv, pvc, nil
 }
 
-// CreatePVsPVCs creates the desired number of PVs and PVCs and returns them in separate maps. If the
-// number of PVs != the number of PVCs then the min of those two counts is the number of
-// PVs expected to bind. If a Create error occurs, the returned maps may contain pv and pvc
-// entries for the resources that were successfully created. In other words, when the caller
-// sees an error returned, it needs to decide what to do about entries in the maps.
-// Note: when the test suite deletes the namespace orphaned pvcs and pods are deleted. However,
-//
-//	orphaned pvs are not deleted and will remain after the suite completes.
+// CreatePVsPVCs 创建指定数量的 PV 和 PVC，并分别放到两个 map 中返回。如果 PV 数与 PVC 数不相等，
+// 预计绑定的 PV 数为两者的较小值。如果创建过程中出错，返回的 map 中仍可能包含已成功创建的资源条目。
+// 也就是说，调用方看到返回的错误时，需要自行决定如何处理 map 中的条目。
+// 注意：测试套件删除 namespace 时，孤立的 PVC 和 pod 会被删除，但孤立的 PV 不会被删除，
+// 在测试套件结束后仍会残留。
 func CreatePVsPVCs(ctx context.Context, numpvs, numpvcs int, c clientset.Interface, timeouts *framework.TimeoutContext, ns string, pvConfig PersistentVolumeConfig, pvcConfig PersistentVolumeClaimConfig) (PVMap, PVCMap, error) {
 	pvMap := make(PVMap, numpvs)
 	pvcMap := make(PVCMap, numpvcs)
@@ -430,9 +403,9 @@ func CreatePVsPVCs(ctx context.Context, numpvs, numpvcs int, c clientset.Interfa
 		extraPVCs = -extraPVs
 		extraPVs = 0
 	}
-	pvsToCreate := numpvs - extraPVs // want the min(numpvs, numpvcs)
+	pvsToCreate := numpvs - extraPVs // 取 min(numpvs, numpvcs)
 
-	// create pvs and pvcs
+	// 创建 PV 和 PVC
 	for range pvsToCreate {
 		pv, pvc, err := CreatePVPVC(ctx, c, timeouts, pvConfig, pvcConfig, ns, false)
 		if err != nil {
@@ -442,7 +415,7 @@ func CreatePVsPVCs(ctx context.Context, numpvs, numpvcs int, c clientset.Interfa
 		pvcMap[makePvcKey(ns, pvc.Name)] = pvcval{}
 	}
 
-	// create extra pvs or pvcs as needed
+	// 按需创建额外的 PV 或 PVC
 	for i := 0; i < extraPVs; i++ {
 		pv := MakePersistentVolume(pvConfig)
 		pv, err := createPV(ctx, c, timeouts, pv)
@@ -462,23 +435,23 @@ func CreatePVsPVCs(ctx context.Context, numpvs, numpvcs int, c clientset.Interfa
 	return pvMap, pvcMap, nil
 }
 
-// WaitOnPVandPVC waits for the pv and pvc to bind to each other.
+// WaitOnPVandPVC 等待 PV 和 PVC 相互绑定。
 func WaitOnPVandPVC(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, ns string, pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) error {
-	// Wait for newly created PVC to bind to the PV
+	// 等待新建的 PVC 与 PV 绑定
 	framework.Logf("Waiting for PV %v to bind to PVC %v", pv.Name, pvc.Name)
 	err := WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, c, ns, pvc.Name, framework.Poll, timeouts.ClaimBound)
 	if err != nil {
 		return fmt.Errorf("PVC %q did not become Bound: %w", pvc.Name, err)
 	}
 
-	// Wait for PersistentVolume.Status.Phase to be Bound, which it should be
-	// since the PVC is already bound.
+	// 等待 PersistentVolume.Status.Phase 变为 Bound。既然 PVC 已经绑定，
+	// PV 理应如此。
 	err = WaitForPersistentVolumePhase(ctx, v1.VolumeBound, c, pv.Name, framework.Poll, timeouts.PVBound)
 	if err != nil {
 		return fmt.Errorf("PV %q did not become Bound: %w", pv.Name, err)
 	}
 
-	// Re-get the pv and pvc objects
+	// 重新获取 PV 和 PVC 对象
 	pv, err = c.CoreV1().PersistentVolumes().Get(ctx, pv.Name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("PV Get API error: %w", err)
@@ -488,8 +461,8 @@ func WaitOnPVandPVC(ctx context.Context, c clientset.Interface, timeouts *framew
 		return fmt.Errorf("PVC Get API error: %w", err)
 	}
 
-	// The pv and pvc are both bound, but to each other?
-	// Check that the PersistentVolume.ClaimRef matches the PVC
+	// PV 和 PVC 都已绑定，但是否互相绑定？
+	// 检查 PersistentVolume.ClaimRef 是否与 PVC 匹配
 	if pv.Spec.ClaimRef == nil {
 		return fmt.Errorf("PV %q ClaimRef is nil", pv.Name)
 	}
@@ -505,17 +478,14 @@ func WaitOnPVandPVC(ctx context.Context, c clientset.Interface, timeouts *framew
 	return nil
 }
 
-// WaitAndVerifyBinds searches for bound PVs and PVCs by examining pvols for non-nil claimRefs.
-// NOTE: Each iteration waits for a maximum of 3 minutes per PV and, if the PV is bound,
-//
-//	up to 3 minutes for the PVC. When the number of PVs != number of PVCs, this can lead
-//	to situations where the maximum wait times are reached several times in succession,
-//	extending test time. Thus, it is recommended to keep the delta between PVs and PVCs
-//	small.
+// WaitAndVerifyBinds 通过检查 pvols 中非 nil 的 claimRef 来查找已绑定的 PV 和 PVC。
+// NOTE: 每次迭代中，每个 PV 最多等待 3 分钟；如果 PV 已绑定，PVC 最多再等待 3 分钟。
+// 当 PV 数与 PVC 数不相等时，可能出现连续多次达到最大等待时间的情况，
+// 从而延长测试时长。因此建议让 PV 与 PVC 的数量差尽量小。
 func WaitAndVerifyBinds(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, ns string, pvols PVMap, claims PVCMap, testExpected bool) error {
 	var actualBinds int
 	expectedBinds := len(pvols)
-	if expectedBinds > len(claims) { // want the min of # pvs or #pvcs
+	if expectedBinds > len(claims) { // 取 PV 数与 PVC 数的较小值
 		expectedBinds = len(claims)
 	}
 
@@ -536,8 +506,8 @@ func WaitAndVerifyBinds(ctx context.Context, c clientset.Interface, timeouts *fr
 		}
 		cr := pv.Spec.ClaimRef
 		if cr != nil && len(cr.Name) > 0 {
-			// Assert bound pvc is a test resource. Failing assertion could
-			// indicate non-test PVC interference or a bug in the test
+			// 断言已绑定的 PVC 是测试资源。断言失败可能意味着
+			// 有非测试用的 PVC 干扰，或测试本身存在 bug
 			pvcKey := makePvcKey(ns, cr.Name)
 			if _, found := claims[pvcKey]; !found {
 				return fmt.Errorf("internal: claims map is missing pvc %q", pvcKey)
@@ -557,19 +527,16 @@ func WaitAndVerifyBinds(ctx context.Context, c clientset.Interface, timeouts *fr
 	return nil
 }
 
-// Return a pvckey struct.
+// 返回 pvckey 结构体。
 func makePvcKey(ns, name string) types.NamespacedName {
 	return types.NamespacedName{Namespace: ns, Name: name}
 }
 
-// MakePersistentVolume returns a PV definition based on the nfs server IP. If the PVC is not nil
-// then the PV is defined with a ClaimRef which includes the PVC's namespace.
-// If the PVC is nil then the PV is not defined with a ClaimRef.  If no reclaimPolicy
-// is assigned, assumes "Retain". Specs are expected to match the test's PVC.
-// Note: the passed-in claim does not have a name until it is created and thus the PV's
-//
-//	ClaimRef cannot be completely filled-in in this func. Therefore, the ClaimRef's name
-//	is added later in CreatePVCPV.
+// MakePersistentVolume 根据 nfs server IP 返回 PV 定义。如果 PVC 非 nil，
+// 则 PV 会带上一个包含 PVC namespace 的 ClaimRef；如果 PVC 为 nil，则不设置 ClaimRef。
+// 如果未指定 reclaimPolicy，则默认 "Retain"。Spec 应与测试的 PVC 匹配。
+// 注意：传入的 claim 在创建前没有名称，因此本函数无法完整填充 PV 的 ClaimRef。
+// ClaimRef 的名称会在 CreatePVCPV 中后续补上。
 func MakePersistentVolume(pvConfig PersistentVolumeConfig) *v1.PersistentVolume {
 	var claimRef *v1.ObjectReference
 
@@ -627,7 +594,7 @@ func MakePersistentVolume(pvConfig PersistentVolumeConfig) *v1.PersistentVolume 
 	}
 }
 
-// MakePersistentVolumeClaim returns a PVC API Object based on the PersistentVolumeClaimConfig.
+// MakePersistentVolumeClaim 根据 PersistentVolumeClaimConfig 返回 PVC API 对象。
 func MakePersistentVolumeClaim(cfg PersistentVolumeClaimConfig, ns string) *v1.PersistentVolumeClaim {
 
 	if len(cfg.AccessModes) == 0 {
@@ -696,17 +663,17 @@ func DeleteShare(accountName, shareName string) error {
 	return framework.TestContext.CloudConfig.Provider.DeleteShare(accountName, shareName)
 }
 
-// CreatePDWithRetry creates PD with retry.
+// CreatePDWithRetry 带重试地创建 PD。
 func CreatePDWithRetry(ctx context.Context) (string, error) {
 	return createPDWithRetry(ctx, "")
 }
 
-// CreatePDWithRetryAndZone creates PD on zone with retry.
+// CreatePDWithRetryAndZone 带重试地在指定 zone 创建 PD。
 func CreatePDWithRetryAndZone(ctx context.Context, zone string) (string, error) {
 	return createPDWithRetry(ctx, zone)
 }
 
-// DeletePDWithRetry deletes PD with retry.
+// DeletePDWithRetry 带重试地删除 PD。
 func DeletePDWithRetry(ctx context.Context, diskName string) error {
 	var err error
 	for start := time.Now(); ; time.Sleep(pdRetryPollTime) {
@@ -735,7 +702,7 @@ func deletePD(pdName string) error {
 	return framework.TestContext.CloudConfig.Provider.DeletePD(pdName)
 }
 
-// WaitForPVClaimBoundPhase waits until all pvcs phase set to bound
+// WaitForPVClaimBoundPhase 等待所有 PVC 的阶段变为 Bound
 func WaitForPVClaimBoundPhase(ctx context.Context, client clientset.Interface, pvclaims []*v1.PersistentVolumeClaim, timeout time.Duration) ([]*v1.PersistentVolume, error) {
 	persistentvolumes := make([]*v1.PersistentVolume, len(pvclaims))
 
@@ -744,12 +711,12 @@ func WaitForPVClaimBoundPhase(ctx context.Context, client clientset.Interface, p
 		if err != nil {
 			return persistentvolumes, err
 		}
-		// Get new copy of the claim
+		// 获取 PVC 的最新副本
 		claim, err = client.CoreV1().PersistentVolumeClaims(claim.Namespace).Get(ctx, claim.Name, metav1.GetOptions{})
 		if err != nil {
 			return persistentvolumes, fmt.Errorf("PVC Get API error: %w", err)
 		}
-		// Get the bounded PV
+		// 获取已绑定的 PV
 		persistentvolumes[index], err = client.CoreV1().PersistentVolumes().Get(ctx, claim.Spec.VolumeName, metav1.GetOptions{})
 		if err != nil {
 			return persistentvolumes, fmt.Errorf("PV Get API error: %w", err)
@@ -758,7 +725,7 @@ func WaitForPVClaimBoundPhase(ctx context.Context, client clientset.Interface, p
 	return persistentvolumes, nil
 }
 
-// WaitForPersistentVolumePhase waits for a PersistentVolume to be in a specific phase or until timeout occurs, whichever comes first.
+// WaitForPersistentVolumePhase 等待 PersistentVolume 进入指定阶段，或等待超时，以先发生者为准。
 func WaitForPersistentVolumePhase(ctx context.Context, phase v1.PersistentVolumePhase, c clientset.Interface, pvName string, poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for PersistentVolume %s to have phase %s", timeout, pvName, phase)
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(poll) {
@@ -776,13 +743,13 @@ func WaitForPersistentVolumePhase(ctx context.Context, phase v1.PersistentVolume
 	return fmt.Errorf("PersistentVolume %s not in phase %s within %v", pvName, phase, timeout)
 }
 
-// WaitForPersistentVolumeClaimPhase waits for a PersistentVolumeClaim to be in a specific phase or until timeout occurs, whichever comes first.
+// WaitForPersistentVolumeClaimPhase 等待 PersistentVolumeClaim 进入指定阶段，或等待超时，以先发生者为准。
 func WaitForPersistentVolumeClaimPhase(ctx context.Context, phase v1.PersistentVolumeClaimPhase, c clientset.Interface, ns string, pvcName string, poll, timeout time.Duration) error {
 	return WaitForPersistentVolumeClaimsPhase(ctx, phase, c, ns, []string{pvcName}, poll, timeout, true)
 }
 
-// WaitForPersistentVolumeClaimsPhase waits for any (if matchAny is true) or all (if matchAny is false) PersistentVolumeClaims
-// to be in a specific phase or until timeout occurs, whichever comes first.
+// WaitForPersistentVolumeClaimsPhase 等待任意一个（matchAny 为 true）或全部（matchAny 为 false）
+// PersistentVolumeClaim 进入指定阶段，或等待超时，以先发生者为准。
 func WaitForPersistentVolumeClaimsPhase(ctx context.Context, phase v1.PersistentVolumeClaimPhase, c clientset.Interface, ns string, pvcNames []string, poll, timeout time.Duration, matchAny bool) error {
 	if len(pvcNames) == 0 {
 		return fmt.Errorf("Incorrect parameter: Need at least one PVC to track. Found 0")
@@ -814,7 +781,7 @@ func WaitForPersistentVolumeClaimsPhase(ctx context.Context, phase v1.Persistent
 	return fmt.Errorf("PersistentVolumeClaims %v not all in phase %s within %v", pvcNames, phase, timeout)
 }
 
-// CreatePVSource creates a PV source.
+// CreatePVSource 创建 PV source。
 func CreatePVSource(ctx context.Context, zone string) (*v1.PersistentVolumeSource, error) {
 	diskName, err := CreatePDWithRetryAndZone(ctx, zone)
 	if err != nil {
@@ -823,12 +790,12 @@ func CreatePVSource(ctx context.Context, zone string) (*v1.PersistentVolumeSourc
 	return framework.TestContext.CloudConfig.Provider.CreatePVSource(ctx, zone, diskName)
 }
 
-// DeletePVSource deletes a PV source.
+// DeletePVSource 删除 PV source。
 func DeletePVSource(ctx context.Context, pvSource *v1.PersistentVolumeSource) error {
 	return framework.TestContext.CloudConfig.Provider.DeletePVSource(ctx, pvSource)
 }
 
-// GetDefaultStorageClassName returns default storageClass or return error
+// GetDefaultStorageClassName 返回默认 storageClass，或返回错误
 func GetDefaultStorageClassName(ctx context.Context, c clientset.Interface) (string, error) {
 	list, err := c.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -850,7 +817,7 @@ func GetDefaultStorageClassName(ctx context.Context, c clientset.Interface) (str
 	return scName, nil
 }
 
-// SkipIfNoDefaultStorageClass skips tests if no default SC can be found.
+// SkipIfNoDefaultStorageClass 在找不到默认 SC 时跳过测试。
 func SkipIfNoDefaultStorageClass(ctx context.Context, c clientset.Interface) {
 	_, err := GetDefaultStorageClassName(ctx, c)
 	if err != nil {
@@ -858,7 +825,7 @@ func SkipIfNoDefaultStorageClass(ctx context.Context, c clientset.Interface) {
 	}
 }
 
-// WaitForPersistentVolumeDeleted waits for a PersistentVolume to get deleted or until timeout occurs, whichever comes first.
+// WaitForPersistentVolumeDeleted 等待 PersistentVolume 被删除，或等待超时，以先发生者为准。
 func WaitForPersistentVolumeDeleted(ctx context.Context, c clientset.Interface, pvName string, poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for PersistentVolume %s to get deleted", timeout, pvName)
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(poll) {
@@ -876,7 +843,7 @@ func WaitForPersistentVolumeDeleted(ctx context.Context, c clientset.Interface, 
 	return fmt.Errorf("PersistentVolume %s still exists within %v", pvName, timeout)
 }
 
-// WaitForPVCFinalizer waits for a finalizer to be added to a PVC in a given namespace.
+// WaitForPVCFinalizer 等待指定 namespace 中的 PVC 被添加 finalizer。
 func WaitForPVCFinalizer(ctx context.Context, cs clientset.Interface, name, namespace, finalizer string, poll, timeout time.Duration) error {
 	var (
 		err error
@@ -904,7 +871,7 @@ func WaitForPVCFinalizer(ctx context.Context, cs clientset.Interface, name, name
 	return err
 }
 
-// GetDefaultFSType returns the default fsType
+// GetDefaultFSType 返回默认 fsType
 func GetDefaultFSType() string {
 	if framework.NodeOSDistroIs("windows") {
 		return "ntfs"

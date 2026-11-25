@@ -47,7 +47,7 @@ var _ = SIGDescribe("Kubelet", func() {
 		/*
 			Release: v1.13
 			Testname: Kubelet, log output, default
-			Description: By default the stdout and stderr from the process being executed in a pod MUST be sent to the pod's logs.
+			Description: 默认情况下，pod 中进程的标准输出和标准错误 MUST 被送入 pod 日志。
 		*/
 		framework.ConformanceIt("should print the output to logs", f.WithNodeConformance(), func(ctx context.Context) {
 			podClient.CreateSync(ctx, &v1.Pod{
@@ -55,7 +55,7 @@ var _ = SIGDescribe("Kubelet", func() {
 					Name: podName,
 				},
 				Spec: v1.PodSpec{
-					// Don't restart the Pod since it is expected to exit
+					// Pod 预期会退出，因此不重启
 					RestartPolicy: v1.RestartPolicyNever,
 					Containers: []v1.Container{
 						{
@@ -89,7 +89,7 @@ var _ = SIGDescribe("Kubelet", func() {
 					Name: podName,
 				},
 				Spec: v1.PodSpec{
-					// Don't restart the Pod since it is expected to exit
+					// Pod 预期会退出，因此不重启
 					RestartPolicy: v1.RestartPolicyNever,
 					Containers: []v1.Container{
 						{
@@ -105,7 +105,7 @@ var _ = SIGDescribe("Kubelet", func() {
 		/*
 			Release: v1.13
 			Testname: Kubelet, failed pod, terminated reason
-			Description: Create a Pod with terminated state. Pod MUST have only one container. Container MUST be in terminated state and MUST have an terminated reason.
+			Description: 创建一个处于 terminated 状态的 Pod。Pod MUST 只有一个容器。该容器 MUST 处于 terminated 状态且 MUST 有终止原因。
 		*/
 		framework.ConformanceIt("should have an terminated reason", f.WithNodeConformance(), func(ctx context.Context) {
 			gomega.Eventually(ctx, func() error {
@@ -130,7 +130,7 @@ var _ = SIGDescribe("Kubelet", func() {
 		/*
 			Release: v1.13
 			Testname: Kubelet, failed pod, delete
-			Description: Create a Pod with terminated state. This terminated pod MUST be able to be deleted.
+			Description: 创建一个处于 terminated 状态的 Pod。这个已终止的 Pod MUST 可以被删除。
 		*/
 		framework.ConformanceIt("should be possible to delete", f.WithNodeConformance(), func(ctx context.Context) {
 			err := podClient.Delete(ctx, podName, metav1.DeleteOptions{})
@@ -143,11 +143,11 @@ var _ = SIGDescribe("Kubelet", func() {
 		/*
 			Release: v1.13
 			Testname: Kubelet, hostAliases
-			Description: Create a Pod with hostAliases and a container with command to output /etc/hosts entries. Pod's logs MUST have matching entries of specified hostAliases to the output of /etc/hosts entries.
+			Description: 创建一个带 hostAliases 的 Pod，其中容器命令会输出 /etc/hosts 条目。Pod 日志中 MUST 包含与指定 hostAliases 对应的 /etc/hosts 条目。
 		*/
 		framework.ConformanceIt("should write entries to /etc/hosts", f.WithNodeConformance(), func(ctx context.Context) {
 			pod := e2epod.NewAgnhostPod(f.Namespace.Name, podName, nil, nil, nil, "etc-hosts")
-			// Don't restart the Pod since it is expected to exit
+			// Pod 预期会退出，因此不重启
 			pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			pod.Spec.HostAliases = []v1.HostAlias{
 				{
@@ -178,8 +178,8 @@ var _ = SIGDescribe("Kubelet", func() {
 		/*
 			Release: v1.13
 			Testname: Kubelet, pod with read only root file system
-			Description: Create a Pod with security context set with ReadOnlyRootFileSystem set to true. The Pod then tries to write to the /file on the root, write operation to the root filesystem MUST fail as expected.
-			This test is marked LinuxOnly since Windows does not support creating containers with read-only access.
+			Description: 创建一个 security context 中 ReadOnlyRootFileSystem 设为 true 的 Pod。Pod 尝试向根目录下的 /file 写入，写操作 MUST 按预期失败。
+			该测试标记为 LinuxOnly，因为 Windows 不支持创建只读访问的容器。
 		*/
 		framework.ConformanceIt("should not write to root filesystem [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			isReadOnly := true
@@ -188,7 +188,7 @@ var _ = SIGDescribe("Kubelet", func() {
 					Name: podName,
 				},
 				Spec: v1.PodSpec{
-					// Don't restart the Pod since it is expected to exit
+					// Pod 预期会退出，因此不重启
 					RestartPolicy: v1.RestartPolicyNever,
 					Containers: []v1.Container{
 						{
@@ -228,12 +228,12 @@ var _ = SIGDescribe("Kubelet with pods in a privileged namespace", func() {
 		/*
 			Release: v1.30
 			Testname: Kubelet, hostAliases, hostNetwork
-			Description: Create a Pod with hostNetwork enabled, hostAliases and a container with command to output /etc/hosts entries. Pod's logs MUST have matching entries of specified hostAliases to the output of /etc/hosts entries.
+			Description: 创建一个启用 hostNetwork、带 hostAliases 的 Pod，其中容器命令会输出 /etc/hosts 条目。Pod 日志中 MUST 包含与指定 hostAliases 对应的 /etc/hosts 条目。
 		*/
 		framework.It("should write entries to /etc/hosts when hostNetwork is enabled", f.WithNodeConformance(), func(ctx context.Context) {
 			pod := e2epod.NewAgnhostPod(f.Namespace.Name, podName, nil, nil, nil, "etc-hosts")
 			pod.Spec.HostNetwork = true
-			// Don't restart the Pod since it is expected to exit
+			// Pod 预期会退出，因此不重启
 			pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			pod.Spec.HostAliases = []v1.HostAlias{
 				{

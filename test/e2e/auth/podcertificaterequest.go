@@ -42,11 +42,11 @@ var _ = SIGDescribe("PodCertificateRequest API [Privileged:ClusterAdmin]", func(
 		Release: v1.37
 		Testname: PodCertificateRequest API operations
 		Description:
-		The certificates.k8s.io API group MUST exist in the /apis discovery document.
-		The certificates.k8s.io/v1 API group/version MUST exist in the /apis/certificates.k8s.io discovery document.
-		The podcertificaterequests and podcertificaterequests/status resources MUST exist in the /apis/certificates.k8s.io/v1 discovery document.
-		The podcertificaterequests resource must support namespaced create, read, update, patch, and delete.
-		The podcertificaterequests/status resource must support get, update, patch.
+		/apis discovery 文档中 MUST 存在 certificates.k8s.io API group。
+		/apis/certificates.k8s.io discovery 文档中 MUST 存在 certificates.k8s.io/v1 API group/version。
+		/apis/certificates.k8s.io/v1 discovery 文档中 MUST 存在 podcertificaterequests 和 podcertificaterequests/status 资源。
+		podcertificaterequests 资源 must 支持带命名空间的 create、read、update、patch 和 delete。
+		podcertificaterequests/status 资源 must 支持 get、update、patch。
 	*/
 	framework.ConformanceIt("should support PodCertificateRequest API operations", func(ctx context.Context) {
 		_, csrData, pemCert, notBefore, notAfter, err := generateKeyCSRAndCert()
@@ -59,7 +59,7 @@ var _ = SIGDescribe("PodCertificateRequest API [Privileged:ClusterAdmin]", func(
 
 		signerName := "example.com/e2e-" + f.UniqueName
 
-		// Construct status patch payloads dynamically because pemCert is dynamic
+		// pemCert 是运行时生成的，因此 status patch 载荷也须动态构造
 		statusPatch := map[string]interface{}{
 			"status": map[string]interface{}{
 				"certificateChain": string(pemCert),

@@ -40,23 +40,21 @@ import (
 )
 
 const (
-	// kubeSchedulerPort is the default port for the scheduler status server.
+	// kubeSchedulerPort 是 scheduler status server 的默认端口。
 	kubeSchedulerPort = 10259
-	// kubeControllerManagerPort is the default port for the controller manager status server.
+	// kubeControllerManagerPort 是 controller manager status server 的默认端口。
 	kubeControllerManagerPort = 10257
-	// snapshotControllerPort is the port for the snapshot controller
+	// snapshotControllerPort 是 snapshot controller 的端口。
 	snapshotControllerPort = 9102
-	// kubeProxyPort is the default port for the kube-proxy status server.
+	// kubeProxyPort 是 kube-proxy status server 的默认端口。
 	kubeProxyPort = 10249
 )
 
-// MetricsGrabbingDisabledError is an error that is wrapped by the
-// different MetricsGrabber.Wrap functions when metrics grabbing is
-// not supported. Tests that check metrics data should then skip
-// the check.
+// MetricsGrabbingDisabledError 是不支持采集指标时由 MetricsGrabber 的各个
+// Wrap 函数包装的错误。检查指标数据的测试遇到它时应跳过检查。
 var MetricsGrabbingDisabledError = errors.New("metrics grabbing disabled")
 
-// Collection is metrics collection of components
+// Collection 汇总各组件采集到的指标。
 type Collection struct {
 	APIServerMetrics          APIServerMetrics
 	APIServerMetricsSLIs      APIServerMetrics
@@ -67,7 +65,7 @@ type Collection struct {
 	ClusterAutoscalerMetrics  ClusterAutoscalerMetrics
 }
 
-// Grabber provides functions which grab metrics from components
+// Grabber 提供从各组件采集指标的函数。
 type Grabber struct {
 	client                             clientset.Interface
 	externalClient                     clientset.Interface
@@ -86,14 +84,11 @@ type Grabber struct {
 	waitForSnapshotControllerReadyOnce sync.Once
 }
 
-// NewMetricsGrabber prepares for grabbing metrics data from several different
-// components. It should be called when those components are running because
-// it needs to communicate with them to determine for which components
-// metrics data can be retrieved.
+// NewMetricsGrabber 准备从多个组件采集指标。应在这些组件运行时调用，
+// 因为它需要与组件通信，判断哪些组件可以采集指标。
 //
-// Collecting metrics data is an optional debug feature. Not all clusters will
-// support it. If disabled for a component, the corresponding Grab function
-// will immediately return an error derived from MetricsGrabbingDisabledError.
+// 指标采集是可选的调试功能，并非所有集群都支持。如果某个组件不支持，
+// 对应的 Grab 函数会立即返回由 MetricsGrabbingDisabledError 派生的错误。
 func NewMetricsGrabber(ctx context.Context, c clientset.Interface, ec clientset.Interface, config *rest.Config, kubelets bool, scheduler bool, controllers bool, apiServer bool, clusterAutoscaler bool, snapshotController bool) (*Grabber, error) {
 	kubeScheduler := ""
 	kubeControllerManager := ""
@@ -157,8 +152,8 @@ func checkPodDebugHandlers(ctx context.Context, c clientset.Interface, requested
 		return false
 	}
 
-	// The debug handlers on the host where the pod runs might be disabled.
-	// We can check that indirectly by trying to retrieve log output.
+	// pod 所在主机上的 debug handler 可能被禁用。
+	// 可以尝试获取日志输出来间接判断。
 	limit := int64(1)
 	if _, err := c.CoreV1().Pods(metav1.NamespaceSystem).GetLogs(podName, &v1.PodLogOptions{LimitBytes: &limit}).DoRaw(ctx); err != nil {
 		klog.Warningf("Can't retrieve log output of %s (%q). Debug handlers might be disabled in kubelet. Grabbing metrics from %s is disabled.",
@@ -166,16 +161,16 @@ func checkPodDebugHandlers(ctx context.Context, c clientset.Interface, requested
 		return false
 	}
 
-	// Metrics gathering enabled.
+	// 指标采集可用。
 	return true
 }
 
-// HasControlPlanePods returns true if metrics grabber was able to find control-plane pods
+// HasControlPlanePods 在 metrics grabber 找到 control plane pod 时返回 true。
 func (g *Grabber) HasControlPlanePods() bool {
 	return g.kubeScheduler != "" && g.kubeControllerManager != ""
 }
 
-// GrabFromKubelet returns metrics from kubelet
+// GrabFromKubelet 从 kubelet 采集指标。
 func (g *Grabber) GrabFromKubelet(ctx context.Context, nodeName string) (KubeletMetrics, error) {
 	nodes, err := g.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{FieldSelector: fields.Set{"metadata.name": nodeName}.AsSelector().String()})
 	if err != nil {
@@ -188,7 +183,7 @@ func (g *Grabber) GrabFromKubelet(ctx context.Context, nodeName string) (Kubelet
 	return g.grabFromKubeletInternal(ctx, nodeName, int(kubeletPort), "metrics")
 }
 
-// GrabresourceMetricsFromKubelet returns resource metrics from kubelet
+// GrabResourceMetricsFromKubelet 从 kubelet 采集资源指标。
 func (g *Grabber) GrabResourceMetricsFromKubelet(ctx context.Context, nodeName string) (KubeletMetrics, error) {
 	nodes, err := g.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{FieldSelector: fields.Set{"metadata.name": nodeName}.AsSelector().String()})
 	if err != nil {
@@ -213,7 +208,7 @@ func (g *Grabber) grabFromKubeletInternal(ctx context.Context, nodeName string, 
 }
 
 func (g *Grabber) getMetricsFromNode(ctx context.Context, nodeName string, kubeletPort int, pathSuffix string) (string, error) {
-	// There's a problem with timing out during proxy. We are going to set a 45 second client timeout, and issue a retry.
+	// proxy 请求容易超时，因此设置 45 秒客户端超时并配合重试。
 	var err error
 	var output []byte
 	err = wait.PollUntilContextTimeout(ctx, 15*time.Second, 2*time.Minute, true, func(ctx context.Context) (done bool, retErr error) {
@@ -238,7 +233,7 @@ func (g *Grabber) getMetricsFromNode(ctx context.Context, nodeName string, kubel
 	return string(output), err
 }
 
-// GrabFromKubeProxy returns metrics from kube-proxy
+// GrabFromKubeProxy 从 kube-proxy 采集指标。
 func (g *Grabber) GrabFromKubeProxy(ctx context.Context, nodeName string) (KubeProxyMetrics, error) {
 	nodes, err := g.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{FieldSelector: fields.Set{"metadata.name": nodeName}.AsSelector().String()})
 	if err != nil {
@@ -277,7 +272,7 @@ func (g *Grabber) grabFromKubeProxy(ctx context.Context, nodeName string) (strin
 	return stdout, err
 }
 
-// GrabFromScheduler returns metrics from scheduler
+// GrabFromScheduler 从 scheduler 采集指标。
 func (g *Grabber) GrabFromScheduler(ctx context.Context) (SchedulerMetrics, error) {
 	if !g.grabFromScheduler {
 		return SchedulerMetrics{}, fmt.Errorf("kube-scheduler: %w", MetricsGrabbingDisabledError)
@@ -307,7 +302,7 @@ func (g *Grabber) GrabFromScheduler(ctx context.Context) (SchedulerMetrics, erro
 	return parseSchedulerMetrics(output)
 }
 
-// GrabFromClusterAutoscaler returns metrics from cluster autoscaler
+// GrabFromClusterAutoscaler 从 cluster autoscaler 采集指标。
 func (g *Grabber) GrabFromClusterAutoscaler(ctx context.Context) (ClusterAutoscalerMetrics, error) {
 	if !g.HasControlPlanePods() && g.externalClient == nil {
 		return ClusterAutoscalerMetrics{}, fmt.Errorf("ClusterAutoscaler: %w", MetricsGrabbingDisabledError)
@@ -328,7 +323,7 @@ func (g *Grabber) GrabFromClusterAutoscaler(ctx context.Context) (ClusterAutosca
 	return parseClusterAutoscalerMetrics(output)
 }
 
-// GrabFromControllerManager returns metrics from controller manager
+// GrabFromControllerManager 从 controller manager 采集指标。
 func (g *Grabber) GrabFromControllerManager(ctx context.Context) (ControllerManagerMetrics, error) {
 	if !g.grabFromControllerManager {
 		return ControllerManagerMetrics{}, fmt.Errorf("kube-controller-manager: %w", MetricsGrabbingDisabledError)
@@ -358,14 +353,14 @@ func (g *Grabber) GrabFromControllerManager(ctx context.Context) (ControllerMana
 	return parseControllerManagerMetrics(output)
 }
 
-// GrabFromSnapshotController returns metrics from controller manager
+// GrabFromSnapshotController 从 snapshot controller 采集指标。
 func (g *Grabber) GrabFromSnapshotController(ctx context.Context, podName string, port int) (SnapshotControllerMetrics, error) {
 	if !g.grabFromSnapshotController {
 		return SnapshotControllerMetrics{}, fmt.Errorf("volume-snapshot-controller: %w", MetricsGrabbingDisabledError)
 	}
 
-	// Use overrides if provided via test config flags.
-	// Otherwise, use the default volume-snapshot-controller pod name and port.
+	// 测试配置 flag 提供了覆盖值就使用它们，
+	// 否则采用 volume-snapshot-controller 默认 pod 名和端口。
 	if podName == "" {
 		podName = g.snapshotController
 	}
@@ -397,7 +392,7 @@ func (g *Grabber) GrabFromSnapshotController(ctx context.Context, podName string
 	return parseSnapshotControllerMetrics(output)
 }
 
-// GrabFromAPIServer returns metrics from API server
+// GrabFromAPIServer 从 API server 采集指标。
 func (g *Grabber) GrabFromAPIServer(ctx context.Context) (APIServerMetrics, error) {
 	output, err := g.getMetricsFromAPIServer(ctx)
 	if err != nil {
@@ -406,7 +401,7 @@ func (g *Grabber) GrabFromAPIServer(ctx context.Context) (APIServerMetrics, erro
 	return parseAPIServerMetrics(output)
 }
 
-// GrabMetricsSLIsFromAPIServer returns metrics from API server
+// GrabMetricsSLIsFromAPIServer 从 API server 采集 SLI 指标。
 func (g *Grabber) GrabMetricsSLIsFromAPIServer(ctx context.Context) (APIServerMetrics, error) {
 	output, err := g.getMetricsSLIsFromAPIServer(ctx)
 	if err != nil {
@@ -431,7 +426,7 @@ func (g *Grabber) getMetricsSLIsFromAPIServer(ctx context.Context) (string, erro
 	return string(rawOutput), nil
 }
 
-// Grab returns metrics from corresponding component
+// Grab 从对应的各个组件采集指标。
 func (g *Grabber) Grab(ctx context.Context) (Collection, error) {
 	result := Collection{}
 	var errs []error
@@ -503,7 +498,7 @@ func (g *Grabber) Grab(ctx context.Context) (Collection, error) {
 	return result, nil
 }
 
-// getMetricsFromPod retrieves metrics data from an insecure port.
+// getMetricsFromPod 从非安全端口获取指标数据。
 func (g *Grabber) getMetricsFromPod(ctx context.Context, client clientset.Interface, podName string, namespace string, port int) (string, error) {
 	rawOutput, err := client.CoreV1().RESTClient().Get().
 		Namespace(namespace).
@@ -518,11 +513,9 @@ func (g *Grabber) getMetricsFromPod(ctx context.Context, client clientset.Interf
 	return string(rawOutput), nil
 }
 
-// getSecureMetricsFromPod retrieves metrics from a pod that uses TLS
-// and checks client credentials. Conceptually this function is
-// similar to "kubectl port-forward" + "kubectl get --raw
-// https://localhost:<port>/metrics". It uses the same credentials
-// as kubelet.
+// getSecureMetricsFromPod 从使用 TLS 并校验客户端凭据的 pod 获取指标。
+// 概念上相当于 "kubectl port-forward" + "kubectl get --raw
+// https://localhost:<port>/metrics"。它使用与 kubelet 相同的凭据。
 func (g *Grabber) getSecureMetricsFromPod(ctx context.Context, podName string, namespace string, port int) (string, error) {
 	dialer := e2epod.NewDialer(g.client, g.config)
 	metricConfig := rest.CopyConfig(g.config)
@@ -534,23 +527,19 @@ func (g *Grabber) getSecureMetricsFromPod(ctx context.Context, podName string, n
 	metricConfig.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
 		return dialer.DialContainerPort(ctx, addr)
 	}
-	// This should make it possible verify the server, but while it
-	// got past the server name check, certificate validation
-	// still failed.
+	// 按理说这样就能校验服务端，但实际只是通过了服务器名称检查，
+	// 证书校验仍然失败。
 	metricConfig.Host = addr.String()
 	metricConfig.ServerName = "localhost"
-	// Verifying the pod certificate with the same root CA
-	// as for the API server led to an error about "unknown root
-	// certificate". Disabling certificate checking on the client
-	// side gets around that and should be good enough for
-	// E2E testing.
+	// 用 API server 的 root CA 校验 pod 证书会报 "unknown root
+	// certificate"。在客户端关闭证书校验可以绕开这个问题，
+	// 对 E2E 测试来说足够了。
 	metricConfig.Insecure = true
 	metricConfig.CAFile = ""
 	metricConfig.CAData = nil
 
-	// clientset.NewForConfig is used because
-	// metricClient.RESTClient() is directly usable, in contrast
-	// to the client constructed by rest.RESTClientFor().
+	// 使用 clientset.NewForConfig 是因为它构造出的 metricClient.RESTClient()
+	// 可以直接用，而 rest.RESTClientFor() 构造的 client 不行。
 	metricClient, err := clientset.NewForConfig(metricConfig)
 	if err != nil {
 		return "", err

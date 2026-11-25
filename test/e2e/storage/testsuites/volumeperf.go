@@ -48,31 +48,26 @@ var _ storageframework.TestSuite = &volumePerformanceTestSuite{}
 
 const testTimeout = 15 * time.Minute
 
-// Time intervals when a resource was created, it enters
-// the desired state and the elapsed time between these
-// two states
+// interval 记录资源创建时间、进入期望状态的时间，以及两者之间的耗时。
 type interval struct {
 	create            time.Time
 	enterDesiredState time.Time
 	elapsed           time.Duration
 }
 
-// Consolidates performance stats for any operation
+// performanceStats 汇总某项操作的性能统计数据。
 type performanceStats struct {
 	mutex             *sync.Mutex
 	perObjectInterval map[string]*interval
 	operationMetrics  *storageframework.Metrics
 }
 
-// waitForProvisionCh receives a signal from controller
-// when all PVCs are Bound
-// The signal received on this channel is the list of
-// PVC objects that are created in the test
-// The test blocks until waitForProvisionCh receives a signal
-// or the test times out
+// waitForProvisionCh 在所有 PVC 都进入 Bound 状态时接收 controller 发来的信号。
+// 信号内容是本测试创建的 PVC 对象列表。
+// 测试会阻塞等待信号，直到收到信号或超时。
 var waitForProvisionCh chan []*v1.PersistentVolumeClaim
 
-// InitVolumePerformanceTestSuite returns volumePerformanceTestSuite that implements TestSuite interface
+// InitVolumePerformanceTestSuite 返回实现了 TestSuite 接口的 volumePerformanceTestSuite。
 func InitVolumePerformanceTestSuite() storageframework.TestSuite {
 	return &volumePerformanceTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -107,7 +102,7 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 		l     *local
 	)
 	ginkgo.BeforeEach(func() {
-		// Check preconditions
+		// 检查前置条件
 		dDriver := driver.(storageframework.DynamicPVTestDriver)
 		if dDriver == nil {
 			e2eskipper.Skipf("Test driver does not support dynamically created volumes")
@@ -159,8 +154,8 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 		}
 		l.config = driver.PrepareTest(ctx, f)
 
-		// Stats for volume provisioning operation
-		// TODO: Add stats for attach, resize and snapshot
+		// volume provisioning 操作的统计数据
+		// TODO: 增加 attach、resize 和 snapshot 的统计
 		provisioningStats := &performanceStats{
 			mutex:             &sync.Mutex{},
 			perObjectInterval: make(map[string]*interval),
@@ -168,7 +163,7 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 		}
 		sc := driver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(ctx, l.config, pattern.FsType)
 		ginkgo.By(fmt.Sprintf("Creating Storage Class %v", sc))
-		// TODO: Add support for WaitForFirstConsumer volume binding mode
+		// TODO: 增加对 WaitForFirstConsumer volume binding 模式的支持
 		if sc.VolumeBindingMode != nil && *sc.VolumeBindingMode == storagev1.VolumeBindingWaitForFirstConsumer {
 			e2eskipper.Skipf("WaitForFirstConsumer binding mode currently not supported for performance tests")
 		}
@@ -177,9 +172,9 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 		framework.ExpectNoError(err)
 		l.scName = sc.Name
 
-		// Create a controller to watch on PVCs
-		// When all PVCs provisioned by this test are in the Bound state, the controller
-		// sends a signal to the channel
+		// 创建一个 controller 监听 PVC，
+		// 当本测试创建的所有 PVC 都进入 Bound 状态时，
+		// 它会向 channel 发送信号。
 		controller := newPVCWatch(ctx, f, l.options.ProvisioningOptions.Count, provisioningStats)
 		l.stopCh = make(chan struct{})
 		go controller.Run(l.stopCh)
@@ -193,7 +188,7 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 			}, l.ns.Name)
 			pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(ctx, pvc, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
-			// Store create time for each PVC
+			// 记录每个 PVC 的创建时间
 			provisioningStats.mutex.Lock()
 			provisioningStats.perObjectInterval[pvc.Name] = &interval{
 				create: pvc.CreationTimestamp.Time,
@@ -220,8 +215,7 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 
 }
 
-// createPerformanceStats calculates individual metrics for an operation
-// given the intervals collected during that operation
+// createPerformanceStats 根据某次操作收集到的时间间隔计算各项性能指标。
 func createPerformanceStats(stats *performanceStats, provisionCount int, pvcs []*v1.PersistentVolumeClaim) {
 	var min, max, sum time.Duration
 	for _, pvc := range pvcs {
@@ -245,7 +239,7 @@ func createPerformanceStats(stats *performanceStats, provisionCount int, pvcs []
 	}
 }
 
-// validatePerformanceStats validates if test performance metrics meet the baseline target
+// validatePerformanceStats 验证测试得到的性能指标是否满足基线目标。
 func validatePerformanceStats(operationMetrics *storageframework.Metrics, baselineMetrics *storageframework.Metrics) []error {
 	var errList []error
 	framework.Logf("Metrics to evaluate: %+v", dump.Pretty(operationMetrics))
@@ -261,9 +255,8 @@ func validatePerformanceStats(operationMetrics *storageframework.Metrics, baseli
 	return errList
 }
 
-// newPVCWatch creates an informer to check whether all PVCs are Bound
-// When all PVCs are bound, the controller sends a signal to
-// waitForProvisionCh to unblock the test
+// newPVCWatch 创建一个 informer 检查所有 PVC 是否都已 Bound。
+// 全部 Bound 后，controller 向 waitForProvisionCh 发送信号以解除测试阻塞。
 func newPVCWatch(ctx context.Context, f *framework.Framework, provisionCount int, pvcMetrics *performanceStats) cache.Controller {
 	defer ginkgo.GinkgoRecover()
 	count := 0
@@ -277,7 +270,7 @@ func newPVCWatch(ctx context.Context, f *framework.Framework, provisionCount int
 		countLock.Lock()
 		defer countLock.Unlock()
 
-		// Check if PVC entered the bound state
+		// 检查 PVC 是否进入了 Bound 状态
 		if oldPVC.Status.Phase != v1.ClaimBound && newPVC.Status.Phase == v1.ClaimBound {
 			newPVCInterval, ok := pvcMetrics.perObjectInterval[newPVC.Name]
 			if !ok {
@@ -289,9 +282,8 @@ func newPVCWatch(ctx context.Context, f *framework.Framework, provisionCount int
 			pvcs = append(pvcs, newPVC)
 		}
 		if count == provisionCount {
-			// Number of Bound PVCs equals the number of PVCs
-			// provisioned by this test
-			// Send those PVCs to the channel to unblock test
+			// Bound 的 PVC 数量已等于本测试创建的数量，
+			// 将这些 PVC 发送到 channel 以解除测试阻塞。
 			waitForProvisionCh <- pvcs
 		}
 	}

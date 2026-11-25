@@ -44,25 +44,25 @@ import (
 	"k8s.io/kubernetes/test/e2e_node/remote"
 )
 
-// TODO(random-liu): Replace this with standard kubelet launcher.
+// TODO(random-liu): 用标准的 kubelet launcher 替换这里
 
-// args is the type used to accumulate args from the flags with the same name.
+// args 用于累积同名 flag 的参数
 type args []string
 
-// String function of flag.Value
+// String 实现 flag.Value 的 String 方法
 func (a *args) String() string {
 	return fmt.Sprint(*a)
 }
 
-// Set function of flag.Value
+// Set 实现 flag.Value 的 Set 方法
 func (a *args) Set(value string) error {
-	// Note that we assume all white space in flag string is separating fields
+	// 这里假设 flag 字符串中的所有空白都是字段分隔符
 	na := strings.Fields(value)
 	*a = append(*a, na...)
 	return nil
 }
 
-// kubeletArgs is the override kubelet args specified by the test runner.
+// kubeletArgs 是测试运行器指定的 kubelet 参数覆盖项
 var kubeletArgs args
 var kubeletConfigFile = "./kubeletconfig.yaml"
 
@@ -73,28 +73,26 @@ func init() {
 	}
 }
 
-// RunKubelet starts kubelet and waits for termination signal. Once receives the
-// termination signal, it will stop the kubelet gracefully.
+// RunKubelet 启动 kubelet 并等待终止信号；收到信号后优雅停止 kubelet
 func RunKubelet(ctx context.Context, featureGates map[string]bool) {
 	var err error
-	// Enable monitorParent to make sure kubelet will receive termination signal
-	// when test process exits.
+	// 启用 monitorParent，确保测试进程退出时 kubelet 能收到终止信号
 	e := NewE2EServices(true /* monitorParent */)
 	defer e.Stop()
 	e.kubelet, err = e.startKubelet(ctx, featureGates)
 	if err != nil {
 		klog.Fatalf("Failed to start kubelet: %v", err)
 	}
-	// Wait until receiving a termination signal.
+	// 等待终止信号
 	waitForTerminationSignal()
 }
 
 const (
-	// KubeletRootDirectory specifies the directory where the kubelet runtime information is stored.
+	// KubeletRootDirectory 指定存放 kubelet 运行时信息的目录
 	KubeletRootDirectory = "/var/lib/kubelet"
 )
 
-// Health check url of kubelet
+// kubelet 的健康检查 URL
 var kubeletHealthCheckURL = fmt.Sprintf("http://127.0.0.1:%d/healthz", ports.KubeletHealthzPort)
 
 func baseKubeConfiguration(ctx context.Context, cfgPath string) (*kubeletconfig.KubeletConfiguration, error) {
@@ -105,25 +103,21 @@ func baseKubeConfiguration(ctx context.Context, cfgPath string) (*kubeletconfig.
 
 	_, err = os.Stat(cfgPath)
 	if err != nil {
-		// If the kubeletconfig exists, but for some reason we can't read it, then
-		// return an error to avoid silently skipping it.
+		// kubeletconfig 存在但由于某种原因无法读取时返回错误，避免静默跳过
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
 
-		// If the kubeletconfig file doesn't exist, then use a default configuration
-		// as the base.
+		// kubeletconfig 文件不存在时，使用默认配置作为基础
 		kc, err := options.NewKubeletConfiguration()
 		if err != nil {
 			return nil, err
 		}
 
-		// The following values should match the contents of
-		// test/e2e_node/jenkins/default-kubelet-config.yaml. We can't use go embed
-		// here to fallback as default config lives in a parallel directory.
-		// TODO(endocrimes): Remove fallback for lack of kubelet config when all
-		//                   uses of e2e_node switch to providing one (or move to
-		//                   kubetest2 and pick up the default).
+		// 以下值应与 test/e2e_node/jenkins/default-kubelet-config.yaml 的内容保持一致。
+		// 默认配置位于并行目录中，因此这里无法用 go embed 作为回退。
+		// TODO(endocrimes): 当所有 e2e_node 使用方都提供配置（或迁移到 kubetest2
+		//                   并使用其默认配置）后，移除缺少 kubelet config 时的回退逻辑
 		kc.CgroupRoot = "/"
 		kc.VolumeStatsAggPeriod = metav1.Duration{Duration: 10 * time.Second}
 		kc.SerializeImagePulls = false
@@ -151,8 +145,7 @@ func baseKubeConfiguration(ctx context.Context, cfgPath string) (*kubeletconfig.
 	return loader.Load(ctx)
 }
 
-// startKubelet starts the Kubelet in a separate process or returns an error
-// if the Kubelet fails to start.
+// startKubelet 在独立进程中启动 kubelet，启动失败时返回错误
 func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]bool) (*server, error) {
 	klog.Info("Starting kubelet")
 
@@ -162,26 +155,26 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 
 	if !framework.TestContext.StandaloneMode {
 		var err error
-		// Build kubeconfig
+		// 生成 kubeconfig
 		kubeconfigPath, err = createKubeconfigCWD()
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// KubeletConfiguration file path
+	// KubeletConfiguration 文件路径
 	kubeletConfigPath, err := kubeletConfigCWDPath()
 	if err != nil {
 		return nil, err
 	}
 
-	// KubeletDropInConfiguration directory path
+	// KubeletDropInConfiguration 目录路径
 	framework.TestContext.KubeletConfigDropinDir, err = KubeletConfigDirCWDDir()
 	if err != nil {
 		return nil, err
 	}
 
-	// Create pod directory
+	// 创建 pod 目录
 	podPath, err := createPodDirectory()
 	if err != nil {
 		return nil, err
@@ -201,8 +194,8 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 		return nil, fmt.Errorf("failed to load base kubelet configuration: %w", err)
 	}
 
-	// Apply overrides to allow access to the Kubelet API from the test suite.
-	// These are insecure and should generally not be used outside of test infra.
+	// 应用覆盖项，使测试套件可以访问 Kubelet API。
+	// 这些设置不安全，通常不应在测试基础设施之外使用
 
 	// --anonymous-auth
 	kc.Authentication.Anonymous.Enabled = true
@@ -213,26 +206,23 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 	// --read-only-port
 	kc.ReadOnlyPort = ports.KubeletReadOnlyPort
 
-	// Static Pods are in a per-test location, so we override them for tests.
+	// static pod 位于每个测试各自的目录中，这里为测试覆盖该路径
 	kc.StaticPodPath = podPath
 
 	var killCommand, restartCommand *exec.Cmd
 	var isSystemd bool
 	var unitName string
-	// Apply default kubelet flags.
+	// 应用默认的 kubelet 参数
 	cmdArgs := []string{}
 	if systemdRun, err := exec.LookPath("systemd-run"); err == nil {
-		// On systemd services, detection of a service / unit works reliably while
-		// detection of a process started from an ssh session does not work.
-		// Since kubelet will typically be run as a service it also makes more
-		// sense to test it that way
+		// systemd service/unit 的检测是可靠的，而从 ssh 会话启动的进程无法可靠检测。
+		// kubelet 通常以 service 方式运行，因此这样测试也更贴近实际
 		isSystemd = true
 
-		// If we are running on systemd >=240, we can append to the
-		// same log file on restarts
+		// systemd >=240 时，重启后可以追加到同一个日志文件
 		logLocation := "StandardError=file:"
 		if version, verr := exec.Command("systemd-run", "--version").Output(); verr == nil {
-			// sample output from $ systemd-run --version
+			// $ systemd-run --version 的输出示例
 			// systemd 245 (245.4-4ubuntu3.13)
 			re := regexp.MustCompile(`systemd (\d+)`)
 			if match := re.FindSubmatch(version); len(match) > 1 {
@@ -242,10 +232,9 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 				}
 			}
 		}
-		// We can ignore errors, to have GetTimestampFromWorkspaceDir() fallback
-		// to the current time.
+		// 可以忽略错误，让 GetTimestampFromWorkspaceDir() 回退到当前时间
 		cwd, _ := os.Getwd()
-		// Use the timestamp from the current directory to name the systemd unit.
+		// 用当前目录的时间戳命名 systemd unit
 		unitTimestamp := remote.GetTimestampFromWorkspaceDir(cwd)
 		unitName = fmt.Sprintf("kubelet-%s.service", unitTimestamp)
 		cmdArgs = append(cmdArgs,
@@ -263,7 +252,7 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 		kc.KubeletCgroups = "/kubelet.slice"
 	} else {
 		cmdArgs = append(cmdArgs, builder.GetKubeletServerBin())
-		// TODO(random-liu): Get rid of this docker specific thing.
+		// TODO(random-liu): 去掉这个 docker 特有的设置
 		cmdArgs = append(cmdArgs, "--runtime-cgroups=/docker-daemon")
 
 		kc.KubeletCgroups = "/kubelet"
@@ -282,18 +271,17 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 		"--v", LogVerbosityLevel,
 	)
 
-	// Apply test framework feature gates by default. This could also be overridden
-	// by kubelet-flags.
+	// 默认应用测试框架的 feature gate，也可以用 kubelet-flags 覆盖
 	if len(featureGates) > 0 {
 		cmdArgs = append(cmdArgs, "--feature-gates", cliflag.NewMapStringBool(&featureGates).String())
 		kc.FeatureGates = featureGates
 	}
 
-	// Add the KubeletDropinConfigDirectory flag if set.
+	// 添加 KubeletDropinConfigDirectory 参数（如果已设置）
 	cmdArgs = append(cmdArgs, "--config-dir", framework.TestContext.KubeletConfigDropinDir)
 
-	// Keep hostname override for convenience.
-	if framework.TestContext.NodeName != "" { // If node name is specified, set hostname override.
+	// 为方便起见保留 hostname override
+	if framework.TestContext.NodeName != "" { // 指定了 node name 时设置 hostname override
 		cmdArgs = append(cmdArgs, "--hostname-override", framework.TestContext.NodeName)
 	}
 
@@ -308,13 +296,13 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 	if err := WriteKubeletConfigFile(kc, kubeletConfigPath); err != nil {
 		return nil, err
 	}
-	// add the flag to load config from a file
+	// 添加从文件加载配置的 flag
 	cmdArgs = append(cmdArgs, "--config", kubeletConfigPath)
 
-	// Override the default kubelet flags.
+	// 覆盖默认的 kubelet flag
 	cmdArgs = append(cmdArgs, kubeletArgs...)
 
-	// Adjust the args if we are running kubelet with systemd.
+	// 以 systemd 方式运行 kubelet 时调整参数
 	if isSystemd {
 		adjustArgsForSystemd(cmdArgs)
 	}
@@ -334,25 +322,25 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 	return server, server.start()
 }
 
-// WriteKubeletConfigFile writes the kubelet config file based on the args and returns the filename
+// WriteKubeletConfigFile 根据参数写入 kubelet 配置文件
 func WriteKubeletConfigFile(internal *kubeletconfig.KubeletConfiguration, path string) error {
 	data, err := kubeletconfigcodec.EncodeKubeletConfig(internal, kubeletconfigv1beta1.SchemeGroupVersion)
 	if err != nil {
 		return err
 	}
-	// create the directory, if it does not exist
+	// 目录不存在时创建目录
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	// write the file
+	// 写入文件
 	if err := os.WriteFile(path, data, 0755); err != nil {
 		return err
 	}
 	return nil
 }
 
-// createPodDirectory creates pod directory.
+// createPodDirectory 创建 pod 目录
 func createPodDirectory() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -365,7 +353,7 @@ func createPodDirectory() (string, error) {
 	return path, nil
 }
 
-// createKubeconfig creates a kubeconfig file at the fully qualified `path`. The parent dirs must exist.
+// createKubeconfig 在绝对路径 `path` 处创建 kubeconfig 文件，父目录必须已存在
 func createKubeconfig(path string) error {
 	kubeconfig := []byte(fmt.Sprintf(`apiVersion: v1
 kind: Config
@@ -414,7 +402,7 @@ func kubeletConfigCWDPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
-	// DO NOT name this file "kubelet" - you will overwrite the kubelet binary and be very confused :)
+	// 不要把这个文件命名为 "kubelet"，否则会覆盖 kubelet 二进制并造成困惑 :)
 	return filepath.Join(cwd, "kubelet-config"), nil
 }
 
@@ -430,8 +418,8 @@ func KubeletConfigDirCWDDir() (string, error) {
 	return dir, nil
 }
 
-// like createKubeconfig, but creates kubeconfig at current-working-directory/kubeconfig
-// returns a fully-qualified path to the kubeconfig file
+// 与 createKubeconfig 类似，但在当前工作目录下创建 kubeconfig；
+// 返回 kubeconfig 文件的绝对路径
 func createKubeconfigCWD() (string, error) {
 	kubeconfigPath, err := kubeconfigCWDPath()
 	if err != nil {
@@ -444,8 +432,8 @@ func createKubeconfigCWD() (string, error) {
 	return kubeconfigPath, nil
 }
 
-// adjustArgsForSystemd escape special characters in kubelet arguments for systemd. Systemd
-// may try to do auto expansion without escaping.
+// adjustArgsForSystemd 为 systemd 转义 kubelet 参数中的特殊字符，
+// 否则 systemd 可能尝试自动展开
 func adjustArgsForSystemd(args []string) {
 	for i := range args {
 		args[i] = strings.Replace(args[i], "%", "%%", -1)

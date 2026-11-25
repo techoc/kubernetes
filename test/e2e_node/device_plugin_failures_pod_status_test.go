@@ -52,7 +52,7 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 		ginkgo.GinkgoHelper()
 		node := getLocalNode(ctx, f)
 
-		// -1 represents that the resource is not found
+		// -1 表示未找到该资源
 		result := ResourceValue{
 			Allocatable: -1,
 			Capacity:    -1,
@@ -107,7 +107,7 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 				RestartPolicy: v1.RestartPolicyAlways,
 				Containers: []v1.Container{{
 					Image:           imageutils.GetE2EImage(imageutils.InvalidRegistryImage),
-					ImagePullPolicy: v1.PullAlways, // this is to make test not fail on non pre-pulled image validation
+					ImagePullPolicy: v1.PullAlways, // 避免测试因镜像未预拉取的校验而失败
 					Name:            "container-1",
 					Command:         []string{"sh", "-c", fmt.Sprintf("env && sleep %s", sleepIntervalForever)},
 					Resources: v1.ResourceRequirements{
@@ -126,23 +126,23 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 	ginkgo.It("will report a Healthy and then Unhealthy single device in the pod status", func(ctx context.Context) {
 		e2eskipper.SkipUnlessFeatureGateEnabled(features.ResourceHealthStatus)
 
-		// randomizing so tests can run in parallel
+		// 随机化名称，使测试可以并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 		devices := []*kubeletdevicepluginv1beta1.Device{{ID: "testdevice", Health: kubeletdevicepluginv1beta1.Healthy}}
 		plugin := testdeviceplugin.NewDevicePlugin(nil)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也要停止
 		gomega.Expect(err).To(gomega.Succeed())
 
 		ginkgo.By("initial state: capacity and allocatable are set")
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 1, Capacity: 1}))
 
-		// schedule a pod that requests the device
+		// 创建请求该设备的 pod
 		client := e2epod.NewPodClient(f)
 		pod := client.Create(ctx, createPod(resourceName, 1))
 
-		// wait for the pod to be running
+		// 等待 pod 开始运行
 		gomega.Expect(e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)).To(gomega.Succeed())
 
 		expectedStatus := []v1.ResourceStatus{
@@ -162,7 +162,7 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 			return pod.Status.ContainerStatuses[0].AllocatedResourcesStatus
 		}, devicePluginUpdateTimeout, f.Timeouts.Poll).Should(gomega.Equal(expectedStatus))
 
-		// now make the device unhealthy
+		// 将设备标记为不健康
 		devices[0].Health = kubeletdevicepluginv1beta1.Unhealthy
 		plugin.UpdateDevices(devices)
 
@@ -176,7 +176,7 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 			return pod.Status.ContainerStatuses[0].AllocatedResourcesStatus
 		}, devicePluginUpdateTimeout, f.Timeouts.Poll).Should(gomega.Equal(expectedStatus))
 
-		// deleting the pod
+		// 删除 pod
 		err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 		gomega.Expect(err).To(gomega.Succeed())
 
@@ -186,23 +186,23 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 	ginkgo.It("will report a Device Status for the failed pod in the pod status", func(ctx context.Context) {
 		e2eskipper.SkipUnlessFeatureGateEnabled(features.ResourceHealthStatus)
 
-		// randomizing so tests can run in parallel
+		// 随机化名称，使测试可以并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 		devices := []*kubeletdevicepluginv1beta1.Device{{ID: "testdevice", Health: kubeletdevicepluginv1beta1.Healthy}}
 		plugin := testdeviceplugin.NewDevicePlugin(nil)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也要停止
 		gomega.Expect(err).To(gomega.Succeed())
 
 		ginkgo.By("initial state: capacity and allocatable are set")
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 1, Capacity: 1}))
 
-		// schedule a pod that requests the device
+		// 创建请求该设备的 pod
 		client := e2epod.NewPodClient(f)
 		pod := client.Create(ctx, createPodWrongImage(resourceName, 1))
 
-		// wait for the pod to be running
+		// 等待 pod 开始运行
 		gomega.Expect(e2epod.WaitForPodCondition(ctx, f.ClientSet, pod.Namespace, pod.Name, "Back-off pulling image", f.Timeouts.PodStartShort,
 			func(pod *v1.Pod) (bool, error) {
 				if pod.Status.Phase == v1.PodPending &&
@@ -231,7 +231,7 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 			return pod.Status.ContainerStatuses[0].AllocatedResourcesStatus
 		}, devicePluginUpdateTimeout, f.Timeouts.Poll).Should(gomega.Equal(expectedStatus))
 
-		// now make the device unhealthy
+		// 将设备标记为不健康
 		devices[0].Health = kubeletdevicepluginv1beta1.Unhealthy
 		plugin.UpdateDevices(devices)
 
@@ -245,7 +245,7 @@ var _ = SIGDescribe("Device Plugin Failures Pod Status", framework.WithSlow(), f
 			return pod.Status.ContainerStatuses[0].AllocatedResourcesStatus
 		}, devicePluginUpdateTimeout, f.Timeouts.Poll).Should(gomega.Equal(expectedStatus))
 
-		// deleting the pod
+		// 删除 pod
 		err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 		gomega.Expect(err).To(gomega.Succeed())
 

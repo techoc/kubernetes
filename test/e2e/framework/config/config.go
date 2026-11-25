@@ -14,29 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package config simplifies the declaration of configuration options.
-// Right now the implementation maps them directly to command line
-// flags. When combined with test/e2e/framework/viperconfig in a test
-// suite, those flags then can also be read from a config file.
+// Package config 简化配置选项的声明。
+// 目前实现会把它们直接映射成命令行 flag。在测试套件中与
+// test/e2e/framework/viperconfig 结合使用时，这些 flag 也可以从配置文件读取。
 //
-// The command line flags all get stored in a private flag set. The
-// developer of the E2E test suite decides how they are exposed. Options
-// include:
-//   - exposing as normal flags in the actual command line:
+// 所有命令行 flag 都存储在私有的 flag set 中，由 E2E 测试套件的开发者
+// 决定如何暴露它们。可选方式包括：
+//   - 作为普通 flag 暴露在实际命令行中：
 //     CopyFlags(Flags, flag.CommandLine)
-//   - populate via test/e2e/framework/viperconfig:
+//   - 通过 test/e2e/framework/viperconfig 填充：
 //     viperconfig.ViperizeFlags("my-config.yaml", "", Flags)
-//   - a combination of both:
+//   - 两者结合：
 //     CopyFlags(Flags, flag.CommandLine)
 //     viperconfig.ViperizeFlags("my-config.yaml", "", flag.CommandLine)
 //
-// Instead of defining flags one-by-one, test developers annotate a
-// structure with tags and then call a single function. This is the
-// same approach as in https://godoc.org/github.com/jessevdk/go-flags,
-// but implemented so that a test suite can continue to use the normal
-// "flag" package.
+// 测试开发者无需逐个定义 flag，只需给结构体加 tag 然后调用一个函数即可。
+// 思路与 https://godoc.org/github.com/jessevdk/go-flags 相同，
+// 但实现上让测试套件可以继续使用标准的 "flag" 包。
 //
-// For example, a file storage/csi.go might define:
+// 例如，storage/csi.go 文件可以这样定义：
 //
 //	var scaling struct {
 //	        NumNodes int  `default:"1" description:"number of nodes to run on"`
@@ -44,13 +40,12 @@ limitations under the License.
 //	}
 //	_ = config.AddOptions(&scaling, "storage.csi.scaling")
 //
-// This defines the following command line flags:
+// 这会定义如下命令行 flag：
 //
-//	-storage.csi.scaling.numNodes=<int>  - number of nodes to run on (default: 1)
+//	-storage.csi.scaling.numNodes=<int>  - 要运行的节点数（默认：1）
 //	-storage.csi.scaling.master=<string>
 //
-// All fields in the structure must be exported and have one of the following
-// types (same as in the `flag` package):
+// 结构体中的所有字段都必须导出，且类型必须是下列之一（与 `flag` 包一致）：
 // - bool
 // - time.Duration
 // - float64
@@ -59,30 +54,22 @@ limitations under the License.
 // - int64
 // - uint
 // - uint64
-// - and/or nested or embedded structures containing those basic types.
+// - 以及/或者包含上述基本类型的嵌套或嵌入结构体。
 //
-// Each basic entry may have a tag with these optional keys:
+// 每个基本字段可以带 tag，支持以下可选键：
 //
-//	usage:   additional explanation of the option
-//	default: the default value, in the same format as it would
-//	         be given on the command line and true/false for
-//	         a boolean
+//	usage:   选项的补充说明
+//	default: 默认值，格式与命令行传入的一致，布尔值用 true/false
 //
-// The names of the final configuration options are a combination of an
-// optional common prefix for all options in the structure and the
-// name of the fields, concatenated with a dot. To get names that are
-// consistent with the command line flags defined by `ginkgo`, the
-// initial character of each field name is converted to lower case.
+// 最终配置选项的名称由结构体所有选项共用的可选前缀和字段名以点号拼接而成。
+// 为与 `ginkgo` 定义的命令行 flag 保持一致，每个字段名的首字符会转成小写。
 //
-// There is currently no support for aliases, so renaming the fields
-// or the common prefix will be visible to users of the test suite and
-// may breaks scripts which use the old names.
+// 目前不支持别名，因此重命名字段或公共前缀对测试套件用户是可见的，
+// 并可能破坏依赖旧名称的脚本。
 //
-// The variable will be filled with the actual values by the test
-// suite before running tests. Beware that the code which registers
-// Ginkgo tests cannot use those config options, because registering
-// tests and options both run before the E2E test suite handles
-// parameters.
+// 测试套件会在运行测试前把实际值填进该变量。注意，注册 Ginkgo 测试的代码
+// 不能使用这些配置选项，因为测试注册和选项注册都发生在 E2E 测试套件
+// 处理参数之前。
 package config
 
 import (
@@ -95,41 +82,34 @@ import (
 	"unicode/utf8"
 )
 
-// Flags is the flag set that AddOptions adds to. Test authors should
-// also use it instead of directly adding to the global command line.
+// Flags 是 AddOptions 添加 flag 的目标 flag set。测试作者也应使用它，
+// 而不是直接往全局命令行添加 flag。
 var Flags = flag.NewFlagSet("", flag.ContinueOnError)
 
-// CopyFlags ensures that all flags that are defined in the source flag
-// set appear in the target flag set as if they had been defined there
-// directly. From the flag package it inherits the behavior that there
-// is a panic if the target already contains a flag from the source.
+// CopyFlags 确保 source flag set 中定义的所有 flag 都出现在 target 中，
+// 就像直接定义在 target 里一样。沿用 flag 包的行为：如果 target 已经包含
+// source 中的同名 flag，会 panic。
 func CopyFlags(source *flag.FlagSet, target *flag.FlagSet) {
 	source.VisitAll(func(flag *flag.Flag) {
-		// We don't need to copy flag.DefValue. The original
-		// default (from, say, flag.String) was stored in
-		// the value and gets extracted by Var for the help
-		// message.
+		// 无需复制 flag.DefValue：原始默认值（例如 flag.String 设置的）
+		// 已保存在 value 中，Var 会提取它用于帮助信息。
 		target.Var(flag.Value, flag.Name, flag.Usage)
 	})
 }
 
-// AddOptions analyzes the options value and creates the necessary
-// flags to populate it.
+// AddOptions 分析 options 值并创建填充它所需的 flag。
 //
-// The prefix can be used to root the options deeper in the overall
-// set of options, with a dot separating different levels.
+// prefix 可以把选项放到整体选项集的更深层，不同层级用点号分隔。
 //
-// The function always returns true, to enable this simplified
-// registration of options:
+// 该函数总是返回 true，以便简化选项注册：
 // _ = AddOptions(...)
 //
-// It panics when it encounters an error, like unsupported types
-// or option name conflicts.
+// 遇到不支持的类型或选项名冲突等错误时会 panic。
 func AddOptions(options interface{}, prefix string) bool {
 	return AddOptionsToSet(Flags, options, prefix)
 }
 
-// AddOptionsToSet is the same as AddOption, except that it allows choosing the flag set.
+// AddOptionsToSet 与 AddOptions 相同，只是可以指定 flag set。
 func AddOptionsToSet(flags *flag.FlagSet, options interface{}, prefix string) bool {
 	optionsType := reflect.TypeOf(options)
 	if optionsType == nil {
@@ -160,24 +140,20 @@ func addStructFields(flags *flag.FlagSet, structType reflect.Type, structValue r
 		}
 		ptr := addr.Interface()
 		if structField.Anonymous {
-			// Entries in embedded fields are treated like
-			// entries, in the struct itself, i.e. we add
-			// them with the same prefix.
+			// 嵌入字段中的成员视为结构体自身的成员，
+			// 即使用相同的前缀添加。
 			addStructFields(flags, structField.Type, entry, prefix)
 			continue
 		}
 		if structField.Type.Kind() == reflect.Struct {
-			// Add nested options.
+			// 添加嵌套选项。
 			addStructFields(flags, structField.Type, entry, name)
 			continue
 		}
-		// We could switch based on structField.Type. Doing a
-		// switch after getting an interface holding the
-		// pointer to the entry has the advantage that we
-		// immediately have something that we can add as flag
-		// variable.
+		// 可以直接按 structField.Type 做 switch，但拿到持有字段指针的
+		// interface 后再 switch 的好处是，可以直接把该指针作为 flag 变量添加。
 		//
-		// Perhaps generics will make this entire switch redundant someday...
+		// 也许将来泛型会让整个 switch 变得多余……
 		switch ptr := ptr.(type) {
 		case *bool:
 			var defValue bool
@@ -215,10 +191,8 @@ func addStructFields(flags *flag.FlagSet, structType reflect.Type, structValue r
 	}
 }
 
-// parseDefault is necessary because "flag" wants the default in the
-// actual type and cannot take a string. It would be nice to reuse the
-// existing code for parsing from the "flag" package, but it isn't
-// exported.
+// parseDefault 是必需的，因为 "flag" 要求默认值是实际类型，不能传字符串。
+// 理想情况是复用 "flag" 包中已有的解析代码，但那些代码没有导出。
 func parseDefault(value interface{}, name, def string) {
 	if def == "" {
 		return

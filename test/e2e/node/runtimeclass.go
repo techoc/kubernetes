@@ -120,7 +120,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 
 		framework.ExpectNoError(e2epod.WaitForPodNotPending(ctx, f.ClientSet, f.Namespace.Name, pod.Name))
 
-		// check that pod got scheduled on specified node.
+		// 检查 pod 是否被调度到了指定 node 上。
 		scheduledPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		gomega.Expect(nodeName).To(gomega.Equal(scheduledPod.Spec.NodeName))
@@ -166,7 +166,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 
 		framework.ExpectNoError(e2epod.WaitForPodNotPending(ctx, f.ClientSet, f.Namespace.Name, pod.Name))
 
-		// check that pod got scheduled on specified node.
+		// 检查 pod 是否被调度到了指定 node 上。
 		scheduledPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		gomega.Expect(nodeName).To(gomega.Equal(scheduledPod.Spec.NodeName))
@@ -174,7 +174,7 @@ var _ = SIGDescribe("RuntimeClass", func() {
 	})
 })
 
-// newRuntimeClass returns a test runtime class.
+// newRuntimeClass 返回一个测试用的 runtime class。
 func newRuntimeClass(namespace, name string) *nodev1.RuntimeClass {
 	uniqueName := fmt.Sprintf("%s-%s", namespace, name)
 	return runtimeclasstest.NewRuntimeClass(uniqueName, e2eruntimeclass.PreconfiguredRuntimeClassHandler)

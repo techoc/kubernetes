@@ -41,7 +41,7 @@ var _ = utils.SIGDescribe("CSI Mock volume limit", func() {
 
 	ginkgo.Context("CSI volume limit information using mock driver", func() {
 		f.It("should report attach limit when limit is bigger than 0", f.WithSlow(), func(ctx context.Context) {
-			// define volume limit to be 2 for this test
+			// 本测试将 volume limit 设为 2
 			var err error
 			m.init(ctx, testParameters{attachLimit: 2})
 			ginkgo.DeferCleanup(m.cleanup)
@@ -73,7 +73,7 @@ var _ = utils.SIGDescribe("CSI Mock volume limit", func() {
 		})
 
 		f.It("should report attach limit for generic ephemeral volume when persistent volume is attached", f.WithSlow(), func(ctx context.Context) {
-			// define volume limit to be 2 for this test
+			// 本测试将 volume limit 设为 2
 			var err error
 			m.init(ctx, testParameters{attachLimit: 1})
 			ginkgo.DeferCleanup(m.cleanup)
@@ -99,7 +99,7 @@ var _ = utils.SIGDescribe("CSI Mock volume limit", func() {
 		})
 
 		f.It("should report attach limit for persistent volume when generic ephemeral volume is attached", f.WithSlow(), func(ctx context.Context) {
-			// define volume limit to be 2 for this test
+			// 本测试将 volume limit 设为 2
 			var err error
 			m.init(ctx, testParameters{attachLimit: 1})
 			ginkgo.DeferCleanup(m.cleanup)

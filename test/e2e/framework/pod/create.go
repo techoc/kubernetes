@@ -35,8 +35,8 @@ const (
 	VolumeMountPath1        = "/mnt/volume1"
 )
 
-// Config is a struct containing all arguments for creating a pod.
-// SELinux testing requires to pass HostIPC and HostPID as boolean arguments.
+// Config 包含创建 pod 所需的全部参数。
+// SELinux 测试需要以布尔参数形式传入 HostIPC 和 HostPID。
 type Config struct {
 	NS                     string
 	PVCs                   []*v1.PersistentVolumeClaim
@@ -54,19 +54,19 @@ type Config struct {
 	PodSELinuxChangePolicy *v1.PodSELinuxChangePolicy
 }
 
-// CreateUnschedulablePod with given claims based on node selector
+// CreateUnschedulablePod 按 node selector 和给定的 PVC 创建不可调度的 pod。
 func CreateUnschedulablePod(ctx context.Context, client clientset.Interface, namespace string, nodeSelector map[string]string, pvclaims []*v1.PersistentVolumeClaim, securityLevel admissionapi.Level, command string) (*v1.Pod, error) {
 	pod := MakePod(namespace, nodeSelector, pvclaims, securityLevel, command)
 	pod, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("pod Create API error: %w", err)
 	}
-	// Waiting for pod to become Unschedulable
+	// 等待 pod 变成 Unschedulable
 	err = WaitForPodNameUnschedulableInNamespace(ctx, client, pod.Name, namespace)
 	if err != nil {
 		return pod, fmt.Errorf("pod %q is not Unschedulable: %w", pod.Name, err)
 	}
-	// get fresh pod info
+	// 重新获取最新的 pod 信息
 	pod, err = client.CoreV1().Pods(namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return pod, fmt.Errorf("pod Get API error: %w", err)
@@ -74,24 +74,24 @@ func CreateUnschedulablePod(ctx context.Context, client clientset.Interface, nam
 	return pod, nil
 }
 
-// CreateClientPod defines and creates a pod with a mounted PV. Pod runs infinite loop until killed.
+// CreateClientPod 定义并创建一个挂载了 PV 的 pod，它会一直运行直到被杀掉。
 func CreateClientPod(ctx context.Context, c clientset.Interface, ns string, pvc *v1.PersistentVolumeClaim) (*v1.Pod, error) {
 	return CreatePod(ctx, c, ns, nil, []*v1.PersistentVolumeClaim{pvc}, admissionapi.LevelPrivileged, "")
 }
 
-// CreatePod with given claims based on node selector
+// CreatePod 按 node selector 和给定的 PVC 创建 pod。
 func CreatePod(ctx context.Context, client clientset.Interface, namespace string, nodeSelector map[string]string, pvclaims []*v1.PersistentVolumeClaim, securityLevel admissionapi.Level, command string) (*v1.Pod, error) {
 	pod := MakePod(namespace, nodeSelector, pvclaims, securityLevel, command)
 	pod, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("pod Create API error: %w", err)
 	}
-	// Waiting for pod to be running
+	// 等待 pod 进入 running 状态
 	err = WaitForPodNameRunningInNamespace(ctx, client, pod.Name, namespace)
 	if err != nil {
 		return pod, fmt.Errorf("pod %q is not Running: %w", pod.Name, err)
 	}
-	// get fresh pod info
+	// 重新获取最新的 pod 信息
 	pod, err = client.CoreV1().Pods(namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return pod, fmt.Errorf("pod Get API error: %w", err)
@@ -99,12 +99,12 @@ func CreatePod(ctx context.Context, client clientset.Interface, namespace string
 	return pod, nil
 }
 
-// CreateSecPod creates security pod with given claims
+// CreateSecPod 用给定的 Config 创建安全测试 pod。
 func CreateSecPod(ctx context.Context, client clientset.Interface, podConfig *Config, timeout time.Duration) (*v1.Pod, error) {
 	return CreateSecPodWithNodeSelection(ctx, client, podConfig, timeout)
 }
 
-// CreateSecPodWithNodeSelection creates security pod with given claims
+// CreateSecPodWithNodeSelection 用给定的 Config 创建带节点选择的安全测试 pod。
 func CreateSecPodWithNodeSelection(ctx context.Context, client clientset.Interface, podConfig *Config, timeout time.Duration) (*v1.Pod, error) {
 	pod, err := MakeSecPod(podConfig)
 	if err != nil {
@@ -116,12 +116,12 @@ func CreateSecPodWithNodeSelection(ctx context.Context, client clientset.Interfa
 		return nil, fmt.Errorf("pod Create API error: %w", err)
 	}
 
-	// Waiting for pod to be running
+	// 等待 pod 进入 running 状态
 	err = WaitTimeoutForPodRunningInNamespace(ctx, client, pod.Name, podConfig.NS, timeout)
 	if err != nil {
 		return pod, fmt.Errorf("pod %q is not Running: %w", pod.Name, err)
 	}
-	// get fresh pod info
+	// 重新获取最新的 pod 信息
 	pod, err = client.CoreV1().Pods(podConfig.NS).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return pod, fmt.Errorf("pod Get API error: %w", err)
@@ -129,8 +129,8 @@ func CreateSecPodWithNodeSelection(ctx context.Context, client clientset.Interfa
 	return pod, nil
 }
 
-// MakePod returns a pod definition based on the namespace. The pod references the PVC's
-// name.  A slice of BASH commands can be supplied as args to be run by the pod
+// MakePod 在指定 namespace 下返回 pod 定义，引用给定 PVC 的名称。
+// 可以传入一组 BASH 命令作为 pod 要执行的参数。
 func MakePod(ns string, nodeSelector map[string]string, pvclaims []*v1.PersistentVolumeClaim, securityLevel admissionapi.Level, command string) *v1.Pod {
 	if len(command) == 0 {
 		command = InfiniteSleepCommand
@@ -167,8 +167,8 @@ func MakePod(ns string, nodeSelector map[string]string, pvclaims []*v1.Persisten
 	return podSpec
 }
 
-// MakeSecPod returns a pod definition based on the namespace. The pod references the PVC's
-// name.  A slice of BASH commands can be supplied as args to be run by the pod.
+// MakeSecPod 在指定 namespace 下返回 pod 定义，引用给定 PVC 的名称。
+// 可以传入一组 BASH 命令作为 pod 要执行的参数。
 func MakeSecPod(podConfig *Config) (*v1.Pod, error) {
 	if podConfig.NS == "" {
 		return nil, fmt.Errorf("Cannot create pod with empty namespace")
@@ -197,7 +197,7 @@ func MakeSecPod(podConfig *Config) (*v1.Pod, error) {
 	return podSpec, nil
 }
 
-// MakePodSpec returns a PodSpec definition
+// MakePodSpec 返回 PodSpec 定义。
 func MakePodSpec(podConfig *Config) *v1.PodSpec {
 	image := imageutils.BusyBox
 	if podConfig.ImageID != imageutils.None {
@@ -261,7 +261,7 @@ func setVolumes(podSpec *v1.PodSpec, pvcs []*v1.PersistentVolumeClaim, inlineVol
 	for _, src := range inlineVolumeSources {
 		volumename := fmt.Sprintf("volume%v", volumeIndex+1)
 		volumeMountPath := fmt.Sprintf(VolumeMountPathTemplate, volumeIndex+1)
-		// In-line volumes can be only filesystem, not block.
+		// inline volume 只能是 filesystem 类型，不能是 block。
 		volumeMounts = append(volumeMounts, v1.VolumeMount{Name: volumename, MountPath: volumeMountPath})
 		volumes[volumeIndex] = v1.Volume{Name: volumename, VolumeSource: *src}
 		volumeIndex++

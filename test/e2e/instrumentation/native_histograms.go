@@ -100,10 +100,10 @@ func foundNativeHistogram(mf *dto.MetricFamily) bool {
 			continue
 		}
 
-		// Native Histograms are characterized by having a non-zero/non-nil Schema value.
+		// Native Histogram 的特征是 Schema 值非零/非 nil。
 		if h.Schema != nil && *h.Schema != 0 {
-			// Assert that if observations exist, the dynamic positive spans
-			// are populated (since API request latencies are positive durations).
+			// 断言只要有观测值，就必须填充动态 positive span
+			// （因为 API 请求延迟都是正的时长）。
 			if h.GetSampleCount() > 0 && len(h.GetPositiveSpan()) > 0 {
 				return true
 			}
@@ -126,7 +126,7 @@ func foundClassicHistogram(mf *dto.MetricFamily) bool {
 			continue
 		}
 
-		// Classic histograms define bucket bounds and cumulative counts.
+		// 经典 histogram 定义了 bucket 边界和累计计数。
 		if len(h.Bucket) > 0 {
 			return true
 		}

@@ -51,18 +51,16 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// estimateMaximumPods estimates how many pods the cluster can handle
-// with some wiggle room, to prevent pods being unable to schedule due
-// to max pod constraints.
-//
-// Tests that call this should use framework.WithSerial() because they're not
-// safe to run concurrently as they consume a large number of pods.
+// estimateMaximumPods 估算集群能容纳的 pod 数，并留出余量，
+// 避免因 pod 数量触顶而无法调度。
+// 调用方应使用 framework.WithSerial()，因为这些测试会消耗大量 pod，
+// 并发运行并不安全。
 func estimateMaximumPods(ctx context.Context, c clientset.Interface, min, max int32) int32 {
 	nodes, err := e2enode.GetReadySchedulableNodes(ctx, c)
 	framework.ExpectNoError(err)
 
 	availablePods := int32(0)
-	// estimate some reasonable overhead per-node for pods that are non-test
+	// 为每个 node 上的非测试 pod 预留合理的余量
 	const daemonSetReservedPods = 10
 	for _, node := range nodes.Items {
 		if q, ok := node.Status.Allocatable["pods"]; ok {
@@ -73,14 +71,13 @@ func estimateMaximumPods(ctx context.Context, c clientset.Interface, min, max in
 				continue
 			}
 		}
-		// Only when we fail to obtain the number, we fall back to a best guess
-		// per node. Since default maxPerCore is 10 and most nodes have at least
-		// one core.
+		// 只有在取不到数值时才退回按 node 估算：默认 maxPerCore 为 10，
+		// 而大多数 node 至少有一个 core
 		availablePods += 10
 	}
-	// avoid creating exactly max pods
+	// 不按上限满额创建 pod，留出一半余量
 	availablePods = int32(float32(availablePods) * 0.5)
-	// bound the top and bottom
+	// 限制上下界
 	if availablePods > max {
 		availablePods = max
 	}
@@ -111,20 +108,19 @@ var (
 )
 
 const (
-	// The GC controller periodically rediscovers available APIs and syncs running informers for those resources.
-	// If previously available APIs are removed during that resync process, the sync process can fail and need to be retried.
+	// GC controller 会周期性重新发现可用 API，并同步这些资源的 informer。
+	// 若此前可用的 API 在同步过程中被移除，同步会失败并需要重试。
 	//
-	// During e2e runs, parallel tests add/remove API resources (by creating/deleting CRDs and aggregated APIs),
-	// which makes it likely GC will need to retry informer resync at some point during an e2e run.
+	// e2e 运行中并行测试会增删 API 资源（创建/删除 CRD 和聚合 API），
+	// 因此 GC 很可能需要在某个时刻重试 informer 同步。
 	//
-	// This timeout covers two resync/retry periods, and should be added to wait timeouts to account for delays
-	// to the GC controller caused by API changes in other tests.
+	// 该超时覆盖两个 resync/重试周期，应加到 wait 超时中，
+	// 以容纳其他测试的 API 变更给 GC controller 带来的延迟。
 	gcInformerResyncRetryTimeout = time.Minute
 
-	// Many operations in these tests are per-replica and may require 100 mutating requests. The
-	// default client QPS of a controller is 5. If the qps is saturated, it will take 20s complete
-	// 100 requests. The e2e tests are running in parallel, so a controller might be stuck
-	// processing other tests.
+	// 这些测试中的许多操作按副本执行，可能需要 100 次变更请求。
+	// controller 默认 client QPS 为 5，qps 打满时完成 100 次请求需要 20 秒。
+	// e2e 测试并行运行，controller 可能忙着处理其他测试。
 	replicaSyncTimeout = 2 * time.Minute
 )
 
@@ -189,8 +185,8 @@ func newGCPod(name string) *v1.Pod {
 	}
 }
 
-// verifyRemainingObjects verifies if the number of remaining objects.
-// It returns error if the communication with the API server fails.
+// verifyRemainingObjects 校验剩余对象数量是否符合预期。
+// 与 API server 通信失败时返回 error。
 func verifyRemainingObjects(ctx context.Context, f *framework.Framework, objects map[string]int) (bool, error) {
 	var ret = true
 
@@ -310,7 +306,7 @@ func newCronJob(name, schedule string) *batchv1.CronJob {
 	}
 }
 
-// getUniqLabel returns a UniqLabel based on labeLkey and labelvalue.
+// getUniqLabel 基于 labeLkey 和 labelvalue 生成唯一的 UniqLabel。
 func getUniqLabel(labelkey, labelvalue string) map[string]string {
 	count := lablecount.Add(1)
 	uniqlabelkey := fmt.Sprintf("%s-%05d", labelkey, count)
@@ -325,7 +321,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 	/*
 		Release: v1.9
 		Testname: Garbage Collector, delete replication controller, propagation policy background
-		Description: Create a replication controller with 2 Pods. Once RC is created and the first Pod is created, delete RC with deleteOptions.PropagationPolicy set to Background. Deleting the Replication Controller MUST cause pods created by that RC to be deleted.
+		Description: 创建带 2 个 Pod 的 replication controller。RC 和第一个 Pod 创建完成后，使用 deleteOptions.PropagationPolicy=Background 删除 RC。删除 RC MUST 同时删除由该 RC 创建的 pod。
 	*/
 	framework.ConformanceIt("should delete pods created by rc when not orphaning", func(ctx context.Context) {
 		clientSet := f.ClientSet
@@ -339,16 +335,14 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to create replication controller: %v", err)
 		}
-		// wait for rc to create some pods
+		// 等待 rc 创建出一些 pod
 		if err := wait.Poll(5*time.Second, 30*time.Second, func() (bool, error) {
 			pods, err := podClient.List(ctx, metav1.ListOptions{})
 			if err != nil {
 				return false, fmt.Errorf("failed to list pods: %w", err)
 			}
-			// We intentionally don't wait the number of pods to reach
-			// rc.Spec.Replicas. We want to see if the garbage collector and the
-			// rc manager work properly if the rc is deleted before it reaches
-			// stasis.
+			// 故意不等待 pod 数达到 rc.Spec.Replicas：要在 rc 达到稳定前就删除它，
+			// 以验证 garbage collector 和 rc manager 能否正确处理
 			if len(pods.Items) > 0 {
 				return true, nil
 			}
@@ -364,7 +358,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed to delete the rc: %v", err)
 		}
 		ginkgo.By("wait for all pods to be garbage collected")
-		// wait for the RCs and Pods to reach the expected numbers.
+		// 等待 RC 和 Pod 数量达到预期
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, (60*time.Second)+gcInformerResyncRetryTimeout, false, func(ctx context.Context) (bool, error) {
 			objects := map[string]int{"ReplicationControllers": 0, "Pods": 0}
 			return verifyRemainingObjects(ctx, f, objects)
@@ -383,7 +377,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 	/*
 		Release: v1.9
 		Testname: Garbage Collector, delete replication controller, propagation policy orphan
-		Description: Create a replication controller with maximum allocatable Pods between 10 and 100 replicas. Once RC is created and the all Pods are created, delete RC with deleteOptions.PropagationPolicy set to Orphan. Deleting the Replication Controller MUST cause pods created by that RC to be orphaned.
+		Description: 创建副本数在 10 到 100 之间、不超过可分配 pod 上限的 replication controller。RC 和所有 Pod 创建完成后，使用 deleteOptions.PropagationPolicy=Orphan 删除 RC。删除 RC MUST 使该 RC 创建的 pod 成为孤儿。
 	*/
 	framework.ConformanceIt("should orphan pods created by rc if delete options say so", framework.WithSerial(), func(ctx context.Context) {
 		clientSet := f.ClientSet
@@ -397,7 +391,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to create replication controller: %v", err)
 		}
-		// wait for rc to create pods
+		// 等待 rc 创建 pod
 		waitForReplicas(ctx, rc, rcClient)
 
 		ginkgo.By("delete the rc")
@@ -407,13 +401,10 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed to delete the rc: %v", err)
 		}
 		ginkgo.By("wait for the rc to be deleted")
-		// Orphaning the 100 pods takes 100 PATCH operations. The default qps of
-		// a client is 5. If the qps is saturated, it will take 20s to orphan
-		// the pods. However, apiserver takes hundreds of ms to finish one
-		// PATCH, and the gc sends the patching in a single thread, so the
-		// actual qps is less than 5. Also, the e2e tests are running in
-		// parallel, the GC controller might get distracted by other tests.
-		// According to the test logs, 120s is enough time.
+		// 将 100 个 pod 变为孤儿需要 100 次 PATCH。client 默认 qps 为 5，
+		// qps 打满时需要 20 秒。但 apiserver 完成一次 PATCH 需要数百毫秒，
+		// 而 gc 单线程发送 patch，实际 qps 低于 5；加上 e2e 并行运行时
+		// GC controller 可能被其他测试牵制。根据测试日志，120 秒足够。
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 120*time.Second+gcInformerResyncRetryTimeout, false, func(ctx context.Context) (bool, error) {
 			rcs, err := rcClient.List(ctx, metav1.ListOptions{})
 			if err != nil {
@@ -441,8 +432,8 @@ var _ = SIGDescribe("Garbage collector", func() {
 		}
 	})
 
-	// deleteOptions.OrphanDependents is deprecated in 1.7 and preferred to use the PropagationPolicy.
-	// Discussion is tracked under https://github.com/kubernetes/kubernetes/issues/65427 to promote for conformance in future.
+	// deleteOptions.OrphanDependents 自 1.7 起废弃，推荐使用 PropagationPolicy。
+	// 未来晋升为一致性测试的讨论见 https://github.com/kubernetes/kubernetes/issues/65427。
 	ginkgo.It("should orphan pods created by rc if deleteOptions.OrphanDependents is nil", func(ctx context.Context) {
 		clientSet := f.ClientSet
 		rcClient := clientSet.CoreV1().ReplicationControllers(f.Namespace.Name)
@@ -455,7 +446,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to create replication controller: %v", err)
 		}
-		// wait for rc to create some pods
+		// 等待 rc 创建出一些 pod
 		waitForReplicas(ctx, rc, rcClient)
 
 		ginkgo.By("delete the rc")
@@ -483,7 +474,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 	/*
 		Release: v1.9
 		Testname: Garbage Collector, delete deployment,  propagation policy background
-		Description: Create a deployment with a replicaset. Once replicaset is created , delete the deployment  with deleteOptions.PropagationPolicy set to Background. Deleting the deployment MUST delete the replicaset created by the deployment and also the Pods that belong to the deployments MUST be deleted.
+		Description: 创建带 replicaset 的 deployment。replicaset 创建完成后，使用 deleteOptions.PropagationPolicy=Background 删除 deployment。删除 deployment MUST 同时删除其创建的 replicaset 和属于该 deployment 的 pod。
 	*/
 	framework.ConformanceIt("should delete RS created by deployment when not orphaning", func(ctx context.Context) {
 		clientSet := f.ClientSet
@@ -497,7 +488,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to create deployment: %v", err)
 		}
-		// wait for deployment to create some rs
+		// 等待 deployment 创建出一些 rs
 		ginkgo.By("Wait for the Deployment to create new ReplicaSet")
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 1*time.Minute, true, func(ctx context.Context) (bool, error) {
 			rsList, err := rsClient.List(ctx, metav1.ListOptions{})
@@ -542,7 +533,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 	/*
 		Release: v1.9
 		Testname: Garbage Collector, delete deployment, propagation policy orphan
-		Description: Create a deployment with a replicaset. Once replicaset is created , delete the deployment  with deleteOptions.PropagationPolicy set to Orphan. Deleting the deployment MUST cause the replicaset created by the deployment to be orphaned, also the Pods created by the deployments MUST be orphaned.
+		Description: 创建带 replicaset 的 deployment。replicaset 创建完成后，使用 deleteOptions.PropagationPolicy=Orphan 删除 deployment。删除 deployment MUST 使其创建的 replicaset 和 pod 都成为孤儿。
 	*/
 	framework.ConformanceIt("should orphan RS created by deployment when deleteOptions.PropagationPolicy is Orphan", func(ctx context.Context) {
 		clientSet := f.ClientSet
@@ -556,7 +547,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to create deployment: %v", err)
 		}
-		// wait for deployment to create some rs
+		// 等待 deployment 创建出一些 rs
 		ginkgo.By("Wait for the Deployment to create new ReplicaSet")
 		var replicaset appsv1.ReplicaSet
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 1*time.Minute, true, func(ctx context.Context) (bool, error) {
@@ -603,7 +594,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to wait for the Deployment to be deleted: %v", err)
 		}
-		// Once the deployment object is gone, we'll know the GC has finished performing any relevant actions.
+		// deployment 对象消失即表明 GC 已完成所有相关动作
 		objects := map[string]int{"Deployments": 0, "ReplicaSets": 1, "Pods": 2}
 		ok, err := verifyRemainingObjects(ctx, f, objects)
 		if err != nil {
@@ -642,7 +633,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 	/*
 		Release: v1.9
 		Testname: Garbage Collector, delete replication controller, after owned pods
-		Description: Create a replication controller with maximum allocatable Pods between 10 and 100 replicas. Once RC is created and the all Pods are created, delete RC with deleteOptions.PropagationPolicy set to Foreground. Deleting the Replication Controller MUST cause pods created by that RC to be deleted before the RC is deleted.
+		Description: 创建副本数在 10 到 100 之间、不超过可分配 pod 上限的 replication controller。RC 和所有 Pod 创建完成后，使用 deleteOptions.PropagationPolicy=Foreground 删除 RC。该 RC 创建的 pod MUST 在 RC 被删除之前先删除。
 	*/
 	framework.ConformanceIt("should keep the rc around until all its pods are deleted if the deleteOptions says so", framework.WithSerial(), func(ctx context.Context) {
 		clientSet := f.ClientSet
@@ -656,7 +647,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to create replication controller: %v", err)
 		}
-		// wait for rc to create pods
+		// 等待 rc 创建 pod
 		waitForReplicas(ctx, rc, rcClient)
 
 		ginkgo.By("delete the rc")
@@ -666,11 +657,9 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed to delete the rc: %v", err)
 		}
 		ginkgo.By("wait for the rc to be deleted")
-		// default client QPS is 20, deleting each pod requires 2 requests, so 30s should be enough
-		// TODO: 30s is enough assuming immediate processing of dependents following
-		// owner deletion, but in practice there can be a long delay between owner
-		// deletion and dependent deletion processing. For now, increase the timeout
-		// and investigate the processing delay.
+		// client 默认 QPS 为 20，删除每个 pod 需要 2 次请求，30 秒应足够
+		// TODO: 30 秒仅在 owner 删除后立即处理 dependent 时够用；实际中二者之间
+		// 可能有较长延迟。目前先增大超时，并调查处理延迟的原因。
 		if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second+gcInformerResyncRetryTimeout, false, func(ctx context.Context) (bool, error) {
 			_, err := rcClient.Get(ctx, rc.Name, metav1.GetOptions{})
 			if err == nil {
@@ -702,7 +691,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			}
 			framework.Failf("failed to delete the rc: %v", err)
 		}
-		// There shouldn't be any pods
+		// 此时不应残留任何 pod
 		pods, err := podClient.List(ctx, metav1.ListOptions{})
 		if err != nil {
 			framework.Failf("%v", err)
@@ -713,11 +702,11 @@ var _ = SIGDescribe("Garbage collector", func() {
 		gatherMetrics(ctx, f)
 	})
 
-	// TODO: this should be an integration test
+	// TODO: 该测试应改为集成测试
 	/*
 		Release: v1.9
 		Testname: Garbage Collector, multiple owners
-		Description: Create a replication controller RC1, with maximum allocatable Pods between 10 and 100 replicas. Create second replication controller RC2 and set RC2 as owner for half of those replicas. Once RC1 is created and the all Pods are created, delete RC1 with deleteOptions.PropagationPolicy set to Foreground. Half of the Pods that has RC2 as owner MUST not be deleted or have a deletion timestamp. Deleting the Replication Controller MUST not delete Pods that are owned by multiple replication controllers.
+		Description: 创建 replication controller RC1，副本数在 10 到 100 之间且不超过可分配 pod 上限。再创建 RC2，并将其设为半数副本的 owner。RC1 和所有 Pod 创建完成后，使用 deleteOptions.PropagationPolicy=Foreground 删除 RC1。以 RC2 为 owner 的那部分 pod MUST 不被删除，也不带删除时间戳。删除 RC MUST NOT 删除同时属于多个 replication controller 的 pod。
 	*/
 	framework.ConformanceIt("should not delete dependents that have both valid owner and owner that's waiting for dependents to be deleted", framework.WithSerial(), func(ctx context.Context) {
 		clientSet := f.ClientSet
@@ -741,7 +730,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("Failed to create replication controller: %v", err)
 		}
-		// wait for rc1 to be stable
+		// 等待 rc1 稳定
 		waitForReplicas(ctx, rc1, rcClient)
 
 		ginkgo.By(fmt.Sprintf("set half of pods created by rc %s to have rc %s as owner as well", rc1Name, rc2Name))
@@ -761,7 +750,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed to delete the rc: %v", err)
 		}
 		ginkgo.By("wait for the rc to be deleted")
-		// TODO: shorten the timeout when we make GC's periodic API rediscovery more efficient.
+		// TODO: GC 的周期性 API 重新发现优化后，可缩短该超时。
 		// Tracked at https://github.com/kubernetes/kubernetes/issues/50046.
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 90*time.Second, false, func(ctx context.Context) (bool, error) {
 			_, err := rcClient.Get(ctx, rc1.Name, metav1.GetOptions{})
@@ -794,7 +783,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			}
 			framework.Failf("failed to delete rc %s, err: %v", rc1Name, err)
 		}
-		// half of the pods should still exist,
+		// 半数 pod 应仍然存在，
 		pods, err = podClient.List(ctx, metav1.ListOptions{})
 		if err != nil {
 			framework.Failf("%v", err)
@@ -806,7 +795,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			if pod.ObjectMeta.DeletionTimestamp != nil {
 				framework.Failf("expected pod DeletionTimestamp to be nil, got %#v", pod.ObjectMeta)
 			}
-			// they should only have 1 ownerReference left
+			// 它们应只剩 1 个 ownerReference
 			if len(pod.ObjectMeta.OwnerReferences) != 1 {
 				framework.Failf("expected pod to only have 1 owner, got %#v", pod.ObjectMeta.OwnerReferences)
 			}
@@ -817,11 +806,11 @@ var _ = SIGDescribe("Garbage collector", func() {
 		}
 	})
 
-	// TODO: should be an integration test
+	// TODO: 应改为集成测试
 	/*
 		Release: v1.9
 		Testname: Garbage Collector, dependency cycle
-		Description: Create three pods, patch them with Owner references such that pod1 has pod3, pod2 has pod1 and pod3 has pod2 as owner references respectively. Delete pod1 MUST delete all pods. The dependency cycle MUST not block the garbage collection.
+		Description: 创建三个 pod，patch 其 ownerReference 形成环状依赖：pod1 的 owner 是 pod3，pod2 的 owner 是 pod1，pod3 的 owner 是 pod2。删除 pod1 MUST 删除所有 pod。依赖环 MUST NOT 阻塞垃圾回收。
 	*/
 	framework.ConformanceIt("should not be blocked by dependency circle", func(ctx context.Context) {
 		clientSet := f.ClientSet
@@ -838,7 +827,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		pod3 := newGCPod(pod3Name)
 		pod3, err = podClient.Create(ctx, pod3, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create pod %s in namespace: %s", pod3Name, f.Namespace.Name)
-		// create circular dependency
+		// 构造循环依赖
 		addRefPatch := func(name string, uid types.UID) []byte {
 			return []byte(fmt.Sprintf(`{"metadata":{"ownerReferences":[{"apiVersion":"v1","kind":"Pod","name":"%s","uid":"%s","controller":true,"blockOwnerDeletion":true}]}}`, name, uid))
 		}
@@ -854,14 +843,14 @@ var _ = SIGDescribe("Garbage collector", func() {
 		pod3, err = podClient.Patch(ctx, pod3.Name, types.StrategicMergePatchType, patch3, metav1.PatchOptions{})
 		framework.ExpectNoError(err, "failed to apply to pod %s in namespace %s, a strategic merge patch: %s", pod3.Name, f.Namespace.Name, patch3)
 		framework.Logf("pod3.ObjectMeta.OwnerReferences=%#v", pod3.ObjectMeta.OwnerReferences)
-		// delete one pod, should result in the deletion of all pods
+		// 删除一个 pod 应导致所有 pod 都被删除
 		deleteOptions := getForegroundOptions()
 		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pod1.UID))
 		err = podClient.Delete(ctx, pod1.ObjectMeta.Name, deleteOptions)
 		framework.ExpectNoError(err, "failed to delete pod %s in namespace: %s", pod1.Name, f.Namespace.Name)
 		var pods *v1.PodList
 		var err2 error
-		// TODO: shorten the timeout when we make GC's periodic API rediscovery more efficient.
+		// TODO: GC 的周期性 API 重新发现优化后，可缩短该超时。
 		// Tracked at https://github.com/kubernetes/kubernetes/issues/50046.
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 90*time.Second+gcInformerResyncRetryTimeout, false, func(ctx context.Context) (bool, error) {
 			pods, err2 = podClient.List(ctx, metav1.ListOptions{})
@@ -890,8 +879,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed to initialize apiExtensionClient: %v", err)
 		}
 
-		// Create a random custom resource definition and ensure it's available for
-		// use.
+		// 创建一个随机名称的 CRD，并等待其可用
 		definition := apiextensionstestserver.NewRandomNameV1CustomResourceDefinition(apiextensionsv1.ClusterScoped)
 		defer func() {
 			err = apiextensionstestserver.DeleteV1CustomResourceDefinition(definition, apiExtensionClient)
@@ -906,13 +894,13 @@ var _ = SIGDescribe("Garbage collector", func() {
 		gomega.Expect(definition.Spec.Versions).To(gomega.HaveLen(1), "custom resource definition should have one version")
 		version := definition.Spec.Versions[0]
 
-		// Get a client for the custom resource.
+		// 获取该自定义资源的 client
 		gvr := schema.GroupVersionResource{Group: definition.Spec.Group, Version: version.Name, Resource: definition.Spec.Names.Plural}
 		resourceClient := f.DynamicClient.Resource(gvr)
 
 		apiVersion := definition.Spec.Group + "/" + version.Name
 
-		// Create a custom owner resource.
+		// 创建自定义 owner 资源
 		ownerName := names.SimpleNameGenerator.GenerateName("owner")
 		owner := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -929,7 +917,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		}
 		framework.Logf("created owner resource %q", ownerName)
 
-		// Create a custom dependent resource.
+		// 创建自定义 dependent 资源
 		dependentName := names.SimpleNameGenerator.GenerateName("dependent")
 		dependent := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -954,15 +942,15 @@ var _ = SIGDescribe("Garbage collector", func() {
 		}
 		framework.Logf("created dependent resource %q", dependentName)
 
-		// Delete the owner.
+		// 删除 owner
 		background := metav1.DeletePropagationBackground
 		err = resourceClient.Delete(ctx, ownerName, metav1.DeleteOptions{PropagationPolicy: &background})
 		if err != nil {
 			framework.Failf("failed to delete owner resource %q: %v", ownerName, err)
 		}
 
-		// Create and delete an unrelated instance of the custom resource in foreground deletion mode,
-		// so we have a signal when GC is aware of this custom resource type
+		// 以前台删除模式创建并删除一个无关的自定义资源实例，
+		// 以此作为 GC 已识别该自定义资源类型的信号
 		canaryName := names.SimpleNameGenerator.GenerateName("canary")
 		canary := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -980,7 +968,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		if err != nil {
 			framework.Failf("failed to delete canary resource %q: %v", canaryName, err)
 		}
-		// Wait for the canary foreground finalization to complete, which means GC is aware of our new custom resource type
+		// 等待 canary 的前台终结完成，这意味着 GC 已识别新的自定义资源类型
 		var lastCanary *unstructured.Unstructured
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 3*time.Minute, true, func(ctx context.Context) (bool, error) {
 			lastCanary, err = resourceClient.Get(ctx, dependentName, metav1.GetOptions{})
@@ -990,7 +978,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed waiting for canary resource %q to be deleted", canaryName)
 		}
 
-		// Ensure the dependent is deleted.
+		// 确认 dependent 已被删除
 		var lastDependent *unstructured.Unstructured
 		var err2 error
 		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, false, func(ctx context.Context) (bool, error) {
@@ -1003,7 +991,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed waiting for dependent resource %q to be deleted", dependentName)
 		}
 
-		// Ensure the owner is deleted.
+		// 确认 owner 已被删除
 		_, err = resourceClient.Get(ctx, ownerName, metav1.GetOptions{})
 		if err == nil {
 			framework.Failf("expected owner resource %q to be deleted", ownerName)
@@ -1025,8 +1013,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 			framework.Failf("failed to initialize apiExtensionClient: %v", err)
 		}
 
-		// Create a random custom resource definition and ensure it's available for
-		// use.
+		// 创建一个随机名称的 CRD，并等待其可用
 		definition := apiextensionstestserver.NewRandomNameV1CustomResourceDefinition(apiextensionsv1.ClusterScoped)
 		defer func() {
 			err = apiextensionstestserver.DeleteV1CustomResourceDefinition(definition, apiExtensionClient)
@@ -1041,13 +1028,13 @@ var _ = SIGDescribe("Garbage collector", func() {
 		gomega.Expect(definition.Spec.Versions).To(gomega.HaveLen(1), "custom resource definition should have one version")
 		version := definition.Spec.Versions[0]
 
-		// Get a client for the custom resource.
+		// 获取该自定义资源的 client
 		gvr := schema.GroupVersionResource{Group: definition.Spec.Group, Version: version.Name, Resource: definition.Spec.Names.Plural}
 		resourceClient := f.DynamicClient.Resource(gvr)
 
 		apiVersion := definition.Spec.Group + "/" + version.Name
 
-		// Create a custom owner resource.
+		// 创建自定义 owner 资源
 		ownerName := names.SimpleNameGenerator.GenerateName("owner")
 		owner := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -1064,7 +1051,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		}
 		framework.Logf("created owner resource %q", ownerName)
 
-		// Create a custom dependent resource.
+		// 创建自定义 dependent 资源
 		dependentName := names.SimpleNameGenerator.GenerateName("dependent")
 		dependent := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -1089,7 +1076,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 		}
 		framework.Logf("created dependent resource %q", dependentName)
 
-		// Delete the owner and orphan the dependent.
+		// 删除 owner，并将 dependent 置为孤儿
 		err = resourceClient.Delete(ctx, ownerName, getOrphanOptions())
 		if err != nil {
 			framework.Failf("failed to delete owner resource %q: %v", ownerName, err)
@@ -1152,7 +1139,7 @@ var _ = SIGDescribe("Garbage collector", func() {
 	})
 })
 
-// TODO(106575): Migrate away from generic polling function.
+// TODO(106575): 不再使用通用轮询函数。
 func waitForReplicas(ctx context.Context, rc *v1.ReplicationController, rcClient clientv1.ReplicationControllerInterface) {
 	var (
 		lastObservedRC *v1.ReplicationController

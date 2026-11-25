@@ -63,10 +63,9 @@ var _ = SIGDescribe("CustomResourceValidationRules [Privileged:ClusterAdmin]", f
 		return &c
 	}
 
-	// for all new CRD validation features that should be E2E-tested, add them
-	// into this schema and then add CR requests to the end of the test
-	// below ("MUST NOT fail validation...") instead of writing a new and
-	// separate test
+	// 新增需要 e2e 覆盖的 CRD 校验特性时，把它们加进这个 schema，
+	// 然后在下方测试末尾（"MUST NOT fail validation..."）追加 CR 请求，
+	// 不必另写一个独立测试
 	var schemaWithValidationExpression = unmarshallSchema([]byte(`{
 	   "type":"object",
 	   "properties":{

@@ -35,9 +35,9 @@ var _ = SIGDescribe("Networking", func() {
 	ginkgo.Describe("Granular Checks: Pods", func() {
 
 		checkPodToPodConnectivity := func(ctx context.Context, config *e2enetwork.NetworkingTestConfig, protocol string, port int) {
-			// breadth first poll to quickly estimate failure.
+			// 先广度优先快速探测，尽早筛出失败对象
 			failedPodsByHost := map[string][]*v1.Pod{}
-			// First time, we'll quickly try all pods, breadth first.
+			// 第一轮广度优先，快速尝试所有 pod
 			for _, endpointPod := range config.EndpointPods {
 				framework.Logf("Breadth first check of %v on host %v...", endpointPod.Status.PodIP, endpointPod.Status.HostIP)
 				if err := config.DialFromTestContainer(ctx, protocol, endpointPod.Status.PodIP, port, 1, 0, sets.NewString(endpointPod.Name)); err != nil {
@@ -49,7 +49,7 @@ var _ = SIGDescribe("Networking", func() {
 				}
 			}
 			errors := []error{}
-			// Second time, we pass through pods more carefully...
+			// 第二轮再对失败的 pod 仔细重试
 			framework.Logf("Going to retry %v out of %v pods....", len(failedPodsByHost), len(config.EndpointPods))
 			for host, failedPods := range failedPodsByHost {
 				framework.Logf("Doublechecking %v pods in host %v which weren't seen the first time.", len(failedPods), host)
@@ -73,14 +73,14 @@ var _ = SIGDescribe("Networking", func() {
 			}
 		}
 
-		// Try to hit all endpoints through a test container, retry 5 times,
-		// expect exactly one unique hostname. Each of these endpoints reports
-		// its own hostname.
+		// 通过测试容器访问所有 endpoint，最多重试 5 次，
+		// 预期得到唯一一个 hostname；每个 endpoint 都会报告自己的 hostname，
+		// 这里用唯一性验证流量确实分散到了不同后端。
 		/*
 			Release: v1.9, v1.18
 			Testname: Networking, intra pod http
-			Description: Create a hostexec pod that is capable of curl to netcat commands. Create a test Pod that will act as a webserver front end exposing ports 8080 for tcp and 8081 for udp. The netserver service proxies are created on specified number of nodes.
-			The kubectl exec on the webserver container MUST reach a http port on the each of service proxy endpoints in the cluster and the request MUST be successful. Container will execute curl command to reach the service port within specified max retry limit and MUST result in reporting unique hostnames.
+			Description: 创建一个可执行 curl 和 netcat 命令的 hostexec pod。创建一个测试 Pod 作为 webserver 前端，暴露 tcp 8080 和 udp 8081 端口。在指定数量的 node 上创建 netserver service 代理。
+			webserver 容器内的 kubectl exec MUST 能访问集群中每个 service 代理 endpoint 的 http 端口，且请求 MUST 成功。容器将在指定重试上限内执行 curl 命令访问 service 端口，且 MUST 报告互不相同的 hostname。
 		*/
 		framework.ConformanceIt("should function for intra-pod communication: http", f.WithNodeConformance(), func(ctx context.Context) {
 			config := e2enetwork.NewCoreNetworkingTestConfig(ctx, f, false)
@@ -90,8 +90,8 @@ var _ = SIGDescribe("Networking", func() {
 		/*
 			Release: v1.9, v1.18
 			Testname: Networking, intra pod udp
-			Description: Create a hostexec pod that is capable of curl to netcat commands. Create a test Pod that will act as a webserver front end exposing ports 8080 for tcp and 8081 for udp. The netserver service proxies are created on specified number of nodes.
-			The kubectl exec on the webserver container MUST reach a udp port on the each of service proxy endpoints in the cluster and the request MUST be successful. Container will execute curl command to reach the service port within specified max retry limit and MUST result in reporting unique hostnames.
+			Description: 创建一个可执行 curl 和 netcat 命令的 hostexec pod。创建一个测试 Pod 作为 webserver 前端，暴露 tcp 8080 和 udp 8081 端口。在指定数量的 node 上创建 netserver service 代理。
+			webserver 容器内的 kubectl exec MUST 能访问集群中每个 service 代理 endpoint 的 udp 端口，且请求 MUST 成功。容器将在指定重试上限内执行 curl 命令访问 service 端口，且 MUST 报告互不相同的 hostname。
 		*/
 		framework.ConformanceIt("should function for intra-pod communication: udp", f.WithNodeConformance(), func(ctx context.Context) {
 			config := e2enetwork.NewCoreNetworkingTestConfig(ctx, f, false)
@@ -101,9 +101,9 @@ var _ = SIGDescribe("Networking", func() {
 		/*
 			Release: v1.9
 			Testname: Networking, intra pod http, from node
-			Description: Create a hostexec pod that is capable of curl to netcat commands. Create a test Pod that will act as a webserver front end exposing ports 8080 for tcp and 8081 for udp. The netserver service proxies are created on specified number of nodes.
-			The kubectl exec on the webserver container MUST reach a http port on the each of service proxy endpoints in the cluster using a http post(protocol=tcp)  and the request MUST be successful. Container will execute curl command to reach the service port within specified max retry limit and MUST result in reporting unique hostnames.
-			This test is marked LinuxOnly it breaks when using Overlay networking with Windows.
+			Description: 创建一个可执行 curl 和 netcat 命令的 hostexec pod。创建一个测试 Pod 作为 webserver 前端，暴露 tcp 8080 和 udp 8081 端口。在指定数量的 node 上创建 netserver service 代理。
+			webserver 容器内的 kubectl exec MUST 使用 HTTP POST（protocol=tcp）访问集群中每个 service 代理 endpoint 的 http 端口，且请求 MUST 成功。容器将在指定重试上限内执行 curl 命令访问 service 端口，且 MUST 报告互不相同的 hostname。
+			该测试标记为 LinuxOnly，因为 Windows 下使用 Overlay 网络时会失败。
 		*/
 		framework.ConformanceIt("should function for node-pod communication: http [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			config := e2enetwork.NewCoreNetworkingTestConfig(ctx, f, true)
@@ -118,9 +118,9 @@ var _ = SIGDescribe("Networking", func() {
 		/*
 			Release: v1.9
 			Testname: Networking, intra pod http, from node
-			Description: Create a hostexec pod that is capable of curl to netcat commands. Create a test Pod that will act as a webserver front end exposing ports 8080 for tcp and 8081 for udp. The netserver service proxies are created on specified number of nodes.
-			The kubectl exec on the webserver container MUST reach a http port on the each of service proxy endpoints in the cluster using a http post(protocol=udp)  and the request MUST be successful. Container will execute curl command to reach the service port within specified max retry limit and MUST result in reporting unique hostnames.
-			This test is marked LinuxOnly it breaks when using Overlay networking with Windows.
+			Description: 创建一个可执行 curl 和 netcat 命令的 hostexec pod。创建一个测试 Pod 作为 webserver 前端，暴露 tcp 8080 和 udp 8081 端口。在指定数量的 node 上创建 netserver service 代理。
+			webserver 容器内的 kubectl exec MUST 使用 HTTP POST（protocol=udp）访问集群中每个 service 代理 endpoint 的 http 端口，且请求 MUST 成功。容器将在指定重试上限内执行 curl 命令访问 service 端口，且 MUST 报告互不相同的 hostname。
+			该测试标记为 LinuxOnly，因为 Windows 下使用 Overlay 网络时会失败。
 		*/
 		framework.ConformanceIt("should function for node-pod communication: udp [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			config := e2enetwork.NewCoreNetworkingTestConfig(ctx, f, true)

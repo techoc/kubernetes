@@ -27,13 +27,13 @@ import (
 	e2enodekubelet "k8s.io/kubernetes/test/e2e_node_windows/kubeletconfig"
 )
 
-// getCurrentKubeletConfig returns the current KubeletConfiguration.
+// getCurrentKubeletConfig 返回当前的 KubeletConfiguration
 func getCurrentKubeletConfig(ctx context.Context) (*kubeletconfig.KubeletConfiguration, error) {
-	// namespace only relevant if useProxy==true, so we don't bother
+	// namespace 仅在 useProxy==true 时才相关，这里无需关心
 	return e2enodekubelet.GetCurrentKubeletConfig(ctx, framework.TestContext.NodeName, "", false, framework.TestContext.StandaloneMode)
 }
 
-// isNodeReady returns true if a node is ready; false otherwise.
+// isNodeReady 在 node 就绪时返回 true，否则返回 false
 func isNodeReady(node *v1.Node) bool {
 	for _, c := range node.Status.Conditions {
 		if c.Type == v1.NodeReady {

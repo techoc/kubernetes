@@ -50,15 +50,15 @@ var _ = utils.SIGDescribe("CSIStorageCapacity", func() {
 		The csistoragecapacities resource must support create, get, list, watch, update, patch, delete, and deletecollection.
 	*/
 	framework.ConformanceIt("should support CSIStorageCapacities API operations", func(ctx context.Context) {
-		// Setup
+		// 准备
 		cscVersion := "v1"
 		cscClient := f.ClientSet.StorageV1().CSIStorageCapacities(f.Namespace.Name)
 		cscClientNoNamespace := f.ClientSet.StorageV1().CSIStorageCapacities("")
 
-		// The fictional StorageClass for these objects.
+		// 这些对象使用的虚构 StorageClass。
 		scName := "e2e.example.com"
 
-		// All CRUD operations in this test are limited to the objects with the label test=f.UniqueName
+		// 本测试中所有 CRUD 操作都限定在带有 test=f.UniqueName 标签的对象上
 		newCSIStorageCapacity := func(nameSuffix string) *storagev1.CSIStorageCapacity {
 			return &storagev1.CSIStorageCapacity{
 				ObjectMeta: metav1.ObjectMeta{
@@ -74,7 +74,7 @@ var _ = utils.SIGDescribe("CSIStorageCapacity", func() {
 		csc2 := newCSIStorageCapacity("-csc2")
 		csc3 := newCSIStorageCapacity("-csc3")
 
-		// Discovery
+		// 验证 API 发现端点能暴露新建的 CSIStorageCapacity 资源
 
 		ginkgo.By("getting /apis")
 		{
@@ -129,7 +129,7 @@ var _ = utils.SIGDescribe("CSIStorageCapacity", func() {
 			}
 		}
 
-		// Main resource create/read/update/watch operations
+		// 主要的资源 create/read/update/watch 操作
 
 		ginkgo.By("creating")
 		createdCSC, err := cscClient.Create(ctx, csc, metav1.CreateOptions{})
@@ -148,7 +148,7 @@ var _ = utils.SIGDescribe("CSIStorageCapacity", func() {
 		cscWatchNoNamespace, err := cscClientNoNamespace.Watch(ctx, metav1.ListOptions{LabelSelector: "test=" + f.UniqueName})
 		framework.ExpectNoError(err)
 
-		// added for a watch
+		// 创建一个对象以便 watch 捕获新增事件
 		_, err = cscClient.Create(ctx, csc3, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
@@ -220,7 +220,7 @@ var _ = utils.SIGDescribe("CSIStorageCapacity", func() {
 		expectWatchResult("in namespace", cscWatch)
 		expectWatchResult("across namespace", cscWatchNoNamespace)
 
-		// main resource delete operations
+		// 主要的资源删除操作
 
 		ginkgo.By("deleting")
 		err = cscClient.Delete(ctx, createdCSC.Name, metav1.DeleteOptions{})
@@ -230,13 +230,13 @@ var _ = utils.SIGDescribe("CSIStorageCapacity", func() {
 		max := min
 		switch {
 		case apierrors.IsNotFound(err):
-			// Okay, normal case.
+			// 正常情况。
 		case err != nil:
-			// Unexpected error.
+			// 非预期的错误。
 			framework.Failf("expected 404, got %#v", err)
 		case csc.DeletionTimestamp != nil && len(csc.Finalizers) > 0:
-			// Deletion was prevented by a finalizer, but it might
-			// still get deleted before we list them below.
+			// 删除被 finalizer 阻止，但在下面的 list 之前
+			// 对象可能仍会被删除。
 			max++
 		default:
 			framework.Failf("CSIStorageCapacitity should have been deleted or have DeletionTimestamp and Finalizers, but instead got: %s", csc)
@@ -254,8 +254,8 @@ var _ = utils.SIGDescribe("CSIStorageCapacity", func() {
 		cscs, err = cscClient.List(ctx, metav1.ListOptions{LabelSelector: "test=" + f.UniqueName})
 		framework.ExpectNoError(err)
 		for _, csc := range cscs.Items {
-			// Any remaining objects should be marked for deletion
-			// and only held back by a Finalizer.
+			// 任何剩余对象都应已被标记为删除，
+			// 只是被 Finalizer 暂时保留。
 			if csc.DeletionTimestamp == nil || len(csc.Finalizers) == 0 {
 				framework.Failf("CSIStorageCapacity should have been deleted or have DeletionTimestamp and Finalizers, but instead got: %s", &csc)
 			}

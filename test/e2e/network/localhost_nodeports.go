@@ -97,8 +97,8 @@ var _ = common.SIGDescribe("LocalhostNodePorts", func() {
 		if framework.TestContext.ClusterIsIPv6() {
 			loopbackIP = "::1"
 		}
-		// shouldHold=false: without session affinity, requests must spread across
-		// the two backends (one local, one remote), confirming cross-node proxying.
+		// shouldHold=false：没有 session affinity 时，请求必须分散到
+		// 两个后端（一个本地、一个远端），以验证跨节点代理。
 		if !checkAffinity(ctx, cs, hostExecPod, loopbackIP, int(svc.Spec.Ports[0].NodePort), false) {
 			framework.Failf("expected localhost NodePort %d traffic to be distributed across both backends", svc.Spec.Ports[0].NodePort)
 		}
@@ -159,8 +159,8 @@ var _ = common.SIGDescribe("LocalhostNodePorts", func() {
 		if framework.TestContext.ClusterIsIPv6() {
 			loopbackIP = "::1"
 		}
-		// shouldHold=true: with sessionAffinity=ClientIP, all localhost requests
-		// (source IP 127.0.0.1/::1) must be pinned to a single backend.
+		// shouldHold=true：启用 sessionAffinity=ClientIP 后，所有来自 localhost 的请求
+		// （源 IP 127.0.0.1/::1）必须固定到同一个后端。
 		if !checkAffinity(ctx, cs, hostExecPod, loopbackIP, int(svc.Spec.Ports[0].NodePort), true) {
 			framework.Failf("expected sessionAffinity=ClientIP to pin localhost NodePort %d traffic to a single backend", svc.Spec.Ports[0].NodePort)
 		}

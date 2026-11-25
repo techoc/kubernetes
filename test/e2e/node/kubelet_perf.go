@@ -41,11 +41,11 @@ import (
 )
 
 const (
-	// Interval to poll /stats/container on a node
+	// 轮询节点上 /stats/container 的间隔
 	containerStatsPollingPeriod = 10 * time.Second
-	// The monitoring time for one test.
+	// 单个测试的监控时长。
 	monitoringTime = 20 * time.Minute
-	// The periodic reporting period.
+	// 周期性上报的间隔。
 	reportingPeriod = 5 * time.Minute
 )
 
@@ -73,7 +73,7 @@ func runResourceTrackingTest(ctx context.Context, f *framework.Framework, podsPe
 	ginkgo.By(fmt.Sprintf("Creating a RC of %d pods and wait until all pods of this RC are running", totalPods))
 	rcName := fmt.Sprintf("resource%d-%s", totalPods, string(uuid.NewUUID()))
 
-	// TODO: Use a more realistic workload
+	// TODO: 使用更贴近真实情况的工作负载
 	err := e2erc.RunRC(ctx, testutils.RCConfig{
 		Client:    f.ClientSet,
 		Name:      rcName,
@@ -83,16 +83,14 @@ func runResourceTrackingTest(ctx context.Context, f *framework.Framework, podsPe
 	})
 	framework.ExpectNoError(err)
 
-	// Log once and flush the stats.
+	// 记录一次并清空统计数据。
 	rm.LogLatest()
 	rm.Reset()
 
 	ginkgo.By("Start monitoring resource usage")
-	// Periodically dump the cpu summary until the deadline is met.
-	// Note that without calling e2ekubelet.ResourceMonitor.Reset(), the stats
-	// would occupy increasingly more memory. This should be fine
-	// for the current test duration, but we should reclaim the
-	// entries if we plan to monitor longer (e.g., 8 hours).
+	// 定期输出 CPU 摘要，直到达到截止时间。
+	// 注意，如果不调用 e2ekubelet.ResourceMonitor.Reset()，统计数据会占用越来越多的内存。
+	// 以当前测试时长来看这还可以接受，但如果计划监控更久（例如 8 小时），就需要回收这些条目。
 	deadline := time.Now().Add(monitoringTime)
 	for time.Now().Before(deadline) && ctx.Err() == nil {
 		timeLeft := time.Until(deadline)
@@ -109,15 +107,15 @@ func runResourceTrackingTest(ctx context.Context, f *framework.Framework, podsPe
 	logPodsOnNodes(ctx, f.ClientSet, nodeNames.List())
 	usageSummary, err := rm.GetLatest()
 	framework.ExpectNoError(err)
-	// TODO(random-liu): Remove the original log when we migrate to new perfdash
+	// TODO(random-liu): 迁移到新的 perfdash 后移除原始日志
 	framework.Logf("%s", rm.FormatResourceUsage(usageSummary))
-	// Log perf result
+	// 输出性能数据
 	printPerfData(e2eperf.ResourceUsageToPerfData(rm.GetMasterNodeLatest(usageSummary)))
 	verifyMemoryLimits(ctx, f.ClientSet, expectedMemory, usageSummary)
 
 	cpuSummary := rm.GetCPUSummary()
 	framework.Logf("%s", rm.FormatCPUSummary(cpuSummary))
-	// Log perf result
+	// 输出性能数据
 	printPerfData(e2eperf.CPUUsageToPerfData(rm.GetMasterNodeCPUSummary(cpuSummary)))
 	verifyCPULimits(expectedCPU, cpuSummary)
 
@@ -195,7 +193,7 @@ func verifyCPULimits(expected e2ekubelet.ContainersCPUSummary, actual e2ekubelet
 	}
 }
 
-// Slow by design (1 hour)
+// 设计上就很慢（1 小时）
 var _ = SIGDescribe("Kubelet", framework.WithSerial(), framework.WithSlow(), func() {
 	var nodeNames sets.String
 	f := framework.NewDefaultFramework("kubelet-perf")
@@ -221,22 +219,16 @@ var _ = SIGDescribe("Kubelet", framework.WithSerial(), framework.WithSlow(), fun
 		framework.Logf("runtime operation error metrics:\n%s", e2ekubelet.FormatRuntimeOperationErrorRate(result))
 	})
 	f.Describe("regular resource usage tracking", feature.RegularResourceUsageTracking, func() {
-		// We assume that the scheduler will make reasonable scheduling choices
-		// and assign ~N pods on the node.
-		// Although we want to track N pods per node, there are N + add-on pods
-		// in the cluster. The cluster add-on pods can be distributed unevenly
-		// among the nodes because they are created during the cluster
-		// initialization. This *noise* is obvious when N is small. We
-		// deliberately set higher resource usage limits to account for the
-		// noise.
+		// 假设 scheduler 会做出合理的调度决策，在每个节点上分配约 N 个 pod。
+		// 虽然我们想跟踪每个节点上的 N 个 pod，但集群中实际有 N + add-on 个 pod。
+		// add-on pod 在集群初始化期间创建，可能在节点间分布不均。
+		// 当 N 较小时，这种 *噪声* 很明显，因此我们特意放宽资源使用上限以容纳它。
 		//
-		// We set all resource limits generously because this test is mainly
-		// used to catch resource leaks in the soak cluster. For tracking
-		// kubelet/runtime resource usage, please see the node e2e benchmark
-		// dashboard. http://node-perf-dash.k8s.io/
+		// 资源上限都设得比较宽松，因为这个测试主要用于发现 soak 集群中的资源泄漏。
+		// 若要跟踪 kubelet/runtime 的资源使用，请参考 node e2e benchmark
+		// dashboard。 http://node-perf-dash.k8s.io/
 		//
-		// TODO(#36621): Deprecate this test once we have a node e2e soak
-		// cluster.
+		// TODO(#36621): 等有了 node e2e soak 集群后就废弃这个测试。
 		rTests := []resourceTest{
 			{
 				podsPerNode: 0,
@@ -246,7 +238,7 @@ var _ = SIGDescribe("Kubelet", framework.WithSerial(), framework.WithSlow(), fun
 				},
 				memLimits: e2ekubelet.ResourceUsagePerContainer{
 					kubeletstatsv1alpha1.SystemContainerKubelet: &e2ekubelet.ContainerResourceUsage{MemoryRSSInBytes: 200 * 1024 * 1024},
-					// The detail can be found at https://github.com/kubernetes/kubernetes/issues/28384#issuecomment-244158892
+					// 详情见 https://github.com/kubernetes/kubernetes/issues/28384#issuecomment-244158892
 					kubeletstatsv1alpha1.SystemContainerRuntime: &e2ekubelet.ContainerResourceUsage{MemoryRSSInBytes: 125 * 1024 * 1024},
 				},
 			},
@@ -284,10 +276,10 @@ var _ = SIGDescribe("Kubelet", framework.WithSerial(), framework.WithSlow(), fun
 	})
 })
 
-// printPerfData prints the perfdata in json format with PerfResultTag prefix.
-// If an error occurs, nothing will be printed.
+// printPerfData 以 JSON 格式输出性能数据，并加上 PerfResultTag 前缀。
+// 发生错误时不输出任何内容。
 func printPerfData(p *perftype.PerfData) {
-	// Notice that we must make sure the perftype.PerfResultEnd is in a new line.
+	// 注意必须确保 perftype.PerfResultEnd 位于新的一行。
 	if str := framework.PrettyPrintJSON(p); str != "" {
 		framework.Logf("%s %s\n%s", perftype.PerfResultTag, str, perftype.PerfResultEnd)
 	}

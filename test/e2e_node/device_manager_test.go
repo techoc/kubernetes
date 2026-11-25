@@ -50,60 +50,51 @@ const (
 	devicePluginDir = "/var/lib/kubelet/device-plugins"
 )
 
-// Serial because the test updates kubelet configuration.
+// 串行执行，因为该测试会更新 kubelet 配置
 var _ = SIGDescribe("Device Manager", framework.WithSerial(), feature.DeviceManager, func() {
 	f := framework.NewDefaultFramework("devicemanager-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	/*
-		This end to end test is to simulate a scenario where after kubelet restart/node
-		reboot application pods requesting devices appear before the device plugin
-		pod exposing those devices as resources.
+		该端到端测试模拟如下场景：kubelet 重启/节点重启后，请求设备的 application pod
+		先于暴露设备资源的 device plugin pod 出现。
 
-		The happy path is where after node reboot/ kubelet restart, the device plugin pod
-		appears before the application pod. This PR and this e2e test
-		aims to tackle the scenario where device plugin either does not appear first
-		or doesn't get the chance to re-register itself.
+		正常路径是重启后 device plugin pod 先于 application pod 出现。该测试要覆盖的是
+		device plugin 没有先出现、或没来得及重新注册自己的异常场景。
 
-		Since there is no way of controlling the order in which the pods appear after
-		kubelet restart/node reboot, we can't guarantee that the application pod
-		recovers before device plugin pod (the scenario we want to exercise here).
-		If the device plugin pod is recovered before the test pod, we still can
-		meaningfully reproduce the scenario by NOT sending the registration command.
-		To do so sample device plugin is enhanced. For implementation details, refer to:
-		`test/images/sample-device-plugin/sampledeviceplugin.go`. This enhancement
-		allows auto-registration of the plugin to be controlled with the help of an environment
-		variable: REGISTER_CONTROL_FILE. By default this environment variable is not present
-		and the device plugin autoregisters to kubelet. For this e2e test, we use sample device
-		plugin spec with REGISTER_CONTROL_FILE=/var/lib/kubelet/device-plugins/sample/registration
-		to allow manual registeration of the plugin to allow an application pod (requesting devices)
-		to successfully run on the node followed by kubelet restart where device plugin doesn't
-		register and the application pod fails with admission error.
+		由于无法控制重启后 pod 出现的先后顺序，无法保证 application pod 在 device plugin pod
+		之前恢复（即这里要验证的场景）。即便 device plugin pod 先恢复，也可以不发送注册命令
+		来有效复现该场景。为此对 sample device plugin 做了增强，实现细节参见：
+		`test/images/sample-device-plugin/sampledeviceplugin.go`。该增强通过环境变量
+		REGISTER_CONTROL_FILE 控制插件的自动注册：默认不设置该变量时，插件会自动向 kubelet
+		注册。本测试使用带有
+		REGISTER_CONTROL_FILE=/var/lib/kubelet/device-plugins/sample/registration 的
+		sample device plugin spec，改为手动注册：先让请求设备的 application pod 能在节点上
+		正常运行，然后重启 kubelet，此时 device plugin 不再注册，application pod 因准入错误失败。
 
-		   Breakdown of the steps implemented as part of this e2e test is as follows:
-		   1. Create a file `registration` at path `/var/lib/kubelet/device-plugins/sample/`
-		   2. Create sample device plugin with an environment variable with
-		      `REGISTER_CONTROL_FILE=/var/lib/kubelet/device-plugins/sample/registration` that
-			  waits for a client to delete the control file.
-		   3. Trigger plugin registeration by deleting the abovementioned directory.
-		   4. Create a test pod requesting devices exposed by the device plugin.
-		   5. Stop kubelet.
-		   6. Remove pods using CRI to ensure new pods are created after kubelet restart.
-		   7. Restart kubelet.
-		   8. Wait for the sample device plugin pod to be running. In this case,
-		      the registration is not triggered.
-		   9. Ensure that resource capacity/allocatable exported by the device plugin is zero.
-		   10. The test pod should fail with `UnexpectedAdmissionError`
-		   11. Delete the test pod.
-		   12. Delete the sample device plugin pod.
-		   13. Remove `/var/lib/kubelet/device-plugins/sample/` and its content, the directory created to control registration
+		   该 e2e 测试的步骤如下：
+		   1. 在 `/var/lib/kubelet/device-plugins/sample/` 下创建 `registration` 文件
+		   2. 创建带有环境变量
+		      `REGISTER_CONTROL_FILE=/var/lib/kubelet/device-plugins/sample/registration` 的
+			  sample device plugin，等待客户端删除该控制文件
+		   3. 删除上述目录触发插件注册
+		   4. 创建请求 device plugin 所暴露设备的测试 pod
+		   5. 停止 kubelet
+		   6. 通过 CRI 移除 pod，确保 kubelet 重启后会创建新 pod
+		   7. 重启 kubelet
+		   8. 等待 sample device plugin pod 运行；此时注册不会被触发
+		   9. 确认 device plugin 导出的资源 capacity/allocatable 为零
+		   10. 测试 pod 应以 `UnexpectedAdmissionError` 失败
+		   11. 删除测试 pod
+		   12. 删除 sample device plugin pod
+		   13. 删除 `/var/lib/kubelet/device-plugins/sample/` 及其内容，即用于控制注册的目录
 	*/
 	f.Context("With sample device plugin", f.WithSerial(), f.WithDisruptive(), func() {
 		var deviceCount int = 2
 		var devicePluginPod *v1.Pod
 		var triggerPathFile, triggerPathDir string
 
-		// this test wants to reproduce what happened in https://github.com/kubernetes/kubernetes/issues/109595
+		// 该测试要复现 https://github.com/kubernetes/kubernetes/issues/109595 中的问题
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			ginkgo.By("Wait for node to be ready")
 			gomega.Eventually(ctx, e2enode.TotalReady).
@@ -111,10 +102,9 @@ var _ = SIGDescribe("Device Manager", framework.WithSerial(), feature.DeviceMana
 				WithTimeout(time.Minute).
 				Should(gomega.BeEquivalentTo(1))
 
-			// Before we run the device plugin test, we need to ensure
-			// that the cluster is in a clean state and there are no
-			// pods running on this node.
-			// This is done in a gomega.Eventually with retries since a prior test in a different test suite could've run and the deletion of it's resources may still be in progress.
+			// 运行 device plugin 测试前，需确保集群处于干净状态、该节点上没有运行中的 pod。
+			// 这里用 gomega.Eventually 重试，因为其他测试套件中的前一个测试可能刚运行完，
+			// 其资源删除可能仍在进行中。
 			// xref: https://issue.k8s.io/115381
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				v1PodResources, err := getV1NodeDevices(ctx)
@@ -199,11 +189,9 @@ var _ = SIGDescribe("Device Manager", framework.WithSerial(), feature.DeviceMana
 			}, 60*time.Second, framework.Poll).Should(gomega.BeTrueBecause("expected watching routine"))
 
 			go func() {
-				// Since autoregistration is disabled for the device plugin (as REGISTER_CONTROL_FILE
-				// environment variable is specified), device plugin registration needs to be triggerred
-				// manually.
-				// This is done by deleting the control file at the following path:
-				// `/var/lib/kubelet/device-plugins/sample/registration`.
+				// 由于指定了 REGISTER_CONTROL_FILE 环境变量，device plugin 的自动注册被禁用，
+				// 需要手动触发注册：删除以下路径的控制文件
+				// `/var/lib/kubelet/device-plugins/sample/registration`。
 
 				defer ginkgo.GinkgoRecover()
 				framework.Logf("Deleting the control file: %q to trigger registration", triggerPathFile)
@@ -264,7 +252,7 @@ var _ = SIGDescribe("Device Manager", framework.WithSerial(), feature.DeviceMana
 			restartKubelet(ctx)
 
 			ginkgo.By("waiting for the kubelet to be ready again")
-			// Wait for the Kubelet to be ready.
+			// 等待 kubelet 就绪
 
 			gomega.Eventually(ctx, e2enode.TotalReady).
 				WithArguments(f.ClientSet).
@@ -284,10 +272,9 @@ var _ = SIGDescribe("Device Manager", framework.WithSerial(), feature.DeviceMana
 
 			ginkgo.By("Waiting for the resource capacity/allocatable exported by the sample device plugin to become zero")
 
-			// The device plugin pod has restarted but has not re-registered to kubelet (as AUTO_REGISTER= false)
-			// and registration wasn't triggered manually (by writing to the unix socket exposed at
-			// `/var/lib/kubelet/device-plugins/registered`). Because of this, the capacity and allocatable corresponding
-			// to the resource exposed by the device plugin should be zero.
+			// device plugin pod 已重启但未向 kubelet 重新注册（AUTO_REGISTER=false），
+			// 也没有通过向 `/var/lib/kubelet/device-plugins/registered` 暴露的 unix socket
+			// 写入数据来手动触发注册。因此该插件暴露资源的 capacity 和 allocatable 应为零
 
 			gomega.Eventually(ctx, isNodeReadyWithAllocatableSampleResources).
 				WithArguments(f, int64(0)).
@@ -296,8 +283,8 @@ var _ = SIGDescribe("Device Manager", framework.WithSerial(), feature.DeviceMana
 
 			ginkgo.By("Checking that pod requesting devices failed to start because of admission error")
 
-			// NOTE: The device plugin won't re-register again and this is intentional.
-			// Because of this, the testpod (requesting a device) should fail with an admission error.
+			// 注意：device plugin 不会再次注册，这是有意为之。
+			// 因此请求设备的测试 pod 应以准入错误失败
 
 			gomega.Eventually(ctx, getPod).
 				WithArguments(f, testPod.Name).
@@ -312,7 +299,7 @@ var _ = SIGDescribe("Device Manager", framework.WithSerial(), feature.DeviceMana
 		ginkgo.AfterEach(func(ctx context.Context) {
 
 			ginkgo.By("Get and print devicePluginPod logs")
-			// Printing the logs form the pod, help to troubleshoot cases when devicePluginPod fails to register device with manual registration
+			// 打印 pod 日志，便于排查 devicePluginPod 手动注册设备失败的情况
 			logs, err := e2epod.GetPodLogs(ctx, f.ClientSet, devicePluginPod.Namespace, devicePluginPod.Name, devicePluginPod.Spec.Containers[0].Name)
 			if err != nil {
 				framework.Logf("failed to get pod logs %v", err)
@@ -366,7 +353,7 @@ func makeBusyboxDeviceRequiringPod(resourceName, cmd string) *v1.Pod {
 			Containers: []v1.Container{{
 				Image: busyboxImage,
 				Name:  podName,
-				// Runs the specified command in the test pod.
+				// 在测试 pod 中运行指定命令
 				Command: []string{"sh", "-c", cmd},
 				Resources: v1.ResourceRequirements{
 					Limits:   rl,
@@ -377,10 +364,10 @@ func makeBusyboxDeviceRequiringPod(resourceName, cmd string) *v1.Pod {
 	}
 }
 
-// BeReady verifies that a node is ready and devices have registered.
+// BeReady 校验节点已就绪且设备已注册
 func BeReady() types.GomegaMatcher {
 	return gomega.And(
-		// This additional matcher checks for the final error condition.
+		// 该额外的 matcher 用于检查最终的错误条件
 		gcustom.MakeMatcher(func(ready bool) (bool, error) {
 			if !ready {
 				return false, fmt.Errorf("expected node to be ready=%t", ready)
@@ -391,7 +378,7 @@ func BeReady() types.GomegaMatcher {
 	)
 }
 
-// BeInReadyPhase matches if node is ready i.e. ready is true.
+// BeInReadyPhase 校验节点处于指定就绪状态
 func BeInReadyPhase(isReady bool) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(ready bool) (bool, error) {
 		return ready == isReady, nil
@@ -410,10 +397,10 @@ func isNodeReadyWithSampleResources(ctx context.Context, f *framework.Framework)
 	return true, nil
 }
 
-// HaveAllocatableDevices verifies that a node has allocatable devices.
+// HaveAllocatableDevices 校验节点上存在可分配的设备
 func HaveAllocatableDevices() types.GomegaMatcher {
 	return gomega.And(
-		// This additional matcher checks for the final error condition.
+		// 该额外的 matcher 用于检查最终的错误条件
 		gcustom.MakeMatcher(func(hasAllocatable bool) (bool, error) {
 			if !hasAllocatable {
 				return false, fmt.Errorf("expected node to be have allocatable devices=%t", hasAllocatable)
@@ -424,7 +411,7 @@ func HaveAllocatableDevices() types.GomegaMatcher {
 	)
 }
 
-// hasAllocatable matches if node is ready i.e. ready is true.
+// hasAllocatable 校验节点是否具有可分配设备
 func hasAllocatable(hasAllocatable bool) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(hasAllocatableDevices bool) (bool, error) {
 		return hasAllocatableDevices == hasAllocatable, nil
@@ -459,7 +446,7 @@ func isNodeReadyWithoutSampleResources(ctx context.Context, f *framework.Framewo
 	return true, nil
 }
 
-// HaveFailedWithAdmissionError verifies that a pod fails at admission.
+// HaveFailedWithAdmissionError 校验 pod 在准入阶段失败
 func HaveFailedWithAdmissionError() types.GomegaMatcher {
 	return gomega.And(
 		gcustom.MakeMatcher(func(hasFailed bool) (bool, error) {
@@ -472,7 +459,7 @@ func HaveFailedWithAdmissionError() types.GomegaMatcher {
 	)
 }
 
-// hasFailed matches if pod has failed.
+// hasFailed 校验 pod 是否失败
 func hasFailed(hasFailed bool) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(hasPodFailed bool) (bool, error) {
 		return hasPodFailed == hasFailed, nil
@@ -492,7 +479,7 @@ func getPod(ctx context.Context, f *framework.Framework, podName string) (bool, 
 	expectedStatusReason := "UnexpectedAdmissionError"
 	expectedStatusMessage := "Allocate failed due to no healthy devices present; cannot allocate unhealthy devices"
 
-	// This additional matcher checks for the final error condition.
+	// 该额外的 matcher 用于检查最终的错误条件
 	if pod.Status.Phase != v1.PodFailed {
 		return false, fmt.Errorf("expected pod to reach phase %q, got final phase %q instead.", v1.PodFailed, pod.Status.Phase)
 	}

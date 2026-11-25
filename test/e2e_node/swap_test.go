@@ -136,11 +136,11 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 			)
 		})
 
-		// These tests assume the following, and will fail otherwise:
-		// - The node is provisioned with swap
-		// - The node is configured with cgroup v2
-		// - The swap feature gate is enabled
-		// - The node has no more than 15GB of memory
+		// 这些测试依赖以下前提，否则会失败：
+		// - 节点已配置 swap
+		// - 节点使用 cgroup v2
+		// - swap feature gate 已启用
+		// - 节点内存不超过 15GB
 		f.Context("with swap stress", func() {
 			var (
 				nodeName           string
@@ -190,9 +190,9 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 						gomega.BeNumerically("<=", 100),
 					), "percentage has to be between 1 and 100")
 
-					// <swap-limit> = <memory-request>*(<swap-capacity>/<node-capacity>).
-					// if x is the percentage, and <memory-request> == (x/100)*<node-capacity>, then:
-					// <swap-limit> = (x/100)*<node-capacity>*(<swap-capacity>/<node-capacity>) = (x/100)*<swap-capacity>.
+					// <swap-limit> = <memory-request>*(<swap-capacity>/<node-capacity>)。
+					// 如果 x 是百分比，且 <memory-request> == (x/100)*<node-capacity>，则：
+					// <swap-limit> = (x/100)*<node-capacity>*(<swap-capacity>/<node-capacity>) = (x/100)*<swap-capacity>。
 					return multiplyQuantity(divideQuantity(nodeTotalMemory, 100), swapPercentage)
 				}
 
@@ -207,7 +207,7 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 					stressSize := cloneQuantity(nodeTotalMemory)
 
 					stressPod := getStressPod(stressSize)
-					// Request will use a lot more swap memory than needed, since we don't test swap limits in this test
+					// 这个测试不检验 swap 上限，因此 request 会额外申请远多于实际需要的 swap
 					memRequest := getRequestBySwapLimit(30)
 					setPodMemoryResources(stressPod, memRequest, noLimits)
 					gomega.Expect(qos.GetPodQOS(stressPod)).To(gomega.Equal(v1.PodQOSBurstable))
@@ -234,7 +234,7 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 						return nil
 					}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed(), "swap usage is above zero: %s", swapUsage.String())
 
-					// Better to delete the stress pod ASAP to avoid node failures
+					// 尽快删除 stress pod，避免节点故障
 					err := podClient.Delete(context.Background(), stressPod.Name, metav1.DeleteOptions{})
 					framework.ExpectNoError(err)
 				})
@@ -252,8 +252,8 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 					gomega.Expect(qos.GetPodQOS(stressPod)).To(gomega.Equal(v1.PodQOSBurstable))
 
 					var swapUsage, memoryUsage *resource.Quantity
-					// This is sanity check to ensure that swap usage is not caused by a system-level pressure, but
-					// due to a container-level (cgroup-level) pressure that's caused because of the memory limits.
+					// 这里是健全性检查，确认 swap 使用不是系统级压力导致的，
+					// 而是 memory limit 引发的容器（cgroup）级压力
 					minExpectedMemoryUsage := multiplyQuantity(divideQuantity(memoryLimit, 4), 3)
 
 					stressPod = runPodAndWaitUntilScheduled(f, stressPod)
@@ -284,7 +284,7 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 						return nil
 					}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 
-					// Better to delete the stress pod ASAP to avoid node failures
+					// 尽快删除 stress pod，避免节点故障
 					err := podClient.Delete(context.Background(), stressPod.Name, metav1.DeleteOptions{})
 					framework.ExpectNoError(err)
 				})
@@ -346,9 +346,9 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 					}))
 
 					ginkgo.By("Validating /stats/summary")
-					// Give pods a minute to actually start up.
+					// 给 pod 一点时间真正启动
 					gomega.Eventually(context.Background(), getNodeSummary, 180*time.Second, 15*time.Second).Should(matchExpectations)
-					// Then the summary should match the expectations a few more times.
+					// 随后再持续检查若干次，summary 都应满足预期
 					gomega.Consistently(context.Background(), getNodeSummary, 30*time.Second, 15*time.Second).Should(matchExpectations)
 				})
 			})
@@ -356,14 +356,14 @@ var _ = SIGDescribe("Swap", "[LinuxOnly]", ginkgo.Ordered, feature.Swap, framewo
 	})
 })
 
-// Note that memoryRequestEqualLimit is effective only when qosClass is not PodQOSBestEffort.
+// 注意，memoryRequestEqualLimit 仅在 qosClass 不是 PodQOSBestEffort 时生效
 func getSwapTestPod(f *framework.Framework, qosClass v1.PodQOSClass, memoryRequestEqualLimit bool) *v1.Pod {
 	podMemoryAmount := resource.MustParse("128Mi")
 
 	var resources v1.ResourceRequirements
 	switch qosClass {
 	case v1.PodQOSBestEffort:
-		// nothing to do in this case
+		// 这种情况无需处理
 	case v1.PodQOSBurstable:
 		resources = v1.ResourceRequirements{
 			Requests: v1.ResourceList{
@@ -471,7 +471,7 @@ func expectNoSwap(f *framework.Framework, pod *v1.Pod) {
 	gomega.ExpectWithOffset(offest, swapLimit).To(gomega.Equal("0"), "max swap allowed should be zero")
 }
 
-// supports v2 only as v1 shouldn't support LimitedSwap
+// 仅支持 cgroup v2，因为 v1 不支持 LimitedSwap
 func expectLimitedSwap(f *framework.Framework, pod *v1.Pod, expectedSwapLimit int64) {
 	ginkgo.By("expecting limited swap")
 	swapLimitStr, err := readCgroupFile(f, pod, cgroupV2SwapLimitFile)
@@ -480,7 +480,7 @@ func expectLimitedSwap(f *framework.Framework, pod *v1.Pod, expectedSwapLimit in
 	swapLimit, err := strconv.Atoi(swapLimitStr)
 	framework.ExpectNoError(err, "cannot convert swap limit to int")
 
-	// cgroup values are always aligned w.r.t. the page size, which is usually 4Ki
+	// cgroup 的值始终按页大小对齐，通常是 4Ki
 	const cgroupAlignment int64 = 4 * 1024 // 4Ki
 	const errMsg = "swap limitation is not as expected"
 
@@ -604,8 +604,8 @@ func getMemoryUsage(f *framework.Framework, pod *v1.Pod) (*resource.Quantity, er
 	return parseBytesStrToQuantity(outputStr)
 }
 
-// Sets memory request or limit can be null, then it's dismissed.
-// Sets the same value for all containers.
+// 将 memory request/limit 设为 nil 表示不设置该项；
+// 对 pod 中所有容器设置相同的值
 func setPodMemoryResources(pod *v1.Pod, memoryRequest, memoryLimit *resource.Quantity) {
 	for i := range pod.Spec.Containers {
 		resources := &pod.Spec.Containers[i].Resources

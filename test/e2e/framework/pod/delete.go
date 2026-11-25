@@ -32,12 +32,11 @@ import (
 )
 
 const (
-	// PodDeleteTimeout is how long to wait for a pod to be deleted.
+	// PodDeleteTimeout 是等待 pod 被删除的最长时间。
 	PodDeleteTimeout = 5 * time.Minute
 )
 
-// DeletePodOrFail deletes the pod of the specified namespace and name. Resilient to the pod
-// not existing.
+// DeletePodOrFail 删除指定 namespace 和名称的 pod。pod 不存在时不会报错。
 func DeletePodOrFail(ctx context.Context, c clientset.Interface, ns, name string) {
 	ginkgo.By(fmt.Sprintf("Deleting pod %s in namespace %s", name, ns))
 	err := c.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{})
@@ -48,8 +47,7 @@ func DeletePodOrFail(ctx context.Context, c clientset.Interface, ns, name string
 	framework.ExpectNoErrorWithOffset(1, err, "failed to delete pod %s in namespace %s", name, ns)
 }
 
-// DeletePodWithWait deletes the passed-in pod and waits for the pod to be terminated. Resilient to the pod
-// not existing.
+// DeletePodWithWait 删除传入的 pod 并等待其终止。pod 不存在时不会报错。
 func DeletePodWithWait(ctx context.Context, c clientset.Interface, pod *v1.Pod) error {
 	if pod == nil {
 		return nil
@@ -57,7 +55,7 @@ func DeletePodWithWait(ctx context.Context, c clientset.Interface, pod *v1.Pod) 
 	return DeletePodWithWaitByName(ctx, c, pod.GetName(), pod.GetNamespace())
 }
 
-// DeletePodsWithWait deletes the passed-in pods, waits for them to be terminated, and reports any deletion errors that occur.
+// DeletePodsWithWait 删除传入的 pod，等待它们终止，并汇总删除过程中出现的错误。
 func DeletePodsWithWait(ctx context.Context, c clientset.Interface, pods []*v1.Pod) {
 	var delErrs []error
 	for _, testPod := range pods {
@@ -72,14 +70,13 @@ func DeletePodsWithWait(ctx context.Context, c clientset.Interface, pods []*v1.P
 	}
 }
 
-// DeletePodWithWaitByName deletes the named and namespaced pod and waits for the pod to be terminated. Resilient to the pod
-// not existing.
+// DeletePodWithWaitByName 按名称和 namespace 删除 pod 并等待其终止。pod 不存在时不会报错。
 func DeletePodWithWaitByName(ctx context.Context, c clientset.Interface, podName, podNamespace string) error {
 	framework.Logf("Deleting pod %q in namespace %q", podName, podNamespace)
 	err := c.CoreV1().Pods(podNamespace).Delete(ctx, podName, metav1.DeleteOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil // assume pod was already deleted
+			return nil // 认为 pod 已经被删除
 		}
 		return fmt.Errorf("pod Delete API error: %w", err)
 	}
@@ -91,12 +88,12 @@ func DeletePodWithWaitByName(ctx context.Context, c clientset.Interface, podName
 	return nil
 }
 
-// DeletePodWithGracePeriod deletes the passed-in pod. Resilient to the pod not existing.
+// DeletePodWithGracePeriod 按指定的 grace period 删除传入的 pod。pod 不存在时不会报错。
 func DeletePodWithGracePeriod(ctx context.Context, c clientset.Interface, pod *v1.Pod, grace int64) error {
 	return DeletePodWithGracePeriodByName(ctx, c, pod.GetName(), pod.GetNamespace(), grace)
 }
 
-// DeletePodsWithGracePeriod deletes the passed-in pods. Resilient to the pods not existing.
+// DeletePodsWithGracePeriod 按指定的 grace period 删除传入的 pod。pod 不存在时不会报错。
 func DeletePodsWithGracePeriod(ctx context.Context, c clientset.Interface, pods []v1.Pod, grace int64) error {
 	for _, pod := range pods {
 		if err := DeletePodWithGracePeriod(ctx, c, &pod, grace); err != nil {
@@ -106,13 +103,14 @@ func DeletePodsWithGracePeriod(ctx context.Context, c clientset.Interface, pods 
 	return nil
 }
 
-// DeletePodWithGracePeriodByName deletes a pod by name and namespace. Resilient to the pod not existing.
+// DeletePodWithGracePeriodByName 按名称和 namespace 删除 pod，并指定 grace period。
+// pod 不存在时不会报错。
 func DeletePodWithGracePeriodByName(ctx context.Context, c clientset.Interface, podName, podNamespace string, grace int64) error {
 	framework.Logf("Deleting pod %q in namespace %q", podName, podNamespace)
 	err := c.CoreV1().Pods(podNamespace).Delete(ctx, podName, *metav1.NewDeleteOptions(grace))
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil // assume pod was already deleted
+			return nil // 认为 pod 已经被删除
 		}
 		return fmt.Errorf("pod Delete API error: %w", err)
 	}

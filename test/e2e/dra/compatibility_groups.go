@@ -30,10 +30,9 @@ import (
 
 const compatGroupsCounterSet = "gpu"
 
-// compatGroupsCounters is a single counter set with room for two devices (each
-// device below consumes half of it), so two devices can be co-allocated to
-// separate claims on the same node only when their compatibility groups
-// intersect - counters alone never force the second pod to be unschedulable.
+// compatGroupsCounters 是一个容量为两台设备的 counter set（下面每台设备消耗一半），
+// 因此只有兼容性组有交集时，两台设备才能在同一节点上分配给不同的 claim。
+// 单靠计数器余量不会让第二个 pod 变得不可调度。
 func compatGroupsCounters() []resourceapi.CounterSet {
 	return []resourceapi.CounterSet{{
 		Name:     compatGroupsCounterSet,
@@ -52,22 +51,20 @@ func compatGroupsDevice(name, group string) resourceapi.Device {
 	}
 }
 
-// This suite exercises the DRADeviceCompatibilityGroups feature end to end with a
-// fake DRA driver that advertises devices declaring compatibility groups on a
-// shared counter set. It only runs on clusters where the (alpha) feature gate is
-// enabled.
+// 本测试套件用 fake DRA driver 端到端验证 DRADeviceCompatibilityGroups 特性：
+// driver 上报的设备在共享 counter set 上声明兼容性组。
+// 仅在启用该（alpha）feature gate 的集群上运行。
 var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), framework.WithFeatureGate(features.DRADeviceCompatibilityGroups), func() {
 	f := framework.NewDefaultFramework("dra-compat-groups")
 
-	// The driver containers run privileged to manage /var/lib/kubelet/plugins.
+	// driver 容器需要 privileged 才能管理 /var/lib/kubelet/plugins。
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	nodes := drautils.NewNodes(f, 1, 1)
 
 	f.Context("device compatibility groups", func() {
 		f.Context("incompatible devices", func() {
-			// Two devices declaring mutually exclusive groups (mig, vgpu) share
-			// one counter set.
+			// 两台设备分别声明互斥的组（mig、vgpu），共享同一个 counter set。
 			driver := drautils.NewDriver(f, nodes, drautils.ToDriverResources(
 				compatGroupsCounters(),
 				compatGroupsDevice("gpu-mig", "mig"),
@@ -78,16 +75,15 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), framework.With
 			f.It("leave a pod requesting an incompatible device unschedulable", func(ctx context.Context) {
 				tCtx := f.TContext(ctx)
 
-				// The first pod takes one of the two devices.
+				// 第一个 pod 占用两台设备中的一台。
 				claim1 := b.ExternalClaim()
 				b.Create(tCtx, claim1)
 				pod1 := b.PodExternal(claim1.Name)
 				b.Create(tCtx, pod1)
 				b.TestPod(tCtx, pod1)
 
-				// The only remaining device declares an incompatible group on the
-				// same counter set, so the second pod cannot be scheduled even
-				// though the counter set still has room for it.
+				// 剩下的唯一一台设备在同一 counter set 上声明了不兼容的组，
+				// 所以即使 counter set 仍有余量，第二个 pod 也无法调度。
 				claim2 := b.ExternalClaim()
 				b.Create(tCtx, claim2)
 				pod2 := b.PodExternal(claim2.Name)
@@ -99,7 +95,7 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), framework.With
 		})
 
 		f.Context("compatible devices", func() {
-			// Two devices declaring the same group (mig) share one counter set.
+			// 两台设备声明同一个组（mig），共享同一个 counter set。
 			driver := drautils.NewDriver(f, nodes, drautils.ToDriverResources(
 				compatGroupsCounters(),
 				compatGroupsDevice("gpu-0", "mig"),
@@ -116,8 +112,8 @@ var _ = framework.SIGDescribe("node")(framework.WithLabel("DRA"), framework.With
 				b.Create(tCtx, pod1)
 				b.TestPod(tCtx, pod1)
 
-				// The second device shares the first's group, so it can be
-				// co-allocated on the same counter set and its pod also runs.
+				// 第二台设备与第一台同组，因此可以在同一 counter set 上
+				// 共同分配，它的 pod 也能运行。
 				claim2 := b.ExternalClaim()
 				b.Create(tCtx, claim2)
 				pod2 := b.PodExternal(claim2.Name)

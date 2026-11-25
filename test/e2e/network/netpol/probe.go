@@ -25,7 +25,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// probeConnectivityArgs is set of arguments for a probeConnectivity
+// probeConnectivityArgs 是 probeConnectivity 的参数集合
 type probeConnectivityArgs struct {
 	nsFrom              string
 	podFrom             string
@@ -38,12 +38,12 @@ type probeConnectivityArgs struct {
 	pollTimeoutSeconds  int
 }
 
-// decouple us from k8smanager.go
+// 与 k8smanager.go 解耦
 type Prober interface {
 	probeConnectivity(args *probeConnectivityArgs) (bool, string, error)
 }
 
-// ProbeJob packages the data for the input of a pod->pod connectivity probe
+// ProbeJob 封装 pod->pod 连通性探测的输入数据
 type ProbeJob struct {
 	PodFrom            TestPod
 	PodTo              TestPod
@@ -54,7 +54,7 @@ type ProbeJob struct {
 	ExpectConnectivity bool
 }
 
-// ProbeJobResults packages the data for the results of a pod->pod connectivity probe
+// ProbeJobResults 封装 pod->pod 连通性探测的结果数据
 type ProbeJobResults struct {
 	Job         *ProbeJob
 	IsConnected bool
@@ -62,7 +62,7 @@ type ProbeJobResults struct {
 	Command     string
 }
 
-// ProbePodToPodConnectivity runs a series of probes in kube, and records the results in `testCase.Reachability`
+// ProbePodToPodConnectivity 在 kube 中运行一系列探测，并将结果记录到 `testCase.Reachability` 中
 func ProbePodToPodConnectivity(prober Prober, allPods []TestPod, dnsDomain string, testCase *TestCase) {
 	size := len(allPods) * len(allPods)
 	jobs := make(chan *ProbeJob, size)
@@ -72,8 +72,7 @@ func ProbePodToPodConnectivity(prober Prober, allPods []TestPod, dnsDomain strin
 	}
 	for _, podFrom := range allPods {
 		for _, podTo := range allPods {
-			// set connectivity expectation for the probe job, this allows to retry probe when observed value
-			// don't match expected value.
+			// 为探测任务设置连通性预期，以便观测值与预期不符时重试探测。
 			expectConnectivity := testCase.Reachability.Expected.Get(podFrom.PodString().String(), podTo.PodString().String())
 
 			jobs <- &ProbeJob{
@@ -108,13 +107,13 @@ func ProbePodToPodConnectivity(prober Prober, allPods []TestPod, dnsDomain strin
 	}
 }
 
-// probeWorker continues polling a pod connectivity status, until the incoming "jobs" channel is closed, and writes results back out to the "results" channel.
-// it only writes pass/fail status to a channel and has no failure side effects, this is by design since we do not want to fail inside a goroutine.
+// probeWorker 持续轮询 pod 连通性状态，直到 "jobs" channel 关闭，并将结果写回 "results" channel。
+// 它只向 channel 写入成功/失败状态，不会产生失败副作用；这是刻意设计的，因为我们不想在 goroutine 内触发测试失败。
 func probeWorker(prober Prober, jobs <-chan *ProbeJob, results chan<- *ProbeJobResults) {
 	defer ginkgo.GinkgoRecover()
 	for job := range jobs {
 		podFrom := job.PodFrom
-		// defensive programming: this should not be possible as we already check in initializeClusterFromModel
+		// 防御性编程：initializeClusterFromModel 中已做过检查，这里理论上不会发生
 		if netutils.ParseIPSloppy(job.PodTo.ServiceIP) == nil {
 			results <- &ProbeJobResults{
 				Job:         job,
@@ -122,12 +121,11 @@ func probeWorker(prober Prober, jobs <-chan *ProbeJob, results chan<- *ProbeJobR
 				Err:         fmt.Errorf("empty service ip"),
 			}
 		}
-		// note that we can probe a dnsName instead of ServiceIP by using dnsName like so:
-		// we stopped doing this because we wanted to support netpol testing in non dns enabled
-		// clusters, but might re-enable it later.
+		// 注意，可以像下面这样用 dnsName 代替 ServiceIP 进行探测：
+		// 后来为了支持未启用 DNS 的集群中的 netpol 测试而停用了这种做法，但将来可能会重新启用。
 		// dnsName := job.PodTo.QualifiedServiceAddress(job.ToPodDNSDomain)
 
-		// TODO make this work on dual-stack clusters...
+		// TODO: 让它在双栈集群上也能工作……
 		connected, command, err := prober.probeConnectivity(&probeConnectivityArgs{
 			nsFrom:              podFrom.Namespace,
 			podFrom:             podFrom.Name,

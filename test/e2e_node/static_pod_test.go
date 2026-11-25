@@ -82,7 +82,7 @@ var _ = SIGDescribe("StaticPod", framework.WithSerial(), func() {
 				g.Expect(err).Should(gomega.Succeed())
 				g.Expect(pod.Status.InitContainerStatuses).To(gomega.HaveLen(1))
 				cstatus := pod.Status.InitContainerStatuses[0]
-				// Wait until the init container is terminated.
+				// 等待 init container 终止
 				g.Expect(cstatus.State.Terminated).NotTo(gomega.BeNil())
 				g.Expect(cstatus.State.Terminated.Reason).To(gomega.Equal("Completed"))
 				g.Expect(cstatus.State.Terminated.ExitCode).To(gomega.BeZero())
@@ -103,7 +103,7 @@ var _ = SIGDescribe("StaticPod", framework.WithSerial(), func() {
 				g.Expect(err).Should(gomega.Succeed())
 				g.Expect(pod.Status.InitContainerStatuses).To(gomega.HaveLen(1))
 				cstatus := pod.Status.InitContainerStatuses[0]
-				// Init container should be completed.
+				// init container 应已完成
 				g.Expect(cstatus.State.Terminated).NotTo(gomega.BeNil())
 				g.Expect(cstatus.State.Terminated.Reason).To(gomega.Equal("Completed"))
 				g.Expect(cstatus.State.Terminated.ExitCode).To(gomega.BeZero())
@@ -155,12 +155,12 @@ var _ = SIGDescribe("StaticPod", framework.WithSerial(), func() {
 				g.Expect(err).Should(gomega.Succeed())
 				g.Expect(pod.Status.InitContainerStatuses).To(gomega.HaveLen(1))
 				cstatus := pod.Status.InitContainerStatuses[0]
-				// Wait until the sidecar container starts running.
+				// 等待 sidecar container 开始运行
 				g.Expect(cstatus.State.Running).NotTo(gomega.BeNil())
 				sidecarCtrID = cstatus.ContainerID
 			}, 2*time.Minute, 5*time.Second).Should(gomega.Succeed())
 
-			// Stop kubelet first not to restart the sidecar container.
+			// 先停止 kubelet，避免 sidecar container 被重启
 			ginkgo.By("stop kubelet")
 			startKubelet := mustStopKubelet(ctx, f)
 
@@ -176,7 +176,7 @@ var _ = SIGDescribe("StaticPod", framework.WithSerial(), func() {
 				g.Expect(err).Should(gomega.Succeed())
 				g.Expect(pod.Status.InitContainerStatuses).To(gomega.HaveLen(1))
 				cstatus := pod.Status.InitContainerStatuses[0]
-				// Sidecar container should be restarted and running.
+				// sidecar container 应已重启并运行
 				g.Expect(cstatus.State.Running).NotTo(gomega.BeNil())
 				g.Expect(cstatus.ContainerID).NotTo(gomega.Equal(sidecarCtrID))
 			}, 2*time.Minute, 5*time.Second).Should(gomega.Succeed())
@@ -207,7 +207,7 @@ func removeInitContainer(ctx context.Context, ctrID string) {
 	splitID := strings.Split(ctrID, "://")
 	gomega.Expect(splitID).To(gomega.HaveLen(2))
 	ctrID = splitID[1]
-	// Make sure the container is stopped before removing it. This may fail.
+	// 删除前先确保容器已停止，这一步可能失败
 	_ = cricli.StopContainer(ctx, ctrID, 0)
 	err = cricli.RemoveContainer(ctx, ctrID)
 	framework.ExpectNoError(err)

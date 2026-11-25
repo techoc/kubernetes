@@ -36,12 +36,11 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 )
 
-// StartPodLogs begins capturing log output and events from current
-// and future pods running in the namespace of the framework. That
-// ends when the returned cleanup function is called.
+// StartPodLogs 开始捕获 framework 的 namespace 中当前及后续 pod 的日志输出和事件，
+// 直到调用返回的清理函数为止。
 //
-// The output goes to log files (when using --report-dir, as in the
-// CI) or the output stream (otherwise).
+// 输出会写入日志文件（使用 --report-dir 时，如 CI 中），
+// 否则写入输出流。
 func StartPodLogs(ctx context.Context, f *framework.Framework, driverNamespace *v1.Namespace) func() {
 	ctx, cancel := context.WithCancel(ctx)
 	cs := f.ClientSet
@@ -57,9 +56,7 @@ func StartPodLogs(ctx context.Context, f *framework.Framework, driverNamespace *
 		to.LogWriter = ginkgo.GinkgoWriter
 	} else {
 		test := ginkgo.CurrentSpecReport()
-		// Clean up each individual component text such that
-		// it contains only characters that are valid as file
-		// name.
+		// 清理每一段文本，使其只包含文件名中可用的字符。
 		reg := regexp.MustCompile("[^a-zA-Z0-9_-]+")
 		var testName []string
 		for _, text := range test.ContainerHierarchyTexts {
@@ -69,19 +66,16 @@ func StartPodLogs(ctx context.Context, f *framework.Framework, driverNamespace *
 			}
 		}
 
-		// Make sure each directory name is short enough for Linux + Windows
+		// 确保每个目录名在 Linux 和 Windows 上都不会过长
 		for i, testNameComponent := range testName {
 			testName[i] = ShortenFileName(testNameComponent)
 		}
 
-		// We end the prefix with a slash to ensure that all logs
-		// end up in a directory named after the current test.
+		// 前缀以斜杠结尾，确保所有日志都落在以当前测试命名的目录中。
 		//
-		// Each component name maps to a directory. This
-		// avoids cluttering the root artifact directory and
-		// keeps each directory name smaller (the full test
-		// name at one point exceeded 256 characters, which was
-		// too much for some filesystems).
+		// 每段名称对应一个目录层级，避免根目录的 artifact 过于杂乱，
+		// 同时让目录名更短（完整的测试名曾超过 256 个字符，
+		// 对某些文件系统来说太长了）。
 		logDir := filepath.Join(framework.TestContext.ReportDir, filepath.Join(testName...))
 		to.LogPathPrefix = logDir + "/"
 
@@ -94,17 +88,16 @@ func StartPodLogs(ctx context.Context, f *framework.Framework, driverNamespace *
 	}
 	podlogs.CopyAllLogs(ctx, cs, ns, to)
 
-	// The framework doesn't know about the driver pods because of
-	// the separate namespace.  Therefore we always capture the
-	// events ourselves.
+	// driver pod 运行在独立的 namespace 中，framework 感知不到，
+	// 因此需要自行捕获其事件。
 	podlogs.WatchPods(ctx, cs, ns, podEventLog, podEventLogCloser)
 
 	return cancel
 }
 
-// KubeletCommand performs `start`, `restart`, or `stop` on the kubelet running on the node of the target pod and waits
-// for the desired statues..
-// Allowed kubeletOps are `KStart`, `KStop`, and `KRestart`
+// KubeletCommand 在目标 pod 所在 node 的 kubelet 上执行 `start`、`restart` 或 `stop`，
+// 并等待达到期望状态。
+// 允许的 kubeletOps 为 `KStart`、`KStop` 和 `KRestart`。
 func KubeletCommand(ctx context.Context, kOp KubeletOpt, c clientset.Interface, pod *v1.Pod) {
 	nodeIP, err := getHostAddress(ctx, c, pod)
 	framework.ExpectNoError(err)
@@ -134,7 +127,7 @@ func KubeletCommand(ctx context.Context, kOp KubeletOpt, c clientset.Interface, 
 
 	if kOp == KStart && getKubeletRunning(ctx, nodeIP) {
 		framework.Logf("Kubelet is already running on node %q", pod.Spec.NodeName)
-		// Just skip. Or we cannot get a new heartbeat in time.
+		// 直接跳过，否则可能无法及时获得新的心跳。
 		return
 	}
 
@@ -143,23 +136,22 @@ func KubeletCommand(ctx context.Context, kOp KubeletOpt, c clientset.Interface, 
 	heartbeatTime := e2enode.GetNodeHeartbeatTime(node)
 
 	runCmd("start")
-	// Wait for next heartbeat, which must be sent by the new kubelet process.
+	// 等待下一次心跳，它必须由新的 kubelet 进程发出。
 	e2enode.WaitForNodeHeartbeatAfter(ctx, c, pod.Spec.NodeName, heartbeatTime, NodeStateTimeout)
-	// Then wait until Node with new process becomes Ready.
+	// 然后等待运行新进程的 Node 变为 Ready。
 	if ok := e2enode.WaitForNodeToBeReady(ctx, c, pod.Spec.NodeName, NodeStateTimeout); !ok {
 		framework.Failf("Node %s failed to enter Ready state", pod.Spec.NodeName)
 	}
 }
 
-// getHostAddress gets the node for a pod and returns the first
-// address. Returns an error if the node the pod is on doesn't have an
-// address.
+// getHostAddress 获取 pod 所在的 node 并返回其第一个地址。
+// 如果 pod 所在的 node 没有地址，则返回错误。
 func getHostAddress(ctx context.Context, client clientset.Interface, p *v1.Pod) (string, error) {
 	node, err := client.CoreV1().Nodes().Get(ctx, p.Spec.NodeName, metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
-	// Try externalAddress first
+	// 优先尝试 externalAddress
 	for _, address := range node.Status.Addresses {
 		if address.Type == v1.NodeExternalIP {
 			if address.Address != "" {
@@ -167,7 +159,7 @@ func getHostAddress(ctx context.Context, client clientset.Interface, p *v1.Pod) 
 			}
 		}
 	}
-	// If no externalAddress found, try internalAddress
+	// 如果找不到 externalAddress，则尝试 internalAddress
 	for _, address := range node.Status.Addresses {
 		if address.Type == v1.NodeInternalIP {
 			if address.Address != "" {
@@ -176,7 +168,7 @@ func getHostAddress(ctx context.Context, client clientset.Interface, p *v1.Pod) 
 		}
 	}
 
-	// If not found, return error
+	// 都找不到则返回错误
 	return "", fmt.Errorf("No address for pod %v on node %v",
 		p.Name, p.Spec.NodeName)
 }

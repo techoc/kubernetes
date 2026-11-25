@@ -24,8 +24,8 @@ import (
 	"strings"
 )
 
-// countSRIOVDevices provides a rough estimate of SRIOV Virtual Functions available on the system.
-// This is a rough check we use to rule out unsuitable systems, not to detect suitable systems.
+// countSRIOVDevices 粗略估算系统上可用的 SRIOV Virtual Function 数量。
+// 这只是用于排除不合适系统的粗粒度检查，不用于判定系统是否合适
 func countSRIOVDevices() (int, error) {
 	outData, err := exec.Command("/bin/sh", "-c", "ls /sys/bus/pci/devices/*/physfn | wc -w").Output()
 	if err != nil {

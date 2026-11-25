@@ -59,14 +59,14 @@ var _ = SIGDescribe("PodOSRejection", framework.WithNodeConformance(), func() {
 				},
 			}
 			pod = e2epod.NewPodClient(f).Create(ctx, pod)
-			// Check the pod is still not running
+			// 确认 pod 仍未运行
 			err = e2epod.WaitForPodFailedReason(ctx, f.ClientSet, pod, "PodOSNotSupported", f.Timeouts.PodStartShort)
 			framework.ExpectNoError(err)
 		})
 	})
 })
 
-// findLinuxNode finds a Linux node that is Ready and Schedulable
+// findLinuxNode 查找处于 Ready 且可调度的 Linux node
 func findLinuxNode(ctx context.Context, f *framework.Framework) (v1.Node, error) {
 	logger := klog.FromContext(ctx)
 	selector := labels.Set{"kubernetes.io/os": "linux"}.AsSelector()

@@ -32,13 +32,13 @@ import (
 	"k8s.io/kubernetes/test/utils/localupcluster"
 )
 
-// gateOnFunc runs while the feature gate is ON and returns the next phase.
+// gateOnFunc 在 feature gate 开启阶段运行，并返回下一阶段的函数。
 type gateOnFunc func(tCtx ktesting.TContext, b *drautils.Builder) gateOffFunc
 
-// gateOffFunc runs while the feature gate is OFF and returns the next phase.
+// gateOffFunc 在 feature gate 关闭阶段运行，并返回下一阶段的函数。
 type gateOffFunc func(tCtx ktesting.TContext) gateOnAgainFunc
 
-// gateOnAgainFunc runs after the feature gate is re-enabled.
+// gateOnAgainFunc 在 feature gate 重新开启后运行。
 type gateOnAgainFunc func(tCtx ktesting.TContext)
 
 type getResources func(nodes *drautils.Nodes) map[string]resourceslice.DriverResources
@@ -61,13 +61,13 @@ func testFeatureGateCycle(tCtx ktesting.TContext) {
 	subTests := map[string]struct {
 		test                gateOnFunc
 		driverResourcesFunc getResources
-		// enabledGates lists the feature gates that are enabled throughout the test.
+		// enabledGates 列出整个测试期间保持开启的 feature gate。
 		enabledGates []string
-		// toggledGates lists the feature gates to start ON in phase 0, toggle OFF in phase 1, and re-enable in phase 2.
+		// toggledGates 列出阶段 0 开启、阶段 1 关闭、阶段 2 重新开启的 feature gate。
 		toggledGates []string
-		// emulatedVersion, if non-empty, is passed as EMULATED_VERSION to local-up-cluster.sh.
-		// Set this to the last version where the gates were still toggleable so the test
-		// keeps working once those gates become locked in a future release.
+		// emulatedVersion 非空时会作为 EMULATED_VERSION 传给 local-up-cluster.sh。
+		// 设为这些 gate 仍可切换的最后一个版本，这样即使将来版本将其锁定，
+		// 测试依然能继续运行。
 		emulatedVersion    string
 		extraRuntimeConfig string
 	}{
@@ -75,8 +75,8 @@ func testFeatureGateCycle(tCtx ktesting.TContext) {
 			test:                extendedResourceGateCycle,
 			driverResourcesFunc: extendedResourcesDriverResources,
 			toggledGates:        []string{"DRAExtendedResource"},
-			// Emulate 1.36 so that gates which are locked in the current binary
-			// remain toggleable. DRAExtendedResource is toggleable in 1.36.
+			// 模拟 1.36，使当前二进制中已锁定的 gate 仍可切换。
+			// DRAExtendedResource 在 1.36 中可切换。
 			emulatedVersion: "1.36",
 		},
 		"workload-resourceclaims": {
@@ -90,15 +90,15 @@ func testFeatureGateCycle(tCtx ktesting.TContext) {
 			test:                compatibilityGroupsGateCycle,
 			driverResourcesFunc: compatibilityGroupsDriverResources,
 			toggledGates:        []string{"DRADeviceCompatibilityGroups"},
-			// DRADeviceCompatibilityGroups is alpha and toggleable starting in 1.37;
-			// emulate that version so the test keeps working once the gate locks.
+			// DRADeviceCompatibilityGroups 自 1.37 起为 alpha 且可切换；
+			// 模拟该版本，以便 gate 锁定后测试仍能运行。
 			emulatedVersion: "1.37",
 		},
 	}
 
 	for name, def := range subTests {
 		tCtx.Run(name, func(tCtx ktesting.TContext) {
-			// ---- Phase 0: gate(s) ON ----
+			// ---- 阶段 0：gate 开启 ----
 			cluster := localupcluster.New()
 			tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
 				tCtx.Step("cleanup", cluster.Stop)
@@ -125,7 +125,7 @@ func testFeatureGateCycle(tCtx ktesting.TContext) {
 				nodes = drautils.NewNodesNow(tCtx, 1, 1)
 			})
 
-			// Create builder
+			// 创建 builder
 			driver := drautils.NewDriverInstance(tCtx)
 			driver.SetNameSuffix(tCtx, name)
 			driver.IsLocal = true
@@ -138,13 +138,11 @@ func testFeatureGateCycle(tCtx ktesting.TContext) {
 				gateOffFn = def.test(tCtx, builder)
 			})
 
-			// ---- Phase 1: gate(s) OFF ----
+			// ---- 阶段 1：gate 关闭 ----
 			phase = "phase-1-gate-off"
-			// With the gate off, the apiserver is expected to drop the gated fields
-			// from any ResourceSlice the driver (re)publishes - the kubelet wipes the
-			// slices when it restarts, so the driver re-creates them and the create is
-			// stripped. Tolerate those expected drops until the gate is back on and the
-			// slices have been re-published.
+			// gate 关闭时，apiserver 会丢弃 driver 重新发布的 ResourceSlice 中的受控字段：
+			// kubelet 重启会清空 slice，driver 随之重建，而创建请求中的字段会被剔除。
+			// 在 gate 重新开启并重新发布 slice 之前，需要容忍这种预期的字段丢弃。
 			driver.SetExpectDroppedFields(true)
 			cluster.ToggleFeatureGates(tCtx, phase, turnFgOn(def.enabledGates)+","+turnFgOff(def.toggledGates))
 			waitForSlices(tCtx, name, builder, def.driverResourcesFunc(nodes))
@@ -154,20 +152,18 @@ func testFeatureGateCycle(tCtx ktesting.TContext) {
 				gateOnAgainFn = gateOffFn(tCtx)
 			})
 
-			// ---- Phase 2: gate(s) ON again ----
+			// ---- 阶段 2：gate 重新开启 ----
 			phase = "phase-2-gate-on-again"
 			cluster.ToggleFeatureGates(tCtx, phase, turnFgOn(def.enabledGates)+","+turnFgOn(def.toggledGates))
-			// While the gate was off, the apiserver dropped the gated fields, and the
-			// resourceslice controller latched its desired state to the stored
-			// (stripped) result to avoid a hot update loop. Without re-publishing, the
-			// driver keeps publishing slices without the gated fields even though the
-			// apiserver now accepts them. ToggleFeatureGates only returns once the
-			// gate-on apiserver is ready, so this re-publish is guaranteed to reach an
-			// apiserver that preserves the fields.
+			// gate 关闭期间，apiserver 丢弃了受控字段，resourceslice controller
+			// 为避免热更新循环，将期望状态锁定为存储中已被剔除字段的结果。
+			// 若不重新发布，即便 apiserver 现已接受这些字段，driver 仍会持续发布
+			// 不含受控字段的 slice。ToggleFeatureGates 只在 gate 开启的
+			// apiserver 就绪后才返回，因此这次重新发布必定到达保留字段的 apiserver。
 			driver.PublishResources(tCtx, def.driverResourcesFunc(nodes))
 			waitForSlices(tCtx, name, builder, def.driverResourcesFunc(nodes))
-			// The gate is back on and the slices have been re-published with the gated
-			// fields, so from here on any dropped-field error would be a real bug.
+			// gate 已重新开启，slice 也已带上受控字段重新发布；
+			// 此后任何字段丢弃错误都是真正的 bug。
 			driver.SetExpectDroppedFields(false)
 
 			tCtx.Run(phase, func(tCtx ktesting.TContext) {
@@ -177,18 +173,18 @@ func testFeatureGateCycle(tCtx ktesting.TContext) {
 	}
 }
 
-// turnFgOn returns a string to turn the given feature gates on, e.g. "FeatureA=true,FeatureB=true".
+// turnFgOn 返回用于开启指定 feature gate 的字符串，例如 "FeatureA=true,FeatureB=true"。
 func turnFgOn(featureGates []string) string {
 	return turnFg(featureGates, "=true")
 }
 
-// turnFgOff returns a string to turn the given feature gates off, e.g. "FeatureA=false,FeatureB=false".
+// turnFgOff 返回用于关闭指定 feature gate 的字符串，例如 "FeatureA=false,FeatureB=false"。
 func turnFgOff(featureGates []string) string {
 	return turnFg(featureGates, "=false")
 }
 
-// turnFg is a common part of turnFgOn and turnFgOff, returns a string to turn the given
-// feature gates on or off based on the suffix, e.g. "FeatureA=true,FeatureB=true" or "FeatureA=false,FeatureB=false".
+// turnFg 是 turnFgOn 和 turnFgOff 的公共实现，根据后缀生成开启或关闭指定
+// feature gate 的字符串，例如 "FeatureA=true,FeatureB=true" 或 "FeatureA=false,FeatureB=false"。
 func turnFg(featureGates []string, suffix string) string {
 	if len(featureGates) == 0 {
 		return ""

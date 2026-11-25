@@ -64,7 +64,7 @@ func NewDevicePlugin(errorInjector func(string) error) *DevicePlugin {
 }
 
 func (dp *DevicePlugin) GetDevicePluginOptions(context.Context, *kubeletdevicepluginv1beta1.Empty) (*kubeletdevicepluginv1beta1.DevicePluginOptions, error) {
-	// lock the mutex and add to a list of calls
+	// 加锁后记录到调用列表
 	dp.callsSync.Lock()
 	dp.calls = append(dp.calls, "GetDevicePluginOptions")
 	dp.callsSync.Unlock()
@@ -102,9 +102,8 @@ func (dp *DevicePlugin) ListAndWatch(empty *kubeletdevicepluginv1beta1.Empty, st
 		return err
 	}
 
-	// when the devices are updated, send the new devices to the kubelet
-	// also start a timer and every second call into the dp.errorInjector
-	// to simulate a device plugin failure
+	// 设备更新时将新设备列表发送给 kubelet；
+	// 同时每秒调用一次 dp.errorInjector，模拟 device plugin 故障
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -172,7 +171,7 @@ func (dp *DevicePlugin) RegisterDevicePlugin(ctx context.Context, uniqueName, re
 		return ok
 	}, framework.PodStartTimeout, framework.Poll).Should(gomega.BeTrueBecause("expected kubelet health check to be successful"))
 
-	// Implement the logic to register the device plugin with the kubelet
+	// 实现向 kubelet 注册 device plugin 的逻辑
 	ginkgo.By("Create a listener on a specific port")
 	lis, err := net.Listen("unix", kubeletdevicepluginv1beta1.DevicePluginPath+devicePluginEndpoint)
 	if err != nil {
@@ -240,7 +239,7 @@ func (dp *DevicePlugin) Stop() {
 }
 
 func (dp *DevicePlugin) WasCalled(method string) bool {
-	// lock mutex and then search if the method was called
+	// 加锁后查找该方法是否被调用过
 	dp.callsSync.Lock()
 	defer dp.callsSync.Unlock()
 	for _, call := range dp.calls {
@@ -252,17 +251,17 @@ func (dp *DevicePlugin) WasCalled(method string) bool {
 }
 
 func (dp *DevicePlugin) Calls() []string {
-	// lock the mutex and return the calls
+	// 加锁后返回调用列表
 	dp.callsSync.Lock()
 	defer dp.callsSync.Unlock()
-	// return a copy of the calls
+	// 返回调用列表的副本
 	calls := make([]string, len(dp.calls))
 	copy(calls, dp.calls)
 	return calls
 }
 
 func (dp *DevicePlugin) UpdateDevices(devices []*kubeletdevicepluginv1beta1.Device) {
-	// lock the mutex and update the devices
+	// 加锁后更新设备列表
 	dp.devicesSync.Lock()
 	defer dp.devicesSync.Unlock()
 	dp.devices = devices

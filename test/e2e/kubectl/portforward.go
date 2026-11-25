@@ -61,7 +61,7 @@ const (
 	postStartWaitTimeout = 2 * time.Minute
 )
 
-// TODO support other ports besides 80
+// TODO: 支持 80 以外的其他端口
 var (
 	portForwardRegexp = regexp.MustCompile("Forwarding from (127.0.0.1|\\[::1\\]):([0-9]+) -> 80")
 )
@@ -192,7 +192,7 @@ func testWebServerPod() *v1.Pod {
 	}
 }
 
-// WaitForTerminatedContainer waits till a given container be terminated for a given pod.
+// WaitForTerminatedContainer 等待指定 pod 中的指定容器终止。
 func WaitForTerminatedContainer(ctx context.Context, f *framework.Framework, pod *v1.Pod, containerName string) error {
 	return e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, pod.Name, "container terminated", framework.PodStartTimeout, func(pod *v1.Pod) (bool, error) {
 		if len(testutils.TerminatedContainers(pod)[containerName]) > 0 {
@@ -207,15 +207,15 @@ type portForwardCommand struct {
 	port int
 }
 
-// Stop attempts to gracefully stop `kubectl port-forward`, only killing it if necessary.
-// This helps avoid spdy goroutine leaks in the Kubelet.
+// Stop 尝试优雅地停止 `kubectl port-forward`，只在必要时才强杀它。
+// 这有助于避免 kubelet 中的 spdy goroutine 泄漏。
 func (c *portForwardCommand) Stop() {
-	// SIGINT signals that kubectl port-forward should gracefully terminate
+	// SIGINT 通知 kubectl port-forward 应优雅退出
 	if err := c.cmd.Process.Signal(syscall.SIGINT); err != nil {
 		framework.Logf("error sending SIGINT to kubectl port-forward: %v", err)
 	}
 
-	// try to wait for a clean exit
+	// 尝试等待干净退出
 	done := make(chan error)
 	go func() {
 		done <- c.cmd.Wait()
@@ -227,7 +227,7 @@ func (c *portForwardCommand) Stop() {
 	select {
 	case err := <-done:
 		if err == nil {
-			// success
+			// 成功
 			return
 		}
 		framework.Logf("error waiting for kubectl port-forward to exit: %v", err)
@@ -239,13 +239,12 @@ func (c *portForwardCommand) Stop() {
 	framework.TryKill(c.cmd)
 }
 
-// runPortForward runs port-forward, warning, this may need root functionality on some systems.
+// runPortForward 运行 port-forward。注意，在某些系统上这可能需要 root 权限。
 func runPortForward(ns, podName string, port int) *portForwardCommand {
 	tk := e2ekubectl.NewTestKubeconfig(framework.TestContext.CertDir, framework.TestContext.Host, framework.TestContext.KubeConfig, framework.TestContext.KubeContext, framework.TestContext.KubectlPath, ns)
 	cmd := tk.KubectlCmd("port-forward", fmt.Sprintf("--namespace=%v", ns), podName, fmt.Sprintf(":%d", port))
-	// This is somewhat ugly but is the only way to retrieve the port that was picked
-	// by the port-forward command. We don't want to hard code the port as we have no
-	// way of guaranteeing we can pick one that isn't in use, particularly on Jenkins.
+	// 这样做有些丑陋，但这是获取 port-forward 命令所选端口的唯一方式。
+	// 我们不想把端口写死，因为无法保证选到的端口没有被占用，在 Jenkins 上尤其如此。
 	framework.Logf("starting port-forward command and streaming output")
 	portOutput, _, err := framework.StartCmdAndStreamOutput(cmd)
 	if err != nil {
@@ -541,7 +540,7 @@ var _ = SIGDescribe("Kubectl Port forwarding", func() {
 		})
 	})
 
-	// kubectl port-forward may need elevated privileges to do its job.
+	// kubectl port-forward 可能需要提升权限才能工作。
 	ginkgo.Describe("With a server listening on localhost", func() {
 		ginkgo.Describe("that expects a client request", func() {
 			ginkgo.It("should support a client that connects, sends NO DATA, and disconnects", func(ctx context.Context) {
@@ -583,7 +582,7 @@ var _ = SIGDescribe("Kubectl Port forwarding", func() {
 			go func() {
 				defer ginkgo.GinkgoRecover()
 
-				// try to mock a big request, which should take some time
+				// 尝试模拟一个大请求，这应该会花费一些时间
 				for sentBodySize := 0; sentBodySize < 1024*1024*1024; {
 					size := rand.Intn(4 * 1024 * 1024)
 					url := fmt.Sprintf("http://localhost:%d/header", cmd.port)
@@ -612,11 +611,11 @@ var _ = SIGDescribe("Kubectl Port forwarding", func() {
 			ginkgo.By("Check the client error")
 			gomega.Expect(err).To(gomega.HaveOccurred())
 			gomega.Expect(err.Error()).To(gomega.Or(
-				// these two errors indicates remote connection is closed
+				// 这两个错误表示远端连接已关闭
 				gomega.ContainSubstring("connection reset by peer"), gomega.ContainSubstring("EOF"),
-				// this error indicates timeout when POST-ing data
+				// 该错误表示 POST 数据时超时
 				gomega.ContainSubstring("context deadline exceeded"),
-				// this will happen when trying to write to a closed connection
+				// 在向已关闭的连接写入数据时会出现这种错误
 				gomega.ContainSubstring("write: broken pipe"), gomega.ContainSubstring("closed network connection"),
 				gomega.ContainSubstring("connect: connection refused")))
 
@@ -641,8 +640,8 @@ var _ = SIGDescribe("Kubectl Port forwarding", func() {
 
 			ginkgo.By("Send a http request to verify port-forward working")
 			client := http.Client{
-				// As discussed in https://github.com/kubernetes/kubernetes/pull/133682#issuecomment-3228372990,
-				// 30 second should be sufficient to complete.
+				// 如 https://github.com/kubernetes/kubernetes/pull/133682#issuecomment-3228372990 中所讨论的，
+				// 30 秒应足以完成。
 				Timeout: 30 * time.Second,
 			}
 			resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/", cmd.port))
@@ -657,7 +656,7 @@ var _ = SIGDescribe("Kubectl Port forwarding", func() {
 			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", cmd.port))
 			framework.ExpectNoError(err, "couldn't connect to port %d", cmd.port)
 
-			// use raw tcp connection to emulate client close connection without reading response
+			// 使用原始 TCP 连接模拟客户端不读取响应就关闭连接
 			ginkgo.By("Request agnhost binary file (40MB+)")
 			requestLines := []string{"GET /agnhost HTTP/1.1", "Host: localhost", ""}
 			for _, line := range requestLines {

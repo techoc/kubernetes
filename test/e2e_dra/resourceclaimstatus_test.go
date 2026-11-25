@@ -34,7 +34,7 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// resourceClaimDeviceStatus corresponds to testResourceClaimDeviceStatus in test/integration/dra.
+// resourceClaimDeviceStatus 对应 test/integration/dra 中的 testResourceClaimDeviceStatus。
 func resourceClaimDeviceStatus(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc {
 	namespace := tCtx.Namespace()
 	claimName := "claim-with-device-status"
@@ -60,8 +60,7 @@ func resourceClaimDeviceStatus(tCtx ktesting.TContext, b *drautils.Builder) upgr
 	claim, err := tCtx.Client().ResourceV1beta2().ResourceClaims(namespace).Create(tCtx, claim, metav1.CreateOptions{})
 	tCtx.ExpectNoError(err, "create ResourceClaim")
 
-	// Add an allocation result.
-	// A finalizer is required for that.
+	// 先添加 allocation result；这需要 finalizer。
 	finalizer := "test.example.com/my-test-finalizer"
 	claim.Finalizers = append(claim.Finalizers, finalizer)
 	claim, err = tCtx.Client().ResourceV1beta2().ResourceClaims(namespace).Update(tCtx, claim, metav1.UpdateOptions{})
@@ -111,7 +110,7 @@ func resourceClaimDeviceStatus(tCtx ktesting.TContext, b *drautils.Builder) upgr
 	claim, err = tCtx.Client().ResourceV1beta2().ResourceClaims(namespace).UpdateStatus(tCtx, claim, metav1.UpdateOptions{})
 	tCtx.ExpectNoError(err, "add allocation result")
 
-	// Now adding the device status should work.
+	// 此时添加 device status 应能成功。
 	deviceStatus := []resourceapiv1beta2.AllocatedDeviceStatus{{
 		Driver: "one",
 		Pool:   "global",
@@ -132,14 +131,14 @@ func resourceClaimDeviceStatus(tCtx ktesting.TContext, b *drautils.Builder) upgr
 	tCtx.ExpectNoError(err, "add device status")
 	require.Equal(tCtx, deviceStatus, claim.Status.Devices, "after adding device status")
 
-	// Strip the RawExtension. SSA re-encodes it, which causes negligble differences that nonetheless break assert.Equal.
+	// 去掉 RawExtension：SSA 会重新编码它，产生细微差异，足以让 assert.Equal 失败。
 	claim.Status.Devices[0].Data = nil
 	deviceStatus[0].Data = nil
 	claim, err = tCtx.Client().ResourceV1beta2().ResourceClaims(namespace).UpdateStatus(tCtx, claim, metav1.UpdateOptions{})
 	tCtx.ExpectNoError(err, "add device status")
 	require.Equal(tCtx, deviceStatus, claim.Status.Devices, "after stripping RawExtension")
 
-	// Exercise SSA.
+	// 验证 SSA 行为。
 	deviceStatusAC := resourceapiacv1beta2.AllocatedDeviceStatus().
 		WithDriver("two").
 		WithPool("global").
@@ -190,7 +189,7 @@ func resourceClaimDeviceStatus(tCtx ktesting.TContext, b *drautils.Builder) upgr
 	tCtx.Logf("Final ResourceClaim:\n%s", buffer.String())
 
 	return func(tCtx ktesting.TContext) downgradedTestFunc {
-		// Update one entry, remove the other.
+		// 更新其中一项，另一项保持不变。
 		deviceStatusAC := resourceapiac.AllocatedDeviceStatus().
 			WithDriver("two").
 			WithPool("global").
@@ -223,9 +222,8 @@ func resourceClaimDeviceStatus(tCtx ktesting.TContext, b *drautils.Builder) upgr
 			tCtx.ExpectNoError(err, "remove device status three")
 			require.Equal(tCtx, deviceStatus, claim.Status.Devices, "after removing device status three")
 
-			// This was created in a prior sub-test, so we have to
-			// clean up manually for a proper termination of the
-			// overall test.
+			// 该 claim 在之前的子测试中创建，需要手动清理，
+			// 否则整个测试无法干净收尾。
 			removeClaim(tCtx)
 		}
 	}

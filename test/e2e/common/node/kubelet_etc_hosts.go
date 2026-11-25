@@ -40,7 +40,7 @@ const (
 	etcHostsOriginalPathWindows = `C:\Windows\System32\drivers\etc\hosts-original`
 )
 
-// KubeletManagedHostConfig defines the types for running managed etc hosts test cases
+// KubeletManagedHostConfig 定义运行 kubelet 托管 /etc/hosts 测试用例所需的类型
 type KubeletManagedHostConfig struct {
 	hostNetworkPod *v1.Pod
 	pod            *v1.Pod
@@ -57,10 +57,10 @@ var _ = SIGDescribe("KubeletManagedEtcHosts", func() {
 	/*
 		Release: v1.9
 		Testname: Kubelet, managed etc hosts
-		Description: Create a Pod with containers with hostNetwork set to false, one of the containers mounts the /etc/hosts file form the host. Create a second Pod with hostNetwork set to true.
-			1. The Pod with hostNetwork=false MUST have /etc/hosts of containers managed by the Kubelet.
-			2. The Pod with hostNetwork=false but the container mounts /etc/hosts file from the host. The /etc/hosts file MUST not be managed by the Kubelet.
-			3. The Pod with hostNetwork=true , /etc/hosts file MUST not be managed by the Kubelet.
+		Description: 创建一个 hostNetwork=false 的 Pod，其中一个容器挂载 host 上的 /etc/hosts 文件。再创建一个 hostNetwork=true 的 Pod。
+			1. hostNetwork=false 的 Pod，其容器的 /etc/hosts MUST 由 kubelet 托管。
+			2. hostNetwork=false 但容器挂载了 host 的 /etc/hosts 时，该文件 MUST 不由 kubelet 托管。
+			3. hostNetwork=true 的 Pod，其 /etc/hosts 文件 MUST 不由 kubelet 托管。
 	*/
 	framework.ConformanceIt("should test kubelet managed /etc/hosts file", f.WithNodeConformance(), func(ctx context.Context) {
 		ginkgo.By("Setting up the test")
@@ -106,9 +106,8 @@ func assertManagedStatus(
 	config *KubeletManagedHostConfig, podName string, expectedIsManaged bool, name string) {
 	// TODO: workaround for https://github.com/kubernetes/kubernetes/issues/34256
 	//
-	// Retry until timeout for the contents of /etc/hosts to show
-	// up. Note: if /etc/hosts is properly mounted, then this will
-	// succeed immediately.
+	// 重试直到 /etc/hosts 内容出现或超时。若 /etc/hosts 挂载正常，
+	// 这里会立即成功。
 	const retryTimeout = 30 * time.Second
 
 	retryCount := 0
@@ -119,11 +118,11 @@ func assertManagedStatus(
 		etcHostsContent = config.getFileContents(podName, name, etcHostsPath)
 		etcHostsOriginalContent := config.getFileContents(podName, name, etcHostsOriginalPath)
 
-		// Make sure there is some content in both files
+		// 两个文件都有内容后再判断
 		if len(etcHostsContent) > 0 && len(etcHostsOriginalContent) > 0 {
-			// if the files match, kubernetes did not touch the file at all
-			// if the file has the header, kubernetes is not using host network
-			// and is constructing the file based on Pod IP
+			// 文件相同说明 kubernetes 完全没动过；
+			// 带 header 说明 kubernetes 未使用 host network，
+			// 而是根据 Pod IP 生成了文件
 			isManaged := strings.HasPrefix(etcHostsContent, etcHostsPartialContent) &&
 				etcHostsContent != etcHostsOriginalContent
 			if expectedIsManaged == isManaged {

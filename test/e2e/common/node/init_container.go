@@ -52,10 +52,10 @@ func recordEvents(events []watch.Event, f func(watch.Event) (bool, error)) func(
 	}
 }
 
-// invariantFunc is a func that checks for invariant.
+// invariantFunc 检查相邻事件之间是否满足不变量
 type invariantFunc func(older, newer runtime.Object) error
 
-// checkInvariants checks for invariant of the each events.
+// checkInvariants 检查事件序列中每一步是否满足不变量
 func checkInvariants(events []watch.Event, fns ...invariantFunc) error {
 	errs := sets.NewString()
 	for i := range events {
@@ -75,7 +75,7 @@ func checkInvariants(events []watch.Event, fns ...invariantFunc) error {
 	return nil
 }
 
-// containerInitInvariant checks for an init containers are initialized and invariant on both older and newer.
+// containerInitInvariant 检查 init container 的初始化状态在新旧对象间保持一致
 func containerInitInvariant(older, newer runtime.Object) error {
 	oldPod := older.(*v1.Pod)
 	newPod := newer.(*v1.Pod)
@@ -97,14 +97,13 @@ func containerInitInvariant(older, newer runtime.Object) error {
 	oldInit, _, _ := initialized(oldPod)
 	newInit, _, _ := initialized(newPod)
 	if oldInit && !newInit {
-		// TODO: we may in the future enable resetting initialized = false if the kubelet needs to restart it
-		// from scratch
+		// TODO: 未来 kubelet 需要从头重启时可允许把 initialized 重置为 false
 		return fmt.Errorf("pod cannot be initialized and then regress to not being initialized")
 	}
 	return nil
 }
 
-// initialized checks the state of all init containers in the pod.
+// initialized 检查 pod 中所有 init container 的状态
 func initialized(pod *v1.Pod) (ok bool, failed bool, err error) {
 	allInit := true
 	initFailed := false
@@ -170,10 +169,8 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 	/*
 		Release: v1.12
 		Testname: init-container-starts-app-restartnever-pod
-		Description: Ensure that all InitContainers are started
-		and all containers in pod are voluntarily terminated with exit status 0,
-		and the system is not going to restart any of these containers
-		when Pod has restart policy as RestartNever.
+		Description: 确保所有 InitContainer 都已启动，pod 中所有容器均以退出码 0 正常终止，
+		且当 Pod 的 restart policy 为 RestartNever 时，系统不会重启其中任何容器。
 	*/
 	framework.ConformanceIt("should invoke init containers on a RestartNever pod", func(ctx context.Context) {
 		ginkgo.By("creating the pod")
@@ -248,10 +245,8 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 	/*
 		Release: v1.12
 		Testname: init-container-starts-app-restartalways-pod
-		Description: Ensure that all InitContainers are started
-		and all containers in pod started
-		and at least one container is still running or is in the process of being restarted
-		when Pod has restart policy as RestartAlways.
+		Description: 确保所有 InitContainer 都已启动，pod 中所有容器均已启动，
+		且当 Pod 的 restart policy 为 RestartAlways 时，至少有一个容器仍在运行或正在重启。
 	*/
 	framework.ConformanceIt("should invoke init containers on a RestartAlways pod", func(ctx context.Context) {
 		ginkgo.By("creating the pod")
@@ -327,10 +322,8 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 	/*
 		Release: v1.12
 		Testname: init-container-fails-stops-app-restartalways-pod
-		Description: Ensure that app container is not started
-		when all InitContainers failed to start
-		and Pod has restarted for few occurrences
-		and pod has restart policy as RestartAlways.
+		Description: 当所有 InitContainer 均启动失败、Pod 已重启若干次，
+		且 restart policy 为 RestartAlways 时，确保 app 容器不会启动。
 	*/
 	framework.ConformanceIt("should not start app containers if init containers fail on a RestartAlways pod", func(ctx context.Context) {
 		ginkgo.By("creating the pod")
@@ -389,7 +382,7 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 			ctx,
 			startedPod.ResourceVersion,
 			w,
-			// check for the first container to fail at least once
+			// 等待第一个容器至少失败一次
 			func(evt watch.Event) (bool, error) {
 				switch t := evt.Object.(type) {
 				case *v1.Pod:
@@ -415,13 +408,13 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 					if status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
 						return false, fmt.Errorf("first init container should have exitCode != 0: %s", toDebugJSON(status))
 					}
-					// continue until we see an attempt to restart the pod
+					// 持续观察直到出现重启 pod 的迹象
 					return status.LastTerminationState.Terminated != nil, nil
 				default:
 					return false, fmt.Errorf("unexpected object: %#v", t)
 				}
 			},
-			// verify we get two restarts
+			// 确认发生了两次重启
 			func(evt watch.Event) (bool, error) {
 				switch t := evt.Object.(type) {
 				case *v1.Pod:
@@ -430,7 +423,7 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 						return false, nil
 					}
 					framework.Logf("init container has failed twice: %#v", t)
-					// TODO: more conditions
+					// TODO: 补充更多条件
 					return true, nil
 				default:
 					return false, fmt.Errorf("unexpected object: %#v", t)
@@ -453,8 +446,8 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 	/*
 		Release: v1.12
 		Testname: init-container-fails-stops-app-restartnever-pod
-		Description: Ensure that app container is not started
-		when at least one InitContainer fails to start and Pod has restart policy as RestartNever.
+		Description: 当至少一个 InitContainer 启动失败且 Pod 的 restart policy 为 RestartNever 时，
+		确保 app 容器不会启动。
 	*/
 	framework.ConformanceIt("should not start app containers and fail the pod if init containers fail on a RestartNever pod", func(ctx context.Context) {
 		ginkgo.By("creating the pod")
@@ -513,7 +506,7 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 		event, err := watchtools.Until(
 			ctx, startedPod.ResourceVersion, w,
 			recordEvents(events,
-				// check for the second container to fail at least once
+				// 等待第二个容器至少失败一次
 				func(evt watch.Event) (bool, error) {
 					switch t := evt.Object.(type) {
 					case *v1.Pod:
@@ -568,8 +561,7 @@ var _ = SIGDescribe("InitContainer", framework.WithNodeConformance(), func() {
 	})
 })
 
-// toDebugJSON converts an object to its JSON representation for debug logging
-// purposes instead of using a struct.
+// toDebugJSON 将对象转为 JSON 表示用于调试日志，避免直接打印 struct
 func toDebugJSON(obj interface{}) string {
 	m, err := json.Marshal(obj)
 	if err != nil {

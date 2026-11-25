@@ -58,7 +58,7 @@ const (
 	hugepages2MiCount  = 8
 )
 
-// Helper for makeMemoryManagerPod().
+// makeMemoryManagerPod 的辅助类型
 type memoryManagerCtnAttributes struct {
 	ctnName      string
 	cpus         string
@@ -66,7 +66,7 @@ type memoryManagerCtnAttributes struct {
 	hugepages2Mi string
 }
 
-// makeMemoryManagerContainers returns slice of containers with provided attributes and indicator of hugepages mount needed for those.
+// makeMemoryManagerContainers 按给定属性创建容器，并返回是否需要挂载 hugepages
 func makeMemoryManagerContainers(ctnCmd string, ctnAttributes []memoryManagerCtnAttributes) ([]v1.Container, bool) {
 	hugepagesMount := false
 	var containers []v1.Container
@@ -108,7 +108,7 @@ func makeMemoryManagerContainers(ctnCmd string, ctnAttributes []memoryManagerCtn
 	return containers, hugepagesMount
 }
 
-// makeMemoryMangerPod returns a pod with the provided ctnAttributes.
+// makeMemoryManagerPod 按给定的 ctnAttributes 创建 pod
 func makeMemoryManagerPod(podName string, initCtnAttributes, ctnAttributes []memoryManagerCtnAttributes) *v1.Pod {
 	hugepagesMount := false
 	memsetCmd := "grep Mems_allowed_list /proc/self/status | cut -f2"
@@ -197,7 +197,7 @@ func updateKubeletConfigWithMemoryManagerParams(initialCfg *kubeletconfig.Kubele
 
 	initialCfg.MemoryManagerPolicy = params.policy
 
-	// update system-reserved
+	// 更新 system-reserved
 	if initialCfg.SystemReserved == nil {
 		initialCfg.SystemReserved = map[string]string{}
 	}
@@ -205,7 +205,7 @@ func updateKubeletConfigWithMemoryManagerParams(initialCfg *kubeletconfig.Kubele
 		initialCfg.SystemReserved[resourceName] = value
 	}
 
-	// update kube-reserved
+	// 更新 kube-reserved
 	if initialCfg.KubeReserved == nil {
 		initialCfg.KubeReserved = map[string]string{}
 	}
@@ -213,7 +213,7 @@ func updateKubeletConfigWithMemoryManagerParams(initialCfg *kubeletconfig.Kubele
 		initialCfg.KubeReserved[resourceName] = value
 	}
 
-	// update hard eviction threshold
+	// 更新硬驱逐阈值
 	if initialCfg.EvictionHard == nil {
 		initialCfg.EvictionHard = map[string]string{}
 	}
@@ -221,7 +221,7 @@ func updateKubeletConfigWithMemoryManagerParams(initialCfg *kubeletconfig.Kubele
 		initialCfg.EvictionHard[resourceName] = value
 	}
 
-	// update reserved memory
+	// 更新预留内存
 	if initialCfg.ReservedMemory == nil {
 		initialCfg.ReservedMemory = []kubeletconfig.MemoryReservation{}
 	}
@@ -297,7 +297,7 @@ func verifyMemoryManagerAllocations(ctx context.Context, pod *v1.Pod, expectedGu
 		}
 
 		for _, containerResource := range podResource.Containers {
-			// find the container in the pod spec
+			// 在 pod spec 中查找对应容器
 			var containerSpec *v1.Container
 			for i := range pod.Spec.Containers {
 				if pod.Spec.Containers[i].Name == containerResource.Name {
@@ -306,7 +306,7 @@ func verifyMemoryManagerAllocations(ctx context.Context, pod *v1.Pod, expectedGu
 				}
 			}
 			if containerSpec == nil {
-				// could be an init container
+				// 可能是 init container
 				for i := range pod.Spec.InitContainers {
 					if pod.Spec.InitContainers[i].Name == containerResource.Name {
 						containerSpec = &pod.Spec.InitContainers[i]
@@ -331,9 +331,9 @@ func verifyMemoryManagerAllocations(ctx context.Context, pod *v1.Pod, expectedGu
 	}
 }
 
-// Serial because the test updates kubelet configuration.
+// 串行执行，因为测试会修改 kubelet 配置
 var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(), framework.WithSerial(), feature.MemoryManager, func() {
-	// TODO: add more complex tests that will include interaction between CPUManager, MemoryManager and TopologyManager
+	// TODO: 补充覆盖 CPUManager、MemoryManager 与 TopologyManager 相互作用的复杂用例
 	var (
 		allNUMANodes             []int
 		ctnParams, initCtnParams []memoryManagerCtnAttributes
@@ -377,7 +377,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				return fmt.Errorf("failed to convert quantity to int64")
 			}
 
-			// 512 Mb, the expected size in bytes
+			// 512 MiB 对应的字节数
 			expectedSize := int64(hugepagesCount * hugepagesSize2M * 1024)
 			if size != expectedSize {
 				return fmt.Errorf("the actual size %d is different from the expected one %d", size, expectedSize)
@@ -399,7 +399,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 			allNUMANodes = getAllNUMANodes()
 		}
 
-		// allocate hugepages
+		// 预分配 hugepages
 		if *is2MiHugepagesSupported {
 			ginkgo.By("Configuring hugepages")
 			gomega.Eventually(ctx, func() error {
@@ -408,9 +408,9 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 		}
 	})
 
-	// dynamically update the kubelet configuration
+	// 动态更新 kubelet 配置
 	ginkgo.JustBeforeEach(func(ctx context.Context) {
-		// allocate hugepages
+		// 预分配 hugepages
 		if *is2MiHugepagesSupported {
 			ginkgo.By("Waiting for hugepages resource to become available on the local node")
 			waitingForHugepages(ctx, hugepages2MiCount)
@@ -426,16 +426,16 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 	})
 
 	ginkgo.JustAfterEach(func(ctx context.Context) {
-		// delete the test pod
+		// 删除测试 pod
 		if testPod != nil && testPod.Name != "" {
 			e2epod.NewPodClient(f).DeleteSync(ctx, testPod.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 		}
 
-		// release hugepages
+		// 释放 hugepages
 		if *is2MiHugepagesSupported {
 			ginkgo.By("Releasing allocated hugepages")
 			gomega.Eventually(ctx, func() error {
-				// configure hugepages on the NUMA node 0 to avoid hugepages split across NUMA nodes
+				// 在 NUMA node 0 上配置 hugepages，避免跨 NUMA node 拆分
 				return configureHugePages(hugepagesSize2M, 0, ptr.To[int](0))
 			}).WithTimeout(90*time.Second).WithPolling(15*time.Second).ShouldNot(gomega.HaveOccurred(), "failed to release hugepages")
 		}
@@ -449,12 +449,12 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 		})
 
 		ginkgo.JustAfterEach(func() {
-			// reset containers attributes
+			// 重置容器参数
 			ctnParams = []memoryManagerCtnAttributes{}
 			initCtnParams = []memoryManagerCtnAttributes{}
 		})
 
-		// TODO: move the test to pod resource API test suite, see - https://github.com/kubernetes/kubernetes/issues/101945
+		// TODO: 将该用例移到 pod resource API 测试套件，参见 https://github.com/kubernetes/kubernetes/issues/101945
 		ginkgo.It("should report memory data during request to pod resources GetAllocatableResources", func(ctx context.Context) {
 			endpoint, err := util.LocalEndpoint(defaultPodResourcesPath, podresources.Socket)
 			framework.ExpectNoError(err)
@@ -498,7 +498,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 
 		ginkgo.When("guaranteed pod has init and app containers", func() {
 			ginkgo.BeforeEach(func() {
-				// override containers parameters
+				// 覆盖容器参数
 				ctnParams = []memoryManagerCtnAttributes{
 					{
 						ctnName: "memory-manager-static",
@@ -506,7 +506,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 						memory:  "128Mi",
 					},
 				}
-				// override init container parameters
+				// 覆盖 init container 参数
 				initCtnParams = []memoryManagerCtnAttributes{
 					{
 						ctnName: "init-memory-manager-static",
@@ -520,7 +520,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				ginkgo.By("Running the test pod")
 				testPod = e2epod.NewPodClient(f).CreateSync(ctx, testPod)
 
-				// it no taste to verify NUMA pinning when the node has only one NUMA node
+				// 单 NUMA node 上验证内存绑定意义不大
 				if !*isMultiNUMASupported {
 					framework.Logf("Skipping memory pinning verification on single-NUMA machine")
 					return
@@ -531,7 +531,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 
 		ginkgo.When("guaranteed pod has only app containers", func() {
 			ginkgo.BeforeEach(func() {
-				// override containers parameters
+				// 覆盖容器参数
 				ctnParams = []memoryManagerCtnAttributes{
 					{
 						ctnName: "memory-manager-static",
@@ -545,7 +545,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				ginkgo.By("Running the test pod")
 				testPod = e2epod.NewPodClient(f).CreateSync(ctx, testPod)
 
-				// it no taste to verify NUMA pinning when the node has only one NUMA node
+				// 单 NUMA node 上验证内存绑定意义不大
 				if !*isMultiNUMASupported {
 					framework.Logf("Skipping memory pinning verification on single-NUMA machine")
 					return
@@ -558,7 +558,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 			var testPod2 *v1.Pod
 
 			ginkgo.BeforeEach(func() {
-				// override containers parameters
+				// 覆盖容器参数
 				ctnParams = []memoryManagerCtnAttributes{
 					{
 						ctnName: "memory-manager-static",
@@ -579,7 +579,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				ginkgo.By("Running the test pod 2")
 				testPod2 = e2epod.NewPodClient(f).CreateSync(ctx, testPod2)
 
-				// it no taste to verify NUMA pinning when the node has only one NUMA node
+				// 单 NUMA node 上验证内存绑定意义不大
 				if !*isMultiNUMASupported {
 					framework.Logf("Skipping memory pinning verification on single-NUMA machine")
 					return
@@ -588,7 +588,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				verifyMemoryPinning(f, ctx, testPod2, []int{0})
 			})
 
-			// TODO: move the test to pod resource API test suite, see - https://github.com/kubernetes/kubernetes/issues/101945
+			// TODO: 将该用例移到 pod resource API 测试套件，参见 https://github.com/kubernetes/kubernetes/issues/101945
 			ginkgo.It("should report memory data for each guaranteed pod and container during request to pod resources List", func(ctx context.Context) {
 				ginkgo.By("Running the test pod and the test pod 2")
 				testPod = e2epod.NewPodClient(f).CreateSync(ctx, testPod)
@@ -631,17 +631,15 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 			})
 
 			ginkgo.JustAfterEach(func(ctx context.Context) {
-				// delete the test pod 2
+				// 删除测试 pod 2
 				if testPod2.Name != "" {
 					e2epod.NewPodClient(f).DeleteSync(ctx, testPod2.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 				}
 			})
 		})
 
-		// the test requires at least two NUMA nodes
-		// test on each NUMA node will start the pod that will consume almost all memory of the NUMA node except 256Mi
-		// after it will start an additional pod with the memory request that can not be satisfied by the single NUMA node
-		// free memory
+		// 该用例至少需要两个 NUMA node：先在每个 NUMA node 上启动 pod 消耗掉除 256Mi 外的几乎所有内存，
+		// 再启动一个内存请求无法由单个 NUMA node 空闲内存满足的 pod，验证其被拒绝
 		ginkgo.When("guaranteed pod memory request is bigger than free memory on each NUMA node", func() {
 			var workloadPods []*v1.Pod
 
@@ -664,7 +662,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				framework.ExpectNoError(err)
 
 				for _, memoryState := range stateData.MachineState {
-					// consume all memory except of 256Mi on each NUMA node via workload pods
+					// 用 workload pod 消耗每个 NUMA node 上除 256Mi 外的全部内存
 					workloadPodMemory := memoryState.MemoryMap[v1.ResourceMemory].Free - 256*1024*1024
 					memoryQuantity := resource.NewQuantity(int64(workloadPodMemory), resource.BinarySI)
 					workloadCtnAttrs := []memoryManagerCtnAttributes{
@@ -726,10 +724,10 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 			updateKubeletConfigWithMemoryManagerParams(initialConfig, &kubeParams)
 		})
 
-		// empty context to configure same container parameters for all tests
+		// 空 context，用于为所有用例配置相同的容器参数
 		ginkgo.Context("", func() {
 			ginkgo.BeforeEach(func() {
-				// override pod parameters
+				// 覆盖 pod 参数
 				ctnParams = []memoryManagerCtnAttributes{
 					{
 						ctnName: "memory-manager-none",
@@ -739,7 +737,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				}
 			})
 
-			// TODO: move the test to pod resource API test suite, see - https://github.com/kubernetes/kubernetes/issues/101945
+			// TODO: 将该用例移到 pod resource API 测试套件，参见 https://github.com/kubernetes/kubernetes/issues/101945
 			ginkgo.It("should not report any memory data during request to pod resources GetAllocatableResources", func(ctx context.Context) {
 				endpoint, err := util.LocalEndpoint(defaultPodResourcesPath, podresources.Socket)
 				framework.ExpectNoError(err)
@@ -754,7 +752,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 				gomega.Expect(resp.Memory).To(gomega.BeEmpty())
 			})
 
-			// TODO: move the test to pod resource API test suite, see - https://github.com/kubernetes/kubernetes/issues/101945
+			// TODO: 将该用例移到 pod resource API 测试套件，参见 https://github.com/kubernetes/kubernetes/issues/101945
 			ginkgo.It("should not report any memory data during request to pod resources List", func(ctx context.Context) {
 				testPod = e2epod.NewPodClient(f).CreateSync(ctx, testPod)
 
@@ -782,7 +780,7 @@ var _ = SIGDescribe("Memory Manager", "[LinuxOnly]", framework.WithDisruptive(),
 			ginkgo.It("should succeed to start the pod", func(ctx context.Context) {
 				testPod = e2epod.NewPodClient(f).CreateSync(ctx, testPod)
 
-				// it no taste to verify NUMA pinning when the node has only one NUMA node
+				// 单 NUMA node 上验证内存绑定意义不大
 				if !*isMultiNUMASupported {
 					framework.Logf("Skipping memory pinning verification on single-NUMA machine")
 					return
@@ -808,7 +806,7 @@ func configureMemoryManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguration,
 	}
 
 	newCfg.FeatureGates["PodLevelResources"] = kubeletArguments.enablePodLevelResources
-	// InPlacePodLevelResourcesVerticalScaling, PodLevelResourcesFixDefaulting and PodLevelResourcesFixKubeletQOSClass are only supported when PodLevelResources is enabled
+	// InPlacePodLevelResourcesVerticalScaling、PodLevelResourcesFixDefaulting 和 PodLevelResourcesFixKubeletQOSClass 仅在 PodLevelResources 启用时生效
 	if !kubeletArguments.enablePodLevelResources {
 		newCfg.FeatureGates["InPlacePodLevelResourcesVerticalScaling"] = kubeletArguments.enablePodLevelResources
 		newCfg.FeatureGates["PodLevelResourcesFixDefaulting"] = kubeletArguments.enablePodLevelResources
@@ -1333,10 +1331,8 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				}).WithTimeout(time.Minute).WithPolling(5 * time.Second).Should(gomega.Succeed())
 			})
 
-			// This test demonstrates that memory resources are correctly released and re-allocated.
-			// It runs two pods sequentially that each request a significant amount of memory from a single NUMA node.
-			// It verifies that the second pod is allocated the same NUMA node(s) as the first,
-			// proving that the memory manager freed the resources after the first pod completed.
+			// 依次运行两个各申请大量内存的 pod，验证第二个 pod 被分配到与第一个相同的 NUMA node，
+			// 以此证明第一个 pod 结束后 memory manager 正确释放并重新分配了内存资源
 			ginkgo.It("should release and re-allocate memory correctly for sequential guaranteed pods with guaranteed containers and empty shared pool", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 				currentCfg, err := getCurrentKubeletConfig(ctx)
 				framework.ExpectNoError(err)
@@ -1351,11 +1347,11 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				stateData, err := getMemoryManagerState()
 				framework.ExpectNoError(err)
 
-				// Find the first NUMA node with enough allocatable memory to run the test.
+				// 找到第一个可分配内存足够运行该用例的 NUMA node
 				var memRequest string
 				foundNuma := false
 				for _, numaState := range stateData.MachineState {
-					memToRequest := numaState.MemoryMap[v1.ResourceMemory].Allocatable - (1 * 1024 * 1024) // leave 1Mi buffer
+					memToRequest := numaState.MemoryMap[v1.ResourceMemory].Allocatable - (1 * 1024 * 1024) // 预留 1Mi 缓冲
 					memRequest = fmt.Sprintf("%d", memToRequest)
 					foundNuma = true
 					break
@@ -1376,7 +1372,7 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 					},
 				}
 
-				// A command that prints the allowed NUMA nodes and then exits.
+				// 打印允许的 NUMA node 后退出的命令
 				command := []string{"sh", "-c", "grep Mems_allowed_list /proc/self/status | cut -f2 && sleep 2"}
 
 				makeTestPod := func(name string) *v1.Pod {
@@ -1442,9 +1438,8 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				gomega.Expect(numaNodes2).To(gomega.Equal(numaNodes1), "The NUMA set for the second pod should be the same as the first pod's.")
 			})
 
-			// This test demonstrates that memory is correctly released from the pod shared
-			// pool, even when no containers are linked to it. This test demonstrates that
-			// the remove container logic cleans resources properly using the state.
+			// 验证即使没有容器关联 pod shared pool，其内存仍能被正确释放，
+			// 即 remove container 逻辑能依据 state 彻底清理资源
 			ginkgo.It("should release resources from the pod shared pool when no containers used it", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 				currentCfg, err := getCurrentKubeletConfig(ctx)
 				framework.ExpectNoError(err)
@@ -1459,11 +1454,11 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				stateData, err := getMemoryManagerState()
 				framework.ExpectNoError(err)
 
-				// Find the first NUMA node with enough allocatable memory to run the test.
+				// 找到第一个可分配内存足够运行该用例的 NUMA node
 				var memRequest string
 				foundNuma := false
 				for _, numaState := range stateData.MachineState {
-					memToRequest := numaState.MemoryMap[v1.ResourceMemory].Allocatable - (1 * 1024 * 1024) // leave 1Mi buffer
+					memToRequest := numaState.MemoryMap[v1.ResourceMemory].Allocatable - (1 * 1024 * 1024) // 预留 1Mi 缓冲
 					memRequest = fmt.Sprintf("%d", memToRequest)
 					foundNuma = true
 					break
@@ -1484,7 +1479,7 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 					},
 				}
 
-				// A command that prints the allowed NUMA nodes and then exits.
+				// 打印允许的 NUMA node 后退出的命令
 				command := []string{"sh", "-c", "grep Mems_allowed_list /proc/self/status | cut -f2 && sleep 2"}
 
 				makeTestPod := func(name string) *v1.Pod {
@@ -1550,9 +1545,8 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				framework.ExpectNoError(err, "second pod failed to complete")
 			})
 
-			// This test verifies that the pod shared pool memory is not removed until all containers
-			// in the pod have finished. It creates a pod with two containers sharing the pool,
-			// allows one to terminate, and then ensures that the memory remains reserved in the state.
+			// 验证 pod 中所有容器结束前不会释放 pod shared pool：两个容器共享 pool，
+			// 其中一个退出后，其内存在 state 中仍保持预留
 			ginkgo.It("should not release pod shared pool memory while at least one container is using it", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 				currentCfg, err := getCurrentKubeletConfig(ctx)
 				framework.ExpectNoError(err)
@@ -1567,14 +1561,14 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				stateData, err := getMemoryManagerState()
 				framework.ExpectNoError(err)
 
-				// Find a NUMA node with sufficient memory.
+				// 找到内存充足的 NUMA node
 				var memRequestString string
 				var memRequestValue int64
 				foundNuma := false
 				for _, numaState := range stateData.MachineState {
 					allocatable := numaState.MemoryMap[v1.ResourceMemory].Allocatable
 					if allocatable > 256*1024*1024 {
-						// Request half the allocatable memory to be safe, but substantial enough to verify reservation.
+						// 申请一半可分配内存，既留出安全余量，又足以验证预留行为
 						memRequestValue = int64(allocatable / 2)
 						memRequestString = fmt.Sprintf("%d", memRequestValue)
 						foundNuma = true
@@ -1617,7 +1611,7 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				ginkgo.By("waiting for short-container to terminate")
 				framework.ExpectNoError(e2epod.WaitForContainerTerminated(ctx, f.ClientSet, podA.Namespace, podA.Name, "short-container", 2*time.Minute))
 
-				// Identify the NUMA node used by Pod A
+				// 确认 Pod A 使用的 NUMA node
 				logs, err := e2epod.GetPodLogs(ctx, f.ClientSet, podA.Namespace, podA.Name, "long-container")
 				framework.ExpectNoError(err, "failed to get logs for long-container")
 				numaNodes, err := cpuset.Parse(strings.TrimSpace(logs))
@@ -1631,16 +1625,14 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				for _, nodeID := range numaNodes.List() {
 					nodeState := stateAfterExit.MachineState[nodeID]
 					reserved := nodeState.MemoryMap[v1.ResourceMemory].Reserved
-					// We verify that Reserved memory is at least what we requested, the pod shared pool should not be affected.
+					// 预留内存不应少于申请量，pod shared pool 不受容器退出影响
 					gomega.Expect(int64(reserved)).To(gomega.BeNumerically(">=", memRequestValue), "Reserved memory on node %d should be at least %d", nodeID, memRequestValue)
 				}
 			})
 
-			// This test verifies that resource accounting is performed at the pod level for memory.
-			// It creates two pods, each requesting half of the node's allocatable memory at the pod level
-			// but containing three non-guaranteed containers. If accounting were incorrect
-			// (e.g., summing container resources), the pods might be rejected.
-			// The test ensures both pods are admitted and run concurrently.
+			// 验证内存按 pod 级别计费：两个 pod 各在 pod 级别申请节点一半的可分配内存，
+			// 但包含多个 non-guaranteed container；若错误地按容器资源累加，pod 会被拒绝。
+			// 该用例确保两个 pod 都能被准入并并发运行
 			ginkgo.It("should admit multiple pods with pod-level resources and many non-guaranteed containers", ginkgo.Label("pod-scope"), func(ctx context.Context) {
 				currentCfg, err := getCurrentKubeletConfig(ctx)
 				framework.ExpectNoError(err)
@@ -1698,8 +1690,8 @@ var _ = SIGDescribe("Memory Manager Pod Level Resources", ginkgo.Ordered, ginkgo
 				framework.ExpectNoError(err, "failed to parse NUMA nodes for pod2")
 
 				ginkgo.By("verifying NUMA sets do not overlap if on different nodes")
-				// This is a soft check. If the machine has enough NUMA nodes, they should be different.
-				// If not, they might be the same, which is also valid. The main point is that both were admitted.
+				// 这只是宽松检查：NUMA node 充足时两个 pod 应落在不同 node 上，
+				// 不足时相同也合法，关键是两个 pod 都被准入
 				if numaNodes1.String() != numaNodes2.String() {
 					framework.Logf("Pods are on different NUMA nodes, verifying no overlap.")
 					gomega.Expect(numaNodes1.Intersection(numaNodes2).IsEmpty()).To(gomega.BeTrueBecause("NUMA sets of the two pods should not overlap"))

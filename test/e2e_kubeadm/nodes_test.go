@@ -35,16 +35,15 @@ const (
 	nodesCRISocketAnnotation                   = "kubeadm.alpha.kubernetes.io/cri-socket"
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm configures the nodes and system:nodes group as expected
+// 定义容器，容纳所有用于验证 kubeadm 是否按预期配置节点和 system:nodes 组的测试用例
 var _ = Describe("nodes", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s 测试框架实例
 	f := framework.NewDefaultFramework("nodes")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 该容器中的测试不会在集群里创建对象，
+	// 因此禁用 namespace 创建以加快执行速度
 	f.SkipNamespaceCreation = true
 
 	ginkgo.It("should have CRI annotation", func(ctx context.Context) {
@@ -61,8 +60,7 @@ var _ = Describe("nodes", func() {
 			}
 		}
 
-		// Checks that the nodes have the CRI socket annotation
-		// and that it is prefixed with a URL scheme
+		// 检查节点是否带有 CRI socket 注解，且注解值以 URL scheme 为前缀
 		for _, node := range nodes.Items {
 			if !nodeLocalCRISocketEnabled {
 				gomega.Expect(node.Annotations).To(gomega.HaveKey(nodesCRISocketAnnotation))
@@ -72,7 +70,7 @@ var _ = Describe("nodes", func() {
 	})
 
 	ginkgo.It("should be allowed to rotate CSR", func(ctx context.Context) {
-		// Nb. this is technically implemented a part of the bootstrap-token phase
+		// 注意：严格来说，这是 bootstrap-token 阶段的一部分
 		ExpectClusterRoleBindingWithSubjectAndRole(f.ClientSet,
 			nodesCertificateRotationClusterRoleBinding,
 			rbacv1.GroupKind, nodesGroup,

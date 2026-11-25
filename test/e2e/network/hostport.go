@@ -68,7 +68,7 @@ var _ = common.SIGDescribe("HostPort", func() {
 			localhost = "::1"
 			family = v1.IPv6Protocol
 		}
-		// Get a node where to schedule the pods
+		// 找一个节点来调度这些 pod
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 1)
 		framework.ExpectNoError(err)
 		if len(nodes.Items) == 0 {
@@ -87,7 +87,7 @@ var _ = common.SIGDescribe("HostPort", func() {
 		hostIP := ips[0]
 		port := int32(54323)
 
-		// Create pods with the same HostPort
+		// 创建使用相同 HostPort 的 pod
 		ginkgo.By(fmt.Sprintf("Trying to create a pod(pod1) with hostport %v and hostIP %s and expect scheduled", port, localhost))
 		createHostPortPodOnNode(ctx, f, "pod1", ns, localhost, port, v1.ProtocolTCP, randomNode.Name)
 
@@ -97,8 +97,8 @@ var _ = common.SIGDescribe("HostPort", func() {
 		ginkgo.By(fmt.Sprintf("Trying to create a third pod(pod3) with hostport %v, hostIP %s but use UDP protocol on the node which pod2 resides", port, hostIP))
 		createHostPortPodOnNode(ctx, f, "pod3", ns, hostIP, port, v1.ProtocolUDP, randomNode.Name)
 
-		// check that the port is being actually exposed to each container
-		// create a pod on the host network in the same node
+		// 检查端口是否真的暴露给了每个容器，
+		// 在同一节点上创建一个使用 host network 的 pod
 		hostExecPod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "e2e-host-exec",
@@ -117,34 +117,34 @@ var _ = common.SIGDescribe("HostPort", func() {
 		}
 		e2epod.NewPodClient(f).CreateSync(ctx, hostExecPod)
 
-		// use a 5 seconds timeout per connection
+		// 每次连接使用 5 秒超时
 		timeout := 5
-		// IPv6 doesn't NAT from localhost -> localhost, it doesn't have the route_localnet kernel hack, so we need to specify the source IP
+		// IPv6 不会对 localhost -> localhost 做 NAT，也没有 route_localnet 的内核技巧，因此需要显式指定源 IP
 		cmdPod1 := []string{"/bin/sh", "-c", fmt.Sprintf("curl -g --connect-timeout %v --interface %s http://%s/hostname", timeout, hostIP, net.JoinHostPort(localhost, strconv.Itoa(int(port))))}
 		cmdPod2 := []string{"/bin/sh", "-c", fmt.Sprintf("curl -g --connect-timeout %v http://%s/hostname", timeout, net.JoinHostPort(hostIP, strconv.Itoa(int(port))))}
 		cmdPod3 := []string{"/bin/sh", "-c", fmt.Sprintf("echo hostname | nc -u -w %v %s %d", timeout, hostIP, port)}
-		// try 5 times to connect to the exposed ports
+		// 尝试 5 次连接暴露的端口
 		for range 5 {
-			// check pod1
+			// 检查 pod1
 			ginkgo.By(fmt.Sprintf("checking connectivity from pod %s to serverIP: %s, port: %d", hostExecPod.Name, localhost, port))
 			hostname1, _, err := e2epod.ExecCommandInContainerWithFullOutput(f, hostExecPod.Name, "e2e-host-exec", cmdPod1...)
 			if err != nil {
 				framework.Logf("Can not connect from %s to pod(pod1) to serverIP: %s, port: %d", hostExecPod.Name, localhost, port)
 				continue
 			}
-			// check pod2
+			// 检查 pod2
 			ginkgo.By(fmt.Sprintf("checking connectivity from pod %s to serverIP: %s, port: %d", hostExecPod.Name, hostIP, port))
 			hostname2, _, err := e2epod.ExecCommandInContainerWithFullOutput(f, hostExecPod.Name, "e2e-host-exec", cmdPod2...)
 			if err != nil {
 				framework.Logf("Can not connect from %s to pod(pod2) to serverIP: %s, port: %d", hostExecPod.Name, hostIP, port)
 				continue
 			}
-			// the hostname returned has to be different because we are exposing the same port to two different pods
+			// 返回的 hostname 必须不同，因为同一个端口暴露给了两个不同的 pod
 			if hostname1 == hostname2 {
 				framework.Logf("pods must have different hostname: pod1 has hostname %s, pod2 has hostname %s", hostname1, hostname2)
 				continue
 			}
-			// check pod3
+			// 检查 pod3
 			ginkgo.By(fmt.Sprintf("checking connectivity from pod %s to serverIP: %s, port: %d UDP", hostExecPod.Name, hostIP, port))
 			hostname3, _, err := e2epod.ExecCommandInContainerWithFullOutput(f, hostExecPod.Name, "e2e-host-exec", cmdPod3...)
 			if err != nil {
@@ -165,8 +165,8 @@ var _ = common.SIGDescribe("HostPort", func() {
 	})
 })
 
-// create pod which using hostport on the specified node according to the nodeSelector
-// it starts an http server on the exposed port
+// 根据 nodeSelector 在指定节点上创建使用 hostPort 的 pod，
+// 并在暴露的端口上启动一个 HTTP server。
 func createHostPortPodOnNode(ctx context.Context, f *framework.Framework, podName, ns, hostIP string, port int32, protocol v1.Protocol, nodeName string) {
 
 	var netexecArgs []string

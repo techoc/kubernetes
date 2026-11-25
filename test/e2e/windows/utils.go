@@ -40,8 +40,7 @@ import (
 	semver "github.com/blang/semver/v4"
 )
 
-// waits for a deployment to be created and the desired replicas
-// are updated and available, and no old pods are running.
+// 等待 deployment 创建完成、期望副本数更新并可用，且不再有旧 pod 运行。
 func waitForDeployment(getDeploymentFunc func() (*appsv1.Deployment, error), interval, timeout time.Duration) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
 		deployment, err := getDeploymentFunc()
@@ -59,7 +58,7 @@ func waitForDeployment(getDeploymentFunc func() (*appsv1.Deployment, error), int
 	})
 }
 
-// gets the container runtime and version for a node
+// 获取节点的容器运行时及其版本
 func getNodeContainerRuntimeAndVersion(n v1.Node) (string, semver.Version, error) {
 	containerRuntimeVersionString := n.Status.NodeInfo.DeepCopy().ContainerRuntimeVersion
 	parts := strings.Split(containerRuntimeVersionString, "://")
@@ -105,17 +104,14 @@ func skipUnlessContainerdOneSevenOrGreater(ctx context.Context, f *framework.Fra
 	}
 }
 
-// windowsTestMemorySafetyBuffer is fixed headroom (in bytes) reserved on a
-// node above the sum of admitted pod requests + pod.Spec.Overhead. It absorbs
-// kubelet/cgroup memory-accounting drift that would otherwise produce flaky
-// OutOfmemory admission errors at the capacity boundary.
+// windowsTestMemorySafetyBuffer 是在节点上为已准入 pod 的 request 之和加
+// pod.Spec.Overhead 之外预留的固定余量（字节）。它用于吸收 kubelet/cgroup
+// 内存统计的偏差，否则在容量临界点会偶发 OutOfmemory 准入错误。
 //
-// 256 MiB is empirical, not derived from any kubelet constant: a comfortable
-// upper bound on the accounting jitter we observed in practice (single- to
-// low-tens of MiB) while remaining a small fraction (~5-10%) of typical
-// Windows test-node Allocatable. It can be tightened with measurements if it
-// ever becomes a constraint, or replaced with a fraction of Allocatable if
-// we ever need to run on nodes too small for a fixed buffer.
+// 256 MiB 是经验值，并非来自任何 kubelet 常量：它足以覆盖实测中观察到的
+// 统计抖动（几 MiB 到几十 MiB），同时只占典型 Windows 测试节点
+// Allocatable 的一小部分（约 5-10%）。若将来成为瓶颈，可通过测量收紧；
+// 若需要在小到无法使用固定余量的节点上运行，也可改用 Allocatable 的比例。
 const windowsTestMemorySafetyBuffer int64 = 256 * 1024 * 1024
 
 var (
@@ -124,15 +120,13 @@ var (
 	podOverheadMemoryErr   error
 )
 
-// detectPodOverheadMemory returns the per-pod memory overhead the cluster's
-// admission chain injects (Pod Overhead, KEP-688), in bytes, or 0 if no
-// overhead is applied. The error is non-nil only when the probe itself
-// could not be completed (e.g., the API server rejected the DryRun create);
-// a successful probe with no overhead returns (0, nil).
+// detectPodOverheadMemory 返回集群准入链路注入的单 pod 内存开销
+// （Pod Overhead，KEP-688，单位字节）；未注入开销时返回 0。
+// 仅当探测本身无法完成（例如 apiserver 拒绝 DryRun 创建）时 error 才非 nil；
+// 探测成功但没有开销时返回 (0, nil)。
 //
-// Result and error are cached for the lifetime of the test process — the
-// admission chain is traversed at most once per run. See
-// computePodOverheadMemory for probe details.
+// 结果与错误在测试进程生命周期内缓存，准入链路每次运行最多走一遍。
+// 探测细节见 computePodOverheadMemory。
 func detectPodOverheadMemory(ctx context.Context, c clientset.Interface, namespace string) (int64, error) {
 	podOverheadMemoryOnce.Do(func() {
 		podOverheadMemoryCache, podOverheadMemoryErr = computePodOverheadMemory(ctx, c, namespace)
@@ -140,17 +134,15 @@ func detectPodOverheadMemory(ctx context.Context, c clientset.Interface, namespa
 	return podOverheadMemoryCache, podOverheadMemoryErr
 }
 
-// computePodOverheadMemory performs a single DryRun pod create and inspects
-// the mutated result for pod.Spec.Overhead. DryRun (rather than reading
-// RuntimeClass directly) is needed because admission webhooks may inject
-// overhead conditionally on namespace, labels, or other request-scoped data
-// that is not visible from a static API read.
+// computePodOverheadMemory 执行一次 DryRun pod 创建，检查变更后的结果中
+// 是否带有 pod.Spec.Overhead。之所以用 DryRun 而不是直接读取 RuntimeClass，
+// 是因为准入 webhook 可能根据 namespace、标签或其他请求范围内的数据
+// 有条件地注入开销，而这些信息无法从静态 API 读取中获得。
 //
-// Assumes overhead is RuntimeClass-driven (or otherwise static per pod) and
-// does not vary with container count, image, or per-container requests; a
-// future webhook that scaled overhead by pod shape would invalidate the
-// capacity calculations in this package. Callers must use a namespace that
-// admits a pause-image pod (current callers set PodSecurity LevelPrivileged).
+// 这里假设开销由 RuntimeClass 决定（或对单个 pod 而言是静态的），不会随
+// 容器数量、镜像或单容器 request 变化；若将来有 webhook 按 pod 形态调整
+// 开销，本包中的容量计算将失效。调用方必须使用允许创建 pause 镜像 pod 的
+// namespace（当前调用方设置 PodSecurity LevelPrivileged）。
 func computePodOverheadMemory(ctx context.Context, c clientset.Interface, namespace string) (int64, error) {
 	probePod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -182,16 +174,13 @@ func computePodOverheadMemory(ctx context.Context, c clientset.Interface, namesp
 	return 0, nil
 }
 
-// waitForNodeMemoryToSettle polls until the node has at least neededBytes
-// of free admittable memory (allocatable - sum of admitted-pod requests),
-// or the 90s timeout elapses. Useful in [Serial] tests that follow one
-// which leaves large pods Terminating — their requests stay counted until
-// fully removed.
+// waitForNodeMemoryToSettle 轮询等待节点上至少有 neededBytes 的可准入空闲内存
+// （allocatable 减去已准入 pod 的 request 之和），或等满 90 秒超时。
+// 适用于 [Serial] 测试：前一个测试遗留的大 pod 处于 Terminating 时，
+// 其 request 会一直被计入，直到彻底删除。
 //
-// On timeout the function does not fail the test; it logs a tagged
-// "did NOT settle" message so a downstream OutOfmemory failure points
-// back at the cause (leftover pods) rather than appearing as an
-// unexplained scheduling error.
+// 超时不会让测试失败，而是打印带标记的消息，便于把后续的 OutOfmemory
+// 失败追溯到真正原因（残留 pod），而不是被误认为莫名其妙的调度错误。
 func waitForNodeMemoryToSettle(ctx context.Context, c clientset.Interface, nodeName string, neededBytes int64) {
 	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -216,11 +205,10 @@ func waitForNodeMemoryToSettle(ctx context.Context, c clientset.Interface, nodeN
 		nodeName, lastFree, neededBytes, pollErr)
 }
 
-// sumExistingPodMemoryReservation returns the total memory reservation
-// (sum of container memory requests + pod overhead) for all non-terminal pods
-// scheduled on the given node. Tests that compute "remaining schedulable
-// memory" (e.g., the Memory Limits test) must subtract this from
-// allocatable to leave room for DaemonSets and other system pods.
+// sumExistingPodMemoryReservation 返回调度到指定节点上所有非终态 pod 的
+// 内存预留总量（容器内存 request 之和 + pod overhead）。
+// 计算“剩余可调度内存”的测试（如 Memory Limits 测试）必须从 allocatable
+// 中减去它，为 DaemonSet 和其他系统 pod 留出空间。
 func sumExistingPodMemoryReservation(ctx context.Context, c clientset.Interface, nodeName string) int64 {
 	podList, err := c.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: "spec.nodeName=" + nodeName,

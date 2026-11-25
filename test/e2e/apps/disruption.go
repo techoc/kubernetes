@@ -55,9 +55,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// schedulingTimeout is longer specifically because sometimes we need to wait
-// awhile to guarantee that we've been patient waiting for something ordinary
-// to happen: a pod to get scheduled and move into Ready
+// schedulingTimeout 特意设得更长：调度 pod 并进入 Ready 本是平常事，
+// 但偶尔需要足够耐心等待它发生
 const (
 	bigClusterSize    = 7
 	schedulingTimeout = 10 * time.Minute
@@ -87,7 +86,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 		/*
 		   Release : v1.21
 		   Testname: PodDisruptionBudget: list and delete collection
-		   Description: PodDisruptionBudget API must support list and deletecollection operations.
+		   Description: PodDisruptionBudget API must 支持 list 和 deletecollection 操作。
 		*/
 		framework.ConformanceIt("should list and delete a collection of PodDisruptionBudgets", func(ctx context.Context) {
 			specialLabels := map[string]string{"foo_pdb": "bar_pdb"}
@@ -108,7 +107,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 	/*
 		Release : v1.21
 		Testname: PodDisruptionBudget: create, update, patch, and delete object
-		Description: PodDisruptionBudget API must support create, update, patch, and delete operations.
+		Description: PodDisruptionBudget API must 支持 create、update、patch 和 delete 操作。
 	*/
 	framework.ConformanceIt("should create a PodDisruptionBudget", func(ctx context.Context) {
 		ginkgo.By("creating the pdb")
@@ -142,8 +141,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 	/*
 	   Release : v1.21
 	   Testname: PodDisruptionBudget: Status updates
-	   Description: Disruption controller MUST update the PDB status with
-	   how many disruptions are allowed.
+	   Description: Disruption controller MUST 更新 PDB status，填入允许的中断数量。
 	*/
 	framework.ConformanceIt("should observe PodDisruptionBudget status updated", func(ctx context.Context) {
 		createPDBMinAvailableOrDie(ctx, cs, ns, defaultName, intstr.FromInt32(1), defaultLabels)
@@ -151,8 +149,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 		createPodsOrDie(ctx, cs, ns, 3)
 		waitForPodsOrDie(ctx, cs, ns, 3)
 
-		// Since disruptionAllowed starts out 0, if we see it ever become positive,
-		// that means the controller is working.
+		// disruptionAllowed 初始为 0，一旦变为正数就说明 controller 已开始工作
 		err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, func(ctx context.Context) (bool, error) {
 			pdb, err := cs.PolicyV1().PodDisruptionBudgets(ns).Get(ctx, defaultName, metav1.GetOptions{})
 			if err != nil {
@@ -166,14 +163,15 @@ var _ = SIGDescribe("DisruptionController", func() {
 	/*
 		Release : v1.21
 		Testname: PodDisruptionBudget: update and patch status
-		Description: PodDisruptionBudget API must support update and patch operations on status subresource.
+		Description: PodDisruptionBudget API must 支持对 status subresource 的 update 和 patch 操作。
 	*/
 	framework.ConformanceIt("should update/patch PodDisruptionBudget status", func(ctx context.Context) {
 		createPDBMinAvailableOrDie(ctx, cs, ns, defaultName, intstr.FromInt32(1), defaultLabels)
 
 		ginkgo.By("Updating PodDisruptionBudget status")
-		// PDB status can be updated by both PDB controller and the status API. The test selects `DisruptedPods` field to show immediate update via API.
-		// The pod has to exist, otherwise wil be removed by the controller. Other fields may not reflect the change from API.
+		// PDB status 可由 PDB controller 和 status API 同时更新。测试选用 `DisruptedPods` 字段，
+		// 以体现经 API 立即生效的更新。pod 必须存在，否则会被 controller 清除；
+		// 其他字段未必能反映来自 API 的改动。
 		createPodsOrDie(ctx, cs, ns, 1)
 		waitForPodsOrDie(ctx, cs, ns, 1)
 		pod, _ := locateRunningPod(ctx, cs, ns)
@@ -182,7 +180,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 			old.Status.DisruptedPods[pod.Name] = metav1.NewTime(time.Now())
 			return old
 		}, cs.PolicyV1().PodDisruptionBudgets(ns).UpdateStatus)
-		// fetch again to make sure the update from API was effective
+		// 再次获取，确认来自 API 的更新已生效
 		updated := getPDBStatusOrDie(ctx, dc, ns, defaultName)
 		gomega.Expect(updated.Status.DisruptedPods).To(gomega.HaveKey(pod.Name), "Expecting the DisruptedPods have %s", pod.Name)
 
@@ -198,7 +196,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 		gomega.Expect(patched.Status.DisruptedPods).To(gomega.BeEmpty(), "Expecting the PodDisruptionBudget's be empty")
 	})
 
-	// PDB shouldn't error out when there are unmanaged pods
+	// 存在 unmanaged pod 时 PDB 不应报错
 	ginkgo.It("should observe that the PodDisruptionBudget status is not updated for unmanaged pods",
 		func(ctx context.Context) {
 			createPDBMinAvailableOrDie(ctx, cs, ns, defaultName, intstr.FromInt32(1), defaultLabels)
@@ -206,7 +204,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 			createPodsOrDie(ctx, cs, ns, 3)
 			waitForPodsOrDie(ctx, cs, ns, 3)
 
-			// Since we allow unmanaged pods to be associated with a PDB, we should not see any error
+			// 既然允许 unmanaged pod 关联 PDB，就不应看到任何错误
 			gomega.Consistently(ctx, func(ctx context.Context) (bool, error) {
 				pdb, err := cs.PolicyV1().PodDisruptionBudgets(ns).Get(ctx, defaultName, metav1.GetOptions{})
 				if err != nil {
@@ -259,7 +257,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 			replicaSetSize: 10,
 			exclusive:      true,
 			shouldDeny:     true,
-			// This tests assumes that there is less than replicaSetSize nodes in the cluster.
+			// 该测试假设集群 node 数少于 replicaSetSize
 			skipForBigClusters: true,
 		},
 		{
@@ -277,7 +275,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 			replicaSetSize: 10,
 			exclusive:      true,
 			shouldDeny:     true,
-			// This tests assumes that there is less than replicaSetSize nodes in the cluster.
+			// 该测试假设集群 node 数少于 replicaSetSize
 			skipForBigClusters: true,
 		},
 	}
@@ -287,9 +285,8 @@ var _ = SIGDescribe("DisruptionController", func() {
 		if c.shouldDeny {
 			expectation = "should not allow an eviction"
 		}
-		// tests with exclusive set to true relies on HostPort to make sure
-		// only one pod from the replicaset is assigned to each node. This
-		// requires these tests to be run serially.
+		// exclusive=true 的测试依赖 HostPort 保证每个 node 上只分配该 replicaset 的一个 pod，
+		// 因此这些测试必须串行运行
 		args := []interface{}{fmt.Sprintf("evictions: %s => %s", c.description, expectation)}
 		if c.exclusive {
 			args = append(args, framework.WithSerial())
@@ -311,7 +308,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 				createPDBMaxUnavailableOrDie(ctx, cs, ns, defaultName, c.maxUnavailable, nil)
 			}
 
-			// Locate a running pod.
+			// 定位一个运行中的 pod
 			pod, err := locateRunningPod(ctx, cs, ns)
 			framework.ExpectNoError(err)
 
@@ -328,13 +325,11 @@ var _ = SIGDescribe("DisruptionController", func() {
 					return apierrors.HasStatusCause(err, policyv1.DisruptionBudgetCause)
 				}, "pod eviction should fail with DisruptionBudget cause"))
 			} else {
-				// Only wait for running pods in the "allow" case
-				// because one of shouldDeny cases relies on the
-				// replicaSet not fitting on the cluster.
+				// 仅在 "allow" 场景等待 pod 进入 Running：
+				// 某个 shouldDeny 场景依赖 replicaset 无法在集群中铺开来达成条件
 				waitForPodsOrDie(ctx, cs, ns, c.podCount+int(c.replicaSetSize))
 
-				// Since disruptionAllowed starts out false, if an eviction is ever allowed,
-				// that means the controller is working.
+				// disruptionAllowed 初始为 false，一旦允许驱逐就说明 controller 已开始工作
 				err = wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, func(ctx context.Context) (bool, error) {
 					err = cs.CoreV1().Pods(ns).EvictV1(ctx, e)
 					if err != nil {
@@ -350,7 +345,7 @@ var _ = SIGDescribe("DisruptionController", func() {
 	/*
 		Release : v1.22
 		Testname: PodDisruptionBudget: block an eviction until the PDB is updated to allow it
-		Description: Eviction API must block an eviction until the PDB is updated to allow it
+		Description: Eviction API must 阻塞驱逐，直到 PDB 更新为允许该驱逐
 	*/
 	framework.ConformanceIt("should block an eviction until the PDB is updated to allow it", func(ctx context.Context) {
 		ginkgo.By("Creating a pdb that targets all three pods in a test replica set")
@@ -516,9 +511,9 @@ var _ = SIGDescribe("DisruptionController", func() {
 						Namespace: ns,
 					},
 				}
-				// New pods can be created between the evictions by a replica set controller.
-				// This can affect the PDB, and pods could potentially be evicted that shouldn't be.
-				// To prevent this, there should always be a sufficient pod readiness delay (see initialDelaySeconds).
+				// 驱逐之间 replicaset controller 可能创建新 pod，进而影响 PDB，
+				// 导致本不该被驱逐的 pod 遭到驱逐。为避免这种情况，
+				// 应设置足够长的 pod readiness 延迟（见 initialDelaySeconds）。
 				err = cs.CoreV1().Pods(ns).EvictV1(ctx, e)
 				if err == nil {
 					evictedPods.Insert(pod.Name)
@@ -827,7 +822,7 @@ func unstructuredToPDB(obj *unstructured.Unstructured) (*policyv1.PodDisruptionB
 	return pdb, err
 }
 
-// isPDBErroring checks if the PDB is erroring on when there are unmanaged pods
+// isPDBErroring 判断存在 unmanaged pod 时 PDB 是否报错
 func isPDBErroring(pdb *policyv1.PodDisruptionBudget) bool {
 	hasFailed := false
 	for _, condition := range pdb.Status.Conditions {

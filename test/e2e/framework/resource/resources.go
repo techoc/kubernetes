@@ -39,12 +39,12 @@ import (
 )
 
 const (
-	// Number of objects that gc can delete in a second.
-	// GC issues 2 requestes for single delete.
+	// gc 每秒能删除的对象数量。
+	// 单次删除会发出 2 个请求。
 	gcThroughput = 10
 )
 
-// ScaleResource scales resource to the given size.
+// ScaleResource 将资源扩缩容到指定规模。
 func ScaleResource(
 	ctx context.Context,
 	clientset clientset.Interface,
@@ -65,7 +65,7 @@ func ScaleResource(
 	return WaitForControlledPodsRunning(ctx, clientset, ns, name, kind)
 }
 
-// DeleteResourceAndWaitForGC deletes only given resource and waits for GC to delete the pods.
+// DeleteResourceAndWaitForGC 只删除指定的资源，然后等待 GC 删除对应的 pod。
 func DeleteResourceAndWaitForGC(ctx context.Context, c clientset.Interface, kind schema.GroupKind, ns, name string) error {
 	ginkgo.By(fmt.Sprintf("deleting %v %s in namespace %s, will wait for the garbage collector to delete the pods", kind, name, ns))
 
@@ -84,8 +84,8 @@ func DeleteResourceAndWaitForGC(ctx context.Context, c clientset.Interface, kind
 	return deleteObjectAndWaitForGC(ctx, c, rtObject, deleteObject, ns, name, kind.String())
 }
 
-// DeleteCustomResourceAndWaitForGC deletes only given resource and waits for GC to delete the pods.
-// Enables to provide a custom resourece client, e.g. to fetch a CRD object.
+// DeleteCustomResourceAndWaitForGC 只删除指定的资源，然后等待 GC 删除对应的 pod。
+// 允许提供自定义的资源客户端，例如用于获取 CRD 对象。
 func DeleteCustomResourceAndWaitForGC(ctx context.Context, c clientset.Interface, dynamicClient dynamic.Interface, scaleClient scaleclient.ScalesGetter, gvr schema.GroupVersionResource, ns, name string) error {
 	ginkgo.By(fmt.Sprintf("deleting %v %s in namespace %s, will wait for the garbage collector to delete the pods", gvr, name, ns))
 	resourceClient := dynamicClient.Resource(gvr).Namespace(ns)
@@ -151,7 +151,7 @@ func deleteObjectAndWaitForGC(ctx context.Context, c clientset.Interface, rtObje
 		timeout = 10 * time.Minute
 	} else {
 		timeout = time.Duration(replicas/gcThroughput) * time.Second
-		// gcThroughput is pretty strict now, add a bit more to it
+		// 现有 gcThroughput 估值偏紧，再放宽一些
 		timeout = timeout + 3*time.Minute
 	}
 
@@ -162,9 +162,8 @@ func deleteObjectAndWaitForGC(ctx context.Context, c clientset.Interface, rtObje
 	terminatePodTime := time.Since(startTime) - deleteTime
 	framework.Logf("Terminating %v %s pods took: %v", description, name, terminatePodTime)
 
-	// In gce, at any point, small percentage of nodes can disappear for
-	// ~10 minutes due to hostError. 20 minutes should be long enough to
-	// restart VM in that case and delete the pod.
+	// 在 GCE 中，偶尔会有少量节点因 hostError 消失约 10 分钟。
+	// 20 分钟足够重启 VM 并删除 pod。
 	err = waitForPodsGone(ctx, ps, interval, 20*time.Minute)
 	if err != nil {
 		return fmt.Errorf("error while waiting for pods gone %s: %w", name, err)
@@ -172,7 +171,7 @@ func deleteObjectAndWaitForGC(ctx context.Context, c clientset.Interface, rtObje
 	return nil
 }
 
-// waitForPodsGone waits until there are no pods left in the PodStore.
+// waitForPodsGone 等待 PodStore 中不再有任何 pod。
 func waitForPodsGone(ctx context.Context, ps *testutils.PodStore, interval, timeout time.Duration) error {
 	var pods []*v1.Pod
 	err := wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
@@ -191,10 +190,9 @@ func waitForPodsGone(ctx context.Context, ps *testutils.PodStore, interval, time
 	return err
 }
 
-// waitForPodsInactive waits until there are no active pods left in the PodStore.
-// This is to make a fair comparison of deletion time between DeleteRCAndPods
-// and DeleteRCAndWaitForGC, because the RC controller decreases status.replicas
-// when the pod is inactvie.
+// waitForPodsInactive 等待 PodStore 中不再有活跃 pod。
+// 这样能公平比较 DeleteRCAndPods 和 DeleteRCAndWaitForGC 的删除耗时，
+// 因为 pod 变为非活跃时 RC controller 就会降低 status.replicas。
 func waitForPodsInactive(ctx context.Context, ps *testutils.PodStore, interval, timeout time.Duration) error {
 	var activePods []*v1.Pod
 	err := wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
@@ -215,7 +213,7 @@ func waitForPodsInactive(ctx context.Context, ps *testutils.PodStore, interval, 
 	return err
 }
 
-// WaitForControlledPodsRunning waits up to 10 minutes for pods to become Running.
+// WaitForControlledPodsRunning 最多等待 10 分钟，直到 pod 进入 Running 状态。
 func WaitForControlledPodsRunning(ctx context.Context, c clientset.Interface, ns, name string, kind schema.GroupKind) error {
 	rtObject, err := GetRuntimeObjectForKind(ctx, c, kind, ns, name)
 	if err != nil {
@@ -236,7 +234,7 @@ func WaitForControlledPodsRunning(ctx context.Context, c clientset.Interface, ns
 	return nil
 }
 
-// WaitForControlledPods waits up to podListTimeout for getting pods of the specified controller name and return them.
+// WaitForControlledPods 最多等待 podListTimeout，获取指定控制器名下的 pod 并返回。
 func WaitForControlledPods(ctx context.Context, c clientset.Interface, ns, name string, kind schema.GroupKind) (pods *v1.PodList, err error) {
 	rtObject, err := GetRuntimeObjectForKind(ctx, c, kind, ns, name)
 	if err != nil {

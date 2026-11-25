@@ -17,7 +17,7 @@ limitations under the License.
 package e2e
 
 import (
-	// ensure that cloud providers are loaded
+	// 确保 cloud provider 已加载
 	_ "k8s.io/kubernetes/test/e2e/framework/providers/aws"
 	_ "k8s.io/kubernetes/test/e2e/framework/providers/azure"
 	_ "k8s.io/kubernetes/test/e2e/framework/providers/gce"

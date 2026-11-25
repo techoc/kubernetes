@@ -36,27 +36,26 @@ import (
 
 const devicePath = "/mnt/volume1"
 
-// VolumeModeDowngradeTest tests that a VolumeMode Block PV is not mistakenly
-// formatted and mounted like a nil/Filesystem PV after a downgrade to a version
-// where the BlockVolume feature is disabled
+// VolumeModeDowngradeTest 验证降级到禁用 BlockVolume 特性的版本后，
+// VolumeMode 为 Block 的 PV 不会被误当作 nil/Filesystem PV 格式化和挂载。
 type VolumeModeDowngradeTest struct {
 	pv  *v1.PersistentVolume
 	pvc *v1.PersistentVolumeClaim
 	pod *v1.Pod
 }
 
-// Name returns the tracking name of the test.
+// Name 返回用于跟踪测试的名称。
 func (VolumeModeDowngradeTest) Name() string {
 	return "[sig-storage] volume-mode-downgrade"
 }
 
-// Skip returns true when this test can be skipped.
+// Skip 在可以跳过本测试时返回 true。
 func (t *VolumeModeDowngradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	if !framework.ProviderIs("openstack", "gce", "aws", "vsphere", "azure") {
 		return true
 	}
 
-	// Only run when downgrading from >= 1.13 to < 1.13
+	// 仅在从 >= 1.13 降级到 < 1.13 时运行
 	blockVersion := version.MustParseSemantic("1.13.0-alpha.0")
 	if upgCtx.Versions[0].Version.LessThan(blockVersion) {
 		return true
@@ -68,7 +67,7 @@ func (t *VolumeModeDowngradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	return false
 }
 
-// Setup creates a block pv and then verifies that a pod can consume it.  The pod writes data to the volume.
+// Setup 创建一个 block PV，然后验证 pod 可以使用它。pod 会向该卷写入数据。
 func (t *VolumeModeDowngradeTest) Setup(ctx context.Context, f *framework.Framework) {
 
 	var err error
@@ -112,8 +111,8 @@ func (t *VolumeModeDowngradeTest) Setup(ctx context.Context, f *framework.Framew
 	storageutils.CheckReadWriteToPath(ctx, f, t.pod, block, devicePath)
 }
 
-// Test waits for the downgrade to complete, and then verifies that a pod can no
-// longer consume the pv as it is not mapped nor mounted into the pod
+// Test 等待降级完成，然后验证 pod 无法再使用该 PV，
+// 因为它既没有被映射也没有被挂载到 pod 中。
 func (t *VolumeModeDowngradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	ginkgo.By("Waiting for downgrade to finish")
 	<-done
@@ -123,7 +122,7 @@ func (t *VolumeModeDowngradeTest) Test(ctx context.Context, f *framework.Framewo
 	framework.ExpectNoError(err)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *VolumeModeDowngradeTest) Teardown(ctx context.Context, f *framework.Framework) {
 	ginkgo.By("Deleting the pod")
 	framework.ExpectNoError(e2epod.DeletePodWithWait(ctx, f.ClientSet, t.pod))

@@ -52,13 +52,12 @@ import (
 )
 
 const (
-	// Try all the proxy tests this many times (to catch even rare flakes).
+	// 所有 proxy 测试都重复这么多次，以捕获偶发的 flake。
 	proxyAttempts = 20
-	// Only print this many characters of the response (to keep the logs
-	// legible).
+	// 只打印响应的前若干字符，避免日志过长难以阅读。
 	maxDisplayBodyLen = 100
 
-	// We have seen one of these calls take just over 15 seconds, so putting this at 30.
+	// 曾观察到其中某个调用耗时略超 15 秒，所以这里设为 30 秒。
 	proxyHTTPCallTimeout = 30 * time.Second
 
 	requestRetryPeriod  = 10 * time.Millisecond
@@ -81,14 +80,14 @@ var _ = common.SIGDescribe("Proxy", func() {
 		prefix := "/api/" + version
 
 		/*
-			Test for Proxy, logs port endpoint
-			Select any node in the cluster to invoke /proxy/nodes/<nodeip>:10250/logs endpoint. This endpoint MUST be reachable.
+			Proxy 测试：带端口的 logs endpoint
+			选择集群中的任意节点，调用 /proxy/nodes/<nodeip>:10250/logs endpoint。该 endpoint 必须可访问。
 		*/
 		ginkgo.It("should proxy logs on node with explicit kubelet port using proxy subresource", func(ctx context.Context) { nodeProxyTest(ctx, f, prefix+"/nodes/", ":10250/proxy/logs/") })
 
 		/*
-			Test for Proxy, logs endpoint
-			Select any node in the cluster to invoke /proxy/nodes/<nodeip>//logs endpoint. This endpoint MUST be reachable.
+			Proxy 测试：logs endpoint
+			选择集群中的任意节点，调用 /proxy/nodes/<nodeip>//logs endpoint。该 endpoint 必须可访问。
 		*/
 		ginkgo.It("should proxy logs on node using proxy subresource", func(ctx context.Context) { nodeProxyTest(ctx, f, prefix+"/nodes/", "/proxy/logs/") })
 
@@ -132,9 +131,8 @@ var _ = common.SIGDescribe("Proxy", func() {
 			}, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
 
-			// Make a deployment with a single pod. 'agnhost porter' is
-			// a simple server which serves the values of the
-			// environmental variables below.
+			// 创建一个只有一个 pod 的 deployment。'agnhost porter' 是一个简单 server，
+			// 会返回下面这些环境变量的值。
 			ginkgo.By("starting an echo server on multiple ports")
 
 			deploymentConfig := e2edeployment.NewDeployment(service.Name,
@@ -225,8 +223,7 @@ var _ = common.SIGDescribe("Proxy", func() {
 			err = e2eendpointslice.WaitForEndpointCount(ctx, f.ClientSet, f.Namespace.Name, service.Name, 1)
 			framework.ExpectNoError(err)
 
-			// table constructors
-			// Try proxying through the service and directly to through the pod.
+			// 构造 table：分别尝试通过 service 代理和直接通过 pod 代理。
 			subresourceServiceProxyURL := func(scheme, port string) string {
 				return prefix + "/namespaces/" + f.Namespace.Name + "/services/" + net.JoinSchemeNamePort(scheme, service.Name, port) + "/proxy"
 			}
@@ -234,7 +231,7 @@ var _ = common.SIGDescribe("Proxy", func() {
 				return prefix + "/namespaces/" + f.Namespace.Name + "/pods/" + net.JoinSchemeNamePort(scheme, pods[0].Name, port) + "/proxy"
 			}
 
-			// construct the table
+			// 构造 table
 			expectations := map[string]string{
 				subresourceServiceProxyURL("", "portname1") + "/":         "foo",
 				subresourceServiceProxyURL("http", "portname1") + "/":     "foo",
@@ -255,13 +252,12 @@ var _ = common.SIGDescribe("Proxy", func() {
 				subresourcePodProxyURL("https", "460") + "/": "tls baz",
 				subresourcePodProxyURL("https", "462") + "/": "tls qux",
 
-				// TODO: below entries don't work, but I believe we should make them work.
+				// TODO: 下面的条目目前不工作，但我们认为应该让它们工作。
 				// podPrefix + ":dest1": "foo",
 				// podPrefix + ":dest2": "bar",
 			}
 
-			// Poll until the apiserver is aware of the service and its endpoints,
-			// before starting the main part of the test.
+			// 在测试主体开始前，持续轮询直到 apiserver 感知到 service 及其 endpoints。
 			pollTestPath := subresourceServiceProxyURL("", "portname1") + "/"
 			pollTestBody := "foo"
 			err = wait.PollUntilContextTimeout(ctx, time.Second, e2eservice.ServiceEndpointsTimeout, true, func(ctx context.Context) (bool, error) {
@@ -289,7 +285,7 @@ var _ = common.SIGDescribe("Proxy", func() {
 				for path, val := range expectations {
 					go func(i int, path, val string) {
 						defer wg.Done()
-						// this runs the test case
+						// 运行测试用例
 						body, status, d, err := doProxy(ctx, f, path, i)
 
 						if err != nil {
@@ -397,8 +393,8 @@ var _ = common.SIGDescribe("Proxy", func() {
 				Transport: restTransport,
 			}
 
-			// All methods for Pod ProxyWithPath return 200
-			// For all methods other than HEAD the response body returns 'foo' with the received http method
+			// Pod ProxyWithPath 的所有方法均返回 200
+			// 除 HEAD 外，所有方法的响应体都会返回 'foo' 及收到的 HTTP 方法
 			httpVerbs := []string{"DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"}
 			for _, httpVerb := range httpVerbs {
 
@@ -409,8 +405,8 @@ var _ = common.SIGDescribe("Proxy", func() {
 				framework.ExpectNoError(err, "Service didn't start within time out period. %v", pollErr)
 			}
 
-			// All methods for Service ProxyWithPath return 200
-			// For all methods other than HEAD the response body returns 'foo' with the received http method
+			// Service ProxyWithPath 的所有方法均返回 200
+			// 除 HEAD 外，所有方法的响应体都会返回 'foo' 及收到的 HTTP 方法
 			for _, httpVerb := range httpVerbs {
 
 				urlString := strings.TrimRight(f.ClientConfig().Host, "/") + "/api/v1/namespaces/" + ns + "/services/test-service/proxy/some/path/with/" + httpVerb
@@ -491,8 +487,8 @@ var _ = common.SIGDescribe("Proxy", func() {
 				Transport: restTransport,
 			}
 
-			// All methods for Pod Proxy return 200
-			// The response body returns 'foo' with the received http method
+			// Pod Proxy 的所有方法均返回 200
+			// 响应体返回 'foo' 及收到的 HTTP 方法
 			httpVerbs := []string{"DELETE", "OPTIONS", "PATCH", "POST", "PUT"}
 			for _, httpVerb := range httpVerbs {
 
@@ -503,8 +499,8 @@ var _ = common.SIGDescribe("Proxy", func() {
 				framework.ExpectNoError(pollErr, "Pod didn't start within time out period. %v", pollErr)
 			}
 
-			// All methods for Service Proxy return 200
-			// The response body returns 'foo' with the received http method
+			// Service Proxy 的所有方法均返回 200
+			// 响应体返回 'foo' 及收到的 HTTP 方法
 			for _, httpVerb := range httpVerbs {
 
 				urlString := strings.TrimRight(f.ClientConfig().Host, "/") + "/api/v1/namespaces/" + ns + "/services/" + testSvcName + "/proxy?method=" + httpVerb
@@ -514,7 +510,7 @@ var _ = common.SIGDescribe("Proxy", func() {
 				framework.ExpectNoError(pollErr, "Service didn't start within time out period. %v", pollErr)
 			}
 
-			// Test that each method returns 301 for both pod and service endpoints
+			// 验证每种方法对 pod 和 service endpoint 都返回 301
 			redirectVerbs := []string{"GET", "HEAD"}
 			for _, redirectVerb := range redirectVerbs {
 				urlString := strings.TrimRight(f.ClientConfig().Host, "/") + "/api/v1/namespaces/" + ns + "/pods/agnhost/proxy?method=" + redirectVerb
@@ -540,9 +536,8 @@ func validateRedirectRequest(client *http.Client, redirectVerb string, urlString
 	gomega.Expect(resp.StatusCode).To(gomega.Equal(301), "The resp.StatusCode returned: %d", resp.StatusCode)
 }
 
-// validateProxyVerbRequest checks that a http request to a pod
-// or service was valid for any http verb. Requires agnhost image
-// with porter --json-response
+// validateProxyVerbRequest 检查对 pod 或 service 的 HTTP 请求在使用任意 HTTP 方法时是否有效。
+// 需要带有 porter --json-response 的 agnhost 镜像。
 func validateProxyVerbRequest(client *http.Client, urlString string, httpVerb string, msg string) func() (bool, error) {
 	return func() (bool, error) {
 		var err error
@@ -597,12 +592,10 @@ func validateProxyVerbRequest(client *http.Client, urlString string, httpVerb st
 }
 
 func doProxy(ctx context.Context, f *framework.Framework, path string, i int) (body []byte, statusCode int, d time.Duration, err error) {
-	// About all of the proxy accesses in this file:
-	// * AbsPath is used because it preserves the trailing '/'.
-	// * Do().Raw() is used (instead of DoRaw()) because it will turn an
-	//   error from apiserver proxy into an actual error, and there is no
-	//   chance of the things we are talking to being confused for an error
-	//   that apiserver would have emitted.
+	// 关于本文件中所有的 proxy 访问：
+	// * 使用 AbsPath 是因为它会保留结尾的 '/'。
+	// * 使用 Do().Raw()（而非 DoRaw()），因为它会把 apiserver proxy 返回的错误
+	//   转为真正的 error，而且不会让我们访问的对象被误认为是 apiserver 发出的错误。
 	start := time.Now()
 	body, err = f.ClientSet.CoreV1().RESTClient().Get().AbsPath(path).Do(ctx).StatusCode(&statusCode).Raw()
 	d = time.Since(start)
@@ -624,12 +617,11 @@ func truncate(b []byte, maxLen int) []byte {
 }
 
 func nodeProxyTest(ctx context.Context, f *framework.Framework, prefix, nodeDest string) {
-	// TODO: investigate why it doesn't work on master Node.
+	// TODO: 调查为什么它在 master Node 上不工作。
 	node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
 	framework.ExpectNoError(err)
 
-	// TODO: Change it to test whether all requests succeeded when requests
-	// not reaching Kubelet issue is debugged.
+	// TODO: 等请求到不了 kubelet 的问题排查清楚后，改为验证所有请求都成功。
 	serviceUnavailableErrors := 0
 	for i := range proxyAttempts {
 		_, status, d, err := doProxy(ctx, f, prefix+node.Name+nodeDest, i)

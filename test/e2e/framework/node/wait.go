@@ -40,14 +40,14 @@ var requiredPerNodePods = []*regexp.Regexp{
 	regexp.MustCompile(".*node-problem-detector.*"),
 }
 
-// WaitForReadyNodes waits up to timeout for cluster to has desired size and
-// there is no not-ready nodes in it. By cluster size we mean number of schedulable Nodes.
+// WaitForReadyNodes 在 timeout 内等待集群达到期望规模且没有 not-ready 节点。
+// 集群规模指可调度 Node 的数量。
 func WaitForReadyNodes(ctx context.Context, c clientset.Interface, size int, timeout time.Duration) error {
 	_, err := CheckReady(ctx, c, size, timeout)
 	return err
 }
 
-// WaitForTotalHealthy checks whether all registered nodes are ready and all required Pods are running on them.
+// WaitForTotalHealthy 检查所有已注册节点是否 ready，以及必需的系统 Pod 是否都在运行。
 func WaitForTotalHealthy(ctx context.Context, c clientset.Interface, timeout time.Duration) error {
 	logger := klog.FromContext(ctx)
 	framework.Logf("Waiting up to %v for all nodes to be ready", timeout)
@@ -56,7 +56,7 @@ func WaitForTotalHealthy(ctx context.Context, c clientset.Interface, timeout tim
 	var missingPodsPerNode map[string][]string
 	err := wait.PollUntilContextTimeout(ctx, poll, timeout, true, func(ctx context.Context) (bool, error) {
 		notReady = nil
-		// It should be OK to list unschedulable Nodes here.
+		// 这里把不可调度节点一并列出也没问题。
 		nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{ResourceVersion: "0"})
 		if err != nil {
 			return false, err
@@ -113,10 +113,9 @@ func WaitForTotalHealthy(ctx context.Context, c clientset.Interface, timeout tim
 
 }
 
-// WaitConditionToBe returns whether node "name's" condition state matches wantTrue
-// within timeout. If wantTrue is true, it will ensure the node condition status
-// is ConditionTrue; if it's false, it ensures the node condition is in any state
-// other than ConditionTrue (e.g. not true or unknown).
+// WaitConditionToBe 在 timeout 内检查节点 name 的 condition 状态是否匹配 wantTrue。
+// wantTrue 为 true 时要求 condition 状态为 ConditionTrue；为 false 时要求
+// 处于 ConditionTrue 以外的任意状态（例如 false 或 unknown）。
 func WaitConditionToBe(ctx context.Context, c clientset.Interface, name string, conditionType v1.NodeConditionType, wantTrue bool, timeout time.Duration) bool {
 	framework.Logf("Waiting up to %v for node %s condition %s to be %t", timeout, name, conditionType, wantTrue)
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(poll) {
@@ -134,14 +133,13 @@ func WaitConditionToBe(ctx context.Context, c clientset.Interface, name string, 
 	return false
 }
 
-// WaitForNodeToBeNotReady returns whether node name is not ready (i.e. the
-// readiness condition is anything but ready, e.g false or unknown) within
-// timeout.
+// WaitForNodeToBeNotReady 在 timeout 内检查节点 name 是否 not ready
+// （即 readiness condition 非 ready，例如 false 或 unknown）。
 func WaitForNodeToBeNotReady(ctx context.Context, c clientset.Interface, name string, timeout time.Duration) bool {
 	return WaitConditionToBe(ctx, c, name, v1.NodeReady, false, timeout)
 }
 
-// WaitForNodeToBeReady returns whether node name is ready within timeout.
+// WaitForNodeToBeReady 在 timeout 内检查节点 name 是否 ready。
 func WaitForNodeToBeReady(ctx context.Context, c clientset.Interface, name string, timeout time.Duration) bool {
 	return WaitConditionToBe(ctx, c, name, v1.NodeReady, true, timeout)
 }
@@ -164,11 +162,10 @@ func WaitForNodeSchedulable(ctx context.Context, c clientset.Interface, name str
 	return false
 }
 
-// WaitForNodeHeartbeatAfter waits up to timeout for node to send the next
-// heartbeat after the given timestamp.
+// WaitForNodeHeartbeatAfter 在 timeout 内等待节点发送时间晚于给定时间戳的下一次心跳。
 //
-// To ensure the node status is posted by a restarted kubelet process,
-// after should be retrieved by [GetNodeHeartbeatTime] while the kubelet is down.
+// 要确保节点状态确实由重启后的 kubelet 上报，应在 kubelet 停机期间
+// 通过 [GetNodeHeartbeatTime] 取到 after 这个值。
 func WaitForNodeHeartbeatAfter(ctx context.Context, c clientset.Interface, name string, after metav1.Time, timeout time.Duration) {
 	framework.Logf("Waiting up to %v for node %s to send a heartbeat after %v", timeout, name, after)
 	gomega.Eventually(ctx, func() (time.Time, error) {
@@ -181,8 +178,8 @@ func WaitForNodeHeartbeatAfter(ctx context.Context, c clientset.Interface, name 
 	}, timeout, poll).Should(gomega.BeTemporally(">", after.Time), "Node %s didn't send a heartbeat", name)
 }
 
-// CheckReady waits up to timeout for cluster to has desired size and
-// there is no not-ready nodes in it. By cluster size we mean number of schedulable Nodes.
+// CheckReady 在 timeout 内等待集群达到期望规模且没有 not-ready 节点。
+// 集群规模指可调度 Node 的数量。
 func CheckReady(ctx context.Context, c clientset.Interface, size int, timeout time.Duration) ([]v1.Node, error) {
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(sleepTime) {
 		nodes, err := waitListSchedulableNodes(ctx, c)
@@ -192,7 +189,7 @@ func CheckReady(ctx context.Context, c clientset.Interface, size int, timeout ti
 		}
 		numNodes := len(nodes.Items)
 
-		// Filter out not-ready nodes.
+		// 过滤掉 not-ready 的节点。
 		Filter(nodes, func(node v1.Node) bool {
 			nodeReady := IsConditionSetAsExpected(&node, v1.NodeReady, true)
 			networkReady := isConditionUnset(&node, v1.NodeNetworkUnavailable) || IsConditionSetAsExpected(&node, v1.NodeNetworkUnavailable, false)
@@ -209,7 +206,7 @@ func CheckReady(ctx context.Context, c clientset.Interface, size int, timeout ti
 	return nil, fmt.Errorf("timeout waiting %v for number of ready nodes to be %d", timeout, size)
 }
 
-// waitListSchedulableNodes is a wrapper around listing nodes supporting retries.
+// waitListSchedulableNodes 是列节点的包装，支持重试。
 func waitListSchedulableNodes(ctx context.Context, c clientset.Interface) (*v1.NodeList, error) {
 	var nodes *v1.NodeList
 	var err error
@@ -227,7 +224,7 @@ func waitListSchedulableNodes(ctx context.Context, c clientset.Interface) (*v1.N
 	return nodes, nil
 }
 
-// checkWaitListSchedulableNodes is a wrapper around listing nodes supporting retries.
+// checkWaitListSchedulableNodes 是列节点的包装，支持重试。
 func checkWaitListSchedulableNodes(ctx context.Context, c clientset.Interface) (*v1.NodeList, error) {
 	nodes, err := waitListSchedulableNodes(ctx, c)
 	if err != nil {
@@ -236,7 +233,8 @@ func checkWaitListSchedulableNodes(ctx context.Context, c clientset.Interface) (
 	return nodes, nil
 }
 
-// CheckReadyForTests returns a function which will return 'true' once the number of ready nodes is above the allowedNotReadyNodes threshold (i.e. to be used as a global gate for starting the tests).
+// CheckReadyForTests 返回一个函数：ready 节点数超过 allowedNotReadyNodes 允许的
+// 未就绪阈值时就返回 true（即用作启动测试的全局闸门）。
 func CheckReadyForTests(ctx context.Context, c clientset.Interface, nonblockingTaints string, allowedNotReadyNodes, largeClusterThreshold int) func(ctx context.Context) (bool, error) {
 	logger := klog.FromContext(ctx)
 	attempt := 0
@@ -248,7 +246,7 @@ func CheckReadyForTests(ctx context.Context, c clientset.Interface, nonblockingT
 		var nodesNotReadyYet []v1.Node
 		opts := metav1.ListOptions{
 			ResourceVersion: "0",
-			// remove uncordoned nodes from our calculation, TODO refactor if node v2 API removes that semantic.
+			// 统计时排除 uncordon 的节点；如果 node v2 API 去掉这个语义，TODO 重构这里。
 			FieldSelector: fields.Set{"spec.unschedulable": "false"}.AsSelector().String(),
 		}
 		allNodes, err := c.CoreV1().Nodes().List(ctx, opts)
@@ -265,15 +263,14 @@ func CheckReadyForTests(ctx context.Context, c clientset.Interface, nonblockingT
 				nodesNotReadyYet = append(nodesNotReadyYet, node)
 			}
 		}
-		// Framework allows for <TestContext.AllowedNotReadyNodes> nodes to be non-ready,
-		// to make it possible e.g. for incorrect deployment of some small percentage
-		// of nodes (which we allow in cluster validation). Some nodes that are not
-		// provisioned correctly at startup will never become ready (e.g. when something
-		// won't install correctly), so we can't expect them to be ready at any point.
+		// framework 允许 <TestContext.AllowedNotReadyNodes> 个节点未就绪，
+		// 以容忍少量节点部署异常（集群校验也允许这种情况）。有些节点在启动时
+		// 就没有正确初始化（例如某些组件没装好），永远不会 ready，
+		// 所以不能指望它们变成 ready。
 		//
-		// We log the *reason* why nodes are not schedulable, specifically, its usually the network not being available.
+		// 我们会记录节点不可调度的*原因*，通常是网络不可用。
 		if len(nodesNotReadyYet) > 0 {
-			// In large clusters, log them only every 10th pass.
+			// 大集群里每 10 次才打印一次。
 			if len(nodesNotReadyYet) < largeClusterThreshold || attempt%10 == 0 {
 				framework.Logf("Unschedulable nodes= %v, maximum value for starting tests= %v", len(nodesNotReadyYet), allowedNotReadyNodes)
 				for _, node := range nodesNotReadyYet {
@@ -297,14 +294,13 @@ func CheckReadyForTests(ctx context.Context, c clientset.Interface, nonblockingT
 	}
 }
 
-// readyForTests determines whether or not we should continue waiting for the nodes
-// to enter a testable state. By default this means it is schedulable, NodeReady, and untainted.
-// Nodes with taints nonblocking taints are permitted to have that taint and
-// also have their node.Spec.Unschedulable field ignored for the purposes of this function.
+// readyForTests 判断是否可以停止等待节点进入可测试状态。
+// 默认要求节点可调度、NodeReady 且没有 taint。带有 nonblocking taints 的节点
+// 允许保留这些 taint，并且在本函数中忽略其 node.Spec.Unschedulable 字段。
 func readyForTests(logger klog.Logger, node *v1.Node, nonblockingTaints string) bool {
 	if hasNonblockingTaint(node, nonblockingTaints) {
-		// If the node has one of the nonblockingTaints taints; just check that it is ready
-		// and don't require node.Spec.Unschedulable to be set either way.
+		// 节点带有 nonblockingTaints 中的 taint 时，只检查它是否 ready，
+		// 不要求 node.Spec.Unschedulable 取任何特定值。
 		if !IsNodeReady(logger, node) || !isNodeUntaintedWithNonblocking(logger, node, nonblockingTaints) {
 			return false
 		}

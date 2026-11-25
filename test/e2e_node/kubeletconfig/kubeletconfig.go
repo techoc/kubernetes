@@ -48,13 +48,12 @@ func getKubeletConfigFilePath() (string, error) {
 		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	// DO NOT name this file "kubelet" - you will overwrite the kubelet binary and be very confused :)
+	// 不要把这个文件命名为 "kubelet"，否则会覆盖 kubelet 二进制文件，然后困惑半天 :)
 	return filepath.Join(cwd, "kubelet-config"), nil
 }
 
-// GetCurrentKubeletConfigFromFile returns the current kubelet configuration under the filesystem.
-// This method should only run together with e2e node tests, meaning the test executor and the cluster nodes is the
-// same machine
+// GetCurrentKubeletConfigFromFile 返回文件系统上当前的 kubelet 配置。
+// 只能在 e2e node 测试中调用，因为测试执行器和集群节点必须是同一台机器
 func GetCurrentKubeletConfigFromFile() (*kubeletconfig.KubeletConfiguration, error) {
 	kubeletConfigFilePath, err := getKubeletConfigFilePath()
 	if err != nil {
@@ -85,9 +84,8 @@ func GetCurrentKubeletConfigFromFile() (*kubeletconfig.KubeletConfiguration, err
 	return &kubeletConfig, nil
 }
 
-// WriteKubeletConfigFile updates the kubelet configuration under the filesystem
-// This method should only run together with e2e node tests, meaning the test executor and the cluster nodes is the
-// same machine
+// WriteKubeletConfigFile 更新文件系统上的 kubelet 配置
+// 只能在 e2e node 测试中调用，因为测试执行器和集群节点必须是同一台机器
 func WriteKubeletConfigFile(kubeletConfig *kubeletconfig.KubeletConfiguration) error {
 	data, err := kubeletconfigcodec.EncodeKubeletConfig(kubeletConfig, kubeletconfigv1beta1.SchemeGroupVersion)
 	if err != nil {
@@ -106,7 +104,7 @@ func WriteKubeletConfigFile(kubeletConfig *kubeletconfig.KubeletConfiguration) e
 	return nil
 }
 
-// GetCurrentKubeletConfig fetches the current Kubelet Config for the given node
+// GetCurrentKubeletConfig 获取指定 node 当前的 kubelet 配置
 func GetCurrentKubeletConfig(ctx context.Context, nodeName, namespace string, useProxy bool, standaloneMode bool) (*kubeletconfig.KubeletConfiguration, error) {
 	resp := pollConfigz(ctx, 5*time.Minute, 5*time.Second, nodeName, namespace, useProxy, standaloneMode)
 	if len(resp) == 0 {
@@ -119,11 +117,11 @@ func GetCurrentKubeletConfig(ctx context.Context, nodeName, namespace string, us
 	return kubeCfg, nil
 }
 
-// returns a status 200 response from the /configz endpoint or nil if fails
+// 返回 /configz 端点状态码为 200 的响应，失败时返回 nil
 func pollConfigz(ctx context.Context, timeout time.Duration, pollInterval time.Duration, nodeName, namespace string, useProxy bool, standaloneMode bool) []byte {
 	endpoint := ""
 	if useProxy {
-		// start local proxy, so we can send graceful deletion over query string, rather than body parameter
+		// 启动本地 proxy，以便通过 query string 发送优雅删除请求，而不是 body 参数
 		framework.Logf("Opening proxy to cluster")
 		tk := e2ekubectl.NewTestKubeconfig(framework.TestContext.CertDir, framework.TestContext.Host, framework.TestContext.KubeConfig, framework.TestContext.KubeContext, framework.TestContext.KubectlPath, namespace)
 		cmd := tk.KubectlCmd("proxy", "-p", "0")
@@ -188,9 +186,9 @@ func pollConfigz(ctx context.Context, timeout time.Duration, pollInterval time.D
 	return respBody
 }
 
-// Decodes the http response from /configz and returns a kubeletconfig.KubeletConfiguration (internal type).
+// decodeConfigz 解析 /configz 的 HTTP 响应，返回 kubeletconfig.KubeletConfiguration（内部类型）。
 func decodeConfigz(respBody []byte) (*kubeletconfig.KubeletConfiguration, error) {
-	// This hack because /configz reports the following structure:
+	// 因为 /configz 返回如下结构，所以需要这个 hack：
 	// {"kubeletconfig": {the JSON representation of kubeletconfigv1beta1.KubeletConfiguration}}
 	type configzWrapper struct {
 		ComponentConfig kubeletconfigv1beta1.KubeletConfiguration `json:"kubeletconfig"`

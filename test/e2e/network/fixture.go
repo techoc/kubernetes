@@ -31,7 +31,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// TestFixture is a simple helper class to avoid too much boilerplate in tests
+// TestFixture 是一个简单的辅助结构，避免测试中写太多样板代码
 type TestFixture struct {
 	ServiceName string
 	Namespace   string
@@ -46,7 +46,7 @@ type TestFixture struct {
 	Image       string
 }
 
-// NewServerTest creates a new TestFixture for the tests.
+// NewServerTest 为测试创建一个新的 TestFixture。
 func NewServerTest(client clientset.Interface, namespace string, serviceName string) *TestFixture {
 	t := &TestFixture{}
 	t.Client = client
@@ -66,7 +66,7 @@ func NewServerTest(client clientset.Interface, namespace string, serviceName str
 	return t
 }
 
-// BuildServiceSpec builds default config for a service (which can then be changed)
+// BuildServiceSpec 构建 service 的默认配置（之后可以再修改）
 func (t *TestFixture) BuildServiceSpec() *v1.Service {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -92,7 +92,7 @@ func (t *TestFixture) CreateDeployment(deployment *appsv1.Deployment) (*appsv1.D
 	return deployment, err
 }
 
-// CreateService creates a service, and record it for cleanup
+// CreateService 创建 service，并记录它以便清理
 func (t *TestFixture) CreateService(service *v1.Service) (*v1.Service, error) {
 	result, err := t.Client.CoreV1().Services(t.Namespace).Create(context.TODO(), service, metav1.CreateOptions{})
 	if err == nil {
@@ -101,7 +101,7 @@ func (t *TestFixture) CreateService(service *v1.Service) (*v1.Service, error) {
 	return result, err
 }
 
-// DeleteService deletes a service, and remove it from the cleanup list
+// DeleteService 删除 service，并将其从清理列表中移除
 func (t *TestFixture) DeleteService(serviceName string) error {
 	err := t.Client.CoreV1().Services(t.Namespace).Delete(context.TODO(), serviceName, metav1.DeleteOptions{})
 	if err == nil {
@@ -110,7 +110,7 @@ func (t *TestFixture) DeleteService(serviceName string) error {
 	return err
 }
 
-// Cleanup cleans all ReplicationControllers and Services which this object holds.
+// Cleanup 清理该对象持有的所有 ReplicationController 和 Service。
 func (t *TestFixture) Cleanup() []error {
 	var errs []error
 	for deploymentName := range t.deployments {

@@ -22,13 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// PortsByPodUID is a map that maps pod UID to container ports.
+// PortsByPodUID 把 pod UID 映射到容器端口（仅端口号）。
 type PortsByPodUID map[types.UID][]int
 
-// FullPortsByPodUID is a map that maps pod UID to container ports.
+// FullPortsByPodUID 把 pod UID 映射到完整的容器端口信息。
 type FullPortsByPodUID map[types.UID][]v1.ContainerPort
 
-// GetContainerPortsByPodUID returns a PortsByPodUID map on the given endpoints.
+// GetContainerPortsByPodUID 从给定的 endpoints 生成 PortsByPodUID 映射。
 func GetContainerPortsByPodUID(eps []discoveryv1.EndpointSlice) PortsByPodUID {
 	m := PortsByPodUID{}
 
@@ -49,7 +49,7 @@ func GetContainerPortsByPodUID(eps []discoveryv1.EndpointSlice) PortsByPodUID {
 	return m
 }
 
-// GetFullContainerPortsByPodUID returns a PortsByPodUID map on the given endpoints.
+// GetFullContainerPortsByPodUID 从给定的 endpoints 生成 FullPortsByPodUID 映射。
 func GetFullContainerPortsByPodUID(eps []discoveryv1.EndpointSlice) FullPortsByPodUID {
 	m := FullPortsByPodUID{}
 

@@ -58,7 +58,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// getInternalIP returns node internal IP
+// getInternalIP 返回节点的内部 IP
 func getInternalIP(node *v1.Node) (string, error) {
 	for _, address := range node.Status.Addresses {
 		if address.Type == v1.NodeInternalIP && address.Address != "" {
@@ -68,10 +68,9 @@ func getInternalIP(node *v1.Node) (string, error) {
 	return "", fmt.Errorf("couldn't get the internal IP of host %s with addresses %v", node.Name, node.Status.Addresses)
 }
 
-// getSubnetPrefix returns a network prefix based on one of the workers
-// InternalIP adding a /16 or /64 mask depending on the IP family of the node.
-// IMPORTANT: These assumes a flat network assigned to the nodes, that is common
-// on cloud providers.
+// getSubnetPrefix 根据某个 worker 的 InternalIP 返回网络前缀，
+// 并根据节点的 IP 地址族添加 /16 或 /64 掩码。
+// 重要：这里假设节点处于扁平网络中，这在云 provider 上很常见。
 func getSubnetPrefix(ctx context.Context, c clientset.Interface) (*net.IPNet, error) {
 	node, err := getReadySchedulableWorkerNode(ctx, c)
 	if err != nil {
@@ -86,17 +85,17 @@ func getSubnetPrefix(ctx context.Context, c clientset.Interface) (*net.IPNet, er
 		return nil, fmt.Errorf("invalid IP address format: %s", internalIP)
 	}
 
-	// if IPv6 return a net.IPNet with IP = ip and mask /64
+	// IPv6 时返回 IP = ip、掩码为 /64 的 net.IPNet
 	ciderMask := net.CIDRMask(64, 128)
-	// if IPv4 return a net.IPNet with IP = ip and mask /16
+	// IPv4 时返回 IP = ip、掩码为 /16 的 net.IPNet
 	if netutils.IsIPv4(ip) {
 		ciderMask = net.CIDRMask(16, 32)
 	}
 	return &net.IPNet{IP: ip.Mask(ciderMask), Mask: ciderMask}, nil
 }
 
-// getReadySchedulableWorkerNode gets a single worker node which is available for
-// running pods on. If there are no such available nodes it will return an error.
+// getReadySchedulableWorkerNode 获取一个可运行 pod 的 worker 节点。
+// 如果没有这样的节点，则返回错误。
 func getReadySchedulableWorkerNode(ctx context.Context, c clientset.Interface) (*v1.Node, error) {
 	nodes, err := e2enode.GetReadySchedulableNodes(ctx, c)
 	if err != nil {
@@ -130,15 +129,15 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 	})
 
 	f.It("should be able to change the type and ports of a TCP service", f.WithSlow(), func(ctx context.Context) {
-		// FIXME: need a better platform-independent timeout
+		// FIXME: 需要一个更好的平台无关超时
 		loadBalancerLagTimeout := e2eservice.LoadBalancerLagTimeoutAWS
 		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 
-		// This test is more monolithic than we'd like because LB turnup can be
-		// very slow, so we lumped all the tests into one LB lifecycle.
+		// 这个测试比我们期望的更“单体”，因为 LB 启动可能非常慢，
+		// 所以我们把所有测试都合并到一个 LB 生命周期中。
 
 		serviceName := "mutability-test"
-		ns1 := f.Namespace.Name // LB1 in ns1 on TCP
+		ns1 := f.Namespace.Name // ns1 中基于 TCP 的 LB1
 		framework.Logf("namespace for TCP test: %s", ns1)
 
 		ginkgo.By("creating a TCP service " + serviceName + " with type=ClusterIP in namespace " + ns1)
@@ -157,7 +156,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		err = tcpJig.CheckServiceReachability(ctx, tcpService, execPod)
 		framework.ExpectNoError(err)
 
-		// Change the services to NodePort.
+		// 将 service 改为 NodePort。
 
 		ginkgo.By("changing the TCP service to type=NodePort")
 		tcpService, err = tcpJig.UpdateService(ctx, func(s *v1.Service) {
@@ -170,7 +169,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		err = tcpJig.CheckServiceReachability(ctx, tcpService, execPod)
 		framework.ExpectNoError(err)
 
-		// Change the services to LoadBalancer.
+		// 将 service 改为 LoadBalancer。
 		ginkgo.By("changing the TCP service to type=LoadBalancer")
 		_, err = tcpJig.UpdateService(ctx, func(s *v1.Service) {
 			s.Spec.Type = v1.ServiceTypeLoadBalancer
@@ -178,7 +177,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		framework.ExpectNoError(err)
 
 		ginkgo.By("waiting for the TCP service to have a load balancer")
-		// Wait for the load balancer to be created asynchronously
+		// 等待 load balancer 异步创建完成
 		tcpService, err = tcpJig.WaitForLoadBalancer(ctx, loadBalancerCreateTimeout)
 		framework.ExpectNoError(err)
 		if int(tcpService.Spec.Ports[0].NodePort) != tcpNodePort {
@@ -193,7 +192,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		ginkgo.By("hitting the TCP service's LoadBalancer")
 		e2eservice.TestReachableHTTP(ctx, tcpIngressIP, svcPort, loadBalancerLagTimeout)
 
-		// Change the services' node ports.
+		// 修改 service 的 node port。
 
 		ginkgo.By("changing the TCP service's NodePort")
 		tcpService, err = tcpJig.ChangeServiceNodePort(ctx, tcpNodePort)
@@ -211,7 +210,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		ginkgo.By("hitting the TCP service's LoadBalancer")
 		e2eservice.TestReachableHTTP(ctx, tcpIngressIP, svcPort, loadBalancerLagTimeout)
 
-		// Change the services' main ports.
+		// 修改 service 的主端口。
 
 		ginkgo.By("changing the TCP service's port")
 		tcpService, err = tcpJig.UpdateService(ctx, func(s *v1.Service) {
@@ -249,7 +248,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		ginkgo.By("hitting the TCP service's LoadBalancer")
 		e2eservice.TestReachableHTTP(ctx, tcpIngressIP, svcPort, loadBalancerLagTimeout)
 
-		// Change the services back to ClusterIP.
+		// 将 service 改回 ClusterIP。
 
 		ginkgo.By("changing TCP service back to type=ClusterIP")
 		tcpReadback, err := tcpJig.UpdateService(ctx, func(s *v1.Service) {
@@ -259,7 +258,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		if tcpReadback.Spec.Ports[0].NodePort != 0 {
 			framework.Fail("TCP Spec.Ports[0].NodePort was not cleared")
 		}
-		// Wait for the load balancer to be destroyed asynchronously
+		// 等待 load balancer 异步销毁完成
 		_, err = tcpJig.WaitForLoadBalancerDestroy(ctx, tcpIngressIP, svcPort, loadBalancerCreateTimeout)
 		framework.ExpectNoError(err)
 
@@ -268,16 +267,16 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 	})
 
 	f.It("should be able to change the type and ports of a UDP service", f.WithSlow(), func(ctx context.Context) {
-		// FIXME: some cloud providers do not support UDP LoadBalancers
+		// FIXME: 有些云 provider 不支持 UDP LoadBalancer
 
 		loadBalancerLagTimeout := e2eservice.LoadBalancerLagTimeoutDefault
 		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 
-		// This test is more monolithic than we'd like because LB turnup can be
-		// very slow, so we lumped all the tests into one LB lifecycle.
+		// 这个测试比我们期望的更“单体”，因为 LB 启动可能非常慢，
+		// 所以我们把所有测试都合并到一个 LB 生命周期中。
 
 		serviceName := "mutability-test"
-		ns2 := f.Namespace.Name // LB1 in ns2 on TCP
+		ns2 := f.Namespace.Name // ns2 中基于 TCP 的 LB1
 		framework.Logf("namespace for TCP test: %s", ns2)
 
 		ginkgo.By("creating a UDP service " + serviceName + " with type=ClusterIP in namespace " + ns2)
@@ -296,7 +295,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		err = udpJig.CheckServiceReachability(ctx, udpService, execPod)
 		framework.ExpectNoError(err)
 
-		// Change the services to NodePort.
+		// 将 service 改为 NodePort。
 
 		ginkgo.By("changing the UDP service to type=NodePort")
 		udpService, err = udpJig.UpdateService(ctx, func(s *v1.Service) {
@@ -309,7 +308,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		err = udpJig.CheckServiceReachability(ctx, udpService, execPod)
 		framework.ExpectNoError(err)
 
-		// Change the services to LoadBalancer.
+		// 将 service 改为 LoadBalancer。
 		ginkgo.By("changing the UDP service to type=LoadBalancer")
 		_, err = udpJig.UpdateService(ctx, func(s *v1.Service) {
 			s.Spec.Type = v1.ServiceTypeLoadBalancer
@@ -318,7 +317,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 
 		var udpIngressIP string
 		ginkgo.By("waiting for the UDP service to have a load balancer")
-		// 2nd one should be faster since they ran in parallel.
+		// 第二个应该更快，因为两者是并行运行的。
 		udpService, err = udpJig.WaitForLoadBalancer(ctx, loadBalancerCreateTimeout)
 		framework.ExpectNoError(err)
 		if int(udpService.Spec.Ports[0].NodePort) != udpNodePort {
@@ -333,7 +332,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		ginkgo.By("hitting the UDP service's LoadBalancer")
 		testReachableUDP(ctx, udpIngressIP, svcPort, loadBalancerLagTimeout)
 
-		// Change the services' node ports.
+		// 修改 service 的 node port。
 
 		ginkgo.By("changing the UDP service's NodePort")
 		udpService, err = udpJig.ChangeServiceNodePort(ctx, udpNodePort)
@@ -354,7 +353,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		ginkgo.By("hitting the UDP service's LoadBalancer")
 		testReachableUDP(ctx, udpIngressIP, svcPort, loadBalancerLagTimeout)
 
-		// Change the services' main ports.
+		// 修改 service 的主端口。
 		framework.Logf("Service Status: %v", udpService.Status)
 		ginkgo.By("changing the UDP service's port")
 		udpService, err = udpJig.UpdateService(ctx, func(s *v1.Service) {
@@ -401,7 +400,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		ginkgo.By("hitting the UDP service's LoadBalancer")
 		testReachableUDP(ctx, udpIngressIP, svcPort, loadBalancerCreateTimeout)
 
-		// Change the services back to ClusterIP.
+		// 将 service 改回 ClusterIP。
 
 		ginkgo.By("changing UDP service back to type=ClusterIP")
 		udpReadback, err := udpJig.UpdateService(ctx, func(s *v1.Service) {
@@ -411,7 +410,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		if udpReadback.Spec.Ports[0].NodePort != 0 {
 			framework.Fail("UDP Spec.Ports[0].NodePort was not cleared")
 		}
-		// Wait for the load balancer to be destroyed asynchronously
+		// 等待 load balancer 异步销毁完成
 		_, err = udpJig.WaitForLoadBalancerDestroy(ctx, udpIngressIP, svcPort, loadBalancerCreateTimeout)
 		framework.ExpectNoError(err)
 
@@ -420,7 +419,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 	})
 
 	f.It("should only allow access from service loadbalancer source ranges", f.WithSlow(), func(ctx context.Context) {
-		// FIXME: need a better platform-independent timeout
+		// FIXME: 需要一个更好的平台无关超时
 		loadBalancerLagTimeout := e2eservice.LoadBalancerLagTimeoutAWS
 		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 
@@ -438,7 +437,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 			e2eservice.WaitForServiceDeletedWithFinalizer(ctx, cs, svc.Namespace, svc.Name)
 		})
 
-		// Provisioning the LB may take some time, so create pods while we wait.
+		// 配置 LB 可能需要一些时间，所以趁等待时创建 pod。
 
 		ginkgo.By("creating a pod to be part of the service " + serviceName)
 		_, err = jig.Run(ctx, nil)
@@ -479,16 +478,14 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		e2eservice.TestReachableHTTP(ctx, ingress, svcPort, loadBalancerLagTimeout)
 
 		ginkgo.By("checking reachability from pods when LoadBalancerSourceRanges is unset")
-		// There are different propagation delay for the APIs for different nodes, so it tries
-		// a few times, despite previously it was confirmed that the Service was reachable.
+		// 不同节点的 API 传播延迟不同，因此即使之前已确认 Service 可访问，
+		// 这里仍会多试几次。
 		checkReachabilityFromPod(ctx, true, e2eservice.KubeProxyEndpointLagTimeout, namespace, acceptPod.Name, ingress)
 		checkReachabilityFromPod(ctx, true, e2eservice.KubeProxyEndpointLagTimeout, namespace, dropPod.Name, ingress)
 
-		// Create source ranges that allow acceptPod but not dropPod or
-		// cluster-external sources. We assume that the LBSR rules will either see
-		// the traffic unmasqueraded, or else see it masqueraded to the pod's node
-		// IP. (Since acceptPod and dropPod are on different nodes, this should
-		// still be unambiguous.)
+		// 构造 source range，使其允许 acceptPod，但不允许 dropPod 或集群外部来源。
+		// 我们假设 LBSR 规则看到的流量要么未经 masquerade，要么是 masquerade 成
+		// pod 所在节点的 IP。（由于 acceptPod 和 dropPod 位于不同节点，这仍然不会有歧义。）
 		sourceRanges := []string{
 			ipToSourceRange(acceptPod.Status.PodIP),
 			ipToSourceRange(acceptPod.Status.HostIP),
@@ -506,8 +503,8 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		checkReachabilityFromPod(ctx, true, e2eservice.KubeProxyEndpointLagTimeout, namespace, acceptPod.Name, ingress)
 		checkReachabilityFromPod(ctx, false, e2eservice.KubeProxyEndpointLagTimeout, namespace, dropPod.Name, ingress)
 
-		// "Allow all". (We should be able to set this dual-stack but maybe
-		// some IPv4-only cloud providers won't handle that.)
+		// “全部允许”。（我们本可以将其设为双栈，但某些仅支持 IPv4 的云 provider
+		// 可能无法处理。）
 		if netutils.IsIPv4String(acceptPod.Status.HostIP) {
 			sourceRanges = []string{"0.0.0.0/1", "128.0.0.0/1"}
 		} else {
@@ -527,7 +524,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		checkReachabilityFromPod(ctx, true, e2eservice.KubeProxyEndpointLagTimeout, namespace, acceptPod.Name, ingress)
 		checkReachabilityFromPod(ctx, true, e2eservice.KubeProxyEndpointLagTimeout, namespace, dropPod.Name, ingress)
 
-		// "Deny all, essentially"
+		// 实质上就是“全部拒绝”
 		if netutils.IsIPv4String(acceptPod.Status.HostIP) {
 			sourceRanges = []string{"255.0.0.0/32"}
 		} else {
@@ -561,9 +558,9 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		checkReachabilityFromPod(ctx, true, e2eservice.KubeProxyEndpointLagTimeout, namespace, dropPod.Name, ingress)
 	})
 
-	// [LinuxOnly]: Windows does not support session affinity.
+	// [LinuxOnly]: Windows 不支持 session affinity。
 	f.It("should have session affinity work for LoadBalancer service with Local traffic policy", f.WithSlow(), "[LinuxOnly]", func(ctx context.Context) {
-		// FIXME: some cloud providers do not support k8s-compatible affinity
+		// FIXME: 有些云 provider 不支持与 k8s 兼容的 affinity
 
 		svc := getServeHostnameService("affinity-lb-esipp")
 		svc.Spec.Type = v1.ServiceTypeLoadBalancer
@@ -571,9 +568,9 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		execAffinityTestForLBService(ctx, f, cs, svc)
 	})
 
-	// [LinuxOnly]: Windows does not support session affinity.
+	// [LinuxOnly]: Windows 不支持 session affinity。
 	f.It("should be able to switch session affinity for LoadBalancer service with Local traffic policy", f.WithSlow(), "[LinuxOnly]", func(ctx context.Context) {
-		// FIXME: some cloud providers do not support k8s-compatible affinity
+		// FIXME: 有些云 provider 不支持与 k8s 兼容的 affinity
 
 		svc := getServeHostnameService("affinity-lb-esipp-transition")
 		svc.Spec.Type = v1.ServiceTypeLoadBalancer
@@ -581,9 +578,9 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		execAffinityTestForLBServiceWithTransition(ctx, f, cs, svc)
 	})
 
-	// [LinuxOnly]: Windows does not support session affinity.
+	// [LinuxOnly]: Windows 不支持 session affinity。
 	f.It("should have session affinity work for LoadBalancer service with Cluster traffic policy", f.WithSlow(), "[LinuxOnly]", func(ctx context.Context) {
-		// FIXME: some cloud providers do not support k8s-compatible affinity
+		// FIXME: 有些云 provider 不支持与 k8s 兼容的 affinity
 
 		svc := getServeHostnameService("affinity-lb")
 		svc.Spec.Type = v1.ServiceTypeLoadBalancer
@@ -591,9 +588,9 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		execAffinityTestForLBService(ctx, f, cs, svc)
 	})
 
-	// [LinuxOnly]: Windows does not support session affinity.
+	// [LinuxOnly]: Windows 不支持 session affinity。
 	f.It("should be able to switch session affinity for LoadBalancer service with Cluster traffic policy", f.WithSlow(), "[LinuxOnly]", func(ctx context.Context) {
-		// FIXME: some cloud providers do not support k8s-compatible affinity
+		// FIXME: 有些云 provider 不支持与 k8s 兼容的 affinity
 
 		svc := getServeHostnameService("affinity-lb-transition")
 		svc.Spec.Type = v1.ServiceTypeLoadBalancer
@@ -601,12 +598,12 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		execAffinityTestForLBServiceWithTransition(ctx, f, cs, svc)
 	})
 
-	// This test verifies if service load balancer cleanup finalizer is properly
-	// handled during service lifecycle.
-	// 1. Create service with type=LoadBalancer. Finalizer should be added.
-	// 2. Update service to type=ClusterIP. Finalizer should be removed.
-	// 3. Update service to type=LoadBalancer. Finalizer should be added.
-	// 4. Delete service with type=LoadBalancer. Finalizer should be removed.
+	// 该测试验证 service load balancer 的清理 finalizer 在 service 生命周期中
+	// 是否得到正确处理。
+	// 1. 创建 type=LoadBalancer 的 service，应添加 finalizer。
+	// 2. 将 service 改为 type=ClusterIP，应移除 finalizer。
+	// 3. 再将 service 改回 type=LoadBalancer，应添加 finalizer。
+	// 4. 删除 type=LoadBalancer 的 service，应移除 finalizer。
 	f.It("should handle load balancer cleanup finalizer for service", f.WithSlow(), func(ctx context.Context) {
 		jig := e2eservice.NewTestJig(cs, f.Namespace.Name, "lb-finalizer")
 
@@ -640,15 +637,15 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 	})
 
 	f.It("should be able to create LoadBalancer Service without NodePort and change it", f.WithSlow(), func(ctx context.Context) {
-		// FIXME: need a better platform-independent timeout
+		// FIXME: 需要一个更好的平台无关超时
 		loadBalancerLagTimeout := e2eservice.LoadBalancerLagTimeoutAWS
 		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 
-		// This test is more monolithic than we'd like because LB turnup can be
-		// very slow, so we lumped all the tests into one LB lifecycle.
+		// 这个测试比我们期望的更“单体”，因为 LB 启动可能非常慢，
+		// 所以我们把所有测试都合并到一个 LB 生命周期中。
 
 		serviceName := "reallocate-nodeport-test"
-		ns1 := f.Namespace.Name // LB1 in ns1 on TCP
+		ns1 := f.Namespace.Name // ns1 中基于 TCP 的 LB1
 		framework.Logf("namespace for TCP test: %s", ns1)
 
 		ginkgo.By("creating a TCP service " + serviceName + " with type=ClusterIP in namespace " + ns1)
@@ -663,7 +660,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		_, err = tcpJig.Run(ctx, nil)
 		framework.ExpectNoError(err)
 
-		// Change the services to LoadBalancer.
+		// 将 service 改为 LoadBalancer。
 		ginkgo.By("changing the TCP service to type=LoadBalancer")
 		_, err = tcpJig.UpdateService(ctx, func(s *v1.Service) {
 			s.Spec.Type = v1.ServiceTypeLoadBalancer
@@ -672,7 +669,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		framework.ExpectNoError(err)
 
 		ginkgo.By("waiting for the TCP service to have a load balancer")
-		// Wait for the load balancer to be created asynchronously
+		// 等待 load balancer 异步创建完成
 		tcpService, err = tcpJig.WaitForLoadBalancer(ctx, loadBalancerCreateTimeout)
 		framework.ExpectNoError(err)
 		if int(tcpService.Spec.Ports[0].NodePort) != 0 {
@@ -684,7 +681,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		ginkgo.By("hitting the TCP service's LoadBalancer")
 		e2eservice.TestReachableHTTP(ctx, tcpIngressIP, svcPort, loadBalancerLagTimeout)
 
-		// Change the services' node ports.
+		// 修改 service 的 node port。
 
 		ginkgo.By("adding a TCP service's NodePort")
 		tcpService, err = tcpJig.UpdateService(ctx, func(s *v1.Service) {
@@ -705,7 +702,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 	})
 
 	ginkgo.It("should be able to preserve UDP traffic when server pod cycles for a LoadBalancer service on different nodes", func(ctx context.Context) {
-		// FIXME: some cloud providers do not support UDP LoadBalancers
+		// FIXME: 有些云 provider 不支持 UDP LoadBalancer
 
 		ns := f.Namespace.Name
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -719,7 +716,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		loadBalancerLagTimeout := e2eservice.LoadBalancerLagTimeoutDefault
 		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 
-		// Create a LoadBalancer service
+		// 创建 LoadBalancer service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=LoadBalancer in " + ns)
 		_, err = udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -738,7 +735,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		udpIngressIP = e2eservice.GetIngressPoint(&udpService.Status.LoadBalancer.Ingress[0])
 		framework.Logf("UDP load balancer: %s", udpIngressIP)
 
-		// keep hitting the loadbalancer to check it fails over to the second pod
+		// 持续访问 loadbalancer，检查流量是否切换到第二个 pod
 		ginkgo.By("hitting the UDP service's LoadBalancer with same source port")
 		stopCh := make(chan struct{})
 		defer close(stopCh)
@@ -784,7 +781,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 			}
 		}()
 
-		// Add a backend pod to the service in one node
+		// 在某个节点上为 service 添加后端 pod
 		ginkgo.By("creating a backend pod " + podBackend1 + " for the service " + serviceName)
 		serverPod1 := e2epod.NewAgnhostPod(ns, podBackend1, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod1.Labels = udpJig.Labels
@@ -796,11 +793,9 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend1)
 		framework.ExpectNoError(err)
 
-		// Note that the fact that EndpointSlice object already exists, does NOT mean
-		// that iptables (or whatever else is used) was already programmed.
-		// Additionally take into account that UDP conntract entries timeout is
-		// 30 seconds by default.
-		// Based on the above check if the pod receives the traffic.
+		// 注意，EndpointSlice 对象已存在并不代表 iptables（或其他机制）
+		// 已经完成配置。还要考虑到 UDP conntrack 条目默认 30 秒才超时。
+		// 基于上述因素检查 pod 是否收到流量。
 		ginkgo.By("checking client pod connected to the backend 1 on Node " + nodes.Items[0].Name)
 		if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, loadBalancerLagTimeout, true, func(ctx context.Context) (bool, error) {
 			mu.Lock()
@@ -810,7 +805,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 			framework.Failf("Failed to connect to backend 1")
 		}
 
-		// Create a second pod
+		// 创建第二个 pod
 		ginkgo.By("creating a second backend pod " + podBackend2 + " for the service " + serviceName)
 		serverPod2 := e2epod.NewAgnhostPod(ns, podBackend2, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod2.Labels = udpJig.Labels
@@ -819,15 +814,15 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		e2epod.SetNodeSelection(&serverPod2.Spec, nodeSelection)
 		e2epod.NewPodClient(f).CreateSync(ctx, serverPod2)
 
-		// and delete the first pod
+		// 并删除第一个 pod
 		framework.Logf("Cleaning up %s pod", podBackend1)
 		e2epod.NewPodClient(f).DeleteSync(ctx, podBackend1, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend2)
 		framework.ExpectNoError(err)
 
-		// Check that the second pod keeps receiving traffic
-		// UDP conntrack entries timeout is 30 sec by default
+		// 检查第二个 pod 是否持续收到流量
+		// UDP conntrack 条目默认 30 秒超时
 		ginkgo.By("checking client pod connected to the backend 2 on Node " + nodes.Items[1].Name)
 		if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, loadBalancerLagTimeout, true, func(ctx context.Context) (bool, error) {
 			mu.Lock()
@@ -839,7 +834,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 	})
 
 	ginkgo.It("should be able to preserve UDP traffic when server pod cycles for a LoadBalancer service on the same nodes", func(ctx context.Context) {
-		// FIXME: some cloud providers do not support UDP LoadBalancers
+		// FIXME: 有些云 provider 不支持 UDP LoadBalancer
 
 		ns := f.Namespace.Name
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 1)
@@ -853,7 +848,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		loadBalancerLagTimeout := e2eservice.LoadBalancerLagTimeoutDefault
 		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 
-		// Create a LoadBalancer service
+		// 创建 LoadBalancer service
 		udpJig := e2eservice.NewTestJig(cs, ns, serviceName)
 		ginkgo.By("creating a UDP service " + serviceName + " with type=LoadBalancer in " + ns)
 		_, err = udpJig.CreateUDPService(ctx, func(svc *v1.Service) {
@@ -872,7 +867,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		udpIngressIP = e2eservice.GetIngressPoint(&udpService.Status.LoadBalancer.Ingress[0])
 		framework.Logf("UDP load balancer: %s", udpIngressIP)
 
-		// keep hitting the loadbalancer to check it fails over to the second pod
+		// 持续访问 loadbalancer，检查流量是否切换到第二个 pod
 		ginkgo.By("hitting the UDP service's LoadBalancer with same source port")
 		stopCh := make(chan struct{})
 		defer close(stopCh)
@@ -918,7 +913,7 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 			}
 		}()
 
-		// Add a backend pod to the service in one node
+		// 在某个节点上为 service 添加后端 pod
 		ginkgo.By("creating a backend pod " + podBackend1 + " for the service " + serviceName)
 		serverPod1 := e2epod.NewAgnhostPod(ns, podBackend1, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod1.Labels = udpJig.Labels
@@ -930,11 +925,9 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend1)
 		framework.ExpectNoError(err)
 
-		// Note that the fact that EndpointSlice object already exists, does NOT mean
-		// that iptables (or whatever else is used) was already programmed.
-		// Additionally take into account that UDP conntract entries timeout is
-		// 30 seconds by default.
-		// Based on the above check if the pod receives the traffic.
+		// 注意，EndpointSlice 对象已存在并不代表 iptables（或其他机制）
+		// 已经完成配置。还要考虑到 UDP conntrack 条目默认 30 秒才超时。
+		// 基于上述因素检查 pod 是否收到流量。
 		ginkgo.By("checking client pod connected to the backend 1 on Node " + nodes.Items[0].Name)
 		if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, loadBalancerLagTimeout, true, func(ctx context.Context) (bool, error) {
 			mu.Lock()
@@ -944,24 +937,24 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 			framework.Failf("Failed to connect to backend 1")
 		}
 
-		// Create a second pod on the same node
+		// 在同一节点上创建第二个 pod
 		ginkgo.By("creating a second backend pod " + podBackend2 + " for the service " + serviceName)
 		serverPod2 := e2epod.NewAgnhostPod(ns, podBackend2, nil, nil, nil, "netexec", fmt.Sprintf("--udp-port=%d", 80))
 		serverPod2.Labels = udpJig.Labels
 		serverPod2.Spec.Hostname = "hostname2"
-		// use the same node as previous pod
+		// 与前一个 pod 使用同一节点
 		e2epod.SetNodeSelection(&serverPod2.Spec, nodeSelection)
 		e2epod.NewPodClient(f).CreateSync(ctx, serverPod2)
 
-		// and delete the first pod
+		// 并删除第一个 pod
 		framework.Logf("Cleaning up %s pod", podBackend1)
 		e2epod.NewPodClient(f).DeleteSync(ctx, podBackend1, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 
 		err = e2eendpointslice.WaitForEndpointPods(ctx, cs, ns, serviceName, podBackend2)
 		framework.ExpectNoError(err)
 
-		// Check that the second pod keeps receiving traffic
-		// UDP conntrack entries timeout is 30 sec by default
+		// 检查第二个 pod 是否持续收到流量
+		// UDP conntrack 条目默认 30 秒超时
 		ginkgo.By("checking client pod connected to the backend 2 on Node " + nodes.Items[0].Name)
 		if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, loadBalancerLagTimeout, true, func(ctx context.Context) (bool, error) {
 			mu.Lock()
@@ -973,18 +966,18 @@ var _ = common.SIGDescribe("LoadBalancers", feature.LoadBalancer, func() {
 	})
 
 	f.It("should not have connectivity disruption during rolling update with externalTrafficPolicy=Cluster", f.WithSlow(), func(ctx context.Context) {
-		// We start with a low but reasonable threshold to analyze the results.
-		// The goal is to achieve 99% minimum success rate.
-		// TODO: We should do incremental steps toward the goal.
+		// 我们从一个较低但合理的阈值开始分析结果。
+		// 目标是达到至少 99% 的成功率。
+		// TODO: 应该逐步提高阈值，向目标逼近。
 		minSuccessRate := 0.95
 
 		testRollingUpdateLBConnectivityDisruption(ctx, f, v1.ServiceExternalTrafficPolicyTypeCluster, minSuccessRate)
 	})
 
 	f.It("should not have connectivity disruption during rolling update with externalTrafficPolicy=Local", f.WithSlow(), func(ctx context.Context) {
-		// We start with a low but reasonable threshold to analyze the results.
-		// The goal is to achieve 99% minimum success rate.
-		// TODO: We should do incremental steps toward the goal.
+		// 我们从一个较低但合理的阈值开始分析结果。
+		// 目标是达到至少 99% 的成功率。
+		// TODO: 应该逐步提高阈值，向目标逼近。
 		minSuccessRate := 0.95
 
 		testRollingUpdateLBConnectivityDisruption(ctx, f, v1.ServiceExternalTrafficPolicyTypeLocal, minSuccessRate)
@@ -1028,7 +1021,7 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 			err = jig.ChangeServiceType(ctx, v1.ServiceTypeClusterIP, loadBalancerCreateTimeout)
 			framework.ExpectNoError(err)
 
-			// Make sure we didn't leak the health check node port.
+			// 确保没有泄漏 health check node port。
 			const threshold = 2
 			nodes, err := getEndpointNodesWithInternalIP(ctx, jig)
 			framework.ExpectNoError(err)
@@ -1047,8 +1040,7 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 			framework.ExpectNoError(err)
 		})
 
-		// FIXME: figure out the actual expected semantics for
-		// "ExternalTrafficPolicy: Local" + "IPMode: Proxy".
+		// FIXME: 需要弄清 "ExternalTrafficPolicy: Local" + "IPMode: Proxy" 的实际预期语义。
 		// https://issues.k8s.io/123714
 		ingress := &svc.Status.LoadBalancer.Ingress[0]
 		if ingress.IP == "" || (ingress.IPMode != nil && *ingress.IPMode == v1.LoadBalancerIPModeProxy) {
@@ -1064,7 +1056,7 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 		framework.Logf("ClientIP detected by target pod using VIP:SvcPort is %s", clientIPPort)
 
 		ginkgo.By("checking if Source IP is preserved")
-		// The clientIPPort returned from GetHTTPContent is in this format: x.x.x.x:port or [xx:xx:xx::x]:port
+		// GetHTTPContent 返回的 clientIPPort 格式为 x.x.x.x:port 或 [xx:xx:xx::x]:port
 		host, _, err := net.SplitHostPort(clientIPPort)
 		if err != nil {
 			framework.Failf("SplitHostPort returned unexpected error: %q", clientIPPort)
@@ -1087,8 +1079,7 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 
 		svc, err := jig.CreateOnlyLocalLoadBalancerService(ctx, loadBalancerCreateTimeout, false,
 			func(svc *v1.Service) {
-				// Change service port to avoid collision with opened hostPorts
-				// in other tests that run in parallel.
+				// 修改 service 端口，避免与并行运行的其他测试中打开的 hostPort 冲突。
 				if len(svc.Spec.Ports) != 0 {
 					svc.Spec.Ports[0].TargetPort = intstr.FromInt32(svc.Spec.Ports[0].Port)
 					svc.Spec.Ports[0].Port = 8081
@@ -1108,7 +1099,7 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 			framework.Failf("Service HealthCheck NodePort was not allocated")
 		}
 
-		// Collect InternalIP addresses for each node.
+		// 收集每个节点的 InternalIP 地址。
 		nodeInternalIPs := make(map[string]sets.Set[string], len(nodes.Items))
 		for i := range nodes.Items {
 			node := &nodes.Items[i]
@@ -1144,12 +1135,12 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 			err = jig.WaitForEndpointOnNode(ctx, endpointNodeName)
 			framework.ExpectNoError(err)
 
-			// HealthCheck should pass only on the node where num(endpoints) > 0
-			// All other nodes should fail the healthcheck on the service healthCheckNodePort
+			// 只有 num(endpoints) > 0 的节点才应通过 HealthCheck，
+			// 其他所有节点在该 service 的 healthCheckNodePort 上都应检查失败
 			for n, internalIPs := range nodeInternalIPs {
 				for ip := range internalIPs {
-					// Make sure the loadbalancer picked up the health check change.
-					// Confirm traffic can reach backend through LB before checking healthcheck nodeport.
+					// 确保 loadbalancer 已感知到 health check 的变更。
+					// 在检查 healthcheck nodeport 前，先确认流量能通过 LB 到达后端。
 					e2eservice.TestReachableHTTP(ctx, ingressIP, svcTCPPort, e2eservice.KubeProxyLagTimeout)
 					expectedSuccess := n == endpointNodeName
 					port := strconv.Itoa(healthCheckNodePort)
@@ -1172,7 +1163,7 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 	})
 
 	ginkgo.It("should target all nodes with endpoints", func(ctx context.Context) {
-		// FIXME: need a better platform-independent timeout
+		// FIXME: 需要一个更好的平台无关超时
 		loadBalancerCreateTimeout := e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs)
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -1209,10 +1200,8 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 		framework.ExpectNoError(err, "creating the endpoints")
 
 		ginkgo.By("ensuring that the LoadBalancer targets all endpoints")
-		// We're not testing affinity here, but we can use checkAffinity(false) to
-		// test that affinity *isn't* enabled, which is to say, that connecting to
-		// ingress:svcPort multiple times eventually reaches at least 2 different
-		// endpoints.
+		// 这里不是要测试 affinity，但可以用 checkAffinity(false) 来验证 affinity *未* 启用，
+		// 即多次连接 ingress:svcPort 最终至少要到达 2 个不同的 endpoint。
 		if !checkAffinity(ctx, cs, nil, ingress, svcPort, false) {
 			framework.Failf("Load balancer connections only reached one of the two endpoints")
 		}
@@ -1233,8 +1222,7 @@ var _ = common.SIGDescribe("LoadBalancers ExternalTrafficPolicy: Local", feature
 			framework.ExpectNoError(err)
 		})
 
-		// FIXME: figure out the actual expected semantics for
-		// "ExternalTrafficPolicy: Local" + "IPMode: Proxy".
+		// FIXME: 需要弄清 "ExternalTrafficPolicy: Local" + "IPMode: Proxy" 的实际预期语义。
 		// https://issues.k8s.io/123714
 		ingress := &svc.Status.LoadBalancer.Ingress[0]
 		if ingress.IP == "" || (ingress.IPMode != nil && *ingress.IPMode == v1.LoadBalancerIPModeProxy) {
@@ -1343,7 +1331,7 @@ func testRollingUpdateLBConnectivityDisruption(ctx context.Context, f *framework
 	svcPort := int(service.Spec.Ports[0].Port)
 
 	ginkgo.By("Hitting the DaemonSet's pods through the service's load balancer")
-	// FIXME: need a better platform-independent timeout
+	// FIXME: 需要一个更好的平台无关超时
 	timeout := e2eservice.LoadBalancerLagTimeoutAWS
 	e2eservice.TestReachableHTTP(ctx, lbNameOrAddress, svcPort, timeout)
 
@@ -1440,7 +1428,7 @@ func testRollingUpdateLBConnectivityDisruption(ctx context.Context, f *framework
 		})
 		framework.ExpectNoError(err, "error waiting for daemon pods to be ready")
 
-		// assert that the HTTP requests success rate is above the acceptable threshold after this rolling update
+		// 断言此次滚动更新后 HTTP 请求成功率高于可接受阈值
 		currentTotalRequests := totalRequests.Load()
 		currentNetworkErrors := networkErrors.Load()
 		currentHTTPErrors := httpErrors.Load()
@@ -1463,6 +1451,6 @@ func testRollingUpdateLBConnectivityDisruption(ctx context.Context, f *framework
 		previousHTTPErrors = currentHTTPErrors
 	}
 
-	// assert that the load balancer address is still reachable after the rolling updates are finished
+	// 断言滚动更新完成后 load balancer 地址仍可访问
 	e2eservice.TestReachableHTTP(ctx, lbNameOrAddress, svcPort, timeout)
 }

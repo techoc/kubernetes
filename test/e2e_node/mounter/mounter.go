@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package mounter is a temporary copy of cluster/gce/gci/mounter for use in the e2e_node
-// binary itself. If that approach works out, cluster/gce/gci/mounter will be refactored
-// to remove the code duplication, otherwise this will get reverted.
+// Package mounter 是 cluster/gce/gci/mounter 的临时副本，供 e2e_node 二进制自身使用。
+// 若该方案可行，将重构 cluster/gce/gci/mounter 以消除代码重复；否则此副本会被回退。
 package mounter
 
 import (
@@ -28,7 +27,7 @@ import (
 )
 
 const (
-	// Location of the mount file to use
+	// 要使用的 mount 文件路径
 	chrootCmd        = "chroot"
 	mountCmd         = "mount"
 	mountBin         = "/bin/mount"
@@ -64,7 +63,7 @@ func Main() {
 	}
 }
 
-// mountInChroot runs mount within chroot with the passing root directory
+// mountInChroot 在指定的根目录上通过 chroot 执行 mount
 func mountInChroot(rootfsPath string, args []string) error {
 	if _, err := os.Stat(rootfsPath); os.IsNotExist(err) {
 		return fmt.Errorf("path <%s> does not exist", rootfsPath)
@@ -76,17 +75,17 @@ func mountInChroot(rootfsPath string, args []string) error {
 	}
 
 	if !strings.EqualFold(string(output), nfsRPCBindErrMsg) {
-		// Mount failed but not because of RPC bind error
+		// mount 失败，但并非由 RPC bind 错误导致
 		return fmt.Errorf("mount failed: %v\nMounting command: %s\nMounting arguments: %v\nOutput: %s", err, chrootCmd, args, string(output))
 	}
 
-	// Mount failed because it is NFS V3 and we need to run rpcBind
+	// mount 失败是因为 NFS V3 需要先运行 rpcbind
 	output, err = exec.Command(chrootCmd, rootfsPath, rpcBindCmd, "-w").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mount issued for NFS V3 but unable to run rpcbind:\n Output: %s\n Error: %v", string(output), err)
 	}
 
-	// Rpcbind is running, try mounting again
+	// rpcbind 已启动，重新尝试 mount
 	output, err = exec.Command(chrootCmd, args...).CombinedOutput()
 
 	if err != nil {

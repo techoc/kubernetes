@@ -44,7 +44,7 @@ var (
 	arc Archive
 )
 
-// Archive contains path info in the archive.
+// Archive 保存归档文件的路径信息
 type Archive struct {
 	sync.Once
 	path string
@@ -60,10 +60,9 @@ func getFlag(name string) string {
 }
 
 func RunRemoteTestSuite(testSuite TestSuite) {
-	// Listen for SIGINT and ignore the first one. In case SIGINT is sent to this
-	// process and all its children, we ignore it here, while our children ssh connections
-	// are stopped. This allows us to gather artifacts and print out test state before
-	// being killed.
+	// 监听 SIGINT 并忽略第一次信号。如果 SIGINT 同时发给本进程及其所有子进程，
+	// 这里先忽略，让子进程的 ssh 连接停止，从而在进程被杀掉之前
+	// 收集产物并打印测试状态
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt)
 	go func() {
@@ -75,14 +74,14 @@ func RunRemoteTestSuite(testSuite TestSuite) {
 	}()
 
 	if *buildOnly {
-		// Build the archive and exit
+		// 构建归档后退出
 		CreateTestArchive(testSuite,
 			getFlag("system-spec-name"),
 			getFlag("kubelet-config-file"))
 		return
 	}
 
-	// Append some default ginkgo flags. We use similar defaults here as hack/ginkgo-e2e.sh
+	// 追加一些默认的 ginkgo 参数，默认值与 hack/ginkgo-e2e.sh 中的类似
 	allGinkgoFlags := fmt.Sprintf("%s --no-color -v", *ginkgoFlags)
 	klog.Infof("Will use ginkgo flags as: %s", allGinkgoFlags)
 
@@ -119,7 +118,7 @@ func RunRemoteTestSuite(testSuite TestSuite) {
 		klog.Fatalf("validating remote config, %s", err)
 	}
 
-	// Setup coloring
+	// 设置颜色
 	stat, _ := os.Stdout.Stat()
 	useColor := (stat.Mode() & os.ModeCharDevice) != 0
 	blue := ""
@@ -138,19 +137,19 @@ func RunRemoteTestSuite(testSuite TestSuite) {
 	defer arc.deleteArchive()
 
 	running := runner.StartTests(testSuite, path, results)
-	// You can potentially run SSH based tests while running image based test as well.  The GCE provider does this, see
-	// test-e2e-node.sh.
+	// 基于镜像的测试运行时也可以同时运行基于 SSH 的测试。
+	// GCE provider 就是这么做的，参见 test-e2e-node.sh
 	if sshRunner != nil && len(cfg.Hosts) > 0 {
 		running += sshRunner.StartTests(testSuite, path, results)
 	}
 
-	// Wait for all tests to complete and emit the results
+	// 等待所有测试完成并输出结果
 	errCount := 0
 	exitOk := true
 	for i := 0; i < running; i++ {
 		tr := <-results
 		host := tr.Host
-		fmt.Println() // Print an empty line
+		fmt.Println() // 打印空行
 		fmt.Printf("%s>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>%s\n", blue, noColour)
 		fmt.Printf("%s>                              START TEST                                >%s\n", blue, noColour)
 		fmt.Printf("%s>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>%s\n", blue, noColour)
@@ -166,9 +165,9 @@ func RunRemoteTestSuite(testSuite TestSuite) {
 		fmt.Printf("%s<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<%s\n", blue, noColour)
 		fmt.Printf("%s<                              FINISH TEST                               <%s\n", blue, noColour)
 		fmt.Printf("%s<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<%s\n", blue, noColour)
-		fmt.Println() // Print an empty line
+		fmt.Println() // 打印空行
 	}
-	// Set the exit code if there were failures
+	// 有失败时设置退出码
 	if !exitOk {
 		fmt.Printf("Failure: %d errors encountered.\n", errCount)
 		callGubernator(*gubernator)
@@ -217,8 +216,8 @@ func (a *Archive) deleteArchive() {
 	os.Remove(path)
 }
 
-// parseHostsList splits a host list of the form a=1.2.3.4,b=5.6.7.8 into the list of hosts [a,b] while registering the
-// given addresses
+// parseHostsList 将 a=1.2.3.4,b=5.6.7.8 形式的主机列表拆成主机列表 [a,b]，
+// 同时注册给定的地址
 func parseHostsList(hostList string) []string {
 	if len(hostList) == 0 {
 		return nil

@@ -39,31 +39,29 @@ import (
 )
 
 const (
-	// SSHPort is tcp port number of SSH
+	// SSHPort 是 SSH 的 TCP 端口号
 	SSHPort = "22"
 
-	// pollNodeInterval is how often to Poll pods.
+	// pollNodeInterval 是轮询 pod 的间隔。
 	pollNodeInterval = 2 * time.Second
 
-	// singleCallTimeout is how long to try single API calls (like 'get' or 'list'). Used to prevent
-	// transient failures from failing tests.
+	// singleCallTimeout 是单次 API 调用（如 'get' 或 'list'）的尝试时长，用于防止
+	// 瞬时故障导致测试失败。
 	singleCallTimeout = 5 * time.Minute
 
-	// sshBastionEnvKey is the environment variable key for running SSH commands via bastion.
+	// sshBastionEnvKey 是通过 bastion 运行 SSH 命令时使用的环境变量 key。
 	sshBastionEnvKey = "KUBE_SSH_BASTION"
 )
 
-// GetSigner returns an ssh.Signer for the provider ("gce", etc.) that can be
-// used to SSH to their nodes.
+// GetSigner 返回指定 provider（"gce" 等）的 ssh.Signer，用于 SSH 到其节点。
 func GetSigner(provider string) (ssh.Signer, error) {
-	// honor a consistent SSH key across all providers
+	// 优先使用统一的 SSH key，覆盖所有 provider
 	if path := os.Getenv("KUBE_SSH_KEY_PATH"); len(path) > 0 {
 		return makePrivateKeySignerFromFile(path)
 	}
 
-	// Select the key itself to use. When implementing more providers here,
-	// please also add them to any SSH tests that are disabled because of signer
-	// support.
+	// 选择要使用的 key。在这里新增 provider 时，也请把它加入那些因 signer
+	// 支持不足而被禁用的 SSH 测试。
 	keyfile := ""
 	switch provider {
 	case "gce", "kubemark":
@@ -98,8 +96,7 @@ func GetSigner(provider string) (ssh.Signer, error) {
 		return nil, fmt.Errorf("GetSigner(...) not implemented for %s", provider)
 	}
 
-	// Respect absolute paths for keys given by user, fallback to assuming
-	// relative paths are in ~/.ssh
+	// 尊重用户给定的绝对路径；相对路径则默认位于 ~/.ssh
 	if !filepath.IsAbs(keyfile) {
 		keydir := filepath.Join(os.Getenv("HOME"), ".ssh")
 		keyfile = filepath.Join(keydir, keyfile)
@@ -122,21 +119,19 @@ func makePrivateKeySignerFromFile(key string) (ssh.Signer, error) {
 	return signer, err
 }
 
-// NodeSSHHosts returns SSH-able host names for all schedulable nodes.
-// If it can't find any external IPs, it falls back to
-// looking for internal IPs. If it can't find an internal IP for every node it
-// returns an error.
+// NodeSSHHosts 返回所有可调度节点上可通过 SSH 访问的主机名。
+// 如果找不到外部 IP，则回退到内部 IP。如果无法为每个节点找到内部 IP，则返回错误。
 func NodeSSHHosts(ctx context.Context, c clientset.Interface) ([]string, error) {
 	nodelist := waitListSchedulableNodesOrDie(ctx, c)
 
 	hosts := nodeAddresses(nodelist, v1.NodeExternalIP)
-	// If  ExternalIPs aren't available for all nodes, try falling back to the InternalIPs.
+	// 如果并非所有节点都有 ExternalIP，则尝试回退到 InternalIP。
 	if len(hosts) < len(nodelist.Items) {
 		framework.Logf("No external IP address on nodes, falling back to internal IPs")
 		hosts = nodeAddresses(nodelist, v1.NodeInternalIP)
 	}
 	if len(hosts) != len(nodelist.Items) {
-		// Something is wrong; all schedulable nodes should have at least one IP.
+		// 出了问题：所有可调度节点都应至少有一个 IP。
 		return nil, fmt.Errorf(
 			"only found %d IPs on nodes, but found %d nodes. Nodelist: %v",
 			len(hosts), len(nodelist.Items), nodelist)
@@ -166,7 +161,7 @@ func NodeSSHHosts(ctx context.Context, c clientset.Interface) ([]string, error) 
 	return sshHosts, nil
 }
 
-// canConnect returns true if a network connection is possible to the SSHPort.
+// 如果可以建立到 SSHPort 的网络连接，canConnect 返回 true。
 func canConnect(host string) bool {
 	if _, ok := os.LookupEnv(sshBastionEnvKey); ok {
 		return true
@@ -181,7 +176,7 @@ func canConnect(host string) bool {
 	return true
 }
 
-// Result holds the execution result of SSH command
+// Result 保存 SSH 命令的执行结果
 type Result struct {
 	User   string
 	Host   string
@@ -191,27 +186,26 @@ type Result struct {
 	Code   int
 }
 
-// NodeExec execs the given cmd on node via SSH. Note that the nodeName is an sshable name,
-// eg: the name returned by framework.GetMasterHost(). This is also not guaranteed to work across
-// cloud providers since it involves ssh.
+// NodeExec 通过 SSH 在节点上执行给定 cmd。注意 nodeName 是可 SSH 的名称，
+// 例如 framework.GetMasterHost() 返回的名称。由于涉及 SSH，这在不同云 provider 上
+// 并不保证都能工作。
 func NodeExec(ctx context.Context, nodeName, cmd, provider string) (Result, error) {
 	return SSH(ctx, cmd, net.JoinHostPort(nodeName, SSHPort), provider)
 }
 
-// SSH synchronously SSHs to a node running on provider and runs cmd. If there
-// is no error performing the SSH, the stdout, stderr, and exit code are
-// returned.
+// SSH 同步地 SSH 到 provider 上的节点并执行 cmd。如果 SSH 过程没有出错，
+// 则返回 stdout、stderr 和退出码。
 func SSH(ctx context.Context, cmd, host, provider string) (Result, error) {
 	result := Result{Host: host, Cmd: cmd}
 
-	// Get a signer for the provider.
+	// 获取 provider 的 signer。
 	signer, err := GetSigner(provider)
 	if err != nil {
 		return result, fmt.Errorf("error getting signer for provider %s: %w", provider, err)
 	}
 
-	// RunSSHCommand will default to Getenv("USER") if user == "", but we're
-	// defaulting here as well for logging clarity.
+	// 当 user 为空时 RunSSHCommand 会默认使用 Getenv("USER")，但这里也做一次默认值处理，
+	// 以便日志更清晰。
 	result.User = os.Getenv("KUBE_SSH_USER")
 	if result.User == "" {
 		result.User = os.Getenv("USER")
@@ -233,13 +227,13 @@ func SSH(ctx context.Context, cmd, host, provider string) (Result, error) {
 	return result, err
 }
 
-// runSSHCommandViaBastion returns the stdout, stderr, and exit code from running cmd on
-// host as specific user, along with any SSH-level error.
+// runSSHCommandViaBastion 返回以指定用户在 host 上执行 cmd 的 stdout、stderr 和退出码，
+// 以及任何 SSH 层面的错误。
 func runSSHCommand(ctx context.Context, cmd, user, host string, signer ssh.Signer) (string, string, int, error) {
 	if user == "" {
 		user = os.Getenv("USER")
 	}
-	// Setup the config, dial the server, and open a session.
+	// 配置 client，连接 server，打开 session。
 	config := &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
@@ -261,34 +255,31 @@ func runSSHCommand(ctx context.Context, cmd, user, host string, signer ssh.Signe
 	}
 	defer session.Close()
 
-	// Run the command.
+	// 执行命令。
 	code := 0
 	var bout, berr bytes.Buffer
 	session.Stdout, session.Stderr = &bout, &berr
 	if err = session.Run(cmd); err != nil {
-		// Check whether the command failed to run or didn't complete.
+		// 检查命令是执行失败还是未完成。
 		if exiterr, ok := err.(*ssh.ExitError); ok {
-			// If we got an ExitError and the exit code is nonzero, we'll
-			// consider the SSH itself successful (just that the command run
-			// errored on the host).
+			// 如果得到 ExitError 且退出码非零，则认为 SSH 本身成功
+			// （只是命令在 host 上执行失败）。
 			if code = exiterr.ExitStatus(); code != 0 {
 				err = nil
 			}
 		} else {
-			// Some other kind of error happened (e.g. an IOError); consider the
-			// SSH unsuccessful.
+			// 发生了其他类型的错误（如 IOError），认为 SSH 失败。
 			err = fmt.Errorf("failed running `%s` on %s@%s: %w", cmd, user, host, err)
 		}
 	}
 	return bout.String(), berr.String(), code, err
 }
 
-// runSSHCommandViaBastion returns the stdout, stderr, and exit code from running cmd on
-// host as specific user, along with any SSH-level error. It uses an SSH proxy to connect
-// to bastion, then via that tunnel connects to the remote host. Similar to
-// sshutil.RunSSHCommand but scoped to the needs of the test infrastructure.
+// runSSHCommandViaBastion 返回以指定用户在 host 上执行 cmd 的 stdout、stderr 和退出码，
+// 以及任何 SSH 层面的错误。它先通过 SSH proxy 连接 bastion，再借助该隧道连接远端 host。
+// 与 sshutil.RunSSHCommand 类似，但针对测试基础设施的需求做了裁剪。
 func runSSHCommandViaBastion(ctx context.Context, cmd, user, bastion, host string, signer ssh.Signer) (string, string, int, error) {
-	// Setup the config, dial the server, and open a session.
+	// 配置 client，连接 server，打开 session。
 	config := &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
@@ -329,29 +320,27 @@ func runSSHCommandViaBastion(ctx context.Context, cmd, user, bastion, host strin
 	}
 	defer session.Close()
 
-	// Run the command.
+	// 执行命令。
 	code := 0
 	var bout, berr bytes.Buffer
 	session.Stdout, session.Stderr = &bout, &berr
 	if err = session.Run(cmd); err != nil {
-		// Check whether the command failed to run or didn't complete.
+		// 检查命令是执行失败还是未完成。
 		if exiterr, ok := err.(*ssh.ExitError); ok {
-			// If we got an ExitError and the exit code is nonzero, we'll
-			// consider the SSH itself successful (just that the command run
-			// errored on the host).
+			// 如果得到 ExitError 且退出码非零，则认为 SSH 本身成功
+			// （只是命令在 host 上执行失败）。
 			if code = exiterr.ExitStatus(); code != 0 {
 				err = nil
 			}
 		} else {
-			// Some other kind of error happened (e.g. an IOError); consider the
-			// SSH unsuccessful.
+			// 发生了其他类型的错误（如 IOError），认为 SSH 失败。
 			err = fmt.Errorf("failed running `%s` on %s@%s: %w", cmd, user, host, err)
 		}
 	}
 	return bout.String(), berr.String(), code, err
 }
 
-// LogResult records result log
+// LogResult 记录执行结果日志
 func LogResult(result Result) {
 	remote := fmt.Sprintf("%s@%s", result.User, result.Host)
 	framework.Logf("ssh %s: command:   %s", remote, result.Cmd)
@@ -360,7 +349,7 @@ func LogResult(result Result) {
 	framework.Logf("ssh %s: exit code: %d", remote, result.Code)
 }
 
-// IssueSSHCommandWithResult tries to execute a SSH command and returns the execution result
+// IssueSSHCommandWithResult 尝试执行 SSH 命令并返回执行结果
 func IssueSSHCommandWithResult(ctx context.Context, cmd, provider string, node *v1.Node) (*Result, error) {
 	framework.Logf("Getting external IP address for %s", node.Name)
 	host := ""
@@ -372,7 +361,7 @@ func IssueSSHCommandWithResult(ctx context.Context, cmd, provider string, node *
 	}
 
 	if host == "" {
-		// No external IPs were found, let's try to use internal as plan B
+		// 没找到外部 IP，退而求其次使用内部 IP
 		for _, a := range node.Status.Addresses {
 			if a.Type == v1.NodeInternalIP && a.Address != "" {
 				host = net.JoinHostPort(a.Address, SSHPort)
@@ -397,7 +386,7 @@ func IssueSSHCommandWithResult(ctx context.Context, cmd, provider string, node *
 	return &result, nil
 }
 
-// IssueSSHCommand tries to execute a SSH command
+// IssueSSHCommand 尝试执行 SSH 命令
 func IssueSSHCommand(ctx context.Context, cmd, provider string, node *v1.Node) error {
 	_, err := IssueSSHCommandWithResult(ctx, cmd, provider, node)
 	if err != nil {
@@ -406,7 +395,7 @@ func IssueSSHCommand(ctx context.Context, cmd, provider string, node *v1.Node) e
 	return nil
 }
 
-// nodeAddresses returns the first address of the given type of each node.
+// nodeAddresses 返回每个节点上指定类型的第一个地址。
 func nodeAddresses(nodelist *v1.NodeList, addrType v1.NodeAddressType) []string {
 	hosts := []string{}
 	for _, n := range nodelist.Items {
@@ -420,7 +409,7 @@ func nodeAddresses(nodelist *v1.NodeList, addrType v1.NodeAddressType) []string 
 	return hosts
 }
 
-// waitListSchedulableNodes is a wrapper around listing nodes supporting retries.
+// waitListSchedulableNodes 封装了支持重试的节点列表查询。
 func waitListSchedulableNodes(ctx context.Context, c clientset.Interface) (*v1.NodeList, error) {
 	var nodes *v1.NodeList
 	var err error
@@ -438,7 +427,7 @@ func waitListSchedulableNodes(ctx context.Context, c clientset.Interface) (*v1.N
 	return nodes, nil
 }
 
-// waitListSchedulableNodesOrDie is a wrapper around listing nodes supporting retries.
+// waitListSchedulableNodesOrDie 封装了支持重试的节点列表查询，失败时终止测试。
 func waitListSchedulableNodesOrDie(ctx context.Context, c clientset.Interface) *v1.NodeList {
 	nodes, err := waitListSchedulableNodes(ctx, c)
 	if err != nil {
@@ -447,13 +436,13 @@ func waitListSchedulableNodesOrDie(ctx context.Context, c clientset.Interface) *
 	return nodes
 }
 
-// expectNoError checks if "err" is set, and if so, fails assertion while logging the error.
+// expectNoError 检查 err 是否非 nil，如果是则在记录错误后断言失败。
 func expectNoError(err error, explain ...interface{}) {
 	expectNoErrorWithOffset(1, err, explain...)
 }
 
-// expectNoErrorWithOffset checks if "err" is set, and if so, fails assertion while logging the error at "offset" levels above its caller
-// (for example, for call chain f -> g -> ExpectNoErrorWithOffset(1, ...) error would be logged for "f").
+// expectNoErrorWithOffset 检查 err 是否非 nil，如果是则在调用方之上 "offset" 层记录错误并断言失败。
+// （例如调用链 f -> g -> ExpectNoErrorWithOffset(1, ...) 时，错误会记为发生在 "f"）。
 func expectNoErrorWithOffset(offset int, err error, explain ...interface{}) {
 	if err != nil {
 		framework.Logf("Unexpected error occurred: %v", err)

@@ -102,7 +102,7 @@ var _ = SIGDescribe("Deployment", func() {
 	/*
 	  Release: v1.12
 	  Testname: Deployment RollingUpdate
-	  Description: A conformant Kubernetes distribution MUST support the Deployment with RollingUpdate strategy.
+	  Description: 符合一致性的 Kubernetes 发行版 MUST 支持采用 RollingUpdate 策略的 Deployment。
 	*/
 	framework.ConformanceIt("RollingUpdateDeployment should delete old pods and create new ones", func(ctx context.Context) {
 		testRollingUpdateDeployment(ctx, f)
@@ -110,7 +110,7 @@ var _ = SIGDescribe("Deployment", func() {
 	/*
 	  Release: v1.12
 	  Testname: Deployment Recreate
-	  Description: A conformant Kubernetes distribution MUST support the Deployment with Recreate strategy.
+	  Description: 符合一致性的 Kubernetes 发行版 MUST 支持采用 Recreate 策略的 Deployment。
 	*/
 	framework.ConformanceIt("RecreateDeployment should delete old pods and create new ones", func(ctx context.Context) {
 		testRecreateDeployment(ctx, f)
@@ -118,8 +118,8 @@ var _ = SIGDescribe("Deployment", func() {
 	/*
 	  Release: v1.12
 	  Testname: Deployment RevisionHistoryLimit
-	  Description: A conformant Kubernetes distribution MUST clean up Deployment's ReplicaSets based on
-	  the Deployment's `.spec.revisionHistoryLimit`.
+	  Description: 符合一致性的 Kubernetes 发行版 MUST 根据 Deployment 的 `.spec.revisionHistoryLimit`
+	  清理其 ReplicaSet。
 	*/
 	framework.ConformanceIt("deployment should delete old replica sets", func(ctx context.Context) {
 		testDeploymentCleanUpPolicy(ctx, f)
@@ -127,9 +127,8 @@ var _ = SIGDescribe("Deployment", func() {
 	/*
 	  Release: v1.12
 	  Testname: Deployment Rollover
-	  Description: A conformant Kubernetes distribution MUST support Deployment rollover,
-	    i.e. allow arbitrary number of changes to desired state during rolling update
-	    before the rollout finishes.
+	  Description: 符合一致性的 Kubernetes 发行版 MUST 支持 Deployment rollover，
+	    即在滚动更新完成前允许任意次修改期望状态。
 	*/
 	framework.ConformanceIt("deployment should support rollover", func(ctx context.Context) {
 		testRolloverDeployment(ctx, f)
@@ -144,10 +143,9 @@ var _ = SIGDescribe("Deployment", func() {
 	/*
 	   Release: v1.21
 	   Testname: Deployment, completes the scaling of a Deployment subresource
-	   Description: Create a Deployment with a single Pod. The Pod MUST be verified
-	   that it is running. The Deployment MUST get and verify the scale subresource count.
-	   The Deployment MUST update and verify the scale subresource. The Deployment MUST patch and verify
-	   a scale subresource.
+	   Description: 创建只有一个 Pod 的 Deployment。必须验证该 Pod 处于 Running。
+	   Deployment MUST 获取并校验 scale subresource 的计数。
+	   Deployment MUST 更新并校验 scale subresource，MUST patch 并校验 scale subresource。
 	*/
 	framework.ConformanceIt("Deployment should have a working scale subresource", func(ctx context.Context) {
 		testDeploymentSubresources(ctx, f)
@@ -155,9 +153,8 @@ var _ = SIGDescribe("Deployment", func() {
 	/*
 	  Release: v1.12
 	  Testname: Deployment Proportional Scaling
-	  Description: A conformant Kubernetes distribution MUST support Deployment
-	    proportional scaling, i.e. proportionally scale a Deployment's ReplicaSets
-	    when a Deployment is scaled.
+	  Description: 符合一致性的 Kubernetes 发行版 MUST 支持 Deployment 按比例扩缩容，
+	    即对 Deployment 扩缩容时，按比例调整其各个 ReplicaSet。
 	*/
 	framework.ConformanceIt("deployment should support proportional scaling", func(ctx context.Context) {
 		testProportionalScalingDeployment(ctx, f)
@@ -169,19 +166,18 @@ var _ = SIGDescribe("Deployment", func() {
 		e2eskipper.SkipUnlessAtLeast(len(nodes.Items), 3, "load-balancer test requires at least 3 schedulable nodes")
 		testRollingUpdateDeploymentWithLocalTrafficLoadBalancer(ctx, f)
 	})
-	// TODO: add tests that cover deployment.Spec.MinReadySeconds once we solved clock-skew issues
+	// TODO: 解决 clock-skew 问题后，补充覆盖 deployment.Spec.MinReadySeconds 的测试
 	// See https://github.com/kubernetes/kubernetes/issues/29229
-	// Add UnavailableReplicas check because ReadyReplicas or UpdatedReplicas might not represent
-	// the actual number of pods running successfully if some pods failed to start after update or patch.
+	// 增加 UnavailableReplicas 校验：更新或 patch 后若有 pod 启动失败，
+	// ReadyReplicas 或 UpdatedReplicas 未必能反映实际成功运行的 pod 数量。
 	// See issue ##100192
 
 	/*
 		Release: v1.20
 		Testname: Deployment, completes the lifecycle of a Deployment
-		Description: When a Deployment is created it MUST succeed with the required number of replicas.
-		It MUST succeed when the Deployment is patched. When scaling the deployment is MUST succeed.
-		When fetching and patching the DeploymentStatus it MUST succeed. It MUST succeed when deleting
-		the Deployment.
+		Description: 创建 Deployment 时 MUST 成功达到要求的副本数。
+		patch Deployment MUST 成功，扩缩容 Deployment MUST 成功。
+		获取并 patch DeploymentStatus MUST 成功，删除 Deployment MUST 成功。
 	*/
 	framework.ConformanceIt("should run the lifecycle of a Deployment", func(ctx context.Context) {
 		one := int64(1)
@@ -346,7 +342,7 @@ var _ = SIGDescribe("Deployment", func() {
 		testDeploymentUpdateUnstructured := unstructuredv1.Unstructured{
 			Object: testDeploymentUpdateUnstructuredMap,
 		}
-		// currently this hasn't been able to hit the endpoint replaceAppsV1NamespacedDeploymentStatus
+		// 目前还无法覆盖 replaceAppsV1NamespacedDeploymentStatus endpoint
 		_, err = dc.Resource(deploymentResource).Namespace(testNamespaceName).Update(ctx, &testDeploymentUpdateUnstructured, metav1.UpdateOptions{}) //, "status")
 		framework.ExpectNoError(err, "failed to update the DeploymentStatus")
 		ctxUntil, cancel = context.WithTimeout(ctx, 30*time.Second)
@@ -484,9 +480,9 @@ var _ = SIGDescribe("Deployment", func() {
 	/*
 		Release: v1.22
 		Testname: Deployment, status sub-resource
-		Description: When a Deployment is created it MUST succeed.
-		Attempt to read, update and patch its status sub-resource; all
-		mutating sub-resource operations MUST be visible to subsequent reads.
+		Description: 创建 Deployment MUST 成功。
+		尝试读取、更新和 patch 其 status sub-resource；所有变更 sub-resource 的操作
+		MUST 在后续读取中可见。
 	*/
 	framework.ConformanceIt("should validate Deployment Status endpoints", func(ctx context.Context) {
 		dClient := c.AppsV1().Deployments(ns)
@@ -511,7 +507,7 @@ var _ = SIGDescribe("Deployment", func() {
 		deploy, err := c.AppsV1().Deployments(ns).Create(ctx, d, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		// Wait for it to be updated to revision 1
+		// 等待其更新到 revision 1
 		err = e2edeployment.WaitForDeploymentRevisionAndImage(c, ns, dName, "1", AgnhostImage)
 		framework.ExpectNoError(err)
 
@@ -645,7 +641,7 @@ func failureTrap(ctx context.Context, c clientset.Interface, ns string) {
 		}
 		testutil.LogPodsOfDeployment(c, &d, rsList, framework.Logf)
 	}
-	// We need print all the ReplicaSets if there are no Deployment object created
+	// 若没有创建 Deployment 对象，需要打印所有 ReplicaSet 以便排查
 	if len(deployments.Items) != 0 {
 		return
 	}
@@ -698,7 +694,7 @@ func stopDeployment(ctx context.Context, c clientset.Interface, ns, deploymentNa
 		if err != nil {
 			return false, err
 		}
-		// Pods may be created by overlapping deployments right after this deployment is deleted, ignore them
+		// 该 deployment 删除后，重叠的其他 deployment 可能立即创建 pod，忽略这些 pod
 		if len(pods.Items) == 0 {
 			return true, nil
 		}
@@ -721,7 +717,7 @@ func testDeleteDeployment(ctx context.Context, f *framework.Framework) {
 	deploy, err := c.AppsV1().Deployments(ns).Create(ctx, d, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Wait for it to be updated to revision 1
+	// 等待其更新到 revision 1
 	err = e2edeployment.WaitForDeploymentRevisionAndImage(c, ns, deploymentName, "1", AgnhostImage)
 	framework.ExpectNoError(err)
 
@@ -739,7 +735,7 @@ func testDeleteDeployment(ctx context.Context, f *framework.Framework) {
 func testRollingUpdateDeployment(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
-	// Create webserver pods.
+	// 创建 webserver pod。
 	podName := "sample-pod"
 	deploymentPodLabels := map[string]string{"name": podName}
 	rsPodLabels := map[string]string{
@@ -757,7 +753,7 @@ func testRollingUpdateDeployment(ctx context.Context, f *framework.Framework) {
 	framework.Logf("Creating replica set %q (going to be adopted)", rs.Name)
 	_, err := c.AppsV1().ReplicaSets(ns).Create(ctx, rs, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
-	// Verify that the required pods have come up.
+	// 确认所需 pod 已就绪。
 	err = e2epod.VerifyPodsRunning(ctx,
 		c,
 		ns,
@@ -767,14 +763,14 @@ func testRollingUpdateDeployment(ctx context.Context, f *framework.Framework) {
 		replicas)
 	framework.ExpectNoError(err, "error in waiting for pods to come up: %s", err)
 
-	// Create a deployment to delete webserver pods and instead bring up agnhost pods.
+	// 创建 deployment，删除 webserver pod 并改为启动 agnhost pod。
 	deploymentName := "test-rolling-update-deployment"
 	framework.Logf("Creating deployment %q", deploymentName)
 	d := e2edeployment.NewDeployment(deploymentName, replicas, deploymentPodLabels, AgnhostImageName, AgnhostImage, appsv1.RollingUpdateDeploymentStrategyType)
 	deploy, err := c.AppsV1().Deployments(ns).Create(ctx, d, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Wait for it to be updated to revision 3546343826724305833.
+	// 等待其更新到 revision 3546343826724305833。
 	framework.Logf("Ensuring deployment %q gets the next revision from the one the adopted replica set %q has", deploy.Name, rs.Name)
 	err = e2edeployment.WaitForDeploymentRevisionAndImage(c, ns, deploymentName, "3546343826724305833", AgnhostImage)
 	framework.ExpectNoError(err)
@@ -783,7 +779,7 @@ func testRollingUpdateDeployment(ctx context.Context, f *framework.Framework) {
 	err = e2edeployment.WaitForDeploymentComplete(c, deploy)
 	framework.ExpectNoError(err)
 
-	// There should be 1 old RS (webserver-controller, which is adopted)
+	// 应有 1 个旧 RS（webserver-controller，已被接管）
 	framework.Logf("Ensuring deployment %q has one old replica set (the one it adopted)", deploy.Name)
 	deployment, err := c.AppsV1().Deployments(ns).Get(ctx, deploymentName, metav1.GetOptions{})
 	framework.ExpectNoError(err)
@@ -796,14 +792,14 @@ func testRecreateDeployment(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
 
-	// Create a deployment that brings up agnhost pods.
+	// 创建启动 agnhost pod 的 deployment
 	deploymentName := "test-recreate-deployment"
 	framework.Logf("Creating deployment %q", deploymentName)
 	d := e2edeployment.NewDeployment(deploymentName, int32(1), map[string]string{"name": "sample-pod-3"}, AgnhostImageName, PrevAgnhostImage, appsv1.RecreateDeploymentStrategyType)
 	deployment, err := c.AppsV1().Deployments(ns).Create(ctx, d, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Wait for it to be updated to revision 1
+	// 等待其更新到 revision 1
 	framework.Logf("Waiting deployment %q to be updated to revision 1", deploymentName)
 	err = e2edeployment.WaitForDeploymentRevisionAndImage(c, ns, deploymentName, "1", PrevAgnhostImage)
 	framework.ExpectNoError(err)
@@ -812,7 +808,7 @@ func testRecreateDeployment(ctx context.Context, f *framework.Framework) {
 	err = e2edeployment.WaitForDeploymentComplete(c, deployment)
 	framework.ExpectNoError(err)
 
-	// Update deployment to delete agnhost pods and bring up webserver pods.
+	// 更新 deployment，删除 agnhost pod 并改为启动 webserver pod
 	framework.Logf("Triggering a new rollout for deployment %q", deploymentName)
 	deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, deploymentName, func(update *appsv1.Deployment) {
 		update.Spec.Template.Spec.Containers[0].Name = AgnhostImageName
@@ -825,11 +821,11 @@ func testRecreateDeployment(ctx context.Context, f *framework.Framework) {
 	framework.ExpectNoError(err)
 }
 
-// testDeploymentCleanUpPolicy tests that deployment supports cleanup policy
+// testDeploymentCleanUpPolicy 测试 deployment 支持 cleanup policy
 func testDeploymentCleanUpPolicy(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
-	// Create webserver pods.
+	// 创建 webserver pod。
 	podName := "cleanup-pod"
 	deploymentPodLabels := map[string]string{"name": podName}
 	rsPodLabels := map[string]string{
@@ -842,7 +838,7 @@ func testDeploymentCleanUpPolicy(ctx context.Context, f *framework.Framework) {
 	_, err := c.AppsV1().ReplicaSets(ns).Create(ctx, newRS(rsName, replicas, rsPodLabels, AgnhostImageName, AgnhostImage, nil), metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Verify that the required pods have come up.
+	// 确认所需 pod 已就绪。
 	err = e2epod.VerifyPodsRunning(ctx,
 		c,
 		ns,
@@ -852,7 +848,7 @@ func testDeploymentCleanUpPolicy(ctx context.Context, f *framework.Framework) {
 		replicas)
 	framework.ExpectNoError(err, "error in waiting for pods to come up: %v", err)
 
-	// Create a deployment to delete webserver pods and instead bring up agnhost pods.
+	// 创建 deployment，删除 webserver pod 并改为启动 agnhost pod。
 	deploymentName := "test-cleanup-deployment"
 	framework.Logf("Creating deployment %s", deploymentName)
 
@@ -868,8 +864,8 @@ func testDeploymentCleanUpPolicy(ctx context.Context, f *framework.Framework) {
 	framework.ExpectNoError(err)
 	go func() {
 		defer ginkgo.GinkgoRecover()
-		// There should be only one pod being created, which is the pod with the agnhost image.
-		// The old RS shouldn't create new pod when deployment controller adding pod template hash label to its selector.
+		// 应只创建一个 pod，即使用 agnhost 镜像的那个。
+		// deployment controller 向其 selector 添加 pod template hash label 时，旧 RS 不应创建新 pod。
 		numPodCreation := 1
 		for {
 			select {
@@ -903,8 +899,8 @@ func testDeploymentCleanUpPolicy(ctx context.Context, f *framework.Framework) {
 	framework.ExpectNoError(err)
 }
 
-// testRolloverDeployment tests that deployment supports rollover.
-// i.e. we can change desired state and kick off rolling update, then change desired state again before it finishes.
+// testRolloverDeployment 测试 deployment 支持 rollover：
+// 即先修改期望状态启动滚动更新，再在更新完成前重新修改期望状态。
 func testRolloverDeployment(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
@@ -919,7 +915,7 @@ func testRolloverDeployment(ctx context.Context, f *framework.Framework) {
 	rsReplicas := int32(1)
 	_, err := c.AppsV1().ReplicaSets(ns).Create(ctx, newRS(rsName, rsReplicas, rsPodLabels, AgnhostImageName, AgnhostImage, nil), metav1.CreateOptions{})
 	framework.ExpectNoError(err)
-	// Verify that the required pods have come up.
+	// 确认所需 pod 已就绪。
 	err = e2epod.VerifyPodsRunning(ctx,
 		c,
 		ns,
@@ -929,13 +925,13 @@ func testRolloverDeployment(ctx context.Context, f *framework.Framework) {
 		rsReplicas)
 	framework.ExpectNoError(err, "error in waiting for pods to come up: %v", err)
 
-	// Wait for replica set to become ready before adopting it.
+	// 先等待 replicaset 就绪，再进行接管
 	framework.Logf("Waiting for pods owned by replica set %q to become ready", rsName)
 	err = e2ereplicaset.WaitForReadyReplicaSet(ctx, c, ns, rsName)
 	framework.ExpectNoError(err)
 
-	// Create a deployment to delete webserver pods and instead bring up redis-slave pods.
-	// We use a nonexistent image here, so that we make sure it won't finish
+	// 创建 deployment，删除 webserver pod 并改为启动 redis-slave pod。
+	// 这里使用不存在的镜像，确保滚动更新不会完成
 	deploymentName, deploymentImageName := "test-rollover-deployment", "redis-slave"
 	deploymentReplicas := int32(1)
 	deploymentImage := "gcr.io/google_samples/gb-redisslave:nonexistent"
@@ -950,14 +946,14 @@ func testRolloverDeployment(ctx context.Context, f *framework.Framework) {
 	_, err = c.AppsV1().Deployments(ns).Create(ctx, newDeployment, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Verify that the pods were scaled up and down as expected.
+	// 确认 pod 按预期完成扩缩容
 	deployment, err := c.AppsV1().Deployments(ns).Get(ctx, deploymentName, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	framework.Logf("Make sure deployment %q performs scaling operations", deploymentName)
-	// Make sure the deployment starts to scale up and down replica sets by checking if its updated replicas >= 1
+	// 通过 updated replicas >= 1 确认 deployment 已开始对 replicaset 扩缩容
 	err = waitForDeploymentUpdatedReplicasGTE(c, ns, deploymentName, deploymentReplicas, deployment.Generation)
 	framework.ExpectNoError(err)
-	// Check if it's updated to revision 1 correctly
+	// 确认其正确更新到 revision 1
 	framework.Logf("Check revision of new replica set for deployment %q", deploymentName)
 	err = checkDeploymentRevisionAndImage(c, ns, deploymentName, "1", deploymentImage)
 	framework.ExpectNoError(err)
@@ -970,7 +966,7 @@ func testRolloverDeployment(ctx context.Context, f *framework.Framework) {
 	framework.ExpectNoError(err)
 	ensureReplicas(newRS, int32(1))
 
-	// The deployment is stuck, update it to rollover the above 2 ReplicaSets and bring up agnhost pods.
+	// deployment 卡住了，更新它以接管上述 2 个 ReplicaSet 并启动 agnhost pod
 	framework.Logf("Rollover old replica sets for deployment %q with new image update", deploymentName)
 	updatedDeploymentImageName, updatedDeploymentImage := AgnhostImageName, AgnhostImage
 	deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, newDeployment.Name, func(update *appsv1.Deployment) {
@@ -979,12 +975,12 @@ func testRolloverDeployment(ctx context.Context, f *framework.Framework) {
 	})
 	framework.ExpectNoError(err)
 
-	// Use observedGeneration to determine if the controller noticed the pod template update.
+	// 用 observedGeneration 判断 controller 是否已感知 pod template 更新
 	framework.Logf("Wait deployment %q to be observed by the deployment controller", deploymentName)
 	err = waitForObservedDeployment(c, ns, deploymentName, deployment.Generation)
 	framework.ExpectNoError(err)
 
-	// Wait for it to be updated to revision 2
+	// 等待其更新到 revision 2
 	framework.Logf("Wait for revision update of deployment %q to 2", deploymentName)
 	err = e2edeployment.WaitForDeploymentRevisionAndImage(c, ns, deploymentName, "2", updatedDeploymentImage)
 	framework.ExpectNoError(err)
@@ -997,7 +993,7 @@ func testRolloverDeployment(ctx context.Context, f *framework.Framework) {
 	oldRS, err = c.AppsV1().ReplicaSets(ns).Get(ctx, rsName, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	ensureReplicas(oldRS, int32(0))
-	// Not really the new replica set anymore but we GET by name so that's fine.
+	// 此时它已不是最新的 replicaset，但按名称 GET 没有影响
 	newRS, err = c.AppsV1().ReplicaSets(ns).Get(ctx, newRS.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	ensureReplicas(newRS, int32(0))
@@ -1030,7 +1026,7 @@ func testIterativeDeployments(ctx context.Context, f *framework.Framework) {
 	zero := int64(0)
 	two := int32(2)
 
-	// Create a webserver deployment.
+	// 创建 webserver deployment。
 	deploymentName := "webserver"
 	fiveMinutes := int32(5 * 60)
 	d := e2edeployment.NewDeployment(deploymentName, replicas, podLabels, AgnhostImageName, AgnhostImage, appsv1.RollingUpdateDeploymentStrategyType)
@@ -1049,7 +1045,7 @@ func testIterativeDeployments(ctx context.Context, f *framework.Framework) {
 
 		switch n := rand.Float32(); {
 		case n < 0.2:
-			// trigger a new deployment
+			// 触发新的 deployment
 			framework.Logf("%02d: triggering a new rollout for deployment %q", i, deployment.Name)
 			deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, deployment.Name, func(update *appsv1.Deployment) {
 				newEnv := v1.EnvVar{Name: fmt.Sprintf("A%d", i), Value: fmt.Sprintf("%d", i)}
@@ -1059,7 +1055,7 @@ func testIterativeDeployments(ctx context.Context, f *framework.Framework) {
 			framework.ExpectNoError(err)
 
 		case n < 0.4:
-			// rollback to the previous version
+			// 回滚到上一个版本
 			framework.Logf("%02d: rolling back a rollout for deployment %q", i, deployment.Name)
 			deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, deployment.Name, func(update *appsv1.Deployment) {
 				if update.Annotations == nil {
@@ -1070,7 +1066,7 @@ func testIterativeDeployments(ctx context.Context, f *framework.Framework) {
 			framework.ExpectNoError(err)
 
 		case n < 0.6:
-			// just scaling
+			// 仅做扩缩容
 			framework.Logf("%02d: scaling deployment %q", i, deployment.Name)
 			deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, deployment.Name, func(update *appsv1.Deployment) {
 				randomScale(update, i)
@@ -1078,7 +1074,7 @@ func testIterativeDeployments(ctx context.Context, f *framework.Framework) {
 			framework.ExpectNoError(err)
 
 		case n < 0.8:
-			// toggling the deployment
+			// 切换 deployment 的暂停状态
 			if deployment.Spec.Paused {
 				framework.Logf("%02d: resuming deployment %q", i, deployment.Name)
 				deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, deployment.Name, func(update *appsv1.Deployment) {
@@ -1096,7 +1092,7 @@ func testIterativeDeployments(ctx context.Context, f *framework.Framework) {
 			}
 
 		default:
-			// arbitrarily delete deployment pods
+			// 随机删除 deployment 的 pod
 			framework.Logf("%02d: arbitrarily deleting one or more deployment pods for deployment %q", i, deployment.Name)
 			selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 			framework.ExpectNoError(err)
@@ -1121,7 +1117,7 @@ func testIterativeDeployments(ctx context.Context, f *framework.Framework) {
 		}
 	}
 
-	// unpause the deployment if we end up pausing it
+	// 如果 deployment 被暂停，最后要恢复
 	deployment, err = c.AppsV1().Deployments(ns).Get(ctx, deployment.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	if deployment.Spec.Paused {
@@ -1198,9 +1194,8 @@ func testDeploymentsControllerRef(ctx context.Context, f *framework.Framework) {
 	gomega.Expect(rsList.Items[0].UID).To(gomega.Equal(orphanedRSUID))
 }
 
-// testProportionalScalingDeployment tests that when a RollingUpdate Deployment is scaled in the middle
-// of a rollout (either in progress or paused), then the Deployment will balance additional replicas
-// in existing active ReplicaSets (ReplicaSets with more than 0 replica) in order to mitigate risk.
+// testProportionalScalingDeployment 测试 RollingUpdate Deployment 在 rollout 中途（进行中或暂停）被扩缩容时，
+// 会把新增副本按比例分配到现有的活跃 ReplicaSet（副本数大于 0）中，以降低风险。
 func testProportionalScalingDeployment(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
@@ -1208,7 +1203,7 @@ func testProportionalScalingDeployment(ctx context.Context, f *framework.Framewo
 	podLabels := map[string]string{"name": AgnhostImageName}
 	replicas := int32(10)
 
-	// Create a webserver deployment.
+	// 创建 webserver deployment。
 	deploymentName := "webserver-deployment"
 	d := e2edeployment.NewDeployment(deploymentName, replicas, podLabels, AgnhostImageName, AgnhostImage, appsv1.RollingUpdateDeploymentStrategyType)
 	d.Spec.Strategy.RollingUpdate = new(appsv1.RollingUpdateDeployment)
@@ -1223,7 +1218,7 @@ func testProportionalScalingDeployment(ctx context.Context, f *framework.Framewo
 	err = waitForObservedDeployment(c, ns, deploymentName, deployment.Generation)
 	framework.ExpectNoError(err)
 
-	// Verify that the required pods have come up.
+	// 确认所需 pod 已就绪。
 	framework.Logf("Waiting for all required pods to come up")
 	err = e2epod.VerifyPodsRunning(ctx, c, ns, AgnhostImageName, labels.SelectorFromSet(podLabels), false, *(deployment.Spec.Replicas))
 	framework.ExpectNoError(err, "error in waiting for pods to come up: %v", err)
@@ -1235,8 +1230,7 @@ func testProportionalScalingDeployment(ctx context.Context, f *framework.Framewo
 	firstRS, err := testutil.GetNewReplicaSet(deployment, c)
 	framework.ExpectNoError(err)
 
-	// Update the deployment with a non-existent image so that the new replica set
-	// will be blocked to simulate a partial rollout.
+	// 用不存在的镜像更新 deployment，使新 replicaset 被阻塞，模拟部分 rollout
 	framework.Logf("Updating deployment %q with a non-existent image", deploymentName)
 	deployment, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, d.Name, func(update *appsv1.Deployment) {
 		update.Spec.Template.Spec.Containers[0].Image = "webserver:404"
@@ -1247,60 +1241,60 @@ func testProportionalScalingDeployment(ctx context.Context, f *framework.Framewo
 	err = waitForObservedDeployment(c, ns, deploymentName, deployment.Generation)
 	framework.ExpectNoError(err)
 
-	// Checking state of first rollout's replicaset.
+	// 检查第一次 rollout 的 replicaset 状态
 	maxUnavailable, err := intstr.GetScaledValueFromIntOrPercent(deployment.Spec.Strategy.RollingUpdate.MaxUnavailable, int(*(deployment.Spec.Replicas)), false)
 	framework.ExpectNoError(err)
 
-	// First rollout's replicaset should have Deployment's (replicas - maxUnavailable) = 10 - 2 = 8 available replicas.
+	// 第一次 rollout 的 replicaset 应有 Deployment 的 (replicas - maxUnavailable) = 10 - 2 = 8 个可用副本。
 	minAvailableReplicas := replicas - int32(maxUnavailable)
 	framework.Logf("Waiting for the first rollout's replicaset to have .status.availableReplicas = %d", minAvailableReplicas)
 	err = e2ereplicaset.WaitForReplicaSetTargetAvailableReplicas(ctx, c, firstRS, minAvailableReplicas)
 	framework.ExpectNoError(err)
 
-	// First rollout's replicaset should have .spec.replicas = 8 too.
+	// 第一次 rollout 的 replicaset 的 .spec.replicas 也应为 8。
 	framework.Logf("Waiting for the first rollout's replicaset to have .spec.replicas = %d", minAvailableReplicas)
 	err = waitForReplicaSetTargetSpecReplicas(ctx, c, firstRS, minAvailableReplicas)
 	framework.ExpectNoError(err)
 
-	// The desired replicas wait makes sure that the RS controller has created expected number of pods.
+	// 等待期望副本数可确保 RS controller 已创建预期数量的 pod。
 	framework.Logf("Waiting for the first rollout's replicaset of deployment %q to have desired number of replicas", deploymentName)
 	firstRS, err = c.AppsV1().ReplicaSets(ns).Get(ctx, firstRS.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	err = waitForReplicaSetDesiredReplicas(ctx, c.AppsV1(), firstRS)
 	framework.ExpectNoError(err)
 
-	// Checking state of second rollout's replicaset.
+	// 检查第二次 rollout 的 replicaset 状态
 	secondRS, err := testutil.GetNewReplicaSet(deployment, c)
 	framework.ExpectNoError(err)
 
 	maxSurge, err := intstr.GetScaledValueFromIntOrPercent(deployment.Spec.Strategy.RollingUpdate.MaxSurge, int(*(deployment.Spec.Replicas)), false)
 	framework.ExpectNoError(err)
 
-	// Second rollout's replicaset should have 0 available replicas.
+	// 第二次 rollout 的 replicaset 应有 0 个可用副本。
 	framework.Logf("Verifying that the second rollout's replicaset has .status.availableReplicas = 0")
 	gomega.Expect(secondRS.Status.AvailableReplicas).To(gomega.Equal(int32(0)))
 
-	// Second rollout's replicaset should have Deployment's (replicas + maxSurge - first RS's replicas) = 10 + 3 - 8 = 5 for .spec.replicas.
+	// 第二次 rollout 的 replicaset 的 .spec.replicas 应为 Deployment 的 (replicas + maxSurge - 第一个 RS 的副本数) = 10 + 3 - 8 = 5。
 	newReplicas := replicas + int32(maxSurge) - minAvailableReplicas
 	framework.Logf("Waiting for the second rollout's replicaset to have .spec.replicas = %d", newReplicas)
 	err = waitForReplicaSetTargetSpecReplicas(ctx, c, secondRS, newReplicas)
 	framework.ExpectNoError(err)
 
-	// The desired replicas wait makes sure that the RS controller has created expected number of pods.
+	// 等待期望副本数可确保 RS controller 已创建预期数量的 pod。
 	framework.Logf("Waiting for the second rollout's replicaset of deployment %q to have desired number of replicas", deploymentName)
 	secondRS, err = c.AppsV1().ReplicaSets(ns).Get(ctx, secondRS.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	err = waitForReplicaSetDesiredReplicas(ctx, c.AppsV1(), secondRS)
 	framework.ExpectNoError(err)
 
-	// Check the deployment's minimum availability.
+	// 检查 deployment 的最小可用性
 	framework.Logf("Verifying that deployment %q has minimum required number of available replicas", deploymentName)
 	if deployment.Status.AvailableReplicas < minAvailableReplicas {
 		err = fmt.Errorf("observed %d available replicas, less than min required %d", deployment.Status.AvailableReplicas, minAvailableReplicas)
 		framework.ExpectNoError(err)
 	}
 
-	// Scale the deployment to 30 replicas.
+	// 将 deployment 扩到 30 个副本
 	newReplicas = int32(30)
 	framework.Logf("Scaling up the deployment %q from %d to %d", deploymentName, replicas, newReplicas)
 	_, err = e2edeployment.UpdateDeploymentWithRetries(c, ns, deployment.Name, func(update *appsv1.Deployment) {
@@ -1314,14 +1308,14 @@ func testProportionalScalingDeployment(ctx context.Context, f *framework.Framewo
 	secondRS, err = c.AppsV1().ReplicaSets(ns).Get(ctx, secondRS.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 
-	// First rollout's replicaset should have .spec.replicas = 8 + (30-10)*(8/13) = 8 + 12 = 20 replicas.
-	// Note that 12 comes from rounding (30-10)*(8/13) to nearest integer.
+	// 第一次 rollout 的 replicaset 应有 .spec.replicas = 8 + (30-10)*(8/13) = 8 + 12 = 20 个副本。
+	// 其中 12 来自 (30-10)*(8/13) 四舍五入到最近整数。
 	framework.Logf("Verifying that first rollout's replicaset has .spec.replicas = 20")
 	err = waitForReplicaSetTargetSpecReplicas(ctx, c, firstRS, 20)
 	framework.ExpectNoError(err)
 
-	// Second rollout's replicaset should have .spec.replicas = 5 + (30-10)*(5/13) = 5 + 8 = 13 replicas.
-	// Note that 8 comes from rounding (30-10)*(5/13) to nearest integer.
+	// 第二次 rollout 的 replicaset 应有 .spec.replicas = 5 + (30-10)*(5/13) = 5 + 8 = 13 个副本。
+	// 其中 8 来自 (30-10)*(5/13) 四舍五入到最近整数。
 	framework.Logf("Verifying that second rollout's replicaset has .spec.replicas = 13")
 	err = waitForReplicaSetTargetSpecReplicas(ctx, c, secondRS, 13)
 	framework.ExpectNoError(err)
@@ -1330,7 +1324,7 @@ func testProportionalScalingDeployment(ctx context.Context, f *framework.Framewo
 func checkDeploymentReplicaSetsControllerRef(ctx context.Context, c clientset.Interface, ns string, uid types.UID, label map[string]string) error {
 	rsList := listDeploymentReplicaSets(ctx, c, ns, label)
 	for _, rs := range rsList.Items {
-		// This rs is adopted only when its controller ref is update
+		// 只有在 controller ref 被更新时，该 rs 才会被接管
 		if controllerRef := metav1.GetControllerOf(&rs); controllerRef == nil || controllerRef.UID != uid {
 			return fmt.Errorf("ReplicaSet %s has unexpected controllerRef %v", rs.Name, controllerRef)
 		}
@@ -1342,7 +1336,7 @@ func waitDeploymentReplicaSetsOrphaned(c clientset.Interface, ns string, label m
 	return func(ctx context.Context) (bool, error) {
 		rsList := listDeploymentReplicaSets(ctx, c, ns, label)
 		for _, rs := range rsList.Items {
-			// This rs is orphaned only when controller ref is cleared
+			// 只有清除 controller ref 时，该 rs 才会成为孤儿
 			if controllerRef := metav1.GetControllerOf(&rs); controllerRef != nil {
 				return false, nil
 			}
@@ -1376,23 +1370,18 @@ func testRollingUpdateDeploymentWithLocalTrafficLoadBalancer(ctx context.Context
 	podLabels := map[string]string{"name": name}
 	replicas := int32(3)
 	d := e2edeployment.NewDeployment(name, replicas, podLabels, AgnhostImageName, AgnhostImage, appsv1.RollingUpdateDeploymentStrategyType)
-	// NewDeployment assigned the same value to both d.Spec.Selector and
-	// d.Spec.Template.Labels, so mutating the one would mutate the other.
-	// Thus we need to set d.Spec.Template.Labels to a new value if we want
-	// to mutate it alone.
+	// NewDeployment 给 d.Spec.Selector 和 d.Spec.Template.Labels 赋了同一个值，
+	// 修改其中一个就会同时改掉另一个。因此若只想修改 d.Spec.Template.Labels，
+	// 需要先给它赋一个新值。
 	d.Spec.Template.Labels = map[string]string{
 		"iteration": "0",
 		"name":      name,
 	}
 	d.Spec.Template.Spec.Containers[0].Args = []string{"netexec", "--http-port=80", "--udp-port=80"}
-	// To ensure that a node that had a local endpoint prior to a rolling
-	// update continues to have a local endpoint throughout the rollout, we
-	// need an affinity policy that will cause pods to be scheduled on the
-	// same nodes as old pods, and we need the deployment to scale up a new
-	// pod before deleting an old pod.  This affinity policy will define
-	// inter-pod affinity for pods of different rollouts and anti-affinity
-	// for pods of the same rollout, so it will need to be updated when
-	// performing a rollout.
+	// 为了让滚动更新前拥有本地 endpoint 的 node 在整个 rollout 期间持续拥有本地 endpoint，
+	// 需要亲和性策略让新 pod 与旧 pod 调度到相同 node，并且 deployment 要先扩容出新 pod
+	// 再删除旧 pod。该策略对不同 rollout 的 pod 定义 inter-pod affinity，
+	// 对同一 rollout 的 pod 定义 anti-affinity，因此执行 rollout 时需要更新它。
 	setAffinities(d, false)
 	d.Spec.Strategy.RollingUpdate = &appsv1.RollingUpdateDeployment{
 		MaxSurge:       ptr.To(intstr.FromInt32(1)),
@@ -1430,10 +1419,8 @@ func testRollingUpdateDeploymentWithLocalTrafficLoadBalancer(ctx context.Context
 	defer close(done)
 	go func() {
 		defer ginkgo.GinkgoRecover()
-		// The affinity policy should ensure that before an old pod is
-		// deleted, a new pod will have been created on the same node.
-		// Thus the set of nodes with local endpoints for the service
-		// should remain unchanged.
+		// 亲和性策略应保证旧 pod 被删除前，同一 node 上已创建新 pod，
+		// 从而使拥有该 service 本地 endpoint 的 node 集合保持不变
 		wait.Until(func() {
 			actualNodes, err := jig.GetEndpointNodeNames(ctx)
 			if err != nil {
@@ -1473,12 +1460,10 @@ func testRollingUpdateDeploymentWithLocalTrafficLoadBalancer(ctx context.Context
 	}
 }
 
-// setAffinities set PodAntiAffinity across pods from the same generation
-// of Deployment and if, explicitly requested, also affinity with pods
-// from other generations.
-// It is required to make those "Required" so that in large clusters where
-// scheduler may not score all nodes if a lot of them are feasible, the
-// test will also have a chance to pass.
+// setAffinities 为同一 generation 的 pod 设置 PodAntiAffinity，
+// 若显式要求，也为不同 generation 的 pod 设置 affinity。
+// 必须将其设为 "Required"：在大规模集群中，若可行 node 很多，
+// scheduler 可能不会给所有 node 打分，这样测试才有机会通过。
 func setAffinities(d *appsv1.Deployment, setAffinity bool) {
 	affinity := &v1.Affinity{
 		PodAntiAffinity: &v1.PodAntiAffinity{
@@ -1529,8 +1514,7 @@ func setAffinities(d *appsv1.Deployment, setAffinity bool) {
 	d.Spec.Template.Spec.Affinity = affinity
 }
 
-// watchRecreateDeployment watches Recreate deployments and ensures no new pods will run at the same time with
-// old pods.
+// watchRecreateDeployment 观察 Recreate deployment，确保新旧 pod 不会同时运行
 func watchRecreateDeployment(ctx context.Context, c clientset.Interface, d *appsv1.Deployment) error {
 	if d.Spec.Strategy.Type != appsv1.RecreateDeploymentStrategyType {
 		return fmt.Errorf("deployment %q does not use a Recreate strategy: %s", d.Name, d.Spec.Strategy.Type)
@@ -1575,7 +1559,7 @@ func watchRecreateDeployment(ctx context.Context, c clientset.Interface, d *apps
 	return err
 }
 
-// waitForDeploymentOldRSsNum waits for the deployment to clean up old rcs.
+// waitForDeploymentOldRSsNum 等待 deployment 清理旧的 rc
 func waitForDeploymentOldRSsNum(ctx context.Context, c clientset.Interface, ns, deploymentName string, desiredRSNum int) error {
 	var oldRSs []*appsv1.ReplicaSet
 	var d *appsv1.Deployment
@@ -1600,7 +1584,7 @@ func waitForDeploymentOldRSsNum(ctx context.Context, c clientset.Interface, ns, 
 	return pollErr
 }
 
-// waitForReplicaSetDesiredReplicas waits until the replicaset has desired number of replicas.
+// waitForReplicaSetDesiredReplicas 等待 replicaset 达到期望副本数
 func waitForReplicaSetDesiredReplicas(ctx context.Context, rsClient appsclient.ReplicaSetsGetter, replicaSet *appsv1.ReplicaSet) error {
 	desiredGeneration := replicaSet.Generation
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, framework.PollShortTimeout, true, func(ctx context.Context) (bool, error) {
@@ -1616,7 +1600,7 @@ func waitForReplicaSetDesiredReplicas(ctx context.Context, rsClient appsclient.R
 	return err
 }
 
-// waitForReplicaSetTargetSpecReplicas waits for .spec.replicas of a RS to equal targetReplicaNum
+// waitForReplicaSetTargetSpecReplicas 等待 RS 的 .spec.replicas 等于 targetReplicaNum
 func waitForReplicaSetTargetSpecReplicas(ctx context.Context, c clientset.Interface, replicaSet *appsv1.ReplicaSet, targetReplicaNum int32) error {
 	desiredGeneration := replicaSet.Generation
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, framework.PollShortTimeout, true, func(ctx context.Context) (bool, error) {
@@ -1632,33 +1616,33 @@ func waitForReplicaSetTargetSpecReplicas(ctx context.Context, c clientset.Interf
 	return err
 }
 
-// checkDeploymentRevisionAndImage checks if the input deployment's and its new replica set's revision and image are as expected.
+// checkDeploymentRevisionAndImage 检查传入 deployment 及其新 replicaset 的 revision 和 image 是否符合预期
 func checkDeploymentRevisionAndImage(c clientset.Interface, ns, deploymentName, revision, image string) error {
 	return testutil.CheckDeploymentRevisionAndImage(c, ns, deploymentName, revision, image)
 }
 
-// waitForObservedDeployment waits for the specified deployment generation.
+// waitForObservedDeployment 等待观察到指定的 deployment generation
 func waitForObservedDeployment(c clientset.Interface, ns, deploymentName string, desiredGeneration int64) error {
 	return testutil.WaitForObservedDeployment(c, ns, deploymentName, desiredGeneration)
 }
 
-// waitForDeploymentWithCondition waits for the specified deployment condition.
+// waitForDeploymentWithCondition 等待 deployment 出现指定的 condition
 func waitForDeploymentWithCondition(c clientset.Interface, ns, deploymentName, reason string, condType appsv1.DeploymentConditionType) error {
 	return testutil.WaitForDeploymentWithCondition(c, ns, deploymentName, reason, condType, framework.Logf, poll, pollLongTimeout)
 }
 
-// waitForDeploymentCompleteAndCheckRolling waits for the deployment to complete, and check rolling update strategy isn't broken at any times.
-// Rolling update strategy should not be broken during a rolling update.
+// waitForDeploymentCompleteAndCheckRolling 等待 deployment 完成，并全程检查 rolling update 策略未被破坏
 func waitForDeploymentCompleteAndCheckRolling(c clientset.Interface, d *appsv1.Deployment) error {
 	return testutil.WaitForDeploymentCompleteAndCheckRolling(c, d, framework.Logf, poll, pollLongTimeout)
 }
 
-// waitForDeploymentUpdatedReplicasGTE waits for given deployment to be observed by the controller and has at least a number of updatedReplicas
+// waitForDeploymentUpdatedReplicasGTE 等待 controller 观察到指定 deployment，
+// 且其 updatedReplicas 至少达到给定数量
 func waitForDeploymentUpdatedReplicasGTE(c clientset.Interface, ns, deploymentName string, minUpdatedReplicas int32, desiredGeneration int64) error {
 	return testutil.WaitForDeploymentUpdatedReplicasGTE(c, ns, deploymentName, minUpdatedReplicas, desiredGeneration, poll, pollLongTimeout)
 }
 
-// Deployment should have a working scale subresource
+// Deployment 应具备可用的 scale subresource
 func testDeploymentSubresources(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
@@ -1669,7 +1653,7 @@ func testDeploymentSubresources(ctx context.Context, f *framework.Framework) {
 	deploy, err := c.AppsV1().Deployments(ns).Create(ctx, d, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Wait for it to be updated to revision 1
+	// 等待其更新到 revision 1
 	err = e2edeployment.WaitForDeploymentRevisionAndImage(c, ns, deploymentName, "1", AgnhostImage)
 	framework.ExpectNoError(err)
 

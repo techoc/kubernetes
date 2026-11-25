@@ -50,10 +50,10 @@ var _ = utils.SIGDescribe("CSIInlineVolumes", func() {
 		  create, get, list, patch, and delete operations.
 	*/
 	framework.ConformanceIt("should support CSIVolumeSource in Pod API", func(ctx context.Context) {
-		// Create client
+		// 创建 client
 		client := f.ClientSet.CoreV1().Pods(f.Namespace.Name)
 
-		// Fake driver name for this API test
+		// 本 API 测试使用的虚构 driver 名称
 		driverName := "e2e.example.com"
 
 		podName := "pod-csi-inline-volumes"
@@ -62,7 +62,7 @@ var _ = utils.SIGDescribe("CSIInlineVolumes", func() {
 		vol2fstype := "ext4"
 		vol2readonly := true
 
-		// Create a simple pod object with 2 CSI inline volumes
+		// 创建一个带 2 个 CSI inline volume 的简单 pod 对象
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName,
@@ -137,11 +137,11 @@ var _ = utils.SIGDescribe("CSIInlineVolumes", func() {
 		retrievedPod, err = client.Get(ctx, createdPod.Name, metav1.GetOptions{})
 		switch {
 		case apierrors.IsNotFound(err):
-			// Okay, normal case.
+			// 正常情况。
 		case err != nil:
 			framework.Failf("expected 404, got %#v", err)
 		case retrievedPod.DeletionTimestamp != nil:
-			// Okay, normal case.
+			// 正常情况。
 		default:
 			framework.Failf("Pod should have been deleted or have DeletionTimestamp, but instead got: %s", retrievedPod)
 		}
@@ -157,13 +157,13 @@ var _ = utils.SIGDescribe("CSIInlineVolumes", func() {
 		MUST succeed.
 	*/
 	framework.ConformanceIt("should run through the lifecycle of a CSIDriver", func(ctx context.Context) {
-		// Create client
+		// 创建 client
 		client := f.ClientSet.StorageV1().CSIDrivers()
 		defaultFSGroupPolicy := storagev1.ReadWriteOnceWithFSTypeFSGroupPolicy
 		csiDriverLabel := map[string]string{"e2e-test": f.UniqueName}
 		csiDriverLabelSelector := labels.SelectorFromSet(csiDriverLabel).String()
 
-		// Driver that supports only Ephemeral
+		// 只支持 Ephemeral 的 driver
 		driver1 := &storagev1.CSIDriver{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   "inline-driver-" + string(uuid.NewUUID()),
@@ -176,7 +176,7 @@ var _ = utils.SIGDescribe("CSIInlineVolumes", func() {
 			},
 		}
 
-		// Driver that supports both Ephemeral and Persistent
+		// 同时支持 Ephemeral 和 Persistent 的 driver
 		driver2 := &storagev1.CSIDriver{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   "inline-driver-" + string(uuid.NewUUID()),
@@ -247,11 +247,11 @@ var _ = utils.SIGDescribe("CSIInlineVolumes", func() {
 		retrievedDriver, err := client.Get(ctx, createdDriver1.Name, metav1.GetOptions{})
 		switch {
 		case apierrors.IsNotFound(err):
-			// Okay, normal case.
+			// 正常情况。
 		case err != nil:
 			framework.Failf("expected 404, got %#v", err)
 		case retrievedDriver.DeletionTimestamp != nil:
-			// Okay, normal case.
+			// 正常情况。
 		default:
 			framework.Failf("CSIDriver should have been deleted or have DeletionTimestamp, but instead got: %s", retrievedDriver)
 		}
@@ -264,11 +264,11 @@ var _ = utils.SIGDescribe("CSIInlineVolumes", func() {
 		retrievedDriver, err = client.Get(ctx, createdDriver2.Name, metav1.GetOptions{})
 		switch {
 		case apierrors.IsNotFound(err):
-			// Okay, normal case.
+			// 正常情况。
 		case err != nil:
 			framework.Failf("expected 404, got %#v", err)
 		case retrievedDriver.DeletionTimestamp != nil:
-			// Okay, normal case.
+			// 正常情况。
 		default:
 			framework.Failf("CSIDriver should have been deleted or have DeletionTimestamp, but instead got: %s", retrievedDriver)
 		}
