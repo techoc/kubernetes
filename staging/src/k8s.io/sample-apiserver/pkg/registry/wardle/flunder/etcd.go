@@ -25,7 +25,7 @@ import (
 	"k8s.io/sample-apiserver/pkg/registry"
 )
 
-// NewREST returns a RESTStorage object that will work against API services.
+// NewREST 创建基于 etcd 的 Flunder RESTStorage。
 // 存储层只认内部类型，外部版本在 HTTP 层完成转换。
 func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*registry.REST, error) {
 	// 同一份策略同时负责创建、更新和删除，校验规则不会因操作而异。
@@ -43,7 +43,7 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*reg
 		DeleteStrategy: strategy,
 
 		// 默认转换器只给 name 和创建时间，示例够用，要加列就替换掉它。
-		// TODO: define table converter that exposes more than name/creation timestamp
+		// TODO：定义表格转换器，暴露名称和创建时间之外的字段。
 		TableConvertor: rest.NewDefaultTableConvertor(wardle.Resource("flunders")),
 	}
 	// AttrFunc 提供命名空间/名称属性，供策略判断和索引使用。

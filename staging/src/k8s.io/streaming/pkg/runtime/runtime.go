@@ -23,9 +23,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// HandleError logs an asynchronous error.
-// 异步路径拿不到请求上下文，只能退回到 Background logger；调用方若手上有 ctx，
-// 优先用 HandleErrorWithContext，日志才能带上 trace/请求 ID。
+// HandleError 记录异步执行过程中发生的错误。
+// 该接口不接收上下文，只能使用 klog.Background()；调用方若持有 ctx，
+// 应改用 HandleErrorWithContext，让日志关联请求上下文。
 func HandleError(err error) {
 	if err == nil {
 		return
@@ -33,9 +33,9 @@ func HandleError(err error) {
 	klog.Background().Error(err, "Unhandled Error")
 }
 
-// HandleErrorWithContext logs an asynchronous error with contextual logging when available.
-// 这里的“when available”指 ctx 里是否挂了 logger；没有就退回默认 logger，
-// 所以调用方传 context.Background() 也不会 panic。
+// HandleErrorWithContext 使用 ctx 中的日志记录器记录异步错误。
+// ctx 未关联日志记录器时，klog.FromContext 会返回后台日志记录器，
+// 因此传入 context.Background() 也不会 panic。
 func HandleErrorWithContext(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	if err == nil {
 		return
@@ -43,13 +43,13 @@ func HandleErrorWithContext(ctx context.Context, err error, msg string, keysAndV
 	klog.FromContext(ctx).Error(err, msg, keysAndValues...)
 }
 
-// HandleCrash recovers from panic and logs it.
-// 仅在 defer 中调用才有意义；不在 defer 里调用时 recover() 恒为 nil，等于空操作。
+// HandleCrash 从 panic 中恢复，并使用后台日志记录器记录异常。
+// 必须直接由 defer 调用；普通调用中的 recover() 恒为 nil，等于空操作。
 func HandleCrash() {
 	HandleCrashWithLogger(klog.Background())
 }
 
-// HandleCrashWithContext recovers from panic and logs it with the context logger.
+// HandleCrashWithContext 从 panic 中恢复，并使用上下文中的日志记录器记录异常。
 // 附加处理器先跑，让调用方有机会在日志落盘前补充自己的现场信息（比如上报指标），
 // 且它们拿到的是原始 panic 值，不做 fmt.Errorf 包装。
 func HandleCrashWithContext(ctx context.Context, additionalHandlers ...func(context.Context, interface{})) {
@@ -61,7 +61,7 @@ func HandleCrashWithContext(ctx context.Context, additionalHandlers ...func(cont
 	}
 }
 
-// HandleCrashWithLogger recovers from panic and logs it using the provided logger.
+// HandleCrashWithLogger 从 panic 中恢复，并使用调用方提供的日志记录器记录异常。
 // 与 HandleCrashWithContext 的区别是不支持附加处理器；给已有明确 logger 的调用点省一次 ctx 查找。
 func HandleCrashWithLogger(logger klog.Logger) {
 	if r := recover(); r != nil {

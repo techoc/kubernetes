@@ -37,7 +37,7 @@ func Test_getTotalReadyEndpoints(t *testing.T) {
 		name               string
 		si                 *SliceInfo
 		expectedTotalReady int
-		expectedTotal      int // this is really just testing the test helper
+		expectedTotal      int // 这实际上只是在测试测试辅助函数
 	}{{
 		// 空 SliceInfo：三组 slice 均为空，期望两类计数都是 0。
 		name:          "empty",
@@ -87,7 +87,6 @@ func Test_getTotalReadyEndpoints(t *testing.T) {
 			actualTotal := countEndpoints(tc.si.ToCreate) + countEndpoints(tc.si.ToUpdate) + countEndpoints(tc.si.Unchanged)
 
 			if actualTotal != tc.expectedTotal {
-				// This likely means that sliceWithNEndpoints or countEndpoints are not working as expected
 				// 总数不符说明构造 fixture 或 countEndpoints 有问题，此时后续断言不可信。
 				t.Errorf("Problem with test or test helper. Expected %d total endpoints, got %d", tc.expectedTotal, actualTotal)
 			}
@@ -101,8 +100,6 @@ func Test_getTotalReadyEndpoints(t *testing.T) {
 		})
 	}
 }
-
-// helpers
 
 // sliceWithNEndpoints 构造一个含 ready 个 Ready 端点、unready 个未 Ready 端点的 EndpointSlice。
 // 端点地址按序号递增生成（10.1.2.<i>），仅 Conditions.Ready 用于区分两组端点。

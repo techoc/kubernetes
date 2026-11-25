@@ -21,6 +21,6 @@ limitations under the License.
 // +groupName=metrics.k8s.io
 // +k8s:openapi-model-package=io.k8s.metrics.pkg.apis.metrics.v1
 
-// Package v1 is the v1 version of the metrics API.
-// 本包是当前对外版本；生成器指令集中放在本文件，不散落到各类型文件。
+// Package v1 是指标 API 的 v1 版本。
+// 本包是当前对外版本，代码生成指令集中放在本文件。
 package v1

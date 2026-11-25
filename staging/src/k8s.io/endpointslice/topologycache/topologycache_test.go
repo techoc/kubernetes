@@ -785,8 +785,6 @@ func TestTopologyCacheRace(t *testing.T) {
 	}()
 }
 
-// Test Helpers
-
 // expectEquivalentSlices 辅助断言两组 EndpointSlice 等价：先比对 slice 数量，
 // 再逐个 slice 比对端点数量，最后用 reflect.DeepEqual 比较每个端点（包括 hint 与 Conditions）。
 func expectEquivalentSlices(t *testing.T, actualSlices, expectedSlices []*discovery.EndpointSlice) {

@@ -33,8 +33,7 @@ import (
 	informers "k8s.io/sample-apiserver/pkg/generated/informers/externalversions"
 )
 
-// TestBanfluderAdmissionPlugin tests various test cases against
-// ban flunder admission plugin
+// TestBanflunderAdmissionPlugin 测试禁用 Flunder 名字的准入插件。
 // 用表格驱动的方式覆盖“命中禁用名单 / 未命中 / 资源类型不符”三条路径，
 // 重点验证插件只在 Kind 确实是 Flunder 时才拦截。
 func TestBanflunderAdmissionPlugin(t *testing.T) {
@@ -47,8 +46,7 @@ func TestBanflunderAdmissionPlugin(t *testing.T) {
 		admissionInputResource schema.GroupVersionResource
 		admissionMustFail      bool
 	}{
-		// scenario 1:
-		// a flunder with a name that appears on a list of disallowed flunders must be banned
+		// 场景 1：名字在禁用名单中的 Flunder 必须被拒绝。
 		{
 			informersOutput: wardle.FischerList{
 				Items: []wardle.Fischer{
@@ -65,8 +63,7 @@ func TestBanflunderAdmissionPlugin(t *testing.T) {
 			admissionInputResource: wardle.Resource("flunders").WithVersion("version"),
 			admissionMustFail:      true,
 		},
-		// scenario 2:
-		// a flunder with a name that does not appear on a list of disallowed flunders must be admitted
+		// 场景 2：名字不在禁用名单中的 Flunder 必须被放行。
 		{
 			informersOutput: wardle.FischerList{
 				Items: []wardle.Fischer{
@@ -83,9 +80,7 @@ func TestBanflunderAdmissionPlugin(t *testing.T) {
 			admissionInputResource: wardle.Resource("flunders").WithVersion("version"),
 			admissionMustFail:      false,
 		},
-		// scenario 3:
-		// a flunder with a name that appears on a list of disallowed flunders would be banned
-		// but the kind passed in is not a flunder thus the whole request is accepted
+		// 场景 3：即使名字在禁用名单中，非 Flunder 请求也应整体放行。
 		{
 			informersOutput: wardle.FischerList{
 				Items: []wardle.Fischer{
@@ -107,7 +102,6 @@ func TestBanflunderAdmissionPlugin(t *testing.T) {
 	for index, scenario := range scenarios {
 		// 用闭包包住每个场景，便于 defer 关闭 informer 的 stop channel，避免场景间互相污染。
 		func() {
-			// prepare
 			// 让 fake 客户端的 list 总是返回该场景预设的 Fischer，插件据此构建缓存。
 			cs := &fake.Clientset{}
 			cs.AddReactor("list", "fischers", func(action clienttesting.Action) (bool, runtime.Object, error) {
@@ -134,7 +128,6 @@ func TestBanflunderAdmissionPlugin(t *testing.T) {
 			informersFactory.Start(stop)
 			informersFactory.WaitForCacheSync(stop)
 
-			// act
 			// 构造一个 CREATE 请求，Kind/Resource 由场景指定，用来验证插件的类型过滤。
 			err = target.Admit(context.TODO(), admission.NewAttributesRecord(
 				&scenario.admissionInput,
@@ -151,7 +144,6 @@ func TestBanflunderAdmissionPlugin(t *testing.T) {
 				nil,
 			)
 
-			// validate
 			// 只在期望失败时要求报错，其余场景要求零错误，避免“误杀”通过。
 			if scenario.admissionMustFail && err == nil {
 				t.Errorf("scenario %d: expected an error but got nothing", index)

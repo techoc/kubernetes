@@ -52,11 +52,8 @@ var (
 	errNoContext = fmt.Errorf("no context is currently set, use %q to select a new one", "kubectl config use-context <context>")
 )
 
-// NamespaceOptions provides information required to update
-// the current context on a user's KUBECONFIG
-//
-// 这里把命令处理过程拆成 Complete、Validate、Run 三个阶段所需的中间状态都放在一个结构体里，
-// 好处是每个阶段只读写自己关心的字段，测试时可以跳过 cobra 直接对选项做断言。
+// NamespaceOptions 保存更新用户 KUBECONFIG 当前 context 所需的全部状态。
+// Complete、Validate、Run 各阶段只读写自己关心的字段，测试也可绕过 cobra 直接驱动。
 type NamespaceOptions struct {
 	// 复用 cli-runtime 的 ConfigFlags，让本命令自动支持 --kubeconfig、--context 等标准 kubectl 参数，
 	// 而不必自己解析这些标识。
@@ -84,10 +81,8 @@ type NamespaceOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewNamespaceOptions provides an instance of NamespaceOptions with default values
-//
-// ConfigFlags(true) 表示启用“使用当前 context”的行为，让默认值直接从用户的 kubeconfig 继承，
-// 而不是构造一个空配置要求调用方逐项填写。
+// NewNamespaceOptions 创建带默认值的 NamespaceOptions。
+// ConfigFlags(true) 让默认值继承用户 kubeconfig 的当前 context，而非构造空配置。
 func NewNamespaceOptions(streams genericiooptions.IOStreams) *NamespaceOptions {
 	return &NamespaceOptions{
 		configFlags: genericclioptions.NewConfigFlags(true),
@@ -96,11 +91,9 @@ func NewNamespaceOptions(streams genericiooptions.IOStreams) *NamespaceOptions {
 	}
 }
 
-// NewCmdNamespace provides a cobra command wrapping NamespaceOptions
-//
-// SilenceUsage 设为 true 是因为 RunE 内部已经给出具体错误；
-// 参数错误时再打印整段用法只会淹没真正的原因。
-// DisplayName 注解保证帮助与提示中显示 "kubectl ns"，即便二进制实际叫作 kubectl-ns。
+// NewCmdNamespace 创建封装 NamespaceOptions 的 cobra 命令。
+// SilenceUsage 避免在 RunE 已给出具体错误时再打印整段用法；
+// DisplayName 注解确保帮助与提示显示 "kubectl ns"，而非二进制名 kubectl-ns。
 func NewCmdNamespace(streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewNamespaceOptions(streams)
 
@@ -137,10 +130,8 @@ func NewCmdNamespace(streams genericiooptions.IOStreams) *cobra.Command {
 	return cmd
 }
 
-// Complete sets all information required for updating the current context
-//
-// Complete 只做汇总，不写回 kubeconfig。先把原始配置读成快照，再依次解析目标命名空间以及
-// 可能覆盖它的 context、cluster、user，保证后续步骤看到的是一致的视图。
+// Complete 汇总更新当前 context 所需信息，但不写回 kubeconfig。
+// 先读取配置快照，再解析目标命名空间及 context、cluster、user 覆盖值，供后续阶段使用一致视图。
 func (o *NamespaceOptions) Complete(cmd *cobra.Command, args []string) error {
 	o.args = args
 
@@ -162,10 +153,8 @@ func (o *NamespaceOptions) Complete(cmd *cobra.Command, args []string) error {
 		o.userSpecifiedNamespace = args[0]
 	}
 
-	// if no namespace argument or flag value was specified, then there
-	// is no need to generate a resulting context
-	// 纯查询路径到此为止：后面的集群、用户覆盖只对“写入新命名空间”有意义，
-	// 提前返回也能让无 context 的纯 --list 场景正常工作。
+	// 未指定命名空间时不生成目标 context；集群与用户覆盖只对写操作有意义。
+	// 提前返回也让尚未设置 context 的纯 --list 查询能继续工作。
 	if len(o.userSpecifiedNamespace) == 0 {
 		return nil
 	}
@@ -194,10 +183,8 @@ func (o *NamespaceOptions) Complete(cmd *cobra.Command, args []string) error {
 	o.resultingContext.Cluster = currentContext.Cluster
 	o.resultingContext.AuthInfo = currentContext.AuthInfo
 
-	// if a target context is explicitly provided by the user,
-	// use that as our reference for the final, resulting context
-	// 先以当前 context 为基底，若用户点名了目标 context 就整体深拷贝作为新基底；
-	// 深拷贝是必要的，否则后续改命名空间会直接改到 rawConfig 里的原对象。
+	// 默认以当前 context 为基底；用户指定目标 context 时改用其深拷贝。
+	// 必须深拷贝，否则修改命名空间会污染 rawConfig 中的原对象。
 	if len(o.userSpecifiedContext) > 0 {
 		o.resultingContextName = o.userSpecifiedContext
 		if userCtx, exists := o.rawConfig.Contexts[o.userSpecifiedContext]; exists {
@@ -205,9 +192,7 @@ func (o *NamespaceOptions) Complete(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// override context info with user provided values
-	// 覆盖顺序是有意为之：命名空间来自位置参数或 --namespace，始终写入；
-	// cluster 和 user 只有显式给出时才覆盖基底 context 的对应字段。
+	// 命名空间始终取位置参数或 --namespace；cluster 与 user 仅在显式给出时覆盖。
 	o.resultingContext.Namespace = o.userSpecifiedNamespace
 
 	if len(o.userSpecifiedCluster) > 0 {
@@ -217,10 +202,7 @@ func (o *NamespaceOptions) Complete(cmd *cobra.Command, args []string) error {
 		o.resultingContext.AuthInfo = o.userSpecifiedAuthInfo
 	}
 
-	// generate a unique context name based on its new values if
-	// user did not explicitly request a context by name
-	// 未指定名称时按内容拼出名字，使“同一命名空间+集群+用户”复用同一个 context，
-	// 避免每次切换都往 kubeconfig 里塞一个近乎重复的条目。
+	// 未指定 context 名称时按内容生成确定性名字，使相同命名空间、集群和用户复用同一条目。
 	if len(o.userSpecifiedContext) == 0 {
 		o.resultingContextName = generateContextName(o.resultingContext)
 	}
@@ -244,10 +226,8 @@ func generateContextName(fromContext *api.Context) string {
 	return name
 }
 
-// Validate ensures that all required arguments and flag values are provided
-//
-// 这里只检查发出写操作前必须成立的前提：存在当前 context，且位置参数不超过一个。
-// 更细的规则（如 --namespace 与位置参数互斥）在 Complete 阶段已经处理。
+// Validate 检查执行命令前必须满足的参数前提：存在当前 context，且最多只有一个位置参数。
+// --namespace 与位置参数互斥等规则已在 Complete 中处理。
 func (o *NamespaceOptions) Validate() error {
 	if len(o.rawConfig.CurrentContext) == 0 {
 		return errNoContext
@@ -259,11 +239,8 @@ func (o *NamespaceOptions) Validate() error {
 	return nil
 }
 
-// Run lists all available namespaces on a user's KUBECONFIG or updates the
-// current context based on a provided namespace.
-//
-// Run 是查询与写入两条路径的分叉点：有目标命名空间就走 setNamespace 写回配置，
-// 否则只读 rawConfig 输出当前命名空间或全部命名空间。
+// Run 列出 KUBECONFIG 中的命名空间，或按指定命名空间更新当前 context。
+// 有目标命名空间时通过 setNamespace 写回；否则只读 rawConfig 输出当前或全部命名空间。
 func (o *NamespaceOptions) Run() error {
 	if len(o.userSpecifiedNamespace) > 0 && o.resultingContext != nil {
 		return o.setNamespace(o.resultingContext, o.resultingContextName)
@@ -281,10 +258,7 @@ func (o *NamespaceOptions) Run() error {
 			return nil
 		}
 
-		// skip if dealing with a namespace we have already seen
-		// or if the namespace for the current context is empty
-		// 空命名空间没有展示价值；用 map 去重则是为了让 --list 输出每个名字恰好一次，
-		// 而不是被共享同一命名空间的多个 context 重复刷屏。
+		// 跳过空命名空间，并用 map 去重，确保 --list 不因多个 context 共享命名空间而重复输出。
 		if len(c.Namespace) == 0 {
 			continue
 		}
@@ -325,13 +299,8 @@ func isContextEqual(ctxA, ctxB *api.Context) bool {
 	return true
 }
 
-// setNamespace receives a "desired" context state and determines if a similar context
-// is already present in a user's KUBECONFIG. If one is not, then a new context is added
-// to the user's config under the provided destination name.
-// The current context field is updated to point to the new context.
-//
-// 这里先判断是否已存在等价 context，避免无谓地覆盖用户在同一名字下保存过的配置；
-// 最后通过 ModifyConfig 一次性持久化，让它自行处理 kubeconfig 文件的写入与备份语义。
+// setNamespace 保存目标 context 并将 CurrentContext 切换为指定名称。
+// 仅在同名 context 不存在或内容不等价时覆盖；ModifyConfig 统一处理文件写入与备份。
 func (o *NamespaceOptions) setNamespace(fromContext *api.Context, withContextName string) error {
 	if len(fromContext.Namespace) == 0 {
 		return fmt.Errorf("a non-empty namespace must be provided")
@@ -339,10 +308,7 @@ func (o *NamespaceOptions) setNamespace(fromContext *api.Context, withContextNam
 
 	configAccess := clientcmd.NewDefaultPathOptions()
 
-	// determine if we have already saved this context to the user's KUBECONFIG before
-	// if so, simply switch the current context to the existing one.
-	// 只有当同名 context 不存在或内容不一致时才覆盖；内容一致时保留原条目，
-	// 可以减少对 kubeconfig 的无意义改动。
+	// 内容一致时保留原条目，避免无意义改写；不等价时才替换同名 context。
 	if existingResultingCtx, exists := o.rawConfig.Contexts[withContextName]; !exists || !isContextEqual(fromContext, existingResultingCtx) {
 		o.rawConfig.Contexts[withContextName] = fromContext
 	}

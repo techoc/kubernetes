@@ -44,7 +44,7 @@ type customMetricsClient struct {
 	mapper  meta.RESTMapper
 }
 
-// NewForVersion returns a new CustomMetricsClient for a particular api version.
+// NewForVersion 为指定 API 版本创建 CustomMetricsClient。
 // 版本信息留在客户端里，后续请求和结果转换都按该版本协商。
 func NewForVersion(client rest.Interface, mapper meta.RESTMapper, version schema.GroupVersion) CustomMetricsClient {
 	return &customMetricsClient{
@@ -54,7 +54,7 @@ func NewForVersion(client rest.Interface, mapper meta.RESTMapper, version schema
 	}
 }
 
-// NewForVersionForConfig returns a new CustomMetricsClient for a particular api version and base configuration.
+// NewForVersionForConfig 基于基础配置为指定 API 版本创建 CustomMetricsClient。
 // 这里复制一份配置再改，避免把 GroupVersion 等设置写回调用方持有的 Config。
 // 使用 WithoutConversion 是因为转换由 versionConverter 显式完成，
 // 编码器只负责按选定版本读写线上格式。
@@ -96,7 +96,7 @@ func (c *customMetricsClient) NamespacedMetrics(namespace string) MetricsInterfa
 	}
 }
 
-// qualResourceForKind returns the string format of a qualified group resource for the specified GroupKind
+// qualResourceForKind 返回指定 GroupKind 对应的限定 group/resource 字符串。
 // 指标 API 用“资源名/对象名/指标名”定位一条指标，所以必须先把 Kind 映射为资源名。
 // 走 mapper 而不是硬编码，是为了兼容 CRD 等带自定义 group 的对象。
 func (c *customMetricsClient) qualResourceForKind(groupKind schema.GroupKind) (string, error) {
@@ -151,7 +151,7 @@ func (m *rootScopedMetrics) getForNamespace(namespace string, metricName string,
 // GetForObject 取单个对象的一条指标；API 返回列表，这里要求恰好一条，
 // 否则说明服务端行为不符合单对象查询的约定，直接报错比悄悄取第一条更安全。
 func (m *rootScopedMetrics) GetForObject(groupKind schema.GroupKind, name string, metricName string, metricSelector labels.Selector) (*v1beta2.MetricValue, error) {
-	// handle namespace separately
+	// Namespace 需要单独处理。
 	// Namespace 既是集群级对象，又有专用路径，不能按普通子资源拼接。
 	if groupKind.Kind == "Namespace" && groupKind.Group == "" {
 		return m.getForNamespace(name, metricName, metricSelector)
@@ -196,7 +196,7 @@ func (m *rootScopedMetrics) GetForObject(groupKind schema.GroupKind, name string
 // GetForObjects 通过 AllObjects 通配符一次取回多个对象的同指标值。
 // Namespace 没有批量查询入口，因此显式拒绝，避免调用方误以为得到了全部命名空间。
 func (m *rootScopedMetrics) GetForObjects(groupKind schema.GroupKind, selector labels.Selector, metricName string, metricSelector labels.Selector) (*v1beta2.MetricValueList, error) {
-	// we can't wildcard-fetch for namespaces
+	// 不能对命名空间做通配批量查询。
 	if groupKind.Kind == "Namespace" && groupKind.Group == "" {
 		return nil, fmt.Errorf("cannot fetch metrics for multiple namespaces at once")
 	}

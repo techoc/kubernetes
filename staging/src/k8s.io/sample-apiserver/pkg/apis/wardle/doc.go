@@ -17,6 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=wardle.example.com
 
-// Package wardle is the internal version of the API.
+// Package wardle 是 Wardle API 的内部版本。
 // 本包只放内部类型，供外部版本转换时复用。
 package wardle

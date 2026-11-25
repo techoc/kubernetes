@@ -21,142 +21,85 @@ import (
 )
 
 const (
-	// BootstrapTokenSecretPrefix is the prefix for bootstrap token names.
-	// Bootstrap tokens secrets must be named in the form
-	// `bootstrap-token-<token-id>`.  This is the prefix to be used before the
-	// token ID.
-	//
-	// Secret 名称采用 `bootstrap-token-<token-id>` 的形式，ID 可公开，
-	// 因此可以安全地出现在对象名称中；Secret 本体则只存于 Data。
+	// BootstrapTokenSecretPrefix 是 bootstrap token Secret 名称的前缀。
+	// 名称必须为 `bootstrap-token-<token-id>`；ID 可公开，Secret 本体只存入 Data。
 	BootstrapTokenSecretPrefix = "bootstrap-token-"
 
-	// SecretTypeBootstrapToken is used during the automated bootstrap process (first
-	// implemented by kubeadm). It stores tokens that are used to sign well known
-	// ConfigMaps. They may also eventually be used for authentication.
-	//
-	// 使用专用 Secret 类型而非普通 Opaque，便于控制器按类型批量过滤、
-	// 回收，并让 RBAC 与审计能明确识别这类高价值凭据。
+	// SecretTypeBootstrapToken 是自动化引导流程使用的专用 Secret 类型。
+	// 专用类型便于控制器筛选和回收，也让 RBAC 与审计能识别这类凭据。
 	SecretTypeBootstrapToken v1.SecretType = "bootstrap.kubernetes.io/token"
 
-	// BootstrapTokenIDKey is the id of this token. This can be transmitted in the
-	// clear and encoded in the name of the secret. It must be a random 6 character
-	// string that matches the regexp `^([a-z0-9]{6})$`. Required.
-	//
-	// ID 是 token 的公开部分：它不能单独用于认证，只用于定位和标识 Secret。
+	// BootstrapTokenIDKey 是 Secret 中存放公开 token ID 的必需键。
+	// ID 必须是随机的 6 位小写字母或数字，可放入 Secret 名称，但不能单独用于认证。
 	BootstrapTokenIDKey = "token-id"
 
-	// BootstrapTokenSecretKey is the actual secret. It must be a random 16 character
-	// string that matches the regexp `^([a-z0-9]{16})$`. Required.
-	//
-	// Secret 是 token 的保密部分，必须始终被当作密码对待：不可写入日志、
-	// 不可放在 Secret 名称或注解中。16 个字符（约 80 bit）在短期有效期
-	// 内足以抵御暴力猜测。
+	// BootstrapTokenSecretKey 是 Secret 中存放保密部分的必需键。
+	// 值必须是随机的 16 位小写字母或数字，不得写入日志、对象名称或注解。
 	BootstrapTokenSecretKey = "token-secret"
 
-	// BootstrapTokenExpirationKey is when this token should be expired and no
-	// longer used. A controller will delete this resource after this time. This
-	// is an absolute UTC time using RFC3339. If this cannot be parsed, the token
-	// should be considered invalid. Optional.
-	//
-	// 解析失败时按“已过期”处理，而不是“永久有效”，是安全上的失效关闭
-	// （fail-closed）选择：畸形时间不能意外延长凭据寿命。
+	// BootstrapTokenExpirationKey 是可选的绝对过期时间，采用 RFC3339 UTC 格式。
+	// 控制器在到期后删除 Secret；无法解析时必须按已过期处理，不能视为永久有效。
 	BootstrapTokenExpirationKey = "expiration"
 
-	// BootstrapTokenDescriptionKey is a description in human-readable format that
-	// describes what the bootstrap token is used for. Optional.
-	//
-	// 仅供人工运维识别用途，认证与签名逻辑不读取该字段。
+	// BootstrapTokenDescriptionKey 是可选的人工可读用途说明。
+	// 认证与签名逻辑不读取该字段。
 	BootstrapTokenDescriptionKey = "description"
 
-	// BootstrapTokenExtraGroupsKey is a comma-separated list of group names.
-	// The  bootstrap token will authenticate as these groups in addition to the
-	// "system:bootstrappers" group.
-	//
-	// 附加组必须匹配 BootstrapGroupPattern，避免 token 冒充高权限内置组；
-	// 每个名称都会通过 ValidateBootstrapGroupName 校验后才生效。
+	// BootstrapTokenExtraGroupsKey 是逗号分隔的附加组名称，认证时叠加到默认组。
+	// 每个名称都必须匹配 BootstrapGroupPattern，防止 token 加入特权组。
 	BootstrapTokenExtraGroupsKey = "auth-extra-groups"
 
-	// BootstrapTokenUsagePrefix is the prefix for the other usage constants that specifies different
-	// functions of a bootstrap token
-	//
-	// 出于向前兼容，未知的 usage-bootstrap-* 键会被忽略而不是报错，
-	// 这样新增用途的集群仍可被旧组件读取。
+	// BootstrapTokenUsagePrefix 是 token 用途键的前缀。
+	// 未知的 usage-bootstrap-* 键会被忽略，以兼容由更新组件写入的 Secret。
 	BootstrapTokenUsagePrefix = "usage-bootstrap-"
 
-	// BootstrapTokenUsageSigningKey signals that this token should be used to
-	// sign configs as part of the bootstrap process. Value must be "true". Any
-	// other value is assumed to be false. Optional.
-	//
-	// 签名用途只允许控制面用 token 为 cluster-info 生成 JWS 签名，避免
-	// 把所有 token 都隐式赋予签名能力。
+	// BootstrapTokenUsageSigningKey 是可选签名用途开关，仅值为 "true" 时启用。
+	// 该用途允许控制面为 cluster-info 生成 JWS 签名；其他值均按 false 处理。
 	BootstrapTokenUsageSigningKey = "usage-bootstrap-signing"
 
-	// BootstrapTokenUsageAuthentication signals that this token should be used
-	// as a bearer token to authenticate against the Kubernetes API. The bearer
-	// token takes the form "<token-id>.<token-secret>" and authenticates as the
-	// user "system:bootstrap:<token-id>" in the "system:bootstrappers" group
-	// as well as any groups specified using BootstrapTokenExtraGroupsKey.
-	// Value must be "true". Any other value is assumed to be false. Optional.
-	//
-	// 只有显式开启该用途，token 才能作为 Bearer token 通过认证；签名用途
-	// 与认证用途相互独立，便于最小权限授予。
+	// BootstrapTokenUsageAuthentication 是可选 Bearer token 认证用途开关，仅值为 "true" 时启用。
+	// token 形如 "<token-id>.<token-secret>"，用户名为 "system:bootstrap:<token-id>"，
+	// 所属组为 "system:bootstrappers" 及 BootstrapTokenExtraGroupsKey 指定的附加组。
+	// 签名与认证用途相互独立；其他值均按 false 处理。
 	BootstrapTokenUsageAuthentication = "usage-bootstrap-authentication"
 
-	// ConfigMapClusterInfo defines the name for the ConfigMap where the information how to connect and trust the cluster exist
-	//
-	// 该 ConfigMap 位于 kube-public 命名空间，内容包含集群 CA 与 API
-	// 端点；其 kubeconfig 条目用 bootstrap token 的 HMAC 签名，正是防止
-	// 未认证的中间人篡改引导信息。
+	// ConfigMapClusterInfo 是 kube-public 命名空间中保存集群连接与信任信息的 ConfigMap 名称。
+	// 其中 kubeconfig 条目带有 bootstrap token 的 HMAC 签名，用于检测中间人篡改。
 	ConfigMapClusterInfo = "cluster-info"
 
-	// KubeConfigKey defines at which key in the Data object of the ConfigMap the KubeConfig object is stored
+	// KubeConfigKey 是 ConfigMapClusterInfo 的 Data 中存放 kubeconfig 的键。
 	KubeConfigKey = "kubeconfig"
 
-	// JWSSignatureKeyPrefix defines what key prefix the JWS-signed tokens have
+	// JWSSignatureKeyPrefix 是 ConfigMapClusterInfo 中 detached JWS 签名条目的键前缀。
 	JWSSignatureKeyPrefix = "jws-kubeconfig-"
 
-	// BootstrapUserPrefix is the username prefix bootstrapping bearer tokens
-	// authenticate as. The full username given is "system:bootstrap:<token-id>".
-	//
-	// 用户名只由公开的 token ID 组成，不含 Secret，因此可以安全地出现在
-	// 审计日志与 RBAC 绑定中。
+	// BootstrapUserPrefix 是 bootstrap Bearer token 认证用户名的前缀。
+	// 完整用户名为 "system:bootstrap:<token-id>"，不含 Secret，可安全用于审计和 RBAC。
 	BootstrapUserPrefix = "system:bootstrap:"
 
-	// BootstrapDefaultGroup is the default group for bootstrapping bearer
-	// tokens (in addition to any groups from BootstrapTokenExtraGroupsKey).
-	//
-	// 所有 bootstrap token 默认属于该组；配合 RBAC 通常只授予
-	// CSR 创建与相关读取权限，而不授予任意工作负载权限。
+	// BootstrapDefaultGroup 是 bootstrap Bearer token 的默认组，附加组在此之上叠加。
+	// 该组本身不代表管理员权限，实际权限由 RBAC 绑定决定。
 	BootstrapDefaultGroup = "system:bootstrappers"
 
-	// BootstrapGroupPattern is the valid regex pattern that all groups
-	// assigned to a bootstrap token by BootstrapTokenExtraGroupsKey must match.
-	// See also util.ValidateBootstrapGroupName()
-	//
-	// 限定只能落在 system:bootstrappers 前缀下，且字符集受限，防止 token
-	// 被用来加入 system:masters 或其他特权组。
+	// BootstrapGroupPattern 限制 BootstrapTokenExtraGroupsKey 中所有组名的格式。
+	// 名称只能位于 system:bootstrappers 命名空间且字符集受限，防止加入 system:masters 等特权组。
 	BootstrapGroupPattern = `\Asystem:bootstrappers:[a-z0-9:-]{0,255}[a-z0-9]\z`
 
-	// BootstrapTokenPattern defines the {id}.{secret} regular expression pattern
-	//
-	// 完整 token 的形态为 "<id>.<secret>"，即 kubeadm 输出给用户的字符串；
-	// 用 \A...\z 锚定整串，避免前缀或后缀篡改通过校验。
+	// BootstrapTokenPattern 匹配完整的 "<id>.<secret>" token。
+	// \A 与 \z 锚定整串，拒绝前后附加内容；6 位 ID 和 16 位 Secret 均限于小写字母与数字。
 	BootstrapTokenPattern = `\A([a-z0-9]{6})\.([a-z0-9]{16})\z`
 
-	// BootstrapTokenIDPattern defines token's id regular expression pattern
+	// BootstrapTokenIDPattern 匹配完整的 6 位公开 token ID。
 	BootstrapTokenIDPattern = `\A([a-z0-9]{6})\z`
 
-	// BootstrapTokenIDBytes defines the number of bytes used for the Bootstrap Token's ID field
-	// ID 固定 6 字节，与 Secret 名称 `bootstrap-token-<id>` 的长度约束保持一致。
+	// BootstrapTokenIDBytes 是生成 token ID 时使用的随机字节数。
+	// 固定为 6，与 Secret 名称中的 ID 长度约束一致。
 	BootstrapTokenIDBytes = 6
 
-	// BootstrapTokenSecretBytes defines the number of bytes used the Bootstrap Token's Secret field
-	// Secret 固定 16 字节，是判断输入长度的唯一依据；不要把它当作可选值。
+	// BootstrapTokenSecretBytes 是生成或校验 token Secret 时使用的固定字节数。
 	BootstrapTokenSecretBytes = 16
 )
 
-// KnownTokenUsages specifies the known functions a token will get.
-//
-// 这是 ValidateUsages 的唯一白名单来源；新增用途需同时在这里登记，
-// 否则写入 Secret 时会被拒绝。
+// KnownTokenUsages 是 bootstrap token 支持的用途白名单。
+// ValidateUsages 据此拒绝未知用途；新增用途必须同步登记。
 var KnownTokenUsages = []string{"signing", "authentication"}

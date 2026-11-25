@@ -5,8 +5,7 @@ package v1;
 option go_package = "k8s.io/kubelet/pkg/apis/podresources/v1";
 
 
-// PodResourcesLister is a service provided by the kubelet that provides information about the
-// node resources consumed by pods and containers on the node
+// PodResourcesLister 是 Kubelet 提供的服务，用于提供节点上 Pod 和容器消耗的节点资源信息。
 service PodResourcesLister {
     rpc List(ListPodResourcesRequest) returns (ListPodResourcesResponse) {}
     rpc GetAllocatableResources(AllocatableResourcesRequest) returns (AllocatableResourcesResponse) {}
@@ -15,37 +14,35 @@ service PodResourcesLister {
 
 message AllocatableResourcesRequest {}
 
-// AllocatableResourcesResponses contains informations about all the devices known by the kubelet
+// AllocatableResourcesResponse 包含 Kubelet 已知的所有设备的信息。
 message AllocatableResourcesResponse {
     repeated ContainerDevices devices = 1;
     repeated int64 cpu_ids = 2;
     repeated ContainerMemory memory = 3;
 }
 
-// ListPodResourcesRequest is the request made to the PodResourcesLister service
+// ListPodResourcesRequest 是发送给 PodResourcesLister 服务的请求。
 message ListPodResourcesRequest {}
 
-// ListPodResourcesResponse is the response returned by List function
+// ListPodResourcesResponse 是 List 函数返回的响应。
 message ListPodResourcesResponse {
     repeated PodResources pod_resources = 1;
 }
 
-// PodResources contains information about the node resources assigned to a pod
+// PodResources 包含分配给 Pod 的节点资源信息。
 message PodResources {
     string name = 1;
     string namespace = 2;
     repeated ContainerResources containers = 3;
-    // List of exclusive CPU ids allocated at the pod level. Populated only when
-    // the pod has a pod-level exclusive allocation. CPUs exclusively assigned
-    // to individual containers within the pod are also included here, so
-    // pod-level and container-level cpu_ids intentionally overlap.
+    // 在 Pod 级别分配的独占 CPU ID 列表，仅在 Pod 具有 Pod 级独占分配时填充。
+    // 其中也包括专门分配给 Pod 内各个容器的 CPU，因此 Pod 级和容器级
+    // cpu_ids 会有意重叠。
     repeated int64 cpu_ids = 4;
-    // List of memory blocks allocated at the pod level, following the same
-    // population and overlap semantics as cpu_ids.
+    // 在 Pod 级别分配的内存块列表，其填充和重叠语义与 cpu_ids 相同。
     repeated ContainerMemory memory = 5;
 }
 
-// ContainerResources contains information about the resources assigned to a container
+// ContainerResources 包含分配给容器的资源信息。
 message ContainerResources {
     string name = 1;
     repeated ContainerDevices devices = 2;
@@ -54,43 +51,42 @@ message ContainerResources {
     repeated DynamicResource dynamic_resources = 5;
 }
 
-// ContainerMemory contains information about memory and hugepages assigned to a pod / container
+// ContainerMemory 包含分配给 Pod 或容器的内存和巨页信息。
 message ContainerMemory {
     string memory_type = 1;
     uint64 size = 2;
     TopologyInfo topology = 3;
 }
 
-// ContainerDevices contains information about the devices assigned to a container
+// ContainerDevices 包含分配给容器的设备信息。
 message ContainerDevices {
     string resource_name = 1;
     repeated string device_ids = 2;
     TopologyInfo topology = 3;
 }
 
-// Topology describes hardware topology of the resource
+// Topology 描述资源的硬件拓扑。
 message TopologyInfo {
     repeated NUMANode nodes = 1;
 }
 
-// NUMA representation of NUMA node
+// NUMA 节点的 NUMA 表示。
 message NUMANode {
     int64 ID = 1;
 }
 
-// DynamicResource contains information about the devices assigned to a container by DRA
+// DynamicResource 包含 DRA 分配给容器的设备信息。
 message DynamicResource {
-    // tombstone: removed in 1.31 because claims are no longer associated with one class
+    // 墓碑字段：在 1.31 中移除，因为 Claim 不再与单个类关联。
     // string class_name = 1;
     string claim_name = 2;
     string claim_namespace = 3;
     repeated ClaimResource claim_resources = 4;
 }
 
-// ClaimResource contains resource information. The driver name/pool name/device name
-// triplet uniquely identifies the device. Should DRA get extended to other kinds
-// of resources, then device_name will be empty and other fields will get added.
-// Each device at the DRA API level may map to zero or more CDI devices.
+// ClaimResource 包含资源信息。驱动名称、资源池名称和设备名称三元组唯一标识设备。
+// 如果 DRA 扩展到其他类型的资源，device_name 将为空，并会增加其他字段。
+// DRA API 级别的每个设备可以映射到零个或多个 CDI 设备。
 message ClaimResource {
     repeated CDIDevice cdi_devices = 1;
     string driver_name = 2;
@@ -99,22 +95,22 @@ message ClaimResource {
     optional string share_id = 5;
 }
 
-// CDIDevice specifies a CDI device information
+// CDIDevice 描述 CDI 设备信息。
 message CDIDevice {
-    // Fully qualified CDI device name
-    // for example: vendor.com/gpu=gpudevice1
-    // see more details in the CDI specification:
+    // 完全限定的 CDI 设备名称。
+    // 例如：vendor.com/gpu=gpudevice1
+    // 更多详情参见 CDI 规范：
     // https://github.com/container-orchestrated-devices/container-device-interface/blob/main/SPEC.md
     string name = 1;
 }
 
-// GetPodResourcesRequest contains information about the pod
+// GetPodResourcesRequest 包含 Pod 信息。
 message GetPodResourcesRequest {
     string pod_name = 1;
     string pod_namespace = 2;
 }
 
-// GetPodResourcesResponse contains information about the pod the devices
+// GetPodResourcesResponse 包含 Pod 及其设备信息。
 message GetPodResourcesResponse {
     PodResources pod_resources = 1;
 }

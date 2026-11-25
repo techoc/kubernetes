@@ -1,48 +1,43 @@
 // To regenerate api.pb.go run `hack/update-codegen.sh protobindings`
 syntax = "proto3";
 
-package deviceplugin; // This should have been v1alpha.
+package deviceplugin; // 这里本应是 v1alpha。
 option go_package = "k8s.io/kubelet/pkg/apis/deviceplugin/v1alpha";
 
-// Registration is the service advertised by the Kubelet
-// Only when Kubelet answers with a success code to a Register Request
-// may Device Plugins start their service
-// Registration may fail when device plugin version is not supported by
-// Kubelet or the registered resourceName is already taken by another
-// active device plugin. Device plugin is expected to terminate upon registration failure
+// Registration 是 Kubelet 对外提供的服务。
+// 只有 Kubelet 对 Register 请求返回成功码后，设备插件才能启动其服务。
+// 如果 Kubelet 不支持设备插件版本，或已注册的 resourceName 已被另一个
+// 活跃设备插件占用，注册可能失败。注册失败时，设备插件应退出。
 service Registration {
 	rpc Register(RegisterRequest) returns (Empty) {}
 }
 
 message RegisterRequest {
-	// Version of the API the Device Plugin was built against
+	// 设备插件构建所依据的 API 版本。
 	string version = 1;
-	// Name of the unix socket the device plugin is listening on
+	// 设备插件监听的 Unix 套接字名称。
 	// PATH = path.Join(DevicePluginPath, endpoint)
 	string endpoint = 2;
-	// Schedulable resource name. As of now it's expected to be a DNS Label
+	// 可调度资源名称，目前应为 DNS 标签。
 	string resource_name = 3;
 }
 
 message Empty {
 }
 
-// DevicePlugin is the service advertised by Device Plugins
+// DevicePlugin 是设备插件对外提供的服务。
 service DevicePlugin {
-	// ListAndWatch returns a stream of List of Devices
-	// Whenever a Device state changes or a Device disappears, ListAndWatch
-	// returns the new list
+	// ListAndWatch 返回设备列表流。
+	// 每当设备状态变化或设备消失时，ListAndWatch 都会返回新列表。
 	rpc ListAndWatch(Empty) returns (stream ListAndWatchResponse) {}
 
-	// Allocate is called during container creation so that the Device
-	// Plugin can run device specific operations and instruct Kubelet
-	// of the steps to make the Device available in the container
+	// Allocate 在创建容器时调用，使设备插件可以执行设备相关操作，
+	// 并告知 Kubelet 如何使设备在容器中可用。
 	rpc Allocate(AllocateRequest) returns (AllocateResponse) {}
 }
 
-// ListAndWatch returns a stream of List of Devices
-// Whenever a Device state changes or a Device disappears, ListAndWatch
-// returns the new list
+// ListAndWatch 返回设备列表流。
+// 每当设备状态变化或设备消失时，ListAndWatch 都会返回新列表。
 message ListAndWatchResponse {
 	repeated Device devices = 1;
 }
@@ -53,63 +48,56 @@ message ListAndWatchResponse {
 *    Health: "Healthy",
 *} */
 message Device {
-	// A unique ID assigned by the device plugin used
-	// to identify devices during the communication
-	// Max length of this field is 63 characters
+	// 设备插件分配的唯一 ID，用于通信期间标识设备。
+	// 此字段最大长度为 63 个字符。
 	string ID = 1;
-	// Health of the device, can be healthy or unhealthy, see constants.go
+	// 设备健康状态，可以是健康或不健康，参见 constants.go。
 	string health = 2;
 }
 
-// - Allocate is expected to be called during pod creation since allocation
-//   failures for any container would result in pod startup failure.
-// - Allocate allows kubelet to exposes additional artifacts in a pod's
-//   environment as directed by the plugin.
-// - Allocate allows Device Plugin to run device specific operations on
-//   the Devices requested
+// - Allocate 应在创建 Pod 时调用，因为任一容器的分配失败都会导致 Pod 启动失败。
+// - Allocate 允许 Kubelet 按插件指示在 Pod 环境中提供额外制品。
+// - Allocate 允许设备插件对所请求的设备执行设备相关操作。
 message AllocateRequest {
 	repeated string devicesIDs = 1;
 }
 
-// AllocateResponse includes the artifacts that needs to be injected into
-// a container for accessing 'deviceIDs' that were mentioned as part of
-// 'AllocateRequest'.
-// Failure Handling:
-// if Kubelet sends an allocation request for dev1 and dev2.
-// Allocation on dev1 succeeds but allocation on dev2 fails.
-// The Device plugin should send a ListAndWatch update and fail the
-// Allocation request
+// AllocateResponse 包含需要注入容器的制品，用于访问 AllocateRequest
+// 中指定的 deviceIDs。
+// 失败处理：
+// 如果 Kubelet 发送 dev1 和 dev2 的分配请求，dev1 分配成功而 dev2 失败，
+// 设备插件应发送 ListAndWatch 更新并使分配请求失败。
 message AllocateResponse {
-  	// List of environment variable to be set in the container to access one of more devices.
+	// 需要在容器中设置的环境变量列表，用于访问一个或多个设备。
 	map<string, string> envs = 1;
-	// Mounts for the container.
+	// 容器的挂载项。
 	repeated Mount mounts = 2;
-	// Devices for the container.
+	// 容器的设备。
 	repeated DeviceSpec devices = 3;
-	// Container annotations to pass to the container runtime
+	// 需要传递给容器运行时的容器注解。
 	map<string, string> annotations = 4;
 }
 
-// Mount specifies a host volume to mount into a container.
-// where device library or tools are installed on host and container
+// Mount 指定要挂载到容器中的主机卷。
+// 用于向容器提供主机上安装的设备库或工具。
 message Mount {
-	// Path of the mount within the container.
+	// 挂载点在容器内的路径。
 	string container_path = 1;
-	// Path of the mount on the host.
+	// 挂载点在主机上的路径。
 	string host_path = 2;
-	// If set, the mount is read-only.
+	// 设置后，挂载为只读。
 	bool read_only = 3;
 }
 
-// DeviceSpec specifies a host device to mount into a container.
+// DeviceSpec 指定要挂载到容器中的主机设备。
 message DeviceSpec {
-    // Path of the device within the container.
+    // 设备在容器内的路径。
     string container_path = 1;
-    // Path of the device on the host.
+    // 设备在主机上的路径。
     string host_path = 2;
-    // Cgroups permissions of the device, candidates are one or more of
-    // * r - allows container to read from the specified device.
-    // * w - allows container to write to the specified device.
-    // * m - allows container to create device files that do not yet exist.
+    // 设备的 cgroup 权限，可取以下一项或多项：
+    // * r：允许容器读取指定设备。
+    // * w：允许容器写入指定设备。
+    // * m：允许容器创建尚不存在的设备文件。
     string permissions = 3;
 }

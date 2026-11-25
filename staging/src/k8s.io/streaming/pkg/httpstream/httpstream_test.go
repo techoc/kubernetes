@@ -25,7 +25,7 @@ import (
 )
 
 // 最小 ResponseWriter 桩：只记录头与状态码，便于断言 Handshake 写出的内容。
-// 用指针保存状态码，区分“未写入”与“写入了 0”。
+// 用指针保存状态码，以区分“未写入”和“状态码为 0”。
 type responseWriter struct {
 	header     http.Header
 	statusCode *int
@@ -115,7 +115,7 @@ func TestHandshake(t *testing.T) {
 			w := newResponseWriter()
 			negotiated, err := Handshake(req, w, test.serverProtocols)
 
-			// verify negotiated protocol
+			// 核对协商出的协议是否符合预期。
 			if e, a := test.expectedProtocol, negotiated; e != a {
 				t.Fatalf("%s: protocol: expected %q, got %q", name, e, a)
 			}
@@ -151,7 +151,7 @@ func TestHandshake(t *testing.T) {
 				return
 			}
 
-			// verify response headers
+			// 核对响应头是否回写了协商出的协议。
 			if e, a := []string{test.expectedProtocol}, w.Header()[HeaderProtocolVersion]; !reflect.DeepEqual(e, a) {
 				t.Fatalf("%s: protocol response header: expected %v, got %v", name, e, a)
 			}

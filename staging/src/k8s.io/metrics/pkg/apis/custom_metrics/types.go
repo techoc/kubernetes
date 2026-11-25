@@ -22,13 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// MetricIdentifier 通过名称和可选标签选择器标识一个指标。
 type MetricIdentifier struct {
-	// name is the name of the given metric
-	// 名字是查询主键；同名指标可以有多组标签对应的时间序列。
+	// 指标名称。
+	// 名字是查询主键，同名指标可以有多组标签对应的时间序列。
 	Name string
-	// selector represents the label selector that could be used to select
-	// this metric, and will generally just be the selector passed in to
-	// the query used to fetch this metric.
+	// 用于选择该指标的标签选择器，通常就是查询该指标时传入的选择器。
 	// 省略标签时只按名字取值，提供后才能区分同名指标下的不同序列。
 	// +optional
 	Selector *metav1.LabelSelector
@@ -36,84 +35,88 @@ type MetricIdentifier struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// a list of values for a given metric for some set of objects
-// 每个元素对应一个对象；空列表表示没有匹配项，不视为错误。
+// MetricValueList 是一组对象上同一指标的取值列表。
+// 每个元素对应一个对象，空列表表示没有匹配项，不视为错误。
 type MetricValueList struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta `json:""`
+	// 标准列表元数据。
 	metav1.ListMeta `json:"metadata,omitempty"`
 
-	// the value of the metric across the described objects
+	// 所描述对象的指标取值。
 	Items []MetricValue `json:"items"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// a metric value for some object
+// MetricValue 是某个对象的一条指标记录。
 type MetricValue struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta
 
-	// a reference to the described object
+	// 所描述对象的引用。
 	// 引用类型在本仓库内定义，避免把内部 API 包拖进来形成依赖环。
 	DescribedObject ObjectReference
 
 	// 名字加可选标签才能确定一条具体的时间序列。
 	Metric MetricIdentifier
 
-	// indicates the time at which the metrics were produced
+	// 指标产生的时间。
 	// 取服务端采样时刻，而非客户端收到响应的时间。
 	Timestamp metav1.Time
 
-	// indicates the window ([Timestamp-Window, Timestamp]) from
-	// which these metrics were calculated, when returning rate
-	// metrics calculated from cumulative metrics (or zero for
-	// non-calculated instantaneous metrics).
+	// 指标计算所使用的时间区间 [Timestamp-Window, Timestamp]。
+	// 返回由累计指标计算出的速率时提供该窗口；非计算的瞬时指标为零。
 	// 速率值只有配上窗口才能还原原始累积量，否则无法二次聚合。
 	WindowSeconds *int64
 
-	// the value of the metric for this
+	// 该对象的指标值。
 	// 用 Quantity 保留精度和单位，避免后端上报值在客户端被提前舍入。
 	Value resource.Quantity
 }
 
-// allObjects is a wildcard used to select metrics
-// for all objects matching the given label selector
-// 用显式的 * 表示「全部对象」，比空选择器语义更明确。
+// AllObjects 是用于选择指标的通配符，匹配给定标签选择器下的所有对象。
+// 用显式的 * 表示“全部对象”，比空选择器语义更明确。
 const AllObjects = "*"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// MetricListOptions is used to select metrics by their label selectors
+// MetricListOptions 用于通过标签选择器筛选指标。
 // 两个选择器分别作用于被查询对象和指标自身的标签，混用会查不到预期结果。
 type MetricListOptions struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta
 
-	// A selector to restrict the list of returned objects by their labels.
-	// Defaults to everything.
+	// 用于按标签限制返回对象列表的选择器，默认匹配所有对象。
 	// 这里匹配的是 Kubernetes 对象标签，不是指标标签。
 	// +optional
 	LabelSelector string
 
-	// A selector to restrict the list of returned metrics by their labels
+	// 用于按标签限制返回指标列表的选择器。
 	// 对应指标自身的标签维度，用于区分同名指标的多条序列。
 	// +optional
 	MetricLabelSelector string
 }
 
-// NOTE: ObjectReference is copied from k8s.io/kubernetes/pkg/api/types.go. We
-// cannot depend on k8s.io/kubernetes/pkg/api because that creates cyclic
-// dependency between k8s.io/metrics and k8s.io/kubernetes. We cannot depend on
-// k8s.io/client-go/pkg/api because the package is going to be deprecated soon.
-// There is no need to keep it an exact copy. Each repo can define its own
-// internal objects.
+// ObjectReference 的定义复制自 k8s.io/kubernetes/pkg/api/types.go。
+// 不能依赖 k8s.io/kubernetes/pkg/api，否则会造成 k8s.io/metrics 与
+// k8s.io/kubernetes 之间的循环依赖；也不能依赖即将弃用的
+// k8s.io/client-go/pkg/api。各仓库可独立定义所需字段，无需保持完全一致。
 
-// ObjectReference contains enough information to let you inspect or modify the referred object.
-// 这是一份本地副本，字段不必与上游逐字一致；只保留定位对象所需部分，随本仓库独立演进。
+// ObjectReference 包含足以查看或修改所引用对象的信息。
 type ObjectReference struct {
-	Kind            string
-	Namespace       string
-	Name            string
-	UID             types.UID
-	APIVersion      string
+	// 对象类型。
+	Kind string
+	// 对象所在的命名空间。
+	Namespace string
+	// 对象名称。
+	Name string
+	// 对象唯一标识。
+	UID types.UID
+	// 对象的 API 版本。
+	APIVersion string
+	// 对象资源版本，可用于并发控制。
 	ResourceVersion string
-	FieldPath       string
+	// 对象内字段的路径，用于引用子字段。
+	FieldPath string
 }

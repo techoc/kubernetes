@@ -28,16 +28,16 @@ import (
 	"k8s.io/metrics/pkg/apis/custom_metrics/v1beta2"
 )
 
-// AvailableAPIsGetter knows how to fetch and cache the preferred custom metrics API version,
-// and invalidate that cache when asked.
+// AvailableAPIsGetter 负责获取并缓存首选自定义指标 API 版本，并按需使缓存失效。
 // 把读版本与失效拆开，调用方自行决定刷新节奏，不必每次请求都做服务发现。
 type AvailableAPIsGetter interface {
+	// PreferredVersion 返回当前首选版本；缓存为空时从服务发现获取。
 	PreferredVersion() (schema.GroupVersion, error)
+	// Invalidate 清除首选版本缓存，使下次读取重新发现。
 	Invalidate()
 }
 
-// PeriodicallyInvalidate periodically invalidates the preferred version cache until
-// told to stop.
+// PeriodicallyInvalidate 周期性地使首选版本缓存失效，直到收到停止信号。
 // 通常跑在后台 goroutine；stopCh 关闭即退出，避免长生命周期客户端泄漏 goroutine。
 func PeriodicallyInvalidate(cache AvailableAPIsGetter, interval time.Duration, stopCh <-chan struct{}) {
 	ticker := time.NewTicker(interval)
@@ -53,8 +53,7 @@ func PeriodicallyInvalidate(cache AvailableAPIsGetter, interval time.Duration, s
 	}
 }
 
-// NewForConfig creates a new custom metrics client which delegates to a client which
-// uses the preferred api version.
+// NewForConfig 创建自定义指标客户端，实际查询委托给服务端首选 API 版本对应的客户端。
 // 每个版本客户端拿独立的 rest.Config 副本，避免配置被后续修改牵连；版本在首次请求时才确定。
 func NewForConfig(baseConfig *rest.Config, mapper meta.RESTMapper, availableAPIs AvailableAPIsGetter) CustomMetricsClient {
 	return &multiClient{
@@ -67,7 +66,7 @@ func NewForConfig(baseConfig *rest.Config, mapper meta.RESTMapper, availableAPIs
 	}
 }
 
-// multiClient is a CustomMetricsClient that can work with *any* metrics API version.
+// multiClient 是可与任何自定义指标 API 版本协作的 CustomMetricsClient。
 // 按 GroupVersion 缓存已创建的客户端，版本切换时无需重建整个客户端。
 type multiClient struct {
 	newClient     func(schema.GroupVersion) (CustomMetricsClient, error)
@@ -76,8 +75,8 @@ type multiClient struct {
 	mu            sync.RWMutex
 }
 
-// getPreferredClient returns a custom metrics client of the preferred api version.
-// 与版本发现器同样做双重检查，防止并发请求重复创建同一版本的客户端。
+// getPreferredClient 返回使用首选 API 版本的自定义指标客户端。
+// 缓存未命中时在写锁内创建并写入，串行化该客户端的初始化；已缓存版本直接复用。
 func (c *multiClient) getPreferredClient() (CustomMetricsClient, error) {
 	pref, err := c.availableAPIs.PreferredVersion()
 	if err != nil {

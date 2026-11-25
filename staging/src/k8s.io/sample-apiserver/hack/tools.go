@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This package imports things required by build scripts, to force `go mod` to see them as dependencies
+// tools 包导入构建脚本所需的依赖，强制 go mod 将其记录为依赖。
 // 本文件带 tools 构建标签，只在构建脚本里生效，不会进入正式二进制。
 package tools
 

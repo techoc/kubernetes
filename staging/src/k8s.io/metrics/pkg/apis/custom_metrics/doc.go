@@ -17,8 +17,7 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=custom.metrics.k8s.io
 
-// Package custom_metrics defines an API for using custom metrics.
-//
-// 中文说明：本包是自定义指标的内部版本，作为各外部版本之间转换的中枢；
-// 生成器指令放在本文件，避免散落到类型定义处。
+// Package custom_metrics 定义使用自定义指标的 API。
+// 本包是自定义指标的内部版本，作为各外部版本之间转换的中枢。
+// 代码生成指令集中放在本文件，避免散落到类型定义处。
 package custom_metrics

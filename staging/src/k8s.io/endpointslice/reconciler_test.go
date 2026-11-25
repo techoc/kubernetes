@@ -77,22 +77,17 @@ func expectAction(t *testing.T, actions []k8stesting.Action, index int, verb, re
 	}
 }
 
-// cacheMutationCheck helps ensure that cached objects have not been changed
-// in any way throughout a test run.
 // cacheMutationCheck 在测试开始时保存对象及其深拷贝，用于检测缓存对象是否被就地修改。
 type cacheMutationCheck struct {
 	objects []cacheObject
 }
 
-// cacheObject stores a reference to an original object as well as a deep copy
-// of that object to track any mutations in the original object.
 // cacheObject 保存一个原始对象引用和它的深拷贝，两者比对即可发现对缓存对象的改动。
 type cacheObject struct {
 	original runtime.Object
 	deepCopy runtime.Object
 }
 
-// newCacheMutationCheck initializes a cacheMutationCheck with EndpointSlices.
 // newCacheMutationCheck 用给定的 EndpointSlice 列表构造一个空的检查器并逐个登记。
 func newCacheMutationCheck(endpointSlices []*discovery.EndpointSlice) cacheMutationCheck {
 	cmc := cacheMutationCheck{}
@@ -102,8 +97,6 @@ func newCacheMutationCheck(endpointSlices []*discovery.EndpointSlice) cacheMutat
 	return cmc
 }
 
-// Add appends a runtime.Object and a deep copy of that object into the
-// cacheMutationCheck.
 // Add 把一个运行时对象及其深拷贝登记到检查器中。
 func (cmc *cacheMutationCheck) Add(o runtime.Object) {
 	cmc.objects = append(cmc.objects, cacheObject{
@@ -112,13 +105,10 @@ func (cmc *cacheMutationCheck) Add(o runtime.Object) {
 	})
 }
 
-// Check verifies that no objects in the cacheMutationCheck have been mutated.
 // Check 遍历所有登记对象，若原始对象与深拷贝不再深度相等则报告缓存被修改。
 func (cmc *cacheMutationCheck) Check(t *testing.T) {
 	for _, o := range cmc.objects {
 		if !reflect.DeepEqual(o.original, o.deepCopy) {
-			// Cached objects can't be safely mutated and instead should be deep
-			// copied before changed in any way.
 			// 缓存对象不可直接修改，必须先深拷贝再改动，否则会污染 informer 缓存。
 			t.Errorf("Cached object was unexpectedly mutated. Original: %+v, Mutated: %+v", o.deepCopy, o.original)
 		}
@@ -128,7 +118,6 @@ func (cmc *cacheMutationCheck) Check(t *testing.T) {
 // defaultMaxEndpointsPerSlice 是多数用例采用的默认值：单个 EndpointSlice 最多容纳 100 个端点。
 var defaultMaxEndpointsPerSlice = int32(100)
 
-// Even when there are no pods, we want to have a placeholder slice for each service
 // TestReconcileEmpty 验证即使 Service 没有任何匹配 Pod，也必须为其创建一个空的占位 EndpointSlice。
 // 构造 1 个 Service、0 个 Pod 和 0 个已有切片；断言只产生一次 create，切片名以 svc 名开头、带有 service-name 标签、端口与端点均为空，同时校验 generation 记录与各项指标。
 func TestReconcileEmpty(t *testing.T) {
@@ -160,8 +149,6 @@ func TestReconcileEmpty(t *testing.T) {
 	expectMetrics(t, expectedMetrics{desiredSlices: 1, actualSlices: 1, desiredEndpoints: 0, addedPerSync: 0, removedPerSync: 0, numCreated: 1, numUpdated: 0, numDeleted: 0, slicesChangedPerSync: 1})
 }
 
-// Given a single pod matching a service selector and no existing endpoint slices,
-// a slice should be created
 // TestReconcile1Pod 验证单个匹配 Pod 在没有已有切片时会按 Service 的地址族创建相应切片。
 // Pod 同时具备 IPv4/IPv6 地址、主机名和带 zone/region 标签的节点；表驱动用例覆盖未指定 IPFamily、IPv4/IPv6 单栈、指定 ClusterIP、自定义标签、非法保留标签以及双栈等场景。
 // 断言每个地址族各创建一个切片，切片名、标签、触发时间注解、地址类型、端点内容（含 zone、nodeName、TargetRef）与指标均符合预期。
@@ -184,10 +171,8 @@ func TestReconcile1Pod(t *testing.T) {
 	svcv6.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv6Protocol}
 	svcv6ClusterIP, _ := newServiceAndEndpointMeta("foo", namespace)
 	svcv6ClusterIP.Spec.ClusterIP = "1234::5678:0000:0000:9abc:def1"
-	// newServiceAndEndpointMeta generates v4 single stack
 	svcv6ClusterIP.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv6Protocol}
 
-	// dual stack
 	dualStackSvc, _ := newServiceAndEndpointMeta("foo", namespace)
 	dualStackSvc.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol}
 	dualStackSvc.Spec.ClusterIP = "10.0.0.10"
@@ -538,7 +523,6 @@ func TestReconcile1Pod(t *testing.T) {
 					t.Fatalf("Expected EndpointSlice trigger time annotation to be %s, got %s", triggerTime.Format(time.RFC3339Nano), slice.Annotations[corev1.EndpointsLastChangeTriggerTime])
 				}
 
-				// validate that this slice has address type matching expected
 				// 若切片的地址类型不在期望集合中，视为意外创建的切片。
 				expectedEndPointList := testCase.expectedEndpointPerSlice[slice.AddressType]
 				if expectedEndPointList == nil {
@@ -550,7 +534,6 @@ func TestReconcile1Pod(t *testing.T) {
 				}
 
 				// 本测试每个切片仅包含一个端点，直接校验该端点内容。
-				// test is limited to *ONE* endpoint
 				endpoint := slice.Endpoints[0]
 				if !reflect.DeepEqual(endpoint, expectedEndPointList[0]) {
 					t.Fatalf("Expected endpoint: %+v, got: %+v", expectedEndPointList[0], endpoint)
@@ -580,8 +563,6 @@ func TestReconcile1Pod(t *testing.T) {
 	}
 }
 
-// given an existing placeholder endpoint slice and no pods matching the service, the existing
-// slice should not change the placeholder
 // TestReconcile1EndpointSlice 验证在没有匹配 Pod 时对占位切片的处理：没有占位则创建，已有相同占位则保持不变，已有不同占位则更新。
 // 断言新增 action 数量与期望一致、最终仍只有一个切片，并对无需更新的场景校验切片字段未被改动，同时比对指标。
 func TestReconcile1EndpointSlice(t *testing.T) {
@@ -742,8 +723,6 @@ func TestPlaceHolderSliceCompare(t *testing.T) {
 	}
 }
 
-// when a Service has PublishNotReadyAddresses set to true, corresponding
-// Endpoints should be considered ready, even if the backing Pod is not.
 // TestReconcile1EndpointSlicePublishNotReadyAddresses 验证 Service 开启 PublishNotReadyAddresses 后，即使底层 Pod 未就绪，对应端点也被视为 ready。
 // 构造 50 个 Pod（约 1/3 未就绪），断言只创建 1 个包含全部 50 个端点的切片，且所有端点均为 ready。
 func TestReconcile1EndpointSlicePublishNotReadyAddresses(t *testing.T) {
@@ -753,7 +732,6 @@ func TestReconcile1EndpointSlicePublishNotReadyAddresses(t *testing.T) {
 	svc, _ := newServiceAndEndpointMeta("foo", namespace)
 	svc.Spec.PublishNotReadyAddresses = true
 
-	// start with 50 pods, 1/3 not ready
 	// 按 i%3 控制 Pod 就绪状态，使约 1/3 的 Pod 未就绪。
 	pods := []*corev1.Pod{}
 	for i := 0; i < 50; i++ {
@@ -765,11 +743,9 @@ func TestReconcile1EndpointSlicePublishNotReadyAddresses(t *testing.T) {
 	r := newReconciler(client, []*corev1.Node{{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}}, defaultMaxEndpointsPerSlice)
 	reconcileHelper(t, r, &svc, pods, []*discovery.EndpointSlice{}, time.Now())
 
-	// Only 1 action, an EndpointSlice create
 	assert.Len(t, client.Actions(), 1, "Expected 1 additional clientset action")
 	expectActions(t, client.Actions(), 1, "create", "endpointslices")
 
-	// Two endpoint slices should be completely full, the remainder should be in another one
 	endpointSlices := fetchEndpointSlices(t, client, namespace)
 	for _, endpointSlice := range endpointSlices {
 		// 即使底层 Pod 未就绪，端点也应为 ready。
@@ -782,8 +758,6 @@ func TestReconcile1EndpointSlicePublishNotReadyAddresses(t *testing.T) {
 	expectUnorderedSlicesWithLengths(t, endpointSlices, []int{50})
 }
 
-// a simple use case with 250 pods matching a service and no existing slices
-// reconcile should create 3 slices, completely filling 2 of them
 // TestReconcileManyPods 验证 250 个 Pod 且无已有切片时的基本装箱行为。
 // 期望只产生 3 次 create，切片端点分布为 100/100/50，并校验新增端点数、创建数与变更次数等指标。
 func TestReconcileManyPods(t *testing.T) {
@@ -792,7 +766,6 @@ func TestReconcileManyPods(t *testing.T) {
 	namespace := "test"
 	svc, _ := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 250 pods
 	// 约 2/3 的 Pod 处于就绪状态。
 	pods := []*corev1.Pod{}
 	for i := 0; i < 250; i++ {
@@ -804,25 +777,15 @@ func TestReconcileManyPods(t *testing.T) {
 	r := newReconciler(client, []*corev1.Node{{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}}, defaultMaxEndpointsPerSlice)
 	reconcileHelper(t, r, &svc, pods, []*discovery.EndpointSlice{}, time.Now())
 
-	// This is an ideal scenario where only 3 actions are required, and they're all creates
 	// 理想情况下只需 3 次 create action。
 	assert.Len(t, client.Actions(), 3, "Expected 3 additional clientset actions")
 	expectActions(t, client.Actions(), 3, "create", "endpointslices")
 
-	// Two endpoint slices should be completely full, the remainder should be in another one
 	// 断言切片分布为 100/100/50。
 	expectUnorderedSlicesWithLengths(t, fetchEndpointSlices(t, client, namespace), []int{100, 100, 50})
 	expectMetrics(t, expectedMetrics{desiredSlices: 3, actualSlices: 3, desiredEndpoints: 250, addedPerSync: 250, removedPerSync: 0, numCreated: 3, numUpdated: 0, numDeleted: 0, slicesChangedPerSync: 3})
 }
 
-// now with preexisting slices, we have 250 pods matching a service
-// the first endpoint slice contains 62 endpoints, all desired
-// the second endpoint slice contains 61 endpoints, all desired
-// that leaves 127 to add
-// to minimize writes, our strategy is to create new slices for multiples of 100
-// that leaves 27 to drop in an existing slice
-// dropping them in the first slice will result in the slice being closest to full
-// this approach requires 1 update + 1 create instead of 2 updates + 1 create
 // TestReconcileEndpointSlicesSomePreexisting 验证 250 个 Pod 且已有两个各含约 1/4 端点的切片时的写入最小化策略。
 // 剩余 127 个端点中，100 个放入新建切片、27 个放入更接近满载的旧切片，因此只需 1 次 create 加 1 次 update。
 // 断言 action 顺序、最终切片长度 89/61/100、指标，并确认缓存对象未被就地修改。
@@ -832,21 +795,18 @@ func TestReconcileEndpointSlicesSomePreexisting(t *testing.T) {
 	namespace := "test"
 	svc, endpointMeta := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 250 pods
 	pods := []*corev1.Pod{}
 	for i := 0; i < 250; i++ {
 		ready := i%3 != 0
 		pods = append(pods, newPod(i, namespace, ready, 1, false))
 	}
 
-	// have approximately 1/4 in first slice
 	// 约 1/4 的 Pod 放入第一个已有切片。
 	endpointSlice1 := newEmptyEndpointSlice(1, namespace, endpointMeta, svc)
 	for i := 1; i < len(pods)-4; i += 4 {
 		endpointSlice1.Endpoints = append(endpointSlice1.Endpoints, podToEndpoint(pods[i], &corev1.Node{}, &svc, discovery.AddressTypeIPv4))
 	}
 
-	// have approximately 1/4 in second slice
 	// 约 1/4 的 Pod 放入第二个已有切片。
 	endpointSlice2 := newEmptyEndpointSlice(2, namespace, endpointMeta, svc)
 	for i := 3; i < len(pods)-4; i += 4 {
@@ -868,25 +828,13 @@ func TestReconcileEndpointSlicesSomePreexisting(t *testing.T) {
 	assert.True(t, actions[numActionsBefore].Matches("create", "endpointslices"), "First action should be create endpoint slice")
 	assert.True(t, actions[numActionsBefore+1].Matches("update", "endpointslices"), "Second action should be update endpoint slice")
 
-	// 1 new slice (0->100) + 1 updated slice (62->89)
 	// 校验最终切片长度分布：89/61/100。
 	expectUnorderedSlicesWithLengths(t, fetchEndpointSlices(t, client, namespace), []int{89, 61, 100})
 	expectMetrics(t, expectedMetrics{desiredSlices: 3, actualSlices: 3, desiredEndpoints: 250, addedPerSync: 127, removedPerSync: 0, numCreated: 1, numUpdated: 1, numDeleted: 0, slicesChangedPerSync: 2})
 
-	// ensure cache mutation has not occurred
 	cmc.Check(t)
 }
 
-// now with preexisting slices, we have 300 pods matching a service
-// this scenario will show some less ideal allocation
-// the first endpoint slice contains 74 endpoints, all desired
-// the second endpoint slice contains 74 endpoints, all desired
-// that leaves 152 to add
-// to minimize writes, our strategy is to create new slices for multiples of 100
-// that leaves 52 to drop in an existing slice
-// that capacity could fit if split in the 2 existing slices
-// to minimize writes though, reconcile create a new slice with those 52 endpoints
-// this approach requires 2 creates instead of 2 updates + 1 create
 // TestReconcileEndpointSlicesSomePreexistingWorseAllocation 验证 300 个 Pod 且已有两个各含 74 个端点切片时的分配策略。
 // 剩余 152 个端点不拆分填入旧切片，而是直接新建 100 与 52 两个切片：2 次 create 优于 2 次 update 加 1 次 create。
 // 断言产生 2 次 create、最终长度为 74/74/100/52（实际切片数 4 大于理想值 3）、指标符合预期，且缓存未被修改。
@@ -896,20 +844,17 @@ func TestReconcileEndpointSlicesSomePreexistingWorseAllocation(t *testing.T) {
 	namespace := "test"
 	svc, endpointMeta := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 300 pods
 	pods := []*corev1.Pod{}
 	for i := 0; i < 300; i++ {
 		ready := i%3 != 0
 		pods = append(pods, newPod(i, namespace, ready, 1, false))
 	}
 
-	// have approximately 1/4 in first slice
 	endpointSlice1 := newEmptyEndpointSlice(1, namespace, endpointMeta, svc)
 	for i := 1; i < len(pods)-4; i += 4 {
 		endpointSlice1.Endpoints = append(endpointSlice1.Endpoints, podToEndpoint(pods[i], &corev1.Node{}, &svc, discovery.AddressTypeIPv4))
 	}
 
-	// have approximately 1/4 in second slice
 	endpointSlice2 := newEmptyEndpointSlice(2, namespace, endpointMeta, svc)
 	for i := 3; i < len(pods)-4; i += 4 {
 		endpointSlice2.Endpoints = append(endpointSlice2.Endpoints, podToEndpoint(pods[i], &corev1.Node{}, &svc, discovery.AddressTypeIPv4))
@@ -929,17 +874,13 @@ func TestReconcileEndpointSlicesSomePreexistingWorseAllocation(t *testing.T) {
 	assert.Len(t, actions, numActionsBefore+2, "Expected 2 additional client actions as part of reconcile")
 	expectActions(t, client.Actions(), 2, "create", "endpointslices")
 
-	// 2 new slices (100, 52) in addition to existing slices (74, 74)
 	// 最终得到 4 个切片（74/74/100/52），实际切片数大于理想值 3。
 	expectUnorderedSlicesWithLengths(t, fetchEndpointSlices(t, client, namespace), []int{74, 74, 100, 52})
 	expectMetrics(t, expectedMetrics{desiredSlices: 3, actualSlices: 4, desiredEndpoints: 300, addedPerSync: 152, removedPerSync: 0, numCreated: 2, numUpdated: 0, numDeleted: 0, slicesChangedPerSync: 2})
 
-	// ensure cache mutation has not occurred
 	cmc.Check(t)
 }
 
-// In some cases, such as a service port change, all slices for that service will require a change
-// This test ensures that we are updating those slices and not calling create + delete for each
 // TestReconcileEndpointSlicesUpdating 验证 Service 端口变更导致所有切片都需要改变时，采用 update 而不是 create+delete。
 // 先协调生成 3 个切片，修改 TargetPort 后再次协调；断言新增 3 次 update action，切片长度保持 100/100/50。
 func TestReconcileEndpointSlicesUpdating(t *testing.T) {
@@ -947,7 +888,6 @@ func TestReconcileEndpointSlicesUpdating(t *testing.T) {
 	namespace := "test"
 	svc, _ := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 250 pods
 	pods := []*corev1.Pod{}
 	for i := 0; i < 250; i++ {
 		ready := i%3 != 0
@@ -977,8 +917,6 @@ func TestReconcileEndpointSlicesUpdating(t *testing.T) {
 	expectUnorderedSlicesWithLengths(t, fetchEndpointSlices(t, client, namespace), []int{100, 100, 50})
 }
 
-// In some cases, such as service labels updates, all slices for that service will require a change
-// This test ensures that we are updating those slices and not calling create + delete for each
 // TestReconcileEndpointSlicesServicesLabelsUpdating 验证 Service 标签变更会传播到其所有切片，且同样采用 update。
 // 首次协调生成 3 个切片，修改 Service 标签后再次协调；断言 3 次 update，且每个新切片都带有 foo=bar 标签。
 func TestReconcileEndpointSlicesServicesLabelsUpdating(t *testing.T) {
@@ -986,7 +924,6 @@ func TestReconcileEndpointSlicesServicesLabelsUpdating(t *testing.T) {
 	namespace := "test"
 	svc, _ := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 250 pods
 	pods := []*corev1.Pod{}
 	for i := 0; i < 250; i++ {
 		ready := i%3 != 0
@@ -1003,7 +940,6 @@ func TestReconcileEndpointSlicesServicesLabelsUpdating(t *testing.T) {
 	numActionsExpected++
 	expectUnorderedSlicesWithLengths(t, slices, []int{100, 100, 50})
 
-	// update service with new labels
 	// 修改 Service 标签后，期望所有切片被更新并继承新标签。
 	svc.Labels = map[string]string{"foo": "bar"}
 	reconcileHelper(t, r, &svc, pods, []*discovery.EndpointSlice{&slices[0], &slices[1], &slices[2]}, time.Now())
@@ -1014,7 +950,6 @@ func TestReconcileEndpointSlicesServicesLabelsUpdating(t *testing.T) {
 
 	newSlices := fetchEndpointSlices(t, client, namespace)
 	expectUnorderedSlicesWithLengths(t, newSlices, []int{100, 100, 50})
-	// check that the labels were updated
 	// 遍历新切片，确认 foo=bar 标签已传播。
 	for _, slice := range newSlices {
 		w, ok := slice.Labels["foo"]
@@ -1026,8 +961,6 @@ func TestReconcileEndpointSlicesServicesLabelsUpdating(t *testing.T) {
 	}
 }
 
-// In some cases, such as service labels updates, all slices for that service will require a change
-// However, this should not happen for reserved labels
 // TestReconcileEndpointSlicesServicesReservedLabels 验证 Service 上设置的保留标签不应传播到 EndpointSlice。
 // 首次协调生成 3 个切片，随后把保留标签写进 Service 并再次协调；断言不产生任何额外 action，切片长度不变。
 func TestReconcileEndpointSlicesServicesReservedLabels(t *testing.T) {
@@ -1035,7 +968,6 @@ func TestReconcileEndpointSlicesServicesReservedLabels(t *testing.T) {
 	namespace := "test"
 	svc, _ := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 250 pods
 	pods := []*corev1.Pod{}
 	for i := 0; i < 250; i++ {
 		ready := i%3 != 0
@@ -1051,7 +983,6 @@ func TestReconcileEndpointSlicesServicesReservedLabels(t *testing.T) {
 	numActionsExpected++
 	expectUnorderedSlicesWithLengths(t, slices, []int{100, 100, 50})
 
-	// update service with new labels
 	// 使用保留标签作为 Service 标签，这些标签不应传播到切片。
 	svc.Labels = map[string]string{discovery.LabelServiceName: "bad", discovery.LabelManagedBy: "actor", corev1.IsHeadlessService: "invalid"}
 	// 再次协调不应产生任何写操作。
@@ -1062,10 +993,6 @@ func TestReconcileEndpointSlicesServicesReservedLabels(t *testing.T) {
 	expectUnorderedSlicesWithLengths(t, newSlices, []int{100, 100, 50})
 }
 
-// In this test, we start with 10 slices that only have 30 endpoints each
-// An initial reconcile makes no changes (as desired to limit writes)
-// When we change a service port, all slices will need to be updated in some way
-// reconcile repacks the endpoints into 3 slices, and deletes the extras
 // TestReconcileEndpointSlicesRecycling 验证切片回收（recycling）带来的免费重新装箱。
 // 构造 10 个各含 30 个端点的切片：首次协调为 no-op；修改端口后所有切片都需变更，协调器将其重新装箱为 3 个满载切片，产生 3 次 update 与 7 次 delete。
 // 断言首次无 action、第二次共 10 次 action、最终长度 100/100/100、指标，并确认缓存未被修改。
@@ -1075,14 +1002,12 @@ func TestReconcileEndpointSlicesRecycling(t *testing.T) {
 	namespace := "test"
 	svc, endpointMeta := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 300 pods
 	pods := []*corev1.Pod{}
 	for i := 0; i < 300; i++ {
 		ready := i%3 != 0
 		pods = append(pods, newPod(i, namespace, ready, 1, false))
 	}
 
-	// generate 10 existing slices with 30 pods/endpoints each
 	// 按每 30 个端点划分为 10 个切片。
 	existingSlices := []*discovery.EndpointSlice{}
 	for i, pod := range pods {
@@ -1102,31 +1027,23 @@ func TestReconcileEndpointSlicesRecycling(t *testing.T) {
 	r := newReconciler(client, []*corev1.Node{{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}}, defaultMaxEndpointsPerSlice)
 	// 首次协调应为 no-op。
 	reconcileHelper(t, r, &svc, pods, existingSlices, time.Now())
-	// initial reconcile should be a no op, all pods are accounted for in slices, no repacking should be done
 	// 断言首次协调没有产生额外 action。
 	assert.Len(t, client.Actions(), numActionsBefore+0, "Expected 0 additional client actions as part of reconcile")
 
-	// changing a service port should require all slices to be updated, time for a repack
 	// 修改端口迫使所有切片更新，从而触发重新装箱。
 	svc.Spec.Ports[0].TargetPort.IntVal = 81
 	reconcileHelper(t, r, &svc, pods, existingSlices, time.Now())
 
-	// this should reflect 3 updates + 7 deletes
 	// 期望 3 次 update 与 7 次 delete。
 	assert.Len(t, client.Actions(), numActionsBefore+10, "Expected 10 additional client actions as part of reconcile")
 
-	// thanks to recycling, we get a free repack of endpoints, resulting in 3 full slices instead of 10 mostly empty slices
 	// 最终得到 3 个满载切片。
 	expectUnorderedSlicesWithLengths(t, fetchEndpointSlices(t, client, namespace), []int{100, 100, 100})
 	expectMetrics(t, expectedMetrics{desiredSlices: 3, actualSlices: 3, desiredEndpoints: 300, addedPerSync: 300, removedPerSync: 0, numCreated: 0, numUpdated: 3, numDeleted: 7, slicesChangedPerSync: 10})
 
-	// ensure cache mutation has not occurred
 	cmc.Check(t)
 }
 
-// In this test, we want to verify that endpoints are added to a slice that will
-// be closest to full after the operation, even when slices are already marked
-// for update.
 // TestReconcileEndpointSlicesUpdatePacking 验证新增端点会被放入操作后最接近满载的切片，即使两个切片都已标记为需要更新。
 // 预置 80 与 20 个端点的两个切片，周期性地把 Pod 标记为未就绪以强制两个切片都更新，再加 15 个新端点。
 // 断言两个切片都被 update，新端点进入更满的切片，最终长度为 95/20，并确认缓存未被修改。
@@ -1161,7 +1078,6 @@ func TestReconcileEndpointSlicesUpdatePacking(t *testing.T) {
 	cmc := newCacheMutationCheck(existingSlices)
 	createEndpointSlices(t, client, namespace, existingSlices)
 
-	// ensure that endpoints in each slice will be marked for update.
 	// 把部分 Pod 标记为未就绪，强制两个切片都需要更新。
 	for i, pod := range pods {
 		if i%10 == 0 {
@@ -1172,7 +1088,6 @@ func TestReconcileEndpointSlicesUpdatePacking(t *testing.T) {
 		}
 	}
 
-	// add a few additional endpoints - no more than could fit in either slice.
 	// 新增 15 个端点，数量足以完全放入任一现有切片。
 	for i := 200; i < 215; i++ {
 		pods = append(pods, newPod(i, namespace, true, 1, false))
@@ -1181,21 +1096,16 @@ func TestReconcileEndpointSlicesUpdatePacking(t *testing.T) {
 	r := newReconciler(client, []*corev1.Node{{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}}, defaultMaxEndpointsPerSlice)
 	reconcileHelper(t, r, &svc, pods, existingSlices, time.Now())
 
-	// ensure that both endpoint slices have been updated
 	// 期望两个切片都被 update。
 	expectActions(t, client.Actions(), 2, "update", "endpointslices")
 	expectMetrics(t, expectedMetrics{desiredSlices: 2, actualSlices: 2, desiredEndpoints: 115, addedPerSync: 15, removedPerSync: 0, numCreated: 0, numUpdated: 2, numDeleted: 0, slicesChangedPerSync: 2})
 
-	// additional pods should get added to fuller slice
 	// 新端点应进入更新后更接近满载的切片，得到 95/20 的分布。
 	expectUnorderedSlicesWithLengths(t, fetchEndpointSlices(t, client, namespace), []int{95, 20})
 
-	// ensure cache mutation has not occurred
 	cmc.Check(t)
 }
 
-// In this test, we want to verify that old EndpointSlices with a deprecated IP
-// address type will be replaced with a newer IPv4 type.
 // TestReconcileEndpointSlicesReplaceDeprecated 验证地址类型为已废弃值 "IP" 的旧切片会被新的 IPv4 切片替换。
 // 预置两个使用废弃地址类型、但端点实际为 IPv4 地址的切片；协调后断言产生 2 次 delete，新切片被完美装箱为 100/30 且地址类型均为 IPv4，同时确认缓存未被修改。
 func TestReconcileEndpointSlicesReplaceDeprecated(t *testing.T) {
@@ -1205,7 +1115,6 @@ func TestReconcileEndpointSlicesReplaceDeprecated(t *testing.T) {
 
 	// Service 使用普通 IPv4 配置，但把已有切片的地址类型设为已废弃值。
 	svc, endpointMeta := newServiceAndEndpointMeta("foo", namespace)
-	// "IP" is a deprecated address type, ensuring that it is handled properly.
 	// 已有切片端点本身仍是 IPv4 地址。
 	endpointMeta.addressType = discovery.AddressType("IP")
 
@@ -1238,15 +1147,12 @@ func TestReconcileEndpointSlicesReplaceDeprecated(t *testing.T) {
 	reconcileHelper(t, r, &svc, pods, existingSlices, time.Now())
 	// 协调后旧切片应被新的 IPv4 切片替换。
 
-	// ensure that both original endpoint slices have been deleted
 	// 期望产生两次 delete action。
 	expectActions(t, client.Actions(), 2, "delete", "endpointslices")
 
 	endpointSlices := fetchEndpointSlices(t, client, namespace)
 
-	// since this involved replacing both EndpointSlices, the result should be
 	// 新切片应被完美装箱为 100/30。
-	// perfectly packed.
 	expectUnorderedSlicesWithLengths(t, endpointSlices, []int{100, 30})
 
 	// 断言所有新切片的地址类型均为 IPv4。
@@ -1256,12 +1162,9 @@ func TestReconcileEndpointSlicesReplaceDeprecated(t *testing.T) {
 		}
 	}
 
-	// ensure cache mutation has not occurred
 	cmc.Check(t)
 }
 
-// In this test, we want to verify that a Service recreation will result in new
-// EndpointSlices being created.
 // TestReconcileEndpointSlicesRecreation 验证 Service 重建（UID 变化）后，属于旧 UID 的切片会被替换。
 // 表驱动用例分别构造 ownerReference UID 与当前 Service 一致和不一致的切片；一致时不产生写操作，不一致时先 create 新切片再 delete 旧切片，最后只剩 1 个切片。
 func TestReconcileEndpointSlicesRecreation(t *testing.T) {
@@ -1328,14 +1231,11 @@ func TestReconcileEndpointSlicesRecreation(t *testing.T) {
 					t.Errorf("Expected no additional actions, got %d", len(client.Actions())-numActionsBefore)
 				}
 			}
-			// ensure cache mutation has not occurred
 			cmc.Check(t)
 		})
 	}
 }
 
-// Named ports can map to different port numbers on different pods.
-// This test ensures that EndpointSlices are grouped correctly in that case.
 // TestReconcileEndpointSlicesNamedPorts 验证命名端口映射到不同端口号时切片的分组行为。
 // Service 使用名为 http 的目标端口，300 个 Pod 的容器端口按 i%5 产生 5 种映射；期望创建 5 个各含 60 个端点的切片，每个切片对应一种端口号，并校验端口与地址类型。
 func TestReconcileEndpointSlicesNamedPorts(t *testing.T) {
@@ -1362,7 +1262,6 @@ func TestReconcileEndpointSlicesNamedPorts(t *testing.T) {
 		},
 	}
 
-	// start with 300 pods
 	// 每个 Pod 的容器端口按 i%5 取不同值。
 	pods := []*corev1.Pod{}
 	for i := 0; i < 300; i++ {
@@ -1381,7 +1280,6 @@ func TestReconcileEndpointSlicesNamedPorts(t *testing.T) {
 	r := newReconciler(client, []*corev1.Node{{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}}, defaultMaxEndpointsPerSlice)
 	reconcileHelper(t, r, &svc, pods, []*discovery.EndpointSlice{}, time.Now())
 
-	// reconcile should create 5 endpoint slices
 	// 期望生成 5 个 create action。
 	assert.Len(t, client.Actions(), 5, "Expected 5 client actions as part of reconcile")
 	expectActions(t, client.Actions(), 5, "create", "endpointslices")
@@ -1389,11 +1287,9 @@ func TestReconcileEndpointSlicesNamedPorts(t *testing.T) {
 
 	fetchedSlices := fetchEndpointSlices(t, client, namespace)
 
-	// each slice should have 60 endpoints to match 5 unique variations of named port mapping
 	// 断言 5 个切片各含 60 个端点。
 	expectUnorderedSlicesWithLengths(t, fetchedSlices, []int{60, 60, 60, 60, 60})
 
-	// generate data structures for expected slice ports and address types
 	// 为 5 种端口映射构造期望的顶层属性。
 	expectedSlices := []discovery.EndpointSlice{}
 	for i := range fetchedSlices {
@@ -1407,20 +1303,16 @@ func TestReconcileEndpointSlicesNamedPorts(t *testing.T) {
 		})
 	}
 
-	// slices fetched should match expected address type and ports
 	// 校验切片的端口与地址类型符合预期。
 	expectUnorderedSlicesWithTopLevelAttrs(t, fetchedSlices, expectedSlices)
 }
 
-// This test ensures that maxEndpointsPerSlice configuration results in
-// appropriate endpoints distribution among slices
 // TestReconcileMaxEndpointsPerSlice 验证 maxEndpointsPerSlice 配置对端点分布的影响。
 // 固定 250 个 Pod，表驱动用例覆盖上限 50/80/150/250/500，断言切片长度分布分别为 50x5、80x3+10、150+100、250、250，并校验期望切片数、创建数等指标。
 func TestReconcileMaxEndpointsPerSlice(t *testing.T) {
 	namespace := "test"
 	svc, _ := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 250 pods
 	// 250 个 Pod 作为固定输入。
 	pods := []*corev1.Pod{}
 	for i := 0; i < 250; i++ {
@@ -1478,7 +1370,6 @@ func TestReconcileEndpointSlicesMetrics(t *testing.T) {
 	namespace := "test"
 	svc, _ := newServiceAndEndpointMeta("foo", namespace)
 
-	// start with 20 pods
 	// 构造 20 个就绪 Pod。
 	pods := []*corev1.Pod{}
 	for i := 0; i < 20; i++ {
@@ -1513,7 +1404,6 @@ func TestReconcileEndpointSlicesMetrics_EndpointsAddedPerSync_CollectAndCompare(
 	keepPod := newPod(1, namespace, true, 1, false)
 	newDesiredPod := newPod(2, namespace, true, 1, false)
 
-	// Existing slice has one endpoint that should remain. Reconcile should add exactly 1 endpoint.
 	// 已有切片仅含 keepPod，期望协调后新增 1 个端点。
 	existingSlice := newEmptyEndpointSlice(1, namespace, endpointMeta, svc)
 	existingSlice.Endpoints = []discovery.Endpoint{
@@ -1569,9 +1459,7 @@ func TestReconcileEndpointSlicesMetrics_EndpointsRemovedPerSync_CollectAndCompar
 	stalePod := newPod(0, namespace, true, 1, false)
 	keepPod := newPod(1, namespace, true, 1, false)
 
-	// Existing slice has one stale endpoint and one endpoint that should remain.
 	// 期望协调后只保留 keepPod，恰好移除 1 个端点。
-	// Reconcile should remove exactly 1 endpoint.
 	existingSlice := newEmptyEndpointSlice(1, namespace, endpointMeta, svc)
 	existingSlice.Endpoints = []discovery.Endpoint{
 		podToEndpoint(stalePod, &corev1.Node{}, &svc, discovery.AddressTypeIPv4),
@@ -1631,7 +1519,6 @@ func TestReconcileEndpointSlicesMetrics_GaugeUpdates(t *testing.T) {
 		t.Fatalf("Expected no error creating Service, got: %v", err)
 	}
 
-	// Reconcile with exactly 2 pods to deterministically set gauge metric values.
 	// 使用恰好 2 个 Pod，使 gauge 值可精确断言。
 	pod1 := newPod(1, namespace, true, 1, false)
 	pod2 := newPod(2, namespace, true, 1, false)
@@ -1665,11 +1552,6 @@ endpoint_slice_controller_services_count_by_traffic_distribution{traffic_distrib
 	}
 }
 
-// When a Service has a non-nil deletionTimestamp we want to avoid creating any
-// new EndpointSlices but continue to allow updates and deletes through. This
-// test uses 3 EndpointSlices, 1 "to-create", 1 "to-update", and 1 "to-delete".
-// Each test case exercises different combinations of calls to finalize with
-// those resources.
 // TestReconcilerFinalizeSvcDeletionTimestamp 验证 Service 带有 deletionTimestamp 时 finalize 的行为。
 // 规则是：不创建新切片，但允许更新与删除；回收场景下原本要创建的切片会转为更新待删除切片。
 // 表驱动用例按 deletionTimestamp 是否为空以及 create/update/delete 三类操作的尝试组合展开，断言三类切片的最终存在性与内容。
@@ -1703,8 +1585,6 @@ func TestReconcilerFinalizeSvcDeletionTimestamp(t *testing.T) {
 		expectUpdatedSlice: true,
 		expectDeletedSlice: true,
 	}, {
-		// Slice scheduled for creation is transitioned to update of Slice
-		// scheduled for deletion.
 		name:               "Attempt create, update, and delete, nil deletion timestamp, recycling in action",
 		deletionTimestamp:  nil,
 		attemptCreate:      true,
@@ -1714,8 +1594,6 @@ func TestReconcilerFinalizeSvcDeletionTimestamp(t *testing.T) {
 		expectUpdatedSlice: true,
 		expectDeletedSlice: true,
 	}, {
-		// Slice scheduled for creation is transitioned to update of Slice
-		// scheduled for deletion.
 		name:               "Attempt create, update, and delete, deletion timestamp set, recycling in action",
 		deletionTimestamp:  &now,
 		attemptCreate:      true,
@@ -1725,7 +1603,6 @@ func TestReconcilerFinalizeSvcDeletionTimestamp(t *testing.T) {
 		expectUpdatedSlice: true,
 		expectDeletedSlice: true,
 	}, {
-		// Update and delete continue to work when deletionTimestamp is set.
 		name:               "Attempt update delete, deletion timestamp set",
 		deletionTimestamp:  &now,
 		attemptCreate:      false,
@@ -1760,7 +1637,6 @@ func TestReconcilerFinalizeSvcDeletionTimestamp(t *testing.T) {
 				Ports:       endpointMeta.ports,
 			}
 
-			// Add EndpointSlice that can be updated.
 			// 写入待更新切片，并预置端点以检验更新是否生效。
 			esToUpdate, err := client.DiscoveryV1().EndpointSlices(namespace).Create(context.TODO(), &discovery.EndpointSlice{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1773,11 +1649,8 @@ func TestReconcilerFinalizeSvcDeletionTimestamp(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Expected no error creating EndpointSlice during test setup, got %v", err)
 			}
-			// Add an endpoint so we can see if this has actually been updated by
-			// finalize func.
 			esToUpdate.Endpoints = []discovery.Endpoint{{Addresses: []string{"10.2.3.4"}}}
 
-			// Add EndpointSlice that can be deleted.
 			// 写入待删除切片。
 			esToDelete, err := client.DiscoveryV1().EndpointSlices(namespace).Create(context.TODO(), &discovery.EndpointSlice{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1848,11 +1721,6 @@ func TestReconcilerFinalizeSvcDeletionTimestamp(t *testing.T) {
 	}
 }
 
-// When a Pod references a Node that is not present in the informer cache the
-// EndpointSlices will continue to allow create, updates and deletes through.
-// The Pod with the missing reference will be published or retried depending of
-// the service.spec.PublishNotReadyAddresses.
-// The test considers two Pods on different nodes, one of the Nodes is not present.
 // TestReconcilerPodMissingNode 验证 Pod 引用的 Node 不在 informer 缓存中时的处理。
 // 构造两个节点及分别调度其上的两个 Pod，但只把部分节点加入索引；表驱动用例覆盖创建/更新、PublishNotReadyAddresses 开关以及节点缺失程度。
 // 当引用了缺失节点且未开启 PublishNotReadyAddresses 时期望返回错误；开启时不报错，端点按规则保留或发布。断言错误、实际切片数与指标。
@@ -1995,7 +1863,7 @@ func TestReconcilerPodMissingNode(t *testing.T) {
 			addedPerSync:     0,
 			removedPerSync:   2,
 			numCreated:       0,
-			// the slice is updated not deleted
+			// 端点被移除后切片仍有内容，因此更新切片而非删除。
 			numUpdated:           1,
 			numDeleted:           0,
 			slicesChangedPerSync: 1,
@@ -2052,7 +1920,6 @@ func TestReconcileTopology(t *testing.T) {
 	ns := "testing"
 	svc, endpointMeta := newServiceAndEndpointMeta("foo", ns)
 
-	// 3 zones, 10 nodes and pods per zone
 	// 每个可用区 10 个节点，每个节点 1 个 Pod。
 	zones := []string{"zone-a", "zone-b", "zone-c"}
 
@@ -2213,9 +2080,8 @@ func TestReconcileTopology(t *testing.T) {
 			addedPerSync:     0,
 			removedPerSync:   0,
 			numCreated:       0,
-			// TODO(robscott): Since we're potentially changing more slices when
-			// adding topology hints we could use it as a free repacking
-			// opportunity. That would make this value 1.
+			// TODO(robscott)：添加拓扑 Hints 时可能本就会变更更多切片，可顺便重新装箱；
+			// 若实施，此值应为 1。
 			numUpdated:                   2,
 			numDeleted:                   0,
 			slicesChangedPerSyncTopology: 2,
@@ -2330,16 +2196,14 @@ func TestReconcileTopology(t *testing.T) {
 	}
 }
 
-// Test reconciliation behaviour for trafficDistribution field.
 // TestReconcile_TrafficDistribution 验证 trafficDistribution 字段对端点提示的影响。
 // 表驱动用例覆盖 PreferClose、与 topology 注解的优先级、两者均关闭、PreferSameNode 特性开关以及 PreferSameZone 未开启特性开关等场景。
 // 断言按 zone/node 的提示分布、跨区提示数以及按 trafficDistribution 维度统计的指标。
 func TestReconcile_TrafficDistribution(t *testing.T) {
-	// Setup the following topology for the test.
-	//
-	// 	- node-0 IN zone-a CONTAINS {pod-0}
-	// 	- node-1 IN zone-b CONTAINS {pod-1, pod-2, pod-3}
-	// 	- node-2 IN zone-c CONTAINS {pod-4, pod-5}
+	// 测试拓扑：
+	//   - node-0 属于 zone-a，包含 {pod-0}
+	//   - node-1 属于 zone-b，包含 {pod-1, pod-2, pod-3}
+	//   - node-2 属于 zone-c，包含 {pod-4, pod-5}
 	// 按上述拓扑构造节点与 Pod。
 	ns := "ns1"
 	svc, _ := newServiceAndEndpointMeta("foo", ns)
@@ -2375,8 +2239,6 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 	pods[4].Spec.NodeName = nodes[2].Name
 	pods[5].Spec.NodeName = nodes[2].Name
 
-	// Define test cases.
-
 	// 表驱动用例覆盖 trafficDistribution 与 topology 注解的优先级、特性开关以及两者均关闭等场景。
 	testCases := []struct {
 		name string
@@ -2386,11 +2248,10 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 		trafficDistribution          *string
 		topologyAnnotation           string
 
-		// Defines how many hints belong to a particular zone/node
+		// 分别统计各 zone、各 node 获得的 Hints 数量。
 		wantHintsDistributionByZone map[string]int
 		wantHintsDistributionByNode map[string]int
-		// Number of endpoints where the zone hints are different from the zone of
-		// the endpoint itself.
+		// 统计 Hints 指向的 zone 与 Endpoint 自身 zone 不同的端点数。
 		wantEndpointsWithCrossZoneHints int
 		wantMetrics                     expectedMetrics
 	}{
@@ -2413,9 +2274,9 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 				numCreated:                      1,
 				numUpdated:                      0,
 				numDeleted:                      0,
-				slicesChangedPerSync:            0, // 0 means either topologyAnnotation or trafficDistribution was used.
-				slicesChangedPerSyncTopology:    0, // 0 means topologyAnnotation was not used.
-				slicesChangedPerSyncTrafficDist: 1, // 1 EPS configured using trafficDistribution.
+				slicesChangedPerSync:            0, // 0 表示使用了 topologyAnnotation 或 trafficDistribution。
+				slicesChangedPerSyncTopology:    0, // 0 表示未使用 topologyAnnotation。
+				slicesChangedPerSyncTrafficDist: 1, // 1 个 EndpointSlice 使用 trafficDistribution 配置。
 				servicesCountByTrafficDistribution: map[string]int{
 					"PreferClose": 1,
 				},
@@ -2427,11 +2288,11 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 			trafficDistribution: ptr.To(corev1.ServiceTrafficDistributionPreferClose),
 			topologyAnnotation:  "Auto",
 			wantHintsDistributionByZone: map[string]int{
-				"zone-a": 2, // {pod-0, pod-3} (pod-3 is just an example, it could have also been either of the other two)
+				"zone-a": 2, // {pod-0, pod-3}（pod-3 仅为示例，也可能是另外两个 Pod 中的任意一个）
 				"zone-b": 2, // {pod-1, pod-2}
 				"zone-c": 2, // {pod-4, pod-5}
 			},
-			wantEndpointsWithCrossZoneHints: 1, // since a pod from zone-b is likely assigned a hint for zone-a
+			wantEndpointsWithCrossZoneHints: 1, // 因为 zone-b 的 Pod 很可能被分配了 zone-a 的提示
 			wantMetrics: expectedMetrics{
 				desiredSlices:                   1,
 				actualSlices:                    1,
@@ -2441,9 +2302,9 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 				numCreated:                      1,
 				numUpdated:                      0,
 				numDeleted:                      0,
-				slicesChangedPerSync:            0, // 0 means either topologyAnnotation or trafficDistribution was used.
-				slicesChangedPerSyncTopology:    1, // 1 EPS configured using topologyAnnotation.
-				slicesChangedPerSyncTrafficDist: 0, // 0 means trafficDistribution was not used.
+				slicesChangedPerSync:            0, // 0 表示使用了 topologyAnnotation 或 trafficDistribution。
+				slicesChangedPerSyncTopology:    1, // 1 个 EndpointSlice 使用 topologyAnnotation 配置。
+				slicesChangedPerSyncTrafficDist: 0, // 0 表示未使用 trafficDistribution。
 			},
 		},
 		{
@@ -2451,7 +2312,7 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 			desc:                        "When trafficDistribution and topologyAnnotation are both disabled, no hints should be added",
 			trafficDistribution:         nil,
 			topologyAnnotation:          "",
-			wantHintsDistributionByZone: map[string]int{"": 6}, // Equivalent to no hints.
+			wantHintsDistributionByZone: map[string]int{"": 6}, // 等价于无提示。
 			wantMetrics: expectedMetrics{
 				desiredSlices:                   1,
 				actualSlices:                    1,
@@ -2461,9 +2322,9 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 				numCreated:                      1,
 				numUpdated:                      0,
 				numDeleted:                      0,
-				slicesChangedPerSync:            1, // 1 means both topologyAnnotation and trafficDistribution were not used.
-				slicesChangedPerSyncTopology:    0, // 0 means topologyAnnotation was not used.
-				slicesChangedPerSyncTrafficDist: 0, // 0 means trafficDistribution was not used.
+				slicesChangedPerSync:            1, // 1 表示 topologyAnnotation 与 trafficDistribution 均未使用。
+				slicesChangedPerSyncTopology:    0, // 0 表示未使用 topologyAnnotation。
+				slicesChangedPerSyncTrafficDist: 0, // 0 表示未使用 trafficDistribution。
 			},
 		},
 		{
@@ -2491,9 +2352,9 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 				numCreated:                      1,
 				numUpdated:                      0,
 				numDeleted:                      0,
-				slicesChangedPerSync:            0, // 0 means either topologyAnnotation or trafficDistribution was used.
-				slicesChangedPerSyncTopology:    0, // 0 means topologyAnnotation was not used.
-				slicesChangedPerSyncTrafficDist: 1, // 1 EPS configured using trafficDistribution.
+				slicesChangedPerSync:            0, // 0 表示使用了 topologyAnnotation 或 trafficDistribution。
+				slicesChangedPerSyncTopology:    0, // 0 表示未使用 topologyAnnotation。
+				slicesChangedPerSyncTrafficDist: 1, // 1 个 EndpointSlice 使用 trafficDistribution 配置。
 				servicesCountByTrafficDistribution: map[string]int{
 					"PreferSameNode": 1,
 				},
@@ -2505,7 +2366,7 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 			preferSameFeatureGateEnabled: false,
 			trafficDistribution:          ptr.To(corev1.ServiceTrafficDistributionPreferSameZone),
 			topologyAnnotation:           "Disabled",
-			wantHintsDistributionByZone:  map[string]int{"": 6}, // Equivalent to no hints.
+			wantHintsDistributionByZone:  map[string]int{"": 6}, // 等价于无提示。
 			wantMetrics: expectedMetrics{
 				desiredSlices:                   1,
 				actualSlices:                    1,
@@ -2515,14 +2376,12 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 				numCreated:                      1,
 				numUpdated:                      0,
 				numDeleted:                      0,
-				slicesChangedPerSync:            1, // 1 means both topologyAnnotation and trafficDistribution were not used.
-				slicesChangedPerSyncTopology:    0, // 0 means topologyAnnotation was not used.
-				slicesChangedPerSyncTrafficDist: 0, // 0 means trafficDistribution was not used.
+				slicesChangedPerSync:            1, // 1 表示 topologyAnnotation 与 trafficDistribution 均未使用。
+				slicesChangedPerSyncTopology:    0, // 0 表示未使用 topologyAnnotation。
+				slicesChangedPerSyncTrafficDist: 0, // 0 表示未使用 trafficDistribution。
 			},
 		},
 	}
-
-	// Make assertions.
 
 	// 逐用例执行协调并断言提示分布与指标。
 	for _, tc := range testCases {
@@ -2582,11 +2441,9 @@ func TestReconcile_TrafficDistribution(t *testing.T) {
 	}
 }
 
-// TestReconcileHeadlessServiceNoPorts verifies that headless services with no ports
-// don't cause EndpointSlice churn. Validates fix for https://github.com/kubernetes/kubernetes/issues/133474
 // TestReconcileHeadlessServiceNoPorts 验证无端口的 headless Service 不会造成 EndpointSlice 反复变更。
 // 首次协调创建一个端口列表为空的切片；随后模拟 API 服务器把空端口切片序列化为 nil，再次协调应不产生任何写操作，仅有一次 list。
-// 该用例用于回归 https://github.com/kubernetes/kubernetes/issues/133474。
+// 该用例用于回归 https://github.com/kubernetes/kubernetes/issues/133474.
 func TestReconcileHeadlessServiceNoPorts(t *testing.T) {
 	namespace := "test"
 	client := newClientset()
@@ -2620,7 +2477,6 @@ func TestReconcileHeadlessServiceNoPorts(t *testing.T) {
 	var existingSlices []*discovery.EndpointSlice
 	for _, slice := range fetchEndpointSlices(t, client, namespace) {
 		copy := slice.DeepCopy()
-		// replicate API server behavior which serializes this empty slice as nil
 		copy.Ports = nil
 		existingSlices = append(existingSlices, copy)
 	}
@@ -2632,8 +2488,6 @@ func TestReconcileHeadlessServiceNoPorts(t *testing.T) {
 	assert.Len(t, client.Actions(), 2, "Expected second reconcile to only list")
 	expectActions(t, client.Actions(), 1, "list", "endpointslices")
 }
-
-// Test Helpers
 
 // newReconciler 使用 fake clientset 构造 Reconciler：把传入节点加入 Node informer 的索引器，并用固定的控制器名、事件记录器与 EndpointSliceTracker 完成初始化。
 func newReconciler(client *fake.Clientset, nodes []*corev1.Node, maxEndpointsPerSlice int32) *Reconciler {
@@ -2658,7 +2512,6 @@ func newReconciler(client *fake.Clientset, nodes []*corev1.Node, maxEndpointsPer
 	)
 }
 
-// ensures endpoint slices exist with the desired set of lengths
 // expectUnorderedSlicesWithLengths 断言切片集合的端点数量分布与期望一致，不关心切片顺序。
 func expectUnorderedSlicesWithLengths(t *testing.T, endpointSlices []discovery.EndpointSlice, expectedLengths []int) {
 	assert.Len(t, endpointSlices, len(expectedLengths), "Expected %d endpoint slices", len(expectedLengths))
@@ -2688,7 +2541,6 @@ func expectUnorderedSlicesWithLengths(t *testing.T, endpointSlices []discovery.E
 	}
 }
 
-// ensures endpoint slices exist with the desired set of ports and address types
 // expectUnorderedSlicesWithTopLevelAttrs 忽略顺序，断言每个切片的端口与地址类型都能与期望切片匹配。
 func expectUnorderedSlicesWithTopLevelAttrs(t *testing.T, endpointSlices []discovery.EndpointSlice, expectedSlices []discovery.EndpointSlice) {
 	t.Helper()
@@ -2717,7 +2569,6 @@ func expectUnorderedSlicesWithTopLevelAttrs(t *testing.T, endpointSlices []disco
 // expectActions 从 action 列表末尾开始，校验最近 num 个 action 的 verb 与 resource。
 func expectActions(t *testing.T, actions []k8stesting.Action, num int, verb, resource string) {
 	t.Helper()
-	// if actions are less the below logic will panic
 	// 若 action 数量不足则直接失败，避免后续越界。
 	if num > len(actions) {
 		t.Fatalf("len of actions %v is unexpected. Expected to be at least %v", len(actions), num+1)
@@ -2782,8 +2633,6 @@ func reconcileHelper(t *testing.T, r *Reconciler, service *corev1.Service, pods 
 		t.Fatalf("Expected no error reconciling Endpoint Slices, got: %v", err)
 	}
 }
-
-// Metrics helpers
 
 // expectedMetrics 汇总一次协调后期望的各项指标取值。
 // desiredSlices 为理想切片数，actualSlices 为实际切片数，desiredEndpoints 为期望端点数；

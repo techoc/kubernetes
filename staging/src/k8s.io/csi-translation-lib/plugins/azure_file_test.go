@@ -373,8 +373,7 @@ func TestTranslateAzureFileInTreePVToCSI(t *testing.T) {
 						AzureFile: &corev1.AzureFilePersistentVolumeSource{
 							ShareName:  "sharename",
 							SecretName: "secretname",
-							//SecretNamespace: &secretNamespace,
-							ReadOnly: true,
+							ReadOnly:   true,
 						},
 					},
 					// 命名空间信息改由 ClaimRef 提供。

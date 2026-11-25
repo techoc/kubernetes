@@ -22,32 +22,30 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-// 自定义指标挂在独立 API 组下，与核心资源和 metrics.k8s.io 分开。
+// GroupName 是本包使用的 API 组名称。
+// 自定义指标位于独立 API 组，与核心资源和 metrics.k8s.io 分开。
 const GroupName = "custom.metrics.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-// 该版本只用于编解码 v1beta1 的自定义指标对象。
+// SchemeGroupVersion 是用于注册本包对象的组版本。
+// 该版本用于编解码 v1beta1 的自定义指标对象。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
-// 补全组名后交给 REST 映射，避免调用方手拼字符串。
+// Resource 接收不限定的 resource，返回包含组名的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
-	// 集中登记本版本的已知类型，新增类型只改 addKnownTypes。
+	// SchemeBuilder 保存需要添加到 Scheme 的注册函数。
+	// 集中登记本版本的已知类型，新增类型时只需修改 addKnownTypes。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme applies all the stored functions to the scheme.
-	// 暴露统一入口，内部 builder 细节不外泄。
+	// AddToScheme 将所有已注册的函数应用到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// addKnownTypes 同时注册指标实体、列表和查询选项，
-// 并加入 metav1 公共类型以正确解析 TypeMeta/ListMeta。
+// addKnownTypes 注册指标实体、列表和查询选项，
+// 并加入 metav1 公共类型以正确解析 TypeMeta 和 ListMeta。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&MetricValue{},

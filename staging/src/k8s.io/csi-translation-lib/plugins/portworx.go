@@ -75,8 +75,6 @@ func NewPortworxCSITranslator() InTreePlugin {
 	return &portworxCSITranslator{}
 }
 
-// TranslateInTreeStorageClassToCSI takes in-tree storage class used by in-tree plugin
-// and translates them to a storageclass consumable by CSI plugin
 // TranslateInTreeStorageClassToCSI 将树内 StorageClass 的认证 Secret 参数展开为 CSI 各阶段所需的带前缀参数，
 // 并把 provisioner 替换为 Portworx CSI 驱动名。
 func (p portworxCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logger, sc *storagev1.StorageClass) (*storagev1.StorageClass, error) {
@@ -107,7 +105,6 @@ func (p portworxCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logg
 			params[prefixedControllerExpandSecretNamespaceKey] = v
 			params[prefixedNodeExpandSecretNamespaceKey] = v
 		default:
-			// All other parameters can be copied as is
 			// 其余参数原样保留，交由 CSI 驱动处理。
 			params[k] = v
 		}
@@ -122,8 +119,6 @@ func (p portworxCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logg
 	return sc, nil
 }
 
-// TranslateInTreeInlineVolumeToCSI takes a inline volume and will translate
-// the in-tree inline volume source to a CSIPersistentVolumeSource
 // TranslateInTreeInlineVolumeToCSI 把 Pod 中的 Portworx 内联卷转换为等价的 CSI PV 定义。
 func (p portworxCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error) {
 	// Volume 与 PortworxVolume 来源必须同时存在。
@@ -160,8 +155,6 @@ func (p portworxCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logg
 	return pv, nil
 }
 
-// TranslateInTreePVToCSI takes a Portworx persistent volume and will translate
-// the in-tree pv source to a CSI Source
 // TranslateInTreePVToCSI 把树内 Portworx PV 就地转换为 CSI PV，
 // 并将两处认证注解合并为各 CSI 阶段共享的 Secret 引用。
 func (p portworxCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
@@ -187,7 +180,7 @@ func (p portworxCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1
 		Driver:                     PortworxDriverName,
 		VolumeHandle:               pv.Spec.PortworxVolume.VolumeID,
 		FSType:                     pv.Spec.PortworxVolume.FSType,
-		VolumeAttributes:           make(map[string]string), // copy access mode
+		VolumeAttributes:           make(map[string]string),
 		ControllerPublishSecretRef: secretRef,
 		NodeStageSecretRef:         secretRef,
 		NodePublishSecretRef:       secretRef,
@@ -201,8 +194,6 @@ func (p portworxCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1
 	return pv, nil
 }
 
-// TranslateCSIPVToInTree takes a PV with a CSI PersistentVolume Source and will translate
-// it to a in-tree Persistent Volume Source for the in-tree volume
 // TranslateCSIPVToInTree 是反向转换：把 CSI PV 还原为树内 Portworx PV，用于回滚场景。
 func (p portworxCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	// 没有 CSI 来源时无法反推，直接报错。
@@ -224,33 +215,28 @@ func (p portworxCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (
 	return pv, nil
 }
 
-// CanSupport tests whether the plugin supports a given persistent volume
-// specification from the API.
 // CanSupport 判断该 PV 是否为 Portworx 树内卷。
+// 传入对象的 spec 应视为常量，不得修改。
 func (p portworxCSITranslator) CanSupport(pv *v1.PersistentVolume) bool {
 	return pv != nil && pv.Spec.PortworxVolume != nil
 }
 
-// CanSupportInline tests whether the plugin supports a given inline volume
-// specification from the API.
 // CanSupportInline 判断该内联卷是否为 Portworx 卷。
+// 传入对象的 spec 应视为常量，不得修改。
 func (p portworxCSITranslator) CanSupportInline(volume *v1.Volume) bool {
 	return volume != nil && volume.PortworxVolume != nil
 }
 
-// GetInTreePluginName returns the in-tree plugin name this migrates
 // GetInTreePluginName 返回本转换器所迁移的树内插件名。
 func (p portworxCSITranslator) GetInTreePluginName() string {
 	return PortworxVolumePluginName
 }
 
-// GetCSIPluginName returns the name of the CSI plugin that supersedes the in-tree plugin
 // GetCSIPluginName 返回取代树内插件的 CSI 驱动名。
 func (p portworxCSITranslator) GetCSIPluginName() string {
 	return PortworxDriverName
 }
 
-// RepairVolumeHandle generates a correct volume handle based on node ID information.
 // RepairVolumeHandle 无需修正 Portworx 的卷句柄，原样返回即可。
 func (p portworxCSITranslator) RepairVolumeHandle(volumeHandle, nodeID string) (string, error) {
 	return volumeHandle, nil

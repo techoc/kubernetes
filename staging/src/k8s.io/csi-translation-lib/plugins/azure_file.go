@@ -28,10 +28,8 @@ import (
 )
 
 const (
-	// AzureFileDriverName is the name of the CSI driver for Azure File
 	// AzureFileDriverName 是 Azure File 对应的 CSI 驱动名称，翻译后的 PV 会引用它。
 	AzureFileDriverName = "file.csi.azure.com"
-	// AzureFileInTreePluginName is the name of the intree plugin for Azure file
 	// AzureFileInTreePluginName 是树内（in-tree）Azure File 插件的名称。
 	AzureFileInTreePluginName = "kubernetes.io/azure-file"
 
@@ -39,8 +37,6 @@ const (
 	// volumeIDTemplate 是 volume handle 的格式模板，依次填入资源组、存储账户、文件共享名、PV 名称和 Secret 命名空间。
 	separator        = "#"
 	volumeIDTemplate = "%s#%s#%s#%s#%s"
-	// Parameter names defined in azure file CSI driver, refer to
-	// https://github.com/kubernetes-sigs/azurefile-csi-driver/blob/master/docs/driver-parameters.md
 	// 下面这组常量是 Azure File CSI 驱动约定的 VolumeAttributes 键名：
 	// shareNameField 表示文件共享名，secretNameField 表示存储账户 Secret 名称，
 	// secretNamespaceField 表示 Secret 所在命名空间，secretNameTemplate 是默认 Secret 名称的模板，
@@ -60,25 +56,20 @@ var _ InTreePlugin = &azureFileCSITranslator{}
 // secretNameFormatRE 用于从默认的 Secret 名称中反解出存储账户名。
 var secretNameFormatRE = regexp.MustCompile(`azure-storage-account-(.+)-secret`)
 
-// azureFileCSITranslator handles translation of PV spec from In-tree
-// Azure File to CSI Azure File and vice versa
 // azureFileCSITranslator 负责在树内 Azure File 与 CSI Azure File 之间双向翻译 PV 配置。
 type azureFileCSITranslator struct{}
 
-// NewAzureFileCSITranslator returns a new instance of azureFileTranslator
 // NewAzureFileCSITranslator 返回一个 Azure File 翻译器实例。
 func NewAzureFileCSITranslator() InTreePlugin {
 	return &azureFileCSITranslator{}
 }
 
-// TranslateInTreeStorageClassToCSI translates InTree Azure File storage class parameters to CSI storage class
 // TranslateInTreeStorageClassToCSI 翻译 StorageClass 参数；Azure File 无需转换，因此原样返回。
+// 驱动参数说明：https://github.com/kubernetes-sigs/azurefile-csi-driver/blob/master/docs/driver-parameters.md
 func (t *azureFileCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logger, sc *storage.StorageClass) (*storage.StorageClass, error) {
 	return sc, nil
 }
 
-// TranslateInTreeInlineVolumeToCSI takes a Volume with AzureFile set from in-tree
-// and converts the AzureFile source to a CSIPersistentVolumeSource
 // TranslateInTreeInlineVolumeToCSI 把 Pod 中内联的 AzureFile 卷转换为等价的 CSI PV。
 func (t *azureFileCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error) {
 	// 内联卷必须显式带有 AzureFile 来源，否则无法翻译。
@@ -107,7 +98,6 @@ func (t *azureFileCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Lo
 	var (
 		pv = &v1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{
-				// Must be unique as it is used as the unique part of the staging path
 				// 直接用 volume handle 作为名字，保证同一个卷的 staging 路径稳定且唯一。
 				Name: volumeID,
 			},
@@ -137,8 +127,6 @@ func (t *azureFileCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Lo
 	return pv, nil
 }
 
-// TranslateInTreePVToCSI takes a PV with AzureFile set from in-tree
-// and converts the AzureFile source to a CSIPersistentVolumeSource
 // TranslateInTreePVToCSI 把树内 Azure File PV 原地改造成 CSI PV。
 func (t *azureFileCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	// 只接受带有 AzureFile 来源的 PV。
@@ -161,16 +149,13 @@ func (t *azureFileCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *
 		}
 	}
 
-	// Secret is required when mounting a volume but pod presence cannot be assumed - we should not try to read pod now.
 	// 挂载阶段需要知道 Secret 所在的命名空间，但此时不能假设 Pod 已存在。
 	namespace := ""
-	// Try to read SecretNamespace from source pv.
 	// 优先使用 PV 来源中显式声明的 SecretNamespace。
 	if azureSource.SecretNamespace != nil {
 		namespace = *azureSource.SecretNamespace
 	} else {
-		// Try to read namespace from ClaimRef which should be always present.
-		// 否则回退到 ClaimRef 的命名空间（静态制备的 PV 通常都有 ClaimRef）。
+		// 否则回退到 ClaimRef 的命名空间；按约定静态制备 PV 的 ClaimRef 应始终存在。
 		if pv.Spec.ClaimRef != nil {
 			namespace = pv.Spec.ClaimRef.Namespace
 		}
@@ -185,7 +170,6 @@ func (t *azureFileCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *
 	volumeID := fmt.Sprintf(volumeIDTemplate, resourceGroup, accountName, azureSource.ShareName, pv.ObjectMeta.Name, namespace)
 
 	var (
-		// refer to https://github.com/kubernetes-sigs/azurefile-csi-driver/blob/master/docs/driver-parameters.md
 		// 生成 CSI 来源：驱动名与 node stage 阶段使用的 Secret 引用。
 		csiSource = &v1.CSIPersistentVolumeSource{
 			Driver: AzureFileDriverName,
@@ -209,8 +193,6 @@ func (t *azureFileCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *
 	return pv, nil
 }
 
-// TranslateCSIPVToInTree takes a PV with CSIPersistentVolumeSource set and
-// translates the Azure File CSI source to a AzureFile source.
 // TranslateCSIPVToInTree 是反向翻译：把 CSI Azure File PV 还原成树内 AzureFile PV，用于回滚。
 func (t *azureFileCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	// 必须是 CSI 来源的 PV。
@@ -219,7 +201,6 @@ func (t *azureFileCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume)
 	}
 	csiSource := pv.Spec.CSI
 
-	// refer to https://github.com/kubernetes-sigs/azurefile-csi-driver/blob/master/docs/driver-parameters.md
 	// 先建立空的 AzureFile 来源，只读标志直接继承。
 	azureSource := &v1.AzureFilePersistentVolumeSource{
 		ReadOnly: csiSource.ReadOnly,
@@ -281,29 +262,23 @@ func (t *azureFileCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume)
 	return pv, nil
 }
 
-// CanSupport tests whether the plugin supports a given volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupport 判断该 PV 是否为树内 Azure File 卷。
+// 传入对象的 spec 应视为常量，不得修改。
 func (t *azureFileCSITranslator) CanSupport(pv *v1.PersistentVolume) bool {
 	return pv != nil && pv.Spec.AzureFile != nil
 }
 
-// CanSupportInline tests whether the plugin supports a given inline volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupportInline 判断内联 Volume 是否为 Azure File 类型。
+// 传入对象的 spec 应视为常量，不得修改。
 func (t *azureFileCSITranslator) CanSupportInline(volume *v1.Volume) bool {
 	return volume != nil && volume.AzureFile != nil
 }
 
-// GetInTreePluginName returns the name of the intree plugin driver
 // GetInTreePluginName 返回树内插件名称。
 func (t *azureFileCSITranslator) GetInTreePluginName() string {
 	return AzureFileInTreePluginName
 }
 
-// GetCSIPluginName returns the name of the CSI plugin
 // GetCSIPluginName 返回 CSI 驱动名称。
 func (t *azureFileCSITranslator) GetCSIPluginName() string {
 	return AzureFileDriverName
@@ -314,10 +289,8 @@ func (t *azureFileCSITranslator) RepairVolumeHandle(volumeHandle, nodeID string)
 	return volumeHandle, nil
 }
 
-// get file share info according to volume id, e.g.
-// input: "rg#f5713de20cde511e8ba4900#pvc-file-dynamic-17e43f84-f474-11e8-acd0-000d3a00df41#diskname.vhd"
-// output: rg, f5713de20cde511e8ba4900, pvc-file-dynamic-17e43f84-f474-11e8-acd0-000d3a00df41, diskname.vhd
-// getFileShareInfo 按 # 拆分 volume handle，提取资源组、存储账户、共享名和可选的磁盘名。
+// getFileShareInfo 按 # 拆分 volume handle，提取资源组、存储账户、共享名和第四段；
+// 第四段在旧格式中是可选的磁盘名，在当前格式中是 PV 名称，调用方忽略该返回值。
 func getFileShareInfo(id string) (string, string, string, string, error) {
 	segments := strings.Split(id, separator)
 	// 至少需要三段（资源组、账户、共享名）才能满足反向翻译需要。
@@ -325,14 +298,13 @@ func getFileShareInfo(id string) (string, string, string, string, error) {
 		return "", "", "", "", fmt.Errorf("error parsing volume id: %q, should at least contain two #", id)
 	}
 	var diskName string
-	// 第四段是可选的磁盘名，缺失时返回空字符串。
+	// 兼容旧格式：第四段不存在时返回空字符串。
 	if len(segments) > 3 {
 		diskName = segments[3]
 	}
 	return segments[0], segments[1], segments[2], diskName, nil
 }
 
-// get storage account name from secret name
 // getStorageAccountName 从形如 azure-storage-account-<账户>-secret 的名称中提取存储账户名。
 func getStorageAccountName(secretName string) (string, error) {
 	matches := secretNameFormatRE.FindStringSubmatch(secretName)

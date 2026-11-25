@@ -17,61 +17,60 @@ package v1;
 option go_package = "k8s.io/kubelet/pkg/apis/dra-health/v1";
 
 
-// DRAResourceHealth service is implemented by DRA plugins and called by Kubelet.
+// DRAResourceHealth 服务由 DRA 插件实现，并由 Kubelet 调用。
 service DRAResourceHealth {
-  // NodeWatchResources allows a DRA plugin to stream health updates for its devices to Kubelet.
+  // NodeWatchResources 允许 DRA 插件向 Kubelet 流式发送其设备的健康状态更新。
   rpc NodeWatchResources(NodeWatchResourcesRequest) returns (stream NodeWatchResourcesResponse) {}
 }
 
 message NodeWatchResourcesRequest {
-  // Reserved for future use.
+  // 保留供将来使用。
 }
 
-// HealthStatus defines the possible health states of a device.
+// HealthStatus 定义设备可能具有的健康状态。
 enum HealthStatus {
-  // UNKNOWN indicates that the health of the device cannot be determined.
+  // UNKNOWN 表示无法确定设备的健康状况。
   UNKNOWN = 0;
-  // HEALTHY indicates that the device is operating normally.
+  // HEALTHY 表示设备运行正常。
   HEALTHY = 1;
-  // UNHEALTHY indicates that the device has reported a problem.
+  // UNHEALTHY 表示设备已报告问题。
   UNHEALTHY = 2;
 }
 
-// DeviceIdentifier uniquely identifies a device within the scope of a driver.
+// DeviceIdentifier 在驱动范围内唯一标识一个设备。
 message DeviceIdentifier {
-  // The pool which contains the device.
+  // 包含此设备的资源池。
   string pool_name = 1;
 
-  // The unique name of the device within the pool.
+  // 设备在资源池内的唯一名称。
   string device_name = 2;
 }
 
-// DeviceHealth represents the health of a single device.
+// DeviceHealth 表示单个设备的健康状况。
 message DeviceHealth {
-  // The identifier for the device.
+  // 设备的标识。
   DeviceIdentifier device = 1;
 
-  // The health status of the device.
+  // 设备的健康状态。
   HealthStatus health = 2;
 
-  // The Unix time (in seconds) of when this health status was last determined by the plugin.
+  // 插件上次确定此健康状态的 Unix 时间（秒）。
   int64 last_updated_time = 3;
 
-  // Health check timeout in seconds for this device.
-  // If not specified, zero, or negative, Kubelet will use a default timeout.
-  // Negative values will be logged and treated as if not specified.
+  // 此设备的健康检查超时时间（秒）。
+  // 未指定、为零或为负数时，Kubelet 将使用默认超时时间。
+  // 负值会被记录到日志，并按未指定处理。
   int64 health_check_timeout_seconds = 4;
 
-  // An optional message providing additional details about the device's health.
-  // Maximum length is 1024 characters. Messages longer than 1024 characters
-  // will be truncated to 1021 characters with "..." appended.
+  // 可选消息，用于提供设备健康状况的更多详情。
+  // 最大长度为 1024 个字符；超过 1024 个字符的消息会截断为 1021 个字符，
+  // 并追加 "..."。
   string message = 5;
 }
 
-// NodeWatchResourcesResponse contains a list of devices and their current health.
-// This should be a complete list for the driver; Kubelet will reconcile this
-// state with its internal cache. Any devices managed by the driver that are
-// not in this list will be considered to have an "Unknown" health status after a timeout.
+// NodeWatchResourcesResponse 包含设备列表及其当前健康状况。
+// 此列表应包含驱动管理的全部设备；Kubelet 会将该状态与内部缓存协调一致。
+// 超时后，驱动管理的设备若未出现在此列表中，将被视为具有 "Unknown" 健康状态。
 message NodeWatchResourcesResponse {
   repeated DeviceHealth devices = 1;
 }

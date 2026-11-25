@@ -26,34 +26,33 @@ import (
 	cmv1beta2 "k8s.io/metrics/pkg/apis/custom_metrics/v1beta2"
 )
 
-// GroupName is the group name use in this package.
-// 中文说明：直接复用 API 包里的常量，避免客户端与服务端对 group 名产生分歧。
+// GroupName 是本包使用的 API 组名。
+// 直接复用 API 包里的常量，避免客户端与服务端对组名产生分歧。
 const GroupName = cmv1beta1.GroupName
 
-// SchemeGroupVersion is group version used to register these objects.
-// 中文说明：客户端 scheme 用内部版本做中枢，外部版本在请求时再协商。
+// SchemeGroupVersion 是注册这些对象时使用的 group/version。
+// 客户端 scheme 用内部版本做中枢，外部版本在请求时再协商。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Scheme is the runtime.Scheme to which all custom metrics api types are registered.
-// 中文说明：这里注册所有版本的类型，使客户端能在版本间做转换。
+// Scheme 是注册了所有自定义指标 API 类型的 runtime.Scheme。
+// 这里注册所有版本的类型，使客户端能在版本间做转换。
 var Scheme = runtime.NewScheme()
 
-// Codecs provides access to encoding and decoding for the scheme.
-// 中文说明：编解码工厂按 scheme 中注册的类型创建序列化器。
+// Codecs 提供基于该 scheme 的编解码器。
+// 编解码工厂按 scheme 中注册的类型创建序列化器。
 var Codecs = serializer.NewCodecFactory(Scheme)
 
-// ParameterCodec handles versioning of objects that are converted to query parameters.
-// 中文说明：查询参数里的 LabelSelector 等对象需要按版本编码成字符串。
+// ParameterCodec 处理转换为查询参数的对象的版本转换。
+// 查询参数里的 LabelSelector 等对象需要按版本编码成字符串。
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
 
-// 中文说明：把 metav1 的基础类型和本组各版本类型一起注册，保证解码器认识所有内嵌类型。
+// 把 metav1 的基础类型和本组各版本类型一起注册，保证解码器认识所有内嵌类型。
 func init() {
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Version: "v1"})
 	AddToScheme(Scheme)
 }
 
-// AddToScheme adds all types of this clientset into the given scheme. This allows composition
-// of clientsets, like in:
+// AddToScheme 将自定义指标 clientset 的所有类型注册到给定 scheme，便于组合多个 clientset，例如：
 //
 //	import (
 //	  "k8s.io/client-go/kubernetes"
@@ -64,8 +63,7 @@ func init() {
 //	kclientset, _ := kubernetes.NewForConfig(c)
 //	aggregatorclientsetscheme.AddToScheme(clientsetscheme.Scheme)
 //
-// After this, RawExtensions in Kubernetes types will serialize kube-aggregator types
-// correctly.
+// 完成后，Kubernetes 类型中的 RawExtension 将能正确序列化 kube-aggregator 类型。
 func AddToScheme(scheme *runtime.Scheme) {
 	cmint.AddToScheme(scheme)
 	cmv1beta1.AddToScheme(scheme)

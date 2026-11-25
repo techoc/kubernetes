@@ -23,7 +23,7 @@ import (
 	wardlefuzzer "k8s.io/sample-apiserver/pkg/apis/wardle/fuzzer"
 )
 
-// 用 fuzzer 覆盖各版本对象，验证编码再解码不丢字段；
+// TestRoundTripTypes 用 fuzzer 覆盖各版本对象，验证编码再解码不丢字段；
 // 这正是多版本 API 最容易出错的地方，所以单独跑一次完整 Scheme 的往返。
 func TestRoundTripTypes(t *testing.T) {
 	roundtrip.RoundTripTestForScheme(t, Scheme, wardlefuzzer.Funcs)

@@ -34,28 +34,22 @@ import (
 // 不做版本协商，声明别的版本一律按 upgrade 失败处理。
 const HeaderSpdy31 = "SPDY/3.1"
 
-// responseUpgrader knows how to upgrade HTTP responses. It
-// implements the httpstream.ResponseUpgrader interface.
+// responseUpgrader 通过 spdystream 将 HTTP 响应升级为支持多路复用的连接。
 // 结构体只携带 pingPeriod：是否发送 Ping 是建连时的一次性决策，之后不再改。
 type responseUpgrader struct {
 	pingPeriod time.Duration
 }
 
-// connWrapper is used to wrap a hijacked connection and its bufio.Reader. All
-// calls will be handled directly by the underlying net.Conn with the exception
-// of Read and Close calls, which will consider data in the bufio.Reader. This
-// ensures that data already inside the used bufio.Reader instance is also
-// read.
-// 必须包这一层：Hijack 返回的 bufio.Reader 里可能已经预读了客户端发来的 SPDY 帧，
-// 直接把裸 conn 交给 spdystream 会丢掉这些字节，握手就卡住了。
+// connWrapper 包装 Hijack 返回的连接及其 bufio.Reader。除 Read 和 Close 外，
+// 其他调用直接透传给底层 net.Conn；读写和关闭时还必须考虑 Reader 中已预读的数据，
+// 否则这些字节会丢失。
 type connWrapper struct {
 	net.Conn
 	closed    int32
 	bufReader *bufio.Reader
 }
 
-// 底层 conn 关闭后 bufio.Reader 里可能仍有预读数据；先看 closed 标志直接返回 EOF，
-// 免得 spdystream 在已经关闭的连接上继续等下一帧。
+// Read 在连接关闭后直接返回 EOF，避免 spdystream 继续等待下一帧。
 func (w *connWrapper) Read(b []byte) (n int, err error) {
 	if atomic.LoadInt32(&w.closed) == 1 {
 		return 0, io.EOF
@@ -63,39 +57,28 @@ func (w *connWrapper) Read(b []byte) (n int, err error) {
 	return w.bufReader.Read(b)
 }
 
-// 用 atomic 而不是 mutex：关闭标志只会被并发的 Read 观察到，
-// 读写本身已经由底层 conn 和 bufio.Reader 各自同步，不必再加锁。
+// Close 用 atomic 发布关闭状态，供并发 Read 观察，避免额外加锁。
 func (w *connWrapper) Close() error {
 	err := w.Conn.Close()
 	atomic.StoreInt32(&w.closed, 1)
 	return err
 }
 
-// NewResponseUpgrader returns a new httpstream.ResponseUpgrader that is
-// capable of upgrading HTTP responses using SPDY/3.1 via the
-// spdystream package.
-// 默认不发 Ping；只有明确需要绕过 LB 空闲超时时，调用方才用 WithPings 版本。
+// NewResponseUpgrader 创建通过 spdystream 使用 SPDY/3.1 升级 HTTP 响应的 ResponseUpgrader。
+// 默认不发 Ping；只有明确需要避免负载均衡器回收空闲连接时，才使用 WithPings 版本。
 func NewResponseUpgrader() httpstream.ResponseUpgrader {
 	return NewResponseUpgraderWithPings(0)
 }
 
-// NewResponseUpgraderWithPings returns a new httpstream.ResponseUpgrader that
-// is capable of upgrading HTTP responses using SPDY/3.1 via the spdystream
-// package.
-//
-// If pingPeriod is non-zero, for each incoming connection a background
-// goroutine will send periodic Ping frames to the server. Use this to keep
-// idle connections through certain load balancers alive longer.
-// 注意注释里写的是“向 server 发 Ping”，但服务端升连后实际上由底层
-// spdystream 自行回 Pong；这里的 Ping 周期只在本端作为发起方时生效。
+// NewResponseUpgraderWithPings 创建通过 spdystream 使用 SPDY/3.1 升级 HTTP 响应的 ResponseUpgrader。
+// pingPeriod 非零时，每条传入连接都会启动后台 goroutine 定期发送 Ping，
+// 用于避免某些负载均衡器过早回收空闲连接。
 func NewResponseUpgraderWithPings(pingPeriod time.Duration) httpstream.ResponseUpgrader {
 	return responseUpgrader{pingPeriod: pingPeriod}
 }
 
-// UpgradeResponse upgrades an HTTP response to one that supports multiplexed
-// streams. newStreamHandler will be called synchronously whenever the
-// other end of the upgraded connection creates a new stream.
-// 返回 nil 表示升级失败且已经向客户端写了错误响应；调用方不应再拿它去建连。
+// UpgradeResponse 将 HTTP 响应升级为支持多路复用的连接。对端创建新流时，
+// newStreamHandler 会被同步调用。升级失败时返回 nil，调用方不能继续用它建流。
 func (u responseUpgrader) UpgradeResponse(w http.ResponseWriter, req *http.Request, newStreamHandler httpstream.NewStreamHandler) httpstream.Connection {
 	connectionHeader := strings.ToLower(req.Header.Get(httpstream.HeaderConnection))
 	upgradeHeader := strings.ToLower(req.Header.Get(httpstream.HeaderUpgrade))

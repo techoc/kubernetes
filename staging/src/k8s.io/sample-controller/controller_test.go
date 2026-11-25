@@ -59,18 +59,12 @@ type fixture struct {
 	// 两套 fake client 对应自定义资源和内置资源，和 Controller 的字段一一对应。
 	client     *fake.Clientset
 	kubeclient *k8sfake.Clientset
-	// Objects to put in the store.
-	//
 	// lister 与 client 分开填充，才能模拟“缓存落后于 API”或“API 有而缓存没有”的情况。
 	fooLister        []*samplecontroller.Foo
 	deploymentLister []*apps.Deployment
-	// Actions expected to happen on the client.
-	//
 	// 只记录会产生写入的动作；列表和监听由 filterInformerActions 过滤掉。
 	kubeactions []core.Action
 	actions     []core.Action
-	// Objects from here preloaded into NewSimpleFake.
-	//
 	// 预置到 fake client 的对象，供 Get/Create/Update 命中。
 	kubeobjects []runtime.Object
 	objects     []runtime.Object
@@ -189,9 +183,7 @@ func (f *fixture) runController(ctx context.Context, fooRef cache.ObjectName, st
 	}
 }
 
-// checkAction verifies that expected and actual actions are equal and both have
-// same attached resources
-//
+// checkAction 校验预期与实际动作及其附带资源是否一致。
 // 分层比对：先比动词/资源/子资源，再比具体 payload；
 // 这样失败信息能直接指出是“做了错动作”还是“动作对但内容错”。
 func checkAction(expected, actual core.Action, t *testing.T) {
@@ -242,10 +234,7 @@ func checkAction(expected, actual core.Action, t *testing.T) {
 	}
 }
 
-// filterInformerActions filters list and watch actions for testing resources.
-// Since list and watch don't change resource state we can filter it to lower
-// nose level in our tests.
-//
+// filterInformerActions 过滤测试资源的后台 list/watch 动作，降低断言噪声。
 // 这些动作是 informer 后台自发产生的，和 syncHandler 的业务决策无关；
 // 留着它们会让期望动作列表随启动时序漂移。
 func filterInformerActions(actions []core.Action) []core.Action {
@@ -329,7 +318,7 @@ func TestUpdateDeployment(t *testing.T) {
 
 	d := newDeployment(foo)
 
-	// Update replicas
+	// 修改期望副本数，触发 Deployment 更新。
 	foo.Spec.Replicas = ptr.To[int32](2)
 	expDeployment := newDeployment(foo)
 

@@ -22,7 +22,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:prerelease-lifecycle-gen:introduced=1.0
 // +k8s:prerelease-lifecycle-gen:removed=1.10
 
-// FlunderList is a list of Flunder objects.
+// FlunderList 是 Flunder 对象的列表。
 // 列表对象需要自带 TypeMeta，客户端才能按版本解码 whole-list 响应。
 type FlunderList struct {
 	metav1.TypeMeta `json:""`
@@ -35,18 +35,18 @@ type FlunderList struct {
 type ReferenceType string
 
 const (
-	// 指向另一个 Flunder；示例里用常量而非枚举校验，方便客户端直接比较字符串。
+	// FlunderReferenceType 表示引用指向另一个 Flunder，客户端可直接比较字符串值。
 	FlunderReferenceType = ReferenceType("Flunder")
-	// 指向 Fischer，后者是集群级资源。
+	// FischerReferenceType 表示引用指向 Fischer，后者是集群级资源。
 	FischerReferenceType = ReferenceType("Fischer")
 )
 
 // FlunderSpec 演示同一字段按类型引用两种资源，以及指针字段承载默认值语义。
 type FlunderSpec struct {
-	// A name of another flunder or fischer, depending on the reference type.
-	// 具体指向哪种对象由 ReferenceType 决定；这里只存名字，不存对象引用，避免跨版本序列化耦合。
+	// Reference 保存目标 Flunder 或 Fischer 的名字，具体类型由 ReferenceType 决定。
+	// 这里只存名字，不存对象引用，避免跨版本序列化耦合。
 	Reference string `json:"reference,omitempty" protobuf:"bytes,1,opt,name=reference"`
-	// The reference type, defaults to "Flunder" if reference is set.
+	// ReferenceType 表示引用目标的类型；设置 Reference 时默认值为 Flunder。
 	// 用指针区分“未设置”和“显式设为空”，默认化时才能只在缺省情况下填入 Flunder。
 	ReferenceType *ReferenceType `json:"referenceType,omitempty" protobuf:"bytes,2,opt,name=referenceType"`
 }
@@ -65,7 +65,9 @@ type Flunder struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	Spec   FlunderSpec   `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
+	// Spec 保存用户声明的期望状态。
+	Spec FlunderSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
+	// Status 预留给控制器回写观测状态。
 	Status FlunderStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
@@ -80,7 +82,7 @@ type Fischer struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// DisallowedFlunders holds a list of Flunder.Names that are disallowed.
+	// DisallowedFlunders 保存被禁止使用的 Flunder 名字。
 	// 指令 +listType=atomic 表示整段列表作为一个整体更新，避免并发写时按元素合并出半新半旧的名单。
 	// +listType=atomic
 	DisallowedFlunders []string `json:"disallowedFlunders,omitempty" protobuf:"bytes,2,rep,name=disallowedFlunders"`
@@ -91,7 +93,7 @@ type Fischer struct {
 // +k8s:prerelease-lifecycle-gen:introduced=1.0
 // +k8s:prerelease-lifecycle-gen:removed=1.10
 
-// FischerList is a list of Fischer objects.
+// FischerList 是 Fischer 对象的列表。
 // 集群级资源的列表同样需要 TypeMeta，便于不带 context 的 list 调用解码。
 type FischerList struct {
 	metav1.TypeMeta `json:""`

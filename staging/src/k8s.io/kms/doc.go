@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kms contains the proto definitions for the kms API.
-//
 // Package kms 定义 Kubernetes KMS（Key Management Service，密钥管理服务）插件的 API。
 // KMS 插件以 gRPC 服务的形式运行在本地 socket 上，为 apiserver 提供信封加密能力：
 //   - apis/v1beta1：KMS v1（已弃用），仅保留安全更新；

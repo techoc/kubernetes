@@ -35,14 +35,12 @@ import (
 // 但头的值（协议名）本身是大小写敏感的，协议判断不能图省事做大小写折叠。
 const WebSocketProtocolHeader = "Sec-Websocket-Protocol"
 
-// The Websocket subprotocol "channel.k8s.io" prepends each binary message with a byte indicating
-// the channel number (zero indexed) the message was sent on. Messages in both directions should
-// prefix their messages with this channel byte. When used for remote execution, the channel numbers
-// are by convention defined to match the POSIX file-descriptors assigned to STDIN, STDOUT, and STDERR
-// (0, 1, and 2). No other conversion is performed on the raw subprotocol - writes are sent as they
-// are received by the server.
+// WebSocket 子协议 "channel.k8s.io" 在每个二进制消息前添加一个字节，
+// 表示消息发送到的通道号（从 0 开始）。双向消息都必须带上该通道字节。
+// 用于远程执行时，通道号按约定对应 STDIN、STDOUT 和 STDERR 的 POSIX 文件描述符
+// （0、1、2）。原始子协议不进行其他转换，服务端按收到的内容原样写出。
 //
-// Example client session:
+// 客户端会话示例：
 //
 //	CONNECT http://server.com with subprotocol "channel.k8s.io"
 //	WRITE []byte{0, 102, 111, 111, 10} # send "foo\n" on channel 0 (STDIN)
@@ -53,14 +51,13 @@ const WebSocketProtocolHeader = "Sec-Websocket-Protocol"
 // 任何分隔符都可能出现在内容里；代价是每帧多出一个字节。
 const ChannelWebSocketProtocol = "channel.k8s.io"
 
-// The Websocket subprotocol "base64.channel.k8s.io" base64 encodes each message with a character
-// indicating the channel number (zero indexed) the message was sent on. Messages in both directions
-// should prefix their messages with this channel char. When used for remote execution, the channel
-// numbers are by convention defined to match the POSIX file-descriptors assigned to STDIN, STDOUT,
-// and STDERR ('0', '1', and '2'). The data received on the server is base64 decoded (and must be
-// be valid) and data written by the server to the client is base64 encoded.
+// WebSocket 子协议 "base64.channel.k8s.io" 用 base64 编码每条消息，并以一个字符
+// 表示消息发送到的通道号（从 0 开始）。双向消息都必须带上该通道字符。
+// 用于远程执行时，通道号按约定对应 STDIN、STDOUT 和 STDERR 的 POSIX 文件描述符
+// （'0'、'1'、'2'）。服务端收到的数据必须是合法的 base64 并会被解码；
+// 服务端写给客户端的数据会先进行 base64 编码。
 //
-// Example client session:
+// 客户端会话示例：
 //
 //	CONNECT http://server.com with subprotocol "base64.channel.k8s.io"
 //	WRITE []byte{48, 90, 109, 57, 118, 67, 103, 111, 61} # send "foo\n" (base64: "Zm9vCgo=") on channel '0' (STDIN)
@@ -98,8 +95,7 @@ const (
 	ReadWriteChannel
 )
 
-// IsWebSocketRequest returns true if the incoming request contains connection upgrade headers
-// for WebSockets.
+// IsWebSocketRequest 判断传入请求是否包含升级为 WebSocket 所需的连接升级头。
 //
 // Upgrade 头单独判定，是因为通用升级请求也可能是 SPDY；只有两者同时满足才算 WebSocket。
 // 头名由 net/http 规范化，值用 EqualFold 比较以容忍客户端的大小写写法。
@@ -110,9 +106,8 @@ func IsWebSocketRequest(req *http.Request) bool {
 	return httpstream.IsUpgradeRequest(req)
 }
 
-// IsWebSocketRequestWithStreamCloseProtocol returns true if the request contains headers
-// identifying that it is requesting a websocket upgrade with a remotecommand protocol
-// version that supports the "CLOSE" signal; false otherwise.
+// IsWebSocketRequestWithStreamCloseProtocol 判断请求是否要求升级到支持 "CLOSE"
+// 信号的 WebSocket RemoteCommand 协议；不满足时返回 false。
 //
 // 客户端可以一次列出多个候选子协议，只要其中有支持半关闭的就算命中；
 // 最终用哪个协议仍由握手阶段决定，这里只用于提前分流处理逻辑。
@@ -130,9 +125,8 @@ func IsWebSocketRequestWithStreamCloseProtocol(req *http.Request) bool {
 	return false
 }
 
-// IsWebSocketRequestWithTunnelingProtocol returns true if the request contains headers
-// identifying that it is requesting a websocket upgrade with a tunneling protocol;
-// false otherwise.
+// IsWebSocketRequestWithTunnelingProtocol 判断请求是否要求升级到支持隧道协议的
+// WebSocket；不满足时返回 false。
 //
 // 同半关闭判断一样，只探测“列表里是否存在隧道协议”；具体的 SPDY 版本协商
 // 留给隧道层完成，避免在这里固守某个版本号而随协议演进而失效。
@@ -150,19 +144,17 @@ func IsWebSocketRequestWithTunnelingProtocol(req *http.Request) bool {
 	return false
 }
 
-// IgnoreReceives reads from a WebSocket until it is closed, then returns. If timeout is set, the
-// read and write deadlines are pushed every time a new message is received.
+// IgnoreReceives 持续读取 WebSocket 消息直到连接关闭。
+// 设置 timeout 后，每收到一条消息都会顺延读写截止时间。
 //
-// Contextual logging: IgnoreReceivesWithLogger should be used instead of IgnoreReceives in code which uses contextual logging.
-//
-// 保留旧签名是为了兼容尚无上下文日志的调用方；它固定用 Background logger，
-// 因此日志里不会带上请求信息，新代码应直接传 logger。
+// 保留旧签名是为了兼容尚无上下文日志的调用方；它固定使用 klog.Background()，
+// 日志不含请求信息。使用上下文日志的代码应改用 IgnoreReceivesWithLogger。
 func IgnoreReceives(ws *websocket.Conn, timeout time.Duration) {
 	IgnoreReceivesWithLogger(klog.Background(), ws, timeout)
 }
 
-// IgnoreReceivesWithLogger reads from a WebSocket until it is closed, then returns. If timeout is set, the
-// read and write deadlines are pushed every time a new message is received.
+// IgnoreReceivesWithLogger 使用指定日志记录器持续读取 WebSocket 消息，直到连接关闭。
+// 设置 timeout 后，每收到一条消息都会顺延读写截止时间。
 //
 // 只读不解析：这个 goroutine 的目的是让对端发来的数据有地方可去，否则
 // 底层连接会因为无人读取而卡住。收到任何消息就刷新超时，空闲连接最终自然过期。
@@ -178,10 +170,8 @@ func IgnoreReceivesWithLogger(logger klog.Logger, ws *websocket.Conn, timeout ti
 	}
 }
 
-// handshake ensures the provided user protocol matches one of the allowed protocols. It returns
-// no error if no protocol is specified.
-//
-// 未指定子协议时补上空字符串参与匹配，这样默认协议也能出现在允许列表里；
+// handshake 确保客户端提议的子协议至少有一个出现在服务端允许列表中。
+// 未指定子协议时补上空字符串参与匹配，使默认协议也能出现在允许列表里；
 // 命中后把列表收敛为单项，避免底层库挑中客户端实际不认识的协议。
 func handshake(config *websocket.Config, req *http.Request, allowed []string) error {
 	protocols := config.Protocol
@@ -201,23 +191,23 @@ func handshake(config *websocket.Config, req *http.Request, allowed []string) er
 	return fmt.Errorf("requested protocol(s) are not supported: %v; supports %v", config.Protocol, allowed)
 }
 
-// ChannelProtocolConfig describes a websocket subprotocol with channels.
+// ChannelProtocolConfig 描述一个带通道的 WebSocket 子协议。
 //
-// Binary 决定收发用原始字节还是 base64；Channels 按序号给出每个通道的方向，
-// 它同时定义了帧首字节的合法范围——越界的通道号一律当作协议错误处理。
-// 只有文本化的子协议才置 false，此时每帧承载的是 base64 文本而非原始字节。
-// 切片下标即通道号，元素描述该通道在本端是否可读、可写。
+// Binary 决定收发使用原始字节还是 base64 文本；Channels 按序号给出每个通道的方向，
+// 切片下标即通道号，同时界定帧首通道字节的合法范围。
+// 只有文本化的子协议才将 Binary 置为 false。
 type ChannelProtocolConfig struct {
-	Binary   bool
+	// Binary 为 true 时使用二进制帧，为 false 时使用 base64 文本帧。
+	Binary bool
+	// Channels 按通道号顺序描述各通道在本端的读写方向。
 	Channels []ChannelType
 }
 
-// NewDefaultChannelProtocols returns a channel protocol map with the
-// subprotocols "", "channel.k8s.io", "base64.channel.k8s.io" and the given
-// channels.
+// NewDefaultChannelProtocols 为给定通道返回默认协议表，包含空协议名、
+// "channel.k8s.io" 和 "base64.channel.k8s.io"。
 //
-// 默认让空协议名和 "channel.k8s.io" 走二进制帧，只有 base64 变体走文本帧；
-// 这样客户端完全不提子协议时也能按裸通道协议工作，无需额外协商步骤。
+// 空协议名和 "channel.k8s.io" 使用二进制帧，base64 变体使用文本帧；
+// 客户端不指定子协议时也能按裸通道协议工作。
 func NewDefaultChannelProtocols(channels []ChannelType) map[string]ChannelProtocolConfig {
 	return map[string]ChannelProtocolConfig{
 		"":                             {Binary: true, Channels: channels},
@@ -226,14 +216,13 @@ func NewDefaultChannelProtocols(channels []ChannelType) map[string]ChannelProtoc
 	}
 }
 
-// Conn supports sending multiple binary channels over a websocket connection.
+// Conn 在单个 WebSocket 连接上复用多个二进制或 base64 文本通道。
 //
-// 服务端的 websocket.Server 在独立 goroutine 里跑握手和处理循环，
-// ready 用来把“握手已完成、通道已建好”这一事实同步给调用 Open 的 goroutine；
-// Close 必须等这个信号，否则可能在 ws 仍为 nil 时就去关连接。
-// 提供给握手的候选协议表，键是子协议名；selectedProtocol 是握手后选定的协议。
-// channels 按通道号索引，codec 由选定协议推导，ready 同步握手完成，ws 仅在 initialize 后可用。
-// timeout 是每次收发成功后顺延的空闲超时。
+// Open 在独立 goroutine 中运行握手和处理循环，并通过 ready 通知调用方握手已完成、
+// 通道已建好；Close 必须等待该信号，避免在连接尚未初始化时访问字段。
+// protocols 是可供握手的子协议配置表，selectedProtocol 记录最终选定的协议；
+// channels 按通道号索引，codec 由选定协议推导，ws 仅在 initialize 后可用。
+// timeout 是每次收发活动后顺延的空闲超时。
 type Conn struct {
 	protocols        map[string]ChannelProtocolConfig
 	selectedProtocol string
@@ -244,16 +233,13 @@ type Conn struct {
 	timeout          time.Duration
 }
 
-// NewConn creates a WebSocket connection that supports a set of channels. Channels begin each
-// web socket message with a single byte indicating the channel number (0-N). 255 is reserved for
-// future use. The channel types for each channel are passed as an array, supporting the different
-// duplex modes. Read and Write refer to whether the channel can be used as a Reader or Writer.
+// NewConn 创建支持一组通道的 WebSocket 连接。
+// 每条消息以单个通道字节或字符开头，通道号从 0 开始；255 保留给半关闭信号。
+// 各通道的方向支持忽略、只读、只写和双向；读写权限决定返回的对象能否作为
+// io.Reader 或 io.Writer 使用，禁用方向会被静默丢弃或返回 EOF。
 //
-// The protocols parameter maps subprotocol names to ChannelProtocols. The empty string subprotocol
-// name is used if websocket.Config.Protocol is empty.
-//
-// 构造阶段只初始化同步原语和协议表：真正的连接、通道和编码器都要等握手
-// 成功后才能确定，提前创建会让失败路径留下需要回收的资源。
+// protocols 将子协议名映射到 ChannelProtocolConfig；客户端未指定子协议时使用空字符串。
+// 构造阶段只初始化同步原语和协议表，连接、通道和编码器须等握手成功后确定。
 func NewConn(protocols map[string]ChannelProtocolConfig) *Conn {
 	return &Conn{
 		ready:     make(chan struct{}),
@@ -261,8 +247,7 @@ func NewConn(protocols map[string]ChannelProtocolConfig) *Conn {
 	}
 }
 
-// SetIdleTimeout sets the interval for both reads and writes before timeout. If not specified,
-// there is no timeout on the connection.
+// SetIdleTimeout 设置连接在读写空闲多久后超时；未设置时不启用空闲超时。
 //
 // 必须在 Open 之前设置：超时值会被接收循环和每次发送读取，运行中途改动
 // 没有同步保护，也不保证对已经阻塞的读写生效。
@@ -270,30 +255,26 @@ func (conn *Conn) SetIdleTimeout(duration time.Duration) {
 	conn.timeout = duration
 }
 
-// SetWriteDeadline sets a timeout on writing to the websocket connection. The
-// passed "duration" identifies how far into the future the write must complete
-// by before the timeout fires.
+// SetWriteDeadline 设置 WebSocket 写入必须在 duration 时间内完成的截止时间。
 //
-// 这是单次写入的硬截止时间，和 SetIdleTimeout 的“每次活动后顺延”语义不同；
-// 用于大帧发送时限制最长等待时间，而不是控制整体连接寿命。
+// 必须在 Open 成功后调用。这是单次写入的硬截止时间，与 SetIdleTimeout 的
+// “每次活动后顺延”语义不同，用于限制大帧发送的最长等待时间。
 func (conn *Conn) SetWriteDeadline(duration time.Duration) {
 	conn.ws.SetWriteDeadline(time.Now().Add(duration)) //nolint:errcheck
 }
 
-// Open the connection and create channels for reading and writing. It returns
-// the selected subprotocol, a slice of channels and an error.
+// Open 建立连接并创建读写通道，返回选定的子协议、通道列表和错误。
 //
-// websocket.Server.ServeHTTP 会一直阻塞到连接关闭，因此必须放到 goroutine 里跑，
-// 同时监听 ready 和“服务提前结束”两个信号：后者说明握手失败，不能让调用方
-// 永远等下去。panic 单独走一个通道传回，避免跨 goroutine 丢失调用栈。
+// websocket.Server.ServeHTTP 会一直阻塞到连接关闭，因此放到 goroutine 中运行；
+// Open 同时等待握手完成和服务提前结束信号，后者用于避免握手失败时永久阻塞。
+// panic 通过单独通道传回调用方 goroutine，以便保留原始调用栈。
 func (conn *Conn) Open(w http.ResponseWriter, req *http.Request) (string, []io.ReadWriteCloser, error) {
-	// serveHTTPComplete is channel that is closed/selected when "websocket#ServeHTTP" finishes.
+	// websocket.Server.ServeHTTP 结束时关闭该通道，使 Open 不必继续等待握手。
 	serveHTTPComplete := make(chan struct{})
-	// Ensure panic in spawned goroutine is propagated into the parent goroutine.
+	// 将子 goroutine 中的 panic 传回调用方，避免异常在 goroutine 内丢失。
 	panicChan := make(chan any, 1)
 	go func() {
-		// If websocket server returns, propagate panic if necessary. Otherwise,
-		// signal HTTPServe finished by closing "serveHTTPComplete".
+		// 优先传回 panic；正常退出则关闭 serveHTTPComplete。
 		defer func() {
 			if p := recover(); p != nil {
 				panicChan <- p
@@ -304,13 +285,12 @@ func (conn *Conn) Open(w http.ResponseWriter, req *http.Request) (string, []io.R
 		websocket.Server{Handshake: conn.handshake, Handler: conn.handle}.ServeHTTP(w, req)
 	}()
 
-	// In normal circumstances, "websocket.Server#ServeHTTP" calls "initialize" which closes
-	// "conn.ready" and then blocks until serving is complete.
+	// 正常情况下，ServeHTTP 先调用 initialize 关闭 conn.ready，再阻塞到服务结束。
 	select {
 	case <-conn.ready:
 		klog.FromContext(req.Context()).V(8).Info("websocket server initialized--serving")
 	case <-serveHTTPComplete:
-		// websocket server returned before completing initialization; cleanup and return error.
+		// 服务在初始化完成前退出，清理尚未建立完整的资源并返回错误。
 		conn.closeNonThreadSafe() //nolint:errcheck
 		return "", nil, fmt.Errorf("websocket server finished before becoming ready")
 	case p := <-panicChan:
@@ -374,10 +354,10 @@ func (conn *Conn) resetTimeout() {
 	}
 }
 
-// closeNonThreadSafe cleans up by closing streams and the websocket
-// connection *without* waiting for the "ready" channel.
+// closeNonThreadSafe 关闭所有流和 WebSocket 连接，不等待 ready 通道。
 //
 // 专供握手失败的清理路径使用：那时 ready 永远不会被关闭，若走 Close 会死锁。
+// 此方法不做并发同步，调用方必须确保没有其他 goroutine 正在访问连接。
 // 先关通道再关连接，让阻塞在 Pipe 读写上的调用方先拿到错误。
 func (conn *Conn) closeNonThreadSafe() error {
 	for _, s := range conn.channels {
@@ -390,18 +370,16 @@ func (conn *Conn) closeNonThreadSafe() error {
 	return err
 }
 
-// Close is only valid after Open has been called
+// Close 关闭所有通道和底层连接，仅在 Open 成功返回后调用。
 //
-// 先等 ready 是必要的：Open 可能仍在另一个 goroutine 里做握手，
-// 此时 conn.ws 和 channels 都还没填好，贸然清理会漏关资源。
+// 先等待 ready 是必要的：Open 可能仍在另一个 goroutine 中握手，
+// 此时 conn.ws 和 channels 尚未填好。握手失败后的清理必须使用 closeNonThreadSafe。
 func (conn *Conn) Close() error {
 	<-conn.ready
 	return conn.closeNonThreadSafe()
 }
 
-// protocolSupportsStreamClose returns true if the passed protocol
-// supports the stream close signal (currently only V5 remotecommand);
-// false otherwise.
+// protocolSupportsStreamClose 判断协议是否支持流半关闭信号；目前仅 V5 RemoteCommand 支持。
 //
 // 用精确比较而不是前缀匹配：协议名大小写敏感，V4 之前的版本没有半关闭信号，
 // 误判会让控制字节被当成通道数据投递给用户。
@@ -409,8 +387,8 @@ func protocolSupportsStreamClose(protocol string) bool {
 	return protocol == "v5.channel.k8s.io"
 }
 
-// protocolSupportsWebsocketTunneling returns true if the passed protocol
-// is a tunneled Kubernetes spdy protocol; false otherwise.
+// protocolSupportsWebsocketTunneling 判断协议是否为承载 Kubernetes SPDY 隧道的
+// WebSocket 子协议。
 //
 // 隧道子协议把自定义后缀挂在 SPDY/3.1+ 后面，所以只认固定前缀和 .k8s.io 结尾；
 // 中间部分留给具体的隧道实现，避免这里跟着每个新版本改判断逻辑。
@@ -418,18 +396,18 @@ func protocolSupportsWebsocketTunneling(protocol string) bool {
 	return strings.HasPrefix(protocol, "SPDY/3.1+") && strings.HasSuffix(protocol, ".k8s.io")
 }
 
-// handle implements a websocket handler.
+// handle 实现 WebSocket 服务端处理器。
 //
-// 接收循环运行在服务端 goroutine 里：每帧首字节是通道号（base64 协议下是字符），
-// 其余载荷写进对应通道的 Pipe。帧格式不合法时只记日志并丢弃该帧，
-// 不让单个坏包拖垮整条连接。
+// 接收循环按帧首字节或字符中的通道号，将剩余载荷写入对应通道的 Pipe。
+// 无效通道的数据帧会被丢弃；半关闭信号格式错误或目标通道无效时则终止连接，
+// 避免继续按错误协议状态投递数据。
 func (conn *Conn) handle(ws *websocket.Conn) {
 	conn.initialize(ws)
 	// 接收循环退出时一并关掉所有通道和连接，避免对端读端永远阻塞。
 	defer conn.Close()
 	supportsStreamClose := protocolSupportsStreamClose(conn.selectedProtocol)
-	// conn.handle is typically used on the server-side and thus we have a request,
-	// but don't assume that and use klog.Background as fallback.
+	// handle 通常在服务端运行，可优先使用请求上下文中的日志记录器；
+	// 但调用方不一定提供请求，因此以 klog.Background() 兜底。
 	logger := klog.Background()
 	if req := ws.Request(); req != nil {
 		logger = klog.FromContext(req.Context())
@@ -464,7 +442,7 @@ func (conn *Conn) handle(ws *websocket.Conn) {
 				logger.V(4).Info("Received half-close signal from client, close stream", "channel", channel)
 				// 对端声明不再往这个通道写数据；关闭 Pipe 写端让本端读侧收到 EOF，
 				// 其他通道仍可继续传输，这也正是半关闭相对于直接断开连接的价值。
-				conn.channels[channel].Close() // After first Close, other closes are noop.
+				conn.channels[channel].Close() // 首次关闭后，重复调用为无操作。
 			}
 			continue
 		}
@@ -487,10 +465,10 @@ func (conn *Conn) handle(ws *websocket.Conn) {
 	}
 }
 
-// write multiplexes the specified channel onto the websocket
+// write 将指定通道的数据复用发送到 WebSocket。
 //
 // 发送路径按协商结果二选一：二进制帧直接前置通道字节，文本帧前置通道字符
-// 并把载荷做 base64 编码。返回长度是原始载荷长度，符合 io.Writer 的语义，
+// 并对载荷做 base64 编码。返回长度是原始载荷长度，符合 io.Writer 的语义，
 // 调用方看到的字节数不受编码方式影响。
 func (conn *Conn) write(num byte, data []byte) (int, error) {
 	conn.resetTimeout()
@@ -512,12 +490,11 @@ func (conn *Conn) write(num byte, data []byte) (int, error) {
 	return len(data), nil
 }
 
-// websocketChannel represents a channel in a connection
+// websocketChannel 表示连接中的一个通道。
 //
-// 每个通道由一对 io.Pipe 构成：接收循环往写端塞数据，调用方从读端取；
-// 发送方向则直接经 Conn.write 落到 websocket，不需要第二个管道。
-// 每个通道由一对 io.Pipe 构成：接收循环往 w 写，调用方从 r 读；发送方向直接走 conn。
-// num 是帧首部的通道号；read/write 为方向开关，误用时按“无害化”处理避免阻塞调用方。
+// 每个通道由一对 io.Pipe 构成：接收循环往 w 写，调用方从 r 读；
+// 发送方向直接经 Conn.write 写到 WebSocket。num 是帧首部的通道号；
+// read/write 是方向开关，禁用方向会被静默丢弃或返回 EOF，避免阻塞调用方。
 type websocketChannel struct {
 	conn *Conn
 	num  byte
@@ -527,13 +504,11 @@ type websocketChannel struct {
 	read, write bool
 }
 
-// newWebsocketChannel creates a pipe for writing to a websocket. Do not write to this pipe
-// prior to the connection being opened. It may be no, half, or full duplex depending on
-// read and write.
+// newWebsocketChannel 创建通道的接收管道，read 和 write 决定其单向或双向能力。
+// 连接打开前不应写入该管道。
 //
-// 用同步的 io.Pipe 而非缓冲队列，是为了让慢读者自然地反向施压；
-// 但这也意味着没有读者时接收循环会阻塞，所以每个通道即便不开放读权限
-// 也要有一个不会被消费的管道端点，写操作由 DataFromSocket 提前短路掉。
+// 使用同步的 io.Pipe 而非缓冲队列，可让慢读者自然形成反向压力；
+// 没有读者时接收循环会阻塞，因此禁用读方向的通道由 DataFromSocket 直接丢弃载荷。
 func newWebsocketChannel(conn *Conn, num byte, read, write bool) *websocketChannel {
 	r, w := io.Pipe()
 	return &websocketChannel{conn, num, r, w, read, write}
@@ -548,11 +523,10 @@ func (p *websocketChannel) Write(data []byte) (int, error) {
 	return p.conn.write(p.num, data)
 }
 
-// DataFromSocket is invoked by the connection receiver to move data from the connection
-// into a specific channel.
+// DataFromSocket 由连接接收循环调用，将 WebSocket 载荷送入指定通道。
 //
 // 和 Write 对称：本端不读的通道直接丢弃载荷并报告“已消费”，
-// 否则接收循环会卡在这个无人读取的管道上，连带阻断其他通道。
+// 避免接收循环卡在无人读取的管道上，连带阻断其他通道。
 func (p *websocketChannel) DataFromSocket(data []byte) (int, error) {
 	if !p.read {
 		return len(data), nil

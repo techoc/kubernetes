@@ -28,7 +28,7 @@ import (
 //
 // pod 是待查询的 Pod。当 pod.Spec.Priority 非空时直接解引用返回其指向的值；
 // 老版本创建的 Pod 可能没有 priority 字段（为 nil），此时统一当作 0 处理，
-// 让调用方不必到处写 nil 判断；0 也正好对应默认优先级类（default priority class）的取值。
+// 让调用方不必到处写 nil 判断。0 是这里的静态兜底值，不读取集群全局默认优先级类。
 func PodPriority(pod *v1.Pod) int32 {
 	if pod.Spec.Priority != nil {
 		return *pod.Spec.Priority

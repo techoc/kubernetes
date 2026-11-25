@@ -1002,7 +1002,7 @@ func TestPodResourceRequestsReuse(t *testing.T) {
 
 // TestPodResourceLimits 与 requests 主表对称，但多出两条 limits 特有的口径：
 // 没有声明 limit 的容器视为无限制，不会因为 overhead 或 DRA 冒出一条 limit；
-// overhead 只加到非零 limit 上，所以 pod overhead included 这个 case 里内存开销不会体现。
+// overhead 只加到非零 limit 上，所以 pod overhead included 这个用例里内存开销不会体现。
 // 其余 case 继续覆盖 sidecar 累加、三方取最大，以及 spec 与 status 不一致的 resize。
 func TestPodResourceLimits(t *testing.T) {
 	restartAlways := v1.ContainerRestartPolicyAlways
@@ -3588,7 +3588,7 @@ func TestPodRequestsAndLimitsWithDRA(t *testing.T) {
 // TestAggregateContainerRequestsAndLimits 直接测聚合函数本身，
 // 不含 overhead 和 pod 级覆盖，因此能把 sidecar KEP 的公式单独拎出来看：
 // 普通容器求和，init 容器取峰值，restartable init 既进总和又参与后续 init 的峰值计算。
-// 两个 max of sums case 用来锁定 UseStatusResources 下的顺序：
+// 两个 max of sums 用例用来锁定 UseStatusResources 下的顺序：
 // 先按来源在容器间求和，再跨来源取最大；最后几个 case 覆盖 PLR 垂直扩缩容时
 // 直接读 pod 级 status，以及字段缺失时回退到容器级聚合。
 func TestAggregateContainerRequestsAndLimits(t *testing.T) {
@@ -4028,7 +4028,7 @@ func getPodLevelResourcesPod(podResources v1.ResourceRequirements, overhead v1.R
 	}
 }
 
-// TODO(ndixita): refactor to re-use getPodResourcesPod()
+// TODO(ndixita): 重构以复用 getPodResourcesPod()。
 // 造一个普通容器加同构 init 容器的 pod：两者资源相同，
 // 于是 init 取峰值的结果就等于单容器值，overhead 的累加效果不会被 init 逻辑掩盖。
 func getPod(cname string, resources podResources) *v1.Pod {

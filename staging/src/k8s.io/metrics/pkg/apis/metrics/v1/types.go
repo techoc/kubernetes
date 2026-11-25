@@ -27,36 +27,37 @@ import (
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NodeMetrics sets resource usage metrics of a node.
+// NodeMetrics 定义节点的资源使用指标。
 type NodeMetrics struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// The following fields define time interval from which metrics were
-	// collected from the interval [Timestamp-Window, Timestamp].
+	// 以下字段定义指标采集的时间区间 [Timestamp-Window, Timestamp]。
 	// 速率指标必须结合窗口才能还原原始累积量，窗口为零表示瞬时采样。
-	Timestamp metav1.Time     `json:"timestamp" protobuf:"bytes,2,opt,name=timestamp"`
-	Window    metav1.Duration `json:"window" protobuf:"bytes,3,opt,name=window"`
+	Timestamp metav1.Time `json:"timestamp" protobuf:"bytes,2,opt,name=timestamp"`
+	// 指标采集窗口的长度。
+	Window metav1.Duration `json:"window" protobuf:"bytes,3,opt,name=window"`
 
-	// The memory usage is the memory working set.
-	// working set 排除可回收缓存，比 RSS 更贴近实际内存压力。
+	// 内存用量为工作集（working set），排除可回收缓存，比 RSS 更贴近实际内存压力。
 	Usage v1.ResourceList `json:"usage" protobuf:"bytes,4,rep,name=usage,casttype=k8s.io/api/core/v1.ResourceList,castkey=k8s.io/api/core/v1.ResourceName,castvalue=k8s.io/apimachinery/pkg/api/resource.Quantity"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NodeMetricsList is a list of NodeMetrics.
+// NodeMetricsList 是节点指标列表。
 // 列表不保证节点顺序，消费者应按名字自行匹配。
 type NodeMetricsList struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// List of node metrics.
+	// 节点指标列表。
 	Items []NodeMetrics `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -65,47 +66,48 @@ type NodeMetricsList struct {
 // +genclient:readonly
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodMetrics sets resource usage metrics of a pod.
+// PodMetrics 定义 Pod 的资源使用指标。
 // Pod 的采样窗口对所有容器一致，便于把容器用量加总到 Pod 级别。
 type PodMetrics struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// The following fields define time interval from which metrics were
-	// collected from the interval [Timestamp-Window, Timestamp].
+	// 以下字段定义指标采集的时间区间 [Timestamp-Window, Timestamp]。
 	// 速率指标必须结合窗口才能还原原始累积量，窗口为零表示瞬时采样。
-	Timestamp metav1.Time     `json:"timestamp" protobuf:"bytes,2,opt,name=timestamp"`
-	Window    metav1.Duration `json:"window" protobuf:"bytes,3,opt,name=window"`
+	Timestamp metav1.Time `json:"timestamp" protobuf:"bytes,2,opt,name=timestamp"`
+	// 指标采集窗口的长度。
+	Window metav1.Duration `json:"window" protobuf:"bytes,3,opt,name=window"`
 
-	// Metrics for all containers are collected within the same time window.
-	// 同一批容器共享采样窗口，所以列表被声明为原子整体，避免部分更新混用不同窗口。
+	// 所有容器的指标都在同一时间窗口内采集。
+	// 该列表具有原子性，更新时整体替换，避免部分更新混用不同窗口。
 	// +listType=atomic
 	Containers []ContainerMetrics `json:"containers" protobuf:"bytes,4,rep,name=containers"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodMetricsList is a list of PodMetrics.
+// PodMetricsList 是 Pod 指标列表。
 // 同样不保证顺序；跨 Pod 汇总时注意时间戳是否对齐。
 type PodMetricsList struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// List of pod metrics.
+	// Pod 指标列表。
 	Items []PodMetrics `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// ContainerMetrics sets resource usage metrics of a container.
+// ContainerMetrics 定义容器的资源使用指标。
 type ContainerMetrics struct {
-	// Container name corresponding to the one from pod.spec.containers.
+	// 与 pod.spec.containers 对应的容器名称。
 	// 名字与 pod.spec.containers 对齐，便于按名关联用量和容器定义。
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
-	// The memory usage is the memory working set.
-	// working set 排除可回收缓存，比 RSS 更贴近实际内存压力。
+	// 内存用量为工作集（working set），排除可回收缓存，比 RSS 更贴近实际内存压力。
 	Usage v1.ResourceList `json:"usage" protobuf:"bytes,2,rep,name=usage,casttype=k8s.io/api/core/v1.ResourceList,castkey=k8s.io/api/core/v1.ResourceName,castvalue=k8s.io/apimachinery/pkg/api/resource.Quantity"`
 }

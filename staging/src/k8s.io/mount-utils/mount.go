@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO(thockin): This whole pkg is pretty linux-centric.  As soon as we have
-// an alternate platform, we will need to abstract further.
+// TODO(thockin)：整个包目前高度偏向 Linux。一旦支持其他平台，还需进一步抽象。
 
 package mount
 
@@ -29,85 +28,68 @@ import (
 )
 
 const (
-	// Default mount command if mounter path is not specified.
+	// 未指定挂载器路径时使用的默认挂载命令。
 	defaultMountCommand = "mount"
-	// Log message where sensitive mount options were removed
+	// 日志中敏感挂载选项被移除后使用的标记。
 	sensitiveOptionsRemoved = "<masked>"
 )
 
-// Interface defines the set of methods to allow for mount operations on a system.
+// Interface 定义在系统上执行挂载操作所需的方法集合。
 type Interface interface {
-	// Mount mounts source to target as fstype with given options.
-	// options MUST not contain sensitive material (like passwords).
+	// Mount 按给定的文件系统类型和选项将 source 挂载到 target。
+	// options 不得包含密码等敏感信息。
 	Mount(source string, target string, fstype string, options []string) error
-	// MountSensitive is the same as Mount() but this method allows
-	// sensitiveOptions to be passed in a separate parameter from the normal
-	// mount options and ensures the sensitiveOptions are never logged. This
-	// method should be used by callers that pass sensitive material (like
-	// passwords) as mount options.
+	// MountSensitive 与 Mount 相同，但通过单独参数接收敏感选项，并确保这些选项不会写入日志。
+	// 当挂载选项包含密码等敏感信息时，调用方应使用本方法。
 	MountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error
-	// MountSensitiveWithoutSystemd is the same as MountSensitive() but this method disable using systemd mount.
+	// MountSensitiveWithoutSystemd 与 MountSensitive 相同，但不使用 systemd 挂载。
 	MountSensitiveWithoutSystemd(source string, target string, fstype string, options []string, sensitiveOptions []string) error
-	// MountSensitiveWithoutSystemdWithMountFlags is the same as MountSensitiveWithoutSystemd() with additional mount flags
+	// MountSensitiveWithoutSystemdWithMountFlags 与 MountSensitiveWithoutSystemd 相同，并额外接收挂载标志。
 	MountSensitiveWithoutSystemdWithMountFlags(source string, target string, fstype string, options []string, sensitiveOptions []string, mountFlags []string) error
-	// Unmount unmounts given target.
+	// Unmount 卸载给定的 target。
 	Unmount(target string) error
-	// List returns a list of all mounted filesystems.  This can be large.
-	// On some platforms, reading mounts directly from the OS is not guaranteed
-	// consistent (i.e. it could change between chunked reads). This is guaranteed
-	// to be consistent.
+	// List 返回所有已挂载文件系统的列表，数量可能很大。
+	// 在某些平台上，直接从操作系统读取挂载信息无法保证一致性，分块读取之间可能发生变化；本方法保证返回一致的结果。
 	List() ([]MountPoint, error)
-	// IsLikelyNotMountPoint uses heuristics to determine if a directory
-	// is not a mountpoint.
-	// It should return ErrNotExist when the directory does not exist.
-	// IsLikelyNotMountPoint does NOT properly detect all mountpoint types
-	// most notably linux bind mounts and symbolic link. For callers that do not
-	// care about such situations, this is a faster alternative to calling List()
-	// and scanning that output.
+	// IsLikelyNotMountPoint 使用启发式判断目录是否不是挂载点。
+	// 目录不存在时应返回 ErrNotExist。
+	// 本方法不能正确识别所有挂载点类型，尤其是 Linux 绑定挂载和符号链接。
+	// 对调用方不关心这些类型的情况，相比调用 List 并扫描结果，这是更快的替代方案。
 	IsLikelyNotMountPoint(file string) (bool, error)
-	// CanSafelySkipMountPointCheck indicates whether this mounter returns errors on
-	// operations for targets that are not mount points. If this returns true, no such
-	// errors will be returned.
+	// CanSafelySkipMountPointCheck 表示对非挂载点目标执行操作时，挂载器是否会返回错误。
+	// 返回 true 时不会再返回这类错误。
 	CanSafelySkipMountPointCheck() bool
-	// IsMountPoint determines if a directory is a mountpoint.
-	// It should return ErrNotExist when the directory does not exist.
-	// IsMountPoint is more expensive than IsLikelyNotMountPoint.
-	// IsMountPoint detects bind mounts in linux.
-	// IsMountPoint may enumerate all the mountpoints using List() and
-	// the list of mountpoints may be large, then it uses
-	// isMountPointMatch to evaluate whether the directory is a mountpoint.
+	// IsMountPoint 判断目录是否为挂载点，目录不存在时应返回 ErrNotExist。
+	// 它的开销高于 IsLikelyNotMountPoint，并能检测 Linux 绑定挂载。
+	// 它可能调用 List 枚举所有挂载点；列表可能很大，随后使用 isMountPointMatch 判断目录是否为挂载点。
 	IsMountPoint(file string) (bool, error)
-	// GetMountRefs finds all mount references to pathname, returning a slice of
-	// paths. Pathname can be a mountpoint path or a normal	directory
-	// (for bind mount). On Linux, pathname is excluded from the slice.
-	// For example, if /dev/sdc was mounted at /path/a and /path/b,
-	// GetMountRefs("/path/a") would return ["/path/b"]
-	// GetMountRefs("/path/b") would return ["/path/a"]
-	// On Windows there is no way to query all mount points; as long as pathname is
-	// a valid mount, it will be returned.
+	// GetMountRefs 查找 pathname 的所有挂载引用并返回路径切片。
+	// pathname 可以是挂载点路径，也可以是普通目录（用于绑定挂载）；Linux 返回的切片不包含 pathname 本身。
+	// 例如，/dev/sdc 同时挂载在 /path/a 和 /path/b 时：
+	// GetMountRefs("/path/a") 返回 ["/path/b"]
+	// GetMountRefs("/path/b") 返回 ["/path/a"]
+	// Windows 无法查询所有挂载点；只要 pathname 是有效挂载，就会返回它。
 	// Linux 下需据此统计同一设备的引用数，卸载前必须确认没有其它挂载点。
 	GetMountRefs(pathname string) ([]string, error)
 }
 
-// Compile-time check to ensure all Mounter implementations satisfy
-// the mount interface.
+// 编译期检查，确保 Mounter 的所有实现都满足挂载接口。
 var _ Interface = &Mounter{}
 
 // MounterForceUnmounter 在默认卸载失败后可用强制选项重试，适用于挂载点卡住的场景。
 type MounterForceUnmounter interface {
 	Interface
-	// UnmountWithForce unmounts given target but will retry unmounting with force option
-	// after given timeout.
+	// UnmountWithForce 卸载给定目标，并在指定超时后带强制选项重试。
 	UnmountWithForce(target string, umountTimeout time.Duration) error
 }
 
-// MountPoint represents a single line in /proc/mounts or /etc/fstab.
+// MountPoint 表示 /proc/mounts 或 /etc/fstab 中的一行。
 // 各平台解析挂载表时统一填充该结构，调用方无需关心来源差异。
 type MountPoint struct {
 	Device string
 	Path   string
 	Type   string
-	Opts   []string // Opts may contain sensitive mount options (like passwords) and MUST be treated as such (e.g. not logged).
+	Opts   []string // Opts 可能包含密码等敏感挂载选项，必须按敏感信息处理，例如不得写入日志。
 	Freq   int
 	Pass   int
 }
@@ -138,6 +120,7 @@ func (mountError MountError) String() string {
 	return mountError.Message
 }
 
+// Error 返回挂载错误消息，实现 error 接口。
 func (mountError MountError) Error() string {
 	return mountError.Message
 }
@@ -151,10 +134,9 @@ func NewMountError(mountErrorValue MountErrorType, format string, args ...interf
 	return mountError
 }
 
-// SafeFormatAndMount probes a device to see if it is formatted.
-// Namely it checks to see if a file system is present. If so it
-// mounts it otherwise the device is formatted first then mounted.
-// SafeFormatAndMount 在普通挂载器之上叠加格式化保护，字段保持连续以便对齐。
+// SafeFormatAndMount 探测设备是否已格式化，即检查是否存在文件系统。
+// 已有文件系统时直接挂载，否则先格式化设备再挂载。
+// 它在普通挂载器之上叠加格式化保护，字段保持连续以便对齐。
 //
 // formatSem 作为并发令牌，限制同时执行的格式化数量；
 // formatTimeout 到期即释放令牌，不中断已开始的格式化。
@@ -181,12 +163,9 @@ func NewSafeFormatAndMount(mounter Interface, exec utilexec.Interface, opts ...O
 // Option 只用于构造阶段，创建后再修改并发参数会导致令牌与超时不一致。
 type Option func(*SafeFormatAndMount)
 
-// WithMaxConcurrentFormat sets the maximum number of concurrent format
-// operations executed by the mounter. The timeout controls the maximum
-// duration of a format operation before its concurrency token is released.
-// Once a token is released, it can be acquired by another concurrent format
-// operation. The original operation is allowed to complete.
-// If n < 1, concurrency is set to unlimited.
+// WithMaxConcurrentFormat 设置挂载器并发执行格式化操作的最大数量。
+// timeout 控制格式化操作释放并发令牌前的最长持续时间；令牌释放后，其它并发格式化操作可以获取它，原操作仍可继续完成。
+// n < 1 时不限制并发。
 // 超时只回收令牌，格式化本身继续跑完，以免中断正在写入的设备。
 func WithMaxConcurrentFormat(n int, timeout time.Duration) Option {
 	return func(mounter *SafeFormatAndMount) {
@@ -197,44 +176,34 @@ func WithMaxConcurrentFormat(n int, timeout time.Duration) Option {
 	}
 }
 
-// FormatAndMount formats the given disk, if needed, and mounts it.
-// That is if the disk is not formatted and it is not being mounted as
-// read-only it will format it first then mount it. Otherwise, if the
-// disk is already formatted or it is being mounted as read-only, it
-// will be mounted without formatting.
-// options MUST not contain sensitive material (like passwords).
+// FormatAndMount 按需格式化给定磁盘，然后挂载。
+// 磁盘未格式化且不是只读挂载时，先格式化再挂载；磁盘已格式化或以只读方式挂载时，不执行格式化。
+// options 不得包含密码等敏感信息。
 func (mounter *SafeFormatAndMount) FormatAndMount(source string, target string, fstype string, options []string) error {
 	return mounter.FormatAndMountSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 }
 
-// FormatAndMountSensitive is the same as FormatAndMount but this method allows
-// sensitiveOptions to be passed in a separate parameter from the normal mount
-// options and ensures the sensitiveOptions are never logged. This method should
-// be used by callers that pass sensitive material (like passwords) as mount
-// options.
+// FormatAndMountSensitive 与 FormatAndMount 相同，但通过单独参数接收敏感选项，并确保这些选项不会写入日志。
+// 当挂载选项包含密码等敏感信息时，调用方应使用本方法。
 func (mounter *SafeFormatAndMount) FormatAndMountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	return mounter.FormatAndMountSensitiveWithFormatOptions(source, target, fstype, options, sensitiveOptions, nil /* formatOptions */)
 }
 
-// FormatAndMountSensitiveWithFormatOptions behaves exactly the same as
-// FormatAndMountSensitive, but allows for options to be passed when the disk
-// is formatted. These options are NOT validated in any way and should never
-// come directly from untrusted user input as that would be an injection risk.
+// FormatAndMountSensitiveWithFormatOptions 的行为与 FormatAndMountSensitive 完全相同，但允许在格式化磁盘时传入额外选项。
+// 这些选项不会经过任何校验，绝不能直接来自不可信的用户输入，否则存在注入风险。
 func (mounter *SafeFormatAndMount) FormatAndMountSensitiveWithFormatOptions(source string, target string, fstype string, options []string, sensitiveOptions []string, formatOptions []string) error {
 	return mounter.formatAndMountSensitive(source, target, fstype, options, sensitiveOptions, formatOptions)
 }
 
-// getMountRefsByDev finds all references to the device provided
-// by mountPath; returns a list of paths.
-// Note that mountPath should be path after the evaluation of any symblolic links.
-// 调用方先解析符号链接，避免同一设备的不同路径被当成两个挂载点。
+// getMountRefsByDev 查找 mountPath 对应设备的所有引用并返回路径列表。
+// mountPath 必须是解析所有符号链接后的路径；调用方需先解析符号链接，避免同一设备的不同路径被当成两个挂载点。
 func getMountRefsByDev(mounter Interface, mountPath string) ([]string, error) {
 	mps, err := mounter.List()
 	if err != nil {
 		return nil, err
 	}
 
-	// Finding the device mounted to mountPath.
+	// 查找挂载在 mountPath 上的设备。
 	diskDev := ""
 	for i := range mps {
 		if mountPath == mps[i].Path {
@@ -243,7 +212,7 @@ func getMountRefsByDev(mounter Interface, mountPath string) ([]string, error) {
 		}
 	}
 
-	// Find all references to the device.
+	// 查找该设备的所有引用。
 	var refs []string
 	for i := range mps {
 		if mps[i].Device == diskDev || mps[i].Device == mountPath {
@@ -255,17 +224,10 @@ func getMountRefsByDev(mounter Interface, mountPath string) ([]string, error) {
 	return refs, nil
 }
 
-// IsNotMountPoint determines if a directory is a mountpoint.
-// It should return ErrNotExist when the directory does not exist.
-// IsNotMountPoint is more expensive than IsLikelyNotMountPoint
-// and depends on IsMountPoint.
+// IsNotMountPoint 判断目录是否不是挂载点，依赖 IsMountPoint，开销高于 IsLikelyNotMountPoint。
+// 目录不存在时应返回 ErrNotExist；发生错误时返回 true（按不是挂载点处理），调用方行为与 IsLikelyNotMountPoint 类似。
 //
-// If an error occurs, it returns true (assuming it is not a mountpoint)
-// when ErrNotExist is returned for callers similar to IsLikelyNotMountPoint.
-//
-// Deprecated: This function is kept to keep changes backward compatible with
-// previous library version. Callers should prefer mounter.IsMountPoint.
-// 已弃用：仅为兼容旧调用方保留，新代码直接用 IsMountPoint。
+// Deprecated: 仅为兼容旧版库保留，调用方应优先使用 mounter.IsMountPoint。
 func IsNotMountPoint(mounter Interface, file string) (bool, error) {
 	isMnt, err := mounter.IsMountPoint(file)
 	if err != nil {
@@ -274,8 +236,7 @@ func IsNotMountPoint(mounter Interface, file string) (bool, error) {
 	return !isMnt, nil
 }
 
-// GetDeviceNameFromMount given a mnt point, find the device from /proc/mounts
-// returns the device name, reference count, and error code.
+// GetDeviceNameFromMount 从 /proc/mounts 查找给定挂载点对应的设备，返回设备名、引用计数和错误。
 // 引用数用于卸载前判断是否还有其它挂载点使用该设备。
 func GetDeviceNameFromMount(mounter Interface, mountPath string) (string, int, error) {
 	mps, err := mounter.List()
@@ -283,10 +244,10 @@ func GetDeviceNameFromMount(mounter Interface, mountPath string) (string, int, e
 		return "", 0, err
 	}
 
-	// Find the device name.
-	// FIXME if multiple devices mounted on the same mount path, only the first one is returned.
+	// 查找设备名。
+	// FIXME：同一挂载路径对应多个设备时，只返回第一个。
 	device := ""
-	// If mountPath is symlink, need get its target path.
+	// mountPath 是符号链接时，需要获取其目标路径。
 	slTarget, err := filepath.EvalSymlinks(mountPath)
 	if err != nil {
 		slTarget = mountPath
@@ -298,7 +259,7 @@ func GetDeviceNameFromMount(mounter Interface, mountPath string) (string, int, e
 		}
 	}
 
-	// Find all references to the device.
+	// 查找该设备的所有引用。
 	refCount := 0
 	for i := range mps {
 		if mps[i].Device == device {
@@ -308,37 +269,26 @@ func GetDeviceNameFromMount(mounter Interface, mountPath string) (string, int, e
 	return device, refCount, nil
 }
 
-// MakeBindOpts detects whether a bind mount is being requested and makes the remount options to
-// use in case of bind mount, due to the fact that bind mount doesn't respect mount options.
-// The list equals:
+// MakeBindOpts 判断是否请求绑定挂载，并生成绑定挂载所需的重新挂载选项。
+// 绑定挂载不会遵循原始挂载选项，因此需要在 remount 时显式带上。结果列表为：
 //
-//	options - 'bind' + 'remount' (no duplicate)
-//
-// bind 挂载不继承原始挂载选项，因此需要在 remount 时显式带上。
+//	options - 'bind' + 'remount'（不重复）
 func MakeBindOpts(options []string) (bool, []string, []string) {
 	bind, bindOpts, bindRemountOpts, _ := MakeBindOptsSensitive(options, nil /* sensitiveOptions */)
 	return bind, bindOpts, bindRemountOpts
 }
 
-// MakeBindOptsSensitive is the same as MakeBindOpts but this method allows
-// sensitiveOptions to be passed in a separate parameter from the normal mount
-// options and ensures the sensitiveOptions are never logged. This method should
-// be used by callers that pass sensitive material (like passwords) as mount
-// options.
+// MakeBindOptsSensitive 与 MakeBindOpts 相同，但通过单独参数接收敏感选项，并确保这些选项不会写入日志。
+// 当挂载选项包含密码等敏感信息时，调用方应使用本方法。
 func MakeBindOptsSensitive(options []string, sensitiveOptions []string) (bool, []string, []string, []string) {
-	// Because we have an FD opened on the subpath bind mount, the "bind" option
-	// needs to be included, otherwise the mount target will error as busy if you
-	// remount as readonly.
-	//
-	// As a consequence, all read only bind mounts will no longer change the underlying
-	// volume mount to be read only.
+	// 子路径绑定挂载已打开文件描述符，因此必须包含 "bind" 选项；否则以只读方式重新挂载时，目标会因繁忙而报错。
+	// 因此，所有只读绑定挂载都不会再把底层卷挂载改为只读。
 	bindRemountOpts := []string{"bind", "remount"}
 	bindRemountSensitiveOpts := []string{}
 	bind := false
 	bindOpts := []string{"bind"}
 
-	// _netdev is a userspace mount option and does not automatically get added when
-	// bind mount is created and hence we must carry it over.
+	// _netdev 是用户态挂载选项，创建绑定挂载时不会自动添加，因此必须显式继承。
 	if checkForNetDev(options, sensitiveOptions) {
 		bindOpts = append(bindOpts, "_netdev")
 	}
@@ -381,31 +331,29 @@ func checkForNetDev(options []string, sensitiveOptions []string) bool {
 	return false
 }
 
-// PathWithinBase checks if give path is within given base directory.
-// 仅做路径判断，不解析真实路径，避免把 symlink 逃逸误判为安全。
+// PathWithinBase 判断给定路径是否位于给定基础目录内。
+// 仅做路径判断，不解析真实路径；调用方不能据此认定符号链接逃逸是安全的。
 func PathWithinBase(fullPath, basePath string) bool {
 	rel, err := filepath.Rel(basePath, fullPath)
 	if err != nil {
 		return false
 	}
 	if StartsWithBackstep(rel) {
-		// Needed to escape the base path.
+		// 必须拒绝通过 .. 段逃出基础路径的情况。
 		return false
 	}
 	return true
 }
 
-// StartsWithBackstep checks if the given path starts with a backstep segment.
-// StartsWithBackstep 统一用 / 判断，兼容 Windows 的反斜杠相对路径。
+// StartsWithBackstep 判断给定路径是否以 .. 段开头。
+// 统一用 / 判断，兼容 Windows 的反斜杠相对路径。
 func StartsWithBackstep(rel string) bool {
-	// normalize to / and check for ../
+	// 统一转换为 / 后检查 ../ 前缀。
 	return rel == ".." || strings.HasPrefix(filepath.ToSlash(rel), "../")
 }
 
-// sanitizedOptionsForLogging will return a comma separated string containing
-// options and sensitiveOptions. Each entry in sensitiveOptions will be
-// replaced with the string sensitiveOptionsRemoved
-// e.g. o1,o2,<masked>,<masked>
+// sanitizedOptionsForLogging 返回以逗号分隔的选项字符串，其中包含 options 和 sensitiveOptions。
+// sensitiveOptions 的每一项都会替换为 sensitiveOptionsRemoved，例如 o1,o2,<masked>,<masked>。
 // 敏感项一律只输出掩码，日志里不能泄露密码等凭据。
 func sanitizedOptionsForLogging(options []string, sensitiveOptions []string) string {
 	separator := ""

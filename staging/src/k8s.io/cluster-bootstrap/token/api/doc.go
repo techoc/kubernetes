@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package api (k8s.io/cluster-bootstrap/token/api) contains constants and types needed for
-// bootstrap tokens as maintained by the BootstrapSigner and TokenCleaner
-// controllers (in k8s.io/kubernetes/pkg/controller/bootstrap)
+// Package api (k8s.io/cluster-bootstrap/token/api) 定义 bootstrap token 的 API 常量，
+// 供 k8s.io/kubernetes/pkg/controller/bootstrap 中的 BootstrapSigner 与
+// TokenCleaner 控制器使用。
 //
 // 本包只包含常量，不包含逻辑。这些键名、前缀和正则共同定义了 bootstrap token
 // 在 Kubernetes API 中的序列化格式（Secret 类型、Data 键、token ID/Secret 的

@@ -28,7 +28,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"k8s.io/sample-controller/pkg/signals"
-	// Uncomment the following line to load the gcp plugin (only required to authenticate against GKE clusters).
+	// 取消下一行注释以加载 GCP 插件（仅对 GKE 集群认证需要）。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
 	clientset "k8s.io/sample-controller/pkg/generated/clientset/versioned"
@@ -48,8 +48,6 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 
-	// set up signals so we handle the shutdown signal gracefully
-	//
 	// ctx 贯穿整个程序，SIGTERM/SIGINT 一到就能让 informer 和 worker 一起收尾。
 	ctx := signals.SetupSignalHandler()
 	logger := klog.FromContext(ctx)
@@ -84,9 +82,7 @@ func main() {
 		kubeInformerFactory.Apps().V1().Deployments(),
 		exampleInformerFactory.Samplecontroller().V1alpha1().Foos())
 
-	// notice that there is no need to run Start methods in a separate goroutine. (i.e. go kubeInformerFactory.Start(ctx.done())
-	// Start method is non-blocking and runs all registered informers in a dedicated goroutine.
-	//
+	// Start 非阻塞，并在专用 goroutine 中运行已注册的 informer，无须再包一层 goroutine。
 	// 先 Start 再 Run：Run 内部会等缓存同步，若 informer 没启动就会一直阻塞在等待上。
 	kubeInformerFactory.Start(ctx.Done())
 	exampleInformerFactory.Start(ctx.Done())

@@ -30,13 +30,9 @@ import (
 	jose "gopkg.in/go-jose/go-jose.v2"
 )
 
-// ComputeDetachedSignature takes content and token details and computes a detached
-// JWS signature.  This is described in Appendix F of RFC 7515.  Basically, this
-// is a regular JWS with the content part of the signature elided.
-//
-// 返回值为 "<protected>..<signature>" 形式的紧凑序列化。tokenSecret 是
-// 对称 HMAC 密钥，必须保持机密；任何能把 Secret 泄露到日志或错误中的
-// 改动都会削弱引导信任。
+// ComputeDetachedSignature 按 RFC 7515 附录 F 为内容生成 detached JWS 签名，
+// 返回 "<protected>..<signature>" 形式的紧凑序列化。
+// tokenSecret 是对称 HMAC 密钥，必须保持机密；实现和错误路径都不得泄露它。
 func ComputeDetachedSignature(content, tokenID, tokenSecret string) (string, error) {
 	// 把 Secret 包装成 JSONWebKey，并用公开的 token ID 作为 KeyID，
 	// 使验证方无需额外信息即可定位对应 token。
@@ -46,9 +42,8 @@ func ComputeDetachedSignature(content, tokenID, tokenSecret string) (string, err
 	}
 
 	opts := &jose.SignerOptions{
-		// Since this is a symmetric key, go-jose doesn't automatically include
-		// the KeyID as part of the protected header. We have to pass it here
-		// explicitly.
+		// go-jose 不会为对称密钥自动写入 KeyID，必须显式加入受保护头，
+		// 否则验证方无法把签名对应到 bootstrap token ID。
 		ExtraHeaders: map[jose.HeaderKey]interface{}{
 			"kid": tokenID,
 		},
@@ -74,14 +69,9 @@ func ComputeDetachedSignature(content, tokenID, tokenSecret string) (string, err
 	return stripContent(fullSig)
 }
 
-// stripContent will remove the content part of a compact JWS
-//
-// The `go-jose` library doesn't support generating signatures with "detached"
-// content. To make up for this we take the full compact signature, break it
-// apart and put it back together without the content section.
-//
-// 紧凑 JWS 由三部分组成（protected.payload.signature）；detached 形式把
-// 中间的 payload 置空，从而保持 "<protected>..<signature>" 的合法结构。
+// stripContent 移除紧凑 JWS 的载荷段。
+// go-jose 不直接生成 detached 签名，因此先完整序列化再拆分为
+// protected.payload.signature 三段，最后以 "<protected>..<signature>" 重组。
 func stripContent(fullSig string) (string, error) {
 	parts := strings.Split(fullSig, ".")
 	if len(parts) != 3 {
@@ -91,11 +81,8 @@ func stripContent(fullSig string) (string, error) {
 	return parts[0] + ".." + parts[2], nil
 }
 
-// DetachedTokenIsValid checks whether a given detached JWS-encoded token matches JWS output of the given content and token
-//
-// 通过重新计算签名再做字符串比较来验证；因为签名由 HMAC 决定，未知密钥
-// 无法构造出匹配值。这里的比较本身不是常量时间的，但只涉及公开的签名，
-// 不泄露 Secret。
+// DetachedTokenIsValid 重新计算签名并比较，判断 detached JWS 是否与给定内容和 token 匹配。
+// 比较对象是公开签名，不是 token Secret；重新计算失败时按无效处理。
 func DetachedTokenIsValid(detachedToken, content, tokenID, tokenSecret string) bool {
 	newToken, err := ComputeDetachedSignature(content, tokenID, tokenSecret)
 	if err != nil {

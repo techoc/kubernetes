@@ -20,8 +20,6 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.metrics.pkg.apis.custom_metrics.v1beta1
 
-// Package v1beta1 is the v1beta1 version of the custom_metrics API.
-//
-// 中文说明：本文件集中放生成指令；自定义指标的类型与查询选项定义在 types.go，
-// 需要配合安装步骤把内部版本与外部版本一并注册到 scheme。
+// Package v1beta1 是自定义指标 API 的 v1beta1 版本。
+// 类型与查询选项定义在 types.go，安装时需将内部版本与外部版本一并注册到 scheme。
 package v1beta1

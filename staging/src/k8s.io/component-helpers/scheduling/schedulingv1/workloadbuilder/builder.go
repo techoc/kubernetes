@@ -50,11 +50,13 @@ const (
 
 // BuildOptions 携带 BuildWorkload 生成的 Workload 对象的身份信息，以及控制器的调度白名单。
 type BuildOptions struct {
-	Name      string
+	// Name 是编译出的 Workload 名称。
+	Name string
+	// Namespace 是编译出的 Workload 命名空间；物化出的 PodGroup 也使用该命名空间。
 	Namespace string
-	// Owner 是可选的 ownerReference，用于垃圾回收。
-	// 它指向控制器对象，靠 ownerRef 让 Workload 随父对象一起被回收；
-	// 为空时 build 阶段直接报错，避免产出无人管理的孤儿对象。
+	// Owner 指向控制器对象，靠 ownerRef 让 Workload 随父对象一起被回收。
+	// 从 WorkloadItem 树编译时 Owner 必填；从已有 Workload 物化 PodGroup 时可为空，
+	// 此时生成的 PodGroup 不带 ownerReferences。
 	Owner *metav1.OwnerReference
 
 	// AllowedPolicies 是控制器声明允许的调度策略集合。
@@ -111,6 +113,7 @@ func NewBuilderFromExistingWorkload(workload *schedulingv1beta1.Workload, opts B
 // BuildWorkload 把 WorkloadItem 树编译成 Workload，设置其身份信息和 controllerRef，
 // 并缓存结果。从既有 Workload 构造的 Builder 会拒绝编译，
 // 防止覆盖持久化对象或父控制器编写的内容。
+// 返回值是 Builder 持有的缓存对象；调用方若需修改，应先深拷贝，以免影响后续物化结果。
 func (b *Builder) BuildWorkload() (*schedulingv1beta1.Workload, error) {
 	if b.existingWorkload != nil {
 		return nil, fmt.Errorf("BuildWorkload is not available on a Builder created from an existing Workload: it materializes from the supplied Workload")
@@ -357,7 +360,8 @@ func buildLeafTemplate(name string, cfg *SchedulingConfig) (schedulingv1beta1.Po
 
 // compileSchedulingPolicy 把 IR 的调度策略映射为 API 策略。nil 策略解析为 Basic；
 // Gang 要求事先解析出 MinCount，才能填充 API 中非指针的 MinCount 字段。
-// minCount>=1 的取值约束由声明式校验保证，这里不重复检查。
+// minCount>=1 的取值约束由 Validate 中的声明式校验负责；
+// BuildWorkload 不隐式执行 Validate，这里只检查编译期不变量，即 MinCount 已解析为非 nil。
 func compileSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1beta1.PodGroupSchedulingPolicy, error) {
 	basic := schedulingv1beta1.PodGroupSchedulingPolicy{
 		Basic: &schedulingv1beta1.BasicSchedulingPolicy{},
@@ -441,7 +445,8 @@ func compileCompositePodGroupTemplate(item *WorkloadItem) (schedulingv1beta1.Com
 // compileCompositeSchedulingPolicy 把 IR 调度策略映射为复合类型的 API 策略。
 // nil 策略解析为 Basic；Gang 要求事先解析出 MinCount，才能填充必填的 MinGroupCount 字段
 // （IR 复用 GangSchedulingPolicy.MinCount 来承载复合的 minGroupCount 值）。
-// minGroupCount>=1 的取值约束由声明式校验保证，这里不重复检查。
+// minGroupCount>=1 的取值约束由 Validate 中的声明式校验负责；
+// BuildWorkload 不隐式执行 Validate，这里只检查编译期不变量，即 MinCount 已解析为非 nil。
 func compileCompositeSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1beta1.CompositePodGroupSchedulingPolicy, error) {
 	basic := schedulingv1beta1.CompositePodGroupSchedulingPolicy{
 		Basic: &schedulingv1beta1.CompositeBasicSchedulingPolicy{},
@@ -471,8 +476,8 @@ func compileCompositeSchedulingPolicy(policy *SchedulingPolicy) (schedulingv1bet
 }
 
 // compileDisruptionMode 把 IR 的中断模式映射为叶子节点的 API 模式。
-// “恰好一个成员非空”的 union 约束在编译后的 Workload 提交时由声明式校验负责，
-// 因此两个成员都未设置的模式会被编译成 nil。
+// 两个成员都未设置时返回 nil；同时设置时按 All 优先转换。
+// “恰好一个成员非空”的 union 约束应由调用方通过 Validate 检查，本函数不隐式执行校验。
 func compileDisruptionMode(dm *DisruptionMode) *schedulingv1beta1.DisruptionMode {
 	switch {
 	case dm.All != nil:
@@ -499,8 +504,8 @@ func compileResourceClaims(claims []ResourceClaim) []schedulingv1beta1.PodGroupR
 }
 
 // compileCompositeDisruptionMode 把 IR 的中断模式映射为复合节点的 API 模式。
-// “恰好一个成员非空”的 union 约束在编译后的 Workload 提交时由声明式校验负责，
-// 因此两个成员都未设置的模式会被编译成 nil。
+// 两个成员都未设置时返回 nil；同时设置时按 All 优先转换。
+// “恰好一个成员非空”的 union 约束应由调用方通过 Validate 检查，本函数不隐式执行校验。
 func compileCompositeDisruptionMode(dm *DisruptionMode) *schedulingv1beta1.CompositeDisruptionMode {
 	switch {
 	case dm.All != nil:

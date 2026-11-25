@@ -29,22 +29,16 @@ import (
 )
 
 const (
-	// GCEPDDriverName is the name of the CSI driver for GCE PD
 	// GCEPDDriverName 是 GCE PD 对应的 CSI 驱动名称。
 	GCEPDDriverName = "pd.csi.storage.gke.io"
-	// GCEPDInTreePluginName is the name of the intree plugin for GCE PD
 	// GCEPDInTreePluginName 是树内（in-tree）GCE PD 插件的名称。
 	GCEPDInTreePluginName = "kubernetes.io/gce-pd"
 
-	// GCEPDTopologyKey is the zonal topology key for GCE PD CSI Driver
 	// GCEPDTopologyKey 是 CSI 驱动使用的可用区拓扑标签键。
 	GCEPDTopologyKey = "topology.gke.io/zone"
 
-	// Volume ID Expected Format
-	// "projects/{projectName}/zones/{zoneName}/disks/{diskName}"
 	// volIDZonalFmt 是区域级（zonal）磁盘的 volume handle 格式：项目、可用区、磁盘名。
 	volIDZonalFmt = "projects/%s/zones/%s/disks/%s"
-	// "projects/{projectName}/regions/{regionName}/disks/{diskName}"
 	// 下面一组常量描述 region 级 handle 格式以及按 "/" 拆分后各字段的下标：
 	// volIDRegionalFmt 是地区级（regional）磁盘的 handle 格式；
 	// volIDProjectValue 等项目在 RepairVolumeHandle 中用于定位并修补 UNSPECIFIED 字段；
@@ -59,7 +53,6 @@ const (
 	// nodeIDFmt 是节点 ID 的格式，修补 handle 时从中提取项目与可用区。
 	nodeIDFmt = "projects/%s/zones/%s/instances/%s"
 
-	// UnspecifiedValue is used for an unknown zone string
 	// UnspecifiedValue 表示 handle 中尚未确定的项目/可用区，需要后续从节点信息推断。
 	UnspecifiedValue = "UNSPECIFIED"
 )
@@ -67,12 +60,9 @@ const (
 // 编译期断言：确保 gcePersistentDiskCSITranslator 实现 InTreePlugin 接口。
 var _ InTreePlugin = &gcePersistentDiskCSITranslator{}
 
-// gcePersistentDiskCSITranslator handles translation of PV spec from In-tree
-// GCE PD to CSI GCE PD and vice versa
 // gcePersistentDiskCSITranslator 负责树内 GCE PD 与 CSI GCE PD 之间 PV 配置的双向翻译。
 type gcePersistentDiskCSITranslator struct{}
 
-// NewGCEPersistentDiskCSITranslator returns a new instance of gcePersistentDiskTranslator
 // NewGCEPersistentDiskCSITranslator 返回一个 GCE PD 翻译器实例。
 func NewGCEPersistentDiskCSITranslator() InTreePlugin {
 	return &gcePersistentDiskCSITranslator{}
@@ -93,7 +83,6 @@ func generateToplogySelectors(key string, values []string) []v1.TopologySelector
 	}
 }
 
-// TranslateInTreeStorageClassToCSI translates InTree GCE storage class parameters to CSI storage class
 // TranslateInTreeStorageClassToCSI 把树内 StorageClass 参数翻译为 CSI 参数：重命名 fstype，并把 zone/zones 转成拓扑约束。
 func (g *gcePersistentDiskCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logger, sc *storage.StorageClass) (*storage.StorageClass, error) {
 	var generatedTopologies []v1.TopologySelectorTerm
@@ -104,10 +93,8 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreeStorageClassToCSI(logger
 		// 参数名大小写不敏感，统一转小写后匹配。
 		switch strings.ToLower(k) {
 		case fsTypeKey:
-			// prefixed fstype parameter is stripped out by external provisioner
 			// 旧键 fstype 被外部 provisioner 剥离，需改写成 CSI 识别的完整键名。
 			np[csiFsTypeKey] = v
-		// Strip out zone and zones parameters and translate them into topologies instead
 		// zone/zones 不再作为参数传递，而是转换成 allowedTopologies。
 		case zoneKey:
 			generatedTopologies = generateToplogySelectors(GCEPDTopologyKey, []string{v})
@@ -141,19 +128,10 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreeStorageClassToCSI(logger
 	return sc, nil
 }
 
-// backwardCompatibleAccessModes translates all instances of ReadWriteMany
-// access mode from the in-tree plugin to ReadWriteOnce. This is because in-tree
-// plugin never supported ReadWriteMany but also did not validate or enforce
-// this access mode for pre-provisioned volumes. The GCE PD CSI Driver validates
-// and enforces (fails) ReadWriteMany. Therefore we treat all in-tree
-// ReadWriteMany as ReadWriteOnce volumes to not break legacy volumes. It also
-// takes [ReadWriteOnce, ReadOnlyMany] and makes it ReadWriteOnce. This is
-// because the in-tree plugin does not enforce access modes and just attaches
-// the disk in ReadWriteOnce mode; however, the CSI external-attacher will fail
-// this combination because technically [ReadWriteOnce, ReadOnlyMany] is not
-// supportable on an attached volume
-// See: https://github.com/kubernetes-csi/external-attacher/issues/153
 // backwardCompatibleAccessModes 将树内遗留的访问模式规整为 CSI 能接受的形式：RWX 当作 RWO，[RWO, ROX] 也折叠为 RWO。
+// 树内插件从未真正支持 RWX，且对预置卷既不校验也不强制执行；GCE PD CSI 则会校验并拒绝 RWX。
+// 树内把 [RWO, ROX] 按 RWO 挂接，但 CSI external-attacher 拒绝该组合，因此需折叠为 RWO。
+// 背景：https://github.com/kubernetes-csi/external-attacher/issues/153
 func backwardCompatibleAccessModes(ams []v1.PersistentVolumeAccessMode) []v1.PersistentVolumeAccessMode {
 	if ams == nil {
 		return nil
@@ -165,8 +143,6 @@ func backwardCompatibleAccessModes(ams []v1.PersistentVolumeAccessMode) []v1.Per
 
 	for _, am := range ams {
 		if am == v1.ReadWriteMany {
-			// ReadWriteMany is unsupported in CSI, but in-tree did no
-			// validation and treated it as ReadWriteOnce
 			// 树内插件从未真正支持 RWX，这里等价替换为 RWO 以保持旧卷可用。
 			s[v1.ReadWriteOnce] = true
 		} else {
@@ -177,8 +153,6 @@ func backwardCompatibleAccessModes(ams []v1.PersistentVolumeAccessMode) []v1.Per
 	// 按优先级选出一个 CSI 可接受的访问模式。
 	switch {
 	case s[v1.ReadOnlyMany] && s[v1.ReadWriteOnce]:
-		// ROX,RWO is unsupported in CSI, but in-tree did not validation and
-		// treated it as ReadWriteOnce
 		// ROX+RWO 组合在 CSI external-attacher 中会失败，统一降级为 RWO。
 		newAM = []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}
 	case s[v1.ReadWriteOnce]:
@@ -193,8 +167,6 @@ func backwardCompatibleAccessModes(ams []v1.PersistentVolumeAccessMode) []v1.Per
 	return newAM
 }
 
-// TranslateInTreeInlineVolumeToCSI takes a Volume with GCEPersistentDisk set from in-tree
-// and converts the GCEPersistentDisk source to a CSIPersistentVolumeSource
 // TranslateInTreeInlineVolumeToCSI 把 Pod 中内联的 GCE PD 卷转换成内存中的 CSI PV。
 func (g *gcePersistentDiskCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error) {
 	// 内联卷必须带有 GCEPersistentDisk 来源。
@@ -222,9 +194,7 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreeInlineVolumeToCSI(logger
 	fsMode := v1.PersistentVolumeFilesystem
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			// Must be unique per disk as it is used as the unique part of the
-			// staging path
-			// 用驱动名加磁盘名保证同名卷的 staging 路径稳定且全局唯一。
+			// 用驱动名加磁盘名按磁盘唯一命名，保证 staging 路径稳定。
 			Name: fmt.Sprintf("%s-%s", GCEPDDriverName, pdSource.PDName),
 		},
 		Spec: v1.PersistentVolumeSpec{
@@ -248,8 +218,6 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreeInlineVolumeToCSI(logger
 	}, nil
 }
 
-// TranslateInTreePVToCSI takes a PV with GCEPersistentDisk set from in-tree
-// and converts the GCEPersistentDisk source to a CSIPersistentVolumeSource
 // TranslateInTreePVToCSI 把树内 GCE PD PV 原地改造成 CSI PV，并按拓扑标签生成 volume handle。
 func (g *gcePersistentDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	var volID string
@@ -258,7 +226,6 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logg
 		return nil, fmt.Errorf("pv is nil or GCE Persistent Disk source not defined on pv")
 	}
 
-	// depend on which version it migrates from, the label could be failuredomain beta or topology GA version
 	// 旧版本用 beta 标签，新版本用 GA 标签，两者都要兼容。
 	zonesLabel := pv.Labels[v1.LabelFailureDomainBetaZone]
 	if zonesLabel == "" {
@@ -268,11 +235,9 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logg
 	// 多个可用区之间用 "__" 分隔，代表地区级（regional）磁盘。
 	zones := strings.Split(zonesLabel, labelMultiZoneDelimiter)
 	if len(zones) == 1 && len(zones[0]) != 0 {
-		// Zonal
 		// 单一可用区：生成区域级 handle，项目仍待推断。
 		volID = fmt.Sprintf(volIDZonalFmt, UnspecifiedValue, zones[0], pv.Spec.GCEPersistentDisk.PDName)
 	} else if len(zones) > 1 {
-		// Regional
 		// 多个可用区：先从区名推导出地区名，再生成地区级 handle。
 		region, err := gceGetRegionFromZones(zones)
 		if err != nil {
@@ -280,7 +245,6 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logg
 		}
 		volID = fmt.Sprintf(volIDRegionalFmt, UnspecifiedValue, region, pv.Spec.GCEPersistentDisk.PDName)
 	} else {
-		// Unspecified
 		// 没有拓扑标签：项目和可用区都留待后续修复。
 		volID = fmt.Sprintf(volIDZonalFmt, UnspecifiedValue, UnspecifiedValue, pv.Spec.GCEPersistentDisk.PDName)
 	}
@@ -317,8 +281,6 @@ func (g *gcePersistentDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logg
 	return pv, nil
 }
 
-// TranslateCSIPVToInTree takes a PV with CSIPersistentVolumeSource set and
-// translates the GCE PD CSI source to a GCEPersistentDisk source.
 // TranslateCSIPVToInTree 是反向翻译：把 CSI GCE PD PV 还原成树内 GCEPersistentDisk PV，用于回滚。
 func (g *gcePersistentDiskCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	if pv == nil || pv.Spec.CSI == nil {
@@ -347,7 +309,6 @@ func (g *gcePersistentDiskCSITranslator) TranslateCSIPVToInTree(pv *v1.Persisten
 		gceSource.Partition = int32(partInt)
 	}
 
-	// translate CSI topology to In-tree topology for rollback compatibility
 	// 回滚时把 CSI 拓扑键还原为树内标签，地区级还需要从区名推导地区。
 	if err := translateTopologyFromCSIToInTree(pv, GCEPDTopologyKey, gceGetRegionFromZones); err != nil {
 		return nil, fmt.Errorf("failed to translate topology. PV:%+v. Error:%v", *pv, err)
@@ -360,38 +321,29 @@ func (g *gcePersistentDiskCSITranslator) TranslateCSIPVToInTree(pv *v1.Persisten
 	return pv, nil
 }
 
-// CanSupport tests whether the plugin supports a given persistent volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupport 判断该 PV 是否为树内 GCE PD 卷。
+// 传入对象的 spec 应视为常量，不得修改。
 func (g *gcePersistentDiskCSITranslator) CanSupport(pv *v1.PersistentVolume) bool {
 	return pv != nil && pv.Spec.GCEPersistentDisk != nil
 }
 
-// CanSupportInline tests whether the plugin supports a given inline volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupportInline 判断内联 Volume 是否为 GCE PD 类型。
+// 传入对象的 spec 应视为常量，不得修改。
 func (g *gcePersistentDiskCSITranslator) CanSupportInline(volume *v1.Volume) bool {
 	return volume != nil && volume.GCEPersistentDisk != nil
 }
 
-// GetInTreePluginName returns the name of the intree plugin driver
 // GetInTreePluginName 返回树内插件名称。
 func (g *gcePersistentDiskCSITranslator) GetInTreePluginName() string {
 	return GCEPDInTreePluginName
 }
 
-// GetCSIPluginName returns the name of the CSI plugin
 // GetCSIPluginName 返回 CSI 驱动名称。
 func (g *gcePersistentDiskCSITranslator) GetCSIPluginName() string {
 	return GCEPDDriverName
 }
 
-// RepairVolumeHandle returns a fully specified volume handle by inferring
-// project, zone/region from the node ID if the volume handle has UNSPECIFIED
-// sections
-// RepairVolumeHandle 用节点 ID 中的项目和可用区信息补全 handle 里的 UNSPECIFIED 字段。
+// RepairVolumeHandle 用节点 ID 中的项目和可用区/地区信息补全 handle 里的 UNSPECIFIED 字段。
 func (g *gcePersistentDiskCSITranslator) RepairVolumeHandle(volumeHandle, nodeID string) (string, error) {
 	var err error
 	tok := strings.Split(volumeHandle, "/")
@@ -447,16 +399,14 @@ func pdNameFromVolumeID(id string) (string, error) {
 	return splitID[volIDDiskNameValue], nil
 }
 
-// TODO: Replace this with the imported one from GCE PD CSI Driver when
-// the driver removes all k8s/k8s dependencies
 // gceGetRegionFromZones 从可用区名称列表中推导出唯一的地区名（取区名的前两段）。
+// TODO：待 GCE PD CSI 驱动移除所有 k8s/k8s 依赖后，改用其导出的实现。
 func gceGetRegionFromZones(zones []string) (string, error) {
 	regions := sets.String{}
 	if len(zones) < 1 {
 		return "", fmt.Errorf("no zones specified")
 	}
 	for _, zone := range zones {
-		// Zone expected format {locale}-{region}-{zone}
 		// 区名形如 us-central1-a，前两段拼起来就是地区名。
 		splitZone := strings.Split(zone, "-")
 		if len(splitZone) != 3 {

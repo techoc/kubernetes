@@ -21,35 +21,35 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name used in this package
+// GroupName 是本包使用的 API 组名。
 // 内部版本与外部版本共用组名，转换时不用改 GVK 的 group 部分。
 const GroupName = "wardle.example.com"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册本包对象所用的组版本。
 // 内部版本只在内存中流转，不会出现在 etcd 或 API 响应里。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns back a Group qualified GroupKind
+// Kind 为未限定组的 Kind 补上本 API 组，返回 GroupKind。
 // 补上组名，kind 在不同 API 组之间才不会撞名。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns back a Group qualified GroupResource
+// Resource 为未限定组的资源名补上本 API 组，返回 GroupResource。
 // 资源名本身不带组信息，这里补齐供存储层键路径使用。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 保存本 API 包需要在 Scheme 上执行的注册函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is a common registration function for mapping packaged scoped group & version keys to a scheme
+	// AddToScheme 把本包的组版本及类型注册到 Scheme。
 	// 内部版本只需注册已知类型，默认值与转换由版本化包处理。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 把本包的已知类型注册到 Scheme。
 // 注册的是内存中的内部类型，外部版本通过转换函数与它们互转。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,

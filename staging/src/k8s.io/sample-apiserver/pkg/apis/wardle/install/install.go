@@ -24,7 +24,7 @@ import (
 	"k8s.io/sample-apiserver/pkg/apis/wardle/v1beta1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 向 Scheme 注册 Wardle API 组及其类型。
 // 集中安装内部版本和外部版本，调用方无需知道各版本包的存在。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(wardle.AddToScheme(scheme))

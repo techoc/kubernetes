@@ -65,7 +65,7 @@ func TestNewEndpointSlice(t *testing.T) {
 	// 表驱动用例：name 为用例名，updateSvc 用于定制基础 Service，expectedSlice 为期望生成的 EndpointSlice。
 	testCases := []struct {
 		name          string
-		updateSvc     func(svc v1.Service) v1.Service // given basic valid services, each test case can customize them
+		updateSvc     func(svc v1.Service) v1.Service // 给定有效的基础 Service，每个用例可自行定制
 		expectedSlice *discovery.EndpointSlice
 	}{
 		{
@@ -491,7 +491,7 @@ func TestPodToEndpoint(t *testing.T) {
 	}
 }
 
-// TestServiceControllerKey 测试 ServiceControllerKey 从 EndpointSlice 推导 Service controller key 的行为。
+// TestServiceControllerKey 测试 ServiceControllerKey 从 EndpointSlice 推导 Service 控制器键的行为。
 // 输入包括 nil slice、缺少 service-name 标签的空 slice、以及带命名空间与标签的合法 slice；
 // 断言返回的错误与 key（如 "ns/svc"）符合预期。
 func TestServiceControllerKey(t *testing.T) {
@@ -743,7 +743,7 @@ func TestSetEndpointSliceLabels(t *testing.T) {
 	testCases := []struct {
 		name           string
 		epSlice        *discovery.EndpointSlice
-		updateSvc      func(svc v1.Service) v1.Service // given basic valid services, each test case can customize them
+		updateSvc      func(svc v1.Service) v1.Service // 给定有效的基础 Service，每个用例可自行定制
 		expectedLabels map[string]string
 		expectedUpdate bool
 	}{
@@ -1017,7 +1017,6 @@ func TestSetEndpointSliceLabels(t *testing.T) {
 
 }
 
-// Test helpers
 // 测试辅助函数
 
 // newPod 创建测试用 Pod：按 n 命名并生成 IP（1.2.3.<4+n>），
@@ -1280,7 +1279,6 @@ func TestSupportedServiceAddressType(t *testing.T) {
 				t.Fatalf("expected count address types %v got %v", len(testCase.expectedAddressTypes), len(addressTypes))
 			}
 
-			// compare
 			// 逐个确认期望的地址类型确实出现在结果集合中。
 			for _, expectedAddressType := range testCase.expectedAddressTypes {
 				// 在结果集合中查找当前期望的地址类型。
@@ -1533,7 +1531,6 @@ func TestFindPort(t *testing.T) {
 			port:     intstr.FromString("a"),
 			expected: 11,
 			pass:     true,
-			// this should fail but passes.
 		},
 		{
 			name: "invalid ContainerPort",
@@ -1546,7 +1543,6 @@ func TestFindPort(t *testing.T) {
 			port:     intstr.FromString("a"),
 			expected: -1,
 			pass:     true,
-			// this should fail but passes
 		},
 		{
 			name: "HostIP Address",

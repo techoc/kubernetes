@@ -166,7 +166,7 @@ func TestGetGroups(t *testing.T) {
 					bootstrapapi.BootstrapTokenExtraGroupsKey: []byte("system:bootstrappers:foo,system:bootstrappers:bar,system:bootstrappers:bar"),
 				},
 			},
-			// expect the results in deduplicated, sorted order
+			// 期望结果已去重并按字典序排列。
 			expectResult: []string{
 				"system:bootstrappers",
 				"system:bootstrappers:bar",

@@ -22,31 +22,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-// 中文说明：外部指标独立于自定义指标，HPA 通过不同的 group 区分两类数据源。
+// GroupName 是本包使用的 API 组名称。
+// 外部指标独立于自定义指标，HPA 通过不同的组区分两类数据源。
 const GroupName = "external.metrics.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-// 中文说明：这是当前对外提供的唯一版本，新版本需另行注册。
+// SchemeGroupVersion 是用于注册本包对象的组版本。
+// 这是当前对外提供的唯一版本，新版本需另行注册。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
-// 中文说明：补全 group 信息，供请求路径和 scheme 查询统一使用。
+// Resource 接收不限定的 resource，返回包含组名的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
-	// 中文说明：集中管理本版本的类型注册逻辑。
+	// SchemeBuilder 保存需要添加到 Scheme 的注册函数。
+	// 集中管理本版本的类型注册逻辑。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme applies all the stored functions to the scheme.
-	// 中文说明：通过 local builder 调用，便于未来在本文件内插入更多注册步骤。
+	// AddToScheme 将所有已注册的函数应用到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// 中文说明：注册外部指标的单值和列表类型，并补上 metav1 内嵌类型。
+// addKnownTypes 注册外部指标的单值和列表类型，并补上 metav1 内嵌类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ExternalMetricValue{},

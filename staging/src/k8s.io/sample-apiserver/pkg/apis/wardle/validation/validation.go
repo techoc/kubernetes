@@ -21,7 +21,7 @@ import (
 	"k8s.io/sample-apiserver/pkg/apis/wardle"
 )
 
-// ValidateFlunder validates a Flunder.
+// ValidateFlunder 校验 Flunder 对象。
 // 校验逻辑放在内部版本，各版本 API 通过转换汇合到这里，避免规则散落。
 func ValidateFlunder(f *wardle.Flunder) field.ErrorList {
 	allErrs := field.ErrorList{}
@@ -32,7 +32,7 @@ func ValidateFlunder(f *wardle.Flunder) field.ErrorList {
 	return allErrs
 }
 
-// ValidateFlunderSpec validates a FlunderSpec.
+// ValidateFlunderSpec 校验 FlunderSpec 的引用字段。
 // 用 else-if 串联保证同一组字段只报一个最相关的错误，避免刷屏。
 func ValidateFlunderSpec(s *wardle.FlunderSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}

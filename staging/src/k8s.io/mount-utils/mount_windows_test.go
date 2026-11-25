@@ -69,8 +69,7 @@ func setEquivalent(set1, set2 []string) bool {
 	return true
 }
 
-// this func must run in admin mode, otherwise it will fail
-// 真实查询依赖系统挂载表，普通权限下跳过即可，不在测试里提权。
+// TestGetMountRefs 依赖真实系统状态，必须以管理员权限运行，否则会失败。
 func TestGetMountRefs(t *testing.T) {
 	tests := []struct {
 		mountPath    string
@@ -210,7 +209,7 @@ func TestIsLikelyNotMountPoint(t *testing.T) {
 					return err
 				}
 
-				// create a Junction file type on Windows
+				// 在 Windows 上创建 junction 类型的链接。
 				junction := filepath.Join(base, fileName)
 				if output, err := exec.Command("cmd", "/c", "mklink", "/J", junction, target).CombinedOutput(); err != nil {
 					return fmt.Errorf("mklink failed: %v, link(%q) target(%q) output: %q", err, junction, target, string(output))

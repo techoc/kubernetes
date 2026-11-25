@@ -4,70 +4,61 @@ syntax = "proto3";
 package v1beta1;
 option go_package = "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1";
 
-// Registration is the service advertised by the Kubelet
-// Only when Kubelet answers with a success code to a Register Request
-// may Device Plugins start their service
-// Registration may fail when device plugin version is not supported by
-// Kubelet or the registered resourceName is already taken by another
-// active device plugin. Device plugin is expected to terminate upon registration failure
+// Registration 是 Kubelet 对外提供的服务。
+// 只有 Kubelet 对 Register 请求返回成功码后，设备插件才能启动其服务。
+// 如果 Kubelet 不支持设备插件版本，或已注册的 resourceName 已被另一个
+// 活跃设备插件占用，注册可能失败。注册失败时，设备插件应退出。
 service Registration {
 	rpc Register(RegisterRequest) returns (Empty) {}
 }
 
 message DevicePluginOptions {
-	// Indicates if PreStartContainer call is required before each container start
+	// 指示是否需要在每次启动容器前调用 PreStartContainer。
 	bool pre_start_required = 1;
-	// Indicates if GetPreferredAllocation is implemented and available for calling
+	// 指示是否已实现 GetPreferredAllocation 并可调用。
 	bool get_preferred_allocation_available = 2;
 }
 
 message RegisterRequest {
-	// Version of the API the Device Plugin was built against
+	// 设备插件构建所依据的 API 版本。
 	string version = 1;
-	// Name of the unix socket the device plugin is listening on
+	// 设备插件监听的 Unix 套接字名称。
 	// PATH = path.Join(DevicePluginPath, endpoint)
 	string endpoint = 2;
-	// Schedulable resource name. As of now it's expected to be a DNS Label
+	// 可调度资源名称，目前应为 DNS 标签。
 	string resource_name = 3;
-	// Options to be communicated with Device Manager
+	// 需要与设备管理器通信的选项。
 	DevicePluginOptions options = 4;
 }
 
 message Empty {
 }
 
-// DevicePlugin is the service advertised by Device Plugins
+// DevicePlugin 是设备插件对外提供的服务。
 service DevicePlugin {
-	// GetDevicePluginOptions returns options to be communicated with Device
-	// Manager
+	// GetDevicePluginOptions 返回需要与设备管理器通信的选项。
 	rpc GetDevicePluginOptions(Empty) returns (DevicePluginOptions) {}
 
-	// ListAndWatch returns a stream of List of Devices
-	// Whenever a Device state change or a Device disappears, ListAndWatch
-	// returns the new list
+	// ListAndWatch 返回设备列表流。
+	// 每当设备状态变化或设备消失时，ListAndWatch 都会返回新列表。
 	rpc ListAndWatch(Empty) returns (stream ListAndWatchResponse) {}
 
-	// GetPreferredAllocation returns a preferred set of devices to allocate
-	// from a list of available ones. The resulting preferred allocation is not
-	// guaranteed to be the allocation ultimately performed by the
-	// devicemanager. It is only designed to help the devicemanager make a more
-	// informed allocation decision when possible.
+	// GetPreferredAllocation 从可用设备列表中返回一组优先分配的设备。
+	// 返回的优先分配不保证成为设备管理器最终执行的分配结果，
+	// 仅用于帮助设备管理器在可能时做出更合理的分配决策。
 	rpc GetPreferredAllocation(PreferredAllocationRequest) returns (PreferredAllocationResponse) {}
 
-	// Allocate is called during container creation so that the Device
-	// Plugin can run device specific operations and instruct Kubelet
-	// of the steps to make the Device available in the container
+	// Allocate 在创建容器时调用，使设备插件可以执行设备相关操作，
+	// 并告知 Kubelet 如何使设备在容器中可用。
 	rpc Allocate(AllocateRequest) returns (AllocateResponse) {}
 
-	// PreStartContainer is called, if indicated by Device Plugin during registeration phase,
-	// before each container start. Device plugin can run device specific operations
-	// such as resetting the device before making devices available to the container
+	// 如果设备插件在注册阶段提出要求，PreStartContainer 会在每次启动容器前调用。
+	// 设备插件可以执行设备相关操作，例如在使设备可供容器使用前重置设备。
 	rpc PreStartContainer(PreStartContainerRequest) returns (PreStartContainerResponse) {}
 }
 
-// ListAndWatch returns a stream of List of Devices
-// Whenever a Device state change or a Device disappears, ListAndWatch
-// returns the new list
+// ListAndWatch 返回设备列表流。
+// 每当设备状态变化或设备消失时，ListAndWatch 都会返回新列表。
 message ListAndWatchResponse {
 	repeated Device devices = 1;
 }
@@ -89,48 +80,43 @@ message NUMANode {
 *        ID: 1
 *} */
 message Device {
-	// A unique ID assigned by the device plugin used
-	// to identify devices during the communication
-	// Max length of this field is 63 characters
+	// 设备插件分配的唯一 ID，用于通信期间标识设备。
+	// 此字段最大长度为 63 个字符。
 	string ID = 1;
-	// Health of the device, can be healthy or unhealthy, see constants.go
+	// 设备健康状态，可以是健康或不健康，参见 constants.go。
 	string health = 2;
-	// Topology for device
+	// 设备的拓扑信息。
 	TopologyInfo topology = 3;
 }
 
-// - PreStartContainer is expected to be called before each container start if indicated by plugin during registration phase.
-// - PreStartContainer allows kubelet to pass reinitialized devices to containers.
-// - PreStartContainer allows Device Plugin to run device specific operations on
-//   the Devices requested
+// - 如果插件在注册阶段提出要求，PreStartContainer 应在每次启动容器前调用。
+// - PreStartContainer 允许 Kubelet 将重新初始化的设备传递给容器。
+// - PreStartContainer 允许设备插件对所请求的设备执行设备相关操作。
 message PreStartContainerRequest {
 	repeated string devices_ids = 1;
 }
 
-// PreStartContainerResponse will be send by plugin in response to PreStartContainerRequest
+// PreStartContainerResponse 由插件响应 PreStartContainerRequest 时发送。
 message PreStartContainerResponse {
 }
 
-// PreferredAllocationRequest is passed via a call to GetPreferredAllocation()
-// at pod admission time. The device plugin should take the list of
-// `available_deviceIDs` and calculate a preferred allocation of size
-// 'allocation_size' from them, making sure to include the set of devices
-// listed in 'must_include_deviceIDs'.
+// PreferredAllocationRequest 在 Pod 准入时通过 GetPreferredAllocation() 调用传入。
+// 设备插件应从 available_deviceIDs 列表中选出大小为 allocation_size 的优先分配，
+// 并确保包含 must_include_deviceIDs 中列出的设备。
 message PreferredAllocationRequest {
 	repeated ContainerPreferredAllocationRequest container_requests = 1;
 }
 
 message ContainerPreferredAllocationRequest {
-	// List of available deviceIDs from which to choose a preferred allocation
+	// 可供选择优先分配的可用 deviceIDs 列表。
 	repeated string available_deviceIDs = 1;
-	// List of deviceIDs that must be included in the preferred allocation
+	// 优先分配中必须包含的 deviceIDs 列表。
 	repeated string must_include_deviceIDs = 2;
-	// Number of devices to include in the preferred allocation
+	// 优先分配中包含的设备数量。
 	int32 allocation_size = 3;
 }
 
-// PreferredAllocationResponse returns a preferred allocation,
-// resulting from a PreferredAllocationRequest.
+// PreferredAllocationResponse 返回由 PreferredAllocationRequest 产生的优先分配结果。
 message PreferredAllocationResponse {
 	repeated ContainerPreferredAllocationResponse container_responses = 1;
 }
@@ -139,12 +125,9 @@ message ContainerPreferredAllocationResponse {
 	repeated string deviceIDs = 1;
 }
 
-// - Allocate is expected to be called during pod creation since allocation
-//   failures for any container would result in pod startup failure.
-// - Allocate allows kubelet to exposes additional artifacts in a pod's
-//   environment as directed by the plugin.
-// - Allocate allows Device Plugin to run device specific operations on
-//   the Devices requested
+// - Allocate 应在创建 Pod 时调用，因为任一容器的分配失败都会导致 Pod 启动失败。
+// - Allocate 允许 Kubelet 按插件指示在 Pod 环境中提供额外制品。
+// - Allocate 允许设备插件对所请求的设备执行设备相关操作。
 message AllocateRequest {
 	repeated ContainerAllocateRequest container_requests = 1;
 }
@@ -153,60 +136,57 @@ message ContainerAllocateRequest {
 	repeated string devices_ids = 1;
 }
 
-// CDIDevice specifies a CDI device information.
+// CDIDevice 描述 CDI 设备信息。
 message CDIDevice {
-	// Fully qualified CDI device name
-	// for example: vendor.com/gpu=gpudevice1
-	// see more details in the CDI specification:
+	// 完全限定的 CDI 设备名称。
+	// 例如：vendor.com/gpu=gpudevice1
+	// 更多详情参见 CDI 规范：
 	// https://github.com/container-orchestrated-devices/container-device-interface/blob/main/SPEC.md
 	string name = 1;
 }
 
-// AllocateResponse includes the artifacts that needs to be injected into
-// a container for accessing 'deviceIDs' that were mentioned as part of
-// 'AllocateRequest'.
-// Failure Handling:
-// if Kubelet sends an allocation request for dev1 and dev2.
-// Allocation on dev1 succeeds but allocation on dev2 fails.
-// The Device plugin should send a ListAndWatch update and fail the
-// Allocation request
+// AllocateResponse 包含需要注入容器的制品，用于访问 AllocateRequest
+// 中指定的 deviceIDs。
+// 失败处理：
+// 如果 Kubelet 发送 dev1 和 dev2 的分配请求，dev1 分配成功而 dev2 失败，
+// 设备插件应发送 ListAndWatch 更新并使分配请求失败。
 message AllocateResponse {
 	repeated ContainerAllocateResponse container_responses = 1;
 }
 
 message ContainerAllocateResponse {
-  	// List of environment variable to be set in the container to access one of more devices.
+	// 需要在容器中设置的环境变量列表，用于访问一个或多个设备。
 	map<string, string> envs = 1;
-	// Mounts for the container.
+	// 容器的挂载项。
 	repeated Mount mounts = 2;
-	// Devices for the container.
+	// 容器的设备。
 	repeated DeviceSpec devices = 3;
-	// Container annotations to pass to the container runtime
+	// 需要传递给容器运行时的容器注解。
 	map<string, string> annotations = 4;
-	// CDI devices for the container.
+	// 容器的 CDI 设备。
 	repeated CDIDevice cdi_devices = 5;
 }
 
-// Mount specifies a host volume to mount into a container.
-// where device library or tools are installed on host and container
+// Mount 指定要挂载到容器中的主机卷。
+// 用于向容器提供主机上安装的设备库或工具。
 message Mount {
-	// Path of the mount within the container.
+	// 挂载点在容器内的路径。
 	string container_path = 1;
-	// Path of the mount on the host.
+	// 挂载点在主机上的路径。
 	string host_path = 2;
-	// If set, the mount is read-only.
+	// 设置后，挂载为只读。
 	bool read_only = 3;
 }
 
-// DeviceSpec specifies a host device to mount into a container.
+// DeviceSpec 指定要挂载到容器中的主机设备。
 message DeviceSpec {
-	// Path of the device within the container.
+	// 设备在容器内的路径。
 	string container_path = 1;
-	// Path of the device on the host.
+	// 设备在主机上的路径。
 	string host_path = 2;
-	// Cgroups permissions of the device, candidates are one or more of
-	// * r - allows container to read from the specified device.
-	// * w - allows container to write to the specified device.
-	// * m - allows container to create device files that do not yet exist.
+	// 设备的 cgroup 权限，可取以下一项或多项：
+	// * r：允许容器读取指定设备。
+	// * w：允许容器写入指定设备。
+	// * m：允许容器创建尚不存在的设备文件。
 	string permissions = 3;
 }

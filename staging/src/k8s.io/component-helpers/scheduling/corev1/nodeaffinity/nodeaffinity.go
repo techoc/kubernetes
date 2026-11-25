@@ -55,6 +55,7 @@ type LazyErrorNodeSelector struct {
 // 对 API 校验等场景，必须在构造阶段一次性拿到所有错误，
 // 因此这里把各 term 的 parseErrs 汇总后返回。
 // opts 用于给错误信息附加字段路径前缀，便于调用方定位具体出错的字段。
+// ns 必须非 nil；缺失的 requiredDuringScheduling 段应在调用前处理为“无此约束”。
 func NewNodeSelector(ns *v1.NodeSelector, opts ...field.PathOption) (*NodeSelector, error) {
 	lazy := NewLazyErrorNodeSelector(ns, opts...)
 	var errs []error
@@ -76,6 +77,7 @@ func NewNodeSelector(ns *v1.NodeSelector, opts ...field.PathOption) (*NodeSelect
 //
 // 不返回 error，因为解析失败也被编码进 nodeSelectorTerm，留给 Match 阶段决定
 // 是否报告；field.Path 从调用方传入，保证错误信息带有完整的字段路径。
+// ns 必须非 nil，空 NodeSelector 则构造出不匹配任何节点的选择器。
 func NewLazyErrorNodeSelector(ns *v1.NodeSelector, opts ...field.PathOption) *LazyErrorNodeSelector {
 	p := field.ToPath(opts...)
 	parsedTerms := make([]nodeSelectorTerm, 0, len(ns.NodeSelectorTerms))
@@ -99,6 +101,7 @@ func NewLazyErrorNodeSelector(ns *v1.NodeSelector, opts ...field.PathOption) *La
 // nil 节点或空 term 不匹配任何对象。
 //
 // 丢弃 error 是安全的：构造器已经保证 NodeSelector 中没有解析错误。
+// node 为 nil 时返回 false。
 func (ns *NodeSelector) Match(node *v1.Node) bool {
 	// 解析错误已在 NewNodeSelector 中报告，此处无需处理。
 	match, _ := ns.lazy.Match(node)
@@ -180,6 +183,7 @@ func NewPreferredSchedulingTerms(terms []v1.PreferredSchedulingTerm, opts ...fie
 // Score 计算节点得分：所有命中该节点的 term 的权重之和。
 //
 // 构造器已校验过所有 term，因此这里忽略 match 的错误返回值。
+// node 必须非 nil；未命中任何 term 时得分为 0。
 func (t *PreferredSchedulingTerms) Score(node *v1.Node) int64 {
 	var score int64
 	nodeLabels := labels.Set(node.Labels)
@@ -393,7 +397,7 @@ type RequiredNodeAffinity struct {
 // GetRequiredNodeAffinity 返回 Pod 的 nodeSelector 与 nodeAffinity 的解析结果。
 //
 // 对 Pod 对象的便捷封装；调用方若只有 spec 字段（如 workload controller），
-// 应直接使用 NewRequiredNodeAffinity。
+// 应直接使用 NewRequiredNodeAffinity。pod 必须非 nil。
 func GetRequiredNodeAffinity(pod *v1.Pod) RequiredNodeAffinity {
 	return NewRequiredNodeAffinity(pod.Spec.NodeSelector, pod.Spec.Affinity)
 }
@@ -424,6 +428,7 @@ func NewRequiredNodeAffinity(nodeSelector map[string]string, affinity *v1.Affini
 //
 // 先检查简单的标签选择器：不匹配时立即返回，避免对复杂的 nodeAffinity
 // 做无意义的求值；只有标签匹配时才继续检查 nodeAffinity。
+// node 必须非 nil，即使两种约束都不存在，本方法也不接受 nil 节点。
 func (s RequiredNodeAffinity) Match(node *v1.Node) (bool, error) {
 	if s.labelSelector != nil {
 		if !s.labelSelector.Matches(labels.Set(node.Labels)) {

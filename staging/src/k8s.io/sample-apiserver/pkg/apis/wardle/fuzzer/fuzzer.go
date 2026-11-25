@@ -23,13 +23,13 @@ import (
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// Funcs returns the fuzzer functions for the apps api group.
+// Funcs 返回 Wardle API 的随机数据填充函数。
 // 随机值必须落在校验规则之内，否则 round-trip 测试会因对象本身非法而失败。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		// 先让 randfill 填原始值，再修正成互斥引用与匹配的 referenceType。
 		func(s *wardle.FlunderSpec, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 填充本对象，避免再次调用当前自定义函数。
 
 			// 两个引用字段不能同时有值，保留 FlunderReference、清掉另一个。
 			if len(s.FlunderReference) != 0 && len(s.FischerReference) != 0 {

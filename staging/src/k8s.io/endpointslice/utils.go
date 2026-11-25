@@ -36,7 +36,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// podToEndpoint returns an Endpoint object generated from a Pod, a Node, and a Service for a particular addressType.
 // podToEndpoint 根据 Pod、Node、Service 和指定地址类型生成对应的 Endpoint。
 // Serving 取 Pod 自身就绪状态；只要设置了删除时间戳就视为 Terminating；
 // Ready 还受 publishNotReadyAddresses 影响，并按需要填充 NodeName、Zone 与 Hostname。
@@ -45,8 +44,6 @@ func podToEndpoint(pod *v1.Pod, node *v1.Node, service *v1.Service, addressType 
 	serving := endpointutil.IsPodReady(pod)
 	// 只要 Pod 带删除时间戳，就认为它处于终止中。
 	terminating := pod.DeletionTimestamp != nil
-	// For compatibility reasons, "ready" should never be "true" if a pod is terminatng, unless
-	// publishNotReadyAddresses was set.
 	// 兼容考虑：终止中的 Pod 不应被标记为 ready，除非设置了 publishNotReadyAddresses。
 	ready := service.Spec.PublishNotReadyAddresses || (serving && !terminating)
 	// 构造 Endpoint：地址按地址类型从 Pod 状态提取，条件含 Ready/Serving/Terminating，
@@ -84,8 +81,6 @@ func podToEndpoint(pod *v1.Pod, node *v1.Node, service *v1.Service, addressType 
 	return ep
 }
 
-// getEndpointPorts returns a list of EndpointPorts generated from a Service
-// and Pod.
 // getEndpointPorts 根据 Service 与 Pod 生成 EndpointPort 列表。
 // 无头 Service 允许没有端口；对每个 ServicePort 调用 FindPort 解析容器端口，
 // 解析失败时记录日志并跳过该端口，不阻断其余端口。
@@ -93,7 +88,6 @@ func getEndpointPorts(logger klog.Logger, service *v1.Service, pod *v1.Pod) []di
 	// 初始化为空切片，而非 nil，保证返回值结构稳定。
 	endpointPorts := []discovery.EndpointPort{}
 
-	// Allow headless service not to have ports.
 	// 无头 Service 没有端口是合法的，直接返回空列表。
 	if len(service.Spec.Ports) == 0 && service.Spec.ClusterIP == v1.ClusterIPNone {
 		return endpointPorts
@@ -122,7 +116,6 @@ func getEndpointPorts(logger klog.Logger, service *v1.Service, pod *v1.Pod) []di
 	return endpointPorts
 }
 
-// getEndpointAddresses returns a list of addresses generated from a pod status.
 // getEndpointAddresses 从 Pod 状态中按指定地址类型（IPv4/IPv6）提取地址列表。
 // 为避免不规则格式的 IP，会先解析再字符串化，只保留与地址类型匹配的地址。
 func getEndpointAddresses(podStatus v1.PodStatus, service *v1.Service, addressType discovery.AddressType) []string {
@@ -131,7 +124,6 @@ func getEndpointAddresses(podStatus v1.PodStatus, service *v1.Service, addressTy
 
 	// 遍历 Pod 的所有 IP，按地址族筛选。
 	for _, podIP := range podStatus.PodIPs {
-		// We parse and restringify the pod IP in case it is in an irregular format.
 		// 先宽松解析再输出规范字符串，以统一不规则格式的 IP。
 		ip := utilnet.ParseIPSloppy(podIP.IP)
 		isIPv6PodIP := utilnet.IsIPv6(ip)
@@ -149,8 +141,6 @@ func getEndpointAddresses(podStatus v1.PodStatus, service *v1.Service, addressTy
 	return addresses
 }
 
-// newEndpointSlice returns an EndpointSlice generated from a service and
-// endpointMeta.
 // newEndpointSlice 根据 Service 与 endpointMeta 构造一个新的 EndpointSlice。
 // 设置 GenerateName、OwnerReferences、Namespace、Ports、AddressType 等字段，
 // 最后通过 setEndpointSliceLabels 生成标签。
@@ -170,18 +160,15 @@ func newEndpointSlice(logger klog.Logger, service *v1.Service, endpointMeta *end
 		AddressType: endpointMeta.addressType,
 		Endpoints:   []discovery.Endpoint{},
 	}
-	// add parent service labels
 	// 复制父 Service 的标签（保留标签由 setEndpointSliceLabels 覆盖）。
 	epSlice.Labels, _ = setEndpointSliceLabels(logger, epSlice, service, controllerName)
 
 	return epSlice
 }
 
-// getEndpointSlicePrefix returns a suitable prefix for an EndpointSlice name.
 // getEndpointSlicePrefix 返回适合作为 EndpointSlice 名称的前缀。
 // 名称合法时带尾部连字符以使生成名更美观，否则退回 Service 名本身。
 func getEndpointSlicePrefix(serviceName string) string {
-	// use the dash (if the name isn't too long) to make the pod name a bit prettier
 	// 默认加连字符；若生成的前缀不是合法 DNS 子域名则去掉连字符。
 	prefix := fmt.Sprintf("%s-", serviceName)
 	if len(apimachineryvalidation.NameIsDNSSubdomain(prefix, true)) != 0 {
@@ -190,8 +177,6 @@ func getEndpointSlicePrefix(serviceName string) string {
 	return prefix
 }
 
-// ownedBy returns true if the provided EndpointSlice is owned by the provided
-// Service.
 // ownedBy 判断给定 EndpointSlice 是否由给定 Service 所有。
 // 通过逐一比对 OwnerReferences 中的 UID、Kind 与 APIVersion 来确定。
 func ownedBy(endpointSlice *discovery.EndpointSlice, svc *v1.Service) bool {
@@ -204,9 +189,6 @@ func ownedBy(endpointSlice *discovery.EndpointSlice, svc *v1.Service) bool {
 	return false
 }
 
-// getSliceToFill will return the EndpointSlice that will be closest to full
-// when numEndpoints are added. If no EndpointSlice can be found, a nil pointer
-// will be returned.
 // getSliceToFill 返回加入 numEndpoints 后最接近填满（maxEndpoints）的 EndpointSlice；
 // 若没有 slice 能容纳则返回 nil，若恰好填满则立即返回该 slice。
 func getSliceToFill(endpointSlices []*discovery.EndpointSlice, numEndpoints, maxEndpoints int) (slice *discovery.EndpointSlice) {
@@ -229,7 +211,6 @@ func getSliceToFill(endpointSlices []*discovery.EndpointSlice, numEndpoints, max
 	return closestSlice
 }
 
-// addTriggerTimeAnnotation adds a triggerTime annotation to an EndpointSlice
 // addTriggerTimeAnnotation 为 EndpointSlice 写入或清除 triggerTime 注解。
 // triggerTime 非零时以 UTC 的 RFC3339Nano 格式写入，为零时删除该注解。
 func addTriggerTimeAnnotation(endpointSlice *discovery.EndpointSlice, triggerTime time.Time) {
@@ -241,13 +222,11 @@ func addTriggerTimeAnnotation(endpointSlice *discovery.EndpointSlice, triggerTim
 	// 有新的触发时间则写入；否则清除旧注解。
 	if !triggerTime.IsZero() {
 		endpointSlice.Annotations[v1.EndpointsLastChangeTriggerTime] = triggerTime.UTC().Format(time.RFC3339Nano)
-	} else { // No new trigger time, clear the annotation.
+	} else { // 没有新的触发时间，清除注解。
 		delete(endpointSlice.Annotations, v1.EndpointsLastChangeTriggerTime)
 	}
 }
 
-// ServiceControllerKey returns a controller key for a Service but derived from
-// an EndpointSlice.
 // ServiceControllerKey 从 EndpointSlice 推导出对应 Service 的 controller key（namespace/name）。
 // slice 为 nil 或缺少 service-name 标签时返回错误。
 func ServiceControllerKey(endpointSlice *discovery.EndpointSlice) (string, error) {
@@ -264,9 +243,6 @@ func ServiceControllerKey(endpointSlice *discovery.EndpointSlice) (string, error
 	return fmt.Sprintf("%s/%s", endpointSlice.Namespace, serviceName), nil
 }
 
-// setEndpointSliceLabels returns a map with the new endpoint slices labels and true if there was an update.
-// Slices labels must be equivalent to the Service labels except for the reserved IsHeadlessService, LabelServiceName and LabelManagedBy labels
-// Changes to IsHeadlessService, LabelServiceName and LabelManagedBy labels on the Service do not result in updates to EndpointSlice labels.
 // setEndpointSliceLabels 返回 EndpointSlice 应使用的新标签集合，以及标签是否发生了变化。
 // 除保留标签（IsHeadlessService、LabelServiceName、LabelManagedBy）外，slice 标签应与 Service 标签一致；
 // 对这些保留标签的改动不会触发 slice 标签更新。
@@ -276,14 +252,11 @@ func setEndpointSliceLabels(logger klog.Logger, epSlice *discovery.EndpointSlice
 	epLabels := make(map[string]string)
 	svcLabels := make(map[string]string)
 
-	// check if the endpoint slice and the service have the same labels
-	// clone current slice labels except the reserved labels
 	// 复制 slice 现有标签，但跳过保留标签。
 	for key, value := range epSlice.Labels {
 		if isReservedLabelKey(key) {
 			continue
 		}
-		// copy endpoint slice labels
 		epLabels[key] = value
 	}
 
@@ -293,17 +266,14 @@ func setEndpointSliceLabels(logger klog.Logger, epSlice *discovery.EndpointSlice
 			logger.Info("Service using reserved endpoint slices label", "service", klog.KObj(service), "skipping", key, "label", value)
 			continue
 		}
-		// copy service labels
 		svcLabels[key] = value
 	}
 
-	// if the labels are not identical update the slice with the corresponding service labels
 	// 两组非保留标签不一致时需要更新。
 	if !apiequality.Semantic.DeepEqual(epLabels, svcLabels) {
 		updated = true
 	}
 
-	// add or remove headless label depending on the service Type
 	// 无 ClusterIP 的 Service 写入 headless 标签，否则删除该标签。
 	if !isServiceIPSet(service) {
 		svcLabels[v1.IsHeadlessService] = ""
@@ -311,7 +281,6 @@ func setEndpointSliceLabels(logger klog.Logger, epSlice *discovery.EndpointSlice
 		delete(svcLabels, v1.IsHeadlessService)
 	}
 
-	// override endpoint slices reserved labels
 	// 强制覆盖保留标签，使用真实 Service 名与控制器名。
 	svcLabels[discovery.LabelServiceName] = service.Name
 	svcLabels[discovery.LabelManagedBy] = controllerName
@@ -319,7 +288,6 @@ func setEndpointSliceLabels(logger klog.Logger, epSlice *discovery.EndpointSlice
 	return svcLabels, updated
 }
 
-// isReservedLabelKey return true if the label is one of the reserved label for slices
 // isReservedLabelKey 判断标签键是否为 EndpointSlice 的保留标签之一。
 // 保留标签包括 LabelServiceName、LabelManagedBy 与 IsHeadlessService。
 func isReservedLabelKey(label string) bool {
@@ -332,8 +300,6 @@ func isReservedLabelKey(label string) bool {
 	return false
 }
 
-// endpointSliceEndpointLen helps sort endpoint slices by the number of
-// endpoints they contain.
 // endpointSliceEndpointLen 是按所含 Endpoint 数量对 EndpointSlice 排序的辅助类型，
 // 实现 sort.Interface：Len 返回 slice 数量，Swap 交换两个元素，
 // Less 按端点数量降序比较（端点多的排在前面）。
@@ -345,19 +311,18 @@ func (sl endpointSliceEndpointLen) Less(i, j int) bool {
 	return len(sl[i].Endpoints) > len(sl[j].Endpoints)
 }
 
-// returns a map of address types used by a service
 // getAddressTypesForService 返回 Service 使用的地址类型集合。
 // 优先依据 spec.IPFamilies 推断；为空时（集群升级/旧 apiserver 场景），
-// 有 ClusterIP 的 Service 按 ClusterIP 地址族推断，headless Service 默认按双栈处理。
+// 有 ClusterIP 的非 headless Service 按 ClusterIP 地址族推断，headless Service 默认按双栈处理。
+// 旧 apiserver 不提供 IPFamilies；若直接按空集合处理会删除已有切片，导致 ClusterIP VIP
+// 路由中断。headless Service 也暂按双栈处理以避免中断，但在新 apiserver 完成默认值前，
+// 可能暂时包含不需要的地址族。
 func getAddressTypesForService(logger klog.Logger, service *v1.Service) sets.Set[discovery.AddressType] {
 	// 初始化地址类型集合。
 	serviceSupportedAddresses := sets.New[discovery.AddressType]()
-	// TODO: (khenidak) when address types are removed in favor of
-	// v1.IPFamily this will need to be removed, and work directly with
-	// v1.IPFamily types
+	// 假定已废弃的 discovery.AddressTypeIP 不再使用。
+	// TODO(khenidak): 当地址类型被 v1.IPFamily 取代后，删除此转换逻辑并直接使用 v1.IPFamily。
 
-	// IMPORTANT: we assume that IP of (discovery.AddressType enum) is never in use
-	// as it gets deprecated
 	// 按 IPFamilies 中声明的协议族收集地址类型（IPv4/IPv6）。
 	for _, family := range service.Spec.IPFamilies {
 		if family == v1.IPv4Protocol {
@@ -371,26 +336,13 @@ func getAddressTypesForService(logger klog.Logger, service *v1.Service) sets.Set
 
 	// 已从 IPFamilies 得到结果则直接返回，无需回退推断。
 	if serviceSupportedAddresses.Len() > 0 {
-		return serviceSupportedAddresses // we have found families for this service
+		return serviceSupportedAddresses // 已找到该 Service 的 family
 	}
 
-	// TODO (khenidak) remove when (1) dual stack becomes
-	// enabled by default (2) v1.19 falls off supported versions
-
-	// Why do we need this:
-	// a cluster being upgraded to the new apis
-	// will have service.spec.IPFamilies: nil
-	// if the controller manager connected to old api
-	// server. This will have the nasty side effect of
-	// removing all slices already created for this service.
-	// this will disable all routing to service vip (ClusterIP)
-	// this ensures that this does not happen. Same for headless services
-	// we assume it is dual stack, until they get defaulted by *new* api-server
-	// this ensures that traffic is not disrupted  until then. But *may*
-	// include undesired families for headless services until then.
+	// TODO (khenidak): 待双栈默认启用且 v1.19 退出支持后，移除此回退逻辑。
 
 	// 回退（有 ClusterIP）：按 ClusterIP 的地址族推断地址类型，避免旧 apiserver 场景下误删 slice。
-	if len(service.Spec.ClusterIP) > 0 && service.Spec.ClusterIP != v1.ClusterIPNone { // headfull
+	if len(service.Spec.ClusterIP) > 0 && service.Spec.ClusterIP != v1.ClusterIPNone { // 有 ClusterIP 的非 headless Service
 		// 默认 IPv4，ClusterIP 为 IPv6 时改为 IPv6。
 		addrType := discovery.AddressTypeIPv4
 		if utilnet.IsIPv6String(service.Spec.ClusterIP) {
@@ -401,11 +353,6 @@ func getAddressTypesForService(logger klog.Logger, service *v1.Service) sets.Set
 		return serviceSupportedAddresses
 	}
 
-	// headless
-	// for now we assume two families. This should have minimal side effect
-	// if the service is headless with no selector, then this will remain the case
-	// if the service is headless with selector then chances are pods are still using single family
-	// since kubelet will need to restart in order to start patching pod status with multiple ips
 	// 回退（headless）：暂无 IPFamilies 时先按双栈处理，待 apiserver 默认值后再收敛。
 	serviceSupportedAddresses.Insert(discovery.AddressTypeIPv4)
 	serviceSupportedAddresses.Insert(discovery.AddressTypeIPv6)
@@ -435,10 +382,6 @@ func unchangedSlices(existingSlices, slicesToUpdate, slicesToDelete []*discovery
 	return unchangedSlices
 }
 
-// hintsEnabled returns true if the provided annotations include either
-// v1.AnnotationTopologyMode or v1.DeprecatedAnnotationTopologyAwareHints key
-// with a value set to "Auto" or "auto". When both are set,
-// v1.DeprecatedAnnotationTopologyAwareHints has precedence.
 // hintsEnabled 判断注解是否启用了拓扑感知提示（值需为 "Auto" 或 "auto"）。
 // 同时兼容新注解 AnnotationTopologyMode 与旧注解 DeprecatedAnnotationTopologyAwareHints，
 // 两者都存在时以旧注解为准。
@@ -455,9 +398,6 @@ func hintsEnabled(annotations map[string]string) bool {
 	return val == "Auto" || val == "auto"
 }
 
-// isServiceIPSet aims to check if the service's ClusterIP is set or not
-// the objective is not to perform validation here
-// copied from k8s.io/kubernetes/pkg/apis/core/v1/helper
 // isServiceIPSet 检查 Service 是否设置了 ClusterIP（不做合法性校验）。
 // 代码拷贝自 k8s.io/kubernetes/pkg/apis/core/v1/helper。
 func isServiceIPSet(service *v1.Service) bool {
@@ -465,10 +405,6 @@ func isServiceIPSet(service *v1.Service) bool {
 	return service.Spec.ClusterIP != v1.ClusterIPNone && service.Spec.ClusterIP != ""
 }
 
-// FindPort locates the container port for the given pod and portName.  If the
-// targetPort is a number, use that.  If the targetPort is a string, look that
-// string up in all named ports in all containers in the target pod.  If no
-// match is found, fail.
 // FindPort 查找给定 Pod 与端口名对应的容器端口。
 // targetPort 为数字时直接返回；为字符串时在所有普通容器（以及 restartPolicy=Always 的 sidecar
 // init 容器）的命名端口中按名称与协议匹配，找不到则报错。
@@ -486,7 +422,6 @@ func FindPort(pod *v1.Pod, svcPort *v1.ServicePort) (int, error) {
 				}
 			}
 		}
-		// also support sidecar container (initContainer with restartPolicy=Always)
 		// 普通容器未命中时，继续查 restartPolicy=Always 的 sidecar init 容器。
 		for _, container := range pod.Spec.InitContainers {
 			// 非 Always 重启策略的 init 容器直接跳过。

@@ -23,14 +23,11 @@ import (
 )
 
 const (
-	// unixProtocol is the only supported protocol for remote KMS provider.
-	// unixProtocol 是远程 KMS 插件唯一支持的协议（Unix Domain Socket）。
+	// unixProtocol 是远程 KMS 插件唯一支持的协议（Unix 域套接字）。
 	unixProtocol = "unix"
 )
 
-// ParseEndpoint parses the endpoint to extract schema, host or path.
 // ParseEndpoint 解析 KMS 插件端点 URL，提取并返回 socket 路径。
-//
 // 支持形式：
 //   - unix:///path/to/socket   -> 返回 /path/to/socket
 //   - unix:///@abstract        -> 返回 @abstract（Linux 抽象命名空间 socket）
@@ -53,13 +50,9 @@ func ParseEndpoint(endpoint string) (string, error) {
 		return "", fmt.Errorf("unsupported scheme %q for remote KMS provider", u.Scheme)
 	}
 
-	// Linux abstract namespace socket - no physical file required
-	// Warning: Linux Abstract sockets have not concept of ACL (unlike traditional file based sockets).
-	// However, Linux Abstract sockets are subject to Linux networking namespace, so will only be accessible to
-	// containers within the same pod (unless host networking is used).
 	// Linux 抽象命名空间 socket 不需要实体文件，路径以 @ 开头。
 	// 注意：与基于文件的 socket 不同，抽象 socket 没有 ACL 概念；
-	// 但它受 Linux 网络命名空间约束，因此通常只有同一 Pod 内的容器能访问（除非使用 host 网络）。
+	// 但它受 Linux 网络命名空间约束，因此只有同一 Pod 内的容器能访问（除非使用 host 网络）。
 	// URL 中的 /@xxx 需要去掉前导 /，还原为抽象命名空间地址 @xxx。
 	if strings.HasPrefix(u.Path, "/@") {
 		return strings.TrimPrefix(u.Path, "/"), nil

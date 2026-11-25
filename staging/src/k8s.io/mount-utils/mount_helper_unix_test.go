@@ -35,7 +35,7 @@ func writeFile(t *testing.T, content string) string {
 	return filename
 }
 
-// 用一份真实宿主的 mountinfo 快照，覆盖 bind mount、cgroup、带引号选项等形态；
+// 用一份真实宿主的 mountinfo 快照，覆盖绑定挂载、cgroup、带引号选项等形态；
 // 按 ID 定位条目而非按行号，前提是快照里 ID 不重复。
 func TestParseMountInfo(t *testing.T) {
 	info := `62 0 253:0 / / rw,relatime shared:1 - ext4 /dev/mapper/ssd-root rw,seclabel,data=ordered
@@ -231,8 +231,8 @@ func TestParseMountInfo(t *testing.T) {
 	}
 }
 
-// malformed 输入必须给出带原始行的错误，方便定位是哪一行坏了；
-// 期望信息里保留字段名，避免只报 invalid syntax 让人猜。
+// 格式错误的输入必须给出带原始行的错误，方便定位是哪一行坏了；
+// 期望信息里保留字段名，避免只报“语法无效”让人猜。
 func TestBadParseMountInfo(t *testing.T) {
 	tests := []struct {
 		info         string

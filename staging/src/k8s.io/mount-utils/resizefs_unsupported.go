@@ -24,25 +24,25 @@ import (
 	utilexec "k8s.io/utils/exec"
 )
 
-// ResizeFs Provides support for resizing file systems
-// 本文件为不支持扩容的平台提供桩实现，保证接口在各平台都能编译通过。
+// ResizeFs 在非 Linux 平台提供文件系统扩容的桩实现。
+// 本文件保证接口在各平台都能编译通过，但不执行实际扩容。
 type ResizeFs struct {
 	exec utilexec.Interface
 }
 
-// NewResizeFs returns new instance of resizer
+// NewResizeFs 创建扩容器实例。
 // 保留 exec 参数以维持跨平台一致的构造函数签名，尽管此实现用不到它。
 func NewResizeFs(exec utilexec.Interface) *ResizeFs {
 	return &ResizeFs{exec: exec}
 }
 
-// Resize perform resize of file system
-// 明确报错而不是静默成功，让调用方立即知道该平台不支持扩容。
+// Resize 尝试扩容文件系统。
+// 非 Linux 平台明确报错而不是静默成功，让调用方立即知道该平台不支持扩容。
 func (resizefs *ResizeFs) Resize(devicePath string, deviceMountPath string) (bool, error) {
 	return false, fmt.Errorf("Resize is not supported for this build")
 }
 
-// NeedResize check whether mounted volume needs resize
+// NeedResize 判断已挂载卷是否需要扩容。
 // 与 Resize 一致：不做猜测，直接返回不支持的错误。
 func (resizefs *ResizeFs) NeedResize(devicePath string, deviceMountPath string) (bool, error) {
 	return false, fmt.Errorf("NeedResize is not supported for this build")

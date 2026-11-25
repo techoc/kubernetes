@@ -21,77 +21,63 @@ package v1beta1;
 option go_package = "k8s.io/kms/apis/v1beta1";
 option deprecated = true;
 
-// This service defines the public APIs for remote KMS provider.
 // KeyManagementService 定义远程 KMS 提供者对外的 gRPC 服务（KMS v1，已弃用）。
 service KeyManagementService {
-    // Version returns the runtime name and runtime version of the KMS provider.
     // Version RPC：返回 KMS 提供者的名称与版本，apiserver 用它做版本兼容检查。
     rpc Version(VersionRequest) returns (VersionResponse) {}
 
-    // Execute decryption operation in KMS provider.
     // Decrypt RPC：在 KMS 提供者中执行解密操作。
     rpc Decrypt(DecryptRequest) returns (DecryptResponse) {}
-    // Execute encryption operation in KMS provider.
     // Encrypt RPC：在 KMS 提供者中执行加密操作。
     rpc Encrypt(EncryptRequest) returns (EncryptResponse) {}
 }
 
-// Deprecated: KMSv1 is deprecated in v1.28 and will only receive security updates going forward. Use KMSv2 instead.
+// Deprecated: KMSv1 自 v1.28 起已弃用，后续仅接收安全更新；请改用 KMSv2。
 // VersionRequest 是版本探测请求，携带 KMS 插件 API 版本。
 message VersionRequest {
-    // Version of the KMS plugin API.
     // version 是 KMS 插件 API 的版本字符串。
     string version = 1;
 }
 
-// Deprecated: KMSv1 is deprecated in v1.28 and will only receive security updates going forward. Use KMSv2 instead.
+// Deprecated: KMSv1 自 v1.28 起已弃用，后续仅接收安全更新；请改用 KMSv2。
 // VersionResponse 是版本探测响应，包含 API 版本与提供者自身的运行时信息。
 message VersionResponse {
-    // Version of the KMS plugin API.
     // version 是 KMS 插件 API 版本。
     string version = 1;
-    // Name of the KMS provider.
     // runtime_name 是 KMS 提供者的名称。
     string runtime_name = 2;
-    // Version of the KMS provider. The string must be semver-compatible.
     // runtime_version 是提供者自身版本，必须符合语义化版本（semver）规范。
     string runtime_version = 3;
 }
 
-// Deprecated: KMSv1 is deprecated in v1.28 and will only receive security updates going forward. Use KMSv2 instead.
+// Deprecated: KMSv1 自 v1.28 起已弃用，后续仅接收安全更新；请改用 KMSv2。
 // DecryptRequest 是解密请求：指定 API 版本并给出待解密密文。
 message DecryptRequest {
-    // Version of the KMS plugin API.
     // version 是 KMS 插件 API 版本。
     string version = 1;
-    // The data to be decrypted.
     // cipher 是待解密的密文字节。
     bytes cipher = 2;
 }
 
-// Deprecated: KMSv1 is deprecated in v1.28 and will only receive security updates going forward. Use KMSv2 instead.
+// Deprecated: KMSv1 自 v1.28 起已弃用，后续仅接收安全更新；请改用 KMSv2。
 // DecryptResponse 是解密响应，包含还原后的明文。
 message DecryptResponse {
-    // The decrypted data.
     // plain 是解密得到的明文字节。
     bytes plain = 1;
 }
 
-// Deprecated: KMSv1 is deprecated in v1.28 and will only receive security updates going forward. Use KMSv2 instead.
+// Deprecated: KMSv1 自 v1.28 起已弃用，后续仅接收安全更新；请改用 KMSv2。
 // EncryptRequest 是加密请求：指定 API 版本并给出待加密明文。
 message EncryptRequest {
-    // Version of the KMS plugin API.
     // version 是 KMS 插件 API 版本。
     string version = 1;
-    // The data to be encrypted.
     // plain 是待加密的明文字节。
     bytes plain = 2;
 }
 
-// Deprecated: KMSv1 is deprecated in v1.28 and will only receive security updates going forward. Use KMSv2 instead.
+// Deprecated: KMSv1 自 v1.28 起已弃用，后续仅接收安全更新；请改用 KMSv2。
 // EncryptResponse 是加密响应，包含密文。
 message EncryptResponse {
-    // The encrypted data.
     // cipher 是加密后的密文字节。
     bytes cipher = 1;
 }

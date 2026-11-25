@@ -25,7 +25,7 @@ import (
 	"k8s.io/sample-apiserver/pkg/registry"
 )
 
-// NewREST returns a RESTStorage object that will work against API services.
+// NewREST 创建基于 etcd 的 Fischer RESTStorage。
 // 用通用 Store 接上策略与后端选项，启动时的选项校验错误在这里就暴露出来。
 func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*registry.REST, error) {
 	strategy := NewStrategy(scheme)
@@ -41,7 +41,7 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*reg
 		UpdateStrategy: strategy,
 		DeleteStrategy: strategy,
 
-		// TODO: define table converter that exposes more than name/creation timestamp
+		// TODO：定义表格转换器，暴露名称和创建时间之外的字段。
 		// 默认 converter 只够 kubectl get 显示基本信息，够示例演示用。
 		TableConvertor: rest.NewDefaultTableConvertor(wardle.Resource("fischers")),
 	}

@@ -70,7 +70,6 @@ func TestGRPCService(t *testing.T) {
 	// 创建连接到该 socket 的 gRPC 客户端。
 	client := newClient(t, address)
 
-	// make sure the gRPC server is up before running tests
 	// 等待服务端就绪：循环调用 Status 探测，直到成功或整体超时。
 ready:
 	for {

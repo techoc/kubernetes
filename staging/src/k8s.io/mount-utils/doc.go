@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package mount defines an interface to mounting filesystems.
+// Package mount 定义用于挂载文件系统的接口。
 //
 // 本包按平台拆分具体实现，敏感挂载选项与普通选项分开传递以免落进日志；调用方应优先使用 Interface。
 package mount

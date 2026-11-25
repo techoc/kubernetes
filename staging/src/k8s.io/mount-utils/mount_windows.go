@@ -34,17 +34,13 @@ const (
 	accessDenied string = "access is denied"
 )
 
-// Mounter provides the default implementation of mount.Interface
-// for the windows platform.  This implementation assumes that the
-// kubelet is running in the host's root mount namespace.
+// Mounter 是 Windows 平台的默认 mount.Interface 实现。
 // Windows 上挂载靠符号链接与 SMB 全局映射实现，不依赖 Linux 的挂载命名空间。
 type Mounter struct {
 	mounterPath string
 }
 
-// New returns a mount.Interface for the current system.
-// It provides options to override the default mounter behavior.
-// mounterPath allows using an alternative to `/bin/mount` for mounting.
+// New 返回当前系统的 mount.Interface，并允许覆盖默认 mounter 行为。
 // Windows 实现不使用 mounterPath，仍接收该参数以保持与各平台一致的签名。
 func New(mounterPath string) Interface {
 	return &Mounter{
@@ -52,37 +48,29 @@ func New(mounterPath string) Interface {
 	}
 }
 
-// acquire lock for smb mount
-// 按源路径加锁，避免并发对同一 SMB 共享重复建映射。
+// getSMBMountMutex 按源路径加锁，避免并发对同一 SMB 共享重复建立映射。
 var getSMBMountMutex = keymutex.NewHashed(0)
 
-// Mount : mounts source to target with given options.
-// currently only supports cifs(smb), bind mount(for disk)
+// Mount 使用给定选项将 source 挂载到 target，支持 CIFS（SMB）和磁盘绑定挂载。
 // 敏感选项走单独入口，普通挂载直接委托给它。
 func (mounter *Mounter) Mount(source string, target string, fstype string, options []string) error {
 	return mounter.MountSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 }
 
-// MountSensitiveWithoutSystemd is the same as MountSensitive() but disable using ssytemd mount.
-// Windows not supported systemd mount, this function degrades to MountSensitive().
-// Windows 没有 systemd 挂载路径，降级转发即可。
+// MountSensitiveWithoutSystemd 与 MountSensitive 相同，但不使用 systemd 挂载。
+// Windows 没有 systemd 挂载路径，降级转发并保留敏感选项即可。
 func (mounter *Mounter) MountSensitiveWithoutSystemd(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	return mounter.MountSensitive(source, target, fstype, options, sensitiveOptions /* sensitiveOptions */)
 }
 
-// MountSensitiveWithoutSystemdWithMountFlags is the same as MountSensitiveWithoutSystemd with additional mount flags
-// Windows not supported systemd mount, this function degrades to MountSensitive().
-// 挂载标志在 Windows 实现中无对应语义，同样忽略并转发。
+// MountSensitiveWithoutSystemdWithMountFlags 在 MountSensitiveWithoutSystemd 基础上附加挂载标志。
+// Windows 没有 systemd 挂载路径，也不使用这些标志，降级转发并保留敏感选项。
 func (mounter *Mounter) MountSensitiveWithoutSystemdWithMountFlags(source string, target string, fstype string, options []string, sensitiveOptions []string, mountFlags []string) error {
 	return mounter.MountSensitive(source, target, fstype, options, sensitiveOptions /* sensitiveOptions */)
 }
 
-// MountSensitive is the same as Mount() but this method allows
-// sensitiveOptions to be passed in a separate parameter from the normal
-// mount options and ensures the sensitiveOptions are never logged. This
-// method should be used by callers that pass sensitive material (like
-// passwords) as mount options.
-// 先生成脱敏后的选项用于日志，口令仅经环境变量传给 PowerShell，不进命令行。
+// MountSensitive 与 Mount 相同，但 sensitiveOptions 单独传递且绝不写入日志。
+// 调用方应将口令等敏感材料放入 sensitiveOptions；日志仅使用脱敏选项，口令经环境变量传给 PowerShell。
 func (mounter *Mounter) MountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	target = NormalizeWindowsPath(target)
 	sanitizedOptionsForLogging := sanitizedOptionsForLogging(options, sensitiveOptions)
@@ -112,13 +100,12 @@ func (mounter *Mounter) MountSensitive(source string, target string, fstype stri
 				sanitizedOptionsForLogging, len(allOptions), source, target)
 		}
 
-		// currently only cifs mount is supported
+		// 目前仅支持 CIFS 挂载。
 		// 非 CIFS 类型没有对应的映射命令，提前失败比静默建错映射更清楚。
 		if strings.ToLower(fstype) != "cifs" {
 			return fmt.Errorf("only cifs mount is supported now, fstype: %q, mounting source (%q), target (%q), with options (%q)", fstype, source, target, sanitizedOptionsForLogging)
 		}
 
-		// lock smb mount for the same source
 		// 同一共享的映射检查与重建必须串行，避免并发互相覆盖。
 		getSMBMountMutex.LockKey(source)
 		defer getSMBMountMutex.UnlockKey(source)
@@ -148,13 +135,10 @@ func (mounter *Mounter) MountSensitive(source string, target string, fstype stri
 		}
 	}
 
-	// There is an issue in golang where EvalSymlinks fails on Windows when passed a
-	// UNC share root path without a trailing backslash.
-	// Ex: \\SERVER\share will fail to resolve but \\SERVER\share\ will resolve
-	// containerD on Windows calls EvalSymlinks so we'll add the backslash when making the symlink if it is missing.
-	// https://github.com/golang/go/pull/42096 fixes this issue in golang but a fix will not be available until
-	// golang v1.16
-	// 绕过 Go 对 UNC 根路径解析的缺陷：补上结尾反斜杠让 containerD 的 EvalSymlinks 可正常工作。
+	// Go 的 EvalSymlinks 曾无法解析不带结尾反斜杠的 UNC 共享根路径。
+	// 例如 \\SERVER\share 解析失败，而 \\SERVER\share\ 可以解析。
+	// Windows 上的 containerD 会调用 EvalSymlinks，因此创建软链接前需补齐反斜杠。
+	// 该问题由 https://github.com/golang/go/pull/42096 修复，并随 Go 1.16 发布。
 	mklinkSource := bindSource
 	if !strings.HasSuffix(mklinkSource, "\\") {
 		mklinkSource = mklinkSource + "\\"
@@ -170,17 +154,16 @@ func (mounter *Mounter) MountSensitive(source string, target string, fstype stri
 	return nil
 }
 
-// do the SMB mount with username, password, remotepath
-// return (output, error)
+// newSMBMapping 使用用户名、口令和远程路径建立 SMB 映射，返回命令输出与错误。
 // 用户名与口令放入环境变量而非命令行参数，防止被进程列表或日志泄露。
 func newSMBMapping(username, password, remotepath string) (string, error) {
 	if username == "" || password == "" || remotepath == "" {
 		return "", fmt.Errorf("invalid parameter(username: %s, password: %s, remotepath: %s)", username, sensitiveOptionsRemoved, remotepath)
 	}
 
-	// use PowerShell Environment Variables to store user input string to prevent command line injection
+	// 通过 PowerShell 环境变量传递用户输入，避免命令行注入。
 	// https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables?view=powershell-5.1
-	// 通过环境变量传值可避免凭据出现在命令行中，从而规避注入与泄露风险。
+	// 环境变量传值也避免凭据出现在命令行中，降低泄露风险。
 	cmdLine := `$PWord = ConvertTo-SecureString -String $Env:smbpassword -AsPlainText -Force` +
 		`;$Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Env:smbuser, $PWord` +
 		`;New-SmbGlobalMapping -RemotePath $Env:smbremotepath -Credential $Credential -RequirePrivacy $true`
@@ -194,8 +177,7 @@ func newSMBMapping(username, password, remotepath string) (string, error) {
 	return string(output), err
 }
 
-// check whether remotepath is already mounted
-// 建映射前先确认是否已存在，避免重复建立导致冲突。
+// isSMBMappingExist 检查远程路径是否已经建立 SMB 映射，避免重复建立导致冲突。
 func isSMBMappingExist(remotepath string) bool {
 	cmd := exec.Command("powershell", "/c", `Get-SmbGlobalMapping -RemotePath $Env:smbremotepath`)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("smbremotepath=%s", remotepath))
@@ -203,8 +185,7 @@ func isSMBMappingExist(remotepath string) bool {
 	return err == nil
 }
 
-// check whether remotepath is valid
-// return (true, nil) if remotepath is valid
+// isValidPath 检查远程路径是否有效，有效时返回 true 和 nil。
 // 已有映射出错时用它区分凭据失效与路径本身不可达。
 func isValidPath(remotepath string) (bool, error) {
 	cmd := exec.Command("powershell", "/c", `Test-Path $Env:remotepath`)
@@ -222,7 +203,7 @@ func isAccessDeniedError(err error) bool {
 	return err != nil && strings.Contains(strings.ToLower(err.Error()), accessDenied)
 }
 
-// remove SMB mapping
+// removeSMBMapping 删除指定远程路径的 SMB 映射，返回命令输出与错误。
 // 凭据变更时先清掉旧映射，再按新凭据重建。
 func removeSMBMapping(remotepath string) (string, error) {
 	cmd := exec.Command("powershell", "/c", `Remove-SmbGlobalMapping -RemotePath $Env:smbremotepath -Force`)
@@ -231,7 +212,7 @@ func removeSMBMapping(remotepath string) (string, error) {
 	return string(output), err
 }
 
-// Unmount unmounts the target.
+// Unmount 卸载目标。
 // Windows 上的挂载是符号链接，卸载即删除该链接。
 func (mounter *Mounter) Unmount(target string) error {
 	klog.V(4).Infof("Unmount target (%q)", target)
@@ -244,13 +225,13 @@ func (mounter *Mounter) Unmount(target string) error {
 	return nil
 }
 
-// List returns a list of all mounted filesystems. todo
-// Windows 下缺少统一的挂载表查询接口，故返回空列表。
+// List 返回已挂载文件系统列表。
+// Windows 下缺少统一的挂载表查询接口，故当前始终返回空列表。
 func (mounter *Mounter) List() ([]MountPoint, error) {
 	return []MountPoint{}, nil
 }
 
-// IsLikelyNotMountPoint determines if a directory is not a mountpoint.
+// IsLikelyNotMountPoint 判断目录是否可能不是挂载点。
 // 通过符号链接位判断；特殊文件也视为挂载点，以免误卸载。
 func (mounter *Mounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	stat, err := os.Lstat(file)
@@ -261,7 +242,7 @@ func (mounter *Mounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	if stat.Mode()&os.ModeSymlink != 0 {
 		return false, err
 	}
-	// go1.23 behavior change: https://github.com/golang/go/issues/63703#issuecomment-2535941458
+	// Go 1.23 行为变更：https://github.com/golang/go/issues/63703#issuecomment-2535941458
 	// 适配 Go 1.23 对 Windows 特殊文件模式位的变更，避免误判为普通目录。
 	if stat.Mode()&os.ModeIrregular != 0 {
 		return false, err
@@ -269,14 +250,14 @@ func (mounter *Mounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	return true, nil
 }
 
-// CanSafelySkipMountPointCheck always returns false on Windows
-// Windows 无法保证跳过检查安全，故始终要求进行探测。
+// CanSafelySkipMountPointCheck 表示是否可以安全跳过挂载点检查。
+// Windows 无法保证跳过检查安全，故始终返回 false，要求调用方进行探测。
 func (mounter *Mounter) CanSafelySkipMountPointCheck() bool {
 	return false
 }
 
-// IsMountPoint: determines if a directory is a mountpoint.
-// 复用反向判定，保持两个入口结果一致。
+// IsMountPoint 判断目录是否为挂载点。
+// 复用 IsLikelyNotMountPoint 的反向判定，保持两个入口结果一致。
 func (mounter *Mounter) IsMountPoint(file string) (bool, error) {
 	isNotMnt, err := mounter.IsLikelyNotMountPoint(file)
 	if err != nil {
@@ -285,8 +266,8 @@ func (mounter *Mounter) IsMountPoint(file string) (bool, error) {
 	return !isNotMnt, nil
 }
 
-// GetMountRefs : empty implementation here since there is no place to query all mount points on Windows
-// 无全局挂载表可查，只能返回自身；路径损坏时按未挂载处理，避免误报引用。
+// GetMountRefs 返回给定路径的挂载引用。
+// Windows 无全局挂载表可查，有效路径只返回自身；不存在或损坏的路径返回空列表。
 func (mounter *Mounter) GetMountRefs(pathname string) ([]string, error) {
 	windowsPath := NormalizeWindowsPath(pathname)
 	pathExists, pathErr := PathExists(windowsPath)
@@ -301,9 +282,10 @@ func (mounter *Mounter) GetMountRefs(pathname string) ([]string, error) {
 	return []string{pathname}, nil
 }
 
-// 先格式化裸盘再挂载，磁盘号即命令参数，故必须先校验格式。
+// SafeFormatAndMount.formatAndMountSensitive 先初始化并格式化裸盘，再挂载到目标路径。
+// 磁盘号会传给 PowerShell，必须先校验格式；敏感选项继续单独传递。
 func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string, formatOptions []string) error {
-	// Try to mount the disk
+	// 尝试格式化并挂载磁盘。
 	klog.V(4).Infof("Attempting to formatAndMount disk: %s %s %s", fstype, source, target)
 
 	if err := ValidateDiskNumber(source); err != nil {
@@ -312,8 +294,7 @@ func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target
 	}
 
 	if len(fstype) == 0 {
-		// Use 'NTFS' as the default
-		// 未指定文件系统时采用 Windows 默认格式，避免格式化命令缺少参数。
+		// 未指定文件系统时使用 NTFS，避免格式化命令缺少参数。
 		fstype = "NTFS"
 	}
 
@@ -343,11 +324,10 @@ func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target
 	return mounter.MountSensitive(driverPath, target, fstype, options, sensitiveOptions)
 }
 
-// ListVolumesOnDisk - returns back list of volumes(volumeIDs) in the disk (requested in diskID).
-// 取到卷 ID 后供上层选定实际挂载路径。
+// ListVolumesOnDisk 返回指定磁盘上的卷 ID 列表，供上层选定实际挂载路径。
 func ListVolumesOnDisk(diskID string) (volumeIDs []string, err error) {
-	// If a Disk has multiple volumes, Get-Volume may not return items in the same order.
-	// 排序保证多次调用返回顺序稳定，避免选中错误的卷。
+	// 同一磁盘有多个卷时，Get-Volume 的返回顺序可能变化。
+	// 按 UniqueId 排序保证多次调用顺序稳定，避免选中错误的卷。
 	cmd := exec.Command("powershell", "/c", "(Get-Disk -DeviceId $env:diskID | Get-Partition | Get-Volume | Sort-Object -Property UniqueId).UniqueId")
 	cmd.Env = append(os.Environ(), fmt.Sprintf("diskID=%s", diskID))
 	klog.V(8).Infof("Executing command: %q", cmd.String())

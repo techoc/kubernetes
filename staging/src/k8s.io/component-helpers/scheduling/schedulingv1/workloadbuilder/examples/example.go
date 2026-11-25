@@ -184,8 +184,9 @@ func ExampleJobControllerE2E() {
 // ExampleDelegatedPodGroupFromExistingWorkload 演示控制器如何从自己没有编译过的
 // Workload 物化运行时 PodGroup。Workload 由父控制器（或手写模板）拥有并已持久化，
 // 它就是事实来源：NewBuilderFromExistingWorkload 直接接收该 Workload，子控制器不提供
-// 任何自己的调度输入。Validate 是空操作（持久化对象已通过 apiserver 校验），
-// BuildWorkload 会被拒绝，确保该对象不会被重新编译覆盖。这对应 Job 控制器的委托式 PodGroup 模式。
+// 任何自己的调度输入。Validate 会报告 InternalError，因为没有 WorkloadItem 树可校验，
+// 也不应把 apiserver 已完成的校验误当成空操作；BuildWorkload 同样会被拒绝，
+// 确保该对象不会被重新编译覆盖。这对应 Job 控制器的委托式 PodGroup 模式。
 // 这个例子存在的意义是区分两种所有权：Workload 属于父控制器，PodGroup 属于子控制器。
 // 子控制器只有“按现有模板物化”的权限，不能反过来重建父控制器的对象。
 func ExampleDelegatedPodGroupFromExistingWorkload() {
@@ -205,7 +206,8 @@ func ExampleDelegatedPodGroupFromExistingWorkload() {
 	owner := &metav1.OwnerReference{APIVersion: "batch/v1", Kind: "Job", Name: "trainer-worker", UID: "job-uid"}
 	builder := workloadbuilder.NewBuilderFromExistingWorkload(parentWorkload, workloadbuilder.BuildOptions{Owner: owner})
 
-	// 对从既有 Workload 构造的 Builder 来说，Validate 是空操作。
+	// 对从既有 Workload 构造的 Builder 调用 Validate 会返回 InternalError；
+	// 该模式只用于物化，不应重新校验父控制器已经持久化的对象。
 	if errs := builder.Validate(context.Background(), workloadbuilder.ValidationInput{}); len(errs) > 0 {
 		fmt.Printf("unexpected validation errors: %v\n", errs.ToAggregate())
 		return

@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package streaming contains the staged module root for Kubernetes transport streaming primitives.
+// Package streaming 是 Kubernetes 传输流原语的独立 staging 模块。
+// 将这些原语独立成模块，组件便无需为主仓库的庞大依赖树付出额外代价。
 package streaming
-
-// 本模块独立承载流传输原语，便于各组件只依赖这一小组接口而不牵连主仓库的庞大依赖树。

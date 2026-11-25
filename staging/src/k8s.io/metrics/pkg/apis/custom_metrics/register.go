@@ -21,22 +21,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-// 各版本共用同一 group 名，仅通过 Version 区分，故集中定义在此。
+// GroupName 是本包使用的 API 组名称。
+// 各版本共用同一组名，仅通过 Version 区分，因此集中定义在此。
 const GroupName = "custom.metrics.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-// 内部版本只存在于进程内，不会出现在 API 响应中，专门作为跨版本转换的中转站。
+// SchemeGroupVersion 是用于注册本包对象的组版本。
+// 内部版本只存在于进程内，不出现在 API 响应中，仅作为跨版本转换的中转。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns back a Group qualified GroupKind
-// helper 给转换器使用，避免各处手写 GroupKind 字面量。
+// Kind 接收不限定的 kind，返回包含组名的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns back a Group qualified GroupResource
-// 只补 group，不补 version；调用方再按需加版本，便于复用同一 helper。
+// Resource 接收不限定的 resource，返回包含组名的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
@@ -44,10 +42,11 @@ func Resource(resource string) schema.GroupResource {
 var (
 	// SchemeBuilder 注册内部版本类型，供转换函数在内存中使用。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme 将本包的注册函数应用到 scheme。
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// addKnownTypes 只注册内部版本：外部版本由各自的 register.go 负责。
+// addKnownTypes 只注册内部版本类型，外部版本由各自的 register.go 负责。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&MetricValue{},

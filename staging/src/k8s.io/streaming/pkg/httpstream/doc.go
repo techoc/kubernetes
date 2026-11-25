@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package httpstream adds multiplexed streaming support to HTTP requests and
-// responses via connection upgrades.
+// Package httpstream 通过连接升级，为 HTTP 请求和响应提供多路复用流传输能力。
+// 本包只定义升级协商接口、头部常量和错误类型，具体协议实现留在子包中；
+// 客户端使用 UpgradeRoundTripper，服务端使用 ResponseUpgrader，共享同一套抽象。
 package httpstream
-
-// 本包只定义升级协商所需的接口、头部常量与错误类型；具体协议实现放在子包中。
-// 客户端用 UpgradeRoundTripper，服务端用 ResponseUpgrader，两侧共享这里的抽象。

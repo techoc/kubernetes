@@ -24,65 +24,56 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// FakeMounter implements mount.Interface for tests.
+// FakeMounter 在测试中实现 mount.Interface。
 // 本类型用内存中的挂载表替代真实系统调用，让测试无需 root 权限即可复现挂载状态。
 type FakeMounter struct {
+	// MountPoints 保存当前可见的挂载点，测试可直接预置或核对。
 	MountPoints []MountPoint
 	log         []FakeAction
-	// Error to return for a path when calling IsLikelyNotMountPoint
-	// 注入检查错误，用于模拟挂载点失效等真实文件系统才有的异常路径。
+	// MountCheckErrors 注入指定路径的检查错误，用于模拟挂载点失效等真实文件系统才有的异常路径。
 	MountCheckErrors map[string]error
-	// Some tests run things in parallel, make sure the mounter does not produce
-	// any golang's DATA RACE warnings.
-	// 并发测试共享同一个 mounter，故所有可变状态都需由此锁保护。
+	// mutex 保护所有可变状态，避免并发测试共享 mounter 时触发数据竞争。
 	mutex sync.Mutex
-	// 卸载前回调，供测试在真正移除挂载点前插入断言或模拟失败。
+	// UnmountFunc 是卸载前回调，供测试在真正移除挂载点前插入断言或模拟失败。
 	UnmountFunc UnmountFunc
-	// 为需要跳过挂载点探测的测试留出开关，避免依赖真实文件系统状态。
+	// skipMountPointCheck 为需要跳过挂载点探测的测试留出开关，避免依赖真实文件系统状态。
 	skipMountPointCheck bool
 }
 
-// UnmountFunc is a function callback to be executed during the Unmount() call.
-// 允许测试在卸载时注入副作用，例如验证调用顺序或返回自定义错误。
+// UnmountFunc 是 Unmount 执行期间调用的回调，用于注入副作用、验证调用顺序或返回自定义错误。
 type UnmountFunc func(path string) error
 
 var _ Interface = &FakeMounter{}
 
 const (
-	// FakeActionMount is the string for specifying mount as FakeAction.Action
-	// 用字符串而非枚举，便于测试直接断言日志内容。
+	// FakeActionMount 表示挂载操作，供测试直接断言 FakeAction.Action。
 	FakeActionMount = "mount"
-	// FakeActionUnmount is the string for specifying unmount as FakeAction.Action
-	// 同上，保持日志表示简单可读。
+	// FakeActionUnmount 表示卸载操作，供测试直接断言 FakeAction.Action。
 	FakeActionUnmount = "unmount"
 )
 
-// FakeAction objects are logged every time a fake mount or unmount is called.
-// 记录操作内容，测试据此核对调用方是否按预期发起挂载/卸载。
+// FakeAction 记录每次假挂载或假卸载，测试据此核对调用方是否按预期发起操作。
 type FakeAction struct {
-	Action string // "mount" or "unmount"
-	Target string // applies to both mount and unmount actions
-	Source string // applies only to "mount" actions
-	FSType string // applies only to "mount" actions
+	Action string // 值为 "mount" 或 "unmount"
+	Target string // 挂载与卸载操作均适用的目标路径
+	Source string // 仅适用于挂载操作的源路径
+	FSType string // 仅适用于挂载操作的文件系统类型
 }
 
-// NewFakeMounter returns a FakeMounter struct that implements Interface and is
-// suitable for testing purposes.
-// 传入初始挂载表，让测试从预置的挂载状态出发。
+// NewFakeMounter 返回实现 Interface 的 FakeMounter，并从传入的初始挂载表开始测试。
 func NewFakeMounter(mps []MountPoint) *FakeMounter {
 	return &FakeMounter{
 		MountPoints: mps,
 	}
 }
 
-// 链式设置跳过挂载点检查的开关，方便测试一行内装配 mounter。
+// WithSkipMountPointCheck 启用跳过挂载点检查并返回自身，便于测试链式装配 mounter。
 func (f *FakeMounter) WithSkipMountPointCheck() *FakeMounter {
 	f.skipMountPointCheck = true
 	return f
 }
 
-// ResetLog clears all the log entries in FakeMounter
-// 让多个断言阶段互不干扰，清空前同样加锁以匹配并发写入。
+// ResetLog 清空 FakeMounter 的全部操作日志；清空前加锁以匹配并发写入。
 func (f *FakeMounter) ResetLog() {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -90,8 +81,7 @@ func (f *FakeMounter) ResetLog() {
 	f.log = []FakeAction{}
 }
 
-// GetLog returns the slice of FakeActions taken by the mounter
-// 返回内部切片引用，调用方只读即可，避免拷贝开销。
+// GetLog 返回 mounter 记录的操作日志切片；调用方应只读，避免与内部状态发生数据竞争。
 func (f *FakeMounter) GetLog() []FakeAction {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -99,18 +89,13 @@ func (f *FakeMounter) GetLog() []FakeAction {
 	return f.log
 }
 
-// Mount records the mount event and updates the in-memory mount points for FakeMounter
-// 敏感选项走单独入口，普通挂载只需转发即可。
+// Mount 记录挂载事件并更新 FakeMounter 的内存挂载点；敏感选项走单独入口，普通挂载只需转发。
 func (f *FakeMounter) Mount(source string, target string, fstype string, options []string) error {
 	return f.MountSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 }
 
-// Mount records the mount event and updates the in-memory mount points for FakeMounter
-// sensitiveOptions to be passed in a separate parameter from the normal
-// mount options and ensures the sensitiveOptions are never logged. This
-// method should be used by callers that pass sensitive material (like
-// passwords) as mount options.
-// 敏感选项只进入内存挂载表，不写入操作日志，避免测试日志泄露口令。
+// MountSensitive 记录挂载事件并更新内存挂载点。
+// sensitiveOptions 与普通选项分开传递，只写入内存挂载表而不进入操作日志，避免测试日志泄露口令。
 func (f *FakeMounter) MountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -118,19 +103,16 @@ func (f *FakeMounter) MountSensitive(source string, target string, fstype string
 	opts := []string{}
 
 	for _, option := range options {
-		// find 'bind' option
+		// 查找 bind 选项。
 		if option == "bind" {
-			// This is a bind-mount. In order to mimic linux behaviour, we must
-			// use the original device of the bind-mount as the real source.
-			// E.g. when mounted /dev/sda like this:
+			// 为模拟 Linux 行为，绑定挂载必须使用原挂载点的设备作为源。
+			// 例如依次执行：
 			//      $ mount /dev/sda /mnt/test
 			//      $ mount -o bind /mnt/test /mnt/bound
-			// then /proc/mount contains:
+			// /proc/mount 中会记录：
 			// /dev/sda /mnt/test
 			// /dev/sda /mnt/bound
-			// (and not /mnt/test /mnt/bound)
-			// I.e. we must use /dev/sda as source instead of /mnt/test in the
-			// bind mount.
+			// 而不是 /mnt/test /mnt/bound，因此这里用 /dev/sda 替代 /mnt/test。
 			for _, mnt := range f.MountPoints {
 				if source == mnt.Path {
 					source = mnt.Device
@@ -138,11 +120,11 @@ func (f *FakeMounter) MountSensitive(source string, target string, fstype string
 				}
 			}
 		}
-		// reuse MountPoint.Opts field to mark mount as readonly
+		// 复用 MountPoint.Opts 字段，使包含 ro 的挂载在内存表中呈现为只读。
 		opts = append(opts, option)
 	}
 
-	// If target is a symlink, get its absolute path
+	// 目标为软链接时解析其实际路径；解析失败则保留原路径。
 	absTarget, err := filepath.EvalSymlinks(target)
 	if err != nil {
 		absTarget = target
@@ -153,23 +135,25 @@ func (f *FakeMounter) MountSensitive(source string, target string, fstype string
 	return nil
 }
 
-// 假实现没有 systemd 概念，忽略该差异直接走通用挂载路径。
+// MountSensitiveWithoutSystemd 忽略 systemd 差异并转交通用挂载路径。
+// 假实现当前也不保留 sensitiveOptions，与既有行为保持一致。
 func (f *FakeMounter) MountSensitiveWithoutSystemd(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	return f.MountSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 }
 
-// 同理，挂载标志在这里不影响内存状态，转交通用实现即可。
+// MountSensitiveWithoutSystemdWithMountFlags 忽略 systemd 与挂载标志差异，转交通用实现。
+// 假实现当前也不保留 sensitiveOptions。
 func (f *FakeMounter) MountSensitiveWithoutSystemdWithMountFlags(source string, target string, fstype string, options []string, sensitiveOptions []string, mountFlags []string) error {
 	return f.MountSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 }
 
-// Unmount records the unmount event and updates the in-memory mount points for FakeMounter
-// 同步清理对应的检查错误，避免残留错误污染后续断言。
+// Unmount 记录卸载事件并更新 FakeMounter 的内存挂载点。
+// 同步清理指定的检查错误，避免残留错误污染后续断言。
 func (f *FakeMounter) Unmount(target string) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
-	// If target is a symlink, get its absolute path
+	// 目标为软链接时解析其实际路径；解析失败则保留原路径。
 	absTarget, err := filepath.EvalSymlinks(target)
 	if err != nil {
 		absTarget = target
@@ -185,7 +169,7 @@ func (f *FakeMounter) Unmount(target string) error {
 				}
 			}
 			klog.V(5).Infof("Fake mounter: unmounted %s from %s", mp.Device, absTarget)
-			// Don't copy it to newMountpoints
+			// 不复制到新挂载点列表；其余挂载点仅保留设备、路径和类型，不保留选项。
 			continue
 		}
 		newMountpoints = append(newMountpoints, MountPoint{Device: mp.Device, Path: mp.Path, Type: mp.Type})
@@ -196,7 +180,7 @@ func (f *FakeMounter) Unmount(target string) error {
 	return nil
 }
 
-// List returns all the in-memory mountpoints for FakeMounter
+// List 返回 FakeMounter 当前的全部内存挂载点。
 // 假实现永不失败，直接暴露当前快照供测试核对。
 func (f *FakeMounter) List() ([]MountPoint, error) {
 	f.mutex.Lock()
@@ -205,8 +189,7 @@ func (f *FakeMounter) List() ([]MountPoint, error) {
 	return f.MountPoints, nil
 }
 
-// IsLikelyNotMountPoint determines whether a path is a mountpoint by checking
-// if the absolute path to file is in the in-memory mountpoints
+// IsLikelyNotMountPoint 通过判断文件解析后的路径是否在内存挂载表中来确定它是否可能不是挂载点。
 // 先比对注入错误，再查内存表，以便测试覆盖探测失败的分支。
 func (f *FakeMounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	f.mutex.Lock()
@@ -222,7 +205,7 @@ func (f *FakeMounter) IsLikelyNotMountPoint(file string) (bool, error) {
 		return true, err
 	}
 
-	// If file is a symlink, get its absolute path
+	// 文件为软链接时解析其实际路径；解析失败则保留原路径。
 	absFile, err := filepath.EvalSymlinks(file)
 	if err != nil {
 		absFile = file
@@ -238,12 +221,12 @@ func (f *FakeMounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	return true, nil
 }
 
-// 暴露开关，供调用方决定是否可省略挂载点探测。
+// CanSafelySkipMountPointCheck 返回测试开关，供调用方决定是否可省略挂载点探测。
 func (f *FakeMounter) CanSafelySkipMountPointCheck() bool {
 	return f.skipMountPointCheck
 }
 
-// 复用反向判定，避免两份逻辑在假实现里产生分歧。
+// IsMountPoint 复用 IsLikelyNotMountPoint 的反向判定，避免假实现中的两份逻辑产生分歧。
 func (f *FakeMounter) IsMountPoint(file string) (bool, error) {
 	notMnt, err := f.IsLikelyNotMountPoint(file)
 	if err != nil {
@@ -252,13 +235,12 @@ func (f *FakeMounter) IsMountPoint(file string) (bool, error) {
 	return !notMnt, nil
 }
 
-// GetMountRefs finds all mount references to the path, returns a
-// list of paths.
-// 按设备号比对内存挂载表，模拟同一块盘的多处引用。
+// GetMountRefs 查找指定路径对应设备的所有其它挂载引用并返回路径列表。
+// 按设备名比对内存挂载表；软链接解析失败时保留原路径，因为假实现并未创建实际文件。
 func (f *FakeMounter) GetMountRefs(pathname string) ([]string, error) {
 	realpath, err := filepath.EvalSymlinks(pathname)
 	if err != nil {
-		// Ignore error in FakeMounter, because we actually didn't create files.
+		// 假实现没有创建实际文件，因此解析失败时保留原路径。
 		realpath = pathname
 	}
 	return getMountRefsByDev(f, realpath)

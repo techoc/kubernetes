@@ -36,13 +36,9 @@ func TestDoCleanupMountPoint(t *testing.T) {
 
 	tests := map[string]struct {
 		corruptedMnt bool
-		// Function that prepares the directory structure for the test under
-		// the given base directory.
-		// Returns a fake MountPoint, a fake error for the mount point,
-		// and error if the prepare function encountered a fatal error.
+		// prepareMnt 在给定基目录下准备用例目录，依次返回假挂载点、注入的挂载点检查错误和准备错误。
 		prepareMnt func(base string) (MountPoint, error, error)
-		// Function that prepares the FakeMounter for the test.
-		// 允许个别用例调整 mounter 开关，例如启用跳过挂载点检查。
+		// prepareMntr 调整 FakeMounter，例如启用跳过挂载点检查的开关。
 		prepareMntr func(mntr *FakeMounter)
 		expectErr   bool
 	}{

@@ -61,7 +61,6 @@ func TestNewServiceExistingPods(t *testing.T) {
 	pod2 := createPod(ttNamespace, "pod2", t1)
 	pod3 := createPod(ttNamespace, "pod3", t5)
 	tester.whenComputeEndpointLastChangeTriggerTime(ttNamespace, service, pod1, pod2, pod3).
-		// Pods were created before service, but trigger time is the time when service was created.
 		// 首次同步始终以 Service 创建时间为准。
 		expect(t3)
 }
@@ -96,7 +95,6 @@ func TestPodsUpdated(t *testing.T) {
 	pod1 = createPod(ttNamespace, "pod1", t5)
 	// pod1、pod2 更新到 t5、t4，pod3 不变，期望返回 t4。
 	pod2 = createPod(ttNamespace, "pod2", t4)
-	// pod3 doesn't change.
 	tester.whenComputeEndpointLastChangeTriggerTime(ttNamespace, service, pod1, pod2, pod3).expect(t4)
 }
 
@@ -111,7 +109,6 @@ func TestPodsUpdatedNoOp(t *testing.T) {
 	pod3 := createPod(ttNamespace, "pod3", t3)
 	tester.whenComputeEndpointLastChangeTriggerTime(ttNamespace, service, pod1, pod2, pod3).expect(t0)
 
-	// Nothing has changed.
 	// 再次以完全相同的对象同步，期望零值。
 	tester.whenComputeEndpointLastChangeTriggerTime(ttNamespace, service, pod1, pod2, pod3).expectNil()
 }
@@ -164,20 +161,16 @@ func TestServiceUpdatedNoPodChange(t *testing.T) {
 	pod2 := createPod(ttNamespace, "pod2", t2)
 	tester.whenComputeEndpointLastChangeTriggerTime(ttNamespace, service, pod1, pod2).expect(t0)
 
-	// service's ports have changed.
 	// 仅修改 Service 的端口配置。
 	service.Spec = v1.ServiceSpec{
 		Selector: map[string]string{},
 		Ports:    []v1.ServicePort{{Port: 80, TargetPort: intstr.FromInt32(8080), Protocol: "TCP"}},
 	}
 
-	// Currently we're not able to calculate trigger time for service updates, hence the returned
-	// value is a nil time.
 	// 当前实现不计算 Service 更新的触发时间，期望零值。
 	tester.whenComputeEndpointLastChangeTriggerTime(ttNamespace, service, pod1, pod2).expectNil()
 }
 
-// ------- Test Utils -------
 // ------- 测试辅助工具 -------
 
 // tester 封装 TriggerTimeTracker 与 testing.T，提供链式断言能力。

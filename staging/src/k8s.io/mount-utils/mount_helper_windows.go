@@ -28,7 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// following failure codes are from https://docs.microsoft.com/en-us/windows/desktop/debug/system-error-codes--1300-1699-
+// errorNoList 中的网络错误码来自 https://docs.microsoft.com/en-us/windows/desktop/debug/system-error-codes--1300-1699- ：
 // ERROR_BAD_NETPATH                 = 53
 // ERROR_NETWORK_BUSY                = 54
 // ERROR_UNEXP_NET_ERR               = 59
@@ -42,7 +42,7 @@ import (
 // 网络相关错误码集中于此，便于统一判断远程挂载是否已损坏。
 var errorNoList = [...]int{53, 54, 59, 64, 65, 66, 67, 1219, 1326, 10064}
 
-// IsCorruptedMnt return true if err is about corrupted mount point
+// IsCorruptedMnt 判断错误是否表示挂载点已损坏，损坏时返回 true。
 // 剥开标准库包装的错误才能拿到底层 errno，进而识别损坏的远程挂载。
 func IsCorruptedMnt(err error) bool {
 	if err == nil {
@@ -73,10 +73,8 @@ func IsCorruptedMnt(err error) bool {
 	return false
 }
 
-// NormalizeWindowsPath makes sure the given path is a valid path on Windows
-// systems by making sure all instances of `/` are replaced with `\\`, and the
-// path beings with `c:`
-// 上层可能传入 POSIX 风格路径，先归一化再交给系统 API，避免路径解析歧义。
+// NormalizeWindowsPath 将路径归一化为 Windows 路径：把所有 "/" 替换为 "\\"，给以 "\\" 开头的路径补上 "c:"。
+// 上层可能传入 POSIX 风格路径，先归一化再交给系统 API，避免路径解析歧义；已有盘符或相对路径保持不变。
 func NormalizeWindowsPath(path string) string {
 	normalizedPath := strings.Replace(path, "/", "\\", -1)
 	if strings.HasPrefix(normalizedPath, "\\") {
@@ -85,8 +83,8 @@ func NormalizeWindowsPath(path string) string {
 	return normalizedPath
 }
 
-// ValidateDiskNumber : disk number should be a number in [0, 99]
-// 磁盘号会被插入 PowerShell 命令，先校验数字格式以防注入。
+// ValidateDiskNumber 校验磁盘号能否由 strconv.Atoi 解析为整数。
+// 磁盘号会被插入 PowerShell 命令，先校验数字格式以防注入；本函数不限制两位数上限。
 func ValidateDiskNumber(disk string) error {
 	if _, err := strconv.Atoi(disk); err != nil {
 		return fmt.Errorf("wrong disk number format: %q, err: %v", disk, err)
@@ -94,14 +92,14 @@ func ValidateDiskNumber(disk string) error {
 	return nil
 }
 
-// isMountPointMatch determines if the mountpoint matches the dir
+// isMountPointMatch 判断挂载点是否与给定目录匹配。
 // Windows 下没有设备号语义，按路径精确比较即可。
 func isMountPointMatch(mp MountPoint, dir string) bool {
 	return mp.Path == dir
 }
 
-// PathExists returns true if the specified path exists.
-// TODO: clean this up to use pkg/util/file/FileExists
+// PathExists 判断指定路径是否存在。
+// TODO: 改用 pkg/util/file/FileExists。
 // 损坏的挂载点虽 stat 失败，但不应被当成不存在，故单独返回 true 并带出错误。
 func PathExists(path string) (bool, error) {
 	_, err := os.Stat(path)

@@ -27,8 +27,7 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
-// connection maintains state about a spdystream.Connection and its associated
-// streams.
+// connection 维护 spdystream.Connection 及其流的状态。
 // 额外维护一张 stream 表，是为了 Close 时能对所有在途 stream 统一 Reset；
 // 只关底层 conn 会让对端悬挂在半开的 stream 上。
 type connection struct {
@@ -39,19 +38,14 @@ type connection struct {
 	ping             func() (time.Duration, error)
 }
 
-// NewClientConnection creates a new SPDY client connection.
-// 不发 Ping 的快捷入口；需要保活时走 WithPings 版本。
+// NewClientConnection 创建 SPDY 客户端连接，不发送保活 Ping。
 func NewClientConnection(conn net.Conn) (httpstream.Connection, error) {
 	return NewClientConnectionWithPings(conn, 0)
 }
 
-// NewClientConnectionWithPings creates a new SPDY client connection.
-//
-// If pingPeriod is non-zero, a background goroutine will send periodic Ping
-// frames to the server. Use this to keep idle connections through certain load
-// balancers alive longer.
-// 客户端侧没有业务上的新 stream 回调，所以传 NoOpNewStreamHandler；
-// 主动建流走 CreateStream，对端推送的流在这个角色里没有意义。
+// NewClientConnectionWithPings 创建 SPDY 客户端连接。
+// pingPeriod 非零时，后台 goroutine 会定期向服务端发送 Ping，避免空闲连接被过早回收。
+// 客户端使用 NoOpNewStreamHandler，主动建流通过 CreateStream 完成。
 func NewClientConnectionWithPings(conn net.Conn, pingPeriod time.Duration) (httpstream.Connection, error) {
 	spdyConn, err := spdystream.NewConnection(conn, false)
 	if err != nil {
@@ -63,23 +57,15 @@ func NewClientConnectionWithPings(conn net.Conn, pingPeriod time.Duration) (http
 	return newConnection(spdyConn, httpstream.NoOpNewStreamHandler, pingPeriod, spdyConn.Ping), nil
 }
 
-// NewServerConnection creates a new SPDY server connection. newStreamHandler
-// will be invoked when the server receives a newly created stream from the
-// client.
-// newStreamHandler 由服务端提供，决定接受还是拒绝客户端推来的流。
+// NewServerConnection 创建 SPDY 服务端连接。收到客户端新建的流时调用 newStreamHandler，
+// 由它决定接受还是拒绝该流。
 func NewServerConnection(conn net.Conn, newStreamHandler httpstream.NewStreamHandler) (httpstream.Connection, error) {
 	return NewServerConnectionWithPings(conn, newStreamHandler, 0)
 }
 
-// NewServerConnectionWithPings creates a new SPDY server connection.
-// newStreamHandler will be invoked when the server receives a newly created
-// stream from the client.
-//
-// If pingPeriod is non-zero, a background goroutine will send periodic Ping
-// frames to the server. Use this to keep idle connections through certain load
-// balancers alive longer.
-// spdystream.NewConnection 的第二个参数为 true，表示本端扮演 server：
-// 这会决定 SPDY 握手中的帧语义（server push / 流 ID 奇偶等），客户端侧传的是 false。
+// NewServerConnectionWithPings 创建 SPDY 服务端连接。收到客户端新建的流时调用 newStreamHandler。
+// pingPeriod 非零时，后台 goroutine 会定期发送 Ping，避免空闲连接被过早回收。
+// spdystream.NewConnection 的第二个参数为 true，表示本端扮演服务端，决定握手中的帧语义。
 func NewServerConnectionWithPings(conn net.Conn, newStreamHandler httpstream.NewStreamHandler, pingPeriod time.Duration) (httpstream.Connection, error) {
 	spdyConn, err := spdystream.NewConnection(conn, true)
 	if err != nil {
@@ -90,10 +76,8 @@ func NewServerConnectionWithPings(conn net.Conn, newStreamHandler httpstream.New
 	return newConnection(spdyConn, newStreamHandler, pingPeriod, spdyConn.Ping), nil
 }
 
-// newConnection returns a new connection wrapping conn. newStreamHandler
-// will be invoked when the server receives a newly created stream from the
-// client.
-// Serve 和 sendPings 都在这里拉起；调用方拿到连接时，收帧循环已经在跑了。
+// newConnection 包装底层连接，并启动收帧循环；配置了 Ping 时同时启动保活循环。
+// 服务端收到客户端新建的流时调用 newStreamHandler。
 func newConnection(conn *spdystream.Connection, newStreamHandler httpstream.NewStreamHandler, pingPeriod time.Duration, pingFn func() (time.Duration, error)) httpstream.Connection {
 	c := &connection{
 		conn:             conn,
@@ -108,36 +92,29 @@ func newConnection(conn *spdystream.Connection, newStreamHandler httpstream.NewS
 	return c
 }
 
-// createStreamResponseTimeout indicates how long to wait for the other side to
-// acknowledge the new stream before timing out.
-// 只覆盖握手阶段（等 SYN_REPLY），不限制 stream 建立后的读写时长。
+// createStreamResponseTimeout 是等待对端确认新流的超时时间，只覆盖建流握手阶段。
 const createStreamResponseTimeout = 30 * time.Second
 
-// Close first sends a reset for all of the connection's streams, and then
-// closes the underlying spdystream.Connection.
+// Close 先 Reset 所有流，再关闭底层连接，避免对端的流一直处于半开状态。
 func (c *connection) Close() error {
 	c.streamLock.Lock()
 	for _, s := range c.streams {
-		// calling Reset instead of Close ensures that all streams are fully torn down
-		// Reset 会立刻通知对端 RST_STREAM，Close 则可能走优雅关闭、一直等对端把数据读完。
+		// Reset 会立刻通知对端 RST_STREAM；Close 可能等待对端读完数据，不适合这里。
 		s.Reset()
 	}
 	// 清空表防止重复 Reset，也方便 GC 回收已经不再引用的 stream。
 	c.streams = make(map[uint32]httpstream.Stream, 0)
 	c.streamLock.Unlock()
 
-	// now that all streams are fully torn down, it's safe to call close on the underlying connection,
-	// which should be able to terminate immediately at this point, instead of waiting for any
-	// remaining graceful stream termination.
+	// 所有流都已拆除，底层连接可以立即关闭，无需等待优雅终止流程。
 	return c.conn.Close()
 }
 
-// RemoveStreams can be used to removes a set of streams from the Connection.
-// 业务侧读完 stream 后调用，避免长连接上 stream 表无限增长；它不会关闭这些 stream。
+// RemoveStreams 从连接维护的表中移除指定流，但不会关闭这些流。
 func (c *connection) RemoveStreams(streams ...httpstream.Stream) {
 	c.streamLock.Lock()
 	for _, stream := range streams {
-		// It may be possible that the provided stream is nil if timed out.
+		// 建流超时时调用方可能传入 nil。
 		if stream != nil {
 			delete(c.streams, stream.Identifier())
 		}
@@ -145,10 +122,8 @@ func (c *connection) RemoveStreams(streams ...httpstream.Stream) {
 	c.streamLock.Unlock()
 }
 
-// CreateStream creates a new stream with the specified headers and registers
-// it with the connection.
-// 先等对端确认再登记：未被确认的 stream 不该进入 c.streams，
-// 否则 Close 时会向一个可能根本不存在于对端的流发 Reset。
+// CreateStream 使用指定请求头创建流，并在收到对端确认后将其登记到连接。
+// 未确认的流不能登记，否则 Close 可能向对端不存在的流发送 Reset。
 func (c *connection) CreateStream(headers http.Header) (httpstream.Stream, error) {
 	stream, err := c.conn.CreateStream(headers, nil, false)
 	if err != nil {
@@ -162,34 +137,27 @@ func (c *connection) CreateStream(headers http.Header) (httpstream.Stream, error
 	return stream, nil
 }
 
-// registerStream adds the stream s to the connection's list of streams that
-// it owns.
-// 由 CreateStream 和 newSpdyStream 两条路径调用，都必须持锁写表。
+// registerStream 将流登记到连接维护的表中，内部持锁保护并发访问。
 func (c *connection) registerStream(s httpstream.Stream) {
 	c.streamLock.Lock()
 	c.streams[s.Identifier()] = s
 	c.streamLock.Unlock()
 }
 
-// CloseChan returns a channel that, when closed, indicates that the underlying
-// spdystream.Connection has been closed.
-// 直接透传底层通道：关闭事件由 spdystream 产生，这里没有额外状态要同步。
+// CloseChan 返回底层 spdystream.Connection 的关闭通知通道。
 func (c *connection) CloseChan() <-chan bool {
 	return c.conn.CloseChan()
 }
 
-// newSpdyStream is the internal new stream handler used by spdystream.Connection.Serve.
-// It calls connection's newStreamHandler, giving it the opportunity to accept or reject
-// the stream. If newStreamHandler returns an error, the stream is rejected. If not, the
-// stream is accepted and registered with the connection.
-// replySent 用来告诉上层处理器何时可以认为回复已经发出；必须先注册再关通道，
-// 否则处理器一旦依赖该通道做清理，可能撞上 stream 还没登记进表的空窗。
+// newSpdyStream 是 spdystream.Connection.Serve 使用的新流处理器。
+// 它调用业务回调决定接受或拒绝流，并在接受后将流登记到连接。
+// replySent 表示回复已发送；必须先登记再关闭通道，避免依赖该通道的清理逻辑观察到空窗。
 func (c *connection) newSpdyStream(stream *spdystream.Stream) {
 	replySent := make(chan struct{})
 	err := c.newStreamHandler(stream, replySent)
 	rejectStream := (err != nil)
 	if rejectStream {
-		//nolint:logcheck // Hopefully this never gets triggered.
+		//nolint:logcheck // 正常情况下不会拒绝流，保留日志便于排查意外错误。
 		klog.Warningf("Stream rejected: %v", err)
 		stream.Reset()
 		return
@@ -200,15 +168,13 @@ func (c *connection) newSpdyStream(stream *spdystream.Stream) {
 	close(replySent)
 }
 
-// SetIdleTimeout sets the amount of time the connection may remain idle before
-// it is automatically closed.
-// 透传给 spdystream；这里的“idle”按帧活动计算，Ping 帧也会把计时器重置。
+// SetIdleTimeout 设置连接自动关闭前的空闲时长；Ping 等帧活动也会重置空闲计时器。
 func (c *connection) SetIdleTimeout(timeout time.Duration) {
 	c.conn.SetIdleTimeout(timeout)
 }
 
-// 用 CloseChan 而不是 defer t.Stop 之外的手段退出：连接一关，goroutine 立刻收工，
-// 不必再空转一个 ticker。Ping 失败只记日志不退出，因为单次失败可能只是网络抖动。
+// sendPings 定期发送保活 Ping，并在连接关闭时退出。
+// 单次 Ping 失败只记日志，因为可能是瞬时网络问题；真正关闭时由 CloseChan 通知。
 func (c *connection) sendPings(period time.Duration) {
 	t := time.NewTicker(period)
 	defer t.Stop()
@@ -219,11 +185,9 @@ func (c *connection) sendPings(period time.Duration) {
 		case <-t.C:
 		}
 		if _, err := c.ping(); err != nil {
-			//nolint:logcheck // Hopefully this never gets triggered.
+			//nolint:logcheck // 正常情况下不会失败，保留日志便于排查。
 			klog.V(3).Infof("SPDY Ping failed: %v", err)
-			// Continue, in case this is a transient failure.
-			// c.conn.CloseChan above will tell us when the connection is
-			// actually closed.
+			// 瞬时失败后继续重试，连接真正关闭时由 CloseChan 通知。
 		}
 	}
 }

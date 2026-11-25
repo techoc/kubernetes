@@ -41,7 +41,7 @@ func TestComputeDetachedSignature(t *testing.T) {
 		sig,
 		"Wrong signature. Got: %v", sig)
 
-	// Try with null content
+	// 空内容仍须生成可验证的 detached 签名。
 	sig, err = ComputeDetachedSignature("", id, secret)
 	assert.NoError(t, err, "Error when computing signature: %v", err)
 	assert.Equal(
@@ -50,7 +50,7 @@ func TestComputeDetachedSignature(t *testing.T) {
 		sig,
 		"Wrong signature. Got: %v", sig)
 
-	// Try with no secret
+	// 空 Secret 用于锁定边界输入下的序列化结果，不代表生产凭据合法。
 	sig, err = ComputeDetachedSignature(content, id, "")
 	assert.NoError(t, err, "Error when computing signature: %v", err)
 	assert.Equal(
@@ -63,12 +63,12 @@ func TestComputeDetachedSignature(t *testing.T) {
 // TestDetachedTokenIsValid 确认正确签名通过、被追加字符的签名失败，
 // 后者防止宽松比较把伪造签名误判为有效。
 func TestDetachedTokenIsValid(t *testing.T) {
-	// Valid detached JWS token and valid inputs should succeed
+	// 签名、内容与 token 一致时应通过。
 	sig := "eyJhbGciOiJIUzI1NiIsImtpZCI6Impvc2h1YSJ9..VShe2taLd-YTrmWuRkcL_8QTNDHYxQIEBsAYYiIj1_8"
 	assert.True(t, DetachedTokenIsValid(sig, content, id, secret),
 		"Content %q and token \"%s:%s\" should equal signature: %q", content, id, secret, sig)
 
-	// Invalid detached JWS token and valid inputs should fail
+	// 签名被追加字符后应失败，避免宽松比较接受伪造值。
 	sig2 := sig + "foo"
 	assert.False(t, DetachedTokenIsValid(sig2, content, id, secret),
 		"Content %q and token \"%s:%s\" should not equal signature: %q", content, id, secret, sig)

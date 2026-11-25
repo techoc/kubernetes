@@ -21,6 +21,4 @@ limitations under the License.
 // 作为独立的 k8s.io 模块存在，便于被其他仓库按版本依赖，而不必反向依赖 k8s.io/kubernetes。
 //
 // 子包各自声明自己的包文档，这里不与它们重复描述模块用途。
-// 注释与 package 语句之间刻意留空行，避免 go doc 把它当作额外的包文档。
-
 package kubeproxy

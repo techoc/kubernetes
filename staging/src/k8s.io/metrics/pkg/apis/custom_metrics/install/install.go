@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the experimental API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// Package install 注册实验性 API 组，供 API 编码和解码机制使用。
+// 本包只负责注册，不定义类型。
 package install
 
 import (
@@ -26,8 +26,8 @@ import (
 	"k8s.io/metrics/pkg/apis/custom_metrics/v1beta2"
 )
 
-// Install registers the API group and adds types to a scheme
-// 中文说明：用 v1beta1 作为首选版本，保证服务端协商时优先返回兼容性更好的表示。
+// Install 注册 API 组，并将相关类型添加到 scheme。
+// 将 v1beta1 设为首选版本，服务端协商时优先返回该版本。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(custom_metrics.AddToScheme(scheme))
 	utilruntime.Must(v1beta2.AddToScheme(scheme))

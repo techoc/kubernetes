@@ -115,7 +115,6 @@ func TestShouldPodBeInEndpoints(t *testing.T) {
 		expected           bool
 		includeTerminating bool
 	}{
-		// Pod should not be in endpoints:
 		// 以下场景不应出现在 endpoint 中。
 		{
 			name: "Failed pod with Never RestartPolicy",
@@ -199,7 +198,6 @@ func TestShouldPodBeInEndpoints(t *testing.T) {
 			},
 			expected: false,
 		},
-		// Pod should be in endpoints:
 		// 以下场景应出现在 endpoint 中。
 		{
 			name: "Pending pod with Never RestartPolicy",
@@ -432,7 +430,6 @@ func TestGetPodServicesToUpdate(t *testing.T) {
 // BenchmarkGetPodServicesToUpdate 在 1000 个 Service 的场景下，
 // 测量查询 Pod 所属 Service 的性能。
 func BenchmarkGetPodServicesToUpdate(b *testing.B) {
-	// init fake service informer.
 	// 初始化带 1000 个 Service 的 fake informer。
 	fakeInformerFactory := informers.NewSharedInformerFactory(&fake.Clientset{}, 0*time.Second)
 	for i := 0; i < 1000; i++ {
@@ -493,20 +490,19 @@ func Test_podChanged(t *testing.T) {
 			podChanged:    false,
 			labelsChanged: false,
 		}, {
+			// NodeName 只能在 Pod 获得 IP 前改变；此时不关心该 Pod，忽略变化。
 			testName: "change NodeName",
 			modifier: func(old, new *v1.Pod) {
 				new.Spec.NodeName = "changed"
 			},
-			// NodeName can only change before the pod has an IP, and we don't care about the
-			// pod yet at that point so we ignore this change
 			podChanged:    false,
 			labelsChanged: false,
 		}, {
+			// 其他字段未变时，ResourceVersion 变化被有意忽略。
 			testName: "change ResourceVersion",
 			modifier: func(old, new *v1.Pod) {
 				new.ObjectMeta.ResourceVersion = "changed"
 			},
-			// ResourceVersion is intentionally ignored if nothing else changed
 			podChanged:    false,
 			labelsChanged: false,
 		}, {
@@ -966,7 +962,6 @@ type unicycle struct {
 // TestDeepObjectPointer 验证 deepHashObject 会解引用指针：
 // 不同指针但相同值得到相同哈希，值不同则哈希不同。
 func TestDeepObjectPointer(t *testing.T) {
-	// Arrange
 	// 准备三个对象，其中两个轮子值相同但指针不同。
 	wheel1 := wheel{radius: 17}
 	wheel2 := wheel{radius: 22}
@@ -976,13 +971,11 @@ func TestDeepObjectPointer(t *testing.T) {
 	myUni2 := unicycle{licencePlateID: "blah", primaryWheel: &wheel2, tags: map[string]string{"color": "blue", "name": "john"}}
 	myUni3 := unicycle{licencePlateID: "blah", primaryWheel: &wheel3, tags: map[string]string{"color": "blue", "name": "john"}}
 
-	// Run it more than once to verify determinism of hasher.
 	// 重复 100 次以验证哈希器的确定性。
 	for i := 0; i < 100; i++ {
 		hasher1 := adler32.New()
 		hasher2 := adler32.New()
 		hasher3 := adler32.New()
-		// Act
 		// 分别计算三个对象的哈希。
 		deepHashObject(hasher1, myUni1)
 		hash1 := hasher1.Sum32()
@@ -993,7 +986,6 @@ func TestDeepObjectPointer(t *testing.T) {
 		deepHashObject(hasher3, myUni3)
 		hash3 := hasher3.Sum32()
 
-		// Assert
 		// 断言重复哈希一致、不同值的哈希不同、相同值的哈希相同。
 		if hash1 != hash1a {
 			t.Errorf("repeated hash of the same object produced different results: %d vs %d", hash1, hash1a)

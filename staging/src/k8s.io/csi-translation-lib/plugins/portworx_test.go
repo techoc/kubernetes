@@ -151,8 +151,6 @@ func TestTranslatePortworxInTreeInlineVolumeToCSI(t *testing.T) {
 			},
 			csiVol: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					// Must be unique per disk as it is used as the unique part of the
-					// staging path
 					Name: "pxd.portworx.com-ID",
 				},
 				Spec: v1.PersistentVolumeSpec{
@@ -392,8 +390,6 @@ func TestTranslatePortworxCSIPvToInTree(t *testing.T) {
 			name: "no CSI section",
 			csi: &v1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					// Must be unique per disk as it is used as the unique part of the
-					// staging path
 					Name: "pxd.portworx.com",
 				},
 				Spec: v1.PersistentVolumeSpec{

@@ -117,9 +117,8 @@ func (f *Framework) InferForPodUpdate(oldPodInfo, newPodInfo *types.PodInfo, tar
 	return reqs, nil
 }
 
-// MatchResult 除了布尔结论还带回未满足的特性名，
-// 目的是让调度失败时能直接说明"节点缺什么"，而不是只报不匹配。
-// MatchResult 封装一次特性匹配检查的结果。
+// MatchResult 封装一次特性匹配检查的结果，并列出未满足的特性名，
+// 让调度失败时能直接说明“节点缺什么”，而不是只报不匹配。
 type MatchResult struct {
 	// IsMatch 为 true 表示节点满足了全部特性要求。
 	IsMatch bool

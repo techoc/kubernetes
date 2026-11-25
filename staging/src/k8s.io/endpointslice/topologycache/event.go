@@ -16,7 +16,6 @@ limitations under the License.
 
 package topologycache
 
-// TopologyAwareHints events messages list.
 // TopologyAwareHints 事件消息列表。
 const (
 	// NoZoneSpecified 表示一个或多个端点没有指定可用区。
@@ -37,11 +36,9 @@ const (
 	MinAllocationExceedsOverloadThreshold = "Unable to allocate minimum required endpoints to each zone without exceeding overload threshold"
 )
 
-// EventBuilder let's us construct events in the code.
-// We use it to build events and return them from a function instead of publishing them from within it.
-// EventType, Reason, and Message fields are equivalent to the v1.Event fields - https://pkg.go.dev/k8s.io/api/core/v1#Event.
 // EventBuilder 用于在代码中构造事件：函数只构建并返回事件，而不在函数内部发布事件。
 // 其 EventType、Reason、Message 字段与 v1.Event 的同名字段含义一致。
+// 事件 API 说明：https://pkg.go.dev/k8s.io/api/core/v1#Event.
 type EventBuilder struct {
 	// EventType 表示事件类型（如 Normal 或 Warning）。
 	// Reason 表示事件原因。

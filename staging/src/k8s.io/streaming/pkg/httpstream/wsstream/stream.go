@@ -30,37 +30,33 @@ import (
 	"k8s.io/streaming/pkg/runtime"
 )
 
-// The WebSocket subprotocol "binary.k8s.io" will only send messages to the
-// client and ignore messages sent to the server. The received messages are
-// the exact bytes written to the stream. Zero byte messages are possible.
+// WebSocket 子协议 "binary.k8s.io" 只向客户端发送消息，忽略客户端发来的消息。
+// 客户端收到的是写入流的原始字节，也支持零字节消息。
 //
-// 单向协议：客户端发来的内容一律被 IgnoreReceivesWithLogger 吞掉，
-// 因为这里没有通道号可用来区分回传目标，回显只会造成语义混乱。
+// 单向协议：客户端发来的内容由 IgnoreReceivesWithLogger 读取并丢弃；
+// 该协议没有通道号，无法区分回传目标。
 const binaryWebSocketProtocol = "binary.k8s.io"
 
-// The WebSocket subprotocol "base64.binary.k8s.io" will only send messages to the
-// client and ignore messages sent to the server. The received messages are
-// a base64 version of the bytes written to the stream. Zero byte messages are
-// possible.
+// WebSocket 子协议 "base64.binary.k8s.io" 只向客户端发送消息，忽略客户端发来的消息。
+// 客户端收到的是写入流内容的 base64 文本，也支持零字节消息。
 //
-// 与二进制变体行为一致，只是把载荷做 base64 文本化，供只接受文本帧的客户端使用；
-// 解码由客户端负责，服务端不额外保存编码状态。
+// 与二进制变体行为一致，只是将载荷 base64 文本化，供只接受文本帧的客户端使用；
+// 解码由客户端负责。
 const base64BinaryWebSocketProtocol = "base64.binary.k8s.io"
 
-// ReaderProtocolConfig describes a websocket subprotocol with one stream.
+// ReaderProtocolConfig 描述一个承载单条流的 WebSocket 子协议。
 //
-// 单流协议不需要通道表，唯一的编码选择就是配置里的全部语义；
-// 布尔值 false 即代表整条流都走 base64。
+// 单流协议不需要通道表，仅由 Binary 决定使用原始字节还是 base64 文本。
 type ReaderProtocolConfig struct {
-	// true 表示直接发送原始字节，false 表示对每帧做 base64 编码。
+	// Binary 为 true 时发送原始字节，为 false 时对每帧做 base64 编码。
 	Binary bool
 }
 
-// NewDefaultReaderProtocols returns a stream protocol map with the
-// subprotocols "", "channel.k8s.io", "base64.channel.k8s.io".
+// NewDefaultReaderProtocols 返回包含空协议名、"binary.k8s.io" 和
+// "base64.binary.k8s.io" 的单流协议表。
 //
-// 空协议名与二进制协议映射到同一编码，base64 变体单独列出；
-// 这样客户端不指定子协议时仍能按原始字节方式接收流。
+// 空协议名与二进制协议使用原始字节，base64 变体使用文本编码；
+// 客户端不指定子协议时仍能按原始字节方式接收流。
 func NewDefaultReaderProtocols() map[string]ReaderProtocolConfig {
 	return map[string]ReaderProtocolConfig{
 		"":                            {Binary: true},
@@ -69,14 +65,13 @@ func NewDefaultReaderProtocols() map[string]ReaderProtocolConfig {
 	}
 }
 
-// Reader supports returning an arbitrary byte stream over a websocket channel.
+// Reader 通过 WebSocket 向客户端返回任意字节流。
 //
-// 与 Conn 相反，这里只往客户端写、不解析客户端数据；err 通道是 Copy 与
-// 流的 goroutine 之间唯一的完成信号，同时承担结果和同步两件事。
-// logger 传给接收 goroutine 以便日志关联到具体请求；err 是 Copy 与流 goroutine 之间的完成信号。
-// r 是数据源，ping 在数据前插入空帧以尽早打通连接；timeout 在每次读写成功后顺延。
-// protocols 按子协议名给出编码方式，selectedProtocol 是握手选定的那一个。
-// handleCrash 测试时可替换，避免真实 HandleCrash 把测试进程带崩。
+// 与 Conn 不同，Reader 只向客户端发送数据，不解析客户端数据；无缓冲的 err 通道
+// 是 Copy 与流 goroutine 之间唯一的完成信号，同时传递结果并建立同步。
+// logger 供接收 goroutine 关联请求日志；r 是数据源；ping 在数据前发送空帧以尽早打通连接。
+// timeout 在每次读写活动后顺延；protocols 按子协议名给出编码方式，selectedProtocol
+// 记录握手选定的协议；handleCrash 可在测试中替换，以控制 panic 处理行为。
 type Reader struct {
 	logger           klog.Logger
 	err              chan error
@@ -86,33 +81,26 @@ type Reader struct {
 	protocols        map[string]ReaderProtocolConfig
 	selectedProtocol string
 
-	handleCrash func(ctx context.Context, additionalHandlers ...func(context.Context, interface{})) // overridable for testing
+	handleCrash func(ctx context.Context, additionalHandlers ...func(context.Context, interface{})) // 测试中可替换
 }
 
-// NewReader creates a WebSocket pipe that will copy the contents of r to a provided
-// WebSocket connection. If ping is true, a zero length message will be sent to the client
-// before the stream begins reading.
+// NewReader 创建 WebSocket 管道，将 r 的内容复制到客户端连接。
+// ping 为 true 时，在开始读取流之前发送一条零长度消息。
+// protocols 将子协议名映射到 ReaderProtocolConfig；客户端未指定子协议时使用空字符串。
 //
-// The protocols parameter maps subprotocol names to StreamProtocols. The empty string
-// subprotocol name is used if websocket.Config.Protocol is empty.
-//
-// 保留旧签名只是兼容尚无上下文日志的调用方，内部固定用 Background logger；
-// 新代码应传入带请求信息的 logger，否则异常日志缺少上下文。
+// 保留旧签名只是为了兼容调用方，内部固定使用 klog.Background()；
+// 使用上下文日志的代码应调用 NewReaderWithLogger。
 //
 //logcheck:context // NewReaderWithLogger should be used instead of NewReader in code which supports contextual logging.
 func NewReader(r io.Reader, ping bool, protocols map[string]ReaderProtocolConfig) *Reader {
 	return NewReaderWithLogger(klog.Background(), r, ping, protocols)
 }
 
-// NewReaderWithLogger creates a WebSocket pipe that will copy the contents of r to a provided
-// WebSocket connection. If ping is true, a zero length message will be sent to the client
-// before the stream begins reading.
+// NewReaderWithLogger 使用指定日志记录器创建 WebSocket 管道，将 r 的内容复制到客户端。
+// ping 为 true 时，在开始读取流之前发送一条零长度消息。
+// protocols 将子协议名映射到 ReaderProtocolConfig；客户端未指定子协议时使用空字符串。
 //
-// The protocols parameter maps subprotocol names to StreamProtocols. The empty string
-// subprotocol name is used if websocket.Config.Protocol is empty.
-//
-// err 通道不带缓冲：Copy 是唯一的接收者，无缓冲能让它与流的 goroutine
-// 严格同步，结果交付后不会再有第二个写入者。
+// err 通道不带缓冲：Copy 是唯一接收者，无缓冲确保流的 goroutine 交付结果后才能退出。
 func NewReaderWithLogger(logger klog.Logger, r io.Reader, ping bool, protocols map[string]ReaderProtocolConfig) *Reader {
 	return &Reader{
 		logger:      logger,
@@ -124,8 +112,7 @@ func NewReaderWithLogger(logger klog.Logger, r io.Reader, ping bool, protocols m
 	}
 }
 
-// SetIdleTimeout sets the interval for both reads and writes before timeout. If not specified,
-// there is no timeout on the reader.
+// SetIdleTimeout 设置 Reader 在读写空闲多久后超时；未设置时不启用空闲超时。
 //
 // 必须在 Copy 之前设置：流一旦开始，超时值会被读循环和接收 goroutine 同时读取，
 // 中途修改既无同步保证，也不会影响已经阻塞的操作。
@@ -143,12 +130,11 @@ func (r *Reader) handshake(config *websocket.Config, req *http.Request) error {
 	return handshake(config, req, supportedProtocols)
 }
 
-// Copy the reader to the response. The created WebSocket is closed after this
-// method completes.
+// Copy 将 Reader 的内容写入 HTTP 响应，并在返回时关闭创建的 WebSocket。
 //
-// ServeHTTP 会阻塞到连接关闭，所以放进 goroutine；当前 goroutine 等在 err 通道上，
-// 直到流结束或失败才返回。panic 通过 handleCrash 在 goroutine 内部兜住，
-// 不让流式 handler 的异常越过 HTTP 框架边界。
+// ServeHTTP 会阻塞到连接关闭，所以放进 goroutine；当前 goroutine 等待 err 通道，
+// 直到流结束或失败才返回。panic 由 goroutine 内的 handleCrash 兜住，
+// 避免流式 handler 的异常越过 HTTP 框架边界。
 func (r *Reader) Copy(w http.ResponseWriter, req *http.Request) error {
 	go func() {
 		// 这里包一层 handleCrash 是为了把 goroutine 内的 panic 限制在本请求内。
@@ -158,12 +144,12 @@ func (r *Reader) Copy(w http.ResponseWriter, req *http.Request) error {
 	return <-r.err
 }
 
-// handle implements a WebSocket handler.
+// handle 实现 WebSocket 服务端处理器。
 //
-// 两条关闭路径并存：客户端主动断开，或服务端流发送完毕。用 sync.Once 确保
-// 只关一次，否则后到的路径会对已关闭的连接再次 Close 并报错。
+// 客户端主动断开和服务端流发送完毕都可能触发关闭；用 sync.Once 确保只关一次，
+// 避免后到的路径对已关闭连接重复调用 Close。
 func (r *Reader) handle(ws *websocket.Conn) {
-	// Close the connection when the client requests it, or when we finish streaming, whichever happens first
+	// 客户端断开或服务端完成发送时，以先发生者为准关闭连接。
 	closeConnOnce := &sync.Once{}
 	closeConn := func() {
 		closeConnOnce.Do(func() {
@@ -184,10 +170,9 @@ func (r *Reader) handle(ws *websocket.Conn) {
 	go func() {
 		// 常驻 goroutine 内的 panic 必须就地兜住，不能靠 Copy 的 defer。
 		defer runtime.HandleCrashWithLogger(r.logger)
-		// This blocks until the connection is closed.
-		// Client should not send anything.
+		// 单流协议不要求客户端发送数据，但仍需读取以维持 WebSocket 连接；
+		// 客户端关闭后，服务端也关闭连接，让阻塞的发送尽早失败。
 		IgnoreReceivesWithLogger(r.logger, ws, r.timeout)
-		// Once the client closes, we should also close
 		closeConn()
 	}()
 

@@ -23,10 +23,10 @@ import (
 	wardlefuzzer "k8s.io/sample-apiserver/pkg/apis/wardle/fuzzer"
 )
 
-// 用 fuzzer 生成的随机对象做编解码往返，验证各版本注册与转换闭环。
+// TestRoundTripTypes 用 fuzzer 生成的随机对象做编解码往返，验证各版本注册与转换闭环。
 func TestRoundTripTypes(t *testing.T) {
 	// 先跑 JSON 路径；protobuf 往返等生成代码补齐后再打开。
 	roundtrip.RoundTripTestForAPIGroup(t, Install, wardlefuzzer.Funcs)
-	// TODO: enable protobuf generation for the sample-apiserver
+	// TODO：为 sample-apiserver 启用 protobuf 生成。
 	// roundtrip.RoundTripProtobufTestForAPIGroup(t, Install, wardlefuzzer.Funcs)
 }

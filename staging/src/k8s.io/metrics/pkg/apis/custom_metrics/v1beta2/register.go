@@ -22,31 +22,28 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-// 本常量是 API group 的唯一来源，其他文件应引用它而不是重复写字符串。
+// GroupName 是本包使用的 API 组名称。
 const GroupName = "custom.metrics.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-// 客户端构建 rest 请求时需要精确的 GroupVersion，不能用 GroupName 代替。
+// SchemeGroupVersion 是用于注册本包对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta2"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
-// 只补 group，不补 version；调用方再按需加版本，便于复用同一 helper。
+// Resource 接收不限定的 resource，返回包含组名的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
+	// SchemeBuilder 保存需要添加到 Scheme 的注册函数。
 	// 集中注册本版本的全部类型，避免调用方漏注册某个 List kind。
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme applies all the stored functions to the scheme.
-	// 经 localSchemeBuilder 暴露，便于生成代码继续追加注册函数。
+	// AddToScheme 将所有已注册的函数应用到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// addKnownTypes 同时注册 metav1 的通用类型，保证 ListMeta、Time 等字段能被正确解码。
+// addKnownTypes 注册本版本的指标类型，并加入 metav1 公共类型，
+// 保证 ListMeta、Time 等字段能被正确解码。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&MetricValue{},

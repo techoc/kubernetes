@@ -28,18 +28,13 @@ import (
 )
 
 const (
-	// AzureDiskDriverName is the name of the CSI driver for Azure Disk
 	// AzureDiskDriverName 是 Azure Disk CSI 驱动的名称。
 	AzureDiskDriverName = "disk.csi.azure.com"
-	// AzureDiskTopologyKey is the topology key of Azure Disk CSI driver
 	// AzureDiskTopologyKey 是 Azure Disk CSI 驱动使用的区拓扑键。
 	AzureDiskTopologyKey = "topology.disk.csi.azure.com/zone"
-	// AzureDiskInTreePluginName is the name of the intree plugin for Azure Disk
 	// AzureDiskInTreePluginName 是 in-tree Azure Disk 插件的名称。
 	AzureDiskInTreePluginName = "kubernetes.io/azure-disk"
 
-	// Parameter names defined in azure disk CSI driver, refer to
-	// https://github.com/kubernetes-sigs/azuredisk-csi-driver/blob/master/docs/driver-parameters.md
 	// 以下是 Azure Disk CSI 驱动定义的参数名，用于构造 VolumeAttributes。
 	// kind：磁盘类型；cachingmode：缓存模式；fstype：文件系统类型。
 	azureDiskKind        = "kind"
@@ -60,20 +55,17 @@ var (
 // 编译期断言：确保 azureDiskCSITranslator 实现了 InTreePlugin 接口。
 var _ InTreePlugin = &azureDiskCSITranslator{}
 
-// azureDiskCSITranslator handles translation of PV spec from In-tree
-// Azure Disk to CSI Azure Disk and vice versa
 // azureDiskCSITranslator 负责 in-tree Azure Disk 与 CSI Azure Disk 之间 PV spec 的双向翻译。
 type azureDiskCSITranslator struct{}
 
-// NewAzureDiskCSITranslator returns a new instance of azureDiskTranslator
 // NewAzureDiskCSITranslator 返回一个新的 Azure Disk 翻译器实例。
 func NewAzureDiskCSITranslator() InTreePlugin {
 	return &azureDiskCSITranslator{}
 }
 
-// TranslateInTreeStorageClassToCSI translates InTree Azure Disk storage class parameters to CSI storage class
 // TranslateInTreeStorageClassToCSI 把 in-tree Azure Disk StorageClass 翻译为 CSI StorageClass：
 // 把 zone/zones 转为拓扑选择器，并清洗无可用区 region 的拓扑值。
+// 驱动参数说明：https://github.com/kubernetes-sigs/azuredisk-csi-driver/blob/master/docs/driver-parameters.md
 func (t *azureDiskCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logger, sc *storage.StorageClass) (*storage.StorageClass, error) {
 	var (
 		generatedTopologies []v1.TopologySelectorTerm
@@ -112,8 +104,6 @@ func (t *azureDiskCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Lo
 	return sc, nil
 }
 
-// TranslateInTreeInlineVolumeToCSI takes a Volume with AzureDisk set from in-tree
-// and converts the AzureDisk source to a CSIPersistentVolumeSource
 // TranslateInTreeInlineVolumeToCSI 把 Pod 中 inline 的 in-tree Azure Disk 卷转换为独立的 CSI PV。
 func (t *azureDiskCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error) {
 	// 入参必须是带 AzureDisk 的 Volume。
@@ -128,8 +118,6 @@ func (t *azureDiskCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Lo
 	}
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			// Must be unique per disk as it is used as the unique part of the
-			// staging path
 			// 以 DataDiskURI 作为 PV 名称，保证跨磁盘唯一；它也是 staging 路径的组成部分。
 			Name: azureSource.DataDiskURI,
 		},
@@ -165,8 +153,6 @@ func (t *azureDiskCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Lo
 	return pv, nil
 }
 
-// TranslateInTreePVToCSI takes a PV with AzureDisk set from in-tree
-// and converts the AzureDisk source to a CSIPersistentVolumeSource
 // TranslateInTreePVToCSI 把带 in-tree AzureDisk 源的 PV 原地转换为 CSI PV。
 func (t *azureDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	// 校验 PV 非空且确实带有 AzureDisk 源。
@@ -177,7 +163,6 @@ func (t *azureDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *
 	var (
 		azureSource = pv.Spec.PersistentVolumeSource.AzureDisk
 
-		// refer to https://github.com/kubernetes-sigs/azuredisk-csi-driver/blob/master/docs/driver-parameters.md
 		// 按 CSI 驱动参数文档构造源：磁盘 URI 作为 volumeHandle，kind 固定为 Managed。
 		csiSource = &v1.CSIPersistentVolumeSource{
 			Driver:           AzureDiskDriverName,
@@ -215,8 +200,6 @@ func (t *azureDiskCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *
 	return pv, nil
 }
 
-// TranslateCSIPVToInTree takes a PV with CSIPersistentVolumeSource set and
-// translates the Azure Disk CSI source to a AzureDisk source.
 // TranslateCSIPVToInTree 是反向翻译：把 Azure Disk CSI 源还原为 in-tree AzureDisk 源。
 func (t *azureDiskCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	// 校验 PV 非空且带有 CSI 源。
@@ -232,7 +215,6 @@ func (t *azureDiskCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume)
 		return nil, err
 	}
 
-	// refer to https://github.com/kubernetes-sigs/azuredisk-csi-driver/blob/master/docs/driver-parameters.md
 	// 先按直接对应关系构造 AzureDisk 源，kind 固定为 Managed。
 	managed := v1.AzureManagedDisk
 	azureSource := &v1.AzureDiskVolumeSource{
@@ -271,29 +253,23 @@ func (t *azureDiskCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume)
 	return pv, nil
 }
 
-// CanSupport tests whether the plugin supports a given volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupport 判断该插件能否处理该 PV：即是否为 in-tree Azure Disk 源。
+// 传入对象的 spec 应视为常量，不得修改。
 func (t *azureDiskCSITranslator) CanSupport(pv *v1.PersistentVolume) bool {
 	return pv != nil && pv.Spec.AzureDisk != nil
 }
 
-// CanSupportInline tests whether the plugin supports a given inline volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupportInline 判断该插件能否处理该 inline Volume：即是否带 AzureDisk 源。
+// 传入对象的 spec 应视为常量，不得修改。
 func (t *azureDiskCSITranslator) CanSupportInline(volume *v1.Volume) bool {
 	return volume != nil && volume.AzureDisk != nil
 }
 
-// GetInTreePluginName returns the name of the intree plugin driver
 // GetInTreePluginName 返回 in-tree 插件的名称。
 func (t *azureDiskCSITranslator) GetInTreePluginName() string {
 	return AzureDiskInTreePluginName
 }
 
-// GetCSIPluginName returns the name of the CSI plugin
 // GetCSIPluginName 返回对应 CSI 插件的名称。
 func (t *azureDiskCSITranslator) GetCSIPluginName() string {
 	return AzureDiskDriverName
@@ -328,8 +304,6 @@ func getDiskName(diskURI string) (string, error) {
 	return matches[1], nil
 }
 
-// Replace topology values for failure domains ("<number>") to "",
-// as it's the value that the CSI driver expects.
 // replaceFailureDomainsToCSI 把无可用区 region 的数字拓扑值（如 "0"）替换为空字符串，
 // 因为 Azure Disk CSI 驱动期望用 "" 表示这种拓扑。
 func (t *azureDiskCSITranslator) replaceFailureDomainsToCSI(terms []v1.TopologySelectorTerm) []v1.TopologySelectorTerm {
@@ -348,12 +322,6 @@ func (t *azureDiskCSITranslator) replaceFailureDomainsToCSI(terms []v1.TopologyS
 			if exp.Key == AzureDiskTopologyKey {
 				for j := range exp.Values {
 					if unzonedCSIRegionRE.Match([]byte(exp.Values[j])) {
-						// Topologies "0", "1" etc are used when in-tree topology is translated to CSI in Azure
-						// regions that don't have availability zones. E.g.:
-						//    topology.kubernetes.io/region: westus
-						//    topology.kubernetes.io/zone: "0"
-						// The CSI driver uses zone "" instead of "0" in this case.
-						//    topology.disk.csi.azure.com/zone": ""
 						// 纯数字值代表无可用区，改写为空字符串。
 						exp.Values[j] = ""
 					}

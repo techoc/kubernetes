@@ -29,7 +29,7 @@ type pluginInitializer struct {
 // 编译期断言确保仍满足 apiserver 的初始化器接口。
 var _ admission.PluginInitializer = pluginInitializer{}
 
-// New creates an instance of wardle admission plugins initializer.
+// New 创建 Wardle 准入插件初始化器。
 // 把 factory 缓存下来，等插件注册后再统一注入。
 func New(informers informers.SharedInformerFactory) pluginInitializer {
 	return pluginInitializer{
@@ -37,8 +37,7 @@ func New(informers informers.SharedInformerFactory) pluginInitializer {
 	}
 }
 
-// Initialize checks the initialization interfaces implemented by a plugin
-// and provide the appropriate initialization data
+// Initialize 按插件实现的可选接口注入相应依赖。
 // 用可选接口而非强制参数，让不需要 informer 的插件保持零依赖。
 func (i pluginInitializer) Initialize(plugin admission.Interface) {
 	// 只有声明需要的插件才注入，类型断言失败时静默跳过。

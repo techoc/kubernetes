@@ -59,8 +59,8 @@ func TestRawConn(t *testing.T) {
 	<-conn.ready
 	wg := sync.WaitGroup{}
 
-	// verify we can read a client write
-	// 放在 goroutine 里等：写入下一行才触发服务端投递，顺序颠倒会永远等不到 EOF。
+	// 在 goroutine 中等待并读取客户端写入；必须先启动读取，再触发服务端投递，
+	// 否则 io.ReadAll 会一直等不到 EOF。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -79,7 +79,7 @@ func TestRawConn(t *testing.T) {
 		t.Fatalf("%d: %v", n, err)
 	}
 
-	// verify we can read a server write
+	// 客户端应读到服务端写入及对应的通道字节。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -97,7 +97,7 @@ func TestRawConn(t *testing.T) {
 		t.Errorf("unexpected client read: %v", data[:7])
 	}
 
-	// verify that an ignore channel is empty in both directions.
+	// 忽略通道的读写都应静默丢弃，不向对端发送数据。
 	if n, err := conn.channels[2].Write([]byte("test")); n != 4 || err != nil {
 		t.Errorf("writes should be ignored")
 	}
@@ -106,18 +106,18 @@ func TestRawConn(t *testing.T) {
 		t.Errorf("reads should be ignored")
 	}
 
-	// verify that a write to a Read channel doesn't block
+	// 向只读通道写入应被丢弃，不能阻塞。
 	if n, err := conn.channels[3].Write([]byte("test")); n != 4 || err != nil {
 		t.Errorf("writes should be ignored")
 	}
 
-	// verify that a read from a Write channel doesn't block
+	// 从只写通道读取应立即返回 EOF，不能阻塞。
 	data = make([]byte, 1024)
 	if n, err := conn.channels[4].Read(data); n != 0 || err != io.EOF {
 		t.Errorf("reads should be ignored")
 	}
 
-	// verify that a client write to a Write channel doesn't block (is dropped)
+	// 客户端向只写通道发送的数据应被丢弃，不能阻塞接收循环。
 	if n, err := client.Write(append([]byte{4}, []byte("ignored")...)); err != nil || n != 8 {
 		t.Fatalf("%d: %v", n, err)
 	}
@@ -195,7 +195,7 @@ func TestBase64Conn(t *testing.T) {
 // 握手场景的通用表：supported 描述服务端允许哪些协议及其编码，
 // requested 是客户端提议列表，expected 是应当协商出的协议；error 表示预期握手失败。
 type versionTest struct {
-	supported map[string]bool // protocol -> binary
+	supported map[string]bool // 子协议名 -> 是否使用二进制帧
 	requested []string
 	error     bool
 	expected  string
@@ -259,10 +259,8 @@ func TestVersionedConn(t *testing.T) {
 				}
 			}
 			conn := NewConn(supportedProtocols)
-			// note that it's not enough to wait for conn.ready to avoid a race here. Hence,
-			// we use a channel.
-			// ready 关闭时 selectedProtocol 可能还没被赋值；用带同步语义的 channel
-			// 传值，才能确保读到的是 Open 真正返回的协议。
+			// Open 返回的协议通过 channel 传给测试，建立明确的同步关系，
+			// 避免测试直接并发读取 conn.selectedProtocol。
 			selectedProtocol := make(chan string)
 			s, addr := newServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				p, _, _ := conn.Open(w, req)
@@ -346,7 +344,7 @@ func TestIsWebSocketRequestWithStreamCloseProtocol(t *testing.T) {
 			headers: map[string]string{
 				"Connection":            "upgrade",
 				"Upgrade":               "websocket",
-				WebSocketProtocolHeader: "v5.CHANNEL.k8s.io", // header value is case-sensitive
+				WebSocketProtocolHeader: "v5.CHANNEL.k8s.io", // 头值区分大小写
 			},
 			expected: false,
 		},

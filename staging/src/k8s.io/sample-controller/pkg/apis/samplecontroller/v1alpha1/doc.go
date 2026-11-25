@@ -19,8 +19,7 @@ limitations under the License.
 // +groupName=samplecontroller.k8s.io
 // +k8s:openapi-model-package=io.k8s.sample-controller.pkg.apis.samplecontroller.v1alpha1
 
-// Package v1alpha1 is the v1alpha1 version of the API.
-//
+// Package v1alpha1 是 samplecontroller API 的 v1alpha1 版本。
 // 本包定义 Foo 自定义资源的类型与版本信息。
 // API 版本单独成包，是为了在未来引入 v1beta1/v1 时能够并存并完成渐进式迁移。
 // 指令 +k8s:deepcopy-gen=package 与 +groupName=samplecontroller.k8s.io 分别供代码生成器确定深拷贝实现和 API 组名。

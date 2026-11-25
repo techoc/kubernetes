@@ -43,9 +43,7 @@ type pkcs11RemoteService struct {
 	aead cipher.AEAD
 }
 
-// NewPKCS11RemoteService creates a new PKCS11 remote service with SoftHSMv2 configuration file and keyID
 // NewPKCS11RemoteService 从 SoftHSMv2 配置文件加载上下文，按 keyID 查找密钥并创建 GCM AEAD 实例。
-//
 // 流程：
 //  1. 用配置文件初始化 PKCS#11 上下文；
 //  2. 校验 keyID 非空；

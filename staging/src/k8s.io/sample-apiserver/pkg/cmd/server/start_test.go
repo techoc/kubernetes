@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 覆盖映射的等价、回退、封顶与无映射四种情况。
+// TestWardleEmulationVersionToKubeEmulationVersion 覆盖映射的等价、回退、封顶与无映射四种情况。
 func TestWardleEmulationVersionToKubeEmulationVersion(t *testing.T) {
 	// 期望值基于测试专用二进制版本推导，避免把当前版本号写死在用例里。
 	defaultKubeEffectiveVersion := compatibility.DefaultKubeEffectiveVersionForTest()

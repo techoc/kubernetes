@@ -38,11 +38,9 @@ var (
 	secretNameRe = regexp.MustCompile(`^` + regexp.QuoteMeta(api.BootstrapTokenSecretPrefix) + `([a-z0-9]{6})$`)
 )
 
-// GetData returns the string value for the given key in the specified Secret
-// If there is an error or if the key doesn't exist, an empty string is returned.
+// GetData 返回 Secret 中指定键的字符串值；Data 为 nil 或键不存在时返回空串。
 func GetData(secret *v1.Secret, key string) string {
-	// Data 为 nil 等价于所有键都不存在；返回空串让调用方无需区分
-	// “缺少键”和“缺少 Data”。
+	// 统一返回空串，让调用方无需区分“缺少键”和“缺少 Data”。
 	if secret.Data == nil {
 		return ""
 	}
@@ -52,21 +50,15 @@ func GetData(secret *v1.Secret, key string) string {
 	return ""
 }
 
-// HasExpired will identify whether the secret expires
+// HasExpired 判断 bootstrap token Secret 在 currentTime 是否已经过期。
 func HasExpired(secret *v1.Secret, currentTime time.Time) bool {
 	_, expired := GetExpiration(secret, currentTime)
 
 	return expired
 }
 
-// GetExpiration checks if the secret expires
-// isExpired indicates if the secret is already expired.
-// timeRemaining indicates how long until it does expire.
-// if the secret has no expiration timestamp, returns 0, false.
-// if there is an error parsing the secret's expiration timestamp, returns 0, true.
-//
-// 时间解析失败按过期处理（fail-closed），避免畸形的时间戳意外延长 token 的
-// 可用期。
+// GetExpiration 返回距离过期的剩余时间和是否已过期。
+// 未设置过期时间时返回 (0, false)；时间格式非法时返回 (0, true)，使畸形值无法延长凭据寿命。
 func GetExpiration(secret *v1.Secret, currentTime time.Time) (timeRemaining time.Duration, isExpired bool) {
 	expiration := GetData(secret, api.BootstrapTokenExpirationKey)
 	if len(expiration) == 0 {
@@ -89,10 +81,8 @@ func GetExpiration(secret *v1.Secret, currentTime time.Time) (timeRemaining time
 	return timeRemaining, false
 }
 
-// ParseName parses the name of the secret to extract the secret ID.
-//
-// 名称形如 `bootstrap-token-<id>`；正则的捕获组保证返回的是纯 ID，
-// 名称不合法时 ok 为 false 而不是返回空串加 nil 错误。
+// ParseName 从 `bootstrap-token-<id>` 形式的 Secret 名称中提取公开 ID。
+// 名称不合法时返回空 ID 和 false；捕获组确保结果不夹带前缀。
 func ParseName(name string) (secretID string, ok bool) {
 	r := secretNameRe.FindStringSubmatch(name)
 	if r == nil {
@@ -101,23 +91,19 @@ func ParseName(name string) (secretID string, ok bool) {
 	return r[1], true
 }
 
-// GetGroups loads and validates the bootstrapapi.BootstrapTokenExtraGroupsKey
-// key from the bootstrap token secret, returning a list of group names or an
-// error if any of the group names are invalid.
-//
-// 结果始终包含默认组 system:bootstrappers；附加组逐个校验，任一非法则
-// 整体返回错误（不静默丢弃），以免配置错误被掩盖成权限缺失或越权。
+// GetGroups 读取并校验 bootstrap token Secret 的附加组，返回去重、排序后的组列表。
+// 默认组 system:bootstrappers 始终存在；任一附加组非法都会整体报错，不静默丢弃。
 func GetGroups(secret *v1.Secret) ([]string, error) {
-	// always include the default group
+	// 默认组无条件加入。
 	groups := sets.NewString(api.BootstrapDefaultGroup)
 
-	// grab any extra groups and if there are none, return just the default
+	// 未配置附加组时仅返回默认组。
 	extraGroupsString := GetData(secret, api.BootstrapTokenExtraGroupsKey)
 	if extraGroupsString == "" {
 		return groups.List(), nil
 	}
 
-	// validate the names of the extra groups
+	// 逐个拒绝非法组名，防止配置错误被解释为权限不足或越权。
 	for _, group := range strings.Split(extraGroupsString, ",") {
 		if err := legacyutil.ValidateBootstrapGroupName(group); err != nil {
 			return nil, err
@@ -125,6 +111,6 @@ func GetGroups(secret *v1.Secret) ([]string, error) {
 		groups.Insert(group)
 	}
 
-	// return the result as a deduplicated, sorted list
+	// sets.String.List 同时保证去重与稳定排序。
 	return groups.List(), nil
 }

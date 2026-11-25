@@ -31,10 +31,9 @@ var (
 	bootstrapTokenRe = regexp.MustCompile(api.BootstrapTokenPattern)
 )
 
-// ParseToken tries and parse a valid token from a string.
-// A token ID and token secret are returned in case of success, an error otherwise.
-//
-// 使用锚定整串的正则捕获两组；len 检查同时兜住格式错误，避免越界访问。
+// ParseToken 解析 "<id>.<secret>" 形式的 token，成功时返回 ID 与 Secret，否则返回错误。
+// 正则必须锚定整串；额外的 len 检查用于在格式异常时避免越界访问。
+// 本函数只检查格式，不验证凭据是否存在于集群或已经过期。
 func ParseToken(s string) (tokenID, tokenSecret string, err error) {
 	split := bootstrapTokenRe.FindStringSubmatch(s)
 	if len(split) != 3 {

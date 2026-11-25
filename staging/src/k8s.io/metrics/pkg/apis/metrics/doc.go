@@ -17,6 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=metrics.k8s.io
 
-// Package metrics defines an API for exposing metrics.
+// Package metrics 定义用于暴露指标的 API。
 // 本包是内部版本的类型定义，作为各外部版本之间转换的中转表示。
 package metrics

@@ -812,8 +812,7 @@ func TestAddTopology(t *testing.T) {
 								{
 									Key:      GCEPDTopologyKey,
 									Operator: v1.NodeSelectorOpIn,
-									// Values are expected to be ordered
-									Values: []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
+									Values:   []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 								},
 							},
 						},

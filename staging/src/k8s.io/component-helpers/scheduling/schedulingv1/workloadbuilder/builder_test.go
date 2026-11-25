@@ -38,8 +38,8 @@ import (
 // 默认值与用户输入的逐字段覆盖、回调调整，以及各类非法输入。
 // 每个用例的 verify 回调用于检查具体的编译结果。
 func TestBuildWorkload(t *testing.T) {
-	// 这个标志位跨用例共享，专门用来验证“空叶子名字”用例会在名字检查处提前失败：
-	// 名字校验应先于配置解析与回调执行，因此该标志位应始终保持 false。
+	// 回调会设置这个跨用例共享的标志；当前空名字用例只断言构建失败，
+	// 成功后才执行的 verify 不会运行，因此不能据此证明回调是否被调用。
 	emptyNameCallbackRan := false
 	// 表驱动用例各字段的含义：
 	// name - 用例名，同时作为子测试名；owner 替换逻辑靠它识别“缺少 owner”特例
@@ -265,8 +265,8 @@ func TestBuildWorkload(t *testing.T) {
 			},
 		},
 		{
-			// 叶子节点名字为空。验证名字检查在配置解析与回调之前短路：
-			// 期望报错，且挂载的回调绝不执行（由共享标志位 emptyNameCallbackRan 证明）。
+			// 叶子节点名字为空：整树结构校验应先于编译，因此直接返回错误。
+			// 回调是否执行没有独立断言，见上方对 emptyNameCallbackRan 的说明。
 			name: "empty leaf name fails before resolution and callbacks",
 			root: &WorkloadItem{
 				Name:  "",

@@ -31,42 +31,31 @@ import (
 )
 
 const (
-	// AWSEBSDriverName is the name of the CSI driver for EBS
 	// AWSEBSDriverName 是 EBS CSI 驱动的名称。
 	AWSEBSDriverName = "ebs.csi.aws.com"
-	// AWSEBSInTreePluginName is the name of the intree plugin for EBS
 	// AWSEBSInTreePluginName 是 in-tree EBS 插件的名称。
 	AWSEBSInTreePluginName = "kubernetes.io/aws-ebs"
-	// AWSEBSTopologyKey is the zonal topology key for AWS EBS CSI driver
 	// AWSEBSTopologyKey 是 AWS EBS CSI 驱动用于表示可用区（zone）的拓扑键。
 	AWSEBSTopologyKey = "topology." + AWSEBSDriverName + "/zone"
-	// iopsPerGBKey is StorageClass parameter name that specifies IOPS
-	// Per GB.
 	// iopsPerGBKey 是 StorageClass 中指定“每 GB 对应 IOPS”的参数名。
 	iopsPerGBKey = "iopspergb"
-	// allowIncreaseIOPSKey is parameter name that allows the CSI driver
-	// to increase IOPS to the minimum value supported by AWS when IOPS
-	// Per GB is too low for a given volume size. This preserves current
-	// in-tree volume plugin behavior.
-	// allowIncreaseIOPSKey 是允许 CSI 驱动在每 GB IOPS 过低时，自动把 IOPS
-	// 提升到 AWS 支持的最小值的参数名，用于保持 in-tree 插件的原有行为。
+	// allowIncreaseIOPSKey 是允许 CSI 驱动在给定卷大小下，按“卷大小 × 每 GB IOPS”
+	// 计算出的总 IOPS 低于 AWS 支持的最小值时，自动提升到该最小值的参数名，
+	// 用于保持 in-tree 插件的原有行为。
 	allowIncreaseIOPSKey = "allowautoiopspergbincrease"
 )
 
 // 编译期断言：确保 awsElasticBlockStoreCSITranslator 实现了 InTreePlugin 接口。
 var _ InTreePlugin = &awsElasticBlockStoreCSITranslator{}
 
-// awsElasticBlockStoreTranslator handles translation of PV spec from In-tree EBS to CSI EBS and vice versa
 // awsElasticBlockStoreCSITranslator 负责 in-tree EBS 与 CSI EBS 之间 PV spec 的双向翻译。
 type awsElasticBlockStoreCSITranslator struct{}
 
-// NewAWSElasticBlockStoreCSITranslator returns a new instance of awsElasticBlockStoreTranslator
 // NewAWSElasticBlockStoreCSITranslator 返回一个新的 AWS EBS 翻译器实例。
 func NewAWSElasticBlockStoreCSITranslator() InTreePlugin {
 	return &awsElasticBlockStoreCSITranslator{}
 }
 
-// TranslateInTreeStorageClassToCSI translates InTree EBS storage class parameters to CSI storage class
 // TranslateInTreeStorageClassToCSI 把 in-tree EBS StorageClass 的参数翻译为 CSI 参数：
 // 重命名 fstype、补充 IOPS 参数，并把 zone/zones 转换为 AllowedTopologies。
 func (t *awsElasticBlockStoreCSITranslator) TranslateInTreeStorageClassToCSI(logger klog.Logger, sc *storage.StorageClass) (*storage.StorageClass, error) {
@@ -87,12 +76,10 @@ func (t *awsElasticBlockStoreCSITranslator) TranslateInTreeStorageClassToCSI(log
 			// 逗号分隔的多个 zone 生成一个含多个匹配值的拓扑选择器。
 			generatedTopologies = generateToplogySelectors(AWSEBSTopologyKey, strings.Split(v, ","))
 		case iopsPerGBKey:
-			// Keep iopsPerGBKey
 			// 保留 iopsPerGB 参数本身。
 			params[k] = v
-			// Preserve current in-tree volume plugin behavior and allow the CSI
-			// driver to bump volume IOPS when volume size * iopsPerGB is too low.
-			// 额外开启自动提升 IOPS，复现 in-tree 插件在 IOPS 过低时的行为。
+			// 额外开启自动提升 IOPS：给定卷大小下，卷大小 × 每 GB IOPS 低于 AWS
+			// 支持的最小值时提升到最小值，复现 in-tree 插件的行为。
 			params[allowIncreaseIOPSKey] = "true"
 		default:
 			// 其他参数原样透传给 CSI 驱动。
@@ -121,8 +108,6 @@ func (t *awsElasticBlockStoreCSITranslator) TranslateInTreeStorageClassToCSI(log
 	return sc, nil
 }
 
-// TranslateInTreeInlineVolumeToCSI takes a Volume with AWSElasticBlockStore set from in-tree
-// and converts the AWSElasticBlockStore source to a CSIPersistentVolumeSource
 // TranslateInTreeInlineVolumeToCSI 把 Pod 中 inline 的 in-tree AWS EBS 卷转换为一个独立的 CSI PV。
 func (t *awsElasticBlockStoreCSITranslator) TranslateInTreeInlineVolumeToCSI(logger klog.Logger, volume *v1.Volume, podNamespace string) (*v1.PersistentVolume, error) {
 	// 入参必须是带 AWSElasticBlockStore 的 Volume，否则没有可翻译的来源。
@@ -138,8 +123,6 @@ func (t *awsElasticBlockStoreCSITranslator) TranslateInTreeInlineVolumeToCSI(log
 	}
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			// Must be unique per disk as it is used as the unique part of the
-			// staging path
 			// PV 名称按磁盘唯一，因为它会作为 staging 路径的唯一组成部分。
 			Name: fmt.Sprintf("%s-%s", AWSEBSDriverName, volumeHandle),
 		},
@@ -163,8 +146,6 @@ func (t *awsElasticBlockStoreCSITranslator) TranslateInTreeInlineVolumeToCSI(log
 	return pv, nil
 }
 
-// TranslateInTreePVToCSI takes a PV with AWSElasticBlockStore set from in-tree
-// and converts the AWSElasticBlockStore source to a CSIPersistentVolumeSource
 // TranslateInTreePVToCSI 把带 in-tree AWSElasticBlockStore 源的 PV 原地转换为 CSI PV。
 func (t *awsElasticBlockStoreCSITranslator) TranslateInTreePVToCSI(logger klog.Logger, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	// 校验 PV 非空且确实带有 in-tree EBS 源。
@@ -203,8 +184,6 @@ func (t *awsElasticBlockStoreCSITranslator) TranslateInTreePVToCSI(logger klog.L
 	return pv, nil
 }
 
-// TranslateCSIPVToInTree takes a PV with CSIPersistentVolumeSource set and
-// translates the EBS CSI source to a AWSElasticBlockStore source.
 // TranslateCSIPVToInTree 是反向翻译：把 EBS CSI 源还原为 in-tree AWSElasticBlockStore 源。
 func (t *awsElasticBlockStoreCSITranslator) TranslateCSIPVToInTree(pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	// 校验 PV 非空且确实带有 CSI 源。
@@ -230,7 +209,6 @@ func (t *awsElasticBlockStoreCSITranslator) TranslateCSIPVToInTree(pv *v1.Persis
 		ebsSource.Partition = int32(partValue)
 	}
 
-	// translate CSI topology to In-tree topology for rollback compatibility
 	// 反向翻译拓扑，并把 zone 推导出的 region 交给回调函数，以兼容回滚场景。
 	if err := translateTopologyFromCSIToInTree(pv, AWSEBSTopologyKey, getAwsRegionFromZones); err != nil {
 		return nil, fmt.Errorf("failed to translate topology. PV:%+v. Error:%v", *pv, err)
@@ -241,29 +219,23 @@ func (t *awsElasticBlockStoreCSITranslator) TranslateCSIPVToInTree(pv *v1.Persis
 	return pv, nil
 }
 
-// CanSupport tests whether the plugin supports a given persistent volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupport 判断该插件能否处理给定的 PV：即 PV 是否为 in-tree AWS EBS 源。
+// 传入对象的 spec 应视为常量，不得修改。
 func (t *awsElasticBlockStoreCSITranslator) CanSupport(pv *v1.PersistentVolume) bool {
 	return pv != nil && pv.Spec.AWSElasticBlockStore != nil
 }
 
-// CanSupportInline tests whether the plugin supports a given inline volume
-// specification from the API.  The spec pointer should be considered
-// const.
 // CanSupportInline 判断该插件能否处理给定的 inline Volume：即是否带 AWS EBS 源。
+// 传入对象的 spec 应视为常量，不得修改。
 func (t *awsElasticBlockStoreCSITranslator) CanSupportInline(volume *v1.Volume) bool {
 	return volume != nil && volume.AWSElasticBlockStore != nil
 }
 
-// GetInTreePluginName returns the name of the intree plugin driver
 // GetInTreePluginName 返回 in-tree 插件的名称。
 func (t *awsElasticBlockStoreCSITranslator) GetInTreePluginName() string {
 	return AWSEBSInTreePluginName
 }
 
-// GetCSIPluginName returns the name of the CSI plugin
 // GetCSIPluginName 返回对应 CSI 插件的名称。
 func (t *awsElasticBlockStoreCSITranslator) GetCSIPluginName() string {
 	return AWSEBSDriverName
@@ -274,42 +246,26 @@ func (t *awsElasticBlockStoreCSITranslator) RepairVolumeHandle(volumeHandle, nod
 	return volumeHandle, nil
 }
 
-// awsVolumeRegMatch represents Regex Match for AWS volume.
 // awsVolumeRegMatch 用于校验 EBS 卷 ID 是否符合 vol-xxx（且不含路径分隔符）的格式。
 var awsVolumeRegMatch = regexp.MustCompile("^vol-[^/]*$")
 
-// KubernetesVolumeIDToEBSVolumeID translates Kubernetes volume ID to EBS volume ID
-// KubernetesVolumeID forms:
-//   - aws://<zone>/<awsVolumeId>
-//   - aws:///<awsVolumeId>
-//   - <awsVolumeId>
-//
-// EBS Volume ID form:
-//   - vol-<alphanumberic>
-//
-// This translation shouldn't be needed and should be fixed in long run
-// See https://github.com/kubernetes/kubernetes/issues/73730
 // KubernetesVolumeIDToEBSVolumeID 把 Kubernetes 卷 ID 转换为纯 EBS 卷 ID，
 // 兼容三种输入：裸 vol-id、aws:///vol-id 以及 aws://zone/vol-id。
+// 长期看这种转换应不再必要：
+// https://github.com/kubernetes/kubernetes/issues/73730
+// URL 形式最初把可用区放在 host 中，以便无需查询 API 即可取得；现在 PV 标签
+// 已保存可用区，因此不再需要这一层。若未来支持不使用 PV 的多可用区卷感知，
+// 可能仍需从 host 获取可用区。
 func KubernetesVolumeIDToEBSVolumeID(kubernetesID string) (string, error) {
-	// name looks like aws://availability-zone/awsVolumeId
 
-	// The original idea of the URL-style name was to put the AZ into the
-	// host, so we could find the AZ immediately from the name without
-	// querying the API.  But it turns out we don't actually need it for
-	// multi-AZ clusters, as we put the AZ into the labels on the PV instead.
-	// However, if in future we want to support multi-AZ cluster
-	// volume-awareness without using PersistentVolumes, we likely will
-	// want the AZ in the host.
 	// 没有 aws:// 前缀时视为裸卷 ID，直接返回。
 	if !strings.HasPrefix(kubernetesID, "aws://") {
-		// Assume a bare aws volume id (vol-1234...)
 		return kubernetesID, nil
 	}
 	// 带 URL 前缀时按 URL 解析，并校验 scheme 是否为 aws。
 	url, err := url.Parse(kubernetesID)
 	if err != nil {
-		// TODO: Maybe we should pass a URL into the Volume functions
+		// TODO: 考虑让 Volume 函数直接接收解析后的 URL。
 		return "", fmt.Errorf("Invalid disk name (%s): %v", kubernetesID, err)
 	}
 	if url.Scheme != "aws" {
@@ -320,8 +276,6 @@ func KubernetesVolumeIDToEBSVolumeID(kubernetesID string) (string, error) {
 	awsID := url.Path
 	awsID = strings.Trim(awsID, "/")
 
-	// We sanity check the resulting volume; the two known formats are
-	// vol-12345678 and vol-12345678abcdef01
 	// 用正则做合法性校验，避免把畸形 ID 传给 CSI 驱动。
 	if !awsVolumeRegMatch.MatchString(awsID) {
 		return "", fmt.Errorf("Invalid format for AWS volume (%s)", kubernetesID)
@@ -332,24 +286,21 @@ func KubernetesVolumeIDToEBSVolumeID(kubernetesID string) (string, error) {
 
 // getAwsRegionFromZones 从一组可用区名称中推导出唯一的 AWS region；
 // 供拓扑反向翻译时把 zone 映射回 region 使用。
+// 标准可用区名称假定以单个字母结尾；形如 us-west-10 的名称会解析失败。
 func getAwsRegionFromZones(zones []string) (string, error) {
 	regions := sets.String{}
 	if len(zones) < 1 {
 		return "", fmt.Errorf("no zones specified")
 	}
 
-	// AWS zones can be in four forms:
-	// us-west-2a, us-gov-east-1a, us-west-2-lax-1a (local zone) and us-east-1-wl1-bos-wlz-1 (wavelength).
 	// 依次解析每个 zone，利用字符串分段数区分标准区、GovCloud、local zone 与 wavelength 区。
 	for _, zone := range zones {
 		splitZone := strings.Split(zone, "-")
 		if (len(splitZone) == 3 || len(splitZone) == 4) && len(splitZone[len(splitZone)-1]) == 2 {
 			// 标准可用区：去掉末尾表示可用区的单个字母，剩下即为 region。
-			// this would break if we ever have a location with more than 9 regions, ie us-west-10.
 			splitZone[len(splitZone)-1] = splitZone[len(splitZone)-1][:1]
 			regions.Insert(strings.Join(splitZone, "-"))
 		} else if len(splitZone) == 5 || len(splitZone) == 7 {
-			// local zone or wavelength
 			// local zone 或 wavelength 区：取前三段作为 region。
 			regions.Insert(strings.Join(splitZone[:3], "-"))
 		} else {

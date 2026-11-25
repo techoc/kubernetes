@@ -24,11 +24,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// CleanupMountPoint unmounts the given path and deletes the remaining directory
-// if successful. If extensiveMountPointCheck is true IsNotMountPoint will be
-// called instead of IsLikelyNotMountPoint. IsNotMountPoint is more expensive
-// but properly handles bind mounts within the same fs.
-// 路径不存在直接返回成功，让卸载幂等；损坏的挂载点仍要继续清理。
+// CleanupMountPoint 卸载指定路径，并在成功后删除剩余目录；路径不存在时视为成功，保证幂等。
+// extensiveMountPointCheck 为 true 时使用成本更高但能正确处理同一文件系统内绑定挂载的 IsNotMountPoint；
+// 否则使用 IsLikelyNotMountPoint。损坏的挂载点仍需继续清理。
 func CleanupMountPoint(mountPath string, mounter Interface, extensiveMountPointCheck bool) error {
 	pathExists, pathErr := PathExists(mountPath)
 	if !pathExists && pathErr == nil {
@@ -43,7 +41,8 @@ func CleanupMountPoint(mountPath string, mounter Interface, extensiveMountPointC
 }
 
 // CleanupMountWithForce 在普通卸载可能卡住时使用，超时后改用强制卸载。
-// 与 CleanupMountPoint 逻辑一致，区别只在卸载调用的入口。
+// 路径存在性、损坏挂载和挂载点判定沿用 CleanupMountPoint 的规则，仅卸载入口不同。
+// corruptedMnt 为 true 或 mounter 允许跳过检查时直接强制卸载，否则先确认路径仍是挂载点。
 func CleanupMountWithForce(mountPath string, mounter MounterForceUnmounter, extensiveMountPointCheck bool, umountTimeout time.Duration) error {
 	pathExists, pathErr := PathExists(mountPath)
 	if !pathExists && pathErr == nil {
@@ -65,7 +64,7 @@ func CleanupMountWithForce(mountPath string, mounter MounterForceUnmounter, exte
 	}
 
 	notMnt, err := removePathIfNotMountPoint(mountPath, mounter, extensiveMountPointCheck)
-	// if mountPath is not a mount point, it's just been removed or there was an error
+	// 出错或已确认不是挂载点时，目录要么已删除，要么应保留给调用方处理。
 	if err != nil || notMnt {
 		return err
 	}
@@ -76,22 +75,18 @@ func CleanupMountWithForce(mountPath string, mounter MounterForceUnmounter, exte
 	}
 
 	notMnt, err = removePathIfNotMountPoint(mountPath, mounter, extensiveMountPointCheck)
-	// if mountPath is not a mount point, it's either just been removed or there was an error
+	// 卸载后路径可能已被移除，也可能检查出错；仅确认仍是挂载点时才继续报错。
 	if notMnt {
 		return err
 	}
-	// mountPath is still a mount point
+	// 仍是挂载点，说明清理未完成。
 	return fmt.Errorf("failed to cleanup mount point %v", mountPath)
 }
 
-// doCleanupMountPoint unmounts the given path and
-// deletes the remaining directory if successful.
-// if extensiveMountPointCheck is true
-// IsNotMountPoint will be called instead of IsLikelyNotMountPoint.
-// IsNotMountPoint is more expensive but properly handles bind mounts within the same fs.
-// if corruptedMnt is true, it means that the mountPath is a corrupted mountpoint, and the mount point check
-// will be skipped. The mount point check will also be skipped if the mounter supports it.
-// 损坏挂载点无法再做检查，只能直接卸载；检查失败时宁可保留目录也不误删。
+// doCleanupMountPoint 卸载指定路径，并在成功后删除剩余目录。
+// extensiveMountPointCheck 为 true 时使用 IsNotMountPoint，它能正确处理同一文件系统内的绑定挂载，但成本更高；
+// 否则使用 IsLikelyNotMountPoint。corruptedMnt 表示损坏的挂载点，此时跳过检查；
+// mounter 声明可以安全跳过检查时也同样直接卸载。
 func doCleanupMountPoint(mountPath string, mounter Interface, extensiveMountPointCheck bool, corruptedMnt bool) error {
 	if corruptedMnt || mounter.CanSafelySkipMountPointCheck() {
 		klog.V(4).Infof("unmounting %q (corruptedMount: %t, mounterCanSkipMountPointChecks: %t)",
@@ -103,7 +98,7 @@ func doCleanupMountPoint(mountPath string, mounter Interface, extensiveMountPoin
 	}
 
 	notMnt, err := removePathIfNotMountPoint(mountPath, mounter, extensiveMountPointCheck)
-	// if mountPath is not a mount point, it's just been removed or there was an error
+	// 出错或已确认不是挂载点时，目录要么已删除，要么应保留给调用方处理。
 	if err != nil || notMnt {
 		return err
 	}
@@ -114,17 +109,16 @@ func doCleanupMountPoint(mountPath string, mounter Interface, extensiveMountPoin
 	}
 
 	notMnt, err = removePathIfNotMountPoint(mountPath, mounter, extensiveMountPointCheck)
-	// if mountPath is not a mount point, it's either just been removed or there was an error
+	// 卸载后路径可能已被移除，也可能检查出错；仅确认仍是挂载点时才继续报错。
 	if notMnt {
 		return err
 	}
-	// mountPath is still a mount point
+	// 仍是挂载点，说明清理未完成。
 	return fmt.Errorf("failed to cleanup mount point %v", mountPath)
 }
 
-// removePathIfNotMountPoint verifies if given mountPath is a mount point if not it attempts
-// to remove the directory. Returns true and nil if directory was not a mount point and removed.
-// 只在确认不是挂载点时才删目录，防止误删挂载在非空目录上的数据。
+// removePathIfNotMountPoint 验证给定路径是否为挂载点，仅在确认不是挂载点时尝试删除目录。
+// 目录原本不是挂载点且已删除时返回 true 和 nil；出错时保留目录并返回错误，避免误删数据。
 func removePathIfNotMountPoint(mountPath string, mounter Interface, extensiveMountPointCheck bool) (bool, error) {
 	var notMnt bool
 	var err error
@@ -150,7 +144,7 @@ func removePathIfNotMountPoint(mountPath string, mounter Interface, extensiveMou
 	return notMnt, nil
 }
 
-// removePath attempts to remove the directory. Returns nil if the directory was removed or does not exist.
+// removePath 尝试删除目录；目录已删除或不存在时返回 nil。
 // 已不存在视为成功，让多次清理调用保持幂等。
 func removePath(mountPath string) error {
 	klog.V(4).Infof("Deleting path %q", mountPath)

@@ -29,13 +29,10 @@ import (
 )
 
 const (
-	// overloadThreshold represents the maximum overload any individual endpoint
-	// should be exposed to.
 	// overloadThreshold 表示单个端点可承受的最大过载比例。
 	overloadThreshold float64 = 0.2
 )
 
-// TopologyCache tracks the distribution of Nodes and endpoints across zones.
 // TopologyCache 记录节点与端点在各可用区之间的分布情况。
 type TopologyCache struct {
 	// lock 保护本结构体中所有可变字段的并发访问。
@@ -52,13 +49,9 @@ type TopologyCache struct {
 	hintsPopulatedByService sets.Set[string]
 }
 
-// EndpointZoneInfo tracks the distribution of endpoints across zones for a
-// Service.
 // EndpointZoneInfo 记录某个 Service 的端点在各可用区之间的分布（可用区名到端点数的映射）。
 type EndpointZoneInfo map[string]int
 
-// allocation describes the number of endpoints that should be allocated for a
-// zone.
 // allocation 描述某个可用区应分配的端点数量范围。
 type allocation struct {
 	// minimum 表示该可用区最少需要分配的端点数。
@@ -69,10 +62,9 @@ type allocation struct {
 	desired float64
 }
 
-// NewTopologyCache initializes a new TopologyCache.
 // NewTopologyCache 初始化并返回一个新的 TopologyCache。
 func NewTopologyCache() *TopologyCache {
-	// 初始化各映射与集合，避免后续写入时出现 nil map panic。
+	// 初始化各映射与集合，避免后续写入时出现 nil 映射 panic。
 	return &TopologyCache{
 		cpuByZone:               map[string]*resource.Quantity{},
 		cpuRatiosByZone:         map[string]float64{},
@@ -81,8 +73,6 @@ func NewTopologyCache() *TopologyCache {
 	}
 }
 
-// GetOverloadedServices returns a list of Service keys that refer to Services
-// that have crossed the overload threshold for any zone.
 // GetOverloadedServices 返回在任何可用区上越过过载阈值的 Service 键列表。
 func (t *TopologyCache) GetOverloadedServices() []string {
 	t.lock.Lock()
@@ -102,8 +92,6 @@ func (t *TopologyCache) GetOverloadedServices() []string {
 	return svcKeys
 }
 
-// AddHints adds or updates topology hints on EndpointSlices and returns updated
-// lists of EndpointSlices to create and update.
 // AddHints 在 EndpointSlice 上添加或更新拓扑提示，并返回更新后的待创建与待更新切片列表。
 func (t *TopologyCache) AddHints(logger klog.Logger, si *SliceInfo) ([]*discovery.EndpointSlice, []*discovery.EndpointSlice, []*EventBuilder) {
 	// 先统计就绪端点总数，再据此计算各可用区的分配方案。
@@ -129,7 +117,6 @@ func (t *TopologyCache) AddHints(logger klog.Logger, si *SliceInfo) ([]*discover
 		allocatableSlices = append(allocatableSlices, slice)
 	}
 
-	// step 1: assign same-zone hints for all endpoints as a starting point.
 	// 第一步：以“端点所在可用区”作为起点，为就绪端点分配同可用区提示。
 	for _, slice := range allocatableSlices {
 		for i, endpoint := range slice.Endpoints {
@@ -157,11 +144,9 @@ func (t *TopologyCache) AddHints(logger klog.Logger, si *SliceInfo) ([]*discover
 		}
 	}
 
-	// step 2. Identify which zones need to donate slices and which need more.
 	// 第二步：根据期望分配与当前分配的差距，找出需要给出端点与需要接收端点的可用区。
 	givingZones, receivingZones := getGivingAndReceivingZones(allocations, allocatedHintsByZone)
 
-	// step 3. Redistribute endpoints based on data from step 2.
 	// 第三步：在可分配切片上执行提示重分配，得到各可用区提示数的变化量。
 	redistributions := redistributeHints(logger, allocatableSlices, givingZones, receivingZones)
 
@@ -189,7 +174,6 @@ func (t *TopologyCache) AddHints(logger klog.Logger, si *SliceInfo) ([]*discover
 	hintsEnabled := t.hasPopulatedHintsLocked(si.ServiceKey)
 	t.setHintsLocked(si.ServiceKey, si.AddressType, allocatedHintsByZone)
 
-	// if hints were not enabled before, we publish an event to indicate we enabled them.
 	// 如果此前未启用过提示，则发布一个“已启用”事件通知外部。
 	if !hintsEnabled {
 		logger.Info("Topology Aware Hints has been enabled, adding hints.", "key", si.ServiceKey, "addressType", si.AddressType)
@@ -202,8 +186,6 @@ func (t *TopologyCache) AddHints(logger klog.Logger, si *SliceInfo) ([]*discover
 	return si.ToCreate, si.ToUpdate, events
 }
 
-// SetHints sets topology hints for the provided serviceKey and addrType in this
-// cache.
 // SetHints 在缓存中为指定的 serviceKey 和 addrType 设置拓扑提示。
 func (t *TopologyCache) SetHints(serviceKey string, addrType discovery.AddressType, allocatedHintsByZone EndpointZoneInfo) {
 	t.lock.Lock()
@@ -227,8 +209,6 @@ func (t *TopologyCache) setHintsLocked(serviceKey string, addrType discovery.Add
 	t.hintsPopulatedByService.Insert(serviceKey)
 }
 
-// RemoveHints removes topology hints for the provided serviceKey and addrType
-// from this cache.
 // RemoveHints 从缓存中移除指定 serviceKey 和 addrType 对应的拓扑提示。
 func (t *TopologyCache) RemoveHints(serviceKey string, addrType discovery.AddressType) {
 	t.lock.Lock()
@@ -246,7 +226,6 @@ func (t *TopologyCache) RemoveHints(serviceKey string, addrType discovery.Addres
 	t.hintsPopulatedByService.Delete(serviceKey)
 }
 
-// SetNodes updates the Node distribution for the TopologyCache.
 // SetNodes 根据给定的节点列表更新 TopologyCache 中按可用区分布的节点 CPU 信息。
 func (t *TopologyCache) SetNodes(logger klog.Logger, nodes []*v1.Node) {
 	cpuByZone := map[string]*resource.Quantity{}
@@ -270,14 +249,9 @@ func (t *TopologyCache) SetNodes(logger klog.Logger, nodes []*v1.Node) {
 		nodeCPU := node.Status.Allocatable.Cpu()
 		zone, ok := node.Labels[v1.LabelTopologyZone]
 
-		// TODO(robscott): Figure out if there's an acceptable proportion of
-		// nodes with inadequate information. The current logic means that as
-		// soon as we find any node without a zone or allocatable CPU specified,
-		// we bail out entirely. Bailing out at this level will make our cluster
-		// wide ratios nil, which would result in slices for all Services having
-		// their hints removed.
-		// 缺少可用区或可分配 CPU 信息时整体放弃计算：将清空统计并终止遍历，
-		// 这会使集群 CPU 比例变为 nil，进而导致所有 Service 的提示被移除。
+		// TODO(robscott)：确定信息缺失节点占可接受的比例；当前只要一个节点缺少 zone 或
+		// allocatable CPU 就整体放弃计算，清空统计并终止遍历，使 CPU 比例变为 nil，
+		// 进而移除所有 Service 的提示。
 		if !ok || zone == "" || nodeCPU.IsZero() {
 			cpuByZone = map[string]*resource.Quantity{}
 			sufficientNodeInfo = false
@@ -316,7 +290,6 @@ func (t *TopologyCache) SetNodes(logger klog.Logger, nodes []*v1.Node) {
 	}
 }
 
-// HasPopulatedHints checks whether there are populated hints for a given service in the cache.
 // HasPopulatedHints 检查缓存中指定 Service 是否已填充过提示。
 func (t *TopologyCache) HasPopulatedHints(serviceKey string) bool {
 	t.lock.Lock()
@@ -330,15 +303,11 @@ func (t *TopologyCache) hasPopulatedHintsLocked(serviceKey string) bool {
 	return t.hintsPopulatedByService.Has(serviceKey)
 }
 
-// getAllocations returns a set of minimum and maximum allocations per zone. If
-// it is not possible to provide allocations that are below the overload
-// threshold, a nil value will be returned.
 // getAllocations 返回每个可用区的最小与最大分配量；若无法在不超出过载阈值的前提下完成分配，则返回 nil。
 func (t *TopologyCache) getAllocations(numEndpoints int) (map[string]allocation, *EventBuilder) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	// it is similar to checking !t.sufficientNodeInfo
 	// CPU 比例为空等价于节点信息不足，此时无法计算分配方案并返回警告事件。
 	if t.cpuRatiosByZone == nil {
 		return nil, &EventBuilder{
@@ -398,8 +367,6 @@ func (t *TopologyCache) getAllocations(numEndpoints int) (map[string]allocation,
 	return allocations, nil
 }
 
-// Nodes with any of these labels set to any value will be excluded from
-// topology capacity calculations.
 // hasExcludedLabels 判断节点是否带有需要排除的标签；带有任一排除标签的节点不参与拓扑容量计算。
 func hasExcludedLabels(labels map[string]string) bool {
 	// 没有标签时自然无需排除。

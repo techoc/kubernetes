@@ -43,7 +43,7 @@ func TestNormalizeWindowsPath(t *testing.T) {
 	}
 }
 
-// 磁盘号只接受十进制数字；invalid 一例用来确认非数字输入被拒绝。
+// TestValidateDiskNumber 校验磁盘号解析；非数字用例用于确认格式错误被拒绝。
 func TestValidateDiskNumber(t *testing.T) {
 	// 99/100/200 都要放行：Windows 磁盘号不局限于两位。
 	tests := []struct {

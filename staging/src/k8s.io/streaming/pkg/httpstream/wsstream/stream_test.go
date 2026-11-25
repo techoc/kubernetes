@@ -191,8 +191,8 @@ func TestStreamSurvivesPanic(t *testing.T) {
 	//nolint:logcheck // Intentionally uses the old API.
 	r := NewReader(errs, false, NewDefaultReaderProtocols())
 
-	// do not call runtime.HandleCrash() in handler. Otherwise, the tests are interrupted.
-	// 真正的 HandleCrash 会重新抛出，把测试进程也一起干掉；这里只验证吞掉 panic 后流的表现。
+	// 不在 handler 中调用 runtime.HandleCrash()，否则测试会被 panic 中断；
+	// 此处仅注入 recover，验证吞掉 panic 后流的表现。
 	r.handleCrash = func(_ context.Context, additionalHandlers ...func(context.Context, interface{})) { recover() }
 
 	data, err := readWebSocket(r, t, nil)
@@ -226,11 +226,11 @@ func TestStreamClosedDuringRead(t *testing.T) {
 			c.Close()
 			close(ch)
 		})
-		// verify that the data returned by the server on an early close always has a specific error
+		// 提前关闭连接时，服务端必须返回可识别的关闭错误。
 		if err == nil || !strings.Contains(err.Error(), "use of closed network connection") {
 			t.Fatal(err)
 		}
-		// verify that the data returned is a strict subset of the input
+		// 提前关闭时只能收到输入数据的前缀，不能出现额外字节。
 		if !bytes.HasPrefix([]byte(input), data) && len(data) != 0 {
 			t.Fatalf("unexpected server read: %q", string(data))
 		}

@@ -26,7 +26,6 @@ import (
 	kmsapi "k8s.io/kms/apis/v2"
 )
 
-// GRPCService is a grpc server that runs the kms v2 alpha1 API.
 // GRPCService 是承载 KMS v2 API 的 gRPC 服务端，负责把 protobuf 请求转换为
 // 内部 Service 接口调用，并把业务结果包装回 protobuf 响应。
 type GRPCService struct {
@@ -47,7 +46,6 @@ type GRPCService struct {
 // 编译期断言：GRPCService 必须完整实现 KMS gRPC 服务端接口。
 var _ kmsapi.KeyManagementServiceServer = (*GRPCService)(nil)
 
-// NewGRPCService creates an instance of GRPCService.
 // NewGRPCService 构造一个 GRPCService，参数分别为监听地址、连接超时与业务实现。
 func NewGRPCService(
 	address string,
@@ -62,10 +60,7 @@ func NewGRPCService(
 	}
 }
 
-// ListenAndServe accepts incoming connections on a Unix socket. It is a blocking method.
-// Returns non-nil error unless Close or Shutdown is called.
 // ListenAndServe 在 Unix socket 上监听并阻塞处理请求。
-//
 // 流程：
 //  1. 在指定地址建立 Unix socket 监听；
 //  2. 创建带连接超时配置的 gRPC server；
@@ -91,8 +86,6 @@ func (s *GRPCService) ListenAndServe() error {
 	return gs.Serve(ln)
 }
 
-// Shutdown performs a graceful shutdown. Doesn't accept new connections and
-// blocks until all pending RPCs are finished.
 // Shutdown 优雅关闭：停止接收新连接，并阻塞等待所有进行中的 RPC 完成。
 func (s *GRPCService) Shutdown() {
 	if s.server != nil {
@@ -100,8 +93,6 @@ func (s *GRPCService) Shutdown() {
 	}
 }
 
-// Close stops the server by closing all connections immediately and cancels
-// all active RPCs.
 // Close 立即关闭：直接断开所有连接并取消所有活跃 RPC（与 Shutdown 的优雅关闭相对）。
 func (s *GRPCService) Close() {
 	if s.server != nil {
@@ -109,7 +100,6 @@ func (s *GRPCService) Close() {
 	}
 }
 
-// Status sends a status request to specified kms service.
 // Status 转发状态查询请求给底层 KMS 服务，并把结果转换为 protobuf 响应。
 func (s *GRPCService) Status(ctx context.Context, _ *kmsapi.StatusRequest) (*kmsapi.StatusResponse, error) {
 	res, err := s.kmsService.Status(ctx)
@@ -124,7 +114,6 @@ func (s *GRPCService) Status(ctx context.Context, _ *kmsapi.StatusRequest) (*kms
 	}, nil
 }
 
-// Decrypt sends a decryption request to specified kms service.
 // Decrypt 把 protobuf 解密请求转换为内部 DecryptRequest，调用业务实现后返回明文。
 func (s *GRPCService) Decrypt(ctx context.Context, req *kmsapi.DecryptRequest) (*kmsapi.DecryptResponse, error) {
 	// 把 protobuf 的 KeyId 字段（生成代码命名）映射到内部的 KeyID。
@@ -142,7 +131,6 @@ func (s *GRPCService) Decrypt(ctx context.Context, req *kmsapi.DecryptRequest) (
 	}, nil
 }
 
-// Encrypt sends an encryption request to specified kms service.
 // Encrypt 调用业务实现加密明文，并把密文、key ID 与 annotations 包装为 protobuf 响应。
 func (s *GRPCService) Encrypt(ctx context.Context, req *kmsapi.EncryptRequest) (*kmsapi.EncryptResponse, error) {
 	encRes, err := s.kmsService.Encrypt(ctx, req.Uid, req.Plaintext)

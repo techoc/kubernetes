@@ -22,87 +22,75 @@ package k8s.io.kubelet.pkg.apis.dra.v1beta1;
 option go_package = "k8s.io/kubelet/pkg/apis/dra/v1beta1";
 
 service DRAPlugin {
-  // NodePrepareResources prepares several ResourceClaims
-  // for use on the node. If an error is returned, the
-  // response is ignored. Failures for individual claims
-  // can be reported inside NodePrepareResourcesResponse.
+  // NodePrepareResources 准备若干 ResourceClaim，以供节点使用。
+  // 如果返回错误，响应会被忽略；各个 Claim 的失败可在
+  // NodePrepareResourcesResponse 中报告。
   rpc NodePrepareResources (NodePrepareResourcesRequest)
     returns (NodePrepareResourcesResponse) {}
 
-  // NodeUnprepareResources is the opposite of NodePrepareResources.
-  // The same error handling rules apply,
+  // NodeUnprepareResources 执行与 NodePrepareResources 相反的操作，
+  // 并遵循相同的错误处理规则。
   rpc NodeUnprepareResources (NodeUnprepareResourcesRequest)
     returns (NodeUnprepareResourcesResponse) {}
 }
 
 message NodePrepareResourcesRequest {
-     // The list of ResourceClaims that are to be prepared.
+     // 需要准备的 ResourceClaim 列表。
      repeated Claim claims = 1;
 }
 
 message NodePrepareResourcesResponse {
-    // The ResourceClaims for which preparation was done
-    // or attempted, with claim_uid as key.
+    // 已准备或已尝试准备的 ResourceClaim，以 claim_uid 为键。
     //
-    // It is an error if some claim listed in NodePrepareResourcesRequest
-    // does not get prepared. NodePrepareResources
-    // will be called again for those that are missing.
+    // 如果 NodePrepareResourcesRequest 中列出的某个 Claim 未被准备，则属于错误。
+    // 对于缺失的条目，会再次调用 NodePrepareResources。
     map<string, NodePrepareResourceResponse> claims = 1;
 }
 
 message NodePrepareResourceResponse {
-    // These are the additional devices that kubelet must
-    // make available via the container runtime. A claim
-    // may have zero or more requests and each request
-    // may have zero or more devices.
+    // Kubelet 必须通过容器运行时提供这些额外设备。
+    // 一个 Claim 可以包含零个或多个请求，每个请求可以包含零个或多个设备。
     repeated Device devices = 1;
-    // If non-empty, preparing the ResourceClaim failed.
-    // Devices are ignored in that case.
+    // 非空表示准备 ResourceClaim 失败，此时忽略设备信息。
     string error = 2;
 }
 
 message Device {
-    // The requests in the claim that this device is associated with.
-    // Optional. If empty, the device is associated with all requests.
+    // 此设备关联的 Claim 中的请求。
+    // 可选；为空时表示此设备关联所有请求。
     repeated string request_names = 1;
 
-    // The pool which contains the device. Required.
+    // 包含此设备的资源池，必填。
     string pool_name = 2;
 
-    // The device itself. Required.
+    // 设备本身，必填。
     string device_name = 3;
 
-    // A single device instance may map to several CDI device IDs.
-    // None is also valid.
+    // 单个设备实例可以映射到多个 CDI 设备 ID，也可以不映射。
     repeated string cdi_device_ids = 4;
 }
 
 message NodeUnprepareResourcesRequest {
-    // The list of ResourceClaims that are to be unprepared.
+    // 需要撤销准备的 ResourceClaim 列表。
     repeated Claim claims = 1;
 }
 
 message NodeUnprepareResourcesResponse {
-    // The ResourceClaims for which preparation was reverted.
-    // The same rules as for NodePrepareResourcesResponse.claims
-    // apply. In particular, all claims in the request must
-    // have an entry in the response, even if that entry is nil.
+    // 已撤销准备的 ResourceClaim，遵循 NodePrepareResourcesResponse.claims 的相同规则。
+    // 特别是，请求中的所有 Claim 都必须在响应中有对应条目，即使该条目为 nil。
     map<string, NodeUnprepareResourceResponse> claims = 1;
 }
 
 message NodeUnprepareResourceResponse {
-    // If non-empty, unpreparing the ResourceClaim failed.
+    // 非空表示撤销 ResourceClaim 的准备失败。
     string error = 1;
 }
 
 message Claim {
-    // The ResourceClaim namespace (ResourceClaim.meta.Namespace).
-    // This field is REQUIRED.
+    // ResourceClaim 命名空间（ResourceClaim.meta.Namespace），必填。
     string namespace = 1;
-    // The UID of the Resource claim (ResourceClaim.meta.UUID).
-    // This field is REQUIRED.
+    // ResourceClaim 的 UID（ResourceClaim.meta.UUID），必填。
     string uid = 2;
-    // The name of the Resource claim (ResourceClaim.meta.Name)
-    // This field is REQUIRED.
+    // ResourceClaim 的名称（ResourceClaim.meta.Name），必填。
     string name = 3;
 }

@@ -29,29 +29,19 @@ const (
 	deletionExpected = -1
 )
 
-// GenerationsBySlice tracks expected EndpointSlice generations by EndpointSlice
-// uid. A value of deletionExpected (-1) may be used here to indicate that we
-// expect this EndpointSlice to be deleted.
 // GenerationsBySlice 按 EndpointSlice UID 记录期望的 generation，
 // 值为 -1（deletionExpected）时表示期望该分片被删除。
 type GenerationsBySlice map[types.UID]int64
 
-// EndpointSliceTracker tracks EndpointSlices and their associated generation to
-// help determine if a change to an EndpointSlice has been processed by the
-// EndpointSlice controller.
 // EndpointSliceTracker 跟踪各 Service 的 EndpointSlice generation，
 // 用于判断控制器是否已经处理了某个分片变更。
 type EndpointSliceTracker struct {
-	// lock protects generationsByService.
 	// 互斥锁保护 generationsByService 的并发访问。
 	lock sync.Mutex
-	// generationsByService tracks the generations of EndpointSlices for each
-	// Service.
 	// 以 Service 的命名空间名为键，保存其下所有 EndpointSlice 的期望 generation。
 	generationsByService map[types.NamespacedName]GenerationsBySlice
 }
 
-// NewEndpointSliceTracker creates and initializes a new endpointSliceTracker.
 // NewEndpointSliceTracker 创建并初始化一个空的 EndpointSliceTracker。
 func NewEndpointSliceTracker() *EndpointSliceTracker {
 	return &EndpointSliceTracker{
@@ -60,8 +50,6 @@ func NewEndpointSliceTracker() *EndpointSliceTracker {
 	}
 }
 
-// Has returns true if the endpointSliceTracker has a generation for the
-// provided EndpointSlice.
 // Has 判断跟踪器中是否记录了指定 EndpointSlice 的 generation。
 func (est *EndpointSliceTracker) Has(endpointSlice *discovery.EndpointSlice) bool {
 	est.lock.Lock()
@@ -78,9 +66,6 @@ func (est *EndpointSliceTracker) Has(endpointSlice *discovery.EndpointSlice) boo
 	return ok
 }
 
-// ShouldSync returns true if this endpointSliceTracker does not have a
-// generation for the provided EndpointSlice or it is greater than the
-// generation of the tracked EndpointSlice.
 // ShouldSync 在跟踪器没有记录或记录的 generation 落后于当前对象时返回 true。
 func (est *EndpointSliceTracker) ShouldSync(endpointSlice *discovery.EndpointSlice) bool {
 	est.lock.Lock()
@@ -97,15 +82,9 @@ func (est *EndpointSliceTracker) ShouldSync(endpointSlice *discovery.EndpointSli
 	return !ok || endpointSlice.Generation > g
 }
 
-// StaleSlices returns true if any of the following are true:
-//  1. One or more of the provided EndpointSlices have older generations than the
-//     corresponding tracked ones.
-//  2. The tracker is expecting one or more of the provided EndpointSlices to be
-//     deleted. (EndpointSlices that have already been marked for deletion are ignored here.)
-//  3. The tracker is tracking EndpointSlices that have not been provided.
-//
 // StaleSlices 检查传入的 EndpointSlice 是否与跟踪状态一致；
 // 发现旧 generation、待删除或缺失分片时返回 true。
+// 已带删除时间戳、即 deletionExpected 的切片不计入期待删除。
 func (est *EndpointSliceTracker) StaleSlices(service *v1.Service, endpointSlices []*discovery.EndpointSlice) bool {
 	est.lock.Lock()
 	// 加锁读取。
@@ -141,8 +120,6 @@ func (est *EndpointSliceTracker) StaleSlices(service *v1.Service, endpointSlices
 	return false
 }
 
-// Update adds or updates the generation in this endpointSliceTracker for the
-// provided EndpointSlice.
 // Update 记录指定 EndpointSlice 的当前 generation。
 func (est *EndpointSliceTracker) Update(endpointSlice *discovery.EndpointSlice) {
 	est.lock.Lock()
@@ -160,7 +137,6 @@ func (est *EndpointSliceTracker) Update(endpointSlice *discovery.EndpointSlice) 
 	gfs[endpointSlice.UID] = endpointSlice.Generation
 }
 
-// DeleteService removes the set of generations tracked for the Service.
 // DeleteService 删除某个 Service 下跟踪的全部 generation。
 func (est *EndpointSliceTracker) DeleteService(namespace, name string) {
 	est.lock.Lock()
@@ -172,8 +148,6 @@ func (est *EndpointSliceTracker) DeleteService(namespace, name string) {
 	delete(est.generationsByService, serviceNN)
 }
 
-// ExpectDeletion sets the generation to deletionExpected in this
-// endpointSliceTracker for the provided EndpointSlice.
 // ExpectDeletion 将指定 EndpointSlice 的期望 generation 标记为 deletionExpected。
 func (est *EndpointSliceTracker) ExpectDeletion(endpointSlice *discovery.EndpointSlice) {
 	est.lock.Lock()
@@ -191,9 +165,6 @@ func (est *EndpointSliceTracker) ExpectDeletion(endpointSlice *discovery.Endpoin
 	gfs[endpointSlice.UID] = deletionExpected
 }
 
-// HandleDeletion removes the generation in this endpointSliceTracker for the
-// provided EndpointSlice. This returns true if the tracker expected this
-// EndpointSlice to be deleted and false if not.
 // HandleDeletion 清理已删除分片的跟踪记录；若之前确实期望其删除则返回 true。
 func (est *EndpointSliceTracker) HandleDeletion(endpointSlice *discovery.EndpointSlice) bool {
 	est.lock.Lock()
@@ -216,9 +187,6 @@ func (est *EndpointSliceTracker) HandleDeletion(endpointSlice *discovery.Endpoin
 	return true
 }
 
-// GenerationsForSliceUnsafe returns the generations for the Service
-// corresponding to the provided EndpointSlice, and a bool to indicate if it
-// exists. A lock must be applied before calling this function.
 // GenerationsForSliceUnsafe 返回指定 EndpointSlice 所属 Service 的 generation 表；
 // 调用方必须已持有锁。
 func (est *EndpointSliceTracker) GenerationsForSliceUnsafe(endpointSlice *discovery.EndpointSlice) (GenerationsBySlice, bool) {
@@ -228,8 +196,6 @@ func (est *EndpointSliceTracker) GenerationsForSliceUnsafe(endpointSlice *discov
 	return generations, ok
 }
 
-// getServiceNN returns a namespaced name for the Service corresponding to the
-// provided EndpointSlice.
 // getServiceNN 根据 EndpointSlice 的标签与命名空间还原其所属 Service 的 NamespacedName。
 func getServiceNN(endpointSlice *discovery.EndpointSlice) types.NamespacedName {
 	serviceName, _ := endpointSlice.Labels[discovery.LabelServiceName]

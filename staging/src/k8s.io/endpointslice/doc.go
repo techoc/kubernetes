@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package endpointslice contains the core logic of endpointslice controller.
 // Package endpointslice 包含 endpointslice 控制器的核心逻辑。
 package endpointslice

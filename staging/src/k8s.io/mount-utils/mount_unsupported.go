@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// 本文件为不支持的平台提供 stub：接口必须完整、操作一律报错，
+// 本文件为不支持的平台提供桩实现：接口必须完整、操作一律报错，
 // 这样上层无需用构建标签分支处理平台差异。
 
 package mount
@@ -25,7 +25,7 @@ import (
 	"errors"
 )
 
-// Mounter implements mount.Interface for unsupported platforms
+// Mounter 在非 Linux、非 Windows 平台实现 mount.Interface。
 // 保留 mounterPath 只是为了与其他平台的构造签名一致，实际不会被使用。
 type Mounter struct {
 	mounterPath string
@@ -34,73 +34,70 @@ type Mounter struct {
 // 统一用一个错误值，调用方可用 errors.Is 判断"平台不支持"并给出明确提示。
 var errUnsupported = errors.New("util/mount on this platform is not supported")
 
-// New returns a mount.Interface for the current system.
-// It provides options to override the default mounter behavior.
-// mounterPath allows using an alternative to `/bin/mount` for mounting.
-// 仍然接收并保存该参数，保证各平台 New 签名一致，调用方无需条件编译。
+// New 返回当前系统的 mount.Interface，并允许覆盖默认 mounter 行为。
+// 仍然接收并保存 mounterPath，保证各平台 New 签名一致，调用方无需条件编译。
 func New(mounterPath string) Interface {
 	return &Mounter{
 		mounterPath: mounterPath,
 	}
 }
 
-// Mount always returns an error on unsupported platforms
-// 明确报错好过返回 nil：上层不会误以为卷已经挂上。
+// Mount 在不支持的平台上始终返回错误。
+// 明确报错好过返回 nil，避免上层误以为卷已经挂上。
 func (mounter *Mounter) Mount(source string, target string, fstype string, options []string) error {
 	return errUnsupported
 }
 
-// MountSensitive always returns an error on unsupported platforms
+// MountSensitive 在不支持的平台上始终返回错误。
 // 与 Mount 保持同样语义，避免调用方在两个入口间得到不同结果。
 func (mounter *Mounter) MountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	return errUnsupported
 }
 
-// MountSensitiveWithoutSystemd always returns an error on unsupported platforms
+// MountSensitiveWithoutSystemd 在不支持的平台上始终返回错误。
 // systemd 只是挂载方式之一，不支持平台上连探测都不做，直接拒绝。
 func (mounter *Mounter) MountSensitiveWithoutSystemd(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	return errUnsupported
 }
 
-// MountSensitiveWithoutSystemdWithMountFlags always returns an error on unsupported platforms
+// MountSensitiveWithoutSystemdWithMountFlags 在不支持的平台上始终返回错误。
 // 参数再多也不执行；保留完整签名是为了满足接口实现要求。
 func (mounter *Mounter) MountSensitiveWithoutSystemdWithMountFlags(source string, target string, fstype string, options []string, sensitiveOptions []string, mountFlags []string) error {
 	return errUnsupported
 }
 
-// Unmount always returns an error on unsupported platforms
+// Unmount 在不支持的平台上始终返回错误。
 // 假装卸载成功会让上层跳过必要的清理，所以这里也明确失败。
 func (mounter *Mounter) Unmount(target string) error {
 	return errUnsupported
 }
 
-// List always returns an error on unsupported platforms
-// 空切片配错误：即便调用方忽略错误，也拿不到一份看似正常的挂载表。
+// List 在不支持的平台上始终返回错误。
+// 返回空切片加错误，避免调用方忽略错误后拿到看似正常的挂载表。
 func (mounter *Mounter) List() ([]MountPoint, error) {
 	return []MountPoint{}, errUnsupported
 }
 
-// IsLikelyNotMountPoint always returns an error on unsupported platforms
-// 返回 true 加错误：调用方通常先查错误，不会把这个 true 当成确定结论。
+// IsLikelyNotMountPoint 在不支持的平台上始终返回错误。
+// 返回 true 加错误，调用方必须先检查错误，不能把 true 当成确定结论。
 func (mounter *Mounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	return true, errUnsupported
 }
 
-// CanSafelySkipMountPointCheck always returns false on unsupported platforms
+// CanSafelySkipMountPointCheck 在不支持的平台上始终返回 false。
 // 没有平台能力可供信任，保守地要求调用方自己做检查。
 func (mounter *Mounter) CanSafelySkipMountPointCheck() bool {
 	return false
 }
 
-// IsMountPoint determines if a directory is a mountpoint.
-// It always returns an error on unsupported platforms.
-// 判断需要读系统状态，这里无法提供，返回错误好过让调用方继续猜。
+// IsMountPoint 判断目录是否为挂载点。
+// 在不支持的平台上始终返回错误，因为无法读取必要的系统状态。
 func (mounter *Mounter) IsMountPoint(file string) (bool, error) {
 	return false, errUnsupported
 }
 
-// GetMountRefs always returns an error on unsupported platforms
-// 返回 nil 而非空切片，强调这是查询失败，不是"没有引用"。
+// GetMountRefs 在不支持的平台上始终返回错误。
+// 返回 nil 而非空切片，强调这是查询失败，不是“没有引用”。
 func (mounter *Mounter) GetMountRefs(pathname string) ([]string, error) {
 	return nil, errUnsupported
 }
@@ -116,9 +113,8 @@ func (mounter *SafeFormatAndMount) diskLooksUnformatted(disk string) (bool, erro
 	return true, errUnsupported
 }
 
-// IsMountPoint determines if a directory is a mountpoint.
-// It always returns an error on unsupported platforms.
-// 与 Mounter 的同名方法保持一致，避免两条调用路径行为分叉。
+// SafeFormatAndMount.IsMountPoint 判断目录是否为挂载点。
+// 与 Mounter 的同名方法保持一致，在不支持的平台上始终返回错误。
 func (mounter *SafeFormatAndMount) IsMountPoint(file string) (bool, error) {
 	return false, errUnsupported
 }

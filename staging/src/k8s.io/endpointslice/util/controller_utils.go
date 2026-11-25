@@ -36,10 +36,6 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// semanticIgnoreResourceVersion does semantic deep equality checks for objects
-// but excludes ResourceVersion of ObjectReference. They are used when comparing
-// endpoints in Endpoints and EndpointSlice objects to avoid unnecessary updates
-// caused by Pod resourceVersion change.
 // semanticIgnoreResourceVersion 在比较 ObjectReference 时忽略 ResourceVersion，避免因 Pod 版本变化产生无谓的 Endpoint 更新。
 var semanticIgnoreResourceVersion = conversion.EqualitiesOrDie(
 	func(a, b v1.ObjectReference) bool {
@@ -49,15 +45,14 @@ var semanticIgnoreResourceVersion = conversion.EqualitiesOrDie(
 	},
 )
 
-// PodProjectionKey encapsulates all pod information required to find services that may need their endpoints to be updated.
 // PodProjectionKey 封装定位需要刷新 endpoint 的 Service 所需的全部 Pod 信息。
 // 其中 Namespace 是 Pod 所在命名空间；Labels 是 Pod 当前标签；
 // OldLabels 在 Pod 标签变化的 Update 事件中记录旧标签；PodChanged 表示 Pod 字段变化是否影响其 endpoint 归属。
 type PodProjectionKey struct {
 	Namespace  string
-	Labels     labels.Set // this is set to the pod's current labels
-	OldLabels  labels.Set // this is set if the pod's labels changed (in an Update event)
-	PodChanged bool       // set to true if the pod's fields changed in a way that may affect its endpoints membership
+	Labels     labels.Set // 设置为 Pod 当前的标签
+	OldLabels  labels.Set // 当 Pod 标签发生变化时（Update 事件）设置
+	PodChanged bool       // 当 Pod 字段变化可能影响其 endpoints 归属时设为 true
 }
 
 // GetPodUpdateProjectionKey 根据 Pod 的新旧对象生成投影键，用于找出可能需要更新 endpoint 的 Service。
@@ -84,8 +79,6 @@ func GetPodUpdateProjectionKey(oldObj, newObj interface{}) *PodProjectionKey {
 		}
 	}
 
-	// If we reached here, both old/new pod objects are non-nil, so it's an update event.
-	// Safe to ignore pod informer resync events as service informer already handles resync for all services.
 	// 若新旧 ResourceVersion 相同，说明是 informer 重同步事件，Service informer 已处理，可直接忽略。
 	if newPod.ResourceVersion == oldPod.ResourceVersion {
 		return nil
@@ -94,13 +87,11 @@ func GetPodUpdateProjectionKey(oldObj, newObj interface{}) *PodProjectionKey {
 	// 判断 Pod 字段与标签是否发生了变化。
 	podChanged, labelsChanged := podEndpointsChanged(oldPod, newPod)
 
-	// If both the pod and labels are unchanged, no update is needed.
 	// 两者都未变化时无需更新任何 Service。
 	if !podChanged && !labelsChanged {
 		return nil
 	}
 
-	// If only the pod has changed, projection key can be created with just the new pod.
 	// 仅 Pod 字段变化时，用新 Pod 构造投影键即可。
 	if !labelsChanged {
 		return &PodProjectionKey{
@@ -109,8 +100,6 @@ func GetPodUpdateProjectionKey(oldObj, newObj interface{}) *PodProjectionKey {
 		}
 	}
 
-	// The pod labels have changed, so the projection key needs to include both its old/new labels.
-	// Additionally, PodChanged field indicates if union/diff of matching services should be reconciled.
 	// 标签变化时需要同时保留新旧标签，并通过 PodChanged 决定取匹配 Service 的并集还是差集。
 	return &PodProjectionKey{
 		Namespace:  newPod.Namespace,
@@ -133,7 +122,6 @@ func GetServicesToUpdate(serviceLister v1listers.ServiceLister, key *PodProjecti
 		return nil, err
 	}
 
-	// If the pod's labels changed in an update event, we'll need to consider all the affected services.
 	// 标签变化时还需考虑旧标签匹配的 Service，以覆盖变化前后的状态。
 	if key.OldLabels != nil {
 		oldServices, err := getServicesForPod(serviceLister, key.Namespace, key.OldLabels)
@@ -148,7 +136,6 @@ func GetServicesToUpdate(serviceLister v1listers.ServiceLister, key *PodProjecti
 	return services, nil
 }
 
-// getServicesForPod returns a set of services matching the given pod's namespace and labels (via service selector).
 // getServicesForPod 列出指定命名空间中所有 selector 与给定 Pod 标签匹配的 Service。
 func getServicesForPod(serviceLister v1listers.ServiceLister, namespace string, podLabels labels.Set) (sets.Set[string], error) {
 	// 从 lister 中取出该命名空间下的全部 Service。
@@ -159,10 +146,9 @@ func getServicesForPod(serviceLister v1listers.ServiceLister, namespace string, 
 
 	set := sets.Set[string]{}
 	for _, service := range services {
+		// selector 为 nil 表示不匹配任何 Pod，直接跳过。
 		if service.Spec.Selector == nil {
-			// If the service has a nil selector this means selectors match nothing, not everything.
 			continue
-			// selector 为 nil 表示不匹配任何 Pod，直接跳过。
 		}
 
 		if labels.ValidatedSetSelector(service.Spec.Selector).Matches(podLabels) {
@@ -177,14 +163,11 @@ func getServicesForPod(serviceLister v1listers.ServiceLister, namespace string, 
 	return set, nil
 }
 
-// PortMapKey is used to uniquely identify groups of endpoint ports.
 // PortMapKey 是端口分组的唯一标识，用于在 EndpointSlice 之间复用端口配置。
 type PortMapKey string
 
-// NewPortMapKey generates a PortMapKey from endpoint ports.
 // NewPortMapKey 对端点端口排序后计算哈希，生成与端口顺序无关的 PortMapKey。
 func NewPortMapKey(endpointPorts []discovery.EndpointPort) PortMapKey {
-	// Normalize nil to empty slice so they hash the same.
 	// 将 nil 归一化为空切片，保证 nil 与空切片得到相同键。
 	if endpointPorts == nil {
 		endpointPorts = []discovery.EndpointPort{}
@@ -194,7 +177,6 @@ func NewPortMapKey(endpointPorts []discovery.EndpointPort) PortMapKey {
 	return PortMapKey(deepHashObjectToString(endpointPorts))
 }
 
-// deepHashObjectToString creates a unique hash string from a go object.
 // deepHashObjectToString 使用 FNV-1a 128 位哈希生成对象的十六进制摘要字符串。
 func deepHashObjectToString(objectToWrite interface{}) string {
 	// 128 位 FNV 哈希提供足够低的碰撞概率。
@@ -204,15 +186,10 @@ func deepHashObjectToString(objectToWrite interface{}) string {
 	return hex.EncodeToString(hasher.Sum(nil)[0:])
 }
 
-// ShouldPodBeInEndpoints returns true if a specified pod should be in an
-// Endpoints or EndpointSlice resource. Terminating pods are only included if
-// includeTerminating is true.
 // ShouldPodBeInEndpoints 判断 Pod 是否应出现在 Endpoints/EndpointSlice 中；
 // includeTerminating 控制是否包含正在终止（带删除时间戳）的 Pod。
+// Terminal 指 Succeeded/Failed，与仅表示 metadata.deletionTimestamp 非 nil 的 Terminating 不同。
 func ShouldPodBeInEndpoints(pod *v1.Pod, includeTerminating bool) bool {
-	// "Terminal" describes when a Pod is complete (in a succeeded or failed phase).
-	// This is distinct from the "Terminating" condition which represents when a Pod
-	// is being terminated (metadata.deletionTimestamp is non nil).
 	// 终态 Pod（Succeeded/Failed）永远不应出现在 endpoint 中。
 	if isPodTerminal(pod) {
 		return false
@@ -231,21 +208,14 @@ func ShouldPodBeInEndpoints(pod *v1.Pod, includeTerminating bool) bool {
 	return true
 }
 
-// ShouldSetHostname returns true if the Hostname attribute should be set on an
-// Endpoints Address or EndpointSlice Endpoint.
 // ShouldSetHostname 判断是否为 Endpoint 设置 hostname：需同时满足 Pod 有 hostname、subdomain 与 Service 名称一致且命名空间相同。
 func ShouldSetHostname(pod *v1.Pod, svc *v1.Service) bool {
 	// hostname 与 subdomain 必须同时匹配 Service 的名称和命名空间。
 	return len(pod.Spec.Hostname) > 0 && pod.Spec.Subdomain == svc.Name && svc.Namespace == pod.Namespace
 }
 
-// podEndpointsChanged returns two boolean values. The first is true if the pod has
-// changed in a way that may change existing endpoints. The second value is true if the
-// pod has changed in a way that may affect which Services it matches.
 // podEndpointsChanged 返回两个布尔值：Pod 字段变化是否影响 endpoint，以及标签变化是否影响 Service 匹配。
 func podEndpointsChanged(oldPod, newPod *v1.Pod) (bool, bool) {
-	// Check if the pod labels have changed, indicating a possible
-	// change in the service membership
 	// 标签或 hostname/subdomain 变化都可能改变 Pod 匹配的 Service 集合。
 	labelsChanged := false
 	if !reflect.DeepEqual(newPod.Labels, oldPod.Labels) ||
@@ -253,21 +223,15 @@ func podEndpointsChanged(oldPod, newPod *v1.Pod) (bool, bool) {
 		labelsChanged = true
 	}
 
-	// If the pod's deletion timestamp is set, remove endpoint from ready address.
 	// 删除时间戳变化意味着 endpoint 需要从未就绪地址中移除。
 	if newPod.DeletionTimestamp != oldPod.DeletionTimestamp {
 		return true, labelsChanged
 	}
-	// If the pod's readiness has changed, the associated endpoint address
-	// will move from the unready endpoints set to the ready endpoints.
-	// So for the purposes of an endpoint, a readiness change on a pod
-	// means we have a changed pod.
 	// 就绪状态变化会使地址在 ready/unready 集合之间迁移。
 	if IsPodReady(oldPod) != IsPodReady(newPod) {
 		return true, labelsChanged
 	}
 
-	// Check if the pod IPs have changed
 	// 逐个比较 PodIPs，数量或任一 IP 不同都视为 endpoint 变化。
 	if len(oldPod.Status.PodIPs) != len(newPod.Status.PodIPs) {
 		return true, labelsChanged
@@ -278,9 +242,6 @@ func podEndpointsChanged(oldPod, newPod *v1.Pod) (bool, bool) {
 		}
 	}
 
-	// Endpoints may also reference a pod's Name, Namespace, UID, and NodeName, but
-	// the first three are immutable, and NodeName is immutable once initially set,
-	// which happens before the pod gets an IP.
 	// 其余被 endpoint 引用的字段（Name/Namespace/UID/NodeName）在 Pod 获得 IP 后不可变，无需比较。
 
 	return false, labelsChanged
@@ -296,7 +257,6 @@ func getPodFromObject(obj interface{}) *v1.Pod {
 		// 常规情况下事件对象就是 *v1.Pod。
 		return pod
 	}
-	// If we reached here it means the pod was deleted but its final state is unrecorded.
 	// 删除事件可能只留下墓碑，需要从中解出 Pod；类型不符则记录错误。
 	tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 	if !ok {
@@ -322,18 +282,14 @@ func hostNameAndDomainAreEqual(pod1, pod2 *v1.Pod) bool {
 func determineNeededServiceUpdates(oldServices, services sets.Set[string], podChanged bool) sets.Set[string] {
 	if podChanged {
 		// Pod 字段变化时，新旧匹配到的 Service 都可能需要重算。
-		// if the labels and pod changed, all services need to be updated
 		services = services.Union(oldServices)
 	} else {
 		// 仅标签变化时，只处理只属于新旧其中一方的 Service。
-		// if only the labels changed, services not common to both the new
-		// and old service set (the disjuntive union) need to be updated
 		services = services.Difference(oldServices).Union(oldServices.Difference(services))
 	}
 	return services
 }
 
-// portsInOrder helps sort endpoint ports in a consistent way for hashing.
 // portsInOrder 实现 sort.Interface，用于按稳定顺序排列端口以便生成一致的哈希；
 // 其中 Len 返回端口数量，Swap 交换两个端口，Less 按端口的哈希字符串决定顺序。
 type portsInOrder []discovery.EndpointPort
@@ -348,10 +304,6 @@ func (sl portsInOrder) Less(i, j int) bool {
 	return h1 < h2
 }
 
-// EndpointsEqualBeyondHash returns true if endpoints have equal attributes
-// but excludes equality checks that would have already been covered with
-// endpoint hashing (see hashEndpoint func for more info) and ignores difference
-// in ResourceVersion of TargetRef.
 // EndpointsEqualBeyondHash 比较 endpoint 中未被哈希覆盖的属性，并忽略 TargetRef 的 ResourceVersion 差异。
 func EndpointsEqualBeyondHash(ep1, ep2 *discovery.Endpoint) bool {
 	if stringPtrChanged(ep1.NodeName, ep2.NodeName) {
@@ -387,7 +339,6 @@ func EndpointsEqualBeyondHash(ep1, ep2 *discovery.Endpoint) bool {
 	return true
 }
 
-// boolPtrChanged returns true if a set of bool pointers have different values.
 // boolPtrChanged 判断两个布尔指针是否不同（包括 nil 与非 nil 的差异）。
 func boolPtrChanged(ptr1, ptr2 *bool) bool {
 	if (ptr1 == nil) != (ptr2 == nil) {
@@ -399,7 +350,6 @@ func boolPtrChanged(ptr1, ptr2 *bool) bool {
 	return false
 }
 
-// stringPtrChanged returns true if a set of string pointers have different values.
 // stringPtrChanged 判断两个字符串指针是否不同（包括 nil 与非 nil 的差异）。
 func stringPtrChanged(ptr1, ptr2 *string) bool {
 	if (ptr1 == nil) != (ptr2 == nil) {
@@ -411,10 +361,6 @@ func stringPtrChanged(ptr1, ptr2 *string) bool {
 	return false
 }
 
-// DeepHashObject writes specified object to hash using the spew library
-// which follows pointers and prints actual values of the nested objects
-// ensuring the hash does not change when a pointer changes.
-// copied from k8s.io/kubernetes/pkg/util/hash
 // deepHashObject 借助 dump.ForHash 展开指针指向的实际值，保证指针变化不影响哈希结果。
 func deepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 	// 重置哈希状态，避免复用时累积上一次的内容。
@@ -423,30 +369,22 @@ func deepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 	fmt.Fprint(hasher, dump.ForHash(objectToWrite))
 }
 
-// IsPodReady returns true if Pods Ready condition is true
-// copied from k8s.io/kubernetes/pkg/api/v1/pod
 // IsPodReady 返回 Pod 的 Ready 条件是否为 True。
 func IsPodReady(pod *v1.Pod) bool {
 	// 从 PodStatus 中提取 Ready 条件并判断。
 	return isPodReadyConditionTrue(pod.Status)
 }
 
-// IsPodTerminal returns true if a pod is terminal, all containers are stopped and cannot ever regress.
-// copied from k8s.io/kubernetes/pkg/api/v1/pod
 // isPodTerminal 返回 Pod 是否处于终态（所有容器已停止且不可恢复）。
 func isPodTerminal(pod *v1.Pod) bool {
 	return isPodPhaseTerminal(pod.Status.Phase)
 }
 
-// IsPodPhaseTerminal returns true if the pod's phase is terminal.
-// copied from k8s.io/kubernetes/pkg/api/v1/pod
 // isPodPhaseTerminal 返回 Pod Phase 是否为 Failed 或 Succeeded。
 func isPodPhaseTerminal(phase v1.PodPhase) bool {
 	return phase == v1.PodFailed || phase == v1.PodSucceeded
 }
 
-// IsPodReadyConditionTrue returns true if a pod is ready; false otherwise.
-// copied from k8s.io/kubernetes/pkg/api/v1/pod
 // isPodReadyConditionTrue 返回 PodStatus 中 Ready 条件的状态是否为 True。
 func isPodReadyConditionTrue(status v1.PodStatus) bool {
 	condition := getPodReadyCondition(&status)
@@ -454,9 +392,6 @@ func isPodReadyConditionTrue(status v1.PodStatus) bool {
 	return condition != nil && condition.Status == v1.ConditionTrue
 }
 
-// getPodReadyCondition extracts the pod ready condition from the given status and returns that.
-// Returns nil if the condition is not present.
-// copied from k8s.io/kubernetes/pkg/api/v1/pod
 // getPodReadyCondition 从 PodStatus 中查找 Ready 条件，不存在时返回 nil。
 func getPodReadyCondition(status *v1.PodStatus) *v1.PodCondition {
 	if status == nil || status.Conditions == nil {

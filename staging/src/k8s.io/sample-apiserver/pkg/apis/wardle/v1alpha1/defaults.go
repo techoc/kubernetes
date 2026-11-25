@@ -25,7 +25,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_FlunderSpec sets defaults for Flunder spec
+// SetDefaults_FlunderSpec 为 FlunderSpec 填入默认值。
 // 旧客户端只填 Reference 不填类型时按 Flunder 处理，保证回读后引用不丢。
 func SetDefaults_FlunderSpec(obj *FlunderSpec) {
 	if (obj.ReferenceType == nil || len(*obj.ReferenceType) == 0) && len(obj.Reference) != 0 {

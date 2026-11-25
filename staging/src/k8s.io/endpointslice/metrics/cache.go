@@ -24,7 +24,6 @@ import (
 	endpointsliceutil "k8s.io/endpointslice/util"
 )
 
-// NewCache returns a new Cache with the specified endpointsPerSlice.
 // NewCache 使用指定的 endpointsPerSlice 创建一个新的 Cache。
 func NewCache(endpointsPerSlice int32) *Cache {
 	// 初始化缓存：记录单切片端点上限、按 Service 索引的端口缓存，以及按 trafficDistribution 分组的 Service 集合。
@@ -35,53 +34,32 @@ func NewCache(endpointsPerSlice int32) *Cache {
 	}
 }
 
-// Cache tracks values for total numbers of desired endpoints as well as the
-// efficiency of EndpointSlice endpoints distribution.
 // Cache 记录期望端点总数以及 EndpointSlice 端点分发效率相关的指标值。
 type Cache struct {
-	// maxEndpointsPerSlice references the maximum number of endpoints that
-	// should be added to an EndpointSlice.
 	// maxEndpointsPerSlice 表示单个 EndpointSlice 中应添加的最大端点数。
 	maxEndpointsPerSlice int32
 
-	// lock protects changes to numEndpoints, numSlicesActual, numSlicesDesired,
-	// cache and servicesByTrafficDistribution
 	// lock 保护对 numEndpoints、numSlicesActual、numSlicesDesired、cache 和 servicesByTrafficDistribution 的修改。
 	lock sync.Mutex
-	// numEndpoints represents the total number of endpoints stored in
-	// EndpointSlices.
 	// numEndpoints 表示 EndpointSlices 中存储的端点总数。
 	numEndpoints int
-	// numSlicesActual represents the total number of EndpointSlices.
 	// numSlicesActual 表示 EndpointSlices 的实际总数。
 	numSlicesActual int
-	// numSlicesDesired represents the desired number of EndpointSlices.
 	// numSlicesDesired 表示 EndpointSlices 的期望总数。
 	numSlicesDesired int
-	// cache stores a ServicePortCache grouped by NamespacedNames representing
-	// Services.
 	// cache 以 Service 的 NamespacedName 为键，保存对应的 ServicePortCache。
 	cache map[types.NamespacedName]*ServicePortCache
-	// Tracks all services partitioned by their trafficDistribution field.
-	//
-	// The type should be read as map[trafficDistribution]setOfServices
 	// servicesByTrafficDistribution 按 trafficDistribution 字段对所有 Service 分组。
 	// 其类型应读作 map[trafficDistribution]setOfServices，即每种流量分布对应一个 Service 集合。
 	servicesByTrafficDistribution map[string]map[types.NamespacedName]bool
 }
 
-// ServicePortCache tracks values for total numbers of desired endpoints as well
-// as the efficiency of EndpointSlice endpoints distribution for each unique
-// Service Port combination.
 // ServicePortCache 按唯一的 Service Port 组合记录期望端点总数以及 EndpointSlice 端点分发效率。
 type ServicePortCache struct {
 	// items 以端口组合的 PortMapKey 为键，保存各端口组合对应的端点与切片统计。
 	items map[endpointsliceutil.PortMapKey]EfficiencyInfo
 }
 
-// EfficiencyInfo stores the number of Endpoints and Slices for calculating
-// total numbers of desired endpoints and the efficiency of EndpointSlice
-// endpoints distribution.
 // EfficiencyInfo 保存端点数和切片数，用于计算期望端点总数与 EndpointSlice 端点分发效率。
 type EfficiencyInfo struct {
 	// Endpoints 表示该端口组合下的端点数量。
@@ -90,7 +68,6 @@ type EfficiencyInfo struct {
 	Slices    int
 }
 
-// NewServicePortCache initializes and returns a new ServicePortCache.
 // NewServicePortCache 初始化并返回一个空的 ServicePortCache。
 func NewServicePortCache() *ServicePortCache {
 	return &ServicePortCache{
@@ -98,15 +75,11 @@ func NewServicePortCache() *ServicePortCache {
 	}
 }
 
-// Set updates the ServicePortCache to contain the provided EfficiencyInfo
-// for the provided PortMapKey.
 // Set 将指定 PortMapKey 对应的 EfficiencyInfo 写入缓存。
 func (spc *ServicePortCache) Set(pmKey endpointsliceutil.PortMapKey, eInfo EfficiencyInfo) {
 	spc.items[pmKey] = eInfo
 }
 
-// totals returns the total number of endpoints and slices represented by a
-// ServicePortCache.
 // totals 汇总该 ServicePortCache 中所有端口组合的端点总数与切片总数。
 func (spc *ServicePortCache) totals(maxEndpointsPerSlice int) (int, int, int) {
 	var actualSlices, desiredSlices, endpoints int
@@ -116,7 +89,6 @@ func (spc *ServicePortCache) totals(maxEndpointsPerSlice int) (int, int, int) {
 		actualSlices += eInfo.Slices
 		desiredSlices += numDesiredSlices(eInfo.Endpoints, maxEndpointsPerSlice)
 	}
-	// there is always a placeholder slice
 	// 即使没有任何端点，也始终保留一个占位切片，因此期望切片数至少为 1。
 	if desiredSlices == 0 {
 		desiredSlices = 1
@@ -124,11 +96,6 @@ func (spc *ServicePortCache) totals(maxEndpointsPerSlice int) (int, int, int) {
 	return actualSlices, desiredSlices, endpoints
 }
 
-// UpdateServicePortCache updates a ServicePortCache in the global cache for a
-// given Service and updates the corresponding metrics.
-// Parameters:
-// * serviceNN refers to a NamespacedName representing the Service.
-// * spCache refers to a ServicePortCache for the specified Service.
 // UpdateServicePortCache 将指定 Service 的 ServicePortCache 写入全局缓存，并更新相应指标。
 // 参数：serviceNN 是代表该 Service 的 NamespacedName；spCache 是该 Service 对应的端口缓存。
 func (c *Cache) UpdateServicePortCache(serviceNN types.NamespacedName, spCache *ServicePortCache) {
@@ -144,8 +111,6 @@ func (c *Cache) UpdateServicePortCache(serviceNN types.NamespacedName, spCache *
 
 	// 统计新缓存的当前值。
 	currActualSlices, currDesiredSlices, currEndpoints := spCache.totals(int(c.maxEndpointsPerSlice))
-	// To keep numEndpoints up to date, add the difference between the number of
-	// endpoints in the provided spCache and any spCache it might be replacing.
 	// 用新值减去被替换的旧值，保持端点总数与切片总数处于最新状态。
 	c.numEndpoints = c.numEndpoints + currEndpoints - prevEndpoints
 
@@ -187,8 +152,6 @@ func (c *Cache) UpdateTrafficDistributionForService(serviceNN types.NamespacedNa
 	serviceSet[serviceNN] = true
 }
 
-// DeleteService removes references of a Service from the global cache and
-// updates the corresponding metrics.
 // DeleteService 从全局缓存中移除某个 Service 的所有引用，并更新相应指标。
 func (c *Cache) DeleteService(serviceNN types.NamespacedName) {
 	c.lock.Lock()
@@ -210,8 +173,6 @@ func (c *Cache) DeleteService(serviceNN types.NamespacedName) {
 	}
 }
 
-// updateMetrics updates metrics with the values from this Cache.
-// Must be called holding lock.
 // updateMetrics 用当前 Cache 中的聚合值更新指标。
 // 调用方必须持有 lock。
 func (c *Cache) updateMetrics() {
@@ -227,8 +188,6 @@ func (c *Cache) updateMetrics() {
 	}
 }
 
-// numDesiredSlices calculates the number of EndpointSlices that would exist
-// with ideal endpoint distribution.
 // numDesiredSlices 计算在理想端点分配情况下会存在的 EndpointSlice 数量。
 func numDesiredSlices(numEndpoints, maxEndpointsPerSlice int) int {
 	// 没有端点时不需要任何切片。

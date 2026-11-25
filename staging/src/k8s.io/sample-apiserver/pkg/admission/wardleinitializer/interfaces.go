@@ -21,7 +21,7 @@ import (
 	informers "k8s.io/sample-apiserver/pkg/generated/informers/externalversions"
 )
 
-// WantsInternalWardleInformerFactory defines a function which sets InformerFactory for admission plugins that need it
+// WantsInternalWardleInformerFactory 声明插件对内部 Wardle informer 工厂的依赖。
 // 需要 informer 的插件实现它，初始化器据此注入共享工厂。
 type WantsInternalWardleInformerFactory interface {
 	SetInternalWardleInformerFactory(informers.SharedInformerFactory)

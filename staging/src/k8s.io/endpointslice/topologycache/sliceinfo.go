@@ -20,8 +20,6 @@ import (
 	discovery "k8s.io/api/discovery/v1"
 )
 
-// SliceInfo stores information about EndpointSlices for the reconciliation
-// process.
 // SliceInfo 保存协调过程中与 EndpointSlice 相关的信息。
 type SliceInfo struct {
 	// ServiceKey 表示所属 Service 的键。
@@ -54,24 +52,14 @@ func (si *SliceInfo) getTotalReadyEndpoints() int {
 	return totalEndpoints
 }
 
-// getAllocatedHintsByZone sums up the allocated hints we currently have in
-// unchanged slices and marks slices for update as necessary. A slice needs to
-// be updated if any of the following are true:
-//   - It has an endpoint without zone hints
-//   - It has an endpoint hint for a zone that no longer needs any
-//   - It has endpoint hints that would make the minimum allocations necessary
-//     impossible with changes to slices that are already being updated or
-//     created.
-//
 // getAllocatedHintsByZone 汇总未变更切片中当前已分配的提示，并在必要时将切片标记为需要更新。
 // 当出现以下任一情况时需要更新切片：端点没有可用区提示；提示指向已不再需要分配的可用区；
 // 或者现有提示会导致在已更新/新建切片的基础上无法满足最小分配量。
 func (si *SliceInfo) getAllocatedHintsByZone(allocations map[string]allocation) EndpointZoneInfo {
 	allocatedHintsByZone := EndpointZoneInfo{}
 
-	// Using filtering in place to remove any endpoints that are no longer
-	// unchanged (https://github.com/golang/go/wiki/SliceTricks#filter-in-place)
 	// 使用原地过滤移除不再属于“未变更”集合的切片，j 记录保留下来的切片数量。
+	// 技巧说明：https://github.com/golang/go/wiki/SliceTricks#filter-in-place
 	j := 0
 	for _, slice := range si.Unchanged {
 		// 计算该切片按可用区分配的提示；返回 nil 表示提示已失效，需要更新该切片。

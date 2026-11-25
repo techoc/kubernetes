@@ -27,7 +27,8 @@ import (
 )
 
 // ErrorMounter 按调用顺序返回预设错误，用来模拟挂载在不同阶段失败。
-// errIndex 指向下一次挂载应返回的错误；err 可短于调用次数，其余情况走 FakeMounter 的默认行为。
+// errIndex 指向下一次要消费的错误；err 中的 nil 项回退到 FakeMounter。
+// 注意：err 非 nil 时必须覆盖实际调用次数，否则索引会越界。
 type ErrorMounter struct {
 	*FakeMounter
 	errIndex int
@@ -39,7 +40,8 @@ func (mounter *ErrorMounter) Mount(source string, target string, fstype string, 
 	return mounter.MountSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 }
 
-// MountSensitive 先消费预设错误再回退到 FakeMounter，避免污染真实挂载状态。
+// MountSensitive 先消费预设错误再回退到 FakeMounter。
+// 回退路径只转发普通 options，不保留 sensitiveOptions，与既有测试替身行为一致。
 func (mounter *ErrorMounter) MountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	i := mounter.errIndex
 	mounter.errIndex++
@@ -50,8 +52,8 @@ func (mounter *ErrorMounter) MountSensitive(source string, target string, fstype
 }
 
 // ExecArgs 描述一次预期命令及其输出，用于构造 FakeExec 的脚本。
-// command 为预期执行的命令名，args 为预期参数且顺序必须与实际调用一致；
-// output 作为命令的标准输出返回，err 模拟命令失败，例如 blkid 的退出码。
+// command 为预期命令名，args 为预期参数；output 作为命令的标准输出返回，err 模拟命令失败。
+// 当前 makeFakeCmd 会忽略实际传入的命令与参数，因此这里主要记录测试意图。
 type ExecArgs struct {
 	command string
 	args    []string
@@ -256,13 +258,13 @@ func TestSafeFormatAndMount(t *testing.T) {
 				t.Errorf("test \"%s\" unexpected non-error: %v", test.description, err)
 			}
 
-			// Check that something was mounted on the directory
+			// 确认目标目录上确实挂载了文件系统。
 			isNotMountPoint, err := fakeMounter.IsLikelyNotMountPoint(dest)
 			if err != nil || isNotMountPoint {
 				t.Errorf("test \"%s\" the directory was not mounted", test.description)
 			}
 
-			// check that the correct device was mounted
+			// 确认挂载的是预期设备。
 			mountedDevice, _, err := GetDeviceNameFromMount(fakeMounter.FakeMounter, dest)
 			if err != nil || mountedDevice != device {
 				t.Errorf("test \"%s\" the correct device was not mounted", test.description)

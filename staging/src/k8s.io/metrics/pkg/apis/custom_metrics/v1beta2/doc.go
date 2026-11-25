@@ -20,6 +20,6 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:openapi-model-package=io.k8s.metrics.pkg.apis.custom_metrics.v1beta2
 
-// Package v1beta2 is the v1beta2 version of the custom_metrics API.
-// 本包只声明外部版本类型；与内部版本的转换逻辑放在父包，由生成器在此生成转换函数。
+// Package v1beta2 是自定义指标 API 的 v1beta2 版本。
+// 本包声明外部版本类型，转换函数由生成器依据生成指令在此生成。
 package v1beta2

@@ -538,7 +538,7 @@ func TestReconcileHints(t *testing.T) {
 							Zone:       ptr.To("zone-a"),
 							NodeName:   ptr.To("node-1"),
 							Conditions: discoveryv1.EndpointConditions{Ready: ptr.To(true)},
-							Hints:      &discoveryv1.EndpointHints{ForZones: []discoveryv1.ForZone{{Name: "zone-b"}}}, // incorrect hint as per new heuristic
+							Hints:      &discoveryv1.EndpointHints{ForZones: []discoveryv1.ForZone{{Name: "zone-b"}}}, // 按新启发式算法判断为错误的提示
 						},
 					},
 				},
@@ -896,12 +896,12 @@ func TestReconcileHints(t *testing.T) {
 							Addresses:  []string{"10.0.0.2"},
 							Zone:       ptr.To("zone-b"),
 							NodeName:   ptr.To("node-2"),
-							Conditions: discoveryv1.EndpointConditions{Ready: ptr.To(false)}, // endpoint is not ready
+							Conditions: discoveryv1.EndpointConditions{Ready: ptr.To(false)}, // endpoint 未就绪
 						},
 					},
 				},
 			},
-			wantSlicesUnchanged: []*discoveryv1.EndpointSlice{ // ... so there should be no updates
+			wantSlicesUnchanged: []*discoveryv1.EndpointSlice{ // 因此不应产生更新
 				{
 					Endpoints: []discoveryv1.Endpoint{
 						{
@@ -1086,7 +1086,6 @@ func TestReconcileHints(t *testing.T) {
 	}
 }
 
-// Ensure that the EndpointSlice objects within `slicesUnchanged` don't get modified.
 // TestReconcileHints_doesNotMutateUnchangedSlices 验证传入 slicesUnchanged 的对象不会被原地修改。
 func TestReconcileHints_doesNotMutateUnchangedSlices(t *testing.T) {
 	// 构造一个缺少 hints 且带 zone 的就绪 Endpoint，按 PreferClose 本应触发更新。
@@ -1103,7 +1102,6 @@ func TestReconcileHints_doesNotMutateUnchangedSlices(t *testing.T) {
 	// 深拷贝一份作为基准，用于事后对比原始对象是否被改动。
 	clonedEps := originalEps.DeepCopy()
 
-	// originalEps should not get modified.
 	// 调用时只传入 unchanged 切片；函数应深拷贝后再写入 hints，而非修改入参对象。
 	ReconcileHints(ptr.To(corev1.ServiceTrafficDistributionPreferClose), nil, nil, []*discoveryv1.EndpointSlice{originalEps})
 	// 断言：原对象与拷贝完全一致，说明 informer 缓存中的对象未被污染。

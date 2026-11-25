@@ -32,26 +32,23 @@ import (
 )
 
 var (
+	// Scheme 提供 API 对象的序列化与反序列化方法。
 	// 全局单例供 API 安装和各版本存储共用，改这里等于改所有请求看到的编解码规则。
-	// 必须基于上面的 Scheme 构建，否则版本协商会拿到另一套类型信息。
-	// 组件名同时用于事件与日志来源，和 API 组名保持一致以免排查时混淆。
-	// Scheme defines methods for serializing and deserializing API objects.
 	Scheme = runtime.NewScheme()
-	// Codecs provides methods for retrieving codecs and serializers for specific
-	// versions and content types.
-	Codecs              = serializer.NewCodecFactory(Scheme)
+	// Codecs 按版本和内容类型提供编解码器与序列化器。
+	Codecs = serializer.NewCodecFactory(Scheme)
+	// WardleComponentName 是 Wardle 组件的注册名，同时用于事件与日志来源。
 	WardleComponentName = "wardle"
 )
 
 func init() {
 	install.Install(Scheme)
 
-	// we need to add the options to empty v1
-	// TODO fix the server code to avoid this
 	// 没有 Group 的 v1 也要带上 ListOptions 等元类型，否则列表请求解码会失败。
+	// TODO：修正服务端代码，避免需要此注册。
 	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Version: "v1"})
 
-	// TODO: keep the generic API server from wanting this
+	// TODO：阻止通用 API server 依赖这些未分组类型。
 	// 通用 apiserver 的发现接口依赖这些未分组类型，示例服务只能照注册。
 	unversioned := schema.GroupVersion{Group: "", Version: "v1"}
 	Scheme.AddUnversionedTypes(unversioned,
@@ -63,22 +60,25 @@ func init() {
 	)
 }
 
-// ExtraConfig holds custom apiserver config
+// ExtraConfig 保存示例 apiserver 的自定义配置。
 // 示例里没有可配项，保留空壳是为了展示如何扩展配置结构。
 type ExtraConfig struct {
-	// Place you custom config here.
+	// 在此添加自定义配置。
 }
 
-// Config defines the config for the apiserver
+// Config 定义构造 Wardle apiserver 所需的配置。
 // 把通用配置和示例专属配置分开传，便于构造时各取所需。
 type Config struct {
+	// GenericConfig 承载通用 apiserver 的配置。
 	GenericConfig *genericapiserver.RecommendedConfig
-	ExtraConfig   ExtraConfig
+	// ExtraConfig 承载 Wardle 专属配置。
+	ExtraConfig ExtraConfig
 }
 
-// WardleServer contains state for a Kubernetes cluster master/api server.
+// WardleServer 保存 Wardle API 服务器的运行状态。
 // 这里只包一层通用 server，聚合 apiserver 的委托逻辑也由它承载。
 type WardleServer struct {
+	// GenericAPIServer 是承载 HTTP 服务与 API 安装的通用服务器。
 	GenericAPIServer *genericapiserver.GenericAPIServer
 }
 
@@ -88,13 +88,13 @@ type completedConfig struct {
 	ExtraConfig   *ExtraConfig
 }
 
-// CompletedConfig embeds a private pointer that cannot be instantiated outside of this package.
+// CompletedConfig 内嵌私有配置指针，包外无法直接实例化。
 // 对外暴露类型但不暴露字段，顺序约束靠包边界而不是文档约定。
 type CompletedConfig struct {
 	*completedConfig
 }
 
-// Complete fills in any fields not set that are required to have valid data. It's mutating the receiver.
+// Complete 补齐构造有效服务器所需的字段，并直接修改接收者。
 // 直接改接收者而非拷贝，避免调用方误用未补全的配置。
 func (cfg *Config) Complete() CompletedConfig {
 	c := completedConfig{
@@ -105,7 +105,7 @@ func (cfg *Config) Complete() CompletedConfig {
 	return CompletedConfig{&c}
 }
 
-// New returns a new instance of WardleServer from the given config.
+// New 根据已补全的配置创建 WardleServer。
 // 在通用 server 上按版本挂载存储：v1alpha1 有 Fischer 和 Flunder，v1beta1 只有 Flunder，
 // 正好演示同一资源多版本共存时存储可以独立演进。
 func (c completedConfig) New() (*WardleServer, error) {

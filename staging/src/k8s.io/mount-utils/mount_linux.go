@@ -39,40 +39,34 @@ import (
 )
 
 const (
-	// Number of fields per line in /proc/mounts as per the fstab man page.
+	// 按照 fstab 手册，/proc/mounts 每行应包含的字段数。
 	// 列数不符通常意味着读到了半行，宁可报错也不给出半截挂载表。
 	expectedNumFieldsPerLine = 6
-	// Location of the mount file to use
-	// /proc/mounts 是 List() 的数据源；/etc/mtab 可能是过期符号链接，不能替代。
+	// 所用挂载文件的位置；/proc/mounts 是 List() 的数据源，/etc/mtab 可能是过期符号链接，不能替代。
 	procMountsPath = "/proc/mounts"
-	// Location of the mountinfo file
-	// mountinfo 带 root 与 major:minor，定位 bind mount 引用必须用这份文件。
+	// mountinfo 文件的位置；其中带 root 与 major:minor，定位 bind mount 引用必须用这份文件。
 	procMountInfoPath = "/proc/self/mountinfo"
-	// 'fsck' found errors and corrected them
-	// 1 表示错误已修好，属于可以继续挂载的退出码。
+	// fsck 发现错误并已修复的退出码；1 表示可以继续挂载。
 	fsckErrorsCorrected = 1
-	// 'fsck' found errors but exited without correcting them
-	// 4 表示仍有问题没修掉，此时必须中断挂载而不是带病上线。
+	// fsck 发现错误但未修复的退出码；4 表示必须中断挂载，不能带病上线。
 	fsckErrorsUncorrected = 4
-	// Error thrown by exec cmd.Run() when process spawned by cmd.Start() completes before cmd.Wait() is called (see - k/k issue #103753)
+	// cmd.Start() 启动的进程先于 cmd.Wait() 完成时，exec cmd.Run() 返回的错误（参见 k/k issue #103753）。
 	// Start/Wait 的竞态会把成功命令也报成这个错，需要结合 ProcessState 再判一次。
 	errNoChildProcesses = "wait: no child processes"
-	// Error returned by some `umount` implementations when the specified path is not a mount point
+	// 某些 umount 实现发现指定路径不是挂载点时返回的错误文本。
 	// 各实现文案不一，这里只认最常见的这一种，其余仍按真实失败处理。
 	errNotMounted = "not mounted"
 )
 
 var (
-	// Error statx support since Linux 4.11, https://man7.org/linux/man-pages/man2/statx.2.html
+	// statx 支持错误：至少需要 Linux 4.11，https://man7.org/linux/man-pages/man2/statx.2.html。
 	// 单独造一个哨兵错误，调用方用 errors.Is 判断后即可回退到 stat。
 	errStatxNotSupport = errors.New("the statx syscall is not supported. At least Linux kernel 4.11 is needed")
 )
 
-// Mounter provides the default implementation of mount.Interface
-// for the linux platform.  This implementation assumes that the
-// kubelet is running in the host's root mount namespace.
+// Mounter 是 mount.Interface 在 Linux 平台上的默认实现，假设 kubelet 运行在宿主机的根挂载命名空间中。
 // systemd 与 umount 行为只在构造时探测一次并缓存，避免每次挂载都 fork 探测命令。
-// withSystemd 用指针而非 bool，是为了区分"尚未探测"与"探测结果为无"。
+// withSystemd 用指针而非 bool，是为了区分“尚未探测”与“探测结果为无”。
 // trySystemd 由构造方式固定，显式禁用时连探测都省掉。
 type Mounter struct {
 	mounterPath                string
@@ -83,9 +77,8 @@ type Mounter struct {
 
 var _ MounterForceUnmounter = &Mounter{}
 
-// New returns a mount.Interface for the current system.
-// It provides options to override the default mounter behavior.
-// mounterPath allows using an alternative to `/bin/mount` for mounting.
+// New 返回当前系统使用的 mount.Interface，可覆盖默认挂载器行为。
+// mounterPath 允许使用 /bin/mount 的替代程序执行挂载。
 // 默认尝试 systemd scope，让 fuse 守护进程独立于 kubelet 的 cgroup 存活。
 func New(mounterPath string) Interface {
 	return &Mounter{
@@ -95,10 +88,8 @@ func New(mounterPath string) Interface {
 	}
 }
 
-// NewWithoutSystemd returns a Linux specific mount.Interface for the current
-// system. It provides options to override the default mounter behavior.
-// mounterPath allows using an alternative to `/bin/mount` for mounting. Any
-// detection for systemd functionality is disabled with this Mounter.
+// NewWithoutSystemd 返回当前系统使用的 Linux 专用 mount.Interface，可覆盖默认挂载器行为。
+// mounterPath 允许使用 /bin/mount 的替代程序执行挂载；此 Mounter 禁用所有 systemd 功能探测。
 // 某些挂载不需要 fuse 守护进程，也就没必要引入 systemd-run 的不确定性。
 func NewWithoutSystemd(mounterPath string) Interface {
 	return &Mounter{
@@ -108,8 +99,7 @@ func NewWithoutSystemd(mounterPath string) Interface {
 	}
 }
 
-// hasSystemd validates that the withSystemd bool is set, if it is not,
-// detectSystemd will be called once for this Mounter instance.
+// hasSystemd 检查 withSystemd 是否已设置；未设置时，对当前 Mounter 实例调用一次 detectSystemd。
 // 结果写回接收者供后续挂载复用；显式禁用时同步缓存，避免下次又去探测。
 func (mounter *Mounter) hasSystemd() bool {
 	if !mounter.trySystemd {
@@ -124,8 +114,7 @@ func (mounter *Mounter) hasSystemd() bool {
 	return *mounter.withSystemd
 }
 
-// Map unix.Statfs mount flags ro, nodev, noexec, nosuid, noatime, relatime,
-// nodiratime to mount option flag strings.
+// getBindMountOptions 将 unix.Statfs 中的 ro、nodev、noexec、nosuid、noatime、relatime、nodiratime 标志映射为挂载选项字符串。
 // statfs 返回的是内核标志位，mount 命令只认字符串选项；不转换就会丢掉源端的加固属性。
 func getBindMountOptions(path string, statfs func(path string, buf *unix.Statfs_t) (err error)) ([]string, error) {
 	var s unix.Statfs_t
@@ -151,9 +140,7 @@ func getBindMountOptions(path string, statfs func(path string, buf *unix.Statfs_
 	return mountOpts, nil
 }
 
-// Performs a bind mount with the specified options, and then remounts
-// the mount point with the same `nodev`, `nosuid`, `noexec`, `nosuid`, `noatime`,
-// `relatime`, `nodiratime` options as the original mount point.
+// bindMountSensitive 按指定选项执行绑定挂载，再以与原挂载点相同的 nodev、nosuid、noexec、noatime、relatime、nodiratime 选项重新挂载。
 // bind 本身不继承这些安全属性，必须在第二次 remount 时补回来。
 // 敏感选项只进入首次挂载与敏感 remount，不会出现在普通 remount 的日志里。
 func (mounter *Mounter) bindMountSensitive(mounterPath string, mountCmd string, source string, target string, fstype string, bindOpts []string, bindRemountOpts []string, bindRemountOptsSensitive []string, mountFlags []string, systemdMountRequired bool) error {
@@ -161,43 +148,36 @@ func (mounter *Mounter) bindMountSensitive(mounterPath string, mountCmd string, 
 	if err != nil {
 		return err
 	}
-	// Check if the source has ro, nodev, noexec, nosuid, noatime, relatime,
-	// nodiratime flag...
+	// 检查源是否带有 ro、nodev、noexec、nosuid、noatime、relatime、nodiratime 标志。
 	fixMountOpts, err := getBindMountOptions(source, unix.Statfs)
 	if err != nil {
 		return &os.PathError{Op: "statfs", Path: source, Err: err}
 	}
-	// ... and retry the mount with flags found above.
+	// 然后带上上述标志重新挂载。
 	bindRemountOpts = append(bindRemountOpts, fixMountOpts...)
 	return mounter.doMount(mounterPath, mountCmd, source, target, fstype, bindRemountOpts, bindRemountOptsSensitive, mountFlags, systemdMountRequired)
 }
 
-// Mount mounts source to target as fstype with given options. 'source' and 'fstype' must
-// be an empty string in case it's not required, e.g. for remount, or for auto filesystem
-// type, where kernel handles fstype for you. The mount 'options' is a list of options,
-// currently come from mount(8), e.g. "ro", "remount", "bind", etc. If no more option is
-// required, call Mount with an empty string list or nil.
+// Mount 按给定选项将 source 挂载到 target，文件系统类型为 fstype。
+// 不需要 source 或 fstype 时必须传空字符串，例如重新挂载或由内核自动识别文件系统类型时。
+// options 是来自 mount(8) 的选项列表，例如 "ro"、"remount"、"bind"；无需选项时传空切片或 nil。
 // 统一收敛到 MountSensitive，让脱敏逻辑只存在一份实现。
 func (mounter *Mounter) Mount(source string, target string, fstype string, options []string) error {
 	return mounter.MountSensitive(source, target, fstype, options, nil)
 }
 
-// MountSensitive is the same as Mount() but this method allows
-// sensitiveOptions to be passed in a separate parameter from the normal
-// mount options and ensures the sensitiveOptions are never logged. This
-// method should be used by callers that pass sensitive material (like
-// passwords) as mount options.
+// MountSensitive 与 Mount 相同，但通过单独参数接收敏感选项，并确保这些选项不会写入日志。
+// 当挂载选项包含密码等敏感信息时，调用方应使用本方法。
 // GCI 镜像里 nfs/cifs 等用户态文件系统需要容器化 mount，其余类型直接用宿主二进制。
 func (mounter *Mounter) MountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
-	// Path to mounter binary if containerized mounter is needed. Otherwise, it is set to empty.
-	// All Linux distros are expected to be shipped with a mount utility that a support bind mounts.
+	// 需要容器化挂载器时保存其二进制路径，否则为空；所有 Linux 发行版都应自带支持绑定挂载的 mount 工具。
 	mounterPath := ""
 	bind, bindOpts, bindRemountOpts, bindRemountOptsSensitive := MakeBindOptsSensitive(options, sensitiveOptions)
 	if bind {
 		return mounter.bindMountSensitive(mounterPath, defaultMountCommand, source, target, fstype, bindOpts, bindRemountOpts, bindRemountOptsSensitive, nil /* mountFlags */, mounter.trySystemd)
 	}
 	// 只有这几类需要切换二进制；其余文件系统走默认路径，省掉一次无谓的替换。
-	// The list of filesystems that require containerized mounter on GCI image cluster
+	// GCI 镜像集群中需要容器化挂载器的文件系统类型。
 	fsTypesNeedMounter := map[string]struct{}{
 		"nfs":       {},
 		"glusterfs": {},
@@ -210,12 +190,12 @@ func (mounter *Mounter) MountSensitive(source string, target string, fstype stri
 	return mounter.doMount(mounterPath, defaultMountCommand, source, target, fstype, options, sensitiveOptions, nil /* mountFlags */, mounter.trySystemd)
 }
 
-// MountSensitiveWithoutSystemd is the same as MountSensitive() but disable using systemd mount.
+// MountSensitiveWithoutSystemd 与 MountSensitive 相同，但不使用 systemd 挂载。
 func (mounter *Mounter) MountSensitiveWithoutSystemd(source string, target string, fstype string, options []string, sensitiveOptions []string) error {
 	return mounter.MountSensitiveWithoutSystemdWithMountFlags(source, target, fstype, options, sensitiveOptions, nil /* mountFlags */)
 }
 
-// MountSensitiveWithoutSystemdWithMountFlags is the same as MountSensitiveWithoutSystemd with additional mount flags.
+// MountSensitiveWithoutSystemdWithMountFlags 与 MountSensitiveWithoutSystemd 相同，并额外接收挂载标志。
 // mountFlags 走命令行位置参数，不属于 -o 选项；与敏感选项分离便于日志脱敏。
 func (mounter *Mounter) MountSensitiveWithoutSystemdWithMountFlags(source string, target string, fstype string, options []string, sensitiveOptions []string, mountFlags []string) error {
 	mounterPath := ""
@@ -223,7 +203,7 @@ func (mounter *Mounter) MountSensitiveWithoutSystemdWithMountFlags(source string
 	if bind {
 		return mounter.bindMountSensitive(mounterPath, defaultMountCommand, source, target, fstype, bindOpts, bindRemountOpts, bindRemountOptsSensitive, mountFlags, false)
 	}
-	// The list of filesystems that require containerized mounter on GCI image cluster
+	// GCI 镜像集群中需要容器化挂载器的文件系统类型。
 	fsTypesNeedMounter := map[string]struct{}{
 		"nfs":       {},
 		"glusterfs": {},
@@ -236,9 +216,9 @@ func (mounter *Mounter) MountSensitiveWithoutSystemdWithMountFlags(source string
 	return mounter.doMount(mounterPath, defaultMountCommand, source, target, fstype, options, sensitiveOptions, mountFlags, false)
 }
 
-// doMount runs the mount command. mounterPath is the path to mounter binary if containerized mounter is used.
-// sensitiveOptions is an extension of options except they will not be logged (because they may contain sensitive material)
-// systemdMountRequired is an extension of option to decide whether uses systemd mount.
+// doMount 执行 mount 命令；使用容器化挂载器时，mounterPath 为其二进制路径。
+// sensitiveOptions 是 options 的扩展，但不会写入日志，因为可能包含敏感信息。
+// systemdMountRequired 决定是否使用 systemd 挂载。
 // 同时持有原始参数与脱敏日志串，记录日志时无需再拼出密码。
 func (mounter *Mounter) doMount(mounterPath string, mountCmd string, source string, target string, fstype string, options []string, sensitiveOptions []string, mountFlags []string, systemdMountRequired bool) error {
 	mountArgs, mountArgsLogStr := MakeMountArgsSensitiveWithMountFlags(source, target, fstype, options, sensitiveOptions, mountFlags)
@@ -249,37 +229,26 @@ func (mounter *Mounter) doMount(mounterPath string, mountCmd string, source stri
 	}
 
 	if systemdMountRequired && mounter.hasSystemd() {
-		// Try to run mount via systemd-run --scope. This will escape the
-		// service where kubelet runs and any fuse daemons will be started in a
-		// specific scope. kubelet service than can be restarted without killing
-		// these fuse daemons.
+		// 尝试通过 systemd-run --scope 运行 mount，以脱离 kubelet 所在服务；FUSE 守护进程会在独立 scope 中启动，kubelet 服务重启不会杀死它们。
 		//
-		// Complete command line (when mounterPath is not used):
+		// 完整命令行（未使用 mounterPath 时）：
 		// systemd-run --description=... --scope -- mount -t <type> <what> <where>
 		//
-		// Expected flow:
-		// * systemd-run creates a transient scope (=~ cgroup) and executes its
-		//   argument (/bin/mount) there.
-		// * mount does its job, forks a fuse daemon if necessary and finishes.
-		//   (systemd-run --scope finishes at this point, returning mount's exit
-		//   code and stdout/stderr - thats one of --scope benefits).
-		// * systemd keeps the fuse daemon running in the scope (i.e. in its own
-		//   cgroup) until the fuse daemon dies (another --scope benefit).
-		//   Kubelet service can be restarted and the fuse daemon survives.
-		// * When the fuse daemon dies (e.g. during unmount) systemd removes the
-		//   scope automatically.
+		// 预期流程：
+		// * systemd-run 创建临时 scope（约等于 cgroup），并在其中执行参数指定的命令（/bin/mount）。
+		// * mount 完成挂载，必要时 fork FUSE 守护进程后结束；systemd-run --scope 此时返回 mount 的退出码及标准输出、标准错误，这是 --scope 的优势之一。
+		// * 在 FUSE 守护进程退出前，systemd 会让它继续在 scope（即独立 cgroup）中运行，这是 --scope 的另一优势；kubelet 服务重启后守护进程仍可存活。
+		// * FUSE 守护进程退出时（例如卸载过程中），systemd 自动删除 scope。
 		//
-		// systemd-mount is not used because it's too new for older distros
-		// (CentOS 7, Debian Jessie).
+		// 不使用 systemd-mount，因为它对旧发行版（CentOS 7、Debian Jessie）而言太新。
 		// 只有调用方要求且确实探测到 systemd 时才改造命令行；否则保持原样。
 		mountCmd, mountArgs, mountArgsLogStr = AddSystemdScopeSensitive("systemd-run", target, mountCmd, mountArgs, mountArgsLogStr)
 		// } else {
-		// No systemd-run on the host (or we failed to check it), assume kubelet
-		// does not run as a systemd service.
-		// No code here, mountCmd and mountArgs are already populated.
+		// 宿主没有 systemd-run（或探测失败）时，假定 kubelet 不是作为 systemd 服务运行的。
+		// 无需额外处理，mountCmd 和 mountArgs 已填好。
 	}
 
-	// Logging with sensitive mount options removed.
+	// 记录日志前移除敏感挂载选项。
 	klog.V(4).Infof("Mounting cmd (%s) with arguments (%s)", mountCmd, mountArgsLogStr)
 	command := exec.Command(mountCmd, mountArgs...)
 	output, err := command.CombinedOutput()
@@ -287,10 +256,10 @@ func (mounter *Mounter) doMount(mounterPath string, mountCmd string, source stri
 		if err.Error() == errNoChildProcesses {
 			// CombinedOutput 把 Start/Wait 的竞态包装成字符串错误，只能靠 ProcessState 还原真实退出码。
 			if command.ProcessState.Success() {
-				// We don't consider errNoChildProcesses an error if the process itself succeeded (see - k/k issue #103753).
+				// 进程本身成功时，不把 errNoChildProcesses 视为错误（参见 k/k issue #103753）。
 				return nil
 			}
-			// Rewrite err with the actual exit error of the process.
+			// 用进程的实际退出错误替换原错误。
 			err = &exec.ExitError{ProcessState: command.ProcessState}
 		}
 		klog.Errorf("Mount failed: %v\nMounting command: %s\nMounting arguments: %s\nOutput: %s\n", err, mountCmd, mountArgsLogStr, string(output))
@@ -300,21 +269,16 @@ func (mounter *Mounter) doMount(mounterPath string, mountCmd string, source stri
 	return err
 }
 
-// detectSystemd returns true if OS runs with systemd as init. When not sure
-// (permission errors, ...), it returns false.
-// There may be different ways how to detect systemd, this one makes sure that
-// systemd-runs (needed by Mount()) works.
-// 探测的是"能否用 systemd-run --scope"，而非 systemd 是否安装：容器镜像常装了它但 PID 1 不是。
+// detectSystemd 判断操作系统是否以 systemd 作为 init；遇到权限错误等不确定情况时返回 false。
+// 探测方式不止一种，本方法确保 Mount 所需的 systemd-run 可用。
+// 探测的是“能否用 systemd-run --scope”，而非 systemd 是否安装：容器镜像常装了它但 PID 1 不是。
 func detectSystemd() bool {
 	if _, err := exec.LookPath("systemd-run"); err != nil {
 		klog.V(2).Infof("Detected OS without systemd")
 		return false
 	}
 	// 用 /bin/true 当探针比读 /proc/1/comm 更贴近实际用途：能在 scope 里跑起来才算可用。
-	// Try to run systemd-run --scope /bin/true, that should be enough
-	// to make sure that systemd is really running and not just installed,
-	// which happens when running in a container with a systemd-based image
-	// but with different pid 1.
+	// 尝试运行 systemd-run --scope /bin/true，足以确认 systemd 确实运行，而不只是安装了程序；基于 systemd 的容器镜像可能安装了它但 PID 1 不同。
 	cmd := exec.Command("systemd-run", "--description=Kubernetes systemd probe", "--scope", "true")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -326,20 +290,18 @@ func detectSystemd() bool {
 	return true
 }
 
-// detectSafeNotMountedBehavior returns true if the umount implementation replies "not mounted"
-// when the specified path is not mounted. When not sure (permission errors, ...), it returns false.
-// When possible, we will trust umount's message and avoid doing our own mount point checks.
-// More info: https://github.com/util-linux/util-linux/blob/v2.2/mount/umount.c#L179
+// detectSafeNotMountedBehavior 判断指定路径未挂载时，umount 实现是否会回复 "not mounted"；遇到权限错误等不确定情况时返回 false。
+// 可行时将信任 umount 的应答，避免自行检查挂载点。
+// 更多信息：https://github.com/util-linux/util-linux/blob/v2.2/mount/umount.c#L179
 // 信任 umount 的应答能省掉每次卸载前的挂载点检查，但得先实测当前实现是否可靠。
 func detectSafeNotMountedBehavior() bool {
 	return detectSafeNotMountedBehaviorWithExec(utilexec.New())
 }
 
-// detectSafeNotMountedBehaviorWithExec is for testing with FakeExec.
+// detectSafeNotMountedBehaviorWithExec 供测试通过 FakeExec 注入命令执行器。
 // 把 exec 抽成参数，测试里就能用假命令模拟不同 umount 的输出。
 func detectSafeNotMountedBehaviorWithExec(exec utilexec.Interface) bool {
-	// 用确定未挂载的临时目录做探针，不碰真实挂载点。
-	// create a temp dir and try to umount it
+	// 用确定未挂载的临时目录做探针，不碰真实挂载点；创建临时目录后尝试卸载它。
 	path, err := os.MkdirTemp("", "kubelet-detect-safe-umount")
 	if err != nil {
 		klog.V(4).Infof("Cannot create temp dir to detect safe 'not mounted' behavior: %v", err)
@@ -359,28 +321,26 @@ func detectSafeNotMountedBehaviorWithExec(exec utilexec.Interface) bool {
 	return false
 }
 
-// MakeMountArgs makes the arguments to the mount(8) command.
-// options MUST not contain sensitive material (like passwords).
-// 公开入口不收敏感参数，需要时调用方应走 Sensitive 版本。
+// MakeMountArgs 构造 mount(8) 命令的参数。
+// options 不得包含密码等敏感信息；需要接收敏感参数时，调用方应使用 Sensitive 版本。
 func MakeMountArgs(source, target, fstype string, options []string) (mountArgs []string) {
 	mountArgs, _ = MakeMountArgsSensitive(source, target, fstype, options, nil /* sensitiveOptions */)
 	return mountArgs
 }
 
-// MakeMountArgsSensitive makes the arguments to the mount(8) command.
-// sensitiveOptions is an extension of options except they will not be logged (because they may contain sensitive material)
+// MakeMountArgsSensitive 构造 mount(8) 命令的参数。
+// sensitiveOptions 是 options 的扩展，但不会写入日志，因为可能包含敏感信息。
 // 两个返回值一一对应：前者执行命令，后者只用于日志。
 func MakeMountArgsSensitive(source, target, fstype string, options []string, sensitiveOptions []string) (mountArgs []string, mountArgsLogStr string) {
 	return MakeMountArgsSensitiveWithMountFlags(source, target, fstype, options, sensitiveOptions, nil /* mountFlags */)
 }
 
-// MakeMountArgsSensitiveWithMountFlags makes the arguments to the mount(8) command.
-// sensitiveOptions is an extension of options except they will not be logged (because they may contain sensitive material)
-// mountFlags are additional mount flags that are not related with the fstype
-// and mount options
+// MakeMountArgsSensitiveWithMountFlags 构造 mount(8) 命令的参数。
+// sensitiveOptions 是 options 的扩展，但不会写入日志，因为可能包含敏感信息。
+// mountFlags 是与文件系统类型及挂载选项无关的额外挂载标志。
 // mountFlags 放在命令最前，与 -t/-o 无关；日志串始终用脱敏后的选项拼装。
 func MakeMountArgsSensitiveWithMountFlags(source, target, fstype string, options []string, sensitiveOptions []string, mountFlags []string) (mountArgs []string, mountArgsLogStr string) {
-	// Build mount command as follows:
+	// 按如下格式构建 mount 命令：
 	//   mount [$mountFlags] [-t $fstype] [-o $options] [$source] $target
 	mountArgs = []string{}
 	mountArgsLogStr = ""
@@ -397,8 +357,7 @@ func MakeMountArgsSensitiveWithMountFlags(source, target, fstype string, options
 		combinedOptions = append(combinedOptions, options...)
 		combinedOptions = append(combinedOptions, sensitiveOptions...)
 		mountArgs = append(mountArgs, "-o", strings.Join(combinedOptions, ","))
-		// 真实选项用于执行命令，日志里敏感项只留占位符。
-		// exclude sensitiveOptions from log string
+		// 真实选项用于执行命令，日志里敏感项只留占位符；日志串不包含 sensitiveOptions。
 		mountArgsLogStr += " -o " + sanitizedOptionsForLogging(options, sensitiveOptions)
 	}
 	if len(source) > 0 {
@@ -411,9 +370,8 @@ func MakeMountArgsSensitiveWithMountFlags(source, target, fstype string, options
 	return mountArgs, mountArgsLogStr
 }
 
-// AddSystemdScope adds "system-run --scope" to given command line
-// If args contains sensitive material, use AddSystemdScopeSensitive to construct
-// a safe to log string.
+// AddSystemdScope 为给定命令行添加 "systemd-run --scope"。
+// args 包含敏感信息时，应使用 AddSystemdScopeSensitive 构造可安全记录的日志串。
 // description 带上挂载点，便于在 systemctl 里定位是哪个卷起了 scope。
 func AddSystemdScope(systemdRunPath, mountName, command string, args []string) (string, []string) {
 	descriptionArg := fmt.Sprintf("--description=Kubernetes transient mount for %s", mountName)
@@ -421,9 +379,7 @@ func AddSystemdScope(systemdRunPath, mountName, command string, args []string) (
 	return systemdRunPath, append(systemdRunArgs, args...)
 }
 
-// AddSystemdScopeSensitive adds "system-run --scope" to given command line
-// It also accepts takes a sanitized string containing mount arguments, mountArgsLogStr,
-// and returns the string appended to the systemd command for logging.
+// AddSystemdScopeSensitive 为给定命令行添加 "systemd-run --scope"，并接收已脱敏的挂载参数日志串 mountArgsLogStr，返回追加到 systemd 命令后用于记录的字符串。
 // 与 AddSystemdScope 只差日志串：敏感信息由调用方脱敏后传进来。
 func AddSystemdScopeSensitive(systemdRunPath, mountName, command string, args []string, mountArgsLogStr string) (string, []string, string) {
 	descriptionArg := fmt.Sprintf("--description=Kubernetes transient mount for %s", mountName)
@@ -431,8 +387,7 @@ func AddSystemdScopeSensitive(systemdRunPath, mountName, command string, args []
 	return systemdRunPath, append(systemdRunArgs, args...), strings.Join(systemdRunArgs, " ") + " " + mountArgsLogStr
 }
 
-// Unmount unmounts the target.
-// If the mounter has safe "not mounted" behavior, no error will be returned when the target is not a mount point.
+// Unmount 卸载目标；挂载器具备安全的 "not mounted" 行为时，目标不是挂载点也不会返回错误。
 // 卸载要幂等：重复卸载同一路径不该让 kubelet 陷入错误循环。
 func (mounter *Mounter) Unmount(target string) error {
 	klog.V(4).Infof("Unmounting %s", target)
@@ -444,8 +399,7 @@ func (mounter *Mounter) Unmount(target string) error {
 	return nil
 }
 
-// UnmountWithForce unmounts given target but will retry unmounting with force option
-// after given timeout.
+// UnmountWithForce 卸载给定目标，并在指定超时后带强制选项重试。
 // 先给普通 umount 一个宽限期，超时才上 -f，避免对繁忙设备动辄强制卸载。
 func (mounter *Mounter) UnmountWithForce(target string, umountTimeout time.Duration) error {
 	err := tryUnmount(target, mounter.withSafeNotMountedBehavior, umountTimeout)
@@ -460,14 +414,14 @@ func (mounter *Mounter) UnmountWithForce(target string, umountTimeout time.Durat
 	return nil
 }
 
-// List returns a list of all mounted filesystems.
+// List 返回所有已挂载文件系统的列表。
 // 直接解析 /proc/mounts，不调用外部命令，少一层路径依赖。
 func (*Mounter) List() ([]MountPoint, error) {
 	return ListProcMounts(procMountsPath)
 }
 
-// statx 能直接给出挂载根属性，比比较 st_dev 更准；ENOSYS 是内核过老的唯一正常信号。
-// AT_STATX_DONT_SYNC 避免为了取属性去和 NFS 服务器同步。
+// statx 能直接给出挂载根属性，比比较 st_dev 更准；AT_STATX_DONT_SYNC 避免为了取属性去和 NFS 服务器同步。
+// ENOSYS 表示内核不支持 statx，是回退到旧方法时的正常信号。
 func statx(file string) (unix.Statx_t, error) {
 	var stat unix.Statx_t
 	if err := unix.Statx(unix.AT_FDCWD, file, unix.AT_STATX_DONT_SYNC, 0, &stat); err != nil {
@@ -492,7 +446,6 @@ func (mounter *Mounter) isLikelyNotMountPointStat(file string) (bool, error) {
 		return true, err
 	}
 	// 设备号不同即判为挂载点；同设备也可能是 bind mount，这里接受这个漏判。
-	// If the directory has a different device as parent, then it is a mountpoint.
 	if stat.Sys().(*syscall.Stat_t).Dev != rootStat.Sys().(*syscall.Stat_t).Dev {
 		return false, nil
 	}
@@ -513,11 +466,10 @@ func (mounter *Mounter) isLikelyNotMountPointStatx(file string) (bool, error) {
 	if stat.Attributes_mask != 0 {
 		if stat.Attributes_mask&unix.STATX_ATTR_MOUNT_ROOT != 0 {
 			if stat.Attributes&unix.STATX_ATTR_MOUNT_ROOT != 0 {
-				// file is a mountpoint
+				// file 是挂载点。
 				return false, nil
 			} else {
-				// 属性位可用且未置位，结论已确定，不必再取父目录。
-				// no need to check rootStat if unix.STATX_ATTR_MOUNT_ROOT supported
+				// 属性位可用且未置位，结论已确定，不必再取父目录；内核支持 unix.STATX_ATTR_MOUNT_ROOT 时无需检查 rootStat。
 				return true, nil
 			}
 		}
@@ -531,33 +483,28 @@ func (mounter *Mounter) isLikelyNotMountPointStatx(file string) (bool, error) {
 	return (stat.Dev_major == rootStat.Dev_major && stat.Dev_minor == rootStat.Dev_minor), nil
 }
 
-// IsLikelyNotMountPoint determines if a directory is not a mountpoint.
-// It is fast but not necessarily ALWAYS correct. If the path is in fact
-// a bind mount from one part of a mount to another it will not be detected.
-// It also can not distinguish between mountpoints and symbolic links.
+// IsLikelyNotMountPoint 快速判断目录是否不是挂载点，但结果不一定始终正确。
+// 它无法检测从一个挂载区域绑定到另一个区域的挂载，也不能区分挂载点与符号链接。
 // mkdir /tmp/a /tmp/b; mount --bind /tmp/a /tmp/b; IsLikelyNotMountPoint("/tmp/b")
-// will return true. When in fact /tmp/b is a mount point. If this situation
-// is of interest to you, don't use this function...
+// 会返回 true，但 /tmp/b 实际是挂载点；需要识别这种情况时不要使用本方法。
 // 先走 statx，老内核返回 ENOSYS 才回退，避免每次都做两组系统调用。
 func (mounter *Mounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	notMountPoint, err := mounter.isLikelyNotMountPointStatx(file)
 	if errors.Is(err, errStatxNotSupport) {
-		// fall back to isLikelyNotMountPointStat
+		// 回退到 isLikelyNotMountPointStat。
 		return mounter.isLikelyNotMountPointStat(file)
 	}
 
 	return notMountPoint, err
 }
 
-// CanSafelySkipMountPointCheck relies on the detected behavior of umount when given a target that is not a mount point.
-// "安全"指 umount 会明确报 not mounted，调用方因此可以省掉自己的预判。
+// CanSafelySkipMountPointCheck 返回对非挂载点目标执行 umount 时探测到的行为是否允许跳过挂载点检查。
+// “安全”指 umount 会明确报 not mounted，调用方因此可以省掉自己的预判。
 func (mounter *Mounter) CanSafelySkipMountPointCheck() bool {
 	return mounter.withSafeNotMountedBehavior
 }
 
-// GetMountRefs finds all mount references to pathname, returns a
-// list of paths. Path could be a mountpoint or a normal
-// directory (for bind mount).
+// GetMountRefs 查找 pathname 的所有挂载引用并返回路径列表；路径可以是挂载点，也可以是用于绑定挂载的普通目录。
 // 先解析软链接再查 mountinfo：内核在 /proc 里记录的是解析后的路径。
 func (mounter *Mounter) GetMountRefs(pathname string) ([]string, error) {
 	pathExists, pathErr := PathExists(pathname)
@@ -578,7 +525,7 @@ func (mounter *Mounter) GetMountRefs(pathname string) ([]string, error) {
 	return SearchMountPoints(realpath, procMountInfoPath)
 }
 
-// checkAndRepairFileSystem checks and repairs filesystems using command fsck.
+// checkAndRepairFilesystem 使用 fsck 命令检查并修复文件系统。
 // 只修可修复的问题；修不掉的必须中断挂载，带病上线更麻烦。
 func (mounter *SafeFormatAndMount) checkAndRepairFilesystem(source string) error {
 	klog.V(4).Infof("Checking for issues with fsck on disk: %s", source)
@@ -606,7 +553,7 @@ func (mounter *SafeFormatAndMount) checkAndRepairFilesystem(source string) error
 	return nil
 }
 
-// formatAndMount uses unix utils to format and mount the given disk
+// formatAndMountSensitive 使用 Unix 工具按需格式化并挂载给定磁盘。
 // 只读卷遇到未格式化磁盘必须报错：格式化会改写数据，与 read-only 语义冲突。
 // 类型不符只告警，让 mount 命令自己给出更准确的失败原因。
 func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target string, fstype string, options []string, sensitiveOptions []string, formatOptions []string) error {
@@ -618,8 +565,7 @@ func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target
 		}
 	}
 	if !readOnly {
-		// ro 也可能藏在敏感选项里，漏判会导致只读卷被格式化。
-		// Check sensitiveOptions for ro
+		// ro 也可能藏在敏感选项里，漏判会导致只读卷被格式化；因此也要检查 sensitiveOptions。
 		for _, option := range sensitiveOptions {
 			if option == "ro" {
 				readOnly = true
@@ -632,36 +578,35 @@ func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target
 	options = append(options, "defaults")
 	mountErrorValue := UnknownMountError
 
-	// Check if the disk is already formatted
+	// 检查磁盘是否已经格式化。
 	existingFormat, err := mounter.GetDiskFormat(source)
 	if err != nil {
 		return NewMountError(GetDiskFormatFailed, "failed to get disk format of disk %s: %v", source, err)
 	}
 
 	// 未指定类型时沿用历史默认 ext4。
-	// Use 'ext4' as the default
 	if len(fstype) == 0 {
 		fstype = "ext4"
 	}
 
 	// 只有确认是裸盘才 mkfs；已有数据的盘绝不能顺手格式化。
 	if existingFormat == "" {
-		// Do not attempt to format the disk if mounting as readonly, return an error to reflect this.
+		// 以只读方式挂载时不尝试格式化磁盘，而是返回错误明确说明这一限制。
 		if readOnly {
 			return NewMountError(UnformattedReadOnly, "cannot mount unformatted disk %s as we are manipulating it in read-only mode", source)
 		}
 
-		// Disk is unformatted so format it.
+		// 磁盘未格式化，因此执行格式化。
 		args := []string{source}
 		if fstype == "ext4" || fstype == "ext3" {
 			args = []string{
-				"-F",  // Force flag
-				"-m0", // Zero blocks reserved for super-user
+				"-F",  // 强制标志。
+				"-m0", // 不为超级用户保留数据块。
 				source,
 			}
 		} else if fstype == "xfs" {
 			args = []string{
-				"-f", // force flag
+				"-f", // 强制标志。
 				source,
 			}
 		}
@@ -671,7 +616,7 @@ func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target
 
 		output, err := mounter.format(fstype, args)
 		if err != nil {
-			// Do not log sensitiveOptions only options
+			// 日志只记录普通 options，不记录 sensitiveOptions。
 			sensitiveOptionsLog := sanitizedOptionsForLogging(options, sensitiveOptions)
 			detailedErr := fmt.Sprintf("format of disk %q failed: type:(%q) target:(%q) options:(%q) errcode:(%v) output:(%v) ", source, fstype, target, sensitiveOptionsLog, err, string(output))
 			klog.Error(detailedErr)
@@ -682,14 +627,14 @@ func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target
 	} else {
 		// 类型不符只记录告警，最终的 mount 失败会带上内核侧的错误细节。
 		if fstype != existingFormat {
-			// Verify that the disk is formatted with filesystem type we are expecting
+			// 检查磁盘的文件系统类型是否符合预期。
 			mountErrorValue = FilesystemMismatch
 			klog.Warningf("Configured to mount disk %s as %s but current format is %s, things might break", source, fstype, existingFormat)
 		}
 
 		// fsck 会写盘，只读卷跳过。
 		if !readOnly {
-			// Run check tools on the disk to fix repairable issues, only do this for formatted volumes requested as rw.
+			// 仅对请求以读写方式挂载的已格式化卷运行检查工具，修复可处理的问题。
 			err := mounter.checkAndRepairFilesystem(source)
 			if err != nil {
 				return err
@@ -697,7 +642,7 @@ func (mounter *SafeFormatAndMount) formatAndMountSensitive(source string, target
 		}
 	}
 
-	// Mount the disk
+	// 挂载磁盘。
 	klog.V(4).Infof("Attempting to mount disk %s in %s format at %s", source, fstype, target)
 	// 用先前记录的 mismatch 分类上报，便于上层区分类型不符与格式化失败。
 	if err := mounter.MountSensitive(source, target, fstype, options, sensitiveOptions); err != nil {
@@ -735,8 +680,8 @@ func (mounter *SafeFormatAndMount) format(fstype string, args []string) ([]byte,
 	return mounter.Exec.Command("mkfs."+fstype, args...).CombinedOutput()
 }
 
-// 一次 blkid 同时取 TYPE 与 PTTYPE：有分区表说明盘上已有布局，不能当裸盘格式化。
-// 退出码 2 是 blkid 的"没识别到"，不等于探测命令失败。
+// getDiskFormat 通过一次 blkid 同时获取 TYPE 与 PTTYPE：有分区表说明盘上已有布局，不能当裸盘格式化。
+// 退出码 2 表示 blkid 未识别到目标，不等于探测命令失败。
 func getDiskFormat(exec utilexec.Interface, disk string) (string, error) {
 	args := []string{"-p", "-s", "TYPE", "-s", "PTTYPE", "-o", "export", disk}
 	klog.V(4).Infof("Attempting to determine if disk %q is formatted using blkid with args: (%v)", disk, args)
@@ -747,10 +692,7 @@ func getDiskFormat(exec utilexec.Interface, disk string) (string, error) {
 	if err != nil {
 		if exit, ok := err.(utilexec.ExitError); ok {
 			if exit.ExitStatus() == 2 {
-				// Disk device is unformatted.
-				// For `blkid`, if the specified token (TYPE/PTTYPE, etc) was
-				// not found, or no (specified) devices could be identified, an
-				// exit code of 2 is returned.
+				// 磁盘设备未格式化；blkid 在指定标记（TYPE/PTTYPE 等）不存在或无法识别任何指定设备时返回退出码 2。
 				return "", nil
 			}
 		}
@@ -763,15 +705,14 @@ func getDiskFormat(exec utilexec.Interface, disk string) (string, error) {
 	lines := strings.Split(output, "\n")
 	for _, l := range lines {
 		if len(l) <= 0 {
-			// Ignore empty line.
+			// 忽略空行。
 			continue
 		}
 		cs := strings.Split(l, "=")
 		if len(cs) != 2 {
 			return "", fmt.Errorf("blkid returns invalid output: %s", output)
 		}
-		// TYPE is filesystem type, and PTTYPE is partition table type, according
-		// to https://www.kernel.org/pub/linux/utils/util-linux/v2.21/libblkid-docs/.
+		// 根据 https://www.kernel.org/pub/linux/utils/util-linux/v2.21/libblkid-docs/，TYPE 表示文件系统类型，PTTYPE 表示分区表类型。
 		if cs[0] == "TYPE" {
 			fstype = cs[1]
 		} else if cs[0] == "PTTYPE" {
@@ -782,21 +723,20 @@ func getDiskFormat(exec utilexec.Interface, disk string) (string, error) {
 	// 有分区表时返回特殊非空字符串，阻止后续 mkfs 覆盖已有分区布局。
 	if len(pttype) > 0 {
 		klog.V(4).Infof("Disk %s detected partition table type: %s", disk, pttype)
-		// Returns a special non-empty string as filesystem type, then kubelet
-		// will not format it.
+		// 返回特殊的非空字符串作为文件系统类型，使 kubelet 不会格式化该磁盘。
 		return "unknown data, probably partitions", nil
 	}
 
 	return fstype, nil
 }
 
-// GetDiskFormat uses 'blkid' to see if the given disk is unformatted
+// GetDiskFormat 使用 blkid 判断给定磁盘是否未格式化。
 // 抽成包级函数后，测试可以直接注入 FakeExec 而不必构造完整 Mounter。
 func (mounter *SafeFormatAndMount) GetDiskFormat(disk string) (string, error) {
 	return getDiskFormat(mounter.Exec, disk)
 }
 
-// ListProcMounts returns a list of all mounted filesystems.
+// ListProcMounts 返回指定挂载文件中所有已挂载文件系统的列表。
 // 路径参数化是为了测试能喂固定快照，生产代码只传 /proc/mounts。
 func ListProcMounts(mountFilePath string) ([]MountPoint, error) {
 	content, err := readMountInfo(mountFilePath)
@@ -812,14 +752,12 @@ func parseProcMounts(content []byte) ([]MountPoint, error) {
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
 		if line == "" {
-			// 末尾换行产生的空行直接跳过。
-			// the last split() item is empty string following the last \n
+			// 末尾换行经 split 后产生空字符串，直接跳过。
 			continue
 		}
 		fields := strings.Fields(line)
-		// 选项里可能带密码，错误只报列数，不回显整行。
+		// 选项里可能带密码，错误只报列数，不回显整行，避免日志泄露敏感挂载选项。
 		if len(fields) != expectedNumFieldsPerLine {
-			// Do not log line in case it contains sensitive Mount options
 			return nil, fmt.Errorf("wrong number of fields (expected %d, got %d)", expectedNumFieldsPerLine, len(fields))
 		}
 
@@ -847,13 +785,9 @@ func parseProcMounts(content []byte) ([]MountPoint, error) {
 	return out, nil
 }
 
-// SearchMountPoints finds all mount references to the source, returns a list of
-// mountpoints.
-// The source can be a mount point or a normal directory (bind mount). We
-// didn't support device because there is no use case by now.
-// Some filesystems may share a source name, e.g. tmpfs. And for bind mounting,
-// it's possible to mount a non-root path of a filesystem, so we need to use
-// root path and major:minor to represent mount source uniquely.
+// SearchMountPoints 查找源的所有挂载引用并返回挂载点列表。
+// 源可以是挂载点，也可以是用于绑定挂载的普通目录；目前不支持设备，因为没有使用场景。
+// 某些文件系统可能共用源名称（例如 tmpfs），绑定挂载也可能挂载文件系统的非根路径，因此必须用根路径和 major:minor 唯一标识挂载源。
 // 只按路径比对会把同一 tmpfs 的不同子挂载混为一谈，root 加 major:minor 才唯一。
 func SearchMountPoints(hostSource, mountInfoPath string) ([]string, error) {
 	mis, err := ParseMountInfo(mountInfoPath)
@@ -866,13 +800,10 @@ func SearchMountPoints(hostSource, mountInfoPath string) ([]string, error) {
 	major := -1
 	minor := -1
 
-	// Finding the underlying root path and major:minor if possible.
-	// We need search in backward order because it's possible for later mounts
-	// 后挂载的条目会盖住先挂载的，倒序才能定位当前生效的那一层。
-	// to overlap earlier mounts.
+	// 尽可能查找底层根路径和 major:minor；后挂载的条目会盖住先挂载的，因此倒序搜索才能定位当前生效的那一层。
 	for i := len(mis) - 1; i >= 0; i-- {
 		if hostSource == mis[i].MountPoint || PathWithinBase(hostSource, mis[i].MountPoint) {
-			// If it's a mount point or path under a mount point.
+			// 处理挂载点本身或其下的路径。
 			mountID = mis[i].ID
 			rootPath = filepath.Join(mis[i].Root, strings.TrimPrefix(hostSource, mis[i].MountPoint))
 			major = mis[i].Major
@@ -888,9 +819,8 @@ func SearchMountPoints(hostSource, mountInfoPath string) ([]string, error) {
 
 	var refs []string
 	for i := range mis {
-		// 调用方要的是指向源的引用，源挂载本身不算。
+		// 调用方要的是指向源的引用，源挂载本身不算，因此跳过对应条目。
 		if mis[i].ID == mountID {
-			// Ignore mount entry for mount source itself.
 			continue
 		}
 		if mis[i].Root == rootPath && mis[i].Major == major && mis[i].Minor == minor {
@@ -901,26 +831,16 @@ func SearchMountPoints(hostSource, mountInfoPath string) ([]string, error) {
 	return refs, nil
 }
 
-// IsMountPoint determines if a file is a mountpoint.
-// It first detects bind & any other mountpoints using
-// MountedFast function. If the MountedFast function returns
-// sure as true and err as nil, then a mountpoint is detected
-// successfully. When an error is returned by MountedFast, the
-// following is true:
-// 1. All errors are returned with IsMountPoint as false
-// except os.IsPermission.
-// 2. When os.IsPermission is returned by MountedFast, List()
-// is called to confirm if the given file is a mountpoint are not.
+// IsMountPoint 判断文件是否为挂载点。
+// 首先使用 MountedFast 检测绑定挂载及其他挂载点；MountedFast 返回 sure=true 且 err=nil 时直接采用结果。
+// MountedFast 返回错误时：
+// 1. 除 os.IsPermission 外，IsMountPoint 均返回 false 和该错误。
+// 2. MountedFast 返回 os.IsPermission 时，调用 List() 确认文件是否为挂载点。
 //
-// os.ErrNotExist should always be returned if a file does not exist
-// as callers have in past relied on this error and not fallback.
+// 文件不存在时必须始终返回 os.ErrNotExist；历史调用方依赖该错误且不会执行回退，也依赖它判断是否需要创建目录。
 //
-// When MountedFast returns sure as false and err as nil (eg: in
-// case of bindmounts on kernel version 5.10- ); mounter.List()
-// endpoint is called to enumerate all the mountpoints and check if
-// MountedFast 对 bind mount 等情形给不出确定答案；不确定的一律回退到 /proc/mounts 全表扫描。
-// os.ErrNotExist 必须原样返回，历史调用方依赖它判断要不要创建目录。
-// it is mountpoint match or not.
+// MountedFast 返回 sure=false 且 err=nil 时（例如内核 5.10- 上的绑定挂载），调用 mounter.List() 枚举所有挂载点并检查是否匹配。
+// MountedFast 对绑定挂载等情形给不出确定答案；不确定的一律回退到 /proc/mounts 全表扫描。
 func (mounter *Mounter) IsMountPoint(file string) (bool, error) {
 	isMnt, sure, isMntErr := mountinfo.MountedFast(file)
 	if sure && isMntErr == nil {
@@ -931,16 +851,13 @@ func (mounter *Mounter) IsMountPoint(file string) (bool, error) {
 		if errors.Is(isMntErr, fs.ErrNotExist) {
 			return false, fs.ErrNotExist
 		}
-		// We were not allowed to do the simple stat() check, e.g. on NFS with
-		// root_squash. Fall back to /proc/mounts check below when
-		// fs.ErrPermission is returned.
+		// 简单 stat() 检查未获允许，例如 NFS 启用 root_squash；收到 fs.ErrPermission 时回退到下面的 /proc/mounts 检查。
 		// 权限之外的失败说明探测本身不可用，回退到列表也无济于事。
 		if !errors.Is(isMntErr, fs.ErrPermission) {
 			return false, isMntErr
 		}
 	}
-	// /proc/mounts 里是内核解析后的路径，不解析就会漏配。
-	// Resolve any symlinks in file, kernel would do the same and use the resolved path in /proc/mounts.
+	// /proc/mounts 里是内核解析后的路径，不解析就会漏配；内核同样会解析符号链接并使用解析后的路径。
 	resolvedFile, err := filepath.EvalSymlinks(file)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -949,9 +866,7 @@ func (mounter *Mounter) IsMountPoint(file string) (bool, error) {
 		return false, err
 	}
 
-	// 全表扫描慢，但能覆盖 bind mount 和被 rename 过的挂载点，是最后的兜底。
-	// check all mountpoints since MountedFast is not sure.
-	// is not reliable for some mountpoint types.
+	// 全表扫描慢，但能覆盖 bind mount 和被 rename 过的挂载点，是 MountedFast 对某些类型不可靠时的最后兜底。
 	mountPoints, mountPointsErr := mounter.List()
 	if mountPointsErr != nil {
 		return false, mountPointsErr
@@ -964,7 +879,7 @@ func (mounter *Mounter) IsMountPoint(file string) (bool, error) {
 	return false, nil
 }
 
-// tryUnmount calls plain "umount" and waits for unmountTimeout for it to finish.
+// tryUnmount 调用普通 umount，并等待 unmountTimeout 指定的时间直到完成。
 // 超时得自己返回 DeadlineExceeded：CombinedOutput 不会把 ctx 超时透传出来。
 func tryUnmount(target string, withSafeNotMountedBehavior bool, unmountTimeout time.Duration) error {
 	klog.V(4).Infof("Unmounting %s", target)
@@ -974,8 +889,7 @@ func tryUnmount(target string, withSafeNotMountedBehavior bool, unmountTimeout t
 	command := exec.CommandContext(ctx, "umount", target)
 	output, err := command.CombinedOutput()
 
-	// CombinedOutput() does not return DeadlineExceeded, make sure it's
-	// propagated on timeout.
+	// CombinedOutput() 不会返回 DeadlineExceeded，超时时必须显式传播该错误。
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -996,16 +910,16 @@ func forceUmount(target string, withSafeNotMountedBehavior bool) error {
 	return nil
 }
 
-// checkUmountError checks a result of umount command and determine a return value.
-// 把"目标本就没挂载"从错误里摘出来，让重复卸载保持幂等。
+// checkUmountError 检查 umount 命令的结果并确定返回值。
+// 把“目标本就没挂载”从错误里摘出来，让重复卸载保持幂等。
 func checkUmountError(target string, command *exec.Cmd, output []byte, err error, withSafeNotMountedBehavior bool) error {
 	// 与挂载路径同样的竞态，先看 ProcessState 再决定是否转成真实退出错误。
 	if err.Error() == errNoChildProcesses {
 		if command.ProcessState.Success() {
-			// We don't consider errNoChildProcesses an error if the process itself succeeded (see - k/k issue #103753).
+			// 进程本身成功时，不把 errNoChildProcesses 视为错误（参见 k/k issue #103753）。
 			return nil
 		}
-		// Rewrite err with the actual exit error of the process.
+		// 用进程的实际退出错误替换原错误。
 		err = &exec.ExitError{ProcessState: command.ProcessState}
 	}
 	// 只有实测确认 umount 会报 not mounted，才敢忽略这条错误。

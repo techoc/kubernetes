@@ -1,50 +1,45 @@
 // To regenerate api.pb.go run `hack/update-codegen.sh protobindings`
 syntax = "proto3";
 
-package pluginregistration; // This should have been v1.
+package pluginregistration; // 这里本应是 v1。
 option go_package = "k8s.io/kubelet/pkg/apis/pluginregistration/v1";
 
-// PluginInfo is the message sent from a plugin to the Kubelet pluginwatcher for plugin registration
+// PluginInfo 是插件为注册而发送给 Kubelet pluginwatcher 的消息。
 message PluginInfo {
-	// Type of the Plugin. CSIPlugin or DevicePlugin
+	// 插件类型：CSIPlugin 或 DevicePlugin。
 	string type = 1;
-	// Plugin name that uniquely identifies the plugin for the given plugin type.
-	// For DevicePlugin, this is the resource name that the plugin manages and
-	// should follow the extended resource name convention.
-	// For CSI, this is the CSI driver registrar name.
+	// 在给定插件类型下唯一标识插件的名称。
+	// 对于 DevicePlugin，这是插件管理的资源名称，应遵循扩展资源名称约定。
+	// 对于 CSI，这是 CSI 驱动注册器名称。
 	string name = 2;
-	// Optional endpoint location. If found set by Kubelet component,
-	// Kubelet component will use this endpoint for specific requests.
-	// This allows the plugin to register using one endpoint and possibly use
-	// a different socket for control operations. CSI uses this model to delegate
-	// its registration external from the plugin.
+	// 可选的端点位置。如果由 Kubelet 组件设置，该组件会将此端点用于特定请求。
+	// 这允许插件使用一个端点注册，并使用另一个套接字执行控制操作。
+	// CSI 使用此模型将注册委托给插件之外的组件。
 	string endpoint = 3;
-	// Plugin service API versions the plugin supports.
-	// For DevicePlugin, this maps to the deviceplugin API versions the
-	// plugin supports at the given socket.
-	// The Kubelet component communicating with the plugin should be able
-	// to choose any preferred version from this list, or returns an error
-	// if none of the listed versions is supported.
+	// 插件支持的插件服务 API 版本。
+	// 对于 DevicePlugin，这对应插件在给定套接字支持的 deviceplugin API 版本。
+	// 与插件通信的 Kubelet 组件应能从此列表选择任一优先版本；
+	// 如果列表中的版本均不受支持，则返回错误。
 	repeated string supported_versions = 4;
 }
 
-// RegistrationStatus is the message sent from Kubelet pluginwatcher to the plugin for notification on registration status
+// RegistrationStatus 是 Kubelet pluginwatcher 发送给插件、用于通知注册状态的消息。
 message RegistrationStatus {
-	// True if plugin gets registered successfully at Kubelet
+	// 插件已在 Kubelet 成功注册时为 true。
 	bool plugin_registered  = 1;
-	// Error message in case plugin fails to register, empty string otherwise
+	// 插件注册失败时的错误消息，否则为空字符串。
 	string error  = 2;
 }
 
-// RegistrationStatusResponse is sent by plugin to kubelet in response to RegistrationStatus RPC
+// RegistrationStatusResponse 是插件响应 RegistrationStatus RPC 时发送给 Kubelet 的消息。
 message RegistrationStatusResponse {
 }
 
-// InfoRequest is the empty request message from Kubelet
+// InfoRequest 是来自 Kubelet 的空请求消息。
 message InfoRequest {
 }
 
-// Registration is the service advertised by the Plugins.
+// Registration 是插件对外提供的服务。
 service Registration {
 	rpc GetInfo(InfoRequest) returns (PluginInfo) {}
 	rpc NotifyRegistrationStatus(RegistrationStatus) returns (RegistrationStatusResponse) {}

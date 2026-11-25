@@ -51,24 +51,26 @@ import (
 // 示例服务使用独立的 etcd 前缀，避免与同集群的其他 API 服务争用键空间。
 const defaultEtcdPathPrefix = "/registry/wardle.example.com"
 
-// WardleServerOptions contains state for master/api server
+// WardleServerOptions 保存启动 Wardle API 服务器所需的选项。
 // 启动参数集中放在这里，便于命令层与 Config 之间传递，测试时也能整体替换。
 type WardleServerOptions struct {
+	// RecommendedOptions 提供通用 apiserver 的推荐配置。
 	RecommendedOptions *genericoptions.RecommendedOptions
-	// ComponentGlobalsRegistry is the registry where the effective versions and feature gates for all components are stored.
+	// ComponentGlobalsRegistry 保存所有组件的有效版本与 feature gate 配置。
 	ComponentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry
 
-	// 由 ExtraAdmissionInitializers 创建，启动后再拉起，避免准入插件拿到未启动的工厂。
-	// 输出流由外部注入，测试可替换成内存 buffer。
+	// SharedInformerFactory 由 ExtraAdmissionInitializers 创建，启动后再拉起，避免准入插件拿到未启动的工厂。
 	SharedInformerFactory informers.SharedInformerFactory
-	StdOut                io.Writer
-	StdErr                io.Writer
+	// StdOut 是注入的标准输出流，测试可替换成内存 buffer。
+	StdOut io.Writer
+	// StdErr 是注入的标准错误流，测试可替换成内存 buffer。
+	StdErr io.Writer
 
-	// 自签证书的备用 DNS 名，方便通过非 localhost 地址访问示例服务。
+	// AlternateDNS 是自签证书的备用 DNS 名，方便通过非 localhost 地址访问示例服务。
 	AlternateDNS []string
 }
 
-// 把 wardle 的版本映射到它模拟的 kube 版本。
+// WardleVersionToKubeVersion 把 Wardle 版本映射到它模拟的 kube 版本。
 // 主版本不一致时无从推断兼容性，返回 nil 表示没有映射。
 func WardleVersionToKubeVersion(ver *version.Version) *version.Version {
 	// 只有 1.x 有对应关系，跨主版本直接放弃。
@@ -76,7 +78,7 @@ func WardleVersionToKubeVersion(ver *version.Version) *version.Version {
 		return nil
 	}
 	kubeVer := version.MustParse(baseversion.DefaultKubeBinaryVersion)
-	// "1.2" maps to kubeVer
+	// Wardle 1.2 对应二进制版本，其余 1.x 版本按次版本号偏移。
 	offset := int(ver.Minor()) - 2
 	mappedVer := kubeVer.OffsetMinor(offset)
 	// 模拟版本不能超过真实二进制，否则会暴露不存在的能力。
@@ -86,7 +88,7 @@ func WardleVersionToKubeVersion(ver *version.Version) *version.Version {
 	return mappedVer
 }
 
-// NewWardleServerOptions returns a new WardleServerOptions
+// NewWardleServerOptions 创建 WardleServerOptions。
 // 默认使用全局组件注册表，让命令行与测试看到同一份组件配置。
 func NewWardleServerOptions(out, errOut io.Writer) *WardleServerOptions {
 	o := &WardleServerOptions{
@@ -104,8 +106,7 @@ func NewWardleServerOptions(out, errOut io.Writer) *WardleServerOptions {
 	return o
 }
 
-// NewCommandStartWardleServer provides a CLI handler for 'start master' command
-// with a default WardleServerOptions.
+// NewCommandStartWardleServer 创建使用默认 WardleServerOptions 的服务器启动命令。
 // 命令本身也是示例：在这里演示 KEP-4330 的版本兼容与版本化 feature gate 配置。
 func NewCommandStartWardleServer(ctx context.Context, defaults *WardleServerOptions, skipDefaultComponentGlobalsRegistrySet bool) *cobra.Command {
 	// 按值拷贝，Complete/Validate 的修改不会污染调用方的默认值。
@@ -139,30 +140,20 @@ func NewCommandStartWardleServer(ctx context.Context, defaults *WardleServerOpti
 	flags := cmd.Flags()
 	o.RecommendedOptions.AddFlags(flags)
 
-	// The following lines demonstrate how to configure version compatibility and feature gates
-	// for the "Wardle" component, as an example of KEP-4330.
-
-	// Create an effective version object for the "Wardle" component.
-	// This initializes the binary version, the emulation version and the minimum compatibility version.
-	//
-	// Note:
-	// - The binary version represents the actual version of the running source code.
-	// - The emulation version is the version whose capabilities are being emulated by the binary.
-	// - The minimum compatibility version specifies the minimum version that the component remains compatible with.
-	//
-	// Refer to KEP-4330 for more details: https://github.com/kubernetes/enhancements/blob/master/keps/sig-architecture/4330-compatibility-versions
+	// 下面按 KEP-4330 为 Wardle 组件配置版本兼容与 feature gate。
+	// EffectiveVersion 同时确定二进制版本、模拟版本和最低兼容版本：
+	// 二进制版本是实际运行的代码版本，模拟版本是要模拟的能力版本，
+	// 最低兼容版本是组件仍保证兼容的最早版本。
+	// 详见 KEP-4330：https://github.com/kubernetes/enhancements/blob/master/keps/sig-architecture/4330-compatibility-versions
 	// 选 1.2 作为基线，是因为 BanFlunder 在该版本已 GA 并锁定默认值。
 	defaultWardleVersion := "1.2"
-	// Register the "Wardle" component with the global component registry,
-	// associating it with its effective version and feature gate configuration.
-	// Will skip if the component has been registered, like in the integration test.
+	// 把 Wardle 组件及其有效版本和 feature gate 注册到全局注册表。
 	// 注册幂等：重复调用不会覆盖已有组件，集成测试因此可以放心复用。
 	_, wardleFeatureGate := defaults.ComponentGlobalsRegistry.ComponentGlobalsOrRegister(
 		apiserver.WardleComponentName, basecompatibility.NewEffectiveVersionFromString(defaultWardleVersion, "", ""),
 		featuregate.NewVersionedFeatureGate(version.MustParse(defaultWardleVersion)))
 
-	// Add versioned feature specifications for the "BanFlunder" feature.
-	// These specifications, together with the effective version, determine if the feature is enabled.
+	// 为 BanFlunder 添加版本化规格，规格与有效版本共同决定功能是否启用。
 	// 按版本描述演进轨迹：1.0 默认关、1.1 默认开、1.2 GA 后锁定，用来演示版本化开关。
 	utilruntime.Must(wardleFeatureGate.AddVersioned(map[featuregate.Feature]featuregate.VersionedSpecs{
 		"BanFlunder": {
@@ -172,14 +163,12 @@ func NewCommandStartWardleServer(ctx context.Context, defaults *WardleServerOpti
 		},
 	}))
 
-	// Register the default kube component if not already present in the global registry.
-	// kube 组件也要进注册表，wardle 的 feature gate 最终挂在它上面。
+	// 若全局注册表尚无默认 kube 组件，则注册它；Wardle 的 feature gate 最终挂在它上面。
 	_, _ = defaults.ComponentGlobalsRegistry.ComponentGlobalsOrRegister(basecompatibility.DefaultKubeComponent,
 		basecompatibility.NewEffectiveVersionFromString(baseversion.DefaultKubeBinaryVersion, "", ""), utilfeature.DefaultMutableFeatureGate)
 
-	// Set the emulation version mapping from the "Wardle" component to the kube component.
-	// This ensures that the emulation version of the latter is determined by the emulation version of the former.
-	// 用映射把两侧模拟版本绑定，避免 wardle 与 kube 各自开关出能力错配。
+	// 设置 Wardle 到 kube 的模拟版本映射，让 kube 的模拟版本由 Wardle 决定。
+	// 用映射把两侧模拟版本绑定，避免 Wardle 与 kube 各自开关出能力错配。
 	utilruntime.Must(defaults.ComponentGlobalsRegistry.SetVersionMapping(apiserver.WardleComponentName, basecompatibility.DefaultKubeComponent, WardleVersionToKubeVersion))
 
 	// 参数在 Set() 之前注册，执行时用户的覆盖值才会生效。
@@ -188,7 +177,7 @@ func NewCommandStartWardleServer(ctx context.Context, defaults *WardleServerOpti
 	return cmd
 }
 
-// Validate validates WardleServerOptions
+// Validate 校验 WardleServerOptions。
 // 聚合各来源的错误，一次运行把所有配置问题都报出来。
 func (o WardleServerOptions) Validate(args []string) error {
 	// 参数当前未参与校验，保留它只是为了对齐 apiserver 的命令模板。
@@ -198,27 +187,25 @@ func (o WardleServerOptions) Validate(args []string) error {
 	return utilerrors.NewAggregate(errors)
 }
 
-// Complete fills in fields required to have valid data
+// Complete 补齐有效运行所需的字段。
 // 插件是否注册由版本化开关决定，关掉时既不在插件表也不在推荐链里。
 func (o *WardleServerOptions) Complete() error {
 	// 用 wardle 自己的 feature gate 判断，与 kube 的默认开关互不影响。
 	if o.ComponentGlobalsRegistry.FeatureGateFor(apiserver.WardleComponentName).Enabled("BanFlunder") {
-		// register admission plugins
 		// 注册只把插件放进表，是否执行取决于下面追加的推荐顺序。
 		banflunder.Register(o.RecommendedOptions.Admission.Plugins)
 
-		// add admission plugins to the RecommendedPluginOrder
-		// 必须同时追加顺序，只注册不排序等于没启用。
+		// 必须同时追加推荐顺序，只注册不排序等于没启用。
 		o.RecommendedOptions.Admission.RecommendedPluginOrder = append(o.RecommendedOptions.Admission.RecommendedPluginOrder, "BanFlunder")
 	}
 	return nil
 }
 
-// Config returns config for the api server given WardleServerOptions
-// 把通用 apiserver 配置与 wardle 自己的配置拼在一起。
+// Config 根据 WardleServerOptions 构造 API 服务器配置。
+// 把通用 apiserver 配置与 Wardle 自己的配置拼在一起。
 func (o *WardleServerOptions) Config() (*apiserver.Config, error) {
 	// 示例没有真实对外地址，先用 localhost 自签证书把安全端口跑通。
-	// TODO have a "real" external address
+	// TODO：配置真实的外部地址。
 	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", o.AlternateDNS, []net.IP{netutils.ParseIPSloppy("127.0.0.1")}); err != nil {
 		return nil, fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
@@ -263,7 +250,7 @@ func (o *WardleServerOptions) Config() (*apiserver.Config, error) {
 	return config, nil
 }
 
-// RunWardleServer starts a new WardleServer given WardleServerOptions
+// RunWardleServer 根据 WardleServerOptions 创建并运行 WardleServer。
 // 先构建配置再建 server，错误逐层上抛，失败时不留半初始化对象。
 func (o WardleServerOptions) RunWardleServer(ctx context.Context) error {
 	config, err := o.Config()

@@ -73,8 +73,7 @@ func main() {
 	grpcService.Shutdown()
 }
 
-// withShutdownSignal returns a copy of the parent context that will close if
-// the process receives termination signals.
+// withShutdownSignal 返回派生自父上下文的新上下文；进程收到终止信号时取消该上下文。
 func withShutdownSignal(ctx context.Context) context.Context {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT, os.Interrupt)

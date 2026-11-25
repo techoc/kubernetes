@@ -38,14 +38,18 @@ type GetForActionImpl struct {
 // GetForAction 暴露自定义指标查询特有的参数，便于 reactor 对 Action 做类型断言。
 type GetForAction interface {
 	testing.GetAction
+	// GetMetricName 返回查询的指标名。
 	GetMetricName() string
+	// GetLabelSelector 返回查询的标签选择器。
 	GetLabelSelector() labels.Selector
 }
 
+// GetMetricName 返回 action 中记录的自定义指标名。
 func (i GetForActionImpl) GetMetricName() string {
 	return i.MetricName
 }
 
+// GetLabelSelector 返回 action 中记录的标签选择器。
 func (i GetForActionImpl) GetLabelSelector() labels.Selector {
 	return i.LabelSelector
 }
@@ -71,7 +75,7 @@ func (i GetForActionImpl) DeepCopy() testing.Action {
 // NewGetForAction 构造 namespaced 查询对应的 action。
 // 复用的客户端只认 v1beta2 端点，因此这里统一套一层 v1beta2 的 group 名。
 func NewGetForAction(groupKind schema.GroupKind, namespace, name string, metricName string, labelSelector labels.Selector) GetForActionImpl {
-	// the version doesn't matter
+	// 这里不使用版本信息。
 	gvk := groupKind.WithVersion("")
 	gvr, _ := meta.UnsafeGuessKindToResource(gvk)
 	groupResourceForKind := schema.GroupResource{
@@ -91,7 +95,7 @@ func NewGetForAction(groupKind schema.GroupKind, namespace, name string, metricN
 
 // NewRootGetForAction 构造集群级（无 namespace）查询对应的 action。
 func NewRootGetForAction(groupKind schema.GroupKind, name string, metricName string, labelSelector labels.Selector) GetForActionImpl {
-	// the version doesn't matter
+	// 这里不使用版本信息。
 	gvk := groupKind.WithVersion("")
 	gvr, _ := meta.UnsafeGuessKindToResource(gvk)
 	groupResourceForKind := schema.GroupResource{
@@ -115,12 +119,14 @@ type FakeCustomMetricsClient struct {
 	testing.Fake
 }
 
+// RootScopedMetrics 返回使用 RootGet action 的集群级 fake 指标接口。
 func (c *FakeCustomMetricsClient) RootScopedMetrics() cmclient.MetricsInterface {
 	return &fakeRootScopedMetrics{
 		Fake: c,
 	}
 }
 
+// NamespacedMetrics 返回绑定指定命名空间的 fake 指标接口。
 func (c *FakeCustomMetricsClient) NamespacedMetrics(namespace string) cmclient.MetricsInterface {
 	return &fakeNamespacedMetrics{
 		Fake: c,
@@ -151,6 +157,7 @@ func (m *fakeNamespacedMetrics) GetForObject(groupKind schema.GroupKind, name st
 	return &objList.Items[0], err
 }
 
+// GetForObjects 按对象选择器构造批量查询 action，并返回 reactor 提供的指标列表。
 func (m *fakeNamespacedMetrics) GetForObjects(groupKind schema.GroupKind, selector labels.Selector, metricName string, metricSelector labels.Selector) (*v1beta2.MetricValueList, error) {
 	obj, err := m.Fake.
 		Invokes(NewGetForAction(groupKind, m.ns, "*", metricName, selector), &v1beta2.MetricValueList{})
@@ -167,6 +174,7 @@ type fakeRootScopedMetrics struct {
 	Fake *FakeCustomMetricsClient
 }
 
+// GetForObject 构造单对象查询 action，并要求 reactor 恰好返回一项指标。
 func (m *fakeRootScopedMetrics) GetForObject(groupKind schema.GroupKind, name string, metricName string, metricSelector labels.Selector) (*v1beta2.MetricValue, error) {
 	obj, err := m.Fake.
 		Invokes(NewRootGetForAction(groupKind, name, metricName, nil), &v1beta2.MetricValueList{})
@@ -183,6 +191,7 @@ func (m *fakeRootScopedMetrics) GetForObject(groupKind schema.GroupKind, name st
 	return &objList.Items[0], err
 }
 
+// GetForObjects 构造集群级批量查询 action，并返回 reactor 提供的指标列表。
 func (m *fakeRootScopedMetrics) GetForObjects(groupKind schema.GroupKind, selector labels.Selector, metricName string, metricSelector labels.Selector) (*v1beta2.MetricValueList, error) {
 	obj, err := m.Fake.
 		Invokes(NewRootGetForAction(groupKind, "*", metricName, selector), &v1beta2.MetricValueList{})

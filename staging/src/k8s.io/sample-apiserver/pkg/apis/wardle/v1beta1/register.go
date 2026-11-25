@@ -22,36 +22,33 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName holds the API group name.
+// GroupName 保存本包的 API 组名。
 // 示例组名用 example.com 后缀，避免和真实 API 组冲突。
 const GroupName = "wardle.example.com"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册本包对象所用的组版本。
 // 同一组下多版本共存时，注册和序列化都以它为身份标识。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 var (
-	// SchemeBuilder allows to add this group to a scheme.
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// SchemeBuilder 保存本 API 包需要在 Scheme 上执行的注册函数。
+	// TODO：将 SchemeBuilder 与 zz_generated.deepcopy.go 移至 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 将保留在 k8s.io/kubernetes。
 	// 包变量而非 init 里直接注册，调用方可以在多个 Scheme 上重复安装。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 
-	// AddToScheme adds this group to a scheme.
+	// AddToScheme 把本 API 组注册到 Scheme。
 	// 暴露函数值而不是包级函数，保持与生成代码一致的注册入口。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
 	// 手写和生成注册分开，缺生成文件时仍能编译，方便排查生成链问题。
 	localSchemeBuilder.Register(addKnownTypes)
 }
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 把本版本的已知类型注册到 Scheme。
 // 每新增一个该版本的类型都要加进这里，否则序列化时会报 unregistered type。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
@@ -62,7 +59,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	return nil
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 为未限定组的资源名补上本 API 组，返回 GroupResource。
 // 让存储层和校验错误都带上完整组名，避免不同组的同名资源混淆。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()

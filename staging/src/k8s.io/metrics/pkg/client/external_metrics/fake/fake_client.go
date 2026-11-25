@@ -31,6 +31,7 @@ type FakeExternalMetricsClient struct {
 	testing.Fake
 }
 
+// NamespacedMetrics 返回绑定指定命名空间的 fake 指标接口。
 func (c *FakeExternalMetricsClient) NamespacedMetrics(namespace string) eclient.MetricsInterface {
 	return &fakeNamespacedMetrics{
 		Fake: c,

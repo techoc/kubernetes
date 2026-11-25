@@ -198,7 +198,7 @@ func TestConnectionPings(t *testing.T) {
 	const pingPeriod = 10 * time.Millisecond
 	timeout := time.After(10 * time.Second)
 
-	// Set up server connection.
+	// 建立服务端连接。
 	listener, err := net.Listen("tcp4", "localhost:0")
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestConnectionPings(t *testing.T) {
 		srvSPDYConn := newConnection(
 			spdyConn,
 			func(stream httpstream.Stream, replySent <-chan struct{}) error {
-				// Echo all the incoming data.
+				// 回显收到的全部数据。
 				go io.Copy(stream, stream)
 				return nil
 			},
@@ -239,8 +239,7 @@ func TestConnectionPings(t *testing.T) {
 			})
 		defer srvSPDYConn.Close()
 
-		// Wait for the connection to close, to prevent defers from running
-		// early.
+		// 等待连接关闭，避免 defer 提前执行。
 		select {
 		case <-timeout:
 			srvErr <- fmt.Errorf("server: timeout waiting for connection to close")
@@ -248,14 +247,14 @@ func TestConnectionPings(t *testing.T) {
 		case <-srvSPDYConn.CloseChan():
 		}
 
-		// Count pings sent by the server.
+		// 统计服务端发送的 Ping。
 		gotPings := atomic.LoadInt64(&pingsSent)
 		if gotPings < 1 {
 			t.Errorf("server: failed to send any pings (check logs)")
 		}
 	}()
 
-	// Set up client connection.
+	// 建立客户端连接。
 	clConn, err := net.Dial("tcp4", listener.Addr().String())
 	if err != nil {
 		t.Fatalf("client: error connecting to proxy: %v", err)
@@ -273,8 +272,7 @@ func TestConnectionPings(t *testing.T) {
 	}
 	defer clSPDYStream.Close()
 
-	// Send some data both ways, to make sure pings don't interfere with
-	// regular messages.
+	// 双向发送数据，确认 Ping 不干扰正常流消息。
 	in := "foo"
 	if _, err := fmt.Fprintln(clSPDYStream, in); err != nil {
 		t.Fatalf("client: error writing data to stream: %v", err)
@@ -287,8 +285,7 @@ func TestConnectionPings(t *testing.T) {
 		t.Errorf("client: received data doesn't match sent data: got %q, want %q", out, in)
 	}
 
-	// Wait for at least 2 pings to get sent each way before closing the
-	// connection.
+	// 关闭前等待双向都至少发送两个 Ping。
 	elapsed := time.Since(start)
 	if elapsed < 3*pingPeriod {
 		time.Sleep(3*pingPeriod - elapsed)
@@ -329,17 +326,17 @@ func TestConnectionRemoveStreams(t *testing.T) {
 		t.Fatalf("should have two streams, has %d", len(c.streams))
 	}
 
-	// not exists
+	// 移除不存在的流不应改变表大小。
 	c.RemoveStreams(stream2)
 
 	if len(c.streams) != 2 {
 		t.Fatalf("should have two streams, has %d", len(c.streams))
 	}
 
-	// remove all existing
+	// 批量移除已存在的流。
 	c.RemoveStreams(stream0, stream1)
 
-	// remove nil stream should not crash
+	// nil 流不应引发 panic。
 	c.RemoveStreams(nil)
 
 	if len(c.streams) != 0 {

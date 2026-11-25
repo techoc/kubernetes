@@ -22,6 +22,6 @@ limitations under the License.
 // +groupName=wardle.example.com
 // +k8s:openapi-model-package=io.k8s.sample-apiserver.pkg.apis.wardle.v1alpha1
 
-// Package v1alpha1 is the v1alpha1 version of the API.
+// Package v1alpha1 是 Wardle API 的 v1alpha1 版本。
 // 本包是示例 API 的第一个版本，上方指令声明代码生成规则；真正类型定义见 types.go。
 package v1alpha1

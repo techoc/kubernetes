@@ -177,13 +177,13 @@ func (h *testHTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Reque
 }
 
 // CONNECT 隧道的生命周期由客户端决定，必须等它退出再拆测试环境；
-// 否则关掉 httptest.Server 时上面的 io.Copy 还在跑，容易报 use of closed connection。
+// 否则关掉 httptest.Server 时上面的 io.Copy 还在运行，容易报告连接已关闭。
 func (h *testHTTPProxyHandler) Wait() {
 	h.handlerDone.Wait()
 }
 
-// 证书里的主机名是 example.com，配合 InsecureSkipVerify 和 hostname verification
-// 两种客户端配置，就能分别测出“信任但跳过校验”与“严格校验失败”两条路径。
+// httpsServerInvalidHostname 使用主机名为 example.com 的证书，供测试覆盖 InsecureSkipVerify
+// 与严格主机名校验两种客户端配置。
 func httpsServerInvalidHostname(t *testing.T) serverFunc {
 	return func(h http.Handler) *httptest.Server {
 		cert, err := tls.X509KeyPair(exampleCert, exampleKey)
@@ -227,9 +227,9 @@ func localhostCertPool(t *testing.T) *x509.CertPool {
 	return localhostPool
 }
 
-// be sure to unset environment variable https_proxy (if exported) before testing, otherwise the testing will fail unexpectedly.
-// 表驱动覆盖直连、HTTP/HTTPS 代理、代理链路里任意一跳是 HTTPS 的组合，
-// 重点验证 InsecureSkipVerify/RootCAs 与代理认证的交互；下面还会回写一条消息确认流可用。
+// TestRoundTripAndNewConnection 覆盖直连、HTTP/HTTPS 代理及代理链路中任意一跳为 HTTPS 的组合，
+// 验证 InsecureSkipVerify、RootCAs 与代理认证的交互，并通过回显消息确认升级后的流可用。
+// 运行前应清除已导出的 https_proxy 环境变量，避免测试结果受宿主代理设置影响。
 func TestRoundTripAndNewConnection(t *testing.T) {
 	localhostPool := localhostCertPool(t)
 
@@ -336,7 +336,7 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 			serverConnectionHeader: "Upgrade",
 			serverUpgradeHeader:    "SPDY/3.1",
 			serverStatusCode:       http.StatusSwitchingProtocols,
-			shouldError:            true, // fails because the client doesn't trust the proxy
+			shouldError:            true, // 客户端不信任测试代理的证书，因此预期失败
 		},
 		"proxied https (valid hostname + RootCAs) -> http": {
 			serverFunc:             httptest.NewServer,
@@ -364,7 +364,7 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 			serverConnectionHeader: "Upgrade",
 			serverUpgradeHeader:    "SPDY/3.1",
 			serverStatusCode:       http.StatusSwitchingProtocols,
-			shouldError:            false, // works because the test proxy ignores TLS errors
+			shouldError:            false, // 测试代理忽略 TLS 错误，因此预期成功
 		},
 		"proxied https with auth (invalid hostname + InsecureSkipVerify) -> https (invalid hostname)": {
 			serverFunc:             httpsServerInvalidHostname(t),
@@ -374,7 +374,7 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 			serverConnectionHeader: "Upgrade",
 			serverUpgradeHeader:    "SPDY/3.1",
 			serverStatusCode:       http.StatusSwitchingProtocols,
-			shouldError:            false, // works because the test proxy ignores TLS errors
+			shouldError:            false, // 测试代理忽略 TLS 错误，因此预期成功
 		},
 		"proxied https (invalid hostname + hostname verification) -> https (invalid hostname)": {
 			serverFunc:             httpsServerInvalidHostname(t),
@@ -383,7 +383,7 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 			serverConnectionHeader: "Upgrade",
 			serverUpgradeHeader:    "SPDY/3.1",
 			serverStatusCode:       http.StatusSwitchingProtocols,
-			shouldError:            true, // fails because the client doesn't trust the proxy
+			shouldError:            true, // 客户端不信任测试代理的证书，因此预期失败
 		},
 		"proxied https (valid hostname + RootCAs) -> https (valid hostname + RootCAs)": {
 			serverFunc:             httpsServerValidHostname(t),
@@ -553,9 +553,7 @@ func TestRoundTripAndNewConnection(t *testing.T) {
 	}
 }
 
-// Tests SpdyRoundTripper constructors
-// 专测配置项之间的互斥关系：UpgradeTransport 与 TLS/Proxier 不能同时给，
-// 同时确认构造函数返回的 TLS 配置符合预期、不会被悄悄改写。
+// TestRoundTripConstuctor 验证 SpdyRoundTripper 构造函数的配置互斥关系及 TLS 配置提取结果。
 func TestRoundTripConstuctor(t *testing.T) {
 	testCases := map[string]struct {
 		tlsConfig         *tls.Config
@@ -732,9 +730,9 @@ func (i *Interceptor) Rewrite(ctx context.Context, req *socks5.Request) (context
 	return ctx, req.DestAddr
 }
 
-// be sure to unset environment variable https_proxy (if exported) before testing, otherwise the testing will fail unexpectedly.
-// 与 HTTP 代理测试对称，这里专门覆盖 socks5:// 代理：认证有无、目标 HTTP/HTTPS 的组合，
-// 并通过 Interceptor 校验 SOCKS5 握手阶段真正收到的 method 与目标地址。
+// TestRoundTripSocks5AndNewConnection 覆盖 socks5:// 代理的认证有无及目标 HTTP/HTTPS 组合，
+// 并通过 Interceptor 校验 SOCKS5 握手阶段实际收到的 method 与目标地址。
+// 运行前应清除已导出的 https_proxy 环境变量，避免测试结果受宿主代理设置影响。
 func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 	localhostPool := localhostCertPool(t)
 
@@ -851,7 +849,7 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 
 			if testCase.proxyAuth != nil {
 				proxyHandler = socks5Server(&socks5.StaticCredentials{
-					"proxyuser": "proxypasswd", // Socks5 server static credentials when client authentication is expected
+					"proxyuser": "proxypasswd", // 客户端需要认证时使用的 SOCKS5 静态凭据。
 				}, interceptor)
 			}
 
@@ -886,10 +884,8 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 				}
 
 				if err := proxyHandler.ServeConn(conn); err != nil && !shoulderror {
-					// If the connection request is closed before the channel is closed
-					// the test will fail with a ServeConn error. Since the test only return
-					// early if expects shouldError=true, the channel is closed at the end of
-					// the test, just before all the deferred connections Close() are executed.
+					// 连接先于通道关闭时，ServeConn 会把正常收尾误报为错误。
+					// 只有预期失败的用例会提前返回；正常用例在 defer 关连接前关闭通道。
 					if isClosed() {
 						return
 					}
@@ -997,8 +993,8 @@ func TestRoundTripSocks5AndNewConnection(t *testing.T) {
 				}
 			}
 
-			// The channel must be closed before any of the connections are closed
-			// 先通知 Accept/ServeConn 的 goroutine“这是正常收尾”，再让 defer 关连接，
+			// 必须先关闭 closed 通道，再让 defer 关闭连接。
+			// 先通知 Accept/ServeConn 的 goroutine“这是正常收尾”，
 			// 否则关闭本身会被当成 ServeConn 错误报出来。
 			close(closed)
 		})
@@ -1029,7 +1025,7 @@ func TestRoundTripPassesContextToDialer(t *testing.T) {
 	}
 }
 
-// exampleCert was generated from crypto/tls/generate_cert.go with the following command:
+// exampleCert 由 crypto/tls/generate_cert.go 使用以下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var exampleCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -1080,7 +1076,7 @@ VfyJSCgg3fPe7kChWKlfcOebVKSb68LKRsz1Lz1KdbY0HOJFp/cT4lKmDAlRY9gq
 LB4rdf46lV0mUkvd2/oofIbTrzukjQSnyfLawb/2uJGV1IkTcZcn9CI=
 -----END RSA PRIVATE KEY-----`)
 
-// localhostCert was generated from crypto/tls/generate_cert.go with the following command:
+// localhostCert 由 crypto/tls/generate_cert.go 使用以下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host 127.0.0.1,::1,example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var localhostCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -1103,7 +1099,7 @@ MGYMzP0u4nw47aRz9shB8w+taPKHx2BVwE1m/yp3nHVioOjXqA1fwRQVGclCJSH1
 D2iq3hWVHRENgjTjANBPICLo9AZ4JfN6PH19mnU=
 -----END CERTIFICATE-----`)
 
-// localhostKey is the private key for localhostCert.
+// localhostKey 是 localhostCert 对应的私钥。
 var localhostKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEAtD8UdzJXB0UfEBFtsPYoG0NRPsSeL7yKg12O0Zya1eoG/jkQ
 LUIk6qoYlOugUYnpD2RAhn0WofkglHZ844kP2Q5O54bhW3UljWuPUpumN5+7xeV5

@@ -23,13 +23,10 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// EndpointSliceSubsystem - subsystem name used for Endpoint Slices.
 // EndpointSliceSubsystem 是 EndpointSlice 相关指标使用的子系统名称。
 const EndpointSliceSubsystem = "endpoint_slice_controller"
 
 var (
-	// EndpointsAddedPerSync tracks the number of endpoints added on each
-	// Service sync.
 	// EndpointsAddedPerSync 记录每次 Service 同步时新增的端点数量。
 	EndpointsAddedPerSync = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
@@ -41,8 +38,6 @@ var (
 		},
 		[]string{},
 	)
-	// EndpointsRemovedPerSync tracks the number of endpoints removed on each
-	// Service sync.
 	// EndpointsRemovedPerSync 记录每次 Service 同步时移除的端点数量。
 	EndpointsRemovedPerSync = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
@@ -54,7 +49,6 @@ var (
 		},
 		[]string{},
 	)
-	// EndpointsDesired tracks the total number of desired endpoints.
 	// EndpointsDesired 记录期望的端点总数。
 	EndpointsDesired = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
@@ -65,7 +59,6 @@ var (
 		},
 		[]string{},
 	)
-	// NumEndpointSlices tracks the number of EndpointSlices in a cluster.
 	// NumEndpointSlices 记录集群中 EndpointSlice 的实际数量。
 	NumEndpointSlices = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
@@ -76,8 +69,6 @@ var (
 		},
 		[]string{},
 	)
-	// DesiredEndpointSlices tracks the number of EndpointSlices that would
-	// exist with perfect endpoint allocation.
 	// DesiredEndpointSlices 记录在端点完美分配情况下本应存在的 EndpointSlice 数量。
 	DesiredEndpointSlices = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
@@ -89,7 +80,6 @@ var (
 		[]string{},
 	)
 
-	// EndpointSliceChanges tracks the number of changes to Endpoint Slices.
 	// EndpointSliceChanges 记录 EndpointSlice 发生变更的次数，按操作类型（operation）区分。
 	EndpointSliceChanges = metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -101,8 +91,6 @@ var (
 		[]string{"operation"},
 	)
 
-	// EndpointSlicesChangedPerSync observes the number of EndpointSlices
-	// changed per sync.
 	// EndpointSlicesChangedPerSync 观察每次 Service 同步时变更的 EndpointSlice 数量，按拓扑模式和流量分布区分。
 	EndpointSlicesChangedPerSync = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
@@ -111,13 +99,11 @@ var (
 			Help:      "Number of EndpointSlices changed on each Service sync",
 		},
 		[]string{
-			"topology",             // either "Auto" or "Disabled"
-			"traffic_distribution", // a trafficDistribution value or <empty>
+			"topology",             // 取值为 "Auto" 或 "Disabled"
+			"traffic_distribution", // trafficDistribution 值或空值
 		},
 	)
 
-	// EndpointSliceSyncs tracks the number of sync operations the controller
-	// runs along with their result.
 	// EndpointSliceSyncs 记录控制器执行的同步操作次数，并按结果（result）标签区分成功、过期或错误。
 	EndpointSliceSyncs = metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -126,11 +112,9 @@ var (
 			Help:           "Number of EndpointSlice syncs",
 			StabilityLevel: metrics.ALPHA,
 		},
-		[]string{"result"}, // either "success", "stale", or "error"
+		[]string{"result"}, // 取值为 "success"、"stale" 或 "error"
 	)
 
-	// ServicesCountByTrafficDistribution tracks the number of Services using some
-	// specific trafficDistribution
 	// ServicesCountByTrafficDistribution 记录使用某种特定 trafficDistribution 的 Service 数量。
 	ServicesCountByTrafficDistribution = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
@@ -139,14 +123,13 @@ var (
 			Help:           "Number of Services using some specific trafficDistribution",
 			StabilityLevel: metrics.BETA,
 		},
-		[]string{"traffic_distribution"}, // A trafficDistribution value
+		[]string{"traffic_distribution"}, // trafficDistribution 值
 	)
 )
 
 // registerMetrics 保证 RegisterMetrics 只执行一次。
 var registerMetrics sync.Once
 
-// RegisterMetrics registers EndpointSlice metrics.
 // RegisterMetrics 将本包定义的所有 EndpointSlice 指标注册到 legacyregistry。
 func RegisterMetrics() {
 	// 借助 sync.Once 保证即使被并发或重复调用，指标也只注册一次（重复注册会 panic）。

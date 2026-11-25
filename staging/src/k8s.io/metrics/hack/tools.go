@@ -16,7 +16,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This package imports things required by build scripts, to force `go mod` to see them as dependencies
 // 本文件只在 tools 构建标签下参与编译，不进入正式产物；空导入只为让依赖管理工具看见生成器。
 package tools
 

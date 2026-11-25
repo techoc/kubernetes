@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	// MetricVersions is the set of metric versions accepted by the converter.
+	// MetricVersions 是转换器接受的自定义指标版本集合。
 	// 顺序不影响解码，但按新旧排列便于人读；内部版本也在此列，供兼容旧适配器使用。
 	MetricVersions = []schema.GroupVersion{
 		cmv1beta2.SchemeGroupVersion,
@@ -40,7 +40,7 @@ var (
 	}
 )
 
-// MetricConverter knows how to convert between external MetricValue versions.
+// MetricConverter 在自定义指标 API 的外部版本之间转换 MetricValue。
 // 本类型把 scheme、codecs、版本器打包，避免调用方各自拼一套解码/转换流程。
 type MetricConverter struct {
 	scheme            *runtime.Scheme
@@ -48,8 +48,7 @@ type MetricConverter struct {
 	internalVersioner runtime.GroupVersioner
 }
 
-// NewMetricConverter creates a MetricConverter which knows how to convert objects
-// between different versions of the custom metrics api.
+// NewMetricConverter 创建可在自定义指标 API 不同版本间转换对象的 MetricConverter。
 // 多版本器把三个 group 名收敛到内部版本，因为它们的 Kind 集合相同、仅 group 不同。
 func NewMetricConverter() *MetricConverter {
 	return &MetricConverter{
@@ -64,18 +63,17 @@ func NewMetricConverter() *MetricConverter {
 	}
 }
 
-// Scheme returns the scheme used by this metric converter.
+// Scheme 返回此指标转换器使用的 scheme。
 func (c *MetricConverter) Scheme() *runtime.Scheme {
 	return c.scheme
 }
 
-// Codecs returns the codecs used by this metric converter
+// Codecs 返回此指标转换器使用的编解码器。
 func (c *MetricConverter) Codecs() serializer.CodecFactory {
 	return c.codecs
 }
 
-// ConvertListOptionsToVersion converts converts a set of MetricListOptions
-// to the provided GroupVersion.
+// ConvertListOptionsToVersion 把一组 MetricListOptions 转换为指定的 GroupVersion。
 // 先转内部版本再转目标版本，是为了让 list option 字段在各版本间有单一转换路径。
 func (c *MetricConverter) ConvertListOptionsToVersion(opts *cmint.MetricListOptions, version schema.GroupVersion) (runtime.Object, error) {
 	paramObj, err := c.UnsafeConvertToVersionVia(opts, version)
@@ -85,7 +83,7 @@ func (c *MetricConverter) ConvertListOptionsToVersion(opts *cmint.MetricListOpti
 	return paramObj, nil
 }
 
-// ConvertResultToVersion converts a Result to the provided GroupVersion
+// ConvertResultToVersion 把 REST 查询结果转换为指定的 GroupVersion。
 // 用 UniversalDecoder 接收所有已知指标版本，避免适配器仍返回旧版本时直接报错。
 func (c *MetricConverter) ConvertResultToVersion(res rest.Result, gv schema.GroupVersion) (runtime.Object, error) {
 	if err := res.Error(); err != nil {
@@ -110,9 +108,9 @@ func (c *MetricConverter) ConvertResultToVersion(res rest.Result, gv schema.Grou
 	return metricObj, nil
 }
 
-// UnsafeConvertToVersionVia is like Scheme.UnsafeConvertToVersion, but it does so via an internal version first.
-// We use it here to work with the v1beta2 client internally, while preserving backwards compatibility for existing custom metrics adapters
-// 这里的两段式转换是有意为之：直接从 v1beta2 转到 v1beta1 会漏掉内部版本上的兼容处理。
+// UnsafeConvertToVersionVia 类似 Scheme.UnsafeConvertToVersion，但先经内部版本中转，再转到目标外部版本。
+// 这样客户端内部可用 v1beta2，同时保留对现有自定义指标适配器的兼容；
+// 直接从 v1beta2 转到 v1beta1 会漏掉内部版本上的兼容处理。
 func (c *MetricConverter) UnsafeConvertToVersionVia(obj runtime.Object, externalVersion schema.GroupVersion) (runtime.Object, error) {
 	objInt, err := c.scheme.UnsafeConvertToVersion(obj, schema.GroupVersion{Group: externalVersion.Group, Version: runtime.APIVersionInternal})
 	if err != nil {

@@ -33,6 +33,7 @@ type externalMetricsClient struct {
 	client rest.Interface
 }
 
+// New 基于给定的 REST 客户端创建外部指标客户端。
 func New(client rest.Interface) ExternalMetricsClient {
 	return &externalMetricsClient{
 		client: client,
@@ -72,6 +73,7 @@ func NewForConfigOrDie(c *rest.Config) ExternalMetricsClient {
 	return client
 }
 
+// NamespacedMetrics 返回绑定指定命名空间的指标查询接口。
 func (c *externalMetricsClient) NamespacedMetrics(namespace string) MetricsInterface {
 	return &namespacedMetrics{
 		client:    c,

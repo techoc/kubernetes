@@ -38,7 +38,7 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-// groups 覆盖本模块所有 API group 及其版本，避免新增版本后忘记加入往返测试。
+// groups 覆盖本模块所有 API 组及其版本，避免新增版本后忘记加入往返测试。
 var groups = []runtime.SchemeBuilder{
 	custommetrics.SchemeBuilder,
 	custommetricsv1beta1.SchemeBuilder,
@@ -51,7 +51,7 @@ var groups = []runtime.SchemeBuilder{
 	metricsv1beta1.SchemeBuilder,
 }
 
-// TestRoundTripTypes 用随机对象验证编解码不丢字段；固定随机种子便于复现失败用例。
+// TestRoundTripTypes 用随机对象验证编解码往返不丢失字段。
 func TestRoundTripTypes(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -59,9 +59,7 @@ func TestRoundTripTypes(t *testing.T) {
 		require.NoError(t, builder.AddToScheme(scheme))
 	}
 	seed := rand.Int63()
-	// I'm only using the generic fuzzer funcs, but at some point in time we might need to
-	// switch to specialized. For now we're happy with the current serialization test.
-	// 通用 fuzzer 足够覆盖序列化路径；若将来字段需要合法取值约束再换专用实现。
+	// 当前仅使用通用模糊测试函数；若将来需要专用序列化测试，可切换到专用实现。
 	fuzzer := fuzzer.FuzzerFor(genericfuzzer.Funcs, rand.NewSource(seed), codecs)
 
 	roundtrip.RoundTripExternalTypes(t, scheme, codecs, fuzzer, nil)

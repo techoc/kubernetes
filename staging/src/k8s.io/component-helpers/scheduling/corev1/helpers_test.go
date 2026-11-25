@@ -673,13 +673,13 @@ func TestGetAvoidPodsFromNode(t *testing.T) {
 // 覆盖过滤器、容忍匹配以及数值比较操作符三大块。
 // 关键不变量是：只有“过滤后仍未被任何 toleration 覆盖的 taint”才构成阻碍；
 // 空 taint 集永远可通过，过滤器把所有 taint 排除掉也视为可通过。
-// 数值用例还验证了非法值会报错，而不是被当成不匹配后静默放过。
+// 数值用例还验证了非法值不会被误判为可容忍，具体错误由底层容忍判定记录。
 func TestFindMatchingUntoleratedTaint(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	// 表驱动用例字段：description 为用例描述；tolerations 为容忍列表；taints 为污点列表；
 	// applyFilter 为污点过滤函数；expectTolerated 表示期望是否全部被容忍；
-	// expectError 表示是否期望出错（数值比较遇到非法值）；
-	// enableComparisonOperatorsFG 控制数值比较操作符特性开关。
+	// expectError 保留非法数值用例的测试意图，但当前断言只检查“不可容忍”的布尔结果，
+	// 并未检查底层记录的错误；enableComparisonOperatorsFG 控制数值比较操作符特性开关。
 	testCases := []struct {
 		description                 string
 		tolerations                 []v1.Toleration

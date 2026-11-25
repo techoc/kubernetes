@@ -44,7 +44,7 @@ func TestReadProcMountsFrom(t *testing.T) {
 /dev/1    /path/to/1   type1	flags 1 1
 /dev/2 /path/to/2 type2 flags,1,2=3 2 2
 `
-	// NOTE: readProcMountsFrom has been updated to using fnv.New32a()
+	// 注意：readProcMountsFrom 已改用 fnv.New32a()。
 	mounts, err := parseProcMounts([]byte(successCase))
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
@@ -466,7 +466,7 @@ func TestSearchMountPoints(t *testing.T) {
 
 // 验证挂载参数中敏感选项被遮蔽，同时辅助标志与普通选项完整保留。
 func TestSensitiveMountOptions(t *testing.T) {
-	// Arrange
+	// 准备测试数据。
 	testcases := []struct {
 		source           string
 		target           string
@@ -515,10 +515,10 @@ func TestSensitiveMountOptions(t *testing.T) {
 	}
 
 	for _, v := range testcases {
-		// Act
+		// 执行被测逻辑。
 		mountArgs, mountArgsLogStr := MakeMountArgsSensitiveWithMountFlags(v.source, v.target, v.fstype, v.options, v.sensitiveOptions, v.mountFlags)
 
-		// Assert
+		// 校验结果。
 		t.Logf("\r\nmountArgs =%q\r\nmountArgsLogStr=%q", mountArgs, mountArgsLogStr)
 		for _, mountFlag := range v.mountFlags {
 			if found := mountArgsContainString(t, mountArgs, mountFlag); !found {
@@ -588,7 +588,7 @@ func mountArgsContainOption(t *testing.T, mountArgs []string, option string) boo
 
 // 用伪造的 umount 输出验证“未挂载”安全行为的判定，避免依赖宿主机实际 umount 版本。
 func TestDetectSafeNotMountedBehavior(t *testing.T) {
-	// Example output for umount from util-linux 2.30.2
+	// util-linux 2.30.2 中 umount 的输出示例。
 	notMountedOutput := "umount: /foo: not mounted."
 
 	testcases := []struct {
@@ -637,7 +637,7 @@ func TestDetectSafeNotMountedBehavior(t *testing.T) {
 func TestCheckUmountError(t *testing.T) {
 	target := "/test/path"
 	withSafeNotMountedBehavior := true
-	command := exec.Command("uname", "-r") // dummy command return status 0
+	command := exec.Command("uname", "-r") // 仅用于取得状态为 0 的虚拟命令。
 
 	if err := command.Run(); err != nil {
 		t.Errorf("Faild to exec dummy command. err: %s", err)
@@ -675,7 +675,7 @@ func TestCheckUmountError(t *testing.T) {
 	}
 }
 
-// TODO https://github.com/kubernetes/kubernetes/pull/117539#discussion_r1181873355
+// TODO：测试设计讨论见 https://github.com/kubernetes/kubernetes/pull/117539#discussion_r1181873355
 // 用受控的假命令验证格式化并发上限：多余请求应排队等待而非同时执行。
 func TestFormatConcurrency(t *testing.T) {
 	const (
@@ -727,9 +727,7 @@ func TestFormatConcurrency(t *testing.T) {
 			}
 			mounter := NewSafeFormatAndMount(nil, exec, WithMaxConcurrentFormat(tc.max, tc.timeout))
 
-			// we run max+1 goroutines and block the command execution
-			// only max goroutine should be running and the additional one should wait
-			// for one to be released
+			// 运行 max+1 个 goroutine 并阻塞命令执行；只有 max 个应同时运行，多余的一个必须等待某个令牌释放。
 			for i := 0; i < tc.max+1; i++ {
 				go func() {
 					_, err := mounter.format(fstype, nil)
@@ -739,7 +737,7 @@ func TestFormatConcurrency(t *testing.T) {
 				}()
 			}
 
-			// wait for all goorutines to be scheduled
+			// 等待所有 goroutine 都被调度。
 			time.Sleep(100 * time.Millisecond)
 
 			mu.Lock()
@@ -748,13 +746,12 @@ func TestFormatConcurrency(t *testing.T) {
 			}
 			mu.Unlock()
 
-			// signal the commands to finish the goroutines, this will allow the command
-			// that is pending to be executed
+			// 通知正在执行的命令结束，让排队的命令得以执行。
 			for i := 0; i < tc.max; i++ {
 				witness <- struct{}{}
 			}
 
-			// wait for all goroutines to acquire the lock and decrement the counter
+			// 等待所有 goroutine 获取锁并递减计数器。
 			time.Sleep(100 * time.Millisecond)
 
 			mu.Lock()
@@ -763,10 +760,10 @@ func TestFormatConcurrency(t *testing.T) {
 			}
 			mu.Unlock()
 
-			// signal the pending command to finish, no more command should be running
+			// 通知剩余命令结束，此后不应再有命令运行。
 			close(witness)
 
-			// wait a few for the last goroutine to acquire the lock and decrements the counter down to zero
+			// 稍等片刻，让最后一个 goroutine 获取锁并将计数器递减到零。
 			time.Sleep(10 * time.Millisecond)
 
 			mu.Lock()
@@ -778,7 +775,7 @@ func TestFormatConcurrency(t *testing.T) {
 	}
 }
 
-// TODO https://github.com/kubernetes/kubernetes/pull/117539#discussion_r1181873355
+// TODO：测试设计讨论见 https://github.com/kubernetes/kubernetes/pull/117539#discussion_r1181873355
 // 验证等待超时的排队请求最终会被放行，避免格式化请求永久挂起。
 func TestFormatTimeout(t *testing.T) {
 	const (
@@ -818,7 +815,7 @@ func TestFormatTimeout(t *testing.T) {
 		}()
 	}
 
-	// wait a bit more than the configured timeout
+	// 等待时间略长于配置的超时。
 	time.Sleep(timeout + 100*time.Millisecond)
 
 	mu.Lock()
@@ -827,9 +824,8 @@ func TestFormatTimeout(t *testing.T) {
 	}
 	mu.Unlock()
 
-	// signal the pending commands to finish
+	// 通知剩余命令结束，并等待所有 goroutine 获取锁且递减计数器。
 	close(witness)
-	// wait for all goroutines to acquire the lock and decrement the counter
 	time.Sleep(100 * time.Millisecond)
 
 	mu.Lock()
@@ -839,14 +835,13 @@ func TestFormatTimeout(t *testing.T) {
 	mu.Unlock()
 }
 
-// Replicate some types found in "golang.org/x/exp/constraints"
-// to avoid a dependency on that package.
-// 只在测试里用到的整数约束，避免为一个简单辅助函数引入额外依赖。
+// Signed 复制 "golang.org/x/exp/constraints" 中的部分类型，避免依赖该包。
+// 只在测试里用到的有符号整数约束，避免为一个简单辅助函数引入额外依赖。
 type Signed interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64
 }
 
-// 各平台的 Statfs_t.Flags 底层类型不同，这里统一覆盖无符号整数。
+// Unsigned 统一覆盖无符号整数，兼容各平台不同的 Statfs_t.Flags 底层类型。
 type Unsigned interface {
 	~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
@@ -856,8 +851,7 @@ type Integer interface {
 	Signed | Unsigned
 }
 
-// Some platforms define unix.Statfs_t.Flags differently.  Our need here is
-// pretty constrained, so some aggressive type-conversion is OK.
+// 部分平台以不同方式定义 unix.Statfs_t.Flags；这里只测试少量标志，因此可以进行激进的类型转换。
 // 泛型转换让同一份测试代码能在不同体系结构的 Flags 类型上编译。
 func mkStatfsFlags[T1 Integer, T2 Integer](orig T1, add T2) T1 {
 	return orig | T1(add)
@@ -866,7 +860,7 @@ func mkStatfsFlags[T1 Integer, T2 Integer](orig T1, add T2) T1 {
 // 验证从 Statfs 标志位推导出的绑定挂载选项，注意结果需排序后比较。
 func TestGetBindMountOptions(t *testing.T) {
 	var testCases = map[string]struct {
-		flags        int32 // smallest size used by any platform we care about
+		flags        int32 // 所关注平台中最小的底层类型。
 		mountoptions string
 	}{
 		"ro":            {flags: unix.MS_RDONLY, mountoptions: "ro"},
@@ -1003,7 +997,7 @@ func TestIsLikelyNotMountPoint(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// test with absolute and relative path
+		// 分别使用绝对路径和相对路径测试。
 		baseList := []string{t.TempDir(), "./"}
 		for _, base := range baseList {
 			if err := test.setUp(base, test.fileName, test.targetLinkName); err != nil {

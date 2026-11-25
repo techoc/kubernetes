@@ -35,8 +35,7 @@ func Convert_v1_ObjectReference_To_custom_metrics_ObjectReference(in *v1.ObjectR
 	return nil
 }
 
-// Convert_custom_metrics_ObjectReference_To_v1_ObjectReference 是上述转换的逆过程，
-// 同样只搬运字段，不解析引用 Target 对应的实际对象。
+// Convert_custom_metrics_ObjectReference_To_v1_ObjectReference 执行反向转换，逐字段复制对象引用。
 func Convert_custom_metrics_ObjectReference_To_v1_ObjectReference(in *ObjectReference, out *v1.ObjectReference, s conversion.Scope) error {
 	out.APIVersion = in.APIVersion
 

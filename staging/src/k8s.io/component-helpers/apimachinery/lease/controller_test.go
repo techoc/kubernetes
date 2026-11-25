@@ -596,7 +596,7 @@ func TestStopDoesNotBlockWhenLeaseCannotBeCreated(t *testing.T) {
 }
 
 // setNodeOwnerFunc 构造一个 newLeasePostProcessFunc，用于给租约对象补上指向对应节点的
-// OwnerReference。
+// OwnerReference 引用。
 // 这里把“每次续租都尝试补 ownerReference”做成后置钩子，而不是控制器内置逻辑，
 // 是因为节点 UID 在首次创建租约时未必查得到；即使钩子报错，创建路径也会吞掉错误、
 // 下一轮再试，而更新路径照常提交，让心跳业务优先于附加元数据。

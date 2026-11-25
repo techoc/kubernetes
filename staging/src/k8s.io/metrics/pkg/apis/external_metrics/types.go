@@ -23,43 +23,42 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// a list of values for a given metric for some set labels
-// 同一个指标名可以返回多条不同标签组合的值，列表即这些时间序列的集合。
+// ExternalMetricValueList 是同一指标在一组标签下的取值列表。
+// 同一个指标名可以返回多条不同标签组合的值。
 type ExternalMetricValueList struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta `json:""`
+	// 标准列表元数据。
 	metav1.ListMeta `json:"metadata,omitempty"`
 
-	// value of the metric matching a given set of labels
+	// 与给定标签集合匹配的指标值。
 	Items []ExternalMetricValue `json:"items"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// a metric value for external metric
-// A single metric value is identified by metric name and a set of string labels.
-// 名字加标签共同确定一条序列，只按名字查询会拿到全部标签组合。
-// For one metric there can be multiple values with different sets of labels.
+// ExternalMetricValue 是外部指标的一条取值记录。
+// 单条记录由指标名称和一组字符串标签共同标识，同一指标可以有不同的标签组合。
 type ExternalMetricValue struct {
+	// API 对象的类型元数据。
 	metav1.TypeMeta `json:""`
 
-	// the name of the metric
+	// 指标名称。
 	MetricName string `json:"metricName"`
 
-	// a set of labels that identify a single time series for the metric
+	// 标识该指标下单一时间序列的一组标签。
 	// 标签直接映射后端时间序列的维度，不做额外归并。
 	MetricLabels map[string]string `json:"metricLabels"`
 
-	// indicates the time at which the metrics were produced
+	// 指标产生的时间。
 	Timestamp metav1.Time `json:"timestamp"`
 
-	// indicates the window ([Timestamp-Window, Timestamp]) from
-	// which these metrics were calculated, when returning rate
-	// metrics calculated from cumulative metrics (or zero for
-	// non-calculated instantaneous metrics).
-	// 速率值需要窗口才能还原累积量；瞬时值该字段为零。
+	// 指标计算所使用的时间区间 [Timestamp-Window, Timestamp]。
+	// 返回由累计指标计算出的速率时提供该窗口；非计算的瞬时指标为零。
+	// 速率值需要窗口才能还原累积量。
 	WindowSeconds *int64 `json:"window,omitempty"`
 
-	// the value of the metric
+	// 指标值。
 	// 用 Quantity 保留单位与精度，避免客户端提前舍入。
 	Value resource.Quantity `json:"value"`
 }

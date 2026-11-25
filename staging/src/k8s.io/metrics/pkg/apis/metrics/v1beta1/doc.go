@@ -21,8 +21,6 @@ limitations under the License.
 // +groupName=metrics.k8s.io
 // +k8s:openapi-model-package=io.k8s.metrics.pkg.apis.metrics.v1beta1
 
-// Package v1beta1 is the v1beta1 version of the metrics API.
-//
-// 中文说明：本文件集中声明代码生成指令，包本身的 Go 逻辑很少；
-// 具体类型定义见 types.go，转换与深拷贝由生成器产出。
+// Package v1beta1 是指标 API 的 v1beta1 版本。
+// 具体类型定义在 types.go，转换与深拷贝代码由生成器产生。
 package v1beta1

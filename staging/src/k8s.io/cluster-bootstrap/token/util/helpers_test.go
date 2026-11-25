@@ -61,7 +61,7 @@ func TestTokenFromIDAndSecret(t *testing.T) {
 		secret   string
 		expected string
 	}{
-		{"foo", "bar", "foo.bar"}, // should use default
+		{"foo", "bar", "foo.bar"}, // 应使用默认错误信息
 		{"abcdef", "abcdef0123456789", "abcdef.abcdef0123456789"},
 		{"h", "b", "h.b"},
 	}
@@ -86,16 +86,16 @@ func TestIsValidBootstrapToken(t *testing.T) {
 	}{
 		{token: "", expected: false},
 		{token: ".", expected: false},
-		{token: "1234567890123456789012", expected: false},   // invalid parcel size
-		{token: "12345.1234567890123456", expected: false},   // invalid parcel size
-		{token: ".1234567890123456", expected: false},        // invalid parcel size
-		{token: "123456.", expected: false},                  // invalid parcel size
-		{token: "123456:1234567890.123456", expected: false}, // invalid separation
-		{token: "abcdef:1234567890123456", expected: false},  // invalid separation
-		{token: "Abcdef.1234567890123456", expected: false},  // invalid token id
-		{token: "123456.AABBCCDDEEFFGGHH", expected: false},  // invalid token secret
-		{token: "123456.AABBCCD-EEFFGGHH", expected: false},  // invalid character
-		{token: "abc*ef.1234567890123456", expected: false},  // invalid character
+		{token: "1234567890123456789012", expected: false},   // 缺少分隔符
+		{token: "12345.1234567890123456", expected: false},   // ID 长度错误
+		{token: ".1234567890123456", expected: false},        // ID 为空
+		{token: "123456.", expected: false},                  // Secret 为空
+		{token: "123456:1234567890.123456", expected: false}, // 分隔符数量错误
+		{token: "abcdef:1234567890123456", expected: false},  // 分隔符数量错误
+		{token: "Abcdef.1234567890123456", expected: false},  // ID 含非法字符
+		{token: "123456.AABBCCDDEEFFGGHH", expected: false},  // Secret 含非法字符
+		{token: "123456.AABBCCD-EEFFGGHH", expected: false},  // Secret 含非法字符
+		{token: "abc*ef.1234567890123456", expected: false},  // ID 含非法字符
 		{token: "abcdef.1234567890123456", expected: true},
 		{token: "123456.aabbccddeeffgghh", expected: true},
 		{token: "ABCDEF.abcdef0123456789", expected: false},

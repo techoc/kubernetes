@@ -112,7 +112,6 @@ func TestTranslationStability(t *testing.T) {
 }
 
 // TestTopologyTranslation 验证拓扑信息在各插件翻译过程中的处理是否正确。
-//
 // 覆盖场景：
 //   - Beta 与 GA 两种 Kubernetes 拓扑标签；
 //   - PV 已有拓扑（beta key 或 CSI key）时的保留行为；
@@ -195,7 +194,6 @@ func TestTopologyTranslation(t *testing.T) {
 				true, /*multiTerms*/
 				plugins.GCEPDTopologyKey, "europe-west1-f", "europe-west1-g"),
 		},
-		// EBS test cases: test mostly topology key, i.e., don't repeat testing done with GCE
 		// EBS 用例：主要验证拓扑 key，不重复 GCE 已覆盖的通用测试。
 		{
 			name:                 "AWS EBS with beta zone labels",
@@ -217,7 +215,6 @@ func TestTopologyTranslation(t *testing.T) {
 			pv:                   makeAWSEBSPV(kubernetesGATopologyLabels, makeTopology(v1.LabelTopologyZone, "us-east-2a")),
 			expectedNodeAffinity: makeNodeAffinity(false /*multiTerms*/, plugins.AWSEBSTopologyKey, "us-east-2a"),
 		},
-		// Cinder test cases: test mosty topology key, i.e., don't repeat testing done with GCE
 		// Cinder 用例：同样只验证拓扑 key。
 		{
 			name:                 "OpenStack Cinder with zone labels",
@@ -235,7 +232,6 @@ func TestTopologyTranslation(t *testing.T) {
 		ctl := New()
 		t.Logf("Testing %v", test.name)
 
-		// Translate to CSI PV and check translated node affinity
 		// 第一步：翻译为 CSI PV，并校验节点亲和性符合期望。
 		newCSIPV, err := ctl.TranslateInTreePVToCSI(logger, test.pv)
 		if err != nil {
@@ -247,14 +243,12 @@ func TestTopologyTranslation(t *testing.T) {
 			t.Errorf("Expected node affinity %v, got %v", *test.expectedNodeAffinity, *nodeAffinity)
 		}
 
-		// Translate back to in-tree and make sure node affinity has been removed
 		// 第二步：翻译回树内 PV。
 		newInTreePV, err := ctl.TranslateCSIPVToInTree(newCSIPV)
 		if err != nil {
 			t.Errorf("Error when translating to in-tree: %v", err)
 		}
 
-		// For now, non-pd cloud should stay the old behavior which is still have the CSI topology.
 		// 第三步：按用例类型分别断言。
 		// 对于指定 key 的用例（GCE/EBS/Cinder），CSI 拓扑 key 应被移除，
 		// 同时 Kubernetes 自身的 beta 或 GA 拓扑标签应保留。
@@ -263,7 +257,6 @@ func TestTopologyTranslation(t *testing.T) {
 			if plugins.TopologyKeyExist(test.key, nodeAffinity) {
 				t.Errorf("Expected node affinity key %v being removed, got %v", test.key, *nodeAffinity)
 			}
-			// verify that either beta or GA kubernetes topology key should exist
 			if !(plugins.TopologyKeyExist(v1.LabelFailureDomainBetaZone, nodeAffinity) || plugins.TopologyKeyExist(v1.LabelTopologyZone, nodeAffinity)) {
 				t.Errorf("Expected node affinity kubernetes topology label exist, got %v", *nodeAffinity)
 			}
@@ -376,13 +369,11 @@ func makeNodeAffinity(multiTerms bool, key string, values ...string) *v1.VolumeN
 		},
 	}
 
-	// If multiple terms is NOT requested, return a single term with all values
 	if !multiTerms {
 		return nodeAffinity
 	}
 
-	// Otherwise return multiple terms, each one with a single value
-	nodeAffinity.Required.NodeSelectorTerms[0].MatchExpressions[0].Values = values[:1] // If values=[1,2,3], overwrite with [1]
+	nodeAffinity.Required.NodeSelectorTerms[0].MatchExpressions[0].Values = values[:1] // 若 values=[1,2,3]，则覆盖为 [1]
 	for _, value := range values[1:] {
 		term := v1.NodeSelectorTerm{
 			MatchExpressions: []v1.NodeSelectorRequirement{
@@ -547,4 +538,4 @@ func TestPluginNameMappings(t *testing.T) {
 	}
 }
 
-// TODO: test for not modifying the original PV.
+// TODO: 补充测试，确认翻译不会修改原始 PV。

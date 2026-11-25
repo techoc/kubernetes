@@ -98,8 +98,6 @@ func expectNumEndpointsAndSlices(t *testing.T, c *Cache, desired int, actual int
 	}
 }
 
-// Tests the mutations to servicesByTrafficDistribution field within Cache
-// object.
 // TestCache_ServicesByTrafficDistribution 验证 Cache.servicesByTrafficDistribution 字段在各种增删与切换场景下的变化。
 func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	cache := NewCache(0)
@@ -110,7 +108,6 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	service3 := types.NamespacedName{Namespace: "ns2", Name: "service3"}
 	service4 := types.NamespacedName{Namespace: "ns3", Name: "service4"}
 
-	// Define helper function for assertion
 	// 定义断言辅助函数：比较期望的分组映射与缓存中的实际映射，不一致则失败。
 	mustHaveServicesByTrafficDistribution := func(wantServicesByTrafficDistribution map[string]map[types.NamespacedName]bool, desc string) {
 		t.Helper()
@@ -120,7 +117,6 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 		}
 	}
 
-	// Mutate and make assertions
 	// 依次执行变更并断言：每种 trafficDistribution 取值对应一个 Service 集合。
 
 	// 场景 1：service1 开始使用 PreferClose，断言它被加入对应集合。
@@ -133,7 +129,7 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	// 场景 2：重复相同更新，断言操作幂等，集合不产生变化。
 	desc = "service1 starts using trafficDistribution=PreferClose, retries of similar mutation should be idempotent"
 	cache.UpdateTrafficDistributionForService(service1, ptr.To(corev1.ServiceTrafficDistributionPreferClose))
-	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{ // No delta
+	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{ // 无增量
 		corev1.ServiceTrafficDistributionPreferClose: {service1: true},
 	}, desc)
 
@@ -141,7 +137,7 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	desc = "service2 starts using trafficDistribution=PreferClose"
 	cache.UpdateTrafficDistributionForService(service2, ptr.To(corev1.ServiceTrafficDistributionPreferClose))
 	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{
-		corev1.ServiceTrafficDistributionPreferClose: {service1: true, service2: true}, // Delta
+		corev1.ServiceTrafficDistributionPreferClose: {service1: true, service2: true}, // 增量
 	}, desc)
 
 	// 场景 4：service3 使用自定义的 FutureValue，断言新增了一个分类集合。
@@ -149,13 +145,13 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	cache.UpdateTrafficDistributionForService(service3, ptr.To("FutureValue"))
 	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{
 		corev1.ServiceTrafficDistributionPreferClose: {service1: true, service2: true},
-		"FutureValue": {service3: true}, // Delta
+		"FutureValue": {service3: true}, // 增量
 	}, desc)
 
 	// 场景 5：service4 的 trafficDistribution 为 nil，断言既不新增分类也不影响已有分类。
 	desc = "service4 starts using trafficDistribution=nil"
 	cache.UpdateTrafficDistributionForService(service4, nil)
-	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{ // No delta
+	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{ // 无增量
 		corev1.ServiceTrafficDistributionPreferClose: {service1: true, service2: true},
 		"FutureValue": {service3: true},
 	}, desc)
@@ -164,9 +160,9 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	desc = "service2 transitions trafficDistribution: PreferClose -> AnotherFutureValue"
 	cache.UpdateTrafficDistributionForService(service2, ptr.To("AnotherFutureValue"))
 	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{
-		corev1.ServiceTrafficDistributionPreferClose: {service1: true}, // Delta
+		corev1.ServiceTrafficDistributionPreferClose: {service1: true}, // 增量
 		"FutureValue":        {service3: true},
-		"AnotherFutureValue": {service2: true}, // Delta
+		"AnotherFutureValue": {service2: true}, // 增量
 	}, desc)
 
 	// 场景 7：删除 service3，断言它从 FutureValue 集合中移除且集合被清空。
@@ -174,7 +170,7 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	cache.DeleteService(service3)
 	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{
 		corev1.ServiceTrafficDistributionPreferClose: {service1: true},
-		"FutureValue":        {}, // Delta
+		"FutureValue":        {}, // 增量
 		"AnotherFutureValue": {service2: true},
 	}, desc)
 
@@ -182,7 +178,7 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	desc = "service1 transitions trafficDistribution: PreferClose -> nil"
 	cache.UpdateTrafficDistributionForService(service1, nil)
 	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{
-		corev1.ServiceTrafficDistributionPreferClose: {}, // Delta
+		corev1.ServiceTrafficDistributionPreferClose: {}, // 增量
 		"FutureValue":        {},
 		"AnotherFutureValue": {service2: true},
 	}, desc)
@@ -193,7 +189,7 @@ func TestCache_ServicesByTrafficDistribution(t *testing.T) {
 	mustHaveServicesByTrafficDistribution(map[string]map[types.NamespacedName]bool{
 		corev1.ServiceTrafficDistributionPreferClose: {},
 		"FutureValue":        {},
-		"AnotherFutureValue": {}, // Delta
+		"AnotherFutureValue": {}, // 增量
 	}, desc)
 
 }

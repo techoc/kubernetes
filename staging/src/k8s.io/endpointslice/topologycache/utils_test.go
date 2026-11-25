@@ -416,7 +416,6 @@ func Test_getHintsByZone(t *testing.T) {
 			actualHintsByZone := getHintsByZone(&tc.slice, tc.allocatedHintsByZone, tc.allocations)
 
 			if !reflect.DeepEqual(actualHintsByZone, tc.expectedHintsByZone) {
-				// %#v for distinguishing between nil and empty map
 				// 使用 %#v 输出以便区分 nil map 与空 map。
 				t.Errorf("Expected %#v hints by zones, got %#v", tc.expectedHintsByZone, actualHintsByZone)
 			}
