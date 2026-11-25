@@ -5715,10 +5715,9 @@ func TestJobGangSchedulingSuspendResume(t *testing.T) {
 	verifyPodsInPodGroup("after second resume")
 }
 
-// TestJobDelegatedPodGroup verifies that a non-root Job whose parent controller
-// owns the Workload and delegates PodGroup management (via the group-template
-// annotation) gets a PodGroup materialized from the parent's persisted template,
-// without the Job controller creating or taking ownership of a Workload.
+// TestJobDelegatedPodGroup 验证以下场景：一个非 root Job 的父控制器拥有 Workload，
+// 并通过 group-template annotation 将 PodGroup 管理委托出去；此时会从父级持久化的模板中
+// 具化出 PodGroup，而 Job 控制器不会创建 Workload，也不会取得其所有权。
 func TestJobDelegatedPodGroup(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.GenericWorkload: true,
@@ -5737,10 +5736,9 @@ func TestJobDelegatedPodGroup(t *testing.T) {
 		templateName = "workers"
 	)
 
-	// A parent-owned Workload with a named gang template. Its spec.controllerRef
-	// points at the parent controller so the Job controller can discover it. The
-	// delegated PodGroup must be materialized from this persisted template rather
-	// than compiled from the Job spec.
+	// 一个由父级拥有的 Workload，带有一个命名 gang 模板。其 spec.controllerRef
+	// 指向父控制器，以便 Job 控制器能够发现它。委托的 PodGroup 必须从该持久化模板
+	// 具化而来，而不是从 Job spec 编译得到。
 	parentWorkload, err := clientSet.SchedulingV1beta1().Workloads(ns.Name).Create(ctx, &schedulingv1beta1.Workload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "parent-workload",
@@ -5764,8 +5762,8 @@ func TestJobDelegatedPodGroup(t *testing.T) {
 		t.Fatalf("Failed to create parent Workload: %v", err)
 	}
 
-	// A non-root Job owned by the parent controller, delegating PodGroup
-	// management via the group-template annotation.
+	// 一个由父控制器拥有的非 root Job，通过 group-template annotation
+	// 委托 PodGroup 管理。
 	jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "delegated-job",

@@ -44,8 +44,9 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestMutatingWebhookDuplicateOwnerReferences 确保当 mutating webhook 在 create/update
-// 请求中打上重复的 ownerReferences 时，API server 的处理程序能正确去重。
+// TestMutatingWebhookDuplicateOwnerReferences 确保当 mutating webhook
+// 在 create/update 请求中打上重复的 ownerReferences 时，
+// API server 的处理程序能正确去重。
 func TestMutatingWebhookDuplicateOwnerReferences(t *testing.T) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {

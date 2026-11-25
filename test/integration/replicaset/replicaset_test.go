@@ -956,11 +956,11 @@ func TestExtraPodsAdoptionAndDeletion(t *testing.T) {
 	defer stopControllers()
 	waitRSStable(t, c, rs)
 
-	// Verify the extra pod is deleted eventually by determining whether number of
-	// all pods within namespace matches .spec.replicas of the RS (2 in this case)
+	// 通过判断命名空间中所有 Pod 的数量是否等于 RS 的 .spec.replicas
+	// （本例中为 2），验证多余的 Pod 最终会被删除
 	podClient := c.CoreV1().Pods(ns.Name)
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
-		// All pods have labelMap as their labels
+		// 所有 Pod 都以 labelMap 作为标签
 		pods := getPods(t, podClient, labelMap())
 		return int32(len(pods.Items)) == *rs.Spec.Replicas, nil
 	}); err != nil {
@@ -982,13 +982,13 @@ func TestFullyLabeledReplicas(t *testing.T) {
 	rs = rss[0]
 	waitRSStable(t, c, rs)
 
-	// Change RS's template labels to have extra labels, but not its selector
+	// 给 RS 的 template 标签增加额外标签，但不改动其 selector
 	rsClient := c.AppsV1().ReplicaSets(ns.Name)
 	updateRS(t, rsClient, rs.Name, func(rs *apps.ReplicaSet) {
 		rs.Spec.Template.Labels = extraLabelMap
 	})
 
-	// Set one of the pods to have extra labels
+	// 给其中一个 Pod 设置额外标签
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap())
 	if len(pods.Items) != 2 {

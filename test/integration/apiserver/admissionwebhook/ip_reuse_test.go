@@ -61,8 +61,9 @@ func (r *dynamicServiceResolver) ResolveEndpoint(namespace, name string, port in
 	return url.Parse(r.targetURL)
 }
 
-// TestWebhookConnectionPoolIPReuse 断言 API Server 的 webhook 客户端会按解析出的
-// 后端 IP 地址隔离其 HTTP 连接池。如果 service 解析出的 endpoint 变成了新 IP，
+// TestWebhookConnectionPoolIPReuse 断言 API Server 的 webhook 客户端
+// 会按解析出的后端 IP 地址隔离其 HTTP 连接池。
+// 如果 service 解析出的 endpoint 变成了新 IP，
 // 请求不得被路由到池中旧的连接上，从而防止利用 IP 复用绕过安全限制。
 func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 	roots := x509.NewCertPool()
@@ -275,7 +276,8 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 	_ = client.CoreV1().Pods("default").Delete(context.TODO(), pod2.Name, metav1.DeleteOptions{})
 
 	// 断言
-	// 如果连接池没有按 IP 隔离，第二个请求会复用与 Server A 的空闲连接。
+	// 如果连接池没有按 IP 隔离，第二个请求会复用
+	// 与 Server A 的空闲连接。
 	// 有了修复后，它必须正确连接到 Server B。
 	if atomic.LoadInt32(&serverBCalls) != 1 {
 		t.Errorf("Expected 1 call to Server B (New Pod), got %d. The request was incorrectly routed/stuck!", serverBCalls)
