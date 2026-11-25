@@ -22,40 +22,33 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// Attributes exposes the admission request parameters consumed by the PodSecurity admission controller.
+// Attributes 抽象 PodSecurity 准入控制器消费的请求参数。
 // 只暴露控制器真正需要的字段，避免与具体的准入请求类型强耦合，也方便测试时直接构造。
 type Attributes interface {
-	// GetName is the name of the object associated with the request.
+	// GetName 返回请求关联的对象名称。
 	GetName() string
-	// GetNamespace is the namespace associated with the request (if any)
+	// GetNamespace 返回请求关联的命名空间；没有命名空间时返回空字符串。
 	GetNamespace() string
-	// GetResource is the name of the resource being requested.  This is not the kind.  For example: pods
+	// GetResource 返回请求的资源名，而不是 Kind；例如 Pod 的资源名是 pods。
 	GetResource() schema.GroupVersionResource
-	// GetKind is the name of the kind being requested.  For example: Pod
+	// GetKind 返回请求的 Kind；例如 Pod。
 	GetKind() schema.GroupVersionKind
-	// GetSubresource is the name of the subresource being requested.  This is a different resource, scoped to the parent resource, but it may have a different kind.
-	// For instance, /pods has the resource "pods" and the kind "Pod", while /pods/foo/status has the resource "pods", the sub resource "status", and the kind "Pod"
-	// (because status operates on pods). The binding resource for a pod though may be /pods/foo/binding, which has resource "pods", subresource "binding", and kind "Binding".
-	// 子资源名决定是否要对请求体做 Pod 安全检查，必须和 kind 分开看。
+	// GetSubresource 返回子资源名；它决定是否需要对请求体执行 Pod 安全检查，不能与 Kind 混为一谈。
 	GetSubresource() string
-	// GetOperation is the operation being performed
+	// GetOperation 返回请求执行的操作。
 	GetOperation() admissionv1.Operation
 
-	// GetObject returns the typed Object from incoming request.
-	// For objects in the core API group, the result must use the v1 API.
-	// 统一到 v1 才能用同一套检查逻辑，不必为每个 API 版本各写一份。
+	// GetObject 解码并返回请求中的对象；core API group 中的对象必须使用 v1 API，以便复用同一套检查逻辑。
 	GetObject() (runtime.Object, error)
-	// GetOldObject returns the typed existing object. Only populated for UPDATE requests.
-	// For objects in the core API group, the result must use the v1 API.
-	// 更新场景要靠旧对象判断字段是否被改动，创建请求里它为空。
+	// GetOldObject 返回更新前已存在的对象，仅 UPDATE 请求会填充；core API group 中必须使用 v1 API。
+	// 创建请求没有旧对象，更新检查依赖它判断字段是否变化。
 	GetOldObject() (runtime.Object, error)
-	// GetUserName is the requesting user's authenticated name.
-	// 豁免名单按用户名匹配，因此这里必须是认证后的身份而非请求里自称的名字。
+	// GetUserName 返回请求方已认证的用户名；豁免按该身份匹配，不能采用请求中未经认证的自称值。
 	GetUserName() string
 }
 
-// AttributesRecord is a simple struct implementing the Attributes interface.
-// 字段直接对应接口方法，省去解码步骤，主要给测试和非 admission.Request 场景使用。
+// AttributesRecord 是 Attributes 的简单实现，字段直接对应接口方法。
+// 它跳过解码步骤，主要供测试和非 admission.Request 场景使用。
 type AttributesRecord struct {
 	Name        string
 	Namespace   string
@@ -68,30 +61,47 @@ type AttributesRecord struct {
 	Username    string
 }
 
+// GetName 返回记录中的对象名称。
 func (a *AttributesRecord) GetName() string {
 	return a.Name
 }
+
+// GetNamespace 返回记录中的命名空间。
 func (a *AttributesRecord) GetNamespace() string {
 	return a.Namespace
 }
+
+// GetKind 返回记录中的 Kind。
 func (a *AttributesRecord) GetKind() schema.GroupVersionKind {
 	return a.Kind
 }
+
+// GetResource 返回记录中的资源名。
 func (a *AttributesRecord) GetResource() schema.GroupVersionResource {
 	return a.Resource
 }
+
+// GetSubresource 返回记录中的子资源名。
 func (a *AttributesRecord) GetSubresource() string {
 	return a.Subresource
 }
+
+// GetOperation 返回记录中的操作。
 func (a *AttributesRecord) GetOperation() admissionv1.Operation {
 	return a.Operation
 }
+
+// GetUserName 返回记录中的用户名。
 func (a *AttributesRecord) GetUserName() string {
 	return a.Username
 }
+
+// GetObject 直接返回记录中的对象，不执行解码。
 func (a *AttributesRecord) GetObject() (runtime.Object, error) {
 	return a.Object, nil
 }
+
+// GetOldObject 直接返回记录中的旧对象，不执行解码。
 func (a *AttributesRecord) GetOldObject() (runtime.Object, error) {
 	return a.OldObject, nil
 }
@@ -99,7 +109,7 @@ func (a *AttributesRecord) GetOldObject() (runtime.Object, error) {
 // 编译期断言，防止接口新增方法时漏改实现。
 var _ Attributes = &AttributesRecord{}
 
-// RequestAttributes adapts an admission.Request to the Attributes interface.
+// RequestAttributes 把 admission.Request 适配为 Attributes。
 // 解码器由调用方传入，便于用不同的 scheme 或测试桩替换默认行为。
 func RequestAttributes(request *admissionv1.AdmissionRequest, decoder runtime.Decoder) Attributes {
 	return &attributes{
@@ -108,9 +118,8 @@ func RequestAttributes(request *admissionv1.AdmissionRequest, decoder runtime.De
 	}
 }
 
-// attributes is an interface used by AdmissionController to get information about a request
-// that is used to make an admission decision.
-// 包装原始请求并缓存解码器，对象只在被真正读取时才解码。
+// attributes 包装原始准入请求，供 AdmissionController 提取决策所需信息。
+// 对象只在被真正读取时才解码。
 type attributes struct {
 	r       *admissionv1.AdmissionRequest
 	decoder runtime.Decoder

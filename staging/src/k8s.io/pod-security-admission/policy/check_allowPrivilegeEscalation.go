@@ -25,14 +25,14 @@ import (
 )
 
 /*
-Privilege escalation (such as via set-user-ID or set-group-ID file mode) should not be allowed.
+禁止权限提升，例如通过 set-user-ID 或 set-group-ID 文件权限位提升权限。
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.containers[*].securityContext.allowPrivilegeEscalation
 spec.initContainers[*].securityContext.allowPrivilegeEscalation
 
-**Allowed Values:** false
+**允许值：** false
 */
 // 本文件检查 allowPrivilegeEscalation；Windows Pod 因接口差异自 1.25 起单独豁免。
 
@@ -40,8 +40,7 @@ func init() {
 	addCheck(CheckAllowPrivilegeEscalation)
 }
 
-// CheckAllowPrivilegeEscalation returns a restricted level check
-// that requires allowPrivilegeEscalation=false in 1.8+
+// CheckAllowPrivilegeEscalation 返回受限级检查，从 1.8 起要求 allowPrivilegeEscalation=false。
 // 新版本复用旧版实现，仅为 Windows 场景增加豁免，避免复制检查逻辑。
 func CheckAllowPrivilegeEscalation() Check {
 	return Check{
@@ -49,13 +48,13 @@ func CheckAllowPrivilegeEscalation() Check {
 		Level: api.LevelRestricted,
 		Versions: []VersionedCheck{
 			{
-				// Field added in 1.8:
+				// 该字段于 1.8 加入：
 				// https://github.com/kubernetes/kubernetes/blob/v1.8.0/staging/src/k8s.io/api/core/v1/types.go#L4797-L4804
 				MinimumVersion: api.MajorMinorVersion(1, 8),
 				CheckPod:       allowPrivilegeEscalation_1_8,
 			},
 			{
-				// Starting 1.25, windows pods would be exempted from this check using pod.spec.os field when set to windows.
+				// 从 1.25 起，pod.spec.os 为 windows 的 Pod 通过 Windows 分支豁免此项检查。
 				// 版本化而非直接改旧实现，保证 1.8 策略的历史判定不被改写。
 				MinimumVersion: api.MajorMinorVersion(1, 25),
 				CheckPod:       allowPrivilegeEscalation_1_25,
@@ -88,9 +87,7 @@ func allowPrivilegeEscalation_1_8(podMetadata *metav1.ObjectMeta, podSpec *corev
 }
 
 func allowPrivilegeEscalation_1_25(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	// Pod API validation would have failed if podOS == Windows and if privilegeEscalation has been set.
-	// We can admit the Windows pod even if privilegeEscalation has not been set.
-	// Windows 上该字段语义不同，API 校验已挡住显式开启的情况，这里无需重复判定。
+	// Windows 上该字段语义不同；若已设置，Pod API 校验会先行拒绝，这里仅需放行未设置的 Pod。
 	if podSpec.OS != nil && podSpec.OS.Name == corev1.Windows {
 		return CheckResult{Allowed: true}
 	}

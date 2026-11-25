@@ -23,7 +23,7 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // 指令 +k8s:deepcopy-gen:interfaces 让生成器为它实现 runtime.Object 接口，便于放进 scheme 中解码。
 
-// PodSecurityConfiguration 是配置文件的内部表示，各外部版本先转换成它再供准入控制器使用。
+// PodSecurityConfiguration 是配置文件的内部表示；各外部版本先转换成它，再供准入控制器使用。
 type PodSecurityConfiguration struct {
 	metav1.TypeMeta
 	Defaults   PodSecurityDefaults
@@ -31,7 +31,7 @@ type PodSecurityConfiguration struct {
 }
 
 // PodSecurityDefaults 保存三个动作各自的默认级别与版本。
-// enforce 真正拒绝 Pod，warn/audit 只记录，互不共用取值以免互相影响。
+// enforce 拒绝 Pod，warn 与 audit 只记录；各动作独立配置，避免互相影响。
 type PodSecurityDefaults struct {
 	Enforce        string
 	EnforceVersion string

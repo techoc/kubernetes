@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// 1.25 起 Windows Pod 直接放行；这里的用例专门防止 Windows 分支被后续改动破坏。
+// 1.25 起 Windows Pod 直接放行；用例锁定该豁免边界，防止后续改动误拒 Windows 工作负载。
 func TestCapabilitiesRestricted_1_25(t *testing.T) {
 	tests := []struct {
 		name         string

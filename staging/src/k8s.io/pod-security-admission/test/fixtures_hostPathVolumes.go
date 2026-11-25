@@ -22,25 +22,22 @@ import (
 )
 
 /*
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 */
 
-// 本文件为已弃用的 hostPathVolumes 基线检查保留夹具。
-// 最小合法 Pod 不含任何 hostPath，因此通过夹具无需额外构造；
-// 失败夹具同时覆盖混合卷与纯 hostPath 两种写法，防止只在单一形态下命中规则。
+// 本文件为 hostPathVolumes 基线检查注册夹具。
+// 最小合法 Pod 不含 hostPath，无需额外构造通过夹具；混合卷与纯 hostPath 卷覆盖两种拒绝路径。
 func init() {
 
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "hostPath",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
-			// minimal valid pod already captures all valid combinations
-			// 最小合法 Pod 本身无卷，已覆盖“不使用 hostPath”这一唯一合法形态，
-			// 无需再生成重复夹具。
+			// 最小合法 Pod 无卷，已覆盖唯一合法形态。
 			return nil
 		},
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			return []*corev1.Pod{
-				// mix of hostPath and non-hostPath volumes
+				// hostPath 与普通卷混合。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Volumes = []corev1.Volume{
 						{
@@ -59,7 +56,7 @@ func init() {
 						},
 					}
 				}),
-				// just hostPath volumes
+				// 仅包含 hostPath 卷。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Volumes = []corev1.Volume{
 						{

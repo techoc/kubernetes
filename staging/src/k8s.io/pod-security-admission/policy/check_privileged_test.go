@@ -23,7 +23,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// nil、false、true 三种取值都放进同一个 Pod：检查必须只报出两个 true 的容器，
+// 同一 Pod 混放 nil、false、true，检查只能列出两个 true 容器，锁定默认值与显式值边界，
 // 既不把未设置当违规，也不把 false 误判成提权。
 func TestPrivileged(t *testing.T) {
 	tests := []struct {

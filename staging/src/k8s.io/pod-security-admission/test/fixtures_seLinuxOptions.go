@@ -22,8 +22,8 @@ import (
 )
 
 /*
-字段路径清单暂留在注释里：反射式测试还没接上，先把要覆盖的字段记下来，避免实现时遗漏 type/user/role 中的任一处。
-TODO: include field paths in reflect-based unit test
+字段路径清单暂留在注释里：反射式测试还没接上，先记下 type/user/role 的覆盖范围，避免实现时遗漏。
+TODO: 将字段路径纳入反射式单元测试。
 
 podFields: []string{
 	`spec.securityContext.seLinuxOptions.type`,
@@ -44,21 +44,21 @@ func init() {
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			p = ensureSELinuxOptions(p)
 			return []*corev1.Pod{
-				// security context with no seLinuxOptions
+				// 安全上下文未设置 SELinux 选项。
 				tweak(p, func(p *corev1.Pod) {
-					// no pod-level
+					// Pod 级未设置。
 					p.Spec.SecurityContext.SELinuxOptions = nil
-					// no container-level
+					// 容器级未设置。
 					p.Spec.Containers[0].SecurityContext.SELinuxOptions = nil
-					// empty container-level
+					// init 容器保留空选项对象。
 					p.Spec.InitContainers[0].SecurityContext.SELinuxOptions = &corev1.SELinuxOptions{}
 				}),
 				tweak(p, func(p *corev1.Pod) {
-					// seLinuxOptions with all valid types
+					// 三个允许的 type 分别放在不同层级。
 					p.Spec.SecurityContext.SELinuxOptions.Type = "container_t"
 					p.Spec.Containers[0].SecurityContext.SELinuxOptions.Type = "container_init_t"
 					p.Spec.InitContainers[0].SecurityContext.SELinuxOptions.Type = "container_kvm_t"
-					// with empty level and arbitrary level
+					// Level 可为空或任意值，不受该检查限制。
 					p.Spec.SecurityContext.SELinuxOptions.Level = ""
 					p.Spec.Containers[0].SecurityContext.SELinuxOptions.Level = "somevalue"
 				}),
@@ -67,16 +67,15 @@ func init() {
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			p = ensureSELinuxOptions(p)
 			return []*corev1.Pod{
-				// seLinuxOptions with out of bounds type
-				// pod-level
+				// Pod 级 type 不在允许集合内。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.SELinuxOptions.Type = "somevalue" }),
-				// container
+				// 普通容器 type 不在允许集合内。
 				tweak(p, func(p *corev1.Pod) { p.Spec.Containers[0].SecurityContext.SELinuxOptions.Type = "somevalue" }),
-				// initContainer
+				// init 容器 type 不在允许集合内。
 				tweak(p, func(p *corev1.Pod) { p.Spec.InitContainers[0].SecurityContext.SELinuxOptions.Type = "somevalue" }),
-				// seLinuxOptions with out of bounds user
+				// Pod 级 user 不在允许集合内。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.SELinuxOptions.User = "somevalue" }),
-				// seLinuxOptions with out of bounds role
+				// Pod 级 role 不在允许集合内。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.SELinuxOptions.Role = "somevalue" }),
 			}
 		},

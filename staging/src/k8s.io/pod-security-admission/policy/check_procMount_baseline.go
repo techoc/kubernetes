@@ -27,24 +27,22 @@ import (
 
 /*
 
-The default /proc masks are set up to reduce attack surface, and should be required
-by the baseline policy unless the pod is in a user namespace ("hostUsers: false").
+默认的 /proc 掩码用于缩小攻击面，基线策略必须保留；
+但用户命名空间（"hostUsers: false"）已隔离宿主，因此不再强制要求。
 
-**Restricted Fields:**
+**受限字段：**
 spec.containers[*].securityContext.procMount
 spec.initContainers[*].securityContext.procMount
 
-**Allowed Values:** undefined/null, "Default" (or any value if "hostUsers" is false)
+**允许值：** 未定义/null、"Default" (or "hostUsers" 为 false 时允许任意值)
 */
 
 func init() {
 	addCheck(CheckProcMountBaseline)
 }
 
-// CheckProcMount returns a baseline level check that restricts
-// setting the value of securityContext.procMount to DefaultProcMount
-// in 1.0+.
-// Starting in 1.35+, any value is allowed if the pod is in a user namespace ("hostUsers: false").
+// CheckProcMountBaseline 返回基线级检查，从 1.0 起要求 securityContext.procMount 使用 DefaultProcMount。
+// 从 1.35 起，用户命名空间 Pod（"hostUsers: false"）允许任意取值。
 // 限制 procMount 可收窄 /proc 的攻击面；用户命名空间隔离了宿主，故 1.35 起对其放行。
 func CheckProcMountBaseline() Check {
 	return Check{
@@ -63,21 +61,21 @@ func CheckProcMountBaseline() Check {
 	}
 }
 
-// procMount_1_0 blocks unmasked procMount unconditionally
+// procMount_1_0 无条件阻止未掩码的 procMount，保持旧版本行为。
 // 此处不区分命名空间，因为旧版本检查必须与历史行为保持一致。
 func procMount_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	var badContainers []string
 	forbiddenProcMountTypes := sets.NewString()
 	visitContainers(podSpec, func(container *corev1.Container) {
-		// allow if the security context is nil.
+		// securityContext 为空时继承运行时默认设置，予以放行。
 		if container.SecurityContext == nil {
 			return
 		}
-		// allow if proc mount is not set.
+		// 未设置 procMount 时沿用默认掩码，予以放行。
 		if container.SecurityContext.ProcMount == nil {
 			return
 		}
-		// check if the value of the proc mount type is valid.
+		// 已设置时只接受 Default，其余值可能暴露未掩码的 /proc。
 		if *container.SecurityContext.ProcMount != corev1.DefaultProcMount {
 			badContainers = append(badContainers, container.Name)
 			forbiddenProcMountTypes.Insert(string(*container.SecurityContext.ProcMount))
@@ -98,12 +96,12 @@ func procMount_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Chec
 	return CheckResult{Allowed: true}
 }
 
-// procMount1_35baseline blocks unmasked procMount for pods that are not in a user namespace
+// procMount1_35baseline 仅对未使用用户命名空间的 Pod 阻止未掩码 procMount。
 // 作为新版本检查，先识别用户命名空间再复用旧逻辑，避免维护两份相同的容器遍历代码。
 func procMount1_35baseline(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	if relaxPolicyForUserNamespacePod(podSpec) {
 		return CheckResult{Allowed: true}
 	}
-	// If the pod is not in a user namespace, treat it as restricted.
+	// 未使用用户命名空间时沿用受限口径，避免误放行。
 	return procMount_1_0(podMetadata, podSpec)
 }

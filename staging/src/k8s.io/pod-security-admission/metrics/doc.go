@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package metrics contains metrics interfaces and implementations for PodSecurity admission
+// Package metrics 提供 PodSecurity 准入指标的接口与实现。
 //
 // 本包把策略评估结果转成可观测指标。接口与实现分离是为了让准入链只依赖抽象，
 // 测试时可替换为桩实现，无需真的启动指标后端。

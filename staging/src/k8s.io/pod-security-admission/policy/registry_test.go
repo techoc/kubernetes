@@ -124,7 +124,7 @@ func TestCheckRegistry_NoRestricted(t *testing.T) {
 	}
 	for _, test := range levelCases {
 		test.Run(t, reg)
-		// Restricted results should be identical to baseline.
+		// restricted 的结果应与 baseline 完全一致。
 		restrictedTest := test
 		restrictedTest.level = api.LevelRestricted
 		restrictedTest.Run(t, reg)
@@ -144,7 +144,7 @@ func TestCheckRegistry_Empty(t *testing.T) {
 	}
 	for _, test := range levelCases {
 		test.Run(t, reg)
-		// Restricted results should be identical to baseline.
+		// restricted 的结果应与 baseline 完全一致。
 		restrictedTest := test
 		restrictedTest.level = api.LevelRestricted
 		restrictedTest.Run(t, reg)
@@ -164,7 +164,7 @@ func (tc *registryTestCase) Run(t *testing.T, registry Evaluator) {
 	t.Run(fmt.Sprintf("%s:%s", tc.level, tc.version), func(t *testing.T) {
 		results := registry.EvaluatePod(api.LevelVersion{Level: tc.level, Version: versionOrPanic(tc.version)}, nil, nil)
 
-		// Set extract the ForbiddenReasons from the results.
+		// set 从结果中提取 ForbiddenReasons，便于表格断言。
 		var actualReasons []string
 		for _, result := range results {
 			actualReasons = append(actualReasons, result.ForbiddenReason)
@@ -181,7 +181,7 @@ func generateCheck(id CheckID, level api.Level, versions []string) Check {
 		Level: level,
 	}
 	for _, ver := range versions {
-		v := versionOrPanic(ver) // Copy ver so it can be used in the CheckPod closure.
+		v := versionOrPanic(ver) // 复制版本值，避免闭包捕获循环变量。
 		c.Versions = append(c.Versions, VersionedCheck{
 			MinimumVersion: v,
 			CheckPod: func(_ *metav1.ObjectMeta, _ *corev1.PodSpec) CheckResult {

@@ -33,7 +33,7 @@ func TestRunAsUser(t *testing.T) {
 		expectReason  string
 		expectDetail  string
 	}{
-		// Pod 级设置为 root 时无需逐容器判断，直接拒绝整个 Pod。
+		// Pod 级已设为 root 时直接拒绝整个 Pod，容器级非零 UID 无法覆盖该违规。
 		{
 			name: "pod runAsUser=0",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{

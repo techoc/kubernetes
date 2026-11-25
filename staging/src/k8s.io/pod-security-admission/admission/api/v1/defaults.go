@@ -26,7 +26,8 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// 缺省全部落到 privileged/latest：最宽松的起点让未配置的 namespace 保持原有准入行为。
+// SetDefaults_PodSecurityDefaults 将空字段补齐为 privileged/latest，
+// 让未显式配置策略的命名空间保持最宽松的准入行为。
 func SetDefaults_PodSecurityDefaults(obj *PodSecurityDefaults) {
 	if len(obj.Enforce) == 0 {
 		obj.Enforce = string(api.LevelPrivileged)

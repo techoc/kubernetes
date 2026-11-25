@@ -16,4 +16,4 @@ limitations under the License.
 
 package v1beta1
 
-// 本文件验证 v1beta1 的默认值行为：缺省配置必须保持最宽松的 privileged/latest。
+// 本文件当前仅占位，便于后续补充 v1beta1 默认值函数的直接单元测试。

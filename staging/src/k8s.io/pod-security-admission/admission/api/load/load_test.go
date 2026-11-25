@@ -56,10 +56,9 @@ func writeTempFile(t *testing.T, content string) string {
 	return file.Name()
 }
 
-// TestLoadFromFile 覆盖文件路径的几种输入：空路径、空文件、各版本合法配置、缺失文件与未知版本。
-// 空路径和空文件都必须回落到缺省配置，保证 unicorn 未显式配置时也能安全启动。
+// TestLoadFromFile 覆盖空路径、空文件、各版本配置、缺失文件与未知版本。
+// 空路径和空文件都返回缺省配置，避免未显式配置时启动失败。
 func TestLoadFromFile(t *testing.T) {
-	// no file
 	// 空路径表示不启用配置文件，不能当作读取失败。
 	{
 		config, err := LoadFromFile("")
@@ -71,8 +70,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// empty file
-	// 空文件与空路径等价：用户可能预置了空文件，不应因此失败。
+	// 空文件与空路径等价：用户可能预置空文件，不应因此启动失败。
 	{
 		config, err := LoadFromFile(writeTempFile(t, ``))
 		if err != nil {
@@ -83,8 +81,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// valid file
-	// v1alpha1 仍是兼容格式，加载器必须继续认得它，升级用户才不会被强制改配置。
+	// v1alpha1 仍是兼容格式，加载器必须继续支持，避免升级时强制改写配置。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v1alpha1",
@@ -107,8 +104,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// valid v1beta1 file
-	// 逐个版本都跑同一套解析，防止新增版本时悄悄丢掉旧格式的兼容路径。
+	// 逐个版本运行同一套断言，防止回归时丢掉旧格式兼容路径。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v1beta1",
@@ -131,8 +127,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// valid v1 file
-	// v1 是稳定版本，解析后应与其他版本得到同样的内部配置。
+	// v1 是稳定版本，解析结果应与其他版本一致。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v1",
@@ -155,8 +150,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// missing file
-	// 错误信息里必须带文件名，运维才能从日志直接定位哪个路径写错了。
+	// 文件缺失时错误必须带文件名，便于定位错误路径。
 	{
 		_, err := LoadFromFile(`bogus-missing-pod-security-policy-config-file`)
 		if err == nil {
@@ -167,8 +161,7 @@ func TestLoadFromFile(t *testing.T) {
 		}
 	}
 
-	// invalid content file
-	// 未知 apiVersion 必须报错而不是静默套用缺省，否则拼错版本会悄悄改变准入行为。
+	// 未知 apiVersion 必须报错，不能静默套用缺省配置。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v99",
@@ -188,7 +181,7 @@ func TestLoadFromFile(t *testing.T) {
 // TestLoadFromReader 验证从流读取的语义与从文件读取一致。
 // nil reader 代表没有配置源，必须回落到缺省配置而不是 panic。
 func TestLoadFromReader(t *testing.T) {
-	// no reader
+	// nil reader 表示未指定配置源。
 	{
 		config, err := LoadFromReader(nil)
 		if err != nil {
@@ -199,8 +192,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// empty reader
-	// 空流与空文件等价，避免加载器对数据源类型产生行为差异。
+	// 空流与空文件等价，避免数据源类型导致行为差异。
 	{
 		config, err := LoadFromReader(&bytes.Buffer{})
 		if err != nil {
@@ -211,8 +203,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// valid reader
-	// v1alpha1 从流读取时也要能把缺省字段补齐，不能只依赖文件路径分支的默认值。
+	// v1alpha1 从流读取时同样需要补齐缺省字段。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v1alpha1",
@@ -235,8 +226,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// valid reader
-	// v1beta1 作为过渡版本，解析结果必须和其他版本一致，升级才不会出现行为断层。
+	// v1beta1 的解析结果必须与其他版本一致。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v1beta1",
@@ -259,8 +249,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// valid reader
-	// v1 是稳定版本，从流读取同样应得到规范化的内部配置。
+	// v1 从流读取后应得到规范化的内部配置。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v1",
@@ -283,8 +272,7 @@ func TestLoadFromReader(t *testing.T) {
 		}
 	}
 
-	// invalid reader
-	// 与文件分支保持同样严格的版本校验，避免从不同来源加载时行为分叉。
+	// 流读取与文件读取采用相同的严格版本校验。
 	{
 		input := `{
 			"apiVersion":"pod-security.admission.config.k8s.io/v99",

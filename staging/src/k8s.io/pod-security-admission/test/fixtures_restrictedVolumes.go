@@ -28,12 +28,11 @@ func init() {
 		expectErrorSubstring: "restricted volume types",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			return []*corev1.Pod{
-				// pod that has all allowed volume types
-				// 把允许类型集中到一个 Pod，一次断言即可覆盖整张白名单。
+				// 允许类型集中在一个 Pod 中，一次断言覆盖整张白名单。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Volumes = []corev1.Volume{
-						{Name: "volume0", VolumeSource: corev1.VolumeSource{}}, // implicit empty dir
-						// 空 VolumeSource 表示隐式 emptyDir，也要被识别为允许类型。
+						{Name: "volume0", VolumeSource: corev1.VolumeSource{}}, // 隐式 emptyDir
+						// 空 VolumeSource 也是允许的隐式 emptyDir 形态。
 						{Name: "volume1", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 						{Name: "volume2", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "test"}}},
 						{Name: "volume3", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "test"}}},
@@ -41,10 +40,10 @@ func init() {
 						{Name: "volume5", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "test"}}}},
 						{Name: "volume6", VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{}}}},
 
-						// TODO: Uncomment this volume when CSIInlineVolume hits GA.
+						// TODO: CSIInlineVolume 达到 GA 后启用该卷。
 						// {Name: "volume7", VolumeSource: corev1.VolumeSource{CSI: &corev1.CSIVolumeSource{Driver: "inline.storage.kubernetes.io",VolumeAttributes: map[string]string{"foo": "bar"}}}},
 
-						// TODO: Uncomment this volume when Ephemeral hits GA.
+						// TODO: Ephemeral 达到 GA 后启用该卷。
 						// {Name: "volume8", VolumeSource: corev1.VolumeSource{Ephemeral: &corev1.EphemeralVolumeSource{VolumeClaimTemplate: nil}}},
 					}
 				}),

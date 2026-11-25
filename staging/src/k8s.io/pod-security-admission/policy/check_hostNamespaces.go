@@ -25,15 +25,15 @@ import (
 )
 
 /*
-Sharing the host network, PID, and IPC namespaces must be disallowed.
+禁止共享宿主机 network、PID 和 IPC 命名空间，以维持容器与节点的隔离。
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.hostNetwork
 spec.hostPID
 spec.hostIPC
 
-**Allowed Values:** undefined, false
+**允许值：** 未定义、false
 */
 // 本文件检查共享宿主机命名空间；三项独立判定，全部汇总到同一条原因中。
 
@@ -41,8 +41,7 @@ func init() {
 	addCheck(CheckHostNamespaces)
 }
 
-// CheckHostNamespaces returns a baseline level check
-// that prohibits host namespaces in 1.0+
+// CheckHostNamespaces 返回基线级检查，从 1.0 起禁止共享宿主机命名空间。
 // 策略自 1.0 起稳定，暂无按版本分支的必要。
 func CheckHostNamespaces() Check {
 	return Check{

@@ -26,20 +26,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// minimalValidPods holds minimal valid OS neutral pods per-level per-version.
-// To get a valid pod for a particular level/version, use getMinimalValidPod().
-// 各版本只保存“刚好达标”的最小 Pod；生成器在此基础上叠加变体，
-// 避免每个检查各自维护一份完整 Pod 导致夹具之间悄悄漂移。
+// minimalValidPods 按级别和版本保存 OS 中立的最小合法 Pod，访问时使用 GetMinimalValidPod。
+// 各检查在同一基线上叠加变体，避免分别维护完整 Pod 导致夹具漂移。
 var minimalValidPods = map[api.Level]map[api.Version]*corev1.Pod{}
 
-// minimalValidLinuxPods holds minimal valid linux pods per-level per-version.
-// To get a valid pod for a particular level/version, use getMinimalValidPod().
-// 按操作系统拆分是为了让 Linux 专属要求（如 seccomp）不误伤 Windows 夹具。
+// minimalValidLinuxPods 按级别和版本保存 Linux 专属的最小合法 Pod，访问时使用 GetMinimalValidLinuxPod。
+// 单独保存可避免 seccomp 等 Linux 要求误伤 Windows 夹具。
 var minimalValidLinuxPods = map[api.Level]map[api.Version]*corev1.Pod{}
 
-// minimalValidWindowsPods holds minimal valid Windows pods per-level per-version.
-// To get a valid pod for a particular level/version, use getMinimalValidPod().
-// 1.25 起受限策略按 OS 分化，许多字段只对 Linux 有意义，Windows 夹具需单独基线。
+// minimalValidWindowsPods 按级别和版本保存 Windows 专属的最小合法 Pod，访问时使用 GetMinimalValidWindowsPod。
+// 1.25 起受限策略按 OS 分化，Windows 需要独立基线。
 var minimalValidWindowsPods = map[api.Level]map[api.Version]*corev1.Pod{}
 
 // addLinux 返回显式声明 OS 为 Linux 的副本，不修改入参。
@@ -58,25 +54,21 @@ func addWindows(pod *corev1.Pod) *corev1.Pod {
 }
 
 func init() {
-	// These are the OS neutral pods
+	// 以下为 OS 中立的最小合法 Pod。
 	minimalValidPods[api.LevelBaseline] = map[api.Version]*corev1.Pod{}
 	minimalValidPods[api.LevelRestricted] = map[api.Version]*corev1.Pod{}
 
 	minimalValidLinuxPods[api.LevelRestricted] = map[api.Version]*corev1.Pod{}
 	minimalValidWindowsPods[api.LevelRestricted] = map[api.Version]*corev1.Pod{}
-	// Define minimal valid baseline pod.
-	// This must remain valid for all versions.
-	// 只放最低限度的 initContainer/container；任何更严格的新要求都由各版本受限夹具增量添加。
+	// 基线只需最低限度的 init 容器和普通容器；后续收紧要求由受限夹具增量添加。
 	baseline_1_0 := &corev1.Pod{Spec: corev1.PodSpec{
 		InitContainers: []corev1.Container{{Name: "initcontainer1", Image: "registry.k8s.io/pause"}},
 		Containers:     []corev1.Container{{Name: "container1", Image: "registry.k8s.io/pause"}}}}
 	minimalValidPods[api.LevelBaseline][api.MajorMinorVersion(1, 0)] = baseline_1_0
 
-	//
-	// Define minimal valid restricted pods.
-	//
+	// 定义各版本的最小合法受限 Pod。
 
-	// 1.0+: baseline + runAsNonRoot=true
+	// 1.0 起：基线 + runAsNonRoot=true
 	restricted_1_0 := tweak(baseline_1_0, func(p *corev1.Pod) {
 		p.Spec.SecurityContext = &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true)}
 	})
@@ -84,7 +76,7 @@ func init() {
 	minimalValidLinuxPods[api.LevelRestricted][api.MajorMinorVersion(1, 0)] = addLinux(restricted_1_0)
 	minimalValidWindowsPods[api.LevelRestricted][api.MajorMinorVersion(1, 0)] = addWindows(restricted_1_0)
 
-	// 1.8+: allowPrivilegeEscalation=false
+	// 1.8 起：allowPrivilegeEscalation=false
 	restricted_1_8 := tweak(restricted_1_0, func(p *corev1.Pod) {
 		p.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false)}
 		p.Spec.InitContainers[0].SecurityContext = &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false)}
@@ -93,7 +85,7 @@ func init() {
 	minimalValidLinuxPods[api.LevelRestricted][api.MajorMinorVersion(1, 8)] = addLinux(restricted_1_8)
 	minimalValidWindowsPods[api.LevelRestricted][api.MajorMinorVersion(1, 8)] = addWindows(restricted_1_8)
 
-	// 1.19+: seccompProfile.type=RuntimeDefault
+	// 1.19 起：seccompProfile.type=RuntimeDefault
 	restricted_1_19 := tweak(restricted_1_8, func(p *corev1.Pod) {
 		p.Annotations = nil
 		p.Spec.SecurityContext.SeccompProfile = &corev1.SeccompProfile{
@@ -104,7 +96,7 @@ func init() {
 	minimalValidLinuxPods[api.LevelRestricted][api.MajorMinorVersion(1, 19)] = addLinux(restricted_1_19)
 	minimalValidWindowsPods[api.LevelRestricted][api.MajorMinorVersion(1, 19)] = addWindows(restricted_1_19)
 
-	// 1.22+: capabilities.drop=["ALL"]
+	// 1.22 起：capabilities.drop=["ALL"]
 	restricted_1_22 := tweak(restricted_1_19, func(p *corev1.Pod) {
 		p.Spec.Containers[0].SecurityContext.Capabilities = &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
 		p.Spec.InitContainers[0].SecurityContext.Capabilities = &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
@@ -113,20 +105,18 @@ func init() {
 	minimalValidLinuxPods[api.LevelRestricted][api.MajorMinorVersion(1, 22)] = addLinux(restricted_1_22)
 	minimalValidWindowsPods[api.LevelRestricted][api.MajorMinorVersion(1, 22)] = addWindows(restricted_1_22)
 
-	// 1.25+: OS specific changes
-	// 从此版本起按 OS 分化：OS 中立夹具停留在 1.22 不变，Linux/Windows 各自走专属夹具，
-	// 这样新增的 OS 专属限制不会让另一平台的测试无谓失败。
+	// 1.25 起按 OS 分化：OS 中立夹具沿用 1.22，Linux/Windows 使用各自基线，
+	// 避免新增的 OS 专属限制让另一平台无谓失败。
 	minimalValidPods[api.LevelRestricted][api.MajorMinorVersion(1, 25)] = restricted_1_22
 	minimalValidLinuxPods[api.LevelRestricted][api.MajorMinorVersion(1, 25)] = addLinux(restricted_1_22)
-	// none of the restricted requirements added between 1.0 and 1.25 apply to the pods that are explicitly Windows
+	// 1.0 之后、1.25 之前新增的受限要求均不适用于显式声明为 Windows 的 Pod。
 	restricted_1_25_windows := addWindows(restricted_1_0)
 	minimalValidWindowsPods[api.LevelRestricted][api.MajorMinorVersion(1, 25)] = restricted_1_25_windows
 
 }
 
-// GetMinimalValidPod returns a minimal valid OS neutral pod for the specified level and version.
-// 指定版本没有夹具时向更低版本回退：策略是累加的，旧版本的最小合法 Pod 对新版本未必合法，
-// 但新版本夹具缺失时回退能避免测试因版本矩阵扩容而集体失效。
+// GetMinimalValidPod 返回指定级别和版本的 OS 中立最小合法 Pod 深拷贝。
+// 缺少夹具时逐版本回退；规则或基线变化后必须注册新版本，回退不能替代新版本夹具。
 func GetMinimalValidPod(level api.Level, version api.Version) (*corev1.Pod, error) {
 	originalVersion := version
 	for {
@@ -141,8 +131,8 @@ func GetMinimalValidPod(level api.Level, version api.Version) (*corev1.Pod, erro
 	}
 }
 
-// GetMinimalValidLinuxPod returns a minimal valid linux pod for the specified level and version.
-// 与 OS 中立版本一样按版本回退，差别仅在于查询的是 Linux 专属夹具表。
+// GetMinimalValidLinuxPod 返回指定级别和版本的 Linux 最小合法 Pod 深拷贝，并按版本回退查找。
+// 规则变化后需注册新版本，不能依赖回退沿用旧基线。
 func GetMinimalValidLinuxPod(level api.Level, version api.Version) (*corev1.Pod, error) {
 	originalVersion := version
 	for {
@@ -157,8 +147,8 @@ func GetMinimalValidLinuxPod(level api.Level, version api.Version) (*corev1.Pod,
 	}
 }
 
-// GetMinimalValidWindowsPod returns a minimal valid windows pod for the specified level and version.
-// Windows 的受限基线在 1.25 之前与 Linux 同源，回退时需命中对应的 Windows 副本而非 OS 中立夹具。
+// GetMinimalValidWindowsPod 返回指定级别和版本的 Windows 最小合法 Pod 深拷贝，并按版本回退查找。
+// 规则变化后需注册新版本，不能依赖回退沿用旧基线。
 func GetMinimalValidWindowsPod(level api.Level, version api.Version) (*corev1.Pod, error) {
 	originalVersion := version
 	for {
@@ -173,74 +163,60 @@ func GetMinimalValidWindowsPod(level api.Level, version api.Version) (*corev1.Po
 	}
 }
 
-// fixtureGenerators holds fixture generators per-level per-version.
-// To add generators, use registerFixtureGenerator().
-// To get fixtures for a particular level/version, use getFixtures().
-// 集中注册让每个检查的通过与失败样例共用同一份最小合法 Pod，改动一次即可覆盖所有版本矩阵。
+// fixtureGenerators 按级别、版本和检查保存生成器，分别使用 registerFixtureGenerator 注册、getFixtures 获取。
+// 集中注册可让同一检查的通过和失败夹具共用最小合法 Pod，并覆盖整个版本矩阵。
 var fixtureGenerators = map[fixtureKey]fixtureGenerator{}
 
-// fixtureKey is a tuple of version/level/check name
-// 三元组定位唯一一个检查在某个版本/级别下的夹具，缺一不可；
-// 同名检查在不同版本可有不同规则，因此版本必须参与键。
+// fixtureKey 由版本、级别和检查名组成，唯一标识一组夹具。
+// 同一检查在不同版本可有不同规则，版本必须参与键。
 type fixtureKey struct {
 	version api.Version
 	level   api.Level
 	check   policy.CheckID
 }
 
-// fixtureGenerator holds generators for valid and invalid fixtures.
-// 生成器按版本注册一次即可向后沿用，避免每个版本重复定义相同的通过/失败变体。
+// fixtureGenerator 保存通过和失败夹具的生成函数及失败断言约束。
+// 生成器按版本注册，未单独注册更高版本时可继续沿用。
 type fixtureGenerator struct {
-	// expectErrorSubstring is a substring to expect in the error message for failed pods.
-	// if empty, the check ID is used.
+	// expectErrorSubstring 是失败 Pod 错误信息中预期的子串；为空时使用检查 ID。
 	expectErrorSubstring string
 
-	// failRequiresFeatures lists feature gates that must all be enabled for failure cases to fail properly.
-	// This allows failure cases depending on rejecting data populated in alpha or beta fields to be skipped when those features are not enabled.
-	// If empty, failure test cases are always run.
-	// Pass cases are not allowed to be feature-gated (pass cases must only depend on data existing in GA fields).
+	// failRequiresFeatures 列出失败夹具正常触发拒绝所需的全部 feature gate。
+	// 依赖 alpha/beta 字段的失败样例在门控未启用时跳过；为空则始终运行。
+	// 通过夹具不得依赖门控，只能使用已 GA 的字段。
 	failRequiresFeatures []featuregate.Feature
 
-	// failRequiresError indicates the fixtures in the failure cases cannot be created with warnings, but result in API errors.
-	// This happens when the combination of fields required to fail the PSA check also fails validation.
-	// When failRequiresError=true, the controller test scenarios expect failure cases to be rejected rather than accepted with warnings.
+	// failRequiresError 表示失败夹具会触发 API 错误，而不是带警告被接纳。
+	// 这通常是因为触发 PodSecurity 拒绝的字段组合同时违反 API 校验；
+	// 控制器测试据此预期硬拒绝。
 	failRequiresError bool
 
-	// generatePass transforms a minimum valid pod into one or more valid pods that pass the given policy level.
-	// pods do not need to populate metadata.name.
-	// 接收 level 是为了让同一个生成器在 baseline 与 restricted 下产出不同夹具
-	// （例如某些字段只在更严格级别下才算违规）。
+	// generatePass 将最小合法 Pod 变换为一个或多个通过指定级别的 Pod，无需设置 metadata.name。
+	// 接收 level 是为了让同一生成器在不同级别产出不同夹具。
 	generatePass func(*corev1.Pod, api.Level) []*corev1.Pod
-	// generateFail transforms a minimum valid pod into one or more invalid pods.
-	// pods do not need to populate metadata.name.
-	// 失败夹具必须至少返回一个，否则 getFixtures 无法验证该检查确实会拒绝违规 Pod。
+	// generateFail 将最小合法 Pod 变换为一个或多个失败 Pod，无需设置 metadata.name。
+	// 必须至少返回一个 Pod，getFixtures 会校验失败夹具非空。
 	generateFail func(*corev1.Pod) []*corev1.Pod
 }
 
-// fixtureData holds valid and invalid pod fixtures.
-// 由生成器即时物化，调用方拿到的是独立副本，可随意修改而不污染注册表。
+// fixtureData 保存物化后的通过和失败 Pod，以及对应的失败断言约束。
+// 每次获取都会重新生成并深拷贝，调用方修改不会污染注册表。
 type fixtureData struct {
 	expectErrorSubstring string
 
-	// failRequiresFeatures lists feature gates that must all be enabled for failure cases to fail properly.
-	// This allows failure cases depending on rejecting data populated in alpha or beta fields to be skipped when those features are not enabled.
-	// If empty, failure test cases are always run.
-	// Pass cases are not allowed to be feature-gated (pass cases must only depend on data existing in GA fields).
+	// failRequiresFeatures 列出运行失败夹具所需的全部 feature gate；为空表示始终运行。
+	// 通过夹具不得依赖门控，只能使用已 GA 的字段。
 	failRequiresFeatures []featuregate.Feature
 
-	// failRequiresError indicates the fixtures in the failure cases cannot be created with warnings, but result in API errors.
-	// This happens when the combination of fields required to fail the PSA check also fails validation.
-	// When failRequiresError=true, the controller test scenarios expect failure cases to be rejected rather than accepted with warnings.
+	// failRequiresError 表示失败夹具会触发 API 硬错误，控制器测试应预期拒绝而非警告。
 	failRequiresError bool
 
-	pass []*corev1.Pod
-	fail []*corev1.Pod
+	pass []*corev1.Pod // 通过夹具。
+	fail []*corev1.Pod // 失败夹具。
 }
 
-// registerFixtureGenerator adds a generator for the given level/version/check.
-// A generator registered for v1.x is used for v1.x+ if no generator is registered for the higher version.
-// 注册时立即校验键与生成器完整性，把错误暴露在 init 阶段，避免测试运行时才出现空指针。
-// baseline 的生成器会同时挂到 restricted 上：同名的基线限制在两个级别都应生效。
+// registerFixtureGenerator 为指定级别、版本和检查注册生成器，并校验键与生成函数完整。
+// v1.x 的生成器会用于 v1.x+，直到注册更高版本；基线生成器同时注册到受限级别。
 func registerFixtureGenerator(key fixtureKey, generator fixtureGenerator) {
 	if err := checkKey(key); err != nil {
 		panic(err)
@@ -254,8 +230,7 @@ func registerFixtureGenerator(key fixtureKey, generator fixtureGenerator) {
 	fixtureGenerators[key] = generator
 
 	if key.level == api.LevelBaseline {
-		// also register to restricted
-		// 基线规则在受限级别同样禁止，共享同一生成器可避免两处夹具出现分歧。
+		// 基线规则在受限级别同样生效，复用生成器避免两处夹具分歧。
 		restrictedKey := key
 		restrictedKey.level = api.LevelRestricted
 		if _, exists := fixtureGenerators[restrictedKey]; exists {
@@ -265,11 +240,9 @@ func registerFixtureGenerator(key fixtureKey, generator fixtureGenerator) {
 	}
 }
 
-// getFixtures returns the fixture data for the specified level/version/check.
-// Fixtures are generated by applying the registered generator to the minimal valid pod for that level/version.
-// If no fixture generator exists for the given version, previous generators are checked back to 1.0.
-// 每次调用都重新生成，防止某个用例对 Pod 的修改泄漏到下一个用例。
-// 未注册 check ID 时回退到 check ID 本身作为错误子串，多数检查的拒绝原因恰好与 ID 同名。
+// getFixtures 返回指定级别、版本和检查的夹具数据。
+// 生成器作用于该级别/版本的最小合法 Pod；缺少当前版本生成器时回退查找至 1.0。
+// 每次调用都重新生成并深拷贝，防止用例修改泄漏到后续测试。
 func getFixtures(key fixtureKey) (fixtureData, error) {
 	if err := checkKey(key); err != nil {
 		return fixtureData{}, err
@@ -291,6 +264,7 @@ func getFixtures(key fixtureKey) (fixtureData, error) {
 				fail: generator.generateFail(validPodForLevel.DeepCopy()),
 			}
 			if len(data.expectErrorSubstring) == 0 {
+				// 未指定时以检查 ID 作为预期错误子串。
 				data.expectErrorSubstring = string(key.check)
 			}
 			if len(data.fail) == 0 {
@@ -301,13 +275,12 @@ func getFixtures(key fixtureKey) (fixtureData, error) {
 		if key.version.Minor() == 0 {
 			return fixtureData{}, fmt.Errorf("no fixture generator found in specified or older versions for %#v", key)
 		}
-		// check the next older version
+		// 继续查找下一个更低版本。
 		key.version = api.MajorMinorVersion(key.version.Major(), key.version.Minor()-1)
 	}
 }
 
-// checkKey ensures the fixture key has a valid level, version, and check.
-// 提前拦住拼错的 check ID 与越界版本，避免注册了永远不会被查找的夹具而测试静默漏跑。
+// checkKey 校验级别、版本和检查 ID，防止注册错误键后夹具永远不会被查找。
 func checkKey(key fixtureKey) error {
 	if key.level != api.LevelBaseline && key.level != api.LevelRestricted {
 		return fmt.Errorf("invalid key, level must be baseline or restricted: %#v", key)

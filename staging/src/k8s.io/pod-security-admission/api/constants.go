@@ -20,11 +20,13 @@ package api
 // 用字符串别名而非枚举常量，是为了直接对应命名空间标签上的取值，便于序列化与校验。
 type Level string
 
-// 三个级别按严格程度递增：privileged 不限制，baseline 阻挡已知提权路径，
-// restricted 进一步收紧到默认安全的容器配置。
+// 三个级别按严格程度递增。
 const (
+	// LevelPrivileged 不施加 Pod 安全限制。
 	LevelPrivileged Level = "privileged"
-	LevelBaseline   Level = "baseline"
+	// LevelBaseline 阻挡已知的提权路径。
+	LevelBaseline Level = "baseline"
+	// LevelRestricted 在 baseline 之上进一步收紧容器配置。
 	LevelRestricted Level = "restricted"
 )
 
@@ -49,16 +51,24 @@ const AuditAnnotationPrefix = labelPrefix
 const (
 	labelPrefix = "pod-security.kubernetes.io/"
 
-	EnforceLevelLabel   = labelPrefix + "enforce"
+	// EnforceLevelLabel 指定阻断准入时采用的 Pod 安全级别。
+	EnforceLevelLabel = labelPrefix + "enforce"
+	// EnforceVersionLabel 指定 enforce 模式使用的策略版本。
 	EnforceVersionLabel = labelPrefix + "enforce-version"
-	AuditLevelLabel     = labelPrefix + "audit"
-	AuditVersionLabel   = labelPrefix + "audit-version"
-	WarnLevelLabel      = labelPrefix + "warn"
-	WarnVersionLabel    = labelPrefix + "warn-version"
+	// AuditLevelLabel 指定只记录审计违规、不阻断准入的 Pod 安全级别。
+	AuditLevelLabel = labelPrefix + "audit"
+	// AuditVersionLabel 指定 audit 模式使用的策略版本。
+	AuditVersionLabel = labelPrefix + "audit-version"
+	// WarnLevelLabel 指定向请求方返回警告、不阻断准入的 Pod 安全级别。
+	WarnLevelLabel = labelPrefix + "warn"
+	// WarnVersionLabel 指定 warn 模式使用的策略版本。
+	WarnVersionLabel = labelPrefix + "warn-version"
 
-	// 审计注解键：记录豁免原因、被审计到的违规详情，以及实际生效的策略。
-	// 这些信息只写进审计注解而不回写到对象本身，避免改变 Pod/命名空间的配置语义。
+	// 审计注解只写进审计记录，不回写对象本身，避免改变 Pod 或命名空间的配置语义。
+	// ExemptionReasonAnnotationKey 记录请求获得豁免的原因。
 	ExemptionReasonAnnotationKey = "exempt"
+	// AuditViolationsAnnotationKey 记录审计模式发现的违规详情。
 	AuditViolationsAnnotationKey = "audit-violations"
-	EnforcedPolicyAnnotationKey  = "enforce-policy"
+	// EnforcedPolicyAnnotationKey 记录实际生效的 enforce 策略，便于审计追溯。
+	EnforcedPolicyAnnotationKey = "enforce-policy"
 )

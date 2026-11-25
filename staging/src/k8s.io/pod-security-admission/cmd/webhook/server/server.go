@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package server implements a Server object for running the admission controller as a webhook server.
+// Package server 把 PodSecurity 准入控制器包装为 webhook 服务。
 //
 // 本包只负责把 admission 逻辑挂到 HTTP 上，策略判断本身由 admission 包完成。
 package server
@@ -57,7 +57,7 @@ import (
 // AdmissionReview 请求体通常远小于此值，限制上限主要是防止恶意大包把 webhook 内存打满。
 const maxRequestSize = int64(3 * 1024 * 1024)
 
-// NewSchedulerCommand creates a *cobra.Command object with default parameters and registryOptions
+// NewServerCommand 创建带默认参数的 PodSecurity webhook 命令，并注册配置与版本标志。
 func NewServerCommand() *cobra.Command {
 	opts := options.NewOptions()
 
@@ -115,7 +115,7 @@ type Server struct {
 	metricsRegistry compbasemetrics.KubeRegistry
 }
 
-// 先等监听器退出再等已有连接处理完，避免日志里出现“还在收请求但已宣布退出”的假象。
+// Start 启动 informer 和 HTTP 服务，待监听停止后等待优雅关闭完成。
 func (s *Server) Start(ctx context.Context) error {
 	s.informerFactory.Start(ctx.Done())
 	logger := klog.FromContext(ctx)
@@ -123,11 +123,10 @@ func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	healthz.InstallHandler(mux, healthz.PingHealthz)
 	healthz.InstallReadyzHandler(mux, healthz.NewInformerSyncHealthz(s.informerFactory))
-	// The webhook is stateless, so it's safe to expose everything on the insecure port for
-	// debugging or proxy purposes. The API server will not connect to an http webhook.
+	// webhook 本身无状态，可在非安全端口暴露同一组处理器供调试或代理；API server 不会连接 HTTP webhook。
 	mux.HandleFunc("/", s.HandleValidate)
 
-	// Serve the metrics.
+	// 暴露 Prometheus 指标。
 	mux.Handle("/metrics",
 		compbasemetrics.HandlerFor(s.metricsRegistry, compbasemetrics.HandlerOpts{ErrorHandling: compbasemetrics.ContinueOnError}))
 
@@ -150,7 +149,7 @@ func (s *Server) Start(ctx context.Context) error {
 	<-listenerStoppedCh
 	logger.V(1).Info("[graceful-termination] HTTP Server has stopped listening")
 
-	// Wait for graceful shutdown.
+	// 等待优雅关闭完成。
 	<-shutdownCh
 	logger.V(1).Info("[graceful-termination] HTTP Server is exiting")
 
@@ -160,7 +159,7 @@ func (s *Server) Start(ctx context.Context) error {
 // HandleValidate 严格只接受 v1 AdmissionReview：API server 期望相同 kind 的响应，Kind 不一致必须早退。
 func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 	defer utilruntime.HandleCrash(func(_ interface{}) {
-		// Assume the crash happened before the response was written.
+		// 崩溃可能发生在响应写入之前，此时用 HTTP 错误兜底。
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	})
 
@@ -172,7 +171,7 @@ func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if timeout, ok, err := parseTimeout(r); err != nil {
-		// Ignore an invalid timeout.
+		// 忽略非法 timeout，不让格式错误挡住正常的准入请求。
 		logger.V(2).Info("Invalid timeout", "error", err)
 	} else if ok {
 		var cancel context.CancelFunc
@@ -202,7 +201,7 @@ func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// verify the content type is accurate
+	// 只接受 JSON，避免用错误的解码方式处理请求体。
 	if contentType := r.Header.Get("Content-Type"); contentType != "application/json" {
 		err = fmt.Errorf("contentType=%s, expected application/json", contentType)
 		logger.Error(err, "unable to process a request with an unknown content type", "type", contentType)
@@ -231,22 +230,25 @@ func (s *Server) HandleValidate(w http.ResponseWriter, r *http.Request) {
 
 	attributes := api.RequestAttributes(review.Request, codecs.UniversalDeserializer())
 	response := s.delegate.Validate(ctx, attributes)
-	response.UID = review.Request.UID // Response UID must match request UID
+	response.UID = review.Request.UID // 响应 UID 必须与请求 UID 一致。
 	review.Response = response
 	writeResponse(w, review)
 }
 
-// Config holds the loaded options.Options used to set up the webhook server.
-//
+// Config 保存已加载并生效的 webhook 配置。
 // 内部 Config 与命令行 Options 分开：后者可以被校验和修改，前者只承载已生效的配置。
 type Config struct {
-	SecureServing     *apiserver.SecureServingInfo
-	InsecureServing   *apiserver.DeprecatedInsecureServingInfo
-	KubeConfig        *restclient.Config
+	// SecureServing 描述安全监听器及其 TLS 配置。
+	SecureServing *apiserver.SecureServingInfo
+	// InsecureServing 描述可选的非安全监听器。
+	InsecureServing *apiserver.DeprecatedInsecureServingInfo
+	// KubeConfig 是访问 API server 所用的客户端配置。
+	KubeConfig *restclient.Config
+	// PodSecurityConfig 是已从文件加载的准入配置。
 	PodSecurityConfig *admissionapi.PodSecurityConfiguration
 }
 
-// LoadConfig loads the Config from the Options.
+// LoadConfig 校验 Options 并加载客户端与 PodSecurity 配置。
 //
 // 客户端 QPS 和 Burst 单独设置，避免 webhook 在批量准入时被 client-go 默认限流拖慢。
 func LoadConfig(opts *options.Options) (*Config, error) {
@@ -257,7 +259,7 @@ func LoadConfig(opts *options.Options) (*Config, error) {
 	var c Config
 	opts.SecureServing.ApplyTo(&c.SecureServing)
 
-	// Load Kube Client
+	// 加载 Kubernetes 客户端配置。
 	kubeConfig, err := clientcmd.BuildConfigFromFlags("", opts.Kubeconfig)
 	if err != nil {
 		return nil, err
@@ -266,7 +268,7 @@ func LoadConfig(opts *options.Options) (*Config, error) {
 	kubeConfig.Burst = opts.ClientQPSBurst
 	c.KubeConfig = restclient.AddUserAgent(kubeConfig, "podsecurity-webhook")
 
-	// Load PodSecurity config
+	// 加载 PodSecurity 配置。
 	c.PodSecurityConfig, err = podsecurityconfigloader.LoadFromFile(opts.Config)
 	if err != nil {
 		return nil, err
@@ -275,7 +277,7 @@ func LoadConfig(opts *options.Options) (*Config, error) {
 	return &c, nil
 }
 
-// Setup creates an Admission object to handle the admission logic.
+// Setup 根据已加载配置创建准入控制器、informer 与指标注册表，并返回可启动的 Server。
 //
 // 这里只注册 namespace informer：Pod 安全配置按 namespace 匹配，其它 informer 用不上。
 func Setup(c *Config) (*Server, error) {
@@ -292,7 +294,7 @@ func Setup(c *Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.informerFactory = kubeinformers.NewSharedInformerFactory(client, 0 /* no resync */)
+	s.informerFactory = kubeinformers.NewSharedInformerFactory(client, 0 /* 不周期重同步 */)
 	namespaceInformer := s.informerFactory.Core().V1().Namespaces()
 	namespaceLister := namespaceInformer.Lister()
 
@@ -324,21 +326,18 @@ func Setup(c *Config) (*Server, error) {
 	return s, nil
 }
 
-// 响应码固定 200，真正的拒绝信息放在 AdmissionResponse 里；否则 API server 会当成 webhook 故障。
+// writeResponse 在能生成 AdmissionResponse 时始终返回 HTTP 200。
+// 业务拒绝或错误详情写入 response.result.code；编码失败时才回退为 HTTP 错误。
 func writeResponse(w http.ResponseWriter, review *admissionv1.AdmissionReview) {
-	// Webhooks should always respond with a 200 HTTP status code when an AdmissionResponse can be sent.
-	// In an error case, the true status code is captured in the response.result.code
 	if err := json.NewEncoder(w).Encode(review); err != nil {
 		klog.ErrorS(err, "Failed to encode response")
-		// Unable to send an AdmissionResponse, fall back to an HTTP error.
+		// 无法发送 AdmissionResponse 时回退为 HTTP 错误。
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-// parseTimeout parses the given HTTP request URL and extracts the timeout query parameter
-// value if specified by the user.
-// If a timeout is not specified the function returns false and err is set to nil
-// If the value specified is malformed then the function returns false and err is set
+// parseTimeout 从请求 URL 中读取可选的 timeout 查询参数。
+// 未指定时返回 false 和 nil；格式错误时返回 false 和错误。
 //
 // timeout 只是可选的性能保护；非法值直接忽略，不让格式错误挡住正常的准入请求。
 func parseTimeout(req *http.Request) (time.Duration, bool, error) {

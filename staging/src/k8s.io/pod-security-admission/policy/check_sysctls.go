@@ -27,16 +27,16 @@ import (
 
 /*
 
-Sysctls can disable security mechanisms or affect all containers on a host,
-and should be disallowed except for an allowed "safe" subset.
+sysctl 可能禁用安全机制，也可能影响节点上的全部容器，
+因此除明确允许的“安全”子集外一律禁止。
 
-A sysctl is considered safe if it is namespaced in the container or the Pod,
-and it is isolated from other Pods or processes on the same Node.
+只有已按容器或 Pod 命名空间隔离，且不会影响同一节点上其他 Pod 或进程的
+sysctl 才视为安全。
 
-**Restricted Fields:**
+**受限字段：**
 spec.securityContext.sysctls[*].name
 
-**Allowed Values:**
+**允许值：**
 'kernel.shm_rmid_forced'
 'net.ipv4.ip_local_port_range'
 'net.ipv4.tcp_syncookies'
@@ -60,8 +60,7 @@ func init() {
 	addCheck(CheckSysctls)
 }
 
-// CheckSysctls returns a baseline level check
-// that limits the value of sysctls in 1.0+
+// CheckSysctls 返回基线级检查，从 1.0 起限制可设置的 sysctl。
 func CheckSysctls() Check {
 	return Check{
 		ID:    "sysctls",

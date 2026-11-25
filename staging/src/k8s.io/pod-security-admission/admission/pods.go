@@ -26,8 +26,8 @@ import (
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
 
-// PodListerFromClient returns a PodLister that does live lists using the provided client.
-// 实时列表适合对时效性要求高的场景（如审计当前违规 Pod），代价是每次调用都打到 API Server。
+// PodListerFromClient 返回通过客户端实时列取 Pod 的 PodLister，适合对时效性要求高的场景；
+// 代价是每次调用都会请求 API Server。
 func PodListerFromClient(client kubernetes.Interface) PodLister {
 	return &clientPodLister{client}
 }
@@ -38,6 +38,7 @@ type clientPodLister struct {
 	client kubernetes.Interface
 }
 
+// ListPods 同步请求 API Server，并返回指向列表元素的 Pod 指针。
 func (p *clientPodLister) ListPods(ctx context.Context, namespace string) ([]*corev1.Pod, error) {
 	// 取 Items 的地址而非值：PodLister 接口统一返回 []*corev1.Pod，
 	// 这里把切片元素转为指针以适配该契约，元素本身仍在 list 底层数组中。
@@ -52,8 +53,8 @@ func (p *clientPodLister) ListPods(ctx context.Context, namespace string) ([]*co
 	return pods, nil
 }
 
-// PodListerFromInformer returns a PodLister that does cached lists using the provided lister.
-// 缓存列表避免每次准入都访问 API Server，适合高频调用；代价是读到的数据可能有短暂延迟。
+// PodListerFromInformer 返回通过 informer 缓存列取 Pod 的 PodLister，避免每次准入都请求 API Server；
+// 代价是缓存数据可能短暂滞后。
 func PodListerFromInformer(lister corev1listers.PodLister) PodLister {
 	return &informerPodLister{lister}
 }
@@ -64,6 +65,7 @@ type informerPodLister struct {
 	lister corev1listers.PodLister
 }
 
+// ListPods 从本地缓存同步列取 Pod；ctx 不参与查询，缓存读取无法由上下文取消。
 func (p *informerPodLister) ListPods(ctx context.Context, namespace string) ([]*corev1.Pod, error) {
 	return p.lister.Pods(namespace).List(labels.Everything())
 }

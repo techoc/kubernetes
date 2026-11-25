@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// TestHostPathVolumes 验证 hostPath 卷被拒绝而 emptyDir 不出现在违规列表里，
+// TestHostPathVolumes 验证 hostPath 卷被拒绝，同时确保 emptyDir 不污染违规列表，
 // 确保报错详情只列出真正违规的卷名。
 func TestHostPathVolumes(t *testing.T) {
 	tests := []struct {

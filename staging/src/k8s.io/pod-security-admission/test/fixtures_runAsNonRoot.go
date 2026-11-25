@@ -24,7 +24,7 @@ import (
 
 /*
 字段路径留档待补进反射式测试；这里覆盖 Pod 与容器两级设置，以及完全未设置的情况。
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 
 podFields: []string{
 	`securityContext.runAsNonRoot`,
@@ -35,20 +35,20 @@ containerFields: []string{
 
 */
 
-// 只在 Pod 或所有容器上显式为 true 才算通过；未设置与显式 false 都会让 root 容器有机会启动，故判失败。
+// 通过夹具覆盖 Pod 级和所有容器级两种合法设置；未设置或显式 false 都可能以 root 启动，均判失败。
 func init() {
 
 	fixtureData_1_0 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
-				// set at pod level
+				// Pod 级设置为 true，容器级留空以验证继承。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.RunAsNonRoot = ptr.To(true)
 					p.Spec.Containers[0].SecurityContext.RunAsNonRoot = nil
 					p.Spec.InitContainers[0].SecurityContext.RunAsNonRoot = nil
 				}),
-				// set on all containers
+				// Pod 级留空，所有容器显式设置为 true。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.RunAsNonRoot = nil
 					p.Spec.Containers[0].SecurityContext.RunAsNonRoot = ptr.To(true)
@@ -59,15 +59,15 @@ func init() {
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
-				// unset everywhere
+				// 所有层级均未设置。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.RunAsNonRoot = nil
 					p.Spec.Containers[0].SecurityContext.RunAsNonRoot = nil
 					p.Spec.InitContainers[0].SecurityContext.RunAsNonRoot = nil
 				}),
-				// explicit false on pod
+				// Pod 级显式设置为 false。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.RunAsNonRoot = ptr.To(false) }),
-				// explicit false on containers
+				// 普通容器显式设置为 false。
 				tweak(p, func(p *corev1.Pod) { p.Spec.Containers[0].SecurityContext.RunAsNonRoot = ptr.To(false) }),
 				tweak(p, func(p *corev1.Pod) { p.Spec.InitContainers[0].SecurityContext.RunAsNonRoot = ptr.To(false) }),
 			}

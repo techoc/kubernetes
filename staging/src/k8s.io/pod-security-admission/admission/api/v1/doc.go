@@ -19,9 +19,8 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +k8s:validation-gen=false
 // +groupName=pod-security.admission.config.k8s.io
-// 指令 +k8s:deepcopy-gen 与 +k8s:conversion-gen 负责生成深拷贝和跨版本转换，
-// 指令 +groupName 指定了配置文件使用的 API 组名。
+// 生成器按 deepcopy-gen 与 conversion-gen 指令生成深拷贝和跨版本转换，
+// 并按 groupName 指令确定配置文件使用的 API 组名。
 
-// Package v1 contains PodSecurity admission configuration file types
-// 本包是 PodSecurity 准入配置文件的稳定版本，定义用户写入磁盘的外部类型。
+// Package v1 包含 PodSecurity 准入配置文件稳定版本的外部类型。
 package v1

@@ -22,13 +22,13 @@ import (
 
 /*
 
-The default /proc masks are set up to reduce attack surface, and should be required by the restricted profile.
+默认的 /proc 掩码用于缩小攻击面，受限策略必须保留，且不因用户命名空间而放宽。
 
-**Restricted Fields:**
+**受限字段：**
 spec.containers[*].securityContext.procMount
 spec.initContainers[*].securityContext.procMount
 
-**Allowed Values:** undefined/null, "Default"
+**允许值：** 未定义/null、"Default"
 
 */
 // 本文件把基线的 procMount 检查在受限等级重新收紧：基线在 1.35 起对 user namespace Pod 放宽，
@@ -38,7 +38,7 @@ func init() {
 	addCheck(CheckProcMountRestricted)
 }
 
-// CheckProcMountRestricted returns a restricted level check that forbids unmasked procmount.
+// CheckProcMountRestricted 返回受限级检查，禁止未掩码的 procMount。
 // 仅覆盖基线同名检查，不改基线实现，避免影响基线策略的既有判定。
 func CheckProcMountRestricted() Check {
 	return Check{
@@ -46,10 +46,8 @@ func CheckProcMountRestricted() Check {
 		Level: api.LevelRestricted,
 		Versions: []VersionedCheck{
 			{
-				// Prior to 1.35, the baseline "procMount" check ran procMount_1_0 to unconditionally block unmasked procMount.
-				// In 1.35+, baseline conditionally relaxes for user namespace pods.
-				// Starting at that version, keep running the unconditional block in the restricted profile,
-				// and override the slightly weaker version of the same check from the baseline profile.
+				// 1.35 起基线会放宽用户命名空间 Pod；受限等级仍复用无条件阻止的 procMount_1_0，
+				// 并覆盖基线同名检查，避免较宽松的实现放行未掩码配置。
 				MinimumVersion:   api.MajorMinorVersion(1, 35),
 				CheckPod:         procMount_1_0,
 				OverrideCheckIDs: []CheckID{"procMount"},

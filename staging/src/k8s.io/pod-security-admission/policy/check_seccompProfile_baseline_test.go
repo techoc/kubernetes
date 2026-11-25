@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// 覆盖 1.0 中基于旧注解的 seccomp 判定：pod 级与容器级注解都要检查。
+// 锁定 1.0 基于旧注解的 seccomp 判定：Pod 级与容器级注解均不可遗漏。
 func TestSeccompProfileBaseline_1_0(t *testing.T) {
 	tests := []struct {
 		name         string

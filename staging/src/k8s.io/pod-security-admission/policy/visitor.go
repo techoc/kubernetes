@@ -20,12 +20,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ContainerVisitor is called with each container and the field.Path to that container
-// 各检查共享这一访问器，保证普通、init 与临时容器的遍历顺序一致。
+// ContainerVisitor 为每个容器及其字段路径调用，保持各检查的遍历顺序一致。
 type ContainerVisitor func(container *corev1.Container)
 
-// visitContainers invokes the visitor function for every container in the given pod spec
-// 三类容器都要覆盖，否则临时容器可能绕过检查；顺序固定便于输出稳定。
+// visitContainers 遍历全部三类容器，避免临时容器绕过检查；固定顺序便于稳定输出。
 func visitContainers(podSpec *corev1.PodSpec, visitor ContainerVisitor) {
 	for i := range podSpec.InitContainers {
 		visitor(&podSpec.InitContainers[i])

@@ -26,15 +26,15 @@ import (
 )
 
 /*
-Adding NET_RAW or capabilities beyond the default set must be disallowed.
+禁止添加 NET_RAW 或默认能力集合之外的能力，以免扩大容器的权限边界。
 
-**Restricted Fields:**
+**受限字段：**
 spec.containers[*].securityContext.capabilities.add
 spec.initContainers[*].securityContext.capabilities.add
 
-**Allowed Values:**
-undefined / empty
-values from the default set "AUDIT_WRITE", "CHOWN", "DAC_OVERRIDE","FOWNER", "FSETID", "KILL", "MKNOD", "NET_BIND_SERVICE", "SETFCAP", "SETGID", "SETPCAP", "SETUID", "SYS_CHROOT"
+**允许值：**
+未定义 / 空
+默认集合中的值："AUDIT_WRITE", "CHOWN", "DAC_OVERRIDE","FOWNER", "FSETID", "KILL", "MKNOD", "NET_BIND_SERVICE", "SETFCAP", "SETGID", "SETPCAP", "SETUID", "SYS_CHROOT"
 */
 
 // 这里只约束 add 列表而非 drop：丢弃能力只会收紧权限，没有提权风险。
@@ -45,8 +45,7 @@ func init() {
 
 const checkCapabilitiesBaselineID CheckID = "capabilities_baseline"
 
-// CheckCapabilitiesBaseline returns a baseline level check
-// that limits the capabilities that can be added in 1.0+
+// CheckCapabilitiesBaseline 返回基线级检查，从 1.0 起限制可添加的能力。
 // 白名单来自运行时默认能力集，额外增加能力等于扩大攻击面。
 func CheckCapabilitiesBaseline() Check {
 	return Check{

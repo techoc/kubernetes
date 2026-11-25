@@ -35,14 +35,12 @@ import (
 
 const updateEnvVar = "UPDATE_POD_SECURITY_FIXTURE_DATA"
 
-// TestFixtures ensures fixtures are registered for every check,
-// and that in-memory fixtures match serialized fixtures in testdata.
-// When adding new versions or checks, serialized fixtures can be updated by running:
+// TestFixtures 校验每个检查都有夹具，并比较内存夹具与 testdata 中的序列化结果。
+// 新增版本或检查后，可运行以下命令更新序列化夹具：
 //
 //	UPDATE_POD_SECURITY_FIXTURE_DATA=true go test k8s.io/pod-security-admission/test
 //
-// 这里同时校验“内存中的 fixture 已全部落盘”和“磁盘上没有遗留 fixture”，
-// 否则改了生成器却忘记重跑时，差异只会出现在没被覆盖的版本目录里。
+// 同时检查内存夹具已全部落盘、磁盘没有遗留文件，避免遗漏未覆盖的版本目录。
 func TestFixtures(t *testing.T) {
 	expectedFiles := sets.NewString("testdata/README.md")
 
@@ -60,16 +58,13 @@ func TestFixtures(t *testing.T) {
 			passDir := filepath.Join("testdata", string(level), fmt.Sprintf("v1.%d", version), "pass")
 			failDir := filepath.Join("testdata", string(level), fmt.Sprintf("v1.%d", version), "fail")
 
-			// render the minimal valid pod fixture
-			// 先给出各版本/级别的最小合法 Pod，后续 pass/fail fixture 都基于它做单点 tweak，
-			// 才能把失败原因收敛到被测字段上。
+			// 渲染最小合法 Pod；后续夹具都从它做单点修改，以隔离失败原因。
 			osNeutralPod, err := GetMinimalValidPod(level, api.MajorMinorVersion(1, version))
 			if err != nil {
 				t.Fatal(err)
 			}
 			expectedFiles.Insert(testFixtureFile(t, passDir, "base", osNeutralPod))
-			// Don't generate OS specific pods when version < 1.25 as pod os field based restriction is not enabled.
-			// 只为 restricted 生成 OS 变体：该检查是 restricted 独有的，baseline 不需要这些文件。
+			// 1.25 前不生成 OS 专属 Pod；它们仅用于 restricted 的 OS 相关限制。
 			if level == api.LevelRestricted && version >= podOSBasedRestrictionEnabledVersion {
 				linuxPod, err := GetMinimalValidLinuxPod(level, api.MajorMinorVersion(1, version))
 				if err != nil {
@@ -84,8 +79,7 @@ func TestFixtures(t *testing.T) {
 				expectedFiles.Insert(testFixtureFile(t, passDir, "base_windows", windowsPod))
 			}
 
-			// render check-specific fixtures
-			// 按版本取实际启用的检查集合，新增检查只要注册了生成器就会自动获得覆盖。
+			// 渲染当前版本实际启用的检查夹具；新检查注册生成器后即可自动获得覆盖。
 			checkIDs, err := checksForLevelAndVersion(defaultChecks, level, api.MajorMinorVersion(1, version))
 			if err != nil {
 				t.Fatal(err)
@@ -138,7 +132,7 @@ func TestFixtures(t *testing.T) {
 
 }
 
-// 文件名即 Pod 名，便于从失败的 YAML 直接定位是哪个 fixture；深拷贝避免改名污染共享的基准 Pod。
+// testFixtureFile 以文件名作为 Pod 名，便于从 YAML 定位夹具；深拷贝避免改名污染共享基准 Pod。
 func testFixtureFile(t *testing.T, dir, name string, pod *corev1.Pod) string {
 	filename := filepath.Join(dir, name+".yaml")
 	pod = pod.DeepCopy()
@@ -155,8 +149,7 @@ func testFixtureFile(t *testing.T, dir, name string, pod *corev1.Pod) string {
 		t.Fatal(err)
 	}
 
-	// clean up noise in fixtures
-	// 空 resources/status 是序列化样板，删掉后 fixture 的可读差异只剩真正被测的字段。
+	// 清理序列化噪声，让 fixture 差异只保留被测字段。
 	yamlData = []byte(strings.ReplaceAll(string(yamlData), "    resources: {}\n", ""))
 	yamlData = []byte(strings.ReplaceAll(string(yamlData), "status: {}\n", ""))
 

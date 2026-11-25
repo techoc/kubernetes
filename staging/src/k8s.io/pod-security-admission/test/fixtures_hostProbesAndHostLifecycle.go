@@ -22,15 +22,15 @@ import (
 	"k8s.io/pod-security-admission/api"
 )
 
-// 这组 fixture 要覆盖三种探针 × HTTPGet/TCPSocket，以及生命周期的 postStart/preStop；
-// 这里的通过/失败样本是按 check 实现的判定路径挑的，每一类都至少有一个代表。
+// 本文件覆盖 HTTPGet/TCPSocket 探针与 postStart 生命周期，并验证 Host 为空或非空时的不同判定。
+// 失败样例包含域名、IPv4、IPv6 回环地址及 init 容器，避免实现只按单一地址形态判断。
 func init() {
 	fixtureDataV1Dot34 := fixtureGenerator{
 		expectErrorSubstring: "probe or lifecycle host",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			return []*corev1.Pod{
-				p, // A pod with no probes should pass.
-				// 只设 Port、不设 Host 才是合法的探针：判定看的正是 Host 是否为空。
+				p, // 无探针的 Pod 应通过。
+				// 探针只设 Port、不设 Host，确保空 Host 不会被误判为访问宿主。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -53,8 +53,7 @@ func init() {
 		},
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			return []*corev1.Pod{
-				// 覆盖 HTTPGet、TCPSocket，以及 initContainer 上的场景；
-				// hostname 和三种 IP 形式都试，防止有人按「看起来像不像 IP」来判断。
+				// 失败样例覆盖 HTTPGet/TCPSocket、postStart、init 容器，以及域名和多种 IP 写法。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].LivenessProbe = &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -66,6 +65,7 @@ func init() {
 					}
 				}),
 				tweak(p, func(p *corev1.Pod) {
+					// 边车式 init 容器要配置 ReadinessProbe，API 要求其重启策略为 Always。
 					restartPolicy := corev1.ContainerRestartPolicyAlways
 					p.Spec.InitContainers[0].RestartPolicy = &restartPolicy
 					p.Spec.InitContainers[0].ReadinessProbe = &corev1.Probe{

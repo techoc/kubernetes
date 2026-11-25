@@ -142,7 +142,7 @@ func TestSELinuxOptions(t *testing.T) {
 			expectDetail: `pod set forbidden securityContext.seLinuxOptions: type "bad"`,
 		},
 		{
-			// user/role 在 restricted 下完全禁止，不能只靠 type 属性判断。
+			// user/role 在 restricted 下完全禁止，防止仅校验 type 而漏掉自定义身份。
 			name: "bad user",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				SecurityContext: &corev1.PodSecurityContext{

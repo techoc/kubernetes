@@ -39,11 +39,11 @@ const (
 	validValue            = "testing"
 )
 
+// TestValidatePodSecurityConfiguration 验证默认策略与豁免名单的错误路径和字段定位。
 func TestValidatePodSecurityConfiguration(t *testing.T) {
 	// 只断言错误数量、类型和出错值：逐条比对完整 ErrorList 会让无关的文案改动打翻这个测试。
 	tests := []test{
-		// defaults
-		// 第一个用例塞满各类非法 exemptions，第二个用例专测 defaults 的六个字段，一次覆盖两条校验分支。
+		// 第一个用例覆盖非法豁免项，第二个覆盖 defaults 的六个字段。
 		{
 			expectedErrList: field.ErrorList{
 				field.Invalid(exemptionsPath("namespaces", 0), invalidValueEmpty, "..."),
@@ -135,14 +135,12 @@ func TestValidatePodSecurityConfiguration(t *testing.T) {
 	}
 }
 
-// defaultsPath returns the appropriate defaults path
-// 单独构造路径，避免测试里重复硬编码字段层级写错位置。
+// defaultsPath 构造 defaults 下的字段路径，避免测试重复硬编码字段层级。
 func defaultsPath(child string) *field.Path {
 	return field.NewPath("defaults", child)
 }
 
-// exemptionsPath returns the appropriate defaults path
-// 带 Index 是因为 exemptions 里每一项都要报出具体下标，便于定位是哪一条被拒。
+// exemptionsPath 为豁免项构造带下标的字段路径，便于定位具体被拒项。
 func exemptionsPath(child string, i int) *field.Path {
 	return field.NewPath("exemptions", child).Index(i)
 }

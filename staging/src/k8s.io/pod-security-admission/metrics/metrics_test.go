@@ -40,7 +40,7 @@ var (
 	operations = []admissionv1.Operation{admissionv1.Create, admissionv1.Update}
 	levels     = []api.Level{api.LevelPrivileged, api.LevelBaseline, api.LevelRestricted}
 
-	// Map of resource types to test to expected label value.
+	// 资源类型到预期指标标签值的映射。
 	// 指标刻意把各种控制器收敛成同一个 resource 标签，避免标签基数随工作负载类型暴涨。
 	resourceExpectations = map[schema.GroupVersionResource]string{
 		corev1.SchemeGroupVersion.WithResource("pods"):        "pod",
@@ -48,7 +48,7 @@ var (
 		batchv1.SchemeGroupVersion.WithResource("cronjobs"):   "controller",
 	}
 
-	// Map of versions to expected label value (compared against testVersion).
+	// 策略版本到预期标签值的映射，版本基准为 testVersion。
 	// 只有 latest/当前/过去三种取值；比测试版本新的统一归到 future，同样是为了压标签基数。
 	versionExpectations = map[string]string{
 		"latest": "latest",
@@ -169,7 +169,7 @@ func levelVersion(level api.Level, version string) api.LevelVersion {
 	return lv
 }
 
-// The cached metrics should always be present (value 0 if not counted).
+// 缓存的指标序列应始终存在，未被计数时值为 0。
 // 这些序列是 recorder 注册时预热的，断言里必须显式带上 0 值，才能确认没被意外漏掉。
 var expectedCachedMetrics = map[string][]string{
 	"pod_security_evaluations_total": {
@@ -188,7 +188,7 @@ var expectedCachedMetrics = map[string][]string{
 func expectCachedMetrics(metricName, expected string) string {
 	expectations := strings.Split(strings.TrimSpace(expected), "\n")
 	for i, expectation := range expectations {
-		expectations[i] = strings.TrimSpace(expectation) // Whitespace messes with sorting.
+		expectations[i] = strings.TrimSpace(expectation) // 空白会影响排序。
 	}
 	for _, cached := range expectedCachedMetrics[metricName] {
 		expectations = addZeroExpectation(expectations, cached)
@@ -197,12 +197,11 @@ func expectCachedMetrics(metricName, expected string) string {
 	return "\n" + strings.Join(expectations, "\n") + "\n"
 }
 
-// addZeroExpectation adds the mixin as an empty sample if not already present.
-// 只有当前断言里还没出现过这个标签组合时才补 0，避免覆盖掉真正的非零计数。
+// addZeroExpectation 在期望中尚未包含对应标签组合时补入值为 0 的样本。
 func addZeroExpectation(currentExpectations []string, mixin string) []string {
 	for _, current := range currentExpectations {
 		if strings.HasPrefix(current, mixin) {
-			return currentExpectations // Mixin value already present.
+			return currentExpectations // 该组合已有非零计数期望，无需再补 0。
 		}
 	}
 	return append(currentExpectations, fmt.Sprintf("%s 0", mixin))

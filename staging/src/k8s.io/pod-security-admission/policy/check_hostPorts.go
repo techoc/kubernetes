@@ -28,14 +28,14 @@ import (
 )
 
 /*
-HostPort ports must be forbidden.
+禁止设置 HostPort，避免容器绕过 Pod 网络边界占用节点端口。
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.containers[*].ports[*].hostPort
 spec.initContainers[*].ports[*].hostPort
 
-**Allowed Values:** undefined/0
+**允许值：** 未定义/0
 */
 
 // 通过 init 自注册，避免在检查器列表中手写每一项。
@@ -43,8 +43,7 @@ func init() {
 	addCheck(CheckHostPorts)
 }
 
-// CheckHostPorts returns a baseline level check
-// that forbids any host ports in 1.0+
+// CheckHostPorts 返回基线级检查，从 1.0 起禁止任何宿主机端口映射。
 // 占用宿主机端口会绕过 Pod 网络隔离，因此基线级别从 1.0 起一律禁止。
 func CheckHostPorts() Check {
 	return Check{

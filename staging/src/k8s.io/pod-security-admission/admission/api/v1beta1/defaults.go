@@ -27,8 +27,8 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_PodSecurityDefaults 在字段留空时填入最宽松的默认值：
-// 未显式配置策略时保持 privileged + latest，避免因版本差异意外拒绝用户已有的 Pod。
+// SetDefaults_PodSecurityDefaults 在字段留空时填入 privileged + latest，
+// 避免未显式配置策略时因字段缺失而拒绝 Pod。
 func SetDefaults_PodSecurityDefaults(obj *PodSecurityDefaults) {
 	// 三个动作分别填默认级别：强制、告警、审计各自独立，
 	// 用户可只配置其中一部分而无需被迫补齐其余字段。

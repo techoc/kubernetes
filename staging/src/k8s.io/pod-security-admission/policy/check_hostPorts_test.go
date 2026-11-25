@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// 0 表示未占用主机端口，只有非零值才算违规；用例顺便检查多容器去重。
+// 0 表示未占用主机端口，只有非零值才算违规；同时验证多容器报错去重。
 func TestHostPort(t *testing.T) {
 	tests := []struct {
 		name         string

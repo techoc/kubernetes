@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestValidChecks ensures that all registered checks are valid.
+// TestValidChecks 校验所有已注册检查的结构与覆盖关系。
 // 除了结构合法性，还要确认每个 override 都指向真实存在的检查——
 // 写错 ID 的 override 不会报错，只会在运行时悄悄失效。
 func TestValidChecks(t *testing.T) {
@@ -30,7 +30,7 @@ func TestValidChecks(t *testing.T) {
 
 	assert.NoError(t, validateChecks(allChecks))
 
-	// Ensure that all overrides map to existing checks.
+	// 确认每个覆盖 ID 都指向已注册检查。
 	// 先把 ID 收成集合，再核对每个 override，避免 O(n²) 的逐个查找。
 	allIDs := map[CheckID]bool{}
 	for _, check := range allChecks {

@@ -23,7 +23,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// 同一个 Pod 里混放 nil、默认、Unmasked、其他值，一次就把判定边界跑完；
+// 同一 Pod 混放 nil、默认、Unmasked 和其他值，一次覆盖全部判定分支；
 // 第二个用例专门验证 userns 打开后规则放宽——这是 baseline 在 1.35 的行为。
 func TestProcMountBaseline(t *testing.T) {
 	defaultValue := corev1.DefaultProcMount

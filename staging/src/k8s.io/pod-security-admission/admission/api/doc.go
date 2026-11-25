@@ -19,5 +19,5 @@ limitations under the License.
 // 本包只承载准入配置文件在内存中的内部表示，apiserver 读入配置后即可解码到此处的类型。
 // 与对外版本解耦，避免配置格式的演进牵动 API 兼容性。
 
-// Package api contains PodSecurity admission configuration file types
+// Package api 包含 PodSecurity 准入配置文件的内部类型。
 package api

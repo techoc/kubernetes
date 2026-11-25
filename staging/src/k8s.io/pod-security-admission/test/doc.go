@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package test contains tests for PodSecurity admission
+// Package test 提供 PodSecurity 准入检查的共享测试夹具，供策略测试与一致性测试复用。
 package test
-
-// 本包提供 PodSecurity 检查的共享测试夹具：按检查项注册生成器，供策略测试与一致性测试复用。

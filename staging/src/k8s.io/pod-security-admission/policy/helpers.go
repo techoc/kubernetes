@@ -38,8 +38,7 @@ func pluralize(singular, plural string, count int) string {
 	return plural
 }
 
-// relaxPolicyForUserNamespacePod returns true if a policy should be relaxed
-// because of enabled user namespaces in the provided pod spec.
+// relaxPolicyForUserNamespacePod 判断给定 PodSpec 启用用户命名空间后是否应放宽策略。
 func relaxPolicyForUserNamespacePod(podSpec *corev1.PodSpec) bool {
 	return podSpec != nil && podSpec.HostUsers != nil && !*podSpec.HostUsers
 }

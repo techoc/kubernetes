@@ -20,7 +20,7 @@ import (
 	"os"
 
 	"k8s.io/component-base/cli"
-	_ "k8s.io/component-base/logs/json/register" // for JSON log format registration
+	_ "k8s.io/component-base/logs/json/register" // 注册 JSON 日志格式
 	"k8s.io/pod-security-admission/cmd/webhook/server"
 )
 

@@ -20,17 +20,16 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// tweak makes a copy of in, passes it to f(), and returns the result.
-// the input is not modified.
-// 每个用例都从同一个基准 Pod 派生，改动互不污染；用深拷贝避免共享指针被 f 修改。
+// tweak 深拷贝 in，将副本交给 f 修改后返回，不改变入参。
+// 各夹具从同一基准 Pod 派生，避免共享指针导致用例之间相互污染。
 func tweak(in *corev1.Pod, f func(copy *corev1.Pod)) *corev1.Pod {
 	out := in.DeepCopy()
 	f(out)
 	return out
 }
 
-// ensureSecurityContext ensures the pod and all initContainers and containers have a non-nil security context.
-// 测试里要区分“字段没设置”和“整层对象缺失”，先补齐对象才能只测字段语义。
+// ensureSecurityContext 为 Pod、普通容器和 init 容器补齐安全上下文。
+// 先区分“对象缺失”和“字段未设置”，夹具才能只改变目标字段。
 func ensureSecurityContext(p *corev1.Pod) *corev1.Pod {
 	p = p.DeepCopy()
 	if p.Spec.SecurityContext == nil {
@@ -49,8 +48,8 @@ func ensureSecurityContext(p *corev1.Pod) *corev1.Pod {
 	return p
 }
 
-// ensureSELinuxOptions ensures the pod and all initContainers and containers have a non-nil seLinuxOptions.
-// 与 ensureSecurityContext 组合使用，才能在不同层级的 SELinux 选项上构造差异用例。
+// ensureSELinuxOptions 为 Pod、普通容器和 init 容器补齐 SELinux 选项对象。
+// 与 ensureSecurityContext 组合，可在不同层级构造差异夹具。
 func ensureSELinuxOptions(p *corev1.Pod) *corev1.Pod {
 	p = ensureSecurityContext(p)
 	if p.Spec.SecurityContext.SELinuxOptions == nil {
@@ -69,8 +68,7 @@ func ensureSELinuxOptions(p *corev1.Pod) *corev1.Pod {
 	return p
 }
 
-// ensureAnnotation makes sure that pod.Annotations is never nil
-// 注解夹具需要往里写键值，先初始化 map 才能避免赋值 panic。
+// ensureAnnotation 确保 pod.Annotations 不为 nil，避免写注解时因 map 未初始化而 panic。
 func ensureAnnotation(pod *corev1.Pod) *corev1.Pod {
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}

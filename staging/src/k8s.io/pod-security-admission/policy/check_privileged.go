@@ -25,13 +25,13 @@ import (
 )
 
 /*
-Privileged Pods disable most security mechanisms and must be disallowed.
+特权 Pod 会禁用多数安全机制，必须禁止。
 
-Restricted Fields:
+**受限字段：**
 spec.containers[*].securityContext.privileged
 spec.initContainers[*].securityContext.privileged
 
-Allowed Values: false, undefined/null
+**允许值：** false, 未定义/null
 */
 // 本文件检查特权容器；只有显式设为 true 才算违规，未设置按默认禁用处理。
 
@@ -39,8 +39,7 @@ func init() {
 	addCheck(CheckPrivileged)
 }
 
-// CheckPrivileged returns a baseline level check
-// that forbids privileged=true in 1.0+
+// CheckPrivileged 返回基线级检查，从 1.0 起禁止 privileged=true。
 // 作为基线检查，同时在基线与受限策略下生效。
 func CheckPrivileged() Check {
 	return Check{

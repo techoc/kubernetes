@@ -26,9 +26,11 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// webhook 只需要解码 AdmissionReview 以及被审查的 Workload 对象，
+// scheme 注册 AdmissionReview 及 Pod、控制器模板解码所需的 API 类型。
 // 注册范围刻意收窄，避免把无关 API 类型拉进这个独立二进制。
 var scheme = runtime.NewScheme()
+
+// codecs 与 scheme 使用同一套类型注册，避免请求体和内嵌对象按不同规则解码。
 var codecs = serializer.NewCodecFactory(scheme)
 
 func init() {

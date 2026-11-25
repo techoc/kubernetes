@@ -49,26 +49,21 @@ const (
 	defaultNamespacePodCheckTimeout = 1 * time.Second
 )
 
-// Admission implements the core admission logic for the Pod Security Admission controller.
-// The admission logic can be
-// 本结构把配置、评估器与外部依赖聚合在一起；各字段均可在测试中替换，便于隔离验证。
+// Admission 实现 PodSecurity 准入控制器的核心逻辑，聚合配置、评估器与外部依赖；
+// 依赖字段可替换，便于测试隔离。
 type Admission struct {
 	Configuration *admissionapi.PodSecurityConfiguration
 
-	// Getting policy checks per level/version
-	// 按等级与版本取检查项，宿主字段由调用方注入以支持独立测试。
+	// Evaluator 按等级与版本获取检查项，由调用方注入以支持独立测试。
 	Evaluator policy.Evaluator
 
-	// Metrics
-	// 决策与豁免都要留痕，缺失时直接拒绝启动而非静默降级。
+	// Metrics 记录决策与豁免；缺失时拒绝启动，避免静默失去观测能力。
 	Metrics metrics.Recorder
 
-	// Arbitrary object --> PodSpec
-	// 控制器对象形态各异，抽出 PodSpec 才能复用同一套 Pod 检查。
+	// PodSpecExtractor 从控制器对象中抽取 PodSpec，以复用 Pod 检查逻辑。
 	PodSpecExtractor PodSpecExtractor
 
-	// API connections
-	// 仅读取命名空间标签与既有 Pod，无需写权限。
+	// NamespaceGetter 与 PodLister 只读取命名空间标签和既有 Pod，无需写权限。
 	NamespaceGetter NamespaceGetter
 	PodLister       PodLister
 
@@ -80,25 +75,25 @@ type Admission struct {
 	namespacePodCheckTimeout time.Duration
 }
 
-// 只暴露需要的读取接口，便于测试注入假实现，也避免误用写权限。
+// NamespaceGetter 只暴露命名空间读取接口，便于测试注入假实现并避免误用写权限。
 type NamespaceGetter interface {
+	// GetNamespace 返回指定命名空间。
 	GetNamespace(ctx context.Context, name string) (*corev1.Namespace, error)
 }
 
-// 仅用于命名空间级别收紧时的既有 Pod 预检，列表结果会被本地重排。
+// PodLister 仅用于命名空间收紧策略时预检既有 Pod，返回的切片会被本地重排。
 type PodLister interface {
+	// ListPods 列取指定命名空间中的 Pod。
 	ListPods(ctx context.Context, namespace string) ([]*corev1.Pod, error)
 }
 
-// PodSpecExtractor extracts a PodSpec from pod-controller resources that embed a PodSpec.
-// This interface can be extended to enforce policy on CRDs for custom pod-controllers.
+// PodSpecExtractor 从内嵌 PodSpec 的控制器对象中抽取模板；可扩展以检查自定义 Pod 控制器 CRD。
 type PodSpecExtractor interface {
-	// HasPodSpec returns true if the given resource type MAY contain an extractable PodSpec.
+	// HasPodSpec 判断资源类型是否可能包含可抽取的 PodSpec。
 	HasPodSpec(schema.GroupResource) bool
-	// ExtractPodSpec returns a pod spec and metadata to evaluate from the object.
-	// An error returned here does not block admission of the pod-spec-containing object and is not returned to the user.
-	// If the object has no pod spec, return `nil, nil, nil`.
-	// 抽取失败只记审计信息，不阻断控制器对象准入：Pod 创建时才真正执行策略。
+	// ExtractPodSpec 返回待评估的元数据与 PodSpec；无 PodSpec 时返回三个 nil。
+	// 抽取失败只记入审计信息，不阻断控制器对象准入，也不直接返回给用户；
+	// 实际 Pod 创建时会再次执行强制策略。
 	ExtractPodSpec(runtime.Object) (*metav1.ObjectMeta, *corev1.PodSpec, error)
 }
 
@@ -115,13 +110,15 @@ var defaultPodSpecResources = map[schema.GroupResource]bool{
 	batchv1.Resource("cronjobs"):              true,
 }
 
-// 内置实现只覆盖已知的内置控制器；CRD 由调用方扩展，避免误判未知类型。
+// DefaultPodSpecExtractor 只覆盖已知内建控制器；CRD 由调用方扩展，避免误判未知类型。
 type DefaultPodSpecExtractor struct{}
 
+// HasPodSpec 判断资源是否属于内建 Pod 或 Pod 控制器白名单。
 func (DefaultPodSpecExtractor) HasPodSpec(gr schema.GroupResource) bool {
 	return defaultPodSpecResources[gr]
 }
 
+// ExtractPodSpec 抽取内建 Pod 或控制器模板；未知资源类型返回错误。
 func (DefaultPodSpecExtractor) ExtractPodSpec(obj runtime.Object) (*metav1.ObjectMeta, *corev1.PodSpec, error) {
 	// 用类型断言而非 reflect，未知类型直接报错，避免把无关对象误当 Pod 模板。
 	switch o := obj.(type) {
@@ -148,7 +145,8 @@ func (DefaultPodSpecExtractor) ExtractPodSpec(obj runtime.Object) (*metav1.Objec
 	}
 }
 
-// 供调用方构造 webhook 规则；map 遍历顺序不稳定，调用方应自行排序后再对外暴露。
+// PodSpecResources 返回可检查的内建资源类型，供调用方构造 webhook 规则；
+// map 遍历顺序不稳定，调用方应先排序。
 func (DefaultPodSpecExtractor) PodSpecResources() []schema.GroupResource {
 	retval := make([]schema.GroupResource, 0, len(defaultPodSpecResources))
 	for r := range defaultPodSpecResources {
@@ -165,8 +163,7 @@ func extractPodSpecFromTemplate(template *corev1.PodTemplateSpec) (*metav1.Objec
 	return &template.ObjectMeta, &template.Spec, nil
 }
 
-// CompleteConfiguration sets up default or derived configuration.
-// 必须先于 ValidateConfiguration 调用：派生字段与校验条件在此一并落地。
+// CompleteConfiguration 补齐默认值与派生字段，必须先于 ValidateConfiguration 调用。
 func (a *Admission) CompleteConfiguration() error {
 	if a.Configuration != nil {
 		if p, err := admissionapi.ToPolicy(a.Configuration.Defaults); err != nil {
@@ -185,8 +182,7 @@ func (a *Admission) CompleteConfiguration() error {
 	return nil
 }
 
-// ValidateConfiguration ensures all required fields are set with valid values.
-// 校验派生字段与传入配置一致，可发现漏调 CompleteConfiguration 的初始化顺序错误。
+// ValidateConfiguration 校验必需字段与取值，并确认派生字段和配置一致，以发现初始化顺序错误。
 func (a *Admission) ValidateConfiguration() error {
 	if a.Configuration == nil {
 		return fmt.Errorf("configuration required")
@@ -226,10 +222,8 @@ var (
 	podsResource       = corev1.Resource("pods")
 )
 
-// Validate admits an API request.
-// The objects in admission attributes are expected to be external v1 objects that we care about.
-// The returned response may be shared and must not be mutated.
-// 按资源类型分派：命名空间改标签要预检，Pod 走强制执行，其余只做审计与警告。
+// Validate 按资源类型分派准入请求：命名空间改标签时预检，Pod 强制执行，其余对象只审计与警告。
+// 属性中的对象应为相关的外部 v1 类型；返回响应可能被共享，调用方不得修改。
 func (a *Admission) Validate(ctx context.Context, attrs api.Attributes) *admissionv1.AdmissionResponse {
 	var response *admissionv1.AdmissionResponse
 	switch attrs.GetResource().GroupResource() {
@@ -243,12 +237,11 @@ func (a *Admission) Validate(ctx context.Context, attrs api.Attributes) *admissi
 	return response
 }
 
-// ValidateNamespace evaluates a namespace create or update request to ensure the pod security labels are valid,
-// and checks existing pods in the namespace for violations of the new policy when updating the enforce level on a namespace.
-// The returned response may be shared between evaluations and must not be mutated.
-// 收紧 enforce 时只警告不拒绝：存量 Pod 无法就地修改，强堵会让命名空间无法更新。
+// ValidateNamespace 校验命名空间创建或更新请求中的 PodSecurity 标签；
+// 更新 enforce 策略时预检既有 Pod。返回响应可能被共享，调用方不得修改。
+// 收紧 enforce 时只警告不拒绝：存量 Pod 无法就地修改，强堵会阻止命名空间更新。
 func (a *Admission) ValidateNamespace(ctx context.Context, attrs api.Attributes) *admissionv1.AdmissionResponse {
-	// short-circuit on subresources
+	// 子资源不承载待检查的对象，直接放行。
 	if attrs.GetSubresource() != "" {
 		return sharedAllowedResponse
 	}
@@ -267,7 +260,7 @@ func (a *Admission) ValidateNamespace(ctx context.Context, attrs api.Attributes)
 
 	switch attrs.GetOperation() {
 	case admissionv1.Create:
-		// require valid labels on create
+		// 创建时标签必须合法。
 		if len(newErrs) > 0 {
 			return invalidResponse(attrs, newErrs)
 		}
@@ -281,7 +274,7 @@ func (a *Admission) ValidateNamespace(ctx context.Context, attrs api.Attributes)
 		return sharedAllowedResponse
 
 	case admissionv1.Update:
-		// if update, check if policy labels changed
+		// 更新时先读取旧标签，用于判断策略是否变化。
 		oldObj, err := attrs.GetOldObject()
 		if err != nil {
 			klog.FromContext(ctx).Error(err, "failed to decode old object")
@@ -294,16 +287,16 @@ func (a *Admission) ValidateNamespace(ctx context.Context, attrs api.Attributes)
 		}
 		oldPolicy, oldErrs := a.PolicyToEvaluate(oldNamespace.Labels)
 
-		// require valid labels on update if they have changed
+		// 仅当标签发生新变化时拒绝非法值；保持原有错误不阻断无关更新。
 		if len(newErrs) > 0 && (len(oldErrs) == 0 || !reflect.DeepEqual(newErrs, oldErrs)) {
 			return invalidResponse(attrs, newErrs)
 		}
 
-		// Skip dry-running pods:
-		// * if the enforce policy is unchanged
-		// * if the new enforce policy is privileged
-		// * if the new enforce is the same version and level was relaxed
-		// * for exempt namespaces
+		// 以下情况跳过存量 Pod 预检：
+		// * enforce 策略未变化；
+		// * 新 enforce 策略为 privileged；
+		// * 版本相同且等级放宽；
+		// * 命名空间已豁免。
 		if newPolicy.Enforce == oldPolicy.Enforce {
 			return sharedAllowedResponse
 		}
@@ -331,10 +324,8 @@ func (a *Admission) ValidateNamespace(ctx context.Context, attrs api.Attributes)
 	}
 }
 
-// ignoredPodSubresources is a set of ignored Pod subresources.
-// Any other subresource is expected to be a *v1.Pod type and is evaluated.
-// This ensures a version skewed webhook fails safe and denies an unknown pod subresource that allows modifying the pod spec.
-// 显式枚举可忽略子资源；未知子资源一律按 Pod 主体检查，宁可误拒也不漏放。
+// ignoredPodSubresources 列出不执行 Pod 校验的子资源。
+// 其余子资源按 v1.Pod 检查，使版本错配时对可能修改 PodSpec 的未知子资源采取拒绝策略。
 var ignoredPodSubresources = map[string]bool{
 	"exec":        true,
 	"attach":      true,
@@ -346,15 +337,14 @@ var ignoredPodSubresources = map[string]bool{
 	"status":      true,
 }
 
-// ValidatePod evaluates a pod create or update request against the effective policy for the namespace.
-// The returned response may be shared between evaluations and must not be mutated.
-// 更新时仅当策略相关字段变化才重算，避免与 PodSecurity 无关的更新被误拒。
+// ValidatePod 按命名空间有效策略校验 Pod 创建或更新；返回响应可能被共享，调用方不得修改。
+// 更新时仅策略相关字段变化才重新评估，避免无关更新被误拒。
 func (a *Admission) ValidatePod(ctx context.Context, attrs api.Attributes) *admissionv1.AdmissionResponse {
-	// short-circuit on ignored subresources
+	// 忽略的子资源不执行 Pod 校验。
 	if ignoredPodSubresources[attrs.GetSubresource()] {
 		return sharedAllowedResponse
 	}
-	// short-circuit on exempt namespaces and users
+	// 命名空间或用户命中豁免时跳过策略检查。
 	if a.exemptNamespace(attrs.GetNamespace()) {
 		a.Metrics.RecordExemption(attrs)
 		return sharedAllowedByNamespaceExemptionResponse
@@ -365,7 +355,7 @@ func (a *Admission) ValidatePod(ctx context.Context, attrs api.Attributes) *admi
 		return sharedAllowedByUserExemptionResponse
 	}
 
-	// short-circuit on privileged enforce+audit+warn namespaces
+	// 三种模式均为 privileged 时无需评估。
 	namespace, err := a.NamespaceGetter.GetNamespace(ctx, attrs.GetNamespace())
 	if err != nil {
 		klog.FromContext(ctx).Error(err, "failed to fetch pod namespace", "namespace", attrs.GetNamespace())
@@ -404,22 +394,21 @@ func (a *Admission) ValidatePod(ctx context.Context, attrs api.Attributes) *admi
 			return errorResponse(nil, &apierrors.NewBadRequest("failed to decode old pod").ErrStatus)
 		}
 		if !isSignificantPodUpdate(pod, oldPod) {
-			// Nothing we care about changed, so always allow the update.
+			// 策略相关字段未变化，直接放行更新。
 			return sharedAllowedResponse
 		}
 	}
 	return a.EvaluatePod(ctx, nsPolicy, nsPolicyErrs.ToAggregate(), &pod.ObjectMeta, &pod.Spec, attrs, true)
 }
 
-// ValidatePodController evaluates a pod controller create or update request against the effective policy for the namespace.
-// The returned response may be shared between evaluations and must not be mutated.
-// 控制器模板只审计与警告、不强制拒绝：实际 Pod 创建时还会再做一次强制检查。
+// ValidatePodController 按命名空间有效策略检查 Pod 控制器模板；返回响应可能被共享，调用方不得修改。
+// 控制器请求只审计与警告、不强制拒绝，实际 Pod 创建时会再次强制执行检查。
 func (a *Admission) ValidatePodController(ctx context.Context, attrs api.Attributes) *admissionv1.AdmissionResponse {
-	// short-circuit on subresources
+	// 子资源不承载待检查的对象，直接放行。
 	if attrs.GetSubresource() != "" {
 		return sharedAllowedResponse
 	}
-	// short-circuit on exempt namespaces and users
+	// 命名空间或用户命中豁免时跳过策略检查。
 	if a.exemptNamespace(attrs.GetNamespace()) {
 		a.Metrics.RecordExemption(attrs)
 		return sharedAllowedByNamespaceExemptionResponse
@@ -430,7 +419,7 @@ func (a *Admission) ValidatePodController(ctx context.Context, attrs api.Attribu
 		return sharedAllowedByUserExemptionResponse
 	}
 
-	// short-circuit on privileged audit+warn namespaces
+	// audit 与 warn 均为 privileged 时无需评估模板。
 	namespace, err := a.NamespaceGetter.GetNamespace(ctx, attrs.GetNamespace())
 	if err != nil {
 		klog.FromContext(ctx).Error(err, "failed to fetch pod namespace", "namespace", attrs.GetNamespace())
@@ -467,19 +456,18 @@ func (a *Admission) ValidatePodController(ctx context.Context, attrs api.Attribu
 		return response
 	}
 	if podMetadata == nil && podSpec == nil {
-		// if a controller with an optional pod spec does not contain a pod spec, skip validation
+		// 可选 PodSpec 的控制器未提供模板时跳过校验。
 		return sharedAllowedResponse
 	}
 	return a.EvaluatePod(ctx, nsPolicy, nsPolicyErrs.ToAggregate(), podMetadata, podSpec, attrs, false)
 }
 
-// EvaluatePod evaluates the given policy against the given pod(-like) object.
-// The enforce policy is only checked if enforce=true.
-// The returned response may be shared between evaluations and must not be mutated.
-// enforce/audit/warn 三种模式可能同等级同版本，用缓存复用结果，避免重复跑同一组检查。
+// EvaluatePod 按给定策略评估 Pod 或类 Pod 对象；仅 enforce 为 true 时执行强制检查。
+// 返回响应可能被共享，调用方不得修改。
+// enforce、audit、warn 同等级同版本时复用缓存，避免重复检查。
 func (a *Admission) EvaluatePod(ctx context.Context, nsPolicy api.Policy, nsPolicyErr error, podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec, attrs api.Attributes, enforce bool) *admissionv1.AdmissionResponse {
 	logger := klog.FromContext(ctx)
-	// short-circuit on exempt runtimeclass
+	// RuntimeClass 命中豁免时跳过策略检查。
 	if a.exemptRuntimeClass(podSpec.RuntimeClassName) {
 		a.Metrics.RecordExemption(attrs)
 		return sharedAllowedByRuntimeClassExemptionResponse
@@ -514,7 +502,7 @@ func (a *Admission) EvaluatePod(ctx context.Context, nsPolicy api.Policy, nsPoli
 		cachedResults[nsPolicy.Enforce] = result
 	}
 
-	// reuse previous evaluation if audit level+version is the same as enforce level+version
+	// audit 与 enforce 的等级和版本相同时复用强制检查结果。
 
 	auditResult, ok := cachedResults[nsPolicy.Audit]
 	if !ok {
@@ -530,15 +518,15 @@ func (a *Admission) EvaluatePod(ctx context.Context, nsPolicy api.Policy, nsPoli
 		a.Metrics.RecordEvaluation(metrics.DecisionDeny, nsPolicy.Audit, metrics.ModeAudit, attrs)
 	}
 
-	// avoid adding warnings to a request we're already going to reject with an error
+	// 请求已因错误拒绝时不再追加警告。
 	if response.Allowed {
-		// reuse previous evaluation if warn level+version is the same as audit or enforce level+version
+		// warn 与 audit 或 enforce 的等级和版本相同时复用已有结果。
 		warnResult, ok := cachedResults[nsPolicy.Warn]
 		if !ok {
 			warnResult = policy.AggregateCheckResults(a.Evaluator.EvaluatePod(nsPolicy.Warn, podMetadata, podSpec))
 		}
 		if !warnResult.Allowed {
-			// TODO: Craft a better user-facing warning message
+			// TODO: 改进面向用户的警告文案。
 			response.Warnings = append(response.Warnings, fmt.Sprintf(
 				"would violate PodSecurity %q: %s",
 				nsPolicy.Warn.String(),
@@ -552,22 +540,22 @@ func (a *Admission) EvaluatePod(ctx context.Context, nsPolicy api.Policy, nsPoli
 	return response
 }
 
-// podCount is used to track the number of pods sharing identical warnings when validating a namespace
-// 相同原因合并成一条警告，只保留字典序最小的 Pod 名，保证输出稳定可复现。
+// podCount 汇总相同警告涉及的 Pod；保留字典序最小的名字，确保输出稳定。
 type podCount struct {
-	// podName is the lexically first pod name for the given warning
+	// podName 是该警告对应的字典序最小 Pod 名。
 	podName string
 
-	// podCount is the total number of pods with the same warnings
+	// podCount 是命中该警告的 Pod 总数。
 	podCount int
 }
 
-// 命名空间收紧 enforce 时的预检：超时或触及上限都会如实告知只检查了部分存量 Pod。
+// EvaluatePodsInNamespace 在命名空间收紧 enforce 时预检存量 Pod，返回违规警告。
+// 超时或触及上限时只检查部分 Pod，避免无关的命名空间更新被无限期阻塞。
 func (a *Admission) EvaluatePodsInNamespace(ctx context.Context, namespace string, enforce api.LevelVersion) []string {
-	// start with the default timeout
+	// 先使用配置的超时预算。
 	timeout := a.namespacePodCheckTimeout
 	if deadline, ok := ctx.Deadline(); ok {
-		timeRemaining := time.Until(deadline) / 2 // don't take more than half the remaining time
+		timeRemaining := time.Until(deadline) / 2 // 最多占用请求剩余时间的一半。
 		if timeout > timeRemaining {
 			timeout = timeRemaining
 		}
@@ -610,7 +598,7 @@ func (a *Admission) EvaluatePodsInNamespace(ctx context.Context, namespace strin
 			c.podCount++
 			podWarningsToCount[warning] = c
 		}
-		if err := ctx.Err(); err != nil { // deadline exceeded or context was cancelled
+		if err := ctx.Err(); err != nil { // 超时或上下文取消。
 			checkedPods = i + 1
 			break
 		}
@@ -624,22 +612,21 @@ func (a *Admission) EvaluatePodsInNamespace(ctx context.Context, namespace strin
 		warnings = append(warnings, fmt.Sprintf("existing pods in namespace %q violate the new PodSecurity enforce level %q", namespace, enforce.String()))
 	}
 
-	// prepend pod names to warnings
+	// 为警告补充 Pod 名。
 	decoratePodWarnings(podWarningsToCount, podWarnings)
-	// put warnings in a deterministic order
+	// 固定警告顺序，便于比较与排查。
 	sort.Strings(podWarnings)
 
 	return append(warnings, podWarnings...)
 }
 
-// prefixes warnings with the pod names related to that warning
-// 按受影响的 Pod 数量选择不同措辞，单个名字与数量一起给出便于定位。
+// decoratePodWarnings 按受影响 Pod 数量补充名字与数量，便于定位违规来源。
 func decoratePodWarnings(podWarningsToCount map[string]podCount, warnings []string) {
 	for i, warning := range warnings {
 		c := podWarningsToCount[warning]
 		switch c.podCount {
 		case 0:
-			// unexpected, just leave the warning alone
+			// 无对应计数时保留原警告。
 		case 1:
 			warnings[i] = fmt.Sprintf("%s: %s", c.podName, warning)
 		case 2:
@@ -650,16 +637,16 @@ func decoratePodWarnings(podWarningsToCount map[string]podCount, warnings []stri
 	}
 }
 
-// 用已解析的默认策略补齐命名空间标签，确保校验阶段与预检看到同一份策略。
+// PolicyToEvaluate 用已解析的默认策略补齐命名空间标签，确保校验阶段与 Pod 预检看到同一份策略。
 func (a *Admission) PolicyToEvaluate(labels map[string]string) (api.Policy, field.ErrorList) {
 	return api.PolicyToEvaluate(labels, a.defaultPolicy)
 }
 
-// isSignificantPodUpdate determines whether a pod update should trigger a policy evaluation.
-// Relevant mutable pod fields as of 1.21 are image annotations:
+// isSignificantPodUpdate 判断 Pod 更新是否需要重新执行策略评估。
+// 截至 1.21，相关的可变字段包括镜像与注解：
 // * https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/apis/core/validation/validation.go#L3947-L3949
 func isSignificantPodUpdate(pod, oldPod *corev1.Pod) bool {
-	// TODO: invert this logic to only allow specific update types.
+	// TODO: 改为仅允许明确的更新类型。
 	if len(pod.Spec.Containers) != len(oldPod.Spec.Containers) {
 		return true
 	}
@@ -685,7 +672,7 @@ func isSignificantPodUpdate(pod, oldPod *corev1.Pod) bool {
 			}
 		}
 		if oldC == nil {
-			return true // EphemeralContainer added
+			return true // 新增临时容器。
 		}
 		if isSignificantContainerUpdate((*corev1.Container)(&c.EphemeralContainerCommon), oldC) {
 			return true
@@ -694,7 +681,7 @@ func isSignificantPodUpdate(pod, oldPod *corev1.Pod) bool {
 	return false
 }
 
-// isSignificantContainerUpdate determines whether a container update should trigger a policy evaluation.
+// isSignificantContainerUpdate 判断容器更新是否需要重新执行策略评估。
 func isSignificantContainerUpdate(container, oldContainer *corev1.Container) bool {
 	return container.Image != oldContainer.Image
 }
@@ -704,7 +691,7 @@ func (a *Admission) exemptNamespace(namespace string) bool {
 	if len(namespace) == 0 {
 		return false
 	}
-	// TODO: consider optimizing to O(1) lookup
+	// TODO: 考虑优化为 O(1) 查找。
 	return containsString(namespace, a.Configuration.Exemptions.Namespaces)
 }
 
@@ -713,7 +700,7 @@ func (a *Admission) exemptUser(username string) bool {
 	if len(username) == 0 {
 		return false
 	}
-	// TODO: consider optimizing to O(1) lookup
+	// TODO: 考虑优化为 O(1) 查找。
 	return containsString(username, a.Configuration.Exemptions.Usernames)
 }
 
@@ -722,25 +709,24 @@ func (a *Admission) exemptRuntimeClass(runtimeClass *string) bool {
 	if runtimeClass == nil || len(*runtimeClass) == 0 {
 		return false
 	}
-	// TODO: consider optimizing to O(1) lookup
+	// TODO: 考虑优化为 O(1) 查找。
 	return containsString(*runtimeClass, a.Configuration.Exemptions.RuntimeClasses)
 }
 
-// Filter and prioritize pods based on runtimeclass and uniqueness of the controller respectively for evaluation.
-// The input slice is modified in place and should not be reused.
-// 同控制器副本的检查结果一致，先查一份再补其余，可在有限预算内覆盖更多控制器。
+// prioritizePods 过滤豁免 Pod，并优先排列不同控制器的 Pod；输入切片会原地修改，调用方不应复用。
+// 同控制器副本先检查一份，可在有限预算内覆盖更多控制器。
 func (a *Admission) prioritizePods(pods []*corev1.Pod) []*corev1.Pod {
-	// accumulate the list of prioritized pods in-place to avoid double-allocating
+	// 原地构造优先列表，避免二次分配。
 	prioritizedPods := pods[:0]
-	// accumulate any additional replicated pods after the first one encountered for a given controller uid
+	// 同一控制器的额外副本暂存，待不同控制器检查完后追加。
 	var duplicateReplicatedPods []*corev1.Pod
 	evaluatedControllers := make(map[types.UID]bool)
 	for _, pod := range pods {
-		// short-circuit on exempt runtimeclass
+		// RuntimeClass 命中豁免时跳过策略检查。
 		if a.exemptRuntimeClass(pod.Spec.RuntimeClassName) {
 			continue
 		}
-		// short-circuit if pod from the same controller is evaluated
+		// 同一控制器已有代表 Pod 时，将副本放入延迟列表。
 		podOwnerControllerRef := metav1.GetControllerOfNoCopy(pod)
 		if podOwnerControllerRef == nil {
 			prioritizedPods = append(prioritizedPods, pod)
@@ -766,15 +752,13 @@ func containsString(needle string, haystack []string) bool {
 	return false
 }
 
-// exemptNamespaceWarning returns a non-empty warning message if the exempt namespace has a
-// non-privileged policy and sets pod security labels.
+// exemptNamespaceWarning 在豁免命名空间显式设置非 privileged 策略时返回警告，提示该策略不会生效。
 func (a *Admission) exemptNamespaceWarning(exemptNamespace string, policy api.Policy, nsLabels map[string]string) string {
 	if policy.FullyPrivileged() || policy.Equivalent(&a.defaultPolicy) {
 		return ""
 	}
 
-	// Build a compact representation of the policy, only printing non-privileged modes that have
-	// been explicitly set.
+	// 仅输出显式设置的非 privileged 模式，保持警告简洁并避免泄露无关标签。
 	sb := strings.Builder{}
 	_, hasEnforceLevel := nsLabels[api.EnforceLevelLabel]
 	_, hasEnforceVersion := nsLabels[api.EnforceVersionLabel]

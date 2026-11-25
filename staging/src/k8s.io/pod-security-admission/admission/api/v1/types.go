@@ -37,7 +37,7 @@ type PodSecurityConfiguration struct {
 }
 
 // PodSecurityDefaults 描述三个动作各自的默认级别与策略版本。
-// 级别与版本成对出现：只设级别不设版本时，策略语义会随集群升级漂移，因此两者必须配套配置。
+// 级别与版本成对出现；固定版本可避免策略语义随集群升级变化。
 type PodSecurityDefaults struct {
 	Enforce        string `json:"enforce,omitempty"`
 	EnforceVersion string `json:"enforce-version,omitempty"`
@@ -47,9 +47,8 @@ type PodSecurityDefaults struct {
 	WarnVersion    string `json:"warn-version,omitempty"`
 }
 
-// PodSecurityExemptions 列出完全豁免策略的主体。
-// 三类豁免对应三种绕过场景：特定用户、特定命名空间、特定 RuntimeClass；
-// 豁免会跳过所有检查，因此名单应保持精简并显式记录，避免策略被大范围架空。
+// PodSecurityExemptions 列出完全豁免策略的用户、命名空间与 RuntimeClass。
+// 豁免会跳过所有检查，名单应保持精简并显式记录，避免策略被大范围架空。
 type PodSecurityExemptions struct {
 	Usernames      []string `json:"usernames,omitempty"`
 	Namespaces     []string `json:"namespaces,omitempty"`

@@ -27,7 +27,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 }
 
 // SetDefaults_PodSecurityDefaults 把未指定的级别与版本填成最宽松值，
-// 保证老配置文件升级后仍能被接受，不会因为新增字段而突然拒绝 Pod。
+// 避免旧配置文件因缺字段而被突然拒绝。
 func SetDefaults_PodSecurityDefaults(obj *PodSecurityDefaults) {
 	if len(obj.Enforce) == 0 {
 		obj.Enforce = string(api.LevelPrivileged)

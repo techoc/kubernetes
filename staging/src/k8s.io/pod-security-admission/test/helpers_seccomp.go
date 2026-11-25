@@ -28,21 +28,19 @@ const (
 )
 
 var (
-	// the RuntimeDefault seccomp profile
-	// 共享这些指针值，测试里就不用每次都写一个完整的 profile 结构。
+	// RuntimeDefault seccomp profile；共享指针，避免每个夹具重复构造。
 	seccompProfileRuntimeDefault *corev1.SeccompProfile = &corev1.SeccompProfile{
 		Type: corev1.SeccompProfileTypeRuntimeDefault,
 	}
 
-	// the Unconfined seccomp profile
-	// 和 RuntimeDefault 互斥，分别代表「受约束」与「不受约束」两个判定端点。
+	// Unconfined seccomp profile，与 RuntimeDefault 构成受约束和不受约束两个端点。
 	seccompProfileUnconfined *corev1.SeccompProfile = &corev1.SeccompProfile{
 		Type: corev1.SeccompProfileTypeUnconfined,
 	}
 )
 
-// the Localhost seccomp profile
-// 路径由调用方给，才能测到「引用了节点上特定 profile」这种最宽松的情形。
+// seccompProfileLocalhost 构造引用节点上指定 profile 的 Localhost 配置。
+// 路径由调用方提供，以覆盖显式引用本地 profile 的场景。
 func seccompProfileLocalhost(profile string) *corev1.SeccompProfile {
 	return &corev1.SeccompProfile{
 		Type:             corev1.SeccompProfileTypeLocalhost,
@@ -50,8 +48,7 @@ func seccompProfileLocalhost(profile string) *corev1.SeccompProfile {
 	}
 }
 
-// annotationKeyContainer builds the annotation key for a specific container
-// 老注解按容器名区分，所以拼接时不能漏掉名字，否则多个容器会互相覆盖。
+// annotationKeyContainer 按容器名拼接旧 seccomp 注解键，避免不同容器互相覆盖。
 func annotationKeyContainer(c corev1.Container) string {
 	return annotationKeyContainerPrefix + c.Name
 }

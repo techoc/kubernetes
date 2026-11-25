@@ -38,64 +38,50 @@ import (
 
 const (
 	// 只测到当前受支持的最新小版本；再往后是未来版本，集群里还不会出现。
-	// 从 29 起 restricted 等级开始按 Pod OS 分别给最小合法 fixture，
+	// 从 29 起 restricted 等级开始按 Pod OS 分别提供最小合法夹具，
 	// 因为 Linux 和 Windows 的必需字段已经分化。
 	newestMinorVersionToTest            = 37
 	podOSBasedRestrictionEnabledVersion = 29
 )
 
-// Options hold configuration for running integration tests against an existing server.
+// Options 保存对已有 apiserver 运行集成测试所需的配置。
 type Options struct {
-	// ClientConfig is a client configuration with sufficient permission to create, update, and delete
-	// namespaces, pods, and pod-template-containing objects.
-	// Required.
-	// 测试需要真的往 apiserver 发 dry-run 请求，所以权限不够会在早期就失败。
+	// ClientConfig 是具有创建、更新、删除命名空间、Pod 及含 Pod 模板对象权限的客户端配置，必填。
+	// 测试会向 apiserver 发送 dry-run 请求，权限不足应尽早失败。
 	ClientConfig *rest.Config
 
-	// Features optionally provides information about which feature gates are enabled.
-	// This is used to skip failure cases for negative tests of data in alpha/beta fields.
-	// If unset, all testcases are run.
-	// 关掉的门控就别拿它的失败用例来考核服务端，否则测的是环境而不是策略。
+	// Features 可选，提供已启用的 feature gate 信息，用于跳过依赖 alpha/beta 字段的失败用例。
+	// 未设置时运行全部用例；避免把环境门控差异误判为策略失败。
 	Features featuregate.FeatureGate
 
-	// EmulationVersion optionally indicates a different minor version is being emulated.
-	// This can lower the effective "latest" version.
-	// 用于验证老版本客户端/服务端组合下的判定，不必真起一个老集群。
+	// EmulationVersion 可选，指定正在模拟的较低次要版本，用于验证版本兼容行为而不启动旧集群。
 	EmulationVersion *api.Version
 
-	// CreateNamespace is an optional stub for creating a namespace with the given name and labels.
-	// Returning an error fails the test.
-	// If nil, DefaultCreateNamespace is used.
-	// 留个钩子，让调用方能在建命名空间时加自己的标签或做权限断言。
+	// CreateNamespace 可选，按给定名称和标签创建命名空间；返回错误会使测试失败。
+	// 为空时使用 DefaultCreateNamespace；调用方可借此添加自定义标签或权限断言。
 	CreateNamespace func(client kubernetes.Interface, name string, labels map[string]string) (*corev1.Namespace, error)
 
-	// These are the check ids/starting versions to exercise.
-	// If unset, policy.DefaultChecks() are used.
-	// 传自定义集合可以只跑实验性检查或某几项，便于定位单个规则的问题。
+	// Checks 是待测试的检查及其起始版本；为空时使用 policy.DefaultChecks()。
+	// 可传入自定义集合，只运行实验性检查或定位单项规则。
 	Checks []policy.Check
 
-	// ExemptClient is an optional client interface to exercise behavior of an exempt client.
-	// 预留给调用方验证豁免身份走的是另一套判定；当前 Run 尚未读取它。
+	// ExemptClient 可选，提供用于验证豁免客户端行为的接口；当前 Run 尚未读取该字段。
 	ExemptClient kubernetes.Interface
-	// ExemptNamespaces are optional namespaces not expected to have PodSecurity controls enforced.
-	// 同理，目前仅作为选项保留，Run 里还没有按它跳过测试。
+	// ExemptNamespaces 可选，列出不应执行 PodSecurity 控制的命名空间；当前 Run 尚未按它跳过测试。
 	ExemptNamespaces []string
-	// ExemptRuntimeClasses are optional runtimeclasses not expected to have PodSecurity controls enforced.
-	// 配置侧已有对应豁免项，测试侧留个位置以后串联进来。
+	// ExemptRuntimeClasses 可选，列出不应执行 PodSecurity 控制的 RuntimeClass；当前仅保留配置入口。
 	ExemptRuntimeClasses []string
 }
 
-// 报错里打整个 Pod 的 JSON，省得读者再去猜 fixture 长什么样；序列化失败就当空串处理。
+// 报错里打整个 Pod 的 JSON，省得读者再去猜夹具长什么样；序列化失败就当空串处理。
 func toJSON(pod *corev1.Pod) string {
 	data, _ := json.Marshal(pod)
 	return string(data)
 }
 
-// checksForLevelAndVersion returns the set of check IDs that apply when evaluating the given level and version.
-// checks are assumed to be well-formed and valid to pass to policy.NewEvaluator().
-// level must be api.LevelRestricted or api.LevelBaseline
-// Restricted 比 Baseline 更严，所以它也要跑所有 Baseline 的检查；Privileged 没有要拒绝的项，
-// 这里直接排除。
+// checksForLevelAndVersion 返回给定级别和版本适用的检查 ID 集合。
+// 检查需格式正确且可传给 policy.NewEvaluator；level 只能为 api.LevelRestricted 或 api.LevelBaseline。
+// restricted 包含全部 baseline 检查；privileged 没有需要拒绝的检查，故不纳入。
 func checksForLevelAndVersion(checks []policy.Check, level api.Level, version api.Version) ([]policy.CheckID, error) {
 	retval := []policy.CheckID{}
 	for _, check := range checks {
@@ -106,18 +92,12 @@ func checksForLevelAndVersion(checks []policy.Check, level api.Level, version ap
 	return retval, nil
 }
 
-// computeVersionsToTest returns all the versions that have distinct checks defined,
-// all the versions that have distinct minimal valid pod fixtures defined, and
-// any hard-coded versions that should always be tested.
-//
-// This lets us sparsely test all versions with distinct fixture or policy changes
-// without needing to exercise every intermediate version that had no changes.
-// 判定是按「版本号 >= 规则引入版本」做的，所以没变过的中间版本共享同一份预期结果，
-// 抽出来反而能把测试时间压到可接受范围。
+// computeVersionsToTest 返回检查规则或最小合法 Pod 发生变化的版本，加上固定边界版本。
+// 判定采用“版本号不低于规则引入版本”，未变化的中间版本可共享预期，稀疏测试以控制运行时间。
 func computeVersionsToTest(t *testing.T, checks []policy.Check) []api.Version {
 	seenVersions := map[api.Version]bool{}
 
-	// include all versions we have registered distinct checks for
+	// 纳入所有注册了不同检查规则的版本。
 	for _, check := range checks {
 		for _, checkVersion := range check.Versions {
 			if checkVersion.MinimumVersion.Major() != 1 {
@@ -130,7 +110,7 @@ func computeVersionsToTest(t *testing.T, checks []policy.Check) []api.Version {
 		t.Fatal("no versions defined for checks")
 	}
 
-	// include all versions we have registered distinct fixtures for
+	// 纳入 OS 中立最小合法 Pod 发生变化的版本。
 	for _, versionsForLevel := range minimalValidPods {
 		for version := range versionsForLevel {
 			if version.Major() != 1 {
@@ -159,7 +139,7 @@ func computeVersionsToTest(t *testing.T, checks []policy.Check) []api.Version {
 	}
 
 	alwaysIncludeVersions := []api.Version{
-		// include the oldest version by default
+		// 默认纳入最老版本。
 		api.MajorMinorVersion(1, 0),
 		api.MajorMinorVersion(1, newestMinorVersionToTest),
 	}
@@ -173,7 +153,7 @@ func computeVersionsToTest(t *testing.T, checks []policy.Check) []api.Version {
 	}
 	sort.Slice(versions, func(i, j int) bool { return versions[i].Older(versions[j]) })
 
-	// TODO: consider exposing an option to test all versions instead of sparse ones
+	// TODO: 考虑开放测试全部版本的选项，而非只做稀疏采样。
 
 	return versions
 }
@@ -201,9 +181,8 @@ func (t *testWarningHandler) FlushWarnings() []string {
 	return warnings
 }
 
-// and ensures pod fixtures expected to pass and fail against that level/version work as expected.
-// 整套测试直接打真实 apiserver，所以每个 level/version 组合都建独立命名空间：
-// 标签一变，准入判定就跟着变，混在一起会互相污染预期。
+// Run 针对真实 apiserver 验证指定级别和版本下，通过及失败夹具是否符合预期。
+// 每个级别/版本组合使用独立命名空间，避免准入标签变化造成跨用例污染。
 func Run(t *testing.T, opts Options) {
 	warningHandler := &testWarningHandler{}
 
@@ -232,10 +211,10 @@ func Run(t *testing.T, opts Options) {
 	for _, level := range []api.Level{api.LevelBaseline, api.LevelRestricted} {
 		for _, version := range versionsToTest {
 			minor := version.Minor()
-			// create test name
+			// 创建测试名称。
 			ns := fmt.Sprintf("podsecurity-%s-1-%d", level, minor)
 
-			// create namespace
+			// 创建命名空间。
 			_, err := opts.CreateNamespace(client, ns, map[string]string{
 				api.EnforceLevelLabel:   string(level),
 				api.EnforceVersionLabel: fmt.Sprintf("v1.%d", minor),
@@ -246,13 +225,13 @@ func Run(t *testing.T, opts Options) {
 				t.Errorf("failed creating namespace %s: %v", ns, err)
 				continue
 			}
-			// 用 Cleanup 而不是 defer：Run 里的失败分支是 continue/manual return，
+			// 用 Cleanup 而不是 defer：Run 的失败分支包含 continue 或提前返回，
 			// 交给测试框架清理才不会被这些分支跳过。
 			t.Cleanup(func() {
 				client.CoreV1().Namespaces().Delete(context.Background(), ns, metav1.DeleteOptions{})
 			})
 
-			// create service account (to allow pod to pass serviceaccount admission)
+			// 创建 ServiceAccount，避免 Pod 被 serviceaccount admission 拒绝。
 			sa, err := client.CoreV1().ServiceAccounts(ns).Create(
 				context.Background(),
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
@@ -266,17 +245,16 @@ func Run(t *testing.T, opts Options) {
 				client.CoreV1().ServiceAccounts(ns).Delete(context.Background(), sa.Name, metav1.DeleteOptions{})
 			})
 
-			// create pod
-			// dry-run 创建：只看准入结果，不想真把 fixture Pod 跑起来。
+			// 创建 Pod；dry-run 只检查准入结果，不实际启动夹具 Pod。
 			createPod := func(t *testing.T, i int, pod *corev1.Pod, expectSuccess bool, expectErrorSubstring string) {
 				t.Helper()
-				// avoid mutating original pod fixture
-				// 同一个 fixture 会被多个子测试复用，原地改名字会串味，所以先深拷贝。
+				// 深拷贝避免原地修改共享夹具。
+				// 同一 fixture 会用于直接创建 Pod 和控制器创建，改名不能污染后续用例。
 				pod = pod.DeepCopy()
-				// assign pod name and serviceaccount
+				// 设置 Pod 名称和 ServiceAccount。
 				pod.Name = "test"
 				pod.Spec.ServiceAccountName = "default"
-				// dry-run create
+				// dry-run 创建。
 				_, err := client.CoreV1().Pods(ns).Create(context.Background(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 				if !expectSuccess {
 					if err == nil {
@@ -299,13 +277,11 @@ func Run(t *testing.T, opts Options) {
 				}
 			}
 
-			// create controller
-			// 再走一遍「控制器创建 Pod 模板」的路径，因为那条路径产生的是警告而不是硬拒绝，
-			// 和直接建 Pod 的判定分支不一样，必须分别验证。
+			// 创建控制器；该路径产生警告而非硬拒绝，需与直接创建 Pod 分别验证。
 			createController := func(t *testing.T, i int, pod *corev1.Pod, expectSuccess bool, expectError bool, expectErrorSubstring string) {
 				t.Helper()
 
-				// avoid mutating original pod fixture
+				// 深拷贝避免原地修改共享夹具。
 				pod = pod.DeepCopy()
 				if pod.Labels == nil {
 					pod.Labels = map[string]string{}
@@ -314,7 +290,7 @@ func Run(t *testing.T, opts Options) {
 
 				// 先清空上一次测试残留的警告，避免把它误算到当前这次创建头上。
 				warningHandler.FlushWarnings()
-				// dry-run create
+				// dry-run 创建。
 				deployment := &appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{Name: "test"},
 					Spec: appsv1.DeploymentSpec{
@@ -362,7 +338,7 @@ func Run(t *testing.T, opts Options) {
 					}
 				}
 
-				// 本该通过的 fixture 却带回了警告，说明策略误伤了合法配置，这里要显式拦下。
+				// 本应通过的夹具若带回目标拒绝原因或 UnknownForbiddenReason，显式报错；其他警告不在此断言范围。
 				if expectSuccess && len(failureText) > 0 {
 					if (len(expectErrorSubstring) > 0 && strings.Contains(failureText, expectErrorSubstring)) ||
 						strings.Contains(failureText, policy.UnknownForbiddenReason) {
@@ -394,11 +370,11 @@ func Run(t *testing.T, opts Options) {
 				createPod(t, 0, minimalValidOSNeutralPod.DeepCopy(), true, "")
 				createController(t, 0, minimalValidOSNeutralPod.DeepCopy(), true, false, "")
 				if minimalValidLinuxPod != nil && minimalValidWindowsPod != nil {
-					// Linux specific pods
+					// Linux 专属 Pod。
 					createPod(t, 0, minimalValidLinuxPod.DeepCopy(), true, "")
 					createController(t, 0, minimalValidLinuxPod.DeepCopy(), true, false, "")
 
-					// Windows specific pods
+					// Windows 专属 Pod。
 					createPod(t, 0, minimalValidWindowsPod.DeepCopy(), true, "")
 					createController(t, 0, minimalValidWindowsPod.DeepCopy(), true, false, "")
 				}
@@ -425,8 +401,8 @@ func Run(t *testing.T, opts Options) {
 					}
 				})
 
-				// see if any features required for failure cases are disabled
-				// 失败用例可能依赖 alpha/beta 字段；门控没开就跳过，而不是报一个假失败。
+				// 检查失败用例依赖的 feature gate 是否全部启用。
+				// 未启用的 alpha/beta 字段用例应跳过，避免环境差异造成假失败。
 				var disabledRequiredFeatures []featuregate.Feature
 				for _, f := range checkData.failRequiresFeatures {
 					if opts.Features != nil && !opts.Features.Enabled(f) {
@@ -447,7 +423,7 @@ func Run(t *testing.T, opts Options) {
 	}
 }
 
-// 默认建命名空间的实现，只设置名字和准入标签；调用方想加自定义标签可以传自己的 stub。
+// DefaultCreateNamespace 创建仅设置名称和给定标签的命名空间；需要自定义行为时可替换 Options.CreateNamespace。
 func DefaultCreateNamespace(client kubernetes.Interface, name string, labels map[string]string) (*corev1.Namespace, error) {
 	return client.CoreV1().Namespaces().Create(
 		context.Background(),

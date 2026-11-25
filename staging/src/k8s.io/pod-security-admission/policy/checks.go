@@ -25,103 +25,93 @@ import (
 )
 
 // 把多条版本化检查打包成一个具名检查，版本按递增顺序排列，求值时取适用的最后一条。
+// Check 描述一项策略检查及其版本化实现和覆盖关系。
 type Check struct {
-	// ID is the unique ID of the check.
-	// ID 同时是覆盖关系的引用键，必须全局唯一。
+	// ID 是检查的唯一标识，也是覆盖关系的引用键，必须全局唯一。
 	ID CheckID
-	// Level is the policy level this check belongs to.
-	// Must be Baseline or Restricted.
-	// Baseline checks are evaluated for baseline and restricted namespaces.
-	// Restricted checks are only evaluated for restricted namespaces.
-	// 等级决定适用范围：受限策略会连带跑基线检查，但基线策略不跑受限检查。
+	// Level 是检查所属等级，只能为 Baseline 或 Restricted。
+	// Baseline 检查用于 baseline 和 restricted 命名空间；Restricted 检查只用于 restricted 命名空间。
+
 	Level api.Level
-	// Versions contains one or more revisions of the check that apply to different versions.
-	// If the check is not yet assigned to a version, this must be a single-item list with a MinimumVersion of "".
-	// Otherwise, MinimumVersion of items must represent strictly increasing versions.
+	// Versions 保存适用于不同策略版本的实现。
+	// 尚未分配版本时只能有一项，且 MinimumVersion 为 ""；
+	// 否则 MinimumVersion 必须严格递增。
 	// 用递增起点而非区间，可让未来版本自动继承最近的一条实现。
 	Versions []VersionedCheck
 }
 
-// 同一检查在不同策略版本可有不同的实现，例如在后续版本放宽 user namespace 场景。
+// VersionedCheck 描述检查在单个策略版本中的实现；不同版本可分别放宽 user namespace 等场景。
 type VersionedCheck struct {
-	// MinimumVersion is the first policy version this check applies to.
-	// If unset, this check is not yet assigned to a policy version.
-	// If set, must not be "latest".
-	// 留空表示尚未纳入版本管理，求值时应归入实验性检查。
+	// MinimumVersion 是检查首次适用的策略版本。
+	// 留空表示尚未分配策略版本，归入实验性检查；设置时不能为 "latest"。
 	MinimumVersion api.Version
-	// CheckPod determines if the pod is allowed.
+	// CheckPod 判定 Pod 是否允许通过。
 	// 求值函数保持无状态，同一 Pod 重复调用结果一致。
 	CheckPod CheckPodFn
-	// OverrideCheckIDs is an optional list of checks that should be skipped when this check is run.
-	// Overrides may only be set on restricted checks, and may only override baseline checks.
+	// OverrideCheckIDs 是运行本检查时应跳过的检查 ID 列表。
+	// 只有 Restricted 检查可设置覆盖，且只能覆盖 Baseline 检查。
 	// 受限等级借此收紧基线中已放宽的场景，避免出现双重宽松判定。
 	OverrideCheckIDs []CheckID
 }
 
-// 只传元数据与 PodSpec，避免求值函数依赖完整对象及其客户端状态。
+// CheckPodFn 是无状态的 Pod 检查函数，只依赖元数据与 PodSpec，避免耦合完整对象及客户端状态。
 type CheckPodFn func(*metav1.ObjectMeta, *corev1.PodSpec) CheckResult
 
-// 用字符串类型而非结构体，便于在覆盖列表和注册键中直接比较。
+// CheckID 是检查的字符串标识，便于在覆盖列表和注册键中直接比较。
 type CheckID string
 
-// CheckResult contains the result of checking a pod and indicates whether the pod is allowed,
-// and if not, why it was forbidden.
+// CheckResult 保存 Pod 检查结果，说明是否允许通过以及拒绝原因。
 //
-// Example output for (false, "host ports", "8080, 9090"):
+// 当 Allowed 为 false、ForbiddenReason 为 "host ports"、ForbiddenDetail 为 "8080, 9090" 时，输出示例：
 //
-//	When checking all pods in a namespace:
+//	检查命名空间内全部 Pod 时：
 //	  disallowed by policy "baseline": host ports, privileged containers, non-default capabilities
-//	When checking an individual pod:
+//	检查单个 Pod 时：
 //	  disallowed by policy "baseline": host ports (8080, 9090), privileged containers, non-default capabilities (CAP_NET_RAW)
 //
 // 原因与详情分层：原因可跨 Pod 合并统计，详情只在检查单个对象时展开具体值。
 type CheckResult struct {
-	// Allowed indicates if the check allowed the pod.
+	// Allowed 表示检查是否允许该 Pod 通过。
 	Allowed bool
-	// ForbiddenReason must be set if Allowed is false.
-	// ForbiddenReason should be as succinct as possible and is always output.
-	// 简短且不含具体值，才能在命名空间预检中按原因聚合警告。
-	// Examples:
+	// Allowed 为 false 时必须设置 ForbiddenReason。它应简短且不含具体值，
+	// 因为始终输出，并用于命名空间预检的按原因聚合。
+	// 示例：
 	// - "host ports"
 	// - "privileged containers"
 	// - "non-default capabilities"
 	ForbiddenReason string
-	// ForbiddenDetail should only be set if Allowed is false, and is optional.
-	// ForbiddenDetail can include specific values that were disallowed and is used when checking an individual object.
-	// 可以带上被禁止的具体值；允许时可留空，避免无意义的细节输出。
-	// Examples:
-	// - list specific invalid host ports: "8080, 9090"
-	// - list specific invalid containers: "container1, container2"
-	// - list specific non-default capabilities: "CAP_NET_RAW"
+	// ForbiddenDetail 可选，只应在 Allowed 为 false 时设置；可包含被拒绝的具体值，
+	// 仅在检查单个对象时使用，允许时留空以避免无意义输出。
+	// 示例：
+	// - 列出非法宿主机端口："8080, 9090"
+	// - 列出非法容器："container1, container2"
+	// - 列出非默认能力："CAP_NET_RAW"
 	ForbiddenDetail string
 }
 
-// AggergateCheckResult holds the aggregate result of running CheckPod across multiple checks.
+// AggregateCheckResult 保存多项 CheckPod 检查的聚合结果。
 // 两个切片按下标一一对应，格式化详情时才能把值与原因配对。
 type AggregateCheckResult struct {
-	// Allowed indicates if all checks allowed the pod.
+	// Allowed 表示是否所有检查都允许该 Pod 通过。
 	Allowed bool
-	// ForbiddenReasons is a slice of the forbidden reasons from all the forbidden checks. It should not include empty strings.
-	// ForbiddenReasons and ForbiddenDetails must have the same number of elements, and the indexes are for the same check.
+	// ForbiddenReasons 保存所有拒绝检查的原因，不能包含空串。
+	// 两个切片数量必须相同，相同下标对应同一检查。
 	// 聚合后可能跨多条检查合并展示，但不在此处排序，由调用方决定顺序。
 	ForbiddenReasons []string
-	// ForbiddenDetails is a slice of the forbidden details from all the forbidden checks. It may include empty strings.
-	// ForbiddenReasons and ForbiddenDetails must have the same number of elements, and the indexes are for the same check.
+	// ForbiddenDetails 保存所有拒绝检查的详情，允许包含空串。
+	// 两个切片数量必须相同，相同下标对应同一检查。
 	// 允许为空串表示该检查没有可展示的具体值。
 	ForbiddenDetails []string
 }
 
-// ForbiddenReason returns a comma-separated string of of the forbidden reasons.
-// Example: host ports, privileged containers, non-default capabilities
-// 命名空间预检按原因汇总，因此这里只拼接原因，不带具体值。
+// ForbiddenReason 返回以逗号分隔的原因，供命名空间预检聚合，不带具体值。
+// 示例：host ports, privileged containers, non-default capabilities
 func (a *AggregateCheckResult) ForbiddenReason() string {
 	return strings.Join(a.ForbiddenReasons, ", ")
 }
 
-// ForbiddenDetail returns a detailed forbidden message, with non-empty details formatted in
-// parentheses with the associated reason.
-// Example: host ports (8080, 9090), privileged containers, non-default capabilities (NET_RAW)
-// 仅把非空的详情放进括号，空串时保持原因简洁。
+// ForbiddenDetail 返回详细拒绝信息，仅将非空详情用括号附在对应原因后。
+// 示例：host ports (8080, 9090), privileged containers, non-default capabilities (NET_RAW)
 func (a *AggregateCheckResult) ForbiddenDetail() string {
 	var b strings.Builder
 	for i := 0; i < len(a.ForbiddenReasons); i++ {
@@ -138,12 +128,11 @@ func (a *AggregateCheckResult) ForbiddenDetail() string {
 	return b.String()
 }
 
-// UnknownForbiddenReason is used as the placeholder forbidden reason for checks that incorrectly disallow without providing a reason.
-// 检查实现漏填原因时仍能产出可聚合的结果，避免静默丢弃该条违规。
+// UnknownForbiddenReason 是检查拒绝却漏填原因时的占位值，确保违规仍可聚合。
 const UnknownForbiddenReason = "unknown forbidden reason"
 
-// AggregateCheckPod runs all the checks and aggregates the forbidden results into a single CheckResult.
-// The aggregated reason is a comma-separated
+// AggregateCheckResults 将全部检查的拒绝结果聚合为一个 CheckResult。
+// 聚合原因是逗号分隔的字符串。
 // 聚合顺序即传入顺序，调用方负责稳定排序以便输出可复现。
 func AggregateCheckResults(results []CheckResult) AggregateCheckResult {
 	var (
@@ -175,7 +164,7 @@ var (
 
 // 各检查在 init 中由此注册；存构造函数而非实例，便于每次取到全新副本。
 func addCheck(f func() Check) {
-	// add to experimental or versioned list
+	// 按是否分配版本，分别加入实验性或版本化列表。
 	c := f()
 	if len(c.Versions) == 1 && c.Versions[0].MinimumVersion == (api.Version{}) {
 		experimentalChecks = append(experimentalChecks, f)
@@ -184,10 +173,9 @@ func addCheck(f func() Check) {
 	}
 }
 
-// DefaultChecks returns checks that are expected to be enabled by default.
-// The results are mutually exclusive with ExperimentalChecks.
-// It returns a new copy of checks on each invocation and is expected to be called once at setup time.
-// 返回副本可防止调用方修改共享注册表中的构造函数。
+// DefaultChecks 返回默认启用的检查。
+// 与 ExperimentalChecks 互斥。
+// 每次调用返回新副本，供初始化阶段注册，避免修改共享注册表。
 func DefaultChecks() []Check {
 	retval := make([]Check, 0, len(defaultChecks))
 	for _, f := range defaultChecks {
@@ -196,10 +184,9 @@ func DefaultChecks() []Check {
 	return retval
 }
 
-// ExperimentalChecks returns checks that have not yet been assigned to policy versions.
-// The results are mutually exclusive with DefaultChecks.
-// It returns a new copy of checks on each invocation and is expected to be called once at setup time.
-// 与 DefaultChecks 返回互斥集合，避免同一检查被重复注册而产出重复警告。
+// ExperimentalChecks 返回尚未分配策略版本的实验性检查。
+// 与 DefaultChecks 互斥。
+// 每次调用返回新副本，供初始化阶段注册，避免重复注册和共享状态。
 func ExperimentalChecks() []Check {
 	retval := make([]Check, 0, len(experimentalChecks))
 	for _, f := range experimentalChecks {

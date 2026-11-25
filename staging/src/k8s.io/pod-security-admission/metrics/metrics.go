@@ -32,25 +32,36 @@ import (
 )
 
 const (
-	ModeAudit     = "audit"
-	ModeEnforce   = "enforce"
-	ModeWarn      = "warn"
-	DecisionAllow = "allow" // Policy evaluated, request allowed
-	DecisionDeny  = "deny"  // Policy evaluated, request denied
+	// ModeAudit 表示只记录审计违规、不阻断请求的模式。
+	ModeAudit = "audit"
+	// ModeEnforce 表示评估结果可阻断请求的模式。
+	ModeEnforce = "enforce"
+	// ModeWarn 表示向请求方返回警告但不阻断请求的模式。
+	ModeWarn = "warn"
+	// DecisionAllow 表示策略评估后允许请求。
+	DecisionAllow = "allow"
+	// DecisionDeny 表示策略评估后拒绝请求。
+	DecisionDeny = "deny"
 )
 
-// Decision 与 Mode 作为独立类型，避免调用方把任意字符串传进录制接口污染指标标签。
+// Decision 表示一次策略评估的准入结果。
 type Decision string
+
+// Mode 表示策略评估所处的准入模式。
 type Mode string
 
 // Recorder 抽象出指标上报，测试里可以换成假实现而不依赖 Prometheus registry。
 type Recorder interface {
+	// RecordEvaluation 记录策略评估结果。
 	RecordEvaluation(Decision, api.LevelVersion, Mode, api.Attributes)
+	// RecordExemption 记录被豁免、未进入策略评估的请求。
 	RecordExemption(api.Attributes)
+	// RecordError 记录评估过程中的错误，fatal 表示是否导致准入失败。
 	RecordError(fatal bool, attrs api.Attributes)
 }
 
-// apiVersion 用来判断策略版本是“未来版本”，防止指标基数随 API 升级无限增长。
+// PrometheusRecorder 用 Prometheus 计数器记录评估、豁免和错误。
+// apiVersion 用于识别未来策略版本，防止指标基数随 API 升级无限增长。
 type PrometheusRecorder struct {
 	apiVersion api.Version
 
@@ -61,6 +72,7 @@ type PrometheusRecorder struct {
 
 var _ Recorder = &PrometheusRecorder{}
 
+// NewPrometheusRecorder 创建指标录制器；version 表示当前 API server 版本，用于识别未来策略版本。
 func NewPrometheusRecorder(version api.Version) *PrometheusRecorder {
 	errorsCounter := metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -93,10 +105,11 @@ func (r *PrometheusRecorder) Reset() {
 	r.errorsCounter.Reset()
 }
 
+// RecordEvaluation 记录一次策略评估结果，只累加指标，不影响准入决策。
 func (r *PrometheusRecorder) RecordEvaluation(decision Decision, policy api.LevelVersion, evalMode Mode, attrs api.Attributes) {
 	var version string
 	// privileged 没有版本差异，和 latest 归到同一个标签，避免产生无意义的版本序列。
-	if policy.Version.Latest() || policy.Level == api.LevelPrivileged { // Privileged is always effectively latest.
+	if policy.Version.Latest() || policy.Level == api.LevelPrivileged { // privileged 在效果上始终等同于 latest。
 		version = "latest"
 	} else {
 		// 超出当前 API 版本的策略统一记为 future，防止每次发版都新增一组时间序列。
@@ -118,6 +131,7 @@ func (r *PrometheusRecorder) RecordEvaluation(decision Decision, policy api.Leve
 	})
 }
 
+// RecordExemption 记录被豁免、未进入策略评估的请求。
 func (r *PrometheusRecorder) RecordExemption(attrs api.Attributes) {
 	r.exemptionsCounter.CachedInc(exemptionsLabels{
 		operation:   operationLabel(attrs.GetOperation()),
@@ -126,6 +140,7 @@ func (r *PrometheusRecorder) RecordExemption(attrs api.Attributes) {
 	})
 }
 
+// RecordError 记录评估过程中的错误；fatal 区分导致准入失败的错误与可降级继续评估的错误。
 func (r *PrometheusRecorder) RecordError(fatal bool, attrs api.Attributes) {
 	r.errorsCounter.WithLabelValues(
 		strconv.FormatBool(fatal),
@@ -147,8 +162,7 @@ func resourceLabel(resource schema.GroupVersionResource) string {
 	case namespaceResource:
 		return "namespace"
 	default:
-		// Assume any other resource is a valid input to pod-security, and therefore a controller.
-		// 用固定值兜底，避免把任意 CRD 的 group/resource 原样当标签导致基数爆炸。
+		// 其他资源按控制器处理；用固定值兜底，避免把任意 CRD 的 group/resource 原样当标签导致基数爆炸。
 		return "controller"
 	}
 }
@@ -160,8 +174,7 @@ func operationLabel(op admissionv1.Operation) string {
 	case admissionv1.Update:
 		return "update"
 	default:
-		// This is a slower operation, but never used in the default implementation.
-		// 保留通用分支供非默认实现使用；标签值统一小写，保持命名一致。
+		// 默认实现不会走到该分支；保留它以兼容其他操作，并统一标签值的大小写。
 		return strings.ToLower(string(op))
 	}
 }

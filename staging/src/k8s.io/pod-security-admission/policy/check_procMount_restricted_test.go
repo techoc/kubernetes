@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// restricted 等级不看 userns：无论 HostUsers 取什么值，Unmasked 和其他值都要被拒。
+// restricted 不采纳基线的 userns 放宽：无论 HostUsers 取值，Unmasked 和其他值都必须拒绝。
 // 所以这里对同一个 Pod 跑两种 userns 设置，确认结果一致。
 func TestProcMountRestricted(t *testing.T) {
 	defaultValue := corev1.DefaultProcMount

@@ -26,15 +26,15 @@ import (
 )
 
 /*
-Pod and containers must not set securityContext.windowsOptions.hostProcess to true.
+Pod 和容器不得将 securityContext.windowsOptions.hostProcess 设置为 true，以免以宿主身份运行。
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.securityContext.windowsOptions.hostProcess
 spec.containers[*].securityContext.windowsOptions.hostProcess
 spec.initContainers[*].securityContext.windowsOptions.hostProcess
 
-**Allowed Values:** undefined / false
+**允许值：** 未定义 / false
 */
 
 // hostProcess 让容器以宿主身份运行，等同于绕过容器隔离边界；nil 与 false 都安全，只有显式 true 才拒绝。
@@ -42,8 +42,7 @@ func init() {
 	addCheck(CheckWindowsHostProcess)
 }
 
-// CheckWindowsHostProcess returns a baseline level check
-// that forbids hostProcess=true in 1.0+
+// CheckWindowsHostProcess 返回基线级检查，从 1.0 起禁止 hostProcess=true。
 func CheckWindowsHostProcess() Check {
 	return Check{
 		ID:    "windowsHostProcess",
@@ -77,7 +76,7 @@ func windowsHostProcess_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodS
 		podSpecForbidden = true
 	}
 
-	// pod or containers explicitly set hostProcess=true
+	// Pod 或容器显式设置了 hostProcess=true
 	// 即使在 Linux Pod 上这几个字段也没意义，但设置它们仍是显式的高危意图，统一拒绝避免平台差异。
 	var forbiddenSetters []string
 	if podSpecForbidden {

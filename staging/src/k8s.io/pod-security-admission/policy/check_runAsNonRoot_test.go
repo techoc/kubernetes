@@ -23,7 +23,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// 覆盖显式禁用、Pod 级继承与 user namespace 放宽这几条互斥分支。
+// 分别锁定显式禁用、Pod 级继承和 user namespace 放宽，防止分支之间相互误判。
 func TestRunAsNonRoot(t *testing.T) {
 	tests := []struct {
 		name          string

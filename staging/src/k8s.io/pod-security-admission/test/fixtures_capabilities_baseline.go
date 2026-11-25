@@ -22,15 +22,15 @@ import (
 )
 
 /*
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 
 containerFields: []string{
 	`securityContext.capabilities.add`,
 },
 */
 
-// ensureCapabilities ensures the pod and all initContainers and containers have a non-nil capabilities.
-// 夹具只需改动 add 字段，先补齐 capabilities 结构可让下游 tweak 不必层层判空。
+// ensureCapabilities 为 Pod、普通容器和 init 容器补齐 capabilities 对象。
+// 夹具只修改 add 字段，提前补齐结构可让后续 tweak 无需层层判空。
 func ensureCapabilities(p *corev1.Pod) *corev1.Pod {
 	p = ensureSecurityContext(p)
 	for i := range p.Spec.Containers {
@@ -46,15 +46,13 @@ func ensureCapabilities(p *corev1.Pod) *corev1.Pod {
 	return p
 }
 
-// 基线只允许一组受控的 capability，这里用最小化的通过集合与多个失败变体
-// 分别验证白名单本身、initContainer 覆盖，以及大小写/CAP_ 前缀等别名写法不能绕过检查。
+// 基线只允许一组受控的 capability，这里用完整的通过集合与多个失败变体
+// 分别验证白名单本身、init 容器覆盖，以及大小写/CAP_ 前缀等别名写法不能绕过检查。
 func init() {
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "capabilities",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
-			// don't generate fixtures if minimal valid pod drops ALL
-			// 若最小合法 Pod 已 drop ALL，再 add 任何 capability 都可能被策略拒绝，
-			// 此时返回空集合比强行构造一个“通过”用例更准确。
+			// 最小合法 Pod 已 drop ALL 时，任何新增 capability 都可能被拒绝，不再构造通过夹具。
 			if p.Spec.Containers[0].SecurityContext != nil && p.Spec.Containers[0].SecurityContext.Capabilities != nil {
 				for _, capability := range p.Spec.Containers[0].SecurityContext.Capabilities.Drop {
 					if capability == corev1.Capability("ALL") {
@@ -65,7 +63,7 @@ func init() {
 
 			p = ensureCapabilities(p)
 			return []*corev1.Pod{
-				// all allowed capabilities
+				// 一次加回全部允许能力，普通容器与 init 容器都覆盖。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Capabilities.Add = []corev1.Capability{
 						"AUDIT_WRITE", "CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "MKNOD", "NET_BIND_SERVICE", "SETFCAP", "SETGID", "SETPCAP", "SETUID", "SYS_CHROOT",
@@ -79,21 +77,19 @@ func init() {
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			p = ensureCapabilities(p)
 			return []*corev1.Pod{
-				// NET_RAW
+				// 不在基线白名单中的能力。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Capabilities.Add = []corev1.Capability{"NET_RAW"}
 				}),
-				// ensure init container is enforced
+				// init 容器也不能新增白名单外的能力。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.InitContainers[0].SecurityContext.Capabilities.Add = []corev1.Capability{"NET_RAW"}
 				}),
-				// case-difference
-				// 能力名大小写敏感，小写写法不应被当作合法能力而放行。
+				// 能力名大小写敏感，小写形式不能当作合法能力放行。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Capabilities.Add = []corev1.Capability{"chown"}
 				}),
-				// CAP_ prefix
-				// 内核工具常带 CAP_ 前缀，白名单按裸名匹配，因此这种别名也不能绕过检查。
+				// 白名单按裸能力名匹配，CAP_ 前缀别名不能绕过检查。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Capabilities.Add = []corev1.Capability{"CAP_CHOWN"}
 				}),

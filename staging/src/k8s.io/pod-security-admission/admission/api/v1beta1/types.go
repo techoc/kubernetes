@@ -21,9 +21,10 @@ import (
 )
 
 // 指令 +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object 使生成代码为本类型实现 DeepCopyObject，
-// 从而满足 runtime.Object 接口参与 scheme 编解码；本文件为旧版配置结构，供读取历史配置并转换到 v1。
+// 从而满足 runtime.Object 接口参与 scheme 编解码；本文件保留旧版配置结构，供读取历史配置并转换到内部表示。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// PodSecurityConfiguration 是 v1beta1 配置根对象，加载后转换为内部表示。
 type PodSecurityConfiguration struct {
 	metav1.TypeMeta `json:""`
 
@@ -44,8 +45,8 @@ type PodSecurityDefaults struct {
 	WarnVersion    string `json:"warn-version,omitempty"`
 }
 
-// PodSecurityExemptions 列出无需执行策略的主体。
-// 三类豁免互不影响，任一命中即可跳过检查；切片可省略，nil 与空列表等价。
+// PodSecurityExemptions 列出无需执行策略的用户、命名空间与 RuntimeClass。
+// 任一命中即可跳过检查；切片可省略，nil 与空列表等价。
 type PodSecurityExemptions struct {
 	Usernames      []string `json:"usernames,omitempty"`
 	Namespaces     []string `json:"namespaces,omitempty"`

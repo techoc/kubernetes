@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// 三个 host 命名空间开关一起打开，验证失败详情会把它们按固定顺序全部列出；
+// 同时打开三个 host 命名空间开关，确认失败详情按固定顺序列全，避免遗漏任一共享边界；
 // 顺序固定才能保证告警/审计信息可读、断言可写。
 func TestHostNamespaces(t *testing.T) {
 	tests := []struct {

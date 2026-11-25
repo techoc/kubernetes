@@ -58,12 +58,12 @@ func TestHostProbesAndHostLifecycleEmulation(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// pod that uses a probe with an explicit host
+			// 探针显式设置 host 的 Pod
 			// 显式 host 是触发该检查的必要条件；留空时探测目标是 Pod IP，属于安全用法。
 			podMetadata := &metav1.ObjectMeta{}
 			podSpec := &corev1.PodSpec{Containers: []corev1.Container{{StartupProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Host: "localhost"}}}}}}
 
-			// evaluating "version=latest" and "version=1.34" should only allow if the host check is not active
+			// 仅当 host 检查未启用时，求值 "version=latest" 与 "version=1.34" 才应放行
 			// 用 "latest" 和 "1.34" 两个版本交叉验证，确保模拟版本只影响模拟目标版本之前的历史策略，
 			// 而不会改变当前版本自身的判断。
 			expectAllowed := tc.hostCheckActive == false
@@ -74,7 +74,7 @@ func TestHostProbesAndHostLifecycleEmulation(t *testing.T) {
 				t.Fatalf("evaluating with '1.34' expected allowed=%v, got %v: %v", expectAllowed, result.Allowed, result.ForbiddenReasons)
 			}
 
-			// evaluating "version=1.33" should always allow
+			// 求值 "version=1.33" 时必须始终放行
 			// 1.33 早于该限制引入的版本，无论模拟开关如何都必须放行，
 			// 这是防止策略被追溯应用到旧版本的关键回归点。
 			if result := AggregateCheckResults(e.EvaluatePod(api.LevelVersion{Level: api.LevelBaseline, Version: api.MajorMinorVersion(1, 33)}, podMetadata, podSpec)); !result.Allowed {
@@ -104,17 +104,17 @@ func TestHostProbesAndHostLifecycle(t *testing.T) {
 						Name: "a",
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{}, // Host field not set (defaults to podIP)
+								HTTPGet: &corev1.HTTPGetAction{}, // 未设置 host，默认使用 Pod IP
 							},
 						},
 						ReadinessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
-								TCPSocket: &corev1.TCPSocketAction{}, // Host field not set (defaults to podIP)
+								TCPSocket: &corev1.TCPSocketAction{}, // 未设置 host，默认使用 Pod IP
 							},
 						},
 						Lifecycle: &corev1.Lifecycle{
 							PostStart: &corev1.LifecycleHandler{
-								HTTPGet: &corev1.HTTPGetAction{}, // Host field not set (defaults to podIP)
+								HTTPGet: &corev1.HTTPGetAction{}, // 未设置 host，默认使用 Pod IP
 							},
 						},
 					},

@@ -24,7 +24,7 @@ import (
 
 /*
 字段路径留档待补进反射式测试；privileged 只看容器级字段，所以清单里没有 Pod 级路径。
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 
 containerFields: []string{
 	`securityContext.privileged`,
@@ -32,13 +32,13 @@ containerFields: []string{
 
 */
 
-// fail 用例同时清掉 allowPrivilegeEscalation，确保报错只由 privileged=true 引起，不被其他检查干扰。
+// 失败夹具同时清掉 allowPrivilegeEscalation，确保拒绝只由 privileged=true 引起。
 func init() {
 	fixtureData_1_0 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
-				// privileged explicitly set to false
+				// 普通容器显式关闭特权。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Privileged = ptr.To(false)
 					p.Spec.InitContainers[0].SecurityContext.Privileged = ptr.To(false)
@@ -48,12 +48,12 @@ func init() {
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
-				// privileged set to true in container
+				// 普通容器开启特权。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.Privileged = ptr.To(true)
 					p.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation = nil
 				}),
-				// privileged set to true in init container
+				// init 容器开启特权。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.InitContainers[0].SecurityContext.Privileged = ptr.To(true)
 					p.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation = nil

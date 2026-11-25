@@ -23,7 +23,7 @@ import (
 )
 
 /*
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 
 podFields: []string{
 	`securityContext.runAsUser`,
@@ -34,10 +34,9 @@ containerFields: []string{
 
 */
 
-// 上述 TODO 保留原始意图：反射式单测尚未覆盖字段路径，当前靠下面的显式夹具保证行为。
+// runAsUser 限制从 v1.23 起生效；显式夹具覆盖 Pod、普通容器和 init 容器的非零 UID 与 UID 0。
 func init() {
 
-	// runAsUser 限制从 v1.23 起生效，夹具按该版本注册。
 	fixtureData_1_23 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
 			p = ensureSecurityContext(p)
@@ -52,9 +51,9 @@ func init() {
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
-				// explicit 0 on pod
+				// Pod 级显式设置为 UID 0。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.RunAsUser = ptr.To[int64](0) }),
-				// explicit 0 on containers
+				// 普通容器显式设置为 UID 0。
 				tweak(p, func(p *corev1.Pod) { p.Spec.Containers[0].SecurityContext.RunAsUser = ptr.To[int64](0) }),
 				tweak(p, func(p *corev1.Pod) { p.Spec.InitContainers[0].SecurityContext.RunAsUser = ptr.To[int64](0) }),
 			}

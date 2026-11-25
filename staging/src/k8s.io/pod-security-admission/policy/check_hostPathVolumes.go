@@ -25,13 +25,13 @@ import (
 )
 
 /*
-HostPath volumes must be forbidden.
+禁止使用 HostPath 卷，避免容器直接访问节点文件系统。
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.volumes[*].hostPath
 
-**Allowed Values:** undefined/null
+**允许值：** 未定义/null
 */
 
 // hostPath 直接把节点文件系统挂进容器，等于把节点暴露给工作负载；这一项是基线里最硬的禁令之一，
@@ -44,9 +44,7 @@ func init() {
 // 单独命名为常量，是为了让其它 check 能通过 OverrideCheckIDs 精确引用到这一项。
 const checkHostPathVolumesID CheckID = "hostPathVolumes"
 
-// CheckHostPathVolumes returns a baseline level check
-// that requires hostPath=undefined/null in 1.0+
-// 从 1.0 起就有这条规则，故没有版本分支。
+// CheckHostPathVolumes 返回基线级检查，从 1.0 起要求 hostPath 未设置或为 null，故无版本分支。
 func CheckHostPathVolumes() Check {
 	return Check{
 		ID:    checkHostPathVolumesID,

@@ -26,8 +26,7 @@ import (
 )
 
 /*
-In addition to restricting HostPath volumes, the restricted profile
-limits usage of inline pod volume sources to:
+受限策略除禁止 HostPath 卷外，还只允许以下内联 Pod 卷源：
 * configMap
 * downwardAPI
 * emptyDir
@@ -38,7 +37,7 @@ limits usage of inline pod volume sources to:
 * ephemeral
 * image
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.volumes[*].hostPath
 spec.volumes[*].gcePersistentDisk
@@ -62,7 +61,7 @@ spec.volumes[*].photonPersistentDisk
 spec.volumes[*].scaleIO
 spec.volumes[*].storageos
 
-**Allowed Values:** undefined/null
+**允许值：** 未定义/null
 */
 
 func init() {
@@ -70,8 +69,7 @@ func init() {
 	addCheck(CheckRestrictedVolumes)
 }
 
-// CheckRestrictedVolumes returns a restricted level check
-// that limits usage of specific volume types in 1.0+
+// CheckRestrictedVolumes 返回受限级检查，从 1.0 起限制可使用的卷类型。
 // 这条检查取代 1.25 之前的 hostPathVolumes：与其只封禁 hostPath，
 // 不如显式列出允许的内联卷类型，新增卷源时默认拒绝，避免白名单被动放宽。
 func CheckRestrictedVolumes() Check {

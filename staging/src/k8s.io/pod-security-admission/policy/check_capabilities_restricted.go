@@ -33,21 +33,21 @@ const (
 )
 
 /*
-Containers must drop ALL, and may only add NET_BIND_SERVICE.
+容器必须丢弃 ALL 能力，仅允许额外添加 NET_BIND_SERVICE。
 
-**Restricted Fields:**
+**受限字段：**
 spec.containers[*].securityContext.capabilities.drop
 spec.initContainers[*].securityContext.capabilities.drop
 
-**Allowed Values:**
-Must include "ALL"
+**允许值：**
+必须包含 "ALL"
 
-**Restricted Fields:**
+**受限字段：**
 spec.containers[*].securityContext.capabilities.add
 spec.initContainers[*].securityContext.capabilities.add
 
-**Allowed Values:**
-undefined / empty
+**允许值：**
+未定义 / 空
 "NET_BIND_SERVICE"
 */
 // 本文件实现 capabilities 的受限级检查；Windows Pod 在 1.25 版本起直接跳过。
@@ -56,8 +56,7 @@ func init() {
 	addCheck(CheckCapabilitiesRestricted)
 }
 
-// CheckCapabilitiesRestricted returns a restricted level check
-// that ensures ALL capabilities are dropped in 1.22+
+// CheckCapabilitiesRestricted 返回受限级检查，从 1.22 起要求丢弃 ALL 能力。
 func CheckCapabilitiesRestricted() Check {
 	return Check{
 		ID:    "capabilities_restricted",
@@ -68,7 +67,7 @@ func CheckCapabilitiesRestricted() Check {
 				CheckPod:         capabilitiesRestricted_1_22,
 				OverrideCheckIDs: []CheckID{checkCapabilitiesBaselineID},
 			},
-			// Starting 1.25, windows pods would be exempted from this check using pod.spec.os field when set to windows.
+			// 从 1.25 起，pod.spec.os 为 windows 的 Pod 通过 Windows 分支豁免此项检查。
 			{
 				MinimumVersion:   api.MajorMinorVersion(1, 25),
 				CheckPod:         capabilitiesRestricted_1_25,
@@ -140,8 +139,7 @@ func capabilitiesRestricted_1_22(podMetadata *metav1.ObjectMeta, podSpec *corev1
 
 // Windows 容器不支持 Linux capabilities，检查它们只会产生无法修复的拒绝。
 func capabilitiesRestricted_1_25(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	// Pod API validation would have failed if podOS == Windows and if capabilities have been set.
-	// We can admit the Windows pod even if capabilities has not been set.
+	// Windows 不支持 Linux capabilities；若已显式设置，Pod API 校验会先行拒绝，这里可放行未设置的 Pod。
 	if podSpec.OS != nil && podSpec.OS.Name == corev1.Windows {
 		return CheckResult{Allowed: true}
 	}

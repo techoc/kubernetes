@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package admission contains PodSecurity admission logic
-// 本包提供准入链路的组装与决策逻辑；纯策略检查在 policy 包，配置类型在 api 包。
+// Package admission 提供 PodSecurity 准入链路的组装与决策逻辑；
+// 纯策略检查在 policy 包，配置类型在 api 包。
 package admission

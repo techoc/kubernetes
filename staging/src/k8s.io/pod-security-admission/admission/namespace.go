@@ -46,7 +46,7 @@ type namespaceGetter struct {
 func (n *namespaceGetter) GetNamespace(ctx context.Context, name string) (namespace *corev1.Namespace, err error) {
 	if n.lister != nil {
 		namespace, err := n.lister.Get(name)
-		// 只有 NotFound 才回源，其他错误（例如缓存未同步）原样返回，避免掩盖故障。
+		// 只有 NotFound 才回源；缓存自身的错误原样返回，避免掩盖故障。
 		if err == nil || !apierrors.IsNotFound(err) {
 			return namespace, err
 		}

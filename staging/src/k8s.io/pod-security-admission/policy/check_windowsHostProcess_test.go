@@ -34,7 +34,7 @@ func TestWindowsHostProcess(t *testing.T) {
 		expectDetail string
 	}{
 		{
-			// 同一 Pod 内混合多种 SecurityContext 形态，
+			// 同一 Pod 混放多种 SecurityContext，覆盖空值与显式值，
 			// 一次运行即可确认只有显式 true 的容器被列入拒绝详情。
 			name: "host process",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{

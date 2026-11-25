@@ -21,29 +21,22 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-// 本包名与策略组名分离，配置对象统一挂在该 API 组下。
+// GroupName 是配置对象所属的 API 组名。
 const GroupName = "pod-security.admission.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-// alpha 与 beta 共用 group，靠 version 区分，避免解码时类型冲突。
+// SchemeGroupVersion 是 v1alpha1 配置对象的注册版本；各版本共用组名，以版本号区分。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
 var (
-	// SchemeBuilder is a pointer used to call AddToScheme
-	// 对外暴露 builder，供调用方在自有 scheme 中装配本组类型。
+	// SchemeBuilder 收集本版本的手写与生成注册函数。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is used to register the types to API encoding/decoding machinery
-	// 它是集成点：外部只需调用此函数，无需了解内部注册细节。
+	// AddToScheme 将本版本类型注册到编解码 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
-	// 手写与生成注册分开，可让代码在生成文件缺失时仍通过编译。
+	// 手写与生成注册分开，缺少生成文件时本包仍可编译。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 

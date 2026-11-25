@@ -26,9 +26,9 @@ import (
 )
 
 /*
-Host field is restricted in the probes and lifecycle handlers.
+探针和生命周期处理器中的 host 字段只能留空，以免 kubelet 从节点访问任意目标。
 
-**Restricted Fields:**
+**受限字段：**
 
 * spec.containers[*].livenessProbe.httpGet.host
 * spec.containers[*].readinessProbe.httpGet.host
@@ -36,8 +36,8 @@ Host field is restricted in the probes and lifecycle handlers.
 * spec.containers[*].livenessProbe.tcpSocket.host
 * spec.containers[*].readinessProbe.tcpSocket.host
 * spec.containers[*].startupProbe.tcpSocket.host
-* spec.containers[*].lifecycle.postStart.tcpSocket.host // Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept for backward compatibility.
-* spec.containers[*].lifecycle.preStop.tcpSocket.host // Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept for backward compatibility.
+* spec.containers[*].lifecycle.postStart.tcpSocket.host // Deprecated: TCPSocket 不支持作为 LifecycleHandler，仅为兼容旧版本保留。
+* spec.containers[*].lifecycle.preStop.tcpSocket.host // Deprecated: TCPSocket 不支持作为 LifecycleHandler，仅为兼容旧版本保留。
 * spec.containers[*].lifecycle.postStart.httpGet.host
 * spec.containers[*].lifecycle.preStop.httpGet.host
 * spec.initContainers[*].livenessProbe.httpGet.host
@@ -46,12 +46,12 @@ Host field is restricted in the probes and lifecycle handlers.
 * spec.initContainers[*].livenessProbe.tcpSocket.host
 * spec.initContainers[*].readinessProbe.tcpSocket.host
 * spec.initContainers[*].startupProbe.tcpSocket.host
-* spec.initContainers[*].lifecycle.postStart.tcpSocket.host // Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept for backward compatibility.
-* spec.initContainers[*].lifecycle.preStop.tcpSocket.host // Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept for backward compatibility.
+* spec.initContainers[*].lifecycle.postStart.tcpSocket.host // Deprecated: TCPSocket 不支持作为 LifecycleHandler，仅为兼容旧版本保留。
+* spec.initContainers[*].lifecycle.preStop.tcpSocket.host // Deprecated: TCPSocket 不支持作为 LifecycleHandler，仅为兼容旧版本保留。
 * spec.initContainers[*].lifecycle.postStart.httpGet.host
 * spec.initContainers[*].lifecycle.preStop.httpGet.host
 
-Allowed Values: "", undefined/null
+**允许值：** "", 未定义/null
 */
 
 // 探针和生命周期回调里的 host 会让 kubelet 去访问节点上的服务，等于绕开 Pod 的网络隔离；
@@ -61,8 +61,7 @@ func init() {
 	addCheck(CheckHostProbesAndHostLifecycle)
 }
 
-// CheckHostProbesAndHostLifecycle returns a baseline level check
-// that forbids setting host field in probes and lifecycle handlers in 1.34+
+// CheckHostProbesAndHostLifecycle 返回基线级检查，从 1.34 起禁止在探针和生命周期处理器中设置 host。
 // 从 1.34 起才算违规：此前这些字段不算基线违规，老版本策略不能套用新规则。
 func CheckHostProbesAndHostLifecycle() Check {
 	return Check{
@@ -83,7 +82,7 @@ func hostProbesAndHostLifecycleV1Dot34(podMetadata *metav1.ObjectMeta, podSpec *
 	badContainers := sets.New[string]()
 	forbidden := sets.New[string]()
 	visitContainers(podSpec, func(container *corev1.Container) {
-		// Check probes
+		// 检查三种探针，避免遗漏任一访问节点的入口。
 		// 三种探针都要查：漏掉任何一种都会给违规配置留下入口。
 		if badHosts := getForbiddenHostProbes(container.LivenessProbe); len(badHosts) > 0 {
 			badContainers.Insert(container.Name)
@@ -98,7 +97,7 @@ func hostProbesAndHostLifecycleV1Dot34(podMetadata *metav1.ObjectMeta, podSpec *
 			forbidden.Insert(badHosts...)
 		}
 
-		// Check lifecycle handlers
+		// 检查生命周期处理器，其执行位置与探针相同。
 		// 生命周期回调同样在节点上执行，风险与探针相同，不能只查探针就放过。
 		if container.Lifecycle != nil {
 			if badHosts := getForbiddenHostLifecycle(container.Lifecycle.PostStart); len(badHosts) > 0 {

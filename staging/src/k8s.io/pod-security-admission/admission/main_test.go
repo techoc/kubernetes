@@ -25,7 +25,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 )
 
-// 共享响应对象会被多个用例返回，这里在全部测试后检查它们没被就地修改。
+// TestMain 在全部测试结束后检查共享响应未被就地修改；调用方修改共享对象会污染后续准入结果。
 func TestMain(m *testing.M) {
 	sharedResponses := map[string]*admissionv1.AdmissionResponse{
 		"sharedAllowedResponse":                        sharedAllowedResponse,

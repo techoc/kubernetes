@@ -29,14 +29,14 @@ import (
 	apiv1 "k8s.io/pod-security-admission/admission/api/v1"
 )
 
-// 路径为空等同于没有配置：直接生成默认配置，而不是把空路径当文件读。
+// LoadFromFile 读取并解码配置文件；空路径表示未指定配置，返回默认配置。
 func LoadFromFile(file string) (*api.PodSecurityConfiguration, error) {
 	if len(file) == 0 {
-		// no file specified, use default config
+		// 未指定文件时使用默认配置。
 		return LoadFromData(nil)
 	}
 
-	// read from file
+	// 读取文件内容后统一交给数据加载逻辑。
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
@@ -44,10 +44,10 @@ func LoadFromFile(file string) (*api.PodSecurityConfiguration, error) {
 	return LoadFromData(data)
 }
 
-// 与 LoadFromFile 同理，nil reader 表示未指定输入，回落到默认配置。
+// LoadFromReader 读取并解码配置流；nil reader 表示未指定输入，返回默认配置。
 func LoadFromReader(reader io.Reader) (*api.PodSecurityConfiguration, error) {
 	if reader == nil {
-		// no reader specified, use default config
+		// 未指定 reader 时使用默认配置。
 		return LoadFromData(nil)
 	}
 
@@ -58,10 +58,11 @@ func LoadFromReader(reader io.Reader) (*api.PodSecurityConfiguration, error) {
 	return LoadFromData(data)
 }
 
-// 空数据先经过 scheme 默认值再转内部类型，保证缺省字段与显式声明默认值结果一致。
+// LoadFromData 解码配置字节；空数据先应用默认值，非空数据严格解码后转内部类型，
+// 保证缺省字段与显式配置得到一致的规范化结果。
 func LoadFromData(data []byte) (*api.PodSecurityConfiguration, error) {
 	if len(data) == 0 {
-		// no config provided, return default
+		// 未提供配置数据时返回默认配置。
 		externalConfig := &apiv1.PodSecurityConfiguration{}
 		scheme.Scheme.Default(externalConfig)
 		internalConfig := &api.PodSecurityConfiguration{}

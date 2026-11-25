@@ -26,19 +26,18 @@ import (
 )
 
 /*
-Containers must not set runAsUser: 0
-unless the pod is in a user namespace ("hostUsers: false").
+容器不得设置 runAsUser: 0；用户命名空间（"hostUsers: false"）已隔离宿主，故可例外。
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.securityContext.runAsUser
 spec.containers[*].securityContext.runAsUser
 spec.initContainers[*].securityContext.runAsUser
 
-**Allowed Values:**
-non-zero values
-undefined/null
-any value if "hostUsers" is false
+**允许值：**
+非零值
+未定义/null
+"hostUsers" 为 false 时允许任意值
 
 */
 
@@ -47,8 +46,7 @@ func init() {
 	addCheck(CheckRunAsUser)
 }
 
-// CheckRunAsUser returns a restricted level check
-// that forbides runAsUser=0 in 1.23+
+// CheckRunAsUser 返回受限级检查，从 1.23 起禁止 runAsUser=0。
 // 按版本注册两套实现：1.35 起用户命名空间成为稳定特性，
 // 放宽规则不再依赖 Alpha 特性门控，因此需要独立的版本化检查。
 func CheckRunAsUser() Check {
@@ -69,9 +67,8 @@ func CheckRunAsUser() Check {
 }
 
 func runAsUser1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	// See KEP-127: https://github.com/kubernetes/enhancements/blob/308ba8d/keps/sig-node/127-user-namespaces/README.md?plain=1#L411-L447
-	// In the 1.23 policy, this relaxation was gated on a perma-alpha feature gate.
-	// Instead of relaxing 1.0 policy, drop the relaxation there, and add it unconditionally here.
+	// 参见 KEP-127： https://github.com/kubernetes/enhancements/blob/308ba8d/keps/sig-node/127-user-namespaces/README.md?plain=1#L411-L447
+	// 1.23 策略中的这项放宽曾受永久 Alpha 特性门控约束。
 	// 用户命名空间把容器内 root 映射为节点上的非 root，此时 runAsUser=0 不再意味着节点提权，
 	// 所以 1.35 版本无需特性门控即可放行，但仍要复用 1.23 的实现处理非命名空间 Pod。
 	if relaxPolicyForUserNamespacePod(podSpec) {
@@ -84,14 +81,14 @@ func runAsUser1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Chec
 // runAsUser1_23 只检查显式设为 0 的情况：
 // 未设置字段交由运行时的默认非 root 策略处理，策略本身不替用户做隐式推断。
 func runAsUser1_23(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	// things that explicitly set runAsUser=0
+	// 显式设置 runAsUser=0 的来源
 	var badSetters []string
 
 	if podSpec.SecurityContext != nil && podSpec.SecurityContext.RunAsUser != nil && *podSpec.SecurityContext.RunAsUser == 0 {
 		badSetters = append(badSetters, "pod")
 	}
 
-	// containers that explicitly set runAsUser=0
+	// 显式设置 runAsUser=0 的容器
 	var explicitlyBadContainers []string
 
 	visitContainers(podSpec, func(container *corev1.Container) {
@@ -110,7 +107,7 @@ func runAsUser1_23(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Chec
 			),
 		)
 	}
-	// pod or containers explicitly set runAsUser=0
+	// Pod 或容器显式设置了 runAsUser=0
 	// 统一汇总 Pod 级与容器级的违规者，让用户一次看到所有需要修改的位置。
 	if len(badSetters) > 0 {
 		return CheckResult{

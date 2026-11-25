@@ -26,19 +26,18 @@ import (
 )
 
 /*
-Containers must be required to run as non-root users,
-unless the pod is in a user namespace ("hostUsers: false").
+容器必须以非 root 用户运行；用户命名空间（"hostUsers: false"）已隔离宿主，故可例外。
 
-**Restricted Fields:**
+**受限字段：**
 
 spec.securityContext.runAsNonRoot
 spec.containers[*].securityContext.runAsNonRoot
 spec.initContainers[*].securityContext.runAsNonRoot
 
-**Allowed Values:**
+**允许值：**
 true
-undefined/null at container-level if pod-level is set to true
-any value if "hostUsers" is false
+Pod 级设为 true 时，容器级可为未定义/null
+"hostUsers" 为 false 时允许任意值
 */
 // 本文件定义 runAsNonRoot 检查；1.35 起对启用 user namespace 的 Pod 放宽，其余沿用 1.0 逻辑。
 
@@ -46,9 +45,8 @@ func init() {
 	addCheck(CheckRunAsNonRoot)
 }
 
-// CheckRunAsNonRoot returns a restricted level check
-// that requires runAsNonRoot=true in 1.0+
-// 版本列表按时间递增，求值时选Version不晚于策略版本的最新一条。
+// CheckRunAsNonRoot 返回受限级检查，从 1.0 起要求 runAsNonRoot=true。
+// 版本列表按时间递增，求值时选择不晚于策略版本的最新实现。
 func CheckRunAsNonRoot() Check {
 	return Check{
 		ID:    "runAsNonRoot",
@@ -67,10 +65,9 @@ func CheckRunAsNonRoot() Check {
 }
 
 func runAsNonRoot1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	// See KEP-127: https://github.com/kubernetes/enhancements/blob/308ba8d/keps/sig-node/127-user-namespaces/README.md?plain=1#L411-L447
-	// In the 1.0 policy, this relaxation was gated on a perma-alpha feature gate.
-	// Instead of relaxing 1.0 policy, drop the relaxation there, and add it unconditionally here.
-	// 旧版本策略保持不变，只在新版本放开：已固化的基线不应被追溯改写。
+	// 参见 KEP-127： https://github.com/kubernetes/enhancements/blob/308ba8d/keps/sig-node/127-user-namespaces/README.md?plain=1#L411-L447
+	// 1.0 策略中的这项放宽曾受永久 Alpha 特性门控约束。
+	// 旧版本策略保持不变，只在新版本放开，避免追溯改写已固化的判定。
 	if relaxPolicyForUserNamespacePod(podSpec) {
 		return CheckResult{Allowed: true}
 	}
@@ -80,7 +77,7 @@ func runAsNonRoot1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) C
 
 // 显式填 false 与仅未填写要分开报：前者是明确违规，后者需提示补齐设置。
 func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
-	// things that explicitly set runAsNonRoot=false
+	// 显式设置 runAsNonRoot=false 的来源
 	var badSetters []string
 
 	podRunAsNonRoot := false
@@ -92,23 +89,23 @@ func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Ch
 		}
 	}
 
-	// containers that explicitly set runAsNonRoot=false
+	// 显式设置 runAsNonRoot=false 的容器
 	var explicitlyBadContainers []string
-	// containers that didn't set runAsNonRoot and aren't caught by a pod-level runAsNonRoot=true
+	// 未设置 runAsNonRoot 且没有 Pod 级 true 可继承的容器
 	// 容器未填时允许继承 Pod 级设置，但显式 false 不能被 Pod 级 true 覆盖。
 	var implicitlyBadContainers []string
 
 	visitContainers(podSpec, func(container *corev1.Container) {
 		if container.SecurityContext != nil && container.SecurityContext.RunAsNonRoot != nil {
-			// container explicitly set runAsNonRoot
+			// 容器显式设置了 runAsNonRoot
 			if !*container.SecurityContext.RunAsNonRoot {
-				// container explicitly set runAsNonRoot to a bad value
+				// 容器显式将 runAsNonRoot 设为非法值
 				explicitlyBadContainers = append(explicitlyBadContainers, container.Name)
 			}
 		} else {
-			// container did not explicitly set runAsNonRoot
+			// 容器未显式设置 runAsNonRoot
 			if !podRunAsNonRoot {
-				// no pod-level runAsNonRoot=true, so this container implicitly has a bad value
+				// 没有 Pod 级 runAsNonRoot=true，容器继承不到有效设置
 				implicitlyBadContainers = append(implicitlyBadContainers, container.Name)
 			}
 		}
@@ -124,7 +121,7 @@ func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Ch
 			),
 		)
 	}
-	// pod or containers explicitly set runAsNonRoot=false
+	// Pod 或容器显式设置了 runAsNonRoot=false
 	// 显式错误优先报出，避免用户只补齐遗漏项后仍被提示。
 	if len(badSetters) > 0 {
 		return CheckResult{
@@ -134,7 +131,7 @@ func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) Ch
 		}
 	}
 
-	// pod didn't set runAsNonRoot and not all containers opted into runAsNonRoot
+	// Pod 未设置 runAsNonRoot，且并非所有容器都显式开启
 	// 既没有 Pod 级兜底、容器自身也没开启，需提示至少一处显式设为 true。
 	if len(implicitlyBadContainers) > 0 {
 		return CheckResult{

@@ -24,13 +24,12 @@ import (
 func init() {
 	appArmorFixture_1_0 := fixtureGenerator{
 		expectErrorSubstring: "forbidden AppArmor profile",
-		// 通过样例覆盖自定义 profile 与运行时默认 profile，确认检查只拦 unconfined。
+		// 通过样例验证非 unconfined 的 AppArmor 配置不会被拦截。
 		generatePass: func(pod *corev1.Pod, _ api.Level) []*corev1.Pod {
 			pod = ensureAnnotation(pod)
 			return []*corev1.Pod{
-				// container with runtime/default annotation
-				// container with localhost/foo annotation
-				// 注意这里复用了 containers[0] 的名字给 init container 注解，测试只关心注解内容本身。
+				// 同一键先写 runtime/default 再写 localhost/foo，后者覆盖前者；
+				// 复用容器名可避免为注释放置额外容器，最终只验证 localhost/foo。
 				tweak(pod, func(copy *corev1.Pod) {
 					containerName := copy.Spec.Containers[0].Name
 					copy.Annotations[corev1.DeprecatedAppArmorBetaContainerAnnotationKeyPrefix+containerName] = "runtime/default"
@@ -40,17 +39,17 @@ func init() {
 				}),
 			}
 		},
-		// 分别给普通容器与 init 容器设置 unconfined，确保二者都会被检查到。
+		// 普通容器与 init 容器分别设置 unconfined，确保两层都被检查。
 		generateFail: func(pod *corev1.Pod) []*corev1.Pod {
 			pod = ensureAnnotation(pod)
 			return []*corev1.Pod{
-				// container with unconfined annotation
+				// 普通容器使用 unconfined 注解。
 				tweak(pod, func(copy *corev1.Pod) {
 					name := copy.Spec.Containers[0].Name
 					copy.Annotations[corev1.DeprecatedAppArmorBetaContainerAnnotationKeyPrefix+name] = "unconfined"
 				}),
 
-				// initContainer with unconfined annotation
+				// init 容器使用 unconfined 注解。
 				tweak(pod, func(copy *corev1.Pod) {
 					name := copy.Spec.InitContainers[0].Name
 					copy.Annotations[corev1.DeprecatedAppArmorBetaContainerAnnotationKeyPrefix+name] = "unconfined"

@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podsecurityadmission is a placeholder until the initial podsecurity implementation is
-// added.
+// Package podsecurityadmission 仅保留顶层包路径，便于 import 此 staging 模块。
 //
-// 本文件仅保留占位包，实际实现已拆分到 policy、admission、api 等子包：
-// policy 负责逐条检查，admission 负责接入准入链，api 定义对外契约。
-// 留一个顶层包是为了让该 staging 仓库路径可以被顺利 import。
+// 实际实现已拆分到 policy、admission、api 等子包：policy 负责逐条检查，
+// admission 负责接入准入链，api 定义对外契约。
 package podsecurityadmission

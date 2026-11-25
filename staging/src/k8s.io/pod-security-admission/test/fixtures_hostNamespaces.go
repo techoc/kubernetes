@@ -22,16 +22,16 @@ import (
 )
 
 /*
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 */
 
-// 本文件为 hostNamespaces 检查注册夹具，逐个打开宿主命名空间以验证检查能定位到具体字段。
+// 本文件为 hostNamespaces 检查注册夹具，逐个开启宿主命名空间以定位具体违规字段。
 func init() {
 
 	fixtureData_1_0 := fixtureGenerator{
 		expectErrorSubstring: "host namespaces",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
-			// minimal valid pod already captures all valid combinations
+			// 最小合法 Pod 已覆盖合法组合，无需重复生成通过夹具。
 			return nil
 		},
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {

@@ -24,24 +24,31 @@ import (
 
 // 默认值集中定义，避免命令行标志与代码初始化两处写死不同数字。
 const (
-	DefaultPort           = 8443
-	DefaultInsecurePort   = 8080
+	// DefaultPort 是 webhook 默认的安全监听端口。
+	DefaultPort = 8443
+	// DefaultInsecurePort 是非安全监听的默认端口。
+	DefaultInsecurePort = 8080
+	// DefaultClientQPSLimit 是访问 API server 的默认每秒查询数上限。
 	DefaultClientQPSLimit = 20
+	// DefaultClientQPSBurst 是访问 API server 的默认突发请求数上限。
 	DefaultClientQPSBurst = 50
 )
 
-// Options has all the params needed to run a PodSecurity webhook.
-// 本结构体聚合 webhook 专属参数与 apiserver 的安全监听配置，便于统一注册到命令行。
+// Options 聚合运行 PodSecurity webhook 所需的参数。
+// 本结构体同时包含 webhook 专属参数与 apiserver 的安全监听配置，便于统一注册到命令行。
 type Options struct {
-	// Kubeconfig is the file path to the KubeConfig file to use. Only for out-of-cluster configuration.
+	// Kubeconfig 是集群外运行时使用的 KubeConfig 文件路径；留空则使用集群内配置。
 	Kubeconfig string
 
-	// Config is the file path to the PodSecurity configuration file.
+	// Config 是 PodSecurity 配置文件的路径。
 	Config string
 
+	// ClientQPSLimit 限制访问 API server 的每秒查询数。
 	ClientQPSLimit float32
+	// ClientQPSBurst 限制访问 API server 的突发请求数。
 	ClientQPSBurst int
 
+	// SecureServing 提供安全监听、证书与 TLS 配置。
 	SecureServing apiserveroptions.SecureServingOptions
 }
 
@@ -70,7 +77,7 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	o.SecureServing.AddFlags(fs)
 }
 
-// Validate validates all the required options.
+// Validate 校验所有必填选项。
 // 本 webhook 没有额外的必填参数，校验集中在安全监听配置上。
 func (o *Options) Validate() []error {
 	var errs []error

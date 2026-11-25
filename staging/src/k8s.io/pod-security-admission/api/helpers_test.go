@@ -257,7 +257,7 @@ func TestPolicyToEvaluate(t *testing.T) {
 	}
 }
 
-// makeLabels turns the kev-value pairs into a labels map[string]string.
+// makeLabels 把键值对转换为标签映射。
 // 额外塞一个无关标签，用来验证解析器只挑自己认得的键。
 func makeLabels(kvs ...string) map[string]string {
 	if len(kvs)%2 != 0 {

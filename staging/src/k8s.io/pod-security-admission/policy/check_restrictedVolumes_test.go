@@ -35,7 +35,7 @@ func TestRestrictedVolumes(t *testing.T) {
 			name: "host path volumes",
 			pod: &corev1.Pod{Spec: corev1.PodSpec{
 				Volumes: []corev1.Volume{
-					// allowed types
+					// 允许的卷类型
 					{Name: "a1", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 					{Name: "a2", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{}}},
 					{Name: "a3", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{}}},
@@ -46,7 +46,7 @@ func TestRestrictedVolumes(t *testing.T) {
 					{Name: "a8", VolumeSource: corev1.VolumeSource{Ephemeral: &corev1.EphemeralVolumeSource{}}},
 					{Name: "a9", VolumeSource: corev1.VolumeSource{Image: &corev1.ImageVolumeSource{}}},
 
-					// known restricted types
+					// 已知但受限的卷类型
 					// 每种禁用类型各占一个卷，期望详情里按卷名完整列出。
 					{Name: "b1", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{}}},
 					{Name: "b2", VolumeSource: corev1.VolumeSource{GCEPersistentDisk: &corev1.GCEPersistentDiskVolumeSource{}}},
@@ -70,7 +70,7 @@ func TestRestrictedVolumes(t *testing.T) {
 					{Name: "b20", VolumeSource: corev1.VolumeSource{ScaleIO: &corev1.ScaleIOVolumeSource{}}},
 					{Name: "b21", VolumeSource: corev1.VolumeSource{StorageOS: &corev1.StorageOSVolumeSource{}}},
 
-					// unknown type
+					// 未知卷类型
 					// 空 VolumeSource 无法识别类型，按未知类型处理，不能因类型缺失而放行。
 					{Name: "c1", VolumeSource: corev1.VolumeSource{}},
 				},

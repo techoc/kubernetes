@@ -22,21 +22,15 @@ import (
 )
 
 /*
-Note: these fixtures utilize seccomp helper functions that ensure consistency across the
-alpha annotation (up to v.1.19) and the securityContext.seccompProfile field (v1.19+).
-
-The check implementation looks at the appropriate value based on version.
+说明：注解与字段夹具共用 seccomp profile 常量和构造 helper；检查实现按版本读取对应配置。
 */
 
-// 两个版本各注册一份生成器：1.0 用注解模拟 seccomp，1.19 用原生字段，
-// 这样升级过程中旧 Pod 的注解写法仍有对应 fixture 兜底。
+// 两个版本各注册一份生成器：1.0 使用旧注解，1.19 使用原生字段，覆盖配置形式的切换。
 func init() {
 	fixtureData_baseline_1_0 := fixtureGenerator{
 		expectErrorSubstring: "seccompProfile",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
-			// don't generate fixtures if minimal valid pod already has seccomp config
-			// 基准 Pod 已带安全配置时再产出 pass 用例就成了重复文件，直接跳过。
-			// 基准 Pod 已带安全配置时再产出 pass 用例就成了重复文件，直接跳过。
+			// 基准 Pod 已有 Pod 级 seccomp 配置时，跳过这组额外通过夹具。
 			if val, ok := p.Annotations[annotationKeyPod]; ok &&
 				val == corev1.SeccompProfileRuntimeDefault {
 				return nil
@@ -45,12 +39,11 @@ func init() {
 			p = ensureAnnotation(p)
 			return []*corev1.Pod{
 				tweak(p, func(p *corev1.Pod) {
-					// pod-level default
+					// Pod 级使用运行时默认配置。
 					p.Annotations[annotationKeyPod] = corev1.SeccompProfileRuntimeDefault
-					// container-level localhost
+					// 容器级使用 localhost profile。
 					p.Annotations[annotationKeyContainer(p.Spec.Containers[0])] = corev1.SeccompLocalhostProfileNamePrefix + "testing"
-					// init-container unset
-					// init container 故意留空：未显式声明时允许继承 Pod 级配置，这是必须的通过场景。
+					// init 容器故意留空，验证未显式设置时可继承 Pod 级配置。
 				}),
 			}
 		},
@@ -73,8 +66,7 @@ func init() {
 	fixtureData_baseline_1_19 := fixtureGenerator{
 		expectErrorSubstring: "seccompProfile",
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
-			// don't generate fixtures if minimal valid pod already has seccomp config
-			// 基准 Pod 已带安全配置时再产出 pass 用例就成了重复文件，直接跳过。
+			// 基准 Pod 已配置 seccomp 时，无需重复生成通过夹具。
 			if p.Spec.SecurityContext != nil &&
 				p.Spec.SecurityContext.SeccompProfile != nil &&
 				p.Spec.SecurityContext.SeccompProfile.Type == corev1.SeccompProfileTypeRuntimeDefault {
@@ -84,12 +76,11 @@ func init() {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
 				tweak(p, func(p *corev1.Pod) {
-					// pod-level default
+					// Pod 级使用运行时默认配置。
 					p.Spec.SecurityContext.SeccompProfile = seccompProfileRuntimeDefault
-					// container-level localhost
+					// 容器级沿用运行时默认配置。
 					p.Spec.Containers[0].SecurityContext.SeccompProfile = seccompProfileRuntimeDefault
-					// init-container unset
-					// init container 故意留空：未显式声明时允许继承 Pod 级配置，这是必须的通过场景。
+					// init 容器故意留空，验证未显式设置时可继承 Pod 级配置。
 				}),
 			}
 		},

@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// 1.0 的白名单只有五项，这里锁死最初的安全 sysctl 集合；虚构名字 a/b 用来验证多个违规项的拼接顺序。
+// 1.0 白名单仅有五项，以此锁定最初的安全集合；虚构名字 a/b 用于验证多项违规的稳定拼接顺序。
 func TestSysctls(t *testing.T) {
 	// allowed 省略即视为 false：表中大多数用例都是拒绝场景。
 	tests := []struct {

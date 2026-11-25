@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// 放行用例覆盖旧注解和新字段两条路径：字段优先，但旧注解不能因此被误判。
+// 放行用例覆盖旧注解和新字段两条路径，防止升级期间遗漏任一配置来源。
 func TestCheckAppArmor_Allowed(t *testing.T) {
 	testCases := []struct {
 		name     string

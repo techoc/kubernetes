@@ -22,13 +22,10 @@ import (
 )
 
 /*
-Note: these fixtures utilize seccomp helper functions that ensure consistency across the
-alpha annotation (up to v.1.19) and the securityContext.seccompProfile field (v1.19+).
-
-The check implementation looks at the appropriate value based on version.
+说明：字段夹具共用 seccomp profile 常量和构造 helper；检查实现按版本读取对应配置。
 */
 
-// 因此下面的夹具只构造字段形式，helper 会同步生成对应的注解形式。
+// 本文件只注册 1.19 起的字段形式，旧注解由基线夹具覆盖。
 func init() {
 	fixtureData_restricted_1_19 := fixtureGenerator{
 		expectErrorSubstring: "seccompProfile",
@@ -52,26 +49,26 @@ func init() {
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
 			p = ensureSecurityContext(p)
 			return []*corev1.Pod{
-				// restricted 档要求所有层级都显式设置，缺省即视为违规。
-				// unset everywhere
+				// restricted 拒绝 Unconfined；Pod 与容器均未设置时也没有可继承的有效配置。
+				// 以下失败样例覆盖配置缺失和 Unconfined。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.SeccompProfile = nil
 				}),
-				// unconfined, pod-level
+				// Pod 级显式使用 Unconfined。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.SeccompProfile = seccompProfileUnconfined
 				}),
-				// unset initContainer
+				// init 容器未显式设置。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.SeccompProfile = nil
 					p.Spec.Containers[0].SecurityContext.SeccompProfile = seccompProfileRuntimeDefault
 				}),
-				// unset container
+				// 普通容器未显式设置。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.SeccompProfile = nil
 					p.Spec.InitContainers[0].SecurityContext.SeccompProfile = seccompProfileRuntimeDefault
 				}),
-				// unconfined, container-level
+				// init 容器显式使用 Unconfined。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.SeccompProfile = nil
 					p.Spec.Containers[0].SecurityContext.SeccompProfile = seccompProfileRuntimeDefault

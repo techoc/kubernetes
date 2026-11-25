@@ -26,12 +26,10 @@ import (
 	"k8s.io/pod-security-admission/api"
 )
 
-// ValidatePodSecurityConfiguration validates a given PodSecurityConfiguration.
-// 一次性收集所有字段的错误，方便用户一次改完，而不是逐条报错反复提交。
+// ValidatePodSecurityConfiguration 校验整个配置并一次性返回所有字段错误，避免用户逐项修复后反复提交。
 func ValidatePodSecurityConfiguration(configuration *admissionapi.PodSecurityConfiguration) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	// validate defaults
 	// 默认值决定未打标签命名空间的行为，必须先确认等级和版本号都能被解析。
 	allErrs = append(allErrs, validateLevel(field.NewPath("defaults", "enforce"), configuration.Defaults.Enforce)...)
 	allErrs = append(allErrs, validateVersion(field.NewPath("defaults", "enforce-version"), configuration.Defaults.EnforceVersion)...)
@@ -40,8 +38,7 @@ func ValidatePodSecurityConfiguration(configuration *admissionapi.PodSecurityCon
 	allErrs = append(allErrs, validateLevel(field.NewPath("defaults", "audit"), configuration.Defaults.Audit)...)
 	allErrs = append(allErrs, validateVersion(field.NewPath("defaults", "audit-version"), configuration.Defaults.AuditVersion)...)
 
-	// validate exemptions
-	// 豁免名单直接放宽准入边界，名字格式和重复项都要挡住，避免配置写错却静默生效。
+	// 豁免直接放宽准入边界，必须校验名字格式与重复项，避免配置写错却静默生效。
 	allErrs = append(allErrs, validateNamespaces(configuration)...)
 	allErrs = append(allErrs, validateRuntimeClasses(configuration)...)
 	allErrs = append(allErrs, validateUsernames(configuration)...)
@@ -49,8 +46,7 @@ func ValidatePodSecurityConfiguration(configuration *admissionapi.PodSecurityCon
 	return allErrs
 }
 
-// validateLevel validates a level
-// 复用解析函数做校验，保证「配置能通过」与「准入时能识别」是同一个判断标准。
+// validateLevel 复用解析函数校验等级，保证配置校验与准入解析采用同一判断标准。
 func validateLevel(p *field.Path, value string) field.ErrorList {
 	errs := field.ErrorList{}
 	_, err := api.ParseLevel(value)
@@ -60,8 +56,7 @@ func validateLevel(p *field.Path, value string) field.ErrorList {
 	return errs
 }
 
-// validateVersion validates a version
-// 版本字符串写错会导致策略回退到意外版本，所以在加载配置时就要拦下来。
+// validateVersion 校验版本字符串，避免错误取值在加载后导致意外的策略版本。
 func validateVersion(p *field.Path, value string) field.ErrorList {
 	errs := field.ErrorList{}
 	_, err := api.ParseVersion(value)

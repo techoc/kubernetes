@@ -23,7 +23,7 @@ import (
 )
 
 /*
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 
 containerFields: []string{
 	`securityContext.allowPrivilegeEscalation`,
@@ -32,11 +32,11 @@ containerFields: []string{
 */
 
 // 本文件注册 allowPrivilegeEscalation 检查的失败夹具。
-// Windows 上不支持该字段，故显式跳过；nil 安全上下文等同未显式关闭提权，需被视为违规。
+// Windows 不支持该字段，需显式跳过；nil 表示未关闭提权，也属于违规。
 func init() {
 	fixtureData_1_8 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
-			// minimal valid pod already captures all valid combinations
+			// 最小合法 Pod 已覆盖合法组合，无需重复生成通过夹具。
 			return nil
 		},
 		generateFail: func(p *corev1.Pod) []*corev1.Pod {
@@ -44,17 +44,17 @@ func init() {
 				return []*corev1.Pod{}
 			}
 			return []*corev1.Pod{
-				// explicit true
+				// 显式允许提权。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation = ptr.To(true)
 				}),
-				// ensure initContainers are checked
+				// init 容器同样受该检查约束。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.InitContainers[0].SecurityContext.AllowPrivilegeEscalation = ptr.To(true)
 				}),
-				// nil AllowPrivilegeEscalation
+				// 字段未设置。
 				tweak(p, func(p *corev1.Pod) { p.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation = nil }),
-				// nil security context
+				// 整个安全上下文缺失。
 				tweak(p, func(p *corev1.Pod) { p.Spec.Containers[0].SecurityContext = nil }),
 			}
 		},

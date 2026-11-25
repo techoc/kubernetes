@@ -23,7 +23,7 @@ import (
 )
 
 /*
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 
 podFields: []string{
 	`securityContext.windowsOptions.hostProcess`,
@@ -34,13 +34,13 @@ containerFields: []string{
 
 */
 
-// 本文件为 windowsHostProcess 检查注册夹具：仅覆盖失败场景，
-// 因为最小合法 Pod 已经代表所有允许组合；待 hostProcess GA 后再补显式 false 的用例。
+// 本文件为 windowsHostProcess 检查注册失败夹具；最小合法 Pod 已覆盖允许组合。
+// hostProcess 达到 GA 后，再补 Pod 级和容器级显式 false 的通过夹具。
 func init() {
 
 	fixtureData_1_0 := fixtureGenerator{
 		generatePass: func(p *corev1.Pod, _ api.Level) []*corev1.Pod {
-			// minimal valid pod already captures all valid combinations
+			// 最小合法 Pod 已覆盖合法组合，无需重复生成通过夹具。
 			return nil
 		},
 		expectErrorSubstring: "hostProcess",
@@ -56,17 +56,15 @@ func init() {
 				p.Spec.InitContainers[0].SecurityContext.WindowsOptions = &corev1.WindowsSecurityContextOptions{}
 			}
 			return []*corev1.Pod{
-				// true for pod
+				// Pod 级开启 HostProcess。
 				tweak(p, func(p *corev1.Pod) {
-					// HostNetwork is required to be true for HostProcess pods.
-					// Set to true here so we pass API validation and get to admission checks.
+					// HostProcess Pod 必须开启 HostNetwork 才能通过 API 校验，进而测试准入检查。
 					p.Spec.HostNetwork = true
 					p.Spec.SecurityContext.WindowsOptions.HostProcess = ptr.To(true)
 				}),
-				// true for containers
+				// 普通容器和 init 容器开启 HostProcess。
 				tweak(p, func(p *corev1.Pod) {
-					// HostNetwork is required to be true for HostProcess pods.
-					// Set to true here so we pass API validation and get to admission checks.
+					// HostProcess Pod 必须开启 HostNetwork 才能通过 API 校验，进而测试准入检查。
 					p.Spec.HostNetwork = true
 					p.Spec.Containers[0].SecurityContext.WindowsOptions.HostProcess = ptr.To(true)
 					p.Spec.InitContainers[0].SecurityContext.WindowsOptions.HostProcess = ptr.To(true)
@@ -79,5 +77,5 @@ func init() {
 		fixtureKey{level: api.LevelBaseline, version: api.MajorMinorVersion(1, 0), check: "windowsHostProcess"},
 		fixtureData_1_0,
 	)
-	// TODO: register another set of fixtures with passing test cases that explicitly set hostProcess=false at pod and container level once hostProcess is GA
+	// TODO: hostProcess 达到 GA 后，补充 Pod 级和容器级显式 false 的通过夹具。
 }

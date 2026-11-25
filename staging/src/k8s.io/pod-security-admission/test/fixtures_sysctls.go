@@ -22,7 +22,7 @@ import (
 )
 
 /*
-TODO: include field paths in reflect-based unit test
+TODO: 将字段路径纳入反射式单元测试。
 
 podFields: []string{
 	`spec.securityContext.sysctls.name`,
@@ -39,12 +39,11 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// security context with no sysctls
+				// 安全上下文未设置 sysctl。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.Sysctls = nil }),
-				// sysctls with name="kernel.shm_rmid_forced" ,"net.ipv4.ip_local_port_range"
-				// "net.ipv4.tcp_syncookies", "net.ipv4.ping_group_range",
-				// "net.ipv4.ip_unprivileged_port_start"
-				// 这里逐项列出白名单，是为了在内核允许集合变化时能立刻发现夹具与实现脱节。
+				// sysctl 名称："kernel.shm_rmid_forced"、"net.ipv4.ip_local_port_range"、
+				// "net.ipv4.tcp_syncookies"、"net.ipv4.ping_group_range"、"net.ipv4.ip_unprivileged_port_start"。
+				// 逐项列出白名单，便于发现允许集合变化后夹具与实现脱节。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{
 						{Name: "kernel.shm_rmid_forced", Value: "0"},
@@ -61,8 +60,7 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// sysctls with out of allowed name
-				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
+				// 不在白名单中的名称，各版本共用同一失败样例。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -81,11 +79,9 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// security context with no sysctls
+				// 安全上下文未设置 sysctl。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.Sysctls = nil }),
-				// sysctls with name="kernel.shm_rmid_forced" ,"net.ipv4.ip_local_port_range"
-				// "net.ipv4.tcp_syncookies", "net.ipv4.ping_group_range",
-				// "net.ipv4.ip_unprivileged_port_start", "net.ipv4.ip_local_reserved_ports"
+				// sysctl 名称：基础白名单项加上 "net.ipv4.ip_local_reserved_ports"。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{
 						{Name: "kernel.shm_rmid_forced", Value: "0"},
@@ -103,8 +99,7 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// sysctls with out of allowed name
-				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
+				// 不在白名单中的名称，各版本共用同一失败样例。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -123,12 +118,10 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// security context with no sysctls
+				// 安全上下文未设置 sysctl。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.Sysctls = nil }),
-				// sysctls with name="kernel.shm_rmid_forced" ,"net.ipv4.ip_local_port_range"
-				// "net.ipv4.tcp_syncookies", "net.ipv4.ping_group_range",
-				// "net.ipv4.ip_unprivileged_port_start", "net.ipv4.ip_local_reserved_ports",
-				// "net.ipv4.tcp_keepalive_time"
+				// 在 1.27 白名单基础上加入 tcp_keepalive_time、tcp_fin_timeout、
+				// tcp_keepalive_intvl、tcp_keepalive_probes 四个 net.ipv4 sysctl。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{
 						{Name: "kernel.shm_rmid_forced", Value: "0"},
@@ -150,8 +143,7 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// sysctls with out of allowed name
-				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
+				// 不在白名单中的名称，各版本共用同一失败样例。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -170,9 +162,9 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// security context with no sysctls
+				// 安全上下文未设置 sysctl。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.Sysctls = nil }),
-				// sysctls with name="net.ipv4.tcp_rmem", "net.ipv4.tcp_wmem"
+				// sysctl 名称："net.ipv4.tcp_rmem"、"net.ipv4.tcp_wmem"。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{
 						{Name: "net.ipv4.tcp_rmem", Value: "4096 87380 16777216"},
@@ -186,8 +178,7 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// sysctls with out of allowed name
-				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
+				// 不在白名单中的名称，各版本共用同一失败样例。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),
@@ -208,9 +199,9 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// security context with no sysctls
+				// 安全上下文未设置 sysctl。
 				tweak(p, func(p *corev1.Pod) { p.Spec.SecurityContext.Sysctls = nil }),
-				// sysctls with name="net.ipv4.tcp_slow_start_after_idle", "net.ipv4.tcp_notsent_lowat"
+				// sysctl 名称："net.ipv4.tcp_slow_start_after_idle"、"net.ipv4.tcp_notsent_lowat"。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{
 						{Name: "net.ipv4.tcp_slow_start_after_idle", Value: "0"},
@@ -224,8 +215,7 @@ func init() {
 				p.Spec.SecurityContext = &corev1.PodSecurityContext{}
 			}
 			return []*corev1.Pod{
-				// sysctls with out of allowed name
-				// 用明显不在白名单的名字触发拒绝；各版本只需替换通过用例，失败用例保持一致即可。
+				// 不在白名单中的名称，各版本共用同一失败样例。
 				tweak(p, func(p *corev1.Pod) {
 					p.Spec.SecurityContext.Sysctls = []corev1.Sysctl{{Name: "othersysctl", Value: "other"}}
 				}),

@@ -194,6 +194,7 @@ type testEvaluator struct {
 	delay time.Duration
 }
 
+// EvaluatePod 可注入延迟，用于验证预检超时与次数上限。
 func (t *testEvaluator) EvaluatePod(lv api.LevelVersion, meta *metav1.ObjectMeta, spec *corev1.PodSpec) []policy.CheckResult {
 	if t.delay > 0 {
 		time.Sleep(t.delay)
@@ -210,6 +211,7 @@ func (t *testEvaluator) EvaluatePod(lv api.LevelVersion, meta *metav1.ObjectMeta
 // 便于测试命名空间不存在时的处理路径。
 type testNamespaceGetter map[string]*corev1.Namespace
 
+// GetNamespace 返回副本，避免测试中的调用方改动模拟数据。
 func (t testNamespaceGetter) GetNamespace(ctx context.Context, name string) (*corev1.Namespace, error) {
 	if ns, ok := t[name]; ok {
 		return ns.DeepCopy(), nil
@@ -226,6 +228,7 @@ type testPodLister struct {
 	delay  time.Duration
 }
 
+// ListPods 记录调用状态，并可注入延迟来测试预检超时。
 func (t *testPodLister) ListPods(ctx context.Context, namespace string) ([]*corev1.Pod, error) {
 	t.called = true
 	if t.delay > 0 {
@@ -244,19 +247,19 @@ func TestValidateNamespace(t *testing.T) {
 		name                 string
 		exemptNamespaces     []string
 		exemptRuntimeClasses []string
-		// override default policy
+		// 覆盖默认策略。
 		defaultPolicy *api.Policy
-		// request subresource
+		// 请求子资源。
 		subresource string
-		// labels for the new namespace
+		// 新命名空间的标签。
 		newLabels map[string]string
-		// labels for the old namespace (only used if update=true)
+		// 旧命名空间的标签，仅更新请求使用。
 		oldLabels map[string]string
-		// list of pods to return
+		// 模拟列表接口返回的 Pod。
 		pods []*corev1.Pod
-		// time to sleep while listing
+		// 模拟列表接口耗时。
 		delayList time.Duration
-		// time to sleep while evaluating
+		// 模拟策略评估耗时。
 		delayEvaluation time.Duration
 
 		expectAllowed  bool
@@ -265,7 +268,6 @@ func TestValidateNamespace(t *testing.T) {
 		expectEvaluate api.LevelVersion
 		expectWarnings []string
 	}{
-		// creation tests, just validate labels
 		// 创建时无需检查存量 Pod，仅校验标签取值是否合法。
 		{
 			name:           "create privileged",
@@ -310,8 +312,7 @@ func TestValidateNamespace(t *testing.T) {
 			expectListPods: false,
 		},
 
-		// update tests that don't tighten effective policy, no pod list/evaluate
-		// 放宽或保持策略不会让存量 Pod 变成违规，可跳过昂贵的列 Pod 步骤。
+		// 放宽或保持策略不会让存量 Pod 变成违规，可跳过列 Pod 与评估。
 		{
 			name:           "update no-op",
 			newLabels:      map[string]string{api.EnforceLevelLabel: string(api.LevelRestricted), api.EnforceVersionLabel: "v1.0"},
@@ -385,8 +386,7 @@ func TestValidateNamespace(t *testing.T) {
 			},
 		},
 
-		// update tests that introduce labels errors
-		// 标签错误不能被当作放宽处理，必须在变更时立即报错。
+		// 新引入的标签错误不能被当作放宽处理，必须在变更时立即报错。
 		{
 			name:           "update malformed level",
 			newLabels:      map[string]string{api.EnforceLevelLabel: "unknown"},
@@ -404,8 +404,7 @@ func TestValidateNamespace(t *testing.T) {
 			expectListPods: false,
 		},
 
-		// update tests that tighten effective policy
-		// 收紧时必须评估存量 Pod，警告要汇总违规信息并受数量与超时上限约束。
+		// 收紧时评估存量 Pod；警告汇总违规，并受数量与超时上限约束。
 		{
 			name:           "update to implicit restricted",
 			newLabels:      map[string]string{},
@@ -451,7 +450,7 @@ func TestValidateNamespace(t *testing.T) {
 			name:            "timeout on evaluate",
 			newLabels:       map[string]string{api.EnforceLevelLabel: string(api.LevelRestricted)},
 			oldLabels:       map[string]string{api.EnforceLevelLabel: string(api.LevelBaseline)},
-			delayEvaluation: (time.Second + 100*time.Millisecond) / 2, // leave time for two evaluations
+			delayEvaluation: (time.Second + 100*time.Millisecond) / 2, // 为两次评估预留时间。
 			expectAllowed:   true,
 			expectListPods:  true,
 			expectEvaluate:  api.LevelVersion{Level: api.LevelRestricted, Version: api.LatestVersion()},
@@ -488,12 +487,12 @@ func TestValidateNamespace(t *testing.T) {
 			newLabels:            map[string]string{api.EnforceLevelLabel: string(api.LevelRestricted)},
 			oldLabels:            map[string]string{api.EnforceLevelLabel: string(api.LevelBaseline)},
 			pods: []*corev1.Pod{
-				// ensure exempt pods don't use up the limit of evaluated pods
+				// 豁免 Pod 不应占用评估数量上限。
 				{ObjectMeta: metav1.ObjectMeta{Name: "exemptpod1", Annotations: map[string]string{"error": "message1"}}, Spec: corev1.PodSpec{RuntimeClassName: ptr.To("runtimeclass1")}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "exemptpod2", Annotations: map[string]string{"error": "message1"}}, Spec: corev1.PodSpec{RuntimeClassName: ptr.To("runtimeclass1")}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "exemptpod3", Annotations: map[string]string{"error": "message1"}}, Spec: corev1.PodSpec{RuntimeClassName: ptr.To("runtimeclass1")}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "exemptpod4", Annotations: map[string]string{"error": "message1"}}, Spec: corev1.PodSpec{RuntimeClassName: ptr.To("runtimeclass1")}},
-				// ensure replicas from the same controller don't use up limit of evaluated pods
+				// 同一控制器的副本不应重复占用评估额度。
 				{ObjectMeta: metav1.ObjectMeta{Name: "replicaset1pod1", Annotations: map[string]string{"error": "replicaset1error"}, OwnerReferences: []metav1.OwnerReference{{UID: types.UID("1"), Controller: ptr.To(true)}}}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "replicaset1pod2", Annotations: map[string]string{"error": "replicaset1error"}, OwnerReferences: []metav1.OwnerReference{{UID: types.UID("1"), Controller: ptr.To(true)}}}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "replicaset1pod3", Annotations: map[string]string{"error": "replicaset1error"}, OwnerReferences: []metav1.OwnerReference{{UID: types.UID("1"), Controller: ptr.To(true)}}}},
@@ -502,7 +501,7 @@ func TestValidateNamespace(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "replicaset2pod2", Annotations: map[string]string{"error": "replicaset2error"}, OwnerReferences: []metav1.OwnerReference{{UID: types.UID("2"), Controller: ptr.To(true)}}}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "replicaset2pod3", Annotations: map[string]string{"error": "replicaset2error"}, OwnerReferences: []metav1.OwnerReference{{UID: types.UID("2"), Controller: ptr.To(true)}}}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "replicaset2pod4", Annotations: map[string]string{"error": "replicaset2error"}, OwnerReferences: []metav1.OwnerReference{{UID: types.UID("2"), Controller: ptr.To(true)}}}},
-				// ensure unique pods are prioritized before additional replicas
+				// 独立 Pod 应排在同控制器的额外副本之前。
 				{ObjectMeta: metav1.ObjectMeta{Name: "uniquepod1", Annotations: map[string]string{"error": "uniquemessage1"}}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "uniquepod2", Annotations: map[string]string{"error": "uniquemessage2"}}},
 				{ObjectMeta: metav1.ObjectMeta{Name: "uniquepod3", Annotations: map[string]string{"error": "uniquemessage3"}}},
@@ -717,7 +716,7 @@ func TestValidatePodAndController(t *testing.T) {
 		invalidNs:       makeNs("not-a-valid-level", "", ""),
 	}
 
-	config, err := load.LoadFromData(nil) // Start with the default config.
+	config, err := load.LoadFromData(nil) // 从默认配置开始。
 	require.NoError(t, err, "loading default config")
 	config.Exemptions.Namespaces = []string{exemptNs}
 	config.Exemptions.RuntimeClasses = []string{exemptRuntimeClass}
@@ -733,7 +732,7 @@ func TestValidatePodAndController(t *testing.T) {
 		namespace string
 		username  string
 
-		// pod and oldPod are used to populate obj and oldObj respectively, according to the test type (pod or deployment).
+		// 按用例类型用 pod 与 oldPod 填充 obj 与 oldObj。
 		pod    *corev1.Pod
 		oldPod *corev1.Pod
 
@@ -742,12 +741,12 @@ func TestValidatePodAndController(t *testing.T) {
 		kind        schema.GroupVersionKind
 		obj         runtime.Object
 		oldObj      runtime.Object
-		objErr      error // Error to return instead of obj by attrs.GetObject()
-		oldObjErr   error // Error to return instead of oldObj by attrs.GetOldObject()
+		objErr      error // 替代 obj 由 attrs.GetObject() 返回的错误。
+		oldObjErr   error // 替代 oldObj 由 attrs.GetOldObject() 返回的错误。
 		subresource string
 
-		skipPod        bool // Whether to skip the ValidatePod test case.
-		skipDeployment bool // Whteher to skip the ValidatePodController test case.
+		skipPod        bool // 是否跳过 ValidatePod 用例。
+		skipDeployment bool // 是否跳过 ValidatePodController 用例。
 
 		expectAllowed bool
 		expectReason  metav1.StatusReason
@@ -837,7 +836,7 @@ func TestValidatePodAndController(t *testing.T) {
 			expectAllowed:  false,
 			expectReason:   metav1.StatusReasonBadRequest,
 			expectError:    true,
-			skipDeployment: true, // Updates aren't special cased for controller resources.
+			skipDeployment: true, // 控制器资源更新不走特殊分支。
 		},
 		{
 			desc:           "invalid old object",
@@ -848,7 +847,7 @@ func TestValidatePodAndController(t *testing.T) {
 			expectAllowed:  false,
 			expectReason:   metav1.StatusReasonBadRequest,
 			expectError:    true,
-			skipDeployment: true, // Updates aren't special cased for controller resources.
+			skipDeployment: true, // 控制器资源更新不走特殊分支。
 		},
 		{
 			desc:           "insignificant update",
@@ -857,7 +856,7 @@ func TestValidatePodAndController(t *testing.T) {
 			pod:            tolerantPod.DeepCopy(),
 			oldPod:         privilegedPod.DeepCopy(),
 			expectAllowed:  true,
-			skipDeployment: true, // Updates aren't special cased for controller resources.
+			skipDeployment: true, // 控制器资源更新不走特殊分支。
 		},
 		{
 			desc:          "significant update denied",
@@ -928,7 +927,7 @@ func TestValidatePodAndController(t *testing.T) {
 			namespace:     restrictedNs,
 			obj:           emptyDeployment.DeepCopy(),
 			expectAllowed: true,
-			expectWarning: "", // No pod template skips validation.
+			expectWarning: "", // 无 Pod 模板时跳过校验。
 			skipPod:       true,
 		},
 	}
@@ -948,7 +947,7 @@ func TestValidatePodAndController(t *testing.T) {
 		}
 	}
 
-	// Convert "pod cases" into pod test cases & deployment test cases.
+	// 将 Pod 用例扩展为 Pod 与 Deployment 两组用例。
 	testCases := []testCase{}
 	for _, tc := range podCases {
 		podTest := tc
@@ -956,14 +955,14 @@ func TestValidatePodAndController(t *testing.T) {
 		podTest.resource = schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 		podTest.kind = schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
 		if !tc.expectAllowed {
-			podTest.expectWarning = "" // Warnings should only be returned when the request is allowed.
+			podTest.expectWarning = "" // 请求被拒绝时不返回警告。
 		}
 
 		deploymentTest := tc
 		deploymentTest.desc = "deployment:" + tc.desc
 		deploymentTest.resource = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 		deploymentTest.kind = schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
-		// PodController validation is always non-enforcing.
+		// 控制器校验始终不强制执行。
 		deploymentTest.expectAllowed = true
 		deploymentTest.expectEnforce = ""
 		deploymentTest.expectReason = ""
@@ -1099,13 +1098,17 @@ type MetricsRecord struct {
 	EvalMode     metrics.Mode
 }
 
+// RecordEvaluation 记录一次评估决策，供测试断言指标调用。
 func (r *FakeRecorder) RecordEvaluation(decision metrics.Decision, policy api.LevelVersion, evalMode metrics.Mode, attrs api.Attributes) {
 	r.evaluations = append(r.evaluations, MetricsRecord{attrs.GetName(), decision, policy.Level, evalMode})
 }
 
+// RecordExemption 记录一次豁免决策，供测试断言指标调用。
 func (r *FakeRecorder) RecordExemption(attrs api.Attributes) {
 	r.exemptions = append(r.exemptions, MetricsRecord{ObjectName: attrs.GetName()})
 }
+
+// RecordError 记录一次评估错误，忽略首个布尔参数以匹配指标接口。
 func (r *FakeRecorder) RecordError(_ bool, attrs api.Attributes) {
 	r.errors = append(r.errors, MetricsRecord{ObjectName: attrs.GetName()})
 }
@@ -1144,7 +1147,7 @@ func TestPrioritizePods(t *testing.T) {
 	var pods []*corev1.Pod
 	randomSource := rand.NewSource(time.Now().Unix())
 	for _, sampleOwnerRef := range sampleOwnerReferences {
-		// Generate multiple pods for a controller
+		// 为同一控制器生成多个 Pod。
 		for i := 0; i < rand.New(randomSource).Intn(5)+len(sampleOwnerReferences); i++ {
 			pods = append(pods, &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1193,7 +1196,7 @@ func TestExemptNamespaceWarning(t *testing.T) {
 	tests := []struct {
 		name                  string
 		labels                map[string]string
-		defaultPolicy         api.Policy // Defaults to privilegedPolicy if empty.
+		defaultPolicy         api.Policy // 为空时默认使用 privilegedPolicy。
 		expectWarning         bool
 		expectWarningContains string
 	}{{
@@ -1284,6 +1287,7 @@ type testAttributes struct {
 	oldObjectErr error
 }
 
+// GetObject 允许单独注入对象读取错误，覆盖解码失败路径。
 func (a *testAttributes) GetObject() (runtime.Object, error) {
 	if a.objectErr != nil {
 		return nil, a.objectErr
@@ -1292,6 +1296,7 @@ func (a *testAttributes) GetObject() (runtime.Object, error) {
 	}
 }
 
+// GetOldObject 允许单独注入旧对象读取错误，覆盖更新请求的异常路径。
 func (a *testAttributes) GetOldObject() (runtime.Object, error) {
 	if a.oldObjectErr != nil {
 		return nil, a.oldObjectErr
