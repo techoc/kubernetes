@@ -211,14 +211,14 @@ func TestFinishRequestWithPostTimeoutTracker(t *testing.T) {
 			resultFn := func() (runtime.Object, error) {
 				defer func() {
 					if test.childGoroutineNeverReturns {
-						// sleep a bit more than test.postTimeoutWait so the
-						// post-timeout monitor gives up.
+						// 比 test.postTimeoutWait 多睡一会儿，
+						// 让 post-timeout 监控放弃等待。
 						time.Sleep(test.postTimeoutWait + time.Second)
 					}
 					close(resultFuncDoneCh)
 				}()
 
-				// it will block here
+				// 在这里阻塞
 				<-timeoutAsDesignedCh
 
 				if len(test.reason) > 0 {
@@ -247,7 +247,7 @@ func TestFinishRequestWithPostTimeoutTracker(t *testing.T) {
 				t.Errorf("expected timeout error: %v, but got: %v", expectedTimeoutErr, err)
 			}
 
-			// the rest ResultFunc is still running, let's unblock it so it can complete
+			// 其余的 ResultFunc 仍在运行，解除阻塞让它完成
 			close(timeoutAsDesignedCh)
 
 			t.Log("waiting for the ResultFunc rest function to finish")
@@ -260,7 +260,7 @@ func TestFinishRequestWithPostTimeoutTracker(t *testing.T) {
 			case test.childGoroutineNeverReturns && resultGot != nil:
 				t.Fatal("expected the result for the post-timeout logger to be nil")
 			case test.childGoroutineNeverReturns:
-				// resultGot is nil, nothing more to verify
+				// resultGot 为 nil，无需再验证
 				return
 			case !test.childGoroutineNeverReturns && resultGot == nil:
 				t.Fatal("expected a result for the post-timeout logger, but got nil")

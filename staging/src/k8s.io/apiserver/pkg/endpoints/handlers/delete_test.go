@@ -373,17 +373,17 @@ func TestDeleteCollectionWithNoContextDeadlineEnforced(t *testing.T) {
 	ctx := t.Context()
 	var invokedGot, hasDeadlineGot int32
 	fakeDeleterFn := func(ctx context.Context, _ rest.ValidateObjectFunc, _ *metav1.DeleteOptions, _ *metainternalversion.ListOptions) (runtime.Object, error) {
-		// we expect CollectionDeleter to be executed once
+		// 预期 CollectionDeleter 只被执行一次
 		atomic.AddInt32(&invokedGot, 1)
 
-		// we don't expect any context deadline to be set
+		// 预期不会设置任何 context deadline
 		if _, hasDeadline := ctx.Deadline(); hasDeadline {
 			atomic.AddInt32(&hasDeadlineGot, 1)
 		}
 		return nil, nil
 	}
 
-	// do the minimum setup to ensure that it gets as far as CollectionDeleter
+	// 只做最小设置，确保流程能走到 CollectionDeleter
 	scope := &RequestScope{
 		Namer: &mockNamer{},
 		Serializer: &fakeSerializer{
@@ -396,7 +396,7 @@ func TestDeleteCollectionWithNoContextDeadlineEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// the request context should not have any deadline by default
+	// 请求上下文默认不应带任何 deadline
 	if _, hasDeadline := request.Context().Deadline(); hasDeadline {
 		t.Fatalf("expected request context to not have any deadline")
 	}
@@ -620,7 +620,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 				ctx = request.WithRequestInfo(ctx, test.reqInfo)
 			}
 
-			// wrap the attributes so we can access the annotations set during admission
+			// 包装 attributes，以便访问准入期间设置的 annotations
 			attrs := &fakeAttributes{Attributes: test.attr}
 			got := authorizeUnsafeDelete(ctx, attrs, test.authz)
 			switch {
@@ -637,7 +637,7 @@ func TestAuthorizeUnsafeDelete(t *testing.T) {
 	}
 }
 
-// attributes of interest for this test
+// 本测试关注的 attributes
 // 只构造本插件关心的字段；对象、kind 等保持零值以证明它们不会被读取。
 type attributes struct {
 	operation        admission.Operation
@@ -715,12 +715,12 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 	tests := []struct {
 		name           string
 		featureEnabled bool
-		// whether the registry implements rest.CorruptObjectDeleterProvider, and provides an unsafe deleter:
-		//  nil: it does not implement the rest.CorruptObjectDeleterProvider interface
-		//  true: it implements CorruptObjectDeleterProvider, and returns a valid unsafe deleter
-		//  false: it implements CorruptObjectDeleterProvider, but returns nil when asked for an unsafe deleter
+		// registryHasUnsafeDeleter 表示 registry 是否实现了 rest.CorruptObjectDeleterProvider 并提供 unsafe 删器：
+		//  nil：未实现 rest.CorruptObjectDeleterProvider 接口
+		//  true：实现了 CorruptObjectDeleterProvider，并返回有效的 unsafe 删器
+		//  false：实现了 CorruptObjectDeleterProvider，但被请求 unsafe 删器时返回 nil
 		registryHasUnsafeDeleter *bool
-		// what the user passes in the delete options for ignoreStoreReadErrorWithClusterBreakingPotential
+		// 用户在 delete options 中传入的 ignoreStoreReadErrorWithClusterBreakingPotential 取值
 		ignoreReadErr *bool
 		authorizer    authorizer.UnconditionalAuthorizer
 		// want
@@ -906,8 +906,7 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 				MetaGroupVersion: metav1.SchemeGroupVersion,
 			}
 
-			// create a fake deleter that will be used for the normal deletion
-			// flow, and it will record the normal deletion activities
+			// 创建一个用于普通删除流程的 fake deleter，它会记录普通删除的相关活动
 			// registryHasUnsafeDeleter 为 nil 表示不实现 provider 接口；
 			// 为 false 表示实现但返回 nil，二者语义不同，需分别覆盖。
 			normalFlowObserved, unsafeFlowObserved := &deletionFlowTracker{}, &deletionFlowTracker{}
@@ -915,8 +914,7 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 			if provider := test.registryHasUnsafeDeleter; provider != nil {
 				r := &fakeRegistryWithCorruptObjDeleter{GracefulDeleter: deleter}
 				if *provider {
-					// create a fake deleter that will be used for the unsafe deletion
-					// flow, and it will record the unsafe deletion activities
+					// 创建一个用于 unsafe 删除流程的 fake deleter，它会记录 unsafe 删除的相关活动
 					r.unsafeDeleter = &fakeRegistry{tracker: unsafeFlowObserved}
 				}
 				deleter = r
@@ -927,7 +925,7 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			handler.ServeHTTP(recorder, req)
 
-			// the status we have received in the response should match expectation
+			// 响应中收到的 status 应与预期一致
 			resp := recorder.Result()
 			status := toStatus(t, resp)
 			if want, got := test.status, status; !cmp.Equal(want, got) {
@@ -938,8 +936,7 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 			if want, got := test.normalFlowWant, normalFlowObserved; !cmp.Equal(want, got) {
 				t.Errorf("expected the normal deletion flow observation to match, diff: %s", cmp.Diff(want, got))
 			}
-			// this is an invariant; if the feature is disabled the normal deletion
-			// flow should never see the ignore option set.
+			// 这是一条不变式：特性关闭时，普通删除流程绝不应看到 ignore 选项被设置。
 			if got := normalFlowObserved; !test.featureEnabled && got.Invoked == 1 && got.Ignore != nil {
 				t.Errorf("IgnoreStoreReadErrorWithClusterBreakingPotential should always be nil when the feature is disabled, but got: %t", *got.Ignore)
 			}
@@ -948,12 +945,12 @@ func TestDeleteResourceWithUnsafeDeletionFlow(t *testing.T) {
 			if want, got := test.unsafeFlowWant, unsafeFlowObserved; !cmp.Equal(want, got) {
 				t.Errorf("expected the unsafe deletion flow observation to match, diff: %s", cmp.Diff(want, got))
 			}
-			// this is an invariant; when invoked, the unsafe deletion flow should always see the option enabled
+			// 这是一条不变式：unsafe 删除流程被调用时，应始终看到该选项处于启用状态
 			if got := ptr.Deref(unsafeFlowObserved.Ignore, false); unsafeFlowObserved.Invoked == 1 && !got {
 				t.Errorf("Invariant failed, IgnoreStoreReadErrorWithClusterBreakingPotential should always be set to %t for the unsafe deletion flow, but got: %t", true, got)
 			}
 
-			// certain annotation should be added in unsafe delete
+			// unsafe 删除时应添加特定的 annotation
 			const keyWant = "apiserver.k8s.io/unsafe-delete-ignore-read-error"
 			ac := audit.AuditContextFrom(req.Context())
 			switch test.unsafeAnnotationWant {
@@ -979,7 +976,7 @@ func TestDeleteCollectionWithUnsafeDeletionFlow(t *testing.T) {
 	tests := []struct {
 		name           string
 		featureEnabled bool
-		// what the user passes in the delete options for ignoreStoreReadErrorWithClusterBreakingPotential
+		// 用户在 delete options 中传入的 ignoreStoreReadErrorWithClusterBreakingPotential 取值
 		ignoreReadErr *bool
 		// want
 		deleterInvoked int           // how many times the deleter should be invoked
@@ -1056,8 +1053,8 @@ func TestDeleteCollectionWithUnsafeDeletionFlow(t *testing.T) {
 				MetaGroupVersion: metav1.SchemeGroupVersion,
 			}
 
-			// the deleter should never see the ignore option enabled,
-			// initializing it to true, so we can verify that it is reset to nil
+			// 删器绝不应看到 ignore 选项被启用，这里初始化为 true，
+			// 以便验证它会被重置为 nil
 			observed := &deletionFlowTracker{}
 			deleter := func(ctx context.Context, _ rest.ValidateObjectFunc, options *metav1.DeleteOptions, _ *metainternalversion.ListOptions) (runtime.Object, error) {
 				observed.Invoked++
@@ -1073,7 +1070,7 @@ func TestDeleteCollectionWithUnsafeDeletionFlow(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			handler.ServeHTTP(recorder, req)
 
-			// the status we have received in the response should match expectation
+			// 响应中收到的 status 应与预期一致
 			resp := recorder.Result()
 			status := toStatus(t, resp)
 			if want, got := test.status, status; !cmp.Equal(want, got) {
@@ -1083,11 +1080,11 @@ func TestDeleteCollectionWithUnsafeDeletionFlow(t *testing.T) {
 			if want, got := test.deleterInvoked, observed.Invoked; want != got {
 				t.Errorf("expected the deleter to be invoked %d times, but got: %d", want, got)
 			}
-			// if invoked, the deleter should never see the ignore option enabled
+			// 若被调用，删器不应看到 ignore 选项被启用
 			if got := ptr.Deref(observed.Ignore, false); test.deleterInvoked == 1 && got {
 				t.Errorf("expected IgnoreStoreReadErrorWithClusterBreakingPotential to be nil for the deleter, but got: %t", got)
 			}
-			// we never expect the annotation to be added
+			// 我们从不预期该 annotation 被添加
 			const keyNeverWant = "apiserver.k8s.io/unsafe-delete-ignore-read-error"
 			ac := audit.AuditContextFrom(req.Context())
 			if value, ok := ac.GetEventAnnotation(keyNeverWant); ok || len(value) > 0 {
@@ -1160,7 +1157,7 @@ func toStatus(t *testing.T, resp *http.Response) metav1.Status {
 	return status
 }
 
-// to keep track of what a deletion flow (GracefulDeleter) observes
+// 记录删除流程（GracefulDeleter）观察到的内容
 // Ignore 保存最后一次看到的 ignore 选项，用于区分普通/unsafe 流程。
 type deletionFlowTracker struct {
 	Invoked int   // how many times Delete has been invoked
@@ -1168,9 +1165,8 @@ type deletionFlowTracker struct {
 }
 
 // implements a fake GracefulDeleter.
-// TODO: this is not thread safe if concurrent Delete calls are made by a
-// test, tests are expected to invoke Delete serially, if that is to chage
-// we need to implement locking to keept it concurrency safe.
+// TODO：若测试并发调用 Delete，这里并非线程安全；目前预期测试串行调用，
+// 若将来改变，需要加锁保证并发安全。
 // 记录调用次数与最后一次看到的 ignore 选项；测试串行调用，故无需加锁。
 type fakeRegistry struct {
 	tracker *deletionFlowTracker
@@ -1179,8 +1175,8 @@ type fakeRegistry struct {
 func (f *fakeRegistry) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	f.tracker.Invoked++
 	f.tracker.Ignore = nil
-	// the following is on the basis that invoking the deleter more than once is an
-	// error condition, so we are just storing the final ignore option provided
+	// 以下内容基于一个前提：删器被多次调用属于错误情形，
+	// 因此我们只保存最后一次提供的 ignore 选项
 	if ignore := options.IgnoreStoreReadErrorWithClusterBreakingPotential; ignore != nil {
 		f.tracker.Ignore = ptr.To(*ignore)
 	}
@@ -1189,17 +1185,17 @@ func (f *fakeRegistry) Delete(ctx context.Context, name string, deleteValidation
 
 var _ rest.CorruptObjectDeleterProvider = &fakeRegistryWithCorruptObjDeleter{}
 
-// fake registry implementation with support of the unsafe deletion flow
+// 支持 unsafe 删除流程的 fake registry 实现
 // fakeRegistryWithCorruptObjDeleter 同时提供普通删器与 unsafe 删器；
 // handler 通过 CorruptObjectDeleterProvider 接口决定是否切换流程。
 type fakeRegistryWithCorruptObjDeleter struct {
-	// the default GracefulDeleter in use for the normal deletion flow
+	// 普通删除流程使用的默认 GracefulDeleter
 	rest.GracefulDeleter
-	// used for the unsafe deletion flow
+	// 用于 unsafe 删除流程
 	unsafeDeleter rest.GracefulDeleter
 }
 
-// the delete handler switches to the unsafe deletion flow by using GetCorruptObjDeleter
+// 删除处理器通过 GetCorruptObjDeleter 切换到 unsafe 删除流程
 func (p *fakeRegistryWithCorruptObjDeleter) GetCorruptObjDeleter() rest.GracefulDeleter {
 	return p.unsafeDeleter
 }

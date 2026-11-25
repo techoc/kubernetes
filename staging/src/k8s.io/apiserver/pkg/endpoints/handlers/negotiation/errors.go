@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// errNotAcceptable indicates Accept negotiation has failed
+// errNotAcceptable 表示 Accept 协商失败
 //
 // 这些错误类型都实现 Status()，以便 responsewriters 把错误直接转成 metav1.Status
 // 返回给客户端；错误文案是 API 契约的一部分，不要随意改写。
@@ -32,7 +32,7 @@ type errNotAcceptable struct {
 	accepted []string
 }
 
-// NewNotAcceptableError returns an error of NotAcceptable which contains specified string
+// NewNotAcceptableError 返回一个包含指定字符串的 NotAcceptable 错误
 func NewNotAcceptableError(accepted []string) error {
 	return errNotAcceptable{accepted}
 }
@@ -52,8 +52,7 @@ func (e errNotAcceptable) Status() metav1.Status {
 	}
 }
 
-// errNotAcceptableConversion indicates Accept negotiation has failed specifically
-// for a conversion to a known type.
+// errNotAcceptableConversion 表示针对转换到已知类型的 Accept 协商失败。
 //
 // 与 errNotAcceptable 的区别是携带 target，便于客户端知道是"哪种转换"不被接受，
 // 例如请求 Table 输出但协商到了 protobuf 时。
@@ -62,10 +61,9 @@ type errNotAcceptableConversion struct {
 	accepted []string
 }
 
-// NewNotAcceptableConversionError returns an error indicating that the desired
-// API transformation to the target group version kind string is not accepted and
-// only the listed mime types are allowed. This is temporary while Table does not
-// yet support protobuf encoding.
+// NewNotAcceptableConversionError 返回一个错误，表示期望的、转换到目标
+// group version kind 字符串的 API 转换不被接受，只允许列出的媒体类型。
+// 在 Table 尚不支持 protobuf 编码期间，这是临时措施。
 func NewNotAcceptableConversionError(target string, accepted []string) error {
 	return errNotAcceptableConversion{target, accepted}
 }
@@ -83,12 +81,12 @@ func (e errNotAcceptableConversion) Status() metav1.Status {
 	}
 }
 
-// errUnsupportedMediaType indicates Content-Type is not recognized
+// errUnsupportedMediaType 表示 Content-Type 无法识别
 type errUnsupportedMediaType struct {
 	accepted []string
 }
 
-// NewUnsupportedMediaTypeError returns an error of UnsupportedMediaType which contains specified string
+// NewUnsupportedMediaTypeError 返回一个包含指定字符串的 UnsupportedMediaType 错误
 func NewUnsupportedMediaTypeError(accepted []string) error {
 	return errUnsupportedMediaType{accepted}
 }

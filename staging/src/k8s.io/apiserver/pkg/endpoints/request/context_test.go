@@ -23,7 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// TestNamespaceContext validates that a namespace can be get/set on a context object
+// TestNamespaceContext 验证可以在 context 对象上 get/set 命名空间
 // 验证 NewDefaultContext 默认使用 default 命名空间，
 // 而 NewContext 不携带命名空间（NamespaceFrom 返回 ok=false）。
 func TestNamespaceContext(t *testing.T) {
@@ -43,7 +43,7 @@ func TestNamespaceContext(t *testing.T) {
 	}
 }
 
-// TestUserContext validates that a userinfo can be get/set on a context object
+// TestUserContext 验证可以在 context 对象上 get/set userinfo
 // 验证空上下文取不到用户，WithUser 后能完整读回 Name/UID/Groups/Extra。
 // Extra 是多值 map，必须逐值比较而非只比较键。
 func TestUserContext(t *testing.T) {

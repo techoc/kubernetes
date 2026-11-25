@@ -23,9 +23,9 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
-// Interface is from "k8s.io/apiserver/pkg/endpoints/handlers/negotiation"
+// 以下接口来自 "k8s.io/apiserver/pkg/endpoints/handlers/negotiation"
 
-// DiscoveryEndpointRestrictions allows requests to /apis to provide a Content Negotiation GVK for aggregated discovery.
+// DiscoveryEndpointRestrictions 允许请求在 /apis 上为聚合发现提供内容协商 GVK。
 //
 // 发现端点通常只允许按 Accept 头返回固定格式；这里额外放行 aggregated discovery
 // 的 GVK，使客户端可以通过 Accept 参数显式请求聚合发现文档。
@@ -45,7 +45,7 @@ func (discoveryEndpointRestrictions) AllowsServerVersion(string) bool { return f
 // AllowsStreamSchema 仅允许 watch 流。
 func (discoveryEndpointRestrictions) AllowsStreamSchema(s string) bool { return s == "watch" }
 
-// IsAggregatedDiscoveryGVK checks if a provided GVK is the GVK for serving aggregated discovery.
+// IsAggregatedDiscoveryGVK 检查给定的 GVK 是否为用于提供聚合发现的 GVK。
 // 特性门控 AggregatedDiscoveryRemoveBetaType 开启后不再接受 v2beta1，用于推动客户端迁移。
 func IsAggregatedDiscoveryGVK(gvk *schema.GroupVersionKind) bool {
 	if gvk != nil {

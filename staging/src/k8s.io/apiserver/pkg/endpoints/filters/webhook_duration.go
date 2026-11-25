@@ -32,11 +32,10 @@ var (
 	watchVerbs = sets.NewString("watch")
 )
 
-// WithLatencyTrackers adds a LatencyTrackers instance to the
-// context associated with a request so that we can measure latency
-// incurred in various components within the apiserver.
+// WithLatencyTrackers 往请求关联的 context 中加入一个 LatencyTrackers 实例，
+// 用于度量 apiserver 内部各个组件产生的延迟。
 //
-// 中文说明：必须在 RequestInfo 过滤器之后安装，否则拿不到 verb 也就无法
+// 必须在 RequestInfo 过滤器之后安装，否则拿不到 verb 也就无法
 // 区分 watch；缺失 RequestInfo 属于装配错误，直接 500 而不是静默降级。
 func WithLatencyTrackers(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

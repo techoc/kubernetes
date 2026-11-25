@@ -60,12 +60,12 @@ func TestBasicMetrics(t *testing.T) {
 	interests := []string{"aggregator_discovery_aggregation_count_total"}
 
 	_, _, _ = fetchPath(manager, "application/json", discoveryPath, "")
-	// A single fetch should aggregate and increment regeneration counter.
+	// 单次 fetch 应触发聚合并递增 regeneration 计数器。
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, formatExpectedMetrics(1), interests...); err != nil {
 		t.Fatal(err)
 	}
 	_, _, _ = fetchPath(manager, "application/json", discoveryPath, "")
-	// Subsequent fetches should not reaggregate discovery.
+	// 后续 fetch 不应重新聚合 discovery。
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, formatExpectedMetrics(1), interests...); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestMetricsModified(t *testing.T) {
 	interests := []string{"aggregator_discovery_aggregation_count_total"}
 
 	_, _, _ = fetchPath(manager, "application/json", discoveryPath, "")
-	// A single fetch should aggregate and increment regeneration counter.
+	// 单次 fetch 应触发聚合并递增 regeneration 计数器。
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, formatExpectedMetrics(1), interests...); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestMetricsModified(t *testing.T) {
 	// Update discovery document.
 	manager.SetGroups(fuzzAPIGroups(1, 3, 10).Items)
 	_, _, _ = fetchPath(manager, "application/json", discoveryPath, "")
-	// If the discovery content has changed, reaggregation should be performed.
+	// 若 discovery 内容发生变化，则应重新聚合。
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, formatExpectedMetrics(2), interests...); err != nil {
 		t.Fatal(err)
 	}

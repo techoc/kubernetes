@@ -58,7 +58,7 @@ func TestCacheControl(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := t.Context()
 			handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-				//do nothing
+				// 什么都不做
 			})
 			wrapped := WithCacheControl(handler)
 

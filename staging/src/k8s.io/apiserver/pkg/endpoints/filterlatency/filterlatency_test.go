@@ -44,10 +44,10 @@ func TestTrackStartedWithContextAlreadyHasFilterRecord(t *testing.T) {
 		filterRecord *requestFilterRecord
 	)
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-		// we expect the handler to be invoked just once.
+		// 预期处理器恰好被调用一次。
 		callCount++
 
-		// we expect the filter record to be set in the context
+		// 预期 context 中已设置 filter 记录
 		filterRecord = requestFilterRecordFrom(req.Context())
 	})
 
@@ -90,10 +90,10 @@ func TestTrackStartedWithContextDoesNotHaveFilterRecord(t *testing.T) {
 		filterRecord *requestFilterRecord
 	)
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-		// we expect the handler to be invoked just once.
+		// 预期处理器恰好被调用一次。
 		callCount++
 
-		// we expect the filter record to be set in the context
+		// 预期 context 中已设置 filter 记录
 		filterRecord = requestFilterRecordFrom(req.Context())
 	})
 
@@ -133,7 +133,7 @@ func TestTrackCompletedContextHasFilterRecord(t *testing.T) {
 		filterCompletedAtGot time.Time
 	)
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-		// we expect the handler to be invoked just once.
+		// 预期处理器恰好被调用一次。
 		handlerCallCount++
 	})
 
@@ -202,17 +202,17 @@ func TestTrackCompletedContextDoesNotHaveFilterRecord(t *testing.T) {
 func TestStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	ctx := t.Context()
 	filterName := "my-filter"
-	// Seup OTel for testing
+	// 为测试设置 OTel
 	fakeRecorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(fakeRecorder))
 
 	// base handler func
 	var callCount int
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-		// we expect the handler to be invoked just once.
+		// 预期处理器恰好被调用一次。
 		callCount++
 	})
-	// wrap with start and completed handler
+	// 用 start 与 completed 处理器包装
 	wrapped := TrackCompleted(handler)
 	wrapped = TrackStarted(wrapped, tp, filterName)
 
@@ -241,21 +241,21 @@ func TestStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 func TestNestedStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	outerFilterName := "outer-filter"
 	innerFilterName := "inner-filter"
-	// Seup OTel for testing
+	// 为测试设置 OTel
 	fakeRecorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(fakeRecorder))
 
 	// base handler func
 	var callCount int
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-		// we expect the handler to be invoked just once.
+		// 预期处理器恰好被调用一次。
 		callCount++
 	})
-	// wrap the handler with the inner start and completed handler
+	// 用内层 start 与 completed 处理器包装 handler
 	wrapped := TrackCompleted(handler)
 	wrapped = TrackStarted(wrapped, tp, innerFilterName)
 
-	// wrap with an external handler, nesting the inner span
+	// 再用外层 handler 包装，使内层 span 嵌套其中
 	wrapped = TrackCompleted(wrapped)
 	wrapped = TrackStarted(wrapped, tp, outerFilterName)
 

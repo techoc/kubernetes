@@ -322,8 +322,8 @@ func TestAuthenticateRequestClearHeaders(t *testing.T) {
 				"Another-X-Remote-User":  {"Third header, first value"}},
 		},
 		"user case-insensitive": {
-			nameHeaders:    []string{"x-REMOTE-user"},             // configured headers can be case-insensitive
-			requestHeaders: http.Header{"X-Remote-User": {"Bob"}}, // the parsed headers are normalized by the http package
+			nameHeaders:    []string{"x-REMOTE-user"},             // 配置的头部可以大小写不敏感
+			requestHeaders: http.Header{"X-Remote-User": {"Bob"}}, // 解析出的头部由 http 包规范化
 		},
 
 		"groups none": {
@@ -400,8 +400,8 @@ func TestAuthenticateRequestClearHeaders(t *testing.T) {
 			groupHeaders:       []string{"X-Remote-Group-1", "X-Remote-Group-2"},
 			extraPrefixHeaders: []string{"X-Remote-Extra-1-", "X-Remote-Extra-2-"},
 			requestHeaders: http.Header{
-				"X-Group-Remote":        {"snorlax"}, // unrelated header
-				"X-Group-Bear":          {"panda"},   // another unrelated header
+				"X-Group-Remote":        {"snorlax"}, // 无关的头部
+				"X-Group-Bear":          {"panda"},   // 另一个无关的头部
 				"X-Uid-Remote":          {"bobs-unrelated-uid"},
 				"X-Remote-User":         {"Bob"},
 				"X-Remote-Uid":          {"bobs-uid"},
@@ -649,7 +649,7 @@ func TestUnauthenticatedHTTP2ClientConnectionClose(t *testing.T) {
 				ctx := t.Context()
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.UnauthenticatedHTTP2DOSMitigation, !tc.skipHTTP2DOSMitigation)
 
-				var localAddrs atomic.Uint64 // indicates how many TCP connection set up
+				var localAddrs atomic.Uint64 // 记录建立了多少个 TCP 连接
 
 				tlsConfig := &tls.Config{
 					RootCAs:    rootCAs,
@@ -675,10 +675,9 @@ func TestUnauthenticatedHTTP2ClientConnectionClose(t *testing.T) {
 					},
 				}
 
-				tr.MaxIdleConnsPerHost = 1 // allow http1 to have keep alive connections open
+				tr.MaxIdleConnsPerHost = 1 // 允许 http1 保持 keep-alive 连接
 				if nextProto == http2.NextProtoTLS {
-					// Disable connection pooling to avoid additional connections
-					// that cause the test to flake
+					// 关闭连接池，避免额外连接导致测试抖动
 					tr.MaxIdleConnsPerHost = -1
 					if err := http2.ConfigureTransport(tr); err != nil {
 						t.Fatal(err)
@@ -715,7 +714,7 @@ func TestUnauthenticatedHTTP2ClientConnectionClose(t *testing.T) {
 				f(t, http2.NextProtoTLS, tc.expectConnections)
 			})
 
-			// http1 connection reuse occasionally flakes on CI, skipping for now
+			// http1 连接复用在 CI 上偶尔抖动，暂时跳过
 			// t.Run("http/1.1", func(t *testing.T) {
 			// 	f(t, "http/1.1", 1)
 			// })
@@ -729,7 +728,7 @@ func TestAuthenticationLatencyTracked(t *testing.T) {
 	successHandlerCalled := false
 	handler := WithAuthentication(
 		http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-			// latency annotations should be added by the time the success handler is called
+			// 调用成功 handler 时应已加上延迟注解
 			annotations := genericapirequest.AuditAnnotationsFromLatencyTrackers(req.Context())
 			if annotations["apiserver.latency.k8s.io/authentication"] == "" {
 				t.Errorf("missing authentication latency annotation: %v", annotations)

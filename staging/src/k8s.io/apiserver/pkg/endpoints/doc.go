@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package endpoints contains the generic code that provides a RESTful Kubernetes-style API service.
-//
-// 中文说明：本包负责把一个 registry 暴露为带版本协商、watch、分页、字段选择器等
+// Package endpoints 包含提供 RESTful Kubernetes 风格 API 服务的通用代码，
+// 负责把一个 registry 暴露为带版本协商、watch、分页、字段选择器等
 // 语义的 Kubernetes 风格 REST API，是 kube-apiserver 与聚合 apiserver 共用的骨架。
 package endpoints

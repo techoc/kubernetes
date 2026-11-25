@@ -14,11 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package filters contains all the http handler chain filters which
-// _are_ api related, i.e. which are prerequisite for the API services
-// to work (in contrast to the filters in the server package which are
-// not part of the API contract).
-//
 // Package filters 汇总与 API 契约直接相关的 HTTP 过滤器（认证、鉴权、
 // 审计、请求信息、警告等）。与 server 包中的过滤器不同，这里的顺序和
 // 行为属于对外可观察的 API 语义，调整时必须考虑兼容性。

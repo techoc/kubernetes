@@ -37,12 +37,10 @@ import (
 	"k8s.io/utils/lru"
 )
 
-// modeIndexCache is a simple username -> impersonation mode cache that is based on the assumption
-// that a particular user is likely to use a single mode of impersonation for all impersonated requests
-// that they make.  it remembers which impersonation mode was last successful for a username, and tries
-// that mode first for future impersonation checks.  this makes it so that the amortized cost of legacy
-// impersonation remains the same, and the cost of constrained impersonation is one extra authorization
-// check in additional to the existing checks of regular impersonation.
+// modeIndexCache 是一个简单的“用户名 -> 模拟模式”缓存，前提假设是同一个用户
+// 发出的所有模拟请求通常只用一种模拟模式。它记住某个用户名上次成功的模拟模式，
+// 并在后续模拟检查中优先尝试该模式。这样 legacy 模拟的均摊成本保持不变，
+// constrained 模拟的成本也只在常规模拟的既有检查之上多一次授权调用。
 //
 // 该缓存只影响“先尝试哪种模式”，不改变授权结果；命中与否都只是性能优化。
 type modeIndexCache struct {
@@ -66,36 +64,36 @@ func (c *modeIndexCache) set(attributes authorizer.Attributes, idx int) {
 // modeIndexCacheKey 用用户名构造定长缓存键。
 func modeIndexCacheKey(attributes authorizer.Attributes) string {
 	key := attributes.GetUser().GetName()
-	// hash the name so our cache size is predicable regardless of the size of usernames
-	// collisions do not matter for this logic as it simply changes the ordering of the modes used
+	// 对名字做哈希，使缓存大小可预测，不受用户名长度影响；
+	// 碰撞在这里无关紧要，只会改变各模式的尝试顺序。
 	h := fnv.New128a()
 	h.Write([]byte(key))
 	var sum [16]byte
 	h.Sum(sum[:0])
-	buf := make([]byte, 32) // 16 bytes of hash -> 32 hex chars
+	buf := make([]byte, 32) // 16 字节哈希 -> 32 个十六进制字符
 	hex.Encode(buf, sum[:])
-	return toString(buf) // only safe because buf is heap allocated via make
+	return toString(buf) // 仅在 buf 由 make 分配堆内存时才安全
 }
 
 // newModeIndexCache 创建容量固定的 LRU，避免用户数增长导致内存无界。
 func newModeIndexCache() *modeIndexCache {
 	return &modeIndexCache{
-		// each entry is roughly ~100 bytes (hashed string key + int value + LRU list/map overhead)
-		// thus at even 10k entries, we should use about 1 MB memory
-		// this hardcoded size allows us to remember many users without leaking memory
+		// 每个条目约 100 字节（哈希字符串键 + int 值 + LRU list/map 开销），
+		// 即使 1 万条也只占约 1 MB 内存。
+		// 写死容量既能记住大量用户，又不会持续泄漏内存。
 		cache: lru.New(10_000),
 	}
 }
 
-// impersonationCache tracks successful impersonation attempts for a given mode with a short TTL.
+// impersonationCache 以很短的 TTL 记录某个模式下成功的模拟尝试。
 //
-// when skipAttributes is false, it maps [wantedUser, attributes] -> impersonatedUserInfo
-// when skipAttributes is true, it maps [wantedUser, requestor] -> impersonatedUserInfo
+// skipAttributes 为 false 时，映射关系是 [wantedUser, attributes] -> impersonatedUserInfo；
+// skipAttributes 为 true 时，映射关系是 [wantedUser, requestor] -> impersonatedUserInfo。
 //
-// thus each constrained impersonation mode needs two of these caches:
-// the outer cache sets skipAttributes to false and thus covers the overall impersonation attempt, see constrainedImpersonationModeState.check.
-// the inner cache sets skipAttributes to true and only covers the authorization checks that
-// are not dependent on the specific request being made, see impersonationModeState.check.
+// 因此每种 constrained 模拟模式都需要两个这样的缓存：
+// 外层缓存把 skipAttributes 设为 false，覆盖整次模拟尝试，见 constrainedImpersonationModeState.check；
+// 内层缓存把 skipAttributes 设为 true，只覆盖那些与具体请求无关的授权检查，
+// 见 impersonationModeState.check。
 //
 // 外层缓存按完整请求属性命中，内层缓存只按请求者命中，用于复用与具体请求无关的授权结果。
 type impersonationCache struct {
@@ -125,7 +123,7 @@ func (c *impersonationCache) set(k *impersonationCacheKey, impersonatedUser *imp
 		utilruntime.HandleError(fmt.Errorf("failed to build impersonation cache key: %w", err))
 		return
 	}
-	c.cache.Set(key, impersonatedUser, 10*time.Second) // hardcode the same short TTL as used by TokenSuccessCacheTTL
+	c.cache.Set(key, impersonatedUser, 10*time.Second) // 沿用 TokenSuccessCacheTTL 使用的相同短 TTL
 }
 
 // newImpersonationCache 创建缓存；skipAttributes 决定缓存键是否包含请求属性。
@@ -136,8 +134,8 @@ func newImpersonationCache(skipAttributes bool) *impersonationCache {
 	}
 }
 
-// The attribute accessors known to cache key construction. If this fails to compile, the cache
-// implementation may need to be updated.
+// 构造缓存键时已知会使用到的 attribute 访问方法。如果这里编译失败，
+// 说明缓存实现可能需要更新。
 //
 // 编译期约束：authorizer.Attributes 若新增方法，这里会失败，提醒同步更新 buildKey，
 // 否则新字段可能被静默排除在缓存键之外，导致跨请求的错误命中。
@@ -157,8 +155,8 @@ var _ authorizer.Attributes = (interface {
 	GetLabelSelector() (labels.Requirements, error)
 })(nil)
 
-// The user info accessors known to cache key construction. If this fails to compile, the cache
-// implementation may need to be updated.
+// 构造缓存键时已知会使用到的 user info 访问方法。如果这里编译失败，
+// 说明缓存实现可能需要更新。
 //
 // 同上，user.Info 的方法集变化必须同步到 addUser。
 var _ user.Info = (interface {
@@ -168,16 +166,16 @@ var _ user.Info = (interface {
 	GetExtra() map[string][]string
 })(nil)
 
-// impersonationCacheKey allows for lazy building of string cache keys based on the inputs.
-// See impersonationCache details above for the semantics around skipAttributes.
-// Note that the same impersonationCacheKey can be used with any value for skipAttributes.
+// impersonationCacheKey 根据输入惰性构造字符串缓存键。
+// skipAttributes 的语义见上文 impersonationCache 的说明。
+// 注意：同一个 impersonationCacheKey 可以配合任意 skipAttributes 取值使用。
 //
 // 两种键按需惰性计算并就地缓存，避免一次检查里重复构造键。
 type impersonationCacheKey struct {
 	wantedUser *user.DefaultInfo
 	attributes authorizer.Attributes
 
-	// lazily calculated values at point of use
+	// 在实际使用处才计算的值
 	keyAttr string
 	errAttr error
 	keyUser string
@@ -209,7 +207,7 @@ func (k *impersonationCacheKey) keyWithoutAttributes() (string, error) {
 		return k.keyUser, k.errUser
 	}
 
-	// fake attributes that just contain the requestor to allow us to reuse buildKey
+	// 构造只包含请求者的假 attributes，以便复用 buildKey
 	requestor := k.attributes.GetUser()
 	attributes := authorizer.AttributesRecord{User: requestor}
 
@@ -217,31 +215,27 @@ func (k *impersonationCacheKey) keyWithoutAttributes() (string, error) {
 	return k.keyUser, k.errUser
 }
 
-// buildKey creates a hashed string key based on the inputs that is namespaced to the requestor.
-// A cryptographically secure hash is used to minimize the chance of collisions.
+// buildKey 根据输入构造以请求者为命名空间的哈希字符串键。
+// 使用密码学安全的哈希以尽量降低碰撞概率。
 func buildKey(wantedUser *user.DefaultInfo, attributes authorizer.Attributes) (string, error) {
 	// 无法完整理解 attributes 时放弃缓存而不是冒险命中错误条目。
 	fieldSelector, err := attributes.GetFieldSelector()
 	if err != nil {
-		return "", err // if we do not fully understand the attributes, just skip caching altogether
+		return "", err // 无法完全理解 attributes 时直接跳过缓存
 	}
 
 	labelSelector, err := attributes.GetLabelSelector()
 	if err != nil {
-		return "", err // if we do not fully understand the attributes, just skip caching altogether
+		return "", err // 无法完全理解 attributes 时直接跳过缓存
 	}
 
 	requestor := attributes.GetUser()
 
-	// the chance of a hash collision is impractically small, but the only way that would lead to a
-	// privilege escalation is if you could get the cache key of a different user.  if you somehow
-	// get a collision with your own username, you already have that permission since we only set
-	// values in the cache after a successful impersonation.  Thus, we include the requestor
-	// username in the cache key.  It is safe to assume that a user has no control over their own
-	// username since that is controlled by the authenticator.  Even though many of the other inputs
-	// are under the control of the requestor, they cannot explode the cache due to the hashing.
-	//
-	// 把请求者名字放进键前缀并作为命名空间，确保哈希碰撞不会跨用户复用授权结果。
+	// 哈希碰撞的概率小到不现实，而唯一可能提权的情形是拿到别人的缓存键。
+	// 万一和自己的用户名发生碰撞，你也本来就有该权限——缓存只在模拟成功后才写入值。
+	// 因此我们把请求者用户名放进缓存键。用户名由认证器控制，可以安全地假设用户无法左右它。
+	// 其他输入大多由请求者掌控，但因为做了哈希，它们无法把缓存撑爆。
+	// 把请求者名字作为键的命名空间前缀，可确保哈希碰撞不会跨用户复用授权结果。
 	b := newCacheKeyBuilder(requestor.GetName())
 
 	addUser(b, wantedUser)
@@ -295,16 +289,16 @@ func addUser(b *cacheKeyBuilder, u user.Info) {
 	})
 }
 
-// cacheKeyBuilder builds a binary key from structured inputs using uint32 length-prefixed encoding, then hashes
-// it with SHA-256.  All methods operate on a single shared buffer to avoid closure and child-builder allocations.
+// cacheKeyBuilder 用 uint32 长度前缀编码把结构化输入拼成二进制键，再用 SHA-256 散列。
+// 所有方法共用同一个缓冲区，避免闭包和子 builder 的额外分配。
 type cacheKeyBuilder struct {
-	namespace string // in the programming sense, not the Kubernetes concept
+	namespace string // 这里的 namespace 是编程概念，不是 Kubernetes 的 Namespace
 	builder   []byte
 }
 
 // newCacheKeyBuilder 预分配 384 字节，覆盖典型键大小以减少扩容。
 func newCacheKeyBuilder(namespace string) *cacheKeyBuilder {
-	// start with a reasonable size to avoid too many allocations
+	// 初始容量取一个合理值，减少反复扩容
 	return &cacheKeyBuilder{namespace: namespace, builder: make([]byte, 0, 384)}
 }
 
@@ -342,31 +336,31 @@ type builderContinuation func(child *cacheKeyBuilder)
 // addLengthPrefixed 先占位 4 字节长度，执行回调后回填实际长度。
 func (c *cacheKeyBuilder) addLengthPrefixed(f builderContinuation) {
 	offset := len(c.builder)
-	c.builder = append(c.builder, 0, 0, 0, 0) // placeholder for uint32 length
+	c.builder = append(c.builder, 0, 0, 0, 0) // uint32 长度的占位
 	f(c)
 	binary.BigEndian.PutUint32(c.builder[offset:], uint32(len(c.builder)-offset-4))
 }
 
 // build 对缓冲区做 SHA-256 并追加命名空间，得到定长键。
 func (c *cacheKeyBuilder) build() string {
-	hashed := sha256.Sum256(c.builder) // reduce the size of the cache key to keep the overall cache size small
-	// sha256 = 32 bytes -> 64 hex chars + "/" + namespace
+	hashed := sha256.Sum256(c.builder) // 散列以缩短缓存键，控制整体缓存体积
+	// sha256 = 32 字节 -> 64 个十六进制字符 + "/" + namespace
 	buf := make([]byte, 0, 64+1+len(c.namespace))
 	buf = hex.AppendEncode(buf, hashed[:])
 	buf = append(buf, '/')
 	buf = append(buf, c.namespace...)
-	return toString(buf) // only safe because buf is heap allocated via make
+	return toString(buf) // 仅在 buf 由 make 分配堆内存时才安全
 }
 
-// toString performs unholy acts to avoid allocations
+// toString 做一些“不干净”的操作来避免内存分配
 //
 // 仅在 b 由 make 分配、不会被原地修改时安全；调用点都满足这一前提。
 func toString(b []byte) string {
-	// unsafe.SliceData relies on cap whereas we want to rely on len
+	// unsafe.SliceData 依赖 cap，而我们需要的是 len
 	if len(b) == 0 {
 		return ""
 	}
-	// Copied from go 1.20.1 strings.Builder.String
+	// 复制自 go 1.20.1 strings.Builder.String
 	// https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/strings/builder.go#L48
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }

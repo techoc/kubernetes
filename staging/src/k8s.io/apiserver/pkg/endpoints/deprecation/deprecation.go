@@ -43,11 +43,11 @@ type apiLifecycleReplacement interface {
 	APILifecycleReplacement() schema.GroupVersionKind
 }
 
-// extract all digits at the beginning of the string
+// 提取字符串开头的所有数字
 var leadingDigits = regexp.MustCompile(`^(\d+)`)
 
-// MajorMinor parses a numeric major/minor version from the provided version info.
-// The minor version drops all characters after the first non-digit character:
+// MajorMinor 从给定的版本信息中解析出数字形式的 major/minor 版本。
+// minor 版本会丢弃第一个非数字字符及其后的所有字符：
 //
 //	version.Info{Major:"1", Minor:"2+"} -> 1,2
 //	version.Info{Major:"1", Minor:"2.3-build4"} -> 1,2
@@ -64,8 +64,8 @@ func MajorMinor(v version.Info) (int, int, error) {
 	return major, minor, nil
 }
 
-// IsDeprecated returns true if obj implements APILifecycleDeprecated() and returns
-// a major/minor version that is non-zero and is <= the specified current major/minor version.
+// IsDeprecated 在 obj 实现了 APILifecycleDeprecated() 且返回非零的 major/minor
+// 版本、并且该版本小于等于给定的当前 major/minor 版本时返回 true。
 func IsDeprecated(obj runtime.Object, currentMajor, currentMinor int) bool {
 	deprecated, isDeprecated := obj.(apiLifecycleDeprecated)
 	if !isDeprecated {
@@ -73,16 +73,15 @@ func IsDeprecated(obj runtime.Object, currentMajor, currentMinor int) bool {
 	}
 
 	deprecatedMajor, deprecatedMinor := deprecated.APILifecycleDeprecated()
-	// no deprecation version expressed
+	// 未声明弃用版本
 	if deprecatedMajor == 0 && deprecatedMinor == 0 {
 		return false
 	}
-	// no current version info available
-	// 无法确定当前版本时保守地视为已弃用，以便尽早提示用户。
+	// 当前版本信息不可用：无法确定当前版本时保守地视为已弃用，以便尽早提示用户。
 	if currentMajor == 0 && currentMinor == 0 {
 		return true
 	}
-	// compare deprecation version to current version
+	// 将弃用版本与当前版本比较
 	if deprecatedMajor > currentMajor {
 		return false
 	}
@@ -92,8 +91,8 @@ func IsDeprecated(obj runtime.Object, currentMajor, currentMinor int) bool {
 	return true
 }
 
-// RemovedRelease returns the major/minor version in which the given object is unavailable (in the form "<major>.<minor>")
-// if the object implements APILifecycleRemoved() to indicate a non-zero removal version, and returns an empty string otherwise.
+// RemovedRelease 返回给定对象不可用的 major/minor 版本（形式为 "<major>.<minor>"）：
+// 当对象实现了 APILifecycleRemoved() 并给出非零的移除版本时返回该版本，否则返回空字符串。
 func RemovedRelease(obj runtime.Object) string {
 	if removed, hasRemovalInfo := obj.(apiLifecycleRemoved); hasRemovalInfo {
 		removedMajor, removedMinor := removed.APILifecycleRemoved()
@@ -104,8 +103,8 @@ func RemovedRelease(obj runtime.Object) string {
 	return ""
 }
 
-// WarningMessage returns a human-readable deprecation warning if the object implements APILifecycleDeprecated()
-// to indicate a non-zero deprecated major/minor version and has a populated GetObjectKind().GroupVersionKind().
+// WarningMessage 在对象实现了 APILifecycleDeprecated()、给出非零的弃用 major/minor
+// 版本，且 GetObjectKind().GroupVersionKind() 已填充时，返回人类可读的弃用警告。
 //
 // 缺少 GVK 时返回空字符串：警告文本需要明确是哪个组版本的哪个 Kind 被弃用，
 // 信息不完整时宁可不发警告，也不要输出令人困惑的消息。

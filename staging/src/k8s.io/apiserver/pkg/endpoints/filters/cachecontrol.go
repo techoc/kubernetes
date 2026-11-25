@@ -20,15 +20,14 @@ import (
 	"net/http"
 )
 
-// WithCacheControl sets the Cache-Control header to "no-cache, private" because all servers are protected by authn/authz.
-// see https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching#defining_optimal_cache-control_policy
-//
-// 中文说明：private 防止共享代理缓存带身份信息的响应；no-cache 允许客户端
+// WithCacheControl 把 Cache-Control 头设为 "no-cache, private"，因为所有服务端都受认证/鉴权保护。
+// 参见 https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching#defining_optimal_cache-control_policy
+// private 防止共享代理缓存带身份信息的响应；no-cache 允许客户端
 // 缓存但要求每次校验，兼顾安全与带宽。
 func WithCacheControl(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// Set the cache-control header if it is not already set
-		// 中文说明：不覆盖下游显式设置的值，给流式或长轮询接口保留自定义缓存策略的余地。
+		// 仅在尚未设置时写入 cache-control 头：
+		// 不覆盖下游显式设置的值，给流式或长轮询接口保留自定义缓存策略的余地。
 		if _, ok := w.Header()["Cache-Control"]; !ok {
 			w.Header().Set("Cache-Control", "no-cache, private")
 		}

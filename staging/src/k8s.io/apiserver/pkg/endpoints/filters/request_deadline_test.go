@@ -39,7 +39,7 @@ import (
 )
 
 // TestParseTimeout 覆盖 timeout 查询参数的解析：缺省、0s、非法值。
-// 中文说明：0s 与缺省都表示“使用服务端默认上限”，只有真正无法解析时才报错。
+// 0s 与缺省都表示“使用服务端默认上限”，只有真正无法解析时才报错。
 func TestParseTimeout(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -115,7 +115,7 @@ func TestWithRequestDeadline(t *testing.T) {
 			longRunning:              false,
 			handlerCallCountExpected: 1,
 			hasDeadlineExpected:      true,
-			deadlineExpected:         14 * time.Second, // to account for the delay in verification
+			deadlineExpected:         14 * time.Second, // 预留校验过程本身的延迟
 			statusCodeExpected:       http.StatusOK,
 		},
 		{
@@ -124,7 +124,7 @@ func TestWithRequestDeadline(t *testing.T) {
 			longRunning:              false,
 			handlerCallCountExpected: 1,
 			hasDeadlineExpected:      true,
-			deadlineExpected:         14 * time.Second, // to account for the delay in verification
+			deadlineExpected:         14 * time.Second, // 预留校验过程本身的延迟
 			statusCodeExpected:       http.StatusOK,
 		},
 		{
@@ -133,7 +133,7 @@ func TestWithRequestDeadline(t *testing.T) {
 			longRunning:              false,
 			handlerCallCountExpected: 1,
 			hasDeadlineExpected:      true,
-			deadlineExpected:         requestTimeoutMaximum - time.Second, // to account for the delay in verification
+			deadlineExpected:         requestTimeoutMaximum - time.Second, // 预留校验过程本身的延迟
 			statusCodeExpected:       http.StatusOK,
 		},
 		{
@@ -142,7 +142,7 @@ func TestWithRequestDeadline(t *testing.T) {
 			longRunning:              false,
 			handlerCallCountExpected: 1,
 			hasDeadlineExpected:      true,
-			deadlineExpected:         requestTimeoutMaximum - time.Second, // to account for the delay in verification
+			deadlineExpected:         requestTimeoutMaximum - time.Second, // 预留校验过程本身的延迟
 			statusCodeExpected:       http.StatusOK,
 		},
 		{
@@ -166,7 +166,7 @@ func TestWithRequestDeadline(t *testing.T) {
 			statusCodeExpected:       http.StatusOK,
 			handlerCallCountExpected: 1,
 			hasDeadlineExpected:      true,
-			deadlineExpected:         requestTimeoutMaximum - time.Second, // to account for the delay in verification
+			deadlineExpected:         requestTimeoutMaximum - time.Second, // 预留校验过程本身的延迟
 		},
 	}
 
@@ -191,7 +191,7 @@ func TestWithRequestDeadline(t *testing.T) {
 
 			testRequest := newRequest(t, test.requestURL)
 
-			// make sure a default request does not have any deadline set
+			// 确认默认请求没有设置任何 deadline
 			remaning, ok := deadline(testRequest)
 			if ok {
 				t.Fatalf("test setup failed, expected the new HTTP request context to have no deadline but got: %s", remaning)
@@ -223,7 +223,7 @@ func TestWithRequestDeadline(t *testing.T) {
 
 // TestWithRequestDeadlineWithClock 用假时钟验证 deadline 基于请求到达时间
 // （ReceivedTimestamp）而非当前时间计算。
-// 中文说明：若实现误用 clock.Now()，在已过一分钟的假时钟下会得到接近一分钟的
+// 若实现误用 clock.Now()，在已过一分钟的假时钟下会得到接近一分钟的
 // 剩余时间，本用例会立即失败。
 func TestWithRequestDeadlineWithClock(t *testing.T) {
 	var (
@@ -234,8 +234,8 @@ func TestWithRequestDeadlineWithClock(t *testing.T) {
 		deadlineGot, hasDeadlineGot = deadline(req)
 	})
 
-	// if the deadline filter uses the clock instead of using the request started timestamp from the context
-	// then we will see a request deadline of about a minute.
+	// 若 deadline 过滤器使用的是时钟而不是 context 中的请求开始时间戳，
+	// 我们会看到大约一分钟的请求 deadline。
 	receivedTimestampExpected := time.Now().Add(time.Minute)
 	fakeClock := testingclock.NewFakeClock(receivedTimestampExpected)
 
@@ -246,7 +246,7 @@ func TestWithRequestDeadlineWithClock(t *testing.T) {
 	withDeadline = WithRequestInfo(withDeadline, &fakeRequestResolver{})
 
 	testRequest := newRequest(t, "/api/v1/namespaces?timeout=1s")
-	// the request has arrived just now.
+	// 请求刚刚到达。
 	testRequest = testRequest.WithContext(request.WithReceivedTimestamp(testRequest.Context(), time.Now()))
 
 	w := httptest.NewRecorder()
@@ -256,7 +256,7 @@ func TestWithRequestDeadlineWithClock(t *testing.T) {
 		t.Error("expected the request context to have deadline set")
 	}
 
-	// we expect a deadline <= 1s since the filter should use the request started timestamp from the context.
+	// 期望 deadline <= 1s，因为过滤器应使用 context 中的请求开始时间戳。
 	if deadlineGot > time.Second {
 		t.Errorf("expected a request context with a deadline <= %s, but got: %s", time.Second, deadlineGot)
 	}
@@ -288,7 +288,7 @@ func TestWithRequestDeadlineWithInvalidTimeoutIsAudited(t *testing.T) {
 	if statusCodeGot != http.StatusBadRequest {
 		t.Errorf("expected status code %d, but got: %d", http.StatusBadRequest, statusCodeGot)
 	}
-	// verify that the audit event from the request context is written to the audit sink.
+	// 校验写入审计 sink 的是来自请求上下文的审计事件。
 	if len(fakeSink.events) != 1 {
 		t.Fatalf("expected audit sink to have 1 event, but got: %d", len(fakeSink.events))
 	}
@@ -419,7 +419,7 @@ func TestWithFailedRequestAudit(t *testing.T) {
 			}
 
 			if test.auditExpected {
-				// verify that the right http.ResponseWriter is passed to the error handler
+				// 校验传给错误处理的是正确的 http.ResponseWriter
 				_, ok := rwGot.(*auditResponseWriter)
 				if !ok {
 					t.Errorf("expected an http.ResponseWriter of type: %T but got: %T", &auditResponseWriter{}, rwGot)
@@ -442,7 +442,7 @@ func TestWithFailedRequestAudit(t *testing.T) {
 					t.Errorf("expected audit event ResponseStatus.Message: %s, but got: %s", test.statusErr, auditContext.GetEventResponseStatus().Message)
 				}
 
-				// verify that the audit event from the request context is written to the audit sink.
+				// 校验写入审计 sink 的是来自请求上下文的审计事件。
 				if len(fakeSink.events) != 1 {
 					t.Fatalf("expected audit sink to have 1 event, but got: %d", len(fakeSink.events))
 				}

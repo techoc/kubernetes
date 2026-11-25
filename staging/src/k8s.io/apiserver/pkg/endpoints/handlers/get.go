@@ -45,13 +45,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// getterFunc performs a get request with the given context and object name. The request
-// may be used to deserialize an options object to pass to the getter.
+// getterFunc 使用给定的 context 与对象名执行一次 get 请求；
+// request 可用于反序列化要传给 getter 的 options 对象。
 type getterFunc func(ctx context.Context, name string, req *http.Request) (runtime.Object, error)
 
-// getResourceHandler is an HTTP handler function for get requests. It delegates to the
-// passed-in getterFunc to perform the actual get.
-//
+// getResourceHandler 是处理 get 请求的 HTTP handler，具体的 get 操作委托给
+// 传入的 getterFunc 执行。
 // 公共的 GET 骨架：解析命名、协商输出格式、调用 getter、统一写响应；
 // 单资源与子资源的差异全部封装在 getterFunc 内。
 func getResourceHandler(scope *RequestScope, getter getterFunc) http.HandlerFunc {
@@ -86,11 +85,11 @@ func getResourceHandler(scope *RequestScope, getter getterFunc) http.HandlerFunc
 	}
 }
 
-// GetResource returns a function that handles retrieving a single resource from a rest.Storage object.
+// GetResource 返回从 rest.Storage 对象获取单个资源的函数。
 func GetResource(r rest.Getter, scope *RequestScope) http.HandlerFunc {
 	return getResourceHandler(scope,
 		func(ctx context.Context, name string, req *http.Request) (runtime.Object, error) {
-			// check for export
+			// 检查 export 参数。
 			// export 参数自 v1.14 起被移除；显式传 true 必须报错而不是静默忽略，
 			// 以免客户端误以为拿到了脱敏/可移植的对象。
 			options := metav1.GetOptions{}
@@ -116,7 +115,7 @@ func GetResource(r rest.Getter, scope *RequestScope) http.HandlerFunc {
 		})
 }
 
-// GetResourceWithOptions returns a function that handles retrieving a single resource from a rest.Storage object.
+// GetResourceWithOptions 返回从 rest.Storage 对象获取单个资源的函数。
 //
 // 与 GetResource 的区别在于资源自带 options 类型（如 pods/log），且子资源
 // 需要把 URL 尾部路径（subpath）作为参数传给存储层。
@@ -135,7 +134,7 @@ func GetResourceWithOptions(r rest.GetterWithOptions, scope *RequestScope, isSub
 		})
 }
 
-// getRequestOptions parses out options and can include path information.  The path information shouldn't include the subresource.
+// getRequestOptions 解析出 options，其中可能包含路径信息；路径信息不应包含子资源部分。
 //
 // startingIndex 跳过 /api|apis/<group>/<version> 与 namespaces/<ns> 等固定段，
 // 剩余部分才是真正的子路径；因此这里的魔法数字与请求信息解析规则强耦合。
@@ -160,12 +159,12 @@ func getRequestOptions(req *http.Request, scope *RequestScope, into runtime.Obje
 
 		p := strings.Join(requestInfo.Parts[startingIndex:], "/")
 
-		// ensure non-empty subpaths correctly reflect a leading slash
+		// 保证非空子路径正确反映开头的斜杠。
 		if len(p) > 0 && !strings.HasPrefix(p, "/") {
 			p = "/" + p
 		}
 
-		// ensure subpaths correctly reflect the presence of a trailing slash on the original request
+		// 保证子路径正确反映原始请求末尾是否有斜杠。
 		if strings.HasSuffix(requestInfo.Path, "/") && !strings.HasSuffix(p, "/") {
 			p += "/"
 		}
@@ -176,7 +175,7 @@ func getRequestOptions(req *http.Request, scope *RequestScope, into runtime.Obje
 	return scope.ParameterCodec.DecodeParameters(query, scope.Kind.GroupVersion(), into)
 }
 
-// ListResource returns a handler serving both list and watch requests.
+// ListResource 返回同时服务 list 与 watch 请求的 handler。
 // forceWatch 由路由决定（/watch 前缀），用于在缺少 watch 参数时仍走 watch 路径。
 func ListResource(r rest.Lister, rw rest.Watcher, scope *RequestScope, forceWatch bool, minRequestTimeout time.Duration) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
@@ -212,10 +211,10 @@ func ListResource(r rest.Lister, rw rest.Watcher, scope *RequestScope, forceWatc
 	}
 }
 
-// listOpts decodes and validates list/watch query parameters.
+// listOpts 解码并校验 list/watch 的查询参数。
 func listOpts(req *http.Request, scope *RequestScope) (metainternalversion.ListOptions, error) {
-	// Watches for single objects are routed to this function.
-	// Treat a name parameter the same as a field selector entry.
+	// 单对象的 watch 也会被路由到这里。
+	// name 参数的处理方式与字段选择器条目相同。
 	// 单对象 watch 没有独立的 code path，而是通过 metadata.name 字段选择器
 	// 让存储层把它优化为精确查询。
 	hasName := true
@@ -235,9 +234,8 @@ func listOpts(req *http.Request, scope *RequestScope) (metainternalversion.ListO
 		return opts, err
 	}
 
-	// transform fields
-	// TODO: DecodeParametersInto should do this.
-	// transform fields
+	// 转换字段。
+	// TODO: 这件事本该由 DecodeParametersInto 来完成。
 	// 不同资源可自定义字段名（例如把外部字段映射到内部字段），
 	// 必须在交给存储层之前完成转换。
 	if opts.FieldSelector != nil {
@@ -245,23 +243,20 @@ func listOpts(req *http.Request, scope *RequestScope) (metainternalversion.ListO
 			return scope.Convertor.ConvertFieldLabel(scope.Kind, label, value)
 		}
 		if opts.FieldSelector, err = opts.FieldSelector.Transform(fn); err != nil {
-			// TODO: allow bad request to set field causes based on query parameters
+			// TODO: 让 bad request 能够根据查询参数给出具体原因。
 			return opts, errors.NewBadRequest(err.Error())
 		}
 	}
 
 	if hasName {
-		// metadata.name is the canonical internal name.
-		// SelectionPredicate will notice that this is a request for
-		// a single object and optimize the storage query accordingly.
+		// metadata.name 是规范的内部字段名。SelectionPredicate 会识别出这是
+		// 单对象请求，并相应优化存储层查询。
 		nameSelector := fields.OneTermEqualSelector("metadata.name", name)
 
-		// Note that fieldSelector setting explicitly the "metadata.name"
-		// will result in reaching this branch (as the value of that field
-		// is propagated to requestInfo as the name parameter.
-		// That said, the allowed field selectors in this branch are:
-		// nil, fields.Everything and field selector matching metadata.name
-		// for our name.
+		// 注意：显式设置 metadata.name 的 fieldSelector 也会走到这个分支
+		// （该字段的值会作为 name 参数传递到 requestInfo）。
+		// 该分支允许的 field selector 只有：nil、fields.Everything，
+		// 以及与我们的 name 匹配的 metadata.name 选择器。
 		if opts.FieldSelector != nil && !opts.FieldSelector.Empty() {
 			selectedName, ok := opts.FieldSelector.RequiresExactMatch("metadata.name")
 			if !ok || name != selectedName {
@@ -274,8 +269,7 @@ func listOpts(req *http.Request, scope *RequestScope) (metainternalversion.ListO
 	return opts, nil
 }
 
-// handleWatch sets up and serves a watch (or watch-list) request.
-//
+// handleWatch 建立并服务一个 watch（或 watch-list）请求。
 // 超时策略：优先使用客户端指定的 timeoutSeconds；否则在
 // [minRequestTimeout, 2*minRequestTimeout) 间随机取值，避免大量 watch
 // 在同一时刻集体断开重连（惊群）。
@@ -292,7 +286,7 @@ func handleWatch(ctx context.Context, rw rest.Watcher, scope *RequestScope, req 
 	if rw == nil {
 		return errors.NewMethodNotSupported(scope.Resource.GroupResource(), "watch")
 	}
-	// TODO: Currently we explicitly ignore ?timeout= and use only ?timeoutSeconds=.
+	// TODO: 目前我们显式忽略 ?timeout=，只使用 ?timeoutSeconds=。
 	timeout := time.Duration(0)
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -313,7 +307,7 @@ func handleWatch(ctx context.Context, rw rest.Watcher, scope *RequestScope, req 
 	if err != nil {
 		return err
 	}
-	// Invalidate cancel() to defer until serve() is complete.
+	// 使 cancel() 失效，直到 serve() 完成才取消。
 	// 超时上下文必须覆盖整个 watch 服务过程，而不是在 handleWatch 返回时取消；
 	// 否则 watch 刚建立就会被立刻中止。
 	deferredCancel := cancel
@@ -328,7 +322,7 @@ func handleWatch(ctx context.Context, rw rest.Watcher, scope *RequestScope, req 
 		})
 	}
 
-	// Run watch serving in a separate goroutine to allow freeing current stack memory
+	// 在独立 goroutine 中运行 watch 服务，以便释放当前栈内存。
 	// 有 Task 时交给 routine 中间件在独立 goroutine 执行，否则就地执行。
 	t := routine.TaskFrom(req.Context())
 	if t != nil {
@@ -339,9 +333,9 @@ func handleWatch(ctx context.Context, rw rest.Watcher, scope *RequestScope, req 
 	return nil
 }
 
-// handleList serves a non-watch list request.
+// handleList 处理非 watch 的 list 请求。
 func handleList(ctx context.Context, r rest.Lister, scope *RequestScope, req *http.Request, w http.ResponseWriter, opts metainternalversion.ListOptions, outputMediaType negotiation.MediaTypeOptions) error {
-	// For performance tracking purposes.
+	// 用于性能追踪。
 	ctx, span := tracing.Start(ctx, "List", traceFields(req)...)
 	defer span.End(500 * time.Millisecond)
 	req = req.WithContext(ctx)
@@ -354,7 +348,7 @@ func handleList(ctx context.Context, r rest.Lister, scope *RequestScope, req *ht
 	return nil
 }
 
-// isListWatchRequest is mirrored in staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go
+// isListWatchRequest 的实现与 staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go 中保持一致。
 //
 // 判定条件与 cacher 中必须保持一致，否则追踪 span 的开启/结束会与实际
 // 的 watch-list 语义错位。修改此处需同步修改 cacher。

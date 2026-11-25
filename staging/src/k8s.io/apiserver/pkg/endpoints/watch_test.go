@@ -49,13 +49,12 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
-// watchJSON defines the expected JSON wire equivalent of watch.Event
+// watchJSON 定义 watch.Event 在 JSON 线格式上的等价表示
 type watchJSON struct {
 	Type   watch.EventType `json:"type,omitempty"`
 	Object json.RawMessage `json:"object,omitempty"`
 }
 
-// roundTripOrDie round trips an object to get defaults set.
 // 往返一次可应用默认值并规范化字段，使测试中的期望对象与实际编码输出一致。
 func roundTripOrDie(codec runtime.Codec, object runtime.Object) runtime.Object {
 	data, err := runtime.Encode(codec, object)
@@ -85,7 +84,7 @@ func podWatchTestTable() []struct {
 	t   watch.EventType
 	obj runtime.Object
 } {
-	// creaze lazily here in a func because podWatchTestTable can only be used after all types are registered.
+	// 在这里用函数形式惰性创建，因为 podWatchTestTable 只有在所有类型都注册后才能使用。
 	return []struct {
 		t   watch.EventType
 		obj runtime.Object
@@ -167,7 +166,7 @@ func TestWatchWebsocketClientClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Ensure the websocket is closed without error
+	// 确认 websocket 无错误地关闭
 	closeWebSocket := apitesting.Close
 	defer func() {
 		closeWebSocket(t, ws)
@@ -194,21 +193,21 @@ func TestWatchWebsocketClientClose(t *testing.T) {
 		}
 	}
 
-	// Send/receive should work
+	// 收发应当正常
 	for _, item := range watchTestTable {
 		try(item.t, item.obj)
 	}
 
-	// Sending normal data should be ignored
+	// 发送普通数据应被忽略
 	websocket.JSON.Send(ws, map[string]interface{}{"test": "data"})
 
-	// Send/receive should still work
+	// 收发仍应正常
 	for _, item := range watchTestTable {
 		try(item.t, item.obj)
 	}
 
-	// Websocket.Close errors if called twice.
-	// So disable the defer close and close immediately instead.
+	// 对 Websocket 调用两次 Close 会报错，
+	// 因此这里去掉 defer 关闭，改为立即关闭。
 	closeWebSocket = apitesting.CloseNoOp
 	require.NoError(t, ws.Close())
 
@@ -221,7 +220,7 @@ func TestWatchWebsocketClientClose(t *testing.T) {
 		t.Errorf("watcher did not close when client closed")
 	}
 
-	// Reading from a closed websocket should error
+	// 从已关闭的 websocket 读取应报错
 	var got watchJSON
 	err = websocket.JSON.Receive(ws, &got)
 	require.ErrorContains(t, err, "use of closed network connection")
@@ -251,7 +250,7 @@ func TestWatchClientClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Ensure the response body is closed without error
+	// 确认 response body 无错误地关闭
 	defer apitesting.Close(t, response.Body)
 
 	if response.StatusCode != http.StatusOK {
@@ -259,7 +258,7 @@ func TestWatchClientClose(t *testing.T) {
 		t.Fatalf("Unexpected response: %#v\n%s", response, string(b))
 	}
 
-	// Close response to cause a cancel on the server
+	// 关闭响应以触发服务端取消
 	if err := response.Body.Close(); err != nil {
 		t.Fatalf("Unexpected close client err: %v", err)
 	}
@@ -273,7 +272,7 @@ func TestWatchClientClose(t *testing.T) {
 		t.Errorf("watcher did not close when client closed")
 	}
 
-	// Reading from a closed response body should error
+	// 从已关闭的 response body 读取应报错
 	_, err = io.Copy(io.Discard, response.Body)
 	require.ErrorContains(t, err, "http: read on closed response body")
 }
@@ -342,9 +341,9 @@ func TestWatchRead(t *testing.T) {
 			ExpectedContentType: "application/json", // legacy behavior
 			MediaType:           "application/json",
 		},
-		// TODO: yaml stream serialization requires that RawExtension.MarshalJSON
-		// be able to understand nested encoding (since yaml calls json.Marshal
-		// rather than yaml.Marshal, which results in the raw bytes being in yaml).
+		// TODO：yaml 流式序列化要求 RawExtension.MarshalJSON
+		// 能理解嵌套编码（因为 yaml 调用的是 json.Marshal 而非
+		// yaml.Marshal，这会让原始字节以 yaml 形式出现）。
 		/*{
 			Accept:              "application/yaml",
 			ExpectedContentType: "application/yaml;stream=watch",
@@ -397,8 +396,8 @@ func TestWatchRead(t *testing.T) {
 					fr = streamSerializer.Framer.NewFrameReader(r)
 				}
 				d := streaming.NewDecoder(fr, streamSerializer.Serializer)
-				// Websockets error if closed twice.
-				// So disable the Body.Close and use Decoder.Close instead.
+				// 对 Websocket 关闭两次会报错，
+				// 因此这里不用 Body.Close，改用 Decoder.Close。
 				closeBody = apitesting.CloseNoOp
 				defer apitesting.Close(t, d)
 
@@ -469,7 +468,7 @@ func TestWatchHTTPAccept(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// TODO: once this is fixed, this test will change
+	// TODO：这个问题修复后，本测试将随之改变
 	if response.StatusCode != http.StatusNotAcceptable {
 		t.Errorf("Unexpected response %#v", response)
 	}
@@ -633,9 +632,8 @@ func TestWatchProtocolSelection(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			// The requests recognized as websocket requests based on connection
-			// and upgrade headers will not also have the necessary Sec-Websocket-*
-			// headers so it is expected to throw a 400
+			// 仅凭 connection 与 upgrade 头被识别为 websocket 请求的调用，
+			// 不会带上必需的 Sec-Websocket-* 头，因此预期返回 400
 			if test.isWebsocket && response.StatusCode != http.StatusBadRequest {
 				t.Errorf("Unexpected response %#v", response)
 			}
@@ -648,12 +646,12 @@ func TestWatchProtocolSelection(t *testing.T) {
 
 }
 
-// BenchmarkWatchHTTP measures the cost of serving a watch.
+// BenchmarkWatchHTTP 测量提供一次 watch 的开销。
 // 使用 ASCII 名称作为基线，排除 UTF-8 转义带来的额外开销。
 func BenchmarkWatchHTTP(b *testing.B) {
 	items := benchmarkItems(b)
 
-	// use ASCII names to capture the cost of handling ASCII only self-links
+	// 使用 ASCII 名称，衡量处理纯 ASCII self-link 的开销
 	for i := range items {
 		item := &items[i]
 		item.Namespace = fmt.Sprintf("namespace-%d", i)
@@ -668,7 +666,7 @@ func BenchmarkWatchHTTP(b *testing.B) {
 func BenchmarkWatchHTTP_UTF8(b *testing.B) {
 	items := benchmarkItems(b)
 
-	// use UTF names to capture the cost of handling UTF-8 escaping in self-links
+	// 使用 UTF 名称，衡量 self-link 中 UTF-8 转义的开销
 	for i := range items {
 		item := &items[i]
 		item.Namespace = fmt.Sprintf("躀痢疈蜧í柢-%d", i)
@@ -736,7 +734,7 @@ func runWatchHTTPBenchmark(b *testing.B, items []runtime.Object, contentType str
 	b.StopTimer()
 }
 
-// BenchmarkWatchWebsocket measures the cost of serving a watch.
+// BenchmarkWatchWebsocket 测量提供一次 watch 的开销。
 func BenchmarkWatchWebsocket(b *testing.B) {
 	items := benchmarkItems(b)
 
@@ -776,7 +774,7 @@ func BenchmarkWatchWebsocket(b *testing.B) {
 	b.StopTimer()
 }
 
-// BenchmarkWatchProtobuf measures the cost of serving a watch.
+// BenchmarkWatchProtobuf 测量提供一次 watch 的开销。
 func BenchmarkWatchProtobuf(b *testing.B) {
 	items := benchmarkItems(b)
 

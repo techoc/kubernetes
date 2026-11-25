@@ -47,14 +47,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// UpdateResource returns a function that will handle a resource update
+// UpdateResource 返回处理资源更新的函数。
 //
 // PUT 可能变成 create（AllowCreateOnUpdate 的资源），因此这里同时准备
 // create 与 update 两套准入属性与授权属性，由存储层在事务内决定实际走哪条路径。
 func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
-		// For performance tracking purposes.
+		// 用于性能追踪。
 		ctx, span := tracing.Start(ctx, "Update", traceFields(req)...)
 		req = req.WithContext(ctx)
 		defer span.End(500 * time.Millisecond)
@@ -65,8 +65,7 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 			return
 		}
 
-		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
-		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		// 强制超时不超过 requestTimeoutUpperBound（34s）；若父上下文中用户给定的超时更短则沿用。
 		// 34s 来自 etcd 默认请求超时的安全余量，保证客户端断开前服务端能先收尾。
 		ctx, cancel := context.WithTimeout(ctx, requestTimeoutUpperBound)
 		defer cancel()
@@ -149,10 +148,10 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 		audit.LogRequestObject(req.Context(), obj, objGV, scope.Resource, scope.Subresource, scope.Serializer)
 		admit = admission.WithAudit(admit)
 
-		// if this object supports namespace info
+		// 若该对象支持 namespace 信息。
 		// 命名空间必须与 URL 一致，防止越权写到其他命名空间。
 		if objectMeta, err := meta.Accessor(obj); err == nil {
-			// ensure namespace on the object is correct, or error if a conflicting namespace was set in the object
+			// 确保对象上的 namespace 正确；若对象中设置了冲突的 namespace 则报错。
 			if err := rest.EnsureObjectNamespaceMatchesRequestNamespace(rest.ExpectedNamespaceForResource(namespace, scope.Resource), objectMeta); err != nil {
 				scope.err(err, w, req)
 				return
@@ -167,7 +166,7 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 		userInfo, _ := request.UserFrom(ctx)
 		transformers := []rest.TransformFunc{}
 
-		// allows skipping managedFields update if the resulting object is too big
+		// 允许在结果对象过大时跳过 managedFields 更新。
 		// managedFields 可能非常大；若因此超出 etcd 限制，会退化为不维护它并重试。
 		shouldUpdateManagedFields := true
 		admit = fieldmanager.NewManagedFieldsValidatingAdmissionController(admit)
@@ -197,7 +196,7 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 				return newObj, nil
 			})
 			transformers = append(transformers, func(ctx context.Context, newObj, oldObj runtime.Object) (runtime.Object, error) {
-				// Dedup owner references again after mutating admission happens
+				// 变更准入完成之后再次对 owner references 去重。
 				// 准入可能新增 ownerReferences，必须在写库前再次去重。
 				dedupOwnerReferencesAndAddWarning(newObj, req.Context(), true)
 				return newObj, nil
@@ -239,13 +238,13 @@ func UpdateResource(r rest.Updater, scope *RequestScope, admit admission.Interfa
 			wasCreated = created
 			return obj, err
 		}
-		// Dedup owner references before updating managed fields
+		// 在更新 managedFields 之前对 owner references 去重。
 		// 入库前先去重，避免重复引用被计入 managedFields 造成后续冲突。
 		dedupOwnerReferencesAndAddWarning(obj, req.Context(), false)
 		result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
 			result, err := requestFunc()
-			// If the object wasn't committed to storage because it's serialized size was too large,
-			// it is safe to remove managedFields (which can be large) and try again.
+			// 若对象因序列化后体积过大而未提交到存储，
+			// 可以安全地移除 managedFields（它可能很大）后重试。
 			// 仅对“对象过大”重试一次，且必须在确认未写入后进行，避免重复应用变更。
 			if isTooLargeError(err) {
 				if accessor, accessorErr := meta.Accessor(obj); accessorErr == nil {
@@ -291,22 +290,23 @@ func withAuthorization(validate rest.ValidateObjectFunc, a authorizer.Unconditio
 		once.Do(func() {
 			authorizerDecision, authorizerReason, authorizerErr = a.Authorize(ctx, attributes)
 		})
-		// an authorizer like RBAC could encounter evaluation errors and still allow the request, so authorizer decision is checked before error here.
+		// 像 RBAC 这样的 authorizer 可能在遇到评估错误的同时仍放行请求，
+		// 因此先看授权决定再判断错误。
 		// 顺序不可颠倒：Allow 优先于 error，否则 RBAC 的部分失败会被误报为 500。
 		if authorizerDecision == authorizer.DecisionAllow {
-			// Continue to validating admission
+			// 继续执行校验准入
 			return validate(ctx, obj)
 		}
 		if authorizerErr != nil {
 			return errors.NewInternalError(authorizerErr)
 		}
 
-		// The user is not authorized to perform this action, so we need to build the error response
+		// 用户未被授权执行该操作，需要构造错误响应。
 		return responsewriters.ForbiddenStatusError(attributes, authorizerReason)
 	}
 }
 
-// updateToCreateOptions creates a CreateOptions with the same field values as the provided UpdateOptions.
+// updateToCreateOptions 用给定 UpdateOptions 的字段值构造 CreateOptions。
 //
 // 仅复制 dryRun/fieldManager/fieldValidation 三个语义等价的字段，其余字段
 // 在 create 与 update 之间并不通用。

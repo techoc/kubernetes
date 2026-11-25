@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package responsewriters containers helpers to write responses in HTTP handlers.
+// Package responsewriters 提供在 HTTP handler 中写出响应的辅助方法。
 //
 // 该包统一了 API Server 的响应写出路径：序列化（JSON/YAML/protobuf）、内容协商、
 // 错误体构造与状态码设置都在这里完成，避免各 handler 各写一套导致格式不一致。

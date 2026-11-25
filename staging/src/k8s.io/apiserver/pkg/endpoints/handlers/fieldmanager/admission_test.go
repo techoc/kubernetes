@@ -32,7 +32,7 @@ import (
 
 // TestAdmission 验证 managedFields 校验准入控制器会丢弃非法的 ManagedFieldsEntry。
 //
-// 中文说明：服务端字段管理把 managedFields 视为客户端可写但不完全可信的数据；
+// 服务端字段管理把 managedFields 视为客户端可写但不完全可信的数据；
 // 该控制器在准入阶段做「读-校验-必要时重置」：一旦发现条目不符合规范
 // （APIVersion/Operation/FieldsType/FieldsV1 非法），就整条移除，避免脏数据落库。
 // 注意 manager 为空并不触发重置——空 manager 在历史数据中合法，这是兼容性约束。
@@ -111,7 +111,7 @@ func TestAdmission(t *testing.T) {
 }
 
 // replaceManagedFields 返回一个准入函数，把对象的 managedFields 整体替换为给定值。
-// 中文说明：用于模拟「客户端提交非法 managedFields」这一输入形态，
+// 用于模拟「客户端提交非法 managedFields」这一输入形态，
 // 而不必真的构造完整的 API 请求。
 func replaceManagedFields(with []metav1.ManagedFieldsEntry) func(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {
 	return func(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) error {

@@ -38,25 +38,21 @@ func maxDuration(d1 time.Duration, d2 time.Duration) time.Duration {
 	return d2
 }
 
-// DurationTracker is a simple interface for tracking functions duration,
-// it is safe for concurrent use by multiple goroutines.
+// DurationTracker 是统计函数耗时的简单接口，可被多个 goroutine 并发使用。
 type DurationTracker interface {
-	// Track measures time spent in the given function f and
-	// aggregates measured duration using aggregateFunction.
-	// if Track is invoked with f from multiple goroutines concurrently,
-	// then f must be safe to be invoked concurrently by multiple goroutines.
+	// Track 统计给定函数 f 的执行时间，并用 aggregateFunction 聚合测得的耗时。
+	// 如果多个 goroutine 并发调用 Track，那么 f 本身必须支持并发调用。
 	Track(f func())
 
-	// TrackDuration tracks latency from the specified duration
-	// and aggregate it using aggregateFunction
+	// TrackDuration 直接把指定时长计入延迟，并用 aggregateFunction 聚合。
 	TrackDuration(time.Duration)
 
-	// GetLatency returns the total latency incurred so far
+	// GetLatency 返回迄今累计的总延迟。
 	GetLatency() time.Duration
 }
 
-// durationTracker implements DurationTracker by measuring function time
-// using given clock and aggregates the duration using given aggregate function
+// durationTracker 实现 DurationTracker：用给定的时钟测量函数耗时，
+// 并用给定的聚合函数累加时长。
 // 聚合函数在构造时固定，因此 tracker 本身无需在调用点区分 sum/max 语义。
 type durationTracker struct {
 	clock             clock.Clock
@@ -65,8 +61,7 @@ type durationTracker struct {
 	aggregateFunction func(time.Duration, time.Duration) time.Duration
 }
 
-// Track measures time spent in given function and aggregates measured
-// duration using aggregateFunction
+// Track 统计给定函数的执行时间，并用 aggregateFunction 聚合测得的耗时。
 // 使用 defer 保证 f 发生 panic 时仍会记录已消耗的时间。
 func (t *durationTracker) Track(f func()) {
 	startedAt := t.clock.Now()
@@ -80,15 +75,14 @@ func (t *durationTracker) Track(f func()) {
 	f()
 }
 
-// TrackDuration tracks latency from the given duration
-// using aggregateFunction
+// TrackDuration 用 aggregateFunction 把给定时长计入延迟。
 func (t *durationTracker) TrackDuration(d time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.latency = t.aggregateFunction(t.latency, d)
 }
 
-// GetLatency returns aggregated latency tracked by a tracker
+// GetLatency 返回该 tracker 聚合后的延迟。
 func (t *durationTracker) GetLatency() time.Duration {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -111,90 +105,68 @@ func newMaxLatencyTracker(c clock.Clock) DurationTracker {
 	}
 }
 
-// LatencyTrackers stores trackers used to measure latecny incurred in
-// components within the apiserver.
+// LatencyTrackers 保存用于测量 apiserver 内部各组件延迟的 tracker。
 // 每个字段的聚合方式取决于对应阶段的执行模型：串行用 sum，并行用 max。
 // 这些数据最终以审计注解形式输出，用于排查请求延迟分布。
 type LatencyTrackers struct {
-	// MutatingWebhookTracker tracks the latency incurred in mutating webhook(s).
-	// Since mutating webhooks are done sequentially, latency
-	// is aggregated using sum function.
+	// MutatingWebhookTracker 统计 mutating webhook 的延迟。
+	// 由于 mutating webhook 是串行执行的，延迟用求和方式聚合。
 	MutatingWebhookTracker DurationTracker
 
-	// ValidatingWebhookTracker tracks the latency incurred in validating webhook(s).
-	// Validate webhooks are done in parallel, so max function is used.
+	// ValidatingWebhookTracker 统计 validating webhook 的延迟。
+	// 由于 validating webhook 是并行执行的，因此用取最大值方式聚合。
 	ValidatingWebhookTracker DurationTracker
 
-	// AuthenticationTracker tracks the latency incurred by Authentication of request
+	// AuthenticationTracker 统计请求认证阶段的延迟。
 	AuthenticationTracker DurationTracker
 
-	// AuthorizationTracker tracks the latency incurred by Authorization of request
+	// AuthorizationTracker 统计请求授权阶段的延迟。
 	AuthorizationTracker DurationTracker
 
-	// APFQueueWaitTracker tracks the latency incurred by queue wait times
-	// from priority & fairness.
+	// APFQueueWaitTracker 统计优先级与公平性（APF）队列等待带来的延迟。
 	APFQueueWaitTracker DurationTracker
 
-	// StorageTracker tracks the latency incurred inside the storage layer,
-	// it accounts for the time it takes to send data to the underlying
-	// storage layer (etcd) and get the complete response back.
-	// If a request involves N (N>=1) round trips to the underlying
-	// stogare layer, the latency will account for the total duration
-	// from these N round trips.
-	// It does not include the time incurred in admission, or validation.
+	// StorageTracker 统计存储层内部的延迟，即把数据写入底层存储（etcd）
+	// 并取回完整响应所花的时间。若一次请求涉及与底层存储的 N（N>=1）次往返，
+	// 延迟就是这 N 次往返的总耗时，但不包含准入（admission）或校验的耗时。
 	StorageTracker DurationTracker
 
-	// TransformTracker tracks the latency incurred in transforming the
-	// response object(s) returned from the underlying storage layer.
-	// This includes transforming the object to user's desired form
-	// (ie. as Table), and also setting appropriate API level fields.
-	// This does not include the latency incurred in serialization
-	// (json or protobuf) of the response object or writing
-	// of it to the http ResponseWriter object.
+	// TransformTracker 统计对底层存储返回的响应对象做转换的延迟，
+	// 包括把对象转换成用户期望的形式（例如 Table）以及设置 API 层字段。
+	// 不包含响应对象序列化（json 或 protobuf）以及写入 http ResponseWriter 的延迟。
 	TransformTracker DurationTracker
 
-	// SerializationTracker tracks the latency incurred in serialization
-	// (json or protobuf) of the response object.
-	// NOTE: serialization and writing of the serialized raw bytes to the
-	// associated http ResponseWriter object are interleaved, and hence
-	// the latency measured here will include the time spent writing the
-	// serialized raw bytes to the http ResponseWriter object.
+	// SerializationTracker 统计响应对象序列化（json 或 protobuf）的延迟。
+	// 注意：序列化与把字节写入 http ResponseWriter 是交替进行的，
+	// 因此这里测得的延迟也包含写入 ResponseWriter 所花的时间。
 	SerializationTracker DurationTracker
 
-	// ResponseWriteTracker tracks the latency incurred in writing the
-	// serialized raw bytes to the http ResponseWriter object (via the
-	// Write method) associated with the request.
-	// The Write method can be invoked multiple times, so we use a
-	// latency tracker that sums up the duration from each call.
+	// ResponseWriteTracker 统计通过 Write 方法把序列化后的字节写入请求关联的
+	// http ResponseWriter 的延迟。Write 可能被调用多次，因此使用求和型 tracker。
 	ResponseWriteTracker DurationTracker
 
-	// DecodeTracker is used to track latency incurred inside the function
-	// that takes an object returned from the underlying storage layer
-	// (etcd) and performs decoding of the response object.
-	// When called multiple times, the latency incurred inside to
-	// decode func each time will be summed up.
+	// DecodeTracker 用于统计“从底层存储（etcd）取回对象并解码响应对象”的函数内部延迟，
+	// 多次调用时各次解码耗时会被累加。
 	DecodeTracker DurationTracker
 
-	// ImpersonationTracker tracks the latency incurred in resolving impersonation.
-	// This includes mode selection, authorization checks, and cache lookups.
+	// ImpersonationTracker 统计解析冒充（impersonation）过程的延迟，
+	// 包括模式选择、授权检查与缓存查询。
 	ImpersonationTracker DurationTracker
 }
 
 // latencyTrackersKeyType 是私有类型，避免与其他包的 context key 冲突。
 type latencyTrackersKeyType int
 
-// latencyTrackersKey is the key that associates a LatencyTrackers
-// instance with the request context.
+// latencyTrackersKey 是把 LatencyTrackers 实例与请求上下文关联起来的键。
 const latencyTrackersKey latencyTrackersKeyType = iota
 
-// WithLatencyTrackers returns a copy of parent context to which an
-// instance of LatencyTrackers is added.
+// WithLatencyTrackers 返回 parent 的副本，其中加入了 LatencyTrackers 实例。
 func WithLatencyTrackers(parent context.Context) context.Context {
 	return WithLatencyTrackersAndCustomClock(parent, clock.RealClock{})
 }
 
-// WithLatencyTrackersAndCustomClock returns a copy of parent context to which
-// an instance of LatencyTrackers is added. Tracers use given clock.
+// WithLatencyTrackersAndCustomClock 返回加入 LatencyTrackers 实例的 parent 副本，
+// tracker 使用给定的时钟。
 // 提供自定义时钟是为了让测试能精确控制耗时，而不依赖真实时间。
 func WithLatencyTrackersAndCustomClock(parent context.Context, c clock.Clock) context.Context {
 	return WithValue(parent, latencyTrackersKey, &LatencyTrackers{
@@ -215,22 +187,16 @@ func WithLatencyTrackersAndCustomClock(parent context.Context, c clock.Clock) co
 	})
 }
 
-// LatencyTrackersFrom returns the associated LatencyTrackers instance
-// from the specified context.
+// LatencyTrackersFrom 从指定上下文中取出关联的 LatencyTrackers 实例。
 // 额外判断 wd != nil，避免有人把 typed nil 放入 context 导致调用方空指针。
 func LatencyTrackersFrom(ctx context.Context) (*LatencyTrackers, bool) {
 	wd, ok := ctx.Value(latencyTrackersKey).(*LatencyTrackers)
 	return wd, ok && wd != nil
 }
 
-// TrackTransformResponseObjectLatency is used to track latency incurred
-// inside the function that takes an object returned from the underlying
-// storage layer (etcd) and performs any necessary transformations
-// of the response object. This does not include the latency incurred in
-// serialization (json or protobuf) of the response object or writing of
-// it to the http ResponseWriter object.
-// When called multiple times, the latency incurred inside the
-// transform func each time will be summed up.
+// TrackTransformResponseObjectLatency 用于统计“取回底层存储（etcd）对象并对响应对象
+// 做必要转换”的函数内部延迟，不包含序列化或写入 http ResponseWriter 的延迟。
+// 多次调用时，各次转换耗时会被累加。
 // 没有 tracker 时直接执行 transform，保证埋点缺失不影响功能路径。
 func TrackTransformResponseObjectLatency(ctx context.Context, transform func()) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
@@ -241,18 +207,15 @@ func TrackTransformResponseObjectLatency(ctx context.Context, transform func()) 
 	transform()
 }
 
-// TrackStorageLatency is used to track latency incurred
-// inside the underlying storage layer.
-// When called multiple times, the latency provided will be summed up.
+// TrackStorageLatency 用于统计底层存储内部的延迟，多次调用时给出的延迟会被累加。
 func TrackStorageLatency(ctx context.Context, d time.Duration) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.StorageTracker.TrackDuration(d)
 	}
 }
 
-// TrackSerializeResponseObjectLatency is used to track latency incurred in
-// serialization (json or protobuf) of the response object.
-// When called multiple times, the latency provided will be summed up.
+// TrackSerializeResponseObjectLatency 用于统计响应对象序列化（json 或 protobuf）的延迟，
+// 多次调用时给出的延迟会被累加。
 func TrackSerializeResponseObjectLatency(ctx context.Context, f func()) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.SerializationTracker.Track(f)
@@ -262,62 +225,52 @@ func TrackSerializeResponseObjectLatency(ctx context.Context, f func()) {
 	f()
 }
 
-// TrackResponseWriteLatency is used to track latency incurred in writing
-// the serialized raw bytes to the http ResponseWriter object (via the
-// Write method) associated with the request.
-// When called multiple times, the latency provided will be summed up.
+// TrackResponseWriteLatency 用于统计通过 Write 方法把序列化字节写入请求关联的
+// http ResponseWriter 的延迟，多次调用时给出的延迟会被累加。
 func TrackResponseWriteLatency(ctx context.Context, d time.Duration) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.ResponseWriteTracker.TrackDuration(d)
 	}
 }
 
-// TrackAuthenticationLatency is used to track latency incurred
-// by Authentication phase of request.
+// TrackAuthenticationLatency 用于统计请求认证阶段的延迟。
 func TrackAuthenticationLatency(ctx context.Context, d time.Duration) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.AuthenticationTracker.TrackDuration(d)
 	}
 }
 
-// TrackAuthorizationLatency is used to track latency incurred
-// by Authorization phase of request.
+// TrackAuthorizationLatency 用于统计请求授权阶段的延迟。
 func TrackAuthorizationLatency(ctx context.Context, d time.Duration) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.AuthorizationTracker.TrackDuration(d)
 	}
 }
 
-// TrackAPFQueueWaitLatency is used to track latency incurred
-// by priority and fairness queues.
+// TrackAPFQueueWaitLatency 用于统计优先级与公平性队列等待的延迟。
 func TrackAPFQueueWaitLatency(ctx context.Context, d time.Duration) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.APFQueueWaitTracker.TrackDuration(d)
 	}
 }
 
-// TrackDecodeLatency is used to track latency incurred inside the function
-// that takes an object returned from the underlying storage layer
-// (etcd) and performs decoding of the response object.
-// When called multiple times, the latency incurred inside to
-// decode func each time will be summed up.
+// TrackDecodeLatency 用于统计“取回底层存储（etcd）对象并解码响应对象”的函数内部延迟，
+// 多次调用时各次解码耗时会被累加。
 func TrackDecodeLatency(ctx context.Context, d time.Duration) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.DecodeTracker.TrackDuration(d)
 	}
 }
 
-// TrackImpersonationLatency is used to track latency incurred
-// in resolving impersonation for the request.
+// TrackImpersonationLatency 用于统计解析请求冒充关系的延迟。
 func TrackImpersonationLatency(ctx context.Context, d time.Duration) {
 	if tracker, ok := LatencyTrackersFrom(ctx); ok {
 		tracker.ImpersonationTracker.TrackDuration(d)
 	}
 }
 
-// AuditAnnotationsFromLatencyTrackers will inspect each latency tracker
-// associated with the request context and return a set of audit
-// annotations that can be added to the API audit entry.
+// AuditAnnotationsFromLatencyTrackers 检查请求上下文关联的每个延迟 tracker，
+// 返回可写入 API 审计记录的注解集合。
 // 只有非零耗时才写注解，避免为每个请求生成大量无意义的 0s 条目；
 // 注解键属于对外可观测契约，重命名会影响依赖审计日志的下游系统。
 func AuditAnnotationsFromLatencyTrackers(ctx context.Context) map[string]string {

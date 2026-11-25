@@ -31,15 +31,14 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 )
 
-// This file exposes helper functions used for calculating the E-Tag header
-// used in discovery endpoint responses
+// 本文件提供计算发现端点响应中 E-Tag 头所使用的辅助函数。
 
-// Attaches Cache-Busting functionality to an endpoint
-//   - Sets ETag header to provided hash
-//   - Replies with 304 Not Modified, if If-None-Match header matches hash
+// ServeHTTPWithETag 为端点附加 Cache-Busting 功能：
+//   - 将 ETag 头设置为给定的哈希值
+//   - 若 If-None-Match 头与哈希匹配，则回复 304 Not Modified
 //
-// hash should be the value of calculateETag on object. If hash is empty, then
-// the object is simply serialized without E-Tag functionality
+// hash 应为 calculateETag 对 object 的计算结果；若 hash 为空，
+// 则直接序列化对象，不带 E-Tag 功能。
 // 注意：hash 为空时仍会写出空的 ETag 头，调用方需自行判断是否需要 ETag 语义。
 func ServeHTTPWithETag(
 	object runtime.Object,
@@ -49,7 +48,7 @@ func ServeHTTPWithETag(
 	w http.ResponseWriter,
 	req *http.Request,
 ) {
-	// ETag must be enclosed in double quotes:
+	// ETag 必须用双引号包裹：
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
 	quotedHash := strconv.Quote(hash)
 	w.Header().Set("ETag", quotedHash)
@@ -58,11 +57,10 @@ func ServeHTTPWithETag(
 	w.Header().Set("Vary", "Accept")
 	w.Header().Set("Cache-Control", "public")
 
-	// If Request includes If-None-Match and matches hash, reply with 304
-	// Otherwise, we delegate to the handler for actual content
+	// 若请求包含 If-None-Match 且与哈希匹配，回复 304；
+	// 否则委托给处理函数输出实际内容。
 	//
-	// According to documentation, An Etag within an If-None-Match
-	// header will be enclosed within double quotes:
+	// 根据文档，If-None-Match 头中的 Etag 会被双引号包裹：
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match#directives
 	if clientCachedHash := req.Header.Get("If-None-Match"); quotedHash == clientCachedHash {
 		w.WriteHeader(http.StatusNotModified)

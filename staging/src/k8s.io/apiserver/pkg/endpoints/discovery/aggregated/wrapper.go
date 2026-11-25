@@ -35,7 +35,7 @@ import (
 
 // WrappedHandler 在同一个路径上按内容协商结果分发到「传统发现」或「聚合发现」处理器。
 //
-// 中文说明：聚合发现（APIGroupDiscoveryList）是 v2/v2beta1 的新格式，
+// 聚合发现（APIGroupDiscoveryList）是 v2/v2beta1 的新格式，
 // 但老客户端仍按 Accept 头请求 v1 的 APIVersions/APIResourceList。
 // 用包装器而非两个独立端点，保证 URL 稳定、客户端按 Accept 头自行选择，
 // 从而可以在同一 apiserver 上渐进启用新格式。
@@ -48,12 +48,12 @@ type WrappedHandler struct {
 
 // ServeHTTP 先协商媒体类型，再按「是否聚合发现」分流。
 //
-// 中文说明：协商失败时 mediaType 为零值，Convert 为空，自然走传统处理器，
+// 协商失败时 mediaType 为零值，Convert 为空，自然走传统处理器，
 // 从而保证异常 Accept 头不会导致 500。对 v2 且开启 UnknownVersionInteroperabilityProxy 时，
 // 默认走 peerAggregatedHandler（聚合对等 apiserver 的信息）；客户端显式加
 // profile=nopeer 才退回本地聚合，这一分支会计数以便观察显式退避的使用量。
 func (wrapped *WrappedHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	// mediaType.Convert looks at the request accept headers and is used to control whether the discovery document will be aggregated.
+	// mediaType.Convert 由请求的 Accept 头解析得到，用于控制是否返回聚合发现文档。
 	mediaType, _ := negotiation.NegotiateMediaTypeOptions(req.Header.Get("Accept"), wrapped.s.SupportedMediaTypes(), DiscoveryEndpointRestrictions)
 	if IsAggregatedDiscoveryGVK(mediaType.Convert) {
 		if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.UnknownVersionInteroperabilityProxy) && mediaType.Convert.Version == "v2" {
@@ -63,7 +63,7 @@ func (wrapped *WrappedHandler) ServeHTTP(resp http.ResponseWriter, req *http.Req
 				return
 			}
 			if wrapped.peerAggregatedHandler != nil {
-				// Serve peer-aggregated discovery by default if provided.
+				// 若提供了 peerAggregatedHandler，默认用它服务对等聚合发现。
 				wrapped.peerAggregatedHandler.ServeHTTP(resp, req)
 				return
 			}
@@ -81,7 +81,7 @@ func (wrapped *WrappedHandler) restfulHandle(req *restful.Request, resp *restful
 }
 
 // GenerateWebService 构造注册到 go-restful 的路由。
-// 中文说明：Produces/Consumes 使用 serializer 支持的全部媒体类型，
+// Produces/Consumes 使用 serializer 支持的全部媒体类型，
 // 使内容协商在 ServeHTTP 内完成而不是由 restful 提前拒绝；
 // Writes 声明返回类型仅用于生成 OpenAPI 文档。
 func (wrapped *WrappedHandler) GenerateWebService(prefix string, returnType interface{}) *restful.WebService {
@@ -98,17 +98,16 @@ func (wrapped *WrappedHandler) GenerateWebService(prefix string, returnType inte
 	return ws
 }
 
-// WrapAggregatedDiscoveryToHandler wraps a handler with an option to
-// emit the aggregated discovery by passing in the aggregated
-// discovery type in content negotiation headers: eg: (Accept:
-// application/json;v=v2;g=apidiscovery.k8s.io;as=APIGroupDiscoveryList)
+// WrapAggregatedDiscoveryToHandler 包装一个 handler，并允许通过在内容协商头中
+// 传入聚合发现类型来输出聚合发现文档，例如：
+// (Accept: application/json;v=v2;g=apidiscovery.k8s.io;as=APIGroupDiscoveryList)
 //
-// If peerAggregatedHandler is non-nil, it will be used to serve peer-aggregated
-// discovery requests which aggregate discovery information from peer API servers.
-// To request a no-peer aggregation, the client must include the "profile=nopeer" parameter in the
-// Accept header eg: (Accept: application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList;profile=nopeer).
+// 若 peerAggregatedHandler 非 nil，将用它来服务对等聚合发现请求，
+// 即聚合来自对等 API server 的发现信息。若客户端希望请求非对等聚合，
+// 必须在 Accept 头中包含 "profile=nopeer" 参数，例如：
+// (Accept: application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList;profile=nopeer)。
 //
-// 中文说明：此处自建 scheme 与 codec，而不是复用全局 scheme，是因为聚合发现
+// 此处自建 scheme 与 codec，而不是复用全局 scheme，是因为聚合发现
 // 只涉及 apidiscovery 类型，独立 codec 可避免与主 API 的类型注册互相影响。
 // CBOR 序列化器按特性门控附加，保证在未启用时行为与之前完全一致。
 func WrapAggregatedDiscoveryToHandler(handler, aggHandler, peerAggregatedHandler http.Handler) *WrappedHandler {

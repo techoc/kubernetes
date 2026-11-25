@@ -53,8 +53,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// DeleteResource returns a function that will handle a resource deletion
-// TODO admission here becomes solely validating admission
+// DeleteResource 返回处理资源删除的函数。
+// TODO: 这里的准入最终应只保留校验准入。
 //
 // 删除流程刻意分成"静态属性准入"与"存储层删除"两段：前半段只依据请求本身
 // （命名空间、名称、DeleteOptions）构造 admission 属性，使准入插件在读取对象前就能
@@ -62,7 +62,7 @@ import (
 func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestScope, admit admission.Interface) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
-		// For performance tracking purposes.
+		// 用于性能追踪。
 		ctx, span := tracing.Start(ctx, "Delete", traceFields(req)...)
 		req = req.WithContext(ctx)
 		defer span.End(500 * time.Millisecond)
@@ -73,8 +73,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 			return
 		}
 
-		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
-		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		// 强制超时不超过 requestTimeoutUpperBound（34s）；若父上下文中的用户超时更短则沿用。
 		// 上限与客户端超时取较小者：既防止请求无限挂起，也尊重调用方更严格的时限。
 		ctx, cancel := context.WithTimeout(ctx, requestTimeoutUpperBound)
 		defer cancel()
@@ -89,7 +88,6 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		}
 
 		// DeleteOptions 既可来自请求体也可来自查询参数；前者优先，后者用于兼容
-		// 无法携带 body 的客户端（如部分代理或旧版工具）。
 		options := &metav1.DeleteOptions{}
 		if allowsOptions {
 			body, err := limitedReadBodyWithRecordMetric(ctx, req, scope.MaxRequestBodyBytes, scope.Resource.GroupResource(), requestmetrics.Delete)
@@ -105,8 +103,8 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 					scope.err(err, w, req)
 					return
 				}
-				// For backwards compatibility, we need to allow existing clients to submit per group DeleteOptions
-				// It is also allowed to pass a body with meta.k8s.io/v1.DeleteOptions
+				// 为向后兼容，需要允许既有客户端提交按 group 定义的 DeleteOptions，
+				// 同时也允许提交 meta.k8s.io/v1.DeleteOptions 的请求体。
 				defaultGVK := scope.MetaGroupVersion.WithKind("DeleteOptions")
 				obj, gvk, err := apihelpers.GetMetaInternalVersionCodecs().DecoderToVersion(s.Serializer, defaultGVK.GroupVersion()).Decode(body, &defaultGVK, options)
 				if err != nil {
@@ -151,13 +149,13 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		// 这是绕过一致性保护的高危操作，因此要求额外的细粒度权限并留下审计注解。
 		if utilfeature.DefaultFeatureGate.Enabled(features.AllowUnsafeMalformedObjectDeletion) {
 			if options != nil && ptr.Deref(options.IgnoreStoreReadErrorWithClusterBreakingPotential, false) {
-				// let's make sure that the audit will reflect that this delete request
-				// was tried with ignoreStoreReadErrorWithClusterBreakingPotential enabled
+				// 确保审计记录能反映这次删除请求启用了
+				// ignoreStoreReadErrorWithClusterBreakingPotential。
 				audit.AddAuditAnnotation(ctx, "apiserver.k8s.io/unsafe-delete-ignore-read-error", "")
 
 				p, ok := r.(rest.CorruptObjectDeleterProvider)
 				if !ok || p.GetCorruptObjDeleter() == nil {
-					// this is a developer error
+					// 这是开发者的编码错误
 					scope.err(errors.NewInternalError(fmt.Errorf("no unsafe deleter provided, can not honor ignoreStoreReadErrorWithClusterBreakingPotential")), w, req)
 					return
 				}
@@ -190,12 +188,9 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		span.AddEvent("Object deleted from database")
 
 		status := http.StatusOK
-		// Return http.StatusAccepted if the resource was not deleted immediately and
-		// user requested cascading deletion by setting OrphanDependents=false.
-		// Note: We want to do this always if resource was not deleted immediately, but
-		// that will break existing clients.
-		// Other cases where resource is not instantly deleted are: namespace deletion
-		// and pod graceful deletion.
+		// 若资源未被立即删除且用户通过设置 OrphanDependents=false 请求级联删除，则返回 http.StatusAccepted。
+		// 注意：我们希望对所有“未立即删除”的情况都这么做，但那会破坏既有客户端。
+		// 其他不会立即删除资源的场景有：命名空间删除与 pod 优雅删除。
 		//
 		// 202 是历史行为：只有"显式要求级联删除且未立即完成"才返回，
 		// 是为了在不破坏既有客户端的前提下表达"已受理、稍后完成"。
@@ -204,8 +199,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 		if !wasDeleted && options.OrphanDependents != nil && !*options.OrphanDependents {
 			status = http.StatusAccepted
 		}
-		// if the rest.Deleter returns a nil object, fill out a status. Callers may return a valid
-		// object with the response.
+		// 若 rest.Deleter 返回 nil 对象，则补上一个 status；调用方也可能返回有效对象。
 		if result == nil {
 			result = &metav1.Status{
 				Status: metav1.StatusSuccess,
@@ -223,7 +217,7 @@ func DeleteResource(r rest.GracefulDeleter, allowsOptions bool, scope *RequestSc
 	}
 }
 
-// DeleteCollection returns a function that will handle a collection deletion
+// DeleteCollection 返回处理集合删除的函数。
 //
 // 与单对象删除的关键差异：不施加 34 秒上限，因为集合删除可能涉及大量对象；
 // 也不支持 ignoreStoreReadErrorWithClusterBreakingPotential（下面显式拒绝）。
@@ -240,9 +234,9 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 			return
 		}
 
-		// DELETECOLLECTION can be a lengthy operation,
-		// we should not impose any 34s timeout here.
-		// NOTE: This is similar to LIST which does not enforce a 34s timeout.
+		// DELETECOLLECTION 可能是耗时较长的操作，
+		// 这里不应施加 34 秒超时。
+		// 注意：这与 LIST 类似，LIST 也不强制 34s 超时。
 		ctx = request.WithNamespace(ctx, namespace)
 
 		outputMediaType, _, err := negotiation.NegotiateOutputMediaType(req, scope.Serializer, scope)
@@ -267,8 +261,8 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 			return
 		}
 
-		// transform fields
-		// TODO: DecodeParametersInto should do this.
+		// 转换字段。
+		// TODO: 这件事本该由 DecodeParametersInto 来完成。
 		// 字段选择器需按资源类型转换标签，使 --field-selector metadata.name=x 之类
 		// 的通用写法能匹配到内部字段。
 		if listOptions.FieldSelector != nil {
@@ -276,7 +270,7 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 				return scope.Convertor.ConvertFieldLabel(scope.Kind, label, value)
 			}
 			if listOptions.FieldSelector, err = listOptions.FieldSelector.Transform(fn); err != nil {
-				// TODO: allow bad request to set field causes based on query parameters
+				// TODO: 让 bad request 能够根据查询参数给出具体原因。
 				err = errors.NewBadRequest(err.Error())
 				scope.err(err, w, req)
 				return
@@ -298,8 +292,8 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 					scope.err(err, w, req)
 					return
 				}
-				// For backwards compatibility, we need to allow existing clients to submit per group DeleteOptions
-				// It is also allowed to pass a body with meta.k8s.io/v1.DeleteOptions
+				// 为向后兼容，需要允许既有客户端提交按 group 定义的 DeleteOptions，
+				// 同时也允许提交 meta.k8s.io/v1.DeleteOptions 的请求体。
 				defaultGVK := scope.MetaGroupVersion.WithKind("DeleteOptions")
 				obj, gvk, err := apihelpers.GetMetaInternalVersionCodecs().DecoderToVersion(s.Serializer, defaultGVK.GroupVersion()).Decode(body, &defaultGVK, options)
 				if err != nil {
@@ -357,8 +351,7 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 			return
 		}
 
-		// if the rest.Deleter returns a nil object, fill out a status. Callers may return a valid
-		// object with the response.
+		// 若 rest.Deleter 返回 nil 对象，则补上一个 status；调用方也可能返回有效对象。
 		if result == nil {
 			result = &metav1.Status{
 				Status: metav1.StatusSuccess,
@@ -375,9 +368,8 @@ func DeleteCollection(r rest.CollectionDeleter, checkBody bool, scope *RequestSc
 	}
 }
 
-// authorizeUnsafeDelete ensures that the user has permission to do
-// 'unsafe-delete-ignore-read-errors' on the resource being deleted when
-// ignoreStoreReadErrorWithClusterBreakingPotential is enabled
+// authorizeUnsafeDelete 在启用 ignoreStoreReadErrorWithClusterBreakingPotential 时，
+// 确认用户对被删除的资源拥有 'unsafe-delete-ignore-read-errors' 权限。
 //
 // 使用独立的动词而非普通 delete 权限：绕过存储读取错误可能破坏一致性，
 // 必须由集群管理员显式授予，不能由普通的资源删除权限隐含。
@@ -404,9 +396,8 @@ func authorizeUnsafeDelete(ctx context.Context, attr admission.Attributes, authz
 		return admission.NewForbidden(attr, fmt.Errorf("ignoreStoreReadErrorWithClusterBreakingPotential delete option is not allowed on a subresource or non-resource request"))
 	}
 
-	// if we are here, IgnoreStoreReadErrorWithClusterBreakingPotential
-	// is set to true in the delete options, the user must have permission
-	// to do 'unsafe-delete-ignore-read-errors' on the given resource.
+	// 走到这里说明删除选项中 IgnoreStoreReadErrorWithClusterBreakingPotential
+	// 已被置为 true，用户必须对给定资源拥有 'unsafe-delete-ignore-read-errors' 权限。
 	record := authorizer.AttributesRecord{
 		User:            attr.GetUserInfo(),
 		Verb:            "unsafe-delete-ignore-read-errors",
@@ -417,8 +408,8 @@ func authorizeUnsafeDelete(ctx context.Context, attr admission.Attributes, authz
 		Resource:        attr.GetResource().Resource,
 		ResourceRequest: true,
 	}
-	// TODO: can't use ResourceAttributesFrom from k8s.io/kubernetes/pkg/registry/authorization/util
-	// due to prevent staging --> k8s.io/kubernetes dep issue
+	// TODO: 无法使用 k8s.io/kubernetes/pkg/registry/authorization/util 中的 ResourceAttributesFrom，
+	// 以避免 staging 反向依赖 k8s.io/kubernetes 的问题。
 	//
 	// 把选择器一并带入授权属性，使基于 selector 的 RBAC 规则（如只能删除特定字段值的对象）
 	// 在批量删除场景下同样生效；解析失败也记录下来，交由授权器决定如何处理。

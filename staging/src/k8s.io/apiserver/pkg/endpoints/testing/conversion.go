@@ -26,7 +26,7 @@ import (
 // convertUrlValuesToSimpleGetOptions 把查询参数转换为 SimpleGetOptions，
 // 仅用于测试工具；缺省参数显式置空，避免复用旧对象时残留值。
 func convertUrlValuesToSimpleGetOptions(in *url.Values, out *SimpleGetOptions, s conversion.Scope) error {
-	// Skip TypeMeta field.
+	// 跳过 TypeMeta 字段。
 
 	if values, ok := map[string][]string(*in)["param1"]; ok && len(values) > 0 {
 		if err := runtime.Convert_Slice_string_To_string(&values, &out.Param1, s); err != nil {

@@ -353,10 +353,10 @@ func TestAudit(t *testing.T) {
 				t.Errorf("[%s] expected http code %d, got %#v", test.desc, test.code, response)
 			}
 
-			// close body because the handler might block in Flush, unable to send the remaining event.
+			// 关闭 body，因为处理器可能阻塞在 Flush 中，无法发送剩余事件。
 			response.Body.Close()
 
-			// wait for events to arrive, at least the given number in the test
+			// 等待事件到达，至少达到测试给定的数量
 			events := []*auditinternal.Event{}
 			err = wait.Poll(50*time.Millisecond, testTimeout(t), wait.ConditionFunc(func() (done bool, err error) {
 				events = sink.Events()
@@ -393,8 +393,8 @@ func TestAudit(t *testing.T) {
 	}
 }
 
-// testTimeout returns the minimimum of the "ForeverTestTimeout" and the testing deadline (with
-// cleanup time).
+// testTimeout 返回 "ForeverTestTimeout" 与 testing 截止时间（含清理时间）
+// 中的较小值。
 // 取二者较小值可确保在 `go test -timeout` 到期前主动失败并打印上下文，
 // 同时为清理留出 5 秒。
 func testTimeout(t *testing.T) time.Duration {

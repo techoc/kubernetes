@@ -28,13 +28,13 @@ import (
 )
 
 const (
-	// gzipContentEncodingLevel is set to 1 which uses least CPU compared to higher levels, yet offers
-	// similar compression ratios (off by at most 1.5x, but typically within 1.1x-1.3x). For further details see -
+	// gzipContentEncodingLevel 设为 1：相比更高级别最省 CPU，压缩率却相近
+	// （最多偏差 1.5 倍，通常落在 1.1x-1.3x 之间）。详见 -
 	// https://github.com/kubernetes/kubernetes/issues/112296
 	gzipContentEncodingLevel = 1
 )
 
-// NewGzipWriterPoolOrDie returns a sync.Pool of gzip.Writers configured with gzipContentEncodingLevel.
+// NewGzipWriterPoolOrDie 返回一个按 gzipContentEncodingLevel 配置的 gzip.Writer 的 sync.Pool。
 //
 // 复用 gzip.Writer 可以避免每次响应都分配压缩器与 32KB 窗口。
 // 池中的 writer 由使用方负责 Reset/归还；级别固定为 1，因此池中实例可互换。
@@ -51,16 +51,15 @@ func NewGzipWriterPoolOrDie() *sync.Pool {
 	}
 }
 
-// responseContentEncodingSupported returns a supported client-requested content encoding for the
-// provided request. It will return the empty string if no supported content encoding was
-// found or if the APIResponseCompression feature gate is disabled.
+// responseContentEncodingSupported 返回所提供请求中客户端请求且受支持的 content
+// encoding；若未找到受支持的编码，或 APIResponseCompression 特性门控被关闭，
+// 则返回空字符串。
 func responseContentEncodingSupported(req *http.Request) string {
 	return ContentEncodingSupported(req, features.APIResponseCompression)
 }
 
-// ContentEncodingSupported returns a supported client-requested content encoding for the
-// provided request. It will return the empty string if no supported content encoding was
-// found or if the provided feature gate is disabled.
+// ContentEncodingSupported 返回所提供请求中客户端请求且受支持的 content
+// encoding；若未找到受支持的编码，或所提供的特性门控被关闭，则返回空字符串。
 //
 // 手工解析 Accept-Encoding 而不是用标准库协商，是为了让 API 响应压缩受
 // 特性门控控制，并且只认 gzip 一种编码——服务端没有实现其它算法。

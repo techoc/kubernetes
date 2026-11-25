@@ -26,12 +26,12 @@ import (
 	"k8s.io/apiserver/pkg/warning"
 )
 
-// InvalidManagedFieldsAfterMutatingAdmissionWarningFormat is the warning that a client receives
-// when a create/update/patch request results in invalid managedFields after going through the admission chain.
+// InvalidManagedFieldsAfterMutatingAdmissionWarningFormat 是客户端在 create/update/patch
+// 请求经过准入链后 managedFields 仍处于无效状态时收到的警告。
 const InvalidManagedFieldsAfterMutatingAdmissionWarningFormat = ".metadata.managedFields was in an invalid state after admission; this could be caused by an outdated mutating admission controller; please fix your requests: %v"
 
-// NewManagedFieldsValidatingAdmissionController validates the managedFields after calling
-// the provided admission and resets them to their original state if they got changed to an invalid value
+// NewManagedFieldsValidatingAdmissionController 在调用所提供的 admission 之后校验
+// managedFields，若其被改成无效值则重置为原始状态
 //
 // 包装器而非改造每个插件：managedFields 只能由服务器写入，任何插件误改都
 // 应被回滚并提示，而不是让无效状态进入存储。
@@ -51,13 +51,13 @@ var _ admission.Interface = &managedFieldsValidatingAdmissionController{}
 var _ admission.MutationInterface = &managedFieldsValidatingAdmissionController{}
 var _ admission.ValidationInterface = &managedFieldsValidatingAdmissionController{}
 
-// Handles calls the wrapped admission.Interface if applicable
+// Handles 在适用时调用被包装的 admission.Interface
 func (admit *managedFieldsValidatingAdmissionController) Handles(operation admission.Operation) bool {
 	return admit.wrap.Handles(operation)
 }
 
-// Admit calls the wrapped admission.Interface if applicable and resets the managedFields to their state before admission if they
-// got modified in an invalid way
+// Admit 在适用时调用被包装的 admission.Interface；若 managedFields 被以无效方式修改，
+// 则将其重置为准入前的状态
 func (admit *managedFieldsValidatingAdmissionController) Admit(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	mutationInterface, isMutationInterface := admit.wrap.(admission.MutationInterface)
 	if !isMutationInterface {
@@ -65,9 +65,8 @@ func (admit *managedFieldsValidatingAdmissionController) Admit(ctx context.Conte
 	}
 	objectMeta, err := meta.Accessor(a.GetObject())
 	if err != nil {
-		// the object we are dealing with doesn't have object metadata defined
-		// in that case we don't have to keep track of the managedField
-		// just call the wrapped admission
+		// 所处理的对象没有定义对象元数据，此时无需跟踪 managedFields，
+		// 直接调用被包装的准入逻辑即可
 		return mutationInterface.Admit(ctx, a, o)
 	}
 	// 在调用前保存引用切片；随后插件可能替换整个 managedFields，故此处只保存浅拷贝即可，
@@ -89,7 +88,7 @@ func (admit *managedFieldsValidatingAdmissionController) Admit(ctx context.Conte
 	return nil
 }
 
-// Validate calls the wrapped admission.Interface if aplicable
+// Validate 在适用时调用被包装的 admission.Interface
 func (admit *managedFieldsValidatingAdmissionController) Validate(ctx context.Context, a admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	if validationInterface, isValidationInterface := admit.wrap.(admission.ValidationInterface); isValidationInterface {
 		return validationInterface.Validate(ctx, a, o)

@@ -29,10 +29,10 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 )
 
-// legacyRootAPIHandler creates a webservice serving api group discovery.
+// legacyRootAPIHandler 创建一个 WebService，服务于 API 组发现。
 // 这里服务的是旧版 /api 端点，只暴露核心组的版本列表，与新式 /apis 分开维护。
 type legacyRootAPIHandler struct {
-	// addresses is used to build cluster IPs for discovery.
+	// addresses 用于在发现响应中构造集群 IP
 	addresses  Addresses
 	apiPrefix  string
 	serializer runtime.NegotiatedSerializer
@@ -40,9 +40,8 @@ type legacyRootAPIHandler struct {
 
 // NewLegacyRootAPIHandler 构造旧版 /api 发现处理器。
 func NewLegacyRootAPIHandler(addresses Addresses, serializer runtime.NegotiatedSerializer, apiPrefix string) *legacyRootAPIHandler {
-	// Because in release 1.1, /apis returns response with empty APIVersion, we
-	// use stripVersionNegotiatedSerializer to keep the response backwards
-	// compatible.
+	// 1.1 版本中 /apis 返回的响应里 APIVersion 为空，这里用
+	// stripVersionNegotiatedSerializer 保持响应向后兼容。
 	// 该兼容行为已固化进 API 契约，修改会破坏老客户端，因此保留。
 	serializer = stripVersionNegotiatedSerializer{serializer}
 
@@ -53,7 +52,7 @@ func NewLegacyRootAPIHandler(addresses Addresses, serializer runtime.NegotiatedS
 	}
 }
 
-// AddApiWebService adds a service to return the supported api versions at the legacy /api.
+// WebService 创建一个服务，在旧版 /api 端点返回受支持的 API 版本列表。
 // 注意方法名沿用历史拼写 WebService，实际返回 restful.WebService。
 func (s *legacyRootAPIHandler) WebService() *restful.WebService {
 	mediaTypes, _ := negotiation.MediaTypesForSerializer(s.serializer)

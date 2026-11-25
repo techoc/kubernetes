@@ -52,12 +52,12 @@ var namespaceGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resourc
 
 // createHandler 构造处理 POST（创建）请求的 HTTP handler。
 //
-// 中文说明：includeName 区分 CreateNamedResource（URL 中带名字）与普通创建；
+// includeName 区分 CreateNamedResource（URL 中带名字）与普通创建；
 // 两者的差异仅在名字缺失时是报错还是回退到命名空间解析。
 func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Interface, includeName bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
-		// For performance tracking purposes.
+		// 用于性能追踪。
 		ctx, span := tracing.Start(ctx, "Create", traceFields(req)...)
 		req = req.WithContext(ctx)
 		// 500ms 的 span 截止时间只为限制追踪开销，不表示请求超时。
@@ -66,13 +66,13 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 		namespace, name, err := scope.Namer.Name(req)
 		if err != nil {
 			if includeName {
-				// name was required, return
+				// 要求必须提供 name，直接返回错误。
 				scope.err(err, w, req)
 				return
 			}
 
-			// otherwise attempt to look up the namespace
-			// 中文说明：普通创建请求的 URL 只含命名空间，名字来自请求体。
+			// 否则尝试解析 namespace。
+			// 普通创建请求的 URL 只含命名空间，名字来自请求体。
 			namespace, err = scope.Namer.Namespace(req)
 			if err != nil {
 				scope.err(err, w, req)
@@ -80,9 +80,9 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 			}
 		}
 
-		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
-		// timeout inside the parent context is lower than requestTimeoutUpperBound.
-		// 中文说明：父上下文若已更短，WithTimeout 不会延长它，因此这里只是设上限。
+		// 强制超时不超过 requestTimeoutUpperBound（34s）；若父上下文中用户给定的
+		// 超时更短，则沿用更短的值。
+		// 父上下文若已更短，WithTimeout 不会延长它，因此这里只是设上限。
 		ctx, cancel := context.WithTimeout(ctx, requestTimeoutUpperBound)
 		defer cancel()
 		outputMediaType, _, err := negotiation.NegotiateOutputMediaType(req, scope.Serializer, scope)
@@ -163,7 +163,7 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 		}
 		span.AddEvent("Conversion done")
 
-		// On create, get name from new object if unset
+		// 创建时若对象未设置名字，则从新对象中取得。
 		if len(name) == 0 {
 			_, name, _ = scope.Namer.ObjectName(obj)
 		}
@@ -190,7 +190,7 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 				rest.WipeObjectMetaSystemFields(objectMeta)
 			}
 
-			// ensure namespace on the object is correct, or error if a conflicting namespace was set in the object
+			// 确保对象上的 namespace 正确；若对象中设置了冲突的 namespace 则报错。
 			if err := rest.EnsureObjectNamespaceMatchesRequestNamespace(rest.ExpectedNamespaceForResource(namespace, scope.Resource), objectMeta); err != nil {
 				scope.err(err, w, req)
 				return
@@ -209,8 +209,8 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 				options,
 			)
 		}
-		// Dedup owner references before updating managed fields
-		// 中文说明：先清理一次，避免重复 ownerReference 影响 field manager 计算；
+		// 在更新 managedFields 之前对 owner references 去重。
+		// 先清理一次，避免重复 ownerReference 影响 field manager 计算；
 		// 变更准入后再清理一次，因为插件可能重新引入重复项。
 		dedupOwnerReferencesAndAddWarning(obj, req.Context(), false)
 		result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
@@ -227,12 +227,12 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 					return nil, err
 				}
 			}
-			// Dedup owner references again after mutating admission happens
+			// 变更准入完成之后再次对 owner references 去重
 			dedupOwnerReferencesAndAddWarning(obj, req.Context(), true)
 			result, err := requestFunc()
-			// If the object wasn't committed to storage because it's serialized size was too large,
-			// it is safe to remove managedFields (which can be large) and try again.
-			// 中文说明：仅在超限错误时重试一次；managedFields 是可有可无的元数据，
+			// 若对象因序列化后体积过大而未提交到存储，
+			// 可以安全地移除 managedFields（它可能很大）后重试。
+			// 仅在超限错误时重试一次；managedFields 是可有可无的元数据，
 			// 丢弃它比直接拒绝用户请求更友好。
 			if isTooLargeError(err) {
 				if accessor, accessorErr := meta.Accessor(obj); accessorErr == nil {
@@ -262,23 +262,23 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 	}
 }
 
-// CreateNamedResource returns a function that will handle a resource creation with name.
+// CreateNamedResource 返回处理带 name 的资源创建的函数。
 //
-// 中文说明：用于名字出现在 URL 中的创建接口（如子资源或部分非标准资源）。
+// 用于名字出现在 URL 中的创建接口（如子资源或部分非标准资源）。
 func CreateNamedResource(r rest.NamedCreater, scope *RequestScope, admission admission.Interface) http.HandlerFunc {
 	return createHandler(r, scope, admission, true)
 }
 
-// CreateResource returns a function that will handle a resource creation.
+// CreateResource 返回处理资源创建的函数。
 //
-// 中文说明：标准集合创建；通过适配器把 Creater 提升为 NamedCreater，以复用同一 handler。
+// 标准集合创建；通过适配器把 Creater 提升为 NamedCreater，以复用同一 handler。
 func CreateResource(r rest.Creater, scope *RequestScope, admission admission.Interface) http.HandlerFunc {
 	return createHandler(&namedCreaterAdapter{r}, scope, admission, false)
 }
 
 // namedCreaterAdapter 把只接受对象名的 Creater 适配为 NamedCreater。
 //
-// 中文说明：普通创建的路径中名字来自对象本身，适配器直接忽略传入的 name 参数。
+// 普通创建的路径中名字来自对象本身，适配器直接忽略传入的 name 参数。
 type namedCreaterAdapter struct {
 	rest.Creater
 }
@@ -288,10 +288,9 @@ func (c *namedCreaterAdapter) Create(ctx context.Context, name string, obj runti
 	return c.Creater.Create(ctx, obj, createValidatingAdmission, options)
 }
 
-// manager is assumed to be already a valid value, we need to make
-// userAgent into a valid value too.
+// manager 已被假定为合法值，因此也要把 userAgent 变成合法值。
 //
-// 中文说明：显式 FieldManager 优先；否则从 User-Agent 派生，保证 managedFields
+// 显式 FieldManager 优先；否则从 User-Agent 派生，保证 managedFields
 // 的 manager 字段总是合法值。
 func managerOrUserAgent(manager, userAgent string) string {
 	if manager != "" {
@@ -300,22 +299,21 @@ func managerOrUserAgent(manager, userAgent string) string {
 	return prefixFromUserAgent(userAgent)
 }
 
-// prefixFromUserAgent takes the characters preceding the first /, quote
-// unprintable character and then trim what's beyond the
-// FieldManagerMaxLength limit.
+// prefixFromUserAgent 取第一个 / 之前的字符，为不可打印字符加引号，
+// 然后截断到 FieldManagerMaxLength 上限之外。
 //
-// 中文说明：截断按 rune 边界进行，避免把多字节字符切成非法 UTF-8；
+// 截断按 rune 边界进行，避免把多字节字符切成非法 UTF-8；
 // 同时过滤不可打印字符，防止污染 managedFields。
 func prefixFromUserAgent(u string) string {
 	m := strings.Split(u, "/")[0]
 	buf := bytes.NewBuffer(nil)
 	for _, r := range m {
-		// Ignore non-printable characters
+		// 跳过不可打印字符。
 		if !unicode.IsPrint(r) {
 			continue
 		}
-		// Only append if we have room for it
-		// 中文说明：按编码后字节数判断，确保结果满足长度上限。
+		// 放不下就不再追加。
+		// 按编码后字节数判断，确保结果满足长度上限。
 		if buf.Len()+utf8.RuneLen(r) > validation.FieldManagerMaxLength {
 			break
 		}

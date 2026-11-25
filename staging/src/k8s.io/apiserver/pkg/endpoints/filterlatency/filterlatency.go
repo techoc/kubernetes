@@ -38,7 +38,7 @@ import (
 
 type requestFilterRecordKeyType int
 
-// requestFilterRecordKey is the context key for a request filter record struct.
+// requestFilterRecordKey 是请求 filter 记录结构体在 context 中的键。
 const requestFilterRecordKey requestFilterRecordKeyType = iota
 
 const minFilterLatencyToLog = 100 * time.Millisecond
@@ -50,25 +50,23 @@ type requestFilterRecord struct {
 	startedTimestamp time.Time
 }
 
-// withRequestFilterRecord attaches the given request filter record to the parent context.
+// withRequestFilterRecord 将给定的请求 filter 记录附加到父 context。
 func withRequestFilterRecord(parent context.Context, fr *requestFilterRecord) context.Context {
 	return apirequest.WithValue(parent, requestFilterRecordKey, fr)
 }
 
-// requestFilterRecordFrom returns the request filter record from the given context.
+// requestFilterRecordFrom 从给定 context 中取出请求 filter 记录。
 func requestFilterRecordFrom(ctx context.Context) *requestFilterRecord {
 	fr, _ := ctx.Value(requestFilterRecordKey).(*requestFilterRecord)
 	return fr
 }
 
-// TrackStarted measures the timestamp the given handler has started execution
-// by attaching a handler to the chain.
+// TrackStarted 通过在处理链上挂载 handler，记录给定 handler 开始执行的时间戳。
 func TrackStarted(handler http.Handler, tp trace.TracerProvider, name string) http.Handler {
 	return trackStarted(handler, tp, name, clock.RealClock{})
 }
 
-// TrackCompleted measures the timestamp the given handler has completed execution and then
-// it updates the corresponding metric with the filter latency duration.
+// TrackCompleted 记录给定 handler 完成执行的时间戳，并用 filter 延迟时长更新相应指标。
 //
 // 指标标签只有 filter 名，不包含用户输入，避免高基数。
 func TrackCompleted(handler http.Handler) http.Handler {
@@ -82,7 +80,7 @@ func TrackCompleted(handler http.Handler) http.Handler {
 }
 
 func trackStarted(handler http.Handler, tp trace.TracerProvider, name string, clock clock.PassiveClock) http.Handler {
-	// This is a noop if the tracing is disabled, since tp will be a NoopTracerProvider
+	// 若未启用 tracing，tp 是 NoopTracerProvider，这里是空操作
 	tracer := tp.Tracer("k8s.op/apiserver/pkg/endpoints/filterlatency")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := tracer.Start(r.Context(), name)
@@ -107,7 +105,7 @@ func trackStarted(handler http.Handler, tp trace.TracerProvider, name string, cl
 
 func trackCompleted(handler http.Handler, clock clock.PassiveClock, action func(context.Context, *requestFilterRecord, time.Time)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The previous filter has just completed.
+		// 上一个 filter 刚刚执行完毕。
 		// 在进入下一层之前取时间点，因此 action 统计的是“本 filter 到此处
 		// 为止”的耗时，而不是整个请求的耗时。
 		completedAt := clock.Now()

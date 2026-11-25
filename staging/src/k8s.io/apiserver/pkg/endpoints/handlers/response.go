@@ -42,9 +42,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// watchEmbeddedEncoder performs encoding of the embedded object.
+// watchEmbeddedEncoder 负责编码被嵌入的对象。
 //
-// NOTE: watchEmbeddedEncoder is NOT thread-safe.
+// 注意：watchEmbeddedEncoder 不是线程安全的。
 //
 // 每个 watch 请求独立持有一个实例；tableOptions 在首个事件后被就地修改，
 // 因此不能跨请求共享。
@@ -53,13 +53,12 @@ type watchEmbeddedEncoder struct {
 
 	ctx context.Context
 
-	// target, if non-nil, configures transformation type.
-	// The other options are ignored if target is nil.
+	// target 非 nil 时启用转换类型；target 为 nil 时忽略其他选项。
 	target       *schema.GroupVersionKind
 	tableOptions *metav1.TableOptions
 	scope        *RequestScope
 
-	// identifier of the encoder, computed lazily
+	// 编码器的标识，惰性计算。
 	// 惰性计算是因为 tableOptions 会在编码过程中变化（首事件后去掉表头）。
 	identifier runtime.Identifier
 }
@@ -75,7 +74,7 @@ func newWatchEmbeddedEncoder(ctx context.Context, encoder runtime.Encoder, targe
 	}
 }
 
-// Encode implements runtime.Encoder interface.
+// Encode 实现 runtime.Encoder 接口。
 // CacheableObject 允许把同一对象的序列化结果在多个 watch 之间复用。
 func (e *watchEmbeddedEncoder) Encode(obj runtime.Object, w io.Writer) error {
 	if co, ok := obj.(runtime.CacheableObject); ok {
@@ -93,21 +92,20 @@ func (e *watchEmbeddedEncoder) doEncode(obj runtime.Object, w io.Writer) error {
 		result = obj
 	}
 
-	// When we are tranforming to a table, use the original table options when
-	// we should print headers only on the first object - headers should be
-	// omitted on subsequent events.
+	// 转换为 Table 时，使用原始的 table options：只在第一个对象上打印表头，
+	// 后续事件应省略表头。
 	// 注意：这里修改的是调用方传入的 tableOptions 指针，属于请求内状态。
 	if e.tableOptions != nil && !e.tableOptions.NoHeaders {
 		e.tableOptions.NoHeaders = true
-		// With options change, we should recompute the identifier.
-		// Clearing this will trigger lazy recompute when needed.
+		// 选项发生变化时需要重新计算 identifier。
+		// 清空后会在需要时触发惰性重算。
 		e.identifier = ""
 	}
 
 	return e.encoder.Encode(result, w)
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (e *watchEmbeddedEncoder) Identifier() runtime.Identifier {
 	if e.identifier == "" {
 		e.identifier = e.embeddedIdentifier()
@@ -126,11 +124,9 @@ type watchEmbeddedEncoderIdentifier struct {
 }
 
 // embeddedIdentifier 计算缓存键；无转换时直接复用底层编码器的标识，
-// 使缓存可以与普通请求共享。
 func (e *watchEmbeddedEncoder) embeddedIdentifier() runtime.Identifier {
 	if e.target == nil {
-		// If no conversion is performed, we effective only use
-		// the embedded identifier.
+		// 若不做任何转换，实际只使用内层编码器自身的标识。
 		return e.encoder.Identifier()
 	}
 	identifier := watchEmbeddedEncoderIdentifier{
@@ -152,9 +148,9 @@ func (e *watchEmbeddedEncoder) embeddedIdentifier() runtime.Identifier {
 	return runtime.Identifier(result)
 }
 
-// watchEncoder performs encoding of the watch events.
+// watchEncoder 负责编码 watch 事件。
 //
-// NOTE: watchEncoder is NOT thread-safe.
+// 注意：watchEncoder 不是线程安全的。
 //
 // 它把事件对象编码为 RawExtension，再包进 metav1.WatchEvent 编码到 framer。
 // 每个 watch 请求一个实例，buffer 复用避免每事件分配。
@@ -186,10 +182,10 @@ func newWatchEncoder(ctx context.Context, gvr schema.GroupVersionResource, embed
 	}
 }
 
-// Encode encodes a given watch event.
-// NOTE: if events object is implementing the CacheableObject interface,
+// Encode 编码给定的 watch 事件。
+// 注意：若事件对象实现了 CacheableObject 接口，
 //
-//	the serialized version is cached in that object [not the event itself].
+//	则序列化结果缓存在该对象上【而不是事件本身】。
 func (e *watchEncoder) Encode(event watch.Event) error {
 	encodeFunc := func(obj runtime.Object, w io.Writer) error {
 		return e.doEncode(obj, event, w)
@@ -209,7 +205,7 @@ func (e *watchEncoder) doEncode(obj runtime.Object, event watch.Event, w io.Writ
 		return fmt.Errorf("unable to encode watch object %T: %v", obj, err)
 	}
 
-	// ContentType is not required here because we are defaulting to the serializer type.
+	// 这里无需指定 ContentType，因为默认就是序列化器的类型。
 	outEvent := &metav1.WatchEvent{
 		Type:   string(event.Type),
 		Object: runtime.RawExtension{Raw: e.buffer.Bytes()},
@@ -234,11 +230,9 @@ type watchEncoderIdentifier struct {
 
 // identifier 按事件类型缓存缓存键；嵌入编码器标识变化（如 table 转表头状态改变）时整体失效。
 func (e *watchEncoder) identifier(eventType watch.EventType) runtime.Identifier {
-	// We need to take into account that in embeddedEncoder includes table
-	// transformer, then its identifier is dynamic. As a result, whenever
-	// the identifier of embeddedEncoder changes, we need to invalidate the
-	// whole identifiers cache.
-	// TODO(wojtek-t): Can we optimize it somehow?
+	// 需要注意：当 embeddedEncoder 内含 table 转换器时，它的 identifier 是动态的。
+	// 因此只要 embeddedEncoder 的 identifier 发生变化，就要让整个 identifiers 缓存失效。
+	// TODO(wojtek-t): 有没有办法优化？
 	if e.currentEmbeddedIdentifier != e.embeddedEncoder.Identifier() {
 		e.currentEmbeddedIdentifier = e.embeddedEncoder.Identifier()
 		e.identifiers = map[watch.EventType]runtime.Identifier{}
@@ -251,9 +245,8 @@ func (e *watchEncoder) identifier(eventType watch.EventType) runtime.Identifier 
 
 // typeIdentifier 计算单个事件类型的缓存键。
 func (e *watchEncoder) typeIdentifier(eventType watch.EventType) runtime.Identifier {
-	// The eventType is a non-standard pattern. This is coming from the fact
-	// that we're effectively serializing the whole watch event, but storing
-	// it in serializations of the Object within the watch event.
+	// eventType 是一种不常见的用法：实际上我们序列化的是整个 watch 事件，
+	// 却把它存放在 watch 事件中 Object 的序列化结果里。
 	identifier := watchEncoderIdentifier{
 		Name:            "watch",
 		EmbeddedEncoder: string(e.embeddedEncoder.Identifier()),
@@ -268,7 +261,7 @@ func (e *watchEncoder) typeIdentifier(eventType watch.EventType) runtime.Identif
 	return runtime.Identifier(result)
 }
 
-// doTransformResponseObject is used for handling all requests, including watch.
+// doTransformResponseObject 用于处理所有请求，包括 watch。
 //
 // 把内部对象转换为客户端请求的形态（PartialObjectMetadata / Table）。
 // Status 对象不转换：错误响应必须保持原样，否则客户端无法解析。
@@ -279,8 +272,8 @@ func doTransformObject(ctx context.Context, obj runtime.Object, opts interface{}
 
 	switch {
 	case target == nil:
-		// If we ever change that from a no-op, the identifier of
-		// the watchEmbeddedEncoder has to be adjusted accordingly.
+		// 如果将来这里的 no-op 行为发生变化，
+		// watchEmbeddedEncoder 的 identifier 也必须相应调整。
 		return obj, nil
 
 	case target.Kind == "PartialObjectMetadata":
@@ -304,8 +297,7 @@ func doTransformObject(ctx context.Context, obj runtime.Object, opts interface{}
 	}
 }
 
-// optionsForTransform will load and validate any additional query parameter options for
-// a conversion or return an error.
+// optionsForTransform 加载并校验转换所需的额外查询参数选项，出错时返回错误。
 func optionsForTransform(mediaType negotiation.MediaTypeOptions, req *http.Request) (interface{}, error) {
 	switch target := mediaType.Convert; {
 	case target == nil:
@@ -327,7 +319,7 @@ func optionsForTransform(mediaType negotiation.MediaTypeOptions, req *http.Reque
 	return nil, nil
 }
 
-// targetEncodingForTransform returns the appropriate serializer for the input media type
+// targetEncodingForTransform 为输入媒体类型返回合适的序列化器。
 // 元数据类转换使用 meta 内部版本编解码器，其余情况沿用资源自身的序列化器。
 func targetEncodingForTransform(scope *RequestScope, mediaType negotiation.MediaTypeOptions, req *http.Request) (schema.GroupVersionKind, runtime.NegotiatedSerializer, bool) {
 	switch target := mediaType.Convert; {
@@ -339,9 +331,8 @@ func targetEncodingForTransform(scope *RequestScope, mediaType negotiation.Media
 	return scope.Kind, scope.Serializer, false
 }
 
-// transformResponseObject takes an object loaded from storage and performs any necessary transformations.
-// Will write the complete response object.
-// transformResponseObject is used only for handling non-streaming requests.
+// transformResponseObject 处理从存储加载的对象并执行必要的转换，会写出完整响应。
+// 它只用于非流式请求。
 func transformResponseObject(ctx context.Context, scope *RequestScope, req *http.Request, w http.ResponseWriter, statusCode int, mediaType negotiation.MediaTypeOptions, result runtime.Object) {
 	options, err := optionsForTransform(mediaType, req)
 	if err != nil {
@@ -349,9 +340,8 @@ func transformResponseObject(ctx context.Context, scope *RequestScope, req *http
 		return
 	}
 
-	// ensure that for empty lists we don't return <nil> items.
-	// This is safe to modify without deep-copying the object, as
-	// List objects themselves are never cached.
+	// 确保空列表不会返回 <nil> 的 items。
+	// 直接修改该对象是安全的，因为 List 对象本身不会被缓存。
 	// 空列表若 Items 为 nil，JSON 会输出 null 而非 []，破坏客户端反序列化。
 	if meta.IsListType(result) && meta.LenList(result) == 0 {
 		if err := meta.SetList(result, []runtime.Object{}); err != nil {
@@ -375,7 +365,7 @@ func transformResponseObject(ctx context.Context, scope *RequestScope, req *http
 	responsewriters.WriteObjectNegotiated(serializer, scope, kind.GroupVersion(), w, req, statusCode, obj, false)
 }
 
-// errNotAcceptable indicates Accept negotiation has failed
+// errNotAcceptable 表示 Accept 协商失败。
 type errNotAcceptable struct {
 	message string
 }
@@ -430,14 +420,14 @@ func asTable(ctx context.Context, result runtime.Object, opts *metav1.TableOptio
 			if err != nil {
 				return nil, err
 			}
-		// TODO: rely on defaulting for the value here?
+			// TODO: 这里的默认值是否应交给 defaulting 处理？
 		case opts.IncludeObject == metav1.IncludeMetadata, hasInitialEventsEndAnnotation, opts.IncludeObject == "":
 			// 默认（空值）与 IncludeMetadata 一致，只返回元数据以减小响应体积。
 			m, err := meta.Accessor(item.Object.Object)
 			if err != nil {
 				return nil, err
 			}
-			// TODO: turn this into an internal type and do conversion in order to get object kind automatically set?
+			// TODO: 把它改成内部类型并做转换，以便自动设置 object kind？
 			partial := meta.AsPartialObjectMetadata(m)
 			partial.GetObjectKind().SetGroupVersionKind(groupVersion.WithKind("PartialObjectMetadata"))
 			item.Object.Object = partial

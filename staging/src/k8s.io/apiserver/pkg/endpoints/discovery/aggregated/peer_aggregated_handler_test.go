@@ -157,7 +157,7 @@ func TestPeerAggregatedDiscovery_ETagHandling(t *testing.T) {
 	etag1 := rr1.header.Get("ETag")
 	assert.NotEmpty(t, etag1, "ETag should be set on first response")
 
-	// Second request, ETag should be the same (cache hit)
+	// 第二次请求，ETag 应保持不变（缓存命中）
 	rr2 := &responseRecorder{header: make(http.Header)}
 	req2, _ := http.NewRequest(http.MethodGet, "/apis", nil)
 	req2.Header.Set("Accept", "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList")
@@ -165,12 +165,12 @@ func TestPeerAggregatedDiscovery_ETagHandling(t *testing.T) {
 	etag2 := rr2.header.Get("ETag")
 	assert.Equal(t, etag1, etag2, "ETag should be the same for cached response")
 
-	// Invalidate cache and add a new peer resource
+	// 使缓存失效并添加新的 peer 资源
 	peerAggregatedDiscoveryManager.InvalidateCache()
 	gvr := schema.GroupVersionResource{Group: "peer.example.com", Version: "v2", Resource: "peer-resource2"}
 	peerProvider.addResource("peer-server-3", gvr, newAPIGroup(gvr.Group, gvr.Version, "peer-resource2"))
 
-	// Third request, ETag should change
+	// 第三次请求，ETag 应发生变化
 	rr3 := &responseRecorder{header: make(http.Header)}
 	req3, _ := http.NewRequest(http.MethodGet, "/apis", nil)
 	req3.Header.Set("Accept", "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList")
@@ -284,7 +284,7 @@ func TestMergeResources(t *testing.T) {
 
 	// g1v1r1 + g1v1r2 = g1v1(r1,r2)
 	g1v1r1r2Merged := apidiscoveryv2.APIGroupDiscovery{
-		// Meta is copied from first server in the sorted list of serverIDs
+		// Meta 复制自排序后 serverIDs 列表中的第一个 server
 		ObjectMeta: metav1.ObjectMeta{Name: "g1", UID: "g1-uid"}, // Meta from g1v1r1
 		Versions: []apidiscoveryv2.APIVersionDiscovery{
 			{Version: "v1", Resources: []apidiscoveryv2.APIResourceDiscovery{r1, r2}},
@@ -440,11 +440,11 @@ func TestMergeResources(t *testing.T) {
 				t.Errorf("mergeResources() mismatch (-want +got):\n%s", cmp.Diff(tt.wantResult, result))
 			}
 
-			// Test the short-circuit case specifically if requested
+			// 按需专门测试短路（short-circuit）情形
 			if tt.validateShortCircuit {
-				// reflect.ValueOf(slice).Pointer() gives the address of the underlying array.
-				// If the short-circuit worked, the result slice should be the *exact same*
-				// slice (same pointer) as localGroups, not just DeepEqual.
+				// reflect.ValueOf(slice).Pointer() 给出底层数组的地址。
+				// 若短路生效，结果 slice 应与 localGroups 是*完全相同*的
+				// slice（同一指针），而不只是 DeepEqual 相等。
 				if reflect.ValueOf(result).Pointer() != reflect.ValueOf(tt.localGroups).Pointer() {
 					t.Errorf("Short-circuit failed: function returned a new slice instead of the original localGroups")
 				}
@@ -458,7 +458,7 @@ type mockPeerDiscoveryProvider struct {
 	resources map[string][]apidiscoveryv2.APIGroupDiscovery
 }
 
-// responseRecorder is a minimal http.ResponseWriter for testing status codes and headers
+// responseRecorder 是一个最小化的 http.ResponseWriter，用于测试状态码与响应头
 type responseRecorder struct {
 	header     http.Header
 	statusCode int

@@ -59,10 +59,10 @@ func TestWithHTTP1(t *testing.T) {
 		})
 	}
 
-	// wrap the original http.ResponseWriter multiple times
+	// 将原始 http.ResponseWriter 包装多次
 	handler := chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// at this point, the original ResponseWriter object has been wrapped three times
-		// so each decorator is expected to tick the count by one for each method.
+		// 此时原始 ResponseWriter 对象已被包装三层，
+		// 因此每个装饰器对每个方法都应让计数加一。
 		defer counterGot.assert(t, &counter{FlushInvoked: 3, CloseNotifyInvoked: 3, HijackInvoked: 3})
 
 		//nolint:staticcheck // SA1019
@@ -116,10 +116,10 @@ func TestWithHTTP2(t *testing.T) {
 		})
 	}
 
-	// wrap the original http.ResponseWriter multiple times
+	// 将原始 http.ResponseWriter 包装多次
 	handler := chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// at this point, the original ResponseWriter object has been wrapped three times
-		// so each decorator is expected to tick the count by one for each method.
+		// 此时原始 ResponseWriter 对象已被包装三层，
+		// 因此每个装饰器对每个方法都应让计数加一。
 		defer counterGot.assert(t, &counter{FlushInvoked: 3, CloseNotifyInvoked: 3, HijackInvoked: 0})
 
 		//nolint:staticcheck // SA1019
@@ -245,8 +245,8 @@ func sendRequest(t *testing.T, server *httptest.Server) {
 }
 
 func assertCloseNotifierFlusherHijacker(t *testing.T, hijackableExpected bool, w http.ResponseWriter) {
-	// the http.ResponseWriter object for both http/1.x and http2
-	// implement http.Flusher and http.CloseNotifier
+	// http/1.x 与 http2 的 http.ResponseWriter 对象
+	// 都实现了 http.Flusher 和 http.CloseNotifier
 	if _, ok := w.(http.Flusher); !ok {
 		t.Errorf("Expected the http.ResponseWriter object to implement http.Flusher")
 	}
@@ -256,7 +256,7 @@ func assertCloseNotifierFlusherHijacker(t *testing.T, hijackableExpected bool, w
 		t.Errorf("Expected the http.ResponseWriter object to implement http.CloseNotifier")
 	}
 
-	// http/1.x implements http.Hijacker, not http2
+	// http/1.x 实现了 http.Hijacker，http2 则没有
 	if _, ok := w.(http.Hijacker); ok != hijackableExpected {
 		t.Errorf("Unexpected http.Hijacker implementation, expected: %t, but got: %t", hijackableExpected, ok)
 	}

@@ -42,7 +42,7 @@ const (
 	extensionGVK = "x-kubernetes-group-version-kind"
 )
 
-// ToValidOperationID makes an string a valid op ID (e.g. removing punctuations and whitespaces and make it camel case)
+// ToValidOperationID 把字符串转换为合法的操作 ID（例如去除标点与空白并转为驼峰命名）
 //
 // 处理规则：保留字母、下划线和非首位的数字；其余字符作为分隔并触发下一个字符大写。
 // 首字符不允许数字，以保证生成的 ID 是合法的编程语言标识符。
@@ -64,7 +64,8 @@ func ToValidOperationID(s string, capitalizeFirstLetter bool) string {
 	return buffer.String()
 }
 
-// GetOperationIDAndTags returns a customize operation ID and a list of tags for kubernetes API server's OpenAPI spec to prevent duplicate IDs.
+// GetOperationIDAndTags 为 Kubernetes API server 的 OpenAPI spec 返回定制化的操作 ID
+// 与标签列表，以避免 ID 重复。
 //
 // 操作 ID 由动词 + 组 + 版本 + 资源拼成，并去掉 ".k8s.io" 后缀；tags 用于
 // 在 OpenAPI 文档中按组/资源分组。无法识别动词时返回错误，提示路由命名不规范。
@@ -78,7 +79,7 @@ func GetOperationIDAndTags(r *restful.Route) (string, []string, error) {
 	}
 	op = op[len(prefix):]
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	// Assume /api is /apis/core, remove this when we actually server /api/... on /apis/core/...
+	// 暂时把 /api 视作 /apis/core，等真正在 /apis/core/... 上提供 /api/... 时移除这段逻辑
 	if len(parts) >= 1 && parts[0] == "api" {
 		parts = append([]string{"apis", "core"}, parts[1:]...)
 	}
@@ -135,7 +136,7 @@ func (s groupVersionKinds) JSON() []interface{} {
 	return j
 }
 
-// DefinitionNamer is the type to customize OpenAPI definition name.
+// DefinitionNamer 是用于定制 OpenAPI 定义名的类型。
 type DefinitionNamer struct {
 	// typeGroupVersionKinds 以 OpenAPI 定义名为键，记录该定义对应的所有 GVK。
 	typeGroupVersionKinds map[string]groupVersionKinds
@@ -150,7 +151,7 @@ func gvkConvert(gvk schema.GroupVersionKind) v1.GroupVersionKind {
 	}
 }
 
-// NewDefinitionNamer constructs a new DefinitionNamer to be used to customize OpenAPI spec.
+// NewDefinitionNamer 构造一个新的 DefinitionNamer，用于定制 OpenAPI spec。
 //
 // 多个 scheme 可能包含同名类型（不同组/版本），这里按定义名聚合去重，
 // 并排序后写入扩展，避免生成结果随 map 遍历顺序抖动。
@@ -186,7 +187,7 @@ func NewDefinitionNamer(schemes ...*runtime.Scheme) *DefinitionNamer {
 	return ret
 }
 
-// GetDefinitionName returns the name and tags for a given definition
+// GetDefinitionName 返回给定定义的名称与标签
 // 未知定义名原样返回且不带扩展，供非 Kubernetes 类型使用。
 func (d *DefinitionNamer) GetDefinitionName(name string) (string, spec.Extensions) {
 	if groupVersionKinds, ok := d.typeGroupVersionKinds[name]; ok {

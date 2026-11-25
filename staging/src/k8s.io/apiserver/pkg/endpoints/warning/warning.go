@@ -23,9 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/warning"
 )
 
-// AddWarningsHandler returns a handler that adds the provided warnings to all requests,
-// then delegates to the provided handler.
-//
+// AddWarningsHandler 返回一个新的 handler，它会为所有请求附加给定的警告，然后再委托给原 handler。
 // AddWarningsHandler 为路由附加固定警告（例如 API 已弃用）。警告通过
 // context 传递，由外层过滤器统一写入 Warning 响应头；warnings 为空时
 // 直接返回原 handler，避免无意义的包装。

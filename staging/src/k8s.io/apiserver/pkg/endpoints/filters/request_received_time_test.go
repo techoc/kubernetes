@@ -41,7 +41,7 @@ func TestWithRequestReceivedTimestamp(t *testing.T) {
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		callCount++
 
-		// does the handler chain that follows see the request received timestamp?
+		// 后续的 handler 链是否能看到请求到达时间戳？
 		receivedTimestampGot, ok = request.ReceivedTimestampFrom(req.Context())
 	})
 

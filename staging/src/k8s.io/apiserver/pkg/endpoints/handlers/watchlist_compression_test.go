@@ -94,7 +94,7 @@ func TestWatchResponseWriter(t *testing.T) {
 				t.Errorf("status code = %d, want %d", got, http.StatusOK)
 			}
 
-			// write and verify body
+			// 写出并校验 body
 			n, err := rw.Write(scenario.actualData)
 			if err != nil {
 				t.Fatalf("Write failed: %v", err)
@@ -103,7 +103,7 @@ func TestWatchResponseWriter(t *testing.T) {
 				t.Errorf("Write returned %d, want %d", n, len(scenario.actualData))
 			}
 
-			// flush and verify
+			// flush 并校验
 			if err := rw.Flush(); err != nil {
 				t.Fatalf("Flush failed: %v", err)
 			}
@@ -111,7 +111,7 @@ func TestWatchResponseWriter(t *testing.T) {
 				t.Error("expected recorder to be flushed")
 			}
 
-			// close and verify body
+			// 关闭并校验 body
 			if err := rw.Close(); err != nil {
 				t.Fatalf("Close failed: %v", err)
 			}
@@ -237,15 +237,13 @@ func TestPerFlushGzipWriter(t *testing.T) {
 	}
 }
 
-// BenchmarkPerFlushGzipWriterMemory measures retained heap growth per watch
-// connection when compression is enabled.
+// BenchmarkPerFlushGzipWriterMemory 测量开启压缩时每个 watch 连接造成的堆内存增长，
+// 用于评估逐事件 flush 的分配开销与压缩对大流量 watch 的内存压力。
 //
-// Each iteration opens numConns compressed watch connections, reads the initial
-// events and the initial-events-end bookmark, then measures heap.
-// The perFlushGzipWriter releases the gzip.Writer back to the pool on Flush,
-// so idle connections after initial events should not hold gzip state.
-// BenchmarkPerFlushGzipWriterMemory 测量逐事件 flush 的分配开销，
-// 用于评估压缩对大流量 watch 的内存压力。
+// 每次迭代打开 numConns 个压缩 watch 连接，读取初始事件与
+// initial-events-end bookmark，然后测量堆内存。
+// perFlushGzipWriter 在 Flush 时把 gzip.Writer 归还给池，
+// 因此初始事件之后的空闲连接不应持有 gzip 状态。
 func BenchmarkPerFlushGzipWriterMemory(b *testing.B) {
 	klog.SetLogger(logr.Discard())
 	featuregatetesting.SetFeatureGateDuringTest(b, utilfeature.DefaultFeatureGate, features.WatchListCompression, true)
@@ -328,7 +326,7 @@ func BenchmarkPerFlushGzipWriterMemory(b *testing.B) {
 	goruntime.GC()
 	var memAfter goruntime.MemStats
 	goruntime.ReadMemStats(&memAfter)
-	// prevent GC from collecting client connections before we measure heap
+	// 在测量堆内存前阻止 GC 回收客户端连接
 	goruntime.KeepAlive(decoders)
 
 	var heapGrowth uint64

@@ -24,14 +24,11 @@ import (
 // requestReceivedTimestampKeyType 是私有类型，防止其他包用裸 int 伪造 context key。
 type requestReceivedTimestampKeyType int
 
-// requestReceivedTimestampKey is the ReceivedTimestamp (the time the request reached the apiserver)
-// key for the context.
+// requestReceivedTimestampKey 是 ReceivedTimestamp（请求到达 apiserver 的时刻）在 context 中的 key。
 const requestReceivedTimestampKey requestReceivedTimestampKeyType = iota
 
-// WithReceivedTimestamp returns a copy of parent context in which the ReceivedTimestamp
-// (the time the request reached the apiserver) is set.
-//
-// If the specified ReceivedTimestamp is zero, no value is set and the parent context is returned as is.
+// WithReceivedTimestamp 返回 parent 的副本，其中已设置 ReceivedTimestamp（请求到达 apiserver 的时刻）。
+// 若传入的 ReceivedTimestamp 为零值，则不写入任何值，原样返回 parent。
 // 零值不写入，是为了让调用方可以无条件调用本函数，而不必先判断时间是否有效。
 func WithReceivedTimestamp(parent context.Context, receivedTimestamp time.Time) context.Context {
 	if receivedTimestamp.IsZero() {
@@ -40,7 +37,7 @@ func WithReceivedTimestamp(parent context.Context, receivedTimestamp time.Time) 
 	return WithValue(parent, requestReceivedTimestampKey, receivedTimestamp)
 }
 
-// ReceivedTimestampFrom returns the value of the ReceivedTimestamp key from the specified context.
+// ReceivedTimestampFrom 从指定 context 中读取 ReceivedTimestamp key 的值。
 // 第二个返回值区分“未设置”与“设置为零值”；调用方据此决定是否回退到当前时间。
 func ReceivedTimestampFrom(ctx context.Context) (time.Time, bool) {
 	info, ok := ctx.Value(requestReceivedTimestampKey).(time.Time)

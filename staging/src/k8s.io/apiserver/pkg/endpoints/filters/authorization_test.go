@@ -285,7 +285,7 @@ func TestAuditAnnotation(t *testing.T) {
 	for k, tc := range testcases {
 		ctx := t.Context()
 		handler := WithAuthorization(&fakeHTTPHandler{}, tc.authorizer, negotiatedSerializer)
-		// TODO: fake audit injector
+		// TODO: 伪造审计注入器
 
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "/api/v1/namespaces/default/pods", nil)
 		req = withTestContext(req, nil, &auditinternal.Event{Level: auditinternal.LevelMetadata})

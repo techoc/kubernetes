@@ -35,20 +35,17 @@ import (
 	"k8s.io/apiserver/pkg/storageversion"
 )
 
-// ConvertabilityChecker indicates what versions a GroupKind is available in.
-//
+// ConvertabilityChecker 指明某个 GroupKind 在哪些版本上可用，
 // 用于在解码时确定有哪些目标版本可用，避免把对象转换到未注册的版本。
 type ConvertabilityChecker interface {
-	// VersionsForGroupKind indicates what versions are available to convert a group kind. This determines
-	// what our decoding abilities are.
+	// VersionsForGroupKind 返回能够转换指定 group kind 的版本集合，
+	// 这决定了本 apiserver 具备哪些解码能力。
 	VersionsForGroupKind(gk schema.GroupKind) []schema.GroupVersion
 }
 
-// APIGroupVersion is a helper for exposing rest.Storage objects as http.Handlers via go-restful
-// It handles URLs of the form:
-// /${storage_key}[/${object_name}]
-// Where 'storage_key' points to a rest.Storage object stored in storage.
-// This object should contain all parameterization necessary for running a particular API version
+// APIGroupVersion 是一个辅助结构，通过 go-restful 把 rest.Storage 对象暴露为 http.Handler，
+// 处理的 URL 形如：/${storage_key}[/${object_name}]，其中 storage_key 指向存放在 Storage 中的
+// rest.Storage 对象。该结构应包含运行某个 API 版本所需的全部参数。
 //
 // 一个 APIGroupVersion 对应"一个 group/version 的全部资源"；不同版本共享同一份 Storage，
 // 差异由 Serializer/Convertor 承担，因此这里的字段大多是编解码与授权所需的依赖注入点。
@@ -58,26 +55,22 @@ type APIGroupVersion struct {
 
 	Root string
 
-	// GroupVersion is the external group version
+	// GroupVersion 是对外暴露的 group version。
 	GroupVersion schema.GroupVersion
 
-	// AllServedVersionsByResource is indexed by resource and maps to a list of versions that resource exists in.
-	// This was created so that StorageVersion for APIs can include a list of all version that are served for each
-	// GroupResource tuple.
+	// AllServedVersionsByResource 以资源名为键，映射到该资源存在的所有版本列表。
+	// 引入它是为了让各 GroupResource 元组的 StorageVersion 能够列出其全部对外服务版本。
 	AllServedVersionsByResource map[string][]string
 
-	// OptionsExternalVersion controls the Kubernetes APIVersion used for common objects in the apiserver
-	// schema like api.Status, api.DeleteOptions, and metav1.ListOptions. Other implementors may
-	// define a version "v1beta1" but want to use the Kubernetes "v1" internal objects. If
-	// empty, defaults to GroupVersion.
+	// OptionsExternalVersion 指定 apiserver 内通用对象（如 api.Status、api.DeleteOptions、
+	// metav1.ListOptions）所使用的 Kubernetes APIVersion。其他实现方可能定义了 "v1beta1" 版本，
+	// 但仍想使用 Kubernetes 的 "v1" 内部对象。为空时回退到 GroupVersion。
 	OptionsExternalVersion *schema.GroupVersion
-	// MetaGroupVersion defaults to "meta.k8s.io/v1" and is the scheme group version used to decode
-	// common API implementations like ListOptions. Future changes will allow this to vary by group
-	// version (for when the inevitable meta/v2 group emerges).
+	// MetaGroupVersion 默认为 "meta.k8s.io/v1"，用于解码 ListOptions 等通用 API 实现。
+	// 后续改动会允许它按 group version 区分（以应对将来出现的 meta/v2）。
 	MetaGroupVersion *schema.GroupVersion
 
-	// Serializer is used to determine how to convert responses from API methods into bytes to send over
-	// the wire.
+	// Serializer 决定如何把 API 方法的响应转换成要在线上发送的字节。
 	Serializer     runtime.NegotiatedSerializer
 	ParameterCodec runtime.ParameterCodec
 
@@ -95,24 +88,21 @@ type APIGroupVersion struct {
 
 	EquivalentResourceRegistry runtime.EquivalentResourceRegistry
 
-	// Authorizer determines whether a user is allowed to make a certain request. The Handler does a preliminary
-	// authorization check using the request URI but it may be necessary to make additional checks, such as in
-	// the create-on-update case
+	// Authorizer 判断用户是否被允许发起某个请求。Handler 会先基于请求 URI 做一次初步鉴权，
+	// 但某些场景（例如 create-on-update）还需要额外的检查。
 	Authorizer authorizer.UnconditionalAuthorizer
 
 	Admit admission.Interface
 
 	MinRequestTimeout time.Duration
 
-	// The limit on the request body size that would be accepted and decoded in a write request.
-	// 0 means no limit.
-	// 限制请求体大小是防御超大对象耗尽内存的第一道闸门；0 表示不限制。
+	// 写请求中可接受并解码的请求体大小上限，0 表示不限制。
+	// 限制请求体大小是防御超大对象耗尽内存的第一道闸门。
 	MaxRequestBodyBytes int64
 }
 
-// InstallREST registers the REST handlers (storage, watch, proxy and redirect) into a restful Container.
-// It is expected that the provided path root prefix will serve all operations. Root MUST NOT end
-// in a slash.
+// InstallREST 把 REST handler（storage、watch、proxy、redirect）注册进 restful Container。
+// 调用方需保证给定的路径根前缀承载全部操作，且 Root 不能以斜杠结尾。
 //
 // 返回聚合发现所需的资源描述、存储版本信息，以及注册过程中的错误集合。
 // 错误以 Aggregate 返回而不是立即失败，是为了让调用方一次性看到所有冲突。
@@ -142,9 +132,7 @@ func (g *APIGroupVersion) InstallREST(container *restful.Container) ([]apidiscov
 func removeNonPersistedResources(infos []*storageversion.ResourceInfo) []*storageversion.ResourceInfo {
 	var filtered []*storageversion.ResourceInfo
 	for _, info := range infos {
-		// if EncodingVersion is empty, then the apiserver does not
-		// need to register this resource via the storage version API,
-		// thus we can remove it.
+		// 不落盘的资源无需通过 storage version API 注册，直接过滤掉。
 		if info != nil && len(info.EncodingVersion) > 0 {
 			filtered = append(filtered, info)
 		}
@@ -152,7 +140,7 @@ func removeNonPersistedResources(infos []*storageversion.ResourceInfo) []*storag
 	return filtered
 }
 
-// staticLister implements the APIResourceLister interface
+// staticLister 实现 APIResourceLister 接口。
 type staticLister struct {
 	list []metav1.APIResource
 }

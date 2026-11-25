@@ -36,8 +36,7 @@ const (
 // 审计）时才读取请求信息。这样在不开日志的路径上不产生额外开销，
 // 也避免在日志级别不够时仍构造字符串。
 
-// lazyTruncatedUserAgent implements String() string and it will
-// return user-agent which may be truncated.
+// lazyTruncatedUserAgent 实现 String() string，返回可能被截断的 user-agent。
 type lazyTruncatedUserAgent struct {
 	req *http.Request
 }
@@ -55,8 +54,7 @@ func (lazy *lazyTruncatedUserAgent) String() string {
 	return ua
 }
 
-// LazyClientIP implements String() string and it will
-// calls GetClientIP() lazily only when required.
+// LazyClientIP 实现 String() string，仅在真正需要时才调用 GetClientIP()。
 type lazyClientIP struct {
 	req *http.Request
 }
@@ -72,8 +70,7 @@ func (lazy *lazyClientIP) String() string {
 	return "unknown"
 }
 
-// lazyAccept implements String() string and it will
-// calls http.Request Header.Get() lazily only when required.
+// lazyAccept 实现 String() string，仅在需要时调用 http.Request Header.Get()。
 type lazyAccept struct {
 	req *http.Request
 }
@@ -88,8 +85,7 @@ func (lazy *lazyAccept) String() string {
 	return "unknown"
 }
 
-// lazyAPIGroup implements String() string and it will
-// lazily get Group from request info.
+// lazyAPIGroup 实现 String() string，按需从 request info 中取得 API 组。
 type lazyAPIGroup struct {
 	req *http.Request
 }
@@ -107,8 +103,7 @@ func (lazy *lazyAPIGroup) String() string {
 	return "unknown"
 }
 
-// lazyAPIVersion implements String() string and it will
-// lazily get Group from request info.
+// lazyAPIVersion 实现 String() string，按需从 request info 中取得 API 版本。
 type lazyAPIVersion struct {
 	req *http.Request
 }
@@ -126,8 +121,7 @@ func (lazy *lazyAPIVersion) String() string {
 	return "unknown"
 }
 
-// lazyName implements String() string and it will
-// lazily get Group from request info.
+// lazyName 实现 String() string，按需从 request info 中取得对象名。
 type lazyName struct {
 	req *http.Request
 }
@@ -145,8 +139,7 @@ func (lazy *lazyName) String() string {
 	return "unknown"
 }
 
-// lazySubresource implements String() string and it will
-// lazily get Group from request info.
+// lazySubresource 实现 String() string，按需从 request info 中取得子资源名。
 type lazySubresource struct {
 	req *http.Request
 }
@@ -164,8 +157,7 @@ func (lazy *lazySubresource) String() string {
 	return "unknown"
 }
 
-// lazyNamespace implements String() string and it will
-// lazily get Group from request info.
+// lazyNamespace 实现 String() string，按需从 request info 中取得命名空间。
 type lazyNamespace struct {
 	req *http.Request
 }
@@ -183,8 +175,7 @@ func (lazy *lazyNamespace) String() string {
 	return "unknown"
 }
 
-// lazyAuditID implements Stringer interface to lazily retrieve
-// the audit ID associated with the request.
+// lazyAuditID 实现 Stringer 接口，按需取出请求关联的审计 ID。
 type lazyAuditID struct {
 	req *http.Request
 }
@@ -199,8 +190,7 @@ func (lazy *lazyAuditID) String() string {
 	return "unknown"
 }
 
-// lazyVerb implements String() string and it will
-// lazily get normalized Verb
+// lazyVerb 实现 String() string，按需取得归一化后的 Verb。
 type lazyVerb struct {
 	req *http.Request
 }
@@ -214,8 +204,7 @@ func (lazy *lazyVerb) String() string {
 	return metrics.NormalizedVerb(lazy.req)
 }
 
-// lazyResource implements String() string and it will
-// lazily get Resource from request info
+// lazyResource 实现 String() string，按需从 request info 中取得 Resource。
 type lazyResource struct {
 	req *http.Request
 }
@@ -233,8 +222,7 @@ func (lazy *lazyResource) String() string {
 	return "unknown"
 }
 
-// lazyScope implements String() string and it will
-// lazily get Scope from request info
+// lazyScope 实现 String() string，按需从 request info 中取得 Scope。
 type lazyScope struct {
 	req *http.Request
 }

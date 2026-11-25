@@ -24,8 +24,7 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// WithRequestInfo attaches a RequestInfo to the context.
-//
+// WithRequestInfo 把 RequestInfo 附加到 context。
 // 该过滤器必须尽早安装：后续的鉴权、准入、审计都依赖上下文中解析出的
 // 动词/资源/命名空间信息。解析失败说明路由与解析器配置不一致，属于服务端
 // 配置错误，因此返回 500 而不是 4xx，避免把内部问题伪装成客户端错误。

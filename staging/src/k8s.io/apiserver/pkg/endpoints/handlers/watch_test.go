@@ -47,7 +47,7 @@ import (
 	metricstestutil "k8s.io/component-base/metrics/testutil"
 )
 
-// Fake API versions, similar to api/latest.go
+// 模拟的 API 版本，类似于 api/latest.go
 //
 // 使用独立的 test.group 组注册类型，避免与真实 API 组冲突。
 const namedGroupPrefix = "apis"
@@ -111,12 +111,12 @@ func TestWatchHTTPErrors(t *testing.T) {
 	require.NoError(t, err)
 	defer apitesting.Close(t, resp.Body)
 
-	// Send error to server from storage
+	// 由存储层向服务端发送错误
 	errStatus := apierrors.NewInternalError(fmt.Errorf("we got an error")).Status()
 	watcher.Error(&errStatus)
 	watcher.Stop()
 
-	// Make sure we can actually watch an endpoint
+	// 确认确实可以对端点发起 watch
 	decoder := json.NewDecoder(resp.Body)
 	var got watchJSON
 	err = decoder.Decode(&got)
@@ -186,7 +186,7 @@ func TestWatchHTTPErrorsBeforeServe(t *testing.T) {
 	require.NoError(t, err)
 	defer apitesting.Close(t, resp.Body)
 
-	// We had already got an error before watch serve started
+	// watch 开始服务之前已经出现过错误
 	decoder := json.NewDecoder(resp.Body)
 	var status *metav1.Status
 	err = decoder.Decode(&status)
@@ -204,7 +204,7 @@ func TestWatchHTTPErrorsBeforeServe(t *testing.T) {
 	}
 	require.Equal(t, expectedStatus, status)
 
-	// check for leaks
+	// 检查泄漏
 	require.Truef(t, watcher.IsStopped(),
 		"Leaked watcher goruntine after request done")
 }
@@ -289,16 +289,16 @@ func TestWatchHTTPTimeout(t *testing.T) {
 	require.NoError(t, err)
 	defer apitesting.Close(t, resp.Body)
 
-	// Send object added event to server from storage
+	// 由存储层向服务端发送对象新增事件
 	watcher.Add(&endpointstesting.Simple{TypeMeta: metav1.TypeMeta{APIVersion: testGroupV2.String()}})
 
-	// Make sure we can actually watch an endpoint
+	// 确认确实可以对端点发起 watch
 	decoder := json.NewDecoder(resp.Body)
 	var got watchJSON
 	err = decoder.Decode(&got)
 	require.NoError(t, err)
 
-	// Timeout and check for leaks
+	// 超时后检查泄漏
 	close(timeoutCh)
 	select {
 	case <-done:
@@ -318,15 +318,15 @@ func TestWatchHTTPTimeout(t *testing.T) {
 		t.Errorf("Failed to stop watcher after %s of timeout signal", wait.ForeverTestTimeout.String())
 	}
 
-	// Make sure we can't receive any more events through the timeout watch
+	// 确认通过已超时的 watch 收不到更多事件
 	err = decoder.Decode(&got)
 	require.Equal(t, io.EOF, err)
 }
 
-// watchJSON defines the expected JSON wire equivalent of watch.Event.
-// Use this for testing instead of metav1.WatchEvent to ensure the wire format
-// doesn't change and skip the automatic decoding of WatchEvent.Object.Raw into
-// WatchEvent.Object.Object.
+// watchJSON 定义 watch.Event 在 JSON 线格式上的等价表示。
+// 测试时使用它而不是 metav1.WatchEvent，以确保线格式不变，
+// 并跳过把 WatchEvent.Object.Raw 自动解码为
+// WatchEvent.Object.Object 的过程。
 type watchJSON struct {
 	Type   watch.EventType `json:"type,omitempty"`
 	Object json.RawMessage `json:"object,omitempty"`
@@ -347,8 +347,8 @@ func (t *fakeTimeoutFactory) TimeoutCh() (<-chan time.Time, func() bool) {
 	}
 }
 
-// serveWatch will serve a watch response according to the watcher and watchServer.
-// Before watchServer.HandleHTTP, an error may occur like k8s.io/apiserver/pkg/endpoints/handlers/watch.go#serveWatch does.
+// serveWatch 按给定的 watcher 与 watchServer 提供 watch 响应。
+// 在 watchServer.HandleHTTP 之前就可能出错，与 watch.go#serveWatch 的行为一致。
 func serveWatch(watcher watch.Interface, watchServer *WatchServer, preServeErr error) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		defer watcher.Stop()
@@ -477,7 +477,7 @@ func TestWatchEventSizes(t *testing.T) {
 			require.NoError(t, err)
 			defer apitesting.Close(t, resp.Body)
 
-			// Send object twice so that in case of caching the cached version is used.
+			// 发送对象两次，以便存在缓存时会使用缓存版本。
 			watcher.Action(tc.event.Type, tc.event.Object)
 			watcher.Action(tc.event.Type, tc.event.Object)
 

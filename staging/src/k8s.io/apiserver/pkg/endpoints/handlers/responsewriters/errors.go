@@ -29,13 +29,13 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-// Avoid emitting errors that look like valid HTML. Quotes are okay.
+// 避免输出看起来像合法 HTML 的错误信息。引号没问题。
 //
 // 错误信息里可能包含用户可控的请求路径/资源名，若不转义，浏览器在
 // 直接访问 API 时会把它当作 HTML 渲染，形成反射型 XSS。
 var sanitizer = strings.NewReplacer(`&`, "&amp;", `<`, "&lt;", `>`, "&gt;")
 
-// Forbidden renders a simple forbidden error
+// Forbidden 渲染一个简单的 forbidden 错误
 func Forbidden(attributes authorizer.Attributes, w http.ResponseWriter, req *http.Request, reason string, s runtime.NegotiatedSerializer) {
 	RespondWithError(w, req, ForbiddenStatusError(attributes, reason), s)
 }
@@ -88,7 +88,7 @@ func forbiddenMessage(attributes authorizer.Attributes) string {
 	return fmt.Sprintf("User %q cannot %s resource %q in API group %q at the cluster scope", username, attributes.GetVerb(), resource, attributes.GetAPIGroup())
 }
 
-// InternalError renders a simple internal error
+// InternalError 渲染一个简单的内部错误
 //
 // 同样经过 sanitizer 转义；同时把原始错误交给 utilruntime 记录，避免
 // 内部细节只出现在响应体里。

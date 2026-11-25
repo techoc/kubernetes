@@ -23,7 +23,7 @@ import (
 )
 
 // Test_recorder_AddWarning 覆盖 Warning 头的序列化与去重。
-// 中文说明：agent 为空的警告格式为 `299 - "text"`；同一 text 只保留第一次出现，
+// agent 为空的警告格式为 `299 - "text"`；同一 text 只保留第一次出现，
 // 非法 agent/含换行 text 因会破坏 HTTP 头语法而被丢弃。
 func Test_recorder_AddWarning(t *testing.T) {
 	type args struct {
@@ -115,23 +115,23 @@ func TestTruncation(t *testing.T) {
 	responseRecorder := httptest.NewRecorder()
 	warningRecorder := &recorder{writer: responseRecorder}
 
-	// add items longer than the individual length
-	warningRecorder.AddWarning("", "aaaaaaaaaa")  // long item
-	warningRecorder.AddWarning("-", "aaaaaaaaaa") // duplicate item
-	warningRecorder.AddWarning("", "bb")          // short item
-	warningRecorder.AddWarning("", "ccc")         // short item
-	warningRecorder.AddWarning("", "Iñtërnâtiô")  // long item
-	// check they are preserved
+	// 添加超过单条长度上限的条目
+	warningRecorder.AddWarning("", "aaaaaaaaaa")  // 长条目
+	warningRecorder.AddWarning("-", "aaaaaaaaaa") // 重复条目
+	warningRecorder.AddWarning("", "bb")          // 短条目
+	warningRecorder.AddWarning("", "ccc")         // 短条目
+	warningRecorder.AddWarning("", "Iñtërnâtiô")  // 长条目
+	// 确认它们被原样保留
 	if e, a := []string{`299 - "aaaaaaaaaa"`, `299 - "bb"`, `299 - "ccc"`, `299 - "Iñtërnâtiô"`}, responseRecorder.Header()["Warning"]; !reflect.DeepEqual(e, a) {
 		t.Errorf("expected\n%#v\ngot\n%#v", e, a)
 	}
-	// add an item that exceeds the length and triggers truncation, reducing existing items to 15 runes
-	warningRecorder.AddWarning("", "e")          // triggering item, 16 total
-	warningRecorder.AddWarning("", "ffffffffff") // long item to get truncated, 21 total
-	warningRecorder.AddWarning("", "ffffffffff") // duplicate item
-	warningRecorder.AddWarning("", "gggggggggg") // item to get truncated, 26 total
-	warningRecorder.AddWarning("", "h")          // item to get ignored since we're over our limit
-	// check that existing items are truncated, and order preserved
+	// 添加超出长度上限并触发截断的条目，把已有条目缩减到 15 个 rune
+	warningRecorder.AddWarning("", "e")          // 触发截断的条目，累计 16
+	warningRecorder.AddWarning("", "ffffffffff") // 会被截断的长条目，累计 21
+	warningRecorder.AddWarning("", "ffffffffff") // 重复条目
+	warningRecorder.AddWarning("", "gggggggggg") // 会被截断的条目，累计 26
+	warningRecorder.AddWarning("", "h")          // 超出上限后会被忽略的条目
+	// 确认已有条目被截断且顺序保持不变
 	if e, a := []string{`299 - "aaaaa"`, `299 - "bb"`, `299 - "ccc"`, `299 - "Iñtër"`, `299 - "e"`, `299 - "fffff"`, `299 - "ggggg"`}, responseRecorder.Header()["Warning"]; !reflect.DeepEqual(e, a) {
 		t.Errorf("expected\n%#v\ngot\n%#v", e, a)
 	}

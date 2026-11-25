@@ -25,16 +25,14 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// ScopeNamer handles accessing names from requests and objects
+// ScopeNamer 负责从请求和对象中读取名称信息
 type ScopeNamer interface {
-	// Namespace returns the appropriate namespace value from the request (may be empty) or an
-	// error.
+	// Namespace 从请求中返回合适的命名空间值（可能为空），否则返回错误。
 	Namespace(req *http.Request) (namespace string, err error)
-	// Name returns the name from the request, and an optional namespace value if this is a namespace
-	// scoped call. An error is returned if the name is not available.
+	// Name 返回请求中的名称；若是命名空间作用域的调用还会返回命名空间值。
+	// 名称不可用时返回错误。
 	Name(req *http.Request) (namespace, name string, err error)
-	// ObjectName returns the namespace and name from an object if they exist, or an error if the object
-	// does not support names.
+	// ObjectName 返回对象上的命名空间与名称（若存在）；对象不支持命名时返回错误。
 	ObjectName(obj runtime.Object) (namespace, name string, err error)
 }
 
@@ -48,7 +46,7 @@ type ContextBasedNaming struct {
 	ClusterScoped bool
 }
 
-// ContextBasedNaming implements ScopeNamer
+// ContextBasedNaming 实现了 ScopeNamer
 var _ ScopeNamer = ContextBasedNaming{}
 
 // Namespace 从请求上下文中的 RequestInfo 取命名空间。
@@ -92,5 +90,5 @@ func (n ContextBasedNaming) ObjectName(obj runtime.Object) (namespace, name stri
 	return namespace, name, err
 }
 
-// errEmptyName is returned when API requests do not fill the name section of the path.
+// errEmptyName 在 API 请求未填写路径中的名称部分时返回。
 var errEmptyName = errors.NewBadRequest("name must be provided")

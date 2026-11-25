@@ -27,9 +27,9 @@ import (
 	"k8s.io/apiserver/pkg/warning"
 )
 
-// WithWarningRecorder attaches a deduplicating k8s.io/apiserver/pkg/warning#WarningRecorder to the request context.
+// WithWarningRecorder 在请求上下文上挂一个带去重能力的 k8s.io/apiserver/pkg/warning#WarningRecorder。
 //
-// 中文说明：Warning 头是逐请求的，且同一消息重复出现只会让客户端日志变噪音，
+// Warning 头是逐请求的，且同一消息重复出现只会让客户端日志变噪音，
 // 因此这里每个请求新建一个 recorder，而不是全局共享。
 func WithWarningRecorder(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -54,22 +54,22 @@ type recordedWarning struct {
 // recorder 收集单个请求产生的 warning，并在超过上限后统一截断重放。
 // 它会被多个 goroutine 并发调用（不同 webhook/插件），因此所有状态都由 lock 保护。
 type recorder struct {
-	// lock guards calls to AddWarning from multiple threads
+	// lock 保护多线程对 AddWarning 的调用
 	lock sync.Mutex
 
-	// recorded tracks whether AddWarning was already called with a given text
+	// recorded 记录某个文本是否已经通过 AddWarning 添加过
 	recorded map[string]bool
 
-	// ordered tracks warnings added so they can be replayed and truncated if needed
+	// ordered 保存已添加的 warning，必要时可重放并截断
 	ordered []recordedWarning
 
-	// written tracks how many runes of text have been added as warning headers
+	// written 统计已作为 Warning 头写入的文本字符数（rune）
 	written int
 
-	// truncating tracks if we have already exceeded truncateAtTotalRunes and are now truncating warning messages as we add them
+	// truncating 表示是否已超过 truncateAtTotalRunes、正在添加时截断 warning 内容
 	truncating bool
 
-	// writer is the response writer to add warning headers to
+	// writer 是要写入 Warning 头的响应写入器
 	writer http.ResponseWriter
 }
 
@@ -83,46 +83,46 @@ func (r *recorder) AddWarning(agent, text string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	// if we've already exceeded our limit and are already truncating, return early
+	// 已经超过上限并处于截断状态时直接返回
 	if r.written >= truncateAtTotalRunes && r.truncating {
 		return
 	}
 
-	// init if needed
+	// 需要时初始化
 	if r.recorded == nil {
 		r.recorded = map[string]bool{}
 	}
 
-	// dedupe if already warned
+	// 已经警告过同一文本则去重
 	if r.recorded[text] {
 		return
 	}
 	r.recorded[text] = true
 	r.ordered = append(r.ordered, recordedWarning{agent: agent, text: text})
 
-	// truncate on a rune boundary, if needed
+	// 需要时按 rune 边界截断
 	textRuneLength := utf8.RuneCountInString(text)
 	if r.truncating && textRuneLength > truncateItemRunes {
 		text = string([]rune(text)[:truncateItemRunes])
 		textRuneLength = truncateItemRunes
 	}
 
-	// compute the header
+	// 构造 Warning 头
 	header, err := net.NewWarningHeader(299, agent, text)
 	if err != nil {
 		return
 	}
 
-	// if this fits within our limit, or we're already truncating, write and return
+	// 若仍在上限内、或已经在截断，直接写入并返回
 	if r.written+textRuneLength <= truncateAtTotalRunes || r.truncating {
 		r.written += textRuneLength
 		r.writer.Header().Add("Warning", header)
 		return
 	}
 
-	// otherwise, enable truncation, reset, and replay the existing items as truncated warnings
+	// 否则开启截断、重置状态，并把已有条目按截断后的形式重放
 	//
-	// 中文说明：一旦超限就不可逆地进入截断模式，并清空已写头重新生成，
+	// 一旦超限就不可逆地进入截断模式，并清空已写头重新生成，
 	// 保证最终响应里所有 warning 长度一致、不会出现“前几条完整后面残缺”。
 	r.truncating = true
 	r.written = 0

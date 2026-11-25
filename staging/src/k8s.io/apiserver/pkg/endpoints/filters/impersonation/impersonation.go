@@ -38,7 +38,7 @@ import (
 	"k8s.io/apiserver/pkg/server/httplog"
 )
 
-// WithImpersonation is a filter that will inspect and check requests that attempt to change the user.Info for their requests
+// WithImpersonation 是一个过滤器，用于检查那些试图替换请求中 user.Info 的请求。
 //
 // 安全边界：每一个 Impersonate-* 头都映射为一次独立的授权检查，全部通过后才替换
 // 请求中的用户。任何一项被拒绝都立即返回 Forbidden，避免部分生效的模拟身份。
@@ -63,12 +63,13 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 			return
 		}
 
-		// if groups are not specified, then we need to look them up differently depending on the type of user
-		// if they are specified, then they are the authority (including the inclusion of system:authenticated/system:unauthenticated groups)
+		// 如果未指定组，则需要根据用户类型用不同方式查出其所属组；
+		// 如果指定了组，那么以指定内容为准（包括是否包含
+		// system:authenticated/system:unauthenticated 组）。
 		groupsSpecified := len(req.Header[authenticationv1.ImpersonateGroupHeader]) > 0
 
-		// make sure we're allowed to impersonate each thing we're requesting.  While we're iterating through, start building username
-		// and group information
+		// 逐个确认我们有权模拟所请求的每一项。遍历的同时开始构造用户名
+		// 和组信息。
 		username := ""
 		groups := []string{}
 		userExtra := map[string][]string{}
@@ -92,7 +93,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 				actingAsAttributes.Resource = "serviceaccounts"
 				username = serviceaccount.MakeUsername(impersonationRequest.Namespace, impersonationRequest.Name)
 				if !groupsSpecified {
-					// if groups aren't specified for a service account, we know the groups because its a fixed mapping.  Add them
+					// 若未为服务账号指定组，我们可以推导出它所属的组，因为这是固定映射，直接补上。
 					// ServiceAccount 的组是固定映射（system:serviceaccounts 等），无需请求方显式声明。
 					groups = serviceaccount.MakeGroupNames(impersonationRequest.Namespace)
 				}
@@ -135,13 +136,12 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 		// 组语义：模拟非匿名用户时默认补上 system:authenticated，除非调用方已显式
 		// 指定了 system:authenticated 或 system:unauthenticated（显式即权威）。
 		if username != user.Anonymous {
-			// When impersonating a non-anonymous user, include the 'system:authenticated' group
-			// in the impersonated user info:
-			// - if no groups were specified
-			// - if a group has been specified other than 'system:authenticated'
+			// 模拟非匿名用户时，要在模拟出的 user info 中加入 'system:authenticated' 组：
+			// - 如果没有指定任何组
+			// - 如果指定了除 'system:authenticated' 之外的组
 			//
-			// If 'system:unauthenticated' group has been specified we should not include
-			// the 'system:authenticated' group.
+			// 如果指定了 'system:unauthenticated' 组，则不应加入
+			// 'system:authenticated' 组。
 			addAuthenticated := true
 			for _, group := range groups {
 				if group == user.AllAuthenticated || group == user.AllUnauthenticated {
@@ -182,7 +182,7 @@ func WithImpersonation(handler http.Handler, a authorizer.UnconditionalAuthorize
 		// 审计记录同时保留原用户与模拟用户，便于事后追责。
 		audit.LogImpersonatedUser(audit.WithAuditContext(ctx), newUser, "")
 
-		// clear all the impersonation headers from the request
+		// 清除请求中所有的模拟头。
 		// 必须清除，否则下游的聚合层/代理会再次解释这些头，造成二次模拟或越权。
 		req.Header.Del(authenticationv1.ImpersonateUserHeader)
 		req.Header.Del(authenticationv1.ImpersonateGroupHeader)
@@ -219,16 +219,16 @@ func userString(u user.Info) string {
 // unescapeExtraKey 对 extra 头中的键做百分号解码。解码失败时保留原值，
 // 因为审计/日志必须如实记录客户端发送的内容，不能因格式问题丢弃。
 func unescapeExtraKey(encodedKey string) string {
-	key, err := url.PathUnescape(encodedKey) // Decode %-encoded bytes.
+	key, err := url.PathUnescape(encodedKey) // 解码 %-编码的字节。
 	if err != nil {
-		return encodedKey // Always record extra strings, even if malformed/unencoded.
+		return encodedKey // 即使格式非法或未编码，也照常记录 extra 字符串。
 	}
 	return key
 }
 
-// buildImpersonationRequests returns a list of objectreferences that represent the different things we're requesting to impersonate.
-// Also includes a map[string][]string representing user.Info.Extra
-// Each request must be authorized against the current user before switching contexts.
+// buildImpersonationRequests 返回一组 objectreference，代表我们请求模拟的不同对象，
+// 其中也包含表示 user.Info.Extra 的 map[string][]string。
+// 在切换上下文之前，每一项请求都必须针对当前用户通过授权。
 //
 // 顺序无关紧要：所有请求都必须通过授权，任一失败即整体拒绝。
 func buildImpersonationRequests(headers http.Header) ([]v1.ObjectReference, error) {
@@ -262,18 +262,18 @@ func buildImpersonationRequests(headers http.Header) ([]v1.ObjectReference, erro
 		// 头名在 HTTP/2 中已小写，这里显式转小写以兼容不同传输层。
 		extraKey := unescapeExtraKey(strings.ToLower(headerName[len(authenticationv1.ImpersonateUserExtraHeaderPrefix):]))
 
-		// make a separate request for each extra value they're trying to set
+		// 为对方要设置的每个 extra 值单独生成一项请求。
 		// 每个 extra 值单独授权，避免一个键通过后批量注入多个值。
 		for _, value := range values {
 			impersonationRequests = append(impersonationRequests,
 				v1.ObjectReference{
 					Kind: "UserExtra",
-					// we only parse out a group above, but the parsing will fail if there isn't SOME version
-					// using the internal version will help us fail if anyone starts using it
+					// 上面只解析出了 group，但如果没有某个 version，解析就会失败；
+					// 使用内部版本可以在有人开始使用它时及时暴露问题。
 					APIVersion: authenticationv1.SchemeGroupVersion.String(),
 					Name:       value,
-					// ObjectReference doesn't have a subresource field.  FieldPath is close and available, so we'll use that
-					// TODO fight the good fight for ObjectReference to refer to resources and subresources
+					// ObjectReference 没有 subresource 字段；FieldPath 含义接近且可用，因此用它代替。
+					// TODO 继续推动 ObjectReference 支持引用资源和子资源
 					FieldPath: extraKey,
 				})
 		}

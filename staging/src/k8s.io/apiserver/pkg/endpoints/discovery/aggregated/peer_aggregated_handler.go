@@ -36,20 +36,20 @@ import (
 	utilsort "k8s.io/apimachinery/pkg/util/sort"
 )
 
-// PeerDiscoveryProvider defines an interface to get peer resources for peer-aggregated discovery.
+// PeerDiscoveryProvider 定义获取对端资源以进行对等聚合发现的接口。
 // 实现对端数据来源可以是对等 apiserver 的聚合发现端点。
 type PeerDiscoveryProvider interface {
 	GetPeerResources() map[string][]apidiscoveryv2.APIGroupDiscovery
 }
 
-// PeerAggregatedResourceManager defines the interface for managing peer-aggregated discovery resources
-// that combines both local and peer server resources.
+// PeerAggregatedResourceManager 定义管理对等聚合发现资源的接口，
+// 该资源同时包含本地服务器与对端服务器的数据。
 type PeerAggregatedResourceManager interface {
-	// InvalidateCache invalidates the peer-aggregated discovery caches
-	// This should be called when peer discovery data changes.
+	// InvalidateCache 失效对等聚合发现缓存。
+	// 对端发现数据发生变化时应调用。
 	InvalidateCache()
 
-	// ServeHTTP handles peer-aggregated discovery HTTP requests.
+	// ServeHTTP 处理对等聚合发现的 HTTP 请求。
 	http.Handler
 }
 
@@ -64,7 +64,7 @@ type peerAggregatedDiscoveryHandler struct {
 	serveHTTPFunc         func(http.ResponseWriter, *http.Request)
 }
 
-// NewPeerAggregatedDiscoveryHandler creates a new handler for peer-aggregated discovery.
+// NewPeerAggregatedDiscoveryHandler 创建一个新的对等聚合发现 handler。
 func NewPeerAggregatedDiscoveryHandler(serverID string, localDiscoveryProvider ResourceManager, peerDiscoveryProvider PeerDiscoveryProvider, path string) PeerAggregatedResourceManager {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(apidiscoveryv2.AddToScheme(scheme))
@@ -89,7 +89,7 @@ func NewPeerAggregatedDiscoveryHandler(serverID string, localDiscoveryProvider R
 		h.InvalidateCache()
 	})
 
-	// Instrumentation wrapper for serveHTTP
+	// serveHTTP 的指标包装
 	// 指标包在合并逻辑外层，统计的是端点整体耗时。
 	h.serveHTTPFunc = metrics.InstrumentHandlerFunc(request.MethodGet,
 		"", "", "", path, "", metrics.APIServerComponent, false, "",
@@ -98,8 +98,8 @@ func NewPeerAggregatedDiscoveryHandler(serverID string, localDiscoveryProvider R
 	return h
 }
 
-// InvalidateCache invalidates the peer-aggregated discovery caches.
-// This should be called when peer discovery data changes.
+// InvalidateCache 失效对等聚合发现缓存。
+// 对端发现数据发生变化时应调用。
 func (h *peerAggregatedDiscoveryHandler) InvalidateCache() {
 	h.cache.Store(nil)
 	klog.V(4).Info("Invalidated peer-aggregated discovery caches")
@@ -130,7 +130,7 @@ func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 
 	PeerAggregatedCacheMissesCounter.Inc()
 
-	// Get local groups
+	// 获取本地组
 	// 仅在本地管理器支持内部接口时才能直接读其缓存；否则退化为空集合。
 	var localGroups []apidiscoveryv2.APIGroupDiscovery
 	if rdm, ok := h.localResourceManager.(resourceManager); ok {
@@ -140,7 +140,7 @@ func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 		}
 	}
 
-	// Get peer resources if provider is set
+	// 若配置了 provider，则获取对端资源
 	// 未配置对端来源时只暴露本地资源，便于单机部署。
 	var mergedGroups []apidiscoveryv2.APIGroupDiscovery
 	if h.peerDiscoveryProvider != nil {
@@ -168,9 +168,9 @@ func (h *peerAggregatedDiscoveryHandler) fetchFromCache() *cachedGroupList {
 	return cached
 }
 
-// mergeResources merges local and peer APIGroupDiscovery lists, preserving relative order as much as possible.
-// localGroups is a list of APIGroupDiscovery objects from the local server.
-// peerGroupDiscovery is a map of peer server IDs to their APIGroupDiscovery lists.
+// mergeResources 合并本地与对端的 APIGroupDiscovery 列表，尽可能保留相对顺序。
+// localGroups 是本地服务器的 APIGroupDiscovery 对象列表。
+// peerGroupDiscovery 是对端服务器 ID 到其 APIGroupDiscovery 列表的映射。
 //
 // 顺序稳定性是对外契约的一部分：客户端可能按顺序渲染 kubectl api-resources，
 // 因此这里用拓扑式合并（MergePreservingRelativeOrder）而非简单排序。
@@ -180,7 +180,7 @@ func (h *peerAggregatedDiscoveryHandler) mergeResources(
 ) []apidiscoveryv2.APIGroupDiscovery {
 	discoveryByServerID := h.combineServerDiscoveryLists(localGroups, peerGroupDiscovery)
 	if len(discoveryByServerID) <= 1 {
-		// No merging or sorting needed.
+		// 无需合并也无需排序。
 		return localGroups
 	}
 
@@ -189,9 +189,9 @@ func (h *peerAggregatedDiscoveryHandler) mergeResources(
 	// 按 serverID 排序遍历，保证相同输入得到相同的合并结果（确定性 ETag）。
 	sortedServerIDs := sortServerIDs(discoveryByServerID)
 
-	// contentChanged tracks if any new groups/versions/resources were added in a peer.
+	// contentChanged 记录是否有对端新增了组/版本/资源。
 	contentChanged := false
-	// groupNameListsAreIdentical tracks if all peers have the exact same group names as local.
+	// groupNameListsAreIdentical 记录所有对端的组名列表是否与本地完全一致。
 	groupNameListsAreIdentical := true
 	localGroupNames := localGroupNames(localGroups)
 	for _, serverID := range sortedServerIDs {
@@ -201,31 +201,31 @@ func (h *peerAggregatedDiscoveryHandler) mergeResources(
 			contentChanged = true
 		}
 		allGroupNames = append(allGroupNames, groupNames)
-		// Check if this server's group order differs from local.
-		// 1. It catches simple re-orderings (e.g., ["g1", "g2"] vs ["g2", "g1"]).
-		// 2. It catches new or removed groups (e.g., ["g1"] vs ["g1", "g2"]).
-		// In either case, the list is not identical, and we must fall through
-		// to the full merge to ensure a deterministic result.
+		// 检查该服务器的组顺序是否与本地不同。
+		// 1. 可以发现简单的重排（例如 ["g1", "g2"] 与 ["g2", "g1"]）。
+		// 2. 可以发现新增或删除的组（例如 ["g1"] 与 ["g1", "g2"]）。
+		// 这两种情况下列表都不再一致，必须继续走完整合并，
+		// 以确保结果确定。
 		if !reflect.DeepEqual(localGroupNames, groupNames) {
 			groupNameListsAreIdentical = false
 		}
 	}
 
-	// Case 1: Total short-circuit.
-	// Nothing changed (no new content AND no order change).
+	// 情形 1：完全短路。
+	// 什么都没变（既无新内容，也无顺序变化）。
 	// 完全无变化时直接返回本地切片，避免分配与排序。
 	if !contentChanged && groupNameListsAreIdentical {
 		return localGroups
 	}
 
 	var finalGroupOrder []string
-	// Case 2: Content changed, but group order didn't.
-	// We must return the new content, but we can skip the expensive sort.
+	// 情形 2：内容有变，但组顺序没变。
+	// 必须返回新内容，但可以跳过开销较大的排序。
 	if contentChanged && groupNameListsAreIdentical {
 		finalGroupOrder = localGroupNames
 	} else {
-		// Case 3: Group lists were different (new groups, different order, or both).
-		// We have no choice but to run the full topological sort.
+		// 情形 3：组列表不同（新增组、顺序不同，或两者皆有）。
+		// 只能执行完整的拓扑排序。
 		finalGroupOrder = utilsort.MergePreservingRelativeOrder(allGroupNames)
 	}
 
@@ -243,7 +243,7 @@ func (h *peerAggregatedDiscoveryHandler) processServerGroups(
 
 	for _, group := range discoveryGroups {
 		if existing, ok := mergedGroupMap[group.Name]; ok {
-			// Merge versions and resources.
+			// 合并版本与资源。
 			mergedG, didMerge := mergeVersionsAcrossGroup(existing, group)
 			mergedGroupMap[group.Name] = mergedG
 			if didMerge {
@@ -259,16 +259,16 @@ func (h *peerAggregatedDiscoveryHandler) processServerGroups(
 	return groupNames, contentMerged
 }
 
-// mergeVersionsAcrossGroup merges two APIGroupDiscovery objects.
-// It returns a new merged object and a boolean indicating if the result differs from a.
-// The result may differ if any new versions/resources were added or if the order was different.
+// mergeVersionsAcrossGroup 合并两个 APIGroupDiscovery 对象。
+// 返回合并后的新对象，以及一个表示结果是否与 a 不同的布尔值。
+// 只要新增了版本/资源，或者顺序不同，结果就可能不同。
 func mergeVersionsAcrossGroup(a, b apidiscoveryv2.APIGroupDiscovery) (apidiscoveryv2.APIGroupDiscovery, bool) {
 	versionOrder := [][]string{}
 	mergedVersionMap := make(map[string]apidiscoveryv2.APIVersionDiscovery)
 
 	aVersionNames := make([]string, 0, len(a.Versions))
 	bVersionNames := make([]string, 0, len(b.Versions))
-	// This flag tracks if 'b' modified existing versions.
+	// 该标志记录 'b' 是否修改了已有的版本。
 	contentMerged := false
 
 	for _, v := range a.Versions {
@@ -282,7 +282,7 @@ func mergeVersionsAcrossGroup(a, b apidiscoveryv2.APIGroupDiscovery) (apidiscove
 		if existing, ok := mergedVersionMap[v.Version]; !ok {
 			mergedVersionMap[v.Version] = v
 		} else {
-			// Version exists in both, must merge their resources
+			// 双方都有该版本，必须合并它们的资源
 			mergedV, didMerge := mergeResourcesAcrossVersion(existing, v)
 			mergedVersionMap[v.Version] = mergedV
 			if didMerge {
@@ -292,8 +292,8 @@ func mergeVersionsAcrossGroup(a, b apidiscoveryv2.APIGroupDiscovery) (apidiscove
 	}
 	versionOrder = append(versionOrder, bVersionNames)
 
-	// Case 1: Total short-circuit.
-	// No new versions/resources were added and order is the same.
+	// 情形 1：完全短路。
+	// 没有新增版本/资源，且顺序相同。
 	versionNamesAreIdentical := reflect.DeepEqual(aVersionNames, bVersionNames)
 	if !contentMerged && versionNamesAreIdentical {
 		return a, false
@@ -301,12 +301,12 @@ func mergeVersionsAcrossGroup(a, b apidiscoveryv2.APIGroupDiscovery) (apidiscove
 
 	var finalVersionOrder []string
 	if versionNamesAreIdentical {
-		// Case 2: Content changed, but version order didn't.
-		// We can skip the expensive sort and just use the known order.
+		// 情形 2：内容有变，但版本顺序没变。
+		// 可以跳过开销较大的排序，直接使用已知顺序。
 		finalVersionOrder = aVersionNames
 	} else {
-		// Case 3: Version lists were different (new versions, different order, or both).
-		// Must perform topological sort.
+		// 情形 3：版本列表不同（新增版本、顺序不同，或两者皆有）。
+		// 必须执行拓扑排序。
 		finalVersionOrder = utilsort.MergePreservingRelativeOrder(versionOrder)
 	}
 
@@ -319,16 +319,16 @@ func mergeVersionsAcrossGroup(a, b apidiscoveryv2.APIGroupDiscovery) (apidiscove
 	}, true
 }
 
-// mergeResourcesAcrossVersion merges two APIVersionDiscovery objects.
-// It returns a new merged object and a boolean indicating if the result differs from a.
-// The result may differ if any new resources were added or if the order was different.
+// mergeResourcesAcrossVersion 合并两个 APIVersionDiscovery 对象。
+// 返回合并后的新对象，以及一个表示结果是否与 a 不同的布尔值。
+// 只要新增了资源，或者顺序不同，结果就可能不同。
 func mergeResourcesAcrossVersion(a, b apidiscoveryv2.APIVersionDiscovery) (apidiscoveryv2.APIVersionDiscovery, bool) {
 	resourceOrder := [][]string{}
 	mergedResourceMap := make(map[string]apidiscoveryv2.APIResourceDiscovery)
 
 	aResourceNames := make([]string, 0, len(a.Resources))
 	bResourceNames := make([]string, 0, len(b.Resources))
-	// This flag tracks if 'b' modified existing resources.
+	// 该标志记录 'b' 是否修改了已有的资源。
 	contentChanged := false
 
 	for _, r := range a.Resources {
@@ -353,8 +353,8 @@ func mergeResourcesAcrossVersion(a, b apidiscoveryv2.APIVersionDiscovery) (apidi
 	}
 	resourceOrder = append(resourceOrder, bResourceNames)
 
-	// Case 1: Total short-circuit.
-	// 'b' didn't add any new resources AND the resource order is the same.
+	// 情形 1：完全短路。
+	// 'b' 没有新增资源，且资源顺序相同。
 	resourceNameListIsIdentical := reflect.DeepEqual(aResourceNames, bResourceNames)
 	if !contentChanged && resourceNameListIsIdentical {
 		return a, false
@@ -362,12 +362,12 @@ func mergeResourcesAcrossVersion(a, b apidiscoveryv2.APIVersionDiscovery) (apidi
 
 	var finalResourceOrder []string
 	if resourceNameListIsIdentical {
-		// Case 2: Content changed, but resource order didn't.
-		// We can skip the expensive sort and just use the known order.
+		// 情形 2：内容有变，但资源顺序没变。
+		// 可以跳过开销较大的排序，直接使用已知顺序。
 		finalResourceOrder = aResourceNames
 	} else {
-		// Case 3: Resource lists were different (new resources, different order, or both).
-		// Must perform topological sort.
+		// 情形 3：资源列表不同（新增资源、顺序不同，或两者皆有）。
+		// 必须执行拓扑排序。
 		finalResourceOrder = utilsort.MergePreservingRelativeOrder(resourceOrder)
 	}
 
@@ -379,11 +379,10 @@ func mergeResourcesAcrossVersion(a, b apidiscoveryv2.APIVersionDiscovery) (apidi
 	}, true
 }
 
-// mergeResourceCapabilities takes two resources and returns a new one
-// containing the union of their verbs and subresources.
-// The resulting slices are sorted to ensure the merge is deterministic.
+// mergeResourceCapabilities 接收两个资源，返回一个包含二者 verbs 与子资源并集的新对象。
+// 结果切片会排序，以保证合并是确定性的。
 func mergeResourceCapabilities(a, b apidiscoveryv2.APIResourceDiscovery) apidiscoveryv2.APIResourceDiscovery {
-	// 1. Merge Verbs
+	// 1. 合并 Verbs
 	verbSet := make(map[string]struct{})
 	for _, v := range a.Verbs {
 		verbSet[v] = struct{}{}
@@ -398,11 +397,11 @@ func mergeResourceCapabilities(a, b apidiscoveryv2.APIResourceDiscovery) apidisc
 		for v := range verbSet {
 			newVerbs = append(newVerbs, v)
 		}
-		// Sort for deterministic ETag
+		// 排序以获得确定的 ETag
 		sort.Strings(newVerbs)
 	}
 
-	// 2. Merge Subresources
+	// 2. 合并 Subresources
 	// 子资源按名字去重；同名时后者覆盖前者（对端数据更新视为更权威）。
 	subresourceSet := make(map[string]apidiscoveryv2.APISubresourceDiscovery)
 	for _, s := range a.Subresources {
@@ -418,14 +417,14 @@ func mergeResourceCapabilities(a, b apidiscoveryv2.APIResourceDiscovery) apidisc
 		for _, s := range subresourceSet {
 			newSubresources = append(newSubresources, s)
 		}
-		// Sort for deterministic ETag
+		// 排序以获得确定的 ETag
 		sort.Slice(newSubresources, func(i, j int) bool {
 			return newSubresources[i].Subresource < newSubresources[j].Subresource
 		})
 	}
 
-	// 3. Return the new, merged object
-	// We prefer 'a's metadata (like ResponseKind) but 'b's could be used if 'a' is empty.
+	// 3. 返回合并后的新对象
+	// 优先沿用 'a' 的元数据（如 ResponseKind），只有 'a' 为空时才用 'b' 的。
 	mergedResource := a
 	if len(mergedResource.Resource) == 0 {
 		mergedResource = b
@@ -436,7 +435,7 @@ func mergeResourceCapabilities(a, b apidiscoveryv2.APIResourceDiscovery) apidisc
 	return mergedResource
 }
 
-// assembleGroups builds the final slice from the merged map and ordered list.
+// assembleGroups 由合并后的 map 与有序列表构造最终切片。
 func assembleGroups(
 	groupMap map[string]apidiscoveryv2.APIGroupDiscovery,
 	orderedGroups []string,
@@ -451,7 +450,7 @@ func assembleGroups(
 	return result
 }
 
-// orderedAPIVersionList builds the final APIGroupDiscovery struct.
+// orderedAPIVersionList 构造最终的 APIGroupDiscovery 结构体。
 func orderedAPIVersionList(
 	versionMap map[string]apidiscoveryv2.APIVersionDiscovery,
 	orderedVersions []string,
@@ -460,14 +459,14 @@ func orderedAPIVersionList(
 	for _, vName := range orderedVersions {
 		if v, ok := versionMap[vName]; ok {
 			mergedVersions = append(mergedVersions, v)
-			delete(versionMap, vName) // Avoid duplicates
+			delete(versionMap, vName) // 避免重复
 		}
 	}
 
 	return mergedVersions
 }
 
-// orderedAPIResourceList builds the final APIVersionDiscovery struct.
+// orderedAPIResourceList 构造最终的 APIVersionDiscovery 结构体。
 func orderedAPIResourceList(
 	resourceMap map[string]apidiscoveryv2.APIResourceDiscovery,
 	orderedResources []string,
@@ -513,14 +512,14 @@ func localGroupNames(localGroups []apidiscoveryv2.APIGroupDiscovery) []string {
 	return localGroupNames
 }
 
-// TestMergeResources is for testing only. It allows tests to call MergeResources without exporting peerAggregatedDiscoveryHandler.
+// TestMergeResources 仅供测试使用，让测试无需导出 peerAggregatedDiscoveryHandler 即可调用 MergeResources。
 func TestMergeResources(serverID string, localGroups []apidiscoveryv2.APIGroupDiscovery, peerGroupDiscovery map[string][]apidiscoveryv2.APIGroupDiscovery) []apidiscoveryv2.APIGroupDiscovery {
 	h := &peerAggregatedDiscoveryHandler{serverID: serverID}
 	return h.mergeResources(localGroups, peerGroupDiscovery)
 }
 
-// TestFetchFromCache is for testing only. It allows tests to call fetchFromCache without exporting peerAggregatedDiscoveryHandler.
-// Returns the cached response and ETag.
+// TestFetchFromCache 仅供测试使用，让测试无需导出 peerAggregatedDiscoveryHandler 即可调用 fetchFromCache。
+// 返回缓存的响应与 ETag。
 func TestFetchFromCache(serverID string, localResourceManager ResourceManager, peerDiscoveryProvider PeerDiscoveryProvider) (apidiscoveryv2.APIGroupDiscoveryList, string) {
 	h := &peerAggregatedDiscoveryHandler{
 		serverID:              serverID,

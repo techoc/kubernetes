@@ -37,15 +37,14 @@ import (
 )
 
 const (
-	// The 'timeout' query parameter in the request URL has an invalid duration specifier
+	// 请求 URL 中的 'timeout' 查询参数给出了无效的时长格式
 	invalidTimeoutInURL = "invalid timeout specified in the request URL"
 )
 
-// WithRequestDeadline determines the timeout duration applicable to the given request and sets a new context
-// with the appropriate deadline.
-// auditWrapper provides an http.Handler that audits a failed request.
-// longRunning returns true if he given request is a long running request.
-// requestTimeoutMaximum specifies the default request timeout value.
+// WithRequestDeadline 计算给定请求适用的超时时长，并用该截止时间创建新的上下文。
+// auditWrapper 提供一个用于审计失败请求的 http.Handler。
+// longRunning 在给定请求属于长时请求时返回 true。
+// requestTimeoutMaximum 指定默认的请求超时值。
 //
 // 长时请求（watch、exec 等）不受 timeout 约束：它们本就设计为长时间挂起，
 // 强加截止时间会破坏客户端语义。时间基准优先使用 ReceivedTimestamp，
@@ -87,9 +86,9 @@ func withRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.Pol
 
 		timeout := requestTimeoutMaximum
 		if ok {
-			// we use the default timeout enforced by the apiserver:
-			// - if the user has specified a timeout of 0s, this implies no timeout on the user's part.
-			// - if the user has specified a timeout that exceeds the maximum deadline allowed by the apiserver.
+			// 使用 apiserver 强制执行的默认超时：
+			// - 用户指定 timeout 为 0s，表示用户侧不设超时；
+			// - 用户指定的超时超过了 apiserver 允许的最大截止时间。
 			if userSpecifiedTimeout > 0 && userSpecifiedTimeout < requestTimeoutMaximum {
 				timeout = userSpecifiedTimeout
 			}
@@ -110,8 +109,8 @@ func withRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.Pol
 	})
 }
 
-// withFailedRequestAudit decorates a failed http.Handler and is used to audit a failed request.
-// statusErr is used to populate the Message property of ResponseStatus.
+// withFailedRequestAudit 装饰失败的 http.Handler，用于审计失败的请求。
+// statusErr 用于填充 ResponseStatus 的 Message 字段。
 //
 // 没有审计 sink 或策略时直接透传，避免在未启用审计的集群上引入额外开销。
 func withFailedRequestAudit(failedHandler http.Handler, statusErr *apierrors.StatusError, sink audit.Sink, policy audit.PolicyRuleEvaluator) http.Handler {
@@ -144,8 +143,8 @@ func withFailedRequestAudit(failedHandler http.Handler, statusErr *apierrors.Sta
 	})
 }
 
-// failedErrorHandler returns an http.Handler that uses the specified StatusError object
-// to render an error response to the request.
+// failedErrorHandler 返回一个 http.Handler，用给定的 StatusError 对象
+// 渲染错误响应。
 //
 // 按请求的 GroupVersion 协商编码，保证错误响应与客户端期望的 API 版本一致。
 func failedErrorHandler(s runtime.NegotiatedSerializer, statusError *apierrors.StatusError) http.Handler {
@@ -162,10 +161,10 @@ func failedErrorHandler(s runtime.NegotiatedSerializer, statusError *apierrors.S
 	})
 }
 
-// parseTimeout parses the given HTTP request URL and extracts the timeout query parameter
-// value if specified by the user.
-// If a timeout is not specified the function returns false and err is set to nil
-// If the value specified is malformed then the function returns false and err is set
+// parseTimeout 解析给定的 HTTP 请求 URL，若用户指定了 timeout 查询参数
+// 则取出其值。
+// 未指定 timeout 时返回 false，且 err 为 nil；
+// 指定的值格式非法时返回 false，并设置 err。
 //
 // 返回值 ok 表示用户显式指定了 timeout；duration 为 0 或负数时由调用方
 // 视为“不限时”，仍以 apiserver 的最大值为准。
@@ -183,11 +182,9 @@ func parseTimeout(req *http.Request) (time.Duration, bool, error) {
 	return timeout, true, nil
 }
 
-// handleError does the following:
-// a) it writes the specified error code, and msg to the ResponseWriter
-// object, it does not print the given innerErr into the ResponseWriter object.
-// b) additionally, it prints the given msg, and innerErr to the log with other
-// request scoped data that helps identify the given request.
+// handleError 做以下两件事：
+// a) 把指定的错误码和 msg 写入 ResponseWriter，不会把 innerErr 写进 ResponseWriter；
+// b) 另外把 msg 和 innerErr 连同其他有助于定位该请求的信息一起打印到日志。
 //
 // 内外有别的错误信息是有意为之：客户端只看到 msg，内部细节（innerErr）
 // 只进日志，避免泄露服务端实现细节。

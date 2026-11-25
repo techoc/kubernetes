@@ -26,10 +26,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// WithAuditInit initializes the audit context and attaches the Audit-ID associated with a request.
+// WithAuditInit 初始化审计上下文，并把与请求关联的 Audit-ID 附加到上下文。
 //
-// a. If the caller does not specify a value for Audit-ID in the request header, we generate a new audit ID
-// b. We echo the Audit-ID value to the caller via the response Header 'Audit-ID'.
+// a. 如果调用方没有在请求头中指定 Audit-ID，我们会生成一个新的审计 ID
+// b. 我们通过响应头 'Audit-ID' 把 Audit-ID 的值回显给调用方。
 //
 // 该过滤器必须位于审计过滤器之前：后续的审计逻辑依赖 context 中的审计上下文与 ID。
 func WithAuditInit(handler http.Handler) http.Handler {
@@ -51,16 +51,15 @@ func withAuditInit(handler http.Handler, newAuditIDFunc func() string) http.Hand
 			auditID = newAuditIDFunc()
 		}
 
-		// Note: we save the user specified value of the Audit-ID header as is, no truncation is performed.
+		// 注意：原样保存用户指定的 Audit-ID 头值，不做截断。
 		audit.WithAuditID(ctx, types.UID(auditID))
 
-		// We echo the Audit-ID in to the response header.
-		// It's not guaranteed Audit-ID http header is sent for all requests.
-		// For example, when user run "kubectl exec", apiserver uses a proxy handler
-		// to deal with the request, users can only get http headers returned by kubelet node.
+		// 把 Audit-ID 回显到响应头。并不保证所有请求都能收到 Audit-ID HTTP 头，
+		// 例如用户执行 "kubectl exec" 时，apiserver 用代理 handler 处理请求，
+		// 用户只能拿到 kubelet 节点返回的 HTTP 头。
 		//
-		// This filter will also be used by other aggregated api server(s). For an aggregated API
-		// we don't want to see the same audit ID appearing more than once.
+		// 该过滤器也会被其他聚合 apiserver 使用。对聚合 API 来说，
+		// 同一个审计 ID 不应该出现多次。
 		//
 		// 先判断是否已有值再写：聚合服务器链路中前面的 apiserver 可能已经回写了 ID，
 		// 重复 Set 会让客户端看到多个值。

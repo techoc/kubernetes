@@ -196,7 +196,7 @@ func TestEqualIgnoringFieldValueAtPath(t *testing.T) {
 			if actual != c.want {
 				t.Error("Expected equality check to return ", c.want, ", but got ", actual)
 			}
-			// Check that equality is commutative
+			// 检查相等性判断满足交换律
 			// 交换参数顺序必须得到相同结论，否则调用方的行为会依赖参数
 			// 顺序，属于隐蔽的正确性 bug。
 			actual = equalIgnoringValueAtPath(c.b, c.a, path)

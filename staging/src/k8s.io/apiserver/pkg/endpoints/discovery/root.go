@@ -31,8 +31,7 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 )
 
-// GroupManager is an interface that allows dynamic mutation of the existing webservice to handle
-// API groups being added or removed.
+// GroupManager 是一个接口，允许在运行时动态增删 API 组并同步修改已有的 WebService。
 type GroupManager interface {
 	GroupLister
 
@@ -42,38 +41,35 @@ type GroupManager interface {
 	WebService() *restful.WebService
 }
 
-// GroupLister knows how to list APIGroups for discovery.
+// GroupLister 提供发现所需的 APIGroup 列表。
 type GroupLister interface {
-	// Groups returns APIGroups for discovery, filling in ServerAddressByClientCIDRs
-	// based on data in req.
+	// Groups 返回用于发现的 APIGroup 列表，并根据 req 中的信息填充
+	// ServerAddressByClientCIDRs。
 	Groups(ctx context.Context, req *http.Request) ([]metav1.APIGroup, error)
 }
 
-// rootAPIsHandler creates a webservice serving api group discovery.
-// The list of APIGroups may change while the server is running because additional resources
-// are registered or removed.  It is not safe to cache the values.
+// rootAPIsHandler 创建一个 WebService，服务于 API 组发现。服务器运行期间，
+// API 组列表会因资源的注册或移除而变化，缓存这些值并不安全。
 //
 // 因此读路径统一加 RLock，写路径加 Lock；apiGroupNames 单独维护插入顺序，
 // 因为 map 迭代顺序不稳定，而发现输出需要可预测的顺序。
 type rootAPIsHandler struct {
-	// addresses is used to build cluster IPs for discovery.
+	// addresses 用于在发现响应中构造集群 IP
 	addresses Addresses
 
 	serializer runtime.NegotiatedSerializer
 
-	// Map storing information about all groups to be exposed in discovery response.
-	// The map is from name to the group.
+	// 记录所有将在发现响应中暴露的组，键为组名、值为对应的 APIGroup
 	lock      sync.RWMutex
 	apiGroups map[string]metav1.APIGroup
-	// apiGroupNames preserves insertion order
+	// apiGroupNames 保持组的插入顺序
 	apiGroupNames []string
 }
 
 // NewRootAPIsHandler 构造 /apis 发现处理器，并沿用旧版空 APIVersion 的兼容序列化。
 func NewRootAPIsHandler(addresses Addresses, serializer runtime.NegotiatedSerializer) *rootAPIsHandler {
-	// Because in release 1.1, /apis returns response with empty APIVersion, we
-	// use stripVersionNegotiatedSerializer to keep the response backwards
-	// compatible.
+	// 1.1 版本中 /apis 返回的响应里 APIVersion 为空，这里用
+	// stripVersionNegotiatedSerializer 保持响应向后兼容。
 	serializer = stripVersionNegotiatedSerializer{serializer}
 
 	return &rootAPIsHandler{
@@ -118,8 +114,8 @@ func (s *rootAPIsHandler) Groups(ctx context.Context, req *http.Request) ([]meta
 	return s.groupsLocked(ctx, req), nil
 }
 
-// groupsLocked returns the APIGroupList discovery information for this handler.
-// The caller must hold the lock before invoking this method to avoid data races.
+// groupsLocked 返回该处理器的 APIGroupList 发现信息。
+// 调用方必须在调用本方法前持有锁，以避免数据竞争。
 func (s *rootAPIsHandler) groupsLocked(ctx context.Context, req *http.Request) []metav1.APIGroup {
 	clientIP := utilnet.GetClientIP(req)
 	serverCIDR := s.addresses.ServerAddressByClientCIDRs(clientIP)
@@ -154,8 +150,8 @@ func (s *rootAPIsHandler) restfulHandle(req *restful.Request, resp *restful.Resp
 	s.ServeHTTP(resp.ResponseWriter, req.Request)
 }
 
-// WebService returns a webservice serving api group discovery.
-// Note: during the server runtime apiGroups might change.
+// WebService 返回一个服务于 API 组发现的 WebService。
+// 注意：服务器运行期间 apiGroups 可能发生变化。
 func (s *rootAPIsHandler) WebService() *restful.WebService {
 	mediaTypes, _ := negotiation.MediaTypesForSerializer(s.serializer)
 	ws := new(restful.WebService)

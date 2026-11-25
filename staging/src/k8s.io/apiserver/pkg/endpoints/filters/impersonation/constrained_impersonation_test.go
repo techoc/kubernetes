@@ -61,9 +61,9 @@ type constrainedImpersonationTest struct {
 
 	attemptMode          string
 	attemptDecision      string
-	authorizationMetrics map[string]int // "mode/decision" -> count
+	authorizationMetrics map[string]int // "mode/decision" -> 次数
 
-	// only used for parallelHandler
+	// 仅 parallelHandler 使用
 	lock sync.Mutex
 }
 
@@ -76,7 +76,7 @@ type authzCheck struct {
 // ProcessEvents 作为审计后端接收事件；必须深拷贝，因为事件对象会被原地复用。
 func (c *constrainedImpersonationTest) ProcessEvents(evs ...*auditinternal.Event) bool {
 	for _, e := range evs {
-		c.auditEvents = append(c.auditEvents, e.DeepCopy()) // event is mutated in place so capture its current state
+		c.auditEvents = append(c.auditEvents, e.DeepCopy()) // 事件会被就地修改，因此记录它当时的状态
 	}
 	return true
 }
@@ -139,7 +139,7 @@ func (c *constrainedImpersonationTest) Authorize(ctx context.Context, a authoriz
 		return authorizer.DecisionAllow, "", nil
 	}
 
-	// many-groups-impersonater: can impersonate users and any groups via wildcard
+	// many-groups-impersonater：可通过通配符模拟 users 和任意 groups
 	if u.GetName() == "many-groups-impersonater" && a.GetVerb() == "impersonate:user-info" && a.GetResource() == "users" {
 		return authorizer.DecisionAllow, "", nil
 	}
@@ -147,7 +147,7 @@ func (c *constrainedImpersonationTest) Authorize(ctx context.Context, a authoriz
 		return authorizer.DecisionAllow, "", nil
 	}
 
-	// many-extras-impersonater: can impersonate users and any extras via wildcard
+	// many-extras-impersonater：可通过通配符模拟 users 和任意 extras
 	if u.GetName() == "many-extras-impersonater" && a.GetVerb() == "impersonate:user-info" && a.GetResource() == "users" {
 		return authorizer.DecisionAllow, "", nil
 	}
@@ -155,15 +155,15 @@ func (c *constrainedImpersonationTest) Authorize(ctx context.Context, a authoriz
 		return authorizer.DecisionAllow, "", nil
 	}
 
-	// mixed-impersonater: can impersonate users, specific groups, and specific extras (but NOT via wildcards)
+	// mixed-impersonater：可模拟 users、指定的 groups 和指定的 extras（但不能用通配符）
 	if u.GetName() == "mixed-impersonater" && a.GetVerb() == "impersonate:user-info" && a.GetResource() == "users" {
 		return authorizer.DecisionAllow, "", nil
 	}
-	// Allow specific group names, but NOT wildcard
+	// 允许指定的 group 名称，但不允许通配符
 	if u.GetName() == "mixed-impersonater" && a.GetVerb() == "impersonate:user-info" && a.GetResource() == "groups" && a.GetName() != "*" {
 		return authorizer.DecisionAllow, "", nil
 	}
-	// Allow specific extras for tags.io/env, but NOT wildcard
+	// 允许 tags.io/env 的指定 extras，但不允许通配符
 	if u.GetName() == "mixed-impersonater" && a.GetVerb() == "impersonate:user-info" && a.GetResource() == "userextras" &&
 		a.GetSubresource() == "tags.io/env" && a.GetName() != "*" {
 		return authorizer.DecisionAllow, "", nil
@@ -272,12 +272,12 @@ func (c *constrainedImpersonationTest) handler() http.Handler {
 
 	fakeRuleEvaluator := policy.NewFakePolicyRuleEvaluator(auditinternal.LevelRequestResponse, nil)
 
-	// follow the same handler chain order as DefaultBuildHandlerChain
+	// 与 DefaultBuildHandlerChain 保持相同的 handler 链顺序
 	addAudit := filters.WithAudit(addImpersonation, c, fakeRuleEvaluator, nil)
 	addAuthentication := c.authenticationHandler(addAudit)
 	addLatencyTrackers := filters.WithLatencyTrackers(addAuthentication)
 	addRequestInfo := c.requestInfoHandler(addLatencyTrackers)
-	// set received timestamp >500ms in the past so audit annotations are emitted
+	// 把接收时间设为 500ms 以前，这样会产生审计注解
 	// 延迟注解只在耗时超过阈值时才写入；回拨接收时间以稳定触发该路径。
 	addReceivedTimestamp := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req = req.WithContext(request.WithReceivedTimestamp(req.Context(), time.Now().Add(-time.Hour)))
@@ -333,8 +333,8 @@ func (c *constrainedImpersonationTest) assertAttributes(r testRequest) {
 
 	require.Len(c.t, authzChecks, len(r.expectedAuthzChecks))
 
-	// normally all authorization checks are done against the requestor
-	// but in some cases such as associated-node, we check against a slightly different user
+	// 通常所有授权检查都针对请求发起者
+	// 但某些情况下（如 associated-node）检查的是略有不同的用户
 	expectedAttributesUser := r.expectedAttributesUser
 	if expectedAttributesUser == nil {
 		expectedAttributesUser = r.requestor
@@ -600,15 +600,15 @@ func outerCacheKey(wantedUser, requestor *user.DefaultInfo, req *request.Request
 	attributes := withUser(requestInfoToAttributes(req), requestor)
 	return outerKey{
 		wantedUser: wantedUser,
-		attributes: &attributes, // use a *authorizer.AttributesRecord so that it can be used in a map key
+		attributes: &attributes, // 用 *authorizer.AttributesRecord，使其可以作为 map 的键
 		rawKey:     rawKey,
 	}
 }
 
 // expectedCache 描述两级缓存的期望内容。
 type expectedCache struct {
-	modeIdx map[string]string            // username -> mode verb
-	modes   map[string]expectedModeCache // mode verb -> cache
+	modeIdx map[string]string            // 用户名 -> mode 动词
+	modes   map[string]expectedModeCache // mode 动词 -> 缓存
 }
 
 // expectedModeCache 描述某个代理模式下的 outer/inner 缓存内容。
@@ -639,7 +639,7 @@ type testRequest struct {
 	expectedImpersonatedUser *user.DefaultInfo
 	expectedMessage          string
 
-	expectedAttributesUser *user.DefaultInfo // nil means use requestor
+	expectedAttributesUser *user.DefaultInfo // nil 表示使用请求发起者
 	expectedAuthzChecks    []authzCheck
 	expectedCache          *expectedCache
 	expectedCode           int
@@ -728,7 +728,7 @@ func associatedNodeTestCase() []testRequest {
 					outerCacheKey(&user.DefaultInfo{Name: "system:node:*"}, saDefaultOnAnyNode, getSecretRequest,
 						"\x00\x00\x00\x1d\x00\x00\x00\rsystem:node:*\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb7\x00\x00\x00%system:serviceaccount:default:default\x00\x00\x00\x00\x00\x00\x00\x1f\x00\x00\x00\x1bassociate-node-impersonater\x00\x00\x00c\x00\x00\x001authentication.kubernetes.io/associated-node-keys\x00\x00\x00*\x00\x00\x00&authentication.kubernetes.io/node-name\x00\x00\x004\x00\x00\x00\x03get\x01\x00\x00\x00\x03bar\x00\x00\x00\asecrets\x00\x00\x00\x00\x00\x00\x00\x03foo\x00\x00\x00\x00\x00\x00\x00\x02v1\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
 					): node1FullUserInfo,
-					// even though this request was made on node2, since the inner cache matched it returned a value for node1
+					// 尽管该请求发往 node2，但内层缓存命中后返回的是 node1 的值
 					outerCacheKey(&user.DefaultInfo{Name: "system:node:*"}, saDefaultOnAnyNode, getPodRequest,
 						"\x00\x00\x00\x1d\x00\x00\x00\rsystem:node:*\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb7\x00\x00\x00%system:serviceaccount:default:default\x00\x00\x00\x00\x00\x00\x00\x1f\x00\x00\x00\x1bassociate-node-impersonater\x00\x00\x00c\x00\x00\x001authentication.kubernetes.io/associated-node-keys\x00\x00\x00*\x00\x00\x00&authentication.kubernetes.io/node-name\x00\x00\x001\x00\x00\x00\x03get\x01\x00\x00\x00\x03bar\x00\x00\x00\x04pods\x00\x00\x00\x00\x00\x00\x00\x03foo\x00\x00\x00\x00\x00\x00\x00\x02v1\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
 					): node1FullUserInfo,
@@ -741,7 +741,7 @@ func associatedNodeTestCase() []testRequest {
 		{
 			request:                  getSecretRequest,
 			requestor:                saDefaultOnNode1,
-			impersonatedUser:         &user.DefaultInfo{Name: "system:node:node1"}, // node matches
+			impersonatedUser:         &user.DefaultInfo{Name: "system:node:node1"}, // 节点匹配
 			expectedImpersonatedUser: node1FullUserInfo,
 			expectedAttributesUser:   saDefaultOnAnyNode,
 			expectedAuthzChecks: []authzCheck{
@@ -759,20 +759,20 @@ func associatedNodeTestCase() []testRequest {
 		{
 			request:                      getSecretRequest,
 			requestor:                    saDefaultOnNode2,
-			impersonatedUser:             &user.DefaultInfo{Name: "system:node:node2"}, // node matches
+			impersonatedUser:             &user.DefaultInfo{Name: "system:node:node2"}, // 节点匹配
 			expectedImpersonatedUser:     node2FullUserInfo,
 			expectedAttributesUser:       saDefaultOnAnyNode,
-			expectedAuthzChecks:          nil, // no authz checks for the second request
+			expectedAuthzChecks:          nil, // 第二个请求不做鉴权检查
 			expectedCache:                cacheWithOnlyNode1Data,
 			expectedCode:                 http.StatusOK,
 			expectedAttemptMode:          "associated-node",
 			expectedAttemptDecision:      "allowed",
-			expectedAuthorizationMetrics: nil, // full cache hit
+			expectedAuthorizationMetrics: nil, // 完全命中缓存
 		},
 		{
 			request:                getSecretRequest,
 			requestor:              saDefaultOnNode2,
-			impersonatedUser:       &user.DefaultInfo{Name: "system:node:node1"}, // node does not match
+			impersonatedUser:       &user.DefaultInfo{Name: "system:node:node1"}, // 节点不匹配
 			expectedMessage:        `nodes.authentication.k8s.io "node1" is forbidden: User "system:serviceaccount:default:default" cannot impersonate:arbitrary-node resource "nodes" in API group "authentication.k8s.io" at the cluster scope: deny by default`,
 			expectedAttributesUser: nil,
 			expectedAuthzChecks: []authzCheck{
@@ -786,39 +786,39 @@ func associatedNodeTestCase() []testRequest {
 			expectedAttemptDecision: "denied",
 			expectedAuthorizationMetrics: map[string]int{
 				"arbitrary-node/allowed": 1, // impersonate-on:arbitrary-node:get
-				"arbitrary-node/denied":  1, // impersonate:arbitrary-node nodes
-				"legacy/denied":          1, // impersonate users
+				"arbitrary-node/denied":  1, // impersonate:arbitrary-node 的 nodes
+				"legacy/denied":          1, // 模拟 users
 			},
 		},
 		{
 			request:                  getPodRequest,
 			requestor:                saDefaultOnNode2,
-			impersonatedUser:         &user.DefaultInfo{Name: "system:node:node2"}, // node matches
+			impersonatedUser:         &user.DefaultInfo{Name: "system:node:node2"}, // 节点匹配
 			expectedImpersonatedUser: node2FullUserInfo,
 			expectedAttributesUser:   saDefaultOnAnyNode,
 			expectedAuthzChecks: []authzCheck{
-				expectAllow(withImpersonateOnAttributes(getPodRequest, "associated-node")), // one authz check because different request info
+				expectAllow(withImpersonateOnAttributes(getPodRequest, "associated-node")), // 因 RequestInfo 不同，只有一次鉴权检查
 			},
 			expectedCache:           cacheWithMultipleRequests,
 			expectedCode:            http.StatusOK,
 			expectedAttemptMode:     "associated-node",
 			expectedAttemptDecision: "allowed",
 			expectedAuthorizationMetrics: map[string]int{
-				"associated-node/allowed": 1, // impersonate-on only (inner cache hit)
+				"associated-node/allowed": 1, // 仅 impersonate-on（内层缓存命中）
 			},
 		},
 		{
 			request:                      getPodRequest,
 			requestor:                    saDefaultOnNode1,
-			impersonatedUser:             &user.DefaultInfo{Name: "system:node:node1"}, // node matches
+			impersonatedUser:             &user.DefaultInfo{Name: "system:node:node1"}, // 节点匹配
 			expectedImpersonatedUser:     node1FullUserInfo,
 			expectedAttributesUser:       nil,
-			expectedAuthzChecks:          nil, // no authz checks for pod request via node1
+			expectedAuthzChecks:          nil, // 经 node1 的 pod 请求不做鉴权检查
 			expectedCache:                cacheWithMultipleRequests,
 			expectedCode:                 http.StatusOK,
 			expectedAttemptMode:          "associated-node",
 			expectedAttemptDecision:      "allowed",
-			expectedAuthorizationMetrics: nil, // full cache hit
+			expectedAuthorizationMetrics: nil, // 完全命中缓存
 		},
 	}
 }
@@ -907,8 +907,8 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptDecision: "denied",
 					expectedAuthorizationMetrics: map[string]int{
 						"user-info/allowed": 1, // impersonate-on:user-info:get
-						"user-info/denied":  1, // impersonate:user-info users
-						"legacy/denied":     1, // impersonate users
+						"user-info/denied":  1, // impersonate:user-info 的 users
+						"legacy/denied":     1, // 模拟 users
 					},
 				},
 			},
@@ -989,7 +989,7 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptMode:     "user-info",
 					expectedAttemptDecision: "allowed",
 					expectedAuthorizationMetrics: map[string]int{
-						"user-info/allowed": 1, // impersonate-on (inner cache hit skips impersonate:user-info)
+						"user-info/allowed": 1, // impersonate-on（内层缓存命中，跳过 impersonate:user-info）
 					},
 				},
 				{
@@ -1030,7 +1030,7 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptDecision: "denied",
 					expectedAuthorizationMetrics: map[string]int{
 						"user-info/denied": 1, // impersonate-on:user-info:create
-						"legacy/denied":    1, // impersonate users
+						"legacy/denied":    1, // 模拟 users
 					},
 				},
 			},
@@ -1096,8 +1096,8 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptDecision: "denied",
 					expectedAuthorizationMetrics: map[string]int{
 						"arbitrary-node/allowed": 1, // impersonate-on:arbitrary-node:get
-						"arbitrary-node/denied":  1, // impersonate:arbitrary-node nodes
-						"legacy/denied":          1, // impersonate users
+						"arbitrary-node/denied":  1, // impersonate:arbitrary-node 的 nodes
+						"legacy/denied":          1, // 模拟 users
 					},
 				},
 			},
@@ -1120,7 +1120,7 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptDecision: "denied",
 					expectedAuthorizationMetrics: map[string]int{
 						"arbitrary-node/denied": 1, // impersonate-on:arbitrary-node:create
-						"legacy/denied":         1, // impersonate users
+						"legacy/denied":         1, // 模拟 users
 					},
 				},
 			},
@@ -1195,8 +1195,8 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptDecision: "denied",
 					expectedAuthorizationMetrics: map[string]int{
 						"user-info/allowed": 3, // impersonate-on:get + users + groups
-						"user-info/denied":  1, // userextras scope-a
-						"legacy/denied":     1, // impersonate users
+						"user-info/denied":  1, // userextras 的 scope-a
+						"legacy/denied":     1, // 模拟 users
 					},
 				},
 			},
@@ -1277,8 +1277,8 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptMode:     "user-info",
 					expectedAttemptDecision: "allowed",
 					expectedAuthorizationMetrics: map[string]int{
-						"user-info/allowed": 9, // impersonate-on:get + users + 7 individual extra values
-						"user-info/denied":  1, // wildcard userextras check
+						"user-info/allowed": 9, // impersonate-on:get + users + 7 个单独的 extra 值
+						"user-info/denied":  1, // 通配符 userextras 检查
 					},
 				},
 			},
@@ -1312,8 +1312,8 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptDecision: "denied",
 					expectedAuthorizationMetrics: map[string]int{
 						"arbitrary-node/allowed": 1, // impersonate-on:arbitrary-node:get
-						"arbitrary-node/denied":  1, // impersonate:arbitrary-node nodes
-						"legacy/denied":          1, // impersonate users
+						"arbitrary-node/denied":  1, // impersonate:arbitrary-node 的 nodes
+						"legacy/denied":          1, // 模拟 users
 					},
 				},
 			},
@@ -1338,15 +1338,15 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 						modeIdx: map[string]string{
 							"legacy-impersonater": "impersonate",
 						},
-						modes: nil, // legacy impersonation does not cache
+						modes: nil, // 传统模拟不使用缓存
 					},
 					expectedCode:            http.StatusOK,
 					expectedAttemptMode:     "legacy",
 					expectedAttemptDecision: "allowed",
 					expectedAuthorizationMetrics: map[string]int{
 						"user-info/allowed": 1, // impersonate-on:user-info:get
-						"user-info/denied":  1, // impersonate:user-info users
-						"legacy/allowed":    1, // impersonate users
+						"user-info/denied":  1, // impersonate:user-info 的 users
+						"legacy/allowed":    1, // 模拟 users
 					},
 				},
 			},
@@ -1373,7 +1373,7 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					expectedAttemptDecision: "denied",
 					expectedAuthorizationMetrics: map[string]int{
 						"user-info/allowed": 2, // impersonate-on:user-info:get, impersonate:user-info users
-						"legacy/denied":     1, // impersonate users
+						"legacy/denied":     1, // 模拟 users
 					},
 				},
 			},
@@ -1560,18 +1560,18 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 						},
 					},
 					expectedAuthzChecks: []authzCheck{
-						// impersonate-on check passes
+						// impersonate-on 检查通过
 						expectAllow(withImpersonateOnAttributes(getPodRequest, "user-info")),
-						// user check passes
+						// user 检查通过
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "users", Name: "frank"}, "user-info")),
-						// wildcard groups check FAILS (mixed-impersonater doesn't allow wildcard groups)
+						// 通配符 groups 检查失败（mixed-impersonater 不允许通配符 groups）
 						expectDeny(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "groups", Name: "*"}, "user-info")),
-						// individual group checks PASS - demonstrating fallback after wildcard failure
+						// 逐个 group 检查通过，演示通配符失败后的回退
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "groups", Name: "dev"}, "user-info")),
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "groups", Name: "ops"}, "user-info")),
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "groups", Name: "security"}, "user-info")),
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "groups", Name: "audit"}, "user-info")),
-						// individual extra checks PASS (wildcard not attempted for extras with single subresource)
+						// 逐个 extra 检查通过（只有一个子资源时不会尝试通配符
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "userextras", Subresource: "tags.io/env", Name: "prod"}, "user-info")),
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "userextras", Subresource: "tags.io/env", Name: "staging"}, "user-info")),
 						expectAllow(withConstrainedImpersonationAttributes(authorizer.AttributesRecord{Resource: "userextras", Subresource: "tags.io/env", Name: "dev"}, "user-info")),
@@ -1688,7 +1688,7 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 						Name:   "bob",
 						Groups: []string{"system:authenticated"},
 					},
-					expectedAuthzChecks: nil, // no authz checks for cached request
+					expectedAuthzChecks: nil, // 命中缓存的请求不做鉴权检查
 					expectedCode:        http.StatusOK,
 					expectedCache: &expectedCache{
 						modeIdx: map[string]string{
@@ -1719,7 +1719,7 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 					},
 					expectedAttemptMode:          "user-info",
 					expectedAttemptDecision:      "allowed",
-					expectedAuthorizationMetrics: nil, // full cache hit
+					expectedAuthorizationMetrics: nil, // 完全命中缓存
 				},
 			},
 		},
@@ -1988,15 +1988,15 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 						modeIdx: map[string]string{
 							"legacy-impersonater": "impersonate",
 						},
-						modes: nil, // legacy impersonation does not cache
+						modes: nil, // 传统模拟不使用缓存
 					},
 					expectedCode:            http.StatusOK,
 					expectedAttemptMode:     "legacy",
 					expectedAttemptDecision: "allowed",
 					expectedAuthorizationMetrics: map[string]int{
 						"user-info/allowed": 1, // impersonate-on:user-info:get
-						"user-info/denied":  1, // impersonate:user-info users
-						"legacy/allowed":    1, // impersonate users
+						"user-info/denied":  1, // impersonate:user-info 的 users
+						"legacy/allowed":    1, // 模拟 users
 					},
 				},
 				{
@@ -2014,13 +2014,13 @@ func constrainedImpersonationTestCases() []impersonationTestCase {
 						modeIdx: map[string]string{
 							"legacy-impersonater": "impersonate",
 						},
-						modes: nil, // legacy impersonation does not cache
+						modes: nil, // 传统模拟不使用缓存
 					},
 					expectedCode:            http.StatusOK,
 					expectedAttemptMode:     "legacy",
 					expectedAttemptDecision: "allowed",
 					expectedAuthorizationMetrics: map[string]int{
-						"legacy/allowed": 1, // impersonate users (mode index cache hit skips constrained checks)
+						"legacy/allowed": 1, // 模拟 users (mode index cache hit skips constrained checks)
 					},
 				},
 			},
@@ -2072,8 +2072,8 @@ func TestConstrainedImpersonationFilter(t *testing.T) {
 
 					require.Equal(t, r.expectedImpersonatedUser, &actualUser)
 					test.assertEchoCalled(true)
-					require.NotNil(t, r.expectedImpersonatedUser) // sanity check test data
-					require.Empty(t, r.expectedMessage)           // sanity check test data
+					require.NotNil(t, r.expectedImpersonatedUser) // 校验测试数据本身
+					require.Empty(t, r.expectedMessage)           // 校验测试数据本身
 				} else {
 					var status metav1.Status
 					if err := json.Unmarshal(body, &status); err != nil {
@@ -2081,8 +2081,8 @@ func TestConstrainedImpersonationFilter(t *testing.T) {
 					}
 					require.Equal(t, r.expectedMessage, status.Message)
 					test.assertEchoCalled(false)
-					require.NotEmpty(t, r.expectedMessage)     // sanity check test data
-					require.Nil(t, r.expectedImpersonatedUser) // sanity check test data
+					require.NotEmpty(t, r.expectedMessage)     // 校验测试数据本身
+					require.Nil(t, r.expectedImpersonatedUser) // 校验测试数据本身
 				}
 
 				test.assertAttributes(r)
@@ -2098,11 +2098,11 @@ func TestConstrainedImpersonationFilter(t *testing.T) {
 // 多个用户/目标/操作组合同时打向同一 handler，检查结果互不串扰、
 // 缓存与模式索引在并发访问下保持一致。
 func TestConstrainedImpersonationParallel(t *testing.T) {
-	// This test verifies goroutine safety by sending concurrent requests.
-	// Each test case defines multiple requests that are sent in parallel,
-	// ensuring no data races or request interference occurs.
+	// 本测试通过并发发送请求来验证 goroutine 安全性。
+	// 每个测试用例定义多个并行发送的请求，
+	// 确保不会出现数据竞争或请求间相互干扰。
 
-	// Common request infos
+	// 公共的 RequestInfo
 	getPods := &request.RequestInfo{IsResourceRequest: true, Verb: "get", APIVersion: "v1", Resource: "pods"}
 	listServices := &request.RequestInfo{IsResourceRequest: true, Verb: "list", APIVersion: "v1", Resource: "services"}
 	createConfigMaps := &request.RequestInfo{IsResourceRequest: true, Verb: "create", APIVersion: "v1", Resource: "configmaps"}
@@ -2297,7 +2297,7 @@ func TestConstrainedImpersonationParallel(t *testing.T) {
 			var wg sync.WaitGroup
 			results := make(chan resultType, len(tc.requests))
 
-			// Send all requests concurrently
+			// 并发发送所有请求
 			// 并发发送全部请求，制造缓存读写竞争；
 			// 每个请求自带 requestor 与目标用户，互不共享可变状态。
 			for idx, req := range tc.requests {
@@ -2345,11 +2345,11 @@ func TestConstrainedImpersonationParallel(t *testing.T) {
 				})
 			}
 
-			// Wait for all requests to complete
+			// 等待所有请求完成
 			wg.Wait()
 			close(results)
 
-			// Collect results
+			// 收集结果
 			// 用索引映射收结果，避免并发完成顺序影响断言语义。
 			resultMap := make(map[int]resultType)
 			for res := range results {
@@ -2359,7 +2359,7 @@ func TestConstrainedImpersonationParallel(t *testing.T) {
 				resultMap[res.requestIdx] = res
 			}
 
-			// Verify each request's result
+			// 校验每个请求的结果
 			for idx, req := range tc.requests {
 				res, ok := resultMap[idx]
 				require.True(t, ok, "request %d: missing result", idx)
@@ -2369,7 +2369,7 @@ func TestConstrainedImpersonationParallel(t *testing.T) {
 					idx, req.requestor.Name, req.impersonatedUser, req.requestInfo.Verb, req.requestInfo.Resource)
 
 				if req.expectedImpersonatedUser != nil {
-					// Success case - verify impersonated user
+					// 成功场景：校验被模拟的用户
 					var actualUser user.DefaultInfo
 					err := json.Unmarshal(res.body, &actualUser)
 					require.NoError(t, err, "request %d: failed to unmarshal user", idx)
@@ -2452,7 +2452,7 @@ func BenchmarkImpersonation(b *testing.B) {
 // WithImpersonation 不认识受约束的 impersonate:* 动词，因此这些请求会被拒绝。
 func benchmarkExpectedCode(r testRequest, isLegacy bool) int {
 	if isLegacy && r.expectedCode == http.StatusOK && r.requestor.Name != "legacy-impersonater" {
-		// legacy WithImpersonation denies any requestor that only has constrained impersonation verbs
+		// 传统的 WithImpersonation 会拒绝仅拥有受限模拟动词的请求发起者
 		return http.StatusForbidden
 	}
 	return r.expectedCode

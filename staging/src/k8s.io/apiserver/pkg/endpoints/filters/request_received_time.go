@@ -23,15 +23,14 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// WithRequestReceivedTimestamp attaches the ReceivedTimestamp (the time the request reached
-// the apiserver) to the context.
-//
+// WithRequestReceivedTimestamp 把 ReceivedTimestamp（请求到达 apiserver 的时间）
+// 附加到 context。
 // 该时间戳用于审计日志与请求超时计算；放在过滤器链最外层，才能最接近请求到达时刻。
 func WithRequestReceivedTimestamp(handler http.Handler) http.Handler {
 	return withRequestReceivedTimestampWithClock(handler, clock.RealClock{})
 }
 
-// The clock is passed as a parameter, handy for unit testing.
+// clock 作为参数传入，方便单元测试注入假时钟。
 func withRequestReceivedTimestampWithClock(handler http.Handler, clock clock.PassiveClock) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()

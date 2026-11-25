@@ -43,7 +43,7 @@ var (
 )
 
 func init() {
-	// Register Unversioned types under their own special group
+	// 将 Unversioned 类型注册到它们专属的特殊组下
 	scheme.AddUnversionedTypes(schema.GroupVersion{Group: "", Version: "v1"},
 		&metav1.Status{},
 		&metav1.APIVersions{},
@@ -106,7 +106,7 @@ func contextHandler(handler http.Handler) http.Handler {
 }
 
 // TestDiscoveryAtAPIS 验证 /apis 根发现端点的增删行为与服务地址回填。
-// 中文说明：空列表、加入组、移除组三步构成完整生命周期；
+// 空列表、加入组、移除组三步构成完整生命周期；
 // ServerAddressByClientCIDRs 必须由 handler 的 addresses 计算得出，
 // 因为客户端会根据来源 IP 选择可达的 apiserver 地址。
 func TestDiscoveryAtAPIS(t *testing.T) {
@@ -150,7 +150,7 @@ func TestDiscoveryAtAPIS(t *testing.T) {
 	assert.Equal(t, extensionsPreferredVersion, groupListGroup.PreferredVersion)
 	assert.Equal(t, handler.addresses.ServerAddressByClientCIDRs(utilnet.GetClientIP(&http.Request{})), groupListGroup.ServerAddressByClientCIDRs)
 
-	// Remove the group.
+	// 移除该组。
 	handler.RemoveGroup(extensionsGroupName)
 	groupList, err = getGroupList(t, server)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestDiscoveryAtAPIS(t *testing.T) {
 }
 
 // TestDiscoveryOrdering 验证组列表的顺序语义。
-// 中文说明：发现文档的顺序对客户端有实际影响——它决定了 kubectl 等工具
+// 发现文档的顺序对客户端有实际影响——它决定了 kubectl 等工具
 // 遍历组的先后（例如同名资源的优先解析）。规则是「按注册顺序、不排序」；
 // 重复注册不改变位置，移除后重新加入则排到末尾。
 // 该用例同时断言内部 Groups() 与 HTTP 响应一致，防止两条路径实现分叉。
@@ -179,11 +179,11 @@ func TestDiscoveryOrdering(t *testing.T) {
 	handler.AddGroup(metav1.APIGroup{Name: "x"})
 	handler.AddGroup(metav1.APIGroup{Name: "y"})
 	handler.AddGroup(metav1.APIGroup{Name: "z"})
-	// Register three additional groups that come earlier alphabetically
+	// 再注册三个按字母序排在更前面的组
 	handler.AddGroup(metav1.APIGroup{Name: "a"})
 	handler.AddGroup(metav1.APIGroup{Name: "b"})
 	handler.AddGroup(metav1.APIGroup{Name: "c"})
-	// Make sure re-adding doesn't double-register or make a group lose its place
+	// 确认重新添加不会重复注册，也不会让组丢失原有位置
 	handler.AddGroup(metav1.APIGroup{Name: "x"})
 
 	groupList, err = getGroupList(t, server)
@@ -191,7 +191,7 @@ func TestDiscoveryOrdering(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Check if internal groups listers returns the same group.
+	// 检查内部 groups lister 返回的是否为同一个组。
 	groups, err := handler.Groups(context.TODO(), &http.Request{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -214,7 +214,7 @@ func TestDiscoveryOrdering(t *testing.T) {
 	}
 	assert.Len(t, groupList.Groups, 5)
 
-	// Re-adding should move to the end.
+	// 重新添加应把它移到末尾。
 	handler.AddGroup(metav1.APIGroup{Name: "a"})
 	groupList, err = getGroupList(t, server)
 	if err != nil {

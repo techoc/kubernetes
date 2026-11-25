@@ -48,32 +48,32 @@ import (
 	"k8s.io/streaming/pkg/httpstream/wsstream"
 )
 
-// timeoutFactory abstracts watch timeout logic for testing
+// timeoutFactory 抽象 watch 的超时逻辑，便于测试。
 type TimeoutFactory interface {
 	TimeoutCh() (<-chan time.Time, func() bool)
 }
 
-// realTimeoutFactory implements timeoutFactory using a real time.Timer.
+// realTimeoutFactory 使用真实的 time.Timer 实现 timeoutFactory。
 type realTimeoutFactory struct {
 	timeout time.Duration
 }
 
-// TimeoutCh returns a channel which will receive something when the watch times out,
-// and a cleanup function to call when this happens.
+// TimeoutCh 返回一个通道，watch 超时时会从中收到数据，
+// 同时返回一个用于届时调用的清理函数。
 //
 // timeout == 0 时返回 nil channel：在 select 中永久阻塞，正好表达“不超时”，
 // 且无需额外分配 timer。
 func (w *realTimeoutFactory) TimeoutCh() (<-chan time.Time, func() bool) {
 	if w.timeout == 0 {
-		// nothing will ever be sent down this channel
+		// 该通道永远不会收到任何数据。
 		return nil, func() bool { return false }
 	}
 	t := time.NewTimer(w.timeout)
 	return t.C, t.Stop
 }
 
-// serveWatchHandler returns a handle to serve a watch response.
-// TODO: the functionality in this method and in WatchServer.Serve is not cleanly decoupled.
+// serveWatchHandler 返回一个用于服务 watch 响应的句柄。
+// TODO: 本方法与 WatchServer.Serve 的职责划分尚不清晰。
 //
 // 该函数负责“协商与装配”（编码器、framing、内存分配器、超时），
 // WatchServer 负责实际的流式循环；两者尚未完全解耦。
@@ -83,7 +83,7 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 		return nil, err
 	}
 
-	// negotiate for the stream serializer from the scope's serializer
+	// 从 scope 的序列化器协商出流式序列化器。
 	serializer, err := negotiation.NegotiateOutputMediaTypeStream(req, scope.Serializer, scope)
 	if err != nil {
 		return nil, err
@@ -101,17 +101,16 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 	if framer == nil {
 		return nil, fmt.Errorf("no framer defined for %q available for embedded encoding", serializer.MediaType)
 	}
-	// TODO: next step, get back mediaTypeOptions from negotiate and return the exact value here
+	// TODO: 下一步应从 negotiate 拿回 mediaTypeOptions，并在此返回准确的值。
 	mediaType := serializer.MediaType
 	switch mediaType {
 	case runtime.ContentTypeJSON:
-		// as-is
+		// 保持不变。
 	case runtime.ContentTypeCBOR:
-		// If a client indicated it accepts application/cbor (exactly one data item) on a
-		// watch request, set the conformant application/cbor-seq media type the watch
-		// response. RFC 9110 allows an origin server to deviate from the indicated
-		// preference rather than send a 406 (Not Acceptable) response (see
-		// https://www.rfc-editor.org/rfc/rfc9110.html#section-12.1-5).
+		// 如果客户端在 watch 请求中声明只接受 application/cbor（单个数据项），
+		// 则把 watch 响应的媒体类型设为符合规范的 application/cbor-seq。
+		// RFC 9110 允许源服务器偏离客户端声明的偏好，而不返回 406（Not Acceptable）
+		// （见 https://www.rfc-editor.org/rfc/rfc9110.html#section-12.1-5）。
 		mediaType = runtime.ContentTypeCBORSequence
 	default:
 		mediaType += ";stream=watch"
@@ -119,7 +118,7 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 
 	ctx := req.Context()
 
-	// locate the appropriate embedded encoder based on the transform
+	// 根据 transform 定位合适的内嵌编码器。
 	var negotiatedEncoder runtime.Encoder
 	contentKind, contentSerializer, transform := targetEncodingForTransform(scope, mediaTypeOptions, req)
 	if transform {
@@ -143,8 +142,8 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 	var memoryAllocator runtime.MemoryAllocator
 
 	if encoderWithAllocator, supportsAllocator := negotiatedEncoder.(runtime.EncoderWithAllocator); supportsAllocator {
-		// don't put the allocator inside the embeddedEncodeFn as that would allocate memory on every call.
-		// instead, we allocate the buffer for the entire watch session and release it when we close the connection.
+		// 不要把 allocator 放进 embeddedEncodeFn，否则每次调用都会分配内存；
+		// 应该为整个 watch 会话分配一次 buffer，并在关闭 checker 时释放。
 		// 每个 watch 连接复用一个分配器，显著降低长连接的 GC 压力。
 		memoryAllocator = runtime.AllocatorPool.Get().(*runtime.Allocator)
 		negotiatedEncoder = runtime.NewEncoderWithAllocator(encoderWithAllocator, memoryAllocator)
@@ -161,8 +160,8 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 
 	if encoderWithAllocator, supportsAllocator := encoder.(runtime.EncoderWithAllocator); supportsAllocator {
 		if memoryAllocator == nil {
-			// don't put the allocator inside the embeddedEncodeFn as that would allocate memory on every call.
-			// instead, we allocate the buffer for the entire watch session and release it when we close the connection.
+			// 不要把 allocator 放进 embeddedEncodeFn，否则每次调用都会分配内存；
+			// 应该为整个 watch 会话分配一次 buffer，并在关闭 checker 时释放。
 			memoryAllocator = runtime.AllocatorPool.Get().(*runtime.Allocator)
 		}
 		encoder = runtime.NewEncoderWithAllocator(encoderWithAllocator, memoryAllocator)
@@ -200,20 +199,20 @@ func serveWatchHandler(watcher watch.Interface, scope *RequestScope, mediaTypeOp
 	return http.HandlerFunc(server.HandleHTTP), nil
 }
 
-// WatchServer serves a watch.Interface over a websocket or vanilla HTTP.
+// WatchServer 通过 websocket 或普通 HTTP 提供 watch.Interface 的服务。
 type WatchServer struct {
 	Watching watch.Interface
 	Scope    *RequestScope
 
-	// true if websocket messages should use text framing (as opposed to binary framing)
+	// websocket 消息是否使用文本帧（相对于二进制帧）
 	UseTextFraming bool
-	// the media type this watch is being served with
+	// 本次 watch 所使用的媒体类型
 	MediaType string
-	// used to frame the watch stream
+	// 用于对 watch 流做分帧
 	Framer runtime.Framer
-	// used to encode the watch stream event itself
+	// 用于编码 watch 流事件本身
 	Encoder runtime.Encoder
-	// used to encode the nested object in the watch stream
+	// 用于编码 watch 流中嵌套的对象
 	EmbeddedEncoder runtime.Encoder
 
 	MemoryAllocator      runtime.MemoryAllocator
@@ -227,9 +226,9 @@ type WatchServer struct {
 
 type WatchListCompleteHook func()
 
-// watchEventMetricsRecorder allows the caller to count bytes written and report the size of the event.
-// It is thread-safe, as long as underlying io.Writer is thread-safe.
-// Once all Write calls for a given watch event have finished, RecordEvent must be called.
+// watchEventMetricsRecorder 供调用方统计写出的字节数，并上报每个事件的大小。
+// 只要底层 io.Writer 是线程安全的，它就是线程安全的。
+// 某个 watch 事件的所有 Write 调用结束后，必须调用 RecordEvent。
 //
 // 一个事件可能被 Write 多次（例如编码器分块写），因此用计数器累积，
 // 由 RecordEvent 一次性上报并清零。
@@ -240,20 +239,20 @@ type watchEventMetricsRecorder struct {
 	byteCount   atomic.Int64
 }
 
-// Write implements io.Writer.
+// Write 实现 io.Writer。
 func (c *watchEventMetricsRecorder) Write(p []byte) (n int, err error) {
 	n, err = c.writer.Write(p)
 	c.byteCount.Add(int64(n))
 	return
 }
 
-// Record reports the metrics and resets the byte count.
+// Record 上报指标并重置字节计数。
 func (c *watchEventMetricsRecorder) RecordEvent() {
 	c.countMetric.Inc()
 	c.sizeMetric.Observe(float64(c.byteCount.Swap(0)))
 }
 
-// watchGzipPool is a no-op until the first Get call (https://pkg.go.dev/sync#Pool.Get).
+// 说明：sync.Pool 在首次 Get 之前是空池（https://pkg.go.dev/sync#Pool.Get）。
 var watchGzipPool = responsewriters.NewGzipWriterPoolOrDie()
 
 // watchStreamWriter 统一了明文与 gzip 两种流写入方式，供 watchResponseWriter 使用。
@@ -279,7 +278,7 @@ func (p *plainResponseWriter) Flush() error {
 	return nil
 }
 
-// Close is a no-op because http.ResponseWriter (p.w) doesn't implement io.Closer.
+// Close 是空操作，因为 http.ResponseWriter（p.w）没有实现 io.Closer。
 func (p *plainResponseWriter) Close() error {
 	return nil
 }
@@ -303,9 +302,9 @@ func (p *perFlushGzipWriter) Write(b []byte) (int, error) {
 	return p.gw.Write(b)
 }
 
-// Flush writes compressed data to the client and releases the gzip.Writer back to the pool.
+// Flush 把压缩数据写给客户端，并把 gzip.Writer 归还给 pool。
 func (p *perFlushGzipWriter) Flush() error {
-	// no writer means Write was not called, nothing to flush
+	// 没有 writer 说明 Write 从未被调用，无需 flush
 	if p.gw == nil {
 		return nil
 	}
@@ -324,7 +323,7 @@ func (p *perFlushGzipWriter) Close() error {
 	err := p.gw.Close()
 	p.gw.Reset(nil)
 	watchGzipPool.Put(p.gw)
-	// prevent double-close returning the writer to the pool twice
+	// 防止重复 close 把同一个 writer 归还给 pool 两次
 	// 置 nil 是必要的：同一 writer 可能因错误路径被重复 Close，
 	// 重复归还对象池会导致池中出现同一对象的多个副本。
 	p.gw = nil
@@ -362,8 +361,7 @@ func (w *watchResponseWriter) BeginStream(mediaType string) {
 		w.writer = &perFlushGzipWriter{delegateRW: w.delegateRW, flusher: w.flusher}
 	}
 	w.delegateRW.WriteHeader(http.StatusOK)
-	// Flush HTTP headers only
-	// gzip applies to the body, not headers.
+	// 只 flush HTTP 头；gzip 只作用于 body，不作用于 header。
 	w.flusher.Flush()
 }
 
@@ -379,8 +377,8 @@ func (w *watchResponseWriter) Close() error {
 	return w.writer.Close()
 }
 
-// HandleHTTP serves a series of encoded events via HTTP with Transfer-Encoding: chunked.
-// or over a websocket connection.
+// HandleHTTP 通过 HTTP 的 Transfer-Encoding: chunked，或者 websocket 连接，
+// 输出一串已编码的事件。
 func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	ctx, span := tracing.Start(ctx, "WatchServer.HandleHTTP",
@@ -416,19 +414,19 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 	// framer 负责把编码后的事件切分成流式帧；构造失败属于编程错误。
 	framer := s.Framer.NewFrameWriter(rw)
 	if framer == nil {
-		// programmer error
+		// 这是编程错误。
 		err := fmt.Errorf("no stream framing support is available for media type %q", s.MediaType)
 		utilruntime.HandleErrorWithContext(req.Context(), err, "No stream framing support available")
 		s.Scope.err(errors.NewBadRequest(err.Error()), w, req)
 		return
 	}
 
-	// ensure the connection times out
+	// 确保连接会超时。
 	// 超时后直接返回，让客户端按自身策略重连（通常是带 resourceVersion 续传）。
 	timeoutCh, cleanup := s.TimeoutFactory.TimeoutCh()
 	defer cleanup()
 
-	// begin the stream
+	// 开始输出流。
 	rw.BeginStream(s.MediaType)
 
 	gvr := s.Scope.Resource
@@ -447,13 +445,11 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 	for {
 		select {
 		case <-s.ServerShuttingDownCh:
-			// the server has signaled that it is shutting down (not accepting
-			// any new request), all active watch request(s) should return
-			// immediately here. The WithWatchTerminationDuringShutdown server
-			// filter will ensure that the response to the client is rate
-			// limited in order to avoid any thundering herd issue when the
-			// client(s) try to reestablish the WATCH on the other
-			// available apiserver instance(s).
+			// 服务器已发出正在关闭（不再接收新请求）的信号时，
+			// 所有活跃的 watch 请求应立即在此返回。
+			// WithWatchTerminationDuringShutdown 服务端过滤器会确保对客户端的
+			// 响应做限速，避免客户端在其他可用的 apiserver 实例上重建 WATCH 时
+			// 造成惊群效应。
 			return
 		case <-done:
 			return
@@ -461,7 +457,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		case event, ok := <-ch:
 			if !ok {
-				// End of results.
+				// 结果结束。
 				return
 			}
 			// watch-list 的首批事件以带注解的 Bookmark 结束，借此记录初始化延迟。
@@ -469,7 +465,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 
 			if err := watchEncoder.Encode(event); err != nil {
 				utilruntime.HandleErrorWithContext(req.Context(), err, "Failed to encode watch event")
-				// client disconnect.
+				// 客户端断开。
 				return
 			}
 			recorder.RecordEvent()
@@ -482,7 +478,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 			if isWatchListLatencyRecordingRequired {
-				// Record completion of initial listing phase for WatchList
+				// 记录 WatchList 初始列表阶段的完成。
 				receivedTimestamp, ok := apirequest.ReceivedTimestampFrom(req.Context())
 				if !ok {
 					utilruntime.HandleErrorWithContext(req.Context(), nil, "Unable to measure watchlist latency, no received timestamp found in the context", "gvr", s.Scope.Resource)
@@ -496,7 +492,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 					span.End(5 * time.Second)
 					s.watchListCompleteHook()
 				}
-				// release the gzip writer back to the pool so idle watches don't hold gzip state.
+				// 把 gzip writer 归还给 pool，避免空闲 watch 长期占用 gzip 状态。
 				// 空闲的 watch 可能持续数小时，长期占用 gzip 状态是内存浪费。
 				if err := rw.Flush(); err != nil {
 					utilruntime.HandleErrorWithContext(req.Context(), err, "Failed to flush watch response after initial events")
@@ -507,7 +503,7 @@ func (s *WatchServer) HandleHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// HandleWS serves a series of encoded events over a websocket connection.
+// HandleWS 通过 websocket 连接输出一串已编码的事件。
 func (s *WatchServer) HandleWS(ws *websocket.Conn) {
 	ctx := ws.Request().Context()
 	logger := klog.FromContext(ctx)
@@ -520,7 +516,7 @@ func (s *WatchServer) HandleWS(ws *websocket.Conn) {
 
 	defer ws.Close()
 	done := make(chan struct{})
-	// ensure the connection times out
+	// 确保连接会超时。
 	timeoutCh, cleanup := s.TimeoutFactory.TimeoutCh()
 	defer cleanup()
 
@@ -528,10 +524,10 @@ func (s *WatchServer) HandleWS(ws *websocket.Conn) {
 	// 客户端不应发送任何内容，收到的一律丢弃。
 	go func() {
 		defer utilruntime.HandleCrashWithLogger(logger)
-		// This blocks until the connection is closed.
-		// Client should not send anything.
+		// 此处会阻塞直到连接关闭。
+		// 客户端不应该发送任何内容。
 		wsstream.IgnoreReceivesWithLogger(logger, ws, 0)
-		// Once the client closes, we should also close
+		// 客户端关闭后，我们也应当关闭
 		close(done)
 	}()
 
@@ -549,13 +545,13 @@ func (s *WatchServer) HandleWS(ws *websocket.Conn) {
 			return
 		case event, ok := <-ch:
 			if !ok {
-				// End of results.
+				// 结果结束。
 				return
 			}
 
 			if err := watchEncoder.Encode(event); err != nil {
 				utilruntime.HandleErrorWithLogger(logger, err, "Failed to encode watch event")
-				// client disconnect.
+				// 客户端断开。
 				return
 			}
 		}
@@ -579,8 +575,8 @@ func (w *websocketFramer) Write(p []byte) (int, error) {
 	// JSON 等文本媒体类型使用 text frame，二进制格式使用 binary frame；
 	// 浏览器端依赖这一区分来正确解码。
 	if w.useTextFraming {
-		// bytes.Buffer::String() has a special handling of nil value, but given
-		// we're writing serialized watch events, this will never happen here.
+		// bytes.Buffer::String() 对 nil 有特殊处理，但由于写入的是序列化后的 watch 事件，
+		// 这里不会出现该情况。
 		if err := websocket.Message.Send(w.ws, string(p)); err != nil {
 			return 0, err
 		}
@@ -600,10 +596,9 @@ func shouldRecordWatchListLatency(ctx context.Context, event watch.Event) bool {
 	if event.Type != watch.Bookmark || !utilfeature.DefaultFeatureGate.Enabled(features.WatchList) {
 		return false
 	}
-	// as of today the initial-events-end annotation is added only to a single event
-	// by the watch cache and only when certain conditions are met
-	//
-	// for more please read https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/3157-watch-list
+	// 目前 initial-events-end 注解只会由 watch cache 添加到单个事件上，
+	// 且只在满足特定条件时添加。
+	// 更多背景请阅读 https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/3157-watch-list#design
 	hasAnnotation, err := storage.HasInitialEventsEndBookmarkAnnotation(event.Object)
 	if err != nil {
 		utilruntime.HandleErrorWithContext(ctx, err, "Unable to determine if the object has the required annotation for measuring watchlist latency", "object", fmt.Sprintf("%T", event.Object))

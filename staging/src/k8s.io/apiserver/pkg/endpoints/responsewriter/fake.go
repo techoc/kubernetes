@@ -26,8 +26,7 @@ import (
 
 var _ http.ResponseWriter = &FakeResponseWriter{}
 
-// FakeResponseWriter implements http.ResponseWriter,
-// it is used for testing purpose only
+// FakeResponseWriter 实现 http.ResponseWriter，仅用于测试。
 type FakeResponseWriter struct{}
 
 // Header 返回一个全新的空 header，调用方写入的内容不会被保留。
@@ -39,9 +38,8 @@ func (fw *FakeResponseWriter) WriteHeader(code int) {}
 // Write 假装写入成功，始终返回完整长度。
 func (fw *FakeResponseWriter) Write(bs []byte) (int, error) { return len(bs), nil }
 
-// For HTTP2 an http.ResponseWriter object implements
-// http.Flusher and http.CloseNotifier.
-// It is used for testing purpose only
+// FakeResponseWriterFlusherCloseNotifier 用于测试：模拟 HTTP/2 下 http.ResponseWriter
+// 同时实现 http.Flusher 和 http.CloseNotifier 的情形。
 type FakeResponseWriterFlusherCloseNotifier struct {
 	*FakeResponseWriter
 }
@@ -52,9 +50,8 @@ func (fw *FakeResponseWriterFlusherCloseNotifier) Flush() {}
 // CloseNotify 返回 nil channel，测试中不会触发连接关闭通知。
 func (fw *FakeResponseWriterFlusherCloseNotifier) CloseNotify() <-chan bool { return nil }
 
-// For HTTP/1.x an http.ResponseWriter object implements
-// http.Flusher, http.CloseNotifier and http.Hijacker.
-// It is used for testing purpose only
+// FakeResponseWriterFlusherCloseNotifierHijacker 用于测试：模拟 HTTP/1.x 下 http.ResponseWriter
+// 同时实现 http.Flusher、http.CloseNotifier 和 http.Hijacker 的情形。
 type FakeResponseWriterFlusherCloseNotifierHijacker struct {
 	*FakeResponseWriterFlusherCloseNotifier
 }

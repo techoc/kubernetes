@@ -29,8 +29,7 @@ import (
 	tracing "k8s.io/component-base/tracing"
 )
 
-// WithTracing adds tracing to requests if the incoming request is sampled
-//
+// WithTracing 在传入请求被采样时为请求添加追踪。
 // 追踪开关由传入的 TracerProvider 决定：传入 Noop provider 时仍保留
 // W3C/B3 上下文传播（用于把上游 trace 带给下游），但不产生 span，
 // 这样无需在过滤器里额外分支。
@@ -53,25 +52,24 @@ func WithTracing(handler http.Handler, tp trace.TracerProvider) http.Handler {
 		}),
 	}
 	wrappedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Adjust otelhttp tracing start time to match the start time used
-		// for Prometheus metrics.
+		// 把 otelhttp 的追踪起始时间调整为与 Prometheus 指标使用的时间一致，
 		// 统一起点后，trace 时长与 request latency 指标可以相互对照。
 		if startTime, ok := request.ReceivedTimestampFrom(r.Context()); ok {
 			r = r.WithContext(otelhttp.ContextWithStartTime(r.Context(), startTime))
 		}
-		// Add the http.target attribute to the otelhttp span
-		// Workaround for https://github.com/open-telemetry/opentelemetry-go-contrib/issues/3743
+		// 给 otelhttp 的 span 添加 http.target 属性，
+		// 用于绕过 https://github.com/open-telemetry/opentelemetry-go-contrib/issues/3743
 		span := trace.SpanFromContext(r.Context())
 		if r.URL != nil {
 			span.SetAttributes(attribute.Key("http.target").String(r.URL.RequestURI()))
 		}
-		// Add auditID attribute if available. This helps us connect traces to audit log entries
+		// 如果 auditID 可用就添加该属性，便于把 trace 与审计日志条目关联起来。
 		// audit-id 已截断，避免在 span 中泄露完整标识或撑爆属性长度。
 		span.SetAttributes(attribute.String("audit-id", audit.GetAuditIDTruncated(r.Context())))
 		handler.ServeHTTP(w, r)
 	})
-	// With Noop TracerProvider, the otelhttp still handles context propagation.
-	// See https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
+	// 即使使用 Noop TracerProvider，otelhttp 仍会负责上下文传播。
+	// 参见 https://github.com/open-telemetry/opentelemetry-go/tree/main/example/passthrough
 	return otelhttp.NewHandler(wrappedHandler, "KubernetesAPI", opts...)
 }
 

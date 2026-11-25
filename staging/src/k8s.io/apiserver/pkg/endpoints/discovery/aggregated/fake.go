@@ -48,15 +48,14 @@ func NewFakeResourceManager() FakeResourceManager {
 	return &fakeResourceManager{}
 }
 
-// a resource manager with helper functions for checking the actions
-// match expected. For Use in tests
+// fakeResourceManager 是一个带有辅助函数的 resource manager，用于检查实际动作
+// 是否与预期一致，仅供测试使用
 type fakeResourceManager struct {
 	recorderResourceManager
 	expect recorderResourceManager
 }
 
-// a resource manager which instead of managing a discovery document,
-// simply records the calls to its interface functoins for testing
+// recorderResourceManager 不维护 discovery 文档，只记录对其接口方法的调用，供测试使用
 type recorderResourceManager struct {
 	lock    sync.RWMutex
 	Actions []recorderResourceManagerAction
@@ -65,7 +64,7 @@ type recorderResourceManager struct {
 var _ ResourceManager = &fakeResourceManager{}
 var _ ResourceManager = &recorderResourceManager{}
 
-// Storage type for a call to the resource manager
+// recorderResourceManagerAction 保存对 resource manager 一次调用的记录
 type recorderResourceManagerAction struct {
 	Type    string
 	Group   string
@@ -109,8 +108,8 @@ func (f *fakeResourceManager) Validate() error {
 func (f *fakeResourceManager) WaitForActions(ctx context.Context, timeout time.Duration) error {
 	err := wait.PollImmediateWithContext(
 		ctx,
-		100*time.Millisecond, // try every 100ms
-		timeout,              // timeout after timeout
+		100*time.Millisecond, // 每 100ms 轮询一次
+		timeout,              // 超过 timeout 后放弃
 		func(ctx context.Context) (done bool, err error) {
 			if f.HasExpectedNumberActions() {
 				return true, f.Validate()

@@ -61,36 +61,36 @@ import (
 )
 
 const (
-	// maximum number of operations a single json patch may contain.
+	// 单个 JSON Patch 允许包含的最大操作数。
 	//
 	// 限制操作数是为了给 JSON Patch 的应用成本设上界，防止单个请求消耗过多 CPU。
 	maxJSONPatchOperations = 10000
 )
 
-// PatchResource returns a function that will handle a resource patch.
+// PatchResource 返回处理资源 patch 的函数。
 //
 // 处理流程：解析 Content-Type 与请求参数 → 读取并校验 patch → 记录审计 →
 // 组装 patcher → 通过 GuaranteedUpdate 在存储层重试地应用 patch 与准入 → 写响应。
 func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interface, patchTypes []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
-		// For performance tracking purposes.
+		// 用于性能追踪。
 		ctx, span := tracing.Start(ctx, "Patch", traceFields(req)...)
 		req = req.WithContext(ctx)
 		defer span.End(500 * time.Millisecond)
 
-		// Do this first, otherwise name extraction can fail for unrecognized content types
-		// TODO: handle this in negotiation
+		// 先做这一步，否则无法识别的 content type 会导致 name 提取失败。
+		// TODO: 这部分应放到协商逻辑中处理。
 		//
 		// 必须先剥离 "; charset=..." 再交给 Namer，否则部分 Namer 无法识别媒体类型。
 		contentType := req.Header.Get("Content-Type")
-		// Remove "; charset=" if included in header.
+		// 去掉 header 中可能包含的 "; charset="。
 		if idx := strings.Index(contentType, ";"); idx > 0 {
 			contentType = contentType[:idx]
 		}
 		patchType := types.PatchType(contentType)
 
-		// Ensure the patchType is one we support
+		// 确保 patchType 是我们支持的类型
 		if !sets.NewString(patchTypes...).Has(contentType) {
 			scope.err(negotiation.NewUnsupportedMediaTypeError(patchTypes), w, req)
 			return
@@ -102,8 +102,7 @@ func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interfac
 			return
 		}
 
-		// enforce a timeout of at most requestTimeoutUpperBound (34s) or less if the user-provided
-		// timeout inside the parent context is lower than requestTimeoutUpperBound.
+		// 强制超时不超过 requestTimeoutUpperBound（34s）；若父上下文中用户给定的超时更短则沿用。
 		//
 		// 这里只设上界；父上下文中更短的超时仍会先生效（context 取最早截止时间）。
 		ctx, cancel := context.WithTimeout(ctx, requestTimeoutUpperBound)
@@ -140,10 +139,10 @@ func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interfac
 
 		admit = admission.WithAudit(admit)
 
-		// Decode and convert the patch payload to JSON for storage into audit.
-		// the decision to reject the request for failure to decode before we record the request for audit.
+		// 解码 patch 载荷并转换成 JSON，以便写入审计记录：
+		// 解码失败时在记录审计之前就拒绝请求。
 		//
-		// This guarantees that the audit event contains valid JSON, or the request is rejected.
+		// 这保证审计事件里要么是合法 JSON，要么请求已被拒绝。
 		patchForAudit, err := validateAndTranscodePatch(patchBytes, patchType)
 		if err != nil {
 			scope.err(err, w, req)
@@ -160,9 +159,8 @@ func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interfac
 			baseContentType = runtime.ContentTypeYAML
 		case types.ApplyCBORPatchType:
 			if !utilfeature.DefaultFeatureGate.Enabled(features.CBORServingAndStorage) {
-				// This request should have already been rejected by the
-				// Content-Type allowlist check. Return 500 because assumptions are
-				// already broken and the feature is not GA.
+				// 该请求本应已被 Content-Type 白名单检查拒绝。
+				// 这里返回 500，因为前提假设已被破坏且该特性尚未 GA。
 				utilruntime.HandleErrorWithContext(req.Context(), nil, "The patch content-type allowlist check should have made this unreachable.")
 				scope.err(errors.NewInternalError(errors.NewInternalError(fmt.Errorf("unexpected patch type: %v", patchType))), w, req)
 				return
@@ -292,13 +290,11 @@ func PatchResource(r rest.Patcher, scope *RequestScope, admit admission.Interfac
 // mutateObjectUpdateFunc 是“对 (obj, old) 执行变更”的函数签名。
 type mutateObjectUpdateFunc func(ctx context.Context, obj, old runtime.Object) error
 
-// patcher breaks the process of patch application and retries into smaller
-// pieces of functionality.
-// TODO: Use builder pattern to construct this object?
-// TODO: As part of that effort, some aspects of PatchResource above could be
-// moved into this type.
+// patcher 把“应用补丁”与“重试”这两件事拆成更小的功能单元。
+// TODO: 是否用 builder 模式构造该对象？
+// TODO: 作为该工作的一部分，上面 PatchResource 的一些逻辑可以移进这个类型。
 type patcher struct {
-	// Pieces of RequestScope
+	// RequestScope 的各部分
 	namer               ScopeNamer
 	creater             runtime.ObjectCreater
 	defaulter           runtime.ObjectDefaulter
@@ -314,7 +310,7 @@ type patcher struct {
 
 	hubGroupVersion schema.GroupVersion
 
-	// Validation functions
+	// 校验函数
 	createValidation rest.ValidateObjectFunc
 	updateValidation rest.ValidateObjectUpdateFunc
 	admissionCheck   admission.MutationInterface
@@ -323,14 +319,14 @@ type patcher struct {
 
 	options *metav1.PatchOptions
 
-	// Operation information
+	// 操作信息
 	restPatcher rest.Patcher
 	name        string
 	patchType   types.PatchType
 	patchBytes  []byte
 	userAgent   string
 
-	// Set at invocation-time (by applyPatch) and immutable thereafter
+	// 在调用时（由 applyPatch）设置，此后不可变。
 	//
 	// 这些字段在 patchResource 确定 patch 机制后写入，之后只读；
 	// 因为 GuaranteedUpdate 可能重试多次，每次重试共享同一份配置。
@@ -357,27 +353,27 @@ type jsonPatcher struct {
 // applyPatchToCurrentObject 把 JSON 类 patch 应用到当前对象上。
 // 先编码为外部版本 JSON（patch 是针对外部版本构造的），再应用 patch 并解码回类型化对象。
 func (p *jsonPatcher) applyPatchToCurrentObject(requestContext context.Context, currentObject runtime.Object) (runtime.Object, error) {
-	// Encode will convert & return a versioned object in JSON.
+	// Encode 会转换并返回 JSON 形式的带版本对象。
 	currentObjJS, err := runtime.Encode(p.codec, currentObject)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply the patch.
+	// 应用补丁。
 	patchedObjJS, appliedStrictErrs, err := p.applyJSPatch(currentObjJS)
 	if err != nil {
 		return nil, err
 	}
 
-	// Construct the resulting typed, unversioned object.
+	// 构造最终的类型化、无版本对象。
 	objToUpdate := p.restPatcher.New()
 	if err := runtime.DecodeInto(p.codec, patchedObjJS, objToUpdate); err != nil {
 		strictError, isStrictError := runtime.AsStrictDecodingError(err)
 		switch {
 		case !isStrictError:
-			// disregard any appliedStrictErrs, because it's an incomplete
-			// list of strict errors given that we don't know what fields were
-			// unknown because DecodeInto failed. Non-strict errors trump in this case.
+			// 忽略已应用的 appliedStrictErrs：由于 DecodeInto 失败，
+			// 我们并不知道哪些字段是未知的，这份列表并不完整。
+			// 这种情况下以非严格错误为准。
 			return nil, errors.NewInvalid(schema.GroupKind{}, "", field.ErrorList{
 				field.Invalid(field.NewPath("patch"), string(patchedObjJS), err.Error()),
 			})
@@ -401,8 +397,7 @@ func (p *jsonPatcher) applyPatchToCurrentObject(requestContext context.Context, 
 	}
 
 	if p.options == nil {
-		// Provide a more informative error for the crash that would
-		// happen on the next line
+		// 提前给出更有信息量的错误，否则下一行会直接崩溃
 		panic("PatchOptions required but not provided")
 	}
 	// UpdateNoErrors 只更新 managedFields 所有权，校验留给后续的准入链，
@@ -424,8 +419,8 @@ type jsonPatchOp struct {
 	Value interface{} `json:"value"`
 }
 
-// applyJSPatch applies the patch. Input and output objects must both have
-// the external version, since that is what the patch must have been constructed against.
+// applyJSPatch 应用补丁。输入与输出对象都必须携带外部版本，
+// 因为补丁是针对外部版本构造的。
 func (p *jsonPatcher) applyJSPatch(versionedJS []byte) (patchedJS []byte, strictErrors []error, retErr error) {
 	switch p.patchType {
 	case types.JSONPatchType:
@@ -472,7 +467,7 @@ func (p *jsonPatcher) applyJSPatch(versionedJS []byte) (patchedJS []byte, strict
 		}
 		return patchedJS, strictErrors, retErr
 	default:
-		// only here as a safety net - go-restful filters content-type
+		// 只是作为保险措施存在 —— go-restful 会过滤 content-type
 		return nil, nil, fmt.Errorf("unknown Content-Type header for patch: %v", p.patchType)
 	}
 }
@@ -481,7 +476,7 @@ func (p *jsonPatcher) applyJSPatch(versionedJS []byte) (patchedJS []byte, strict
 type smpPatcher struct {
 	*patcher
 
-	// Schema
+	// schema 参考对象
 	schemaReferenceObj runtime.Object
 	fieldManager       *managedfields.FieldManager
 }
@@ -489,8 +484,7 @@ type smpPatcher struct {
 // applyPatchToCurrentObject 先把对象转到外部版本（patch 针对外部版本），
 // 应用策略合并后再转回 hub 版本，最后更新 managedFields 所有权。
 func (p *smpPatcher) applyPatchToCurrentObject(requestContext context.Context, currentObject runtime.Object) (runtime.Object, error) {
-	// Since the patch is applied on versioned objects, we need to convert the
-	// current object to versioned representation first.
+	// 由于 patch 是作用在带版本对象上的，需要先把当前对象转成带版本表示。
 	currentVersionedObject, err := p.unsafeConvertor.ConvertToVersion(currentObject, p.kind.GroupVersion())
 	if err != nil {
 		return nil, err
@@ -502,7 +496,7 @@ func (p *smpPatcher) applyPatchToCurrentObject(requestContext context.Context, c
 	if err := strategicPatchObject(requestContext, p.defaulter, currentVersionedObject, p.patchBytes, versionedObjToUpdate, p.schemaReferenceObj, p.validationDirective); err != nil {
 		return nil, err
 	}
-	// Convert the object back to the hub version
+	// 把对象转回 hub 版本
 	newObj, err := p.unsafeConvertor.ConvertToVersion(versionedObjToUpdate, p.hubGroupVersion)
 	if err != nil {
 		return nil, err
@@ -566,8 +560,8 @@ func (p *applyPatcher) applyPatchToCurrentObject(requestContext context.Context,
 		return obj, err
 	}
 
-	// TODO: spawn something to track deciding whether a fieldValidation=Strict
-	// fatal error should return before an error from the apply operation
+	// TODO: 应当另起机制来判断 fieldValidation=Strict 的致命错误
+	// 是否应先于 apply 操作的错误返回。
 	//
 	// 严格解码在 apply 之后单独做一次：apply configuration 目标类型是 unstructured，
 	// 普通解码不会暴露未知字段问题。
@@ -591,12 +585,11 @@ func (p *applyPatcher) createNewObject(requestContext context.Context) (runtime.
 	return p.applyPatchToCurrentObject(requestContext, obj)
 }
 
-// strategicPatchObject applies a strategic merge patch of `patchBytes` to
-// `originalObject` and stores the result in `objToUpdate`.
-// It additionally returns the map[string]interface{} representation of the
-// `originalObject` and `patchBytes`.
+// strategicPatchObject 把 `patchBytes` 作为策略合并补丁应用到 `originalObject`，
+// 结果写入 `objToUpdate`；此外还返回 `originalObject` 与 `patchBytes` 的
+// map[string]interface{} 表示。
 //
-// NOTE: Both `originalObject` and `objToUpdate` are supposed to be versioned.
+// 注意：`originalObject` 与 `objToUpdate` 都应是带版本的对象。
 // 先把对象转成 map 再做策略合并：strategicpatch 需要 map 形态才能按 schema 处理列表合并键。
 func strategicPatchObject(
 	requestContext context.Context,
@@ -631,14 +624,13 @@ func strategicPatchObject(
 	return nil
 }
 
-// applyPatch is called every time GuaranteedUpdate asks for the updated object,
-// and is given the currently persisted object as input.
-// TODO: rename this function because the name implies it is related to applyPatcher
+// applyPatch 在 GuaranteedUpdate 每次要求更新对象时被调用，输入为当前已持久化的对象。
+// TODO: 改名，当前名字容易让人误以为与 applyPatcher 相关。
 //
 // 该函数会被 GuaranteedUpdate 在每次乐观并发冲突后重复调用，因此必须无副作用、
 // 只基于传入的 currentObject 计算新对象。
 func (p *patcher) applyPatch(ctx context.Context, _, currentObject runtime.Object) (objToUpdate runtime.Object, patchErr error) {
-	// Make sure we actually have a persisted currentObject
+	// 确认我们确实拿到了已持久化的 currentObject。
 	tracing.SpanFromContext(ctx).AddEvent("About to apply patch")
 	currentObjectHasUID, err := hasUID(currentObject)
 	if err != nil {
@@ -667,9 +659,9 @@ func (p *patcher) applyPatch(ctx context.Context, _, currentObject runtime.Objec
 		return nil, errors.NewConflict(p.resource.GroupResource(), p.name, fmt.Errorf("uid mismatch: the provided object specified uid %s, and no existing object was found", accessor.GetUID()))
 	}
 
-	// if this object supports namespace info
+	// 若该对象支持 namespace 信息。
 	if objectMeta, err := meta.Accessor(objToUpdate); err == nil {
-		// ensure namespace on the object is correct, or error if a conflicting namespace was set in the object
+		// 确保对象上的 namespace 正确；若对象中设置了冲突的 namespace 则报错。
 		if err := rest.EnsureObjectNamespaceMatchesRequestNamespace(rest.ExpectedNamespaceForResource(p.namespace, p.resource), objectMeta); err != nil {
 			return nil, err
 		}
@@ -688,9 +680,9 @@ func (p *patcher) admissionAttributes(ctx context.Context, updatedObject runtime
 	return admission.NewAttributesRecord(updatedObject, currentObject, p.kind, p.namespace, p.name, p.resource, p.subresource, operation, operationOptions, p.dryRun, userInfo)
 }
 
-// applyAdmission is called every time GuaranteedUpdate asks for the updated object,
-// and is given the currently persisted object and the patched object as input.
-// TODO: rename this function because the name implies it is related to applyPatcher
+// applyAdmission 在 GuaranteedUpdate 每次要求新对象时被调用，
+// 输入为当前持久化对象与打完补丁的对象。
+// TODO: 改名，当前名字容易让人误以为与 applyPatcher 相关。
 //
 // 根据对象是否已存在选择 Create/Update 准入语义，保证 patch 触发的创建也经过 create 准入。
 func (p *patcher) applyAdmission(ctx context.Context, patchedObject runtime.Object, currentObject runtime.Object) (runtime.Object, error) {
@@ -714,7 +706,7 @@ func (p *patcher) applyAdmission(ctx context.Context, patchedObject runtime.Obje
 	return patchedObject, nil
 }
 
-// patchResource divides PatchResource for easier unit testing
+// patchResource 把 PatchResource 拆分出来，便于单元测试。
 //
 // 核心流程：按 patch 类型选定 mechanism，组装 transformer 链（应用 patch → 准入 → 去重 ownerReferences），
 // 然后交给 restPatcher.Update 在存储层带重试地执行。
@@ -737,7 +729,7 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 			schemaReferenceObj: schemaReferenceObj,
 			fieldManager:       scope.FieldManager,
 		}
-	// this case is unreachable if ServerSideApply is not enabled because we will have already rejected the content type
+		// 若未启用 ServerSideApply，这种情形不可达：content type 早已被拒绝。
 	case types.ApplyYAMLPatchType:
 		p.mechanism = newApplyPatcher(p, scope.FieldManager, yaml.Unmarshal, yaml.UnmarshalStrict)
 		p.forceAllowCreate = true
@@ -747,11 +739,9 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 			return nil, false, fmt.Errorf("%v: unimplemented patch type", p.patchType)
 		}
 
-		// The strict and non-strict funcs are the same here because any CBOR map with
-		// duplicate keys is invalid and always rejected outright regardless of strictness
-		// mode, and unknown field errors can't occur in practice because the type of the
-		// destination value for unmarshaling an apply configuration is always
-		// "unstructured".
+		// 这里严格与非严格解码函数相同：CBOR map 只要出现重复键就一定无效，
+		// 与严格程度无关；而 apply configuration 的目标类型始终是
+		// "unstructured"，因此实践中不会出现未知字段错误。
 		p.mechanism = newApplyPatcher(p, scope.FieldManager, cbor.Unmarshal, cbor.Unmarshal)
 		p.forceAllowCreate = true
 	default:
@@ -759,7 +749,7 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 	}
 	// ownerReferences 去重放在准入之后：准入可能注入重复引用，只有最终对象才值得清理。
 	dedupOwnerReferencesTransformer := func(_ context.Context, obj, _ runtime.Object) (runtime.Object, error) {
-		// Dedup owner references after mutating admission happens
+		// 变更准入之后对 owner references 去重
 		dedupOwnerReferencesAndAddWarning(obj, ctx, true)
 		return obj, nil
 	}
@@ -769,7 +759,7 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 	wasCreated := false
 	p.updatedObjectInfo = rest.DefaultUpdatedObjectInfo(nil, transformers...)
 	requestFunc := func() (runtime.Object, error) {
-		// Pass in UpdateOptions to override UpdateStrategy.AllowUpdateOnCreate
+		// 传入 UpdateOptions 以覆盖 UpdateStrategy.AllowUpdateOnCreate
 		options := patchToUpdateOptions(p.options)
 		updateObject, created, updateErr := p.restPatcher.Update(ctx, p.name, p.updatedObjectInfo, p.createValidation, p.updateValidation, p.forceAllowCreate, options)
 		wasCreated = created
@@ -778,8 +768,8 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 	result, err := finisher.FinishRequest(ctx, func() (runtime.Object, error) {
 
 		result, err := requestFunc()
-		// If the object wasn't committed to storage because it's serialized size was too large,
-		// it is safe to remove managedFields (which can be large) and try again.
+		// 若对象因序列化后体积过大而未提交到存储，
+		// 可以安全地移除 managedFields（它可能很大）后重试。
 		//
 		// 仅对非 apply patch 重试：apply 的 managedFields 是所有权契约的一部分，不能随意丢弃。
 		if isTooLargeError(err) && p.patchType != types.ApplyYAMLPatchType && p.patchType != types.ApplyCBORPatchType {
@@ -799,10 +789,9 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 		return result, err
 	})
 
-	// In case of a timeout error, the goroutine handling the request is still running.
-	// https://github.com/kubernetes/kubernetes/blob/d2c12afa4593e50a187075157d38748292b02733/staging/src/k8s.io/apiserver/pkg/endpoints/handlers/finisher/finisher.go#L127-L146
-	// We cannot reliably read the variable (data race!) and have to assume that
-	// the object was not created.
+	// 超时错误发生时，处理请求的 goroutine 仍在运行，
+	// 见 https://github.com/kubernetes/kubernetes/blob/d2c12afa4593e50a187075157d38748292b02733/staging/src/k8s.io/apiserver/pkg/endpoints/handlers/finisher/finisher.go#L127-L146
+	// 我们无法可靠地读取该变量（存在数据竞争），只能假定对象未被创建。
 	//
 	// 超时后写协程仍在运行，读取 wasCreated 会有数据竞争，因此保守地返回“未创建”。
 	if errors.IsTimeout(err) {
@@ -811,9 +800,8 @@ func (p *patcher) patchResource(ctx context.Context, scope *RequestScope) (runti
 	return result, wasCreated, err
 }
 
-// applyPatchToObject applies a strategic merge patch of <patchMap> to
-// <originalMap> and stores the result in <objToUpdate>.
-// NOTE: <objToUpdate> must be a versioned object.
+// applyPatchToObject 把 <patchMap> 作为策略合并补丁应用到 <originalMap>，
+// 结果写入 <objToUpdate>。注意：<objToUpdate> 必须是带版本的对象。
 //
 // 直接做 map→object 的转换而非 JSON 往返，减少一次序列化；未知字段是否返回取决于校验指令。
 func applyPatchToObject(
@@ -831,17 +819,16 @@ func applyPatchToObject(
 		return interpretStrategicMergePatchError(err)
 	}
 
-	// Rather than serialize the patched map to JSON, then decode it to an object, we go directly from a map to an object
+	// 与其把打过补丁的 map 序列化成 JSON 再解码成对象，不如直接从 map 构造对象。
 	converter := runtime.DefaultUnstructuredConverter
 	returnUnknownFields := validationDirective == metav1.FieldValidationWarn || validationDirective == metav1.FieldValidationStrict
 	if err := converter.FromUnstructuredWithValidation(patchedObjMap, objToUpdate, returnUnknownFields); err != nil {
 		strictError, isStrictError := runtime.AsStrictDecodingError(err)
 		switch {
 		case !isStrictError:
-			// disregard any sttrictErrs, because it's an incomplete
-			// list of strict errors given that we don't know what fields were
-			// unknown because StrategicMergeMapPatch failed.
-			// Non-strict errors trump in this case.
+			// 忽略已收集的 strictErrs：由于 StrategicMergeMapPatch 失败，
+			// 我们并不知道哪些字段是未知的，因此这份列表并不完整。
+			// 这种情况下以非严格错误为准。
 			return errors.NewInvalid(schema.GroupKind{}, "", field.ErrorList{
 				field.Invalid(field.NewPath("patch"), fmt.Sprintf("%+v", patchMap), err.Error()),
 			})
@@ -864,16 +851,15 @@ func applyPatchToObject(
 		}
 	}
 
-	// Decoding from JSON to a versioned object would apply defaults, so we do the same here
+	// 从 JSON 解码为带版本对象时会应用默认值，这里同样如此。
 	defaulter.Default(objToUpdate)
 
 	return nil
 }
 
-// interpretStrategicMergePatchError interprets the error type and returns an error with appropriate HTTP code.
+// interpretStrategicMergePatchError 判断错误类型并返回带合适 HTTP 状态码的错误。
 //
 // 区分“客户端 patch 格式错误”（400）与“patch 与对象语义冲突”（422），
-// 便于客户端决定是修正请求还是重试。
 func interpretStrategicMergePatchError(err error) error {
 	switch err {
 	case mergepatch.ErrBadJSONDoc, mergepatch.ErrBadPatchFormatForPrimitiveList, mergepatch.ErrBadPatchFormatForRetainKeys, mergepatch.ErrBadPatchFormatForSetElementOrderList, mergepatch.ErrUnsupportedStrategicMergePatchFormat:
@@ -885,7 +871,7 @@ func interpretStrategicMergePatchError(err error) error {
 	}
 }
 
-// patchToUpdateOptions creates an UpdateOptions with the same field values as the provided PatchOptions.
+// patchToUpdateOptions 用给定 PatchOptions 的字段值构造 UpdateOptions。
 //
 // patch 触发的更新需要把 dryRun/fieldManager/fieldValidation 原样传给存储与准入层。
 func patchToUpdateOptions(po *metav1.PatchOptions) *metav1.UpdateOptions {
@@ -901,7 +887,7 @@ func patchToUpdateOptions(po *metav1.PatchOptions) *metav1.UpdateOptions {
 	return uo
 }
 
-// patchToCreateOptions creates an CreateOptions with the same field values as the provided PatchOptions.
+// patchToCreateOptions 用给定 PatchOptions 的字段值构造 CreateOptions。
 func patchToCreateOptions(po *metav1.PatchOptions) *metav1.CreateOptions {
 	if po == nil {
 		return nil
@@ -916,7 +902,6 @@ func patchToCreateOptions(po *metav1.PatchOptions) *metav1.CreateOptions {
 }
 
 // validateAndTranscodePatch 校验 patch 载荷并转换为 JSON，用于审计。
-// 在记录审计之前完成校验：保证审计里只会出现合法 JSON，非法载荷直接拒绝请求。
 func validateAndTranscodePatch(patchBytes []byte, patchType types.PatchType) ([]byte, error) {
 	switch patchType {
 	case types.ApplyCBORPatchType:

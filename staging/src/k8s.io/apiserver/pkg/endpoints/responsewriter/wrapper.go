@@ -22,69 +22,55 @@ import (
 	"net/http"
 )
 
-// UserProvidedDecorator represensts a user (client that uses this package)
-// provided decorator that wraps an inner http.ResponseWriter object.
-// The user-provided decorator object must return the inner (decorated)
-// http.ResponseWriter object via the Unwrap function.
+// UserProvidedDecorator 表示使用方（即本包的调用方）提供的装饰器，它包装了内层的
+// http.ResponseWriter 对象。该装饰器必须通过 Unwrap 函数返回被装饰的内层
+// http.ResponseWriter 对象。
 type UserProvidedDecorator interface {
 	http.ResponseWriter
 
-	// Unwrap returns the inner http.ResponseWriter object associated
-	// with the user-provided decorator.
+	// Unwrap 返回与用户提供的装饰器相关联的内层 http.ResponseWriter 对象。
 	Unwrap() http.ResponseWriter
 }
 
-// WrapForHTTP1Or2 accepts a user-provided decorator of an "inner" http.responseWriter
-// object and potentially wraps the user-provided decorator with a new http.ResponseWriter
-// object that implements http.CloseNotifier, http.Flusher, and/or http.Hijacker by
-// delegating to the user-provided decorator (if it implements the relevant method) or
-// the inner http.ResponseWriter (otherwise), so that the returned http.ResponseWriter
-// object implements the same subset of those interfaces as the inner http.ResponseWriter.
+// WrapForHTTP1Or2 接受一个包装了“内层”http.ResponseWriter 的用户装饰器，并可能在外面
+// 再包一层新的 http.ResponseWriter：它通过委托给用户装饰器（若其实现了对应方法）
+// 或内层 http.ResponseWriter（否则）来实现 http.CloseNotifier、http.Flusher
+// 和/或 http.Hijacker，从而保证返回对象实现的接口子集与内层对象完全一致。
+// 本函数处理以下三种情况：
+//   - 内层 ResponseWriter 同时实现 `http.CloseNotifier`、`http.Flusher` 和
+//     `http.Hijacker`（HTTP/1.1 服务器提供这样的 ResponseWriter）。
+//   - 内层 ResponseWriter 实现 `http.CloseNotifier` 和 `http.Flusher`，
+//     但不实现 `http.Hijacker`（HTTP/2 服务器提供这样的 ResponseWriter）。
+//   - 其余所有情况都归为第三类，直接返回传入的 ResponseWriter。
 //
-// This function handles the following three casses.
-//   - The inner ResponseWriter implements `http.CloseNotifier`, `http.Flusher`,
-//     and `http.Hijacker` (an HTTP/1.1 sever provides such a ResponseWriter).
-//   - The inner ResponseWriter implements `http.CloseNotifier` and `http.Flusher`
-//     but not `http.Hijacker` (an HTTP/2 server provides such a ResponseWriter).
-//   - All the other cases collapse to this one, in which the given ResponseWriter is returned.
-//
-// There are three applicable terms:
-//   - "outer": this is the ResponseWriter object returned by the WrapForHTTP1Or2 function.
-//   - "user-provided decorator" or "middle": this is the user-provided decorator
-//     that decorates an inner ResponseWriter object. A user-provided decorator
-//     implements the UserProvidedDecorator interface. A user-provided decorator
-//     may or may not implement http.CloseNotifier, http.Flusher or http.Hijacker.
-//   - "inner": the ResponseWriter that the user-provided decorator extends.
+// 涉及三个术语：
+//   - “outer”：WrapForHTTP1Or2 返回的 ResponseWriter 对象。
+//   - “用户提供的装饰器”或“middle”：包装内层 ResponseWriter 的那个装饰器对象，
+//     它实现 UserProvidedDecorator 接口，可能实现也可能不实现
+//     http.CloseNotifier、http.Flusher 或 http.Hijacker。
+//   - “inner”：被用户装饰器扩展的那个 ResponseWriter。
 //
 // 关键不变量：返回对象暴露的可选接口集合必须与 inner 完全一致，
 // 否则调用方按接口断言时会误判连接能力（例如 HTTP/2 下谎报可 Hijack）。
 func WrapForHTTP1Or2(decorator UserProvidedDecorator) http.ResponseWriter {
-	// from go net/http documentation:
-	// The default HTTP/1.x and HTTP/2 ResponseWriter implementations support Flusher
-	// Handlers should always test for this ability at runtime.
+	// 以下结论来自 go net/http 文档：
+	// HTTP/1.x 与 HTTP/2 的默认 ResponseWriter 实现都支持 Flusher，handler 应在运行时检测该能力。
 	//
-	// The Hijacker interface is implemented by ResponseWriters that allow an HTTP handler
-	// to take over the connection.
-	// The default ResponseWriter for HTTP/1.x connections supports Hijacker, but HTTP/2 connections
-	// intentionally do not. ResponseWriter wrappers may also not support Hijacker.
-	// Handlers should always test for this ability at runtime
+	// Hijacker 由允许 handler 接管连接的 ResponseWriter 实现：HTTP/1.x 默认支持，
+	// HTTP/2 刻意不支持，包装器也可能不支持，handler 同样应在运行时检测。
 	//
-	// The CloseNotifier interface is implemented by ResponseWriters which allow detecting
-	// when the underlying connection has gone away.
-	// Deprecated: the CloseNotifier interface predates Go's context package.
-	// New code should use Request.Context instead.
+	// CloseNotifier 用于检测底层连接已断开。Deprecated: 该接口早于 Go 的 context 包，
+	// 新代码应改用 Request.Context。
 	inner := decorator.Unwrap()
 	if innerNotifierFlusher, ok := inner.(CloseNotifierFlusher); ok {
-		// for HTTP/2 request, the default ResponseWriter object (http2responseWriter)
-		// implements Flusher and CloseNotifier.
+		// HTTP/2 请求的默认 ResponseWriter 对象（http2responseWriter）实现 Flusher 和 CloseNotifier。
 		outerHTTP2 := outerWithCloseNotifyAndFlush{
 			UserProvidedDecorator:     decorator,
 			InnerCloseNotifierFlusher: innerNotifierFlusher,
 		}
 
 		if innerHijacker, hijackable := inner.(http.Hijacker); hijackable {
-			// for HTTP/1.x request the default implementation of ResponseWriter
-			// also implement CloseNotifier, Flusher and Hijacker
+			// HTTP/1.x 请求的默认 ResponseWriter 实现同时提供 CloseNotifier、Flusher 和 Hijacker。
 			return &outerWithCloseNotifyFlushAndHijack{
 				outerWithCloseNotifyAndFlush: outerHTTP2,
 				InnerHijacker:                innerHijacker,
@@ -94,20 +80,19 @@ func WrapForHTTP1Or2(decorator UserProvidedDecorator) http.ResponseWriter {
 		return outerHTTP2
 	}
 
-	// we should never be here for either http/1.x or http2 request
+	// 无论 http/1.x 还是 http2 请求，都不应该走到这里。
 	return decorator
 }
 
-// CloseNotifierFlusher is a combination of http.CloseNotifier and http.Flusher
-// This applies to both http/1.x and http2 requests.
+// CloseNotifierFlusher 是 http.CloseNotifier 与 http.Flusher 的组合，
+// http/1.x 和 http2 请求都适用。
 type CloseNotifierFlusher interface {
 	http.CloseNotifier
 	http.Flusher
 }
 
-// GetOriginal goes through the chain of wrapped http.ResponseWriter objects
-// and returns the original http.ResponseWriter object provided to the first
-// request handler in the filter chain.
+// GetOriginal 沿着被包装的 http.ResponseWriter 链条一直向下查找，
+// 返回过滤器链中第一个 handler 收到的原始 http.ResponseWriter 对象。
 // 用于需要访问底层连接（如 hijack、flush）的过滤器绕过装饰层。
 func GetOriginal(w http.ResponseWriter) http.ResponseWriter {
 	decorator, ok := w.(UserProvidedDecorator)
@@ -117,7 +102,7 @@ func GetOriginal(w http.ResponseWriter) http.ResponseWriter {
 
 	inner := decorator.Unwrap()
 	if inner == w {
-		// infinite cycle here, we should never be here though.
+		// 这里出现了无限循环，正常流程不应该走到这一步。
 		// 自引用会无限递归，宁可 panic 也不要栈溢出。
 		panic("http.ResponseWriter decorator chain has a cycle")
 	}
@@ -131,14 +116,13 @@ var _ http.Flusher = outerWithCloseNotifyAndFlush{}
 var _ http.ResponseWriter = outerWithCloseNotifyAndFlush{}
 var _ UserProvidedDecorator = outerWithCloseNotifyAndFlush{}
 
-// outerWithCloseNotifyAndFlush is the outer object that extends the
-// user provied decorator with http.CloseNotifier and http.Flusher only.
+// outerWithCloseNotifyAndFlush 是外层对象，仅为用户装饰器补充 http.CloseNotifier
+// 和 http.Flusher。
 type outerWithCloseNotifyAndFlush struct {
-	// UserProvidedDecorator is the user-provided object, it decorates
-	// an inner ResponseWriter object.
+	// UserProvidedDecorator 是使用方提供的对象，它装饰了内层 ResponseWriter。
 	UserProvidedDecorator
 
-	// http.CloseNotifier and http.Flusher for the inner object
+	// 内层对象的 http.CloseNotifier 和 http.Flusher 实现。
 	InnerCloseNotifierFlusher CloseNotifierFlusher
 }
 
@@ -168,13 +152,12 @@ var _ http.Hijacker = outerWithCloseNotifyFlushAndHijack{}
 var _ http.ResponseWriter = outerWithCloseNotifyFlushAndHijack{}
 var _ UserProvidedDecorator = outerWithCloseNotifyFlushAndHijack{}
 
-// outerWithCloseNotifyFlushAndHijack is the outer object that extends the
-// user-provided decorator with http.CloseNotifier, http.Flusher and http.Hijacker.
-// This applies to http/1.x requests only.
+// outerWithCloseNotifyFlushAndHijack 是外层对象，为用户装饰器补充 http.CloseNotifier、
+// http.Flusher 和 http.Hijacker，仅适用于 http/1.x 请求。
 type outerWithCloseNotifyFlushAndHijack struct {
 	outerWithCloseNotifyAndFlush
 
-	// http.Hijacker for the inner object
+	// 内层对象的 http.Hijacker 实现。
 	InnerHijacker http.Hijacker
 }
 

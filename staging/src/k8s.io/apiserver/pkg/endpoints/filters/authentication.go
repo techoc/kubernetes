@@ -39,10 +39,9 @@ import (
 
 type authenticationRecordMetricsFunc func(context.Context, *authenticator.Response, bool, error, authenticator.Audiences, time.Time, time.Time)
 
-// WithAuthentication creates an http handler that tries to authenticate the given request as a user, and then
-// stores any such user found onto the provided context for the request. If authentication fails or returns an error
-// the failed handler is used. On success, "Authorization" header is removed from the request and handler
-// is invoked to serve the request.
+// WithAuthentication 创建一个 http handler，尝试把给定请求认证为用户，并把认证到的
+// 用户存入该请求的上下文。认证失败或出错时使用 failed handler。成功时，请求上的
+// "Authorization" 头会被移除，然后调用 handler 处理请求。
 func WithAuthentication(handler http.Handler, auth authenticator.Request, failed http.Handler, apiAuds authenticator.Audiences, requestHeaderConfig *authenticatorfactory.RequestHeaderConfig) http.Handler {
 	RegisterMetrics()
 	return withAuthentication(handler, auth, failed, apiAuds, requestHeaderConfig, recordAuthenticationMetrics)
@@ -91,10 +90,10 @@ func withAuthentication(handler http.Handler, auth authenticator.Request, failed
 			return
 		}
 
-		// authorization header is not required anymore in case of a successful authentication.
+		// 认证成功之后就不再需要 authorization 头。
 		req.Header.Del("Authorization")
 
-		// delete standard front proxy headers
+		// 删除标准前置代理头
 		headerrequest.ClearAuthenticationHeaders(
 			req.Header,
 			standardRequestHeaderConfig.UsernameHeaders,
@@ -103,7 +102,7 @@ func withAuthentication(handler http.Handler, auth authenticator.Request, failed
 			standardRequestHeaderConfig.ExtraHeaderPrefixes,
 		)
 
-		// also delete any custom front proxy headers
+		// 同时删除自定义的前置代理头
 		if requestHeaderConfig != nil {
 			headerrequest.ClearAuthenticationHeaders(
 				req.Header,
@@ -114,14 +113,14 @@ func withAuthentication(handler http.Handler, auth authenticator.Request, failed
 			)
 		}
 
-		// http2 is an expensive protocol that is prone to abuse,
-		// see CVE-2023-44487 and CVE-2023-39325 for an example.
-		// Do not allow unauthenticated clients to keep these
-		// connections open (i.e. basically degrade them to the
-		// performance of http1 with keep-alive disabled).
+		// http2 是开销较大且容易被滥用的协议，
+		// 可参考 CVE-2023-44487 和 CVE-2023-39325。
+		// 不要让未认证的客户端长期保持这类连接
+		// （那样相当于把它们降级为禁用 keep-alive 的 http1
+		// 性能水平）。
 		if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.UnauthenticatedHTTP2DOSMitigation) && req.ProtoMajor == 2 && isAnonymousUser(resp.User) {
-			// limit this connection to just this request,
-			// and then send a GOAWAY and tear down the TCP connection
+			// 把该连接限制为只服务当前这一个请求，
+			// 随后发送 GOAWAY 并关闭 TCP 连接
 			// https://github.com/golang/net/commit/97aa3a539ec716117a9d15a4659a911f50d13c3c
 			w.Header().Set("Connection", "close")
 		}
@@ -134,14 +133,14 @@ func withAuthentication(handler http.Handler, auth authenticator.Request, failed
 // Unauthorized 返回认证失败时使用的处理器，统一输出 401。
 func Unauthorized(s runtime.NegotiatedSerializer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// http2 is an expensive protocol that is prone to abuse,
-		// see CVE-2023-44487 and CVE-2023-39325 for an example.
-		// Do not allow unauthenticated clients to keep these
-		// connections open (i.e. basically degrade them to the
-		// performance of http1 with keep-alive disabled).
+		// http2 是开销较大且容易被滥用的协议，
+		// 可参考 CVE-2023-44487 和 CVE-2023-39325。
+		// 不要让未认证的客户端长期保持这类连接
+		// （那样相当于把它们降级为禁用 keep-alive 的 http1
+		// 性能水平）。
 		if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.UnauthenticatedHTTP2DOSMitigation) && req.ProtoMajor == 2 {
-			// limit this connection to just this request,
-			// and then send a GOAWAY and tear down the TCP connection
+			// 把该连接限制为只服务当前这一个请求，
+			// 随后发送 GOAWAY 并关闭 TCP 连接
 			// https://github.com/golang/net/commit/97aa3a539ec716117a9d15a4659a911f50d13c3c
 			w.Header().Set("Connection", "close")
 		}

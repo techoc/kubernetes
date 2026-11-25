@@ -310,7 +310,7 @@ func TestConvertAPIResourceToDiscovery(t *testing.T) {
 				{
 					Resource: "cronjobs",
 					Scope:    apidiscoveryv2.ScopeNamespace,
-					// populated to avoid nil panics
+					// 填充该字段以避免 nil panic
 					ResponseKind: &metav1.GroupVersionKind{},
 					Subresources: []apidiscoveryv2.APISubresourceDiscovery{{
 						Subresource: "status",
@@ -339,11 +339,11 @@ func TestConvertAPIResourceToDiscovery(t *testing.T) {
 				{
 					Resource: "cronjobs",
 					Scope:    apidiscoveryv2.ScopeNamespace,
-					// populated to avoid nil panics
+					// 填充该字段以避免 nil panic
 					ResponseKind: &metav1.GroupVersionKind{},
 					Subresources: []apidiscoveryv2.APISubresourceDiscovery{{
 						Subresource: "status",
-						// populated to avoid nil panics
+						// 填充该字段以避免 nil panic
 						ResponseKind: &metav1.GroupVersionKind{},
 						Verbs:        []string{"create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"},
 					}},

@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// statusError is an object that can be converted into an metav1.Status
+// statusError 是可以转换为 metav1.Status 的对象
 type statusError interface {
 	Status() metav1.Status
 }
@@ -50,7 +50,7 @@ func (n *fakeNegotiater) SupportedMediaTypes() []runtime.SerializerInfo {
 		}
 		parts := strings.SplitN(mediaType, "/", 2)
 		if len(parts) == 1 {
-			// this is an error on the server side
+			// 这是服务端错误
 			parts = append(parts, "")
 		}
 
@@ -156,7 +156,7 @@ func TestNegotiate(t *testing.T) {
 			params:      map[string]string{"pretty": "1"},
 		},
 
-		// query param triggers pretty
+		// 查询参数触发 pretty
 		{
 			req: &http.Request{
 				Header: http.Header{"Accept": []string{"application/json"}},
@@ -168,7 +168,7 @@ func TestNegotiate(t *testing.T) {
 			params:      map[string]string{"pretty": "1"},
 		},
 
-		// certain user agents trigger pretty
+		// 特定 user agent 触发 pretty
 		{
 			req: &http.Request{
 				Header: http.Header{
@@ -225,8 +225,8 @@ func TestNegotiate(t *testing.T) {
 			ns:          &fakeNegotiater{serializer: fakeCodec, types: []string{"application/json"}},
 			serializer:  fakeCodec,
 		},
-		// "application" is not a valid media type, so the server will reject the response during
-		// negotiation (the server, in error, has specified an invalid media type)
+		// "application" 不是合法的媒体类型，server 会在协商阶段拒绝响应
+		// （server 错误地指定了非法媒体类型）
 		{
 			accept: "application",
 			ns:     &fakeNegotiater{serializer: fakeCodec, types: []string{"application"}},

@@ -30,22 +30,21 @@ type Addresses interface {
 	ServerAddressByClientCIDRs(net.IP) []metav1.ServerAddressByClientCIDR
 }
 
-// DefaultAddresses is a default implementation of Addresses that will work in most cases
+// DefaultAddresses 是 Addresses 的默认实现，适用于大多数场景
 type DefaultAddresses struct {
-	// CIDRRules is a list of CIDRs and Addresses to use if a client is in the range
+	// CIDRRules 是一组 CIDR 与地址规则：客户端 IP 落在某个网段内时使用对应地址
 	CIDRRules []CIDRRule
 
-	// DefaultAddress is the address (hostname or IP and port) that should be used in
-	// if no CIDR matches more specifically.
+	// DefaultAddress 是没有任何 CIDR 规则更精确匹配时应使用的地址
+	// （主机名，或 IP 加端口）
 	DefaultAddress string
 }
 
-// CIDRRule is a rule for adding an alternate path to the master based on matching CIDR
+// CIDRRule 基于 CIDR 匹配，为访问 apiserver 增加一条备用地址路径
 type CIDRRule struct {
 	IPRange net.IPNet
 
-	// Address is the address (hostname or IP and port) that should be used in
-	// if this CIDR matches
+	// Address 是该 CIDR 匹配时应使用的地址（主机名，或 IP 加端口）
 	Address string
 }
 

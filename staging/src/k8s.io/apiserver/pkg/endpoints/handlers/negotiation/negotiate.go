@@ -30,7 +30,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
-// MediaTypesForSerializer returns a list of media and stream media types for the server.
+// MediaTypesForSerializer 返回服务器可用的媒体类型与流媒体类型列表。
 // 流式类型用于 watch；开启 CBOR 特性门控时额外提供 CBOR Sequence，
 // 因为 CBOR 的流式格式并非简单的 “;stream=watch” 参数化形式。
 func MediaTypesForSerializer(ns runtime.NegotiatedSerializer) (mediaTypes, streamMediaTypes []string) {
@@ -41,15 +41,14 @@ func MediaTypesForSerializer(ns runtime.NegotiatedSerializer) (mediaTypes, strea
 				streamMediaTypes = append(streamMediaTypes, runtime.ContentTypeCBORSequence)
 				continue
 			}
-			// stream=watch is the existing mime-type parameter for watch
+			// stream=watch 是 watch 沿用的既有 mime 参数
 			streamMediaTypes = append(streamMediaTypes, info.MediaType+";stream=watch")
 		}
 	}
 	return mediaTypes, streamMediaTypes
 }
 
-// NegotiateOutputMediaType negotiates the output structured media type and a serializer, or
-// returns an error.
+// NegotiateOutputMediaType 协商输出的结构化媒体类型与序列化器，失败时返回错误。
 // 客户端可通过 Accept 参数请求 pretty 输出；未显式请求时，已知的人类客户端
 // （curl/Wget/浏览器）会自动获得 pretty 序列化。
 func NegotiateOutputMediaType(req *http.Request, ns runtime.NegotiatedSerializer, restrictions EndpointRestrictions) (MediaTypeOptions, runtime.SerializerInfo, error) {
@@ -58,7 +57,7 @@ func NegotiateOutputMediaType(req *http.Request, ns runtime.NegotiatedSerializer
 		supported, _ := MediaTypesForSerializer(ns)
 		return mediaType, runtime.SerializerInfo{}, NewNotAcceptableError(supported)
 	}
-	// TODO: move into resthandler
+	// TODO: 移到 resthandler 中
 	info := mediaType.Accepted
 	if (mediaType.Pretty || isPrettyPrint(req)) && info.PrettySerializer != nil {
 		info.Serializer = info.PrettySerializer
@@ -66,7 +65,7 @@ func NegotiateOutputMediaType(req *http.Request, ns runtime.NegotiatedSerializer
 	return mediaType, info, nil
 }
 
-// NegotiateOutputMediaTypeStream returns a stream serializer for the given request.
+// NegotiateOutputMediaTypeStream 返回给定请求的流式序列化器。
 // 只有声明了 StreamSerializer 的类型才能用于 watch，否则返回 NotAcceptable。
 func NegotiateOutputMediaTypeStream(req *http.Request, ns runtime.NegotiatedSerializer, restrictions EndpointRestrictions) (runtime.SerializerInfo, error) {
 	mediaType, ok := NegotiateMediaTypeOptions(req.Header.Get("Accept"), ns.SupportedMediaTypes(), restrictions)
@@ -77,13 +76,13 @@ func NegotiateOutputMediaTypeStream(req *http.Request, ns runtime.NegotiatedSeri
 	return mediaType.Accepted, nil
 }
 
-// NegotiateInputSerializer returns the input serializer for the provided request.
+// NegotiateInputSerializer 返回该请求对应的输入序列化器。
 func NegotiateInputSerializer(req *http.Request, streaming bool, ns runtime.NegotiatedSerializer) (runtime.SerializerInfo, error) {
 	mediaType := req.Header.Get("Content-Type")
 	return NegotiateInputSerializerForMediaType(mediaType, streaming, ns)
 }
 
-// NegotiateInputSerializerForMediaType returns the appropriate serializer for the given media type or an error.
+// NegotiateInputSerializerForMediaType 为给定媒体类型返回合适的序列化器。
 // 空 Content-Type 时回退到首个受支持类型，保持与历史客户端（如 kubectl）的兼容。
 func NegotiateInputSerializerForMediaType(mediaType string, streaming bool, ns runtime.NegotiatedSerializer) (runtime.SerializerInfo, error) {
 	mediaTypes := ns.SupportedMediaTypes()
@@ -103,12 +102,12 @@ func NegotiateInputSerializerForMediaType(mediaType string, streaming bool, ns r
 	return runtime.SerializerInfo{}, NewUnsupportedMediaTypeError(supported)
 }
 
-// isPrettyPrint returns true if the "pretty" query parameter is true or if the User-Agent
-// matches known "human" clients.
+// isPrettyPrint 在 "pretty" 查询参数为真，或 User-Agent 匹配已知的
+// "人类"客户端时返回 true。
 func isPrettyPrint(req *http.Request) bool {
-	// DEPRECATED: should be part of the content type
+	// DEPRECATED: 它本应是内容类型的一部分。
 	if req.URL != nil {
-		// avoid an allocation caused by parsing the URL query
+		// 避免解析 URL query 带来的内存分配。
 		// 先做廉价的子串检查，只有确实包含 pretty 时才解析 query。
 		if strings.Contains(req.URL.RawQuery, "pretty") {
 			pp := req.URL.Query().Get("pretty")
@@ -119,30 +118,26 @@ func isPrettyPrint(req *http.Request) bool {
 		}
 	}
 	userAgent := req.UserAgent()
-	// This covers basic all browsers and cli http tools
+	// 该正则覆盖常见的浏览器与命令行 HTTP 工具。
 	if strings.HasPrefix(userAgent, "curl") || strings.HasPrefix(userAgent, "Wget") || strings.HasPrefix(userAgent, "Mozilla/5.0") {
 		return true
 	}
 	return false
 }
 
-// EndpointRestrictions is an interface that allows content-type negotiation
-// to verify server support for specific options
+// EndpointRestrictions 接口让内容协商能够校验服务器对特定选项的支持情况。
 type EndpointRestrictions interface {
-	// AllowsMediaTypeTransform returns true if the endpoint allows either the requested mime type
-	// or the requested transformation. If false, the caller should ignore this mime type. If the
-	// target is nil, the client is not requesting a transformation.
+	// AllowsMediaTypeTransform 在端点允许请求的媒体类型或请求的转换时返回 true。
+	// 返回 false 时调用方应忽略该媒体类型；若 target 为 nil，说明客户端并未请求转换。
 	AllowsMediaTypeTransform(mimeType, mimeSubType string, target *schema.GroupVersionKind) bool
-	// AllowsServerVersion should return true if the specified version is valid
-	// for the server group.
+	// AllowsServerVersion 在给定版本对 server group 合法时应返回 true。
 	AllowsServerVersion(version string) bool
-	// AllowsStreamSchema should return true if the specified stream schema is
-	// valid for the server group.
+	// AllowsStreamSchema 在给定流 schema 对 server group 合法时应返回 true。
 	AllowsStreamSchema(schema string) bool
 }
 
-// DefaultEndpointRestrictions is the default EndpointRestrictions which allows
-// content-type negotiation to verify server support for specific options
+// DefaultEndpointRestrictions 是默认的 EndpointRestrictions，
+// 允许内容协商校验服务器对特定选项的支持情况。
 var DefaultEndpointRestrictions = emptyEndpointRestrictions{}
 
 // emptyEndpointRestrictions 只允许不请求类型转换、仅 watch 流的保守策略。
@@ -159,51 +154,45 @@ func (emptyEndpointRestrictions) AllowsServerVersion(string) bool { return false
 // AllowsStreamSchema 仅允许 watch。
 func (emptyEndpointRestrictions) AllowsStreamSchema(s string) bool { return s == "watch" }
 
-// MediaTypeOptions describes information for a given media type that may alter
-// the server response
+// MediaTypeOptions 描述某个媒体类型上可能改变服务器响应的信息。
 type MediaTypeOptions struct {
-	// pretty is true if the requested representation should be formatted for human
-	// viewing
+	// pretty 为 true 时，请求的表示形式应为便于人阅读的排版。
 	Pretty bool
 
-	// stream, if set, indicates that a streaming protocol variant of this encoding
-	// is desired. The only currently supported value is watch which returns versioned
-	// events. In the future, this may refer to other stream protocols.
+	// stream 若设置，表示希望使用该编码的流式协议变体。
+	// 目前唯一支持的取值是 watch，返回带版本的事件；将来可能引入其他流协议。
 	Stream string
 
-	// convert is a request to alter the type of object returned by the server from the
-	// normal response
+	// convert 表示希望改变服务器返回对象的类型，而非通常的响应形式。
 	Convert *schema.GroupVersionKind
-	// useServerVersion is an optional version for the server group
+	// useServerVersion 是 server group 的可选版本。
 	UseServerVersion string
 
-	// export is true if the representation requested should exclude fields the server
-	// has set
+	// export 为 true 时，请求的表示形式应排除服务器设置的字段。
 	Export bool
 
-	// profile controls the discovery profile (e.g., "local" for local (non peer-aggregated) discovery)
+	// profile 控制 discovery profile（例如 "local" 表示本地、非对等聚合的发现）。
 	Profile string
 
-	// unrecognized is a list of all unrecognized keys
+	// unrecognized 列出所有无法识别的键。
 	// 记录未知参数而非直接报错，为未来扩展参数留出前向兼容空间。
 	Unrecognized []string
 
-	// the accepted media type from the client
+	// 客户端接受的媒体类型
 	Accepted runtime.SerializerInfo
 }
 
-// acceptMediaTypeOptions returns an options object that matches the provided media type params. If
-// it returns false, the provided options are not allowed and the media type must be skipped.  These
-// parameters are unversioned and may not be changed.
+// acceptMediaTypeOptions 返回与给定媒体类型参数相匹配的选项对象。
+// 若返回 false，说明这些选项不被允许，必须跳过该媒体类型。参数是无版本的，不可更改。
 func acceptMediaTypeOptions(params map[string]string, accepts *runtime.SerializerInfo, endpoint EndpointRestrictions) (MediaTypeOptions, bool) {
 	var options MediaTypeOptions
 
-	// extract all known parameters
+	// 提取所有已知参数。
 	// 未知参数只记录不拒绝；但若 endpoint 限制不满足，则整个媒体类型被跳过。
 	for k, v := range params {
 		switch k {
 
-		// controls transformation of the object when returned
+		// 控制对象返回时的转换方式。
 		case "as":
 			if options.Convert == nil {
 				options.Convert = &schema.GroupVersionKind{}
@@ -220,32 +209,30 @@ func acceptMediaTypeOptions(params map[string]string, accepts *runtime.Serialize
 			}
 			options.Convert.Version = v
 
-		// controls the streaming schema
+			// 控制流式 schema。
 		case "stream":
 			if len(v) > 0 && (accepts.StreamSerializer == nil || !endpoint.AllowsStreamSchema(v)) {
 				return MediaTypeOptions{}, false
 			}
 			options.Stream = v
 
-		// controls the version of the server API group used
-		// for generic output
+			// 控制用于通用输出的 server API group 版本。
 		case "sv":
 			if len(v) > 0 && !endpoint.AllowsServerVersion(v) {
 				return MediaTypeOptions{}, false
 			}
 			options.UseServerVersion = v
 
-		// if specified, the server should transform the returned
-		// output and remove fields that are always server specified,
-		// or which fit the default behavior.
+			// 若指定，服务器应转换返回的输出，移除那些始终由服务器设置
+			// 或符合默认行为的字段。
 		case "export":
 			options.Export = v == "1"
 
-		// if specified, the pretty serializer will be used
+			// 若指定，则使用 pretty 序列化器。
 		case "pretty":
 			options.Pretty = v == "1"
 
-		// controls the discovery profile (eg local vs peer-aggregated)
+			// 控制 discovery profile（例如 local 与 peer-aggregated）。
 		case "profile":
 			options.Profile = v
 
@@ -263,8 +250,8 @@ func acceptMediaTypeOptions(params map[string]string, accepts *runtime.Serialize
 	return options, true
 }
 
-// NegotiateMediaTypeOptions returns the most appropriate content type given the accept header and
-// a list of alternatives along with the accepted media type parameters.
+// NegotiateMediaTypeOptions 根据 Accept 头、可选媒体类型列表以及请求 scope，
+// 返回最合适的内容类型及被接受的媒体类型参数。
 // 按客户端偏好顺序遍历 Accept 子句，返回第一个被服务端与 endpoint 同时接受的选项；
 // 空 Accept 时回退到服务端首个类型。
 func NegotiateMediaTypeOptions(header string, accepted []runtime.SerializerInfo, endpoint EndpointRestrictions) (MediaTypeOptions, bool) {

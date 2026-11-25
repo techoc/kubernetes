@@ -38,7 +38,7 @@ import (
 // might fail during GoLang update, we can fix the broken test(s) by changing the
 // wanted error in the test setup to the new observed error.
 //
-// 中文说明：本文件用真实 net/http 服务器刻画 per-request 读/写 deadline 的底层行为，
+// 本文件用真实 net/http 服务器刻画 per-request 读/写 deadline 的底层行为，
 // 作为 filters 中 SetReadDeadline/SetWriteDeadline 实现的“事实基线”。断言依赖
 // 标准库错误文本，升级 Go 时可能需要同步调整。
 

@@ -38,38 +38,37 @@ import (
 
 // impersonatedUserInfo 是某个模式成功模拟后的结果。
 //
-// 中文说明：constraint 记录「允许此次模拟的动词」，用于审计与错误信息；
+// constraint 记录「允许此次模拟的动词」，用于审计与错误信息；
 // 它不参与授权判定，只用于解释结果来源。
 type impersonatedUserInfo struct {
 	user       user.Info
-	constraint string // the verb used in impersonationModeState.check that allowed this user to be impersonated
+	constraint string // impersonationModeState.check 中允许该用户被模拟的那个动词。
 }
 
-// impersonationMode is a type that represents a specific impersonation mode
-// it checks if a requester is allowed to make an API request (the attributes) while impersonating a user (the wantedUser)
-// a mode may return a cached result if it supports caching (using the input cache key if appropriate)
-// a nil impersonatedUserInfo is returned if the mode does not support impersonating the wantedUser
+// impersonationMode 表示一种具体的模拟模式：它检查请求方在模拟某个用户（wantedUser）时
+// 是否被允许发起某个 API 请求（attributes）。若模式支持缓存，可能返回缓存结果
+// （必要时使用传入的缓存键）。若该模式不支持模拟该 wantedUser，则返回 nil 的 impersonatedUserInfo。
 //
-// 中文说明：每个模式负责两件事——先判断「该模式是否适用于本次请求」，再做授权检查。
+// 每个模式负责两件事——先判断「该模式是否适用于本次请求」，再做授权检查。
 // 返回 nil 表示不适用（继续尝试下一个模式），返回错误表示明确拒绝。
 // 缓存由各模式自行决定；key 由调用方给出，但模式可以按需改造或忽略。
 type impersonationMode interface {
 	check(ctx context.Context, key *impersonationCacheKey, wantedUser *user.DefaultInfo, attributes authorizer.Attributes) (*impersonatedUserInfo, error)
 
-	// all methods below are only used in unit tests
+	// 以下方法仅用于单元测试。
 	verbForTests() string
 	cachesForTests() (outer, inner *impersonationCache)
 }
 
-// constrainedImpersonationModeFilter is a function that defines if a specific constrained impersonation mode
-// supports the requestor impersonating the wantedUser.  It serves as a sudo authorization check for the mode.
+// constrainedImpersonationModeFilter 用于判断某个受约束的模拟模式是否支持
+// requestor 模拟 wantedUser，它同时充当该模式的 sudo 授权检查。
 //
-// 中文说明：过滤在授权之前执行，且不查缓存——因为缓存键不一定与 wantedUser+attributes
+// 过滤在授权之前执行，且不查缓存——因为缓存键不一定与 wantedUser+attributes
 // 一一对应，必须先确认模式适用，否则可能命中为其他输入准备的缓存项。
 type constrainedImpersonationModeFilter func(wantedUser *user.DefaultInfo, requestor user.Info) bool
 
 // allImpersonationModes 返回按优先级排列的全部模式。
-// 中文说明：顺序即尝试顺序；associated-node 放在最前，因为它对节点代理有专门优化，
+// 顺序即尝试顺序；associated-node 放在最前，因为它对节点代理有专门优化，
 // 且其语义最窄，先匹配可避免落入更宽泛的模式。
 func allImpersonationModes(a authorizer.UnconditionalAuthorizer) []impersonationMode {
 	return []impersonationMode{
@@ -81,23 +80,22 @@ func allImpersonationModes(a authorizer.UnconditionalAuthorizer) []impersonation
 	}
 }
 
-// associatedNodeImpersonationMode allows a requestor service account to impersonate the node that it is
-// associated with.  this is by far the most complex impersonation mode because it caches successful
-// impersonation attempts in a way that results in a high cache hit ratio even when the same service account
-// is used across different pods running on different nodes (i.e. a node agent running as a daemonset).
-// only the username can be specified by the requester.  all other fields in user.Info are controlled by the API server.
+// associatedNodeImpersonationMode 允许 requestor ServiceAccount 模拟与它关联的节点。
+// 这是最复杂的一种模拟模式：它对成功的模拟结果做缓存，使得同一个 ServiceAccount
+// 在不同节点上的不同 Pod 中使用时（例如以 DaemonSet 运行的节点代理）仍能保持很高的缓存命中率。
+// 请求方只能指定用户名，user.Info 的其余字段都由 API Server 控制。
 //
-// 中文说明：缓存键刻意抹去节点名与 extra 值（用 "system:node:*" 作占位），
+// 缓存键刻意抹去节点名与 extra 值（用 "system:node:*" 作占位），
 // 使同一 ServiceAccount 在所有节点上共享缓存；安全性由前置的「节点关联校验」保证——
 // 只有确认该 SA 的 bound node 与目标节点一致时才会走到这里。
 func associatedNodeImpersonationMode(a authorizer.UnconditionalAuthorizer) impersonationMode {
-	// we wrap the authorizer so that we can override the requestor service account's extra values
-	// and the node name used in the authorization check.  this makes our authorization checks match
-	// the exact semantics of our cache key which prevents unexpected privilege escalation on a cache
-	// hit.  see the comment below for the cache key details.
+	// 我们包装 authorizer，以便覆盖 requestor ServiceAccount 的 extra 取值
+	// 以及授权检查中使用的节点名。这样我们的授权检查与缓存键的语义
+	// 精确一致，从而避免缓存命中时出现意外的权限提升。
+	// 缓存键的细节见下方注释。
 	wrappedAuthorizer := authorizer.AuthorizerFunc(func(ctx context.Context, attributes authorizer.Attributes) (authorizer.Decision, string, error) {
-		// we use checkAuthorization instead of directly calling the authorizer so we can
-		// make the error message line up with the actual attributes authorized against
+		// 这里使用 checkAuthorization 而不是直接调用 authorizer，
+		// 以便让错误信息与实际用于授权的 attributes 保持一致。
 		if err := checkAuthorization(ctx, a, &associatedNodeImpersonationAttributes{Attributes: attributes}); err != nil {
 			return authorizer.DecisionDeny, "", err
 		}
@@ -119,24 +117,24 @@ type associatedNodeImpersonationCheck struct {
 }
 
 // check 使用静态缓存键执行检查，再把结果中的节点名修正为目标节点。
-// 中文说明：忽略传入 key 是有意为之——见下方注释，缓存语义需要跨节点共享。
+// 忽略传入 key 是有意为之——见下方注释，缓存语义需要跨节点共享。
 func (a *associatedNodeImpersonationCheck) check(ctx context.Context, _ *impersonationCacheKey, wantedUser *user.DefaultInfo, attributes authorizer.Attributes) (*impersonatedUserInfo, error) {
 	wantedNodeName := wantedUser.Name
-	// ignore the input cache key because the cache semantics for associated-node require custom logic.
-	// we know that by the time this key is used, the filter has already verified that the requestor is
-	// a service account with a node ref that matches the node it is trying to impersonate.
-	// the actual node being impersonated is not relevant to the cache key, so we just use a static wantedUser.
-	// we wrap the attributes so that we can drop the requestor service account's extra values.
-	// this results in the cache key being the same for the same service account across all nodes.
-	// this is only safe because of the aforementioned filter running before the cache lookup happens.
+	// 忽略传入的缓存键，因为 associated-node 的缓存语义需要自定义逻辑。
+	// 能用到这个键时，filter 已经确认 requestor 是一个 ServiceAccount，
+	// 且其 node ref 与要模拟的节点匹配。
+	// 实际被模拟的节点与缓存键无关，因此这里只使用一个固定的 wantedUser。
+	// 我们包装 attributes，以便丢弃 requestor ServiceAccount 的 extra 取值。
+	// 这样同一 ServiceAccount 在所有节点上的缓存键都相同。
+	// 只有依赖前述“filter 先于缓存查询执行”这一前提，这样做才是安全的。
 	key := &impersonationCacheKey{wantedUser: &user.DefaultInfo{Name: "system:node:*"}, attributes: &associatedNodeImpersonationAttributes{Attributes: attributes}}
 	impersonatedNodeWithMaybeIncorrectUsername, err := a.mode.check(ctx, key, wantedUser, attributes)
 	if err != nil || impersonatedNodeWithMaybeIncorrectUsername == nil {
 		return nil, err
 	}
-	// at this point, we know that we have a successful associated-node impersonation.
-	// the value could have come from the cache and thus could be for any node, so we wrap the result
-	// here so that the username matches the node associated with the requestor service account.
+	// 走到这里说明 associated-node 模拟已成功。
+	// 结果可能来自缓存，因此可能对应任意节点，所以这里再包装一次结果，
+	// 使用户名与 requestor ServiceAccount 关联的节点一致。
 	return &impersonatedUserInfo{
 		user: &associatedNodeImpersonationWantedUserInfo{
 			Info: impersonatedNodeWithMaybeIncorrectUsername.user,
@@ -167,11 +165,11 @@ func (a *associatedNodeImpersonationAttributes) GetUser() user.Info {
 }
 
 // GetName 在 associated-node 动词下返回 "*"。
-// 中文说明：因为缓存键忽略节点名，授权检查必须对「所有节点名」都成立，
+// 因为缓存键忽略节点名，授权检查必须对「所有节点名」都成立，
 // 否则会出现「授权了 A 节点、却命中 B 节点的缓存」这种越权。
 func (a *associatedNodeImpersonationAttributes) GetName() string {
 	if a.GetVerb() == "impersonate:associated-node" {
-		return "*" // our cache key ignores the node name, so our authorization check needs to be valid for all node names
+		return "*" // 缓存键忽略节点名，因此授权检查必须对所有节点名都成立
 	}
 	return a.Attributes.GetName()
 }
@@ -182,17 +180,17 @@ type associatedNodeImpersonationRequestorUserInfo struct {
 }
 
 // GetExtra 只保留 extra 的键名集合，丢弃具体值。
-// 中文说明：节点名等值会让缓存键随节点变化，导致命中率极低；
+// 节点名等值会让缓存键随节点变化，导致命中率极低；
 // 保留键名是为了让不同类型的 bound object ref 产生不同缓存键，维持隔离。
 // 完整 extra 仍会出现在审计日志中。
 func (a *associatedNodeImpersonationRequestorUserInfo) GetExtra() map[string][]string {
 	return map[string][]string{
-		// we know the requestor is a service account with a node ref that matches the node it is trying to impersonate
-		// basically all the extra values would cause cache misses (for example, the node name itself)
-		// so we drop all the extra values but keep the associated key names
-		// the authorizer can trust that we have performed the node association check correctly
-		// the audit log will still contain the full requestor extra fields
-		// different bound object ref types can result in different extra keys, and thus a different cache key
+		// 此处已知 requestor 是 ServiceAccount，且其 node ref 与要模拟的节点匹配。
+		// 基本上所有 extra 的取值都会造成缓存未命中（例如节点名本身），
+		// 因此丢弃全部 extra 取值但保留其键名。
+		// authorizer 可以相信我们已经正确完成了节点关联校验。
+		// 审计日志中仍会保留 requestor 完整的 extra 字段。
+		// 不同类型的 bound object ref 会产生不同的 extra 键，从而得到不同的缓存键。
 		"authentication.kubernetes.io/associated-node-keys": sets.StringKeySet(a.Info.GetExtra()).List(),
 	}
 }
@@ -208,8 +206,8 @@ func (a *associatedNodeImpersonationWantedUserInfo) GetName() string {
 	return a.name
 }
 
-// arbitraryNodeImpersonationMode implements constrained impersonation for nodes.
-// Only the username can be specified by the requester.  All other fields in user.Info are controlled by the API server.
+// arbitraryNodeImpersonationMode 为节点实现受约束的模拟。
+// 请求方只能指定用户名，user.Info 的其余字段都由 API Server 控制。
 func arbitraryNodeImpersonationMode(a authorizer.UnconditionalAuthorizer) impersonationMode {
 	return newConstrainedImpersonationMode(a, "arbitrary-node",
 		func(wantedUser *user.DefaultInfo, _ user.Info) bool {
@@ -222,8 +220,8 @@ func arbitraryNodeImpersonationMode(a authorizer.UnconditionalAuthorizer) impers
 	)
 }
 
-// serviceAccountImpersonationMode implements constrained impersonation for service accounts.
-// Only the username can be specified by the requester.  All other fields in user.Info are controlled by the API server.
+// serviceAccountImpersonationMode 为 ServiceAccount 实现受约束的模拟。
+// 请求方只能指定用户名，user.Info 的其余字段都由 API Server 控制。
 func serviceAccountImpersonationMode(a authorizer.UnconditionalAuthorizer) impersonationMode {
 	return newConstrainedImpersonationMode(a, "serviceaccount",
 		func(wantedUser *user.DefaultInfo, _ user.Info) bool {
@@ -236,17 +234,17 @@ func serviceAccountImpersonationMode(a authorizer.UnconditionalAuthorizer) imper
 	)
 }
 
-// userInfoImpersonationMode implements constrained impersonation for non-node and non-service account users.
-// Unlike the other constrained impersonation modes, it supports impersonating all fields of user.Info.
+// userInfoImpersonationMode 为非节点、非 ServiceAccount 的用户实现受约束的模拟。
+// 与其他受约束模式不同，它支持模拟 user.Info 的全部字段。
 //
-// 中文说明：排除节点与 ServiceAccount 用户名，是因为它们已有专门模式且
+// 排除节点与 ServiceAccount 用户名，是因为它们已有专门模式且
 // 其组/extra 由 API Server 固定生成；若允许在此模式模拟，会绕过这些固定语义。
 func userInfoImpersonationMode(a authorizer.UnconditionalAuthorizer) impersonationMode {
 	return newConstrainedImpersonationMode(a, "user-info",
 		func(wantedUser *user.DefaultInfo, _ user.Info) bool {
-			// nodes and service accounts cannot be impersonated in this mode.
-			// the user-info bucket is reserved for the "other" users, that is,
-			// users that do not have an explicit schema defined by Kube.
+			// 在该模式下不能模拟节点和 ServiceAccount。
+			// user-info 这个“桶”专门留给其他用户，即那些
+			// Kubernetes 没有为其定义显式 schema 的用户。
 			if _, ok := isNodeUsername(wantedUser.Name); ok {
 				return false
 			}
@@ -258,10 +256,10 @@ func userInfoImpersonationMode(a authorizer.UnconditionalAuthorizer) impersonati
 	)
 }
 
-// legacyImpersonationMode is a complete reimplementation of the original impersonation mode that has
-// existed in kube since v1.3.  The behavior is expected to be identical to the original implementation.
+// legacyImpersonationMode 完全重新实现了 kube 自 v1.3 起就存在的原始模拟模式。
+// 其行为被期望与原实现保持一致。
 //
-// 中文说明：保留原语义（使用 impersonate 动词、无外层缓存、无额外校验），
+// 保留原语义（使用 impersonate 动词、无外层缓存、无额外校验），
 // 以保证升级后旧客户端的授权结果不变。
 func legacyImpersonationMode(a authorizer.UnconditionalAuthorizer) impersonationMode {
 	return &legacyImpersonationCheck{m: newImpersonationModeState(a, "impersonate", false)}
@@ -285,8 +283,8 @@ func (l *legacyImpersonationCheck) verbForTests() string {
 
 // cachesForTests 返回空的外层缓存与（未使用的）内层缓存。
 func (l *legacyImpersonationCheck) cachesForTests() (*impersonationCache, *impersonationCache) {
-	// legacy impersonation has no outer layer so just return an empty cache
-	// though an inner cache is present, it is unused
+	// legacy 模拟没有外层，直接返回空缓存；
+	// 虽有内层缓存，但并未使用。
 	return newImpersonationCache(false), l.m.cache
 }
 
@@ -301,18 +299,18 @@ func newConstrainedImpersonationMode(a authorizer.UnconditionalAuthorizer, mode 
 	}
 }
 
-// constrainedImpersonationModeState implements the secondary authorization check via impersonate-on:<mode>:<verb> to
-// determine if the requestor is authorized to perform the specific verb when impersonating the wantedUser via mode.
-// if this check succeeds, the primary authorization checks are run, see impersonationModeState for details.
-// if the mode's filter does not match the inputs, the impersonation automatically fails and returns a nil impersonatedUserInfo.
+// constrainedImpersonationModeState 通过 impersonate:<mode> 动词实现次级授权检查：
+// 判断 requestor 是否在模拟 wantedUser 时被授权执行这个具体动词。
+// 该检查通过后，才会执行主授权检查（见 impersonationModeState）。
+// 若模式的 filter 与输入不匹配，模拟直接失败并返回 nil。
 //
-// 中文说明：两层授权——先检查「是否允许在此模式下执行该动词」（sudo 检查），
+// 两层授权——先检查「是否允许在此模式下执行该动词」（sudo 检查），
 // 再检查「是否允许模拟该用户的具体字段」。外层缓存覆盖整体结果，命中率高时省去两轮检查。
 type constrainedImpersonationModeState struct {
 	state *impersonationModeState
-	// this outer cache covers the overall impersonation for this mode, i.e. a cache hit here short-circuits all checks
-	// skipAttributes is false, i.e. this cache depends on the request being made, not just the user being impersonated by the requestor
-	// it is expected to have a low hit ratio because the requestor is unlikely to make the same request multiple times in a short period
+	// 这层外层缓存覆盖该模式的整体模拟结果：命中这里就意味着后续
+	// skipAttributes 为 false，即该缓存取决于所发出的请求，而不仅是被模拟的用户；
+	// 预期命中率较低，因为 requestor 很少用完全相同的方式重复同一请求。
 	cache      *impersonationCache
 	authorizer authorizer.UnconditionalAuthorizer
 	mode       string
@@ -322,8 +320,8 @@ type constrainedImpersonationModeState struct {
 // check 依次执行过滤、外层缓存、sudo 授权、主授权与缓存写入。
 func (c *constrainedImpersonationModeState) check(ctx context.Context, key *impersonationCacheKey, wantedUser *user.DefaultInfo, attributes authorizer.Attributes) (*impersonatedUserInfo, error) {
 	requestor := attributes.GetUser()
-	// we must call the filter before doing anything because this serves as a sudo authorization check to say "does this mode even apply?"
-	// also the cache key is not always a direct match with wantedUser+attributes, so again, we must call the filter first
+	// 必须先调用 filter，因为它同时充当 sudo 授权检查；
+	// 而且缓存键并不总是与 wantedUser+attributes 直接对应，所以同样必须先调用它。
 	if !c.filter(wantedUser, requestor) {
 		return nil, nil
 	}
@@ -354,11 +352,11 @@ func (c *constrainedImpersonationModeState) cachesForTests() (*impersonationCach
 	return c.cache, c.state.cache
 }
 
-// impersonationModeState implements the primary authorization checks via the impersonate:<mode> verb for constrained
-// impersonation and the impersonate verb for legacy impersonation.  each field that is set in the wantedUser
-// results in one or more authorization checks to determine if the requestor has access to impersonate that value.
+// impersonationModeState 通过 impersonate:<mode> 动词实现主授权检查，
+// 对 legacy 模拟则使用 impersonate 动词。wantedUser 中每设置一个字段，
+// 都会触发一次或多次授权检查，以判断 requestor 是否有权模拟该字段。
 //
-// 中文说明：内层缓存只取决于「被模拟的用户」，与具体请求无关（skipAttributes=true），
+// 内层缓存只取决于「被模拟的用户」，与具体请求无关（skipAttributes=true），
 // 因此同一用户被反复模拟时命中率很高。legacy 模式不启用该缓存以保持行为不变。
 type impersonationModeState struct {
 	authorizer                 authorizer.UnconditionalAuthorizer
@@ -368,14 +366,14 @@ type impersonationModeState struct {
 	usernameAndGroupGV schema.GroupVersion
 	constraint         string
 
-	// this inner cache covers the checks related to the specific fields set in wantedUser
-	// skipAttributes is true, i.e. this cache only depends on the user being impersonated by the requestor
-	// it is expected to have a high hit ratio because the requestor may impersonate the same user for many different requests
+	// 这层内层缓存覆盖 wantedUser 中各具体字段相关的检查。
+	// skipAttributes 为 true，即该缓存只取决于 requestor 要模拟的那个用户，
+	// 与请求内容无关。预期命中率很高，因为 requestor 常会针对不同请求模拟同一个用户。
 	cache *impersonationCache
 }
 
 // newImpersonationModeState 根据是否为受限模式选择 API 组与约束标识。
-// 中文说明：受限模式使用 authentication.k8s.io/v1 的虚拟资源（users/groups/uids），
+// 受限模式使用 authentication.k8s.io/v1 的虚拟资源（users/groups/uids），
 // legacy 模式沿用 core/v1 的历史语义，两者不能混用，否则旧策略会失效。
 func newImpersonationModeState(a authorizer.UnconditionalAuthorizer, verb string, isConstrainedImpersonation bool) *impersonationModeState {
 	usernameAndGroupGV := authenticationv1.SchemeGroupVersion
@@ -396,11 +394,11 @@ func newImpersonationModeState(a authorizer.UnconditionalAuthorizer, verb string
 }
 
 // check 逐字段授权并补齐系统组。
-// 中文说明：字段检查顺序为用户名 → UID → 组 → extra；任一失败即拒绝。
+// 字段检查顺序为用户名 → UID → 组 → extra；任一失败即拒绝。
 // 最后根据匿名与否补齐 system:unauthenticated / system:authenticated，
 // 使模拟出的用户与真实认证用户的组集合一致。
 func (m *impersonationModeState) check(ctx context.Context, key *impersonationCacheKey, wantedUser *user.DefaultInfo, requestor user.Info) (*impersonatedUserInfo, error) {
-	// we only use caching in constrained impersonation mode to avoid any behavioral changes with legacy impersonation
+	// 仅在 constrained 模拟模式下使用缓存，以免给 legacy 模拟模式带来任何行为变化。
 	if m.isConstrainedImpersonation {
 		if impersonatedUser := m.cache.get(key); impersonatedUser != nil {
 			return impersonatedUser, nil
@@ -439,7 +437,7 @@ func (m *impersonationModeState) check(ctx context.Context, key *impersonationCa
 }
 
 // authorizeUsername 对用户名执行授权，并在受限模式下规范化节点/ServiceAccount 的属性。
-// 中文说明：受限模式要求节点与 SA 不得同时指定组（其组由系统固定生成）；
+// 受限模式要求节点与 SA 不得同时指定组（其组由系统固定生成）；
 // 若未指定组，则填入对应的固定组，保证模拟结果可预测且不可被调用方篡改。
 func (m *impersonationModeState) authorizeUsername(ctx context.Context, requestor user.Info, username string, wantedUserGroups []string, actualUser *user.DefaultInfo) error {
 	usernameAttributes := impersonationAttributes(requestor, m.usernameAndGroupGV, m.verb, "users", username)
@@ -449,12 +447,12 @@ func (m *impersonationModeState) authorizeUsername(ctx context.Context, requesto
 			usernameAttributes.Resource = "nodes"
 			usernameAttributes.Name = name
 
-			// this should be impossible to reach but check just in case
+			// 理论上不可能走到这里，但仍做检查。
 			if len(wantedUserGroups) != 0 {
 				return responsewriters.ForbiddenStatusError(usernameAttributes, fmt.Sprintf("when impersonating a node, cannot impersonate groups %q", wantedUserGroups))
 			}
 
-			actualUser.Groups = []string{user.NodesGroup} // all nodes have a fixed group list in constrained impersonation
+			actualUser.Groups = []string{user.NodesGroup} // constrained 模式下所有节点都有固定的组列表。
 		}
 	}
 
@@ -463,13 +461,13 @@ func (m *impersonationModeState) authorizeUsername(ctx context.Context, requesto
 		usernameAttributes.Namespace = namespace
 		usernameAttributes.Name = name
 
-		// this should be impossible to reach but check just in case
+		// 理论上不可能走到这里，但仍做检查。
 		if m.isConstrainedImpersonation && len(wantedUserGroups) != 0 {
 			return responsewriters.ForbiddenStatusError(usernameAttributes, fmt.Sprintf("when impersonating a service account, cannot impersonate groups %q", wantedUserGroups))
 		}
 
 		if len(wantedUserGroups) == 0 {
-			// if groups are not specified for a service account, we know the groups because it is a fixed mapping.  Add them
+			// 若未给 ServiceAccount 指定组，我们已知其组是固定映射，因此可以自行构造。
 			actualUser.Groups = serviceaccount.MakeGroupNames(namespace)
 		}
 	}
@@ -486,15 +484,15 @@ func (m *impersonationModeState) authorizeUID(ctx context.Context, requestor use
 	return checkAuthorization(ctx, m.authorizer, uidAttributes)
 }
 
-// manyAuthorizationChecksInLoop is an arbitrary value used in constrained impersonation modes to decide if they
-// should try to perform a single wildcard authorization check before making many individual checks in a loop.
+// manyAuthorizationChecksInLoop 是 constrained 模式中使用的一个任意阈值：
+// 当待检查的条目多于该值时，先尝试一次通配授权检查，而不是一一检查。
 //
-// 中文说明：当组/extra 数量较多时，先尝试一次通配授权，可把 N 次授权压缩为 1 次；
+// 当组/extra 数量较多时，先尝试一次通配授权，可把 N 次授权压缩为 1 次；
 // 4 是经验阈值，平衡「多一次可能失败的检查」与「循环开销」。
 const manyAuthorizationChecksInLoop = 4
 
 // authorizeGroups 对组列表执行授权。
-// 中文说明：受限模式额外禁止模拟空字符串组与 system:masters——后者等价于提权。
+// 受限模式额外禁止模拟空字符串组与 system:masters——后者等价于提权。
 // 数量达到阈值时先尝试通配授权。
 func (m *impersonationModeState) authorizeGroups(ctx context.Context, requestor user.Info, groups []string) error {
 	if len(groups) == 0 {
@@ -503,7 +501,7 @@ func (m *impersonationModeState) authorizeGroups(ctx context.Context, requestor 
 
 	groupAttributes := impersonationAttributes(requestor, m.usernameAndGroupGV, m.verb, "groups", "")
 
-	// perform extra sanity checks that would be backwards incompatible with legacy impersonation
+	// 执行那些与 legacy 模拟不向后兼容的额外安全检查。
 	if m.isConstrainedImpersonation {
 		if slices.Contains(groups, "") {
 			return responsewriters.ForbiddenStatusError(groupAttributes, "impersonating the empty string group is not allowed")
@@ -514,8 +512,8 @@ func (m *impersonationModeState) authorizeGroups(ctx context.Context, requestor 
 		}
 	}
 
-	// if the requestor is trying to impersonate many groups at once, see if they are authorized to impersonate all groups
-	// we only do this in constrained impersonation mode to avoid any behavioral changes with legacy impersonation
+	// 若 requestor 一次性模拟多个组，检查其是否被授权模拟这些组。
+	// 只在 constrained 模式下这么做，以避免改变 legacy 模式的行为。
 	if m.isConstrainedImpersonation && len(groups) >= manyAuthorizationChecksInLoop {
 		groupAttributes.Name = "*"
 		if err := checkAuthorization(ctx, m.authorizer, groupAttributes); err == nil {
@@ -534,7 +532,7 @@ func (m *impersonationModeState) authorizeGroups(ctx context.Context, requestor 
 }
 
 // authorizeExtra 对 user.Info.Extra 执行授权。
-// 中文说明：extra 的键作为子资源、值作为对象名参与授权，因此策略可以精确到
+// extra 的键作为子资源、值作为对象名参与授权，因此策略可以精确到
 // 「允许模拟某个键的某个值」。受限模式会先校验键格式与值非空，
 // 防止畸形 extra 进入下游或被用于构造歧义键。
 func (m *impersonationModeState) authorizeExtra(ctx context.Context, requestor user.Info, extra map[string][]string) error {
@@ -544,15 +542,15 @@ func (m *impersonationModeState) authorizeExtra(ctx context.Context, requestor u
 
 	extraAttributes := impersonationAttributes(requestor, authenticationv1.SchemeGroupVersion, m.verb, "userextras", "")
 
-	// perform extra sanity checks that would be backwards incompatible with legacy impersonation
+	// 执行那些与 legacy 模拟不向后兼容的额外安全检查。
 	if m.isConstrainedImpersonation {
 		if err := validateExtra(extra); err != nil {
 			return responsewriters.ForbiddenStatusError(extraAttributes, err.Error())
 		}
 	}
 
-	// if the requestor is trying to impersonate many extras at once, see if they are authorized to impersonate all extras
-	// we only do this in constrained impersonation mode to avoid any behavioral changes with legacy impersonation
+	// 若 requestor 一次性模拟多个 extra，检查其是否被授权模拟这些 extra。
+	// 只在 constrained 模式下这么做，以避免改变 legacy 模式的行为。
 	if m.isConstrainedImpersonation && isLargeExtra(extra) {
 		extraAttributes.Subresource = "*"
 		extraAttributes.Name = "*"
@@ -575,7 +573,7 @@ func (m *impersonationModeState) authorizeExtra(ctx context.Context, requestor u
 }
 
 // validateExtra 校验 extra 的键与值格式。
-// 中文说明：键必须是小写的域名前缀路径（与 user.Info 约定一致），
+// 键必须是小写的域名前缀路径（与 user.Info 约定一致），
 // 空键、空值、空字符串值一律拒绝；这些约束在 legacy 模式下无法强制执行，
 // 因此只在受限模式生效，以免破坏兼容性。
 func validateExtra(extra map[string][]string) error {
@@ -628,10 +626,10 @@ func impersonationAttributes(requestor user.Info, gv schema.GroupVersion, verb, 
 	}
 }
 
-// impersonateOnAttributes is a simple wrapper that updates the verb of the attributes to impersonate-on:<mode>:<verb>
-// This allows the expression of "a subject can perform this verb while using this impersonation mode"
+// impersonateOnAttributes 是一个简单的包装，把属性的动词改成 impersonate:<mode>，
+// 从而表达“某主体可以在使用该模拟模式的前提下执行这个动词”。
 //
-// 中文说明：通过改写在授权器看来是「另一个动词」，策略作者无需理解模拟实现细节，
+// 通过改写在授权器看来是「另一个动词」，策略作者无需理解模拟实现细节，
 // 即可表达「某主体可在该模式下执行某动词」。
 type impersonateOnAttributes struct {
 	mode string
@@ -644,17 +642,18 @@ func (i *impersonateOnAttributes) GetVerb() string {
 }
 
 // checkAuthorization 调用授权器并把结果转换为错误。
-// 中文说明：先看 Decision 再看 err——RBAC 等授权器可能在求值出错时仍返回 Allow，
+// 先看 Decision 再看 err——RBAC 等授权器可能在求值出错时仍返回 Allow，
 // 此时应以 Decision 为准。已是 Forbidden 的错误不再二次包装，保留原始信息。
 func checkAuthorization(ctx context.Context, a authorizer.UnconditionalAuthorizer, attributes authorizer.Attributes) error {
 	authorized, reason, err := a.Authorize(ctx, attributes)
 
-	// an authorizer like RBAC could encounter evaluation errors and still allow the request, so authorizer decision is checked before error here.
+	// 像 RBAC 这样的 authorizer 可能在遇到评估错误的同时仍放行请求，
+	// 因此这里先检查授权决定，再检查错误。
 	if authorized == authorizer.DecisionAllow {
 		return nil
 	}
 
-	// if the authorizer gave us a forbidden error, do not wrap it again
+	// 若 authorizer 给出的本来就是 forbidden 错误，不要再包一层。
 	if errors.IsForbidden(err) {
 		return err
 	}
@@ -671,14 +670,14 @@ func checkAuthorization(ctx context.Context, a authorizer.UnconditionalAuthorize
 }
 
 // ensureGroup 在组列表中补齐指定组；若已存在则不动。
-// 中文说明：复制后再追加，避免修改调用方传入的底层数组，
+// 复制后再追加，避免修改调用方传入的底层数组，
 // 否则可能污染其他请求共享的切片。
 func ensureGroup(u *user.DefaultInfo, group string) {
 	if slices.Contains(u.Groups, group) {
 		return
 	}
 
-	// do not mutate a slice that we did not create
+	// 不要修改并非由我们创建的 slice。
 	groups := make([]string, 0, len(u.Groups)+1)
 	groups = append(groups, u.Groups...)
 	groups = append(groups, group)
@@ -691,10 +690,10 @@ func isServiceAccountUsername(username string) (namespace, name string, ok bool)
 	return namespace, name, err == nil
 }
 
-// matches the real ValidateNodeName from k8s.io/kubernetes/pkg/apis/core/validation
-// which we are not allowed to import here
+// 这里的实现与 k8s.io/kubernetes/pkg/apis/core/validation 中真实的 ValidateNodeName 保持一致，
+// 而那个包在本处不允许被导入。
 //
-// 中文说明：staging 不能依赖 k8s.io/kubernetes，因此复用同一底层校验函数，
+// staging 不能依赖 k8s.io/kubernetes，因此复用同一底层校验函数，
 // 保持与真实 Node 名称规则一致。
 var validateNodeName = validation.NameIsDNSSubdomain
 
@@ -713,7 +712,7 @@ func isNodeUsername(username string) (string, bool) {
 
 // requesterAssociatedWithRequestedNodeUsername 判断 requestor 是否为
 // 「bound node 与目标节点一致」的 ServiceAccount。
-// 中文说明：这是 associated-node 模式的安全前提；只有它为真，
+// 这是 associated-node 模式的安全前提；只有它为真，
 // 跨节点共享缓存才是安全的。
 func requesterAssociatedWithRequestedNodeUsername(requestor user.Info, username string) bool {
 	nodeName, ok := isNodeUsername(username)
@@ -736,7 +735,7 @@ func getExtraValue(u user.Info, key string) string {
 }
 
 // onlyUsernameSet 判断用户是否只设置了用户名（无 UID、组、extra）。
-// 中文说明：受限的节点/SA 模式只允许指定用户名，其余字段由 API Server 生成；
+// 受限的节点/SA 模式只允许指定用户名，其余字段由 API Server 生成；
 // 该判断是这些模式的准入条件。
 func onlyUsernameSet(u user.Info) bool {
 	return len(u.GetUID()) == 0 && len(u.GetGroups()) == 0 && len(u.GetExtra()) == 0

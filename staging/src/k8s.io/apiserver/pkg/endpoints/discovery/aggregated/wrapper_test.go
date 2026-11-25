@@ -46,13 +46,13 @@ const aggregatedNoPeerProtoAccept = protobufAccept + aggregatedAcceptSuffix + ";
 
 // fetchPath 用给定 Accept 头调用 handler 并返回响应体。
 //
-// 中文说明：用假 handler 的固定字符串作为响应体，测试只关心路由选择，
+// 用假 handler 的固定字符串作为响应体，测试只关心路由选择，
 // 不关心真实聚合发现的序列化内容。
 func fetchPath(handler http.Handler, path, accept string) string {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(request.MethodGet, discoveryPath, nil)
 
-	// Ask for JSON response
+	// 请求 JSON 响应
 	req.Header.Set("Accept", accept)
 
 	handler.ServeHTTP(w, req)
@@ -71,7 +71,7 @@ func (f fakeHTTPHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) 
 
 // TestAggregationEnabled 验证基于 Accept 头的聚合发现路由与 profile 语义。
 //
-// 中文说明：三个下游 handler 的响应体不同，因此仅凭返回内容就能判断请求被
+// 三个下游 handler 的响应体不同，因此仅凭返回内容就能判断请求被
 // 路由到哪一层；用例同时覆盖畸形/空 Accept、多类型优先级与 peer/nopeer。
 func TestAggregationEnabled(t *testing.T) {
 	// 固定仿真版本，避免测试结果随默认版本变化。
@@ -87,11 +87,11 @@ func TestAggregationEnabled(t *testing.T) {
 		enablePeerAggregated bool
 	}{
 		{
-			// Misconstructed/incorrect accept headers should be passed to the unaggregated handler to return an error
+			// 构造错误或不正确的 Accept 头应传给非聚合处理器并返回错误
 			accept:   "application/json;foo=bar",
 			expected: "unaggregated",
 		}, {
-			// Empty accept headers are valid and should be handled by the unaggregated handler
+			// 空的 Accept 头是合法的，应由非聚合处理器处理
 			accept:   "",
 			expected: "unaggregated",
 		}, {
@@ -113,16 +113,16 @@ func TestAggregationEnabled(t *testing.T) {
 			accept:   protobufAccept,
 			expected: "unaggregated",
 		}, {
-			// Server should return the first accepted type
+			// server 应返回第一个可接受的类型
 			accept:   aggregatedJSONAccept + "," + jsonAccept,
 			expected: "nopeer-aggregated",
 		}, {
-			// Server should return the first accepted type
+			// server 应返回第一个可接受的类型
 			accept:   aggregatedProtoAccept + "," + protobufAccept,
 			expected: "nopeer-aggregated",
 		},
-		// Peer Agg discovery cases.
-		// profile is not set (should default to peer-aggregated)
+		// 对等聚合发现的测试用例。
+		// 未设置 profile（应默认为 peer-aggregated）
 		{
 			accept:               aggregatedJSONAccept,
 			expected:             "peer-aggregated",
@@ -132,7 +132,7 @@ func TestAggregationEnabled(t *testing.T) {
 			expected:             "peer-aggregated",
 			enablePeerAggregated: true,
 		},
-		// profile=nopeer (should return no-peer)
+		// profile=nopeer（应返回 no-peer 结果）
 		{
 			accept:               aggregatedNoPeerJSONAccept,
 			expected:             "nopeer-aggregated",
@@ -142,7 +142,7 @@ func TestAggregationEnabled(t *testing.T) {
 			expected:             "nopeer-aggregated",
 			enablePeerAggregated: true,
 		},
-		// profile is set to something other than no-peer (should default to peer-aggregated)
+		// profile 被设为 no-peer 以外的值（应默认为 peer-aggregated）
 		{
 			accept:               aggregatedJSONAccept + ";profile=foo",
 			expected:             "peer-aggregated",

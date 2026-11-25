@@ -76,7 +76,7 @@ func TestWithAuditID(t *testing.T) {
 			handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 				innerHandlerCallCount++
 
-				// does the inner handler see the audit ID?
+				// 内层 handler 是否能看到审计 ID？
 				// 内层 handler 必须能从 context 读到同一个 ID。
 				v, ok := audit.AuditIDFrom(req.Context())
 

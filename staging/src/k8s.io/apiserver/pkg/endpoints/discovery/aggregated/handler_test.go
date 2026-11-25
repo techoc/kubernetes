@@ -57,7 +57,7 @@ const discoveryPath = "/apis"
 func init() {
 	utilruntime.Must(apidiscoveryv2.AddToScheme(scheme))
 	utilruntime.Must(apidiscoveryv2beta1.AddToScheme(scheme))
-	// Register conversion for apidiscovery
+	// 注册 apidiscovery 的转换
 	utilruntime.Must(apidiscoveryv2conversion.RegisterConversions(scheme))
 	codecs = runtimeserializer.NewCodecFactory(scheme)
 }
@@ -73,8 +73,7 @@ func fuzzAPIGroups(atLeastNumGroups, maxNumGroups int, seed int64) apidiscoveryv
 	fuzzer.Funcs(func(o *apidiscoveryv2.APIGroupDiscovery, c randfill.Continue) {
 		c.FillNoCustom(o)
 
-		// The ResourceManager will just not serve the group if its versions
-		// list is empty
+		// 若 ResourceManager 中某组的 versions 列表为空，该组将不再被服务
 		atLeastOne := apidiscoveryv2.APIVersionDiscovery{}
 		c.Fill(&atLeastOne)
 		o.Versions = append(o.Versions, atLeastOne)
@@ -139,15 +138,15 @@ func fetchPath(handler http.Handler, acceptPrefix string, path string, etag stri
 
 // fetchPathHelper 构造请求并执行，按需设置 If-None-Match（自动补引号）。
 func fetchPathHelper(handler http.Handler, accept string, path string, etag string) (*http.Response, []byte) {
-	// Expect json-formatted apis group list
+	// 期望返回 JSON 格式的 apis 组列表
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(request.MethodGet, path, nil)
 
-	// Ask for JSON response
+	// 请求 JSON 响应
 	req.Header.Set("Accept", accept)
 
 	if etag != "" {
-		// Quote provided etag if unquoted
+		// 若提供的 etag 未加引号则补上引号
 		quoted := etag
 		if !strings.HasPrefix(etag, "\"") {
 			quoted = strconv.Quote(etag)
@@ -161,7 +160,7 @@ func fetchPathHelper(handler http.Handler, accept string, path string, etag stri
 	return w.Result(), bytes
 }
 
-// Add all builtin APIServices to the manager and check the output
+// 把所有内建 APIService 加入 manager 并检查输出
 func TestBasicResponse(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 
@@ -182,7 +181,7 @@ func TestBasicResponse(t *testing.T) {
 	assert.Equal(t, string(jsonFormatted)+"\n", string(body), "response should be the api group list")
 }
 
-// Test that protobuf is outputted correctly
+// 测试 protobuf 输出是否正确
 func TestBasicResponseProtobuf(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 
@@ -196,7 +195,7 @@ func TestBasicResponseProtobuf(t *testing.T) {
 	assert.EqualValues(t, &apis, decoded, "decoded value should equal input")
 }
 
-// V2Beta1 should still be served
+// v2beta1 仍应被提供服务
 func TestV2Beta1SkewSupport(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.AggregatedDiscoveryRemoveBetaType, false)
@@ -226,10 +225,10 @@ func TestV2Beta1SkewSupport(t *testing.T) {
 	assert.Equal(t, string(jsonFormatted)+"\n", string(body), "response should be the api group list")
 }
 
-// Test that an etag associated with the service only depends on the apiresources
-// e.g.: Multiple services with the same contents should have the same etag.
+// 测试与服务关联的 etag 只取决于 apiresources，
+// 例如内容相同的多个 service 应具有相同的 etag。
 func TestEtagConsistent(t *testing.T) {
-	// Create 2 managers, add a bunch of services to each
+	// 创建 2 个 manager，各添加一批 service
 	manager1 := discoveryendpoint.NewResourceManager("apis")
 	manager2 := discoveryendpoint.NewResourceManager("apis")
 
@@ -237,7 +236,7 @@ func TestEtagConsistent(t *testing.T) {
 	manager1.SetGroups(apis.Items)
 	manager2.SetGroups(apis.Items)
 
-	// Make sure etag of each is the same
+	// 确认两者的 etag 相同
 	res1_initial, _, _ := fetchPath(manager1, "application/json", discoveryPath, "")
 	res2_initial, _, _ := fetchPath(manager2, "application/json", discoveryPath, "")
 
@@ -245,8 +244,8 @@ func TestEtagConsistent(t *testing.T) {
 	assert.NotEmpty(t, res2_initial.Header.Get("ETag"), "Etag should be populated")
 	assert.Equal(t, res1_initial.Header.Get("ETag"), res2_initial.Header.Get("ETag"), "etag should be deterministic")
 
-	// Then add one service to only one.
-	// Make sure etag is changed, but other is the same
+	// 然后只向其中一个添加一个 service。
+	// 确认它的 etag 变化而另一个不变
 	apis = fuzzAPIGroups(1, 1, 11)
 	for _, group := range apis.Items {
 		for _, version := range group.Versions {
@@ -262,8 +261,8 @@ func TestEtagConsistent(t *testing.T) {
 	assert.NotEqual(t, res1_initial.Header.Get("ETag"), res1_addedToOne.Header.Get("ETag"), "ETag should be changed since version was added")
 	assert.Equal(t, res2_initial.Header.Get("ETag"), res2_addedToOne.Header.Get("ETag"), "ETag should be unchanged since data was unchanged")
 
-	// Then add service to other one
-	// Make sure etag is the same
+	// 再把该 service 添加到另一个
+	// 确认 etag 相同
 	for _, group := range apis.Items {
 		for _, version := range group.Versions {
 			manager2.AddGroupVersion(group.Name, version)
@@ -278,7 +277,7 @@ func TestEtagConsistent(t *testing.T) {
 	assert.Equal(t, res1_addedToBoth.Header.Get("ETag"), res2_addedToBoth.Header.Get("ETag"), "ETags should be equal since content is equal")
 	assert.NotEqual(t, res2_initial.Header.Get("ETag"), res2_addedToBoth.Header.Get("ETag"), "ETag should be changed since data was changed")
 
-	// Remove the group version from both. Initial E-Tag should be restored
+	// 从两者移除该组版本，初始 E-Tag 应恢复
 	for _, group := range apis.Items {
 		for _, version := range group.Versions {
 			manager1.RemoveGroupVersion(metav1.GroupVersion{
@@ -301,19 +300,17 @@ func TestEtagConsistent(t *testing.T) {
 	assert.Equal(t, res1_initial.Header.Get("ETag"), res1_removeFromBoth.Header.Get("ETag"), "ETag should be equal to initial value since added content was removed")
 }
 
-// Test that if a request comes in with an If-None-Match header with an incorrect
-// E-Tag, that fresh content is returned.
+// 测试请求携带不匹配 E-Tag 的 If-None-Match 头时，返回最新内容。
 func TestEtagNonMatching(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 	apis := fuzzAPIGroups(1, 3, 12)
 	manager.SetGroups(apis.Items)
 
-	// fetch the document once
+	// 先获取一次文档
 	initial, _, _ := fetchPath(manager, "application/json", discoveryPath, "")
 	assert.NotEmpty(t, initial.Header.Get("ETag"), "ETag should be populated")
 
-	// Send another request with a wrong e-tag. The same response should
-	// get sent again
+	// 用错误的 e-tag 再发一次请求，应返回同样的响应
 	second, _, _ := fetchPath(manager, "application/json", discoveryPath, "wrongetag")
 
 	assert.Equal(t, http.StatusOK, initial.StatusCode, "response should be 200 OK")
@@ -321,20 +318,18 @@ func TestEtagNonMatching(t *testing.T) {
 	assert.Equal(t, initial.Header.Get("ETag"), second.Header.Get("ETag"), "ETag of both requests should be equal")
 }
 
-// Test that if a request comes in with an If-None-Match header with a correct
-// E-Tag, that 304 Not Modified is returned
+// 测试请求携带匹配 E-Tag 的 If-None-Match 头时，返回 304 Not Modified
 func TestEtagMatching(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 	apis := fuzzAPIGroups(1, 3, 12)
 	manager.SetGroups(apis.Items)
 
-	// fetch the document once
+	// 先获取一次文档
 	initial, initialBody, _ := fetchPath(manager, "application/json", discoveryPath, "")
 	assert.NotEmpty(t, initial.Header.Get("ETag"), "ETag should be populated")
 	assert.NotEmpty(t, initialBody, "body should not be empty")
 
-	// Send another request with a wrong e-tag. The same response should
-	// get sent again
+	// 用错误的 e-tag 再发一次请求，应返回同样的响应
 	second, secondBody, _ := fetchPath(manager, "application/json", discoveryPath, initial.Header.Get("ETag"))
 
 	assert.Equal(t, http.StatusOK, initial.StatusCode, "initial response should be 200 OK")
@@ -343,19 +338,18 @@ func TestEtagMatching(t *testing.T) {
 	assert.Empty(t, secondBody, "body should be empty when returning 304 Not Modified")
 }
 
-// Test that if a request comes in with an If-None-Match header with an old
-// E-Tag, that fresh content is returned
+// 测试请求携带过期 E-Tag 的 If-None-Match 头时，返回最新内容
 func TestEtagOutdated(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 	apis := fuzzAPIGroups(1, 3, 15)
 	manager.SetGroups(apis.Items)
 
-	// fetch the document once
+	// 先获取一次文档
 	initial, initialBody, _ := fetchPath(manager, "application/json", discoveryPath, "")
 	assert.NotEmpty(t, initial.Header.Get("ETag"), "ETag should be populated")
 	assert.NotEmpty(t, initialBody, "body should not be empty")
 
-	// Then add some services so the etag changes
+	// 然后添加一些 service 使 etag 变化
 	apis = fuzzAPIGroups(1, 3, 14)
 	for _, group := range apis.Items {
 		for _, version := range group.Versions {
@@ -363,7 +357,7 @@ func TestEtagOutdated(t *testing.T) {
 		}
 	}
 
-	// Send another request with the old e-tag. Response should not be 304 Not Modified
+	// 用旧的 e-tag 再发一次请求，响应不应是 304 Not Modified
 	second, secondBody, _ := fetchPath(manager, "application/json", discoveryPath, initial.Header.Get("ETag"))
 
 	assert.Equal(t, http.StatusOK, initial.StatusCode, "initial response should be 200 OK")
@@ -372,7 +366,7 @@ func TestEtagOutdated(t *testing.T) {
 	assert.NotEmpty(t, secondBody, "body should be not empty when returning 304 Not Modified")
 }
 
-// Test that an api service can be added or removed
+// 测试可以添加或移除 api service
 func TestAddRemove(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 	apis := fuzzAPIGroups(1, 3, 15)
@@ -401,8 +395,7 @@ func TestAddRemove(t *testing.T) {
 	assert.Empty(t, secondDocument.Items, "second document should have no groups")
 }
 
-// Show that updating an existing service replaces and does not add the entry
-// and instead replaces it
+// 说明更新已有 service 时是替换条目而不是新增条目
 func TestUpdateService(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 	apis := fuzzAPIGroups(1, 3, 15)
@@ -454,7 +447,7 @@ func TestMultipleSources(t *testing.T) {
 		manager := defaultManager.WithSource(name)
 		apis := fuzzAPIGroups(1, 3, int64(15+i))
 
-		// Give the groups deterministic names
+		// 给各组确定性的名称
 		for i := range apis.Items {
 			apis.Items[i].Name = fmt.Sprintf("%v.%v.com", i, name)
 		}
@@ -470,8 +463,8 @@ func TestMultipleSources(t *testing.T) {
 			for vi, v := range g.Versions {
 				p.manager.AddGroupVersion(g.Name, v)
 
-				// Use index for priority so we dont have to do any sorting
-				// Use negative index since it is sorted descending
+				// 用下标作为优先级，这样无需任何排序
+				// 用负下标，因为排序是降序
 				p.manager.SetGroupVersionPriority(metav1.GroupVersion{Group: g.Name, Version: v.Version}, -gi-groupCounter, -vi)
 			}
 
@@ -481,15 +474,15 @@ func TestMultipleSources(t *testing.T) {
 		groupCounter += len(p.apis.Items)
 	}
 
-	// Show discovery document is what we expect
+	// 说明发现文档与预期一致
 	_, _, initialDocument := fetchPath(defaultManager, "application/json", discoveryPath, "")
 
 	require.Len(t, initialDocument.Items, len(expectedResult))
 	require.Equal(t, expectedResult, initialDocument.Items)
 }
 
-// Shows that if you have multiple sources including Default source using
-// with the same group name the groups added by the "Default" source are used
+// 说明当多个数据源（含 Default 源）使用相同组名时，
+// 实际采用由 "Default" 源添加的组
 func TestSourcePrecedence(t *testing.T) {
 	defaultManager := discoveryendpoint.NewResourceManager("apis")
 	otherManager := defaultManager.WithSource(500)
@@ -505,8 +498,8 @@ func TestSourcePrecedence(t *testing.T) {
 	_, _, initialDocument := fetchPath(defaultManager, "application/json", discoveryPath, "")
 	require.Equal(t, apis.Items, initialDocument.Items)
 
-	// Add the first groupversion under default.
-	// No versions should appear in discovery document except this one
+	// 把第一个 groupversion 加到 default 下。
+	// 发现文档中除它以外不应出现其他版本
 	overrideVersion := initialDocument.Items[0].Versions[0]
 	overrideVersion.Freshness = apidiscoveryv2.DiscoveryFreshnessStale
 	defaultManager.AddGroupVersion(initialDocument.Items[0].Name, overrideVersion)
@@ -517,16 +510,16 @@ func TestSourcePrecedence(t *testing.T) {
 
 	require.Equal(t, masked.Items, maskedDocument.Items)
 
-	// Wipe out default group. The other versions from the other group should now
-	// appear since the group is not being overridden by defaults ource
+	// 清空 default 组。由于该组不再被 default 源覆盖，
+	// 其他源中同组的其他版本现在应当出现
 	defaultManager.RemoveGroup(apis.Items[0].Name)
 
 	_, _, resetDocument := fetchPath(defaultManager, "application/json", discoveryPath, "")
 	require.Equal(t, resetDocument.Items, initialDocument.Items)
 }
 
-// Show the discovery manager is capable of serving requests to multiple users
-// with unchanging data
+// 说明 discovery manager 能在数据不变的情况下
+// 同时服务多个用户的请求
 func TestConcurrentRequests(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 	apis := fuzzAPIGroups(1, 3, 15)
@@ -537,7 +530,7 @@ func TestConcurrentRequests(t *testing.T) {
 	numReaders := 100
 	numRequestsPerReader := 100
 
-	// Spawn a bunch of readers that will keep sending requests to the server
+	// 启动一批读取者，持续向 server 发送请求
 	for i := 0; i < numReaders; i++ {
 		waitGroup.Add(1)
 		go func() {
@@ -546,7 +539,7 @@ func TestConcurrentRequests(t *testing.T) {
 			for j := 0; j < numRequestsPerReader; j++ {
 				usedEtag := etag
 				if j%2 == 0 {
-					// Disable use of etag for every second request
+					// 每隔一个请求禁用一次 etag
 					usedEtag = ""
 				}
 				response, body, document := fetchPath(manager, "application/json", discoveryPath, usedEtag)
@@ -566,9 +559,8 @@ func TestConcurrentRequests(t *testing.T) {
 	waitGroup.Wait()
 }
 
-// Show the handler is capable of serving many concurrent readers and many
-// concurrent writers without tripping up. Good to run with go '-race' detector
-// since there are not many "correctness" checks
+// 说明该 handler 能同时服务大量并发读者与写者而不出问题。
+// 由于这里没有多少"正确性"断言，适合配合 go '-race' 检测器运行
 func TestAbuse(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 
@@ -580,8 +572,7 @@ func TestAbuse(t *testing.T) {
 
 	waitGroup := sync.WaitGroup{}
 
-	// Spawn a bunch of writers that randomly add groups, remove groups, and
-	// reset the list of groups
+	// 启动一批写者，随机添加组、移除组并重置组列表
 	for i := 0; i < numWriters; i++ {
 		source := rand.NewSource(int64(i))
 
@@ -589,8 +580,7 @@ func TestAbuse(t *testing.T) {
 		go func() {
 			defer waitGroup.Done()
 
-			// track list of groups we've added so that we can remove them
-			// randomly
+			// 记录已添加的组，以便随机移除
 			var addedGroups []metav1.GroupVersion
 
 			for j := 0; j < numWritesPerWriter; j++ {
@@ -608,13 +598,12 @@ func TestAbuse(t *testing.T) {
 						}
 					}
 				case 1:
-					// Remove a group that we have added
+					// 移除一个我们已添加的组
 					if len(addedGroups) > 0 {
 						manager.RemoveGroupVersion(addedGroups[0])
 						addedGroups = addedGroups[1:]
 					} else {
-						// Send a request and try to remove a group someone else
-						// might have added
+						// 发送一次请求，并尝试移除别人可能刚添加的组
 						_, _, document := fetchPath(manager, "application/json", discoveryPath, "")
 						assert.NotNil(t, document, "manager should always succeed in returning a document")
 
@@ -636,8 +625,8 @@ func TestAbuse(t *testing.T) {
 		}()
 	}
 
-	// Spawn a bunch of readers that will keep sending requests to the server
-	// and making sure the response makes sense
+	// 启动一批读取者持续向 server 发送请求，
+	// 并确认响应合理
 	for i := 0; i < numReaders; i++ {
 		waitGroup.Add(1)
 		go func() {
@@ -690,7 +679,7 @@ func TestVersionSortingNoPriority(t *testing.T) {
 
 	versions := decoded.Items[0].Versions
 
-	// Ensure that v1 is sorted before v1alpha1
+	// 确保 v1 排在 v1alpha1 之前
 	assert.Equal(t, "v2", versions[0].Version)
 	assert.Equal(t, "v1", versions[1].Version)
 	assert.Equal(t, "v2beta1", versions[2].Version)
@@ -716,12 +705,12 @@ func TestVersionSortingWithPriority(t *testing.T) {
 
 	versions := decoded.Items[0].Versions
 
-	// Ensure that reverse alpha sort order can be overridden by setting group version priorities.
+	// 确保通过设置组版本优先级可以覆盖逆字母序排序。
 	assert.Equal(t, "v1alpha1", versions[0].Version)
 	assert.Equal(t, "v1", versions[1].Version)
 }
 
-// if two apiservices declare conflicting priorities for their group priority, take the higher one.
+// 若两个 apiservice 声明的组优先级冲突，取较高的那个。
 func TestGroupVersionSortingConflictingPriority(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 
@@ -743,13 +732,13 @@ func TestGroupVersionSortingConflictingPriority(t *testing.T) {
 
 	groups := decoded.Items
 
-	// Ensure that reverse alpha sort order can be overridden by setting group version priorities.
+	// 确保通过设置组版本优先级可以覆盖逆字母序排序。
 	assert.Equal(t, "test", groups[0].Name)
 	assert.Equal(t, "default", groups[1].Name)
 }
 
-// Show that the GroupPriorityMinimum is not sticky if a higher group version is removed
-// after a lower one is added
+// 说明若先添加较低组版本再移除较高组版本，
+// GroupPriorityMinimum 不会残留
 func TestStatelessGroupPriorityMinimum(t *testing.T) {
 	manager := discoveryendpoint.NewResourceManager("apis")
 
@@ -771,13 +760,13 @@ func TestStatelessGroupPriorityMinimum(t *testing.T) {
 	})
 	manager.SetGroupVersionPriority(metav1.GroupVersion{Group: experimentalGroup, Version: "v1alpha1"}, 10000, 100)
 
-	// Expect v1alpha1's group priority to be used and sort it first in the list
+	// 预期采用 v1alpha1 的组优先级，并将其排在列表首位
 	response, _, decoded := fetchPath(manager, "application/json", discoveryPath, "")
 	assert.Equal(t, http.StatusOK, response.StatusCode, "response should be 200 OK")
 	assert.Equal(t, "experimental.example.com", decoded.Items[0].Name)
 	assert.Equal(t, "stable.example.com", decoded.Items[1].Name)
 
-	// Remove v1alpha1 and expect the new lower priority to take hold
+	// 移除 v1alpha1 后，预期新的较低优先级生效
 	manager.RemoveGroupVersion(metav1.GroupVersion{Group: experimentalGroup, Version: "v1alpha1"})
 
 	response, _, decoded = fetchPath(manager, "application/json", discoveryPath, "")

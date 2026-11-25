@@ -51,8 +51,6 @@ var (
 			Subsystem: "apiserver",
 			Name:      "request_body_size_bytes",
 			Help:      "Apiserver request body size in bytes broken out by resource and verb.",
-			// we use 0.05 KB as the smallest bucket with 0.1 KB increments up to the
-			// apiserver limit.
 			// 桶从 50KB 起、每档 100KB、共 31 档，覆盖到约 3MB 的默认请求上限。
 			Buckets:        metrics.LinearBuckets(50000, 100000, 31),
 			StabilityLevel: metrics.ALPHA,

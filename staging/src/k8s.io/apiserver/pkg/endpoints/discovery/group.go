@@ -28,8 +28,8 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 )
 
-// APIGroupHandler creates a webservice serving the supported versions, preferred version, and name
-// of a group. E.g., such a web service will be registered at /apis/extensions.
+// APIGroupHandler 创建一个 WebService，返回某个 API 组的受支持版本、首选版本和名称。
+// 例如，该 WebService 会注册在 /apis/extensions。
 type APIGroupHandler struct {
 	serializer runtime.NegotiatedSerializer
 	group      metav1.APIGroup
@@ -39,10 +39,8 @@ type APIGroupHandler struct {
 // 由调用方预先计算好，这里只负责序列化，不再做任何取舍。
 func NewAPIGroupHandler(serializer runtime.NegotiatedSerializer, group metav1.APIGroup) *APIGroupHandler {
 	if keepUnversioned(group.Name) {
-		// Because in release 1.1, /apis/extensions returns response with empty
-		// APIVersion, we use stripVersionNegotiatedSerializer to keep the
-		// response backwards compatible.
-		//
+		// 1.1 版本中 /apis/extensions 返回的响应里 APIVersion 为空，这里用
+		// stripVersionNegotiatedSerializer 保持响应向后兼容。
 		// 这是历史兼容性包袱：老客户端依赖 /apis/extensions 响应中 apiVersion 为空，
 		// 不能因为“清理”而移除。
 		serializer = stripVersionNegotiatedSerializer{serializer}
@@ -69,7 +67,7 @@ func (s *APIGroupHandler) WebService() *restful.WebService {
 	return ws
 }
 
-// handle returns a handler which will return the api.GroupAndVersion of the group.
+// handle 返回处理该组的 APIGroup 信息的处理函数。
 func (s *APIGroupHandler) handle(req *restful.Request, resp *restful.Response) {
 	s.ServeHTTP(resp.ResponseWriter, req.Request)
 }

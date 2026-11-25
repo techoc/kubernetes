@@ -141,7 +141,7 @@ func TestDecorateResponseWriterWithoutChannel(t *testing.T) {
 	ac := audit.AuditContextFrom(ctx)
 	actual := decorateResponseWriter(ctx, &responsewriter.FakeResponseWriter{}, false)
 
-	// write status. This will not block because firstEventSentCh is nil
+	// 写入状态。由于 firstEventSentCh 为 nil，这里不会阻塞。
 	actual.WriteHeader(42)
 	if ac.GetEventResponseStatus() == nil {
 		t.Fatalf("Expected ResponseStatus to be non-nil")
@@ -158,7 +158,7 @@ func TestDecorateResponseWriterWithImplicitWrite(t *testing.T) {
 	ac := audit.AuditContextFrom(ctx)
 	actual := decorateResponseWriter(ctx, &responsewriter.FakeResponseWriter{}, false)
 
-	// write status. This will not block because firstEventSentCh is nil
+	// 写入状态。由于 firstEventSentCh 为 nil，这里不会阻塞。
 	actual.Write([]byte("foo"))
 	if ac.GetEventResponseStatus() == nil {
 		t.Fatalf("Expected ResponseStatus to be non-nil")
@@ -190,7 +190,7 @@ func TestDecorateResponseWriterChannel(t *testing.T) {
 		actual.Write([]byte("foo"))
 	}()
 
-	// sleep some time to give write the possibility to do wrong stuff
+	// 休眠一会儿，给 write 犯错的机会。
 	time.Sleep(100 * time.Millisecond)
 
 	t.Log("Waiting for event in the channel")
@@ -210,7 +210,7 @@ func TestDecorateResponseWriterChannel(t *testing.T) {
 	<-done
 	t.Log("Seen the go routine finished")
 
-	// write again
+	// 再次写入。
 	_, err = actual.Write([]byte("foo"))
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -221,16 +221,16 @@ func TestDecorateResponseWriterChannel(t *testing.T) {
 // 以便测试直接检查“当前正在构建”的事件（尚未发送到后端）。
 // 仅测试代码可使用；依赖内部字段布局，改动 AuditContext 结构时需同步更新。
 func getAuditContextEvent(ac *audit.AuditContext) *auditinternal.Event {
-	// Get the reflect.Value of the AuditContext
+	// 取出 AuditContext 的 reflect.Value。
 	val := reflect.ValueOf(ac).Elem()
 
-	// Access the unexported `event` field
+	// 访问未导出的 `event` 字段。
 	eventField := val.FieldByName("event")
 
-	// Use unsafe to get a pointer to the field
+	// 用 unsafe 取得该字段的指针。
 	eventPtr := unsafe.Pointer(eventField.UnsafeAddr())
 
-	// Cast the pointer to the correct type
+	// 把指针转换为正确的类型。
 	return (*auditinternal.Event)(eventPtr)
 }
 
@@ -264,7 +264,7 @@ func TestAudit(t *testing.T) {
 		expected   []auditinternal.Event
 		respHeader bool
 	}{
-		// short running requests with read-only verb
+		// 使用只读动词的短耗时请求
 		{
 			"read-only empty",
 			shortRunningPath,
@@ -335,7 +335,7 @@ func TestAudit(t *testing.T) {
 			},
 			false,
 		},
-		// short running request with non-read-only verb
+		// 使用非只读动词的短耗时请求
 		{
 			"writing empty",
 			shortRunningPath,
@@ -461,7 +461,7 @@ func TestAudit(t *testing.T) {
 			},
 			true,
 		},
-		// long running requests
+		// 长耗时请求
 		{
 			"empty longrunning",
 			longRunningPath,
@@ -742,7 +742,7 @@ func TestAudit(t *testing.T) {
 			sink := &fakeAuditSink{}
 			fakeRuleEvaluator := policy.NewFakePolicyRuleEvaluator(auditinternal.LevelRequestResponse, test.omitStages)
 			handler := WithAudit(http.HandlerFunc(test.handler), sink, fakeRuleEvaluator, func(r *http.Request, ri *request.RequestInfo) bool {
-				// simplified long-running check
+				// 简化的长耗时检查
 				return ri.Verb == "watch"
 			})
 			handler = WithLatencyTrackers(handler)
@@ -873,16 +873,16 @@ func TestAuditIDHttpHeader(t *testing.T) {
 		expectedHeader bool
 	}{
 		{
-			// we always want an audit ID since it can appear in logging/tracing and it is propagated
-			// to the aggregated apiserver(s) to improve correlation.
+			// 我们总是希望有审计 ID，因为它会出现在日志/追踪中，并会传播给
+			// 聚合 apiserver 以改善关联能力。
 			"http header when there is no audit",
 			"",
 			auditinternal.LevelNone,
 			true,
 		},
 		{
-			// we always want an audit ID since it can appear in logging/tracing and it is propagated
-			// to the aggregated apiserver(s) to improve correlation.
+			// 我们总是希望有审计 ID，因为它会出现在日志/追踪中，并会传播给
+			// 聚合 apiserver 以改善关联能力。
 			"http header when there is no audit even the request header specified",
 			uuid.New().String(),
 			auditinternal.LevelNone,
@@ -927,7 +927,7 @@ func TestAuditIDHttpHeader(t *testing.T) {
 					t.Errorf("[%s] expected Audit-ID http header returned, but not returned", test.desc)
 					return
 				}
-				// if get Audit-ID returned, it should be the same with the requested one
+				// 如果返回了 Audit-ID，应当与请求中携带的那个一致
 				if test.requestHeader != "" && resp.Header.Get("Audit-ID") != test.requestHeader {
 					t.Errorf("[%s] returned audit http header is not the same with the requested http header, expected: %s, get %s", test.desc, test.requestHeader, resp.Header.Get("Audit-ID"))
 				}
@@ -978,8 +978,8 @@ func (f fakeAuditWebhookAuditBackend) RoundTrip(r *http.Request) (*http.Response
 	}, nil
 }
 
-// Test case for https://github.com/kubernetes/kubernetes/issues/120507
-// to test for race conditions in audit backends use the following command:
+// 针对 https://github.com/kubernetes/kubernetes/issues/120507 的测试用例
+// 要测试审计后端的竞态条件，使用以下命令：
 // `go test ./ -race --run=TestAuditBackendRaceCondition -v`
 //
 // 该测试对每种审计后端（log/buffered/webhook/union）反复处理请求，
@@ -1046,7 +1046,7 @@ func TestAuditBackendRaceCondition(t *testing.T) {
 			for {
 				select {
 				case <-ctx.Done():
-					// finished the test
+					// 测试结束
 					return
 				default:
 				}
@@ -1060,7 +1060,7 @@ func TestAuditBackendRaceCondition(t *testing.T) {
 					for {
 						select {
 						case <-ctx.Done():
-							// finished the test
+							// 测试结束
 							backend.Shutdown()
 							return
 						default:
@@ -1070,7 +1070,7 @@ func TestAuditBackendRaceCondition(t *testing.T) {
 				}()
 				realHandler := http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
 					close(serveStarted)
-					// mock some business logic
+					// 模拟一段业务逻辑
 					time.Sleep(time.Millisecond)
 				})
 				handler := WithAudit(realHandler, backend, fakeRuleEvaluator, longRunningCheck)

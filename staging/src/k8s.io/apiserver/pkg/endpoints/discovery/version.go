@@ -42,8 +42,8 @@ func (f APIResourceListerFunc) ListAPIResources() []metav1.APIResource {
 	return f()
 }
 
-// APIVersionHandler creates a webservice serving the supported resources for the version
-// E.g., such a web service will be registered at /apis/extensions/v1beta1.
+// APIVersionHandler 创建一个 WebService，返回该版本支持的资源列表。
+// 例如，该 WebService 会注册在 /apis/extensions/v1beta1。
 type APIVersionHandler struct {
 	serializer runtime.NegotiatedSerializer
 
@@ -57,9 +57,8 @@ type APIVersionHandler struct {
 // 兼容 1.1 时代的客户端行为，因此在这里替换序列化器。
 func NewAPIVersionHandler(serializer runtime.NegotiatedSerializer, groupVersion schema.GroupVersion, apiResourceLister APIResourceLister) *APIVersionHandler {
 	if keepUnversioned(groupVersion.Group) {
-		// Because in release 1.1, /apis/extensions returns response with empty
-		// APIVersion, we use stripVersionNegotiatedSerializer to keep the
-		// response backwards compatible.
+		// 1.1 版本中 /apis/extensions 返回的响应里 APIVersion 为空，这里用
+		// stripVersionNegotiatedSerializer 保持响应向后兼容。
 		serializer = stripVersionNegotiatedSerializer{serializer}
 	}
 
@@ -81,7 +80,7 @@ func (s *APIVersionHandler) AddToWebService(ws *restful.WebService) {
 		Writes(metav1.APIResourceList{}))
 }
 
-// handle returns a handler which will return the api.VersionAndVersion of the group.
+// handle 返回处理该组版本信息的处理函数。
 func (s *APIVersionHandler) handle(req *restful.Request, resp *restful.Response) {
 	s.ServeHTTP(resp.ResponseWriter, req.Request)
 }

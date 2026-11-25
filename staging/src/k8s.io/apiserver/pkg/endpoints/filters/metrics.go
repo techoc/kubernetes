@@ -30,12 +30,11 @@ import (
 )
 
 /*
- * By default, all the following metrics are defined as falling under
- * ALPHA stability level https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
+ * 默认情况下，以下所有指标都属于 ALPHA 稳定性级别
+ * https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
  *
- * Promoting the stability level of the metric is a responsibility of the component owner, since it
- * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
- * the metric stability policy.
+ * 提升指标的稳定性级别是组件负责人的职责，因为这意味着按照指标稳定性策略
+ * 明确承诺在多个版本中持续支持该指标。
  */
 const (
 	// 认证结果标签：成功、凭据不足（failed）与处理出错（error），
@@ -109,15 +108,11 @@ var (
 
 var registerMetricsOnce sync.Once
 
-// RegisterMetrics registers the authentication and authorization filter metrics
-// with the legacy registry. It is invoked when the authentication/authorization
-// filters are installed into the handler chain (rather than from an init()
-// function), so that metric feature gates such as NativeHistograms have been
-// applied before these histogram metrics are created.
-//
-// 之所以不在 init() 中注册：histogram 的创建方式依赖 NativeHistograms
-// 等特性门控，而门控在 init 阶段可能尚未确定，延迟到过滤器安装时注册
-// 才能保证配置生效。sync.Once 保证重复安装链时不会重复注册。
+// RegisterMetrics 把认证与鉴权过滤器的指标注册到 legacy registry。
+// 它在认证/鉴权过滤器被安装进 handler 链时调用，而不是在 init() 函数中：
+// histogram 的创建方式依赖 NativeHistograms 等特性门控，而门控在 init 阶段
+// 可能尚未生效，延迟到过滤器安装时注册才能保证配置被正确应用。
+// sync.Once 保证重复安装 handler 链时不会重复注册。
 func RegisterMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(authenticatedUserCounter)
@@ -168,29 +163,22 @@ func recordAuthenticationMetrics(ctx context.Context, resp *authenticator.Respon
 	authenticationLatency.WithContext(ctx).WithLabelValues(resultLabel).Observe(authFinish.Sub(authStart).Seconds())
 }
 
-// compressUsername maps all possible usernames onto a small set of categories
-// of usernames. This is done both to limit the cardinality of the
-// authorized_user_requests metric, and to avoid pushing actual usernames in the
-// metric.
-//
-// compressUsername 把用户名压缩为少量类别：既限制指标标签基数，又避免
-// 把真实用户名（可能是邮箱）写入指标。内部身份保留原名，便于区分系统
-// 组件流量。
+// compressUsername 把所有可能的用户名映射为少量类别，既限制
+// authorized_user_requests 指标的标签基数，又避免把真实用户名写入指标；
+// 内部身份保留原名，便于区分系统组件流量。
 func compressUsername(username string) string {
 	switch {
-	// Known internal identities.
-	// 这些身份由 kube-apiserver 内部产生，名称固定且基数有限。
+	// 已知的内部身份，由 kube-apiserver 内部产生，名称固定且基数有限。
 	case username == "admin" ||
 		username == "client" ||
 		username == "kube_proxy" ||
 		username == "kubelet" ||
 		username == "system:serviceaccount:kube-system:default":
 		return username
-	// Probably an email address.
-	// 含 @ 的多为用户邮箱，统一归为 email_id 以免泄露。
+	// 很可能是邮箱地址：含 @ 的多为用户邮箱，统一归为 email_id 以免泄露。
 	case strings.Contains(username, "@"):
 		return "email_id"
-	// Anything else (custom service accounts, custom external identities, etc.)
+	// 其他情况（自定义服务账号、自定义外部身份等）。
 	default:
 		return "other"
 	}

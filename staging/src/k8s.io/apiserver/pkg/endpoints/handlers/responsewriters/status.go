@@ -25,7 +25,7 @@ import (
 	"k8s.io/apiserver/pkg/storage"
 )
 
-// statusError is an object that can be converted into an metav1.Status
+// statusError 是可以转换为 metav1.Status 的对象
 //
 // statusError 是所有能自描述为 API Status 的错误的最小接口；
 // *apierrors.StatusError 等类型天然满足它。
@@ -33,7 +33,7 @@ type statusError interface {
 	Status() metav1.Status
 }
 
-// ErrorToAPIStatus converts an error to an metav1.Status object.
+// ErrorToAPIStatus 将错误转换为 metav1.Status 对象。
 //
 // ErrorToAPIStatus 保证 HTTP 响应体始终是合法且字段完整的 metav1.Status：
 // 缺失的 Status/Code 会补默认值，非 Status 错误统一转 500（冲突除外），
@@ -65,21 +65,19 @@ func ErrorToAPIStatus(err error) *metav1.Status {
 		// 序列化契约要求固定的 Kind/APIVersion，客户端依赖它们反序列化。
 		status.Kind = "Status"
 		status.APIVersion = "v1"
-		//TODO: check for invalid responses
+		// TODO：检查无效的响应
 		return &status
 	default:
 		// 未包装为 Status 的错误通常意味着未使用 pkg/api/errors，
 		// 默认 500；存储层冲突是少数可映射为 409 的例外。
 		status := http.StatusInternalServerError
 		switch {
-		//TODO: replace me with NewConflictErr
+		// TODO：用 NewConflictErr 替换这里
 		case storage.IsConflict(err):
 			status = http.StatusConflict
 		}
-		// Log errors that were not converted to an error status
-		// by REST storage - these typically indicate programmer
-		// error by not using pkg/api/errors, or unexpected failure
-		// cases.
+		// 记录未被 REST 存储层转换为错误状态的错误：这些通常表明
+		// 未使用 pkg/api/errors 的编程错误，或意料之外的失败场景。
 		runtime.HandleError(fmt.Errorf("apiserver received an error that is not an metav1.Status: %#+v: %v", err, err))
 		return &metav1.Status{
 			TypeMeta: metav1.TypeMeta{

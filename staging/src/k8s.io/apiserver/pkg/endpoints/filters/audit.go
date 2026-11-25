@@ -35,10 +35,9 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/responsewriter"
 )
 
-// WithAudit decorates a http.Handler with audit logging information for all the
-// requests coming to the server. Audit level is decided according to requests'
-// attributes and audit policy. Logs are emitted to the audit sink to
-// process events. If sink or audit policy is nil, no decoration takes place.
+// WithAudit 给 http.Handler 加上审计日志装饰，覆盖进入服务端的所有请求。
+// 审计级别由请求属性和审计策略共同决定；事件通过 audit sink 写出。
+// sink 或审计策略为 nil 时不做任何装饰。
 //
 // 审计必须发生在认证与授权之后：只有拿到完整的用户与请求属性，策略才能正确匹配。
 // 关闭审计（sink/policy 为 nil）时直接返回原 handler，零开销。
@@ -69,7 +68,7 @@ func WithAudit(handler http.Handler, sink audit.Sink, policy audit.PolicyRuleEva
 			return
 		}
 
-		// intercept the status code
+		// 装饰响应写入器，用于拦截状态码
 		// 长时请求（watch、exec）需要在响应开始时先落一条事件，否则可能长时间没有任何审计记录。
 		isLongRunning := false
 		if longRunningCheck != nil {
@@ -80,8 +79,8 @@ func WithAudit(handler http.Handler, sink audit.Sink, policy audit.PolicyRuleEva
 		}
 		respWriter := decorateResponseWriter(ctx, w, isLongRunning)
 
-		// send audit event when we leave this func, either via a panic or cleanly. In the case of long
-		// running requests, this will be the second audit event.
+		// 离开本函数时（无论 panic 还是正常返回）发送审计事件。
+		// 对长时请求来说，这将是第二个审计事件。
 		defer func() {
 			if r := recover(); r != nil {
 				// 先记录 panic 事件再重新抛出，保证 panic 仍由外层恢复逻辑处理，
@@ -97,8 +96,8 @@ func WithAudit(handler http.Handler, sink audit.Sink, policy audit.PolicyRuleEva
 				return
 			}
 
-			// if no StageResponseStarted event was sent b/c neither a status code nor a body was sent, fake it here
-			// But Audit-Id http header will only be sent when http.ResponseWriter.WriteHeader is called.
+			// 如果既没写状态码也没写响应体，就不会发出 StageResponseStarted 事件，这里补一个。
+			// 但 Audit-Id 这个 HTTP 头只在 http.ResponseWriter.WriteHeader 被调用时才会发送。
 			//
 			// 连接被提前关闭时可能从未写过状态码，这里补一个成功状态，避免事件缺少响应字段。
 			fakedSuccessStatus := &metav1.Status{
@@ -109,7 +108,7 @@ func WithAudit(handler http.Handler, sink audit.Sink, policy audit.PolicyRuleEva
 			if ac.GetEventResponseStatus() == nil {
 				ac.SetEventResponseStatus(fakedSuccessStatus)
 				if isLongRunning {
-					// A nil ResponseStatus means the writer never processed the ResponseStarted stage, so do that now.
+					// ResponseStatus 为 nil 说明写入器从未处理过 ResponseStarted 阶段，现在补上。
 					ac.ProcessEventStage(ctx, auditinternal.StageResponseStarted)
 				}
 			}
@@ -120,15 +119,13 @@ func WithAudit(handler http.Handler, sink audit.Sink, policy audit.PolicyRuleEva
 	})
 }
 
-// evaluatePolicyAndCreateAuditEvent is responsible for evaluating the audit
-// policy configuration applicable to the request and initializing the audit
-// context with the audit config for the request, the sink to write to, and the request metadata.
-// - error if anything bad happened
+// evaluatePolicyAndCreateAuditEvent 负责求值该请求适用的审计策略配置，并用请求的
+// 审计配置、要写入的 sink 以及请求元数据初始化审计上下文。
+// - 发生任何严重错误时返回 error
 func evaluatePolicyAndCreateAuditEvent(req *http.Request, policy audit.PolicyRuleEvaluator, sink audit.Sink) (*audit.AuditContext, error) {
 	ctx := req.Context()
 	ac := audit.AuditContextFrom(ctx)
 	if ac == nil {
-		// Auditing not configured.
 		// 没有审计上下文说明本请求路径未启用审计（例如探活端点），直接放行。
 		return nil, nil
 	}
@@ -146,7 +143,7 @@ func evaluatePolicyAndCreateAuditEvent(req *http.Request, policy audit.PolicyRul
 		return nil, fmt.Errorf("failed to initialize audit context: %w", err)
 	}
 	if rac.Level == auditinternal.LevelNone {
-		// Don't audit.
+		// 不做审计。
 		return ac, nil
 	}
 
@@ -160,31 +157,29 @@ func evaluatePolicyAndCreateAuditEvent(req *http.Request, policy audit.PolicyRul
 	return ac, nil
 }
 
-// writeLatencyToAnnotation writes the latency incurred in different
-// layers of the apiserver to the annotations of the audit object.
+// writeLatencyToAnnotation 把 apiserver 各层产生的延迟写入审计对象的注解。
 //
 // 仅在总耗时超过阈值时记录分层延迟，避免每个事件都携带大量注解、放大审计日志体积。
 func writeLatencyToAnnotation(ctx context.Context) {
 	ac := audit.AuditContextFrom(ctx)
-	// we will track latency in annotation only when the total latency
-	// of the given request exceeds 500ms, this is in keeping with the
-	// traces in rest/handlers for create, delete, update,
-	// get, list, and deletecollection.
+	// 只有当请求总耗时超过 500ms 时才把分层延迟写入注解，
+	// 这与 rest/handlers 中 create、delete、update、
+	// get、list、deletecollection 的 trace 阈值保持一致。
 	const threshold = 500 * time.Millisecond
 	latency := time.Since(ac.GetEventRequestReceivedTimestamp().Time)
 	if latency <= threshold {
 		return
 	}
 
-	// if we are tracking latency incurred inside different layers within
-	// the apiserver, add these as annotation to the audit event object.
+	// 如果开启了 apiserver 内部分层延迟跟踪，
+	// 把这些分层耗时作为注解加到审计事件对象上。
 	layerLatencies := request.AuditAnnotationsFromLatencyTrackers(ctx)
 	if len(layerLatencies) == 0 {
-		// latency tracking is not enabled for this request
+		// 本请求未启用延迟跟踪
 		return
 	}
 
-	// record the total latency for this request, for convenience.
+	// 顺便记录该请求的总延迟，方便排查。
 	layerLatencies["apiserver.latency.k8s.io/total"] = latency.String()
 	audit.AddAuditAnnotationsMap(ctx, layerLatencies)
 }
@@ -205,8 +200,8 @@ func decorateResponseWriter(ctx context.Context, responseWriter http.ResponseWri
 var _ http.ResponseWriter = &auditResponseWriter{}
 var _ responsewriter.UserProvidedDecorator = &auditResponseWriter{}
 
-// auditResponseWriter intercepts WriteHeader, sets it in the event. If the sink is set, it will
-// create immediately an event (for long running requests).
+// auditResponseWriter 拦截 WriteHeader 并写入事件。若设置了 sink，
+// 会立即生成一个事件（针对长时请求）。
 //
 // once 保证状态码与 ResponseStarted 事件只处理一次：Go 的 ResponseWriter 可能被多次
 // 调用 WriteHeader，但审计事件里只应有一个响应状态。
@@ -237,7 +232,7 @@ func (a *auditResponseWriter) processCode(code int) {
 // Write 在首次写入时补记 200：Go 会在内部隐式调用 WriteHeader，若不主动记录，
 // 审计事件将缺失响应状态。
 func (a *auditResponseWriter) Write(bs []byte) (int, error) {
-	// the Go library calls WriteHeader internally if no code was written yet. But this will go unnoticed for us
+	// 若尚未写过状态码，Go 标准库会在 Write 内部隐式调用 WriteHeader，但对我们不可见
 	a.processCode(http.StatusOK)
 	return a.ResponseWriter.Write(bs)
 }
@@ -251,10 +246,10 @@ func (a *auditResponseWriter) WriteHeader(code int) {
 // Hijack 在协议切换（如 SPDY/WebSocket）前伪造 101 状态，
 // 否则审计事件会缺少这次升级的响应码。
 func (a *auditResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	// fake a response status before protocol switch happens
+	// 在协议切换发生前先伪造一个响应状态
 	a.processCode(http.StatusSwitchingProtocols)
 
-	// the outer ResponseWriter object returned by WrapForHTTP1Or2 implements
-	// http.Hijacker if the inner object (a.ResponseWriter) implements http.Hijacker.
+	// WrapForHTTP1Or2 返回的外层 ResponseWriter 是否实现 http.Hijacker，
+	// 取决于内层对象（a.ResponseWriter）是否实现 http.Hijacker。
 	return a.ResponseWriter.(http.Hijacker).Hijack()
 }

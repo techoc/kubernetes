@@ -105,7 +105,7 @@ func (alwaysValidatingDeny) Handles(operation admission.Operation) bool {
 
 var _ admission.ValidationInterface = &alwaysValidatingDeny{}
 
-// This creates fake API versions, similar to api/latest.go.
+// 这会创建模拟的 API 版本，类似于 api/latest.go。
 var testAPIGroup = "test.group"
 var testAPIGroup2 = "test.group2"
 var testInternalGroupVersion = schema.GroupVersion{Group: testAPIGroup, Version: runtime.APIVersionInternal}
@@ -169,9 +169,8 @@ func addTestTypes() {
 		&genericapitesting.SimpleGetOptions{}, &genericapitesting.SimpleRoot{},
 		&genericapitesting.SimpleXGSubresource{})
 	scheme.AddKnownTypes(testInternalGroupVersion, &example.Pod{})
-	// Register SimpleXGSubresource in both testGroupVersion and testGroup2Version, and also their
-	// their corresponding internal versions, to verify that the desired group version object is
-	// served in the tests.
+	// 同时在 testGroupVersion 和 testGroup2Version（以及它们对应的内部版本）中注册
+	// SimpleXGSubresource，以验证测试中会按期望的组版本提供对象。
 	scheme.AddKnownTypes(testGroup2Version, &genericapitesting.SimpleXGSubresource{})
 	scheme.AddKnownTypes(testInternalGroup2Version, &genericapitesting.SimpleXGSubresource{})
 	metav1.AddToGroupVersion(scheme, testGroupVersion)
@@ -192,8 +191,8 @@ func addNewTestTypes() {
 }
 
 func init() {
-	// Certain API objects are returned regardless of the contents of storage:
-	// api.Status is returned in errors
+	// 某些 API 对象无论存储内容如何都会返回：
+	// api.Status 会在出错时返回
 
 	addGrouplessTypes()
 	addTestTypes()
@@ -216,7 +215,6 @@ func init() {
 	)
 }
 
-// defaultAPIServer exposes nested objects for testability.
 // defaultAPIServer 暴露内部的 restful.Container，便于测试检查已注册的路由与
 // 生产媒体类型。
 type defaultAPIServer struct {
@@ -229,7 +227,6 @@ func handleWithWarnings(storage map[string]rest.Storage) http.Handler {
 	return genericapifilters.WithWarningRecorder(handle(storage))
 }
 
-// uses the default settings
 // handle 用默认准入配置装配一个测试用 apiserver handler。
 func handle(storage map[string]rest.Storage) http.Handler {
 	return handleInternal(storage, admissionControl, nil)
@@ -368,7 +365,7 @@ type SimpleRESTStorage struct {
 	actualNamespace  string
 	namespacePresent bool
 
-	// These are set when Watch is called
+	// 这些字段在调用 Watch 时设置
 	fakeWatch                  *watch.FakeWatcher
 	requestedLabelSelector     labels.Selector
 	requestedFieldSelector     fields.Selector
@@ -377,8 +374,8 @@ type SimpleRESTStorage struct {
 
 	expectedResourceNamespace string
 
-	// If non-nil, called inside the WorkFunc when answering update, delete, create.
-	// obj receives the original input to the update, delete, or create call.
+	// 若非 nil，则在响应 update、delete、create 时于 WorkFunc 内部被调用。
+	// obj 接收 update、delete 或 create 调用的原始输入。
 	injectedFunction func(obj runtime.Object) (returnObj runtime.Object, err error)
 }
 
@@ -783,7 +780,7 @@ func TestNotFound(t *testing.T) {
 		Status int
 	}
 	cases := map[string]T{
-		// Positive checks to make sure everything is wired correctly
+		// 正向检查，确认各部分已正确接线
 		"groupless GET root":       {request.MethodGet, "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/simpleroots", http.StatusOK},
 		"groupless GET namespaced": {request.MethodGet, "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/namespaces/ns/simples", http.StatusOK},
 
@@ -811,7 +808,7 @@ func TestNotFound(t *testing.T) {
 		"groupless namespaced watch with bad method":        {request.MethodPost, "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/watch/namespaces/ns/simples/bar", http.StatusMethodNotAllowed},
 		"groupless namespaced watch param with bad method":  {request.MethodPost, "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/namespaces/ns/simples/bar?watch=true", http.StatusMethodNotAllowed},
 
-		// Positive checks to make sure everything is wired correctly
+		// 正向检查，确认各部分已正确接线
 		"GET root": {request.MethodGet, "/" + prefix + "/" + testGroupVersion.Group + "/" + testGroupVersion.Version + "/simpleroots", http.StatusOK},
 		// TODO: JTL: "GET root item":       {request.MethodGet, "/" + prefix + "/" + testGroupVersion.Group + "/" + testGroupVersion.Version + "/simpleroots/bar", http.StatusOK},
 		"GET namespaced": {request.MethodGet, "/" + prefix + "/" + testGroupVersion.Group + "/" + testGroupVersion.Version + "/namespaces/ns/simples", http.StatusOK},
@@ -888,11 +885,10 @@ func (UnimplementedRESTStorage) GetSingularName() string {
 	return ""
 }
 
-// TestUnimplementedRESTStorage ensures that if a rest.Storage does not implement a given
-// method, that it is literally not registered with the server.  In the past,
-// we registered everything, and returned method not supported if it didn't support
-// a verb.  Now we literally do not register a storage if it does not implement anything.
-// TODO: in future, we should update proxy/redirect
+// TestUnimplementedRESTStorage 验证：当 rest.Storage 未实现某个方法时，它根本不会
+// 向 server 注册。过去我们会注册所有内容，在不支持某个动词时返回 method not
+// supported；现在如果 rest.Storage 什么都不实现，就完全不注册它。
+// TODO：将来应当更新 proxy/redirect
 func TestUnimplementedRESTStorage(t *testing.T) {
 	type T struct {
 		Method  string
@@ -970,10 +966,9 @@ func (OnlyGetRESTStorage) ConvertToTable(ctx context.Context, object runtime.Obj
 	return nil, nil
 }
 
-// TestSomeUnimplementedRESTStorage ensures that if a rest.Storage does
-// not implement a given method, that it is literally not registered
-// with the server. We need to have at least one verb supported inorder
-// to get a MethodNotAllowed rather than NotFound error.
+// TestSomeUnimplementedRESTStorage 验证：当 rest.Storage 未实现某个方法时，
+// 它根本不会向 server 注册。至少需要支持一个动词，才能得到
+// MethodNotAllowed 而不是 NotFound 错误。
 func TestSomeUnimplementedRESTStorage(t *testing.T) {
 	type T struct {
 		Method  string
@@ -1033,7 +1028,7 @@ func TestList(t *testing.T) {
 	}{
 		// Groupless API
 
-		// legacy namespace param is ignored
+		// 旧的 namespace 参数会被忽略
 		{
 			url:       "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/simple?namespace=",
 			namespace: "",
@@ -1051,7 +1046,7 @@ func TestList(t *testing.T) {
 			label:     "a=b",
 			field:     "c=d",
 		},
-		// legacy api version is honored
+		// 旧的 api version 会被采纳
 		{
 			url:       "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/simple",
 			namespace: "",
@@ -1069,13 +1064,13 @@ func TestList(t *testing.T) {
 			label:     "a=b",
 			field:     "c=d",
 		},
-		// list items across all namespaces
+		// 跨所有命名空间列出条目
 		{
 			url:       "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/simple",
 			namespace: "",
 			legacy:    true,
 		},
-		// list items in a namespace in the path
+		// 列出路径中指定命名空间下的条目
 		{
 			url:       "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/namespaces/default/simple",
 			namespace: "default",
@@ -1090,7 +1085,7 @@ func TestList(t *testing.T) {
 			label:     "a=b",
 			field:     "c=d",
 		},
-		// list items across all namespaces
+		// 跨所有命名空间列出条目
 		{
 			url:       "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/simple",
 			namespace: "",
@@ -1098,7 +1093,7 @@ func TestList(t *testing.T) {
 
 		// Group API
 
-		// legacy namespace param is ignored
+		// 旧的 namespace 参数会被忽略
 		{
 			url:       "/" + prefix + "/" + testGroupVersion.Group + "/" + testGroupVersion.Version + "/simple?namespace=",
 			namespace: "",
@@ -1116,7 +1111,7 @@ func TestList(t *testing.T) {
 			label:     "a=b",
 			field:     "c=d",
 		},
-		// legacy api version is honored
+		// 旧的 api version 会被采纳
 		{
 			url:       "/" + prefix + "/" + testGroupVersion.Group + "/" + testGroupVersion.Version + "/simple",
 			namespace: "",
@@ -1134,13 +1129,13 @@ func TestList(t *testing.T) {
 			label:     "a=b",
 			field:     "c=d",
 		},
-		// list items across all namespaces
+		// 跨所有命名空间列出条目
 		{
 			url:       "/" + prefix + "/" + testGroupVersion.Group + "/" + testGroupVersion.Version + "/simple",
 			namespace: "",
 			legacy:    true,
 		},
-		// list items in a namespace in the path
+		// 列出路径中指定命名空间下的条目
 		{
 			url:       "/" + prefix + "/" + newGroupVersion.Group + "/" + newGroupVersion.Version + "/namespaces/default/simple",
 			namespace: "default",
@@ -1155,7 +1150,7 @@ func TestList(t *testing.T) {
 			label:     "a=b",
 			field:     "c=d",
 		},
-		// list items across all namespaces
+		// 跨所有命名空间列出条目
 		{
 			url:       "/" + prefix + "/" + newGroupVersion.Group + "/" + newGroupVersion.Version + "/simple",
 			namespace: "",
@@ -1262,7 +1257,7 @@ func TestListCompression(t *testing.T) {
 		field          string
 		acceptEncoding string
 	}{
-		// list items in a namespace in the path
+		// 列出路径中指定命名空间下的条目
 		{
 			url:            "/" + grouplessPrefix + "/" + grouplessGroupVersion.Version + "/namespaces/default/simple",
 			namespace:      "default",
@@ -1297,9 +1292,8 @@ func TestListCompression(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%d: unexpected error: %v", testIndex, err)
 			}
-			// It's necessary to manually set Accept-Encoding here
-			// to prevent http.DefaultClient from automatically
-			// decoding responses
+			// 这里必须手动设置 Accept-Encoding，
+			// 以免 http.DefaultClient 自动解码响应
 			req.Header.Set("Accept-Encoding", test.acceptEncoding)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -1542,7 +1536,7 @@ func BenchmarkGet(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Use a closure to execute defers before continuing
+		// 使用闭包，以便在继续执行前先运行 defer
 		func() {
 			req, err := http.NewRequestWithContext(ctx, request.MethodGet, url, nil)
 			require.NoError(b, err)
@@ -1586,7 +1580,7 @@ func BenchmarkGetNoCompression(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Use a closure to execute defers before continuing
+		// 使用闭包，以便在继续执行前先运行 defer
 		func() {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
@@ -1640,9 +1634,8 @@ func TestGetCompression(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error creating request: %v", err)
 			}
-			// It's necessary to manually set Accept-Encoding here
-			// to prevent http.DefaultClient from automatically
-			// decoding responses
+			// 这里必须手动设置 Accept-Encoding，
+			// 以免 http.DefaultClient 自动解码响应
 			req.Header.Set("Accept-Encoding", test.acceptEncoding)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -1741,7 +1734,7 @@ func TestGetPretty(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// to get stable ordering we need to use a go type
+			// 要获得稳定的顺序，需要使用 Go 类型
 			unstructured := genericapitesting.Simple{}
 			if err := json.Unmarshal([]byte(body), &unstructured); err != nil {
 				t.Fatal(err)
@@ -1788,7 +1781,7 @@ func TestGetTable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// the codec includes a trailing newline that is not present during decode
+		// codec 会附带一个解码时并不存在的结尾换行符
 		encodedV1Beta1Body = bytes.TrimSpace(encodedBody)
 	}
 	var encodedV1Body []byte
@@ -1799,7 +1792,7 @@ func TestGetTable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// the codec includes a trailing newline that is not present during decode
+		// codec 会附带一个解码时并不存在的结尾换行符
 		encodedV1Body = bytes.TrimSpace(encodedBody)
 	}
 
@@ -1982,14 +1975,14 @@ func TestWatchTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// the codec includes a trailing newline that is not present during decode
+	// codec 会附带一个解码时并不存在的结尾换行符
 	encodedBody = bytes.TrimSpace(encodedBody)
 
 	encodedBodyV1, err := runtime.Encode(metainternalversionscheme.Codecs.LegacyCodec(metav1.SchemeGroupVersion), partial)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// the codec includes a trailing newline that is not present during decode
+	// codec 会附带一个解码时并不存在的结尾换行符
 	encodedBodyV1 = bytes.TrimSpace(encodedBodyV1)
 
 	metaDoc := metav1.ObjectMeta{}.SwaggerDoc()
@@ -2261,7 +2254,7 @@ func TestGetPartialObjectMetadata(t *testing.T) {
 			statusCode: http.StatusNotAcceptable,
 		},
 
-		// verify preferred version overrides supported version
+		// 验证 preferred version 会覆盖 supported version
 		{
 			accept:     "application/json;as=PartialObjectMetadata;v=v1beta1;g=meta.k8s.io, application/json;as=PartialObjectMetadata;v=v1;g=meta.k8s.io, application/json",
 			expectKind: schema.GroupVersionKind{Kind: "PartialObjectMetadata", Group: "meta.k8s.io", Version: "v1beta1"},
@@ -2432,7 +2425,7 @@ func TestGetBinary(t *testing.T) {
 
 // validateSimpleGetOptionsParams 校验 SimpleGetOptions 生成的参数文档与预期一致。
 func validateSimpleGetOptionsParams(t *testing.T, route *restful.Route) {
-	// Validate name and description
+	// 校验 name 与 description
 	expectedParams := map[string]string{
 		"param1":  "description for param1",
 		"param2":  "description for param2",
@@ -3099,7 +3092,7 @@ func TestDeleteWithOptionsQueryAndBody(t *testing.T) {
 
 // TestDeleteInvokesAdmissionControl 验证删除路径同时经过变更与校验准入。
 func TestDeleteInvokesAdmissionControl(t *testing.T) {
-	// TODO: remove mutating deny when we removed it from the endpoint implementation and ported all plugins
+	// TODO：等我们从 endpoint 实现中移除 mutating deny 并迁移所有插件后再删除
 	for _, admit := range []admission.Interface{alwaysMutatingDeny{}, alwaysValidatingDeny{}} {
 		testName := fmt.Sprintf("%T", admit)
 		t.Run(testName, func(t *testing.T) {
@@ -3177,7 +3170,7 @@ func TestUpdate(t *testing.T) {
 	}
 	body, err := runtime.Encode(testCodec, item)
 	if err != nil {
-		// The following cases will fail, so die now
+		// 以下用例将会失败，因此直接退出
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -3223,7 +3216,7 @@ func TestUpdateInvokesAdmissionControl(t *testing.T) {
 			}
 			body, err := runtime.Encode(testCodec, item)
 			if err != nil {
-				// The following cases will fail, so die now
+				// 以下用例将会失败，因此直接退出
 				t.Fatalf("unexpected error: %v", err)
 			}
 
@@ -3263,7 +3256,7 @@ func TestUpdateRequiresMatchingName(t *testing.T) {
 	}
 	body, err := runtime.Encode(testCodec, item)
 	if err != nil {
-		// The following cases will fail, so die now
+		// 以下用例将会失败，因此直接退出
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -3303,7 +3296,7 @@ func TestUpdateAllowsMissingNamespace(t *testing.T) {
 	}
 	body, err := runtime.Encode(testCodec, item)
 	if err != nil {
-		// The following cases will fail, so die now
+		// 以下用例将会失败，因此直接退出
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -3325,7 +3318,7 @@ func TestUpdateAllowsMissingNamespace(t *testing.T) {
 	}
 }
 
-// when the object name and namespace can't be retrieved, don't update.  It isn't safe.
+// 当无法获取对象名称和命名空间时不要更新，那样不安全。
 func TestUpdateDisallowsMismatchedNamespaceOnError(t *testing.T) {
 	ctx := t.Context()
 	storage := map[string]rest.Storage{}
@@ -3345,7 +3338,7 @@ func TestUpdateDisallowsMismatchedNamespaceOnError(t *testing.T) {
 	}
 	body, err := runtime.Encode(testCodec, item)
 	if err != nil {
-		// The following cases will fail, so die now
+		// 以下用例将会失败，因此直接退出
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -3388,7 +3381,7 @@ func TestUpdatePreventsMismatchedNamespace(t *testing.T) {
 	}
 	body, err := runtime.Encode(testCodec, item)
 	if err != nil {
-		// The following cases will fail, so die now
+		// 以下用例将会失败，因此直接退出
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -3452,8 +3445,8 @@ func TestCreateNotFound(t *testing.T) {
 	ctx := t.Context()
 	handler := handle(map[string]rest.Storage{
 		"simple": &SimpleRESTStorage{
-			// storage.Create can fail with not found error in theory.
-			// See https://pr.k8s.io/486#discussion_r15037092.
+			// 理论上 storage.Create 可能返回 not found 错误。
+			// 参见 https://pr.k8s.io/486#discussion_r15037092。
 			errors: map[string]error{"create": apierrors.NewNotFound(schema.GroupResource{Resource: "simples"}, "id")},
 		},
 	})
@@ -3583,14 +3576,14 @@ func TestParentResourceIsRequired(t *testing.T) {
 
 	handler := genericapifilters.WithRequestInfo(container, newTestRequestInfoResolver())
 
-	// resource is NOT registered in the root scope
+	// 该资源未注册在 root scope
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, &http.Request{Method: request.MethodGet, URL: &url.URL{Path: "/" + prefix + "/simple/test/sub"}})
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected not found: %#v", w)
 	}
 
-	// resource is registered in the namespace scope
+	// 该资源注册在 namespace scope
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, &http.Request{Method: request.MethodGet, URL: &url.URL{Path: "/" + prefix + "/" + newGroupVersion.Group + "/" + newGroupVersion.Version + "/namespaces/test/simple/test/sub"}})
 	if w.Code != http.StatusOK {
@@ -3677,7 +3670,7 @@ func TestNamedCreaterWithoutName(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	defer apitesting.Close(t, response.Body)
-	// empty name is not allowed for NamedCreater
+	// NamedCreater 不允许空名称
 	if response.StatusCode != http.StatusBadRequest {
 		t.Errorf("Unexpected response %#v", response)
 	}
@@ -3766,7 +3759,7 @@ func TestNamedCreaterWithGenerateName(t *testing.T) {
 		t.Errorf("unexpected error: %v %#v", err, response)
 	}
 
-	// Avoid comparing managed fields in expected result
+	// 避免比较预期结果中的 managed fields
 	itemOut.ManagedFields = nil
 	itemOut.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 	simple.Name = populateName
@@ -3854,7 +3847,7 @@ func TestCreate(t *testing.T) {
 		t.Errorf("unexpected error: %v %#v", err, response)
 	}
 
-	// Avoid comparing managed fields in expected result
+	// 避免比较预期结果中的 managed fields
 	itemOut.ManagedFields = nil
 	itemOut.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 	simple.Namespace = "default" // populated by create handler to match request URL
@@ -3921,7 +3914,7 @@ func TestCreateYAML(t *testing.T) {
 		t.Fatalf("unexpected error: %v %#v", err, response)
 	}
 
-	// Avoid comparing managed fields in expected result
+	// 避免比较预期结果中的 managed fields
 	itemOut.ManagedFields = nil
 	itemOut.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 	simple.Namespace = "default" // populated by create handler to match request URL
@@ -3978,7 +3971,7 @@ func TestCreateInNamespace(t *testing.T) {
 		t.Fatalf("unexpected error: %v\n%s", err, data)
 	}
 
-	// Avoid comparing managed fields in expected result
+	// 避免比较预期结果中的 managed fields
 	itemOut.ManagedFields = nil
 	itemOut.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 	simple.Namespace = "other" // populated by create handler to match request URL
@@ -4099,11 +4092,11 @@ func TestWriteJSONDecodeError(t *testing.T) {
 		responsewriters.WriteObjectNegotiated(codecs, negotiation.DefaultEndpointRestrictions, newGroupVersion, w, req, http.StatusOK, &UnregisteredAPIObject{"Undecodable"}, false)
 	}))
 	defer server.Close()
-	// Decode error response behavior is dictated by
-	// apiserver/pkg/endpoints/handlers/responsewriters/status.go::ErrorToAPIStatus().
-	// Unless specific metav1.Status() parameters are implemented for the particular error in question, such that
-	// the status code is defined, metav1 errors where error.status == metav1.StatusFailure
-	// will throw a '500 Internal Server Error'. Non-metav1 type errors will always throw a '500 Internal Server Error'.
+	// 错误响应的解码行为由
+	// apiserver/pkg/endpoints/handlers/responsewriters/status.go::ErrorToAPIStatus() 决定。
+	// 除非针对具体错误实现了特定的 metav1.Status() 参数从而定义了状态码，
+	// 否则 error.status == metav1.StatusFailure 的 metav1 错误会抛出
+	// '500 Internal Server Error'；非 metav1 类型的错误则总是抛出 '500 Internal Server Error'。
 	status := expectAPIStatus(t, request.MethodGet, server.URL, nil, http.StatusInternalServerError)
 	if status.Reason != metav1.StatusReasonUnknown {
 		t.Errorf("unexpected reason %#v", status)
@@ -4145,7 +4138,7 @@ func TestCreateTimeout(t *testing.T) {
 	defer close(testOver)
 	storage := SimpleRESTStorage{
 		injectedFunction: func(obj runtime.Object) (runtime.Object, error) {
-			// Eliminate flakes by ensuring the create operation takes longer than this test.
+			// 让 create 操作的耗时超过本测试，以消除偶发失败。
 			<-testOver
 			return obj, nil
 		},
@@ -4176,7 +4169,7 @@ func TestCreateChecksAPIVersion(t *testing.T) {
 	client := http.Client{}
 
 	simple := &genericapitesting.Simple{}
-	//using newCodec and send the request to testVersion URL shall cause a discrepancy in apiVersion
+	// 使用 newCodec 并向 testVersion URL 发送请求，会导致 apiVersion 不一致
 	data, err := runtime.Encode(newCodec, simple)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -4272,8 +4265,8 @@ func TestUpdateChecksAPIVersion(t *testing.T) {
 	}
 }
 
-// runRequest is used by TestDryRun since it runs the test twice in a
-// row with a slightly different URL (one has ?dryRun, one doesn't).
+// runRequest 供 TestDryRun 使用：它会用略有不同的 URL 连续运行测试两次
+// （一次带 ?dryRun，一次不带）。
 func runRequest(t testing.TB, path, verb string, data []byte, contentType string) *http.Response {
 	ctx := t.Context()
 	request, err := http.NewRequestWithContext(ctx, verb, path, bytes.NewBuffer(data))
@@ -4296,20 +4289,20 @@ type SimpleRESTStorageWithDeleteCollection struct {
 	SimpleRESTStorage
 }
 
-// Delete collection doesn't do much, but let us test this path.
+// Delete collection 做的事情不多，但也测试一下这条路径。
 func (storage *SimpleRESTStorageWithDeleteCollection) DeleteCollection(ctx context.Context, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions, listOptions *metainternalversion.ListOptions) (runtime.Object, error) {
 	storage.checkContext(ctx)
 	return nil, nil
 }
 
-// shared vars used by both TestFieldValidation and BenchmarkFieldValidation
+// TestFieldValidation 与 BenchmarkFieldValidation 共用的变量
 var (
 	strictFieldValidation = "?fieldValidation=Strict"
 	warnFieldValidation   = "?fieldValidation=Warn"
 	ignoreFieldValidation = "?fieldValidation=Ignore"
 )
 
-// TestFieldValidation tests the create, update, and patch handlers for correctness when faced with field validation errors.
+// TestFieldValidation 测试 create、update、patch 处理器在遇到字段校验错误时的正确性。
 func TestFieldValidation(t *testing.T) {
 	var (
 		strictDecodingErr          = `strict decoding error: duplicate field \"other\", unknown field \"unknown\"`
@@ -4344,9 +4337,7 @@ unknown: baz`)
 	{"op": "add", "path": "/other", "value": "bar"}
 	]
 	`)
-		// note: duplicate fields in the patch itself
-		// are dropped by the
-		// evanphx/json-patch library and is expected.
+		// 注意：patch 内容中的重复字段会被 evanphx/json-patch 库丢弃，这是预期行为。
 		jsonPatchStrictDecodingErr   = `strict decoding error: unknown field \"unknown\"`
 		jsonPatchStrictDecodingWarns = []string{`unknown field "unknown"`}
 
@@ -4445,8 +4436,8 @@ unknown: baz`)
 	}
 }
 
-// BenchmarkFieldValidation benchmarks the create, update, and patch handlers for performance distinctions between
-// strict, warn, and ignore field validation handling.
+// BenchmarkFieldValidation 对 create、update、patch 处理器做基准测试，
+// 比较 strict、warn、ignore 三种字段校验处理方式的性能差异。
 func BenchmarkFieldValidation(b *testing.B) {
 	var (
 		validJSONDataPost = []byte(`{"kind":"Simple", "apiVersion":"test.group/version", "metadata":{}, "other":"foo"}`)
@@ -4648,11 +4639,10 @@ func TestXGSubresource(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Test if the returned object has the expected group, version and kind
-	// We are directly unmarshaling JSON here because TypeMeta cannot be decoded through the
-	// installed decoders. TypeMeta cannot be decoded because it is added to the ignored
-	// conversion type list in API scheme and hence cannot be converted from input type object
-	// to output type object. So it's values don't appear in the decoded output object.
+	// 检查返回的对象是否具有预期的 group、version 和 kind。
+	// 这里直接反序列化 JSON，因为 TypeMeta 无法通过已安装的解码器解码：
+	// TypeMeta 被加入了 API scheme 的忽略转换类型列表，无法从输入类型对象
+	// 转换为输出类型对象，因此它的值不会出现在解码后的输出对象中。
 	decoder := json.NewDecoder(strings.NewReader(body))
 	var itemFromBody genericapitesting.SimpleXGSubresource
 	err = decoder.Decode(&itemFromBody)
@@ -4680,7 +4670,7 @@ func readBodyOrDie(r io.Reader) []byte {
 	return body
 }
 
-// BenchmarkUpdateProtobuf measures the cost of processing an update on the server in proto
+// BenchmarkUpdateProtobuf 测量服务端以 protobuf 处理一次 update 的开销
 func BenchmarkUpdateProtobuf(b *testing.B) {
 	ctx := b.Context()
 	items := benchmarkItems(b)
@@ -4704,7 +4694,7 @@ func BenchmarkUpdateProtobuf(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Use a closure to execute defers before continuing
+		// 使用闭包，以便在继续执行前先运行 defer
 		func() {
 			request, err := http.NewRequestWithContext(ctx, request.MethodPut, dest.String(), bytes.NewReader(data))
 			if err != nil {

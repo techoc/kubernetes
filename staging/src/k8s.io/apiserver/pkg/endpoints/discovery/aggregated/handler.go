@@ -47,7 +47,7 @@ import (
 // 被多个来源声明时，只有最小数值的来源会出现在最终文档中。
 type Source uint
 
-// The GroupVersion from the lowest Source takes precedence
+// Source 数值最小的 GroupVersion 优先。
 // 数值刻意留出间隔，便于将来在已有来源之间插入新来源而不重排所有常量。
 const (
 	AggregatorSource Source = 0
@@ -55,44 +55,41 @@ const (
 	CRDSource        Source = 200
 )
 
-// This handler serves the /apis endpoint for an aggregated list of
-// api resources indexed by their group version.
+// 本 handler 负责 /apis 端点，返回按 group version 索引的聚合 API 资源列表。
 //
 // 所有修改方法都要求线程安全：kube-aggregator、CRD 控制器与内置注册
 // 会并发更新同一份文档。实现上以读写锁保护 map，读取路径走原子快照。
 type ResourceManager interface {
-	// Adds knowledge of the given groupversion to the discovery document
-	// If it was already being tracked, updates the stored APIVersionDiscovery
-	// Thread-safe
+	// AddGroupVersion 把指定 group-version 加入发现文档；
+	// 若已在跟踪，则更新其中保存的 APIVersionDiscovery。
+	// 线程安全
 	AddGroupVersion(groupName string, value apidiscoveryv2.APIVersionDiscovery)
 
-	// Sets a priority to be used while sorting a specific group and
-	// group-version. If two versions report different priorities for
-	// the group, the higher one will be used. If the group is not
-	// known, the priority is ignored. The priority for this version
-	// is forgotten once the group-version is forgotten
+	// SetGroupVersionPriority 设置在排序某个组和 group-version 时使用的优先级。
+	// 若同一组的两个版本上报了不同的优先级，取较大的那个。
+	// 若该组未知，则忽略该优先级。
+	// 一旦该 group-version 被移除，其优先级也会被遗忘。
 	SetGroupVersionPriority(gv metav1.GroupVersion, grouppriority, versionpriority int)
 
-	// Removes all group versions for a given group
-	// Thread-safe
+	// RemoveGroup 删除某个组下的全部 group-version。
+	// 线程安全
 	RemoveGroup(groupName string)
 
-	// Removes a specific groupversion. If all versions of a group have been
-	// removed, then the entire group is unlisted.
-	// Thread-safe
+	// RemoveGroupVersion 删除指定的 group-version。若一个组的所有版本都被删除，
+	// 则整个组从列表中移除。
+	// 线程安全
 	RemoveGroupVersion(gv metav1.GroupVersion)
 
-	// Resets the manager's known list of group-versions and replaces them
-	// with the given groups
-	// Thread-Safe
+	// SetGroups 重置管理器已知的 group-version 列表，替换为给定的这些组。
+	// 线程安全
 	SetGroups([]apidiscoveryv2.APIGroupDiscovery)
 
-	// Returns the same resource manager using a different source
-	// The source is used to decide how to de-duplicate groups.
-	// The group from the least-numbered source is used
+	// WithSource 返回使用另一来源的同一个资源管理器。
+	// 来源用于决定如何对组去重：
+	// 取数值最小的来源。
 	WithSource(source Source) ResourceManager
 
-	// AddInvalidationCallback adds a callback to be called when the discovery cache is invalidated.
+	// AddInvalidationCallback 注册一个回调，在发现缓存失效时调用。
 	AddInvalidationCallback(callback func())
 
 	http.Handler
@@ -148,8 +145,7 @@ func (rm resourceManager) AddInvalidationCallback(callback func()) {
 type groupKey struct {
 	name string
 
-	// Source identifies where this group came from and dictates which group
-	// among duplicates is chosen to be used for discovery.
+	// source 标识该组来自哪里，并决定重复的组中发现信息采用哪一个。
 	source Source
 }
 
@@ -162,14 +158,14 @@ type groupVersionKey struct {
 // resourceDiscoveryManager 是所有视图共享的存储。
 type resourceDiscoveryManager struct {
 	serializer runtime.NegotiatedSerializer
-	// cache is an atomic pointer to avoid the use of locks
+	// cache 用原子指针实现，以避免加锁
 	// 读路径（/apis 每个客户端都会请求）不取锁，直接原子读取预计算结果。
 	cache atomic.Pointer[cachedGroupList]
 
 	serveHTTPFunc http.HandlerFunc
 
-	// Writes protected by the lock.
-	// List of all apigroups & resources indexed by the resource manager
+	// 写操作由锁保护。
+	// 资源管理器索引的全部 apigroup 与资源列表
 	lock                 sync.RWMutex
 	apiGroups            map[groupKey]*apidiscoveryv2.APIGroupDiscovery
 	versionPriorities    map[groupVersionKey]priorityInfo
@@ -202,7 +198,7 @@ func NewResourceManager(path string) ResourceManager {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(apidiscoveryv2.AddToScheme(scheme))
 	utilruntime.Must(apidiscoveryv2beta1.AddToScheme(scheme))
-	// Register conversion for apidiscovery
+	// 注册 apidiscovery 的转换函数
 	utilruntime.Must(apidiscoveryv2conversion.RegisterConversions(scheme))
 
 	// CBOR 仅在特性门控开启时注册，避免在未启用的集群上暴露新编码。
@@ -265,7 +261,7 @@ func (rdm *resourceDiscoveryManager) SetGroups(source Source, groups []apidiscov
 		}
 	}
 
-	// Filter unused out priority entries
+	// 过滤掉已不再使用的优先级条目
 	for gv := range rdm.versionPriorities {
 		key := groupKey{
 			source: source,
@@ -313,15 +309,12 @@ func (rdm *resourceDiscoveryManager) addGroupVersionLocked(source Source, groupN
 	}
 
 	if existing, groupExists := rdm.apiGroups[key]; groupExists {
-		// If this version already exists, replace it
+		// 该版本已存在时直接替换
 		versionExists := false
 
-		// Not very efficient, but in practice there are generally not many versions
+		// 效率不算高，但实践中版本数量通常很少
 		for i := range existing.Versions {
 			if existing.Versions[i].Version == value.Version {
-				// The new gv is the exact same as what is already in
-				// the map. This is a noop and cache should not be
-				// invalidated.
 				// 内容完全相同则直接返回，避免每次 informer 重同步都让缓存失效。
 				if reflect.DeepEqual(existing.Versions[i], value) {
 					return
@@ -361,7 +354,7 @@ func (rdm *resourceDiscoveryManager) addGroupVersionLocked(source Source, groupN
 		}
 	}
 
-	// Reset response document so it is recreated lazily
+	// 重置响应文档，使其按需重新生成
 	rdm.invalidateCacheLocked()
 }
 
@@ -388,7 +381,7 @@ func (rdm *resourceDiscoveryManager) RemoveGroupVersion(source Source, apiGroup 
 			break
 		}
 	}
-	// If no modification was done, cache does not need to be cleared
+	// 若没有任何修改，就不需要清空缓存
 	if !modified {
 		return
 	}
@@ -404,7 +397,7 @@ func (rdm *resourceDiscoveryManager) RemoveGroupVersion(source Source, apiGroup 
 		delete(rdm.apiGroups, key)
 	}
 
-	// Reset response document so it is recreated lazily
+	// 重置响应文档，使其按需重新生成
 	rdm.invalidateCacheLocked()
 }
 
@@ -427,19 +420,18 @@ func (rdm *resourceDiscoveryManager) RemoveGroup(source Source, groupName string
 		}
 	}
 
-	// Reset response document so it is recreated lazily
+	// 重置响应文档，使其按需重新生成
 	// 这里直接 Store(nil) 而非 invalidateCacheLocked：删除组不需要通知外部重新聚合。
 	rdm.cache.Store(nil)
 }
 
-// Prepares the api group list for serving by converting them from map into
-// list and sorting them according to insertion order
+// 把 API 组列表从 map 转为 list 并按插入顺序排序，完成对外提供服务前的准备。
 //
 // 计算分三步：按来源去重合并 group-version、按 VersionPriority 排序版本、
 // 按 GroupPriorityMinimum 排序组。调用方必须持有读锁或写锁。
 func (rdm *resourceDiscoveryManager) calculateAPIGroupsLocked() []apidiscoveryv2.APIGroupDiscovery {
 	regenerationCounter.Inc()
-	// Re-order the apiGroups by their priority.
+	// 按优先级重新排列 apiGroups。
 	groups := []apidiscoveryv2.APIGroupDiscovery{}
 
 	groupsToUse := map[string]apidiscoveryv2.APIGroupDiscovery{}
@@ -450,13 +442,11 @@ func (rdm *resourceDiscoveryManager) calculateAPIGroupsLocked() []apidiscoveryv2
 			for _, v := range group.Versions {
 				gv := metav1.GroupVersion{Group: key.name, Version: v.Version}
 
-				// Skip groupversions we've already seen before. Only DefaultSource
-				// takes precedence
 				// Source 数值越小优先级越高，因此已记录更小来源时跳过。
 				if usedSource, seen := sourcesUsed[gv]; seen && key.source >= usedSource {
 					continue
 				} else if seen {
-					// Find the index of the duplicate version and replace
+					// 找到重复版本的下标并替换
 					for i := 0; i < len(existing.Versions); i++ {
 						if existing.Versions[i].Version == v.Version {
 							existing.Versions[i] = v
@@ -465,15 +455,14 @@ func (rdm *resourceDiscoveryManager) calculateAPIGroupsLocked() []apidiscoveryv2
 					}
 
 				} else {
-					// New group-version, just append
+					// 新的 group-version，直接追加
 					existing.Versions = append(existing.Versions, v)
 				}
 
 				sourcesUsed[gv] = key.source
 				groupsToUse[key.name] = existing
 			}
-			// Check to see if we have overlapping versions. If we do, take the one
-			// with highest source precedence
+			// 检查是否存在版本重叠，若重叠则取来源优先级最高的那个
 		} else {
 			// 首次遇到该组时深拷贝，后续合并不会污染受锁保护的原始数据。
 			groupsToUse[key.name] = *group.DeepCopy()
@@ -486,8 +475,7 @@ func (rdm *resourceDiscoveryManager) calculateAPIGroupsLocked() []apidiscoveryv2
 
 	for _, group := range groupsToUse {
 
-		// Re-order versions based on their priority. Use kube-aware string
-		// comparison as a tie breaker
+		// 按优先级重新排列版本，并用 Kubernetes 感知的字符串比较作为平手裁决。
 		// 使用 Stable 排序，保证优先级与版本比较都相同时顺序稳定，避免文档抖动。
 		sort.SliceStable(group.Versions, func(i, j int) bool {
 			iVersion := group.Versions[i].Version
@@ -503,19 +491,18 @@ func (rdm *resourceDiscoveryManager) calculateAPIGroupsLocked() []apidiscoveryv2
 			iPriority := rdm.versionPriorities[groupVersionKey{iGV, iSource}].VersionPriority
 			jPriority := rdm.versionPriorities[groupVersionKey{jGV, jSource}].VersionPriority
 
-			// Sort by version string comparator if priority is equal
+			// 优先级相同时按版本字符串比较器排序
 			if iPriority == jPriority {
 				return version.CompareKubeAwareVersionStrings(iVersion, jVersion) > 0
 			}
 
-			// i sorts before j if it has a higher priority
+			// 优先级更高的 i 排在 j 之前
 			return iPriority > jPriority
 		})
 
 		groups = append(groups, group)
 	}
 
-	// For each group, determine the highest minimum group priority and use that
 	// 同一组可能有多个版本各自声明 GroupPriorityMinimum，取最大值以尊重最“重要”的版本。
 	priorities := map[string]int{}
 	for gv, info := range rdm.versionPriorities {
@@ -536,25 +523,25 @@ func (rdm *resourceDiscoveryManager) calculateAPIGroupsLocked() []apidiscoveryv2
 		iName := groups[i].Name
 		jName := groups[j].Name
 
-		// Default to 0 priority by default
+		// 缺省优先级为 0
 		iPriority := priorities[iName]
 		jPriority := priorities[jName]
 
-		// Sort discovery based on apiservice priority.
-		// Duplicated from staging/src/k8s.io/kube-aggregator/pkg/apis/apiregistration/v1/helpers.go
+		// 按 apiservice 优先级排序发现信息。
+		// 逻辑复制自 staging/src/k8s.io/kube-aggregator/pkg/apis/apiregistration/v1/helpers.go
 		if iPriority == jPriority {
-			// Equal priority uses name to break ties
+			// 优先级相同时用名称打破平局
 			return iName < jName
 		}
 
-		// i sorts before j if it has a higher priority
+		// 优先级更高的 i 排在 j 之前
 		return iPriority > jPriority
 	})
 
 	return groups
 }
 
-// Fetches from cache if it exists. If cache is empty, create it.
+// 缓存存在则直接取用；缓存为空则先创建。
 // 注意：计算在 RLock 下进行，多个并发未命中会各自计算一次，最终只有一份被保留，
 // 这是以极小的重复计算换取读路径无写锁的取舍。
 func (rdm *resourceDiscoveryManager) fetchFromCache() *cachedGroupList {
@@ -585,12 +572,12 @@ func (rdm *resourceDiscoveryManager) fetchFromCache() *cachedGroupList {
 // cachedGroupList 是一次计算的结果快照；缓存对象本身不可变，可被并发读取。
 type cachedGroupList struct {
 	cachedResponse apidiscoveryv2.APIGroupDiscoveryList
-	// etag is calculated based on a SHA hash of only the JSON object.
-	// A response via different Accept encodings (eg: protobuf, json) will
-	// yield the same etag. This is okay because Accept is part of the Vary header.
-	// Per RFC7231 a client must only cache a response etag pair if the header field
-	// matches as indicated by the Vary field. Thus, protobuf and json and other Accept
-	// encodings will not be cached as the same response despite having the same etag.
+	// etag 只基于 JSON 对象的 SHA 散列计算。
+	// 通过不同 Accept 编码（如 protobuf、json）请求同一响应会得到相同的 etag。
+	// 这没问题，因为 Accept 是 Vary 头的一部分。
+	// 按 RFC7231，客户端只有在 Vary 指明的头字段也匹配时才能缓存响应与 etag 的对应关系，
+	// 因此即便 etag 相同，protobuf 与 json 等其他 Accept 编码
+	// 也不会被当作同一个响应来缓存。
 	cachedResponseETag string
 }
 
@@ -619,8 +606,8 @@ func writeDiscoveryResponse(
 ) {
 	mediaType, _, err := negotiation.NegotiateOutputMediaType(req, serializer, DiscoveryEndpointRestrictions)
 	if err != nil {
-		// Should never happen. wrapper.go will only proxy requests to this
-		// handler if the media type passes DiscoveryEndpointRestrictions
+		// 理论上不会发生。wrapper.go 只有在媒体类型通过 DiscoveryEndpointRestrictions
+		// 时才会把请求代理到本 handler
 		utilruntime.HandleError(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -649,7 +636,7 @@ func writeDiscoveryResponse(
 	targetGV = mediaType.Convert.GroupVersion()
 
 	if len(etag) > 0 {
-		// Use proper e-tag headers if one is available
+		// 有 etag 时使用标准的 e-tag 头
 		ServeHTTPWithETag(
 			resp,
 			etag,
@@ -659,8 +646,8 @@ func writeDiscoveryResponse(
 			req,
 		)
 	} else {
-		// Default to normal response in rare case etag is
-		// not cached with the object for some reason.
+		// 极少数情况下对象上没有缓存 etag，
+		// 此时退化为普通响应。
 		responsewriters.WriteObjectNegotiated(
 			serializer,
 			DiscoveryEndpointRestrictions,

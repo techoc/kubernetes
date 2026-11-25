@@ -35,9 +35,8 @@ func keepUnversioned(group string) bool {
 	return group == "" || group == "extensions"
 }
 
-// stripVersionEncoder strips APIVersion field from the encoding output. It's
-// used to keep the responses at the discovery endpoints backward compatible
-// with release-1.1, when the responses have empty APIVersion.
+// stripVersionEncoder 会从编码输出中去掉 APIVersion 字段，用于让发现端点的响应
+// 与 release-1.1（当时响应的 APIVersion 为空）保持向后兼容。
 //
 // 实现方式是“编码→解码→清空 GVK→再编码”，代价较高，因此仅用于兼容路径。
 type stripVersionEncoder struct {
@@ -97,13 +96,13 @@ func (c stripVersionEncoder) doEncode(obj runtime.Object, w io.Writer) error {
 	return c.serializer.Encode(roundTrippedObj, w)
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (c stripVersionEncoder) Identifier() runtime.Identifier {
 	return c.identifier
 }
 
-// stripVersionNegotiatedSerializer will return stripVersionEncoder when
-// EncoderForVersion is called. See comments for stripVersionEncoder.
+// stripVersionNegotiatedSerializer 在 EncoderForVersion 被调用时返回
+// stripVersionEncoder。参见 stripVersionEncoder 的注释。
 type stripVersionNegotiatedSerializer struct {
 	runtime.NegotiatedSerializer
 }
@@ -114,9 +113,9 @@ type stripVersionNegotiatedSerializer struct {
 func (n stripVersionNegotiatedSerializer) EncoderForVersion(encoder runtime.Encoder, gv runtime.GroupVersioner) runtime.Encoder {
 	serializer, ok := encoder.(runtime.Serializer)
 	if !ok {
-		// The stripVersionEncoder needs both an encoder and decoder, but is called from a context that doesn't have access to the
-		// decoder. We do a best effort cast here (since this code path is only for backwards compatibility) to get access to the caller's
-		// decoder.
+		// stripVersionEncoder 同时需要 encoder 和 decoder，但调用它的上下文拿不到
+		// decoder。由于该代码路径仅用于向后兼容，这里做尽力而为的类型断言，
+		// 以获取调用方的 decoder。
 		panic(fmt.Sprintf("Unable to extract serializer from %#v", encoder))
 	}
 	versioned := n.NegotiatedSerializer.EncoderForVersion(encoder, gv)

@@ -28,8 +28,8 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 )
 
-// WithFailedAuthenticationAudit decorates a failed http.Handler used in WithAuthentication handler.
-// It is meant to log only failed authentication requests.
+// WithFailedAuthenticationAudit 装饰 WithAuthentication 中使用的失败 http.Handler，
+// 只记录认证失败的请求。
 //
 // 未配置审计后端或策略时直接返回原 handler，避免为每个失败请求付出额外开销。
 func WithFailedAuthenticationAudit(failedHandler http.Handler, sink audit.Sink, policy audit.PolicyRuleEvaluator) http.Handler {

@@ -75,9 +75,8 @@ type SimpleList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SimpleXGSubresource is a cross group subresource, i.e. the subresource does not belong to the
-// same group as its parent resource.
-// SimpleXGSubresource 用于验证“子资源与父资源属于不同 API 组”时的路由与鉴权。
+// SimpleXGSubresource 是跨组子资源（cross group subresource），即子资源不属于其父资源所在的 API 组。
+// 该类型用于验证“子资源与父资源属于不同 API 组”时的路由与鉴权。
 type SimpleXGSubresource struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`

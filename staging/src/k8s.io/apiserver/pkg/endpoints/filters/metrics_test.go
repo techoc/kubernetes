@@ -36,7 +36,7 @@ import (
 // TestMetrics 验证 WithAuthentication 在不同认证结果下记录的指标：
 // success/error/failure 三类结果，以及 audience 交叉校验失败时仍记 error。
 func TestMetrics(t *testing.T) {
-	// Excluding authentication_duration_seconds since it is difficult to predict its values.
+	// 不含 authentication_duration_seconds，因为它的取值难以预测。
 	// 同样排除延迟类指标：它们依赖真实时钟，无法稳定断言。
 	metrics := []string{
 		"authenticated_user_requests",
@@ -133,9 +133,9 @@ func TestMetrics(t *testing.T) {
 		},
 	}
 
-	// Since prometheus' gatherer is global, other tests may have updated metrics already, so
-	// we need to reset them prior running this test.
-	// This also implies that we can't run this test in parallel with other auth tests.
+	// prometheus 的 gatherer 是全局的，其他测试可能已经更新过这些指标，
+	// 因此运行本测试前需要先重置它们。
+	// 这也意味着本测试不能与其他认证测试并行运行。
 	authenticatedUserCounter.Reset()
 	authenticatedAttemptsCounter.Reset()
 
@@ -173,7 +173,7 @@ func TestMetrics(t *testing.T) {
 // authorization_attempts_total 的映射：Allow/Deny/NoOpinion/error，
 // 且 Allow 即使带 error 也按 allowed 计数（决策优先于错误）。
 func TestRecordAuthorizationMetricsMetrics(t *testing.T) {
-	// Excluding authorization_duration_seconds since it is difficult to predict its values.
+	// 不含 authorization_duration_seconds，因为它的取值难以预测。
 	metrics := []string{
 		"authorization_attempts_total",
 		"authorization_decision_annotations_total",
@@ -253,9 +253,9 @@ func TestRecordAuthorizationMetricsMetrics(t *testing.T) {
 		},
 	}
 
-	// Since prometheus' gatherer is global, other tests may have updated metrics already, so
-	// we need to reset them prior running this test.
-	// This also implies that we can't run this test in parallel with other auth tests.
+	// prometheus 的 gatherer 是全局的，其他测试可能已经更新过这些指标，
+	// 因此运行本测试前需要先重置它们。
+	// 这也意味着本测试不能与其他认证测试并行运行。
 	authorizationAttemptsCounter.Reset()
 
 	scheme := runtime.NewScheme()
@@ -268,7 +268,7 @@ func TestRecordAuthorizationMetricsMetrics(t *testing.T) {
 
 			audit := &auditinternal.Event{Level: auditinternal.LevelMetadata}
 			handler := WithAuthorization(&fakeHTTPHandler{}, tt.authorizer, negotiatedSerializer)
-			// TODO: fake audit injector
+			// TODO: 伪造审计注入器
 
 			// 构造一个合法的资源请求；路径只影响属性，不影响指标断言。
 			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "/api/v1/namespaces/default/pods", nil)

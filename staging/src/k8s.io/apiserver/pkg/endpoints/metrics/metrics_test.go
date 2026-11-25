@@ -32,7 +32,7 @@ import (
 )
 
 // TestCleanVerb 验证指标 verb 标签的归一化。
-// 中文说明：指标标签基数必须受控，因此未知 verb 统一归为 "other"；
+// 指标标签基数必须受控，因此未知 verb 统一归为 "other"；
 // 带 watch=true 的 GET/LIST 要改写为 WATCH，否则 watch 的延迟/流量会被计入读请求。
 func TestCleanVerb(t *testing.T) {
 	testCases := []struct {
@@ -78,8 +78,8 @@ func TestCleanVerb(t *testing.T) {
 			expectedVerb: request.MethodList,
 		},
 		{
-			// The above may seem counter-intuitive, but it actually is needed for cases like
-			// watching a single item, e.g.:
+			// 上述行为看似违反直觉，但在这类场景下确实必要：
+			// 监听单个条目，例如：
 			//  /api/v1/namespaces/foo/pods/bar?fieldSelector=metadata.name=baz&watch=true
 			desc:        "GET is transformed to WATCH if we have the right query param on the request",
 			initialVerb: request.MethodGet,
@@ -461,9 +461,9 @@ func TestRecordDroppedRequests(t *testing.T) {
 		},
 	}
 
-	// Since prometheus' gatherer is global, other tests may have updated metrics already, so
-	// we need to reset them prior running this test.
-	// This also implies that we can't run this test in parallel with other tests.
+	// prometheus 的 gatherer 是全局的，其他测试可能已经更新过指标，
+	// 因此需要在运行本测试前重置它们。
+	// 这也意味着本测试不能与其他测试并行运行。
 	Register()
 	requestCounter.Reset()
 
