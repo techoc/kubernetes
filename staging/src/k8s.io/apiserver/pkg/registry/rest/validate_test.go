@@ -46,7 +46,7 @@ import (
 
 // TestValidateDeclaratively 端到端验证声明式校验的接入：对象先转换为外部版本，
 // 再调用 scheme 注册的 ValidateFunc。
-// 中文说明：覆盖 create/update 的不可变检查、子资源校验、未知子资源、校验选项，
+// 覆盖 create/update 的不可变检查、子资源校验、未知子资源、校验选项，
 // 以及非法子资源路径的错误处理。
 func TestValidateDeclaratively(t *testing.T) {
 	valid := &Pod{
@@ -186,8 +186,8 @@ func TestValidateDeclaratively(t *testing.T) {
 	}
 }
 
-// Fake internal pod type, since core.Pod cannot be imported by this package
-// 中文说明：只保留校验相关字段，避免引入 k8s.io/kubernetes 造成循环依赖。
+// 伪造的 internal Pod 类型，因为本包无法导入 core.Pod。
+// 只保留校验相关字段，避免引入 k8s.io/kubernetes 造成循环依赖。
 type Pod struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -210,11 +210,9 @@ func (p Pod) DeepCopyObject() runtime.Object {
 	}
 }
 
-// TestGatherDeclarativeValidationMismatches tests all mismatch
-// scenarios across imperative and declarative errors for
-// the gatherDeclarativeValidationMismatches function
-//
-// 中文说明：该函数决定哪些 imperative/declarative 错误视为“同一错误”，
+// TestGatherDeclarativeValidationMismatches 覆盖 gatherDeclarativeValidationMismatches
+// 函数中 imperative 与 declarative 错误的所有不匹配场景。
+// 该函数决定哪些 imperative/declarative 错误视为“同一错误”，
 // 覆盖类型、字段、origin 与 lifecycle 标注等匹配维度。
 func TestGatherDeclarativeValidationMismatches(t *testing.T) {
 	pathStandard := field.NewPath("spec", "standard")
@@ -400,9 +398,9 @@ func TestGatherDeclarativeValidationMismatches(t *testing.T) {
 	}
 }
 
-// TestCompareDeclarativeErrorsAndEmitMismatches tests expected
-// logging of mismatch information given match & mismatch error conditions.
-// 中文说明：迁移期需要同时观测两套校验的差异，本用例锁定日志输出条件，防止
+// TestCompareDeclarativeErrorsAndEmitMismatches 验证在错误匹配与不匹配条件下，
+// 不匹配信息的预期日志输出。
+// 迁移期需要同时观测两套校验的差异，本用例锁定日志输出条件，防止
 // 静默漂移或日志刷屏。
 func TestCompareDeclarativeErrorsAndEmitMismatches(t *testing.T) {
 	replicasPath := field.NewPath("spec").Child("replicas")
@@ -543,7 +541,7 @@ func TestRunDeclarativeValidationWithRecover(t *testing.T) {
 }
 
 // TestRecordDuplicateValidationErrors 验证重复的声明式错误会通过指标暴露。
-// 中文说明：重复通常意味着同一规则被多次生成，属于开发期问题，需要可观测性。
+// 重复通常意味着同一规则被多次生成，属于开发期问题，需要可观测性。
 func TestRecordDuplicateValidationErrors(t *testing.T) {
 	ctx := context.Background()
 
@@ -718,7 +716,7 @@ func TestMetricIdentifier(t *testing.T) {
 
 // TestValidateDeclarativelyWithMigrationChecks 覆盖迁移期的错误合并规则：
 // 标准/DV 覆盖、beta 阶段门控、alpha 阶段 shadow，以及无 origin 的特殊配对。
-// 中文说明：这些规则决定最终返回给用户的是 imperative 还是 declarative 错误，
+// 这些规则决定最终返回给用户的是 imperative 还是 declarative 错误，
 // 直接关系到版本升级期间的兼容性。
 func TestValidateDeclarativelyWithMigrationChecks(t *testing.T) {
 	// Standard Lifecycle (Enforced by default in explicit strategy)

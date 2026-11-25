@@ -82,7 +82,7 @@ type deducedTypeConverter struct{}
 // DeducedTypeConverter 用于没有 schema 的 CRD；它实现相同接口并创建相同类型的对象，
 // 因此行为保持一致。CRD 的所有字段（包括列表）均按 "atomic" 合并。
 //
-// 中文说明：没有 schema 的 CRD 无法得知字段粒度，只能整体原子合并——
+// 没有 schema 的 CRD 无法得知字段粒度，只能整体原子合并——
 // 这会导致字段所有权更粗，但至少保证行为可预测。
 func NewDeducedTypeConverter() TypeConverter {
 	return deducedTypeConverter{}
@@ -157,7 +157,7 @@ func indexModels(
 
 // 从扩展中获取并解析 GroupVersionKind；不存在时返回空值。
 //
-// 中文说明：OpenAPI 扩展经不同反序列化路径可能得到 map[interface{}]interface{}
+// OpenAPI 扩展经不同反序列化路径可能得到 map[interface{}]interface{}
 // （YAML）或 map[string]interface{}（JSON），因此两种都要处理。
 func parseGroupVersionKind(extensions map[string]interface{}) []schema.GroupVersionKind {
 	gvkListResult := []schema.GroupVersionKind{}

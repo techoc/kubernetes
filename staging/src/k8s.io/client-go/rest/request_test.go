@@ -66,8 +66,7 @@ import (
 )
 
 // TestNewRequestSetsAccept 验证 Accept 头的默认构造。
-//
-// 中文说明：未配置 ContentType 时默认接受 JSON；配置后把它放在首位，再追加 */* 作为
+// 未配置 ContentType 时默认接受 JSON；配置后把它放在首位，再追加 */* 作为
 // 兜底，使服务端在无法满足首选类型时仍可返回其它表示。
 func TestNewRequestSetsAccept(t *testing.T) {
 	r := NewRequestWithClient(&url.URL{Path: "/path/"}, "", ClientContentConfig{}, nil).Verb("get")
@@ -120,8 +119,7 @@ func TestRequestSetsHeaders(t *testing.T) {
 }
 
 // TestRequestWithErrorWontChange 验证已记录错误的 Request 在后续链式调用中保持原状。
-//
-// 中文说明：Request 是不可变风格的 builder；一旦出错，后续方法应短路并返回同一对象，
+// Request 是不可变风格的 builder；一旦出错，后续方法应短路并返回同一对象，
 // 避免把“已失败”的请求悄悄修复成可发送状态。
 func TestRequestWithErrorWontChange(t *testing.T) {
 	gvCopy := v1.SchemeGroupVersion
@@ -382,8 +380,7 @@ func defaultContentConfig() ClientContentConfig {
 }
 
 // TestRequestBody 验证 Body 对各类输入的编码行为。
-//
-// 中文说明：支持 []byte、文件路径、io.Reader 与已注册的 API 对象；未知类型、无法读取
+// 支持 []byte、文件路径、io.Reader 与已注册的 API 对象；未知类型、无法读取
 // 的文件、未注册对象都应只设置 err 并保持 body 为 nil。类型化的 nil 对象被视为
 // “无 body”，用于 DELETE 等可选 body 的请求。
 func TestRequestBody(t *testing.T) {
@@ -433,8 +430,7 @@ func TestResultIntoWithNoBodyReturnsErr(t *testing.T) {
 }
 
 // TestURLTemplate 验证真实请求 URL 与“模板 URL”的生成规则。
-//
-// 中文说明：模板 URL 把 namespace/name/param 值替换为 {placeholder}，用于日志脱敏与
+// 模板 URL 把 namespace/name/param 值替换为 {placeholder}，用于日志脱敏与
 // 指标聚合；它必须与真实 URL 的路径结构一致，且生成模板时不得改动原 Request。
 // 用例覆盖核心组、命名组、有无名称、子资源、以及前缀不匹配时退化为 {prefix}。
 func TestURLTemplate(t *testing.T) {
@@ -638,8 +634,7 @@ func TestURLTemplate(t *testing.T) {
 }
 
 // TestTransformResponse 验证 HTTP 响应到 Result 的转换。
-//
-// 中文说明：2xx 返回原始 body，201 额外标记 created；4xx/5xx 应转为实现 APIStatus
+// 2xx 返回原始 body，201 额外标记 created；4xx/5xx 应转为实现 APIStatus
 // 的错误，且错误中的 Code 与 HTTP 状态码一致。对 Unauthorized，正文为 JSON 时尝试
 // 解码 Status，正文为其它类型时给出可读的认证提示。
 func TestTransformResponse(t *testing.T) {
@@ -747,8 +742,7 @@ func (r *renegotiator) StreamDecoder(contentType string, params map[string]strin
 }
 
 // TestTransformResponseNegotiate 验证响应解码器按响应 Content-Type 协商。
-//
-// 中文说明：响应未带 Content-Type 时回退到请求的 ContentType；未知类型交给协商器，
+// 响应未带 Content-Type 时回退到请求的 ContentType；未知类型交给协商器，
 // 协商失败仍应保留 HTTP 状态码对应的 APIStatus。即使解码失败，错误也不应是原始
 // 响应正文。
 func TestTransformResponseNegotiate(t *testing.T) {
@@ -898,8 +892,7 @@ func TestTransformResponseNegotiate(t *testing.T) {
 }
 
 // TestTransformUnstructuredError 验证非结构化错误响应的状态推断与 Result 各方法的一致性。
-//
-// 中文说明：响应体若是合法 Status，则其 code 覆盖按 HTTP 状态推断的结果；Success
+// 响应体若是合法 Status，则其 code 覆盖按 HTTP 状态推断的结果；Success
 // 状态、空对象、非法 JSON 都回退到 HTTP 状态。POST+409 视为 AlreadyExists，其它
 // 方法为 Conflict。Raw() 必须保留未转换的原始错误，Error/Get/Into 则使用转换后的。
 func TestTransformUnstructuredError(t *testing.T) {
@@ -1047,8 +1040,7 @@ func TestTransformUnstructuredError(t *testing.T) {
 }
 
 // TestRequestWatch 验证 Watch 的错误分类与重试次数。
-//
-// 中文说明：请求已带错误时零次调用；不可重试错误只尝试一次；带 Retry-After 的响应
+// 请求已带错误时零次调用；不可重试错误只尝试一次；带 Retry-After 的响应
 // 会重试到 maxRetries；EOF、连接中断等被视为正常结束，返回空 watcher 而非错误；
 // 403/401 转为对应 StatusError。
 func TestRequestWatch(t *testing.T) {
@@ -1320,8 +1312,7 @@ func TestRequestWatch(t *testing.T) {
 }
 
 // TestRequestStream 验证 Stream 的握手期错误与重试。
-//
-// 中文说明：与 Do 类似，Retry-After 可触发重试；但请求体不可重放（如 io.EOF 的
+// 与 Do 类似，Retry-After 可触发重试；但请求体不可重放（如 io.EOF 的
 // readSeeker）时只尝试一次。网络层错误在 Stream 路径通常不重试，最终错误保持可
 // 通过 errors 链还原。
 func TestRequestStream(t *testing.T) {
@@ -1597,10 +1588,8 @@ func TestDoRequestNewWay(t *testing.T) {
 	fakeHandler.ValidateRequest(t, requestURL, "POST", &reqBody)
 }
 
-// This test assumes that the client implementation backs off exponentially, for an individual request.
-// This test assumes that the client implementation backs off exponentially, for an individual request.
-//
-// 中文说明：服务端在第 5、9 次返回成功，其余返回 504。期望每次请求的退避序列为
+// TestBackoffLifecycle 假定客户端实现对单个请求采用指数退避。
+// 服务端在第 5、9 次返回成功，其余返回 504。期望每次请求的退避序列为
 // 0,1,2,4,8 后因成功而重置，再次 0,1,2,4 后重置，以此验证成功的请求会清空退避状态。
 // 使用假时钟精确断言 Sleep 时长，避免真实等待。
 func TestBackoffLifecycle(t *testing.T) {
@@ -1661,11 +1650,8 @@ type stepClockDuringSleep struct {
 	clock *testingclock.FakeClock
 }
 
-// SleepWithContext wraps the underlying SleepWithContext and ensures that once
-// that is sleeping, the fake clock advances by exactly the duration that
-// it is sleeping for.
-//
-// 中文说明：仅当 d != 0 时才启动推进逻辑；轮询 HasWaiters 直到调用方真正进入
+// SleepWithContext 包装底层的 SleepWithContext，确保调用方进入睡眠后，假时钟恰好
+// 推进与其睡眠时长相等的值。仅当 d != 0 时才启动推进逻辑；轮询 HasWaiters 直到调用方真正进入
 // timer 等待，再 Step(d)，从而让“睡眠时长”与“时钟推进”严格对应。
 func (s stepClockDuringSleep) SleepWithContext(ctx context.Context, d time.Duration) {
 	// This code is sensitive to both the implementation of
@@ -1713,8 +1699,7 @@ func (b *testBackoffManager) SleepWithContext(ctx context.Context, d time.Durati
 }
 
 // TestCheckRetryClosesBody 验证 429 重试期间请求体被重放、响应体被关闭。
-//
-// 中文说明：前四次返回 429 + Retry-After: 1，第五次成功；请求体是 []byte，可重放。
+// 前四次返回 429 + Retry-After: 1，第五次成功；请求体是 []byte，可重放。
 // 期望 5 次尝试，睡眠序列为初始 0 加上四次 1s。
 func TestCheckRetryClosesBody(t *testing.T) {
 	count := 0
@@ -2200,8 +2185,7 @@ func TestBody(t *testing.T) {
 }
 
 // TestWatch 验证 watch 流的事件解码与重试恢复。
-//
-// 中文说明：分别覆盖不重试与重试 3 次两种配置。服务端在重试耗尽前返回 429，随后
+// 分别覆盖不重试与重试 3 次两种配置。服务端在重试耗尽前返回 429，随后
 // 以 chunked 流发送 Added/Modified/Deleted 三个事件并结束；客户端应按序收到事件，
 // 并在流结束后关闭 ResultChan。
 func TestWatch(t *testing.T) {
@@ -2497,8 +2481,7 @@ func init() {
 }
 
 // TestTruncateBody 验证日志正文按 klog 详细级别截断。
-//
-// 中文说明：级别 <8 时正文完全不记录；级别 8 截断到 1024 字符；级别 9 截断到 10240；
+// 级别 <8 时正文完全不记录；级别 8 截断到 1024 字符；级别 9 截断到 10240；
 // 级别 ≥10 不截断。截断后缀会注明丢弃的字符数。
 func TestTruncateBody(t *testing.T) {
 	tests := []struct {
@@ -2583,8 +2566,7 @@ func defaultResourcePathWithPrefix(prefix, resource, namespace, name string) str
 }
 
 // TestRequestPreflightCheck 验证发送前的路径完整性校验。
-//
-// 中文说明：显式设置了 namespace 时，GET/PUT/DELETE 若带 name 则必须也有 namespace；
+// 显式设置了 namespace 时，GET/PUT/DELETE 若带 name 则必须也有 namespace；
 // POST 即使无 name，也要求指定 namespace（集群级 POST 应走不同的构造函数）。
 func TestRequestPreflightCheck(t *testing.T) {
 	for _, tt := range []struct {
@@ -2650,8 +2632,7 @@ func TestRequestPreflightCheck(t *testing.T) {
 }
 
 // TestThrottledLogger 验证全局节流日志在并发下每秒最多输出一条。
-//
-// 中文说明：1000 秒 × 每秒 10 个并发调用，期望恰好 100 条（每秒 1 条），且不因并发
+// 1000 秒 × 每秒 10 个并发调用，期望恰好 100 条（每秒 1 条），且不因并发
 // 竞争而多记。测试直接替换全局 clock，结束后恢复，避免污染其它用例。
 func TestThrottledLogger(t *testing.T) {
 	logger := klog.Background()
@@ -2782,10 +2763,8 @@ func (c *count) getCloseCount() int {
 	return c.closes
 }
 
-// used to track {Request|Response}.Body
-//
-// 中文说明：包装底层 body，记录 Seek/Close 调用；delegated 可在每次响应时替换，
-// 从而对每次尝试使用新的空 body。
+// readTracker 用于追踪 {Request|Response}.Body：包装底层 body，记录 Seek/Close 调用；
+// delegated 可在每次响应时替换，从而对每次尝试使用新的空 body。
 type readTracker struct {
 	delegated io.Reader
 	count     *count
@@ -2861,8 +2840,7 @@ func (n *noSleepBackOff) Sleep(d time.Duration) {}
 func (n *noSleepBackOff) SleepWithContext(ctx context.Context, d time.Duration) {}
 
 // TestRequestWithRetry 验证 request() 内部循环的重试判定与 body 可重放性。
-//
-// 中文说明：无 body 或 []byte body 时可重试，opaque（不可 Seek）body 时只能尝试一次；
+// 无 body 或 []byte body 时可重试，opaque（不可 Seek）body 时只能尝试一次；
 // Retry-After 响应会触发转换函数，而传输层错误不会走到响应转换。
 func TestRequestWithRetry(t *testing.T) {
 	tests := []struct {
@@ -3097,8 +3075,7 @@ func TestRequestDoWithWrapPreviousError(t *testing.T) {
 }
 
 // testRequestWithRetry 是 Do/DoRaw/Stream/Watch 共享的重试行为测试。
-//
-// 中文说明：对每种路径断言尝试次数，以及请求体 Seek 次数与响应体 Close 次数。
+// 对每种路径断言尝试次数，以及请求体 Seek 次数与响应体 Close 次数。
 // Stream 在网络错误上不重试，是三种路径中唯一不同的行为。
 func testRequestWithRetry(t *testing.T, key string, doFunc func(ctx context.Context, r *Request)) {
 	type expected struct {
@@ -3261,13 +3238,10 @@ type retryTestKeyType int
 // retryTestKey 用于标记“属于本测试的”指标调用；零值即有效值。
 const retryTestKey retryTestKeyType = iota
 
-// fake flowcontrol.RateLimiter so we can tap into the Wait method of the rate limiter.
-// fake BackoffManager so we can tap into backoff calls
-// fake metrics.ResultMetric to tap into the metric calls
-// we use it to verify that RateLimiter, BackoffManager, and
-// metric calls are invoked appropriately in right order.
-//
-// 中文说明：同时嵌入 RateLimiter、ResultMetric、RetryMetric 并实现 BackoffManager，
+// withRateLimiterBackoffManagerAndMetrics 是聚合的 fake 实现：嵌入
+// flowcontrol.RateLimiter 以拦截限流器的 Wait 调用，实现 BackoffManager 以拦截退避调用，
+// 嵌入 metrics.ResultMetric 以拦截指标调用，用来验证这些调用按正确的顺序发生。
+// 同时嵌入 RateLimiter、ResultMetric、RetryMetric 并实现 BackoffManager，
 // 把各组件调用按发生顺序记入 invokeOrderGot，供断言精确的调用序列。
 type withRateLimiterBackoffManagerAndMetrics struct {
 	flowcontrol.RateLimiter
@@ -3332,8 +3306,7 @@ func (lb *withRateLimiterBackoffManagerAndMetrics) Do() {
 
 // testRetryWithRateLimiterBackoffAndMetrics 断言一次 500+Retry-After 后成功的过程中，
 // RateLimiter、Backoff、指标调用的顺序、睡眠时长与状态码。
-//
-// 中文说明：重试睡眠取 Retry-After 与 CalculateBackoff 的较大值，两个场景分别覆盖
+// 重试睡眠取 Retry-After 与 CalculateBackoff 的较大值，两个场景分别覆盖
 // Retry-After 更大与退避更大。Watch 在首次发送前不调用 RateLimiter.Wait，因此期望
 // 顺序少一项。测试临时替换全局 metrics 接口，依据 context key 过滤本测试的调用。
 func testRetryWithRateLimiterBackoffAndMetrics(t *testing.T, key string, doFunc func(ctx context.Context, r *Request)) {
@@ -3603,8 +3576,7 @@ func (ri *retryInterceptor) Do() {
 }
 
 // testWithRetryInvokeOrder 断言 WithRetry 的 Before/After/IsNextRetry 调用顺序。
-//
-// 中文说明：一次重试后成功应产生 Before→Do→After→IsNextRetry 的两轮序列；但 Watch 和
+// 一次重试后成功应产生 Before→Do→After→IsNextRetry 的两轮序列；但 Watch 和
 // Stream 在收到成功响应后立即返回，不再调用最后一次 IsNextRetry。
 func testWithRetryInvokeOrder(t *testing.T, key string, doFunc func(ctx context.Context, r *Request)) {
 	// we define the expected order of how the client
@@ -3711,8 +3683,7 @@ func testWithRetryInvokeOrder(t *testing.T, key string, doFunc func(ctx context.
 }
 
 // testWithWrapPreviousError 验证重试耗尽后错误链的构造。
-//
-// 中文说明：最终错误仍是最后一次尝试的错误（可经 url.Error 还原），并额外附加
+// 最终错误仍是最后一次尝试的错误（可经 url.Error 还原），并额外附加
 // “- error from a previous attempt: ...” 说明最近一次网络层错误。非重试错误直接返回，
 // 不添加包装；成功后不产生错误。
 func testWithWrapPreviousError(t *testing.T, doFunc func(ctx context.Context, r *Request) error) {
@@ -3919,8 +3890,7 @@ func testWithWrapPreviousError(t *testing.T, doFunc func(ctx context.Context, r 
 }
 
 // TestReuseRequest 验证同一 RESTClient 的连续请求可以复用底层连接。
-//
-// 中文说明：服务端返回 RemoteAddr，两次请求拿到相同地址即表示复用了同一条连接；
+// 服务端返回 RemoteAddr，两次请求拿到相同地址即表示复用了同一条连接；
 // HTTP/1.1 与 HTTP/2 都应如此。
 func TestReuseRequest(t *testing.T) {
 	var tests = []struct {
@@ -3968,8 +3938,7 @@ func TestReuseRequest(t *testing.T) {
 }
 
 // TestHTTP1DoNotReuseRequestAfterTimeout 验证超时请求对连接复用的影响。
-//
-// 中文说明：HTTP/1.1 在请求超时后不会复用旧连接（地址变化），HTTP/2 则继续复用同一
+// HTTP/1.1 在请求超时后不会复用旧连接（地址变化），HTTP/2 则继续复用同一
 // 连接（地址不变）。服务端在 /hang 上阻塞直到测试结束。
 func TestHTTP1DoNotReuseRequestAfterTimeout(t *testing.T) {
 	var tests = []struct {
@@ -4110,8 +4079,7 @@ func TestTransportConcurrency(t *testing.T) {
 }
 
 // TestRetryableConditions 以“方法 × 动词 × 服务端返回”矩阵验证可重试判定。
-//
-// 中文说明：429/5xx 且带 Retry-After 时都重试；缺 Retry-After 则不重试；连接重置、
+// 429/5xx 且带 Retry-After 时都重试；缺 Retry-After 则不重试；连接重置、
 // EOF、GOAWAY 等在非 Stream 路径重试（Stream 不重试）；连接拒绝、超时、3xx、2xx
 // 均不重试。POST 上的 EOF 不重试，因为请求体可能已部分发送。
 func TestRetryableConditions(t *testing.T) {
@@ -4382,8 +4350,7 @@ func TestRequestConcurrencyWithRetry(t *testing.T) {
 }
 
 // TestRequestLogging 验证按 verbosity 记录请求/响应正文及 warning。
-//
-// 中文说明：v<8 不记录正文；v>=8 记录请求与响应 body，超过 1024 字符截断；io.Reader
+// v<8 不记录正文；v>=8 记录请求与响应 body，超过 1024 字符截断；io.Reader
 // 类型的 body 无法重读，因此只记录响应。code 299 的 Warning 通过 klog 输出，其它
 // code 忽略。比较前剥离每行固定长度的时间戳前缀与 warnings.go 行号。
 func TestRequestLogging(t *testing.T) {
@@ -4500,8 +4467,7 @@ warnings.go] "Warning: warning 2" logger="TestLogger"
 }
 
 // TestRequestWarningHandler 验证 WarningHandler 与 WarningHandlerWithContext 的设置语义。
-//
-// 中文说明：旧接口会被适配为带 context 的实现；带 context 的接口直接保存；传入 nil
+// 旧接口会被适配为带 context 的实现；带 context 的接口直接保存；传入 nil
 // 会清除已设置的处理器。所有设置方法都返回自身以支持链式调用。
 func TestRequestWarningHandler(t *testing.T) {
 	t.Run("no-context", func(t *testing.T) {

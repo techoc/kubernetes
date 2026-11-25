@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package user contains utilities for dealing with simple user exchange in the auth
-// packages. The user.Info interface defines an interface for exchanging that info.
-//
-// 中文说明：user.Info 是认证器与授权器之间的契约——认证器只负责填充身份，
+// Package user 提供认证相关包之间交换用户信息的工具，user.Info 接口定义了交换这些信息的契约。
+// user.Info 是认证器与授权器之间的契约——认证器只负责填充身份，
 // 授权器只读取身份，二者不依赖具体认证方式（证书、token、OIDC 等）。
 package user

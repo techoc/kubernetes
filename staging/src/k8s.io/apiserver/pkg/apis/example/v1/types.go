@@ -31,9 +31,8 @@ type (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Pod is a collection of containers, used as either input (create, update) or as output (list, get).
-//
-// 中文说明：本包是测试用的示例 API，结构刻意模仿 core/v1 的 Pod，
+// Pod 是容器的集合，既可作为输入（create、update）也可作为输出（list、get）。
+// 本包是测试用的示例 API，结构刻意模仿 core/v1 的 Pod，
 // 用来覆盖 apiserver 的通用机制（序列化、转换、patch），并非真实资源。
 type Pod struct {
 	metav1.TypeMeta `json:""`
@@ -56,10 +55,8 @@ type Pod struct {
 	Status PodStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
 
-// PodStatus represents information about the status of a pod. Status may trail the actual
-// state of a system.
-//
-// 中文说明：status 由系统写入，客户端提交的 status 会被忽略，这一点在
+// PodStatus 表示 Pod 的状态信息，status 可能滞后于系统的实际状态。
+// status 由系统写入，客户端提交的 status 会被忽略，这一点在
 // 存储层的策略中强制，而非依赖类型定义。
 type PodStatus struct {
 	// Current condition of the pod.
@@ -94,7 +91,7 @@ type PodStatus struct {
 
 // PodCondition 描述 Pod 的一个状态条件。
 //
-// 中文说明：Conditions 使用 merge 策略与 type 作为合并键，保证不同控制面组件
+// Conditions 使用 merge 策略与 type 作为合并键，保证不同控制面组件
 // 可以并发更新各自负责的条件而不互相覆盖。
 type PodCondition struct {
 	// Type is the type of the condition.
@@ -119,9 +116,7 @@ type PodCondition struct {
 	Message string `json:"message,omitempty" protobuf:"bytes,6,opt,name=message"`
 }
 
-// PodSpec is a description of a pod
-//
-// 中文说明：部分字段关闭了 conversion-gen，说明它们在内部版本中
+// PodSpec 是对 Pod 的描述。部分字段关闭了 conversion-gen，说明它们在内部版本中
 // 不存在，转换时会丢失——测试正是用来确认这种有意的信息损失被正确处理。
 type PodSpec struct {
 	// Restart policy for all containers within the pod.
@@ -196,9 +191,7 @@ type PodSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodList is a list of Pods.
-//
-// 中文说明：列表类型需要独立的 TypeMeta/ListMeta，以便分页与 watch 时
+// PodList 是 Pod 的列表。列表类型需要独立的 TypeMeta/ListMeta，以便分页与 watch 时
 // 携带 resourceVersion；Items 不加 omitempty 以区分空列表与缺省字段。
 type PodList struct {
 	metav1.TypeMeta `json:""`

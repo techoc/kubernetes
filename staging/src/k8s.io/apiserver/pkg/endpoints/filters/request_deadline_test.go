@@ -97,7 +97,7 @@ func TestParseTimeout(t *testing.T) {
 
 // TestWithRequestDeadline 验证 deadline 过滤器对各输入形态的处理：
 // 正常超时、0/缺省走服务端上限、超过上限被截断、long-running 不设 deadline、
-// 非法值返回 400。中文说明：long-running 请求（watch/exec 等）不能被 deadline 杀死。
+// 非法值返回 400。long-running 请求（watch/exec 等）不能被 deadline 杀死。
 func TestWithRequestDeadline(t *testing.T) {
 	const requestTimeoutMaximum = 60 * time.Second
 	tests := []struct {

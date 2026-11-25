@@ -168,12 +168,10 @@ func startRouteController(ctx context.Context, initContext ControllerInitContext
 	return nil, true, nil
 }
 
-// processCIDRs is a helper function that works on a comma separated cidrs and returns
-// a list of typed cidrs
-// a flag if cidrs represents a dual stack
-// error if failed to parse any of the cidrs
+// processCIDRs 是一个处理逗号分隔 CIDR 列表的辅助函数，返回类型化的 CIDR 列表、
+// 表示这组 CIDR 是否构成双栈的标志，以及解析任一 CIDR 失败时的错误。
 //
-// 中文说明：入参来自 --cluster-cidr，允许以逗号分隔。返回值中的 dualStack 用于
+// 入参来自 --cluster-cidr，允许以逗号分隔。返回值中的 dualStack 用于
 // 校验配置是否自相矛盾（多 CIDR 必须构成双栈）。
 func processCIDRs(cidrsList string) ([]*net.IPNet, bool, error) {
 	// 先 TrimSpace 再 Split，容忍 "10.0.0.0/8, 192.168.0.0/16" 这类带空格的写法；

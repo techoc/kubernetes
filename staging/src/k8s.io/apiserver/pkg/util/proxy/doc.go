@@ -25,16 +25,12 @@ limitations under the License.
 // STDERR, TTY resize, and error streams) to the input streams of a
 // SPDY connection.
 //
-// The stream tunnel proxy tunnels SPDY frames through a WebSocket
-// connection, and it is used for the PortForward subprotocol (e.g.
-// kubectl port-forward). This proxy implements tunneling by transparently
-// encoding and decoding SPDY framed data into and out of the payload of a
-// WebSocket data frame. The primary structure for this tunneling is
-// the TunnelingConnection. A lot of the other code in streamtunnel.go
-// is for properly upgrading both the upstream SPDY connection and the
-// downstream WebSocket connection before streaming begins.
-//
-// 中文说明：本包中的代理都位于 apiserver 与后端（kubelet/peer apiserver）之间，
+// 流隧道代理（stream tunnel proxy）把 SPDY 帧封装进 WebSocket 连接中传输，
+// 用于 PortForward 子协议（例如 kubectl port-forward）。该代理透明地把 SPDY
+// 帧数据编解码进 WebSocket 数据帧的 payload 来实现隧道。隧道的核心结构是
+// TunnelingConnection，streamtunnel.go 中的其余大量代码用于在开始流传输之前
+// 正确升级上游 SPDY 连接与下游 WebSocket 连接。
+// 本包中的代理都位于 apiserver 与后端（kubelet/peer apiserver）之间，
 // 负责协议适配与连接升级。WebSocket 侧的握手与流封装必须严格遵循对应子协议，
 // 否则 kubectl 等客户端会出现难以诊断的挂起。
 package proxy

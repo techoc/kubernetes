@@ -171,22 +171,16 @@ func (uc uniformClient) pad(finalSeats int, duration time.Duration) uniformClien
 	return uc
 }
 
-// uniformScenario describes a scenario based on the given set of uniform clients.
-// Each uniform client specifies a number of threads, each of which alternates between thinking
-// and making a synchronous request through the QueueSet.
-// The test measures how much concurrency each client got, on average, over
-// the initial evalDuration and tests to see whether they all got about the fair amount.
-// Each client needs to be demanding enough to use more than its fair share,
-// or overall care needs to be taken about timing so that scheduling details
-// do not cause any client to actually request a significantly smaller share
-// than it theoretically should.
-// expectFair indicate whether the QueueSet is expected to be
-// fair in the respective halves of a split scenario;
-// in a non-split scenario this is a singleton with one expectation.
-// expectAllRequests indicates whether all requests are expected to get dispatched.
-// expectedAverages, if provided, replaces the normal calculation of expected results.
-//
-// 中文说明：场景驱动的测试框架。每个客户端线程交替“思考”和发起同步请求，
+// uniformScenario 描述一个基于给定均匀客户端集合的测试场景。每个均匀客户端指定
+// 若干线程，每个线程在“思考”与通过 QueueSet 发起同步请求之间交替。测试测量在最初
+// evalDuration 期间每个客户端平均获得多少并发，并检查它们是否都获得了大致公平的份额。
+// 每个客户端必须足够贪婪、其需求超过公平份额，否则就要在时序上格外小心，
+// 确保调度细节不会让任何客户端实际请求的份额明显小于其理论应得值。
+// expectFair 表示在 split 场景的两半中是否预期 QueueSet 保持公平；
+// 在非 split 场景中它是只含一个期望值的单元素切片。
+// expectAllRequests 表示是否预期所有请求都会被派发。
+// 若提供了 expectedAverages，则取代期望结果的常规计算。
+// 这是场景驱动的测试框架：每个客户端线程交替“思考”和发起同步请求，
 // 测试测量平均并发并与 max-min 公平分配结果比较；margin 用于容忍离散化误差。
 type uniformScenario struct {
 	name                                     string

@@ -104,8 +104,7 @@ func setCount(event v1.Event, count int) v1.Event {
 
 // validateEvent 校验关联后的事件：时间戳的一/多发性与 Count 一致、名称带期望前缀，
 // 其余字段与期望事件相等。
-//
-// 中文说明：FirstTimestamp 与 LastTimestamp 相等表示只发生一次；不等则表示发生过
+// FirstTimestamp 与 LastTimestamp 相等表示只发生一次；不等则表示发生过
 // 压缩聚合（Count > 1）。比较前把时间戳替换为期望值并恢复，因为具体时间取决于
 // 测试时钟而非固定值。名称只校验前缀（真实名称带有随机后缀）。
 func validateEvent(messagePrefix string, actualEvent *v1.Event, expectedEvent *v1.Event, t *testing.T) (*v1.Event, error) {
@@ -148,8 +147,7 @@ func validateEvent(messagePrefix string, actualEvent *v1.Event, expectedEvent *v
 }
 
 // TestEventAggregatorByReasonFunc 确保仅 event.message 不同的两个事件会被聚合
-//
-// 中文说明：聚合需要同时看两个键——aggKey 决定“哪些事件算同一类”，localKey 用于
+// 聚合需要同时看两个键——aggKey 决定“哪些事件算同一类”，localKey 用于
 // 区分同类事件的具体内容。仅 message 不同时 aggKey 相同但 localKey 不同；reason
 // 不同时 aggKey 也不同。
 func TestEventAggregatorByReasonFunc(t *testing.T) {
@@ -319,8 +317,7 @@ func TestEventCorrelator(t *testing.T) {
 }
 
 // TestEventSpamFilter 验证 SpamKeyFunc 可定制刷屏判定粒度。
-//
-// 中文说明：默认 key 基于对象引用，因此同一对象的不同 reason 也会被当作刷屏；自定义
+// 默认 key 基于对象引用，因此同一对象的不同 reason 也会被当作刷屏；自定义
 // key 加入 reason 后，只有对象与 reason 都相同才判为刷屏。BurstSize=1 且间隔 1s，
 // 使第二条事件立即触发阈值。
 func TestEventSpamFilter(t *testing.T) {

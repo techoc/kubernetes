@@ -26,7 +26,7 @@ import (
 )
 
 // TestRecordStorageListMetrics 验证 LIST 路径的四类指标被正确打点。
-// 中文说明：分别用 etcd 与 watchcache 两种后端，覆盖 index 标签存在与缺失的场景
+// 分别用 etcd 与 watchcache 两种后端，覆盖 index 标签存在与缺失的场景
 // （etcd 直读时索引为空，watchcache 路径携带字段选择器索引）。
 // 断言采用完整文本比对而非逐项取值，目的是同时锁定指标名、标签集与 HELP 文本，
 // 防止不经意的重命名破坏监控契约。

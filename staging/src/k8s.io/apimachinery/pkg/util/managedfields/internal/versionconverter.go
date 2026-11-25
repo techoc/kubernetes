@@ -28,7 +28,7 @@ import (
 
 // versionConverter 是 sigs.k8s.io/structured-merge-diff/merge.Converter 的实现。
 //
-// 中文说明：merge 引擎只认 typed value，而版本转换只能通过运行时对象做，
+// merge 引擎只认 typed value，而版本转换只能通过运行时对象做，
 // 因此这里“typed -> 对象 -> hub 版本 -> 目标版本 -> typed”往返一次。
 // hubGetter 区分内置类型（同 group 的 hub 版本）与 CRD（固定 hub）。
 type versionConverter struct {
@@ -86,7 +86,7 @@ func (v *versionConverter) Convert(object *typed.TypedValue, version fieldpath.A
 	fromVersion := objectToConvert.GetObjectKind().GroupVersionKind().GroupVersion()
 
 	//转换为内部版本。
-	// 中文说明：先转到 hub 版本再转到目标版本，避免任意两版本之间都注册
+	// 先转到 hub 版本再转到目标版本，避免任意两版本之间都注册
 	// 转换函数（平方级组合）。
 	internalObject, err := v.objectConvertor.ConvertToVersion(objectToConvert, v.hubGetter(fromVersion))
 	if err != nil {

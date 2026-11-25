@@ -24,13 +24,13 @@ import (
 )
 
 const (
-	// subSystemName is the name of this subsystem name used for prometheus metrics.
-	// 中文说明：与控制器名称保持一致，指标形如 service_controller_loadbalancer_sync_total。
+	// subSystemName 是 Prometheus 指标中使用的子系统名，与控制器名称保持一致，
+	// 指标形如 service_controller_loadbalancer_sync_total。
 	subSystemName = "service_controller"
 )
 
 // register 保证指标只向全局 registry 注册一次。
-// 中文说明：New 可能被重复调用（例如测试），重复注册会 panic，因此用 sync.Once 保护。
+// New 可能被重复调用（例如测试），重复注册会 panic，因此用 sync.Once 保护。
 var register sync.Once
 
 // registerMetrics registers service-controller metrics.
@@ -62,8 +62,8 @@ var (
 		Name:      "nodesync_latency_seconds",
 		Subsystem: subSystemName,
 		Help:      "A metric measuring the latency for nodesync which updates loadbalancer hosts on cluster node updates.",
-		// Buckets from 1s to 16384s
-		// 中文说明：云侧后端更新可能耗时数分钟，指数桶覆盖 1s~4.5h，便于观察长尾。
+		// 分桶从 1s 到 16384s：云侧后端更新可能耗时数分钟，指数桶覆盖 1s~4.5h，
+		// 便于观察长尾。
 		Buckets:        metrics.ExponentialBuckets(1, 2, 15),
 		StabilityLevel: metrics.ALPHA,
 	})

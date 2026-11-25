@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file should be written by each cloud provider.
-// For an minimal working example, please refer to k8s.io/cloud-provider/sample/basic_main.go
-// For more details, please refer to k8s.io/kubernetes/cmd/cloud-controller-manager/main.go
-// 中文说明：每个外部云提供商只需要提供这样一个 main：注册 Factory、构造选项、
+// 本文件应由每个云提供商自行编写。
+// 最小可运行示例请参考 k8s.io/cloud-provider/sample/basic_main.go
+// 更多细节请参考 k8s.io/kubernetes/cmd/cloud-controller-manager/main.go
+// 每个外部云提供商只需要提供这样一个 main：注册 Factory、构造选项、
 // 启动命令。控制器本身由 cloud-provider 模块提供，无需重复实现。
 
 package main

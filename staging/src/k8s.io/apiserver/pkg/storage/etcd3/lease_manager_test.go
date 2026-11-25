@@ -22,7 +22,7 @@ import (
 
 // TestGetReuseDurationSeconds 验证 lease 复用窗口的计算：取 TTL 的 1/20，
 // 且下限为 60 秒。
-// 中文说明：复用窗口的存在是为了避免频繁创建 lease——只要旧 lease 还剩足够长时间，
+// 复用窗口的存在是为了避免频繁创建 lease——只要旧 lease 还剩足够长时间，
 // 新对象就继续挂到它上面。60 秒下限保证短 TTL 场景下仍有足够的安全边际；
 // 1/20 上限则保证 lease 不会在对象过期后才失效（那会导致键被提前删除）。
 func TestGetReuseDurationSeconds(t *testing.T) {

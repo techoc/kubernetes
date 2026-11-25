@@ -17,8 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=*
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package primitivepointers is a test package.
-// 中文说明：验证 immutable 作用于指向基本类型的指针字段时的更新校验。
+// Package primitivepointers 是一个测试包，验证 immutable 作用于指向基本类型的
+// 指针字段时的更新校验。
 //
 // +k8s:validation-gen-nolint
 //

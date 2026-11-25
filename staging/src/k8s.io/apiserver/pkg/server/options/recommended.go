@@ -28,11 +28,9 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
-// RecommendedOptions contains the recommended options for running an API server.
-// If you add something to this list, it should be in a logical grouping.
-// Each of them can be nil to leave the feature unconfigured on ApplyTo.
-//
-// 中文说明：各子选项可为 nil，表示不启用对应功能；聚合型 apiserver
+// RecommendedOptions 包含运行 API Server 所需的推荐选项。
+// 如果要在该列表中加入新选项，应按逻辑分组添加。
+// 各子选项可为 nil，表示不启用对应功能；聚合型 apiserver
 // 通过替换个别字段即可获得与 kube-apiserver 一致的基础行为。
 type RecommendedOptions struct {
 	Etcd           *EtcdOptions
@@ -99,10 +97,9 @@ func (o *RecommendedOptions) AddFlags(fs *pflag.FlagSet) {
 	o.Traces.AddFlags(fs)
 }
 
-// ApplyTo adds RecommendedOptions to the server configuration.
-// pluginInitializers can be empty, it is only need for additional initializers.
-//
-// 中文说明：应用顺序有依赖——egress selector 要先于 tracing（tracing 依赖
+// ApplyTo 把 RecommendedOptions 添加到服务器配置中。
+// pluginInitializers 可以为空，只有在需要额外初始化器时才用到它。
+// 应用顺序有依赖——egress selector 要先于 tracing（tracing 依赖
 // 出站连接），客户端要早于 features/admission（二者需要 kube client）。
 func (o *RecommendedOptions) ApplyTo(config *server.RecommendedConfig) error {
 	if err := o.Etcd.ApplyTo(&config.Config); err != nil {

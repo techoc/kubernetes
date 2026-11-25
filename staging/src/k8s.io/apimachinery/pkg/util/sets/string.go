@@ -23,7 +23,7 @@ package sets
 // s1 := Set[string]{}
 // s2 := New[string]()
 //
-// 中文说明：仅为兼容保留；新代码应直接使用泛型 Set[string]，本类型在
+// 仅为兼容保留；新代码应直接使用泛型 Set[string]，本类型在
 // 每次操作时都要做 map 类型转换。
 type String map[string]Empty
 
@@ -34,7 +34,7 @@ func NewString(items ...string) String {
 
 // StringKeySet 根据 map[string]T 的键创建 String 集合，value 类型不影响结果。
 // 该函数要求传入 map；若传入值不是 map，则会 panic。
-// 中文说明：用泛型约束把“必须是 map[string]T”的检查前移到编译期，
+// 用泛型约束把“必须是 map[string]T”的检查前移到编译期，
 // 因此函数体内的 panic 实际上不可达。
 func StringKeySet[T any](theMap map[string]T) String {
 	return String(KeySet(theMap))
@@ -77,7 +77,7 @@ func (s String) Clone() String {
 // s1.Difference(s2) = {a3}
 // s2.Difference(s1) = {a4, a5}
 //
-// 中文说明：结果是一个新集合，不修改 s1 或 s2。
+// 结果是一个新集合，不修改 s1 或 s2。
 func (s1 String) Difference(s2 String) String {
 	return String(cast(s1).Difference(cast(s2)))
 }
@@ -124,7 +124,7 @@ func (s1 String) Equal(s2 String) bool {
 }
 
 // List 返回按升序排列的 string 切片。
-// 中文说明：排序保证输出确定，适合用于生成需要稳定比较的结果。
+// 排序保证输出确定，适合用于生成需要稳定比较的结果。
 func (s String) List() []string {
 	return List(cast(s))
 }
@@ -135,7 +135,7 @@ func (s String) UnsortedList() []string {
 }
 
 // PopAny 从集合中移除并返回任意一个元素。
-// 中文说明：结果不确定（map 遍历顺序），因此只在“任意一个即可”的场景使用；
+// 结果不确定（map 遍历顺序），因此只在“任意一个即可”的场景使用；
 // 会修改集合。
 func (s String) PopAny() (string, bool) {
 	return cast(s).PopAny()

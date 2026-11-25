@@ -33,9 +33,9 @@ import (
 )
 
 var (
-	// startServerShutdown is a signal from the backend after receiving all (25) requests
-	// after which the test shuts down the HTTP server
-	// 中文说明：必须等 25 个请求全部在途后才触发 Shutdown，才能验证“关停不打断活跃连接”。
+	// startServerShutdown 是后端在收到全部（25 个）请求后发出的信号，
+	// 测试收到信号后关闭 HTTP 服务器。
+	// 必须等 25 个请求全部在途后才触发 Shutdown，才能验证“关停不打断活跃连接”。
 	startServerShutdown = make(chan struct{})
 
 	// handlerLock used in the backendHTTPHandler to count the number of requests and signal the test that the termination can start
@@ -92,16 +92,17 @@ f+pC77R3PW/o7oClJ+/GYIMy5AfkCaRjX1RLf+vhAoGBANJBi0ARkhwOWbnD2urA
 W+S7SneWTL09leh5ATNhog6s
 -----END PRIVATE KEY-----`)
 
-// TestGracefulShutdownForActiveHTTP2Streams checks if graceful shut down of HTTP2 server works.
-// It expects that all active connections will be finished (without any errors) before the server exits.
+// TestGracefulShutdownForActiveHTTP2Streams 验证 HTTP2 服务器的优雅关闭是否生效。
+// 它期望所有活跃连接在服务器退出前正常完成（不出现任何错误）。
 //
-// The test sends 25 requests to the target server in parallel. Each request is held by the target server for 60s.
-// As soon as the target server receives the last request the test calls backendServer.Config.Shutdown which gracefully shuts down the server without interrupting any active connections.
+// 测试并行向目标服务器发送 25 个请求，目标服务器将每个请求挂起 60 秒。
+// 一旦目标服务器收到最后一个请求，测试就调用 backendServer.Config.Shutdown，
+// 在不打断任何活跃连接的情况下优雅关闭服务器。
 //
-// See more at: https://github.com/golang/go/issues/39776
+// 更多细节见：https://github.com/golang/go/issues/39776
 //
-// Note this test will fail on upstream golang 1.15
-// 中文说明：这是对 Go 标准库 HTTP/2 优雅关闭行为的回归测试；它验证的是运行时行为，
+// 注意：本用例在上游 golang 1.15 上会失败。
+// 这是对 Go 标准库 HTTP/2 优雅关闭行为的回归测试；它验证的是运行时行为，
 // 而不是本仓库代码，因此标准库升级时需重新评估。
 func TestGracefulShutdownForActiveHTTP2Streams(t *testing.T) {
 	// set up the backend server

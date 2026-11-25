@@ -29,11 +29,9 @@ import (
 
 const ContentTypeOpenAPIV3PB = "application/com.github.proto-openapi.spec.v3@v1.0+protobuf"
 
-// GroupVersionWithContext is a better alternative because it supports contextual logging and cancellation.
-//
 // Contextual logging: Use GroupVersionWithContext instead.
 //
-// 中文说明：GroupVersion 的旧接口不接收 context，无法取消请求或传递日志上下文；
+// GroupVersion 的旧接口不接收 context，无法取消请求或传递日志上下文；
 // 新代码应优先使用 GroupVersionWithContext。
 type GroupVersion interface {
 	// Schema 返回指定 content type 的序列化 schema 字节。
@@ -59,8 +57,7 @@ type GroupVersionWithContext interface {
 }
 
 // ToGroupVersionWithContext 将旧的 GroupVersion 适配为 GroupVersionWithContext。
-//
-// 中文说明：若对象已实现新接口则直接返回，避免不必要的包装；旧实现被包装后其
+// 若对象已实现新接口则直接返回，避免不必要的包装；旧实现被包装后其
 // SchemaWithContext 会忽略 ctx，仅保留兼容性，不接受取消。
 func ToGroupVersionWithContext(gv GroupVersion) GroupVersionWithContext {
 	if gv == nil {
@@ -109,8 +106,7 @@ func (g *groupversion) Schema(contentType string) ([]byte, error) {
 }
 
 // SchemaWithContext 通过 REST 客户端获取 schema。
-//
-// 中文说明：服务端可能返回客户端前缀（client prefix）形式的 URL，两种模式的处理方式不同：
+// 服务端可能返回客户端前缀（client prefix）形式的 URL，两种模式的处理方式不同：
 //   - 无前缀：URL 已是相对 restClient 根路径的完整请求 URI，直接 RequestURI。
 //   - 有前缀：需要拆分出路径与查询参数，因为 AbsPath 不会保留查询串，需手动逐个添加。
 func (g *groupversion) SchemaWithContext(ctx context.Context, contentType string) ([]byte, error) {
@@ -144,10 +140,8 @@ func (g *groupversion) SchemaWithContext(ctx context.Context, contentType string
 	return path.Do(ctx).Raw()
 }
 
-// URL used for fetching the schema. The URL includes a hash and can be used
-// to key the current version of the schema in a cache.
-//
-// 中文说明：直接返回 discovery 中记录的 URL 字符串，不做任何改写。
+// ServerRelativeURL 返回获取 schema 所用的 URL。该 URL 带有 hash，可随 schema 更新
+// 用作缓存键；这里直接返回 discovery 中记录的 URL 字符串，不做任何改写。
 func (g *groupversion) ServerRelativeURL() string {
 	return g.item.ServerRelativeURL
 }

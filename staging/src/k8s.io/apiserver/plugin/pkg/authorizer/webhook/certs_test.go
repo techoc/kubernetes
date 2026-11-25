@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file was generated using openssl by the gencerts.sh script
-// and holds raw certificates for the webhook tests.
-//
-// 中文说明：这些是测试专用证书，包含受信 CA、一个不受信 CA、服务端与客户端证书/私钥。
+// 本文件由 gencerts.sh 脚本调用 openssl 生成，存放 webhook 测试所用的原始证书。
+// 这些是测试专用证书，包含受信 CA、一个不受信 CA、服务端与客户端证书/私钥。
 // badCACert 用于验证「证书链不被信任时请求必须失败」这条安全边界；
 // 所有材料均为测试固定值，生产环境绝不可复用。
 

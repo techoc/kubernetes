@@ -18,14 +18,10 @@ limitations under the License.
 // 生产实现基于原子计数，测试实现则让测试代码得以等待“所有就绪工作”完成。
 package counter
 
-// GoRoutineCounter keeps track of the number of active goroutines
-// working on/for something.  This is a utility that makes such code more
-// testable.  The code uses this utility to report the number of active
-// goroutines to the test code, so that the test code can advance a fake
-// clock when and only when the code being tested has finished all
-// the work that is ready to do at the present time.
-//
-// 中文说明：计数的语义是“可能还会做事的 goroutine 数”，而非物理线程数；
+// GoRoutineCounter 跟踪正在为某事工作的活跃 goroutine 数量，这是一项让此类代码
+// 更可测试的工具：被测代码通过它向测试代码报告活跃 goroutine 数，测试代码据此
+// 当且仅当被测代码完成当前所有就绪工作时才推进假时钟。
+// 计数的语义是“可能还会做事的 goroutine 数”，而非物理线程数；
 // 等待/阻塞前减一、唤醒对方前加一，测试据此判断何时推进虚拟时钟。
 type GoRoutineCounter interface {
 	// Add adds the given delta to the count of active goroutines.

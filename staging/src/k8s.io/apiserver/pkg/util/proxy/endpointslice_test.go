@@ -36,7 +36,7 @@ import (
 
 // makeEndpointSlice 构造带 service 标签的 EndpointSlice。
 //
-// 中文说明：名字按 service/slice 编号生成，保证不同命名空间下同名 service
+// 名字按 service/slice 编号生成，保证不同命名空间下同名 service
 // 的切片不会冲突，从而验证按命名空间索引的正确性。
 func makeEndpointSlice(namespace, service, slice int, ip string) *discoveryv1.EndpointSlice {
 	namespaceName := fmt.Sprintf("namespace%d", namespace)
@@ -107,7 +107,7 @@ var (
 
 // assertSlices 轮询等待 getter 返回期望的切片集合。
 //
-// 中文说明：informer 同步是异步的，必须轮询；空集合单独处理是因为
+// informer 同步是异步的，必须轮询；空集合单独处理是因为
 // cmp.Diff 会区分 nil 与空切片，而语义上二者等价。
 func assertSlices(t *testing.T, getter EndpointSliceGetter, namespace, service string, expected []*discoveryv1.EndpointSlice) {
 	t.Helper()
@@ -137,7 +137,7 @@ func assertSlices(t *testing.T, getter EndpointSliceGetter, namespace, service s
 
 // testGetter 依次执行创建/更新/删除并核对四个命名空间-服务组合的视图。
 //
-// 中文说明：两个 getter 实现共用本函数，确保索引实现与 lister 实现行为一致。
+// 两个 getter 实现共用本函数，确保索引实现与 lister 实现行为一致。
 func testGetter(t *testing.T, client clientset.Interface, getter EndpointSliceGetter) {
 	ctx := context.Background()
 
@@ -186,7 +186,7 @@ func testGetter(t *testing.T, client clientset.Interface, getter EndpointSliceGe
 
 // TestNewEndpointSliceIndexerGetter 验证基于 informer 索引的 getter。
 //
-// 中文说明：索引按 namespace/service 直接定位，避免遍历全部切片。
+// 索引按 namespace/service 直接定位，避免遍历全部切片。
 func TestNewEndpointSliceIndexerGetter(t *testing.T) {
 	client := clientsetfake.NewSimpleClientset(initialSlices...)
 	informerFactory := informers.NewSharedInformerFactory(client, 30*time.Second)

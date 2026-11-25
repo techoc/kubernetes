@@ -53,14 +53,13 @@ func init() {
 	registerMetrics()
 }
 
-// labelReconcileInfo lists Node labels to reconcile, and how to reconcile them.
-// primaryKey and secondaryKey are keys of labels to reconcile.
-//   - If both keys exist, but their values don't match. Use the value from the
-//     primaryKey as the source of truth to reconcile.
-//   - If ensureSecondaryExists is true, and the secondaryKey does not
-//     exist, secondaryKey will be added with the value of the primaryKey.
+// labelReconcileInfo 列出需要对账的节点标签以及对账方式。primaryKey 与 secondaryKey
+// 是需要对账的标签键：
+//   - 两个键都存在但取值不一致时，以 primaryKey 的取值作为事实来源；
+//   - ensureSecondaryExists 为 true 且 secondaryKey 不存在时，用 primaryKey 的取值
+//     补写 secondaryKey。
 //
-// 中文说明：beta 标签是唯一事实来源，GA 标签只是派生副本。这样即使有外部组件
+// beta 标签是唯一事实来源，GA 标签只是派生副本。这样即使有外部组件
 // 仍在写 beta 标签，也能保证两套标签最终一致，避免调度器读到互相矛盾的拓扑信息。
 var labelReconcileInfo = []struct {
 	primaryKey            string
@@ -101,9 +100,8 @@ var UpdateNodeSpecBackoff = wait.Backoff{
 	Jitter:   1.0,
 }
 
-// CloudNodeController is the controller implementation for Node resources
+// CloudNodeController 是 Node 资源的控制器实现。控制器有两条独立的执行路径：
 //
-// 中文说明：控制器有两条独立的执行路径：
 //  1. workqueue + syncNode：只处理带 cloudprovider 污点的新节点，做一次性初始化；
 //  2. UpdateNodeStatus 定时循环：对已初始化节点周期性刷新地址。
 //
@@ -127,9 +125,8 @@ type CloudNodeController struct {
 	workqueue   workqueue.TypedRateLimitingInterface[string] // 只承载需要初始化的节点 key，而不是全量节点，避免周期性重扫。
 }
 
-// NewCloudNodeController creates a CloudNodeController object
-//
-// 中文说明：构造阶段即校验云提供商是否具备 Instances 或 InstancesV2 能力——
+// NewCloudNodeController 创建 CloudNodeController 对象。
+// 构造阶段即校验云提供商是否具备 Instances 或 InstancesV2 能力——
 // 二者都没有时无法获取节点信息，控制器没有存在意义。
 func NewCloudNodeController(
 	nodeInformer coreinformers.NodeInformer,
@@ -160,10 +157,9 @@ func NewCloudNodeController(
 		),
 	}
 
-	// Use shared informer to listen to add/update of nodes. Note that any nodes
-	// that exist before node controller starts will show up in the update method
-	// 中文说明：只注册 Add/Update，不注册 Delete——节点删除无需云侧初始化。
-	// 控制器启动前已存在的节点会在首次 List 时以 Add 事件形式补齐。
+	// 使用 shared informer 监听节点的 add/update 事件：只注册 Add/Update，不注册
+	// Delete——节点删除无需云侧初始化。控制器启动前已存在的节点会在首次 List 时
+	// 以 Add 事件形式补齐。
 	cnc.nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    cnc.enqueueNode,
 		UpdateFunc: func(oldObj, newObj interface{}) { cnc.enqueueNode(newObj) },
@@ -182,12 +178,10 @@ func (cnc *CloudNodeController) Run(stopCh <-chan struct{}, controllerManagerMet
 	cnc.RunWithContext(wait.ContextForChannel(stopCh), controllerManagerMetrics)
 }
 
-// RunWithContext will sync informer caches and starting workers.
-// This controller updates newly registered nodes with information
-// from the cloud provider. This call is blocking so should be called
-// via a goroutine
+// RunWithContext 会同步 informer 缓存并启动 worker：本控制器把云侧信息写入新注册的
+// 节点。该调用会阻塞，因此应通过 goroutine 启动。
 //
-// 中文说明：启动顺序很关键——先起事件管道与缓存同步，再启动状态刷新循环和
+// 启动顺序很关键——先起事件管道与缓存同步，再启动状态刷新循环和
 // 初始化 worker；否则 worker 可能读到空缓存，把尚不存在的节点误判为已删除。
 func (cnc *CloudNodeController) RunWithContext(ctx context.Context, controllerManagerMetrics *controllersmetrics.ControllerManagerMetrics) {
 	cnc.broadcaster = record.NewBroadcaster(record.WithContext(ctx))
@@ -213,9 +207,8 @@ func (cnc *CloudNodeController) RunWithContext(ctx context.Context, controllerMa
 		return
 	}
 
-	// The periodic loop for updateNodeStatus polls the Cloud Provider periodically
-	// to reconcile the nodes addresses and labels.
-	// 中文说明：该循环与初始化 worker 并行，但只处理无污点的节点，两者职责不重叠。
+	// updateNodeStatus 周期循环会定时轮询云提供商，对账节点地址与标签。
+	// 该循环与初始化 worker 并行，但只处理无污点的节点，两者职责不重叠。
 	go wait.UntilWithContext(ctx, func(ctx context.Context) {
 		if err := cnc.UpdateNodeStatus(ctx); err != nil {
 			klog.Errorf("failed to update node status: %v", err)
@@ -254,8 +247,7 @@ func (cnc *CloudNodeController) processNextWorkItem(ctx context.Context) bool {
 		// Run the syncHandler, passing it the key of the
 		// Node resource to be synced.
 		if err := cnc.syncHandler(ctx, key); err != nil {
-			// Put the item back on the workqueue to handle any transient errors.
-			// 中文说明：云 API 抖动属于可恢复错误，限速重入队；成功则 Forget 清除退避历史。
+			// 云 API 抖动属于可恢复错误，限速重入队；成功则 Forget 清除退避历史。
 			cnc.workqueue.AddRateLimited(key)
 			klog.Infof("error syncing '%s': %v, requeuing", key, err)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
@@ -287,9 +279,9 @@ func (cnc *CloudNodeController) syncHandler(ctx context.Context, key string) err
 	return cnc.syncNode(ctx, name)
 }
 
-// UpdateNodeStatus updates the node status, such as node addresses
+// UpdateNodeStatus 更新节点状态，例如节点地址。
 //
-// 中文说明：每轮把 lister 中的全量节点按 statusUpdateWorkerCount 并行处理。
+// 每轮把 lister 中的全量节点按 statusUpdateWorkerCount 并行处理。
 // 使用 DeepCopy 隔离并发写入，避免多个 goroutine 共享同一缓存对象。
 func (cnc *CloudNodeController) UpdateNodeStatus(ctx context.Context) error {
 	start := time.Now()
@@ -304,8 +296,7 @@ func (cnc *CloudNodeController) UpdateNodeStatus(ctx context.Context) error {
 
 	updateNodeFunc := func(piece int) {
 		node := nodes[piece].DeepCopy()
-		// Do not process nodes that are still tainted, those will be processed by syncNode()
-		// 中文说明：带污点的节点尚未完成初始化，由 syncNode 负责；此处跳过可避免
+		// 带污点的节点尚未完成初始化，由 syncNode 负责；此处跳过可避免
 		// 两个路径同时写 Node.Status 造成无谓冲突。
 		cloudTaint := getCloudTaint(node.Spec.Taints)
 		if cloudTaint != nil {
@@ -339,9 +330,9 @@ func (cnc *CloudNodeController) enqueueNode(obj interface{}) {
 	cnc.workqueue.Add(key)
 }
 
-// reconcileNodeLabels reconciles node labels transitioning from beta to GA
+// reconcileNodeLabels 对账 beta 标签向 GA 标签过渡期间的节点标签。
 //
-// 中文说明：节点初始化之后不再走 syncNode，但历史节点可能存在 beta/GA 标签
+// 节点初始化之后不再走 syncNode，但历史节点可能存在 beta/GA 标签
 // 不一致的情况（例如由旧版本 kubelet 创建），这里做一次幂等修补。
 func (cnc *CloudNodeController) reconcileNodeLabels(nodeName string) error {
 	node, err := cnc.nodeInformer.Lister().Get(nodeName)
@@ -365,10 +356,9 @@ func (cnc *CloudNodeController) reconcileNodeLabels(nodeName string) error {
 		secondaryValue, secondaryExists := node.Labels[r.secondaryKey]
 
 		if !primaryExists {
-			// The primary label key does not exist. This should not happen
-			// within our supported version skew range, when no external
-			// components/factors modifying the node object. Ignore this case.
-			// 中文说明：缺少主标签时不反向推导，避免把外部写入的 GA 标签当成事实来源。
+			// 主标签键不存在。只要没有外部组件或其他因素修改节点对象，在我们支持的
+			// 版本偏斜范围内不应出现这种情况，这里直接忽略。缺少主标签时不反向推导，
+			// 避免把外部写入的 GA 标签当成事实来源。
 			continue
 		}
 		if secondaryExists && primaryValue != secondaryValue {
@@ -418,9 +408,8 @@ func (cnc *CloudNodeController) updateNodeAddress(ctx context.Context, node *v1.
 			break
 		}
 	}
-	// If hostname was not present in cloud provided addresses, use the hostname
-	// from the existing node (populated by kubelet)
-	// 中文说明：多数云厂商不返回 Hostname，但许多工作负载依赖它；沿用 kubelet 写入的值。
+	// 云厂商返回的地址里没有 Hostname 时，沿用现有节点上由 kubelet 写入的值：
+	// 多数云厂商不返回 Hostname，但许多工作负载依赖它。
 	if !hostnameExists {
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == v1.NodeHostName {
@@ -428,8 +417,8 @@ func (cnc *CloudNodeController) updateNodeAddress(ctx context.Context, node *v1.
 			}
 		}
 	}
-	// If kubelet provided a node IP, prefer it in the node address list
-	// 中文说明：--node-ip 注解代表用户显式选择，优先级高于云侧枚举出的地址。
+	// 如果 kubelet 提供了 node IP，则在节点地址列表中优先使用它：--node-ip 注解
+	// 代表用户显式选择，优先级高于云侧枚举出的地址。
 	nodeAddresses, err := updateNodeAddressesFromNodeIP(node, nodeAddresses)
 	if err != nil {
 		klog.Errorf("Failed to update node addresses for node %q: %v", node.Name, err)
@@ -448,10 +437,9 @@ func (cnc *CloudNodeController) updateNodeAddress(ctx context.Context, node *v1.
 	}
 }
 
-// nodeModifier is used to carry changes to node objects across multiple attempts to update them
-// in a retry-if-conflict loop.
+// nodeModifier 用于在“冲突即重试”的循环中，把对节点对象的改动跨多次更新尝试携带过去。
 //
-// 中文说明：把“要改什么”与“何时改”解耦。重试循环每次取最新对象再依次应用，
+// 把“要改什么”与“何时改”解耦。重试循环每次取最新对象再依次应用，
 // 因此每个 modifier 必须是幂等的。
 type nodeModifier func(*v1.Node)
 
@@ -483,8 +471,8 @@ func (cnc *CloudNodeController) syncNode(ctx context.Context, nodeName string) e
 		return fmt.Errorf("failed to get instance metadata for node %s: %v", nodeName, err)
 	}
 	if instanceMetadata == nil {
-		// do nothing when external cloud providers provide nil instanceMetadata
-		// 中文说明：nil 表示云侧暂无该实例信息（例如实例尚未注册），保留污点等下一轮再试。
+		// 外部云提供商返回 nil instanceMetadata 时不做任何处理：nil 表示云侧暂无该
+		// 实例信息（例如实例尚未注册），保留污点等下一轮再试。
 		klog.Infof("Skip sync node %s because cloud provided nil metadata", nodeName)
 		return nil
 	}
@@ -519,9 +507,8 @@ func (cnc *CloudNodeController) syncNode(ctx context.Context, nodeName string) e
 		// 观测“节点创建到移除污点”的时延，用于评估初始化流程的健康度。
 		removeCloudProviderTaintDelay.Observe(time.Since(newNode.ObjectMeta.CreationTimestamp.Time).Seconds())
 
-		// After adding, call UpdateNodeAddress to set the CloudProvider provided IPAddresses
-		// So that users do not see any significant delay in IP addresses being filled into the node
-		// 中文说明：update 之后立即补写地址，避免等待下一个 status 周期，缩短地址可用的空窗。
+		// Update 成功后立即调用 updateNodeAddress 写入云提供商提供的 IP 地址，
+		// 避免等待下一个 status 周期，缩短地址可用的空窗。
 		cnc.updateNodeAddress(ctx, newNode, instanceMetadata)
 
 		klog.Infof("Successfully initialized node %s with cloud provider", nodeName)
@@ -554,11 +541,9 @@ func (cnc *CloudNodeController) getNodeModifiersFromCloudProvider(
 		}
 	}
 
-	// If kubelet annotated the node with a node IP, ensure that it is valid
-	// and can be applied to the discovered node addresses before removing
-	// the taint on the node.
-	// 中文说明：先在移除污点前校验 --node-ip，校验失败则整次初始化失败并重试，
-	// 避免节点带着一个云侧不存在的地址进入可用状态。
+	// 如果 kubelet 通过注解给节点指定了 node IP，那么在移除污点之前，必须先确认
+	// 它是合法的、可以应用到探测出的节点地址上：先在移除污点前校验 --node-ip，
+	// 校验失败则整次初始化失败并重试，避免节点带着一个云侧不存在的地址进入可用状态。
 	_, err := updateNodeAddressesFromNodeIP(node, instanceMeta.NodeAddresses)
 	if err != nil {
 		return nil, fmt.Errorf("provided node ip for node %q is not valid: %w", node.Name, err)
@@ -609,8 +594,8 @@ func (cnc *CloudNodeController) getNodeModifiersFromCloudProvider(
 
 			k8sNamespaceRegex := regexp.MustCompile(`(^|\.)(kubernetes|k8s)\.io/`)
 			for k, v := range instanceMeta.AdditionalLabels {
-				// Cloud provider should not be using kubernetes namespaces in labels
-				// 中文说明：保留 k8s 命名空间给核心组件，防止云厂商覆盖语义标签（如拓扑、污点相关）。
+				// 云厂商不应使用 kubernetes 命名空间的标签：保留 k8s 命名空间给核心
+				// 组件，防止云厂商覆盖语义标签（如拓扑、污点相关）。
 				if isK8sNamespace := k8sNamespaceRegex.MatchString(k); isK8sNamespace {
 					klog.Warningf("Discarding node label %s with kubernetes namespace", k)
 					continue
@@ -642,14 +627,13 @@ func (cnc *CloudNodeController) getInstanceMetadata(ctx context.Context, node *v
 		if err != nil {
 			return nil, err
 		}
-		// spec.ProviderID is required for multiple controllers, like loadbalancers, so we should not
-		// untaint the node until is set. Once it is set, the field is immutable, so no need to reconcile.
-		// We only set this value during initialization and is never reconciled, so if for some reason
-		// we are not able to set it, the instance will never be able to acquire it.
-		// Before external cloud providers were enabled by default, the field was set by the kubelet, and the
-		// node was created with the value.
+		// spec.ProviderID 是多个控制器（如 loadbalancer）必需的字段，因此在它被设置
+		// 好之前不能移除节点污点。该字段一旦写入即不可变，无需再做对账；而这里只在
+		// 初始化阶段设置一次、之后不再对账，所以此刻若拿不到值，该实例以后再也无法
+		// 获得它。在外部云提供商成为默认方式之前，该字段由 kubelet 写入，节点创建时
+		// 就带有该值。
 		// xref: https://issues.k8s.io/123024
-		// 中文说明：云厂商未返回 ProviderID 时回退到 kubelet 已写入的值；两者都缺失则
+		// 云厂商未返回 ProviderID 时回退到 kubelet 已写入的值；两者都缺失则
 		// 返回错误，让节点保持污点状态重试——宁可不初始化，也不能让后续控制器拿到空 ID。
 		if metadata != nil && metadata.ProviderID == "" {
 			if providerID == "" {
@@ -677,10 +661,8 @@ func (cnc *CloudNodeController) getInstanceMetadata(ctx context.Context, node *v
 				// addresses given the node name in getNodeAddressesByProviderIDOrName
 				klog.Warningf("cloud provider does not set node provider ID, using node name to discover node %s", node.Name)
 			} else {
-				// if the cloud provider being used supports provider IDs, we want
-				// to propagate the error so that we re-try in the future; if we
-				// do not, the taint will be removed, and this will not be retried
-				// 中文说明：把错误上抛而非吞掉，否则污点被移除后 ProviderID 将永远缺失。
+				// 云厂商支持 provider ID 时要把错误上抛，以便后续重新入队重试；
+				// 否则污点被移除后 ProviderID 将永远缺失。
 				return nil, err
 			}
 		}
@@ -723,10 +705,10 @@ func (cnc *CloudNodeController) getInstanceMetadata(ctx context.Context, node *v
 	return instanceMetadata, nil
 }
 
-// getInstanceAddresses returns InstanceMetadata.NodeAddresses. If InstancesV2 not supported, it won't get instanceType
-// which avoid an api call compared with getInstanceMetadata.
+// getInstanceAddresses 返回 InstanceMetadata.NodeAddresses。若不支持 InstancesV2，
+// 就不会去取 instanceType，相比 getInstanceMetadata 少一次云 API 调用。
 //
-// 中文说明：周期性刷新只需要地址，因此省略实例类型与区域查询，把每轮云 API 调用降到最少。
+// 周期性刷新只需要地址，因此省略实例类型与区域查询，把每轮云 API 调用降到最少。
 func (cnc *CloudNodeController) getInstanceNodeAddresses(ctx context.Context, node *v1.Node) (*cloudprovider.InstanceMetadata, error) {
 	if instancesV2, ok := cnc.cloud.InstancesV2(); instancesV2 != nil && ok {
 		return instancesV2.InstanceMetadata(ctx, node)
@@ -748,7 +730,7 @@ func (cnc *CloudNodeController) getInstanceNodeAddresses(ctx context.Context, no
 }
 
 // getCloudTaint 返回节点上的“未初始化”污点，不存在时返回 nil。
-// 中文说明：返回指针副本而非切片元素地址，避免调用方持有 lister 缓存对象内部指针。
+// 返回指针副本而非切片元素地址，避免调用方持有 lister 缓存对象内部指针。
 func getCloudTaint(taints []v1.Taint) *v1.Taint {
 	for _, taint := range taints {
 		if taint.Key == cloudproviderapi.TaintExternalCloudProvider {
@@ -759,7 +741,7 @@ func getCloudTaint(taints []v1.Taint) *v1.Taint {
 }
 
 // excludeCloudTaint 返回去掉“未初始化”污点后的切片。
-// 中文说明：总是构造新切片，不原地修改入参，保证基于缓存对象的拷贝语义安全。
+// 总是构造新切片，不原地修改入参，保证基于缓存对象的拷贝语义安全。
 func excludeCloudTaint(taints []v1.Taint) []v1.Taint {
 	newTaints := []v1.Taint{}
 	for _, taint := range taints {
@@ -772,7 +754,7 @@ func excludeCloudTaint(taints []v1.Taint) []v1.Taint {
 }
 
 // getNodeAddressesByProviderIDOrName 优先按 providerID 查询地址，失败后回退到节点名。
-// 中文说明：回退兼容不支持 providerID 的旧云厂商；两次都失败时把两个错误都返回，
+// 回退兼容不支持 providerID 的旧云厂商；两次都失败时把两个错误都返回，
 // 便于区分“云 API 故障”与“实例不存在”。
 func getNodeAddressesByProviderIDOrName(ctx context.Context, instances cloudprovider.Instances, providerID, nodeName string) ([]v1.NodeAddress, error) {
 	nodeAddresses, err := instances.NodeAddressesByProviderID(ctx, providerID)
@@ -787,7 +769,7 @@ func getNodeAddressesByProviderIDOrName(ctx context.Context, instances cloudprov
 }
 
 // nodeAddressesChangeDetected 比较两组地址是否不同。
-// 中文说明：按类型建立映射后比较，忽略顺序差异——云厂商返回地址顺序并不稳定，
+// 按类型建立映射后比较，忽略顺序差异——云厂商返回地址顺序并不稳定，
 // 若按顺序比较会导致每轮都触发无意义的 patch。
 func nodeAddressesChangeDetected(addressSet1, addressSet2 []v1.NodeAddress) bool {
 	if len(addressSet1) != len(addressSet2) {
@@ -808,7 +790,7 @@ func nodeAddressesChangeDetected(addressSet1, addressSet2 []v1.NodeAddress) bool
 }
 
 // updateNodeAddressesFromNodeIP 在节点带有 --node-ip 注解时，用该 IP 约束云侧地址列表。
-// 中文说明：注解不存在时原样返回，保持与旧集群的兼容行为。
+// 注解不存在时原样返回，保持与旧集群的兼容行为。
 func updateNodeAddressesFromNodeIP(node *v1.Node, nodeAddresses []v1.NodeAddress) ([]v1.NodeAddress, error) {
 	var err error
 

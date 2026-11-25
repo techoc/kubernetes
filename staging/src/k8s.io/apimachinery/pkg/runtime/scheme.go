@@ -50,8 +50,7 @@ type Scheme struct {
 	// 因为注册时会先对传入对象类型执行 Elem()。
 	typeToGVK map[reflect.Type][]schema.GroupVersionKind
 
-	// unversionedTypes are transformed without conversion in ConvertToVersion.
-	// 中文说明：unversioned 类型只改 GVK、不做结构转换，因此永远向后兼容。
+	// unversioned 类型在 ConvertToVersion 中不做转换直接处理：只改 GVK、不做结构转换，因此永远向后兼容。
 	unversionedTypes map[reflect.Type]schema.GroupVersionKind
 
 	// unversionedKinds 按 Kind 名称索引 unversioned 类型，使其可以在任意 Group/Version 上构造。
@@ -75,7 +74,7 @@ type Scheme struct {
 	versionPriority map[string][]string
 
 	// observedVersions 按首次注册顺序记录 GroupVersion，用于未显式配置优先级时生成稳定顺序。
-	// 中文说明：用于在没有显式 SetVersionPriority 时，按注册顺序补全版本列表。
+	// 用于在没有显式 SetVersionPriority 时，按注册顺序补全版本列表。
 	observedVersions []schema.GroupVersion
 
 	// schemeName 是该 Scheme 的名称。未显式指定时从 NewScheme 调用栈推断，
@@ -176,9 +175,8 @@ func (s *Scheme) AddKnownTypeWithName(gvk schema.GroupVersionKind, obj Object) {
 	}
 	s.typeToGVK[t] = append(s.typeToGVK[t], gvk)
 
-	// if the type implements DeepCopyInto(<obj>), register a self-conversion
-	// 中文说明：同类型转换直接复用 DeepCopyInto，并清空 TypeMeta，与反射
-	// 转换的旧行为保持一致。
+	// 若类型实现了 DeepCopyInto(<obj>)，则注册同类型转换：直接复用 DeepCopyInto，
+	// 并清空 TypeMeta，与反射转换的旧行为保持一致。
 	if m := reflect.ValueOf(obj).MethodByName("DeepCopyInto"); m.IsValid() && m.Type().NumIn() == 1 && m.Type().NumOut() == 0 && m.Type().In(0) == reflect.TypeOf(obj) {
 		if err := s.AddGeneratedConversionFunc(obj, obj, func(a, b interface{}, scope conversion.Scope) error {
 			// copy a to b
@@ -192,8 +190,7 @@ func (s *Scheme) AddKnownTypeWithName(gvk schema.GroupVersionKind, obj Object) {
 	}
 }
 
-// KnownTypes returns the types known for the given version.
-// 中文说明：返回 kind -> Go 类型的映射，用于按版本构造对象或反射检查。
+// KnownTypes 返回指定版本已知的 kind -> Go 类型映射，用于按版本构造对象或反射检查。
 func (s *Scheme) KnownTypes(gv schema.GroupVersion) map[string]reflect.Type {
 	types := make(map[string]reflect.Type)
 	for gvk, t := range s.gvkToType {
@@ -206,10 +203,9 @@ func (s *Scheme) KnownTypes(gv schema.GroupVersion) map[string]reflect.Type {
 	return types
 }
 
-// VersionsForGroupKind returns the versions that a particular GroupKind can be converted to within the given group.
-// A GroupKind might be converted to a different group. That information is available in EquivalentResourceMapper.
-//
-// 中文说明：先按优先级顺序遍历已知版本，再筛选该 GroupKind 实际注册过的
+// VersionsForGroupKind 返回某个 GroupKind 在给定组内可以转换到的版本列表。
+// GroupKind 也可能被转换到其他组，该信息可从 EquivalentResourceMapper 获取。
+// 实现上先按优先级顺序遍历已知版本，再筛选该 GroupKind 实际注册过的
 // 版本，从而保证输出稳定且符合优先级。
 func (s *Scheme) VersionsForGroupKind(gk schema.GroupKind) []schema.GroupVersion {
 	availableVersions := []schema.GroupVersion{}
@@ -243,11 +239,9 @@ func (s *Scheme) AllKnownTypes() map[schema.GroupVersionKind]reflect.Type {
 // 查询 Go 对象可能对应的全部 GVK，并返回它是否为 unversioned 类型。
 // 普通对象必须是已注册类型的指针；Unstructured 对象不查注册表，而是直接读取对象自身声明的 GVK，并要求 Kind 与 Version 均非空。
 func (s *Scheme) ObjectKinds(obj Object) ([]schema.GroupVersionKind, bool, error) {
-	// Unstructured objects are always considered to have their declared GVK
-	// 中文说明：unstructured 对象不在注册表中，只能相信其内部声明的 GVK；
-	// 因此 kind/version 缺失时报错而不是猜测。
+	// Unstructured 对象始终被认为携带其自身声明的 GVK：它不在注册表中，只能相信其内部声明的 GVK。
+	// 识别对象要求 GVK 已填充完整，因此 kind/version 缺失时报错而不是猜测。
 	if _, ok := obj.(Unstructured); ok {
-		// we require that the GVK be populated in order to recognize the object
 		gvk := obj.GetObjectKind().GroupVersionKind()
 		if len(gvk.Kind) == 0 {
 			return nil, false, NewMissingKindErr("unstructured object has no kind")
@@ -396,8 +390,8 @@ func (s *Scheme) Convert(in, out interface{}, context interface{}) error {
 		}
 		gvk := gvks[0]
 
-		// if no conversion is necessary, convert immediately
-		// 中文说明：internal 对象不能直接暴露给用户（可能含未对外开放的字段），
+		// 若无需转换（unversioned 或版本不是 internal），立即转换。
+		// internal 对象不能直接暴露给用户（可能含未对外开放的字段），
 		// 必须先转到外部版本。
 		if unversioned || gvk.Version != APIVersionInternal {
 			content, err := DefaultUnstructuredConverter.ToUnstructured(in)
@@ -577,9 +571,9 @@ func copyAndSetTargetKind(copy bool, obj Object, kind schema.GroupVersionKind) (
 // setTargetKind sets the kind on an object, taking into account whether the target kind is the internal version.
 func setTargetKind(obj Object, kind schema.GroupVersionKind) {
 	if kind.Version == APIVersionInternal {
-		// internal is a special case
+		// internal 版本是一种特殊情况。
 		// TODO: look at removing the need to special case this
-		// 中文说明：internal 对象不应暴露 GVK，清空以避免序列化时写入伪版本。
+		// internal 对象不应暴露 GVK，清空以避免序列化时写入伪版本。
 		obj.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 		return
 	}
@@ -772,8 +766,7 @@ func (s *Scheme) ToOpenAPIDefinitionName(groupVersionKind schema.GroupVersionKin
 // a dependency on kube-openapi.
 func toOpenAPIDefinitionName(name string) string {
 	nameParts := strings.Split(name, "/")
-	// Reverse first part. e.g., io.k8s... instead of k8s.io...
-	// 中文说明：域名部分需要反转成 REST 风格，其余路径段只做 "." 连接。
+	// 反转第一段域名成 REST 风格（例如 io.k8s... instead of k8s.io...），其余路径段只做 "." 连接。
 	if len(nameParts) > 0 && strings.Contains(nameParts[0], ".") {
 		nameParts[0] = reverseParts(nameParts[0])
 	}

@@ -96,28 +96,17 @@ limitations under the License.
 // the ideal. In plain fair queuing the bound is one packet; in our
 // version it is C requests.
 //
-// To support efficiently making the necessary adjustments once a
-// request’s actual service time is known, the virtual finish time of
-// a request and the last virtual finish time of a queue are not
-// represented directly but instead computed from queue length,
-// request position in the queue, and an alternate state variable that
-// holds the queue’s virtual start time. While the queue is empty and
-// has no requests executing: the value of its virtual start time
-// variable is ignored and its last virtual finish time is considered
-// to be in the virtual past. When a request arrives to an empty queue
-// with no requests executing, the queue’s virtual start time is set
-// to the current virtual time. The virtual finish time of request
-// number J in the queue (counting from J=1 for the head) is J * G +
-// (queue's virtual start time). While the queue is non-empty: the
-// last virtual finish time of the queue is the virtual finish time of
-// the last request in the queue. While the queue is empty and has a
-// request executing: the last virtual finish time is the queue’s
-// virtual start time. When a request is dequeued for service the
-// queue’s virtual start time is advanced by G. When a request
-// finishes being served, and the actual service time was S, the
-// queue’s virtual start time is decremented by G - S.
-//
-// 中文说明：处理请求时并非真的收发包，而是把“服务时间”折算进虚拟时钟：
+// 为了在请求的实际服务时间已知后能高效地做出必要调整，请求的虚拟完成时间与
+// 队列的最后虚拟完成时间都不直接表示，而是由队列长度、请求在队列中的位置，
+// 以及一个保存队列虚拟起始时间的替代状态变量计算得出。队列空闲且没有请求
+// 正在执行时：其虚拟起始时间变量的值被忽略，其最后虚拟完成时间被视为处于
+// 虚拟过去。当请求到达一个没有请求正在执行的空队列时，队列的虚拟起始时间
+// 被设为当前虚拟时间。队列中第 J 个请求（从队首 J=1 开始计数）的虚拟完成
+// 时间是 J * G +（队列的虚拟起始时间）。队列非空时：队列的最后虚拟完成时间
+// 是队列中最后一个请求的虚拟完成时间。队列为空但有请求正在执行时：最后虚拟
+// 完成时间是队列的虚拟起始时间。请求出队开始服务时，队列的虚拟起始时间前进
+// G。请求服务结束、实际服务时间为 S 时，队列的虚拟起始时间回退 G - S。
+// 换言之，处理请求时并非真的收发包，而是把“服务时间”折算进虚拟时钟：
 // 每个请求按初始估计 G 参与排队，完成后再用实际耗时修正队列的虚拟起始时间。
 // 关键不变量是“虚拟时间只增不减且所有队列以同一速率推进”，这样才能保证
 // 公平性上界为 C 个请求；任何直接改写 request 的 finish time 的实现都会破坏它。

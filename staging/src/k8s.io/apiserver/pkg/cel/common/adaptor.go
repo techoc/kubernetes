@@ -16,11 +16,9 @@ limitations under the License.
 
 package common
 
-// Schema is the adapted type for an OpenAPI schema that CEL uses.
-// This schema does not cover all OpenAPI fields but only these CEL requires
-// are exposed as getters.
-//
-// 中文说明：这是一个抽象适配层，屏蔽内部 OpenAPI 与结构化 schema 的差异，
+// Schema 是 CEL 使用的 OpenAPI schema 适配类型。它不覆盖全部 OpenAPI 字段，
+// 只把 CEL 需要的字段暴露为 getter。
+// 这是一个抽象适配层，屏蔽内部 OpenAPI 与结构化 schema 的差异，
 // 使 CEL 类型推导只依赖只读 getter。所有方法都应视作纯读：实现方可能被多个
 // 编译/校验 goroutine 共享。
 type Schema interface {
@@ -51,18 +49,17 @@ type Schema interface {
 	Validations
 	KubeExtensions
 
-	// WithTypeAndObjectMeta returns a schema that has the type and object meta set.
-	// the type includes "kind", "apiVersion" field
-	// the "metadata" field requires "name" and "generateName" to be set
-	// The original schema must not be mutated. Make a copy if necessary.
-	//
-	// 中文说明：这是“不可变”契约的关键：调用方可能在共享 schema 上调用本方法，
+	// WithTypeAndObjectMeta 返回设置了 type 与 object meta 的 schema。
+	// type 包含 "kind"、"apiVersion" 字段；
+	// "metadata" 字段要求 "name" 与 "generateName" 已设置。
+	// 原始 schema 不得被修改，必要时先复制副本。
+	// 这是“不可变”契约的关键：调用方可能在共享 schema 上调用本方法，
 	// 实现必须返回副本。
 	WithTypeAndObjectMeta() Schema
 }
 
-// Validations contains OpenAPI validation that the CEL library uses.
-// 中文说明：这些 getter 直接映射 OpenAPI 校验字段，CEL 用它推导默认值与约束，
+// Validations 包含 CEL 库使用的 OpenAPI 校验信息。
+// 这些 getter 直接映射 OpenAPI 校验字段，CEL 用它推导默认值与约束，
 // 因此缺省语义（如是否设置、exclusive 的默认值）必须与 OpenAPI 一致。
 type Validations interface {
 	Pattern() string
@@ -88,8 +85,8 @@ type Validations interface {
 	Not() Schema
 }
 
-// KubeExtensions contains Kubernetes-specific extensions to the OpenAPI schema.
-// 中文说明：x-kubernetes-* 扩展决定了 CEL 对列表/映射的语义（merge key、原子性等），
+// KubeExtensions 包含 Kubernetes 对 OpenAPI schema 的专有扩展。
+// x-kubernetes-* 扩展决定了 CEL 对列表/映射的语义（merge key、原子性等），
 // 与 API 的 server-side apply 行为保持一致。
 type KubeExtensions interface {
 	IsXIntOrString() bool
@@ -101,8 +98,8 @@ type KubeExtensions interface {
 	XValidations() []ValidationRule
 }
 
-// ValidationRule represents a single x-kubernetes-validations rule.
-// 中文说明：只暴露规则原文与其元数据，不求值；求值由 CEL 运行时负责，
+// ValidationRule 表示单条 x-kubernetes-validations 规则。
+// 只暴露规则原文与其元数据，不求值；求值由 CEL 运行时负责，
 // 以便编译结果可缓存。
 type ValidationRule interface {
 	Rule() string
@@ -111,9 +108,8 @@ type ValidationRule interface {
 	FieldPath() string
 }
 
-// SchemaOrBool contains either a schema or a boolean indicating if the object
-// can contain any fields.
-// 中文说明：对应 OpenAPI 的 additionalProperties，可为 schema 或布尔值两种形态。
+// SchemaOrBool 要么包含一个 schema，要么是一个布尔值，指示对象
+// 能否包含任意字段。对应 OpenAPI 的 additionalProperties，可为 schema 或布尔值两种形态。
 type SchemaOrBool interface {
 	Schema() Schema
 	Allows() bool

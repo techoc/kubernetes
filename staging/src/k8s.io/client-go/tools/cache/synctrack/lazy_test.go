@@ -113,10 +113,8 @@ func TestLazyThroughput(t *testing.T) {
 
 }
 
-// sequence is for controlling the order various lines of code execute in.
-// Replaces a bunch of time.Sleep() calls that would certainly be flaky.
-//
-// 中文说明：每个 WaitGroup 代表一个执行步骤的闸门。Step(n) 等待第 n 步被放行，
+// sequence 用于控制各行代码的执行顺序，替代一批必然不稳定的 time.Sleep() 调用。
+// 每个 WaitGroup 代表一个执行步骤的闸门。Step(n) 等待第 n 步被放行，
 // 然后放行第 n+1 步，从而在不使用 sleep 的情况下确定性地编排并发顺序。
 type sequence []sync.WaitGroup
 
@@ -163,8 +161,7 @@ func asyncGet[T any](t *testing.T, seq sequence, z *synctrack.Lazy[T], pre, post
 }
 
 // TestLazySlowEval 覆盖“先发起的求值比后发起的更晚完成”的竞态。
-//
-// 中文说明：预期结果是不把较旧的求值结果写入缓存，也不为纠正它而额外调用 Evaluate；
+// 预期结果是不把较旧的求值结果写入缓存，也不为纠正它而额外调用 Evaluate；
 // 后发起的较新结果应胜出，且所有 Get 最终拿到相同（较新）的值。
 func TestLazySlowEval(t *testing.T) {
 	// This tests the case where the first invocation of eval finishes

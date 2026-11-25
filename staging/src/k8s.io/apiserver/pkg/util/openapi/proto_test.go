@@ -24,9 +24,8 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// TestOpenAPIDefinitionsToProtoSchema tests the openapi parser
-//
-// 中文说明：验证 x-kubernetes-group-version-kind 扩展在转换为 proto 模型时
+// TestOpenAPIDefinitionsToProtoModels 测试 openapi 解析器。
+// 验证 x-kubernetes-group-version-kind 扩展在转换为 proto 模型时
 // 被保留且值被规范化（map[string]interface{} 变为 map[interface{}]interface{}）。
 func TestOpenAPIDefinitionsToProtoModels(t *testing.T) {
 	openAPISpec := &spec.Swagger{

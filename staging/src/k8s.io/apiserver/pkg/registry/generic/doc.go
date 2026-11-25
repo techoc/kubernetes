@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package generic provides a generic object store interface and a
-// generic label/field matching type.
-//
-// 中文说明：generic 包是各资源 REST 存储的公共骨架。它把「与具体资源无关」的部分
+// Package generic 提供通用的对象存储接口和通用的标签/字段匹配类型。
+// generic 包是各资源 REST 存储的公共骨架。它把「与具体资源无关」的部分
 // （键编码、准入/校验、更新策略、回收、事件分发）与资源特有的转换、策略、选择器解耦，
 // 使上层 registry 包只需提供 Storage 对象即可复用 etcd 存储实现。
 // 这样做的代价是大量回调（CreateStrategy/UpdateStrategy/AttrFunc 等），

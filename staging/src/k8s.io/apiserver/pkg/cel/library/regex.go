@@ -48,8 +48,7 @@ import (
 //	"123 abc 456".findAll('xyz') // returns []
 //
 // Regex 返回注入正则库的 CEL 环境选项。
-//
-// 中文说明：提供 find/findAll 两个字符串成员函数。find 返回第一个匹配
+// 提供 find/findAll 两个字符串成员函数。find 返回第一个匹配
 // （无匹配返回空串），findAll 可选传入上限，-1 表示不限数量。它们常用于
 // 校验策略中提取版本号、端口等模式化字段。
 func Regex() cel.EnvOption {

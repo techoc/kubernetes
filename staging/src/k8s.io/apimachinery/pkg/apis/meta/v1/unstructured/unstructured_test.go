@@ -53,7 +53,7 @@ func TestNilUnstructuredContent(t *testing.T) {
 	assert.Equal(t, uCopy, &u)
 }
 
-// 中文说明：先用 converter 把 ObjectMeta 整体写入 metadata，再用 getter/setter
+// 先用 converter 把 ObjectMeta 整体写入 metadata，再用 getter/setter
 // 逐字段复制到另一个对象；两者应完全一致。这验证 accessor 与
 // ToUnstructured 的语义（尤其是 omitempty）没有偏差。
 func TestUnstructuredMetadataRoundTrip(t *testing.T) {
@@ -80,7 +80,7 @@ func TestUnstructuredMetadataRoundTrip(t *testing.T) {
 	}
 }
 
-// 中文说明：把所有字段显式设为零值，metadata map 必须完全为空，证明
+// 把所有字段显式设为零值，metadata map 必须完全为空，证明
 // setter 遵守 omitempty 而不是留下 "name": "" 之类的条目。
 func TestUnstructuredMetadataOmitempty(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -326,7 +326,7 @@ func generateNonEmptyString(c randfill.Continue) string {
 	return temp
 }
 
-// 中文说明：apiVersion 的 group 与 version 部分都不能包含 "/"。
+// apiVersion 的 group 与 version 部分都不能包含 "/"。
 func generateNonEmptyNoSlashString(c randfill.Continue) string {
 	temp := strings.ReplaceAll(generateNonEmptyString(c), "/", "")
 	for len(temp) == 0 {
@@ -335,7 +335,7 @@ func generateNonEmptyNoSlashString(c randfill.Continue) string {
 	return temp
 }
 
-// 中文说明：前者表示 <group>/<version>，后者表示核心组的 <version>。
+// 前者表示 <group>/<version>，后者表示核心组的 <version>。
 func generateValidAPIVersionString(c randfill.Continue) string {
 	if c.Bool() {
 		return generateNonEmptyNoSlashString(c) + "/" + generateNonEmptyNoSlashString(c)
@@ -344,7 +344,7 @@ func generateValidAPIVersionString(c randfill.Continue) string {
 	}
 }
 
-// 中文说明：该函数只生成 unstructured 解码后可能出现的类型集合。数组与
+// 该函数只生成 unstructured 解码后可能出现的类型集合。数组与
 // 对象会递归调用，深度到达 0 时只生成非递归类型，防止无限展开。
 func generateRandomTypeValue(depth int, c randfill.Continue) interface{} {
 	t := c.Rand.Intn(120)
@@ -393,7 +393,7 @@ func unstructuredEqual(t *testing.T, a, b runtime.Unstructured) bool {
 	return anyEqual(t, a.UnstructuredContent(), b.UnstructuredContent())
 }
 
-// 中文说明：如果 int64 无法被 float64 精确表示，则两个数不可能相等，
+// 如果 int64 无法被 float64 精确表示，则两个数不可能相等，
 // 直接返回 false，避免引入舍入误差。
 func numberEqual(a int64, b float64) bool {
 	// 确保 int64 到 float64 的往返转换无损。

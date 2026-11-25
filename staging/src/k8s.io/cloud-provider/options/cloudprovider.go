@@ -21,17 +21,17 @@ import (
 	cpconfig "k8s.io/cloud-provider/config"
 )
 
-// CloudProviderOptions holds the cloudprovider options.
+// CloudProviderOptions 保存 cloudprovider 相关选项。
 //
-// 中文说明：内嵌内部配置类型，命令行解析结果直接写入其字段，再由 ApplyTo
+// 内嵌内部配置类型，命令行解析结果直接写入其字段，再由 ApplyTo
 // 复制到组件配置中。
 type CloudProviderOptions struct {
 	*cpconfig.CloudProviderConfiguration
 }
 
-// Validate checks validation of cloudprovider options.
+// Validate 校验 cloudprovider 选项。
 //
-// 中文说明：目前无需校验——云厂商名不存在时由 plugins 加载阶段报错，
+// 目前无需校验——云厂商名不存在时由 plugins 加载阶段报错，
 // 配置文件路径的合法性也留到实际读取时判断。
 func (s *CloudProviderOptions) Validate() []error {
 	allErrors := []error{}

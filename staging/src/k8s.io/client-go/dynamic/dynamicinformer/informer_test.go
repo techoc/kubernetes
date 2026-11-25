@@ -77,8 +77,7 @@ func handler(rcvCh chan<- *unstructured.Unstructured) *cache.ResourceEventHandle
 
 // TestWatchListSemanticsSimple 验证启用 WatchListClient 后，informer 能通过
 // WatchList 的初始事件（Bookmark + initial-events 注解）完成同步。
-//
-// 中文说明：服务端只允许带 `watch` 参数的请求，并返回一个带
+// 服务端只允许带 `watch` 参数的请求，并返回一个带
 // InitialEventsAnnotationKey 的 Bookmark 事件，模拟 WatchList 协议。若客户端仍发
 // List 请求，测试会立即失败；最终以 HasSynced 作为成功判据。
 func TestWatchListSemanticsSimple(t *testing.T) {
@@ -149,8 +148,7 @@ func TestWatchListSemanticsSimple(t *testing.T) {
 
 // TestUnSupportWatchListSemantics 验证服务端/客户端不支持 WatchList 时能自动回退到
 // 传统 List+Watch，并仍然完成同步。
-//
-// 中文说明：fake dynamic client 不支持 WatchList 语义，这里不提供任何自定义响应，
+// fake dynamic client 不支持 WatchList 语义，这里不提供任何自定义响应，
 // 只要 informer 能在超时内 HasSynced 即证明回退路径可用。
 func TestUnSupportWatchListSemantics(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
@@ -174,8 +172,7 @@ func TestUnSupportWatchListSemantics(t *testing.T) {
 }
 
 // TestFilteredDynamicSharedInformerFactory 验证工厂级的命名空间与 ListOptions 过滤。
-//
-// 中文说明：覆盖两类过滤——构造工厂时指定的 namespace，以及 tweakListOptions 注入的
+// 覆盖两类过滤——构造工厂时指定的 namespace，以及 tweakListOptions 注入的
 // field/label selector。核心断言是：不匹配的对象不得触发 AddFunc；匹配的对象必须在
 // 超时前送达。超时本身被用作“未收到事件”的判定手段。
 func TestFilteredDynamicSharedInformerFactory(t *testing.T) {
@@ -311,8 +308,7 @@ func TestFilteredDynamicSharedInformerFactory(t *testing.T) {
 }
 
 // TestDynamicSharedInformerFactory 验证动态共享 informer 对 Add/Update/Delete 的转发。
-//
-// 中文说明：三种场景分别触发对应事件处理器，并用 DeepEqual 校验 informer 收到的对象
+// 三种场景分别触发对应事件处理器，并用 DeepEqual 校验 informer 收到的对象
 // 与 API 调用返回值一致。所有等待都有 3 秒超时，避免测试无限挂起。
 func TestDynamicSharedInformerFactory(t *testing.T) {
 	scenarios := []struct {

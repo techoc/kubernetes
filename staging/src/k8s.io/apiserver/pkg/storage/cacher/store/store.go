@@ -58,15 +58,14 @@ const (
 	// StoreList/List=Namespace/Paginate=False/RV=Empty-24   32.43k ± 0%   32.44k ± 0%       ~ (p=0.579 n=10)   32.43k ± 0%       ~ (p=0.971 n=10)   32.45k ± 0%       ~ (p=0.517 n=10)   32.44k ± 0%       ~ (p=0.670 n=10)   32.46k ± 0%       ~ (p=0.256 n=10)   32.41k ± 0%       ~ (p=0.247 n=10)
 	// geomean                                               4.872k        4.887k       +0.31%                  4.870k       -0.03%                  4.885k       +0.28%                  4.880k       +0.17%                  4.875k       +0.06%                  4.876k       +0.08%
 	//
-	// 中文说明：degree 越大节点越扁平、查找层级越少，但单节点拷贝成本越高；
+	// degree 越大节点越扁平、查找层级越少，但单节点拷贝成本越高；
 	// 基准显示 16 在时间与分配上整体最优，故固定为该值。
 	btreeDegree = 16
 )
 
 // Indexer 是带索引能力的有序存储接口，语义与 client-go 的 Indexer 相近，
 // 但增加了按前缀有序遍历与快照能力。
-//
-// 中文说明：实现必须并发安全；Clone 返回的快照与主存储隔离，用于长时间
+// 实现必须并发安全；Clone 返回的快照与主存储隔离，用于长时间
 // 的 List 请求而不阻塞写入。
 type Indexer interface {
 	Add(obj interface{}) error
@@ -84,8 +83,7 @@ type Indexer interface {
 }
 
 // Snapshot 是某一时刻的只读视图。
-//
-// 中文说明：快照只在创建时复制必要结构，读取期间不受后续写入影响，
+// 快照只在创建时复制必要结构，读取期间不受后续写入影响，
 // 从而为 watch 事件提供一致的列表基线。
 type Snapshot interface {
 	GetByKey(key string) (item interface{}, exists bool, err error)
@@ -97,13 +95,10 @@ func NewIndexer(indexers *cache.Indexers) Indexer {
 	return newThreadedBtreeStoreIndexer(ElementIndexers(indexers), btreeDegree)
 }
 
-// Computing a key of an object is generally non-trivial (it performs
-// e.g. validation underneath). Similarly computing object fields and
-// labels. To avoid computing them multiple times (to serve the event
-// in different List/Watch requests), in the underlying store we are
-// keeping structs (key, object, labels, fields).
-//
-// 中文说明：预先物化 key/labels/fields 是把计算成本从每次 List/Watch 分摊到
+// 计算对象的 key 通常并不轻量（底层会执行校验等操作），计算对象的字段和
+// 标签同样如此。为避免在不同 List/Watch 请求服务时重复计算，底层存储
+// 保留 (key, object, labels, fields) 结构体。
+// 预先物化 key/labels/fields 是把计算成本从每次 List/Watch 分摊到
 // 写入一次，这是缓存层可扩展的关键。
 type Element struct {
 	Key    string
@@ -142,8 +137,7 @@ func ElementIndexFunc(objIndexFunc cache.IndexFunc) cache.IndexFunc {
 }
 
 // ElementIndexers 把整套索引函数批量适配到 Element 包装上。
-//
-// 中文说明：nil 输入返回空 map 而非 nil，调用方可直接遍历而无需判空。
+// nil 输入返回空 map 而非 nil，调用方可直接遍历而无需判空。
 func ElementIndexers(indexers *cache.Indexers) cache.Indexers {
 	if indexers == nil {
 		return cache.Indexers{}

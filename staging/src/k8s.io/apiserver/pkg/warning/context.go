@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 // Package warning 提供把警告写入 HTTP Warning 响应头的 context 机制。
-//
-// 中文说明：插件通过 context 拿到 Recorder，从而与具体的响应写入方式解耦；
+// 插件通过 context 拿到 Recorder，从而与具体的响应写入方式解耦；
 // 警告是 RFC 7234 定义的带外信息，不应影响响应状态码或正文。
 package warning
 

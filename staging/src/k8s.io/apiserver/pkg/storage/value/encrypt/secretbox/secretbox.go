@@ -27,11 +27,10 @@ import (
 	"k8s.io/apiserver/pkg/storage/value"
 )
 
-// secretbox implements at rest encryption of the provided values given a 32 byte secret key.
-// Uses a standard 24 byte nonce (placed at the beginning of the cipher text) generated
-// from crypto/rand. Does not perform authentication of the data at rest.
-//
-// 中文说明：密文格式为 nonce || ciphertext，secretbox 自身保证完整性，
+// secretbox 在给定 32 字节密钥下实现数据的静态加密。
+// 使用 crypto/rand 生成的标准 24 字节 nonce（置于密文开头），
+// 不对静态数据做与存储上下文的认证绑定。
+// 密文格式为 nonce || ciphertext，secretbox 自身保证完整性，
 // 但这里不做与存储上下文（资源/键）的绑定，因此不同资源的密文可互换。
 type secretboxTransformer struct {
 	key [32]byte

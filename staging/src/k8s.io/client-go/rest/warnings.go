@@ -28,9 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/net"
 )
 
-// WarningHandler is an interface for handling warning headers
-//
-// 中文说明：Kubernetes 服务端通过 HTTP `Warning` 响应头返回弃用提示等信息，
+// WarningHandler 是处理 warning 响应头的接口。
+// Kubernetes 服务端通过 HTTP `Warning` 响应头返回弃用提示等信息，
 // 该接口在每次收到 warning header 时被调用。新代码应优先实现
 // WarningHandlerWithContext 以支持日志上下文与取消。
 type WarningHandler interface {
@@ -51,15 +50,14 @@ var (
 	defaultWarningHandlerLock sync.RWMutex
 )
 
-// SetDefaultWarningHandler sets the default handler clients use when warning headers are encountered.
-// By default, warnings are logged. Several built-in implementations are provided:
-//   - NoWarnings suppresses warnings.
-//   - WarningLogger logs warnings.
-//   - NewWarningWriter() outputs warnings to the provided writer.
+// SetDefaultWarningHandler 设置客户端遇到 warning 响应头时使用的默认处理器。
+// 默认会记录 warning。内置了若干实现：
+//   - NoWarnings 抑制 warning。
+//   - WarningLogger 记录 warning。
+//   - NewWarningWriter() 把 warning 输出到指定的 writer。
 //
 // logcheck:context // SetDefaultWarningHandlerWithContext should be used instead of SetDefaultWarningHandler in code which supports contextual logging.
-//
-// 中文说明：该默认处理器是进程级全局状态，影响所有 rest 客户端；测试或多组件共用
+// 该默认处理器是进程级全局状态，影响所有 rest 客户端；测试或多组件共用
 // 进程时应注意相互干扰。传入 nil 会清空默认处理器（收到 warning 时静默丢弃）。
 func SetDefaultWarningHandler(l WarningHandler) {
 	if l == nil {
@@ -154,9 +152,8 @@ type WarningWriterOptions struct {
 	Color bool
 }
 
-// NewWarningWriter returns an implementation of WarningHandler that outputs code 299 warnings to the specified writer.
-//
-// 中文说明：未启用 Deduplicate 时不分配 map，减少无谓内存；返回类型是未导出的
+// NewWarningWriter 返回一个 WarningHandler 实现，把 code 299 的 warning 输出到指定 writer。
+// 未启用 Deduplicate 时不分配 map，减少无谓内存；返回类型是未导出的
 // 具体类型，调用方只能依赖 WarningHandler 接口，这也便于后续扩展。
 func NewWarningWriter(out io.Writer, opts WarningWriterOptions) *warningWriter {
 	h := &warningWriter{out: out, opts: opts}
@@ -205,8 +202,7 @@ func (w *warningWriter) WarningCount() int {
 }
 
 // handleWarnings 解析响应头并对每条 warning 调用处理器。
-//
-// 中文说明：handler 为 nil 时回退到全局默认处理器；解析失败的头会被忽略（错误
+// handler 为 nil 时回退到全局默认处理器；解析失败的头会被忽略（错误
 // 直接丢弃），因为 warning 是尽力而为的附加信息，不应影响正常请求结果。
 // 返回解析出的 warning 列表，便于调用方记录或测试断言。
 func handleWarnings(ctx context.Context, headers http.Header, handler WarningHandlerWithContext) []net.WarningHeader {

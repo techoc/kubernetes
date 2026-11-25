@@ -24,9 +24,8 @@ import (
 	"time"
 )
 
-// TestSeatSecondsString exercises the SeatSeconds constructor and de-constructors (String, ToFloat).
-//
-// 中文说明：SeatSeconds 用 1e-8 秒的定点数表示工作量，测试同时覆盖
+// TestSeatSecondsString 覆盖 SeatSeconds 的构造函数与解构方法（String、ToFloat）。
+// SeatSeconds 用 1e-8 秒的定点数表示工作量，测试同时覆盖
 // String 的固定 8 位小数格式与 ToFloat 的精度往返。
 func TestSeatSecondsString(t *testing.T) {
 	testCases := []struct {

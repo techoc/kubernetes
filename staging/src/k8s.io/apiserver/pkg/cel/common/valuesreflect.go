@@ -35,11 +35,9 @@ import (
 	"github.com/google/cel-go/common/types/traits"
 )
 
-// TypedToVal wraps "typed" Go value as CEL ref.Val types using reflection.
-// "typed" values must be values declared by Kubernetes API types.go definitions.
-//
-// 中文说明：反射包装只在缺少生成代码或需要通用路径时使用；它依赖 schema 提供
-// 子字段类型，因此 schema 与值结构必须一致，否则返回 CEL error 而非 panic。
+// TypedToVal 使用反射将 "typed" Go 值包装为 CEL ref.Val 类型。"typed" 值必须是由
+// Kubernetes API types.go 定义声明的类型。反射包装只在缺少生成代码或需要通用路径时使用；
+// 它依赖 schema 提供子字段类型，因此 schema 与值结构必须一致，否则返回 CEL error 而非 panic。
 // 指针逐层解引用并在遇到 nil 时返回 NullValue，保证 CEL 的 null 语义。
 func TypedToVal(val interface{}, schema Schema) ref.Val {
 	if val == nil {
@@ -94,14 +92,13 @@ func TypedToVal(val interface{}, schema Schema) ref.Val {
 			return types.String(typedVal.StrVal)
 		}
 	case resource.Quantity:
-		// For compatibility with CRD Validation rules, represent quantity as a plain string.
-		// 中文说明：不能映射为数字，因为 Quantity 支持 m、Mi 等后缀，转为数字会丢失精度与语义。
+		// 为兼容 CRD Validation rules，Quantity 以普通字符串表示；不能映射为数字，
+		// 因为 Quantity 支持 m、Mi 等后缀，转为数字会丢失精度与语义。
 		return types.String(typedVal.String())
 	case json.Marshaler:
-		// All JSON marshaled types must be mapped to a CEL type in the above switch.
-		// This ensures that all types are purposefully mapped to CEL types.
-		// 中文说明：显式报错而非回退到反射，是为了强制新增 API 类型时审慎选择 CEL 映射，
-		// 避免出现隐式、不可控的表示。
+		// 所有 JSON 序列化类型都必须在上面的 switch 中映射为 CEL 类型，
+		// 以确保每种类型都是有意地映射到 CEL。显式报错而非回退到反射，
+		// 是为了强制新增 API 类型时审慎选择 CEL 映射，避免出现隐式、不可控的表示。
 		return types.NewErr("unsupported Go type for CEL: %T", typedVal)
 	default:
 		// continue on to the next switch
@@ -148,8 +145,8 @@ func TypedToVal(val interface{}, schema Schema) ref.Val {
 				return nil, false
 			},
 		}
-	// Match type aliases to primitives by kind
-	// 中文说明：如 PodPhase 这类字符串别名没有独立的 CEL 类型，按底层 kind 处理。
+	// 按 kind 将类型别名匹配到基础类型：如 PodPhase 这类字符串别名没有独立的
+	// CEL 类型，按底层 kind 处理。
 	case reflect.Bool:
 		return types.Bool(v.Bool())
 	case reflect.String:
@@ -163,9 +160,8 @@ func TypedToVal(val interface{}, schema Schema) ref.Val {
 	}
 }
 
-// typedStruct wraps a struct as a CEL ref.Val and provides lazy access to fields via reflection.
-//
-// 中文说明：字段在访问时才转换，避免把整棵对象树一次性展开；对于只读取少数
+// typedStruct 将结构体包装为 CEL ref.Val，并通过反射提供字段的惰性访问。
+// 字段在访问时才转换，避免把整棵对象树一次性展开；对于只读取少数
 // 字段的策略，这能显著减少反射与分配开销。
 type typedStruct struct {
 	value reflect.Value // Kind is required to be: reflect.Struct
@@ -197,8 +193,7 @@ func (s *typedStruct) ConvertToType(typeValue ref.Type) ref.Val {
 }
 
 // Equal 使用 Kubernetes 语义相等，忽略仅由 API 默认值造成的差异。
-//
-// 中文说明：不能直接用 reflect.DeepEqual，否则零值与 nil 切片会被判定不等，
+// 不能直接用 reflect.DeepEqual，否则零值与 nil 切片会被判定不等，
 // 与 API 的语义比较约定冲突。
 func (s *typedStruct) Equal(other ref.Val) ref.Val {
 	otherStruct, ok := other.(*typedStruct)
@@ -225,11 +220,9 @@ func (s *typedStruct) Value() interface{} {
 	return s.value.Interface()
 }
 
-// IsSet returns true if the field is set. escapedField must be a types.String containing the
-// escaped CEL identifier. For example, "__if__" for JSON name "if".
-//
-// 中文说明：区分"字段不存在"与"字段值为 null/错误"；后者需原样向上传播，
-// 否则会把错误吞掉变成 false。
+// IsSet 在字段已设置时返回 true。escapedField 必须是包含转义后 CEL 标识符的
+// types.String，例如 JSON 名 "if" 对应 "__if__"。区分"字段不存在"与"字段值为
+// null/错误"；后者需原样向上传播，否则会把错误吞掉变成 false。
 func (s *typedStruct) IsSet(escapedField ref.Val) ref.Val {
 	v, found := s.lookupField(escapedField)
 	if v != nil && types.IsUnknownOrError(v) {
@@ -248,11 +241,9 @@ func (s *typedStruct) Get(escapedKey ref.Val) ref.Val {
 	return v
 }
 
-// lookupField finds a field by name. escapedKey must be a types.String containing the escaped
-// CEL identifier of the field name. For example, "__if__" for JSON name "if".
-//
-// 中文说明：先反转义再查字段缓存，是因为 CEL 会把 Go 关键字等冲突名改写为
-// __xxx__；缓存按未转义的 JSON 名索引。
+// lookupField 按名称查找字段。escapedKey 必须是包含字段名转义后 CEL 标识符的
+// types.String，例如 JSON 名 "if" 对应 "__if__"。先反转义再查字段缓存，是因为
+// CEL 会把 Go 关键字等冲突名改写为 __xxx__；缓存按未转义的 JSON 名索引。
 func (s *typedStruct) lookupField(escapedKey ref.Val) (ref.Val, bool) {
 	escapedKeyStr, ok := escapedKey.(types.String)
 	if !ok {
@@ -285,8 +276,7 @@ func (s *typedStruct) lookupField(escapedKey ref.Val) (ref.Val, bool) {
 }
 
 // typedList 表示普通（atomic 或未声明 list-type）切片。
-//
-// 中文说明：保持元素顺序，相等性按位置比较——这是 atomic 语义的核心。
+// 保持元素顺序，相等性按位置比较——这是 atomic 语义的核心。
 type typedList struct {
 	value reflect.Value // Kind is required to be: reflect.Slice
 
@@ -313,8 +303,7 @@ func (t *typedList) ConvertToType(typeValue ref.Type) ref.Val {
 }
 
 // Equal 逐位置比较，任一元素不等立即返回。
-//
-// 中文说明：返回元素的比较结果而非统一返回 false，是为了让错误（如类型
+// 返回元素的比较结果而非统一返回 false，是为了让错误（如类型
 // 不匹配）能够向上传播。
 func (t *typedList) Equal(other ref.Val) ref.Val {
 	oList, ok := other.(traits.Lister)
@@ -343,8 +332,7 @@ func (t *typedList) Value() interface{} {
 }
 
 // Add 实现 CEL 的列表拼接：先放本列表全部元素，再追加另一列表。
-//
-// 中文说明：结果为新列表，不修改原值，符合 CEL 表达式不可变的语义。
+// 结果为新列表，不修改原值，符合 CEL 表达式不可变的语义。
 func (t *typedList) Add(other ref.Val) ref.Val {
 	oList, ok := other.(traits.Lister)
 	if !ok {
@@ -363,8 +351,7 @@ func (t *typedList) Add(other ref.Val) ref.Val {
 }
 
 // Contains 判断列表中是否存在与 val 相等的元素。
-//
-// 中文说明：比较过程中若出现类型错误，先记住错误继续扫描，命中相等元素时
+// 比较过程中若出现类型错误，先记住错误继续扫描，命中相等元素时
 // 仍返回 true——存在性判断不应因无关元素类型不符而失败。
 func (t *typedList) Contains(val ref.Val) ref.Val {
 	if types.IsUnknownOrError(val) {
@@ -417,8 +404,7 @@ func (t *typedList) Size() ref.Val {
 }
 
 // sliceIter 是物化列表上的单向迭代器。
-//
-// 中文说明：不支持回退，符合 CEL 迭代协议；越界后继续 Next 返回错误。
+// 不支持回退，符合 CEL 迭代协议；越界后继续 Next 返回错误。
 type sliceIter struct {
 	*typedList
 	elements []ref.Val
@@ -439,9 +425,7 @@ func (it *sliceIter) Next() ref.Val {
 }
 
 // typedMapList 表示 x-kubernetes-list-type=map 的切片：相等性忽略顺序，
-// 以 keyProps 标识元素。
-//
-// 中文说明：mapOfList 用 sync.Once 惰性构建，因为多数表达式只做字段访问，
+// 以 keyProps 标识元素。mapOfList 用 sync.Once 惰性构建，因为多数表达式只做字段访问，
 // 不触发相等比较；构建后即可 O(1) 定位。
 type typedMapList struct {
 	typedList
@@ -469,11 +453,9 @@ func (t *typedMapList) getMap() map[interface{}]interface{} {
 	return t.mapOfList
 }
 
-// toMapKey returns a valid golang map key for the given element of the map list.
-// element must be a valid map list entry where all map key props are scalar types (which are comparable in go
-// and valid for use in a golang map key).
-//
-// 中文说明：1-3 个 key 用数组（可直接比较），更多时退化为字符串序列化，
+// toMapKey 为 map 列表的给定元素返回合法的 golang map key。element 必须是合法的
+// map 列表条目，其所有 map key props 均为标量类型（在 go 中可比较，可用作 golang map key）。
+// 1-3 个 key 用数组（可直接比较），更多时退化为字符串序列化，
 // 避免为通用情况引入不可比较类型。
 func (t *typedMapList) toMapKey(element reflect.Value) interface{} {
 	if element.Kind() != reflect.Struct {
@@ -527,10 +509,8 @@ func (t *typedMapList) toMapKey(element reflect.Value) interface{} {
 	return fmt.Sprintf("%#v", key)
 }
 
-// Equal on a map list ignores list element order.
-//
-// 中文说明：用 seen 计数确保两侧元素一一对应——仅判断"每个元素都能在对方
-// 找到"不足够，重复 key 可能掩盖长度相同的假相等。
+// map 列表的 Equal 忽略元素顺序。用 seen 计数确保两侧元素一一对应——
+// 仅判断"每个元素都能在对方找到"不足够，重复 key 可能掩盖长度相同的假相等。
 func (t *typedMapList) Equal(other ref.Val) ref.Val {
 	oMapList, ok := other.(traits.Lister)
 	if !ok {
@@ -558,11 +538,9 @@ func (t *typedMapList) Equal(other ref.Val) ref.Val {
 	return types.Bool(len(seen) == len(tMap))
 }
 
-// Add for a map list `X + Y` performs a merge where the array positions of all keys in `X` are preserved but the values
-// are overwritten by values in `Y` when the key sets of `X` and `Y` intersect. Elements in `Y` with
-// non-intersecting keys are appended, retaining their partial order.
-//
-// 中文说明：与 SSA 的 merge key 语义一致，使 CEL 中的 `+` 能直接表达
+// map 列表的 Add（`X + Y`）执行合并：`X` 中所有 key 的数组位置保留，但当 `X` 与 `Y`
+// 的 key 集合相交时，对应值被 `Y` 覆盖；`Y` 中 key 不相交的元素被追加并保持其偏序。
+// 与 SSA 的 merge key 语义一致，使 CEL 中的 `+` 能直接表达
 // "按 key 合并"的期望。
 func (t *typedMapList) Add(other ref.Val) ref.Val {
 	oMapList, ok := other.(traits.Lister)
@@ -577,17 +555,11 @@ func (t *typedMapList) Add(other ref.Val) ref.Val {
 	return addToMapList(elements, oMapList, t.escapedKeyProps)
 }
 
-// addToMapList merges the elements of other into the given map list elements
-// according to x-kubernetes-list-type=map semantics: elements of other with
-// intersecting keys overwrite the matching entries of elements in place, and
-// elements with non-intersecting keys are appended. elements may be mutated in
-// place and may be appended to, so callers must not retain or reuse elements
-// after the call.
-//
-// escapedKeyProps must contain the escaped CEL identifiers keys.
-//
-// 中文说明：调用方需注意 elements 会被原地修改或追加，因此必须先复制；
-// 该约定避免了每次合并都重新分配整个切片。
+// addToMapList 按 x-kubernetes-list-type=map 语义将 other 的元素合并到给定的 map 列表
+// elements 中：key 相交的元素原地覆盖 elements 中的匹配条目，key 不相交的元素被追加。
+// elements 会被原地修改或追加，因此调用方在调用后不得保留或复用 elements，
+// 需要先复制；该约定避免了每次合并都重新分配整个切片。
+// escapedKeyProps 必须包含转义后的 CEL 标识符 key。
 func addToMapList(elements []ref.Val, other traits.Lister, escapedKeyProps []string) ref.Val {
 	keyToIdx := make(map[interface{}]int, len(elements))
 	for i, e := range elements {
@@ -608,10 +580,9 @@ func addToMapList(elements []ref.Val, other traits.Lister, escapedKeyProps []str
 	}
 }
 
-// refValMapKey returns a valid golang map key for the given element of a map list.
-// escapedKeyProps must contain the escaped CEL identifiers of the keys.
-//
-// 中文说明：与 typedMapList.toMapKey 逻辑对应，但作用于已转换的 ref.Val；
+// refValMapKey 为 map 列表的给定元素返回合法的 golang map key。
+// escapedKeyProps 必须包含 key 转义后的 CEL 标识符。
+// 与 typedMapList.toMapKey 逻辑对应，但作用于已转换的 ref.Val；
 // 同时兼容 map 与带字段测试的对象两种访问方式。
 func refValMapKey(element ref.Val, escapedKeyProps []string) interface{} {
 	get := func(escapedProp string) interface{} {
@@ -711,9 +682,7 @@ func (l *refValMapList) Equal(other ref.Val) ref.Val {
 }
 
 // typedSetList 表示 x-kubernetes-list-type=set 的切片：相等性忽略顺序，
-// 元素必须可比较（标量）。
-//
-// 中文说明：setOfList 同样惰性构建；遇到非标量元素时缓存错误，避免重复扫描。
+// 元素必须可比较（标量）。setOfList 同样惰性构建；遇到非标量元素时缓存错误，避免重复扫描。
 type typedSetList struct {
 	typedList
 
@@ -739,9 +708,7 @@ func (t *typedSetList) getSet() (map[interface{}]struct{}, ref.Val) {
 	return t.set, t.setErr
 }
 
-// Equal on a set list ignores list element order.
-//
-// 中文说明：与 map-list 相同，用 seen 计数保证元素数量与对应关系都一致。
+// set 列表的 Equal 忽略元素顺序。与 map-list 相同，用 seen 计数保证元素数量与对应关系都一致。
 func (t *typedSetList) Equal(other ref.Val) ref.Val {
 	oSetList, ok := other.(traits.Lister)
 	if !ok {
@@ -769,10 +736,8 @@ func (t *typedSetList) Equal(other ref.Val) ref.Val {
 	return types.Bool(len(seen) == len(tSet))
 }
 
-// Add for a set list `X + Y` performs a union where the array positions of all elements in `X` are preserved and
-// non-intersecting elements in `Y` are appended, retaining their partial order.
-//
-// 中文说明：这是集合并集，不产生重复元素。
+// set 列表的 Add（`X + Y`）执行并集：`X` 中所有元素的数组位置保留，`Y` 中不相交的元素
+// 被追加并保持其偏序。这是集合并集，不产生重复元素。
 func (t *typedSetList) Add(other ref.Val) ref.Val {
 	oSetList, ok := other.(traits.Lister)
 	if !ok {
@@ -786,13 +751,10 @@ func (t *typedSetList) Add(other ref.Val) ref.Val {
 	return addToSetList(elements, oSetList)
 }
 
-// addToSetList unions the elements of other into the given set list elements
-// according to x-kubernetes-list-type=set semantics: the array positions of
-// elements are preserved, and elements of other that are not already present
-// are appended to maintain partial order. elements may be appended to,
-// so callers must not retain or reuse elements after the call.
-//
-// 中文说明：非标量元素直接返回错误，因为集合语义要求元素可作为 map key。
+// addToSetList 按 x-kubernetes-list-type=set 语义将 other 的元素并集到给定的 set 列表
+// elements 中：元素的数组位置保留，other 中尚不存在的元素被追加以维持偏序。
+// elements 可能被追加，调用方在调用后不得保留或复用 elements。
+// 非标量元素直接返回错误，因为集合语义要求元素可作为 map key。
 func addToSetList(elements []ref.Val, other traits.Lister) ref.Val {
 	set := make(map[interface{}]struct{}, len(elements))
 	for _, e := range elements {
@@ -816,10 +778,9 @@ func addToSetList(elements []ref.Val, other traits.Lister) ref.Val {
 	return &refValSetList{Lister: types.NewRefValList(types.DefaultTypeAdapter, elements)}
 }
 
-// setElementKey returns a valid golang map key for the given element of a set list.
-// Set elements are expected to be scalars; if the element is a non-scalar an error is returned.
-//
-// 中文说明：不可比较的原始值通过 %#v 序列化为字符串，保证字符串结果带引号，
+// setElementKey 为 set 列表的给定元素返回合法的 golang map key。
+// 集合元素应为标量；若元素是非标量则返回错误。
+// 不可比较的原始值通过 %#v 序列化为字符串，保证字符串结果带引号，
 // 不会与真正的字符串值碰撞。
 func setElementKey(element ref.Val) (value interface{}, err ref.Val) {
 	switch element.(type) {
@@ -886,8 +847,7 @@ func (l *refValSetList) Equal(other ref.Val) ref.Val {
 }
 
 // typedMap 表示 Go map，键为字符串，值类型由 additionalProperties schema 描述。
-//
-// 中文说明：map 的键不经过 CEL 标识符转义，与结构体字段的访问方式不同。
+// map 的键不经过 CEL 标识符转义，与结构体字段的访问方式不同。
 type typedMap struct {
 	value reflect.Value // Kind is required to be: reflect.Map
 
@@ -968,10 +928,8 @@ func (t *typedMap) Size() ref.Val {
 	return types.Int(t.value.Len())
 }
 
-// Find returns the value of the map entry for the given key, if present. The map keys
-// are normal strings, not CEL identifiers, and are not escaped.
-//
-// 中文说明：返回 (nil, false) 表示键不存在，与"键存在但值为空"区分开。
+// Find 返回给定 key 对应的 map 条目值（若存在）。map 的键是普通字符串，
+// 不是 CEL 标识符，也不做转义。返回 (nil, false) 表示键不存在，与"键存在但值为空"区分开。
 func (t *typedMap) Find(key ref.Val) (ref.Val, bool) {
 	keyStr, ok := key.(types.String)
 	if !ok {
@@ -985,8 +943,7 @@ func (t *typedMap) Find(key ref.Val) (ref.Val, bool) {
 }
 
 // Iterator 预先收集键，迭代顺序为 Go map 的随机顺序。
-//
-// 中文说明：map 本身无序，CEL 对 map 的迭代不应依赖顺序；需要有序语义的
+// map 本身无序，CEL 对 map 的迭代不应依赖顺序；需要有序语义的
 // 调用方应使用列表。
 func (t *typedMap) Iterator() traits.Iterator {
 	keys := make([]ref.Val, t.value.Len())

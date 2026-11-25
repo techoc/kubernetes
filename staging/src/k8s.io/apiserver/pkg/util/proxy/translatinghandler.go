@@ -22,13 +22,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// translatingHandler wraps the delegate handler, implementing the
-// http.Handler interface. The delegate handles all requests unless
-// the request satisfies the passed "shouldTranslate" function
-// (currently only for WebSocket/V5 request), in which case the translator
-// handles the request.
-//
-// 中文说明：按请求形态分流而非按路径，是因为同一代理端点既要兼容旧版
+// translatingHandler 包装 delegate handler 并实现 http.Handler 接口。除非请求满足传入的
+// "shouldTranslate" 函数（目前仅 WebSocket/V5 请求），否则一律由 delegate 处理，
+// 满足时交给 translator。按请求形态分流而非按路径，是因为同一代理端点既要兼容旧版
 // SPDY/V4 客户端，又要支持新协议；翻译层只处理无法直接透传的请求。
 type translatingHandler struct {
 	delegate        http.Handler
@@ -38,7 +34,7 @@ type translatingHandler struct {
 
 // NewTranslatingHandler 构造分流 handler。
 //
-// 中文说明：shouldTranslate 由调用方注入，便于按 Upgrade 头或子协议判定，
+// shouldTranslate 由调用方注入，便于按 Upgrade 头或子协议判定，
 // 而无需在此包内硬编码协议细节。
 func NewTranslatingHandler(delegate http.Handler, translator http.Handler, shouldTranslate func(*http.Request) bool) http.Handler {
 	return &translatingHandler{

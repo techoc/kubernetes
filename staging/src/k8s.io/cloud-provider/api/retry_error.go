@@ -22,10 +22,9 @@ import (
 	"time"
 )
 
-// RetryError indicates that a service reconciliation should be retried after a
-// fixed duration (as opposed to backing off exponentially).
+// RetryError 表示某次 Service 对账应在固定时长后重试（而不是指数退避）。
 //
-// 中文说明：云厂商在负载均衡等资源尚未就绪时，往往能给出精确的重试间隔（例如
+// 云厂商在负载均衡等资源尚未就绪时，往往能给出精确的重试间隔（例如
 // 等待后端安全组规则生效）。用固定间隔重试可以避免指数退避把重试拖到很久之后，
 // 从而缩短 Service 从 Pending 到可用状态的时间。调用方通过 errors.As 识别该类型，
 // 并读取 RetryAfter() 决定入队延迟。
@@ -34,8 +33,8 @@ type RetryError struct {
 	retryAfter time.Duration // 建议的固定重试间隔，必须为正数才有意义。
 }
 
-// NewRetryError returns a RetryError.
-// 中文说明：msg 应说明“为什么需要等待”，方便从事件或日志中直接定位云侧问题。
+// NewRetryError 返回一个 RetryError。msg 应说明“为什么需要等待”，
+// 方便从事件或日志中直接定位云侧问题。
 func NewRetryError(msg string, retryAfter time.Duration) *RetryError {
 	return &RetryError{
 		msg:        msg,
@@ -43,14 +42,14 @@ func NewRetryError(msg string, retryAfter time.Duration) *RetryError {
 	}
 }
 
-// Error shows the details of the retry reason.
-// 中文说明：实现 error 接口；消息面向最终用户，不应包含敏感信息。
+// Error 返回重试原因的详细信息：实现 error 接口；消息面向最终用户，
+// 不应包含敏感信息。
 func (re *RetryError) Error() string {
 	return re.msg
 }
 
-// RetryAfter returns the defined retry-after duration.
-// 中文说明：调用方应在该时长后重新入队，而不是走默认的指数退避。
+// RetryAfter 返回定义的 retry-after 时长：调用方应在该时长后重新入队，
+// 而不是走默认的指数退避。
 func (re *RetryError) RetryAfter() time.Duration {
 	return re.retryAfter
 }

@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: the example only works with the code within the same release/branch.
-//
-// 中文说明：演示如何在集群外使用 kubeconfig 构建 clientset。示例代码与同一
+// 演示如何在集群外使用 kubeconfig 构建 clientset。注意：示例代码与同一
 // release/branch 的 client-go 配套使用，跨版本复制时 API 可能不兼容。
 package main
 

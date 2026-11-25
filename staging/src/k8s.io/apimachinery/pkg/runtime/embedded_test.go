@@ -91,8 +91,7 @@ func TestArrayOfRuntimeObject(t *testing.T) {
 	items := []runtime.Object{
 		&runtimetesting.EmbeddedTest{ID: "foo"},
 		&runtimetesting.EmbeddedTest{ID: "bar"},
-		// TODO: until YAML is removed, this JSON must be in ascending key order to ensure consistent roundtrip serialization
-		// 中文说明：在 YAML 移除之前，这段 JSON 的键必须按升序排列，才能保证序列化往返一致。
+		// TODO: 在 YAML 移除之前，这段 JSON 的键必须按升序排列，才能保证序列化往返一致。
 		&runtime.Unknown{
 			Raw:         []byte(`{"apiVersion":"unknown.group/unknown","foo":"bar","kind":"OtherTest"}`),
 			ContentType: runtime.ContentTypeJSON,

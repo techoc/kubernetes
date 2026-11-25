@@ -29,14 +29,12 @@ var (
 // GroupName is the group name use in this package
 const GroupName = "example.apiserver.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-//
-// 中文说明：示例组只有内部版本，用于测试转换与编解码链路。
+// SchemeGroupVersion 是注册这些对象所使用的组版本。
+// 示例组只有内部版本，用于测试转换与编解码链路。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
-//
-// 中文说明：仅用于构造示例类型标识，不参与资源发现。
+// Kind 接受一个不带组名的 kind，返回带组限定的 GroupKind。
+// 仅用于构造示例类型标识，不参与资源发现。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
@@ -46,9 +44,8 @@ func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// Adds the list of known types to the given scheme.
-//
-// 中文说明：只注册内部类型；外部版本由 install 包通过转换函数接入。
+// 把已知类型列表添加到给定的 scheme。
+// 只注册内部类型；外部版本由 install 包通过转换函数接入。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Pod{},

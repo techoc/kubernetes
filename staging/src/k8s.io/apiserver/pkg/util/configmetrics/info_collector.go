@@ -26,18 +26,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// HashProvider is an interface for getting the current config hash values
-//
-// 中文说明：抽象出接口是为了让指标采集与哈希计算解耦，测试可注入固定值。
+// HashProvider 是获取当前配置哈希值的接口。抽象出接口是为了让指标采集与哈希计算解耦，测试可注入固定值。
 type HashProvider interface {
 	GetCurrentHashes() []string
 	SetHashes(hashes ...string)
 }
 
-// AtomicHashProvider implements HashProvider using a single atomic pointer to a slice
-//
-// 中文说明：配置热加载时写、指标采集时读，用原子指针避免读写锁；
-// 哈希列表很小，整体替换比逐项同步更简单。
+// AtomicHashProvider 用指向切片的单个原子指针实现 HashProvider。配置热加载时写、
+// 指标采集时读，用原子指针避免读写锁；哈希列表很小，整体替换比逐项同步更简单。
 type AtomicHashProvider struct {
 	hashes *atomic.Pointer[[]string]
 }
@@ -47,15 +43,14 @@ func NewAtomicHashProvider() *AtomicHashProvider {
 	p := &AtomicHashProvider{
 		hashes: &atomic.Pointer[[]string]{},
 	}
-	// Initialize with empty slice
-	// 中文说明：预置空切片使首次 Load 不会得到 nil，减少调用方的判空分支。
+	// 用空切片初始化：预置空切片使首次 Load 不会得到 nil，减少调用方的判空分支。
 	p.hashes.Store(ptr.To([]string{}))
 	return p
 }
 
 // GetCurrentHashes 返回哈希列表的副本。
 //
-// 中文说明：返回副本而非内部切片，防止调用方修改后与 SetHashes 产生数据竞争。
+// 返回副本而非内部切片，防止调用方修改后与 SetHashes 产生数据竞争。
 func (h *AtomicHashProvider) GetCurrentHashes() []string {
 	hashesPtr := h.hashes.Load()
 	if hashesPtr == nil {
@@ -69,16 +64,14 @@ func (h *AtomicHashProvider) GetCurrentHashes() []string {
 
 // SetHashes 原子替换哈希列表。
 //
-// 中文说明：先克隆入参再存储，避免调用方之后复用底层数组造成别名问题。
+// 先克隆入参再存储，避免调用方之后复用底层数组造成别名问题。
 func (h *AtomicHashProvider) SetHashes(hashes ...string) {
 	hashCopy := slices.Clone(hashes)
 	h.hashes.Store(&hashCopy)
 }
 
-// NewConfigInfoCustomCollector creates a custom collector for config hash info metrics.
-// This eliminates the need for state management and locks by collecting metrics on demand.
-//
-// 中文说明：采集时才读取哈希，指标始终反映最新配置，无需在配置变更时维护指标状态。
+// NewConfigInfoCustomCollector 为配置哈希 info 指标创建自定义采集器。它按需读取指标，
+// 从而免去状态管理和锁。采集时才读取哈希，指标始终反映最新配置，无需在配置变更时维护指标状态。
 func NewConfigInfoCustomCollector(desc *metrics.Desc, hashProvider HashProvider) metrics.StableCollector {
 	return &configInfoCustomCollector{
 		desc:         desc,
@@ -102,7 +95,7 @@ func (c *configInfoCustomCollector) DescribeWithStability(ch chan<- *metrics.Des
 
 // CollectWithStability 用当前哈希作为标签值输出值为 1 的 gauge。
 //
-// 中文说明：无哈希时不输出样本，避免产生一个无意义的空标签序列。
+// 无哈希时不输出样本，避免产生一个无意义的空标签序列。
 func (c *configInfoCustomCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	hashes := c.hashProvider.GetCurrentHashes()
 	if len(hashes) == 0 {

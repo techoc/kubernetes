@@ -26,23 +26,22 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// This test case is carefully constructed to test recursion. We don't want to
-// add more `validateFalse` tags because the bug that motivated this test
-// wasn't looking deep enough into the recursion tree.
+// 该用例经过精心构造以测试递归机制。不要再添加更多 `validateFalse` 标签，因为
+// 触发该测试的那个 bug 是对递归树探查得不够深。
 //
-// Expectations:
-// * We should emit validation for T1 because T3 has validation.
-// * We should emit validation for T2 because it uses T1, which has validation.
-// * We should emit validation for T3 because it has validation.
-// * We should emit validation for T4 because it uses T3, which has validation.
-// * T1 should call T2 and T3.
-// * T2 should call eachVal(T1).
-// * T3 should call T4.
-// * T4 should call eachVal(T3).
-// * T5 and T6 hold a map of themselves, reached via T1 so the map type is
-//   still being discovered when its own field is processed.
+// 期望：
+// * T3 带有验证，因此应为 T1 生成验证。
+// * T2 使用了带验证的 T1，因此应为 T2 生成验证。
+// * T3 自身带有验证，因此应为 T3 生成验证。
+// * T4 使用了带验证的 T3，因此应为 T4 生成验证。
+// * T1 应调用 T2 和 T3。
+// * T2 应调用 eachVal(T1)。
+// * T3 应调用 T4。
+// * T4 应调用 eachVal(T3)。
+// * T5 和 T6 持有以自身为值类型的 map，且经由 T1 到达，因此该 map 类型在
+//   其自身字段被处理时尚处于发现过程中。
 //
-// 中文说明：该用例针对递归 map 类型的验证传播。核心风险是类型发现与字段处理
+// 该用例针对递归 map 类型的验证传播。核心风险是类型发现与字段处理
 // 交错时可能提前判定“无验证”，因此期望值明确要求 T2/T4 等间接类型也被生成，
 // 并且自引用 map（T5/T6）在自身字段处理期间仍能被发现。
 

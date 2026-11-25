@@ -33,12 +33,12 @@ import (
 
 // TestResolve 验证 ClusterIP 与 Endpoint 两种解析模式在各 Service 类型下的行为。
 //
-// 中文说明：cluster 模式只依赖 Service 的 ClusterIP；endpoint 模式依赖
+// cluster 模式只依赖 Service 的 ClusterIP；endpoint 模式依赖
 // EndpointSlice 中的实际地址。用例覆盖无 443 端口、无切片、ExternalName、
 // 不支持的 Service 类型与缺失 Service 等失败路径。
 func TestResolve(t *testing.T) {
 	// matchingEndpointSlices 生成与 Service 端口一一对应的 EndpointSlice。
-	// 中文说明：只保留 TargetPort 为整数的端口，与解析逻辑的假设一致。
+	// 只保留 TargetPort 为整数的端口，与解析逻辑的假设一致。
 	matchingEndpointSlices := func(svc *v1.Service) []*discoveryv1.EndpointSlice {
 		ports := []discoveryv1.EndpointPort{}
 		for _, p := range svc.Spec.Ports {
@@ -311,9 +311,8 @@ func TestResolve(t *testing.T) {
 	}
 }
 
-// Tests that ResolveEndpoint picks randomly among endpoints in the expected way
-//
-// 中文说明：随机选择意味着单次调用无法断言结果，因此重复采样 100 次，
+// 验证 ResolveEndpoint 按预期在多个端点之间随机选择。
+// 随机选择意味着单次调用无法断言结果，因此重复采样 100 次，
 // 用集合覆盖来验证"所有合法端点都可能被选中、非法端点从不被选中"。
 func TestResolveEndpointDistribution(t *testing.T) {
 	singleStackService := &v1.Service{

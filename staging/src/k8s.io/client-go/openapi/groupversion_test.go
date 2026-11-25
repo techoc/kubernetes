@@ -30,8 +30,7 @@ import (
 
 // TestGroupVersion 验证 GroupVersion.Schema 在多种客户端前缀（client prefix）配置下
 // 都能取到正确的 schema。
-//
-// 中文说明：API server 可能被部署在子路径下，discovery 返回的 serverRelativeURL 可能
+// API server 可能被部署在子路径下，discovery 返回的 serverRelativeURL 可能
 // 带或不带该前缀，客户端必须两种都支持。测试用 httptest 模拟 /openapi/v3 发现文档与
 // 具体 group/version 的 schema 端点，并断言 hash 查询参数被原样保留。
 func TestGroupVersion(t *testing.T) {

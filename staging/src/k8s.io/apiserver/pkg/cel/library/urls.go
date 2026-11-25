@@ -105,7 +105,7 @@ import (
 //	url('https://example.com/path?').getQuery() // returns {}
 //	url('https://example.com/path').getQuery() // returns {}
 //
-// 中文说明：URL 库把字符串转换为 kubernetes.URL 类型并暴露解析后的组件。
+// URL 库把字符串转换为 kubernetes.URL 类型并暴露解析后的组件。
 // 只接受绝对 URI 或绝对路径，相对路径与畸形 URI 会被拒绝，以免策略中
 // 出现歧义的 URL 判断。IP 地址在 getHost 中保留方括号，便于直接用作
 // HTTP 主机；getHostname 则去掉方括号。

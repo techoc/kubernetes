@@ -1628,12 +1628,9 @@ func TestStoreGracefulDeleteWithResourceVersion(t *testing.T) {
 	}
 }
 
-// TestGracefulStoreCanDeleteIfExistingGracePeriodZero tests recovery from
-// race condition where the graceful delete is unable to complete
-// in prior operation, but the pod remains with deletion timestamp
-// and grace period set to 0.
-//
-// 中文说明：对象已带 DeletionTimestamp 且宽限期为 0 时，BeforeDelete
+// TestGracefulStoreCanDeleteIfExistingGracePeriodZero 测试从如下竞态中恢复：
+// 上一次优雅删除未能完成，但对象仍带有删除时间戳且宽限期已被设置为 0。
+// 对象已带 DeletionTimestamp 且宽限期为 0 时，BeforeDelete
 // 必须判定为"可立即删除"（graceful/gracefulPending 均为 false），
 // 使上一次未完成的删除能够在本次重试中收尾。
 func TestGracefulStoreCanDeleteIfExistingGracePeriodZero(t *testing.T) {

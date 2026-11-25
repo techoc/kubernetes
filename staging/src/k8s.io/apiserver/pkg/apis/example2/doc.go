@@ -17,11 +17,8 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=example2.apiserver.k8s.io
 //
-// package example2 contains an example API whose internal version is defined in
-// another group ("example"). This happens if a type is moved to a different
-// group. It's not recommended to move types across groups, though Kubernetes
-// have a few cases due to historical reasons. This package is for tests.
-//
-// 中文说明：该包专用于测试“类型迁移到其他 API 组”的场景，验证转换生成器能同时
-// 引用 example2 与 example 两个内部版本；生产代码不要模仿这种跨组迁移。
+// package example2 包含一个示例 API，其内部版本定义在另一个组（"example"）中，
+// 这种情况发生在类型被迁移到其他 API 组时。不推荐跨组迁移类型，尽管 Kubernetes
+// 因历史原因存在少数案例。该包专用于测试“类型迁移到其他 API 组”的场景，
+// 验证转换生成器能同时引用 example2 与 example 两个内部版本；生产代码不要模仿这种跨组迁移。
 package example2

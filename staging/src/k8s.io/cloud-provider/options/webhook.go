@@ -35,7 +35,7 @@ import (
 
 const (
 	// CloudControllerManagerWebhookPort 是 CCM webhook 服务的默认监听端口。
-	// 中文说明：与 CCM 主指标端口区分开，避免端口冲突；ProviderDefaults 未指定时使用。
+	// 与 CCM 主指标端口区分开，避免端口冲突；ProviderDefaults 未指定时使用。
 	CloudControllerManagerWebhookPort = 10260
 )
 
@@ -53,7 +53,7 @@ func NewWebhookOptions() *WebhookOptions {
 
 // AddFlags 注册 --webhooks 参数。
 //
-// 中文说明：帮助文本里带上全部已知 webhook 与默认禁用列表，用户无需翻代码
+// 帮助文本里带上全部已知 webhook 与默认禁用列表，用户无需翻代码
 // 就能构造合法取值。
 func (o *WebhookOptions) AddFlags(fs *pflag.FlagSet, allWebhooks, disabledByDefaultWebhooks []string) {
 	fs.StringSliceVar(&o.Webhooks, "webhooks", o.Webhooks, fmt.Sprintf(""+
@@ -64,7 +64,7 @@ func (o *WebhookOptions) AddFlags(fs *pflag.FlagSet, allWebhooks, disabledByDefa
 
 // Validate 检查用户指定的 webhook 名称是否都存在。
 //
-// 中文说明：默认禁用列表同样参与校验，因为它们最终也会被启用；'*' 是通配符，
+// 默认禁用列表同样参与校验，因为它们最终也会被启用；'*' 是通配符，
 // 不需要对应具体 webhook。
 func (o *WebhookOptions) Validate(allWebhooks, disabledByDefaultWebhooks []string) []error {
 	allErrors := []error{}
@@ -104,7 +104,7 @@ type WebhookServingOptions struct {
 
 // NewWebhookServingOptions 依据云厂商默认值构造 webhook 服务选项。
 //
-// 中文说明：未提供默认值时回退到 0.0.0.0:10260；证书目录留空表示由
+// 未提供默认值时回退到 0.0.0.0:10260；证书目录留空表示由
 // --webhook-tls-cert-file/--webhook-tls-private-key-file 或自签名生成决定。
 func NewWebhookServingOptions(defaults ProviderDefaults) *WebhookServingOptions {
 	var (
@@ -213,7 +213,7 @@ func (o *WebhookServingOptions) Validate() []error {
 
 // ApplyTo 创建 webhook 监听并组装 SecureServingInfo。
 //
-// 中文说明：端口为 0 或没有任何启用的 webhook 时不监听——避免仅为占位而
+// 端口为 0 或没有任何启用的 webhook 时不监听——避免仅为占位而
 // 打开一个无人使用的端口。
 func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookCfg config.WebhookConfiguration) error {
 	if o == nil {
@@ -294,7 +294,7 @@ func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookC
 }
 
 // createListener 在 addr 上监听并返回实际绑定的端口。
-// 中文说明：当传入端口为 0 时，内核会分配临时端口，调用方必须使用返回的端口
+// 当传入端口为 0 时，内核会分配临时端口，调用方必须使用返回的端口
 // 对外通告，否则客户端无法连接。
 func createListener(addr string, config net.ListenConfig) (net.Listener, int, error) {
 	ln, err := config.Listen(context.TODO(), "tcp", addr)

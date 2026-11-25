@@ -49,7 +49,7 @@ func newWatchIdentifier(apiGroup, resource, namespace, name string) *watchIdenti
 
 // TestRegisterWatch 验证哪些请求会被识别为 watch 并正确归类。
 //
-// 中文说明：只有 watch=true 的 GET 才注册；普通 list 返回 nil。带
+// 只有 watch=true 的 GET 才注册；普通 list 返回 nil。带
 // metadata.name 字段选择器的 watch 视为单对象 watch，其余按资源/命名空间归类。
 func TestRegisterWatch(t *testing.T) {
 	testCases := []struct {
@@ -150,7 +150,7 @@ func TestRegisterWatch(t *testing.T) {
 
 // TestGetInterestedWatchCount 验证写请求会影响多少个已注册 watch。
 //
-// 中文说明：这是优先级公平性的输入——受影响 watch 越多，请求越应被视为
+// 这是优先级公平性的输入——受影响 watch 越多，请求越应被视为
 // 高成本；用例覆盖命名空间、单对象与 API 组三个维度的交叉。
 func TestGetInterestedWatchCount(t *testing.T) {
 	watchTracker := NewWatchTracker()
@@ -278,7 +278,7 @@ func TestGetInterestedWatchCount(t *testing.T) {
 
 // TestGetInterestedWatchCountWithIndex 验证索引型字段选择器只匹配"空值"的 watch。
 //
-// 中文说明：spec.nodeName=node1/node2 的 watch 依赖索引查询，无法从写请求
+// spec.nodeName=node1/node2 的 watch 依赖索引查询，无法从写请求
 // 静态判断是否受影响，因此不计入——宁可低估也不能误报。
 func TestGetInterestedWatchCountWithIndex(t *testing.T) {
 	watchTracker := NewWatchTracker()

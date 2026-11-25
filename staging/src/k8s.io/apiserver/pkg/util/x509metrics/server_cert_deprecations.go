@@ -17,7 +17,7 @@ limitations under the License.
 // Package x509metrics 通过包装 http.RoundTripper 观测对端证书中已弃用的属性，
 // 并计入指标与审计注解。
 //
-// 中文说明：目标是在 Go 默认收紧 x509 校验前，提前发现集群中仍依赖 CN 或 SHA-1
+// 目标是在 Go 默认收紧 x509 校验前，提前发现集群中仍依赖 CN 或 SHA-1
 // 的证书，避免升级后突然出现连接失败。
 package x509metrics
 
@@ -40,13 +40,13 @@ var _ utilnet.RoundTripperWrapper = &x509DeprecatedCertificateMetricsRTWrapper{}
 type x509DeprecatedCertificateMetricsRTWrapper struct {
 	rt http.RoundTripper
 
-	// 中文说明：每个 checker 对应一种已弃用的证书属性；新增检查项只需追加到切片。
+	// 每个 checker 对应一种已弃用的证书属性；新增检查项只需追加到切片。
 	checkers []deprecatedCertificateAttributeChecker
 }
 
 // deprecatedCertificateAttributeChecker 同时覆盖两条检测路径：握手失败（错误）
-// 与握手成功但证书本身已弃用（peer certificates）。
-// 中文说明：两条路径都需要，否则 GODEBUG 开关不同时只能观测到其中一半。
+// 与握手成功但证书本身已弃用（peer certificates）。两条路径都需要，
+// 否则 GODEBUG 开关不同时只能观测到其中一半。
 type deprecatedCertificateAttributeChecker interface {
 	// CheckRoundTripError returns true if the err is an error specific
 	// to this deprecated certificate attribute
@@ -71,7 +71,7 @@ type counterRaiser struct {
 }
 
 func (c *counterRaiser) IncreaseMetricsCounter(req *http.Request) {
-	// 中文说明：日志与审计注解都带 hostname，便于定位是哪台后端证书有问题；
+	// 日志与审计注解都带 hostname，便于定位是哪台后端证书有问题；
 	// 但 hostname 不进指标标签，避免基数爆炸。
 	if req != nil && req.URL != nil {
 		if hostname := req.URL.Hostname(); len(hostname) > 0 {
@@ -83,22 +83,20 @@ func (c *counterRaiser) IncreaseMetricsCounter(req *http.Request) {
 	c.counter.Inc()
 }
 
-// NewDeprecatedCertificateRoundTripperWrapperConstructor returns a RoundTripper wrapper that's usable within ClientConfig.Wrap.
+// NewDeprecatedCertificateRoundTripperWrapperConstructor 返回一个可在 ClientConfig.Wrap
+// 中使用的 RoundTripper 包装器。
 //
-// It increases the `missingSAN` counter whenever:
-//  1. we get a x509.HostnameError with string `x509: certificate relies on legacy Common Name field`
-//     which indicates an error caused by the deprecation of Common Name field when veryfing remote
-//     hostname
-//  2. the server certificate in response contains no SAN. This indicates that this binary run
-//     with the GODEBUG=x509ignoreCN=0 in env
+// 以下任一情况都会使 `missingSAN` 计数器增加：
+//  1. 出现包含 `x509: certificate relies on legacy Common Name field` 字符串的
+//     x509.HostnameError，说明校验远端主机名时因 Common Name 字段被弃用而报错；
+//  2. 响应中的服务端证书不含 SAN，说明该二进制运行在 GODEBUG=x509ignoreCN=0 环境下。
 //
-// It increases the `sha1` counter whenever:
-//  1. we get a x509.InsecureAlgorithmError with string `SHA1`
-//     which indicates an error caused by an insecure SHA1 signature
-//  2. the server certificate in response contains a SHA1WithRSA or ECDSAWithSHA1 signature.
-//     This indicates that this binary run with the GODEBUG=x509sha1=1 in env
+// 以下任一情况都会使 `sha1` 计数器增加：
+//  1. 出现字符串为 `SHA1` 的 x509.InsecureAlgorithmError，即不安全 SHA1 签名导致的错误；
+//  2. 响应中的服务端证书使用 SHA1WithRSA 或 ECDSAWithSHA1 签名，
+//     说明该二进制运行在 GODEBUG=x509sha1=1 环境下。
 //
-// 中文说明：包装器只观测、不改变握手结果，因此可以安全地挂在任意 client 上；
+// 包装器只观测、不改变握手结果，因此可以安全地挂在任意 client 上；
 // 目的是在 Go 收紧 x509 校验前，提前发现集群里依赖已弃用证书的组件。
 func NewDeprecatedCertificateRoundTripperWrapperConstructor(missingSAN, sha1 *metrics.Counter) func(rt http.RoundTripper) http.RoundTripper {
 	return func(rt http.RoundTripper) http.RoundTripper {
@@ -113,7 +111,7 @@ func NewDeprecatedCertificateRoundTripperWrapperConstructor(missingSAN, sha1 *me
 }
 
 // RoundTrip 先完成真实请求，再分别从“错误”和“成功响应的证书”两个维度检查。
-// 中文说明：成功的响应也检查，因为某些环境通过 GODEBUG 暂时放过了不安全的证书，
+// 成功的响应也检查，因为某些环境通过 GODEBUG 暂时放过了不安全的证书，
 // 此时只能从 PeerCertificates 发现风险。
 func (w *x509DeprecatedCertificateMetricsRTWrapper) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := w.rt.RoundTrip(req)
@@ -182,7 +180,7 @@ func (c *missingSANChecker) CheckPeerCertificates(peerCertificates []*x509.Certi
 }
 
 // hasSAN 通过 OID 2.5.29.17 判断证书是否含 Subject Alternative Name 扩展。
-// 中文说明：不依赖解析后的 DNSNames，因为 SAN 可能只包含 IP 或 email。
+// 不依赖解析后的 DNSNames，因为 SAN 可能只包含 IP 或 email。
 func hasSAN(c *x509.Certificate) bool {
 	sanOID := []int{2, 5, 29, 17}
 
@@ -232,9 +230,8 @@ func (c *sha1SignatureChecker) CheckRoundTripError(err error) bool {
 // CheckPeerCertificates returns true when the server response contains
 // a non-root non-self-signed  certificate with a deprecated SHA1 signature
 func (c *sha1SignatureChecker) CheckPeerCertificates(peerCertificates []*x509.Certificate) bool {
-	// check all received non-self-signed certificates for deprecated signing algorithms
-	// 中文说明：自签名根证书使用 SHA1 不在弃用范围内（无法由 CA 重新签发），
-	// 因此用 Issuer==Subject 排除。
+	// 检查所有收到的非自签名证书是否使用了弃用的签名算法。自签名根证书使用
+	// SHA1 不在弃用范围内（无法由 CA 重新签发），因此用 Issuer==Subject 排除。
 	for _, cert := range peerCertificates {
 		if cert.SignatureAlgorithm == x509.SHA1WithRSA || cert.SignatureAlgorithm == x509.ECDSAWithSHA1 {
 			// the SHA-1 deprecation does not involve self-signed root certificates

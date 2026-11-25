@@ -24,9 +24,8 @@ import (
 
 const GroupName = "apiserver.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-//
-// 中文说明：组名带 .config. 前缀，明确这些类型只用于配置文件而非 API 资源。
+// SchemeGroupVersion 是注册这些对象所使用的组版本。
+// 组名带 .config. 前缀，明确这些类型只用于配置文件而非 API 资源。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
@@ -38,17 +37,14 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
-	// 中文说明：手工注册与生成代码分离，便于在没有执行代码生成的环境下编译。
+	// 这里只注册手工编写的函数，生成函数的注册发生在生成文件中。
+	// 手工注册与生成代码分离，便于在没有执行代码生成的环境下编译。
 	localSchemeBuilder.Register(addKnownTypes)
 	localSchemeBuilder.Register(addDefaultingFuncs)
 }
 
-// Adds the list of known types to the given scheme.
-//
-// 中文说明：EncryptionConfiguration 额外以 core/v1 的 EncryptionConfig 名字注册，
+// 把已知类型列表添加到给定的 scheme。
+// EncryptionConfiguration 额外以 core/v1 的 EncryptionConfig 名字注册，
 // 是为了兼容早期文档与用户配置中的错误 apiVersion；不能删除，否则存量配置失效。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,

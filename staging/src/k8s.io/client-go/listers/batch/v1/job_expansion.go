@@ -25,10 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// JobListerExpansion allows custom methods to be added to
-// JobLister.
-//
-// 中文说明：手写扩展接口，属于生成 lister 的一部分。
+// JobListerExpansion 允许向 JobLister 添加自定义方法。
+// 手写扩展接口，属于生成 lister 的一部分。
 type JobListerExpansion interface {
 	// GetPodJobs returns a list of Jobs that potentially
 	// match a Pod. Only the one specified in the Pod's ControllerRef
@@ -37,12 +35,9 @@ type JobListerExpansion interface {
 	GetPodJobs(pod *v1.Pod) (jobs []batch.Job, err error)
 }
 
-// GetPodJobs returns a list of Jobs that potentially
-// match a Pod. Only the one specified in the Pod's ControllerRef
-// will actually manage it.
-// Returns an error only if no matching Jobs are found.
-//
-// 中文说明：返回值为 Job 的副本而非指针，避免调用方意外修改缓存中的对象。
+// GetPodJobs 返回可能与某个 Pod 匹配的 Job 列表，真正管理该 Pod 的只有 Pod 的
+// ControllerRef 指定的那一个；只有在找不到匹配的 Job 时才返回错误。
+// 返回值为 Job 的副本而非指针，避免调用方意外修改缓存中的对象。
 // 与 DaemonSet 版本不同，这里不显式排除空 selector：LabelSelectorAsSelector(nil)
 // 会得到 Nothing，天然满足“空 selector 不匹配任何对象”。
 func (l *jobLister) GetPodJobs(pod *v1.Pod) (jobs []batch.Job, err error) {
@@ -76,8 +71,6 @@ func (l *jobLister) GetPodJobs(pod *v1.Pod) (jobs []batch.Job, err error) {
 	return
 }
 
-// JobNamespaceListerExpansion allows custom methods to be added to
-// JobNamespaceLister.
-//
-// 中文说明：当前无命名空间级扩展方法，仅作为预留钩子。
+// JobNamespaceListerExpansion 允许向 JobNamespaceLister 添加自定义方法。
+// 当前无命名空间级扩展方法，仅作为预留钩子。
 type JobNamespaceListerExpansion interface{}

@@ -78,16 +78,14 @@ func withFakeUser(handler http.Handler) http.Handler {
 	})
 }
 
-// Tests that MaxInFlightLimit works, i.e.
-//   - "long" requests such as proxy or watch, identified by regexp are not accounted despite
-//     hanging for the long time,
-//   - "short" requests are correctly accounted, i.e. there can be only size of channel passed to the
-//     constructor in flight at any given moment,
-//   - subsequent "short" requests are rejected instantly with appropriate error,
-//   - subsequent "long" requests are handled normally,
-//   - we correctly recover after some "short" requests finish, i.e. we can process new ones.
+// 验证 MaxInFlightLimit 生效：
+//   - 被正则识别的 proxy/watch 等“长”请求即使长期挂起也不计入并发；
+//   - “短”请求被正确计数：任意时刻在途数量不超过构造函数传入的 channel 容量；
+//   - 后续的“短”请求会立即被相应的错误拒绝；
+//   - 后续的“长”请求仍正常处理；
+//   - 部分“短”请求完成后能正确恢复，即可以继续处理新请求。
 //
-// 中文说明：长请求（watch/proxy）不占并发配额，即使挂起也不影响计数；
+// 长请求（watch/proxy）不占并发配额，即使挂起也不影响计数；
 // 短请求达到上限后立即返回 429，且拒绝路径不阻塞；请求完成后配额应释放。
 func TestMaxInFlightNonMutating(t *testing.T) {
 	const AllowedNonMutatingInflightRequestsNo = 3

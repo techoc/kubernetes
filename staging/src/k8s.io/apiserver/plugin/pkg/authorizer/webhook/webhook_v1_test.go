@@ -235,10 +235,9 @@ type V1Service interface {
 	HTTPStatusCode() int
 }
 
-// NewV1TestServer wraps a V1Service as an httptest.Server.
 // NewV1TestServer 启动一个使用给定证书的 TLS 测试服务端，并在自定义路径上
 // 模拟 SubjectAccessReview 接口。
-// 中文说明：服务端强制校验 POST、路径与 apiVersion，确保被测客户端发出的
+// 服务端强制校验 POST、路径与 apiVersion，确保被测客户端发出的
 // 请求形态正确；这些校验失败会以 4xx 返回，从而在测试中显式暴露协议错误。
 func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, error) {
 	const webhookPath = "/testserver"
@@ -317,9 +316,8 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 	return server, nil
 }
 
-// A service that can be set to allow all or deny all authorization requests.
-//
-// 中文说明：called 记录后端被调用的次数，用于断言缓存与重试行为；
+// mockV1Service 是一个可以被设置为放行或拒绝所有授权请求的服务。
+// called 记录后端被调用的次数，用于断言缓存与重试行为；
 // reviewHook 允许用例在返回前修改评审对象（如注入求值错误）。
 type mockV1Service struct {
 	allow      bool
@@ -343,10 +341,8 @@ func (m *mockV1Service) Allow()              { m.allow = true }
 func (m *mockV1Service) Deny()               { m.allow = false }
 func (m *mockV1Service) HTTPStatusCode() int { return m.statusCode }
 
-// newV1Authorizer creates a temporary kubeconfig file from the provided arguments and attempts to load
-// a new WebhookAuthorizer from it.
-//
-// 中文说明：把证书与 URL 写入临时 kubeconfig 再走真实加载路径，
+// newV1Authorizer 用传入的参数生成一个临时 kubeconfig 文件，并尝试从中加载一个新的 WebhookAuthorizer。
+// 把证书与 URL 写入临时 kubeconfig 再走真实加载路径，
 // 这样测试覆盖的是生产同款配置解析逻辑，而不是直接构造内部结构。
 func newV1Authorizer(callbackURL string, clientCert, clientKey, ca []byte, cacheTime time.Duration, metrics metrics.AuthorizerMetrics, compiler authorizationcel.Compiler, expressions []apiserver.WebhookMatchCondition, authzName string) (*WebhookAuthorizer, error) {
 	tempfile, err := os.CreateTemp("", "")
@@ -382,7 +378,7 @@ func newV1Authorizer(callbackURL string, clientCert, clientKey, ca []byte, cache
 }
 
 // TestV1TLSConfig 验证 TLS 配置组合下的认证结果。
-// 中文说明：关键安全断言——客户端不信任服务端、服务端不信任客户端（坏 CA）、
+// 关键安全断言——客户端不信任服务端、服务端不信任客户端（坏 CA）、
 // 以及「不允许 insecure 连接」都必须失败。插件拒绝明文连接是硬性安全边界。
 func TestV1TLSConfig(t *testing.T) {
 	tests := []struct {
@@ -479,9 +475,8 @@ func TestV1TLSConfig(t *testing.T) {
 	}
 }
 
-// recorderV1Service records all access review requests.
-//
-// 中文说明：始终返回允许，但保留最后收到的评审对象，供用例断言请求内容。
+// recorderV1Service 记录所有 access review 请求。
+// 它始终返回允许，但保留最后收到的评审对象，供用例断言请求内容。
 type recorderV1Service struct {
 	last authorizationv1.SubjectAccessReview
 	err  error
@@ -500,7 +495,7 @@ func (rec *recorderV1Service) Last() (authorizationv1.SubjectAccessReview, error
 func (rec *recorderV1Service) HTTPStatusCode() int { return 200 }
 
 // TestV1Webhook 验证 authorizer.Attributes 到 SubjectAccessReview 的字段映射。
-// 中文说明：这是插件与外部服务之间的协议契约——用户、UID、组、资源属性、
+// 这是插件与外部服务之间的协议契约——用户、UID、组、资源属性、
 // 子资源与路径都必须逐字段正确传递，否则外部策略会基于错误信息做决策。
 func TestV1Webhook(t *testing.T) {
 	serv := new(recorderV1Service)
@@ -601,10 +596,7 @@ func TestV1Webhook(t *testing.T) {
 	}
 }
 
-// TestWebhookCache verifies that error responses from the server are not
-// cached, but successful responses are.
-// TestV1WebhookCache 验证授权结果的缓存与重试策略。
-// 中文说明：
+// TestV1WebhookCache 验证授权结果的缓存与重试策略：服务端的错误响应不会被缓存，成功响应会被缓存。
 //   - 5xx/429 可重试，按退避步数调用 5 次；4xx（401/403/404）不重试；
 //   - 成功响应（无论 allow 还是 deny）在 TTL 内命中缓存，不再访问后端；
 //   - 超大属性（每字段 2000 字节）不缓存，防止缓存键与内存被滥用。
@@ -714,9 +706,8 @@ func TestV1WebhookCache(t *testing.T) {
 	}
 }
 
-// TestStructuredAuthzConfigFeatureEnablement verifies cel expressions can only be used when feature is enabled
-//
-// 中文说明：特性门控关闭时，携带 match condition 的配置必须被拒绝，
+// TestStructuredAuthzConfigFeatureEnablement 验证只有在特性开启时才允许使用 CEL 表达式。
+// 特性门控关闭时，携带 match condition 的配置必须被拒绝，
 // 防止集群在降级版本上静默忽略安全相关条件。
 func TestStructuredAuthzConfigFeatureEnablement(t *testing.T) {
 	service := new(mockV1Service)
@@ -835,7 +826,7 @@ func TestStructuredAuthzConfigFeatureEnablement(t *testing.T) {
 }
 
 // TestWebhookMetrics 验证 match condition 相关指标按授权器名称与类型打点。
-// 中文说明：两个授权器使用不同表达式，断言「评估错误」与「排除」分别计数；
+// 两个授权器使用不同表达式，断言「评估错误」与「排除」分别计数；
 // 全局指标在每个子用例前后重置，避免相互污染。
 func TestWebhookMetrics(t *testing.T) {
 	service := new(mockV1Service)
@@ -1155,9 +1146,8 @@ func benchmarkWebhookAuthorize(b *testing.B, expressions []apiserver.WebhookMatc
 	b.StopTimer()
 }
 
-// TestV1WebhookMatchConditions verifies cel expressions are compiled and evaluated correctly
-//
-// 中文说明：覆盖匹配全通过、任一条件为假即排除、编译错误与求值错误等分支。
+// TestV1WebhookMatchConditions 验证 CEL 表达式被正确编译和求值。
+// 覆盖匹配全通过、任一条件为假即排除、编译错误与求值错误等分支。
 // 语义是「所有表达式同时为真才算匹配」，空表达式列表视为全部匹配。
 func TestV1WebhookMatchConditions(t *testing.T) {
 	service := new(mockV1Service)

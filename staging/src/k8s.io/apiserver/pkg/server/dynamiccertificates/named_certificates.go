@@ -28,19 +28,17 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// BuildNamedCertificates returns a map of *tls.Certificate by name. It's
-// suitable for use in tls.Config#NamedCertificates. Returns an error if any of the certs
-// is invalid. Returns nil if len(certs) == 0
-//
-// 中文说明：任何一张证书非法都会整体失败，而不是跳过——服务端证书集不完整
+// BuildNamedCertificates 返回按名称索引的 *tls.Certificate map。
+// 它适合用于 tls.Config#NamedCertificates。任一证书非法时返回错误；
+// len(certs) == 0 时返回 nil。
+// 任何一张证书非法都会整体失败，而不是跳过——服务端证书集不完整
 // 可能导致部分 SNI 名握手失败，静默忽略更难排查。
 func (c *DynamicServingCertificateController) BuildNamedCertificates(sniCerts []sniCertKeyContent) (map[string]*tls.Certificate, error) {
 	nameToCertificate := map[string]*tls.Certificate{}
 	byNameExplicit := map[string]*tls.Certificate{}
 
-	// Iterate backwards so that earlier certs take precedence in the names map
-	//
-	// 中文说明：倒序遍历 + 正向覆盖，实现“先声明的证书优先”；配置中靠前的
+	// 倒序遍历，使靠前的证书在 names map 中取得优先权。
+	// 倒序遍历 + 正向覆盖，实现“先声明的证书优先”；配置中靠前的
 	// 证书通常是更具体、更新的那张。
 	for i := len(sniCerts) - 1; i >= 0; i-- {
 		cert, err := tls.X509KeyPair(sniCerts[i].cert, sniCerts[i].key)
@@ -92,10 +90,9 @@ func getCertificateNames(cert *x509.Certificate) []string {
 		names = append(names, cn)
 	}
 	names = append(names, cert.DNSNames...)
-	// intentionally all IPs in the cert are ignored as SNI forbids passing IPs
-	// to select a cert. Before go 1.6 the tls happily passed IPs as SNI values.
-	//
-	// 中文说明：SAN 中的 IP 同样被忽略——SNI 扩展本身不允许 IP 字面量，
+	// 有意忽略证书中的所有 IP，因为 SNI 禁止用 IP 来选择证书。
+	// Go 1.6 之前，tls 包会乐意把 IP 当作 SNI 值传入。
+	// SAN 中的 IP 同样被忽略——SNI 扩展本身不允许 IP 字面量，
 	// 保留它们只会造成“配置了却永远匹配不上”的困惑。
 
 	return names

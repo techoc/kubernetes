@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package helpers 提供云提供商卷插件共用的容量换算与可用区选择工具。
 //
-// 中文说明：容量按云厂商的分配单位向上取整，可用区按卷名稳定散列选择；
+// 容量按云厂商的分配单位向上取整，可用区按卷名稳定散列选择；
 // 两者都要求可重复计算，以保证同一 PVC 的重试得到相同结果。
 package helpers
 
@@ -29,16 +29,13 @@ import (
 )
 
 /*
-The Cloud Provider's volume plugins provision disks for corresponding
-PersistentVolumeClaims. Cloud Providers use different allocation unit for their
-disk sizes. AWS allows you to specify the size as an integer amount of GiB,
-while Portworx expects bytes for example. On AWS, if you want a volume of
-1500MiB, the actual call to the AWS API should therefore be for a 2GiB disk.
-This file contains functions that help rounding a storage request based on a
-Cloud Provider's allocation unit.
+云提供商的卷插件会为对应的 PersistentVolumeClaim 创建磁盘，而各家使用的分配单位
+不同：AWS 允许以整数 GiB 指定大小，Portworx 则要求以字节表示。例如在 AWS 上申请
+1500MiB 的卷，实际调用 AWS API 时应当申请 2GiB 的磁盘。
+本文件包含按云提供商分配单位对存储申请量做舍入的函数。
 */
 
-// 中文说明：下面这组 RoundUpTo* 均返回“需要多少个分配单位”。必须向上取整——
+// 下面这组 RoundUpTo* 均返回“需要多少个分配单位”。必须向上取整——
 // 少算单位会让实际磁盘小于 PVC 申请值，Pod 写满后即失败；各变体只是分配单位
 // 与返回类型不同（int64 / int / int32），语义完全一致。
 
@@ -136,10 +133,10 @@ func roundUpSizeInt(size resource.Quantity, allocationUnitBytes int64) (int, err
 	return int(res), err
 }
 
-// roundUpSizeInt32 calculates how many allocation units are needed to accommodate
-// a volume of a given size. It returns an int32 and an error if there's overflow
+// roundUpSizeInt32 计算容纳指定大小的卷需要多少个分配单位，
+// 返回 int32，溢出时返回错误。
 //
-// 中文说明：先按 int64 计算再检查上限，避免在 32 位平台上发生截断。
+// 先按 int64 计算再检查上限，避免在 32 位平台上发生截断。
 func roundUpSizeInt32(size resource.Quantity, allocationUnitBytes int64) (int32, error) {
 	roundedUpInt32, err := roundUpSizeInt64(size, allocationUnitBytes)
 	if err != nil {
@@ -161,8 +158,8 @@ func roundUpSizeInt64(size resource.Quantity, allocationUnitBytes int64) (int64,
 	// support BinarySI format, nor can we use AsInt64() directly since it's
 	// only implemented for int64 scaled numbers (int64Amount).
 
-	// CmpInt64() actually returns 0 when comparing an amount bigger than MaxInt64.
-	// 中文说明：>= 0 同时覆盖“等于 MaxInt64”与“溢出”两种情况；此时 Value()
+	// CmpInt64() 在被比较的量大于 MaxInt64 时实际上返回 0，因此 >= 0 同时覆盖
+	// “等于 MaxInt64”与“溢出”两种情况；此时 Value()
 	// 的结果不可信，必须报错而不是返回截断后的单位数。
 	if size.CmpInt64(math.MaxInt64) >= 0 {
 		return 0, fmt.Errorf("quantity %s is too great, overflows int64", size.String())

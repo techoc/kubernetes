@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package registry contains the generic implementation of the storage and system logic.
-//
-// 中文说明：本包仅作为 registry 子包的父级说明，具体通用存储/策略实现位于
+// Package registry 包含存储与系统逻辑的通用实现。
+// 本包仅作为 registry 子包的父级说明，具体通用存储/策略实现位于
 // generic、rest 等子包；这里不放代码，避免父包与子包形成循环依赖。
 package registry

@@ -18,16 +18,14 @@ package v1alpha1
 
 // NodeControllerConfiguration contains elements describing NodeController.
 type NodeControllerConfiguration struct {
-	// ConcurrentNodeSyncs is the number of workers
-	// concurrently synchronizing nodes
+	// ConcurrentNodeSyncs 是并发同步节点的 worker 数量。
 	//
-	// 中文说明：每个 worker 会调用云厂商实例接口，需与云 API 配额匹配。
+	// 每个 worker 会调用云厂商实例接口，需与云 API 配额匹配。
 	ConcurrentNodeSyncs int32
-	// ConcurrentNodeStatusUpdates is the number of workers
-	// concurrently updating node statuses.
-	// If unspecified or 0, ConcurrentNodeSyncs is used instead
+	// ConcurrentNodeStatusUpdates 是并发更新节点状态的 worker 数量。
+	// 未指定或为 0 时改用 ConcurrentNodeSyncs。
 	//
-	// 中文说明：状态刷新比初始化更频繁，通常需要更高的并发；留 0 时复用
+	// 状态刷新比初始化更频繁，通常需要更高的并发；留 0 时复用
 	// ConcurrentNodeSyncs，避免用户必须同时配置两个值。
 	ConcurrentNodeStatusUpdates int32
 }

@@ -41,9 +41,8 @@ import (
 // SharedInformerOption defines the functional option type for metadataSharedInformerFactory.
 type SharedInformerOption func(*metadataSharedInformerFactory) *metadataSharedInformerFactory
 
-// WithTransform sets a transform on all informers.
-//
-// 中文说明：transform 在对象进入 indexer 前执行，可用于去掉不需要的字段以节省内存。
+// WithTransform 为所有 informer 设置 transform。
+// transform 在对象进入 indexer 前执行，可用于去掉不需要的字段以节省内存。
 // 它必须返回同类型对象且不得修改共享缓存中的原对象，否则会破坏 informer 的一致性假设。
 func WithTransform(transform cache.TransformFunc) SharedInformerOption {
 	return func(factory *metadataSharedInformerFactory) *metadataSharedInformerFactory {
@@ -57,10 +56,9 @@ func NewSharedInformerFactory(client metadata.Interface, defaultResync time.Dura
 	return NewFilteredSharedInformerFactory(client, defaultResync, metav1.NamespaceAll, nil)
 }
 
-// NewFilteredSharedInformerFactory constructs a new instance of metadataSharedInformerFactory.
-// Listers obtained via this factory will be subject to the same filters as specified here.
-//
-// 中文说明：namespace 与 tweakListOptions 会作用于该工厂创建的所有 informer，
+// NewFilteredSharedInformerFactory 构造 metadataSharedInformerFactory 的新实例，
+// 经由该工厂获取的 Lister 会应用与这里相同的过滤条件：namespace 与 tweakListOptions
+// 会作用于该工厂创建的所有 informer，
 // 因此 lister 看到的视图与 List/Watch 请求的过滤条件保持一致。
 func NewFilteredSharedInformerFactory(client metadata.Interface, defaultResync time.Duration, namespace string, tweakListOptions TweakListOptionsFunc) SharedInformerFactory {
 	return &metadataSharedInformerFactory{
@@ -118,8 +116,7 @@ type metadataSharedInformerFactory struct {
 var _ SharedInformerFactory = &metadataSharedInformerFactory{}
 
 // ForResource 返回指定 GVR 的 informer，不存在则创建并缓存。
-//
-// 中文说明：整个查找与创建过程持锁，保证同一 GVR 在并发调用下只创建一个 informer；
+// 整个查找与创建过程持锁，保证同一 GVR 在并发调用下只创建一个 informer；
 // 缓存 key 就是 GVR，工厂的 namespace/tweak 已固化在 informer 内，调用方无需再传。
 func (f *metadataSharedInformerFactory) ForResource(gvr schema.GroupVersionResource) informers.GenericInformer {
 	f.lock.Lock()
@@ -148,9 +145,8 @@ func (f *metadataSharedInformerFactory) Start(stopCh <-chan struct{}) {
 	f.StartWithContext(wait.ContextForChannel(stopCh))
 }
 
-// StartWithContext initializes all requested informers.
-//
-// 中文说明：为每个尚未启动的 informer 各起一个 goroutine，并立即更新 startedInformers，
+// StartWithContext 启动所有已请求的 informer。
+// 为每个尚未启动的 informer 各起一个 goroutine，并立即更新 startedInformers，
 // 因此重复调用 StartWithContext 不会重复启动。持锁时间仅覆盖遍历与标记，实际运行在锁外。
 func (f *metadataSharedInformerFactory) StartWithContext(ctx context.Context) {
 	f.lock.Lock()
@@ -177,9 +173,8 @@ func (f *metadataSharedInformerFactory) StartWithContext(ctx context.Context) {
 	}
 }
 
-// WaitForCacheSync waits for all started informers' cache were synced.
-//
-// 中文说明：先在锁内快照已启动的 informer，随后在锁外逐个等待同步，避免长时间持锁
+// WaitForCacheSync 等待所有已启动 informer 的缓存完成同步。
+// 先在锁内快照已启动的 informer，随后在锁外逐个等待同步，避免长时间持锁
 // 阻塞其它调用方创建或启动 informer。未启动的 informer 不出现在结果中。
 func (f *metadataSharedInformerFactory) WaitForCacheSync(stopCh <-chan struct{}) map[schema.GroupVersionResource]bool {
 	informers := func() map[schema.GroupVersionResource]cache.SharedIndexInformer {
@@ -215,9 +210,8 @@ func (f *metadataSharedInformerFactory) Shutdown() {
 	f.shuttingDown = true
 }
 
-// NewFilteredMetadataInformer constructs a new informer for a metadata type.
-//
-// 中文说明：以 PartialObjectMetadata 作为缓存对象类型，只保留 metadata 字段。
+// NewFilteredMetadataInformer 为 metadata 类型构造一个新的 informer。
+// 以 PartialObjectMetadata 作为缓存对象类型，只保留 metadata 字段。
 // 每个 List/Watch 回调都会应用 tweakListOptions，确保工厂级别的过滤语义一致；
 // 同时提供带 context 与不带 context 的版本，后者仅为兼容旧 reflector 路径。
 func NewFilteredMetadataInformer(client metadata.Interface, gvr schema.GroupVersionResource, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions TweakListOptionsFunc) informers.GenericInformer {

@@ -1101,7 +1101,7 @@ func Test_GetProviderID(t *testing.T) {
 }
 
 // syncNodeStore 用 fake clientset 中的节点直接替换 informer 缓存内容。
-// 中文说明：测试不启动 informer 的 Run 循环，必须手动填充 store，否则 Lister 为空。
+// 测试不启动 informer 的 Run 循环，必须手动填充 store，否则 Lister 为空。
 func syncNodeStore(ctx context.Context, nodeinformer coreinformers.NodeInformer, f *fake.Clientset) error {
 	nodes, err := f.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {

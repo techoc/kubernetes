@@ -17,8 +17,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package unions contains test types for testing subfield union validation tags.
-// 中文说明：通过 subfield 把 unionDiscriminator/unionMember 作用到子结构体字段上。
+// Package unions 是包含 subfield 联合校验标签测试类型的测试包，
+// 验证通过 subfield 把 unionDiscriminator/unionMember 作用到子结构体字段上。
 // +k8s:validation-gen-nolint
 package unions
 

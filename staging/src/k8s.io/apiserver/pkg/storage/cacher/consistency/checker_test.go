@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 // Package consistency 对比 watch 缓存与 etcd 的快照摘要，用于发现缓存漏事件或脏数据。
-//
-// 中文说明：一致性检查是只读的诊断工具，检查结果通过 cacher 的 MarkConsistent
+// 一致性检查是只读的诊断工具，检查结果通过 cacher 的 MarkConsistent
 // 暴露，不能反向影响正常的读写路径。
 package consistency
 

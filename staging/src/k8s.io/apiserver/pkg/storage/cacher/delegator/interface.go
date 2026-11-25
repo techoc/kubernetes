@@ -55,9 +55,7 @@ func ShouldDelegateList(opts storage.ListOptions, cache Helper) (Result, error) 
 		if len(opts.Predicate.Continue) > 0 {
 			return cache.ShouldDelegateContinue(opts.Predicate.Continue, opts.Recursive)
 		}
-		// Legacy exact match
-		//
-		// 中文说明：旧客户端用 limit+rv 表达“从某个版本开始分页”，
+		// 旧式（legacy）exact match：旧客户端用 limit+rv 表达“从某个版本开始分页”，
 		// 语义上等同 Exact，因此走同一条判断路径。
 		if opts.Predicate.Limit > 0 && len(opts.ResourceVersion) > 0 && opts.ResourceVersion != "0" {
 			return cache.ShouldDelegateExactRV(opts.ResourceVersion, opts.Recursive)

@@ -27,9 +27,8 @@ const GroupName = appsapiv1beta2.GroupName
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta2"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
-//
-// 中文说明：把 "deployments" 之类的非限定资源名补全为 apps/v1beta2, Resource=deployments。
+// Resource 接收非限定的资源名并返回带 Group 限定的 GroupResource，
+// 把 "deployments" 之类的非限定资源名补全为 apps/v1beta2, Resource=deployments。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }

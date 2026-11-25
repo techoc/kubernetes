@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 // Package testing 提供 storage/cacher 相关测试使用的伪造存储实现。
-//
-// 中文说明：仅用于测试，依赖 k8s.io/apiserver/pkg/apis/example 类型，
+// 仅用于测试，依赖 k8s.io/apiserver/pkg/apis/example 类型，
 // 生产代码不应导入本包。
 package testing
 
@@ -35,7 +34,7 @@ import (
 
 // MockStorage 是 storage.Interface 的测试替身：可注入错误、钩子函数，
 // 并记录 RequestWatchProgress 调用次数。
-// 中文说明：嵌入 sync.RWMutex，使计数读取与写入在并发测试下安全；未实现的方法
+// 嵌入 sync.RWMutex，使计数读取与写入在并发测试下安全；未实现的方法
 // 统一返回 unimplemented，避免测试误用。
 type MockStorage struct {
 	sync.RWMutex

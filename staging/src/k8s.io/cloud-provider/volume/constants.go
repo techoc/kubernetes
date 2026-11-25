@@ -18,16 +18,16 @@ limitations under the License.
 package volume
 
 const (
-	// ProvisionedVolumeName is the name of a volume in an external cloud
-	// that is being provisioned and thus should be ignored by rest of Kubernetes.
+	// ProvisionedVolumeName 是外部云厂商中正在供给（provision）的卷名，
+	// Kubernetes 的其余部分应当忽略它。
 	//
-	// 中文说明：动态供给期间存在一个“占位”卷，此时真实卷尚未就绪；使用固定名字
+	// 动态供给期间存在一个“占位”卷，此时真实卷尚未就绪；使用固定名字
 	// 让各控制器能够识别并跳过它，避免把中间状态当成真实卷处理。
 	ProvisionedVolumeName = "placeholder-for-provisioning"
 
-	// LabelMultiZoneDelimiter separates zones for volumes
+	// LabelMultiZoneDelimiter 用于分隔卷的多个可用区。
 	//
-	// 中文说明：PV 的 zone 标签只能存一个字符串，多可用区用 "__" 拼接；
+	// PV 的 zone 标签只能存一个字符串，多可用区用 "__" 拼接；
 	// 选用双下划线是为了避免与常见可用区名（含 '-'）冲突。
 	LabelMultiZoneDelimiter = "__"
 )

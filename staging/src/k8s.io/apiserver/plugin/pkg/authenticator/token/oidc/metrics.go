@@ -72,17 +72,15 @@ var (
 	)
 )
 
-// jwksHashKey uniquely identifies a JWKS by issuer and API server ID
-//
-// 中文说明：用哈希而非原始 issuer 作为键，避免指标标签泄漏内部身份配置。
+// jwksHashKey 用 issuer 与 API server ID 唯一标识一份 JWKS。
+// 用哈希而非原始 issuer 作为键，避免指标标签泄漏内部身份配置。
 type jwksHashKey struct {
 	jwtIssuerHash   string
 	apiServerIDHash string
 }
 
-// jwksHashProvider manages JWKS hashes for all authenticators
-//
-// 中文说明：多个 OIDC 认证器共享该 provider，采集时一次性汇总；sync.Map
+// jwksHashProvider 管理所有认证器的 JWKS 哈希。
+// 多个 OIDC 认证器共享该 provider，采集时一次性汇总；sync.Map
 // 适配"读多写少、键集合动态变化"的场景。
 type jwksHashProvider struct {
 	hashes sync.Map // map[jwksHashKey]string
@@ -104,8 +102,7 @@ func (p *jwksHashProvider) setHash(jwtIssuer, apiServerID, keySet string) {
 }
 
 // getHashes 返回当前全部哈希的快照。
-//
-// 中文说明：返回副本而非直接暴露 sync.Map，保证采集过程中不会与写入竞争。
+// 返回副本而非直接暴露 sync.Map，保证采集过程中不会与写入竞争。
 func (p *jwksHashProvider) getHashes() map[jwksHashKey]string {
 	result := make(map[jwksHashKey]string)
 	p.hashes.Range(func(k, v interface{}) bool {
@@ -132,9 +129,8 @@ func (p *jwksHashProvider) deleteHash(jwtIssuer, apiServerID string) {
 	p.hashes.Delete(key)
 }
 
-// jwksHashCollector is a custom collector that emits JWKS hash metrics
-//
-// 中文说明：哈希集合动态变化，无法用固定标签的 GaugeVec 表达，因此用自定义
+// jwksHashCollector 是一个输出现有哈希指标的自定义 collector。
+// 哈希集合动态变化，无法用固定标签的 GaugeVec 表达，因此用自定义
 // collector 在采集时枚举。
 type jwksHashCollector struct {
 	metrics.BaseStableCollector
@@ -174,8 +170,7 @@ var registerMetrics sync.Once
 var hashProvider = newJWKSHashProvider()
 
 // RegisterMetrics 幂等注册全部 OIDC 认证指标。
-//
-// 中文说明：sync.Once 防止多个认证器实例重复注册导致 MustRegister panic。
+// sync.Once 防止多个认证器实例重复注册导致 MustRegister panic。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(jwtAuthenticatorLatencyMetric)
@@ -262,8 +257,7 @@ type instrumentedAuthenticator struct {
 }
 
 // AuthenticateToken 调用底层认证器并记录耗时。
-//
-// 中文说明：(false, nil) 表示 token 不属于该 issuer，属于正常的"未命中"，
+// (false, nil) 表示 token 不属于该 issuer，属于正常的"未命中"，
 // 不应计入失败率，否则多 issuer 场景下的指标会严重失真。
 func (a *instrumentedAuthenticator) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	start := a.clock.Now()

@@ -43,13 +43,12 @@ import (
 var errAuthnCrash = apierrors.NewInternalError(errors.New("authentication failed unexpectedly"))
 
 // sharedLookupTimeout 是单次共享认证查询的超时。
-// 中文说明：查询脱离原请求上下文（singleflight 共享给多个调用方），
+// 查询脱离原请求上下文（singleflight 共享给多个调用方），
 // 因此必须有自己的超时，否则一个挂起的认证器会永久占用该 key 的 flight。
 const sharedLookupTimeout = 30 * time.Second
 
-// cacheRecord holds the three return values of the authenticator.Token AuthenticateToken method
-//
-// 中文说明：额外保存审计注解与警告，是因为缓存命中时无法重放认证器的副作用——
+// cacheRecord 保存 authenticator.Token 的 AuthenticateToken 方法的三个返回值。
+// 额外保存审计注解与警告，是因为缓存命中时无法重放认证器的副作用——
 // 只能把首次查询时产生的副作用随记录一起缓存，命中时再重新施加到当前请求。
 type cacheRecord struct {
 	resp *authenticator.Response
@@ -75,8 +74,7 @@ type cacheWarning struct {
 }
 
 // cachedTokenAuthenticator 包装底层 Token 认证器，缓存其结果。
-//
-// 中文说明：并发控制有两层——cache 自身线程安全，singleflight 保证同一 key
+// 并发控制有两层——cache 自身线程安全，singleflight 保证同一 key
 // 在缓存未命中时只有一次真实认证，其余调用方等待并共享结果，避免惊群。
 // hashPool 复用 hash.Hash，减少每请求分配；HMAC + 随机密钥的用途见字段注释。
 type cachedTokenAuthenticator struct {
@@ -105,9 +103,8 @@ type cache interface {
 	remove(key string)
 }
 
-// New returns a token authenticator that caches the results of the specified authenticator. A ttl of 0 bypasses the cache.
-//
-// 中文说明：successTTL/failureTTL 为 0 时对应类别不缓存——失败不缓存可避免
+// New 返回一个 token 认证器，它缓存指定认证器的结果。ttl 为 0 表示绕过缓存。
+// successTTL/failureTTL 为 0 时对应类别不缓存——失败不缓存可避免
 // 短暂故障被放大成 TTL 时长的持续拒绝。
 func New(authenticator authenticator.Token, cacheErrs bool, successTTL, failureTTL time.Duration) authenticator.Token {
 	return newWithClock(authenticator, cacheErrs, successTTL, failureTTL, clock.RealClock{})
@@ -145,9 +142,8 @@ func newWithClock(authenticator authenticator.Token, cacheErrs bool, successTTL,
 	}
 }
 
-// AuthenticateToken implements authenticator.Token
-//
-// 中文说明：缓存命中时不返回缓存的 err，而是把注解/警告重新施加到当前请求后
+// AuthenticateToken 实现 authenticator.Token 接口。
+// 缓存命中时不返回缓存的 err，而是把注解/警告重新施加到当前请求后
 // 返回成功响应；未命中/失败路径则原样返回。这样上层看到的语义与未缓存时一致。
 func (a *cachedTokenAuthenticator) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	record := a.doAuthenticateToken(ctx, token)
@@ -164,7 +160,7 @@ func (a *cachedTokenAuthenticator) AuthenticateToken(ctx context.Context, token 
 }
 
 // doAuthenticateToken 实现「查缓存 → 未命中则 singleflight 认证 → 写缓存」。
-// 中文说明：key 由 audiences + token 共同决定，因为同一 token 在不同 audience 下
+// key 由 audiences + token 共同决定，因为同一 token 在不同 audience 下
 // 可能得到不同结论；只用 token 作 key 会导致跨 audience 的错误复用。
 func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, token string) *cacheRecord {
 	doneAuthenticating := stats.authenticating(ctx)
@@ -188,10 +184,8 @@ func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, toke
 		record := &cacheRecord{}
 
 		doneFetching := stats.fetching(ctx)
-		// We're leaving the request handling stack so we need to handle crashes
-		// ourselves. Log a stack trace and return a 500 if something panics.
-		//
-		// 中文说明：认证器运行在独立 goroutine 中，panic 不会传播回调用栈；
+		// 我们已经离开请求处理调用栈，因此需要自己处理崩溃：panic 时打印堆栈并返回 500。
+		// 认证器运行在独立 goroutine 中，panic 不会传播回调用栈；
 		// 必须自行 recover，否则整个进程会崩溃。限制栈大小避免日志爆炸。
 		defer func() {
 			if r := recover(); r != nil {
@@ -214,10 +208,8 @@ func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, toke
 			return record, nil
 		}
 
-		// Detach the context because the lookup may be shared by multiple callers,
-		// however propagate the audience.
-		//
-		// 中文说明：不能复用任一调用方的 context——它可能先于其他等待者被取消；
+		// 上下文需要脱离调用方，因为这次查询可能被多个调用方共享；但 audience 必须继续传递。
+		// 不能复用任一调用方的 context——它可能先于其他等待者被取消；
 		// 但 audience 是认证语义的一部分，必须显式透传。
 		ctx, cancel := context.WithTimeout(context.Background(), sharedLookupTimeout)
 		defer cancel()
@@ -255,18 +247,14 @@ func (a *cachedTokenAuthenticator) doAuthenticateToken(ctx context.Context, toke
 		// we always set Val and never set Err
 		return result.Val.(*cacheRecord)
 	case <-ctx.Done():
-		// fake a record on context cancel
-		//
-		// 中文说明：调用方取消时不再等待共享查询（查询本身仍会完成并填充缓存），
+		// 调用方上下文取消时伪造一条记录：不再等待共享查询（查询本身仍会完成并填充缓存），
 		// 返回一个只含错误的记录，语义与真实认证失败一致。
 		return &cacheRecord{err: ctx.Err()}
 	}
 }
 
-// keyFunc generates a string key by hashing the inputs.
-// This lowers the memory requirement of the cache and keeps tokens out of memory.
-//
-// 中文说明：所有字段都带长度前缀，避免拼接歧义（"xy"+"z" 与 "x"+"yz"）。
+// keyFunc 通过对输入做哈希来生成字符串 key，从而降低缓存的内存需求，并避免 token 留在内存中。
+// 所有字段都带长度前缀，避免拼接歧义（"xy"+"z" 与 "x"+"yz"）。
 // audiences 先编码数量再逐个编码，防止不同分组方式产生相同输入。
 // 结果不做 base64，直接使用原始字节的字符串视图以省一次分配。
 func keyFunc(hashPool *sync.Pool, auds []string, token string) string {
@@ -310,9 +298,7 @@ func writeLength(w io.Writer, b []byte, length int) {
 	}
 }
 
-// toBytes performs unholy acts to avoid allocations
-//
-// 中文说明：通过 unsafe 把 string 的底层字节直接暴露给哈希写入，避免 []byte(s) 的拷贝。
+// toBytes 用 unsafe 把 string 的底层字节直接交给哈希写入以避免 []byte(s) 拷贝分配。
 // 只在调用方保证不修改返回切片的前提下安全；哈希写入恰好只读。
 func toBytes(s string) []byte {
 	// unsafe.StringData is unspecified for the empty string, so we provide a strict interpretation
@@ -324,9 +310,7 @@ func toBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-// toString performs unholy acts to avoid allocations
-//
-// 中文说明：把哈希结果字节切片零拷贝转成 string 作为 map 键。
+// toString 用 unsafe 避免分配：把哈希结果字节切片零拷贝转成 string 作为缓存键。
 // 哈希输出不会再被修改，因此该别名是安全的；空切片单独处理，
 // 因为 unsafe.SliceData 对空切片返回未定义指针。
 func toString(b []byte) string {
@@ -339,9 +323,8 @@ func toString(b []byte) string {
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
-// simple recorder that only appends warning
-//
-// 中文说明：warning 可能由认证器内部多个 goroutine 产生，故需要互斥；
+// recorder 是一个只追加 warning 的简单记录器。
+// warning 可能由认证器内部多个 goroutine 产生，故需要互斥；
 // extractWarnings 在取出后清空，防止同一条 warning 被重复附加到后续请求。
 type recorder struct {
 	mu       sync.Mutex

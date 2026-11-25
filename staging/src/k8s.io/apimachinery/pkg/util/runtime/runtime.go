@@ -35,10 +35,8 @@ import (
 
 var (
 	// ReallyCrash 控制 HandleCrash 的最终行为，默认值为 true。
-	// 暴露该变量是为了兼容需要恢复旧行为的组件；主要用于测试验证崩溃处理路径。
-	//
-	// 中文说明：仅用于测试；生产代码不应把它设为 false，否则真正的 panic
-	// 会被吞掉。
+	// 暴露该变量是为了兼容需要恢复旧行为的组件，主要供测试验证崩溃处理路径使用；
+	// 生产代码不应把它设为 false，否则真正的 panic 会被吞掉。
 	ReallyCrash = true
 )
 
@@ -48,7 +46,7 @@ var (
 // 使 klog.FromContext(ctx) 跳过 panic 处理器及若干中间函数，
 // 从而尽可能将日志归属到触发 panic 的代码。
 //
-// 中文说明：这是全局可替换的钩子，测试或组件可以追加/替换处理器；默认
+// 这是全局可替换的钩子，测试或组件可以追加/替换处理器；默认
 // 处理器 logPanic 会打印调用栈。
 var PanicHandlers = []func(context.Context, interface{}){logPanic}
 
@@ -59,7 +57,7 @@ var PanicHandlers = []func(context.Context, interface{}){logPanic}
 //
 // 支持上下文日志的代码应优先使用 HandleCrashWithContext 或 HandleCrashWithLogger。
 //
-// 中文说明：在非上下文场景中调用；内部把无 ctx 的处理器适配成带 ctx 的
+// 在非上下文场景中调用；内部把无 ctx 的处理器适配成带 ctx 的
 // 形式后复用统一实现，保证调用栈深度一致。
 func HandleCrash(additionalHandlers ...func(interface{})) {
 	if r := recover(); r != nil {
@@ -78,7 +76,7 @@ func HandleCrash(additionalHandlers ...func(interface{})) {
 //
 // 调用方可以提供额外处理器，用于 panic 后的资源清理或状态通知。所有处理器执行完毕后，
 // 若 ReallyCrash 为 true，则重新触发 panic。ctx 同时决定日志上下文和归属信息。
-// 中文说明：上下文中的 logger 决定日志输出位置，适合请求级代码。
+// 上下文中的 logger 决定日志输出位置，适合请求级代码。
 func HandleCrashWithContext(ctx context.Context, additionalHandlers ...func(context.Context, interface{})) {
 	if r := recover(); r != nil {
 		handleCrash(ctx, r, additionalHandlers...)
@@ -90,7 +88,7 @@ func HandleCrashWithContext(ctx context.Context, additionalHandlers ...func(cont
 // 调用方可以提供额外处理器，用于 panic 后的资源清理或状态通知。所有处理器执行完毕后，
 // 若 ReallyCrash 为 true，则重新触发 panic。该入口适用于已有 logger、但没有 ctx 的场景。
 //
-// 中文说明：已有 logger 但无 ctx 时使用；内部把 logger 放进新的 ctx。
+// 已有 logger 但无 ctx 时使用；内部把 logger 放进新的 ctx。
 func HandleCrashWithLogger(logger klog.Logger, additionalHandlers ...func(context.Context, interface{})) {
 	if r := recover(); r != nil {
 		ctx := klog.NewContext(context.Background(), logger)
@@ -103,7 +101,7 @@ func HandleCrashWithLogger(logger klog.Logger, additionalHandlers ...func(contex
 // 统一经过该函数可以让不同入口调用处理器时具有一致的调用栈深度，
 // 从而避免日志调用位置因入口不同而产生偏差。
 //
-// 中文说明：ReallyCrash 为 false 时仅记录不重新 panic，便于测试验证
+// ReallyCrash 为 false 时仅记录不重新 panic，便于测试验证
 // 崩溃路径；生产环境默认继续 panic 以保留 fast-fail 语义。
 func handleCrash(ctx context.Context, r any, additionalHandlers ...func(context.Context, interface{})) {
 	//Go panic 处理器位于我们与触发 panic 的代码之间，因此无法准确知道要跳过的调用帧数。
@@ -130,7 +128,7 @@ func logPanic(ctx context.Context, r interface{}) {
 		// 遵循 http.ErrAbortHandler 哨兵值的约定：它用于主动中止 HTTP handler。
 		// ServeHTTP 中的任意 panic 都会中止客户端响应；使用 ErrAbortHandler 还会抑制
 		// 服务端错误日志中的堆栈跟踪输出。
-		// 中文说明：这是 net/http 约定的“静默中止”信号，日志处理器必须放行。
+		// 这是 net/http 约定的“静默中止”信号，日志处理器必须放行。
 		return
 	}
 
@@ -177,7 +175,7 @@ type ErrorHandler func(ctx context.Context, err error, msg string, keysAndValues
 //
 // 如果需要的是 error 对象而不是字符串，请使用 errors.New。
 //
-// 中文说明：临时构造一个输出到 buffer 的 textlogger，从而让字符串格式化
+// 临时构造一个输出到 buffer 的 textlogger，从而让字符串格式化
 // 与真实日志保持一致；不带头部（时间/级别），便于嵌入其他消息。
 func ErrorToString(err error, msg string, keysAndValues ...interface{}) string {
 	var buffer bytes.Buffer
@@ -198,7 +196,7 @@ func ErrorToString(err error, msg string, keysAndValues ...interface{}) string {
 // 支持上下文日志的代码应使用 HandleErrorWithContext。
 func HandleError(err error) {
 	// 某些调用路径可能传入 nil；此时不应额外制造错误或日志，直接返回即可。
-	// 中文说明：nil 错误静默忽略，与 HandleErrorWithContext 明确不同。
+	// nil 错误静默忽略，与 HandleErrorWithContext 明确不同。
 	if err == nil {
 		return
 	}
@@ -219,14 +217,12 @@ func HandleError(err error) {
 //
 //	klog.ErrorS(err, msg, keysAndValues...)
 //
-// 与 HandleError 不同，即使 err 为 nil 也会触发日志记录。不要为了填充 err 而新建或包装错误；
+// 与 HandleError 不同，即使 err 为 nil 也会触发日志记录（用于没有错误对象但需要
+// 上报异常状态的情形）。不要为了填充 err 而新建或包装错误；
 // 应通过 msg 和键值对补充上下文信息。
 //
 // 该入口支持结构化、上下文日志，因此优先于 HandleError。若已有 logger 而非 context，
 // 可以使用 HandleErrorWithLogger。
-//
-// 中文说明：即使 err 为 nil 也会记录一条日志（用于没有错误对象但需要上报
-// 异常状态的情形），因此不要为了“有 err”而包装一个假错误。
 func HandleErrorWithContext(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	handleError(ctx, err, msg, keysAndValues...)
 }
@@ -239,7 +235,7 @@ func HandleErrorWithLogger(logger klog.Logger, err error, msg string, keysAndVal
 // handleError 是所有 HandleError* 入口共用的实现。统一经过该函数可以保证
 // 不同入口调用处理器时具有相同的调用栈深度。
 //
-// 中文说明：按注册顺序调用所有 ErrorHandlers——默认是“记录 + 限速”，
+// 按注册顺序调用所有 ErrorHandlers——默认是“记录 + 限速”，
 // 替换列表即可把错误转发到远程分析系统。
 func handleError(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	for _, fn := range ErrorHandlers {
@@ -250,7 +246,7 @@ func handleError(ctx context.Context, err error, msg string, keysAndValues ...in
 // logError 记录错误及其上报位置的调用栈。预期调用链为：
 // <caller> -> HandleError[WithContext] -> handleError -> logError。
 //
-// 中文说明：WithCallDepth(3) 正好跳过 logError/handleError/HandleError* 三层。
+// WithCallDepth(3) 正好跳过 logError/handleError/HandleError* 三层。
 func logError(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	logger := klog.FromContext(ctx).WithCallDepth(3)
 	logger = klog.LoggerWithName(logger, "UnhandledError")
@@ -258,7 +254,7 @@ func logError(ctx context.Context, err error, msg string, keysAndValues ...inter
 }
 
 // backoffError 返回一个限速处理器；调用频率超过 minPeriod 时会阻塞当前 goroutine。
-// 中文说明：包装成无状态外观，但内部共享同一 backoff 实例以便全局限速。
+// 包装成无状态外观，但内部共享同一 backoff 实例以便全局限速。
 func backoffError(minPeriod time.Duration) ErrorHandler {
 	r := &rudimentaryErrorBackoff{
 		lastErrorTime: time.Now(),
@@ -297,7 +293,7 @@ func (r *rudimentaryErrorBackoff) OnError() {
 }
 
 // GetCaller 返回直接调用该函数的调用方函数名。
-// 中文说明：Callers 的 skip=3 跳过 runtime.Callers、GetCaller 与直接调用者，
+// Callers 的 skip=3 跳过 runtime.Callers、GetCaller 与直接调用者，
 // 得到实际业务代码位置；依赖固定调用层级，包装会增加跳过层数。
 func GetCaller() string {
 	var pc [1]uintptr
@@ -312,7 +308,7 @@ func GetCaller() string {
 // RecoverFromPanic 捕获当前 goroutine 的 panic，并将指定错误替换为包含原错误和 panic 调用栈的新错误。
 // 这样上层错误处理逻辑可以用统一方式处理普通错误与 panic。
 //
-// 中文说明：典型用法是 `defer utilruntime.RecoverFromPanic(&err)`，让
+// 典型用法是 `defer utilruntime.RecoverFromPanic(&err)`，让
 // “函数返回错误”和“panic”在调用方看来是同一种失败。
 func RecoverFromPanic(err *error) {
 	if r := recover(); r != nil {
@@ -331,7 +327,7 @@ func RecoverFromPanic(err *error) {
 }
 
 // Must 在 err 非 nil 时触发 panic，适用于程序员错误或初始化阶段无法继续的失败。
-// 中文说明：只用于启动期、不可恢复的编程错误；不要把用户输入错误交给它。
+// 只用于启动期、不可恢复的编程错误；不要把用户输入错误交给它。
 func Must(err error) {
 	if err != nil {
 		panic(err)

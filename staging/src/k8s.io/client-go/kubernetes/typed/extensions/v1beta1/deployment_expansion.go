@@ -24,18 +24,16 @@ import (
 	scheme "k8s.io/client-go/kubernetes/scheme"
 )
 
-// The DeploymentExpansion interface allows manually adding extra methods to the DeploymentInterface.
-//
-// 中文说明：手写的扩展方法接口，生成代码不会覆盖它。extensions/v1beta1 的 Deployment
+// DeploymentExpansion 接口允许手动向 DeploymentInterface 添加额外方法。
+// 手写的扩展方法接口，生成代码不会覆盖它。extensions/v1beta1 的 Deployment
 // 已弃用，但 rollback 子资源仍只能通过该扩展方法访问。
 type DeploymentExpansion interface {
 	// Rollback 触发指定 Deployment 回滚到上一个 revision。
 	Rollback(context.Context, *v1beta1.DeploymentRollback, metav1.CreateOptions) error
 }
 
-// Rollback applied the provided DeploymentRollback to the named deployment in the current namespace.
-//
-// 中文说明：向 deployments/<name>/rollback 子资源 POST。请求体中的 Name 决定目标对象，
+// Rollback 把给定的 DeploymentRollback 应用到当前命名空间中指定名称的 deployment。
+// 向 deployments/<name>/rollback 子资源 POST。请求体中的 Name 决定目标对象，
 // 因此额外用 Name 指定 URL 路径；CreateOptions 通过参数编码器转为查询参数。
 func (c *deployments) Rollback(ctx context.Context, deploymentRollback *v1beta1.DeploymentRollback, opts metav1.CreateOptions) error {
 	return c.GetClient().Post().Namespace(c.GetNamespace()).Resource("deployments").Name(deploymentRollback.Name).VersionedParams(&opts, scheme.ParameterCodec).SubResource("rollback").Body(deploymentRollback).Do(ctx).Error()

@@ -26,8 +26,7 @@ import (
 )
 
 // TestListAll 验证 ListAll 只把匹配 selector 的对象交给回调。
-//
-// 中文说明：用 10 万到 100 万级的对象量覆盖不同匹配比例，确保筛选逻辑在极端规模下
+// 用 10 万到 100 万级的对象量覆盖不同匹配比例，确保筛选逻辑在极端规模下
 // 仍然正确（子集匹配、全匹配、无匹配三种情形）。
 func TestListAll(t *testing.T) {
 	testCases := []struct {

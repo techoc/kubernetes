@@ -30,8 +30,7 @@ import (
 
 // TestCreateWithEventNamespace 验证 CreateWithEventNamespace 会用事件自身的
 // namespace 发起请求，且拒绝与客户端 namespace 不一致的事件。
-//
-// 中文说明：fake RESTClient 对任何请求都返回 {}，因此断言重点在错误路径——即
+// fake RESTClient 对任何请求都返回 {}，因此断言重点在错误路径——即
 // 客户端在真正发请求前就应发现 namespace 冲突。该能力用于把事件写到事件所属
 // namespace，而不是客户端创建时绑定的 namespace。
 func TestCreateWithEventNamespace(t *testing.T) {
@@ -85,8 +84,7 @@ func TestCreateWithEventNamespace(t *testing.T) {
 }
 
 // TestPatchWithEventNamespace 验证 PatchWithEventNamespace 的 namespace 校验逻辑。
-//
-// 中文说明：数据为空 JSON patch（[]byte{}），成功路径只验证请求能被构造并通过 fake
+// 数据为空 JSON patch（[]byte{}），成功路径只验证请求能被构造并通过 fake
 // 客户端；重点同样是 namespace 不匹配时必须提前失败。
 func TestPatchWithEventNamespace(t *testing.T) {
 	event := &v1beta1.Event{

@@ -30,14 +30,12 @@ import (
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// New returns an HTTP handler that is meant to be executed at the end of the delegation chain.
-// It checks if the request have been made before the server has installed all known HTTP paths.
-// In that case it returns a 503 response otherwise it returns a 404.
+// New 返回一个设计好在委派链末端执行的 HTTP handler。它检查请求是否发生在服务器
+// 安装完所有已知 HTTP 路径之前：若是则返回 503 响应，否则返回 404。
 //
-// Note that we don't want to add additional checks to the readyz path as it might prevent fixing bricked clusters.
-// This specific handler is meant to "protect" requests that arrive before the paths and handlers are fully initialized.
-//
-// 中文说明：启动早期返回 503+Retry-After 而非 404，避免客户端把“服务尚未就绪”
+// 注意：不要在 readyz 路径上添加额外检查，因为这可能妨碍修复已经瘫痪的集群。
+// 该 handler 用于“保护”在路径与 handler 完成初始化之前到达的请求。
+// 启动早期返回 503+Retry-After 而非 404，避免客户端把“服务尚未就绪”
 // 误判为资源不存在并触发删除等破坏性操作；故意不检查 readyz 路径，以免阻塞自救。
 func New(serializer runtime.NegotiatedSerializer, isMuxAndDiscoveryCompleteFn func(ctx context.Context) bool) *Handler {
 	return &Handler{serializer: serializer, isMuxAndDiscoveryCompleteFn: isMuxAndDiscoveryCompleteFn}

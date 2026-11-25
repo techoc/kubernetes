@@ -32,8 +32,7 @@ import (
 )
 
 // TestRequestTimeoutBehavior 验证请求超时在写/刷新响应前后的不同表现。
-//
-// 中文说明：超时过滤器在未写出响应时能返回 504；一旦已写出，就只能标记
+// 超时过滤器在未写出响应时能返回 504；一旦已写出，就只能标记
 // writer 超时并中止连接。用例同时覆盖 HTTP/1.1 与 HTTP/2，因为两者的
 // 连接中止语义（EOF vs stream reset）不同，客户端必须都能正确处理。
 func TestRequestTimeoutBehavior(t *testing.T) {
@@ -195,20 +194,16 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 		//   c) the handler writes to the ResponseWriter object before request times out: Yes
 		//   d) the handler flushes the ResponseWriter object before request times out: No
 		// observation:
-		//  the timeout filter detects that the context of the request has exceeded its
-		//  deadline, and the the following takes place:
-		//   - it marks the ResponseWriter object as timeout=true, so any further attempt
-		//   to write to it will yield an 'http: Handler timeout' error
-		//   - it can't send '504 GatewayTimeout' to the client since the ResponseWriter
-		//   object has already been written to, so it panics with 'net/http: abort Handler' error
-		//  at the same time, the net/http client also detects that the context of the
-		//  client-side request has exceeded its deadline, and so it aborts with a
-		//  'context deadline exceeded' error.
-		// NOTE: although the client is most likely to receive the context deadline error
-		// first due to the roundtrip time added to the arrival of the error from
-		// the server, nevertheless it could cause flakes in CI due to overload, so we
-		// need to check for either error to be flake free.
-		// 中文说明：两个来源的错误都合法，因此用 wantEitherOr 而非固定断言，
+		// 当超时过滤器发现请求 context 已超过其 deadline 时，会发生：
+		//   - 它把 ResponseWriter 标记为 timeout=true，之后再向其写入
+		//     都会返回 'http: Handler timeout' 错误
+		//   - 由于 ResponseWriter 已被写出过，无法再向客户端发送
+		//     '504 GatewayTimeout'，因此它以 'net/http: abort Handler' 错误中止
+		// 同时，net/http 客户端也会发现自身请求 context 超过了 deadline，
+		// 因而以 'context deadline exceeded' 错误中止。
+		// 注意：虽然由于往返时间，客户端通常最先收到 context deadline 错误，
+		// 但 CI 过载时也可能出现抖动，因此需要两种错误都接受才能稳定不 flake。
+		// 两个来源的错误都合法，因此用 wantEitherOr 而非固定断言，
 		// 否则 CI 负载波动会造成偶发失败。
 		{
 			setup: setup{
@@ -279,12 +274,10 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					waiter = &waitWithChannelClose{after: make(chan time.Time)}
 				}
 
-				// this is the timeout we expect the context of a request
-				// on the server to have.
-				//  - if the client does not specify a timeout parameter in
-				//  the request URI then it should default to --request-timeout
-				//  - otherwise, it should be the timeout specified by the client
-				// 中文说明：服务端会取二者较小值，这里两个值相等或客户端更小，便于精确断言。
+				// 这是我们期望服务端上请求 context 拥有的超时。
+				//  - 若客户端未在请求 URI 中指定超时参数，则默认取 --request-timeout
+				//  - 否则取客户端指定的超时
+				// 服务端会取二者较小值，这里两个值相等或客户端更小，便于精确断言。
 				reqCtxTimeoutWant := config.RequestTimeout
 				if setup.clientTimeout > 0 {
 					reqCtxTimeoutWant = setup.clientTimeout
@@ -352,8 +345,8 @@ func TestRequestTimeoutBehavior(t *testing.T) {
 					// wait for the request context deadline to elapse
 					<-waiter.wait()
 
-					// write to the ResponseWriter object after timeout happens
-					// 中文说明：此时必须返回 ErrHandlerTimeout，证明 writer 已被标记为超时。
+					// 在超时发生后写入 ResponseWriter。
+					// 此时必须返回 ErrHandlerTimeout，证明 writer 已被标记为超时。
 					_, err := w.Write([]byte("a"))
 					want.handlerWriteErr.verify(t, err)
 

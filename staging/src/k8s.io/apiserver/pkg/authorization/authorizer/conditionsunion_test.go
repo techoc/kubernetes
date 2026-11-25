@@ -24,10 +24,9 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-// TestConditionsAwareDecisionUnionAdd exercises the Add method's bookkeeping behavior:
-// it must reject duplicate authorizer names and stop appending after the first Allow/Deny leaf.
-//
-// 中文说明：重复的 authorizer 名称会造成条件重复计数，必须 fail closed；
+// TestConditionsAwareDecisionUnionAdd 考察 Add 方法的簿记行为：它必须拒绝重复的 authorizer
+// 名称，并在首个 Allow/Deny 叶子之后停止追加。
+// 重复的 authorizer 名称会造成条件重复计数，必须 fail closed；
 // 无条件的 Allow/Deny 已经决定最终结果，后续加入的子决策不再影响并集。
 func TestConditionsAwareDecisionUnionAdd(t *testing.T) {
 	noOp := authorizer.ConditionsAwareDecisionNoOpinion("", nil)

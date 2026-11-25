@@ -14,13 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package connrotation implements a connection dialer that tracks and can close
-// all created connections.
-//
-// This is used for credential rotation of long-lived connections, when there's
-// no way to re-authenticate on a live connection.
-//
-// 中文说明：凭证轮换时，旧连接仍会使用旧凭证存活，只能强制关闭并让客户端重新拨号。
+// Package connrotation 实现了一个能追踪并可关闭所有已创建连接的拨号器。
+// 这用于长连接的凭证轮换场景——此时无法在活动连接上重新认证：
+// 凭证轮换时，旧连接仍会使用旧凭证存活，只能强制关闭并让客户端重新拨号。
 // 该包记录所有已建立的连接，便于在轮换时一次性关闭。
 package connrotation
 
@@ -47,14 +43,10 @@ func NewDialer(dial DialFunc) *Dialer {
 	return NewDialerWithTracker(dial, nil)
 }
 
-// NewDialerWithTracker creates a new Dialer instance.
-//
-// If dial is not nil, it will be used to create new underlying connections.
-// Otherwise net.DialContext is used.
-// If tracker is not nil, it will be used to track new underlying connections.
-// Otherwise NewConnectionTracker() is used.
-//
-// 中文说明：tracker 允许与其它 Dialer 共享连接集合，从而一起轮换。注意当前实现
+// NewDialerWithTracker 创建一个新的 Dialer 实例。
+// 若 dial 不为 nil，则用它创建底层连接；否则使用 net.DialContext。
+// 若 tracker 不为 nil，则用它追踪新的底层连接；否则使用 NewConnectionTracker()。
+// tracker 允许与其它 Dialer 共享连接集合，从而一起轮换。注意当前实现
 // 并未在 dial 为 nil 时回退到 net.DialContext，传入 nil 会在首次拨号时 panic。
 func NewDialerWithTracker(dial DialFunc, tracker *ConnectionTracker) *Dialer {
 	if tracker == nil {
@@ -81,11 +73,9 @@ func NewConnectionTracker() *ConnectionTracker {
 	}
 }
 
-// CloseAll forcibly closes all tracked connections.
-//
-// Note: new connections may get created before CloseAll returns.
-//
-// 中文说明：先在锁内替换为新的空 map，再在锁外逐个关闭；这样既缩短临界区，也避免
+// CloseAll 强制关闭所有被追踪的连接。
+// 注意：在 CloseAll 返回之前，新连接也可能被建立。
+// 先在锁内替换为新的空 map，再在锁外逐个关闭；这样既缩短临界区，也避免
 // 关闭动作里的回调（delete）与持锁路径相互纠缠。关闭期间新建立的连接不会被本轮
 // 关闭，这是刻意接受的竞态，调用方应通过轮换后的凭证重新建连。
 func (c *ConnectionTracker) CloseAll() {

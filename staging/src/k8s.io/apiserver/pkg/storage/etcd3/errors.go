@@ -29,7 +29,7 @@ import (
 )
 
 // interpretWatchError 把 etcd 的 watch 错误翻译成 API 语义错误。
-// 中文说明：ErrCompacted 必须映射为 410 Gone（ResourceExpired），客户端据此重建
+// ErrCompacted 必须映射为 410 Gone（ResourceExpired），客户端据此重建
 // watch 并回到最新版本；未识别的错误原样返回，避免把未知故障伪装成正常语义。
 func interpretWatchError(err error) error {
 	switch {
@@ -69,7 +69,7 @@ const (
 )
 
 // interpretListError 把 list 阶段的 compaction 错误翻译为 ResourceExpired。
-// 中文说明：分页场景下不能只报错——要给出可继续的新 token，否则大列表在中途
+// 分页场景下不能只报错——要给出可继续的新 token，否则大列表在中途
 // compaction 后永远无法完成。
 func interpretListError(err error, paging bool, continueKey, keyPrefix string) error {
 	switch {
@@ -83,10 +83,8 @@ func interpretListError(err error, paging bool, continueKey, keyPrefix string) e
 }
 
 func handleCompactedErrorForPaging(continueKey, keyPrefix string) error {
-	// continueToken.ResoureVersion=-1 means that the apiserver can
-	// continue the list at the latest resource version. We don't use rv=0
-	// for this purpose to distinguish from a bad token that has empty rv.
-	// 中文说明：-1 编码“从最新版本继续”，与空 rv（非法 token）区分开。
+	// continueToken.ResourceVersion=-1 表示 apiserver 可以在最新的资源版本处继续 list；
+	// 不用 rv=0 是为了与携带空 rv 的非法 token 区分开。
 	newToken, err := storage.EncodeContinue(continueKey, keyPrefix, -1)
 	if err != nil {
 		utilruntime.HandleError(err)

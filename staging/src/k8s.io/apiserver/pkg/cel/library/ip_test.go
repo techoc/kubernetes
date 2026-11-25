@@ -31,8 +31,7 @@ import (
 )
 
 // testIP 编译并求值一条 CEL 表达式，按期望校验编译错误、运行错误或结果。
-//
-// 中文说明：编译错误以正则匹配，避免断言完整错误文本而随 cel-go 版本升级
+// 编译错误以正则匹配，避免断言完整错误文本而随 cel-go 版本升级
 // 频繁失败；同时校验没有多余的编译错误，防止"期望的错出现了、别的错也被忽略"。
 func testIP(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr string, expectCompileErrs []string) {
 	env, err := cel.NewEnv(
@@ -107,8 +106,7 @@ func testIP(t *testing.T, expr string, expectResult ref.Val, expectRuntimeErr st
 }
 
 // TestIP 覆盖 IP/CIDR CEL 库的解析、判定方法与类型行为。
-//
-// 中文说明：IPv4 与 IPv6 成对覆盖同一组方法，确保两者实现没有分叉；
+// IPv4 与 IPv6 成对覆盖同一组方法，确保两者实现没有分叉；
 // 另含跨类型误用（把 CIDR 传给 isIP）必须编译失败的负向用例。
 func TestIP(t *testing.T) {
 	ipv4Addr, _ := netip.ParseAddr("192.168.0.1")

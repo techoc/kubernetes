@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package rest defines common logic around changes to Kubernetes-style resources.
-//
-// 中文说明：这里定义存储层与 HTTP 层之间的契约（Creater、Updater、Getter 等），
+// Package rest 定义 Kubernetes 风格资源变更相关的公共逻辑。
+// 这里定义存储层与 HTTP 层之间的契约（Creater、Updater、Getter 等），
 // 具体实现在 etcd 存储与各类聚合 API 中；包本身不含存储细节。
 package rest

@@ -61,17 +61,11 @@ type QueueSetCompleter interface {
 //
 // 每个非豁免优先级对应一个 QueueSet；多个 QueueSet 之间通过公平性维度解耦。
 type QueueSet interface {
-	// BeginConfigChange starts the two-step process of updating the
-	// configuration.  No change is made until Complete is called.  If
-	// `C := X.BeginConstruction(q)` then `C.Complete(d)` returns the
-	// same value `X`.  If the QueuingConfig's DesiredNumQueues field
-	// is zero then the other queuing-specific config parameters are
-	// not changed, so that the queues continue draining as before.
-	// In any case, reconfiguration does not discard any queue unless
-	// and until it is undesired and empty.
-	//
-	// 中文说明：重配置是原地生效的，不会丢弃仍在使用的队列，
-	// 避免配置热更新导致已排队请求被静默拒绝。
+	// BeginConfigChange 启动配置更新的两步流程：调用 Complete 之前不会发生任何变更。
+	// 若 `C := X.BeginConstruction(q)`，则 `C.Complete(d)` 返回同一个值 `X`。
+	// 若 QueuingConfig 的 DesiredNumQueues 字段为零，则不改动其余排队相关配置参数，
+	// 队列继续像之前一样排空。重配置是原地生效的，不会丢弃任何仍在使用的队列
+	// （除非它既不再需要又为空），避免配置热更新导致已排队请求被静默拒绝。
 	BeginConfigChange(QueuingConfig) (QueueSetCompleter, error)
 
 	// IsIdle returns a bool indicating whether the QueueSet was idle

@@ -31,9 +31,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-// getEncoder mimics how k8s.io/client-go/rest.createSerializers creates a encoder
-//
-// 中文说明：复现 rest 客户端的序列化器构造方式——JSON serializer + 不做转换的 codec。
+// getEncoder 模仿 k8s.io/client-go/rest.createSerializers 构造 encoder 的方式，
+// 复现 rest 客户端的序列化器构造——JSON serializer + 不做转换的 codec。
 // 使用同样的构造可确保测试覆盖真实的线上编码行为。
 func getEncoder() runtime.Encoder {
 	jsonSerializer := runtimejson.NewSerializerWithOptions(runtimejson.DefaultMetaFactory, scheme.Scheme, scheme.Scheme, runtimejson.SerializerOptions{})
@@ -42,8 +41,7 @@ func getEncoder() runtime.Encoder {
 }
 
 // TestEncodeDecodeRoundTrip 验证 watch 事件编码后再解码能还原类型与对象内容。
-//
-// 中文说明：覆盖 Added/Modified/Deleted/Bookmark 四种事件类型。Bookmark 事件的对象
+// 覆盖 Added/Modified/Deleted/Bookmark 四种事件类型。Bookmark 事件的对象
 // 只携带 resourceVersion，但这里仍用完整 Pod 确保编解码路径一致。比较使用
 // DeepDerivative，忽略解码后补零的字段（例如 TypeMeta 未设置时）。
 func TestEncodeDecodeRoundTrip(t *testing.T) {

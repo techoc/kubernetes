@@ -54,9 +54,8 @@ func init() {
 	client.Metrics.RegisterMetrics(legacyregistry.Registerer())
 }
 
-// EgressSelector is the map of network context type to context dialer, for network egress.
-//
-// 中文说明：构造后只读，因此可被多个组件并发 Lookup；缺失的上下文回退到直连。
+// EgressSelector 是网络上下文类型到上下文拨号器的映射，用于网络出站。
+// 构造后只读，因此可被多个组件并发 Lookup；缺失的上下文回退到直连。
 type EgressSelector struct {
 	egressToDialer map[EgressType]utilnet.DialFunc
 }
@@ -66,8 +65,8 @@ type EgressSelector struct {
 type EgressType int
 
 const (
-	// ControlPlane is the EgressType for traffic intended to go to the control plane.
-	// 中文说明：apiserver 访问 kubelet/其他控制面组件时使用。
+	// ControlPlane 是发往控制面的流量对应的 EgressType：
+	// apiserver 访问 kubelet/其他控制面组件时使用。
 	ControlPlane EgressType = iota
 	// Etcd is the EgressType for traffic intended to go to Kubernetes persistence store.
 	Etcd
@@ -106,8 +105,7 @@ func (s EgressType) AsNetworkContext() NetworkContext {
 }
 
 // lookupServiceName 把配置文件中的名字解析为 EgressType。
-//
-// 中文说明：大小写不敏感，但未知名字必须报错——静默回退会隐藏配置拼写错误。
+// 大小写不敏感，但未知名字必须报错——静默回退会隐藏配置拼写错误。
 func lookupServiceName(name string) (EgressType, error) {
 	switch strings.ToLower(name) {
 	case "controlplane":
@@ -121,8 +119,7 @@ func lookupServiceName(name string) (EgressType, error) {
 }
 
 // tunnelHTTPConnect 通过已有代理连接执行 HTTP CONNECT 隧道握手。
-//
-// 中文说明：限制响应头大小以防恶意代理撑爆内存；握手成功后不能有残留缓冲
+// 限制响应头大小以防恶意代理撑爆内存；握手成功后不能有残留缓冲
 // 数据，否则后续 TLS 字节流会错位。
 func tunnelHTTPConnect(proxyConn net.Conn, proxyAddress, addr string) (net.Conn, error) {
 	fmt.Fprintf(proxyConn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", addr, "127.0.0.1")
@@ -166,8 +163,7 @@ type proxier interface {
 var _ proxier = &httpConnectProxier{}
 
 // httpConnectProxier 复用一条代理连接，每次 proxy 都发起新的 CONNECT。
-//
-// 中文说明：调用方需自行保证 conn 的生命周期，proxier 不负责关闭底层连接。
+// 调用方需自行保证 conn 的生命周期，proxier 不负责关闭底层连接。
 type httpConnectProxier struct {
 	conn         net.Conn
 	proxyAddress string
@@ -277,8 +273,7 @@ type metricsOptions struct {
 }
 
 // createDialer 返回直连拨号器或带指标的代理拨号器。
-//
-// 中文说明：失败指标区分 connect 与 proxy 两个阶段，便于判断是代理不可达
+// 失败指标区分 connect 与 proxy 两个阶段，便于判断是代理不可达
 // 还是目标地址不可达。
 func (d *dialerCreator) createDialer() utilnet.DialFunc {
 	if d.direct {
@@ -305,8 +300,7 @@ func (d *dialerCreator) createDialer() utilnet.DialFunc {
 }
 
 // getTLSConfig 从配置构造客户端 TLS 配置。
-//
-// 中文说明：未提供 CA 时使用系统根证书（certPool=nil），便于在托管环境中
+// 未提供 CA 时使用系统根证书（certPool=nil），便于在托管环境中
 // 复用主机信任链；提供 CA 则只信任该 CA，收紧信任范围。
 func getTLSConfig(t *apiserver.TLSConfig) (*tls.Config, error) {
 	clientCert := t.ClientCert
@@ -347,8 +341,7 @@ func getProxyAddress(urlString string) (string, error) {
 }
 
 // connectionToDialerCreator 把配置中的连接方式映射为具体连接器。
-//
-// 中文说明：gRPC 仅支持 UDS 是当前实现限制，返回明确错误而非静默回退。
+// gRPC 仅支持 UDS 是当前实现限制，返回明确错误而非静默回退。
 func connectionToDialerCreator(c apiserver.Connection) (*dialerCreator, error) {
 	switch c.ProxyProtocol {
 
@@ -406,10 +399,9 @@ func connectionToDialerCreator(c apiserver.Connection) (*dialerCreator, error) {
 
 }
 
-// NewEgressSelector configures lookup mechanism for Lookup.
-// It does so based on a EgressSelectorConfiguration which was read at startup.
-//
-// 中文说明：返回 (nil, nil) 表示未配置，调用方应把 nil Lookup 视为"全部直连"；
+// NewEgressSelector 配置 Lookup 的查找机制。
+// 它基于启动时读取的 EgressSelectorConfiguration 完成配置。
+// 返回 (nil, nil) 表示未配置，调用方应把 nil Lookup 视为"全部直连"；
 // 任一选择项配置错误都会让整个构造失败，避免部分流量走错路径。
 func NewEgressSelector(config *apiserver.EgressSelectorConfiguration) (*EgressSelector, error) {
 	if config == nil || config.EgressSelections == nil {
@@ -433,9 +425,8 @@ func NewEgressSelector(config *apiserver.EgressSelectorConfiguration) (*EgressSe
 	return cs, nil
 }
 
-// NewEgressSelectorWithMap returns a EgressSelector with the supplied EgressType to DialFunc map.
-//
-// 中文说明：主要用于测试或已有自定义拨号器的高级场景；nil map 会被规范化为空 map。
+// NewEgressSelectorWithMap 返回使用给定 EgressType 到 DialFunc 映射的 EgressSelector。
+// 主要用于测试或已有自定义拨号器的高级场景；nil map 会被规范化为空 map。
 func NewEgressSelectorWithMap(m map[EgressType]utilnet.DialFunc) *EgressSelector {
 	if m == nil {
 		m = make(map[EgressType]utilnet.DialFunc)
@@ -445,10 +436,9 @@ func NewEgressSelectorWithMap(m map[EgressType]utilnet.DialFunc) *EgressSelector
 	}
 }
 
-// Lookup gets the dialer function for the network context.
-// This is configured for the Kubernetes API Server at startup.
-//
-// 中文说明：返回 nil 拨号器是合法结果，表示使用默认网络栈；未在配置中出现的
+// Lookup 获取该网络上下文对应的拨号器函数。
+// 该配置在 Kubernetes API Server 启动时确定。
+// 返回 nil 拨号器是合法结果，表示使用默认网络栈；未在配置中出现的
 // 上下文也按直连处理，而不是报错。
 func (cs *EgressSelector) Lookup(networkContext NetworkContext) (utilnet.DialFunc, error) {
 	if cs.egressToDialer == nil {

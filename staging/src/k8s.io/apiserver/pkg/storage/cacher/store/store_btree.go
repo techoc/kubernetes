@@ -25,14 +25,12 @@ import (
 	"k8s.io/utils/third_party/forked/golang/btree"
 )
 
-// newThreadedBtreeStoreIndexer returns a storage for cacher by adding locking over the two 2 data structures:
-// * btree based storage for efficient LIST operation on prefix
-// * map based indexer for retrieving values by index.
-// This separation is used to allow independent snapshotting those two storages in the future.
-// Intention is to utilize btree for its cheap snapshots that don't require locking if don't mutate data.
-//
-// 中文说明：btree 与 map 索引分开维护，是为了让 LIST（按 key 有序）与字段/标签索引查询
-// 各自使用最合适的数据结构；所有公开方法统一由一把 RWMutex 保护，
+// newThreadedBtreeStoreIndexer 返回为 cacher 提供存储的结构，它在两个数据结构上统一加锁：
+// * 基于 btree 的存储，用于高效执行按前缀的 LIST 操作
+// * 基于 map 的索引器，用于按索引取值
+// 分开维护两者是为将来可对这两个存储分别做快照预留空间；
+// 利用 btree 快照廉价的特点——不修改数据时快照无需加锁。
+// 所有公开方法统一由一把 RWMutex 保护，
 // 保证两个结构在任意观察点保持一致。
 func newThreadedBtreeStoreIndexer(indexers cache.Indexers, degree int) *threadedStoreIndexer {
 	return &threadedStoreIndexer{
@@ -42,7 +40,7 @@ func newThreadedBtreeStoreIndexer(indexers cache.Indexers, degree int) *threaded
 }
 
 // threadedStoreIndexer 用一把读写锁同时保护 btree 存储与索引器。
-// 中文说明：两结构必须原子更新，否则并发读可能看到「对象已加入 btree 但索引未更新」
+// 两结构必须原子更新，否则并发读可能看到「对象已加入 btree 但索引未更新」
 // 的中间状态，导致按索引查询遗漏对象。
 type threadedStoreIndexer struct {
 	lock    sync.RWMutex
@@ -60,7 +58,7 @@ func (si *threadedStoreIndexer) Count(prefix, continueKey string) (count int) {
 }
 
 // Clone 返回 btree 的惰性快照。
-// 中文说明：btree 的 Clone 是写时复制，代价低；但底层实现要求调用时不并发修改，
+// btree 的 Clone 是写时复制，代价低；但底层实现要求调用时不并发修改，
 // 因此这里必须持有写锁而非读锁——这也是注释「Clone 不应并发调用」的由来。
 func (si *threadedStoreIndexer) Clone() Snapshot {
 	// Clone should not be called concurrently.
@@ -80,7 +78,7 @@ func (si *threadedStoreIndexer) Update(obj interface{}) error {
 }
 
 // addOrUpdate 先更新 btree 取得旧值，再用旧值/新值同步更新索引。
-// 中文说明：索引更新需要旧值才能正确移除旧索引项；先 btree 后索引的顺序
+// 索引更新需要旧值才能正确移除旧索引项；先 btree 后索引的顺序
 // 保证在锁内两者最终一致。
 func (si *threadedStoreIndexer) addOrUpdate(obj interface{}) error {
 	if obj == nil {
@@ -147,7 +145,7 @@ func (si *threadedStoreIndexer) GetByKey(key string) (item interface{}, exists b
 }
 
 // Replace 用给定对象整体替换内容。
-// 中文说明：必须持写锁并在同一临界区内同时替换 btree 与索引，否则并发读会看到
+// 必须持写锁并在同一临界区内同时替换 btree 与索引，否则并发读会看到
 // 新旧混合的视图。resourceVersion 在此实现中被忽略——快照版本由 Snapshotter 管理。
 func (si *threadedStoreIndexer) Replace(objs []interface{}, resourceVersion string) error {
 	si.lock.Lock()
@@ -180,10 +178,9 @@ type btreeStore struct {
 	tree *btree.BTree[*Element]
 }
 
-// Clone should not be called concurrently.
+// Clone 不应并发调用。
 // Ref: https://github.com/kubernetes/kubernetes/blob/4a8f617f3ca/vendor/k8s.io/utils/third_party/forked/golang/btree/btree.go#L586-L588
-//
-// 中文说明：惰性克隆，后续对原树的写会复制受影响路径，因此快照读无需加锁且与写互不影响。
+// 惰性克隆，后续对原树的写会复制受影响路径，因此快照读无需加锁且与写互不影响。
 func (s *btreeStore) Clone() Snapshot {
 	return &btreeStore{
 		tree: s.tree.Clone(),
@@ -282,10 +279,8 @@ func (s *btreeStore) Replace(objs []interface{}, _ string) error {
 	return nil
 }
 
-// addOrUpdateLocked assumes a lock is held and is used for Add
-// and Update operations.
-//
-// 中文说明：ReplaceOrInsert 返回旧值（若存在），供索引器计算差异。
+// addOrUpdateElem 假定调用时已持有锁，用于 Add 和 Update 操作。
+// ReplaceOrInsert 返回旧值（若存在），供索引器计算差异。
 func (s *btreeStore) addOrUpdateElem(storeElem *Element) *Element {
 	oldObj, _ := s.tree.ReplaceOrInsert(storeElem)
 	return oldObj
@@ -330,16 +325,15 @@ func (s *btreeStore) Count(prefix, continueKey string) (count int) {
 	return count
 }
 
-// newIndexer returns a indexer similar to storeIndex from client-go/tools/cache.
+// newIndexer 返回一个与 client-go/tools/cache 中 storeIndex 类似的索引器。
 // TODO: Unify the indexer code with client-go/cache package.
-// Major differences is type of values stored and their mutability:
-// * Indexer in client-go stores object keys, that are not mutable.
-// * Indexer in cacher stores whole objects, which is mutable.
-// Indexer in client-go uses keys as it is used in conjunction with map[key]value
-// allowing for fast value retrieval, while btree used in cacher would provide additional overhead.
-// Difference in mutability of stored values is used for optimizing some operations in client-go Indexer.
-//
-// 中文说明：三级 map 的结构为 索引名 → 索引值 → key → 元素，
+// 主要区别在于存储值的类型及其可变性：
+// * client-go 中的 Indexer 存储对象 key，且 key 不可变。
+// * cacher 中的 Indexer 存储整个对象，且对象可变。
+// client-go 的 Indexer 用 key 是因为它配合 map[key]value 使用，可快速取值，
+// 而 cacher 中使用 btree 会带来额外开销。
+// 存储值可变性的差异被用于优化 client-go Indexer 的部分操作。
+// 三级 map 的结构为 索引名 → 索引值 → key → 元素，
 // 这样 ByIndex 能 O(1) 定位到目标集合，而删除单个元素时也只需操作对应集合。
 func newIndexer(indexers cache.Indexers) indexer {
 	return indexer{
@@ -370,7 +364,7 @@ func (i *indexer) ByIndex(indexName, indexValue string) ([]interface{}, error) {
 }
 
 // Replace 重建全部索引。
-// 中文说明：直接丢弃旧 map 而非逐项删除，避免大对象集合下逐个清理的开销；
+// 直接丢弃旧 map 而非逐项删除，避免大对象集合下逐个清理的开销；
 // 旧 map 由 GC 回收。
 func (i *indexer) Replace(objs []interface{}, resourceVersion string) error {
 	i.indices = map[string]map[string]map[string]*Element{}
@@ -388,7 +382,7 @@ func (i *indexer) Replace(objs []interface{}, resourceVersion string) error {
 }
 
 // updateElem 根据旧值/新值重新计算每个索引的归属并增删。
-// 中文说明：oldObj/newObj 为 nil 分别表示「新增」与「删除」。
+// oldObj/newObj 为 nil 分别表示「新增」与「删除」。
 // 常见快路径是「单值且未变化」——此时无需先删后加，直接 add 覆盖即可，
 // 避免无谓的 map 操作。索引函数返回错误时立即中止，防止部分更新造成不一致。
 func (i *indexer) updateElem(key string, oldObj, newObj *Element) (err error) {
@@ -447,51 +441,44 @@ func (i *indexer) delete(key, value string, index map[string]map[string]*Element
 		return
 	}
 	delete(set, key)
-	// If we don's delete the set when zero, indices with high cardinality
-	// short lived resources can cause memory to increase over time from
-	// unused empty sets. See `kubernetes/kubernetes/issues/84959`.
-	//
-	// 中文说明：高基数短生命周期资源会产生大量空集合，不清理会导致内存缓慢增长。
+	// 若不在集合为空时删除它，高基数、短生命周期资源的索引会残留大量
+	// 未使用的空集合，导致内存随时间增长。见 `kubernetes/kubernetes/issues/84959`。
 	if len(set) == 0 {
 		delete(index, value)
 	}
 }
 
-// newStoreSnapshotter returns a storeSnapshotter that stores snapshots for
-// serving read requests with exact resource versions (RV) and pagination.
+// NewSnapshotter 返回一个 storeSnapshotter，用于存储快照以支持精确
+// resourceVersion（RV）的读请求与分页。
 //
-// Snapshots are created by calling Clone method on orderedLister, which is
-// expected to be fast and efficient thanks to usage of B-trees.
-// B-trees can create a lazy copy of the tree structure, minimizing overhead.
+// 快照通过调用 orderedLister 的 Clone 方法创建，得益于 B-tree 的使用，
+// 这应当快速且高效：B-tree 可以惰性复制树结构，将开销降到最低。
 //
-// Assuming the watch cache observes all events and snapshots cache after each of them,
-// requests for a specific resource version can be served by retrieving
-// the snapshot with the greatest RV less than or equal to the requested RV.
-// To make snapshot retrivial efficient we need an ordered data structure, such as tree.
+// 假设 watch cache 能观察所有事件并在每个事件后快照缓存，
+// 对特定 resourceVersion 的请求可以通过取出
+// RV 小于等于请求 RV 的最大快照来服务。要高效地检索快照，
+// 需要一个有序数据结构，例如树。
 //
-// The initial implementation uses a B-tree to achieve the following performance characteristics (n - number of snapshots stored):
-//   - `Add`: Adds a new snapshot.
-//     Complexity: O(log n).
-//     Executed for each watch event observed by the cache.
-//   - `GetLessOrEqual`: Retrieves the snapshot with the greatest RV less than or equal to the requested RV.
-//     Complexity: O(log n).
-//     Executed for each LIST request with match=Exact or continuation.
-//   - `RemoveLess`: Cleans up snapshots outside the watch history window.
-//     Complexity: O(k log n), k - number of snapshots to remove, usually only one if watch capacity was not reduced.
-//     Executed per watch event observed when the cache is full.
-//   - `Reset`: Cleans up all snapshots.
-//     Complexity: O(1).
-//     Executed when the watch cache is reinitialized.
+// 初始实现使用 B-tree 以获得以下性能特征（n 为存储的快照数量）：
+//   - `Add`：添加新快照。
+//     复杂度：O(log n)。
+//     cache 每观察到一个 watch 事件执行一次。
+//   - `GetLessOrEqual`：取出 RV 小于等于请求 RV 的最大快照。
+//     复杂度：O(log n)。
+//     每个 match=Exact 或带 continuation 的 LIST 请求执行一次。
+//   - `RemoveLess`：清理超出 watch 历史窗口的快照。
+//     复杂度：O(k log n)，k 为要删除的快照数；若 watch 容量未缩减通常只有 1 个。
+//     缓存已满时，每观察到一个 watch 事件执行一次。
+//   - `Reset`：清理所有快照。
+//     复杂度：O(1)。
+//     watch cache 重新初始化时执行。
 //
-// Further optimization is possible by leveraging the property that adds always
-// increase the maximum RV and deletes only increase the minimum RV.
-// For example, a binary search on a cyclic buffer of (RV, snapshot)
-// should reduce number of allocations and improve removal complexity.
-// However, this solution is more complex and is deferred for future implementation.
+// 还可以利用「添加只会抬高最大 RV、删除只会抬高最小 RV」的性质进一步优化。
+// 例如，在 (RV, snapshot) 循环缓冲上做二分查找可以减少分配次数并改善
+// 删除复杂度。但该方案更复杂，留待将来实现。
 //
 // TODO: Rewrite to use a cyclic buffer
-//
-// 中文说明：以 RV 为键的 btree 让「找到 ≤ 请求 RV 的最新快照」成为一次有序查找，
+// 以 RV 为键的 btree 让「找到 ≤ 请求 RV 的最新快照」成为一次有序查找，
 // 这是支持 resourceVersion 精确读与分页续读的基础。
 func NewSnapshotter() Snapshotter {
 	s := &storeSnapshotter{
@@ -535,7 +522,7 @@ func (s *storeSnapshotter) Reset() {
 }
 
 // GetLessOrEqual 返回 RV ≤ 给定值的最新快照。
-// 中文说明：DescendLessOrEqual 从大到小遍历，回调返回 false 即停止，
+// DescendLessOrEqual 从大到小遍历，回调返回 false 即停止，
 // 因此只访问第一个（也是最大的）匹配项。
 func (s *storeSnapshotter) GetLessOrEqual(rv uint64) (Snapshot, bool) {
 	s.mux.RLock()
@@ -565,7 +552,7 @@ func (s *storeSnapshotter) Latest() (Snapshot, bool) {
 }
 
 // Add 克隆索引器并挂到给定 RV 下。
-// 中文说明：Clone 在写锁内完成，保证快照与当前状态一致；
+// Clone 在写锁内完成，保证快照与当前状态一致；
 // btree 的惰性克隆让该操作在后续写入前几乎零成本。
 func (s *storeSnapshotter) Add(rv uint64, indexer Indexer) {
 	s.mux.Lock()
@@ -574,7 +561,7 @@ func (s *storeSnapshotter) Add(rv uint64, indexer Indexer) {
 }
 
 // RemoveLess 删除所有 RV 小于给定值的快照，即清理超出 watch 历史窗口的部分。
-// 中文说明：循环删除最小项，遇到第一个 ≥ rv 的即停止；由于有序，
+// 循环删除最小项，遇到第一个 ≥ rv 的即停止；由于有序，
 // 至多删除 k 个（通常为 1）。
 func (s *storeSnapshotter) RemoveLess(rv uint64) {
 	s.mux.Lock()

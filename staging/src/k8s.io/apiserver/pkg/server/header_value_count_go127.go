@@ -20,10 +20,9 @@ package server
 
 import "net/http"
 
-// 1 MiB MaxHeaderBytes / 64 bytes per value (~16 for header and ~48 for value) bounds tiny-header floods
-// while allowing thousands of identity groups sent one per header line.
-//
-// 中文说明：按「最大头部字节数 ÷ 单个头部值的最小字节数」估算值个数上限，
+// 以 1 MiB 的 MaxHeaderBytes、每个值 64 字节（头部名约 16 字节、值约 48 字节）为界，
+// 既能限制极小头部行的洪泛，又允许每行头部传一个、共数千个身份组。
+// 按「最大头部字节数 ÷ 单个头部值的最小字节数」估算值个数上限，
 // 目的有二：一是阻止攻击者用大量极小的头部行耗尽 CPU（Go 1.27 起为头部值数量单独设限），
 // 二是仍允许前置代理把成千上万个用户组每组一行地传入（RequestHeader 认证依赖此形态）。
 // 上限与 MaxHeaderBytes 保持同量级，避免任一维度成为绕过点。

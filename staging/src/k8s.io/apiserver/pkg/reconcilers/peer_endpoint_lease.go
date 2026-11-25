@@ -16,8 +16,7 @@ limitations under the License.
 
 // Package reconcilers 提供 apiserver 级别的后台协调器，例如把本实例的
 // peer 访问地址以租约形式写入共享存储，供其它 apiserver 在版本偏斜时转发请求。
-//
-// 中文说明：协调器只依赖存储与 client-go，不依赖具体资源实现，便于在 apiserver 内复用。
+// 协调器只依赖存储与 client-go，不依赖具体资源实现，便于在 apiserver 内复用。
 package reconcilers
 
 import (
@@ -65,7 +64,7 @@ type peerEndpointLeases struct {
 }
 
 // PeerEndpointLeaseReconciler 维护“本 apiserver 的 peer 地址”在共享存储中的租约。
-// 中文说明：用 lease（TTL）而非静态配置，才能让实例崩溃后在有限时间内自动过期，
+// 用 lease（TTL）而非静态配置，才能让实例崩溃后在有限时间内自动过期，
 // 避免 peer 一直把流量转发到不存在的地址。
 type PeerEndpointLeaseReconciler interface {
 	// GetEndpoint 返回指定 apiserverId 的端点。
@@ -86,8 +85,7 @@ type peerEndpointLeaseReconciler struct {
 }
 
 // NewPeerEndpointLeaseReconciler 创建新的对端端点租约协调器。
-//
-// 中文说明：这里只做存储读写，不使用 watch，因此 newFunc/newListFunc 留空；
+// 这里只做存储读写，不使用 watch，因此 newFunc/newListFunc 留空；
 // destroyFn 用 sync.Once 包裹，保证 Stop 与 Destroy 重复调用安全。
 func NewPeerEndpointLeaseReconciler(config *storagebackend.ConfigForResource, baseKey string, leaseTime time.Duration) (PeerEndpointLeaseReconciler, error) {
 	// 不使用 storage.Watch 时，newFunc 和 newListFunc 可留空。
@@ -109,8 +107,7 @@ func NewPeerEndpointLeaseReconciler(config *storagebackend.ConfigForResource, ba
 // PeerEndpointLeaseController 是更新对端端点租约的控制器管理器。
 // 它为对端端点租约提供独立调谐循环，确保当某个 peer kube-apiserver 因版本不匹配
 // 无法处理请求、需要代理到目标 apiserver 时，能够获取目标实例的最新端点信息。
-//
-// 中文说明：controller 与 reconciler 分离，便于把“调度节奏/生命周期”和“存储交互”分开测试。
+// controller 与 reconciler 分离，便于把“调度节奏/生命周期”和“存储交互”分开测试。
 type PeerEndpointLeaseController struct {
 	reconciler       PeerEndpointLeaseReconciler
 	endpointInterval time.Duration

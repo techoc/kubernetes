@@ -24,7 +24,7 @@ import (
 
 // EmptyFields 表示不含任何路径的集合，
 // 其表现形式类似于 metav1.Fields{Raw: []byte("{}")}。
-// 中文说明：使用包级初始化一次性计算，避免每次重置 managedFields 都重新
+// 使用包级初始化一次性计算，避免每次重置 managedFields 都重新
 // 序列化空集合。
 var EmptyFields = func() metav1.FieldsV1 {
 	f, err := SetToFields(*fieldpath.NewSet())
@@ -41,7 +41,7 @@ func FieldsToSet(f metav1.FieldsV1) (s fieldpath.Set, err error) {
 }
 
 // SetToFields 从路径集合创建字段 trie。
-// 中文说明：即使 ToJSON 出错也仍返回已设置的 raw bytes，调用方需同时检查
+// 即使 ToJSON 出错也仍返回已设置的 raw bytes，调用方需同时检查
 // err 与返回值。
 func SetToFields(s fieldpath.Set) (f metav1.FieldsV1, err error) {
 	raw, err := s.ToJSON()

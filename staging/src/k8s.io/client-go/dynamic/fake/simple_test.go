@@ -138,8 +138,7 @@ func TestGetDecoding(t *testing.T) {
 }
 
 // TestList 验证 List 只返回指定 GVR 的对象，并保持确定性的排序。
-//
-// 中文说明：fixture 中混入 group2/version 的对象，期望结果中被排除；同 GVR 的对象按
+// fixture 中混入 group2/version 的对象，期望结果中被排除；同 GVR 的对象按
 // 名称升序返回（bar、baz、foo），避免 map 遍历顺序带来的不稳定断言。
 func TestList(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -170,8 +169,7 @@ func TestList(t *testing.T) {
 }
 
 // Test_ListKind 验证使用 UnstructuredList 作为种子时，List 返回正确的 list 元数据。
-//
-// 中文说明：fake tracker 的 resourceVersion 从 1 开始，每创建一个对象递增；种子里
+// fake tracker 的 resourceVersion 从 1 开始，每创建一个对象递增；种子里
 // 已有三个对象，因此 rv 为 4，continue 为空串。
 func Test_ListKind(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -277,8 +275,7 @@ func (tc *patchTestCase) verifyResult(result *unstructured.Unstructured) error {
 }
 
 // TestPatch 覆盖 JSON Patch、Merge Patch 对 unstructured 的效果与边界。
-//
-// 中文说明：unstructured 不支持 StrategicMergePatch（没有 Go 类型信息可供合并策略），
+// unstructured 不支持 StrategicMergePatch（没有 Go 类型信息可供合并策略），
 // 因此该类型会返回解析错误；JSON Patch 的 add/replace/remove 与 Merge Patch 的
 // 字段替换均应生效。
 func TestPatch(t *testing.T) {
@@ -342,10 +339,8 @@ func TestPatch(t *testing.T) {
 	}
 }
 
-// This test ensures list works when the fake dynamic client is seeded with a typed scheme and
-// unstructured type fixtures
-//
-// 中文说明：scheme 里注册了类型化对象（mockResource），但种子是 unstructured；List
+// TestListWithUnstructuredObjectsAndTypedScheme 确保 fake dynamic client 使用注册了
+// 类型化对象的 scheme 与 unstructured 种子时 List 仍正常工作：scheme 里注册了类型化对象（mockResource），但种子是 unstructured；List
 // 仍应返回 unstructured list，rv 为 2（一个对象 + 初始 1）。
 func TestListWithUnstructuredObjectsAndTypedScheme(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: testGroup, Version: testVersion, Resource: testResource}

@@ -29,13 +29,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-// RequestWaitGroup helps with the accounting of request(s) that are in
-// flight: the caller is expected to invoke Add(1) before executing the
-// request handler and then invoke Done() when the handler finishes.
-// NOTE: implementations must ensure that it is thread-safe
-// when invoked from multiple goroutines.
-//
-// 中文说明：与 sync.WaitGroup 不同，Add 在 Wait 之后返回错误而不是 panic，
+// RequestWaitGroup 用于统计在途请求：调用方应在执行请求处理器前调用 Add(1)，
+// 处理器结束后调用 Done()。
+// 注意：实现必须保证从多个 goroutine 调用时的线程安全。
+// 与 sync.WaitGroup 不同，Add 在 Wait 之后返回错误而不是 panic，
 // 这样优雅停机时新请求可以被明确拒绝。
 type RequestWaitGroup interface {
 	// Add adds delta, which may be negative, similar to sync.WaitGroup.
@@ -72,12 +69,11 @@ func withWaitGroup(handler http.Handler, longRunning apirequest.LongRunningReque
 		}
 
 		if err := wg.Add(1); err != nil {
-			// shutdown delay duration has elapsed and SafeWaitGroup.Wait has been invoked,
-			// this means 'WithRetryAfter' has started sending Retry-After response.
-			// we are going to exempt the same set of requests that WithRetryAfter are
-			// exempting from being rejected with a Retry-After response.
-			//
-			// 中文说明：豁免集合必须与 WithRetryAfter 保持一致，否则健康检查等
+			// shutdown 延迟时长已耗尽且 SafeWaitGroup.Wait 已被调用，
+			// 这意味着 WithRetryAfter 已开始发送 Retry-After 响应。
+			// 这里豁免的请求集合与 WithRetryAfter 豁免的集合相同——
+			// 即不会被 Retry-After 响应拒绝的那一组。
+			// 豁免集合必须与 WithRetryAfter 保持一致，否则健康检查等
 			// 请求会在停机窗口内被误拒，负载均衡器会把整个实例摘除。
 			if isRequestExemptFn(req) {
 				handler.ServeHTTP(w, req)

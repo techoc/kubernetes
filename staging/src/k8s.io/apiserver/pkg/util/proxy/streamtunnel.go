@@ -58,13 +58,10 @@ func NewTunnelingHandler(upgradeHandler http.Handler) *TunnelingHandler {
 	return &TunnelingHandler{upgradeHandler: upgradeHandler}
 }
 
-// ServeHTTP uses the upgradeHandler to tunnel between a downstream tunneling
-// connection and an upstream SPDY connection. The tunneling connection is
-// a wrapped WebSockets connection which communicates SPDY framed data. In the
-// case the upstream upgrade fails, we delegate communication to the passed
-// in "w" ResponseWriter.
-//
-// 中文说明：客户端必须在 WebSocket 子协议中声明 SPDY 隧道协议，否则无法确定
+// ServeHTTP 使用 upgradeHandler 在下游隧道连接与上游 SPDY 连接之间做隧道转发。
+// 隧道连接是包装后的 WebSockets 连接，传输 SPDY 帧数据；若上游升级失败，
+// 通信委派给传入的 "w" ResponseWriter。
+// 客户端必须在 WebSocket 子协议中声明 SPDY 隧道协议，否则无法确定
 // 上游应使用哪个 SPDY 版本，直接 400 拒绝。writer 中的 w 与 conn 互斥：
 // 升级成功用 conn，失败则用 w 写普通 HTTP 错误响应。
 func (h *TunnelingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -101,12 +98,9 @@ func (h *TunnelingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	h.upgradeHandler.ServeHTTP(writer, spdyRequest)
 }
 
-// createSPDYRequest modifies the passed request to remove
-// WebSockets headers and add SPDY upgrade information, including
-// spdy protocols acceptable to the client.
-//
-// 中文说明：必须克隆请求——原请求仍被下游 WebSocket 升级使用，直接修改会破坏它。
-// 请求体被丢弃：SPDY 升级请求本身无 body，保留它会让上游误读。
+// createSPDYRequest 修改传入的请求：移除 WebSockets 头部，添加 SPDY 升级信息，
+// 包括客户端可接受的 spdy 协议。必须克隆请求——原请求仍被下游 WebSocket 升级
+// 使用，直接修改会破坏它。请求体被丢弃：SPDY 升级请求本身无 body，保留它会让上游误读。
 func createSPDYRequest(req *http.Request, spdyProtocols ...string) *http.Request {
 	clone := utilnet.CloneRequest(req)
 	// Clean up the websocket headers from the http request.
@@ -125,11 +119,9 @@ func createSPDYRequest(req *http.Request, spdyProtocols ...string) *http.Request
 	return clone
 }
 
-// spdyProtocolsFromWebsocketProtocols returns a list of spdy protocols by filtering
-// to Kubernetes websocket subprotocols prefixed with "SPDY/3.1+", then removing the prefix
-//
-// 中文说明：只接受同时带 Kubernetes 前缀与后缀的子协议，避免把无关的
-// 自定义子协议误当成 SPDY 版本传给上游。
+// spdyProtocolsFromWebsocketProtocols 先筛选出以 "SPDY/3.1+" 为前缀的 Kubernetes
+// websocket 子协议，再去掉前缀得到 spdy 协议列表。只接受同时带 Kubernetes 前缀与
+// 后缀的子协议，避免把无关的自定义子协议误当成 SPDY 版本传给上游。
 func spdyProtocolsFromWebsocketProtocols(req *http.Request) []string {
 	var spdyProtocols []string
 	for _, protocol := range gwebsocket.Subprotocols(req) {
@@ -143,13 +135,12 @@ func spdyProtocolsFromWebsocketProtocols(req *http.Request) []string {
 var _ http.ResponseWriter = &tunnelingResponseWriter{}
 var _ http.Hijacker = &tunnelingResponseWriter{}
 
-// tunnelingResponseWriter implements the http.ResponseWriter and http.Hijacker interfaces.
-// Only non-upgrade responses can be written using WriteHeader() and Write().
-// Once Write or WriteHeader is called, Hijack returns an error.
-// Once Hijack is called, Write, WriteHeader, and Hijack return errors.
-//
-// 中文说明：状态机是单向的（written / hijacked 至多一个为真），互斥锁保证并发安全。
-// 这种严格性让「升级成功」与「返回普通错误」两条路径不会交叉，避免写出半截响应。
+// tunnelingResponseWriter 实现 http.ResponseWriter 与 http.Hijacker 接口，
+// 只有非升级响应可以用 WriteHeader() 和 Write() 写入。一旦调用过 Write 或
+// WriteHeader，Hijack 返回错误；一旦调用过 Hijack，Write、WriteHeader 与
+// Hijack 均返回错误。状态机是单向的（written / hijacked 至多一个为真），
+// 互斥锁保证并发安全。这种严格性让「升级成功」与「返回普通错误」两条路径
+// 不会交叉，避免写出半截响应。
 type tunnelingResponseWriter struct {
 	logger klog.Logger
 	// w is used to delegate Header(), WriteHeader(), and Write() calls
@@ -200,10 +191,9 @@ func (w *tunnelingResponseWriter) Write(p []byte) (int, error) {
 	return w.w.Write(p)
 }
 
-// WriteHeader is delegated to the stored "http.ResponseWriter".
-//
-// 中文说明：101 必须经由 Hijack 后的连接发出，直接 WriteHeader(101) 会绕过
-// WebSocket 握手逻辑；这里转换为 500，让配置错误显式失败而非静默产生坏连接。
+// WriteHeader 委派给保存的 "http.ResponseWriter"。101 必须经由 Hijack 后的
+// 连接发出，直接 WriteHeader(101) 会绕过 WebSocket 握手逻辑；这里转换为 500，
+// 让配置错误显式失败而非静默产生坏连接。
 func (w *tunnelingResponseWriter) WriteHeader(statusCode int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -228,13 +218,10 @@ func (w *tunnelingResponseWriter) WriteHeader(statusCode int) {
 	w.w.WriteHeader(statusCode)
 }
 
-// headerInterceptingConn wraps the tunneling "net.Conn" to drain the
-// HTTP response status/headers from the upstream SPDY connection, then use
-// that to decide how to initialize the delegate connection for writes.
-//
-// 中文说明：SPDY 客户端期望先读到完整的 HTTP 响应头，再开始读写帧；
-// 因此这里先缓冲并解析头部，解析成功后才初始化真正的下游连接，
-// 并把剩余字节（可能已含 body）转发出去。
+// headerInterceptingConn 包装隧道 "net.Conn"，先从上游 SPDY 连接读取并排空
+// HTTP 响应的状态行与头部，再据此决定如何初始化用于写数据的委派连接。
+// SPDY 客户端期望先读到完整的 HTTP 响应头，再开始读写帧；因此这里先缓冲并
+// 解析头部，解析成功后才初始化真正的下游连接，并把剩余字节（可能已含 body）转发出去。
 type headerInterceptingConn struct {
 	logger klog.Logger
 	// initializableConn is delegated to for all net.Conn methods.
@@ -265,11 +252,8 @@ var lfCRLF = []byte("\n\r\n")
 // token for header / body separation without \r (which go tolerates)
 var lfLF = []byte("\n\n")
 
-// Write intercepts to initially swallow the HTTP response, then
-// delegate to the tunneling "net.Conn" once the response has been
-// seen and processed.
-//
-// 中文说明：头部可能分多次 Write 到达，因此在未见分隔符前持续累积并返回成功；
+// Write 先拦截并吞掉 HTTP 响应，待响应被完整读取并处理后，再委派给隧道的
+// "net.Conn"。头部可能分多次 Write 到达，因此在未见分隔符前持续累积并返回成功；
 // 一旦识别出完整头部，解析后立即把同一批数据里的 body 字节转发。
 // 缓冲区上限防止恶意上游发送无限长的「头部」耗尽内存。
 func (h *headerInterceptingConn) Write(b []byte) (int, error) {
@@ -345,7 +329,7 @@ type tunnelingWebsocketUpgraderConn struct {
 //   - 101：校验 Upgrade/Connection 头后，升级为 WebSocket 并包装成隧道连接；
 //   - 其他状态：把原始响应字节回放到 hijack 得到的连接上，透传给客户端。
 //
-// 中文说明：错误路径会关闭可能已打开的连接，避免泄漏；升级后不再向 ResponseWriter
+// 错误路径会关闭可能已打开的连接，避免泄漏；升级后不再向 ResponseWriter
 // 写错误（此时 HTTP 响应已提交，再写会产生无效数据）。
 func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.Response, backendResponseBytes []byte) (err error) {
 	// make sure we close a connection we open in error cases
@@ -417,10 +401,8 @@ func (u *tunnelingWebsocketUpgraderConn) InitializeWrite(backendResponse *http.R
 		u.err = err
 		return u.err
 	}
-	// replay the backend response bytes to the hijacked conn
-	//
-	// 中文说明：设置写超时，避免客户端不读取时永久阻塞；回放的是原始字节，
-	// 保证状态行、头部与 body 与后端完全一致。
+	// 把后端响应的原始字节回放到 hijack 得到的连接上。设置写超时，避免客户端
+	// 不读取时永久阻塞；回放的是原始字节，保证状态行、头部与 body 与后端完全一致。
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 	_, err = conn.Write(backendResponseBytes)
 	if err != nil {

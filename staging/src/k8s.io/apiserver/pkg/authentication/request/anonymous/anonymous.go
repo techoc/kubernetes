@@ -55,12 +55,9 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 	}, true, nil
 }
 
-// NewAuthenticator returns a new anonymous authenticator.
-// When conditions is empty all requests are authenticated as anonymous.
-// When conditions are non-empty only those requests that match the at-least one
-// condition are authenticated as anonymous.
-//
-// 中文说明：条件目前只支持路径精确匹配；用 map 去重，重复配置不会改变行为。
+// NewAuthenticator 返回一个新的匿名认证器。conditions 为空时所有请求都被认证为匿名；
+// conditions 非空时，只有至少匹配一个条件的请求才被认证为匿名。
+// 条件目前只支持路径精确匹配；用 map 去重，重复配置不会改变行为。
 func NewAuthenticator(conditions []apiserver.AnonymousAuthCondition) authenticator.Request {
 	allowedPaths := make(map[string]bool)
 	for _, c := range conditions {

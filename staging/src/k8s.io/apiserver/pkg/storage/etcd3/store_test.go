@@ -90,7 +90,7 @@ func newPodList() runtime.Object {
 
 // checkStorageInvariants 断言写入 etcd 的原始值满足存储层不变量：
 // 能被 codec 解码，且持久化对象不应携带 resourceVersion/selfLink。
-// 中文说明：RV 由 etcd 在读取时填充，selfLink 已被废弃；若写入时就带上它们，
+// RV 由 etcd 在读取时填充，selfLink 已被废弃；若写入时就带上它们，
 // 说明序列化路径有误，会污染后续读出的对象。
 func checkStorageInvariants(etcdClient *clientv3.Client, codec runtime.Codec) storagetesting.KeyValidation {
 	return func(ctx context.Context, t *testing.T, key string) {
@@ -326,7 +326,7 @@ type storeWithPrefixTransformer struct {
 }
 
 // UpdatePrefixTransformer 替换转换器并返回恢复函数。
-// 中文说明：必须同时更新 store 与 watcher 的转换器，否则二者对同一份数据
+// 必须同时更新 store 与 watcher 的转换器，否则二者对同一份数据
 // 使用不同前缀，测试会出现难以解释的解码失败。
 func (s *storeWithPrefixTransformer) UpdatePrefixTransformer(modifier storagetesting.PrefixTransformerModifier) func() {
 	originalTransformer := s.transformer.(*storagetesting.PrefixTransformer)
@@ -397,7 +397,7 @@ func TestTransformationFailure(t *testing.T) {
 }
 
 // TestList 在 EtcdRangeStream 开关两种取值下验证 LIST 契约。
-// 中文说明：开启时必须确实走 RangeStream，关闭时不得发起流式请求——
+// 开启时必须确实走 RangeStream，关闭时不得发起流式请求——
 // 通过 KVRecorder 计数来断言，避免功能开关形同虚设。
 func TestList(t *testing.T) {
 	for _, rangeStream := range []bool{false, true} {
@@ -418,10 +418,9 @@ func TestList(t *testing.T) {
 	}
 }
 
-// TestGetListStreamFallsBackToPaginated verifies that a GetList against a server without
-// RangeStream support marks the feature unsupported and serves from the paginated path.
-//
-// 中文说明：Unimplemented 是「服务端不支持」的确定信号，因此必须记住并停止重试，
+// TestGetListStreamFallsBackToPaginated 验证对不支持 RangeStream 的服务端发起
+// GetList 时，该特性会被标记为不支持并回退到分页路径。
+// Unimplemented 是「服务端不支持」的确定信号，因此必须记住并停止重试，
 // 否则每个 LIST 都会先失败一次再回退，造成持续的性能损失。
 func TestGetListStreamFallsBackToPaginated(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EtcdRangeStream, true)
@@ -476,10 +475,9 @@ etcd_requests_total{group="",operation="list",resource="pods"} 1
 	}
 }
 
-// TestGetListStreamMultiChunk verifies the streamed request shapes on lists spanning
-// multiple RangeStream chunks (the etcd server chunks streams at 10 keys).
-//
-// 中文说明：同时验证 Exact（固定 RV，看不到之后写入）与 NotOlderThan（可见最新写入）
+// TestGetListStreamMultiChunk 验证跨多个 RangeStream 分块（etcd 服务端按每 10 个键
+// 分块）的列表上流式请求的形态。
+// 同时验证 Exact（固定 RV，看不到之后写入）与 NotOlderThan（可见最新写入）
 // 两种语义，以及流式列举不应产生分页字段。
 func TestGetListStreamMultiChunk(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EtcdRangeStream, true)
@@ -602,7 +600,7 @@ func TestConsistentList(t *testing.T) {
 }
 
 // TestCompactRevision 验证 store 能观察到 etcd 的压缩版本变化。
-// 中文说明：依赖 ListFromCacheSnapshot 开启的专用 watch——压缩事件不会通过
+// 依赖 ListFromCacheSnapshot 开启的专用 watch——压缩事件不会通过
 // 普通资源 watch 传递，必须单独监听 compact key。
 func TestCompactRevision(t *testing.T) {
 	// Test requires store to observe extenal changes to compaction revision, requiring dedicated watch on compact key which is enabled by ListFromCacheSnapshot.
@@ -612,7 +610,7 @@ func TestCompactRevision(t *testing.T) {
 }
 
 // checkStorageCallsInvariants 校验分页列举的实际 etcd 调用次数与变换读取次数。
-// 中文说明：apiserver 在收到非满页时会指数级放大 pageSize，因此调用次数应远小于
+// apiserver 在收到非满页时会指数级放大 pageSize，因此调用次数应远小于
 // 「每页固定 1000」的朴素实现；这里按 1+2+4+... 的几何级数推算期望值。
 func checkStorageCallsInvariants(transformer *storagetesting.PrefixTransformer, recorder *storagetesting.KVRecorder) storagetesting.CallsValidation {
 	return func(t *testing.T, pageSize, estimatedProcessedObjects uint64) {
@@ -678,7 +676,7 @@ func TestNamespaceScopedList(t *testing.T) {
 }
 
 // compactStorage 对给定 RV 执行 etcd 压缩，并在需要时等待 store 观察到压缩版本。
-// 中文说明：压缩可能需要重试（已压缩的 RV 会返回错误），因此第二次失败才视为失败；
+// 压缩可能需要重试（已压缩的 RV 会返回错误），因此第二次失败才视为失败；
 // 开启 ListFromCacheSnapshot 时必须轮询 CompactRevision，否则后续断言会与压缩竞态。
 func compactStorage(s *store, client *clientv3.Client) storagetesting.Compaction {
 	return func(ctx context.Context, t *testing.T, resourceVersion string) {
@@ -713,7 +711,7 @@ func compactStorage(s *store, client *clientv3.Client) storagetesting.Compaction
 }
 
 // increaseRVFunc 通过一次无关写入推进 etcd 全局 revision，并返回新值。
-// 中文说明：用于模拟「期间发生了其他写入」，测试 RV 的推进与快照边界。
+// 用于模拟「期间发生了其他写入」，测试 RV 的推进与快照边界。
 func increaseRVFunc(client *clientv3.Client) storagetesting.IncreaseRVFunc {
 	return func(ctx context.Context, t *testing.T) int64 {
 		resp, err := client.KV.Put(ctx, "increaseRV", "ok")
@@ -761,7 +759,7 @@ func TestStats(t *testing.T) {
 // =======================================================================
 
 // TestPrefix 验证配置前缀会被规范化为「以 / 开头、以 / 结尾」的形式。
-// 中文说明：规范化保证键空间不会因多余斜杠或缺少前导斜杠而与相邻前缀混淆。
+// 规范化保证键空间不会因多余斜杠或缺少前导斜杠而与相邻前缀混淆。
 func TestPrefix(t *testing.T) {
 	testcases := map[string]string{
 		"custom/prefix":     "/custom/prefix/",
@@ -777,7 +775,7 @@ func TestPrefix(t *testing.T) {
 }
 
 // Test_growSlice 验证按对象大小预估扩容切片时，容量与长度不被破坏。
-// 中文说明：growSlice 在反序列化 LIST 结果前预分配，既能避免多次扩容，
+// growSlice 在反序列化 LIST 结果前预分配，既能避免多次扩容，
 // 又必须遵守 maxCapacity 上限，防止恶意/异常大小导致内存暴涨。
 func Test_growSlice(t *testing.T) {
 	type args struct {
@@ -873,7 +871,7 @@ func Test_growSlice(t *testing.T) {
 }
 
 // TestLeaseMaxObjectCount 验证单个 lease 挂载对象数达到上限后会换用新 lease。
-// 中文说明：限制单 lease 对象数可避免 lease 撤销时一次性删除过多键；
+// 限制单 lease 对象数可避免 lease 撤销时一次性删除过多键；
 // 新 lease 的计数应从 1 重新开始。
 func TestLeaseMaxObjectCount(t *testing.T) {
 	ctx, store, _ := testSetup(t, withLeaseConfig(LeaseManagerConfig{
@@ -1012,7 +1010,7 @@ func withDefaults(options *setupOptions) {
 var _ setupOption = withDefaults
 
 // testSetup 启动嵌入式 etcd 并构造被测 store，注册清理以终止实例与 compactor。
-// 中文说明：withDefaults 被放在选项链最前，使调用方提供的选项能覆盖默认值。
+// withDefaults 被放在选项链最前，使调用方提供的选项能覆盖默认值。
 func testSetup(t testing.TB, opts ...setupOption) (context.Context, *store, *kubernetes.Client) {
 	setupOpts := setupOptions{}
 	opts = append([]setupOption{withDefaults}, opts...)
@@ -1047,7 +1045,7 @@ func testSetup(t testing.TB, opts ...setupOption) (context.Context, *store, *kub
 
 // TestPrepareKey 验证键规范化：补全全局前缀、按递归与否追加结尾斜杠，
 // 并拒绝包含 "." 或 ".." 路径段的键。
-// 中文说明：路径段校验是安全边界——".." 可让键逃逸出预期前缀，
+// 路径段校验是安全边界——".." 可让键逃逸出预期前缀，
 // 从而读写其他资源甚至其他组件的数据。
 func TestPrepareKey(t *testing.T) {
 	validKeys := []string{

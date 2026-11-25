@@ -26,8 +26,7 @@ import (
 )
 
 // TestDefaultStacktracePred 验证默认只在异常状态码上记录堆栈。
-//
-// 中文说明：100 与 500 记录，2xx/3xx/4xx 不记录——4xx 是客户端问题，堆栈
+// 100 与 500 记录，2xx/3xx/4xx 不记录——4xx 是客户端问题，堆栈
 // 只会淹没日志。
 func TestDefaultStacktracePred(t *testing.T) {
 	for _, x := range []int{101, 200, 204, 302, 400, 404} {
@@ -64,8 +63,7 @@ func TestStatusIsNot(t *testing.T) {
 }
 
 // TestWithLogging 验证重复包装日志中间件会 panic。
-//
-// 中文说明：双重包装会重复读取/记录同一请求，属于编程错误，应在开发期
+// 双重包装会重复读取/记录同一请求，属于编程错误，应在开发期
 // 立即暴露而不是产生重复日志。
 func TestWithLogging(t *testing.T) {
 	req, err := http.NewRequest("GET", "http://example.com", nil)
@@ -90,8 +88,7 @@ func TestWithLogging(t *testing.T) {
 }
 
 // TestLogOf 验证 LogOf 根据 shouldLogRequest 返回不同实现。
-//
-// 中文说明：不记录时返回 passthroughLogger，其开销极低，避免为关闭日志的
+// 不记录时返回 passthroughLogger，其开销极低，避免为关闭日志的
 // 请求分配额外结构。
 func TestLogOf(t *testing.T) {
 	tests := []struct {
@@ -132,8 +129,7 @@ func TestLogOf(t *testing.T) {
 }
 
 // TestUnlogged 验证 Unlogged 总是返回最底层原始 ResponseWriter。
-//
-// 中文说明：用于需要在日志包装之外直接操作连接的场景（如 hijack）。
+// 用于需要在日志包装之外直接操作连接的场景（如 hijack）。
 func TestUnlogged(t *testing.T) {
 	unloggedTests := []bool{true, false}
 	for _, makeLogger := range unloggedTests {
@@ -184,8 +180,7 @@ func TestLoggedStatus(t *testing.T) {
 }
 
 // TestRespLoggerWithDecoratedResponseWriter 验证日志包装保留底层 writer 的能力。
-//
-// 中文说明：HTTP/2 不支持 hijack，而 HTTP/1.x 支持；包装层必须透传，否则
+// HTTP/2 不支持 hijack，而 HTTP/1.x 支持；包装层必须透传，否则
 // 流式接口（如 exec）会在包装后失效。
 func TestRespLoggerWithDecoratedResponseWriter(t *testing.T) {
 	tests := []struct {

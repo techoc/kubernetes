@@ -21,10 +21,8 @@ import (
 	"net/http"
 )
 
-// Wrap wraps an io.Writer into a writer that flushes after every write if
-// the writer implements the Flusher interface.
-//
-// 中文说明：无论 w 是否实现 Flusher 都返回包装器，这样调用方无需做类型分支；
+// Wrap 把 io.Writer 包装成“每次写入后，若底层 writer 实现了 Flusher 接口就 flush”的 writer。
+// 无论 w 是否实现 Flusher 都返回包装器，这样调用方无需做类型分支；
 // 不实现时退化为普通写透传。
 func Wrap(w io.Writer) io.Writer {
 	fw := &flushWriter{
@@ -42,10 +40,8 @@ type flushWriter struct {
 	writer  io.Writer
 }
 
-// Write is a FlushWriter implementation of the io.Writer that sends any buffered
-// data to the client.
-//
-// 中文说明：Write 失败时不 flush，避免把半截数据推给客户端后掩盖真实错误。
+// Write 是 flushWriter 对 io.Writer 的实现，把缓冲数据发送给客户端。
+// Write 失败时不 flush，避免把半截数据推给客户端后掩盖真实错误。
 func (fw *flushWriter) Write(p []byte) (n int, err error) {
 	n, err = fw.writer.Write(p)
 	if err != nil {

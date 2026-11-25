@@ -28,7 +28,7 @@ limitations under the License.
 //	  return MaxLength(ctx, op, fldPath, value, nil)
 //	}
 //
-// 中文说明：本包为 validation-gen 代码生成器提供可组合的校验原语。所有函数遵循
+// 本包为 validation-gen 代码生成器提供可组合的校验原语。所有函数遵循
 // 统一签名，以便生成器按字段类型自动选择实现；指针参数模拟“是否设置”，
 // CREATE 时 oldValue 为 nil，UPDATE 时 value/oldValue 均可能为 nil（如 list-map 的增删）。
 package validate

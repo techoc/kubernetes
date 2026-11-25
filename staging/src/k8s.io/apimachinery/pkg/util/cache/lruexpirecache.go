@@ -24,7 +24,7 @@ import (
 )
 
 // Clock 定义获取当前时间的接口，便于测试注入可控时钟。
-// 中文说明：抽出时钟是为了测试能确定性地控制过期时间，而不必真实 sleep。
+// 抽出时钟是为了测试能确定性地控制过期时间，而不必真实 sleep。
 type Clock interface {
 	Now() time.Time
 }
@@ -37,7 +37,7 @@ func (realClock) Now() time.Time { return time.Now() }
 // LRUExpireCache 是带 TTL 和容量上限的 LRU 缓存：访问过的条目会提升到队首，
 // 超过 TTL 的条目视为失效，容量不足时淘汰最久未使用的条目。
 //
-// 中文说明：evictionList 以“最近使用在前”的顺序维护元素，entries 提供
+// evictionList 以“最近使用在前”的顺序维护元素，entries 提供
 // O(1) 查找；两个结构必须在锁内同步更新。容量满时淘汰最久未使用的条目，
 // 过期条目则在 Get 时惰性删除。
 type LRUExpireCache struct {
@@ -85,7 +85,7 @@ func (c *LRUExpireCache) Add(key interface{}, value interface{}, ttl time.Durati
 	defer c.lock.Unlock()
 
 	// key 已存在：更新现有节点，不创建重复条目。
-	// 中文说明：已存在的 key 只更新值、TTL 并提升优先级，不新建节点，
+	// 已存在的 key 只更新值、TTL 并提升优先级，不新建节点，
 	// 从而保证 entries 与链表始终一一对应。
 	oldElement, ok := c.entries[key]
 	if ok {
@@ -167,7 +167,7 @@ func (c *LRUExpireCache) RemoveAll(predicate func(key any) bool) {
 // 返回 key 后，条目仍可能在下一次 Get 前过期，因此后续 Get 可能返回未命中。
 // 返回顺序为从最久未使用到最近使用。
 //
-// 中文说明：只读遍历，不删除已过期条目（Get 会负责清理）；返回值顺序
+// 只读遍历，不删除已过期条目（Get 会负责清理）；返回值顺序
 // 依赖链表，故从 Back 向前遍历得到“最久未用优先”的顺序。
 func (c *LRUExpireCache) Keys() []interface{} {
 	c.lock.Lock()

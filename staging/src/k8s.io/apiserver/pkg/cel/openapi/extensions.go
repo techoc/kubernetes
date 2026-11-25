@@ -25,8 +25,7 @@ import (
 var intOrStringFormat = intstr.IntOrString{}.OpenAPISchemaFormat()
 
 // isExtension 判断布尔型扩展是否显式为 true。
-//
-// 中文说明：必须同时检查存在性与值——扩展缺失时 GetBool 返回零值 false，
+// 必须同时检查存在性与值——扩展缺失时 GetBool 返回零值 false，
 // 仅看值会把"未设置"和"设为 false"混为一谈。
 func isExtension(schema *spec.Schema, key string) bool {
 	v, ok := schema.Extensions.GetBool(key)
@@ -34,8 +33,7 @@ func isExtension(schema *spec.Schema, key string) bool {
 }
 
 // isXIntOrString 判断是否为 IntOrString 类型。
-//
-// 中文说明：内置类型用 format、CRD 用扩展，两条路径都要认，否则同一语义
+// 内置类型用 format、CRD 用扩展，两条路径都要认，否则同一语义
 // 在原生资源与自定义资源中表现不一致。
 func isXIntOrString(schema *spec.Schema) bool {
 	// built-in types have the Format while CRDs use extension
@@ -76,8 +74,7 @@ func getXListMapKeys(schema *spec.Schema) []string {
 }
 
 // ValidationRule 是 x-kubernetes-validations 扩展条目的反序列化目标。
-//
-// 中文说明：字段名带 Field 后缀是为了与接口方法名区分；JSON 标签对应
+// 字段名带 Field 后缀是为了与接口方法名区分；JSON 标签对应
 // CRD 中校验规则的字段名，不能修改。
 type ValidationRule struct {
 	RuleField              string `json:"rule"`
@@ -107,8 +104,7 @@ func (v ValidationRule) MessageExpression() string {
 }
 
 // TODO: simplify
-//
-// 中文说明：解析失败时返回 nil 而非错误，是因为扩展内容由 API 校验保证合法，
+// 解析失败时返回 nil 而非错误，是因为扩展内容由 API 校验保证合法，
 // 此处属于尽力而为的读取路径。
 func getXValidations(schema *spec.Schema) []common.ValidationRule {
 	var rules []ValidationRule

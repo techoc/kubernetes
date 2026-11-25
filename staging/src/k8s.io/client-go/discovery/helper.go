@@ -26,11 +26,9 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
-// IsResourceEnabled queries the server to determine if the resource specified is present on the server.
-// This is particularly helpful when writing a controller or an e2e test that requires a particular resource to function.
-//
-// 中文说明：只需一次 discovery 请求即可判断某个资源是否可用。适用于编写控制器或 e2e
-// 测试时探测可选 API（例如某个特性门控开启后才注册的资源）是否已存在于目标集群。
+// IsResourceEnabled 查询服务端以判断指定资源是否存在，只需一次 discovery 请求即可得出
+// 结论。适用于编写控制器或 e2e 测试时探测可选 API（例如某个特性门控开启后才注册的资源）
+// 是否已存在于目标集群。
 func IsResourceEnabled(client DiscoveryInterface, resourceToCheck schema.GroupVersionResource) (bool, error) {
 	// this is a single request.  The ServerResourcesForGroupVersion handles the core v1 group as legacy.
 	// 中文：只查询目标 group/version，避免拉取全量 discovery 数据；核心 v1 组的遗留路径由
@@ -53,11 +51,9 @@ func IsResourceEnabled(client DiscoveryInterface, resourceToCheck schema.GroupVe
 	return false, nil
 }
 
-// MatchesServerVersion queries the server to compares the build version
-// (git hash) of the client with the server's build version. It returns an error
-// if it failed to contact the server or if the versions are not an exact match.
-//
-// 中文说明：用于客户端与服务端二进制必须严格同版本的场景（如 e2e 测试），任一字段不一致即返回错误。
+// MatchesServerVersion 查询服务端，比较客户端与服务端的服务端构建信息（git hash），
+// 联系不上服务端或版本不完全一致都会返回错误。适用于客户端与服务端二进制必须严格
+// 同版本的场景（如 e2e 测试），任一字段不一致即返回错误。
 func MatchesServerVersion(clientVersion apimachineryversion.Info, client DiscoveryInterface) error {
 	sVer, err := client.ServerVersion()
 	if err != nil {
@@ -72,9 +68,8 @@ func MatchesServerVersion(clientVersion apimachineryversion.Info, client Discove
 	return nil
 }
 
-// ServerSupportsVersion returns an error if the server doesn't have the required version
-//
-// 中文说明：通过 ServerGroups 列出所有 group/version，检查目标版本是否在其中。
+// ServerSupportsVersion 在服务端没有所需版本时返回错误。
+// 通过 ServerGroups 列出所有 group/version，检查目标版本是否在其中。
 // 注意：discovery 可能因 403 而返回空列表，此时故意放行，以免 RBAC 受限的客户端被误判为
 // 不支持该版本。
 func ServerSupportsVersion(client DiscoveryInterface, requiredGV schema.GroupVersion) error {
@@ -105,9 +100,7 @@ func ServerSupportsVersion(client DiscoveryInterface, requiredGV schema.GroupVer
 	return fmt.Errorf("server does not support API version %q", requiredGV)
 }
 
-// GroupVersionResources converts APIResourceLists to the GroupVersionResources.
-//
-// 中文说明：把 discovery 返回的 APIResourceList 拍平成一个 GVR 集合。
+// GroupVersionResources 把 discovery 返回的 APIResourceList 拍平成一个 GVR 集合。
 // 用 map[struct{}] 而非切片是为了 O(1) 的存在性判断。
 func GroupVersionResources(rls []*metav1.APIResourceList) (map[schema.GroupVersionResource]struct{}, error) {
 	gvrs := map[schema.GroupVersionResource]struct{}{}
@@ -124,10 +117,8 @@ func GroupVersionResources(rls []*metav1.APIResourceList) (map[schema.GroupVersi
 	return gvrs, nil
 }
 
-// FilteredBy filters by the given predicate. Empty APIResourceLists are dropped.
-//
-// 中文说明：逐条筛选资源；某个 group/version 若没有任何资源通过谓词，则整条列表被丢弃，
-// 避免调用方拿到空列表产生误解。
+// FilteredBy 按给定谓词逐条筛选资源；某个 group/version 若没有任何资源通过谓词，
+// 则其空的 APIResourceList 整条被丢弃，避免调用方拿到空列表产生误解。
 func FilteredBy(pred ResourcePredicate, rls []*metav1.APIResourceList) []*metav1.APIResourceList {
 	result := []*metav1.APIResourceList{}
 	for _, rl := range rls {
@@ -147,17 +138,15 @@ func FilteredBy(pred ResourcePredicate, rls []*metav1.APIResourceList) []*metav1
 	return result
 }
 
-// ResourcePredicate has a method to check if a resource matches a given condition.
-//
-// 中文说明：FilteredBy 使用的筛选条件抽象，便于调用方以函数或结构体形式提供谓词。
+// ResourcePredicate 提供检查资源是否匹配给定条件的方法，是 FilteredBy 使用的筛选条件
+// 抽象，便于调用方以函数或结构体形式提供谓词。
 type ResourcePredicate interface {
 	// Match 判断给定 group/version 下的资源是否满足条件。
 	Match(groupVersion string, r *metav1.APIResource) bool
 }
 
-// ResourcePredicateFunc returns true if it matches a resource based on a custom condition.
-//
-// 中文说明：让普通函数通过适配器直接满足 ResourcePredicate。
+// ResourcePredicateFunc 基于自定义条件判断资源是否匹配，让普通函数直接满足
+// ResourcePredicate 接口。
 type ResourcePredicateFunc func(groupVersion string, r *metav1.APIResource) bool
 
 // Match is a wrapper around ResourcePredicateFunc.
@@ -165,17 +154,14 @@ func (fn ResourcePredicateFunc) Match(groupVersion string, r *metav1.APIResource
 	return fn(groupVersion, r)
 }
 
-// SupportsAllVerbs is a predicate matching a resource iff all given verbs are supported.
-//
-// 中文说明：例如只会读的客户端可要求资源至少支持 get 与 list。
+// SupportsAllVerbs 是仅当资源支持全部给定动词时才匹配的谓词。
+// 例如只会读的客户端可要求资源至少支持 get 与 list。
 type SupportsAllVerbs struct {
 	// Verbs 是要求资源全部支持的动词集合。
 	Verbs []string
 }
 
-// Match checks if a resource contains all the given verbs.
-//
-// 中文说明：按“全部包含”语义判断，而非任意一个。
+// Match 检查资源是否包含全部给定动词：按“全部包含”语义判断，而非任意一个。
 func (p SupportsAllVerbs) Match(groupVersion string, r *metav1.APIResource) bool {
 	return sets.NewString([]string(r.Verbs)...).HasAll(p.Verbs...)
 }

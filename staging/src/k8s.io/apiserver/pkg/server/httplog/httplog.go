@@ -47,19 +47,16 @@ type logger interface {
 
 type respLoggerContextKeyType int
 
-// respLoggerContextKey is used to store the respLogger pointer in the request context.
-//
-// 中文说明：使用私有类型作为 key，避免与其它包在 context 中存入的字符串键冲突。
+// respLoggerContextKey 用于在请求 context 中存储 respLogger 指针。
+// 使用私有类型作为 key，避免与其它包在 context 中存入的字符串键冲突。
 const respLoggerContextKey respLoggerContextKeyType = iota
 
-// Add a layer on top of ResponseWriter, so we can track latency and error
-// message sources.
+// 在 ResponseWriter 之上加一层封装，以便跟踪耗时与错误信息来源。
+// 包装 ResponseWriter 的核心目的是记录状态码与耗时——标准库不暴露已写出的状态码。
 //
-// TODO now that we're using go-restful, we shouldn't need to be wrapping
-// the http.ResponseWriter. We can recover panics from go-restful, and
-// the logging value is questionable.
+// TODO：现在已在使用 go-restful，理论上不再需要包装 http.ResponseWriter——
+// 我们可以从 go-restful 中恢复 panic，这层包装的日志价值存疑。
 //
-// 中文说明：包装 ResponseWriter 的核心目的是记录状态码与耗时——标准库不暴露已写出的状态码。
 // 并发注意：请求超时时，其他 goroutine 仍可能向 addedInfo 等字段追加内容，
 // 因此这些字段的读写都由 mutex 保护；而 status/statusRecorded 只在请求处理路径写。
 type respLogger struct {
@@ -100,9 +97,8 @@ func (passthroughLogger) Addf(format string, data ...interface{}) {
 	klog.V(2).Info(fmt.Sprintf(format, data...))
 }
 
-// DefaultStacktracePred is the default implementation of StacktracePred.
-//
-// 中文说明：只对 1xx/5xx 记录栈，排除 101（协议切换）——WebSocket 升级成功不是错误，
+// DefaultStacktracePred 是 StacktracePred 的默认实现：
+// 只对 1xx/5xx 记录栈，排除 101（协议切换）——WebSocket 升级成功不是错误，
 // 记录栈只会制造噪音。
 func DefaultStacktracePred(status int) bool {
 	return (status < http.StatusOK || status >= http.StatusInternalServerError) && status != http.StatusSwitchingProtocols
@@ -110,9 +106,8 @@ func DefaultStacktracePred(status int) bool {
 
 const withLoggingLevel = 3
 
-// WithLogging wraps the handler with logging.
-//
-// 中文说明：默认仅在 -v=3 及以上启用，避免每个请求都产生日志。
+// WithLogging 用日志功能包装 handler。
+// 默认仅在 -v=3 及以上启用，避免每个请求都产生日志。
 // 通过闭包而非常量判断，使运行期日志级别变化能立即生效。
 func WithLogging(handler http.Handler, pred StacktracePred) http.Handler {
 	return withLogging(handler, pred, func() bool {
@@ -121,7 +116,7 @@ func WithLogging(handler http.Handler, pred StacktracePred) http.Handler {
 }
 
 // withLogging 是 WithLogging 的可测试版本：日志开关由调用方注入。
-// 中文说明：若上层用 WithRoutine 把处理放到独立 goroutine，ServeHTTP 返回时
+// 若上层用 WithRoutine 把处理放到独立 goroutine，ServeHTTP 返回时
 // 请求可能尚未真正完成；此时把 rl.Log 追加为该 goroutine 的收尾任务，
 // 保证日志在响应完成后才输出，且不会重复输出（logFunc 置 nil）。
 func withLogging(handler http.Handler, stackTracePred StacktracePred, shouldLogRequest ShouldLogRequestPred) http.Handler {
@@ -184,7 +179,7 @@ func respLoggerFromRequest(req *http.Request) *respLogger {
 }
 
 // newLoggedWithStartTime 构造 logger 并快照 User-Agent/Content-Type。
-// 中文说明：头部在此时复制，是因为请求超时后其他 goroutine 可能修改请求头，
+// 头部在此时复制，是因为请求超时后其他 goroutine 可能修改请求头，
 // 延迟到 Log 时再读取会与写者产生 map 并发读写竞态。
 func newLoggedWithStartTime(req *http.Request, w http.ResponseWriter, startTime time.Time) *respLogger {
 	logger := &respLogger{
@@ -203,11 +198,9 @@ func newLogged(req *http.Request, w http.ResponseWriter) *respLogger {
 	return newLoggedWithStartTime(req, w, time.Now())
 }
 
-// LogOf returns the logger hiding in w. If there is not an existing logger
-// then a passthroughLogger will be created which will log to stdout immediately
-// when Addf is called.
-//
-// 中文说明：返回 passthroughLogger 而非 nil，让调用方无需判空即可安全调用 Addf。
+// LogOf 返回隐藏在 w 中的 logger；若不存在已有 logger，则创建 passthroughLogger，
+// 后者在 Addf 被调用时立即输出到 stdout。
+// 返回 passthroughLogger 而非 nil，让调用方无需判空即可安全调用 Addf。
 func LogOf(req *http.Request, w http.ResponseWriter) logger {
 	if rl := respLoggerFromRequest(req); rl != nil {
 		return rl
@@ -215,9 +208,8 @@ func LogOf(req *http.Request, w http.ResponseWriter) logger {
 	return &passthroughLogger{}
 }
 
-// Unlogged returns the original ResponseWriter, or w if it is not our inserted logger.
-//
-// 中文说明：某些需要直接控制连接的处理器（如流式代理）必须拿到未被包装的 writer，
+// Unlogged 返回原始 ResponseWriter；若 w 不是我们插入的 logger 则原样返回 w。
+// 某些需要直接控制连接的处理器（如流式代理）必须拿到未被包装的 writer，
 // 否则 Hijack/Flush 语义会被中间层改变。
 func Unlogged(req *http.Request, w http.ResponseWriter) http.ResponseWriter {
 	if rl := respLoggerFromRequest(req); rl != nil {
@@ -287,9 +279,8 @@ func SetStacktracePredicate(ctx context.Context, pred StacktracePred) {
 	}
 }
 
-// Log is intended to be called once at the end of your request handler, via defer
-//
-// 中文说明：在持有 mutex 的情况下读取并输出，保证 addedKeyValuePairs/addedInfo
+// Log 设计为在请求处理器结束时通过 defer 调用一次。
+// 在持有 mutex 的情况下读取并输出，保证 addedKeyValuePairs/addedInfo
 // 不会与其他 goroutine 的写入交错；延迟在此时才计算，覆盖完整处理时间。
 func (rl *respLogger) Log() {
 	latency := time.Since(rl.startTime)
@@ -337,9 +328,8 @@ func (rl *respLogger) Header() http.Header {
 	return rl.w.Header()
 }
 
-// Write implements http.ResponseWriter.
-//
-// 中文说明：若 WriteHeader 未被显式调用，首次 Write 隐式记录 200，
+// Write 实现 http.ResponseWriter 接口。
+// 若 WriteHeader 未被显式调用，首次 Write 隐式记录 200，
 // 与 net/http 的行为一致；否则日志中的状态码会是零值。
 func (rl *respLogger) Write(b []byte) (int, error) {
 	if !rl.statusRecorded {
@@ -358,7 +348,7 @@ func (rl *respLogger) WriteHeader(status int) {
 }
 
 // Hijack 标记连接已被接管并透传到底层 writer。
-// 中文说明：只有底层实现 http.Hijacker 时才能调用，否则类型断言会 panic——
+// 只有底层实现 http.Hijacker 时才能调用，否则类型断言会 panic——
 // 这是有意为之，说明包装链装配有误。
 func (rl *respLogger) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	rl.hijacked = true
@@ -369,7 +359,7 @@ func (rl *respLogger) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 // recordStatus 记录状态码，并按谓词决定是否捕获栈与错误输出。
-// 中文说明：栈与后续的响应体捕获绑定——只有在需要栈时才有必要把错误响应体
+// 栈与后续的响应体捕获绑定——只有在需要栈时才有必要把错误响应体
 // 一并记入日志，否则会平白放大日志体积。
 func (rl *respLogger) recordStatus(status int) {
 	rl.mutex.Lock()

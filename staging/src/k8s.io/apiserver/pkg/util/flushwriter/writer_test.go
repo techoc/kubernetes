@@ -51,7 +51,7 @@ func (w *writerWithNoFlush) Write(p []byte) (n int, err error) {
 
 // TestWriteWithFlush 验证底层实现了 Flush 时，每次 Write 都会触发一次 Flush。
 //
-// 中文说明：流式响应依赖这一行为把数据及时推送给客户端。
+// 流式响应依赖这一行为把数据及时推送给客户端。
 func TestWriteWithFlush(t *testing.T) {
 	w := &writerWithFlush{}
 	fw := Wrap(w)

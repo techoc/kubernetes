@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// 中文说明：UPDATE 操作允许的变更类型，供各类 Update* 函数共享。
+// UPDATE 操作允许的变更类型，供各类 Update* 函数共享。
 type UpdateConstraint int
 
 const (
@@ -42,7 +42,7 @@ const (
 	NoRemoveItem
 )
 
-// 中文说明：适用于可用 == 比较的标量值；零值被视为“未设置”。
+// 适用于可用 == 比较的标量值；零值被视为“未设置”。
 func UpdateValueByCompare[T comparable](_ context.Context, op operation.Operation, fldPath *field.Path, value, oldValue *T, constraints ...UpdateConstraint) field.ErrorList {
 	// oldValue 为 nil 表示没有旧值可比较（如 +k8s:eachVal 作用域的新条目），无需检查状态转换。
 	if op.Type != operation.Update || oldValue == nil {
@@ -75,7 +75,7 @@ func UpdateValueByCompare[T comparable](_ context.Context, op operation.Operatio
 	return errs
 }
 
-// 中文说明：指针的 nil 直接表示“未设置”，比零值判断更精确。
+// 指针的 nil 直接表示“未设置”，比零值判断更精确。
 func UpdatePointer[T any](_ context.Context, op operation.Operation, fldPath *field.Path, value, oldValue *T, constraints ...UpdateConstraint) field.ErrorList {
 	if op.Type != operation.Update {
 		return nil
@@ -106,7 +106,7 @@ func UpdatePointer[T any](_ context.Context, op operation.Operation, fldPath *fi
 	return errs
 }
 
-// 中文说明：slice/map/struct 等不可用 == 比较的类型，用 semantic DeepEqual 判断是否为零值。
+// slice/map/struct 等不可用 == 比较的类型，用 semantic DeepEqual 判断是否为零值。
 func UpdateValueByReflect[T any](_ context.Context, op operation.Operation, fldPath *field.Path, value, oldValue *T, constraints ...UpdateConstraint) field.ErrorList {
 	// oldValue 为 nil 表示没有旧值可比较（如 +k8s:eachVal 作用域的新条目），无需检查状态转换。
 	if op.Type != operation.Update || oldValue == nil {
@@ -142,7 +142,7 @@ func UpdateValueByReflect[T any](_ context.Context, op operation.Operation, fldP
 	return errs
 }
 
-// 中文说明：非指针结构体无法表达“未设置”，因此只可能触发 NoModify。
+// 非指针结构体无法表达“未设置”，因此只可能触发 NoModify。
 func UpdateStruct[T any](_ context.Context, op operation.Operation, fldPath *field.Path, value, oldValue *T, constraints ...UpdateConstraint) field.ErrorList {
 	// oldValue 为 nil 表示没有旧值可比较（如 +k8s:eachVal 作用域的新条目），无需检查状态转换。
 	if op.Type != operation.Update || oldValue == nil {
@@ -168,7 +168,7 @@ func UpdateStruct[T any](_ context.Context, op operation.Operation, fldPath *fie
 	return errs
 }
 
-// 中文说明：元素按值存储；用 match 在两个 slice 间做元素配对，判定是新增还是删除。
+// 元素按值存储；用 match 在两个 slice 间做元素配对，判定是新增还是删除。
 func ValSliceUpdate[T any](_ context.Context, op operation.Operation, fldPath *field.Path, value, oldValue []T, match MatchFunc[*T], constraints ...UpdateConstraint) field.ErrorList {
 	if op.Type != operation.Update {
 		return nil
@@ -214,7 +214,7 @@ func ValSliceUpdate[T any](_ context.Context, op operation.Operation, fldPath *f
 	return errs
 }
 
-// 中文说明：与 ValSliceUpdate 相同，但元素为指针；nil 元素由 PtrSliceNoNils 负责校验，
+// 与 ValSliceUpdate 相同，但元素为指针；nil 元素由 PtrSliceNoNils 负责校验，
 // 这里跳过，以免 match 函数收到 nil。
 func PtrSliceUpdate[T any](ctx context.Context, op operation.Operation, fldPath *field.Path, value, oldValue []*T, match MatchFunc[*T], constraints ...UpdateConstraint) field.ErrorList {
 	if op.Type != operation.Update {
@@ -264,7 +264,7 @@ func PtrSliceUpdate[T any](ctx context.Context, op operation.Operation, fldPath 
 	return errs
 }
 
-// 中文说明：只比较键集合，值的变化不在本函数职责内。
+// 只比较键集合，值的变化不在本函数职责内。
 func UpdateMap[K comparable, V any](_ context.Context, op operation.Operation, fldPath *field.Path, value, oldValue map[K]V, constraints ...UpdateConstraint) field.ErrorList {
 	if op.Type != operation.Update {
 		return nil

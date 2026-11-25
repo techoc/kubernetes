@@ -48,7 +48,7 @@ type testArgs struct {
 // TestApplyUsingLastAppliedAnnotation 验证对使用客户端应用 last-applied 注解创建的对象
 // 执行 apply 不会产生冲突。
 //
-// 中文说明：复用同一 kubectl manager 时，只有 last-applied 中未声明的字段
+// 复用同一 kubectl manager 时，只有 last-applied 中未声明的字段
 // 变更才会冲突；不同 manager 则要把所有被他人改过的字段都视为冲突。
 // 用例还覆盖 apiVersion 不匹配与非法 last-applied 的降级行为。
 func TestApplyUsingLastAppliedAnnotation(t *testing.T) {
@@ -996,7 +996,7 @@ func testConflicts(t *testing.T, f managedfieldstest.TestFieldManager, tests []t
 			}
 
 			//最终资源应包含已应用的更改
-			// 中文说明：DeepDerivative 只要求 applied 中出现的字段在 live 中一致，
+			// DeepDerivative 只要求 applied 中出现的字段在 live 中一致，
 			// 不反对 server 补充默认字段。
 			if !apiequality.Semantic.DeepDerivative(appliedObj, f.Live()) {
 				t.Errorf("expected equal resource: \n%#v, got: \n%#v", appliedObj, f.Live())

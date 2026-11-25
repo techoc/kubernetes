@@ -195,7 +195,7 @@ func getIPv6DefaultRoutes(input io.Reader) ([]Route, error) {
 // parseIP 将路由文件中的十六进制 IP 字符串转换为 net.IP。
 // IPv4 值必须转换为大端序。
 //
-// 中文说明：/proc 中的 IPv4 地址按主机字节序存储，需反转字节才能得到网络序；
+// /proc 中的 IPv4 地址按主机字节序存储，需反转字节才能得到网络序；
 // IPv6 已经是网络序，直接用。
 func parseIP(str string, family AddressFamily) (net.IP, error) {
 	if str == "" {
@@ -290,7 +290,7 @@ func getIPFromInterface(logger klog.Logger, intfName string, forFamily AddressFa
 // getIPFromLoopbackInterface 获取回环接口上的 IP，并返回全局单播地址（如果有）。
 // 回环接口必须启用，IP 必须属于请求的地址族且为全局单播地址。
 //
-// 中文说明：RFC5549 场景下默认路由的接口只有 link-local 地址，而真正的
+// RFC5549 场景下默认路由的接口只有 link-local 地址，而真正的
 // 全局地址挂在 loopback 上，因此在路由接口找不到时需回退到这里。
 func getIPFromLoopbackInterface(logger klog.Logger, forFamily AddressFamily, nw networkInterfacer) (net.IP, error) {
 	intfs, err := nw.Interfaces()
@@ -396,7 +396,7 @@ func ChooseHostInterface() (net.IP, error) {
 // 否则使用 IPv4 和 IPv6 路由信息，返回具有网关的接口 IP（优先 IPv4）。
 // 节点没有互联网连接时返回错误。
 //
-// 中文说明：这是支持上下文日志的主入口；无 logger 的版本仅为兼容保留。
+// 这是支持上下文日志的主入口；无 logger 的版本仅为兼容保留。
 func ChooseHostInterfaceWithLogger(logger klog.Logger) (net.IP, error) {
 	return chooseHostInterface(logger, preferIPv4)
 }
@@ -511,7 +511,7 @@ func ResolveBindAddress(bindAddress net.IP) (net.IP, error) {
 // bindAddress 为未指定地址或回环地址时，返回相同地址族的默认 IP。
 // 否则直接返回 bindAddress。
 //
-// 中文说明：绑定到 unspecified（0.0.0.0/::）或 loopback 时，实际对外地址仍需
+// 绑定到 unspecified（0.0.0.0/::）或 loopback 时，实际对外地址仍需
 // 从主机接口选择，且保持与用户指定地址相同的族（IPv4/IPv6）。
 func ResolveBindAddressWithLogger(logger klog.Logger, bindAddress net.IP) (net.IP, error) {
 	addressFamilies := preferIPv4

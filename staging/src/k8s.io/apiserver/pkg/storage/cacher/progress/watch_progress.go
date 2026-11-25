@@ -16,8 +16,7 @@ limitations under the License.
 
 // Package progress 实现按需向 etcd 请求 watch 进度（bookmark）的机制，
 // 用于让缓存尽快追上最新资源版本。
-//
-// 中文说明：只有存在等待者时才周期性请求，避免在空闲时产生无谓的 etcd 负载。
+// 只有存在等待者时才周期性请求，避免在空闲时产生无谓的 etcd 负载。
 package progress
 
 import (
@@ -35,9 +34,8 @@ import (
 )
 
 const (
-	// progressRequestPeriod determines period of requesting progress
-	// from etcd when there is a request waiting for watch cache to be fresh.
-	// 中文说明：仅在有等待者时才以该周期请求 progress（bookmark），避免空转流量。
+	// progressRequestPeriod 决定当有请求等待 watch 缓存追平时向 etcd
+	// 请求 progress 的周期；仅在有等待者时才以该周期请求 progress（bookmark），避免空转流量。
 	progressRequestPeriod = 100 * time.Millisecond
 )
 
@@ -60,10 +58,8 @@ type TickerFactory interface {
 	NewTimer(time.Duration) clock.Timer
 }
 
-// ConditionalProgressRequester will request progress notification if there
-// is a request waiting for watch cache to be fresh.
-//
-// 中文说明：waiting 是“等待缓存追平的调用方数量”，由 Add/Remove 维护；
+// ConditionalProgressRequester 在有请求等待 watch 缓存追平时请求 progress 通知。
+// waiting 是“等待缓存追平的调用方数量”，由 Add/Remove 维护；
 // 只有大于 0 才向 etcd 请求 progress，避免无意义的 bookmark 流量。
 type ConditionalProgressRequester struct {
 	clock                TickerFactory
@@ -77,7 +73,7 @@ type ConditionalProgressRequester struct {
 }
 
 // Run 启动请求循环，直到 stopCh 关闭。
-// 中文说明：stopCh 关闭时设置 stopped 并唤醒 cond，保证等待循环不会漏掉退出信号。
+// stopCh 关闭时设置 stopped 并唤醒 cond，保证等待循环不会漏掉退出信号。
 func (pr *ConditionalProgressRequester) Run(stopCh <-chan struct{}) {
 	ctx := wait.ContextForChannel(stopCh)
 	if pr.contextMetadata != nil {

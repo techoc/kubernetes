@@ -32,20 +32,18 @@ import (
 )
 
 const (
-	// idleTimeout is the read/write deadline set for websocket server connection. Reading
-	// or writing the connection will return an i/o timeout if this deadline is exceeded.
-	// Currently, we use the same value as the kubelet websocket server.
-	// 中文说明：与 kubelet 保持一致，避免两端超时策略不同造成“半死”连接。
+	// idleTimeout 是为 websocket 服务端连接设置的读写截止时间，超过后读写会返回
+	// i/o 超时。目前与 kubelet websocket 服务端使用相同的值，保持一致以避免
+	// 两端超时策略不同造成“半死”连接。
 	defaultIdleConnectionTimeout = 4 * time.Hour
 
-	// Deadline for writing errors to the websocket connection before io/timeout.
-	// 中文说明：错误写不出去时不能无限等待，否则会拖住 handler。
+	// 向 websocket 连接写错误的截止时间，超过后触发 io/timeout。
+	// 错误写不出去时不能无限等待，否则会拖住 handler。
 	writeErrorDeadline = 10 * time.Second
 )
 
-// Options contains details about which streams are required for
-// remote command execution.
-// 中文说明：只有被请求的流才会真正建立，未请求的通道在协议里标记为 Ignore。
+// Options 包含远程命令执行需要哪些流的细节。
+// 只有被请求的流才会真正建立，未请求的通道在协议里标记为 Ignore。
 type Options struct {
 	Stdin  bool
 	Stdout bool
@@ -53,9 +51,8 @@ type Options struct {
 	Tty    bool
 }
 
-// conns contains the connection and streams used when
-// forwarding an attach or execute session into a container.
-// 中文说明：writeStatus 把 apiserver 的错误以 Status JSON 写入专用错误通道，
+// conns 包含把 attach 或 exec 会话转发进容器时使用的连接与各流。
+// writeStatus 把 apiserver 的错误以 Status JSON 写入专用错误通道，
 // 客户端据此区分“会话结束”与“传输中断”。
 type conns struct {
 	conn         io.Closer
@@ -68,10 +65,8 @@ type conns struct {
 	tty          bool
 }
 
-// Create WebSocket server streams to respond to a WebSocket client. Creates the streams passed
-// in the stream options.
-//
-// 中文说明：resize 事件在独立 goroutine 中读取，并捕获 panic——resize 流关闭时的
+// 创建 WebSocket 服务端流以响应 WebSocket 客户端，按传入的流选项创建各流。
+// resize 事件在独立 goroutine 中读取，并捕获 panic——resize 流关闭时的
 // panic 不应传播到 HTTP handler。
 func webSocketServerStreams(req *http.Request, w http.ResponseWriter, opts Options) (*conns, error) {
 	ctx, err := createWebSocketStreams(req, w, opts)
@@ -98,8 +93,8 @@ func webSocketServerStreams(req *http.Request, w http.ResponseWriter, opts Optio
 	return ctx, nil
 }
 
-// Read terminal resize events off of passed stream and queue into passed channel.
-// 中文说明：解码失败即视为流结束并关闭 channel；ctx.Done 分支避免请求结束时
+// 从传入的流中读取终端 resize 事件并排队到传入的通道。
+// 解码失败即视为流结束并关闭 channel；ctx.Done 分支避免请求结束时
 // goroutine 泄漏。
 func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- remotecommand.TerminalSize) {
 	defer close(channel)
@@ -122,10 +117,9 @@ func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- re
 	}
 }
 
-// createChannels returns the standard channel types for a shell connection (STDIN 0, STDOUT 1, STDERR 2)
-// along with the approximate duplex value. It also creates the error (3) and resize (4) channels.
-//
-// 中文说明：错误通道始终写、resize 始终读——客户端必须能收到错误，也能随时调整窗口。
+// createChannels 返回 shell 连接的标准通道类型（STDIN 0、STDOUT 1、STDERR 2）
+// 及近似的 duplex 值，同时创建错误（3）与 resize（4）通道。
+// 错误通道始终写、resize 始终读——客户端必须能收到错误，也能随时调整窗口。
 func createChannels(opts Options) []wsstream.ChannelType {
 	// open the requested channels, and always open the error channel
 	channels := make([]wsstream.ChannelType, 5)
@@ -153,11 +147,9 @@ func writeChannel(real bool) wsstream.ChannelType {
 	return wsstream.IgnoreChannel
 }
 
-// createWebSocketStreams returns a "conns" struct containing the websocket connection and
-// streams needed to perform an exec or an attach.
-//
-// 中文说明：仅声明 v5 子协议是有意为之——apiserver 作为服务端只需支持 kubelet 当前的
-// 协议版本；不兼容的旧客户端会被协商拒绝。
+// createWebSocketStreams 返回一个 "conns" 结构，包含执行 exec 或 attach 所需的
+// websocket 连接与各流。仅声明 v5 子协议是有意为之——apiserver 作为服务端只需支持
+// kubelet 当前的协议版本；不兼容的旧客户端会被协商拒绝。
 func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts Options) (*conns, error) {
 	channels := createChannels(opts)
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{

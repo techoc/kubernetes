@@ -53,11 +53,11 @@ import (
 )
 
 const (
-	// Maximal number of concurrent route operation API calls.
-	// TODO: This should be per-provider.
+	// 路由操作云 API 调用的最大并发数。
+	// TODO: 这里应按 provider 分别配置。
 	//
-	// 中文说明：并发上限用于保护云 API 配额；不同云厂商的限流差异很大，
-	// 因此这里取一个保守的全局值，后续应改为按 provider 配置。
+	// 并发上限用于保护云 API 配额；不同云厂商的限流差异很大，
+	// 因此这里取一个保守的全局值。
 	maxConcurrentRouteOperations int = 200
 	// In the scenarios with a burst of node events, we don't want to be worse
 	// than a 10s interval.
@@ -65,11 +65,8 @@ const (
 	// sync period of the route controller.
 	minRouteResyncInterval time.Duration = 10 * time.Second
 
-	// routesSyncKey and routeCorrectionsKey are workqueue keys that both trigger a
-	// full-cluster route reconcile. They identify the trigger reason so we can
-	// attribute the outcome.
-	//
-	// 中文说明：两个 key 都代表“全量对账”，分开只是为了让指标能区分触发来源：
+	// routesSyncKey 和 routeCorrectionsKey 是两个都会触发全集群路由对账的 workqueue
+	// key，分开只是为了让指标能区分触发来源并给结果归因：
 	// node_change（节点事件）与 periodic（周期性清理）。
 	routesSyncKey       = "node_change"
 	routeCorrectionsKey = "periodic"
@@ -84,7 +81,7 @@ var updateNetworkConditionBackoff = wait.Backoff{
 
 // RouteController 同步节点 PodCIDR 与云侧路由。
 //
-// 中文说明：reconcile 以整个集群为单位，因此不需要按节点分片的 worker；
+// reconcile 以整个集群为单位，因此不需要按节点分片的 worker；
 // 开启 watch-based 功能时由 workqueue 接收节点事件，否则按固定周期触发。
 type RouteController struct {
 	routes           cloudprovider.Routes
@@ -126,13 +123,10 @@ func New(
 	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.CloudControllerManagerWatchBasedRoutesReconciliation) {
-		// We use [TypedWithMaxWaitRateLimiter] to cap the [TypedBucketRateLimiter] at 10 seconds.
-		// Without this cap, the bucket rate limiter would keep accumulating delay for each node event.
-		// With the cap, even under a constant stream of node events, reconciles happen at most every
-		// 10 seconds — either triggered immediately or queued for another run if one is already in progress.
-		//
-		// 中文说明：桶限流器会让连续事件不断累加延迟；套一层 MaxWait 后，无论事件多密集，
-		// 对账间隔都不会超过 10 秒，避免新节点长时间得不到路由。
+		// 用 [TypedWithMaxWaitRateLimiter] 给 [TypedBucketRateLimiter] 设 10 秒上限：
+		// 桶限流器会让连续事件不断累加延迟；套一层 MaxWait 后，无论事件多密集，
+		// 对账间隔都不会超过 10 秒（已有对账在跑时事件排队等下一轮），避免新节点
+		// 长时间得不到路由。
 		bucketRateLimiter := &workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Every(minRouteResyncInterval), 1)}
 		rc.workqueue = workqueue.NewTypedRateLimitingQueueWithConfig(
 			workqueue.NewTypedWithMaxWaitRateLimiter[string](bucketRateLimiter, minRouteResyncInterval),
@@ -182,14 +176,12 @@ func (rc *RouteController) handleNodeUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	// The Node informer triggers a periodic update event.
-	// In these cases, the old and new Node objects are identical. We use this event as a signal to perform
-	// a route reconciliation — our regular cleanup process — as described in the KEP 5237.
-	// We use a separate key to measure the amount of route reconciles due to a
-	// periodic reconcile. This is tracked in the metric
-	// `route_controller_route_sync_total` via the `trigger="periodic"` label.
+	// Node informer 会触发周期性更新事件，此时新旧 Node 对象完全相同。我们借用该事件
+	// 作为执行路由对账（即常规清理流程）的信号，详见 KEP 5237。周期性对账用单独的 key
+	// 统计，通过 `route_controller_route_sync_total` 指标的 `trigger="periodic"` 标签
+	// 区分。
 	//
-	// 中文说明：resync 事件的新旧对象完全相同，借此充当周期性清理的触发器，
+	// resync 事件的新旧对象完全相同，借此充当周期性清理的触发器，
 	// 从而在没有独立定时器的情况下仍能回收孤儿路由。
 	if oldNode.GetResourceVersion() == newNode.GetResourceVersion() {
 		rc.workqueue.AddRateLimited(routeCorrectionsKey)
@@ -258,17 +250,14 @@ func (rc *RouteController) processNextWorkItem(ctx context.Context) bool {
 		return false
 	}
 
-	// Forget is a no-op with a BucketRateLimiter. This is still called in case the implementation detail changes,
-	// as the [workqueue.TypedRateLimitingInterface] insists on it being called.
+	// 对 BucketRateLimiter 而言 Forget 是空操作，但 [workqueue.TypedRateLimitingInterface]
+	// 要求必须调用，因此保留该调用以防实现细节变化。
 	//
-	// We call it before reconcileNodeRoutes, as otherwise we may have a race condition:
-	// 1. we start a reconcile with a fixed list of nodes
-	// 2. the event for a new node is enqueued, but it is not considered in the running reconcile
-	// 3. we finish the reconcile and "forget" the event from our queue
-	// => The new node is never reconciled
-	//
-	// 中文说明：必须在开始对账前 Forget，否则对账期间入队的新节点事件会在结束时被
-	// 一并清除，导致该节点永远得不到路由。
+	// 必须在 reconcileNodeRoutes 之前 Forget，否则会出现竞态：
+	// 1. 用一份固定的节点列表开始一轮对账
+	// 2. 新节点事件入队，但不在本轮对账的考虑范围内
+	// 3. 对账结束，该事件又被 Forget 掉
+	// => 对账期间入队的新节点事件会在结束时被一并清除，该节点永远得不到路由。
 	rc.workqueue.Forget(obj)
 
 	// We wrap this block in a func so we can defer rc.workqueue.Done.
@@ -329,7 +318,7 @@ type routeNode struct {
 // reconcile 是最核心的对账函数：先算出每个 (node, cidr) 的动作，再并发删除/创建
 // 路由，最后回写 NodeNetworkUnavailable condition。
 //
-// 中文说明：删除与创建分两个阶段，且当云厂商支持 EnableNodeAddresses 时先等删除
+// 删除与创建分两个阶段，且当云厂商支持 EnableNodeAddresses 时先等删除
 // 全部完成——否则 action=update 的路由可能被自己在同一轮里重复创建（#98359）。
 func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, routes []*cloudprovider.Route) (bool, error) {
 	var l sync.Mutex
@@ -474,12 +463,9 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 				DestinationCIDR:     podCIDR,
 			}
 			klog.Infof("route spec to be created: %v", route)
-			// cloud providers that:
-			// - depend on nameHint
-			// - trying to support dual stack
-			// will have to carefully generate new route names that allow node->(multi cidr)
-			// 中文说明：用 Node UID 作为 nameHint 的稳定来源；双栈时同一节点有多条路由，
-			// 云厂商需在 nameHint 基础上自行区分，不能假设一节点一路由。
+			// 依赖 nameHint、又打算支持双栈的云厂商需要谨慎生成路由名，允许一个节点
+			// 对应多条 CIDR：这里用 Node UID 作为 nameHint 的稳定来源，双栈时同一节点
+			// 有多条路由，云厂商需在 nameHint 基础上自行区分，不能假设一节点一路由。
 			nameHint := string(node.UID)
 			wg.Add(1)
 			go func(nodeName types.NodeName, nameHint string, route *cloudprovider.Route) {
@@ -511,9 +497,8 @@ func (rc *RouteController) reconcile(ctx context.Context, nodes []*v1.Node, rout
 					}
 					routesChanged.Store(true)
 					l.Lock()
-					// Mark the route action as done (keep)
-					// 中文说明：创建成功后把动作改为 keep，后续汇总 NodeNetworkUnavailable 时
-					// 才能判断该 CIDR 已就绪。
+					// 把该路由动作标记为已完成（keep）：创建成功后改为 keep，后续汇总
+					// NodeNetworkUnavailable 时才能判断该 CIDR 已就绪。
 					(*routeMap[nodeName].cidrWithActions)[route.DestinationCIDR] = keep
 					l.Unlock()
 					klog.Infof("Created route for node %s %s with hint %s after %v", nodeName, route.DestinationCIDR, nameHint, time.Since(startTime))
@@ -624,7 +609,7 @@ func (rc *RouteController) updateNetworkingCondition(node *v1.Node, routesCreate
 }
 
 // isResponsibleForRoute 判断路由的目标 CIDR 是否落在本集群的 clusterCIDR 内。
-// 中文说明：云侧路由表中可能同时存在多个集群的路由，只有与本集群 CIDR 有交集的
+// 云侧路由表中可能同时存在多个集群的路由，只有与本集群 CIDR 有交集的
 // 才允许删除/修改，防止误删其他集群的条目。
 func (rc *RouteController) isResponsibleForRoute(route *cloudprovider.Route) bool {
 	_, cidr, err := netutils.ParseCIDRSloppy(route.DestinationCIDR)
@@ -650,9 +635,9 @@ func (rc *RouteController) isResponsibleForRoute(route *cloudprovider.Route) boo
 	return false
 }
 
-// getRouteAction returns an action according to if there's a route matches a specific cidr and target Node addresses.
+// getRouteAction 根据是否有路由匹配指定 CIDR 和目标节点地址来返回相应动作。
 //
-// 中文说明：destination 相同即视为同一条路由；只有当云厂商支持节点地址（EnableNodeAddresses）
+// destination 相同即视为同一条路由；只有当云厂商支持节点地址（EnableNodeAddresses）
 // 且地址发生变化时才需要 update，否则地址变化无法反映到云侧，保持 keep。
 func getRouteAction(routes []*cloudprovider.Route, cidr string, nodeName types.NodeName, realNodeAddrs []v1.NodeAddress) routeAction {
 	for _, route := range routes {
@@ -668,7 +653,7 @@ func getRouteAction(routes []*cloudprovider.Route, cidr string, nodeName types.N
 }
 
 // equalNodeAddrs 忽略顺序比较两组节点地址是否等价。
-// 中文说明：云厂商返回地址顺序不稳定，按集合语义比较可避免每轮误判为 update。
+// 云厂商返回地址顺序不稳定，按集合语义比较可避免每轮误判为 update。
 func equalNodeAddrs(addrs0 []v1.NodeAddress, addrs1 []v1.NodeAddress) bool {
 	if len(addrs0) != len(addrs1) {
 		return false

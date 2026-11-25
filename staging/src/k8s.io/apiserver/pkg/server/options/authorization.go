@@ -35,13 +35,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DelegatingAuthorizationOptions provides an easy way for composing API servers to delegate their authorization to
-// the root kube API server.
-// WARNING: never assume that every authenticated incoming request already does authorization.
-// The aggregator in the kube API server does this today, but this behaviour is not
-// guaranteed in the future.
-//
-// 中文说明：委托授权通过 SubjectAccessReview 询问上层 kube-apiserver；
+// DelegatingAuthorizationOptions 为组合式 API Server 提供了一种便捷方式，
+// 把授权委托给根 kube API server。
+// 警告：切勿假设每个通过认证的入站请求都已经完成了授权。
+// kube API server 中的聚合层今天会做这件事，但该行为并不能保证未来仍然如此。
+// 委托授权通过 SubjectAccessReview 询问上层 kube-apiserver；
 // 认证通过不等于已授权，每个请求都必须显式经过此授权器。
 type DelegatingAuthorizationOptions struct {
 	// RemoteKubeConfigFile is the file to use to connect to a "normal" kube API server which hosts the

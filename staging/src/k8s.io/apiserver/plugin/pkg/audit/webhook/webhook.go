@@ -48,18 +48,12 @@ func init() {
 	install.Install(audit.Scheme)
 }
 
-// retryOnError enforces the webhook client to retry requests
-// on error regardless of its nature.
-// The default implementation considers a very limited set of
-// 'retriable' errors, assuming correct use of HTTP codes by
-// external webhooks.
-// That may easily lead to dropped audit events. In fact, there is
-// hardly any error that could be a justified reason NOT to retry
-// sending audit events if there is even a slight chance that the
-// receiving service gets back to normal at some point.
-// 中文说明：审计事件丢失通常不可恢复，因此这里采取「只要出错就重试」的策略，
-// 与默认只重试少量状态码的行为相反。代价是持续失败时会占用重试预算，
-// 但审计完整性的优先级高于资源节省。
+// retryOnError 强制 webhook 客户端无论错误性质如何都在出错时重试。
+// 默认实现只把一小类错误视为「可重试」，这假设外部 webhook 正确使用了 HTTP 状态码，
+// 而很容易导致审计事件被丢弃。事实上，只要接收服务哪怕有一线机会在之后恢复正常，
+// 就几乎找不出不重试发送审计事件的正当理由。
+// 因此这里采取「只要出错就重试」的策略，与默认只重试少量状态码的行为相反。
+// 代价是持续失败时会占用重试预算，但审计完整性的优先级高于资源节省。
 func retryOnError(err error) bool {
 	if err != nil {
 		return true
@@ -68,7 +62,7 @@ func retryOnError(err error) bool {
 }
 
 // loadWebhook 从 kubeconfig 构造通用 webhook 客户端，并覆写重试策略。
-// 中文说明：customDial 允许注入自定义拨号（例如代理或测试中的本地监听），
+// customDial 允许注入自定义拨号（例如代理或测试中的本地监听），
 // 保持与其它 webhook 客户端一致的连接语义。
 func loadWebhook(configFile string, groupVersion schema.GroupVersion, retryBackoff wait.Backoff, customDial utilnet.DialFunc) (*webhook.GenericWebhook, error) {
 	clientConfig, err := webhook.LoadKubeconfig(configFile, customDial)
@@ -91,10 +85,8 @@ type backend struct {
 	name string
 }
 
-// NewDynamicBackend returns an audit backend configured from a REST client that
-// sends events over HTTP to an external service.
-//
-// 中文说明：动态后端由动态审计配置构造，REST client 已由上层完成认证/限流配置，
+// NewDynamicBackend 返回一个由 REST client 配置的审计后端，它通过 HTTP 把事件发送到外部服务。
+// 动态后端由动态审计配置构造，REST client 已由上层完成认证/限流配置，
 // 此处只需注入重试策略。名称加 dynamic_ 前缀以便在日志中区分静态配置的后端。
 func NewDynamicBackend(rc *rest.RESTClient, retryBackoff wait.Backoff) audit.Backend {
 	return &backend{
@@ -137,7 +129,7 @@ func (b *backend) ProcessEvents(ev ...*auditinternal.Event) bool {
 }
 
 // processEvents 把事件打包成 EventList 一次性 POST，利用指数退避重试。
-// 中文说明：批量发送减少往返次数；trace 的结束阈值按事件数线性放宽，
+// 批量发送减少往返次数；trace 的结束阈值按事件数线性放宽，
 // 因为单个事件包含嵌套的请求/响应对象，序列化开销随事件数增长。
 // 阈值定得较宽是为了避免把正常的大批量发送误报为慢调用。
 func (b *backend) processEvents(ev ...*auditinternal.Event) error {

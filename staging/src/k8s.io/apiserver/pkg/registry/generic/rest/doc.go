@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package rest has generic implementations of resources used for
-// REST responses
-//
-// 中文说明：这里的 REST 实现（如日志/exec 流式响应、代理、重定向）被多个
+// Package rest 提供用于 REST 响应的各种资源的通用实现。
+// 这里的 REST 实现（如日志/exec 流式响应、代理、重定向）被多个
 // 存储后端复用，因此保持与具体资源解耦。
 package rest

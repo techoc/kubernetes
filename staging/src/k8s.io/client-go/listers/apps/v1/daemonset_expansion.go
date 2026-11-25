@@ -25,10 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// DaemonSetListerExpansion allows custom methods to be added to
-// DaemonSetLister.
-//
-// 中文说明：这是手写的扩展接口，属于生成 lister 的一部分；生成器不会覆盖。
+// DaemonSetListerExpansion 允许向 DaemonSetLister 添加自定义方法。
+// 这是手写的扩展接口，属于生成 lister 的一部分；生成器不会覆盖。
 type DaemonSetListerExpansion interface {
 	// GetPodDaemonSets 返回 selector 可能匹配该 Pod 的 DaemonSet。
 	GetPodDaemonSets(pod *v1.Pod) ([]*apps.DaemonSet, error)
@@ -36,17 +34,13 @@ type DaemonSetListerExpansion interface {
 	GetHistoryDaemonSets(history *apps.ControllerRevision) ([]*apps.DaemonSet, error)
 }
 
-// DaemonSetNamespaceListerExpansion allows custom methods to be added to
-// DaemonSetNamespaceLister.
-//
-// 中文说明：当前无命名空间级扩展方法，仅作为预留钩子。
+// DaemonSetNamespaceListerExpansion 允许向 DaemonSetNamespaceLister 添加自定义方法。
+// 当前无命名空间级扩展方法，仅作为预留钩子。
 type DaemonSetNamespaceListerExpansion interface{}
 
-// GetPodDaemonSets returns a list of DaemonSets that potentially match a pod.
-// Only the one specified in the Pod's ControllerRef will actually manage it.
-// Returns an error only if no matching DaemonSets are found.
-//
-// 中文说明：这里返回的是“可能匹配”的候选集合，调用方仍需根据 ControllerRef 判定真正的
+// GetPodDaemonSets 返回可能与某个 Pod 匹配的 DaemonSet 列表，真正管理该 Pod 的只有
+// Pod 的 ControllerRef 指定的那一个，只有在找不到匹配的 DaemonSet 时才返回错误。
+// 这里返回的是“可能匹配”的候选集合，调用方仍需根据 ControllerRef 判定真正的
 // owner。返回 error 只用于“找不到任何候选”这一情形，便于调用方区分。
 func (s *daemonSetLister) GetPodDaemonSets(pod *v1.Pod) ([]*apps.DaemonSet, error) {
 	var selector labels.Selector
@@ -92,12 +86,10 @@ func (s *daemonSetLister) GetPodDaemonSets(pod *v1.Pod) ([]*apps.DaemonSet, erro
 	return daemonSets, nil
 }
 
-// GetHistoryDaemonSets returns a list of DaemonSets that potentially
-// match a ControllerRevision. Only the one specified in the ControllerRevision's ControllerRef
-// will actually manage it.
-// Returns an error only if no matching DaemonSets are found.
-//
-// 中文说明：用于从 ControllerRevision 反查其所属 DaemonSet（例如解析当前 revision 的
+// GetHistoryDaemonSets 返回可能与某个 ControllerRevision 匹配的 DaemonSet 列表，
+// 真正管理它的只有该 ControllerRevision 的 ControllerRef 指定的那一个，只有在
+// 找不到匹配的 DaemonSet 时才返回错误。
+// 用于从 ControllerRevision 反查其所属 DaemonSet（例如解析当前 revision 的
 // 模板差异）。同样只是候选集合，真正的 owner 由 ControllerRef 决定。
 func (s *daemonSetLister) GetHistoryDaemonSets(history *apps.ControllerRevision) ([]*apps.DaemonSet, error) {
 	// 中文：ControllerRevision 通常带有 DaemonSet 模板的标签；无标签则无法匹配。

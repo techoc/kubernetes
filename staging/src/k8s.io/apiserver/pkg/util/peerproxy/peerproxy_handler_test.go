@@ -74,7 +74,7 @@ type reconciler struct {
 
 // TestPeerProxy 验证对等代理的决策与指标。
 //
-// 中文说明：覆盖的边界包括——
+// 覆盖的边界包括——
 //   - 非资源请求、已带代理标记的请求、informer 尚未同步：一律本地处理，避免代理环路与启动期误转发；
 //   - 本地可服务：本地处理；
 //   - 本地不可服务且存在合适的对等端：转发；对等端不可达或无端点时返回 503 并打点。
@@ -258,7 +258,7 @@ func TestPeerProxy(t *testing.T) {
 }
 
 // TestGetPeerResources 验证聚合对等端发现信息时会剔除本地条目。
-// 中文说明：本地 server ID 的发现数据已经由本机提供，若再合并会造成重复；
+// 本地 server ID 的发现数据已经由本机提供，若再合并会造成重复；
 // 多对等端场景则应按 server ID 分组保留各自结果。
 func TestGetPeerResources(t *testing.T) {
 	testCases := []struct {
@@ -351,7 +351,7 @@ func TestGetPeerResources(t *testing.T) {
 }
 
 // newFakePeerEndpointReconciler 基于真实 etcd 测试实例构造端点 lease 协调器。
-// 中文说明：使用随机 baseKey 隔离各用例的数据；leaseTime 取 1 分钟，
+// 使用随机 baseKey 隔离各用例的数据；leaseTime 取 1 分钟，
 // 确保测试期间 lease 不会过期。
 func newFakePeerEndpointReconciler(t *testing.T) reconcilers.PeerEndpointLeaseReconciler {
 	server, sc := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
@@ -373,7 +373,7 @@ func newFakePeerEndpointReconciler(t *testing.T) reconcilers.PeerEndpointLeaseRe
 }
 
 // newHandlerChain 组装与生产一致的过滤链：RequestInfo → 用户信息 → peerproxy。
-// 中文说明：顺序不可颠倒——peerproxy 依赖 RequestInfo 判断是否可本地服务，
+// 顺序不可颠倒——peerproxy 依赖 RequestInfo 判断是否可本地服务，
 // 也依赖已注入的用户信息做授权/审计。
 func newHandlerChain(t *testing.T, informerFinishedSync bool, handler http.Handler,
 	reconciler reconcilers.PeerEndpointLeaseReconciler,
@@ -432,9 +432,8 @@ func withFakeUser(handler http.Handler) http.Handler {
 	})
 }
 
-// returns a started http2 server, with a client function to send request to the server.
-//
-// 中文说明：必须启用 HTTP/2——对等代理在转发流式请求时依赖 HTTP/2 的多路复用与
+// 返回一个已启动的 http2 server，以及一个可向该 server 发请求的 client 函数。
+// 必须启用 HTTP/2——对等代理在转发流式请求时依赖 HTTP/2 的多路复用与
 // 流式语义；用 HTTP/1.1 测试会掩盖相关问题。
 func createHTTP2ServerWithClient(handler http.Handler, clientTimeout time.Duration) (*httptest.Server, func(req *http.Request) (*http.Response, error)) {
 	server := httptest.NewUnstartedServer(handler)

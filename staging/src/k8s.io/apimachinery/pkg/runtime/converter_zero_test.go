@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// These tests are in a separate package to break cyclic dependency in tests.
-// Unstructured type depends on unstructured converter package but we want to test how the converter handles
-// the Unstructured type so we need to import both.
+// 这些测试放在单独的包中，以打破测试里的循环依赖。
+// Unstructured 类型依赖 unstructured converter 包，但我们又想测试 converter 如何处理
+// Unstructured 类型，因此需要同时导入两者。
 //
-// 中文说明：本文件专门测试 omitzero 标签在 Unstructured 转换与 JSON 序列化
+// 本文件专门测试 omitzero 标签在 Unstructured 转换与 JSON 序列化
 // 之间的一致性——两条路径对“零值”的判断必须相同，否则同一条数据在不同
 // 编码下会以不同字段集出现。
 

@@ -26,8 +26,7 @@ import (
 )
 
 // TestWithRetryAfter 验证停机期间 Retry-After 过滤器的行为。
-//
-// 中文说明：当 shutdown-delay 结束（通道关闭）后，非豁免请求应立即得到
+// 当 shutdown-delay 结束（通道关闭）后，非豁免请求应立即得到
 // 429 + Retry-After + Connection: close，且处理器不被调用——这是为了让负载均衡
 // 尽快摘除本实例，同时让客户端知道稍后重试而不是重连同一节点。
 // 豁免清单（健康检查、metrics、本机 loopback 客户端）必须继续正常服务，
@@ -164,10 +163,9 @@ func TestWithRetryAfter(t *testing.T) {
 
 			safeWG := new(utilwaitgroup.SafeWaitGroup)
 			if test.safeWaitGroupIsWaiting {
-				// mark the safe wait group as waiting, it's a blocking call
-				// but since the WaitGroup counter is zero it should not block
-				//
-				// 中文说明：等待中的 SafeWaitGroup 表示停机已进入排空阶段，
+				// 把 safe wait group 标记为等待中，这是一个阻塞调用，
+				// 但由于 WaitGroup 计数为零，实际不会阻塞。
+				// 等待中的 SafeWaitGroup 表示停机已进入排空阶段，
 				// 此时豁免请求仍需放行，用例确认该状态不会误伤健康检查。
 				safeWG.Wait()
 			}

@@ -39,7 +39,7 @@ const DefaultMaxUpdateManagers int = 10
 
 // DefaultTrackOnCreateProbability 定义从对象创建时开始跟踪字段管理的默认概率，
 // 而不是从对象首次被 apply 时开始。
-// 中文说明：设为 1 表示完全从创建时开始跟踪，避免为省开销而随机跳过，
+// 设为 1 表示完全从创建时开始跟踪，避免为省开销而随机跳过，
 // 从而保证 apply 语义确定。
 const DefaultTrackOnCreateProbability float32 = 1
 
@@ -48,7 +48,7 @@ var atMostEverySecond = NewAtMostEvery(time.Second)
 
 // FieldManager 更新托管字段并合并应用配置。
 //
-// 中文说明：它把内层 Manager 链与实际 API 对象的编解码隔离开——调用方只需
+// 它把内层 Manager 链与实际 API 对象的编解码隔离开——调用方只需
 // 传入 live/new 对象，FieldManager 负责取用、合并与回写 managedFields。
 type FieldManager struct {
 	fieldManager Manager
@@ -62,7 +62,7 @@ func NewFieldManager(f Manager, subresource string) *FieldManager {
 
 // newDefaultFieldManager 为 Manager 包装默认逻辑。
 //
-// 中文说明：包装顺序即语义叠加顺序，从内到外依次为：剥离类型元信息、
+// 包装顺序即语义叠加顺序，从内到外依次为：剥离类型元信息、
 // 按 manager 归属更新、容量上限、创建时跟踪概率、last-applied 维护、
 // 版本校验。顺序有依赖，不能随意调整。
 func NewDefaultFieldManager(f Manager, typeConverter TypeConverter, objectConverter runtime.ObjectConvertor, objectCreater runtime.ObjectCreater, kind schema.GroupVersionKind, subresource string) *FieldManager {

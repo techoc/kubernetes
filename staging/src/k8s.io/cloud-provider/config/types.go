@@ -26,9 +26,9 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CloudControllerManagerConfiguration contains elements describing cloud-controller manager.
+// CloudControllerManagerConfiguration 汇总描述 cloud-controller manager 的各项配置。
 //
-// 中文说明：这是 CCM 的内部（未版本化）配置根对象，由 --config 解析出的
+// 这是 CCM 的内部（未版本化）配置根对象，由 --config 解析出的
 // v1alpha1 版本经转换得到；运行期各控制器只读取这份内部表示。
 type CloudControllerManagerConfiguration struct {
 	metav1.TypeMeta
@@ -61,10 +61,10 @@ type CloudControllerManagerConfiguration struct {
 	Webhook WebhookConfiguration
 }
 
-// KubeCloudSharedConfiguration contains elements shared by both kube-controller manager
-// and cloud-controller manager, but not genericconfig.
+// KubeCloudSharedConfiguration 包含 kube-controller-manager 与 cloud-controller-manager
+// 共用、但不属于 genericconfig 的配置项。
 //
-// 中文说明：这些字段与 kube-controller-manager 的同名配置保持语义一致，
+// 这些字段与 kube-controller-manager 的同名配置保持语义一致，
 // 便于同一套云配置在两个组件之间复用。
 type KubeCloudSharedConfiguration struct {
 	// CloudProviderConfiguration holds configuration for CloudProvider related features.
@@ -116,13 +116,13 @@ type CloudProviderConfiguration struct {
 // WebhookConfiguration contains configuration related to
 // cloud-controller-manager hosted webhooks
 type WebhookConfiguration struct {
-	// Webhooks is the list of webhooks to enable or disable
-	// '*' means "all enabled by default webhooks"
-	// 'foo' means "enable 'foo'"
-	// '-foo' means "disable 'foo'"
-	// first item for a particular name wins
+	// Webhooks 是待启用或禁用的 webhook 列表
+	// '*' 表示“全部默认启用的 webhook”
+	// 'foo' 表示“启用名为 foo 的 webhook”
+	// '-foo' 表示“禁用名为 foo 的 webhook”
+	// 同名条目以第一个出现的为准
 	//
-	// 中文说明：解析顺序敏感——同名条目中先出现者生效，因此 '-' 前缀无法覆盖
+	// 解析顺序敏感——同名条目中先出现者生效，因此 '-' 前缀无法覆盖
 	// 前面的显式启用；校验阶段会拒绝未知的 webhook 名称。
 	Webhooks []string
 }

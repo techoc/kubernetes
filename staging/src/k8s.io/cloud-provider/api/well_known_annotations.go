@@ -17,13 +17,10 @@ limitations under the License.
 package api
 
 const (
-	// AnnotationAlphaProvidedIPAddr is a node IP annotation set by the "external" cloud provider.
-	// 中文说明：kubelet 以 "external" 云提供商启动时，会把 --node-ip 指定的地址写入该节点注解；
-	// cloud-controller-manager 据此向云厂商校验该 IP 是否有效，再决定是否接受该地址。
+	// AnnotationAlphaProvidedIPAddr 是由 "external" 云提供商设置的节点 IP 注解。
+	// kubelet 以 "external" 云提供商启动时，会把 --node-ip 指定的地址写入该节点注解，
+	// 表示这是一个来自命令行的 IP 地址；cloud-controller-manager 据此向云厂商校验该
+	// IP 是否有效，再决定是否接受该地址。
 	// 名称中的 alpha 前缀是历史兼容约定，不能随意更名，否则会破坏 kubelet 与 CCM 的对接。
-	// When kubelet is started with the "external" cloud provider, then
-	// it sets this annotation on the node to denote an ip address set from the
-	// cmd line flag (--node-ip). This ip is verified with the cloudprovider as valid by
-	// the cloud-controller-manager
 	AnnotationAlphaProvidedIPAddr = "alpha.kubernetes.io/provided-node-ip"
 )

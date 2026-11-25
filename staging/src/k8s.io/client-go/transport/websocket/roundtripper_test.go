@@ -40,8 +40,7 @@ import (
 
 // TestWebSocketRoundTripper_RoundTripperSucceeds 验证成功升级后，协商出的子协议与请求
 // 指定的 V5 流协议一致。
-//
-// 中文说明：RoundTripperFor 返回两层——外层是普通 http.RoundTripper，内层持有已建立的
+// RoundTripperFor 返回两层——外层是普通 http.RoundTripper，内层持有已建立的
 // WebSocket 连接（wsRt）。通过服务端配合完成 upgrade 后，可从 wsRt.Connection()
 // 读到协商结果。
 func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
@@ -75,8 +74,7 @@ func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
 }
 
 // TestWebSocketRoundTripper_RoundTripperFails 验证握手失败时错误的分类与透传。
-//
-// 中文说明：所有失败都应包装为 httpstream.UpgradeFailureError（可用
+// 所有失败都应包装为 httpstream.UpgradeFailureError（可用
 // IsUpgradeFailure 判断）；若响应体是合法的 metav1.Status，错误里应能取出原始
 // StatusError。statusCode 为 -1 表示不显式写状态码，从而模拟“非升级响应”的
 // 基础 bad handshake。
@@ -214,8 +212,7 @@ type websocketStreams struct {
 }
 
 // webSocketServerStreams 在服务端接受升级，并注册 V5 协议所需的通道配置。
-//
-// 中文说明：idle timeout 设为 4 小时，远大于测试时长，避免连接在断言前因空闲被
+// idle timeout 设为 4 小时，远大于测试时长，避免连接在断言前因空闲被
 // 关闭而产生偶发失败。
 func webSocketServerStreams(req *http.Request, w http.ResponseWriter) (*websocketStreams, error) {
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{

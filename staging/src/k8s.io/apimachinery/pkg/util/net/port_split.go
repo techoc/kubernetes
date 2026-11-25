@@ -35,7 +35,7 @@ var validSchemes = sets.NewString("http", "https", "")
 // port 以字符串返回，不要求为数字，
 // 例如可以是命名端口。
 //
-// 中文说明：段的个数多于 3 或 name 为空都返回 false；scheme 缺省时只允许
+// 段的个数多于 3 或 name 为空都返回 false；scheme 缺省时只允许
 // 两段/一段形式，从而避免与 IPv6 之类的冒号语法混淆。
 func SplitSchemeNamePort(id string) (scheme, name, port string, valid bool) {
 	parts := strings.Split(id, ":")
@@ -69,7 +69,7 @@ func SplitSchemeNamePort(id string) (scheme, name, port string, valid bool) {
 // name 必填。
 // scheme 必须为 ""、"http" 或 "https"。
 //
-// 中文说明：段数由非空参数个数决定；空 port 与空 scheme 会被省略，因此
+// 段数由非空参数个数决定；空 port 与空 scheme 会被省略，因此
 // 拼接结果可以被 SplitSchemeNamePort 原样解析。
 func JoinSchemeNamePort(scheme, name, port string) string {
 	if len(scheme) > 0 {

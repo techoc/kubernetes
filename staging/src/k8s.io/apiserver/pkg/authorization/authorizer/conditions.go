@@ -25,12 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// conditionsAwareDecisionType is a small enum-like type for keeping track of what type a ConditionsAwareDecision is.
-// These values must never be exposed to users outside of this package, and should not be used for anything else than
-// keeping track of what type of a ConditionsAwareDecision is.
-//
-// 中文说明：刻意与 Decision 的取值错开（11-14），避免类型转换或日志打印时
-// 与无条件决策混淆。
+// conditionsAwareDecisionType 是一个类似枚举的小类型，用于记录 ConditionsAwareDecision 属于哪种类型。
+// 这些取值绝不能暴露给本包之外的用户，也不得用于记录决策类型之外的用途。
+// 取值刻意与 Decision 错开（11-14），避免类型转换或日志打印时与无条件决策混淆。
 type conditionsAwareDecisionType int
 
 const (
@@ -49,20 +46,16 @@ const (
 	conditionsAwareDecisionTypeUnion conditionsAwareDecisionType = 14
 )
 
-// ConditionsAwareDecision models an authorization decision that is conditions-aware.
-// It is an enum type of the following five variants:
-// - Allow: unconditional Allow.
-// - Deny: unconditional Deny.
-// - NoOpinion: unconditional NoOpinion.
-// - Conditional: conditional on some previously-unseen data.
-// - Union: an ordered list of sub-decisions, which forms a tree of decisions.
+// ConditionsAwareDecision 表示一个「感知条件」的授权决策，是以下五种变体的枚举类型：
+// - Allow：无条件放行。
+// - Deny：无条件拒绝。
+// - NoOpinion：无条件无意见。
+// - Conditional：取决于此前尚未见到的数据。
+// - Union：由子决策构成的有序列表，形成一棵决策树。
 //
-// The zero value (ConditionsAwareDecision{}) is equivalent to ConditionsAwareDecisionDeny().
-// A ConditionsAwareDecision is passed by value.
-// Important: A ConditionsAwareDecision is immutable after construction.
-//
-// 中文说明：不可变 + 按值传递，使决策可以安全地在并发评估中共享；条件树
-// 由 Union 与 ConditionsMap 递归组成，评估到叶子才得到最终结论。
+// 零值（ConditionsAwareDecision{}）等价于 ConditionsAwareDecisionDeny()。
+// ConditionsAwareDecision 按值传递，且构造完成之后不可变，因此可以在并发评估中安全共享；
+// 条件树由 Union 与 ConditionsMap 递归组成，评估到叶子才得到最终结论。
 type ConditionsAwareDecision struct {
 	decisionType conditionsAwareDecisionType
 
@@ -73,9 +66,8 @@ type ConditionsAwareDecision struct {
 	err    error
 }
 
-// ConditionsAwareDecisionDeny constructs a Deny decision with the given reason and error.
-//
-// 中文说明：Deny 取零值，使未初始化的决策天然 fail-closed。
+// ConditionsAwareDecisionDeny 用给定的 reason 和 error 构造一个 Deny 决策。
+// Deny 对应结构体零值，使未初始化的决策天然 fail-closed。
 func ConditionsAwareDecisionDeny(reason string, err error) ConditionsAwareDecision {
 	return ConditionsAwareDecision{
 		// conditionsAwareDecisionTypeDeny == 0 == zero value
@@ -104,11 +96,10 @@ func ConditionsAwareDecisionNoOpinion(reason string, err error) ConditionsAwareD
 	}
 }
 
-// ConditionsAwareDecisionFromParts is meant to be used by conditions-unaware Authorizer implementations
-// in order to implement ConditionsAwareAuthorize as:
+// ConditionsAwareDecisionFromParts 供「不感知条件」的 Authorizer 实现使用，
+// 以便把 ConditionsAwareAuthorize 实现为：
 // "return authorizer.ConditionsAwareDecisionFromParts(self.Authorize(ctx, a))"
-//
-// 中文说明：未知的 Decision 值一律按 Deny 处理并附加错误，保证新增枚举值时
+// 未知的 Decision 值一律按 Deny 处理并附加错误，保证新增枚举值时
 // 不会因遗漏分支而意外放行。
 func ConditionsAwareDecisionFromParts(unconditional Decision, reason string, err error) ConditionsAwareDecision {
 	switch unconditional {
@@ -161,26 +152,21 @@ func (d ConditionsAwareDecision) IsUnion() bool {
 	return d.decisionType == conditionsAwareDecisionTypeUnion
 }
 
-// IsUnconditional is true if d is Allow, Deny or NoOpinion.
-//
-// 中文说明：调用方可用它判断是否必须进入条件求值路径。
+// IsUnconditional 在 d 是 Allow、Deny 或 NoOpinion 时返回 true。
+// 调用方可用它判断是否必须进入条件求值路径。
 func (d ConditionsAwareDecision) IsUnconditional() bool {
 	return d.IsAllow() || d.IsDeny() || d.IsNoOpinion()
 }
 
-// unconditionalParts turns a ConditionsAwareDecision into the
-// triple that Authorize expects. If the decision is
-// conditional, the returned condition is Deny if there were at least
-// some Deny condition, otherwise NoOpinion.
-// This function is meant to be called when IsUnconditional() == true.
+// unconditionalParts 把一个 ConditionsAwareDecision 转换成 Authorize 所期望的三个返回值。
+// 如果决策是条件型的，那么当条件中至少存在一个 Deny 条件时返回 Deny，否则返回 NoOpinion。
+// 该函数应当在 IsUnconditional() == true 时被调用。
 //
-// If the authorizer is conditions-aware, it can choose to only implement
-// real business logic in the ConditionsAwareAuthorize method, and implement
-// Authorize() as "return self.ConditionsAwareAuthorize(ctx, attrs).unconditionalParts()"
+// 如果授权器本身是感知条件的，它可以只在 ConditionsAwareAuthorize 方法里实现真正的业务逻辑，
+// 而把 Authorize() 实现为 "return self.ConditionsAwareAuthorize(ctx, attrs).unconditionalParts()"
 //
-// Private for now, to not encourage callers to perform conditions-aware logic where not needed.
-//
-// 中文说明：把条件决策降级为无条件决策时采取 fail-closed——返回 Deny 且不返回
+// 目前保持私有，以免鼓励调用方在不需要的位置执行感知条件的逻辑。
+// 把条件决策降级为无条件决策时采取 fail-closed——返回 Deny 且不返回
 // error，因为返回 error 会让 HTTP 层响应 500 而非 403，且暴露内部状态。
 func (d ConditionsAwareDecision) unconditionalParts() (Decision, string, error) {
 	switch {
@@ -199,12 +185,9 @@ func (d ConditionsAwareDecision) unconditionalParts() (Decision, string, error) 
 	}
 }
 
-// PossibleDecisions details what are the possible decision outcomes of this
-// ConditionsAwareDecision. The return value is a subset of {Allow, Deny, NoOpinion},
-// but never the empty set. If the set only contains a single value, it means the
-// decision is unconditional.
-//
-// 中文说明：集合语义用于判断"是否可能拒绝"，是 FailureDecision 的决策依据。
+// PossibleDecisions 列出该 ConditionsAwareDecision 可能出现的所有决策结果。
+// 返回值是 {Allow, Deny, NoOpinion} 的子集，但绝不会是空集；若集合中只有一个取值，
+// 说明该决策是无条件的。集合语义用于判断"是否可能拒绝"，是 FailureDecision 的决策依据。
 func (d ConditionsAwareDecision) PossibleDecisions() sets.Set[Decision] {
 	switch {
 	case d.IsAllow():
@@ -220,13 +203,10 @@ func (d ConditionsAwareDecision) PossibleDecisions() sets.Set[Decision] {
 	}
 }
 
-// FailureDecision returns either a Deny or NoOpinion decision that the caller can
-// use if the caller encounters an unrecoverable error while processing a
-// ConditionsAwareDecision. If this decision is or could evaluate to Deny
-// this function returns DecisionDeny to the caller, in order to fail closed
-// as a conservative approximation. Otherwise, NoOpinion is returned.
-//
-// 中文说明：只要条件树中存在任何可能 Deny 的分支，就保守地返回 Deny；
+// FailureDecision 返回 Deny 或 NoOpinion，供调用方在处理 ConditionsAwareDecision
+// 过程中遇到无法恢复的错误时使用。如果该决策本身或其求值结果可能是 Deny，
+// 本函数返回 DecisionDeny，以便作为保守近似而 fail closed；否则返回 NoOpinion。
+// 也就是说：只要条件树中存在任何可能 Deny 的分支，就保守地返回 Deny；
 // 否则返回 NoOpinion，让后续授权器继续判断。
 func (d ConditionsAwareDecision) FailureDecision() Decision {
 	if d.PossibleDecisions().Has(DecisionDeny) {
@@ -235,10 +215,8 @@ func (d ConditionsAwareDecision) FailureDecision() Decision {
 	return DecisionNoOpinion
 }
 
-// ContainsUnconditionalAllowOrDeny returns true whether there union contains at least one
-// Allow or Deny decision within the tree of decisions.
-//
-// 中文说明：用于判断是否值得做条件求值——若树中不存在任何 Allow/Deny 叶子，
+// ContainsUnconditionalAllowOrDeny 在该 union 的决策树中至少包含一个 Allow 或 Deny
+// 决策时返回 true。它用于判断是否值得做条件求值——若树中不存在任何 Allow/Deny 叶子，
 // 求值不可能改变最终结论。
 func (d ConditionsAwareDecision) ContainsUnconditionalAllowOrDeny() bool {
 	if d.IsAllow() || d.IsDeny() {
@@ -250,12 +228,9 @@ func (d ConditionsAwareDecision) ContainsUnconditionalAllowOrDeny() bool {
 	return d.union.ContainsUnconditionalAllowOrDeny()
 }
 
-// UnionedDecisions returns an iterator for unioned sub-decisions.
-// This iterator is non-empty if and only if IsUnion() == true.
-// Sub-decisions iteration order is preserved.
-//
-// 中文说明：保留顺序是因为 union 的语义依赖顺序（先到先得/短路），
-// 迭代时不能重排。
+// UnionedDecisions 返回被 union 的子决策的迭代器。
+// 当且仅当 IsUnion() == true 时该迭代器非空，且子决策的迭代顺序保持不变。
+// 保留顺序是因为 union 的语义依赖顺序（先到先得/短路），迭代时不能重排。
 func (d ConditionsAwareDecision) UnionedDecisions() iter.Seq2[string, ConditionsAwareDecision] {
 	return func(yield func(string, ConditionsAwareDecision) bool) {
 		for _, subDecision := range d.union.inner {
@@ -280,10 +255,8 @@ func (d ConditionsAwareDecision) Error() error {
 	return d.err
 }
 
-// String returns a human-readable representation of the decision.
-//
-// 中文说明：输出刻意不包含敏感对象内容，只含 reason/error 与条件数量，
-// 可安全写入日志与审计。
+// String 返回该决策的人类可读表示。输出刻意不包含敏感对象内容，
+// 只含 reason/error 与条件数量，可安全写入日志与审计。
 func (d ConditionsAwareDecision) String() string {
 	if d.IsUnion() {
 		// No need to take d.reason or d.err into account, as they are always zero for the union.

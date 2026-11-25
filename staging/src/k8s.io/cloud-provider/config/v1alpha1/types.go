@@ -26,9 +26,9 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CloudControllerManagerConfiguration contains elements describing cloud-controller manager.
+// CloudControllerManagerConfiguration 汇总描述 cloud-controller manager 的各项配置。
 //
-// 中文说明：这是 v1alpha1 外部配置根对象，仅用于 --config 解析与 /configz 序列化；
+// 这是 v1alpha1 外部配置根对象，仅用于 --config 解析与 /configz 序列化；
 // 默认值在 defaults.go 中补齐，随后通过生成的转换函数转为内部 config 类型。
 type CloudControllerManagerConfiguration struct {
 	metav1.TypeMeta `json:""`
@@ -77,10 +77,9 @@ type KubeCloudSharedConfiguration struct {
 	AllocateNodeCIDRs bool
 	// CIDRAllocatorType determines what kind of pod CIDR allocator will be used.
 	CIDRAllocatorType string
-	// configureCloudRoutes enables CIDRs allocated with allocateNodeCIDRs
-	// to be configured on the cloud provider.
+	// ConfigureCloudRoutes 会把通过 allocateNodeCIDRs 分配出来的 CIDR 配置到云提供商上。
 	//
-	// 中文说明：使用指针以区分“未设置”和“显式设为 false”——默认值需要覆盖前者，
+	// 使用指针以区分“未设置”和“显式设为 false”——默认值需要覆盖前者，
 	// 但不能抹掉用户明确关闭的选择。
 	ConfigureCloudRoutes *bool
 	// nodeSyncPeriod is the period for syncing nodes from cloudprovider. Longer

@@ -24,9 +24,8 @@ import (
 // GroupName is the group name use in this package
 const GroupName = "apidiscovery.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-// 中文说明：本包只做类型注册，不定义新结构，实际类型来自 k8s.io/api/apidiscovery/v2beta1，
-// 以避免 apiserver 与 api 仓库各维护一份定义。
+// SchemeGroupVersion 是注册这些对象所使用的组版本。本包只做类型注册，不定义新结构，
+// 实际类型来自 k8s.io/api/apidiscovery/v2beta1，以避免 apiserver 与 api 仓库各维护一份定义。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v2beta1"}
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource

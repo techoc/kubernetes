@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package x509 provides a request authenticator that validates and
-// extracts user information from client certificates
-//
-// 中文说明：用户名与组由证书的 Subject/Organization 映射而来，因此 TLS 终止点必须
+// Package x509 提供一个请求认证器，用于校验客户端证书并从中提取用户信息。
+// 用户名与组由证书的 Subject/Organization 映射而来，因此 TLS 终止点必须
 // 只信任受控 CA；证书校验失败即视为认证失败，不能退化为匿名访问。
 package x509

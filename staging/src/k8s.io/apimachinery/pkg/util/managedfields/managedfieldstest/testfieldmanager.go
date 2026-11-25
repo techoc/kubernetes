@@ -34,7 +34,7 @@ import (
 // 需要指定子资源或一组修改后的 Manager 进行针对性测试时，
 // 可使用此类型代替 NewDefaultTestFieldManager。
 //
-// 中文说明：接口刻意保持窄小，测试只需构造对象、执行 apply/update 并检查
+// 接口刻意保持窄小，测试只需构造对象、执行 apply/update 并检查
 // 最终的 managedFields，无需关心 manager 链内部结构。
 type TestFieldManager interface {
 	//所跟踪对象的 APIVersion。

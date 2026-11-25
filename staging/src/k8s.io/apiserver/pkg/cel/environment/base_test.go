@@ -54,14 +54,13 @@ func BenchmarkLoadBaseEnvDifferentVersions(b *testing.B) {
 	}
 }
 
-// TestLibraryCoverage lints the management of libraries in baseOpts by
-// checking for:
+// TestLibraryCoverage 通过静态检查 lint baseOpts 中库的管理方式，检查项：
 //
-//   - No gaps and overlap in library inclusion, including when libraries are version bumped
-//   - RemovedVersion is always greater than IntroducedVersion
-//   - Libraries are not removed once added (although they can be replaced with new versions)
+//   - 库的引入无空档、无重叠，库版本升级（version bump）时亦然
+//   - RemovedVersion 恒大于 IntroducedVersion
+//   - 库一旦引入不得移除（但可用新版本替代）
 //
-// 中文说明：该测试对 baseOpts 做静态校验，按 IntroducedVersion 排序后
+// 该测试对 baseOpts 做静态校验，按 IntroducedVersion 排序后
 // 逐版本跟踪每个库的存在区间，确保同一版本的库不会重复引入或出现重叠，
 // 新版本库必须在旧版本移除的同一 Kubernetes 版本引入（否则会留下空档），
 // 且任何库都不能在未被替代的情况下被删除——这是保持 CEL 表达式向后

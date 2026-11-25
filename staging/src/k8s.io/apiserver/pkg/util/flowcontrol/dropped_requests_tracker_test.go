@@ -27,7 +27,7 @@ import (
 
 // TestDroppedRequestsTracker 验证丢弃请求对 Retry-After 的递增与衰减。
 //
-// 中文说明：以假时钟按秒推进，精确断言每秒记录若干丢弃请求后 retryAfter 的
+// 以假时钟按秒推进，精确断言每秒记录若干丢弃请求后 retryAfter 的
 // 变化；同一秒内多次丢弃只应提升一次，避免瞬时抖动放大惩罚。
 func TestDroppedRequestsTracker(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
@@ -80,7 +80,7 @@ func TestDroppedRequestsTracker(t *testing.T) {
 
 // TestDroppedRequestsTrackerPLIndependent 验证不同优先级（PL）之间互不影响。
 //
-// 中文说明：一个 PL 的丢弃不应连带惩罚其他 PL，否则单个高优先级流量会拖慢
+// 一个 PL 的丢弃不应连带惩罚其他 PL，否则单个高优先级流量会拖慢
 // 整个 apiserver；同时验证未出现过的 PL 返回基线值。
 func TestDroppedRequestsTrackerPLIndependent(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
@@ -128,7 +128,7 @@ func TestDroppedRequestsTrackerPLIndependent(t *testing.T) {
 
 // BenchmarkDroppedRequestsTracker 衡量多 PL 并发记录丢弃请求的开销。
 //
-// 中文说明：tracker 位于请求拒绝路径上，任何锁竞争都会直接放大过载影响，
+// tracker 位于请求拒绝路径上，任何锁竞争都会直接放大过载影响，
 // 因此用并发基准守住性能。
 func BenchmarkDroppedRequestsTracker(b *testing.B) {
 	b.StopTimer()

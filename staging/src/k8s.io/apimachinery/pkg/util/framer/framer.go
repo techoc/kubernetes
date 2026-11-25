@@ -167,7 +167,6 @@ func (r *jsonFrameReader) Read(data []byte) (int, error) {
 	if len(m) > len(data) {
 		// 超出 len(data) 的字节写入了 data 的底层数组；函数返回后该数组归调用方所有，
 		// 因此必须复制剩余数据，避免后续被调用方复用时覆盖。
-		// 中文说明：这里必须复制，否则底层数组可能被调用方复用或改写。
 		r.remaining = append([]byte(nil), m[len(data):]...)
 		return len(data), io.ErrShortBuffer
 	}

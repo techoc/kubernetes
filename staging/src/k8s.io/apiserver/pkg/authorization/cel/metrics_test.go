@@ -28,7 +28,7 @@ import (
 
 // TestRecordAuthorizationMatchConditionEvaluationFailure 验证授权 webhook 的
 // match condition 相关指标：评估失败计数、排除计数与评估耗时直方图。
-// 中文说明：使用 legacyregistry 全局 gatherer，因此每个子用例前必须 ResetMetricsForTest，
+// 使用 legacyregistry 全局 gatherer，因此每个子用例前必须 ResetMetricsForTest，
 // 否则上一个用例的计数会污染断言。期望值刻意包含 HELP/TYPE 行，
 // 以锁定指标元数据；histogram 用 1 秒的观测落入 +Inf 桶来验证分桶与 sum/count。
 func TestRecordAuthorizationMatchConditionEvaluationFailure(t *testing.T) {

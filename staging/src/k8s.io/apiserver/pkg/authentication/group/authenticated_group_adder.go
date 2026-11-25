@@ -16,8 +16,7 @@ limitations under the License.
 
 // Package group 提供对认证结果中的用户组进行补充的包装器，
 // 例如为已认证用户自动加上 system:authenticated。
-//
-// 中文说明：这些包装器位于认证器与鉴权器之间，只调整 user.Info，不改变认证结论。
+// 这些包装器位于认证器与鉴权器之间，只调整 user.Info，不改变认证结论。
 package group
 
 import (
@@ -27,20 +26,18 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// AuthenticatedGroupAdder adds system:authenticated group when appropriate
-//
-// 中文说明：所有通过认证的非匿名用户都应属于 system:authenticated，但认证器本身
+// AuthenticatedGroupAdder 在合适的时候补充 system:authenticated 组。
+// 所有通过认证的非匿名用户都应属于 system:authenticated，但认证器本身
 // 不保证这一点；该包装器补上该组，使 RBAC 的 group 绑定对任意认证方式一致生效。
 type AuthenticatedGroupAdder struct {
 	// Authenticator is delegated to make the authentication decision
 	Authenticator authenticator.Request
 }
 
-// NewAuthenticatedGroupAdder wraps a request authenticator, and adds the system:authenticated group when appropriate.
-// Authentication must succeed, the user must not be system:anonymous, the groups system:authenticated or system:unauthenticated must
-// not be present
-//
-// 中文说明：认证失败时原样返回，不修改错误；包装器只在成功且确有必要时追加组。
+// NewAuthenticatedGroupAdder 包装一个请求认证器，并在合适的时候补充 system:authenticated 组。
+// 生效前提：认证必须成功，用户不能是 system:anonymous，且组中不能已经带有
+// system:authenticated 或 system:unauthenticated。
+// 认证失败时原样返回，不修改错误；包装器只在成功且确有必要时追加组。
 func NewAuthenticatedGroupAdder(auth authenticator.Request) authenticator.Request {
 	return &AuthenticatedGroupAdder{auth}
 }
