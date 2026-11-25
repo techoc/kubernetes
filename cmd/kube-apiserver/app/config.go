@@ -30,16 +30,22 @@ import (
 	generatedopenapi "k8s.io/kubernetes/pkg/generated/openapi"
 )
 
+// Config 汇总 API 服务器各部分的配置；Complete 之前不应启动服务。
 type Config struct {
+	// Options 是已完成默认值填充和校验的启动参数。
 	Options options.CompletedOptions
 
-	Aggregator    *aggregatorapiserver.Config
-	KubeAPIs      *controlplane.Config
+	// Aggregator 配置聚合 API 服务器。
+	Aggregator *aggregatorapiserver.Config
+	// KubeAPIs 配置 Kubernetes 内置 API。
+	KubeAPIs *controlplane.Config
+	// ApiExtensions 配置 CustomResourceDefinition 等扩展 API。
 	ApiExtensions *apiextensionsapiserver.Config
 
 	ExtraConfig
 }
 
+// ExtraConfig 保留 API 服务器配置的扩展入口。
 type ExtraConfig struct {
 }
 
@@ -53,11 +59,13 @@ type completedConfig struct {
 	ExtraConfig
 }
 
+// CompletedConfig 表示各子服务器均已完成配置组装的 API 服务器配置。
 type CompletedConfig struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
+	// 嵌入私有指针，避免包外直接构造完成态。
 	*completedConfig
 }
 
+// Complete 完成各子服务器配置，并返回可交给运行阶段的配置。
 func (c *Config) Complete() (CompletedConfig, error) {
 	return CompletedConfig{&completedConfig{
 		Options: c.Options,
@@ -70,7 +78,7 @@ func (c *Config) Complete() (CompletedConfig, error) {
 	}}, nil
 }
 
-// NewConfig creates all the resources for running kube-apiserver, but runs none of them.
+// NewConfig 创建运行 kube-apiserver 所需的全部资源，但不启动它们。
 func NewConfig(opts options.CompletedOptions) (*Config, error) {
 	c := &Config{
 		Options: opts,

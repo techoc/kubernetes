@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 非 Linux、非 Windows 平台的初始化入口。
 package app
 
 import (

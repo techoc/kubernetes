@@ -24,12 +24,12 @@ import (
 	devicetaintevictionconfig "k8s.io/kubernetes/pkg/controller/devicetainteviction/config"
 )
 
-// DeviceTaintEvictionControllerOptions holds the DeviceTaintEvictionController options.
+// DeviceTaintEvictionControllerOptions 保存设备污点驱逐控制器的选项。
 type DeviceTaintEvictionControllerOptions struct {
 	*devicetaintevictionconfig.DeviceTaintEvictionControllerConfiguration
 }
 
-// AddFlags adds flags related to DeviceTaintEvictionController for controller manager to the specified FlagSet.
+// AddFlags 将设备污点驱逐控制器相关参数注册到指定 FlagSet。
 func (o *DeviceTaintEvictionControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -38,7 +38,7 @@ func (o *DeviceTaintEvictionControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentSyncs, "concurrent-device-taint-eviction-syncs", o.ConcurrentSyncs, "The number of operations (evicting pods, updating DeviceTaintRule status) allowed to run concurrently. Greater number = more responsive, but more CPU (and network) load")
 }
 
-// ApplyTo fills up DeviceTaintEvictionController config with options.
+// ApplyTo 将选项写入设备污点驱逐控制器配置。
 func (o *DeviceTaintEvictionControllerOptions) ApplyTo(cfg *devicetaintevictionconfig.DeviceTaintEvictionControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -49,7 +49,7 @@ func (o *DeviceTaintEvictionControllerOptions) ApplyTo(cfg *devicetaintevictionc
 	return nil
 }
 
-// Validate checks validation of DeviceTaintEvictionControllerOptions.
+// Validate 校验设备污点驱逐控制器选项。
 func (o *DeviceTaintEvictionControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

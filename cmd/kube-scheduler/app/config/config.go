@@ -41,30 +41,33 @@ type Config struct {
 
 	// Authentication / Authorization 分别负责请求身份认证和访问授权；SecureServing 保存 HTTPS 服务端配置。
 	Authentication apiserver.AuthenticationInfo
-	Authorization  apiserver.AuthorizationInfo
-	SecureServing  *apiserver.SecureServingInfo
+	// Authorization 配置 HTTPS 管理端点的访问授权；未启用安全监听时无需填充。
+	Authorization apiserver.AuthorizationInfo
+	// SecureServing 保存监听地址、证书和优雅关闭参数；nil 表示不启动 HTTPS 端点。
+	SecureServing *apiserver.SecureServingInfo
 
 	// Client 访问 Kubernetes API，KubeConfig 保存 REST 配置。
 	// 两类 InformerFactory 分别服务内置资源和动态资源，后者不受编译期资源类型集合限制。
-	Client             clientset.Interface
-	KubeConfig         *restclient.Config
-	InformerFactory    informers.SharedInformerFactory
+	Client clientset.Interface
+	// KubeConfig 是创建客户端和资源锁时使用的 REST 配置。
+	KubeConfig *restclient.Config
+	// InformerFactory 为内置资源提供共享缓存，启动前不得替换。
+	InformerFactory informers.SharedInformerFactory
+	// DynInformerFactory 提供动态资源缓存；测试中可为 nil。
 	DynInformerFactory dynamicinformer.DynamicSharedInformerFactory
 
-	//nolint:staticcheck // SA1019 this deprecated field still needs to be used for now. It will be removed once the migration is done.
+	//nolint:staticcheck // SA1019 迁移完成前仍需使用此废弃字段。
 	// EventBroadcaster 将 Scheduler 产生的事件异步写回 API Server。
 	EventBroadcaster events.EventBroadcasterAdapter
 
 	// LeaderElection 为空表示不启用选主；非空时保存 Lease 锁和选主回调所需参数。
 	LeaderElection *leaderelection.LeaderElectionConfig
 
-	// PodMaxInUnschedulablePodsDuration is the maximum time a pod can stay in
-	// unschedulablePods. If a pod stays in unschedulablePods for longer than this
-	// value, the pod will be moved from unschedulablePods to backoffQ or activeQ.
-	// If this value is empty, the default value (5min) will be used.
+	// PodMaxInUnschedulablePodsDuration 限制 Pod 在 unschedulablePods 中的停留时间。
+	// 超时后 Pod 会移入 backoffQ 或 activeQ 重新尝试调度；零值使用默认的 5 分钟。
 	PodMaxInUnschedulablePodsDuration time.Duration
 
-	// ComponentGlobalsRegistry is the registry where the effective versions and feature gates for all components are stored.
+	// ComponentGlobalsRegistry 保存各组件的有效版本和 Feature Gate，用于版本兼容判断与运行期开关管理。
 	ComponentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry
 }
 
@@ -74,7 +77,7 @@ type completedConfig struct {
 
 // CompletedConfig 表示可以交给运行阶段使用的配置；非导出嵌入类型阻止包外伪造完成态对象。
 type CompletedConfig struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
+	// 嵌入包内私有指针，阻止包外代码直接伪造完成态配置。
 	*completedConfig
 }
 

@@ -14,11 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The kubelet binary is responsible for maintaining a set of containers on a particular host VM.
-// It syncs data from both configuration file(s) as well as from a quorum of etcd servers.
-// It then communicates with the container runtime (or a CRI shim for the runtime) to see what is
-// currently running.  It synchronizes the configuration data, with the running set of containers
-// by starting or stopping containers.
+// Kubelet 二进制负责维护节点上的容器集合。
+// 它从配置文件和 etcd 法定成员同步期望状态，通过 CRI 查询容器运行时中的实际状态，
+// 再通过启动或停止容器使两者一致。
 package main
 
 import (
@@ -26,9 +24,9 @@ import (
 	"os"
 
 	"k8s.io/component-base/cli"
-	_ "k8s.io/component-base/logs/json/register"          // for JSON log format registration
-	_ "k8s.io/component-base/metrics/prometheus/clientgo" // for client metric registration
-	_ "k8s.io/component-base/metrics/prometheus/version"  // for version metric registration
+	_ "k8s.io/component-base/logs/json/register"          // 注册 JSON 日志格式
+	_ "k8s.io/component-base/metrics/prometheus/clientgo" // 注册客户端指标
+	_ "k8s.io/component-base/metrics/prometheus/version"  // 注册版本指标
 	"k8s.io/kubernetes/cmd/kubelet/app"
 )
 

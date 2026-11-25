@@ -37,10 +37,6 @@ func newKubeletServerOrDie() *KubeletServer {
 	return s
 }
 
-// TestRoundTrip ensures that flag values from the Kubelet can be serialized
-// to arguments and then read back and have the same value. Also catches cases
-// where the default value reported by the flag is not actually allowed to be
-// specified.
 // TestRoundTrip 验证 Flag 值可以序列化为命令行参数并重新解析，往返后节点级配置保持一致。
 func TestRoundTrip(t *testing.T) {
 	testCases := []struct {
@@ -117,12 +113,12 @@ func asArgs(fn, defaultFn func(*pflag.FlagSet)) []string {
 	defaultFn(defaults)
 	var args []string
 	fs.VisitAll(func(flag *pflag.Flag) {
-		// if the flag implements cliflag.OmitEmpty and the value is Empty, then just omit it from the command line
+		// 若 Flag 实现 cliflag.OmitEmpty 且值为空，则从命令行省略该参数。
 		if omit, ok := flag.Value.(cliflag.OmitEmpty); ok && omit.Empty() {
 			return
 		}
 		s := flag.Value.String()
-		// if the flag has the same value as the default, we can omit it without changing the meaning of the command line
+		// 若 Flag 值等于默认值，可省略该参数而不改变命令行含义。
 		var defaultValue string
 		if defaultFlag := defaults.Lookup(flag.Name); defaultFlag != nil {
 			defaultValue = defaultFlag.Value.String()
@@ -130,7 +126,7 @@ func asArgs(fn, defaultFn func(*pflag.FlagSet)) []string {
 				return
 			}
 		}
-		// if the flag is a string slice, each element is specified with an independent flag invocation
+		// 若 Flag 是字符串切片，则为每个元素单独生成一次参数。
 		if values, err := fs.GetStringSlice(flag.Name); err == nil {
 			for _, s := range values {
 				args = append(args, fmt.Sprintf("--%s=%s", flag.Name, s))

@@ -38,11 +38,10 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/server"
 )
 
-// BuildAuth 为 Kubelet 组装认证器、授权器及节点授权属性，并返回客户端 CA 热加载函数。
-// It returns AuthInterface, a run method to start internal controllers (like cert reloading) and error.
-// BuildAuth 将认证与授权两条链路组合为 Kubelet HTTP Server 使用的 AuthInterface。
+// BuildAuth 将认证与授权两条链路组合为 Kubelet HTTP 服务器使用的 AuthInterface，
+// 并返回启动证书重载等内部控制器的函数。
 func BuildAuth(nodeName types.NodeName, client clientset.Interface, config kubeletconfig.KubeletConfiguration) (server.AuthInterface, func(<-chan struct{}), error) {
-	// Get clients, if provided
+	// 仅在调用方提供客户端时提取认证和授权子客户端。
 	var (
 		tokenClient authenticationclient.AuthenticationV1Interface
 		sarClient   authorizationclient.AuthorizationV1Interface
@@ -70,8 +69,8 @@ func BuildAuth(nodeName types.NodeName, client clientset.Interface, config kubel
 	return server.NewKubeletAuth(authenticator, attributes, authorizer, clientCAProvider), runAuthenticatorCAReload, nil
 }
 
-// BuildAuthn creates an authenticator compatible with the kubelet's needs
-// BuildAuthn 根据 X509、匿名访问和 Webhook 配置创建 HTTP 请求认证器。
+// BuildAuthn 根据 X509、匿名访问和 Webhook 配置创建 HTTP 请求认证器，
+// 同时返回 CA 文件监视器的启动函数和 CA 内容提供器。
 func BuildAuthn(client authenticationclient.AuthenticationV1Interface, authn kubeletconfig.KubeletAuthentication) (authenticator.Request, func(<-chan struct{}), dynamiccertificates.CAContentProvider, error) {
 	var caContentProvider dynamiccertificates.CAContentProvider
 	var dynamicCAContentFromFile *dynamiccertificates.DynamicFileCAContent
@@ -110,13 +109,13 @@ func BuildAuthn(client authenticationclient.AuthenticationV1Interface, authn kub
 
 	// 返回启动函数，由调用方在 Kubelet 生命周期内运行 CA 文件监视器，并通过 stopCh 停止它。
 	return authenticator, func(stopCh <-chan struct{}) {
-		// generate a context from stopCh. This is to avoid modifying files which are relying on this method
-		// TODO: See if we can pass ctx to the current method
+		// 用 stopCh 派生 Context，避免改动依赖此方法的调用方。
+		// TODO：研究能否直接向当前方法传入 ctx。
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			select {
 			case <-stopCh:
-				cancel() // stopCh closed, so cancel our context
+				cancel() // stopCh 已关闭，取消 Context。
 			case <-ctx.Done():
 			}
 		}()
@@ -126,8 +125,7 @@ func BuildAuthn(client authenticationclient.AuthenticationV1Interface, authn kub
 	}, caContentProvider, err
 }
 
-// BuildAuthz creates an authorizer compatible with the kubelet's needs
-// BuildAuthz 按配置选择本地 AlwaysAllow 或 API Server Webhook 授权策略。
+// BuildAuthz 按配置选择本地 AlwaysAllow 或 API 服务器 Webhook 授权策略。
 func BuildAuthz(client authorizationclient.AuthorizationV1Interface, authz kubeletconfig.KubeletAuthorization) (authorizer.UnconditionalAuthorizer, error) {
 	switch authz.Mode {
 	case kubeletconfig.KubeletAuthorizationModeAlwaysAllow:

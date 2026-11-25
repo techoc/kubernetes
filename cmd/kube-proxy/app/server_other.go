@@ -16,8 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app does all of the work necessary to configure and run a
-// Kubernetes app process.
+// Package app 负责 kube-proxy 的配置、启动与运行。
 package app
 
 import (
@@ -29,32 +28,28 @@ import (
 	kubeproxyconfig "k8s.io/kubernetes/pkg/proxy/apis/config"
 )
 
-// platformApplyDefaults is called after parsing command-line flags and/or reading the
-// config file, to apply platform-specific default values to config.
+// platformApplyDefaults 在解析命令行参数或读取配置后应用平台默认值；其他平台无需补充。
 func (o *Options) platformApplyDefaults(config *kubeproxyconfig.KubeProxyConfiguration) {
 }
 
 var unsupportedError = fmt.Errorf(runtime.GOOS + "/" + runtime.GOARCH + "is unsupported")
 
-// platformSetup is called after setting up the ProxyServer, but before creating the
-// Proxier. It should fill in any platform-specific fields and perform other
-// platform-specific setup.
+// platformSetup 在创建 Proxier 前执行平台初始化；当前平台统一返回不支持错误。
 func (s *ProxyServer) platformSetup(ctx context.Context) error {
 	return unsupportedError
 }
 
-// platformCheckSupported is called immediately before creating the Proxier, to check
-// what IP families are supported (and whether the configuration is usable at all).
+// platformCheckSupported 在创建 Proxier 前检查 IP 协议族支持；当前平台始终不可用。
 func (s *ProxyServer) platformCheckSupported(ctx context.Context) (ipv4Supported, ipv6Supported, dualStackSupported bool, err error) {
 	return false, false, false, unsupportedError
 }
 
-// createProxier creates the proxy.Provider
+// createProxier 创建代理提供器；当前平台统一返回不支持错误。
 func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig.KubeProxyConfiguration, dualStackMode, initOnly bool) (proxy.Provider, error) {
 	return nil, unsupportedError
 }
 
-// platformCleanup removes stale kube-proxy rules that can be safely removed.
+// platformCleanup 清理可安全移除的旧代理规则；当前平台统一返回不支持错误。
 func platformCleanup(ctx context.Context, mode kubeproxyconfig.ProxyMode, cleanupAndExit bool) error {
 	return unsupportedError
 }

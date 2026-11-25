@@ -70,59 +70,52 @@ import (
 )
 
 func init() {
-	// If instantiated more than once or together with other servers, the
-	// servers would try to modify the global logging state. This must get
-	// ignored during testing.
+	// 多个测试服务器会重复修改全局日志状态，测试中应忽略未变化的配置。
 	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 }
 
-// This key is for testing purposes only and is not considered secure.
+// 该私钥仅用于测试，不能视为安全凭据。
 const ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIEZmTmUhuanLjPA2CLquXivuwBDHTt5XYwgIr/kA1LtRoAoGCCqGSM49
 AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
 /IR3qCXyThP/dbCiHrF3v1cuhBOHY8CLVg==
 -----END EC PRIVATE KEY-----`
 
-// TearDownFunc is to be called to tear down a test server.
+// TearDownFunc 用于停止测试服务器并释放其资源，必须由调用方在测试结束时调用。
 type TearDownFunc func()
 
-// TestServerInstanceOptions Instance options the TestServer
+// TestServerInstanceOptions 控制单个测试服务器的启动行为。
 type TestServerInstanceOptions struct {
-	// SkipHealthzCheck returns without waiting for the server to become healthy.
-	// Useful for testing server configurations expected to prevent /healthz from completing.
+	// SkipHealthzCheck 跳过健康等待，适用于配置本身就阻止 /healthz 完成的测试。
 	SkipHealthzCheck bool
-	// DisableInvariantChecks skips the invariant checks at the end of the test.
+	// DisableInvariantChecks 跳过测试结束时的指标不变量检查。
 	DisableInvariantChecks bool
-	// Enable cert-auth for the kube-apiserver
+	// EnableCertAuth 为 kube-apiserver 启用证书认证。
 	EnableCertAuth bool
-	// Wrap the storage version interface of the created server's generic server.
+	// StorageVersionWrapFunc 包装通用服务器的存储版本接口。
 	StorageVersionWrapFunc func(storageversion.Manager) storageversion.Manager
-	// CA file used for requestheader authn during communication between:
-	// 1. kube-apiserver and peer when the local apiserver is not able to serve the request due
-	// to version skew
-	// 2. kube-apiserver and aggregated apiserver
-
-	// We specify this as on option to pass a common proxyCA to multiple apiservers to simulate
-	// an apiserver version skew scenario where all apiservers use the same proxyCA to verify client connections.
+	// ProxyCA 提供请求头认证使用的 CA，供以下连接共享：
+	// 1. 本地 API 服务器因版本差异无法处理请求时，kube-apiserver 与对等节点的通信；
+	// 2. kube-apiserver 与聚合 API 服务器的通信。
+	// 多个服务器共用同一 ProxyCA 可模拟版本差异下的一致性客户端验证。
 	ProxyCA *ProxyCA
-	// Set the BinaryVersion of server effective version.
-	// If empty, effective version will default to DefaultKubeEffectiveVersion.
+	// BinaryVersion 设置服务器有效版本中的二进制版本；为空时使用 DefaultKubeEffectiveVersion。
 	BinaryVersion string
-	// Set non-default request timeout in the server.
+	// RequestTimeout 覆盖服务器默认的请求超时时间。
 	RequestTimeout time.Duration
 }
 
-// TestServer return values supplied by kube-test-ApiServer
+// TestServer 保存启动测试 API 服务器后返回的客户端、配置和清理信息。
 type TestServer struct {
-	ClientConfig      *restclient.Config        // Rest client config
-	ServerOpts        *options.ServerRunOptions // ServerOpts
-	TearDownFn        TearDownFunc              // TearDown function
-	TmpDir            string                    // Temp Dir used, by the apiserver
-	EtcdClient        *clientv3.Client          // used by tests that need to check data migrated from APIs that are no longer served
-	EtcdStoragePrefix string                    // storage prefix in etcd
+	ClientConfig      *restclient.Config        // REST 客户端配置
+	ServerOpts        *options.ServerRunOptions // 服务器启动参数
+	TearDownFn        TearDownFunc              // 清理函数
+	TmpDir            string                    // API 服务器使用的临时目录
+	EtcdClient        *clientv3.Client          // 供测试检查已不再提供的 API 所迁移的数据
+	EtcdStoragePrefix string                    // etcd 存储前缀
 }
 
-// Logger allows t.Testing and b.Testing to be passed to StartTestServer and StartTestServerOrDie
+// Logger 是 StartTestServer 和 StartTestServerOrDie 所需的最小测试日志接口。
 type Logger interface {
 	Helper()
 	Errorf(format string, args ...interface{})
@@ -131,34 +124,30 @@ type Logger interface {
 	Cleanup(func())
 }
 
-// ProxyCA contains the certificate authority certificate and key which is used to verify client connections
-// to kube-apiservers. The clients can be :
-// 1. aggregated apiservers
-// 2. peer kube-apiservers
+// ProxyCA 保存用于验证 kube-apiserver 客户端连接的 CA 证书和私钥。
+// 客户端包括聚合 API 服务器和对等 kube-apiserver。
 type ProxyCA struct {
+	// ProxySigningCert 是签发代理客户端证书的 CA 证书。
 	ProxySigningCert *x509.Certificate
-	ProxySigningKey  *rsa.PrivateKey
+	// ProxySigningKey 是与 ProxySigningCert 配对的 CA 私钥。
+	ProxySigningKey *rsa.PrivateKey
 }
 
-// NewDefaultTestServerOptions Default options for TestServer instances
+// NewDefaultTestServerOptions 创建测试服务器的默认实例选项。
 func NewDefaultTestServerOptions() *TestServerInstanceOptions {
 	return &TestServerInstanceOptions{
 		EnableCertAuth: true,
 	}
 }
 
-// StartTestServer starts a etcd server and kube-apiserver. A rest client config and a tear-down func,
-// and location of the tmpdir are returned.
-//
-// Note: we return a tear-down func instead of a stop channel because the later will leak temporary
-// files that because Golang testing's call to os.Exit will not give a stop channel go routine
-// enough time to remove temporary files.
+// StartTestServer 启动 etcd 和 kube-apiserver，并返回 REST 客户端配置、清理函数和临时目录位置。
+// 返回清理函数而不是停止通道，是因为 Go 测试调用 os.Exit 时不会给停止通道的 goroutine
+// 足够时间删除临时文件。
 func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, customFlags []string, storageConfig *storagebackend.Config) (result TestServer, err error) {
-	// Some callers may have initialize ktesting already.
+	// 部分调用方可能已初始化 ktesting。
 	tCtx, ok := t.(ktesting.TContext)
 	if ok {
-		// tCtx.Cancel below must not cancel whatever else might be using
-		// this existing TContext.
+		// 派生可取消的子上下文，避免下方的 Cancel 影响共享该 TContext 的其他代码。
 		tCtx = tCtx.WithCancel()
 	} else {
 		tCtx = ktesting.Init(t)
@@ -175,12 +164,10 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 
 	var errCh chan error
 	tearDown := func() {
-		// Cancel is stopping apiserver and cleaning up
-		// after itself, including shutting down its storage layer.
+		// 取消上下文以停止 API 服务器及其存储层。
 		tCtx.Cancel("tearing down")
 
-		// If the apiserver was started, let's wait for it to
-		// shutdown clearly.
+		// 若服务器已启动，等待其完全退出。
 		if errCh != nil {
 			err, ok := <-errCh
 			if ok && err != nil {
@@ -211,12 +198,11 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 
 	s := options.NewServerRunOptions()
 	if !effectiveVersion.BinaryVersion().EqualTo(effectiveVersion.EmulationVersion()) {
-		// Allow new APIs because features might be enabled explicitly which depend
-		// some API which gets disabled when emulating versions.
+		// 显式启用的特性可能依赖版本模拟时默认关闭的 API，因此允许前向兼容的新 API。
 		s.GenericServerRunOptions.RuntimeConfigEmulationForwardCompatible = true
 	}
 
-	// set up new instance of ComponentGlobalsRegistry instead of using the DefaultComponentGlobalsRegistry to avoid contention in parallel tests.
+	// 使用独立注册表，避免并行测试争用 DefaultComponentGlobalsRegistry。
 	s.Options.GenericServerRunOptions.ComponentGlobalsRegistry = componentGlobalsRegistry
 	if instanceOptions.RequestTimeout > 0 {
 		s.GenericServerRunOptions.RequestTimeout = instanceOptions.RequestTimeout
@@ -235,7 +221,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 
 	reqHeaderFromFlags := s.Authentication.RequestHeader
 	if instanceOptions.EnableCertAuth {
-		// set up default headers for request header auth
+		// 为请求头认证设置默认配置。
 		reqHeaders := serveroptions.NewDelegatingAuthenticationOptions()
 		s.Authentication.RequestHeader = &reqHeaders.RequestHeader
 
@@ -243,12 +229,12 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		var proxySigningCert *x509.Certificate
 
 		if instanceOptions.ProxyCA != nil {
-			// use provided proxyCA
+			// 复用调用方提供的 ProxyCA。
 			proxySigningKey = instanceOptions.ProxyCA.ProxySigningKey
 			proxySigningCert = instanceOptions.ProxyCA.ProxySigningCert
 
 		} else {
-			// create certificates for aggregation and client-cert auth
+			// 创建供聚合和客户端证书认证使用的 CA。
 			proxySigningKey, err = testutil.NewPrivateKey()
 			if err != nil {
 				return result, err
@@ -264,17 +250,15 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		}
 		s.Authentication.RequestHeader.ClientCAFile = proxyCACertFile
 
-		// give the kube api server an "identity" it can use to for request header auth
-		// so that aggregated api servers can understand who the calling user is
+		// 为 API 服务器设置请求头认证身份，使聚合服务器能够识别调用用户。
 		s.Authentication.RequestHeader.AllowedNames = []string{"ash", "misty", "brock"}
 
-		// create private key
 		signer, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			return result, err
 		}
 
-		// make a client certificate for the api server - common name has to match one of our defined names above
+		// 客户端证书的 CommonName 必须匹配上面允许的名称。
 		serial, err := rand.Int(rand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 		if err != nil {
 			return result, err
@@ -303,7 +287,6 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 			return result, err
 		}
 
-		// write the cert to disk
 		certificatePath := filepath.Join(s.SecureServing.ServerCert.CertDirectory, "misty-crt.crt")
 		certBlock := pem.Block{
 			Type:  "CERTIFICATE",
@@ -314,7 +297,6 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 			return result, err
 		}
 
-		// write the key to disk
 		privateKeyPath := filepath.Join(s.SecureServing.ServerCert.CertDirectory, "misty-crt.key")
 		encodedPrivateKey, err := keyutil.MarshalPrivateKeyToPEM(signer)
 		if err != nil {
@@ -342,7 +324,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		s.Authentication.ClientCert.ClientCA = clientCACertFile
 	}
 
-	s.SecureServing.ExternalAddress = s.SecureServing.Listener.Addr().(*net.TCPAddr).IP // use listener addr although it is a loopback device
+	s.SecureServing.ExternalAddress = s.SecureServing.Listener.Addr().(*net.TCPAddr).IP // 虽为回环设备，仍使用监听器地址。
 
 	pkgPath, err := pkgPath(t)
 	if err != nil {
@@ -357,8 +339,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		return result, err
 	}
 
-	// disable endpoint reconciliation when using a loopback "external" address
-	// unless the user has explicitly overridden the reconciler or advertise address
+	// 回环“外部”地址无法被集群访问；除非用户显式覆盖协调器或公布地址，否则关闭端点协调。
 	if !fs.Changed("advertise-address") && !fs.Changed("endpoint-reconciler-type") {
 		s.EndpointReconcilerType = "none"
 	}
@@ -366,10 +347,8 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		s.Flagz = flagz.NamedFlagSetsReader{FlagSets: namedFlagSets}
 	}
 
-	// the RequestHeader options pointer gets replaced in the case of EnableCertAuth override
-	// and so flags are connected to a struct that no longer appears in the ServerOptions struct
-	// we're using.
-	// We still want to make it possible to configure the headers config for the RequestHeader authenticator.
+	// EnableCertAuth 会替换 RequestHeader 指针，使参数绑定到已不在 ServerOptions 中的结构体。
+	// 为保留命令行配置能力，仍需把请求头字段复制到新的认证配置。
 	if usernameHeaders := reqHeaderFromFlags.UsernameHeaders; len(usernameHeaders) > 0 {
 		s.Authentication.RequestHeader.UsernameHeaders = usernameHeaders
 	}
@@ -386,9 +365,8 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 	if err := componentGlobalsRegistry.Set(); err != nil {
 		return result, fmt.Errorf("%w\nIf you are using SetFeatureGate*DuringTest, try using --emulated-version and --feature-gates flags instead", err)
 	}
-	// If the local ComponentGlobalsRegistry is changed by the flags,
-	// we need to copy the new feature values back to the DefaultFeatureGate because most feature checks still use the DefaultFeatureGate.
-	// We cannot directly use DefaultFeatureGate in ComponentGlobalsRegistry because the changes done by ComponentGlobalsRegistry.Set() will not be undone at the end of the test.
+	// 多数特性检查仍读取 DefaultFeatureGate，因此需把参数对本地注册表的修改同步回去。
+	// 不能直接向注册表注入 DefaultFeatureGate，因为 Set() 的修改不会在测试结束时自动撤销。
 	if !featureGate.EmulationVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.EmulationVersion()) || !featureGate.MinCompatibilityVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.MinCompatibilityVersion()) {
 		featuregatetesting.SetFeatureGateVersionsDuringTest(t, utilfeature.DefaultMutableFeatureGate, effectiveVersion.EmulationVersion(), effectiveVersion.MinCompatibilityVersion())
 	}
@@ -468,7 +446,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 	if !instanceOptions.SkipHealthzCheck {
 		t.Logf("Waiting for /healthz to be ok...")
 
-		// wait until healthz endpoint returns ok
+		// 等待健康端点返回成功。
 		err = wait.Poll(100*time.Millisecond, time.Minute, func() (bool, error) {
 			select {
 			case err := <-errCh:
@@ -477,11 +455,9 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 			}
 
 			req := client.CoreV1().RESTClient().Get().AbsPath("/healthz")
-			// The storage version bootstrap test wraps the storage version post-start
-			// hook, so the hook won't become health when the server bootstraps
+			// 存储版本引导测试会包装 post-start hook，导致该 hook 在服务器引导期间保持不健康。
 			if instanceOptions.StorageVersionWrapFunc != nil {
-				// We hardcode the param instead of having a new instanceOptions field
-				// to avoid confusing users with more options.
+				// 直接硬编码排除项，避免为测试专用行为增加公共配置字段。
 				storageVersionCheck := fmt.Sprintf("poststarthook/%s", apiserver.StorageVersionPostStartHookName)
 				req.Param("exclude", storageVersionCheck)
 			}
@@ -498,7 +474,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		}
 	}
 
-	// wait until default namespace is created
+	// 等待默认命名空间创建完成。
 	err = wait.Poll(100*time.Millisecond, 30*time.Second, func() (bool, error) {
 		select {
 		case err := <-errCh:
@@ -523,7 +499,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		return result, fmt.Errorf("create etcd client: %w", err)
 	}
 
-	// from here the caller must call tearDown
+	// 至此启动成功，调用方必须调用 TearDownFn 清理资源。
 	result.ClientConfig = restclient.CopyConfig(server.GenericAPIServer.LoopbackClientConfig)
 	result.ClientConfig.QPS = 1000
 	result.ClientConfig.Burst = 10000
@@ -552,11 +528,11 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 	return result, nil
 }
 
-// GetEtcdClients returns an initialized etcd clientv3.Client and clientv3.KV.
+// GetEtcdClients 返回已初始化的 etcd 客户端和 KV 接口。
 func GetEtcdClients(config storagebackend.TransportConfig) (*clientv3.Client, clientv3.KV, error) {
-	// clientv3.New ignores an invalid TLS config for http://, but not for unix:// (https://github.com/etcd-io/etcd/blob/5a8fba466087686fc15815f5bc041fb7eb1f23ea/client/v3/internal/endpoint/endpoint.go#L61-L66).
-	// To support unix://, we must not set Config.TLS unless we really have
-	// transport security.
+	// clientv3.New 对 http:// 忽略无效 TLS 配置，但对 unix:// 会报错
+	//（https://github.com/etcd-io/etcd/blob/5a8fba466087686fc15815f5bc041fb7eb1f23ea/client/v3/internal/endpoint/endpoint.go#L61-L66）。
+	// 因此只有确实启用传输安全时才设置 Config.TLS，以兼容 unix://。
 	var tlsConfig *tls.Config
 	if config.CertFile != "" ||
 		config.KeyFile != "" ||
@@ -588,7 +564,7 @@ func GetEtcdClients(config storagebackend.TransportConfig) (*clientv3.Client, cl
 	return c, clientv3.NewKV(c), nil
 }
 
-// StartTestServerOrDie calls StartTestServer t.Fatal if it does not succeed.
+// StartTestServerOrDie 启动测试服务器；启动失败时通过 t.Fatal 终止测试。
 func StartTestServerOrDie(t testing.TB, instanceOptions *TestServerInstanceOptions, flags []string, storageConfig *storagebackend.Config) *TestServer {
 	result, err := StartTestServer(t, instanceOptions, flags, storageConfig)
 	if err == nil {
@@ -605,7 +581,7 @@ func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
 		return nil, 0, err
 	}
 
-	// get port
+	// 读取内核分配的端口。
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		ln.Close()
@@ -615,13 +591,9 @@ func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
 	return ln, tcpAddr.Port, nil
 }
 
-// pkgPath returns the absolute file path to this package's directory. With go
-// test, we can just look at the runtime call stack. However, bazel compiles go
-// binaries with the -trimpath option so the simple approach fails however we
-// can consult environment variables to derive the path.
-//
-// The approach taken here works for both go test and bazel on the assumption
-// that if and only if trimpath is passed, we are running under bazel.
+// pkgPath 返回当前包目录的绝对路径。go test 可直接从运行时调用栈获取源码路径；
+// Bazel 编译时使用 -trimpath，该路径失效，因此改为从环境变量推导。
+// 这里假设只有 Bazel 构建会传入 -trimpath，从而同时兼容 go test 和 Bazel。
 func pkgPath(t Logger) (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -630,15 +602,13 @@ func pkgPath(t Logger) (string, error) {
 
 	pkgPath := filepath.Dir(thisFile)
 
-	// If we find bazel env variables, then -trimpath was passed so we need to
-	// construct the path from the environment.
+	// 发现 Bazel 环境变量说明构建使用了 -trimpath，需基于环境变量重建路径。
 	if testSrcdir, testWorkspace := os.Getenv("TEST_SRCDIR"), os.Getenv("TEST_WORKSPACE"); testSrcdir != "" && testWorkspace != "" {
 		t.Logf("Detected bazel env varaiables: TEST_SRCDIR=%q TEST_WORKSPACE=%q", testSrcdir, testWorkspace)
 		pkgPath = filepath.Join(testSrcdir, testWorkspace, pkgPath)
 	}
 
-	// If the path is still not absolute, something other than bazel compiled
-	// with -trimpath.
+	// 若路径仍不是绝对路径，则构建方并非带 -trimpath 的 Bazel。
 	if !filepath.IsAbs(pkgPath) {
 		return "", fmt.Errorf("can't construct an absolute path from %q", pkgPath)
 	}

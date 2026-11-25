@@ -16,30 +16,28 @@ limitations under the License.
 
 package names
 
-// Canonical controller names
+// 控制器规范名称
 //
-// NAMING CONVENTIONS
-// 1. naming should be consistent across the controllers
-// 2. use of shortcuts should be avoided, unless they are well-known non-Kubernetes shortcuts
-// 3. Kubernetes' resources should be written together without a hyphen ("-")
+// 命名约定
+// 1. 所有控制器采用一致的命名方式。
+// 2. 避免缩写，但广为人知的非 Kubernetes 缩写除外。
+// 3. Kubernetes 资源名称应连写，不使用连字符。
 //
-// CHANGE POLICY
-// The controller names should be treated as IDs.
-// They can only be changed if absolutely necessary. For example if an inappropriate name was chosen in the past, or if the scope of the controller changes.
-// When a name is changed, the old name should be aliased in app.ControllerDescriptor#GetAliases, while preserving all old aliases.
-// This is done to achieve backwards compatibility
+// 变更策略
+// 控制器名称视为标识符，仅在绝对必要时修改，例如旧名称不当或控制器职责发生变化。
+// 更名时必须在 app.ControllerDescriptor#GetAliases 中将旧名称登记为别名，并保留所有旧别名，以保持向后兼容。
 //
-// USE CASES
-// The following places should use the controller name constants, when:
-//  1. defining a new app.ControllerDescriptor so it can be used in app.NewControllerDescriptors or app.KnownControllers:
-//  2. used anywhere inside the controller itself:
-//     2.1. [TODO] logging should use a canonical controller name when referencing a controller (Eg. Starting X, Shutting down X)
-//     2.2. [TODO] emitted events should have an EventSource.Component set to the controller name (usually when initializing an EventRecorder)
-//     2.3. [TODO] registering ControllerManagerMetrics with ControllerStarted and ControllerStopped
-//  3. defining controller options for "--help" command or generated documentation
-//     3.1. controller name should be used to create a pflag.FlagSet when registering controller options (the name is rendered in a controller flag group header) in options.KubeControllerManagerOptions
-//     3.2. when defined flag's help mentions a controller name
-//  4. defining a new service account for a new controller (old controllers may have inconsistent service accounts to stay backwards compatible)
+// 使用场景
+// 以下位置应使用控制器名称常量：
+//  1. 定义新的 app.ControllerDescriptor，供 app.NewControllerDescriptors 或 app.KnownControllers 使用；
+//  2. 在控制器内部引用自身：
+//     2.1. [TODO] 日志引用控制器时使用规范名称，例如启动和关闭日志；
+//     2.2. [TODO] 发出事件时将 EventSource.Component 设置为控制器名称，通常在初始化 EventRecorder 时完成；
+//     2.3. [TODO] 使用 ControllerStarted 和 ControllerStopped 注册 ControllerManagerMetrics；
+//  3. 定义 "--help" 命令或生成文档所用的控制器选项：
+//     3.1. 在 options.KubeControllerManagerOptions 注册选项时，用控制器名称创建 pflag.FlagSet，名称会显示在选项组标题中；
+//     3.2. 参数帮助文本提到控制器名称时使用同一常量；
+//  4. 为新控制器定义新服务账号；旧控制器为保持兼容，命名可能不一致。
 const (
 	ServiceAccountTokenController                      = "serviceaccount-token-controller"
 	EndpointsController                                = "endpoints-controller"

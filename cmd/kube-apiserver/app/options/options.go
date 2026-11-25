@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package options contains flags and options for initializing an apiserver
+// Package options 定义初始化 API 服务器所需的命令行参数和配置。
 package options
 
 import (
@@ -31,41 +31,49 @@ import (
 	"k8s.io/kubernetes/pkg/cluster/ports"
 	controlplaneapiserver "k8s.io/kubernetes/pkg/controlplane/apiserver/options"
 	"k8s.io/kubernetes/pkg/controlplane/reconcilers"
-	_ "k8s.io/kubernetes/pkg/features" // add the kubernetes feature gates
+	_ "k8s.io/kubernetes/pkg/features" // 注册 Kubernetes 特性开关
 	kubeoptions "k8s.io/kubernetes/pkg/kubeapiserver/options"
 	kubeletclient "k8s.io/kubernetes/pkg/kubelet/client"
 )
 
-// ServerRunOptions runs a kubernetes api server.
+// ServerRunOptions 保存运行 Kubernetes API 服务器所需的参数。
 type ServerRunOptions struct {
-	*controlplaneapiserver.Options // embedded to avoid noise in existing consumers
+	*controlplaneapiserver.Options // 嵌入以减少现有调用方的配置噪音
 
 	Extra
 }
 
+// Extra 保存 API 服务器特有的配置项。
 type Extra struct {
-	AllowPrivileged           bool
-	KubeletConfig             kubeletclient.KubeletClientConfig
+	// AllowPrivileged 控制是否允许特权容器。
+	AllowPrivileged bool
+	// KubeletConfig 保存访问 kubelet 的连接参数。
+	KubeletConfig kubeletclient.KubeletClientConfig
+	// KubernetesServiceNodePort 指定 Kubernetes 默认 Service 的 NodePort；零值表示使用 ClusterIP。
 	KubernetesServiceNodePort int
-	// ServiceClusterIPRange is mapped to input provided by user
+	// ServiceClusterIPRanges 保存用户输入的服务网段列表。
 	ServiceClusterIPRanges string
-	// PrimaryServiceClusterIPRange and SecondaryServiceClusterIPRange are the results
-	// of parsing ServiceClusterIPRange into actual values
-	PrimaryServiceClusterIPRange   net.IPNet
+	// PrimaryServiceClusterIPRange 和 SecondaryServiceClusterIPRange 是解析用户输入后得到的主、备网段。
+	PrimaryServiceClusterIPRange net.IPNet
+	// SecondaryServiceClusterIPRange 仅在双栈部署中提供第二地址族，不能与主网段属于同一地址族。
 	SecondaryServiceClusterIPRange net.IPNet
-	// APIServerServiceIP is the first valid IP from PrimaryServiceClusterIPRange
+	// APIServerServiceIP 是主服务网段中的首个有效 IP。
 	APIServerServiceIP net.IP
 
+	// ServiceNodePortRange 是预留给 NodePort Service 的端口范围。
 	ServiceNodePortRange utilnet.PortRange
 
+	// EndpointReconcilerType 选择默认 Service Endpoint 的协调器实现。
 	EndpointReconcilerType string
 
+	// MasterCount 是旧版端点协调器使用的 API 服务器数量。
 	MasterCount int
 
+	// InformerName 标识共享 Informer 的来源。
 	InformerName *cache.InformerName
 }
 
-// NewServerRunOptions creates and returns ServerRunOptions according to the given featureGate and effectiveVersion of the server binary to run.
+// NewServerRunOptions 创建带有默认值的 API 服务器启动参数。
 func NewServerRunOptions() *ServerRunOptions {
 	s := ServerRunOptions{
 		Options: controlplaneapiserver.NewOptions(),
@@ -79,11 +87,11 @@ func NewServerRunOptions() *ServerRunOptions {
 					// --override-hostname
 					string(api.NodeHostName),
 
-					// internal, preferring DNS if reported
+					// 内部地址优先使用 DNS，其次使用 IP。
 					string(api.NodeInternalDNS),
 					string(api.NodeInternalIP),
 
-					// external, preferring DNS if reported
+					// 外部地址优先使用 DNS，其次使用 IP。
 					string(api.NodeExternalDNS),
 					string(api.NodeExternalIP),
 				},
@@ -99,12 +107,11 @@ func NewServerRunOptions() *ServerRunOptions {
 	return &s
 }
 
-// Flags returns flags for a specific APIServer by section name
+// Flags 按分组名称注册 API 服务器特有的命令行参数。
 func (s *ServerRunOptions) Flags() (fss cliflag.NamedFlagSets) {
 	s.Options.AddFlags(&fss)
 
-	// Note: the weird ""+ in below lines seems to be the only way to get gofmt to
-	// arrange these text blocks sensibly. Grrr.
+	// 下面的 ""+ 用于让 gofmt 保持帮助文本块的拼接格式。
 	fs := fss.FlagSet("misc")
 
 	fs.BoolVar(&s.AllowPrivileged, "allow-privileged", s.AllowPrivileged,
@@ -113,8 +120,8 @@ func (s *ServerRunOptions) Flags() (fss cliflag.NamedFlagSets) {
 	fs.StringVar(&s.EndpointReconcilerType, "endpoint-reconciler-type", s.EndpointReconcilerType,
 		"Use an endpoint reconciler ("+strings.Join(reconcilers.AllTypes.Names(), ", ")+") master-count is deprecated, and will be removed in a future version.")
 
-	// See #14282 for details on how to test/try this option out.
-	// TODO: remove this comment once this option is tested in CI.
+	// 测试方法见 #14282。
+	// TODO: 在 CI 中覆盖该参数后删除本说明。
 	fs.IntVar(&s.KubernetesServiceNodePort, "kubernetes-service-node-port", s.KubernetesServiceNodePort, ""+
 		"If non-zero, the Kubernetes master service (which apiserver creates/maintains) will be "+
 		"of type NodePort, using this as the value of the port. If zero, the Kubernetes master "+
@@ -128,7 +135,7 @@ func (s *ServerRunOptions) Flags() (fss cliflag.NamedFlagSets) {
 		"A port range to reserve for services with NodePort visibility.  This must not overlap with the ephemeral port range on nodes.  "+
 		"Example: '30000-32767'. Inclusive at both ends of the range.")
 
-	// Kubelet related flags:
+	// kubelet 相关参数：
 	fs.StringSliceVar(&s.KubeletConfig.PreferredAddressTypes, "kubelet-preferred-address-types", s.KubeletConfig.PreferredAddressTypes,
 		"List of the preferred NodeAddressTypes to use for kubelet connections.")
 

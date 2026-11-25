@@ -14,18 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// APIServer is the main API server and master for the cluster.
-// It is responsible for serving the cluster management API.
+// APIServer 是集群的主 API 服务器，负责提供集群管理 API。
 package main
 
 import (
 	"os"
-	_ "time/tzdata" // for timeZone support in CronJob
+	_ "time/tzdata" // 为 CronJob 提供时区数据
 
 	"k8s.io/component-base/cli"
-	_ "k8s.io/component-base/logs/json/register"          // for JSON log format registration
-	_ "k8s.io/component-base/metrics/prometheus/clientgo" // load all the prometheus client-go plugins
-	_ "k8s.io/component-base/metrics/prometheus/version"  // for version metric registration
+	_ "k8s.io/component-base/logs/json/register"          // 注册 JSON 日志格式
+	_ "k8s.io/component-base/metrics/prometheus/clientgo" // 加载全部 prometheus client-go 插件
+	_ "k8s.io/component-base/metrics/prometheus/version"  // 注册版本指标
 	"k8s.io/kubernetes/cmd/kube-apiserver/app"
 )
 

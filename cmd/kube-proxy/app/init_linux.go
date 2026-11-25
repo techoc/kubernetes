@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Linux 初始化入口；平台相关逻辑集中于此文件。
 package app
 
 import (

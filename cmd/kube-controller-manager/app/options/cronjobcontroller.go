@@ -24,12 +24,12 @@ import (
 	cronjobconfig "k8s.io/kubernetes/pkg/controller/cronjob/config"
 )
 
-// CronJobControllerOptions holds the CronJobController options.
+// CronJobControllerOptions 保存 CronJob 控制器的选项。
 type CronJobControllerOptions struct {
 	*cronjobconfig.CronJobControllerConfiguration
 }
 
-// AddFlags adds flags related to JobController for controller manager to the specified FlagSet.
+// AddFlags 将 CronJob 控制器相关参数注册到指定 FlagSet。
 func (o *CronJobControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -38,7 +38,7 @@ func (o *CronJobControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentCronJobSyncs, "concurrent-cron-job-syncs", o.ConcurrentCronJobSyncs, "The number of cron job objects that are allowed to sync concurrently. Larger number = more responsive jobs, but more CPU (and network) load")
 }
 
-// ApplyTo fills up JobController config with options.
+// ApplyTo 将选项写入 CronJob 控制器配置。
 func (o *CronJobControllerOptions) ApplyTo(cfg *cronjobconfig.CronJobControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -49,7 +49,7 @@ func (o *CronJobControllerOptions) ApplyTo(cfg *cronjobconfig.CronJobControllerC
 	return nil
 }
 
-// Validate checks validation of CronJobControllerOptions.
+// Validate 校验 CronJob 控制器选项。
 func (o *CronJobControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

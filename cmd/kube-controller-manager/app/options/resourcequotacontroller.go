@@ -22,12 +22,12 @@ import (
 	resourcequotaconfig "k8s.io/kubernetes/pkg/controller/resourcequota/config"
 )
 
-// ResourceQuotaControllerOptions holds the ResourceQuotaController options.
+// ResourceQuotaControllerOptions 保存资源配额控制器的选项。
 type ResourceQuotaControllerOptions struct {
 	*resourcequotaconfig.ResourceQuotaControllerConfiguration
 }
 
-// AddFlags adds flags related to ResourceQuotaController for controller manager to the specified FlagSet.
+// AddFlags 将资源配额控制器相关参数注册到指定 FlagSet。
 func (o *ResourceQuotaControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -37,7 +37,7 @@ func (o *ResourceQuotaControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentResourceQuotaSyncs, "concurrent-resource-quota-syncs", o.ConcurrentResourceQuotaSyncs, "The number of resource quotas that are allowed to sync concurrently. Larger number = more responsive quota management, but more CPU (and network) load")
 }
 
-// ApplyTo fills up ResourceQuotaController config with options.
+// ApplyTo 将选项写入资源配额控制器配置。
 func (o *ResourceQuotaControllerOptions) ApplyTo(cfg *resourcequotaconfig.ResourceQuotaControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -49,7 +49,7 @@ func (o *ResourceQuotaControllerOptions) ApplyTo(cfg *resourcequotaconfig.Resour
 	return nil
 }
 
-// Validate checks validation of ResourceQuotaControllerOptions.
+// Validate 校验资源配额控制器选项。
 func (o *ResourceQuotaControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

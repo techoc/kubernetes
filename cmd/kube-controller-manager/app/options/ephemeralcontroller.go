@@ -24,12 +24,12 @@ import (
 	ephemeralvolumeconfig "k8s.io/kubernetes/pkg/controller/volume/ephemeral/config"
 )
 
-// EphemeralVolumeControllerOptions holds the EphemeralVolumeController options.
+// EphemeralVolumeControllerOptions 保存临时存储卷控制器的选项。
 type EphemeralVolumeControllerOptions struct {
 	*ephemeralvolumeconfig.EphemeralVolumeControllerConfiguration
 }
 
-// AddFlags adds flags related to EphemeralVolumeController for controller manager to the specified FlagSet.
+// AddFlags 将临时存储卷控制器相关参数注册到指定 FlagSet。
 func (o *EphemeralVolumeControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -38,7 +38,7 @@ func (o *EphemeralVolumeControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentEphemeralVolumeSyncs, "concurrent-ephemeralvolume-syncs", o.ConcurrentEphemeralVolumeSyncs, "The number of ephemeral volume syncing operations that will be done concurrently. Larger number = faster ephemeral volume updating, but more CPU (and network) load")
 }
 
-// ApplyTo fills up EphemeralVolumeController config with options.
+// ApplyTo 将选项写入临时存储卷控制器配置。
 func (o *EphemeralVolumeControllerOptions) ApplyTo(cfg *ephemeralvolumeconfig.EphemeralVolumeControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -49,7 +49,7 @@ func (o *EphemeralVolumeControllerOptions) ApplyTo(cfg *ephemeralvolumeconfig.Ep
 	return nil
 }
 
-// Validate checks validation of EphemeralVolumeControllerOptions.
+// Validate 校验临时存储卷控制器选项。
 func (o *EphemeralVolumeControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

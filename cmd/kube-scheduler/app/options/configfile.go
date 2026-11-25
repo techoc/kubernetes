@@ -50,9 +50,7 @@ func loadConfig(data []byte) (*config.KubeSchedulerConfiguration, error) {
 	if cfgObj, ok := obj.(*config.KubeSchedulerConfiguration); ok {
 		// 版本转换不会把外部 APIVersion 保存在内部对象 TypeMeta 中，API machinery 后续还会清理它。
 		// 因此这里根据解码得到的 GVK 恢复版本号，供日志和配置回写流程识别原始配置版本。
-		// because the field will be cleared later by API machinery during
-		// conversion. See KubeSchedulerConfiguration internal type definition for
-		// more details.
+		// API machinery 后续转换会清空该字段，详见 KubeSchedulerConfiguration 内部类型定义。
 		cfgObj.TypeMeta.APIVersion = gvk.GroupVersion().String()
 		return cfgObj, nil
 	}
@@ -82,7 +80,7 @@ func encodeConfig(cfg *config.KubeSchedulerConfiguration) (*bytes.Buffer, error)
 	return buf, nil
 }
 
-// LogOrWriteConfig logs the completed component config and writes it into the given file name as YAML, if either is enabled
+// LogOrWriteConfig 记录实例化完成的组件配置，并在启用导出时以 YAML 写入指定文件。
 func LogOrWriteConfig(logger klog.Logger, fileName string, cfg *config.KubeSchedulerConfiguration, completedProfiles []config.KubeSchedulerProfile) error {
 	loggerV := logger.V(2)
 	// 既不要求写文件、日志级别也不够高时，无需执行序列化。

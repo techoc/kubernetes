@@ -22,12 +22,12 @@ import (
 	disruptionconfig "k8s.io/kubernetes/pkg/controller/disruption/config"
 )
 
-// DisruptionControllerOptions holds the DisruptionController options.
+// DisruptionControllerOptions 保存干扰控制器的选项。
 type DisruptionControllerOptions struct {
 	*disruptionconfig.DisruptionControllerConfiguration
 }
 
-// AddFlags adds flags related to DisruptionController for controller manager to the specified FlagSet.
+// AddFlags 将干扰控制器相关参数注册到指定 FlagSet。
 func (o *DisruptionControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -36,7 +36,7 @@ func (o *DisruptionControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentDisruptionSyncs, "concurrent-disruption-syncs", o.ConcurrentDisruptionSyncs, "The number of PDB objects that are allowed to sync concurrently. Larger number = more responsive PDB updates, but more CPU (and network) load")
 }
 
-// ApplyTo fills up DisruptionController config with options.
+// ApplyTo 将选项写入干扰控制器配置。
 func (o *DisruptionControllerOptions) ApplyTo(cfg *disruptionconfig.DisruptionControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -47,7 +47,7 @@ func (o *DisruptionControllerOptions) ApplyTo(cfg *disruptionconfig.DisruptionCo
 	return nil
 }
 
-// Validate checks validation of DisruptionControllerOptions.
+// Validate 校验干扰控制器选项。
 func (o *DisruptionControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

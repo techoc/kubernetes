@@ -24,12 +24,12 @@ import (
 	poautosclerconfig "k8s.io/kubernetes/pkg/controller/podautoscaler/config"
 )
 
-// HPAControllerOptions holds the HPAController options.
+// HPAControllerOptions 保存水平 Pod 自动伸缩控制器的选项。
 type HPAControllerOptions struct {
 	*poautosclerconfig.HPAControllerConfiguration
 }
 
-// AddFlags adds flags related to HPAController for controller manager to the specified FlagSet.
+// AddFlags 将水平 Pod 自动伸缩控制器相关参数注册到指定 FlagSet。
 func (o *HPAControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -43,7 +43,7 @@ func (o *HPAControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.HorizontalPodAutoscalerInitialReadinessDelay.Duration, "horizontal-pod-autoscaler-initial-readiness-delay", o.HorizontalPodAutoscalerInitialReadinessDelay.Duration, "The period after pod start during which readiness changes will be treated as initial readiness.")
 }
 
-// ApplyTo fills up HPAController config with options.
+// ApplyTo 将选项写入水平 Pod 自动伸缩控制器配置。
 func (o *HPAControllerOptions) ApplyTo(cfg *poautosclerconfig.HPAControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -59,7 +59,7 @@ func (o *HPAControllerOptions) ApplyTo(cfg *poautosclerconfig.HPAControllerConfi
 	return nil
 }
 
-// Validate checks validation of HPAControllerOptions.
+// Validate 校验水平 Pod 自动伸缩控制器选项。
 func (o *HPAControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

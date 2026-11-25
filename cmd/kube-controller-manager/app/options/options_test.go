@@ -181,14 +181,13 @@ func TestAddFlags(t *testing.T) {
 	fs, s := setupControllerManagerFlagSet(t)
 
 	fs.Parse(args)
-	// Sort GCIgnoredResources because it's built from a map, which means the
-	// insertion order is random.
+	// GCIgnoredResources 由映射构建，插入顺序随机，排序后便于比较。
 	sort.Sort(sortedGCIgnoredResources(s.GarbageCollectorController.GCIgnoredResources))
 
 	expected := &KubeControllerManagerOptions{
 		Generic: &cmoptions.GenericControllerManagerConfigurationOptions{
 			GenericControllerManagerConfiguration: &cmconfig.GenericControllerManagerConfiguration{
-				Address:         "0.0.0.0", // Note: This field should have no effect in CM now, and "0.0.0.0" is the default value.
+				Address:         "0.0.0.0", // 注意：此字段目前不影响控制器管理器，默认值为 "0.0.0.0"。
 				MinResyncPeriod: metav1.Duration{Duration: 8 * time.Hour},
 				ClientConnection: componentbaseconfig.ClientConnectionConfiguration{
 					Kubeconfig:  "/kubeconfig",
@@ -459,19 +458,18 @@ func TestAddFlags(t *testing.T) {
 			ClientTimeout:                10 * time.Second,
 			WebhookRetryBackoff:          apiserveroptions.DefaultAuthWebhookRetryBackoff(),
 			RemoteKubeConfigFileOptional: true,
-			AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // note: this does not match /healthz/ or /healthz/*
+			AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // 注意：此规则不匹配 /healthz/ 或 /healthz/*。
 			AlwaysAllowGroups:            []string{"system:masters"},
 		},
 		Master:                    "192.168.4.20",
 		ControllerShutdownTimeout: 10 * time.Second,
 		Metrics:                   &metrics.Options{},
 		Logs:                      logs.NewOptions(),
-		// ignores comparing ComponentGlobalsRegistry in this test.
+		// 本测试不比较 ComponentGlobalsRegistry。
 		ComponentGlobalsRegistry: s.ComponentGlobalsRegistry,
 	}
 
-	// Sort GCIgnoredResources because it's built from a map, which means the
-	// insertion order is random.
+	// GCIgnoredResources 由映射构建，插入顺序随机，排序后便于比较。
 	sort.Sort(sortedGCIgnoredResources(expected.GarbageCollectorController.GCIgnoredResources))
 
 	if !reflect.DeepEqual(expected, s) {
@@ -482,8 +480,8 @@ func TestAddFlags(t *testing.T) {
 func TestValidateFlags(t *testing.T) {
 	testcases := []struct {
 		name    string
-		flags   []string // not a good place to test flagParse error
-		wantErr bool     // this won't apply to flagParse, it only apply to KubeControllerManagerOptions.Validate
+		flags   []string // 此处不测试参数解析错误
+		wantErr bool     // 此错误仅由 KubeControllerManagerOptions.Validate 校验
 	}{
 		{
 			name:    "empty flags",
@@ -560,14 +558,13 @@ func TestApplyTo(t *testing.T) {
 	fs, s := setupControllerManagerFlagSet(t)
 
 	fs.Parse(args)
-	// Sort GCIgnoredResources because it's built from a map, which means the
-	// insertion order is random.
+	// GCIgnoredResources 由映射构建，插入顺序随机，排序后便于比较。
 	sort.Sort(sortedGCIgnoredResources(s.GarbageCollectorController.GCIgnoredResources))
 
 	expected := &kubecontrollerconfig.Config{
 		ComponentConfig: kubectrlmgrconfig.KubeControllerManagerConfiguration{
 			Generic: cmconfig.GenericControllerManagerConfiguration{
-				Address:         "0.0.0.0", // Note: This field should have no effect in CM now, and "0.0.0.0" is the default value.
+				Address:         "0.0.0.0", // 注意：此字段目前不影响控制器管理器，默认值为 "0.0.0.0"。
 				MinResyncPeriod: metav1.Duration{Duration: 8 * time.Hour},
 				ClientConnection: componentbaseconfig.ClientConnectionConfiguration{
 					Kubeconfig:  "/kubeconfig",
@@ -748,8 +745,7 @@ func TestApplyTo(t *testing.T) {
 		ControllerShutdownTimeout: 10 * time.Second,
 	}
 
-	// Sort GCIgnoredResources because it's built from a map, which means the
-	// insertion order is random.
+	// GCIgnoredResources 由映射构建，插入顺序随机，排序后便于比较。
 	sort.Sort(sortedGCIgnoredResources(expected.ComponentConfig.GarbageCollectorController.GCIgnoredResources))
 
 	c := &kubecontrollerconfig.Config{}
@@ -764,8 +760,8 @@ func TestEmulatedVersion(t *testing.T) {
 
 	testcases := []struct {
 		name              string
-		flags             []string // not a good place to test flagParse error
-		wantErr           bool     // this won't apply to flagParse, it only apply to KubeControllerManagerOptions.Validate
+		flags             []string // 此处不测试参数解析错误
+		wantErr           bool     // 此错误仅由 KubeControllerManagerOptions.Validate 校验
 		errorSubString    string
 		wantFeaturesGates map[string]bool
 	}{
@@ -1256,7 +1252,7 @@ func TestValidateControllersOptions(t *testing.T) {
 				},
 			},
 		},
-		/* empty errs */
+		/* 无错误 */
 		{
 			name:         "CronJobControllerOptions",
 			expectErrors: false,
@@ -1468,7 +1464,7 @@ func TestValidateControllerManagerOptions(t *testing.T) {
 		t.Errorf("expected no error, error found %+v", err)
 	}
 
-	opts.EndpointSliceController.MaxEndpointsPerSlice = 1001 // max endpoints per slice should be a positive integer <= 1000
+	opts.EndpointSliceController.MaxEndpointsPerSlice = 1001 // 每个切片的 Endpoint 上限必须是大于 0 且不超过 1000 的整数。
 
 	if err := opts.Validate([]string{"*"}, []string{""}, nil); err == nil {
 		t.Error("expected error, no error found")
@@ -1549,7 +1545,7 @@ func TestWatchListClientFlagChange(t *testing.T) {
 		t.Fatal(fmt.Errorf("FlatSet.Parse failed with %w", err))
 	}
 
-	// this is needed to Apply parsed flags to GlobalRegistry, so the DefaultFeatureGate values can be set from the flag
+	// 将已解析参数应用到 GlobalRegistry，使命令行参数能够设置 DefaultFeatureGate。
 	err = s.ComponentGlobalsRegistry.Set()
 	if err != nil {
 		t.Fatal(fmt.Errorf("ComponentGlobalsRegistry.Set failed with %w", err))
@@ -1610,17 +1606,16 @@ func setupControllerManagerFlagSet(t *testing.T) (*pflag.FlagSet, *KubeControlle
 	return fs, s
 }
 
-// caution: checkTestError use t.Fatal, to simplify caller handling.
-// it also means it may break test code execution flow.
+// 注意：checkTestError 使用 t.Fatal 简化调用方处理，但会终止当前测试流程。
 func checkTestError(t *testing.T, err error, expectingErr bool, expectedErrorSubString string) {
 	if !expectingErr {
-		if err != nil { // not expecting, but got error
+		if err != nil { // 不预期出错，但实际返回错误
 			t.Fatal(fmt.Errorf("expected no error, got %w", err))
 		}
-		return // not expecting, and no error
+		return // 不预期出错，且未返回错误
 	}
 
-	// from this point we do expecting error
+	// 从此处开始预期返回错误
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

@@ -36,8 +36,8 @@ func checkPermissions(ctx context.Context) error {
 		return err
 	}
 
-	// For Windows user.UserName contains the login name and user.Name contains
-	// the user's display name - https://pkg.go.dev/os/user#User
+	// Windows 的 user.UserName 是登录名，user.Name 是显示名称：
+	// https://pkg.go.dev/os/user#User
 	logger.Info("Kubelet is running as", "login name", u.Username, "display name", u.Name)
 
 	// Windows 的令牌提升状态比用户名字符串更可靠；非提升令牌不能满足 Kubelet 的节点管理要求。

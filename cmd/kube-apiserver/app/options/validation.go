@@ -31,14 +31,14 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// TODO: Longer term we should read this from some config store, rather than a flag.
-// validateClusterIPFlags is expected to be called after Complete()
+// TODO: 长远来看应从配置存储读取，而不是依赖命令行参数。
+// validateClusterIPFlags 必须在 Complete 之后调用。
 func validateClusterIPFlags(options Extra) []error {
 	var errs []error
-	// maxCIDRBits is used to define the maximum CIDR size for the cluster ip(s)
+	// 限制集群服务 IP 网段的主机位数量。
 	maxCIDRBits := 20
 
-	// validate that primary has been processed by user provided values or it has been defaulted
+	// 主网段必须已由用户输入或默认值填充。
 	if options.PrimaryServiceClusterIPRange.IP == nil {
 		errs = append(errs, errors.New("--service-cluster-ip-range must contain at least one valid cidr"))
 	}
@@ -48,22 +48,20 @@ func validateClusterIPFlags(options Extra) []error {
 		errs = append(errs, errors.New("--service-cluster-ip-range must not contain more than two entries"))
 	}
 
-	// Complete() expected to have set Primary* and Secondary
+	// Complete 应已填充 Primary* 和 Secondary 字段。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.MultiCIDRServiceAllocator) ||
 		!utilfeature.DefaultFeatureGate.Enabled(features.DisableAllocatorDualWrite) {
-		// primary CIDR validation
+		// 校验主网段。
 		if err := validateMaxCIDRRange(options.PrimaryServiceClusterIPRange, maxCIDRBits, "--service-cluster-ip-range"); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	secondaryServiceClusterIPRangeUsed := (options.SecondaryServiceClusterIPRange.IP != nil)
-	// note: While the cluster might be dualstack (i.e. pods with multiple IPs), the user may choose
-	// to only ingress traffic within and into the cluster on one IP family only. this family is decided
-	// by the range set on --service-cluster-ip-range. If/when the user decides to use dual stack services
-	// the Secondary* must be of different IPFamily than --service-cluster-ip-range
+	// 即使 Pod 使用双栈，集群入口仍可只使用 --service-cluster-ip-range 指定的一种协议族。
+	// 若用户配置双栈 Service，备网段必须与主网段属于不同协议族。
 	if secondaryServiceClusterIPRangeUsed {
-		// Should be dualstack IPFamily(PrimaryServiceClusterIPRange) != IPFamily(SecondaryServiceClusterIPRange)
+		// 双栈要求 IPFamily(PrimaryServiceClusterIPRange) != IPFamily(SecondaryServiceClusterIPRange)。
 		dualstack, err := netutils.IsDualStackCIDRs([]*net.IPNet{&options.PrimaryServiceClusterIPRange, &options.SecondaryServiceClusterIPRange})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("error attempting to validate dualstack for --service-cluster-ip-range value error:%v", err))
@@ -84,9 +82,7 @@ func validateClusterIPFlags(options Extra) []error {
 }
 
 func validateMaxCIDRRange(cidr net.IPNet, maxCIDRBits int, cidrFlag string) error {
-	// Should be smallish sized cidr, this thing is kept in etcd
-	// bigger cidr (specially those offered by IPv6) will add no value
-	// significantly increase snapshotting time.
+	// 网段会持久化到 etcd；过大尤其是 IPv6 默认网段会显著增加快照耗时。
 	var ones, bits = cidr.Mask.Size()
 	if bits-ones > maxCIDRBits {
 		return fmt.Errorf("specified %s is too large; for %d-bit addresses, the mask must be >= %d", cidrFlag, bits, bits-maxCIDRBits)
@@ -109,11 +105,10 @@ func validateServiceNodePort(options Extra) []error {
 }
 
 func validatePublicIPServiceClusterIPRangeIPFamilies(extra Extra, generic genericoptions.ServerRunOptions) []error {
-	// The "kubernetes.default" Service is SingleStack based on the configured ServiceIPRange.
-	// If the bootstrap controller reconcile the kubernetes.default Service and Endpoints, it must
-	// guarantee that the Service ClusterIPRepairConfig and the associated Endpoints have the same IP family, or
-	// it will not work for clients because of the IP family mismatch.
-	// TODO: revisit for dual-stack https://github.com/kubernetes/enhancements/issues/2438
+	// "kubernetes.default" Service 按配置的 ServiceIPRange 使用单栈。
+	// 引导控制器协调该 Service 与 Endpoints 时，必须保证 ClusterIPRepairConfig 和
+	// Endpoints 使用相同协议族，否则客户端会因协议族不匹配而无法访问。
+	// TODO: 双栈支持重新评估 https://github.com/kubernetes/enhancements/issues/2438
 	if reconcilers.Type(extra.EndpointReconcilerType) != reconcilers.NoneEndpointReconcilerType {
 		serviceIPRange, _, err := controlplaneapiserver.ServiceIPRange(extra.PrimaryServiceClusterIPRange)
 		if err != nil {
@@ -127,7 +122,7 @@ func validatePublicIPServiceClusterIPRangeIPFamilies(extra Extra, generic generi
 	return nil
 }
 
-// Validate checks ServerRunOptions and return a slice of found errs.
+// Validate 校验已完成的启动参数，并返回全部错误。
 func (s CompletedOptions) Validate() []error {
 	var errs []error
 

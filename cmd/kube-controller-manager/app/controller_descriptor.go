@@ -27,26 +27,23 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// This file contains types and functions for wrapping controller implementations from downstream packages.
-// Every controller wrapper implements the Controller interface,
-// which is then associated with a ControllerDescriptor, which holds additional static metadata
-// needed so that the manager can manage Controllers properly.
+// 本文件定义用于包装下游控制器的类型和函数。包装器实现 Controller 接口，
+// 并由 ControllerDescriptor 保存管理器所需的静态元数据。
 
-// Controller defines the base interface that all controller wrappers must implement.
+// Controller 是所有控制器包装器必须实现的基础接口。
 type Controller interface {
-	// Name returns the controller's canonical name.
+	// Name 返回控制器的规范名称。
 	Name() string
 
-	// Run runs the controller loop.
-	// When there is anything to be done, it blocks until the context is cancelled.
-	// Run must ensure all goroutines are terminated before returning.
+	// Run 运行控制器循环，有工作处理时持续阻塞直到上下文取消。
+	// Run 返回前必须确保所有协程均已终止。
 	Run(context.Context)
 }
 
-// ControllerConstructor is a constructor for a controller.
-// A nil Controller returned means that the associated controller is disabled.
+// ControllerConstructor 创建控制器；返回 nil Controller 表示禁用对应控制器。
 type ControllerConstructor func(ctx context.Context, controllerContext ControllerContext, controllerName string) (Controller, error)
 
+// ControllerDescriptor 保存控制器的名称、构造器及启用条件等静态元数据。
 type ControllerDescriptor struct {
 	name                    string
 	constructor             ControllerConstructor
@@ -56,35 +53,38 @@ type ControllerDescriptor struct {
 	requiresSpecialHandling bool
 }
 
+// Name 返回控制器规范名称；管理器据此匹配配置、日志和启动顺序。
 func (r *ControllerDescriptor) Name() string {
 	return r.name
 }
 
+// GetControllerConstructor 返回延迟创建控制器的函数，调用前不会分配控制器资源。
 func (r *ControllerDescriptor) GetControllerConstructor() ControllerConstructor {
 	return r.constructor
 }
 
+// GetRequiredFeatureGates 返回必需特性门控的副本，调用方修改结果不会影响描述符。
 func (r *ControllerDescriptor) GetRequiredFeatureGates() []featuregate.Feature {
 	return append([]featuregate.Feature(nil), r.requiredFeatureGates...)
 }
 
-// GetAliases returns aliases to ensure backwards compatibility and should never be removed!
-// Only addition of new aliases is allowed, and only when a canonical name is changed (please see CHANGE POLICY of controller names)
+// GetAliases 返回用于向后兼容的别名，已有别名绝不能删除。
+// 仅允许在规范名称变更时新增别名，详见控制器名称的变更策略。
 func (r *ControllerDescriptor) GetAliases() []string {
 	return append([]string(nil), r.aliases...)
 }
 
+// IsDisabledByDefault 报告控制器是否必须显式启用，避免新控制器随升级意外启动。
 func (r *ControllerDescriptor) IsDisabledByDefault() bool {
 	return r.isDisabledByDefault
 }
 
-// RequiresSpecialHandling should return true only in a special non-generic controllers like ServiceAccountTokenController
+// RequiresSpecialHandling 仅对 ServiceAccountTokenController 等需要特殊启动流程的控制器返回 true。
 func (r *ControllerDescriptor) RequiresSpecialHandling() bool {
 	return r.requiresSpecialHandling
 }
 
-// BuildController creates a controller based on the given descriptor.
-// The associated controller's constructor is called at the end, so the same contract applies for the return values here.
+// BuildController 检查必需特性门控后调用构造器创建控制器，返回值约定与构造器一致。
 func (r *ControllerDescriptor) BuildController(ctx context.Context, controllerCtx ControllerContext) (Controller, error) {
 	logger := klog.FromContext(ctx)
 	controllerName := r.Name()
@@ -102,12 +102,12 @@ func (r *ControllerDescriptor) BuildController(ctx context.Context, controllerCt
 	return r.GetControllerConstructor()(ctx, controllerCtx, controllerName)
 }
 
-// KnownControllers returns all known controllers' name
+// KnownControllers 返回所有已知控制器的规范名称。
 func KnownControllers() []string {
 	return sets.StringKeySet(NewControllerDescriptors()).List()
 }
 
-// ControllerAliases returns a mapping of aliases to canonical controller names
+// ControllerAliases 返回别名到规范控制器名称的映射。
 func ControllerAliases() map[string]string {
 	aliases := map[string]string{}
 	for name, c := range NewControllerDescriptors() {
@@ -118,6 +118,7 @@ func ControllerAliases() map[string]string {
 	return aliases
 }
 
+// ControllersDisabledByDefault 返回默认禁用的控制器名称，结果按名称排序。
 func ControllersDisabledByDefault() []string {
 	var controllersDisabledByDefault []string
 
@@ -132,14 +133,13 @@ func ControllersDisabledByDefault() []string {
 	return controllersDisabledByDefault
 }
 
-// NewControllerDescriptors is a public map of named controller groups (you can start more than one in an init func)
-// paired to their ControllerDescriptor wrapper object that includes the associated controller constructor.
-// This allows for structured downstream composition and subdivision.
+// NewControllerDescriptors 返回控制器组名称到描述符的公开映射，供下游结构化组合和细分。
+// 每组包含对应控制器的构造器，可在初始化函数中启动多个控制器。
 func NewControllerDescriptors() map[string]*ControllerDescriptor {
 	controllers := map[string]*ControllerDescriptor{}
 	aliases := sets.NewString()
 
-	// All the controllers must fulfil common constraints, or else we will explode.
+	// 所有控制器必须满足共同约束，否则注册过程将失败。
 	register := func(controllerDesc *ControllerDescriptor) {
 		if controllerDesc == nil {
 			panic("received nil controller for a registration")
@@ -165,12 +165,10 @@ func NewControllerDescriptors() map[string]*ControllerDescriptor {
 		controllers[name] = controllerDesc
 	}
 
-	// First add "special" controllers that aren't initialized normally. These controllers cannot be initialized
-	// in the main controller loop initialization, so we add them here only for the metadata and duplication detection.
-	// app.ControllerDescriptor#RequiresSpecialHandling should return true for such controllers
-	// The only known special case is the ServiceAccountTokenController which *must* be started
-	// first to ensure that the SA tokens for future controllers will exist. Think very carefully before adding new
-	// special controllers.
+	// 先注册不能按常规流程初始化的特殊控制器；此处仅登记元数据并检测重复。
+	// 这类描述符的 RequiresSpecialHandling 必须返回 true。
+	// 目前唯一的特殊控制器是 ServiceAccountTokenController，它必须先启动，
+	// 确保后续控制器所需的服务账号令牌存在。新增特殊控制器前务必审慎评估。
 	register(newServiceAccountTokenControllerDescriptor(nil))
 
 	register(newEndpointsControllerDescriptor())
@@ -212,7 +210,7 @@ func NewControllerDescriptors() map[string]*ControllerDescriptor {
 	register(newKubeAPIServerSignerClusterTrustBundledPublisherDescriptor())
 	register(newEphemeralVolumeControllerDescriptor())
 
-	// feature gated
+	// 受特性门控保护的控制器
 	register(newStorageVersionGarbageCollectorControllerDescriptor())
 	register(newResourceClaimControllerDescriptor())
 	register(newResourcePoolStatusRequestControllerDescriptor())

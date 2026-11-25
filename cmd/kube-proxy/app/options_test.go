@@ -37,7 +37,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestLoadConfig tests proper operation of loadConfig()
+// TestLoadConfig 验证 loadConfig 对各种地址、协议族和 v1alpha1 兼容输入的正确解析。
 func TestLoadConfig(t *testing.T) {
 
 	yamlTemplate := `apiVersion: kubeproxy.config.k8s.io/v1alpha1
@@ -114,9 +114,7 @@ nodePortAddresses:
 			metricsBindAddress: "2.3.4.5:23456",
 		},
 		{
-			// Test for 'bindAddress: "::"' (IPv6 all-zeros) in kube-proxy
-			// config file. The user will need to put quotes around '::' since
-			// 'bindAddress: ::' is invalid yaml syntax.
+			// 测试 IPv6 通配地址 'bindAddress: "::"'；'bindAddress: ::' 不是合法 YAML，必须加引号。
 			name:               "iptables mode, IPv6 \"::\" bind address",
 			mode:               "iptables",
 			bindAddress:        "\"::\"",
@@ -125,10 +123,7 @@ nodePortAddresses:
 			metricsBindAddress: "[fd00:2::5]:23456",
 		},
 		{
-			// Test for 'bindAddress: "[::]"' (IPv6 all-zeros in brackets)
-			// in kube-proxy config file. The user will need to use
-			// surrounding quotes here since 'bindAddress: [::]' is invalid
-			// yaml syntax.
+			// 测试带方括号的 IPv6 通配地址 'bindAddress: "[::]"'；YAML 值仍需整体加引号。
 			name:               "iptables mode, IPv6 \"[::]\" bind address",
 			mode:               "iptables",
 			bindAddress:        "\"[::]\"",
@@ -137,8 +132,7 @@ nodePortAddresses:
 			metricsBindAddress: "[fd00:2::5]:23456",
 		},
 		{
-			// Test for 'bindAddress: ::0' (another form of IPv6 all-zeros).
-			// No surrounding quotes are required around '::0'.
+			// 测试 IPv6 通配地址的另一种写法 'bindAddress: ::0'，该值无需引号。
 			name:               "iptables mode, IPv6 ::0 bind address",
 			mode:               "iptables",
 			bindAddress:        "::0",
@@ -155,9 +149,7 @@ nodePortAddresses:
 			metricsBindAddress: "[fd00:2::5]:23456",
 		},
 		{
-			// Test for unknown field within config.
-			// For v1alpha1 a lenient path is implemented and will throw a
-			// strict decoding warning instead of failing to load
+			// v1alpha1 未知字段走宽松解码：记录严格解码警告，但不阻止配置加载。
 			name:               "unknown field",
 			mode:               "iptables",
 			bindAddress:        "9.8.7.6",
@@ -167,9 +159,7 @@ nodePortAddresses:
 			extraConfig:        "foo: bar",
 		},
 		{
-			// Test for duplicate field within config.
-			// For v1alpha1 a lenient path is implemented and will throw a
-			// strict decoding warning instead of failing to load
+			// v1alpha1 重复字段同样走宽松解码，记录警告而非直接加载失败。
 			name:               "duplicate field",
 			mode:               "iptables",
 			bindAddress:        "9.8.7.6",
@@ -184,7 +174,7 @@ nodePortAddresses:
 		t.Run(tc.name, func(t *testing.T) {
 			expBindAddr := tc.bindAddress
 			if tc.bindAddress[0] == '"' {
-				// Surrounding double quotes will get stripped by the yaml parser.
+				// YAML 解析器会剥除外层双引号。
 				expBindAddr = expBindAddr[1 : len(tc.bindAddress)-1]
 			}
 			expected := &kubeproxyconfig.KubeProxyConfiguration{
@@ -243,7 +233,7 @@ nodePortAddresses:
 				yamlTemplate, tc.bindAddress, tc.clusterCIDR,
 				tc.healthzBindAddress, tc.metricsBindAddress, tc.mode)
 
-			// Append additional configuration to the base yaml template
+			// 在基础 YAML 模板后追加用例专属配置。
 			yaml := fmt.Sprintf("%s\n%s", baseYAML, tc.extraConfig)
 
 			config, err := options.loadConfig([]byte(yaml))
@@ -257,11 +247,10 @@ nodePortAddresses:
 	}
 }
 
-// TestLoadConfigFailures tests failure modes for loadConfig()
+// TestLoadConfigFailures 覆盖 loadConfig 的语法错误、类型错误与无效地址输入。
 func TestLoadConfigFailures(t *testing.T) {
-	// TODO(phenixblue): Uncomment below template when v1alpha2+ of kube-proxy config is
-	// released with strict decoding. These associated tests will fail with
-	// the lenient codec and only one config API version.
+	// TODO(phenixblue): v1alpha2+ 配置支持严格解码后取消下方模板注释。
+	// 当前仅有一个配置版本且使用宽松解码，启用这些断言会失败。
 	/*
 			yamlTemplate := `bindAddress: 0.0.0.0
 		clusterCIDR: "1.2.3.0/24"
@@ -290,9 +279,8 @@ func TestLoadConfigFailures(t *testing.T) {
 			config: "bindAddress: ::",
 			expErr: "mapping values are not allowed in this context",
 		},
-		// TODO(phenixblue): Uncomment below tests when v1alpha2+ of kube-proxy config is
-		// released with strict decoding. These tests will fail with the
-		// lenient codec and only one config API version.
+		// TODO(phenixblue): v1alpha2+ 支持严格解码后启用下方用例；
+		// 当前宽松解码路径不会对重复或未知字段返回严格解码错误。
 		/*
 			{
 				name:    "Duplicate fields",
@@ -324,7 +312,7 @@ func TestLoadConfigFailures(t *testing.T) {
 	}
 }
 
-// TestProcessHostnameOverrideFlag tests processing hostname-override arg
+// TestProcessHostnameOverrideFlag 验证 hostname-override 的覆盖、规范化和空白拒绝规则。
 func TestProcessHostnameOverrideFlag(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -374,7 +362,7 @@ func TestProcessHostnameOverrideFlag(t *testing.T) {
 	}
 }
 
-// TestProcessV1Alpha1Flags tests processing v1alpha1 flags.
+// TestProcessV1Alpha1Flags 验证 v1alpha1 兼容标志按代理模式分别合并。
 func TestProcessV1Alpha1Flags(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -467,14 +455,13 @@ func TestProcessV1Alpha1Flags(t *testing.T) {
 	}
 }
 
-// TestOptionsComplete checks that command line flags are combined with a
-// config properly.
+// TestOptionsComplete 验证命令行标志与配置文件按既定优先级正确合并。
 func TestOptionsComplete(t *testing.T) {
 	header := `apiVersion: kubeproxy.config.k8s.io/v1alpha1
 kind: KubeProxyConfiguration
 `
 
-	// Determine default config (depends on platform defaults).
+	// 先取得默认配置；具体值取决于平台默认值。
 	o := NewOptions()
 	require.NoError(t, o.Complete(new(pflag.FlagSet)))
 	expected := o.config
@@ -573,14 +560,14 @@ kind: KubeProxyConfiguration
 			flags: []string{
 				"-v=7",
 				"--vmodule", "goo.go=8",
-				"--ipvs-scheduler", "some-scheduler", // Overwritten by config.
+				"--ipvs-scheduler", "some-scheduler", // 会被配置文件覆盖。
 			},
 			expected: func() *kubeproxyconfig.KubeProxyConfiguration {
 				c := expected.DeepCopy()
 				c.Logging = *expectedLoggingConfig.DeepCopy()
-				// Flag wins.
+				// 命令行标志优先。
 				c.Logging.Verbosity = 7
-				// Flag and config get merged with command line flags first.
+				// 合并配置时命令行标志优先。
 				c.Logging.VModule = append([]logsapi.VModuleItem{
 					{
 						FilePattern: "goo.go",
@@ -609,6 +596,7 @@ kind: KubeProxyConfiguration
 	}
 }
 
+// TestAddressFromDeprecatedFlags 验证已弃用端口参数对 IPv4、IPv6 监听地址的合并规则。
 func TestAddressFromDeprecatedFlags(t *testing.T) {
 	testCases := []struct {
 		name               string

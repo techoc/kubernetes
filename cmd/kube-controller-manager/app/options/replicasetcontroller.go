@@ -22,12 +22,12 @@ import (
 	replicasetconfig "k8s.io/kubernetes/pkg/controller/replicaset/config"
 )
 
-// ReplicaSetControllerOptions holds the ReplicaSetController options.
+// ReplicaSetControllerOptions 保存 ReplicaSet 控制器的选项。
 type ReplicaSetControllerOptions struct {
 	*replicasetconfig.ReplicaSetControllerConfiguration
 }
 
-// AddFlags adds flags related to ReplicaSetController for controller manager to the specified FlagSet.
+// AddFlags 将 ReplicaSet 控制器相关参数注册到指定 FlagSet。
 func (o *ReplicaSetControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -36,7 +36,7 @@ func (o *ReplicaSetControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentRSSyncs, "concurrent-replicaset-syncs", o.ConcurrentRSSyncs, "The number of replica sets that are allowed to sync concurrently. Larger number = more responsive replica management, but more CPU (and network) load")
 }
 
-// ApplyTo fills up ReplicaSetController config with options.
+// ApplyTo 将选项写入 ReplicaSet 控制器配置。
 func (o *ReplicaSetControllerOptions) ApplyTo(cfg *replicasetconfig.ReplicaSetControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -47,7 +47,7 @@ func (o *ReplicaSetControllerOptions) ApplyTo(cfg *replicasetconfig.ReplicaSetCo
 	return nil
 }
 
-// Validate checks validation of ReplicaSetControllerOptions.
+// Validate 校验 ReplicaSet 控制器选项。
 func (o *ReplicaSetControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

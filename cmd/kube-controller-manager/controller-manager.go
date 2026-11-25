@@ -14,20 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The controller manager is responsible for monitoring replication
-// controllers, and creating corresponding pods to achieve the desired
-// state.  It uses the API to listen for new controllers and to create/delete
-// pods.
+// 控制器管理器通过 API 监听复制控制器并创建或删除 Pod，使集群达到期望状态。
 package main
 
 import (
 	"os"
-	_ "time/tzdata" // for CronJob Time Zone support
+	_ "time/tzdata" // 支持 CronJob 时区
 
 	"k8s.io/component-base/cli"
-	_ "k8s.io/component-base/logs/json/register"          // for JSON log format registration
-	_ "k8s.io/component-base/metrics/prometheus/clientgo" // load all the prometheus client-go plugin
-	_ "k8s.io/component-base/metrics/prometheus/version"  // for version metric registration
+	_ "k8s.io/component-base/logs/json/register"          // 注册 JSON 日志格式
+	_ "k8s.io/component-base/metrics/prometheus/clientgo" // 加载全部 Prometheus client-go 插件
+	_ "k8s.io/component-base/metrics/prometheus/version"  // 注册版本指标
 	"k8s.io/kubernetes/cmd/kube-controller-manager/app"
 )
 

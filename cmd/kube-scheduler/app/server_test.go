@@ -49,14 +49,12 @@ import (
 // TestSetup 验证 Setup 能否把配置文件、默认 Profile 和树外插件注册选项组装成可用 Scheduler。
 // 测试通过临时 HTTPS API 端点和 kubeconfig 隔离真实集群。
 func TestSetup(t *testing.T) {
-	// temp dir
 	tmpDir, err := os.MkdirTemp("", "scheduler-options")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// https server
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte(`ok`))
@@ -86,7 +84,6 @@ users:
 		t.Fatal(err)
 	}
 
-	// plugin config
 	pluginConfigFilev1 := filepath.Join(tmpDir, "pluginv1.yaml")
 	if err := os.WriteFile(pluginConfigFilev1, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -126,7 +123,6 @@ profiles:
 		t.Fatal(err)
 	}
 
-	// plugin config
 	simplifiedPluginConfigFilev1 := filepath.Join(tmpDir, "simplifiedPluginv1.yaml")
 	if err := os.WriteFile(simplifiedPluginConfigFilev1, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -139,7 +135,7 @@ profiles:
 		t.Fatal(err)
 	}
 
-	// out-of-tree plugin config v1
+	// 树外插件 v1 配置
 	outOfTreePluginConfigFilev1 := filepath.Join(tmpDir, "outOfTreePluginv1.yaml")
 	if err := os.WriteFile(outOfTreePluginConfigFilev1, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -158,7 +154,7 @@ profiles:
 		t.Fatal(err)
 	}
 
-	// multiple profiles config
+	// 多 Profile 配置
 	multiProfilesConfig := filepath.Join(tmpDir, "multi-profiles.yaml")
 	if err := os.WriteFile(multiProfilesConfig, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -188,7 +184,7 @@ profiles:
 		t.Fatal(err)
 	}
 
-	// empty leader-election config
+	// 未显式配置选主参数
 	emptyLeaderElectionConfig := filepath.Join(tmpDir, "empty-leader-election-config.yaml")
 	if err := os.WriteFile(emptyLeaderElectionConfig, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -199,7 +195,7 @@ clientConnection:
 		t.Fatal(err)
 	}
 
-	// leader-election config
+	// 显式指定租约时长的选主配置
 	leaderElectionConfig := filepath.Join(tmpDir, "leader-election-config.yaml")
 	if err := os.WriteFile(leaderElectionConfig, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -270,7 +266,7 @@ leaderElection:
 			wantPlugins: map[string]*config.Plugins{
 				"default-scheduler": func() *config.Plugins {
 					plugins := defaults.ExpandedPluginsV1.DeepCopy()
-					// With this (and only this?!) config comes DynamicResources after DefaultPreemption.
+					// 此配置会使 DynamicResources 在默认展开顺序中位于 DefaultPreemption 之后。
 					plugins.PreEnqueue.Enabled[1], plugins.PreEnqueue.Enabled[2] = plugins.PreEnqueue.Enabled[2], plugins.PreEnqueue.Enabled[1]
 					plugins.PostFilter.Enabled[0], plugins.PostFilter.Enabled[1] = plugins.PostFilter.Enabled[1], plugins.PostFilter.Enabled[0]
 					plugins.PodGroupPostFilter.Enabled[0], plugins.PodGroupPostFilter.Enabled[1] = plugins.PodGroupPostFilter.Enabled[1], plugins.PodGroupPostFilter.Enabled[0]
@@ -320,13 +316,13 @@ leaderElection:
 			name: "leader election CLI args, along with --config arg",
 			flags: []string{
 				"--leader-elect=false",
-				"--leader-elect-lease-duration=2h", // CLI args are favored over the fields in ComponentConfig
-				"--kubeconfig=foo",                 // deprecated CLI arg will be ignored if --config is specified
+				"--leader-elect-lease-duration=2h", // 命令行参数优先于组件配置字段
+				"--kubeconfig=foo",                 // 指定 --config 时忽略废弃命令行参数
 				"--config", emptyLeaderElectionConfig,
 			},
 			wantLeaderElection: &componentbaseconfig.LeaderElectionConfiguration{
-				LeaderElect:       false,                                    // from CLI args
-				LeaseDuration:     metav1.Duration{Duration: 2 * time.Hour}, // from CLI args
+				LeaderElect:       false,                                    // 来自命令行参数
+				LeaseDuration:     metav1.Duration{Duration: 2 * time.Hour}, // 来自命令行参数
 				RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
 				RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
 				ResourceLock:      "leases",
@@ -346,19 +342,19 @@ leaderElection:
 				"--leader-elect=false",
 				"--leader-elect-lease-duration=2h",
 				"--leader-elect-resource-namespace=default",
-				"--kubeconfig", configKubeconfig, // deprecated CLI arg is honored if --config is not specified
+				"--kubeconfig", configKubeconfig, // 未指定 --config 时采用废弃命令行参数
 			},
 			wantLeaderElection: &componentbaseconfig.LeaderElectionConfiguration{
-				LeaderElect:       false,                                    // from CLI args
-				LeaseDuration:     metav1.Duration{Duration: 2 * time.Hour}, // from CLI args
+				LeaderElect:       false,                                    // 来自命令行参数
+				LeaseDuration:     metav1.Duration{Duration: 2 * time.Hour}, // 来自命令行参数
 				RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
 				RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
 				ResourceLock:      "leases",
 				ResourceName:      configv1.SchedulerDefaultLockObjectName,
-				ResourceNamespace: "default", // from CLI args
+				ResourceNamespace: "default", // 来自命令行参数
 			},
 			wantClientConnection: &componentbaseconfig.ClientConnectionConfiguration{
-				Kubeconfig:  configKubeconfig, // from deprecated CLI args
+				Kubeconfig:  configKubeconfig, // 来自废弃命令行参数
 				ContentType: "application/vnd.kubernetes.protobuf",
 				QPS:         50,
 				Burst:       100,
@@ -371,7 +367,7 @@ leaderElection:
 			},
 			wantLeaderElection: &componentbaseconfig.LeaderElectionConfiguration{
 				LeaderElect:       true,
-				LeaseDuration:     metav1.Duration{Duration: 1 * time.Hour}, // from CC
+				LeaseDuration:     metav1.Duration{Duration: 1 * time.Hour}, // 来自组件配置
 				RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
 				RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
 				ResourceLock:      "leases",
@@ -389,9 +385,9 @@ leaderElection:
 			},
 			wantLeaderElection: &componentbaseconfig.LeaderElectionConfiguration{
 				LeaderElect:       true,
-				LeaseDuration:     metav1.Duration{Duration: 1 * time.Hour},   // from CC
-				RenewDeadline:     metav1.Duration{Duration: 5 * time.Second}, // from CLI args
-				RetryPeriod:       metav1.Duration{Duration: 1 * time.Second}, // from CLI args
+				LeaseDuration:     metav1.Duration{Duration: 1 * time.Hour},   // 来自组件配置
+				RenewDeadline:     metav1.Duration{Duration: 5 * time.Second}, // 来自命令行参数
+				RetryPeriod:       metav1.Duration{Duration: 1 * time.Second}, // 来自命令行参数
 				ResourceLock:      "leases",
 				ResourceName:      configv1.SchedulerDefaultLockObjectName,
 				ResourceNamespace: configv1.SchedulerDefaultLockObjectNamespace,
@@ -451,7 +447,7 @@ leaderElection:
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			componentGlobalsRegistry := basecompatibility.NewComponentGlobalsRegistry()
-			// set binary version to v1.37+ since StorageCapacityScoring (Beta in v1.37) is enabled by default
+			// StorageCapacityScoring 自 v1.37 起默认启用，因此二进制版本至少设为 1.37。
 			verKube := basecompatibility.NewEffectiveVersionFromString("1.37", "1.31", "1.31")
 			fg := feature.DefaultFeatureGate.DeepCopy()
 			utilruntime.Must(fg.AddVersioned(map[featuregate.Feature]featuregate.VersionedSpecs{
@@ -468,7 +464,7 @@ leaderElection:
 			fs := pflag.NewFlagSet("test", pflag.PanicOnError)
 			opts := options.NewOptionsWithComponentGlobalsRegistry(componentGlobalsRegistry)
 
-			// use listeners instead of static ports so parallel test runs don't conflict
+			// 使用动态 Listener 而非固定端口，避免并行测试冲突
 			opts.SecureServing.Listener = makeListener(t)
 			defer opts.SecureServing.Listener.Close()
 
@@ -480,7 +476,7 @@ leaderElection:
 				t.Fatal(err)
 			}
 
-			// use listeners instead of static ports so parallel test runs don't conflict
+			// 使用动态 Listener 而非固定端口，避免并行测试冲突
 			opts.SecureServing.Listener = makeListener(t)
 			defer opts.SecureServing.Listener.Close()
 
@@ -531,7 +527,7 @@ leaderElection:
 	}
 }
 
-// Simulates an out-of-tree plugin.
+// foo 模拟由集群外注册的调度插件。
 type foo struct{}
 
 var _ fwk.PreFilterPlugin = &foo{}

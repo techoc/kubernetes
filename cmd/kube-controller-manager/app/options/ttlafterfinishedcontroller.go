@@ -25,12 +25,12 @@ import (
 	ttlafterfinishedconfig "k8s.io/kubernetes/pkg/controller/ttlafterfinished/config"
 )
 
-// TTLAfterFinishedControllerOptions holds the TTLAfterFinishedController options.
+// TTLAfterFinishedControllerOptions 保存完成后 TTL 控制器的选项。
 type TTLAfterFinishedControllerOptions struct {
 	*ttlafterfinishedconfig.TTLAfterFinishedControllerConfiguration
 }
 
-// AddFlags adds flags related to TTLAfterFinishedController for controller manager to the specified FlagSet.
+// AddFlags 将完成后 TTL 控制器相关参数注册到指定 FlagSet。
 func (o *TTLAfterFinishedControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -39,7 +39,7 @@ func (o *TTLAfterFinishedControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentTTLSyncs, "concurrent-ttl-after-finished-syncs", o.ConcurrentTTLSyncs, fmt.Sprintf("The number of %s workers that are allowed to sync concurrently.", names.TTLAfterFinishedController))
 }
 
-// ApplyTo fills up TTLAfterFinishedController config with options.
+// ApplyTo 将选项写入完成后 TTL 控制器配置。
 func (o *TTLAfterFinishedControllerOptions) ApplyTo(cfg *ttlafterfinishedconfig.TTLAfterFinishedControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -50,7 +50,7 @@ func (o *TTLAfterFinishedControllerOptions) ApplyTo(cfg *ttlafterfinishedconfig.
 	return nil
 }
 
-// Validate checks validation of TTLAfterFinishedControllerOptions.
+// Validate 校验完成后 TTL 控制器选项。
 func (o *TTLAfterFinishedControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

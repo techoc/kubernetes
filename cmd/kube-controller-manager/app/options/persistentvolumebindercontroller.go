@@ -22,12 +22,12 @@ import (
 	persistentvolumeconfig "k8s.io/kubernetes/pkg/controller/volume/persistentvolume/config"
 )
 
-// PersistentVolumeBinderControllerOptions holds the PersistentVolumeBinderController options.
+// PersistentVolumeBinderControllerOptions 保存持久存储卷绑定控制器的选项。
 type PersistentVolumeBinderControllerOptions struct {
 	*persistentvolumeconfig.PersistentVolumeBinderControllerConfiguration
 }
 
-// AddFlags adds flags related to PersistentVolumeBinderController for controller manager to the specified FlagSet.
+// AddFlags 将持久存储卷绑定控制器相关参数注册到指定 FlagSet。
 func (o *PersistentVolumeBinderControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -45,7 +45,7 @@ func (o *PersistentVolumeBinderControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.VolumeConfiguration.FlexVolumePluginDir, "flex-volume-plugin-dir", o.VolumeConfiguration.FlexVolumePluginDir, "Full path of the directory in which the flex volume plugin should search for additional third party volume plugins.")
 }
 
-// ApplyTo fills up PersistentVolumeBinderController config with options.
+// ApplyTo 将选项写入持久存储卷绑定控制器配置。
 func (o *PersistentVolumeBinderControllerOptions) ApplyTo(cfg *persistentvolumeconfig.PersistentVolumeBinderControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -57,7 +57,7 @@ func (o *PersistentVolumeBinderControllerOptions) ApplyTo(cfg *persistentvolumec
 	return nil
 }
 
-// Validate checks validation of PersistentVolumeBinderControllerOptions.
+// Validate 校验持久存储卷绑定控制器选项。
 func (o *PersistentVolumeBinderControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

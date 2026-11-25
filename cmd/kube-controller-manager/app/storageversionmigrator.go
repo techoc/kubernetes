@@ -54,7 +54,7 @@ func newSVMController(ctx context.Context, controllerContext ControllerContext, 
 		return nil, err
 	}
 
-	// svm controller can make a lot of requests during migration, keep it fast
+	// 存储版本迁移会产生大量请求，因此提高客户端配额以避免迁移受限。
 	config, err := controllerContext.NewClientConfig(controllerName)
 	if err != nil {
 		return nil, err

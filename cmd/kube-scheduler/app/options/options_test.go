@@ -48,16 +48,13 @@ import (
 // TestSchedulerOptions 验证默认值、配置文件与命令行参数的覆盖规则，以及客户端连接参数的传递。
 // 测试通过 TLS/非 TLS 端点记录认证用户名，确认 kubeconfig 与旧参数的生效路径。
 func TestSchedulerOptions(t *testing.T) {
-	// temp dir
 	tmpDir, err := os.MkdirTemp("", "scheduler-options")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// record the username requests were made with
 	username := ""
-	// https server
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		username, _, _ = req.BasicAuth()
 		if username == "" {
@@ -67,7 +64,6 @@ func TestSchedulerOptions(t *testing.T) {
 		w.Write([]byte(`ok`))
 	}))
 	defer server.Close()
-	// http server
 	insecureserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		username, _, _ = req.BasicAuth()
 		if username == "" {
@@ -78,7 +74,7 @@ func TestSchedulerOptions(t *testing.T) {
 	}))
 	defer insecureserver.Close()
 
-	// config file and kubeconfig
+	// 组件配置及其引用的 kubeconfig
 	configFile := filepath.Join(tmpDir, "scheduler.yaml")
 	configKubeconfig := filepath.Join(tmpDir, "config.kubeconfig")
 	if err := os.WriteFile(configFile, []byte(fmt.Sprintf(`
@@ -168,7 +164,7 @@ leaderElection:
 		t.Fatal(err)
 	}
 
-	// flag-specified kubeconfig
+	// 命令行指定的 kubeconfig
 	flagKubeconfig := filepath.Join(tmpDir, "flag.kubeconfig")
 	if err := os.WriteFile(flagKubeconfig, []byte(fmt.Sprintf(`
 apiVersion: v1
@@ -192,7 +188,7 @@ users:
 		t.Fatal(err)
 	}
 
-	// plugin config
+	// 插件配置
 	pluginConfigFile := filepath.Join(tmpDir, "plugin.yaml")
 	if err := os.WriteFile(pluginConfigFile, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -226,7 +222,7 @@ profiles:
 		t.Fatal(err)
 	}
 
-	// multiple profiles config
+	// 多 Profile 配置
 	multiProfilesConfig := filepath.Join(tmpDir, "multi-profiles.yaml")
 	if err := os.WriteFile(multiProfilesConfig, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -253,7 +249,7 @@ profiles:
 		t.Fatal(err)
 	}
 
-	// high throughput profile config
+	// 高吞吐 Profile 配置
 	highThroughputProfileConfig := filepath.Join(tmpDir, "high-throughput.yaml")
 	if err := os.WriteFile(highThroughputProfileConfig, []byte(fmt.Sprintf(`
 apiVersion: kubescheduler.config.k8s.io/v1
@@ -274,8 +270,7 @@ profiles:
 		t.Fatal(err)
 	}
 
-	// Insulate this test from picking up in-cluster config when run inside a pod
-	// We can't assume we have permissions to write to /var/run/secrets/... from a unit test to mock in-cluster config for testing
+	// Pod 内运行时清空集群地址，避免误用 in-cluster 配置；单元测试无权改写 /var/run/secrets/... 来构造该配置。
 	if len(os.Getenv("KUBERNETES_SERVICE_HOST")) > 0 {
 		t.Setenv("KUBERNETES_SERVICE_HOST", "")
 	}
@@ -323,7 +318,7 @@ profiles:
 					AllowCacheTTL:                10 * time.Second,
 					DenyCacheTTL:                 10 * time.Second,
 					RemoteKubeConfigFileOptional: true,
-					AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // note: this does not match /healthz/ or /healthz/*
+					AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // 注意：不匹配 /healthz/ 或 /healthz/*
 					AlwaysAllowGroups:            []string{"system:masters"},
 				},
 				Logs:                     logs.NewOptions(),
@@ -430,7 +425,7 @@ profiles:
 					AllowCacheTTL:                10 * time.Second,
 					DenyCacheTTL:                 10 * time.Second,
 					RemoteKubeConfigFileOptional: true,
-					AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // note: this does not match /healthz/ or /healthz/*
+					AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // 注意：不匹配 /healthz/ 或 /healthz/*
 					AlwaysAllowGroups:            []string{"system:masters"},
 				},
 				Logs:                     logs.NewOptions(),
@@ -503,7 +498,7 @@ profiles:
 					AllowCacheTTL:                10 * time.Second,
 					DenyCacheTTL:                 10 * time.Second,
 					RemoteKubeConfigFileOptional: true,
-					AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // note: this does not match /healthz/ or /healthz/*
+					AlwaysAllowPaths:             []string{"/healthz", "/readyz", "/livez"}, // 注意：不匹配 /healthz/ 或 /healthz/*
 					AlwaysAllowGroups:            []string{"system:masters"},
 				},
 				Logs:                     logs.NewOptions(),
@@ -962,11 +957,9 @@ profiles:
 					tc.options.ComponentConfig = cfg
 				}
 			}
-			// create the config
 			_, ctx := ktesting.NewTestContext(t)
 			config, err := tc.options.Config(ctx)
 
-			// handle errors
 			if err != nil {
 				if tc.expectedError != "" || tc.checkErrFn != nil {
 					if tc.expectedError != "" {
@@ -989,13 +982,11 @@ profiles:
 				t.Errorf("incorrect config (-want,+got):\n%s", diff)
 			}
 
-			// ensure we have a client
 			if config.Client == nil {
 				t.Error("unexpected nil client")
 				return
 			}
 
-			// test the client talks to the endpoint we expect with the credentials we expect
 			username = ""
 			_, err = config.Client.Discovery().RESTClient().Get().AbsPath("/").DoRaw(context.TODO())
 			if err != nil {

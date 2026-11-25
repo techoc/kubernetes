@@ -22,12 +22,12 @@ import (
 	serviceaccountconfig "k8s.io/kubernetes/pkg/controller/serviceaccount/config"
 )
 
-// LegacySATokenCleanerOptions holds the LegacySATokenCleaner options.
+// LegacySATokenCleanerOptions 保存旧式服务账号令牌清理器的选项。
 type LegacySATokenCleanerOptions struct {
 	*serviceaccountconfig.LegacySATokenCleanerConfiguration
 }
 
-// AddFlags adds flags related to LegacySATokenCleaner for controller manager to the specified FlagSet
+// AddFlags 将旧式服务账号令牌清理器相关参数注册到指定 FlagSet。
 func (o *LegacySATokenCleanerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -36,7 +36,7 @@ func (o *LegacySATokenCleanerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.CleanUpPeriod.Duration, "legacy-service-account-token-clean-up-period", o.CleanUpPeriod.Duration, "The period of time since the last usage of an legacy service account token before it can be deleted.")
 }
 
-// ApplyTo fills up LegacySATokenCleaner config with options.
+// ApplyTo 将选项写入旧式服务账号令牌清理器配置。
 func (o *LegacySATokenCleanerOptions) ApplyTo(cfg *serviceaccountconfig.LegacySATokenCleanerConfiguration) error {
 	if o == nil {
 		return nil
@@ -47,7 +47,7 @@ func (o *LegacySATokenCleanerOptions) ApplyTo(cfg *serviceaccountconfig.LegacySA
 	return nil
 }
 
-// Validate checks validation of LegacySATokenCleanerOptions.
+// Validate 校验旧式服务账号令牌清理器选项。
 func (o *LegacySATokenCleanerOptions) Validate() []error {
 	if o == nil {
 		return nil

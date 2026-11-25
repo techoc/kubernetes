@@ -24,12 +24,12 @@ import (
 	csrsigningconfig "k8s.io/kubernetes/pkg/controller/certificates/signer/config"
 )
 
-// CSRSigningControllerOptions holds the CSRSigningController options.
+// CSRSigningControllerOptions 保存 CSR 签名控制器的选项。
 type CSRSigningControllerOptions struct {
 	*csrsigningconfig.CSRSigningControllerConfiguration
 }
 
-// AddFlags adds flags related to CSRSigningController for controller manager to the specified FlagSet.
+// AddFlags 将 CSR 签名控制器相关参数注册到指定 FlagSet。
 func (o *CSRSigningControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -48,7 +48,7 @@ func (o *CSRSigningControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.ClusterSigningDuration.Duration, "cluster-signing-duration", o.ClusterSigningDuration.Duration, "The max length of duration signed certificates will be given.  Individual CSRs may request shorter certs by setting spec.expirationSeconds.")
 }
 
-// ApplyTo fills up CSRSigningController config with options.
+// ApplyTo 将选项写入 CSR 签名控制器配置。
 func (o *CSRSigningControllerOptions) ApplyTo(cfg *csrsigningconfig.CSRSigningControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -65,7 +65,7 @@ func (o *CSRSigningControllerOptions) ApplyTo(cfg *csrsigningconfig.CSRSigningCo
 	return nil
 }
 
-// Validate checks validation of CSRSigningControllerOptions.
+// Validate 校验 CSR 签名控制器选项。
 func (o *CSRSigningControllerOptions) Validate() []error {
 	if o == nil {
 		return nil
@@ -97,7 +97,7 @@ func (o *CSRSigningControllerOptions) Validate() []error {
 	return errs
 }
 
-// both must be specified or both must be empty
+// 证书和密钥必须同时配置，或同时留空。
 func csrSigningFilesValid(config csrsigningconfig.CSRSigningConfiguration) error {
 	switch {
 	case (len(config.CertFile) == 0) && (len(config.KeyFile) == 0):

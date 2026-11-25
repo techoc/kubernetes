@@ -63,7 +63,7 @@ func TestPodGroupProtectionController(t *testing.T) {
 			}
 			controllerCtx.ComponentConfig.Generic.Controllers = []string{names.PodGroupProtectionController}
 
-			// Verify the constructor produces the expected result.
+			// 确认构造器返回预期描述符。
 			ctrl, err := newPodGroupProtectionController(ctx, controllerCtx, names.PodGroupProtectionController)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -74,7 +74,7 @@ func TestPodGroupProtectionController(t *testing.T) {
 				t.Errorf("expected no controller, got %v", ctrl)
 			}
 
-			// Verify the descriptor gates the controller correctly.
+			// 确认描述符正确控制控制器启用状态。
 			initFuncCalled := false
 			descriptor := NewControllerDescriptors()[names.PodGroupProtectionController]
 			descriptor.constructor = func(ctx context.Context, controllerContext ControllerContext, controllerName string) (Controller, error) {

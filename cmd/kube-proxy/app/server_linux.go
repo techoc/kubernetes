@@ -16,8 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app does all of the work necessary to configure and run a
-// Kubernetes app process.
+// Package app 负责 kube-proxy 的配置、启动与运行。
 package app
 
 import (
@@ -44,8 +43,7 @@ import (
 
 var defaultedMode bool
 
-// platformApplyDefaults is called after parsing command-line flags and/or reading the
-// config file, to apply platform-specific default values to config.
+// platformApplyDefaults 在解析命令行参数或读取配置后应用 Linux 平台默认值。
 func (o *Options) platformApplyDefaults(config *kubeproxyconfig.KubeProxyConfiguration) {
 	if config.Mode == "" {
 		config.Mode = kubeproxyconfig.ProxyModeIPTables
@@ -63,9 +61,7 @@ func (o *Options) platformApplyDefaults(config *kubeproxyconfig.KubeProxyConfigu
 	o.logger.V(2).Info("DetectLocalMode", "localMode", string(config.DetectLocalMode))
 }
 
-// platformSetup is called after setting up the ProxyServer, but before creating the
-// Proxier. It should fill in any platform-specific fields and perform other
-// platform-specific setup.
+// platformSetup 在创建 Proxier 前补齐平台字段并应用 conntrack 系统参数。
 func (s *ProxyServer) platformSetup(ctx context.Context) error {
 	if err := conntrack.SetSysctls(ctx, &s.Config.Linux.Conntrack); err != nil {
 		return fmt.Errorf("could not set conntrack parameters from kube-proxy configuration: %w", err)
@@ -74,18 +70,17 @@ func (s *ProxyServer) platformSetup(ctx context.Context) error {
 	return nil
 }
 
-// isIPTablesBased checks whether mode is based on iptables rather than nftables
+// isIPTablesBased 判断代理模式是否依赖 iptables，而非使用 nftables。
 func isIPTablesBased(mode kubeproxyconfig.ProxyMode) bool {
 	return mode == kubeproxyconfig.ProxyModeIPTables || mode == kubeproxyconfig.ProxyModeIPVS
 }
 
-// platformCheckSupported is called immediately before creating the Proxier, to check
-// what IP families are supported (and whether the configuration is usable at all).
+// platformCheckSupported 在创建 Proxier 前检查 IPv4、IPv6 与双栈支持，并拒绝不可用配置。
 func (s *ProxyServer) platformCheckSupported(ctx context.Context) (ipv4Supported, ipv6Supported, dualStackSupported bool, err error) {
 	logger := klog.FromContext(ctx)
 
 	if isIPTablesBased(s.Config.Mode) {
-		// Check for the iptables and ip6tables binaries.
+		// 分别探测 iptables 与 ip6tables，避免仅安装其中一个时误判协议族能力。
 		errv4 := utiliptables.New(utiliptables.ProtocolIPv4).Present()
 		errv6 := utiliptables.New(utiliptables.ProtocolIPv6).Present()
 
@@ -93,9 +88,7 @@ func (s *ProxyServer) platformCheckSupported(ctx context.Context) (ipv4Supported
 		ipv6Supported = errv6 == nil
 
 		if !ipv4Supported && !ipv6Supported {
-			// errv4 and errv6 are almost certainly the same underlying error
-			// ("iptables isn't installed" or "kernel modules not available")
-			// so it doesn't make sense to try to combine them.
+			// 两个错误通常源于同一原因（未安装或内核模块不可用），合并反而会掩盖主因。
 			err = fmt.Errorf("iptables is not available on this host : %w", errv4)
 		} else if !ipv4Supported {
 			logger.Info("No iptables support for family", "ipFamily", v1.IPv4Protocol, "error", errv4)
@@ -103,14 +96,14 @@ func (s *ProxyServer) platformCheckSupported(ctx context.Context) (ipv4Supported
 			logger.Info("No iptables support for family", "ipFamily", v1.IPv6Protocol, "error", errv6)
 		}
 	} else {
-		// The nft CLI always supports both families.
+		// nftables 命令行工具本身同时支持 IPv4 与 IPv6。
 		ipv4Supported, ipv6Supported = true, true
 	}
 
-	// Check if the OS has IPv6 enabled, by verifying if the IPv6 interfaces are available
+	// 通过 IPv6 接口表确认内核是否启用 IPv6。
 	_, errIPv6 := os.Stat("/proc/net/if_inet6")
 	if errIPv6 == nil {
-		// Also check that IPv6 hasn't been disabled
+		// 接口表存在仍不代表可用，继续检查内核禁用开关。
 		content, err := os.ReadFile("/proc/sys/net/ipv6/conf/all/disable_ipv6")
 		if err == nil && strings.TrimSpace(string(content)) == "1" {
 			logger.Info("Kernel support disabled for family", "ipFamily", v1.IPv6Protocol)
@@ -121,13 +114,13 @@ func (s *ProxyServer) platformCheckSupported(ctx context.Context) (ipv4Supported
 		ipv6Supported = false
 	}
 
-	// The Linux proxies can always support dual-stack if they can support both IPv4
-	// and IPv6.
+	// Linux 代理同时支持 IPv4 与 IPv6 时即可启用双栈。
 	dualStackSupported = ipv4Supported && ipv6Supported
 	return
 }
 
-// createProxier creates the proxy.Provider
+// createProxier 按配置模式创建 iptables、ipvs 或 nftables 代理提供器。
+// 部分构造函数会修改系统规则，即使最终创建失败也可能留下副作用。
 func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig.KubeProxyConfiguration, dualStack, initOnly bool) (proxy.Provider, error) {
 	logger := klog.FromContext(ctx)
 	var proxier proxy.Provider
@@ -145,7 +138,7 @@ func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig
 		ipts := utiliptables.NewBestEffort()
 
 		if dualStack {
-			// TODO this has side effects that should only happen when Run() is invoked.
+			// TODO: 此处的系统副作用只应发生在 Run() 被调用时。
 			proxier, err = iptables.NewDualStackProxier(
 				ctx,
 				config,
@@ -159,9 +152,9 @@ func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig
 				initOnly,
 			)
 		} else {
-			// Create a single-stack proxier if and only if the node does not support dual-stack (i.e, no iptables support).
+			// 节点不支持双栈时只创建单栈代理，避免依赖缺失的 iptables 协议族支持。
 
-			// TODO this has side effects that should only happen when Run() is invoked.
+			// TODO: 此处的系统副作用只应发生在 Run() 被调用时。
 			proxier, err = iptables.NewProxier(
 				ctx,
 				config,
@@ -231,7 +224,7 @@ func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig
 		logger.Info("Using nftables Proxier")
 
 		if dualStack {
-			// TODO this has side effects that should only happen when Run() is invoked.
+			// TODO: 此处的系统副作用只应发生在 Run() 被调用时。
 			proxier, err = nftables.NewDualStackProxier(
 				ctx,
 				config,
@@ -243,8 +236,8 @@ func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig
 				initOnly,
 			)
 		} else {
-			// Create a single-stack proxier if and only if the node does not support dual-stack
-			// TODO this has side effects that should only happen when Run() is invoked.
+			// 节点不支持双栈时只创建单栈代理。
+			// TODO: 此处的系统副作用只应发生在 Run() 被调用时。
 			proxier, err = nftables.NewProxier(
 				ctx,
 				config,
@@ -306,20 +299,18 @@ func getLocalDetectors(logger klog.Logger, primaryIPFamily v1.IPFamily, config *
 	return localDetectors
 }
 
-// platformCleanup removes stale kube-proxy rules that can be safely removed. If
-// cleanupAndExit is true, it will attempt to remove rules from all known kube-proxy
-// modes. If it is false, it will only remove rules that are definitely not in use by the
-// currently-configured mode.
+// platformCleanup 清理可安全移除的 kube-proxy 旧规则。
+// cleanupAndExit 为 true 时尝试清理所有已知模式；否则只清理当前模式确定不使用的规则。
 func platformCleanup(ctx context.Context, mode kubeproxyconfig.ProxyMode, cleanupAndExit bool) error {
 	var encounteredError bool
 
-	// Clean up iptables and ipvs rules if switching to nftables, or if cleanupAndExit
+	// 切换到 nftables 或显式清理时，移除 iptables 与 ipvs 旧规则。
 	if !isIPTablesBased(mode) || cleanupAndExit {
 		encounteredError = iptables.CleanupLeftovers(ctx) || encounteredError
 		encounteredError = ipvs.CleanupLeftovers(ctx) || encounteredError
 	}
 
-	// Clean up nftables rules when switching to iptables or ipvs, or if cleanupAndExit
+	// 切换到 iptables/ipvs 或显式清理时，移除 nftables 旧规则。
 	if isIPTablesBased(mode) || cleanupAndExit {
 		encounteredError = nftables.CleanupLeftovers(ctx) || encounteredError
 	}

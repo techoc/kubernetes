@@ -23,7 +23,7 @@ import (
 	"k8s.io/component-base/featuregate"
 	"k8s.io/utils/exec"
 
-	// Volume plugins
+	// 卷插件。
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/pkg/volume/configmap"
@@ -42,18 +42,13 @@ import (
 	"k8s.io/kubernetes/pkg/volume/secret"
 )
 
-// ProbeVolumePlugins collects all volume plugins into an easy to use list.
 // ProbeVolumePlugins 汇总当前 Kubelet 二进制支持的内置卷插件；这里只发现插件对象，实际初始化由卷管理器完成。
 func ProbeVolumePlugins(ctx context.Context, featureGate featuregate.FeatureGate) ([]volume.VolumePlugin, error) {
 	// 显式维护插件列表使编译进二进制的能力可审查，避免依赖动态链接或隐式注册。
 	allPlugins := []volume.VolumePlugin{}
 
-	// The list of plugins to probe is decided by the kubelet binary, not
-	// by dynamic linking or other "magic".  Plugins will be analyzed and
-	// initialized later.
-	//
-	// Kubelet does not currently need to configure volume plugins.
-	// If/when it does, see kube-controller-manager/app/plugins.go for example of using volume.VolumeConfig
+	// 当前 Kubelet 无需配置卷插件，后续由卷管理器分析和初始化。
+	// 若将来需要配置，可参考 kube-controller-manager/app/plugins.go 中 volume.VolumeConfig 的用法。
 	allPlugins = append(allPlugins, emptydir.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, git_repo.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, hostpath.ProbeVolumePlugins(volume.VolumeConfig{})...)
@@ -73,9 +68,6 @@ func ProbeVolumePlugins(ctx context.Context, featureGate featuregate.FeatureGate
 	return allPlugins, nil
 }
 
-// GetDynamicPluginProber gets the probers of dynamically discoverable plugins
-// for kubelet.
-// Currently only Flexvolume plugins are dynamically discoverable.
 // GetDynamicPluginProber 返回动态卷插件发现器；当前动态发现机制主要用于 FlexVolume。
 func GetDynamicPluginProber(ctx context.Context, pluginDir string, runner exec.Interface) volume.DynamicPluginProber {
 	return flexvolume.GetDynamicPluginProber(ctx, pluginDir, runner)

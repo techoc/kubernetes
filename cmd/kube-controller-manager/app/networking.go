@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app implements a server that runs a set of active
-// components.  This includes replication controllers, service endpoints and
-// nodes.
+// Package app 实现控制器管理服务器，运行复制控制器、服务端点和节点等活跃组件。
 package app
 
 import (
@@ -44,7 +42,7 @@ func newServiceCIDRsController(ctx context.Context, controllerContext Controller
 		return nil, err
 	}
 
-	// TODO use component config
+	// TODO：改用组件配置。
 	scc := servicecidrs.NewController(
 		ctx,
 		controllerContext.InformerFactory.Networking().V1().ServiceCIDRs(),

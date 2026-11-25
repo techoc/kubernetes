@@ -27,30 +27,37 @@ import (
 	"time"
 )
 
-// Config is the main context object for the controller manager.
+// Config 保存控制器管理器运行所需的主要上下文。
 type Config struct {
-	// Flagz is the Reader interface to get flags for the flagz page.
+	// Flagz 提供 flagz 页面读取命令行参数的接口。
 	Flagz flagz.Reader
 
+	// ComponentConfig 保存各控制器的组件配置。
 	ComponentConfig kubectrlmgrconfig.KubeControllerManagerConfiguration
 
+	// SecureServing 配置管理服务器的安全监听端点。
 	SecureServing *apiserver.SecureServingInfo
 
+	// Authentication 和 Authorization 分别配置客户端身份认证与授权。
 	Authentication apiserver.AuthenticationInfo
-	Authorization  apiserver.AuthorizationInfo
+	// Authorization 决定管理端点允许哪些已认证请求，未启用 HTTPS 时不会安装该处理器。
+	Authorization apiserver.AuthorizationInfo
 
-	// the general kube client
+	// Client 是供管理器使用的通用 Kubernetes 客户端。
 	Client *clientset.Clientset
 
-	// the rest config for the master
+	// Kubeconfig 保存连接 API 服务器的 REST 配置。
 	Kubeconfig *restclient.Config
 
+	// EventBroadcaster 和 EventRecorder 用于向 API 服务器发送事件。
 	EventBroadcaster record.EventBroadcaster
-	EventRecorder    record.EventRecorder
+	// EventRecorder 供控制器上报事件，通常使用 broadcast 事件源以复用后台写回管道。
+	EventRecorder record.EventRecorder
 
+	// ControllerShutdownTimeout 限制控制器优雅关闭的等待时间。
 	ControllerShutdownTimeout time.Duration
 
-	// ComponentGlobalsRegistry is the registry where the effective versions and feature gates for all components are stored.
+	// ComponentGlobalsRegistry 保存各组件生效的版本和特性门控。
 	ComponentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry
 }
 
@@ -58,13 +65,13 @@ type completedConfig struct {
 	*Config
 }
 
-// CompletedConfig same as Config, just to swap private object.
+// CompletedConfig 封装已完成的配置，防止包外代码直接构造内部完成态。
 type CompletedConfig struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
+	// 嵌入包外无法初始化的私有指针。
 	*completedConfig
 }
 
-// Complete fills in any fields not set that are required to have valid data. It's mutating the receiver.
+// Complete 原地补齐有效运行所需的未设置字段，并返回完成态配置。
 func (c *Config) Complete() *CompletedConfig {
 	cc := completedConfig{c}
 

@@ -24,12 +24,12 @@ import (
 	resourceclaimconfig "k8s.io/kubernetes/pkg/controller/resourceclaim/config"
 )
 
-// ResourceClaimControllerOptions holds the ResourceClaimController options.
+// ResourceClaimControllerOptions 保存资源声明控制器的选项。
 type ResourceClaimControllerOptions struct {
 	*resourceclaimconfig.ResourceClaimControllerConfiguration
 }
 
-// AddFlags adds flags related to ResourceClaimController for controller manager to the specified FlagSet.
+// AddFlags 将资源声明控制器相关参数注册到指定 FlagSet。
 func (o *ResourceClaimControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -38,7 +38,7 @@ func (o *ResourceClaimControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentSyncs, "concurrent-resourceclaim-syncs", o.ConcurrentSyncs, "The number of operations (creating or deleting ResourceClaims) allowed to run concurrently. Larger number = more responsive, but more CPU (and network) load")
 }
 
-// ApplyTo fills up ResourceClaimController config with options.
+// ApplyTo 将选项写入资源声明控制器配置。
 func (o *ResourceClaimControllerOptions) ApplyTo(cfg *resourceclaimconfig.ResourceClaimControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -49,7 +49,7 @@ func (o *ResourceClaimControllerOptions) ApplyTo(cfg *resourceclaimconfig.Resour
 	return nil
 }
 
-// Validate checks validation of ResourceClaimControllerOptions.
+// Validate 校验资源声明控制器选项。
 func (o *ResourceClaimControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

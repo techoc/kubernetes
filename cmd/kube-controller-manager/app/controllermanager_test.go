@@ -121,7 +121,7 @@ func TestNewControllerDescriptorsAlwaysReturnsDescriptorsForAllControllers(t *te
 
 	controllersWithoutFeatureGates := KnownControllers()
 
-	// AllBeta must be enabled before AllAlpha to resolve dependencies.
+	// 必须先启用 AllBeta，再启用 AllAlpha，以满足特性依赖。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		"AllBeta":  true,
 		"AllAlpha": true,
@@ -139,7 +139,7 @@ func TestFeatureGatedControllersShouldNotDefineAliases(t *testing.T) {
 
 	alphaFeatures := sets.NewString()
 	for _, featureText := range utilfeature.DefaultFeatureGate.KnownFeatures() {
-		// we have to parse this from KnownFeatures, because usage of mutable FeatureGate is not allowed in unit tests
+		// 单元测试不能使用可变 FeatureGate，因此从 KnownFeatures 解析。
 		feature := featureGateRegex.FindString(featureText)
 		if strings.Contains(featureText, string(featuregate.Alpha)) && feature != "AllAlpha" {
 			alphaFeatures.Insert(feature)
@@ -157,7 +157,7 @@ func TestFeatureGatedControllersShouldNotDefineAliases(t *testing.T) {
 			continue
 		}
 
-		// DO NOT ADD any new controllers here. one controller is an exception, because it was added before this test was introduced
+		// 不要在此列表新增控制器；唯一例外是本测试引入前已经存在的那个控制器。
 		if name == names.ResourceClaimController {
 			continue
 		}
@@ -176,8 +176,7 @@ func TestFeatureGatedControllersShouldNotDefineAliases(t *testing.T) {
 	}
 }
 
-// TestTaintEvictionControllerGating ensures that it is possible to run taint-manager as a separated controller
-// only when the SeparateTaintEvictionController feature is enabled
+// TestTaintEvictionControllerGating 验证只有启用 SeparateTaintEvictionController 时才能独立运行 taint-manager。
 func TestTaintEvictionControllerGating(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -267,12 +266,11 @@ func TestRunControllers(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 			controllerCtx := ControllerContext{}
 
-			// testCtx is used to make sure the controller failing to shut down can exit after the test is finished.
+			// testCtx 确保无法正常关闭的控制器在测试结束后仍能退出。
 			testCtx, cancelTest := context.WithCancel(ctx)
 			defer cancelTest()
 
-			// ctx is used to wait in the controller for shutdown and also to start the shutdown timeout in RunControllers.
-			// To start the shutdown timeout immediately, we start with a cancelled context already.
+			// ctx 用于等待控制器关闭并启动 RunControllers 的关闭超时；传入已取消上下文可立即触发超时。
 			ctx, cancelController := context.WithCancel(ctx)
 			cancelController()
 

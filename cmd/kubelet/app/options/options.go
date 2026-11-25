@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package options contains all of the primary arguments for a kubelet.
+// Package options 包含 Kubelet 的主要启动参数。
 package options
 
 import (
 	"fmt"
-	_ "net/http/pprof" // Enable pprof HTTP handlers.
+	_ "net/http/pprof" // 启用 pprof HTTP 处理器。
 	"path/filepath"
 	"strings"
 
@@ -44,96 +44,78 @@ import (
 const defaultRootDir = "/var/lib/kubelet"
 
 // KubeletFlags 保存节点级启动参数；与可共享的 KubeletConfiguration 区分，主要容纳不适合在节点间共享的本地信息。
-// A configuration field should go in KubeletFlags instead of KubeletConfiguration if any of these are true:
-//   - its value will never, or cannot safely be changed during the lifetime of a node, or
-//   - its value cannot be safely shared between nodes at the same time (e.g. a hostname);
-//     KubeletConfiguration is intended to be shared between nodes.
+// 满足以下任一条件的字段应放在 KubeletFlags，而不是 KubeletConfiguration：
+//   - 字段值在节点生命周期内不会改变，或不能安全改变；
+//   - 字段值不能同时在多个节点间安全共享，例如主机名。
 //
-// In general, please try to avoid adding flags or configuration fields,
-// we already have a confusingly large amount of them.
+// KubeletConfiguration 用于节点间共享。新增参数或配置字段前应尽量避免进一步扩大配置面。
 type KubeletFlags struct {
-	KubeConfig          string
+	// KubeConfig 指向 API Server 连接的 kubeconfig；为空时 Kubelet 以独立模式运行。
+	KubeConfig string
+	// BootstrapKubeconfig 指向首次申请客户端证书时使用的引导凭据。
 	BootstrapKubeconfig string
 
-	// HostnameOverride is the hostname used to identify the kubelet instead
-	// of the actual hostname.
+	// HostnameOverride 是用于标识 Kubelet 的主机名，优先于实际主机名。
 	HostnameOverride string
-	// NodeIP is IP address of the node.
-	// If set, kubelet will use this IP address for the node.
+	// NodeIP 是节点使用的 IP 地址；设置后 Kubelet 用它注册节点。
 	NodeIP string
 
-	// Container-runtime-specific options.
+	// ContainerRuntimeOptions 保存容器运行时和镜像凭据提供程序的本地设置。
 	kubeletconfig.ContainerRuntimeOptions
 
-	// certDirectory is the directory where the TLS certs are located.
-	// If tlsCertFile and tlsPrivateKeyFile are provided, this flag will be ignored.
+	// CertDirectory 是 TLS 证书目录；同时指定 tlsCertFile 和 tlsPrivateKeyFile 时忽略此设置。
 	CertDirectory string
 
-	// cloudProvider is the provider for cloud services.
+	// CloudProvider 是云服务提供程序名称。
 	// +optional
 	CloudProvider string
 
-	// cloudConfigFile is the path to the cloud provider configuration file.
+	// CloudConfigFile 是云服务提供程序配置文件路径。
 	// +optional
 	CloudConfigFile string
 
-	// rootDirectory is the directory path to place kubelet files (volume
-	// mounts,etc).
+	// RootDirectory 是 Kubelet 存放卷挂载等本地文件的目录。
 	RootDirectory string
 
-	// The Kubelet will load its initial configuration from this file.
-	// The path may be absolute or relative; relative paths are under the Kubelet's current working directory.
-	// Omit this flag to use the combination of built-in default configuration values and flags.
+	// KubeletConfigFile 指向 Kubelet 的初始配置文件。
+	// 路径可为绝对路径或相对于 Kubelet 当前工作目录的路径；省略时使用内置默认值和参数。
 	KubeletConfigFile string
 
-	// KubeletDropinConfigDirectory is the path to a directory containing drop-in configuration files that override settings from defaults and the --config file.
-	// The path may be absolute or relative; relative paths are under the Kubelet's current working directory.
-	// Drop-in files must have a '.conf' suffix and are processed in lexical order. Only '.conf' files are loaded; all other files are ignored.
-	// All .conf files in the directory and its subdirectories are processed in lexical order.
+	// KubeletDropinConfigDirectory 指向覆盖默认值及 --config 配置的 Drop-in 文件目录。
+	// 相对路径以 Kubelet 当前工作目录为基准。目录及子目录中的 .conf 文件按字典序合并，其他文件忽略。
 	KubeletDropinConfigDirectory string
 
-	// WindowsService should be set to true if kubelet is running as a service on Windows.
-	// Its corresponding flag only gets registered in Windows builds.
+	// WindowsService 表示 Kubelet 是否作为 Windows 服务运行；对应参数仅在 Windows 构建中注册。
 	WindowsService bool
 
-	// WindowsPriorityClass sets the priority class associated with the Kubelet process
-	// Its corresponding flag only gets registered in Windows builds
-	// The default priority class associated with any process in Windows is NORMAL_PRIORITY_CLASS. Keeping it as is
-	// to maintain backwards compatibility.
+	// WindowsPriorityClass 设置 Kubelet 进程的 Windows 优先级类别；对应参数仅在 Windows 构建中注册。
+	// 默认使用 NORMAL_PRIORITY_CLASS 以保持兼容。
 	// Source: https://docs.microsoft.com/en-us/windows/win32/procthread/scheduling-priorities
 	WindowsPriorityClass string
 
-	// experimentalMounterPath is the path of mounter binary. Leave empty to use the default mount path
+	// ExperimentalMounterPath 是 mounter 二进制路径；为空时使用默认挂载程序。
 	ExperimentalMounterPath string
-	// This flag, if set, will avoid including `EvictionHard` limits while computing Node Allocatable.
-	// Refer to [Node Allocatable](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable) doc for more information.
+	// ExperimentalNodeAllocatableIgnoreEvictionThreshold 控制计算 Node Allocatable 时是否忽略 EvictionHard 限制。
+	// 参见 [Node Allocatable](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable)。
 	ExperimentalNodeAllocatableIgnoreEvictionThreshold bool
-	// Node Labels are the node labels to add when registering the node in the cluster
+	// NodeLabels 是注册节点时添加的标签。
 	NodeLabels map[string]string
-	// lockFilePath is the path that kubelet will use to as a lock file.
-	// It uses this file as a lock to synchronize with other kubelet processes
-	// that may be running.
+	// LockFilePath 是 Kubelet 用于互斥的锁文件路径，防止同一节点并发运行多个进程。
 	LockFilePath string
-	// ExitOnLockContention is a flag that signifies to the kubelet that it is running
-	// in "bootstrap" mode. This requires that 'LockFilePath' has been set.
-	// This will cause the kubelet to listen to inotify events on the lock file,
-	// releasing it and exiting when another process tries to open that file.
+	// ExitOnLockContention 表示 Kubelet 处于引导模式；要求已设置 LockFilePath。
+	// 启用后监听锁文件的 inotify 事件，并在其他进程尝试打开锁文件时释放锁并退出。
 	ExitOnLockContention bool
-	// DEPRECATED FLAGS
-	// minimumGCAge is the minimum age for a finished container before it is
-	// garbage collected.
+	// 已弃用参数。
+	// MinimumGCAge 是已结束容器被垃圾回收前的最小保留时间。
 	MinimumGCAge metav1.Duration
-	// maxPerPodContainerCount is the maximum number of old instances to
-	// retain per container. Each container takes up some disk space.
+	// MaxPerPodContainerCount 是每个容器保留的旧实例上限；保留实例会占用磁盘空间。
 	MaxPerPodContainerCount int32
-	// maxContainerCount is the maximum number of old instances of containers
-	// to retain globally. Each container takes up some disk space.
+	// MaxContainerCount 是全局保留的旧容器实例上限；保留实例会占用磁盘空间。
 	MaxContainerCount int32
-	// SeccompDefault enables the use of `RuntimeDefault` as the default seccomp profile for all workloads on the node.
+	// SeccompDefault 对节点上的所有工作负载启用 RuntimeDefault 作为默认 seccomp 配置。
 	SeccompDefault bool
 }
 
-// NewKubeletFlags will create a new KubeletFlags with default values
 // NewKubeletFlags 创建 Kubelet 命令行参数的本地默认值。
 func NewKubeletFlags() *KubeletFlags {
 	return &KubeletFlags{
@@ -147,7 +129,6 @@ func NewKubeletFlags() *KubeletFlags {
 	}
 }
 
-// ValidateKubeletFlags validates Kubelet's configuration flags and returns an error if they are invalid.
 // ValidateKubeletFlags 校验节点级参数，当前重点检查 --node-labels 的命名空间和键值格式。
 func ValidateKubeletFlags(f *KubeletFlags) error {
 	unknownLabels := sets.NewString()
@@ -195,7 +176,6 @@ func getLabelNamespace(key string) string {
 	return ""
 }
 
-// NewKubeletConfiguration will create a new KubeletConfiguration with default values
 // NewKubeletConfiguration 通过版本化 v1beta1 Scheme 生成默认值，再转换为内部配置类型。
 func NewKubeletConfiguration() (*kubeletconfigapi.KubeletConfiguration, error) {
 	scheme, _, err := kubeletscheme.NewSchemeAndCodecs()
@@ -213,10 +193,8 @@ func NewKubeletConfiguration() (*kubeletconfigapi.KubeletConfiguration, error) {
 	return config, nil
 }
 
-// applyLegacyDefaults applies legacy default values to the KubeletConfiguration in order to
-// preserve the command line API. This is used to construct the baseline default KubeletConfiguration
-// before the first round of flag parsing.
 // applyLegacyDefaults 补齐历史命令行 API 的默认语义，确保新配置体系升级时保持兼容。
+// 这些值用于首轮参数解析前的基线配置。
 func applyLegacyDefaults(kc *kubeletconfigapi.KubeletConfiguration) {
 	// --anonymous-auth
 	kc.Authentication.Anonymous.Enabled = true
@@ -229,13 +207,12 @@ func applyLegacyDefaults(kc *kubeletconfigapi.KubeletConfiguration) {
 }
 
 // KubeletServer 将节点本地启动参数与可版本化的组件配置合并为最终服务配置。
-// a kubelet. These can either be set via command line or directly.
+// 两种配置均可通过命令行参数或直接赋值设置。
 type KubeletServer struct {
 	KubeletFlags
 	kubeletconfigapi.KubeletConfiguration
 }
 
-// NewKubeletServer will create a new KubeletServer with default values.
 // NewKubeletServer 创建带默认值的 KubeletServer，是程序化启动 Kubelet 的默认配置入口。
 func NewKubeletServer() (*KubeletServer, error) {
 	config, err := NewKubeletConfiguration()
@@ -248,10 +225,9 @@ func NewKubeletServer() (*KubeletServer, error) {
 	}, nil
 }
 
-// ValidateKubeletServer validates configuration of KubeletServer and returns an error if the input configuration is invalid.
 // ValidateKubeletServer 依次校验组件配置与节点级 Flag；组件字段规则集中在专用 validation 包中。
 func ValidateKubeletServer(s *KubeletServer) error {
-	// please add any KubeletConfiguration validation to the kubeletconfigvalidation.ValidateKubeletConfiguration function
+	// 新增 KubeletConfiguration 校验规则时应放入 kubeletconfigvalidation.ValidateKubeletConfiguration。
 	if err := kubeletconfigvalidation.ValidateKubeletConfiguration(&s.KubeletConfiguration, utilfeature.DefaultFeatureGate); err != nil {
 		return err
 	}
@@ -261,20 +237,18 @@ func ValidateKubeletServer(s *KubeletServer) error {
 	return nil
 }
 
-// AddFlags adds flags for a specific KubeletServer to the specified FlagSet
+// AddFlags 将节点级参数和 KubeletConfiguration 参数注册到指定 FlagSet。
 func (s *KubeletServer) AddFlags(fs *pflag.FlagSet) {
 	s.KubeletFlags.AddFlags(fs)
 	AddKubeletConfigFlags(fs, &s.KubeletConfiguration)
 }
 
-// AddFlags adds flags for a specific KubeletFlags to the specified FlagSet
 // AddFlags 注册节点本地参数，并在最后统一合并到调用方传入的 FlagSet。
 func (f *KubeletFlags) AddFlags(mainfs *pflag.FlagSet) {
 	fs := pflag.NewFlagSet("", pflag.ExitOnError)
 	defer func() {
-		// Unhide deprecated flags. We want deprecated flags to show in Kubelet help.
-		// We have some hidden flags, but we might as well unhide these when they are deprecated,
-		// as silently deprecating and removing (even hidden) things is unkind to people who use them.
+		// 弃用参数仍在帮助信息中展示，避免用户在不知情的情况下失去迁移线索。
+		// 这些参数原本可能被隐藏；直接静默删除即使不影响功能，也会破坏使用者的升级预期。
 		fs.VisitAll(func(f *pflag.Flag) {
 			if len(f.Deprecated) > 0 {
 				f.Hidden = false
@@ -310,11 +284,11 @@ func (f *KubeletFlags) AddFlags(mainfs *pflag.FlagSet) {
 	bindableNodeLabels := cliflag.ConfigurationMap(f.NodeLabels)
 	fs.Var(&bindableNodeLabels, "node-labels", fmt.Sprintf("Labels to add when registering the node in the cluster.  Labels must be key=value pairs separated by ','. Labels in the 'kubernetes.io' namespace must begin with an allowed prefix (%s) or be in the specifically allowed set (%s)", strings.Join(kubeletapis.KubeletLabelNamespaces(), ", "), strings.Join(kubeletapis.KubeletLabels(), ", ")))
 
-	// EXPERIMENTAL FLAGS
+	// 实验性参数。
 	fs.StringVar(&f.LockFilePath, "lock-file", f.LockFilePath, "<Warning: Alpha feature> The path to file for kubelet to use as a lock file.")
 	fs.BoolVar(&f.ExitOnLockContention, "exit-on-lock-contention", f.ExitOnLockContention, "Whether kubelet should exit upon lock-file contention.")
 
-	// DEPRECATED FLAGS
+	// 已弃用参数。
 	fs.DurationVar(&f.MinimumGCAge.Duration, "minimum-container-ttl-duration", f.MinimumGCAge.Duration, "Minimum age for a finished container before it is garbage collected.  Examples: '300ms', '10s' or '2h45m'")
 	fs.MarkDeprecated("minimum-container-ttl-duration", "Use --eviction-hard or --eviction-soft instead. Will be removed in a future version.")
 	fs.Int32Var(&f.MaxPerPodContainerCount, "maximum-dead-containers-per-container", f.MaxPerPodContainerCount, "Maximum number of old instances to retain per container.  Each container takes up some disk space.")
@@ -327,32 +301,26 @@ func (f *KubeletFlags) AddFlags(mainfs *pflag.FlagSet) {
 	fs.MarkDeprecated("experimental-allocatable-ignore-eviction", "will be removed in 1.25 or later.")
 }
 
-// addContainerRuntimeFlags adds flags to the container runtime, according to ContainerRuntimeOptions.
+// addContainerRuntimeFlags 根据 ContainerRuntimeOptions 注册容器运行时参数。
 func addContainerRuntimeFlags(fs *pflag.FlagSet, o *kubeletconfig.ContainerRuntimeOptions) {
-	// General settings.
+	// 常规设置。
 	fs.StringVar(&o.RuntimeCgroups, "runtime-cgroups", o.RuntimeCgroups, "Optional absolute name of cgroups to create and run the runtime in.")
 
-	// Image credential provider settings.
+	// 镜像凭据提供程序设置。
 	fs.StringVar(&o.ImageCredentialProviderConfigPath, "image-credential-provider-config", o.ImageCredentialProviderConfigPath, "Path to a credential provider plugin config file (JSON/YAML/YML) or a directory of such files (merged in lexicographical order; non-recursive search).")
 	fs.StringVar(&o.ImageCredentialProviderBinDir, "image-credential-provider-bin-dir", o.ImageCredentialProviderBinDir, "The path to the directory where credential provider plugin binaries are located.")
 }
 
-// AddKubeletConfigFlags adds flags for a specific kubeletconfig.KubeletConfiguration to the specified FlagSet
+// AddKubeletConfigFlags 将 KubeletConfiguration 参数注册到指定 FlagSet。
 func AddKubeletConfigFlags(mainfs *pflag.FlagSet, c *kubeletconfigapi.KubeletConfiguration) {
 	fs := pflag.NewFlagSet("", pflag.ExitOnError)
 	defer func() {
-		// All KubeletConfiguration flags are now deprecated, and any new flags that point to
-		// KubeletConfiguration fields are deprecated-on-creation. When removing flags at the end
-		// of their deprecation period, be careful to check that they have *actually* been deprecated
-		// members of the KubeletConfiguration for the entire deprecation period:
-		// e.g. if a flag was added after this deprecation function, it may not be at the end
-		// of its lifetime yet, even if the rest are.
+		// 指向 KubeletConfiguration 的参数均已弃用，新增参数从引入时即弃用。
+		// 删除参数前必须确认它已在整个弃用期内作为配置字段存在；后加入的参数可能尚未到期。
+		// 例如，若参数在弃用流程之后才添加，即使其他参数已到期，它也可能仍在有效期内。
 		deprecated := "This parameter should be set via the config file specified by the Kubelet's --config flag. See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for more information."
-		// Some flags are permanently (?) meant to be available. In
-		// Kubernetes 1.23, the following options were added to
-		// LoggingConfiguration (long-term goal, more complete
-		// configuration file) but deprecating the flags seemed
-		// premature.
+		// 部分参数拟长期保留。Kubernetes 1.23 将它们纳入 LoggingConfiguration，
+		// 但当时认为立即弃用对应 Flag 为时过早。
 		notDeprecated := map[string]bool{
 			"v":                   true,
 			"vmodule":             true,
@@ -383,11 +351,11 @@ func AddKubeletConfigFlags(mainfs *pflag.FlagSet, c *kubeletconfigapi.KubeletCon
 	fs.Int32Var(&c.ReadOnlyPort, "read-only-port", c.ReadOnlyPort, "The read-only port for the Kubelet to serve on with no authentication/authorization (set to 0 to disable)")
 	fs.BoolVar(&c.FailCgroupV1, "fail-cgroupv1", c.FailCgroupV1, "Prevent the kubelet from starting on the host using cgroup v1.")
 
-	// runtime flags
+	// 运行时参数。
 	fs.StringVar(&c.ContainerRuntimeEndpoint, "container-runtime-endpoint", c.ContainerRuntimeEndpoint, "The endpoint of container runtime service. Unix Domain Sockets are supported on Linux, while npipe and tcp endpoints are supported on Windows. Examples:'unix:///path/to/runtime.sock', 'npipe:////./pipe/runtime'")
 	fs.StringVar(&c.ImageServiceEndpoint, "image-service-endpoint", c.ImageServiceEndpoint, "The endpoint of container image service. If not specified, it will be the same with --container-runtime-endpoint by default. Unix Domain Socket are supported on Linux, while npipe and tcp endpoints are supported on Windows. Examples:'unix:///path/to/runtime.sock', 'npipe:////./pipe/runtime'")
 
-	// Authentication
+	// 认证。
 	fs.BoolVar(&c.Authentication.Anonymous.Enabled, "anonymous-auth", c.Authentication.Anonymous.Enabled, ""+
 		"Enables anonymous requests to the Kubelet server. Requests that are not rejected by another "+
 		"authentication method are treated as anonymous requests. Anonymous requests have a username "+
@@ -400,7 +368,7 @@ func AddKubeletConfigFlags(mainfs *pflag.FlagSet, c *kubeletconfigapi.KubeletCon
 		"If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file "+
 		"is authenticated with an identity corresponding to the CommonName of the client certificate.")
 
-	// Authorization
+	// 授权。
 	fs.StringVar((*string)(&c.Authorization.Mode), "authorization-mode", string(c.Authorization.Mode), ""+
 		"Authorization mode for Kubelet server. Valid options are AlwaysAllow or Webhook. "+
 		"Webhook mode uses the SubjectAccessReview API to determine authorization.")
@@ -488,7 +456,7 @@ func AddKubeletConfigFlags(mainfs *pflag.FlagSet, c *kubeletconfigapi.KubeletCon
 	fs.BoolVar(&c.KernelMemcgNotification, "kernel-memcg-notification", c.KernelMemcgNotification, "If enabled, the kubelet will integrate with the kernel memcg notification to determine if memory eviction thresholds are crossed rather than polling.")
 	fs.BoolVar(&c.LocalStorageCapacityIsolation, "local-storage-capacity-isolation", c.LocalStorageCapacityIsolation, "If true, local ephemeral storage isolation is enabled. Otherwise, local storage isolation feature will be disabled")
 
-	// Flags intended for testing, not recommended used in production environments.
+	// 仅供测试使用，不建议在生产环境启用。
 	fs.Int64Var(&c.MaxOpenFiles, "max-open-files", c.MaxOpenFiles, "Number of files that can be opened by Kubelet process.")
 
 	fs.StringVar(&c.ContentType, "kube-api-content-type", c.ContentType, "Content type of requests sent to apiserver.")
@@ -507,7 +475,7 @@ func AddKubeletConfigFlags(mainfs *pflag.FlagSet, c *kubeletconfigapi.KubeletCon
 	fs.StringVar(&c.ReservedSystemCPUs, "reserved-cpus", c.ReservedSystemCPUs, "A comma-separated list of CPUs or CPU ranges that are reserved for system and kubernetes usage. This specific list will supersede cpu counts in --system-reserved and --kube-reserved.")
 	fs.StringVar(&c.TopologyManagerScope, "topology-manager-scope", c.TopologyManagerScope, "Scope to which topology hints applied. Topology Manager collects hints from Hint Providers and applies them to defined scope to ensure the pod admission. Possible values: 'container', 'pod'.")
 	fs.Var(cliflag.NewMapStringString(&c.TopologyManagerPolicyOptions), "topology-manager-policy-options", "A set of key=value Topology Manager policy options to use, to fine tune their behaviour. If not supplied, keep the default behaviour.")
-	// Node Allocatable Flags
+	// Node Allocatable 参数。
 	fs.Var(cliflag.NewMapStringString(&c.SystemReserved), "system-reserved", "A set of ResourceName=ResourceQuantity (e.g. cpu=200m,memory=500Mi,ephemeral-storage=1Gi,pid=1000) pairs that describe resources reserved for non-kubernetes components. Currently only cpu, memory, pid and local ephemeral storage for root file system are supported. See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ for more detail. [default=none]")
 	fs.Var(cliflag.NewMapStringString(&c.KubeReserved), "kube-reserved", "A set of ResourceName=ResourceQuantity (e.g. cpu=200m,memory=500Mi,ephemeral-storage=1Gi,pid=1000) pairs that describe resources reserved for kubernetes system components. Currently only cpu, memory, pid and local ephemeral storage for root file system are supported. See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/ for more detail. [default=none]")
 	fs.StringSliceVar(&c.EnforceNodeAllocatable, "enforce-node-allocatable", c.EnforceNodeAllocatable, "A comma separated list of levels of node allocatable enforcement to be enforced by kubelet. Acceptable options are 'none', 'pods', 'system-reserved', 'system-reserved-compressible', 'kube-reserved' and 'kube-reserved-compressible'. If any of the latter four options are specified, '--system-reserved-cgroup' and '--kube-reserved-cgroup' must also be set, respectively. If 'none' is specified, no additional options should be set. See https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/ for more details.")
@@ -515,7 +483,7 @@ func AddKubeletConfigFlags(mainfs *pflag.FlagSet, c *kubeletconfigapi.KubeletCon
 	fs.StringVar(&c.KubeReservedCgroup, "kube-reserved-cgroup", c.KubeReservedCgroup, "Absolute name of the top level cgroup that is used to manage kubernetes components for which compute resources were reserved via '--kube-reserved' flag. Ex. '/kube-reserved'. [default='']")
 	logsapi.AddFlags(&c.Logging, fs)
 
-	// Memory Manager Flags
+	// Memory Manager 参数。
 	fs.StringVar(&c.MemoryManagerPolicy, "memory-manager-policy", c.MemoryManagerPolicy, "Memory Manager policy to use. Possible values: 'None', 'Static'.")
 	fs.Var(&utilflag.ReservedMemoryVar{Value: &c.ReservedMemory}, "reserved-memory", "A comma separated list of memory reservations for NUMA nodes. (e.g. --reserved-memory 0:memory=1Gi,hugepages-1M=2Gi --reserved-memory 1:memory=2Gi). The total sum for each memory type should be equal to the sum of kube-reserved, system-reserved and eviction-threshold. See https://kubernetes.io/docs/tasks/administer-cluster/memory-manager/#reserved-memory-flag for more details.")
 

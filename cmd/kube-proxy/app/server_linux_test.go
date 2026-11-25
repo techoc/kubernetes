@@ -34,6 +34,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// Test_platformApplyDefaults 验证 Linux 默认值只填补未设置字段，不覆盖显式配置。
 func Test_platformApplyDefaults(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -97,6 +98,7 @@ func Test_platformApplyDefaults(t *testing.T) {
 	}
 }
 
+// Test_getLocalDetectors 覆盖各本地流量检测模式、协议族缺失与未知模式回退。
 func Test_getLocalDetectors(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -105,7 +107,7 @@ func Test_getLocalDetectors(t *testing.T) {
 		nodePodCIDRs    []string
 		expected        map[v1.IPFamily]proxyutil.LocalTrafficDetector
 	}{
-		// LocalModeClusterCIDR
+		// LocalModeClusterCIDR 模式。
 		{
 			name: "LocalModeClusterCIDR, single-stack IPv4 cluster",
 			config: &kubeproxyconfig.KubeProxyConfiguration{
@@ -143,8 +145,7 @@ func Test_getLocalDetectors(t *testing.T) {
 				},
 			},
 			primaryIPFamily: v1.IPv6Protocol,
-			// This will output a warning that there is no IPv6 CIDR but it
-			// will still use the provided IPv4 CIDR for IPv4.
+			// 缺少 IPv6 CIDR 会记录警告，IPv4 仍使用给定 CIDR。
 			expected: map[v1.IPFamily]proxyutil.LocalTrafficDetector{
 				v1.IPv4Protocol: proxyutil.NewDetectLocalByCIDR("10.0.0.0/14"),
 				v1.IPv6Protocol: proxyutil.NewNoOpLocalDetector(),
@@ -159,8 +160,7 @@ func Test_getLocalDetectors(t *testing.T) {
 				},
 			},
 			primaryIPFamily: v1.IPv4Protocol,
-			// This will output a warning that there is no IPv4 CIDR but it
-			// will still use the provided IPv6 CIDR for IPv6.
+			// 缺少 IPv4 CIDR 会记录警告，IPv6 仍使用给定 CIDR。
 			expected: map[v1.IPFamily]proxyutil.LocalTrafficDetector{
 				v1.IPv4Protocol: proxyutil.NewNoOpLocalDetector(),
 				v1.IPv6Protocol: proxyutil.NewDetectLocalByCIDR("2002:0:0:1234::/64"),
@@ -222,7 +222,7 @@ func Test_getLocalDetectors(t *testing.T) {
 				v1.IPv6Protocol: proxyutil.NewNoOpLocalDetector(),
 			},
 		},
-		// LocalModeNodeCIDR
+		// LocalModeNodeCIDR 模式。
 		{
 			name: "LocalModeNodeCIDR, single-stack IPv4 cluster",
 			config: &kubeproxyconfig.KubeProxyConfiguration{
@@ -263,8 +263,7 @@ func Test_getLocalDetectors(t *testing.T) {
 			},
 			primaryIPFamily: v1.IPv6Protocol,
 			nodePodCIDRs:    []string{"10.0.0.0/24"},
-			// This will output a warning that there is no IPv6 CIDR but it
-			// will still use the provided IPv4 CIDR for IPv4.
+			// 缺少 IPv6 CIDR 会记录警告，IPv4 仍使用给定 CIDR。
 			expected: map[v1.IPFamily]proxyutil.LocalTrafficDetector{
 				v1.IPv4Protocol: proxyutil.NewDetectLocalByCIDR("10.0.0.0/24"),
 				v1.IPv6Protocol: proxyutil.NewNoOpLocalDetector(),
@@ -280,8 +279,7 @@ func Test_getLocalDetectors(t *testing.T) {
 			},
 			primaryIPFamily: v1.IPv4Protocol,
 			nodePodCIDRs:    []string{"2002::1234:abcd:ffff:0:0/96"},
-			// This will output a warning that there is no IPv4 CIDR but it
-			// will still use the provided IPv6 CIDR for IPv6.
+			// 缺少 IPv4 CIDR 会记录警告，IPv6 仍使用给定 CIDR。
 			expected: map[v1.IPFamily]proxyutil.LocalTrafficDetector{
 				v1.IPv4Protocol: proxyutil.NewNoOpLocalDetector(),
 				v1.IPv6Protocol: proxyutil.NewDetectLocalByCIDR("2002::1234:abcd:ffff:0:0/96"),
@@ -347,7 +345,7 @@ func Test_getLocalDetectors(t *testing.T) {
 				v1.IPv6Protocol: proxyutil.NewNoOpLocalDetector(),
 			},
 		},
-		// unknown mode
+		// 未知模式应回退到无操作检测器。
 		{
 			name: "unknown LocalMode",
 			config: &kubeproxyconfig.KubeProxyConfiguration{
@@ -362,7 +360,7 @@ func Test_getLocalDetectors(t *testing.T) {
 				v1.IPv6Protocol: proxyutil.NewNoOpLocalDetector(),
 			},
 		},
-		// LocalModeBridgeInterface
+		// LocalModeBridgeInterface 模式。
 		{
 			name: "LocalModeBridgeInterface",
 			config: &kubeproxyconfig.KubeProxyConfiguration{
@@ -391,7 +389,7 @@ func Test_getLocalDetectors(t *testing.T) {
 				v1.IPv6Protocol: proxyutil.NewDetectLocalByBridgeInterface("1234567890123456789"),
 			},
 		},
-		// LocalModeInterfaceNamePrefix
+		// LocalModeInterfaceNamePrefix 模式。
 		{
 			name: "LocalModeInterfaceNamePrefix",
 			config: &kubeproxyconfig.KubeProxyConfiguration{
@@ -432,6 +430,7 @@ func Test_getLocalDetectors(t *testing.T) {
 	}
 }
 
+// TestConfigChange 验证配置文件更新或代理运行失败都会及时终止 runLoop。
 func TestConfigChange(t *testing.T) {
 	setUp := func() (*os.File, string, error) {
 		tempDir, err := os.MkdirTemp("", "kubeproxy-config-change")

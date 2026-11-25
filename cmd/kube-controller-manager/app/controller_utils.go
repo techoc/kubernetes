@@ -21,8 +21,7 @@ import (
 	"sync"
 )
 
-// This file contains utility functions for implementing controller wrappers,
-// i.e. turning whatever logic into a Controller.
+// 本文件提供将控制器运行逻辑包装为 Controller 的工具函数。
 
 type runFunc func(ctx context.Context)
 
@@ -40,12 +39,12 @@ func (rx runFuncSlice) Run(ctx context.Context) {
 	wg.Wait()
 }
 
-// concurrentRun returns a runFunc that wraps the given functions to run concurrently.
+// concurrentRun 将给定函数包装为并发执行且等待全部完成的 runFunc。
 func concurrentRun(rx ...runFunc) runFunc {
 	return runFuncSlice(rx).Run
 }
 
-// controllerLoop implements the Controller interface. It makes it easy to turn a function into a Controller.
+// controllerLoop 实现 Controller 接口，将单个运行函数适配为控制器。
 type controllerLoop struct {
 	name string
 	run  runFunc
@@ -58,10 +57,12 @@ func newControllerLoop(run runFunc, controllerName string) *controllerLoop {
 	}
 }
 
+// Name 返回包装器关联的规范控制器名称。
 func (loop *controllerLoop) Name() string {
 	return loop.name
 }
 
+// Run 委托给底层运行函数，由调用方保证其阻塞至工作完成或上下文取消。
 func (loop *controllerLoop) Run(ctx context.Context) {
 	loop.run(ctx)
 }

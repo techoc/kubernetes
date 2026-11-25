@@ -22,12 +22,12 @@ import (
 	serviceaccountconfig "k8s.io/kubernetes/pkg/controller/serviceaccount/config"
 )
 
-// SAControllerOptions holds the ServiceAccountController options.
+// SAControllerOptions 保存服务账号控制器的选项。
 type SAControllerOptions struct {
 	*serviceaccountconfig.SAControllerConfiguration
 }
 
-// AddFlags adds flags related to ServiceAccountController for controller manager to the specified FlagSet
+// AddFlags 将服务账号控制器相关参数注册到指定 FlagSet。
 func (o *SAControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -38,7 +38,7 @@ func (o *SAControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.RootCAFile, "root-ca-file", o.RootCAFile, "If set, this root certificate authority will be included in service account's token secret. This must be a valid PEM-encoded CA bundle.")
 }
 
-// ApplyTo fills up ServiceAccountController config with options.
+// ApplyTo 将选项写入服务账号控制器配置。
 func (o *SAControllerOptions) ApplyTo(cfg *serviceaccountconfig.SAControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -51,7 +51,7 @@ func (o *SAControllerOptions) ApplyTo(cfg *serviceaccountconfig.SAControllerConf
 	return nil
 }
 
-// Validate checks validation of ServiceAccountControllerOptions.
+// Validate 校验服务账号控制器选项。
 func (o *SAControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

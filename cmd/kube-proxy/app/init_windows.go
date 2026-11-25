@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Windows 初始化入口，负责服务运行方式等平台设置。
 package app
 
 import (

@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// TestGetServiceIPAndRanges 覆盖默认网段、双栈顺序及非法网段的解析结果。
 func TestGetServiceIPAndRanges(t *testing.T) {
 	tests := []struct {
 		body                    string
@@ -31,31 +32,31 @@ func TestGetServiceIPAndRanges(t *testing.T) {
 		{"", "10.0.0.1", "10.0.0.0/24", "<nil>", false},
 		{"192.0.2.1/24", "192.0.2.1", "192.0.2.0/24", "<nil>", false},
 		{"192.0.2.1/24,192.168.128.0/17", "192.0.2.1", "192.0.2.0/24", "192.168.128.0/17", false},
-		// Dual stack IPv4/IPv6
+		// 双栈：IPv4 主网段、IPv6 备网段。
 		{"192.0.2.1/24,2001:db2:1:3:4::1/112", "192.0.2.1", "192.0.2.0/24", "2001:db2:1:3:4::/112", false},
-		// Dual stack IPv6/IPv4
+		// 双栈：IPv6 主网段、IPv4 备网段。
 		{"2001:db2:1:3:4::1/112,192.0.2.1/24", "2001:db2:1:3:4::1", "2001:db2:1:3:4::/112", "192.0.2.0/24", false},
 
 		{"192.0.2.1/30,192.168.128.0/17", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[0] IPv4 mask
+		// 主网段的 IPv4 掩码无效。
 		{"192.0.2.1/33,192.168.128.0/17", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[1] IPv4 mask
+		// 备网段的 IPv4 掩码无效。
 		{"192.0.2.1/24,192.168.128.0/33", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[0] IPv6 mask
+		// 主网段的 IPv6 掩码无效。
 		{"2001:db2:1:3:4::1/129,192.0.2.1/24", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[1] IPv6 mask
+		// 备网段的 IPv6 掩码无效。
 		{"192.0.2.1/24,2001:db2:1:3:4::1/129", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[0] missing IPv4 mask
+		// 主网段缺少 IPv4 掩码。
 		{"192.0.2.1,192.168.128.0/17", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[1] missing IPv4 mask
+		// 备网段缺少 IPv4 掩码。
 		{"192.0.2.1/24,192.168.128.1", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[0] missing IPv6 mask
+		// 主网段缺少 IPv6 掩码。
 		{"2001:db2:1:3:4::1,192.0.2.1/24", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[1] missing IPv6 mask
+		// 备网段缺少 IPv6 掩码。
 		{"192.0.2.1/24,2001:db2:1:3:4::1", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[0] IP address format
+		// 主网段的 IP 地址格式无效。
 		{"bad.ip.range,192.168.0.2/24", "<nil>", "<nil>", "<nil>", true},
-		// Invalid ip range[1] IP address format
+		// 备网段的 IP 地址格式无效。
 		{"192.168.0.2/24,bad.ip.range", "<nil>", "<nil>", "<nil>", true},
 	}
 

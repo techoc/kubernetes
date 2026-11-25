@@ -24,18 +24,16 @@ import (
 )
 
 // DeprecatedOptions 保存仍需兼容的旧命令行参数；新部署应优先使用 KubeSchedulerConfiguration。
-// TODO remove these fields once the deprecated flags are removed.
+// TODO: 废弃参数全部移除后删除这些字段。
 type DeprecatedOptions struct {
 	componentbaseconfig.DebuggingConfiguration
 	componentbaseconfig.ClientConnectionConfiguration
-	// PodMaxInUnschedulablePodsDuration is the maximum time a pod can stay in
-	// unschedulablePods. If a pod stays in unschedulablePods for longer than this
-	// value, the pod will be moved from unschedulablePods to backoffQ or activeQ.
-	// If this value is empty, the default value (5min) will be used.
+	// PodMaxInUnschedulablePodsDuration 限制 Pod 在 unschedulablePods 中的停留时间；
+	// 超时后移入 backoffQ 或 activeQ，零值使用默认的 5 分钟。
 	PodMaxInUnschedulablePodsDuration time.Duration
 }
 
-// AddFlags adds flags for the deprecated options.
+// AddFlags 将废弃参数注册到指定 FlagSet；nil 接收者表示未启用该兼容容器。
 func (o *DeprecatedOptions) AddFlags(fs *pflag.FlagSet) {
 	// 旧参数容器是可选依赖；未启用时不注册参数，避免对 nil 接收者解引用。
 	if o == nil {
@@ -51,6 +49,6 @@ func (o *DeprecatedOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.Burst, "kube-api-burst", 100, "DEPRECATED: burst to use while talking with kubernetes apiserver. This parameter is ignored if a config file is specified in --config.")
 	// 该参数是特定插件组合下 Pod 长时间停留在 unschedulablePods 队列的临时兼容开关。
 	// 超过设定时间后，队列会把 Pod 移入 backoffQ 或 activeQ，使其重新获得调度机会。
-	// TODO: remove this flag once https://github.com/kubernetes/kubernetes/issues/110175 is done.
+	// TODO: https://github.com/kubernetes/kubernetes/issues/110175 完成后移除此参数。
 	fs.DurationVar(&o.PodMaxInUnschedulablePodsDuration, "pod-max-in-unschedulable-pods-duration", 5*time.Minute, "DEPRECATED: the maximum time a pod can stay in unschedulablePods. If a pod stays in unschedulablePods for longer than this value, the pod will be moved from unschedulablePods to backoffQ or activeQ. This flag is deprecated and will be removed in a future version.")
 }

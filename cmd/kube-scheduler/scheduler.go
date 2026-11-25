@@ -20,9 +20,9 @@ import (
 	"os"
 
 	"k8s.io/component-base/cli"
-	_ "k8s.io/component-base/logs/json/register" // for JSON log format registration
+	_ "k8s.io/component-base/logs/json/register" // 注册 JSON 日志格式
 	_ "k8s.io/component-base/metrics/prometheus/clientgo"
-	_ "k8s.io/component-base/metrics/prometheus/version" // for version metric registration
+	_ "k8s.io/component-base/metrics/prometheus/version" // 注册版本指标
 	"k8s.io/kubernetes/cmd/kube-scheduler/app"
 )
 

@@ -22,20 +22,20 @@ import (
 	kubectrlmgrconfig "k8s.io/kubernetes/pkg/controller/apis/config"
 )
 
-// DeprecatedControllerOptions holds the DeprecatedController options, those option are deprecated.
-// TODO remove these fields once the deprecated flags are removed.
+// DeprecatedControllerOptions 保存已弃用的控制器选项。
+// TODO：移除这些已弃用参数时删除对应字段。
 type DeprecatedControllerOptions struct {
 	*kubectrlmgrconfig.DeprecatedControllerConfiguration
 }
 
-// AddFlags adds flags related to DeprecatedController for controller manager to the specified FlagSet.
+// AddFlags 将已弃用控制器相关参数注册到指定 FlagSet。
 func (o *DeprecatedControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
 	}
 }
 
-// ApplyTo fills up DeprecatedController config with options.
+// ApplyTo 将选项写入已弃用控制器配置。
 func (o *DeprecatedControllerOptions) ApplyTo(cfg *kubectrlmgrconfig.DeprecatedControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -44,7 +44,7 @@ func (o *DeprecatedControllerOptions) ApplyTo(cfg *kubectrlmgrconfig.DeprecatedC
 	return nil
 }
 
-// Validate checks validation of DeprecatedControllerOptions.
+// Validate 校验已弃用控制器选项。
 func (o *DeprecatedControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

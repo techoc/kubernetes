@@ -159,7 +159,7 @@ func TestClusterServiceIPRange(t *testing.T) {
 			expectErrors: true,
 			options:      makeOptionsWithCIDRs("10.0.0.0/16,244.0.0.0/16", "3000::/108"),
 		},
-		/* success cases */
+		/* 成功用例 */
 		{
 			name:         "valid primary",
 			expectErrors: false,
@@ -402,7 +402,7 @@ func makeOptionsWithPort(kubernetesServiceNodePort int, base int, size int) *Ser
 
 func TestValidateMaxCIDRRange(t *testing.T) {
 	testCases := []struct {
-		// tc.cidr, tc.maxCIDRBits, tc.cidrFlag) tc.expectedErrorMessage
+		// 校验网段、主机位上限、参数名与预期错误信息。
 		name                 string
 		cidr                 net.IPNet
 		maxCIDRBits          int

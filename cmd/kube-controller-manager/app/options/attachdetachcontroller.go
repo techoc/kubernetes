@@ -24,12 +24,12 @@ import (
 	attachdetachconfig "k8s.io/kubernetes/pkg/controller/volume/attachdetach/config"
 )
 
-// AttachDetachControllerOptions holds the AttachDetachController options.
+// AttachDetachControllerOptions 保存挂载/卸载控制器的选项。
 type AttachDetachControllerOptions struct {
 	*attachdetachconfig.AttachDetachControllerConfiguration
 }
 
-// AddFlags adds flags related to AttachDetachController for controller manager to the specified FlagSet.
+// AddFlags 将挂载/卸载控制器相关参数注册到指定 FlagSet。
 func (o *AttachDetachControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -40,7 +40,7 @@ func (o *AttachDetachControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&o.DisableForceDetachOnTimeout, "disable-force-detach-on-timeout", false, "Prevent force detaching volumes based on maximum unmount time and node status. If this flag is set to true, the non-graceful node shutdown feature must be used to recover from node failure. See https://k8s.io/docs/storage-disable-force-detach-on-timeout/.")
 }
 
-// ApplyTo fills up AttachDetachController config with options.
+// ApplyTo 将选项写入挂载/卸载控制器配置。
 func (o *AttachDetachControllerOptions) ApplyTo(cfg *attachdetachconfig.AttachDetachControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -53,7 +53,7 @@ func (o *AttachDetachControllerOptions) ApplyTo(cfg *attachdetachconfig.AttachDe
 	return nil
 }
 
-// Validate checks validation of AttachDetachControllerOptions.
+// Validate 校验挂载/卸载控制器选项。
 func (o *AttachDetachControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

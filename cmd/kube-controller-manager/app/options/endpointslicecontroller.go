@@ -31,12 +31,12 @@ const (
 	maxMaxEndpointsPerSlice           = 1000
 )
 
-// EndpointSliceControllerOptions holds the EndpointSliceController options.
+// EndpointSliceControllerOptions 保存 EndpointSlice 控制器的选项。
 type EndpointSliceControllerOptions struct {
 	*endpointsliceconfig.EndpointSliceControllerConfiguration
 }
 
-// AddFlags adds flags related to EndpointSliceController for controller manager to the specified FlagSet.
+// AddFlags 将 EndpointSlice 控制器相关参数注册到指定 FlagSet。
 func (o *EndpointSliceControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -47,7 +47,7 @@ func (o *EndpointSliceControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.EndpointUpdatesBatchPeriod.Duration, "endpointslice-updates-batch-period", o.EndpointUpdatesBatchPeriod.Duration, "The length of endpoint slice updates batching period. Processing of pod changes will be delayed by this duration to join them with potential upcoming updates and reduce the overall number of endpoints updates. Larger number = higher endpoint programming latency, but lower number of endpoints revision generated")
 }
 
-// ApplyTo fills up EndpointSliceController config with options.
+// ApplyTo 将选项写入 EndpointSlice 控制器配置。
 func (o *EndpointSliceControllerOptions) ApplyTo(cfg *endpointsliceconfig.EndpointSliceControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -60,7 +60,7 @@ func (o *EndpointSliceControllerOptions) ApplyTo(cfg *endpointsliceconfig.Endpoi
 	return nil
 }
 
-// Validate checks validation of EndpointSliceControllerOptions.
+// Validate 校验 EndpointSlice 控制器选项。
 func (o *EndpointSliceControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

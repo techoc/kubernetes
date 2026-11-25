@@ -22,12 +22,12 @@ import (
 	deploymentconfig "k8s.io/kubernetes/pkg/controller/deployment/config"
 )
 
-// DeploymentControllerOptions holds the DeploymentController options.
+// DeploymentControllerOptions 保存 Deployment 控制器的选项。
 type DeploymentControllerOptions struct {
 	*deploymentconfig.DeploymentControllerConfiguration
 }
 
-// AddFlags adds flags related to DeploymentController for controller manager to the specified FlagSet.
+// AddFlags 将 Deployment 控制器相关参数注册到指定 FlagSet。
 func (o *DeploymentControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -36,7 +36,7 @@ func (o *DeploymentControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentDeploymentSyncs, "concurrent-deployment-syncs", o.ConcurrentDeploymentSyncs, "The number of deployment objects that are allowed to sync concurrently. Larger number = more responsive deployments, but more CPU (and network) load")
 }
 
-// ApplyTo fills up DeploymentController config with options.
+// ApplyTo 将选项写入 Deployment 控制器配置。
 func (o *DeploymentControllerOptions) ApplyTo(cfg *deploymentconfig.DeploymentControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -47,7 +47,7 @@ func (o *DeploymentControllerOptions) ApplyTo(cfg *deploymentconfig.DeploymentCo
 	return nil
 }
 
-// Validate checks validation of DeploymentControllerOptions.
+// Validate 校验 Deployment 控制器选项。
 func (o *DeploymentControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

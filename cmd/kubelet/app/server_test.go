@@ -278,9 +278,9 @@ kind: KubeletConfiguration
 port: 0
 `,
 			overwrittenConfigFields: map[string]interface{}{
-				"ResolverConfig": "dropin1",    // overridden by dropin1
-				"Port":           int32(10250), // reset to 0 by dropin2, then re-defaulted
-				"ReadOnlyPort":   int32(234),   // preserved from original config
+				"ResolverConfig": "dropin1",    // 由 dropin1 覆盖。
+				"Port":           int32(10250), // 先由 dropin2 重置为 0，再恢复默认值。
+				"ReadOnlyPort":   int32(234),   // 保留原配置值。
 			},
 			name: "json conversion is correct",
 		},
@@ -351,8 +351,8 @@ readOnlyPort: 10255
 `,
 			},
 			overwrittenConfigFields: map[string]interface{}{
-				"Port":         int32(9090),  // Port should remain unchanged as .yaml file should be ignored
-				"ReadOnlyPort": int32(10255), // ReadOnlyPort should be set from .conf file
+				"Port":         int32(9090),  // 忽略 .yaml 文件，Port 应保持不变。
+				"ReadOnlyPort": int32(10255), // ReadOnlyPort 应由 .conf 文件设置。
 			},
 			expectedSkippedFiles: []string{"10-should-be-ignored.yaml", "20-should-be-ignored.txt"},
 		},
@@ -380,16 +380,16 @@ port: [this is not valid
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			// Prepare a temporary directory for testing
+			// 为测试准备临时目录。
 			tempDir := t.TempDir()
 
 			kubeletConfig := &kubeletconfiginternal.KubeletConfiguration{}
 			kubeletFlags := &options.KubeletFlags{}
 
 			if test.kubeletConfig != nil {
-				// Create the Kubeletconfig
+				// 创建 Kubelet 配置文件。
 				kubeletConfFile := filepath.Join(tempDir, "kubelet.conf")
-				yamlData, err := yaml.Marshal(test.kubeletConfig) // Convert struct to YAML
+				yamlData, err := yaml.Marshal(test.kubeletConfig) // 将结构体转换为 YAML。
 				require.NoError(t, err, "failed to convert kubelet config to YAML")
 				err = os.WriteFile(kubeletConfFile, yamlData, 0644)
 				require.NoError(t, err, "failed to create config from YAML data")
@@ -397,7 +397,7 @@ port: [this is not valid
 				kubeletConfig = test.kubeletConfig
 			}
 			if len(test.dropin1) > 0 || len(test.dropin2) > 0 || len(test.customDropins) > 0 {
-				// Create kubelet.conf.d directory and drop-in configuration files
+				// 创建 kubelet.conf.d 目录及 Drop-in 配置文件。
 				kubeletConfDir := filepath.Join(tempDir, "kubelet.conf.d")
 				err := os.Mkdir(kubeletConfDir, 0755)
 				require.NoError(t, err, "Failed to create kubelet.conf.d directory")
@@ -417,7 +417,7 @@ port: [this is not valid
 					require.NoError(t, err, "failed to create custom dropin file")
 				}
 
-				// Merge the kubelet configurations
+				// 合并 Kubelet 配置。
 				skippedFiles, err := mergeKubeletConfigurations(kubeletConfig, kubeletConfDir)
 				if test.expectMergeError == "" {
 					require.NoError(t, err, "failed to merge kubelet drop-in configs")
@@ -426,9 +426,9 @@ port: [this is not valid
 					require.ErrorContains(t, err, test.expectMergeError)
 				}
 
-				// Verify skipped files if expected
+				// 校验被跳过的文件。
 				if len(test.expectedSkippedFiles) > 0 {
-					// Extract just the filenames from the full paths
+					// 只提取文件名，忽略目录前缀。
 					var skippedFilenames []string
 					for _, path := range skippedFiles {
 						skippedFilenames = append(skippedFilenames, filepath.Base(path))
@@ -438,11 +438,11 @@ port: [this is not valid
 				}
 			}
 
-			// Use kubelet config flag precedence
+			// 命令行参数优先于配置文件。
 			err := kubeletConfigFlagPrecedence(kubeletConfig, test.cliArgs)
 			require.NoError(t, err, "failed to set the kubelet config flag precedence")
 
-			// Verify the merged configuration fields
+			// 校验合并后的配置字段。
 			for fieldName, expectedValue := range test.overwrittenConfigFields {
 				value := reflect.ValueOf(kubeletConfig).Elem()
 				field := value.FieldByName(fieldName)
@@ -457,7 +457,7 @@ func TestMergeKubeletConfigsWithSubdirs(t *testing.T) {
 	testCases := []struct {
 		name                    string
 		kubeletConfig           *kubeletconfiginternal.KubeletConfiguration
-		dropins                 map[string]string // map[relativePath]content
+		dropins                 map[string]string // 从相对路径到内容的映射。
 		overwrittenConfigFields map[string]interface{}
 	}{
 		{
@@ -531,10 +531,10 @@ readOnlyPort: 9999
 			err := os.Mkdir(kubeletConfDir, 0755)
 			require.NoError(t, err, "Failed to create kubelet.conf.d directory")
 
-			// Create drop-in files including those in subdirectories
+			// 创建目录及子目录中的 Drop-in 文件。
 			for relPath, content := range test.dropins {
 				fullPath := filepath.Join(kubeletConfDir, relPath)
-				// Create subdirectory if needed
+				// 按需创建子目录。
 				dir := filepath.Dir(fullPath)
 				if dir != kubeletConfDir {
 					err = os.MkdirAll(dir, 0755)
@@ -544,11 +544,11 @@ readOnlyPort: 9999
 				require.NoError(t, err, "Failed to create drop-in file: "+relPath)
 			}
 
-			// Merge the kubelet configurations
+			// 合并 Kubelet 配置。
 			_, err = mergeKubeletConfigurations(test.kubeletConfig, kubeletConfDir)
 			require.NoError(t, err, "failed to merge kubelet drop-in configs")
 
-			// Verify the merged configuration fields
+			// 校验合并后的配置字段。
 			for fieldName, expectedValue := range test.overwrittenConfigFields {
 				value := reflect.ValueOf(test.kubeletConfig).Elem()
 				field := value.FieldByName(fieldName)
@@ -565,10 +565,10 @@ func TestMarshalKubeletConfigForLog(t *testing.T) {
 			Kind:       "KubeletConfiguration",
 			APIVersion: "kubelet.config.k8s.io/v1beta1",
 		},
-		// Non-default values that must round-trip into the marshaled output.
+		// 非默认值必须完整保留到序列化输出中。
 		FailSwapOn:   false,
 		EvictionHard: map[string]string{"memory.available": "200Mi"},
-		// Sensitive field that must be masked.
+		// 敏感字段必须脱敏。
 		StaticPodURLHeader: map[string][]string{
 			"Authorization": {"Bearer super-secret-token"},
 		},
@@ -577,18 +577,18 @@ func TestMarshalKubeletConfigForLog(t *testing.T) {
 	out, err := marshalKubeletConfigForLog(kc)
 	require.NoError(t, err)
 
-	// (2) The output carries the external GroupVersionKind, mirroring /configz.
+	// 输出使用与 /configz 相同的外部 GroupVersionKind。
 	require.Contains(t, out, "apiVersion: kubelet.config.k8s.io/v1beta1")
 	require.Contains(t, out, "kind: KubeletConfiguration")
 
-	// (1) Non-default effective values are present.
+	// 非默认的有效配置值必须存在。
 	require.Contains(t, out, "failSwapOn: false")
 	require.Contains(t, out, "memory.available: 200Mi")
 
-	// (3) Sensitive StaticPodURLHeader values are masked, never leaked.
+	// StaticPodURLHeader 的敏感值必须脱敏，不得泄露。
 	require.Contains(t, out, "<masked>")
 	require.NotContains(t, out, "super-secret-token")
 
-	// The helper must not mutate the caller's config when masking.
+	// 脱敏不得修改调用方传入的配置。
 	require.Equal(t, []string{"Bearer super-secret-token"}, kc.StaticPodURLHeader["Authorization"])
 }

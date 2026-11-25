@@ -24,12 +24,12 @@ import (
 	daemonconfig "k8s.io/kubernetes/pkg/controller/daemon/config"
 )
 
-// DaemonSetControllerOptions holds the DaemonSetController options.
+// DaemonSetControllerOptions 保存 DaemonSet 控制器的选项。
 type DaemonSetControllerOptions struct {
 	*daemonconfig.DaemonSetControllerConfiguration
 }
 
-// AddFlags adds flags related to DaemonSetController for controller manager to the specified FlagSet.
+// AddFlags 将 DaemonSet 控制器相关参数注册到指定 FlagSet。
 func (o *DaemonSetControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -38,7 +38,7 @@ func (o *DaemonSetControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentDaemonSetSyncs, "concurrent-daemonset-syncs", o.ConcurrentDaemonSetSyncs, "The number of daemonset objects that are allowed to sync concurrently. Larger number = more responsive daemonsets, but more CPU (and network) load")
 }
 
-// ApplyTo fills up DaemonSetController config with options.
+// ApplyTo 将选项写入 DaemonSet 控制器配置。
 func (o *DaemonSetControllerOptions) ApplyTo(cfg *daemonconfig.DaemonSetControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -49,7 +49,7 @@ func (o *DaemonSetControllerOptions) ApplyTo(cfg *daemonconfig.DaemonSetControll
 	return nil
 }
 
-// Validate checks validation of DaemonSetControllerOptions.
+// Validate 校验 DaemonSet 控制器选项。
 func (o *DaemonSetControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

@@ -55,7 +55,7 @@ func TestAuthzWebhookRequestEncoding(t *testing.T) {
 			name:                    "protobuf",
 			ContentType:             "application/vnd.kubernetes.protobuf",
 			ExpectContentType:       "application/vnd.kubernetes.protobuf",
-			ExpectRequestBodyPrefix: []byte("\x6b\x38\x73\x00"), // k8s protobuf magic number
+			ExpectRequestBodyPrefix: []byte("\x6b\x38\x73\x00"), // Kubernetes protobuf 魔数
 		},
 	}
 
@@ -139,7 +139,7 @@ func TestAuthnWebhookRequestEncoding(t *testing.T) {
 			name:                    "protobuf",
 			ContentType:             "application/vnd.kubernetes.protobuf",
 			ExpectContentType:       "application/vnd.kubernetes.protobuf",
-			ExpectRequestBodyPrefix: []byte("\x6b\x38\x73\x00"), // k8s protobuf magic number
+			ExpectRequestBodyPrefix: []byte("\x6b\x38\x73\x00"), // Kubernetes protobuf 魔数
 		},
 	}
 

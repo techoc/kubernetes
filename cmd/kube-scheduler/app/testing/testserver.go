@@ -41,32 +41,27 @@ import (
 )
 
 func init() {
-	// If instantiated more than once or together with other servers, the
-	// servers would try to modify the global logging state. This must get
-	// ignored during testing.
+	// 多个测试服务器会重复修改全局日志状态，测试期间忽略未变化的重复应用。
 	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 }
 
-// TearDownFunc is to be called to tear down a test server.
+// TearDownFunc 清理测试服务器及其后台资源，由调用方显式执行。
 type TearDownFunc func()
 
-// TestServer return values supplied by kube-test-ApiServer
+// TestServer 保存测试调度器的选项、运行配置和清理信息。
 type TestServer struct {
-	Options    *options.Options
+	// Options 保存本实例实际使用的启动选项。
+	Options *options.Options
+	// Config 保存运行配置，可用于继续创建测试所需的客户端或 Informer。
 	Config     *kubeschedulerconfig.Config
-	TearDownFn TearDownFunc // TearDown function
-	TmpDir     string       // Temp Dir used, by the apiserver
+	TearDownFn TearDownFunc // 清理函数
+	TmpDir     string       // 测试使用的临时目录
 }
 
 // StartTestServer 在测试中启动真实的 kube-scheduler 实例，并返回运行配置、临时目录和显式清理函数。
 // 启动成功以 /healthz 返回 200 为准，而不是仅以 Run goroutine 已创建为准。
 //
-// and location of the tmpdir are returned.
-//
-// Note: we return a tear-down func instead of a stop channel because the later will leak temporary
-//
-//	files that because Golang testing's call to os.Exit will not give a stop channel go routine
-//	enough time to remove temporary files.
+// 返回清理函数而非停止通道，因为 Go 测试结束时调用 os.Exit，不会给清理临时文件的 goroutine 留出执行时间。
 func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (result TestServer, err error) {
 	logger := klog.FromContext(ctx)
 	// 使用独立子 Context 管理测试实例；TearDown 取消它以通知服务和后台协程退出。
@@ -77,8 +72,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 		// 先取消运行上下文，再等待 Run goroutine 退出，避免测试结束后遗留后台任务或占用端口。
 		cancel()
 
-		// If the scheduler was started, let's wait for it to
-		// shutdown clearly.
+		// 调度器已启动时等待其彻底退出，避免后台任务残留。
 		if errCh != nil {
 			err, ok := <-errCh
 			if ok && err != nil {
@@ -118,8 +112,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 	if err := opts.ComponentGlobalsRegistry.Set(); err != nil {
 		return result, err
 	}
-	// If the local ComponentGlobalsRegistry is changed by the flags,
-	// we need to copy the new feature values back to the DefaultFeatureGate because most feature checks still use the DefaultFeatureGate.
+	// 命令行修改的是独立注册表；多数特性检查仍读取 DefaultFeatureGate，因此需同步版本相关开关。
 	if !featureGate.EmulationVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.EmulationVersion()) || !featureGate.MinCompatibilityVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.MinCompatibilityVersion()) {
 		featuregatetesting.SetFeatureGateVersionsDuringTest(t, utilfeature.DefaultMutableFeatureGate, effectiveVersion.EmulationVersion(), effectiveVersion.MinCompatibilityVersion())
 	}
@@ -165,15 +158,13 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 
 	// cc.KubeConfig 用于访问 Kubernetes API Server，并不是当前测试 Scheduler 的监听地址。
 	// 因此使用 Scheduler 自己的服务端证书创建本地 HTTPS 客户端。
-	// Cannot use cc.Kubeconfig since it is overwritten to point to kube-apiserver,
-	// build our own client instead.
 	serverCert, _ := cc.SecureServing.Cert.CurrentCertKeyContent()
 	clientConfig, err := cc.SecureServing.NewClientConfig(serverCert)
 	if err != nil {
 		return result, fmt.Errorf("getting secure serving rest config %w", err)
 	}
 
-	// The server cert only includes IPv4 localhost, not IPv6.
+	// 服务端证书只包含 IPv4 localhost，因此固定使用 127.0.0.1 校验主机名。
 	clientConfig.TLSClientConfig.ServerName = "127.0.0.1"
 	client, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
@@ -208,7 +199,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 	return result, nil
 }
 
-// StartTestServerOrDie calls StartTestServer panic if it does not succeed.
+// StartTestServerOrDie 启动测试服务器，失败时直接终止当前测试。
 func StartTestServerOrDie(t *testing.T, ctx context.Context, flags []string) *TestServer {
 	result, err := StartTestServer(t, ctx, flags)
 	if err != nil {
@@ -224,7 +215,6 @@ func createListenerOnFreePort() (net.Listener, int, error) {
 		return nil, 0, err
 	}
 
-	// get port
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		ln.Close()

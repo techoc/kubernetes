@@ -16,8 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app does all of the work necessary to configure and run a
-// Kubernetes app process.
+// Package app 负责 kube-proxy 的配置、启动与运行。
 package app
 
 import (
@@ -26,7 +25,7 @@ import (
 	"fmt"
 	"net"
 
-	// Enable pprof HTTP handlers.
+	// 导入以注册 pprof HTTP 处理器。
 	_ "net/http/pprof"
 
 	v1 "k8s.io/api/core/v1"
@@ -35,8 +34,7 @@ import (
 	"k8s.io/kubernetes/pkg/proxy/winkernel"
 )
 
-// platformApplyDefaults is called after parsing command-line flags and/or reading the
-// config file, to apply platform-specific default values to config.
+// platformApplyDefaults 在解析命令行参数或读取配置后应用 Windows 平台默认值。
 func (o *Options) platformApplyDefaults(config *kubeproxyconfig.KubeProxyConfiguration) {
 	if config.Mode == "" {
 		config.Mode = kubeproxyconfig.ProxyModeKernelspace
@@ -46,11 +44,9 @@ func (o *Options) platformApplyDefaults(config *kubeproxyconfig.KubeProxyConfigu
 	}
 }
 
-// platformSetup is called after setting up the ProxyServer, but before creating the
-// Proxier. It should fill in any platform-specific fields and perform other
-// platform-specific setup.
+// platformSetup 在创建 Proxier 前补齐平台字段并完成初始化。
 func (s *ProxyServer) platformSetup(ctx context.Context) error {
-	// Preserve backward-compatibility with the old secondary IP behavior
+	// 保留旧版次要 IP 行为，维持 Windows 单栈配置的兼容性。
 	if s.PrimaryIPFamily == v1.IPv4Protocol {
 		s.NodeIPs[v1.IPv6Protocol] = net.IPv6zero
 	} else {
@@ -59,17 +55,15 @@ func (s *ProxyServer) platformSetup(ctx context.Context) error {
 	return nil
 }
 
-// platformCheckSupported is called immediately before creating the Proxier, to check
-// what IP families are supported (and whether the configuration is usable at all).
+// platformCheckSupported 在创建 Proxier 前检查 Windows 内核代理及 IP 协议族是否可用。
 func (s *ProxyServer) platformCheckSupported(ctx context.Context) (ipv4Supported, ipv6Supported, dualStackSupported bool, err error) {
-	// Check if Kernel proxier can be used at all
+	// 先确认系统能够使用内核代理，再判断协议族能力。
 	_, err = winkernel.CanUseWinKernelProxier(winkernel.WindowsKernelCompatTester{})
 	if err != nil {
 		return false, false, false, err
 	}
 
-	// winkernel always supports both single-stack IPv4 and single-stack IPv6, but may
-	// not support dual-stack.
+	// IPv4 与 IPv6 单栈均受支持，双栈能力取决于系统与网络兼容性。
 	ipv4Supported = true
 	ipv6Supported = true
 
@@ -79,7 +73,8 @@ func (s *ProxyServer) platformCheckSupported(ctx context.Context) (ipv4Supported
 	return
 }
 
-// createProxier creates the proxy.Provider
+// createProxier 按双栈能力创建 Windows 内核代理提供器。
+// --init-only 在 Windows 上未实现，必须在创建前拒绝。
 func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig.KubeProxyConfiguration, dualStackMode, initOnly bool) (proxy.Provider, error) {
 	if initOnly {
 		return nil, fmt.Errorf("--init-only is not implemented on Windows")
@@ -113,7 +108,8 @@ func (s *ProxyServer) createProxier(ctx context.Context, config *kubeproxyconfig
 	return proxier, nil
 }
 
-// platformCleanup removes stale kube-proxy rules that can be safely removed.
+// platformCleanup 清理可安全移除的旧代理规则。
+// Windows 尚未实现 --cleanup-and-exit，显式请求时必须报错。
 func platformCleanup(ctx context.Context, mode kubeproxyconfig.ProxyMode, cleanupAndExit bool) error {
 	if cleanupAndExit {
 		return errors.New("--cleanup-and-exit is not implemented on Windows")

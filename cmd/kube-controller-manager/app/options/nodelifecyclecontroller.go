@@ -25,12 +25,12 @@ import (
 	nodelifecycleconfig "k8s.io/kubernetes/pkg/controller/nodelifecycle/config"
 )
 
-// NodeLifecycleControllerOptions holds the NodeLifecycleController options.
+// NodeLifecycleControllerOptions 保存节点生命周期控制器的选项。
 type NodeLifecycleControllerOptions struct {
 	*nodelifecycleconfig.NodeLifecycleControllerConfiguration
 }
 
-// AddFlags adds flags related to NodeLifecycleController for controller manager to the specified FlagSet.
+// AddFlags 将节点生命周期控制器相关参数注册到指定 FlagSet。
 func (o *NodeLifecycleControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -51,7 +51,7 @@ func (o *NodeLifecycleControllerOptions) AddFlags(fs *pflag.FlagSet) {
 		"The period for syncing NodeStatus in NodeLifecycleController.")
 }
 
-// ApplyTo fills up NodeLifecycleController config with options.
+// ApplyTo 将选项写入节点生命周期控制器配置。
 func (o *NodeLifecycleControllerOptions) ApplyTo(cfg *nodelifecycleconfig.NodeLifecycleControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -68,7 +68,7 @@ func (o *NodeLifecycleControllerOptions) ApplyTo(cfg *nodelifecycleconfig.NodeLi
 	return nil
 }
 
-// Validate checks validation of NodeLifecycleControllerOptions.
+// Validate 校验节点生命周期控制器选项。
 func (o *NodeLifecycleControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

@@ -32,14 +32,12 @@ const (
 	mirroringMaxMaxEndpointsPerSubset          = 1000
 )
 
-// EndpointSliceMirroringControllerOptions holds the
-// EndpointSliceMirroringController options.
+// EndpointSliceMirroringControllerOptions 保存 EndpointSlice 镜像控制器的选项。
 type EndpointSliceMirroringControllerOptions struct {
 	*endpointslicemirroringconfig.EndpointSliceMirroringControllerConfiguration
 }
 
-// AddFlags adds flags related to EndpointSliceMirroringController for
-// controller manager to the specified FlagSet.
+// AddFlags 将 EndpointSlice 镜像控制器相关参数注册到指定 FlagSet。
 func (o *EndpointSliceMirroringControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -50,7 +48,7 @@ func (o *EndpointSliceMirroringControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.MirroringEndpointUpdatesBatchPeriod.Duration, "mirroring-endpointslice-updates-batch-period", o.MirroringEndpointUpdatesBatchPeriod.Duration, fmt.Sprintf("The length of EndpointSlice updates batching period for %s. Processing of EndpointSlice changes will be delayed by this duration to join them with potential upcoming updates and reduce the overall number of EndpointSlice updates. Larger number = higher endpoint programming latency, but lower number of endpoints revision generated", names.EndpointSliceMirroringController))
 }
 
-// ApplyTo fills up EndpointSliceMirroringController config with options.
+// ApplyTo 将选项写入 EndpointSlice 镜像控制器配置。
 func (o *EndpointSliceMirroringControllerOptions) ApplyTo(cfg *endpointslicemirroringconfig.EndpointSliceMirroringControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -63,7 +61,7 @@ func (o *EndpointSliceMirroringControllerOptions) ApplyTo(cfg *endpointslicemirr
 	return nil
 }
 
-// Validate checks validation of EndpointSliceMirroringControllerOptions.
+// Validate 校验 EndpointSlice 镜像控制器选项。
 func (o *EndpointSliceMirroringControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

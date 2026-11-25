@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app implements a server that runs a set of active
-// components.  This includes replication controllers, service endpoints and
-// nodes.
+// Package app 实现控制器管理服务器，运行复制控制器、服务端点和节点等活跃组件。
 package app
 
 import (
@@ -97,15 +95,15 @@ func init() {
 }
 
 const (
-	// ControllerStartJitter is the Jitter used when starting controller managers
+	// ControllerStartJitter 是控制器启动时随机延迟的最大倍率。
 	ControllerStartJitter = 1.0
-	// ConfigzName is the name used for register kube-controller manager /configz, same with GroupName.
+	// ConfigzName 是控制器管理器在 /configz 注册的配置名称，与 GroupName 一致。
 	ConfigzName = "kubecontrollermanager.config.k8s.io"
-	// kubeControllerManager defines variable used internally when referring to cloud-controller-manager component
+	// kubeControllerManager 是内部使用的控制器管理器组件名称。
 	kubeControllerManager = "kube-controller-manager"
 )
 
-// NewControllerManagerCommand creates a *cobra.Command object with default parameters
+// NewControllerManagerCommand 创建采用默认配置的控制器管理器命令。
 func NewControllerManagerCommand() *cobra.Command {
 	s, err := options.NewKubeControllerManagerOptions()
 	if err != nil {
@@ -124,36 +122,31 @@ current state towards the desired state. Examples of controllers that ship with
 Kubernetes today are the replication controller, endpoints controller, namespace
 controller, and serviceaccounts controller.`,
 		PersistentPreRunE: func(*cobra.Command, []string) error {
-			// silence client-go warnings.
-			// kube-controller-manager generically watches APIs (including deprecated ones),
-			// and CI ensures it works properly against matching kube-apiserver versions.
+			// 管理器会监听包括已弃用版本在内的 API；CI 已验证匹配版本兼容性，因此屏蔽客户端警告。
 			restclient.SetDefaultWarningHandler(restclient.NoWarnings{})
-			// makes sure feature gates are set before RunE.
+			// 确保在 RunE 前应用特性门控。
 			return s.ComponentGlobalsRegistry.Set()
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			verflag.PrintAndExitIfRequested()
 
-			// Activate logging as soon as possible, after that
-			// show flags with the final logging configuration.
+			// 尽早应用日志配置，随后按最终配置打印参数。
 			if err := logsapi.ValidateAndApply(s.Logs, utilfeature.DefaultFeatureGate); err != nil {
 				return err
 			}
 			cliflag.PrintFlags(cmd.Flags())
 
-			// We use context.Background() here still because using server.SetupSignalContext() would cause
-			// components like the event broadcaster to terminate on signal immediately, which is not what we want.
-			// Termination for that case is being handled explicitly in Run() later on.
+			// 此处仍使用 context.Background()，避免信号到达时事件广播器等组件过早终止；关闭流程由 Run 显式处理。
 			ctx := context.Background()
 			c, err := s.Config(ctx, KnownControllers(), ControllersDisabledByDefault(), ControllerAliases())
 			if err != nil {
 				return err
 			}
 
-			// add feature enablement metrics
+			// 添加特性启用状态指标
 			fg := s.ComponentGlobalsRegistry.FeatureGateFor(basecompatibility.DefaultKubeComponent)
 			fg.(featuregate.MutableFeatureGate).AddMetrics()
-			// add component version metrics
+			// 添加组件版本指标
 			s.ComponentGlobalsRegistry.AddMetrics()
 
 			if utilfeature.DefaultFeatureGate.Enabled(cmfeatures.ControllerManagerReleaseLeaderElectionLockOnExit) {
@@ -186,8 +179,7 @@ controller, and serviceaccounts controller.`,
 	return cmd
 }
 
-// ResyncPeriod returns a function which generates a duration each time it is
-// invoked; this is because that multiple controllers don't get into lock-step.
+// ResyncPeriod 返回带随机抖动的时间生成函数，避免多个控制器同步发起 list 请求。
 func ResyncPeriod(c *config.CompletedConfig) func() time.Duration {
 	return func() time.Duration {
 		factor := rand.Float64() + 1
@@ -195,17 +187,17 @@ func ResyncPeriod(c *config.CompletedConfig) func() time.Duration {
 	}
 }
 
-// Run runs the KubeControllerManagerOptions.
+// Run 按完成态配置启动控制器管理器，并阻塞至关闭。
 func Run(ctx context.Context, c *config.CompletedConfig) error {
 	logger := klog.FromContext(ctx)
 	stopCh := ctx.Done()
 
-	// To help debugging, immediately log version
+	// 立即记录版本，便于排查问题。
 	logger.Info("Starting", "version", utilversion.Get())
 
 	logger.Info("Golang settings", "GOGC", os.Getenv("GOGC"), "GOMAXPROCS", os.Getenv("GOMAXPROCS"), "GOTRACEBACK", os.Getenv("GOTRACEBACK"))
 
-	// Start events processing pipeline.
+	// 启动事件处理和记录流水线。
 	c.EventBroadcaster.StartStructuredLogging(0)
 	c.EventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.Client.CoreV1().Events("")})
 	defer c.EventBroadcaster.Shutdown()
@@ -222,7 +214,7 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 		return fmt.Errorf("unable to set configz: %w", err)
 	}
 
-	// Setup any healthz checks we will want to use.
+	// 注册健康检查。
 	var checks []healthz.HealthChecker
 	var electionChecker *leaderelection.HealthzAdaptor
 	if c.ComponentConfig.Generic.LeaderElection.LeaderElect {
@@ -231,8 +223,7 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 	}
 	healthzHandler := controllerhealthz.NewMutableHealthzHandler(checks...)
 
-	// Start the controller manager HTTP server
-	// unsecuredMux is the handler for these controller *after* authn/authz filters have been applied
+	// 启动管理器 HTTP 服务；unsecuredMux 中的处理器仍需经过认证和授权过滤器。
 	var unsecuredMux *mux.PathRecorderMux
 	if c.SecureServing != nil {
 		unsecuredMux = genericcontrollermanager.NewBaseHandler(&c.ComponentConfig.Generic.Debugging, healthzHandler)
@@ -255,7 +246,7 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 		}
 
 		handler := genericcontrollermanager.BuildHandlerChain(unsecuredMux, &c.Authorization, &c.Authentication)
-		// TODO: handle stoppedCh and listenerStoppedCh returned by c.SecureServing.Serve
+		// TODO：处理 c.SecureServing.Serve 返回的 stoppedCh 和 listenerStoppedCh。
 		if _, _, err := c.SecureServing.Serve(handler, 0, stopCh); err != nil {
 			return err
 		}
@@ -272,21 +263,21 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 			return err
 		}
 
-		// Prepare all controllers in advance.
+		// 提前构造全部控制器，避免启动后部分初始化失败。
 		controllers, err := BuildControllers(ctx, controllerContext, controllerDescriptors, unsecuredMux, healthzHandler)
 		if err != nil {
 			logger.Error(err, "Error building controllers")
 			return err
 		}
 
-		// Start the informers.
+		// 启动共享 informer。
 		stopCh := ctx.Done()
 		controllerContext.InformerFactory.Start(stopCh)
 		defer controllerContext.InformerFactory.Shutdown()
 		controllerContext.ObjectOrMetadataInformerFactory.Start(stopCh)
 		close(controllerContext.InformersStarted)
 
-		// Actually start the controllers.
+		// 正式启动控制器。
 		if len(controllers) > 0 {
 			if !RunControllers(ctx, controllerContext, controllers, ControllerStartJitter, c.ControllerShutdownTimeout) {
 				return errors.New("controller shutdown timeout reached")
@@ -297,7 +288,7 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 		return nil
 	}
 
-	// No leader election, run directly
+	// 未启用领导者选举时直接运行。
 	if !c.ComponentConfig.Generic.LeaderElection.LeaderElect {
 		controllerDescriptors := NewControllerDescriptors()
 		controllerDescriptors[names.ServiceAccountTokenController] = saTokenControllerDescriptor
@@ -309,32 +300,30 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 		return err
 	}
 
-	// add a uniquifier so that two processes on the same host don't accidentally both become active
+	// 添加唯一后缀，避免同主机上的两个进程被误认为同一实例。
 	id = id + "_" + string(uuid.NewUUID())
 
-	// leaderMigrator will be non-nil if and only if Leader Migration is enabled.
+	// leaderMigrator 仅在启用领导者迁移时非空。
 	var leaderMigrator *leadermigration.LeaderMigrator = nil
 
-	// If leader migration is enabled, create the LeaderMigrator and prepare for migration
+	// 启用领导者迁移时创建迁移器并完成准备。
 	if leadermigration.Enabled(&c.ComponentConfig.Generic) {
 		logger.Info("starting leader migration")
 
 		leaderMigrator = leadermigration.NewLeaderMigrator(&c.ComponentConfig.Generic.LeaderMigration,
 			kubeControllerManager)
 
-		// startSATokenControllerInit is the original constructor.
+		// startSATokenControllerInit 是原始构造器。
 		saTokenControllerInit := saTokenControllerDescriptor.GetControllerConstructor()
 
-		// Wrap saTokenControllerDescriptor to signal readiness for migration after starting the controller.
+		// 包装服务账号令牌控制器，在启动后通知迁移器已就绪。
 		saTokenControllerDescriptor.constructor = func(ctx context.Context, controllerContext ControllerContext, controllerName string) (Controller, error) {
 			ctrl, err := saTokenControllerInit(ctx, controllerContext, controllerName)
 			if err != nil {
 				return nil, err
 			}
 
-			// This wrapping is not exactly flawless as RunControllers uses type casting,
-			// which is now not possible for the wrapped controller.
-			// This fortunately doesn't matter for this particular controller.
+			// RunControllers 依赖类型断言，包装后会丢失原类型；此控制器不依赖该断言，因此不受影响。
 			return newControllerLoop(func(ctx context.Context) {
 				close(leaderMigrator.MigrationReady)
 				ctrl.Run(ctx)
@@ -352,7 +341,7 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 			return err
 		}
 
-		// Start lease candidate controller for coordinated leader election
+		// 启动租约候选控制器以协调领导者选举。
 		leaseCandidate, waitForSync, err := leaderelection.NewCandidate(
 			c.Client,
 			"kube-system",
@@ -370,19 +359,18 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 		go leaseCandidate.Run(ctx)
 	}
 
-	// Start the main lock.
+	// 启动主锁竞争。
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// startedLeading must be used to wrap any OnStartedLeading leader election callback.
+	// startedLeading 用于包装所有 OnStartedLeading 回调，以统一取消上下文并收集错误。
 	var (
 		errs     []error
 		errsLock sync.Mutex
 	)
 	startedLeading := func(next func(context.Context) error) func(context.Context) {
 		return func(ctx context.Context) {
-			// It's more efficient to cancel the context at the end of OnStartedLeading to signal termination,
-			// because OnStoppedLeading is only called once the LE lock is released.
+			// 在 OnStartedLeading 结束时直接取消上下文，比等待释放锁后才触发 OnStoppedLeading 更及时。
 			defer cancel()
 			if err := next(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				errsLock.Lock()
@@ -401,8 +389,7 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 				OnStartedLeading: startedLeading(func(ctx context.Context) error {
 					controllerDescriptors := NewControllerDescriptors()
 					if leaderMigrator != nil {
-						// If leader migration is enabled, we should start only non-migrated controllers
-						//  for the main lock.
+						// 启用迁移时，主锁仅运行尚未迁移的控制器。
 						controllerDescriptors = filteredControllerDescriptors(controllerDescriptors, leaderMigrator.FilterFunc, leadermigration.ControllerNonMigrated)
 						logger.Info("leader migration: starting main controllers.")
 					}
@@ -418,15 +405,13 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 			})
 	})
 
-	// If Leader Migration is enabled, proceed to attempt the migration lock.
+	// 启用领导者迁移时，继续竞争迁移锁。
 	if leaderMigrator != nil {
-		// Wait for Service Account Token Controller to start before acquiring the migration lock.
-		// At this point, the main lock must have already been acquired, or the KCM process already exited.
-		// We wait for the main lock before acquiring the migration lock to prevent the situation
-		//  where KCM instance A holds the main lock while KCM instance B holds the migration lock.
+		// 必须先取得主锁再竞争迁移锁，否则两个实例可能分别持有主锁和迁移锁。
+		// 等服务账号令牌控制器启动后再获取迁移锁；此时主锁应已取得，或进程已退出。
 		select {
 		case <-leaderMigrator.MigrationReady:
-			// Start the migration lock.
+			// 启动迁移锁竞争。
 			wg.Go(func() {
 				leaderElectAndRun(ctx, c, id, electionChecker,
 					c.ComponentConfig.Generic.LeaderMigration.ResourceLock,
@@ -436,7 +421,7 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 							logger.Info("leader migration: starting migrated controllers.")
 							controllerDescriptors := NewControllerDescriptors()
 							controllerDescriptors = filteredControllerDescriptors(controllerDescriptors, leaderMigrator.FilterFunc, leadermigration.ControllerMigrated)
-							// DO NOT start saTokenController under migration lock
+							// 不要在迁移锁下启动服务账号令牌控制器。
 							delete(controllerDescriptors, names.ServiceAccountTokenController)
 							return run(ctx, controllerDescriptors)
 						}),
@@ -453,51 +438,43 @@ func Run(ctx context.Context, c *config.CompletedConfig) error {
 		}
 	}
 
-	// Block until all leader elections are stopped.
+	// 等待全部领导者选举结束；此时协程均已终止，无需再加锁读取 errs。
 	wg.Wait()
-	// There is no need to hold errsLock since by this time all goroutines have terminated.
 	return utilerrors.NewAggregate(errs)
 }
 
-// ControllerContext defines the context object for controller
+// ControllerContext 汇总各控制器共享的客户端、informer 和配置。
 type ControllerContext struct {
-	// ClientBuilder will provide a client for this controller to use
+	// ClientBuilder 按控制器名称提供独立客户端。
 	ClientBuilder clientbuilder.ControllerClientBuilder
 
-	// InformerFactory gives access to informers for the controller.
+	// InformerFactory 提供完整资源对象的共享 informer。
 	InformerFactory informers.SharedInformerFactory
 
-	// ObjectOrMetadataInformerFactory gives access to informers for typed resources
-	// and dynamic resources by their metadata. All generic controllers currently use
-	// object metadata - if a future controller needs access to the full object this
-	// would become GenericInformerFactory and take a dynamic client.
+	// ObjectOrMetadataInformerFactory 提供静态类型对象及动态资源元数据 informer。
+	// 目前通用控制器仅使用元数据；若未来需要完整对象，应改用带动态客户端的 GenericInformerFactory。
 	ObjectOrMetadataInformerFactory informerfactory.InformerFactory
 
-	// ComponentConfig provides access to init options for a given controller
+	// ComponentConfig 保存各控制器的组件配置。
 	ComponentConfig kubectrlmgrconfig.KubeControllerManagerConfiguration
 
-	// DeferredDiscoveryRESTMapper is a RESTMapper that will defer
-	// initialization of the RESTMapper until the first mapping is
-	// requested.
+	// RESTMapper 在首次请求映射时才初始化发现结果。
 	RESTMapper *restmapper.DeferredDiscoveryRESTMapper
 
-	// InformersStarted is closed after all of the controllers have been initialized and are running.  After this point it is safe,
-	// for an individual controller to start the shared informers. Before it is closed, they should not.
+	// 全部控制器初始化并运行后关闭 InformersStarted；此后控制器才可自行启动共享 informer。
 	InformersStarted chan struct{}
 
-	// ResyncPeriod generates a duration each time it is invoked; this is so that
-	// multiple controllers don't get into lock-step and all hammer the apiserver
-	// with list requests simultaneously.
+	// ResyncPeriod 每次返回带随机抖动的时间，避免多个控制器同时冲击 API 服务器。
 	ResyncPeriod func() time.Duration
 
-	// ControllerManagerMetrics provides a proxy to set controller manager specific metrics.
+	// ControllerManagerMetrics 提供控制器管理器专属指标。
 	ControllerManagerMetrics *controllersmetrics.ControllerManagerMetrics
 
-	// GraphBuilder gives an access to dependencyGraphBuilder which keeps tracks of resources in the cluster
+	// GraphBuilder 跟踪集群资源依赖关系。
 	GraphBuilder *garbagecollector.GraphBuilder
 }
 
-// IsControllerEnabled checks if the context's controllers enabled or not
+// IsControllerEnabled 判断指定控制器是否启用。
 func (c ControllerContext) IsControllerEnabled(controllerDescriptor *ControllerDescriptor) bool {
 	controllersDisabledByDefault := sets.NewString()
 	if controllerDescriptor.IsDisabledByDefault() {
@@ -506,7 +483,7 @@ func (c ControllerContext) IsControllerEnabled(controllerDescriptor *ControllerD
 	return genericcontrollermanager.IsControllerEnabled(controllerDescriptor.Name(), controllersDisabledByDefault, c.ComponentConfig.Generic.Controllers)
 }
 
-// NewClientConfig is a shortcut for ClientBuilder.Config. It wraps the error with an additional message.
+// NewClientConfig 封装 ClientBuilder.Config，并为错误补充客户端名称。
 func (c ControllerContext) NewClientConfig(name string) (*restclient.Config, error) {
 	config, err := c.ClientBuilder.Config(name)
 	if err != nil {
@@ -515,7 +492,7 @@ func (c ControllerContext) NewClientConfig(name string) (*restclient.Config, err
 	return config, nil
 }
 
-// NewClient is a shortcut for ClientBuilder.Client. It wraps the error with an additional message.
+// NewClient 封装 ClientBuilder.Client，并为错误补充客户端名称。
 func (c ControllerContext) NewClient(name string) (kubernetes.Interface, error) {
 	client, err := c.ClientBuilder.Client(name)
 	if err != nil {
@@ -524,11 +501,9 @@ func (c ControllerContext) NewClient(name string) (kubernetes.Interface, error) 
 	return client, nil
 }
 
-// CreateControllerContext creates a context struct containing references to resources needed by the
-// controllers such as the cloud provider and clientBuilder. rootClientBuilder is only used for
-// the shared-informers client and token controller.
+// CreateControllerContext 创建控制器共享上下文；rootClientBuilder 仅供共享 informer 和令牌控制器使用。
 func CreateControllerContext(ctx context.Context, s *config.CompletedConfig, rootClientBuilder, clientBuilder clientbuilder.ControllerClientBuilder) (ControllerContext, error) {
-	// Informer transform to trim ManagedFields for memory efficiency.
+	// informer 转换器移除 ManagedFields，以降低内存占用。
 	trim := func(obj interface{}) (interface{}, error) {
 		if accessor, err := meta.Accessor(obj); err == nil {
 			if accessor.GetManagedFields() != nil {
@@ -562,13 +537,12 @@ func CreateControllerContext(ctx context.Context, s *config.CompletedConfig, roo
 
 	metadataInformers := metadatainformer.NewSharedInformerFactoryWithOptions(metadataClient, ResyncPeriod(s)(), metadatainformer.WithTransform(trim))
 
-	// If apiserver is not running we should wait for some time and fail only then. This is particularly
-	// important when we start apiserver and controller manager at the same time.
+	// API 服务器尚未就绪时先等待再失败，以支持 API 服务器与控制器管理器同时启动。
 	if err := genericcontrollermanager.WaitForAPIServer(versionedClient, 10*time.Second); err != nil {
 		return ControllerContext{}, fmt.Errorf("failed to wait for apiserver being healthy: %w", err)
 	}
 
-	// Use a discovery client capable of being refreshed.
+	// 使用支持刷新的发现客户端。
 	discoveryClient, err := rootClientBuilder.DiscoveryClient("controller-discovery")
 	if err != nil {
 		return ControllerContext{}, fmt.Errorf("failed to create discovery client: %w", err)
@@ -612,17 +586,14 @@ func CreateControllerContext(ctx context.Context, s *config.CompletedConfig, roo
 	return controllerContext, nil
 }
 
-// HealthCheckAdder is an interface to represent a healthz handler.
-// The extra level of indirection is useful for testing.
+// HealthCheckAdder 抽象健康检查注册能力，便于测试替换具体处理器。
 type HealthCheckAdder interface {
 	AddHealthChecker(checks ...healthz.HealthChecker)
 }
 
-// BuildControllers builds all controllers in the given descriptor map. Disabled controllers are obviously skipped.
-//
-// A health check is registered for each controller using the controller name. The default check always passes.
-// If the controller implements controller.HealthCheckable, though, the given check is used.
-// The controller can also implement controller.Debuggable, in which case the debug handler is registered with the given mux.
+// BuildControllers 构造描述符映射中的已启用控制器，跳过禁用项。
+// 每个控制器默认注册恒通过的健康检查；实现 controller.HealthCheckable 时使用其检查。
+// 实现 controller.Debuggable 时，将调试处理器注册到给定 mux。
 func BuildControllers(ctx context.Context, controllerCtx ControllerContext, controllerDescriptors map[string]*ControllerDescriptor,
 	unsecuredMux *mux.PathRecorderMux, healthzHandler HealthCheckAdder) ([]Controller, error) {
 	logger := klog.FromContext(ctx)
@@ -643,8 +614,7 @@ func BuildControllers(ctx context.Context, controllerCtx ControllerContext, cont
 		}
 
 		check := controllerhealthz.NamedPingChecker(controllerName)
-		// check if the controller supports and requests a debugHandler,
-		// and it needs the unsecuredMux to mount the handler onto.
+		// 仅在控制器提供调试处理器且 mux 可用时注册调试端点。
 		if debuggable, ok := ctrl.(controller.Debuggable); ok && unsecuredMux != nil {
 			if debugHandler := debuggable.DebuggingHandler(); debugHandler != nil {
 				basePath := "/debug/controllers/" + controllerName
@@ -663,23 +633,16 @@ func BuildControllers(ctx context.Context, controllerCtx ControllerContext, cont
 		return nil
 	}
 
-	// Always start the SA token controller first using a full-power client, since it needs to mint tokens for the rest
-	// If this fails, just return here and fail since other controllers won't be able to get credentials.
+	// 服务账号令牌控制器必须用高权限客户端优先启动，为其余控制器签发令牌；失败则终止启动。
 	if serviceAccountTokenControllerDescriptor, ok := controllerDescriptors[names.ServiceAccountTokenController]; ok {
 		if err := buildController(serviceAccountTokenControllerDescriptor); err != nil {
 			return nil, err
 		}
 	}
 
-	// Each controller is passed a context where the logger has the name of
-	// the controller set through WithName. That name then becomes the prefix of
-	// all log messages emitted by that controller.
-	//
-	// In StartController, an explicit "controller" key is used instead, for two reasons:
-	// - while contextual logging is alpha, klog.LoggerWithName is still a no-op,
-	//   so we cannot rely on it yet to add the name
-	// - it allows distinguishing between log entries emitted by the controller
-	//   and those emitted for it - this is a bit debatable and could be revised.
+	// 各控制器使用带自身名称的日志上下文。
+	// StartController 同时显式设置 "controller" 字段：上下文日志仍为 alpha 特性，
+	// 且该字段可区分控制器自身与启动流程发出的日志。
 	for _, controllerDesc := range controllerDescriptors {
 		if controllerDesc.RequiresSpecialHandling() {
 			continue
@@ -695,38 +658,34 @@ func BuildControllers(ctx context.Context, controllerCtx ControllerContext, cont
 		}
 	}
 
-	// Register the checks.
+	// 注册全部健康检查。
 	if len(checks) > 0 {
 		healthzHandler.AddHealthChecker(checks...)
 	}
 	return controllers, nil
 }
 
-// RunControllers runs all controllers concurrently and blocks until the context is cancelled and all controllers are terminated.
-//
-// Once the context is cancelled, RunControllers waits for shutdownTimeout for all controllers to terminate.
-// When the timeout is reached, the function unblocks and returns false.
-// Zero shutdown timeout means that there is no timeout.
+// RunControllers 并发运行全部控制器，并阻塞至上下文取消且所有控制器退出。
+// 取消后最多等待 shutdownTimeout；超时返回 false，否则返回 true。零值表示不设超时。
 func RunControllers(ctx context.Context, controllerCtx ControllerContext, controllers []Controller,
 	controllerStartJitterMaxFactor float64, shutdownTimeout time.Duration) bool {
 	logger := klog.FromContext(ctx)
 
-	// We gather running controllers names for logging purposes.
-	// When the context is cancelled, the controllers still running are logged periodically.
+	// 记录运行中的控制器名称，在关闭期间定期打印尚未退出的控制器。
 	runningControllers := sets.New[string]()
 	var runningControllersLock sync.Mutex
 
 	loggingCtx, cancelLoggingCtx := context.WithCancel(context.Background())
 	defer cancelLoggingCtx()
 	go func() {
-		// Only start logging when terminating.
+		// 仅在关闭阶段开始打印。
 		select {
 		case <-ctx.Done():
 		case <-loggingCtx.Done():
 			return
 		}
 
-		// Regularly print the controllers that still haven't returned.
+		// 定期打印尚未退出的控制器。
 		logPeriod := shutdownTimeout / 3
 		if logPeriod == 0 {
 			logPeriod = 5 * time.Second
@@ -757,8 +716,7 @@ func RunControllers(ctx context.Context, controllerCtx ControllerContext, contro
 			go func() {
 				defer wg.Done()
 
-				// It would be better to unblock and return on context cancelled here,
-				// but that makes tests more flaky regarding timing.
+				// 此处不随上下文取消提前返回，否则会加剧测试时序波动。
 				time.Sleep(wait.Jitter(controllerCtx.ComponentConfig.Generic.ControllerStartInterval.Duration, controllerStartJitterMaxFactor))
 
 				logger.V(1).Info("Controller starting...", "controller", controller.Name())
@@ -781,14 +739,14 @@ func RunControllers(ctx context.Context, controllerCtx ControllerContext, contro
 		logger.Info("All controllers terminated")
 	}()
 
-	// Wait for a signal to terminate.
+	// 等待上下文取消或全部控制器自然结束。
 	select {
 	case <-ctx.Done():
 	case <-terminatedCh:
 		return true
 	}
 
-	// Wait for the shutdown timeout.
+	// 在关闭超时范围内等待全部控制器退出。
 	var shutdownCh <-chan time.Time
 	if shutdownTimeout > 0 {
 		shutdownCh = time.After(shutdownTimeout)
@@ -817,7 +775,7 @@ func readCA(file string) ([]byte, error) {
 	return rootCA, err
 }
 
-// createClientBuilders creates clientBuilder and rootClientBuilder from the given configuration
+// createClientBuilders 根据配置创建按控制器隔离的客户端构建器和根客户端构建器。
 func createClientBuilders(c *config.CompletedConfig) (clientBuilder clientbuilder.ControllerClientBuilder, rootClientBuilder clientbuilder.ControllerClientBuilder) {
 
 	rootClientBuilder = clientbuilder.SimpleControllerClientBuilder{
@@ -835,8 +793,8 @@ func createClientBuilders(c *config.CompletedConfig) (clientBuilder clientbuilde
 	return
 }
 
-// leaderElectAndRun runs the leader election, and runs the callbacks once the leader lease is acquired.
-// TODO: extract this function into staging/controller-manager
+// leaderElectAndRun 运行领导者选举，取得租约后执行回调。
+// TODO：将此函数提取到 staging/controller-manager。
 func leaderElectAndRun(ctx context.Context, c *config.CompletedConfig, lockIdentity string, electionChecker *leaderelection.HealthzAdaptor, resourceLock string, leaseName string, callbacks leaderelection.LeaderCallbacks) {
 	logger := klog.FromContext(ctx)
 	rl, err := resourcelock.NewFromKubeconfig(resourceLock,
@@ -866,7 +824,7 @@ func leaderElectAndRun(ctx context.Context, c *config.CompletedConfig, lockIdent
 	})
 }
 
-// filteredControllerDescriptors returns all controllerDescriptors after filtering through filterFunc.
+// filteredControllerDescriptors 返回筛选结果符合 expected 的控制器描述符。
 func filteredControllerDescriptors(controllerDescriptors map[string]*ControllerDescriptor, filterFunc leadermigration.FilterFunc, expected leadermigration.FilterResult) map[string]*ControllerDescriptor {
 	resultControllers := make(map[string]*ControllerDescriptor)
 	for name, controllerDesc := range controllerDescriptors {

@@ -22,12 +22,12 @@ import (
 	replicationconfig "k8s.io/kubernetes/pkg/controller/replication/config"
 )
 
-// ReplicationControllerOptions holds the ReplicationController options.
+// ReplicationControllerOptions 保存复制控制器的选项。
 type ReplicationControllerOptions struct {
 	*replicationconfig.ReplicationControllerConfiguration
 }
 
-// AddFlags adds flags related to ReplicationController for controller manager to the specified FlagSet.
+// AddFlags 将复制控制器相关参数注册到指定 FlagSet。
 func (o *ReplicationControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -36,7 +36,7 @@ func (o *ReplicationControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentRCSyncs, "concurrent_rc_syncs", o.ConcurrentRCSyncs, "The number of replication controllers that are allowed to sync concurrently. Larger number = more responsive replica management, but more CPU (and network) load")
 }
 
-// ApplyTo fills up ReplicationController config with options.
+// ApplyTo 将选项写入复制控制器配置。
 func (o *ReplicationControllerOptions) ApplyTo(cfg *replicationconfig.ReplicationControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -47,7 +47,7 @@ func (o *ReplicationControllerOptions) ApplyTo(cfg *replicationconfig.Replicatio
 	return nil
 }
 
-// Validate checks validation of ReplicationControllerOptions.
+// Validate 校验复制控制器选项。
 func (o *ReplicationControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

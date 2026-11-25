@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package options provides the flags used for the controller manager.
+// Package options 定义控制器管理器的命令行参数。
 package options
 
 import (
@@ -55,18 +55,20 @@ import (
 	"k8s.io/kubernetes/pkg/controller/nodeipam/ipam"
 	netutils "k8s.io/utils/net"
 
-	// add the kubernetes feature gates
+	// 注册 Kubernetes 特性门控
 	_ "k8s.io/kubernetes/pkg/features"
 )
 
 const (
-	// KubeControllerManagerUserAgent is the userAgent name when starting kube-controller managers.
+	// KubeControllerManagerUserAgent 是控制器管理器请求 API 时使用的 User-Agent。
 	KubeControllerManagerUserAgent = "kube-controller-manager"
 )
 
-// KubeControllerManagerOptions is the main context object for the kube-controller manager.
+// KubeControllerManagerOptions 汇总控制器管理器的通用选项与各控制器选项。
 type KubeControllerManagerOptions struct {
-	Generic         *cmoptions.GenericControllerManagerConfigurationOptions
+	// Generic 保存通用控制器行为，例如并发数和领导者选举相关设置。
+	Generic *cmoptions.GenericControllerManagerConfigurationOptions
+	// KubeCloudShared 保存云插件共享配置；未使用外部云提供程序时通常保持默认值。
 	KubeCloudShared *cpoptions.KubeCloudSharedOptions
 
 	AttachDetachController                    *AttachDetachControllerOptions
@@ -110,14 +112,14 @@ type KubeControllerManagerOptions struct {
 
 	ControllerShutdownTimeout time.Duration
 
-	// ComponentGlobalsRegistry is the registry where the effective versions and feature gates for all components are stored.
+	// ComponentGlobalsRegistry 保存各组件生效的版本和特性门控。
 	ComponentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry
 
-	// Parsedflags holds the parsed CLI flags.
+	// ParsedFlags 保存已解析的命令行参数。
 	ParsedFlags *cliflag.NamedFlagSets
 }
 
-// NewKubeControllerManagerOptions creates a new KubeControllerManagerOptions with a default config.
+// NewKubeControllerManagerOptions 创建采用默认配置的控制器管理器选项。
 func NewKubeControllerManagerOptions() (*KubeControllerManagerOptions, error) {
 	componentConfig, err := NewDefaultComponentConfig()
 	if err != nil {
@@ -233,7 +235,7 @@ func NewKubeControllerManagerOptions() (*KubeControllerManagerOptions, error) {
 	s.Authentication.RemoteKubeConfigFileOptional = true
 	s.Authorization.RemoteKubeConfigFileOptional = true
 
-	// Set the PairName but leave certificate directory blank to generate in-memory by default
+	// 设置证书名称但保留空目录，使证书默认在内存中生成。
 	s.SecureServing.ServerCert.CertDirectory = ""
 	s.SecureServing.ServerCert.PairName = "kube-controller-manager"
 	s.SecureServing.BindPort = ports.KubeControllerManagerPort
@@ -251,7 +253,7 @@ func NewKubeControllerManagerOptions() (*KubeControllerManagerOptions, error) {
 	return &s, nil
 }
 
-// NewDefaultComponentConfig returns kube-controller manager configuration object.
+// NewDefaultComponentConfig 返回控制器管理器的默认组件配置。
 func NewDefaultComponentConfig() (kubectrlmgrconfig.KubeControllerManagerConfiguration, error) {
 	versioned := kubectrlmgrconfigv1alpha1.KubeControllerManagerConfiguration{}
 	kubectrlmgrconfigscheme.Scheme.Default(&versioned)
@@ -263,7 +265,7 @@ func NewDefaultComponentConfig() (kubectrlmgrconfig.KubeControllerManagerConfigu
 	return internal, nil
 }
 
-// Flags returns flags for a specific KubeController by section name
+// Flags 按控制器和功能分组返回全部命令行参数。
 func (s *KubeControllerManagerOptions) Flags(allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string) cliflag.NamedFlagSets {
 	fss := cliflag.NamedFlagSets{}
 	s.Generic.AddFlags(&fss, allControllers, disabledByDefaultControllers, controllerAliases)
@@ -317,7 +319,7 @@ func (s *KubeControllerManagerOptions) Flags(allControllers []string, disabledBy
 	return fss
 }
 
-// ApplyTo fills up controller manager config with options.
+// ApplyTo 将选项写入控制器管理器配置。
 func (s *KubeControllerManagerOptions) ApplyTo(c *kubecontrollerconfig.Config, allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string) error {
 	if err := s.ComponentGlobalsRegistry.SetFallback(); err != nil {
 		return err
@@ -430,7 +432,7 @@ func (s *KubeControllerManagerOptions) ApplyTo(c *kubecontrollerconfig.Config, a
 	return nil
 }
 
-// Validate is used to validate the options and config before launching the controller manager
+// Validate 在启动控制器管理器前校验全部选项。
 func (s *KubeControllerManagerOptions) Validate(allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string) error {
 	var errs []error
 
@@ -474,7 +476,7 @@ func (s *KubeControllerManagerOptions) Validate(allControllers []string, disable
 	errs = append(errs, s.Authorization.Validate()...)
 	errs = append(errs, s.Metrics.Validate()...)
 
-	// in-tree cloud providers are disabled since v1.31 (KEP-2395)
+	// 自 v1.31 起已禁用树内云提供商（KEP-2395）。
 	if len(s.KubeCloudShared.CloudProvider.Name) > 0 && !cloudprovider.IsExternal(s.KubeCloudShared.CloudProvider.Name) {
 		cloudprovider.DisableWarningForProvider(s.KubeCloudShared.CloudProvider.Name)
 		errs = append(errs, cloudprovider.ErrorForDisabledProvider(s.KubeCloudShared.CloudProvider.Name))
@@ -484,12 +486,12 @@ func (s *KubeControllerManagerOptions) Validate(allControllers []string, disable
 		errs = append(errs, fmt.Errorf("built-in cloud providers are disabled. The ipam %s is not available", s.KubeCloudShared.CIDRAllocatorType))
 	}
 
-	// TODO: validate component config, master and kubeconfig
+	// TODO：校验组件配置、master 和 kubeconfig。
 
 	return utilerrors.NewAggregate(errs)
 }
 
-// Config return a controller manager config objective
+// Config 校验选项并构建可直接用于启动控制器管理器的配置。
 func (s KubeControllerManagerOptions) Config(ctx context.Context, allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string) (*kubecontrollerconfig.Config, error) {
 	if err := s.Validate(allControllers, disabledByDefaultControllers, controllerAliases); err != nil {
 		return nil, err

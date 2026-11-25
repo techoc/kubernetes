@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app does all of the work necessary to configure and run a
-// Kubernetes app process.
+// Package app 负责 kube-proxy 的配置、启动与运行。
 package app
 
 import (
@@ -83,7 +82,7 @@ import (
 )
 
 const (
-	// kubeProxy defines variable used internally when referring to kube-proxy component
+	// kubeProxy 是内部引用 kube-proxy 组件时使用的名称。
 	kubeProxy = "kube-proxy"
 )
 
@@ -92,12 +91,14 @@ func init() {
 	utilruntime.Must(logsapi.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
 
-// proxyRun defines the interface to run a specified ProxyServer
+// proxyRun 抽象代理服务器的运行入口，便于测试替换实现。
 type proxyRun interface {
+	// Run 启动代理并阻塞至其结束；返回 nil 表示正常结束。
 	Run(ctx context.Context) error
 }
 
-// NewProxyCommand creates a *cobra.Command object with default parameters
+// NewProxyCommand 创建使用默认配置的 kube-proxy cobra 命令。
+// 命令依次完成平台初始化、配置汇总与校验，再运行代理服务器。
 func NewProxyCommand() *cobra.Command {
 	opts := NewOptions()
 
@@ -131,7 +132,7 @@ with the apiserver API to configure the proxy.`,
 			if err := opts.Validate(); err != nil {
 				return fmt.Errorf("failed validate: %w", err)
 			}
-			// add feature enablement metrics
+			// 注册功能开关状态指标，便于确认实际生效的配置。
 			utilfeature.DefaultMutableFeatureGate.AddMetrics()
 			if err := opts.Run(context.Background()); err != nil {
 				opts.logger.Error(err, "Error running ProxyServer")
@@ -152,35 +153,47 @@ with the apiserver API to configure the proxy.`,
 
 	fs := cmd.Flags()
 	opts.AddFlags(fs)
-	fs.AddGoFlagSet(goflag.CommandLine) // for --boot-id-file and --machine-id-file
+	fs.AddGoFlagSet(goflag.CommandLine) // 加入 --boot-id-file 与 --machine-id-file
 
 	_ = cmd.MarkFlagFilename("config", "yaml", "yml", "json")
 
 	return cmd
 }
 
-// ProxyServer represents all the parameters required to start the Kubernetes proxy server. All
-// fields are required.
+// ProxyServer 保存启动 Kubernetes 网络代理所需的全部运行时依赖与状态。
 type ProxyServer struct {
+	// Config 是已完成默认值转换的 kube-proxy 内部配置。
 	Config *kubeproxyconfig.KubeProxyConfiguration
 
-	Client          clientset.Interface
-	Broadcaster     events.EventBroadcaster
-	Recorder        events.EventRecorder
-	NodeRef         *v1.ObjectReference
-	HealthzServer   *healthcheck.ProxyHealthServer
-	NodeName        string
+	// Client 用于监视 API 对象并发送事件。
+	Client clientset.Interface
+	// Broadcaster 将事件异步投递到 API 服务器。
+	Broadcaster events.EventBroadcaster
+	// Recorder 记录代理启动和健康检查等事件。
+	Recorder events.EventRecorder
+	// NodeRef 是事件关联的当前节点引用。
+	NodeRef *v1.ObjectReference
+	// HealthzServer 是代理健康检查服务；配置为空监听地址时为 nil。
+	HealthzServer *healthcheck.ProxyHealthServer
+	// NodeName 是当前 kube-proxy 所属节点名称。
+	NodeName string
+	// PrimaryIPFamily 是节点优先使用的 IP 协议族。
 	PrimaryIPFamily v1.IPFamily
-	NodeIPs         map[v1.IPFamily]net.IP
-	flagz           flagz.Reader
+	// NodeIPs 保存各协议族对应的节点 IP，缺失族可能使用回环地址兜底。
+	NodeIPs map[v1.IPFamily]net.IP
+	flagz   flagz.Reader
 
-	podCIDRs    []string // only used for LocalModeNodeCIDR
+	// podCIDRs 仅在 LocalModeNodeCIDR 模式下用于判断本地流量。
+	podCIDRs []string
+	// NodeManager 监视当前节点；hollow-proxy 不需要节点配置时为 nil。
 	NodeManager *proxy.NodeManager
 
+	// Proxier 按所选模式实现服务流量转发与规则同步。
 	Proxier proxy.Provider
 }
 
-// newProxyServer creates a ProxyServer based on the given config
+// newProxyServer 根据给定配置创建 ProxyServer，完成客户端、节点信息、平台检查和 Proxier 初始化。
+// initOnly 为 true 时仍执行初始化，但由 Options.Run 决定是否继续运行。
 func newProxyServer(ctx context.Context, config *kubeproxyconfig.KubeProxyConfiguration, master string, initOnly bool, flagzReader flagz.Reader) (*ProxyServer, error) {
 	logger := klog.FromContext(ctx)
 
@@ -217,7 +230,7 @@ func newProxyServer(ctx context.Context, config *kubeproxyconfig.KubeProxyConfig
 		return nil, err
 	}
 
-	// NodeManager makes an informer that selects for the node where this kube-proxy is running
+	// NodeManager 通过 informer 只监视 kube-proxy 所在节点。
 	s.NodeManager, err = proxy.NewNodeManager(ctx, s.Client, s.NodeName, s.Config)
 	if err != nil {
 		return nil, err
@@ -283,14 +296,11 @@ func newProxyServer(ctx context.Context, config *kubeproxyconfig.KubeProxyConfig
 	return s, nil
 }
 
-// checkBadConfig checks for bad/deprecated configuation
+// checkBadConfig 检查可能扩大 NodePort 暴露面的配置，并返回兼容性警告。
 func checkBadConfig(s *ProxyServer) error {
 	var errors []error
 
-	// At this point we haven't seen any actual Services or EndpointSlices, so we
-	// don't really know if the cluster is expected to be single- or dual-stack. But
-	// we can at least take note of whether there is any explicitly-dual-stack
-	// configuration.
+	// 此时尚未观察到实际 Service 或 EndpointSlice，只能根据显式配置判断是否存在双栈意图。
 	anyDualStackConfig := false
 	for _, config := range [][]string{s.Config.DetectLocal.ClusterCIDRs, s.Config.NodePortAddresses, s.Config.IPVS.ExcludeCIDRs, s.podCIDRs} {
 		if dual, _ := netutils.IsDualStackCIDRStrings(config); dual {
@@ -299,8 +309,7 @@ func checkBadConfig(s *ProxyServer) error {
 		}
 	}
 
-	// Warn if NodePortAddresses does not limit connections on all IP families that
-	// seem to be in use.
+	// NodePortAddresses 未覆盖所有在用协议族时，NodePort 可能暴露在非预期本地 IP 上。
 	cidrsByFamily := proxyutil.MapCIDRsByIPFamily(s.Config.NodePortAddresses)
 	if len(s.Config.NodePortAddresses) == 0 {
 		errors = append(errors, fmt.Errorf("nodePortAddresses is unset; NodePort connections will be accepted on all local IPs. Consider using `--nodeport-addresses primary`"))
@@ -313,10 +322,8 @@ func checkBadConfig(s *ProxyServer) error {
 	return utilerrors.NewAggregate(errors)
 }
 
-// checkBadIPConfig checks for bad configuration relative to s.PrimaryIPFamily.
-// Historically, we did not check most of the config options, so we cannot retroactively
-// make IP family mismatches in those options be fatal. When we add new options to check
-// here, we should make problems with those options be fatal.
+// checkBadIPConfig 检查配置与 PrimaryIPFamily 是否冲突，并区分警告与致命错误。
+// 历史选项的协议族不匹配不能突然变为致命错误；新增检查项应默认按致命错误处理。
 func checkBadIPConfig(s *ProxyServer, dualStackSupported bool) (err error, fatal bool) {
 	var errors []error
 	var badFamily netutils.IPFamily
@@ -337,7 +344,7 @@ func checkBadIPConfig(s *ProxyServer, dualStackSupported bool) (err error, fatal
 	if badCIDRs(s.Config.DetectLocal.ClusterCIDRs, badFamily) {
 		errors = append(errors, fmt.Errorf("cluster is %s but clusterCIDRs contains only IPv%s addresses", clusterType, badFamily))
 		if s.Config.DetectLocalMode == kubeproxyconfig.LocalModeClusterCIDR && !dualStackSupported {
-			// This has always been a fatal error
+			// 该组合历史上就是致命错误，保持兼容行为。
 			fatal = true
 		}
 	}
@@ -345,7 +352,7 @@ func checkBadIPConfig(s *ProxyServer, dualStackSupported bool) (err error, fatal
 	if badCIDRs(s.podCIDRs, badFamily) {
 		errors = append(errors, fmt.Errorf("cluster is %s but node.spec.podCIDRs contains only IPv%s addresses", clusterType, badFamily))
 		if s.Config.DetectLocalMode == kubeproxyconfig.LocalModeNodeCIDR {
-			// This has always been a fatal error
+			// 该组合历史上就是致命错误，保持兼容行为。
 			fatal = true
 		}
 	}
@@ -354,8 +361,7 @@ func checkBadIPConfig(s *ProxyServer, dualStackSupported bool) (err error, fatal
 		errors = append(errors, fmt.Errorf("cluster is %s but winkernel.sourceVip is IPv%s", clusterType, badFamily))
 	}
 
-	// In some cases, wrong-IP-family is only a problem when the secondary IP family
-	// isn't present at all.
+	// 次要协议族完全不存在时，错误协议族配置才会造成额外问题。
 	if !dualStackSupported {
 		if badCIDRs(s.Config.IPVS.ExcludeCIDRs, badFamily) {
 			errors = append(errors, fmt.Errorf("cluster is %s but ipvs.excludeCIDRs contains only IPv%s addresses", clusterType, badFamily))
@@ -369,13 +375,13 @@ func checkBadIPConfig(s *ProxyServer, dualStackSupported bool) (err error, fatal
 		}
 	}
 
-	// Note that s.Config.NodePortAddresses gets checked as part of checkBadConfig()
-	// so it doesn't need to be checked here.
+	// NodePortAddresses 已在 checkBadConfig 中检查，无需重复。
 
 	return utilerrors.NewAggregate(errors), fatal
 }
 
-// badCIDRs returns true if cidrs is a non-empty list of CIDRs, all of wrongFamily.
+// badCIDRs 判断 cidrs 是否非空且所有条目都属于错误协议族。
+// 空列表或混合协议族均返回 false，因为此时不能确定是单协议族配置错误。
 func badCIDRs(cidrs []string, wrongFamily netutils.IPFamily) bool {
 	if len(cidrs) == 0 {
 		return false
@@ -388,8 +394,8 @@ func badCIDRs(cidrs []string, wrongFamily netutils.IPFamily) bool {
 	return true
 }
 
-// badBindAddress returns true if bindAddress is an "IP:port" string where IP is a
-// non-zero IP of wrongFamily.
+// badBindAddress 判断 "IP:port" 是否绑定到错误协议族的非通配地址。
+// 通配地址同时适用于双栈监听，因此不算冲突。
 func badBindAddress(bindAddress string, wrongFamily netutils.IPFamily) bool {
 	if host, _, _ := net.SplitHostPort(bindAddress); host != "" {
 		ip := netutils.ParseIPSloppy(host)
@@ -400,8 +406,9 @@ func badBindAddress(bindAddress string, wrongFamily netutils.IPFamily) bool {
 	return false
 }
 
-// createClient creates a kube client from the given config and masterOverride.
-// TODO remove masterOverride when CLI flags are removed.
+// createClient 根据配置和 masterOverride 创建 Kubernetes 客户端。
+// 未指定 kubeconfig 与 master 时使用集群内配置。
+// TODO: 删除对应命令行标志时移除 masterOverride。
 func createClient(ctx context.Context, config componentbaseconfig.ClientConnectionConfiguration, masterOverride string) (clientset.Interface, error) {
 	logger := klog.FromContext(ctx)
 	var kubeConfig *rest.Config
@@ -411,8 +418,7 @@ func createClient(ctx context.Context, config componentbaseconfig.ClientConnecti
 		logger.Info("Neither kubeconfig file nor master URL was specified, falling back to in-cluster config")
 		kubeConfig, err = rest.InClusterConfig()
 	} else {
-		// This creates a client, first loading any specified kubeconfig
-		// file, and then overriding the Master flag, if non-empty.
+		// 先加载指定的 kubeconfig，再用非空的 master 覆盖 API 服务器地址。
 		kubeConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 			&clientcmd.ClientConfigLoadingRules{ExplicitPath: config.Kubeconfig},
 			&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: masterOverride}}).ClientConfig()
@@ -446,7 +452,7 @@ func serveHealthz(ctx context.Context, hz *healthcheck.ProxyHealthServer, errCh 
 			logger.Error(err, "Healthz server failed")
 			if errCh != nil {
 				errCh <- fmt.Errorf("healthz server failed: %w", err)
-				// if in hardfail mode, never retry again
+				// 硬失败模式下不重试，永久阻塞以把错误传递给主循环。
 				blockCh := make(chan error)
 				<-blockCh
 			}
@@ -500,7 +506,7 @@ func serveMetrics(ctx context.Context, bindAddress string, proxyMode kubeproxyco
 				utilruntime.HandleErrorWithContext(ctx, err, "starting metrics server failed")
 				if errCh != nil {
 					errCh <- err
-					// if in hardfail mode, never retry again
+					// 硬失败模式下不重试，永久阻塞以把错误传递给主循环。
 					blockCh := make(chan error)
 					<-blockCh
 				}
@@ -522,18 +528,18 @@ func serveMetrics(ctx context.Context, bindAddress string, proxyMode kubeproxyco
 	go wait.UntilWithContext(ctx, fn, 5*time.Second)
 }
 
-// Run runs the specified ProxyServer.  This should never exit (unless CleanupAndExit is set).
-// TODO: At the moment, Run() cannot return a nil error, otherwise it's caller will never exit. Update callers of Run to handle nil errors.
+// Run 启动代理及辅助服务，并等待辅助服务报告错误。
+// 当前正常路径不会自行返回；若返回 nil，调用方可能永不退出，需能处理 nil 错误。
 func (s *ProxyServer) Run(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
-	// To help debugging, immediately log version
+	// 启动时立即记录版本，便于在故障发生前确认实际二进制版本。
 	logger.Info("Version info", "version", version.Get())
 
 	logger.Info("Golang settings", "GOGC", os.Getenv("GOGC"), "GOMAXPROCS", os.Getenv("GOMAXPROCS"), "GOTRACEBACK", os.Getenv("GOTRACEBACK"))
 
 	proxymetrics.RegisterMetrics(s.Config.Mode)
 
-	// TODO(vmarmol): Use container config for this.
+	// TODO(vmarmol): 改为从容器配置读取。
 	var oomAdjuster *oom.OOMAdjuster
 	if s.Config.Linux.OOMScoreAdj != nil {
 		oomAdjuster = oom.NewOOMAdjuster()
@@ -547,7 +553,7 @@ func (s *ProxyServer) Run(ctx context.Context) error {
 		s.Broadcaster.StartRecordingToSink(stopCh)
 	}
 
-	// TODO(thockin): make it possible for healthz and metrics to be on the same port.
+	// TODO(thockin): 支持健康检查与指标共用同一端口。
 
 	var healthzErrCh, metricsErrCh chan error
 	if s.Config.BindAddressHardFail {
@@ -555,10 +561,10 @@ func (s *ProxyServer) Run(ctx context.Context) error {
 		metricsErrCh = make(chan error)
 	}
 
-	// Start up a healthz server if requested
+	// 仅在配置了监听地址时启动健康检查服务。
 	serveHealthz(ctx, s.HealthzServer, healthzErrCh)
 
-	// Start up a metrics server if requested
+	// 仅在配置了监听地址时启动指标服务。
 	serveMetrics(ctx, s.Config.MetricsBindAddress, s.Config.Mode, s.Config.EnableProfiling, s.flagz, metricsErrCh)
 
 	noProxyName, err := labels.NewRequirement(apis.LabelServiceProxyName, selection.DoesNotExist, nil)
@@ -574,8 +580,7 @@ func (s *ProxyServer) Run(ctx context.Context) error {
 	labelSelectorNoProxyName := labels.NewSelector().Add(*noProxyName)
 	labelSelectorNoHeadlessEndpoints := labels.NewSelector().Add(*noHeadlessEndpoints)
 
-	// kube-proxy never needs the managed fields metadata, so strip it from all
-	// cached objects to reduce memory usage.
+	// kube-proxy 不使用 managedFields，缓存前统一剥离以减少内存占用。
 	trimManagedFields := func(obj interface{}) (interface{}, error) {
 		if accessor, err := meta.Accessor(obj); err == nil {
 			accessor.SetManagedFields(nil)
@@ -583,23 +588,21 @@ func (s *ProxyServer) Run(ctx context.Context) error {
 		return obj, nil
 	}
 
-	// Make informer that contains no filters
+	// 创建不带对象过滤条件的 informer 工厂。
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(s.Client, s.Config.ConfigSyncPeriod.Duration,
 		informers.WithTransform(trimManagedFields),
 	)
 
-	// Make informers that filter out objects that do not contain a service.kubernetes.io/headless label
+	// EndpointSlice informer 排除带有 service.kubernetes.io/headless 标签的对象。
 	endpointSliceInformerFactory := informers.NewSharedInformerFactoryWithOptions(s.Client, s.Config.ConfigSyncPeriod.Duration,
 		informers.WithTransform(trimManagedFields),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
 			options.LabelSelector = labelSelectorNoHeadlessEndpoints.String()
 		}))
 
-	// Create configs (i.e. Watches for Services, EndpointSlices and ServiceCIDRs)
-	// Note: RegisterHandler() calls need to happen before creation of Sources because sources
-	// only notify on changes, and the initial update (on process start) may be lost if no handlers
-	// are registered yet.
-	// don't watch headless services for kube-proxy, they are proxied by DNS.
+	// 注册 Service、EndpointSlice 与 ServiceCIDR 的监视。
+	// 必须先注册处理器再启动 informer，否则启动时的初始更新可能因无处理器而丢失。
+	// Headless Service 由 DNS 代理，不纳入 kube-proxy 监视范围。
 	serviceInformerFactory := informers.NewSharedInformerFactoryWithOptions(s.Client, s.Config.ConfigSyncPeriod.Duration,
 		informers.WithTransform(trimManagedFields),
 		informers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -619,13 +622,12 @@ func (s *ProxyServer) Run(ctx context.Context) error {
 		serviceCIDRConfig.RegisterEventHandler(s.Proxier)
 		go serviceCIDRConfig.Run(wait.NeverStop)
 	}
-	// This has to start after the calls to NewServiceConfig because that
-	// function must configure its shared informer event handlers first.
+	// informer 必须在 NewServiceConfig 等调用之后启动，确保共享 informer 的事件处理器已注册。
 	informerFactory.Start(wait.NeverStop)
 	endpointSliceInformerFactory.Start(wait.NeverStop)
 	serviceInformerFactory.Start(wait.NeverStop)
 
-	// hollow-proxy doesn't need node config, and we don't create nodeManager for hollow-proxy.
+	// hollow-proxy 不使用节点配置，因此没有 NodeManager，也无需启动节点 informer。
 	if s.NodeManager != nil {
 		nodeConfig := config.NewNodeConfig(ctx, s.NodeManager.NodeInformer(), s.Config.ConfigSyncPeriod.Duration)
 		nodeConfig.RegisterEventHandler(s.NodeManager)
@@ -635,7 +637,7 @@ func (s *ProxyServer) Run(ctx context.Context) error {
 		go nodeConfig.Run(wait.NeverStop)
 	}
 
-	// Birth Cry after the birth is successful
+	// 所有启动步骤成功后发送首次运行事件。
 	s.birthCry()
 
 	go s.Proxier.SyncLoop()
@@ -658,9 +660,7 @@ func expandNodePortAddressKeywords(nodePortAddresses []string, nodeIPs map[v1.IP
 	for _, addr := range nodePortAddresses {
 		switch addr {
 		case kubeproxyconfig.NodePortAddressesPrimary:
-			// "primary" pins NodePorts to the node's actual IP(s). A family whose node
-			// IP is loopback has no routable address to pin to (see detectNodeIPs), so
-			// it is skipped.
+			// "primary" 将 NodePort 限定到节点实际 IP；回环地址不可路由，对应协议族直接跳过。
 			if ip := nodeIPs[v1.IPv4Protocol]; ip != nil && !ip.IsLoopback() {
 				expanded = append(expanded, fmt.Sprintf("%s/32", ip.String()))
 			}
@@ -668,8 +668,7 @@ func expandNodePortAddressKeywords(nodePortAddresses []string, nodeIPs map[v1.IP
 				expanded = append(expanded, fmt.Sprintf("%s/128", ip.String()))
 			}
 		case kubeproxyconfig.NodePortAddressesLocalhost:
-			// Loopback exists for every family regardless of the node's routable IPs,
-			// so both are always emitted.
+			// 两种协议族都有回环地址，与节点是否拥有可路由 IP 无关。
 			expanded = append(expanded, "127.0.0.0/8", "::1/128")
 		case kubeproxyconfig.NodePortAddressesAll:
 			expanded = append(expanded, proxyutil.IPv4ZeroCIDR, proxyutil.IPv6ZeroCIDR)
@@ -680,19 +679,14 @@ func expandNodePortAddressKeywords(nodePortAddresses []string, nodeIPs map[v1.IP
 	return expanded
 }
 
-// detectNodeIPs returns the proxier's "node IP" or IPs, and the IP family to use if the
-// node turns out to be incapable of dual-stack. (Note that kube-proxy normally runs as
-// dual-stack if the backend is capable of supporting both IP families, regardless of
-// whether the node is *actually* configured as dual-stack or not.)
-
-// (Note that on Linux, the node IPs are used only to determine whether a given
-// LoadBalancerSourceRanges value matches the node or not. In particular, they are *not*
-// used for NodePort handling.)
+// detectNodeIPs 返回节点 IP 与主协议族；后端不支持双栈时仅使用主协议族。
+// 后端支持双栈时 kube-proxy 会启用双栈，不以节点是否实际配置双栈为前提。
 //
-// The order of precedence is:
-//  1. if bindAddress is not 0.0.0.0 or ::, then it is used as the primary IP.
-//  2. if rawNodeIPs is not empty, then its address(es) is/are used
-//  3. otherwise the node IPs are 127.0.0.1 and ::1
+// Linux 上节点 IP 仅用于判断 LoadBalancerSourceRanges 是否匹配本节点，不用于 NodePort。
+// 地址优先级如下：
+//  1. bindAddress 不是 0.0.0.0 或 :: 时，作为主 IP。
+//  2. 否则使用 rawNodeIPs 中的地址。
+//  3. 仍无可用地址时使用 127.0.0.1 与 ::1。
 func detectNodeIPs(ctx context.Context, rawNodeIPs []net.IP, bindAddress string) (v1.IPFamily, map[v1.IPFamily]net.IP) {
 	logger := klog.FromContext(ctx)
 	primaryFamily := v1.IPv4Protocol
@@ -707,7 +701,7 @@ func detectNodeIPs(ctx context.Context, rawNodeIPs []net.IP, bindAddress string)
 		}
 		nodeIPs[primaryFamily] = rawNodeIPs[0]
 		if len(rawNodeIPs) > 1 {
-			// If more than one address is returned, they are guaranteed to be of different families
+			// 返回多个地址时，NodeManager 保证它们属于不同协议族。
 			family := v1.IPv4Protocol
 			if !netutils.IsIPv4(rawNodeIPs[1]) {
 				family = v1.IPv6Protocol
@@ -716,7 +710,7 @@ func detectNodeIPs(ctx context.Context, rawNodeIPs []net.IP, bindAddress string)
 		}
 	}
 
-	// If a bindAddress is passed, override the primary IP
+	// 非通配 bindAddress 优先级最高，同时决定主协议族。
 	bindIP := netutils.ParseIPSloppy(bindAddress)
 	if bindIP != nil && !bindIP.IsUnspecified() {
 		if netutils.IsIPv4(bindIP) {

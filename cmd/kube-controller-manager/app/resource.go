@@ -34,7 +34,7 @@ func newDeviceTaintEvictionControllerDescriptor() *ControllerDescriptor {
 		name:        names.DeviceTaintEvictionController,
 		constructor: newDeviceTaintEvictionController,
 		requiredFeatureGates: []featuregate.Feature{
-			// TODO update app.TestFeatureGatedControllersShouldNotDefineAliases when removing these feature gates.
+			// TODO：移除这些特性门控时更新 app.TestFeatureGatedControllersShouldNotDefineAliases。
 			features.DynamicResourceAllocation,
 			features.DRADeviceTaints,
 		},
@@ -70,7 +70,7 @@ func newResourceClaimControllerDescriptor() *ControllerDescriptor {
 		aliases:     []string{"resource-claim-controller"},
 		constructor: newResourceClaimController,
 		requiredFeatureGates: []featuregate.Feature{
-			features.DynamicResourceAllocation, // TODO update app.TestFeatureGatedControllersShouldNotDefineAliases when removing this feature
+			features.DynamicResourceAllocation, // TODO：移除此特性时更新 app.TestFeatureGatedControllersShouldNotDefineAliases
 		},
 	}
 }
@@ -126,6 +126,6 @@ func newResourcePoolStatusRequestController(ctx context.Context, controllerConte
 	}
 
 	return newControllerLoop(func(ctx context.Context) {
-		controller.Run(ctx, 1) // Single worker is sufficient for this controller
+		controller.Run(ctx, 1) // 此控制器使用单个工作协程即可
 	}, controllerName), nil
 }

@@ -30,27 +30,26 @@ import (
 	"k8s.io/kubernetes/pkg/kubeapiserver"
 )
 
-// completedOptions is a private wrapper that enforces a call of Complete() before Run can be invoked.
+// completedOptions 通过私有封装确保运行前必须先调用 Complete。
 type completedOptions struct {
 	cp.CompletedOptions
 
 	Extra
 }
 
+// CompletedOptions 是已完成默认值填充、可交给运行阶段使用的启动参数。
 type CompletedOptions struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
+	// 嵌入私有指针，避免包外直接构造完成态。
 	*completedOptions
 }
 
-// Complete set default ServerRunOptions.
-// Should be called after kube-apiserver flags parsed.
+// Complete 为 ServerRunOptions 填充默认值，应在 kube-apiserver 参数解析完成后调用。
 func (s *ServerRunOptions) Complete(ctx context.Context) (CompletedOptions, error) {
 	if s == nil {
 		return CompletedOptions{completedOptions: &completedOptions{}}, nil
 	}
 
-	// process s.ServiceClusterIPRange from list to Primary and Secondary
-	// we process secondary only if provided by user
+	// 将用户输入的服务网段拆为主、备网段；未提供备网段时保持零值。
 	apiServerServiceIP, primaryServiceIPRange, secondaryServiceIPRange, err := getServiceIPAndRanges(s.ServiceClusterIPRanges)
 	if err != nil {
 		return CompletedOptions{}, err
@@ -72,7 +71,7 @@ func (s *ServerRunOptions) Complete(ctx context.Context) (CompletedOptions, erro
 
 	if completed.Etcd != nil && completed.Etcd.EnableWatchCache {
 		sizes := kubeapiserver.DefaultWatchCacheSizes()
-		// Ensure that overrides parse correctly.
+		// 先解析用户覆盖值，再与默认缓存大小合并，避免格式错误被静默忽略。
 		userSpecified, err := apiserveroptions.ParseWatchCacheSizes(completed.Etcd.WatchCacheSizes)
 		if err != nil {
 			return CompletedOptions{}, err
@@ -101,7 +100,7 @@ func getServiceIPAndRanges(serviceClusterIPRanges string) (net.IP, net.IPNet, ne
 	var primaryServiceIPRange net.IPNet
 	var secondaryServiceIPRange net.IPNet
 	var err error
-	// nothing provided by user, use default range (only applies to the Primary)
+	// 用户未指定时使用默认主网段，不生成备网段。
 	if len(serviceClusterIPRangeList) == 0 {
 		var primaryServiceClusterCIDR net.IPNet
 		primaryServiceIPRange, apiServerServiceIP, err = cp.ServiceIPRange(primaryServiceClusterCIDR)
@@ -121,8 +120,7 @@ func getServiceIPAndRanges(serviceClusterIPRanges string) (net.IP, net.IPNet, ne
 		return net.IP{}, net.IPNet{}, net.IPNet{}, fmt.Errorf("error determining service IP ranges for primary service cidr: %v", err)
 	}
 
-	// user provided at least two entries
-	// note: validation asserts that the list is max of two dual stack entries
+	// 仅在用户提供第二项时解析备网段；校验阶段限制最多两个双栈网段。
 	if len(serviceClusterIPRangeList) > 1 {
 		_, secondaryServiceClusterCIDR, err := netutils.ParseCIDRSloppy(serviceClusterIPRangeList[1])
 		if err != nil {

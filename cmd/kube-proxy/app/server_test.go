@@ -51,21 +51,21 @@ import (
 
 type fakeProxyServerLongRun struct{}
 
-// Run runs the specified ProxyServer.
+// Run 按测试注入的代理实现执行。
 func (s *fakeProxyServerLongRun) Run(ctx context.Context) error {
 	for {
 		time.Sleep(2 * time.Second)
 	}
 }
 
-// CleanupAndExit runs in the specified ProxyServer.
+// CleanupAndExit 按测试注入的清理实现执行。
 func (s *fakeProxyServerLongRun) CleanupAndExit() error {
 	return nil
 }
 
 type fakeProxyServerError struct{}
 
-// Run runs the specified ProxyServer.
+// Run 按测试注入的代理实现执行。
 func (s *fakeProxyServerError) Run(ctx context.Context) error {
 	for {
 		time.Sleep(2 * time.Second)
@@ -73,13 +73,12 @@ func (s *fakeProxyServerError) Run(ctx context.Context) error {
 	}
 }
 
-// CleanupAndExit runs in the specified ProxyServer.
+// CleanupAndExit 按测试注入的清理实现执行。
 func (s *fakeProxyServerError) CleanupAndExit() error {
 	return errors.New("mocking error from ProxyServer.CleanupAndExit()")
 }
 
-// fakeMux matches the statusz mux interface used by statusz.Install:
-// it needs Handle(path, handler) and ListedPaths().
+// fakeMux 实现 statusz.Install 所需的 mux 接口：Handle(path, handler) 与 ListedPaths()。
 type fakeMux struct {
 	handlers map[string]http.Handler
 	paths    []string
@@ -95,6 +94,7 @@ func newFakeMux(paths []string) *fakeMux {
 func (m *fakeMux) Handle(path string, h http.Handler) { m.handlers[path] = h }
 func (m *fakeMux) ListedPaths() []string              { return m.paths }
 
+// Test_detectNodeIPs 覆盖节点地址、通配绑定地址和双栈主协议族的优先级与回退行为。
 func Test_detectNodeIPs(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -252,6 +252,7 @@ func Test_detectNodeIPs(t *testing.T) {
 	}
 }
 
+// Test_expandNodePortAddressKeywords 验证 NodePort 关键字展开及与字面 CIDR 混合时的顺序。
 func Test_expandNodePortAddressKeywords(t *testing.T) {
 	v4 := netutils.ParseIPSloppy("192.168.1.1")
 	v6 := netutils.ParseIPSloppy("fd00::1")
@@ -328,6 +329,7 @@ func Test_expandNodePortAddressKeywords(t *testing.T) {
 	}
 }
 
+// Test_checkBadConfig 检查 NodePort 暴露面配置在单栈、双栈和协议族不匹配时的警告。
 func Test_checkBadConfig(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -410,6 +412,7 @@ func Test_checkBadConfig(t *testing.T) {
 	}
 }
 
+// Test_checkBadIPConfig 验证单栈与双栈配置冲突是否分别被判为警告或致命错误。
 func Test_checkBadIPConfig(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -677,6 +680,8 @@ func Test_checkBadIPConfig(t *testing.T) {
 		})
 	}
 }
+
+// TestStatuszRegistryReceivesListedPaths 确认 statusz 注册表完整接收 mux 公布的路径。
 func TestStatuszRegistryReceivesListedPaths(t *testing.T) {
 	wantPaths := []string{"/livez", "/readyz", "/healthz", statusz.DefaultStatuszPath}
 	m := newFakeMux(wantPaths)
@@ -703,7 +708,7 @@ func TestStatuszRegistryReceivesListedPaths(t *testing.T) {
 
 	body := rr.Body.String()
 
-	// Look for the "Paths" line manually instead of regex
+	// 直接查找 "Paths" 行，避免为正则表达式承担额外解析复杂度。
 	lines := strings.Split(body, "\n")
 	var foundPathsLine string
 	for _, line := range lines {
@@ -723,7 +728,7 @@ func TestStatuszRegistryReceivesListedPaths(t *testing.T) {
 	}
 	gotPaths := fields[1:]
 
-	// Use sets for order-independent comparison
+	// 使用集合比较，避免断言依赖输出顺序。
 	wantSet := sets.New[string](wantPaths...)
 	gotSet := sets.New[string](gotPaths...)
 
@@ -733,6 +738,7 @@ func TestStatuszRegistryReceivesListedPaths(t *testing.T) {
 	}
 }
 
+// TestConfigz 验证 /configz 返回可解码为公开 v1alpha1 类型的配置。
 func TestConfigz(t *testing.T) {
 	configz.Delete(kubeproxyconfig.GroupName)
 	cz, err := configz.New(kubeproxyconfig.GroupName)
@@ -783,7 +789,7 @@ func TestConfigz(t *testing.T) {
 		t.Errorf("unexpected Kind: %s", cfg.GetKind())
 	}
 
-	// confirm that they expose public config type
+	// 确认端点公开的是配置类型，而非内部序列化细节。
 	var proxyConfig kubeproxyconfigv1alpha1.KubeProxyConfiguration
 	err = json.Unmarshal(body, &struct {
 		ComponentConfig *kubeproxyconfigv1alpha1.KubeProxyConfiguration `json:"kubeproxy.config.k8s.io"`
@@ -793,6 +799,7 @@ func TestConfigz(t *testing.T) {
 	}
 }
 
+// TestKubeProxyNativeHistogramMetrics 验证启用原生直方图后指标端点暴露对应采样数据。
 func TestKubeProxyNativeHistogramMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, metricsfeatures.NativeHistograms, true)
 	metricsfeatures.ApplyFeatureGates(utilfeature.DefaultFeatureGate)

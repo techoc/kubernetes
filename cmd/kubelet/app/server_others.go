@@ -30,7 +30,7 @@ func checkPermissions(ctx context.Context) error {
 	if uid := os.Getuid(); uid != 0 {
 		return fmt.Errorf("kubelet needs to run as uid `0`. It is being run as %d", uid)
 	}
-	// TODO: Check if kubelet is running in the `initial` user namespace.
+	// TODO: 检查 Kubelet 是否运行在 `initial` 用户命名空间中。
 	// http://man7.org/linux/man-pages/man7/user_namespaces.7.html
 	return nil
 }

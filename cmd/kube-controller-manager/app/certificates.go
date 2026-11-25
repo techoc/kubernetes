@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app implements a server that runs a set of active
-// components.  This includes replication controllers, service endpoints and
-// nodes.
+// Package app 实现控制器管理服务器，运行复制控制器、服务端点和节点等活跃组件。
 package app
 
 import (
@@ -128,21 +126,21 @@ func newCertificateSigningRequestSigningController(ctx context.Context, controll
 }
 
 func areKubeletServingSignerFilesSpecified(config csrsigningconfig.CSRSigningControllerConfiguration) bool {
-	// if only one is specified, it will error later during construction
+	// 仅配置证书或密钥之一时，后续构造阶段会返回错误。
 	return len(config.KubeletServingSignerConfiguration.CertFile) > 0 || len(config.KubeletServingSignerConfiguration.KeyFile) > 0
 }
 func areKubeletClientSignerFilesSpecified(config csrsigningconfig.CSRSigningControllerConfiguration) bool {
-	// if only one is specified, it will error later during construction
+	// 仅配置证书或密钥之一时，后续构造阶段会返回错误。
 	return len(config.KubeletClientSignerConfiguration.CertFile) > 0 || len(config.KubeletClientSignerConfiguration.KeyFile) > 0
 }
 
 func areKubeAPIServerClientSignerFilesSpecified(config csrsigningconfig.CSRSigningControllerConfiguration) bool {
-	// if only one is specified, it will error later during construction
+	// 仅配置证书或密钥之一时，后续构造阶段会返回错误。
 	return len(config.KubeAPIServerClientSignerConfiguration.CertFile) > 0 || len(config.KubeAPIServerClientSignerConfiguration.KeyFile) > 0
 }
 
 func areLegacyUnknownSignerFilesSpecified(config csrsigningconfig.CSRSigningControllerConfiguration) bool {
-	// if only one is specified, it will error later during construction
+	// 仅配置证书或密钥之一时，后续构造阶段会返回错误。
 	return len(config.LegacyUnknownSignerConfiguration.CertFile) > 0 || len(config.LegacyUnknownSignerConfiguration.KeyFile) > 0
 }
 
@@ -154,7 +152,7 @@ func anySpecificFilesSet(config csrsigningconfig.CSRSigningControllerConfigurati
 }
 
 func getKubeletServingSignerFiles(config csrsigningconfig.CSRSigningControllerConfiguration) (string, string) {
-	// if any cert/key is set for specific CSR signing loops, then the --cluster-signing-{cert,key}-file are not used for any CSR signing loop.
+	// 只要配置了任一专用 CSR 签名证书/密钥，所有签名循环都不再使用 --cluster-signing-{cert,key}-file。
 	if anySpecificFilesSet(config) {
 		return config.KubeletServingSignerConfiguration.CertFile, config.KubeletServingSignerConfiguration.KeyFile
 	}
@@ -162,7 +160,7 @@ func getKubeletServingSignerFiles(config csrsigningconfig.CSRSigningControllerCo
 }
 
 func getKubeletClientSignerFiles(config csrsigningconfig.CSRSigningControllerConfiguration) (string, string) {
-	// if any cert/key is set for specific CSR signing loops, then the --cluster-signing-{cert,key}-file are not used for any CSR signing loop.
+	// 只要配置了任一专用 CSR 签名证书/密钥，所有签名循环都不再使用 --cluster-signing-{cert,key}-file。
 	if anySpecificFilesSet(config) {
 		return config.KubeletClientSignerConfiguration.CertFile, config.KubeletClientSignerConfiguration.KeyFile
 	}
@@ -170,7 +168,7 @@ func getKubeletClientSignerFiles(config csrsigningconfig.CSRSigningControllerCon
 }
 
 func getKubeAPIServerClientSignerFiles(config csrsigningconfig.CSRSigningControllerConfiguration) (string, string) {
-	// if any cert/key is set for specific CSR signing loops, then the --cluster-signing-{cert,key}-file are not used for any CSR signing loop.
+	// 只要配置了任一专用 CSR 签名证书/密钥，所有签名循环都不再使用 --cluster-signing-{cert,key}-file。
 	if anySpecificFilesSet(config) {
 		return config.KubeAPIServerClientSignerConfiguration.CertFile, config.KubeAPIServerClientSignerConfiguration.KeyFile
 	}
@@ -178,7 +176,7 @@ func getKubeAPIServerClientSignerFiles(config csrsigningconfig.CSRSigningControl
 }
 
 func getLegacyUnknownSignerFiles(config csrsigningconfig.CSRSigningControllerConfiguration) (string, string) {
-	// if any cert/key is set for specific CSR signing loops, then the --cluster-signing-{cert,key}-file are not used for any CSR signing loop.
+	// 只要配置了任一专用 CSR 签名证书/密钥，所有签名循环都不再使用 --cluster-signing-{cert,key}-file。
 	if anySpecificFilesSet(config) {
 		return config.LegacyUnknownSignerConfiguration.CertFile, config.LegacyUnknownSignerConfiguration.KeyFile
 	}
@@ -245,7 +243,7 @@ func newPodCertificateRequestCleanerController(ctx context.Context, controllerCo
 		controllerContext.ClientBuilder.ClientOrDie("podcertificaterequestcleaner"),
 		controllerContext.InformerFactory.Certificates().V1().PodCertificateRequests(),
 		clock.RealClock{},
-		15*time.Minute, // We expect all PodCertificateRequest flows to complete faster than this.
+		15*time.Minute, // 预期所有 PodCertificateRequest 流程都会在此时间内完成。
 		5*time.Minute,
 	)
 	return newControllerLoop(func(ctx context.Context) {
@@ -365,8 +363,7 @@ func clusterTrustBundlesAvailable(client kubernetes.Interface, schemaVersion sch
 	}
 
 	if resList != nil {
-		// even in case of an error above there might be a partial list for APIs that
-		// were already successfully discovered
+		// 即使发现过程返回错误，已成功发现的 API 仍可能出现在部分结果中。
 		for _, r := range resList.APIResources {
 			if r.Name == "clustertrustbundles" {
 				return true, nil

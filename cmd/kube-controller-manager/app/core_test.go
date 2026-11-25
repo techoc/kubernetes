@@ -33,7 +33,7 @@ import (
 	"k8s.io/kubernetes/cmd/kube-controller-manager/names"
 )
 
-// TestClientBuilder inherits ClientBuilder and can accept a given fake clientset.
+// TestClientBuilder 继承 ClientBuilder，并使用指定的伪客户端。
 type TestClientBuilder struct {
 	clientset clientset.Interface
 }
@@ -61,7 +61,7 @@ func (m TestClientBuilder) DiscoveryClientOrDie(name string) discovery.Discovery
 	return ret
 }
 
-// FakeDiscoveryWithError inherits DiscoveryInterface(via FakeDiscovery) with some methods accepting testing data.
+// FakeDiscoveryWithError 基于 FakeDiscovery 实现 DiscoveryInterface，部分方法接受测试数据。
 type FakeDiscoveryWithError struct {
 	fakediscovery.FakeDiscovery
 	PossibleResources []*metav1.APIResourceList
@@ -76,7 +76,7 @@ func (d FakeDiscoveryWithError) ServerPreferredNamespacedResourcesWithContext(ct
 	return d.PossibleResources, d.Err
 }
 
-// FakeDiscoveryWithError inherits Clientset(via FakeClientset) with overridden Discovery method.
+// FakeDiscoveryWithError 基于 FakeClientset 实现 Clientset，并覆盖 Discovery 方法。
 type FakeClientSet struct {
 	fakeclientset.Clientset
 	DiscoveryObj *FakeDiscoveryWithError
@@ -90,7 +90,7 @@ func (c *FakeClientSet) GetPossibleResources() []*metav1.APIResourceList {
 	return c.DiscoveryObj.PossibleResources
 }
 
-// Create a fake Clientset with its Discovery method overridden.
+// 创建覆盖 Discovery 方法的伪 Clientset。
 func NewFakeClientset(fakeDiscovery FakeDiscoveryWithError) *FakeClientSet {
 	cs := &FakeClientSet{}
 	cs.DiscoveryObj = &fakeDiscovery

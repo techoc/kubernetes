@@ -22,12 +22,12 @@ import (
 	endpointconfig "k8s.io/kubernetes/pkg/controller/endpoint/config"
 )
 
-// EndpointControllerOptions holds the EndPointController options.
+// EndpointControllerOptions 保存 Endpoint 控制器的选项。
 type EndpointControllerOptions struct {
 	*endpointconfig.EndpointControllerConfiguration
 }
 
-// AddFlags adds flags related to EndPointController for controller manager to the specified FlagSet.
+// AddFlags 将 Endpoint 控制器相关参数注册到指定 FlagSet。
 func (o *EndpointControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -37,7 +37,7 @@ func (o *EndpointControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.EndpointUpdatesBatchPeriod.Duration, "endpoint-updates-batch-period", o.EndpointUpdatesBatchPeriod.Duration, "The length of endpoint updates batching period. Processing of pod changes will be delayed by this duration to join them with potential upcoming updates and reduce the overall number of endpoints updates. Larger number = higher endpoint programming latency, but lower number of endpoints revision generated")
 }
 
-// ApplyTo fills up EndPointController config with options.
+// ApplyTo 将选项写入 Endpoint 控制器配置。
 func (o *EndpointControllerOptions) ApplyTo(cfg *endpointconfig.EndpointControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -49,7 +49,7 @@ func (o *EndpointControllerOptions) ApplyTo(cfg *endpointconfig.EndpointControll
 	return nil
 }
 
-// Validate checks validation of EndpointControllerOptions.
+// Validate 校验 Endpoint 控制器选项。
 func (o *EndpointControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

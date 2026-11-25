@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app does all of the work necessary to create a Kubernetes
-// APIServer by binding together the API, master and APIServer infrastructure.
-// It can be configured and called directly or via the hyperkube framework.
+// Package app 组装 Kubernetes API 服务器所需的 API、控制平面和服务端基础设施。
+// 调用方既可直接配置和运行，也可通过 hyperkube 框架接入。
 package app
 
 import (
@@ -67,7 +66,7 @@ func init() {
 	utilruntime.Must(logsapi.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
 
-// NewAPIServerCommand creates a *cobra.Command object with default parameters
+// NewAPIServerCommand 创建使用默认参数的 kube-apiserver 命令。
 func NewAPIServerCommand() *cobra.Command {
 	s := options.NewServerRunOptions()
 	ctx := genericapiserver.SetupSignalContext()
@@ -80,40 +79,38 @@ for the api objects which include pods, services, replicationcontrollers, and
 others. The API Server services REST operations and provides the frontend to the
 cluster's shared state through which all other components interact.`,
 
-		// stop printing usage when the command errors
+		// 命令执行失败时不打印用法，避免错误信息被大段帮助文本淹没。
 		SilenceUsage: true,
 		PersistentPreRunE: func(*cobra.Command, []string) error {
 			if err := s.GenericServerRunOptions.ComponentGlobalsRegistry.Set(); err != nil {
 				return err
 			}
-			// silence client-go warnings.
-			// kube-apiserver loopback clients should not log self-issued warnings.
+			// 回环客户端不应记录自身引发的告警。
 			rest.SetDefaultWarningHandler(rest.NoWarnings{})
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			verflag.PrintAndExitIfRequested()
 			fs := cmd.Flags()
-			// Activate logging as soon as possible, after that
-			// show flags with the final logging configuration.
+			// 尽早应用日志配置，随后按最终配置打印参数。
 			if err := logsapi.ValidateAndApply(s.Logs, featureGate); err != nil {
 				return err
 			}
 			cliflag.PrintFlags(fs)
 
-			// set default options
+			// 填充默认值。
 			completedOptions, err := s.Complete(ctx)
 			if err != nil {
 				return err
 			}
 
-			// validate options
+			// 校验参数。
 			if errs := completedOptions.Validate(); len(errs) != 0 {
 				return utilerrors.NewAggregate(errs)
 			}
-			// add feature enablement metrics
+			// 注册特性开关指标。
 			featureGate.(featuregate.MutableFeatureGate).AddMetrics()
-			// add component version metrics
+			// 注册组件版本指标。
 			s.GenericServerRunOptions.ComponentGlobalsRegistry.AddMetrics()
 			return Run(ctx, completedOptions)
 		},
@@ -145,9 +142,9 @@ cluster's shared state through which all other components interact.`,
 	return cmd
 }
 
-// Run runs the specified APIServer.  This should never exit.
+// Run 运行指定的 API 服务器，正常退出前不会主动返回。
 func Run(ctx context.Context, opts options.CompletedOptions) error {
-	// To help debugging, immediately log version
+	// 立即记录版本，便于排查问题。
 	klog.Infof("Version: %+v", utilversion.Get())
 
 	klog.InfoS("Golang settings", "GOGC", os.Getenv("GOGC"), "GOMAXPROCS", os.Getenv("GOMAXPROCS"), "GOTRACEBACK", os.Getenv("GOTRACEBACK"))
@@ -181,7 +178,7 @@ func Run(ctx context.Context, opts options.CompletedOptions) error {
 	return prepared.Run(ctx)
 }
 
-// CreateServerChain creates the apiservers connected via delegation.
+// CreateServerChain 创建通过委托机制串联的 API 服务器链。
 func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregator, error) {
 	notFoundHandler := notfoundhandler.New(config.KubeAPIs.ControlPlane.Generic.Serializer, genericapifilters.NoMuxAndDiscoveryIncompleteKey)
 	apiExtensionsServer, err := config.ApiExtensions.New(genericapiserver.NewEmptyDelegateWithCustomHandler(notFoundHandler))
@@ -195,17 +192,17 @@ func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregat
 		return nil, err
 	}
 
-	// aggregator comes last in the chain
+	// 聚合服务器位于委托链末端。
 	aggregatorServer, err := controlplaneapiserver.CreateAggregatorServer(config.Aggregator, kubeAPIServer.ControlPlane.GenericAPIServer, apiExtensionsServer.Informers.Apiextensions().V1().CustomResourceDefinitions(), crdAPIEnabled, apiVersionPriorities)
 	if err != nil {
-		// we don't need special handling for innerStopCh because the aggregator server doesn't create any go routines
+		// 聚合服务器不创建 goroutine，无需特殊处理 innerStopCh。
 		return nil, err
 	}
 
 	return aggregatorServer, nil
 }
 
-// CreateKubeAPIServerConfig creates all the resources for running the API server, but runs none of them
+// CreateKubeAPIServerConfig 创建运行 API 服务器所需的全部资源，但不启动它们。
 func CreateKubeAPIServerConfig(
 	opts options.CompletedOptions,
 	genericConfig *genericapiserver.Config,
@@ -217,10 +214,10 @@ func CreateKubeAPIServerConfig(
 	[]admission.PluginInitializer,
 	error,
 ) {
-	// global stuff
+	// 初始化进程级能力配置。
 	capabilities.Setup(opts.AllowPrivileged, opts.MaxConnectionBytesPerSec)
 
-	// additional admission initializers
+	// 创建额外的准入插件初始化器。
 	kubeAdmissionConfig := &kubeapiserveradmission.Config{}
 	kubeInitializers, err := kubeAdmissionConfig.New()
 	if err != nil {
@@ -261,10 +258,10 @@ func CreateKubeAPIServerConfig(
 	}
 
 	if config.ControlPlane.Generic.EgressSelector != nil {
-		// Use the config.ControlPlane.Generic.EgressSelector lookup to find the dialer to connect to the kubelet
+		// 通过出口选择器查找连接 kubelet 所需的拨号器。
 		config.Extra.KubeletClientConfig.Lookup = config.ControlPlane.Generic.EgressSelector.Lookup
 
-		// Use the config.ControlPlane.Generic.EgressSelector lookup as the transport used by the "proxy" subresources.
+		// "proxy" 子资源也使用出口选择器对应的传输层。
 		networkContext := egressselector.Cluster.AsNetworkContext()
 		dialer, err := config.ControlPlane.Generic.EgressSelector.Lookup(networkContext)
 		if err != nil {
@@ -280,8 +277,8 @@ func CreateKubeAPIServerConfig(
 
 var testServiceResolver webhook.ServiceResolver
 
-// SetServiceResolverForTests allows the service resolver to be overridden during tests.
-// Tests using this function must run serially as this function is not safe to call concurrently with server start.
+// SetServiceResolverForTests 允许测试替换 Service 解析器。
+// 它修改全局状态且不能与服务器启动并发，使用该函数的测试必须串行运行。
 func SetServiceResolverForTests(resolver webhook.ServiceResolver) func() {
 	if testServiceResolver != nil {
 		panic("test service resolver is set: tests are either running concurrently or clean up was skipped")
@@ -311,7 +308,7 @@ func buildServiceResolver(enabledAggregatorRouting bool, hostname string, inform
 		)
 	}
 
-	// resolve kubernetes.default.svc locally
+	// 在本地解析 kubernetes.default.svc。
 	if localHost, err := url.Parse(hostname); err == nil {
 		serviceResolver = aggregatorapiserver.NewLoopbackServiceResolver(serviceResolver, localHost)
 	}

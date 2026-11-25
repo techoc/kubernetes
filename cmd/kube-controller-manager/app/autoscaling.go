@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app implements a server that runs a set of active
-// components.  This includes replication controllers, service endpoints and
-// nodes.
+// Package app 实现控制器管理服务器，运行复制控制器、服务端点和节点等活跃组件。
 package app
 
 import (
@@ -51,8 +49,7 @@ func newHorizontalPodAutoscalerController(ctx context.Context, controllerContext
 		return nil, err
 	}
 
-	// we don't use cached discovery because DiscoveryScaleKindResolver does its own caching,
-	// so we want to re-fetch every time when we actually ask for it
+	// DiscoveryScaleKindResolver 已自行缓存，因此这里不再叠加客户端缓存，确保实际查询时重新发现资源。
 	scaleKindResolver := scale.NewDiscoveryScaleKindResolver(hpaClient.Discovery())
 	scaleClient, err := scale.NewForConfig(clientConfig, controllerContext.RESTMapper, dynamic.LegacyAPIPathResolverFunc, scaleKindResolver)
 	if err != nil {

@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app implements a server that runs a set of active
-// components.  This includes replication controllers, service endpoints and
-// nodes.
+// Package app 实现控制器管理服务器，运行复制控制器、服务端点和节点等活跃组件。
 package app
 
 import (
@@ -71,9 +69,9 @@ import (
 )
 
 const (
-	// defaultNodeMaskCIDRIPv4 is default mask size for IPv4 node cidr
+	// defaultNodeMaskCIDRIPv4 是 IPv4 节点 CIDR 的默认掩码长度。
 	defaultNodeMaskCIDRIPv4 = 24
-	// defaultNodeMaskCIDRIPv6 is default mask size for IPv6 node cidr
+	// defaultNodeMaskCIDRIPv6 是 IPv6 节点 CIDR 的默认掩码长度。
 	defaultNodeMaskCIDRIPv6 = 64
 )
 
@@ -90,7 +88,7 @@ func newNodeIpamController(ctx context.Context, controllerContext ControllerCont
 		return nil, nil
 	}
 	if controllerContext.ComponentConfig.KubeCloudShared.CIDRAllocatorType == string(ipam.CloudAllocatorType) {
-		// Cannot run cloud ipam controller if cloud provider is nil (--cloud-provider not set or set to 'external')
+		// 未配置云提供商（--cloud-provider 未设置或设为 external）时不能运行云 IPAM 控制器。
 		return nil, errors.New("--cidr-allocator-type is set to 'CloudAllocator' but cloud provider is not configured")
 	}
 
@@ -99,7 +97,7 @@ func newNodeIpamController(ctx context.Context, controllerContext ControllerCont
 		return nil, err
 	}
 
-	// service cidr processing
+	// 处理服务 CIDR
 	var serviceCIDR *net.IPNet
 	var secondaryServiceCIDR *net.IPNet
 	logger := klog.FromContext(ctx)
@@ -117,9 +115,9 @@ func newNodeIpamController(ctx context.Context, controllerContext ControllerCont
 		}
 	}
 
-	// the following checks are triggered if both serviceCIDR and secondaryServiceCIDR are provided
+	// 同时配置主、辅服务 CIDR 时执行双栈校验。
 	if serviceCIDR != nil && secondaryServiceCIDR != nil {
-		// should be dual stack (from different IPFamilies)
+		// 两个网段必须属于不同 IP 协议族。
 		dualstackServiceCIDR, err := netutils.IsDualStackCIDRs([]*net.IPNet{serviceCIDR, secondaryServiceCIDR})
 		if err != nil {
 			return nil, fmt.Errorf("failed to perform dualstack check on serviceCIDR and secondaryServiceCIDR error: %w", err)
@@ -129,8 +127,8 @@ func newNodeIpamController(ctx context.Context, controllerContext ControllerCont
 		}
 	}
 
-	// only --node-cidr-mask-size-ipv4 and --node-cidr-mask-size-ipv6 supported with dual stack clusters.
-	// --node-cidr-mask-size flag is incompatible with dual stack clusters.
+	// 双栈集群仅支持 --node-cidr-mask-size-ipv4 和 --node-cidr-mask-size-ipv6。
+	// --node-cidr-mask-size 与双栈集群不兼容。
 	nodeCIDRMaskSizes, err := setNodeCIDRMaskSizes(controllerContext.ComponentConfig.NodeIPAMController, clusterCIDRs)
 	if err != nil {
 		return nil, err
@@ -144,7 +142,7 @@ func newNodeIpamController(ctx context.Context, controllerContext ControllerCont
 	nodeIpamController, err := nodeipamcontroller.NewNodeIpamController(
 		ctx,
 		controllerContext.InformerFactory.Core().V1().Nodes(),
-		nil, // no cloud provider on kube-controller-manager since v1.31 (KEP-2395)
+		nil, // 自 v1.31 起控制器管理器不再使用云提供商（KEP-2395）
 		client,
 		clusterCIDRs,
 		serviceCIDR,
@@ -181,7 +179,7 @@ func newNodeLifecycleController(ctx context.Context, controllerContext Controlle
 		controllerContext.InformerFactory.Core().V1().Pods(),
 		controllerContext.InformerFactory.Core().V1().Nodes(),
 		controllerContext.InformerFactory.Apps().V1().DaemonSets(),
-		// node lifecycle controller uses existing cluster role from node-controller
+		// 节点生命周期控制器复用 node-controller 的集群角色。
 		client,
 		controllerContext.ComponentConfig.NodeLifecycleController.NodeMonitorPeriod.Duration,
 		controllerContext.ComponentConfig.NodeLifecycleController.NodeStartupGracePeriod.Duration,
@@ -211,7 +209,7 @@ func newTaintEvictionControllerDescriptor() *ControllerDescriptor {
 }
 
 func newTaintEvictionController(ctx context.Context, controllerContext ControllerContext, controllerName string) (Controller, error) {
-	// taint-manager uses existing cluster role from node-controller
+	// taint-manager 复用 node-controller 的集群角色。
 	client, err := controllerContext.NewClient("node-controller")
 	if err != nil {
 		return nil, err
@@ -522,9 +520,7 @@ func newNamespaceControllerDescriptor() *ControllerDescriptor {
 }
 
 func newNamespaceController(ctx context.Context, controllerContext ControllerContext, controllerName string) (Controller, error) {
-	// the namespace cleanup controller is very chatty.  It makes lots of discovery calls and then it makes lots of delete calls
-	// the ratelimiter negatively affects its speed.  Deleting 100 total items in a namespace (that's only a few of each resource
-	// including events), takes ~10 seconds by default.
+	// 命名空间清理需要大量发现和删除请求，默认限流会明显拖慢速度；删除约 100 个对象约需 10 秒。
 	nsKubeconfig, err := controllerContext.NewClientConfig("namespace-controller")
 	if err != nil {
 		return nil, err
@@ -636,7 +632,7 @@ type garbageCollectorController struct {
 	discoveryClient   discovery.DiscoveryInterface
 }
 
-// Make sure we are propagating properly.
+// 确保 Debuggable 接口正确嵌入并向上传递。
 var _ controller.Debuggable = (*garbageCollectorController)(nil)
 
 func newGarbageCollectorController(ctx context.Context, controllerContext ControllerContext, controllerName string) (Controller, error) {
@@ -659,8 +655,7 @@ func newGarbageCollectorController(ctx context.Context, controllerContext Contro
 		return nil, err
 	}
 
-	// Increase garbage collector controller's throughput: each object deletion takes two API calls,
-	// so to get |config.QPS| deletion rate we need to allow 2x more requests for this controller.
+	// 每个对象删除需要两次 API 调用，将请求配额翻倍才能维持 config.QPS 对应的删除速率。
 	config.QPS *= 2
 	metadataClient, err := metadata.NewForConfig(config)
 	if err != nil {
@@ -686,11 +681,12 @@ func newGarbageCollectorController(ctx context.Context, controllerContext Contro
 	}, nil
 }
 
-// Name must be implemented explicitly as it collides with the embedded controller.
+// 嵌入控制器也提供 Name，因此必须显式实现以返回包装器名称。
 func (c *garbageCollectorController) Name() string {
 	return c.controllerName
 }
 
+// Run 并发运行垃圾回收和定期同步，并在上下文取消后等待两项工作结束。
 func (c *garbageCollectorController) Run(ctx context.Context) {
 	workers := int(c.controllerContext.ComponentConfig.GarbageCollectorController.ConcurrentGCSyncs)
 	const syncPeriod = 30 * time.Second
@@ -700,7 +696,7 @@ func (c *garbageCollectorController) Run(ctx context.Context) {
 			c.GarbageCollector.Run(ctx, workers, syncPeriod)
 		},
 		func(ctx context.Context) {
-			// Periodically refresh the RESTMapper with new discovery information and sync the garbage collector.
+			// 定期用最新发现结果刷新 RESTMapper，并同步垃圾回收器。
 			c.Sync(ctx, c.discoveryClient, syncPeriod)
 		},
 	)(ctx)
@@ -851,22 +847,20 @@ func newLegacyServiceAccountTokenCleanerController(ctx context.Context, controll
 	return newControllerLoop(legacySATokenCleaner.Run, controllerName), nil
 }
 
-// processCIDRs is a helper function that works on a comma separated cidrs and returns
-// a list of typed cidrs
-// error if failed to parse any of the cidrs or invalid length of cidrs
+// validateCIDRs 解析逗号分隔的 CIDR，并校验数量及双栈协议族组合。
 func validateCIDRs(cidrsList string) ([]*net.IPNet, error) {
-	// failure: bad cidrs in config
+	// 配置中的 CIDR 无法解析时失败。
 	clusterCIDRs, dualStack, err := processCIDRs(cidrsList)
 	if err != nil {
 		return nil, err
 	}
 
-	// failure: more than one cidr but they are not configured as dual stack
+	// 配置多个 CIDR 但不构成双栈时失败。
 	if len(clusterCIDRs) > 1 && !dualStack {
 		return nil, fmt.Errorf("len of ClusterCIDRs==%v and they are not configured as dual stack (at least one from each IPFamily", len(clusterCIDRs))
 	}
 
-	// failure: more than cidrs is not allowed even with dual stack
+	// 即使双栈也不允许超过两个 CIDR。
 	if len(clusterCIDRs) > 2 {
 		return nil, fmt.Errorf("length of clusterCIDRs is:%v more than max allowed of 2", len(clusterCIDRs))
 	}
@@ -874,10 +868,7 @@ func validateCIDRs(cidrsList string) ([]*net.IPNet, error) {
 	return clusterCIDRs, nil
 }
 
-// processCIDRs is a helper function that works on a comma separated cidrs and returns
-// a list of typed cidrs
-// a flag if cidrs represents a dual stack
-// error if failed to parse any of the cidrs
+// processCIDRs 解析逗号分隔的 CIDR，并返回网段列表及是否构成双栈。
 func processCIDRs(cidrsList string) ([]*net.IPNet, bool, error) {
 	cidrsSplit := strings.Split(strings.TrimSpace(cidrsList), ",")
 
@@ -886,16 +877,13 @@ func processCIDRs(cidrsList string) ([]*net.IPNet, bool, error) {
 		return nil, false, err
 	}
 
-	// if cidrs has an error then the previous call will fail
-	// safe to ignore error checking on next call
+	// 前一步解析失败已返回，因此这里可安全忽略双栈检查的错误。
 	dualstack, _ := netutils.IsDualStackCIDRs(cidrs)
 
 	return cidrs, dualstack, nil
 }
 
-// setNodeCIDRMaskSizes returns the IPv4 and IPv6 node cidr mask sizes to the value provided
-// for --node-cidr-mask-size-ipv4 and --node-cidr-mask-size-ipv6 respectively. If value not provided,
-// then it will return default IPv4 and IPv6 cidr mask sizes.
+// setNodeCIDRMaskSizes 按集群 IP 协议族顺序返回节点 CIDR 掩码长度；未指定时采用 IPv4 24、IPv6 64。
 func setNodeCIDRMaskSizes(cfg nodeipamconfig.NodeIPAMControllerConfiguration, clusterCIDRs []*net.IPNet) ([]int, error) {
 
 	sortedSizes := func(maskSizeIPv4, maskSizeIPv6 int) []int {
@@ -911,13 +899,13 @@ func setNodeCIDRMaskSizes(cfg nodeipamconfig.NodeIPAMControllerConfiguration, cl
 		return nodeMaskCIDRs
 	}
 
-	// --node-cidr-mask-size flag is incompatible with dual stack clusters.
+	// --node-cidr-mask-size 与双栈集群不兼容。
 	ipv4Mask, ipv6Mask := defaultNodeMaskCIDRIPv4, defaultNodeMaskCIDRIPv6
 	isDualstack := len(clusterCIDRs) > 1
 
-	// case one: cluster is dualstack (i.e, more than one cidr)
+	// 情况一：集群为双栈，即配置多个 CIDR。
 	if isDualstack {
-		// if --node-cidr-mask-size then fail, user must configure the correct dual-stack mask sizes (or use default)
+		// 若设置 --node-cidr-mask-size 则失败；双栈必须使用分协议族参数或默认值。
 		if cfg.NodeCIDRMaskSize != 0 {
 			return nil, errors.New("usage of --node-cidr-mask-size is not allowed with dual-stack clusters")
 
@@ -937,9 +925,9 @@ func setNodeCIDRMaskSizes(cfg nodeipamconfig.NodeIPAMControllerConfiguration, cl
 	maskV6Configured := cfg.NodeCIDRMaskSizeIPv6 != 0
 	isSingleStackIPv6 := netutils.IsIPv6CIDR(clusterCIDRs[0])
 
-	// original flag is set
+	// 已设置通用掩码参数
 	if maskConfigured {
-		// original mask flag is still the main reference.
+		// 通用掩码参数优先，不能与分协议族参数同时使用。
 		if maskV4Configured || maskV6Configured {
 			return nil, errors.New("usage of --node-cidr-mask-size-ipv4 and --node-cidr-mask-size-ipv6 is not allowed if --node-cidr-mask-size is set. For dual-stack clusters please unset it and use IPFamily specific flags")
 		}
@@ -956,7 +944,7 @@ func setNodeCIDRMaskSizes(cfg nodeipamconfig.NodeIPAMControllerConfiguration, cl
 		ipv4Mask = int(cfg.NodeCIDRMaskSizeIPv4)
 	}
 
-	// !maskV4Configured && !maskConfigured && maskV6Configured
+	// 仅配置 IPv6 掩码参数
 	if maskV6Configured {
 		if !isSingleStackIPv6 {
 			return nil, errors.New("usage of --node-cidr-mask-size-ipv6 is not allowed for a single-stack IPv4 cluster")

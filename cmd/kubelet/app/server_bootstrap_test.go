@@ -48,9 +48,6 @@ import (
 	"k8s.io/kubernetes/pkg/controller/certificates/authority"
 )
 
-// Test_buildClientCertificateManager validates that we can build a local client cert
-// manager that will use the bootstrap client until we get a valid cert, then use our
-// provided identity on subsequent requests.
 // Test_buildClientCertificateManager 验证证书管理器在无证书、证书文件存在等场景下选择正确的 CSR 客户端身份。
 func Test_buildClientCertificateManager(t *testing.T) {
 	testDir, err := os.MkdirTemp("", "kubeletcert")
@@ -96,7 +93,7 @@ func Test_buildClientCertificateManager(t *testing.T) {
 	defer m.Stop()
 	r := m.(rotater)
 
-	// get an expired CSR (simulating historical output)
+	// 获取已过期的 CSR（模拟历史输出）
 	server.backdate = 2 * time.Hour
 	server.SetExpectUserAgent("FirstClient")
 	ok, err := r.RotateCerts()
@@ -111,8 +108,7 @@ func Test_buildClientCertificateManager(t *testing.T) {
 		t.Fatalf("Unexpected directory contents: %#v", fi)
 	}
 
-	// if m.Current() == nil, then we try again and get a valid
-	// client
+	// 若 m.Current() 返回 nil，则重试并获取有效的客户端证书。
 	server.backdate = 0
 	server.SetExpectUserAgent("FirstClient")
 	if ok, err := r.RotateCerts(); !ok || err != nil {
@@ -126,7 +122,7 @@ func Test_buildClientCertificateManager(t *testing.T) {
 		t.Fatalf("Unexpected directory contents: %#v", fi)
 	}
 
-	// if m.Current() != nil, then we should use the second client
+	// 若 m.Current() 不为 nil，则后续请求应使用第二个客户端。
 	server.SetExpectUserAgent("SecondClient")
 	if ok, err := r.RotateCerts(); !ok || err != nil {
 		t.Fatalf("unexpected rotation err: %t %v", ok, err)
@@ -148,7 +144,7 @@ func Test_buildClientCertificateManager_populateCertDir(t *testing.T) {
 	}
 	defer func() { os.RemoveAll(testDir) }()
 
-	// when no cert is provided, write nothing to disk
+	// 未提供证书时不向磁盘写入任何内容。
 	config1 := &restclient.Config{
 		UserAgent: "FirstClient",
 		Host:      "http://localhost",
@@ -166,7 +162,7 @@ func Test_buildClientCertificateManager_populateCertDir(t *testing.T) {
 		t.Fatalf("Unexpected directory contents: %#v", fi)
 	}
 
-	// an invalid cert should be ignored
+	// 忽略无效证书。
 	config2.CertData = []byte("invalid contents")
 	config2.KeyData = []byte("invalid contents")
 	if _, err := buildClientCertificateManager(config1, config2, testDir, nodeName); err == nil {
@@ -177,8 +173,7 @@ func Test_buildClientCertificateManager_populateCertDir(t *testing.T) {
 		t.Fatalf("Unexpected directory contents: %#v", fi)
 	}
 
-	// an expired client certificate should be written to disk, because the cert manager can
-	// use config1 to refresh it and the cert manager won't return it for clients.
+	// 过期的客户端证书仍应写入磁盘，因为证书管理器可通过 config1 更新它，且不会将其返回给客户端。
 	config2.CertData, config2.KeyData = genClientCert(t, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
 	if _, err := buildClientCertificateManager(config1, config2, testDir, nodeName); err != nil {
 		t.Fatal(err)
@@ -188,7 +183,7 @@ func Test_buildClientCertificateManager_populateCertDir(t *testing.T) {
 		t.Fatalf("Unexpected directory contents: %#v", fi)
 	}
 
-	// a valid, non-expired client certificate should be written to disk
+	// 有效的未过期客户端证书应写入磁盘。
 	config2.CertData, config2.KeyData = genClientCert(t, time.Now().Add(-time.Hour), time.Now().Add(24*time.Hour))
 	if _, err := buildClientCertificateManager(config1, config2, testDir, nodeName); err != nil {
 		t.Fatal(err)
@@ -272,7 +267,7 @@ func (s *csrSimulator) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer s.lock.Unlock()
 	t := s.t
 
-	// filter out timeouts as csrSimulator don't support them
+	// csrSimulator 不支持超时参数，将其过滤掉。
 	q := req.URL.Query()
 	q.Del("timeout")
 	q.Del("timeoutSeconds")
@@ -357,7 +352,7 @@ func (s *csrSimulator) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.Write(data)
 
 	case utilfeature.DefaultFeatureGate.Enabled(featuregate.Feature(clientfeatures.WatchListClient)) && req.Method == http.MethodGet && req.URL.Path == "/apis/certificates.k8s.io/v1/certificatesigningrequests" && req.URL.RawQuery == "fieldSelector=metadata.name%3Dtest-csr&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&watch=true":
-		// TODO(#115478): remove the list & watch cases above when WatchListClient FG is removed
+		// TODO(#115478)：移除 WatchListClient 功能开关后，删除上述 list 和 watch 分支。
 		if s.csr == nil {
 			t.Fatalf("no csr")
 		}
@@ -404,8 +399,7 @@ func (s *csrSimulator) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// genClientCert generates an x509 certificate for testing. Certificate and key
-// are returned in PEM encoding.
+// genClientCert 生成测试用 x509 证书，并以 PEM 编码返回证书和私钥。
 func genClientCert(t *testing.T, from, to time.Time) ([]byte, []byte) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {

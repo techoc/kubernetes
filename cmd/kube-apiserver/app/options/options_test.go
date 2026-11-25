@@ -48,6 +48,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestAddFlags 验证命令行参数注册后能解析出预期配置。
 func TestAddFlags(t *testing.T) {
 	componentGlobalsRegistry := basecompatibility.NewComponentGlobalsRegistry()
 	fs := pflag.NewFlagSet("addflagstest", pflag.PanicOnError)
@@ -138,7 +139,7 @@ func TestAddFlags(t *testing.T) {
 	fs.Parse(args)
 	utilruntime.Must(componentGlobalsRegistry.Set())
 
-	// This is a snapshot of expected options parsed by args.
+	// 保存参数解析后期望配置的快照。
 	expected := &ServerRunOptions{
 		Options: &controlplaneapiserver.Options{
 			GenericServerRunOptions: &apiserveroptions.ServerRunOptions{
@@ -348,7 +349,7 @@ func TestAddFlags(t *testing.T) {
 		t.Errorf("expected legacy authorization flags to be set")
 	}
 
-	// setting the method to nil since methods can't be compared with reflect.DeepEqual
+	// reflect.DeepEqual 无法比较方法字段，比较前将其置空。
 	s.Authorization.AreLegacyFlagsSet = nil
 
 	if !reflect.DeepEqual(expected, s) {

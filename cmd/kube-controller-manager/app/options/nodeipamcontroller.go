@@ -25,12 +25,12 @@ import (
 	nodeipamconfig "k8s.io/kubernetes/pkg/controller/nodeipam/config"
 )
 
-// NodeIPAMControllerOptions holds the NodeIpamController options.
+// NodeIPAMControllerOptions 保存节点 IPAM 控制器的选项。
 type NodeIPAMControllerOptions struct {
 	*nodeipamconfig.NodeIPAMControllerConfiguration
 }
 
-// AddFlags adds flags related to NodeIpamController for controller manager to the specified FlagSet.
+// AddFlags 将节点 IPAM 控制器相关参数注册到指定 FlagSet。
 func (o *NodeIPAMControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -41,13 +41,13 @@ func (o *NodeIPAMControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.NodeCIDRMaskSizeIPv6, "node-cidr-mask-size-ipv6", o.NodeCIDRMaskSizeIPv6, "Mask size for IPv6 node cidr in dual-stack cluster. Default is 64.")
 }
 
-// ApplyTo fills up NodeIpamController config with options.
+// ApplyTo 将选项写入节点 IPAM 控制器配置。
 func (o *NodeIPAMControllerOptions) ApplyTo(cfg *nodeipamconfig.NodeIPAMControllerConfiguration) error {
 	if o == nil {
 		return nil
 	}
 
-	// split the cidrs list and assign primary and secondary
+	// 拆分 CIDR 列表，并分别设置为主、辅网段。
 	serviceCIDRList := strings.Split(o.ServiceCIDR, ",")
 	if len(serviceCIDRList) > 0 {
 		cfg.ServiceCIDR = serviceCIDRList[0]
@@ -63,7 +63,7 @@ func (o *NodeIPAMControllerOptions) ApplyTo(cfg *nodeipamconfig.NodeIPAMControll
 	return nil
 }
 
-// Validate checks validation of NodeIPAMControllerOptions.
+// Validate 校验节点 IPAM 控制器选项。
 func (o *NodeIPAMControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

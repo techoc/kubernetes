@@ -35,20 +35,16 @@ const (
 	apiVersionTooOld  = "no kind \"KubeSchedulerConfiguration\" is registered for" +
 		" version \"kubescheduler.config.k8s.io/v1alpha1\""
 
-	// schedulerConfigMinimalCorrect is the minimal
-	// correct scheduler config
+	// schedulerConfigMinimalCorrect 是字段最少但合法的 Scheduler 配置。
 	schedulerConfigMinimalCorrect = `
 apiVersion: kubescheduler.config.k8s.io/v1
 kind: KubeSchedulerConfiguration`
 
-	// schedulerConfigDecodeErr is the scheduler config
-	// which throws decoding error when we try to load it
+	// schedulerConfigDecodeErr 是加载时触发解码错误的配置。
 	schedulerConfigDecodeErr = `
 kind: KubeSchedulerConfiguration`
 
-	// schedulerConfigVersionTooOld is the scheduler config
-	// which throws error because the config version 'v1alpha1'
-	// is too old
+	// schedulerConfigVersionTooOld 使用已不再支持的 v1alpha1 版本，用于验证加载错误。
 	schedulerConfigVersionTooOld = `
 apiVersion: kubescheduler.config.k8s.io/v1alpha1
 kind: KubeSchedulerConfiguration

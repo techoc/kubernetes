@@ -48,46 +48,43 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Options contains everything necessary to create and run a proxy server.
+// Options 保存创建和运行 kube-proxy 所需的命令行状态与已解析配置。
 type Options struct {
-	// ConfigFile is the location of the proxy server's configuration file.
+	// ConfigFile 是代理服务器配置文件的路径。
 	ConfigFile string
-	// WriteConfigTo is the path where the default configuration will be written.
+	// WriteConfigTo 是输出默认配置的路径；非空时写文件后退出。
 	WriteConfigTo string
-	// CleanupAndExit, when true, makes the proxy server clean up iptables and ipvs rules, then exit.
+	// CleanupAndExit 为 true 时清理 iptables、ipvs 与 nftables 旧规则后退出。
 	CleanupAndExit bool
-	// InitAndExit, when true, makes the proxy server makes configurations that need privileged access, then exit.
+	// InitAndExit 为 true 时仅执行需要特权的初始化，完成后退出。
 	InitAndExit bool
-	// config is the proxy server's configuration object.
+	// config 是完成默认值转换后的内部配置对象。
 	config *kubeproxyconfig.KubeProxyConfiguration
-	// watcher is used to watch on the update change of ConfigFile
+	// watcher 监视配置文件变化；变化后要求进程退出并由调用方重新加载配置。
 	watcher filesystem.FSWatcher
-	// proxyServer is the interface to run the proxy server
+	// proxyServer 是待运行的代理服务器抽象。
 	proxyServer proxyRun
-	// errCh is the channel that errors will be sent
+	// errCh 在代理、配置监视或辅助服务失败时传递退出原因。
 	errCh chan error
-	// flagz is the Reader interface to get flags for the flagz page.
+	// flagz 为 flagz 页面提供当前命令行标志。
 	flagz flagz.Reader
 
-	// The fields below here are placeholders for flags that can't be directly mapped into
-	// config.KubeProxyConfiguration.
-	//
-	// TODO remove these fields once the deprecated flags are removed.
+	// 以下字段暂存无法直接映射到 config.KubeProxyConfiguration 的已弃用标志。
+	// TODO: 删除这些已弃用标志时一并移除字段。
 
-	// master is used to override the kubeconfig's URL to the apiserver.
+	// master 覆盖 kubeconfig 中的 API 服务器 URL。
 	master string
-	// healthzPort is the port to be used by the healthz server.
+	// healthzPort 是已弃用的健康检查服务器端口参数。
 	healthzPort int32
-	// metricsPort is the port to be used by the metrics server.
+	// metricsPort 是已弃用的指标服务器端口参数。
 	metricsPort int32
 
-	// hostnameOverride, if set from the command line flag, takes precedence over the `HostnameOverride` value from the config file
+	// hostnameOverride 来自命令行时优先于配置文件中的 HostnameOverride。
 	hostnameOverride string
 
 	logger klog.Logger
 
-	// The fields below here are placeholders for flags that can't be directly mapped into
-	// config.KubeProxyConfiguration.
+	// 以下字段暂存无法直接映射到 config.KubeProxyConfiguration 的兼容标志。
 	iptablesSyncPeriod    time.Duration
 	iptablesMinSyncPeriod time.Duration
 	ipvsSyncPeriod        time.Duration
@@ -95,7 +92,7 @@ type Options struct {
 	clusterCIDRs          string
 }
 
-// AddFlags adds flags to fs and binds them to options.
+// AddFlags 向 fs 注册命令行标志，并将它们绑定到 Options 或内部配置字段。
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	o.addOSFlags(fs)
 
@@ -179,7 +176,7 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	logsapi.AddFlags(&o.config.Logging, fs)
 }
 
-// newKubeProxyConfiguration returns a KubeProxyConfiguration with default values
+// newKubeProxyConfiguration 先对 v1alpha1 配置应用默认值，再转换为内部类型。
 func newKubeProxyConfiguration() *kubeproxyconfig.KubeProxyConfiguration {
 	versionedConfig := &v1alpha1.KubeProxyConfiguration{}
 	proxyconfigscheme.Scheme.Default(versionedConfig)
@@ -191,7 +188,7 @@ func newKubeProxyConfiguration() *kubeproxyconfig.KubeProxyConfiguration {
 	return internalConfig.(*kubeproxyconfig.KubeProxyConfiguration)
 }
 
-// NewOptions returns initialized Options
+// NewOptions 返回已装载默认配置和兼容端口初始值的 Options。
 func NewOptions() *Options {
 	return &Options{
 		config:      newKubeProxyConfiguration(),
@@ -202,26 +199,22 @@ func NewOptions() *Options {
 	}
 }
 
-// Complete completes all the required options.
+// Complete 汇总命令行、配置文件与平台默认值，使 Validate 能检查最终生效配置。
 func (o *Options) Complete(fs *pflag.FlagSet) error {
 	if len(o.ConfigFile) == 0 && len(o.WriteConfigTo) == 0 {
 		o.config.HealthzBindAddress = addressFromDeprecatedFlags(o.config.HealthzBindAddress, o.healthzPort)
 		o.config.MetricsBindAddress = addressFromDeprecatedFlags(o.config.MetricsBindAddress, o.metricsPort)
 	}
 
-	// Load the config file here in Complete, so that Validate validates the fully-resolved config.
+	// 必须在 Complete 中加载配置文件，Validate 才能校验合并后的最终配置。
 	if len(o.ConfigFile) > 0 {
 		c, err := o.loadConfigFromFile(o.ConfigFile)
 		if err != nil {
 			return err
 		}
 
-		// Before we overwrite the config which holds the parsed
-		// command line parameters, we need to copy all modified
-		// logging settings over to the loaded config (i.e.  logging
-		// command line flags have priority). Otherwise `--config
-		// ... -v=5` doesn't work (config resets verbosity even
-		// when it contains no logging settings).
+		// 覆盖前把已修改的日志参数复制到文件配置，确保命令行日志标志优先。
+		// 否则即使文件未配置日志，加载配置也会重置 `--config ... -v=5` 的详细级别。
 		_ = copyLogsFromFlags(fs, &c.Logging)
 		o.config = c
 
@@ -241,8 +234,7 @@ func (o *Options) Complete(fs *pflag.FlagSet) error {
 	if err := utilfeature.DefaultMutableFeatureGate.SetFromMap(o.config.FeatureGates); err != nil {
 		return err
 	}
-	// Propagate feature gate state to the metrics subsystem. This must be called
-	// after feature gates are set and before any histogram metrics are registered.
+	// 将功能开关状态同步到指标子系统；必须晚于开关设置、早于直方图指标注册。
 	metricsfeatures.ApplyFeatureGates(utilfeature.DefaultFeatureGate)
 
 	if utilfeature.DefaultFeatureGate.Enabled(zpagesfeatures.ComponentFlagz) {
@@ -258,12 +250,9 @@ func (o *Options) Complete(fs *pflag.FlagSet) error {
 	return nil
 }
 
-// copyLogsFromFlags applies the logging flags from the given flag set to the given
-// configuration. Fields for which the corresponding flag was not used are left
-// unmodified. For fields that have multiple values (like vmodule), the values from
-// the flags get joined so that the command line flags have priority.
-//
-// TODO (pohly): move this to logsapi
+// copyLogsFromFlags 将 from 中显式修改的日志标志复制到 to，未修改字段保持原值。
+// vmodule 等可重复字段由标志值追加在前，确保命令行配置优先。
+// TODO(pohly): 移到 logsapi。
 func copyLogsFromFlags(from *pflag.FlagSet, to *logsapi.LoggingConfiguration) error {
 	var cloneFS pflag.FlagSet
 	logsapi.AddFlags(to, &cloneFS)
@@ -291,7 +280,7 @@ func copyLogsFromFlags(from *pflag.FlagSet, to *logsapi.LoggingConfiguration) er
 	return err
 }
 
-// Creates a new filesystem watcher and adds watches for the config file.
+// initWatcher 创建文件系统监视器并监听配置文件。
 func (o *Options) initWatcher() error {
 	fswatcher := filesystem.NewFsnotifyWatcher()
 	err := fswatcher.Init(o.eventHandler, o.errorHandler)
@@ -308,7 +297,7 @@ func (o *Options) initWatcher() error {
 
 func (o *Options) eventHandler(ent fsnotify.Event) {
 	if ent.Has(fsnotify.Write) || ent.Has(fsnotify.Rename) {
-		// error out when ConfigFile is updated
+		// 配置文件更新后不热加载，发送错误要求进程退出并重新读取。
 		o.errCh <- fmt.Errorf("content of the proxy server's configuration file was updated")
 		return
 	}
@@ -319,9 +308,9 @@ func (o *Options) errorHandler(err error) {
 	o.errCh <- err
 }
 
-// processHostnameOverrideFlag processes hostname-override flag
+// processHostnameOverrideFlag 处理 hostname-override 标志，并拒绝仅含空白的值。
 func (o *Options) processHostnameOverrideFlag() error {
-	// Check if hostname-override flag is set and use value since configFile always overrides
+	// 命令行标志非空时覆盖配置文件值，并统一去除空白、转小写。
 	if len(o.hostnameOverride) > 0 {
 		hostName := strings.TrimSpace(o.hostnameOverride)
 		if len(hostName) == 0 {
@@ -333,7 +322,7 @@ func (o *Options) processHostnameOverrideFlag() error {
 	return nil
 }
 
-// processV1Alpha1Flags processes v1alpha1 flags which can't be directly mapped to internal config.
+// processV1Alpha1Flags 将无法直接映射到内部配置的 v1alpha1 兼容标志合并进去。
 func (o *Options) processV1Alpha1Flags(fs *pflag.FlagSet) {
 	if fs.Changed("iptables-sync-period") && o.config.Mode != kubeproxyconfig.ProxyModeIPVS {
 		o.config.SyncPeriod.Duration = o.iptablesSyncPeriod
@@ -352,7 +341,7 @@ func (o *Options) processV1Alpha1Flags(fs *pflag.FlagSet) {
 	}
 }
 
-// Validate validates all the required options.
+// Validate 校验完成合并的内部配置，并汇总所有字段错误。
 func (o *Options) Validate() error {
 	if errs := validation.Validate(o.config); len(errs) != 0 {
 		return errs.ToAggregate()
@@ -361,7 +350,7 @@ func (o *Options) Validate() error {
 	return nil
 }
 
-// Run runs the specified ProxyServer.
+// Run 写出默认配置、执行清理或初始化，否则启动代理并等待退出。
 func (o *Options) Run(ctx context.Context) error {
 	defer close(o.errCh)
 	if len(o.WriteConfigTo) > 0 {
@@ -372,8 +361,7 @@ func (o *Options) Run(ctx context.Context) error {
 	if o.CleanupAndExit {
 		return err
 	}
-	// We ignore err otherwise; the cleanup is best-effort, and the backends will have
-	// logged messages if they failed in interesting ways.
+	// 普通启动时清理只是尽力而为；后端会记录有意义的失败，因此这里不中止启动。
 
 	proxyServer, err := newProxyServer(ctx, o.config, o.master, o.InitAndExit, o.flagz)
 	if err != nil {
@@ -387,14 +375,14 @@ func (o *Options) Run(ctx context.Context) error {
 	return o.runLoop(ctx)
 }
 
-// runLoop will watch on the update change of the proxy server's configuration file.
-// Return an error when updated
+// runLoop 在后台运行代理，并等待代理或配置文件监视器报告结果。
+// 任一非 nil 错误都会结束循环并向上返回。
 func (o *Options) runLoop(ctx context.Context) error {
 	if o.watcher != nil {
 		o.watcher.Run(ctx)
 	}
 
-	// run the proxy in goroutine
+	// 在 goroutine 中运行代理，使主循环能同时接收配置监视事件。
 	go func() {
 		err := o.proxyServer.Run(ctx)
 		o.errCh <- err
@@ -438,10 +426,8 @@ func (o *Options) writeConfigFile() (err error) {
 	return nil
 }
 
-// addressFromDeprecatedFlags returns server address from flags
-// passed on the command line based on the following rules:
-// 1. If port is 0, disable the server (e.g. set address to empty).
-// 2. Otherwise, set the port portion of the config accordingly.
+// addressFromDeprecatedFlags 根据已弃用的独立端口参数生成监听地址。
+// port 为 0 时返回空地址以禁用服务；否则仅替换 addr 的端口部分。
 func addressFromDeprecatedFlags(addr string, port int32) string {
 	if port == 0 {
 		return ""
@@ -449,8 +435,8 @@ func addressFromDeprecatedFlags(addr string, port int32) string {
 	return proxyutil.AppendPortIfNeeded(addr, port)
 }
 
-// newLenientSchemeAndCodecs returns a scheme that has only v1alpha1 registered into
-// it and a CodecFactory with strict decoding disabled.
+// newLenientSchemeAndCodecs 创建注册内部配置与 v1alpha1、且关闭严格解码的 Scheme 与 CodecFactory。
+// 宽松路径仅用于兼容 v1alpha1，避免意外接受其它配置 API。
 func newLenientSchemeAndCodecs() (*runtime.Scheme, *serializer.CodecFactory, error) {
 	lenientScheme := runtime.NewScheme()
 	if err := kubeproxyconfig.AddToScheme(lenientScheme); err != nil {
@@ -463,8 +449,7 @@ func newLenientSchemeAndCodecs() (*runtime.Scheme, *serializer.CodecFactory, err
 	return lenientScheme, &lenientCodecs, nil
 }
 
-// loadConfigFromFile loads the contents of file and decodes it as a
-// KubeProxyConfiguration object.
+// loadConfigFromFile 读取文件并将内容解码为 KubeProxyConfiguration。
 func (o *Options) loadConfigFromFile(file string) (*kubeproxyconfig.KubeProxyConfiguration, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
@@ -474,14 +459,14 @@ func (o *Options) loadConfigFromFile(file string) (*kubeproxyconfig.KubeProxyCon
 	return o.loadConfig(data)
 }
 
-// loadConfig decodes a serialized KubeProxyConfiguration to the internal type.
+// loadConfig 将序列化的 KubeProxyConfiguration 解码为内部类型。
+// 严格解码失败时，仅 v1alpha1 可回退到宽松解码并记录警告。
 func (o *Options) loadConfig(data []byte) (*kubeproxyconfig.KubeProxyConfiguration, error) {
 
 	configObj, gvk, err := proxyconfigscheme.Codecs.UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
-		// Try strict decoding first. If that fails decode with a lenient
-		// decoder, which has only v1alpha1 registered, and log a warning.
-		// The lenient path is to be dropped when support for v1alpha1 is dropped.
+		// 先严格解码；失败后仅对 v1alpha1 使用宽松解码并记录警告。
+		// 停止支持 v1alpha1 时必须移除该兼容路径。
 		if !runtime.IsStrictDecodingError(err) {
 			return nil, fmt.Errorf("failed to decode: %w", err)
 		}
@@ -493,12 +478,11 @@ func (o *Options) loadConfig(data []byte) (*kubeproxyconfig.KubeProxyConfigurati
 
 		configObj, gvk, lenientErr = lenientCodecs.UniversalDecoder().Decode(data, nil, nil)
 		if lenientErr != nil {
-			// Lenient decoding failed with the current version, return the
-			// original strict error.
+			// 当前版本宽松解码也失败时，返回最初的严格解码错误。
 			return nil, fmt.Errorf("failed lenient decoding: %w", err)
 		}
 
-		// Continue with the v1alpha1 object that was decoded leniently, but emit a warning.
+		// 保留宽松解码得到的 v1alpha1 对象，同时把降级事实写入日志。
 		o.logger.Info("Using lenient decoding as strict decoding failed", "err", err)
 	}
 

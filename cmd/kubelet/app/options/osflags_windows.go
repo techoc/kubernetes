@@ -25,8 +25,7 @@ import (
 // addOSFlags 注册仅 Windows 构建支持的参数：SCM 服务模式和进程优先级类别。
 func (f *KubeletFlags) addOSFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&f.WindowsService, "windows-service", f.WindowsService, "Enable Windows Service Control Manager API integration")
-	// The default priority class associated with any process in Windows is NORMAL_PRIORITY_CLASS. Keeping it as is
-	// to maintain backwards compatibility.
+	// Windows 进程默认使用 NORMAL_PRIORITY_CLASS；保持默认值以维持向后兼容。
 	// Source: https://docs.microsoft.com/en-us/windows/win32/procthread/scheduling-priorities
 	fs.StringVar(&f.WindowsPriorityClass, "windows-priorityclass", "NORMAL_PRIORITY_CLASS",
 		"Set the PriorityClass associated with kubelet process, the default ones are available at "+

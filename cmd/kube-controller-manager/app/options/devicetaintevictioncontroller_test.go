@@ -37,19 +37,19 @@ func TestDeviceTaintEvictionControllerOptions_AddFlags(t *testing.T) {
 
 	opts.AddFlags(fs)
 
-	// Test that the flag was added
+	// 确认参数已注册
 	flag := fs.Lookup("concurrent-device-taint-eviction-syncs")
 	if flag == nil {
 		t.Error("concurrent-device-taint-eviction-syncs flag was not added")
 		return
 	}
 
-	// Test that the flag has the correct default value
+	// 确认参数默认值正确
 	if flag.DefValue != "50" {
 		t.Errorf("expected default value 50, got %s", flag.DefValue)
 	}
 
-	// Test flag parsing
+	// 测试参数解析
 	args := []string{"--concurrent-device-taint-eviction-syncs=25"}
 	if err := fs.Parse(args); err != nil {
 		t.Errorf("failed to parse flags: %v", err)
@@ -64,10 +64,10 @@ func TestDeviceTaintEvictionControllerOptions_AddFlags_Nil(t *testing.T) {
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	var opts *DeviceTaintEvictionControllerOptions
 
-	// Should not panic when options is nil
+	// 选项为 nil 时不应 panic
 	opts.AddFlags(fs)
 
-	// Flag should not be added
+	// 不应注册参数
 	flag := fs.Lookup("concurrent-device-taint-eviction-syncs")
 	if flag != nil {
 		t.Error("concurrent-device-taint-eviction-syncs flag should not be added when options is nil")
@@ -104,7 +104,7 @@ func TestDeviceTaintEvictionControllerOptions_ApplyTo_Nil(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// Configuration should remain unchanged
+	// 配置应保持不变
 	if cfg.ConcurrentSyncs != 50 {
 		t.Errorf("expected ConcurrentSyncs to remain 50, got %d", cfg.ConcurrentSyncs)
 	}
@@ -179,7 +179,7 @@ func TestDeviceTaintEvictionControllerOptions_Validate_Nil(t *testing.T) {
 }
 
 func TestDeviceTaintEvictionControllerOptions_Integration(t *testing.T) {
-	// Test the complete workflow: create options, set flags, apply to config
+	// 测试完整流程：创建选项、注册参数、解析并应用到配置
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	opts := &DeviceTaintEvictionControllerOptions{
 		&devicetaintevictionconfig.DeviceTaintEvictionControllerConfiguration{
@@ -187,28 +187,28 @@ func TestDeviceTaintEvictionControllerOptions_Integration(t *testing.T) {
 		},
 	}
 
-	// Add flags
+	// 注册参数
 	opts.AddFlags(fs)
 
-	// Parse flags with custom value
+	// 解析自定义参数值
 	args := []string{"--concurrent-device-taint-eviction-syncs=100"}
 	if err := fs.Parse(args); err != nil {
 		t.Fatalf("failed to parse flags: %v", err)
 	}
 
-	// Validate
+	// 校验
 	errs := opts.Validate()
 	if len(errs) > 0 {
 		t.Fatalf("validation failed: %v", errs)
 	}
 
-	// Apply to config
+	// 应用到配置
 	cfg := &devicetaintevictionconfig.DeviceTaintEvictionControllerConfiguration{}
 	if err := opts.ApplyTo(cfg); err != nil {
 		t.Fatalf("failed to apply options: %v", err)
 	}
 
-	// Verify final configuration
+	// 确认最终配置
 	expected := &devicetaintevictionconfig.DeviceTaintEvictionControllerConfiguration{
 		ConcurrentSyncs: 100,
 	}

@@ -26,7 +26,7 @@ import (
 
 	"github.com/google/cadvisor/lib/cadvisorflags"
 
-	// registers housekeeping_interval on the global flag set
+	// cAdvisor 将 housekeeping_interval 注册到 Go 全局 FlagSet。
 	_ "github.com/google/cadvisor/lib/manager"
 )
 
@@ -36,9 +36,9 @@ func addCadvisorFlags(fs *pflag.FlagSet) {
 	global := flag.CommandLine
 	local := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
 
-	// e2e node tests rely on this
+	// 节点 e2e 测试依赖此参数。
 	register(global, local, cadvisorflags.HousekeepingInterval)
 
-	// finally, add cadvisor flags to the provided flagset
+	// 最后将 cAdvisor 参数加入调用方传入的 FlagSet。
 	fs.AddFlagSet(local)
 }

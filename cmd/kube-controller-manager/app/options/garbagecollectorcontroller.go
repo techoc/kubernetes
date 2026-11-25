@@ -22,12 +22,12 @@ import (
 	garbagecollectorconfig "k8s.io/kubernetes/pkg/controller/garbagecollector/config"
 )
 
-// GarbageCollectorControllerOptions holds the GarbageCollectorController options.
+// GarbageCollectorControllerOptions 保存垃圾回收控制器的选项。
 type GarbageCollectorControllerOptions struct {
 	*garbagecollectorconfig.GarbageCollectorControllerConfiguration
 }
 
-// AddFlags adds flags related to GarbageCollectorController for controller manager to the specified FlagSet.
+// AddFlags 将垃圾回收控制器相关参数注册到指定 FlagSet。
 func (o *GarbageCollectorControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -37,7 +37,7 @@ func (o *GarbageCollectorControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&o.EnableGarbageCollector, "enable-garbage-collector", o.EnableGarbageCollector, "Enables the generic garbage collector. MUST be synced with the corresponding flag of the kube-apiserver.")
 }
 
-// ApplyTo fills up GarbageCollectorController config with options.
+// ApplyTo 将选项写入垃圾回收控制器配置。
 func (o *GarbageCollectorControllerOptions) ApplyTo(cfg *garbagecollectorconfig.GarbageCollectorControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -50,7 +50,7 @@ func (o *GarbageCollectorControllerOptions) ApplyTo(cfg *garbagecollectorconfig.
 	return nil
 }
 
-// Validate checks validation of GarbageCollectorController.
+// Validate 校验垃圾回收控制器选项。
 func (o *GarbageCollectorControllerOptions) Validate() []error {
 	if o == nil {
 		return nil
