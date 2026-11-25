@@ -23,151 +23,147 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Header keys used by the audit system.
+// 审计系统使用的 HTTP 头键。
 const (
-	// Header to hold the audit ID as the request is propagated through the serving hierarchy. The
-	// Audit-ID header should be set by the first server to receive the request (e.g. the federation
-	// server or kube-aggregator).
+	// 用于在请求穿过服务层级时承载审计 ID 的头。Audit-ID 头应当由第一个
+	// 收到请求的服务器设置（例如联邦服务器或 kube-aggregator）。
 	//
-	// Audit ID is also returned to client by http response header.
-	// It's not guaranteed Audit-Id http header is sent for all requests. When kube-apiserver didn't
-	// audit the events according to the audit policy, no Audit-ID is returned. Also, for request to
-	// pods/exec, pods/attach, pods/proxy, kube-apiserver works like a proxy and redirect the request
-	// to kubelet node, users will only get http headers sent from kubelet node, so no Audit-ID is
-	// sent when users run command like "kubectl exec" or "kubectl attach".
+	// 审计 ID 也会通过 HTTP 响应头返回给客户端。
+	// 并不保证所有请求都会发送 Audit-Id HTTP 头。当 kube-apiserver 未按审计
+	// 策略审计事件时，不会返回 Audit-ID。此外，对于 pods/exec、pods/attach、
+	// pods/proxy 这类请求，kube-apiserver 像代理一样把请求重定向到 kubelet
+	// 所在节点，用户只会拿到 kubelet 节点发送的 HTTP 头，因此运行
+	// "kubectl exec" 或 "kubectl attach" 等命令时不会收到 Audit-ID。
 	HeaderAuditID = "Audit-ID"
 )
 
-// Level defines the amount of information logged during auditing
+// Level 定义审计期间记录信息的多少
 //
 // 等级越高记录的信息越多，代价也越大；策略中按请求类别选择合适等级。
 type Level string
 
-// Valid audit levels
+// 合法的审计等级
 const (
-	// LevelNone disables auditing
+	// LevelNone 关闭审计。
 	LevelNone Level = "None"
-	// LevelMetadata provides the basic level of auditing.
+	// LevelMetadata 提供基本的审计等级。
 	LevelMetadata Level = "Metadata"
-	// LevelRequest provides Metadata level of auditing, and additionally
-	// logs the request object (does not apply for non-resource requests).
+	// LevelRequest 在 Metadata 等级的基础上，额外记录请求对象
+	// （不适用于非资源类请求）。
 	LevelRequest Level = "Request"
-	// LevelRequestResponse provides Request level of auditing, and additionally
-	// logs the response object (does not apply for non-resource requests).
+	// LevelRequestResponse 在 Request 等级的基础上，额外记录响应对象
+	// （不适用于非资源类请求）。
 	LevelRequestResponse Level = "RequestResponse"
 )
 
-// Stage defines the stages in request handling that audit events may be generated.
+// Stage 定义请求处理过程中可能产生审计事件的各个阶段。
 //
 // 同一次请求可能在不同阶段产生多条事件，通过 Stage 字段区分。
 type Stage string
 
-// Valid audit stages.
+// 合法的审计阶段。
 const (
-	// The stage for events generated as soon as the audit handler receives the request, and before it
-	// is delegated down the handler chain.
+	// StageRequestReceived：审计处理器一收到请求、尚未向下委派给处理器链
+	// 之前生成的事件所处的阶段。
 	StageRequestReceived Stage = "RequestReceived"
-	// The stage for events generated once the response headers are sent, but before the response body
-	// is sent. This stage is only generated for long-running requests (e.g. watch).
+	// StageResponseStarted：响应头已发出、但响应体尚未发出时生成的事件
+	// 所处的阶段。该阶段只对长时间运行的请求（例如 watch）生成。
 	StageResponseStarted Stage = "ResponseStarted"
-	// The stage for events generated once the response body has been completed, and no more bytes
-	// will be sent.
+	// StageResponseComplete：响应体已写完、不会再发送任何字节时生成的
+	// 事件所处的阶段。
 	StageResponseComplete Stage = "ResponseComplete"
-	// The stage for events generated when a panic occurred.
+	// StagePanic：发生 panic 时生成的事件所处的阶段。
 	StagePanic Stage = "Panic"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Event captures all the information that can be included in an API audit log.
+// Event 捕获 API 审计日志中可以包含的全部信息。
 //
 // 这是审计事件的内部表示，最终会被转换为 audit.k8s.io/v1 等外部版本写出。
 type Event struct {
 	metav1.TypeMeta
 
-	// AuditLevel at which event was generated
+	// 生成该事件时所用的审计等级
 	Level Level
 
-	// Unique audit ID, generated for each request.
+	// 唯一的审计 ID，为每个请求生成。
 	AuditID types.UID
-	// Stage of the request handling when this event instance was generated.
+	// 生成该事件实例时请求处理所处的阶段。
 	Stage Stage
 
-	// RequestURI is the request URI as sent by the client to a server.
+	// RequestURI 是客户端发送给服务器的请求 URI。
 	RequestURI string
-	// Verb is the kubernetes verb associated with the request.
-	// For non-resource requests, this is the lower-cased HTTP method.
+	// Verb 是与该请求关联的 kubernetes 动词。
+	// 对于非资源类请求，这里是小写化的 HTTP 方法名。
 	Verb string
-	// Authenticated user information.
+	// 已认证的用户信息。
 	User authnv1.UserInfo
-	// Impersonated user information.
+	// 被 impersonate（伪装）的用户信息。
 	// +optional
 	ImpersonatedUser *authnv1.UserInfo
-	// AuthenticationMetadata contains details about how the request was authenticated.
+	// AuthenticationMetadata 包含该请求如何被认证的细节。
 	// +optional
 	AuthenticationMetadata *AuthenticationMetadata
 
-	// Source IPs, from where the request originated and intermediate proxies.
-	// The source IPs are listed from (in order):
-	// 1. X-Forwarded-For request header IPs
-	// 2. X-Real-Ip header, if not present in the X-Forwarded-For list
-	// 3. The remote address for the connection, if it doesn't match the last
-	//    IP in the list up to here (X-Forwarded-For or X-Real-Ip).
-	// Note: All but the last IP can be arbitrarily set by the client.
+	// Source IPs：请求的来源 IP 及中间代理。这些 IP 按以下顺序列出：
+	// 1. X-Forwarded-For 请求头中的 IP
+	// 2. X-Real-Ip 头，若它未出现在 X-Forwarded-For 列表中
+	// 3. 连接的远端地址，若它与至此列表中的最后一个 IP
+	//    （X-Forwarded-For 或 X-Real-Ip）不一致。
+	// 注意：除最后一个 IP 外，其余 IP 均可由客户端任意伪造。
 	// +optional
 	SourceIPs []string
-	// UserAgent records the user agent string reported by the client.
-	// Note that the UserAgent is provided by the client, and must not be trusted.
+	// UserAgent 记录客户端上报的 user agent 字符串。
+	// 注意：UserAgent 由客户端提供，绝不可信任。
 	// +optional
 	UserAgent string
-	// Object reference this request is targeted at.
-	// Does not apply for List-type requests, or non-resource requests.
+	// 该请求指向的对象引用。
+	// 不适用于 List 类请求或非资源类请求。
 	// +optional
 	ObjectRef *ObjectReference
-	// The response status, populated even when the ResponseObject is not a Status type.
-	// For successful responses, this will only include the Code. For non-status type
-	// error responses, this will be auto-populated with the error Message.
+	// 响应状态，即使 ResponseObject 不是 Status 类型也会被填充。
+	// 成功响应时只包含 Code 字段；对于非 Status 类型的错误响应，
+	// 会自动填充错误的 Message。
 	// +optional
 	ResponseStatus *metav1.Status
 
-	// API object from the request, in JSON format. The RequestObject is recorded as-is in the request
-	// (possibly re-encoded as JSON), prior to version conversion, defaulting, admission or
-	// merging. It is an external versioned object type, and may not be a valid object on its own.
-	// Omitted for non-resource requests.  Only logged at Request Level and higher.
+	// 来自请求的 API 对象，JSON 格式。RequestObject 在版本转换、默认值填充、
+	// 准入或合并之前按请求原样记录（可能重新编码为 JSON）。它是外部版本化的
+	// 对象类型，单独看可能不是合法对象。非资源类请求会省略；仅在 Request
+	// 等级及以上记录。
 	// +optional
 	RequestObject *runtime.Unknown
-	// API object returned in the response, in JSON. The ResponseObject is recorded after conversion
-	// to the external type, and serialized as JSON. Omitted for non-resource requests.  Only logged
-	// at Response Level.
+	// 响应中返回的 API 对象，JSON 格式。ResponseObject 在转换为外部类型之后
+	// 记录并序列化为 JSON。非资源类请求会省略；仅在 Response 等级记录。
 	// +optional
 	ResponseObject *runtime.Unknown
 
-	// Time the request reached the apiserver.
+	// 请求到达 apiserver 的时间。
 	RequestReceivedTimestamp metav1.MicroTime
-	// Time the request reached current audit stage.
+	// 请求到达当前审计阶段的时间。
 	StageTimestamp metav1.MicroTime
 
-	// Annotations is an unstructured key value map stored with an audit event that may be set by
-	// plugins invoked in the request serving chain, including authentication, authorization and
-	// admission plugins. Note that these annotations are for the audit event, and do not correspond
-	// to the metadata.annotations of the submitted object. Keys should uniquely identify the informing
-	// component to avoid name collisions (e.g. podsecuritypolicy.admission.k8s.io/policy). Values
-	// should be short. Annotations are included in the Metadata level.
+	// Annotations 是与审计事件一起存储的非结构化键值映射，可由请求服务链中的
+	// 插件（包括认证、授权和准入插件）设置。注意这些注解属于审计事件，与提交
+	// 对象的 metadata.annotations 无关。键应当唯一标识产生信息的组件以避免名称
+	// 冲突（例如 podsecuritypolicy.admission.k8s.io/policy）。值应当简短。
+	// Annotations 会计入 Metadata 等级。
 	// +optional
 	Annotations map[string]string
 }
 
 // AuthenticationMetadata 记录认证阶段产生的附加信息，供审计与后续授权参考。
 type AuthenticationMetadata struct {
-	// ImpersonationConstraint is the verb associated with the constrained impersonation mode that was used to authorize
-	// the ImpersonatedUser associated with this audit event.  It is only set when constrained impersonation was used.
+	// ImpersonationConstraint 是与本审计事件关联的 ImpersonatedUser 在被授权时
+	// 所用的受限 impersonation 模式对应的动词。仅在使用受限 impersonation 时设置。
 	// +optional
 	ImpersonationConstraint string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EventList is a list of audit Events.
+// EventList 是审计 Event 的列表。
 type EventList struct {
 	metav1.TypeMeta
 	// +optional
@@ -178,41 +174,38 @@ type EventList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Policy defines the configuration of audit logging, and the rules for how different request
-// categories are logged.
+// Policy 定义审计日志的配置，以及不同类别请求如何被记录的规则。
 //
 // 策略中 Rules 严格有序，请求命中第一条匹配规则后即停止；没有任何规则命中时
 // 采用等级 None（即不记录）。
 type Policy struct {
 	metav1.TypeMeta
-	// ObjectMeta is included for interoperability with API infrastructure.
+	// 包含 ObjectMeta 以与 API 基础设施互操作。
 	// +optional
 	metav1.ObjectMeta
 
-	// Rules specify the audit Level a request should be recorded at.
-	// A request may match multiple rules, in which case the FIRST matching rule is used.
-	// The default audit level is None, but can be overridden by a catch-all rule at the end of the list.
-	// PolicyRules are strictly ordered.
+	// Rules 指定请求应被记录到的审计 Level。
+	// 一个请求可能匹配多条规则，此时使用第一条（FIRST）匹配的规则。
+	// 默认审计等级是 None，但可以用列表末尾的兜底（catch-all）规则覆盖。
+	// PolicyRules 是严格有序的。
 	Rules []PolicyRule
 
-	// OmitStages is a list of stages for which no events are created. Note that this can also
-	// be specified per rule in which case the union of both are omitted.
+	// OmitStages 是不生成事件的阶段列表。注意它也可以按规则单独指定，
+	// 此时两者（全局与规则级）的并集都会被省略。
 	// +optional
 	OmitStages []Stage
 
-	// OmitManagedFields indicates whether to omit the managed fields of the request
-	// and response bodies from being written to the API audit log.
-	// This is used as a global default - a value of 'true' will omit the managed fileds,
-	// otherwise the managed fields will be included in the API audit log.
-	// Note that this can also be specified per rule in which case the value specified
-	// in a rule will override the global default.
+	// OmitManagedFields 指示是否把请求与响应体中的 managed fields 从
+	// API 审计日志中省略掉。它作为全局默认值使用：取值 'true' 会省略
+	// managed fields，否则 managed fields 会被写入 API 审计日志。
+	// 注意它也可以按规则单独指定，此时规则中指定的值会覆盖全局默认值。
 	// +optional
 	OmitManagedFields bool
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PolicyList is a list of audit Policies.
+// PolicyList 是审计 Policy 的列表。
 type PolicyList struct {
 	metav1.TypeMeta
 	// +optional
@@ -221,102 +214,98 @@ type PolicyList struct {
 	Items []Policy
 }
 
-// PolicyRule maps requests based off metadata to an audit Level.
-// Requests must match the rules of every field (an intersection of rules).
+// PolicyRule 基于元数据将请求映射到一个审计 Level。
+// 请求必须匹配每个字段的规则（各字段规则求交集）。
 //
 // 各字段之间是“与”关系；单个字段内部的列表是“或”关系，空列表表示不限制。
 // 资源型规则（Resources/Namespaces）与非资源型规则（NonResourceURLs）不能同时设置。
 type PolicyRule struct {
-	// The Level that requests matching this rule are recorded at.
+	// 匹配本规则的请求被记录到的 Level。
 	Level Level
 
-	// The users (by authenticated user name) this rule applies to.
-	// An empty list implies every user.
+	// 本规则适用的用户（按已认证用户名）。
+	// 空列表表示所有用户。
 	// +optional
 	Users []string
-	// The user groups this rule applies to. A user is considered matching
-	// if it is a member of any of the UserGroups.
-	// An empty list implies every user group.
+	// 本规则适用的用户组。用户只要属于任一 UserGroups 即视为匹配。
+	// 空列表表示所有用户组。
 	// +optional
 	UserGroups []string
 
-	// The verbs that match this rule.
-	// An empty list implies every verb.
+	// 匹配本规则的动词。
+	// 空列表表示所有动词。
 	// +optional
 	Verbs []string
 
-	// Rules can apply to API resources (such as "pods" or "secrets"),
-	// non-resource URL paths (such as "/api"), or neither, but not both.
-	// If neither is specified, the rule is treated as a default for all URLs.
+	// 规则可以作用于 API 资源（如 "pods" 或 "secrets"）、非资源 URL 路径
+	//（如 "/api"），或两者都不作用于，但不能同时作用于两者。
+	// 若两者都未指定，则该规则被视为对所有 URL 的默认规则。
 
-	// Resources that this rule matches. An empty list implies all kinds in all API groups.
+	// 本规则匹配的资源。空列表表示所有 API 组中的所有类型。
 	// +optional
 	Resources []GroupResources
-	// Namespaces that this rule matches.
-	// The empty string "" matches non-namespaced resources.
-	// An empty list implies every namespace.
+	// 本规则匹配的命名空间。
+	// 空字符串 "" 匹配非命名空间资源。
+	// 空列表表示所有命名空间。
 	// +optional
 	Namespaces []string
 
-	// NonResourceURLs is a set of URL paths that should be audited.
-	// `*`s are allowed, but only as the full, final step in the path.
-	// Examples:
-	//  `/metrics` - Log requests for apiserver metrics
-	//  `/healthz*` - Log all health checks
+	// NonResourceURLs 是需要审计的 URL 路径集合。
+	// 允许使用 `*`，但只能作为路径的最后一个完整步骤。
+	// 示例：
+	//  `/metrics` - 记录 apiserver 指标的请求
+	//  `/healthz*` - 记录所有健康检查
 	// +optional
 	NonResourceURLs []string
 
-	// OmitStages is a list of stages for which no events are created. Note that this can also
-	// be specified policy wide in which case the union of both are omitted.
-	// An empty list means no restrictions will apply.
+	// OmitStages 是不生成事件的阶段列表。注意它也可以在策略全局层面指定，
+	// 此时两者的并集都会被省略。
+	// 空列表表示不施加任何限制。
 	// +optional
 	OmitStages []Stage
 
-	// OmitManagedFields indicates whether to omit the managed fields of the request
-	// and response bodies from being written to the API audit log.
-	// - a value of 'true' will drop the managed fields from the API audit log
-	// - a value of 'false' indicates that the managed fileds should be included
-	//   in the API audit log
-	// Note that the value, if specified, in this rule will override the global default
-	// If a value is not specified then the global default specified in
-	// Policy.OmitManagedFields will stand.
+	// OmitManagedFields 指示是否把请求与响应体中的 managed fields 从
+	// API 审计日志中省略掉：
+	// - 取值 'true' 会把 managed fields 从 API 审计日志中丢弃
+	// - 取值 'false' 表示 managed fields 应当包含在 API 审计日志中
+	// 注意本规则中指定的值（若有）会覆盖全局默认值；
+	// 若未指定，则沿用 Policy.OmitManagedFields 中的全局默认值。
 	// +optional
 	OmitManagedFields *bool
 }
 
-// GroupResources represents resource kinds in an API group.
+// GroupResources 表示某个 API 组内的资源类型。
 //
 // 一个 GroupResources 项把 API 组与若干资源/子资源、实例名绑定在一起，
 // 用于表达“某组下的某些资源”这一规则维度。
 type GroupResources struct {
-	// Group is the name of the API group that contains the resources.
-	// The empty string represents the core API group.
-	// `*` matches all groups
+	// Group 是包含这些资源的 API 组名称。
+	// 空字符串表示 core API 组。
+	// `*` 匹配所有组
 	// +optional
 	Group string
-	// Resources is a list of resources this rule applies to.
+	// Resources 是本规则适用的资源列表。
 	//
-	// For example:
-	// - `pods` matches pods.
-	// - `pods/log` matches the log subresource of pods.
-	// - `*` matches all resources and their subresources.
-	// - `pods/*` matches all subresources of pods.
-	// - `*/scale` matches all scale subresources.
+	// 例如：
+	// - `pods` 匹配 pods。
+	// - `pods/log` 匹配 pods 的 log 子资源。
+	// - `*` 匹配所有资源及其子资源。
+	// - `pods/*` 匹配 pods 的所有子资源。
+	// - `*/scale` 匹配所有的 scale 子资源。
 	//
-	// If wildcard is present, the validation rule will ensure resources do not
-	// overlap with each other.
+	// 若存在通配符，校验规则会确保各资源条目之间不互相重叠。
 	//
-	// An empty list implies all resources and subresources in this API groups apply.
+	// 空列表表示本 API 组内所有资源及子资源都适用。
 	// +optional
 	Resources []string
-	// ResourceNames is a list of resource instance names that the policy matches.
-	// Using this field requires Resources to be specified.
-	// An empty list implies that every instance of the resource is matched.
+	// ResourceNames 是策略匹配的资源实例名列表。
+	// 使用本字段必须先指定 Resources。
+	// 空列表表示匹配该资源的每一个实例。
 	// +optional
 	ResourceNames []string
 }
 
-// ObjectReference contains enough information to let you inspect or modify the referred object.
+// ObjectReference 包含足以检查或修改被引用对象的信息。
 //
 // 审计事件中只记录定位对象所需的坐标，不复制对象内容。
 type ObjectReference struct {
@@ -328,11 +317,11 @@ type ObjectReference struct {
 	Name string
 	// +optional
 	UID types.UID
-	// APIGroup is the name of the API group that contains the referred object.
-	// The empty string represents the core API group.
+	// APIGroup 是包含被引用对象的 API 组名称。
+	// 空字符串表示 core API 组。
 	// +optional
 	APIGroup string
-	// APIVersion is the version of the API group that contains the referred object.
+	// APIVersion 是包含被引用对象的 API 组的版本。
 	// +optional
 	APIVersion string
 	// +optional

@@ -40,16 +40,16 @@ import (
 // 要求“先收到一个 RV 不早于该值的 bookmark，再开始接收事件”。
 // 在收到该 bookmark 前，不能向客户端发送普通事件，否则会破坏 watch 契约。
 const (
-	// cacheWatcherWaitingForBookmark indicates the cacher
-	// is waiting for a bookmark event with a specific RV set
+	// cacheWatcherWaitingForBookmark 表示 cacher 正在等待
+	// 一个带有指定 RV 的 bookmark 事件
 	cacheWatcherWaitingForBookmark = iota
 
-	// cacheWatcherBookmarkReceived indicates that the cacher
-	// has received a bookmark event with required RV
+	// cacheWatcherBookmarkReceived 表示 cacher 已收到
+	// 带有所需 RV 的 bookmark 事件
 	cacheWatcherBookmarkReceived
 
-	// cacheWatcherBookmarkSent indicates that the cacher
-	// has already sent a bookmark event to a client
+	// cacheWatcherBookmarkSent 表示 cacher 已向客户端
+	// 发送过 bookmark 事件
 	cacheWatcherBookmarkSent
 )
 
@@ -72,8 +72,7 @@ type cacheWatcher struct {
 	watcherMetrics      *metrics.WatcherMetricsObservers
 	clock               clock.Clock
 
-	// human readable identifier that helps assigning cacheWatcher
-	// instance with request
+	// 便于把 cacheWatcher 实例与请求对应起来的可读标识符
 	identifier string
 
 	// drainInputBuffer 表示是否应推迟关闭该 watcher，先把输入缓冲区中的事件全部
@@ -81,18 +80,16 @@ type cacheWatcher struct {
 	// 客户端才能拿到它等待的 RV 并重建 watch。
 	drainInputBuffer bool
 
-	// bookmarkAfterResourceVersion holds an RV that indicates
-	// when we should start delivering bookmark events.
-	// If this field holds the value of 0 that means
-	// we don't have any special preferences toward delivering bookmark events.
-	// Note that this field is used in conjunction with the state field.
-	// It should not be changed once the watcher has been started.
+	// bookmarkAfterResourceVersion 保存一个 RV，指示我们应当从何时开始
+	// 投递 bookmark 事件。若该字段值为 0，表示我们对投递 bookmark 事件
+	// 没有任何特殊偏好。注意该字段与 state 字段配合使用，
+	// watcher 启动后不应再修改它。
 	bookmarkAfterResourceVersion uint64
 
-	// stateMutex protects state
+	// stateMutex 保护 state
 	stateMutex sync.Mutex
 
-	// state holds a numeric value indicating the current state of the watcher
+	// state 保存一个数值，表示 watcher 的当前状态
 	state int
 }
 
@@ -131,22 +128,22 @@ func newCacheWatcher(
 }
 
 // ResultChan 返回客户端读取事件的通道。
-// Implements watch.Interface.
+// 实现 watch.Interface 接口。
 func (c *cacheWatcher) ResultChan() <-chan watch.Event {
 	return c.result
 }
 
 // Stop 停止 watcher；graceful=false 表示无需排空输入缓冲。
-// Implements watch.Interface.
+// 实现 watch.Interface 接口。
 func (c *cacheWatcher) Stop() {
 	c.forget(false)
 }
 
-// we rely on the fact that stopLocked is actually protected by Cacher.Lock()
+// 这里依赖一个事实：stopLocked 实际上由 Cacher.Lock() 保护
 func (c *cacheWatcher) stopLocked() {
 	if !c.stopped {
 		c.stopped = true
-		// stop without draining the input channel was requested.
+		// 此时请求的是不排空输入通道的停止方式。
 		if !c.drainInputBuffer {
 			close(c.done)
 		}
@@ -166,11 +163,9 @@ func (c *cacheWatcher) stopLocked() {
 // nonblockingAdd 尝试不阻塞地投递事件。
 // 返回 false 表示缓冲区已满，或该 bookmark 早于客户端要求的 RV（丢弃以避免污染）。
 func (c *cacheWatcher) nonblockingAdd(event *watchCacheEvent) bool {
-	// if the bookmarkAfterResourceVersion hasn't been seen
-	// we will try to deliver a bookmark event every second.
-	// the following check will discard a bookmark event
-	// if it is < than the bookmarkAfterResourceVersion
-	// so that we don't pollute the input channel
+	// 若 bookmarkAfterResourceVersion 尚未出现，我们每秒都会尝试投递
+	// 一个 bookmark 事件。下面的检查会丢弃 RV 小于
+	// bookmarkAfterResourceVersion 的 bookmark 事件，以免污染输入通道。
 	if event.Type == watch.Bookmark && event.ResourceVersion < c.bookmarkAfterResourceVersion {
 		return false
 	}
@@ -183,42 +178,39 @@ func (c *cacheWatcher) nonblockingAdd(event *watchCacheEvent) bool {
 	}
 }
 
-// Nil timer means that add will not block (if it can't send event immediately, it will break the watcher)
+// timer 为 nil 表示 add 不会阻塞（若无法立即发送事件，就会终止该 watcher）。
 //
-// Note that bookmark events are never added via the add method only via the nonblockingAdd.
-// Changing this behaviour will require moving the markBookmarkAfterRvAsReceived method
+// 注意：bookmark 事件从不经由 add 方法投递，只能通过 nonblockingAdd 投递。
+// 若要改变这一行为，需要移动 markBookmarkAfterRvAsReceived 方法的位置。
 //
 // add 尝试投递事件，必要时最多阻塞到 timer 到期。
 // 超时后强制关闭 watcher：宁可断开，也不让一个慢客户端拖住整个 watchCache。
 func (c *cacheWatcher) add(event *watchCacheEvent, timer *time.Timer) bool {
-	// Try to send the event immediately, without blocking.
+	// 先尝试立即发送事件，不阻塞。
 	if c.nonblockingAdd(event) {
 		return true
 	}
 
 	closeFunc := func() {
-		// This means that we couldn't send event to that watcher.
-		// Since we don't want to block on it infinitely,
-		// we simply terminate it.
+		// 这意味着我们无法把事件发送给该 watcher。
+		// 由于不想无限阻塞在它上面，我们直接把它终止掉。
 		metrics.TerminatedWatchersCounter.WithLabelValues(c.groupResource.Group, c.groupResource.Resource).Inc()
-		// This means that we couldn't send event to that watcher.
-		// Since we don't want to block on it infinitely, we simply terminate it.
+		// 这意味着我们无法把事件发送给该 watcher。
+		// 由于不想无限阻塞在它上面，我们直接把它终止掉。
 
-		// we are graceful = false, when:
+		// graceful = false（非优雅关闭）的情形：
 		//
-		// (a) The bookmarkAfterResourceVersionReceived hasn't been received,
-		//     we can safely terminate the watcher. Because the client is waiting
-		//     for this specific bookmark, and we even haven't received one.
-		// (b) We have seen the bookmarkAfterResourceVersion, and it was sent already to the client.
-		//     We can simply terminate the watcher.
+		// (a) 尚未收到 bookmarkAfterResourceVersion：可以安全地终止 watcher。
+		//     因为客户端正在等待这个特定的 bookmark，而我们甚至还没收到过任何一个。
+		// (b) 已看到 bookmarkAfterResourceVersion，并且它已经发送给客户端：
+		//     可以直接终止 watcher。
 
-		// we are graceful = true, when:
+		// graceful = true（优雅关闭）的情形：
 		//
-		// (a) We have seen a bookmark, but it hasn't been sent to the client yet.
-		//     That means we should drain the input buffer which contains
-		//     the bookmarkAfterResourceVersion we want. We do that to make progress
-		//     as clients can re-establish a new watch with the given RV and receive
-		//     further notifications.
+		// (a) 已看到 bookmark，但尚未发送给客户端。
+		//     这意味着应当排空输入缓冲区，其中包含我们想要的
+		//     bookmarkAfterResourceVersion。这样做是为了推进进度：
+		//     客户端可以用该 RV 重建一个新的 watch 并继续接收后续通知。
 		graceful := func() bool {
 			c.stateMutex.Lock()
 			defer c.stateMutex.Unlock()
@@ -233,7 +225,7 @@ func (c *cacheWatcher) add(event *watchCacheEvent, timer *time.Timer) bool {
 		return false
 	}
 
-	// OK, block sending, but only until timer fires.
+	// 好，现在阻塞发送，但最多持续到 timer 触发为止。
 	select {
 	case c.input <- event:
 		return true
@@ -247,32 +239,29 @@ func (c *cacheWatcher) add(event *watchCacheEvent, timer *time.Timer) bool {
 // 返回的 bool 为 false 表示已无可发送的 bookmark（例如 deadline 已过），
 // 调用方应停止调度。
 func (c *cacheWatcher) nextBookmarkTime(now time.Time, bookmarkFrequency time.Duration) (time.Time, bool) {
-	// We try to send bookmarks:
+	// 我们会在以下时机尝试发送 bookmark：
 	//
-	// (a) right before the watcher timeout - for now we simply set it 2s before
-	//     the deadline
+	// (a) 紧贴 watcher 超时之前——目前我们把它设在 deadline 前 2 秒
 	//
-	// (b) roughly every minute
+	// (b) 大约每分钟一次
 	//
-	// (c) immediately when the bookmarkAfterResourceVersion wasn't confirmed
-	//     in this scenario the client have already seen (or is in the process of sending)
-	//     all initial data and is interested in seeing
-	//     a specific RV value (aka. the bookmarkAfterResourceVersion)
-	//     since we don't know when the cacher will see the RV we increase frequency
+	// (c) 当 bookmarkAfterResourceVersion 尚未被确认时立即发送：
+	//     在这种场景下客户端已经看完（或正在发送过程中看完）全部初始数据，
+	//     并希望看到一个特定的 RV 值（即 bookmarkAfterResourceVersion）。
+	//     由于我们不知道 cacher 何时会看到该 RV，因此提高发送频率。
 	//
-	// (b) gives us periodicity if the watch breaks due to unexpected
-	// conditions, (a) ensures that on timeout the watcher is as close to
-	// now as possible - this covers 99% of cases.
+	// (b) 在 watch 因意外情况断开时提供周期性兜底；(a) 保证超时时刻
+	// bookmark 尽可能贴近当前时间——这覆盖了 99% 的场景。
 
 	// 尚未确认目标 RV 时立即发送，尽快让客户端完成“同步点”握手。
 	if !c.wasBookmarkAfterRvReceived() {
-		return time.Time{}, true // schedule immediately
+		return time.Time{}, true // 立即安排发送
 	}
 
 	heartbeatTime := now.Add(bookmarkFrequency)
 	if c.deadline.IsZero() {
-		// Timeout is set by our client libraries (e.g. reflector) as well as defaulted by
-		// apiserver if properly configured. So this shoudln't happen in practice.
+		// 超时时间由我们的客户端库（例如 reflector）设置，apiserver 配置正确时
+		// 也会给出默认值。所以实践中不应出现 deadline 为零的情况。
 		return heartbeatTime, true
 	}
 	// 优先在 deadline 前 2 秒发送，让 bookmark 在连接被服务端关闭前送达。
@@ -286,7 +275,7 @@ func (c *cacheWatcher) nextBookmarkTime(now time.Time, bookmarkFrequency time.Du
 	return heartbeatTime, true
 }
 
-// wasBookmarkAfterRvReceived same as wasBookmarkAfterRvReceivedLocked just acquires a lock
+// wasBookmarkAfterRvReceived 与 wasBookmarkAfterRvReceivedLocked 相同，只是会先获取锁
 func (c *cacheWatcher) wasBookmarkAfterRvReceived() bool {
 	c.stateMutex.Lock()
 	defer c.stateMutex.Unlock()
@@ -299,8 +288,8 @@ func (c *cacheWatcher) wasBookmarkAfterRvReceivedLocked() bool {
 	return c.state != cacheWatcherWaitingForBookmark
 }
 
-// markBookmarkAfterRvAsReceived indicates that the given cacheWatcher
-// have seen a bookmark event >= bookmarkAfterResourceVersion
+// markBookmarkAfterRvAsReceived 表示该 cacheWatcher 已看到
+// RV >= bookmarkAfterResourceVersion 的 bookmark 事件
 func (c *cacheWatcher) markBookmarkAfterRvAsReceived(event *watchCacheEvent) {
 	if event.Type == watch.Bookmark {
 		c.stateMutex.Lock()
@@ -308,10 +297,9 @@ func (c *cacheWatcher) markBookmarkAfterRvAsReceived(event *watchCacheEvent) {
 		if c.wasBookmarkAfterRvReceivedLocked() {
 			return
 		}
-		// bookmark events are scheduled by startDispatchingBookmarkEvents method
-		// since we received a bookmark event that means we have
-		// converged towards the expected RV and it is okay to update the state so that
-		// this cacher can be scheduler for a regular bookmark events
+		// bookmark 事件由 startDispatchingBookmarkEvents 方法调度；
+		// 既然已收到一个 bookmark 事件，说明我们已向期望的 RV 收敛，
+		// 可以更新状态，让该 cacher 被调度去发送常规的 bookmark 事件
 		c.state = cacheWatcherBookmarkReceived
 	}
 }
@@ -322,21 +310,21 @@ func (c *cacheWatcher) wasBookmarkAfterRvSentLocked() bool {
 	return c.state == cacheWatcherBookmarkSent
 }
 
-// wasBookmarkAfterRvSent same as wasBookmarkAfterRvSentLocked just acquires a lock
+// wasBookmarkAfterRvSent 与 wasBookmarkAfterRvSentLocked 相同，只是会先获取锁
 func (c *cacheWatcher) wasBookmarkAfterRvSent() bool {
 	c.stateMutex.Lock()
 	defer c.stateMutex.Unlock()
 	return c.wasBookmarkAfterRvSentLocked()
 }
 
-// markBookmarkAfterRvSent indicates that the given cacheWatcher
-// have sent a bookmark event with an RV >= the bookmarkAfterResourceVersion
+// markBookmarkAfterRvSent 表示该 cacheWatcher 已发送
+// RV >= bookmarkAfterResourceVersion 的 bookmark 事件
 //
-// this function relies on the fact that the nonblockingAdd method
-// won't admit a bookmark event with an RV < the bookmarkAfterResourceVersion
-// so the first received bookmark event is considered to match the bookmarkAfterResourceVersion
+// 本函数依赖这样一个事实：nonblockingAdd 方法不会接纳
+// RV < bookmarkAfterResourceVersion 的 bookmark 事件，
+// 因此第一个收到的 bookmark 事件即被视为与 bookmarkAfterResourceVersion 匹配
 func (c *cacheWatcher) markBookmarkAfterRvSent(event *watchCacheEvent) {
-	// note that bookmark events are not so common so will acquire a lock every ~60 second or so
+	// 注意：bookmark 事件并不频繁，因此大约每 60 秒才会获取一次锁
 	if event.Type == watch.Bookmark {
 		c.stateMutex.Lock()
 		defer c.stateMutex.Unlock()
@@ -352,19 +340,19 @@ func (c *cacheWatcher) setBookmarkAfterResourceVersion(bookmarkAfterResourceVers
 	state := cacheWatcherWaitingForBookmark
 	// 客户端未要求特定 RV 时无需等待，直接把状态置为已发送（no-op）。
 	if bookmarkAfterResourceVersion == 0 {
-		state = cacheWatcherBookmarkSent // if no specific RV was requested we assume no-op
+		state = cacheWatcherBookmarkSent // 未请求特定 RV 时视为 no-op
 	}
 	c.state = state
 	c.bookmarkAfterResourceVersion = bookmarkAfterResourceVersion
 }
 
-// setDrainInputBufferLocked if set to true indicates that we should delay closing this watcher
-// until we send all events residing in the input buffer.
+// setDrainInputBufferLocked 若设为 true，表示应推迟关闭本 watcher，
+// 直到把输入缓冲区中驻留的所有事件全部发送出去。
 func (c *cacheWatcher) setDrainInputBufferLocked(drain bool) {
 	c.drainInputBuffer = drain
 }
 
-// isDoneChannelClosed checks if c.done channel is closed
+// isDoneChannelClosed 检查 c.done 通道是否已关闭
 func (c *cacheWatcher) isDoneChannelClosedLocked() bool {
 	select {
 	case <-c.done:
@@ -379,9 +367,8 @@ func (c *cacheWatcher) isDoneChannelClosedLocked() bool {
 // 否则修改 resourceVersion 会污染缓存中共享的对象。
 func getMutableObject(object runtime.Object) runtime.Object {
 	if _, ok := object.(*cachingObject); ok {
-		// It is safe to return without deep-copy, because the underlying
-		// object will lazily perform deep-copy on the first try to change
-		// any of its fields.
+		// 不做深拷贝直接返回是安全的，因为底层对象在首次尝试修改
+		// 其任一字段时会惰性执行深拷贝。
 		return object
 	}
 	return object.DeepCopyObject()
@@ -417,7 +404,7 @@ func (c *cacheWatcher) convertToWatchEvent(event *watchCacheEvent) *watch.Event 
 		oldObjPasses = c.filter(event.Key, event.PrevObjLabels, event.PrevObjFields, event.PrevObject)
 	}
 	if !curObjPasses && !oldObjPasses {
-		// Watcher is not interested in that object.
+		// 该 watcher 对这个对象不感兴趣。
 		return nil
 	}
 
@@ -427,12 +414,11 @@ func (c *cacheWatcher) convertToWatchEvent(event *watchCacheEvent) *watch.Event 
 	case curObjPasses && oldObjPasses:
 		return &watch.Event{Type: watch.Modified, Object: getMutableObject(event.Object)}
 	case !curObjPasses && oldObjPasses:
-		// return a delete event with the previous object content, but with the event's resource version
+		// 返回一个内容为前一个对象、但携带本事件 resourceVersion 的删除事件
 		oldObj := getMutableObject(event.PrevObject)
-		// We know that if oldObj is cachingObject (which can only be set via
-		// setCachingObjects), its resourceVersion is already set correctly and
-		// we don't need to update it. However, since cachingObject efficiently
-		// handles noop updates, we avoid this microoptimization here.
+		// 我们清楚：若 oldObj 是 cachingObject（只能通过 setCachingObjects 设置），
+		// 它的 resourceVersion 已正确设置，无需再更新。但由于 cachingObject
+		// 能高效处理无操作更新，这里放弃了这一微优化。
 		updateResourceVersion(oldObj, c.versioner, event.ResourceVersion)
 		return &watch.Event{Type: watch.Deleted, Object: oldObj}
 	}
@@ -447,23 +433,19 @@ func (c *cacheWatcher) convertToWatchEvent(event *watchCacheEvent) *watch.Event 
 func (c *cacheWatcher) sendWatchCacheEvent(event *watchCacheEvent) (builtAt, sentAt time.Time) {
 	watchEvent := c.convertToWatchEvent(event)
 	if watchEvent == nil {
-		// Watcher is not interested in that object.
+		// 该 watcher 对这个对象不感兴趣。
 		return time.Time{}, time.Time{}
 	}
 	builtAt = c.clock.Now()
 
-	// We need to ensure that if we put event X to the c.result, all
-	// previous events were already put into it before, no matter whether
-	// c.done is close or not.
-	// Thus we cannot simply select from c.done and c.result and this
-	// would give us non-determinism.
-	// At the same time, we don't want to block infinitely on putting
-	// to c.result, when c.done is already closed.
+	// 我们需要确保：只要把事件 X 放入 c.result，之前所有事件都已先行放入，
+	// 无论 c.done 是否已关闭。
+	// 因此不能简单地在 c.done 与 c.result 之间 select，那样会带来不确定性。
+	// 同时，当 c.done 已关闭时，我们也不想在向 c.result 放入事件时无限阻塞。
 	//
-	// This ensures that with c.done already close, we at most once go
-	// into the next select after this. With that, no matter which
-	// statement we choose there, we will deliver only consecutive
-	// events.
+	// 下面的做法保证：在 c.done 已关闭的情况下，我们最多只会进入一次
+	// 该检查之后的那个 select。这样一来，无论选中哪个分支，
+	// 我们投递的都只是连续不断、不跳跃的事件序列。
 	select {
 	case <-c.done:
 		return time.Time{}, time.Time{}
@@ -486,25 +468,20 @@ func (c *cacheWatcher) processInterval(ctx context.Context, cacheInterval *watch
 	defer close(c.result)
 	defer c.Stop()
 
-	// Check how long we are processing initEvents.
-	// As long as these are not processed, we are not processing
-	// any incoming events, so if it takes long, we may actually
-	// block all watchers for some time.
-	// TODO: From the logs it seems that there happens processing
-	// times even up to 1s which is very long. However, this doesn't
-	// depend that much on the number of initEvents. E.g. from the
-	// 2000-node Kubemark run we have logs like this, e.g.:
+	// 检查处理 initEvents 花了多长时间。在这些事件处理完之前，我们不会处理
+	// 任何新到达的事件，因此如果耗时很长，实际上可能长时间阻塞所有 watcher。
+	// TODO: 从日志看，处理时长甚至可达 1 秒，这非常长。然而这并不太取决于
+	// initEvents 的数量。例如 2000 节点 Kubemark 运行中有这样的日志：
 	// ... processing 13862 initEvents took 66.808689ms
 	// ... processing 14040 initEvents took 993.532539ms
-	// We should understand what is blocking us in those cases (e.g.
-	// is it lack of CPU, network, or sth else) and potentially
-	// consider increase size of result buffer in those cases.
+	// 我们应当弄清楚这些场景下是什么在阻塞我们（例如是 CPU、网络不足
+	// 还是别的原因），并可以考虑在这些场景下增大 result 缓冲区。
 	const initProcessThreshold = 500 * time.Millisecond
 	startTime := time.Now()
 
-	// cacheInterval may be created from a version being more fresh than requested
-	// (e.g. for NotOlderThan semantic). In such a case, we need to prevent watch event
-	// with lower resourceVersion from being delivered to ensure watch contract.
+	// cacheInterval 可能是基于比请求更新的版本创建的（例如 NotOlderThan 语义）。
+	// 这种情况下，必须阻止更低 resourceVersion 的 watch 事件被投递给客户端，
+	// 以保证 watch 契约。
 	if cacheInterval.resourceVersion > resourceVersion {
 		resourceVersion = cacheInterval.resourceVersion
 	}
@@ -513,20 +490,16 @@ func (c *cacheWatcher) processInterval(ctx context.Context, cacheInterval *watch
 	for {
 		event, err := cacheInterval.Next()
 		if err != nil {
-			// An error indicates that the cache interval
-			// has been invalidated and can no longer serve
-			// events.
+			// 出现错误说明该缓存区间已被判定失效，
+			// 无法继续提供事件。
 			//
-			// Initially we considered sending an "out-of-history"
-			// Error event in this case, but because historically
-			// such events weren't sent out of the watchCache, we
-			// decided not to. This is still ok, because on watch
-			// closure, the watcher will try to re-instantiate the
-			// watch and then will get an explicit "out-of-history"
-			// window. There is potential for optimization, but for
-			// now, in order to be on the safe side and not break
-			// custom clients, the cost of it is something that we
-			// are fully accepting.
+			// 我们最初考虑在这种情况下发送一个
+			// “超出历史范围”（out-of-history）的错误事件，但由于历史上
+			// 这类事件并不会从 watchCache 发出，我们决定不这样做。
+			// 这仍然是可以的：watch 关闭时，watcher 会尝试重建
+			// watch，届时会显式地得到“超出历史范围”的窗口。
+			// 存在可优化的空间，但为了稳妥起见、避免破坏
+			// 自定义客户端，我们完全接受这一代价。
 			klog.Warningf("couldn't retrieve watch event to serve: %#v", err)
 			return
 		}
@@ -535,15 +508,12 @@ func (c *cacheWatcher) processInterval(ctx context.Context, cacheInterval *watch
 		}
 		c.sendWatchCacheEvent(event)
 
-		// With some events already sent, update resourceVersion so that
-		// events that were buffered and not yet processed won't be delivered
-		// to this watcher second time causing going back in time.
+		// 在已发送部分事件之后，更新 resourceVersion，避免那些已缓冲、
+		// 尚未处理的事件被第二次投递给该 watcher，导致时间倒退。
 		//
-		// There is one case where events are not necessary ordered by
-		// resourceVersion, being a case of watching from resourceVersion=0,
-		// which at the beginning returns the state of each objects.
-		// For the purpose of it, we need to max it with the resource version
-		// that we have so far.
+		// 有一种情况下事件不一定按 resourceVersion 有序：即从
+		// resourceVersion=0 开始 watch 时，开头会返回每个对象各自的当前状态。
+		// 为此需要用事件的 RV 与我们已有的 RV 取最大值。
 		if event.ResourceVersion > resourceVersion {
 			resourceVersion = event.ResourceVersion
 		}
@@ -572,9 +542,8 @@ func (c *cacheWatcher) process(ctx context.Context, resourceVersion uint64) {
 	// 此时我们已经能处理传入的 watch 事件，但初始事件可能仍在处理中：它们的序列化
 	// 以及发送给客户端都是异步完成的。这里通知 APF：该 watch 已就绪，
 	// 可以开始计费/调度后续请求。
-	// TODO: As describe in the KEP, we would like to estimate that by delaying
-	//   the initialization signal proportionally to the number of events to
-	//   process, but we're leaving this to the tuning phase.
+	// TODO: 如 KEP 所述，我们希望按待处理事件的数量成比例地推迟初始化信号
+	//   来估算这一耗时，但留到调优阶段再做。
 	utilflowcontrol.WatchInitialized(ctx)
 
 	for {

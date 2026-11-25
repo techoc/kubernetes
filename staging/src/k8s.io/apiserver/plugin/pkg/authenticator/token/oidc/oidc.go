@@ -87,47 +87,46 @@ const (
 // KeySet 与 DiscoveryURL 互斥、Client 与 CAContentProvider/
 // EgressLookup 互斥，这些约束在 New 中显式校验，避免产生歧义配置。
 type Options struct {
-	// JWTAuthenticator is the authenticator that will be used to verify the JWT.
+	// JWTAuthenticator 是将用于校验 JWT 的认证器配置。
 	JWTAuthenticator apiserver.JWTAuthenticator
 
-	// Optional KeySet to allow for synchronous initialization instead of fetching from the remote issuer.
-	// Mutually exclusive with JWTAuthenticator.Issuer.DiscoveryURL.
+	// 可选的 KeySet，用于同步初始化，而不是从远端 issuer 拉取。
+	// 与 JWTAuthenticator.Issuer.DiscoveryURL 互斥。
 	//
-	// The following API server metrics for fetching JWKS and provider status will not be recorded if this is set.
+	// 若设置了本字段，则不会记录以下与拉取 JWKS 及 provider 状态相关的
+	// API server 指标：
 	//  - apiserver_authentication_jwt_authenticator_jwks_fetch_last_timestamp_seconds
 	//  - apiserver_authentication_jwt_authenticator_jwks_fetch_last_key_set_info
 	KeySet oidc.KeySet
 
-	// PEM encoded root certificate contents of the provider.  Mutually exclusive with Client.
+	// provider 的 PEM 编码根证书内容。与 Client 互斥。
 	CAContentProvider CAContentProvider
 
-	// EgressLookup allows for optional opt-in egress configuration via a custom dialer.  Mutually exclusive with Client.
+	// EgressLookup 允许通过自定义 dialer 选择性启用 egress 配置。与 Client 互斥。
 	EgressLookup egressselector.Lookup
 
-	// Optional http.Client used to make all requests to the remote issuer.  Mutually exclusive with CAContentProvider and EgressLookup.
+	// 可选的 http.Client，用于向远端 issuer 发起所有请求。
+	// 与 CAContentProvider 和 EgressLookup 互斥。
 	Client *http.Client
 
-	// Optional CEL compiler used to compile the CEL expressions. This is useful to use a shared instance
-	// of the compiler as these compilers holding a CEL environment are expensive to create. If not provided,
-	// a default compiler will be created.
-	// Note: the compiler construction depends on feature gates and the compatibility version to be initialized.
+	// 可选的 CEL 编译器，用于编译 CEL 表达式。使用共享的编译器实例很有好处，
+	// 因为持有 CEL 环境的编译器创建开销很大。若未提供，将创建默认编译器。
+	// Note: 编译器的构造依赖 feature gate 与 compatibility version 先完成初始化。
 	Compiler authenticationcel.Compiler
 
-	// SupportedSigningAlgs sets the accepted set of JOSE signing algorithms that
-	// can be used by the provider to sign tokens.
+	// SupportedSigningAlgs 设置允许 provider 用于给 token 签名的 JOSE 签名算法集合。
 	//
 	// https://tools.ietf.org/html/rfc7518#section-3.1
 	//
-	// This value defaults to RS256, the value recommended by the OpenID Connect
-	// spec:
+	// 该值默认为 RS256，即 OpenID Connect 规范推荐的值：
 	//
 	// https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
 	SupportedSigningAlgs []string
 
 	DisallowedIssuers []string
 
-	// APIServerID is the ID of the API server
-	// This is used in metrics to identify the API server
+	// APIServerID 是 API server 的 ID，
+	// 在指标中用于标识 API server
 	APIServerID string
 
 	// now 用于测试，默认取 time.Now。注入时钟可精确测试 token 过期边界，避免依赖真实时间。
@@ -158,9 +157,8 @@ func initVerifier(ctx context.Context, config *oidc.Config, iss string, audience
 type asyncIDTokenVerifier struct {
 	m sync.Mutex
 
-	// v is the ID token verifier initialized asynchronously.  It remains nil
-	// up until it is eventually initialized.
-	// Guarded by m
+	// v 是异步初始化的 ID token verifier。在完成初始化之前它一直保持 nil。
+	// 由 m 保护
 	v *idTokenVerifier
 }
 
@@ -172,8 +170,8 @@ func newAsyncIDTokenVerifier(ctx context.Context, c *oidc.Config, iss string, au
 	t := &asyncIDTokenVerifier{}
 
 	sync := make(chan struct{})
-	// Polls indefinitely in an attempt to initialize the distributed claims
-	// verifier, or until context canceled.
+	// 无限轮询尝试初始化分布式声明（distributed claims）的 verifier，
+	// 直到上下文被取消。
 	initFn := func(ctx context.Context) (done bool, err error) {
 		klog.V(4).Infof("oidc authenticator: attempting init: iss=%v", iss)
 		v, err := initVerifier(ctx, c, iss, audiences)
@@ -216,18 +214,18 @@ func (a *asyncIDTokenVerifier) verifier() *idTokenVerifier {
 type jwtAuthenticator struct {
 	jwtAuthenticator apiserver.JWTAuthenticator
 
-	// Contains an *oidc.IDTokenVerifier. Do not access directly use the
-	// idTokenVerifier method.
+	// 其中存放的是 *oidc.IDTokenVerifier。不要直接访问，请使用
+	// idTokenVerifier 方法。
 	verifier atomic.Value
 
-	// resolver is used to resolve distributed claims.
+	// resolver 用于解析分布式声明（distributed claims）。
 	resolver *claimResolver
 
-	// celMapper contains the compiled CEL expressions for
-	// username, groups, uid, extra, claimMapping and claimValidation
+	// celMapper 包含 username、groups、uid、extra、claimMapping
+	// 与 claimValidation 的已编译 CEL 表达式
 	celMapper authenticationcel.CELMapper
 
-	// requiredClaims contains the list of claims that must be present in the token.
+	// requiredClaims 包含 token 中必须存在的 claim 列表。
 	requiredClaims map[string]string
 
 	healthCheck atomic.Pointer[errorHolder]
@@ -246,8 +244,8 @@ type idTokenVerifier struct {
 func (a *jwtAuthenticator) setVerifier(v *idTokenVerifier) {
 	a.verifier.Store(v)
 	if v != nil {
-		// this must be done after the verifier has been stored so that a nil error
-		// from HealthCheck always means that the authenticator is ready for use.
+		// 这必须在 verifier 存储完成之后执行，这样 HealthCheck 返回 nil 错误
+		// 才总是意味着认证器已就绪可用。
 		a.healthCheck.Store(&errorHolder{})
 	}
 }
@@ -308,8 +306,8 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 	RegisterMetrics()
 	supportedSigningAlgs := opts.SupportedSigningAlgs
 	if len(supportedSigningAlgs) == 0 {
-		// RS256 is the default recommended by OpenID Connect and an 'alg' value
-		// providers are required to implement.
+		// RS256 是 OpenID Connect 推荐的默认值，也是 provider 必须实现的
+		// 'alg' 取值。
 		supportedSigningAlgs = []string{oidc.RS256}
 	}
 	for _, alg := range supportedSigningAlgs {
@@ -332,7 +330,7 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 		var roots *x509.CertPool
 		var err error
 		if opts.CAContentProvider != nil {
-			// TODO(enj): make this reload CA data dynamically
+			// TODO(enj): 让 CA 数据支持动态重载
 			roots, err = certutil.NewPoolFromBytes(opts.CAContentProvider.CurrentCABundleContent())
 			if err != nil {
 				return nil, fmt.Errorf("Failed to read the CA contents: %v", err)
@@ -344,34 +342,33 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 		var customDial net.DialFunc
 		switch et := opts.JWTAuthenticator.Issuer.EgressSelectorType; et {
 		case "":
-			// valid but nothing to do
+			// 合法取值，但无需做任何事
 		case apiserver.EgressSelectorControlPlane:
 			customDial, err = egressLookupForType(opts.EgressLookup, egressselector.ControlPlane)
 		case apiserver.EgressSelectorCluster:
 			customDial, err = egressLookupForType(opts.EgressLookup, egressselector.Cluster)
 		default:
-			// this should be impossible as validation should catch this at an earlier point
+			// 这理论上不可能发生，校验应当在更早的阶段就把这种情况拦住
 			return nil, fmt.Errorf("oidc: unknown egress selector type %q", et)
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		// Copied from http.DefaultTransport.
+		// 以下复制自 http.DefaultTransport。
 		tr := net.SetTransportDefaults(&http.Transport{
 			DialContext: customDial,
-			// According to golang's doc, if RootCAs is nil,
-			// TLS uses the host's root CA set.
+			// 按 golang 文档说明，RootCAs 为 nil 时，
+			// TLS 使用主机自身的根 CA 集合。
 			TLSClientConfig: &tls.Config{RootCAs: roots},
 		})
 
 		client = &http.Client{Transport: tr, Timeout: 30 * time.Second}
 	}
 
-	// If the discovery URL is set in authentication configuration, we set up a
-	// roundTripper to rewrite the {url}/.well-known/openid-configuration to
-	// the discovery URL. This is useful for self-hosted providers, for example,
-	// providers that run on top of Kubernetes itself.
+	// 若认证配置中设置了 discovery URL，我们安装一个 roundTripper，把
+	// {url}/.well-known/openid-configuration 重写到该 discovery URL。
+	// 这对自托管 provider 很有用，例如运行在 Kubernetes 自身之上的 provider。
 	if len(opts.JWTAuthenticator.Issuer.DiscoveryURL) > 0 {
 		if opts.KeySet != nil {
 			return nil, fmt.Errorf("oidc: KeySet and DiscoveryURL are mutually exclusive")
@@ -387,7 +384,7 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 		if baseTransport == nil {
 			baseTransport = http.DefaultTransport
 		}
-		// This matches the url construction in oidc.NewProvider as of go-oidc v2.2.1.
+		// 此处与 go-oidc v2.2.1 中 oidc.NewProvider 的 URL 构造方式保持一致。
 		// xref: https://github.com/coreos/go-oidc/blob/40cd342c4a2076195294612a834d11df23c1b25a/oidc.go#L114
 		urlToRewrite := strings.TrimSuffix(opts.JWTAuthenticator.Issuer.URL, "/") + wellKnownEndpointPath
 		clientWithDiscoveryURL.Transport = &discoveryURLRoundTripper{baseTransport, discoveryURL, urlToRewrite}
@@ -409,10 +406,9 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 	}
 	if audiences.Len() > 1 {
 		verifierConfig.ClientID = ""
-		// SkipClientIDCheck is set to true because we want to support multiple audiences
-		// in the authentication configuration.
-		// The go oidc library does not support validating
-		// multiple audiences, so we have to skip the client ID check and do it ourselves.
+		// 设置 SkipClientIDCheck 为 true，是因为我们要在认证配置中支持多个
+		// audience。go oidc 库不支持校验多个 audience，因此我们不得不跳过
+		// client ID 检查并自行完成它。
 		// xref: https://github.com/coreos/go-oidc/issues/397
 		verifierConfig.SkipClientIDCheck = true
 	}
@@ -442,20 +438,21 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 
 	issuerURL := opts.JWTAuthenticator.Issuer.URL
 	if opts.KeySet != nil {
-		// We already have a key set, synchronously initialize the verifier.
+		// 我们已经有 key set，直接同步初始化 verifier。
 		authn.setVerifier(&idTokenVerifier{
 			oidc.NewVerifier(issuerURL, opts.KeySet, verifierConfig),
 			audiences,
 		})
 	} else {
-		// Asynchronously attempt to initialize the authenticator. This enables
-		// self-hosted providers, providers that run on top of Kubernetes itself.
+		// 异步尝试初始化认证器。这使得自托管 provider——即运行在
+		// Kubernetes 自身之上的 provider——也能工作。
 		go func() {
-			// we ignore any errors from polling because they can only come from the context being canceled
+			// 轮询产生的错误一律忽略，因为它们只可能来自上下文被取消
 			_ = wait.PollUntilContextCancel(lifecycleCtx, 10*time.Second, true, func(_ context.Context) (done bool, err error) {
-				// this must always use lifecycleCtx because NewProvider uses that context for future key set fetching.
-				// this also means that there is no correct way to control the timeout of the discovery request made by NewProvider.
-				// the global timeout of the http.Client is still honored.
+				// 这里必须始终使用 lifecycleCtx，因为 NewProvider 会用该上下文
+				// 进行后续的 key set 拉取。这也意味着无法以正确的方式控制
+				// NewProvider 发起的 discovery 请求的超时；http.Client 的
+				// 全局超时仍然会被遵守。
 				provider, err := oidc.NewProvider(lifecycleCtx, issuerURL)
 				if err != nil {
 					klog.Errorf("oidc authenticator: initializing plugin: %v", err)
@@ -510,8 +507,8 @@ func egressLookupForType(egressLookup egressselector.Lookup, egressSelector egre
 	if err != nil {
 		return nil, fmt.Errorf("oidc: egress lookup for %q failed: %w", egressSelector, err)
 	}
-	// we are stricter than other egress lookups because this is opt-in config
-	// we expect the user who is configuring the JWT authenticator to keep it in sync with the egress configuration
+	// 我们比其他 egress 查找更严格，因为这是选择性启用（opt-in）的配置；
+	// 我们期望配置 JWT 认证器的用户让其与 egress 配置保持同步
 	if customDial == nil {
 		return nil, fmt.Errorf("oidc: egress lookup for %q is not configured", egressSelector)
 	}
@@ -535,8 +532,8 @@ type metricsRoundTripper struct {
 	shouldRecordFunc func() bool
 }
 
-// shouldRecordMetrics returns true if metrics should be recorded.
-// This is used to avoid recording metrics after the lifecycle context is done.
+// shouldRecordMetrics 返回是否应当记录指标。
+// 用于避免在生命周期上下文结束之后仍然记录指标。
 func (m *metricsRoundTripper) shouldRecordMetrics() bool {
 	return m.shouldRecordFunc()
 }
@@ -566,8 +563,8 @@ func (m *metricsRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return resp, fmt.Errorf("error reading JWKS response: %w", err)
 	}
 
-	// This check has been copied from https://github.com/coreos/go-oidc/blob/0fe98873951208147e6d412602432038c91cda54/oidc/jwks.go#L263-L267
-	// to validate the key set before setting the metrics to avoid recording invalid key sets.
+	// 本检查复制自 https://github.com/coreos/go-oidc/blob/0fe98873951208147e6d412602432038c91cda54/oidc/jwks.go#L263-L267，
+	// 目的是在写入指标之前先校验 key set，避免把无效的 key set 记录成成功。
 	var keySet jose.JSONWebKeySet
 	if m.shouldRecordMetrics() {
 		if unmarshalErr := unmarshalResp(resp, body, &keySet); unmarshalErr != nil {
@@ -630,9 +627,9 @@ func withMetricsRoundTripper(base http.RoundTripper, jwksURL, jwtIssuer, apiServ
 // 匹配的 GET 请求，其余流量原样透传。
 type discoveryURLRoundTripper struct {
 	base http.RoundTripper
-	// discoveryURL is the URL to use to fetch the openid configuration
+	// discoveryURL 是用于拉取 openid 配置的 URL
 	discoveryURL *url.URL
-	// urlToRewrite is the URL to rewrite to the discovery URL
+	// urlToRewrite 是需要被改写为 discovery URL 的那个 URL
 	urlToRewrite string
 }
 
@@ -666,13 +663,13 @@ func untrustedIssuer(token string) (string, error) {
 		return "", fmt.Errorf("error decoding token: %v", err)
 	}
 	claims := struct {
-		// WARNING: this JWT is not verified. Do not trust these claims.
+		// 警告：该 JWT 未经校验。不要信任这些 claim。
 		Issuer string `json:"iss"`
 	}{}
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return "", fmt.Errorf("while unmarshaling token: %v", err)
 	}
-	// Coalesce the legacy GoogleIss with the new one.
+	// 将旧式的 Google iss 归并到新的取值。
 	//
 	// http://openid.net/specs/openid-connect-core-1_0.html#GoogleIss
 	if claims.Issuer == "accounts.google.com" {
@@ -696,15 +693,14 @@ func hasCorrectIssuer(iss, tokenData string) bool {
 // endpoint 表示 OIDC 分布式声明的取值端点。
 // JWT 字段对应聚合声明，当前不支持，保留以便解析不报错。
 type endpoint struct {
-	// URL to use to request the distributed claim.  This URL is expected to be
-	// prefixed by one of the known issuer URLs.
+	// URL 是用于请求分布式声明的端点。该 URL 预期以某个已知的
+	// issuer URL 为前缀。
 	URL string `json:"endpoint,omitempty"`
-	// AccessToken is the bearer token to use for access.  If empty, it is
-	// not used.  Access token is optional per the OIDC distributed claims
-	// specification.
+	// AccessToken 是访问时使用的 bearer token。为空则不使用。
+	// 按 OIDC 分布式声明规范，access token 是可选的。
 	// See: http://openid.net/specs/openid-connect-core-1_0.html#DistributedExample
 	AccessToken string `json:"access_token,omitempty"`
-	// JWT is the container for aggregated claims.  Not supported at the moment.
+	// JWT 是聚合声明（aggregated claims）的载体。目前不支持。
 	// See: http://openid.net/specs/openid-connect-core-1_0.html#AggregatedExample
 	JWT string `json:"JWT,omitempty"`
 }
@@ -715,30 +711,29 @@ type endpoint struct {
 type claimResolver struct {
 	ctx context.Context
 
-	// claim is the distributed claim that may be resolved.
+	// claim 是可以被解析的分布式声明。
 	claim string
 
-	// audiences is the set of acceptable audiences the JWT must be issued to.
-	// At least one of the entries must match the "aud" claim in presented JWTs.
+	// audiences 是 JWT 必须签发给的可接受 audience 集合。
+	//  至少需要有一个条目与所呈现 JWT 的 "aud" claim 匹配。
 	audiences sets.Set[string]
 
-	// client is the to use for resolving distributed claims
+	// client 是用于解析分布式声明的客户端
 	client *http.Client
 
-	// config is the OIDC configuration used for resolving distributed claims.
+	// config 是用于解析分布式声明的 OIDC 配置。
 	config *oidc.Config
 
-	// verifierPerIssuer contains, for each issuer, the appropriate verifier to use
-	// for this claim.  It is assumed that there will be very few entries in
-	// this map.
-	// Guarded by m.
+	// verifierPerIssuer 针对每个 issuer 保存本声明解析时应使用的
+	// verifier。预期该 map 中的条目数量非常少。
+	// 由 m 保护。
 	verifierPerIssuer map[string]*asyncIDTokenVerifier
 
 	m sync.Mutex
 }
 
-// newClaimResolver creates a new resolver for distributed claims.
-// the input ctx is retained and is used as the base context for background requests such as key fetching.
+// newClaimResolver 创建一个新的分布式声明解析器。
+// 传入的 ctx 会被保留，并作为密钥拉取等后台请求的基准上下文。
 func newClaimResolver(ctx context.Context, claim string, client *http.Client, config *oidc.Config, audiences sets.Set[string]) *claimResolver {
 	return &claimResolver{
 		ctx:               ctx,
@@ -757,7 +752,7 @@ func (r *claimResolver) Verifier(iss string) (*idTokenVerifier, error) {
 	r.m.Lock()
 	av := r.verifierPerIssuer[iss]
 	if av == nil {
-		// This lazy init should normally be very quick.
+		// 这一惰性初始化通常应当非常快。
 		ctx := oidc.ClientContext(r.ctx, r.client)
 		av = newAsyncIDTokenVerifier(ctx, r.config, iss, r.audiences)
 		r.verifierPerIssuer[iss] = av
@@ -794,22 +789,22 @@ func (r *claimResolver) Verifier(iss string) (*idTokenVerifier, error) {
 // 若已存在同名普通 claim 则直接跳过，避免远端覆盖本地值。
 func (r *claimResolver) expand(ctx context.Context, c claims) error {
 	const (
-		// The claim containing a map of endpoint references per claim.
-		// OIDC Connect Core 1.0, section 5.6.2.
+		// 存放“每个 claim 对应的端点引用”映射的 claim。
+		// OIDC Connect Core 1.0，第 5.6.2 节。
 		claimNamesKey = "_claim_names"
-		// The claim containing endpoint specifications.
-		// OIDC Connect Core 1.0, section 5.6.2.
+		// 存放端点规格说明的 claim。
+		// OIDC Connect Core 1.0，第 5.6.2 节。
 		claimSourcesKey = "_claim_sources"
 	)
 
 	_, ok := c[r.claim]
 	if ok {
-		// There already is a normal claim, skip resolving.
+		// 已存在普通同名 claim，跳过解析。
 		return nil
 	}
 	names, ok := c[claimNamesKey]
 	if !ok {
-		// No _claim_names, no keys to look up.
+		// 没有 _claim_names，也就没有可查找的键。
 		return nil
 	}
 
@@ -820,20 +815,20 @@ func (r *claimResolver) expand(ctx context.Context, c claims) error {
 
 	rawSources, ok := c[claimSourcesKey]
 	if !ok {
-		// Having _claim_names claim,  but no _claim_sources is not an expected
-		// state.
+		// 存在 _claim_names claim 却没有 _claim_sources，
+		// 这不是预期状态。
 		return fmt.Errorf("oidc: no claim sources")
 	}
 
 	var sources map[string]endpoint
 	if err := json.Unmarshal([]byte(rawSources), &sources); err != nil {
-		// The claims sources claim is malformed, this is not an expected state.
+		// claim sources 这个 claim 格式非法，这不是预期状态。
 		return fmt.Errorf("oidc: could not parse claim sources: %v", err)
 	}
 
 	src, ok := claimToSource[r.claim]
 	if !ok {
-		// No distributed claim present.
+		// 不存在分布式声明。
 		return nil
 	}
 	ep, ok := sources[src]
@@ -841,7 +836,7 @@ func (r *claimResolver) expand(ctx context.Context, c claims) error {
 		return fmt.Errorf("id token _claim_names contained a source %s missing in _claims_sources", src)
 	}
 	if ep.URL == "" {
-		// This is maybe an aggregated claim (ep.JWT != "").
+		// 这可能是一个聚合声明（aggregated claim）（ep.JWT != ""）。
 		return nil
 	}
 	return r.resolve(ctx, ep, c)
@@ -851,7 +846,7 @@ func (r *claimResolver) expand(ctx context.Context, c claims) error {
 // 从 endpoint 拉取的 JWT 必须再次完整校验（issuer 选择 + 签名 +
 // audience），不能信任其中的声明，否则分布式声明会成为伪造身份的入口。
 func (r *claimResolver) resolve(ctx context.Context, endpoint endpoint, allClaims claims) error {
-	// TODO: cache resolved claims.
+	// TODO: 缓存已解析的 claim。
 	jwt, err := getClaimJWT(ctx, r.client, endpoint.URL, endpoint.AccessToken)
 	if err != nil {
 		return fmt.Errorf("while getting distributed claim %q: %v", r.claim, err)
@@ -901,9 +896,9 @@ func (v *idTokenVerifier) Verify(ctx context.Context, rawIDToken string) (*oidc.
 // 空 audience 配置直接报错而非放行，防止配置遗漏导致任意 aud
 // 都被接受。
 func (v *idTokenVerifier) verifyAudience(t *oidc.IDToken) error {
-	// We validate audience field is not empty in the authentication configuration.
-	// This check ensures callers of "Verify" using idTokenVerifier are not passing
-	// an empty audience.
+	// 我们在认证配置中已校验 audience 字段非空。
+	// 本检查是为了确保通过 idTokenVerifier 调用 "Verify" 的
+	// 调用方没有传入空 audience。
 	if v.audiences.Len() == 0 {
 		return fmt.Errorf("oidc: invalid configuration, audiences cannot be empty")
 	}
@@ -945,11 +940,10 @@ func (a *jwtAuthenticator) AuthenticateToken(ctx context.Context, token string) 
 	}
 
 	var claimsValue *lazy.MapValue
-	// Convert the claims to traits.Mapper so that we can evaluate the CEL expressions
-	// against the claims. This is done once here so that we don't have to convert
-	// the claims to traits.Mapper multiple times in the CEL mapper for each mapping.
-	// Only perform this conversion if any of the mapping or validation rules contain
-	// CEL expressions.  The traits.Mapper is lazily evaluated against the expressions.
+	// 把 claims 转换为 traits.Mapper，以便针对这些 claims 求值 CEL 表达式。
+	// 这里只转换一次，避免 CEL mapper 为每个映射把 claims 反复转换为
+	// traits.Mapper。仅当任何映射或校验规则包含 CEL 表达式时才执行这一
+	// 转换。traits.Mapper 会针对表达式惰性求值。
 	if a.celMapper.Username != nil || a.celMapper.Groups != nil || a.celMapper.UID != nil || a.celMapper.Extra != nil || a.celMapper.ClaimValidationRules != nil {
 		claimsValue = newClaimsValue(c)
 	}
@@ -976,13 +970,13 @@ func (a *jwtAuthenticator) AuthenticateToken(ctx context.Context, token string) 
 		info.Extra = extra
 	}
 
-	// check to ensure all required claims are present in the ID token and have matching values.
+	// 检查所有必需 claim 都存在于 ID token 中，且取值匹配。
 	for claim, value := range a.requiredClaims {
 		if !c.hasClaim(claim) {
 			return nil, false, fmt.Errorf("oidc: required claim %s not present in ID token", claim)
 		}
 
-		// NOTE: Only string values are supported as valid required claim values.
+		// NOTE: 必需的 claim 取值仅支持字符串类型。
 		var claimValue string
 		if err := c.unmarshalClaim(claim, &claimValue); err != nil {
 			return nil, false, fmt.Errorf("oidc: parse claim %s: %w", claim, err)
@@ -1009,10 +1003,9 @@ func (a *jwtAuthenticator) AuthenticateToken(ctx context.Context, token string) 
 	}
 
 	if a.celMapper.UserValidationRules != nil {
-		// Convert the user info to traits.Mapper so that we can evaluate the CEL expressions
-		// against the user info. This is done once here so that we don't have to convert
-		// the user info to traits.Mapper multiple times in the CEL mapper for each mapping.
-		// The traits.Mapper is lazily evaluated against the expressions.
+		// 把 user info 转换为 traits.Mapper，以便针对 user info 求值 CEL
+		// 表达式。这里只转换一次，避免 CEL mapper 为每个映射把 user info
+		// 反复转换为 traits.Mapper。traits.Mapper 会针对表达式惰性求值。
 		userInfoVal := newUserInfoValue(info)
 
 		evalResult, err := a.celMapper.UserValidationRules.EvalUser(ctx, userInfoVal)
@@ -1072,7 +1065,7 @@ func (a *jwtAuthenticator) getUsername(ctx context.Context, c claims, claimsValu
 	}
 
 	if usernameClaim == "email" {
-		// If the email_verified claim is present, ensure the email is valid.
+		// 若存在 email_verified claim，则确保该 email 有效。
 		// https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
 		if hasEmailVerified := c.hasClaim("email_verified"); hasEmailVerified {
 			var emailVerified bool
@@ -1080,7 +1073,7 @@ func (a *jwtAuthenticator) getUsername(ctx context.Context, c claims, claimsValu
 				return "", fmt.Errorf("oidc: parse 'email_verified' claim: %v", err)
 			}
 
-			// If the email_verified claim is present we have to verify it is set to `true`.
+			// 若存在 email_verified claim，我们必须核验其取值为 `true`。
 			if !emailVerified {
 				return "", fmt.Errorf("oidc: email not verified")
 			}
@@ -1101,8 +1094,8 @@ func (a *jwtAuthenticator) getGroups(ctx context.Context, c claims, claimsValue 
 	groupsClaim := a.jwtAuthenticator.ClaimMappings.Groups.Claim
 	if len(groupsClaim) > 0 {
 		if _, ok := c[groupsClaim]; ok {
-			// Some admins want to use string claims like "role" as the group value.
-			// Allow the group claim to be a single string instead of an array.
+			// 有些管理员希望把 "role" 这类字符串 claim 当作组值使用。
+			// 允许 groups claim 是单个字符串而不是数组。
 			//
 			// See: https://github.com/kubernetes/kubernetes/issues/33290
 			var groups stringOrArray
@@ -1211,12 +1204,11 @@ func getCredentialID(c claims) string {
 	return ""
 }
 
-// getClaimJWT gets a distributed claim JWT from url, using the supplied access
-// token as bearer token.  If the access token is "", the authorization header
-// will not be set.
-// TODO: Allow passing in JSON hints to the IDP.
+// getClaimJWT 从 url 获取分布式声明 JWT，使用传入的 access token 作为
+// bearer token。若 access token 为 ""，则不设置 Authorization 头。
+// TODO: 允许向 IDP 传入 JSON 提示信息。
 func getClaimJWT(ctx context.Context, client *http.Client, url, accessToken string) (string, error) {
-	// TODO: Allow passing request body with configurable information.
+	// TODO: 允许携带可配置的请求体信息。
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("while calling %v: %v", url, err)
@@ -1230,7 +1222,7 @@ func getClaimJWT(ctx context.Context, client *http.Client, url, accessToken stri
 		return "", err
 	}
 	defer response.Body.Close()
-	// Report non-OK status code as an error.
+	// 把非 OK 状态码上报为错误。
 	if response.StatusCode < http.StatusOK || response.StatusCode > http.StatusIMUsed {
 		return "", fmt.Errorf("error while getting distributed claim JWT: %v", response.Status)
 	}
@@ -1287,14 +1279,14 @@ func (c claims) hasClaim(name string) bool {
 // 付出解析成本，这对包含大量声明的 token 很关键。
 func newClaimsValue(c claims) *lazy.MapValue {
 	lazyMap := lazy.NewMapValue(types.NewObjectType("kubernetes.claims"))
-	for name, msg := range c { // TODO add distributed claims support
+	for name, msg := range c { // TODO 增加分布式声明支持
 		lazyMap.Append(name, func(_ *lazy.MapValue) ref.Val {
 			data, err := msg.MarshalJSON()
 			if err != nil {
-				return types.WrapErr(err) // impossible since RawMessage never errors
+				return types.WrapErr(err) // 不可能发生，RawMessage 从不出错
 			}
 
-			var value any // TODO how do we do multiple levels of lazy decoding?
+			var value any // TODO 多级惰性解码该怎么做？
 			if err := json.Unmarshal(data, &value); err != nil {
 				return types.NewErr("claim %q failed to unmarshal: %w", name, err)
 			}
@@ -1358,7 +1350,7 @@ func convertCELValueToStringList(val ref.Val) ([]string, error) {
 	}
 }
 
-// messageFunc is a function that returns a message for a validation rule.
+// messageFunc 是一个为校验规则返回 message 的函数。
 type messageFunc func(authenticationcel.ExpressionAccessor) (string, error)
 
 // checkValidationRulesEvaluation 检查校验规则的求值结果是否合法；不合法时返回错误，
@@ -1442,9 +1434,9 @@ func (l *unescapeLister) Get(index ref.Val) ref.Val {
 func unescapeWrapper(value ref.Val) ref.Val {
 	switch v := value.(type) {
 	case traits.Mapper:
-		return &unescapeMapper{Mapper: v} // handle nested JSON objects
+		return &unescapeMapper{Mapper: v} // 处理嵌套 JSON 对象
 	case traits.Lister:
-		return &unescapeLister{Lister: v} // handle nested JSON arrays
+		return &unescapeLister{Lister: v} // 处理嵌套 JSON 数组
 	default:
 		return value
 	}
