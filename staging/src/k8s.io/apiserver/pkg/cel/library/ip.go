@@ -27,19 +27,19 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
-// IP provides a CEL function library extension of IP address parsing functions.
+// IP 提供一组用于解析 IP 地址的 CEL 函数库扩展。
 //
 // ip
 //
-// Converts a string to an IP address or results in an error if the string is not a valid IP address.
-// The IP address must be an IPv4 or IPv6 address.
-// IPv4-mapped IPv6 addresses (e.g. ::ffff:1.2.3.4) are not allowed.
-// IP addresses with zones (e.g. fe80::1%eth0) are not allowed.
-// Leading zeros in IPv4 address octets are not allowed.
+// 将字符串转换为 IP 地址；如果字符串不是合法 IP 地址则产生错误。
+// IP 地址必须是 IPv4 或 IPv6 地址。
+// 不允许 IPv4 映射的 IPv6 地址（例如 ::ffff:1.2.3.4）。
+// 不允许带 zone 的 IP 地址（例如 fe80::1%eth0）。
+// 不允许 IPv4 地址各段中出现前导零。
 //
 //	ip(<string>) <IPAddr>
 //
-// Examples:
+// 示例：
 //
 //	ip('127.0.0.1') // returns an IPv4 address
 //	ip('::1') // returns an IPv6 address
@@ -48,15 +48,15 @@ import (
 //
 // isIP
 //
-// Returns true if a string is a valid IP address.
-// The IP address must be an IPv4 or IPv6 address.
-// IPv4-mapped IPv6 addresses (e.g. ::ffff:1.2.3.4) are not allowed.
-// IP addresses with zones (e.g. fe80::1%eth0) are not allowed.
-// Leading zeros in IPv4 address octets are not allowed.
+// 如果字符串是合法 IP 地址则返回 true。
+// IP 地址必须是 IPv4 或 IPv6 地址。
+// 不允许 IPv4 映射的 IPv6 地址（例如 ::ffff:1.2.3.4）。
+// 不允许带 zone 的 IP 地址（例如 fe80::1%eth0）。
+// 不允许 IPv4 地址各段中出现前导零。
 //
 //	isIP(<string>) <bool>
 //
-// Examples:
+// 示例：
 //
 //	isIP('127.0.0.1') // returns true
 //	isIP('::1') // returns true
@@ -65,13 +65,13 @@ import (
 //
 // ip.isCanonical
 //
-// Returns true if the IP address is in its canonical form.
-// There is exactly one canonical form for every IP address, so fields containing
-// IPs in canonical form can just be treated as strings when checking for equality or uniqueness.
+// 如果 IP 地址处于规范形式则返回 true。
+// 每个 IP 地址有且仅有一个规范形式，因此对于以规范形式存储 IP 的字段，
+// 在检查相等性或唯一性时可以直接按字符串处理。
 //
 //	ip.isCanonical(<string>) <bool>
 //
-// Examples:
+// 示例：
 //
 //	ip.isCanonical('127.0.0.1') // returns true; all valid IPv4 addresses are canonical
 //	ip.isCanonical('2001:db8::abcd') // returns true
@@ -80,24 +80,25 @@ import (
 //
 // family / isUnspecified / isLoopback / isLinkLocalMulticast / isLinkLocalUnicast / isGlobalUnicast
 //
-// - family: returns the IP addresses' family (IPv4 or IPv6) as an integer, either '4' or '6'.
+// - family: 以整数形式返回 IP 地址的地址族（IPv4 或 IPv6），取值为 '4' 或 '6'。
 //
-// - isUnspecified: returns true if the IP address is the unspecified address.
-// Either the IPv4 address "0.0.0.0" or the IPv6 address "::".
+// - isUnspecified: 如果 IP 地址是未指定地址则返回 true。
+// 即 IPv4 地址 "0.0.0.0" 或 IPv6 地址 "::"。
 //
-// - isLoopback: returns true if the IP address is the loopback address.
-// Either an IPv4 address with a value of 127.x.x.x or an IPv6 address with a value of ::1.
+// - isLoopback: 如果 IP 地址是回环地址则返回 true。
+// 即取值为 127.x.x.x 的 IPv4 地址，或取值为 ::1 的 IPv6 地址。
 //
-// - isLinkLocalMulticast: returns true if the IP address is a link-local multicast address.
-// Either an IPv4 address with a value of 224.0.0.x or an IPv6 address in the network ff00::/8.
+// - isLinkLocalMulticast: 如果 IP 地址是链路本地组播地址则返回 true。
+// 即取值为 224.0.0.x 的 IPv4 地址，或位于 ff02::/16 网段内的 IPv6 地址。
+// （原英文注释写作 ff00::/8，但实现委托给 netip.Addr.IsLinkLocalMulticast，实际判定 ff02::/16。）
 //
-// - isLinkLocalUnicast: returns true if the IP address is a link-local unicast address.
-// Either an IPv4 address with a value of 169.254.x.x or an IPv6 address in the network fe80::/10.
+// - isLinkLocalUnicast: 如果 IP 地址是链路本地单播地址则返回 true。
+// 即取值为 169.254.x.x 的 IPv4 地址，或位于 fe80::/10 网段内的 IPv6 地址。
 //
-// - isGlobalUnicast: returns true if the IP address is a global unicast address.
-// Either an IPv4 address that is not zero or 255.255.255.255 or an IPv6 address that is not a link-local unicast, loopback or multicast address.
+// - isGlobalUnicast: 如果 IP 地址是全局单播地址则返回 true。
+// 即非零且非 255.255.255.255 的 IPv4 地址，或非链路本地单播、非回环、非组播的 IPv6 地址。
 //
-// Examples:
+// 示例：
 //
 //	ip('127.0.0.1').family() // returns '4”
 //	ip('::1').family() // returns '6'
@@ -220,7 +221,7 @@ func stringToIP(arg ref.Val) ref.Val {
 
 	addr, err := parseIPAddr(s)
 	if err != nil {
-		// Don't add context, we control the error message already.
+		// 不再叠加上下文，错误信息已由我们自己控制。
 		return types.NewErr("%v", err)
 	}
 
@@ -266,13 +267,13 @@ func ipIsCanonical(arg ref.Val) ref.Val {
 
 	addr, err := parseIPAddr(s)
 	if err != nil {
-		// Don't add context, we control the error message already.
+		// 不再叠加上下文，错误信息已由我们自己控制。
 		return types.NewErr("%v", err)
 	}
 
-	// Addr.String() always returns the canonical form of the IP address.
-	// Therefore comparing this with the original string representation
-	// will tell us if the IP address is in its canonical form.
+	// Addr.String() 总是返回 IP 地址的规范形式。
+	// 因此把它与原始字符串表示比较，
+	// 即可判断该 IP 地址是否已处于规范形式。
 	return types.Bool(addr.String() == s)
 }
 
@@ -338,10 +339,10 @@ func isGlobalUnicast(arg ref.Val) ref.Val {
 	return types.Bool(ip.Addr.IsGlobalUnicast())
 }
 
-// parseIPAddr parses a string into an IP address.
-// We use this function to parse IP addresses in the CEL library
-// so that we can share the common logic of rejecting IP addresses
-// that contain zones or are IPv4-mapped IPv6 addresses.
+// parseIPAddr 将字符串解析为 IP 地址。
+// CEL 库中所有 IP 地址的解析都走这个函数，
+// 以便共用同一套拒绝逻辑：拒绝带 zone 的地址，
+// 以及 IPv4 映射的 IPv6 地址。
 func parseIPAddr(raw string) (netip.Addr, error) {
 	addr, err := netip.ParseAddr(raw)
 	if err != nil {

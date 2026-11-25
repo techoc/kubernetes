@@ -23,55 +23,47 @@ import (
 	"time"
 )
 
-// CorrelatedObject represents a node in a tree of objects that are being
-// validated. It is used to keep track of the old value of an object during
-// traversal of the new value. It is also used to cache the results of
-// DeepEqual comparisons between the old and new values of objects.
+// CorrelatedObject 表示正在被校验的对象树中的一个节点。它用于在遍历新值
+// 的过程中跟踪对象的旧值，也用于缓存新旧值之间 DeepEqual 比较的结果。
 //
-// All receiver functions support being called on `nil` to support ergonomic
-// recursive descent. The nil `CorrelatedObject` represents an uncorrelatable
-// node in the tree.
+// 所有接收者方法都支持在 `nil` 上被调用，以方便符合直觉的递归下降。
+// nil 的 `CorrelatedObject` 表示树中一个不可关联的节点。
 //
-// CorrelatedObject is not thread-safe. It is the responsibility of the caller
-// to handle concurrency, if any.
+// CorrelatedObject 不是线程安全的。并发（如果有）由调用方负责处理。
 //
 // 存在的意义是"棘轮校验（ratcheting）"：新对象只需在其未变更的部分上满足
 // 旧规则。判断某部分是否变更，就要把它与旧对象中"对应的"部分配对——
 // 对 map-key 列表不能按下标配对，而应按 map 键匹配，这就是 correlate 逻辑的由来。
 type CorrelatedObject struct {
-	// Currently correlated old value during traversal of the schema/object
+	// 遍历 schema/对象过程中当前关联到的旧值
 	OldValue interface{}
 
-	// Value being validated
+	// 正在被校验的值
 	Value interface{}
 
-	// Schema used for validation of this value. The schema is also used
-	// to determine how to correlate the old object.
+	// 用于校验该值的 Schema。该 Schema 同时用于决定如何关联旧对象。
 	Schema Schema
 
 	// Duration 是该对象及其所有子节点做 ratcheting 校验所花的时间。
 	// 用指针共享同一个累计器，子节点直接累加到父节点上，避免逐层回传。
 	Duration *time.Duration
 
-	// Scratch space below, may change during validation
+	// 以下的临时（scratch）空间，可能在校验过程中发生变化
 
-	// Cached comparison result of DeepEqual of `value` and `thunk.oldValue`
+	// 缓存的 `value` 与 `thunk.oldValue` 之间 DeepEqual 的比较结果
 	comparisonResult *bool
 
 	// mapList 缓存 map 类型列表的 map 表示，不是 map 类型列表时为 nil。
 	// 惰性构建：只有真正按索引访问 map 类型列表时才需要它。
 	mapList MapList
 
-	// Children spawned by a call to `Validate` on this object
-	// key is either a string or an index, depending upon whether `value` is
-	// a map or a list, respectively.
+	// 由在本对象上调用 `Validate` 而生成的子节点。
+	// key 是字符串或索引，取决于 `value` 是 map 还是列表。
 	//
-	// The list of children may be incomplete depending upon if the internal
-	// logic of kube-openapi's SchemaValidator short-circuited before
-	// reaching all of the children.
+	// 子节点列表可能不完整：kube-openapi 的 SchemaValidator 内部逻辑
+	// 可能在遍历到所有子节点之前就短路返回。
 	//
-	// It should be expected to have an entry for either all of the children, or
-	// none of them.
+	// 预期情况是：要么包含全部子节点的条目，要么一条都没有。
 	children map[interface{}]*CorrelatedObject
 }
 
@@ -86,16 +78,13 @@ func NewCorrelatedObject(new, old interface{}, schema Schema) *CorrelatedObject 
 	}
 }
 
-// If OldValue or Value is not a list, or the index is out of bounds of the
-// Value list, returns nil
-// If oldValue is a list, this considers the x-list-type to decide how to
-// correlate old values:
+// 如果 OldValue 或 Value 不是列表，或索引超出 Value 列表的边界，返回 nil。
+// 如果 oldValue 是列表，则由 x-list-type 决定如何关联旧值：
 //
-// If listType is map, creates a map representation of the list using the designated
-// map-keys, caches it for future calls, and returns the map value, or nil if
-// the correlated key is not in the old map
+// 如果 listType 是 map，用指定的 map-key 为列表构建 map 表示，缓存以备后续
+// 调用，并返回对应的 map 值；若关联键不在旧 map 中则返回 nil。
 //
-// Otherwise, if the list type is not correlatable this funcion returns nil.
+// 否则，如果列表类型不可关联，本函数返回 nil。
 func (r *CorrelatedObject) correlateOldValueForChildAtNewIndex(index int) interface{} {
 	oldAsList, ok := r.OldValue.([]interface{})
 	if !ok {
@@ -106,14 +95,14 @@ func (r *CorrelatedObject) correlateOldValueForChildAtNewIndex(index int) interf
 	if !ok {
 		return nil
 	} else if len(asList) <= index {
-		// Cannot correlate out of bounds index
+		// 越界的索引无法关联
 		return nil
 	}
 
 	listType := r.Schema.XListType()
 	switch listType {
 	case "map":
-		// Look up keys for this index in current object
+		// 在当前对象中查出该索引位置元素对应的 map-key
 		currentElement := asList[index]
 
 		// 旧列表的 map 表示只构建一次并缓存，因为同一列表内多次按下标访问很常见。
@@ -125,34 +114,33 @@ func (r *CorrelatedObject) correlateOldValueForChildAtNewIndex(index int) interf
 		return oldList.Get(currentElement)
 
 	case "set":
-		// Are sets correlatable? Only if the old value equals the current value.
-		// We might be able to support this, but do not currently see a lot
-		// of value
-		// (would allow you to add/remove items from sets with ratcheting but not change them)
+		// set 可关联吗？只有当旧值恰好等于当前值时才行。
+		// 也许可以做到支持，但目前看不到多少价值
+		// （那将允许借助 ratcheting 对 set 增删元素，但不能修改元素本身）
 		//
 		// set 无稳定元素标识，无法可靠配对，故一律视为不可关联，退回整体比较。
 		return nil
 	case "":
 		fallthrough
 	case "atomic":
-		// Atomic lists are the default are not correlatable by item
-		// Ratcheting is not available on a per-index basis
+		// atomic 列表是默认类型，无法按元素逐条关联。
+		// ratcheting 不能按索引逐个进行
 		return nil
 	default:
-		// Unrecognized list type. Assume non-correlatable.
+		// 无法识别的列表类型，视为不可关联。
 		return nil
 	}
 }
 
-// CachedDeepEqual is equivalent to reflect.DeepEqual, but caches the
-// results in the tree of ratchetInvocationScratch objects on the way:
+// CachedDeepEqual 等价于 reflect.DeepEqual，但会把结果沿途缓存到
+// CorrelatedObject 对象树中（原英文注释写作 ratchetInvocationScratch，
+// 该类型名在代码中并不存在）：
 //
-// For objects and arrays, this function will make a best effort to make
-// use of past DeepEqual checks performed by this Node's children, if available.
+// 对于对象和数组，本函数会尽量利用本 Node 的子节点已经做过的 DeepEqual
+// 检查结果（如果可用）。
 //
-// If a lazy computation could not be found for all children possibly due
-// to validation logic short circuiting and skipping the children, then
-// this function simply defers to reflect.DeepEqual.
+// 如果并非所有子节点都能找到惰性计算的结果——可能由于校验逻辑短路而跳过了
+// 这些子节点——那么本函数直接回退到 reflect.DeepEqual。
 //
 // 缓存结果以指针写入 comparisonResult：同一节点可能在多条校验路径上被反复比较，
 // 缓存把复杂度从指数级降到线性。
@@ -165,7 +153,7 @@ func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 	}()
 
 	if r == nil {
-		// Uncorrelatable node is not considered equal to its old value
+		// 不可关联的节点不视为与其旧值相等
 		return false
 	} else if r.comparisonResult != nil {
 		return *r.comparisonResult
@@ -187,15 +175,15 @@ func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 	oldAsMap, oldIsMap := r.OldValue.(map[string]interface{})
 	newAsMap, newIsMap := r.Value.(map[string]interface{})
 
-	// If old and new are not the same type, they are not equal
+	// 如果新旧值不是同一类型，则不相等
 	if (oldIsArray != newIsArray) || oldIsMap != newIsMap {
 		return false
 	}
 
-	// Objects are known to be same type of (map, slice, or primitive)
+	// 到这一步，两个对象已知同为 map、slice 或原始值三种类型之一
 	switch {
 	case oldIsArray:
-		// Both arrays case. oldIsArray == newIsArray
+		// 双方都是数组的情形。oldIsArray == newIsArray
 		if len(oldAsArray) != len(newAsArray) {
 			return false
 		}
@@ -212,14 +200,14 @@ func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 				return false
 
 			} else if !child.CachedDeepEqual() {
-				// If one child is not equal the entire object is not equal
+				// 只要有一个子节点不相等，整个对象就不相等
 				return false
 			}
 		}
 
 		return true
 	case oldIsMap:
-		// Both maps case. oldIsMap == newIsMap
+		// 双方都是 map 的情形。oldIsMap == newIsMap
 		if len(oldAsMap) != len(newAsMap) {
 			return false
 		}
@@ -227,11 +215,11 @@ func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 		for k := range newAsMap {
 			child := r.Key(k)
 			if child == nil {
-				// Un-correlatable child due to key change.
-				// Objects are not equal.
+				// 键发生变化导致子节点无法关联。
+				// 两个对象不相等。
 				return false
 			} else if !child.CachedDeepEqual() {
-				// If one child is not equal the entire object is not equal
+				// 只要有一个子节点不相等，整个对象就不相等
 				return false
 			}
 		}
@@ -239,15 +227,14 @@ func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 		return true
 
 	default:
-		// Primitive: use reflect.DeepEqual
+		// 原始值：使用 reflect.DeepEqual
 		return reflect.DeepEqual(r.OldValue, r.Value)
 	}
 }
 
-// Key returns the child of the receiver with the given name.
-// Returns nil if the given name is does not exist in the new object, or its
-// value is not correlatable to an old value.
-// If receiver is nil or if the new value is not an object/map, returns nil.
+// Key 返回接收者中给定名称对应的子节点。
+// 如果给定名称在新对象中不存在，或其值无法与旧值关联，返回 nil。
+// 如果接收者为 nil 或新值不是对象/map，返回 nil。
 func (r *CorrelatedObject) Key(field string) *CorrelatedObject {
 	start := time.Now()
 	defer func() {
@@ -262,7 +249,7 @@ func (r *CorrelatedObject) Key(field string) *CorrelatedObject {
 		return existing
 	}
 
-	// Find correlated old value
+	// 查找与之关联的旧值
 	oldAsMap, okOld := r.OldValue.(map[string]interface{})
 	newAsMap, okNew := r.Value.(map[string]interface{})
 	if !okOld || !okNew {
@@ -299,10 +286,9 @@ func (r *CorrelatedObject) Key(field string) *CorrelatedObject {
 	return res
 }
 
-// Index returns the child of the receiver at the given index.
-// Returns nil if the given index is out of bounds, or its value is not
-// correlatable to an old value.
-// If receiver is nil or if the new value is not an array, returns nil.
+// Index 返回接收者中给定索引处的子节点。
+// 如果给定索引越界，或其值无法与旧值关联，返回 nil。
+// 如果接收者为 nil 或新值不是数组，返回 nil。
 func (r *CorrelatedObject) Index(i int) *CorrelatedObject {
 	start := time.Now()
 	defer func() {

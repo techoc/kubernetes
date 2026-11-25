@@ -24,40 +24,33 @@ import (
 	"k8s.io/apiserver/pkg/util/flowcontrol/request"
 )
 
-// QueueSetFactory is used to create QueueSet objects.  Creation, like
-// config update, is done in two phases: the first phase consumes the
-// QueuingConfig and the second consumes the DispatchingConfig.  They
-// are separated so that errors from the first phase can be found
-// before committing to a concurrency allotment for the second.
+// QueueSetFactory 用于创建 QueueSet 对象。创建过程与配置更新一样分两个
+// 阶段：第一阶段消费 QueuingConfig，第二阶段消费 DispatchingConfig。
+// 两阶段分开的原因：第一阶段产生的错误可以在尚未承诺第二阶段的并发配额
+// 之前就被发现。
 //
 // 两阶段构造的意义：排队参数校验失败时不必回滚已分配的分发资源。
 type QueueSetFactory interface {
-	// BeginConstruction does the first phase of creating a QueueSet.
-	// The RatioedGaugePair observes number of requests,
-	// execution covering just the regular phase.
-	// The denominator for the waiting phase is
-	// max(1, QueuingConfig.QueueLengthLimit) X max(1, QueuingConfig.DesiredNumQueues).
-	// The RatioedGauge observes number of seats occupied through all phases of execution.
-	// The denominator for all the ratioed concurrency gauges is supplied later in the DispatchingConfig.
-	// The Gauge observes the seat demand (executing + queued seats).
+	// BeginConstruction 执行创建 QueueSet 的第一阶段。
+	// RatioedGaugePair 观测请求数量，其执行维度只覆盖常规执行阶段。
+	// 等待阶段的分母是
+	// max(1, QueuingConfig.QueueLengthLimit) X max(1, QueuingConfig.DesiredNumQueues)。
+	// RatioedGauge 观测在执行的所有阶段中占用的承诺（seat）数。
+	// 所有比值并发 gauge 的分母稍后由 DispatchingConfig 提供。
+	// Gauge 观测承诺需求量（执行中 + 排队中的 seat 数）。
 	BeginConstruction(QueuingConfig, metrics.RatioedGaugePair, metrics.RatioedGauge, metrics.Gauge) (QueueSetCompleter, error)
 }
 
-// QueueSetCompleter finishes the two-step process of creating or
-// reconfiguring a QueueSet
+// QueueSetCompleter 完成创建或重配置 QueueSet 的两步流程。
 type QueueSetCompleter interface {
-	// Complete returns a QueueSet configured by the given
-	// dispatching configuration.
+	// Complete 返回由给定分发配置所配置的 QueueSet。
 	Complete(DispatchingConfig) QueueSet
 }
 
-// QueueSet is the abstraction for the queuing and dispatching
-// functionality of one non-exempt priority level.  It covers the
-// functionality described in the "Assignment to a Queue", "Queuing",
-// and "Dispatching" sections of
+// QueueSet 是某一个非豁免优先级的排队与分发功能的抽象。它涵盖了
 // https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/1040-priority-and-fairness/README.md
-// .  Some day we may have connections between priority levels, but
-// today is not that day.
+// 中 "Assignment to a Queue"、"Queuing" 和 "Dispatching" 小节描述的功能。
+// 也许有一天我们会让不同优先级之间产生关联，但至少今天还不是那天。
 //
 // 每个非豁免优先级对应一个 QueueSet；多个 QueueSet 之间通过公平性维度解耦。
 type QueueSet interface {
@@ -68,81 +61,68 @@ type QueueSet interface {
 	// （除非它既不再需要又为空），避免配置热更新导致已排队请求被静默拒绝。
 	BeginConfigChange(QueuingConfig) (QueueSetCompleter, error)
 
-	// IsIdle returns a bool indicating whether the QueueSet was idle
-	// at the moment of the return.  Idle means the QueueSet has zero
-	// requests queued and zero executing.  This bit can change only
-	// (1) during a call to StartRequest and (2) during a call to
-	// Request::Finish.  In the latter case idleness can only change
-	// from false to true.
+	// IsIdle 返回一个布尔值，表示 QueueSet 在返回的那一刻是否空闲。
+	// 空闲指 QueueSet 中排队中和执行中的请求均为零。
+	// 该状态只可能在 (1) StartRequest 的调用过程中、以及 (2)
+	// Request::Finish 的调用过程中发生变化。后一种情况下，空闲状态
+	// 只可能从 false 变为 true。
 	IsIdle() bool
 
-	// StartRequest begins the process of handling a request.  If the
-	// request gets queued and the number of queues is greater than 1
-	// then StartRequest uses the given hashValue as the source of
-	// entropy as it shuffle-shards the request into a queue.  The
-	// descr1 and descr2 values play no role in the logic but appear
-	// in log messages.  This method always returns quickly (without
-	// waiting for the request to be dequeued).  If this method
-	// returns a nil Request value then caller should reject the
-	// request and the returned bool indicates whether the QueueSet
-	// was idle at the moment of the return.  Otherwise idle==false
-	// and the client must call the Finish method of the Request
-	// exactly once.
+	// StartRequest 开始处理一个请求的流程。如果该请求需要排队且队列
+	// 数量大于 1，则 StartRequest 使用给定的 hashValue 作为熵源，通过
+	// shuffle-sharding 把请求分入某个队列。descr1 和 descr2 不参与任何
+	// 逻辑，只出现在日志消息中。本方法总是快速返回（不会等待请求出队）。
+	// 如果本方法返回的 Request 值为 nil，调用方应当拒绝该请求，且返回的
+	// bool 表示 QueueSet 在返回那一刻是否空闲。否则 idle==false，
+	// 客户端必须且只能调用该 Request 的 Finish 方法一次。
 	//
 	// 注意：StartRequest 不阻塞；真正等待发生在 Request.Finish。
 	// 返回 nil Request 表示队列已满，调用方应以 429 拒绝。
 	StartRequest(ctx context.Context, width *request.WorkEstimate, hashValue uint64, flowDistinguisher, fsName string, descr1, descr2 interface{}, queueNoteFn QueueNoteFn) (req Request, idle bool)
 
-	// Dump saves and returns the instant internal state of the queue-set.
-	// Note that dumping process will stop the queue-set from proceeding
-	// any requests.
-	// For debugging only.
+	// Dump 保存并返回该 queue-set 的瞬时内部状态。
+	// 注意：dump 过程会让 queue-set 暂停处理任何请求。
+	// 仅用于调试。
 	Dump(includeRequestDetails bool) debug.QueueSetDump
 }
 
-// QueueNoteFn is called when a request enters and leaves a queue
+// QueueNoteFn 在一个请求进入和离开队列时被调用。
 type QueueNoteFn func(inQueue bool)
 
-// Request represents the remainder of the handling of one request
+// Request 表示单个请求处理流程的剩余部分。
 type Request interface {
-	// Finish determines whether to execute or reject the request and
-	// invokes `execute` if the decision is to execute the request.
-	// The returned `idle bool` value indicates whether the QueueSet
-	// was idle when the value was calculated, but might no longer be
-	// accurate by the time the client examines that value.
+	// Finish 决定是执行还是拒绝该请求，并在决定执行时调用 `execute`。
+	// 返回的 `idle bool` 值表示 QueueSet 在该值被计算出来时是否空闲，
+	// 但到客户端读取该值时它可能已经不再准确。
 	Finish(execute func()) (idle bool)
 }
 
-// QueuingConfig defines the configuration of the queuing aspect of a QueueSet.
+// QueuingConfig 定义 QueueSet 排队方面的配置。
 type QueuingConfig struct {
-	// Name is used to identify a queue set, allowing for descriptive information about its intended use
+	// Name 用于标识一个 queue set，可携带描述其用途的信息。
 	Name string
 
-	// DesiredNumQueues is the number of queues that the API says
-	// should exist now.  This may be non-positive, in which case
-	// QueueLengthLimit, and HandSize are ignored.
-	// A value of zero means to respect the ConcurrencyLimit of the DispatchingConfig.
-	// A negative value means to always dispatch immediately upon arrival
-	// (i.e., the requests are "exempt" from limitation).
-	//
-	// 0 表示沿用分发配置的并发上限；负值表示完全豁免，不做排队。
+	// DesiredNumQueues 是 API 当前声明应当存在的队列数量。该值可以为非正数，
+	// 此时 QueueLengthLimit 和 HandSize 被忽略。
+	// 取值零表示遵循 DispatchingConfig 的 ConcurrencyLimit。
+	// 取值为负表示在请求到达时立即分发（即这些请求完全豁免于限制）。
 	DesiredNumQueues int
 
-	// QueueLengthLimit is the maximum number of requests that may be waiting in a given queue at a time
+	// QueueLengthLimit 是同一时刻某个队列中可以等待的请求数上限。
 	QueueLengthLimit int
 
-	// HandSize is a parameter of shuffle sharding.  Upon arrival of a request, a queue is chosen by randomly
-	// dealing a "hand" of this many queues and then picking one of minimum length.
+	// HandSize 是 shuffle sharding 的一个参数。请求到达时，随机抽取
+	// （"发一手牌"）这么多个队列，然后选取其中长度最小的一个。
 	HandSize int
 }
 
-// DispatchingConfig defines the configuration of the dispatching aspect of a QueueSet.
+// DispatchingConfig 定义 QueueSet 分发方面的配置。
 type DispatchingConfig struct {
-	// ConcurrencyLimit is the maximum number of requests of this QueueSet that may be executing at a time
+	// ConcurrencyLimit 是该 QueueSet 同一时刻允许处于执行中的请求数上限。
 	ConcurrencyLimit int
 
-	// ConcurrencyDenominator is used in relative metrics of concurrency.
-	// It equals ConcurrencyLimit except when that is zero.
+	// ConcurrencyDenominator 用于并发的相对指标。
+	// 它等于 ConcurrencyLimit，除非后者为零。
 	// 为 0 的 ConcurrencyLimit 不能作分母，故单独提供分母值。
 	ConcurrencyDenominator int
 }
