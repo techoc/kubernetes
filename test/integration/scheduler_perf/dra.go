@@ -43,17 +43,17 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// createResourceClaimsOp defines an op where resource claims are created.
+// createResourceClaimsOp 定义创建 resource claim 的操作。
 type createResourceClaimsOp struct {
-	// Must be createResourceClaimsOpcode.
+	// 必须是 createResourceClaimsOpcode。
 	Opcode operationCode
-	// Number of claims to create. Parameterizable through CountParam.
+	// 要创建的 claim 数量，可通过 CountParam 参数化。
 	Count int
-	// Template parameter for Count.
+	// Count 的模板参数。
 	CountParam string
-	// Namespace the claims should be created in.
+	// 创建 claim 所在的 namespace。
 	Namespace string
-	// Path to spec file describing the claims to create.
+	// 描述待创建 claim 的 spec 文件路径。
 	TemplatePath string
 }
 
@@ -121,12 +121,11 @@ func (op *createResourceClaimsOp) run(tCtx ktesting.TContext) {
 	}
 }
 
-// allocResourceClaimsOp defines an op where resource claims with structured
-// parameters get allocated without being associated with a pod.
+// allocResourceClaimsOp 定义在不关联 Pod 的情况下分配带结构化参数的 resource claim 的操作。
 type allocResourceClaimsOp struct {
-	// Must be allocResourceClaimsOpcode.
+	// 必须是 allocResourceClaimsOpcode。
 	Opcode operationCode
-	// Namespace where claims are to be allocated, all namespaces if empty.
+	// 待分配 claim 所在的 namespace，为空表示所有 namespace。
 	Namespace string
 }
 
@@ -153,7 +152,7 @@ func (op *allocResourceClaimsOp) run(tCtx ktesting.TContext) {
 	tCtx = tCtx.WithCancel()
 	defer tCtx.Cancel("allocResourceClaimsOp.run is done")
 
-	// Track cluster state.
+	// 跟踪集群状态。
 	informerFactory := informers.NewSharedInformerFactory(tCtx.Client(), 0)
 	claimInformer := informerFactory.Resource().V1().ResourceClaims().Informer()
 	nodeLister := informerFactory.Core().V1().Nodes().Lister()
@@ -195,7 +194,7 @@ func (op *allocResourceClaimsOp) run(tCtx ktesting.TContext) {
 		tCtx.Fatalf("unexpected informer sync result (- expected, + actual):\n%s", diff)
 	}
 
-	// The ResourceSlice tracker lags behind informers when DeviceTaintRules are enabled.
+	// 启用 DeviceTaintRules 时，ResourceSlice tracker 的同步会滞后于 informer。
 	if !cache.WaitForCacheSync(tCtx.Done(), resourceSliceTracker.HasSynced) {
 		tCtx.Fatalf("resource slice tracker failed to sync: %v", context.Cause(tCtx))
 	}
@@ -205,25 +204,20 @@ func (op *allocResourceClaimsOp) run(tCtx ktesting.TContext) {
 		EnableListTypeAttributes: utilfeature.DefaultFeatureGate.Enabled(features.DRAListTypeAttributes),
 	})
 
-	// Also wait for the assume cache to catch up.
-	// Without this we cannot reliably store the result of
-	// the UpdateStatus call below.
-	// Has to be done indirectly, the assume cache itself has
-	// no HasSynced method (maybe it should).
+	// 还需等待 assume cache 追上，否则下面 UpdateStatus 的结果无法可靠写入。
+	// assume cache 本身没有 HasSynced 方法（也许该有），只能通过事件 handler 间接等待。
 	handle := assumeCache.AddEventHandler(cache.ResourceEventHandlerFuncs{})
 	if !cache.WaitForCacheSync(tCtx.Done(), handle.HasSynced) {
 		tCtx.Fatalf("assume cache failed to sync: %v", context.Cause(tCtx))
 	}
 
-	// The set of nodes is assumed to be fixed at this point.
+	// 此处假定节点集合已固定不变。
 	nodes, err := nodeLister.List(labels.Everything())
 	tCtx.ExpectNoError(err, "list nodes")
 	slices, err := draManager.ResourceSlices().ListWithDeviceTaintRules()
 	tCtx.ExpectNoError(err, "list slices")
 
-	// Allocate one claim at a time, picking nodes randomly. Each
-	// allocation is stored immediately, using the claim cache to avoid
-	// having to wait for the actual informer update.
+	// 逐个分配 claim，随机挑选节点。每次分配后立即写回，借助 claim cache 避免等待 informer 实际更新。
 claims:
 	for i := range claims.Items {
 		claim := &claims.Items[i]

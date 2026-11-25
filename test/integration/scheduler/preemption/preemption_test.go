@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file tests preemption functionality of the scheduler.
+// 本文件测试 scheduler 的抢占功能。
 
 package preemption
 
@@ -61,7 +61,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// imported from testutils
+// 从 testutils 引入。
 var (
 	initPausePod        = testutils.InitPausePod
 	createNode          = testutils.CreateNode
@@ -76,19 +76,18 @@ var lowPriority, mediumPriority, highPriority = int32(100), int32(200), int32(30
 
 const tokenFilterName = "token-filter"
 
-// tokenFilter is a fake plugin that implements PreFilter and Filter.
-// `Token` simulates the allowed pods number a cluster can host.
-// If `EnablePreFilter` is set to false or `Token` is positive, PreFilter passes; otherwise returns Unschedulable
-// For each Filter() call, `Token` is decreased by one. When `Token` is positive, Filter passes; otherwise return
-// Unschedulable or UnschedulableAndUnresolvable (when `Unresolvable` is set to true)
-// AddPod()/RemovePod() adds/removes one token to the cluster to simulate the dryrun preemption
+// tokenFilter 是实现 PreFilter 和 Filter 的假插件。
+// `Token` 模拟集群还能容纳的 Pod 数量：`EnablePreFilter` 为 false 或 `Token` 大于 0 时 PreFilter 通过，否则返回 Unschedulable。
+// 每次 Filter() 都会消耗一个 Token：Token 大于 0 时通过，否则返回 Unschedulable
+// 或 UnschedulableAndUnresolvable（`Unresolvable` 为 true 时）。
+// AddPod()/RemovePod() 通过增减 Token 模拟抢占的 dryrun 过程。
 type tokenFilter struct {
 	Tokens          int
 	Unresolvable    bool
 	EnablePreFilter bool
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (fp *tokenFilter) Name() string {
 	return tokenFilterName
 }
@@ -131,9 +130,9 @@ func (fp *tokenFilter) PreFilterExtensions() fwk.PreFilterExtensions {
 
 var _ fwk.FilterPlugin = &tokenFilter{}
 
-// TestPreemption tests a few preemption scenarios.
+// TestPreemption 覆盖若干抢占场景。
 func TestPreemption(t *testing.T) {
-	// Initialize scheduler with a filter plugin.
+	// 用 filter 插件初始化 scheduler。
 	var filter tokenFilter
 	registry := make(frameworkruntime.Registry)
 	err := registry.Register(filterPluginName, func(_ context.Context, _ runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
@@ -227,10 +226,8 @@ func TestPreemption(t *testing.T) {
 			}),
 			preemptedPodIndexes: map[int]struct{}{0: {}},
 		},
-		// This is identical with previous subtest except for setting enablePreFilter to true.
-		// With this fake plugin returning Unschedulable in PreFilter, it's able to exercise the path
-		// that in-tree plugins return Skip in PreFilter and their AddPod/RemovePod functions are also
-		// skipped properly upon preemption.
+		// 与前一个子用例相同，只是开启 enablePreFilter。假插件在 PreFilter 返回 Unschedulable，
+		// 可覆盖 in-tree 插件在 PreFilter 返回 Skip 时，抢占过程中 AddPod/RemovePod 也被正确跳过的路径。
 		{
 			name:            "basic pod preemption with preFilter",
 			initTokens:      1,
@@ -256,7 +253,7 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{0: {}},
 		},
 		{
-			// same as the previous test, but the filter is unresolvable.
+			// 与前一个用例相同，但 filter 返回的结果不可恢复（unresolvable）。
 			name:         "basic pod preemption with unresolvable filter",
 			initTokens:   1,
 			unresolvable: true,
@@ -315,7 +312,7 @@ func TestPreemption(t *testing.T) {
 					},
 				}),
 			},
-			// A higher priority pod with anti-affinity.
+			// 带有反亲和性的高优先级 Pod。
 			pod: initPausePod(&testutils.PausePodConfig{
 				Name:      "preemptor-pod",
 				Priority:  &highPriority,
@@ -343,7 +340,7 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{0: {}, 1: {}},
 		},
 		{
-			// This is similar to the previous case only pod-1 is high priority.
+			// 与前一个用例类似，只是 pod-1 是高优先级。
 			name:       "preemption is not performed when anti-affinity is not satisfied",
 			initTokens: maxTokens,
 			existingPods: []*v1.Pod{
@@ -378,7 +375,7 @@ func TestPreemption(t *testing.T) {
 					},
 				}),
 			},
-			// A higher priority pod with anti-affinity.
+			// 带有反亲和性的高优先级 Pod。
 			pod: initPausePod(&testutils.PausePodConfig{
 				Name:      "preemptor-pod",
 				Priority:  &highPriority,
@@ -406,8 +403,7 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{},
 		},
 		{
-			// The PodGroup is treated as a single atomic victim, so both pods
-			// are evicted as a unit even though pod-group-victim-2 lives on node2.
+			// PodGroup 被当作一个整体 victim，因此即使 pod-group-victim-2 在 node2 上，两个 Pod 也会被一并驱逐。
 			name:                   "pod group victim across multiple nodes, pod-group-as-victim enabled",
 			initTokens:             maxTokens,
 			genericWorkloadEnabled: true,
@@ -453,12 +449,12 @@ func TestPreemption(t *testing.T) {
 					v1.ResourceMemory: *resource.NewQuantity(200, resource.DecimalSI),
 				}},
 			}),
-			// The entire pod group is evicted as a unit: both index 0 and index 1.
+			// 整个 pod group 作为一个整体被驱逐：索引 0 和 1 的 Pod 都会被驱赶。
 			preemptedPodIndexes: map[int]struct{}{0: {}, 1: {}},
 		},
 		{
-			// When all pods of a PodGroup reside on a single node and DisruptionModeAll is enabled,
-			// preempting one member to satisfy resource requests triggers atomic eviction of the entire group.
+			// PodGroup 所有 Pod 都在同一节点且开启 DisruptionModeAll 时，
+			// 抢占其中一个成员以满足资源请求会原子化地驱逐整个组。
 			name:                   "pod group occupying a single node, pod-group-as-victim enabled",
 			initTokens:             maxTokens,
 			genericWorkloadEnabled: true,
@@ -500,8 +496,8 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{0: {}, 1: {}},
 		},
 		{
-			// When multiple victim PodGroups exist across nodes, preemption selects only the lowest-priority
-			// group needed to satisfy the request. Its members across all nodes are evicted while higher-priority groups remain intact.
+			// 跨节点存在多个 victim PodGroup 时，抢占只选择满足请求所需的最低优先级组；
+			// 该组在所有节点上的成员都会被驱逐，优先级更高的组保持不动。
 			name:                   "multiple victim pod groups, only subset selected for preemption",
 			initTokens:             maxTokens,
 			genericWorkloadEnabled: true,
@@ -572,8 +568,8 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{0: {}, 1: {}},
 		},
 		{
-			// When evicting all lower-priority victim PodGroups on a node is still insufficient to satisfy the request
-			// due to un-preemptible equal-priority pods, preemption aborts without evicting any members of the PodGroup.
+			// 当节点上所有低优先级 victim PodGroup 加起来仍不足以满足请求（因为存在不可抢占的同优先级 Pod）时，
+			// 抢占会整体放弃，不驱逐 PodGroup 的任何成员。
 			name:                   "unsuccessful pod group preemption when freeing lower priority group is insufficient",
 			initTokens:             maxTokens,
 			genericWorkloadEnabled: true,
@@ -631,8 +627,8 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{},
 		},
 		{
-			// When a PodGroup across multiple nodes uses DisruptionModeSingle, evicting a member on the target
-			// node does not trigger gang eviction; members on other nodes remain running untouched.
+			// 跨多节点的 PodGroup 使用 DisruptionModeSingle 时，驱逐目标节点上的一个成员不会触发 gang eviction，
+			// 其他节点上的成员继续运行。
 			name:                   "pod group victim across multiple nodes, DisruptionModeSingle enabled",
 			initTokens:             maxTokens,
 			genericWorkloadEnabled: true,
@@ -678,12 +674,11 @@ func TestPreemption(t *testing.T) {
 					v1.ResourceMemory: *resource.NewQuantity(200, resource.DecimalSI),
 				}},
 			}),
-			// Only index 0 on node1 is evicted; index 1 on node2 is NOT evicted.
+			// 只有 node1 上索引 0 的 Pod 被驱逐；node2 上索引 1 的 Pod 不会被驱逐。
 			preemptedPodIndexes: map[int]struct{}{0: {}},
 		},
 		{
-			// The CompositePodGroup is treated as a single atomic victim, so both pods
-			// are evicted as a unit even though pod-group-victim-2 lives on node2.
+			// CompositePodGroup 被当作一个整体 victim，因此即使 pod-group-victim-2 在 node2 上，两个 Pod 也会被一并驱逐。
 			name:                     "CPG victim across multiple nodes, pod-group-as-victim enabled",
 			initTokens:               maxTokens,
 			genericWorkloadEnabled:   true,
@@ -733,12 +728,12 @@ func TestPreemption(t *testing.T) {
 					v1.ResourceMemory: *resource.NewQuantity(200, resource.DecimalSI),
 				}},
 			}),
-			// The entire pod group is evicted as a unit: both index 0 and index 1.
+			// 整个 pod group 作为一个整体被驱逐：索引 0 和 1 的 Pod 都会被驱赶。
 			preemptedPodIndexes: map[int]struct{}{0: {}, 1: {}},
 		},
 		{
-			// When all pods of a CPG reside on a single node and DisruptionModeAll is enabled,
-			// preempting one member to satisfy resource requests triggers atomic eviction of the entire group.
+			// CPG 所有 Pod 都在同一节点且开启 DisruptionModeAll 时，
+			// 抢占其中一个成员以满足资源请求会原子化地驱逐整个组。
 			name:                     "CPG occupying a single node, pod-group-as-victim enabled",
 			initTokens:               maxTokens,
 			genericWorkloadEnabled:   true,
@@ -784,8 +779,8 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{0: {}, 1: {}},
 		},
 		{
-			// When multiple victim CPGs exist across nodes, preemption selects only the lowest-priority
-			// group needed to satisfy the request. Its members across all nodes are evicted while higher-priority groups remain intact.
+			// 跨节点存在多个 victim CPG 时，抢占只选择满足请求所需的最低优先级组；
+			// 该组在所有节点上的成员都会被驱逐，优先级更高的组保持不动。
 			name:                     "multiple victim CPGs, only subset selected for preemption",
 			initTokens:               maxTokens,
 			genericWorkloadEnabled:   true,
@@ -861,8 +856,8 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{0: {}, 1: {}},
 		},
 		{
-			// When evicting all lower-priority victim CPGs on a node is still insufficient to satisfy the request
-			// due to un-preemptible equal-priority pods, preemption aborts without evicting any members of the CPG.
+			// 当节点上所有低优先级 victim CPG 加起来仍不足以满足请求（因为存在不可抢占的同优先级 Pod）时，
+			// 抢占会整体放弃，不驱逐 CPG 的任何成员。
 			name:                     "unsuccessful CPG preemption when freeing lower priority group is insufficient",
 			initTokens:               maxTokens,
 			genericWorkloadEnabled:   true,
@@ -924,8 +919,8 @@ func TestPreemption(t *testing.T) {
 			preemptedPodIndexes: map[int]struct{}{},
 		},
 		{
-			// When a CPG across multiple nodes uses DisruptionModeSingle, evicting a member on the target
-			// node does not trigger gang eviction; members on other nodes remain running untouched.
+			// 跨多节点的 CPG 使用 DisruptionModeSingle 时，驱逐目标节点上的一个成员不会触发 gang eviction，
+			// 其他节点上的成员继续运行。
 			name:                     "CPG victim across multiple nodes, DisruptionModeSingle enabled",
 			initTokens:               maxTokens,
 			genericWorkloadEnabled:   true,
@@ -975,12 +970,12 @@ func TestPreemption(t *testing.T) {
 					v1.ResourceMemory: *resource.NewQuantity(200, resource.DecimalSI),
 				}},
 			}),
-			// Only index 0 on node1 is evicted; index 1 on node2 is NOT evicted.
+			// 只有 node1 上索引 0 的 Pod 被驱逐；node2 上索引 1 的 Pod 不会被驱逐。
 			preemptedPodIndexes: map[int]struct{}{0: {}},
 		},
 	}
 
-	// Create a node with some resources and a label.
+	// 创建带有资源容量和标签的节点。
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
 		v1.ResourceCPU:    "500m",
@@ -988,8 +983,8 @@ func TestPreemption(t *testing.T) {
 	}
 	nodeObject := st.MakeNode().Name("node1").Capacity(nodeRes).Label("node", "node1").Obj()
 
-	// Group test indexes by genericWorkloadEnabled and compositePodGroupEnabled feature gates
-	// so each group can share an API server started with the correct feature gate values.
+	// 按 genericWorkloadEnabled 和 compositePodGroupEnabled feature gate 对用例分组，
+	// 让同组用例共享按对应 feature gate 配置启动的 API server。
 	type featureGateKey struct {
 		genericWorkloadEnabled   bool
 		compositePodGroupEnabled bool
@@ -1008,8 +1003,8 @@ func TestPreemption(t *testing.T) {
 		for _, asyncAPICallsEnabled := range []bool{true, false} {
 			for _, clearingNominatedNodeNameAfterBinding := range []bool{true, false} {
 				for fgKey, testIndexes := range testsByWASFeatureGates {
-					// One API server per full flag combination. All flags including
-					// GenericWorkload and CompositePodGroup are consistent between API server and scheduler.
+					// 每种完整 flag 组合启动一个 API server，且 GenericWorkload、CompositePodGroup
+					// 等所有 flag 在 API server 和 scheduler 之间保持一致。
 					featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 						features.SchedulerAsyncPreemption:              asyncPreemptionEnabled,
 						features.SchedulerAsyncAPICalls:                asyncAPICallsEnabled,
@@ -1073,7 +1068,7 @@ func TestPreemption(t *testing.T) {
 							filter.EnablePreFilter = test.enablePreFilter
 							filter.Unresolvable = test.unresolvable
 							pods := make([]*v1.Pod, len(test.existingPods))
-							// Create and run existingPods.
+							// 创建并运行已存在的 Pod。
 							for i, p := range test.existingPods {
 								p.Namespace = ns
 								pods[i], err = runPausePod(cs, p)
@@ -1081,13 +1076,13 @@ func TestPreemption(t *testing.T) {
 									t.Fatalf("Error running pause pod: %v", err)
 								}
 							}
-							// Create the "pod".
+							// 创建抢占者 Pod。
 							test.pod.Namespace = ns
 							preemptor, err := createPausePod(cs, test.pod)
 							if err != nil {
 								t.Errorf("Error while creating high priority pod: %v", err)
 							}
-							// Wait for preemption of pods and make sure the other ones are not preempted.
+							// 等待预期 Pod 被抢占，同时确认其余 Pod 未被抢占。
 							for i, p := range pods {
 								if _, found := test.preemptedPodIndexes[i]; found {
 									if err = wait.PollUntilContextTimeout(testCtx.Ctx, 200*time.Millisecond, wait.ForeverTestTimeout, false,
@@ -1103,8 +1098,8 @@ func TestPreemption(t *testing.T) {
 										t.Errorf("Pod %q does not have the expected condition: %q", klog.KObj(pod), v1.DisruptionTarget)
 									}
 								} else {
-									// Re-fetch to get current state; the pod object from runPausePod
-									// always has DeletionTimestamp=nil and cannot detect unexpected eviction.
+									// 重新获取最新状态：runPausePod 返回的 Pod 对象里 DeletionTimestamp 恒为 nil，
+									// 无法据此发现意外驱逐。
 									current, err := cs.CoreV1().Pods(p.Namespace).Get(testCtx.Ctx, p.Name, metav1.GetOptions{})
 									if err != nil {
 										t.Errorf("Error getting pod %v: %v", p.Name, err)
@@ -1113,14 +1108,14 @@ func TestPreemption(t *testing.T) {
 									}
 								}
 							}
-							// Also check that the preemptor pod gets the NominatedNodeName field set.
+							// 还要检查抢占者 Pod 是否设置了 NominatedNodeName 字段。
 							if len(test.preemptedPodIndexes) > 0 && !clearingNominatedNodeNameAfterBinding {
 								if err := testutils.WaitForNominatedNodeName(testCtx.Ctx, cs, preemptor); err != nil {
 									t.Errorf("NominatedNodeName field was not set for pod %v: %v", preemptor.Name, err)
 								}
 							}
 
-							// Cleanup
+							// 清理。
 							pods = append(pods, preemptor)
 							testutils.CleanupPods(testCtx.Ctx, cs, t, pods)
 						})
@@ -1138,9 +1133,7 @@ func TestAsyncPreemption(t *testing.T) {
 
 	type createPod struct {
 		pod *v1.Pod
-		// count is the number of times the pod should be created by this action.
-		// i.e., if you use it, you have to use GenerateName.
-		// By default, it's 1.
+		// count 是该 action 创建 Pod 的次数；若使用需配置 GenerateName，默认为 1。
 		count *int
 	}
 
@@ -1151,51 +1144,43 @@ func TestAsyncPreemption(t *testing.T) {
 	}
 
 	type scenario struct {
-		// name is this step's name, just for the debugging purpose.
+		// name 是该步骤的名称，仅用于调试。
 		name string
 
-		// Only one of the following actions should be set.
+		// 以下 action 只能设置其中一个。
 
-		// createPod creates a Pod.
+		// createPod 创建 Pod。
 		createPod *createPod
-		// createNode creates an additional Node.
+		// createNode 额外创建一个 Node。
 		createNode string
-		// schedulePod schedules one Pod that is at the top of the activeQ.
-		// You should give a Pod name that is supposed to be scheduled.
+		// schedulePod 调度 activeQ 队首的 Pod，需给出预期被调度的 Pod 名称。
 		schedulePod *schedulePod
-		// completePreemption completes the preemption that is currently on-going.
-		// You should give a Pod name.
+		// completePreemption 完成当前正在进行的抢占，需给出 Pod 名称。
 		completePreemption string
-		// podGatedInQueue checks if the given Pod is in the scheduling queue and gated by the preemption.
-		// You should give a Pod name.
+		// podGatedInQueue 检查给定 Pod 是否在调度队列中且被抢占流程 gated，需给出 Pod 名称。
 		podGatedInQueue string
-		// podRunningPreemption checks if the given Pod is running preemption.
-		// You should give a Pod index representing the order of Pod creation.
-		// e.g., if you want to check the Pod created first in the test case, you should give 0.
+		// podRunningPreemption 检查给定 Pod 是否正在执行抢占，值为 Pod 创建顺序的索引（第一个创建的 Pod 用 0）。
 		podRunningPreemption *int
-		// activatePod moves the pod from unschedulable to active or backoff.
-		// The value is the name of the pod to activate.
+		// activatePod 将 Pod 从 unschedulable 移回 active 或 backoff，值为要激活的 Pod 名称。
 		activatePod string
-		// resumeBind resumes the binding operation that keeps the pod blocked.
-		// Note: The pod will only become blocked in the first place, if pod name matches string defined in podBlockedInBinding.
+		// resumeBind 恢复被阻塞的 binding 操作。
+		// Pod 只有在名称匹配 podBlockedInBinding 中定义的字符串时才会被阻塞。
 		resumeBind bool
-		// verifyPodInUnschedulable waits for some time and confirms that the given pod is in the unschedulable pool.
-		// The value is the name of the checked pod.
+		// verifyPodInUnschedulable 等待一段时间后确认给定 Pod 仍在 unschedulable 池中，值为被检查的 Pod 名称。
 		verifyPodInUnschedulable string
-		// flushUnschedulable flushes the unschedulable queue.
+		// flushUnschedulable 清空 unschedulable 队列。
 		flushUnschedulable bool
-		// waitForPodsDeleted waits for the specified pods to be deleted from the cluster.
-		// The value is the array of Pod indexes representing the order of Pod creation.
+		// waitForPodsDeleted 等待指定 Pod 从集群中删除，值为按创建顺序排列的 Pod 索引数组。
 		waitForPodsDeleted []int
 	}
 
 	tests := []struct {
 		name string
-		// scenarios after the first attempt of scheduling the pod.
+		// 首次调度 Pod 之后执行的场景步骤。
 		scenarios []scenario
 	}{
 		{
-			// Very basic test case: if it fails, the basic scenario is broken somewhere.
+			// 最基础的用例：如果它失败，说明基本抢占流程出了问题。
 			name: "basic: async preemption happens expectedly",
 			scenarios: []scenario{
 				{
@@ -1314,8 +1299,7 @@ func TestAsyncPreemption(t *testing.T) {
 					podRunningPreemption: ptr.To(2),
 				},
 				{
-					// This Pod is lower priority than the preemptor Pod.
-					// Given the preemptor Pod is nominated to the node, this Pod should be unschedulable.
+					// 该 Pod 优先级低于抢占者。抢占者已被提名到该节点，因此它应当不可调度。
 					name: "create a second Pod that is lower priority than the first preemptor Pod",
 					createPod: &createPod{
 						pod: st.MakePod().Name("pod-mid-priority").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Priority(50).Obj(),
@@ -1333,7 +1317,7 @@ func TestAsyncPreemption(t *testing.T) {
 					completePreemption: "preemptor-high-priority",
 				},
 				{
-					// the preemptor pod should be popped from the queue before the mid-priority pod.
+					// 抢占者 Pod 应先于中等优先级 Pod 出队。
 					name: "schedule the preemptor Pod again",
 					schedulePod: &schedulePod{
 						podName:       "preemptor-high-priority",
@@ -1381,8 +1365,7 @@ func TestAsyncPreemption(t *testing.T) {
 					podRunningPreemption: ptr.To(4),
 				},
 				{
-					// This Pod is higher priority than the preemptor Pod.
-					// Even though the preemptor Pod is nominated to the node, this Pod can take over the place.
+					// 该 Pod 优先级高于抢占者。即使抢占者已被提名到该节点，它也能接管该位置。
 					name: "create a second Pod that is higher priority than the first preemptor Pod",
 					createPod: &createPod{
 						pod: st.MakePod().Name("preemptor-super-high-priority").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Container("image").Priority(200).Obj(),
@@ -1400,9 +1383,8 @@ func TestAsyncPreemption(t *testing.T) {
 					podRunningPreemption: ptr.To(5),
 				},
 				{
-					// the super-high-priority preemptor should enter the preemption
-					// and select the place where the preemptor-high-priority selected.
-					// So, basically both goroutines are preempting the same Pods.
+					// 超高优先级抢占者也会进入抢占流程，并选择高优先级抢占者看中的位置。
+					// 也就是说两个 goroutine 实际上在抢占同一批 Pod。
 					name:            "check the super-high-priority pod is in the queue and gated",
 					podGatedInQueue: "preemptor-super-high-priority",
 				},
@@ -1441,7 +1423,7 @@ func TestAsyncPreemption(t *testing.T) {
 					},
 				},
 				{
-					// It will preempt two victims.
+					// 它会抢占两个 victim。
 					name: "create a preemptor Pod",
 					createPod: &createPod{
 						pod: st.MakePod().Name("preemptor-high-priority").Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").Priority(100).Obj(),
@@ -1463,9 +1445,8 @@ func TestAsyncPreemption(t *testing.T) {
 					podRunningPreemption: ptr.To(4),
 				},
 				{
-					// This Pod is lower priority than the preemptor Pod.
-					// Given the preemptor Pod is nominated to the node, this Pod should be unschedulable.
-					// This Pod will trigger the preemption to target the two victims that the first Pod doesn't target.
+					// 该 Pod 优先级低于抢占者。抢占者已被提名到该节点，因此它应当不可调度。
+					// 该 Pod 会触发抢占，目标是第一个 Pod 未选中的两个 victim。
 					name: "create a second Pod that is lower priority than the first preemptor Pod",
 					createPod: &createPod{
 						pod: st.MakePod().Name("preemptor-mid-priority").Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").Priority(50).Obj(),
@@ -1495,7 +1476,7 @@ func TestAsyncPreemption(t *testing.T) {
 					completePreemption: "preemptor-high-priority",
 				},
 				{
-					// the preemptor pod should be popped from the queue before the mid-priority pod.
+					// 抢占者 Pod 应先于中等优先级 Pod 出队。
 					name: "schedule the preemptor Pod again",
 					schedulePod: &schedulePod{
 						podName:       "preemptor-high-priority",
@@ -1512,10 +1493,9 @@ func TestAsyncPreemption(t *testing.T) {
 			},
 		},
 		{
-			// This scenario verifies the fix for https://github.com/kubernetes/kubernetes/issues/134217
-			// Scenario reproduces the issue:
-			// Victim pod takes long in binding. Preemptor pod attempts preemption, goes to unschedulable, then the victim is deleted.
-			// Preemptor pod is woken up by the Pod/Delete event and is being scheduled, even before the victim binding is terminated.
+			// 该场景验证 https://github.com/kubernetes/kubernetes/issues/134217 的修复：
+			// victim Pod 长时间卡在 binding，抢占者尝试抢占后进入 unschedulable，随后 victim 被删除；
+			// 抢占者被 Pod/Delete 事件唤醒并开始调度，而 victim 的 binding 其实尚未结束。
 			name: "victim blocked in binding, preemptor pod gets scheduled after victim-in-binding is deleted",
 			scenarios: []scenario{
 				{
@@ -1561,10 +1541,9 @@ func TestAsyncPreemption(t *testing.T) {
 			},
 		},
 		{
-			// This scenario verifies the fix for https://github.com/kubernetes/kubernetes/issues/134217
-			// Scenario reproduces the issue, but with a victim that is under graceful termination:
-			// Victim pod takes long in binding. Preemptor pod attempts preemption, goes to unschedulable, then the victim's graceful termination is initiated.
-			// Preemptor pod is woken up by the Pod/Update event (working like AssignedPodDeleted) and is being scheduled, even before the victim binding is terminated.
+			// 该场景验证 https://github.com/kubernetes/kubernetes/issues/134217 的修复，但 victim 处于优雅终止中：
+			// victim Pod 长时间卡在 binding，抢占者尝试抢占后进入 unschedulable，随后 victim 开始优雅终止；
+			// 抢占者被 Pod/Update 事件（作用类似 AssignedPodDeleted）唤醒并开始调度，而 victim 的 binding 尚未结束。
 			name: "victim blocked in binding, preemptor pod gets scheduled when victim-in-binding is under graceful termination",
 			scenarios: []scenario{
 				{
@@ -1606,10 +1585,9 @@ func TestAsyncPreemption(t *testing.T) {
 			},
 		},
 		{
-			// This scenario verifies the fix for https://github.com/kubernetes/kubernetes/issues/134217
-			// Scenario reproduces the issue, but with a victim that is under graceful termination:
-			// Victim pod takes long in binding. Preemptor pod attempts preemption, goes to unschedulable, then the victim's graceful termination is initiated.
-			// Preemptor pod is woken up by the Pod/Update event (working like AssignedPodDeleted) and is being scheduled, even before the victim binding is terminated.
+			// 该场景验证 https://github.com/kubernetes/kubernetes/issues/134217 的修复，但 victim 处于优雅终止中：
+			// victim Pod 长时间卡在 binding，抢占者尝试抢占后进入 unschedulable，随后 victim 开始优雅终止；
+			// 抢占者被 Pod/Update 事件（作用类似 AssignedPodDeleted）唤醒并开始调度，而 victim 的 binding 尚未结束。
 			name: "victim blocked in binding, preemptor pod gets scheduled when victim-in-binding is under graceful termination",
 			scenarios: []scenario{
 				{
@@ -1655,11 +1633,10 @@ func TestAsyncPreemption(t *testing.T) {
 			},
 		},
 		{
-			// This scenario verifies the fix for https://github.com/kubernetes/kubernetes/issues/134217
-			// Scenario reproduces the issue, but with a victim that is reserving some resources required by the preemptor:
-			// Victim pod takes long in binding. Preemptor pod attempts preemption, goes to unschedulable, then the victim is deleted.
-			// Preemptor pod is woken up by the Pod/Update event (working like AssignedPodDeleted), but is still unschedulable, because victim has to unreserve its resources.
-			// After resuming binding for a victim, it releases the resources in its failure handler, preemptor is woken up again and ultimately scheduled.
+			// 该场景验证 https://github.com/kubernetes/kubernetes/issues/134217 的修复，但 victim 占用了抢占者需要的资源：
+			// victim Pod 长时间卡在 binding，抢占者尝试抢占后进入 unschedulable，随后 victim 被删除；
+			// 抢占者被 Pod/Update 事件（类似 AssignedPodDeleted）唤醒，但仍不可调度，因为 victim 还需释放资源；
+			// 恢复 victim 的 binding 后，它在失败处理中释放资源，抢占者再次被唤醒并最终完成调度。
 			name: "victim blocked in binding, preemptor pod gets scheduled after victim-in-binding is deleted and its resources are unreserved",
 			scenarios: []scenario{
 				{
@@ -1768,11 +1745,10 @@ func TestAsyncPreemption(t *testing.T) {
 			},
 		},
 		{
-			// This scenario verifies the fix for https://github.com/kubernetes/kubernetes/issues/134217
-			// Scenario reproduces the issue, but with a victim that is under graceful termination and sis reserving some resources required by the preemptor:
-			// Victim pod takes long in binding. Preemptor pod attempts preemption, goes to unschedulable, then the victim's graceful termination is initiated.
-			// Preemptor pod is woken up by the Pod/Update event (working like AssignedPodDeleted), but is still unschedulable, because victim has to unreserve its resources.
-			// After resuming binding for a victim, it releases the resources in its failure handler, preemptor is woken up again and ultimately scheduled.
+			// 该场景验证 https://github.com/kubernetes/kubernetes/issues/134217 的修复：victim 处于优雅终止中，且占用了抢占者所需资源；
+			// victim Pod 长时间卡在 binding，抢占者尝试抢占后进入 unschedulable，随后 victim 开始优雅终止；
+			// 抢占者被 Pod/Update 事件（类似 AssignedPodDeleted）唤醒，但仍不可调度，因为 victim 还需释放资源；
+			// 恢复 victim 的 binding 后，它在失败处理中释放资源，抢占者再次被唤醒并最终完成调度。
 			name: "victim blocked in binding, preemptor pod gets scheduled after victim-in-binding is under graceful termination and its resources are unreserved",
 			scenarios: []scenario{
 				{
@@ -1825,7 +1801,7 @@ func TestAsyncPreemption(t *testing.T) {
 			},
 		},
 		{
-			// Expected test outcome: lower priority Pod switches to another node, does not get stuck in unschedulable queue forever. (This part is in comment due to test name length limit.)
+			// 预期结果：低优先级 Pod 转移到其他节点，不会永远卡在 unschedulable 队列中。（因测试名称长度限制写在此处。）
 			name: "While lower priority Pod is waiting for preemption, higher priority Pod takes its place on the node",
 			scenarios: []scenario{
 				{
@@ -1886,8 +1862,8 @@ func TestAsyncPreemption(t *testing.T) {
 				},
 				{
 					name: "schedule the high-priority preemptor Pod and expect it to get scheduled on node1",
-					// While we don't check explicitly that Pod is scheduled on node1, we can assume that because
-					// Pod won't fit on node2 without preemption and there are enough resources on node1.
+					// 虽然没有显式检查 Pod 是否调度到 node1，但可以据此推断：
+					// 不抢占时 Pod 放不进 node2，而 node1 资源充足。
 					schedulePod: &schedulePod{
 						podName:       "preemptor-high-priority",
 						expectSuccess: true,
@@ -1901,7 +1877,7 @@ func TestAsyncPreemption(t *testing.T) {
 					name: "check that mid-priority preemptor Pod got activated by completed preemption and try scheduling it again",
 					schedulePod: &schedulePod{
 						podName: "preemptor-mid-priority",
-						// Pod won't fit on node1 anymore and should trigger preemptions on node2.
+						// Pod 已无法放进 node1，应在 node2 上触发抢占。
 						expectUnschedulable: true,
 					},
 				},
@@ -1920,7 +1896,7 @@ func TestAsyncPreemption(t *testing.T) {
 		},
 	}
 
-	// All test cases have the same node.
+	// 所有用例共享同一个节点。
 	node := st.MakeNode().Name("node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj()
 
 	sharedAPICtx := testutils.InitTestAPIServer(t, "preemption", nil)
@@ -1930,10 +1906,10 @@ func TestAsyncPreemption(t *testing.T) {
 			t.Run(fmt.Sprintf("%s (Async API calls enabled: %v)", test.name, asyncAPICallsEnabled), func(t *testing.T) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerAsyncAPICalls, asyncAPICallsEnabled)
 
-				// We need to use a custom preemption plugin to test async preemption behavior
+				// 测试异步抢占行为需要自定义 preemption 插件。
 				delayedPreemptionPluginName := "delay-preemption"
 				var lock sync.Mutex
-				// keyed by the pod name
+				// 以 Pod 名称为 key。
 				preemptionDoneChannels := make(map[string]chan struct{})
 				defer func() {
 					lock.Lock()
@@ -1946,7 +1922,7 @@ func TestAsyncPreemption(t *testing.T) {
 				var preemptionPlugin *defaultpreemption.DefaultPreemption
 				err := registry.Register(delayedPreemptionPluginName, func(c context.Context, r runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
 					p, err := frameworkruntime.FactoryAdapter(plfeature.Features{EnableAsyncPreemption: true}, defaultpreemption.New)(c, &config.DefaultPreemptionArgs{
-						// Set default values to pass the validation at the initialization, not related to the test.
+						// 设为默认值以通过初始化校验，与测试内容无关。
 						MinCandidateNodesPercentage: 10,
 						MinCandidateNodesAbsolute:   100,
 					}, fh)
@@ -1962,7 +1938,7 @@ func TestAsyncPreemption(t *testing.T) {
 
 					preemptPodFn := preemptionPlugin.Executor.PreemptPod
 					preemptionPlugin.Executor.PreemptPod = func(ctx context.Context, c preemption.Candidate, preemptor preemption.ExecutorPreemptor, victim *v1.Pod, pluginName string) (bool, error) {
-						// block the preemption goroutine to complete until the test case allows it to proceed.
+						// 阻塞抢占 goroutine，直到用例允许它继续执行。
 						lock.Lock()
 						ch, ok := preemptionDoneChannels[preemptor.GetName()]
 						lock.Unlock()
@@ -1978,7 +1954,7 @@ func TestAsyncPreemption(t *testing.T) {
 					t.Fatalf("Error registering a filter: %v", err)
 				}
 
-				// Register fake bind plugin that will block on binding for the specified pod name, until it receives a resume signal via the blockBindingChannel.
+				// 注册假 bind 插件：对指定 Pod 阻塞 binding，直到 blockBindingChannel 发来恢复信号。
 				blockBindingChannel := make(chan struct{})
 				defer close(blockBindingChannel)
 				blockingBindPluginName := "blockingBindPlugin"
@@ -1999,8 +1975,7 @@ func TestAsyncPreemption(t *testing.T) {
 					t.Fatalf("Error registering a bind plugin: %v", err)
 				}
 
-				// Register fake plugin that will reserve some fake resources for one pod.
-				// This could be used to check scheduler's behavior when the victim has to unreserve these resources to let the preemptor schedule.
+				// 注册假插件，为一个 Pod 预留虚拟资源，用于检查 victim 必须释放资源时 scheduler 的行为。
 				reservingPluginName := "reservingPlugin"
 				err = registry.Register(reservingPluginName, func(ctx context.Context, o runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
 					return &reservingPlugin{
@@ -2012,8 +1987,7 @@ func TestAsyncPreemption(t *testing.T) {
 					t.Fatalf("Error registering a reserving plugin: %v", err)
 				}
 
-				// Register fake plugin that will filter nodes with a specific name.
-				// Importantly, this plugin always returns QueueSkip as the queue hint, simulating faulty queue hint implementation.
+				// 注册按名称过滤节点的假插件。关键是它始终返回 QueueSkip 作为队列提示，模拟有缺陷的队列提示实现。
 				queueSkipFilterPluginName := "queueSkipFilterPlugin"
 				err = registry.Register(queueSkipFilterPluginName, func(ctx context.Context, o runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
 					return &queueSkipFilterPlugin{
@@ -2045,14 +2019,13 @@ func TestAsyncPreemption(t *testing.T) {
 					}},
 				})
 
-				// It initializes the scheduler, but doesn't start.
-				// We manually trigger the scheduling cycle.
+				// 这里只初始化 scheduler，不启动它；调度周期由测试手动触发。
 				testCtx := testutils.InitTestSchedulerWithOptions(t,
 					withNewNamespace(t, sharedAPICtx, "preemption"),
 					0,
 					scheduler.WithProfiles(cfg.Profiles...),
 					scheduler.WithFrameworkOutOfTreeRegistry(registry),
-					// disable backoff
+					// 禁用 backoff。
 					scheduler.WithPodMaxBackoffSeconds(0),
 					scheduler.WithPodInitialBackoffSeconds(0),
 				)
@@ -2125,7 +2098,7 @@ func TestAsyncPreemption(t *testing.T) {
 							}
 
 							if testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()[0].Name != scenario.schedulePod.podName {
-								// need to wait more because maybe the queue will get another Pod that higher priority than the current top pod.
+								// 继续等待：队列里可能出现比当前队首优先级更高的 Pod。
 								lastFailure = fmt.Sprintf("The pod %s is expected to be scheduled, but the top Pod is %s", scenario.schedulePod.podName, testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()[0].Name)
 								return false, nil
 							}
@@ -2166,13 +2139,12 @@ func TestAsyncPreemption(t *testing.T) {
 						delete(preemptionDoneChannels, scenario.completePreemption)
 						lock.Unlock()
 					case scenario.podGatedInQueue != "":
-						// make sure the Pod is in the queue in the first place.
+						// 首先确认 Pod 确实在队列中。
 						if !podInUnschedulablePodPool(t, testCtx.Scheduler.SchedulingQueue, scenario.podGatedInQueue) {
 							t.Fatalf("Expected the pod %s to be in the queue", scenario.podGatedInQueue)
 						}
 
-						// Make sure this Pod is gated by the preemption at PreEnqueue extension point
-						// by activating the Pod and see if it's still in the unsched pod pool.
+						// 激活该 Pod 后若它仍在 unsched 池中，就说明它在 PreEnqueue 扩展点被抢占流程 gated。
 						testCtx.Scheduler.SchedulingQueue.Activate(logger, map[string]*v1.Pod{scenario.podGatedInQueue: st.MakePod().Namespace(testCtx.NS.Name).Name(scenario.podGatedInQueue).Obj()})
 						if !podInUnschedulablePodPool(t, testCtx.Scheduler.SchedulingQueue, scenario.podGatedInQueue) {
 							t.Fatalf("Expected the pod %s to be in the queue even after the activation", scenario.podGatedInQueue)
@@ -2193,11 +2165,11 @@ func TestAsyncPreemption(t *testing.T) {
 							if !podInUnschedulablePodPool(t, testCtx.Scheduler.SchedulingQueue, scenario.verifyPodInUnschedulable) {
 								return false, fmt.Errorf("expected the pod %s to remain in the unschedulable queue after the scheduling attempt", scenario.verifyPodInUnschedulable)
 							}
-							// Continue polling to confirm that pod remains in unschedulable queue and does not get activated.
+							// 持续轮询，确认 Pod 一直留在 unschedulable 队列且未被激活。
 							return false, nil
 						}); err != nil && !errors.Is(err, context.DeadlineExceeded) {
-							// If timeout was reached or context was cancelled without finding that vanished from unschedulable, it means the state is as expected.
-							// If a different error occurred, it means that the pod got unexpectedly activated, or something else went wrong.
+							// 若因超时或 context 取消而结束轮询，说明 Pod 始终未离开 unschedulable，符合预期；
+							// 若是其他错误，则说明 Pod 被意外激活或出现了别的问题。
 							t.Fatalf("Error in scenario verifyPodInUnschedulable: %v", err)
 						}
 					case scenario.flushUnschedulable:
@@ -2216,10 +2188,10 @@ func TestAsyncPreemption(t *testing.T) {
 	}
 }
 
-// podInUnschedulablePodPool checks if the given Pod is in the unschedulable pod pool.
+// podInUnschedulablePodPool 检查给定 Pod 是否在 unschedulable pod 池中。
 func podInUnschedulablePodPool(t *testing.T, queue queue.SchedulingQueue, podName string) bool {
 	t.Helper()
-	// First, look for the pod in the activeQ.
+	// 先检查 Pod 是否在 activeQ 中。
 	for _, pod := range queue.PodsInActiveQ() {
 		if pod.Name == podName {
 			return false
@@ -2235,7 +2207,7 @@ func podInUnschedulablePodPool(t *testing.T, queue queue.SchedulingQueue, podNam
 	return false
 }
 
-// unschedulablePod checks if the given Pod is in the unschedulable queue and returns it.
+// unschedulablePod 检查给定 Pod 是否在 unschedulable 队列中，并返回该 Pod。
 func unschedulablePod(t *testing.T, queue queue.SchedulingQueue, podName string) *v1.Pod {
 	t.Helper()
 	unschedPods := queue.UnschedulablePods()
@@ -2279,8 +2251,7 @@ func (fp *queueSkipFilterPlugin) Name() string {
 var _ fwk.FilterPlugin = &queueSkipFilterPlugin{}
 var _ fwk.EnqueueExtensions = &queueSkipFilterPlugin{}
 
-// blockingBindPlugin is a fake plugin that simulates a long binding operation.
-// Underneath it calls realPlugin.Bind(), after receiving a signal that binding can be unblocked.
+// blockingBindPlugin 模拟耗时很长的 binding 操作。收到解除阻塞的信号后，底层仍调用 realPlugin.Bind()。
 type blockingBindPlugin struct {
 	name                string
 	nameOfPodToBlock    string
@@ -2294,7 +2265,7 @@ func (bp *blockingBindPlugin) Name() string {
 
 func (bp *blockingBindPlugin) Bind(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeName string) *fwk.Status {
 	if strings.Contains(p.Name, bp.nameOfPodToBlock) {
-		// block the bind goroutine to complete until the test case allows it to proceed.
+		// 阻塞 bind goroutine，直到用例允许它继续。
 		select {
 		case <-bp.blockBindingChannel:
 		case <-ctx.Done():
@@ -2305,8 +2276,8 @@ func (bp *blockingBindPlugin) Bind(ctx context.Context, state fwk.CycleState, p 
 
 var _ fwk.BindPlugin = &blockingBindPlugin{}
 
-// reservingPlugin is a fake plugin that reserves some resource in memory for nameOfPodToReserve pod.
-// Other pods won't be scheduled, unless the resources are unreserved.
+// reservingPlugin 为 nameOfPodToReserve Pod 在内存中预留虚拟资源；
+// 只有释放这些资源后，其他 Pod 才能被调度。
 type reservingPlugin struct {
 	lock               sync.Mutex
 	name               string
@@ -2320,7 +2291,7 @@ func (rp *reservingPlugin) Name() string {
 
 func (rp *reservingPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWithHint, error) {
 	return []fwk.ClusterEventWithHint{
-		// Plugin will wake up the pod on any Pod/Delete event.
+		// 任何 Pod/Delete 事件都会唤醒该 Pod。
 		{Event: fwk.ClusterEvent{Resource: fwk.Pod, ActionType: fwk.Delete}},
 	}, nil
 }
@@ -2399,7 +2370,7 @@ type blockedPod struct {
 	blocked chan struct{}
 }
 
-// blockingPermitPlugin is a Permit plugin that blocks until a signal is received.
+// blockingPermitPlugin 是收到信号前一直阻塞的 Permit 插件。
 type blockingPermitPlugin struct {
 	podsToBlock map[string]*blockedPod
 }
@@ -2428,15 +2399,16 @@ func (pl *blockingPermitPlugin) Permit(ctx context.Context, state fwk.CycleState
 }
 
 func TestPreemptionRespectsWaitingPod(t *testing.T) {
-	// 1. Create a "blocking" permit plugin that signals when it's running and waits for a specific close.
-	// 2. Create a big node on which low-priority pod will be scheduled.
-	// 3. Schedule a low-priority pod (victim) that hits this plugin (after being selected to run on a big node).
-	// 4. While victim is blocked in WaitOnPermit, add a smaller node on which the victim should be rescheduled.
-	// 5. Schedule a high-priority pod (preemptor), that can only fit on big node.
-	// 6. High-priority pod should be scheduled on a big node and victim should be preempted.
-	// 7. Victim should be rescheduled on a smaller node.
+	// 测试步骤：
+	// 1. 创建 blocking permit 插件：启动时发出信号，然后等待特定信号关闭；
+	// 2. 创建一个可容纳低优先级 Pod 的大节点；
+	// 3. 调度命中该插件的低优先级 Pod（victim），此时它已被选到大节点上；
+	// 4. victim 卡在 WaitOnPermit 时，添加一个适合重新调度 victim 的小节点；
+	// 5. 调度只能放在大节点上的高优先级 Pod（preemptor）；
+	// 6. 预期 preemptor 调度到大节点，victim 被抢占；
+	// 7. victim 应被重新调度到小节点。
 
-	// Create a node with resources for only one pod.
+	// 创建资源仅够一个 Pod 的节点。
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourceCPU:    "2",
 		v1.ResourceMemory: "2Gi",
@@ -2444,10 +2416,10 @@ func TestPreemptionRespectsWaitingPod(t *testing.T) {
 	node := st.MakeNode().Name("big-node").Capacity(nodeRes).Obj()
 
 	victim := st.MakePod().Name("victim").Priority(lowPriority).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1", v1.ResourceMemory: "1Gi"}).Obj()
-	// Preemptor requires more resources than the small node has.
+	// 抢占者需要的资源超过小节点所能提供。
 	preemptor := st.MakePod().Name("preemptor").Priority(highPriority).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1.5", v1.ResourceMemory: "1.5Gi"}).Obj()
 
-	// Register the blocking plugin
+	// 注册 blocking 插件。
 	victimToBlock := &blockedPod{
 		blocked: make(chan struct{}),
 	}
@@ -2524,15 +2496,12 @@ func TestPreemptionRespectsWaitingPod(t *testing.T) {
 		t.Fatalf("Error creating preemptor: %v", err)
 	}
 
-	// Preemptor should eventually be scheduled or cause victim preemption.
-	// Since victim is in WaitingOnPermit, Preemptor's preemption logic (PostFilter) should find it.
-	// It should call PreemptPod() on waiting victim.
-	// The plugin returns error on preemption, so the victim scheduling fails.
-	// The victim should NOT be deleted from API server.
-	// Instead the victim  should go to the backoff queue and get rescheduled eventually.
+	// 抢占者最终应完成调度，或触发对 victim 的抢占。由于 victim 卡在 WaitingOnPermit，
+	// 抢占者的 PostFilter 逻辑应找到它并对其调用 PreemptPod()。插件在抢占时返回错误，
+	// 因此 victim 的调度失败，但不应从 API server 中删除，而应进入 backoff 队列并最终重新调度。
 	t.Logf("Waiting for preemptor to be scheduled")
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 15*time.Second, false, func(ctx context.Context) (bool, error) {
-		// Ensure that victim is not deleted
+		// 确认 victim 未被删除。
 		_, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(ctx, victim.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -2540,7 +2509,7 @@ func TestPreemptionRespectsWaitingPod(t *testing.T) {
 			}
 			return false, err
 		}
-		// Check if preemptor was scheduled
+		// 检查抢占者是否已调度。
 		p, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(ctx, preemptor.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -2566,7 +2535,7 @@ func TestPreemptionRespectsWaitingPod(t *testing.T) {
 		t.Fatalf("Failed waiting for victim validation: %v", err)
 	}
 
-	// Check that preemptor and victim are scheduled on expected nodes: victim on a small node and preemptor on a big node.
+	// 检查抢占者与 victim 是否在预期节点上：victim 在小节点，抢占者在大节点。
 	v, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, victim.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting victim: %v", err)
@@ -2590,7 +2559,7 @@ type perPodBlockingPlugin struct {
 	released    chan struct{}
 }
 
-// blockingPreBindPlugin is a PreBindPlugin that blocks until a signal is received.
+// blockingPreBindPlugin 是收到信号前一直阻塞的 PreBindPlugin。
 type blockingPreBindPlugin struct {
 	podToChannels map[string]*perPodBlockingPlugin
 	handle        fwk.Handle
@@ -2635,25 +2604,24 @@ func (pl *blockingPreBindPlugin) PreBindPreFlight(ctx context.Context, state fwk
 }
 
 func TestPreemptionRespectsBindingPod(t *testing.T) {
-	// 1. Create a "blocking" prebind plugin that signals when it's running and waits for a specific close.
-	// 2. Schedule a low-priority pod (victim) that hits this plugin.
-	// 3. While victim is blocked in PreBind, add a small node and schedule a high-priority pod (preemptor) that fits only on a bigger node.
-	// 4. Wait for preemptor to be scheduled.
-	// 5. Verify that:
-	//		- preemptor takes place on the bigger node
-	//		- victim is NOT deleted, it's rescheduled on to a smaller node
+	// 测试步骤：
+	// 1. 创建 blocking prebind 插件：启动时发出信号，然后等待特定信号关闭；
+	// 2. 调度命中该插件的低优先级 Pod（victim）；
+	// 3. victim 卡在 PreBind 时，添加小节点，并调度只能放在大节点上的高优先级 Pod（preemptor）；
+	// 4. 等待 preemptor 完成调度；
+	// 5. 验证 preemptor 占据大节点，victim 未被删除而是重新调度到小节点。
 
-	// Create a node with resources for only one pod.
+	// 创建资源仅够一个 Pod 的节点。
 	bigNode := st.MakeNode().Name("big-node").Capacity(map[v1.ResourceName]string{
 		v1.ResourceCPU:    "2",
 		v1.ResourceMemory: "2Gi",
 	}).Obj()
-	// Victim requires full node resources.
+	// victim 需要节点的全部资源。
 	victim := st.MakePod().Name("victim").Priority(lowPriority).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1", v1.ResourceMemory: "1Gi"}).Obj()
-	// Preemptor also requires full node resources.
+	// 抢占者同样需要节点的全部资源。
 	preemptor := st.MakePod().Name("preemptor").Priority(highPriority).Req(map[v1.ResourceName]string{v1.ResourceCPU: "1.5", v1.ResourceMemory: "1.5Gi"}).Obj()
 
-	// Register the blocking plugin.
+	// 注册 blocking 插件。
 	victimBlockingPlugin := &perPodBlockingPlugin{
 		shouldBlock: true,
 		blocked:     make(chan struct{}),
@@ -2704,14 +2672,14 @@ func TestPreemptionRespectsBindingPod(t *testing.T) {
 		t.Fatalf("Error creating node: %v", err)
 	}
 
-	// 1. Run victim.
+	// 1. 运行 victim。
 	t.Logf("Creating victim pod")
 	victim, err = cs.CoreV1().Pods(testCtx.NS.Name).Create(testCtx.Ctx, victim, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Error creating victim: %v", err)
 	}
 
-	// Wait for victim to reach PreBind.
+	// 等待 victim 到达 PreBind。
 	t.Logf("Waiting for victim to reach PreBind")
 	select {
 	case <-victimBlockingPlugin.blocked:
@@ -2720,7 +2688,7 @@ func TestPreemptionRespectsBindingPod(t *testing.T) {
 		t.Fatalf("Timed out waiting for victim to reach PreBind")
 	}
 
-	// 2. Add a small node that will fit victim once its preempted.
+	// 2. 加一个小节点，抢占后正好能容纳受害者 Pod。
 	smallNode := st.MakeNode().Name("small-node").Capacity(map[v1.ResourceName]string{
 		v1.ResourceCPU:    "1",
 		v1.ResourceMemory: "1Gi",
@@ -2729,21 +2697,19 @@ func TestPreemptionRespectsBindingPod(t *testing.T) {
 		t.Fatalf("Error creating node: %v", err)
 	}
 
-	// 3. Run preemptor pod.
+	// 3. 运行抢占者 Pod。
 	t.Logf("Creating preemptor pod")
 	preemptor, err = cs.CoreV1().Pods(testCtx.NS.Name).Create(testCtx.Ctx, preemptor, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Error creating preemptor: %v", err)
 	}
 
-	// 4. Wait for victim to be rescheduled.
-	// Preemptor should eventually be scheduled or cause victim preemption.
-	// Since victim is in PreBind (Binding Cycle), Preemptor's preemption logic (PostFilter) should find it.
-	// It should call CancelPod() on the victim's BindingPod, causing it to go to backoff queue.
-	// The victim pod should NOT be deleted from API server.
-	// Instead it should be rescheduled onto a smaller node.
+	// 4. 等待 victim 被重新调度。抢占者应完成调度或触发对 victim 的抢占。
+	// victim 处于 PreBind（Binding Cycle）中，抢占者的 PostFilter 逻辑应找到它，
+	// 对其 BindingPod 调用 CancelPod()，使其进入 backoff 队列。
+	// victim 不应从 API server 删除，而应重新调度到更小的节点上。
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
-		// Check if victim is deleted
+		// 检查 victim 是否被删除。
 		v, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(ctx, victim.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -2751,7 +2717,7 @@ func TestPreemptionRespectsBindingPod(t *testing.T) {
 			}
 			return false, err
 		}
-		// Check if victim was rescheduled
+		// 检查 victim 是否被重新调度。
 		_, cond := podutil.GetPodCondition(&v.Status, v1.PodScheduled)
 		if cond != nil && cond.Status == v1.ConditionTrue {
 			return true, nil
@@ -2762,13 +2728,13 @@ func TestPreemptionRespectsBindingPod(t *testing.T) {
 		t.Fatalf("Failed waiting for victim validation: %v", err)
 	}
 
-	// 5. Wait for preemptor to be scheduled.
+	// 5. 等待抢占者完成调度。
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 10*time.Second, false, func(ctx context.Context) (bool, error) {
 		p, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(ctx, preemptor.Name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
-		// Check if preemptor is scheduled
+		// 检查抢占者是否已调度。
 		_, cond := podutil.GetPodCondition(&p.Status, v1.PodScheduled)
 		if cond != nil && cond.Status == v1.ConditionTrue {
 			return true, nil
@@ -2779,7 +2745,7 @@ func TestPreemptionRespectsBindingPod(t *testing.T) {
 		t.Fatalf("Failed waiting for preemptor to be scheduled: %v", err)
 	}
 
-	// 6. Check that preemptor and victim are scheduled on expected nodes: victim on a small node and preemptor on a big node.
+	// 6. 检查抢占者与 victim 是否在预期节点上：victim 在小节点，抢占者在大节点。
 	v, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, victim.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting victim: %v", err)
@@ -2789,14 +2755,14 @@ func TestPreemptionRespectsBindingPod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting preemptor: %v", err)
 	}
-	// Verify the assignments are correct
+	// 验证节点分配符合预期。
 	if v.Spec.NodeName != "small-node" {
 		t.Errorf("victim should be scheduled on small-node, but was scheduled on %s", v.Spec.NodeName)
 	}
 	if p.Spec.NodeName != "big-node" {
 		t.Errorf("preemptor should be scheduled on big-node, but was scheduled on %s", p.Spec.NodeName)
 	}
-	// Start a goroutine to release the plugin just in case, ensuring clean teardown.
+	// 释放插件，确保能干净地收尾。
 	close(victimBlockingPlugin.released)
 }
 
@@ -2846,7 +2812,7 @@ func TestInterPodAffinityPreemption(t *testing.T) {
 		waitForNominated    string
 	}
 
-	// A test node can fit up to 5 pods with defaultPodRes.
+	// 在 defaultPodRes 下，一个测试节点最多可容纳 5 个 Pod。
 
 	maxTokens := 1000
 
@@ -3048,7 +3014,7 @@ func TestInterPodAffinityPreemption(t *testing.T) {
 					for _, test := range tests {
 						nameSuffix := fmt.Sprintf("Async preemption enabled: %v, ClearingNominatedNodeNameAfterBinding: %v, fpEnabled: %v, genericWorkloadEnabled: %v, cpgEnabled: %v", asyncPreemptionEnabled, clearingNominatedNodeNameAfterBinding, fpEnabled, genericWorkloadEnabled, cpgEnabled)
 						t.Run(fmt.Sprintf("%s (%s)", test.name, nameSuffix), func(t *testing.T) {
-							// Feature gates map to test combinations.
+							// feature gate 与测试组合一一对应。
 							featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 								features.SchedulerAsyncPreemption:              asyncPreemptionEnabled,
 								features.ClearingNominatedNodeNameAfterBinding: clearingNominatedNodeNameAfterBinding,
@@ -3090,7 +3056,7 @@ func TestInterPodAffinityPreemption(t *testing.T) {
 								0,
 								scheduler.WithProfiles(cfg.Profiles...),
 								scheduler.WithFrameworkOutOfTreeRegistry(registry),
-								// disable backoff
+								// 禁用 backoff。
 								scheduler.WithPodMaxBackoffSeconds(0),
 								scheduler.WithPodInitialBackoffSeconds(0),
 							)
@@ -3111,7 +3077,7 @@ func TestInterPodAffinityPreemption(t *testing.T) {
 							defer cancel()
 							defer testCtx.SchedulerCloseFn()
 
-							// Create a node with some resources and a label.
+							// 创建带有资源容量和标签的节点。
 							nodeRes := map[v1.ResourceName]string{
 								v1.ResourcePods:   "32",
 								v1.ResourceCPU:    "500m",
@@ -3165,7 +3131,7 @@ func TestInterPodAffinityPreemption(t *testing.T) {
 										}
 
 										if testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()[0].Name != scenario.schedulePod.podName {
-											// need to wait more because maybe the queue will get another Pod that higher priority than the current top pod.
+											// 继续等待：队列里可能出现比当前队首优先级更高的 Pod。
 											lastFailure = fmt.Sprintf("The pod %s is expected to be scheduled, but the top Pod is %s", scenario.schedulePod.podName, testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()[0].Name)
 											return false, nil
 										}
@@ -3191,7 +3157,7 @@ func TestInterPodAffinityPreemption(t *testing.T) {
 										t.Fatalf("Failed to wait for pod %s to be deleted: %v", scenario.verifyPodDeleted, err)
 									}
 								case scenario.verifyPodNotDeleted != "":
-									// Wait a small bit to ensure it doesn't get evicted!
+									// 稍等片刻，确认它没有被驱逐。
 									time.Sleep(200 * time.Millisecond)
 									p, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, scenario.verifyPodNotDeleted, metav1.GetOptions{})
 									if err != nil {
@@ -3224,10 +3190,9 @@ func TestInterPodAffinityPreemption(t *testing.T) {
 	}
 }
 
-// withNewNamespace creates a child TestContext that shares the API server from
-// parent but gets a fresh namespace. Only the namespace is deleted on t.Cleanup;
-// the API server lifecycle is managed by the caller. This is useful when
-// multiple subtests share one API server to avoid the per-subtest startup cost.
+// withNewNamespace 创建子 TestContext：复用父级的 API server，但使用全新的 Namespace。
+// t.Cleanup 只删除 Namespace，API server 的生命周期由调用方管理。
+// 多个子测试共享同一 API server 时，可避免每个用例重复启动的开销。
 func withNewNamespace(t *testing.T, parent *testutils.TestContext, nsPrefix string) *testutils.TestContext {
 	t.Helper()
 	ctx, cancel := context.WithCancel(parent.Ctx)
@@ -3235,7 +3200,7 @@ func withNewNamespace(t *testing.T, parent *testutils.TestContext, nsPrefix stri
 		ClientSet:  parent.ClientSet,
 		KubeConfig: parent.KubeConfig,
 		Ctx:        ctx,
-		CloseFn:    func() {}, // API server is owned by parent; do not tear it down here.
+		CloseFn:    func() {}, // API server 归父级所有，此处不要关闭。
 	}
 	child.NS = testfwk.CreateNamespaceOrDie(child.ClientSet, nsPrefix+string(k8suuid.NewUUID()), t)
 	t.Cleanup(func() {

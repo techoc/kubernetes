@@ -66,12 +66,10 @@ import (
 	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
-// Short term fix to refresh the policy source cache faster for tests
-// until we reduce the polling interval by default.
+// 临时缩短测试中策略源的缓存刷新间隔，待默认轮询间隔下调后移除。
 const policyRefreshInterval = 10 * time.Millisecond
 
-// Test_ValidateNamespace_NoParams_Success tests a ValidatingAdmissionPolicy that validates creation of a Namespace
-// with no params via happy path.
+// Test_ValidateNamespace_NoParams_Success 验证无参数 ValidatingAdmissionPolicy 在正常路径下放行 Namespace 创建。
 func Test_ValidateNamespace_NoParams_Success(t *testing.T) {
 	resetPolicyRefreshInterval := generic.SetPolicyRefreshIntervalForTests(policyRefreshInterval)
 	defer resetPolicyRefreshInterval()
@@ -185,7 +183,7 @@ func Test_ValidateNamespace_NoParams_Success(t *testing.T) {
 	}
 }
 
-// Test_ValidateNamespace_NoParams_Failures tests a ValidatingAdmissionPolicy that fails creation of a Namespace with no params.
+// Test_ValidateNamespace_NoParams_Failures 验证无参数 ValidatingAdmissionPolicy 拒绝 Namespace 创建。
 func Test_ValidateNamespace_NoParams_Failures(t *testing.T) {
 	resetPolicyRefreshInterval := generic.SetPolicyRefreshIntervalForTests(policyRefreshInterval)
 	defer resetPolicyRefreshInterval()
@@ -434,7 +432,7 @@ func Test_ValidateAnnotationsAndWarnings(t *testing.T) {
 		},
 	}
 
-	// prepare audit policy file
+	// 准备审计策略文件。
 	policyFile, err := os.CreateTemp("", "audit-policy.yaml")
 	if err != nil {
 		t.Fatalf("Failed to create audit policy file: %v", err)
@@ -447,7 +445,7 @@ func Test_ValidateAnnotationsAndWarnings(t *testing.T) {
 		t.Fatalf("Failed to close audit policy file: %v", err)
 	}
 
-	// prepare audit log file
+	// 准备审计日志文件。
 	logFile, err := os.CreateTemp("", "audit.log")
 	if err != nil {
 		t.Fatalf("Failed to create audit log file: %v", err)
@@ -514,8 +512,7 @@ func Test_ValidateAnnotationsAndWarnings(t *testing.T) {
 	}
 }
 
-// Test_ValidateNamespace_WithConfigMapParams tests a ValidatingAdmissionPolicy that validates creation of a Namespace,
-// using ConfigMap as a param reference.
+// Test_ValidateNamespace_WithConfigMapParams 验证以 ConfigMap 作为参数来源的 ValidatingAdmissionPolicy 对 Namespace 创建的校验。
 func Test_ValidateNamespace_WithConfigMapParams(t *testing.T) {
 	resetPolicyRefreshInterval := generic.SetPolicyRefreshIntervalForTests(policyRefreshInterval)
 	defer resetPolicyRefreshInterval()
@@ -714,8 +711,7 @@ func TestMultiplePolicyBindings(t *testing.T) {
 	checkFailureReason(t, err, metav1.StatusReasonInvalid)
 }
 
-// Test_PolicyExemption tests that ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding resources
-// are exempt from policy rules.
+// Test_PolicyExemption 验证 ValidatingAdmissionPolicy 和 ValidatingAdmissionPolicyBinding 资源自身不受策略规则约束。
 func Test_PolicyExemption(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -771,7 +767,7 @@ func Test_PolicyExemption(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that operations to ValidatingAdmissionPolicy are exempt from an existing policy that catches all resources
+	// 验证即使存在匹配所有资源的策略，对 ValidatingAdmissionPolicy 的操作仍被豁免。
 	policy, err = client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Get(context.TODO(), policy.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -788,7 +784,7 @@ func Test_PolicyExemption(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that operations to ValidatingAdmissionPolicyBindings are exempt from an existing policy that catches all resources
+	// 验证对 ValidatingAdmissionPolicyBinding 的操作同样被该策略豁免。
 	policyBindingCopy := policyBinding.DeepCopy()
 	policyBindingCopy.Spec.PolicyName = "different-binding"
 	_, err = client.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Update(context.TODO(), policyBindingCopy, metav1.UpdateOptions{})
@@ -797,11 +793,9 @@ func Test_PolicyExemption(t *testing.T) {
 	}
 }
 
-// Test_ValidatingAdmissionPolicy_UpdateParamKind validates the behavior of ValidatingAdmissionPolicy when
-// only the ParamKind is updated. This test creates a policy where namespaces must have a prefix that matches
-// the ParamKind set in the policy. Switching the ParamKind should result in only namespaces with prefixes matching
-// the new ParamKind to be allowed. For example, when Paramkind is v1/ConfigMap, only namespaces prefixed with "configmap"
-// is allowed and when ParamKind is updated to v1/Secret, only namespaces prefixed with "secret" is allowed, etc.
+// Test_ValidatingAdmissionPolicy_UpdateParamKind 验证仅更新 ParamKind 时 ValidatingAdmissionPolicy 的行为。
+// 策略要求 Namespace 前缀与 ParamKind 匹配：ParamKind 为 v1/ConfigMap 时只允许 "configmap" 前缀，
+// 改为 v1/Secret 后则只允许 "secret" 前缀。
 func Test_ValidatingAdmissionPolicy_UpdateParamKind(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -858,8 +852,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamKind(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "configmap-" are allowed
-	// and namespaces starting with "secret-" are disallowed
+	// 验证 "configmap-" 前缀的 Namespace 被放行，"secret-" 前缀的被拒绝。
 	allowedNamespace := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "configmap-",
@@ -884,7 +877,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamKind(t *testing.T) {
 	}
 	checkFailureReason(t, err, metav1.StatusReasonInvalid)
 
-	// update the policy ParamKind to reference a Secret
+	// 将策略的 ParamKind 改为 Secret。
 	paramKind = &admissionregistrationv1.ParamKind{
 		APIVersion: "v1",
 		Kind:       "Secret",
@@ -899,10 +892,8 @@ func Test_ValidatingAdmissionPolicy_UpdateParamKind(t *testing.T) {
 		t.Error(err)
 	}
 
-	// validate that namespaces starting with "secret-" are allowed
-	// and namespaces starting with "configmap-" are disallowed
-	// wait loop is required here since ConfigMaps were previousy allowed and we need to wait for the new policy
-	// to be enforced
+	// 验证 "secret-" 前缀被放行、"configmap-" 前缀被拒绝。
+	// 此前 ConfigMap 前缀是被允许的，需轮询等待新策略生效。
 	if waitErr := wait.PollImmediate(time.Millisecond*10, wait.ForeverTestTimeout, func() (bool, error) {
 		disallowedNamespace = &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -939,9 +930,8 @@ func Test_ValidatingAdmissionPolicy_UpdateParamKind(t *testing.T) {
 	}
 }
 
-// Test_ValidatingAdmissionPolicy_UpdateParamRef validates the behavior of ValidatingAdmissionPolicy when
-// only the ParamRef in the binding is updated. This test creates a policy where namespaces must have a prefix that matches
-// the ParamRef set in the policy binding. The paramRef in the binding is then updated to a different object.
+// Test_ValidatingAdmissionPolicy_UpdateParamRef 验证仅更新 binding 中 ParamRef 时 ValidatingAdmissionPolicy 的行为。
+// 策略要求 Namespace 前缀与 binding 的 ParamRef 匹配，随后将 ParamRef 指向另一个对象。
 func Test_ValidatingAdmissionPolicy_UpdateParamRef(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -990,8 +980,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamRef(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "test-1" are allowed
-	// and namespaces starting with "test-2-" are disallowed
+	// 验证 "test-1" 前缀被放行，"test-2-" 前缀被拒绝。
 	allowedPrefixesBinding := makeBinding("allowed-prefixes-binding", "allowed-prefixes", "test-1")
 	if err := createAndWaitReady(t, client, allowedPrefixesBinding, nil); err != nil {
 		t.Fatal(err)
@@ -1032,7 +1021,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamRef(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Update the paramRef in the policy binding to use the test-2 ConfigMap
+	// 将 binding 的 paramRef 改为指向 test-2 ConfigMap。
 	policyBinding, err := client.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Get(context.TODO(), allowedPrefixesBinding.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -1050,8 +1039,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamRef(t *testing.T) {
 		t.Error(err)
 	}
 
-	// validate that namespaces starting with "test-2" are allowed
-	// and namespaces starting with "test-1" are disallowed
+	// 验证 "test-2" 前缀被放行，"test-1" 前缀被拒绝。
 	if waitErr := wait.PollImmediate(time.Millisecond*10, wait.ForeverTestTimeout, func() (bool, error) {
 		disallowedNamespace := &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1088,7 +1076,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamRef(t *testing.T) {
 	}
 }
 
-// Test_ValidatingAdmissionPolicy_UpdateParamResource validates behavior of a policy after updates to the param resource.
+// Test_ValidatingAdmissionPolicy_UpdateParamResource 验证参数资源更新后策略的行为。
 func Test_ValidatingAdmissionPolicy_UpdateParamResource(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -1131,8 +1119,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "test-1" are allowed
-	// and namespaces starting with "test-2-" are disallowed
+	// 验证 "test-1" 前缀被放行，"test-2-" 前缀被拒绝。
 	allowedPrefixesBinding := makeBinding("allowed-prefixes-binding", "allowed-prefixes", "allowed-prefix")
 	if err := createAndWaitReady(t, client, allowedPrefixesBinding, nil); err != nil {
 		t.Fatal(err)
@@ -1173,7 +1160,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamResource(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Update the param resource to use "test-2" as the new allwoed prefix
+	// 将参数资源中的允许前缀改为 "test-2"。
 	paramConfigMapCopy := paramConfigMap.DeepCopy()
 	paramConfigMapCopy.Data = map[string]string{
 		"prefix": "test-2",
@@ -1183,8 +1170,7 @@ func Test_ValidatingAdmissionPolicy_UpdateParamResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "test-2" are allowed
-	// and namespaces starting with "test-1" are disallowed
+	// 验证 "test-2" 前缀被放行，"test-1" 前缀被拒绝。
 	if waitErr := wait.PollImmediate(time.Millisecond*10, wait.ForeverTestTimeout, func() (bool, error) {
 		disallowedNamespace := &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1304,7 +1290,7 @@ func Test_ValidatingAdmissionPolicy_MatchByNamespaceSelector(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// only configmaps in default will be allowed.
+	// 只允许 default namespace 下的 ConfigMap。
 	labelSelector := &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
@@ -1352,7 +1338,7 @@ func Test_ValidatingAdmissionPolicy_MatchByNamespaceSelector(t *testing.T) {
 		}
 
 		_, err := client.CoreV1().ConfigMaps(matchedConfigMap.Namespace).Create(context.TODO(), matchedConfigMap, metav1.CreateOptions{})
-		// policy not enforced yet, try again
+		// 策略尚未生效，重试。
 		if err == nil {
 			return false, nil
 		}
@@ -1481,7 +1467,7 @@ func Test_ValidatingAdmissionPolicy_MatchWithExcludeResources(t *testing.T) {
 		}
 
 		_, err := client.CoreV1().Secrets(secret.Namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
-		// policy not enforced yet, try again
+		// 策略尚未生效，重试。
 		if err == nil {
 			return false, nil
 		}
@@ -1686,7 +1672,7 @@ func Test_ValidatingAdmissionPolicy_MatchWithMatchPolicyExact(t *testing.T) {
 		t.Errorf("v1 panadas did not match against policy, err: %v", err)
 	}
 
-	// v2 panadas is allowed since policy specificed match policy Exact and only matched against v1
+	// 策略指定了 Exact matchPolicy 且只匹配 v1，因此 v2 pandas 应被放行。
 	_, err = dynamicClient.Resource(schema.GroupVersionResource{Group: "awesome.bears.com", Version: "v2", Resource: "pandas"}).Create(context.TODO(), v2Resource, metav1.CreateOptions{})
 	if err != nil {
 		t.Error(err)
@@ -1751,14 +1737,13 @@ func Test_ValidatingAdmissionPolicy_MatchExcludedResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected denied SelfSubjectReview: %v", err)
 	}
-	// confidence check the returned user info.
+	// 简单确认返回的用户信息非空。
 	if len(r.Status.UserInfo.UID) == 0 {
 		t.Errorf("unexpected invalid user info: %v", r.Status.UserInfo)
 	}
 }
 
-// Test_ValidatingAdmissionPolicy_PolicyDeletedThenRecreated validates that deleting a ValidatingAdmissionPolicy
-// removes the policy from the apiserver admission chain and recreating it re-enables it.
+// Test_ValidatingAdmissionPolicy_PolicyDeletedThenRecreated 验证删除 ValidatingAdmissionPolicy 会将其从 apiserver admission 链中移除，重建后重新生效。
 func Test_ValidatingAdmissionPolicy_PolicyDeletedThenRecreated(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -1787,7 +1772,7 @@ func Test_ValidatingAdmissionPolicy_PolicyDeletedThenRecreated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "test" are allowed
+	// 验证 "test" 前缀的 Namespace 被放行。
 	policyBinding := makeBinding("allowed-prefixes-binding", "allowed-prefixes", "")
 	if err := createAndWaitReady(t, client, policyBinding, nil); err != nil {
 		t.Fatal(err)
@@ -1818,7 +1803,7 @@ func Test_ValidatingAdmissionPolicy_PolicyDeletedThenRecreated(t *testing.T) {
 		t.Errorf("timed out waiting: %v", err)
 	}
 
-	// delete the binding object and validate that policy is not enforced
+	// 删除 binding 对象，验证策略不再生效。
 	if err := client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Delete(context.TODO(), "allowed-prefixes", metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -1834,7 +1819,7 @@ func Test_ValidatingAdmissionPolicy_PolicyDeletedThenRecreated(t *testing.T) {
 			return true, nil
 		}
 
-		// old policy is still enforced, try again
+		// 旧策略仍在生效，重试。
 		if strings.Contains(err.Error(), "wrong prefix") {
 			return false, nil
 		}
@@ -1874,8 +1859,7 @@ func Test_ValidatingAdmissionPolicy_PolicyDeletedThenRecreated(t *testing.T) {
 	}
 }
 
-// Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated validates that deleting a ValidatingAdmissionPolicyBinding
-// removes the policy from the apiserver admission chain and recreating it re-enables it.
+// Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated 验证删除 ValidatingAdmissionPolicyBinding 会停用策略，重建后重新生效。
 func Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -1904,7 +1888,7 @@ func Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "test" are allowed
+	// 验证 "test" 前缀的 Namespace 被放行。
 	policyBinding := makeBinding("allowed-prefixes-binding", "allowed-prefixes", "")
 	if err := createAndWaitReady(t, client, policyBinding, nil); err != nil {
 		t.Fatal(err)
@@ -1935,7 +1919,7 @@ func Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated(t *testing.T) {
 		t.Errorf("timed out waiting: %v", err)
 	}
 
-	// delete the binding object and validate that policy is not enforced
+	// 删除 binding 对象，验证策略不再生效。
 	if err := client.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Delete(context.TODO(), "allowed-prefixes-binding", metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -1951,7 +1935,7 @@ func Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated(t *testing.T) {
 			return true, nil
 		}
 
-		// old policy is still enforced, try again
+		// 旧策略仍在生效，重试。
 		if strings.Contains(err.Error(), "wrong prefix") {
 			return false, nil
 		}
@@ -1961,7 +1945,7 @@ func Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated(t *testing.T) {
 		t.Errorf("timed out waiting: %v", err)
 	}
 
-	// recreate the policy binding and test that policy is enforced again
+	// 重建 policy binding，验证策略再次生效。
 	_, err = client.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Create(context.TODO(), policyBinding, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -1992,8 +1976,7 @@ func Test_ValidatingAdmissionPolicy_BindingDeletedThenRecreated(t *testing.T) {
 	}
 }
 
-// Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated validates that deleting a param resource referenced
-// by a binding renders the policy as invalid. Recreating the param resource re-enables the policy.
+// Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated 验证删除 binding 引用的参数资源会使策略失效，重建后重新生效。
 func Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -2032,7 +2015,7 @@ func Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated(t *testing
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "test" are allowed
+	// 验证 "test" 前缀的 Namespace 被放行。
 	policyBinding := makeBinding("allowed-prefixes-binding", "allowed-prefixes", "test")
 	if err := createAndWaitReady(t, client, policyBinding, nil); err != nil {
 		t.Fatal(err)
@@ -2063,7 +2046,7 @@ func Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated(t *testing
 		t.Errorf("timed out waiting: %v", err)
 	}
 
-	// delete param object and validate that policy is invalid
+	// 删除参数对象，验证策略转为无效。
 	if err := client.CoreV1().ConfigMaps("default").Delete(context.TODO(), "test", metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -2076,7 +2059,7 @@ func Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated(t *testing
 		}
 
 		_, err = client.CoreV1().Namespaces().Create(context.TODO(), allowedNamespace, metav1.CreateOptions{})
-		// old policy is still enforced, try again
+		// 旧策略仍在生效，重试。
 		if strings.Contains(err.Error(), "wrong prefix") {
 			return false, nil
 		}
@@ -2090,7 +2073,7 @@ func Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated(t *testing
 		t.Errorf("timed out waiting: %v", err)
 	}
 
-	// recreate the param resource and validate namespace is disallowed again
+	// 重建参数资源，验证 Namespace 再次被拒绝。
 	if _, err := client.CoreV1().ConfigMaps("default").Create(context.TODO(), param, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -2103,7 +2086,7 @@ func Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated(t *testing
 		}
 
 		_, err = client.CoreV1().Namespaces().Create(context.TODO(), disallowedNamespace, metav1.CreateOptions{})
-		// cache not synced with new object yet, try again
+		// 缓存尚未同步到新对象，重试。
 		if strings.Contains(err.Error(), "failed to configure binding: no params found for policy binding with `Deny` parameterNotFoundAction") {
 			return false, nil
 		}
@@ -2118,8 +2101,7 @@ func Test_ValidatingAdmissionPolicy_ParamResourceDeletedThenRecreated(t *testing
 	}
 }
 
-// Test_CostLimitForValidation tests the cost limit set for a ValidatingAdmissionPolicy
-// with StrictCostEnforcementForVAP feature enabled.
+// Test_CostLimitForValidation 验证启用 StrictCostEnforcementForVAP 后 ValidatingAdmissionPolicy 的成本上限。
 func Test_CostLimitForValidation(t *testing.T) {
 	resetPolicyRefreshInterval := generic.SetPolicyRefreshIntervalForTests(policyRefreshInterval)
 	defer resetPolicyRefreshInterval()
@@ -2227,7 +2209,7 @@ func Test_CostLimitForValidation(t *testing.T) {
 	}
 }
 
-// generate n validation rules with provided expression
+// generateValidationsWithAuthzCheck 生成 n 条使用给定表达式的校验规则。
 func generateValidationsWithAuthzCheck(num int, exp string) []admissionregistrationv1.Validation {
 	var validations = make([]admissionregistrationv1.Validation, num)
 	for i := range num {
@@ -2236,7 +2218,7 @@ func generateValidationsWithAuthzCheck(num int, exp string) []admissionregistrat
 	return validations
 }
 
-// TestCRDParams tests that a CustomResource can be used as a param resource for a ValidatingAdmissionPolicy.
+// TestCRDParams 验证 CustomResource 可作为 ValidatingAdmissionPolicy 的参数资源。
 func TestCRDParams(t *testing.T) {
 	resetPolicyRefreshInterval := generic.SetPolicyRefreshIntervalForTests(policyRefreshInterval)
 	defer resetPolicyRefreshInterval()
@@ -2326,7 +2308,7 @@ func TestCRDParams(t *testing.T) {
 			if _, err := client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Create(context.TODO(), policy, metav1.CreateOptions{}); err != nil {
 				t.Fatal(err)
 			}
-			// remove default namespace since the CRD is cluster-scoped
+			// CRD 是 cluster-scoped 的，需去掉 namespace。
 			policyBinding := makeBinding("crd-policy-binding", "test-policy", "config-obj")
 			policyBinding.Spec.ParamRef.Namespace = ""
 			if err := createAndWaitReady(t, client, policyBinding, nil); err != nil {
@@ -2376,7 +2358,7 @@ func TestBindingRemoval(t *testing.T) {
 	if err := createAndWaitReady(t, client, binding, nil); err != nil {
 		t.Fatal(err)
 	}
-	// check that the policy is active
+	// 确认策略已生效。
 	if waitErr := wait.PollImmediate(time.Millisecond*10, wait.ForeverTestTimeout, func() (bool, error) {
 		namespace := &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -2388,7 +2370,7 @@ func TestBindingRemoval(t *testing.T) {
 			if strings.Contains(err.Error(), "policy still in effect") {
 				return true, nil
 			} else {
-				// unexpected error while attempting namespace creation
+				// 创建 Namespace 时出现非预期错误。
 				return true, err
 			}
 		}
@@ -2400,7 +2382,7 @@ func TestBindingRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// wait for binding to be deleted
+	// 等待 binding 被删除。
 	if waitErr := wait.PollImmediate(time.Millisecond*10, wait.ForeverTestTimeout, func() (bool, error) {
 
 		_, err := client.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Get(context.TODO(), "test-binding", metav1.GetOptions{})
@@ -2417,7 +2399,7 @@ func TestBindingRemoval(t *testing.T) {
 		t.Errorf("timed out waiting: %v", waitErr)
 	}
 
-	// policy should be considered in an invalid state and namespace creation should be allowed
+	// 策略应视为无效状态，Namespace 创建应被放行。
 	if waitErr := wait.PollImmediate(time.Millisecond*10, wait.ForeverTestTimeout, func() (bool, error) {
 		namespace := &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -2436,8 +2418,7 @@ func TestBindingRemoval(t *testing.T) {
 	}
 }
 
-// Test_ValidateSecondaryAuthorization tests a ValidatingAdmissionPolicy that performs secondary authorization checks
-// for both users and service accounts.
+// Test_ValidateSecondaryAuthorization 验证 ValidatingAdmissionPolicy 对用户和 service account 执行二次鉴权的流程。
 func Test_ValidateSecondaryAuthorization(t *testing.T) {
 	resetPolicyRefreshInterval := generic.SetPolicyRefreshIntervalForTests(policyRefreshInterval)
 	defer resetPolicyRefreshInterval()
@@ -2451,7 +2432,7 @@ func Test_ValidateSecondaryAuthorization(t *testing.T) {
 	}
 	defer server.TearDownFn()
 
-	// For test set up such as creating policies, bindings and RBAC rules.
+	// 用管理员客户端准备策略、binding 和 RBAC 规则等测试前置条件。
 	adminClient := clientset.NewForConfigOrDie(server.ClientConfig)
 	testcases := []struct {
 		name             string
@@ -2514,8 +2495,7 @@ func Test_ValidateSecondaryAuthorization(t *testing.T) {
 
 			for clientName, clientFn := range clients {
 				t.Run(clientName, func(t *testing.T) {
-					// Principal is always allowed to create and update namespaces so that the admission requests to test
-					// authorization expressions can be sent by the principal.
+					// 始终允许 principal 创建和更新 Namespace，才能由它发起用于测试鉴权表达式的 admission 请求。
 					rules := []rbacv1.PolicyRule{{
 						Verbs:     []string{"create", "update"},
 						APIGroups: []string{""},
@@ -2576,7 +2556,7 @@ func TestCRDsOnStartup(t *testing.T) {
 	testContext, testCancel := context.WithCancel(context.Background())
 	defer testCancel()
 
-	// Start server and create CRD, and validatingadmission policy and binding
+	// 启动 server，并创建 CRD、ValidatingAdmissionPolicy 和 binding。
 	etcdConfig := framework.SharedEtcd()
 	server := apiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
@@ -2608,7 +2588,7 @@ func TestCRDsOnStartup(t *testing.T) {
 		},
 	}
 
-	// Create a bunch of fake CRDs to make the initial startup sync take a long time
+	// 创建大量伪 CRD，使启动时的初始同步变慢。
 	for i := range 100 {
 		crd := myCRD.DeepCopy()
 		crd.Name = fmt.Sprintf("foos%d.cr.bar.com", i)
@@ -2655,7 +2635,7 @@ func TestCRDsOnStartup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// validate that namespaces starting with "test" are allowed
+	// 验证 "test" 前缀的 Namespace 被放行。
 	policyBinding := makeBinding("allowed-prefixes-binding", "allowed-prefixes", "test")
 	if err := createAndWaitReady(t, client, policyBinding, nil); err != nil {
 		t.Fatal(err)
@@ -2692,12 +2672,11 @@ func TestCRDsOnStartup(t *testing.T) {
 		}
 	}
 
-	// Show that the policy & binding are correctly working before restarting
-	// to use the paramKind and deliver an error
+	// 重启前先确认策略和 binding 能通过 paramKind 正常工作并返回错误。
 	doCheck(client)
 	server.TearDownFn()
 
-	// Start the server.
+	// 重新启动 server。
 	server = apiservertesting.StartTestServerOrDie(
 		t,
 		&apiservertesting.TestServerInstanceOptions{},
@@ -2709,7 +2688,7 @@ func TestCRDsOnStartup(t *testing.T) {
 		etcdConfig)
 	defer server.TearDownFn()
 
-	// Now that the server is restarted, show again that the policy & binding are correctly working
+	// 重启后再次确认策略和 binding 正常工作。
 	client = clientset.NewForConfigOrDie(server.ClientConfig)
 
 	doCheck(client)
@@ -2788,7 +2767,7 @@ contexts:
 			options.Authorization.Modes = []string{authzmodes.ModeWebhook}
 			options.Authorization.WebhookConfigFile = kcfd.Name()
 			options.Authorization.WebhookVersion = "v1"
-			// Bypass webhook cache to observe the policy plugin's cache behavior.
+			// 关闭 webhook 缓存，以便观察策略插件自身的缓存行为。
 			options.Authorization.WebhookCacheAuthorizedTTL = 0
 			options.Authorization.WebhookCacheUnauthorizedTTL = 0
 		},
@@ -3206,7 +3185,7 @@ func withValidationActions(validationActions []admissionregistrationv1.Validatio
 
 func withBindingExistsLabels(labels []string, policy *admissionregistrationv1.ValidatingAdmissionPolicy, binding *admissionregistrationv1.ValidatingAdmissionPolicyBinding) *admissionregistrationv1.ValidatingAdmissionPolicyBinding {
 	if policy != nil {
-		// shallow copy
+		// 浅拷贝即可，MatchResources 后续会被覆盖。
 		constraintsCopy := *policy.Spec.MatchConstraints
 		binding.Spec.MatchResources = &constraintsCopy
 	}
@@ -3244,7 +3223,7 @@ func checkForFailedRule(t *testing.T, err error) {
 
 func checkFailureReason(t *testing.T, err error, expectedReason metav1.StatusReason) {
 	if err == nil && expectedReason == "" {
-		// no reason was given, no error was passed - early exit
+		// 既无预期 reason 也无实际错误，直接返回。
 		return
 	}
 	switch e := err.(type) {
@@ -3320,7 +3299,7 @@ func checkExpectedError(t *testing.T, err error, expectedErr string) {
 	}
 }
 
-// Copied from etcd.GetCustomResourceDefinitionData
+// versionedCustomResourceDefinition 复制自 etcd.GetCustomResourceDefinitionData。
 func versionedCustomResourceDefinition() *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{

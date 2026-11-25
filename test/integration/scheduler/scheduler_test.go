@@ -16,7 +16,7 @@ limitations under the License.
 
 package scheduler
 
-// This file tests the scheduler.
+// 本文件包含 scheduler 的集成测试。
 
 import (
 	"context"
@@ -56,8 +56,7 @@ func TestUnschedulableNodes(t *testing.T) {
 	testCtx := testutils.InitTestSchedulerWithNS(t, "unschedulable-nodes")
 
 	nodeLister := testCtx.InformerFactory.Core().V1().Nodes().Lister()
-	// NOTE: This test cannot run in parallel, because it is creating and deleting
-	// non-namespaced objects (Nodes).
+	// 该测试不能并发运行，因为它会创建和删除非命名空间对象 Node。
 	defer testCtx.ClientSet.CoreV1().Nodes().DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})
 
 	goodCondition := v1.NodeCondition{
@@ -66,8 +65,7 @@ func TestUnschedulableNodes(t *testing.T) {
 		Reason:            "schedulable condition",
 		LastHeartbeatTime: metav1.Time{Time: time.Now()},
 	}
-	// Create a new schedulable node, since we're first going to apply
-	// the unschedulable condition and verify that pods aren't scheduled.
+	// 先创建可调度 Node，再将其设为不可调度以验证 Pod 不会被调度。
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node-scheduling-test-node"},
 		Spec:       v1.NodeSpec{Unschedulable: false},
@@ -83,17 +81,11 @@ func TestUnschedulableNodes(t *testing.T) {
 		t.Fatalf("Couldn't retrieve key for node %v", node.Name)
 	}
 
-	// The test does the following for each nodeStateManager in this list:
-	//	1. Create a new node
-	//	2. Apply the makeUnSchedulable function
-	//	3. Create a new pod
-	//  4. Check that the pod doesn't get assigned to the node
-	//  5. Apply the schedulable function
-	//  6. Check that the pod *does* get assigned to the node
-	//  7. Delete the pod and node.
+	// 对列表中每个 nodeStateManager 执行：创建 Node → 设为不可调度 → 创建 Pod → 确认 Pod 未被调度，
+	// 再恢复可调度 → 确认 Pod 被调度 → 清理 Pod 和 Node。
 
 	nodeModifications := []nodeStateManager{
-		// Test node.Spec.Unschedulable=true/false
+		// 测试 node.Spec.Unschedulable 的 true/false 切换。
 		{
 			makeUnSchedulable: func(t *testing.T, n *v1.Node, nodeLister corelisters.NodeLister, c clientset.Interface) {
 				n.Spec.Unschedulable = true
@@ -101,10 +93,8 @@ func TestUnschedulableNodes(t *testing.T) {
 					t.Fatalf("Failed to update node with unschedulable=true: %v", err)
 				}
 				err = testutils.WaitForReflection(testCtx.Ctx, t, nodeLister, nodeKey, func(node interface{}) bool {
-					// An unschedulable node should still be present in the store
-					// Nodes that are unschedulable or that are not ready or
-					// have their disk full (Node.Spec.Conditions) are excluded
-					// based on NodeConditionPredicate, a separate check
+					// 不可调度的 Node 仍应保留在 store 中；
+					// 不可用、not ready 或磁盘满的 Node 由 NodeConditionPredicate 单独过滤。
 					return node != nil && node.(*v1.Node).Spec.Unschedulable
 				})
 				if err != nil {
@@ -132,17 +122,16 @@ func TestUnschedulableNodes(t *testing.T) {
 			t.Fatalf("Failed to create node: %v", err)
 		}
 
-		// Apply the unschedulable modification to the node, and wait for the reflection
+		// 将 Node 设为不可调度，并等待变更同步到 cache。
 		mod.makeUnSchedulable(t, unSchedNode, nodeLister, testCtx.ClientSet)
 
-		// Create the new pod, note that this needs to happen post unschedulable
-		// modification or we have a race in the test.
+		// 必须在 Node 变为不可调度之后再创建 Pod，否则测试会存在竞态。
 		myPod, err := testutils.CreatePausePodWithResource(testCtx.ClientSet, "node-scheduling-test-pod", testCtx.NS.Name, nil)
 		if err != nil {
 			t.Fatalf("Failed to create pod: %v", err)
 		}
 
-		// There are no schedulable nodes - the pod shouldn't be scheduled.
+		// 此时没有可调度 Node，Pod 不应被调度。
 		err = testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, testCtx.ClientSet, myPod, 2*time.Second)
 		if err == nil {
 			t.Errorf("Test %d: Pod scheduled successfully on unschedulable nodes", i)
@@ -153,20 +142,20 @@ func TestUnschedulableNodes(t *testing.T) {
 			t.Logf("Test %d: Pod did not get scheduled on an unschedulable node", i)
 		}
 
-		// Apply the schedulable modification to the node, and wait for the reflection
+		// 将 Node 恢复为可调度，并等待变更同步到 cache。
 		schedNode, err := testCtx.ClientSet.CoreV1().Nodes().Get(context.TODO(), unSchedNode.Name, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Failed to get node: %v", err)
 		}
 		mod.makeSchedulable(t, schedNode, nodeLister, testCtx.ClientSet)
 
-		// Wait until the pod is scheduled.
+		// 等待 Pod 调度成功。
 		if err := testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, myPod); err != nil {
 			t.Errorf("Test %d: failed to schedule a pod: %v", i, err)
 		} else {
 			t.Logf("Test %d: Pod got scheduled on a schedulable node", i)
 		}
-		// Clean up.
+		// 清理测试 Pod。
 		if err := testutils.DeletePod(testCtx.ClientSet, myPod.Name, myPod.Namespace); err != nil {
 			t.Errorf("Failed to delete pod: %v", err)
 		}
@@ -178,23 +167,14 @@ func TestUnschedulableNodes(t *testing.T) {
 }
 
 func TestMultipleSchedulers(t *testing.T) {
-	// This integration tests the multi-scheduler feature in the following way:
-	// 1. create a default scheduler
-	// 2. create a node
-	// 3. create 3 pods: testPodNoAnnotation, testPodWithAnnotationFitsDefault and testPodWithAnnotationFitsFoo
-	//	  - note: the first two should be picked and scheduled by default scheduler while the last one should be
-	//	          picked by scheduler of name "foo-scheduler" which does not exist yet.
-	// 4. **check point-1**:
-	//	   - testPodNoAnnotation, testPodWithAnnotationFitsDefault should be scheduled
-	//	   - testPodWithAnnotationFitsFoo should NOT be scheduled
-	// 5. create a scheduler with name "foo-scheduler"
-	// 6. **check point-2**:
-	//     - testPodWithAnnotationFitsFoo should be scheduled
+	// 按如下流程测试多 scheduler 特性：启动默认 scheduler、创建 Node、创建 3 个 Pod。
+	// 前两个 Pod 应由默认 scheduler 调度，最后一个指定 "foo-scheduler" 的 Pod 暂不被调度；
+	// 创建名为 "foo-scheduler" 的 scheduler 后，该 Pod 才应被调度。
 
-	// 1. create and start default-scheduler
+	// 1. 创建并启动默认 scheduler。
 	testCtx := testutils.InitTestSchedulerWithNS(t, "multi-scheduler")
 
-	// 2. create a node
+	// 2. 创建 Node。
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node-multi-scheduler-test-node"},
 		Spec:       v1.NodeSpec{Unschedulable: false},
@@ -206,7 +186,7 @@ func TestMultipleSchedulers(t *testing.T) {
 	}
 	testutils.CreateNode(testCtx.ClientSet, node)
 
-	// 3. create 3 pods for testing
+	// 3. 创建 3 个测试 Pod。
 	t.Logf("create 3 pods for testing")
 	testPod, err := testutils.CreatePausePodWithResource(testCtx.ClientSet, "pod-without-scheduler-name", testCtx.NS.Name, nil)
 	if err != nil {
@@ -225,9 +205,7 @@ func TestMultipleSchedulers(t *testing.T) {
 		t.Fatalf("Failed to create pod: %v", err)
 	}
 
-	// 4. **check point-1**:
-	//		- testPod, testPodFitsDefault should be scheduled
-	//		- testPodFitsFoo should NOT be scheduled
+	// 4. 检查点 1：testPod、testPodFitsDefault 应被调度，testPodFitsFoo 不应被调度。
 	t.Logf("wait for pods scheduled")
 	if err := testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, testPod); err != nil {
 		t.Errorf("Test MultiScheduler: %s Pod not scheduled: %v", testPod.Name, err)
@@ -247,7 +225,7 @@ func TestMultipleSchedulers(t *testing.T) {
 		t.Logf("Test MultiScheduler: %s Pod not scheduled", testPodFitsFoo.Name)
 	}
 
-	// 5. create and start a scheduler with name "foo-scheduler"
+	// 5. 创建并启动名为 "foo-scheduler" 的 scheduler。
 	cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 		Profiles: []configv1.KubeSchedulerProfile{{
 			SchedulerName: ptr.To(fooScheduler),
@@ -267,8 +245,7 @@ func TestMultipleSchedulers(t *testing.T) {
 	testutils.SyncSchedulerInformerFactory(testCtx)
 	go testCtx.Scheduler.Run(testCtx.Ctx)
 
-	//	6. **check point-2**:
-	//		- testPodWithAnnotationFitsFoo should be scheduled
+	// 6. 检查点 2：testPodWithAnnotationFitsFoo 应被调度。
 	err = testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, testPodFitsFoo)
 	if err != nil {
 		t.Errorf("Test MultiScheduler: %s Pod not scheduled, %v", testPodFitsFoo.Name, err)
@@ -346,11 +323,11 @@ func TestMultipleSchedulingProfiles(t *testing.T) {
 	}
 }
 
-// This test will verify scheduler can work well regardless of whether kubelet is allocatable aware or not.
+// TestAllocatable 验证无论 kubelet 是否感知 allocatable，scheduler 都能正常工作。
 func TestAllocatable(t *testing.T) {
 	testCtx := testutils.InitTestSchedulerWithNS(t, "allocatable")
 
-	// 2. create a node without allocatable awareness
+	// 2. 创建一个不感知 allocatable 的 Node。
 	nodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
 		v1.ResourceCPU:    "30m",
@@ -361,7 +338,7 @@ func TestAllocatable(t *testing.T) {
 		t.Fatalf("Failed to create node: %v", err)
 	}
 
-	// 3. create resource pod which requires less than Capacity
+	// 3. 创建资源需求低于 Capacity 的 Pod。
 	podName := "pod-test-allocatable"
 	podRes := &v1.ResourceList{
 		v1.ResourceCPU:    *resource.NewMilliQuantity(20, resource.DecimalSI),
@@ -372,7 +349,7 @@ func TestAllocatable(t *testing.T) {
 		t.Fatalf("Test allocatable unawareness failed to create pod: %v", err)
 	}
 
-	// 4. Test: this test pod should be scheduled since api-server will use Capacity as Allocatable
+	// 4. apiserver 会将 Capacity 当作 Allocatable，因此 Pod 应被调度。
 	err = testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, testCtx.ClientSet, testAllocPod, time.Second*5)
 	if err != nil {
 		t.Errorf("Test allocatable unawareness: %s Pod not scheduled: %v", testAllocPod.Name, err)
@@ -380,7 +357,7 @@ func TestAllocatable(t *testing.T) {
 		t.Logf("Test allocatable unawareness: %s Pod scheduled", testAllocPod.Name)
 	}
 
-	// 5. Change the node status to allocatable aware, note that Allocatable is less than Pod's requirement
+	// 5. 将 Node 状态改为感知 allocatable，且 Allocatable 低于 Pod 需求。
 	allocNode.Status = v1.NodeStatus{
 		Capacity: v1.ResourceList{
 			v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
@@ -402,14 +379,14 @@ func TestAllocatable(t *testing.T) {
 		t.Fatalf("Failed to remove the first pod: %v", err)
 	}
 
-	// 6. Make another pod with different name, same resource request
+	// 6. 创建一个名称不同但资源需求相同的 Pod。
 	podName2 := "pod-test-allocatable2"
 	testAllocPod2, err := testutils.CreatePausePodWithResource(testCtx.ClientSet, podName2, testCtx.NS.Name, podRes)
 	if err != nil {
 		t.Fatalf("Test allocatable awareness failed to create pod: %v", err)
 	}
 
-	// 7. Test: this test pod should not be scheduled since it request more than Allocatable
+	// 7. Pod 需求超过 Allocatable，不应被调度。
 	if err := testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, testCtx.ClientSet, testAllocPod2, time.Second*5); err == nil {
 		t.Errorf("Test allocatable awareness: %s Pod got scheduled unexpectedly, %v", testAllocPod2.Name, err)
 	} else {
@@ -417,10 +394,9 @@ func TestAllocatable(t *testing.T) {
 	}
 }
 
-// TestSchedulerInformers tests that scheduler receives informer events and updates its cache when
-// pods are scheduled by other schedulers.
+// TestSchedulerInformers 验证其他 scheduler 调度 Pod 后，本 scheduler 能通过 informer 事件更新缓存。
 func TestSchedulerInformers(t *testing.T) {
-	// Initialize scheduler.
+	// 初始化 scheduler。
 	testCtx := testutils.InitTestSchedulerWithNS(t, "scheduler-informer")
 	cs := testCtx.ClientSet
 
@@ -511,20 +487,20 @@ func TestSchedulerInformers(t *testing.T) {
 					t.Fatalf("Error creating node %v: %v", nodeConf.name, err)
 				}
 			}
-			// Ensure nodes are present in scheduler cache.
+			// 确认所有 Node 已进入 scheduler cache。
 			if err := testutils.WaitForNodesInCache(testCtx.Ctx, testCtx.Scheduler, len(test.nodes)); err != nil {
 				t.Fatal(err)
 			}
 
 			pods := make([]*v1.Pod, len(test.existingPods))
 			var err error
-			// Create and run existingPods.
+			// 创建并运行 existingPods。
 			for i, p := range test.existingPods {
 				if pods[i], err = testutils.RunPausePod(cs, p); err != nil {
 					t.Fatalf("Error running pause pod: %v", err)
 				}
 			}
-			// Create the new "pod".
+			// 创建新的 Pod。
 			unschedulable, err := testutils.CreatePausePod(cs, test.pod)
 			if err != nil {
 				t.Errorf("Error while creating new pod: %v", err)
@@ -533,7 +509,7 @@ func TestSchedulerInformers(t *testing.T) {
 				t.Errorf("Pod %v got scheduled: %v", unschedulable.Name, err)
 			}
 
-			// Cleanup
+			// 清理测试 Pod。
 			pods = append(pods, unschedulable)
 			testutils.CleanupPods(testCtx.Ctx, cs, t, pods)
 			if err := cs.PolicyV1().PodDisruptionBudgets(testCtx.NS.Name).DeleteCollection(testCtx.Ctx, metav1.DeleteOptions{}, metav1.ListOptions{}); err != nil {
@@ -547,16 +523,13 @@ func TestSchedulerInformers(t *testing.T) {
 }
 
 func TestNodeEvents(t *testing.T) {
-	// The test verifies that unschedulable pods are re-queued
-	// on node update events. The scenario we are testing is the following:
-	// 1. Create pod1 and node1 that is small enough to only fit pod1; pod1 schedules on node1
-	// 2. Create pod2, it should be unschedulable due to insufficient cpu
-	// 3. Create node2 with a taint, pod2 should still not schedule
-	// 4. Remove the taint from node2; pod2 should now schedule on node2
+	// 验证 Node 更新事件会让不可调度的 Pod 重新入队：先创建只能容纳 pod1 的 node1，
+	// pod1 调度到 node1；pod2 因 CPU 不足不可调度；创建带 taint 的 node2 后仍不可调度，
+	// 移除 taint 后 pod2 应调度到 node2。
 
 	testCtx := testutils.InitTestSchedulerWithNS(t, "node-events")
 
-	// 1.1 create pod1
+	// 1.1 创建 pod1。
 	pod1, err := testutils.CreatePausePodWithResource(testCtx.ClientSet, "pod1", testCtx.NS.Name, &v1.ResourceList{
 		v1.ResourceCPU: *resource.NewMilliQuantity(80, resource.DecimalSI),
 	})
@@ -564,7 +537,7 @@ func TestNodeEvents(t *testing.T) {
 		t.Fatalf("Failed to create pod: %v", err)
 	}
 
-	// 1.2 Create node1
+	// 1.2 创建 node1。
 	node1, err := testutils.CreateNode(testCtx.ClientSet, st.MakeNode().
 		Name("node-events-test-node1").
 		Capacity(map[v1.ResourceName]string{
@@ -576,13 +549,13 @@ func TestNodeEvents(t *testing.T) {
 		t.Fatalf("Failed to create %s: %v", node1.Name, err)
 	}
 
-	// 1.3 verify pod1 is scheduled
+	// 1.3 验证 pod1 已调度。
 	err = testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, testCtx.ClientSet, pod1, time.Second*5)
 	if err != nil {
 		t.Errorf("Pod %s didn't schedule: %v", pod1.Name, err)
 	}
 
-	// 2. create pod2
+	// 2. 创建 pod2。
 	pod2, err := testutils.CreatePausePodWithResource(testCtx.ClientSet, "pod2", testCtx.NS.Name, &v1.ResourceList{
 		v1.ResourceCPU: *resource.NewMilliQuantity(40, resource.DecimalSI),
 	})
@@ -594,7 +567,7 @@ func TestNodeEvents(t *testing.T) {
 		t.Errorf("Pod %v got scheduled: %v", pod2.Name, err)
 	}
 
-	// 3.1 Create node2 with a taint
+	// 3.1 创建带 taint 的 node2。
 	node2 := st.MakeNode().
 		Name("node-events-test-node2").
 		Capacity(map[v1.ResourceName]string{
@@ -608,7 +581,7 @@ func TestNodeEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create %s: %v", node2.Name, err)
 	}
-	// make sure the scheduler received the node add event by creating a pod that only fits node2
+	// 创建一个只能调度到 node2 的 Pod，确认 scheduler 已收到 Node add 事件。
 	plugPod := st.MakePod().Name("plug-pod").Namespace(testCtx.NS.Name).Container("pause").
 		Req(map[v1.ResourceName]string{v1.ResourceCPU: "40m"}).
 		NodeAffinityIn("affinity-key", []string{"affinity-value"}, st.NodeSelectorTypeMatchExpressions).
@@ -622,12 +595,12 @@ func TestNodeEvents(t *testing.T) {
 		t.Errorf("Pod %s didn't schedule: %v", plugPod.Name, err)
 	}
 
-	// 3.2 pod2 still unschedulable
+	// 3.2 pod2 仍不可调度。
 	if err := testutils.WaitForPodUnschedulable(testCtx.Ctx, testCtx.ClientSet, pod2); err != nil {
 		t.Errorf("Pod %v got scheduled: %v", pod2.Name, err)
 	}
 
-	// 4. Remove node taint, pod2 should schedule
+	// 4. 移除 Node taint，pod2 应调度成功。
 	node2.Spec.Taints = nil
 	node2, err = testutils.UpdateNode(testCtx.ClientSet, node2)
 	if err != nil {
@@ -648,7 +621,7 @@ func TestHostPorts(t *testing.T) {
 		nonRestartableInitContainer []v1.ContainerPort
 	}
 
-	// Tests run with one node for scheduling. The first pod must always be scheduable.
+	// 测试仅使用一个 Node 进行调度，首个 Pod 必须始终可调度。
 	tests := []struct {
 		name                string
 		firstPorts          podPorts
@@ -1027,16 +1000,8 @@ func TestHostPorts(t *testing.T) {
 	}
 }
 
-// TestTaintTolerationGtLtIntegration tests integration scenarios for Gt/Lt toleration operators
-// The test verifies that unschedulable pods are re-queued when taint values change.
-// 1. Create node1 with dedicated taint and node2 with low priority taint
-// 2. Wait for scheduler to observe both nodes
-// 3. Create pod1 that tolerates node1's taint; it schedules on node1
-// 4. Create pod2 with Gt toleration for priority; it's unschedulable (doesn't tolerate node1, node2's priority too low)
-// 5. Update node2's taint to acceptable priority; pod2 schedules on node2
-// 6. Create node3 with high error-rate taint
-// 7. Create pod3 with Lt toleration for error-rate; it's unschedulable (node3's error-rate too high)
-// 8. Update node3's taint to acceptable error-rate; pod3 schedules on node3
+// TestTaintTolerationGtLtIntegration 验证 taint 值变化时不可调度 Pod 会重新入队：
+// 依次测试 Gt 和 Lt 两种 toleration 操作符下，调高 taint 值后 Pod 能被调度到对应 Node。
 func TestTaintTolerationGtLtIntegration(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TaintTolerationComparisonOperators, true)
 
@@ -1049,7 +1014,7 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		LastHeartbeatTime: metav1.Time{Time: time.Now()},
 	}
 
-	// 1. Create node1 with dedicated taint
+	// 1. 创建带 dedicated taint 的 node1。
 	node1 := st.MakeNode().Name("node1").
 		Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).
 		Taints([]v1.Taint{
@@ -1065,13 +1030,13 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Fatalf("Failed to create node1: %v", err)
 	}
 
-	// Create node2 with a taint that pod2 can't tolerate (priority too low)
+	// 创建 node2，其 taint 值低于 pod2 的 Gt 要求，故 pod2 无法容忍。
 	node2 := st.MakeNode().Name("node2").
 		Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).
 		Taints([]v1.Taint{
 			{
 				Key:    "node.example.com/priority-level",
-				Value:  "850", // Too low for pod2's Gt 900 requirement
+				Value:  "850", // 低于 pod2 的 Gt 900 要求。
 				Effect: v1.TaintEffectNoSchedule,
 			},
 		}).Obj()
@@ -1081,12 +1046,12 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Fatalf("Failed to create node2: %v", err)
 	}
 
-	// 2. Wait for scheduler to observe both nodes
+	// 2. 等待 scheduler 观察到两个 Node。
 	if err := testutils.WaitForNodesInCache(testCtx.Ctx, testCtx.Scheduler, 2); err != nil {
 		t.Fatalf("Failed to wait for nodes in cache: %v", err)
 	}
 
-	// 3. Create pod1 that tolerates node1's taint and should schedule on node1
+	// 3. 创建能容忍 node1 taint 的 pod1，它应调度到 node1。
 	pod1 := st.MakePod().Name("pod1").Namespace(testCtx.NS.Name).
 		Container("busybox").
 		Req(map[v1.ResourceName]string{v1.ResourceCPU: "900m"}).
@@ -1108,7 +1073,7 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Fatalf("Failed to schedule pod1: %v", err)
 	}
 
-	// 4. Create pod2 with Gt toleration, it should be unschedulable as it can't tolerate node1's taint, and node2's taint value is too low
+	// 4. 创建带 Gt toleration 的 pod2；它无法容忍 node1 的 taint，node2 的 taint 值又太低，故不可调度。
 	pod2 := st.MakePod().Name("pod2").Namespace(testCtx.NS.Name).
 		Container("busybox").
 		Req(map[v1.ResourceName]string{v1.ResourceCPU: "200m"}).
@@ -1130,13 +1095,13 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Fatalf("Failed to verify pod2 is unschedulable: %v", err)
 	}
 
-	// 5. Update the taint value on node2 to acceptable priority; pod2 should now schedule on node2
+	// 5. 将 node2 的 taint 值调高到可接受范围，pod2 应调度到 node2。
 	node2, err = testCtx.ClientSet.CoreV1().Nodes().Get(testCtx.Ctx, node2.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to get node2: %v", err)
 	}
 
-	// Update taint to have acceptable priority value
+	// 更新 taint 为可接受的优先级值。
 	for i := range node2.Spec.Taints {
 		if node2.Spec.Taints[i].Key == "node.example.com/priority-level" {
 			node2.Spec.Taints[i].Value = "950"
@@ -1149,7 +1114,7 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Fatalf("Failed to update node2 taint: %v", err)
 	}
 
-	// Verify pod2 now schedules on node2
+	// 验证 pod2 已调度到 node2。
 	err = testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, pod2)
 	if err != nil {
 		t.Fatalf("Failed to schedule pod2: %v", err)
@@ -1164,13 +1129,13 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Errorf("Pod2 scheduled on unexpected node: got %s, expected %s", scheduledPod2.Spec.NodeName, node2.Name)
 	}
 
-	// 6. Test Lt operator scenario - create node3 with high error rate
+	// 6. 测试 Lt 操作符：创建 error-rate taint 很高的 node3。
 	node3 := st.MakeNode().Name("node3").
 		Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).
 		Taints([]v1.Taint{
 			{
 				Key:    "node.example.com/error-rate",
-				Value:  "15", // Too high for pod3's Lt 10 requirement
+				Value:  "15", // 高于 pod3 的 Lt 10 要求。
 				Effect: v1.TaintEffectNoSchedule,
 			},
 		}).Obj()
@@ -1180,12 +1145,12 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Fatalf("Failed to create node3: %v", err)
 	}
 
-	// Wait for scheduler to observe node3
+	// 等待 scheduler 观察到 node3。
 	if err := testutils.WaitForNodesInCache(testCtx.Ctx, testCtx.Scheduler, 3); err != nil {
 		t.Fatalf("Failed to wait for nodes in cache: %v", err)
 	}
 
-	// 7. Create pod3 with Lt toleration, it should be unschedulable as node3's error rate is too high
+	// 7. 创建带 Lt toleration 的 pod3；node3 的 error-rate 太高，故其不可调度。
 	pod3 := st.MakePod().Name("pod3").Namespace(testCtx.NS.Name).
 		Container("busybox").
 		Req(map[v1.ResourceName]string{v1.ResourceCPU: "100m"}).
@@ -1207,7 +1172,7 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Fatalf("Failed to verify pod3 is unschedulable: %v", err)
 	}
 
-	// 8. Update node3 taint to acceptable error rate; pod3 should now schedule
+	// 8. 将 node3 的 taint 调低到可接受范围，pod3 应调度成功。
 	node3, err = testCtx.ClientSet.CoreV1().Nodes().Get(testCtx.Ctx, node3.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to get node3: %v", err)
@@ -1239,7 +1204,7 @@ func TestTaintTolerationGtLtIntegration(t *testing.T) {
 		t.Errorf("Pod3 scheduled on unexpected node: got %s, expected %s", scheduledPod3.Spec.NodeName, node3.Name)
 	}
 
-	// Cleanup pods
+	// 清理测试 Pod。
 	defer testutils.CleanupPods(testCtx.Ctx, testCtx.ClientSet, t, []*v1.Pod{pod1, pod2, pod3})
 	if err := testCtx.ClientSet.CoreV1().Nodes().DeleteCollection(testCtx.Ctx, metav1.DeleteOptions{}, metav1.ListOptions{}); err != nil {
 		t.Errorf("error whiling deleting nodes, error: %v", err)

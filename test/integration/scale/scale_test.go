@@ -98,14 +98,14 @@ func TestScaleSubresources(t *testing.T) {
 		}
 	}
 
-	// Ensure nothing is missing
+	// 确认所有预期的 scale subresource 都被发现，无遗漏
 	for gvr, gvk := range expectedScaleSubresources {
 		if _, ok := discoveredScaleSubresources[gvr]; !ok {
 			t.Errorf("expected scale subresource %#v of kind %#v was missing from discovery", gvr, gvk)
 		}
 	}
 
-	// Ensure discovery lists expected types
+	// 确认发现的类型符合预期：新增 scale 资源应使用 autoscaling/v1 的 Scale
 	for gvr, gvk := range discoveredScaleSubresources {
 		if expectedGVK, expected := expectedScaleSubresources[gvr]; !expected {
 			if gvk == autoscalingGVK {
@@ -120,7 +120,7 @@ func TestScaleSubresources(t *testing.T) {
 		}
 	}
 
-	// Create objects required to exercise scale subresources
+	// 创建用于验证 scale subresource 的对象
 	if _, err := clientSet.CoreV1().ReplicationControllers("default").Create(context.TODO(), rcStub, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestScaleSubresources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ensure scale subresources return and accept expected kinds
+	// 验证各 scale subresource 的 GET 和 PUT 都使用期望的 kind
 	for gvr, gvk := range discoveredScaleSubresources {
 		prefix := "/apis"
 		if gvr.Group == corev1.GroupName {

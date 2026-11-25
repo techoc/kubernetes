@@ -37,17 +37,17 @@ import (
 	apiregistrationclient "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/typed/apiregistration/v1"
 )
 
-// TestOverlappingBuiltInResources ensures the list of group-resources the custom resource finalizer should skip is up to date
+// TestOverlappingBuiltInResources 确保 CR finalizer 应跳过的 group-resource 列表保持最新。
 func TestOverlappingBuiltInResources(t *testing.T) {
-	// Verify built-in resources that overlap with computed CRD storage paths are listed in OverlappingBuiltInResources()
+	// 验证存储路径与 CRD 重叠的内建资源都列在 OverlappingBuiltInResources() 中。
 	detectedOverlappingResources := map[schema.GroupResource]bool{}
 	for gvr, gvrData := range GetEtcdStorageData() {
 		if !strings.HasSuffix(gvr.Group, ".k8s.io") {
-			// only fully-qualified group names can exist as CRDs
+			// 只有完全限定的 group 名才可能存在对应 CRD。
 			continue
 		}
 		if !strings.Contains(gvrData.ExpectedEtcdPath, "/"+gvr.Group+"/"+gvr.Resource+"/") {
-			// CRDs persist in storage under .../<group>/<resource>/...
+			// CRD 数据存放在 .../<group>/<resource>/... 路径下。
 			continue
 		}
 		detectedOverlappingResources[gvr.GroupResource()] = true
@@ -67,7 +67,7 @@ func TestOverlappingBuiltInResources(t *testing.T) {
 	}
 }
 
-// TestOverlappingCustomResourceAPIService ensures creating and deleting a custom resource overlapping with APIServices does not destroy APIService data
+// TestOverlappingCustomResourceAPIService 确保创建并删除与 APIService 存储路径重叠的自定义资源不会破坏 APIService 数据。
 func TestOverlappingCustomResourceAPIService(t *testing.T) {
 	apiServer := StartRealAPIServerOrDie(t)
 	defer apiServer.Cleanup()
@@ -85,7 +85,7 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify APIServices can be listed
+	// 先确认 APIService 列表可正常获取。
 	apiServices, err := apiServiceClient.APIServices().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 		t.Fatal("expected APIService objects, got none")
 	}
 
-	// Create a CRD defining an overlapping apiregistration.k8s.io apiservices resource with an incompatible schema
+	// 创建一个 CRD 覆盖 apiregistration.k8s.io/apiservices 路径，并使用不兼容的 schema。
 	crdCRD, err := crdClient.CustomResourceDefinitions().Create(context.TODO(), &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "apiservices.apiregistration.k8s.io",
@@ -131,7 +131,7 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait until it is established
+	// 等待 CRD 完成 established。
 	if err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		crd, err := crdClient.CustomResourceDefinitions().Get(context.TODO(), crdCRD.Name, metav1.GetOptions{})
 		if err != nil {
@@ -149,19 +149,19 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Make sure API requests are still handled by the built-in handler (and return built-in kinds)
+	// 确认 API 请求仍由内建 handler 处理，返回内建 Kind。
 
-	// Listing v1 succeeds
+	// v1 列表请求应成功。
 	v1DynamicList, err := dynamicClient.Resource(schema.GroupVersionResource{Group: "apiregistration.k8s.io", Version: "v1", Resource: "apiservices"}).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Result was served by built-in handler, not CR handler
+	// 结果应来自内建 handler，而非 CR handler。
 	if _, hasDefaultedCRField := v1DynamicList.Items[0].Object["spec"].(map[string]interface{})["bar"]; hasDefaultedCRField {
 		t.Fatalf("expected no CR defaulting, got %#v", v1DynamicList.Items[0].Object)
 	}
 
-	// Creating v1 succeeds (built-in validation, not CR validation)
+	// v1 创建请求应成功，并使用内建校验而非 CR 校验。
 	testAPIService, err := apiServiceClient.APIServices().Create(context.TODO(), &apiregistrationv1.APIService{
 		ObjectMeta: metav1.ObjectMeta{Name: "v1.example.com"},
 		Spec: apiregistrationv1.APIServiceSpec{
@@ -179,7 +179,7 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// discovery is handled by the built-in handler
+	// discovery 也应交给内建 handler 处理。
 	v1Resources, err := apiServer.Client.Discovery().ServerResourcesForGroupVersion("apiregistration.k8s.io/v1")
 	if err != nil {
 		t.Fatal(err)
@@ -196,13 +196,13 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 		t.Fatalf("expected error looking up apiregistration.k8s.io/v2 discovery, got %#v", v2Resources)
 	}
 
-	// Delete the overlapping CRD
+	// 删除这个存储路径重叠的 CRD。
 	err = crdClient.CustomResourceDefinitions().Delete(context.TODO(), crdCRD.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure the CRD deletion succeeds
+	// 等待 CRD 彻底删除。
 	if err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		crd, err := crdClient.CustomResourceDefinitions().Get(context.TODO(), crdCRD.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -218,7 +218,7 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Make sure APIService objects are not removed
+	// CRD 删除后原有 APIService 对象不应被清理。
 	time.Sleep(5 * time.Second)
 	finalAPIServices, err := apiServiceClient.APIServices().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -229,7 +229,7 @@ func TestOverlappingCustomResourceAPIService(t *testing.T) {
 	}
 }
 
-// TestOverlappingCustomResourceCustomResourceDefinition ensures creating and deleting a custom resource overlapping with CustomResourceDefinition does not destroy CustomResourceDefinition data
+// TestOverlappingCustomResourceCustomResourceDefinition 确保创建并删除与 CustomResourceDefinition 存储路径重叠的自定义资源不会破坏 CRD 数据。
 func TestOverlappingCustomResourceCustomResourceDefinition(t *testing.T) {
 	apiServer := StartRealAPIServerOrDie(t)
 	defer apiServer.Cleanup()
@@ -243,7 +243,7 @@ func TestOverlappingCustomResourceCustomResourceDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify CustomResourceDefinitions can be listed
+	// 先确认 CustomResourceDefinition 列表可正常获取。
 	crds, err := crdClient.CustomResourceDefinitions().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -256,7 +256,7 @@ func TestOverlappingCustomResourceCustomResourceDefinition(t *testing.T) {
 		t.Fatal("expected CustomResourceDefinition objects, got none")
 	}
 
-	// Create a CRD defining an overlapping apiregistration.k8s.io apiservices resource with an incompatible schema
+	// 创建一个 CRD 覆盖 apiregistration.k8s.io/apiservices 路径，并使用不兼容的 schema。
 	crdCRD, err := crdClient.CustomResourceDefinitions().Create(context.TODO(), &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "customresourcedefinitions.apiextensions.k8s.io",
@@ -294,7 +294,7 @@ func TestOverlappingCustomResourceCustomResourceDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait until it is established
+	// 等待 CRD 完成 established。
 	if err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		crd, err := crdClient.CustomResourceDefinitions().Get(context.TODO(), crdCRD.Name, metav1.GetOptions{})
 		if err != nil {
@@ -312,25 +312,25 @@ func TestOverlappingCustomResourceCustomResourceDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Make sure API requests are still handled by the built-in handler (and return built-in kinds)
+	// 确认 API 请求仍由内建 handler 处理，返回内建 Kind。
 
-	// Listing v1 succeeds
+	// v1 列表请求应成功。
 	v1DynamicList, err := dynamicClient.Resource(schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Result was served by built-in handler, not CR handler
+	// 结果应来自内建 handler，而非 CR handler。
 	if _, hasDefaultedCRField := v1DynamicList.Items[0].Object["spec"].(map[string]interface{})["bar"]; hasDefaultedCRField {
 		t.Fatalf("expected no CR defaulting, got %#v", v1DynamicList.Items[0].Object)
 	}
 
-	// Updating v1 succeeds (built-in validation, not CR validation)
+	// v1 更新请求应成功，并使用内建校验而非 CR 校验。
 	_, err = crdClient.CustomResourceDefinitions().Patch(context.TODO(), crdCRD.Name, types.MergePatchType, []byte(`{"metadata":{"annotations":{"test":"updated"}}}`), metav1.PatchOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// discovery is handled by the built-in handler
+	// discovery 也应交给内建 handler 处理。
 	v1Resources, err := apiServer.Client.Discovery().ServerResourcesForGroupVersion("apiextensions.k8s.io/v1")
 	if err != nil {
 		t.Fatal(err)
@@ -347,13 +347,13 @@ func TestOverlappingCustomResourceCustomResourceDefinition(t *testing.T) {
 		t.Fatalf("expected error looking up apiregistration.k8s.io/v2 discovery, got %#v", v2Resources)
 	}
 
-	// Delete the overlapping CRD
+	// 删除这个存储路径重叠的 CRD。
 	err = crdClient.CustomResourceDefinitions().Delete(context.TODO(), crdCRD.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure the CRD deletion succeeds
+	// 等待 CRD 彻底删除。
 	if err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		crd, err := crdClient.CustomResourceDefinitions().Get(context.TODO(), crdCRD.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -369,7 +369,7 @@ func TestOverlappingCustomResourceCustomResourceDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Make sure other CustomResourceDefinition objects are not removed
+	// CRD 删除后其他 CustomResourceDefinition 对象不应被清理。
 	time.Sleep(5 * time.Second)
 	finalCRDs, err := crdClient.CustomResourceDefinitions().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {

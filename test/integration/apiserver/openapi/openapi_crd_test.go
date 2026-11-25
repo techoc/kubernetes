@@ -56,7 +56,7 @@ func TestOpenAPICRDGenerationNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a new CRD with group mygroup.example.com
+	// 创建一个 CRD，用于验证 OpenAPI schema 更新后会重新发布
 	crd := fixtures.NewRandomNameV1CustomResourceDefinition(apiextensionsv1.NamespaceScoped)
 	_, err = fixtures.CreateNewV1CustomResourceDefinition(crd, apiExtensionClient, dynamicClient)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestOpenAPICRDGenerationNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Update OpenAPI schema and ensure it's reflected in the publishing
+	// 更新 OpenAPI schema，等待其反映到已发布的文档中
 	crd.Spec.Versions[0].Schema = &apiextensionsv1.CustomResourceValidation{
 		OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
 			Type:       "object",
@@ -98,7 +98,7 @@ func TestOpenAPICRDGenerationNumber(t *testing.T) {
 			t.Error(err)
 		}
 
-		// Ensure that OpenAPI schema updated is reflected
+		// 确认更新后的 OpenAPI schema 已发布
 		if description := swagger.Definitions["com.example.mygroup.v1beta1."+crd.Spec.Names.Kind].Properties["num"].Description; description == "description" {
 			return true, nil
 		}

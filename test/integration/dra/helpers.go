@@ -44,7 +44,7 @@ const (
 	classNameSuffix  = ".class"
 )
 
-// must can be wrapped around a Create/Update/Patch/Get/Delete call and handles the error checking:
+// must 包装 Create/Update/Patch/Get/Delete 调用，省去每次重复的错误检查：
 //
 //	pod = must(tCtx, tCtx.Client().CoreV1().Pods(namespace).Create, pod, metav1.CreateOptions{})
 func must[R, P, O any](tCtx ktesting.TContext, call func(context.Context, P, O) (*R, error), p P, o O) *R {
@@ -70,19 +70,17 @@ func listObjectNames(list runtime.Object) ([]string, error) {
 	return names, nil
 }
 
-// createTestNamespace creates a namespace with a name that is derived from the
-// current test name:
-// - Strip TestDRA prefix.
-// - Non-alpha-numeric characters replaced by hyphen.
-// - Truncated in the middle to make it short enough for GenerateName.
-// - Hyphen plus random suffix added by the apiserver.
+// createTestNamespace 根据当前测试名生成 namespace 名称：
+// - 去掉 TestDRA 前缀。
+// - 非字母数字字符替换为连字符。
+// - 从中间截断，保证长度足够供 GenerateName 追加后缀。
+// - 由 apiserver 追加连字符和随机后缀。
 func createTestNamespace(tCtx ktesting.TContext, labels map[string]string) string {
 	tCtx.Helper()
 	name := regexp.MustCompile(`[^[:alnum:]_-]`).ReplaceAllString(tCtx.Name(), "-")
 	name = strings.ToLower(name)
 	name = strings.TrimPrefix(name, "testdra-")
-	// Make sure the generated name leaves enough room so we
-	// can use it as a prefix for the driver name.
+	// 预留足够长度，使生成的名称可作为 driver 名的前缀
 	if len(name) > (56 - len(driverNameSuffix)) {
 		name = name[:24] + "--" + name[len(name)-24:]
 	}
@@ -92,12 +90,12 @@ func createTestNamespace(tCtx ktesting.TContext, labels map[string]string) strin
 	tCtx.ExpectNoError(err, "create test namespace")
 	tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
 		tCtx.ExpectNoError(tCtx.Client().CoreV1().Namespaces().Delete(tCtx, ns.Name, metav1.DeleteOptions{}))
-		// *Not* waiting here. Deleting namespaces is slow.
+		// 此处不等待删除完成，namespace 删除通常较慢
 	})
 	return ns.Name
 }
 
-// createSlice creates the given ResourceSlice and removes it when the test is done.
+// createSlice 创建给定的 ResourceSlice，并在测试结束时删除
 func createSlice(tCtx ktesting.TContext, slice *resourceapi.ResourceSlice) *resourceapi.ResourceSlice {
 	tCtx.Helper()
 	slice, err := tCtx.Client().ResourceV1().ResourceSlices().Create(tCtx, slice, metav1.CreateOptions{})
@@ -109,7 +107,7 @@ func createSlice(tCtx ktesting.TContext, slice *resourceapi.ResourceSlice) *reso
 	return slice
 }
 
-// createTestClass creates a DeviceClass with a driver name derived from the test namespace
+// createTestClass 创建 DeviceClass，driver 名由测试 namespace 派生
 func createTestClass(tCtx ktesting.TContext, namespace string) (*resourceapi.DeviceClass, string) {
 	return createTestClassWithSpec(tCtx, namespace, nil)
 }
@@ -122,7 +120,7 @@ func createTestClassWithSpec(tCtx ktesting.TContext, namespace string, spec *res
 	if spec != nil {
 		class.Spec = *spec
 	}
-	// If the caller didn't supply a selector, we add the one which selects by driver name.
+	// 调用方未提供 selector 时，默认按 driver 名筛选
 	if len(class.Spec.Selectors) == 0 {
 		class.Spec.Selectors = []resourceapi.DeviceSelector{{
 			CEL: &resourceapi.CELDeviceSelector{
@@ -140,8 +138,8 @@ func createTestClassWithSpec(tCtx ktesting.TContext, namespace string, spec *res
 	return class, driverName
 }
 
-// createClaim creates a claim and in the namespace.
-// The class must already exist and is used for all requests.
+// createClaim 在指定 namespace 中创建 claim。
+// class 必须已存在，并用于所有 request。
 func createClaim(tCtx ktesting.TContext, namespace string, suffix string, class *resourceapi.DeviceClass, claim *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	tCtx.Helper()
 	claim = claim.DeepCopy()
@@ -161,28 +159,28 @@ func createClaim(tCtx ktesting.TContext, namespace string, suffix string, class 
 	}
 	claim, err := tCtx.Client().ResourceV1().ResourceClaims(namespace).Create(tCtx, claim, metav1.CreateOptions{})
 	tCtx.ExpectNoError(err, "create claim "+claimName)
-	// TODO: some tests leak claims. Probably they need to be fixed... later.
+	// TODO: 部分测试会泄漏 claim，后续需要修复。
 	// tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
-	//		// We want to know when tearing this down gets stuck.
+	//		// 用于观察清理过程何时卡住
 	//	deleteAndWait(tCtx, tCtx.Client().ResourceV1().ResourceClaims(namespace).Delete, tCtx.Client().ResourceV1().ResourceClaims(namespace).Get, claim.Name)
 	// })
 	return claim
 }
 
-// createPod create a pod in the namespace, referencing the given claim.
+// createPod 在指定 namespace 中创建引用给定 claim 的 Pod
 func createPod(tCtx ktesting.TContext, namespace string, suffix string, pod *v1.Pod, claims ...*resourceapi.ResourceClaim) *v1.Pod {
 	return createPodInternal(tCtx, namespace, suffix, pod, nil, claims...)
 }
 
-// createPodWithExtendedResource creates a pod in the namespace, requesting the given extended resource.
+// createPodWithExtendedResource 在指定 namespace 中创建请求给定扩展资源的 Pod
 func createPodWithExtendedResource(tCtx ktesting.TContext, namespace, resourceName, resourceQuantity string, pod *v1.Pod) *v1.Pod {
 	return createPodInternal(tCtx, namespace, "", pod, map[v1.ResourceName]string{
 		v1.ResourceName(resourceName): resourceQuantity,
 	})
 }
 
-// createPodInternal contains the common logic for createPod and createPodWithExtendedResource.
-// It shouldn't be called directly from tests.
+// createPodInternal 提取 createPod 与 createPodWithExtendedResource 的公共逻辑，
+// 测试中不应直接调用。
 var createPodInternal = func(tCtx ktesting.TContext, namespace string, suffix string, pod *v1.Pod, resources map[v1.ResourceName]string, claims ...*resourceapi.ResourceClaim) *v1.Pod {
 	tCtx.Helper()
 	pod = pod.DeepCopy()
@@ -210,15 +208,14 @@ var createPodInternal = func(tCtx ktesting.TContext, namespace string, suffix st
 		}
 	}
 	if len(claims) > 0 {
-		// Update the field only if claims are passed.
+		// 仅在传入 claim 时才设置该字段
 		pod.Spec.ResourceClaims = resourceClaims
 	}
 	pod, err := tCtx.Client().CoreV1().Pods(namespace).Create(tCtx, pod, metav1.CreateOptions{})
 	tCtx.ExpectNoError(err, "create pod "+podName)
 	tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
 		tCtx.Log("Cleaning up Pod...")
-		// We must delete pods before uninstalling our driver.
-		// Also, we want to know when stopping it gets stuck.
+		// 必须在卸载 driver 前删除 Pod，并观察删除过程是否卡住
 		deleteAndWait(tCtx, tCtx.Client().CoreV1().Pods(namespace).Delete, tCtx.Client().CoreV1().Pods(namespace).Get, pod.Name)
 	})
 	return pod
@@ -251,8 +248,7 @@ func deleteAndWait[T any](tCtx ktesting.TContext, del func(context.Context, stri
 	var anyT any = t
 	var options metav1.DeleteOptions
 	if _, ok := anyT.(*v1.Pod); ok {
-		// Special case for pods: we don't have a kubelet which acknowledges
-		// shutdown of a scheduled pod, so we have to force-delete.
+		// Pod 需要特殊处理：没有 kubelet 确认已调度 Pod 的关闭，只能强制删除
 		options.GracePeriodSeconds = ptr.To(int64(0))
 	}
 

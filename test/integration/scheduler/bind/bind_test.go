@@ -31,7 +31,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestDefaultBinder tests the binding process in the scheduler.
+// TestDefaultBinder 测试 scheduler 中的 binding 流程。
 func TestDefaultBinder(t *testing.T) {
 	for _, asyncAPICallsEnabled := range []bool{true, false} {
 		t.Run(fmt.Sprintf("Async API calls enabled: %v", asyncAPICallsEnabled), func(t *testing.T) {
@@ -45,7 +45,7 @@ func TestDefaultBinder(t *testing.T) {
 				defer testCtx.Scheduler.APIDispatcher.Close()
 			}
 
-			// Add a node.
+			// 创建一个 node。
 			node, err := testutil.CreateNode(testCtx.ClientSet, st.MakeNode().Name("testnode").Obj())
 			if err != nil {
 				t.Fatal(err)

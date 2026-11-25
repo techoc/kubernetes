@@ -50,9 +50,9 @@ import (
 )
 
 const (
-	// Fake values for testing.
-	AliceToken string = "abc123" // username: alice.  Present in token file.
-	BobToken   string = "xyz987" // username: bob.  Present in token file.
+	// 测试用的假 token。
+	AliceToken string = "abc123" // 用户名 alice，已写入 token 文件。
+	BobToken   string = "xyz987" // 用户名 bob，已写入 token 文件。
 )
 
 func testPrefix(t *testing.T, prefix string) {
@@ -200,8 +200,7 @@ func TestStatus(t *testing.T) {
 			})
 			defer tearDownFn()
 
-			// When modifying authenticator and authorizer, don't use
-			// bearer token than will be always authorized.
+			// 修改 authenticator 和 authorizer 时不能带 bearer token，否则请求总会被授权，测不到预期状态。
 			if tc.modifyOptions != nil {
 				kubeConfig.BearerToken = ""
 			}
@@ -325,12 +324,9 @@ func TestObjectSizeResponses(t *testing.T) {
 	server.ClientConfig.ContentType = runtime.ContentTypeJSON
 	client := clientset.NewForConfigOrDie(server.ClientConfig)
 
-	// Computing ManagedFields is extremely inefficient for large object, e.g.
-	// it may take 10s+ to just compute it if we have ~100k very small labels or
-	// annotations.  This in turn may lead to timing out requests,
-	// which have hardcoded timeout of 34 seconds.
-	// As a result, we're using slightly larger individual labels/annotations
-	// to reduce the number of those.
+	// 大对象下计算 ManagedFields 非常低效：约 10 万个很小的 label 或 annotation
+	// 可能要花 10 秒以上，进而触发请求硬编码的 34 秒超时。
+	// 因此这里用较大的单个 label/annotation，减少条目数量。
 	const DeploymentMegabyteSize = 25000
 	const DeploymentTwoMegabyteSize = 30000
 	const DeploymentThreeMegabyteSize = 45000
@@ -535,10 +531,10 @@ func TestAppsGroupBackwardCompatibility(t *testing.T) {
 		expectedStatusCodes map[int]bool
 		expectedVersion     string
 	}{
-		// Post to apps endpoint and get back from apps
+		// 向 apps endpoint 创建资源，再从 apps 读回。
 		{"POST", appsPath("deployments", metav1.NamespaceDefault, ""), deploymentApps, integration.Code201, ""},
 		{"GET", appsPath("deployments", metav1.NamespaceDefault, "test-deployment2"), "", integration.Code200, "apps/v1"},
-		// set propagationPolicy=Orphan to force the object to be returned so we can check the apiVersion (otherwise, we just get a status object back)
+		// 设置 propagationPolicy=Orphan 以返回对象本体，从而检查 apiVersion（否则只会返回 status 对象）。
 		{"DELETE", appsPath("deployments", metav1.NamespaceDefault, "test-deployment2") + "?propagationPolicy=Orphan", "", integration.Code200, "apps/v1"},
 	}
 
@@ -697,10 +693,8 @@ func TestAPIServerService(t *testing.T) {
 	}
 }
 
-// TestUpdateNodeObjects represents a simple version of the behavior of node checkins at steady
-// state. This test allows for easy profiling of a realistic primary scenario for baseline CPU
-// in very large clusters. It is disabled by default - start a kube-apiserver and pass
-// UPDATE_NODE_APISERVER as the host value.
+// TestUpdateNodeObjects 简化模拟节点稳态心跳行为，便于对超大集群中主流程的 CPU 基线做性能分析。
+// 该测试默认禁用：需先启动 kube-apiserver，并通过 UPDATE_NODE_APISERVER 传入其 host。
 func TestUpdateNodeObjects(t *testing.T) {
 	server := os.Getenv("UPDATE_NODE_APISERVER")
 	if len(server) == 0 {

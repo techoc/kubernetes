@@ -16,9 +16,8 @@ limitations under the License.
 
 package auth
 
-// This file tests authentication and (soon) authorization of HTTP requests to an API server object.
-// It does not use the client in pkg/client/... because authentication and authorization needs
-// to work for any client of the HTTP interface.
+// 本文件测试发往 apiserver 的 HTTP 请求的认证（以及后续的鉴权）。
+// 不使用 pkg/client/... 中的客户端，因为认证和鉴权必须对任意 HTTP 客户端都生效。
 
 import (
 	"bytes"
@@ -90,9 +89,9 @@ import (
 )
 
 const (
-	AliceToken   string = "abc123" // username: alice.  Present in token file.
-	BobToken     string = "xyz987" // username: bob.  Present in token file.
-	UnknownToken string = "qwerty" // Not present in token file.
+	AliceToken   string = "abc123" // 用户名: alice，存在于 token 文件中。
+	BobToken     string = "xyz987" // 用户名: bob，存在于 token 文件中。
+	UnknownToken string = "qwerty" // 不在 token 文件中。
 )
 
 func getTestWebhookTokenAuth(serverURL string, customDial utilnet.DialFunc) (authenticator.Request, error) {
@@ -149,7 +148,7 @@ func pathWithPrefix(prefix, resource, namespace, name string) string {
 	if namespace != "" {
 		path = path + "/namespaces/" + namespace
 	}
-	// Resource names are lower case.
+	// 资源名统一为小写。
 	resource = strings.ToLower(resource)
 	if resource != "" {
 		path = path + "/" + resource
@@ -172,7 +171,7 @@ func timeoutPath(resource, namespace, name string) string {
 	return addTimeoutFlag(path(resource, namespace, name))
 }
 
-// Bodies for requests used in subsequent tests.
+// 后续测试请求使用的请求体。
 var aPod = `
 {
   "kind": "Pod",
@@ -334,7 +333,7 @@ var deleteNow = `
 }
 `
 
-// To ensure that a POST completes before a dependent GET, set a timeout.
+// addTimeoutFlag 设置 timeout 参数，确保依赖它的 GET 请求在 POST 完成之后才执行。
 func addTimeoutFlag(URLString string) string {
 	u, _ := url.Parse(URLString)
 	values := u.Query()
@@ -347,33 +346,31 @@ type testRequest struct {
 	verb        string
 	URL         string
 	body        string
-	statusCodes map[int]bool // allowed status codes.
+	statusCodes map[int]bool // 允许的状态码。
 }
 
 func getTestRequests(namespace string) []testRequest {
 	requests := []testRequest{
-		// Normal methods on pods
+		// Pod 常规操作。
 		{"GET", path("pods", "", ""), "", integration.Code200},
 		{"GET", path("pods", namespace, ""), "", integration.Code200},
 		{"POST", timeoutPath("pods", namespace, ""), aPod, integration.Code201},
 		{"PUT", timeoutPath("pods", namespace, "a"), aPod, integration.Code200},
 		{"GET", path("pods", namespace, "a"), "", integration.Code200},
-		// GET and POST for /exec should return Bad Request (400) since the pod has not been assigned a node yet.
+		// Pod 尚未调度到 Node，/exec 的 GET 和 POST 应返回 400。
 		{"GET", path("pods", namespace, "a") + "/exec", "", integration.Code400},
 		{"POST", path("pods", namespace, "a") + "/exec", "", integration.Code400},
-		// PUT for /exec should return Method Not Allowed (405).
+		// /exec 不支持 PUT，应返回 405。
 		{"PUT", path("pods", namespace, "a") + "/exec", "", integration.Code405},
-		// GET and POST for /portforward should return Bad Request (400) since the pod has not been assigned a node yet.
+		// Pod 尚未调度到 Node，/portforward 的 GET 和 POST 应返回 400。
 		{"GET", path("pods", namespace, "a") + "/portforward", "", integration.Code400},
 		{"POST", path("pods", namespace, "a") + "/portforward", "", integration.Code400},
-		// PUT for /portforward should return Method Not Allowed (405).
+		// /portforward 不支持 PUT，应返回 405。
 		{"PUT", path("pods", namespace, "a") + "/portforward", "", integration.Code405},
 		{"PATCH", path("pods", namespace, "a"), "{%v}", integration.Code200},
 		{"DELETE", timeoutPath("pods", namespace, "a"), deleteNow, integration.Code200},
 
-		// Non-standard methods (not expected to work,
-		// but expected to pass/fail authorization prior to
-		// failing validation.
+		// 非标准方法（预期不可用，但应先完成鉴权，再在校验阶段失败）。
 		{"OPTIONS", path("pods", namespace, ""), "", integration.Code405},
 		{"OPTIONS", path("pods", namespace, "a"), "", integration.Code405},
 		{"HEAD", path("pods", namespace, ""), "", integration.Code405},
@@ -382,21 +379,20 @@ func getTestRequests(namespace string) []testRequest {
 		{"TRACE", path("pods", namespace, "a"), "", integration.Code405},
 		{"NOSUCHVERB", path("pods", namespace, ""), "", integration.Code405},
 
-		// Normal methods on services
+		// Service 常规操作。
 		{"GET", path("services", "", ""), "", integration.Code200},
 		{"GET", path("services", namespace, ""), "", integration.Code200},
 		{"POST", timeoutPath("services", namespace, ""), aService, integration.Code201},
-		// Create an endpoint for the service (this is done automatically by endpoint controller
-		// whenever a service is created, but this test does not run that controller)
+		// 手动为 Service 创建 Endpoints（正常由 endpoint controller 完成，但本测试未运行它）。
 		{"POST", timeoutPath("endpoints", namespace, ""), emptyEndpoints, integration.Code201},
-		// Should return service unavailable when endpoint.subset is empty.
+		// Endpoints 的 subset 为空时，访问 proxy 应返回 503。
 		{"GET", pathWithSubResource("services", namespace, "a", "proxy") + "/", "", integration.Code503},
 		{"PUT", timeoutPath("services", namespace, "a"), aService, integration.Code200},
 		{"GET", path("services", namespace, "a"), "", integration.Code200},
 		{"DELETE", timeoutPath("endpoints", namespace, "a"), "", integration.Code200},
 		{"DELETE", timeoutPath("services", namespace, "a"), "", integration.Code200},
 
-		// Normal methods on replicationControllers
+		// ReplicationController 常规操作。
 		{"GET", path("replicationControllers", "", ""), "", integration.Code200},
 		{"GET", path("replicationControllers", namespace, ""), "", integration.Code200},
 		{"POST", timeoutPath("replicationControllers", namespace, ""), aRC, integration.Code201},
@@ -404,7 +400,7 @@ func getTestRequests(namespace string) []testRequest {
 		{"GET", path("replicationControllers", namespace, "a"), "", integration.Code200},
 		{"DELETE", timeoutPath("replicationControllers", namespace, "a"), "", integration.Code200},
 
-		// Normal methods on endpoints
+		// Endpoints 常规操作。
 		{"GET", path("endpoints", "", ""), "", integration.Code200},
 		{"GET", path("endpoints", namespace, ""), "", integration.Code200},
 		{"POST", timeoutPath("endpoints", namespace, ""), aEndpoints, integration.Code201},
@@ -412,14 +408,14 @@ func getTestRequests(namespace string) []testRequest {
 		{"GET", path("endpoints", namespace, "a"), "", integration.Code200},
 		{"DELETE", timeoutPath("endpoints", namespace, "a"), "", integration.Code200},
 
-		// Normal methods on nodes
+		// Node 常规操作。
 		{"GET", path("nodes", "", ""), "", integration.Code200},
 		{"POST", timeoutPath("nodes", "", ""), aNode, integration.Code201},
 		{"PUT", timeoutPath("nodes", "", "a"), aNode, integration.Code200},
 		{"GET", path("nodes", "", "a"), "", integration.Code200},
 		{"DELETE", timeoutPath("nodes", "", "a"), "", integration.Code200},
 
-		// Normal methods on events
+		// Event 常规操作。
 		{"GET", path("events", "", ""), "", integration.Code200},
 		{"GET", path("events", namespace, ""), "", integration.Code200},
 		{"POST", timeoutPath("events", namespace, ""), aEvent(namespace), integration.Code201},
@@ -427,28 +423,28 @@ func getTestRequests(namespace string) []testRequest {
 		{"GET", path("events", namespace, "a"), "", integration.Code200},
 		{"DELETE", timeoutPath("events", namespace, "a"), "", integration.Code200},
 
-		// Normal methods on bindings
+		// Binding 常规操作。
 		{"GET", path("bindings", namespace, ""), "", integration.Code405},
-		{"POST", timeoutPath("pods", namespace, ""), aPod, integration.Code201}, // Need a pod to bind or you get a 404
+		{"POST", timeoutPath("pods", namespace, ""), aPod, integration.Code201}, // 先创建 Pod，否则绑定会返回 404。
 		{"POST", timeoutPath("bindings", namespace, ""), aBinding, integration.Code201},
 		{"PUT", timeoutPath("bindings", namespace, "a"), aBinding, integration.Code404},
-		{"GET", path("bindings", namespace, "a"), "", integration.Code404}, // No bindings instances
+		{"GET", path("bindings", namespace, "a"), "", integration.Code404}, // 不存在 Binding 实例。
 		{"DELETE", timeoutPath("bindings", namespace, "a"), "", integration.Code404},
 
-		// Non-existent object type.
+		// 不存在的对象类型。
 		{"GET", path("foo", "", ""), "", integration.Code404},
 		{"POST", path("foo", namespace, ""), `{"foo": "foo"}`, integration.Code404},
 		{"PUT", path("foo", namespace, "a"), `{"foo": "foo"}`, integration.Code404},
 		{"GET", path("foo", namespace, "a"), "", integration.Code404},
 		{"DELETE", timeoutPath("foo", namespace, ""), "", integration.Code404},
 
-		// Special verbs on nodes
+		// Node 上的特殊动词。
 		{"GET", pathWithSubResource("nodes", namespace, "a", "proxy"), "", integration.Code404},
 		{"GET", pathWithPrefix("redirect", "nodes", namespace, "a"), "", integration.Code404},
-		// TODO: test .../watch/..., which doesn't end before the test timeout.
-		// TODO: figure out how to create a node so that it can successfully proxy/redirect.
+		// TODO: 测试 .../watch/...，它在测试超时前不会结束。
+		// TODO: 找到创建 Node 的方法，使 proxy/redirect 能成功。
 
-		// Non-object endpoints
+		// 非对象 endpoint。
 		{"GET", "/", "", integration.Code200},
 		{"GET", "/api", "", integration.Code200},
 		{"GET", "/healthz", "", integration.Code200},
@@ -458,17 +454,15 @@ func getTestRequests(namespace string) []testRequest {
 	return requests
 }
 
-// The TestAuthMode* tests a large number of URLs and checks that they
-// are FORBIDDEN or not, depending on the mode.  They do not attempt to do
-// detailed verification of behaviour beyond authorization.  They are not
-// fuzz tests.
+// TestAuthMode* 系列测试大量 URL，检查在不同模式下是否被 FORBIDDEN。
+// 除鉴权外不做详细的行为校验，也不是 fuzz 测试。
 //
-// TODO(etune): write a fuzz test of the REST API.
+// TODO(etune): 为 REST API 编写 fuzz 测试。
 func TestAuthModeAlwaysAllow(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authorization.Modes = []string{"AlwaysAllow"}
 		},
@@ -489,7 +483,7 @@ func TestAuthModeAlwaysAllow(t *testing.T) {
 		if r.body != "" {
 			sub := ""
 			if r.verb == "PUT" {
-				// For update operations, insert previous resource version
+				// 更新操作需带上之前的 resourceVersion。
 				if resVersion := previousResourceVersion[getPreviousResourceVersionKey(r.URL, "")]; resVersion != 0 {
 					sub += fmt.Sprintf(",\r\n\"resourceVersion\": \"%v\"", resVersion)
 				}
@@ -521,7 +515,7 @@ func TestAuthModeAlwaysAllow(t *testing.T) {
 				t.Errorf("Body: %v", string(b))
 			} else {
 				if r.verb == "POST" {
-					// For successful create operations, extract resourceVersion
+					// 创建成功后提取 resourceVersion，供后续更新使用。
 					id, currentResourceVersion, err := parseResourceVersion(b)
 					if err == nil {
 						key := getPreviousResourceVersionKey(r.URL, id)
@@ -573,7 +567,7 @@ func TestAuthModeAlwaysDeny(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authorization.Modes = []string{"AlwaysDeny"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
@@ -612,13 +606,12 @@ func TestAuthModeAlwaysDeny(t *testing.T) {
 	}
 }
 
-// TestAliceNotForbiddenOrUnauthorized tests a user who is known to
-// the authentication system and authorized to do any actions.
+// TestAliceNotForbiddenOrUnauthorized 验证认证系统已知且被授权所有操作的用户不会被拒绝。
 func TestAliceNotForbiddenOrUnauthorized(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 			opts.Authorization.Modes = []string{"ABAC"}
@@ -642,7 +635,7 @@ func TestAliceNotForbiddenOrUnauthorized(t *testing.T) {
 		if r.body != "" {
 			sub := ""
 			if r.verb == "PUT" {
-				// For update operations, insert previous resource version
+				// 更新操作需带上之前的 resourceVersion。
 				if resVersion := previousResourceVersion[getPreviousResourceVersionKey(r.URL, "")]; resVersion != 0 {
 					sub += fmt.Sprintf(",\r\n\"resourceVersion\": \"%v\"", resVersion)
 				}
@@ -675,7 +668,7 @@ func TestAliceNotForbiddenOrUnauthorized(t *testing.T) {
 				t.Errorf("Body: %v", string(b))
 			} else {
 				if r.verb == "POST" {
-					// For successful create operations, extract resourceVersion
+					// 创建成功后提取 resourceVersion，供后续更新使用。
 					id, currentResourceVersion, err := parseResourceVersion(b)
 					if err == nil {
 						key := getPreviousResourceVersionKey(r.URL, id)
@@ -688,14 +681,12 @@ func TestAliceNotForbiddenOrUnauthorized(t *testing.T) {
 	}
 }
 
-// TestBobIsForbidden tests that a user who is known to
-// the authentication system but not authorized to do any actions
-// should receive "Forbidden".
+// TestBobIsForbidden 验证认证系统已知但未被授权任何操作的用户会收到 Forbidden。
 func TestBobIsForbidden(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 			opts.Authorization.Modes = []string{"ABAC"}
@@ -728,7 +719,7 @@ func TestBobIsForbidden(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all of bob's actions to return Forbidden
+			// 期望 bob 的所有操作都返回 Forbidden。
 			if resp.StatusCode != http.StatusForbidden {
 				t.Logf("case %v", r)
 				t.Errorf("Expected not status Forbidden, but got %s", resp.Status)
@@ -737,15 +728,13 @@ func TestBobIsForbidden(t *testing.T) {
 	}
 }
 
-// TestUnknownUserIsUnauthorized tests that a user who is unknown
-// to the authentication system get status code "Unauthorized".
-// An authorization module is installed in this scenario for integration
-// test purposes, but requests aren't expected to reach it.
+// TestUnknownUserIsUnauthorized 验证认证系统未知的用户会收到 Unauthorized。
+// 本场景也安装了鉴权模块，但请求预期到不了鉴权阶段。
 func TestUnknownUserIsUnauthorized(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 			opts.Authorization.Modes = []string{"ABAC"}
@@ -777,7 +766,7 @@ func TestUnknownUserIsUnauthorized(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all of unauthenticated user's request to be "Unauthorized"
+			// 期望未认证用户的所有请求都返回 Unauthorized。
 			if resp.StatusCode != http.StatusUnauthorized {
 				t.Logf("case %v", r)
 				t.Errorf("Expected status %v, but got %v", http.StatusUnauthorized, resp.StatusCode)
@@ -790,23 +779,23 @@ func TestUnknownUserIsUnauthorized(t *testing.T) {
 
 type impersonateAuthorizer struct{}
 
-// alice can't act as anyone and bob can't do anything but act-as someone
+// alice 不能模拟任意用户；bob 除模拟他人外什么也做不了。
 func (impersonateAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
-	// alice can impersonate service accounts and do other actions
+	// alice 可以模拟 service account，并执行其他操作。
 	if a.GetUser() != nil && a.GetUser().GetName() == "alice" && a.GetVerb() == "impersonate" && a.GetResource() == "serviceaccounts" {
 		return authorizer.DecisionAllow, "", nil
 	}
 	if a.GetUser() != nil && a.GetUser().GetName() == "alice" && a.GetVerb() != "impersonate" {
 		return authorizer.DecisionAllow, "", nil
 	}
-	// bob can impersonate anyone, but that's it
+	// bob 可以模拟任意用户，但仅限于此。
 	if a.GetUser() != nil && a.GetUser().GetName() == "bob" && a.GetVerb() == "impersonate" {
 		return authorizer.DecisionAllow, "", nil
 	}
 	if a.GetUser() != nil && a.GetUser().GetName() == "bob" && a.GetVerb() != "impersonate" {
 		return authorizer.DecisionDeny, "", nil
 	}
-	// service accounts can do everything
+	// service account 可以做任何操作。
 	if a.GetUser() != nil && strings.HasPrefix(a.GetUser().GetName(), serviceaccount.ServiceAccountUsernamePrefix) {
 		return authorizer.DecisionAllow, "", nil
 	}
@@ -814,12 +803,12 @@ func (impersonateAuthorizer) Authorize(ctx context.Context, a authorizer.Attribu
 	return authorizer.DecisionNoOpinion, "I can't allow that.  Go ask alice.", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不支持 conditions，仅转换 Authorize 的判定结果。
 func (i impersonateAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(i.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 当前 authorizer 不支持。
 func (impersonateAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -828,12 +817,12 @@ func TestImpersonateIsForbidden(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Prepend an impersonation authorizer with specific opinions about alice and bob
+			// 在鉴权链最前面加入针对 alice 和 bob 定制规则的模拟鉴权器。
 			authz, err := unionauthz.New(
 				unionauthz.NamedAuthorizer{AuthorizerName: "impersonate", Authorizer: impersonateAuthorizer{}},
 				unionauthz.NamedAuthorizer{AuthorizerName: "default", Authorizer: config.ControlPlane.Generic.Authorization.Authorizer},
@@ -854,7 +843,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// bob can't perform actions himself
+	// bob 不能以自身身份执行操作。
 	for _, r := range getTestRequests(ns.Name) {
 		token := BobToken
 		bodyBytes := bytes.NewReader([]byte(r.body))
@@ -871,7 +860,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all of bob's actions to return Forbidden
+			// 期望 bob 的所有操作都返回 Forbidden。
 			if resp.StatusCode != http.StatusForbidden {
 				t.Logf("case %v", r)
 				t.Errorf("Expected status Forbidden, but got %s", resp.Status)
@@ -879,7 +868,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 		}()
 	}
 
-	// bob can impersonate alice to do other things
+	// bob 可以模拟 alice 执行其他操作。
 	for _, r := range getTestRequests(ns.Name) {
 		token := BobToken
 		bodyBytes := bytes.NewReader([]byte(r.body))
@@ -896,7 +885,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all the requests to be allowed, don't care what they actually do
+			// 期望所有请求通过鉴权，不关心实际操作结果。
 			if resp.StatusCode == http.StatusForbidden {
 				t.Logf("case %v", r)
 				t.Errorf("Expected status not %v, but got %v", http.StatusForbidden, resp.StatusCode)
@@ -904,7 +893,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 		}()
 	}
 
-	// alice can't impersonate bob
+	// alice 不能模拟 bob。
 	for _, r := range getTestRequests(ns.Name) {
 		token := AliceToken
 		bodyBytes := bytes.NewReader([]byte(r.body))
@@ -922,7 +911,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all of bob's actions to return Forbidden
+			// 期望 bob 的所有操作都返回 Forbidden。
 			if resp.StatusCode != http.StatusForbidden {
 				t.Logf("case %v", r)
 				t.Errorf("Expected not status Forbidden, but got %s", resp.Status)
@@ -930,7 +919,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 		}()
 	}
 
-	// bob can impersonate a service account
+	// bob 可以模拟 service account。
 	for _, r := range getTestRequests(ns.Name) {
 		token := BobToken
 		bodyBytes := bytes.NewReader([]byte(r.body))
@@ -947,7 +936,7 @@ func TestImpersonateIsForbidden(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all the requests to be allowed, don't care what they actually do
+			// 期望所有请求通过鉴权，不关心实际操作结果。
 			if resp.StatusCode == http.StatusForbidden {
 				t.Logf("case %v", r)
 				t.Errorf("Expected status not %v, but got %v", http.StatusForbidden, resp.StatusCode)
@@ -1015,8 +1004,7 @@ func TestImpersonateWithUID(t *testing.T) {
 			t.Fatalf("Unexpected error creating Certificate Signing Request: %v", err)
 		}
 
-		// require that all the original fields and the impersonated user's info
-		// is in the returned spec.
+		// 返回的 spec 中应保留所有原始字段，并带上被模拟用户的信息。
 		expectedCsrSpec := certificatesv1.CertificateSigningRequestSpec{
 			Groups:     []string{"system:authenticated"},
 			SignerName: "kubernetes.io/kube-apiserver-client",
@@ -1102,14 +1090,10 @@ func TestImpersonateWithUID(t *testing.T) {
 	})
 }
 
-// TestConstrainedImpersonation tests the constrained impersonation feature.
-// It ensures that users can only perform actions on behalf of other users
-// if they have the appropriate permissions.
-// This test covers:
-// - A user attempting to impersonate another user.
-// - A user attempting to impersonate a node.
-// - A service account attempting to impersonate a node it is scheduled on.
-// - The fallback to legacy impersonation when the feature is enabled.
+// TestConstrainedImpersonation 测试受约束的 impersonation 功能：
+// 只有具备相应权限的用户才能代表他人执行操作。
+// 覆盖场景：普通用户模拟另一用户、模拟 Node、service account 模拟其所在 Node，
+// 以及功能开启时回退到 legacy impersonation 的行为。
 func TestConstrainedImpersonation(t *testing.T) {
 	superUser := "admin/system:masters"
 
@@ -1147,7 +1131,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 
 	superuserClient, _ := clientsetForToken(superUser, kubeConfig)
 
-	// preset permissions for users to be impersonated
+	// 预先授予被模拟用户所需权限。
 	authutil.GrantUserAuthorization(t, ctx, superuserClient, "system:node:node1", rbacv1.PolicyRule{
 		Verbs:     []string{"list"},
 		APIGroups: []string{""},
@@ -1182,7 +1166,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 			t.Fatalf("forbidden error different than expected, -got, +want:\n %s", diff)
 		}
 
-		// with impersonation:user-info permission added, bob still cannot list pods
+		// 仅授予 impersonation:user-info 权限后，bob 仍不能 list Pod。
 		authutil.GrantUserAuthorization(t, ctx, superuserClient, "bob", rbacv1.PolicyRule{
 			Verbs:     []string{"impersonate:user-info"},
 			APIGroups: []string{"authentication.k8s.io"},
@@ -1201,7 +1185,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 			t.Fatalf("forbidden error different than expected, -got, +want:\n %s", diff)
 		}
 
-		// with impersonate-on:list permission added, bob can list but not watch pods.
+		// 再授予 impersonate-on:list 权限后，bob 可以 list 但不能 watch Pod。
 		authutil.GrantUserAuthorization(t, ctx, superuserClient, "bob", rbacv1.PolicyRule{
 			Verbs:     []string{"impersonate-on:user-info:list"},
 			APIGroups: []string{""},
@@ -1266,8 +1250,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 			t.Fatalf("forbidden error different than expected, -got, +want:\n %s", diff)
 		}
 
-		// with permissions added, bob still cannot list pods since bob needs
-		// permission to impersonate node.
+		// 即使授予上述权限，bob 仍不能 list Pod，因为还缺少模拟 Node 的权限。
 		authutil.GrantUserAuthorization(t, ctx, superuserClient, "bob", rbacv1.PolicyRule{
 			Verbs:     []string{"impersonate:user-info"},
 			APIGroups: []string{"authentication.k8s.io"},
@@ -1338,7 +1321,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 
 		client := clientset.NewForConfigOrDie(impersonatorClientConfig)
 
-		// with permissions added, it cannot list pods since sa on the node2 instead of node1.
+		// 即使授予权限，位于 node2 的 sa 仍不能模拟 node1 来 list Pod。
 		authutil.GrantUserAuthorization(t, ctx, superuserClient, "system:serviceaccount:default:sa2", rbacv1.PolicyRule{
 			Verbs:     []string{"impersonate:associated-node"},
 			APIGroups: []string{"authentication.k8s.io"},
@@ -1362,7 +1345,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 			t.Fatalf("forbidden error different than expected, -got, +want:\n %s", diff)
 		}
 
-		// change to service account1 which is at node1
+		// 改用位于 node1 的 service account1。
 		impersonatorClientConfig.BearerToken = "serviceaccount1"
 
 		client = clientset.NewForConfigOrDie(impersonatorClientConfig)
@@ -1419,7 +1402,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 
 		client := clientset.NewForConfigOrDie(impersonatorClientConfig)
 
-		// with legacy impersonation verb, bob can impersonate alice.
+		// 有了 legacy impersonation 动词权限后，bob 可以模拟 alice。
 		authutil.GrantUserAuthorization(t, ctx, superuserClient, "bob", rbacv1.PolicyRule{
 			Verbs:     []string{"impersonate"},
 			APIGroups: []string{""},
@@ -1427,7 +1410,7 @@ func TestConstrainedImpersonation(t *testing.T) {
 		})
 
 		_, err := client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-			LabelSelector: "app=panda", // force this request to have a different cache key than the earlier test
+			LabelSelector: "app=panda", // 使用不同的 label selector，使缓存 key 与前面的测试不同。
 		})
 		if err != nil {
 			t.Fatalf("expected no error, got %T %v", err, err)
@@ -1474,7 +1457,7 @@ func assertImpersonationMetrics(t *testing.T, ctx context.Context, client client
 		if !strings.HasPrefix(line, "apiserver_impersonation_") {
 			continue
 		}
-		// skip histogram bucket lines to keep assertions manageable
+		// 跳过 histogram bucket 行，避免断言过于冗长。
 		if strings.Contains(line, "_bucket{") {
 			continue
 		}
@@ -1546,7 +1529,7 @@ func getAuditEvents(t *testing.T, logFilePath string) []testutils.AuditEvent {
 		}
 	}()
 	report, err := testutils.CheckAuditLinesFiltered(stream, nil, auditv1.SchemeGroupVersion, func(_, _ string) bool {
-		return true // get all audit annotations
+		return true // 保留所有 audit annotation。
 	})
 	if err != nil {
 		t.Fatalf("failed to parse audit log: %v", err)
@@ -1637,16 +1620,13 @@ type slowImpersonationRequests struct {
 
 func (s *slowImpersonationRequests) NewRequestInfo(req *http.Request) (*genericrequest.RequestInfo, error) {
 	if len(req.Header.Get(authenticationv1.ImpersonateUserHeader)) > 0 {
-		time.Sleep(505 * time.Millisecond) // force latency audit annotations to be emitted for impersonation requests
+		time.Sleep(505 * time.Millisecond) // 模拟延迟，确保 impersonation 请求产生 latency audit annotation。
 	}
 	return s.delegate.NewRequestInfo(req)
 }
 
-// TestConstrainedImpersonationDisabled tests the impersonation behavior when the
-// ConstrainedImpersonation feature gate is disabled. In this mode, the legacy
-// impersonation behavior is expected, where a user only needs the "impersonate"
-// permission on the user, group, or service account they are trying to
-// impersonate.
+// TestConstrainedImpersonationDisabled 验证 ConstrainedImpersonation feature gate 关闭时的行为：
+// 回退到 legacy impersonation，用户只需对目标 user、group 或 service account 拥有 impersonate 权限即可。
 func TestConstrainedImpersonationDisabled(t *testing.T) {
 	superUser := "admin/system:masters"
 
@@ -1678,7 +1658,7 @@ func TestConstrainedImpersonationDisabled(t *testing.T) {
 
 	superuserClient, _ := clientsetForToken(superUser, kubeConfig)
 
-	// preset permissions for users to be impersonated
+	// 预先授予被模拟用户所需权限。
 	authutil.GrantUserAuthorization(t, ctx, superuserClient, "system:node:node1", rbacv1.PolicyRule{
 		Verbs:     []string{"list"},
 		APIGroups: []string{""},
@@ -1723,7 +1703,7 @@ func TestConstrainedImpersonationDisabled(t *testing.T) {
 			t.Fatalf("forbidden error different than expected, -got, +want:\n %s", diff)
 		}
 
-		// with legacy impersonation permission added, bob can list pods
+		// 加上 legacy impersonation 权限后，bob 可以 list Pod。
 		authutil.GrantUserAuthorization(t, ctx, superuserClient, "bob", rbacv1.PolicyRule{
 			Verbs:     []string{"impersonate"},
 			APIGroups: []string{""},
@@ -1773,7 +1753,7 @@ func TestConstrainedImpersonationDisabled(t *testing.T) {
 			t.Fatalf("forbidden error different than expected, -got, +want:\n %s", diff)
 		}
 
-		// with legacy impersonation permission added, sa can list pods
+		// 加上 legacy impersonation 权限后，sa 可以 list Pod。
 		authutil.GrantUserAuthorization(t, ctx, superuserClient, "system:serviceaccount:default:sa1", rbacv1.PolicyRule{
 			Verbs:         []string{"impersonate"},
 			APIGroups:     []string{""},
@@ -1849,17 +1829,17 @@ func (a *trackingAuthorizer) Authorize(ctx context.Context, attributes authorize
 	return authorizer.DecisionAllow, "", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不支持 conditions，仅转换 Authorize 的判定结果。
 func (a *trackingAuthorizer) ConditionsAwareAuthorize(ctx context.Context, attributes authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(a.Authorize(ctx, attributes))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 当前 authorizer 不支持。
 func (a *trackingAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
-// TestAuthorizationAttributeDetermination tests that authorization attributes are built correctly
+// TestAuthorizationAttributeDetermination 验证鉴权属性构造正确。
 func TestAuthorizationAttributeDetermination(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -1867,7 +1847,7 @@ func TestAuthorizationAttributeDetermination(t *testing.T) {
 
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 		},
@@ -1939,14 +1919,13 @@ func TestAuthorizationAttributeDetermination(t *testing.T) {
 	}
 }
 
-// TestNamespaceAuthorization tests that authorization can be controlled
-// by namespace.
+// TestNamespaceAuthorization 验证可按 namespace 控制鉴权。
 func TestNamespaceAuthorization(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 			opts.Authorization.PolicyFile = newABACFileWithContents(t, `{"namespace": "auth-namespace"}`)
@@ -1969,7 +1948,7 @@ func TestNamespaceAuthorization(t *testing.T) {
 		URL         string
 		namespace   string
 		body        string
-		statusCodes map[int]bool // allowed status codes.
+		statusCodes map[int]bool // 允许的状态码。
 	}{
 
 		{"POST", timeoutPath("pods", ns.Name, ""), "foo", aPod, integration.Code201},
@@ -1994,12 +1973,12 @@ func TestNamespaceAuthorization(t *testing.T) {
 		if r.body != "" {
 			sub := ""
 			if r.verb == "PUT" && r.body != "" {
-				// For update operations, insert previous resource version
+				// 更新操作需带上之前的 resourceVersion。
 				if resVersion := previousResourceVersion[getPreviousResourceVersionKey(r.URL, "")]; resVersion != 0 {
 					sub += fmt.Sprintf(",\r\n\"resourceVersion\": \"%v\"", resVersion)
 				}
 				namespace := r.namespace
-				// FIXME: Is that correct?
+				// FIXME: 这样处理是否正确？
 				if len(namespace) == 0 {
 					namespace = "default"
 				}
@@ -2029,7 +2008,7 @@ func TestNamespaceAuthorization(t *testing.T) {
 				t.Errorf("Body: %v", string(b))
 			} else {
 				if r.verb == "POST" {
-					// For successful create operations, extract resourceVersion
+					// 创建成功后提取 resourceVersion，供后续更新使用。
 					id, currentResourceVersion, err := parseResourceVersion(b)
 					if err == nil {
 						key := getPreviousResourceVersionKey(r.URL, id)
@@ -2042,14 +2021,13 @@ func TestNamespaceAuthorization(t *testing.T) {
 	}
 }
 
-// TestKindAuthorization tests that authorization can be controlled
-// by namespace.
+// TestKindAuthorization 验证可按资源类型控制鉴权。
 func TestKindAuthorization(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 			opts.Authorization.PolicyFile = newABACFileWithContents(t, `{"resource": "services"}`)
@@ -2085,7 +2063,7 @@ func TestKindAuthorization(t *testing.T) {
 		if r.body != "" {
 			bodyStr = fmt.Sprintf(r.body, "")
 			if r.verb == "PUT" && r.body != "" {
-				// For update operations, insert previous resource version
+				// 更新操作需带上之前的 resourceVersion。
 				if resVersion := previousResourceVersion[getPreviousResourceVersionKey(r.URL, "")]; resVersion != 0 {
 					resourceVersionJSON := fmt.Sprintf(",\r\n\"resourceVersion\": \"%v\"", resVersion)
 					bodyStr = fmt.Sprintf(r.body, resourceVersionJSON)
@@ -2114,7 +2092,7 @@ func TestKindAuthorization(t *testing.T) {
 				t.Errorf("Body: %v", string(b))
 			} else {
 				if r.verb == "POST" {
-					// For successful create operations, extract resourceVersion
+					// 创建成功后提取 resourceVersion，供后续更新使用。
 					id, currentResourceVersion, err := parseResourceVersion(b)
 					if err == nil {
 						key := getPreviousResourceVersionKey(r.URL, id)
@@ -2127,13 +2105,12 @@ func TestKindAuthorization(t *testing.T) {
 	}
 }
 
-// TestReadOnlyAuthorization tests that authorization can be controlled
-// by namespace.
+// TestReadOnlyAuthorization 验证只读策略下的鉴权行为。
 func TestReadOnlyAuthorization(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authentication.TokenFile.TokenFile = "testdata/tokens.csv"
 			opts.Authorization.PolicyFile = newABACFileWithContents(t, `{"readonly": true}`)
@@ -2181,15 +2158,13 @@ func TestReadOnlyAuthorization(t *testing.T) {
 	}
 }
 
-// TestWebhookTokenAuthenticator tests that a control plane can use the webhook token
-// authenticator to call out to a remote web server for authentication
-// decisions.
+// TestWebhookTokenAuthenticator 验证 control plane 可通过 webhook token authenticator
+// 调用远端服务进行认证决策。
 func TestWebhookTokenAuthenticator(t *testing.T) {
 	testWebhookTokenAuthenticator(false, t)
 }
 
-// TestWebhookTokenAuthenticatorCustomDial is the same as TestWebhookTokenAuthenticator, but uses a
-// custom dialer
+// TestWebhookTokenAuthenticatorCustomDial 与 TestWebhookTokenAuthenticator 相同，但使用自定义 dialer。
 func TestWebhookTokenAuthenticatorCustomDial(t *testing.T) {
 	testWebhookTokenAuthenticator(true, t)
 }
@@ -2213,14 +2188,14 @@ func testWebhookTokenAuthenticator(customDialer bool, t *testing.T) {
 
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 当前未运行 serviceaccount controller，需禁用 ServiceAccount admission 插件。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authorization.Modes = []string{"ABAC"}
 			opts.Authorization.PolicyFile = "testdata/allowalice.jsonl"
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
 			config.ControlPlane.Generic.Authentication.Authenticator = group.NewAuthenticatedGroupAdder(authenticator)
-			// Disable checking API audiences that is set by testserver by default.
+			// testserver 默认设置 API audiences，此处禁用其检查。
 			config.ControlPlane.Generic.Authentication.APIAudiences = nil
 		},
 	})
@@ -2235,7 +2210,7 @@ func testWebhookTokenAuthenticator(customDialer bool, t *testing.T) {
 	}
 
 	for _, r := range getTestRequests(ns.Name) {
-		// Expect Bob's requests to all fail.
+		// 期望 Bob 的所有请求失败。
 		token := BobToken
 		bodyBytes := bytes.NewReader([]byte(r.body))
 		req, err := http.NewRequest(r.verb, kubeConfig.Host+r.URL, bodyBytes)
@@ -2251,13 +2226,13 @@ func testWebhookTokenAuthenticator(customDialer bool, t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all of Bob's actions to return Forbidden
+			// 期望 Bob 的所有操作都返回 Forbidden。
 			if resp.StatusCode != http.StatusForbidden {
 				t.Logf("case %v", r)
 				t.Errorf("Expected http.Forbidden, but got %s", resp.Status)
 			}
 		}()
-		// Expect Alice's requests to succeed.
+		// 期望 Alice 的所有请求成功。
 		token = AliceToken
 		bodyBytes = bytes.NewReader([]byte(r.body))
 		req, err = http.NewRequest(r.verb, kubeConfig.Host+r.URL, bodyBytes)
@@ -2273,7 +2248,7 @@ func testWebhookTokenAuthenticator(customDialer bool, t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			// Expect all of Alice's actions to at least get past authn/authz.
+			// 期望 Alice 的操作至少能通过 authn/authz。
 			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 				t.Logf("case %v", r)
 				t.Errorf("Expected something other than Unauthorized/Forbidden, but got %s", resp.Status)
@@ -2282,8 +2257,7 @@ func testWebhookTokenAuthenticator(customDialer bool, t *testing.T) {
 	}
 }
 
-// newTestWebhookTokenAuthServer creates an http token authentication server
-// that knows about both Alice and Bob.
+// newTestWebhookTokenAuthServer 创建一个认识 Alice 和 Bob 的 HTTP token 认证服务。
 func newTestWebhookTokenAuthServer() *httptest.Server {
 	serveHTTP := func(w http.ResponseWriter, r *http.Request) {
 		var review authenticationv1beta1.TokenReview
@@ -2334,7 +2308,7 @@ func TestSloppySANCertificates(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// append to opts.Authentication.ClientCert.ClientCA
+			// 向 ClientCA 追加测试用 CA 证书。
 			fmt.Println(opts.Authentication.ClientCert.ClientCA)
 			caData, err := os.ReadFile(opts.Authentication.ClientCert.ClientCA)
 			if err != nil {

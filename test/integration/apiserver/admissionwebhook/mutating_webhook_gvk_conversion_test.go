@@ -130,7 +130,7 @@ func newAdmissionTypeCheckerHandler(recorder *admissionTypeChecker) http.Handler
 	})
 }
 
-// Test_MutatingWebhookConvertsGVKWithMatchPolicyEquivalent tests if a equivalent resource is properly converted between mutating webhooks
+// Test_MutatingWebhookConvertsGVKWithMatchPolicyEquivalent 验证 MatchPolicy 为 Equivalent 时，等价资源能否在多个 mutating webhook 之间正确转换。
 func Test_MutatingWebhookConvertsGVKWithMatchPolicyEquivalent(t *testing.T) {
 
 	roots := x509.NewCertPool()
@@ -173,14 +173,14 @@ func Test_MutatingWebhookConvertsGVKWithMatchPolicyEquivalent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write markers to a separate namespace to avoid cross-talk
+	// 将 marker 写入独立 Namespace，避免与其他资源相互干扰。
 	markerNs := "marker"
 	_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: markerNs}}, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create a marker object to use to check for the webhook configurations to be ready.
+	// 创建 marker 对象，用于探测 webhook 配置是否已生效。
 	marker, err := client.CoreV1().Pods(markerNs).Create(context.TODO(), newMarkerPodGVKConversion(markerNs), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +277,7 @@ func Test_MutatingWebhookConvertsGVKWithMatchPolicyEquivalent(t *testing.T) {
 		}
 	}()
 
-	// wait until new webhook is called the first time
+	// 等待新 webhook 首次被调用。
 	if err := wait.PollImmediate(time.Millisecond*5, wait.ForeverTestTimeout, func() (bool, error) {
 		_, err = client.CoreV1().Pods(markerNs).Patch(context.TODO(), marker.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 		select {
@@ -348,7 +348,7 @@ func newMarkerPodGVKConversion(namespace string) *corev1.Pod {
 	}
 }
 
-// Copied from etcd.GetCustomResourceDefinitionData
+// 复制自 etcd.GetCustomResourceDefinitionData。
 func versionedCustomResourceDefinition() *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{

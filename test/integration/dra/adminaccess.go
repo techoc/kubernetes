@@ -24,10 +24,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// testAdminAccess creates a claim with AdminAccess and then checks
-// whether that field is or isn't getting dropped.
-// when the AdminAccess feature is enabled, it also checks that the field
-// is only allowed to be used in namespace with the Resource Admin Access label
+// testAdminAccess 创建带 AdminAccess 的 claim，检查该字段是否被保留；
+// 功能开启时，还验证只有在带 Resource Admin Access label 的 namespace 中才允许使用该字段。
 func testAdminAccess(tCtx ktesting.TContext, adminAccessEnabled bool) {
 	tCtx.Parallel()
 
@@ -35,18 +33,18 @@ func testAdminAccess(tCtx ktesting.TContext, adminAccessEnabled bool) {
 	claim1 := claim.DeepCopy()
 	claim1.Namespace = namespace
 	claim1.Spec.Devices.Requests[0].Exactly.AdminAccess = ptr.To(true)
-	// create claim with AdminAccess in non-admin namespace
+	// 在非 admin namespace 中创建带 AdminAccess 的 claim。
 	_, err := tCtx.Client().ResourceV1().ResourceClaims(namespace).Create(tCtx, claim1, metav1.CreateOptions{FieldValidation: "Strict"})
 	if adminAccessEnabled {
 		if err != nil {
-			// should result in validation error
+			// 应产生校验错误。
 			assert.ErrorContains(tCtx, err, "admin access to devices requires the `resource.kubernetes.io/admin-access: true` label on the containing namespace", "the error message should have contained the expected error message")
 			return
 		} else {
 			tCtx.Fatal("expected validation error(s), got none")
 		}
 
-		// create claim with AdminAccess in admin namespace
+		// 在 admin namespace 中创建带 AdminAccess 的 claim。
 		adminNS := createTestNamespace(tCtx, map[string]string{"resource.kubernetes.io/admin-access": "true"})
 		claim2 := claim.DeepCopy()
 		claim2.Namespace = adminNS

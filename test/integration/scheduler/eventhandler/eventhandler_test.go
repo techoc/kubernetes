@@ -73,7 +73,7 @@ func (pl *fooPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWith
 	}, nil
 }
 
-// newPlugin returns a plugin factory with specified Plugin.
+// newPlugin 返回一个生成指定 Plugin 的工厂。
 func newPlugin(plugin fwk.Plugin) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
 		return plugin, nil
@@ -92,7 +92,7 @@ func TestUpdateNodeEvent(t *testing.T) {
 		fooPlugin.Name(): newPlugin(fooPlugin),
 	}
 
-	// Setup plugins for testing.
+	// 配置测试用的 plugin。
 	cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 		Profiles: []configv1.KubeSchedulerProfile{{
 			SchedulerName: ptr.To[string](v1.DefaultSchedulerName),
@@ -133,7 +133,7 @@ func TestUpdateNodeEvent(t *testing.T) {
 		t.Fatalf("Error while getting a node: %v", err)
 	}
 
-	// Update node label and node taints
+	// 更新 Node label 并移除 taint。
 	node.Labels["foo"] = "bar"
 	node.Spec.Taints = nil
 
@@ -157,7 +157,7 @@ func TestUpdateNominatedNodeName(t *testing.T) {
 	var cleanupPods []*v1.Pod
 
 	testNode := st.MakeNode().Name("node-0").Label("kubernetes.io/hostname", "node-0").Capacity(capacity).Obj()
-	// Note that the low priority pod that cannot fit with the mid priority, but can fit with the high priority one.
+	// 低优先级 Pod 与中优先级 Pod 无法共存，但可与高优先级 Pod 共存。
 	podLow := testutils.InitPausePod(&testutils.PausePodConfig{
 		Name:      "test-lp-pod",
 		Namespace: testContext.NS.Name,
@@ -190,7 +190,7 @@ func TestUpdateNominatedNodeName(t *testing.T) {
 		{
 			name: "Preempt nominated pod",
 			updateFunc: func(testCtx *testutils.TestContext) {
-				// Create high-priority pod and wait until it's scheduled (unnominate mid-priority pod)
+				// 创建高优先级 Pod 并等待其调度完成，以取消中优先级 Pod 的 nominate。
 				pod, err := testutils.CreatePausePod(testCtx.ClientSet, podHigh)
 				if err != nil {
 					t.Fatalf("Creating pod error: %v", err)
@@ -213,15 +213,15 @@ func TestUpdateNominatedNodeName(t *testing.T) {
 	for _, tt := range tests {
 		for _, asyncAPICallsEnabled := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s (Async API calls enabled: %v)", tt.name, asyncAPICallsEnabled), func(t *testing.T) {
-				// Handle SchedulerAsyncAPICalls feature only in 1.34+.
+				// SchedulerAsyncAPICalls 特性仅在 1.34+ 版本中需要考虑。
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerAsyncAPICalls, asyncAPICallsEnabled)
 
-				// Set the SchedulerPopFromBackoffQ feature to false, because when it's enabled, we can't be sure the pod won't be popped from the backoffQ.
+				// 关闭 SchedulerPopFromBackoffQ，否则无法保证 Pod 不会提前从 backoffQ 中弹出。
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerPopFromBackoffQ, false)
 
 				testCtx, teardown := schedulerutils.InitTestSchedulerForFrameworkTest(t, testContext, 0, true,
 					scheduler.WithClock(fakeClock),
-					// UpdateFunc needs to be called when the nominated pod is still in the backoff queue, thus small, but non 0 value.
+					// updateFunc 必须在 nominated Pod 仍在 backoff 队列中时调用，故设置一个较小但非 0 的值。
 					scheduler.WithPodInitialBackoffSeconds(int64(testBackoff.Seconds())),
 					scheduler.WithPodMaxBackoffSeconds(int64(testBackoff.Seconds())),
 				)
@@ -232,12 +232,12 @@ func TestUpdateNominatedNodeName(t *testing.T) {
 					t.Fatalf("Creating node error: %v", err)
 				}
 
-				// Ensure node is present in scheduler cache.
+				// 确认 Node 已进入 scheduler cache。
 				if err := testutils.WaitForNodesInCache(testCtx.Ctx, testCtx.Scheduler, 1); err != nil {
 					t.Fatalf("Waiting for node in cache error: %v", err)
 				}
 
-				// Create initial low-priority pod and wait until it's scheduled.
+				// 创建初始低优先级 Pod 并等待其调度完成。
 				pod, err := testutils.CreatePausePod(testCtx.ClientSet, podLow)
 				if err != nil {
 					t.Fatalf("Creating pod error: %v", err)
@@ -246,7 +246,7 @@ func TestUpdateNominatedNodeName(t *testing.T) {
 					t.Fatalf("Pod %v was not scheduled: %v", pod.Name, err)
 				}
 
-				// Create mid-priority pod and wait until it becomes nominated (preempt low-priority pod) and remain uschedulable.
+				// 创建中优先级 Pod，等待其抢占低优先级 Pod 成为 nominated Pod 且自身仍不可调度。
 				pod, err = testutils.CreatePausePod(testCtx.ClientSet, podMidNominated)
 				if err != nil {
 					t.Fatalf("Creating pod error: %v", err)
@@ -258,12 +258,12 @@ func TestUpdateNominatedNodeName(t *testing.T) {
 					t.Errorf("Pod %v haven't become unschedulabe: %v", pod.Name, err)
 				}
 
-				// Remove the initial low-priority pod, which will move the nominated unschedulable pod back to the backoff queue.
+				// 删除初始低优先级 Pod，使 nominated 且不可调度的 Pod 回到 backoff 队列。
 				if err := testutils.DeletePod(testCtx.ClientSet, podLow.Name, podLow.Namespace); err != nil {
 					t.Fatalf("Deleting pod error: %v", err)
 				}
 
-				// Create another low-priority pods which cannot be scheduled because the mid-priority pod is nominated on the node and the node doesn't have enough resource to have two pods both.
+				// 再创建一个低优先级 Pod；中优先级 Pod 已 nominated 在该 Node 上且资源不足以容纳两者，故其不可调度。
 				pod, err = testutils.CreatePausePod(testCtx.ClientSet, podLow)
 				if err != nil {
 					t.Fatalf("Creating pod error: %v", err)
@@ -272,14 +272,14 @@ func TestUpdateNominatedNodeName(t *testing.T) {
 					t.Fatalf("Pod %v was not scheduled: %v", pod.Name, err)
 				}
 
-				// Update causing the nominated pod to be removed or to get its nominated node name removed, which should trigger scheduling of the low priority pod.
-				// Note that the update has to happen since the nominated pod is still in the backoffQ to actually test updates of nominated, but not bound yet pods.
+				// 通过更新删除 nominated Pod 或清除其 nominatedNodeName，触发低优先级 Pod 重新调度。
+				// 必须在 nominated Pod 仍处于 backoffQ 时更新，才能覆盖对已 nominated 但未绑定 Pod 的更新处理。
 				tt.updateFunc(testCtx)
 
-				// Advance time by the 2 * maxPodBackoffSeconds to move low priority pod out of the backoff queue.
+				// 将时间推进 2 倍 maxPodBackoffSeconds，使低优先级 Pod 离开 backoff 队列。
 				fakeClock.Step(2 * testBackoff)
 
-				// Expect the low-priority pod is notified about unnominated mid-pririty pod and gets scheduled, as it should fit this time.
+				// 低优先级 Pod 应收到中优先级 Pod 被取消 nominate 的通知，并在资源足够时完成调度。
 				if err := testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, podLow); err != nil {
 					t.Fatalf("Pod %v was not scheduled: %v", podLow.Name, err)
 				}

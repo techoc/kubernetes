@@ -42,9 +42,8 @@ import (
 
 func TestEgressToWebhookWithProxy(t *testing.T) {
 	t.Skip("this test does not pass for the reason we think it passes")
-	// Go's http.ProxyFromEnvironment bypasses the proxy
-	// for localhost/127.0.0.1. To test this, we must make the HTTP client
-	// resolve a non-local hostname to 127.0.0.1.
+	// Go 的 http.ProxyFromEnvironment 会绕过 localhost/127.0.0.1 的代理。
+	// 要测试这一点，必须让 HTTP client 把一个非本地 hostname 解析到 127.0.0.1。
 	const (
 		webhookHostname = "webhook.example.com"
 		proxyHostname   = "proxy.example.com"
@@ -55,7 +54,7 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 		proxyHostname:   "127.0.0.1",
 	}
 
-	// Fake DNS server
+	// 仿造 DNS server
 	dnsServer, err := fakedns.NewServer(hosts)
 	if err != nil {
 		t.Fatalf("failed to create fake DNS server: %v", err)
@@ -98,7 +97,7 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 	webhookServer.StartTLS()
 	defer webhookServer.Close() //nolint:errcheck
 
-	// Proxy server
+	// proxy server
 	proxyHit := make(chan struct{}, 2)
 	proxyHandler := utilnettesting.NewHTTPProxyHandler(t, func(r *http.Request) bool {
 		t.Logf("Proxy received request for: %s %s", r.Method, r.URL.String())
@@ -122,7 +121,7 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 
 	etcd := framework.SharedEtcd()
 
-	// Construct the webhook URL using our fake hostname and the real port.
+	// 用仿造的 hostname 和真实端口构造 webhook URL。
 	webhookServerURL, err := url.Parse(webhookServer.URL)
 	if err != nil {
 		t.Fatalf("failed to parse webhook server URL: %v", err)
@@ -163,11 +162,11 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 		},
 	}
 
-	// Test with HTTP_PROXY
+	// 测试 HTTP_PROXY 场景
 	t.Log("Testing with HTTP_PROXY")
 	t.Setenv("HTTP_PROXY", proxyURL)
 	t.Setenv("HTTPS_PROXY", proxyURL)
-	t.Setenv("NO_PROXY", "") // Ensure NO_PROXY is cleared
+	t.Setenv("NO_PROXY", "") // 确保 NO_PROXY 被清空
 	serverA := kastesting.StartTestServerOrDie(t, kastesting.NewDefaultTestServerOptions(), []string{"--disable-admission-plugins=ServiceAccount"}, etcd)
 
 	clientA, err := kubernetes.NewForConfig(serverA.ClientConfig)
@@ -179,7 +178,7 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create webhook config: %v", err)
 	}
-	// It can take a moment for the webhook to be consistently available.
+	// webhook 可能需要一点时间才能稳定可用。
 	time.Sleep(2 * time.Second)
 
 	pod := &corev1.Pod{
@@ -208,7 +207,7 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 
 	serverA.TearDownFn()
 
-	// Clear channels for the next run
+	// 清空 channel，供下一轮使用
 	for len(proxyHit) > 0 {
 		<-proxyHit
 	}
@@ -216,11 +215,11 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 		<-webhookHit
 	}
 
-	// Part 2: Test with NO_PROXY
+	// 第二部分：测试 NO_PROXY 场景
 	t.Log("Testing with NO_PROXY")
 	t.Setenv("HTTP_PROXY", proxyURL)
 	t.Setenv("HTTPS_PROXY", proxyURL)
-	// Use the fake hostname in NO_PROXY
+	// 在 NO_PROXY 中使用仿造的 hostname
 	t.Setenv("NO_PROXY", strings.Join([]string{webhookHostname, "127.0.0.1", "localhost"}, ","))
 
 	serverB := kastesting.StartTestServerOrDie(t, kastesting.NewDefaultTestServerOptions(), []string{"--disable-admission-plugins=ServiceAccount"}, etcd)
@@ -255,6 +254,6 @@ func TestEgressToWebhookWithProxy(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Log("Proxy was not hit, as expected")
 	}
-	// It needs to break the proxy connection or it will panic at cleanup
+	// 必须断开 proxy 连接，否则清理时会 panic
 	webhookServer.Close()
 }

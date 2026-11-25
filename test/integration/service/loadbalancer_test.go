@@ -40,8 +40,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Test_ServiceLoadBalancerAllocateNodePorts tests that a Service with spec.allocateLoadBalancerNodePorts=false
-// does not allocate node ports for the Service.
+// Test_ServiceLoadBalancerAllocateNodePorts 验证 spec.allocateLoadBalancerNodePorts=false 的
+// Service 不会分配 node port。
 func Test_ServiceLoadBalancerDisableAllocateNodePorts(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -80,8 +80,8 @@ func Test_ServiceLoadBalancerDisableAllocateNodePorts(t *testing.T) {
 	}
 }
 
-// Test_ServiceUpdateLoadBalancerAllocateNodePorts tests that a Service that is updated from ClusterIP to LoadBalancer
-// with spec.allocateLoadBalancerNodePorts=false does not allocate node ports for the Service
+// Test_ServiceUpdateLoadBalancerAllocateNodePorts 验证 Service 从 ClusterIP 更新为 LoadBalancer
+// 且 spec.allocateLoadBalancerNodePorts=false 时不会分配 node port。
 func Test_ServiceUpdateLoadBalancerDisableAllocateNodePorts(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -130,8 +130,8 @@ func Test_ServiceUpdateLoadBalancerDisableAllocateNodePorts(t *testing.T) {
 	}
 }
 
-// Test_ServiceLoadBalancerSwitchToDeallocatedNodePorts test that switching a Service
-// to spec.allocateLoadBalancerNodePorts=false, does not de-allocate existing node ports.
+// Test_ServiceLoadBalancerSwitchToDeallocatedNodePorts 验证把 Service 切换为
+// spec.allocateLoadBalancerNodePorts=false 不会回收已有的 node port。
 func Test_ServiceLoadBalancerEnableThenDisableAllocatedNodePorts(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -180,8 +180,8 @@ func Test_ServiceLoadBalancerEnableThenDisableAllocatedNodePorts(t *testing.T) {
 	}
 }
 
-// Test_ServiceLoadBalancerDisableAllocatedNodePort test that switching a Service
-// to spec.allocateLoadBalancerNodePorts=false can de-allocate existing node ports.
+// Test_ServiceLoadBalancerDisableAllocatedNodePort 验证把 Service 切换为
+// spec.allocateLoadBalancerNodePorts=false 时可以回收已有的 node port。
 func Test_ServiceLoadBalancerDisableAllocatedNodePort(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -231,8 +231,8 @@ func Test_ServiceLoadBalancerDisableAllocatedNodePort(t *testing.T) {
 	}
 }
 
-// Test_ServiceLoadBalancerDisableAllocatedNodePorts test that switching a Service
-// to spec.allocateLoadBalancerNodePorts=false can de-allocate one of existing node ports.
+// Test_ServiceLoadBalancerDisableAllocatedNodePorts 验证把 Service 切换为
+// spec.allocateLoadBalancerNodePorts=false 时可以回收其中一个已有的 node port。
 func Test_ServiceLoadBalancerDisableAllocatedNodePorts(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -289,8 +289,8 @@ func Test_ServiceLoadBalancerDisableAllocatedNodePorts(t *testing.T) {
 	}
 }
 
-// Test_ServiceLoadBalancerDisableAllocatedNodePortsByPatch test that switching a Service
-// to spec.allocateLoadBalancerNodePorts=false with path can de-allocate one of existing node ports.
+// Test_ServiceLoadBalancerDisableAllocatedNodePortsByPatch 验证通过 patch 把 Service 切换为
+// spec.allocateLoadBalancerNodePorts=false 时可以回收其中一个已有的 node port。
 func Test_ServiceLoadBalancerDisableAllocatedNodePortsByPatch(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -362,8 +362,8 @@ func Test_ServiceLoadBalancerDisableAllocatedNodePortsByPatch(t *testing.T) {
 	}
 }
 
-// Test_ServiceLoadBalancerDisableThenEnableAllocatedNodePorts test that switching a Service
-// to spec.allocateLoadBalancerNodePorts=true from false, allocate new node ports.
+// Test_ServiceLoadBalancerDisableThenEnableAllocatedNodePorts 验证把 Service 的
+// spec.allocateLoadBalancerNodePorts 从 false 切回 true 时会分配新的 node port。
 func Test_ServiceLoadBalancerDisableThenEnableAllocatedNodePorts(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -422,8 +422,8 @@ func serviceHasNodePorts(svc *corev1.Service) bool {
 	return false
 }
 
-// Test_ServiceLoadBalancerEnableLoadBalancerClass tests that when a LoadBalancer
-// type of service has spec.LoadBalancerClass set, cloud provider should not create default load balancer.
+// Test_ServiceLoadBalancerEnableLoadBalancerClass 验证 LoadBalancer 类型的 Service 设置了
+// spec.LoadBalancerClass 后，cloud provider 不应创建默认 load balancer。
 func Test_ServiceLoadBalancerEnableLoadBalancerClass(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -461,15 +461,14 @@ func Test_ServiceLoadBalancerEnableLoadBalancerClass(t *testing.T) {
 		t.Fatalf("Error creating test service: %v", err)
 	}
 
-	time.Sleep(5 * time.Second) // sleep 5 second to wait for the service controller reconcile
+	time.Sleep(5 * time.Second) // 等待 service controller 完成 reconcile
 	if len(cloud.Calls) > 0 {
 		t.Errorf("Unexpected cloud provider calls: %v", cloud.Calls)
 	}
 }
 
-// Test_SetLoadBalancerClassThenUpdateLoadBalancerClass tests that when a LoadBalancer
-// type of service has spec.LoadBalancerClass set, it should be immutable as long as the service type
-// is still LoadBalancer.
+// Test_SetLoadBalancerClassThenUpdateLoadBalancerClass 验证 LoadBalancer 类型的 Service 设置
+// spec.LoadBalancerClass 后，只要 Service 类型仍是 LoadBalancer，该字段就不可修改。
 func Test_SetLoadBalancerClassThenUpdateLoadBalancerClass(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -513,14 +512,14 @@ func Test_SetLoadBalancerClassThenUpdateLoadBalancerClass(t *testing.T) {
 		t.Fatal("Error: updating test service load balancer class should throw error, field is immutable")
 	}
 
-	time.Sleep(5 * time.Second) // sleep 5 second to wait for the service controller reconcile
+	time.Sleep(5 * time.Second) // 等待 service controller 完成 reconcile
 	if len(cloud.Calls) > 0 {
 		t.Errorf("Unexpected cloud provider calls: %v", cloud.Calls)
 	}
 }
 
-// Test_UpdateLoadBalancerWithLoadBalancerClass tests that when a Load Balancer type of Service that
-// is updated from non loadBalancerClass set to loadBalancerClass set, it should be not allowed.
+// Test_UpdateLoadBalancerWithLoadBalancerClass 验证 LoadBalancer 类型的 Service 从
+// 未设置 loadBalancerClass 更新为设置该字段时，更新应被拒绝。
 func Test_UpdateLoadBalancerWithLoadBalancerClass(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -563,14 +562,13 @@ func Test_UpdateLoadBalancerWithLoadBalancerClass(t *testing.T) {
 		t.Fatal("Error: updating test service load balancer class should throw error, field is immutable")
 	}
 
-	time.Sleep(5 * time.Second) // sleep 5 second to wait for the service controller reconcile
+	time.Sleep(5 * time.Second) // 等待 service controller 完成 reconcile
 	if len(cloud.Calls) == 0 {
 		t.Errorf("expected cloud provider calls to create load balancer")
 	}
 }
 
-// Test_ServiceLoadBalancerMixedProtocolSetup tests that a LoadBalancer Service with different protocol values
-// can be created.
+// Test_ServiceLoadBalancerMixedProtocolSetup 验证可以创建包含多种 protocol 的 LoadBalancer Service。
 func Test_ServiceLoadBalancerMixedProtocolSetup(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -616,7 +614,7 @@ func Test_ServiceLoadBalancerMixedProtocolSetup(t *testing.T) {
 		t.Fatalf("Error creating test service: %v", err)
 	}
 
-	time.Sleep(5 * time.Second) // sleep 5 second to wait for the service controller reconcile
+	time.Sleep(5 * time.Second) // 等待 service controller 完成 reconcile
 	if len(cloud.Calls) == 0 {
 		t.Errorf("expected cloud provider calls to create load balancer")
 	}
@@ -637,11 +635,11 @@ func newServiceController(t *testing.T, client *clientset.Clientset) (*serviceco
 	if err != nil {
 		t.Fatalf("Error creating service controller: %v", err)
 	}
-	cloud.ClearCalls() // ignore any cloud calls made in init()
+	cloud.ClearCalls() // 忽略 init() 中产生的 cloud 调用
 	return controller, cloud, informerFactory
 }
 
-// Test_ServiceLoadBalancerIPMode tests whether the cloud provider has correctly updated the ipMode field.
+// Test_ServiceLoadBalancerIPMode 验证 cloud provider 是否正确更新了 ipMode 字段。
 func Test_ServiceLoadBalancerIPMode(t *testing.T) {
 	baseService := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -739,7 +737,7 @@ func Test_ServiceLoadBalancerIPMode(t *testing.T) {
 				}
 			}
 
-			// mutate the service and check the status is preserved
+			// 修改 Service，验证 status 被保留
 			newService := service.DeepCopy()
 			newService.Spec.Ports[0].Port = 443
 			service, err = client.CoreV1().Services(ns.Name).Update(ctx, newService, metav1.UpdateOptions{})

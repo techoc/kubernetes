@@ -142,11 +142,10 @@ var defaultTimerConfig = attachdetach.TimerConfig{
 	DesiredStateOfWorldPopulatorListPodsRetryDuration: 3 * time.Second,
 }
 
-// TestPodTerminationWithNodeOOSDetach integration test verifies that if `out-of-service` taints is applied to the node
-// Which is shutdown non gracefully, then all the pods will immediately get terminated and volume be immediately detached
-// without waiting for the default timout period
+// TestPodTerminationWithNodeOOSDetach 验证：给非优雅关机的节点打上 `out-of-service` taint 后，
+// 其上所有 Pod 会被立即终止、卷被立即 detach，无需等待默认超时时间。
 func TestPodTerminationWithNodeOOSDetach(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -156,7 +155,7 @@ func TestPodTerminationWithNodeOOSDetach(t *testing.T) {
 		ReconcilerLoopPeriod:                        100 * time.Millisecond,
 		ReconcilerMaxWaitForUnmountDuration:         6 * time.Second,
 		DesiredStateOfWorldPopulatorLoopSleepPeriod: 24 * time.Hour,
-		// Use high duration to disable DesiredStateOfWorldPopulator.findAndAddActivePods loop in test.
+		// 用很大的时长禁用测试中的 DesiredStateOfWorldPopulator.findAndAddActivePods 循环。
 		DesiredStateOfWorldPopulatorListPodsRetryDuration: 24 * time.Hour,
 	})
 
@@ -183,7 +182,7 @@ func TestPodTerminationWithNodeOOSDetach(t *testing.T) {
 		t.Errorf("Failed to create pod : %v", err)
 	}
 
-	// start controller loop
+	// 启动 controller 循环。
 	podInformer := informers.Core().V1().Pods().Informer()
 	informers.Start(tCtx.Done())
 	informers.WaitForCacheSync(tCtx.Done())
@@ -192,17 +191,16 @@ func TestPodTerminationWithNodeOOSDetach(t *testing.T) {
 	go podgcCtrl.Run(tCtx)
 
 	waitToObservePods(t, podInformer, 1)
-	// wait for volume to be attached
+	// 等待卷挂载完成。
 	waitForVolumeToBeAttached(tCtx, t, testClient, pod.Name, nodeName)
 
-	// Patch the node to mark the volume in use as attach-detach controller verifies if safe to detach the volume
-	// based on that.
+	// 更新 node status 标记卷正在使用，attach-detach controller 据此判断能否安全 detach。
 	node.Status.VolumesInUse = append(node.Status.VolumesInUse, "kubernetes.io/mock-provisioner/fake-mount")
 	node, err = testClient.CoreV1().Nodes().UpdateStatus(context.TODO(), node, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("error in patch volumeInUse status to nodes: %s", err)
 	}
-	// Delete the pod with grace period time so that it is stuck in terminating state
+	// 带 grace period 删除 Pod，使其卡在 Terminating 状态。
 	gracePeriod := int64(300)
 	err = testClient.CoreV1().Pods(namespaceName).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{
 		GracePeriodSeconds: &gracePeriod,
@@ -211,10 +209,10 @@ func TestPodTerminationWithNodeOOSDetach(t *testing.T) {
 		t.Fatalf("error in deleting pod: %v", err)
 	}
 
-	// varify that DeletionTimestamp is not nil, means pod is in `Terminating` stsate
+	// 确认 DeletionTimestamp 非空，即 Pod 处于 Terminating 状态。
 	waitForPodDeletionTimestampToSet(tCtx, t, testClient, pod.Name, pod.Namespace)
 
-	// taint the node `out-of-service`
+	// 给节点打上 `out-of-service` taint。
 	taint := v1.Taint{
 		Key:    v1.TaintNodeOutOfService,
 		Effect: v1.TaintEffectNoExecute,
@@ -225,20 +223,17 @@ func TestPodTerminationWithNodeOOSDetach(t *testing.T) {
 	}
 	waitForNodeToBeTainted(tCtx, t, testClient, v1.TaintNodeOutOfService, nodeName)
 
-	// Verify if the pod was force deleted.
-	// When the node has out-of-service taint, and only if node is NotReady and pod is Terminating force delete will happen.
+	// 检查 Pod 是否被强制删除：只有节点带 out-of-service taint、处于 NotReady 且 Pod 为 Terminating 时才会强制删除。
 	waitForMetric(tCtx, t, podgcmetrics.DeletingPodsTotal.WithLabelValues(namespaceName, podgcmetrics.PodGCReasonTerminatingOutOfService), 1, "terminating-pod-metric")
-	// verify the volume was force detached
-	// Note: Metrics are accumulating
+	// 检查卷是否被强制 detach。注意 metric 是累计值。
 	waitForMetric(tCtx, t, metrics.ForceDetachMetricCounter.WithLabelValues(metrics.ForceDetachReasonOutOfService), 1, "detach-metric")
 
 }
 
-// Via integration test we can verify that if pod delete
-// event is somehow missed by AttachDetach controller - it still
-// gets cleaned up by Desired State of World populator.
+// 通过集成测试验证：即使 AttachDetach controller 漏掉了 Pod 删除事件，
+// Desired State of World populator 仍会完成清理。
 func TestPodDeletionWithDswp(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -265,7 +260,7 @@ func TestPodDeletionWithDswp(t *testing.T) {
 		t.Fatalf("Failed to created node : %v", err)
 	}
 
-	// start controller loop
+	// 启动 controller 循环。
 	go informers.Core().V1().Nodes().Informer().Run(tCtx.Done())
 	if _, err := testClient.CoreV1().Pods(ns.Name).Create(tCtx, pod, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Failed to create pod : %v", err)
@@ -279,7 +274,7 @@ func TestPodDeletionWithDswp(t *testing.T) {
 	go informers.Storage().V1().VolumeAttachments().Informer().Run(tCtx.Done())
 	initCSIObjects(tCtx.Done(), informers)
 	go ctrl.Run(tCtx)
-	// Run pvCtrl to avoid leaking goroutines started during its creation.
+	// 运行 pvCtrl，避免其创建时启动的 goroutine 泄漏。
 	go pvCtrl.Run(tCtx)
 	go podgcCtrl.Run(tCtx)
 
@@ -296,14 +291,14 @@ func TestPodDeletionWithDswp(t *testing.T) {
 	}
 
 	waitForPodsInDSWP(t, ctrl.GetDesiredStateOfWorld())
-	// let's stop pod events from getting triggered
+	// 停止触发 Pod 事件。
 	err = podInformer.GetStore().Delete(podInformerObj)
 	if err != nil {
 		t.Fatalf("Error deleting pod : %v", err)
 	}
 
 	waitToObservePods(t, podInformer, 0)
-	// the populator loop turns every 1 minute
+	// populator 循环每 1 分钟执行一次。
 	waitForPodFuncInDSWP(t, ctrl.GetDesiredStateOfWorld(), 80*time.Second, "expected 0 pods in dsw after pod delete", 0)
 }
 
@@ -313,7 +308,7 @@ func initCSIObjects(stopCh <-chan struct{}, informers clientgoinformers.SharedIn
 }
 
 func TestPodUpdateWithADC(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 	namespaceName := "test-pod-update"
@@ -351,13 +346,13 @@ func TestPodUpdateWithADC(t *testing.T) {
 	podInformer := informers.Core().V1().Pods().Informer()
 	go podInformer.Run(podStopCh)
 
-	// start controller loop
+	// 启动 controller 循环。
 	go informers.Core().V1().PersistentVolumeClaims().Informer().Run(tCtx.Done())
 	go informers.Core().V1().PersistentVolumes().Informer().Run(tCtx.Done())
 	go informers.Storage().V1().VolumeAttachments().Informer().Run(tCtx.Done())
 	initCSIObjects(tCtx.Done(), informers)
 	go ctrl.Run(tCtx)
-	// Run pvCtrl to avoid leaking goroutines started during its creation.
+	// 运行 pvCtrl，避免其创建时启动的 goroutine 泄漏。
 	go pvCtrl.Run(tCtx)
 	go podgcCtrl.Run(tCtx)
 
@@ -384,9 +379,8 @@ func TestPodUpdateWithADC(t *testing.T) {
 	waitForPodFuncInDSWP(t, ctrl.GetDesiredStateOfWorld(), 20*time.Second, "expected 0 pods in dsw after pod completion", 0)
 }
 
-// wait for the podInformer to observe the pods. Call this function before
-// running the RC manager to prevent the rc manager from creating new pods
-// rather than adopting the existing ones.
+// waitToObservePods 等待 podInformer 观察到 Pod。应在 RC manager 启动前调用，
+// 避免 RC manager 不去接管已有 Pod、反而创建新的 Pod。
 func waitToObservePods(t *testing.T, podInformer cache.SharedIndexInformer, podNum int) {
 	if err := wait.Poll(100*time.Millisecond, 60*time.Second, func() (bool, error) {
 		objects := podInformer.GetIndexer().List()
@@ -399,7 +393,7 @@ func waitToObservePods(t *testing.T, podInformer cache.SharedIndexInformer, podN
 	}
 }
 
-// wait for pods to be observed in desired state of world
+// 等待 Pod 出现在 Desired State of World 中。
 func waitForPodsInDSWP(t *testing.T, dswp volumecache.DesiredStateOfWorld) {
 	if err := wait.Poll(time.Millisecond*500, wait.ForeverTestTimeout, func() (bool, error) {
 		pods := dswp.GetPodToAdd()
@@ -412,7 +406,7 @@ func waitForPodsInDSWP(t *testing.T, dswp volumecache.DesiredStateOfWorld) {
 	}
 }
 
-// wait for pods to be observed in desired state of world
+// 等待 Pod 出现在 Desired State of World 中。
 func waitForPodFuncInDSWP(t *testing.T, dswp volumecache.DesiredStateOfWorld, checkTimeout time.Duration, failMessage string, podCount int) {
 	if err := wait.Poll(time.Millisecond*500, checkTimeout, func() (bool, error) {
 		pods := dswp.GetPodToAdd()
@@ -469,7 +463,7 @@ func createAdClients(ctx context.Context, t *testing.T, server *kubeapiservertes
 		t.Fatalf("Error creating AttachDetach : %v", err)
 	}
 
-	// create pv controller
+	// 创建 pv controller。
 	controllerOptions := persistentvolumeoptions.NewPersistentVolumeControllerOptions()
 	params := persistentvolume.ControllerParameters{
 		KubeClient:                testClient,
@@ -498,11 +492,10 @@ func createAdClients(ctx context.Context, t *testing.T, server *kubeapiservertes
 	return testClient, ctrl, pvCtrl, podgcCtrl, informers
 }
 
-// Via integration test we can verify that if pod add
-// event is somehow missed by AttachDetach controller - it still
-// gets added by Desired State of World populator.
+// 通过集成测试验证：即使 AttachDetach controller 漏掉了 Pod 添加事件，
+// Desired State of World populator 仍会把 Pod 加进来。
 func TestPodAddedByDswp(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 	namespaceName := "test-pod-deletion"
@@ -539,13 +532,13 @@ func TestPodAddedByDswp(t *testing.T) {
 	podInformer := informers.Core().V1().Pods().Informer()
 	go podInformer.Run(podStopCh)
 
-	// start controller loop
+	// 启动 controller 循环。
 	go informers.Core().V1().PersistentVolumeClaims().Informer().Run(tCtx.Done())
 	go informers.Core().V1().PersistentVolumes().Informer().Run(tCtx.Done())
 	go informers.Storage().V1().VolumeAttachments().Informer().Run(tCtx.Done())
 	initCSIObjects(tCtx.Done(), informers)
 	go ctrl.Run(tCtx)
-	// Run pvCtrl to avoid leaking goroutines started during its creation.
+	// 运行 pvCtrl，避免其创建时启动的 goroutine 泄漏。
 	go pvCtrl.Run(tCtx)
 	go podgcCtrl.Run(tCtx)
 
@@ -563,7 +556,7 @@ func TestPodAddedByDswp(t *testing.T) {
 
 	waitForPodsInDSWP(t, ctrl.GetDesiredStateOfWorld())
 
-	// let's stop pod events from getting triggered
+	// 停止触发 Pod 事件。
 	close(podStopCh)
 	podNew := pod.DeepCopy()
 	newPodName := "newFakepod"
@@ -575,12 +568,12 @@ func TestPodAddedByDswp(t *testing.T) {
 
 	waitToObservePods(t, podInformer, 2)
 
-	// the findAndAddActivePods loop turns every 3 minute
+	// findAndAddActivePods 循环每 3 分钟执行一次。
 	waitForPodFuncInDSWP(t, ctrl.GetDesiredStateOfWorld(), 200*time.Second, "expected 2 pods in dsw after pod addition", 2)
 }
 
 func TestPVCBoundWithADC(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -593,7 +586,7 @@ func TestPVCBoundWithADC(t *testing.T) {
 		ReconcilerLoopPeriod:                        100 * time.Millisecond,
 		ReconcilerMaxWaitForUnmountDuration:         6 * time.Second,
 		DesiredStateOfWorldPopulatorLoopSleepPeriod: 24 * time.Hour,
-		// Use high duration to disable DesiredStateOfWorldPopulator.findAndAddActivePods loop in test.
+		// 用很大的时长禁用测试中的 DesiredStateOfWorldPopulator.findAndAddActivePods 循环。
 		DesiredStateOfWorldPopulatorListPodsRetryDuration: 24 * time.Hour,
 	})
 
@@ -612,7 +605,7 @@ func TestPVCBoundWithADC(t *testing.T) {
 		t.Fatalf("Failed to created node : %v", err)
 	}
 
-	// pods with pvc not bound
+	// 带未绑定 PVC 的 Pod。
 	pvcs := []*v1.PersistentVolumeClaim{}
 	for i := range 3 {
 		pod, pvc := fakePodWithPVC(fmt.Sprintf("fakepod-pvcnotbound-%d", i), fmt.Sprintf("fakepvc-%d", i), namespaceName)
@@ -624,14 +617,14 @@ func TestPVCBoundWithADC(t *testing.T) {
 		}
 		pvcs = append(pvcs, pvc)
 	}
-	// pod with no pvc
+	// 不带 PVC 的 Pod。
 	podNew := fakePodWithVol(namespaceName)
 	podNew.SetName("fakepod")
 	if _, err := testClient.CoreV1().Pods(podNew.Namespace).Create(context.TODO(), podNew, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Failed to create pod : %v", err)
 	}
 
-	// start controller loop
+	// 启动 controller 循环。
 	informers.Start(tCtx.Done())
 	informers.WaitForCacheSync(tCtx.Done())
 	initCSIObjects(tCtx.Done(), informers)
@@ -640,7 +633,7 @@ func TestPVCBoundWithADC(t *testing.T) {
 	go podgcCtrl.Run(tCtx)
 
 	waitToObservePods(t, informers.Core().V1().Pods().Informer(), 4)
-	// Give attachdetach controller enough time to populate pods into DSWP.
+	// 给 attachdetach controller 足够时间将 Pod 填入 DSWP。
 	time.Sleep(10 * time.Second)
 	waitForPodFuncInDSWP(t, ctrl.GetDesiredStateOfWorld(), 60*time.Second, "expected 1 pod in dsw", 1)
 	for _, pvc := range pvcs {
@@ -649,7 +642,7 @@ func TestPVCBoundWithADC(t *testing.T) {
 	waitForPodFuncInDSWP(t, ctrl.GetDesiredStateOfWorld(), 60*time.Second, "expected 4 pods in dsw after PVCs are bound", 4)
 }
 
-// Create PV for PVC, pv controller will bind them together.
+// createPVForPVC 创建 PV，由 pv controller 完成与 PVC 的绑定。
 func createPVForPVC(t *testing.T, testClient *clientset.Clientset, pvc *v1.PersistentVolumeClaim) {
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -672,7 +665,7 @@ func createPVForPVC(t *testing.T, testClient *clientset.Clientset, pvc *v1.Persi
 	}
 }
 
-// Wait for DeletionTimestamp added to pod
+// waitForPodDeletionTimestampToSet 等待 Pod 被设置 DeletionTimestamp。
 func waitForPodDeletionTimestampToSet(tCtx context.Context, t *testing.T, testingClient *clientset.Clientset, podName, podNamespace string) {
 	if err := wait.PollUntilContextCancel(tCtx, 100*time.Millisecond, false, func(context.Context) (bool, error) {
 		pod, err := testingClient.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
@@ -688,7 +681,7 @@ func waitForPodDeletionTimestampToSet(tCtx context.Context, t *testing.T, testin
 	}
 }
 
-// Wait for VolumeAttach added to node
+// waitForVolumeToBeAttached 等待卷被挂载到节点。
 func waitForVolumeToBeAttached(ctx context.Context, t *testing.T, testingClient *clientset.Clientset, podName, nodeName string) {
 	if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 120*time.Second, false, func(context.Context) (bool, error) {
 		node, err := testingClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
@@ -704,7 +697,7 @@ func waitForVolumeToBeAttached(ctx context.Context, t *testing.T, testingClient 
 	}
 }
 
-// Wait for taint added to node
+// waitForNodeToBeTainted 等待节点被加上指定 taint。
 func waitForNodeToBeTainted(ctx context.Context, t *testing.T, testingClient *clientset.Clientset, taintKey, nodeName string) {
 	if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 60*time.Second, false, func(context.Context) (bool, error) {
 		node, err := testingClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
@@ -729,7 +722,7 @@ func waitForMetric(ctx context.Context, t *testing.T, m basemetric.CounterMetric
 			t.Fatal(err, identifier)
 		}
 		t.Logf("expected metric count %g but got %g for %s", expectedCount, gotCount, identifier)
-		// As metrics are global, this condition ( >= ) is applied, just to check the minimum expectation.
+		// metric 是全局累计值，因此用 >= 只校验最小期望。
 		if gotCount >= expectedCount {
 			return true, nil
 		}

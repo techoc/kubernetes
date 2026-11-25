@@ -46,9 +46,8 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestMutatingWebhookResetsInvalidManagedFields ensures that the API server
-// resets managedFields to their state before admission if a mutating webhook
-// patches create/update requests with invalid managedFields.
+// TestMutatingWebhookResetsInvalidManagedFields 验证当 mutating webhook 在创建/更新请求中
+// 注入非法 managedFields 时，API server 会将其重置为准入前的状态。
 func TestMutatingWebhookResetsInvalidManagedFields(t *testing.T) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
@@ -82,7 +81,7 @@ func TestMutatingWebhookResetsInvalidManagedFields(t *testing.T) {
 		context.TODO(), invalidManagedFieldsMarkerFixture, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	// make sure we delete the pod even on a failed test
+	// 即使测试失败也要删除 Pod，避免残留影响后续用例
 	defer func() {
 		if err := client.CoreV1().Pods("default").Delete(context.TODO(), invalidManagedFieldsMarkerFixture.Name, metav1.DeleteOptions{}); err != nil {
 			t.Fatalf("failed to delete marker pod: %v", err)
@@ -120,11 +119,10 @@ func TestMutatingWebhookResetsInvalidManagedFields(t *testing.T) {
 
 	var pod *corev1.Pod
 	var lastErr error
-	// We just expect the general warning text as the detail order might change
+	// 只校验警告文本的公共部分，因为明细顺序可能变化
 	expectedWarning := fmt.Sprintf(fieldmanager.InvalidManagedFieldsAfterMutatingAdmissionWarningFormat, "")
 
-	// Make sure reset happens on patch requests
-	// wait until new webhook is called
+	// 验证 patch 请求也会触发重置，并等待新 webhook 被调用
 	if err := wait.PollImmediate(time.Millisecond*5, wait.ForeverTestTimeout, func() (bool, error) {
 		defer recordedWarnings.Reset()
 		pod, err = client.CoreV1().Pods("default").Patch(context.TODO(), invalidManagedFieldsMarkerFixture.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
@@ -150,7 +148,7 @@ func TestMutatingWebhookResetsInvalidManagedFields(t *testing.T) {
 		t.Fatalf("failed to wait for apiserver handling webhook mutation: %v, last error: %v", err, lastErr)
 	}
 
-	// Make sure reset happens in update requests
+	// 验证 update 请求同样会触发重置
 	pod, err = client.CoreV1().Pods("default").Update(context.TODO(), pod, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -167,8 +165,8 @@ func TestMutatingWebhookResetsInvalidManagedFields(t *testing.T) {
 	}
 }
 
-// validate against both decoding and validation to make sure we use the hardest rule between the both to reset
-// with decoding being as strict as it gets, only using it should be enough in admission
+// validateManagedFieldsAndDecode 同时做解码和校验，以两者中更严格的规则为准。
+// 解码已是全部校验中最严格的，准入阶段仅用解码就足够了。
 func validateManagedFieldsAndDecode(managedFields []metav1.ManagedFieldsEntry) error {
 	if err := managedfields.ValidateManagedFields(managedFields); err != nil {
 		return err

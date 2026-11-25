@@ -39,7 +39,7 @@ import (
 )
 
 func TestDeferredResizePodPreemption(t *testing.T) {
-	// Setup API server with feature gates enabled
+	// 启用相关 feature gate，否则原地垂直扩缩容抢占不会生效
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.InPlacePodVerticalScaling:                    true,
 		features.InPlacePodVerticalScalingSchedulerPreemption: true,
@@ -145,7 +145,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 			name:            "parking strategy when deferred resize fits on node",
 			nodeCapacityCPU: "300m",
 			nodeCapacityMem: "300",
-			existingPods:    nil, // fits immediately
+			existingPods:    nil, // 无需抢占即可放下
 			preemptorConfig: &testutils.PausePodConfig{
 				Name:     "preemptor-pod",
 				Priority: &highPriority,
@@ -185,7 +185,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 		},
 	}
 
-	// Initialize API server and Scheduler ONCE for all table cases
+	// 所有表格用例共用一套 API server 和 scheduler，避免重复启动开销
 	testCtx := testutils.InitTestSchedulerWithOptions(t,
 		testutils.InitTestAPIServer(t, "def-preempt", nil),
 		0,
@@ -201,7 +201,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			nodeName := fmt.Sprintf("preempt-node-%d", idx)
 
-			// Create node
+			// 创建带指定容量的节点
 			nodeRes := map[v1.ResourceName]string{
 				v1.ResourcePods:   "32",
 				v1.ResourceCPU:    tt.nodeCapacityCPU,
@@ -218,7 +218,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 				_ = cs.CoreV1().Nodes().Delete(testCtx.Ctx, nodeName, metav1.DeleteOptions{})
 			}()
 
-			// Create and run existing pods (if any) on nodeName
+			// 在 nodeName 上运行已有 Pod（作为潜在被抢占者）
 			var pods []*v1.Pod
 			for _, p := range tt.existingPods {
 				p.Namespace = testCtx.NS.Name
@@ -230,7 +230,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 				pods = append(pods, runningPod)
 			}
 
-			// Create preemptor/resizing pod already scheduled to nodeName
+			// 创建已调度到 nodeName 的抢占者（扩缩容中的 Pod）
 			tt.preemptorConfig.NodeName = nodeName
 			tt.preemptorConfig.Namespace = testCtx.NS.Name
 			preemptorPod := initPausePod(tt.preemptorConfig)
@@ -239,8 +239,8 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 				t.Fatalf("Failed to create preemptor pod: %v", err)
 			}
 
-			// Update status of preemptor pod to simulate it running and being deferred.
-			// Allocated CPU/Mem is set to 100m/100, while Spec request is 300m/100.
+			// 伪造 Pod 正在运行且扩缩容被延迟的状态：
+			// 已分配 100m/100，而 Spec 请求为 300m/100
 			preemptorPod.Status.Phase = v1.PodRunning
 			preemptorPod.Status.Conditions = []v1.PodCondition{
 				{
@@ -273,7 +273,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 				t.Fatalf("Failed to update status of preemptor pod: %v", err)
 			}
 
-			// Wait for expected evictions (if any) or timeout
+			// 等待预期的驱逐发生（如有），或超时
 			if len(tt.expectEvictedNames) > 0 {
 				for _, name := range tt.expectEvictedNames {
 					err = wait.PollUntilContextTimeout(testCtx.Ctx, 50*time.Millisecond, 10*time.Second, false,
@@ -283,7 +283,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 					}
 				}
 			} else {
-				// Wait to confirm NO evictions happen
+				// 观察一段时间，确认没有发生驱逐
 				time.Sleep(500 * time.Millisecond)
 				for _, p := range pods {
 					livePod, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, p.Name, metav1.GetOptions{})
@@ -293,7 +293,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 				}
 			}
 
-			// Verify NominatedNodeName on preemptor pod status (retains empty for deferred pods)
+			// 延迟扩缩容的 Pod 不应设置 NominatedNodeName
 			updatedPreemptor, err := cs.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, preemptorPod.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("Failed to get updated preemptor pod: %v", err)
@@ -302,13 +302,13 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 				t.Errorf("Expected NominatedNodeName to remain empty, but got %q", updatedPreemptor.Status.NominatedNodeName)
 			}
 
-			// Verify the pod remains parked in the scheduler queue
+			// 验证 Pod 仍停留在调度队列中等待重试
 			queue := testCtx.Scheduler.SchedulingQueue
 			_, found := queue.GetPod(preemptorPod.Name, preemptorPod.Namespace, nil)
 			if !found {
 				t.Errorf("Expected preemptor pod to be found in scheduling queue")
 			}
-			// Verify PodScheduled condition remains True (retained running state)
+			// 验证 PodScheduled 仍为 True，保留运行中状态
 			var gotScheduledStatus v1.ConditionStatus
 			for _, cond := range updatedPreemptor.Status.Conditions {
 				if cond.Type == v1.PodScheduled {
@@ -319,7 +319,7 @@ func TestDeferredResizePodPreemption(t *testing.T) {
 				t.Errorf("Expected PodScheduled condition status to remain True, got %v", gotScheduledStatus)
 			}
 
-			// Cleanup
+			// 清理本用例创建的 Pod
 			pods = append(pods, preemptorPod)
 			testutils.CleanupPods(testCtx.Ctx, cs, t, pods)
 		})
@@ -332,7 +332,7 @@ func setUpPreemptionTestWithContext(t *testing.T, testCtx *testutils.TestContext
 	nodeName1 := fmt.Sprintf("hint-node1-%d", idx)
 	nodeName2 := fmt.Sprintf("hint-node2-%d", idx)
 
-	// Create node1
+	// 创建测试目标节点 node1
 	nodeObject1 := st.MakeNode().Name(nodeName1).Capacity(map[v1.ResourceName]string{
 		v1.ResourcePods: "32",
 		v1.ResourceCPU:  nodeCPUCapacity,
@@ -346,7 +346,7 @@ func setUpPreemptionTestWithContext(t *testing.T, testCtx *testutils.TestContext
 		t.Fatalf("Failed to create node1: %v", err)
 	}
 
-	// Create node2 (irrelevant node)
+	// 创建无关节点 node2，用于验证队列提示只关注相关节点
 	nodeObject2 := st.MakeNode().Name(nodeName2).Capacity(map[v1.ResourceName]string{
 		v1.ResourcePods: "32",
 		v1.ResourceCPU:  "500m",
@@ -355,7 +355,7 @@ func setUpPreemptionTestWithContext(t *testing.T, testCtx *testutils.TestContext
 		t.Fatalf("Failed to create node2: %v", err)
 	}
 
-	// Create 'other-pod' utilizing node1
+	// 在 node1 上运行 other-pod，占据部分 CPU
 	other := initPausePod(&testutils.PausePodConfig{
 		Name:     fmt.Sprintf("other-pod-%d", idx),
 		NodeName: nodeName1,
@@ -370,7 +370,7 @@ func setUpPreemptionTestWithContext(t *testing.T, testCtx *testutils.TestContext
 		t.Fatalf("Failed to run other pod: %v", err)
 	}
 
-	// Create 'irrelevant-pod' utilizing node2
+	// 在无关节点 node2 上运行 irrelevant-pod
 	irrelevant := initPausePod(&testutils.PausePodConfig{
 		Name:     fmt.Sprintf("irrelevant-pod-%d", idx),
 		NodeName: nodeName2,
@@ -385,7 +385,7 @@ func setUpPreemptionTestWithContext(t *testing.T, testCtx *testutils.TestContext
 		t.Fatalf("Failed to run irrelevant pod: %v", err)
 	}
 
-	// Create deferred pod
+	// 创建扩缩容被延迟的 Pod
 	pod := initPausePod(&testutils.PausePodConfig{
 		Name:     fmt.Sprintf("deferred-pod-%d", idx),
 		NodeName: nodeName1,
@@ -430,7 +430,7 @@ func setUpPreemptionTestWithContext(t *testing.T, testCtx *testutils.TestContext
 		t.Fatalf("Failed to update status: %v", err)
 	}
 
-	// Wait until deferred-pod fails scheduling and is parked in Unschedulable queue.
+	// 等待延迟扩缩容的 Pod 调度失败并进入 Unschedulable 队列
 	queue := testCtx.Scheduler.SchedulingQueue
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 50*time.Millisecond, 5*time.Second, false, func(context.Context) (bool, error) {
 		unsched := queue.UnschedulablePods()
@@ -646,7 +646,7 @@ func TestDeferredResizeNodePreemptionPolicy(t *testing.T) {
 		}
 		initialAttempts := queuedPod.Attempts
 
-		// Disable preemption on assigned node
+		// 在 Pod 所在节点上禁用抢占
 		nodeName := pod.Spec.NodeName
 		n, err := cs.CoreV1().Nodes().Get(testCtx.Ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
@@ -659,7 +659,7 @@ func TestDeferredResizeNodePreemptionPolicy(t *testing.T) {
 			t.Fatalf("Failed to update node to disable preemption: %v", err)
 		}
 
-		// Verify pod attempts do not increment (QHint skipped)
+		// 禁用抢占后不应产生队列提示，重试次数不变
 		time.Sleep(300 * time.Millisecond)
 		qPod, found := queue.GetPod(pod.Name, pod.Namespace, nil)
 		if !found || qPod.Attempts > initialAttempts {
@@ -681,7 +681,7 @@ func TestDeferredResizeNodePreemptionPolicy(t *testing.T) {
 		}
 		initialAttempts := queuedPod.Attempts
 
-		// Now re-enable preemption on node (clear DisableResizePreemption)
+		// 清除 DisableResizePreemption，重新启用节点抢占
 		nodeName := pod.Spec.NodeName
 		n, err := cs.CoreV1().Nodes().Get(testCtx.Ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
@@ -692,7 +692,7 @@ func TestDeferredResizeNodePreemptionPolicy(t *testing.T) {
 			t.Fatalf("Failed to update node to enable preemption: %v", err)
 		}
 
-		// Verify pod is retried (attempts incremented)
+		// 重新启用后应触发重试，attempts 增加
 		err = wait.PollUntilContextTimeout(testCtx.Ctx, 50*time.Millisecond, 5*time.Second, false, func(context.Context) (bool, error) {
 			qPod, found := queue.GetPod(pod.Name, pod.Namespace, nil)
 			return found && qPod.Attempts > initialAttempts, nil
@@ -716,7 +716,7 @@ func TestDeferredResizeNodePreemptionPolicy(t *testing.T) {
 		}
 		initialAttempts := queuedPod.Attempts
 
-		// Update irrelevant node2
+		// 修改无关节点 node2 的策略，不应影响 Pod 的调度队列
 		nodeName2 := fmt.Sprintf("hint-node2-%d", 2)
 		n, err := cs.CoreV1().Nodes().Get(testCtx.Ctx, nodeName2, metav1.GetOptions{})
 		if err != nil {
@@ -752,12 +752,12 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			}},
 		})
 
-		// Start ONLY the API Server (no scheduler yet!)
+		// 先只启动 API server，暂不启动 scheduler，以验证启动时的 AddPod 处理
 		testCtx := testutils.InitTestAPIServer(t, "deferred-handlers-test", nil)
 
 		cs := testCtx.ClientSet
 
-		// Create node
+		// 创建 node1
 		nodeObject := st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{
 			v1.ResourcePods: "32",
 			v1.ResourceCPU:  "200m",
@@ -766,7 +766,7 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Failed to create node: %v", err)
 		}
 
-		// Create and status-update pod to be deferred resize
+		// 创建 Pod 并伪造延迟扩缩容状态
 		pod := initPausePod(&testutils.PausePodConfig{
 			Name:     "deferred-pod",
 			NodeName: "node1",
@@ -811,12 +811,12 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Failed to update status: %v", err)
 		}
 
-		// Initialize Scheduler (which registers handlers and lists existing pods)
+		// 此时再启动 scheduler，验证其注册 handler 时会列出并入队已有 Pod
 		testCtx = testutils.InitTestSchedulerWithOptions(t, testCtx, 0, scheduler.WithProfiles(cfg.Profiles...))
 		defer testCtx.SchedulerCloseFn()
 		testutils.SyncSchedulerInformerFactory(testCtx)
 
-		// Verify the pod was immediately enqueued on startup by the AddPod handler!
+		// 验证 AddPod handler 在 scheduler 启动时立即将该 Pod 入队
 		queue := testCtx.Scheduler.SchedulingQueue
 		var found bool
 		err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
@@ -850,11 +850,11 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 		defer testCtx.SchedulerCloseFn()
 		testutils.SyncSchedulerInformerFactory(testCtx)
 
-		// Note: we don't start the scheduling loop (Scheduler.Run), only informers & queue!
+		// 只启动 informer 与队列，不启动调度循环，以隔离 handler 行为
 		cs := testCtx.ClientSet
 		queue := testCtx.Scheduler.SchedulingQueue
 
-		// Create node
+		// 创建 node1
 		nodeObject := st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{
 			v1.ResourcePods: "32",
 			v1.ResourceCPU:  "200m",
@@ -863,7 +863,7 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Failed to create node: %v", err)
 		}
 
-		// Create a normal running pod assigned to node1 (no deferred condition)
+		// 先在 node1 上创建一个普通运行中的 Pod（无延迟条件）
 		pod := initPausePod(&testutils.PausePodConfig{
 			Name:     "deferred-pod",
 			NodeName: "node1",
@@ -890,13 +890,13 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Failed to update status: %v", err)
 		}
 
-		// Verify the pod is NOT in the scheduling queue
+		// 普通 Pod 不应进入调度队列
 		time.Sleep(300 * time.Millisecond)
 		if _, found := queue.GetPod(pod.Name, pod.Namespace, nil); found {
 			t.Fatalf("Expected pod to not be in scheduling queue initially")
 		}
 
-		// Now update status to add the deferred condition
+		// 更新 status，加上延迟扩缩容条件
 		pod, err = cs.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Failed to get pod: %v", err)
@@ -924,7 +924,7 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Failed to transition status: %v", err)
 		}
 
-		// Verify the pod was enqueued automatically by the UpdatePod event handler!
+		// 验证状态转换后 UpdatePod handler 自动将 Pod 入队
 		var found bool
 		err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, found = queue.GetPod(pod.Name, pod.Namespace, nil)
@@ -1056,7 +1056,7 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 		queue := testCtx.Scheduler.SchedulingQueue
 		cache := testCtx.Scheduler.Cache
 
-		// Create node
+		// 创建 node1
 		nodeObject := st.MakeNode().Name("node1").Capacity(map[v1.ResourceName]string{
 			v1.ResourcePods: "32",
 			v1.ResourceCPU:  "200m",
@@ -1065,7 +1065,7 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Failed to create node: %v", err)
 		}
 
-		// Create a deferred resize pod assigned to node1
+		// 创建运行在 node1 上、扩缩容被延迟的 Pod
 		pod := initPausePod(&testutils.PausePodConfig{
 			Name:     "deferred-pod-del",
 			NodeName: "node1",
@@ -1110,7 +1110,7 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Failed to update status: %v", err)
 		}
 
-		// Wait for pod to be enqueued and in cache
+		// 等待 Pod 同时出现在调度队列和 scheduler cache 中
 		err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 5*time.Second, true, func(context.Context) (bool, error) {
 			_, foundInQueue := queue.GetPod(pod.Name, pod.Namespace, nil)
 			_, errCache := cache.GetPod(pod)
@@ -1120,12 +1120,12 @@ func TestDeferredResizeQueueingHandlers(t *testing.T) {
 			t.Fatalf("Expected pod to be in both cache and queue initially: %v", err)
 		}
 
-		// Delete the pod
+		// 删除 Pod
 		if err := cs.CoreV1().Pods(testCtx.NS.Name).Delete(testCtx.Ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](0)}); err != nil {
 			t.Fatalf("Failed to delete pod: %v", err)
 		}
 
-		// Verify the pod is removed from both queue and cache by DeletePod event handler
+		// 验证 DeletePod handler 将 Pod 从队列和缓存中一并移除
 		err = wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, 5*time.Second, true, func(context.Context) (bool, error) {
 			_, foundInQueue := queue.GetPod(pod.Name, pod.Namespace, nil)
 			_, errCache := cache.GetPod(pod)

@@ -16,7 +16,7 @@ limitations under the License.
 
 package serviceaccount
 
-// This file tests the legacy service account token cleaning-up.
+// 本文件测试 legacy ServiceAccount token 的清理逻辑
 
 import (
 	"context"
@@ -58,7 +58,7 @@ func TestLegacyServiceAccountTokenCleanUp(t *testing.T) {
 		t.Fatalf("failed to setup ServiceAccounts server: %v", err)
 	}
 
-	// wait configmap to be labeled with tracking date
+	// 等待 ConfigMap 写入跟踪起始日期
 	waitConfigmapToBeLabeled(ctx, t, c)
 
 	tests := []struct {
@@ -118,13 +118,13 @@ func TestLegacyServiceAccountTokenCleanUp(t *testing.T) {
 
 			fakeClock := testingclock.NewFakeClock(time.Now().UTC())
 
-			// start legacy service account token cleaner
+			// 启动 legacy ServiceAccount token 清理器
 			ctxForCleaner, cancelFunc := context.WithCancel(context.Background())
 			startLegacyServiceAccountTokenCleaner(ctxForCleaner, c, fakeClock, informers)
 			informers.Start(ctx.Done())
 			defer cancelFunc()
 
-			// create service account
+			// 创建 ServiceAccount
 			_, err = c.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: test.namespace}}, metav1.CreateOptions{})
 			if err != nil && !apierrors.IsAlreadyExists(err) {
 				t.Fatalf("could not create namespace: %v", err)
@@ -134,7 +134,7 @@ func TestLegacyServiceAccountTokenCleanUp(t *testing.T) {
 				t.Fatalf("Service Account not created: %v", err)
 			}
 
-			// create secret
+			// 创建 Secret
 			secret, err := createServiceAccountToken(c, mysa, test.namespace, test.secretName)
 			if err != nil {
 				t.Fatalf("Secret not created: %v", err)
@@ -155,40 +155,41 @@ func TestLegacyServiceAccountTokenCleanUp(t *testing.T) {
 			myConfig.BearerToken = string(string(secret.Data[v1.ServiceAccountTokenKey]))
 			roClient := clientset.NewForConfigOrDie(&myConfig)
 
-			// the secret should not be labeled with LastUsedLabelKey.
+			// 此时 Secret 不应带有 LastUsedLabelKey 标签
 			checkLastUsedLabel(ctx, t, c, secret, false)
 
 			if test.lastUsedLabel {
 				doServiceAccountAPIReadRequest(ctx, t, roClient, test.namespace, true)
 
-				// all service account tokens should be labeled with LastUsedLabelKey.
+				// 发起请求后应打上 LastUsedLabelKey 标签
 				checkLastUsedLabel(ctx, t, c, secret, true)
 			}
 
-			// Test invalid labels
+			// 验证过期标记
 			fakeClock.Step(cleanUpPeriod + 24*time.Hour)
 			checkInvalidSinceLabel(ctx, t, c, secret, fakeClock, test.expectInvalidLabel)
 
-			// Test invalid secret cannot be used
+			// 验证被标记为失效的 Secret 无法用于认证
 			if test.expectInvalidLabel {
 				t.Logf("Check the invalid token cannot authenticate request.")
 				doServiceAccountAPIReadRequest(ctx, t, roClient, test.namespace, false)
 
-				// Check the secret has been labelded with the LastUsedLabelKey.
+				// 确认 Secret 已带有 LastUsedLabelKey 标签
 				if !test.lastUsedLabel {
 					checkLastUsedLabel(ctx, t, c, secret, true)
 				}
 
-				// Update secret by removing the invalid since label
+				// 移除 invalidSince 标签以恢复 Secret
 				removeInvalidLabel(ctx, c, t, secret)
 
 				t.Logf("Check the token can authenticate request after patching the secret by removing the invalid label.")
 				doServiceAccountAPIReadRequest(ctx, t, roClient, test.namespace, true)
 
-				// Update the lastUsed label date to the fakeClock date (as the validation function uses the real time to label the lastUsed date)
+				// 将 lastUsed 标签日期改为 fakeClock 日期；
+				// 校验函数使用真实时间写入 lastUsed，此处需手动对齐
 				patchSecret(ctx, c, t, fakeClock.Now().UTC().Format(dateFormat), secret)
 
-				// The secret will be marked as invalid again after time period duration cleanUpPeriod + 24*time.Hour
+				// 经过 cleanUpPeriod + 24h 后，Secret 会再次被标记为失效
 				fakeClock.Step(cleanUpPeriod + 24*time.Hour)
 				checkInvalidSinceLabel(ctx, t, c, secret, fakeClock, true)
 			}

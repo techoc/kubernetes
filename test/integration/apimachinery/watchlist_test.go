@@ -71,9 +71,7 @@ func TestReflectorWatchListFallback(t *testing.T) {
 	lw.SetClient(ctx, clientSet, ns)
 	var target *cache.Reflector
 	func() {
-		// Enable ListWatchClient only for this reflector.
-		// We rely on the fact that instantiation of whether watchlist is used or not is done once
-		// during reflector creation in NewReflectorWithOptions
+		// 仅对该 reflector 启用 ListWatchClient：是否使用 watchlist 在 NewReflectorWithOptions 创建 reflector 时即已确定，之后不再变化。
 		clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 		defer clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 		target = cache.NewReflector(lw, &v1.Secret{}, store, time.Duration(0))
@@ -107,7 +105,7 @@ func TestReflectorWatchListFallback(t *testing.T) {
 	verifyStore(t, ctx, clientSet, store, ns)
 }
 
-// TODO(#115478): refactor with e2e/apimachinery/watchlist
+// TODO(#115478): 与 e2e/apimachinery/watchlist 共用实现。
 func verifyStore(t *testing.T, ctx context.Context, clientSet kubernetes.Interface, store cache.Store, namespace *v1.Namespace) {
 	t.Logf("Listing secrets directly from the server from %s namespace", namespace.Name)
 	expectedSecretsList, err := clientSet.CoreV1().Secrets(namespace.Name).List(ctx, metav1.ListOptions{})

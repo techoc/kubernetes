@@ -52,9 +52,8 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestMutatingAdmissionPolicy tests MutatingAdmissionPolicy using a shared apiserver for all tests
-// and waiting for bindings to become ready by dry-running marker requests until the binding successfully
-// mutates a marker, and then verifies the policy exactly once.
+// TestMutatingAdmissionPolicy 使用共享 apiserver 运行所有用例：先通过 dry-run marker 请求等待 binding
+// 就绪（即成功改写 marker），随后只执行一次请求来校验 policy 的效果。
 func TestMutatingAdmissionPolicy(t *testing.T) {
 	allow := v1.AllowAction
 	matchEndpointResources := v1.MatchResources{
@@ -80,7 +79,7 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 
 		requestOperation v1.OperationType
 		requestResource  schema.GroupVersionResource
-		subresources     []string // Only supported for requestOperation=Update since subresources can not be created
+		subresources     []string // 仅在 requestOperation=Update 时支持，因为 subresource 无法创建
 		requestObject    runtime.Object
 		expected         runtime.Object
 	}{
@@ -595,8 +594,7 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 			},
 			bindings: []*v1.MutatingAdmissionPolicyBinding{
 				mutatingBinding("multi-param-binding", &v1.ParamRef{
-					// note empty namespace. all params matching request namespace
-					// will be used
+					// namespace 留空，让所有匹配请求 Namespace 的 param 都生效。
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"multi-param-binding-param": "true",
@@ -731,8 +729,7 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 			},
 		},
 		{
-			// same as the multiple mutations test, but the mutations are split
-			// across multiple policies
+			// 与 multiple mutations 用例相同，只是将 mutation 拆分到多个 policy 中。
 			name: "multiple policies requiring reinvocation",
 			policies: []*v1.MutatingAdmissionPolicy{
 				mutatingPolicy("policy-1", v1.IfNeededReinvocationPolicy, matchEndpointResources, nil,
@@ -795,13 +792,13 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 				"foo": "0",
 			}),
 			expected: withAnnotations(makeEndpoints("test-configmap"), map[string]string{
-				// First mutation 0->1
-				// Second mutation 1->2
-				// Third Mutation 2->3
-				// First Mutation Reinvocation 3->4
-				// Second Mutation Reinvocation 4->5
-				// (Third Mutation is set to never reinvocation, so it's not reinvoked)
-				// No future reinvocation passes (we only do a single reinvocation)
+				// 第一次 mutation：0->1
+				// 第二次 mutation：1->2
+				// 第三次 mutation：2->3
+				// 第一次 mutation 重新调用：3->4
+				// 第二次 mutation 重新调用：4->5
+				// （第三次 mutation 设为 never reinvocation，不再重新调用）
+				// 不会再进行更多轮重新调用（只做一次 reinvocation）。
 				"foo":           "5",
 				"firstApplied":  "true",
 				"secondApplied": "true",
@@ -810,7 +807,7 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 		},
 	}
 
-	// Run all tests in a shared apiserver
+	// 所有用例共享同一个 apiserver。
 	versions := []schema.GroupVersion{v1.SchemeGroupVersion, v1beta1.SchemeGroupVersion}
 	for _, version := range versions {
 		t.Run(version.Version, func(t *testing.T) {
@@ -842,21 +839,21 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 			for i, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 
-					// Create the policies, bindings and params.
+					// 创建 policy、binding 和 param。
 					for _, param := range tc.params {
 						_, err = client.CoreV1().ConfigMaps(param.GetNamespace()).Create(ctx, param, metav1.CreateOptions{FieldManager: "integration-test"})
 						require.NoError(t, err)
 					}
 
 					for _, p := range tc.policies {
-						// Modify each policy to also mutate marker requests.
+						// 给每个 policy 加上改写 marker 请求的逻辑，用于探测就绪状态。
 						p = withMutatingWaitReadyConstraintAndExpression(p, fmt.Sprintf("%d-%s", i, p.Name))
 						err = createPolicy(ctx, t, client, version, p)
 						require.NoError(t, err)
 					}
 
 					for _, b := range tc.bindings {
-						// After creating each binding, wait until a marker request is successfully mutated.
+						// 创建每个 binding 后，等待 marker 请求被成功改写，确认其已生效。
 						err = createAndWaitReadyMutating(ctx, t, client, version, b, fmt.Sprintf("%d-%s", i, b.Spec.PolicyName))
 						require.NoError(t, err)
 					}
@@ -871,9 +868,8 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 						}
 					}()
 
-					// Verify that the policy is working as expected.
-					// Note that we do NOT retry requests here. Once the bindings are verified as working via marker
-					// requests, we expect the policy to work consistently for all subsequent requests.
+					// 校验 policy 的效果。此处不重试请求：既然 binding 已通过 marker 请求验证就绪，
+					// 后续请求就应当稳定地按预期被改写。
 					var resultObj runtime.Object
 					rsrcClient := clientForType(t, unstructuredRequestObj, tc.requestResource, dynClient)
 					switch tc.requestOperation {
@@ -980,10 +976,9 @@ func TestMutatingAdmissionPolicy(t *testing.T) {
 	}
 }
 
-// TestMutatingAdmissionPolicy_Slow tests policies by waiting until a request is successfully mutated.
-// This is slower because it creates an apiserver for each whereas TestMutatingAdmissionPolicy creates
-// a single apiserver and then uses marker requests to check that a binding is ready before testing it exactly once.
-// Only test cases that cannot be run in TestMutatingAdmissionPolicy should be added here.
+// TestMutatingAdmissionPolicy_Slow 通过等待请求被成功改写来测试 policy。
+// 它为每个用例单独创建 apiserver，因此比 TestMutatingAdmissionPolicy 慢；后者共享一个 apiserver，
+// 用 marker 请求确认 binding 就绪后只校验一次。这里只放无法在 TestMutatingAdmissionPolicy 中运行的用例。
 func TestMutatingAdmissionPolicy_Slow(t *testing.T) {
 	allow := v1.AllowAction
 	matchEndpointResources := v1.MatchResources{
@@ -1009,8 +1004,8 @@ func TestMutatingAdmissionPolicy_Slow(t *testing.T) {
 
 		requestOperation v1.OperationType
 		requestResource  schema.GroupVersionResource
-		subresources     []string       // Only supported for requestOperation=Update since subresources can not be created
-		initialObject    runtime.Object // For requestOperation=Update, this may be used to create the initial object state
+		subresources     []string       // 仅在 requestOperation=Update 时支持，因为 subresource 无法创建
+		initialObject    runtime.Object // requestOperation=Update 时，用于创建对象的初始状态
 		requestObject    runtime.Object
 		expected         runtime.Object
 	}{
@@ -1251,8 +1246,7 @@ func TestMutatingAdmissionPolicy_Slow(t *testing.T) {
 			}),
 		},
 		{
-			// Same as the other cases, but the reinvocation is caused by
-			// multiple params bound
+			// 与其他用例类似，但 reinvocation 由绑定了多个 param 触发。
 			name: "multiple params causing reinvocation",
 			policies: []*v1.MutatingAdmissionPolicy{
 				mutatingPolicy(
@@ -1314,8 +1308,7 @@ func TestMutatingAdmissionPolicy_Slow(t *testing.T) {
 			},
 			bindings: []*v1.MutatingAdmissionPolicyBinding{
 				mutatingBinding("multi-param-reinvocation", &v1.ParamRef{
-					// note empty namespace. all params matching request namespace
-					// will be used
+					// namespace 留空，让所有匹配请求 Namespace 的 param 都生效。
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"multi-param-reinvocation": "true",
@@ -1324,8 +1317,7 @@ func TestMutatingAdmissionPolicy_Slow(t *testing.T) {
 					ParameterNotFoundAction: &allow,
 				}, nil),
 				mutatingBinding("policy-with-param-no-reinvoke", &v1.ParamRef{
-					// note empty namespace. all params matching request namespace
-					// will be used
+					// namespace 留空，让所有匹配请求 Namespace 的 param 都生效。
 					Name:                    "multi-param-reinvocation-param-3",
 					ParameterNotFoundAction: &allow,
 				}, nil),
@@ -1425,7 +1417,7 @@ func TestMutatingAdmissionPolicy_Slow(t *testing.T) {
 				unstructuredExpectedObj := toUnstructured(t, tc.expected)
 				wipeUncheckedFields(t, unstructuredExpectedObj)
 
-				// Dry Run the request until we get the expected mutated response
+				// 反复 dry-run 请求，直到返回预期的改写结果。
 				var resultObj runtime.Object
 				err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, false, func(ctx context.Context) (done bool, err error) {
 					rsrcClient := clientForType(t, unstructuredRequestObj, tc.requestResource, dynClient)
@@ -1468,8 +1460,8 @@ func TestMutatingAdmissionPolicy_Slow(t *testing.T) {
 	}
 }
 
-// Test_MutatingAdmissionPolicy_CustomResources tests custom resource mutations across lists, maps, structs, and labels.
-// CRDs are also ideal for testing version conversion since old versions are not removed, so version conversion is also tested.
+// Test_MutatingAdmissionPolicy_CustomResources 测试对自定义资源中 list、map、struct 和 label 的改写。
+// CRD 保留旧版本，适合验证版本转换，因此这里也覆盖了版本转换场景。
 func Test_MutatingAdmissionPolicy_CustomResources(t *testing.T) {
 	versions := []schema.GroupVersion{v1.SchemeGroupVersion, v1beta1.SchemeGroupVersion}
 	for _, version := range versions {
@@ -1545,7 +1537,7 @@ func Test_MutatingAdmissionPolicy_CustomResources(t *testing.T) {
 
 				v2Resource := makePanda("v2-bears", "v2", nil)
 
-				// Wait for CRDs to register
+				// 等待 CRD 注册完成。
 				err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 					createdv1, err := dynamicClient.Resource(schema.GroupVersionResource{Group: "awesome.bears.com", Version: "v1", Resource: "pandas"}).Create(ctx, v1Resource, metav1.CreateOptions{})
 					if err != nil {
@@ -1829,7 +1821,7 @@ func Test_MutatingAdmissionPolicy_CustomResources(t *testing.T) {
 	}
 }
 
-// Test_MutatingAdmissionPolicy_CustomResourceParamRef tests mutating a native Pod based on fields read from a Custom Resource parameter via ParamRef/ParamKind, including map merging.
+// Test_MutatingAdmissionPolicy_CustomResourceParamRef 验证通过 ParamRef/ParamKind 从自定义资源 param 读取字段来改写原生 Pod，包括 map 合并。
 func Test_MutatingAdmissionPolicy_CustomResourceParamRef(t *testing.T) {
 	versions := []schema.GroupVersion{v1.SchemeGroupVersion, v1beta1.SchemeGroupVersion}
 	for _, version := range versions {
@@ -1979,7 +1971,7 @@ func Test_MutatingAdmissionPolicy_CustomResourceParamRef(t *testing.T) {
 				expectedLabels := map[string]string{
 					"pod-label":    "pod-value",
 					"param-label":  "param-value",
-					"shared-label": "from-param", // param map overwrites pod map in ApplyConfiguration
+					"shared-label": "from-param", // ApplyConfiguration 中 param 的 map 会覆盖 Pod 的 map
 				}
 
 				if !reflect.DeepEqual(createdPod.Labels, expectedLabels) {
@@ -2061,7 +2053,7 @@ func withMutatingWaitReadyConstraintAndExpression(policy *v1.MutatingAdmissionPo
 	policy.Spec.Mutations = append([]v1.Mutation{{
 		PatchType: v1.PatchTypeApplyConfiguration,
 		ApplyConfiguration: &v1.ApplyConfiguration{
-			// Only mutate mutation-markers.
+			// 只改写 mutation-marker，避免影响其他请求。
 			Expression: fmt.Sprintf(`object.metadata.?labels["mutation-marker"] == optional.of("%v") ? Object{ metadata: Object.metadata{ labels: {"mutated":"%v"}}}: Object{}`, testID, testID),
 		},
 	}}, policy.Spec.Mutations...)
@@ -2097,7 +2089,7 @@ func waitReadyMutating(ctx context.Context, t *testing.T, client kubernetes.Inte
 	if waitErr := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		result, err := client.CoreV1().Endpoints(ns).Create(ctx, marker, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}, FieldManager: "mutation-marker-sender"})
 		if err != nil {
-			if strings.Contains(err.Error(), "no params found for policy binding") { // wait for params to register
+			if strings.Contains(err.Error(), "no params found for policy binding") { // 等待 param 注册完成
 				return false, nil
 			} else {
 				return false, err
@@ -2197,11 +2189,10 @@ func wipeUncheckedFields(t *testing.T, obj runtime.Object) {
 	acc, err := meta.Accessor(obj)
 	require.NoError(t, err)
 
-	// GVK can't be patched, and not always on our test objects, so
-	// clear for convenience
+	// GVK 无法 patch，且测试对象上未必存在，直接清空以简化比较。
 	obj.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 
-	// Will be set by server, should be wiped
+	// 由服务端设置的字段，比较前需清空。
 	acc.SetResourceVersion("")
 	acc.SetUID("")
 	acc.SetCreationTimestamp(metav1.Time{})

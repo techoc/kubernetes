@@ -33,7 +33,7 @@ import (
 )
 
 func TestData(t *testing.T) {
-	// proto objects mutate themselves when calling String(), build a fresh one every time
+	// proto 对象的 String() 会修改自身，每次都新建对象
 	makeVersionResponse := func() *runtimev1.VersionResponse {
 		return &runtimev1.VersionResponse{
 			Version:           "0.1.0",
@@ -42,11 +42,10 @@ func TestData(t *testing.T) {
 			RuntimeApiVersion: "v1",
 		}
 	}
-	// make the object to log and expect
+	// 构造待记录并用于断言的对象
 	versionResponse := makeVersionResponse()
-	// Compute the String() representation of this object for this invocation.
-	// Proto objects' String() output is non-deterministic, but stable within a given binary invocation.
-	// Sanity check the value isn't empty and reflects the data in the object
+	// 计算本次调用中该对象的 String() 表示。proto 对象的输出不保证跨进程一致，
+	// 但在同一次二进制运行内稳定；此处检查其非空且包含对象数据。
 	versionResponseString := makeVersionResponse().String()
 	if !regexp.MustCompile(`runtime_name:.*"containerd"`).MatchString(versionResponseString) {
 		t.Fatalf("expected versionResponseString to contain runtimeName.*containerd, got %q", versionResponseString)
@@ -54,8 +53,8 @@ func TestData(t *testing.T) {
 
 	testcases := map[string]struct {
 		messages []logMessage
-		// These are subsets of the full output and may be empty.
-		// Prefix and variable stack traces therefore aren't compared.
+		// 以下字段只需匹配完整输出的子串，可留空；
+		// 因此不比较前缀和多变的 stack trace。
 		printf, structured, json string
 		stats                    logStats
 	}{
@@ -168,9 +167,8 @@ func TestData(t *testing.T) {
 			},
 			printf:     `[RemoteRuntimeService] Version Response: [apiVersion ` + versionResponseString + `]`,
 			structured: `"[RemoteRuntimeService] Version Response" apiVersion=` + strconv.Quote(versionResponseString),
-			// Because of
-			// https://github.com/kubernetes/kubernetes/issues/106652
-			// we get the string instead of a JSON struct.
+			// 受 https://github.com/kubernetes/kubernetes/issues/106652 影响，
+			// 这里得到的是字符串而不是 JSON 结构
 			json: `"msg":"[RemoteRuntimeService] Version Response","v":0,"apiVersion":` + strconv.Quote(versionResponseString),
 			stats: logStats{
 				TotalLines: 1,

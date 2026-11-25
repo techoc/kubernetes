@@ -69,7 +69,7 @@ type componentTester interface {
 type kubeControllerManagerTester struct{}
 
 func (kubeControllerManagerTester) StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (*options.SecureServingOptions, *server.SecureServingInfo, func(), error) {
-	// avoid starting any controller loops, we're just testing serving
+	// 这里只测试 serving，禁用所有 controller loop 避免干扰。
 	customFlags = append([]string{"--controllers="}, customFlags...)
 	gotResult, err := kubectrlmgrtesting.StartTestServer(t, ctx, customFlags)
 	if err != nil {
@@ -103,13 +103,13 @@ func TestComponentSecureServingAndAuth(t *testing.T) {
 		cloudprovider.RegisterCloudProvider("fake", fakeCloudProviderFactory)
 	}
 
-	// Insulate this test from picking up in-cluster config when run inside a pod
-	// We can't assume we have permissions to write to /var/run/secrets/... from a unit test to mock in-cluster config for testing
+	// 避免在 Pod 内运行时误用 in-cluster 配置。
+	// 测试进程未必有权写 /var/run/secrets/... 来伪造 in-cluster 配置，因此直接清空该环境变量。
 	if len(os.Getenv("KUBERNETES_SERVICE_HOST")) > 0 {
 		t.Setenv("KUBERNETES_SERVICE_HOST", "")
 	}
 
-	// authenticate to apiserver via bearer token
+	// 使用 bearer token 向 apiserver 认证。
 	token := "flwqkenfjasasdfmwerasd" // Fake token for testing.
 	tokenFile, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
@@ -120,14 +120,14 @@ func TestComponentSecureServingAndAuth(t *testing.T) {
 `, token))
 	tokenFile.Close()
 
-	// start apiserver
+	// 启动 apiserver。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--token-auth-file", tokenFile.Name(),
 		"--authorization-mode", "RBAC",
 	}, framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// create kubeconfig for the apiserver
+	// 为 apiserver 创建 kubeconfig。
 	apiserverConfig, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ users:
 `, server.ClientConfig.Host, server.ServerOpts.SecureServing.ServerCert.CertKey.CertFile, token))
 	apiserverConfig.Close()
 
-	// create BROKEN kubeconfig for the apiserver
+	// 创建认证信息错误的 kubeconfig，用于验证失败路径。
 
 	brokenApiserverConfig, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
@@ -203,7 +203,7 @@ func testComponentWithSecureServing(t *testing.T, tester componentTester, kubeco
 		name           string
 		flags          []string
 		path           string
-		anonymous      bool // to use the token or not
+		anonymous      bool // 是否不携带 token
 		wantErr        bool
 		wantSecureCode *int
 	}{
@@ -223,7 +223,7 @@ func testComponentWithSecureServing(t *testing.T, tester componentTester, kubeco
 			"--leader-elect=false",
 		}, "/healthz", false, false, ptr.To(http.StatusOK)},
 		{"authorization skipped for /healthz with BROKEN authn/authz", []string{
-			"--authentication-skip-lookup", // to survive inaccessible extensions-apiserver-authentication configmap
+			"--authentication-skip-lookup", // 跳过不可访问的 extensions-apiserver-authentication configmap
 			"--authentication-kubeconfig", brokenKubeconfig,
 			"--authorization-kubeconfig", brokenKubeconfig,
 			"--kubeconfig", kubeconfig,
@@ -236,7 +236,7 @@ func testComponentWithSecureServing(t *testing.T, tester componentTester, kubeco
 			"--leader-elect=false",
 		}, "/metrics", false, false, ptr.To(http.StatusInternalServerError)},
 		{"always-allowed /metrics with BROKEN authn/authz", []string{
-			"--authentication-skip-lookup", // to survive inaccessible extensions-apiserver-authentication configmap
+			"--authentication-skip-lookup", // 跳过不可访问的 extensions-apiserver-authentication configmap
 			"--authentication-kubeconfig", brokenKubeconfig,
 			"--authorization-kubeconfig", brokenKubeconfig,
 			"--authorization-always-allow-paths", "/healthz,/metrics",
@@ -262,9 +262,9 @@ func testComponentWithSecureServing(t *testing.T, tester componentTester, kubeco
 				t.Errorf("SecureServing enabled: expected=%v got=%v", want, got)
 			} else if want {
 				url := fmt.Sprintf("https://%s%s", secureInfo.Listener.Addr().String(), tt.path)
-				url = strings.Replace(url, "[::]", "127.0.0.1", -1) // switch to IPv4 because the self-signed cert does not support [::]
+				url = strings.Replace(url, "[::]", "127.0.0.1", -1) // 自签证书不支持 [::]，改用 IPv4
 
-				// read self-signed server cert disk
+				// 从磁盘读取自签服务端证书。
 				pool := x509.NewCertPool()
 				serverCertPath := path.Join(secureOptions.ServerCert.CertDirectory, secureOptions.ServerCert.PairName+".crt")
 				serverCert, err := os.ReadFile(serverCertPath)
@@ -306,12 +306,12 @@ func testComponentWithSecureServing(t *testing.T, tester componentTester, kubeco
 
 func fakeCloudProviderFactory(io.Reader) (cloudprovider.Interface, error) {
 	return &fake.Cloud{
-		DisableRoutes: true, // disable routes for server tests, otherwise --cluster-cidr is required
+		DisableRoutes: true, // 服务测试不需要路由，否则还得传 --cluster-cidr
 	}, nil
 }
 
 func TestKubeControllerManagerServingZPages(t *testing.T) {
-	// authenticate to apiserver via bearer token
+	// 使用 bearer token 向 apiserver 认证。
 	token := "flwqkenfjasasdfmwerasd" // Fake token for testing.
 	tokenFile, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
@@ -326,14 +326,14 @@ func TestKubeControllerManagerServingZPages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// start apiserver
+	// 启动 apiserver。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--token-auth-file", tokenFile.Name(),
 		"--authorization-mode", "RBAC",
 	}, framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// create kubeconfig for the apiserver
+	// 为 apiserver 创建 kubeconfig。
 	apiserverConfig, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
 		t.Fatal(err)
@@ -597,7 +597,7 @@ users:
 	flagzURL := fmt.Sprintf("https://127.0.0.1:%s/flagz", port)
 	configzURL := fmt.Sprintf("https://127.0.0.1:%s/configz", port)
 
-	// read self-signed server cert disk
+	// 从磁盘读取自签服务端证书。
 	pool := x509.NewCertPool()
 	serverCertPath := path.Join(secureOptions.ServerCert.CertDirectory, secureOptions.ServerCert.PairName+".crt")
 	serverCert, err := os.ReadFile(serverCertPath)
@@ -733,7 +733,7 @@ users:
 			t.Errorf("unexpected Kind: %s", cfg.GetKind())
 		}
 
-		// confirm that they expose public config type
+		// 确认 configz 暴露的是公开的配置类型。
 		var kcmConfig kubecontrollermanagerconfigv1alpha1.KubeControllerManagerConfiguration
 		err = json.Unmarshal(body, &struct {
 			ComponentConfig *kubecontrollermanagerconfigv1alpha1.KubeControllerManagerConfiguration `json:"kubecontrollermanager.config.k8s.io"`
@@ -745,7 +745,7 @@ users:
 }
 
 func TestKubeControllerManagerInformerMetrics(t *testing.T) {
-	// authenticate to apiserver via bearer token
+	// 使用 bearer token 向 apiserver 认证。
 	token := "flwqkenfjasasdfmwerasd" // Fake token for testing.
 	tokenFile, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
@@ -760,14 +760,14 @@ func TestKubeControllerManagerInformerMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// start apiserver
+	// 启动 apiserver。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--token-auth-file", tokenFile.Name(),
 		"--authorization-mode", "RBAC",
 	}, framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// create kubeconfig for the apiserver
+	// 为 apiserver 创建 kubeconfig。
 	apiserverConfig, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
 		t.Fatal(err)
@@ -808,7 +808,7 @@ users:
 		"--authorization-always-allow-paths", "/metrics",
 		"--kubeconfig", apiserverConfig.Name(),
 		"--leader-elect=false",
-		// Enable a minimal set of controllers to ensure informers are started and metrics are produced.
+		// 启用最少量的 controller，确保 informer 启动并产出指标。
 		"--controllers=garbagecollector",
 	}
 	secureOptions, secureInfo, tearDownFn, err := kubeControllerManagerTester{}.StartTestServer(t, ctx, flags)
@@ -827,7 +827,7 @@ users:
 	}
 	metricsURL := fmt.Sprintf("https://127.0.0.1:%s/metrics", port)
 
-	// read self-signed server cert disk
+	// 从磁盘读取自签服务端证书。
 	pool := x509.NewCertPool()
 	serverCertPath := path.Join(secureOptions.ServerCert.CertDirectory, secureOptions.ServerCert.PairName+".crt")
 	serverCert, err := os.ReadFile(serverCertPath)
@@ -864,20 +864,20 @@ users:
 		t.Fatalf("want status %d, got %d: %s", http.StatusOK, r.StatusCode, string(body))
 	}
 
-	// Parse metrics using testutil
+	// 用 testutil 解析指标。
 	metrics := testutil.NewMetrics()
 	if err := testutil.ParseMetrics(string(body), &metrics); err != nil {
 		t.Fatalf("failed to parse metrics: %v", err)
 	}
 
-	// Verify that informer_queued_items metric exists
+	// 验证 informer_queued_items 指标存在。
 	wantMetricName := "informer_queued_items"
 	samples, found := metrics[wantMetricName]
 	if !found {
 		t.Fatalf("expected metrics to contain %q, but it was not found", wantMetricName)
 	}
 
-	// Verify that at least one sample has the kube-controller-manager name label
+	// 验证至少有一个样本带有 kube-controller-manager 的 name 标签。
 	wantLabelValue := testutil.LabelValue("kube-controller-manager")
 	foundKCM := false
 	for _, sample := range samples {
@@ -896,7 +896,7 @@ func TestCloudControllerManagerServingZPages(t *testing.T) {
 	if !cloudprovider.IsCloudProvider("fake") {
 		cloudprovider.RegisterCloudProvider("fake", fakeCloudProviderFactory)
 	}
-	// authenticate to apiserver via bearer token
+	// 使用 bearer token 向 apiserver 认证。
 	token := "flwqkenfjasasdfmwerasd" // Fake token for testing.
 	tokenFile, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
@@ -909,14 +909,14 @@ func TestCloudControllerManagerServingZPages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// start apiserver
+	// 启动 apiserver。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--token-auth-file", tokenFile.Name(),
 		"--authorization-mode", "RBAC",
 	}, framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// create kubeconfig for the apiserver
+	// 为 apiserver 创建 kubeconfig。
 	apiserverConfig, err := os.CreateTemp("", "kubeconfig")
 	if err != nil {
 		t.Fatal(err)
@@ -973,7 +973,7 @@ users:
 	}
 	configzURL := fmt.Sprintf("https://127.0.0.1:%s/configz", port)
 
-	// read self-signed server cert disk
+	// 从磁盘读取自签服务端证书。
 	pool := x509.NewCertPool()
 	serverCertPath := path.Join(secureOptions.ServerCert.CertDirectory, secureOptions.ServerCert.PairName+".crt")
 	serverCert, err := os.ReadFile(serverCertPath)
@@ -1027,7 +1027,7 @@ users:
 			t.Errorf("unexpected Kind: %s", cfg.GetKind())
 		}
 
-		// confirm that they expose public config type
+		// 确认 configz 暴露的是公开的配置类型。
 		var ccmConfig cloudproviderconfigv1alpha1.CloudControllerManagerConfiguration
 		err = json.Unmarshal(body, &struct {
 			ComponentConfig *cloudproviderconfigv1alpha1.CloudControllerManagerConfiguration `json:"cloudcontrollermanager.config.k8s.io"`

@@ -62,7 +62,7 @@ func TestAuthnToKAS(t *testing.T) {
 		return func(opts *options.ServerRunOptions) {
 			opts.GenericServerRunOptions.MaxRequestBodyBytes = 1024 * 1024
 
-			// rewrite the client + request header CA certs with our own content
+			// 用测试自签 CA 替换 client 和 request header 的 CA 证书，便于验证。
 			frontProxyCAFilename := opts.Authentication.RequestHeader.ClientCAFile
 			if err := os.WriteFile(frontProxyCAFilename, frontProxyCA, 0644); err != nil {
 				t.Fatal(err)
@@ -94,7 +94,7 @@ func TestAuthnToKAS(t *testing.T) {
 			})
 			defer tearDownFn()
 
-			// Test an aggregated apiserver client (signed by the new front proxy CA) is authorized
+			// 验证由新 front proxy CA 签发的 aggregated apiserver client 能通过认证授权。
 			extensionApiserverClient, err := kubernetes.NewForConfig(&rest.Config{
 				Host: kubeConfig.Host,
 				TLSClientConfig: rest.TLSClientConfig{

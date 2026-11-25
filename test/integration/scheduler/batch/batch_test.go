@@ -474,7 +474,7 @@ func newDefaultComponentConfig() (*config.KubeSchedulerConfiguration, error) {
 		return nil, err
 	}
 
-	// Clear pod topo spread defaults.
+	// 清空 PodTopologySpread 的默认约束，避免干扰测试预期。
 	profile := cfg.Profiles[0]
 	for _, cfg := range profile.PluginConfig {
 		if cfg.Name == names.PodTopologySpread {
@@ -524,7 +524,7 @@ func newEmptySignPlugin(_ context.Context, injArgs runtime.Object, f fwk.Handle)
 	return &testPluginEmptySign{}, nil
 }
 
-// To access the test-only field in the framework
+// 用于访问 framework 中仅供测试使用的字段。
 type batchGetter interface {
 	TotalBatchedPods() int64
 }
@@ -560,7 +560,7 @@ func runScenario(t *testing.T, tt *scenario, batch bool) ([]*v1.Pod, []bool) {
 
 	cs := testCtx.Client()
 
-	// Add nodes.
+	// 创建测试节点。
 	for _, n := range tt.nodes {
 		_, err := testutil.CreateNode(cs, newNode(&n))
 		if err != nil {
@@ -607,44 +607,36 @@ func runScenario(t *testing.T, tt *scenario, batch bool) ([]*v1.Pod, []bool) {
 	return finalPods, batched
 }
 
-// mustSetupCluster starts the following components:
-// - k8s api server
-// - scheduler
-// - some of the kube-controller-manager controllers
-//
-// It returns regular and dynamic clients, and destroyFunc which should be used to
-// remove resources after finished.
-// Notes on rate limiter:
-//   - client rate limit is set to 5000.
+// mustSetupCluster 启动 k8s apiserver、scheduler 以及部分 kube-controller-manager controller。
+// 它返回普通 client、dynamic client 和 destroyFunc，后者用于测试结束后清理资源。
+// 关于限流：client 的 rate limit 设为 5000。
 func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfiguration, outOfTreePluginRegistry frameworkruntime.Registry) (*scheduler.Scheduler, informers.SharedInformerFactory, ktesting.TContext) {
 	var runtimeConfig []string
 	customFlags := []string{
-		// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+		// 没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 		"--disable-admission-plugins=ServiceAccount,TaintNodesByCondition,Priority",
 		"--runtime-config=" + strings.Join(runtimeConfig, ","),
 	}
 	serverOpts := apiservertesting.NewDefaultTestServerOptions()
-	// Timeout sufficiently long to handle deleting pods of the largest test cases.
+	// 超时时间足够长，以覆盖最大用例中删除 Pod 的耗时。
 	serverOpts.RequestTimeout = 10 * time.Minute
 	server, err := apiservertesting.StartTestServer(tCtx, serverOpts, customFlags, framework.SharedEtcd())
 	if err != nil {
 		tCtx.Fatalf("start apiserver: %v", err)
 	}
-	// Cleanup will be in reverse order: first the clients by canceling the
-	// child context, then the server.
+	// 清理顺序与创建相反：先取消子 context 停掉 client，再关闭 server。
 	tCtx.Cleanup(server.TearDownFn)
 	tCtx = tCtx.WithCancel()
 	tCtx.Cleanup(func() {
 		tCtx.Cancel("test is done")
 	})
 
-	// TODO: client connection configuration, such as QPS or Burst is configurable in theory, this could be derived from the `config`, need to
-	// support this when there is any testcase that depends on such configuration.
+	// TODO: client 连接参数（如 QPS、Burst）理论上可由 `config` 推导，待有用例依赖这些参数时再支持。
 	cfg := restclient.CopyConfig(server.ClientConfig)
 	cfg.QPS = 5000.0
 	cfg.Burst = 5000
 
-	// use default component config if config here is nil
+	// 未传入 config 时使用默认 component config。
 	if config == nil {
 		var err error
 		config, err = newDefaultComponentConfig()
@@ -655,8 +647,8 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 
 	tCtx = tCtx.WithRESTConfig(cfg)
 
-	// Not all config options will be effective but only those mostly related with scheduler performance will
-	// be applied to start a scheduler, most of them are defined in `scheduler.schedulerOptions`.
+	// 启动 scheduler 时不会应用所有配置项，只生效与调度性能密切相关的部分，
+	// 这些配置大多定义在 `scheduler.schedulerOptions` 中。
 	scheduler, informerFactory := testutil.StartScheduler(tCtx, config, outOfTreePluginRegistry)
 	testutil.StartFakePVController(tCtx, tCtx.Client(), informerFactory)
 	runGC := testutil.CreateGCController(tCtx, tCtx, *cfg, informerFactory)

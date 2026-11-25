@@ -39,13 +39,11 @@ var (
 	failureCondition   = "failed"
 )
 
-// testDeviceBindingConditions is the entry point for running each integration test that verifies DeviceBindingConditions.
-// Some of these tests use device taints, and they assume that DRADeviceTaints is enabled.
+// testDeviceBindingConditions 是各 DeviceBindingConditions 集成测试的入口。
+// 其中部分测试使用 device taint，假设 DRADeviceTaints 已启用。
 //
-// In addition, some tests use custom scheduler configuration and therefore
-// can't run in parallel. The ones that use the default scheduler configuration
-// will run in parallel with each other, but not in parallel with
-// non-DeviceBindingConditions tests.
+// 此外，部分测试使用自定义调度器配置，因此不能并行运行。
+// 使用默认配置的测试之间可以并行，但不能与非 DeviceBindingConditions 测试并行。
 func testDeviceBindingConditions(tCtx ktesting.TContext, enabled bool) {
 	tCtx.Run("BasicFlow", func(tCtx ktesting.TContext) { testDeviceBindingConditionsBasicFlow(tCtx, enabled) })
 	if enabled {
@@ -56,10 +54,9 @@ func testDeviceBindingConditions(tCtx ktesting.TContext, enabled bool) {
 	}
 }
 
-// testBindingConditionsBasicFlow tests scheduling with mixed devices: one with BindingConditions, one without.
-// It verifies that the scheduler prioritizes the device without BindingConditions for the first pod.
-// The second pod then uses the device with BindingConditions. The test checks that the scheduler retries
-// after an initial binding failure of the second pod, ensuring successful scheduling after rescheduling.
+// testDeviceBindingConditionsBasicFlow 验证混合设备场景：一个设备有 BindingConditions，另一个没有。
+// 调度器应优先为第一个 Pod 选择无 BindingConditions 的设备，第二个 Pod 则使用带条件的设备。
+// 测试还验证第二个 Pod 初次绑定失败后调度器会重试，重新调度后最终成功。
 func testDeviceBindingConditionsBasicFlow(tCtx ktesting.TContext, enabled bool) {
 	tCtx.Parallel()
 
@@ -122,7 +119,7 @@ func testDeviceBindingConditionsBasicFlow(tCtx ktesting.TContext, enabled bool) 
 	tCtx.ExpectNoError(err, "create slice without binding conditions")
 
 	startScheduler(tCtx)
-	// Schedule first pod and wait for the scheduler to reach the binding phase, which marks the claim as allocated.
+	// 调度第一个 Pod，等待调度器进入 binding 阶段（此时 claim 被标记为已分配）。
 	start := time.Now()
 	claim1 := createClaim(tCtx, namespace, "-a", class, claim)
 	pod := createPod(tCtx, namespace, "-a", podWithClaimName, claim1)
@@ -136,16 +133,16 @@ func testDeviceBindingConditionsBasicFlow(tCtx ktesting.TContext, enabled bool) 
 				Pool:    poolWithoutBinding,
 				Device:  "without-binding",
 			}}}),
-		// NodeSelector intentionally not checked - that's covered elsewhere.
+		// 有意不检查 NodeSelector，这部分由其他测试覆盖。
 		"AllocationTimestamp": gomega.HaveField("Time", gomega.And(
-			gomega.BeTemporally(">=", start.Truncate(time.Second) /* may get rounded down during round-tripping */),
+			gomega.BeTemporally(">=", start.Truncate(time.Second) /* 序列化往返时可能被向下取整 */),
 			gomega.BeTemporally("<=", end),
 		)),
 	}))), "first allocated claim")
 
 	waitForPodScheduled(tCtx, namespace, pod.Name)
 
-	// Second pod should get the device with binding conditions.
+	// 第二个 Pod 应使用带 BindingConditions 的设备。
 	claim2 := createClaim(tCtx, namespace, "-b", class, claim)
 	pod = createPod(tCtx, namespace, "-b", podWithClaimName, claim2)
 	claim2 = waitForClaimAllocatedToDevice(tCtx, namespace, claim2.Name, schedulingTimeout)
@@ -160,14 +157,14 @@ func testDeviceBindingConditionsBasicFlow(tCtx ktesting.TContext, enabled bool) 
 				BindingConditions:        []string{bindingCondition},
 				BindingFailureConditions: []string{failureCondition},
 			}}}),
-		// NodeSelector intentionally not checked - that's covered elsewhere.
+		// 有意不检查 NodeSelector，这部分由其他测试覆盖。
 		"AllocationTimestamp": gomega.HaveField("Time", gomega.And(
-			gomega.BeTemporally(">=", start.Truncate(time.Second) /* may get rounded down during round-tripping */),
+			gomega.BeTemporally(">=", start.Truncate(time.Second) /* 序列化往返时可能被向下取整 */),
 			gomega.BeTemporally("<=", end),
 		)),
 	}))), "second allocated claim")
 
-	// fail the binding condition for the second claim, so that it gets scheduled later.
+	// 让第二个 claim 的绑定条件失败，从而触发后续重新调度。
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest, err := tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claim2.Name, metav1.GetOptions{})
 		if err != nil {
@@ -191,23 +188,22 @@ func testDeviceBindingConditionsBasicFlow(tCtx ktesting.TContext, enabled bool) 
 	})
 	tCtx.ExpectNoError(err, "add binding failure condition to second claim")
 
-	// Then wait until the scheduler has cleared the device statuses again.
+	// 等待调度器再次清除设备状态。
 	waitForClaim(tCtx, namespace, claim2.Name, schedulingTimeout,
 		gomega.HaveField("Status.Devices", gomega.HaveLen(0)),
 		"claim should have cleared device conditions after rescheduling",
 	)
 
-	// allocation restored?
+	// 分配是否恢复？
 	claim2 = waitForClaimAllocatedToDevice(tCtx, namespace, claim2.Name, schedulingTimeout)
 
-	// Now it's safe to set the final binding condition.
-	// Allow the scheduler to proceed.
+	// 此时设置最终的绑定条件是安全的，可以放行调度器继续。
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest, err := tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claim2.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
-		// Write status.devices for the CURRENT allocation device.
+		// 为当前分配的设备写入 status.devices。
 		latest.Status.Devices = []resourceapi.AllocatedDeviceStatus{{
 			Driver: driverName,
 			Pool:   poolWithBinding,
@@ -228,11 +224,9 @@ func testDeviceBindingConditionsBasicFlow(tCtx ktesting.TContext, enabled bool) 
 	waitForPodScheduled(tCtx, namespace, pod.Name)
 }
 
-// testBindingFailureReschedule verifies scheduling behavior when device preparation fails on a node.
-// It tests that a BindingFailure is written, and the scheduler successfully reschedules the pod
-// to a different node where binding succeeds. This ensures that failure recovery via rescheduling works as expected.
-// Device preparation failure is simulated in two ways: by applying DeviceTaints or by removing the device from ResourceSlice.
-// The simulation method is controlled via the `useTaints` argument: when true, DeviceTaints are used; when false, the device is removed from ResourceSlice.
+// testDeviceBindingFailureConditionsReschedule 验证节点上设备准备失败时的调度行为：
+// 写入 BindingFailure 后，调度器应能将 Pod 重新调度到绑定成功的其他节点。
+// 失败通过 DeviceTaint 或从 ResourceSlice 移除设备两种方式模拟，由 useTaints 参数控制。
 func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTaints bool) {
 	tCtx.Parallel()
 
@@ -265,8 +259,8 @@ func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTai
 	}
 	slice = createSlice(tCtx, slice)
 
-	// Schedule the first pod to a device that has binding conditions set,
-	// ensuring the initial allocation occurs on the intended node.
+	// 将第一个 Pod 调度到带 BindingConditions 的设备，
+	// 确保初始分配落在预期的节点上。
 	claim1 := createClaim(tCtx, namespace, "-a", class, claim)
 	pod := createPod(tCtx, namespace, "-a", podWithClaimName, claim1)
 	claim1 = waitForClaimAllocatedToDevice(tCtx, namespace, claim1.Name, schedulingTimeout)
@@ -283,8 +277,7 @@ func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTai
 	}))), "third allocated claim to the device with binding conditions")
 
 	if useTaints {
-		// Add taint to the device with binding conditions,
-		// preventing further scheduling to this device.
+		// 给带 BindingConditions 的设备打 taint，阻止后续再调度到该设备。
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest, err := tCtx.Client().ResourceV1().ResourceSlices().Get(tCtx, slice.Name, metav1.GetOptions{})
 			if err != nil {
@@ -303,7 +296,7 @@ func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTai
 		})
 		tCtx.ExpectNoError(err, "add taint to second slice")
 	} else {
-		// Remove the device from the slice to simulate its unavailability due to preparation failure.
+		// 从 slice 中移除设备，模拟准备失败导致设备不可用。
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest, err := tCtx.Client().ResourceV1().ResourceSlices().Get(tCtx, slice.Name, metav1.GetOptions{})
 			if err != nil {
@@ -317,8 +310,8 @@ func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTai
 		tCtx.ExpectNoError(err, "remove devices in slice")
 	}
 
-	// Create a new slice on a different node with a device that has no binding conditions,
-	// allowing the scheduler to retry and allocate the claim successfully.
+	// 在其他节点上创建一个含无 BindingConditions 设备的新 slice，
+	// 使调度器重试后能成功分配 claim。
 	sliceWithoutBinding := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: namespace + "-without-binding-",
@@ -339,7 +332,7 @@ func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTai
 	}
 	createSlice(tCtx, sliceWithoutBinding)
 
-	// Explicitly fail the binding condition for the third claim to trigger rescheduling logic.
+	// 显式让第三个 claim 的绑定条件失败，以触发重新调度逻辑。
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest, err := tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claim1.Name, metav1.GetOptions{})
 		if err != nil {
@@ -364,13 +357,13 @@ func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTai
 	})
 	tCtx.ExpectNoError(err, "add binding failure condition to claim")
 
-	// Then wait until the scheduler has cleared the device statuses again.
+	// 等待调度器再次清除设备状态。
 	waitForClaim(tCtx, namespace, claim1.Name, schedulingTimeout,
 		gomega.HaveField("Status.Devices", gomega.HaveLen(0)),
 		"claim should have cleared device conditions after rescheduling",
 	)
 
-	// allocation restored?
+	// 分配是否恢复？
 	claim1 = waitForClaimAllocatedToDevice(tCtx, namespace, claim1.Name, schedulingTimeout)
 
 	gomega.NewWithT(tCtx).Expect(claim1).To(gomega.HaveField("Status.Allocation", gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -386,15 +379,15 @@ func testDeviceBindingFailureConditionsReschedule(tCtx ktesting.TContext, useTai
 	waitForPodScheduled(tCtx, namespace, pod.Name)
 }
 
-// testBindingConditionsTimeoutReachedd verifies that a short bindingTimeout triggers
-// a PreBind timeout when the required BindingConditions never become true.
+// testDeviceBindingConditionsTimeoutReached 验证当所需 BindingConditions 一直未满足时，
+// 较短的 bindingTimeout 会触发 PreBind 超时。
 //
-// It runs the scheduler with non-standard settings and thus cannot run in parallel.
+// 该测试使用非标准调度器配置，因此不能并行运行。
 func testDeviceBindingConditionsTimeoutReached(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driver := createTestClass(tCtx, namespace)
 
-	// One device that REQUIRES a binding condition.
+	// 一个必须满足绑定条件的设备。
 	slice := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{GenerateName: namespace + "-timeout-"},
 		Spec: resourceapi.ResourceSliceSpec{
@@ -416,7 +409,7 @@ func testDeviceBindingConditionsTimeoutReached(tCtx ktesting.TContext) {
 	wantTO := 6 * time.Second // bindingTimeout
 	maxTO := wantTO * 19 / 10 // 1.9 * wantTO
 
-	// Start the scheduler with a short binding timeout.
+	// 以较短的绑定超时启动调度器。
 	cfg := fmt.Sprintf(`
 profiles:
 - schedulerName: default-scheduler
@@ -428,11 +421,11 @@ profiles:
 
 	startSchedulerWithConfig(tCtx, cfg)
 
-	// Create claim+pod: allocation happens, then scheduler waits in PreBind.
+	// 创建 claim 和 Pod：先完成分配，然后调度器在 PreBind 阶段等待。
 	claim1 := createClaim(tCtx, namespace, "-timeout-enforced", class, claim)
 	pod := createPod(tCtx, namespace, "-timeout-enforced", podWithClaimName, claim1)
 
-	// Wait until the claim is allocated.
+	// 等待 claim 分配完成。
 	allocatedClaim := waitForClaimAllocatedToDevice(tCtx, namespace, claim1.Name, schedulingTimeout)
 
 	gomega.NewWithT(tCtx).Expect(allocatedClaim).To(gomega.HaveField(
@@ -453,8 +446,8 @@ profiles:
 
 	tStart := time.Now()
 
-	// The scheduler should hit the binding timeout and surface that on the pod.
-	// We poll the pod's conditions until we see a message containing "binding timeout".
+	// 调度器应触发绑定超时，并在 Pod 上体现。
+	// 轮询 Pod 的 conditions 直到出现包含 "binding timeout" 的消息。
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*v1.Pod, error) {
 		return tCtx.Client().CoreV1().Pods(namespace).Get(tCtx, pod.Name, metav1.GetOptions{})
 	}).WithTimeout(maxTO).WithPolling(300*time.Millisecond).Should(
@@ -473,7 +466,7 @@ profiles:
 		gomega.BeNumerically("<=", maxTO),
 		"bindingTimeout should trigger roughly near %s (observed %v)", wantTO, elapsed,
 	)
-	// Verify that the pod remains unscheduled after the binding timeout.
+	// 验证绑定超时后 Pod 仍处于未调度状态。
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*v1.Pod, error) {
 		return tCtx.Client().CoreV1().Pods(namespace).Get(tCtx, pod.Name, metav1.GetOptions{})
 	}).WithTimeout(wantTO).WithPolling(200 * time.Millisecond).Should(gomega.SatisfyAll(
@@ -487,16 +480,15 @@ profiles:
 	))
 }
 
-// testDeviceBindingConditionsTimeoutRecovery verifies that when a device with BindingConditions
-// fails to become ready within the timeout (BindingTimeout enforced), and a new device without
-// binding conditions is added, the scheduler reschedules the claim to the new available device.
+// testDeviceBindingConditionsTimeoutRecovery 验证：带 BindingConditions 的设备在超时内未就绪时，
+// 若加入一个无绑定条件的新设备，调度器应将 claim 重新调度到该可用设备。
 //
-// It runs the scheduler with non-standard settings and thus cannot run in parallel.
+// 该测试使用非标准调度器配置，因此不能并行运行。
 func testDeviceBindingConditionsTimeoutRecovery(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driverName := createTestClass(tCtx, namespace)
 
-	// Start the scheduler with a short binding timeout.
+	// 以较短的绑定超时启动调度器。
 	const cfg = `
 profiles:
 - schedulerName: default-scheduler
@@ -507,7 +499,7 @@ profiles:
 `
 	startSchedulerWithConfig(tCtx, cfg)
 
-	// Initial slice: one device that *requires* a binding condition that never becomes true.
+	// 初始 slice 中只有一个设备，且其必需的绑定条件永远不会变为 true。
 	slice := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: namespace + "-",
@@ -563,7 +555,7 @@ profiles:
 	}
 	sliceWithoutBinding = createSlice(tCtx, sliceWithoutBinding)
 
-	// Ensure the ResourceSlice has been created before the binding timeout occurs.
+	// 确保 ResourceSlice 在绑定超时之前创建完成。
 	tCtx.Eventually(func(tCtx ktesting.TContext) error {
 		p, err := tCtx.Client().CoreV1().Pods(namespace).Get(tCtx, pod.Name, metav1.GetOptions{})
 		if err == nil {
@@ -578,7 +570,7 @@ profiles:
 	}).WithTimeout(schedulingTimeout).WithPolling(300*time.Millisecond).Should(
 		gomega.Succeed(), "slice must be created before binding timeout")
 
-	// Wait until the binding timeout occurs.
+	// 等待绑定超时发生。
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*v1.Pod, error) {
 		return tCtx.Client().CoreV1().Pods(namespace).Get(tCtx, pod.Name, metav1.GetOptions{})
 	}).WithTimeout(20*time.Second).WithPolling(300*time.Millisecond).Should(
@@ -592,7 +584,7 @@ profiles:
 		"pod should report binding timeout before reallocation",
 	)
 
-	// Verify recovery to the newly added device without BindingConditions through rescheduling triggered by binding timeout.
+	// 验证绑定超时触发重新调度后，claim 能恢复分配到新加入的无 BindingConditions 设备。
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*resourceapi.ResourceClaim, error) {
 		return tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claim1.Name, metav1.GetOptions{})
 	}).WithTimeout(schedulingTimeout).WithPolling(1*time.Second).Should(gomega.HaveField(

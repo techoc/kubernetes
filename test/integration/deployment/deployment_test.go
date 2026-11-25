@@ -66,22 +66,21 @@ func TestNewDeployment(t *testing.T) {
 		t.Fatalf("failed to create deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Wait for the Deployment to be updated to revision 1
+	// 等待 Deployment 更新到 revision 1。
 	if err := tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure the Deployment completes while manually marking Deployment pods as ready at the same time.
-	// Use soft check because this deployment was just created and rolling update strategy might be violated.
+	// 一边手动标记 Pod ready，一边等待 Deployment 完成；刚创建时 rolling update 约束可能被短暂违反，故用软检查。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Check new RS annotations
+	// 检查新 ReplicaSet 的 annotation。
 	newRS, err := tester.expectNewReplicaSet()
 	if err != nil {
 		t.Fatal(err)
@@ -93,13 +92,13 @@ func TestNewDeployment(t *testing.T) {
 		t.Errorf("expected new ReplicaSet last-applied annotation not copied from Deployment %s", tester.deployment.Name)
 	}
 
-	// New RS should contain pod-template-hash in its selector, label, and template label
+	// 新 ReplicaSet 的 selector、label 和 template label 都应带 pod-template-hash。
 	rsHash, err := checkRSHashLabels(newRS)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// All pods targeted by the deployment should contain pod-template-hash in their labels
+	// Deployment 选中的所有 Pod 都应带 pod-template-hash label。
 	selector, err := metav1.LabelSelectorAsSelector(tester.deployment.Spec.Selector)
 	if err != nil {
 		t.Fatalf("failed to parse deployment %s selector: %v", name, err)
@@ -120,7 +119,7 @@ func TestNewDeployment(t *testing.T) {
 	}
 }
 
-// Deployments should support roll out, roll back, and roll over.
+// TestDeploymentRollingUpdate 验证 Deployment 支持滚动发布、回滚和 roll over。
 func TestDeploymentRollingUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -133,7 +132,7 @@ func TestDeploymentRollingUpdate(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(c, name, t)
 	defer framework.DeleteNamespaceOrDie(c, ns, t)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
@@ -146,7 +145,7 @@ func TestDeploymentRollingUpdate(t *testing.T) {
 		MaxSurge:       &quarter,
 	}
 
-	// Create a deployment.
+	// 创建 Deployment。
 	var err error
 	tester.deployment, err = c.AppsV1().Deployments(ns.Name).Create(context.TODO(), tester.deployment, metav1.CreateOptions{})
 	if err != nil {
@@ -160,7 +159,7 @@ func TestDeploymentRollingUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. Roll out a new image.
+	// 1. 发布新镜像。
 	image := "new-image"
 	if oriImage == image {
 		t.Fatalf("bad test setup, deployment %s roll out with the same image", tester.deployment.Name)
@@ -179,7 +178,7 @@ func TestDeploymentRollingUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 2. Roll over a deployment before the previous rolling update finishes.
+	// 2. 上一次滚动更新尚未完成时就再次 roll over。
 	image = "dont-finish"
 	imageFn = func(update *apps.Deployment) {
 		update.Spec.Template.Spec.Containers[0].Image = image
@@ -192,8 +191,7 @@ func TestDeploymentRollingUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We don't mark pods as ready so that rollout won't finish.
-	// Before the rollout finishes, trigger another rollout.
+	// 不标记 Pod ready，让滚动发布保持进行中，此时再触发一次新发布。
 	image = "rollover"
 	imageFn = func(update *apps.Deployment) {
 		update.Spec.Template.Spec.Containers[0].Image = image
@@ -219,7 +217,7 @@ func TestDeploymentRollingUpdate(t *testing.T) {
 	}
 }
 
-// selectors are IMMUTABLE for all API versions except apps/v1beta1 and extensions/v1beta1
+// 除 apps/v1beta1 和 extensions/v1beta1 外，所有 API 版本的 selector 均不可变。
 func TestDeploymentSelectorImmutability(t *testing.T) {
 	closeFn, c := dcSimpleSetup(t)
 	defer closeFn()
@@ -235,7 +233,7 @@ func TestDeploymentSelectorImmutability(t *testing.T) {
 		t.Fatalf("failed to create apps/v1 deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// test to ensure apps/v1 selector is immutable
+	// 验证 apps/v1 的 selector 不可变。
 	deploymentAppsV1, err := c.AppsV1().Deployments(ns.Name).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("failed to get apps/v1 deployment %s: %v", name, err)
@@ -254,7 +252,7 @@ func TestDeploymentSelectorImmutability(t *testing.T) {
 	}
 }
 
-// Paused deployment should not start new rollout
+// TestPausedDeployment 验证暂停的 Deployment 不会启动新的 rollout。
 func TestPausedDeployment(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -279,55 +277,54 @@ func TestPausedDeployment(t *testing.T) {
 		t.Fatalf("failed to create deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Verify that the paused deployment won't create new replica set.
+	// 验证暂停状态下不会创建新的 ReplicaSet。
 	if err := tester.expectNoNewReplicaSet(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Resume the deployment
+	// 恢复 Deployment。
 	tester.deployment, err = tester.updateDeployment(resumeFn)
 	if err != nil {
 		t.Fatalf("failed to resume deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Wait for the controller to notice the resume.
+	// 等待 controller 感知恢复操作。
 	if err := tester.waitForObservedDeployment(tester.deployment.Generation); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait for the Deployment to be updated to revision 1
+	// 等待 Deployment 更新到 revision 1。
 	if err := tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure the Deployment completes while manually marking Deployment pods as ready at the same time.
-	// Use soft check because this deployment was just created and rolling update strategy might be violated.
+	// 一边手动标记 Pod ready，一边等待 Deployment 完成；刚创建时 rolling update 约束可能被短暂违反，故用软检查。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
 
-	// A new replicaset should be created.
+	// 应创建新的 ReplicaSet。
 	if _, err := tester.expectNewReplicaSet(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Pause the deployment.
-	// The paused deployment shouldn't trigger a new rollout.
+	// 暂停 Deployment。
+	// 暂停状态下不应触发新的 rollout。
 	tester.deployment, err = tester.updateDeployment(pauseFn)
 	if err != nil {
 		t.Fatalf("failed to pause deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Wait for the controller to notice the pause.
+	// 等待 controller 感知暂停操作。
 	if err := tester.waitForObservedDeployment(tester.deployment.Generation); err != nil {
 		t.Fatal(err)
 	}
 
-	// Update the deployment template
+	// 更新 Deployment template。
 	newTGPS := int64(0)
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Template.Spec.TerminationGracePeriodSeconds = &newTGPS
@@ -336,12 +333,12 @@ func TestPausedDeployment(t *testing.T) {
 		t.Fatalf("failed updating template of deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Wait for the controller to notice the rollout.
+	// 等待 controller 感知 rollout。
 	if err := tester.waitForObservedDeployment(tester.deployment.Generation); err != nil {
 		t.Fatal(err)
 	}
 
-	// Verify that the paused deployment won't create new replica set.
+	// 验证暂停状态下不会创建新的 ReplicaSet。
 	if err := tester.expectNoNewReplicaSet(); err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +355,7 @@ func TestPausedDeployment(t *testing.T) {
 	}
 }
 
-// Paused deployment can be scaled
+// TestScalePausedDeployment 验证暂停的 Deployment 仍可扩缩容。
 func TestScalePausedDeployment(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -382,38 +379,37 @@ func TestScalePausedDeployment(t *testing.T) {
 		t.Fatalf("failed to create deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Wait for the Deployment to be updated to revision 1
+	// 等待 Deployment 更新到 revision 1。
 	if err := tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure the Deployment completes while manually marking Deployment pods as ready at the same time.
-	// Use soft check because this deployment was just created and rolling update strategy might be violated.
+	// 一边手动标记 Pod ready，一边等待 Deployment 完成；刚创建时 rolling update 约束可能被短暂违反，故用软检查。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
 
-	// A new replicaset should be created.
+	// 应创建新的 ReplicaSet。
 	if _, err := tester.expectNewReplicaSet(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Pause the deployment.
+	// 暂停 Deployment。
 	tester.deployment, err = tester.updateDeployment(pauseFn)
 	if err != nil {
 		t.Fatalf("failed to pause deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Wait for the controller to notice the scale.
+	// 等待 controller 感知扩缩容操作。
 	if err := tester.waitForObservedDeployment(tester.deployment.Generation); err != nil {
 		t.Fatal(err)
 	}
 
-	// Scale the paused deployment.
+	// 扩缩容暂停状态的 Deployment。
 	newReplicas := int32(10)
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Replicas = &newReplicas
@@ -422,12 +418,12 @@ func TestScalePausedDeployment(t *testing.T) {
 		t.Fatalf("failed updating deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Wait for the controller to notice the scale.
+	// 等待 controller 感知扩缩容操作。
 	if err := tester.waitForObservedDeployment(tester.deployment.Generation); err != nil {
 		t.Fatal(err)
 	}
 
-	// Verify that the new replicaset is scaled.
+	// 验证新 ReplicaSet 已完成扩缩容。
 	rs, err := tester.expectNewReplicaSet()
 	if err != nil {
 		t.Fatal(err)
@@ -436,14 +432,13 @@ func TestScalePausedDeployment(t *testing.T) {
 		t.Errorf("expected new replicaset replicas = %d, got %d", newReplicas, *rs.Spec.Replicas)
 	}
 
-	// Make sure the Deployment completes while manually marking Deployment pods as ready at the same time.
-	// Use soft check because this deployment was just scaled and rolling update strategy might be violated.
+	// 一边手动标记 Pod ready，一边等待 Deployment 完成；刚扩缩容时 rolling update 约束可能被短暂违反，故用软检查。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Deployment rollout shouldn't be blocked on hash collisions
+// TestDeploymentHashCollision 验证 hash 碰撞不应阻塞 Deployment 的 rollout。
 func TestDeploymentHashCollision(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -465,16 +460,16 @@ func TestDeploymentHashCollision(t *testing.T) {
 		t.Fatalf("failed to create deployment %s: %v", tester.deployment.Name, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Wait for the Deployment to be updated to revision 1
+	// 等待 Deployment 更新到 revision 1。
 	if err := tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 		t.Fatal(err)
 	}
 
-	// Mock a hash collision
+	// 模拟一次 hash 碰撞。
 	newRS, err := testutil.GetNewReplicaSet(tester.deployment, c)
 	if err != nil {
 		t.Fatalf("failed getting new replicaset of deployment %s: %v", tester.deployment.Name, err)
@@ -489,7 +484,7 @@ func TestDeploymentHashCollision(t *testing.T) {
 		t.Fatalf("failed updating replicaset %s template: %v", newRS.Name, err)
 	}
 
-	// Expect deployment collision counter to increment
+	// 期望 Deployment 的 collision 计数器递增。
 	if err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
 		d, err := c.AppsV1().Deployments(ns.Name).Get(context.TODO(), tester.deployment.Name, metav1.GetOptions{})
 		if err != nil {
@@ -500,7 +495,7 @@ func TestDeploymentHashCollision(t *testing.T) {
 		t.Fatalf("Failed to increment collision counter for deployment %q: %v", tester.deployment.Name, err)
 	}
 
-	// Expect a new ReplicaSet to be created
+	// 期望创建新的 ReplicaSet。
 	if err := tester.waitForDeploymentRevisionAndImage("2", fakeImage); err != nil {
 		t.Fatal(err)
 	}
@@ -535,7 +530,7 @@ func checkPodsHashLabel(pods *v1.PodList) (string, error) {
 		if len(podHash) == 0 {
 			return "", fmt.Errorf("found pod %s missing pod-template-hash label: %#v", pod.Name, pods)
 		}
-		// Save the first valid hash
+		// 保存第一个有效的 hash。
 		if len(hash) == 0 {
 			hash = podHash
 		}
@@ -546,7 +541,7 @@ func checkPodsHashLabel(pods *v1.PodList) (string, error) {
 	return hash, nil
 }
 
-// Deployment should have a timeout condition when it fails to progress after given deadline.
+// TestFailedDeployment 验证 Deployment 在规定时间内无法推进时会进入超时条件。
 func TestFailedDeployment(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -570,7 +565,7 @@ func TestFailedDeployment(t *testing.T) {
 		t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
@@ -578,18 +573,17 @@ func TestFailedDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Pods are not marked as Ready, therefore the deployment progress will eventually timeout after progressDeadlineSeconds has passed.
-	// Wait for the deployment to have a progress timeout condition.
+	// Pod 未标记 Ready，超过 progressDeadlineSeconds 后 Deployment 应进入超时条件。
 	if err = tester.waitForDeploymentWithCondition(deploymentutil.TimedOutReason, apps.DeploymentProgressing); err != nil {
 		t.Fatal(err)
 	}
 
-	// Manually mark pods as Ready and wait for deployment to complete.
+	// 手动标记 Pod Ready，等待 Deployment 完成。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatalf("deployment %q fails to have its status becoming valid: %v", deploymentName, err)
 	}
 
-	// Wait for the deployment to have a progress complete condition.
+	// 等待 Deployment 进入完成条件。
 	if err = tester.waitForDeploymentWithCondition(deploymentutil.NewRSAvailableReason, apps.DeploymentProgressing); err != nil {
 		t.Fatal(err)
 	}
@@ -615,11 +609,11 @@ func TestOverlappingDeployments(t *testing.T) {
 		{t: t, c: c, deployment: newDeployment(secondDeploymentName, ns.Name, replicas)},
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Create 2 deployments with overlapping selectors
+	// 创建两个 selector 重叠的 Deployment。
 	var err error
 	var rss []*apps.ReplicaSet
 	for _, tester := range testers {
@@ -628,15 +622,15 @@ func TestOverlappingDeployments(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create deployment %q: %v", dname, err)
 		}
-		// Wait for the deployment to be updated to revision 1
+		// 等待 Deployment 更新到 revision 1。
 		if err = tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 			t.Fatalf("failed to update deployment %q to revision 1: %v", dname, err)
 		}
-		// Make sure the deployment completes while manually marking its pods as ready at the same time
+		// 一边手动标记 Pod ready，一边等待 Deployment 完成。
 		if err = tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 			t.Fatalf("deployment %q failed to complete: %v", dname, err)
 		}
-		// Get replicaset of the deployment
+		// 获取 Deployment 对应的 ReplicaSet。
 		newRS, err := tester.getNewReplicaSet()
 		if err != nil {
 			t.Fatalf("failed to get new replicaset of deployment %q: %v", dname, err)
@@ -644,16 +638,16 @@ func TestOverlappingDeployments(t *testing.T) {
 		if newRS == nil {
 			t.Fatalf("unable to find new replicaset of deployment %q", dname)
 		}
-		// Store the replicaset for future usage
+		// 保存 ReplicaSet 供后续步骤使用。
 		rss = append(rss, newRS)
 	}
 
-	// Both deployments should proceed independently, so their respective replicaset should not be the same replicaset
+	// 两个 Deployment 应独立推进，各自的 ReplicaSet 不应相同。
 	if rss[0].UID == rss[1].UID {
 		t.Fatalf("overlapping deployments should not share the same replicaset")
 	}
 
-	// Scale only the first deployment by 1
+	// 只将第一个 Deployment 扩容 1 个副本。
 	newReplicas := replicas + 1
 	testers[0].deployment, err = testers[0].updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Replicas = &newReplicas
@@ -662,12 +656,12 @@ func TestOverlappingDeployments(t *testing.T) {
 		t.Fatalf("failed updating deployment %q: %v", firstDeploymentName, err)
 	}
 
-	// Make sure the deployment completes after scaling
+	// 确认扩缩容后 Deployment 完成。
 	if err := testers[0].waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatalf("deployment %q failed to complete after scaling: %v", firstDeploymentName, err)
 	}
 
-	// Verify replicaset of both deployments has updated number of replicas
+	// 验证两个 Deployment 的 ReplicaSet 副本数均已更新。
 	for i, tester := range testers {
 		rs, err := c.AppsV1().ReplicaSets(ns.Name).Get(context.TODO(), rss[i].Name, metav1.GetOptions{})
 		if err != nil {
@@ -679,7 +673,7 @@ func TestOverlappingDeployments(t *testing.T) {
 	}
 }
 
-// Deployment should not block rollout when updating spec replica number and template at the same time.
+// TestScaledRolloutDeployment 验证同时更新副本数和 template 时不应阻塞 rollout。
 func TestScaledRolloutDeployment(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -692,11 +686,11 @@ func TestScaledRolloutDeployment(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(c, name, t)
 	defer framework.DeleteNamespaceOrDie(c, ns, t)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Create a deployment with rolling update strategy, max surge = 3, and max unavailable = 2
+	// 创建 rolling update 策略的 Deployment，maxSurge=3、maxUnavailable=2。
 	var err error
 	replicas := int32(10)
 	tester := &deploymentTester{t: t, c: c, deployment: newDeployment(name, ns.Name, replicas)}
@@ -713,13 +707,13 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatalf("deployment %q failed to complete: %v", name, err)
 	}
 
-	// Record current replicaset before starting new rollout
+	// 启动新 rollout 前记录当前 ReplicaSet。
 	firstRS, err := tester.expectNewReplicaSet()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Update the deployment with another new image but do not mark the pods as ready to block new replicaset
+	// 换成另一个新镜像但不标记 Pod ready，使新 ReplicaSet 暂时无法完成。
 	fakeImage2 := "fakeimage2"
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Template.Spec.Containers[0].Image = fakeImage2
@@ -731,7 +725,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify the deployment has minimum available replicas after 2nd rollout
+	// 验证第 2 次 rollout 后仍满足最小可用副本数。
 	tester.deployment, err = c.AppsV1().Deployments(ns.Name).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("failed to get deployment %q: %v", name, err)
@@ -741,7 +735,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatalf("deployment %q does not have minimum number of available replicas after 2nd rollout", name)
 	}
 
-	// Wait for old replicaset of 1st rollout to have desired replicas
+	// 等待第 1 次 rollout 的旧 ReplicaSet 达到期望副本数。
 	firstRS, err = c.AppsV1().ReplicaSets(ns.Name).Get(context.TODO(), firstRS.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("failed to get replicaset %q: %v", firstRS.Name, err)
@@ -750,7 +744,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for new replicaset of 2nd rollout to have desired replicas
+	// 等待第 2 次 rollout 的新 ReplicaSet 达到期望副本数。
 	secondRS, err := tester.expectNewReplicaSet()
 	if err != nil {
 		t.Fatal(err)
@@ -759,7 +753,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Scale up the deployment and update its image to another new image simultaneously (this time marks all pods as ready)
+	// 扩容 Deployment 的同时再次更换镜像，这次标记所有 Pod ready。
 	newReplicas := int32(20)
 	fakeImage3 := "fakeimage3"
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
@@ -776,7 +770,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatalf("deployment %q failed to complete: %v", name, err)
 	}
 
-	// Verify every replicaset has correct desiredReplicas annotation after 3rd rollout
+	// 验证第 3 次 rollout 后每个 ReplicaSet 的 desiredReplicas annotation 正确。
 	thirdRS, err := testutil.GetNewReplicaSet(tester.deployment, c)
 	if err != nil {
 		t.Fatalf("failed getting new revision 3 replicaset for deployment %q: %v", name, err)
@@ -796,7 +790,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		}
 	}
 
-	// Update the deployment with another new image but do not mark the pods as ready to block new replicaset
+	// 换成另一个新镜像但不标记 Pod ready，使新 ReplicaSet 暂时无法完成。
 	fakeImage4 := "fakeimage4"
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Template.Spec.Containers[0].Image = fakeImage4
@@ -808,7 +802,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify the deployment has minimum available replicas after 4th rollout
+	// 验证第 4 次 rollout 后仍满足最小可用副本数。
 	tester.deployment, err = c.AppsV1().Deployments(ns.Name).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("failed to get deployment %q: %v", name, err)
@@ -818,7 +812,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatalf("deployment %q does not have minimum number of available replicas after 4th rollout", name)
 	}
 
-	// Wait for old replicaset of 3rd rollout to have desired replicas
+	// 等待第 3 次 rollout 的旧 ReplicaSet 达到期望副本数。
 	thirdRS, err = c.AppsV1().ReplicaSets(ns.Name).Get(context.TODO(), thirdRS.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("failed to get replicaset %q: %v", thirdRS.Name, err)
@@ -827,7 +821,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for new replicaset of 4th rollout to have desired replicas
+	// 等待第 4 次 rollout 的新 ReplicaSet 达到期望副本数。
 	fourthRS, err := tester.expectNewReplicaSet()
 	if err != nil {
 		t.Fatal(err)
@@ -836,7 +830,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Scale down the deployment and update its image to another new image simultaneously (this time marks all pods as ready)
+	// 缩容 Deployment 的同时再次更换镜像，这次标记所有 Pod ready。
 	newReplicas = int32(5)
 	fakeImage5 := "fakeimage5"
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
@@ -853,7 +847,7 @@ func TestScaledRolloutDeployment(t *testing.T) {
 		t.Fatalf("deployment %q failed to complete: %v", name, err)
 	}
 
-	// Verify every replicaset has correct desiredReplicas annotation after 5th rollout
+	// 验证第 5 次 rollout 后每个 ReplicaSet 的 desiredReplicas annotation 正确。
 	fifthRS, err := testutil.GetNewReplicaSet(tester.deployment, c)
 	if err != nil {
 		t.Fatalf("failed getting new revision 5 replicaset for deployment %q: %v", name, err)
@@ -897,11 +891,11 @@ func TestSpecReplicasChange(t *testing.T) {
 		t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Scale up/down deployment and verify its replicaset has matching .spec.replicas
+	// 扩缩容 Deployment，验证其 ReplicaSet 的 .spec.replicas 同步更新。
 	if err = tester.scaleDeployment(2); err != nil {
 		t.Fatal(err)
 	}
@@ -912,8 +906,7 @@ func TestSpecReplicasChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Add a template annotation change to test deployment's status does update
-	// without .spec.replicas change
+	// 只修改 template annotation，验证 .spec.replicas 不变时 status 仍会更新。
 	var oldGeneration int64
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		oldGeneration = update.Generation
@@ -949,9 +942,9 @@ func TestDeploymentAvailableCondition(t *testing.T) {
 	deploymentName := "deployment"
 	replicas := int32(10)
 	tester := &deploymentTester{t: t, c: c, deployment: newDeployment(deploymentName, ns.Name, replicas)}
-	// Assign a high value to the deployment's minReadySeconds
+	// 设置一个较大的 minReadySeconds。
 	tester.deployment.Spec.MinReadySeconds = 3600
-	// progressDeadlineSeconds must be greater than minReadySeconds
+	// progressDeadlineSeconds 必须大于 minReadySeconds。
 	tester.deployment.Spec.ProgressDeadlineSeconds = ptr.To[int32](7200)
 	var err error
 	tester.deployment, err = c.AppsV1().Deployments(ns.Name).Create(context.TODO(), tester.deployment, metav1.CreateOptions{})
@@ -959,46 +952,46 @@ func TestDeploymentAvailableCondition(t *testing.T) {
 		t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Wait for the deployment to be observed by the controller and has at least specified number of updated replicas
+	// 等待 controller 观察到 Deployment 且 updated replica 数达到指定值。
 	if err = tester.waitForDeploymentUpdatedReplicasGTE(replicas); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait for the deployment to have MinimumReplicasUnavailable reason because the pods are not marked as ready
+	// Pod 未标记 ready，等待 Deployment 出现 MinimumReplicasUnavailable reason。
 	if err = tester.waitForDeploymentWithCondition(deploymentutil.MinimumReplicasUnavailable, apps.DeploymentAvailable); err != nil {
 		t.Fatal(err)
 	}
 
-	// Verify all replicas fields of DeploymentStatus have desired counts
+	// 验证 DeploymentStatus 各 replicas 字段的数值符合预期。
 	if err = tester.checkDeploymentStatusReplicasFields(10, 10, 0, 0, 10, ptr.To[int32](0)); err != nil {
 		t.Fatal(err)
 	}
 
-	// Mark the pods as ready without waiting for the deployment to complete
+	// 标记 Pod ready，但不等待 Deployment 完成。
 	if err = tester.markUpdatedPodsReadyWithoutComplete(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait for number of ready replicas to equal number of replicas.
+	// 等待 ready replica 数与期望副本数一致。
 	if err = tester.waitForReadyReplicas(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait for the deployment to still have MinimumReplicasUnavailable reason within minReadySeconds period
+	// minReadySeconds 期间内 Deployment 应仍保留 MinimumReplicasUnavailable reason。
 	if err = tester.waitForDeploymentWithCondition(deploymentutil.MinimumReplicasUnavailable, apps.DeploymentAvailable); err != nil {
 		t.Fatal(err)
 	}
 
-	// Verify all replicas fields of DeploymentStatus have desired counts
+	// 验证 DeploymentStatus 各 replicas 字段的数值符合预期。
 	if err = tester.checkDeploymentStatusReplicasFields(10, 10, 10, 0, 10, ptr.To[int32](0)); err != nil {
 		t.Fatal(err)
 	}
 
-	// Update the deployment's minReadySeconds to a small value
+	// 将 minReadySeconds 调小。
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.MinReadySeconds = 1
 	})
@@ -1006,23 +999,23 @@ func TestDeploymentAvailableCondition(t *testing.T) {
 		t.Fatalf("failed updating deployment %q: %v", deploymentName, err)
 	}
 
-	// Wait for the deployment to notice minReadySeconds has changed
+	// 等待 Deployment 感知 minReadySeconds 的变化。
 	if err := tester.waitForObservedDeployment(tester.deployment.Generation); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait for the deployment to have MinimumReplicasAvailable reason after minReadySeconds period
+	// 经过 minReadySeconds 后应转为 MinimumReplicasAvailable reason。
 	if err = tester.waitForDeploymentWithCondition(deploymentutil.MinimumReplicasAvailable, apps.DeploymentAvailable); err != nil {
 		t.Fatal(err)
 	}
 
-	// Verify all replicas fields of DeploymentStatus have desired counts
+	// 验证 DeploymentStatus 各 replicas 字段的数值符合预期。
 	if err = tester.checkDeploymentStatusReplicasFields(10, 10, 10, 10, 0, ptr.To[int32](0)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Wait for deployment to automatically patch incorrect ControllerRef of RS
+// testRSControllerRefPatch 等待 Deployment 自动修复 ReplicaSet 上错误的 ControllerRef。
 func testRSControllerRefPatch(t *testing.T, tester *deploymentTester, rs *apps.ReplicaSet, ownerReference *metav1.OwnerReference, expectedOwnerReferenceNum int) {
 	ns := rs.Namespace
 	rsClient := tester.c.AppsV1().ReplicaSets(ns)
@@ -1078,21 +1071,21 @@ func TestGeneralReplicaSetAdoption(t *testing.T) {
 		t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Wait for the Deployment to be updated to revision 1
+	// 等待 Deployment 更新到 revision 1。
 	if err := tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 		t.Fatal(err)
 	}
 
-	// Ensure the deployment completes while marking its pods as ready simultaneously
+	// 一边标记 Pod ready，一边等待 Deployment 完成。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Get replicaset of the deployment
+	// 获取 Deployment 对应的 ReplicaSet。
 	rs, err := testutil.GetNewReplicaSet(tester.deployment, c)
 	if err != nil {
 		t.Fatalf("failed to get replicaset of deployment %q: %v", deploymentName, err)
@@ -1101,15 +1094,13 @@ func TestGeneralReplicaSetAdoption(t *testing.T) {
 		t.Fatalf("unable to find replicaset of deployment %q", deploymentName)
 	}
 
-	// When the only OwnerReference of the RS points to another type of API object such as statefulset
-	// with Controller=false, the deployment should add a second OwnerReference (ControllerRef) pointing to itself
-	// with Controller=true
+	// RS 唯一的 OwnerReference 指向其他类型对象（如 StatefulSet）且 Controller=false 时，
+	// Deployment 应补一条指向自身、Controller=true 的 OwnerReference（ControllerRef）。
 	var falseVar = false
 	ownerReference := metav1.OwnerReference{UID: uuid.NewUUID(), APIVersion: "apps/v1", Kind: "StatefulSet", Name: deploymentName, Controller: &falseVar}
 	testRSControllerRefPatch(t, tester, rs, &ownerReference, 2)
 
-	// When the only OwnerReference of the RS points to the deployment with Controller=false,
-	// the deployment should set Controller=true for the only OwnerReference
+	// RS 唯一的 OwnerReference 已指向该 Deployment 但 Controller=false 时，应将其改为 true。
 	ownerReference = metav1.OwnerReference{UID: tester.deployment.UID, APIVersion: "apps/v1", Kind: "Deployment", Name: deploymentName, Controller: &falseVar}
 	testRSControllerRefPatch(t, tester, rs, &ownerReference, 1)
 }
@@ -1172,30 +1163,28 @@ func TestDeploymentScaleSubresource(t *testing.T) {
 		t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Wait for the Deployment to be updated to revision 1
+	// 等待 Deployment 更新到 revision 1。
 	if err := tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 		t.Fatal(err)
 	}
 
-	// Ensure the deployment completes while marking its pods as ready simultaneously
+	// 一边标记 Pod ready，一边等待 Deployment 完成。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Use scale subresource to scale the deployment up to 3
+	// 通过 scale 子资源将 Deployment 扩到 3。
 	testScalingUsingScaleSubresource(t, tester, 3)
-	// Use the scale subresource to scale the deployment down to 0
+	// 通过 scale 子资源将 Deployment 缩到 0。
 	testScalingUsingScaleSubresource(t, tester, 0)
 }
 
-// This test verifies that the Deployment does orphan a ReplicaSet when the ReplicaSet's
-// .Labels field is changed to no longer match the Deployment's selector. It also partially
-// verifies that collision avoidance mechanism is triggered when a Deployment's new ReplicaSet
-// is orphaned, even without PodTemplateSpec change. Refer comment below for more info:
+// TestReplicaSetOrphaningAndAdoptionWhenLabelsChange 验证 ReplicaSet 的 label 不再匹配 Deployment selector 时会被 orphan，
+// 并间接验证即使 PodTemplateSpec 未变化，新建 ReplicaSet 仍会触发名称碰撞规避。
 // https://github.com/kubernetes/kubernetes/pull/59212#discussion_r166465113
 func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
@@ -1218,23 +1207,23 @@ func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Wait for the Deployment to be updated to revision 1
+	// 等待 Deployment 更新到 revision 1。
 	if err := tester.waitForDeploymentRevisionAndImage("1", fakeImage); err != nil {
 		t.Fatal(err)
 	}
 
-	// Ensure the deployment completes while marking its pods as ready simultaneously
+	// 一边标记 Pod ready，一边等待 Deployment 完成。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Orphaning: deployment should remove OwnerReference from a RS when the RS's labels change to not match its labels
+	// Orphaning：RS label 不再匹配时，Deployment 应移除其 OwnerReference。
 
-	// Get replicaset of the deployment
+	// 获取 Deployment 对应的 ReplicaSet。
 	rs, err := testutil.GetNewReplicaSet(tester.deployment, c)
 	if err != nil {
 		t.Fatalf("failed to get replicaset of deployment %q: %v", deploymentName, err)
@@ -1243,7 +1232,7 @@ func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("unable to find replicaset of deployment %q", deploymentName)
 	}
 
-	// Verify controllerRef of the replicaset is not nil and pointing to the deployment
+	// 验证 ReplicaSet 的 controllerRef 存在且指向该 Deployment。
 	controllerRef := metav1.GetControllerOf(rs)
 	if controllerRef == nil {
 		t.Fatalf("controllerRef of replicaset %q is nil", rs.Name)
@@ -1252,7 +1241,7 @@ func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("controllerRef of replicaset %q has a different UID: Expected %v, got %v", rs.Name, tester.deployment.UID, controllerRef.UID)
 	}
 
-	// Change the replicaset's labels to not match the deployment's labels
+	// 修改 ReplicaSet 的 label，使其不再匹配 Deployment。
 	labelMap := map[string]string{"new-name": "new-test"}
 	rs, err = tester.updateReplicaSet(rs.Name, func(update *apps.ReplicaSet) {
 		update.Labels = labelMap
@@ -1261,7 +1250,7 @@ func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("failed to update replicaset %q: %v", rs.Name, err)
 	}
 
-	// Wait for the controllerRef of the replicaset to become nil
+	// 等待 ReplicaSet 的 controllerRef 被清空。
 	rsClient := tester.c.AppsV1().ReplicaSets(ns.Name)
 	if err = wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
 		rs, err = rsClient.Get(context.TODO(), rs.Name, metav1.GetOptions{})
@@ -1273,9 +1262,8 @@ func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("failed to wait for controllerRef of replicaset %q to become nil: %v", rs.Name, err)
 	}
 
-	// Wait for the deployment to create a new replicaset
-	// This will trigger collision avoidance due to deterministic nature of replicaset name
-	// i.e., the new replicaset will have a name with different hash to preserve name uniqueness
+	// 等待 Deployment 创建新 ReplicaSet；由于 RS 名称是确定性生成的，会触发碰撞规避，
+	// 新 RS 将使用不同 hash 以保证名称唯一。
 	var newRS *apps.ReplicaSet
 	if err = wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
 		newRS, err = testutil.GetNewReplicaSet(tester.deployment, c)
@@ -1290,9 +1278,9 @@ func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("expect deployment %q to create a new replicaset different from the orphaned one, but it isn't", deploymentName)
 	}
 
-	// Adoption: deployment should add controllerRef to a RS when the RS's labels change to match its labels
+	// Adoption：RS label 重新匹配时，Deployment 应为其添加 controllerRef。
 
-	// Change the old replicaset's labels to match the deployment's labels
+	// 修改旧 ReplicaSet 的 label 使其重新匹配 Deployment。
 	rs, err = tester.updateReplicaSet(rs.Name, func(update *apps.ReplicaSet) {
 		update.Labels = testLabels()
 	})
@@ -1300,7 +1288,7 @@ func TestReplicaSetOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("failed to update replicaset %q: %v", rs.Name, err)
 	}
 
-	// Wait for the deployment to adopt the old replicaset
+	// 等待 Deployment 重新纳管旧 ReplicaSet。
 	if err = wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
 		rs, err := rsClient.Get(context.TODO(), rs.Name, metav1.GetOptions{})
 		if err != nil {
@@ -1341,68 +1329,68 @@ func TestTerminatingReplicasDeploymentStatus(t *testing.T) {
 		t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	stopControllers := runControllersAndInformers(t, rm, dc, informers)
 	defer stopControllers()
 
-	// Ensure the deployment completes while marking its pods as ready simultaneously
+	// 一边标记 Pod ready，一边等待 Deployment 完成。
 	if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 		t.Fatal(err)
 	}
-	// Should not update terminating replicas when feature gate is disabled
-	// Verify all replicas fields of DeploymentStatus have desired counts
+	// feature gate 关闭时不应更新 terminating replica 数。
+	// 验证 DeploymentStatus 各 replicas 字段的数值符合预期。
 	if err = tester.checkDeploymentStatusReplicasFields(6, 6, 6, 6, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	// Scale down the deployment
+	// 缩容 Deployment。
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Replicas = ptr.To(int32(4))
 	})
 	if err != nil {
 		t.Fatalf("failed updating deployment %q: %v", deploymentName, err)
 	}
-	// Wait for number of ready replicas to equal number of replicas.
+	// 等待 ready replica 数与期望副本数一致。
 	if err = tester.waitForReadyReplicas(); err != nil {
 		t.Fatal(err)
 	}
-	// Verify all replicas fields of DeploymentStatus have desired counts
+	// 验证 DeploymentStatus 各 replicas 字段的数值符合预期。
 	if err = tester.checkDeploymentStatusReplicasFields(4, 4, 4, 4, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	// should update terminating replicas when feature gate is enabled
+	// feature gate 开启时应更新 terminating replica 数。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DeploymentReplicaSetTerminatingReplicas, true)
-	// Scale down the deployment
+	// 缩容 Deployment。
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Replicas = ptr.To(int32(3))
 	})
 	if err != nil {
 		t.Fatalf("failed updating deployment %q: %v", deploymentName, err)
 	}
-	// Wait for number of ready replicas to equal number of replicas.
+	// 等待 ready replica 数与期望副本数一致。
 	if err = tester.waitForReadyReplicas(); err != nil {
 		t.Fatal(err)
 	}
-	// Verify all replicas fields of DeploymentStatus have desired counts
+	// 验证 DeploymentStatus 各 replicas 字段的数值符合预期。
 	if err = tester.checkDeploymentStatusReplicasFields(3, 3, 3, 3, 0, ptr.To[int32](3)); err != nil {
 		t.Fatal(err)
 	}
 
-	// should not update terminating replicas when feature gate is disabled
+	// feature gate 关闭时不应更新 terminating replica 数。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DeploymentReplicaSetTerminatingReplicas, false)
-	// Scale down the deployment
+	// 缩容 Deployment。
 	tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 		update.Spec.Replicas = ptr.To(int32(2))
 	})
 	if err != nil {
 		t.Fatalf("failed updating deployment %q: %v", deploymentName, err)
 	}
-	// Wait for number of ready replicas to equal number of replicas.
+	// 等待 ready replica 数与期望副本数一致。
 	if err = tester.waitForReadyReplicas(); err != nil {
 		t.Fatal(err)
 	}
-	// Verify all replicas fields of DeploymentStatus have desired counts
+	// 验证 DeploymentStatus 各 replicas 字段的数值符合预期。
 	if err = tester.checkDeploymentStatusReplicasFields(2, 2, 2, 2, 0, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -1476,7 +1464,7 @@ func TestRecreateDeploymentForPodReplacement(t *testing.T) {
 			ns := framework.CreateNamespaceOrDie(c, name, t)
 			defer framework.DeleteNamespaceOrDie(c, ns, t)
 
-			// Start informer and controllers
+			// 启动 informer 和 controller。
 			stopControllers := runControllersAndInformers(t, rm, dc, informers)
 			defer stopControllers()
 
@@ -1494,17 +1482,17 @@ func TestRecreateDeploymentForPodReplacement(t *testing.T) {
 				t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 			}
 
-			// Ensure the deployment completes while marking its pods as ready simultaneously
+			// 一边标记 Pod ready，一边等待 Deployment 完成。
 			if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 				t.Fatal(err)
 			}
-			// Record current replicaset before starting new rollout
+			// 启动新 rollout 前记录当前 ReplicaSet。
 			firstRS, err := tester.expectNewReplicaSet()
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// trigger a new rollout
+			// 触发新的 rollout。
 			tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 				update.Spec.Template.Spec.Containers[0].Env = append(update.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "deploy2", Value: "true"})
 			})
@@ -1512,7 +1500,7 @@ func TestRecreateDeploymentForPodReplacement(t *testing.T) {
 				t.Fatalf("failed updating deployment %q: %v", deploymentName, err)
 			}
 
-			// Wait for old replicaset of 1st rollout to have 0 replicas first
+			// 先等待第 1 次 rollout 的旧 ReplicaSet 缩到 0。
 			firstRS, err = c.AppsV1().ReplicaSets(ns.Name).Get(context.TODO(), firstRS.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("failed to get replicaset %q: %v", firstRS.Name, err)
@@ -1522,44 +1510,44 @@ func TestRecreateDeploymentForPodReplacement(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Verify all replicas fields of DeploymentStatus have desired counts after scale down phase
+			// 缩容阶段结束后，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas := test.expectedReplicasAfterOldRSScaleDown
 			if err = tester.waitForDeploymentStatusReplicasFields(ctx, expectedReplicas, expectedReplicas, 0, 0, expectedReplicas, test.expectedTerminatingReplicasAfterOldRSScaleDown); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify that the new rollout won't create new replica set, until the old pods terminate
+			// 验证旧 Pod 终止前新 rollout 不会创建新 ReplicaSet。
 			if err := tester.expectNoNewReplicaSet(); err != nil {
 				t.Fatal(err)
 			}
-			// remove terminating pods and skip graceful termination of the old RS
+			// 删除 terminating Pod，跳过旧 RS 的优雅终止流程。
 			if err := tester.removeRSPods(ctx, firstRS, math.MaxInt, true, 0); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify all replicas fields of DeploymentStatus have desired counts after new RS creation
+			// 新 ReplicaSet 创建后，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas = test.expectedReplicasAfterNewRS
 			if err = tester.waitForDeploymentStatusReplicasFields(ctx, expectedReplicas, expectedReplicas, 0, 0, expectedReplicas, test.expectedTerminatingReplicasAfterNewRS); err != nil {
 				t.Fatal(err)
 			}
-			// Verify that the new rollout created new replica set
+			// 验证新 rollout 创建了新的 ReplicaSet。
 			secondRS, err := tester.expectNewReplicaSet()
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// start terminating 1 pod
+			// 开始终止 1 个 Pod。
 			err = tester.removeRSPods(ctx, secondRS, 1, false, 300)
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Verify all replicas fields of DeploymentStatus have desired counts after surprise pod termination
+			// Pod 意外终止后，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas = test.expectedReplicasAfterInFlightPodTermination
 			if err = tester.waitForDeploymentStatusReplicasFields(ctx, expectedReplicas, expectedReplicas, 0, 0, expectedReplicas, test.expectedTerminatingReplicasAfterInFlightPodTermination); err != nil {
 				t.Fatal(err)
 			}
 
-			// Scale up during the deployment rollout
+			// 在 rollout 过程中扩容。
 			tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 				update.Spec.Replicas = ptr.To[int32](7)
 			})
@@ -1567,13 +1555,13 @@ func TestRecreateDeploymentForPodReplacement(t *testing.T) {
 				t.Fatalf("failed to update deployment %q: %v", deploymentName, err)
 			}
 
-			// Verify all replicas fields of DeploymentStatus have desired counts after in flight scale up
+			// rollout 期间扩容后，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas = test.expectedReplicasAfterInFlightScaleUp
 			if err = tester.waitForDeploymentStatusReplicasFields(ctx, expectedReplicas, expectedReplicas, 0, 0, expectedReplicas, test.expectedTerminatingReplicasAfterInFlightScaleUp); err != nil {
 				t.Fatal(err)
 			}
 
-			// Scale down during the deployment rollout
+			// 在 rollout 过程中缩容。
 			tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 				update.Spec.Replicas = ptr.To[int32](5)
 			})
@@ -1581,38 +1569,38 @@ func TestRecreateDeploymentForPodReplacement(t *testing.T) {
 				t.Fatalf("failed to update/scale deployment %q: %v", deploymentName, err)
 			}
 
-			// Verify all replicas fields of DeploymentStatus have desired counts after in flight scale down
+			// rollout 期间缩容后，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas = test.expectedReplicasAfterInFlightScaleDown
 			if err = tester.waitForDeploymentStatusReplicasFields(ctx, expectedReplicas, expectedReplicas, 0, 0, expectedReplicas, test.expectedTerminatingReplicasAfterInFlightScaleDown); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify all replicas fields of DeploymentStatus have desired counts before the deployment is completed
+			// Deployment 完成前，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas = test.expectedReplicasForDeploymentComplete
 			if err = tester.waitForDeploymentStatusReplicasFields(ctx, expectedReplicas, expectedReplicas, 0, 0, expectedReplicas, test.expectedTerminatingReplicasForDeploymentComplete); err != nil {
 				t.Fatal(err)
 			}
 
-			// Ensure the new deployment completes while marking its pods as ready simultaneously
+			// 一边标记 Pod ready，一边等待新 Deployment 完成。
 			if err = tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 				t.Fatal(err)
 			}
-			// Verify all replicas fields of DeploymentStatus have desired counts after the deployment is completed
+			// Deployment 完成后，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas = test.expectedReplicasForDeploymentComplete
 			if err = tester.waitForDeploymentStatusReplicasFields(ctx, expectedReplicas, expectedReplicas, expectedReplicas, expectedReplicas, 0, test.expectedTerminatingReplicasForDeploymentComplete); err != nil {
 				t.Fatal(err)
 			}
 
-			// remove terminating pods (if there are any) and skip graceful termination of the old RS
+			// 删除所有 terminating Pod（若有），跳过旧 RS 的优雅终止流程。
 			if err := tester.removeRSPods(ctx, firstRS, math.MaxInt, true, 0); err != nil {
 				t.Fatal(err)
 			}
-			// remove terminating pods and skip graceful termination of the new RS
+			// 删除 terminating Pod，跳过新 RS 的优雅终止流程。
 			if err := tester.removeRSPods(ctx, secondRS, math.MaxInt, true, 0); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify all replicas fields of DeploymentStatus have desired counts after the deployment is completed and old pods have terminated
+			// Deployment 完成且旧 Pod 终止后，验证 DeploymentStatus 各 replicas 字段符合预期。
 			expectedReplicas = test.expectedReplicasForDeploymentComplete
 			var expectedFinalTerminatingReplicas *int32
 			if test.enableDeploymentReplicaSetTerminatingReplicas {
@@ -1641,7 +1629,7 @@ func TestRollingUpdateAndProportionalScalingForDeploymentPodReplacement(t *testi
 		expectedFirstRSAnnotationsAfterInFlightScaleUp   map[string]string
 		expectedSecondRSAnnotationsAfterInFlightScaleUp  map[string]string
 	}{
-		// starts with 100 replicas + 20 maxSurge
+		// 初始规模为 100 副本，maxSurge 为 20。
 		{
 			name: "rolling update should not wait for terminating pods with DeploymentReplicaSetTerminatingReplicas=false",
 			enableDeploymentReplicaSetTerminatingReplicas: false,
@@ -1703,7 +1691,7 @@ func TestRollingUpdateAndProportionalScalingForDeploymentPodReplacement(t *testi
 			ns := framework.CreateNamespaceOrDie(c, name, t)
 			defer framework.DeleteNamespaceOrDie(c, ns, t)
 
-			// Start informer and controllers
+			// 启动 informer 和 controller。
 			stopControllers := runControllersAndInformers(t, rm, dc, informers)
 			defer stopControllers()
 
@@ -1722,27 +1710,27 @@ func TestRollingUpdateAndProportionalScalingForDeploymentPodReplacement(t *testi
 				t.Fatalf("failed to create deployment %q: %v", deploymentName, err)
 			}
 
-			// Ensure the deployment completes while marking its pods as ready simultaneously
+			// 一边标记 Pod ready，一边等待 Deployment 完成。
 			if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 				t.Fatal(err)
 			}
-			// Record current replicaset before starting new rollout
+			// 启动新 rollout 前记录当前 ReplicaSet。
 			firstRS, err := tester.expectNewReplicaSet()
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// Terminating some replicas
+			// 终止一部分副本。
 			err = tester.removeRSPods(ctx, firstRS, int(test.terminatingReplicasFirstRS), false, 300)
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Ensure the deployment completes while marking its pods as ready simultaneously
+			// 一边标记 Pod ready，一边等待 Deployment 完成。
 			if err := tester.waitForDeploymentCompleteAndMarkPodsReady(); err != nil {
 				t.Fatal(err)
 			}
 
-			// Trigger a new rollout
+			// 触发新的 rollout。
 			tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 				update.Spec.Template.Spec.Containers[0].Env = append(update.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{Name: "deploy2", Value: "true"})
 			})
@@ -1754,13 +1742,13 @@ func TestRollingUpdateAndProportionalScalingForDeploymentPodReplacement(t *testi
 				t.Fatal(err)
 			}
 
-			// Verify that the new rollout created new replica set
+			// 验证新 rollout 创建了新的 ReplicaSet。
 			secondRS, err := tester.expectNewReplicaSet()
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// terminating additional replicas
+			// 再终止一部分副本。
 			err = tester.removeRSPods(ctx, secondRS, int(test.terminatingReplicasSecondRS), false, 300)
 			if err != nil {
 				t.Fatal(err)
@@ -1769,7 +1757,7 @@ func TestRollingUpdateAndProportionalScalingForDeploymentPodReplacement(t *testi
 				t.Fatal(err)
 			}
 
-			// Scale up during the deployment rollout
+			// 在 rollout 过程中扩容。
 			tester.deployment, err = tester.updateDeployment(func(update *apps.Deployment) {
 				update.Spec.Replicas = ptr.To[int32](120)
 			})
@@ -1782,7 +1770,7 @@ func TestRollingUpdateAndProportionalScalingForDeploymentPodReplacement(t *testi
 				t.Fatal(err)
 			}
 
-			// Check pod count and annotations for all replica sets
+			// 检查所有 ReplicaSet 的 Pod 数和 annotation。
 			firstRS, err = c.AppsV1().ReplicaSets(ns.Name).Get(context.TODO(), firstRS.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("failed to get replicaset %q: %v", firstRS.Name, err)
@@ -1805,12 +1793,12 @@ func TestRollingUpdateAndProportionalScalingForDeploymentPodReplacement(t *testi
 				t.Fatalf("unexpected %q replica set annotations: %s", secondRS.Name, cmp.Diff(test.expectedSecondRSAnnotationsAfterInFlightScaleUp, secondRS.Annotations))
 			}
 
-			// Ensure the deployment completes while marking its pods as ready and removing terminated pods simultaneously
+			// 一边标记 Pod ready 并清理已终止 Pod，一边等待 Deployment 完成。
 			if err := tester.waitForDeploymentCompleteAndMarkPodsReadyAndRemoveTerminated(ctx); err != nil {
 				t.Fatal(err)
 			}
 
-			// all replica sets' annotations should be up-to-date in the end
+			// 最终所有 ReplicaSet 的 annotation 都应更新到最新。
 			rss := []*apps.ReplicaSet{firstRS, secondRS}
 			for idx, curRS := range rss {
 				curRS, err = c.AppsV1().ReplicaSets(ns.Name).Get(context.TODO(), curRS.Name, metav1.GetOptions{})

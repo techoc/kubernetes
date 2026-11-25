@@ -96,7 +96,7 @@ func TestConditionIsolation(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if false /* disabled until patch annotations go into the API (see https://github.com/kubernetes/kubernetes/issues/107574) */ {
+	if false /* 待 patch annotations 进入 API 后再启用（见 https://github.com/kubernetes/kubernetes/issues/107574） */ {
 		danglePostSMP := getCondition(postSMP.Status.Conditions, flowcontrol.FlowSchemaConditionDangling)
 		if danglePostSMP == nil || danglePostSMP.Status != dangleOrig.Status {
 			t.Errorf("Bad dangle condition after SMP, the FS is now %s", fmtFS(t, postSMP))
@@ -122,7 +122,7 @@ func getCondition(conds []flowcontrol.FlowSchemaCondition, condType flowcontrol.
 	return nil
 }
 
-// makeFlowSchemaConditionPatch takes in a condition and returns the patch status as a json.
+// makeFlowSchemaConditionPatch 根据 condition 构造 JSON 格式的 status patch。
 func makeFlowSchemaConditionPatch(condition flowcontrol.FlowSchemaCondition) ([]byte, error) {
 	o := struct {
 		Status flowcontrol.FlowSchemaStatus `json:"status"`

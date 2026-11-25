@@ -138,11 +138,11 @@ func TestReScheduling(t *testing.T) {
 		name   string
 		plugin ResettablePlugin
 		action func() error
-		// The first time for pod scheduling, we make pod scheduled error or unschedulable on purpose.
-		// This is controlled by wantFirstSchedulingError. By default, pod is unschedulable.
+		// 首次调度时故意让 Pod 调度失败或不可调度，由 wantFirstSchedulingError 控制；
+		// 默认 Pod 为不可调度。
 		wantFirstSchedulingError bool
 
-		// wantScheduled/wantError means the final expected scheduling result.
+		// wantScheduled/wantError 表示最终期望的调度结果。
 		wantScheduled bool
 		wantError     bool
 	}{
@@ -211,7 +211,7 @@ func TestReScheduling(t *testing.T) {
 			t.Run(fmt.Sprintf("%s (Async API calls enabled: %v)", test.name, asyncAPICallsEnabled), func(t *testing.T) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SchedulerAsyncAPICalls, asyncAPICallsEnabled)
 
-				// Create a plugin registry for testing. Register only a permit plugin.
+				// 创建测试用 plugin registry，只注册 permit plugin。
 				registry, prof := InitRegistryAndConfig(t, nil, test.plugin)
 				t.Cleanup(test.plugin.Reset)
 
@@ -226,7 +226,7 @@ func TestReScheduling(t *testing.T) {
 					t.Errorf("Error while creating a test pod: %v", err)
 				}
 
-				// The first time for scheduling, pod is error or unschedulable, controlled by wantFirstSchedulingError
+				// 首次调度时 Pod 为失败或不可调度，由 wantFirstSchedulingError 控制
 				if test.wantFirstSchedulingError {
 					if err = wait.PollUntilContextTimeout(testCtx.Ctx, 10*time.Millisecond, 30*time.Second, false,
 						testutils.PodSchedulingError(testCtx.ClientSet, pod.Namespace, pod.Name)); err != nil {

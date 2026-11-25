@@ -50,12 +50,12 @@ import (
 )
 
 func TestPodSecurity(t *testing.T) {
-	// Start server
+	// 启动 server
 	server := startPodSecurityServer(t)
 	opts := podsecuritytest.Options{
 		ClientConfig: server.ClientConfig,
 
-		// Don't pass in feature-gate info, so all testcases run
+		// 不传 feature-gate 信息，让所有用例都执行
 
 		// TODO
 		ExemptClient:         nil,
@@ -67,24 +67,23 @@ func TestPodSecurity(t *testing.T) {
 	ValidatePluginMetrics(t, opts.ClientConfig)
 }
 
-// TestPodSecurityGAOnly ensures policies pass with only GA features enabled
+// TestPodSecurityGAOnly 验证仅启用 GA 特性时策略仍能通过
 func TestPodSecurityGAOnly(t *testing.T) {
-	// Disable all alpha and beta features
+	// 关闭所有 alpha 和 beta 特性
 	for k, v := range utilfeature.DefaultFeatureGate.DeepCopy().GetAll() {
 		if k == "AllAlpha" || k == "AllBeta" {
-			// Skip special features. When processed first, special features may
-			// erroneously disable other features.
+			// 跳过 AllAlpha/AllBeta 这类特殊开关：先处理它们会误关其他特性
 			continue
 		} else if v.PreRelease == featuregate.Alpha || v.PreRelease == featuregate.Beta {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, k, false)
 		}
 	}
-	// Start server
+	// 启动 server
 	server := startPodSecurityServer(t)
 
 	opts := podsecuritytest.Options{
 		ClientConfig: server.ClientConfig,
-		// Pass in feature gate info so negative test cases depending on alpha or beta features can be skipped
+		// 传入 feature gate 信息，以便跳过依赖 alpha/beta 特性的反向用例
 		Features: utilfeature.DefaultFeatureGate,
 	}
 	podsecuritytest.Run(t, opts)
@@ -93,13 +92,13 @@ func TestPodSecurityGAOnly(t *testing.T) {
 }
 
 func TestPodSecurityWebhook(t *testing.T) {
-	// Start test API server.
+	// 启动测试 API server
 	capabilities.ResetForTest()
 	capabilities.Initialize(capabilities.Capabilities{AllowPrivileged: true})
 	testServer := kubeapiservertesting.StartTestServerOrDie(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{
 		"--anonymous-auth=false",
 		"--allow-privileged=true",
-		// The webhook should pass tests even when PodSecurity is disabled.
+		// 即使 PodSecurity 准入插件被禁用，webhook 也应通过测试
 		"--disable-admission-plugins=PodSecurity",
 	}, framework.SharedEtcd())
 	t.Cleanup(testServer.TearDownFn)
@@ -115,7 +114,7 @@ func TestPodSecurityWebhook(t *testing.T) {
 	opts := podsecuritytest.Options{
 		ClientConfig: testServer.ClientConfig,
 
-		// Don't pass in feature-gate info, so all testcases run
+		// 不传 feature-gate 信息，让所有用例都执行
 
 		// TODO
 		ExemptClient:         nil,
@@ -128,7 +127,7 @@ func TestPodSecurityWebhook(t *testing.T) {
 }
 
 func startPodSecurityServer(t *testing.T) *kubeapiservertesting.TestServer {
-	// ensure the global is set to allow privileged containers
+	// 全局能力需允许 privileged 容器，否则相关用例无法通过
 	capabilities.ResetForTest()
 	capabilities.Initialize(capabilities.Capabilities{AllowPrivileged: true})
 
@@ -156,7 +155,7 @@ func startPodSecurityWebhook(t *testing.T, testServer *kubeapiservertesting.Test
 	if err != nil {
 		return "", err
 	}
-	defaultConfig, err := podsecurityconfigloader.LoadFromData(nil) // load the default
+	defaultConfig, err := podsecurityconfigloader.LoadFromData(nil) // 加载默认配置
 	if err != nil {
 		return "", err
 	}
@@ -183,7 +182,7 @@ func startPodSecurityWebhook(t *testing.T, testServer *kubeapiservertesting.Test
 	go webhookServer.Start(ctx)
 	t.Cleanup(cancel)
 
-	// Wait for server to be ready
+	// 等待 webhook server 就绪后再安装配置
 	t.Logf("Waiting for webhook server /readyz to be ok...")
 	readyz := (&url.URL{
 		Scheme: "http",
@@ -218,7 +217,7 @@ func installWebhook(t *testing.T, clientConfig *rest.Config, addr string) error 
 		Host:   addr,
 	}).String()
 
-	// Installing Admission webhook to API server
+	// 向 API server 安装 Admission webhook
 	_, err = client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Create(context.TODO(), &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: "podsecurity-webhook.integration.test"},
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{
@@ -274,11 +273,11 @@ func installWebhook(t *testing.T, clientConfig *rest.Config, addr string) error 
 			},
 		},
 	}
-	// Wait for the invalid namespace to be rejected.
+	// 轮询直到非法 namespace 被拒绝，确认 webhook 已生效
 	if err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		_, err := client.CoreV1().Namespaces().Create(context.TODO(), invalidNamespace, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil && apierrors.IsInvalid(err) {
-			return true, nil // An Invalid error indicates the webhook rejected the invalid level.
+			return true, nil // Invalid 错误说明 webhook 拒绝了非法级别
 		}
 		return false, nil
 	}); err != nil {

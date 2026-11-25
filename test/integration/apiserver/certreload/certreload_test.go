@@ -183,12 +183,12 @@ func testClientCA(t *testing.T, recreate bool) {
 	})
 	defer tearDownFn()
 
-	// wait for request header info
+	// 等待 request header CA 信息发布到 ConfigMap
 	err = wait.PollImmediate(100*time.Millisecond, 30*time.Second, waitForConfigMapCAContent(t, kubeClient, "requestheader-client-ca-file", "-----BEGIN CERTIFICATE-----", 1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// wait for client cert info
+	// 等待客户端 CA 信息发布到 ConfigMap
 	err = wait.PollImmediate(100*time.Millisecond, 30*time.Second, waitForConfigMapCAContent(t, kubeClient, "client-ca-file", "-----BEGIN CERTIFICATE-----", 1))
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +203,7 @@ func testClientCA(t *testing.T, recreate bool) {
 		}
 	}
 
-	// when we run this the second time, we know which one we are expecting
+	// 第二次运行时已明确期望加载哪个 CA
 	if err := os.WriteFile(clientCAFilename, clientCA.CACert, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func testClientCA(t *testing.T, recreate bool) {
 		}
 	}
 
-	// wait for updated request header info that contains both
+	// 等待 ConfigMap 中的 request header CA 包含新旧两个证书
 	err = wait.PollImmediate(100*time.Millisecond, 30*time.Second, waitForConfigMapCAContent(t, kubeClient, "requestheader-client-ca-file", "-----BEGIN CERTIFICATE-----", 2))
 	if err != nil {
 		t.Error(err)
@@ -237,7 +237,7 @@ func testClientCA(t *testing.T, recreate bool) {
 	if err != nil {
 		t.Error(err)
 	}
-	// wait for updated client cert info that contains both
+	// 等待 ConfigMap 中的客户端 CA 包含新旧两个证书
 	err = wait.PollImmediate(100*time.Millisecond, 30*time.Second, waitForConfigMapCAContent(t, kubeClient, "client-ca-file", "-----BEGIN CERTIFICATE-----", 2))
 	if err != nil {
 		t.Error(err)
@@ -247,7 +247,7 @@ func testClientCA(t *testing.T, recreate bool) {
 		t.Error(err)
 	}
 
-	// Test an aggregated apiserver client (signed by the new front proxy CA) is authorized
+	// 验证由新 front proxy CA 签发的 aggregated apiserver 客户端可通过认证授权
 	extensionApiserverClient, err := kubernetes.NewForConfig(&rest.Config{
 		Host: kubeconfig.Host,
 		TLSClientConfig: rest.TLSClientConfig{
@@ -263,7 +263,7 @@ func testClientCA(t *testing.T, recreate bool) {
 		return
 	}
 
-	// Call an endpoint to make sure we are authenticated
+	// 请求接口验证认证已生效
 	err = extensionApiserverClient.AuthorizationV1().RESTClient().
 		Post().
 		Resource("subjectaccessreviews").
@@ -286,7 +286,7 @@ func testClientCA(t *testing.T, recreate bool) {
 		t.Error(err)
 	}
 
-	// Test a client signed by the new ClientCA is authorized
+	// 验证由新客户端 CA 签发的客户端可通过认证授权
 	testClient, err := kubernetes.NewForConfig(&rest.Config{
 		Host: kubeconfig.Host,
 		TLSClientConfig: rest.TLSClientConfig{
@@ -302,7 +302,7 @@ func testClientCA(t *testing.T, recreate bool) {
 		return
 	}
 
-	// Call an endpoint to make sure we are authenticated
+	// 请求接口验证认证已生效
 	_, err = testClient.CoreV1().Nodes().List(tCtx, metav1.ListOptions{})
 	if err != nil {
 		t.Error(err)
@@ -501,7 +501,7 @@ func testServingCert(t *testing.T, recreate bool) {
 
 	time.Sleep(4 * time.Second)
 
-	// get the certs we're actually serving with
+	// 获取 apiserver 实际在用的 serving 证书
 	_, actualCerts, err := cert.GetServingCertificatesForURL(kubeconfig.Host, "")
 	if err != nil {
 		t.Fatal(err)
@@ -537,7 +537,7 @@ func TestSNICert(t *testing.T) {
 	})
 	defer tearDownFn()
 
-	// When we run this the second time, we know which one we are expecting.
+	// 第二次运行时已明确期望的证书
 	_, actualCerts, err := cert.GetServingCertificatesForURL(kubeconfig.Host, "foo")
 	if err != nil {
 		t.Fatal(err)

@@ -38,12 +38,10 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// This test benchmarks the NodeDeclaredFeatures features performance impact.
-//
-// It mocks a variable number of node features registered (via 'numNodeDeclaredFeatures' param) but the
-// inference function of all the registered features look for pod level resouces ('spec.resources').
-// The tests creates a pod with pod level resources to ensure that all features are inferred
-// during scheduling.
+// 本测试评估 NodeDeclaredFeatures 对性能的影响。
+// 它通过 'numNodeDeclaredFeatures' 参数模拟注册任意数量的节点 feature，但所有 feature 的推断函数
+// 都只检查 Pod 级别资源（'spec.resources'）。测试创建的 Pod 带有 Pod 级资源，确保调度时
+// 所有 feature 都会被推断。
 
 func TestMain(m *testing.M) {
 	if err := perf.InitTests(); err != nil {
@@ -54,7 +52,7 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-// mockFeature is a mock implementation of the Feature interface for testing.
+// mockFeature 是 Feature 接口的测试用模拟实现。
 type mockFeature struct {
 	name       string
 	maxVersion *version.Version
@@ -65,14 +63,13 @@ func (f *mockFeature) Name() string {
 }
 
 func (f *mockFeature) Discover(cfg *ndf.NodeConfiguration) bool {
-	// This function is called by kubelet to discover features on the node and report them in the node status.
-	// In the test context, feature discovery is bypassed and we update node status directly after
-	// the node is created (see updateNodesWithDeclaredFeatures()), so this function is a no-op.
+	// kubelet 正常会调用该函数发现节点 feature 并上报到 node status。测试中跳过发现流程，
+	// 创建节点后直接更新 status（见 updateNodesWithDeclaredFeatures()），因此这里是空实现。
 	return true
 }
 
 func (f *mockFeature) InferForScheduling(podInfo *ndf.PodInfo) bool {
-	// Check if the pod is using pod level resources.
+	// 检查 Pod 是否使用了 Pod 级别资源。
 	return podInfo.Spec != nil && podInfo.Spec.Resources != nil
 }
 
@@ -125,7 +122,7 @@ func preInitNodeDeclaredFeatures(t ktesting.TContext, w *perf.Workload) (func(),
 	}
 
 	t.Logf("PreInit: Setting up %d mock features for %s", numNodeDeclaredFeatures, w.Name)
-	// Setup mock features to be registered in the NDF library.
+	// 注册到 NDF 库的模拟 feature。
 	cleanupMockFeatures := setupFeatures(numNodeDeclaredFeatures)
 
 	return cleanupMockFeatures, nil

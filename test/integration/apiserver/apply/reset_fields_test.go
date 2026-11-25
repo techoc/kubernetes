@@ -30,28 +30,22 @@ import (
 	"k8s.io/kubernetes/test/integration/apiserver/apidefinitions"
 )
 
-// noConflicts is the set of resources for which
-// a conflict cannot occur.
+// noConflicts 是不会产生冲突的资源集合。
 var noConflicts = map[string]struct{}{
-	// both spec and status get wiped for CSRs,
-	// nothing is expected to be managed for it, skip it
+	// CSR 的 spec 和 status 都会被清空，没有字段受管理，跳过。
 	"certificatesigningrequests": {},
-	// storageVersions are skipped because their spec is empty
-	// and thus they can never have a conflict.
+	// storageversions 的 spec 为空，不可能产生冲突。
 	"storageversions": {},
-	// servicecidrs are skipped because their spec is inmutable
-	// and thus they can never have a conflict.
+	// servicecidrs 的 spec 不可变，不可能产生冲突。
 	"servicecidrs": {},
-	// namespaces only have a spec.finalizers field which is also skipped,
-	// thus it will never have a conflict.
+	// namespaces 只有 spec.finalizers 字段，该字段同样被跳过，因此不会冲突。
 	"namespaces": {},
 }
 
-// TestResetFields makes sure that fieldManager does not own fields reset by the storage strategy.
-// It takes 2 objects obj1 and obj2 that differ by one field in the spec and one field in the status.
-// It applies obj1 to the spec endpoint and obj2 to the status endpoint, the lack of conflicts
-// confirms that the fieldmanager1 is wiped of the status and fieldmanager2 is wiped of the spec.
-// We then attempt to apply obj2 to the spec endpoint which fails with an expected conflict.
+// TestApplyResetFields 确保 fieldManager 不会持有被 storage 策略重置的字段。
+// 构造 spec 和 status 各相差一个字段的 obj1 与 obj2，分别 apply 到 spec 和 status 端点；
+// 无冲突说明 fieldmanager1 的 status 所有权和 fieldmanager2 的 spec 所有权已被清除。
+// 随后再次将 obj2 apply 到 spec 端点，预期因冲突失败。
 func TestApplyResetFields(t *testing.T) {
 	apidefinitions.TestAllDefinitions(t, "reset-fields-test", func(t *testing.T, api apidefinitions.Definition) {
 		if !api.HasStatus() {
@@ -61,20 +55,20 @@ func TestApplyResetFields(t *testing.T) {
 			t.Skip("Resource does not support patch, get, and update")
 		}
 
-		// assemble first object
+		// 构造第一个对象。
 		status := api.StorageData.GetStatusStub()
 		obj1 := apidefinitions.TestObj(t, api.StorageData.Stub, status, api.Mapping.GroupVersionKind)
 		name := obj1.GetName()
 
 		rsc := api.ResourceClient()
 
-		// apply the spec of the first object
+		// 只 apply 第一个对象的 spec。
 		_, err := rsc.Apply(context.TODO(), name, obj1, metav1.ApplyOptions{FieldManager: "fieldmanager1"})
 		if err != nil {
 			t.Fatalf("Failed to apply obj1: %v", err)
 		}
 
-		// create second object
+		// 构造第二个对象。
 		status2 := api.StorageData.GetMutatedStatusStub()
 		differentSpec := api.StorageData.MutatedStub
 		if differentSpec == "" {
@@ -91,14 +85,14 @@ func TestApplyResetFields(t *testing.T) {
 			t.Fatalf("obj1 and obj2 should not be equal %v", obj2)
 		}
 
-		// apply the status of the second object
+		// 只 apply 第二个对象的 status。
 		_, err = rsc.ApplyStatus(context.TODO(), name, obj2, metav1.ApplyOptions{FieldManager: "fieldmanager2"})
 		if err != nil {
 			t.Fatalf("Failed to apply obj2: %v", err)
 		}
 
 		if _, ok := noConflicts[api.Mapping.Resource.Resource]; !ok {
-			// reapply second object to the spec endpoint
+			// 再次 apply 到 spec 端点，验证所有权已被清除。
 			_, err = rsc.Apply(context.TODO(), name, obj2, metav1.ApplyOptions{FieldManager: "fieldmanager2"})
 			if err := expectConflict(nil, err, rsc, name); err != nil {
 				t.Fatalf("Did not get expected conflict on spec apply: %v", err)
@@ -116,7 +110,7 @@ func expectConflict(objRet *unstructured.Unstructured, err error, rsc dynamic.Re
 		return nil
 	}
 	which := "returned"
-	// something unexpected is going on here, let's not assume that objRet==nil if any only if err!=nil
+	// 出现意外情况时，不能假设 objRet==nil 与 err!=nil 严格对应，需另行获取对象。
 	if objRet == nil {
 		which = "subsequently fetched"
 		var err2 error

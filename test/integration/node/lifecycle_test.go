@@ -46,11 +46,11 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// TestEvictionForNoExecuteTaintAddedByUser tests taint-based eviction for a node tainted NoExecute
+// TestEvictionForNoExecuteTaintAddedByUser 测试用户给节点打上 NoExecute taint 后基于 taint 的驱逐行为。
 func TestEvictionForNoExecuteTaintAddedByUser(t *testing.T) {
-	// we need at least 2 nodes to prevent lifecycle manager from entering "fully-disrupted" mode
+	// 至少需要 2 个节点，避免 lifecycle manager 进入 "fully-disrupted" 模式
 	nodeCount := 3
-	nodeIndex := 1 // the exact node doesn't matter, pick one
+	nodeIndex := 1 // 具体选哪个节点无关紧要
 
 	tests := map[string]struct {
 		enableSeparateTaintEvictionController  bool
@@ -115,19 +115,19 @@ func TestEvictionForNoExecuteTaintAddedByUser(t *testing.T) {
 					},
 				},
 			}
-			// TODO: this will be removed in 1.37
+			// TODO: 将在 1.37 中移除
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, version.MustParse("1.33"))
 			featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.SeparateTaintEvictionController, test.enableSeparateTaintEvictionController)
 			testCtx := testutils.InitTestAPIServer(t, "taint-no-execute", nil)
 			cs := testCtx.ClientSet
 
-			// Build clientset and informers for controllers.
+			// 为 controller 构建 clientset 和 informer。
 			externalClientConfig := restclient.CopyConfig(testCtx.KubeConfig)
 			externalClientConfig.QPS = -1
 			externalClientset := clientset.NewForConfigOrDie(externalClientConfig)
 			externalInformers := informers.NewSharedInformerFactory(externalClientset, time.Second)
 
-			// Start NodeLifecycleController for taint.
+			// 启动处理 taint 的 NodeLifecycleController。
 			nc, err := nodelifecycle.NewNodeLifecycleController(
 				testCtx.Ctx,
 				externalInformers.Coordination().V1().Leases(),
@@ -135,26 +135,26 @@ func TestEvictionForNoExecuteTaintAddedByUser(t *testing.T) {
 				externalInformers.Core().V1().Nodes(),
 				externalInformers.Apps().V1().DaemonSets(),
 				cs,
-				1*time.Second,    // Node monitor grace period
-				time.Minute,      // Node startup grace period
-				time.Millisecond, // Node monitor period
-				100,              // Eviction limiter QPS
-				100,              // Secondary eviction limiter QPS
-				50,               // Large cluster threshold
-				0.55,             // Unhealthy zone threshold
+				1*time.Second,    // 节点监控宽限期
+				time.Minute,      // 节点启动宽限期
+				time.Millisecond, // 节点监控周期
+				100,              // 驱逐限流器 QPS
+				100,              // 二级驱逐限流器 QPS
+				50,               // 大集群阈值
+				0.55,             // 不健康 zone 阈值
 			)
 			if err != nil {
 				t.Fatalf("Failed to create node controller: %v", err)
 			}
 
-			// Waiting for all controllers to sync
+			// 等待所有 controller 完成同步
 			externalInformers.Start(testCtx.Ctx.Done())
 			externalInformers.WaitForCacheSync(testCtx.Ctx.Done())
 
-			// Run all controllers
+			// 运行所有 controller
 			go nc.Run(testCtx.Ctx)
 
-			// Start TaintManager
+			// 启动 TaintManager
 			if test.startStandaloneTaintEvictionController {
 				tm, _ := tainteviction.New(
 					testCtx.Ctx,
@@ -203,11 +203,11 @@ func TestEvictionForNoExecuteTaintAddedByUser(t *testing.T) {
 	}
 }
 
-// TestTaintBasedEvictions tests related cases for the TaintBasedEvictions feature
+// TestTaintBasedEvictions 测试 TaintBasedEvictions 特性的相关场景。
 func TestTaintBasedEvictions(t *testing.T) {
-	// we need at least 2 nodes to prevent lifecycle manager from entering "fully-disrupted" mode
+	// 至少需要 2 个节点，避免 lifecycle manager 进入 "fully-disrupted" 模式
 	nodeCount := 3
-	nodeIndex := 1 // the exact node doesn't matter, pick one
+	nodeIndex := 1 // 具体选哪个节点无关紧要
 	zero := int64(0)
 	gracePeriod := int64(1)
 	testPod := &v1.Pod{
@@ -317,7 +317,7 @@ func TestTaintBasedEvictions(t *testing.T) {
 		},
 	}
 
-	// Build admission chain handler.
+	// 构建 admission 链 handler。
 	podTolerations := podtolerationrestriction.NewPodTolerationsPlugin(&pluginapi.Configuration{})
 	defaultTolerationSeconds, err := newHandlerForTest()
 	if err != nil {
@@ -334,7 +334,7 @@ func TestTaintBasedEvictions(t *testing.T) {
 
 			testCtx := testutils.InitTestAPIServer(t, "taint-based-evictions", admission)
 
-			// Build clientset and informers for controllers.
+			// 为 controller 构建 clientset 和 informer。
 			externalClientConfig := restclient.CopyConfig(testCtx.KubeConfig)
 			externalClientConfig.QPS = -1
 			externalClientset := clientset.NewForConfigOrDie(externalClientConfig)
@@ -344,7 +344,7 @@ func TestTaintBasedEvictions(t *testing.T) {
 
 			cs := testCtx.ClientSet
 
-			// Start NodeLifecycleController for taint.
+			// 启动处理 taint 的 NodeLifecycleController。
 			nc, err := nodelifecycle.NewNodeLifecycleController(
 				testCtx.Ctx,
 				externalInformers.Coordination().V1().Leases(),
@@ -352,26 +352,26 @@ func TestTaintBasedEvictions(t *testing.T) {
 				externalInformers.Core().V1().Nodes(),
 				externalInformers.Apps().V1().DaemonSets(),
 				cs,
-				1*time.Second,    // Node monitor grace period
-				time.Minute,      // Node startup grace period
-				time.Millisecond, // Node monitor period
-				100,              // Eviction limiter QPS
-				100,              // Secondary eviction limiter QPS
-				50,               // Large cluster threshold
-				0.55,             // Unhealthy zone threshold
+				1*time.Second,    // 节点监控宽限期
+				time.Minute,      // 节点启动宽限期
+				time.Millisecond, // 节点监控周期
+				100,              // 驱逐限流器 QPS
+				100,              // 二级驱逐限流器 QPS
+				50,               // 大集群阈值
+				0.55,             // 不健康 zone 阈值
 			)
 			if err != nil {
 				t.Fatalf("Failed to create node controller: %v", err)
 			}
 
-			// Waiting for all controllers to sync
+			// 等待所有 controller 完成同步
 			externalInformers.Start(testCtx.Ctx.Done())
 			externalInformers.WaitForCacheSync(testCtx.Ctx.Done())
 
-			// Run the controller
+			// 运行 controller
 			go nc.Run(testCtx.Ctx)
 
-			// Start TaintEvictionController
+			// 启动 TaintEvictionController
 			if test.enableSeparateTaintEvictionController {
 				tm, _ := tainteviction.New(
 					testCtx.Ctx,
@@ -443,8 +443,7 @@ func TestTaintBasedEvictions(t *testing.T) {
 					if err != nil {
 						return false, err
 					}
-					// as node is unreachable, pod0 is expected to be in Terminating status
-					// rather than getting deleted
+					// 节点不可达时，预期 Pod 处于 Terminating 状态而非被直接删除
 					if test.tolerationSeconds == 0 {
 						return pod.DeletionTimestamp != nil, nil
 					}
@@ -464,7 +463,7 @@ func TestTaintBasedEvictions(t *testing.T) {
 	}
 }
 
-// newHandlerForTest returns a handler configured for testing.
+// newHandlerForTest 返回一个用于测试的 handler。
 func newHandlerForTest() (*defaulttolerationseconds.Plugin, error) {
 	handler := defaulttolerationseconds.NewDefaultTolerationSeconds()
 	pluginInitializer := initializer.New(nil, nil, nil, nil, nil, nil, nil, nil)

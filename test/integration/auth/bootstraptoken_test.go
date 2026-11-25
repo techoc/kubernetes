@@ -49,7 +49,7 @@ func (b bootstrapSecrets) Get(name string) (*corev1.Secret, error) {
 	return b[0], nil
 }
 
-// TestBootstrapTokenAuth tests the bootstrap token auth provider
+// TestBootstrapTokenAuth 验证 bootstrap token 认证提供者。
 func TestBootstrapTokenAuth(t *testing.T) {
 	validTokenID := "token1"
 	validSecret := "validtokensecret"
@@ -95,7 +95,7 @@ func TestBootstrapTokenAuth(t *testing.T) {
 		verb        string
 		URL         string
 		body        string
-		statusCodes map[int]bool // Set of expected resp.StatusCode if all goes well.
+		statusCodes map[int]bool // 一切正常时期望的 resp.StatusCode 集合。
 	}
 	tests := []struct {
 		name    string
@@ -147,7 +147,7 @@ func TestBootstrapTokenAuth(t *testing.T) {
 			if test.request.body != "" {
 				sub := ""
 				if test.request.verb == "PUT" {
-					// For update operations, insert previous resource version
+					// 更新操作需带上之前的 resourceVersion。
 					if resVersion := previousResourceVersion[getPreviousResourceVersionKey(test.request.URL, "")]; resVersion != 0 {
 						sub += fmt.Sprintf(",\r\n\"resourceVersion\": \"%v\"", resVersion)
 					}
@@ -180,7 +180,7 @@ func TestBootstrapTokenAuth(t *testing.T) {
 					t.Errorf("Body: %v", string(b))
 				} else {
 					if test.request.verb == "POST" {
-						// For successful create operations, extract resourceVersion
+						// 创建成功后提取 resourceVersion，供后续更新使用。
 						id, currentResourceVersion, err := parseResourceVersion(b)
 						if err == nil {
 							key := getPreviousResourceVersionKey(test.request.URL, id)

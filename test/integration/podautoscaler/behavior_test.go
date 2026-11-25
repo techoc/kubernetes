@@ -33,24 +33,18 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestHPAWithTolerance integration verifies that a HPA with configurable
-// tolerances has the expected autoscaling behavior.
+// TestHPAWithTolerance 验证配置了容差的 HPA 的扩缩容行为。
 //
-// The test setup composed of:
-//  1. An HPA with 5% up and 50% down tolerances, scaling on a external metric
-//     with a target of 100 per pod.
-//  2. A Deployment with 35 initial pods
-//  3. An external metric server advertising a metric value of 3500.
+// 测试环境：
+//  1. HPA 的扩容容差为 5%、缩容容差为 50%，基于外部指标，目标值为每 Pod 100。
+//  2. 初始 35 个 Pod 的 Deployment。
+//  3. 外部指标服务上报指标值 3500。
 //
-// The test runs the following test cases:
-//  1. The metric value is increased to 3700 (a 6% increase), triggering a
-//     scale-up to 37 replicas.
-//  2. The metric value is increased to 3800 (a 3% increase), which should not
-//     trigger a scale-up.
-//  3. The metric value is decreased to 1000 (a 74% decrease), which should
-//     trigger a scale-down to 10 replicas.
-//  4. The metric value is decreased to 800 (a 20% decrease), which should not
-//     trigger a scale-down.
+// 测试用例：
+//  1. 指标升到 3700（增幅 6%），应扩容到 37 副本。
+//  2. 指标升到 3800（增幅 3%），不应扩容。
+//  3. 指标降到 1000（降幅 74%），应缩容到 10 副本。
+//  4. 指标降到 800（降幅 20%），不应缩容。
 func TestHPAWithTolerance(t *testing.T) {
 	ctx := t.Context()
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HPAConfigurableTolerance, true)
@@ -66,7 +60,7 @@ func TestHPAWithTolerance(t *testing.T) {
 
 	metricValue.Store(resource.MustParse("3500"))
 
-	// Create a HPA using an external metric and 5%/50% up/down tolerances.
+	// 创建使用外部指标、扩容容差 5%/缩容容差 50% 的 HPA。
 	metricSpec := autoscalingv2.MetricSpec{
 		Type: autoscalingv2.ExternalMetricSourceType,
 		External: &autoscalingv2.ExternalMetricSource{
@@ -135,9 +129,8 @@ func TestHPAWithTolerance(t *testing.T) {
 	}
 }
 
-// simulatePodsScheduled sets the `status.replicas` field of a deployment to
-// the same value as `spec.replicas`, pretending that the deployment Pods were
-// actually scheduled.
+// simulatePodsScheduled 将 Deployment 的 status.replicas 设为 spec.replicas，
+// 模拟 Pod 已完成调度。
 func simulatePodsScheduled(t *testing.T, cs *kubernetes.Clientset, d *appsv1.Deployment) {
 	t.Helper()
 	ud, err := cs.AppsV1().Deployments(d.Namespace).Get(t.Context(), d.Name, metav1.GetOptions{})
@@ -153,6 +146,6 @@ func simulatePodsScheduled(t *testing.T, cs *kubernetes.Clientset, d *appsv1.Dep
 		t.Fatalf("Cannot set deployment status: %v", err)
 	}
 
-	// Wait to ensure HPA controller takes the update into account
+	// 等待 HPA controller 感知 status 更新。
 	time.Sleep(hpaControllerResyncPeriod * 2)
 }

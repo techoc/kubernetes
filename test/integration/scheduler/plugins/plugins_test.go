@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package plugins contains functional tests for scheduler plugin support.
-// Beware that the plugins in this directory are not meant to be used in
-// performance tests because they don't behave like real plugins.
+// Package plugins 包含 scheduler 插件支持的功能测试。
+// 注意：本目录中的插件行为与真实插件不同，不可用于性能测试。
 package plugins
 
 import (
@@ -57,14 +56,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// imported from testutils
+// 从 testutils 引入。
 var (
 	initRegistryAndConfig = func(t *testing.T, plugins ...fwk.Plugin) (frameworkruntime.Registry, schedulerconfig.KubeSchedulerProfile) {
 		return schedulerutils.InitRegistryAndConfig(t, newPlugin, plugins...)
 	}
 )
 
-// newPlugin returns a plugin factory with specified Plugin.
+// newPlugin 返回指定 Plugin 的插件工厂。
 func newPlugin(plugin fwk.Plugin) frameworkruntime.PluginFactory {
 	return func(_ context.Context, _ runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
 		switch pl := plugin.(type) {
@@ -78,7 +77,7 @@ func newPlugin(plugin fwk.Plugin) frameworkruntime.PluginFactory {
 }
 
 type QueueSortPlugin struct {
-	// lessFunc is used to compare two queued pod infos.
+	// lessFunc 用于比较两个队列中的 Pod 信息。
 	lessFunc func(info1, info2 fwk.QueuedEntityInfo) bool
 }
 
@@ -184,9 +183,9 @@ type PreBindPlugin struct {
 	numPreBindCalled int
 	failPreBind      bool
 	rejectPreBind    bool
-	// If set to true, always succeed on non-first scheduling attempt.
+	// 为 true 时，非首次调度尝试一律成功。
 	succeedOnRetry bool
-	// Record the pod UIDs that have been tried scheduling.
+	// 记录已经尝试调度的 Pod UID。
 	podUIDs map[types.UID]struct{}
 }
 
@@ -336,7 +335,7 @@ func (ep *QueueSortPlugin) Less(info1, info2 fwk.QueuedEntityInfo) bool {
 	if ep.lessFunc != nil {
 		return ep.lessFunc(info1, info2)
 	}
-	// If no custom less function is provided, default to return true.
+	// 未提供自定义比较函数时默认返回 true。
 	return true
 }
 
@@ -358,12 +357,12 @@ func (ep *PreEnqueuePlugin) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.Stat
 	return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, "not ready for scheduling")
 }
 
-// Name returns name of the score plugin.
+// Name 返回 score 插件名称。
 func (sp *ScorePlugin) Name() string {
 	return scorePluginName
 }
 
-// Score returns the score of scheduling a pod on a specific node.
+// Score 返回将 Pod 调度到指定 Node 的得分。
 func (sp *ScorePlugin) Score(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
@@ -375,7 +374,7 @@ func (sp *ScorePlugin) Score(ctx context.Context, state fwk.CycleState, p *v1.Po
 
 	score := int64(1)
 	if sp.numScoreCalled == 1 {
-		// The first node is scored the highest, the rest is scored lower.
+		// 第一个 Node 得最高分，其余较低。
 		sp.highScoreNode = nodeInfo.Node().Name
 		score = fwk.MaxNodeScore
 	}
@@ -390,12 +389,12 @@ func (sp *ScorePlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventWi
 	return nil, nil
 }
 
-// Name returns name of the score plugin.
+// Name 返回 score 插件名称。
 func (sp *ScoreWithNormalizePlugin) Name() string {
 	return scoreWithNormalizePluginName
 }
 
-// Score returns the score of scheduling a pod on a specific node.
+// Score 返回将 Pod 调度到指定 Node 的得分。
 func (sp *ScoreWithNormalizePlugin) Score(ctx context.Context, state fwk.CycleState, p *v1.Pod, nodeInfo fwk.NodeInfo) (int64, *fwk.Status) {
 	sp.mutex.Lock()
 	defer sp.mutex.Unlock()
@@ -414,13 +413,12 @@ func (sp *ScoreWithNormalizePlugin) ScoreExtensions() fwk.ScoreExtensions {
 	return sp
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (fp *FilterPlugin) Name() string {
 	return filterPluginName
 }
 
-// Filter is a test function that returns an error or nil, depending on the
-// value of "failFilter".
+// Filter 是测试函数，根据 failFilter 返回错误或 nil。
 func (fp *FilterPlugin) Filter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeInfo fwk.NodeInfo) *fwk.Status {
 	fp.mutex.Lock()
 	defer fp.mutex.Unlock()
@@ -446,13 +444,12 @@ func (fp *FilterPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventW
 	}, nil
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (rp *ReservePlugin) Name() string {
 	return rp.name
 }
 
-// Reserve is a test function that increments an intenral counter and returns
-// an error or nil, depending on the value of "failReserve".
+// Reserve 是测试函数，递增内部计数器，并根据 failReserve 返回错误或 nil。
 func (rp *ReservePlugin) Reserve(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) *fwk.Status {
 	rp.numReserveCalled++
 	if rp.failReserve {
@@ -461,9 +458,8 @@ func (rp *ReservePlugin) Reserve(ctx context.Context, state fwk.CycleState, pod 
 	return nil
 }
 
-// Unreserve is a test function that increments an internal counter and emits
-// an event to a channel. While Unreserve implementations should normally be
-// idempotent, we relax that requirement here for testing purposes.
+// Unreserve 是测试函数，递增内部计数器并向 channel 发送事件。
+// 实际实现通常要求幂等，这里为测试目的放宽该要求。
 func (rp *ReservePlugin) Unreserve(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) {
 	rp.numUnreserveCalled++
 	if rp.pluginInvokeEventChan != nil {
@@ -474,12 +470,12 @@ func (rp *ReservePlugin) Unreserve(ctx context.Context, state fwk.CycleState, po
 	}
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (*PreScorePlugin) Name() string {
 	return preScorePluginName
 }
 
-// PreScore is a test function.
+// PreScore 是测试函数。
 func (pfp *PreScorePlugin) PreScore(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, _ []fwk.NodeInfo) *fwk.Status {
 	pfp.numPreScoreCalled++
 	if pfp.failPreScore {
@@ -489,17 +485,17 @@ func (pfp *PreScorePlugin) PreScore(ctx context.Context, _ fwk.CycleState, pod *
 	return nil
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pp *PreBindPlugin) Name() string {
 	return preBindPluginName
 }
 
-// PreBindPreFlight is a test function that returns nil for testing.
+// PreBindPreFlight 是测试函数，固定返回 nil。
 func (pp *PreBindPlugin) PreBindPreFlight(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (*fwk.PreBindPreFlightResult, *fwk.Status) {
 	return &fwk.PreBindPreFlightResult{AllowParallel: false}, nil
 }
 
-// PreBind is a test function that returns (true, nil) or errors for testing.
+// PreBind 是测试函数，根据配置返回成功或错误。
 func (pp *PreBindPlugin) PreBind(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) *fwk.Status {
 	pp.mutex.Lock()
 	defer pp.mutex.Unlock()
@@ -563,12 +559,12 @@ func (bp *BindPlugin) Bind(ctx context.Context, state fwk.CycleState, p *v1.Pod,
 	return bp.bindStatus
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pp *PostBindPlugin) Name() string {
 	return pp.name
 }
 
-// PostBind is a test function, which counts the number of times called.
+// PostBind 是测试函数，统计调用次数。
 func (pp *PostBindPlugin) PostBind(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) {
 	pp.mutex.Lock()
 	defer pp.mutex.Unlock()
@@ -582,17 +578,17 @@ func (pp *PostBindPlugin) PostBind(ctx context.Context, state fwk.CycleState, po
 	}
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pp *PreFilterPlugin) Name() string {
 	return prefilterPluginName
 }
 
-// Extensions returns the PreFilterExtensions interface.
+// Extensions 返回 PreFilterExtensions 接口。
 func (pp *PreFilterPlugin) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }
 
-// PreFilter is a test function that returns (true, nil) or errors for testing.
+// PreFilter 是测试函数，根据配置返回成功或错误。
 func (pp *PreFilterPlugin) PreFilter(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodes []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
 	pp.numPreFilterCalled.Add(1)
 	if pp.failPreFilter {
@@ -607,7 +603,7 @@ func (pp *PreFilterPlugin) PreFilter(ctx context.Context, state fwk.CycleState, 
 	return nil, nil
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pp *PostFilterPlugin) Name() string {
 	return pp.name
 }
@@ -637,12 +633,12 @@ func (pp *PostFilterPlugin) PostFilter(ctx context.Context, state fwk.CycleState
 	return nil, fwk.NewStatus(fwk.Success, fmt.Sprintf("make room for pod %v to be schedulable", pod.Name))
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pp *PermitPlugin) Name() string {
 	return pp.name
 }
 
-// Permit implements the permit test plugin.
+// Permit 实现 permit 测试插件的逻辑。
 func (pp *PermitPlugin) Permit(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (*fwk.Status, time.Duration) {
 	pp.mutex.Lock()
 	defer pp.mutex.Unlock()
@@ -686,12 +682,12 @@ func (pp *PermitPlugin) Permit(ctx context.Context, state fwk.CycleState, pod *v
 	return nil, 0
 }
 
-// allowAllPods allows all waiting pods.
+// allowAllPods 放行所有等待中的 Pod。
 func (pp *PermitPlugin) allowAllPods() {
 	pp.fh.IterateOverWaitingPods(func(wp fwk.WaitingPod) { wp.Allow(pp.name) })
 }
 
-// rejectAllPods rejects all waiting pods.
+// rejectAllPods 拒绝所有等待中的 Pod。
 func (pp *PermitPlugin) rejectAllPods() {
 	pp.mutex.Lock()
 	defer pp.mutex.Unlock()
@@ -702,12 +698,12 @@ func (pp *PermitPlugin) EventsToRegister(_ context.Context) ([]fwk.ClusterEventW
 	return nil, nil
 }
 
-// Name returns name of the plugin.
+// Name 返回插件名称。
 func (pl *PreEnqueueGateAfterPreBindPlugin) Name() string {
 	return preEnqueueGatePluginName
 }
 
-// PreEnqueue is a test function that blocks re-enqueue after PreBind was attempted.
+// PreEnqueue 是测试函数，在 PreBind 尝试后阻止重新入队。
 func (pl *PreEnqueueGateAfterPreBindPlugin) PreEnqueue(ctx context.Context, p *v1.Pod) *fwk.Status {
 	if pl.preBind != nil && pl.preBind.hasTriedPreBind(p.UID) {
 		return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, "test gate: block re-enqueue after PreBind was attempted")
@@ -715,7 +711,7 @@ func (pl *PreEnqueueGateAfterPreBindPlugin) PreEnqueue(ctx context.Context, p *v
 	return nil
 }
 
-// TestPreFilterPlugin tests invocation of prefilter plugins.
+// TestPreFilterPlugin 验证 prefilter 插件的调用。
 func TestPreFilterPlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "prefilter-plugin", nil)
 
@@ -756,7 +752,7 @@ func TestPreFilterPlugin(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register only a pre-filter plugin.
+			// 创建插件注册表，仅注册 pre-filter 插件。
 			preFilterPlugin := &PreFilterPlugin{}
 			registry, prof := initRegistryAndConfig(t, preFilterPlugin)
 
@@ -768,7 +764,7 @@ func TestPreFilterPlugin(t *testing.T) {
 			preFilterPlugin.failPreFilter = test.fail
 			preFilterPlugin.rejectPreFilter = test.reject
 			preFilterPlugin.preFilterResultNodes = test.preFilterResultNodes
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -797,7 +793,7 @@ func TestPreFilterPlugin(t *testing.T) {
 	}
 }
 
-// TestQueueSortPlugin tests invocation of queueSort plugins.
+// TestQueueSortPlugin 验证 queueSort 插件的调用。
 func TestQueueSortPlugin(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -816,7 +812,7 @@ func TestQueueSortPlugin(t *testing.T) {
 		{
 			name:          "priority_sort_order",
 			podNames:      []string{"pod-1", "pod-2", "pod-3"},
-			expectedOrder: []string{"pod-3", "pod-2", "pod-1"}, // depends on pod priority
+			expectedOrder: []string{"pod-3", "pod-2", "pod-1"}, // 取决于 Pod 优先级。
 			customLessFunc: func(info1, info2 fwk.QueuedEntityInfo) bool {
 				p1 := info1.GetPriority()
 				p2 := info2.GetPriority()
@@ -837,7 +833,7 @@ func TestQueueSortPlugin(t *testing.T) {
 
 			pods := make([]*v1.Pod, 0, len(tt.podNames))
 			for i, name := range tt.podNames {
-				// Create a pod with different priority.
+				// 创建优先级各不相同的 Pod。
 				priority := int32(i + 1)
 				pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 					testutils.InitPausePod(&testutils.PausePodConfig{Name: name, Namespace: testCtx.NS.Name, Priority: &priority}))
@@ -847,7 +843,7 @@ func TestQueueSortPlugin(t *testing.T) {
 				pods = append(pods, pod)
 			}
 
-			// Wait for all Pods to be in the scheduling queue.
+			// 等待所有 Pod 进入调度队列。
 			err := wait.PollUntilContextTimeout(testCtx.Ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 				pendingPods, _ := testCtx.Scheduler.SchedulingQueue.PendingPods()
 				if len(pendingPods) == len(pods) {
@@ -876,7 +872,7 @@ func TestQueueSortPlugin(t *testing.T) {
 	}
 }
 
-// TestPostFilterPlugin tests invocation of postFilter plugins.
+// TestPostFilterPlugin 验证 postFilter 插件的调用。
 func TestPostFilterPlugin(t *testing.T) {
 	numNodes := 1
 	tests := []struct {
@@ -959,7 +955,7 @@ func TestPostFilterPlugin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register a combination of filter and postFilter plugin.
+			// 创建插件注册表，注册 filter 和 postFilter 插件组合。
 			var (
 				filterPlugin      = &FilterPlugin{}
 				scorePlugin       = &ScorePlugin{}
@@ -980,7 +976,7 @@ func TestPostFilterPlugin(t *testing.T) {
 				postFilterPluginName2: newPlugin(postFilterPlugin2),
 			}
 
-			// Setup plugins for testing.
+			// 配置待测插件。
 			cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 				Profiles: []configv1.KubeSchedulerProfile{{
 					SchedulerName: ptr.To(v1.DefaultSchedulerName),
@@ -999,8 +995,7 @@ func TestPostFilterPlugin(t *testing.T) {
 							Enabled: []configv1.Plugin{
 								{Name: scorePluginName},
 							},
-							// disable default in-tree Score plugins
-							// to make it easy to control configured ScorePlugins failure
+							// 禁用默认 in-tree Score 插件，便于控制 ScorePlugin 的失败行为。
 							Disabled: []configv1.Plugin{
 								{Name: "*"},
 							},
@@ -1010,8 +1005,8 @@ func TestPostFilterPlugin(t *testing.T) {
 								{Name: postfilterPluginName},
 								{Name: postFilterPluginName2},
 							},
-							// Need to disable default in-tree PostFilter plugins, as they will
-							// call RunPostFilterPlugins and hence impact the "numPostFilterCalled".
+							// 禁用默认 in-tree PostFilter 插件，避免它们调用 RunPostFilterPlugins
+							// 影响 numPostFilterCalled 计数。
 							Disabled: []configv1.Plugin{
 								{Name: "*"},
 							},
@@ -1025,7 +1020,7 @@ func TestPostFilterPlugin(t *testing.T) {
 			)
 			defer teardown()
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet, testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
 				t.Errorf("Error while creating a test pod: %v", err)
@@ -1063,7 +1058,7 @@ func TestPostFilterPlugin(t *testing.T) {
 	}
 }
 
-// TestScorePlugin tests invocation of score plugins.
+// TestScorePlugin 验证 score 插件的调用。
 func TestScorePlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "score-plugin", nil)
 
@@ -1083,7 +1078,7 @@ func TestScorePlugin(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register only a score plugin.
+			// 创建插件注册表，仅注册 score 插件。
 			scorePlugin := &ScorePlugin{}
 			registry, prof := initRegistryAndConfig(t, scorePlugin)
 
@@ -1093,7 +1088,7 @@ func TestScorePlugin(t *testing.T) {
 			defer teardown()
 
 			scorePlugin.failScore = test.fail
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -1125,9 +1120,9 @@ func TestScorePlugin(t *testing.T) {
 	}
 }
 
-// TestNormalizeScorePlugin tests invocation of normalize score plugins.
+// TestNormalizeScorePlugin 验证 normalize score 插件的调用。
 func TestNormalizeScorePlugin(t *testing.T) {
-	// Create a plugin registry for testing. Register only a normalize score plugin.
+	// 创建插件注册表，仅注册 normalize score 插件。
 	scoreWithNormalizePlugin := &ScoreWithNormalizePlugin{}
 	registry, prof := initRegistryAndConfig(t, scoreWithNormalizePlugin)
 
@@ -1135,7 +1130,7 @@ func TestNormalizeScorePlugin(t *testing.T) {
 		scheduler.WithProfiles(prof),
 		scheduler.WithFrameworkOutOfTreeRegistry(registry))
 
-	// Create a best effort pod.
+	// 创建 best effort Pod。
 	pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 		testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 	if err != nil {
@@ -1155,7 +1150,7 @@ func TestNormalizeScorePlugin(t *testing.T) {
 	}
 }
 
-// TestReservePlugin tests invocation of reserve plugins.
+// TestReservePluginReserve 验证 reserve 插件的调用。
 func TestReservePluginReserve(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "reserve-plugin-reserve", nil)
 
@@ -1175,7 +1170,7 @@ func TestReservePluginReserve(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register only a reserve plugin.
+			// 创建插件注册表，仅注册 reserve 插件。
 			reservePlugin := &ReservePlugin{}
 			registry, prof := initRegistryAndConfig(t, reservePlugin)
 
@@ -1185,7 +1180,7 @@ func TestReservePluginReserve(t *testing.T) {
 			defer teardown()
 
 			reservePlugin.failReserve = test.fail
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -1210,7 +1205,7 @@ func TestReservePluginReserve(t *testing.T) {
 	}
 }
 
-// TestPrebindPlugin tests invocation of prebind plugins.
+// TestPrebindPlugin 验证 prebind 插件的调用。
 func TestPrebindPlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "prebind-plugin", nil)
 
@@ -1258,7 +1253,7 @@ func TestPrebindPlugin(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register a prebind and a filter plugin.
+			// 创建插件注册表，注册 prebind 和 filter 插件。
 			preBindPlugin := &PreBindPlugin{podUIDs: make(map[types.UID]struct{})}
 			filterPlugin := &FilterPlugin{}
 			registry := frameworkruntime.Registry{
@@ -1266,9 +1261,8 @@ func TestPrebindPlugin(t *testing.T) {
 				filterPluginName:  newPlugin(filterPlugin),
 			}
 
-			// Setup initial prebind and filter plugin in different profiles.
-			// The second profile ensures the embedded filter plugin is exclusively called, and hence
-			// we can use its internal `numFilterCalled` to perform some precise checking logic.
+			// 在不同 profile 中分别配置 prebind 和 filter 插件。
+			// 第二个 profile 确保 filter 插件被单独调用，便于用其内部 numFilterCalled 精确校验。
 			cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 				Profiles: []configv1.KubeSchedulerProfile{
 					{
@@ -1309,7 +1303,7 @@ func TestPrebindPlugin(t *testing.T) {
 
 			preBindPlugin.set(test.fail, test.reject, test.succeedOnRetry)
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -1340,8 +1334,7 @@ func TestPrebindPlugin(t *testing.T) {
 
 			if test.unschedulablePod != nil {
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 10*time.Millisecond, 15*time.Second, false, func(ctx context.Context) (bool, error) {
-					// 2 means the unschedulable pod is expected to be retried at least twice.
-					// (one initial attempt plus the one moved by the preBind pod)
+					// 2 表示不可调度 Pod 至少应重试两次：一次初始尝试，加上由 preBind Pod 触发的一次。
 					return filterPlugin.deepCopy().numFilterCalled >= 2*nodesNum, nil
 				}); err != nil {
 					t.Errorf("Timed out waiting for the unschedulable Pod to be retried at least twice.")
@@ -1351,10 +1344,8 @@ func TestPrebindPlugin(t *testing.T) {
 	}
 }
 
-// TestUnReserveReservePlugins tests invocation of the Unreserve operation in
-// reserve plugins through failures in execution points such as pre-bind. Also
-// tests that the order of invocation of Unreserve operation is executed in the
-// reverse order of invocation of the Reserve operation.
+// TestUnReserveReservePlugins 验证 pre-bind 等阶段失败时 reserve 插件的 Unreserve 调用，
+// 并检查 Unreserve 的调用顺序与 Reserve 相反。
 func TestUnReserveReservePlugins(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1455,7 +1446,7 @@ func TestUnReserveReservePlugins(t *testing.T) {
 				scheduler.WithFrameworkOutOfTreeRegistry(registry))
 			defer teardown()
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			podName := "test-pod"
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: podName, Namespace: testCtx.NS.Name}))
@@ -1502,7 +1493,7 @@ func TestUnReserveReservePlugins(t *testing.T) {
 	}
 }
 
-// TestUnReservePermitPlugins tests unreserve of Permit plugins.
+// TestUnReservePermitPlugins 验证 Permit 插件失败后的 Unreserve 行为。
 func TestUnReservePermitPlugins(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "unreserve-reserve-plugin", nil)
 
@@ -1549,7 +1540,7 @@ func TestUnReservePermitPlugins(t *testing.T) {
 				scheduler.WithFrameworkOutOfTreeRegistry(registry))
 			defer teardown()
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			podName := "test-pod"
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: podName, Namespace: testCtx.NS.Name}))
@@ -1562,7 +1553,7 @@ func TestUnReservePermitPlugins(t *testing.T) {
 					t.Errorf("Didn't expect the pod to be scheduled. error: %v", err)
 				}
 
-				// Verify the Reserve Plugins
+				// 校验 Reserve 插件。
 				if reservePlugin.numUnreserveCalled != 1 {
 					t.Errorf("Reserve Plugin %s numUnreserveCalled = %d, want 1.", reservePlugin.name, reservePlugin.numUnreserveCalled)
 				}
@@ -1571,7 +1562,7 @@ func TestUnReservePermitPlugins(t *testing.T) {
 					t.Errorf("Expected the pod to be scheduled. error: %v", err)
 				}
 
-				// Verify the Reserve Plugins
+				// 校验 Reserve 插件。
 				if reservePlugin.numUnreserveCalled != 0 {
 					t.Errorf("Reserve Plugin %s numUnreserveCalled = %d, want 0.", reservePlugin.name, reservePlugin.numUnreserveCalled)
 				}
@@ -1584,7 +1575,7 @@ func TestUnReservePermitPlugins(t *testing.T) {
 	}
 }
 
-// TestUnReservePreBindPlugins tests unreserve of Prebind plugins.
+// TestUnReservePreBindPlugins 验证 Prebind 插件失败后的 Unreserve 行为。
 func TestUnReservePreBindPlugins(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "unreserve-prebind-plugin", nil)
 
@@ -1622,7 +1613,7 @@ func TestUnReservePreBindPlugins(t *testing.T) {
 				scheduler.WithFrameworkOutOfTreeRegistry(registry))
 			defer teardown()
 
-			// Create a pause pod.
+			// 创建 pause Pod。
 			podName := "test-pod"
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: podName, Namespace: testCtx.NS.Name}))
@@ -1635,7 +1626,7 @@ func TestUnReservePreBindPlugins(t *testing.T) {
 					t.Errorf("Expected a reasons other than Unschedulable, but got: %v", err)
 				}
 
-				// Verify the Reserve Plugins
+				// 校验 Reserve 插件。
 				if reservePlugin.numUnreserveCalled != 1 {
 					t.Errorf("Reserve Plugin %s numUnreserveCalled = %d, want 1.", reservePlugin.name, reservePlugin.numUnreserveCalled)
 				}
@@ -1644,7 +1635,7 @@ func TestUnReservePreBindPlugins(t *testing.T) {
 					t.Errorf("Expected the pod to be scheduled. error: %v", err)
 				}
 
-				// Verify the Reserve Plugins
+				// 校验 Reserve 插件。
 				if reservePlugin.numUnreserveCalled != 0 {
 					t.Errorf("Reserve Plugin %s numUnreserveCalled = %d, want 0.", reservePlugin.name, reservePlugin.numUnreserveCalled)
 				}
@@ -1657,7 +1648,7 @@ func TestUnReservePreBindPlugins(t *testing.T) {
 	}
 }
 
-// TestUnReserveBindPlugins tests unreserve of Bind plugins.
+// TestUnReserveBindPlugins 验证 Bind 插件失败后的 Unreserve 行为。
 func TestUnReserveBindPlugins(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "unreserve-bind-plugin", nil)
 
@@ -1693,7 +1684,7 @@ func TestUnReserveBindPlugins(t *testing.T) {
 				scheduler.WithFrameworkOutOfTreeRegistry(registry))
 			defer teardown()
 
-			// Create a pause pod.
+			// 创建 pause Pod。
 			podName := "test-pod"
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: podName, Namespace: testCtx.NS.Name}))
@@ -1707,7 +1698,7 @@ func TestUnReserveBindPlugins(t *testing.T) {
 					t.Errorf("Expected a reasons other than Unschedulable, but got: %v", err)
 				}
 
-				// Verify the Reserve Plugins
+				// 校验 Reserve 插件。
 				if reservePlugin.numUnreserveCalled != 1 {
 					t.Errorf("Reserve Plugin %s numUnreserveCalled = %d, want 1.", reservePlugin.name, reservePlugin.numUnreserveCalled)
 				}
@@ -1716,7 +1707,7 @@ func TestUnReserveBindPlugins(t *testing.T) {
 					t.Errorf("Expected the pod to be scheduled. error: %v", err)
 				}
 
-				// Verify the Reserve Plugins
+				// 校验 Reserve 插件。
 				if reservePlugin.numUnreserveCalled != 0 {
 					t.Errorf("Reserve Plugin %s numUnreserveCalled = %d, want 0.", reservePlugin.name, reservePlugin.numUnreserveCalled)
 				}
@@ -1749,10 +1740,10 @@ func TestBindPlugin(t *testing.T) {
 		name                   string
 		enabledBindPlugins     []configv1.Plugin
 		bindPluginStatuses     []*fwk.Status
-		expectBoundByScheduler bool   // true means this test case expecting scheduler would bind pods
-		expectBoundByPlugin    bool   // true means this test case expecting a plugin would bind pods
-		expectBindFailed       bool   // true means this test case expecting a plugin binding pods with error
-		expectBindPluginName   string // expecting plugin name to bind pods
+		expectBoundByScheduler bool   // 为 true 表示期望由 scheduler 绑定 Pod。
+		expectBoundByPlugin    bool   // 为 true 表示期望由插件绑定 Pod。
+		expectBindFailed       bool   // 为 true 表示期望插件绑定 Pod 时出错。
+		expectBindPluginName   string // 期望执行绑定的插件名称。
 		expectInvokeEvents     []pluginInvokeEvent
 	}{
 		{
@@ -1801,8 +1792,7 @@ func TestBindPlugin(t *testing.T) {
 			reservePlugin := &ReservePlugin{name: reservePluginName}
 			postBindPlugin := &PostBindPlugin{name: postBindPluginName}
 
-			// Create a plugin registry for testing. Register reserve, bind, and
-			// postBind plugins.
+			// 创建插件注册表，注册 reserve、bind 和 postBind 插件。
 			registry := frameworkruntime.Registry{
 				reservePlugin.Name():  newPlugin(reservePlugin),
 				bindPlugin1.Name():    newPlugin(bindPlugin1),
@@ -1810,7 +1800,7 @@ func TestBindPlugin(t *testing.T) {
 				postBindPlugin.Name(): newPlugin(postBindPlugin),
 			}
 
-			// Setup initial unreserve and bind plugins for testing.
+			// 配置 unreserve 和 bind 插件。
 			cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 				Profiles: []configv1.KubeSchedulerProfile{{
 					SchedulerName: ptr.To(v1.DefaultSchedulerName),
@@ -1824,7 +1814,7 @@ func TestBindPlugin(t *testing.T) {
 							Enabled: []configv1.Plugin{{Name: reservePlugin.Name()}},
 						},
 						Bind: configv1.PluginSet{
-							// Put DefaultBinder last.
+							// 将 DefaultBinder 放在最后。
 							Enabled:  test.enabledBindPlugins,
 							Disabled: []configv1.Plugin{{Name: defaultbinder.Name}},
 						},
@@ -1851,7 +1841,7 @@ func TestBindPlugin(t *testing.T) {
 			reservePlugin.pluginInvokeEventChan = pluginInvokeEventChan
 			postBindPlugin.pluginInvokeEventChan = pluginInvokeEventChan
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -1859,7 +1849,7 @@ func TestBindPlugin(t *testing.T) {
 			}
 
 			if test.expectBoundByScheduler || test.expectBoundByPlugin {
-				// bind plugins skipped to bind the pod
+				// bind 插件跳过绑定 Pod。
 				if err = testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, pod); err != nil {
 					t.Fatalf("Expected the pod to be scheduled. error: %v", err)
 				}
@@ -1884,7 +1874,7 @@ func TestBindPlugin(t *testing.T) {
 						t.Errorf("Expected %s to be called once, was called %d times.", p1.Name(), p1.numBindCalled)
 					}
 					if test.expectBindPluginName == p1.Name() && p2.numBindCalled > 0 {
-						// expect bindplugin1 succeeded to bind the pod and bindplugin2 should not be called.
+						// bindplugin1 已成功绑定 Pod，bindplugin2 不应被调用。
 						t.Errorf("Expected %s not to be called, was called %d times.", p2.Name(), p2.numBindCalled)
 					}
 				}
@@ -1898,7 +1888,7 @@ func TestBindPlugin(t *testing.T) {
 					t.Errorf("Expected unreserve to not be called, was called %d times.", reservePlugin.numUnreserveCalled)
 				}
 			} else if test.expectBindFailed {
-				// bind plugin fails to bind the pod
+				// bind 插件绑定 Pod 失败。
 				if err = wait.PollUntilContextTimeout(testCtx.Ctx, 10*time.Millisecond, 30*time.Second, false,
 					testutils.PodSchedulingError(testCtx.ClientSet, pod.Namespace, pod.Name)); err != nil {
 					t.Errorf("Expected a scheduling error, but didn't get it. error: %v", err)
@@ -1908,7 +1898,7 @@ func TestBindPlugin(t *testing.T) {
 					t.Errorf("Didn't expect the postbind plugin to be called %d times.", p.numPostBindCalled)
 				}
 			} else if postBindPlugin.numPostBindCalled > 0 {
-				// all bind plugins are skipped
+				// 所有 bind 插件均被跳过。
 				t.Errorf("Didn't expect the postbind plugin to be called %d times.", postBindPlugin.numPostBindCalled)
 			}
 
@@ -1930,7 +1920,7 @@ func TestBindPlugin(t *testing.T) {
 	}
 }
 
-// TestPostBindPlugin tests invocation of postbind plugins.
+// TestPostBindPlugin 验证 postbind 插件的调用。
 func TestPostBindPlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "postbind-plugin", nil)
 
@@ -1950,7 +1940,7 @@ func TestPostBindPlugin(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register a prebind and a postbind plugin.
+			// 创建插件注册表，注册 prebind 和 postbind 插件。
 			preBindPlugin := &PreBindPlugin{
 				failPreBind: test.preBindFail,
 				podUIDs:     make(map[types.UID]struct{}),
@@ -1966,7 +1956,7 @@ func TestPostBindPlugin(t *testing.T) {
 				scheduler.WithFrameworkOutOfTreeRegistry(registry))
 			defer teardown()
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -1998,7 +1988,7 @@ func TestPostBindPlugin(t *testing.T) {
 	}
 }
 
-// TestPermitPlugin tests invocation of permit plugins.
+// TestPermitPlugin 验证 permit 插件的调用。
 func TestPermitPlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "permit-plugin", nil)
 
@@ -2049,7 +2039,7 @@ func TestPermitPlugin(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			// Create a plugin registry for testing. Register only a permit plugin.
+			// 创建插件注册表，仅注册 permit 插件。
 			perPlugin := &PermitPlugin{name: permitPluginName}
 			registry, prof := initRegistryAndConfig(t, perPlugin)
 
@@ -2064,7 +2054,7 @@ func TestPermitPlugin(t *testing.T) {
 			perPlugin.waitAndRejectPermit = false
 			perPlugin.waitAndAllowPermit = false
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -2095,23 +2085,23 @@ func TestPermitPlugin(t *testing.T) {
 	}
 }
 
-// TestMultiplePermitPlugins tests multiple permit plugins returning wait for a same pod.
+// TestMultiplePermitPlugins 验证多个 permit 插件对同一 Pod 返回 Wait 的行为。
 func TestMultiplePermitPlugins(t *testing.T) {
-	// Create a plugin registry for testing.
+	// 创建测试用插件注册表。
 	perPlugin1 := &PermitPlugin{name: "permit-plugin-1"}
 	perPlugin2 := &PermitPlugin{name: "permit-plugin-2"}
 	registry, prof := initRegistryAndConfig(t, perPlugin1, perPlugin2)
 
-	// Create the API server and the scheduler with the test plugin set.
+	// 使用测试插件集启动 API server 和 scheduler。
 	testCtx, _ := schedulerutils.InitTestSchedulerForFrameworkTest(t, testutils.InitTestAPIServer(t, "multi-permit-plugin", nil), 2, true,
 		scheduler.WithProfiles(prof),
 		scheduler.WithFrameworkOutOfTreeRegistry(registry))
 
-	// Both permit plugins will return Wait for permitting
+	// 两个 permit 插件都返回 Wait。
 	perPlugin1.timeoutPermit = true
 	perPlugin2.timeoutPermit = true
 
-	// Create a test pod.
+	// 创建测试 Pod。
 	podName := "test-pod"
 	pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 		testutils.InitPausePod(&testutils.PausePodConfig{Name: podName, Namespace: testCtx.NS.Name}))
@@ -2120,19 +2110,19 @@ func TestMultiplePermitPlugins(t *testing.T) {
 	}
 
 	var waitingPod fwk.WaitingPod
-	// Wait until the test pod is actually waiting.
+	// 等待测试 Pod 真正进入 waiting 状态。
 	wait.PollUntilContextTimeout(testCtx.Ctx, 10*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		waitingPod = perPlugin1.fh.GetWaitingPod(pod.UID)
 		return waitingPod != nil, nil
 	})
 
-	// Check the number of pending permits
+	// 检查待处理的 permit 数量。
 	if l := len(waitingPod.GetPendingPlugins()); l != 2 {
 		t.Errorf("Expected the number of pending plugins is 2, but got %d", l)
 	}
 
 	perPlugin1.allowAllPods()
-	// Check the number of pending permits
+	// 检查待处理的 permit 数量。
 	if l := len(waitingPod.GetPendingPlugins()); l != 1 {
 		t.Errorf("Expected the number of pending plugins is 1, but got %d", l)
 	}
@@ -2147,23 +2137,23 @@ func TestMultiplePermitPlugins(t *testing.T) {
 	}
 }
 
-// TestPermitPluginsCancelled tests whether all permit plugins are cancelled when pod is rejected.
+// TestPermitPluginsCancelled 验证 Pod 被拒绝时所有 permit 插件都会收到取消。
 func TestPermitPluginsCancelled(t *testing.T) {
-	// Create a plugin registry for testing.
+	// 创建测试用插件注册表。
 	perPlugin1 := &PermitPlugin{name: "permit-plugin-1"}
 	perPlugin2 := &PermitPlugin{name: "permit-plugin-2"}
 	registry, prof := initRegistryAndConfig(t, perPlugin1, perPlugin2)
 
-	// Create the API server and the scheduler with the test plugin set.
+	// 使用测试插件集启动 API server 和 scheduler。
 	testCtx, _ := schedulerutils.InitTestSchedulerForFrameworkTest(t, testutils.InitTestAPIServer(t, "permit-plugins", nil), 2, true,
 		scheduler.WithProfiles(prof),
 		scheduler.WithFrameworkOutOfTreeRegistry(registry))
 
-	// Both permit plugins will return Wait for permitting
+	// 两个 permit 插件都返回 Wait。
 	perPlugin1.timeoutPermit = true
 	perPlugin2.timeoutPermit = true
 
-	// Create a test pod.
+	// 创建测试 Pod。
 	podName := "test-pod"
 	pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 		testutils.InitPausePod(&testutils.PausePodConfig{Name: podName, Namespace: testCtx.NS.Name}))
@@ -2172,14 +2162,14 @@ func TestPermitPluginsCancelled(t *testing.T) {
 	}
 
 	var waitingPod fwk.WaitingPod
-	// Wait until the test pod is actually waiting.
+	// 等待测试 Pod 真正进入 waiting 状态。
 	wait.PollUntilContextTimeout(testCtx.Ctx, 10*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		waitingPod = perPlugin1.fh.GetWaitingPod(pod.UID)
 		return waitingPod != nil, nil
 	})
 
 	perPlugin1.rejectAllPods()
-	// Wait some time for the permit plugins to be cancelled
+	// 等待 permit 插件被取消。
 	err = wait.PollUntilContextTimeout(testCtx.Ctx, 10*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		p1 := perPlugin1.deepCopy()
 		p2 := perPlugin2.deepCopy()
@@ -2190,7 +2180,7 @@ func TestPermitPluginsCancelled(t *testing.T) {
 	}
 }
 
-// TestCoSchedulingWithPermitPlugin tests invocation of permit plugins.
+// TestCoSchedulingWithPermitPlugin 验证 permit 插件实现协同调度时的调用行为。
 func TestCoSchedulingWithPermitPlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "permit-plugin", nil)
 
@@ -2214,7 +2204,7 @@ func TestCoSchedulingWithPermitPlugin(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			// Create a plugin registry for testing. Register only a permit plugin.
+			// 创建插件注册表，仅注册 permit 插件。
 			permitPlugin := &PermitPlugin{name: permitPluginName}
 			registry, prof := initRegistryAndConfig(t, permitPlugin)
 
@@ -2229,8 +2219,7 @@ func TestCoSchedulingWithPermitPlugin(t *testing.T) {
 			permitPlugin.waitAndRejectPermit = test.waitReject
 			permitPlugin.waitAndAllowPermit = test.waitAllow
 
-			// Create two pods. First pod to enter Permit() will wait and a second one will either
-			// reject or allow first one.
+			// 创建两个 Pod：先进入 Permit() 的会等待，后进入的会拒绝或放行它。
 			podA, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "pod-a", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -2276,7 +2265,7 @@ func TestCoSchedulingWithPermitPlugin(t *testing.T) {
 	}
 }
 
-// TestFilterPlugin tests invocation of filter plugins.
+// TestFilterPlugin 验证 filter 插件的调用。
 func TestFilterPlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "filter-plugin", nil)
 
@@ -2296,7 +2285,7 @@ func TestFilterPlugin(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register only a filter plugin.
+			// 创建测试用插件注册表。 Register only a filter plugin.
 			filterPlugin := &FilterPlugin{}
 			registry, prof := initRegistryAndConfig(t, filterPlugin)
 
@@ -2306,7 +2295,7 @@ func TestFilterPlugin(t *testing.T) {
 			defer teardown()
 
 			filterPlugin.failFilter = test.fail
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -2333,7 +2322,7 @@ func TestFilterPlugin(t *testing.T) {
 	}
 }
 
-// TestPreScorePlugin tests invocation of pre-score plugins.
+// TestPreScorePlugin 验证 pre-score 插件的调用。
 func TestPreScorePlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "pre-score-plugin", nil)
 
@@ -2353,7 +2342,7 @@ func TestPreScorePlugin(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register only a pre-score plugin.
+			// 创建仅注册 pre-score 插件的测试用注册表。
 			preScorePlugin := &PreScorePlugin{}
 			registry, prof := initRegistryAndConfig(t, preScorePlugin)
 
@@ -2363,7 +2352,7 @@ func TestPreScorePlugin(t *testing.T) {
 			defer teardown()
 
 			preScorePlugin.failPreScore = test.fail
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet,
 				testutils.InitPausePod(&testutils.PausePodConfig{Name: "test-pod", Namespace: testCtx.NS.Name}))
 			if err != nil {
@@ -2388,7 +2377,7 @@ func TestPreScorePlugin(t *testing.T) {
 	}
 }
 
-// TestPreEnqueuePlugin tests invocation of enqueue plugins.
+// TestPreEnqueuePlugin 验证 enqueue 插件的调用。
 func TestPreEnqueuePlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "enqueue-plugin", nil)
 
@@ -2411,9 +2400,9 @@ func TestPreEnqueuePlugin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register only a filter plugin.
+			// 创建仅注册 filter 插件的测试用注册表。
 			enqueuePlugin := &PreEnqueuePlugin{}
-			// Plumb a preFilterPlugin to verify if it's called or not.
+			// 接入 preFilterPlugin 以验证它是否被跳过。
 			preFilterPlugin := &PreFilterPlugin{}
 			registry, prof := initRegistryAndConfig(t, enqueuePlugin, preFilterPlugin)
 
@@ -2423,7 +2412,7 @@ func TestPreEnqueuePlugin(t *testing.T) {
 			defer teardown()
 
 			enqueuePlugin.admit = tt.admitEnqueue
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pod, err := testutils.CreatePausePod(testCtx.ClientSet, tt.pod)
 			if err != nil {
 				t.Errorf("Error while creating a test pod: %v", err)
@@ -2433,7 +2422,7 @@ func TestPreEnqueuePlugin(t *testing.T) {
 				if err := testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, testCtx.ClientSet, pod, 10*time.Second); err != nil {
 					t.Errorf("Expected the pod to be schedulable, but got: %v", err)
 				}
-				// Also verify enqueuePlugin is called.
+				// 同时验证 enqueuePlugin 被调用。
 				if enqueuePlugin.called.Load() == 0 {
 					t.Errorf("Expected the enqueuePlugin plugin to be called at least once, but got 0")
 				}
@@ -2441,7 +2430,7 @@ func TestPreEnqueuePlugin(t *testing.T) {
 				if err := testutils.WaitForPodSchedulingGated(testCtx.Ctx, testCtx.ClientSet, pod, 10*time.Second); err != nil {
 					t.Errorf("Expected the pod to be scheduling waiting, but got: %v", err)
 				}
-				// Also verify preFilterPlugin is not called.
+				// 同时验证 preFilterPlugin 未被调用。
 				if called := preFilterPlugin.numPreFilterCalled.Load(); called != 0 {
 					t.Errorf("Expected the preFilter plugin not to be called, but got %v", called)
 				}
@@ -2450,13 +2439,10 @@ func TestPreEnqueuePlugin(t *testing.T) {
 	}
 }
 
-// TestPreemptWithPermitPlugin tests preempt with permit plugins.
-// It verifies how waitingPods behave in different scenarios:
-// - when waitingPods get preempted
-//   - they should be removed from internal waitingPods map, but not physically deleted
-//   - it'd trigger moving unschedulable Pods, but not the waitingPods themselves
-//
-// - when waitingPods get deleted externally, it'd trigger moving unschedulable Pods
+// TestPreemptWithPermitPlugin 验证有 permit 插件时 waitingPod 的抢占行为：
+//   - waitingPod 被抢占时，应从内部 waitingPods map 移除，但不物理删除
+//   - 会触发移动 unschedulable Pod，但不包含 waitingPod 自身
+//   - waitingPod 被外部删除时，会触发移动 unschedulable Pod
 func TestPreemptWithPermitPlugin(t *testing.T) {
 	testContext := testutils.InitTestAPIServer(t, "preempt-with-permit-plugin", nil)
 
@@ -2493,9 +2479,8 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 			preemptor:              st.MakePod().Name("preemptor-pod").Namespace(ns).Priority(highPriority).Req(preemptorReq).ZeroTerminationGracePeriod().Obj(),
 		},
 		{
-			// The waiting Pod has once gone through the scheduling cycle,
-			// and we don't know if it's schedulable or not after it's preempted.
-			// So, we should retry the scheduling of it so that it won't stuck in the unschedulable Pod pool.
+			// waitingPod 已经历过一轮调度，被抢占后是否仍可调度未知，
+			// 因此需要重新调度，避免它滞留在 unschedulable Pod 池中。
 			name:                   "rejecting a waiting pod to trigger retrying unschedulable pods immediately, and the waiting pod itself will be retried",
 			maxNumWaitingPodCalled: 2,
 			waitingPod:             st.MakePod().Name("waiting-pod").Namespace(ns).Priority(lowPriority).Req(resReq).ZeroTerminationGracePeriod().Obj(),
@@ -2512,17 +2497,16 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a plugin registry for testing. Register a permit and a filter plugin.
+			// 创建测试用插件注册表。 Register a permit and a filter plugin.
 			permitPlugin := &PermitPlugin{}
-			// Inject a fake filter plugin to use its internal `numFilterCalled` to verify
-			// how many times a Pod gets tried scheduling.
+			// 注入 fake filter 插件，利用其内部 numFilterCalled 统计 Pod 被尝试调度的次数。
 			filterPlugin := &FilterPlugin{numCalledPerPod: make(map[string]int)}
 			registry := frameworkruntime.Registry{
 				permitPluginName: newPlugin(permitPlugin),
 				filterPluginName: newPlugin(filterPlugin),
 			}
 
-			// Setup initial permit and filter plugins in the profile.
+			// 在 profile 中配置 permit 和 filter 插件。
 			cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 				Profiles: []configv1.KubeSchedulerProfile{
 					{
@@ -2534,8 +2518,7 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 								},
 							},
 							Filter: configv1.PluginSet{
-								// Ensure the fake filter plugin is always called; otherwise noderesources
-								// would fail first and exit the Filter phase.
+								// 确保 fake filter 插件总被调用，否则 noderesources 会先失败并退出 Filter 阶段。
 								Enabled: []configv1.Plugin{
 									{Name: filterPluginName},
 									{Name: noderesources.Name},
@@ -2567,7 +2550,7 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 				if _, err := testutils.CreatePausePod(testCtx.ClientSet, r); err != nil {
 					t.Fatalf("Error while creating the running pod: %v", err)
 				}
-				// Wait until the pod to be scheduled.
+				// 等待该 Pod 完成调度。
 				if err = testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, r); err != nil {
 					t.Fatalf("The running pod is expected to be scheduled: %v", err)
 				}
@@ -2577,7 +2560,7 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 				if _, err := testutils.CreatePausePod(testCtx.ClientSet, w); err != nil {
 					t.Fatalf("Error while creating the waiting pod: %v", err)
 				}
-				// Wait until the waiting-pod is actually waiting.
+				// 等待 waitingPod 真正进入等待状态。
 				if err := wait.PollUntilContextTimeout(testCtx.Ctx, 10*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 					w := false
 					permitPlugin.fh.IterateOverWaitingPods(func(wp fwk.WaitingPod) { w = true })
@@ -2591,7 +2574,7 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 				if _, err := testutils.CreatePausePod(testCtx.ClientSet, p); err != nil {
 					t.Fatalf("Error while creating the preemptor pod: %v", err)
 				}
-				// Delete the waiting pod if specified.
+				// 按需删除 waitingPod。
 				if w := tt.waitingPod; w != nil && tt.deleteWaitingPod {
 					if err := testutils.DeletePod(testCtx.ClientSet, w.Name, w.Namespace); err != nil {
 						t.Fatalf("Error while deleting the waiting pod: %v", err)
@@ -2618,7 +2601,7 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 				}
 
 				if !tt.deleteWaitingPod {
-					// Expect the waitingPod to be still present.
+					// 期望 waitingPod 仍然存在。
 					if _, err := testutils.GetPod(testCtx.ClientSet, w.Name, w.Namespace); err != nil {
 						t.Error("Get waiting pod in waiting pod failed.")
 					}
@@ -2630,7 +2613,7 @@ func TestPreemptWithPermitPlugin(t *testing.T) {
 			}
 
 			if r := tt.runningPod; r != nil {
-				// Expect the runningPod to be deleted physically.
+				// 期望 runningPod 被物理删除。
 				if _, err = testutils.GetPod(testCtx.ClientSet, r.Name, r.Namespace); err == nil {
 					t.Error("The running pod still exists.")
 				} else if !errors.IsNotFound(err) {
@@ -2678,7 +2661,7 @@ func (j *JobPlugin) PostBind(_ context.Context, state fwk.CycleState, p *v1.Pod,
 		return
 	}
 
-	// If it's a driver pod, move other executor pods proactively to accelerating the scheduling.
+	// 如果是 driver Pod，主动将 executor Pod 转入 activeQ 以加速调度。
 	labelSelector := labels.SelectorFromSet(labels.Set{"executor": ""})
 	podsToActivate, err := j.podLister.Pods(p.Namespace).List(labelSelector)
 	if err == nil && len(podsToActivate) != 0 {
@@ -2697,13 +2680,12 @@ func (j *JobPlugin) PostBind(_ context.Context, state fwk.CycleState, p *v1.Pod,
 	}
 }
 
-// This test simulates a typical spark job workflow.
-//   - N executor pods are created, but kept pending due to missing the driver pod
-//   - when the driver pod gets created and scheduled, proactively move the executors to activeQ
-//     and thus accelerate the entire job workflow.
+// TestActivatePods 模拟典型的 Spark 作业流程：
+//   - 创建 N 个 executor Pod，因缺少 driver Pod 而保持 pending
+//   - driver Pod 创建并调度后，主动将 executor 转入 activeQ，加速整个作业流程。
 func TestActivatePods(t *testing.T) {
 	var jobPlugin *JobPlugin
-	// Create a plugin registry for testing. Register a Job plugin.
+	// 创建测试用插件注册表。 Register a Job plugin.
 	registry := frameworkruntime.Registry{jobPluginName: func(_ context.Context, _ runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
 		jobPlugin = &JobPlugin{
 			podLister:     fh.SharedInformerFactory().Core().V1().Pods().Lister(),
@@ -2712,7 +2694,7 @@ func TestActivatePods(t *testing.T) {
 		return jobPlugin, nil
 	}}
 
-	// Setup initial filter plugin for testing.
+	// 配置待测 filter 插件。
 	cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 		Profiles: []configv1.KubeSchedulerProfile{{
 			SchedulerName: ptr.To(v1.DefaultSchedulerName),
@@ -2731,7 +2713,7 @@ func TestActivatePods(t *testing.T) {
 		}},
 	})
 
-	// Create the API server and the scheduler with the test plugin set.
+	// 使用测试插件集启动 API server 和 scheduler。
 	testCtx, _ := schedulerutils.InitTestSchedulerForFrameworkTest(t, testutils.InitTestAPIServer(t, "job-plugin", nil), 1, true,
 		scheduler.WithProfiles(cfg.Profiles...),
 		scheduler.WithFrameworkOutOfTreeRegistry(registry))
@@ -2740,7 +2722,7 @@ func TestActivatePods(t *testing.T) {
 	ns := testCtx.NS.Name
 	pause := imageutils.GetPauseImageName()
 
-	// Firstly create 2 executor pods.
+	// 先创建两个 executor Pod。
 	var pods []*v1.Pod
 	for i := 1; i <= 2; i++ {
 		name := fmt.Sprintf("executor-%v", i)
@@ -2751,28 +2733,28 @@ func TestActivatePods(t *testing.T) {
 		}
 	}
 
-	// Wait for the 2 executor pods to be unschedulable.
+	// 等待两个 executor Pod 变为 unschedulable。
 	for _, pod := range pods {
 		if err := testutils.WaitForPodUnschedulable(testCtx.Ctx, cs, pod); err != nil {
 			t.Errorf("Failed to wait for Pod %v to be unschedulable: %v", pod.Name, err)
 		}
 	}
 
-	// Create a driver pod.
+	// 创建 driver Pod。
 	driver := st.MakePod().Name("driver").Namespace(ns).Label("driver", "").Container(pause).Obj()
 	pods = append(pods, driver)
 	if _, err := cs.CoreV1().Pods(driver.Namespace).Create(testCtx.Ctx, driver, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create pod %v: %v", driver.Name, err)
 	}
 
-	// Verify all pods to be scheduled.
+	// 验证所有 Pod 均完成调度。
 	for _, pod := range pods {
 		if err := testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, cs, pod, wait.ForeverTestTimeout); err != nil {
 			t.Fatalf("Failed to wait for Pod %v to be schedulable: %v", pod.Name, err)
 		}
 	}
 
-	// Lastly verify the pods activation logic is really called.
+	// 最后验证 Pod 激活逻辑确实被调用。
 	select {
 	case <-jobPlugin.podsActivated:
 	case <-time.After(wait.ForeverTestTimeout):
@@ -2830,7 +2812,7 @@ func (pl *SchedulingGatesPluginWOEvents) EventsToRegister(_ context.Context) ([]
 	return nil, nil
 }
 
-// This test helps to verify registering nil events for PreEnqueue plugin works as expected.
+// TestPreEnqueuePluginEventsToRegister 验证 PreEnqueue 插件注册 nil events 时行为符合预期。
 func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 	num := func(pl fwk.Plugin) int {
 		switch item := pl.(type) {
@@ -2847,7 +2829,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 	tests := []struct {
 		name       string
 		withEvents bool
-		// count is the expected number of calls to PreEnqueue().
+		// count 为 PreEnqueue() 的预期调用次数。
 		count             int
 		expectedScheduled bool
 	}{
@@ -2870,7 +2852,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 			expectedScheduled := tt.expectedScheduled
 
 			testContext := testutils.InitTestAPIServer(t, "preenqueue-plugin", nil)
-			// use new plugin every time to clear counts
+			// 每次使用新插件以清空计数。
 			var plugin fwk.PreEnqueuePlugin
 			if tt.withEvents {
 				plugin = &SchedulingGatesPluginWithEvents{SchedulingGates: schedulinggates.SchedulingGates{}}
@@ -2882,7 +2864,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 				plugin.Name(): newPlugin(plugin),
 			}
 
-			// Setup plugins for testing.
+			// 配置待测插件。
 			cfg := configtesting.V1ToInternalWithDefaults(t, configv1.KubeSchedulerConfiguration{
 				Profiles: []configv1.KubeSchedulerProfile{{
 					SchedulerName: ptr.To(v1.DefaultSchedulerName),
@@ -2907,7 +2889,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 
 			t.Log("Create the gated pod")
 
-			// Create a pod with schedulingGates.
+			// 创建带 schedulingGates 的 Pod。
 			gatedPod := st.MakePod().Name("p").Namespace(testContext.NS.Name).
 				SchedulingGates([]string{"foo"}).
 				PodAffinity("kubernetes.io/hostname", &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}}, st.PodAffinityWithRequiredReq).
@@ -2929,7 +2911,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 
 			t.Log("Create the pause pod")
 
-			// Create a best effort pod.
+			// 创建 best effort Pod。
 			pausePod, err := testutils.CreatePausePod(testCtx.ClientSet, testutils.InitPausePod(&testutils.PausePodConfig{
 				Name:      "pause-pod",
 				Namespace: testCtx.NS.Name,
@@ -2940,7 +2922,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 				return
 			}
 
-			// Wait for the pod schedulabled.
+			// 等待该 Pod 可调度。
 			if err := testutils.WaitForPodToScheduleWithTimeout(testCtx.Ctx, testCtx.ClientSet, pausePod, 10*time.Second); err != nil {
 				t.Errorf("Expected the pod to be schedulable, but got: %v", err)
 				return
@@ -2948,7 +2930,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 
 			t.Log("Update the pause pod")
 
-			// Update the pod which will trigger the requeue logic if plugin registers the events.
+			// 更新 Pod，若插件注册了事件，将触发重新入队。
 			pausePod, err = testCtx.ClientSet.CoreV1().Pods(pausePod.Namespace).Get(testCtx.Ctx, pausePod.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Errorf("Error while getting a pod: %v", err)
@@ -2961,7 +2943,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 				return
 			}
 
-			// Pod should still be unschedulable because scheduling gates still exist, theoretically, it's a waste rescheduling.
+			// scheduling gates 仍存在，Pod 应保持不可调度，此次重排实际上是浪费。
 			if err := testutils.WaitForPodSchedulingGated(testCtx.Ctx, testCtx.ClientSet, gatedPod, 10*time.Second); err != nil {
 				t.Errorf("Expected the pod to be gated, but got: %v", err)
 				return
@@ -2973,7 +2955,7 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 
 			t.Log("Remove the scheduling gate")
 
-			// Remove gated pod's scheduling gates.
+			// 移除 gated Pod 的 scheduling gates。
 			gatedPod, err = testCtx.ClientSet.CoreV1().Pods(gatedPod.Namespace).Get(testCtx.Ctx, gatedPod.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Errorf("Error while getting a pod: %v", err)
@@ -2992,9 +2974,9 @@ func TestPreEnqueuePluginEventsToRegister(t *testing.T) {
 				}
 				return
 			}
-			// wait for some time to ensure that the schedulerQueue has completed processing the podUpdate event.
+			// 等待 schedulerQueue 处理完 podUpdate 事件。
 			time.Sleep(time.Second)
-			// pod shouldn't be scheduled if we didn't register podUpdate event for schedulingGates plugin
+			// schedulingGates 插件未注册 podUpdate 事件时，Pod 不应被调度。
 			if err := testutils.WaitForPodSchedulingGated(testCtx.Ctx, testCtx.ClientSet, gatedPod, 10*time.Second); err != nil {
 				t.Errorf("Expected the pod to be gated, but got: %v", err)
 				return

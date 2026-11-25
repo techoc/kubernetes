@@ -60,14 +60,13 @@ type plMetrics struct {
 	availableSeats int
 }
 
-// metricSnapshot maps from a priority level label to
-// a plMetrics struct containing APF metrics of interest
+// metricSnapshot 按 priority level 标签索引关心的 APF 指标快照
 type metricSnapshot map[string]plMetrics
 
-// Client request latency measurement
+// clientLatencyMeasurement 记录客户端请求时延
 type clientLatencyMeasurement struct {
 	SumAndCount
-	SumSq float64 // latency sum of squares
+	SumSq float64 // 时延平方和
 	Mu    sync.Mutex
 }
 
@@ -91,8 +90,8 @@ func (clm *clientLatencyMeasurement) getStats() clientLatencyStats {
 	clm.Mu.Lock()
 	defer clm.Mu.Unlock()
 	mean := clm.Sum / float64(clm.Count)
-	ss := clm.SumSq - mean*clm.Sum // reduced from ss := sumsq - 2*mean*sum + float64(count)*mean*mean
-	// Set ss to 0 if negative value is resulted from floating point calculations
+	ss := clm.SumSq - mean*clm.Sum // 由 sumsq - 2*mean*sum + count*mean*mean 化简得来
+	// 浮点运算可能导致 ss 为负，此时按 0 处理
 	if ss < 0 {
 		ss = 0
 	}
@@ -102,14 +101,14 @@ func (clm *clientLatencyMeasurement) getStats() clientLatencyStats {
 }
 
 type clientLatencyStats struct {
-	mean   float64 // latency average
-	stdDev float64 // latency population standard deviation
-	cv     float64 // latency coefficient of variation
+	mean   float64 // 平均时延
+	stdDev float64 // 总体标准差
+	cv     float64 // 变异系数
 }
 
 type plMetricAvg struct {
-	reqExecution float64 // average request execution time
-	seatUtil     float64 // average seat utilization
+	reqExecution float64 // 平均请求执行时间
+	seatUtil     float64 // 平均 seat 利用率
 }
 
 func intervalMetricAvg(snapshot0, snapshot1 metricSnapshot, plLabel string) plMetricAvg {
@@ -127,44 +126,40 @@ type noxuDelayingAuthorizer struct {
 
 func (d *noxuDelayingAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	if a.GetUser().GetName() == "noxu1" || a.GetUser().GetName() == "noxu2" {
-		time.Sleep(fakeworkDuration) // simulate fake work with sleep
+		time.Sleep(fakeworkDuration) // 用 sleep 模拟耗时操作
 	}
 	return d.Authorizer.Authorize(ctx, a)
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 本身不处理 conditions，仅转换 Authorize 的决策结果。
 func (d *noxuDelayingAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(d.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 该 authorizer 不支持条件求值。
 func (*noxuDelayingAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
-// TestConcurrencyIsolation tests the concurrency isolation between priority levels.
-// The test defines two priority levels for this purpose, and corresponding flow schemas.
-// To one priority level, this test sends many more concurrent requests than the configuration
-// allows to execute at once, while sending fewer than allowed to the other priority level.
-// The primary check is that the low flow gets all the seats it wants, but is modulated by
-// recognizing that there are uncontrolled overheads in the system.
+// TestConcurrencyIsolation 验证不同 priority level 之间的并发隔离。
+// 测试为此定义两个 priority level 及相应的 flow schema：其中一个发送远超配置并发上限的请求，
+// 另一个发送低于上限的请求。主要断言是低流量方仍能拿到所需的全部 seat，
+// 但需考虑系统中不可控的额外开销，故判定留有裕度。
 //
-// This test differs from TestPriorityLevelIsolation since TestPriorityLevelIsolation checks throughput instead
-// of concurrency. In order to mitigate the effects of system noise, a delaying authorizer is used to artificially
-// increase request execution time to make the system noise relatively insignificant.
-// Secondarily, this test also checks the observed seat utilizations against values derived from expecting that
-// the throughput observed by the client equals the execution throughput observed by the server.
+// 与 TestPriorityLevelIsolation 不同，后者检查的是吞吐量而非并发数。
+// 为抑制系统噪声的影响，这里用延迟 authorizer 人为拉长请求执行时间，使噪声相对可忽略。
+// 此外还把观测到的 seat 利用率与"客户端观测吞吐量等于服务端执行吞吐量"的推算值做比对。
 func TestConcurrencyIsolation(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, kubeConfig, closeFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Ensure all clients are allowed to send requests.
+			// 放行所有客户端，避免鉴权影响并发测量
 			opts.Authorization.Modes = []string{"AlwaysAllow"}
 			opts.GenericServerRunOptions.MaxRequestsInFlight = 10
 			opts.GenericServerRunOptions.MaxMutatingRequestsInFlight = 10
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Wrap default authorizer with one that delays requests from noxu clients
+			// 包装默认 authorizer，对 noxu 客户端的请求人为增加延迟
 			config.ControlPlane.Generic.Authorization.Authorizer = &noxuDelayingAuthorizer{config.ControlPlane.Generic.Authorization.Authorizer}
 		},
 	})
@@ -191,7 +186,7 @@ func TestConcurrencyIsolation(t *testing.T) {
 	stopCh := make(chan struct{})
 	wg := sync.WaitGroup{}
 
-	// "elephant"
+	// "elephant"：高并发大流量的一方
 	noxu1NumGoroutines := 5 + queueLength
 	var noxu1LatMeasure clientLatencyMeasurement
 	wg.Add(noxu1NumGoroutines)
@@ -204,7 +199,7 @@ func TestConcurrencyIsolation(t *testing.T) {
 			t.Error(err)
 		}
 	}, &wg, stopCh)
-	// "mouse"
+	// "mouse"：低并发小流量的一方
 	noxu2NumGoroutines := 3
 	var noxu2LatMeasure clientLatencyMeasurement
 	wg.Add(noxu2NumGoroutines)
@@ -218,7 +213,7 @@ func TestConcurrencyIsolation(t *testing.T) {
 		}
 	}, &wg, stopCh)
 
-	// Warm up
+	// 预热，避开启动阶段的不稳定数据
 	time.Sleep(testWarmUpTime)
 
 	noxu1LatMeasure.reset()
@@ -227,14 +222,14 @@ func TestConcurrencyIsolation(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	time.Sleep(testTime) // after warming up, the test enters a steady state
+	time.Sleep(testTime) // 预热结束后进入稳态，再采样
 	snapshot1, err := getRequestMetricsSnapshot(loopbackClient)
 	if err != nil {
 		t.Error(err)
 	}
 	close(stopCh)
 
-	// Check the assumptions of the test
+	// 先检验测试前提是否成立，否则后续断言无意义
 	noxu1T0 := snapshot0[plNoxu1.Name]
 	noxu1T1 := snapshot1[plNoxu1.Name]
 	noxu2T0 := snapshot0[plNoxu2.Name]
@@ -253,7 +248,7 @@ func TestConcurrencyIsolation(t *testing.T) {
 		t.Errorf("The number of available seats for test client priority levels are too small: (%d, %d). Expecting a number > 4",
 			noxu1T0.availableSeats, noxu2T0.availableSeats)
 	}
-	// No requests should be rejected under normal situations
+	// 正常情况下不应有请求被拒绝
 	_, rejectedReqCounts, err := getRequestCountOfPriorityLevel(loopbackClient)
 	if err != nil {
 		t.Error(err)
@@ -265,32 +260,30 @@ func TestConcurrencyIsolation(t *testing.T) {
 		t.Errorf(`%d requests from the "mouse" stream were rejected unexpectedly`, rejectedReqCounts[plNoxu2.Name])
 	}
 
-	// Calculate APF server side metric averages during the test interval
+	// 计算测试区间内服务端 APF 指标的均值
 	noxu1Avg := intervalMetricAvg(snapshot0, snapshot1, plNoxu1.Name)
 	noxu2Avg := intervalMetricAvg(snapshot0, snapshot1, plNoxu2.Name)
 	t.Logf("\nnoxu1 avg request execution time %v\nnoxu2 avg request execution time %v", noxu1Avg.reqExecution, noxu2Avg.reqExecution)
 	t.Logf("\nnoxu1 avg seat utilization %v\nnoxu2 avg seat utilization %v", noxu1Avg.seatUtil, noxu2Avg.seatUtil)
 
-	// Wait till the client goroutines finish before computing the client side request latency statistics
+	// 等客户端 goroutine 结束后再统计时延，避免数据仍在写入
 	wg.Wait()
 	noxu1LatStats := noxu1LatMeasure.getStats()
 	noxu2LatStats := noxu2LatMeasure.getStats()
 	t.Logf("noxu1 client request count %d duration mean %v stddev %v cv %v", noxu1LatMeasure.Count, noxu1LatStats.mean, noxu1LatStats.stdDev, noxu1LatStats.cv)
 	t.Logf("noxu2 client request count %d duration mean %v stddev %v cv %v", noxu2LatMeasure.Count, noxu2LatStats.mean, noxu2LatStats.stdDev, noxu2LatStats.cv)
 
-	// Calculate server-side observed concurrency
+	// 按服务端指标推算实际并发数
 	noxu1ObservedConcurrency := noxu1Avg.seatUtil * float64(noxu1T0.availableSeats)
 	noxu2ObservedConcurrency := noxu2Avg.seatUtil * float64(noxu2T0.availableSeats)
-	// Expected concurrency is derived from equal throughput assumption on both the client-side and the server-side
+	// 依据客户端与服务端吞吐量相等的假设计算期望并发数
 	noxu1ExpectedConcurrency := float64(noxu1NumGoroutines) * noxu1Avg.reqExecution / noxu1LatStats.mean
 	noxu2ExpectedConcurrency := float64(noxu2NumGoroutines) * noxu2Avg.reqExecution / noxu2LatStats.mean
 	t.Logf("Concurrency of noxu1:noxu2 - expected (%v:%v), observed (%v:%v)", noxu1ExpectedConcurrency, noxu2ExpectedConcurrency, noxu1ObservedConcurrency, noxu2ObservedConcurrency)
 
-	// There are uncontrolled overheads that introduce noise into the system. The coefficient of variation (CV), that is,
-	// standard deviation divided by mean, for a class of traffic is a characterization of all the noise that applied to
-	// that class. We found that noxu1 generally had a much bigger CV than noxu2. This makes sense, because noxu1 probes
-	// more behavior --- the waiting in queues. Both are relevant, so we mix them to get the
-	// threshold to apply in this test.
+	// 系统中存在不可控的额外开销，会引入噪声。变异系数（CV，标准差除以均值）
+	// 刻画了某类流量的全部噪声。noxu1 的 CV 通常远大于 noxu2，
+	// 因为它还会触发排队等待等行为。两者都需考虑，因此组合它们得出本测试的容差阈值。
 	margin := noxu1LatStats.cv + 2*noxu2LatStats.cv
 	t.Logf("Error margin is %v", margin)
 
@@ -306,7 +299,7 @@ func TestConcurrencyIsolation(t *testing.T) {
 		t.Errorf("Concurrency observed by noxu2 is off. Expected: %v, observed: %v", noxu2ExpectedConcurrency, noxu2ObservedConcurrency)
 	}
 
-	// Check the server-side APF seat utilization measurements
+	// 校验服务端观测到的 APF seat 利用率
 	if math.Abs(1-noxu1Avg.seatUtil) > 0.05 {
 		t.Errorf("noxu1Avg.seatUtil=%v is too far from expected=1.0", noxu1Avg.seatUtil)
 	}
@@ -335,7 +328,7 @@ func getRequestMetricsSnapshot(c clientset.Interface) (metricSnapshot, error) {
 		var v model.Vector
 		if err := decoder.Decode(&v); err != nil {
 			if err == io.EOF {
-				// Expected loop termination condition.
+				// EOF 即预期的循环结束条件
 				return snapshot, nil
 			}
 			return nil, fmt.Errorf("failed decoding metrics: %v", err)

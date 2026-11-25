@@ -25,11 +25,10 @@ import (
 )
 
 func init() {
-	// hack/make-rules/test-integration.sh expects that all unit tests
-	// support -v and -vmodule.
+	// hack/make-rules/test-integration.sh 要求所有单元测试支持 -v 和 -vmodule。
 	klog.InitFlags(nil)
 
-	// Write all output into a single file.
+	// 将所有输出写入单个文件，便于统计写入量。
 	flag.Set("alsologtostderr", "false")
 	flag.Set("logtostderr", "false")
 	flag.Set("one_output", "true")

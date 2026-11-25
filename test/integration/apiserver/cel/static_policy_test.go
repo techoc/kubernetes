@@ -47,10 +47,10 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// TestStaticPolicyBlocksAPICreation tests that all policy resources with .static.k8s.io
-// suffix cannot be created via the REST API when the feature gate is enabled. Covers
-// ValidatingAdmissionPolicy, ValidatingAdmissionPolicyBinding, MutatingAdmissionPolicy,
-// and MutatingAdmissionPolicyBinding in a single server instance.
+// TestStaticPolicyBlocksAPICreation 验证启用 feature gate 后，所有带 .static.k8s.io 后缀的
+// policy 资源都无法通过 REST API 创建。在单个 server 实例中覆盖
+// ValidatingAdmissionPolicy、ValidatingAdmissionPolicyBinding、MutatingAdmissionPolicy
+// 和 MutatingAdmissionPolicyBinding。
 func TestStaticPolicyBlocksAPICreation(t *testing.T) {
 	resetPolicyRefreshInterval := generic.SetPolicyRefreshIntervalForTests(policyRefreshInterval)
 	defer resetPolicyRefreshInterval()
@@ -177,22 +177,21 @@ plugins:
 	return configFile.Name()
 }
 
-// TestStaticPolicyComprehensive exercises static policy manifest loading using a
-// single shared API server with combined ValidatingAdmissionPolicy and
-// MutatingAdmissionPolicy admission config.
+// TestStaticPolicyComprehensive 在单个共享 API server 上同时配置 ValidatingAdmissionPolicy 和
+// MutatingAdmissionPolicy，验证静态 policy manifest 的加载。
 //
-// Scenarios tested (in order):
-//  1. Startup loading — VAP+VAPB manifest pre-populated before server start, verified active immediately
-//  2. Hot reload — MAP+MAPB manifest added after server start, verified via polling
-//  3. Both policies active simultaneously — configmap triggers both validation and mutation
-//  4. v1.List format manifest — VAP+VAPB loaded from a v1.List YAML file
-//  5. Static policy intercepts admission config resources — VAP creation denied by static policy
-//  6. Excluded auth resources skipped — SubjectAccessReview not intercepted
-//  7. Coexistence with API-based policy — static and API-defined policies enforce side by side
-//  8. Hot reload removal — VAP manifest deleted, policy stops enforcing
+// 测试场景（按顺序）：
+//  1. 启动加载 — 服务启动前预置 VAP+VAPB manifest，验证立即生效
+//  2. 热重载 — 服务启动后添加 MAP+MAPB manifest，轮询验证
+//  3. 两个 policy 同时生效 — 创建 configmap 同时触发校验与变更
+//  4. v1.List 格式 manifest — 从 v1.List YAML 文件加载 VAP+VAPB
+//  5. 静态 policy 拦截 admission 配置资源 — VAP 创建被静态 policy 拒绝
+//  6. 排除的 auth 资源被跳过 — SubjectAccessReview 不被拦截
+//  7. 与 API 方式 policy 共存 — 静态与 API 定义的 policy 同时生效
+//  8. 热重载移除 — 删除 VAP manifest 后 policy 停止生效
 //
-// Reload metrics (count, hash, timestamp, apiserver_id_hash) are validated after every
-// subtest that triggers a manifest reload to confirm the reload was successful.
+// 每个触发 manifest 重载的子测试后都会校验重载指标（count、hash、timestamp、apiserver_id_hash），
+// 以确认重载成功。
 func TestStaticPolicyComprehensive(t *testing.T) {
 	genericapiserver.SetHostnameFuncForTests("testAPIServerID")
 	metrics.ResetMetricsForTest()
@@ -203,11 +202,11 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ManifestBasedAdmissionControlConfig, true)
 	ctx := t.Context()
 
-	// Separate directories for VAP and MAP manifests (each loader only accepts its own resource types)
+	// VAP 与 MAP manifest 分目录存放（各自的 loader 只接受对应资源类型）
 	vapManifestsDir := t.TempDir()
 	mapManifestsDir := t.TempDir()
 
-	// Pre-populate VAP + VAPB manifest before server start (tests startup loading path)
+	// 启动前预置 VAP+VAPB manifest，覆盖启动加载路径
 	vapPolicy := &admissionregistrationv1.ValidatingAdmissionPolicy{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "admissionregistration.k8s.io/v1", Kind: "ValidatingAdmissionPolicy"},
 		ObjectMeta: metav1.ObjectMeta{Name: "deny-labels.static.k8s.io"},
@@ -237,7 +236,7 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 	}
 	writeManifestToFile(t, vapManifestsDir, "deny-labels.yaml", vapPolicy, vapBinding)
 
-	// Combined admission config for BOTH ValidatingAdmissionPolicy AND MutatingAdmissionPolicy
+	// 同时为 ValidatingAdmissionPolicy 和 MutatingAdmissionPolicy 配置 admission
 	admissionConfigFile := createCombinedPolicyAdmissionConfig(t, vapManifestsDir, mapManifestsDir)
 
 	server, err := apiservertesting.StartTestServer(t, nil, []string{
@@ -257,7 +256,7 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 	}
 	ns := metav1.NamespaceDefault
 
-	// Track reload metrics across subtests for both plugins
+	// 跨子测试跟踪两个插件的重载指标
 	var lastVAPMetrics, lastMAPMetrics *reloadMetrics
 	expectReloadCountIncrease := func(pluginName string, prev **reloadMetrics, expectNonEmptyHash bool) {
 		t.Helper()
@@ -267,7 +266,7 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 			if *prev == nil {
 				return m.reloadSuccessCount > 0, nil
 			}
-			// Wait for both count increase AND hash change
+			// 计数增长与 hash 变化必须同时满足
 			return m.reloadSuccessCount > (*prev).reloadSuccessCount && m.configHash != (*prev).configHash, nil
 		})
 		if err != nil {
@@ -285,7 +284,7 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 	}
 
 	t.Run("validating policy active at startup", func(t *testing.T) {
-		// VAP+VAPB was pre-populated — should be active from the first request
+		// VAP+VAPB 已预置，首个请求起即应生效
 		var lastErr error
 		err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, lastErr = client.CoreV1().ConfigMaps(ns).Create(ctx, &corev1.ConfigMap{
@@ -307,7 +306,7 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 	})
 
 	t.Run("hot reload mutating policy", func(t *testing.T) {
-		// Write MAP + MAPB manifest in a SEPARATE file (tests multiple manifest files in same dir)
+		// 将 MAP+MAPB 写入单独文件（覆盖同目录多个 manifest 文件的场景）
 		mapPolicy := &admissionregistrationv1.MutatingAdmissionPolicy{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "admissionregistration.k8s.io/v1", Kind: "MutatingAdmissionPolicy"},
 			ObjectMeta: metav1.ObjectMeta{Name: "add-label.static.k8s.io"},
@@ -362,7 +361,7 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 	})
 
 	t.Run("both policies active simultaneously", func(t *testing.T) {
-		// Create configmap without deny-me label — should be mutated but not denied
+		// 创建不带 deny-me label 的 configmap — 应被变更而非拒绝
 		cm, err := client.CoreV1().ConfigMaps(ns).Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "both-active-test", Namespace: ns},
 			Data:       map[string]string{"key": "value"},
@@ -377,8 +376,8 @@ func TestStaticPolicyComprehensive(t *testing.T) {
 	})
 
 	t.Run("v1.List format manifest", func(t *testing.T) {
-		// Write a third manifest file using v1.List format containing a VAP+VAPB
-		// that denies configmaps with annotation blocked=true
+		// 写入第三个 v1.List 格式的 manifest 文件，其中的 VAP+VAPB 拒绝
+		// annotation blocked=true 的 configmap
 		listYAML := `apiVersion: v1
 kind: List
 items:
@@ -435,7 +434,7 @@ items:
 	})
 
 	t.Run("static policy protects admission config resources", func(t *testing.T) {
-		// Write a new manifest that denies VAP creation
+		// 写入拒绝 VAP 创建的新 manifest
 		protectPolicy := &admissionregistrationv1.ValidatingAdmissionPolicy{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "admissionregistration.k8s.io/v1", Kind: "ValidatingAdmissionPolicy"},
 			ObjectMeta: metav1.ObjectMeta{Name: "protect-vaps.static.k8s.io"},
@@ -504,7 +503,7 @@ items:
 	})
 
 	t.Run("static policy skips excluded auth resources", func(t *testing.T) {
-		// SubjectAccessReview should NOT be intercepted even with broad static policies
+		// 即使静态 policy 范围很广，也不应拦截 SubjectAccessReview
 		_, err := client.AuthorizationV1().SubjectAccessReviews().Create(ctx,
 			&authorizationv1.SubjectAccessReview{
 				Spec: authorizationv1.SubjectAccessReviewSpec{
@@ -521,14 +520,14 @@ items:
 	})
 
 	t.Run("coexists with API-based policy", func(t *testing.T) {
-		// Remove protect-vaps.yaml so we can create the API-based VAP
+		// 删除 protect-vaps.yaml 以便创建 API 方式的 VAP
 		if err := os.Remove(filepath.Join(vapManifestsDir, "protect-vaps.yaml")); err != nil {
 			t.Fatalf("Failed to remove protect-vaps.yaml: %v", err)
 		}
 
 		expectReloadCountIncrease("ValidatingAdmissionPolicy", &lastVAPMetrics, true)
 
-		// Wait for protect-vaps policy to be unloaded, then create API-based VAP
+		// 等待 protect-vaps policy 卸载后再创建 API 方式的 VAP
 		var lastErr error
 		err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, lastErr = client.AdmissionregistrationV1().ValidatingAdmissionPolicies().Create(ctx,
@@ -568,7 +567,7 @@ items:
 			t.Fatalf("Failed to create API-based VAP binding: %v", err)
 		}
 
-		// Wait for API policy to be active
+		// 等待 API policy 生效
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, lastErr = client.CoreV1().Secrets(ns).Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: "api-vap-probe", Namespace: ns, Labels: map[string]string{"deny-api": "true"}},
@@ -585,7 +584,7 @@ items:
 			t.Fatalf("Timeout waiting for API VAP to enforce: %v (last error: %v)", err, lastErr)
 		}
 
-		// Verify static policy still works (deny configmap with deny-me)
+		// 验证静态 policy 仍然生效（拒绝带 deny-me 的 configmap）
 		_, err = client.CoreV1().ConfigMaps(ns).Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "coexist-static-check", Namespace: ns, Labels: map[string]string{"deny-me": "true"}},
 		}, metav1.CreateOptions{})
@@ -598,12 +597,12 @@ items:
 	})
 
 	t.Run("hot reload removal", func(t *testing.T) {
-		// Remove deny-labels.yaml
+		// 删除 deny-labels.yaml
 		if err := os.Remove(filepath.Join(vapManifestsDir, "deny-labels.yaml")); err != nil {
 			t.Fatalf("Failed to remove deny-labels.yaml: %v", err)
 		}
 
-		// Poll: configmap with deny-me=true now allowed
+		// 轮询确认带 deny-me=true 的 configmap 现在被放行
 		err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			cm, createErr := client.CoreV1().ConfigMaps(ns).Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: "post-removal-cm", Namespace: ns, Labels: map[string]string{"deny-me": "true"}},
@@ -621,7 +620,7 @@ items:
 			t.Fatalf("Timeout waiting for VAP removal to take effect: %v", err)
 		}
 
-		// Other static policies still active (annotations via v1.List, mutation via MAP)
+		// 其他静态 policy 仍然生效（v1.List 的 annotation 校验、MAP 的变更）
 		_, err = client.CoreV1().ConfigMaps(ns).Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "post-removal-annotation", Namespace: ns, Annotations: map[string]string{"blocked": "true"}},
 		}, metav1.CreateOptions{})
@@ -636,7 +635,7 @@ items:
 	})
 }
 
-// reloadMetrics holds parsed reload metrics from /metrics endpoint.
+// reloadMetrics 保存从 /metrics 端点解析出的重载指标。
 type reloadMetrics struct {
 	reloadSuccessCount int
 	reloadSuccessTime  *time.Time
@@ -712,8 +711,8 @@ func parseLabels(line string) map[string]string {
 	return labels
 }
 
-// writeManifestToFile marshals the given objects as a multi-document YAML file.
-// Uses atomic write (write to tmp file, then rename) to avoid partial reads.
+// writeManifestToFile 将对象序列化为多文档 YAML 文件。
+// 采用先写临时文件再 rename 的原子写入，避免读到半成品。
 func writeManifestToFile(t *testing.T, dir, filename string, objects ...interface{}) string {
 	t.Helper()
 	var parts []string

@@ -36,9 +36,7 @@ func testPartitionableDevices(tCtx ktesting.TContext, enabled bool) {
 	}
 }
 
-// testDisabled verifies that creating ResourceSlices with node selection
-// perDeviceNodeSelection fails when the Partitionable Devices feature is
-// disabled.
+// testDisabled 验证禁用 Partitionable Devices 时，创建带 perDeviceNodeSelection 节点选择的 ResourceSlice 会失败。
 func testDisabled(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	_, driverName := createTestClass(tCtx, namespace)
@@ -48,11 +46,7 @@ func testDisabled(tCtx ktesting.TContext) {
 	require.Error(tCtx, err, "slice should have become invalid after dropping PartitionableDevices")
 }
 
-// testPerDeviceNodeSelection verifies that pods are scheduled
-// on the correct nodes when they are allocated devices that
-// speficy node selection using the perDeviceNodeSelection field
-// that was introduced as part of the Partitionable Devices
-// feature.
+// testPerDeviceNodeSelection 验证当设备通过 Partitionable Devices 引入的 perDeviceNodeSelection 字段指定节点选择时，使用这些设备的 Pod 会被调度到正确的节点。
 func testPerDeviceNodeSelection(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driverName := createTestClass(tCtx, namespace)
@@ -94,9 +88,7 @@ func testPerDeviceNodeSelection(tCtx ktesting.TContext) {
 	}
 }
 
-// testPartitionableDevicesWithMultiHostDevice verifies that multiple pods sharing
-// a ResourceClaim that is assigned a multi-host devices gets scheduled correctly
-// on the nodes selected by the node selector on the device.
+// testPartitionableDevicesWithMultiHostDevice 验证共享同一个多主机设备 ResourceClaim 的多个 Pod，会被正确调度到该设备节点选择器所选的节点上。
 func testPartitionableDevicesWithMultiHostDevice(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driverName := createTestClass(tCtx, namespace)

@@ -54,9 +54,9 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// This file tests the client-go credential plugin feature.
+// 本文件测试 client-go 的 credential plugin 功能。
 
-// These constants are used to communicate behavior to the testdata/exec-plugin.sh test fixture.
+// 这些常量用于将测试预期行为传递给 testdata/exec-plugin.sh 测试夹具。
 const (
 	exitCodeEnvVar   = "EXEC_PLUGIN_EXEC_CODE"
 	outputEnvVar     = "EXEC_PLUGIN_OUTPUT"
@@ -100,8 +100,8 @@ type wantMetrics struct {
 	policyCalls []execPluginPolicyCall
 }
 
-// go does not allow implementing different interfaces that share method names,
-// so implement the interfaces on type aliases instead, casting them as needed
+// Go 不允许在同一类型上实现带有同名方法的不同接口，
+// 因此在类型别名上分别实现，使用时按需转换。
 type execPluginMetrics wantMetrics
 type execPluginPolicyMetrics wantMetrics
 
@@ -150,12 +150,12 @@ func execPluginClientTests(t *testing.T, unauthorizedCert, unauthorizedKey []byt
 			wantClientErrorPrefix:         "Unauthorized",
 			wantMetrics: &wantMetrics{
 				calls: []execPluginCall{
-					// 2 calls since we preemptively refresh the creds upon a 401 HTTP response.
+					// 收到 401 后会主动刷新凭据，因此调用两次
 					{exitCode: 0, callStatus: "no_error"},
 					{exitCode: 0, callStatus: "no_error"},
 				},
 				policyCalls: []execPluginPolicyCall{
-					// 2 calls since we preemptively refresh the creds upon a 401 HTTP response.
+					// 收到 401 后会主动刷新凭据，因此调用两次
 					{status: "allowed"},
 					{status: "allowed"},
 				},
@@ -183,12 +183,12 @@ func execPluginClientTests(t *testing.T, unauthorizedCert, unauthorizedKey []byt
 			wantClientErrorPrefix:         "Unauthorized",
 			wantMetrics: &wantMetrics{
 				calls: []execPluginCall{
-					// 2 calls since we preemptively refresh the creds upon a 401 HTTP response.
+					// 收到 401 后会主动刷新凭据，因此调用两次
 					{exitCode: 0, callStatus: "no_error"},
 					{exitCode: 0, callStatus: "no_error"},
 				},
 				policyCalls: []execPluginPolicyCall{
-					// 2 calls since we preemptively refresh the creds upon a 401 HTTP response.
+					// 收到 401 后会主动刷新凭据，因此调用两次
 					{status: "allowed"},
 					{status: "allowed"},
 				},
@@ -339,12 +339,12 @@ func execPluginClientTests(t *testing.T, unauthorizedCert, unauthorizedKey []byt
 			wantClientErrorPrefix:         "Unauthorized",
 			wantMetrics: &wantMetrics{
 				calls: []execPluginCall{
-					// 2 calls since we preemptively refresh the creds upon a 401 HTTP response.
+					// 收到 401 后会主动刷新凭据，因此调用两次
 					{exitCode: 0, callStatus: "no_error"},
 					{exitCode: 0, callStatus: "no_error"},
 				},
 				policyCalls: []execPluginPolicyCall{
-					// 2 calls since we preemptively refresh the creds upon a 401 HTTP response.
+					// 收到 401 后会主动刷新凭据，因此调用两次
 					{status: "allowed"},
 					{status: "allowed"},
 				},
@@ -581,9 +581,8 @@ func TestExecPluginViaClient(t *testing.T) {
 				Command:    "testdata/exec-plugin.sh",
 				APIVersion: "client.authentication.k8s.io/v1",
 				Args: []string{
-					// If we didn't have this arg, then some metrics assertions might fail because
-					// the authenticator may be pulled from a globalCache and therefore it may have
-					// already fetched a valid credential.
+					// 没有这个随机参数时，authenticator 可能命中 globalCache 并复用已获取的有效凭据，
+					// 导致部分 metrics 断言失败。
 					"--random-arg-to-avoid-authenticator-cache-hits",
 					rand.String(10),
 				},
@@ -604,7 +603,7 @@ func TestExecPluginViaClient(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 			defer cancel()
 
-			// Validate that the client works as expected on its own.
+			// 先验证客户端单独工作正常
 			_, err = client.CoreV1().ConfigMaps("default").List(ctx, metav1.ListOptions{})
 			if test.wantClientErrorPrefix != "" {
 				if err == nil || !strings.HasPrefix(err.Error(), test.wantClientErrorPrefix) {
@@ -614,17 +613,17 @@ func TestExecPluginViaClient(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Validate that the proper metrics were set.
+			// 验证 metrics 记录符合预期
 			if diff := cmp.Diff(test.wantMetrics, actualMetrics, wantMetricsComparer); diff != "" {
 				t.Error("unexpected metrics; -want, +got:\n" + diff)
 			}
 
-			// Validate that the right token is used.
+			// 验证使用了正确的 token
 			if diff := cmp.Diff(test.wantAuthorizationHeaderValues, authorizationHeaderValues.get()); diff != "" {
 				t.Error("unexpected authorization header values; -want, +got:\n" + diff)
 			}
 
-			// Validate that the right certs are used.
+			// 验证使用了正确的证书
 			tlsConfig, err := rest.TLSConfigFor(clientConfig)
 			if err != nil {
 				t.Fatal(err)
@@ -665,9 +664,8 @@ func captureMetrics(t *testing.T) *wantMetrics {
 	return actualMetrics
 }
 
-// objectMetaSansResourceVersionComparer compares two metav1.ObjectMeta's except for their resource
-// versions. Since the underlying integration test etcd is shared, these resource versions may jump
-// past the next sequential number for sequential API calls in the test.
+// objectMetaSansResourceVersionComparer 比较两个 metav1.ObjectMeta 时忽略 resourceVersion。
+// 集成测试共享底层 etcd，连续 API 调用的 resourceVersion 可能跳号。
 var objectMetaSansResourceVersionComparer = cmp.Comparer(func(a, b metav1.ObjectMeta) bool {
 	aa := a.DeepCopy()
 	bb := b.DeepCopy()
@@ -720,13 +718,13 @@ func (is *informerSpy) clear() {
 	is.deletes = []interface{}{}
 }
 
-// waitForEvents waits for adds, updates, and deletes to be populated with at least one event.
+// waitForEvents 等待 add、update、delete 三类事件各至少出现一次。
 func (is *informerSpy) waitForEvents(t *testing.T, wantEvents bool) {
 	t.Helper()
-	// wait for create/update/delete 3 events for 30 seconds
+	// 最多等待 30 秒收集 create/update/delete 三类事件
 	waitTimeout := time.Second * 30
 	if !wantEvents {
-		// wait just 15 seconds for no events
+		// 断言无事件时只等待 15 秒
 		waitTimeout = time.Second * 15
 	}
 
@@ -892,20 +890,18 @@ func TestExecPluginRotationViaInformer(t *testing.T) {
 	clientConfig.ExecProvider = execPlugin.config()
 	clientConfig.Dial = clientDialer.DialContext
 	clientConfig.Wrap(func(rt http.RoundTripper) http.RoundTripper {
-		// This makes it helpful to see what is happening with the informer's client.
+		// 便于观察 informer 客户端的请求细节
 		return transport.NewDebuggingRoundTripper(rt, transport.DebugCurlCommand, transport.DebugURLTiming)
 	})
 
-	// Initialize informer spy wth invalid token.
-	// Make sure informer never syncs because it can't authenticate.
+	// 用无效 token 启动 informer，因无法通过认证，确认其不会同步
 	execPlugin.rotateToken(clientUnauthorizedToken, tokenLifetime)
 	informer, informerSpy := startConfigMapInformer(ctx, t, clientset.NewForConfigOrDie(clientConfig), ns.Name)
 	waitForInformerSync(ctx, t, informer, false, "")
 	createUpdateDeleteConfigMap(ctx, t, adminClient.CoreV1().ConfigMaps(ns.Name))
 	informerSpy.waitForEvents(t, false)
 
-	// Rotate token to valid token.
-	// Make sure informer sees events because it now has a valid token with which it can authenticate.
+	// 轮换为有效 token，确认 informer 认证成功后能收到事件
 	execPlugin.rotateToken(clientAuthorizedToken, tokenLifetime)
 	waitForInformerSync(ctx, t, informer, true, "")
 	informerSpy.clear()
@@ -913,19 +909,18 @@ func TestExecPluginRotationViaInformer(t *testing.T) {
 	informerSpy.waitForEvents(t, true)
 	assertInformerEvents(t, informerSpy, createdCM, updatedCM, deletedCM)
 
-	// Rotate token to something invalid and clip watch connection.
-	// Informer should recreate connection with invalid token.
-	// Make sure informer does not see events since it is using the invalid token.
+	// 轮换为无效 token 并断开 watch 连接，informer 会用新 token 重建连接；
+	// 因 token 无效，确认其收不到事件
 	execPlugin.rotateToken(clientUnauthorizedToken, tokenLifetime)
-	time.Sleep(tokenLifetime) // wait for old token to expire to make sure the watch is restarted with clientUnauthorizedToken
+	// 等待旧 token 过期，确保 watch 使用 clientUnauthorizedToken 重启
+	time.Sleep(tokenLifetime)
 	clientDialer.CloseAll()
 	waitForInformerSync(ctx, t, informer, true, "")
 	informerSpy.clear()
 	createUpdateDeleteConfigMap(ctx, t, adminClient.CoreV1().ConfigMaps(ns.Name))
 	informerSpy.waitForEvents(t, false)
 
-	// Rotate token to valid token.
-	// Make sure informer sees events because it now has a valid token with which it can authenticate.
+	// 轮换为有效 token，确认 informer 认证成功后能收到事件
 	lastSyncResourceVersion := informer.LastSyncResourceVersion()
 	execPlugin.rotateToken(clientAuthorizedToken, tokenLifetime)
 	waitForInformerSync(ctx, t, informer, true, lastSyncResourceVersion)
@@ -1034,7 +1029,7 @@ func createNamespace(ctx context.Context, t *testing.T, client clientset.Interfa
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		// Use a new context since the one passed to this function would have timed out.
+		// 传入的 ctx 此时可能已超时，清理操作需用新 context
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		if err := client.CoreV1().Namespaces().Delete(ctx, ns.Name, metav1.DeleteOptions{}); err != nil {
@@ -1053,7 +1048,7 @@ func startConfigMapInformer(ctx context.Context, t *testing.T, client clientset.
 	cmInformer := informerFactory.Core().V1().ConfigMaps().Informer()
 	cmInformer.AddEventHandler(&informerSpy)
 	if err := cmInformer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
-		// t.Logf("watch error handler: failure in reflector %#v: %v", r, err) // Uncomment for more verbose logging
+		// t.Logf("watch error handler: failure in reflector %#v: %v", r, err) // 取消注释可输出更详细的日志
 	}); err != nil {
 		t.Fatalf("could not set watch error handler: %v", err)
 	}
@@ -1108,7 +1103,7 @@ func createUpdateDeleteConfigMap(ctx context.Context, t *testing.T, cms v1.Confi
 func assertInformerEvents(t *testing.T, informerSpy *informerSpy, created, updated, deleted interface{}) {
 	t.Helper()
 
-	// Validate that the informer was called correctly.
+	// 验证 informer 收到的事件符合预期
 	if diff := cmp.Diff([]interface{}{created}, informerSpy.adds, objectMetaSansResourceVersionComparer); diff != "" {
 		t.Errorf("unexpected add event(s), -want, +got:\n%s", diff)
 	}
@@ -1122,7 +1117,7 @@ func assertInformerEvents(t *testing.T, informerSpy *informerSpy, created, updat
 }
 
 func TestExecPluginGlobalCache(t *testing.T) {
-	// we do not really need the server for this test but this allows us to easily share the test data
+	// 本测试并不真的需要 apiserver，但这样可以复用已有的测试数据
 	result, clientAuthorizedToken, clientCertFileName, clientKeyFileName := startTestServer(t)
 
 	unauthorizedCert, unauthorizedKey, err := cert.GenerateSelfSignedCertKey("some-host", nil, nil)
@@ -1147,7 +1142,7 @@ func TestExecPluginGlobalCache(t *testing.T) {
 					Command:    "testdata/exec-plugin.sh",
 					APIVersion: "client.authentication.k8s.io/v1",
 					Args: []string{
-						// carefully control what the global cache sees as the same exec plugin
+						// 控制 global cache 眼中的插件标识，避免跨测试误判为同一插件
 						"--random-arg-to-avoid-authenticator-cache-hits",
 						randStrings[i],
 					},

@@ -60,7 +60,7 @@ var (
 	waitForPodUnschedulable      = testutils.WaitForPodUnschedulable
 )
 
-// This file tests the scheduler predicates functionality.
+// 本文件测试 scheduler 的 predicates 功能。
 
 const pollInterval = 100 * time.Millisecond
 
@@ -70,8 +70,7 @@ var (
 	taints       = []v1.Taint{{Key: v1.TaintNodeUnschedulable, Value: "", Effect: v1.TaintEffectNoSchedule}}
 )
 
-// TestInterPodAffinity verifies that scheduler's inter pod affinity and
-// anti-affinity predicate functions works correctly.
+// TestInterPodAffinity 验证 scheduler 的 inter pod affinity 和 anti-affinity predicate 工作正常。
 func TestInterPodAffinity(t *testing.T) {
 	podLabel := map[string]string{"service": "securityscan"}
 	podLabel2 := map[string]string{"security": "S1"}
@@ -841,8 +840,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{
-				// It matches the incoming Pod's anti affinity's labelSelector.
-				// BUT, the matchLabelKeys make the existing Pod's anti affinity's labelSelector not match with this label.
+				// 与 incoming Pod 的 anti affinity labelSelector 匹配，但 matchLabelKeys 使得该 label 不再匹配现有 Pod 的 anti affinity labelSelector。
 				{
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
@@ -850,8 +848,7 @@ func TestInterPodAffinity(t *testing.T) {
 					},
 					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Labels: map[string]string{"foo": "", "bar": "fuga"}},
 				},
-				// It matches the incoming Pod's anti affinity's labelSelector.
-				// BUT, the matchLabelKeys make the existing Pod's anti affinity's labelSelector not match with this label.
+				// 与 incoming Pod 的 anti affinity labelSelector 匹配，但 matchLabelKeys 使得该 label 不再匹配现有 Pod 的 anti affinity labelSelector。
 				{
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
@@ -892,8 +889,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{
-				// It matches the incoming Pod's anti affinity's labelSelector.
-				// BUT, the mismatchLabelKeys make the existing Pod's anti affinity's labelSelector not match with this label.
+				// 与 incoming Pod 的 anti affinity labelSelector 匹配，但 mismatchLabelKeys 使得该 label 不再匹配现有 Pod 的 anti affinity labelSelector。
 				{
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
@@ -901,8 +897,7 @@ func TestInterPodAffinity(t *testing.T) {
 					},
 					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Labels: map[string]string{"foo": "", "bar": "a"}},
 				},
-				// It matches the incoming Pod's anti affinity's labelSelector.
-				// BUT, the mismatchLabelKeys make the existing Pod's anti affinity's labelSelector not match with this label.
+				// 与 incoming Pod 的 anti affinity labelSelector 匹配，但 mismatchLabelKeys 使得该 label 不再匹配现有 Pod 的 anti affinity labelSelector。
 				{
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
@@ -954,8 +949,7 @@ func TestInterPodAffinity(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				{
-					// It matches the incoming affinity. But, it uses all resources on nodes[1].
-					// So, the incoming Pod can no longer get scheduled on nodes[1].
+					// 匹配 incoming affinity，但占满了 nodes[1] 的资源，导致 incoming Pod 无法再调度到该节点。
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{
 							{
@@ -973,7 +967,7 @@ func TestInterPodAffinity(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Labels: map[string]string{"foo": "", "bar": "a"}},
 				},
 				{
-					// It doesn't match the incoming affinity due to matchLabelKeys.
+					// 由于 matchLabelKeys，该 Pod 不匹配 incoming affinity。
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						NodeName:   "testnode-0",
@@ -981,7 +975,7 @@ func TestInterPodAffinity(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pod2", Labels: map[string]string{"foo": "", "bar": "hoge"}},
 				},
 				{
-					// It doesn't match the incoming affinity due to matchLabelKeys.
+					// 由于 matchLabelKeys，该 Pod 不匹配 incoming affinity。
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						NodeName:   "testnode-0",
@@ -1032,8 +1026,7 @@ func TestInterPodAffinity(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				{
-					// It matches the incoming affinity. But, it uses all resources on nodes[1].
-					// So, the incoming Pod can no longer get scheduled on nodes[1].
+					// 匹配 incoming affinity，但占满了 nodes[1] 的资源，导致 incoming Pod 无法再调度到该节点。
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{
 							{
@@ -1051,7 +1044,7 @@ func TestInterPodAffinity(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Labels: map[string]string{"foo": "", "bar": "fuga"}},
 				},
 				{
-					// It doesn't match the incoming affinity due to mismatchLabelKeys.
+					// 由于 mismatchLabelKeys，该 Pod 不匹配 incoming affinity。
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						NodeName:   "testnode-0",
@@ -1059,7 +1052,7 @@ func TestInterPodAffinity(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "pod2", Labels: map[string]string{"foo": "", "bar": "a"}},
 				},
 				{
-					// It doesn't match the incoming affinity due to mismatchLabelKeys.
+					// 由于 mismatchLabelKeys，该 Pod 不匹配 incoming affinity。
 					Spec: v1.PodSpec{
 						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						NodeName:   "testnode-0",
@@ -1114,7 +1107,7 @@ func TestInterPodAffinity(t *testing.T) {
 					t.Fatalf("failed to create node: %v", err)
 				}
 
-				// another test node has the same "region" and "zone" labels as testnode, but has a different "node" label.
+				// 另一个测试节点与 testnode 有相同的 "region" 和 "zone" 标签，但 "node" 标签不同
 				if _, err := createNode(cs, st.MakeNode().Name("anothernode-0").Label("region", "r1").Label("zone", "z11").Label("node", "n2").Label(v1.LabelHostname, "anothernode-0").Capacity(
 					map[v1.ResourceName]string{
 						v1.ResourceMemory: "1G",
@@ -1189,7 +1182,7 @@ func TestInterPodAffinity(t *testing.T) {
 						return
 					}
 
-					// Ensure pod and nextPod are scheduled on the same node
+					// 确认 pod 与 nextPod 调度到了同一个节点
 					scheduledPod1, err := cs.CoreV1().Pods(testPod.Namespace).Get(testCtx.Ctx, testPod.Name, metav1.GetOptions{})
 					if err != nil {
 						t.Fatalf("Error getting scheduled pod1: %v", err)
@@ -1208,7 +1201,7 @@ func TestInterPodAffinity(t *testing.T) {
 	}
 }
 
-// TestInterPodAffinityWithNamespaceSelector verifies that inter pod affinity with NamespaceSelector works as expected.
+// TestInterPodAffinityWithNamespaceSelector 验证带 NamespaceSelector 的 inter pod affinity 行为符合预期。
 func TestInterPodAffinityWithNamespaceSelector(t *testing.T) {
 	podLabel := map[string]string{"service": "securityscan"}
 	tests := []struct {
@@ -1333,7 +1326,7 @@ func TestInterPodAffinityWithNamespaceSelector(t *testing.T) {
 					featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InterPodAffinityHostnameFastPath, cfg.interPodAffinityHostnameFastPathEnabled)
 					testCtx := initTest(t, "")
 
-					// Add a few nodes with labels
+					// 创建几个带标签的节点
 					nodes, err := createAndWaitForNodesInCache(testCtx, "testnode", st.MakeNode().Label("region", "r1").Label("zone", "z11"), 2)
 					if err != nil {
 						t.Fatal(err)
@@ -1774,7 +1767,7 @@ func TestTaintTolerationFilter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Enable the TaintTolerationComparisonOperators feature gate for Gt/Lt tests
+			// Gt/Lt 场景需要启用 TaintTolerationComparisonOperators feature gate
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TaintTolerationComparisonOperators, true)
 
 			testCtx := initTest(t, "taint-toleration-filter")
@@ -1787,7 +1780,7 @@ func TestTaintTolerationFilter(t *testing.T) {
 				}
 			}
 
-			// set namespace to pods
+			// 为 Pod 设置 namespace
 			tt.incomingPod.SetNamespace(ns)
 			defer testutils.CleanupPods(testCtx.Ctx, cs, t, []*v1.Pod{tt.incomingPod})
 
@@ -1813,10 +1806,10 @@ func TestTaintTolerationFilter(t *testing.T) {
 	}
 }
 
-// TestPodTopologySpreadFilter verifies that EvenPodsSpread predicate functions well.
+// TestPodTopologySpreadFilter 验证 EvenPodsSpread predicate 功能正常。
 func TestPodTopologySpreadFilter(t *testing.T) {
 	pause := imageutils.GetPauseImageName()
-	//  default nodes with labels "zone: zone-{0,1}" and "node: <node name>".
+	//  默认节点带有 "zone: zone-{0,1}" 和 "node: <node name>" 标签。
 	defaultNodes := []*v1.Node{
 		st.MakeNode().Name("node-0").Label("node", "node-0").Label("zone", "zone-0").Obj(),
 		st.MakeNode().Name("node-1").Label("node", "node-1").Label("zone", "zone-0").Obj(),
@@ -1830,11 +1823,11 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 		existingPods              []*v1.Pod
 		fits                      bool
 		nodes                     []*v1.Node
-		candidateNodes            []string // nodes expected to schedule onto
+		candidateNodes            []string // 预期可调度到的节点
 		enableNodeInclusionPolicy bool
 		enableMatchLabelKeys      bool
 	}{
-		// note: naming starts at index 0
+		// 注意：编号从 0 开始
 		{
 			name: "place pod on a 1/1/0/1 cluster with MaxSkew=1, node-2 is the only fit",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
@@ -1896,7 +1889,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 		{
 			name: "pod cannot be placed onto any node",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
-				NodeAffinityNotIn("node", []string{"node-0"}). // mock a 3-node cluster
+				NodeAffinityNotIn("node", []string{"node-0"}). // 模拟 3 节点集群
 				SpreadConstraint(1, "zone", hardSpread, st.MakeLabelSelector().Exists("foo").Obj(), nil, nil, nil, nil).
 				SpreadConstraint(1, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj(), nil, nil, nil, nil).
 				Obj(),
@@ -1913,7 +1906,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 		{
 			name: "high priority pod can preempt others",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).Priority(100).
-				NodeAffinityNotIn("node", []string{"node-0"}). // mock a 3-node cluster
+				NodeAffinityNotIn("node", []string{"node-0"}). // 模拟 3 节点集群
 				SpreadConstraint(1, "zone", hardSpread, st.MakeLabelSelector().Exists("foo").Obj(), nil, nil, nil, nil).
 				SpreadConstraint(1, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj(), nil, nil, nil, nil).
 				Obj(),
@@ -1931,13 +1924,13 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 		{
 			name: "pods spread across nodes as 2/2/1, maxSkew is 2, and the number of domains < minDomains, then the third node fits",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
-				NodeAffinityNotIn("node", []string{"node-0"}). // mock a 3-node cluster
+				NodeAffinityNotIn("node", []string{"node-0"}). // 模拟 3 节点集群
 				SpreadConstraint(
 					2,
 					"node",
 					hardSpread,
 					st.MakeLabelSelector().Exists("foo").Obj(),
-					ptr.To[int32](4), // larger than the number of domains (= 3)
+					ptr.To[int32](4), // 大于 domain 数量（= 3）
 					nil,
 					nil,
 					nil,
@@ -1957,13 +1950,13 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 		{
 			name: "pods spread across nodes as 2/2/1, maxSkew is 2, and the number of domains > minDomains, then the all nodes fit",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
-				NodeAffinityNotIn("node", []string{"node-0"}). // mock a 3-node cluster
+				NodeAffinityNotIn("node", []string{"node-0"}). // 模拟 3 节点集群
 				SpreadConstraint(
 					2,
 					"node",
 					hardSpread,
 					st.MakeLabelSelector().Exists("foo").Obj(),
-					ptr.To[int32](2), // smaller than the number of domains (= 3)
+					ptr.To[int32](2), // 小于 domain 数量（= 3）
 					nil,
 					nil,
 					nil,
@@ -1988,7 +1981,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 					"zone",
 					v1.DoNotSchedule,
 					st.MakeLabelSelector().Exists("foo").Obj(),
-					ptr.To[int32](3), // larger than the number of domains(2)
+					ptr.To[int32](3), // 大于 domain 数量（2）
 					nil,
 					nil,
 					nil,
@@ -2010,7 +2003,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 					"zone",
 					v1.DoNotSchedule,
 					st.MakeLabelSelector().Exists("foo").Obj(),
-					ptr.To[int32](1), // smaller than the number of domains(2)
+					ptr.To[int32](1), // 小于 domain 数量（2）
 					nil,
 					nil,
 					nil,
@@ -2043,7 +2036,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 				st.MakeNode().Name("node-3").Label("node", "node-3").Label("zone", "zone-2").Obj(),
 				st.MakeNode().Name("node-4").Label("node", "node-4").Label("zone", "zone-2").Label("foo", "").Obj(),
 			},
-			candidateNodes:            []string{"node-4"}, // node-3 is filtered out by NodeAffinity plugin
+			candidateNodes:            []string{"node-4"}, // node-3 被 NodeAffinity plugin 过滤掉
 			enableNodeInclusionPolicy: true,
 		},
 		{
@@ -2085,7 +2078,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 				st.MakeNode().Name("node-3").Label("node", "node-3").Label("zone", "zone-2").Taints(taints).Obj(),
 				st.MakeNode().Name("node-4").Label("node", "node-4").Label("zone", "zone-2").Label("foo", "").Obj(),
 			},
-			candidateNodes:            []string{"node-4"}, // node-3 is filtered out by TaintToleration plugin
+			candidateNodes:            []string{"node-4"}, // node-3 被 TaintToleration plugin 过滤掉
 			enableNodeInclusionPolicy: true,
 		},
 		{
@@ -2106,13 +2099,13 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 				st.MakeNode().Name("node-3").Label("node", "node-3").Label("zone", "zone-2").Taints(taints).Obj(),
 				st.MakeNode().Name("node-4").Label("node", "node-4").Label("zone", "zone-2").Label("foo", "").Obj(),
 			},
-			candidateNodes:            []string{"node-1", "node-2", "node-4"}, // node-3 is filtered out by TaintToleration plugin
+			candidateNodes:            []string{"node-1", "node-2", "node-4"}, // node-3 被 TaintToleration plugin 过滤掉
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as 2/1
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/1/~0~/1
-			// intersection of (1) and (2) returns node-4 as node-3 is filtered out by NodeAffinity plugin.
+			// 1. 满足 "zone" 约束时，Pod 在各 zone 的分布为 2/1
+			// 2. 满足 "node" 约束时，Pod 在各节点的分布为 1/1/~0~/1
+			// (1) 与 (2) 取交集得到 node-4，因为 node-3 被 NodeAffinity plugin 过滤掉。
 			name: "two node inclusion Constraints, zone: honor/ignore, node: honor/ignore",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
 				NodeSelector(map[string]string{"foo": ""}).
@@ -2136,9 +2129,9 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as 2/1
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/1/~0~/1
-			// intersection of (1) and (2) returns node-4 as node-3 is filtered out by NodeAffinity plugin
+			// 1. 满足 "zone" 约束时，Pod 在各 zone 的分布为 2/1
+			// 2. 满足 "node" 约束时，Pod 在各节点的分布为 1/1/~0~/1
+			// (1) 与 (2) 取交集得到 node-4，因为 node-3 被 NodeAffinity plugin 过滤掉
 			name: "feature gate disabled, two node inclusion Constraints, zone: honor/ignore, node: honor/ignore",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
 				NodeSelector(map[string]string{"foo": ""}).
@@ -2162,9 +2155,9 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 			enableNodeInclusionPolicy: false,
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as 2/2
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/~0~/~0~/1
-			// intersection of (1) and (2) returns node-1 and node-4 as node-2, node-3 are filtered out by plugins
+			// 1. 满足 "zone" 约束时，Pod 在各 zone 的分布为 2/2
+			// 2. 满足 "node" 约束时，Pod 在各节点的分布为 1/~0~/~0~/1
+			// (1) 与 (2) 取交集得到 node-1 和 node-4，因为 node-2、node-3 被相关 plugin 过滤掉
 			name: "two node inclusion Constraints, zone: ignore/ignore, node: honor/honor",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
 				NodeSelector(map[string]string{"foo": ""}).
@@ -2236,7 +2229,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if !tt.enableNodeInclusionPolicy {
-				// TODO: this will be removed in 1.36
+				// TODO: 将在 1.36 中移除
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeInclusionPolicyInPodTopologySpread, tt.enableNodeInclusionPolicy)
 			}
@@ -2252,7 +2245,7 @@ func TestPodTopologySpreadFilter(t *testing.T) {
 				}
 			}
 
-			// set namespace to pods
+			// 为 Pod 设置 namespace
 			for i := range tt.existingPods {
 				tt.existingPods[i].SetNamespace(ns)
 			}
@@ -2378,7 +2371,7 @@ func TestNodePortsFilter(t *testing.T) {
 				t.Fatalf("Failed to create node: %v", err)
 			}
 
-			// set namespace to pods
+			// 为 Pod 设置 namespace
 			tt.incomingPod.SetNamespace(ns)
 			for i := range tt.existingPods {
 				tt.existingPods[i].SetNamespace(ns)
@@ -2589,7 +2582,7 @@ func TestUnschedulablePodBecomesSchedulable(t *testing.T) {
 				pvc, err := testutils.CreatePVC(cs, st.MakePersistentVolumeClaim().
 					Name("pvc-with-read-write-once-pod").
 					Namespace(ns).
-					// Annotation and volume name required for PVC to be considered bound.
+					// PVC 需具备该 annotation 和 volume name 才会被视为已绑定。
 					Annotation(volume.AnnBindCompleted, "true").
 					VolumeName(pv.Name).
 					AccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod}).
@@ -2641,7 +2634,7 @@ func TestUnschedulablePodBecomesSchedulable(t *testing.T) {
 					AccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod}).
 					Capacity(storage.Requests).
 					HostPathVolumeSource(&v1.HostPathVolumeSource{Path: "/tmp", Type: &volType}).
-					NodeAffinityIn("kubernetes.io/hostname", []string{"node-available", "non-existing"}). // one node exist, one doesn't
+					NodeAffinityIn("kubernetes.io/hostname", []string{"node-available", "non-existing"}). // 一个节点存在，另一个不存在
 					Obj())
 				if err != nil {
 					return fmt.Errorf("cannot create pv: %w", err)
@@ -2760,7 +2753,7 @@ func TestUnschedulablePodBecomesSchedulable(t *testing.T) {
 			if err := testutils.WaitForPodToSchedule(testCtx.Ctx, testCtx.ClientSet, pod); err != nil {
 				t.Errorf("Pod %v was not scheduled: %v", pod.Name, err)
 			}
-			// Make sure pending queue is empty.
+			// 确认 pending queue 已清空。
 			pendingPods, s := testCtx.Scheduler.SchedulingQueue.PendingPods()
 			if len(pendingPods) != 0 {
 				t.Errorf("pending pods queue is not empty, size is: %d, summary is: %s", len(pendingPods), s)
@@ -2769,8 +2762,7 @@ func TestUnschedulablePodBecomesSchedulable(t *testing.T) {
 	}
 }
 
-// TestPodAffinityMatchLabelKeyEnablement tests the Pod is correctly mutated by MatchLabelKeysInPodAffinity feature,
-// even if turing the feature gate enabled or disabled.
+// TestPodAffinityMatchLabelKeyEnablement 验证无论 feature gate 开启还是关闭，Pod 都会被 MatchLabelKeysInPodAffinity 特性正确改写。
 func TestPodAffinityMatchLabelKeyEnablement(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
 
@@ -2833,18 +2825,18 @@ func TestPodAffinityMatchLabelKeyEnablement(t *testing.T) {
 		t.Fatalf("Error while creating pod during test: %v", err)
 	}
 
-	// check the pod has the expected label selector.
+	// 检查 Pod 的 label selector 符合预期。
 	gotpod, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, p1.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error while getting pod during test: %v", err)
 	}
 
-	// the label selector should be changed from the original one because the feature gate is enabled.
+	// feature gate 已启用，label selector 应已被改写。
 	if d := cmp.Diff(gotpod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector, expectedLabelSelector); d != "" {
 		t.Fatalf("Pod %v has wrong label selector: diff = \n%v", p1.Name, d)
 	}
 
-	// disable the feature gate.
+	// 关闭 feature gate。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MatchLabelKeysInPodAffinity, false)
 
 	p2, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Create(testCtx.Ctx, pod, metav1.CreateOptions{})
@@ -2852,29 +2844,29 @@ func TestPodAffinityMatchLabelKeyEnablement(t *testing.T) {
 		t.Fatalf("Error while creating pod during test: %v", err)
 	}
 
-	// check the pod has the expected label selector.
+	// 检查 Pod 的 label selector 符合预期。
 	gotpod, err = testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, p2.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error while getting pod during test: %v", err)
 	}
 
-	// the label selector should be the same as the original one because the feature gate is disabled.
+	// feature gate 已关闭，label selector 应与原始值一致。
 	if d := cmp.Diff(gotpod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector, pod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector); d != "" {
 		t.Fatalf("Pod %v has wrong label selector: diff = \n%v", p2.Name, d)
 	}
 
-	// check the pod, which was created when the feature gate is enabled, still has the expected label selector.
+	// 检查之前开启 feature gate 时创建的 Pod 仍保留预期的 label selector。
 	gotpod, err = testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, p1.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error while getting pod during test: %v", err)
 	}
 
-	// the label selector should be changed from the original one because the feature gate is enabled.
+	// feature gate 已启用，label selector 应已被改写。
 	if d := cmp.Diff(gotpod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector, expectedLabelSelector); d != "" {
 		t.Fatalf("Pod %v has wrong label selector: diff = \n%v", p1.Name, d)
 	}
 
-	// Again, enable the feature gate.
+	// 再次开启 feature gate。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MatchLabelKeysInPodAffinity, true)
 
 	p3, err := testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Create(testCtx.Ctx, pod, metav1.CreateOptions{})
@@ -2882,26 +2874,24 @@ func TestPodAffinityMatchLabelKeyEnablement(t *testing.T) {
 		t.Fatalf("Error while creating pod during test: %v", err)
 	}
 
-	// check the pod has the expected label selector.
+	// 检查 Pod 的 label selector 符合预期。
 	gotpod, err = testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, p3.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error while getting pod during test: %v", err)
 	}
 
-	// the label selector should be changed from the original one because the feature gate is enabled.
+	// feature gate 已启用，label selector 应已被改写。
 	if d := cmp.Diff(gotpod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector, expectedLabelSelector); d != "" {
 		t.Fatalf("Pod %v has wrong label selector: diff = \n%v", p1.Name, d)
 	}
 
-	// check the pod has the expected label selector.
+	// 检查 Pod 的 label selector 符合预期。
 	gotpod, err = testCtx.ClientSet.CoreV1().Pods(testCtx.NS.Name).Get(testCtx.Ctx, p2.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error while getting pod during test: %v", err)
 	}
 
-	// the label selector shouldn't get changed because the feature gate was disabled at its creation.
-	// Even if the feature gate is enabled now, matchLabelKeys don't get applied to the pod.
-	// (it's only handled when the pod is created)
+	// 该 Pod 创建时 feature gate 是关闭的，label selector 不应改变；即使现在重新开启，matchLabelKeys 也不会回溯应用（只在创建时处理）。
 	if d := cmp.Diff(gotpod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector, pod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0].LabelSelector); d != "" {
 		t.Fatalf("Pod %v has wrong label selector: diff = \n%v", p2.Name, d)
 	}
@@ -2970,7 +2960,7 @@ func TestNodeResourcesFilter(t *testing.T) {
 				t.Fatalf("Failed to create node: %v", err)
 			}
 
-			// set namespace to pods
+			// 为 Pod 设置 namespace
 			tt.incomingPod.SetNamespace(ns)
 			allPods := []*v1.Pod{tt.incomingPod}
 			if tt.existingPod != nil {
@@ -3177,18 +3167,18 @@ func TestNodeAffinityFilter(t *testing.T) {
 			cs := testCtx.ClientSet
 			ns := testCtx.NS.Name
 
-			// Create node.
+			// 创建节点。
 			for _, node := range tt.nodes {
 				if _, err := cs.CoreV1().Nodes().Create(testCtx.Ctx, node, metav1.CreateOptions{}); err != nil {
 					t.Fatalf("Failed to create node: %v", err)
 				}
 			}
 
-			// Set namespace for pods and create them.
+			// 为 Pod 设置 namespace 并创建。
 			tt.incomingPod.SetNamespace(ns)
 			defer testutils.CleanupPods(testCtx.Ctx, cs, t, []*v1.Pod{tt.incomingPod})
 
-			// Attempt to schedule the incoming pod.
+			// 尝试调度 incoming Pod。
 			testPod, err := cs.CoreV1().Pods(tt.incomingPod.Namespace).Create(testCtx.Ctx, tt.incomingPod, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("Failed to create pod during test: %v", err)
@@ -3219,12 +3209,12 @@ func TestNodeAffinityFilter(t *testing.T) {
 }
 
 func TestNodeDeclaredFeaturesFilter(t *testing.T) {
-	// Helper to create a pod that requires the feature.
+	// 构造一个依赖该特性的 Pod。
 	podRequiringFeatureA := st.MakePod().Name("pod-req-feature-a").
 		UID("pod-req-feature").
 		Containers([]v1.Container{{Name: "container-req-feature-a", Image: imageutils.GetPauseImageName()}}).Obj()
 
-	// Helper to create a pod that does NOT require the feature.
+	// 构造一个不依赖该特性的 Pod。
 	podWithoutRequirement := st.MakePod().Name("pod-no-req").UID("pod-no-req").
 		Containers([]v1.Container{{Name: "container-no-req", Image: imageutils.GetPauseImageName()}}).
 		Obj()
@@ -3316,7 +3306,7 @@ func TestNodeDeclaredFeaturesFilter(t *testing.T) {
 					t.Fatalf("Failed to create node %v: %v", node.Name, err)
 				}
 			}
-			// Ensure nodes are present in scheduler cache.
+			// 确认节点已进入 scheduler cache。
 			if err := testutils.WaitForNodesInCache(testCtx.Ctx, testCtx.Scheduler, len(tt.nodes)); err != nil {
 				t.Fatalf("Failed to wait for nodes in cache: %v", err)
 			}

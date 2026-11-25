@@ -48,7 +48,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// imported from testutils
+// 从 testutils 引入
 var (
 	runPausePod                  = testutils.RunPausePod
 	createAndWaitForNodesInCache = testutils.CreateAndWaitForNodesInCache
@@ -77,10 +77,9 @@ const (
 	pollInterval = 100 * time.Millisecond
 )
 
-// initTestSchedulerForScoringTests initializes the test environment for scheduler scoring function tests.
-// It configures a scheduler configuration, enabling the specified prescore and score plugins,
-// while disabling all other plugins.
-// This setup ensures that only the desired plugins are active during the integration test.
+// initTestSchedulerForScoringTests 为 scheduler 打分测试初始化环境，
+// 只启用指定的 PreScore 和 Score 插件，禁用其余插件，
+// 确保集成测试中只有目标插件生效。
 func initTestSchedulerForScoringTests(t *testing.T, preScorePluginName, scorePluginName string) *testutils.TestContext {
 	cc := configv1.KubeSchedulerConfiguration{
 		Profiles: []configv1.KubeSchedulerProfile{{
@@ -150,8 +149,7 @@ func initTestSchedulerForNodeResourcesTest(t *testing.T, strategy configv1.Scori
 	return testCtx
 }
 
-// TestNodeResourcesScoring verifies that scheduler's node resources priority function
-// works correctly.
+// TestNodeResourcesScoring 验证 scheduler 的 node resources 打分函数工作正常
 func TestNodeResourcesScoring(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -159,7 +157,7 @@ func TestNodeResourcesScoring(t *testing.T) {
 		existingPods func(testCtx *testutils.TestContext) []*v1.Pod
 		nodes        []*v1.Node
 		strategy     configv1.ScoringStrategyType
-		// expectedNodeName is the list of node names. The pod should be scheduled on either of them.
+		// expectedNodeName 列出可接受的调度目标节点，Pod 调度到其中任意一个即可
 		expectedNodeName []string
 	}{
 		{
@@ -295,16 +293,15 @@ func TestNodeResourcesScoring(t *testing.T) {
 	}
 }
 
-// TestNodeAffinityScoring verifies that scheduler's node affinity priority function
-// works correctly.
+// TestNodeAffinityScoring 验证 scheduler 的 node affinity 打分函数工作正常
 func TestNodeAffinityScoring(t *testing.T) {
 	testCtx := initTestSchedulerForScoringTests(t, nodeaffinity.Name, nodeaffinity.Name)
-	// Add a few nodes.
+	// 创建若干 Node
 	_, err := createAndWaitForNodesInCache(testCtx, "testnode", st.MakeNode(), 4)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Add a label to one of the nodes.
+	// 给其中一个 Node 打标签
 	labelKey := "kubernetes.io/node-topologyKey"
 	labelValue := "topologyvalue"
 	labeledNode, err := createNode(testCtx.ClientSet, st.MakeNode().Name("testnode-4").Label(labelKey, labelValue).Obj())
@@ -315,7 +312,7 @@ func TestNodeAffinityScoring(t *testing.T) {
 		t.Fatalf("failed to wait for nodes in cache: %v", err)
 	}
 
-	// Create a pod with node affinity.
+	// 创建带 node affinity 的 Pod
 	podName := "pod-with-node-affinity"
 	pod, err := runPausePod(testCtx.ClientSet, initPausePod(&testutils.PausePodConfig{
 		Name:      podName,
@@ -349,8 +346,7 @@ func TestNodeAffinityScoring(t *testing.T) {
 	}
 }
 
-// TestPodAffinityScoring verifies that scheduler's pod affinity priority function
-// works correctly.
+// TestPodAffinityScoring 验证 scheduler 的 Pod affinity 打分函数工作正常
 func TestPodAffinityScoring(t *testing.T) {
 	labelKey := "service"
 	labelValue := "S1"
@@ -364,7 +360,7 @@ func TestPodAffinityScoring(t *testing.T) {
 		pod          *testutils.PausePodConfig
 		existingPods []*testutils.PausePodConfig
 		nodes        []*v1.Node
-		// expectedNodeName is the list of node names. The pod should be scheduled on either of them.
+		// expectedNodeName 列出可接受的调度目标节点，Pod 调度到其中任意一个即可
 		expectedNodeName               []string
 		enableMatchLabelKeysInAffinity bool
 	}{
@@ -429,7 +425,7 @@ func TestPodAffinityScoring(t *testing.T) {
 						PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
 							{
 								PodAffinityTerm: v1.PodAffinityTerm{
-									NamespaceSelector: &metav1.LabelSelector{}, // all namespaces
+									NamespaceSelector: &metav1.LabelSelector{}, // 匹配所有 namespace
 									LabelSelector: &metav1.LabelSelector{
 										MatchExpressions: []metav1.LabelSelectorRequirement{
 											{
@@ -500,15 +496,15 @@ func TestPodAffinityScoring(t *testing.T) {
 				},
 			},
 			existingPods: []*testutils.PausePodConfig{
-				// It matches the incoming Pod's anti affinity's labelSelector.
-				// BUT, the matchLabelKeys make the existing Pod's anti affinity's labelSelector not match with this label.
+				// 该 Pod 满足 incoming Pod 反亲和的 labelSelector，
+				// 但 matchLabelKeys 会使其不再匹配
 				{
 					NodeName:  "node1",
 					Name:      "pod1",
 					Namespace: "ns1",
 					Labels:    map[string]string{"foo": "", "bar": "fuga"},
 				},
-				// It matches the incoming Pod's anti affinity.
+				// 该 Pod 满足 incoming Pod 的反亲和
 				{
 					NodeName:  "node2",
 					Name:      "pod2",
@@ -552,15 +548,15 @@ func TestPodAffinityScoring(t *testing.T) {
 				},
 			},
 			existingPods: []*testutils.PausePodConfig{
-				// It matches the incoming Pod's anti affinity's labelSelector.
+				// 该 Pod 满足 incoming Pod 反亲和的 labelSelector
 				{
 					NodeName:  "node1",
 					Name:      "pod1",
 					Namespace: "ns1",
 					Labels:    map[string]string{"foo": "", "bar": "fuga"},
 				},
-				// It matches the incoming Pod's affinity.
-				// But, the mismatchLabelKeys make the existing Pod's anti affinity's labelSelector not match with this label.
+				// 该 Pod 满足 incoming Pod 的亲和，
+				// 但 mismatchLabelKeys 使其不再满足反亲和的 labelSelector
 				{
 					NodeName:  "node2",
 					Name:      "pod2",
@@ -582,7 +578,7 @@ func TestPodAffinityScoring(t *testing.T) {
 					PodAffinity: &v1.PodAffinity{
 						PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
 							{
-								// affinity with pod3.
+								// 与 pod3 亲和
 								PodAffinityTerm: v1.PodAffinityTerm{
 									TopologyKey: topologyKey,
 									LabelSelector: &metav1.LabelSelector{
@@ -598,9 +594,8 @@ func TestPodAffinityScoring(t *testing.T) {
 								Weight: 50,
 							},
 							{
-								// affinity with pod1 and pod2.
-								// schedule this Pod by this weaker affinity
-								// if `matchLabelKeys` above isn't working correctly.
+								// 与 pod1、pod2 亲和；
+								// 若上面的 matchLabelKeys 失效，将靠这条较弱的亲和规则调度
 								PodAffinityTerm: v1.PodAffinityTerm{
 									TopologyKey: topologyKey,
 									LabelSelector: &metav1.LabelSelector{
@@ -660,7 +655,7 @@ func TestPodAffinityScoring(t *testing.T) {
 					PodAffinity: &v1.PodAffinity{
 						PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
 							{
-								// affinity with pod3.
+								// 与 pod3 亲和
 								PodAffinityTerm: v1.PodAffinityTerm{
 									TopologyKey: topologyKey,
 									LabelSelector: &metav1.LabelSelector{
@@ -676,9 +671,8 @@ func TestPodAffinityScoring(t *testing.T) {
 								Weight: 50,
 							},
 							{
-								// affinity with pod1 and pod2.
-								// schedule this Pod by this weaker affinity
-								// if `matchLabelKeys` above isn't working correctly.
+								// 与 pod1、pod2 亲和；
+								// 若上面的 matchLabelKeys 失效，将靠这条较弱的亲和规则调度
 								PodAffinityTerm: v1.PodAffinityTerm{
 									TopologyKey: topologyKey,
 									LabelSelector: &metav1.LabelSelector{
@@ -736,8 +730,8 @@ func TestPodAffinityScoring(t *testing.T) {
 	for _, interPodAffinityHostnameFastPathEnabled := range []bool{true, false} {
 		for _, tt := range tests {
 			if !tt.enableMatchLabelKeysInAffinity && interPodAffinityHostnameFastPathEnabled {
-				// Avoid running the v1.32 emulation twice (once for interPodAffinityHostnameFastPathEnabled=true and once for false).
-				// Since fastPath is not available in v1.32, it will run with fastPath disabled when interPodAffinityHostnameFastPathEnabled=false.
+				// 避免对 v1.32 模拟版本重复运行（fastPath 开关各一次）。
+				// v1.32 没有 fastPath，只需在开关为 false 时运行一次
 				continue
 			}
 			t.Run(fmt.Sprintf("%s/fastPathEnabled=%v", tt.name, interPodAffinityHostnameFastPathEnabled), func(t *testing.T) {
@@ -787,8 +781,7 @@ func TestTaintTolerationScoring(t *testing.T) {
 		name           string
 		podTolerations []v1.Toleration
 		nodes          []*v1.Node
-		// expectedNodesName is a set of nodes that the pod should potentially be scheduled on.
-		// It is used to verify that the pod is scheduled on the expected nodes.
+		// expectedNodesName 是 Pod 可能被调度到的节点集合，用于校验调度结果
 		expectedNodesName sets.Set[string]
 	}{
 		{
@@ -867,7 +860,7 @@ func TestTaintTolerationScoring(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Enable the TaintTolerationComparisonOperators feature gate for Gt/Lt tests
+			// Gt/Lt 测试需要开启 TaintTolerationComparisonOperators feature gate
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.TaintTolerationComparisonOperators, true)
 			testCtx := initTestSchedulerForScoringTests(t, tainttoleration.Name, tainttoleration.Name)
 
@@ -895,14 +888,12 @@ func TestTaintTolerationScoring(t *testing.T) {
 	}
 }
 
-// TestImageLocalityScoring verifies that the scheduler's image locality priority function
-// works correctly, i.e., the pod gets scheduled to the node where its container images are ready.
+// TestImageLocalityScoring 验证 image locality 打分函数生效，
+// 即 Pod 会被调度到已准备好其容器镜像的节点
 func TestImageLocalityScoring(t *testing.T) {
 	testCtx := initTestSchedulerForScoringTests(t, "", imagelocality.Name)
 
-	// Create a node with the large image.
-	// We use a fake large image as the test image used by the pod, which has
-	// relatively large image size.
+	// 创建一个带有大镜像的 Node；用一个体积较大的假镜像作为 Pod 的测试镜像
 	imageName := "fake-large-image:v1"
 	nodeWithLargeImage, err := createNode(
 		testCtx.ClientSet,
@@ -912,13 +903,13 @@ func TestImageLocalityScoring(t *testing.T) {
 		t.Fatalf("cannot create node with a large image: %v", err)
 	}
 
-	// Add a few nodes.
+	// 创建若干 Node
 	_, err = createAndWaitForNodesInCache(testCtx, "testnode", st.MakeNode(), 10)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create a pod with containers each having the specified image.
+	// 创建容器均使用指定镜像的 Pod
 	podName := "pod-using-large-image"
 	pod, err := runPodWithContainers(testCtx.ClientSet, initPodWithContainers(testCtx.ClientSet, &testutils.PodWithContainersConfig{
 		Name:       podName,
@@ -935,8 +926,7 @@ func TestImageLocalityScoring(t *testing.T) {
 	}
 }
 
-// makeContainerWithImage returns a list of v1.Container objects for each given image. Duplicates of an image are ignored,
-// i.e., each image is used only once.
+// makeContainersWithImages 为每个给定镜像生成一个 v1.Container，重复镜像只使用一次
 func makeContainersWithImages(images []string) []v1.Container {
 	var containers []v1.Container
 	usedImages := make(map[string]struct{})
@@ -953,7 +943,7 @@ func makeContainersWithImages(images []string) []v1.Container {
 	return containers
 }
 
-// TestPodTopologySpreadScoring verifies that the PodTopologySpread Score plugin works.
+// TestPodTopologySpreadScoring 验证 PodTopologySpread Score 插件工作正常
 func TestPodTopologySpreadScoring(t *testing.T) {
 	pause := imageutils.GetPauseImageName()
 	taint := v1.Taint{
@@ -962,7 +952,7 @@ func TestPodTopologySpreadScoring(t *testing.T) {
 		Effect: v1.TaintEffectNoSchedule,
 	}
 
-	//  default nodes with labels "zone: zone-{0,1}" and "node: <node name>".
+	// 默认 Node 带有 zone: zone-{0,1} 和 node: <节点名> 标签
 	defaultNodes := []*v1.Node{
 		st.MakeNode().Name("node-0").Label("node", "node-0").Label("zone", "zone-0").Taints([]v1.Taint{taint}).Obj(),
 		st.MakeNode().Name("node-1").Label("node", "node-1").Label("zone", "zone-0").Obj(),
@@ -976,12 +966,11 @@ func TestPodTopologySpreadScoring(t *testing.T) {
 		existingPods              []*v1.Pod
 		fits                      bool
 		nodes                     []*v1.Node
-		want                      []string // nodes expected to schedule onto
+		want                      []string // 期望调度到的节点
 		enableNodeInclusionPolicy bool
 		enableMatchLabelKeys      bool
 	}{
-		// note: naming starts at index 0
-		// the symbol ~X~ means that node is infeasible
+		// 说明：名称从索引 0 开始；~X~ 表示该节点不可行
 		{
 			name: "place pod on a ~0~/1/2/3 cluster with MaxSkew=1, node-1 is the preferred fit",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
@@ -1019,9 +1008,9 @@ func TestPodTopologySpreadScoring(t *testing.T) {
 			want:  []string{"node-2"},
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as ~3~/0
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/~2~/0/~0~
-			// node-2 and node 4 are filtered out by plugins
+			// 1. 为满足 zone 约束，Pod 分布为 ~3~/0
+			// 2. 为满足 node 约束，Pod 分布为 1/~2~/0/~0~
+			// node-2 和 node-4 会被插件过滤掉
 			name: "soft constraint with two node inclusion Constraints, zone: honor/ignore, node: honor/ignore",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
 				NodeSelector(map[string]string{"foo": ""}).
@@ -1045,9 +1034,9 @@ func TestPodTopologySpreadScoring(t *testing.T) {
 			enableNodeInclusionPolicy: true,
 		},
 		{
-			// 1. to fulfil "zone" constraint, pods spread across zones as ~3~/~1~
-			// 2. to fulfil "node" constraint, pods spread across zones as 1/~0~/0/~0~
-			// node-2 and node 4 are filtered out by plugins
+			// 1. 为满足 zone 约束，Pod 分布为 ~3~/~1~
+			// 2. 为满足 node 约束，Pod 分布为 1/~0~/0/~0~
+			// node-2 和 node-4 会被插件过滤掉
 			name: "soft constraint with two node inclusion Constraints, zone: ignore/ignore, node: honor/honor",
 			incomingPod: st.MakePod().Name("p").Label("foo", "").Container(pause).
 				NodeSelector(map[string]string{"foo": ""}).
@@ -1128,7 +1117,7 @@ func TestPodTopologySpreadScoring(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if !tt.enableNodeInclusionPolicy {
-				// TODO: this will be removed in 1.36
+				// TODO: 该分支将在 1.36 中移除
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeInclusionPolicyInPodTopologySpread, tt.enableNodeInclusionPolicy)
 			}
@@ -1147,7 +1136,7 @@ func TestPodTopologySpreadScoring(t *testing.T) {
 				t.Fatalf("Failed to wait for nodes in cache: %v", err)
 			}
 
-			// set namespace to pods
+			// 为 Pod 设置 namespace
 			for i := range tt.existingPods {
 				tt.existingPods[i].SetNamespace(ns)
 			}
@@ -1186,9 +1175,9 @@ func TestPodTopologySpreadScoring(t *testing.T) {
 	}
 }
 
-// TestDefaultPodTopologySpreadScoring verifies that the PodTopologySpread Score plugin
-// with the system default spreading spreads Pods belonging to a Service.
-// The setup has 300 nodes over 3 zones.
+// TestDefaultPodTopologySpreadScoring 验证使用系统默认分散策略时，
+// PodTopologySpread Score 插件能将同一 Service 的 Pod 分散开。
+// 测试环境包含跨 3 个 zone 的 300 个节点。
 func TestDefaultPodTopologySpreadScoring(t *testing.T) {
 	testCtx := initTestSchedulerForScoringTests(t, podtopologyspread.Name, podtopologyspread.Name)
 	cs := testCtx.ClientSet
@@ -1233,7 +1222,7 @@ func TestDefaultPodTopologySpreadScoring(t *testing.T) {
 	pause := imageutils.GetPauseImageName()
 	totalPodCnt := 0
 	for _, nPods := range []int{3, 9, 15} {
-		// Append nPods each iteration.
+		// 每轮追加 nPods 个 Pod
 		t.Run(fmt.Sprintf("%d-pods", totalPodCnt+nPods), func(t *testing.T) {
 			for range nPods {
 				p := st.MakePod().Name(fmt.Sprintf("p-%d", totalPodCnt)).Label("service", serviceName).Container(pause).Obj()
@@ -1244,7 +1233,7 @@ func TestDefaultPodTopologySpreadScoring(t *testing.T) {
 				totalPodCnt++
 			}
 			var pods []v1.Pod
-			// Wait for all Pods scheduled.
+			// 等待所有 Pod 完成调度
 			err = wait.PollUntilContextTimeout(testCtx.Ctx, pollInterval, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 				podList, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
 				if err != nil {
@@ -1258,7 +1247,7 @@ func TestDefaultPodTopologySpreadScoring(t *testing.T) {
 				pods = podList.Items
 				return true, nil
 			})
-			// Verify zone spreading.
+			// 校验跨 zone 均匀分布
 			zoneCnts := make(map[string]int)
 			for _, p := range pods {
 				zoneCnts[zoneForNode[p.Spec.NodeName]]++

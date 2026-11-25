@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package integration provides integration tests for Kubernetes.Some tests require a
-// running etcd or Docker installation on the system.
+// Package integration 提供 Kubernetes 的集成测试。部分测试需要系统上运行 etcd 或安装 Docker。
 package integration

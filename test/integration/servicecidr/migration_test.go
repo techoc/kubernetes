@@ -39,15 +39,14 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestMigrateServiceCIDR validates the steps necessary to migrate a cluster default ServiceCIDR
-// including the existing kubernetes.default service.
-// 1. start apiserver with --service-cluster-ip-range 192.168.0.0/29"
-// 2. create services to use some addresses on the cidr
-// 3. create a temporary new ServiceCIDR 10.168.0.0/24 to migrate the cluster to it
-// 4. delete the default service CIDR so the allocators ignore it (it will be pending because of the finalizer and having still IPs)
-// 5. recreate the services, the allocator should pick the temporary ServiceCIDR
-// 6. start the new apiserver with the new ServiceCIDRs on the flags and shutdown the old one
-// 7. delete the kubernetes.default service, the new apiserver will recreate it within the new ServiceCIDR
+// TestMigrateServiceCIDR 验证迁移集群默认 ServiceCIDR（含已有 kubernetes.default Service）所需的步骤：
+// 1. 以 --service-cluster-ip-range 192.168.0.0/29 启动 apiserver
+// 2. 创建 Service 占用该 CIDR 中的部分地址
+// 3. 新建一个临时 ServiceCIDR 10.168.0.0/24 作为迁移目标
+// 4. 删除默认 ServiceCIDR，使分配器不再使用它（因 finalizer 且仍有 IP，它会处于 pending 状态）
+// 5. 重建 Service，分配器应从临时 ServiceCIDR 中分配
+// 6. 用新的 ServiceCIDR 参数启动新 apiserver 并关闭旧实例
+// 7. 删除 kubernetes.default Service，新 apiserver 会在新 ServiceCIDR 中重建它
 func TestMigrateServiceCIDR(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -74,7 +73,7 @@ func TestMigrateServiceCIDR(t *testing.T) {
 
 	resyncPeriod := 12 * time.Hour
 	informers1 := informers.NewSharedInformerFactory(client1, resyncPeriod)
-	// ServiceCIDR controller
+	// 启动 ServiceCIDR controller
 	go servicecidrs.NewController(
 		tCtx,
 		informers1.Networking().V1().ServiceCIDRs(),
@@ -84,7 +83,7 @@ func TestMigrateServiceCIDR(t *testing.T) {
 	informers1.Start(tCtx.Done())
 	informers1.WaitForCacheSync(tCtx.Done())
 
-	// the default serviceCIDR should have a finalizer and ready condition set to true
+	// 默认 ServiceCIDR 应有 finalizer，且 Ready condition 为 true
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client1.NetworkingV1().ServiceCIDRs().Get(context.TODO(), defaultservicecidr.DefaultServiceCIDRName, metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -113,18 +112,18 @@ func TestMigrateServiceCIDR(t *testing.T) {
 		}
 	}
 
-	// make 2 services , there will be still 3 free addresses
+	// 创建 2 个 Service，CIDR 中还剩 3 个空闲地址
 	for i := range 2 {
 		if _, err := client1.CoreV1().Services(ns.Name).Create(context.TODO(), svc(i), metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// Add a new service CIDR to be able to migrate the apiserver
+	// 新建一个 ServiceCIDR，作为 apiserver 迁移目标
 	if _, err := client1.NetworkingV1().ServiceCIDRs().Create(context.Background(), makeServiceCIDR("migration-cidr", cidr2, ""), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
-	// wait ServiceCIDR is ready
+	// 等待 ServiceCIDR 就绪
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client1.NetworkingV1().ServiceCIDRs().Get(context.TODO(), "migration-cidr", metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -135,12 +134,12 @@ func TestMigrateServiceCIDR(t *testing.T) {
 		t.Fatalf("waiting for default service cidr ready condition set to false: %v", err)
 	}
 
-	// delete the default ServiceCIDR so is no longer used for allocating IPs
+	// 删除默认 ServiceCIDR，使其不再用于 IP 分配
 	if err := client1.NetworkingV1().ServiceCIDRs().Delete(context.Background(), defaultservicecidr.DefaultServiceCIDRName, metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
-	// the default serviceCIDR should be pending deletion with Ready condition set to false
+	// 默认 ServiceCIDR 应处于 pending 删除状态，且 Ready condition 为 false
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client1.NetworkingV1().ServiceCIDRs().Get(context.TODO(), defaultservicecidr.DefaultServiceCIDRName, metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -156,14 +155,13 @@ func TestMigrateServiceCIDR(t *testing.T) {
 		t.Fatalf("waiting for default service cidr ready condition set to false: %v", err)
 	}
 
-	// Migrate the services, delete the existing ones and recreate without specifying the ClusterIP
+	// 迁移 Service：删除原有 Service，不指定 ClusterIP 重建，让分配器重新分配
 	services, err := client1.CoreV1().Services("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, svc := range services.Items {
-		// skip the default service since is managed by the apiserver
-		// and we want the new apiserver with the new service cidr to take over
+		// 跳过 default Service：它由 apiserver 管理，我们希望由使用新 ServiceCIDR 的新 apiserver 接管
 		if svc.Name == "kubernetes" {
 			continue
 		}
@@ -173,7 +171,7 @@ func TestMigrateServiceCIDR(t *testing.T) {
 		}
 		t.Logf("Deleted Service with IP %s", svc.Spec.ClusterIP)
 
-		// wipe the necessary fields so we can recreate the Service
+		// 清除必要字段以便重建 Service
 		svc.ResourceVersion = ""
 		svc.Spec.ClusterIP = ""
 		svc.Spec.ClusterIPs = nil
@@ -188,7 +186,7 @@ func TestMigrateServiceCIDR(t *testing.T) {
 		}
 	}
 
-	// start second apiserver with the new range and new service cidr controller
+	// 用新地址范围启动第二个 apiserver，并运行新的 ServiceCIDR controller
 	s2 := kubeapiservertesting.StartTestServerOrDie(t,
 		apiServerOptions,
 		[]string{
@@ -205,11 +203,11 @@ func TestMigrateServiceCIDR(t *testing.T) {
 	}
 	defer framework.DeleteNamespaceOrDie(client2, ns, t)
 
-	// switch the controller to the new apiserver
+	// 将 controller 切换到新 apiserver
 	tCtx.Cancel("tearing down ServiceCIDR controller 1")
 	s1.TearDownFn()
 
-	// ServiceCIDR controller
+	// 启动 ServiceCIDR controller
 	tCtx2 := ktesting.Init(t)
 	defer tCtx2.Cancel("tearing down ServiceCIDR controller 2")
 	informers2 := informers.NewSharedInformerFactory(client2, resyncPeriod)
@@ -222,13 +220,12 @@ func TestMigrateServiceCIDR(t *testing.T) {
 	informers2.Start(tCtx2.Done())
 	informers2.WaitForCacheSync(tCtx.Done())
 
-	// delete the kubernetes.default service so the old DefaultServiceCIDR can be deleted
-	// and the new apiserver can take over
+	// 删除 kubernetes.default Service，以便旧的 DefaultServiceCIDR 被删除、新 apiserver 接管
 	if err := client2.CoreV1().Services(metav1.NamespaceDefault).Delete(context.Background(), "kubernetes", metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// the default serviceCIDR should  be the new one
+	// 默认 ServiceCIDR 应已更新为新的那个
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 		cidr, err := client2.NetworkingV1().ServiceCIDRs().Get(context.TODO(), defaultservicecidr.DefaultServiceCIDRName, metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -275,12 +272,12 @@ func TestMigrateServiceCIDR(t *testing.T) {
 		t.Fatalf("waiting for default service kubernetes.default to be migrated: %v", err)
 	}
 
-	// The temporary ServiceCIDR can be deleted now since the Default ServiceCIDR will cover it
+	// 默认 ServiceCIDR 已覆盖该范围，临时 ServiceCIDR 现在可以删除
 	if err := client2.NetworkingV1().ServiceCIDRs().Delete(context.Background(), "migration-cidr", metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
-	// wait ServiceCIDR no longer exist
+	// 等待 ServiceCIDR 被删除
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 		_, err := client2.NetworkingV1().ServiceCIDRs().Get(context.TODO(), "migration-cidr", metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -293,11 +290,11 @@ func TestMigrateServiceCIDR(t *testing.T) {
 
 }
 
-// TestServiceCIDRMigrationScenarios tests various migration paths for ServiceCIDRs.
+// TestServiceCIDRMigrationScenarios 覆盖 ServiceCIDR 的各种迁移路径。
 func TestServiceCIDRMigrationScenarios(t *testing.T) {
-	ipv4CIDRSmall := "10.0.0.0/29" // 6 IPs
+	ipv4CIDRSmall := "10.0.0.0/29" // 6 个 IP
 	ipv4CIDRBig := "10.1.0.0/16"
-	ipv6CIDRSmall := "2001:db8:1::/125" // 6 IPs
+	ipv6CIDRSmall := "2001:db8:1::/125" // 6 个 IP
 	ipv6CIDRBig := "2001:db8:2::/112"
 
 	testCases := []struct {
@@ -306,10 +303,10 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 		migratedCIDRs                 []string
 		preMigrationSvcName           string
 		postMigrationSvcName          string
-		expectedPostMigrationSvcError bool // Changing the primary IP family and retaining the old allocator
-		expectInconsistentState       bool // New Service CIDR configured by flags are not applied
+		expectedPostMigrationSvcError bool // 切换主 IP 族但保留旧分配器
+		expectInconsistentState       bool // flags 中配置的新 ServiceCIDR 未生效
 	}{
-		// --- No Change ---
+		// --- 无变化 ---
 		{
 			name:                 "IPv4 -> IPv4 (no change)",
 			initialCIDRs:         []string{ipv4CIDRSmall},
@@ -338,7 +335,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			preMigrationSvcName:  "svc-pre-v6v4-v6v4",
 			postMigrationSvcName: "svc-post-v6v4-v6v4",
 		},
-		// --- Valid Upgrades ---
+		// --- 有效升级 ---
 		{
 			name:                 "IPv4 -> IPv4,IPv6 (upgrade)",
 			initialCIDRs:         []string{ipv4CIDRSmall},
@@ -353,7 +350,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			preMigrationSvcName:  "svc-pre-v6-v6v4",
 			postMigrationSvcName: "svc-post-v6-v6v4",
 		},
-		// --- Invalid Migrations (Require manual intervention) ---
+		// --- 非法迁移（需人工介入） ---
 		{
 			name:                          "IPv4,IPv6 -> IPv6,IPv4 (change primary)",
 			initialCIDRs:                  []string{ipv4CIDRSmall, ipv6CIDRSmall},
@@ -410,7 +407,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 		{
 			name:                          "IPv4 -> IPv6,IPv4 (upgrade, change primary)",
 			initialCIDRs:                  []string{ipv4CIDRSmall},
-			migratedCIDRs:                 []string{ipv6CIDRBig, ipv4CIDRSmall}, // Change primary during upgrade
+			migratedCIDRs:                 []string{ipv6CIDRBig, ipv4CIDRSmall}, // 升级时切换主 IP 族
 			preMigrationSvcName:           "svc-pre-v4-v6v4",
 			postMigrationSvcName:          "svc-post-v4-v6v4",
 			expectedPostMigrationSvcError: true,
@@ -419,7 +416,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 		{
 			name:                          "IPv6 -> IPv4,IPv6 (upgrade, change primary)",
 			initialCIDRs:                  []string{ipv6CIDRSmall},
-			migratedCIDRs:                 []string{ipv4CIDRBig, ipv6CIDRSmall}, // Change primary during upgrade
+			migratedCIDRs:                 []string{ipv4CIDRBig, ipv6CIDRSmall}, // 升级时切换主 IP 族
 			preMigrationSvcName:           "svc-pre-v6-v4v6",
 			postMigrationSvcName:          "svc-post-v6-v4v6",
 			expectedPostMigrationSvcError: true,
@@ -434,10 +431,10 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
 			resyncPeriod := 12 * time.Hour
 
-			// --- Initial Setup ---
+			// --- 初始配置 ---
 			initialFlags := []string{
 				"--service-cluster-ip-range=" + strings.Join(tc.initialCIDRs, ","),
-				"--advertise-address=" + strings.Split(tc.initialCIDRs[0], "/")[0], // the advertise address MUST match the cluster primary ip family
+				"--advertise-address=" + strings.Split(tc.initialCIDRs[0], "/")[0], // advertise 地址必须与集群主 IP 族一致
 				"--disable-admission-plugins=ServiceAccount",
 			}
 			t.Logf("Starting API server with CIDRs: %v", tc.initialCIDRs)
@@ -461,14 +458,14 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			informers1.Start(controllerCtx1.Done())
 			informers1.WaitForCacheSync(controllerCtx1.Done())
 
-			// Wait for default ServiceCIDR to be ready
+			// 等待默认 ServiceCIDR 就绪
 			if err := waitForServiceCIDRState(tCtx, client1, tc.initialCIDRs, true); err != nil {
 				s1.TearDownFn()
 				cancelController1()
 				t.Fatalf("Initial default ServiceCIDR did not become ready: %v", err)
 			}
 
-			// Create pre-migration service
+			// 创建迁移前的 Service
 			preSvc, err := client1.CoreV1().Services(ns.Name).Create(tCtx, makeService(tc.preMigrationSvcName), metav1.CreateOptions{})
 			if err != nil {
 				s1.TearDownFn()
@@ -477,7 +474,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			}
 			t.Logf("Pre-migration service %s created with ClusterIPs: %v", preSvc.Name, preSvc.Spec.ClusterIPs)
 
-			// Basic verification of pre-migration service IP
+			// 基本校验迁移前 Service 的 IP
 			if len(preSvc.Spec.ClusterIPs) == 0 {
 				s1.TearDownFn()
 				cancelController1()
@@ -489,7 +486,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 				t.Fatalf("Pre-migration service %s primary IP %s not in expected range %s", preSvc.Name, preSvc.Spec.ClusterIPs[0], tc.initialCIDRs[0])
 			}
 
-			// --- Migration ---
+			// --- 迁移 ---
 			t.Logf("Shutting down initial API server and controller")
 			cancelController1()
 			s1.TearDownFn()
@@ -497,11 +494,11 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			t.Logf("Starting migrated API server with CIDRs: %v", tc.migratedCIDRs)
 			migratedFlags := []string{
 				"--service-cluster-ip-range=" + strings.Join(tc.migratedCIDRs, ","),
-				"--advertise-address=" + strings.Split(tc.migratedCIDRs[0], "/")[0], // the advertise address MUST match the cluster configured primary ip family
+				"--advertise-address=" + strings.Split(tc.migratedCIDRs[0], "/")[0], // advertise 地址必须与集群配置的主 IP 族一致
 				"--disable-admission-plugins=ServiceAccount",
 			}
 			s2 := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions, migratedFlags, etcdOptions)
-			defer s2.TearDownFn() // Ensure cleanup even on test failure
+			defer s2.TearDownFn() // 即使测试失败也确保清理
 
 			client2, err := clientset.NewForConfig(s2.ClientConfig)
 			if err != nil {
@@ -511,7 +508,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 
 			informers2 := informers.NewSharedInformerFactory(client2, resyncPeriod)
 			controllerCtx2, cancelController2 := context.WithCancel(tCtx)
-			defer cancelController2() // Ensure controller context is cancelled
+			defer cancelController2() // 确保 controller context 被取消
 			go servicecidrs.NewController(
 				controllerCtx2,
 				informers2.Networking().V1().ServiceCIDRs(),
@@ -521,8 +518,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			informers2.Start(controllerCtx2.Done())
 			informers2.WaitForCacheSync(controllerCtx2.Done())
 
-			// Wait for default ServiceCIDR to reflect migrated state
-			// For inconsistent states, we expect to keep existing CIDRs.
+			// 等待默认 ServiceCIDR 反映迁移后的状态；若处于不一致状态，预期保留原有 CIDR。
 			expectedCIDRs := tc.migratedCIDRs
 			if tc.expectInconsistentState {
 				expectedCIDRs = tc.initialCIDRs
@@ -531,9 +527,9 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 				t.Fatalf("Migrated default ServiceCIDR did not reach expected state : %v", err)
 			}
 
-			// --- Post-Migration Verification ---
+			// --- 迁移后校验 ---
 
-			// Verify pre-migration service still exists and retains its IP(s)
+			// 校验迁移前的 Service 仍存在且 IP 未变
 			preSvcMigrated, err := client2.CoreV1().Services(ns.Name).Get(tCtx, tc.preMigrationSvcName, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("Failed to get pre-migration service after migration: %v", err)
@@ -542,7 +538,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 				t.Errorf("Pre-migration service %s ClusterIPs changed after migration. Before: %v, After: %v",
 					preSvcMigrated.Name, preSvc.Spec.ClusterIPs, preSvcMigrated.Spec.ClusterIPs)
 			}
-			// Create post-migration service
+			// 创建迁移后的 Service
 			postSvc, err := client2.CoreV1().Services(ns.Name).Create(tCtx, makeService(tc.postMigrationSvcName), metav1.CreateOptions{})
 			if err != nil && !tc.expectedPostMigrationSvcError {
 				t.Fatalf("Failed to create post-migration service: %v", err)
@@ -551,7 +547,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 			}
 
 			t.Logf("Post-migration service %s created with ClusterIPs: %v, Families: %v", postSvc.Name, postSvc.Spec.ClusterIPs, postSvc.Spec.IPFamilies)
-			// Check if IPs are within the migrated CIDR ranges
+			// 检查 IP 是否落在迁移后的 CIDR 范围内
 			if len(postSvc.Spec.ClusterIPs) > 0 && !cidrContainsIP(expectedCIDRs[0], postSvc.Spec.ClusterIPs[0]) {
 				t.Errorf("Post-migration service %s primary IP %s not in expected range %s", postSvc.Name, postSvc.Spec.ClusterIPs[0], expectedCIDRs[0])
 			}
@@ -559,8 +555,7 @@ func TestServiceCIDRMigrationScenarios(t *testing.T) {
 	}
 }
 
-// waitForServiceCIDRState waits for the named ServiceCIDR to exist, match the expected CIDRs,
-// and have the specified Ready condition status.
+// waitForServiceCIDRState 等待指定的 ServiceCIDR 出现、CIDR 列表符合预期且 Ready condition 达到指定状态。
 func waitForServiceCIDRState(ctx context.Context, client clientset.Interface, expectedCIDRs []string, expectReady bool) error {
 	pollCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
@@ -574,13 +569,13 @@ func waitForServiceCIDRState(ctx context.Context, client clientset.Interface, ex
 			return false, nil
 		}
 
-		// Check CIDRs match
+		// 检查 CIDR 是否匹配
 		if !reflect.DeepEqual(cidr.Spec.CIDRs, expectedCIDRs) {
 			klog.Infof("Waiting for ServiceCIDR %s CIDRs to match %v, current: %v", defaultservicecidr.DefaultServiceCIDRName, expectedCIDRs, cidr.Spec.CIDRs)
 			return false, nil
 		}
 
-		// Check Ready condition
+		// 检查 Ready condition
 		isReady := false
 		foundReadyCondition := false
 		for _, condition := range cidr.Status.Conditions {
@@ -593,15 +588,15 @@ func waitForServiceCIDRState(ctx context.Context, client clientset.Interface, ex
 
 		if !foundReadyCondition && expectReady {
 			klog.Infof("Waiting for ServiceCIDR %s Ready condition to be set...", defaultservicecidr.DefaultServiceCIDRName)
-			return false, nil // Ready condition not found yet
+			return false, nil // 尚未出现 Ready condition
 		}
 
 		if isReady != expectReady {
 			klog.Infof("Waiting for ServiceCIDR %s Ready condition to be %v, current: %v", defaultservicecidr.DefaultServiceCIDRName, expectReady, isReady)
-			return false, nil // Ready condition doesn't match expectation
+			return false, nil // Ready condition 与预期不符
 		}
 
 		klog.Infof("ServiceCIDR %s reached desired state (Ready: %v, CIDRs: %v)", defaultservicecidr.DefaultServiceCIDRName, expectReady, expectedCIDRs)
-		return true, nil // All conditions met
+		return true, nil // 所有条件均满足
 	})
 }

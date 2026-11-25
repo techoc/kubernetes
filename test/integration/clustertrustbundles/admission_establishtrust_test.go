@@ -35,8 +35,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Verifies that the ClusterTrustBundle attest admission plugin correctly
-// enforces that a user has "attest" on the affected signer name.
+// TestCTBAttestPlugin 验证 ClusterTrustBundle attest admission 插件会强制要求用户对相关 signer name 具有 attest 权限。
 func TestCTBAttestPlugin(t *testing.T) {
 	testCases := []struct {
 		description       string
@@ -83,7 +82,7 @@ func TestCTBAttestPlugin(t *testing.T) {
 				grantUserPermissionToAttestFor(ctx, t, client, "test-user", tc.allowedSignerName)
 			}
 
-			// Create a second client that impersonates test-user.
+			// 创建模拟 test-user 的第二个客户端。
 			testUserConfig := rest.CopyConfig(server.ClientConfig)
 			testUserConfig.Impersonate = rest.ImpersonationConfig{UserName: "test-user"}
 			testUserClient := kubernetes.NewForConfigOrDie(testUserConfig)

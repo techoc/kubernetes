@@ -30,9 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestCreateMetadataWiping tests that metadata wiping works as expected on all operations
-// that can create a resource. This includes creates-via-update requests allowed for strategies
-// that support AllowCreateOnUpdate.
+// TestCreateMetadataWiping 验证所有能创建资源的操作都会按预期抹除 metadata，
+// 包括支持 AllowCreateOnUpdate 的策略所允许的 update 创建请求。
 func TestCreateMetadataWiping(t *testing.T) {
 	ctx, client, _, tearDown := setup(t)
 	defer tearDown()
@@ -84,8 +83,7 @@ func TestCreateMetadataWiping(t *testing.T) {
 	})
 
 	t.Run("PUT create-via-update", func(t *testing.T) {
-		// UID and ResourceVersion are omitted here as they are not unconditionally wiped. They
-		// are used precondition checks, which are tested separtely.
+		// UID 和 ResourceVersion 不会被无条件抹除，故此处省略；它们用作前置条件检查，另有测试覆盖。
 		lease := &coordinationv1.Lease{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:                       "put-create",
@@ -137,7 +135,7 @@ func TestCreateMetadataWiping(t *testing.T) {
 		assertCleared(t, got)
 	})
 
-	// All other patch operations are NOT allowed to create via patch.
+	// 其他 patch 操作不允许用于创建资源。
 
 	patchCases := []struct {
 		name      string

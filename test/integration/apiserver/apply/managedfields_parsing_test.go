@@ -31,17 +31,12 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestManagedFieldsTrailingData ensures that any trailing data present in a
-// metadata.managedFields.[*].fieldsV1 JSON payload causes decoding to fail,
-// falling back to the live object's managed fields. On create, invalid
-// managed fields are ignored and the system populates managed fields for the
-// created data. On update, invalid managed fields are ignored and the existing
-// managed fields from the live object are preserved and updated.
+// TestManagedFieldsTrailingData 确保 metadata.managedFields.[*].fieldsV1 中的多余数据会导致解码失败，从而回退到 live object 的 managed fields：create 时忽略非法 managed fields 并为新数据填充，update 时忽略非法字段并保留、更新 live object 原有的 managed fields。
 func TestManagedFieldsTrailingData(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	t.Cleanup(server.TearDownFn)
 
-	// Only possible to have trailing data when the request is protobuf.
+	// 只有 protobuf 请求才可能出现多余数据。
 	config := rest.CopyConfig(server.ClientConfig)
 	config.ContentType = runtime.ContentTypeProtobuf
 	config.AcceptContentTypes = runtime.ContentTypeProtobuf

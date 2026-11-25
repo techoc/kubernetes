@@ -50,7 +50,7 @@ func TestPodCertificateManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(ktesting.Init(t))
 	defer cancel()
 
-	// Run an apiserver with PodCertificateRequest features enabled.
+	// 启动启用 PodCertificateRequest 特性的 apiserver
 	s := kubeapiservertesting.StartTestServerOrDie(
 		t,
 		kubeapiservertesting.NewDefaultTestServerOptions(),
@@ -66,9 +66,7 @@ func TestPodCertificateManager(t *testing.T) {
 
 	var err error
 
-	//
-	// Configure and boot up a fake podcertificaterequest signing controller.
-	//
+	// 配置并启动一个假的 podcertificaterequest 签发 controller
 
 	signerName := "foo.com/signer"
 
@@ -138,10 +136,7 @@ func TestPodCertificateManager(t *testing.T) {
 	pcrSigner := hermeticpodcertificatesigner.New(clock.RealClock{}, signerName, "", caKeys, caCerts, signerClient)
 	go pcrSigner.Run(ctx)
 
-	//
-	// Configure and boot up enough Kubelet subsystems to run
-	// podcertificate.IssuingManager.
-	//
+	// 配置并启动运行 podcertificate.IssuingManager 所需的最小 Kubelet 子系统
 	node1, err := adminClient.CoreV1().Nodes().Create(ctx, &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
@@ -181,9 +176,7 @@ func TestPodCertificateManager(t *testing.T) {
 	node1NodeInformerFactory.Start(ctx.Done())
 	go node1PodCertificateManager.Run(ctx)
 
-	//
-	// Make a pod that uses a podcertificate volume.
-	//
+	// 创建一个使用 podcertificate volume 的 Pod
 
 	workloadNS, err := adminClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -249,8 +242,7 @@ func TestPodCertificateManager(t *testing.T) {
 		t.Fatalf("Unexpected error creating workload pod: %v", err)
 	}
 
-	// Because our fake podManager is based on an informer, we need to poll
-	// until workloadPod is reflected in the informer.
+	// FakePodManager 基于 informer，需轮询等待 workloadPod 同步到 informer 缓存
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, ok := node1PodManager.GetPodByUID(workloadPod.ObjectMeta.UID)
 		return ok, nil
@@ -261,8 +253,7 @@ func TestPodCertificateManager(t *testing.T) {
 
 	node1PodCertificateManager.TrackPod(ctx, workloadPod)
 
-	// Within a few seconds, we should see a PodCertificateRequest created for
-	// this pod.
+	// 等待几秒，应为该 Pod 创建出 PodCertificateRequest
 	var gotPCR *certsv1.PodCertificateRequest
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 		pcrs, err := adminClient.CertificatesV1().PodCertificateRequests(workloadNS.ObjectMeta.Name).List(ctx, metav1.ListOptions{})
@@ -281,9 +272,8 @@ func TestPodCertificateManager(t *testing.T) {
 		t.Fatalf("Error while waiting for PCR to be created: %v", err)
 	}
 
-	// Check that the created PCR spec matches expectations.  Blank out fields on
-	// gotPCR that we don't care about.  Blank out status, because the
-	// controller might have already signed it.
+	// 校验 PCR spec；忽略不关心的字段，并清空 status
+	// （controller 可能已经签发）
 	wantPCR := &certsv1.PodCertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: workloadNS.ObjectMeta.Name,
@@ -309,7 +299,7 @@ func TestPodCertificateManager(t *testing.T) {
 		t.Fatalf("PodCertificateManager created a bad PCR; diff (-got +want)\n%s", diff)
 	}
 
-	// Wait some more time for the PCR to be issued.
+	// 再等待 PCR 被签发
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 		pcrs, err := adminClient.CertificatesV1().PodCertificateRequests(workloadNS.ObjectMeta.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -343,7 +333,7 @@ func TestPodCertificateManager(t *testing.T) {
 		t.Fatalf("The test signingController didn't issue the PCR:\n%+v", gotPCR)
 	}
 
-	// Check the spiffe path has been overridden with the UserAnnotations.
+	// 验证 spiffe path 已被 UserAnnotations 覆盖
 	issuedCertPem := []byte(gotPCR.Status.CertificateChain)
 	block, _ := pem.Decode(issuedCertPem)
 	cert, err := x509.ParseCertificate(block.Bytes)
@@ -355,8 +345,7 @@ func TestPodCertificateManager(t *testing.T) {
 		t.Logf("Certificate path is %s", cert.URIs[0].Path)
 		t.Fatalf("Failed to override the spiffe path with the user annotations")
 	}
-	// Now we know that the PCR was issued, so we can wait for the
-	// podcertificate manager to return some valid credentials.
+	// PCR 已确认签发，接下来等待 podcertificate manager 返回有效凭据
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 15*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, _, err := node1PodCertificateManager.GetPodCertificateCredentialBundle(ctx, workloadPod.ObjectMeta.Namespace, workloadPod.ObjectMeta.Name, string(workloadPod.ObjectMeta.UID), "certificate", 0)
 		if err != nil {

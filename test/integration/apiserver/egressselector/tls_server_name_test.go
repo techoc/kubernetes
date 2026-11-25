@@ -83,7 +83,7 @@ func writeCertAndKey(t *testing.T, dir, name string, cert *x509.Certificate, key
 	return certPath, keyPath
 }
 
-// runTLSEgressProxy runs an HTTP CONNECT proxy with TLS.
+// runTLSEgressProxy 启动一个带 TLS 的 HTTP CONNECT 代理。
 func runTLSEgressProxy(t *testing.T, serverCertPath, serverKeyPath, caCertPath string, called *atomic.Bool, observedSNI *atomic.Pointer[string]) string {
 	t.Helper()
 
@@ -125,8 +125,8 @@ func runTLSEgressProxy(t *testing.T, serverCertPath, serverKeyPath, caCertPath s
 	return proxyAddr
 }
 
-// TestTLSServerName verifies that the tlsServerName field in the egress selector configuration
-// correctly overrides SNI for TLS certificate validation when connecting through a proxy.
+// TestTLSServerName 验证 egress selector 配置中的 tlsServerName 字段能在通过代理连接时
+// 正确覆盖用于证书校验的 SNI。
 func TestTLSServerName(t *testing.T) {
 	tempDir := t.TempDir()
 

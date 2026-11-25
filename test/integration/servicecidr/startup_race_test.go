@@ -32,12 +32,12 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// populateEtcdForRepairTest populates etcd with namespaces, services, and ServiceCIDR
-// to simulate an existing v1.32 cluster that needs repair during upgrade to v1.33.
+// populateEtcdForRepairTest 向 etcd 写入 namespace、service 和 ServiceCIDR，
+// 模拟从 v1.32 升级到 v1.33 时需要修复的存量集群。
 func populateEtcdForRepairTest(t *testing.T, etcdOptions *storagebackend.Config, apiServerOptions *kubeapiservertesting.TestServerInstanceOptions, numNamespaces int) string {
 	t.Logf("Populating etcd with %d namespaces and services (simulating v1.32 cluster)", numNamespaces)
 
-	// We need a temporary server just to get the etcd client
+	// 启动临时 server 只是为了拿到 etcd client。
 	tempServer := kubeapiservertesting.StartTestServerOrDie(t,
 		apiServerOptions,
 		[]string{
@@ -46,7 +46,7 @@ func populateEtcdForRepairTest(t *testing.T, etcdOptions *storagebackend.Config,
 		},
 		etcdOptions)
 
-	// Create test namespace directly in etcd
+	// 直接向 etcd 写入测试 namespace。
 	namespace := "test-repair-race"
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,8 +65,7 @@ func populateEtcdForRepairTest(t *testing.T, etcdOptions *storagebackend.Config,
 	}
 	t.Logf("Created namespace %s in etcd", namespace)
 
-	// Create many namespaces directly in etcd to simulate a large cluster
-	// This causes the namespace informer to take significant time to sync on startup
+	// 直接写入大量 namespace 模拟大集群，使 namespace informer 启动时同步耗时显著增加。
 	for i := range numNamespaces {
 		ns := &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -89,8 +88,7 @@ func populateEtcdForRepairTest(t *testing.T, etcdOptions *storagebackend.Config,
 	}
 	t.Logf("Created %d additional namespaces in etcd to simulate large cluster", numNamespaces)
 
-	// Create services directly in etcd (simulating existing services from v1.32)
-	// These services will need IPAddress objects created by the repair controller
+	// 直接写入 service 模拟 v1.32 存量数据，这些 service 需要 repair controller 创建对应的 IPAddress。
 	numServices := 5
 	for i := 1; i <= numServices; i++ {
 		svc := &v1.Service{
@@ -123,7 +121,7 @@ func populateEtcdForRepairTest(t *testing.T, etcdOptions *storagebackend.Config,
 		t.Logf("Created service %s with ClusterIP %s in etcd", svc.Name, svc.Spec.ClusterIP)
 	}
 
-	// Create ServiceCIDR in etcd - this is required for the repair controller to run
+	// repair controller 运行依赖 ServiceCIDR，需先写入。
 	serviceCIDR := &networkingv1.ServiceCIDR{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "kubernetes",
@@ -142,49 +140,45 @@ func populateEtcdForRepairTest(t *testing.T, etcdOptions *storagebackend.Config,
 	}
 	t.Logf("Created ServiceCIDR in etcd")
 
-	// Tear down the temporary server
+	// 关闭临时 server。
 	tempServer.TearDownFn()
 	t.Logf("Etcd population complete: %d namespaces, %d services, and ServiceCIDR", numNamespaces+1, numServices)
 
 	return namespace
 }
 
-// TestServiceIPRepairRaceCondition tests the race condition with real namespace load.
+// TestServiceIPRepairRaceCondition 用真实的 namespace 规模复现竞态问题。
 //
-// This test reproduces the race condition described in https://github.com/kubernetes/kubernetes/issues/136288
-// using a real large number of namespaces (330000) without artificial delays.
+// 该测试复现 https://github.com/kubernetes/kubernetes/issues/136288 中的竞态，
+// 使用真实数量的 namespace（330000），不引入人为延迟。
 //
-// This test simulates the exact scenario where:
-//  1. A cluster is upgraded from v1.32 to v1.33 with MultiCIDRServiceAllocator enabled
-//  2. Services exist in etcd that need IPAddress objects to be created (repair scenario)
-//  3. Many namespaces (330000) exist in etcd, causing the namespace informer to take time to sync naturally
-//  4. During apiserver startup, the repair controller (in PostStartHook) tries to create IPAddress objects
-//  5. Built-in admission plugins (like NamespaceLifecycle) reject these requests with "not yet ready"
-//     because the namespace informer hasn't synced yet
-//  6. The PostStartHook fails, preventing the apiserver from becoming ready
+// 模拟的完整场景：
+//  1. 集群从 v1.32 升级到 v1.33，开启 MultiCIDRServiceAllocator
+//  2. etcd 中存在需要创建 IPAddress 的存量 Service（修复场景）
+//  3. etcd 中有大量 namespace（330000），namespace informer 自然需要较长时间同步
+//  4. apiserver 启动时，PostStartHook 中的 repair controller 尝试创建 IPAddress
+//  5. 由于 namespace informer 尚未同步，NamespaceLifecycle 等 admission 插件以 "not yet ready" 拒绝请求
+//  6. PostStartHook 失败，apiserver 无法就绪
 //
-// This test takes a long time to run (~30 minutes to populate etcd) but reproduces the issue with realistic load.
+// 测试耗时很长（填充 etcd 约 30 分钟），但能基于真实负载复现问题。
 func TestServiceIPRepairRaceCondition(t *testing.T) {
 	t.Skip("reproducer for https://issues.k8s.io/136288")
 
-	// Setup etcd
+	// 准备 etcd。
 	etcdOptions := framework.SharedEtcd()
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
 
-	// Phase 1: Populate etcd directly to simulate an existing v1.32 cluster
-	// We write directly to etcd to avoid starting an apiserver, making the test faster
-	// Use 330000 namespaces to reproduce the issue with real load (no artificial delay)
+	// 阶段 1：直接写入 etcd，模拟 v1.32 存量集群。
+	// 绕过 apiserver 直接写 etcd 可加快准备速度；
+	// 使用 330000 个 namespace 以真实负载（无人为延迟）复现问题。
 	t.Logf("Phase 1: Populating etcd with namespaces and services (simulating v1.32 cluster)")
 	populateEtcdForRepairTest(t, etcdOptions, apiServerOptions, 330000)
 
-	// Phase 2: Restart apiserver with MultiCIDRServiceAllocator enabled
-	// This simulates the v1.32 -> v1.33 upgrade scenario
+	// 阶段 2：开启 MultiCIDRServiceAllocator 重启 apiserver，模拟 v1.32 -> v1.33 升级。
 	t.Logf("Phase 2: Starting apiserver with MultiCIDRServiceAllocator enabled (simulating v1.33 upgrade)")
 
-	// Start the apiserver with MultiCIDRServiceAllocator enabled
-	// The repair controller will run in the PostStartHook and attempt to create IPAddress objects
-	// Due to the many namespaces, the namespace informer will take time to sync
-	// Admission plugins that depend on the namespace informer will reject requests with "not yet ready"
+	// repair controller 在 PostStartHook 中创建 IPAddress；namespace 过多导致 informer 同步缓慢，
+	// 依赖该 informer 的 admission 插件会以 "not yet ready" 拒绝请求。
 	testServer := kubeapiservertesting.StartTestServerOrDie(t,
 		apiServerOptions,
 		[]string{
@@ -192,7 +186,7 @@ func TestServiceIPRepairRaceCondition(t *testing.T) {
 			"--service-cluster-ip-range=10.0.0.0/24",
 			"--advertise-address=10.1.1.1",
 			"--disable-admission-plugins=ServiceAccount",
-			// Enable verbose logging to see repair controller logs
+			// 开启详细日志，便于查看 repair controller 的行为。
 			"-v=5",
 		},
 		etcdOptions)

@@ -138,8 +138,8 @@ func TestRunOp(t *testing.T) {
 						v1.ResourceCPU:    "2",
 						v1.ResourceMemory: "4Gi",
 					},
-					nil, // no CSI node allocatable
-					nil, // no migrated plugins
+					nil, // 不设置 CSI node allocatable
+					nil, // 不设置迁移插件
 				),
 			},
 			verifyFuncs: []verifyFunc{
@@ -581,8 +581,7 @@ func TestRunOp(t *testing.T) {
 	}
 }
 
-// verifyCount returns a verification function that checks if the number of existing objects
-// matches the expected count based on the operation type.
+// verifyCount 返回校验函数，按操作类型统计实际对象数并与期望值比对
 func verifyCount(expectedCount int) verifyFunc {
 	return func(t *testing.T, tCtx ktesting.TContext, op realOp, opIndex int) error {
 		switch concreteOp := op.(type) {
@@ -644,7 +643,7 @@ func verifyPodSignature(batchSize int) verifyFunc {
 	}
 }
 
-// verifyLabelValuesAllowed returns a verification function that checks if the label values for a given key.
+// verifyLabelValuesAllowed 返回校验函数，确认给定 key 的 label 值都在允许集合内
 func verifyLabelValuesAllowed(key string, allowValues sets.Set[string]) verifyFunc {
 	return func(t *testing.T, tCtx ktesting.TContext, op realOp, opIndex int) error {
 		labelValues, _, err := objLabelValues(t, tCtx, op, key)
@@ -662,7 +661,7 @@ func verifyLabelValuesAllowed(key string, allowValues sets.Set[string]) verifyFu
 	}
 }
 
-// verifyUniqueLabelValues returns a verification function that checks if the label values for a given key are unique.
+// verifyUniqueLabelValues 返回校验函数，确认给定 key 的 label 值无重复
 func verifyUniqueLabelValues(key string) verifyFunc {
 	return func(t *testing.T, tCtx ktesting.TContext, op realOp, opIndex int) error {
 		_, duplicatedValues, err := objLabelValues(t, tCtx, op, key)
@@ -678,9 +677,8 @@ func verifyUniqueLabelValues(key string) verifyFunc {
 	}
 }
 
-// objLabelValues is a helper function to extract label values from the listed objects.
-// The listed objects are dependent on the operation type.
-// It returns two sets: one with deduplicated labelValues and second with duplicated labels.
+// objLabelValues 按操作类型列出对象并提取指定 key 的 label 值，
+// 返回去重后的值集合和重复值集合，供唯一性校验复用
 func objLabelValues(t *testing.T, tCtx ktesting.TContext, op realOp, key string) (sets.Set[string], sets.Set[string], error) {
 	t.Helper()
 
@@ -711,7 +709,7 @@ func objLabelValues(t *testing.T, tCtx ktesting.TContext, op realOp, key string)
 	return labelValues, duplicatedValues, nil
 }
 
-// verifyObj checks if listed objects match the expected template object using cmp.Diff.
+// verifyObj 用 cmp.Diff 校验列出的对象与期望模板一致，忽略与测试无关的字段
 func verifyObj(expectedObj any) verifyFunc {
 	return func(t *testing.T, tCtx ktesting.TContext, op realOp, opIndex int) error {
 		var got, want any
@@ -731,7 +729,7 @@ func verifyObj(expectedObj any) verifyFunc {
 			}
 
 			wantNodes := make([]v1.Node, len(gotNodes))
-			// we don't need to verify len(), we just need to check if all of them are the same as the expected one.
+			// verifyCount 已校验数量，这里只逐个比对内容是否为期望模板
 			for i := range gotNodes {
 				wantNodes[i] = *expectedNodeTemplate
 			}
@@ -739,7 +737,7 @@ func verifyObj(expectedObj any) verifyFunc {
 			cmpOpts = []cmp.Option{
 				cmpopts.EquateEmpty(),
 				cmpOptsIgnoreObjectMeta,
-				cmpopts.IgnoreFields(v1.NodeStatus{}, // This test isn't interested in these fields.
+				cmpopts.IgnoreFields(v1.NodeStatus{}, // 这些字段不在本测试关注范围内
 					"Conditions",
 					"Phase",
 				),
@@ -771,7 +769,7 @@ func verifyObj(expectedObj any) verifyFunc {
 			cmpOpts = []cmp.Option{
 				cmpopts.EquateEmpty(),
 				cmpOptsIgnoreObjectMeta,
-				cmpopts.IgnoreFields(v1.PodStatus{}, // This test isn't interested in these fields.
+				cmpopts.IgnoreFields(v1.PodStatus{}, // 这些字段不在本测试关注范围内
 					"Phase", "Conditions", "Message", "Reason", "NominatedNodeName",
 					"HostIP", "HostIPs", "PodIP", "PodIPs", "StartTime", "QOSClass", "ContainerStatuses",
 				),
@@ -817,7 +815,7 @@ func verifyObj(expectedObj any) verifyFunc {
 	}
 }
 
-// createObjTemplateFile creates a temporary file with the given object serialized as JSON.
+// createObjTemplateFile 将给定对象序列化为 JSON 写入临时文件，供模板参数化测试使用
 func createObjTemplateFile(t *testing.T, obj any) *string {
 	t.Helper()
 
@@ -853,20 +851,20 @@ func createObjTemplateFile(t *testing.T, obj any) *string {
 	return &templateFile
 }
 
-// mockDataCollector always returns the same data items, to be used for mocking data collector in unit tests.
+// mockDataCollector 始终返回固定的数据项，用于单元测试中替身数据收集器
 type mockDataCollector struct {
 	dataItems []DataItem
 }
 
-// init does nothing.
+// init 无需初始化
 func (mc *mockDataCollector) init() error {
 	return nil
 }
 
-// run does nothing.
+// run 无须执行
 func (mc *mockDataCollector) run(_ ktesting.TContext) {}
 
-// collect always returns DataItems defined in the collector.
+// collect 返回构造时预置的 DataItems
 func (mc *mockDataCollector) collect() []DataItem {
 	return mc.dataItems
 }
@@ -1109,10 +1107,10 @@ func TestMetricThreshold(t *testing.T) {
 	}
 }
 
-// cmpOptsIgnoreObjectMeta ignores metadata fields that are not relevant for object equality in these tests.
+// cmpOptsIgnoreObjectMeta 忽略对象比较时无关的 metadata 字段
 var cmpOptsIgnoreObjectMeta = cmpopts.IgnoreFields(metav1.ObjectMeta{},
 	"UID", "ResourceVersion", "Generation", "CreationTimestamp", "ManagedFields", "SelfLink", "Name",
-	"Labels", // verifyObj doesn't care about labels.
+	"Labels", // verifyObj 不关心 label
 )
 
 func newPodTemplateFile(t *testing.T, namespace string) *string {
@@ -1186,7 +1184,7 @@ func newPersistentVolumeClaimTemplateFile(t *testing.T, namespace string) *strin
 	return createObjTemplateFile(t, pvc)
 }
 
-// verifyNamespaceCreated returns a verification function that checks if a namespace was created.
+// verifyNamespaceCreated 返回校验函数，确认指定 namespace 已创建
 func verifyNamespaceCreated(expectedNamespace string) verifyFunc {
 	return func(t *testing.T, tCtx ktesting.TContext, op realOp, opIndex int) error {
 		_, err := tCtx.Client().CoreV1().Namespaces().Get(tCtx, expectedNamespace, metav1.GetOptions{})

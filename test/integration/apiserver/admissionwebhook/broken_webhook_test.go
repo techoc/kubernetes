@@ -65,12 +65,10 @@ func TestBrokenWebhook(t *testing.T) {
 		t.Fatalf("Failed to register broken webhook: %v", err)
 	}
 
-	// There is no guarantee on how long it takes the apiserver to honor the configuration and there is
-	// no API to determine if the configuration is being honored, so we will just wait 10s, which is long enough
-	// in most cases.
+	// 无法得知 apiserver 何时生效该配置，也没有 API 可查询生效状态，因此固定等待 10s（多数情况下足够）。
 	time.Sleep(10 * time.Second)
 
-	// test whether the webhook blocks requests
+	// 验证 webhook 能拦截请求。
 	t.Logf("Attempt to create Deployment which should fail due to the webhook")
 	_, err = client.AppsV1().Deployments("default").Create(context.TODO(), exampleDeployment(generateDeploymentName(1)), metav1.CreateOptions{})
 	if err == nil {
@@ -88,7 +86,7 @@ func TestBrokenWebhook(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// test whether the webhook still blocks requests after restarting
+	// 验证重启后 webhook 仍能拦截请求。
 	t.Logf("Attempt again to create Deployment which should fail due to the webhook")
 	_, err = client.AppsV1().Deployments("default").Create(context.TODO(), exampleDeployment(generateDeploymentName(2)), metav1.CreateOptions{})
 	if err == nil {
@@ -101,10 +99,10 @@ func TestBrokenWebhook(t *testing.T) {
 		t.Fatalf("Failed to delete broken webhook: %v", err)
 	}
 
-	// The webhook deletion is honored in 10s.
+	// 等待 10s 让删除操作生效。
 	time.Sleep(10 * time.Second)
 
-	// test if the deleted webhook no longer blocks requests
+	// 验证删除后的 webhook 不再拦截请求。
 	t.Logf("Creating Deployment to ensure webhook is deleted")
 	_, err = client.AppsV1().Deployments("default").Create(context.TODO(), exampleDeployment(generateDeploymentName(3)), metav1.CreateOptions{})
 	if err != nil {
@@ -167,8 +165,7 @@ func brokenWebhookConfig(name string) *admissionregistrationv1.ValidatingWebhook
 						Resources:   []string{"*/*"},
 					},
 				}},
-				// This client config references a non existent service
-				// so it should always fail.
+				// 指向不存在的 service，确保 webhook 调用始终失败。
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					Service: &admissionregistrationv1.ServiceReference{
 						Namespace: "default",

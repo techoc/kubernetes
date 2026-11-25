@@ -34,8 +34,8 @@ import (
 	"k8s.io/kubernetes/test/utils/image"
 )
 
-// GetSupportedEmulatedVersions provides the list of supported emulated versions in the etcd data.
-// Tests aiming for full coverage of versions should test fixtures of all supported versions.
+// GetSupportedEmulatedVersions 返回 etcd 数据中支持的模拟版本列表。
+// 需要覆盖全部版本的测试应遍历所有支持版本的 fixture。
 func GetSupportedEmulatedVersions() []string {
 	return []string{
 		compatibility.DefaultKubeEffectiveVersionForTest().BinaryVersion().SubtractMinor(3).String(),
@@ -45,36 +45,32 @@ func GetSupportedEmulatedVersions() []string {
 	}
 }
 
-// GetEtcdStorageData returns etcd data for all persisted objects at the latest release version.
-// It is exported so that it can be reused across multiple tests.
-// It returns a new map on every invocation to prevent different tests from mutating shared state.
+// GetEtcdStorageData 返回最新版本中所有持久化对象的 etcd 数据。
+// 导出以便多个测试复用；每次调用都返回新 map，避免测试之间共享状态被修改。
 func GetEtcdStorageData() map[schema.GroupVersionResource]StorageData {
 	return GetEtcdStorageDataServedAt(utilversion.DefaultKubeBinaryVersion, false)
 }
 
-// GetEtcdStorageDataServedAt returns etcd data for all persisted objects at a particular release version.
-// It is exported so that it can be reused across multiple tests.
-// It returns a new map on every invocation to prevent different tests from mutating shared state.
+// GetEtcdStorageDataServedAt 返回指定版本中所有持久化对象的 etcd 数据。
+// 导出以便多个测试复用；每次调用都返回新 map，避免测试之间共享状态被修改。
 func GetEtcdStorageDataServedAt(version string, isEmulation bool) map[schema.GroupVersionResource]StorageData {
 	return GetEtcdStorageDataForNamespaceServedAt("etcdstoragepathtestnamespace", version, isEmulation)
 }
 
-// GetEtcdStorageDataForNamespace returns etcd data for all persisted objects at the latest release version.
-// It is exported so that it can be reused across multiple tests.
-// It returns a new map on every invocation to prevent different tests from mutating shared state.
-// Namespaced objects keys are computed for the specified namespace.
+// GetEtcdStorageDataForNamespace 返回最新版本中所有持久化对象的 etcd 数据，
+// 并为 namespace 级对象使用指定 namespace 计算 key。
+// 导出以便多个测试复用；每次调用都返回新 map，避免测试之间共享状态被修改。
 func GetEtcdStorageDataForNamespace(namespace string) map[schema.GroupVersionResource]StorageData {
 	return GetEtcdStorageDataForNamespaceServedAt(namespace, utilversion.DefaultKubeBinaryVersion, false)
 }
 
-// logExpectedVersionChange is used by GetEtcdStorageDataForNamespaceServedAt to surface when the expected version changed.
-// defaults to no-op, can be set to log for specific tests.
+// logExpectedVersionChange 由 GetEtcdStorageDataForNamespaceServedAt 调用，
+// 用于在预期版本发生变化时输出提示；默认为空操作，特定测试可将其设为日志函数。
 var logExpectedVersionChange = func(format string, args ...any) {}
 
-// GetEtcdStorageDataForNamespaceServedAt returns etcd data for all persisted objects at a particular release version.
-// It is exported so that it can be reused across multiple tests.
-// It returns a new map on every invocation to prevent different tests from mutating shared state.
-// Namespaced objects keys are computed for the specified namespace.
+// GetEtcdStorageDataForNamespaceServedAt 返回指定版本中所有持久化对象的 etcd 数据，
+// 并为 namespace 级对象使用指定 namespace 计算 key。
+// 导出以便多个测试复用；每次调用都返回新 map，避免测试之间共享状态被修改。
 func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulation bool) map[schema.GroupVersionResource]StorageData {
 	alternateImage := image.GetE2EImage(image.Etcd)
 	image := image.GetE2EImage(image.BusyBox)
@@ -666,7 +662,7 @@ func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulat
 		// --
 
 		// k8s.io/kube-aggregator/pkg/apis/apiregistration/v1
-		// depends on aggregator using the same ungrouped RESTOptionsGetter as the kube apiserver, not SimpleRestOptionsFactory in aggregator.go
+		// 依赖 aggregator 与 kube apiserver 共用无分组的 RESTOptionsGetter，而非 aggregator.go 中的 SimpleRestOptionsFactory
 		gvr("apiregistration.k8s.io", "v1", "apiservices"): {
 			Stub:              `{"metadata": {"name": "as2.foo.com"}, "spec": {"group": "foo.com", "version": "as2", "groupPriorityMinimum":100, "versionPriority":10}}`,
 			MutatedStub:       `{"metadata": {"labels": {"a":"c"}}, "spec": {"versionPriority": 100}}`,
@@ -781,8 +777,8 @@ func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulat
 
 		// k8s.io/kubernetes/pkg/apis/resource/v1beta2
 		//
-		// The expected GVK must be set explicitly because when emulating 1.33,
-		// v1beta1 is the default although the actual storage version is v1beta2.
+		// 必须显式设置期望 GVK：模拟 1.33 时，虽然实际存储版本为 v1beta2，
+		// 默认值却是 v1beta1
 		gvr("resource.k8s.io", "v1beta2", "deviceclasses"): {
 			Stub:              `{"metadata": {"name": "class3name"}}`,
 			MutatedStub:       `{"metadata": {"labels":{"a":"c"}}}`,
@@ -893,7 +889,7 @@ func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulat
 		// --
 	}
 
-	// get the min version the Beta api of a group is introduced, and it would be used to determine emulation forward compatibility.
+	// 找出每个 group 的 Beta API 最早引入版本，用于判断模拟版本的前向兼容性
 	minBetaVersions := map[schema.GroupResource]*version.Version{}
 	for key, data := range etcdStorageData {
 		if !strings.Contains(key.Version, "beta") {
@@ -909,7 +905,7 @@ func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulat
 		}
 	}
 
-	// Delete types no longer served or not yet added at a particular emulated version.
+	// 删除在目标模拟版本中已停止提供或尚未引入的类型
 	for key, data := range etcdStorageData {
 		if data.RemovedVersion != "" && version.MustParse(v).AtLeast(version.MustParse(data.RemovedVersion)) {
 			delete(etcdStorageData, key)
@@ -931,16 +927,14 @@ func GetEtcdStorageDataForNamespaceServedAt(namespace string, v string, isEmulat
 			}
 		}
 
-		// Use the production storage version calculation to determine the expected
-		// storage version at this emulation version, avoiding logic duplication.
+		// 复用生产环境的存储版本计算逻辑，避免重复实现
 		effectiveVersion := basecompatibility.NewEffectiveVersionFromString(v, "", "")
 		encodingConfig := serverstorage.NewDefaultResourceEncodingConfigForEffectiveVersion(legacyscheme.Scheme, effectiveVersion)
 		for key, data := range etcdStorageData {
 			if data.ExpectedGVK == nil {
 				continue
 			}
-			// Use the key (served GVR) to find an example object, not the
-			// ExpectedGVK, so we don't feed the expected answer as input.
+			// 用 key（被服务的 GVR）而非 ExpectedGVK 查找示例对象，避免把预期结果当作输入
 			example, err := legacyscheme.Scheme.New(key.GroupVersion().WithKind(data.ExpectedGVK.Kind))
 			if err != nil {
 				continue
@@ -980,40 +974,34 @@ func validateStorageData(etcdStorageData map[schema.GroupVersionResource]Storage
 	}
 }
 
-// StorageData contains information required to create an object and verify its storage in etcd
-// It must be paired with a specific resource
+// StorageData 包含创建对象并验证其在 etcd 中存储所需的信息，必须与具体资源配对使用。
 type StorageData struct {
-	// Stub is a valid JSON object used to create the resource.
+	// Stub 是用于创建该资源的合法 JSON 对象
 	Stub string
-	// MutatedStub is partial update of Sub as a JSON object, with at least one field
-	// changed to a different value. For resources with a status subresource, MutatedStub
-	// MUST mutate a spec field. If a resource is immutable, do not set MutatedStub.
-	// For resources without a status subresource, MutatedStub may mutate any field
-	// or be left empty ("", do not set this field to "{}" as a noop apply will confuse tests).
-	// The mutation is applied as a patch.
-	// Example: if Stub has `"replicas": 1`, MutatedStub might have `"replicas": 2`.
+	// MutatedStub 是对 Stub 的部分更新 JSON，至少修改一个字段的值。
+	// 有 status subresource 的资源必须修改 spec 字段；不可变资源不要设置 MutatedStub。
+	// 没有 status subresource 时可修改任意字段，或留空（""；不要设为 "{}"，空 apply 会干扰测试）。
+	// 修改以 patch 方式应用，例如 Stub 含 `"replicas": 1` 时，MutatedStub 可为 `"replicas": 2`。
 	MutatedStub string
-	// StatusStub is a valid JSON status payload used to write to the /status subresource.
-	// If empty, a metav1.Condition style status condition is used. Required only
-	// for resources without status conditions.
+	// StatusStub 是写入 /status subresource 的合法 JSON 数据。
+	// 留空时使用 metav1.Condition 风格的状态条件；仅无状态条件的资源需要设置。
 	StatusStub string
-	// MutatedStatusStub is StatusStub with at least one status field changed to a different value.
-	// If empty, the default status payload with a flipped condition value is used.
-	// This mutation is applied using a server-side apply patch.
-	// Must be set whenever StatusStub is set.
+	// MutatedStatusStub 在 StatusStub 基础上修改至少一个 status 字段。
+	// 留空时使用翻转 condition 值的默认状态数据。
+	// 修改通过 server-side apply patch 应用；设置 StatusStub 时必须同时设置本字段。
 	MutatedStatusStub string
 
-	Prerequisites     []Prerequisite           // Optional, ordered list of JSON objects to create before stub
-	ExpectedEtcdPath  string                   // Expected location of object in etcd, do not use any variables, constants, etc to derive this value - always supply the full raw string
-	ExpectedGVK       *schema.GroupVersionKind // The GVK that we expect this object to be stored as - leave this nil to use the default
-	IntroducedVersion string                   // The version that this type is introduced
-	RemovedVersion    string                   // The version that this type is removed. May be empty for stable resources
+	Prerequisites     []Prerequisite           // 可选，创建 Stub 前需按顺序创建的 JSON 对象
+	ExpectedEtcdPath  string                   // 对象在 etcd 中的预期位置，必须提供完整原始字符串，不得用变量或常量拼接
+	ExpectedGVK       *schema.GroupVersionKind // 期望的存储 GVK，留空表示使用默认值
+	IntroducedVersion string                   // 该类型引入的版本
+	RemovedVersion    string                   // 该类型移除的版本，稳定资源可留空
 }
 
 const defaultStatusStub = `{"status": {"conditions": [{"type": "MyStatus", "status":"True", "lastTransitionTime": "2020-01-01T00:00:00Z", "reason": "MyReason", "message": "some message"}]}}`
 const defaultMutatedStatusStub = `{"status": {"conditions": [{"type": "MyStatus", "status":"False", "lastTransitionTime": "2020-01-01T00:00:00Z", "reason": "MyReason", "message": "some message"}]}}`
 
-// GetStatusStub returns the StatusStub, or a default conditions-based status if empty.
+// GetStatusStub 返回 StatusStub，留空时返回基于 condition 的默认状态数据
 func (s StorageData) GetStatusStub() string {
 	if s.StatusStub != "" {
 		return s.StatusStub
@@ -1021,8 +1009,7 @@ func (s StorageData) GetStatusStub() string {
 	return defaultStatusStub
 }
 
-// GetMutatedStatusStub returns the MutatedStatusStub, or a default conditions-based status
-// with a flipped condition value if empty.
+// GetMutatedStatusStub 返回 MutatedStatusStub，留空时返回翻转 condition 值的默认状态数据
 func (s StorageData) GetMutatedStatusStub() string {
 	if s.MutatedStatusStub != "" {
 		return s.MutatedStatusStub
@@ -1030,16 +1017,16 @@ func (s StorageData) GetMutatedStatusStub() string {
 	return defaultMutatedStatusStub
 }
 
-// Prerequisite contains information required to create a resource (but not verify it)
+// Prerequisite 包含创建（但不校验）某个资源所需的信息
 type Prerequisite struct {
 	GvrData schema.GroupVersionResource
 	Stub    string
 }
 
-// GetCustomResourceDefinitionData returns the resource definitions that back the custom resources
-// included in GetEtcdStorageData.  They should be created using CreateTestCRDs before running any tests.
-// We can switch this to v1 CRDs based on transitive call site analysis.
-// Call sites:
+// GetCustomResourceDefinitionData 返回 GetEtcdStorageData 中自定义资源所依赖的 CRD 定义。
+// 运行测试前需用 CreateTestCRDs 创建这些 CRD。
+// 根据调用方分析，这些 CRD 可以切换为 v1：
+// 调用点：
 // 1. TestDedupOwnerReferences - beta doesn't matter
 // 2. TestWebhookAdmissionWithWatchCache/TestWebhookAdmissionWithoutWatchCache - beta doesn't matter
 // 3. TestApplyStatus - the version fields don't matter.  Pruning isn't checked, just ownership.
@@ -1051,7 +1038,7 @@ type Prerequisite struct {
 // 9. TestOverlappingCustomResourceAPIService - beta doesn't matter
 func GetCustomResourceDefinitionData() []*apiextensionsv1.CustomResourceDefinition {
 	return []*apiextensionsv1.CustomResourceDefinition{
-		// namespaced
+		// namespace 级
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "foos.cr.bar.com",
@@ -1073,7 +1060,7 @@ func GetCustomResourceDefinitionData() []*apiextensionsv1.CustomResourceDefiniti
 				},
 			},
 		},
-		// cluster scoped
+		// 集群级
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "pants.custom.fancy.com",
@@ -1095,7 +1082,7 @@ func GetCustomResourceDefinitionData() []*apiextensionsv1.CustomResourceDefiniti
 				},
 			},
 		},
-		// cluster scoped with legacy version field and pruning.
+		// 集群级，使用旧版 version 字段并启用字段裁剪
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "integers.random.numbers.com",
@@ -1125,7 +1112,7 @@ func GetCustomResourceDefinitionData() []*apiextensionsv1.CustomResourceDefiniti
 				},
 			},
 		},
-		// cluster scoped with versions field
+		// 集群级，使用 versions 字段
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "pandas.awesome.bears.com",

@@ -85,10 +85,8 @@ func TestCTBSignerNameChangeForbidden(t *testing.T) {
 				t.Fatalf("Error while creating bundle1: %v", err)
 			}
 
-			// Pick a new signer name that is still compatible with the admission
-			// restrictions on object name.  That way the admission plugin won't get in
-			// the way by forbidding the update due to an incompatible name on the
-			// cluster trust bundle.
+			// 选择的新 signer name 仍满足对象名称的 admission 限制，
+			// 避免 admission 插件因名称不兼容而拦截更新，掩盖真正要验证的行为。
 			bundle1.Spec.SignerName = tc.signer2
 
 			_, err = client.CertificatesV1().ClusterTrustBundles().Update(ctx, bundle1, metav1.UpdateOptions{})

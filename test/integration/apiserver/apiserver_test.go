@@ -114,7 +114,7 @@ func setupWithResources(t *testing.T, groupVersions []schema.GroupVersion, resou
 }
 
 func verifyStatusCode(t *testing.T, transport http.RoundTripper, verb, URL, body string, expectedStatusCode int) {
-	// We don't use the typed Go client to send this request to be able to verify the response status code.
+	// 直接用 transport 发请求，才能拿到并断言原始响应状态码。
 	bodyBytes := bytes.NewReader([]byte(body))
 	req, err := http.NewRequest(verb, URL, bodyBytes)
 	if err != nil {
@@ -244,19 +244,19 @@ func TestCacheControl(t *testing.T) {
 	}
 
 	paths := []string{
-		// untyped
+		// 无类型端点
 		"/",
-		// health
+		// 健康检查
 		"/healthz",
-		// openapi
+		// OpenAPI 端点
 		"/openapi/v2",
-		// discovery
+		// discovery 端点
 		"/api",
 		"/api/v1",
 		"/apis",
 		"/apis/apps",
 		"/apis/apps/v1",
-		// apis
+		// 资源 API 端点
 		"/api/v1/namespaces",
 		"/apis/apps/v1/deployments",
 	}
@@ -279,7 +279,7 @@ func TestCacheControl(t *testing.T) {
 	}
 }
 
-// Tests that the apiserver returns HSTS headers as expected.
+// TestHSTS 验证 apiserver 按配置返回 HSTS 头。
 func TestHSTS(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{"--strict-transport-security-directives=max-age=31536000,includeSubDomains"}, framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -290,19 +290,19 @@ func TestHSTS(t *testing.T) {
 	}
 
 	paths := []string{
-		// untyped
+		// 无类型端点
 		"/",
-		// health
+		// 健康检查
 		"/healthz",
-		// openapi
+		// OpenAPI 端点
 		"/openapi/v2",
-		// discovery
+		// discovery 端点
 		"/api",
 		"/api/v1",
 		"/apis",
 		"/apis/apps",
 		"/apis/apps/v1",
-		// apis
+		// 资源 API 端点
 		"/api/v1/namespaces",
 		"/apis/apps/v1/deployments",
 	}
@@ -325,7 +325,7 @@ func TestHSTS(t *testing.T) {
 	}
 }
 
-// Tests that the apiserver returns 202 status code as expected.
+// Test202StatusCode 验证删除操作在各种 finalizer/DeleteOptions 组合下返回预期的状态码。
 func Test202StatusCode(t *testing.T) {
 	ctx, clientSet, kubeConfig, tearDownFn := setup(t)
 	defer tearDownFn()
@@ -340,16 +340,14 @@ func Test202StatusCode(t *testing.T) {
 
 	rsClient := clientSet.AppsV1().ReplicaSets(ns.Name)
 
-	// 1. Create the resource without any finalizer and then delete it without setting DeleteOptions.
-	// Verify that server returns 200 in this case.
+	// 1. 创建无 finalizer 的资源，直接删除，期望返回 200。
 	rs, err := rsClient.Create(ctx, newRS(ns.Name), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create rs: %v", err)
 	}
 	verifyStatusCode(t, transport, "DELETE", kubeConfig.Host+path.Join("/apis/apps/v1/namespaces", ns.Name, "replicasets", rs.Name), "", 200)
 
-	// 2. Create the resource with a finalizer so that the resource is not immediately deleted and then delete it without setting DeleteOptions.
-	// Verify that the apiserver still returns 200 since DeleteOptions.OrphanDependents is not set.
+	// 2. 创建带 finalizer 的资源使其不会立即删除，直接删除；未设置 DeleteOptions.OrphanDependents，期望仍返回 200。
 	rs = newRS(ns.Name)
 	rs.ObjectMeta.Finalizers = []string{"kube.io/dummy-finalizer"}
 	rs, err = rsClient.Create(ctx, rs, metav1.CreateOptions{})
@@ -358,8 +356,7 @@ func Test202StatusCode(t *testing.T) {
 	}
 	verifyStatusCode(t, transport, "DELETE", kubeConfig.Host+path.Join("/apis/apps/v1/namespaces", ns.Name, "replicasets", rs.Name), "", 200)
 
-	// 3. Create the resource and then delete it with DeleteOptions.OrphanDependents=false.
-	// Verify that the server still returns 200 since the resource is immediately deleted.
+	// 3. 创建资源后以 DeleteOptions.OrphanDependents=false 删除；资源立即删除，期望返回 200。
 	rs = newRS(ns.Name)
 	rs, err = rsClient.Create(ctx, rs, metav1.CreateOptions{})
 	if err != nil {
@@ -367,8 +364,7 @@ func Test202StatusCode(t *testing.T) {
 	}
 	verifyStatusCode(t, transport, "DELETE", kubeConfig.Host+path.Join("/apis/apps/v1/namespaces", ns.Name, "replicasets", rs.Name), cascDel, 200)
 
-	// 4. Create the resource with a finalizer so that the resource is not immediately deleted and then delete it with DeleteOptions.OrphanDependents=false.
-	// Verify that the server returns 202 in this case.
+	// 4. 创建带 finalizer 的资源，以 DeleteOptions.OrphanDependents=false 删除；删除尚未完成，期望返回 202。
 	rs = newRS(ns.Name)
 	rs.ObjectMeta.Finalizers = []string{"kube.io/dummy-finalizer"}
 	rs, err = rsClient.Create(ctx, rs, metav1.CreateOptions{})
@@ -384,8 +380,7 @@ var (
 	invalidResourceVersionMatch = metav1.ResourceVersionMatch("InvalidMatch")
 )
 
-// TestListOptions ensures that list works as expected for valid and invalid combinations of limit, continue,
-// resourceVersion and resourceVersionMatch.
+// TestListOptions 验证 limit、continue、resourceVersion 和 resourceVersionMatch 各种合法/非法组合下列表请求的行为。
 func TestListOptions(t *testing.T) {
 	t.Run("watchCacheEnabled=false", func(t *testing.T) {
 		testListOptions(t, false)
@@ -411,8 +406,7 @@ func testListOptions(t *testing.T, watchCacheEnabled bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// kvClient is a wrapper around rawClient and to avoid leaking goroutines we need to
-	// close the client (which we can do by closing rawClient).
+	// kvClient 封装了 rawClient；关闭 rawClient 即关闭 kvClient，避免 goroutine 泄漏。
 	defer func() {
 		err := rawClient.Close()
 		if err != nil {
@@ -440,7 +434,7 @@ func testListOptions(t *testing.T, watchCacheEnabled bool) {
 		if i == 0 {
 			compactedRv = strconv.FormatInt(resp.Header.Revision, 10) // We compact this first resource version below
 		}
-		// delete the first 5, and then compact them
+		// 删除前 5 个并压缩对应 revision。
 		if i < 5 {
 			if _, err := kvClient.Delete(tCtx, key); err != nil {
 				t.Fatal(err)
@@ -471,7 +465,7 @@ func testListOptions(t *testing.T, watchCacheEnabled bool) {
 	}
 	validContinueToken := listObj.Continue
 
-	// test all combinations of these, for both watch cache enabled and disabled:
+	// 覆盖 watch cache 开启和关闭时所有这些参数的组合。
 	limits := []int64{0, 6}
 	continueTokens := []string{"", validContinueToken, invalidContinueToken}
 	rvs := []string{"", "0", compactedRv, invalidResourceVersion}
@@ -531,7 +525,7 @@ func testListOptions(t *testing.T, watchCacheEnabled bool) {
 func testListOptionsCase(t *testing.T, rsClient appsv1.ReplicaSetInterface, watchCacheEnabled bool, opts metav1.ListOptions, compactedRv string) {
 	listObj, err := rsClient.List(context.Background(), opts)
 
-	// check for expected validation errors
+	// 先断言预期的校验错误。
 	if opts.ResourceVersion == "" && opts.ResourceVersionMatch != "" {
 		if err == nil || !strings.Contains(err.Error(), "resourceVersionMatch is forbidden unless resourceVersion is provided") {
 			t.Fatalf("expected forbidden error, but got: %v", err)
@@ -562,7 +556,7 @@ func testListOptionsCase(t *testing.T, rsClient appsv1.ReplicaSetInterface, watc
 		}
 		return
 	}
-	// Should not be allowed for any resource version, but tightening the validation would be a breaking change
+	// 该组合本应对所有 resourceVersion 都禁止，但收紧校验会破坏兼容性。
 	if opts.Continue != "" && !(opts.ResourceVersion == "" || opts.ResourceVersion == "0") {
 		if err == nil || !strings.Contains(err.Error(), "specifying resource version is not allowed when using continue") {
 			t.Fatalf("expected not allowed error, but got: %v", err)
@@ -576,9 +570,9 @@ func testListOptionsCase(t *testing.T, rsClient appsv1.ReplicaSetInterface, watc
 		return
 	}
 
-	// Check for too old errors
+	// 检查 resourceVersion 过旧的错误。
 	isExact := opts.ResourceVersionMatch == metav1.ResourceVersionMatchExact
-	// Legacy corner cases that can be avoided by using an explicit resourceVersionMatch value
+	// 这是遗留边界行为，显式指定 resourceVersionMatch 即可避免。
 	// see https://kubernetes.io/docs/reference/using-api/api-concepts/#the-resourceversion-parameter
 	isLegacyExact := opts.Limit > 0 && opts.ResourceVersionMatch == ""
 
@@ -589,7 +583,7 @@ func testListOptionsCase(t *testing.T, rsClient appsv1.ReplicaSetInterface, watc
 		return
 	}
 
-	// test successful responses
+	// 以下为成功响应的检查。
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -599,8 +593,7 @@ func testListOptionsCase(t *testing.T, rsClient appsv1.ReplicaSetInterface, watc
 	}
 	count := int64(len(items))
 
-	// Cacher.GetList defines this for logic to decide if the watch cache is skipped. We need to know it to know if
-	// the limit is respected when testing here.
+	// Cacher.GetList 用这些条件判断是否跳过 watch cache；需要据此判断本次断言是否应受 limit 约束。
 	hasContinuation := len(opts.Continue) > 0
 	hasLimit := opts.Limit > 0 && opts.ResourceVersion != "0"
 	skipWatchCache := opts.ResourceVersion == "" || hasContinuation || hasLimit || isExact
@@ -670,7 +663,7 @@ func TestListResourceVersion0(t *testing.T) {
 			}
 
 			if tc.watchCacheEnabled {
-				// poll until the watch cache has the full list in memory
+				// 轮询等待 watch cache 同步完整列表。
 				err := wait.PollImmediate(time.Second, wait.ForeverTestTimeout, func() (bool, error) {
 					list, err := clientSet.AppsV1().ReplicaSets(ns.Name).List(tCtx, metav1.ListOptions{ResourceVersion: "0"})
 					if err != nil {
@@ -1339,8 +1332,7 @@ func TestAPICRDProtobuf(t *testing.T) {
 				}
 				status := err.(apierrors.APIStatus).Status()
 				data, _ := json.MarshalIndent(status, "", "  ")
-				// because the dynamic client only has a json serializer, the client processing of the error cannot
-				// turn the response into something meaningful, so we verify that fallback handling works correctly
+				// dynamic client 只带 json serializer，无法解析错误响应；此处验证回退处理是否正确。
 				if !apierrors.IsUnexpectedServerError(err) {
 					t.Fatal(string(data))
 				}
@@ -1397,8 +1389,7 @@ func TestAPICRDProtobuf(t *testing.T) {
 				}
 				status := err.(apierrors.APIStatus).Status()
 				data, _ := json.MarshalIndent(status, "", "  ")
-				// because the dynamic client only has a json serializer, the client processing of the error cannot
-				// turn the response into something meaningful, so we verify that fallback handling works correctly
+				// dynamic client 只带 json serializer，无法解析错误响应；此处验证回退处理是否正确。
 				if !apierrors.IsUnexpectedServerError(err) {
 					t.Fatal(string(data))
 				}
@@ -1699,10 +1690,10 @@ func TestGetSubresourcesAsTables(t *testing.T) {
 }
 
 func TestGetScaleSubresourceAsTableForAllBuiltins(t *testing.T) {
-	// KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE allows for APIs pending removal to not block tests
+	// 设置 KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE，避免待移除 API 阻断测试。
 	t.Setenv("KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE", "true")
 
-	// Enable all features and apis for testing
+	// 测试覆盖所有 feature 和 API。
 	flags := framework.DefaultTestServerFlags()
 	flags = append(flags, "--runtime-config=api/all=true")
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -1844,7 +1835,7 @@ func TestGetScaleSubresourceAsTableForAllBuiltins(t *testing.T) {
 				continue
 			}
 			resourceName := strings.Split(resource.Name, "/")[0]
-			// we can safely skip error here, since the group version is coming from the server
+			// groupVersion 来自服务端发现结果，格式可信，此处可忽略解析错误。
 			groupVersion, _ := schema.ParseGroupVersion(resourceList.GroupVersion)
 
 			t.Run(resourceName, func(t *testing.T) {
@@ -2026,7 +2017,7 @@ func TestTransform(t *testing.T) {
 				if !apierrors.IsNotAcceptable(err) {
 					t.Fatal(err)
 				}
-				// TODO: this should be a more specific error
+				// TODO: 应返回更具体的错误类型。
 				if err.Error() != "only the following media types are accepted: application/json;stream=watch, application/vnd.kubernetes.protobuf;stream=watch" {
 					t.Fatal(err)
 				}
@@ -2153,7 +2144,7 @@ func TestTransform(t *testing.T) {
 				if !apierrors.IsNotAcceptable(err) {
 					t.Fatal(err)
 				}
-				// TODO: this should be a more specific error
+				// TODO: 应返回更具体的错误类型。
 				if err.Error() != "only the following media types are accepted: application/json, application/yaml, application/vnd.kubernetes.protobuf" {
 					t.Fatal(err)
 				}
@@ -2282,7 +2273,7 @@ func TestTransform(t *testing.T) {
 				if !apierrors.IsNotAcceptable(err) {
 					t.Fatal(err)
 				}
-				// TODO: this should be a more specific error
+				// TODO: 应返回更具体的错误类型。
 				if err.Error() != "only the following media types are accepted: application/json;stream=watch, application/vnd.kubernetes.protobuf;stream=watch" {
 					t.Fatal(err)
 				}
@@ -2409,7 +2400,7 @@ func TestTransform(t *testing.T) {
 				if !apierrors.IsNotAcceptable(err) {
 					t.Fatal(err)
 				}
-				// TODO: this should be a more specific error
+				// TODO: 应返回更具体的错误类型。
 				if err.Error() != "only the following media types are accepted: application/json, application/yaml, application/vnd.kubernetes.protobuf" {
 					t.Fatal(err)
 				}
@@ -2499,10 +2490,10 @@ func TestTransform(t *testing.T) {
 
 			var rv string
 			if obj.GetResourceVersion() == "" || obj.GetResourceVersion() == "0" {
-				// no object was created in the preamble to the test, so get recent data
+				// 前置步骤没有创建对象，因此直接取最新数据。
 				rv = "0"
 			} else {
-				// we created an object, and need to list+watch from some time before the creation to see it
+				// 已创建对象，需从创建前的 revision 开始 list+watch 才能观察到它。
 				rv = previousRV
 			}
 
@@ -2638,9 +2629,8 @@ func TestWatchTransformCaching(t *testing.T) {
 		t.Fatalf("Failed to create a second configMap: %v", err)
 	}
 
-	// Now update both configmaps so that filtering watch can observe them.
-	// This is needed to validate whether events caching done by apiserver
-	// distinguished objects by type.
+	// 更新两个 ConfigMap，让过滤 watch 能观察到事件，
+	// 以验证 apiserver 的事件缓存是否按对象类型区分。
 
 	configMapUpdated, err := clientSet.CoreV1().ConfigMaps("watch-transform").Update(ctx, &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "test1", Labels: map[string]string{"foo": "bar"}},
@@ -2992,7 +2982,7 @@ func TestClientsetShareTransport(t *testing.T) {
 	}
 	server.ClientConfig.Dial = dialFn
 	client := clientset.NewForConfigOrDie(server.ClientConfig)
-	// create test namespace
+	// 创建测试 namespace。
 	_, err := client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-creation",
@@ -3001,7 +2991,7 @@ func TestClientsetShareTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test ns: %v", err)
 	}
-	// List different objects
+	// 请求不同类型的对象。
 	result := client.CoreV1().RESTClient().Get().AbsPath("/healthz").Do(context.TODO())
 	_, err = result.Raw()
 	if err != nil {
@@ -3049,7 +3039,7 @@ func TestDedupOwnerReferences(t *testing.T) {
 	dynamicClient := dynamic.NewForConfigOrDie(server.ClientConfig)
 
 	ns := "test-dedup-owner-references"
-	// create test namespace
+	// 创建测试 namespace。
 	_, err := client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
@@ -3059,7 +3049,7 @@ func TestDedupOwnerReferences(t *testing.T) {
 		t.Fatalf("failed to create test ns: %v", err)
 	}
 
-	// some fake owner references
+	// 构造一些伪造的 ownerReference。
 	fakeRefA := metav1.OwnerReference{
 		APIVersion: "v1",
 		Kind:       "ConfigMap",
@@ -3127,10 +3117,9 @@ func TestDedupOwnerReferences(t *testing.T) {
 
 			klog.Infof("patching dependent with duplicate owner reference")
 			dependent = c.patchDependentWithOwner(dependent, fakeRefA)
-			// TODO: currently a patch request that duplicates owner references can still
-			// wipe out managed fields. Note that this happens to built-in resources but
-			// not custom resources. In future we should either dedup before writing manage
-			// fields, or stop deduping and reject the request.
+			// TODO: 含重复 ownerReference 的 patch 仍可能抹掉 managed fields，
+			// 且只出现在内建资源而非自定义资源上。后续应在写入 managed fields 前去重，
+			// 或干脆不再去重并拒绝该请求。
 			// assertManagedFields(t, dependent)
 			expectedPatchWarning := fmt.Sprintf(handlers.DuplicateOwnerReferencesAfterMutatingAdmissionWarningFormat, fakeRefA.UID)
 			assertOwnerReferences(t, dependent, []metav1.OwnerReference{fakeRefA})
@@ -3155,7 +3144,7 @@ func TestDedupOwnerReferences(t *testing.T) {
 			assertWarningMessage(t, b, "")
 		})
 	}
-	// cleanup
+	// 清理测试 namespace。
 	if err := client.CoreV1().Namespaces().Delete(context.TODO(), ns, metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("failed to delete test ns: %v", err)
 	}
@@ -3226,7 +3215,7 @@ func TestEmulatedStorageVersion(t *testing.T) {
 		},
 	}
 
-	// Group cases by their emulated version
+	// 按模拟版本对用例分组。
 	groupedCases := map[string][]testCase{}
 	for _, c := range cases {
 		groupedCases[c.emulatedVersion] = append(groupedCases[c.emulatedVersion], c)
@@ -3241,7 +3230,7 @@ func TestEmulatedStorageVersion(t *testing.T) {
 			client := clientset.NewForConfigOrDie(server.ClientConfig)
 			dynamicClient := dynamic.NewForConfigOrDie(server.ClientConfig)
 
-			// create test namespace
+			// 创建测试 namespace。
 			testNamespace := "test-emulated-storage-version"
 			_, err := client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -3284,16 +3273,14 @@ func TestEmulatedStorageVersion(t *testing.T) {
 						ns = ""
 					}
 
-					// create object
+					// 创建测试对象。
 					created, err := dynamicClient.Resource(c.gvr).Namespace(ns).Create(context.TODO(), uns, metav1.CreateOptions{})
 					if err != nil {
 						t.Fatalf("failed to create object: %v", err)
 					}
 
-					// Fetch object from ETCD
-					// Use this poor man's way to get the etcd path. This wont
-					// work for all resources, but should work for most we want
-					// to test against
+					// 从 ETCD 读取对象。这里用简易方式拼 etcd 路径，
+					// 不保证覆盖所有资源，但足以应付大多数待测资源。
 					resourcePrefix := mapping.Resource.Resource
 					if special, ok := kubeapiserver.SpecialDefaultResourcePrefixes[c.gvr.GroupResource()]; ok {
 						resourcePrefix = special
@@ -3395,7 +3382,7 @@ func TestMinCompatibilityStorageVersion(t *testing.T) {
 		},
 	}
 
-	// Group cases by their min compatibility version
+	// 按最低兼容版本对用例分组。
 	groupedCases := map[string][]testCase{}
 	for _, c := range cases {
 		groupedCases[c.minCompatibilityVersion] = append(groupedCases[c.minCompatibilityVersion], c)
@@ -3415,7 +3402,7 @@ func TestMinCompatibilityStorageVersion(t *testing.T) {
 			client := clientset.NewForConfigOrDie(server.ClientConfig)
 			dynamicClient := dynamic.NewForConfigOrDie(server.ClientConfig)
 
-			// create test namespace
+			// 创建测试 namespace。
 			testNamespace := "test-min-compatibility-storage-version"
 			_, err := client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -3458,16 +3445,14 @@ func TestMinCompatibilityStorageVersion(t *testing.T) {
 						ns = ""
 					}
 
-					// create object
+					// 创建测试对象。
 					created, err := dynamicClient.Resource(c.gvr).Namespace(ns).Create(context.TODO(), uns, metav1.CreateOptions{})
 					if err != nil {
 						t.Fatalf("failed to create object: %v", err)
 					}
 
-					// Fetch object from ETCD
-					// Use this poor man's way to get the etcd path. This wont
-					// work for all resources, but should work for most we want
-					// to test against
+					// 从 ETCD 读取对象。这里用简易方式拼 etcd 路径，
+					// 不保证覆盖所有资源，但足以应付大多数待测资源。
 					resourcePrefix := mapping.Resource.Resource
 					if special, ok := kubeapiserver.SpecialDefaultResourcePrefixes[c.gvr.GroupResource()]; ok {
 						resourcePrefix = special
@@ -3504,7 +3489,7 @@ func TestMinCompatibilityStorageVersion(t *testing.T) {
 	}
 }
 
-// TestAllowedEmulationVersions tests the TestServer can start without problem for all allowed emulation versions.
+// TestAllowedEmulationVersions 验证测试服务器在所有允许的模拟版本下都能正常启动。
 func TestAllowedEmulationVersions(t *testing.T) {
 	tcs := []struct {
 		name             string
@@ -3855,8 +3840,7 @@ func assertManagedFields(t *testing.T, obj *unstructured.Unstructured) {
 	}
 }
 
-// TestDefaultStorageEncoding verifies that the storage encoding for all built-in resources is
-// Protobuf.
+// TestDefaultStorageEncoding 验证所有内建资源的存储编码均为 Protobuf。
 func TestDefaultStorageEncoding(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		"AllAlpha": true,
@@ -3868,8 +3852,7 @@ func TestDefaultStorageEncoding(t *testing.T) {
 	{
 		jsonRecognizer := jsonserializer.NewSerializerWithOptions(jsonserializer.DefaultMetaFactory, runtime.NewScheme(), runtime.NewScheme(), jsonserializer.SerializerOptions{})
 		recognizersByGroup = map[string]recognizer.RecognizingDecoder{
-			// No new exceptions should be added. Once these groups begin using Protobuf
-			// for storage, the exception list should be removed.
+			// 不应新增例外；待这些 group 改用 Protobuf 存储后，应将它们从例外列表中移除。
 			"apiextensions.k8s.io":   jsonRecognizer,
 			"apiregistration.k8s.io": jsonRecognizer,
 		}

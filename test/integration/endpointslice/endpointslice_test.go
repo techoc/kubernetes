@@ -36,12 +36,10 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestEndpointsControllersLabelSemantics tests that the corresponding endpoints controller
-// creates an Endpoint or EndpointSlice with the service.kubernetes.io/headless label when
-// a headless service is created.
-// It also verifies that Service labels are propagated to the Endpoints and EndpointSlice.
+// TestEndpointsControllersLabelSemantics 验证创建 headless Service 时，对应的 endpoints controller
+// 会给 Endpoint / EndpointSlice 加上 service.kubernetes.io/headless 标签，并验证 Service 的 label 会传播过去。
 func TestEndpointsControllersLabelSemantics(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 测试环境没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -72,7 +70,7 @@ func TestEndpointsControllersLabelSemantics(t *testing.T) {
 		client,
 		1*time.Second)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	informers.Start(tCtx.Done())
 	go epsController.Run(tCtx, 1)
 	go epController.Run(tCtx, 1)
@@ -117,17 +115,17 @@ func TestEndpointsControllersLabelSemantics(t *testing.T) {
 		t.Fatalf("Error updating service: %v", err)
 	}
 
-	// Validate that the new labels are propagated.
+	// 验证新增的 label 已传播到 Endpoint 和 EndpointSlice。
 	validateLabelsOnEndpointAndEndpointSlice(t, tCtx, client, ns.Name, svc.Name,
 		[]string{corev1.IsHeadlessService, "new-label"}, []string{"app"})
 }
 
-// TestEndpointsHeadlessLabel tests how the service.kubernetes.io/headless
-// label is applied to Endpoints and EndpointSlices based on Service properties.
+// TestEndpointsHeadlessLabel 验证 service.kubernetes.io/headless 标签如何根据 Service 属性
+// 应用到 Endpoints 和 EndpointSlice 上。
 func TestEndpointsHeadlessLabel(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 测试环境没有运行 serviceaccount controller，需禁用 ServiceAccount admission plugin。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -157,7 +155,7 @@ func TestEndpointsHeadlessLabel(t *testing.T) {
 		client,
 		1*time.Second)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller。
 	informers.Start(tCtx.Done())
 	go epController.Run(tCtx, 1)
 	go epsController.Run(tCtx, 1)
@@ -231,12 +229,11 @@ func TestEndpointsHeadlessLabel(t *testing.T) {
 	}
 }
 
-// validateLabelsOnEndpointAndEndpointSlice is a helper function to check for the
-// presence of expected labels and absence of unexpected labels on an Endpoint
-// and its corresponding EndpointSlice.
+// validateLabelsOnEndpointAndEndpointSlice 检查 Endpoint 及其对应 EndpointSlice
+// 是否包含期望的 label，且不包含不应有的 label。
 func validateLabelsOnEndpointAndEndpointSlice(t *testing.T, tCtx context.Context, client clientset.Interface, nsName, svcName string, wantLabels, notWantLabels []string) {
 	t.Helper()
-	// Validate Endpoint
+	// 校验 Endpoint。
 	err := wait.PollUntilContextTimeout(tCtx, 1*time.Second, 1*time.Minute, true, func(context.Context) (bool, error) {
 		endpoint, err := client.CoreV1().Endpoints(nsName).Get(tCtx, svcName, metav1.GetOptions{})
 		if err != nil {
@@ -262,7 +259,7 @@ func validateLabelsOnEndpointAndEndpointSlice(t *testing.T, tCtx context.Context
 		t.Fatalf("Timed out waiting for Endpoint labels: %v", err)
 	}
 
-	// Validate EndpointSlice
+	// 校验 EndpointSlice。
 	err = wait.PollUntilContextTimeout(tCtx, 1*time.Second, 1*time.Minute, true, func(context.Context) (bool, error) {
 		lSelector := discovery.LabelServiceName + "=" + svcName
 		esList, err := client.DiscoveryV1().EndpointSlices(nsName).List(tCtx, metav1.ListOptions{LabelSelector: lSelector})

@@ -44,7 +44,7 @@ func Test_UpgradeService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a service and store it in etcd with missing fields representing an old version
+	// 构造缺少新字段的旧版本 Service，直接写入 etcd 以模拟升级场景。
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              serviceName,
@@ -72,7 +72,7 @@ func Test_UpgradeService(t *testing.T) {
 	}
 	t.Logf("Service stored in etcd %v", string(svcJSON))
 
-	// Try to update the service
+	// 尝试更新这个旧版本 Service。
 	_, err = kubeclient.CoreV1().Services(ns).Update(context.TODO(), svc, metav1.UpdateOptions{})
 	if err != nil {
 		t.Error(err)

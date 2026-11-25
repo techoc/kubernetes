@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Tests that the apiserver rejects the export param
+// TestExportRejection 验证 apiserver 拒绝 export 参数。
 func TestExportRejection(t *testing.T) {
 	ctx, clientSet, _, tearDownFn := setup(t)
 	defer tearDownFn()

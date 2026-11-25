@@ -37,7 +37,7 @@ import (
 )
 
 func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
-	// Enable Feature Gates Globally for the test run
+	// 为本次测试全局启用相关 feature gate
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DynamicResourceAllocation, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAResourceClaimDeviceStatus, true)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAResourceClaimGranularStatusAuthorization, true)
@@ -60,7 +60,7 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 		{
 			name:        "fails to update status.devices without driver permission",
 			preAllocate: true,
-			setupRBAC:   func(t *testing.T, adminClient clientset.Interface) {}, // No extra RBAC beyond front-door
+			setupRBAC:   func(t *testing.T, adminClient clientset.Interface) {}, // 除前置权限外不额外授予 RBAC
 			updateClaim: func(c *resourceapi.ResourceClaim) {
 				c.Status.Devices = []resourceapi.AllocatedDeviceStatus{
 					{Driver: "test-driver", Pool: "pool1", Device: "dev1"},
@@ -128,16 +128,16 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 			name:        "fails when updating both allocation and devices but missing binding permission",
 			preAllocate: true,
 			setupRBAC: func(t *testing.T, adminClient clientset.Interface) {
-				// Has driver permission, but LACKS binding permission
+				// 仅有 driver 权限，缺少 binding 权限
 				createRoleAndBinding(t, adminClient, ns, saName, "driver-only",
 					[]string{"resourceclaims/driver"}, []string{"arbitrary-node:update"})
 			},
 			updateClaim: func(c *resourceapi.ResourceClaim) {
-				// Re-allocate to a different node (requires binding)
+				// 重新分配到另一个节点（需要 binding 权限）
 				if c.Status.Allocation != nil && c.Status.Allocation.NodeSelector != nil {
 					c.Status.Allocation.NodeSelector.NodeSelectorTerms[0].MatchFields[0].Values = []string{"worker-2"}
 				}
-				// Change devices (requires driver)
+				// 变更 device（需要 driver 权限）
 				c.Status.Devices = []resourceapi.AllocatedDeviceStatus{
 					{Driver: "test-driver", Pool: "pool1", Device: "dev2"},
 				}
@@ -160,7 +160,7 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 
 			adminClient := clientset.NewForConfigOrDie(server.ClientConfig)
 
-			// Setup Namespace and Service Account
+			// 创建 Namespace 和 Service Account
 			_, err := adminClient.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -171,7 +171,7 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Create the base ResourceClaim
+			// 创建基础 ResourceClaim
 			claim := &resourceapi.ResourceClaim{
 				ObjectMeta: metav1.ObjectMeta{Name: claimName},
 				Spec: resourceapi.ResourceClaimSpec{
@@ -191,7 +191,7 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Admin Pre-allocation (if required by test)
+			// 以 admin 身份预分配（测试用例需要时）
 			if tc.preAllocate {
 				c, err := adminClient.ResourceV1().ResourceClaims(ns).Get(context.TODO(), claimName, metav1.GetOptions{})
 				if err != nil {
@@ -215,12 +215,12 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 				}
 			}
 
-			// Setup RBAC
+			// 配置 RBAC
 			createRoleAndBinding(t, adminClient, ns, saName, "base-status-updater", []string{"resourceclaims/status"}, []string{"update", "patch"})
 			createRoleAndBinding(t, adminClient, ns, saName, "base-claim-reader", []string{"resourceclaims"}, []string{"get"})
 			tc.setupRBAC(t, adminClient)
 
-			// Build the Impersonated Client
+			// 构造 impersonated client
 			saConfig := rest.CopyConfig(server.ClientConfig)
 			saConfig.Impersonate = rest.ImpersonationConfig{
 				UserName: fmt.Sprintf("system:serviceaccount:%s:%s", ns, saName),
@@ -228,7 +228,7 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 			}
 			saClient := clientset.NewForConfigOrDie(saConfig)
 
-			// Execute Test Update
+			// 执行测试更新
 			cToUpdate, err := adminClient.ResourceV1().ResourceClaims(ns).Get(context.TODO(), claimName, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("Failed to fetch claim before test execution: %v", err)
@@ -236,13 +236,13 @@ func TestResourceClaimGranularStatusAuthorization(t *testing.T) {
 			tc.updateClaim(cToUpdate)
 			_, testErr := saClient.ResourceV1().ResourceClaims(ns).UpdateStatus(context.TODO(), cToUpdate, metav1.UpdateOptions{})
 
-			// 7. Verify Results
+			// 校验结果
 			tc.verifyErr(t, testErr)
 		})
 	}
 }
 
-// createRoleAndBinding is a quick helper to assign namespaced RBAC rules
+// createRoleAndBinding 是用于分配 namespaced RBAC 规则的辅助函数
 func createRoleAndBinding(t *testing.T, client clientset.Interface, ns, saName, roleName string, resources, verbs []string) {
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: roleName},
@@ -268,7 +268,7 @@ func createRoleAndBinding(t *testing.T, client clientset.Interface, ns, saName, 
 	}
 }
 
-// createClusterRoleAndBinding is a helper for cluster-scoped synthetic checks (like binding)
+// createClusterRoleAndBinding 用于 cluster 级权限检查（如 binding 权限）的辅助函数
 func createClusterRoleAndBinding(t *testing.T, client clientset.Interface, ns, saName, roleName string, resources, verbs []string) {
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: roleName},

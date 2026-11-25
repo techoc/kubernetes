@@ -39,10 +39,9 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// excludedResourceCreators returns, for every virtual resource that admission webhooks exclude, a
-// function that issues a request for that resource. The keys must match exclusion.Excluded() exactly
-// (asserted by the test) so the set stays in parity with the ValidatingAdmissionPolicy /
-// MutatingAdmissionPolicy exclusion list.
+// excludedResourceCreators 为每个被 admission webhook 排除的虚拟资源提供一个发起请求的函数。
+// key 必须与 exclusion.Excluded() 完全一致（由测试断言），以与 ValidatingAdmissionPolicy /
+// MutatingAdmissionPolicy 的排除列表保持同步。
 func excludedResourceCreators(ctx context.Context, client kubernetes.Interface) map[schema.GroupResource]func() error {
 	resourceAttributes := &authorizationv1.ResourceAttributes{Namespace: "default", Verb: "get", Resource: "pods"}
 	return map[schema.GroupResource]func() error{
@@ -73,11 +72,10 @@ func excludedResourceCreators(ctx context.Context, client kubernetes.Interface) 
 	}
 }
 
-// TestWebhookVirtualResourceExclusion verifies that, when ExcludeAdmissionWebhookVirtualResources is
-// enabled, admission webhooks are not dispatched for the excluded virtual resources (so the requests
-// succeed despite a broken webhook), while a non-excluded resource is still intercepted. With the
-// gate disabled, the webhook intercepts everything. It also asserts the excluded set is exactly
-// exclusion.Excluded() (parity with the VAP/MAP exclusion list).
+// TestWebhookVirtualResourceExclusion 验证启用 ExcludeAdmissionWebhookVirtualResources 后，
+// 被排除的虚拟资源不会触发 admission webhook（因此即使 webhook 故障请求也能成功），
+// 未被排除的资源仍会被拦截；关闭该 gate 时 webhook 拦截所有资源。
+// 同时断言排除集合与 exclusion.Excluded() 完全一致（与 VAP/MAP 排除列表同步）。
 func TestWebhookVirtualResourceExclusion(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		t.Run(fmt.Sprintf("gate=%t", enabled), func(t *testing.T) {
@@ -93,16 +91,15 @@ func TestWebhookVirtualResourceExclusion(t *testing.T) {
 
 			ctx := context.Background()
 
-			// Register a broken webhook (failurePolicy=Fail, unreachable service) that matches all
-			// resources, so anything it is dispatched for fails.
+			// 注册一个匹配所有资源的故障 webhook（failurePolicy=Fail，service 不可达），
+			// 凡是被分发给它的请求都会失败。
 			webhookName := fmt.Sprintf("integration-exclusion-test-webhook-%t", enabled)
 			if _, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Create(ctx, brokenWebhookConfig(webhookName), metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to register broken webhook: %v", err)
 			}
 
-			// There is no API to learn when a webhook configuration becomes effective, so poll until
-			// a non-excluded resource (Deployment) starts failing. This confirms the webhook is being
-			// honored regardless of the gate (Deployments are never excluded).
+			// 没有 API 可查询 webhook 配置何时生效，因此轮询直到未被排除的资源（Deployment）
+			// 开始失败，以确认无论 gate 状态如何 webhook 都已生效（Deployment 从不排除）。
 			attempt := 0
 			if err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 				attempt++
@@ -114,8 +111,8 @@ func TestWebhookVirtualResourceExclusion(t *testing.T) {
 
 			creators := excludedResourceCreators(ctx, client)
 
-			// Parity guard: the resources exercised here must be exactly exclusion.Excluded(), which is
-			// the same set ValidatingAdmissionPolicy / MutatingAdmissionPolicy exclude.
+			// 一致性检查：这里覆盖的资源必须恰好是 exclusion.Excluded()，
+			// 即 ValidatingAdmissionPolicy / MutatingAdmissionPolicy 排除的集合。
 			if got, want := sets.KeySet(creators), sets.New(exclusion.Excluded()...); !got.Equal(want) {
 				t.Fatalf("excluded resource coverage does not match exclusion.Excluded(); update excludedResourceCreators (missing=%v extra=%v)",
 					want.Difference(got).UnsortedList(), got.Difference(want).UnsortedList())
@@ -134,8 +131,8 @@ func TestWebhookVirtualResourceExclusion(t *testing.T) {
 	}
 }
 
-// TestWebhookVirtualResourceExclusionWarnings verifies a deprecation warning is returned when a
-// webhook configuration explicitly names an excluded virtual resource in its rules.
+// TestWebhookVirtualResourceExclusionWarnings 验证 webhook 配置在 rules 中显式指定被排除的
+// 虚拟资源时会返回弃用警告。
 func TestWebhookVirtualResourceExclusionWarnings(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ExcludeAdmissionWebhookVirtualResources, true)
 
@@ -161,7 +158,7 @@ func TestWebhookVirtualResourceExclusionWarnings(t *testing.T) {
 				Rule: admissionregistrationv1.Rule{
 					APIGroups:   []string{"authentication.k8s.io"},
 					APIVersions: []string{"v1"},
-					Resources:   []string{"tokenreviews"}, // explicitly named excluded resource
+					Resources:   []string{"tokenreviews"}, // 显式指定的被排除资源
 				},
 			}},
 			ClientConfig: admissionregistrationv1.WebhookClientConfig{

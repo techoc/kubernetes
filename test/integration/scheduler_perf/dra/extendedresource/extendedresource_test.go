@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestSchedulerPerf(t *testing.T) {
-	// Verify correct behavior with all available allocators for this feature.
+	// 遍历该特性所有可用的 allocator，逐一验证行为正确。
 	for _, allocatorName := range []string{"experimental"} {
 		t.Run(allocatorName, func(t *testing.T) {
 			structured.EnableAllocators(allocatorName)
@@ -48,8 +48,7 @@ func TestSchedulerPerf(t *testing.T) {
 }
 
 func BenchmarkPerfScheduling(b *testing.B) {
-	// Restrict benchmarking to the allocator for this feature
-	// to ensure that we do not accidentally pick something else.
+	// 将基准测试限定为该特性的 allocator，避免误用其他实现。
 	structured.EnableAllocators("experimental")
 	defer structured.EnableAllocators()
 

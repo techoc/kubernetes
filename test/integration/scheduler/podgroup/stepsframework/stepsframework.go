@@ -69,12 +69,10 @@ type UpdatePod struct {
 	ModifyFn func(*v1.Pod)
 }
 
-// Step is allowing us to create a test in a more readable way.
-// We can create test as a flow of steps, each step is an operation that will be performed on the cluster.
-// Every Step should have a Name, that is used to identify the step and one operation.
-// Step framework will perform only first operation it will enounter in a given step.
+// Step 让测试更易读：将测试写成一串步骤，每步是对集群的一次操作。
+// 每个 Step 都应有 Name 用于标识，框架只执行该步骤中遇到的第一个操作。
 //
-// For example, this will only create podGroup but will create workload:
+// 例如，下面只会创建 PodGroup，而不会创建 Workload：
 //
 //	Step {
 //		Name: "Create and wait for workload to be ready",
@@ -86,9 +84,9 @@ type UpdatePod struct {
 //		CreatePodGroup: gangPodGroup,
 //	}
 //
-// When all steps are defined, we can run the test by iterating over the steps using the RunSteps function.
+// 定义好所有步骤后，可用 RunSteps 遍历执行这些步骤来运行测试。
 //
-// For example:
+// 例如：
 //
 // ns := testCtx.NS.Name
 //
@@ -129,58 +127,57 @@ type UpdatePod struct {
 //
 // runSteps(tCtx, ns, steps)
 type Step struct {
-	// Name of the step, used to identify the step. Should be in every step.
-	// Used to describe the step in the test output.
+	// 步骤名，用于标识步骤，每个 Step 都应设置。
+	// 用于在测试输出中描述该步骤。
 	Name string
-	// CreateNodes is use to create nodes in the cluster.
+	// 在集群中创建节点。
 	CreateNodes []*v1.Node
-	// CreatePodGroup is use to create a pod group and wait for it to be ready.
+	// 创建 PodGroup 并等待其就绪。
 	CreatePodGroup *schedulingapi.PodGroup
-	// UpdatePodGroup is used to update an existing pod group and wait for it to propagate.
+	// 更新已有 PodGroup 并等待变更传播完成。
 	UpdatePodGroup *schedulingapi.PodGroup
-	// DeletePodGroup is used to delete a pod group by name and wait for it to propagate.
+	// 按名称删除 PodGroup 并等待删除生效。
 	DeletePodGroup string
-	// CreateCompositePodGroup is used to create a composite pod group and wait for it to be ready.
+	// 创建 CompositePodGroup 并等待其就绪。
 	CreateCompositePodGroup *schedulingv1alpha3.CompositePodGroup
-	// UpdateCompositePodGroup is used to update an existing composite pod group and wait for it to propagate.
+	// 更新已有 CompositePodGroup 并等待变更传播完成。
 	UpdateCompositePodGroup *schedulingv1alpha3.CompositePodGroup
-	// CreatePods is use to create pods in the cluster.
+	// 在集群中创建 Pod。
 	CreatePods []*v1.Pod
-	// CreatePodsInOrder is use to create pods in the cluster and have them enqueued by the scheduler in the specified order.
+	// 创建 Pod 并确保它们按指定顺序进入调度队列。
 	CreatePodsInOrder []*v1.Pod
-	// CreateWorkloads is use to create workloads in the cluster.
+	// 在集群中创建 Workload。
 	CreateWorkloads []*schedulingapi.Workload
-	// DeletePods is use to delete pods from the cluster.
+	// 从集群中删除 Pod。
 	DeletePods []string
-	// UpdatePod is used to mutate any field of the pod.
+	// 修改 Pod 的任意字段。
 	UpdatePod *UpdatePod
-	// WaitForPodsInActiveQ is used to check if the pods are present in ActiveQ.
+	// 等待 Pod 出现在 ActiveQ 中。
 	WaitForPodsInActiveQ []string
-	// WaitForPodsInUnschedulableEntities is use to wait for pods to be in unschedulableEntities.
+	// 等待 Pod 进入 unschedulableEntities。
 	WaitForPodsInUnschedulableEntities []string
-	// WaitForPodsInIncompletePodGroupPods is use to wait for pods to be in incompletePodGroupPods.
+	// 等待 Pod 进入 incompletePodGroupPods。
 	WaitForPodsInIncompletePodGroupPods []string
-	// WaitForPodsUnschedulable is use to wait for pods to be unschedulable.
+	// 等待 Pod 变为 unschedulable。
 	WaitForPodsUnschedulable []string
-	// WaitForPodsSchedulingError is use to wait for pods to get scheduling error status.
+	// 等待 Pod 出现调度错误状态。
 	WaitForPodsSchedulingError []string
-	// WaitForPodsScheduled is use to wait for pods to be scheduled.
+	// 等待 Pod 完成调度。
 	WaitForPodsScheduled []string
-	// WaitForPodsRemoved is use to wait for pods to be removed.
+	// 等待 Pod 被移除。
 	WaitForPodsRemoved []string
-	// WaitForAnyPodsScheduled is use to wait for any pod in the pod group to be scheduled.
+	// 等待 PodGroup 中任意 Pod 完成调度。
 	WaitForAnyPodsScheduled *WaitForAnyPodsScheduled
-	// WaitForPodGroupCondition is use to wait for a pod group to have a certain condition.
+	// 等待 PodGroup 出现指定 condition。
 	WaitForPodGroupCondition *PodGroupConditionCheck
-	// VerifyAssignments is use to verify that the pods are assigned to the correct nodes.
+	// 验证 Pod 被分配到正确的节点。
 	VerifyAssignments *VerifyAssignments
-	// VerifyAssignedInOneDomain is use to verify that the pods are assigned to nodes in the same domain.
+	// 验证 Pod 被分配到同一拓扑域内的节点。
 	VerifyAssignedInOneDomain *VerifyAssignedInOneDomain
-	// VerifyPodSchedulingAttempts is used to check the scheduling attempts of a pods.
+	// 检查 Pod 的调度尝试次数。
 	VerifyPodSchedulingAttempts *VerifyPodsSchedulingAttempts
-	// RunScheduleOne is use to run the scheduling once.
-	// This operation should be used only when the test is not deploying the scheduler's goroutine
-	// (testCtx.Scheduler.Run).
+	// 手动执行一次调度。
+	// 仅在测试未启动调度 goroutine（testCtx.Scheduler.Run）时使用。
 	RunScheduleOne bool
 }
 
@@ -269,9 +266,8 @@ func createPods(testCtx *testutils.TestContext, ns string, pods []*v1.Pod, prese
 				if ok {
 					return true, nil
 				}
-				// The pod may have gotten queued and had a scheduling attempt between
-				// polls. A PodScheduled condition, either true or false, proves the
-				// scheduler has observed the pod.
+				// 两次轮询之间 Pod 可能已入队并完成一次调度尝试。
+				// PodScheduled condition（无论取值）都能证明调度器已观察到该 Pod。
 				return podSchedulingAttemptedFn(ctx)
 			})
 			if err != nil {
@@ -662,9 +658,8 @@ func runScheduleOne(testCtx *testutils.TestContext) {
 	testCtx.Scheduler.ScheduleOne(testCtx.Ctx)
 }
 
-// RunSteps executes steps in the given order. It executes only first encountered operation in step.
-// If there is no operation in the step, it will return an error.
-// If there is an error in any step, it will stop and return the error.
+// RunSteps 按顺序执行各步骤，每步只执行遇到的第一个操作。
+// 步骤中没有操作会返回错误；任一步骤出错时立即停止并返回该错误。
 func RunSteps(testCtx *testutils.TestContext, t *testing.T, ns string, steps []Step) error {
 	for i, step := range steps {
 		if step.Name == "" {

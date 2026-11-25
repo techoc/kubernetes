@@ -37,13 +37,12 @@ func testExtendedResource(tCtx ktesting.TContext, enabled, explicit bool) {
 
 	namespace := createTestNamespace(tCtx, nil)
 
-	// Create a DeviceClass with or without ExtendedResourceName based on whether we're testing explicit or implicit extended resources.
+	// 根据测试显式还是隐式 extended resource，决定是否为 DeviceClass 设置 ExtendedResourceName。
 	var resourceName string
 	var spec *resourceapi.DeviceClassSpec
 	if explicit {
 		resourceName = "example.com/" + namespace
-		// Set extended resource name in the DeviceClass spec only for explicit resources.
-		// It's not required for implicit extended resources.
+		// 只有显式资源需要在 DeviceClass spec 中设置名称；隐式资源由系统推导，无需设置。
 		spec = &resourceapi.DeviceClassSpec{
 			ExtendedResourceName: &resourceName,
 		}
@@ -56,7 +55,7 @@ func testExtendedResource(tCtx ktesting.TContext, enabled, explicit bool) {
 			require.Empty(tCtx, class.Spec.ExtendedResourceName, "should strip ExtendedResourceName")
 		}
 	} else {
-		// For implicit extended resources, derive the resource name from the class.
+		// 隐式 extended resource 的名称由 DeviceClass 推导。
 		resourceName = resourceapi.ResourceDeviceClassPrefix + class.Name
 	}
 
@@ -70,7 +69,7 @@ func testExtendedResource(tCtx ktesting.TContext, enabled, explicit bool) {
 
 	var schedulingAttempted gtypes.GomegaMatcher
 	if enabled {
-		// Scheduled using device1 in the slice above.
+		// 应利用上面 slice 中的 device1 完成调度。
 		schedulingAttempted = gomega.HaveField("Status.Conditions", gomega.ContainElement(
 			gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
 				"Type":   gomega.Equal(v1.PodScheduled),

@@ -39,7 +39,7 @@ import (
 )
 
 func TestEndpointSliceMirroring(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为测试中没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -79,7 +79,7 @@ func TestEndpointSliceMirroring(t *testing.T) {
 		client,
 		1*time.Second)
 
-	// Start informer and controllers
+	// 启动 informer 与 controller
 	informers.Start(tCtx.Done())
 	go epController.Run(tCtx, 5)
 	go epsController.Run(tCtx, 5)
@@ -312,7 +312,7 @@ func TestEndpointSliceMirroring(t *testing.T) {
 }
 
 func TestEndpointSliceMirroringUpdates(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为测试中没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -334,7 +334,7 @@ func TestEndpointSliceMirroringUpdates(t *testing.T) {
 		client,
 		1*time.Second)
 
-	// Start informer and controllers
+	// 启动 informer 与 controller
 	informers.Start(tCtx.Done())
 	go epsmController.Run(tCtx, 1)
 
@@ -413,14 +413,14 @@ func TestEndpointSliceMirroringUpdates(t *testing.T) {
 				t.Fatalf("Error creating endpoints: %v", err)
 			}
 
-			// update endpoint
+			// 更新 endpoint
 			tc.tweakEndpoint(customEndpoints)
 			_, err = client.CoreV1().Endpoints(ns.Name).Update(tCtx, customEndpoints, metav1.UpdateOptions{})
 			if err != nil {
 				t.Fatalf("Error updating endpoints: %v", err)
 			}
 
-			// verify the endpoint updates were mirrored
+			// 验证 endpoint 的更新已被镜像
 			err = wait.PollImmediate(1*time.Second, wait.ForeverTestTimeout, func() (bool, error) {
 				lSelector := discovery.LabelServiceName + "=" + service.Name
 				esList, err := client.DiscoveryV1().EndpointSlices(ns.Name).List(tCtx, metav1.ListOptions{LabelSelector: lSelector})
@@ -439,7 +439,7 @@ func TestEndpointSliceMirroringUpdates(t *testing.T) {
 						return false, fmt.Errorf("Expected EndpointSlice to be managed by endpointslicemirroring-controller.k8s.io, got %s", endpointSlice.Labels[discovery.LabelManagedBy])
 					}
 
-					// compare addresses
+					// 比较地址
 					epAddresses := []string{}
 					for _, address := range customEndpoints.Subsets[0].Addresses {
 						epAddresses = append(epAddresses, address.IP)
@@ -458,13 +458,13 @@ func TestEndpointSliceMirroringUpdates(t *testing.T) {
 						return false, nil
 					}
 
-					// check labels were mirrored
+					// 检查 label 已被镜像
 					if !isSubset(customEndpoints.Labels, endpointSlice.Labels) {
 						t.Logf("Expected EndpointSlice to mirror labels, expected %v to be in received %v", customEndpoints.Labels, endpointSlice.Labels)
 						return false, nil
 					}
 
-					// check annotations but endpoints.kubernetes.io/last-change-trigger-time were mirrored
+					// 检查除 endpoints.kubernetes.io/last-change-trigger-time 外的 annotation 已被镜像
 					annotations := map[string]string{}
 					for k, v := range customEndpoints.Annotations {
 						if k == corev1.EndpointsLastChangeTriggerTime {
@@ -487,7 +487,7 @@ func TestEndpointSliceMirroringUpdates(t *testing.T) {
 }
 
 func TestEndpointSliceMirroringSelectorTransition(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为测试中没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -509,7 +509,7 @@ func TestEndpointSliceMirroringSelectorTransition(t *testing.T) {
 		client,
 		1*time.Second)
 
-	// Start informer and controllers
+	// 启动 informer 与 controller
 	informers.Start(tCtx.Done())
 	go epsmController.Run(tCtx, 1)
 
@@ -588,7 +588,7 @@ func TestEndpointSliceMirroringSelectorTransition(t *testing.T) {
 				t.Fatalf("Error creating endpoints: %v", err)
 			}
 
-			// verify the expected number of mirrored slices exist
+			// 验证镜像 slice 数量符合预期
 			err = waitForMirroredSlices(t, client, ns.Name, service.Name, tc.startingMirroredSlices)
 			if err != nil {
 				t.Fatalf("Timed out waiting for initial mirrored slices to match expectations: %v", err)
@@ -600,7 +600,7 @@ func TestEndpointSliceMirroringSelectorTransition(t *testing.T) {
 				t.Fatalf("Error updating service: %v", err)
 			}
 
-			// verify the expected number of mirrored slices exist
+			// 验证镜像 slice 数量符合预期
 			err = waitForMirroredSlices(t, client, ns.Name, service.Name, tc.endingMirroredSlices)
 			if err != nil {
 				t.Fatalf("Timed out waiting for final mirrored slices to match expectations: %v", err)
@@ -629,7 +629,7 @@ func waitForMirroredSlices(t *testing.T, client *clientset.Clientset, nsName, sv
 	})
 }
 
-// isSubset check if all the elements in a exist in b
+// isSubset 检查 a 中的所有元素是否都存在于 b 中
 func isSubset(a, b map[string]string) bool {
 	if len(a) > len(b) {
 		return false

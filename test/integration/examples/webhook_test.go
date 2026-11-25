@@ -46,10 +46,10 @@ func TestWebhookLoopback(t *testing.T) {
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Avoid resolvable kubernetes service
+			// 关闭 endpoint reconciler，避免 kubernetes service 被解析。
 			config.Extra.EndpointReconcilerType = reconcilers.NoneEndpointReconcilerType
 
-			// Hook into audit to watch requests
+			// 通过 audit 观察请求。
 			config.ControlPlane.Generic.AuditBackend = auditSinkFunc(func(events ...*auditinternal.Event) {})
 			config.ControlPlane.Generic.AuditPolicyRuleEvaluator = auditPolicyRuleEvaluator(func(attrs authorizer.Attributes) audit.RequestAuditConfig {
 				if attrs.GetPath() == webhookPath {

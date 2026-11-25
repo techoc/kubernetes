@@ -68,10 +68,8 @@ type testClients struct {
 	scale           scale.ScalesGetter
 }
 
-// createClients creates clients connecting to API server, custom metrics API,...
-//
-// Creates an external metrics server to connect to, and returns a pointer to the
-// metric value it's serving.
+// createClients 创建连接 apiserver 和自定义 metrics API 的客户端，
+// 同时启动一个 fake external metrics server，并返回其提供指标值的指针。
 func createClients(t *testing.T, config *restclient.Config) (testClients, *atomic.Value) {
 	apiServer := clientset.NewForConfigOrDie(config)
 	metrics := metricsclientset.NewForConfigOrDie(config)
@@ -103,8 +101,8 @@ func createTestNamespace(t *testing.T, c *clientset.Clientset) *corev1.Namespace
 	return ns
 }
 
-// setupFakeExternalMetrics returns a client to a fake metric server. The
-// value advertised by the server can be updated via the second return value.
+// setupFakeExternalMetrics 返回连接 fake metric server 的客户端，
+// 可通过第二个返回值更新该 server 发布的指标值。
 func setupFakeExternalMetrics() (*emfake.FakeExternalMetricsClient, *atomic.Value) {
 	var metricValue atomic.Value
 
@@ -138,9 +136,8 @@ func withHPABehavior(behavior *autoscalingv2.HorizontalPodAutoscalerBehavior) cr
 	}
 }
 
-// newHPA builds an HPA targeting the given deployment with a single metric.
-// It applies opts but does not create the object, so callers can also use it to
-// build HPAs whose creation is expected to be rejected.
+// newHPA 为给定 deployment 构造一个单指标 HPA。
+// 它只应用 opts 而不创建对象，因此也可用于构造预期会被拒绝创建的 HPA。
 func newHPA(deployment *appsv1.Deployment, metricSpec autoscalingv2.MetricSpec, opts ...createHPAOption) *autoscalingv2.HorizontalPodAutoscaler {
 	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
@@ -197,10 +194,8 @@ func startHPAControllerAndWaitForCaches(t *testing.T, clients testClients) {
 	informerSet.Start(ctx.Done())
 	go controller.Run(ctx, 1)
 
-	// Since this method starts the controller in a separate goroutine
-	// and the tests don't check /readyz there is no way
-	// the tests can tell it is safe to call the server and requests won't be rejected
-	// thus we wait until caches have synced
+	// 控制器在独立 goroutine 中启动，而测试不检查 /readyz，
+	// 无法判断是否已就绪、请求不会被拒绝，因此这里等待缓存同步完成。
 	informerSet.WaitForCacheSync(ctx.Done())
 }
 
@@ -268,12 +263,11 @@ func noMoreThanReplicas(maxReplicas int32) deploymentCondition {
 	}
 }
 
-// waitForDeploymentCondition waits until a deployment matches a given condition cond.
+// waitForDeploymentCondition 等待 deployment 满足给定条件 cond。
 func waitForDeploymentCondition(ctx context.Context, cs *clientset.Clientset, d *appsv1.Deployment,
 	cond deploymentCondition) error {
 
-	// Updates shouldn't take more than 1 HPA resync period. Bump to a few more
-	// to cover corner cases (e.g. slow API server).
+	// 更新通常不超过一个 HPA resync 周期，放宽到多个周期以覆盖 API server 较慢等边缘情况。
 	timeout := 10 * hpaControllerResyncPeriod
 
 	var condErr error

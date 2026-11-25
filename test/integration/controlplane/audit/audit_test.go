@@ -227,7 +227,7 @@ rules:
 	}
 )
 
-// TestAudit ensures that both v1beta1 and v1 version audit api could work.
+// TestAudit 验证 v1beta1 和 v1 版本的审计 API 均可工作
 func TestAudit(t *testing.T) {
 	for version := range versions {
 		runTestWithVersion(t, version)
@@ -243,7 +243,7 @@ func runTestWithVersion(t *testing.T, version string) {
 		t.Fatalf("%v", err)
 	}
 
-	// prepare audit policy file
+	// 准备审计策略文件
 	auditPolicy := strings.Replace(auditPolicyPattern, "{version}", version, 1)
 	policyFile, err := os.CreateTemp("", "audit-policy.yaml")
 	if err != nil {
@@ -257,14 +257,14 @@ func runTestWithVersion(t *testing.T, version string) {
 		t.Fatalf("Failed to close audit policy file: %v", err)
 	}
 
-	// prepare audit log file
+	// 准备审计日志文件
 	logFile, err := os.CreateTemp("", "audit.log")
 	if err != nil {
 		t.Fatalf("Failed to create audit log file: %v", err)
 	}
 	defer utiltesting.CloseAndRemove(t, logFile)
 
-	// start api server
+	// 启动测试 API server，启用 blocking 审计日志便于断言
 	result := kubeapiservertesting.StartTestServerOrDie(t, nil,
 		[]string{
 			"--audit-policy-file", policyFile.Name(),
@@ -418,7 +418,7 @@ func runTestWithVersion(t *testing.T, version string) {
 		})
 	}
 
-	// cross-group subResources
+	// 跨 group 的 subresource 用例
 	for _, tc := range crossGroupTestCases {
 		t.Run(fmt.Sprintf("cross-group-%s.%s.%s", version, tc.auditLevel, tc.namespace), func(t *testing.T) {
 			testAuditCrossGroupSubResource(t, version, tc.expEvents, tc.namespace, kubeclient, logFile)
@@ -431,10 +431,10 @@ func testAudit(t *testing.T, version string, level auditinternal.Level, enableMu
 	createNamespace(t, kubeclient, namespace)
 
 	if err := wait.Poll(500*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
-		// perform configmap operations
+		// 触发一组 configmap 操作
 		configMapOperations(t, kubeclient, namespace)
 
-		// check for corresponding audit logs
+		// 检查审计日志是否包含预期事件
 		stream, err := os.Open(logFile.Name())
 		if err != nil {
 			return false, fmt.Errorf("unexpected error: %v", err)
@@ -472,7 +472,7 @@ func testAuditCrossGroupSubResource(t *testing.T, version string, expEvents []ut
 	}
 
 	if err := wait.Poll(500*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
-		// perform cross-group subresources operations
+		// 触发跨 group subresource 操作
 		if sa != nil {
 			tokenRequestOperations(t, kubeclient, sa.Namespace, sa.Name)
 		}
@@ -480,7 +480,7 @@ func testAuditCrossGroupSubResource(t *testing.T, version string, expEvents []ut
 			scaleOperations(t, kubeclient, deploy.Namespace, deploy.Name)
 		}
 
-		// check for corresponding audit logs
+		// 检查审计日志是否包含预期事件
 		stream, err := os.Open(logFile.Name())
 		if err != nil {
 			return false, fmt.Errorf("unexpected error: %v", err)
@@ -508,24 +508,24 @@ func getExpectedEvents(level auditinternal.Level, enableMutatingWebhook bool, na
 	var webhookMutationAnnotations, webhookPatchAnnotations map[string]string
 	var requestObject, responseObject bool
 	if level.GreaterOrEqual(auditinternal.LevelMetadata) {
-		// expect mutation existence annotation
+		// 期望存在记录 webhook 发生修改的 annotation
 		webhookMutationAnnotations = map[string]string{}
 		webhookMutationAnnotations[mutating.MutationAuditAnnotationPrefix+"round_0_index_0"] = fmt.Sprintf(`{"configuration":"%s","webhook":"%s","mutated":%t}`, testWebhookConfigurationName, testWebhookName, true)
 	}
 	if level.GreaterOrEqual(auditinternal.LevelRequest) {
-		// expect actual patch annotation
+		// 期望记录实际 patch 内容的 annotation
 		webhookPatchAnnotations = map[string]string{}
 		webhookPatchAnnotations[mutating.PatchAuditAnnotationPrefix+"round_0_index_0"] = strings.Replace(fmt.Sprintf(`{"configuration": "%s", "webhook": "%s", "patch": %s, "patchType": "JSONPatch"}`, testWebhookConfigurationName, testWebhookName, `[{"op":"add","path":"/data","value":{"test":"dummy"}}]`), " ", "", -1)
-		// expect request object in audit log
+		// 期望审计日志中包含请求对象
 		requestObject = true
 	}
 	if level.GreaterOrEqual(auditinternal.LevelRequestResponse) {
-		// expect response object in audit log
+		// 期望审计日志中包含响应对象
 		responseObject = true
 	}
 	return []utils.AuditEvent{
 		{
-			// expect CREATE audit event with webhook in effect
+			// 期望 webhook 生效时的 CREATE 审计事件
 			Level:                               level,
 			Stage:                               auditinternal.StageResponseComplete,
 			RequestURI:                          fmt.Sprintf("/api/v1/namespaces/%s/configmaps", namespace),
@@ -540,7 +540,7 @@ func getExpectedEvents(level auditinternal.Level, enableMutatingWebhook bool, na
 			AdmissionWebhookMutationAnnotations: webhookMutationAnnotations,
 			AdmissionWebhookPatchAnnotations:    webhookPatchAnnotations,
 		}, {
-			// expect UPDATE audit event with webhook in effect
+			// 期望 webhook 生效时的 UPDATE 审计事件
 			Level:                               level,
 			Stage:                               auditinternal.StageResponseComplete,
 			RequestURI:                          fmt.Sprintf("/api/v1/namespaces/%s/configmaps/audit-configmap", namespace),
@@ -558,11 +558,9 @@ func getExpectedEvents(level auditinternal.Level, enableMutatingWebhook bool, na
 	}
 }
 
-// configMapOperations is a set of known operations performed on the configmap type
-// which correspond to the expected events.
-// This is shared by the dynamic test
+// configMapOperations 执行一组与预期审计事件一一对应的 configmap 操作，供各动态用例共用
 func configMapOperations(t *testing.T, kubeclient clientset.Interface, namespace string) {
-	// create, get, watch, update, patch, list and delete configmap.
+	// 依次 create、get、watch、update、patch、list、delete configmap
 	configMap := &apiv1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "audit-configmap",
@@ -572,7 +570,7 @@ func configMapOperations(t *testing.T, kubeclient clientset.Interface, namespace
 			"map-key": "map-value",
 		},
 	}
-	// add admission label to config maps that are to be sent to webhook
+	// 给需要发往 webhook 的 configmap 打上 admission 标签
 	if namespace != nonAdmissionWebhookNamespace {
 		configMap.Labels = map[string]string{
 			"admission": "true",
@@ -588,9 +586,8 @@ func configMapOperations(t *testing.T, kubeclient clientset.Interface, namespace
 	configMapChan, err := kubeclient.CoreV1().ConfigMaps(namespace).Watch(context.TODO(), watchOptions)
 	expectNoError(t, err, "failed to create watch for config maps")
 	for range configMapChan.ResultChan() {
-		// Block until watchOptions.TimeoutSeconds expires.
-		// If the test finishes before watchOptions.TimeoutSeconds expires, the watch audit
-		// event at stage ResponseComplete will not be generated.
+		// 阻塞到 watchOptions.TimeoutSeconds 到期；否则 ResponseComplete 阶段的
+		// watch 审计事件不会产生
 	}
 
 	_, err = kubeclient.CoreV1().ConfigMaps(namespace).Update(context.TODO(), configMap, metav1.UpdateOptions{})
@@ -614,7 +611,7 @@ func tokenRequestOperations(t *testing.T, kubeClient clientset.Interface, namesp
 			},
 		}
 	)
-	// create tokenRequest
+	// 创建 tokenRequest 以触发跨 group subresource 审计
 	_, err := kubeClient.CoreV1().ServiceAccounts(namespace).CreateToken(context.TODO(), name, treq, metav1.CreateOptions{})
 	expectNoError(t, err, "failed to create audit-tokenRequest")
 }
@@ -632,7 +629,7 @@ func scaleOperations(t *testing.T, kubeClient clientset.Interface, namespace, na
 		}
 	)
 
-	// update scale
+	// 更新 scale subresource 以触发跨 group 审计
 	_, err := kubeClient.AppsV1().Deployments(namespace).UpdateScale(context.TODO(), name, scale, metav1.UpdateOptions{})
 	expectNoError(t, err, fmt.Sprintf("failed to update scale %v", scale))
 }
@@ -677,7 +674,7 @@ func admitFunc(review *v1beta1.AdmissionReview) error {
 func createMutationWebhook(client clientset.Interface, endpoint string) error {
 	fail := admissionregistrationv1.Fail
 	noSideEffects := admissionregistrationv1.SideEffectClassNone
-	// Attaching Mutation webhook to API server
+	// 向 API server 注册 mutating webhook
 	_, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Create(context.TODO(), &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: testWebhookConfigurationName},
 		Webhooks: []admissionregistrationv1.MutatingWebhook{{
@@ -870,7 +867,7 @@ data:
 		Get()
 	expectNoError(t, err, "failed to patch configmap with YAML")
 
-	// Send a malformed CBOR patch and expect early rejection with BadRequest
+	// 发送畸形 CBOR patch，期望被尽早拒绝并返回 BadRequest
 	_, err = kubeclient.CoreV1().RESTClient().Patch(types.ApplyCBORPatchType).
 		Namespace(namespace).
 		Resource("configmaps").
@@ -886,7 +883,7 @@ data:
 		t.Errorf("expected BadRequest error for malformed CBOR patch, got: %v", err)
 	}
 
-	// Send a malformed YAML patch and expect early rejection with BadRequest
+	// 发送畸形 YAML patch，期望被尽早拒绝并返回 BadRequest
 	_, err = kubeclient.CoreV1().RESTClient().Patch(types.ApplyYAMLPatchType).
 		Namespace(namespace).
 		Resource("configmaps").
@@ -902,7 +899,7 @@ data:
 		t.Errorf("expected BadRequest error for malformed YAML patch, got: %v", err)
 	}
 
-	// Send a malformed JSON patch and expect early rejection with BadRequest
+	// 发送畸形 JSON patch，期望被尽早拒绝并返回 BadRequest
 	_, err = kubeclient.CoreV1().RESTClient().Patch(types.JSONPatchType).
 		Namespace(namespace).
 		Resource("configmaps").
@@ -917,7 +914,7 @@ data:
 		t.Errorf("expected BadRequest error for malformed JSON patch, got: %v", err)
 	}
 
-	// Send a malformed Merge patch and expect early rejection with BadRequest
+	// 发送畸形 Merge patch，期望被尽早拒绝并返回 BadRequest
 	_, err = kubeclient.CoreV1().RESTClient().Patch(types.MergePatchType).
 		Namespace(namespace).
 		Resource("configmaps").
@@ -932,7 +929,7 @@ data:
 		t.Errorf("expected BadRequest error for malformed Merge patch, got: %v", err)
 	}
 
-	// Send a malformed Strategic Merge patch and expect early rejection with BadRequest
+	// 发送畸形 Strategic Merge patch，期望被尽早拒绝并返回 BadRequest
 	_, err = kubeclient.CoreV1().RESTClient().Patch(types.StrategicMergePatchType).
 		Namespace(namespace).
 		Resource("configmaps").
@@ -947,7 +944,7 @@ data:
 		t.Errorf("expected BadRequest error for malformed Strategic Merge patch, got: %v", err)
 	}
 
-	// Stop the apiserver to flush audit logs
+	// 停掉 apiserver 以刷出审计日志（blocking 模式下事件落盘有延迟）
 	tearDown()
 
 	f, err := os.Open(logFile.Name())

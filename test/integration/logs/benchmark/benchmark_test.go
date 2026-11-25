@@ -41,9 +41,8 @@ import (
 func BenchmarkEncoding(b *testing.B) {
 	seen := map[string]bool{}
 
-	// Each "data/(v[0-9]/)?*.log" file is expected to contain JSON log
-	// messages. We generate one sub-benchmark for each file where logging
-	// is tested with the log level from the directory.
+	// 每个 "data/(v[0-9]/)?*.log" 文件都应包含 JSON 日志消息。
+	// 为每个文件生成一个子 benchmark，使用目录对应的日志级别进行测试。
 	if err := filepath.Walk("data", func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -55,17 +54,15 @@ func BenchmarkEncoding(b *testing.B) {
 		if err != nil {
 			return err
 		}
-		// Only print unique file statistics. They get shown for the
-		// first file where new statistics are encountered. The
-		// assumption here is that the there are no files with
-		// different content and exactly the same statistics.
+		// 只打印不重复的统计信息，在首次出现该统计的文件中展示。
+		// 这里假设不存在内容不同却统计完全一致的文件。
 		statsStr := stats.String()
 		if !seen[statsStr] {
 			b.Log(path + "\n" + statsStr)
 			seen[statsStr] = true
 		}
 		b.Run(strings.TrimSuffix(strings.TrimPrefix(path, "data/"), ".log"), func(b *testing.B) {
-			// Take verbosity threshold from directory, if present.
+			// 若目录名中含有详细级别，则取其作为阈值。
 			vMatch := regexp.MustCompile(`/v(\d+)/`).FindStringSubmatch(path)
 			v := 0
 			if vMatch != nil {
@@ -77,8 +74,7 @@ func BenchmarkEncoding(b *testing.B) {
 				state := klog.CaptureState()
 				defer state.Restore()
 
-				// To make the tests a bit more realistic, at
-				// least do system calls during each write.
+				// 为让测试更贴近真实情况，每次写入至少经过一次系统调用。
 				output := newBytesWritten(b, "/dev/null")
 				c := logsapi.NewLoggingConfiguration()
 				c.Format = format
@@ -97,24 +93,24 @@ func BenchmarkEncoding(b *testing.B) {
 				}
 				logger := klog.Background()
 
-				// Edit and run with this if branch enabled to use slog instead of zapr for JSON.
+				// 修改此处并启用该 if 分支，可用 slog 代替 zapr 输出 JSON。
 				if format == "json" && false {
 					var level slog.LevelVar
-					level.Set(slog.Level(-3)) // hack
+					level.Set(slog.Level(-3)) // 权宜之计
 					logger = logr.FromSlogHandler(slog.NewJSONHandler(output, &slog.HandlerOptions{
 						AddSource: true,
 						Level:     &level,
 						ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 							switch a.Key {
 							case slog.TimeKey:
-								// Could be user-supplied "time".
+								// 可能是用户提供的 "time" 字段。
 								if a.Value.Kind() == slog.KindTime {
 									return slog.Float64("ts", float64(a.Value.Time().UnixMicro())/1000)
 								}
 							case slog.LevelKey:
 								level := a.Value.Any().(slog.Level)
 								if level >= slog.LevelError {
-									// No verbosity on errors.
+									// 错误日志不携带详细级别。
 									return slog.Attr{}
 								}
 								if level >= 0 {
@@ -147,7 +143,7 @@ func BenchmarkEncoding(b *testing.B) {
 				end := time.Now()
 				duration := end.Sub(start)
 
-				// Report messages/s instead of ns/op because "op" varies.
+				// 报告 messages/s 而非 ns/op，因为每次 "op" 的处理量并不固定。
 				b.ReportMetric(0, "ns/op")
 				b.ReportMetric(float64(total)/duration.Seconds(), "msgs/s")
 				fileSizes[filepath.Base(b.Name())] = int(output.bytesWritten)
@@ -174,26 +170,22 @@ func BenchmarkEncoding(b *testing.B) {
 }
 
 type loadGeneratorConfig struct {
-	// Length of the message written in each log entry.
+	// 每条日志中写入的消息长度。
 	messageLength int
 
-	// Percentage of error log entries written.
+	// 错误日志所占百分比。
 	errorPercentage float64
 
-	// Number of concurrent goroutines that generate log entries.
+	// 并发生成日志的 goroutine 数量。
 	workers int
 }
 
-// BenchmarkWriting simulates writing of a stream which mixes info and error log
-// messages at a certain ratio. In contrast to BenchmarkEncoding, this stresses
-// the output handling and includes the usual additional information (caller,
-// time stamp).
+// BenchmarkWriting 模拟按一定比例混合 info 与 error 日志的写入流。与 BenchmarkEncoding 不同，
+// 它侧重压测输出处理路径，并包含 caller、时间戳等常规附加信息。
 //
-// See https://github.com/kubernetes/kubernetes/issues/107029 for the
-// motivation.
+// 背景见 https://github.com/kubernetes/kubernetes/issues/107029
 func BenchmarkWriting(b *testing.B) {
-	// This could be made configurable and/or we could benchmark different
-	// configurations automatically.
+	// 这里可以做成可配置的，也可以自动压测多种配置。
 	config := loadGeneratorConfig{
 		messageLength:   300,
 		errorPercentage: 1.0,
@@ -244,9 +236,7 @@ func benchmarkOutputFormatStream(b *testing.B, config loadGeneratorConfig, disca
 		b.Fatalf("Set feature gates: %v", err)
 	}
 
-	// Create a logging configuration using the exact same code as a normal
-	// component. In order to redirect output, we provide a LoggingOptions
-	// instance.
+	// 用与普通组件完全相同的代码创建日志配置，并提供 LoggingOptions 以重定向输出。
 	var o logsapi.LoggingOptions
 	c := logsapi.NewLoggingConfiguration()
 	c.Format = format
@@ -305,7 +295,7 @@ func generateOutput(b *testing.B, config loadGeneratorConfig, files ...*os.File)
 	err := errors.New("fail")
 	start := time.Now()
 
-	// Scale by 1000 because "go test -bench" starts with b.N == 1, which is very low.
+	// 放大 1000 倍，因为 "go test -bench" 从 b.N == 1 开始，太小了。
 	n := b.N * 1000
 	total := config.workers * n
 
@@ -334,11 +324,11 @@ func generateOutput(b *testing.B, config loadGeneratorConfig, files ...*os.File)
 	end := time.Now()
 	duration := end.Sub(start)
 
-	// Report messages/s instead of ns/op because "op" varies.
+	// 报告 messages/s 而非 ns/op，因为每次 "op" 的处理量并不固定。
 	b.ReportMetric(0, "ns/op")
 	b.ReportMetric(float64(total)/duration.Seconds(), "msgs/s")
 
-	// Print some information about the result.
+	// 打印结果相关信息。
 	b.Logf("Wrote %d log entries in %s -> %.1f/s", total, duration, float64(total)/duration.Seconds())
 	for i, file := range files {
 		if file != nil {

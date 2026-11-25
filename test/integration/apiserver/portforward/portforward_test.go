@@ -68,8 +68,8 @@ func TestPortforward(t *testing.T) {
 			podName,
 			podUID,
 			&kubeletportforward.V4Options{},
-			wait.ForeverTestTimeout, // idle timeout
-			remotecommand.DefaultStreamCreationTimeout, // stream creation timeout
+			wait.ForeverTestTimeout, // 空闲超时
+			remotecommand.DefaultStreamCreationTimeout, // 流创建超时
 			[]string{kubeletportforward.ProtocolV1Name},
 		)
 	}))
@@ -110,8 +110,8 @@ func TestPortforward(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// local port missing asks os to find random open port.
-	// Example: ":8000" (local = random, remote = 8000)
+	// 省略本地端口，让系统随机选择一个空闲端口。
+	// 例如 ":8000"（本地端口随机，远端端口为 8000）。
 	localRemotePort := fmt.Sprintf(":%s", remotePort)
 	out := &mBuffer{
 		buffer: bytes.Buffer{},
@@ -157,7 +157,7 @@ func TestPortforward(t *testing.T) {
 		t.Error("port forward was never ready")
 	}
 
-	// Parse out the randomly selected local port from "out" stream.
+	// 从 out 流中解析出系统随机选择的本地端口。
 	localPort, err := parsePort(out.String())
 	require.NoError(t, err)
 	t.Logf("Local Port: %s", localPort)
@@ -192,8 +192,7 @@ func TestPortforward(t *testing.T) {
 	t.Logf("stderr: %s", errOut.String())
 }
 
-// parsePort parses out the local port from the port-forward output string.
-// This should work for both IP4 and IP6 addresses.
+// parsePort 从 port-forward 输出中提取本地端口，对 IPv4 和 IPv6 地址均适用。
 //
 //	Example: "Forwarding from 127.0.0.1:8000 -> 4000", returns "8000".
 func parsePort(forwardAddr string) (string, error) {

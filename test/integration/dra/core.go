@@ -56,8 +56,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// testPod creates a pod with a resource claim reference and then checks
-// whether that field is or isn't getting dropped.
+// testPod 创建带 resource claim 引用的 Pod，检查该字段是否被保留（取决于 DRA 是否启用）
 func testPod(tCtx ktesting.TContext, draEnabled bool) {
 	tCtx.Parallel()
 	namespace := createTestNamespace(tCtx, nil)
@@ -72,7 +71,7 @@ func testPod(tCtx ktesting.TContext, draEnabled bool) {
 	}
 }
 
-// testAPIDisabled checks that the resource.k8s.io API is disabled.
+// testAPIDisabled 验证 resource.k8s.io API 已禁用
 func testAPIDisabled(tCtx ktesting.TContext) {
 	tCtx.Parallel()
 	_, err := tCtx.Client().ResourceV1().ResourceClaims(claim.Namespace).Create(tCtx, claim, metav1.CreateOptions{FieldValidation: "Strict"})
@@ -81,7 +80,7 @@ func testAPIDisabled(tCtx ktesting.TContext) {
 	}
 }
 
-// testConvert creates a claim using a one API version and reads it with another.
+// testConvert 用某个 API 版本创建 claim，再用另一版本读取，验证转换
 func testConvert(tCtx ktesting.TContext) {
 	tCtx.Parallel()
 	namespace := createTestNamespace(tCtx, nil)
@@ -91,12 +90,12 @@ func testConvert(tCtx ktesting.TContext) {
 	tCtx.ExpectNoError(err, "create claim")
 	claimBeta2, err := tCtx.Client().ResourceV1beta2().ResourceClaims(namespace).Get(tCtx, claim.Name, metav1.GetOptions{})
 	tCtx.ExpectNoError(err, "get claim")
-	// We could check more fields, but there are unit tests which cover this better.
+	// 这里只做冒烟检查，更完整的字段转换由单元测试覆盖
 	assert.Equal(tCtx, claim.Name, claimBeta2.Name, "claim name")
 }
 
-// testResourceSliceFieldSelectors verifies that all supported ResourceSlice
-// field selectors return the same objects through all served API versions.
+// testResourceSliceFieldSelectors 验证各受支持 ResourceSlice field selector
+// 在所有提供服务的 API 版本中返回相同对象
 func testResourceSliceFieldSelectors(tCtx ktesting.TContext) {
 	tCtx.Parallel()
 
@@ -213,9 +212,8 @@ func testResourceSliceFieldSelectors(tCtx ktesting.TContext) {
 	}
 }
 
-// testFilterTimeout covers the scheduler plugin's filter timeout configuration and behavior.
-//
-// It runs the scheduler with non-standard settings and thus cannot run in parallel.
+// testFilterTimeout 验证 scheduler 插件的 filterTimeout 配置与行为。
+// 该测试以非标准配置启动 scheduler，因此不能并行执行。
 func testFilterTimeout(tCtx ktesting.TContext, requestDeviceCount int) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, driverName := createTestClass(tCtx, namespace)
@@ -228,9 +226,8 @@ func testFilterTimeout(tCtx ktesting.TContext, requestDeviceCount int) {
 	otherSlice := st.MakeResourceSlice("worker-1", driverName).Devices(deviceNames[:requestDeviceCount-1]...)
 	createdOtherSlice := createSlice(tCtx, otherSlice.Obj())
 
-	// Impossible to allocate on worker-1: not enough devices, but allocation is too
-	// dumb to notice that upfront and keeps trying until it times out.
-	// On worker-0 we can allocate, but don't schedule because of the timeout on worker-1.
+	// worker-1 设备不足无法分配，但分配器不会提前发现，会一直重试直到超时；
+	// worker-0 虽可分配，却因 worker-1 的超时而不会调度 Pod
 	newClaim := func(suffix string) *resourceapi.ResourceClaim {
 		c := claim.DeepCopy()
 		c.Spec.Devices.Requests[0].Exactly.Count = int64(requestDeviceCount)
@@ -248,8 +245,7 @@ profiles:
     args:
       filterTimeout: 0s
 `)
-		// Without a timeout, the allocator runs to completion on both nodes.
-		// worker-0 has enough devices and succeeds, so the pod gets scheduled.
+		// 不设超时时，分配器会在两个节点上跑完；worker-0 设备充足分配成功，Pod 得以调度
 		tCtx.ExpectNoError(e2epod.WaitForPodScheduled(tCtx, tCtx.Client(), namespace, pod.Name))
 	})
 
@@ -266,9 +262,8 @@ profiles:
 `)
 		expectPodSchedulerError(tCtx, pod, "timed out trying to allocate devices")
 
-		// Update the smaller slice such that allocation also succeeds.
-		// The scheduler retries automatically (timeouts go through
-		// backoff queue, not unschedulable pool) and should succeed now.
+		// 补齐较小 slice 的设备使分配也能成功。超时走 backoff 队列而非
+		// unschedulable 池，scheduler 会自动重试，此时应调度成功
 		createdOtherSlice.Spec.Devices = append(createdOtherSlice.Spec.Devices, resourceapi.Device{
 			Name: deviceNames[requestDeviceCount-1],
 		})
@@ -317,7 +312,7 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 									Key:    "dra.example.com/taint",
 									Value:  "taint-value",
 									Effect: resourceapi.DeviceTaintEffectNoExecute,
-									// TimeAdded is added by apiserver.
+									// TimeAdded 由 apiserver 填充，这里不设置
 								}},
 							},
 							{
@@ -359,7 +354,7 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		},
 	}
 
-	// Manually turn into the expected slices, considering that some fields get dropped.
+	// 手工推导期望的 slice，因为部分字段会被 API server 丢弃
 	expectedResources := resources.DeepCopy()
 	var expectedSliceSpecs []resourceapi.ResourceSliceSpec
 	for _, sl := range expectedResources.Pools[poolName].Slices {
@@ -376,8 +371,7 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		})
 	}
 
-	// Keep track of the disabled features used in each slice. This allows us to check
-	// that we get the right set of features listed in the droppedFields error.
+	// 记录每个 slice 涉及的禁用特性，以便校验 droppedFields 错误中列出的特性集合是否正确
 	disabledFeaturesBySlice := make([]sets.Set[featuregate.Feature], len(resources.Pools[poolName].Slices))
 	for i := range expectedSliceSpecs {
 		disabledFeaturesForSlice := sets.New[featuregate.Feature]()
@@ -433,8 +427,8 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 	expectedSlices := func(expectedSliceSpecs []resourceapi.ResourceSliceSpec) []any {
 		var expectedSlices []any
 		for _, spec := range expectedSliceSpecs {
-			// The matcher is precise and matches all fields, except for those few which are known to
-			// be not exactly as sent by the client. New fields have to be added when extending the API.
+			// matcher 精确匹配所有字段，仅放过少数已知与客户端提交值不一致的字段；
+			// 扩展 API 时须同步补充新字段
 			expectedSlices = append(expectedSlices, gomega.HaveField("Spec", gstruct.MatchAllFields(gstruct.Fields{
 				"Driver": gomega.Equal(driverName),
 				"Pool": gstruct.MatchAllFields(gstruct.Fields{
@@ -461,10 +455,10 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 								var expected []any
 								for _, taint := range device.Taints {
 									if taint.TimeAdded != nil {
-										// Can do exact match.
+										// 已有值，可精确匹配
 										expected = append(expected, gomega.Equal(taint))
 									} else {
-										// Ignore TimeAdded value.
+										// TimeAdded 由 apiserver 生成，只断言非空
 										expected = append(expected, gstruct.MatchAllFields(gstruct.Fields{
 											"Key":       gomega.Equal(taint.Key),
 											"Value":     gomega.Equal(taint.Value),
@@ -510,7 +504,7 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		tCtx.ExpectNoError(err, "delete slices")
 	}
 
-	// Speed up testing a bit...
+	// 缩短同步间隔，加快测试
 	factor := time.Duration(10)
 	mutationCacheTTL := resourceslice.DefaultMutationCacheTTL / factor
 	syncDelay := resourceslice.DefaultSyncDelay / factor
@@ -549,9 +543,9 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 					for _, feature := range disabledFeaturesBySlice[droppedFields.SliceIndex].UnsortedList() {
 						disabled = append(disabled, string(feature))
 					}
-					// Make sure the error is about the right resource pool.
+					// 确认错误指向正确的 resource pool
 					assert.Equal(tCtx, poolName, droppedFields.PoolName)
-					// Make sure the error identifies the correct disabled features.
+					// 确认错误列出了正确的禁用特性
 					assert.ElementsMatch(tCtx, disabled, droppedFields.DisabledFeatures())
 					gotDroppedFieldError.Store(true)
 				} else if validationErrorsOkay.Load() && apierrors.IsInvalid(err) {
@@ -579,7 +573,7 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		return controller, getStats, expectedStats
 	}
 
-	// Each sub-test starts with no slices and must clean up after itself.
+	// 每个子测试都从无 slice 状态开始，并自行清理
 
 	runSubTest(tCtx, "create", func(tCtx ktesting.TContext) {
 		controller, getStats, expectedStats := setup(tCtx, resources)
@@ -587,14 +581,14 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		expectSlices(tCtx, expectedSliceSpecs)
 		tCtx.Consistently(getStats).WithTimeout(quiesencePeriod).Should(gomega.Equal(expectedStats))
 
-		// No further changes necessary.
+		// 稳态下不应再有变化
 		tCtx.Consistently(getStats).WithTimeout(quiesencePeriod).Should(gomega.Equal(expectedStats))
 
 		if len(disabledFeatures) > 0 && !gotDroppedFieldError.Load() {
 			tCtx.Error("expected dropped fields error, got none")
 		}
 
-		// Now switch to one invalid slice.
+		// 改为一个非法 slice，验证错误处理
 		resources := resources.DeepCopy()
 		pool := resources.Pools[poolName]
 		pool.Slices = pool.Slices[:1]
@@ -618,9 +612,8 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		expectSlices(tCtx, expectedSliceSpecs)
 		tCtx.Consistently(getStats).WithTimeout(quiesencePeriod).Should(gomega.Equal(expectedStats))
 
-		// Stress the controller by repeatedly deleting the slices.
-		// One delete occurs after the sync period is over (because of the Consistently),
-		// the second before (because it's done as quickly as possible).
+		// 反复删除 slice 以压测 controller：
+		// 第一次删除发生在同步周期之后（前面有 Consistently 等待），第二次则尽快执行、落在同步周期内
 		for range 2 {
 			tCtx.Log("deleting ResourceSlices")
 			tCtx.ExpectNoError(tCtx.Client().ResourceV1().ResourceSlices().DeleteCollection(tCtx, metav1.DeleteOptions{}, listDriverSlices), "delete driver slices")
@@ -636,7 +629,7 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		expectSlices(tCtx, expectedSliceSpecs)
 		tCtx.Consistently(getStats).WithTimeout(quiesencePeriod).Should(gomega.Equal(expectedStats))
 
-		// Stress the controller by repeatedly updating the slices.
+		// 反复更新 slice 以压测 controller
 		for range 2 {
 			slices, err := tCtx.Client().ResourceV1().ResourceSlices().List(tCtx, listDriverSlices)
 			tCtx.ExpectNoError(err, "list slices")
@@ -658,15 +651,15 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 	})
 
 	runSubTest(tCtx, "recreate-after-update-delete", func(tCtx ktesting.TContext) {
-		// Simplify the test data: just one slice with a basic device.
+		// 简化测试数据：只保留一个含基础设备的 slice
 		resources := resources.DeepCopy()
 		pool := resources.Pools[poolName]
 		pool.Slices = pool.Slices[:1]
 		resources.Pools[poolName] = pool
 		expectedSliceSpecs := expectedSliceSpecs[:1]
 
-		// Create an incomplete ResourceSlice that the controller needs to update once it starts.
-		// This attribute is obsolete and needs to be removed.
+		// 预先创建一个不完整的 ResourceSlice，controller 启动后需要更新它：
+		// 其中的 attribute 已过时，应被移除
 		device := expectedSliceSpecs[0].Devices[0].DeepCopy()
 		device.Attributes = map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 			"foo": {
@@ -697,22 +690,21 @@ func testPublishResourceSlices(tCtx ktesting.TContext, haveLatestAPI bool, disab
 		expectSlices(tCtx, expectedSliceSpecs)
 		tCtx.Consistently(getStats).WithTimeout(quiesencePeriod).Should(gomega.Equal(expectedStats))
 
-		// Verify that the existing slice got updated, then delete it.
+		// 确认已有 slice 被更新后再删除它
 		slice, err = tCtx.Client().ResourceV1().ResourceSlices().Get(tCtx, slice.Name, metav1.GetOptions{})
 		tCtx.ExpectNoError(err, "get slice")
 		tCtx.Log("Deleting slice...")
 		err = tCtx.Client().ResourceV1().ResourceSlices().Delete(tCtx, slice.Name, metav1.DeleteOptions{})
 		tCtx.ExpectNoError(err, "delete slice")
 
-		// The controller must react to the deletion and recreate it.
+		// controller 必须感知删除并重建该 slice
 		expectedStats.NumCreates = 1
 		tCtx.Eventually(getStats).WithTimeout(syncDelay + 5*time.Second).Should(gomega.Equal(expectedStats))
 		expectSlices(tCtx, expectedSliceSpecs)
 	})
 }
 
-// testMaxResourceSlice creates ResourceSlices that are as large as possible
-// and prints some information about it.
+// testMaxResourceSlice 创建尽可能大的 ResourceSlice 并打印其体积信息
 func testMaxResourceSlice(tCtx ktesting.TContext) {
 	for name, slice := range NewMaxResourceSlices() {
 		runSubTest(tCtx, name, func(tCtx ktesting.TContext) {
@@ -737,8 +729,7 @@ func testMaxResourceSlice(tCtx ktesting.TContext) {
 	}
 }
 
-// testControllerManagerMetrics tests ResourceClaim metrics.
-// It must run sequentially.
+// testControllerManagerMetrics 验证 ResourceClaim 指标；因依赖全局指标状态，必须串行执行
 func testControllerManagerMetrics(tCtx ktesting.TContext) {
 	namespace := createTestNamespace(tCtx, nil)
 	class, _ := createTestClass(tCtx, namespace)
@@ -752,7 +743,7 @@ func testControllerManagerMetrics(tCtx ktesting.TContext) {
 		informerFactory.Resource().V1().ResourceClaimTemplates().Informer().HasSynced,
 	)
 
-	// Start the controller (this will run in background and stop when tCtx is cancelled)
+	// 在后台启动 controller，tCtx 取消时自动停止
 	var wg sync.WaitGroup
 	tCtx.Cleanup(func() {
 		tCtx.Cancel("test is done")
@@ -763,17 +754,17 @@ func testControllerManagerMetrics(tCtx ktesting.TContext) {
 	tCtx.Log("ResourceClaim controller started successfully")
 	tCtx.Log("Testing ResourceClaim controller success metrics with admin access labels")
 
-	// Helper function to get metrics from the metric counter directly
+	// 直接从计数器读取指标值
 	getMetricValue := func(status, adminAccess string) float64 {
 		value, err := testutil.GetCounterMetricValue(resourceclaimmetrics.ResourceClaimCreate.WithLabelValues(status, adminAccess, "", "Pod"))
 		if err != nil {
-			// If the metric doesn't exist yet, default to 0
+			// 指标尚未注册时视为 0
 			return 0
 		}
 		return value
 	}
 
-	// Get initial success metrics (only testing success cases since failure cases are not easily testable)
+	// 记录初始成功指标；失败场景不易构造，这里只验证成功路径
 	initialSuccessNoAdmin := getMetricValue("success", "false")
 	initialSuccessWithAdmin := getMetricValue("success", "true")
 
@@ -786,7 +777,7 @@ func testControllerManagerMetrics(tCtx ktesting.TContext) {
 			Should(gomega.BeNumerically("~", want, 0.1), message)
 	}
 
-	// Test 1: Create Pod with ResourceClaimTemplate without admin access (should succeed and trigger controller)
+	// 用例 1：无 admin 权限的 namespace 中用 ResourceClaimTemplate 创建 Pod，应成功并触发 controller
 	template1 := &resourceapi.ResourceClaimTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-template-no-admin",
@@ -800,7 +791,7 @@ func testControllerManagerMetrics(tCtx ktesting.TContext) {
 							Name: "req-0",
 							Exactly: &resourceapi.ExactDeviceRequest{
 								DeviceClassName: class.Name,
-								// AdminAccess defaults to false/nil
+								// AdminAccess 默认为 false/nil
 							},
 						},
 					},
@@ -835,7 +826,7 @@ func testControllerManagerMetrics(tCtx ktesting.TContext) {
 	expectMetricValue("success", "false", initialSuccessNoAdmin+1,
 		"success metric with admin_access=false should increment")
 
-	// Test 2: Create admin namespace and Pod with ResourceClaimTemplate with admin access (should succeed)
+	// 用例 2：在带 admin 标签的 namespace 中创建带 admin 权限的 ResourceClaimTemplate 和 Pod，应成功
 	adminNS := createTestNamespace(tCtx, map[string]string{"resource.kubernetes.io/admin-access": "true"})
 	adminClass, _ := createTestClass(tCtx, adminNS)
 
@@ -886,12 +877,12 @@ func testControllerManagerMetrics(tCtx ktesting.TContext) {
 	expectMetricValue("success", "true", initialSuccessWithAdmin+1,
 		"success metric with admin_access=true should increment")
 
-	// Test 3: Try to create ResourceClaimTemplate with admin access in non-admin namespace
-	// should fail at API level, controller not triggered, no metrics change expected
+	// 用例 3：在非 admin namespace 中创建带 admin 权限的 ResourceClaimTemplate，
+	// 应在 API 层被拒绝，不触发 controller，指标不变
 	invalidTemplate := &resourceapi.ResourceClaimTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-template-invalid-admin",
-			Namespace: namespace, // regular namespace without admin label
+			Namespace: namespace, // 普通 namespace，无 admin 标签
 		},
 		Spec: resourceapi.ResourceClaimTemplateSpec{
 			Spec: resourceapi.ResourceClaimSpec{
@@ -912,7 +903,7 @@ func testControllerManagerMetrics(tCtx ktesting.TContext) {
 	require.Error(tCtx, err, "should fail to create ResourceClaimTemplate with AdminAccess in non-admin namespace")
 	require.ErrorContains(tCtx, err, "admin access to devices requires the `resource.kubernetes.io/admin-access: true` label on the containing namespace")
 
-	// Test 4: Create another Pod with ResourceClaimTemplate without admin access to further verify metrics
+	// 用例 4：再创建一个无 admin 权限的 Pod，进一步验证指标计数
 	template4 := &resourceapi.ResourceClaimTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-template-no-admin-2",
@@ -1057,8 +1048,7 @@ func testInvalidResourceSlices(tCtx ktesting.TContext) {
 			namespace := createTestNamespace(tCtx, nil)
 			class, driverName := createTestClass(tCtx, namespace)
 			for _, slice := range tc.slices {
-				// update the driver since we don't know the actual name until the
-				// class is created.
+				// class 创建后才知道真实 driver 名，故此处回填
 				slice.Spec.Driver = driverName
 				createSlice(tCtx, slice.Obj())
 			}
@@ -1072,7 +1062,7 @@ func testInvalidResourceSlices(tCtx ktesting.TContext) {
 				return tCtx.Client().CoreV1().Pods(namespace).Get(tCtx, pod.Name, metav1.GetOptions{})
 			}).WithTimeout(schedulingTimeout).WithPolling(time.Second).Should(schedulingAttempted)
 
-			// Only check the ResourceClaim if we expected the Pod to schedule.
+			// 仅在期望 Pod 调度成功时才检查 ResourceClaim 的分配结果
 			if tc.expectPodToSchedule {
 				tCtx.Eventually(func(tCtx ktesting.TContext) (*resourceapi.ResourceClaim, error) {
 					return tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claim.Name, metav1.GetOptions{})

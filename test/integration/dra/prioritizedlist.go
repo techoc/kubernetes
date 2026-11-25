@@ -36,8 +36,7 @@ func testPrioritizedList(tCtx ktesting.TContext, enabled bool) {
 	tCtx.Parallel()
 	namespace := createTestNamespace(tCtx, nil)
 	class, _ := createTestClass(tCtx, namespace)
-	// This is allowed to fail if the feature is disabled.
-	// createClaim normally doesn't return errors because this is unusual, but we can get it indirectly.
+	// 功能关闭时允许创建失败。createClaim 通常不返回错误，这里通过 WithError 间接获取。
 	claim, err := func() (claim *resourceapi.ResourceClaim, finalError error) {
 		tCtx, finalize := tCtx.WithError(&finalError)
 		defer finalize()
@@ -53,9 +52,8 @@ func testPrioritizedList(tCtx ktesting.TContext, enabled bool) {
 	require.NotEmpty(tCtx, claim.Spec.Devices.Requests[0].FirstAvailable, "should store FirstAvailable")
 	startScheduler(tCtx)
 
-	// We could create ResourceSlices for some node with the right driver.
-	// But failing during Filter is sufficient to determine that it did
-	// not fail during PreFilter because of FirstAvailable.
+	// 不必为 Node 创建匹配的 ResourceSlice：只要失败发生在 Filter 阶段，
+	// 就足以说明没有因为 FirstAvailable 在 PreFilter 阶段失败。
 	pod := createPod(tCtx, namespace, "", podWithClaimName, claim)
 	schedulingAttempted := gomega.HaveField("Status.Conditions", gomega.ContainElement(
 		gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -76,8 +74,7 @@ func testPrioritizedListScoring(tCtx ktesting.TContext) {
 	nodes, err := tCtx.Client().CoreV1().Nodes().List(tCtx, metav1.ListOptions{})
 	tCtx.ExpectNoError(err, "list nodes")
 
-	// We don't want to use more than 8 nodes since we limit the number
-	// of subrequests to max 8.
+	// 子请求最多 8 个，因此测试用的 Node 也不超过 8 个。
 	var nodesForTest []v1.Node
 	if len(nodes.Items) > 8 {
 		nodesForTest = nodes.Items[:8]
@@ -85,9 +82,7 @@ func testPrioritizedListScoring(tCtx ktesting.TContext) {
 		nodesForTest = nodes.Items
 	}
 
-	// Create a separate device class and driver for each node. This makes
-	// it easy to create subrequests that can only be satisfied by specific
-	// nodes.
+	// 为每个 Node 分别创建 device class 和 driver，便于构造只能由特定 Node 满足的子请求。
 	var nodeInfos []nodeInfo
 	for _, node := range nodesForTest {
 		driverName := fmt.Sprintf("%s-%s", namespace, node.Name)
@@ -102,7 +97,7 @@ func testPrioritizedListScoring(tCtx ktesting.TContext) {
 		})
 	}
 
-	// Randomize the list of nodes so the selected node isn't always the first one.
+	// 打乱 Node 顺序，避免总是选中第一个。
 	rand.Shuffle(len(nodeInfos), func(i, j int) {
 		nodeInfos[i], nodeInfos[j] = nodeInfos[j], nodeInfos[i]
 	})
@@ -133,11 +128,10 @@ func testPrioritizedListScoring(tCtx ktesting.TContext) {
 	})
 
 	runSubTest(tCtx, "multi-claim", func(tCtx ktesting.TContext) {
-		// Set up two claims where the node in nodeInfos[2] will be the best
-		// option:
-		// nodeInfos[1]: rank 1 in claim1 and rank 3 in claim2, so it will get a score of 14
-		// nodeInfos[2]: rank 2 in claim1 and rank 1 in claim2, so it will get a score of 15
-		// nodeInfos[3]: rank 3 in claim1 and rank 2 in claim2, so it will get a score of 13
+		// 构造两个 claim，使 nodeInfos[2] 得分最高：
+		// nodeInfos[1]：在 claim1 中排第 1，在 claim2 中排第 3，得分为 14
+		// nodeInfos[2]：在 claim1 中排第 2，在 claim2 中排第 1，得分为 15
+		// nodeInfos[3]：在 claim1 中排第 3，在 claim2 中排第 2，得分为 13
 		claimPrioritizedList1 := st.MakeResourceClaim().
 			Name(claimName + "-pl-multiclaim-1").
 			Namespace(namespace).
@@ -185,13 +179,13 @@ func testPrioritizedListScoring(tCtx ktesting.TContext) {
 			Obj()
 		_ = createPod(tCtx, namespace, "-pl-multiclaim", pod, claim1, claim2)
 
-		// The second subrequest in claim1 is for nodeInfos[2], so it should be chosen.
+		// claim1 的第二个子请求对应 nodeInfos[2]，应被选中。
 		expectedSelectedRequest := fmt.Sprintf("%s/%s", claim1.Spec.Devices.Requests[0].Name, claim1.Spec.Devices.Requests[0].FirstAvailable[1].Name)
 		tCtx.Eventually(func(tCtx ktesting.TContext) (*resourceapi.ResourceClaim, error) {
 			return tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claimPrioritizedList1.Name, metav1.GetOptions{})
 		}).WithTimeout(schedulingTimeout).WithPolling(time.Second).Should(expectedAllocatedClaim(expectedSelectedRequest, nodeInfos[2]))
 
-		// The first subrequest in claim2 is for nodeInfos[2], so it should be chosen.
+		// claim2 的第一个子请求对应 nodeInfos[2]，应被选中。
 		expectedSelectedRequest = fmt.Sprintf("%s/%s", claim2.Spec.Devices.Requests[0].Name, claim2.Spec.Devices.Requests[0].FirstAvailable[0].Name)
 		tCtx.Eventually(func(tCtx ktesting.TContext) (*resourceapi.ResourceClaim, error) {
 			return tCtx.Client().ResourceV1().ResourceClaims(namespace).Get(tCtx, claimPrioritizedList2.Name, metav1.GetOptions{})

@@ -37,9 +37,9 @@ import (
 )
 
 func RunAuthzSelectorsLibraryTests(t *testing.T) {
-	// Start the server
+	// 启动测试 server
 	args := []string{
-		fmt.Sprintf("--runtime-config=%s=true", resourceapi.SchemeGroupVersion), // For ResourceClaim test case below.
+		fmt.Sprintf("--runtime-config=%s=true", resourceapi.SchemeGroupVersion), // 供下面的 ResourceClaim 用例使用
 	}
 	server, err := apiservertesting.StartTestServer(t, nil, args, framework.SharedEtcd())
 	if err != nil {
@@ -47,8 +47,8 @@ func RunAuthzSelectorsLibraryTests(t *testing.T) {
 	}
 	defer server.TearDownFn()
 
-	// Attempt to create API objects using the fieldSelector and labelSelector authorizer functions,
-	// and ensure they are allowed.
+	// 用 fieldSelector 和 labelSelector 相关的 authorizer 函数创建 API 对象，
+	// 并确认这些表达式被允许（而非报未定义引用）。
 
 	c, err := kubernetes.NewForConfig(server.ClientConfig)
 	if err != nil {
@@ -88,7 +88,7 @@ func RunAuthzSelectorsLibraryTests(t *testing.T) {
 				return err
 			},
 			expectErrors: []*regexp.Regexp{
-				// authorizer is not available to messageExpression
+				// messageExpression 中不可用 authorizer
 				regexp.MustCompile(`spec\.validations\[0\]\.messageExpression:.*undeclared reference to 'authorizer'`),
 			},
 		},
@@ -168,7 +168,7 @@ func RunAuthzSelectorsLibraryTests(t *testing.T) {
 				_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Create(context.TODO(), obj, metav1.CreateOptions{})
 				return err
 			},
-			// authorizer is not available to CRD validation
+			// CRD 校验中不可用 authorizer
 			expectErrors: []*regexp.Regexp{regexp.MustCompile(`x-kubernetes-validations\[0\]\.rule:.*undeclared reference to 'authorizer'`)},
 		},
 		{
@@ -195,7 +195,7 @@ func RunAuthzSelectorsLibraryTests(t *testing.T) {
 				_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Create(context.TODO(), obj, metav1.CreateOptions{})
 				return err
 			},
-			// authorizer is not available to CRD validation
+			// CRD 校验中不可用 authorizer
 			expectErrors: []*regexp.Regexp{regexp.MustCompile(`x-kubernetes-validations\[0\]\.messageExpression:.*undeclared reference to 'authorizer'`)},
 		},
 	}
@@ -205,13 +205,13 @@ func RunAuthzSelectorsLibraryTests(t *testing.T) {
 
 			switch {
 			case len(tc.expectErrors) == 0 && err == nil:
-				// success
+				// 符合预期：创建成功且无错误
 			case len(tc.expectErrors) == 0 && err != nil:
 				t.Fatalf("expected success, got error:\n%s", strings.Join(sets.List(getCauses(t, err)), "\n\n"))
 			case len(tc.expectErrors) > 0 && err == nil:
 				t.Fatalf("expected error, got success")
 			case len(tc.expectErrors) > 0 && err != nil:
-				// make sure errors match expectations
+				// 确保实际错误与预期逐条匹配，无遗漏也无多余
 				actualCauses := getCauses(t, err)
 				for _, expectCause := range tc.expectErrors {
 					found := false

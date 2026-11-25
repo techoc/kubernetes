@@ -64,8 +64,7 @@ func TestWatchBasedManager(t *testing.T) {
 		return client.CoreV1().Secrets(namespace).Watch(ctx, options)
 	}
 	newObj := func() runtime.Object { return &v1.Secret{} }
-	// We want all watches to be up and running to stress test it.
-	// So don't treat any secret as immutable here.
+	// 压测需要所有 watch 都处于运行状态，因此这里不把任何 Secret 视为不可变。
 	isImmutable := func(_ runtime.Object) bool { return false }
 	listWatcherWithWatchListSemanticsWrapper := func(lw *cache.ListWatch) cache.ListerWatcher {
 		return cache.ToListWatcherWithWatchListSemantics(lw, client)
@@ -77,7 +76,7 @@ func TestWatchBasedManager(t *testing.T) {
 
 	store := manager.NewObjectCache(listObj, watchObj, newObj, isImmutable, listWatcherWithWatchListSemanticsWrapper, schema.GroupResource{Group: "v1", Resource: "secrets"}, fakeClock, time.Minute, stopCh)
 
-	// create 1000 secrets in parallel
+	// 并行创建 1000 个 Secret。
 	t.Log(time.Now(), "creating 1000 secrets")
 	wg := sync.WaitGroup{}
 	errCh := make(chan error, n)
@@ -106,7 +105,7 @@ func TestWatchBasedManager(t *testing.T) {
 	}
 	t.Log(time.Now(), "finished creating 1000 secrets")
 
-	// fetch all secrets
+	// 并发读取所有 Secret。
 	wg = sync.WaitGroup{}
 	errCh = make(chan error, n)
 	for i := range n {

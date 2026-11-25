@@ -47,16 +47,14 @@ import (
 	"k8s.io/kubernetes/cmd/kube-apiserver/app/options"
 )
 
-// Only add kinds to this list when this a virtual resource with get and create verbs that doesn't actually
-// store into it's kind.  We've used this downstream for mappings before.
+// 只有具备 get/create 动词、但并不真正按该 kind 存储数据的虚拟资源才加入此列表；下游曾用它做映射。
 var kindAllowList = sets.NewString()
 
-// namespace used for all tests, do not change this
+// 所有测试共用的 namespace，请勿修改
 const testNamespace = "etcdstoragepathtestnamespace"
 
-// allowMissingTestdataFixtures contains the kinds expected to be missing serialization fixtures API testdata directory.
-// this should only contain custom resources and built-in types with open issues tracking adding serialization fixtures.
-// Do not add new built-in types to this list, add them to k8s.io/api/roundtrip_test.go instead.
+// allowMissingTestdataFixtures 列出 API testdata 目录中允许缺少序列化 fixture 的 kind。
+// 这里只能放自定义资源，以及已有 issue 跟踪补充 fixture 的内置类型；新增内置类型请改到 k8s.io/api/roundtrip_test.go。
 var allowMissingTestdataFixtures = map[schema.GroupVersionKind]bool{
 	// TODO(https://github.com/kubernetes/kubernetes/issues/79027)
 	gvk("apiregistration.k8s.io", "v1", "APIService"):     true,
@@ -66,17 +64,14 @@ var allowMissingTestdataFixtures = map[schema.GroupVersionKind]bool{
 	gvk("apiextensions.k8s.io", "v1beta1", "CustomResourceDefinition"): true,
 	gvk("apiextensions.k8s.io", "v1", "CustomResourceDefinition"):      true,
 
-	// Custom resources are not expected to have serialization fixtures in k8s.io/api
+	// 自定义资源无需在 k8s.io/api 中提供序列化 fixture
 	gvk("awesome.bears.com", "v1", "Panda"):    true,
 	gvk("cr.bar.com", "v1", "Foo"):             true,
 	gvk("random.numbers.com", "v1", "Integer"): true,
 	gvk("custom.fancy.com", "v2", "Pant"):      true,
 }
 
-// TestEtcdStoragePath tests to make sure that all objects are stored in an expected location in etcd.
-// It will start failing when a new type is added to ensure that all future types are added to this test.
-// It will also fail when a type gets moved to a different location. Be very careful in this situation because
-// it essentially means that you will be break old clusters unless you create some migration path for the old data.
+// TestEtcdStoragePath 确保所有对象都存放在 etcd 中的预期位置。新增类型时测试会失败，强制你把新类型加入本测试；类型存储位置变动时也会失败，此时务必谨慎，因为这意味着除非为旧数据提供迁移路径，否则会破坏旧集群的升级。
 func TestEtcdStoragePath(t *testing.T) {
 	supportedVersions := GetSupportedEmulatedVersions()
 	for _, v := range supportedVersions {
@@ -93,13 +88,13 @@ func testEtcdStoragePathWithVersion(t *testing.T, v string) {
 			"AllBeta":  true,
 		})
 	} else {
-		// Only test for beta and GA APIs with emulated version.
+		// 使用模拟版本时只测试 beta 和 GA API。
 		featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, version.MustParse(v))
 		featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, "AllBeta", true)
 	}
 
 	apiServer := StartRealAPIServerOrDie(t, func(opts *options.ServerRunOptions) {
-		// Disable alphas when emulating previous versions.
+		// 模拟旧版本时禁用 alpha 特性。
 		if v != componentbaseversion.DefaultKubeBinaryVersion {
 			opts.Options.GenericServerRunOptions.EmulationForwardCompatible = true
 			opts.Options.APIEnablement.RuntimeConfig["api/alpha"] = "false"
@@ -119,8 +114,7 @@ func testEtcdStoragePathWithVersion(t *testing.T, v string) {
 	if v == componentbaseversion.DefaultKubeBinaryVersion {
 		etcdStorageData = GetEtcdStorageDataForNamespaceServedAt("etcdstoragepathtestnamespace", v, false)
 	} else {
-		// Drop alphas from etcd data fixtures when emulating previous versions
-		// as alphas are not supported with emulation.
+		// 模拟旧版本时从 etcd 数据 fixture 中剔除 alpha 类型，因为模拟版本不支持 alpha。
 		original := logExpectedVersionChange
 		logExpectedVersionChange = t.Logf
 		etcdStorageData = GetEtcdStorageDataForNamespaceServedAt("etcdstoragepathtestnamespace", v, true)
@@ -155,7 +149,7 @@ func testEtcdStoragePathWithVersion(t *testing.T, v string) {
 				t.Fatalf("empty test data for %s", gvResource)
 			}
 
-			shouldCreate := len(testData.Stub) != 0 // try to create only if we have a stub
+			shouldCreate := len(testData.Stub) != 0 // 有 stub 时才尝试创建
 
 			var (
 				input *metaObject
@@ -166,15 +160,14 @@ func testEtcdStoragePathWithVersion(t *testing.T, v string) {
 				if err = utiljson.Unmarshal([]byte(testData.Stub), input); err != nil || input.isEmpty() {
 					t.Fatalf("invalid test data for %s: %v", gvResource, err)
 				}
-				// unset type meta fields - we only set these in the CRD test data and it makes
-				// any CRD test with an expectedGVK override fail the DeepDerivative test
+				// 清空 type meta 字段：只有 CRD 测试数据会设置它们，若设置了会让带 expectedGVK 覆盖的 CRD 测试在 DeepDerivative 比对时失败
 				input.Kind = ""
 				input.APIVersion = ""
 			}
 
 			all := &[]cleanupData{}
 			defer func() {
-				if !t.Failed() { // do not cleanup if test has already failed since we may need things in the etcd dump
+				if !t.Failed() { // 测试失败时不清理，etcd dump 中可能需要保留现场
 					if err := client.cleanup(all); err != nil {
 						t.Fatalf("failed to clean up etcd: %#v", err)
 					}
@@ -185,13 +178,13 @@ func testEtcdStoragePathWithVersion(t *testing.T, v string) {
 				t.Fatalf("failed to create prerequisites for %s: %#v", gvResource, err)
 			}
 
-			if shouldCreate { // do not try to create items with no stub
+			if shouldCreate { // 没有 stub 时不尝试创建对象
 				if err := client.create(testData.Stub, testNamespace, mapping, all); err != nil {
 					t.Fatalf("failed to create stub for %s: %#v", gvResource, err)
 				}
 			}
 
-			// Build a decoder that can decode JSON and CBOR from storage.
+			// 构建一个能解码存储中 JSON 和 CBOR 数据的 decoder。
 			scheme := runtime.NewScheme()
 			if testData.ExpectedGVK != nil {
 				scheme.AddKnownTypeWithName(*testData.ExpectedGVK, &metaObject{})
@@ -214,22 +207,22 @@ func testEtcdStoragePathWithVersion(t *testing.T, v string) {
 				expectedGVK = *testData.ExpectedGVK
 			}
 
-			// if previous releases had a non-alpha version of this group/kind, make sure the storage version is understood by a previous release
+			// 如果旧版本曾提供该 group/kind 的非 alpha 版本，需确保当前存储版本能被旧版本识别
 			fixtureFilenameGroup := expectedGVK.Group
 			if fixtureFilenameGroup == "" {
 				fixtureFilenameGroup = "core"
 			}
-			// find all versions of this group/kind in all versions of the serialization fixture testdata
+			// 从各版本的序列化 fixture testdata 中找出该 group/kind 的所有版本
 			releaseGroupKindFiles, err := filepath.Glob("../../../staging/src/k8s.io/api/testdata/*/" + fixtureFilenameGroup + ".*." + expectedGVK.Kind + ".yaml")
 			if err != nil {
 				t.Error(err)
 			}
 			if len(releaseGroupKindFiles) == 0 && !allowMissingTestdataFixtures[expectedGVK] {
-				// We should at least find the HEAD fixtures
+				// 至少应能找到 HEAD 的 fixture
 				t.Errorf("No testdata serialization files found for %#v, cannot determine if previous releases could read this group/kind. Add this group-version to k8s.io/api/roundtrip_test.go", expectedGVK)
 			}
 
-			// find non-alpha versions of this group/kind understood by current and previous releases
+			// 找出当前及历史版本都能识别的非 alpha 版本
 			currentNonAlphaVersions := sets.NewString()
 			previousNonAlphaVersions := sets.NewString()
 			for _, previousReleaseGroupKindFile := range releaseGroupKindFiles {
@@ -321,9 +314,7 @@ func addGVKToEtcdBucket(cohabitatingResources map[string]map[schema.GroupVersion
 	cohabitatingResources[bucket][gvk] = empty{}
 }
 
-// getEtcdBucket assumes the last segment of the given etcd path is the name of the object.
-// Thus it strips that segment to extract the object's storage "bucket" in etcd. We expect
-// all objects that share the a bucket (cohabitating resources) to be stored as the same GVK.
+// getEtcdBucket 假定 etcd 路径的最后一段是对象名，去掉该段即可得到对象的存储 "bucket"。同一 bucket 中的对象（共置资源）应使用相同 GVK 存储。
 func getEtcdBucket(path string) string {
 	idx := strings.LastIndex(path, "/")
 	if idx == -1 {
@@ -336,11 +327,11 @@ func getEtcdBucket(path string) string {
 	return bucket
 }
 
-// stable fields to compare as a sanity check
+// 选取少量稳定字段，便于人工核对输出。
 type metaObject struct {
 	metav1.TypeMeta `json:""`
 
-	// parts of object meta
+	// ObjectMeta 的部分字段
 	Metadata struct {
 		Name      string `json:"name,omitempty"`
 		Namespace string `json:"namespace,omitempty"`
@@ -354,7 +345,7 @@ func (*metaObject) DeepCopyObject() runtime.Object {
 }
 
 func (obj *metaObject) isEmpty() bool {
-	return obj == nil || *obj == metaObject{} // compare to zero value since all fields are strings
+	return obj == nil || *obj == metaObject{} // 字段均为字符串，直接与零值比较即可
 }
 
 type empty struct{}
@@ -399,7 +390,7 @@ func (c *allClient) create(stub, ns string, mapping *meta.RESTMapping, all *[]cl
 }
 
 func (c *allClient) cleanup(all *[]cleanupData) error {
-	for i := len(*all) - 1; i >= 0; i-- { // delete in reverse order in case creation order mattered
+	for i := len(*all) - 1; i >= 0; i-- { // 逆序删除，避免创建顺序有影响
 		obj := (*all)[i].obj
 		gvr := (*all)[i].resource
 

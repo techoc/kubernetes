@@ -53,9 +53,9 @@ const (
 	timeout  = 60 * time.Second
 )
 
-// TestVolumeTemplateNoopUpdate ensures embedded StatefulSet objects with embedded PersistentVolumes can be updated
+// TestVolumeTemplateNoopUpdate 验证带 PVC 模板的 StatefulSet 用原 spec 更新时应被当作 no-op 通过校验
 func TestVolumeTemplateNoopUpdate(t *testing.T) {
-	// Start the server with default storage setup
+	// 用默认存储配置启动 server
 	server := apiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -64,7 +64,7 @@ func TestVolumeTemplateNoopUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Use an unstructured client to ensure we send exactly the bytes we expect for the embedded PVC template
+	// 用 unstructured client 原样提交 JSON，避免序列化改动内嵌 PVC 模板的字节
 	sts := &unstructured.Unstructured{}
 	err = json.Unmarshal([]byte(`{
 		"apiVersion": "apps/v1",
@@ -105,13 +105,13 @@ func TestVolumeTemplateNoopUpdate(t *testing.T) {
 
 	stsClient := c.Resource(appsv1.SchemeGroupVersion.WithResource("statefulsets")).Namespace("default")
 
-	// Create the statefulset
+	// 创建 StatefulSet
 	persistedSTS, err := stsClient.Create(context.TODO(), sts, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Update with the original spec (all the same defaulting should apply, should be a no-op and pass validation
+	// 用原始 spec 更新：默认值填充结果应一致，校验将此视为 no-op
 	originalSpec, ok, err := unstructured.NestedFieldCopy(sts.Object, "spec")
 	if err != nil || !ok {
 		t.Fatal(err, ok)
@@ -140,13 +140,12 @@ func TestSpecReplicasChange(t *testing.T) {
 	sts = stss[0]
 	waitSTSStable(t, c, sts)
 
-	// Update .Spec.Replicas and verify .Status.Replicas is changed accordingly
+	// 修改 .Spec.Replicas，验证 .Status.Replicas 随之更新
 	scaleSTS(t, c, sts, 3)
 	scaleSTS(t, c, sts, 0)
 	scaleSTS(t, c, sts, 2)
 
-	// Add a template annotation change to test STS's status does update
-	// without .Spec.Replicas change
+	// 改动模板 annotation，验证即使 .Spec.Replicas 不变，status 也会更新（ObservedGeneration 推进）
 	stsClient := c.AppsV1().StatefulSets(ns.Name)
 	var oldGeneration int64
 	newSTS := updateSTS(t, stsClient, sts.Name, func(sts *appsv1.StatefulSet) {
@@ -185,15 +184,14 @@ func TestDeletingAndTerminatingPods(t *testing.T) {
 	sts = stss[0]
 	waitSTSStable(t, c, sts)
 
-	// Verify STS creates 3 pods
+	// 验证 STS 创建了 3 个 Pod
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap)
 	if len(pods.Items) != podCount {
 		t.Fatalf("len(pods) = %d, want %d", len(pods.Items), podCount)
 	}
 
-	// Set first pod as deleting pod
-	// Set finalizers for the pod to simulate pending deletion status
+	// 给第一个 Pod 加 finalizer，模拟正在删除但尚未消失的状态
 	deletingPod := &pods.Items[0]
 	updatePod(t, podClient, deletingPod.Name, func(pod *v1.Pod) {
 		pod.Finalizers = []string{"fake.example.com/blockDeletion"}
@@ -202,13 +200,13 @@ func TestDeletingAndTerminatingPods(t *testing.T) {
 		t.Fatalf("error deleting pod %s: %v", deletingPod.Name, err)
 	}
 
-	// Set second pod as failed pod
+	// 将第二个 Pod 置为 Failed
 	failedPod := &pods.Items[1]
 	updatePodStatus(t, podClient, failedPod.Name, func(pod *v1.Pod) {
 		pod.Status.Phase = v1.PodFailed
 	})
 
-	// Set third pod as succeeded pod
+	// 将第三个 Pod 置为 Succeeded
 	succeededPod := &pods.Items[2]
 	updatePodStatus(t, podClient, succeededPod.Name, func(pod *v1.Pod) {
 		pod.Status.Phase = v1.PodSucceeded
@@ -224,26 +222,25 @@ func TestDeletingAndTerminatingPods(t *testing.T) {
 	}
 
 	if err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
-		// Verify only 3 pods exist: deleting pod and new pod replacing failed pod
+		// 应始终有 3 个 Pod：删除中的 Pod 仍在，Failed/Succeeded 的已被替换
 		pods = getPods(t, podClient, labelMap)
 		if len(pods.Items) != podCount {
 			return false, nil
 		}
 
-		// Verify deleting pod still exists
-		// Immediately return false with an error if it does not exist
+		// 删除中的 Pod 必须先于替换它的新 Pod 存在，否则直接判失败
 		if !exists(pods.Items, deletingPod.UID) {
 			return false, fmt.Errorf("expected deleting pod %s still exists, but it is not found", deletingPod.Name)
 		}
-		// Verify failed pod does not exist anymore
+		// Failed Pod 应已被替换
 		if exists(pods.Items, failedPod.UID) {
 			return false, nil
 		}
-		// Verify succeeded pod does not exist anymore
+		// Succeeded Pod 应已被替换
 		if exists(pods.Items, succeededPod.UID) {
 			return false, nil
 		}
-		// Verify all pods have non-terminated status
+		// 替换后的 Pod 都应处于非终态
 		for _, pod := range pods.Items {
 			if pod.Status.Phase == v1.PodFailed || pod.Status.Phase == v1.PodSucceeded {
 				return false, nil
@@ -254,18 +251,18 @@ func TestDeletingAndTerminatingPods(t *testing.T) {
 		t.Fatalf("failed to verify failed pod %s has been replaced with a new non-failed pod, and deleting pod %s survives: %v", failedPod.Name, deletingPod.Name, err)
 	}
 
-	// Remove finalizers of deleting pod to simulate successful deletion
+	// 移除 finalizer，让删除真正完成
 	updatePod(t, podClient, deletingPod.Name, func(pod *v1.Pod) {
 		pod.Finalizers = []string{}
 	})
 
 	if err := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
-		// Verify only 2 pods exist: new non-deleting pod replacing deleting pod and the non-failed pod
+		// 删除完成后控制器应再建一个新 Pod 补齐数量
 		pods = getPods(t, podClient, labelMap)
 		if len(pods.Items) != podCount {
 			return false, nil
 		}
-		// Verify deleting pod does not exist anymore
+		// 确认原删除中的 Pod 已被替换
 		return !exists(pods.Items, deletingPod.UID), nil
 	}); err != nil {
 		t.Fatalf("failed to verify deleting pod %s has been replaced with a new non-deleting pod: %v", deletingPod.Name, err)
@@ -302,25 +299,22 @@ func TestStatefulSetAvailable(t *testing.T) {
 			sts = stss[0]
 			waitSTSStable(t, c, sts)
 
-			// Verify STS creates 4 pods
+			// 验证 STS 创建了 4 个 Pod
 			podClient := c.CoreV1().Pods(ns.Name)
 			pods := getPods(t, podClient, labelMap)
 			if len(pods.Items) != 4 {
 				t.Fatalf("len(pods) = %d, want 4", len(pods.Items))
 			}
 
-			// Separate 3 pods into their own list
+			// 将 Pod 分成三组，用 LastTransitionTime 区分 Ready/Available 状态
 			firstPodList := &v1.PodList{Items: pods.Items[:1]}
 			secondPodList := &v1.PodList{Items: pods.Items[1:2]}
 			thirdPodList := &v1.PodList{Items: pods.Items[2:]}
-			// First pod: Running, but not Ready
-			// by setting the Ready condition to false with LastTransitionTime to be now
+			// 第一个 Running 但未 Ready：Ready 条件为 false
 			setPodsReadyCondition(t, c, firstPodList, v1.ConditionFalse, time.Now())
-			// Second pod: Running and Ready, but not Available
-			// by setting LastTransitionTime to now
+			// 第二个 Ready 但未 Available：LastTransitionTime 设为当前
 			setPodsReadyCondition(t, c, secondPodList, v1.ConditionTrue, time.Now())
-			// Third pod: Running, Ready, and Available
-			// by setting LastTransitionTime to more than 3600 seconds ago
+			// 第三个 Ready 且 Available：LastTransitionTime 早于 MinReadySeconds
 			setPodsReadyCondition(t, c, thirdPodList, v1.ConditionTrue, time.Now().Add(-120*time.Minute))
 
 			stsClient := c.AppsV1().StatefulSets(ns.Name)
@@ -329,7 +323,7 @@ func TestStatefulSetAvailable(t *testing.T) {
 				if err != nil {
 					return false, err
 				}
-				// Verify 4 pods exist, 3 pods are Ready, and 2 pods are Available
+				// 期望 4 个 Pod，其中 3 个 Ready、2 个 Available
 				return newSts.Status.Replicas == test.totalReplicas && newSts.Status.ReadyReplicas == test.readyReplicas && newSts.Status.AvailableReplicas == test.activeReplicas, nil
 			}); err != nil {
 				t.Fatalf("Failed to verify number of Replicas, ReadyReplicas and AvailableReplicas of rs %s to be as expected: %v", sts.Name, err)
@@ -364,7 +358,7 @@ func setPodsReadyCondition(t *testing.T, clientSet clientset.Interface, pods *v1
 			}
 			_, err := clientSet.CoreV1().Pods(pod.Namespace).UpdateStatus(context.TODO(), pod, metav1.UpdateOptions{})
 			if err != nil {
-				// When status fails to be updated, we continue to next pod
+				// 某个 Pod 状态更新失败不影响其余 Pod，继续处理下一个
 				continue
 			}
 			readyPods++
@@ -376,7 +370,7 @@ func setPodsReadyCondition(t *testing.T, clientSet clientset.Interface, pods *v1
 	}
 }
 
-// add for issue: https://github.com/kubernetes/kubernetes/issues/108837
+// 为 https://github.com/kubernetes/kubernetes/issues/108837 补充的回归用例
 func TestStatefulSetStatusWithPodFail(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	limitedPodNumber := 2
@@ -487,7 +481,7 @@ func TestAutodeleteOwnerRefs(t *testing.T) {
 			sts = stss[0]
 			waitSTSStable(t, c, sts)
 
-			// Verify StatefulSet ownerref has been added as appropriate.
+			// 验证 StatefulSet ownerRef 按 retention policy 正确添加
 			pvcClient := c.CoreV1().PersistentVolumeClaims(ns.Name)
 			pvcs := getStatefulSetPVCs(t, pvcClient, sts)
 			for _, pvc := range pvcs {
@@ -495,7 +489,7 @@ func TestAutodeleteOwnerRefs(t *testing.T) {
 				verifyOwnerRef(t, pvc, "Pod", false)
 			}
 
-			// Scale down to 1 pod and verify Pod ownerrefs as appropriate.
+			// 缩容到 1 个 Pod，验证被缩掉副本的 PVC 的 Pod ownerRef
 			one := int32(1)
 			sts.Spec.Replicas = &one
 			waitSTSStable(t, c, sts)
@@ -535,22 +529,22 @@ func TestDeletingPodForRollingUpdatePartition(t *testing.T) {
 	sts = stss[0]
 	waitSTSStable(t, c, sts)
 
-	// Verify STS creates 2 pods
+	// 验证 STS 创建了 2 个 Pod
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap)
 	if len(pods.Items) != 2 {
 		t.Fatalf("len(pods) = %d, want 2", len(pods.Items))
 	}
-	// Setting all pods in Running, Ready, and Available
+	// 将两个 Pod 都置为 Running、Ready 且 Available
 	setPodsReadyCondition(t, c, &v1.PodList{Items: pods.Items}, v1.ConditionTrue, time.Now())
 
-	// 1. Roll out a new image.
+	// 1. 发布新镜像
 	oldImage := sts.Spec.Template.Spec.Containers[0].Image
 	newImage := "new-image"
 	if oldImage == newImage {
 		t.Fatalf("bad test setup, statefulSet %s roll out with the same image", sts.Name)
 	}
-	// Set finalizers for the pod-0 to trigger pod recreation failure while the status UpdateRevision is bumped
+	// 给 pod-0 加 finalizer，让 UpdateRevision 推进但其重建被卡住
 	pod0 := &pods.Items[0]
 	updatePod(t, podClient, pod0.Name, func(pod *v1.Pod) {
 		pod.Finalizers = []string{"fake.example.com/blockDeletion"}
@@ -561,7 +555,7 @@ func TestDeletingPodForRollingUpdatePartition(t *testing.T) {
 		sts.Spec.Template.Spec.Containers[0].Image = newImage
 	})
 
-	// Await for the pod-1 to be recreated, while pod-0 remains running
+	// 等待 pod-1 被重建，同时 pod-0 仍在运行
 	if err := wait.PollUntilContextTimeout(tCtx, pollInterval, pollTimeout, false, func(ctx context.Context) (bool, error) {
 		ss, err := stsClient.Get(ctx, sts.Name, metav1.GetOptions{})
 		if err != nil {
@@ -580,17 +574,17 @@ func TestDeletingPodForRollingUpdatePartition(t *testing.T) {
 		t.Fatalf("failed to await for pod-1 to be recreated by sts %s: %v", sts.Name, err)
 	}
 
-	// Mark pod-0 as terminal and not ready
+	// 将 pod-0 标记为 Failed 且未就绪
 	updatePodStatus(t, podClient, pod0.Name, func(pod *v1.Pod) {
 		pod.Status.Phase = v1.PodFailed
 	})
 
-	// Make sure pod-0 gets deletion timestamp so that it is recreated
+	// 删除 pod-0，使其带上删除时间戳等待重建
 	if err := c.CoreV1().Pods(ns.Name).Delete(context.TODO(), pod0.Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("error deleting pod %s: %v", pod0.Name, err)
 	}
 
-	// Await for pod-0 to be not ready
+	// 等待 status 中 ReadyReplicas 减 1
 	if err := wait.PollUntilContextTimeout(tCtx, pollInterval, pollTimeout, false, func(ctx context.Context) (bool, error) {
 		ss, err := stsClient.Get(ctx, sts.Name, metav1.GetOptions{})
 		if err != nil {
@@ -601,12 +595,12 @@ func TestDeletingPodForRollingUpdatePartition(t *testing.T) {
 		t.Fatalf("failed to await for pod-0 to be not counted as ready in status of sts %s: %v", sts.Name, err)
 	}
 
-	// Remove the finalizer to allow recreation
+	// 移除 finalizer，允许 pod-0 被真正删除并重建
 	updatePod(t, podClient, pod0.Name, func(pod *v1.Pod) {
 		pod.Finalizers = []string{}
 	})
 
-	// Await for pod-0 to be recreated and make it running
+	// 等待 pod-0 重建并就绪
 	if err := wait.PollUntilContextTimeout(tCtx, pollInterval, pollTimeout, false, func(ctx context.Context) (bool, error) {
 		pods := getPods(t, podClient, labelMap)
 		recreatedPods := v1.PodList{}
@@ -621,7 +615,7 @@ func TestDeletingPodForRollingUpdatePartition(t *testing.T) {
 		t.Fatalf("failed to await for pod-0 to be recreated by sts %s: %v", sts.Name, err)
 	}
 
-	// Await for all stateful set status to record all replicas as ready
+	// 等待 StatefulSet status 记录所有副本均已就绪
 	if err := wait.PollUntilContextTimeout(tCtx, pollInterval, pollTimeout, false, func(ctx context.Context) (bool, error) {
 		ss, err := stsClient.Get(ctx, sts.Name, metav1.GetOptions{})
 		if err != nil {
@@ -632,13 +626,13 @@ func TestDeletingPodForRollingUpdatePartition(t *testing.T) {
 		t.Fatalf("failed to verify .Spec.Template.Spec.Containers[0].Image is updated for sts %s: %v", sts.Name, err)
 	}
 
-	// Verify 3 pods exist
+	// 验证 Pod 数量符合预期
 	pods = getPods(t, podClient, labelMap)
 	if len(pods.Items) != int(*sts.Spec.Replicas) {
 		t.Fatalf("Unexpected number of pods")
 	}
 
-	// Verify pod images
+	// 验证镜像按 partition 分成新旧两组
 	for i := range pods.Items {
 		if i < int(*sts.Spec.UpdateStrategy.RollingUpdate.Partition) {
 			if pods.Items[i].Spec.Containers[0].Image != oldImage {
@@ -703,7 +697,7 @@ func TestStatefulSetStartOrdinal(t *testing.T) {
 			ns := framework.CreateNamespaceOrDie(c, test.namespace, t)
 			defer framework.DeleteNamespaceOrDie(c, ns, t)
 
-			// Label map is the map of pod labels used in newSTS()
+			// 使用与 newSTS() 一致的 Pod label
 			labelMap := labelMap()
 			sts := newSTS("sts", ns.Name, test.replicas)
 			sts.Spec.Ordinals = test.ordinals
@@ -743,16 +737,16 @@ func TestStatefulSetStartOrdinal(t *testing.T) {
 				expectedNames = append(expectedNames, fmt.Sprintf("sts-%d", ord))
 			}
 
-			// Validate all the expected pods were created.
+			// 验证所有预期 Pod 均已创建
 			if diff := cmp.Diff(expectedNames, podNames, ignoreOrder); diff != "" {
 				t.Errorf("Unexpected pod names: (-want +got): %v", diff)
 			}
-			// Validate all the expected index labels were added.
+			// 验证 Pod index label 从指定的起始序号开始
 			if diff := cmp.Diff(test.expectedPodIndexes, podLabelIndexes, ignoreOrderForOrdinals); diff != "" {
 				t.Errorf("Unexpected pod indices: (-want +got): %v", diff)
 			}
 
-			// Scale down to 1 pod and verify it matches the first pod.
+			// 缩容到 1 个 Pod，应保留起始序号最小的那个
 			scaleSTS(t, c, sts, 1)
 			waitSTSStable(t, c, sts)
 
@@ -774,20 +768,20 @@ func TestStatefulSetPodSubdomain(t *testing.T) {
 	cancel := runControllerAndInformers(tCtx, rm, informers)
 	defer cancel()
 
-	// create a headless service
+	// 创建 headless Service
 	serviceName := "test-service"
 	service := newHeadlessService(ns.Name)
 	service.Name = serviceName
 	createHeadlessService(t, c, service)
 
-	// create StatefulSet with the service name
+	// 创建引用该 Service 的 StatefulSet
 	sts := newSTS("sts", ns.Name, 3)
 	sts.Spec.ServiceName = serviceName
 	stss, _ := createSTSsPods(t, c, []*appsv1.StatefulSet{sts}, []*v1.Pod{})
 	sts = stss[0]
 	waitSTSStable(t, c, sts)
 
-	// get pods and verify subdomain
+	// 验证 Pod 的 subdomain 指向该 Service
 	labelMap := labelMap()
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap)
@@ -832,14 +826,14 @@ func TestRecreateStatefulSetUpdate(t *testing.T) {
 	}
 	oldCurrentRevision := sts.Status.CurrentRevision
 
-	// oldPodUIDs will be used to make sure all old pods were deleted
+	// 记录旧 Pod UID，用于确认重建时 UID 都发生变化
 	pods = getPods(t, podClient, labelMap)
 	oldPodUIDs := make(map[string]types.UID)
 	for _, pod := range pods.Items {
 		oldPodUIDs[pod.Name] = pod.UID
 	}
 
-	// oldPVCUIDs will be used to make sure all pvcs are preserved after recreate
+	// 记录旧 PVC UID，用于确认重建后 PVC 被保留
 	pvcClient := c.CoreV1().PersistentVolumeClaims(ns.Name)
 	oldPVCs := getStatefulSetPVCs(t, pvcClient, sts)
 	oldPVCUIDs := make(map[string]types.UID)
@@ -859,7 +853,7 @@ func TestRecreateStatefulSetUpdate(t *testing.T) {
 		}
 		currentPods := getPods(t, podClient, labelMap)
 
-		// At no point mixed revisions should exists between pods in recreate
+		// Recreate 策略下任意时刻都不应出现新旧 revision 混用
 		revisions := make(map[string]bool)
 		for _, pod := range currentPods.Items {
 			rev := pod.Labels[appsv1.ControllerRevisionHashLabelKey]
@@ -896,7 +890,7 @@ func TestRecreateStatefulSetUpdate(t *testing.T) {
 		t.Fatalf("CurrentRevision should have changed from %s after recreate", oldCurrentRevision)
 	}
 
-	// Verify all pods were recreated and have the new image.
+	// 验证所有 Pod 均已重建且使用新镜像
 	pods = getPods(t, podClient, labelMap)
 	if len(pods.Items) != int(*sts.Spec.Replicas) {
 		t.Fatalf("Expected %d pods, got %d", *sts.Spec.Replicas, len(pods.Items))
@@ -910,7 +904,7 @@ func TestRecreateStatefulSetUpdate(t *testing.T) {
 		}
 	}
 
-	// Verify PVCs were preserved through the recreate.
+	// 验证重建后 PVC 保持不变（UID 不变）
 	newPVCs := getStatefulSetPVCs(t, pvcClient, sts)
 	if len(newPVCs) != len(oldPVCs) {
 		t.Fatalf("PVC count changed: before=%d, after=%d", len(oldPVCs), len(newPVCs))

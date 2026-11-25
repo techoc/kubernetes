@@ -37,8 +37,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestApplyCRDNoSchema tests that CRDs and CRs can both be applied to with a PATCH request with the apply content type
-// when there is no validation field provided.
+// TestApplyCRDNoSchema 验证在没有提供 validation 字段时，CRD 和 CR 均可通过 apply 类型的 PATCH 请求创建。
 func TestApplyCRDNoSchema(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, framework.SharedEtcd())
 	if err != nil {
@@ -86,7 +85,7 @@ spec:
 	}
 	verifyReplicas(t, result, 1)
 
-	// Patch object to change the number of replicas
+	// 通过 patch 修改 replicas 数量
 	result, err = rest.Patch(types.MergePatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -97,7 +96,7 @@ spec:
 	}
 	verifyReplicas(t, result, 5)
 
-	// Re-apply, we should get conflicts now, since the number of replicas was changed.
+	// replicas 已被他人修改，再次 apply 应产生冲突
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -115,7 +114,7 @@ spec:
 		t.Fatalf("Expecting to get one conflict when applying object after updating replicas, got: %v", status.Status().Details.Causes)
 	}
 
-	// Re-apply with force, should work fine.
+	// 强制 apply 可覆盖冲突，应成功
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -128,7 +127,7 @@ spec:
 	}
 	verifyReplicas(t, result, 1)
 
-	// Try to set managed fields using a subresource and verify that it has no effect
+	// 尝试通过 subresource 设置 managedFields，验证其不生效
 	existingManagedFields, err := getManagedFields(result)
 	if err != nil {
 		t.Fatalf("failed to get managedFields from response: %v", err)
@@ -172,7 +171,7 @@ spec:
 		t.Fatalf("Expected managed fields to not have changed when trying manually setting them via subresoures.\n\nExpected: %#v\n\nGot: %#v", existingManagedFields, newManagedFields)
 	}
 
-	// However, it is possible to modify managed fields using the main resource
+	// 但通过主资源本身可以修改 managedFields
 	result, err = rest.Patch(types.MergePatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -342,12 +341,12 @@ func TestUpdateStatusWithOldVersion(t *testing.T) {
 	name := "mytest"
 
 	rest := apiExtensionClient.Discovery().RESTClient()
-	// create namespace ns test
+	// 创建测试用 namespace
 	if _, err := client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "reset-fields-namespace"}}, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create the resource using the v1 CRD API.
+	// 使用 v1 CRD API 创建资源
 	yamlBody := fmt.Appendf(nil, `
 apiVersion: %s
 kind: %s
@@ -371,10 +370,8 @@ spec:
 	if err != nil {
 		t.Fatalf("failed to get managed fields: %v", err)
 	}
-	// When updating the status subresource via the v1beta1 CRD API,
-	// we assign a value to the spec field for testing purposes.
-	// However, in this case, the operation should NOT trigger any field manager updates
-	// related to server-side apply tracking.
+	// 通过 v1beta1 CRD API 更新 status subresource 时故意带上 spec 改动。
+	// 这里验证该操作不会触发 server-side apply 的 field manager 更新。
 	updateStatusBytes := []byte(`{
   "spec": { "a": "value-for-a-update" },
   "status": {
@@ -396,7 +393,7 @@ spec:
 	if err != nil {
 		t.Fatalf("failed to get managed fields: %v", err)
 	}
-	// newManagedFields should include oldManagedFields
+	// 新的 managedFields 中应保留 apply 初始时的条目
 	var applyManagerFound, subresourceManagerFound bool
 	for i, field := range newManagedFields {
 		if field.Manager == "apply_test" {

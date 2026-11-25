@@ -38,7 +38,7 @@ import (
 )
 
 func setup(ctx context.Context, t *testing.T) (kubeapiservertesting.TearDownFunc, *cronjob.ControllerV2, *job.Controller, informers.SharedInformerFactory, clientset.Interface) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为测试中没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)
@@ -153,7 +153,7 @@ func TestCronJobLaunchesPodAndCleansUp(t *testing.T) {
 	closeFn, cjc, jc, informerSet, clientSet := setup(tCtx, t)
 	defer closeFn()
 
-	// When shutting down, cancel must be called before closeFn.
+	// 关闭时必须先 cancel，再调用 closeFn。
 	defer tCtx.Cancel("test has completed")
 
 	cronJobName := "foo"

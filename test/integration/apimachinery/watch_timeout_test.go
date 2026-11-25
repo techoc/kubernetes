@@ -52,8 +52,7 @@ func (rt *extractRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{}, nil
 }
 
-// headersForConfig extracts any http client logic necessary for the provided
-// config.
+// headersForConfig 通过模拟一次 RoundTrip 提取 config 中 HTTP 客户端逻辑所附加的请求头。
 func headersForConfig(c *restclient.Config, url *url.URL) (http.Header, error) {
 	extract := &extractRT{}
 	rt, err := restclient.HTTPWrappersForConfig(c, extract)
@@ -70,8 +69,7 @@ func headersForConfig(c *restclient.Config, url *url.URL) (http.Header, error) {
 	return extract.Header, nil
 }
 
-// websocketConfig constructs a websocket config to the provided URL, using the client
-// config, with the specified protocols.
+// websocketConfig 根据客户端 config 为指定 URL 构造带认证头、TLS 配置和协议的 websocket 配置。
 func websocketConfig(url *url.URL, config *restclient.Config, protocols []string) (*websocket.Config, error) {
 	tlsConfig, err := restclient.TLSConfigFor(config)
 	if err != nil {
@@ -97,11 +95,11 @@ func websocketConfig(url *url.URL, config *restclient.Config, protocols []string
 }
 
 func TestWebsocketWatchClientTimeout(t *testing.T) {
-	// server setup
+	// 启动测试 apiserver
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// object setup
+	// 准备测试对象
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "test"},
 		Spec: corev1.ServiceSpec{
@@ -171,7 +169,7 @@ func TestWebsocketWatchClientTimeout(t *testing.T) {
 							return
 						}
 						if !t.Failed() {
-							// if we didn't already fail, treat this as an error
+							// 若此前尚未失败，则将读取中断视为错误
 							t.Errorf("Failed to read completely from websocket %v", err)
 						}
 						return
@@ -198,7 +196,7 @@ func TestWebsocketWatchClientTimeout(t *testing.T) {
 }
 
 func TestWatchClientTimeoutXXX(t *testing.T) {
-	// server setup
+	// 启动测试 apiserver
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -282,7 +280,7 @@ func testWatchClientTimeout(t *testing.T, config *restclient.Config, timeout, ti
 			}
 			watchCount++
 			if watchCount > 1 {
-				// success, restarted watch
+				// watch 已重启，符合预期
 				close(stopCh)
 			}
 			return client.CoreV1().ConfigMaps(metav1.NamespaceAll).Watch(context.TODO(), options)

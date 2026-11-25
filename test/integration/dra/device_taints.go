@@ -51,12 +51,11 @@ const (
 	useV1Rule
 )
 
-// testEvictCluster simulates a cluster with many scheduled pods where each
-// pod uses it's own ResourceClaim with one device. Then all those
-// devices get tainted with a single DeviceTaintRule (causing eviction of all pods at once)
-// or by updating the slices (more gradual).
+// testEvictCluster 模拟一个包含大量已调度 Pod 的集群，每个 Pod 各自使用一个带一个 device 的 ResourceClaim。
+// 随后通过单条 DeviceTaintRule 给所有 device 打 taint（一次性驱逐所有 Pod），
+// 或逐个更新 ResourceSlice 来逐步驱逐。
 func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
-	// Not parallel because it creates a controller.
+	// 不并行执行：该测试会创建 controller。
 
 	var wg sync.WaitGroup
 	defer func() {
@@ -107,8 +106,7 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		pod.Spec.NodeName = nodeName // Must be scheduled to be evicted.
 		pod = must(tCtx, tCtx.Client().CoreV1().Pods(namespace).Create, pod, metav1.CreateOptions{})
 
-		// Scheduled pods do not get deleted without acknowledgement by the kubelet,
-		// so we have to force-delete to clean up as we don't have a kubelet.
+		// 已调度的 Pod 没有 kubelet 确认不会被删除，测试环境里没有 kubelet，只能强制删除来清理。
 		tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
 			err := tCtx.Client().CoreV1().Pods(namespace).Delete(tCtx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: ptr.To(int64(0))})
 			if !apierrors.IsNotFound(err) {
@@ -116,7 +114,7 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 			}
 		})
 
-		// No finalizer, so deleting the namespace will be able to delete the claim.
+		// claim 没有 finalizer，删除 Namespace 时可以一并清理。
 		claim := claim.DeepCopy()
 		claim.Name += suffix
 		claim.Namespace = namespace
@@ -139,8 +137,8 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		must(tCtx, tCtx.Client().ResourceV1().ResourceClaims(namespace).UpdateStatus, claim, metav1.UpdateOptions{})
 	}
 
-	// Create a new factory and sync it so that when the controller starts, it is up-to-date.
-	// This works as long as this is the only test running it.
+	// 新建 factory 并先同步缓存，确保 controller 启动时看到的是最新状态。
+	// 仅当本测试是唯一使用者时该方法才成立。
 	informerFactory := informers.NewSharedInformerFactory(tCtx.Client(), 0)
 	var ruleInformer resourceinformers.DeviceTaintRuleInformer
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRADeviceTaintRules) {
@@ -171,7 +169,7 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 				oldPod.DeletionTimestamp == nil &&
 				newPod.DeletionTimestamp != nil &&
 				numExistingPods.Add(-1) == 0 {
-				// All pods marked for deletion.
+				// 所有 Pod 都已标记删除。
 				close(podsDeleted)
 			}
 		},
@@ -208,11 +206,9 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 	switch useRule {
 	case useV1alpha3Rule:
 		getRule = getV1alpha3Rule
-		// Evict through DeviceTaintRule.
-		//
-		// Let's also test some of the semantics around DeviceTaintRule.
-		// We start with NoEffect, check the report, change TimeAdded manually,
-		// then turn on eviction.
+		// 通过 DeviceTaintRule 触发驱逐。
+		// 同时验证其部分语义：从 NoEffect 开始，检查上报结果，手动修改 TimeAdded，
+		// 再开启驱逐。
 		rule := &resourcealpha.DeviceTaintRule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ruleName,
@@ -278,9 +274,7 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		}))))
 
 		rule.Spec.Taint.Effect = resourcealpha.DeviceTaintEffectNoExecute
-		// Must roll over to next second, that's the resolution of TimeAdded.
-		// We could rely on the delay for updating the status, but that
-		// could change.
+		// 必须跨到下一秒：TimeAdded 的精度为秒。不能依赖状态更新的延迟，那个时间可能变化。
 		time.Sleep(time.Second)
 		rule = must(tCtx, tCtx.Client().ResourceV1alpha3().DeviceTaintRules().Update, rule, metav1.UpdateOptions{})
 		if newTime.Equal(rule.Spec.Taint.TimeAdded) {
@@ -288,11 +282,9 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		}
 	case useV1beta2Rule:
 		getRule = getV1beta2Rule
-		// Evict through DeviceTaintRule.
-		//
-		// Let's also test some of the semantics around DeviceTaintRule.
-		// We start with NoEffect, check the report, change TimeAdded manually,
-		// then turn on eviction.
+		// 通过 DeviceTaintRule 触发驱逐。
+		// 同时验证其部分语义：从 NoEffect 开始，检查上报结果，手动修改 TimeAdded，
+		// 再开启驱逐。
 		rule := &resourcebeta.DeviceTaintRule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ruleName,
@@ -358,9 +350,7 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		}))))
 
 		rule.Spec.Taint.Effect = resourcebeta.DeviceTaintEffectNoExecute
-		// Must roll over to next second, that's the resolution of TimeAdded.
-		// We could rely on the delay for updating the status, but that
-		// could change.
+		// 必须跨到下一秒：TimeAdded 的精度为秒。不能依赖状态更新的延迟，那个时间可能变化。
 		time.Sleep(time.Second)
 		rule = must(tCtx, tCtx.Client().ResourceV1beta2().DeviceTaintRules().Update, rule, metav1.UpdateOptions{})
 		if newTime.Equal(rule.Spec.Taint.TimeAdded) {
@@ -368,11 +358,9 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		}
 	case useV1Rule:
 		getRule = getV1Rule
-		// Evict through DeviceTaintRule.
-		//
-		// Let's also test some of the semantics around DeviceTaintRule.
-		// We start with NoEffect, check the report, change TimeAdded manually,
-		// then turn on eviction.
+		// 通过 DeviceTaintRule 触发驱逐。
+		// 同时验证其部分语义：从 NoEffect 开始，检查上报结果，手动修改 TimeAdded，
+		// 再开启驱逐。
 		rule := &resourceapi.DeviceTaintRule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ruleName,
@@ -438,16 +426,14 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		}))))
 
 		rule.Spec.Taint.Effect = resourceapi.DeviceTaintEffectNoExecute
-		// Must roll over to next second, that's the resolution of TimeAdded.
-		// We could rely on the delay for updating the status, but that
-		// could change.
+		// 必须跨到下一秒：TimeAdded 的精度为秒。不能依赖状态更新的延迟，那个时间可能变化。
 		time.Sleep(time.Second)
 		rule = must(tCtx, tCtx.Client().ResourceV1().DeviceTaintRules().Update, rule, metav1.UpdateOptions{})
 		if newTime.Equal(rule.Spec.Taint.TimeAdded) {
 			tCtx.Error("TimeAdded should have been updated automatically")
 		}
 	case useNoRule:
-		// Evict by tainting each device.
+		// 通过逐个给 device 打 taint 来驱逐。
 		for i, slice := range slices {
 			slice = slice.DeepCopy()
 			slice.Spec.Pool.Generation++
@@ -463,11 +449,11 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 		tCtx.Fatalf("unsupported useRule %d", useRule)
 	}
 
-	// Evict and wait for pods to be gone.
+	// 触发驱逐并等待所有 Pod 消失。
 	start := time.Now()
 	select {
 	case <-podsDeleted:
-		// Okay.
+		// 符合预期。
 	case <-tCtx.Done():
 		tCtx.Fatalf("Waiting for pod deletion was canceled: %v", context.Cause(tCtx))
 	case <-time.After(30 * time.Second):
@@ -477,7 +463,7 @@ func testEvictCluster(tCtx ktesting.TContext, useRule useRuleMode) {
 	tCtx.Logf("Evicted %d pods in %s.", numPods, duration)
 
 	if useRule != useNoRule {
-		// Check condition.
+		// 检查上报的 condition。
 		tCtx.Eventually(getRule).
 			WithPolling(10 * time.Second).
 			Should(gomega.HaveField("Status.Conditions", gomega.ConsistOf(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
@@ -580,8 +566,7 @@ func testNoScheduleRule(tCtx ktesting.TContext, useRule useRuleMode) {
 		tCtx.Fatalf("unsupported useRule %d", useRule)
 	}
 
-	// Creating the ResourceSlice after the DeviceTaintRule exercises additional
-	// code paths in the ResourceSlice tracker.
+	// 在 DeviceTaintRule 之后创建 ResourceSlice，以覆盖 ResourceSlice tracker 的额外代码路径。
 	_ = createSlice(tCtx, slice.Obj())
 
 	pod := st.MakePod().Name(podName).Namespace(namespace).

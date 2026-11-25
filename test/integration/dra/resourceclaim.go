@@ -32,14 +32,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// testShareResourceClaim is the former "sharing a claim sequentially" test which was removed from E2E testing
-// in https://github.com/kubernetes/kubernetes/pull/133214. It creates a single ResourceClaim and then schedules
-// more pods using that ResourceClaim than supported at the same time. Scheduling so many pods in an E2E test
-// was problematic, but in an integration test it's fine because we control the environment.
+// testShareResourceClaim 源自 PR https://github.com/kubernetes/kubernetes/pull/133214 从 E2E 移除的
+// "sharing a claim sequentially" 测试：创建一个 ResourceClaim，然后调度超过并发上限数量的 Pod 使用它。
+// 在 E2E 中调度如此多的 Pod 很麻烦，集成测试里环境可控则无此问题。
 func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
-	// Some E2E helpers still use Gomega directly.
-	// TODO: rewrite those helpers to use TContext.
-	// In the meantime, make Gomega work by running sequentially.
+	// 部分 E2E helper 仍直接使用 Gomega，TODO 改为使用 TContext；
+	// 在此之前串行运行以让 Gomega 正常工作。
 	gomega.RegisterTestingT(tCtx)
 	tCtx.Cleanup(func() {
 		gomega.RegisterFailHandler(nil)
@@ -60,10 +58,8 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 	claim := b.ExternalClaim()
 	objects = append(objects, claim)
 
-	// This test used to test usage of the claim by one pod
-	// at a time. After removing the "not sharable"
-	// feature and bumping up the maximum number of
-	// consumers this is became a stress test.
+	// 本测试原先验证同一时刻只有一个 Pod 使用 claim。
+	// 移除 "not sharable" 特性并提高最大消费者数后，它变成了压力测试。
 	numMaxPods := resourceapi.ResourceClaimReservedForMaxSize
 	tCtx.Logf("Creating %d pods sharing the same claim", numMaxPods)
 	pods := make([]*v1.Pod, numMaxPods)
@@ -75,7 +71,7 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 	b.Create(tCtx, objects...)
 
 	podStartTimeout := 5 * time.Minute * time.Duration(numMaxPods)
-	ensureDuration := time.Minute // Don't check for too long, even if it is less precise.
+	ensureDuration := time.Minute // 检查时间不宜过长，精度差一些可以接受。
 	podIsScheduled := func() gomega.OmegaMatcher {
 		return gomega.HaveField("Spec.NodeName", gomega.Not(gomega.BeEmpty()))
 	}
@@ -85,8 +81,8 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 			gomega.HaveField("Status.Conditions", gomega.ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
 				"Type":   gomega.Equal(v1.PodScheduled),
 				"Status": gomega.Equal(v1.ConditionFalse),
-				// With the current scheduler code, creating too many pods is treated as an error,
-				// so this would have to be "SchedulerError". Maybe it shouldn't be an error?
+				// 当前调度器将创建过多 Pod 视为错误，因此这里应匹配 "SchedulerError"。
+				// 也许它本不该是错误？
 				// "Reason": gomega.Equal(v1.PodReasonUnschedulable),
 			}))),
 		)
@@ -109,7 +105,7 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 			Should(podIsPending(), "Pod %s should remain pending.", pod.Name)
 	}
 
-	// We don't know the order. All that matters is that all of them get scheduled eventually.
+	// 无需关心具体顺序，只要所有 Pod 最终都被调度即可。
 	tCtx.Logf("Waiting for %d pods to be scheduled", numMaxPods)
 	var wg sync.WaitGroup
 	for i := range numMaxPods {
@@ -122,9 +118,8 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 		return
 	}
 
-	// TODO (?): check metrics about pod scheduling, speed up pod scheduling.
-	// Currently pods go into backoff, so the initial 256 pods get scheduled much
-	// more slowly that they could be.
+	// TODO (?): 检查调度相关指标并加速 Pod 调度。
+	// 目前 Pod 会进入 backoff，导致最初 256 个 Pod 的调度远慢于理论值。
 
 	numMorePods := 10
 	tCtx.Logf("Creating %d additional pods for the same claim", numMorePods)
@@ -137,7 +132,7 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 	}
 	b.Create(tCtx, objects...)
 
-	// None of the additional pods can run because of the ReservedFor limit.
+	// 受 ReservedFor 上限限制，新增的 Pod 都无法运行。
 	tCtx.Logf("Check for %s that the additional pods don't get scheduled", ensureDuration)
 	for i := range numMorePods {
 		wg.Go(func() {
@@ -149,15 +144,14 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 		return
 	}
 
-	// We need to force-delete (no kubelet!) each scheduled pod,
-	// otherwise the new ones cannot use the claim.
+	// 必须强制删除已调度的 Pod（没有 kubelet！），否则新 Pod 无法使用该 claim。
 	tCtx.Logf("Deleting the initial %d pods", numMaxPods)
 	for i := range numMaxPods {
 		wg.Go(func() {
 			if !tCtx.AssertNoError(tCtx.Client().CoreV1().Pods(pods[i].Namespace).Delete(tCtx, pods[i].Name, metav1.DeleteOptions{GracePeriodSeconds: ptr.To(int64(0))})) {
 				return
 			}
-			// Should be almost (completely?) instantaneous.
+			// 删除应当几乎（或者说完全？）瞬时完成。
 			tCtx.AssertNoError(e2epod.WaitForPodNotFoundInNamespace(tCtx, tCtx.Client(), pods[i].Name, pods[i].Namespace, time.Second))
 		})
 	}
@@ -166,7 +160,7 @@ func testShareResourceClaimSequentially(tCtx ktesting.TContext) {
 		return
 	}
 
-	// Now those should also get scheduled - eventually...
+	// 现在这些 Pod 也应该最终被调度了……
 	tCtx.Logf("Waiting for the additional %d pods to be scheduled", numMorePods)
 	for i := range numMorePods {
 		wg.Go(func() {

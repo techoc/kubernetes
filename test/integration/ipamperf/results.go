@@ -33,55 +33,54 @@ import (
 	controllerutil "k8s.io/kubernetes/pkg/controller/util/node"
 )
 
-// Config represents the test configuration that is being run
+// Config 表示本次测试使用的配置。
 type Config struct {
-	CreateQPS     int                     // rate at which nodes are created
-	KubeQPS       int                     // rate for communication with kubernetes API
-	CloudQPS      int                     // rate for communication with cloud endpoint
-	NumNodes      int                     // number of nodes to created and monitored
-	AllocatorType ipam.CIDRAllocatorType  // type of allocator to run
+	CreateQPS     int                     // 节点创建速率
+	KubeQPS       int                     // 与 kubernetes API 通信的速率
+	CloudQPS      int                     // 与 cloud endpoint 通信的速率
+	NumNodes      int                     // 要创建并监控的节点数
+	AllocatorType ipam.CIDRAllocatorType  // 使用的 allocator 类型
 	Cloud         cloudprovider.Interface // cloud provider
 }
 
 type nodeTime struct {
-	added     time.Time // observed time for when node was added
-	allocated time.Time // observed time for when node was assigned podCIDR
-	podCIDR   string    // the allocated podCIDR range
+	added     time.Time // 观察到节点加入的时间
+	allocated time.Time // 观察到节点分配 podCIDR 的时间
+	podCIDR   string    // 分配到的 podCIDR 范围
 }
 
-// Observer represents the handle to test observer that watches for node changes
-// and tracks behavior
+// Observer 是测试观察者的句柄，监控节点变化并记录时序。
 type Observer struct {
-	numAdded     int                  // number of nodes observed added
-	numAllocated int                  // number of nodes observed allocated podCIDR
-	timing       map[string]*nodeTime // per node timing
-	numNodes     int                  // the number of nodes to expect
-	stopChan     chan struct{}        // for the shared informer
+	numAdded     int                  // 观察到加入的节点数
+	numAllocated int                  // 观察到已分配 podCIDR 的节点数
+	timing       map[string]*nodeTime // 每个节点的时序数据
+	numNodes     int                  // 期望的节点总数
+	stopChan     chan struct{}        // 用于关闭 shared informer
 	wg           sync.WaitGroup
 	clientSet    *clientset.Clientset
 }
 
-// JSONDuration is an alias of time.Duration to support custom Marshal code
+// JSONDuration 是 time.Duration 的别名，用于支持自定义的 Marshal 逻辑。
 type JSONDuration time.Duration
 
-// NodeDuration represents the CIDR allocation time for each node
+// NodeDuration 记录单个节点的 CIDR 分配耗时。
 type NodeDuration struct {
-	Name     string       // node name
-	PodCIDR  string       // the podCIDR that was assigned to the node
-	Duration JSONDuration // how long it took to assign podCIDR
+	Name     string       // 节点名
+	PodCIDR  string       // 分配给该节点的 podCIDR
+	Duration JSONDuration // 分配 podCIDR 耗时
 }
 
-// Results represents the observed test results.
+// Results 表示观察到的测试结果。
 type Results struct {
-	Name           string         // name for the test
-	Config         *Config        // handle to the test config
-	Succeeded      bool           // whether all nodes were assigned podCIDR
-	MaxAllocTime   JSONDuration   // the maximum time take for assignment per node
-	TotalAllocTime JSONDuration   // duration between first addition and last assignment
-	NodeAllocTime  []NodeDuration // assignment time by node name
+	Name           string         // 测试名
+	Config         *Config        // 测试配置
+	Succeeded      bool           // 是否所有节点都分配到了 podCIDR
+	MaxAllocTime   JSONDuration   // 单节点分配的最大耗时
+	TotalAllocTime JSONDuration   // 从首次加入到最后一次分配的时长
+	NodeAllocTime  []NodeDuration // 按节点名记录的分配耗时
 }
 
-// NewObserver creates a new observer given a handle to the Clientset
+// NewObserver 根据给定的 Clientset 创建一个观察者。
 func NewObserver(clientSet *clientset.Clientset, numNodes int) *Observer {
 	o := &Observer{
 		timing:    map[string]*nodeTime{},
@@ -92,23 +91,22 @@ func NewObserver(clientSet *clientset.Clientset, numNodes int) *Observer {
 	return o
 }
 
-// StartObserving starts an asynchronous loop to monitor for node changes.
-// Call Results() to get the test results after starting observer.
+// StartObserving 启动异步循环监控节点变化。
+// 启动后调用 Results() 获取测试结果。
 func (o *Observer) StartObserving() error {
 	o.monitor()
 	klog.Infof("Test observer started")
 	return nil
 }
 
-// Results returns the test results. It waits for the observer to finish
-// and returns the computed results of the observations.
+// Results 等待观察者完成并返回汇总后的测试结果。
 func (o *Observer) Results(name string, config *Config) *Results {
 	var (
-		firstAdd       time.Time // earliest time any node was added (first node add)
-		lastAssignment time.Time // latest time any node was assigned CIDR (last node assignment)
+		firstAdd       time.Time // 最早的节点加入时间
+		lastAssignment time.Time // 最晚的节点 CIDR 分配时间
 	)
 	o.wg.Wait()
-	close(o.stopChan) // shutdown the shared informer
+	close(o.stopChan) // 关闭 shared informer
 
 	results := &Results{
 		Name:          name,
@@ -153,7 +151,7 @@ func (o *Observer) monitor() {
 		AddFunc: controllerutil.CreateAddNodeHandler(func(node *v1.Node) (err error) {
 			name := node.GetName()
 			if node.Spec.PodCIDR != "" {
-				// ignore nodes that have PodCIDR (might be hold over from previous runs that did not get cleaned up)
+				// 忽略已有 PodCIDR 的节点（可能是上次运行残留未清理的数据）。
 				return
 			}
 			nTime := &nodeTime{}
@@ -166,9 +164,9 @@ func (o *Observer) monitor() {
 			name := newNode.GetName()
 			nTime, found := o.timing[name]
 			if !found {
-				return // consistency check - ignore nodes we have not seen the add event for
+				return // 一致性检查：忽略未观察到 add 事件的节点
 			}
-			// check if CIDR assigned and ignore redundant updates
+			// 只在首次分配 CIDR 时记录，忽略重复更新。
 			if newNode.Spec.PodCIDR != "" && nTime.podCIDR == "" {
 				nTime.allocated = time.Now()
 				nTime.podCIDR = newNode.Spec.PodCIDR
@@ -176,8 +174,7 @@ func (o *Observer) monitor() {
 				if o.numAllocated%10 == 0 {
 					klog.Infof("progress: %d/%d - %.2d%%", o.numAllocated, o.numNodes, (o.numAllocated * 100.0 / o.numNodes))
 				}
-				// do following check only if numAllocated is modified, as otherwise, redundant updates
-				// can cause wg.Done() to be called multiple times, causing a panic
+				// 仅在 numAllocated 变化时做此检查，否则重复更新会多次调用 wg.Done() 引发 panic。
 				if o.numAdded == o.numNodes && o.numAllocated == o.numNodes {
 					klog.Info("All nodes assigned podCIDR")
 					o.wg.Done()
@@ -189,8 +186,7 @@ func (o *Observer) monitor() {
 	sharedInformer.Start(o.stopChan)
 }
 
-// String implements the Stringer interface and returns a multi-line representation
-// of the test results.
+// String 实现 Stringer 接口，以多行形式返回测试结果。
 func (results *Results) String() string {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "\n  TestName: %s", results.Name)
@@ -206,12 +202,12 @@ func (results *Results) String() string {
 	return b.String()
 }
 
-// MarshalJSON implements the json.Marshaler interface
+// MarshalJSON 实现 json.Marshaler 接口。
 func (jDuration *JSONDuration) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("\"%s\"", time.Duration(*jDuration).String())), nil
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON 实现 json.Unmarshaler 接口。
 func (jDuration *JSONDuration) UnmarshalJSON(b []byte) (err error) {
 	var d time.Duration
 	if d, err = time.ParseDuration(string(b[1 : len(b)-1])); err == nil {

@@ -32,8 +32,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Verifies that the CSR approval admission plugin correctly enforces that a
-// user has permission to approve CSRs for the named signer
+// TestCSRSignerNameApprovalPlugin 验证 CSR approval admission 插件是否正确要求用户对指定 signer 具有审批权限。
 func TestCSRSignerNameApprovalPlugin(t *testing.T) {
 	tests := map[string]struct {
 		allowedSignerName string
@@ -56,23 +55,23 @@ func TestCSRSignerNameApprovalPlugin(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Run an apiserver with the default configuration options.
+			// 用默认配置启动 apiserver。
 			s := kubeapiservertesting.StartTestServerOrDie(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{"--authorization-mode=RBAC"}, framework.SharedEtcd())
 			defer s.TearDownFn()
 			client := clientset.NewForConfigOrDie(s.ClientConfig)
 
-			// Grant 'test-user' permission to approve CertificateSigningRequests with the specified signerName.
+			// 授予 test-user 审批指定 signerName 的 CertificateSigningRequest 的权限。
 			const username = "test-user"
 			grantUserPermissionToApproveFor(t, client, username, test.allowedSignerName)
-			// Create a CSR to attempt to approve.
+			// 创建用于尝试审批的 CSR。
 			csr := createTestingCSR(t, client.CertificatesV1().CertificateSigningRequests(), "csr", test.signerName, "")
 
-			// Create a second client, impersonating the 'test-user' for us to test with.
+			// 再建一个模拟 test-user 的客户端用于测试。
 			testuserConfig := restclient.CopyConfig(s.ClientConfig)
 			testuserConfig.Impersonate = restclient.ImpersonationConfig{UserName: username}
 			testuserClient := clientset.NewForConfigOrDie(testuserConfig)
 
-			// Attempt to update the Approved condition.
+			// 尝试更新 Approved 条件。
 			csr.Status.Conditions = append(csr.Status.Conditions, certv1.CertificateSigningRequestCondition{
 				Type:    certv1.CertificateApproved,
 				Status:  v1.ConditionTrue,
@@ -112,8 +111,7 @@ func buildApprovalClusterRoleForSigners(name string, signerNames ...string) *rba
 			Name: name,
 		},
 		Rules: []rbacv1.PolicyRule{
-			// must have permission to 'approve' the 'certificatesigners' named
-			// 'signerName' to approve CSRs with the given signerName.
+			// 审批指定 signerName 的 CSR，需要对相应 signer 具备 approve 权限。
 			{
 				Verbs:         []string{"approve"},
 				APIGroups:     []string{certv1.SchemeGroupVersion.Group},

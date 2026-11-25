@@ -114,7 +114,7 @@ func TestRealFIFO_Metrics(t *testing.T) {
 					}, "50")
 				},
 			},
-			// 1 (Add) + 1 (Delete for "old") + 2 (Replace items) = 4
+			// 1（Add）+ 1（删除 "old"）+ 2（Replace 的条目）= 4
 			expectedQueuedItems: 4,
 		},
 	}
@@ -144,10 +144,10 @@ func TestRealFIFO_Metrics(t *testing.T) {
 				action(f)
 			}
 
-			// Verify queued items metric
+			// 验证排队条目指标
 			verifyQueuedItems(t, metricsProvider, "test-fifo", podsGVR, tt.expectedQueuedItems)
 
-			// Verify processing latency observations
+			// 验证处理延迟的观测次数
 			verifyLatencyObservations(t, metricsProvider, "test-fifo", podsGVR, tt.expectedLatencyObservations)
 		})
 	}
@@ -156,7 +156,7 @@ func TestRealFIFO_Metrics(t *testing.T) {
 func TestRealFIFO_MetricsNotPublishedForUnnamedFIFO(t *testing.T) {
 	metricsProvider := newTestInformerMetricsProvider()
 
-	// No InformerName configured - should not publish metrics
+	// 未配置 InformerName，不应发布指标
 	var id cache.InformerNameAndResource
 	f := cache.NewRealFIFOWithOptions(cache.RealFIFOOptions{
 		KeyFunction: cache.DeletionHandlingMetaNamespaceKeyFunc,
@@ -169,11 +169,11 @@ func TestRealFIFO_MetricsNotPublishedForUnnamedFIFO(t *testing.T) {
 		MetricsProvider: metricsProvider,
 	})
 
-	// Perform operations
+	// 执行一些操作
 	_ = f.Add(mkFifoObj("foo", "1"))
 	_ = f.Add(mkFifoObj("bar", "2"))
 
-	// No metrics should be created because there's no identifier configured
+	// 没有配置 identifier，不应产生任何指标
 	want := ""
 	if err := testutil.GatherAndCompare(metricsProvider.registry, strings.NewReader(want), "informer_queued_items"); err != nil {
 		t.Fatal(err)
@@ -183,13 +183,13 @@ func TestRealFIFO_MetricsNotPublishedForUnnamedFIFO(t *testing.T) {
 func TestRealFIFO_MetricsNotPublishedForDuplicateGVR(t *testing.T) {
 	metricsProvider := newTestInformerMetricsProvider()
 
-	// Create InformerName
+	// 创建 InformerName
 	informerName, err := cache.NewInformerName("duplicate-test")
 	if err != nil {
 		t.Fatalf("NewInformerName() unexpected error: %v", err)
 	}
 	defer informerName.Release()
-	// Create first FIFO with a GVR - this should be reserved
+	// 用该 GVR 创建第一个 FIFO，应能占用（reserve）该 identifier
 	id1 := informerName.WithResource(podsGVR)
 	if !id1.Reserved() {
 		t.Fatal("Expected first identifier to be reserved")
@@ -205,7 +205,7 @@ func TestRealFIFO_MetricsNotPublishedForDuplicateGVR(t *testing.T) {
 		MetricsProvider: metricsProvider,
 	})
 
-	// Create second FIFO with the same GVR - this should NOT be reserved
+	// 用相同 GVR 创建第二个 FIFO，不应占用该 identifier
 	id2 := informerName.WithResource(podsGVR)
 	if id2.Reserved() {
 		t.Fatal("Expected second identifier with same GVR to not be reserved")
@@ -221,18 +221,18 @@ func TestRealFIFO_MetricsNotPublishedForDuplicateGVR(t *testing.T) {
 		MetricsProvider: metricsProvider,
 	})
 
-	// Add items to both FIFOs
+	// 向两个 FIFO 都添加条目
 	_ = f1.Add(mkFifoObj("foo", "1"))
 	_ = f2.Add(mkFifoObj("bar", "2"))
 
-	// Only f1's metric should be published, f2 uses noopMetric
+	// 只有 f1 的指标会被发布，f2 使用的是 noopMetric
 	verifyQueuedItems(t, metricsProvider, "duplicate-test", podsGVR, 1)
 }
 
 func TestRealFIFO_MetricsTrackedIndependentlyForDifferentFIFOs(t *testing.T) {
 	metricsProvider := newTestInformerMetricsProvider()
 
-	// Create two InformerNames with different names - both should be unique
+	// 创建两个名称不同的 InformerName，两者应各自唯一
 	informerName1, err := cache.NewInformerName("fifo-1")
 	if err != nil {
 		t.Fatalf("NewInformerName() unexpected error: %v", err)
@@ -269,14 +269,14 @@ func TestRealFIFO_MetricsTrackedIndependentlyForDifferentFIFOs(t *testing.T) {
 		MetricsProvider: metricsProvider,
 	})
 
-	// Add items to f1
+	// 向 f1 添加条目
 	_ = f1.Add(mkFifoObj("foo", "1"))
 	_ = f1.Add(mkFifoObj("bar", "2"))
 
-	// Add items to f2
+	// 向 f2 添加条目
 	_ = f2.Add(mkFifoObj("baz", "3"))
 
-	// Verify metrics are tracked independently
+	// 验证两个 FIFO 的指标彼此独立
 	wantInformerQueuedItemsMetric := `# HELP informer_queued_items [ALPHA] Number of items currently queued in the FIFO.
 # TYPE informer_queued_items gauge
 informer_queued_items{group="",name="fifo-1",resource="pods",version="v1"} 2
@@ -286,7 +286,7 @@ informer_queued_items{group="",name="fifo-2",resource="pods",version="v1"} 1
 		t.Fatal(err)
 	}
 
-	// Pop from f1 and verify its metric decreases while f2's stays the same
+	// 从 f1 弹出条目，验证其指标下降而 f2 不变
 	_, _ = f1.Pop(func(obj interface{}, isInInitialList bool) error { return nil })
 
 	wantInformerQueuedItemsMetricAfterPop := `# HELP informer_queued_items [ALPHA] Number of items currently queued in the FIFO.
@@ -298,8 +298,7 @@ informer_queued_items{group="",name="fifo-2",resource="pods",version="v1"} 1
 		t.Fatal(err)
 	}
 
-	// Verify that processing latency was recorded for f1 only after the Pop.
-	// fifo-2 has count=0 because no Pop was called for it.
+	// 只有 f1 在 Pop 后记录了处理延迟；fifo-2 未调用 Pop，故 count 为 0。
 	wantLatencyMetricAfterPop := `# HELP informer_processing_latency_seconds [ALPHA] Time taken to process events after popping from the queue.
 # TYPE informer_processing_latency_seconds histogram
 informer_processing_latency_seconds_count{group="",name="fifo-1",resource="pods",version="v1"} 1
@@ -439,8 +438,7 @@ func mkFifoObj(name string, resourceVersion string) *v1.Pod {
 	}
 }
 
-// testInformerMetricsProvider is a test implementation of cache.InformerMetricsProvider
-// that uses real component-base metrics registered with a custom registry.
+// testInformerMetricsProvider 是 cache.InformerMetricsProvider 的测试实现，使用注册到自定义 registry 的真实 component-base 指标。
 type testInformerMetricsProvider struct {
 	registry             metrics.KubeRegistry
 	gauge                *metrics.GaugeVec
@@ -512,9 +510,7 @@ informer_queued_items{group="%s",name="%s",resource="%s",version="%s"} %d
 	}
 }
 
-// verifyLatencyObservations checks the histogram observation count using a custom gatherer
-// that strips timing-dependent values (bucket counts and sum) from the comparison, so that
-// we only verify the number of observations without being affected by the duration values.
+// verifyLatencyObservations 使用自定义 gatherer 检查 histogram 的观测次数，剔除依赖时间的字段（bucket 计数与 sum），确保断言不受具体耗时影响。
 func verifyLatencyObservations(t *testing.T, metricsProvider *testInformerMetricsProvider, informerName string, gvr schema.GroupVersionResource, expected uint64) {
 	t.Helper()
 	if expected == 0 {
@@ -549,7 +545,7 @@ func (p *testInformerMetricsProvider) gatherWithoutDurations() testutil.Gatherer
 				if m.Histogram == nil {
 					continue
 				}
-				// Remove everything from a histogram that depends on timing.
+				// 移除 histogram 中所有依赖时间的内容。
 				m.Histogram.SampleSum = nil
 				m.Histogram.Bucket = nil
 			}

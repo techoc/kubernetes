@@ -373,18 +373,18 @@ func TestSelectorsForPodsWithoutLabels(t *testing.T) {
 
 			minAvailable := intstr.FromInt32(1)
 
-			// Create the PDB first and wait for it to settle.
+			// 先创建 PDB 并等待其状态稳定
 			pdbName := "test-pdb"
 			if err := tc.createPDBFunc(tCtx, clientSet, s.EtcdClient, s.EtcdStoragePrefix, pdbName, nsName, minAvailable); err != nil {
 				t.Errorf("Error creating PodDisruptionBudget: %v", err)
 			}
 			waitPDBStable(tCtx, t, clientSet, 0, nsName, pdbName)
 
-			// Create a pod and wait for it be reach the running phase.
+			// 创建 Pod 并等待其进入 Running 状态
 			createPod(tCtx, t, "pod", nsName, map[string]string{}, clientSet, []metav1.OwnerReference{})
 			waitToObservePods(t, informers.Core().V1().Pods().Informer(), 1, v1.PodRunning)
 
-			// Then verify that the added pod are picked up by the disruption controller.
+			// 验证新增的 Pod 已被 disruption controller 统计
 			waitPDBStable(tCtx, t, clientSet, 1, nsName, pdbName)
 
 			newPdb, err := clientSet.PolicyV1().PodDisruptionBudgets(nsName).Get(tCtx, pdbName, metav1.GetOptions{})
@@ -512,9 +512,8 @@ func waitToObservePods(t *testing.T, podInformer cache.SharedIndexInformer, podN
 	}
 }
 
-// createPDBUsingRemovedAPI creates a PDB directly using etcd.  This is must *ONLY* be used for checks of compatibility
-// with removed data. Do not use this just because you don't want to update your test to use v1.  Only use this
-// when it actually matters.
+// createPDBUsingRemovedAPI 直接向 etcd 写入 PDB，仅用于验证对已移除版本数据的兼容性。
+// 不要为了省事而用它替代 v1 API，只在兼容性确实关键时使用。
 func createPDBUsingRemovedAPI(ctx context.Context, etcdClient *clientv3.Client, etcdStoragePrefix, nsName string, betaPDB *v1beta1.PodDisruptionBudget) error {
 	betaPDB.APIVersion = v1beta1.SchemeGroupVersion.Group + "/" + v1beta1.SchemeGroupVersion.Version
 	betaPDB.Kind = "PodDisruptionBudget"
@@ -536,10 +535,8 @@ func TestPatchCompatibility(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	s, pdbc, _, clientSet, _, _ := setup(tCtx, t)
 	defer s.TearDownFn()
-	// Even though pdbc isn't used in this test, its creation is already
-	// spawning some goroutines. So we need to run it to ensure they won't leak.
-	// We can't cancel immediately but later, because when the context is canceled,
-	// the event broadcaster will be shut down .
+	// 虽然本测试不直接使用 pdbc，但创建它时已经启动了 goroutine。
+	// 需要运行它并在稍后取消 context，以确保这些 goroutine 正常退出、不泄漏。
 	defer tCtx.Cancel("cleaning up")
 	go pdbc.Run(tCtx, 1)
 
@@ -558,7 +555,7 @@ func TestPatchCompatibility(t *testing.T) {
 			version:   "v1",
 			patchType: types.StrategicMergePatchType,
 			patch:     `{"spec":{"selector":{"matchLabels":{"patchmatch":"true"},"matchExpressions":[{"key":"patchexpression","operator":"In","values":["true"]}]}}}`,
-			// matchLabels and matchExpressions are both replaced (because selector patchStrategy=replace in v1)
+			// v1 中 selector 的 patchStrategy=replace，matchLabels 与 matchExpressions 均被整体替换
 			expectSelector: &metav1.LabelSelector{
 				MatchLabels:      map[string]string{"patchmatch": "true"},
 				MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "patchexpression", Operator: "In", Values: []string{"true"}}},
@@ -569,7 +566,7 @@ func TestPatchCompatibility(t *testing.T) {
 			version:   "v1",
 			patchType: types.MergePatchType,
 			patch:     `{"spec":{"selector":{"matchLabels":{"patchmatch":"true"},"matchExpressions":[{"key":"patchexpression","operator":"In","values":["true"]}]}}}`,
-			// matchLabels portion is merged, matchExpressions portion is replaced (because it's a list)
+			// matchLabels 按 map 合并；matchExpressions 是列表，整体替换
 			expectSelector: &metav1.LabelSelector{
 				MatchLabels:      map[string]string{"basematch": "true", "patchmatch": "true"},
 				MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "patchexpression", Operator: "In", Values: []string{"true"}}},
@@ -582,7 +579,7 @@ func TestPatchCompatibility(t *testing.T) {
 			patch:        `{"apiVersion":"policy/v1","kind":"PodDisruptionBudget","spec":{"selector":{"matchLabels":{"patchmatch":"true"},"matchExpressions":[{"key":"patchexpression","operator":"In","values":["true"]}]}}}`,
 			force:        ptr.To(true),
 			fieldManager: "test",
-			// entire selector is replaced (because structType=atomic)
+			// structType=atomic，apply 时整个 selector 被替换
 			expectSelector: &metav1.LabelSelector{
 				MatchLabels:      map[string]string{"patchmatch": "true"},
 				MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "patchexpression", Operator: "In", Values: []string{"true"}}},
@@ -701,7 +698,7 @@ func TestStalePodDisruption(t *testing.T) {
 			pod := util.InitPausePod(&util.PausePodConfig{
 				Name:      name,
 				Namespace: nsName,
-				NodeName:  "foo", // mock pod as scheduled so that it's not immediately deleted when calling Delete.
+				NodeName:  "foo", // 伪装为已调度，避免调用 Delete 时被立即删除
 			})
 			var err error
 			pod, err = util.CreatePausePod(clientSet, pod)

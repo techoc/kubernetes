@@ -53,8 +53,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// TestStaticWebhookBlocksAPICreation tests that resources with .static.k8s.io suffix
-// cannot be created via the REST API when the feature gate is enabled.
+// TestStaticWebhookBlocksAPICreation 验证启用 feature gate 后，带 .static.k8s.io 后缀的资源无法通过 REST API 创建。
 func TestStaticWebhookBlocksAPICreation(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ManifestBasedAdmissionControlConfig, true)
 	ctx := t.Context()
@@ -126,22 +125,21 @@ func TestStaticWebhookBlocksAPICreation(t *testing.T) {
 	expectStaticSuffixRejection("MutatingWebhookConfiguration", err)
 }
 
-// TestStaticWebhookComprehensive exercises static webhook manifest loading using a
-// single shared API server with combined ValidatingAdmissionWebhook and
-// MutatingAdmissionWebhook admission config.
+// TestStaticWebhookComprehensive 在单个共享 API server 上同时配置 ValidatingAdmissionWebhook 和
+// MutatingAdmissionWebhook，验证静态 webhook manifest 的加载。
 //
-// Scenarios tested (in order):
-//  1. Startup loading — VWC manifest pre-populated before server start, verified active immediately
-//  2. Hot reload — MWC manifest added after server start, verified via polling
-//  3. Both webhooks active simultaneously — single configmap create triggers both
-//  4. v1.List format manifest — VWC loaded from a JSON v1.List file targeting secrets
-//  5. Static webhook intercepts admission config resources — VWC creation denied
-//  6. Coexistence with API-based webhook — static MWC and API-based VWC enforce side by side
-//  7. Hot reload removal — VWC manifest deleted, validating webhook stops
-//  8. Independent lifecycle — MWC still active after VWC removed
+// 测试场景（按顺序）：
+//  1. 启动加载 — 服务启动前预置 VWC manifest，验证立即生效
+//  2. 热重载 — 服务启动后添加 MWC manifest，轮询验证
+//  3. 两个 webhook 同时生效 — 创建一次 configmap 同时触发两者
+//  4. v1.List 格式 manifest — 从 JSON v1.List 文件加载针对 secret 的 VWC
+//  5. 静态 webhook 拦截 admission 配置资源 — VWC 创建被拒绝
+//  6. 与 API 方式 webhook 共存 — 静态 MWC 与 API 定义的 VWC 同时生效
+//  7. 热重载移除 — 删除 VWC manifest 后 validating webhook 停止
+//  8. 生命周期独立 — VWC 移除后 MWC 仍然生效
 //
-// Reload metrics (count, hash, timestamp, apiserver_id_hash) are validated after every
-// subtest that triggers a manifest reload to confirm the reload was successful.
+// 每个触发 manifest 重载的子测试后都会校验重载指标（count、hash、timestamp、apiserver_id_hash），
+// 以确认重载成功。
 func TestStaticWebhookComprehensive(t *testing.T) {
 	genericapiserver.SetHostnameFuncForTests("testAPIServerID")
 	metrics.ResetMetricsForTest()
@@ -150,13 +148,13 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 	defer resetInterval()
 	ctx := t.Context()
 
-	// Create webhook servers (validating: allows configmaps but denies VWC, mutating: adds label)
+	// 创建 webhook server（validating：放行 configmap 但拒绝 VWC，mutating：添加 label）
 	validatingServer, validatingCACert, validatingRequestCount := createStaticTestWebhookServer(t)
 	defer validatingServer.Close()
 	mutatingServer, mutatingCACert := createStaticMutatingTestWebhookServer(t)
 	defer mutatingServer.Close()
 
-	// Override the validating handler to deny VWC creation but allow everything else
+	// 覆盖 validating handler：拒绝 VWC 创建，其余请求全部放行
 	validatingServer.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		validatingRequestCount.Add(1)
 		body, _ := readStaticBody(r)
@@ -187,11 +185,11 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 		_, _ = w.Write(respBytes)
 	})
 
-	// Separate directories for validating and mutating webhook manifests
+	// validating 与 mutating webhook manifest 分别放在不同目录
 	validatingManifestsDir := t.TempDir()
 	mutatingManifestsDir := t.TempDir()
 
-	// Webhook configurations
+	// webhook 配置
 	vwcConfig := &admissionregistrationv1.ValidatingWebhookConfiguration{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "admissionregistration.k8s.io/v1",
@@ -254,13 +252,13 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 		}},
 	}
 
-	// Pre-populate VWC manifest before server start (tests startup loading path)
+	// 启动前预置 VWC manifest，覆盖启动加载路径
 	validatingManifestPath := writeManifestToFile(t, validatingManifestsDir, "validating.yaml", vwcConfig)
 
-	// Combined admission config for both ValidatingAdmissionWebhook and MutatingAdmissionWebhook
+	// 同时为 ValidatingAdmissionWebhook 和 MutatingAdmissionWebhook 配置 admission
 	admissionConfigFile := createCombinedWebhookAdmissionConfig(t, validatingManifestsDir, mutatingManifestsDir)
 
-	// Start server with both plugins — VWC manifest already present
+	// 启动服务时两个插件均已配置，且 VWC manifest 已就位
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--disable-admission-plugins=ServiceAccount",
 		"--admission-control-config-file=" + admissionConfigFile,
@@ -273,7 +271,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 	}
 	ns := metav1.NamespaceDefault
 
-	// Track reload metrics across subtests for both plugins
+	// 跨子测试跟踪两个插件的重载指标
 	var lastVWHMetrics, lastMWHMetrics *reloadMetrics
 	expectReloadCountIncrease := func(pluginName string, prev **reloadMetrics, expectNonEmptyHash bool) {
 		t.Helper()
@@ -283,7 +281,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 			if *prev == nil {
 				return m.reloadSuccessCount > 0, nil
 			}
-			// Wait for both count increase AND hash change
+			// 计数增长与 hash 变化必须同时满足
 			return m.reloadSuccessCount > (*prev).reloadSuccessCount && m.configHash != (*prev).configHash, nil
 		})
 		if err != nil {
@@ -301,7 +299,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 	}
 
 	t.Run("validating webhook active at startup", func(t *testing.T) {
-		// VWC was pre-populated — should be active from the first request
+		// VWC 已预置，首个请求起即应生效
 		var lastErr error
 		err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			cm := &corev1.ConfigMap{
@@ -380,7 +378,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 	})
 
 	t.Run("v1.List format manifest", func(t *testing.T) {
-		// Write a second VWC using v1.List format
+		// 用 v1.List 格式写入第二个 VWC
 		listVWC := &admissionregistrationv1.ValidatingWebhookConfiguration{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "admissionregistration.k8s.io/v1",
@@ -427,7 +425,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 			t.Fatalf("Failed to rename v1.List manifest: %v", err)
 		}
 
-		// Wait for the v1.List webhook to be active by checking that secrets trigger the validating server
+		// 通过 secret 是否触发 validating server 判断 v1.List webhook 已生效
 		countBefore := validatingRequestCount.Load()
 		var lastErr error
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
@@ -445,7 +443,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 
 		expectReloadCountIncrease("ValidatingAdmissionWebhook", &lastVWHMetrics, true)
 
-		// Clean up the list manifest so it doesn't interfere with later subtests
+		// 清理 list manifest，避免干扰后续子测试
 		if err := os.Remove(listPath); err != nil {
 			t.Fatalf("Failed to remove list manifest: %v", err)
 		}
@@ -486,14 +484,14 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 	})
 
 	t.Run("coexists with API-based webhook", func(t *testing.T) {
-		// Remove the static validating manifest so we can create an API-based VWC
+		// 删除静态 validating manifest，以便创建 API 方式的 VWC
 		if err := os.Remove(validatingManifestPath); err != nil {
 			t.Fatalf("Failed to remove validating manifest: %v", err)
 		}
 
 		expectReloadCountIncrease("ValidatingAdmissionWebhook", &lastVWHMetrics, false)
 
-		// Wait for the static VWC to be unloaded, then create API-based VWC
+		// 等待静态 VWC 卸载后再创建 API 方式的 VWC
 		apiWebhookServer, apiCACert, apiRequestCount := createStaticTestWebhookServer(t)
 		defer apiWebhookServer.Close()
 
@@ -522,7 +520,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 			t.Fatalf("Timeout waiting to create API-based VWC: %v (last error: %v)", err, lastErr)
 		}
 
-		// Wait for API webhook to be active
+		// 等待 API webhook 生效
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, lastErr = client.CoreV1().Secrets(ns).Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: "api-webhook-probe", Namespace: ns},
@@ -536,7 +534,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 			t.Fatalf("Timeout waiting for API webhook to be invoked: %v (last error: %v)", err, lastErr)
 		}
 
-		// Verify static mutating webhook still works on configmaps
+		// 验证静态 mutating webhook 对 configmap 仍然生效
 		cm, err := client.CoreV1().ConfigMaps(ns).Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "coexist-check-cm", Namespace: ns, Labels: map[string]string{"app": "test"}},
 		}, metav1.CreateOptions{})
@@ -548,9 +546,9 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 		}
 		_ = client.CoreV1().ConfigMaps(ns).Delete(ctx, cm.Name, metav1.DeleteOptions{})
 
-		// Re-add the validating manifest for subsequent subtests
+		// 重新写回 validating manifest，供后续子测试使用
 		validatingManifestPath = writeManifestToFile(t, validatingManifestsDir, "validating.yaml", vwcConfig)
-		// Wait for it to reload
+		// 等待重载完成
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 			countBefore := validatingRequestCount.Load()
 			_, _ = client.CoreV1().ConfigMaps(ns).Create(ctx, &corev1.ConfigMap{
@@ -565,7 +563,7 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 
 		expectReloadCountIncrease("ValidatingAdmissionWebhook", &lastVWHMetrics, true)
 
-		// Clean up API webhook
+		// 清理 API webhook
 		_ = client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Delete(ctx, "api-webhook", metav1.DeleteOptions{})
 	})
 
@@ -619,10 +617,9 @@ func TestStaticWebhookComprehensive(t *testing.T) {
 	})
 }
 
-// It returns the server, the CA certificate, and a counter that tracks how many
-// admission requests the webhook has received.
+// 返回 server、CA 证书，以及记录 webhook 收到的 admission 请求数的计数器。
 func createStaticTestWebhookServer(t *testing.T) (*httptest.Server, []byte, *atomic.Int64) {
-	// Use the test certificates already defined in this package
+	// 复用包内已定义的测试证书
 	cert, err := tls.X509KeyPair(localhostCert, localhostKey)
 	if err != nil {
 		t.Fatalf("Failed to create key pair: %v", err)
@@ -632,7 +629,7 @@ func createStaticTestWebhookServer(t *testing.T) (*httptest.Server, []byte, *ato
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
-		// Allow all requests
+		// 放行所有请求
 		review := &admissionreviewv1.AdmissionReview{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "admission.k8s.io/v1",
@@ -644,7 +641,7 @@ func createStaticTestWebhookServer(t *testing.T) (*httptest.Server, []byte, *ato
 			},
 		}
 
-		// Parse the request to get the UID
+		// 解析请求以获取 UID
 		body, _ := readStaticBody(r)
 		if len(body) > 0 {
 			var req admissionreviewv1.AdmissionReview
@@ -698,9 +695,8 @@ plugins:
 	return configFile.Name()
 }
 
-// createStaticMutatingTestWebhookServer creates an HTTPS webhook server that returns a JSON patch
-// adding the label static-mutated=true to the resource.
-// It returns the server and the CA certificate.
+// createStaticMutatingTestWebhookServer 创建一个 HTTPS webhook server，返回给资源添加
+// static-mutated=true label 的 JSON patch。返回 server 与 CA 证书。
 func createStaticMutatingTestWebhookServer(t *testing.T) (*httptest.Server, []byte) {
 	cert, err := tls.X509KeyPair(localhostCert, localhostKey)
 	if err != nil {
@@ -749,8 +745,8 @@ func readStaticBody(r *http.Request) ([]byte, error) {
 	return io.ReadAll(r.Body)
 }
 
-// writeManifestToFile marshals the given objects as a multi-document YAML file.
-// Uses atomic write (write to tmp file, then rename) to avoid partial reads.
+// writeManifestToFile 将对象序列化为多文档 YAML 文件。
+// 采用先写临时文件再 rename 的原子写入，避免读到半成品。
 func writeManifestToFile(t *testing.T, dir, filename string, objects ...interface{}) string {
 	t.Helper()
 	var parts []string
@@ -772,7 +768,7 @@ func writeManifestToFile(t *testing.T, dir, filename string, objects ...interfac
 	return path
 }
 
-// reloadMetrics holds parsed reload metrics from /metrics endpoint.
+// reloadMetrics 保存从 /metrics 端点解析出的重载指标。
 type reloadMetrics struct {
 	reloadSuccessCount int
 	reloadSuccessTime  *time.Time

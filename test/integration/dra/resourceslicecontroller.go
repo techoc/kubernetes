@@ -30,10 +30,9 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// TestCreateResourceSlices uses the ResourceSlice controller to create slices.
-// It runs both as integration and as E2E test, with different number of slices.
+// TestCreateResourceSlices 用 ResourceSlice controller 创建 slice，既作为集成测试也作为 E2E 测试运行（slice 数量不同）
 func TestCreateResourceSlices(tCtx ktesting.TContext, numSlices int) {
-	// Define desired resource slices.
+	// 构造期望的 resource slice
 	namespace := tCtx.Namespace()
 	driverName := namespace
 	devicePrefix := "dev-"
@@ -69,7 +68,7 @@ func TestCreateResourceSlices(tCtx ktesting.TContext, numSlices int) {
 	}
 	listSlices := func(tCtx ktesting.TContext) *resourceapi.ResourceSliceList {
 		tCtx.Helper()
-		// TODO: replicate framework.ListObjects/Get/etc. with ktesting
+		// TODO: 用 ktesting 实现 framework.ListObjects/Get 等辅助方法
 		slices, err := tCtx.Client().ResourceV1().ResourceSlices().List(tCtx, metav1.ListOptions{
 			FieldSelector: resourceapi.ResourceSliceSelectorDriver + "=" + driverName,
 		})
@@ -97,10 +96,10 @@ func TestCreateResourceSlices(tCtx ktesting.TContext, numSlices int) {
 		}).Should(gomega.HaveField("Items", gomega.BeEmpty()))
 	})
 
-	// Eventually we should have all desired slices.
+	// 等待 controller 最终创建出全部期望的 slice
 	tCtx.Eventually(listSlices).WithTimeout(3 * time.Minute).Should(gomega.HaveField("Items", gomega.HaveLen(numSlices)))
 
-	// Verify state.
+	// 校验 slice 体积和 controller 统计值
 	expectSlices := listSlices(tCtx)
 	tCtx.Assert(expectSlices.Items).ShouldNot(gomega.BeEmpty())
 	tCtx.Logf("Protobuf size of one slice is %d bytes = %d KB.", expectSlices.Items[0].Size(), expectSlices.Items[0].Size()/1024)
@@ -109,26 +108,23 @@ func TestCreateResourceSlices(tCtx ktesting.TContext, numSlices int) {
 	expectStats := resourceslice.Stats{NumCreates: int64(numSlices)}
 	tCtx.Assert(controller.GetStats()).Should(gomega.Equal(expectStats))
 
-	// No further changes expected now, after checking again.
+	// 再观察一段时间，确认没有额外变更
 	getStats := func(tCtx ktesting.TContext) resourceslice.Stats { return controller.GetStats() }
 	tCtx.Consistently(getStats).WithTimeout(2 * mutationCacheTTL).Should(gomega.Equal(expectStats))
 
-	// Ask the controller to delete all slices except for one empty slice.
+	// 更新期望资源，让 controller 只保留一个空 slice、其余删除
 	tCtx.Log("Deleting slices")
 	resources = resources.DeepCopy()
 	resources.Pools[poolName] = resourceslice.Pool{Slices: []resourceslice.Slice{{}}, AllNodes: true}
 	controller.Update(resources)
 
-	// A slice should be updated to be empty, and the rest should be deleted.
+	// 期望一个 slice 被更新为空，其余被删除
 	emptySlice := gomega.HaveField("Spec.Devices", gomega.BeEmpty())
 	tCtx.Eventually(listSlices).WithTimeout(2 * time.Minute).Should(gomega.HaveField("Items", gomega.HaveExactElements(emptySlice)))
 	expectStats = resourceslice.Stats{NumCreates: int64(numSlices), NumUpdates: 1, NumDeletes: int64(numSlices) - 1}
 
-	// There is a window of time where the ResourceSlice exists and is
-	// returned in a list but before that ResourceSlice is accounted for
-	// in the controller's stats, consisting mostly of network latency
-	// between this test process and the API server. Wait for the stats
-	// to converge before asserting there are no further changes.
+	// slice 已出现在 list 结果中但尚未计入 controller 统计之间存在时间窗口，
+	// 主要是测试进程与 API server 的网络延迟。先等统计值收敛，再断言无后续变更
 	tCtx.Eventually(getStats).WithTimeout(30 * time.Second).Should(gomega.Equal(expectStats))
 
 	tCtx.Consistently(getStats).WithTimeout(2 * mutationCacheTTL).Should(gomega.Equal(expectStats))

@@ -16,7 +16,7 @@ limitations under the License.
 
 package extender
 
-// This file tests scheduler extender.
+// 本文件测试 scheduler extender。
 
 import (
 	"context"
@@ -40,7 +40,7 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// imported from testutils
+// 从 testutils 引入
 var (
 	createNode = testutils.CreateNode
 )
@@ -92,8 +92,7 @@ func (e *Extender) serveHTTP(t *testing.T, w http.ResponseWriter, req *http.Requ
 				t.Fatalf("Failed to encode %v", resp)
 			}
 		} else if strings.Contains(req.URL.Path, prioritize) {
-			// Prioritize errors are ignored. Default k8s priorities or another extender's
-			// priorities may be applied.
+			// Prioritize 的错误会被忽略，以便应用默认优先级或其他 extender 的优先级
 			priorities, _ := e.Prioritize(&args)
 
 			if err := encoder.Encode(priorities); err != nil {
@@ -361,8 +360,7 @@ func TestSchedulerExtender(t *testing.T) {
 }
 
 func DoTestPodScheduling(ns *v1.Namespace, t *testing.T, cs clientset.Interface) {
-	// NOTE: This test cannot run in parallel, because it is creating and deleting
-	// non-namespaced objects (Nodes).
+	// 注意：本测试会创建和删除集群级对象（Node），不能并行运行
 	defer cs.CoreV1().Nodes().DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})
 
 	goodCondition := v1.NodeCondition{

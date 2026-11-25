@@ -57,7 +57,7 @@ import (
 )
 
 var (
-	// For more test data see pkg/scheduler/framework/plugin/dynamicresources/dynamicresources_test.go.
+	// 更多测试数据见 pkg/scheduler/framework/plugin/dynamicresources/dynamicresources_test.go。
 
 	podName      = "my-pod"
 	namespace    = "default"
@@ -90,23 +90,21 @@ var (
 
 const (
 	numNodes           = 8
-	maxPodsPerNode     = 5000 // This should never be the limiting factor, no matter how many tests run in parallel.
+	maxPodsPerNode     = 5000 // 无论多少测试并行，都不应让 Pod 数量成为限制因素。
 	nodeCPUCapacity    = "100"
 	nodeMemoryCapacity = "1k"
 
-	// schedulingTimeout is the time we grant the scheduler for one scheduling attempt,
-	// whether it's successful or not.
+	// schedulingTimeout 是一次调度尝试（无论成功与否）允许消耗的时间。
 	schedulingTimeout = time.Minute
 )
 
-// featureNodeSetups maps feature gates to functions that configure the nodes
-// for that specific feature.
+// featureNodeSetups 将 feature gate 映射到针对该特性配置 node 的函数。
 var featureNodeSetups = map[featuregate.Feature]func(tCtx ktesting.TContext, nodes []*v1.Node){
 	features.DRAOptionalNodeOperations: func(tCtx ktesting.TContext, nodes []*v1.Node) {
 		if len(nodes) == 0 {
 			return
 		}
-		// Configure worker-0 to declare support for DRAOptionalNodeOperations.
+		// 配置 worker-0 声明支持 DRAOptionalNodeOperations。
 		node := nodes[0]
 		node.Status.DeclaredFeatures = append(node.Status.DeclaredFeatures, draoptionalnodeoperations.DRAOptionalNodeOperationsFeatureGate)
 		updatedNode, err := tCtx.Client().CoreV1().Nodes().UpdateStatus(tCtx, node, metav1.UpdateOptions{})
@@ -122,20 +120,14 @@ func run(tCtx ktesting.TContext, whatRE string) {
 		tCtx.Fatalf("%s: %v", whatRE, err)
 	}
 
-	// Each sub-test brings up the API server in a certain
-	// configuration. These sub-tests must run sequentially because they
-	// change the global DefaultFeatureGate. For each configuration,
-	// multiple tests can run in parallel as long as they are careful
-	// about what they create.
+	// 每个子测试以特定配置启动 API server。这些子测试必须串行运行，因为它们会修改
+	// 全局 DefaultFeatureGate。同一配置下多个测试可以并行，前提是各自小心创建资源。
 	//
-	// Each configuration starts with two Nodes (ready, sufficient RAM and CPU for multiple pods)
-	// and no ResourceSlices. To test scheduling, a sub-test must create ResourceSlices.
-	// createTestNamespace can be used to create a unique per-test namespace. The name of that
-	// namespace then can be used to create cluster-scoped objects without conflicts between tests.
+	// 每种配置初始都有两个 Node（ready，RAM/CPU 足够运行多个 Pod）且没有 ResourceSlice。
+	// 要测试调度，子测试必须创建 ResourceSlice。可用 createTestNamespace 创建各测试独有的
+	// namespace，再用该 namespace 的名字创建 cluster 级对象，避免测试间冲突。
 	//
-	// Some tests run in different configuration even though the test itself is always
-	// executed the same way. This increases test coverage because the code under test
-	// might be different.
+	// 有些测试逻辑完全相同，却在不同配置下运行，以覆盖被测代码的不同分支。
 	for name, tc := range map[string]struct {
 		apis     map[schema.GroupVersion]bool
 		version  string
@@ -143,7 +135,7 @@ func run(tCtx ktesting.TContext, whatRE string) {
 		f        func(tCtx ktesting.TContext)
 	}{
 		"disabled": {
-			version:  "1.34", // In 1.34 it was still possible to disable DRA.
+			version:  "1.34", // 1.34 中仍可禁用 DRA。
 			apis:     map[schema.GroupVersion]bool{resourceapi.SchemeGroupVersion: false},
 			features: map[featuregate.Feature]bool{features.DynamicResourceAllocation: false},
 			f: func(tCtx ktesting.TContext) {
@@ -163,18 +155,16 @@ func run(tCtx ktesting.TContext, whatRE string) {
 				runSubTest(tCtx, "EvictClusterWithV1Rule", func(tCtx ktesting.TContext) { testEvictCluster(tCtx, useV1Rule) })
 				runSubTest(tCtx, "EvictClusterWithSlices", func(tCtx ktesting.TContext) { testEvictCluster(tCtx, useNoRule) })
 				runSubTest(tCtx, "NoScheduleWithSlices", func(tCtx ktesting.TContext) { testNoScheduleRule(tCtx, useNoRule) })
-				// Number of devices per slice is chosen so that Filter takes a few seconds:
-				// without a timeout, the test doesn't run too long, but long enough that a short timeout triggers.
+				// 每个 slice 的 device 数量选为让 Filter 耗时数秒：既不至于让测试太久，
+				// 又足以触发较短的超时。
 				runSubTest(tCtx, "FilterTimeout", func(tCtx ktesting.TContext) { testFilterTimeout(tCtx, 21) })
 				runSubTest(tCtx, "UsesAllResources", testUsesAllResources)
 			},
 		},
-		// Compatibility groups with consumable capacity explicitly disabled.
-		// The two gates are independent, and the scheduler plugin assembles
-		// the allocator's view of existing allocations differently when
-		// DRAConsumableCapacity is off - the allocated-device membership that
-		// the enforcement baseline keys on must still reach the allocator on
-		// that path.
+		// 显式关闭 consumable capacity 的 compatibility group 配置。
+		// 两个 feature gate 相互独立；DRAConsumableCapacity 关闭时，调度插件组装
+		// allocator 眼中的已有分配会走另一条路径，但强制基线依赖的“已分配 device”
+		// 信息在该路径下仍必须传递给 allocator。
 		"compatibility-groups-without-consumable-capacity": {
 			apis: map[schema.GroupVersion]bool{},
 			features: map[featuregate.Feature]bool{
@@ -186,9 +176,8 @@ func run(tCtx ktesting.TContext, whatRE string) {
 				runSubTest(tCtx, "CompatibilityGroups", func(tCtx ktesting.TContext) { testCompatibilityGroups(tCtx, true) })
 			},
 		},
-		// This covers the *current* Kubernetes version with only GA features enabled.
-		// The GA scenario(s) for other version(s) verify that version emulation works.
-		// Just some key tests get replicated there to keep the overall runtime low enough.
+		// 覆盖仅启用 GA 特性的当前 Kubernetes 版本。
+		// 其他版本的 GA 场景用于验证版本模拟是否正常工作，只复刻少量关键测试以控制总运行时长。
 		"GA": {
 			apis: map[schema.GroupVersion]bool{},
 			features: map[featuregate.Feature]bool{
@@ -301,9 +290,7 @@ func run(tCtx ktesting.TContext, whatRE string) {
 				schedulingapi.SchemeGroupVersion:    true,
 			},
 			features: map[featuregate.Feature]bool{
-				// Additional DRA feature gates go here,
-				// in alphabetical order,
-				// as needed by tests for them.
+				// 新增 DRA feature gate 时按字母顺序添加到这里，供相关测试使用。
 				features.DRAAdminAccess:               true,
 				features.DRADeviceBindingConditions:   true,
 				features.DRAConsumableCapacity:        true,
@@ -318,11 +305,11 @@ func run(tCtx ktesting.TContext, whatRE string) {
 				features.DRAExtendedResource:          true,
 				features.DRANodeAllocatableResources:  true,
 				features.DRAWorkloadResourceClaims:    true,
-				features.GenericWorkload:              true, // dependency of DRAWorkloadResourceClaims
-				features.NodeDeclaredFeatures:         true, // dependency of DRAOptionalNodeOperations
+				features.GenericWorkload:              true, // DRAWorkloadResourceClaims 的依赖
+				features.NodeDeclaredFeatures:         true, // DRAOptionalNodeOperations 的依赖
 			},
 			f: func(tCtx ktesting.TContext) {
-				// These tests must run in parallel as much as possible to keep overall runtime low!
+				// 这些测试必须尽可能并行，以控制整体运行时长！
 
 				runSubTest(tCtx, "AdminAccess", func(tCtx ktesting.TContext) { testAdminAccess(tCtx, true) })
 				runSubTest(tCtx, "Convert", testConvert)
@@ -349,9 +336,8 @@ func run(tCtx ktesting.TContext, whatRE string) {
 				runSubTest(tCtx, "NoScheduleWithV1Rule", func(tCtx ktesting.TContext) { testNoScheduleRule(tCtx, useV1Rule) })
 				runSubTest(tCtx, "NoScheduleWithSlices", func(tCtx ktesting.TContext) { testNoScheduleRule(tCtx, useNoRule) })
 				runSubTest(tCtx, "InvalidResourceSlices", testInvalidResourceSlices)
-				// Number of devices per slice is chosen so that Filter takes a few seconds: The allocator
-				// in the experimental channel has an improvement that requires a higher number here than
-				// in the incubating and stable channels.
+				// 每个 slice 的 device 数量选为让 Filter 耗时数秒：experimental 渠道的 allocator
+				// 有优化，因此这里需要比 incubating 和 stable 渠道更大的数量。
 				runSubTest(tCtx, "FilterTimeout", func(tCtx ktesting.TContext) { testFilterTimeout(tCtx, 21) })
 				runSubTest(tCtx, "ShareResourceClaimSequentially", testShareResourceClaimSequentially)
 				runSubTest(tCtx, "UsesAllResources", testUsesAllResources)
@@ -390,9 +376,8 @@ func run(tCtx ktesting.TContext, whatRE string) {
 			}
 			apiServerFlags = append(apiServerFlags, "--runtime-config="+strings.Join(runtimeConfigs, ","))
 
-			// Keep the apiserver running despite context cancelation.
-			// We may want to collect some information from it below.
-			// It then gets stopped explicitly at the end of shutdown.
+			// context 取消后仍保持 apiserver 运行，以便后续收集信息，
+			// 最后在清理阶段显式停止。
 			server, err := kubeapiservertesting.StartTestServer(tCtx.WithoutCancel(), apiServerOptions, apiServerFlags, etcdOptions)
 			tCtx.ExpectNoError(err, "start apiserver")
 			tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
@@ -410,19 +395,17 @@ func run(tCtx ktesting.TContext, whatRE string) {
 			tCtx = prepareScheduler(tCtx)
 			tCtx = prepareClaimController(tCtx)
 
-			// To isolate different tests properly, each test must ensure that it
-			// only allocates its own devices. We can verify that here by making sure that
-			// driver names of allocated devices contain the namespace. That is how all tests
-			// should construct their driver name(s).
+			// 为保证测试相互隔离，每个测试必须只分配自己的 device。这里通过检查已分配
+			// device 的 driver 名包含 namespace 来验证；所有测试都应按此规则构造 driver 名。
 			//
-			// We run this in parallel to the tests because post-test checking might miss claims.
+			// 该检查与测试并行运行，因为测试结束后的检查可能漏掉某些 claim。
 			informerFactory := informers.NewSharedInformerFactory(tCtx.Client(), 0)
 			claimHandle, err := informerFactory.Resource().V1().ResourceClaims().Informer().AddEventHandlerWithOptions(cache.ResourceEventHandlerFuncs{
 				UpdateFunc: func(oldObj, newObj any) {
 					oldClaim := oldObj.(*resourceapi.ResourceClaim)
 					newClaim := newObj.(*resourceapi.ResourceClaim)
 
-					// Check an allocation once when it appears.
+					// 分配出现时检查一次。
 					if oldClaim.Status.Allocation == nil && newClaim.Status.Allocation != nil {
 						for _, result := range newClaim.Status.Allocation.Devices.Results {
 							if !strings.Contains(result.Driver, newClaim.Namespace) {
@@ -443,9 +426,8 @@ func run(tCtx ktesting.TContext, whatRE string) {
 				informerFactory.Shutdown()
 			})
 
-			// Dump some information in case of a test failure before continuing with the shutdown.
-			// If we timed out, then we should still get this done, even if the shutdown itself
-			// then fails.
+			// 测试失败时先 dump 信息，再继续清理。即使发生超时，也必须完成 dump，
+			// 即便随后的清理本身失败。
 			tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
 				if !tCtx.Failed() {
 					return
@@ -470,7 +452,7 @@ func createNodes(tCtx ktesting.TContext) []*v1.Node {
 	var createdNodes []*v1.Node
 	for i := range numNodes {
 		nodeName := fmt.Sprintf("worker-%d", i)
-		// Create node.
+		// 创建 node。
 		node := &v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: nodeName,
@@ -482,15 +464,15 @@ func createNodes(tCtx ktesting.TContext) []*v1.Node {
 		node, err := tCtx.Client().CoreV1().Nodes().Create(tCtx, node, metav1.CreateOptions{FieldValidation: "Strict"})
 		tCtx.ExpectNoError(err, fmt.Sprintf("creating node #%d", i))
 
-		// Make the node ready.
+		// 将 node 置为 ready。
 		node.Status = v1.NodeStatus{
 			Capacity: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse(nodeCPUCapacity),
 				v1.ResourceMemory: resource.MustParse(nodeMemoryCapacity),
 				v1.ResourcePods:   *resource.NewScaledQuantity(maxPodsPerNode, 0),
 			},
-			// Required for tests in test/integration/dra/node_allocatable_resources.go.
-			// DeclaredFeatures must include DRANodeAllocatableResources to pass node feature validation during admission.
+			// test/integration/dra/node_allocatable_resources.go 中的测试需要此字段。
+			// DeclaredFeatures 必须包含 DRANodeAllocatableResources，才能通过 admission 的 node feature 校验。
 			DeclaredFeatures: []string{"DRANodeAllocatableResources"},
 			Phase:            v1.NodeRunning,
 			Conditions: []v1.NodeCondition{
@@ -503,7 +485,7 @@ func createNodes(tCtx ktesting.TContext) []*v1.Node {
 		node, err = tCtx.Client().CoreV1().Nodes().UpdateStatus(tCtx, node, metav1.UpdateOptions{})
 		tCtx.ExpectNoError(err, fmt.Sprintf("setting status of node #%d", i))
 
-		// Remove taint added by TaintNodesByCondition admission check.
+		// 移除 TaintNodesByCondition admission 检查添加的 taint。
 		node.Spec.Taints = nil
 		node, err = tCtx.Client().CoreV1().Nodes().Update(tCtx, node, metav1.UpdateOptions{})
 		tCtx.ExpectNoError(err, fmt.Sprintf("removing node taint from #%d", i))
@@ -515,7 +497,7 @@ func createNodes(tCtx ktesting.TContext) []*v1.Node {
 			return
 		}
 
-		// Dump information about the cluster.
+		// dump 集群信息。
 		nodes, err := tCtx.Client().CoreV1().Nodes().List(tCtx, metav1.ListOptions{})
 		if err != nil {
 			tCtx.Logf("Retrieving nodes failed: %v", err)
@@ -526,13 +508,10 @@ func createNodes(tCtx ktesting.TContext) []*v1.Node {
 	return createdNodes
 }
 
-// runSubTest re-initializes the client inside the sub-test to ensure that the
-// user agent is set based on the sub-test's name. This then shows up in
-// apiserver output. Unfortunately it does not change the credentials and therefore
-// all tests appear as the same manager in ManagedFields.
+// runSubTest 在子测试内重新初始化 client，确保 user agent 按子测试名设置并体现在
+// apiserver 输出中。凭证不会因此改变，因此所有测试在 ManagedFields 中仍是同一个 manager。
 //
-// tCtx.Run() itself doesn't do that because the tests might have set REST
-// config and clients differently in the parent context.
+// tCtx.Run() 本身不做这件事，因为测试可能在父 context 中设置了不同的 REST config 和 client。
 func runSubTest(tCtx ktesting.TContext, name string, cb func(tCtx ktesting.TContext)) {
 	tCtx.Run(name, func(tCtx ktesting.TContext) {
 		tCtx = tCtx.WithRESTConfig(tCtx.RESTConfig())
@@ -540,13 +519,9 @@ func runSubTest(tCtx ktesting.TContext, name string, cb func(tCtx ktesting.TCont
 	})
 }
 
-// prepareScheduler returns a TContext which can be passed to startScheduler
-// to actually start the scheduler when there is a demand for it.
-//
-// Under the hood, schedulerSingleton ensures that at most one scheduler
-// instance is created and tears it down when the last test using it is
-// done. This could lead to starting and stopping it multiple times, but in
-// practice tests start together in parallel and share a single instance.
+// prepareScheduler 返回一个 TContext，可传给 startScheduler 在需要时真正启动 scheduler。
+// 内部由 schedulerSingleton 保证最多创建一个 scheduler 实例，并在最后一个使用它的测试结束后
+// 销毁。理论上可能反复启停，但实际测试都是并行启动并共享同一个实例。
 func prepareScheduler(tCtx ktesting.TContext) ktesting.TContext {
 	scheduler := &schedulerSingleton{
 		rootCtx: tCtx,
@@ -555,14 +530,12 @@ func prepareScheduler(tCtx ktesting.TContext) ktesting.TContext {
 	return tCtx.WithValue(schedulerKey, scheduler)
 }
 
-// startScheduler starts the scheduler with an empty config, i.e. all settings at their default.
-// This may be used in parallel tests.
+// startScheduler 以空配置（即全部使用默认值）启动 scheduler，可用于并行测试。
 func startScheduler(tCtx ktesting.TContext) {
 	startSchedulerWithConfig(tCtx, "")
 }
 
-// startScheduler starts the scheduler with the given config.
-// This may be used only in tests which run sequentially if the config is non-empty.
+// startSchedulerWithConfig 以给定配置启动 scheduler；配置非空时只能用于串行测试。
 func startSchedulerWithConfig(tCtx ktesting.TContext, config string) {
 	tCtx.Helper()
 	value := tCtx.Value(schedulerKey)
@@ -573,7 +546,7 @@ func startSchedulerWithConfig(tCtx ktesting.TContext, config string) {
 	scheduler.start(tCtx, config)
 }
 
-// prepareClaimController does the same as prepareScheduler for the ResourceClaimController.
+// prepareClaimController 为 ResourceClaimController 做与 prepareScheduler 相同的事。
 func prepareClaimController(tCtx ktesting.TContext) ktesting.TContext {
 	claimController := &claimControllerSingleton{
 		rootCtx: tCtx,
@@ -582,8 +555,7 @@ func prepareClaimController(tCtx ktesting.TContext) ktesting.TContext {
 	return tCtx.WithValue(claimControllerKey, claimController)
 }
 
-// startClaimController can be used by tests to ensure that the ResourceClaim controller is running.
-// This may be used in parallel tests.
+// startClaimController 供测试确保 ResourceClaim controller 已运行，可用于并行测试。
 func startClaimController(tCtx ktesting.TContext) {
 	tCtx.Helper()
 	value := tCtx.Value(claimControllerKey)
@@ -611,13 +583,12 @@ func (scheduler *schedulerSingleton) start(tCtx ktesting.TContext, config string
 	scheduler.usageCount++
 	tCtx.CleanupCtx(scheduler.stop)
 	if scheduler.usageCount > 1 {
-		// Already started earlier.
+		// 此前已启动。
 		return
 	}
 
-	// Run scheduler with default configuration. This must use the root context because
-	// the per-test tCtx passed to start will get canceled once the test which triggered
-	// starting the scheduler is done.
+	// 以默认配置启动 scheduler。必须使用 root context，因为传入 start 的 per-test tCtx
+	// 会在触发启动的测试结束时被取消。
 	tCtx = scheduler.rootCtx
 	tCtx.Logf("Starting the scheduler for test %s...", tCtx.Name())
 	tCtx = tCtx.WithLogger(klog.LoggerWithName(tCtx.Logger(), "scheduler"))
@@ -634,7 +605,7 @@ func (scheduler *schedulerSingleton) stop(tCtx ktesting.TContext) {
 
 	scheduler.usageCount--
 	if scheduler.usageCount > 0 {
-		// Still in use by some other test.
+		// 仍被其他测试使用。
 		return
 	}
 
@@ -678,13 +649,12 @@ func (claimController *claimControllerSingleton) start(tCtx ktesting.TContext) {
 	claimController.usageCount++
 	tCtx.CleanupCtx(claimController.stop)
 	if claimController.usageCount > 1 {
-		// Already started earlier.
+		// 此前已启动。
 		return
 	}
 
-	// Run claimController with default configuration. This must use the root context because
-	// the per-test tCtx passed to start will get canceled once the test which triggered
-	// starting the claimController is done.
+	// 以默认配置启动 claimController。必须使用 root context，因为传入 start 的 per-test tCtx
+	// 会在触发启动的测试结束时被取消。
 	tCtx = claimController.rootCtx
 	tCtx.Logf("Starting the ResourceClaim controller for test %s...", tCtx.Name())
 	tCtx = tCtx.WithLogger(klog.LoggerWithName(tCtx.Logger(), "claimController"))
@@ -717,7 +687,7 @@ func (claimController *claimControllerSingleton) stop(tCtx ktesting.TContext) {
 
 	claimController.usageCount--
 	if claimController.usageCount > 0 {
-		// Still in use by some other test.
+		// 仍被其他测试使用。
 		return
 	}
 

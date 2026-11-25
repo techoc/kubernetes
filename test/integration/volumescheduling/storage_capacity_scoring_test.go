@@ -16,7 +16,7 @@ limitations under the License.
 
 package volumescheduling
 
-// This file tests the StorageCapacityScoring feature.
+// 本文件包含 StorageCapacityScoring 特性的集成测试。
 
 import (
 	"context"
@@ -65,7 +65,7 @@ func setupClusterForStorageCapacityScoring(t *testing.T, nsName string, resyncPe
 	}
 	go ctrl.Run(testCtx.Ctx)
 
-	// Start informer factory after all controllers are configured and running.
+	// 等所有 controller 配置完成并运行后再启动 informer factory。
 	informerFactory.Start(testCtx.Ctx.Done())
 	informerFactory.WaitForCacheSync(testCtx.Ctx.Done())
 
@@ -255,7 +255,7 @@ func TestStorageCapacityScoring(t *testing.T) {
 				}
 			}
 
-			// https://github.com/kubernetes/kubernetes/issues/85320
+			// 相关竞态见 https://github.com/kubernetes/kubernetes/issues/85320
 			t.Log("Waiting for PVs to become available to avoid race condition in PV controller")
 			for _, pv := range tt.pvs {
 				if err := waitForPVPhase(c, pv.Name, v1.VolumeAvailable); err != nil {
