@@ -27,13 +27,13 @@ import (
 // conversion-gen 尚不能自动发现生成代码中的转换函数。
 // TODO: 修复 conversion-gen 的缺陷，让它也能在自动生成的代码中发现这些 Convert_* 函数。
 
-// Convert_config_NodeLifecycleControllerConfiguration_To_v1alpha1_NodeLifecycleControllerConfiguration is a public conversion function.
+// Convert_config_NodeLifecycleControllerConfiguration_To_v1alpha1_NodeLifecycleControllerConfiguration 是供生成代码调用的公开转换函数。
 // 内部配置转外部版本，用于序列化组件配置。
 func Convert_config_NodeLifecycleControllerConfiguration_To_v1alpha1_NodeLifecycleControllerConfiguration(in *config.NodeLifecycleControllerConfiguration, out *NodeLifecycleControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_config_NodeLifecycleControllerConfiguration_To_v1alpha1_NodeLifecycleControllerConfiguration(in, out, s)
 }
 
-// Convert_v1alpha1_NodeLifecycleControllerConfiguration_To_config_NodeLifecycleControllerConfiguration is a public conversion function.
+// Convert_v1alpha1_NodeLifecycleControllerConfiguration_To_config_NodeLifecycleControllerConfiguration 是供生成代码调用的公开转换函数。
 // 外部版本转内部配置，组件启动时走此路径。
 func Convert_v1alpha1_NodeLifecycleControllerConfiguration_To_config_NodeLifecycleControllerConfiguration(in *NodeLifecycleControllerConfiguration, out *config.NodeLifecycleControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_v1alpha1_NodeLifecycleControllerConfiguration_To_config_NodeLifecycleControllerConfiguration(in, out, s)

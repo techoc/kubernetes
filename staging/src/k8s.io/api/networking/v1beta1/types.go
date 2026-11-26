@@ -220,8 +220,7 @@ type HTTPIngressRuleValue struct {
 	// paths 是将请求映射到 backend 的路径集合。
 	// +listType=atomic
 	Paths []HTTPIngressPath `json:"paths" protobuf:"bytes,1,rep,name=paths"`
-	// TODO: Consider adding fields for ingress-type specific global
-	// options usable by a loadbalancer, like http keep-alive.
+	// TODO: 考虑增加特定 ingress 类型的全局选项字段，供负载均衡器使用，例如 http keep-alive。
 }
 
 // PathType 表示 HTTPIngressPath 引用的路径类型。

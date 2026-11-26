@@ -134,7 +134,7 @@ func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 			shouldError: false,
 		},
 		{
-			// Accommodating #45201 and #49202
+			// 兼容 #45201 与 #49202 的行为。
 			name:   "InternalIP and ExternalIP are the same",
 			nodeIP: "55.55.55.55",
 			nodeAddresses: []v1.NodeAddress{
@@ -261,8 +261,7 @@ func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 				{Type: v1.NodeInternalIP, Address: "fc01:1234::5678"},
 				{Type: v1.NodeHostName, Address: testKubeletHostname},
 			},
-			// additional IPs of the same type are removed, as in the
-			// single-stack case.
+			// 与单栈情况一样，同类型的其他 IP 会被移除。
 			expectedAddresses: []v1.NodeAddress{
 				{Type: v1.NodeInternalIP, Address: "10.1.1.1"},
 				{Type: v1.NodeInternalIP, Address: "fc01:1234::5678"},
@@ -280,8 +279,7 @@ func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 				{Type: v1.NodeInternalIP, Address: "fc01:1234::5678"},
 				{Type: v1.NodeHostName, Address: testKubeletHostname},
 			},
-			// The ExternalIP is preserved, since no ExternalIP was matched
-			// by --node-ip.
+			// --node-ip 未匹配到 ExternalIP，因此保留原有 ExternalIP。
 			expectedAddresses: []v1.NodeAddress{
 				{Type: v1.NodeInternalIP, Address: "10.1.1.1"},
 				{Type: v1.NodeInternalIP, Address: "fc01:1234::5678"},
@@ -300,8 +298,7 @@ func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 				{Type: v1.NodeExternalIP, Address: "2001:db1::1"},
 				{Type: v1.NodeHostName, Address: testKubeletHostname},
 			},
-			// The ExternalIPs are preserved, since no ExternalIP was matched
-			// by --node-ip.
+			// --node-ip 未匹配到 ExternalIP，因此保留原有 ExternalIP。
 			expectedAddresses: []v1.NodeAddress{
 				{Type: v1.NodeInternalIP, Address: "fc01:1234::5678"},
 				{Type: v1.NodeInternalIP, Address: "10.1.1.1"},
@@ -321,10 +318,8 @@ func TestGetNodeAddressesFromNodeIP(t *testing.T) {
 				{Type: v1.NodeExternalIP, Address: "2001:db1::1"},
 				{Type: v1.NodeHostName, Address: testKubeletHostname},
 			},
-			// Since the IPv4 --node-ip value matched an ExternalIP, that
-			// filters out the IPv6 ExternalIP. Since the IPv6 --node-ip value
-			// matched in InternalIP, that filters out the IPv4 InternalIP
-			// value.
+			// IPv4 的 --node-ip 命中了 ExternalIP，因此过滤掉 IPv6 ExternalIP；
+			// IPv6 的 --node-ip 命中了 InternalIP，因此过滤掉 IPv4 InternalIP。
 			expectedAddresses: []v1.NodeAddress{
 				{Type: v1.NodeExternalIP, Address: "55.55.55.55"},
 				{Type: v1.NodeInternalIP, Address: "fc01:1234::5678"},

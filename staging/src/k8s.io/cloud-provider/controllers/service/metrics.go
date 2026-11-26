@@ -33,7 +33,7 @@ const (
 // New 可能被重复调用（例如测试），重复注册会 panic，因此用 sync.Once 保护。
 var register sync.Once
 
-// registerMetrics registers service-controller metrics.
+// registerMetrics 注册 Service 控制器的指标。
 func registerMetrics() {
 	register.Do(func() {
 		legacyregistry.MustRegister(loadBalancerSyncCount)
@@ -71,7 +71,7 @@ var (
 		Name:      "update_loadbalancer_host_latency_seconds",
 		Subsystem: subSystemName,
 		Help:      "A metric measuring the latency for updating each load balancer hosts.",
-		// Buckets from 1s to 16384s
+		// 桶覆盖 1 秒到 16384 秒。
 		Buckets:        metrics.ExponentialBuckets(1, 2, 15),
 		StabilityLevel: metrics.ALPHA,
 	})

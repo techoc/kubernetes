@@ -46,7 +46,7 @@ func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIServ
 			if minimalFailures := content.IsPathSegmentName(name); len(minimalFailures) > 0 {
 				return minimalFailures
 			}
-			// the name *must* be version.group
+			// 名字必须是 version.group。
 			if name != requiredName {
 				return []string{fmt.Sprintf("must be `spec.version+\".\"+spec.group`: %q", requiredName)}
 			}

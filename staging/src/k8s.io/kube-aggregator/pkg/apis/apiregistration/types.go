@@ -30,11 +30,11 @@ type APIServiceList struct {
 	Items []APIService
 }
 
-// ServiceReference holds a reference to Service.legacy.k8s.io
+// ServiceReference 是对 Service.legacy.k8s.io 的引用。
 type ServiceReference struct {
-	// Namespace is the namespace of the service
+	// Namespace 是该 Service 所在的命名空间。
 	Namespace string
-	// Name is the name of the service
+	// Name 是该 Service 的名字。
 	Name string
 	// 若指定，则为承载该服务的 Service 上的端口；为向后兼容默认为 443；
 	// `port` 应为合法端口号（1-65535，含端点）。
@@ -44,8 +44,8 @@ type ServiceReference struct {
 	Port int32
 }
 
-// APIServiceSpec contains information for locating and communicating with a server.
-// Only https is supported, though you are able to disable certificate verification.
+// APIServiceSpec 包含定位并与 server 通信所需的信息。
+// 仅支持 https，但可以关闭证书校验。
 type APIServiceSpec struct {
 	// Service 是对该 API server 对应 Service 的引用，必须在端口 443 上通信。
 	// 若 Service 为 nil，表示该 API groupversion 由本 server 在本地处理，
@@ -54,13 +54,13 @@ type APIServiceSpec struct {
 	// 把 Service 留空作为“本地组”的标记，避免为内置 API 再维护一份自指的服务引用；
 	// 代理层据此走委托链而非发起真正的网络转发。
 	Service *ServiceReference
-	// Group is the API group name this server hosts
+	// Group 是该 server 承载的 API 组名。
 	Group string
-	// Version is the API version this server hosts.  For example, "v1"
+	// Version 是该 server 承载的 API 版本，例如 "v1"。
 	Version string
 
-	// InsecureSkipTLSVerify disables TLS certificate verification when communicating with this server.
-	// This is strongly discouraged.  You should use the CABundle instead.
+	// InsecureSkipTLSVerify 关闭与该 server 通信时的 TLS 证书校验。
+	// 强烈不建议这样做，应改用 CABundle。
 	InsecureSkipTLSVerify bool
 	// CABundle 是 PEM 编码的 CA 包，用于校验 API server 的服务证书；未指定时使用 apiserver 上的系统信任根。
 	// +listType=atomic
@@ -93,7 +93,7 @@ type APIServiceSpec struct {
 	VersionPriority int32
 }
 
-// ConditionStatus indicates the status of a condition (true, false, or unknown).
+// ConditionStatus 表示 condition 的状态（true、false 或 unknown）。
 type ConditionStatus string
 
 // 以下是合法的 condition 状态。“ConditionTrue” 表示资源处于该状态；
@@ -107,24 +107,23 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// APIServiceConditionType is a valid value for APIServiceCondition.Type
+// APIServiceConditionType 是 APIServiceCondition.Type 的合法取值。
 type APIServiceConditionType string
 
 const (
-	// Available indicates that the service exists and is reachable
+	// Available 表示 Service 存在且可达。
 	Available APIServiceConditionType = "Available"
 )
 
-// APIServiceCondition describes conditions for an APIService
+// APIServiceCondition 描述 APIService 的 condition。
 type APIServiceCondition struct {
-	// Type is the type of the condition.
+	// Type 是 condition 的类型。
 	Type APIServiceConditionType
-	// Status is the status of the condition.
-	// Can be True, False, Unknown.
+	// Status 是 condition 的状态，可取 True、False 或 Unknown。
 	Status ConditionStatus
-	// Last time the condition transitioned from one status to another.
+	// LastTransitionTime 是 condition 上次发生状态转换的时间。
 	LastTransitionTime metav1.Time
-	// Unique, one-word, CamelCase reason for the condition's last transition.
+	// Reason 是上次状态转换的原因，使用单个 CamelCase 单词。
 	Reason string
 	// Message 是描述最近一次状态转换细节的、人类可读的消息。
 	// 把 Reason（机器可读）与 Message（人可读）拆开，是因为两者消费方不同：
@@ -132,7 +131,7 @@ type APIServiceCondition struct {
 	Message string
 }
 
-// APIServiceStatus contains derived information about an API server
+// APIServiceStatus 包含从 API server 推导出的信息。
 type APIServiceStatus struct {
 	// APIService 当前的服务状态。
 	// +listType=map

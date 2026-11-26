@@ -37,8 +37,8 @@ import (
 	_ "k8s.io/component-base/metrics/prometheus/clientgo" // load all the prometheus client-go plugins
 	_ "k8s.io/component-base/metrics/prometheus/version"  // for version metric registration
 	"k8s.io/klog/v2"
-	// For existing cloud providers, the option to import legacy providers is still available.
-	// e.g. _"k8s.io/legacy-cloud-providers/<provider>"
+	// 对既有云 provider 仍可通过 blank import 引入 legacy provider。
+	// 例如 _"k8s.io/legacy-cloud-providers/<provider>"。
 )
 
 // main 是外部 cloud-controller-manager 的最小启动模板。
@@ -55,9 +55,8 @@ func main() {
 	os.Exit(code)
 }
 
-// If custom ClientNames are used, as below, then the controller will not use
-// the API server bootstrapped RBAC, and instead will require it to be installed
-// separately.
+// 像下面这样使用自定义 ClientName 时，控制器不再使用 API Server 引导生成的 RBAC，
+// 需要单独安装相应权限。
 // 自定义 ClientName 会改变派生客户端的身份，因此集群必须预先安装对应的 RBAC，
 // 否则控制器会因权限不足而无法工作。
 func controllerInitializers() map[string]app.ControllerInitFuncConstructor {
@@ -85,7 +84,7 @@ func controllerInitializers() map[string]app.ControllerInitFuncConstructor {
 func cloudInitializer(config *config.CompletedConfig) cloudprovider.Interface {
 	cloudConfig := config.ComponentConfig.KubeCloudShared.CloudProvider
 
-	// initialize cloud provider with the cloud provider name and config file provided
+	// 用给定的 provider 名与配置文件初始化云 provider。
 	// 初始化失败属于不可恢复的配置错误，直接 Fatal。
 	cloud, err := cloudprovider.InitCloudProvider(cloudConfig.Name, cloudConfig.CloudConfigFile)
 	if err != nil {

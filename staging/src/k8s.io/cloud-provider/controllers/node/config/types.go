@@ -17,17 +17,15 @@ limitations under the License.
 // Package config 定义 NodeController 的内部组件配置类型。
 package config
 
-// NodeControllerConfiguration contains elements describing NodeController.
+// NodeControllerConfiguration 包含描述 NodeController 的配置项。
 // NodeControllerConfiguration 控制云节点控制器的并发度：同步节点与更新节点状态
 // 是两类不同的 API 负载，因此拆成两个独立参数。
 type NodeControllerConfiguration struct {
-	// ConcurrentNodeSyncs is the number of workers
-	// concurrently synchronizing nodes
+	// ConcurrentNodeSyncs 是并发同步节点的 worker 数。
 	// 并发同步节点的 worker 数；值越大初始化越快，但对云 API 与 API Server 压力越大。
 	ConcurrentNodeSyncs int32
-	// ConcurrentNodeStatusUpdates is the number of workers
-	// concurrently updating node statuses.
-	// If unspecified or 0, ConcurrentNodeSyncs is used instead
+	// ConcurrentNodeStatusUpdates 是并发更新节点 status 的 worker 数。
+	// 未指定或为 0 时沿用 ConcurrentNodeSyncs。
 	// 未设置或为 0 时回退到 ConcurrentNodeSyncs，以保持旧配置的兼容行为。
 	ConcurrentNodeStatusUpdates int32
 }

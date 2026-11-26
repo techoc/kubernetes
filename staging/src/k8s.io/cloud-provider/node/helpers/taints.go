@@ -91,9 +91,9 @@ func AddOrUpdateTaintOnNode(c clientset.Interface, nodeName string, taints ...*v
 // 仅对 .spec.taints 做 strategic merge；由于该字段没有 patchMergeKey，
 // 这里特意去掉旧对象的 resourceVersion 并只替换 taints，避免错误合并。
 func PatchNodeTaints(c clientset.Interface, nodeName string, oldNode *v1.Node, newNode *v1.Node) error {
-	// Strip base diff node from RV to ensure that our Patch request will set RV to check for conflicts over .spec.taints.
-	// This is needed because .spec.taints does not specify patchMergeKey and patchStrategy and adding them is no longer an option for compatibility reasons.
-	// Using other Patch strategy works for adding new taints, however will not resolve problem with taint removal.
+	// 去掉基准对象的 resourceVersion，让 Patch 请求带上 RV 以检测 .spec.taints 冲突。
+	// .spec.taints 没有定义 patchMergeKey 与 patchStrategy，出于兼容也无法补上；
+	// 换用其他 patch 策略虽能新增 taint，却解决不了删除 taint 的问题。
 	oldNodeNoRV := oldNode.DeepCopy()
 	oldNodeNoRV.ResourceVersion = ""
 	oldDataNoRV, err := json.Marshal(&oldNodeNoRV)
@@ -119,8 +119,7 @@ func PatchNodeTaints(c clientset.Interface, nodeName string, oldNode *v1.Node, n
 	return err
 }
 
-// addOrUpdateTaint tries to add a taint to annotations list. Returns a new copy of updated Node and true if something was updated
-// false otherwise.
+// addOrUpdateTaint 尝试把污点加入列表，返回更新后的 Node 副本；第二个返回值表示是否发生了修改。
 // 匹配同名同效果的 taint 视为同一项：值相同则不变，值不同则原地替换并保持顺序。
 func addOrUpdateTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool) {
 	newNode := node.DeepCopy()
@@ -176,8 +175,7 @@ func RemoveTaintOffNode(c clientset.Interface, nodeName string, node *v1.Node, t
 	return clientretry.RetryOnConflict(updateTaintBackoff, func() error {
 		var err error
 		var oldNode *v1.Node
-		// First we try getting node from the API server cache, as it's cheaper. If it fails
-		// we get it from etcd to be sure to have fresh data.
+		// 先读 API Server 缓存，代价更低；失败再读 etcd 拿最新数据。
 		if firstTry {
 			oldNode, err = c.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{ResourceVersion: "0"})
 			firstTry = false
@@ -215,8 +213,7 @@ func taintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 	return false
 }
 
-// removeTaint tries to remove a taint from annotations list. Returns a new copy of updated Node and true if something was updated
-// false otherwise.
+// removeTaint 尝试从列表删除污点，返回更新后的 Node 副本；第二个返回值表示是否发生了修改。
 // 不存在的 taint 返回 false，使上层跳过补丁提交。
 func removeTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool) {
 	newNode := node.DeepCopy()
@@ -234,7 +231,7 @@ func removeTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool) {
 	return newNode, true
 }
 
-// deleteTaint removes all the taints that have the same key and effect to given taintToDelete.
+// deleteTaint 删除所有与给定 taintToDelete 键和效果相同的污点。
 func deleteTaint(taints []v1.Taint, taintToDelete *v1.Taint) ([]v1.Taint, bool) {
 	newTaints := []v1.Taint{}
 	deleted := false

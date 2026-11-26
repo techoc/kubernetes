@@ -17,8 +17,7 @@ limitations under the License.
 package cloudprovider
 
 const (
-	// CloudControllerManagerPort is the default port for the cloud controller manager server.
-	// This value may be overridden by a flag at startup.
+	// CloudControllerManagerPort 是 cloud controller manager server 的默认端口，启动时可用 flag 覆盖。
 	// 选在 10258 是为了避开 kube-controller-manager 的 10257 与其他组件默认端口。
 	CloudControllerManagerPort = 10258
 )

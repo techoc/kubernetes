@@ -1181,7 +1181,7 @@ func TestMonitorNodesMetrics(t *testing.T) {
 	nodeInformer := informer.Core().V1().Nodes()
 	fakeCloud := &fakecloud.Cloud{}
 
-	// Create 2 ready nodes and 1 not-ready node
+	// 创建两个 Ready 节点与一个 NotReady 节点。
 	node0 := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node0"},
 		Status: v1.NodeStatus{
@@ -1201,7 +1201,7 @@ func TestMonitorNodesMetrics(t *testing.T) {
 		},
 	}
 
-	// Create nodes in API server via clientset
+	// 通过 clientset 把节点写入 API Server。
 	for _, node := range []*v1.Node{node0, node1, node2} {
 		_, err := clientset.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
 		if err != nil {
@@ -1209,12 +1209,12 @@ func TestMonitorNodesMetrics(t *testing.T) {
 		}
 	}
 
-	// Sync node informer store with clientset to populate the cache
+	// 等待 informer 缓存同步到这些节点。
 	if err := syncNodeStore(ctx, nodeInformer, clientset); err != nil {
 		t.Fatalf("failed to sync node store: %v", err)
 	}
 
-	// Instantiate controller (registers metrics automatically)
+	// 实例化控制器（自动注册指标）。
 	c, err := NewCloudNodeLifecycleController(
 		nodeInformer,
 		clientset,
@@ -1228,17 +1228,17 @@ func TestMonitorNodesMetrics(t *testing.T) {
 	c.broadcaster = record.NewBroadcaster(record.WithContext(ctx))
 	c.recorder = c.broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "cloud-node-lifecycle-controller"})
 
-	// Setup fake cloud to report node2 still exists so it is processed under "cloud" path without deleting
+	// 让 fake cloud 报告 node2 仍存在，使其走“云侧存在”路径而不被删除。
 	fakeCloud.Exists = true
 	fakeCloud.ExistsByProviderID = true
 
-	// Reset metrics registry/vectors to clean state before running loop
+	// 运行循环前重置指标注册表，避免其他测试影响断言。
 	cloudProviderCalls.Reset()
 
-	// Execute MonitorNodes loop
+	// 执行一次 MonitorNodes 循环。
 	c.MonitorNodes(ctx)
 
-	// 1. Verify cloudProviderCalls {"operation": "instance_exists", "result": "success"} is exactly 1
+	// 1. 校验 cloudProviderCalls {"operation": "instance_exists", "result": "success"} 恰好为 1。
 	existsCount, err := k8stest.GetCounterMetricValue(cloudProviderCalls.WithLabelValues(instanceExistsOp, "success"))
 	if err != nil {
 		t.Errorf("unexpected error getting %s count: %v", instanceExistsOp, err)

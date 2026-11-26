@@ -38,7 +38,7 @@ func (s *CloudProviderOptions) Validate() []error {
 	return allErrors
 }
 
-// AddFlags adds flags related to cloudprovider for controller manager to the specified FlagSet.
+// AddFlags 把 cloudprovider 相关 flag 加到指定的 FlagSet。
 func (s *CloudProviderOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.Name, "cloud-provider", s.Name,
 		"The provider for cloud services. Empty string for no provider.")
@@ -47,7 +47,7 @@ func (s *CloudProviderOptions) AddFlags(fs *pflag.FlagSet) {
 		"The path to the cloud provider configuration file. Empty string for no configuration file.")
 }
 
-// ApplyTo fills up cloudprovider config with options.
+// ApplyTo 把选项写入 cloudprovider 配置。
 func (s *CloudProviderOptions) ApplyTo(cfg *cpconfig.CloudProviderConfiguration) error {
 	// nil receiver 表示该配置段未启用，静默跳过而不是 panic。
 	if s == nil {

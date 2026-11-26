@@ -27,11 +27,10 @@ import (
 )
 
 var (
-	// Scheme defines methods for serializing and deserializing API objects.
+	// Scheme 定义 API 对象的序列化与反序列化方法。
 	// Scheme 只包含 CCM 自身的配置类型；组件配置读写都经由它完成。
 	Scheme = runtime.NewScheme()
-	// Codecs provides methods for retrieving codecs and serializers for specific
-	// versions and content types.
+	// Codecs 按指定版本与内容类型提供 codec 与 serializer。
 	Codecs = serializer.NewCodecFactory(Scheme)
 )
 
@@ -40,7 +39,7 @@ func init() {
 	Install(Scheme)
 }
 
-// Install adds the types of this group into the given scheme.
+// Install 把本组的类型注册到给定 scheme。
 // 同时注册内部版本与 v1alpha1，并把 v1alpha1 设为序列化首选版本，
 // 这样外部配置文件与 /configz 输出默认使用 v1alpha1。
 func Install(scheme *runtime.Scheme) {

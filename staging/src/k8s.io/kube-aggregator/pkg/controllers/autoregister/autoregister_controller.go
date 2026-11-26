@@ -43,12 +43,12 @@ import (
 // 自治注册通过标签而不是内存状态来标记归属：APIService 重建后控制器重启也能
 // 从对象本身认出哪些是自己创建的，不会把别的组件管理的服务对象误删。
 const (
-	// AutoRegisterManagedLabel is a label attached to the APIService that identifies how the APIService wants to be synced.
+	// AutoRegisterManagedLabel 标注在 APIService 上，表明它希望以何种方式被同步。
 	AutoRegisterManagedLabel = "kube-aggregator.kubernetes.io/automanaged"
 
-	// manageOnStart is a value for the AutoRegisterManagedLabel that indicates the APIService wants to be synced one time when the controller starts.
+	// manageOnStart 表示 APIService 只需在控制器启动时同步一次。
 	manageOnStart = "onstart"
-	// manageContinuously is a value for the AutoRegisterManagedLabel that indicates the APIService wants to be synced continuously.
+	// manageContinuously 表示 APIService 需要持续同步。
 	manageContinuously = "true"
 )
 
@@ -57,16 +57,16 @@ const (
 // 让调用方在本地重声明这个接口，是为了让各组件只依赖自己需要的注册方法，
 // 不必引入整个控制器的实现类型；编译期仍由 Go 的鸭子类型保证兼容。
 type AutoAPIServiceRegistration interface {
-	// AddAPIServiceToSyncOnStart adds an API service to sync on start.
+	// AddAPIServiceToSyncOnStart 添加一个启动时同步一次的 APIService。
 	AddAPIServiceToSyncOnStart(in *v1.APIService)
-	// AddAPIServiceToSync adds an API service to sync continuously.
+	// AddAPIServiceToSync 添加一个持续同步的 APIService。
 	AddAPIServiceToSync(in *v1.APIService)
-	// RemoveAPIServiceToSync removes an API service to auto-register.
+	// RemoveAPIServiceToSync 移除一个待自动注册的 APIService。
 	RemoveAPIServiceToSync(name string)
 }
 
-// autoRegisterController is used to keep a particular set of APIServices present in the API.  It is useful
-// for cases where you want to auto-register APIs like TPRs or groups from the core kube-apiserver
+// autoRegisterController 保证一组特定的 APIService 始终存在于 API 中，
+// 适用于自动注册 TPR 类 API 或 kube-apiserver 核心组的情况。
 type autoRegisterController struct {
 	apiServiceLister listers.APIServiceLister
 	apiServiceSynced cache.InformerSynced
@@ -79,7 +79,7 @@ type autoRegisterController struct {
 
 	syncHandler func(apiServiceName string) error
 
-	// track which services we have synced
+	// 记录已同步过的 Service。
 	syncedSuccessfullyLock *sync.RWMutex
 	syncedSuccessfully     map[string]bool
 
@@ -88,11 +88,11 @@ type autoRegisterController struct {
 	// 不能因为打了个历史标签就把人家的对象接管或删掉。
 	apiServicesAtStart map[string]bool
 
-	// queue is where incoming work is placed to de-dup and to allow "easy" rate limited requeues on errors
+	// 工作先入队去重，出错时也便于做限速重试。
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewAutoRegisterController creates a new autoRegisterController.
+// NewAutoRegisterController 创建一个新的 autoRegisterController。
 func NewAutoRegisterController(apiServiceInformer informers.APIServiceInformer, apiServiceClient apiregistrationclient.APIServicesGetter) *autoRegisterController {
 	c := &autoRegisterController{
 		apiServiceLister:  apiServiceInformer.Lister(),
@@ -146,11 +146,11 @@ func NewAutoRegisterController(apiServiceInformer informers.APIServiceInformer, 
 	return c
 }
 
-// Run starts the autoregister controller in a loop which syncs API services until stopCh is closed.
+// Run 启动 autoregister 控制器的循环，持续同步 APIService 直到 stopCh 关闭。
 func (c *autoRegisterController) Run(workers int, stopCh <-chan struct{}) {
-	// don't let panics crash the process
+	// 防止 panic 导致进程退出。
 	defer utilruntime.HandleCrash()
-	// make sure the work queue is shutdown which will trigger workers to end
+	// 确保关闭 workqueue，从而让 worker 退出。
 	defer c.queue.ShutDown()
 
 	klog.Info("Starting autoregister controller")
@@ -172,20 +172,18 @@ func (c *autoRegisterController) Run(workers int, stopCh <-chan struct{}) {
 		}
 	}
 
-	// start up your worker threads based on workers.  Some controllers have multiple kinds of workers
+	// 按 workers 数量启动 worker；有些控制器有不止一类 worker。
 	for i := 0; i < workers; i++ {
-		// runWorker will loop until "something bad" happens.  The .Until will then rekick the worker
-		// after one second
+		// runWorker 循环运行直到出错，.Until 会在 1 秒后重启 worker。
 		go wait.Until(c.runWorker, time.Second, stopCh)
 	}
 
-	// wait until we're told to stop
+	// 等待停止信号。
 	<-stopCh
 }
 
 func (c *autoRegisterController) runWorker() {
-	// hot loop until we're told to stop.  processNextWorkItem will automatically wait until there's work
-	// available, so we don't worry about secondary waits
+	// 持续循环直到收到停止信号；processNextWorkItem 会自行等待有工作可用，无需额外等待。
 	for c.processNextWorkItem() {
 	}
 }
@@ -194,45 +192,41 @@ func (c *autoRegisterController) runWorker() {
 // 错误一律重新入队而不是就地重试：一次失败通常是 apiserver 暂时不可用，
 // 带退避的重试既能自愈，也不会让一个卡住的对象饿死队列里的其他工作。
 func (c *autoRegisterController) processNextWorkItem() bool {
-	// pull the next work item from queue.  It should be a key we use to lookup something in a cache
+	// 从队列取出下一项，它应是可用来查缓存的 key。
 	key, quit := c.queue.Get()
 	if quit {
 		return false
 	}
-	// you always have to indicate to the queue that you've completed a piece of work
+	// 处理完必须通知队列，避免该项一直被视为进行中。
 	defer c.queue.Done(key)
 
-	// do your work on the key.  This method will contains your "do stuff" logic
+	// 对 key 执行实际的对账逻辑。
 	err := c.syncHandler(key)
 	if err == nil {
-		// if you had no error, tell the queue to stop tracking history for your key.  This will
-		// reset things like failure counts for per-item rate limiting
+		// 成功时让队列忘记该 key，重置按项限速的失败计数。
 		c.queue.Forget(key)
 		return true
 	}
 
-	// there was a failure so be sure to report it.  This method allows for pluggable error handling
-	// which can be used for things like cluster-monitoring
+	// 失败时上报错误；这里可插入自定义错误处理，例如集群监控。
 	utilruntime.HandleError(fmt.Errorf("%v failed with : %v", key, err))
-	// since we failed, we should requeue the item to work on later.  This method will add a backoff
-	// to avoid hotlooping on particular items (they're probably still not going to work right away)
-	// and overall controller protection (everything I've done is broken, this controller needs to
-	// calm down or it can starve other useful work) cases.
+	// 失败后重新入队并加退避：既避免对暂不可用的项忙等，
+	// 也防止控制器整体失控时饿死其他正常工作。
 	c.queue.AddRateLimited(key)
 
 	return true
 }
 
-// checkAPIService syncs the current APIService against a list of desired APIService objects
+// checkAPIService 把当前 APIService 与期望的 APIService 列表对账。
 //
-//	                                                | A. desired: not found | B. desired: sync on start | C. desired: sync always
+//	                                                | A. 期望：不存在       | B. 期望：启动时同步   | C. 期望：持续同步
 //	------------------------------------------------|-----------------------|---------------------------|------------------------
-//	1. current: lookup error                        | error                 | error                     | error
-//	2. current: not found                           | -                     | create once               | create
-//	3. current: no sync                             | -                     | -                         | -
-//	4. current: sync on start, not present at start | -                     | -                         | -
-//	5. current: sync on start, present at start     | delete once           | update once               | update once
-//	6. current: sync always                         | delete                | update once               | update
+//	1. 当前：查询出错                               | error                 | error                     | error
+//	2. 当前：不存在                                 | -                     | 创建一次                  | 创建
+//	3. 当前：不同步                                 | -                     | -                         | -
+//	4. 当前：启动时同步，但启动时不在                | -                     | -                         | -
+//	5. 当前：启动时同步，且启动时存在                | 删除一次              | 更新一次                  | 更新一次
+//	6. 当前：持续同步                               | 删除                  | 更新一次                  | 更新
 //
 // 这张表是实现的权威说明：case 的顺序必须经过精心排列，前面的分支处理更具体的情形，
 // 后面的分支才能安全地假设 curr 非空且对象归自己管理。改动时先改表再审代码。
@@ -253,15 +247,15 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 	}
 
 	switch {
-	// we had a real error, just return it (1A,1B,1C)
+	// 真实错误，直接返回（对应表格 1A/1B/1C）。
 	case err != nil && !apierrors.IsNotFound(err):
 		return err
 
-	// we don't have an entry and we don't want one (2A)
+	// 当前与期望都不存在，无需处理（2A）。
 	case apierrors.IsNotFound(err) && desired == nil:
 		return nil
 
-	// the local object only wants to sync on start and has already synced (2B,5B,6B "once" enforcement)
+	// 本地对象只要求启动时同步且已同步过，不再处理（2B、5B、6B 的 once 约束）。
 	case isAutomanagedOnStart(desired) && hasSynced:
 		return nil
 
@@ -271,20 +265,20 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 	case apierrors.IsNotFound(err) && desired != nil:
 		_, err := c.apiServiceClient.APIServices().Create(context.TODO(), desired, metav1.CreateOptions{})
 		if apierrors.IsAlreadyExists(err) {
-			// created in the meantime, we'll get called again
+			// 期间对象已被创建，下一轮会再次处理。
 			return nil
 		}
 		return err
 
-	// we aren't trying to manage this APIService (3A,3B,3C)
+	// 本控制器不管理该 APIService（3A、3B、3C）。
 	case !isAutomanaged(curr):
 		return nil
 
-	// the remote object only wants to sync on start, but was added after we started (4A,4B,4C)
+	// 远端对象只要求启动时同步，但它是在控制器启动后才加入的（4A、4B、4C）。
 	case isAutomanagedOnStart(curr) && !c.apiServicesAtStart[name]:
 		return nil
 
-	// the remote object only wants to sync on start and has already synced (5A,5B,5C "once" enforcement)
+	// 远端对象只要求启动时同步且已同步过（5A、5B、5C 的 once 约束）。
 	case isAutomanagedOnStart(curr) && hasSynced:
 		return nil
 
@@ -295,12 +289,12 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 		opts := metav1.DeleteOptions{Preconditions: metav1.NewUIDPreconditions(string(curr.UID))}
 		err := c.apiServiceClient.APIServices().Delete(context.TODO(), curr.Name, opts)
 		if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
-			// deleted or changed in the meantime, we'll get called again
+			// 期间对象被删除或改动，下轮会重新处理。
 			return nil
 		}
 		return err
 
-	// if the specs already match, nothing for us to do
+	// spec 已一致，无需操作。
 	case reflect.DeepEqual(curr.Spec, desired.Spec):
 		return nil
 	}
@@ -312,13 +306,13 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 	apiService.Spec = desired.Spec
 	_, err = c.apiServiceClient.APIServices().Update(context.TODO(), apiService, metav1.UpdateOptions{})
 	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
-		// deleted or changed in the meantime, we'll get called again
+		// 期间对象被删除或改动，下轮会重新处理。
 		return nil
 	}
 	return err
 }
 
-// GetAPIServiceToSync gets a single API service to sync.
+// GetAPIServiceToSync 取出一个待同步的 APIService。
 func (c *autoRegisterController) GetAPIServiceToSync(name string) *v1.APIService {
 	c.apiServicesToSyncLock.RLock()
 	defer c.apiServicesToSyncLock.RUnlock()
@@ -326,12 +320,12 @@ func (c *autoRegisterController) GetAPIServiceToSync(name string) *v1.APIService
 	return c.apiServicesToSync[name]
 }
 
-// AddAPIServiceToSyncOnStart registers an API service to sync only when the controller starts.
+// AddAPIServiceToSyncOnStart 注册一个仅在控制器启动时同步一次的 APIService。
 func (c *autoRegisterController) AddAPIServiceToSyncOnStart(in *v1.APIService) {
 	c.addAPIServiceToSync(in, manageOnStart)
 }
 
-// AddAPIServiceToSync registers an API service to sync continuously.
+// AddAPIServiceToSync 注册一个持续同步的 APIService。
 func (c *autoRegisterController) AddAPIServiceToSync(in *v1.APIService) {
 	c.addAPIServiceToSync(in, manageContinuously)
 }
@@ -352,7 +346,7 @@ func (c *autoRegisterController) addAPIServiceToSync(in *v1.APIService, syncType
 	c.queue.Add(apiService.Name)
 }
 
-// RemoveAPIServiceToSync deletes a registered APIService.
+// RemoveAPIServiceToSync 删除一个已注册的 APIService。
 func (c *autoRegisterController) RemoveAPIServiceToSync(name string) {
 	c.apiServicesToSyncLock.Lock()
 	defer c.apiServicesToSyncLock.Unlock()

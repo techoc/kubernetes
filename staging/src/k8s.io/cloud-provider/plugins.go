@@ -126,8 +126,8 @@ func InitCloudProvider(name string, configFilePath string) (Interface, error) {
 		defer config.Close()
 		cloud, err = GetCloudProvider(name, config)
 	} else {
-		// Pass explicit nil so plugins can actually check for nil. See
-		// "Why is my nil error value not equal to nil?" in golang.org/doc/faq.
+		// 显式传入 nil，插件才能用 == nil 判断；参见 golang.org/doc/faq 中
+		// "Why is my nil error value not equal to nil?"。
 		cloud, err = GetCloudProvider(name, nil)
 	}
 

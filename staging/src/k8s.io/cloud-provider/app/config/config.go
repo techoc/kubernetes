@@ -88,7 +88,7 @@ type completedConfig struct {
 // CompletedConfig 与 Config 相同，只是替换了私有对象。
 // 外部包只能持有 CompletedConfig，从而在类型层面保证配置已经过 Complete 处理。
 type CompletedConfig struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
+	// 嵌入私有指针，防止包外实例化。
 	*completedConfig
 }
 

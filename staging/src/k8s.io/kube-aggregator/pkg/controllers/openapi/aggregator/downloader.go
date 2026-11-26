@@ -43,7 +43,7 @@ type CacheableDownloader interface {
 type cacheableDownloader struct {
 	name       string
 	downloader *Downloader
-	// handler is the http Handler for the apiservice that can be replaced
+	// handler 是可替换的 APIService http Handler。
 	handler atomic.Pointer[http.Handler]
 	etag    string
 	spec    *spec.Swagger
@@ -83,7 +83,7 @@ func (d *cacheableDownloader) get() (*spec.Swagger, string, error) {
 	}
 	switch status {
 	case http.StatusNotModified:
-		// Nothing has changed, do nothing.
+		// 内容未变化，无需处理。
 	case http.StatusOK:
 		if swagger != nil {
 			d.etag = etag
@@ -107,7 +107,7 @@ func (d *cacheableDownloader) get() (*spec.Swagger, string, error) {
 type Downloader struct {
 }
 
-// NewDownloader creates a new OpenAPI Downloader.
+// NewDownloader 创建一个新的 OpenAPI 下载器。
 func NewDownloader() Downloader {
 	return Downloader{}
 }
@@ -129,8 +129,8 @@ func etagFor(data []byte) string {
 	return fmt.Sprintf("%s%X\"", locallyGeneratedEtagPrefix, sha512.Sum512(data))
 }
 
-// Download downloads openAPI spec from /openapi/v2 endpoint of the given handler.
-// httpStatus is only valid if err == nil
+// Download 从给定 handler 的 /openapi/v2 端点下载 OpenAPI 规范。
+// 只有 err 为 nil 时 httpStatus 才有效。
 // 直接调用 handler（而不是发真实 HTTP 请求）拿到响应，这样可复用聚合层的代理路由；
 // 外层套 TimeoutHandler 防止某个聚合服务挂住拖垮整个轮询周期。
 func (s *Downloader) Download(handler http.Handler, etag string) (returnSpec *spec.Swagger, newEtag string, httpStatus int, err error) {
@@ -160,7 +160,7 @@ func (s *Downloader) Download(handler http.Handler, etag string) (returnSpec *sp
 		}
 		return nil, etag, http.StatusNotModified, nil
 	case http.StatusNotFound:
-		// Gracefully skip 404, assuming the server won't provide any spec
+		// 优雅跳过 404：视为 server 不提供规范。
 		return nil, "", http.StatusNotFound, nil
 	case http.StatusOK:
 		openAPISpec := &spec.Swagger{}

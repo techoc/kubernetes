@@ -113,7 +113,7 @@ func TestSync(t *testing.T) {
 				t.Fatalf("unexpect sync error: %v", err)
 			}
 
-			// ought to have one action writing status
+			// 应有一次写 status 的动作。
 			// 用动作数量判断“是否写过状态”：写状态时只应产生一次 Update，
 			// 完全不写时则没有任何动作，这样也能顺带捕获多余 API 调用。
 			if e, a := tc.expectedAction, len(fakeClient.Actions()) == 1; e != a {

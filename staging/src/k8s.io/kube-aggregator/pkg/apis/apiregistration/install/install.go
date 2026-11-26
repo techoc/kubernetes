@@ -24,7 +24,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并把类型加入 scheme。
 //
 // 中文补充：内部版本（apiregistration）是转换的中枢，v1/v1beta1 才是线上传输的线格式，
 // 三者都注册进来，scheme 才能在内部对象和外部版本之间来回转换。

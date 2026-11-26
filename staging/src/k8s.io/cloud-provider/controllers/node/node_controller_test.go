@@ -1611,16 +1611,15 @@ func Test_syncNode(t *testing.T) {
 					Region:        "us-west",
 				},
 				AdditionalLabels: map[string]string{
-					// Kubernetes reserves k8s.io and kubernetes.io namespaces
-					// and should be discarded
+					// k8s.io 与 kubernetes.io 命名空间由 Kubernetes 保留，应丢弃。
 					"topology.kubernetes.io/region": "us-other-west",
 					"topology.k8s.io/region":        "us-other-west",
 					"kubernetes.io/region":          "us-other-west",
 					"k8s.io/region":                 "us-other-west",
-					// Should discard labels that already exist
+					// 已有标签不能被覆盖。
 					"my.custom.label/foo": "bar",
 					"my.custom.label/bar": "foo",
-					// Should add labels that not match regex
+					// 不匹配保留命名空间正则的标签应写入。
 					"app.k8snio/bar": "foo",
 					"k8snio/bar":     "foo",
 				},
@@ -2089,7 +2088,7 @@ func Test_reconcileNodeLabels(t *testing.T) {
 				nodeInformer: factory.Core().V1().Nodes(),
 			}
 
-			// activate node informer
+			// 启动 node informer。
 			factory.Core().V1().Nodes().Informer()
 			factory.Start(stopCh)
 			factory.WaitForCacheSync(stopCh)

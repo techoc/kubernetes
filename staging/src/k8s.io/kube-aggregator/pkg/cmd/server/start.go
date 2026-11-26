@@ -41,14 +41,13 @@ import (
 // 是为了让不同组件在同一个 etcd 里各有各的命名空间，互不踩踏。
 const defaultEtcdPathPrefix = "/registry/kube-aggregator.kubernetes.io/"
 
-// AggregatorOptions contains everything necessary to create and run an API Aggregator.
+// AggregatorOptions 包含创建与运行 API Aggregator 所需的全部配置。
 type AggregatorOptions struct {
 	ServerRunOptions   *genericoptions.ServerRunOptions
 	RecommendedOptions *genericoptions.RecommendedOptions
 	APIEnablement      *genericoptions.APIEnablementOptions
 
-	// ProxyClientCert/Key are the client cert used to identify this proxy. Backing APIServices use
-	// this to confirm the proxy's identity
+	// ProxyClientCert/Key 是标识本代理的客户端证书，后端 APIService 用它确认代理身份。
 	ProxyClientCertFile string
 	ProxyClientKeyFile  string
 
@@ -100,7 +99,7 @@ func (o *AggregatorOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.ProxyClientKeyFile, "proxy-client-key-file", o.ProxyClientKeyFile, "client certificate key used identify the proxy to the API server")
 }
 
-// NewDefaultOptions builds a "normal" set of options.  You wouldn't normally expose this, but hyperkube isn't cobra compatible
+// NewDefaultOptions 构造一组“常规”选项；通常无需暴露，但 hyperkube 不兼容 cobra，所以需要它。
 func NewDefaultOptions(out, err io.Writer) *AggregatorOptions {
 	o := &AggregatorOptions{
 		ServerRunOptions: genericoptions.NewServerRunOptions(),
@@ -127,12 +126,12 @@ func (o AggregatorOptions) Validate(args []string) error {
 	return utilerrors.NewAggregate(errors)
 }
 
-// Complete fills in missing Options.
+// Complete 补齐缺失的选项。
 func (o *AggregatorOptions) Complete() error {
 	return o.ServerRunOptions.Complete()
 }
 
-// RunAggregator runs the API Aggregator.
+// RunAggregator 运行 API Aggregator。
 func (o AggregatorOptions) RunAggregator(ctx context.Context) error {
 	// TODO: 使用"真正的"对外地址。
 	// Aggregator 作为独立进程部署时未必有人配好证书，所以这里先用自签名证书兜底，
@@ -163,8 +162,7 @@ func (o AggregatorOptions) RunAggregator(ctx context.Context) error {
 	// 因为聚合器要合并各后端 APIService 的文档，所以把默认安装关掉。
 	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(openapi.GetOpenAPIDefinitions, openapinamer.NewDefinitionNamer(aggregatorscheme.Scheme))
 	serverConfig.OpenAPIConfig.Info.Title = "kube-aggregator"
-	// prevent generic API server from installing the OpenAPI handler. Aggregator server
-	// has its own customized OpenAPI handler.
+	// 阻止 generic apiserver 安装 OpenAPI handler：聚合 server 有自己的定制实现。
 	serverConfig.SkipOpenAPIInstallation = true
 
 	serviceResolver := apiserver.NewClusterIPServiceResolver(serverConfig.SharedInformerFactory.Core().V1().Services().Lister())

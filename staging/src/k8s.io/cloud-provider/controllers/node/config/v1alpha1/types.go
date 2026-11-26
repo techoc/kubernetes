@@ -16,7 +16,7 @@ limitations under the License.
 
 package v1alpha1
 
-// NodeControllerConfiguration contains elements describing NodeController.
+// NodeControllerConfiguration 包含描述 NodeController 的配置项。
 type NodeControllerConfiguration struct {
 	// ConcurrentNodeSyncs 是并发同步节点的 worker 数量。
 	//

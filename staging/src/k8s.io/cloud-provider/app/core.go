@@ -14,9 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app implements a server that runs a set of active
-// components.  This includes node controllers, service and
-// route controller, and so on.
+// Package app 实现运行一组活动组件的 server，包括节点控制器、Service 控制器与路由控制器等。
 package app
 
 import (
@@ -45,7 +43,7 @@ import (
 // 时构造会失败，此时只记录警告并返回 false，而不是让整个 CCM 启动失败——
 // 缺少实例能力的云提供商仍可使用 Service/Route 等其他控制器。
 func startCloudNodeController(ctx context.Context, initContext ControllerInitContext, controlexContext controllermanagerapp.ControllerContext, completedConfig *config.CompletedConfig, cloud cloudprovider.Interface) (controller.Interface, bool, error) {
-	// Start the CloudNodeController
+	// 启动 CloudNodeController。
 	nodeController, err := cloudnodecontroller.NewCloudNodeController(
 		completedConfig.SharedInformers.Core().V1().Nodes(),
 		// 复用 node-controller 的 ClusterRole，避免为 CCM 单独扩权。
@@ -71,7 +69,7 @@ func startCloudNodeController(ctx context.Context, initContext ControllerInitCon
 // 该控制器负责删除云侧已不存在的 Node、给已关机的实例打上 shutdown 污点。
 // 与 node controller 类似，云厂商不支持 instances 接口时只降级而不报错。
 func startCloudNodeLifecycleController(ctx context.Context, initContext ControllerInitContext, controlexContext controllermanagerapp.ControllerContext, completedConfig *config.CompletedConfig, cloud cloudprovider.Interface) (controller.Interface, bool, error) {
-	// Start the cloudNodeLifecycleController
+	// 启动 cloudNodeLifecycleController。
 	cloudNodeLifecycleController, err := cloudnodelifecyclecontroller.NewCloudNodeLifecycleController(
 		completedConfig.SharedInformers.Core().V1().Nodes(),
 		// 同样复用 node-controller 的 ClusterRole。
@@ -93,7 +91,7 @@ func startCloudNodeLifecycleController(ctx context.Context, initContext Controll
 // startServiceController 构造并启动 service-controller，负责把 Service
 // （尤其是 LoadBalancer 类型）同步到云厂商的负载均衡器。
 func startServiceController(ctx context.Context, initContext ControllerInitContext, controlexContext controllermanagerapp.ControllerContext, completedConfig *config.CompletedConfig, cloud cloudprovider.Interface) (controller.Interface, bool, error) {
-	// Start the service controller
+	// 启动 Service 控制器。
 	serviceController, err := servicecontroller.New(
 		cloud,
 		completedConfig.ClientBuilder.ClientOrDie(initContext.ClientName),
@@ -125,7 +123,7 @@ func startRouteController(ctx context.Context, initContext ControllerInitContext
 		return nil, false, nil
 	}
 
-	// If CIDRs should be allocated for pods and set on the CloudProvider, then start the route controller
+	// 只有在为 Pod 分配 CIDR 并写入云 provider 时才启动路由控制器。
 	routes, ok := cloud.Routes()
 	if !ok {
 		klog.Warning("--configure-cloud-routes is set, but cloud provider does not support routes. Will not configure cloud provider routes.")
@@ -179,8 +177,7 @@ func processCIDRs(cidrsList string) ([]*net.IPNet, bool, error) {
 		return nil, false, err
 	}
 
-	// if cidrs has an error then the previous call will fail
-	// safe to ignore error checking on next call
+	// 上一次调用已处理过 CIDR 错误，这里可以安全地忽略第二次取值。
 	dualstack, _ := netutils.IsDualStackCIDRs(cidrs)
 
 	return cidrs, dualstack, nil

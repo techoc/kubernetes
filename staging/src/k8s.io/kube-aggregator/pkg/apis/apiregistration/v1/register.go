@@ -22,13 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the API group for apiregistration
+// GroupName 是 apiregistration 的 API 组名。
 const GroupName = "apiregistration.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns back a Group qualified GroupResource
+// Resource 把非限定资源名转为带组名的 GroupResource。
 //
 // 中文补充：调用方通常只写 "apiservices"，但存储层要按组限定，
 // 用 SchemeGroupVersion 包一层可以保证组名跟着版本定义走，不散落在各调用点。
@@ -37,25 +37,24 @@ func Resource(resource string) schema.GroupResource {
 }
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// SchemeBuilder 收集本 API 包需要执行的 scheme 初始化函数。
+	// TODO: 把 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 与 AddToScheme 仍留在 k8s.io/kubernetes。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is a common registration function for mapping packaged scoped group & version keys to a scheme
+	// AddToScheme 是通用的注册入口，把本包的 group/version 与类型映射到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写函数；生成函数的注册放在生成文件中。
+	// 这样即使生成文件缺失，代码依然能编译。
 	// 中文补充：addDefaultingFuncs 由默认值生成器产出，手写部分只列名字；
 	// 这样代码生成还没跑过时，本包仍能编译，方便本地迭代。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 
-// Adds the list of known types to the given scheme.
+// 把已知类型列表注册到给定 scheme。
 //
 // 中文补充：APIService 和 APIServiceList 都要注册，前者用于单对象编解码，
 // 后者用于 List 请求；漏掉 List 会让客户端的 list/watch 直接找不到类型。

@@ -57,7 +57,7 @@ const (
 	// 失败重试采用指数退避，范围 5s~300s；e2e 脚本中的等待时间与此假设相关。
 	minRetryDelay = 5 * time.Second
 	maxRetryDelay = 300 * time.Second
-	// ToBeDeletedTaint is a taint used by the CLuster Autoscaler before marking a node for deletion. Defined in
+	// ToBeDeletedTaint 是 Cluster Autoscaler 标记待删除节点前打的污点，定义于
 	// https://github.com/kubernetes/autoscaler/blob/e80ab518340f88f364fe3ef063f8303755125971/cluster-autoscaler/utils/deletetaint/delete.go#L36
 	ToBeDeletedTaint = "ToBeDeletedByClusterAutoscaler"
 )
@@ -65,7 +65,7 @@ const (
 // cachedService 保存 Service 的最近一次已知状态。
 // 仅用于非 finalizer 删除路径下的云资源清理，不能当作 informer 缓存使用。
 type cachedService struct {
-	// The cached state of the service
+	// state 是 Service 最近一次已知状态。
 	state *v1.Service
 }
 
@@ -92,7 +92,7 @@ type Controller struct {
 	eventRecorder       record.EventRecorder
 	nodeLister          corelisters.NodeLister // 提供 LB 后端节点集合；过滤谓词决定哪些节点可用。
 	nodeListerSynced    cache.InformerSynced
-	// services and nodes that need to be synced
+	// 分别存放待同步的 Service 与节点。
 	serviceQueue workqueue.TypedRateLimitingInterface[string]
 	nodeQueue    workqueue.TypedRateLimitingInterface[string]
 	// lastSyncedNodes 记录每个 Service 上次同步给云厂商的节点集合，用于跳过
@@ -339,8 +339,8 @@ func (c *Controller) init() error {
 // processServiceCreateOrUpdate 根据传入的 Service 相应地操作负载均衡器；处理 Service 更新失败时返回错误。
 // 该函数维护 cache 与最终状态：只有当 LB 删除成功后才移除缓存。
 func (c *Controller) processServiceCreateOrUpdate(ctx context.Context, service *v1.Service, key string) error {
-	// TODO(@MrHohn): Remove the cache once we get rid of the non-finalizer deletion
-	// path. Ref https://github.com/kubernetes/enhancements/issues/980.
+	// TODO(@MrHohn): 等非 finalizer 删除路径被移除后即可删除该 cache。
+	// Ref https://github.com/kubernetes/enhancements/issues/980。
 	cachedService := c.cache.getOrCreate(key)
 	if cachedService.state != nil && cachedService.state.UID != service.UID {
 		// 这种情况只会发生在 Service 于短时间内被删除并重建时，而这只可能在旧对象不带 finalizer 时出现。
@@ -358,7 +358,7 @@ func (c *Controller) processServiceCreateOrUpdate(ctx context.Context, service *
 		return err
 	}
 	if op == deleteLoadBalancer {
-		// Only delete the cache upon successful load balancer deletion.
+		// 只有 LB 删除成功后才清理缓存，失败时下一轮还要用它做兜底。
 		c.cache.delete(key)
 	}
 
@@ -378,8 +378,8 @@ const (
 // syncLoadBalancerIfNeeded 确保 Service 状态与负载均衡器同步：按需为 Service 创建 LB，Service 不再需要时删除 LB，并返回其中发生的错误。
 // finalizer 的增删与云资源操作严格配对：加 finalizer 后再创建，删除成功后再移除。
 func (c *Controller) syncLoadBalancerIfNeeded(ctx context.Context, service *v1.Service, key string) (loadBalancerOperation, error) {
-	// Note: It is safe to just call EnsureLoadBalancer.  But, on some clouds that requires a delete & create,
-	// which may involve service interruption.  Also, we would like user-friendly events.
+	// 直接调用 EnsureLoadBalancer 是安全的，但某些云上它等价于删后重建，可能导致服务中断，
+	// 因此这里区分创建与更新以发出更友好的事件。
 
 	// 保存旧状态用于比较，避免无变化的 status patch 触发不必要的 watch 事件。
 	previousStatus := service.Status.LoadBalancer.DeepCopy()
@@ -389,7 +389,7 @@ func (c *Controller) syncLoadBalancerIfNeeded(ctx context.Context, service *v1.S
 
 	// 删除分支：Service 不再需要 LB，或带清理 finalizer 且即将/已经删除。
 	if !wantsLoadBalancer(service) || needsCleanup(service) {
-		// Delete the load balancer if service no longer wants one, or if service needs cleanup.
+		// Service 不再需要 LB，或带有清理 finalizer 时删除 LB。
 		op = deleteLoadBalancer
 		newStatus = &v1.LoadBalancerStatus{}
 		// 先查询是否存在，避免对不存在的 LB 发起无意义的删除调用。
@@ -420,8 +420,7 @@ func (c *Controller) syncLoadBalancerIfNeeded(ctx context.Context, service *v1.S
 		op = ensureLoadBalancer
 		klog.V(2).Infof("Ensuring load balancer for service %s", key)
 		c.eventRecorder.Event(service, v1.EventTypeNormal, "EnsuringLoadBalancer", "Ensuring load balancer")
-		// Always add a finalizer prior to creating load balancers, this ensures Services
-		// can't be deleted until all corresponding load balancer resources are also deleted.
+		// 创建 LB 前必须先加 finalizer，防止 Service 在云资源清理完成前被删除。
 		if err := c.addFinalizer(service); err != nil {
 			return op, fmt.Errorf("failed to add load balancer cleanup finalizer: %v", err)
 		}
@@ -469,8 +468,7 @@ func (c *Controller) ensureLoadBalancer(ctx context.Context, service *v1.Service
 	}
 	// 记录本次同步的节点集合，后续节点同步据此跳过无变化更新。
 	c.storeLastSyncedNodes(service, nodes)
-	// - Not all cloud providers support all protocols and the next step is expected to return
-	//   an error for unsupported protocols
+	// 并非所有云厂商都支持全部协议，不支持时应由下一步返回错误。
 	status, err := c.balancer.EnsureLoadBalancer(ctx, c.clusterName, service, nodes)
 	if err != nil {
 		return nil, err
@@ -875,7 +873,7 @@ func (c *Controller) lockedUpdateLoadBalancerHosts(service *v1.Service, hosts []
 	// 该操作通常耗时不长且发生频繁，因此只记录最终结果事件，避免事件刷屏。
 	err := c.balancer.UpdateLoadBalancer(context.TODO(), c.clusterName, service, hosts)
 	if err == nil {
-		// If there are no available nodes for LoadBalancer service, make a EventTypeWarning event for it.
+		// 没有可用节点时发出 Warning 事件提示用户。
 		if len(hosts) == 0 {
 			c.eventRecorder.Event(service, v1.EventTypeWarning, "UnAvailableLoadBalancer", "There are no available nodes for LoadBalancer")
 		} else {
@@ -947,10 +945,7 @@ func (c *Controller) syncService(ctx context.Context, key string) error {
 func (c *Controller) processServiceDeletion(ctx context.Context, key string) error {
 	cachedService, ok := c.cache.get(key)
 	if !ok {
-		// Cache does not contains the key means:
-		// - We didn't create a Load Balancer for the deleted service at all.
-		// - We already deleted the Load Balancer that was created for the service.
-		// In both cases we have nothing left to do.
+		// 缓存里没有该 key 说明要么从未为这个 Service 创建 LB，要么已经删过了，两种情况都无需处理。
 		return nil
 	}
 	klog.V(2).Infof("Service %v has been deleted. Attempting to cleanup load balancer resources", key)
@@ -983,7 +978,7 @@ func (c *Controller) addFinalizer(service *v1.Service) error {
 		return nil
 	}
 
-	// Make a copy so we don't mutate the shared informer cache.
+	// 先复制再修改，避免改动共享 informer 缓存中的对象。
 	updated := service.DeepCopy()
 	updated.ObjectMeta.Finalizers = append(updated.ObjectMeta.Finalizers, servicehelper.LoadBalancerCleanupFinalizer)
 
@@ -999,7 +994,7 @@ func (c *Controller) removeFinalizer(service *v1.Service) error {
 		return nil
 	}
 
-	// Make a copy so we don't mutate the shared informer cache.
+	// 先复制再修改，避免改动共享 informer 缓存中的对象。
 	updated := service.DeepCopy()
 	updated.ObjectMeta.Finalizers = removeString(updated.ObjectMeta.Finalizers, servicehelper.LoadBalancerCleanupFinalizer)
 
@@ -1026,7 +1021,7 @@ func (c *Controller) patchStatus(service *v1.Service, previousStatus, newStatus 
 	if servicehelper.LoadBalancerStatusEqual(previousStatus, newStatus) {
 		return nil
 	}
-	// Make a copy so we don't mutate the shared informer cache.
+	// 先复制再修改，避免改动共享 informer 缓存中的对象。
 	updated := service.DeepCopy()
 	updated.Status.LoadBalancer = *newStatus
 
@@ -1052,11 +1047,8 @@ var (
 	stableNodeSetPredicates []NodeConditionPredicate = []NodeConditionPredicate{
 		nodeNotDeletedPredicate,
 		nodeIncludedPredicate,
-		// This is not perfect, but probably good enough. We won't update the
-		// LBs just because the taint was added (see shouldSyncUpdatedNode) but
-		// if any other situation causes an LB sync, tainted nodes will be
-		// excluded at that time and cause connections on said node to not
-		// connection drain.
+		// 这里不完美但够用：仅新增污点不会触发 LB 更新（见 shouldSyncUpdatedNode），
+		// 但一旦因其他原因同步 LB，带污点节点就会被排除，使该节点上的连接无法排空。
 		nodeUnTaintedPredicate,
 	}
 )

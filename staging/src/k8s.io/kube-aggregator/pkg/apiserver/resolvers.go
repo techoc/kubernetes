@@ -23,15 +23,14 @@ import (
 	listersv1 "k8s.io/client-go/listers/core/v1"
 )
 
-// A ServiceResolver knows how to get a URL given a service.
+// ServiceResolver 负责把 Service 解析成可访问的 URL。
 // 把“Service 引用 -> 可访问的 URL”抽象成接口，是为了让代理层不必关心
 // 到底走 EndpointSlice 直连、ClusterIP 还是 loopback；不同部署形态可注入不同实现。
 type ServiceResolver interface {
 	ResolveEndpoint(namespace, name string, port int32) (*url.URL, error)
 }
 
-// NewEndpointServiceResolver returns a ServiceResolver that chooses one of the
-// service's endpoints.
+// NewEndpointServiceResolver 返回一个从 Service 端点中选一个进行访问的解析器。
 // 走 EndpointSlice 直连后端 Pod，绕过 Service 的 ClusterIP 与 kube-proxy；
 // 需要同时拿到 Service（判断端口）和 EndpointSlice（找可用地址）两个 lister。
 func NewEndpointServiceResolver(services listersv1.ServiceLister, endpointSliceGetter proxy.EndpointSliceGetter) ServiceResolver {
@@ -50,8 +49,7 @@ func (r *aggregatorEndpointRouting) ResolveEndpoint(namespace, name string, port
 	return proxy.ResolveEndpoint(r.services, r.endpointSliceGetter, namespace, name, port)
 }
 
-// NewClusterIPServiceResolver returns a ServiceResolver that directly calls the
-// service's cluster IP.
+// NewClusterIPServiceResolver 返回一个直接访问 Service cluster IP 的解析器。
 // 直接访问 Service 的 ClusterIP，依赖 kube-proxy 做负载均衡；
 // 在无法或无需列举 EndpointSlice 的场景下使用，只需要 Service lister。
 func NewClusterIPServiceResolver(services listersv1.ServiceLister) ServiceResolver {
@@ -68,8 +66,7 @@ func (r *aggregatorClusterRouting) ResolveEndpoint(namespace, name string, port 
 	return proxy.ResolveCluster(r.services, namespace, name, port)
 }
 
-// NewLoopbackServiceResolver returns a ServiceResolver that routes
-// the kubernetes/default service with port 443 to loopback.
+// NewLoopbackServiceResolver 返回一个把 kubernetes/default:443 路由到 loopback 的解析器。
 // default/kubernetes:443 指向的其实就是当前 apiserver 自身，
 // 再走 Service 网络会绕远甚至在有网络分区时失败，因此直接回环到本地 host。
 // 其余 Service 仍交给 delegate 按常规方式解析。

@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package service contains code for syncing cloud load balancers
-// with the service registry.
+// Package service 实现把云负载均衡器与 Service registry 同步的逻辑。
 // 控制器监听 Service 与 Node 变化，调用云厂商 LoadBalancer 接口完成创建、更新、
 // 删除以及后端节点集同步，并通过 finalizer 保证资源清理不会早于 Service 删除。
 package service

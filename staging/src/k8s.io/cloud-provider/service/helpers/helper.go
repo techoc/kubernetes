@@ -67,7 +67,7 @@ func IsAllowAll(ipnets utilnet.IPNetSet) bool {
 func GetLoadBalancerSourceRanges(service *v1.Service) (utilnet.IPNetSet, error) {
 	var ipnets utilnet.IPNetSet
 	var err error
-	// if SourceRange field is specified, ignore sourceRange annotation
+	// 显式设置 SourceRange 字段时忽略 sourceRange 注解。
 	if len(service.Spec.LoadBalancerSourceRanges) > 0 {
 		specs := service.Spec.LoadBalancerSourceRanges
 		ipnets, err = utilnet.ParseIPNets(specs...)
@@ -124,7 +124,7 @@ func NeedsHealthCheck(service *v1.Service) bool {
 	return RequestsOnlyLocalTraffic(service)
 }
 
-// HasLBFinalizer checks if service contains LoadBalancerCleanupFinalizer.
+// HasLBFinalizer 判断 Service 是否带有 LoadBalancerCleanupFinalizer。
 func HasLBFinalizer(service *v1.Service) bool {
 	for _, finalizer := range service.ObjectMeta.Finalizers {
 		if finalizer == LoadBalancerCleanupFinalizer {
@@ -144,7 +144,7 @@ func LoadBalancerStatusEqual(l, r *v1.LoadBalancerStatus) bool {
 // 对 spec 的改动会被忽略。
 // 先重置 spec 再生成 patch，防止控制器用陈旧副本覆盖用户对 Service 规格的并发修改。
 func PatchService(c corev1.CoreV1Interface, oldSvc, newSvc *v1.Service) (*v1.Service, error) {
-	// Reset spec to make sure only patch for Status or ObjectMeta.
+	// 复位 spec，确保补丁只涉及 Status 或 ObjectMeta。
 	newSvc.Spec = oldSvc.Spec
 
 	patchBytes, err := getPatchBytes(oldSvc, newSvc)

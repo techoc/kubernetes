@@ -59,9 +59,8 @@ func SortedByGroupAndVersion(servers []*APIService) [][]*APIService {
 	return ret
 }
 
-// ByGroupPriorityMinimum sorts with the highest group number first, then by name.
-// This is not a simple reverse, because we want the name sorting to be alpha, not
-// reverse alpha.
+// ByGroupPriorityMinimum 按组优先级从高到低排序，同优先级内按名字排。
+// 不能简单反转比较结果，否则组内名字会变成逆序。
 // 用 sort.Interface 实现排序而非直接 sort.Slice，是因为这两个比较器还会被
 // 其他包复用（例如作为 sort.Sort 的参数传入），在类型上显式声明可以避免重复定义比较逻辑。
 // 注意：优先级数值倒序，但同名冲突时的 name 仍保持正序，因为 name 只是稳定输出的 workaround，
@@ -77,9 +76,8 @@ func (s ByGroupPriorityMinimum) Less(i, j int) bool {
 	return s[i].Name < s[j].Name
 }
 
-// ByVersionPriority sorts with the highest version number first, then by name.
-// This is not a simple reverse, because we want the name sorting to be alpha, not
-// reverse alpha.
+// ByVersionPriority 按版本优先级从高到低排序，同优先级内按名字排。
+// 不能简单反转比较结果，否则名字会变成逆序。
 // 版本优先级先按 VersionPriority 数值倒序；数值相同时再用 Kubernetes 风格的版本比较函数
 // 比较版本号本身，从而让 v10 排在 v9 之后而不是按字典序排在 v1 旁边。
 // 和 ByGroupPriorityMinimum 一样不整体 reverse，是为了保持 name 比较的正序语义。

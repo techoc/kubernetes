@@ -125,8 +125,7 @@ func (cb *CommandBuilder) SetLongDesc(long string) {
 	cb.long = long
 }
 
-// SetProviderDefaults can be called to change the default values for some
-// options when a flag is not set
+// SetProviderDefaults 可在 flag 未设置时修改部分选项的默认值。
 // 这些默认值只在 flag 未显式设置时生效；显式传入的 flag 始终优先。
 func (cb *CommandBuilder) SetProviderDefaults(defaults options.ProviderDefaults) {
 	cb.defaults = &defaults

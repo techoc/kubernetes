@@ -67,25 +67,22 @@ var labelReconcileInfo = []struct {
 	ensureSecondaryExists bool
 }{
 	{
-		// Reconcile the beta and the GA zone label using the beta label as
-		// the source of truth
-		// TODO: switch the primary key to GA labels in v1.21
+		// 以 beta 标签为准对账 beta 与 GA 可用区标签。
+		// TODO: v1.21 起把主键切换为 GA 标签。
 		primaryKey:            v1.LabelFailureDomainBetaZone,
 		secondaryKey:          v1.LabelTopologyZone,
 		ensureSecondaryExists: true,
 	},
 	{
-		// Reconcile the beta and the stable region label using the beta label as
-		// the source of truth
-		// TODO: switch the primary key to GA labels in v1.21
+		// 以 beta 标签为准对账 beta 与稳定地域标签。
+		// TODO: v1.21 起把主键切换为 GA 标签。
 		primaryKey:            v1.LabelFailureDomainBetaRegion,
 		secondaryKey:          v1.LabelTopologyRegion,
 		ensureSecondaryExists: true,
 	},
 	{
-		// Reconcile the beta and the stable instance-type label using the beta label as
-		// the source of truth
-		// TODO: switch the primary key to GA labels in v1.21
+		// 以 beta 标签为准对账 beta 与稳定实例类型标签。
+		// TODO: v1.21 起把主键切换为 GA 标签。
 		primaryKey:            v1.LabelInstanceType,
 		secondaryKey:          v1.LabelInstanceTypeStable,
 		ensureSecondaryExists: true,
@@ -168,10 +165,8 @@ func NewCloudNodeController(
 	return cnc, nil
 }
 
-// Run will sync informer caches and starting workers.
-// This controller updates newly registered nodes with information
-// from the cloud provider. This call is blocking so should be called
-// via a goroutine
+// Run 会同步 informer 缓存并启动 worker，把云侧信息写入新注册的节点。
+// 该调用会阻塞，应通过 goroutine 启动。
 //
 //logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
 func (cnc *CloudNodeController) Run(stopCh <-chan struct{}, controllerManagerMetrics *controllersmetrics.ControllerManagerMetrics) {
@@ -191,7 +186,7 @@ func (cnc *CloudNodeController) RunWithContext(ctx context.Context, controllerMa
 	defer utilruntime.HandleCrash()
 	defer cnc.workqueue.ShutDown()
 
-	// Start event processing pipeline.
+	// 启动事件处理管道。
 	klog.Infof("Sending events to api server.")
 	controllerManagerMetrics.ControllerStarted("cloud-node")
 	defer controllerManagerMetrics.ControllerStopped("cloud-node")
@@ -200,7 +195,7 @@ func (cnc *CloudNodeController) RunWithContext(ctx context.Context, controllerMa
 	cnc.broadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: cnc.kubeClient.CoreV1().Events("")})
 	defer cnc.broadcaster.Shutdown()
 
-	// Wait for the caches to be synced before starting workers
+	// 启动 worker 前先等待缓存同步，避免读到空缓存。
 	klog.Info("Waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stopCh, cnc.nodesSynced); !ok {
 		klog.Errorf("failed to wait for caches to sync")
@@ -215,8 +210,7 @@ func (cnc *CloudNodeController) RunWithContext(ctx context.Context, controllerMa
 		}
 	}, cnc.nodeStatusUpdateFrequency)
 
-	// These workers initialize the nodes added to the cluster,
-	// those that are Tainted with TaintExternalCloudProvider.
+	// 这些 worker 负责初始化新加入集群、带 TaintExternalCloudProvider 污点的节点。
 	for i := int32(0); i < cnc.workerCount; i++ {
 		go wait.UntilWithContext(ctx, cnc.runWorker, time.Second)
 	}
@@ -224,28 +218,24 @@ func (cnc *CloudNodeController) RunWithContext(ctx context.Context, controllerMa
 	<-stopCh
 }
 
-// runWorker is a long-running function that will continually call the
-// processNextWorkItem function in order to read and process a message on the
-// workqueue.
+// runWorker 是常驻循环，不断调用 processNextWorkItem 从 workqueue 读取并处理消息。
 func (cnc *CloudNodeController) runWorker(ctx context.Context) {
 	for cnc.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem will read a single work item off the workqueue and
-// attempt to process it, by calling the syncHandler.
+// processNextWorkItem 从 workqueue 取出一项，交给 syncHandler 处理。
 func (cnc *CloudNodeController) processNextWorkItem(ctx context.Context) bool {
 	obj, shutdown := cnc.workqueue.Get()
 	if shutdown {
 		return false
 	}
 
-	// We wrap this block in a func so we can defer cnc.workqueue.Done.
+	// 用函数包裹以便在出错路径也能通过 defer 调用 workqueue.Done。
 	err := func(key string) error {
 		defer cnc.workqueue.Done(key)
 
-		// Run the syncHandler, passing it the key of the
-		// Node resource to be synced.
+		// 调用 syncHandler，传入待同步 Node 的 key。
 		if err := cnc.syncHandler(ctx, key); err != nil {
 			// 云 API 抖动属于可恢复错误，限速重入队；成功则 Forget 清除退避历史。
 			cnc.workqueue.AddRateLimited(key)
@@ -253,8 +243,7 @@ func (cnc *CloudNodeController) processNextWorkItem(ctx context.Context) bool {
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
 
-		// Finally, if no error occurs we Forget this item so it does not
-		// get queued again until another change happens.
+		// 成功后 Forget 清除退避状态，避免下次变更时沿用旧的失败计数。
 		cnc.workqueue.Forget(key)
 		return nil
 	}(obj)
@@ -267,7 +256,7 @@ func (cnc *CloudNodeController) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
-// syncHandler implements the logic of the controller.
+// syncHandler 实现控制器的对账逻辑。
 func (cnc *CloudNodeController) syncHandler(ctx context.Context, key string) error {
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
@@ -318,8 +307,7 @@ func (cnc *CloudNodeController) UpdateNodeStatus(ctx context.Context) error {
 	return nil
 }
 
-// enqueueNode takes a Node resource and converts it into a key
-// string which is then put onto the work queue.
+// enqueueNode 把 Node 转成 key 字符串放入 workqueue。
 func (cnc *CloudNodeController) enqueueNode(obj interface{}) {
 	var key string
 	var err error
@@ -337,7 +325,7 @@ func (cnc *CloudNodeController) enqueueNode(obj interface{}) {
 func (cnc *CloudNodeController) reconcileNodeLabels(nodeName string) error {
 	node, err := cnc.nodeInformer.Lister().Get(nodeName)
 	if err != nil {
-		// If node not found, just ignore it.
+		// 节点已被删除，忽略即可。
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
@@ -346,7 +334,7 @@ func (cnc *CloudNodeController) reconcileNodeLabels(nodeName string) error {
 	}
 
 	if node.Labels == nil {
-		// Nothing to reconcile.
+		// 没有标签，无需对账。
 		return nil
 	}
 
@@ -362,12 +350,11 @@ func (cnc *CloudNodeController) reconcileNodeLabels(nodeName string) error {
 			continue
 		}
 		if secondaryExists && primaryValue != secondaryValue {
-			// Secondary label exists, but not consistent with the primary
-			// label. Need to reconcile.
+			// 次标签与主标签不一致，需按主标签修正。
 			labelsToUpdate[r.secondaryKey] = primaryValue
 
 		} else if !secondaryExists && r.ensureSecondaryExists {
-			// Apply secondary label based on primary label.
+			// 主标签存在而次标签缺失，补写次标签。
 			labelsToUpdate[r.secondaryKey] = primaryValue
 		}
 	}
@@ -384,9 +371,9 @@ func (cnc *CloudNodeController) reconcileNodeLabels(nodeName string) error {
 	return nil
 }
 
-// UpdateNodeAddress updates the nodeAddress of a single node
+// updateNodeAddress 更新单个节点的地址。
 func (cnc *CloudNodeController) updateNodeAddress(ctx context.Context, node *v1.Node, instanceMetadata *cloudprovider.InstanceMetadata) {
-	// Do not process nodes that are still tainted
+	// 带污点节点尚未初始化，跳过。
 	cloudTaint := getCloudTaint(node.Spec.Taints)
 	if cloudTaint != nil {
 		klog.V(5).Infof("This node %s is still tainted. Will not process.", node.Name)
@@ -400,7 +387,7 @@ func (cnc *CloudNodeController) updateNodeAddress(ctx context.Context, node *v1.
 		return
 	}
 
-	// Check if a hostname address exists in the cloud provided addresses
+	// 检查云侧地址中是否已有 Hostname 类型地址。
 	hostnameExists := false
 	for i := range nodeAddresses {
 		if nodeAddresses[i].Type == v1.NodeHostName {
@@ -443,8 +430,7 @@ func (cnc *CloudNodeController) updateNodeAddress(ctx context.Context, node *v1.
 // 因此每个 modifier 必须是幂等的。
 type nodeModifier func(*v1.Node)
 
-// syncNode handles updating existing nodes registered with the cloud taint
-// and processes nodes that were added into the cluster, and cloud initialize them if appropriate.
+// syncNode 处理带云污点的存量节点与新加入集群的节点，并在条件满足时完成云的初始化。
 func (cnc *CloudNodeController) syncNode(ctx context.Context, nodeName string) error {
 	curNode, err := cnc.nodeInformer.Lister().Get(nodeName)
 	if err != nil {
@@ -458,7 +444,7 @@ func (cnc *CloudNodeController) syncNode(ctx context.Context, nodeName string) e
 
 	cloudTaint := getCloudTaint(curNode.Spec.Taints)
 	if cloudTaint == nil {
-		// Node object was already initialized, only need to reconcile the labels
+		// 节点已完成初始化，只需对账标签。
 		return cnc.reconcileNodeLabels(nodeName)
 	}
 
@@ -523,10 +509,8 @@ func (cnc *CloudNodeController) syncNode(ctx context.Context, nodeName string) e
 	return nil
 }
 
-// getNodeModifiersFromCloudProvider returns a slice of nodeModifiers that update
-// a node object with provider-specific information.
-// All of the returned functions are idempotent, because they are used in a retry-if-conflict
-// loop, meaning they could get called multiple times.
+// getNodeModifiersFromCloudProvider 返回一组 nodeModifier，把云厂商特有的信息写到节点上。
+// 它们必须幂等：在“冲突即重试”循环中可能被调用多次。
 func (cnc *CloudNodeController) getNodeModifiersFromCloudProvider(
 	ctx context.Context,
 	node *v1.Node,
@@ -614,14 +598,13 @@ func (cnc *CloudNodeController) getNodeModifiersFromCloudProvider(
 	return nodeModifiers, nil
 }
 
-// getInstanceMetadata get providerdID, instance type and nodeAddresses, use Instances if InstancesV2 is off.
-// ProviderID is expected to be available, but to keep backward compatibility,
-// we should handle some scenarios where it can be missing. It returns an error
-// if providerID is missing, except when is not implemented by GetInstanceProviderID.
+// getInstanceMetadata 获取 providerID、实例类型与节点地址；未启用 InstancesV2 时走 Instances。
+// 通常 providerID 应当存在，但为兼容旧场景也要处理缺失的情况：缺失时返回错误，
+// 除非 GetInstanceProviderID 未实现。
 func (cnc *CloudNodeController) getInstanceMetadata(ctx context.Context, node *v1.Node) (*cloudprovider.InstanceMetadata, error) {
-	// kubelet can set the provider ID using the flag and is inmutable
+	// kubelet 可以通过 flag 设置 providerID，且该字段不可变。
 	providerID := node.Spec.ProviderID
-	// InstancesV2 require ProviderID to be present
+	// InstancesV2 要求 providerID 必须存在。
 	if instancesV2, ok := cnc.cloud.InstancesV2(); instancesV2 != nil && ok {
 		metadata, err := instancesV2.InstanceMetadata(ctx, node)
 		if err != nil {
@@ -644,7 +627,7 @@ func (cnc *CloudNodeController) getInstanceMetadata(ctx context.Context, node *v
 		return metadata, nil
 	}
 
-	// If InstancesV2 not implement, use Instances.
+	// 未实现 InstancesV2 时退回 Instances。
 	instances, ok := cnc.cloud.Instances()
 	if !ok {
 		return nil, fmt.Errorf("failed to get instances from cloud provider")
@@ -654,11 +637,10 @@ func (cnc *CloudNodeController) getInstanceMetadata(ctx context.Context, node *v
 	if providerID == "" {
 		providerID, err = cloudprovider.GetInstanceProviderID(ctx, cnc.cloud, types.NodeName(node.Name))
 		if err != nil {
-			// This is the only case where ProviderID can be skipped
+			// 只有云厂商明确未实现该能力时才允许跳过 providerID。
 			if errors.Is(err, cloudprovider.NotImplemented) {
-				// if the cloud provider being used does not support provider IDs,
-				// we can safely continue since we will attempt to set node
-				// addresses given the node name in getNodeAddressesByProviderIDOrName
+				// 此时后续会按节点名调用 getNodeAddressesByProviderIDOrName 获取地址，
+				// 因此没有 providerID 也能安全继续。
 				klog.Warningf("cloud provider does not set node provider ID, using node name to discover node %s", node.Name)
 			} else {
 				// 云厂商支持 provider ID 时要把错误上抛，以便后续重新入队重试；
@@ -714,7 +696,7 @@ func (cnc *CloudNodeController) getInstanceNodeAddresses(ctx context.Context, no
 		return instancesV2.InstanceMetadata(ctx, node)
 	}
 
-	// If InstancesV2 not implement, use Instances.
+	// 未实现 InstancesV2 时退回 Instances。
 	instances, ok := cnc.cloud.Instances()
 	if !ok {
 		return nil, fmt.Errorf("failed to get instances from cloud provider")
@@ -802,8 +784,7 @@ func updateNodeAddressesFromNodeIP(node *v1.Node, nodeAddresses []v1.NodeAddress
 	return nodeAddresses, err
 }
 
-// getInstanceTypeByProviderIDOrName will attempt to get the instance type of node using its providerID
-// then it's name. If both attempts fail, an error is returned.
+// getInstanceTypeByProviderIDOrName 先按 providerID 查实例类型，失败再按节点名查；两者都失败才返回错误。
 func getInstanceTypeByProviderIDOrName(ctx context.Context, instances cloudprovider.Instances, providerID, nodeName string) (string, error) {
 	instanceType, err := instances.InstanceTypeByProviderID(ctx, providerID)
 	if err != nil {
@@ -816,8 +797,7 @@ func getInstanceTypeByProviderIDOrName(ctx context.Context, instances cloudprovi
 	return instanceType, err
 }
 
-// getZoneByProviderIDorName will attempt to get the zone of node using its providerID
-// then it's name. If both attempts fail, an error is returned.
+// getZoneByProviderIDorName 先按 providerID 查可用区，失败再按节点名查；两者都失败才返回错误。
 func getZoneByProviderIDOrName(ctx context.Context, zones cloudprovider.Zones, providerID, nodeName string) (cloudprovider.Zone, error) {
 	zone, err := zones.GetZoneByProviderID(ctx, providerID)
 	if err != nil {

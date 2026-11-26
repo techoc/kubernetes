@@ -23,7 +23,7 @@ import (
 	"k8s.io/component-base/cli"
 	"k8s.io/kube-aggregator/pkg/cmd/server"
 
-	// force compilation of packages we'll later rely upon
+	// 强制编译后续要用到的包，避免依赖在构建时被裁剪。
 	// 这些包通过空导入引入，只为触发其 init：把 API 类型注册进 scheme、注册校验函数、
 	// 以及让生成的 client/lister 代码参与编译。等到服务真正运行时（例如 scheme 反序列化、
 	// RESTMapper 映射资源时）才依赖这些副作用，提前编译能保证缺失问题在构建期暴露。

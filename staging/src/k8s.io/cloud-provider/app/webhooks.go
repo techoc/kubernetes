@@ -54,7 +54,7 @@ func init() {
 	encoder = serializerInfo.Serializer
 }
 
-// WebhooksDisabledByDefault is the webhooks disabled default when starting cloud-controller managers.
+// WebhooksDisabledByDefault 是 cloud-controller-manager 启动时默认禁用的 webhook。
 // 记录默认关闭的 webhook 名称；由 --webhooks 的 * / -name 语法覆盖。
 var WebhooksDisabledByDefault = sets.NewString()
 
@@ -192,7 +192,7 @@ func (h WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s", out)
 }
 
-// parseRequest extracts an AdmissionReview from an http.Request if possible
+// parseRequest 尽可能从 http.Request 中解析出 AdmissionReview。
 // parseRequest 对请求做严格校验：必须是 application/json、非空 body、可解码的
 // AdmissionReview，且包含 Request 字段，任何一项不满足都拒绝处理。
 func parseRequest(r *http.Request) (*admissionv1.AdmissionReview, error) {

@@ -84,7 +84,7 @@ type CloudNodeLifecycleController struct {
 	// 被判定为 NotReady 之前就发生了云侧状态变化，导致清理延迟。
 	nodeMonitorPeriod time.Duration
 
-	// Value controlling NodeController monitoring loop worker number.
+	// 控制 NodeController 监控循环的 worker 数。
 	concurrentNodeLifecycleSyncs int
 }
 
@@ -131,8 +131,7 @@ func NewCloudNodeLifecycleController(
 	return c, nil
 }
 
-// Run starts the main loop for this controller. Run is blocking so should
-// be called via a goroutine
+// Run 启动控制器的主循环，调用会阻塞，应通过 goroutine 启动。
 func (c *CloudNodeLifecycleController) Run(ctx context.Context, controllerManagerMetrics *controllersmetrics.ControllerManagerMetrics) {
 	c.broadcaster = record.NewBroadcaster(record.WithContext(ctx))
 	c.recorder = c.broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "cloud-node-lifecycle-controller"})
@@ -141,7 +140,7 @@ func (c *CloudNodeLifecycleController) Run(ctx context.Context, controllerManage
 	controllerManagerMetrics.ControllerStarted("cloud-node-lifecycle")
 	defer controllerManagerMetrics.ControllerStopped("cloud-node-lifecycle")
 
-	// Start event processing pipeline.
+	// 启动事件处理管道。
 	klog.Info("Sending events to api server")
 	c.broadcaster.StartStructuredLogging(0)
 	c.broadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.kubeClient.CoreV1().Events("")})
@@ -153,14 +152,11 @@ func (c *CloudNodeLifecycleController) Run(ctx context.Context, controllerManage
 	// 这是全量扫描而非事件驱动——Node 删除、实例关机这类事件本身很稀疏，
 	// 全量比对比维护增量状态更简单可靠；但不要在此加入高频操作。
 
-	// Start a loop to periodically check if any nodes have been
-	// deleted or shutdown from the cloudprovider
+	// 启动周期性检查，发现云 provider 侧已删除或关机的节点。
 	wait.UntilWithContext(ctx, c.MonitorNodes, c.nodeMonitorPeriod)
 }
 
-// MonitorNodes checks to see if nodes in the cluster have been deleted
-// or shutdown. If deleted, it deletes the node resource. If shutdown it
-// applies a shutdown taint to the node
+// MonitorNodes 检查集群中的节点是否已被删除或关机：删除则移除 Node 对象，关机则打上关机污点。
 func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 	startTime := time.Now()
 
@@ -188,8 +184,7 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 			return
 		}
 
-		// At this point the node has NotReady status, we need to check if the node has been removed
-		// from the cloud provider. If node cannot be found in cloudprovider, then delete the node
+		// 此时节点已是 NotReady，需确认它在云 provider 侧是否已不存在，不存在则删除 Node。
 		exists, err := c.ensureNodeExistsByProviderID(ctx, node)
 		if err != nil {
 			// 云 API 失败时保持现状：无法确认实例不存在，就不能删除 Node。
@@ -198,7 +193,7 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 		}
 
 		if !exists {
-			// Current node does not exist, we should delete it, its taints do not matter anymore
+			// 实例已不存在，污点如何已无关紧要，直接删除节点。
 
 			klog.V(2).Infof("deleting node since it is no longer present in cloud provider: %s", node.Name)
 
@@ -230,7 +225,7 @@ func (c *CloudNodeLifecycleController) MonitorNodes(ctx context.Context) {
 			}
 
 			if shutdown {
-				// if node is shutdown add shutdown taint
+				// 实例已关机，打上关机污点。
 				if err := cloudnodeutil.AddOrUpdateTaintOnNode(c.kubeClient, node.Name, ShutdownTaint); err != nil {
 					// 节点可能已被其他流程删除，属于可接受的竞态。
 					klog.Errorf("failed to apply shutdown taint to node %s, it may have been deleted.", node.Name)
@@ -305,7 +300,7 @@ func (c *CloudNodeLifecycleController) shutdownInCloudProvider(ctx context.Conte
 	return shutdown, err
 }
 
-// ensureNodeExistsByProviderID checks if the instance exists by the provider id,
+// ensureNodeExistsByProviderID 按 providerID 检查实例是否仍然存在。
 func (c *CloudNodeLifecycleController) ensureNodeExistsByProviderID(ctx context.Context, node *v1.Node) (bool, error) {
 	if instanceV2, ok := c.cloud.InstancesV2(); ok {
 		exists, err := instanceV2.InstanceExists(ctx, node)

@@ -18,8 +18,7 @@ package v1
 
 const (
 
-	// TODO: Use IPFamily as field with a field selector,And the value is set based on
-	// the name at create time and immutable.
+	// TODO: 改用带 field selector 的 IPFamily 字段，其值在创建时按名称确定且不可变。
 	// LabelIPAddressFamily 用于标识 Kubernetes IPAddress 的 IP 地址族。
 	// 该标签简化双栈客户端操作，允许按地址族过滤获取 IP 地址列表。
 	LabelIPAddressFamily = "ipaddress.kubernetes.io/ip-family"

@@ -25,9 +25,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// WaitForCacheSync is a wrapper around cache.WaitForCacheSync that generates log messages
-// indicating that the controller identified by controllerName is waiting for syncs, followed by
-// either a successful or failed sync.
+// WaitForCacheSync 包装 cache.WaitForCacheSync，记录指定控制器正在等待同步，以及最终成功或失败。
 // 各控制器启动前都要等待 informer 缓存就绪，把这段重复逻辑集中起来，
 // 可以保证日志格式一致，失败时也统一走 HandleError 上报。
 func WaitForCacheSync(controllerName string, stopCh <-chan struct{}, cacheSyncs ...cache.InformerSynced) bool {

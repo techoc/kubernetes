@@ -34,8 +34,8 @@ import (
 	listers "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 )
 
-// apisHandler serves the `/apis` endpoint.
-// This is registered as a filter so that it never collides with any explicitly registered endpoints
+// apisHandler 服务 `/apis` 端点。
+// 注册为 filter 而不是普通路由，避免与显式注册的其他端点冲突。
 //
 // 中文补充：/apis 的组列表是动态的，来自 APIService 对象而不是静态路由表；
 // 用 filter（UnlistedHandle）注册，就不会和某个具体组显式注册的 handler 抢路径。
@@ -74,8 +74,8 @@ func discoveryGroup(enabledVersions sets.String) metav1.APIGroup {
 
 func (r *apisHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	discoveryGroupList := &metav1.APIGroupList{
-		// always add OUR api group to the list first.  Since we'll never have a registered APIService for it
-		// and since this is the crux of the API, having this first will give our names priority.  It's good to be king.
+		// 始终把自己的 API 组放在列表首位：它不会有对应的 APIService，
+		// 而聚合 API 是核心入口，排在前面能让我们的名字优先被匹配。
 		Groups: []metav1.APIGroup{r.discoveryGroup},
 	}
 
@@ -88,7 +88,7 @@ func (r *apisHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	apiServicesByGroup := apiregistrationv1apihelper.SortedByGroupAndVersion(apiServices)
 	for _, apiGroupServers := range apiServicesByGroup {
-		// skip the legacy group
+		// 跳过 legacy 组。
 		if len(apiGroupServers[0].Spec.Group) == 0 {
 			continue
 		}
@@ -101,8 +101,8 @@ func (r *apisHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	responsewriters.WriteObjectNegotiated(r.codecs, negotiation.DefaultEndpointRestrictions, schema.GroupVersion{}, w, req, http.StatusOK, discoveryGroupList, false)
 }
 
-// convertToDiscoveryAPIGroup takes apiservices in a single group and returns a discovery compatible object.
-// if none of the services are available, it will return nil.
+// convertToDiscoveryAPIGroup 把同一组内的 APIService 转成 discovery 可用的 APIGroup。
+// 若没有可用的 Service 则返回 nil。
 //
 // 中文补充：输入理论上只含一个组，但再去一次排序是为了直接复用"组内版本优先级"
 // 的排序规则；取 [0] 即该组的全部版本，排好序后第一个自然成为 PreferredVersion。
@@ -112,7 +112,7 @@ func convertToDiscoveryAPIGroup(apiServices []*apiregistrationv1api.APIService) 
 	var discoveryGroup *metav1.APIGroup
 
 	for _, apiService := range apiServicesByGroup {
-		// the first APIService which is valid becomes the default
+		// 首个有效的 APIService 作为默认版本。
 		if discoveryGroup == nil {
 			discoveryGroup = &metav1.APIGroup{
 				Name: apiService.Spec.Group,
@@ -134,7 +134,7 @@ func convertToDiscoveryAPIGroup(apiServices []*apiregistrationv1api.APIService) 
 	return discoveryGroup
 }
 
-// apiGroupHandler serves the `/apis/<group>` endpoint.
+// apiGroupHandler 服务 `/apis/<group>` 端点。
 //
 // 中文补充：和 /apis 不同，这里针对单个组；如果本组没有任何 APIService，
 // 就把请求委托给 delegate——因为该组可能由底层 apiserver 直接提供，

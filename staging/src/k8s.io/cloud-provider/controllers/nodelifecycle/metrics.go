@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	// monitorNodesDuration is a histogram that measures the duration in seconds of a single MonitorNodes loop execution.
+	// monitorNodesDuration 是单轮 MonitorNodes 执行耗时的直方图（秒）。
 	monitorNodesDuration = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      metricsSubsystem,
@@ -40,8 +40,9 @@ var (
 		},
 	)
 
-	// cloudProviderCalls is a counter vector that tracks the total number of cloud provider API calls.
-	// It is labeled by the operation (e.g., "instance_exists", "instance_shutdown", "instance_metadata") and the result ("success", "error", "instance_not_found", "not_implemented", "canceled").
+	// cloudProviderCalls 统计云 provider API 调用总数，
+	// 按操作（如 "instance_exists"、"instance_shutdown"、"instance_metadata"）与结果
+	// （"success"、"error"、"instance_not_found"、"not_implemented"、"canceled"）细分。
 	cloudProviderCalls = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      metricsSubsystem,
@@ -55,7 +56,7 @@ var (
 
 var metricRegistration sync.Once
 
-// registerMetrics registers the metrics that are to be monitored.
+// registerMetrics 注册本控制器需要上报的指标。
 // 通过 sync.Once 保证全局注册只执行一次，重复调用是安全的。
 func registerMetrics() {
 	metricRegistration.Do(func() {

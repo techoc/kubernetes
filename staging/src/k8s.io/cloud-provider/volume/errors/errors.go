@@ -22,8 +22,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
-// NewDeletedVolumeInUseError returns a new instance of DeletedVolumeInUseError
-// error.
+// NewDeletedVolumeInUseError 返回一个新的 DeletedVolumeInUseError 实例。
 // 表示卷已被删除但仍有挂载引用，调用方通常应继续等待而不是立即失败。
 func NewDeletedVolumeInUseError(message string) error {
 	return deletedVolumeInUseError(message)
@@ -35,8 +34,7 @@ type deletedVolumeInUseError string
 // 编译期断言：确保该类型实现 error 接口。
 var _ error = deletedVolumeInUseError("")
 
-// IsDeletedVolumeInUse returns true if an error returned from Delete() is
-// deletedVolumeInUseError
+// IsDeletedVolumeInUse 判断 Delete() 返回的错误是否为 DeletedVolumeInUseError。
 // 仅匹配具体类型而非错误文本，避免误判。
 func IsDeletedVolumeInUse(err error) bool {
 	switch err.(type) {
@@ -52,8 +50,7 @@ func (err deletedVolumeInUseError) Error() string {
 	return string(err)
 }
 
-// DanglingAttachError indicates volume is attached to a different node
-// than we expected.
+// DanglingAttachError 表示卷挂载在与预期不同的节点上。
 // 携带实际挂载节点与设备路径，便于 attach/detach 逻辑修正状态而不是盲目重试。
 type DanglingAttachError struct {
 	msg         string
@@ -66,7 +63,7 @@ func (err *DanglingAttachError) Error() string {
 	return err.msg
 }
 
-// NewDanglingError create a new dangling error
+// NewDanglingError 创建一个新的悬挂挂载错误。
 // 返回指针类型，以匹配 IsDanglingError 的类型判断。
 func NewDanglingError(msg string, node k8stypes.NodeName, devicePath string) error {
 	return &DanglingAttachError{
@@ -76,7 +73,7 @@ func NewDanglingError(msg string, node k8stypes.NodeName, devicePath string) err
 	}
 }
 
-// IsDanglingError returns true if an error is DanglingAttachError
+// IsDanglingError 判断错误是否为 DanglingAttachError。
 // 只识别 *DanglingAttachError；值类型不会实现 error 接口，因此不会误匹配。
 func IsDanglingError(err error) bool {
 	switch err.(type) {

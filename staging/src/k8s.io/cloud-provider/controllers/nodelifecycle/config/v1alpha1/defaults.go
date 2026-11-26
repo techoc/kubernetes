@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// RecommendedDefaultNodeLifecycleControllerConfiguration sets default values for NodeLifecycleControllerConfiguration.
+// RecommendedDefaultNodeLifecycleControllerConfiguration 为配置填入推荐默认值。
 // 只对零值字段填充默认值，显式配置（包括显式的 0）不会被覆盖。
 func RecommendedDefaultNodeLifecycleControllerConfiguration(obj *NodeLifecycleControllerConfiguration) {
 	zero := metav1.Duration{}

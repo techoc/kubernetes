@@ -50,7 +50,7 @@ const (
 	syncNothing
 )
 
-// AggregationController periodically checks the list of group-versions handled by each APIService and updates the discovery page periodically
+// AggregationController 定期检查每个 APIService 处理的 group/version 列表，并更新发现页面。
 //
 // 中文补充：OpenAPI v3 规范是周期性拉取而不是 watch 驱动的——APIService 的变化
 // 只能说明"该重新拉了"，并不能告诉你远端规范的内容；内容只能靠定时同步获得。
@@ -59,11 +59,11 @@ type AggregationController struct {
 	openAPIAggregationManager aggregator.SpecProxier
 	queue                     workqueue.TypedRateLimitingInterface[string]
 
-	// To allow injection for testing.
+	// 便于在测试中注入。
 	syncHandler func(key string) (syncAction, error)
 }
 
-// NewAggregationController creates new OpenAPI aggregation controller.
+// NewAggregationController 创建一个新的 OpenAPI 聚合控制器。
 func NewAggregationController(openAPIAggregationManager aggregator.SpecProxier) *AggregationController {
 	c := &AggregationController{
 		openAPIAggregationManager: openAPIAggregationManager,
@@ -75,7 +75,7 @@ func NewAggregationController(openAPIAggregationManager aggregator.SpecProxier) 
 
 	c.syncHandler = c.sync
 
-	// update each service at least once, also those which are not coming from APIServices, namely local services
+	// 每个 Service 至少更新一次，包括不来自 APIService 的本地服务。
 	// 中文补充：local delegate 不会触发 AddAPIService，所以启动时主动入队一次，
 	// 否则这部分规范永远不会被拉取；延后一秒是给 generic server 的初始化留点时间。
 	for _, name := range openAPIAggregationManager.GetAPIServiceNames() {
@@ -85,14 +85,14 @@ func NewAggregationController(openAPIAggregationManager aggregator.SpecProxier) 
 	return c
 }
 
-// Run is a legacy wrapper that starts the controller.
+// Run 是启动控制器的旧式包装。
 //
 //logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
 func (c *AggregationController) Run(stopCh <-chan struct{}) {
 	c.RunWithContext(wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext starts OpenAPI V3 AggregationController and blocks until the context is cancelled.
+// RunWithContext 启动 OpenAPI v3 聚合控制器并阻塞到 context 取消。
 func (c *AggregationController) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	defer c.queue.ShutDown()
@@ -112,7 +112,7 @@ func (c *AggregationController) runWorker(ctx context.Context) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key；需要退出时返回 false。
 func (c *AggregationController) processNextWorkItem(logger klog.Logger) bool {
 	key, quit := c.queue.Get()
 	defer c.queue.Done(key)
@@ -121,8 +121,7 @@ func (c *AggregationController) processNextWorkItem(logger klog.Logger) bool {
 	}
 
 	if aggregator.IsLocalAPIService(key) {
-		// for local delegation targets that are aggregated once per second, log at
-		// higher level to avoid flooding the log
+		// 本地委托目标每秒聚合一次，提高日志级别以免刷屏。
 		logger.V(6).Info("OpenAPI AggregationController: Processing item", "key", key)
 	} else {
 		logger.V(4).Info("OpenAPI AggregationController: Processing item", "key", key)
@@ -168,7 +167,7 @@ func (c *AggregationController) sync(key string) (syncAction, error) {
 	return syncRequeue, nil
 }
 
-// AddAPIService adds a new API Service to OpenAPI Aggregation.
+// AddAPIService 向 OpenAPI 聚合中新增 APIService。
 //
 // 中文补充：local APIService 没有可拉取的远端规范，启动时已在构造函数里统一入队，
 // 这里再入队只会产生重复项，因此直接跳过。
@@ -180,7 +179,7 @@ func (c *AggregationController) AddAPIService(handler http.Handler, apiService *
 	c.queue.AddAfter(apiService.Name, time.Second)
 }
 
-// UpdateAPIService updates API Service's info and handler.
+// UpdateAPIService 更新 APIService 的信息与 handler。
 func (c *AggregationController) UpdateAPIService(handler http.Handler, apiService *v1.APIService) {
 	if apiService.Spec.Service == nil {
 		return
@@ -188,8 +187,7 @@ func (c *AggregationController) UpdateAPIService(handler http.Handler, apiServic
 	c.openAPIAggregationManager.AddUpdateAPIService(handler, apiService)
 	key := apiService.Name
 	if c.queue.NumRequeues(key) > 0 {
-		// The item has failed before. Remove it from failure queue and
-		// update it in a second
+		// 该项之前失败过，先从失败队列移除，1 秒后重试。
 		// 中文补充：配置刚变更过，之前失败的原因很可能已经消失，
 		// 没必要让它继续按旧的长退避等待；清掉失败记录，一秒后立刻重试。
 		c.queue.Forget(key)
@@ -197,11 +195,10 @@ func (c *AggregationController) UpdateAPIService(handler http.Handler, apiServic
 	}
 }
 
-// RemoveAPIService removes API Service from OpenAPI Aggregation Controller.
+// RemoveAPIService 从 OpenAPI 聚合控制器中移除 APIService。
 func (c *AggregationController) RemoveAPIService(apiServiceName string) {
 	c.openAPIAggregationManager.RemoveAPIServiceSpec(apiServiceName)
-	// This will only remove it if it was failing before. If it was successful, processNextWorkItem will figure it out
-	// and will not add it again to the queue.
+	// 只有之前失败的项才会在这里移除；成功同步的项 processNextWorkItem 能自行识别，不会再次入队。
 	// 中文补充： Forget 只清失败计数，不会撤销已经 AddAfter 的定时项；
 	// 那一项到点后 sync 会拿到 ErrAPIServiceNotFound 并自然收敛。
 	c.queue.Forget(apiServiceName)

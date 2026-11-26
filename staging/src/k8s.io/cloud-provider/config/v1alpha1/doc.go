@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: The referenced generic ComponentConfig packages with conversions
-// between the types (e.g. the external package) needs to be given as an
-// input to conversion-gen for it to find the native conversation funcs to
-// call.
+// 注意：涉及类型转换的通用 ComponentConfig 包（例如 external 包）必须作为输入
+// 传给 conversion-gen，它才能找到并调用对应的原生转换函数。
 
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/component-base/config/v1alpha1

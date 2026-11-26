@@ -28,20 +28,20 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // 这样一次 LIST 就能拿到完整的注册信息。
 type APIServiceList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of APIService
+	// Items 是 APIService 列表。
 	Items []APIService `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// ServiceReference holds a reference to Service.legacy.k8s.io
+// ServiceReference 是对 Service.legacy.k8s.io 的引用。
 type ServiceReference struct {
-	// Namespace is the namespace of the service
+	// Namespace 是该 Service 所在的命名空间。
 	Namespace string `json:"namespace,omitempty" protobuf:"bytes,1,opt,name=namespace"`
-	// Name is the name of the service
+	// Name 是该 Service 的名字。
 	Name string `json:"name,omitempty" protobuf:"bytes,2,opt,name=name"`
 	// port 指定承载 webhook 的 Service 上的端口；为向后兼容默认为 443；`port` 必须是合法端口号（1-65535，含端点）。
 	// 端口做成指针是为了区分“没填，走默认 443”和“显式填了 443”；
@@ -54,23 +54,20 @@ type ServiceReference struct {
 // 这一份 spec 同时承担两件事：声明某个 GroupVersion 由谁提供，以及决定它在
 // 客户端发现结果中的排序；代理转发和发现聚合读的是同一份数据，避免两处配置漂移。
 type APIServiceSpec struct {
-	// Service is a reference to the service for this API server.  It must communicate
-	// on port 443.
-	// If the Service is nil, that means the handling for the API groupversion is handled locally on this server.
-	// The call will simply delegate to the normal handler chain to be fulfilled.
+	// Service 是对该 API server 对应 Service 的引用，必须在 443 端口通信。
+	// Service 为 nil 表示该 GroupVersion 由本 server 本地处理，调用直接委托给普通 handler 链。
 	// +optional
 	Service *ServiceReference `json:"service,omitempty" protobuf:"bytes,1,opt,name=service"`
-	// Group is the API group name this server hosts
+	// Group 是该 server 承载的 API 组名。
 	Group string `json:"group,omitempty" protobuf:"bytes,2,opt,name=group"`
-	// Version is the API version this server hosts.  For example, "v1"
+	// Version 是该 server 承载的 API 版本，例如 "v1"。
 	Version string `json:"version,omitempty" protobuf:"bytes,3,opt,name=version"`
 
 	// InsecureSkipTLSVerify 在与该服务端通信时关闭 TLS 证书校验，强烈不建议这样做，应当改用 CABundle。
 	// 这是布尔开关而不是可选指针，因为“未设置”与“显式 false”的语义相同：
 	// 缺省就验证书，要放宽只能主动打开，免得默认配置意外降级安全性。
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty" protobuf:"varint,4,opt,name=insecureSkipTLSVerify"`
-	// CABundle is a PEM encoded CA bundle which will be used to validate an API server's serving certificate.
-	// If unspecified, system trust roots on the apiserver are used.
+	// CABundle 是 PEM 编码的 CA 包，用于校验 API server 的服务证书；未指定时使用 apiserver 的系统信任根。
 	// +listType=atomic
 	// +optional
 	CABundle []byte `json:"caBundle,omitempty" protobuf:"bytes,5,opt,name=caBundle"`
@@ -123,7 +120,7 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// APIServiceConditionType is a valid value for APIServiceCondition.Type
+// APIServiceConditionType 是 APIServiceCondition.Type 的合法取值。
 type APIServiceConditionType string
 
 const (
@@ -133,9 +130,9 @@ const (
 	Available APIServiceConditionType = "Available"
 )
 
-// APIServiceCondition describes the state of an APIService at a particular point
+// APIServiceCondition 描述某个时刻 APIService 的状态。
 type APIServiceCondition struct {
-	// Type is the type of the condition.
+	// Type 是该 condition 的类型。
 	Type APIServiceConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=APIServiceConditionType"`
 	// Status 是该条件的状态，可以是 True、False、Unknown。
 	// 状态、原因和消息分开存：机器只读 Status 做判断，人和排障工具读 Reason/Message，
@@ -146,10 +143,10 @@ type APIServiceCondition struct {
 	// 故障持续了多久，客户端也会因为元数据频繁变化而不断重新拉取。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// Unique, one-word, CamelCase reason for the condition's last transition.
+	// Reason 是上次状态转换的原因，使用单个 CamelCase 单词。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// Human-readable message indicating details about last transition.
+	// Message 是描述上次状态转换细节的人类可读消息。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
@@ -185,13 +182,13 @@ type APIServiceStatus struct {
 // 名字即主键，冲突在创建对象时就被唯一性约束挡住，不需要额外的索引判断。
 type APIService struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
+	// 标准对象元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec contains information for locating and communicating with a server
+	// Spec 包含定位并与服务端通信所需的信息。
 	Spec APIServiceSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
-	// Status contains derived information about an API server
+	// Status 包含从 API server 派生出的信息。
 	Status APIServiceStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }

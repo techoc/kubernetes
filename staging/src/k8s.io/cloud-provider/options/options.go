@@ -47,7 +47,7 @@ import (
 	"k8s.io/controller-manager/pkg/clientbuilder"
 	netutils "k8s.io/utils/net"
 
-	// add the related feature gates
+	// 注册相关 feature gate。
 	_ "k8s.io/controller-manager/pkg/features/register"
 )
 
@@ -87,9 +87,9 @@ type CloudControllerManagerOptions struct {
 // 以便定制部分 flag 的默认值。
 // 云提供商可在不回退到 flag 的情况下调整 webhook 端点的默认监听地址。
 type ProviderDefaults struct {
-	// WebhookBindAddress is the default address.  It can be overridden by "--webhook-bind-address".
+	// WebhookBindAddress 是默认监听地址，可用 "--webhook-bind-address" 覆盖。
 	WebhookBindAddress *net.IP
-	// WebhookBindPort is the default port.  It can be overridden by "--webhook-bind-port".
+	// WebhookBindPort 是默认端口，可用 "--webhook-bind-port" 覆盖。
 	WebhookBindPort *int
 }
 
@@ -133,7 +133,7 @@ func NewCloudControllerManagerOptionsWithProviderDefaults(defaults ProviderDefau
 	s.Authentication.RemoteKubeConfigFileOptional = true
 	s.Authorization.RemoteKubeConfigFileOptional = true
 
-	// Set the PairName but leave certificate directory blank to generate in-memory by default
+	// 只设置 PairName，证书目录留空，默认在内存中生成证书。
 	s.SecureServing.ServerCert.CertDirectory = ""
 	s.SecureServing.ServerCert.PairName = "cloud-controller-manager"
 	s.SecureServing.BindPort = cloudprovider.CloudControllerManagerPort

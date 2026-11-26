@@ -48,15 +48,11 @@ func AddToNodeAddresses(addresses *[]v1.NodeAddress, addAddresses ...v1.NodeAddr
 	}
 }
 
-// GetNodeAddressesFromNodeIP filters the provided list of nodeAddresses to match the
-// providedNodeIP from the Node annotation (which is assumed to be non-empty). This is
-// used for external cloud providers.
-//
-// It will return node addresses filtered such that:
-//   - Any address matching nodeIP will be listed first.
-//   - If nodeIP matches an address of a particular type (internal or external),
-//     that will be the *only* address of that type returned.
-//   - All remaining addresses are listed after.
+// GetNodeAddressesFromNodeIP 按 Node 注解中的 providedNodeIP（假定非空）过滤节点地址，
+// 供外部云 provider 使用。过滤结果满足：
+//   - 与 nodeIP 相同的地址排在前面；
+//   - 若命中某个类型（internal 或 external）的地址，该类型只保留这一个；
+//   - 其余地址排在后面。
 func GetNodeAddressesFromNodeIP(providedNodeIP string, cloudNodeAddresses []v1.NodeAddress) ([]v1.NodeAddress, error) {
 	nodeIPs, err := nodeutil.ParseNodeIPAnnotation(providedNodeIP)
 	if err != nil {
@@ -68,12 +64,9 @@ func GetNodeAddressesFromNodeIP(providedNodeIP string, cloudNodeAddresses []v1.N
 	nodeIPTypes := make(map[v1.NodeAddressType]bool)
 
 	for _, nodeIP := range nodeIPs {
-		// For every address supplied by the cloud provider that matches nodeIP,
-		// nodeIP is the enforced node address for that address Type (like
-		// InternalIP and ExternalIP), meaning other addresses of the same Type
-		// are discarded. See #61921 for more information: some cloud providers
-		// may supply secondary IPs, so nodeIP serves as a way to ensure that the
-		// correct IPs show up on a Node object.
+		// 云厂商返回的每个与 nodeIP 相同的地址，都会成为该类型（如 InternalIP、ExternalIP）
+		// 的唯一强制地址，同类型其他地址被丢弃。见 #61921：部分云厂商会返回次要 IP，
+		// 这里用 nodeIP 保证 Node 对象上出现的是用户指定的地址。
 
 		matched := false
 		for _, nodeAddress := range cloudNodeAddresses {

@@ -83,14 +83,14 @@ func NewAggregationController(downloader *aggregator.Downloader, openAPIAggregat
 	return c
 }
 
-// Run is a legacy wrapper that starts the controller.
+// Run 是启动控制器的旧式包装。
 //
 //logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
 func (c *AggregationController) Run(stopCh <-chan struct{}) {
 	c.RunWithContext(wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext starts OpenAPI AggregationController and blocks until the context is cancelled.
+// RunWithContext 启动 OpenAPI 聚合控制器并阻塞到 context 取消。
 func (c *AggregationController) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	defer c.queue.ShutDown()
@@ -167,7 +167,7 @@ func (c *AggregationController) AddAPIService(handler http.Handler, apiService *
 	c.queue.AddAfter(apiService.Name, time.Second)
 }
 
-// UpdateAPIService updates API Service's info and handler.
+// UpdateAPIService 更新 APIService 的信息与 handler。
 func (c *AggregationController) UpdateAPIService(handler http.Handler, apiService *v1.APIService) {
 	if apiService.Spec.Service == nil {
 		return
@@ -193,7 +193,6 @@ func (c *AggregationController) UpdateAPIService(handler http.Handler, apiServic
 // 若之前是成功的正常轮询，processNextWorkItem 会发现对象已不存在而不再重新入队。
 func (c *AggregationController) RemoveAPIService(apiServiceName string) {
 	c.openAPIAggregationManager.RemoveAPIService(apiServiceName)
-	// This will only remove it if it was failing before. If it was successful, processNextWorkItem will figure it out
-	// and will not add it again to the queue.
+	// 只有之前失败的项才会在这里移除；成功同步的项 processNextWorkItem 能自行识别，不会再次入队。
 	c.queue.Forget(apiServiceName)
 }

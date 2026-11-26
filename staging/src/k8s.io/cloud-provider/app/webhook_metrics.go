@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	// subSystemName is the name of this subsystem name used for prometheus metrics.
+	// subSystemName 是本子系统在 Prometheus 指标中的名字。
 	subSystemName = "cloud_provider_webhook"
 )
 
@@ -35,10 +35,9 @@ type registerables []metrics.Registerable
 // registerMetricsOnce 保证注册只执行一次；重复注册会触发 legacyregistry panic。
 var registerMetricsOnce sync.Once
 
-// RegisterMetrics registers the cloud-provider webhook metrics with the legacy
-// registry. It is invoked from webhook server setup at runtime rather than from
-// an init() function, so that metric feature gates (e.g. NativeHistograms) have
-// already been parsed and applied by the time the histogram metrics are created.
+// RegisterMetrics 把 cloud-provider webhook 指标注册到 legacy registry。
+// 它在运行时由 webhook server 的初始化调用，而不是放在 init() 中，
+// 以确保创建直方图指标前指标相关的 feature gate（如 NativeHistograms）已被解析生效。
 func RegisterMetrics() {
 	registerMetricsOnce.Do(func() {
 		for _, metric := range toRegister {
@@ -81,14 +80,14 @@ var (
 )
 
 // recordRequestTotal 记录一次 webhook 请求。使用 ctx 以便在请求取消时仍能正确归属到当前上下文。
-// RecordRequestTotal increments the total number of requests for the webhook.
+// RecordRequestTotal 累加 webhook 的请求总数。
 func recordRequestTotal(ctx context.Context, code string, webhookName string) {
 	requestTotal.WithContext(ctx).With(map[string]string{"code": code, "webhook": webhookName}).Add(1)
 }
 
 // recordRequestLatency 记录一次 webhook 请求耗时；code 用于区分成功与各类失败路径。
 // 指标只做观测，调用方不应因记录失败而改变请求处理结果。
-// RecordRequestLatency measures request latency in seconds for the delegated authorization. Broken down by status code.
+// RecordRequestLatency 记录委托鉴权请求的延迟（秒），按状态码细分。
 func recordRequestLatency(ctx context.Context, code string, webhookName string, latency float64) {
 	requestLatency.WithContext(ctx).With(map[string]string{"code": code, "webhook": webhookName}).Observe(latency)
 }

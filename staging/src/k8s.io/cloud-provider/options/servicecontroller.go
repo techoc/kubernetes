@@ -21,12 +21,12 @@ import (
 	serviceconfig "k8s.io/cloud-provider/controllers/service/config"
 )
 
-// ServiceControllerOptions holds the ServiceController options.
+// ServiceControllerOptions 保存 ServiceController 的选项。
 type ServiceControllerOptions struct {
 	*serviceconfig.ServiceControllerConfiguration
 }
 
-// AddFlags adds flags related to ServiceController for controller manager to the specified FlagSet.
+// AddFlags 把 ServiceController 相关 flag 加到指定 FlagSet。
 func (o *ServiceControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -35,7 +35,7 @@ func (o *ServiceControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&o.ConcurrentServiceSyncs, "concurrent-service-syncs", o.ConcurrentServiceSyncs, "The number of services that are allowed to sync concurrently. Larger number = more responsive service management, but more CPU (and network) load")
 }
 
-// ApplyTo fills up ServiceController config with options.
+// ApplyTo 把选项写入 ServiceController 配置。
 func (o *ServiceControllerOptions) ApplyTo(cfg *serviceconfig.ServiceControllerConfiguration) error {
 	if o == nil {
 		return nil

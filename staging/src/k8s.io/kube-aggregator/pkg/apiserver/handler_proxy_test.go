@@ -779,8 +779,7 @@ jHXdYlJHC8Eslr3iUvRUodgRwOB8c4wWF7s5b6mxGqoXgsNsLrOUPw==
 -----END RSA PRIVATE KEY-----
 */
 
-// valid for hostname test-service.test-ns.svc
-// signed by testCACrt
+// 对主机名 test-service.test-ns.svc 有效，由 testCACrt 签发。
 var svcCrt = []byte(`-----BEGIN CERTIFICATE-----
 MIIDMjCCAhqgAwIBAgIUEBND1EVKxjU7UaJ1ZBw1glkXuaowDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQd2ViaG9va190ZXN0c19jYTAgFw0yMDEwMDcxNDI4MDVa
@@ -1057,13 +1056,12 @@ func TestNewRequestForProxyWithAuditID(t *testing.T) {
 	}
 }
 
-// TestProxyCertReload verifies that the proxy reloading of certificates work
-// to be able to test the reloading it starts a server with client auth enabled
-// it first uses certs that does not match the client CA so the verification fails - expecting HTTP 503
-// then we write correct client certs to the disk, expecting the proxy to reload the cert and use it for the next request
+// TestProxyCertReload 验证代理的证书重载：
+// 启用客户端认证的 server 先收到与 CA 不匹配的证书，预期返回 HTTP 503；
+// 再把正确证书写入磁盘，预期代理重载后用新证书完成下一次请求。
 //
-// Note: this test doesn't use apiserviceRegistrationController nor it doesn't start DynamicServingContentFromFiles controller
-// instead it manually calls to updateAPIService and RunOnce to reload the certificate
+// 注意：本测试不启动 apiserviceRegistrationController 与 DynamicServingContentFromFiles，
+// 而是直接调用 updateAPIService 与 RunOnce 触发重载。
 func TestProxyCertReload(t *testing.T) {
 	// STEP 1: 搭建一个要求客户端证书的后端 server；
 	//         该 server 使用 clientCaCrt() 校验客户端证书。
@@ -1074,7 +1072,7 @@ func TestProxyCertReload(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		caCertPool := x509.NewCertPool()
-		// we're testing this while enabling MTLS
+		// 在启用 mTLS 的情况下测试。
 		caCertPool.AppendCertsFromPEM(clientCaCrt())
 		backendServer.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: caCertPool}
 	}

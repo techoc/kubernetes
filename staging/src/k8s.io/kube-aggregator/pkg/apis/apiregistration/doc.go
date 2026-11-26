@@ -20,5 +20,5 @@ limitations under the License.
 // 内部版本不对外暴露，只作为各外部版本之间转换的中转：转换代码统一落到这里，
 // 外部版本增减时就不必在每对版本之间各写一套转换。
 
-// Package apiregistration is the internal version of the API.
+// Package apiregistration 是 API 的内部版本。
 package apiregistration

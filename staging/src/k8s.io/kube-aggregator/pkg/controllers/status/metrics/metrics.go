@@ -88,7 +88,7 @@ func (m *Metrics) Register(
 	return nil
 }
 
-// UnavailableCounter returns a counter to track apiservices marked as unavailable.
+// UnavailableCounter 返回用于统计被标记为不可用的 APIService 的计数器。
 func (m *Metrics) UnavailableCounter(apiServiceName, reason string) metrics.CounterMetric {
 	return m.unavailableCounter.WithLabelValues(apiServiceName, reason)
 }
@@ -142,12 +142,12 @@ func newAvailabilityCollector() *availabilityCollector {
 	}
 }
 
-// DescribeWithStability implements the metrics.StableCollector interface.
+// DescribeWithStability 实现 metrics.StableCollector 接口。
 func (c *availabilityCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- unavailableGaugeDesc
 }
 
-// CollectWithStability implements the metrics.StableCollector interface.
+// CollectWithStability 实现 metrics.StableCollector 接口。
 func (c *availabilityCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	c.mtx.RLock()
 	defer c.mtx.RUnlock()
@@ -168,12 +168,12 @@ func (c *availabilityCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	}
 }
 
-// SetAPIServiceAvailable sets the given apiservice availability gauge to available.
+// SetAPIServiceAvailable 把指定 APIService 的可用性仪表置为可用。
 func (c *availabilityCollector) SetAPIServiceAvailable(apiServiceKey string) {
 	c.setAPIServiceAvailability(apiServiceKey, true)
 }
 
-// SetAPIServiceUnavailable sets the given apiservice availability gauge to unavailable.
+// SetAPIServiceUnavailable 把指定 APIService 的可用性仪表置为不可用。
 func (c *availabilityCollector) SetAPIServiceUnavailable(apiServiceKey string) {
 	c.setAPIServiceAvailability(apiServiceKey, false)
 }

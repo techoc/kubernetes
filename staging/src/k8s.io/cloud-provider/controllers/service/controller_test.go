@@ -213,7 +213,7 @@ func newController(ctx context.Context, objects ...runtime.Object) (*Controller,
 	return controller, cloud, kubeClient
 }
 
-// TODO(@MrHohn): Verify the end state when below issue is resolved:
+// TODO(@MrHohn): 待以下问题修复后再校验最终状态：
 // https://github.com/kubernetes/client-go/issues/607
 // TestSyncLoadBalancerIfNeeded 覆盖 syncLoadBalancerIfNeeded 的三类结果：
 // 需要确保 LB（可能新建）、需要删除 LB、以及无操作（如 LoadBalancerClass 非空）。
@@ -309,14 +309,14 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 			if op != tc.expectOp {
 				t.Errorf("Got operation %v, want %v", op, tc.expectOp)
 			}
-			// Capture actions from test so it won't be messed up.
+			// 先抓取 client actions，避免后续断言互相干扰。
 			actions := client.Actions()
 
 			if !tc.expectCreateAttempt && !tc.expectDeleteAttempt {
 				if len(cloud.Calls) > 0 {
 					t.Errorf("Unexpected cloud provider calls: %v", cloud.Calls)
 				}
-				// Ignore watch actions from the informer's reflector (timing-dependent).
+				// 忽略 informer reflector 的 watch 动作，其时序不确定。
 				var nonWatchActions []core.Action
 				for _, a := range actions {
 					if a.GetVerb() != "watch" {
@@ -387,7 +387,7 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 	}
 }
 
-// TODO: Finish converting and update comments
+// TODO: 待完成剩余转换并更新注释。
 // TestUpdateNodesInExternalLoadBalancer 验证给定节点集合时，
 // 每个 LoadBalancer 类型 Service 恰好产生一次 UpdateLoadBalancer 调用，
 // 非 LB 类型与 nil Service 被忽略，且 workers 数量不影响调用集合。
@@ -894,7 +894,7 @@ func TestProcessServiceCreateOrUpdate(t *testing.T) {
 
 	controller, _, client := newController(ctx)
 
-	//A pair of old and new loadbalancer IP address
+	// 一对新旧负载均衡器 IP。
 	oldLBIP := "192.168.1.1"
 	newLBIP := "192.168.1.11"
 
@@ -1007,7 +1007,7 @@ func TestProcessServiceCreateOrUpdateK8sError(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			svc := newService(svcName, v1.ServiceTypeLoadBalancer)
-			// Preset finalizer so k8s error only happens when patching status.
+			// 预置 finalizer，使 k8s 错误只可能发生在 patch status 时。
 			svc.Finalizers = []string{servicehelper.LoadBalancerCleanupFinalizer}
 			controller, _, client := newController(ctx)
 			client.PrependReactor("patch", "services", func(action core.Action) (bool, runtime.Object, error) {
@@ -1058,9 +1058,8 @@ func TestSyncService(t *testing.T) {
 				controller, _, _ = newController(ctx)
 			},
 			expectedFn: func(e error) error {
-				//TODO: should find a way to test for dependent package errors in such a way that it won't break
-				//TODO:	our tests, currently we only test if there is an error.
-				//Error should be unexpected key format: "invalid/key/string"
+				//TODO: 需要找到一种测试依赖包错误、又不破坏现有测试的方式；目前只校验是否报错。
+				// 期望错误为 unexpected key format: "invalid/key/string"。
 				expectedError := fmt.Sprintf("unexpected key format: %q", "invalid/key/string")
 				if e == nil || e.Error() != expectedError {
 					return fmt.Errorf("Expected=unexpected key format: %q, Obtained=%v", "invalid/key/string", e)
@@ -1081,7 +1080,7 @@ func TestSyncService(t *testing.T) {
 		},
 		*/
 
-		//TODO: see if we can add a test for valid but error throwing service, its difficult right now because synCService() currently runtime.HandleError
+		//TODO: 尝试为合法但报错的 Service 补一个测试；目前 syncService() 用 runtime.HandleError 吞掉了错误，难以实现。
 		{
 			testName: "if valid service",
 			key:      "external-balancer",
@@ -1093,7 +1092,7 @@ func TestSyncService(t *testing.T) {
 				svc.state = testSvc
 			},
 			expectedFn: func(e error) error {
-				//error should be nil
+				// 期望无错误。
 				if e != nil {
 					return fmt.Errorf("Expected=nil, Obtained=%v", e)
 				}
@@ -1111,12 +1110,12 @@ func TestSyncService(t *testing.T) {
 			tc.updateFn(ctx)
 			obtainedErr := controller.syncService(ctx, tc.key)
 
-			//expected matches obtained ??.
+			// 用 expectedFn 校验实际结果。
 			if exp := tc.expectedFn(obtainedErr); exp != nil {
 				t.Errorf("%v Error:%v", tc.testName, exp)
 			}
 
-			//Post processing, the element should not be in the sync queue.
+			// 收尾检查：该元素不应再留在同步队列中。
 			_, exist := controller.cache.get(tc.key)
 			if exist {
 				t.Fatalf("%v working Queue should be empty, but contains %s", tc.testName, tc.key)
@@ -1131,7 +1130,7 @@ func TestProcessServiceDeletion(t *testing.T) {
 
 	var controller *Controller
 	var cloud *fakecloud.Cloud
-	// Add a global svcKey name
+	// 统一的 svcKey 名称。
 	svcKey := "external-balancer"
 
 	testCases := []struct {
@@ -1141,7 +1140,7 @@ func TestProcessServiceDeletion(t *testing.T) {
 	}{{
 		testName: "If a non-existent service is deleted",
 		updateFn: func(controller *Controller) {
-			// Does not do anything
+			// 不做任何改动。
 		},
 		expectedFn: func(svcErr error) error {
 			return svcErr
@@ -1181,7 +1180,7 @@ func TestProcessServiceDeletion(t *testing.T) {
 				return fmt.Errorf("Expected=nil Obtained=%v", svcErr)
 			}
 
-			// It should no longer be in the workqueue.
+			// 此时缓存中不应再有该 Service。
 			_, exist := controller.cache.get(svcKey)
 			if exist {
 				return fmt.Errorf("delete service error, queue should not contain service: %s any more", svcKey)
@@ -1196,7 +1195,7 @@ func TestProcessServiceDeletion(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		//Create a new controller.
+		// 新建一个 controller。
 		controller, cloud, _ = newController(ctx)
 		tc.updateFn(controller)
 		obtainedErr := controller.processServiceDeletion(ctx, svcKey)
@@ -1207,17 +1206,16 @@ func TestProcessServiceDeletion(t *testing.T) {
 
 }
 
-// Test cases:
-// index    finalizer    timestamp    wantLB  |  clean-up
+// 测试用例矩阵：index / finalizer / timestamp / wantLB | clean-up
 //
-//	0         0           0            0     |   false    (No finalizer, no clean up)
-//	1         0           0            1     |   false    (Ignored as same with case 0)
-//	2         0           1            0     |   false    (Ignored as same with case 0)
-//	3         0           1            1     |   false    (Ignored as same with case 0)
+//	0         0           0            0     |   false    （无 finalizer，无需清理）
+//	1         0           0            1     |   false    （同用例 0，忽略）
+//	2         0           1            0     |   false    （同用例 0，忽略）
+//	3         0           1            1     |   false    （同用例 0，忽略）
 //	4         1           0            0     |   true
 //	5         1           0            1     |   false
-//	6         1           1            0     |   true    (Service is deleted, needs clean up)
-//	7         1           1            1     |   true    (Ignored as same with case 6)
+//	6         1           1            0     |   true    （Service 已删除，需要清理）
+//	7         1           1            1     |   true    （同用例 6，忽略）
 //
 // TestNeedsCleanup 按 finalizer、deletionTimestamp、Service 类型三者组合
 // 验证清理判定；只有带 finalizer 且（待删除或不再需要 LB）才需要清理。
@@ -1278,11 +1276,9 @@ func TestNeedsCleanup(t *testing.T) {
 // TestSlowNodeSync 模拟节点同步进行中同时发生 Service 更新的竞态：
 // 慢速节点同步不能用过期的节点集合覆盖 Service 同步写入的新后端。
 //
-// This tests a service update while a slow node sync is happening. If we have multiple
-// services to process from a node sync: each service will experience a sync delta.
-// If a new Node is added and a service is synced while this happens: we want to
-// make sure that the slow node sync never removes the Node from LB set because it
-// has stale data.
+// 节点同步较慢时，一次同步会依次处理多个 Service，每个都有各自的中间状态。
+// 若此时新增节点并同步某个 Service，慢速节点同步不能用过期的节点集合
+// 把新节点从 LB 后端里移除。
 func TestSlowNodeSync(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -1311,24 +1307,16 @@ func TestSlowNodeSync(t *testing.T) {
 	cloudProvider.EnsureCallCb = func(update fakecloud.UpdateBalancerCall) {
 		syncServiceDone <- update.Service.Name
 	}
-	// Two update calls are expected. This is because this test calls
-	// controller.syncNodes once with two existing services, but with one
-	// controller.syncService while that is happening. The end result is
-	// therefore two update calls - since the second controller.syncNodes won't
-	// trigger an update call because the syncService already did. Each update
-	// call takes cloudProvider.RequestDelay to process. The test asserts that
-	// the order of the Hosts defined by the update calls is respected, but
-	// doesn't necessarily assert the order of the Service. This is because the
-	// controller implementation doesn't use a deterministic order when syncing
-	// services. The test therefor works out which service is impacted by the
-	// slow node sync (which will be whatever service is not synced first) and
-	// then validates that the Hosts for each update call is respected.
+	// 预期有两次 Update：syncNodes 处理两个 Service，其中一个被 syncService 抢先同步，
+	// 因此 syncNodes 只剩一次 Update。每次调用耗时 cloudProvider.RequestDelay。
+	// 测试只断言两次调用的 Hosts 顺序，不断言 Service 顺序——控制器的同步顺序不确定，
+	// 所以先找出被慢速节点同步影响的那个 Service，再校验其 Hosts。
 	expectedUpdateCalls := []fakecloud.UpdateBalancerCall{
-		// First update call for first service from controller.syncNodes
+		// 第一次：syncNodes 对首个 Service 的更新。
 		{Service: service1, Hosts: []*v1.Node{node1, node2}},
 	}
 	expectedEnsureCalls := []fakecloud.UpdateBalancerCall{
-		// Second update call for impacted service from controller.syncService
+		// 第二次：syncService 对被影响 Service 的更新。
 		{Service: service2, Hosts: []*v1.Node{node1, node2, node3}},
 	}
 
@@ -1344,8 +1332,7 @@ func TestSlowNodeSync(t *testing.T) {
 		t.Fatalf("error creating node3, err: %v", err)
 	}
 
-	// Allow a bit of time for the informer cache to get populated with the new
-	// node
+	// 等待 informer 缓存里出现新节点。
 	if err := wait.PollUntilContextCancel(ctx, 10*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
 		n3, _ := controller.nodeLister.Get("node3")
 		return n3 != nil, nil
@@ -1353,7 +1340,7 @@ func TestSlowNodeSync(t *testing.T) {
 		t.Fatalf("informer cache was never populated with node3")
 	}
 
-	// Sync the service
+	// 同步 Service。
 	if err := controller.syncService(ctx, key); err != nil {
 		t.Fatalf("unexpected service sync error, err: %v", err)
 	}
@@ -1558,7 +1545,7 @@ func TestNeedsUpdate(t *testing.T) {
 // GetByKey/allServices；用例之间共享同一缓存，不能随意调整顺序。
 func TestServiceCache(t *testing.T) {
 
-	//ServiceCache a common service cache for all the test cases
+	// 所有用例共享同一个 serviceCache。
 	sc := &serviceCache{serviceMap: make(map[string]*cachedService)}
 
 	testCases := []struct {
@@ -1572,7 +1559,7 @@ func TestServiceCache(t *testing.T) {
 			cS.state = defaultExternalService()
 		},
 		checkCacheFn: func() error {
-			//There must be exactly one element
+			// 此时应恰好有一个元素。
 			if len(sc.serviceMap) != 1 {
 				return fmt.Errorf("Expected=1 Obtained=%d", len(sc.serviceMap))
 			}
@@ -1585,7 +1572,7 @@ func TestServiceCache(t *testing.T) {
 
 		},
 		checkCacheFn: func() error {
-			//Now it should have no element
+			// 此时应无元素。
 			if len(sc.serviceMap) != 0 {
 				return fmt.Errorf("Expected=0 Obtained=%d", len(sc.serviceMap))
 			}
@@ -1597,7 +1584,7 @@ func TestServiceCache(t *testing.T) {
 			sc.set("addTest", &cachedService{state: defaultExternalService()})
 		},
 		checkCacheFn: func() error {
-			//Now it should have one element
+			// 此时应有一个元素。
 			Cs, bool := sc.get("addTest")
 			if !bool {
 				return fmt.Errorf("is Available Expected=true Obtained=%v", bool)
@@ -1610,11 +1597,11 @@ func TestServiceCache(t *testing.T) {
 	}, {
 		testName: "ListKeys",
 		setCacheFn: func() {
-			//Add one more entry here
+			// 再加一个条目。
 			sc.set("addTest1", &cachedService{state: defaultExternalService()})
 		},
 		checkCacheFn: func() error {
-			//It should have two elements
+			// 此时应有两个元素。
 			keys := sc.ListKeys()
 			if len(keys) != 2 {
 				return fmt.Errorf("elements Expected=2 Obtained=%v", len(keys))
@@ -1625,7 +1612,7 @@ func TestServiceCache(t *testing.T) {
 		testName:   "GetbyKeys",
 		setCacheFn: nil, //Nothing to set
 		checkCacheFn: func() error {
-			//It should have two elements
+			// 查到的元素应存在。
 			svc, isKey, err := sc.GetByKey("addTest")
 			if svc == nil || isKey == false || err != nil {
 				return fmt.Errorf("Expected(non-nil, true, nil) Obtained(%v,%v,%v)", svc, isKey, err)
@@ -1636,7 +1623,7 @@ func TestServiceCache(t *testing.T) {
 		testName:   "allServices",
 		setCacheFn: nil, //Nothing to set
 		checkCacheFn: func() error {
-			//It should return two elements
+			// 应返回两个元素。
 			svcArray := sc.allServices()
 			if len(svcArray) != 2 {
 				return fmt.Errorf("Expected(2) Obtained(%v)", len(svcArray))
@@ -1655,7 +1642,7 @@ func TestServiceCache(t *testing.T) {
 	}
 }
 
-// TODO(@MrHohn): Verify the end state when below issue is resolved:
+// TODO(@MrHohn): 待以下问题修复后再校验最终状态：
 // https://github.com/kubernetes/client-go/issues/607
 // TestAddFinalizer 验证仅在缺少 finalizer 时才 patch，已有 finalizer 时为 no-op。
 func TestAddFinalizer(t *testing.T) {
@@ -1710,7 +1697,7 @@ func TestAddFinalizer(t *testing.T) {
 	}
 }
 
-// TODO(@MrHohn): Verify the end state when below issue is resolved:
+// TODO(@MrHohn): 待以下问题修复后再校验最终状态：
 // https://github.com/kubernetes/client-go/issues/607
 // TestRemoveFinalizer 验证仅在存在 finalizer 时才 patch。
 func TestRemoveFinalizer(t *testing.T) {
@@ -1765,7 +1752,7 @@ func TestRemoveFinalizer(t *testing.T) {
 	}
 }
 
-// TODO(@MrHohn): Verify the end state when below issue is resolved:
+// TODO(@MrHohn): 待以下问题修复后再校验最终状态：
 // https://github.com/kubernetes/client-go/issues/607
 // TestPatchStatus 验证状态相同时不写 API、不同时才 patch，覆盖新增与清空两种变化。
 func TestPatchStatus(t *testing.T) {
@@ -1962,7 +1949,7 @@ var providerID = "providerID"
 // nodeTweak 在 makeNode 默认节点上叠加单个字段变化，让用例只表达差异。
 type nodeTweak func(n *v1.Node)
 
-// TODO: use this pattern in all the tests above.
+// TODO: 把上述测试都改成这种模式。
 // makeNode 构造默认 Ready、有 providerID 的节点，再应用 tweaks。
 func makeNode(tweaks ...nodeTweak) *v1.Node {
 	n := &v1.Node{
@@ -2044,7 +2031,7 @@ func tweakUnsetCondition(condType v1.NodeConditionType) nodeTweak {
 		for i := range n.Status.Conditions {
 			c := &n.Status.Conditions[i]
 			if c.Type == condType {
-				// Hacky but easy.
+				// 取巧但够用。
 				c.Type = "SomethingElse"
 				break
 			}
@@ -2410,8 +2397,7 @@ func TestServiceQueueDelay(t *testing.T) {
 				t.Fatal("processNextServiceItem stopped prematurely")
 			}
 
-			// Expect no requeues unless we hit an error that is not a retry
-			// error.
+			// 除不可重试错误外不应有重新入队。
 			wantNumRequeues := 0
 			var re *api.RetryError
 			isRetryError := errors.As(tc.lbCloudErr, &re)
@@ -2450,14 +2436,14 @@ func newFakeNodeLister(err error, nodes ...*v1.Node) *fakeNodeLister {
 	return ret
 }
 
-// List lists all Nodes in the indexer.
-// Objects returned here must be treated as read-only.
+// List 列出 indexer 中所有节点。
+// 返回对象必须视为只读。
 func (l *fakeNodeLister) List(selector labels.Selector) (ret []*v1.Node, err error) {
 	return l.cache, l.err
 }
 
-// Get retrieves the Node from the index for a given name.
-// Objects returned here must be treated as read-only.
+// Get 按名字从 index 中取节点。
+// 返回对象必须视为只读。
 func (l *fakeNodeLister) Get(name string) (*v1.Node, error) {
 	for _, node := range l.cache {
 		if node.Name == name {
@@ -2477,7 +2463,7 @@ type spyWorkQueue struct {
 // spyQueueItem 表示一个被处理过的条目，即一次 AddAfter 调用。
 type spyQueueItem struct {
 	Key string
-	// Delay represents the delayed duration if and only if AddAfter was invoked.
+	// Delay 只在调用过 AddAfter 时表示其延迟时长。
 	Delay time.Duration
 }
 

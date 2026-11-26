@@ -39,8 +39,8 @@ func Resource(resource string) schema.GroupResource {
 
 var (
 	// SchemeBuilder 是带有一组 scheme init 函数的本 API 包的 scheme builder。
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 把 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 与 AddToScheme 仍留在 k8s.io/kubernetes。
 	// 区分公开 SchemeBuilder 与 localSchemeBuilder：前者可被外部包追加注册函数，
 	// 后者由本包 init 使用，把手写注册与生成代码注册分开，避免两者互相覆盖。
 	SchemeBuilder      runtime.SchemeBuilder

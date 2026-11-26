@@ -41,11 +41,11 @@ type apiServerStrategy struct {
 
 // 编译期断言把接口实现绑在声明处：策略方法很多且大多没有显式调用点，
 // 一旦签名漂移，错误会立刻出现在实现文件而不是某个遥远的调用方。
-// apiServerStrategy must implement rest.RESTCreateUpdateStrategy
+// apiServerStrategy 实现 rest.RESTCreateUpdateStrategy。
 var _ rest.RESTCreateUpdateStrategy = apiServerStrategy{}
 var Strategy = apiServerStrategy{}
 
-// NewStrategy creates a new apiServerStrategy.
+// NewStrategy 创建一个新的 apiServerStrategy。
 func NewStrategy(typer runtime.ObjectTyper) rest.CreateUpdateResetFieldsStrategy {
 	return apiServerStrategy{typer, names.SimpleNameGenerator}
 }
@@ -96,7 +96,7 @@ func (apiServerStrategy) Validate(ctx context.Context, obj runtime.Object) field
 	return validation.ValidateAPIService(ctx, obj.(*apiregistration.APIService))
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建对象时的警告。
 func (apiServerStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
@@ -116,7 +116,7 @@ func (apiServerStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Ob
 	return validation.ValidateAPIServiceUpdate(ctx, obj.(*apiregistration.APIService), old.(*apiregistration.APIService))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新对象时的警告。
 func (apiServerStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -126,7 +126,7 @@ type apiServerStatusStrategy struct {
 	names.NameGenerator
 }
 
-// NewStatusStrategy creates a new apiServerStatusStrategy.
+// NewStatusStrategy 创建一个新的 apiServerStatusStrategy。
 func NewStatusStrategy(typer runtime.ObjectTyper) rest.UpdateResetFieldsStrategy {
 	return apiServerStatusStrategy{typer, names.SimpleNameGenerator}
 }
@@ -172,16 +172,16 @@ func (apiServerStatusStrategy) AllowUnconditionalUpdate(ctx context.Context) boo
 	return false
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象。
 func (apiServerStatusStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// ValidateUpdate validates an update of apiServerStatusStrategy.
+// ValidateUpdate 校验 apiServerStatusStrategy 的更新。
 func (apiServerStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateAPIServiceStatusUpdate(ctx, obj.(*apiregistration.APIService), old.(*apiregistration.APIService))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新对象时的警告。
 func (apiServerStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -197,8 +197,8 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(apiserver.ObjectMeta.Labels), ToSelectableFields(apiserver), nil
 }
 
-// MatchAPIService is the filter used by the generic etcd backend to watch events
-// from etcd to clients of the apiserver only interested in specific labels/fields.
+// MatchAPIService 是通用 etcd 后端使用的过滤器，只把匹配特定 label/field 的事件
+// 从 etcd 转发给对应客户端。
 func MatchAPIService(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,

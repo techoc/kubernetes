@@ -48,7 +48,7 @@ var ErrAPIServiceNotFound = errors.New("resource not found")
 // 控制器负责前三者，OpenAPI handler 只消费合并结果，双方不需要了解彼此的内部结构。
 type SpecAggregator interface {
 	AddUpdateAPIService(apiService *v1.APIService, handler http.Handler) error
-	// UpdateAPIServiceSpec updates the APIService. It returns ErrAPIServiceNotFound if the APIService doesn't exist.
+	// UpdateAPIServiceSpec 更新 APIService，不存在时返回 ErrAPIServiceNotFound。
 	UpdateAPIServiceSpec(apiServiceName string) error
 	RemoveAPIService(apiServiceName string)
 }
@@ -64,11 +64,10 @@ const (
 	locallyGeneratedEtagPrefix = "\"6E8F849B434D4B98A569B9D7718876E9-"
 )
 
-// openAPISpecInfo is used to store OpenAPI specs.
-// The apiService object is used to sort specs with their priorities.
+// openAPISpecInfo 保存 OpenAPI 规范；apiService 对象用于按优先级排序。
 type openAPISpecInfo struct {
 	apiService v1.APIService
-	// spec is the cached OpenAPI spec
+	// spec 是缓存的 OpenAPI 规范。
 	spec cached.LastSuccess[*spec.Swagger]
 
 	// downloader 仅用于非本地 apiservice，周期性地重新更新 spec。
@@ -80,14 +79,14 @@ type openAPISpecInfo struct {
 // 把所有可变状态放进同一个结构体并用一把锁保护，是因为 APIService 的增删改
 // 与合并 spec 的读取可能并发发生，粗粒度锁换取的是实现简单和一致性。
 type specAggregator struct {
-	// mutex protects the specsByAPIServiceName map and its contents.
+	// mutex 保护 specsByAPIServiceName 及其内容。
 	mutex sync.Mutex
 
 	// 按名字保存各 API Service 的 OpenAPI spec 的映射。
 	// 用 APIService 名字做键，便于控制器按名字做增量更新，而不必重建整张表。
 	specsByAPIServiceName map[string]*openAPISpecInfo
 
-	// provided for dynamic OpenAPI spec
+	// 由动态 OpenAPI 规范提供。
 	openAPIVersionedService *handler.OpenAPIService
 
 	downloader *Downloader
@@ -118,7 +117,7 @@ func buildAndRegisterSpecAggregatorForLocalServices(downloader *Downloader, aggr
 	return s
 }
 
-// BuildAndRegisterAggregator registered OpenAPI aggregator handler. This function is not thread safe as it only being called on startup.
+// BuildAndRegisterAggregator 注册 OpenAPI 聚合 handler；只在启动时调用，不保证线程安全。
 func BuildAndRegisterAggregator(downloader *Downloader, delegationTarget server.DelegationTarget, webServices []*restful.WebService,
 	config *common.Config, pathHandler common.PathHandler) (SpecAggregator, error) {
 
@@ -235,7 +234,7 @@ func (s *specAggregator) updateServiceLocked(name string) error {
 	return err
 }
 
-// UpdateAPIServiceSpec updates the api service. It is thread safe.
+// UpdateAPIServiceSpec 更新 APIService，线程安全。
 func (s *specAggregator) UpdateAPIServiceSpec(apiServiceName string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -274,8 +273,7 @@ func (s *specAggregator) AddUpdateAPIService(apiService *v1.APIService, handler 
 	return nil
 }
 
-// RemoveAPIService removes an api service from OpenAPI aggregation. If it does not exist, no error is returned.
-// It is thread safe.
+// RemoveAPIService 从 OpenAPI 聚合中移除 APIService；不存在也不报错，线程安全。
 func (s *specAggregator) RemoveAPIService(apiServiceName string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

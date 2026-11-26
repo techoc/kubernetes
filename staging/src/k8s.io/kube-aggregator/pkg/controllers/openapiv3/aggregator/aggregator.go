@@ -53,7 +53,7 @@ var ErrAPIServiceNotFound = errors.New("resource not found")
 // 可能失败；删除只是本地状态变更，没有可失败的步骤。
 type SpecProxier interface {
 	AddUpdateAPIService(handler http.Handler, apiService *v1.APIService)
-	// UpdateAPIServiceSpec updates the APIService. It returns ErrAPIServiceNotFound if the APIService doesn't exist.
+	// UpdateAPIServiceSpec 更新 APIService，不存在时返回 ErrAPIServiceNotFound。
 	UpdateAPIServiceSpec(apiServiceName string) error
 	RemoveAPIServiceSpec(apiServiceName string)
 	GetAPIServiceNames() []string
@@ -71,14 +71,13 @@ const (
 	openAPIV2Converter            = "openapiv2converter"
 )
 
-// IsLocalAPIService returns true for local specs from delegates.
+// IsLocalAPIService 判断规范是否来自 delegate 的本地 APIService。
 func IsLocalAPIService(apiServiceName string) bool {
 	return strings.HasPrefix(apiServiceName, localDelegateChainNamePrefix)
 }
 
-// GetAPIServiceNames returns the names of APIServices recorded in apiServiceInfo.
-// We use this function to pass the names of local APIServices to the controller in this package,
-// so that the controller can periodically sync the OpenAPI spec from delegation API servers.
+// GetAPIServiceNames 返回 apiServiceInfo 中记录的 APIService 名字。
+// 本包用它把本地 APIService 的名字传给控制器，以便定期从委托 API server 同步 OpenAPI 规范。
 func (s *specProxier) GetAPIServiceNames() []string {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
@@ -149,7 +148,7 @@ func BuildAndRegisterAggregator(downloader Downloader, delegationTarget server.D
 	return s, nil
 }
 
-// AddUpdateAPIService adds or updates the api service. It is thread safe.
+// AddUpdateAPIService 新增或更新 APIService，线程安全。
 func (s *specProxier) AddUpdateAPIService(handler http.Handler, apiservice *v1.APIService) {
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
@@ -177,8 +176,7 @@ func getGroupVersionStringFromAPIService(apiService v1.APIService) string {
 	return "apis/" + apiService.Spec.Group + "/" + apiService.Spec.Version
 }
 
-// UpdateAPIServiceSpec updates all the OpenAPI v3 specs that the APIService serves.
-// It is thread safe.
+// UpdateAPIServiceSpec 更新该 APIService 提供的所有 OpenAPI v3 规范，线程安全。
 func (s *specProxier) UpdateAPIServiceSpec(apiServiceName string) error {
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
@@ -227,13 +225,13 @@ func (s *specProxier) updateAPIServiceSpecLocked(apiServiceName string) error {
 }
 
 type specProxier struct {
-	// mutex protects all members of this struct.
+	// mutex 保护本结构的所有成员。
 	rwMutex sync.RWMutex
 
-	// OpenAPI V3 specs by APIService name
+	// 按 APIService 名字存放的 OpenAPI v3 规范。
 	apiServiceInfo map[string]*openAPIV3APIServiceInfo
 
-	// For downloading the OpenAPI v3 specs from apiservices
+	// 用于从 apiservice 下载 OpenAPI v3 规范。
 	downloader Downloader
 
 	openAPIV2ConverterHandler *handler3.OpenAPIService
@@ -255,8 +253,7 @@ type openAPIV3APIServiceInfo struct {
 	isLegacyAPIService bool
 }
 
-// RemoveAPIServiceSpec removes an api service from the OpenAPI map. If it does not exist, no error is returned.
-// It is thread safe.
+// RemoveAPIServiceSpec 从 OpenAPI map 中移除 APIService；不存在也不报错，线程安全。
 func (s *specProxier) RemoveAPIServiceSpec(apiServiceName string) {
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
@@ -315,9 +312,9 @@ func (s *specProxier) handleGroupVersion(w http.ResponseWriter, r *http.Request)
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
 
-	// TODO: Import this logic from kube-openapi instead of duplicating
-	// URLs for OpenAPI V3 have the format /openapi/v3/<groupversionpath>
-	// SplitAfterN with 4 yields ["", "openapi", "v3", <groupversionpath>]
+	// TODO: 应从 kube-openapi 引入这段逻辑，而不是复制一份。
+	// OpenAPI v3 URL 形如 /openapi/v3/<groupversionpath>，
+	// SplitAfterN 传 4 会得到 ["", "openapi", "v3", <groupversionpath>]。
 	url := strings.SplitAfterN(r.URL.Path, "/", 4)
 	targetGV := url[3]
 
@@ -333,7 +330,7 @@ func (s *specProxier) handleGroupVersion(w http.ResponseWriter, r *http.Request)
 			}
 		}
 	}
-	// No group-versions match the desired request
+	// 没有 group/version 匹配请求。
 	w.WriteHeader(404)
 }
 

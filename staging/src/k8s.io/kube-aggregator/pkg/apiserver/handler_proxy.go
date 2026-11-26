@@ -48,56 +48,54 @@ const (
 // 不必重建代理 handler，正在处理的请求也不会读到半新半旧的凭证。
 type certKeyFunc func() ([]byte, []byte)
 
-// proxyHandler provides a http.Handler which will proxy traffic to locations
-// specified by items implementing Redirector.
+// proxyHandler 提供 http.Handler，把流量代理到 Redirector 指定的位置。
 // 每个 handler 只对应一个 GroupVersion；路由在更上层完成，这里只负责
 // 按缓存的 handlingInfo 决定本地处理还是转发到后端服务。
 type proxyHandler struct {
-	// localDelegate is used to satisfy local APIServices
+	// localDelegate 用于处理本地 APIService。
 	localDelegate http.Handler
 
-	// proxyCurrentCertKeyContent holds the client cert used to identify this proxy. Backing APIServices use this to confirm the proxy's identity
+	// proxyCurrentCertKeyContent 保存标识本代理的客户端证书，后端 APIService 用它确认代理身份。
 	proxyCurrentCertKeyContent certKeyFunc
 	proxyTransportDial         *transport.DialHolder
 
-	// Endpoints based routing to map from cluster IP to routable IP
+	// 基于 Endpoints 的路由，把 cluster IP 映射到可路由 IP。
 	serviceResolver ServiceResolver
 
 	// 整个处理信息作为一个值原子替换：请求要么看到旧配置要么看到新配置，
 	// 不会在 APIService 更新过程中读到互相矛盾的 service、证书和可用状态。
 	handlingInfo atomic.Value
 
-	// reject to forward redirect response
+	// 是否拒绝转发重定向响应。
 	rejectForwardingRedirects bool
 
-	// tracerProvider is used to wrap the proxy transport and handler with tracing
+	// tracerProvider 用于给代理传输与 handler 加上链路追踪。
 	tracerProvider tracing.TracerProvider
 }
 
 // 代理所需的全部不可变状态被打包成一个快照，由上面的 atomic.Value 整体换出。
 // 这样请求路径上不需要加锁，控制循环重建配置时也不会让请求看到中间态。
 type proxyHandlingInfo struct {
-	// local indicates that this APIService is locally satisfied
+	// local 表示该 APIService 由本地处理。
 	local bool
 
-	// name is the name of the APIService
+	// name 是 APIService 的名字。
 	name string
-	// transportConfig holds the information for building a roundtripper
+	// transportConfig 保存构造 roundtripper 所需的信息。
 	transportConfig *transport.Config
-	// transportBuildingError is an error produced while building the transport.  If this
-	// is non-nil, it will be reported to clients.
+	// transportBuildingError 是构造 transport 时的错误；非空时会上报给客户端。
 	transportBuildingError error
-	// proxyRoundTripper is the re-useable portion of the transport.  It does not vary with any request.
+	// proxyRoundTripper 是 transport 中可复用的部分，不随请求变化。
 	proxyRoundTripper http.RoundTripper
-	// serviceName is the name of the service this handler proxies to
+	// serviceName 是本 handler 代理到的 Service 名字。
 	serviceName string
-	// namespace is the namespace the service lives in
+	// namespace 是该 Service 所在的命名空间。
 	serviceNamespace string
-	// serviceAvailable indicates this APIService is available or not
+	// serviceAvailable 表示该 APIService 是否可用。
 	// 状态检查在请求路径上只是快速开关：真正的健康检查由状态控制器异步做，
 	// 这里只按结果决定快速返回 503，避免请求洪峰时再去探测后端。
 	serviceAvailable bool
-	// servicePort is the port of the service this handler proxies to
+	// servicePort 是本 handler 代理到的 Service 端口。
 	servicePort int32
 }
 
@@ -110,7 +108,7 @@ func proxyError(w http.ResponseWriter, req *http.Request, error string, code int
 		klog.Warning("no RequestInfo found in the context")
 		return
 	}
-	// TODO: record long-running request differently? The long-running check func does not necessarily match the one of the aggregated apiserver
+	// TODO: 是否需要换一种方式记录长请求？这里的判定函数未必与被聚合 apiserver 一致。
 	endpointmetrics.RecordRequestTermination(req, info, aggregatorComponent, code)
 }
 
@@ -146,7 +144,7 @@ func (r *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// write a new location based on the existing request pointed at the target service
+	// 基于现有请求写出指向目标 Service 的 location。
 	location := &url.URL{}
 	location.Scheme = "https"
 	rloc, err := r.serviceResolver.ResolveEndpoint(handlingInfo.serviceNamespace, handlingInfo.serviceName, handlingInfo.servicePort)
@@ -182,9 +180,8 @@ func (r *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		proxyRoundTripper = tracingWrapper(proxyRoundTripper)
 	}
 
-	// If we are upgrading, then the upgrade path tries to use this request with the TLS config we provide, but it does
-	// NOT use the proxyRoundTripper.  It's a direct dial that bypasses the proxyRoundTripper.  This means that we have to
-	// attach the "correct" user headers to the request ahead of time.
+	// 升级协议时 upgrade 路径会使用这里给出的 TLS 配置，却绕过 proxyRoundTripper 直接拨号，
+	// 因此必须提前把正确的用户头写到请求上。
 	if upgrade {
 		transport.SetAuthProxyHeaders(newReq, user.GetName(), userUID, user.GetGroups(), user.GetExtra())
 	}
@@ -197,13 +194,12 @@ func (r *proxyHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	handler.ServeHTTP(w, newReq)
 }
 
-// responder implements rest.Responder for assisting a connector in writing objects or errors.
+// responder 实现 rest.Responder，帮助 connector 写回对象或错误。
 type responder struct {
 	w http.ResponseWriter
 }
 
-// TODO this should properly handle content type negotiation
-// if the caller asked for protobuf and you write JSON bad things happen.
+// TODO: 这里应正确处理 content type 协商；调用方要 protobuf 却返回 JSON 会出问题。
 func (r *responder) Object(statusCode int, obj runtime.Object) {
 	responsewriters.WriteRawJSON(statusCode, obj, r.w)
 }
@@ -212,10 +208,9 @@ func (r *responder) Error(_ http.ResponseWriter, _ *http.Request, err error) {
 	http.Error(r.w, err.Error(), http.StatusServiceUnavailable)
 }
 
-// these methods provide locked access to fields
+// 以下方法提供对字段的加锁访问。
 
-// Sets serviceAvailable value on proxyHandler
-// not thread safe
+// setServiceAvailable 设置 serviceAvailable，非线程安全。
 func (r *proxyHandler) setServiceAvailable() {
 	info := r.handlingInfo.Load().(proxyHandlingInfo)
 	info.serviceAvailable = true

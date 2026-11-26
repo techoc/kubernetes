@@ -27,7 +27,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_ServiceReference sets defaults for AuditSync Webhook's ServiceReference
+// SetDefaults_ServiceReference 为 AuditSync Webhook 的 ServiceReference 填默认值。
 // 这里默认 443 是历史约定：聚合层向后端 Service 发请求时默认走 HTTPS，
 // 因此"没写端口"要显式落成一个端口值，而不是留 nil 让下游各自猜。
 // 用指针字段是为了能区分"用户明确没指定"和"用户指定了一个端口"，

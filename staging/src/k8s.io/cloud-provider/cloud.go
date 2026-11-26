@@ -49,9 +49,9 @@ type Interface interface {
 	// Initialize 为 cloud provider 提供 kubernetes client builder，并可启动用于日常维护或云厂商自定义控制器的 goroutine；这些任务必须在 stop channel 关闭时被清理。
 	// 该调用在所有控制器启动之前执行一次；厂商可在此启动自有控制器，但必须监听 stop。
 	Initialize(clientBuilder ControllerClientBuilder, stop <-chan struct{})
-	// LoadBalancer returns a balancer interface. Also returns true if the interface is supported, false otherwise.
+	// LoadBalancer 返回负载均衡器接口，第二个返回值表示该能力是否受支持。
 	LoadBalancer() (LoadBalancer, bool)
-	// Instances returns an instances interface. Also returns true if the interface is supported, false otherwise.
+	// Instances 返回实例接口，第二个返回值表示该能力是否受支持。
 	Instances() (Instances, bool)
 	// InstancesV2 是 instances 的实现，只应由外部云 provider 实现。其行为与 Instances 相同，但经过优化以显著减少注册/同步节点时对云的 API 调用；实现该接口后将不再调用 Zones。
 	// 若返回 supported=true，CCM 会优先使用 InstancesV2 并停止调用 Instances/Zones，
@@ -61,9 +61,9 @@ type Interface interface {
 	// DEPRECATED: Zones is deprecated in favor of retrieving zone/region information from InstancesV2.
 	// 启用 InstancesV2 后不会再调用该接口；新实现应通过 InstanceMetadata 返回拓扑。
 	Zones() (Zones, bool)
-	// Clusters returns a clusters interface.  Also returns true if the interface is supported, false otherwise.
+	// Clusters 返回集群接口，第二个返回值表示该能力是否受支持。
 	Clusters() (Clusters, bool)
-	// Routes returns a routes interface along with whether the interface is supported.
+	// Routes 返回路由接口及该能力是否受支持。
 	Routes() (Routes, bool)
 	// ProviderName 返回云 provider 的 ID。
 	// 该值同样用于拼接 ProviderID（<provider>://<instance-id>），必须稳定且不含 "://"。
@@ -76,15 +76,15 @@ type Interface interface {
 // InformerUser 是可选接口：云实现若需要共享 informer 缓存，可额外实现它。
 // 这样云实现不必自行创建 informer，避免与 CCM 的缓存重复。
 type InformerUser interface {
-	// SetInformers sets the informer on the cloud object.
+	// SetInformers 把 informer 注入云实现，使其复用 CCM 的共享缓存。
 	SetInformers(informerFactory informers.SharedInformerFactory)
 }
 
-// Clusters is an abstract, pluggable interface for clusters of containers.
+// Clusters 是容器集群的抽象、可插拔接口。
 type Clusters interface {
-	// ListClusters lists the names of the available clusters.
+	// ListClusters 列出可用集群的名字。
 	ListClusters(ctx context.Context) ([]string, error)
-	// Master gets back the address (either DNS name or IP address) of the master node for the cluster.
+	// Master 返回集群 master 节点的地址，可能是 DNS 名或 IP。
 	Master(ctx context.Context, clusterName string) (string, error)
 }
 
@@ -138,7 +138,7 @@ type LoadBalancer interface {
 	// GetLoadBalancer 返回指定负载均衡器是否存在，若存在则返回其状态。
 	// 实现必须将 *v1.Service 参数视为只读，不得修改；参数 'clusterName' 是提交给 kube-controller-manager 的集群名称。
 	// exists=false 且无错误会让控制器进入创建流程；资源已部分存在时也应返回 true。
-	// TODO: Break this up into different interfaces (LB, etc) when we have more than one type of service
+	// TODO: 当出现多种 Service 类型时，把该接口拆成 LB 等更细的接口。
 	GetLoadBalancer(ctx context.Context, clusterName string, service *v1.Service) (status *v1.LoadBalancerStatus, exists bool, err error)
 	// GetLoadBalancerName 返回负载均衡器的名称；实现必须将 *v1.Service 参数视为只读，不得修改。
 	// 名称必须根据 Service 确定性地生成，才能跨重启、跨副本定位同一 LB。
@@ -162,27 +162,25 @@ type LoadBalancer interface {
 // 这些方法均以节点名或 ProviderID 为键；实现应返回 InstanceNotFound/NotImplemented
 // 等哨兵错误，供控制器区分“实例不存在”与“暂时性 API 失败”。
 type Instances interface {
-	// NodeAddresses returns the addresses of the specified instance.
+	// NodeAddresses 返回指定实例的地址。
 	NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.NodeAddress, error)
-	// NodeAddressesByProviderID returns the addresses of the specified instance.
-	// The instance is specified using the providerID of the node. The
-	// ProviderID is a unique identifier of the node. This will not be called
-	// from the node whose nodeaddresses are being queried. i.e. local metadata
-	// services cannot be used in this method to obtain nodeaddresses
+	// NodeAddressesByProviderID 按 providerID 返回指定实例的地址。
+	// providerID 是节点的唯一标识。该方法不会在被查询地址的节点上调用，
+	// 因此不能依赖本地 metadata service 获取地址。
 	NodeAddressesByProviderID(ctx context.Context, providerID string) ([]v1.NodeAddress, error)
-	// InstanceID returns the cloud provider ID of the node with the specified NodeName.
-	// Note that if the instance does not exist, we must return ("", cloudprovider.InstanceNotFound)
-	// cloudprovider.InstanceNotFound should NOT be returned for instances that exist but are stopped/sleeping
+	// InstanceID 返回指定 NodeName 节点在云 provider 侧的 ID。
+	// 实例不存在时必须返回 ("", cloudprovider.InstanceNotFound)；
+	// 实例存在但处于停止/休眠状态时不能返回该错误。
 	InstanceID(ctx context.Context, nodeName types.NodeName) (string, error)
-	// InstanceType returns the type of the specified instance.
+	// InstanceType 返回指定实例的类型。
 	InstanceType(ctx context.Context, name types.NodeName) (string, error)
-	// InstanceTypeByProviderID returns the type of the specified instance.
+	// InstanceTypeByProviderID 按 providerID 返回指定实例的类型。
 	InstanceTypeByProviderID(ctx context.Context, providerID string) (string, error)
-	// AddSSHKeyToAllInstances adds an SSH public key as a legal identity for all instances
-	// expected format for the key is standard ssh-keygen format: <protocol> <blob>
+	// AddSSHKeyToAllInstances 为所有实例添加 SSH 公钥作为合法身份；
+	// 密钥格式须为 ssh-keygen 标准格式：<protocol> <blob>。
 	AddSSHKeyToAllInstances(ctx context.Context, user string, keyData []byte) error
-	// CurrentNodeName returns the name of the node we are currently running on
-	// On most clouds (e.g. GCE) this is the hostname, so we provide the hostname
+	// CurrentNodeName 返回当前运行所在节点的名字。
+	// 大多数云（如 GCE）上它就是主机名，因此直接传入主机名。
 	CurrentNodeName(ctx context.Context, hostname string) (types.NodeName, error)
 	// InstanceExistsByProviderID 在给定 providerID 对应的实例存在时返回 true；若返回 false 且无错误，实例会被 cloud controller manager 立即删除。
 	// 误报 false 会导致 Node 被删除，因此停止/休眠实例必须仍返回 true。
@@ -195,11 +193,11 @@ type Instances interface {
 // InstancesV2 是云 provider 实例的抽象、可插拔接口；与 Instances 不同，它面向外部云 provider 设计，只应由它们实现，实现该接口后将不再调用 Zones。
 // 设计目标是一次调用返回节点的全部元数据，显著减少注册/同步节点时的 API 往返。
 type InstancesV2 interface {
-	// InstanceExists returns true if the instance for the given node exists according to the cloud provider.
-	// Use the node.name or node.spec.providerID field to find the node in the cloud provider.
+	// InstanceExists 判断云 provider 侧该节点对应的实例是否存在。
+	// 查找时应使用 node.name 或 node.spec.providerID。
 	InstanceExists(ctx context.Context, node *v1.Node) (bool, error)
-	// InstanceShutdown returns true if the instance is shutdown according to the cloud provider.
-	// Use the node.name or node.spec.providerID field to find the node in the cloud provider.
+	// InstanceShutdown 判断云 provider 侧该实例是否已关机。
+	// 查找时应使用 node.name 或 node.spec.providerID。
 	InstanceShutdown(ctx context.Context, node *v1.Node) (bool, error)
 	// InstanceMetadata 返回实例的元数据；InstanceMetadata 中的值会在节点注册时被翻译为 Node 对象上的特定字段与标签。
 	// 实现在查找给定节点对应的实例时应始终先检查 node.spec.providerID；当 node.spec.providerID 为空时，可以使用节点的其他属性，如其名称、标签和注解。
@@ -212,35 +210,33 @@ type InstancesV2 interface {
 // EnableNodeAddresses 是兼容开关：老版本云实现不认 TargetNodeAddresses，
 // 置 false 时控制器忽略该字段，避免每次对账都误判为需要重建。
 type Route struct {
-	// Name is the name of the routing rule in the cloud-provider.
-	// It will be ignored in a Create (although nameHint may influence it)
+	// Name 是路由规则在云 provider 侧的名字。
+	// Create 时会忽略它，但 nameHint 可能影响实际命名。
 	Name string
-	// TargetNode is the NodeName of the target instance.
+	// TargetNode 是目标实例对应的 NodeName。
 	TargetNode types.NodeName
-	// EnableNodeAddresses is a feature gate for TargetNodeAddresses. If false, ignore TargetNodeAddresses.
-	// Without this, if users haven't updated their cloud-provider, reconcile() will delete and create same route every time.
+	// EnableNodeAddresses 是 TargetNodeAddresses 的特性开关；为 false 时忽略该字段。
+	// 若没有它，未升级的云 provider 会导致 reconcile() 每次都删除并重建同一条路由。
 	EnableNodeAddresses bool
-	// TargetNodeAddresses are the Node IPs of the target Node.
+	// TargetNodeAddresses 是目标节点的 IP 地址。
 	TargetNodeAddresses []v1.NodeAddress
-	// DestinationCIDR is the CIDR format IP range that this routing rule
-	// applies to.
+	// DestinationCIDR 是本路由规则适用的 CIDR 格式 IP 范围。
 	DestinationCIDR string
-	// Blackhole is set to true if this is a blackhole route
-	// The node controller will delete the route if it is in the managed range.
+	// Blackhole 表示这是一条黑洞路由。
+	// 落在托管范围内的黑洞路由会被节点控制器删除。
 	Blackhole bool
 }
 
 // Routes 是高级路由规则的抽象、可插拔接口。
 // 控制器只管理落在 --cluster-cidr 内的路由，其他路由不会传入删除路径。
 type Routes interface {
-	// ListRoutes lists all managed routes that belong to the specified clusterName
+	// ListRoutes 列出属于指定 clusterName 的所有托管路由。
 	ListRoutes(ctx context.Context, clusterName string) ([]*Route, error)
-	// CreateRoute creates the described managed route
-	// route.Name will be ignored, although the cloud-provider may use nameHint
-	// to create a more user-meaningful name.
+	// CreateRoute 创建描述的托管路由。
+	// route.Name 会被忽略；云 provider 可用 nameHint 生成更易读的名字。
 	CreateRoute(ctx context.Context, clusterName string, nameHint string, route *Route) error
-	// DeleteRoute deletes the specified managed route
-	// Route should be as returned by ListRoutes
+	// DeleteRoute 删除指定的托管路由。
+	// 传入的 Route 应来自 ListRoutes 的返回值。
 	DeleteRoute(ctx context.Context, clusterName string, route *Route) error
 }
 
@@ -255,7 +251,7 @@ var (
 	NotImplemented = errors.New("unimplemented")
 )
 
-// Zone represents the location of a particular machine.
+// Zone 表示某台机器所在的故障域与地域。
 type Zone struct {
 	FailureDomain string
 	Region        string
@@ -265,20 +261,17 @@ type Zone struct {
 // DEPRECATED: Zones is deprecated in favor of retrieving zone/region information from InstancesV2.
 // 启用 InstancesV2 后不会再调用该接口；仅在未启用 InstancesV2 的旧实现中使用，新实现应通过 InstanceMetadata 返回拓扑。
 type Zones interface {
-	// GetZone returns the Zone containing the current failure zone and locality region that the program is running in
-	// In most cases, this method is called from the kubelet querying a local metadata service to acquire its zone.
-	// For the case of external cloud providers, use GetZoneByProviderID or GetZoneByNodeName since GetZone
-	// can no longer be called from the kubelets.
+	// GetZone 返回程序当前所在故障域与地域构成的 Zone。
+	// 通常由 kubelet 查询本地 metadata service 获取；外部云 provider 场景下
+	// kubelet 不能再调用它，应改用 GetZoneByProviderID 或 GetZoneByNodeName。
 	GetZone(ctx context.Context) (Zone, error)
 
-	// GetZoneByProviderID returns the Zone containing the current zone and locality region of the node specified by providerID
-	// This method is particularly used in the context of external cloud providers where node initialization must be done
-	// outside the kubelets.
+	// GetZoneByProviderID 返回 providerID 指定节点所在故障域与地域构成的 Zone。
+	// 外部云 provider 场景下节点初始化在 kubelet 之外完成，主要用此方法。
 	GetZoneByProviderID(ctx context.Context, providerID string) (Zone, error)
 
-	// GetZoneByNodeName returns the Zone containing the current zone and locality region of the node specified by node name
-	// This method is particularly used in the context of external cloud providers where node initialization must be done
-	// outside the kubelets.
+	// GetZoneByNodeName 返回节点名指定节点所在故障域与地域构成的 Zone。
+	// 外部云 provider 场景下节点初始化在 kubelet 之外完成，主要用此方法。
 	GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) (Zone, error)
 }
 
@@ -292,32 +285,24 @@ type PVLabeler interface {
 // InstanceMetadata 包含特定实例的元数据；其中返回的值会被翻译为 Node 的特定字段和标签。
 // 它是 InstancesV2 的返回值，注册节点时按字段分别写入 spec、status 与 labels。
 type InstanceMetadata struct {
-	// ProviderID is a unique ID used to identify an instance on the cloud provider.
-	// The ProviderID set here will be set on the node's spec.providerID field.
-	// The provider ID format can be set by the cloud provider but providers should
-	// ensure the format does not change in any incompatible way.
-	//
-	// The provider ID format used by existing cloud provider has been:
+	// ProviderID 是云 provider 侧标识实例的唯一 ID，会写入节点的 spec.providerID。
+	// 格式由 provider 自定，但必须保持兼容，不能被控制器误解析。
+	// 既有 provider 使用：
 	//    <provider-name>://<instance-id>
-	// Existing providers setting this field should preserve the existing format
-	// currently being set in node.spec.providerID.
+	// 已有实现填写该字段时应沿用 node.spec.providerID 中当前的格式。
 	ProviderID string
-	// InstanceType is the instance's type.
-	// The InstanceType set here will be set using the following labels on the node object:
+	// InstanceType 是实例类型，会写入节点上的以下标签：
 	//   * node.kubernetes.io/instance-type=<instance-type>
 	//   * beta.kubernetes.io/instance-type=<instance-type> (DEPRECATED)
 	InstanceType string
-	// NodeAddress contains information for the instance's address.
-	// The node addresses returned here will be set on the node's status.addresses field.
+	// NodeAddress 是实例地址信息，会写入节点的 status.addresses。
 	NodeAddresses []v1.NodeAddress
 
-	// Zone is the zone that the instance is in.
-	// The value set here is applied as the following labels on the node:
+	// Zone 是实例所在的可用区，会写入节点上的以下标签：
 	//   * topology.kubernetes.io/zone=<zone>
 	//   * failure-domain.beta.kubernetes.io/zone=<zone> (DEPRECATED)
 	Zone string
-	// Region is the region that the instance is in.
-	// The value set here is applied as the following labels on the node:
+	// Region 是实例所在的地域，会写入节点上的以下标签：
 	//   * topology.kubernetes.io/region=<region>
 	//   * failure-domain.beta.kubernetes.io/region=<region> (DEPRECATED)
 	Region string

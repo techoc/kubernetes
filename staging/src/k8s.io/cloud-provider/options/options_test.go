@@ -456,7 +456,7 @@ func TestCreateConfig(t *testing.T) {
 			},
 			NodeController: nodeconfig.NodeControllerConfiguration{
 				ConcurrentNodeSyncs: 1,
-				// ConcurrentNodeStatusUpdates should default to the value of ConcurrentNodeSyncs only at the stage of config creation
+				// 仅配置创建阶段，ConcurrentNodeStatusUpdates 才应回退到 ConcurrentNodeSyncs 的值。
 				ConcurrentNodeStatusUpdates: 1,
 			},
 			NodeLifecycleController: nodelifecycleconfig.NodeLifecycleControllerConfiguration{
@@ -474,7 +474,7 @@ func TestCreateConfig(t *testing.T) {
 		Authorization:        apiserver.AuthorizationInfo{},
 	}
 
-	// Don't check
+	// 不检查。
 	// 这些字段持有监听器、客户端、informer 等运行时对象，无法用 DeepEqual 比较，
 	// 在比较前置空；WebhookSecureServing 单独断言存在后也置空。
 	c.SecureServing = nil
@@ -624,7 +624,7 @@ func TestCreateConfigWithoutWebHooks(t *testing.T) {
 		Authorization:        apiserver.AuthorizationInfo{},
 	}
 
-	// Don't check
+	// 不检查。
 	c.SecureServing = nil
 	c.Authentication = apiserver.AuthenticationInfo{}
 	c.Authorization = apiserver.AuthorizationInfo{}

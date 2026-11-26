@@ -359,7 +359,7 @@ func TestAPIGroupMissing(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	// this call should delegate
+	// 此调用应被委托出去。
 	resp, err := http.Get(server.URL + "/apis/groupName/foo")
 	if err != nil {
 		t.Fatal(err)
@@ -368,7 +368,7 @@ func TestAPIGroupMissing(t *testing.T) {
 		t.Fatalf("expected %v, got %v", http.StatusForbidden, resp.StatusCode)
 	}
 
-	// groupName still has no api services for it (like it was deleted), it should delegate
+	// groupName 下已无 APIService（如同被删除），请求仍应被委托。
 	resp, err = http.Get(server.URL + "/apis/groupName/")
 	if err != nil {
 		t.Fatal(err)
@@ -377,7 +377,7 @@ func TestAPIGroupMissing(t *testing.T) {
 		t.Fatalf("expected %v, got %v", http.StatusForbidden, resp.StatusCode)
 	}
 
-	// missing group should delegate still has no api services for it (like it was deleted)
+	// 缺失的组应委托出去：该组下已无 APIService（如同被删除）。
 	resp, err = http.Get(server.URL + "/apis/missing")
 	if err != nil {
 		t.Fatal(err)

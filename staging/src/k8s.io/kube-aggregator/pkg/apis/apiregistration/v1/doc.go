@@ -30,17 +30,13 @@ limitations under the License.
 // 指令 +groupName 声明本包归属 apiregistration.k8s.io，供生成器与发现文档确定 API 组名。
 // 指令 +k8s:openapi-model-package 指定 OpenAPI 模型的包名，避免与 Kubernetes 核心 API 的模型重名。
 
-// Package v1 contains the API Registration API, which is responsible for
-// registering an API `Group`/`Version` with another kubernetes like API server.
-// The `APIService` holds information about the other API server in
-// `APIServiceSpec` type as well as general `TypeMeta` and `ObjectMeta`. The
-// `APIServiceSpec` type have the main configuration needed to do the
-// aggregation. Any request coming for specified `Group`/`Version` will be
-// directed to the service defined by `ServiceReference` (on port 443) after
-// validating the target using provided `CABundle` or skipping validation
-// if development flag `InsecureSkipTLSVerify` is set. `Priority` is controlling
-// the order of this API group in the overall discovery document.
-// The return status is a set of conditions for this aggregation. Currently
-// there is only one condition named "Available", if true, it means the
-// api/server requests will be redirected to specified API server.
+// Package v1 定义 API Registration API，负责把某个 API `Group`/`Version`
+// 注册到另一个类似 Kubernetes 的 API server 上。
+// `APIService` 通过 `APIServiceSpec` 以及通用的 `TypeMeta`、`ObjectMeta`
+// 保存目标 server 的信息；`APIServiceSpec` 承载聚合所需的全部配置。
+// 对指定 `Group`/`Version` 的请求，先用 `CABundle` 校验目标证书
+// （开发时可用 `InsecureSkipTLSVerify` 跳过校验），再转发到 `ServiceReference`
+// 指向的 Service（443 端口）。`Priority` 决定该 API 组在整体 discovery 文档中的顺序。
+// 返回状态是一组聚合相关的 condition；当前只有 "Available"，
+// 为 true 表示请求会被重定向到指定的 API server。
 package v1

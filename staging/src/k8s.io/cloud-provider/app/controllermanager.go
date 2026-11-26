@@ -165,10 +165,10 @@ the cloud specific control loops shipped with Kubernetes.`,
 // 最后在选主成功（或未启用选主）时启动控制器。返回错误仅代表启动阶段失败。
 func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface, controllerInitializers map[string]InitFunc, webhooks map[string]WebhookHandler,
 	stopCh <-chan struct{}) error {
-	// To help debugging, immediately log version
+	// 启动时立即打印版本，方便排障。
 	klog.Infof("Version: %+v", version.Get())
 
-	// Start events processing pipeline.
+	// 启动事件处理管道。
 	c.EventBroadcaster.StartStructuredLogging(0)
 	c.EventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.Client.CoreV1().Events("")})
 	defer c.EventBroadcaster.Shutdown()
@@ -180,7 +180,7 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 	}
 	externalConfig.SetGroupVersionKind(configv1alpha.SchemeGroupVersion.WithKind("CloudControllerManagerConfiguration"))
 
-	// setup /configz endpoint
+	// 注册 /configz 端点。
 	if cz, err := configz.New(ConfigzName); err != nil {
 		return fmt.Errorf("unable to register configz: %w", err)
 	} else if err := cz.Set(externalConfig); err != nil {
@@ -216,7 +216,7 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 		slis.SLIMetricsWithReset{}.Install(unsecuredMux)
 
 		handler := genericcontrollermanager.BuildHandlerChain(unsecuredMux, &c.Authorization, &c.Authentication)
-		// TODO: handle stoppedCh and listenerStoppedCh returned by c.SecureServing.Serve
+		// TODO: 处理 c.SecureServing.Serve 返回的 stoppedCh 与 listenerStoppedCh。
 		if _, _, err := c.SecureServing.Serve(handler, 0, stopCh); err != nil {
 			return err
 		}
@@ -250,15 +250,14 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 	if err != nil {
 		return err
 	}
-	// add a uniquifier so that two processes on the same host don't accidentally both become active
+	// 加唯一后缀，避免同机多实例被误判为同一候选者。
 	id = id + "_" + string(uuid.NewUUID())
 
-	// leaderMigrator will be non-nil if and only if Leader Migration is enabled.
+	// 仅当启用 Leader Migration 时 leaderMigrator 才非空。
 	var leaderMigrator *leadermigration.LeaderMigrator = nil
 
-	// If leader migration is enabled, use the redirected initialization
-	// Check feature gate and configuration separately so that any error in configuration checking will not
-	//  affect the result if the feature is not enabled.
+	// 启用 Leader Migration 时走重定向初始化路径。
+	// feature gate 与配置分开检查，未启用该特性时配置错误不应影响结果。
 	if leadermigration.Enabled(&c.ComponentConfig.Generic) {
 		klog.Info("starting leader migration")
 
@@ -275,11 +274,10 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 			OnStartedLeading: func(ctx context.Context) {
 				initializers := controllerInitializers
 				if leaderMigrator != nil {
-					// If leader migration is enabled, we should start only non-migrated controllers
-					//  for the main lock.
+					// 启用 Leader Migration 时主锁只启动未迁移的控制器。
 					initializers = filterInitializers(controllerInitializers, leaderMigrator.FilterFunc, leadermigration.ControllerNonMigrated)
 					klog.Info("leader migration: starting main controllers.")
-					// Signal the main lock is acquired, and thus migration lock is ready to attempt.
+					// 通知主锁已获取，可以开始争取迁移锁。
 					close(leaderMigrator.MigrationReady)
 				}
 				run(ctx, initializers)
@@ -291,12 +289,12 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 			},
 		})
 
-	// If Leader Migration is enabled, proceed to attempt the migration lock.
+	// 启用 Leader Migration 后继续争取迁移锁。
 	if leaderMigrator != nil {
-		// Wait for the signal of main lock being acquired.
+		// 等待主锁获取成功的信号。
 		<-leaderMigrator.MigrationReady
 
-		// Start the migration lock.
+		// 启动迁移锁。
 		go leaderElectAndRun(c, id, electionChecker,
 			c.ComponentConfig.Generic.LeaderMigration.ResourceLock,
 			c.ComponentConfig.Generic.LeaderMigration.LeaderName,
@@ -320,7 +318,7 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 // 先让云实现完成 Initialize 并注入 informer，再依次启动已启用的控制器；
 // 每个控制器启动后短暂抖动，最后等待 informer 缓存同步并阻塞直到停机。
 func startControllers(ctx context.Context, cloud cloudprovider.Interface, controllerContext genericcontrollermanager.ControllerContext, c *cloudcontrollerconfig.CompletedConfig, stopCh <-chan struct{}, controllers map[string]InitFunc, healthzHandler *controllerhealthz.MutableHealthzHandler) error {
-	// Initialize the cloud provider with a reference to the clientBuilder
+	// 用 clientBuilder 初始化云 provider，使其能获取客户端。
 	cloud.Initialize(c.ClientBuilder, stopCh)
 	// 为云对象设置 informer。
 	// 仅部分云实现需要共享 informer；类型断言失败时静默跳过。
@@ -361,8 +359,7 @@ func startControllers(ctx context.Context, cloud cloudprovider.Interface, contro
 
 	healthzHandler.AddHealthChecker(controllerChecks...)
 
-	// If apiserver is not running we should wait for some time and fail only then. This is particularly
-	// important when we start apiserver and controller manager at the same time.
+	// apiserver 可能启动较慢，等待一段时间再判定失败；同时启动 apiserver 与控制器时需要这段缓冲。
 	if err := genericcontrollermanager.WaitForAPIServer(c.VersionedClient, 10*time.Second); err != nil {
 		klog.Fatalf("Failed to wait for apiserver being healthy: %v", err)
 	}
@@ -403,14 +400,10 @@ var (
 	// 当前为空：所有注册的 CCM 控制器默认启用，与历史行为保持一致。
 	ControllersDisabledByDefault = sets.NewString()
 
-	// AllWebhooks represents the list of all webhook options configured in
-	// this package.  This is empty because no webhooks are currently
-	// configured in this package.
+	// AllWebhooks 是本包配置的所有 webhook 列表；当前本包没有配置任何 webhook，故为空。
 	AllWebhooks = []string{}
 
-	// DisabledByDefaultWebhooks represents the list of webhooks which must be
-	// explicitly enabled. This is empty because no webhooks are currently
-	// configured in this package.
+	// DisabledByDefaultWebhooks 是必须显式启用的 webhook 列表；当前没有配置任何 webhook，故为空。
 	DisabledByDefaultWebhooks = []string{}
 )
 
@@ -446,21 +439,21 @@ func StartCloudNodeControllerWrapper(initContext ControllerInitContext, complete
 	}
 }
 
-// StartCloudNodeLifecycleControllerWrapper is used to take cloud config as input and start cloud node lifecycle controller
+// StartCloudNodeLifecycleControllerWrapper 接收云配置并启动 cloud node lifecycle controller。
 func StartCloudNodeLifecycleControllerWrapper(initContext ControllerInitContext, completedConfig *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface) InitFunc {
 	return func(ctx context.Context, controllerContext genericcontrollermanager.ControllerContext) (controller.Interface, bool, error) {
 		return startCloudNodeLifecycleController(ctx, initContext, controllerContext, completedConfig, cloud)
 	}
 }
 
-// StartServiceControllerWrapper is used to take cloud config as input and start service controller
+// StartServiceControllerWrapper 接收云配置并启动 Service 控制器。
 func StartServiceControllerWrapper(initContext ControllerInitContext, completedConfig *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface) InitFunc {
 	return func(ctx context.Context, controllerContext genericcontrollermanager.ControllerContext) (controller.Interface, bool, error) {
 		return startServiceController(ctx, initContext, controllerContext, completedConfig, cloud)
 	}
 }
 
-// StartRouteControllerWrapper is used to take cloud config as input and start route controller
+// StartRouteControllerWrapper 接收云配置并启动路由控制器。
 func StartRouteControllerWrapper(initContext ControllerInitContext, completedConfig *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface) InitFunc {
 	return func(ctx context.Context, controllerContext genericcontrollermanager.ControllerContext) (controller.Interface, bool, error) {
 		return startRouteController(ctx, initContext, controllerContext, completedConfig, cloud)
@@ -510,8 +503,7 @@ func CreateControllerContext(s *cloudcontrollerconfig.CompletedConfig, clientBui
 	metadataClient := metadata.NewForConfigOrDie(clientBuilder.ConfigOrDie("metadata-informers"))
 	metadataInformers := metadatainformer.NewSharedInformerFactory(metadataClient, ResyncPeriod(s)())
 
-	// If apiserver is not running we should wait for some time and fail only then. This is particularly
-	// important when we start apiserver and controller manager at the same time.
+	// apiserver 可能启动较慢，等待一段时间再判定失败；同时启动 apiserver 与控制器时需要这段缓冲。
 	if err := genericcontrollermanager.WaitForAPIServer(versionedClient, 10*time.Second); err != nil {
 		return genericcontrollermanager.ControllerContext{}, fmt.Errorf("failed to wait for apiserver being healthy: %v", err)
 	}

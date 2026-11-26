@@ -36,13 +36,13 @@ func (e *NotFoundError) Error() string {
 	return ""
 }
 
-// Downloader is the OpenAPI downloader type. It will try to download spec from /openapi/v3 and /openap/v3/<group>/<version> endpoints.
+// Downloader 是 OpenAPI 下载器，会尝试从 /openapi/v3 与 /openap/v3/<group>/<version> 端点拉取规范。
 // 下载器不持有连接或缓存，只把“向后端 handler 发请求并解析响应”这一步封装起来；
 // 聚合器可以在 APIService 变化时换掉 handler，而不必重建下载器。
 type Downloader struct {
 }
 
-// NewDownloader creates a new OpenAPI Downloader.
+// NewDownloader 创建一个新的 OpenAPI 下载器。
 func NewDownloader() Downloader {
 	return Downloader{}
 }
@@ -56,7 +56,7 @@ func (s *Downloader) handlerWithUser(handler http.Handler, info user.Info) http.
 	})
 }
 
-// OpenAPIV3Root downloads the OpenAPI V3 root document from an APIService
+// OpenAPIV3Root 从 APIService 下载 OpenAPI v3 根文档。
 // 根文档只列 group/version 到文档的链接，不含具体 schema；先取它能避免
 // 为一个根本不提供新发现文档的旧后端逐个请求子路径。
 func (s *Downloader) OpenAPIV3Root(handler http.Handler) (*handler3.OpenAPIV3Discovery, int, error) {

@@ -16,7 +16,7 @@ limitations under the License.
 
 package v1alpha1
 
-// ServiceControllerConfiguration contains elements describing ServiceController.
+// ServiceControllerConfiguration 包含描述 ServiceController 的配置项。
 type ServiceControllerConfiguration struct {
 	// concurrentServiceSyncs 是允许同时同步的服务数量。数值越大 = 服务管理响应越快，
 	// 但 CPU（和网络）负载也越高。

@@ -22,7 +22,7 @@ import (
 	apiregistrationv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
-// byPriority can be used in sort.Sort to sort specs with their priorities.
+// byPriority 可用于 sort.Sort，按优先级排列规范。
 //
 // 中文补充：OpenAPI 合并时，后合并的规范会覆盖先合并的同名路径/定义。
 // 排序因此决定了"谁的最后一句话说了算"：本地（delegate）放最后才能覆盖远端，
@@ -37,7 +37,7 @@ func (a byPriority) Swap(i, j int) {
 	a.apiServices[i], a.apiServices[j] = a.apiServices[j], a.apiServices[i]
 }
 func (a byPriority) Less(i, j int) bool {
-	// All local specs will come first
+	// 所有本地规范排在前面。
 	// 中文补充：local 与远端分两段，是为了让本地规范排在序列末尾、最后参与合并，
 	// 从而保住本地定义对聚合结果的最终话语权。
 	if a.apiServices[i].Spec.Service == nil && a.apiServices[j].Spec.Service != nil {
@@ -46,9 +46,9 @@ func (a byPriority) Less(i, j int) bool {
 	if a.apiServices[i].Spec.Service != nil && a.apiServices[j].Spec.Service == nil {
 		return false
 	}
-	// WARNING: This will result in not following priorities for local APIServices.
+	// 警告：这会导致本地 APIService 不按优先级排序。
 	if a.apiServices[i].Spec.Service == nil {
-		// Sort local specs with their name. This is the order in the delegation chain (aggregator first).
+		// 本地规范按名字排序，顺序与委托链一致（聚合器在前）。
 		return a.apiServices[i].Name < a.apiServices[j].Name
 	}
 	var iPriority, jPriority int32
@@ -60,10 +60,10 @@ func (a byPriority) Less(i, j int) bool {
 		jPriority = a.groupPriorities[a.apiServices[j].Spec.Group]
 	}
 	if iPriority != jPriority {
-		// Sort by priority, higher first
+		// 按优先级排序，高的在前。
 		return iPriority > jPriority
 	}
-	// Sort by service name.
+	// 按 Service 名字排序。
 	return a.apiServices[i].Name < a.apiServices[j].Name
 }
 

@@ -51,7 +51,7 @@ type testV3APIService struct {
 var _ http.Handler = testV3APIService{}
 
 func (h testV3APIService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Create an APIService with a handler for one group/version
+	// 创建一个只处理某个 group/version 的 APIService 及 handler。
 	if r.URL.Path == "/openapi/v3" {
 		group := &handler3.OpenAPIV3Discovery{
 			Paths: map[string]handler3.OpenAPIV3DiscoveryGroupVersion{
@@ -88,7 +88,7 @@ type testV2APIService struct{}
 var _ http.Handler = testV2APIService{}
 
 func (h testV2APIService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Create an APIService with a handler for one group/version
+	// 创建一个只处理某个 group/version 的 APIService 及 handler。
 	if r.URL.Path == "/openapi/v2" {
 		w.Write([]byte(`{"swagger":"2.0","info":{"title":"Kubernetes","version":"unversioned"}}`))
 		return
@@ -123,8 +123,7 @@ func TestV2APIService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A legacy APIService will not publish OpenAPI V3
-	// Ensure that we can still aggregate its V2 spec and convert it to V3.
+	// legacy APIService 不发布 OpenAPI v3，需确保其 v2 规范仍能被聚合并转换为 v3。
 	path, ok := groupVersionList.Paths["apis/group.example.com/v1"]
 	if !ok {
 		t.Error("Expected group.example.com/v1 to be in group version list")
@@ -140,7 +139,7 @@ func TestV2APIService(t *testing.T) {
 	apiServiceNames := specProxier.GetAPIServiceNames()
 	assert.ElementsMatch(t, []string{openAPIV2Converter, apiService.Name}, apiServiceNames)
 
-	// Ensure that OpenAPI v3 for legacy APIService is removed.
+	// 验证 legacy APIService 的 OpenAPI v3 已移除。
 	specProxier.RemoveAPIServiceSpec(apiService.Name)
 	data = sendReq(t, serveHandler, "/openapi/v3")
 	groupVersionList = handler3.OpenAPIV3Discovery{}
@@ -289,7 +288,7 @@ func TestOpenAPIRequestMetrics(t *testing.T) {
 		t.Error("Expected group.example.com/v1 to be in group version list")
 	}
 
-	// Metrics should be updated after requesting the root document.
+	// 请求根文档后指标应更新。
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(`
 # HELP apiserver_request_total [STABLE] Counter of apiserver requests broken out for each verb, dry run value, group, version, resource, scope, component, and HTTP response code.
 # TYPE apiserver_request_total counter
@@ -300,7 +299,7 @@ apiserver_request_total{code="200",component="",dry_run="",group="",resource="",
 
 	_ = sendReq(t, serveHandler, "/openapi/v3/apis/group.example.com/v1")
 
-	// Metrics should be updated after requesting OpenAPI for a group version.
+	// 请求某个 group/version 的 OpenAPI 后指标应更新。
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(`
 # HELP apiserver_request_total [STABLE] Counter of apiserver requests broken out for each verb, dry run value, group, version, resource, scope, component, and HTTP response code.
 # TYPE apiserver_request_total counter

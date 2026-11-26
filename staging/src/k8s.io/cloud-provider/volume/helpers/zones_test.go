@@ -28,7 +28,7 @@ import (
 // 合法输入应得到去空格后的集合。
 func TestZonesToSet(t *testing.T) {
 	functionUnderTest := "ZonesToSet"
-	// First part: want an error
+	// 第一部分：期望报错
 	sliceOfZones := []string{"", ",", "us-east-1a, , us-east-1d", ", us-west-1b", "us-west-2b,"}
 	for _, zones := range sliceOfZones {
 		if got, err := ZonesToSet(zones); err == nil {
@@ -36,7 +36,7 @@ func TestZonesToSet(t *testing.T) {
 		}
 	}
 
-	// Second part: want no error
+	// 第二部分：期望成功
 	tests := []struct {
 		zones string
 		want  sets.String
@@ -68,9 +68,9 @@ func TestZonesToSet(t *testing.T) {
 // 用例中的注释记录了期望值背后的散列推导，便于人工核对偏移规则。
 func TestChooseZonesForVolume(t *testing.T) {
 	checkFnv32(t, "henley", 1180403676)
-	// 1180403676 mod 3 == 0, so the offset from "henley" is 0, which makes it easier to verify this by inspection
+	// 1180403676 mod 3 == 0，"henley" 的偏移为 0，便于人工核对
 
-	// A few others
+	// 其他几个哈希值
 	checkFnv32(t, "henley-", 2652299129)
 	checkFnv32(t, "henley-a", 1459735322)
 	checkFnv32(t, "", 2166136261)
@@ -81,7 +81,7 @@ func TestChooseZonesForVolume(t *testing.T) {
 		NumZones   uint32
 		Expected   sets.String
 	}{
-		// Test for PVC names that don't have a dash
+		// 不含连字符的 PVC 名
 		{
 			Zones:      sets.NewString("a", "b", "c"),
 			VolumeName: "henley",
@@ -94,7 +94,7 @@ func TestChooseZonesForVolume(t *testing.T) {
 			NumZones:   2,
 			Expected:   sets.NewString("a" /* hash("henley") == 0 */, "b"),
 		},
-		// Tests for PVC names that end in - number, but don't look like statefulset PVCs
+		// 以 -数字 结尾、但并非 StatefulSet PVC 的名字
 		{
 			Zones:      sets.NewString("a", "b", "c"),
 			VolumeName: "henley-0",
@@ -155,7 +155,7 @@ func TestChooseZonesForVolume(t *testing.T) {
 			NumZones:   2,
 			Expected:   sets.NewString("c" /* hash("henley") + 4 + 4(startingIndex) == 8 */, "a"),
 		},
-		// Tests for PVC names that are edge cases
+		// 边界情况的 PVC 名
 		{
 			Zones:      sets.NewString("a", "b", "c"),
 			VolumeName: "henley-",
@@ -192,14 +192,14 @@ func TestChooseZonesForVolume(t *testing.T) {
 			NumZones:   2,
 			Expected:   sets.NewString("a" /* hash("") + 1 + 1(startingIndex) == 2166136261 + 1 + 1 === 3 mod 3 = 0 */, "b"),
 		},
-		// Tests for PVC names for simple StatefulSet cases
+		// 简单 StatefulSet 场景的 PVC 名
 		{
 			Zones:      sets.NewString("a", "b", "c"),
 			VolumeName: "medium-henley-1",
 			NumZones:   1,
 			Expected:   sets.NewString("b" /* hash("henley") + 1 == 1 */),
 		},
-		// Tests for PVC names for simple StatefulSet cases
+		// 简单 StatefulSet 场景的 PVC 名
 		{
 			Zones:      sets.NewString("a", "b", "c"),
 			VolumeName: "medium-henley-1",
@@ -266,7 +266,7 @@ func TestChooseZonesForVolume(t *testing.T) {
 			NumZones:   2,
 			Expected:   sets.NewString("c" /* hash("henley") + 4 + 4(startingIndex) == 8 === 2 mod 3 */, "a"),
 		},
-		// Tests for statefulsets (or claims) with dashes in the names
+		// 名字里带连字符的 StatefulSet（或 claim）
 		{
 			Zones:      sets.NewString("a", "b", "c"),
 			VolumeName: "medium-alpha-henley-2",
@@ -303,7 +303,7 @@ func TestChooseZonesForVolume(t *testing.T) {
 			NumZones:   2,
 			Expected:   sets.NewString("c" /* hash("henley") + 4 + 4(startingIndex) == 8 === 2 mod 3 */, "a"),
 		},
-		// Tests for statefulsets name ending in -
+		// 以连字符结尾的 StatefulSet 名
 		{
 			Zones:      sets.NewString("a", "b", "c"),
 			VolumeName: "medium-henley--2",
@@ -400,7 +400,7 @@ func TestChooseZonesForVolume(t *testing.T) {
 			NumZones:   3,
 			Expected:   sets.NewString("a" /* hash("henley") == 0 + 3 + 6(startingIndex) */, "b", "c"),
 		},
-		// Test for no zones
+		// 无可用 zone 的情况
 		{
 			Zones:      sets.NewString(),
 			VolumeName: "henley-1",
@@ -436,7 +436,7 @@ func TestSelectZoneForVolume(t *testing.T) {
 	nodeWithNoLabels := &v1.Node{}
 
 	tests := []struct {
-		// Parameters passed by test to SelectZoneForVolume
+		// 传给 SelectZoneForVolume 的参数
 		Name              string
 		ZonePresent       bool
 		Zone              string
@@ -445,18 +445,18 @@ func TestSelectZoneForVolume(t *testing.T) {
 		ZonesWithNodes    string
 		Node              *v1.Node
 		AllowedTopologies []v1.TopologySelectorTerm
-		// Expectations around returned zone from SelectZoneForVolume
+		// 对 SelectZoneForVolume 返回 zone 的期望
 		Reject             bool   // expect error due to validation failing
 		ExpectSpecificZone bool   // expect returned zone to specifically match a single zone (rather than one from a set)
 		ExpectedZone       string // single zone that should perfectly match returned zone (requires ExpectSpecificZone to be true)
 		ExpectedZones      string // set of zones one of whose members should match returned zone (requires ExpectSpecificZone to be false)
 	}{
-		// NEGATIVE TESTS
+		// 反面用例
 
-		// Zone and Zones are both specified [Fail]
-		// [1] Node irrelevant
-		// [2] Zone and Zones parameters presents
-		// [3] AllowedTopologies irrelevant
+		// Zone 与 Zones 同时指定 [Fail]
+		// [1] Node 无关
+		// [2] 同时给出 Zone 与 Zones 参数
+		// [3] AllowedTopologies 无关
 		{
 			Name:         "Nil_Node_with_Zone_Zones_parameters_present",
 			ZonePresent:  true,
@@ -466,20 +466,20 @@ func TestSelectZoneForVolume(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Node has no zone labels [Fail]
-		// [1] Node with no zone labels
-		// [2] Zone/Zones parameter irrelevant
-		// [3] AllowedTopologies irrelevant
+		// Node 没有 zone 标签 [Fail]
+		// [1] Node 没有 zone 标签
+		// [2] Zone/Zones 参数无关
+		// [3] AllowedTopologies 无关
 		{
 			Name:   "Node_with_no_Zone_labels",
 			Node:   nodeWithNoLabels,
 			Reject: true,
 		},
 
-		// Node with Zone labels as well as Zone parameter specified [Fail]
-		// [1] Node with zone labels
-		// [2] Zone parameter specified
-		// [3] AllowedTopologies irrelevant
+		// Node 有 zone 标签且指定了 Zone 参数 [Fail]
+		// [1] Node 带 zone 标签
+		// [2] 指定了 Zone 参数
+		// [3] AllowedTopologies 无关
 		{
 			Name:        "Node_with_Zone_labels_and_Zone_parameter_present",
 			Node:        nodeWithGATopologyLabels,
@@ -488,10 +488,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			Reject:      true,
 		},
 
-		// Node with Zone labels as well as Zones parameter specified [Fail]
-		// [1] Node with zone labels
-		// [2] Zones parameter specified
-		// [3] AllowedTopologies irrelevant
+		// Node 有 zone 标签且指定了 Zones 参数 [Fail]
+		// [1] Node 带 zone 标签
+		// [2] 指定了 Zones 参数
+		// [3] AllowedTopologies 无关
 		{
 			Name:         "Node_with_Zone_labels_and_Zones_parameter_present",
 			Node:         nodeWithGATopologyLabels,
@@ -500,10 +500,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Zone parameter as well as AllowedTopologies specified [Fail]
-		// [1] nil Node
-		// [2] Zone parameter specified
-		// [3] AllowedTopologies specified
+		// Zone 参数与 AllowedTopologies 同时指定 [Fail]
+		// [1] Node 为 nil
+		// [2] 指定了 Zone 参数
+		// [3] 指定了 AllowedTopologies
 		{
 			Name:        "Nil_Node_and_Zone_parameter_and_Allowed_Topology_term",
 			Node:        nil,
@@ -522,10 +522,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// Zones parameter as well as AllowedTopologies specified [Fail]
-		// [1] nil Node
-		// [2] Zones parameter specified
-		// [3] AllowedTopologies specified
+		// Zones 参数与 AllowedTopologies 同时指定 [Fail]
+		// [1] Node 为 nil
+		// [2] 指定了 Zones 参数
+		// [3] 指定了 AllowedTopologies
 		{
 			Name:         "Nil_Node_and_Zones_parameter_and_Allowed_Topology_term",
 			Node:         nil,
@@ -544,10 +544,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// Key specified in AllowedTopologies is not LabelTopologyZone [Fail]
-		// [1] nil Node
-		// [2] no Zone/Zones parameter
-		// [3] AllowedTopologies with invalid key specified
+		// AllowedTopologies 中的 key 不是 LabelTopologyZone [Fail]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 中使用了非法 key
 		{
 			Name: "Nil_Node_and_Invalid_Allowed_Topology_Key",
 			Node: nil,
@@ -568,10 +568,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// AllowedTopologies without keys specifying LabelTopologyZone [Fail]
-		// [1] nil Node
-		// [2] no Zone/Zones parameter
-		// [3] Invalid AllowedTopologies
+		// AllowedTopologies 未包含 LabelTopologyZone key [Fail]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 非法
 		{
 			Name: "Nil_Node_and_Invalid_AllowedTopologies",
 			Node: nil,
@@ -583,12 +583,12 @@ func TestSelectZoneForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// POSITIVE TESTS WITH VolumeScheduling ENABLED
+		// 启用 VolumeScheduling 时的正面用例
 
-		// Select zone from active zones [Pass]
-		// [1] nil Node
-		// [2] no Zone parameter specified
-		// [3] no AllowedTopologies
+		// 从活跃 zone 中选择 [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone 参数
+		// [3] 未指定 AllowedTopologies
 		{
 			Name:           "Nil_Node_and_No_Zone_Zones_parameter_and_no_Allowed_topologies_and_VolumeScheduling_enabled",
 			Node:           nil,
@@ -597,10 +597,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZones:  "zoneX,zoneY",
 		},
 
-		// Select zone from single zone parameter [Pass]
-		// [1] nil Node
-		// [2] Zone parameter specified
-		// [3] no AllowedTopology specified
+		// 从单个 zone 参数中选择 [Pass]
+		// [1] Node 为 nil
+		// [2] 指定了 Zone 参数
+		// [3] 未指定 AllowedTopology
 		{
 			Name:               "Nil_Node_and_Zone_parameter_present_and_VolumeScheduling_enabled",
 			ZonePresent:        true,
@@ -611,10 +611,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZone:       "zoneX",
 		},
 
-		// Select zone from zones parameter [Pass]
-		// [1] nil Node
-		// [2] Zones parameter specified
-		// [3] no AllowedTopology
+		// 从 zones 参数中选择 [Pass]
+		// [1] Node 为 nil
+		// [2] 指定了 Zones 参数
+		// [3] 未指定 AllowedTopology
 		{
 			Name:          "Nil_Node_and_Zones_parameter_present_and_VolumeScheduling_enabled",
 			ZonesPresent:  true,
@@ -624,10 +624,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZones: "zoneX,zoneY",
 		},
 
-		// Select zone from node ga label [Pass]
-		// [1] Node with zone labels
-		// [2] no zone/zones parameters
-		// [3] no AllowedTopology
+		// 从节点 GA 标签选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 zone/zones 参数
+		// [3] 未指定 AllowedTopology
 		{
 			Name:               "Node_with_GA_Zone_labels_and_VolumeScheduling_enabled",
 			Node:               nodeWithGATopologyLabels,
@@ -636,10 +636,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZone:       "zoneX",
 		},
 
-		// Select zone from node beta label [Pass]
-		// [1] Node with zone labels
-		// [2] no zone/zones parameters
-		// [3] no AllowedTopology
+		// 从节点 beta 标签选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 zone/zones 参数
+		// [3] 未指定 AllowedTopology
 		{
 			Name:               "Node_with_Beta_Zone_labels_and_VolumeScheduling_enabled",
 			Node:               nodeWithBetaTopologyLabels,
@@ -648,10 +648,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZone:       "zoneY",
 		},
 
-		// Select zone from node label [Pass]
-		// [1] Node with zone labels
-		// [2] no Zone/Zones parameters
-		// [3] AllowedTopology with single term with multiple values specified (ignored)
+		// 从节点标签选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopology 单个 term 多值（忽略）
 		{
 			Name: "Node_with_Zone_labels_and_Multiple_Allowed_Topology_values_and_VolumeScheduling_enabled",
 			Node: nodeWithGATopologyLabels,
@@ -670,10 +670,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZone:       "zoneX",
 		},
 
-		// Select Zone from AllowedTopologies [Pass]
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with single term with multiple values specified
+		// 从 AllowedTopologies 选择 zone [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 单个 term 多值
 		{
 			Name: "Nil_Node_with_Multiple_Allowed_Topology_values_and_VolumeScheduling_enabled",
 			Node: nil,
@@ -691,10 +691,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZones: "zoneX,zoneY",
 		},
 
-		// Select Zone from AllowedTopologies using Beta labels [Pass]
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with single term with multiple values specified
+		// 用 beta 标签从 AllowedTopologies 选择 zone [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 单个 term 多值
 		{
 			Name: "Nil_Node_with_Multiple_Allowed_Topology_values_Beta_label_and_VolumeScheduling_enabled",
 			Node: nil,
@@ -712,10 +712,10 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZones: "zoneX,zoneY",
 		},
 
-		// Select zone from AllowedTopologies [Pass]
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with multiple terms specified
+		// 从 AllowedTopologies 选择 zone [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 多个 term
 		{
 			Name: "Nil_Node_and_Multiple_Allowed_Topology_terms_and_VolumeScheduling_enabled",
 			Node: nil,
@@ -741,11 +741,11 @@ func TestSelectZoneForVolume(t *testing.T) {
 			ExpectedZones: "zoneX,zoneY",
 		},
 
-		// Select Zone from AllowedTopologies [Pass]
-		// Note: Dual replica with same AllowedTopologies will fail: Nil_Node_and_Single_Allowed_Topology_term_value_and_Dual_replicas
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with single term and value specified
+		// 从 AllowedTopologies 选择 zone [Pass]
+		// 注意：双副本配同一 AllowedTopologies 会失败，见用例 Nil_Node_and_Single_Allowed_Topology_term_value_and_Dual_replicas
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 单个 term 与值
 		{
 			Name: "Nil_Node_and_Single_Allowed_Topology_term_value_and_VolumeScheduling_enabled",
 			Node: nil,
@@ -826,7 +826,7 @@ func TestSelectZonesForVolume(t *testing.T) {
 	nodeWithNoLabels := &v1.Node{}
 
 	tests := []struct {
-		// Parameters passed by test to SelectZonesForVolume
+		// 传给 SelectZonesForVolume 的参数
 		Name              string
 		ReplicaCount      uint32
 		ZonePresent       bool
@@ -836,21 +836,21 @@ func TestSelectZonesForVolume(t *testing.T) {
 		ZonesWithNodes    string
 		Node              *v1.Node
 		AllowedTopologies []v1.TopologySelectorTerm
-		// Expectations around returned zones from SelectZonesForVolume
+		// 对 SelectZonesForVolume 返回 zone 集合的期望
 		Reject              bool   // expect error due to validation failing
 		ExpectSpecificZones bool   // expect set of returned zones to be equal to ExpectedZones (rather than subset of ExpectedZones)
 		ExpectedZones       string // set of zones that is a superset of returned zones or equal to returned zones (if ExpectSpecificZones is set)
 		ExpectSpecificZone  bool   // expect set of returned zones to include ExpectedZone as a member
 		ExpectedZone        string // zone that should be a member of returned zones
 	}{
-		// NEGATIVE TESTS
+		// 反面用例
 
-		// Zone and Zones are both specified [Fail]
-		// [1] Node irrelevant
-		// [2] Zone and Zones parameters presents
-		// [3] AllowedTopologies irrelevant
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// Zone 与 Zones 同时指定 [Fail]
+		// [1] Node 无关
+		// [2] 同时给出 Zone 与 Zones 参数
+		// [3] AllowedTopologies 无关
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Nil_Node_with_Zone_Zones_parameters_present",
 			ZonePresent:  true,
@@ -860,24 +860,24 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Node has no zone labels [Fail]
-		// [1] Node with no zone labels
-		// [2] Zone/Zones parameter irrelevant
-		// [3] AllowedTopologies irrelevant
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// Node 没有 zone 标签 [Fail]
+		// [1] Node 没有 zone 标签
+		// [2] Zone/Zones 参数无关
+		// [3] AllowedTopologies 无关
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name:   "Node_with_no_Zone_labels",
 			Node:   nodeWithNoLabels,
 			Reject: true,
 		},
 
-		// Node with Zone labels as well as Zone parameter specified [Fail]
-		// [1] Node with zone labels
-		// [2] Zone parameter specified
-		// [3] AllowedTopologies irrelevant
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// Node 有 zone 标签且指定了 Zone 参数 [Fail]
+		// [1] Node 带 zone 标签
+		// [2] 指定了 Zone 参数
+		// [3] AllowedTopologies 无关
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name:        "Node_with_Zone_labels_and_Zone_parameter_present",
 			Node:        nodeWithZoneLabels,
@@ -886,12 +886,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject:      true,
 		},
 
-		// Node with Zone labels as well as Zones parameter specified [Fail]
-		// [1] Node with zone labels
-		// [2] Zones parameter specified
-		// [3] AllowedTopologies irrelevant
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// Node 有 zone 标签且指定了 Zones 参数 [Fail]
+		// [1] Node 带 zone 标签
+		// [2] 指定了 Zones 参数
+		// [3] AllowedTopologies 无关
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Node_with_Zone_labels_and_Zones_parameter_present",
 			Node:         nodeWithZoneLabels,
@@ -900,12 +900,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Zone parameter as well as AllowedTopologies specified [Fail]
-		// [1] nil Node
-		// [2] Zone parameter specified
-		// [3] AllowedTopologies specified
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// Zone 参数与 AllowedTopologies 同时指定 [Fail]
+		// [1] Node 为 nil
+		// [2] 指定了 Zone 参数
+		// [3] 指定了 AllowedTopologies
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name:        "Nil_Node_and_Zone_parameter_and_Allowed_Topology_term",
 			Node:        nil,
@@ -924,12 +924,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// Zones parameter as well as AllowedTopologies specified [Fail]
-		// [1] nil Node
-		// [2] Zones parameter specified
-		// [3] AllowedTopologies specified
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// Zones 参数与 AllowedTopologies 同时指定 [Fail]
+		// [1] Node 为 nil
+		// [2] 指定了 Zones 参数
+		// [3] 指定了 AllowedTopologies
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Nil_Node_and_Zones_parameter_and_Allowed_Topology_term",
 			Node:         nil,
@@ -948,12 +948,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// Key specified in AllowedTopologies is not LabelTopologyZone [Fail]
-		// [1] nil Node
-		// [2] no Zone/Zones parameter
-		// [3] AllowedTopologies with invalid key specified
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// AllowedTopologies 中的 key 不是 LabelTopologyZone [Fail]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 中使用了非法 key
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name: "Nil_Node_and_Invalid_Allowed_Topology_Key",
 			Node: nil,
@@ -974,12 +974,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// AllowedTopologies without keys specifying LabelTopologyZone [Fail]
-		// [1] nil Node
-		// [2] no Zone/Zones parameter
-		// [3] Invalid AllowedTopologies
-		// [4] ReplicaCount irrelevant
-		// [5] ZonesWithNodes irrelevant
+		// AllowedTopologies 未包含 LabelTopologyZone key [Fail]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 非法
+		// [4] ReplicaCount 无关
+		// [5] ZonesWithNodes 无关
 		{
 			Name: "Nil_Node_and_Invalid_AllowedTopologies",
 			Node: nil,
@@ -991,12 +991,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// Zone specified with ReplicaCount > 1 [Fail]
-		// [1] nil Node
-		// [2] Zone/Zones parameter specified
-		// [3] AllowedTopologies irrelevant
+		// ReplicaCount > 1 时指定 Zone [Fail]
+		// [1] Node 为 nil
+		// [2] 指定了 Zone/Zones 参数
+		// [3] AllowedTopologies 无关
 		// [4] ReplicaCount > 1
-		// [5] ZonesWithNodes irrelevant
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Zone_and_Replicas_mismatched",
 			Node:         nil,
@@ -1006,12 +1006,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Not enough zones in Zones parameter to satisfy ReplicaCount [Fail]
-		// [1] nil Node
-		// [2] Zone/Zones parameter specified
-		// [3] AllowedTopologies irrelevant
-		// [4] ReplicaCount > zones
-		// [5] ZonesWithNodes irrelevant
+		// Zones 参数中的 zone 不足以满足 ReplicaCount [Fail]
+		// [1] Node 为 nil
+		// [2] 指定了 Zone/Zones 参数
+		// [3] AllowedTopologies 无关
+		// [4] ReplicaCount 超过 zone 数
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Zones_and_Replicas_mismatched",
 			Node:         nil,
@@ -1021,12 +1021,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Not enough zones in ZonesWithNodes to satisfy ReplicaCount [Fail]
-		// [1] nil Node
-		// [2] no Zone/Zones parameter specified
-		// [3] AllowedTopologies irrelevant
-		// [4] ReplicaCount > ZonesWithNodes
-		// [5] ZonesWithNodes specified but not enough
+		// ZonesWithNodes 中的 zone 不足以满足 ReplicaCount [Fail]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 无关
+		// [4] ReplicaCount 超过 ZonesWithNodes 数
+		// [5] 指定了 ZonesWithNodes 但数量不足
 		{
 			Name:           "Zones_and_Replicas_mismatched",
 			Node:           nil,
@@ -1035,12 +1035,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject:         true,
 		},
 
-		// Not enough zones in AllowedTopologies to satisfy ReplicaCount [Fail]
-		// [1] nil Node
-		// [2] Zone/Zones parameter specified
-		// [3] Invalid AllowedTopologies
-		// [4] ReplicaCount > zones
-		// [5] ZonesWithNodes irrelevant
+		// AllowedTopologies 中的 zone 不足以满足 ReplicaCount [Fail]
+		// [1] Node 为 nil
+		// [2] 指定了 Zone/Zones 参数
+		// [3] AllowedTopologies 非法
+		// [4] ReplicaCount 超过 zone 数
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "AllowedTopologies_and_Replicas_mismatched",
 			Node:         nil,
@@ -1058,14 +1058,14 @@ func TestSelectZonesForVolume(t *testing.T) {
 			Reject: true,
 		},
 
-		// POSITIVE TESTS
+		// 正面用例
 
-		// Select zones from zones parameter [Pass]
-		// [1] nil Node (Node irrelevant)
-		// [2] Zones parameter specified
-		// [3] no AllowedTopologies
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 从 zones 参数中选择多个 zone [Pass]
+		// [1] Node 为 nil（与 Node 无关）
+		// [2] 指定了 Zones 参数
+		// [3] 未指定 AllowedTopologies
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:          "Zones_parameter_Dual_replica_Superset",
 			ZonesPresent:  true,
@@ -1075,12 +1075,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones: "zoneW,zoneX,zoneY,zoneZ",
 		},
 
-		// Select zones from zones parameter [Pass]
-		// [1] nil Node (Node irrelevant)
-		// [2] Zones parameter specified
-		// [3] no AllowedTopologies
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 从 zones 参数中选择多个 zone [Pass]
+		// [1] Node 为 nil（与 Node 无关）
+		// [2] 指定了 Zones 参数
+		// [3] 未指定 AllowedTopologies
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:                "Zones_parameter_Dual_replica_Match",
 			ZonesPresent:        true,
@@ -1091,12 +1091,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:       "zoneX,zoneY",
 		},
 
-		// Select zones from active zones with nodes [Pass]
-		// [1] nil Node (Node irrelevant)
-		// [2] no Zone parameter
-		// [3] no AllowedTopologies
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes specified
+		// 从集群中有节点的活跃 zone 中选择 [Pass]
+		// [1] Node 为 nil（与 Node 无关）
+		// [2] 未指定 Zone 参数
+		// [3] 未指定 AllowedTopologies
+		// [4] 指定了 ReplicaCount
+		// [5] 指定了 ZonesWithNodes
 		{
 			Name:           "Active_zones_Nil_node_Dual_replica_Superset",
 			ZonesWithNodes: "zoneW,zoneX,zoneY,zoneZ",
@@ -1105,12 +1105,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:  "zoneW,zoneX,zoneY,zoneZ",
 		},
 
-		// Select zones from active zones [Pass]
-		// [1] nil Node (Node irrelevant)
-		// [2] no Zone[s] parameter
-		// [3] no AllowedTopologies
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes specified
+		// 从活跃 zone 中选择多个 [Pass]
+		// [1] Node 为 nil（与 Node 无关）
+		// [2] 未指定 Zone[s] 参数
+		// [3] 未指定 AllowedTopologies
+		// [4] 指定了 ReplicaCount
+		// [5] 指定了 ZonesWithNodes
 		{
 			Name:                "Active_zones_Nil_node_Dual_replica_Match",
 			ZonesWithNodes:      "zoneW,zoneX",
@@ -1122,12 +1122,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:       "zoneW,zoneX",
 		},
 
-		// Select zones from node label and active zones [Pass]
-		// [1] Node with zone labels
-		// [2] no Zone parameter
-		// [3] no AllowedTopologies
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 结合节点标签与活跃 zone 选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 Zone 参数
+		// [3] 未指定 AllowedTopologies
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:               "Active_zones_Node_with_Zone_labels_Dual_replica_Superset",
 			Node:               nodeWithZoneLabels,
@@ -1139,12 +1139,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:      "zoneW,zoneX,zoneY,zoneZ",
 		},
 
-		// Select zones from node label and active zones [Pass]
-		// [1] Node with zone labels
-		// [2] no Zone[s] parameter
-		// [3] no AllowedTopologies
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 结合节点标签与活跃 zone 选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 Zone[s] 参数
+		// [3] 未指定 AllowedTopologies
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:                "Active_zones_Node_with_Zone_labels_Dual_replica_Match",
 			Node:                nodeWithZoneLabels,
@@ -1157,14 +1157,14 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:       "zoneW,zoneX",
 		},
 
-		// Select zones from node label and AllowedTopologies [Pass]
-		// [1] Node with zone labels
-		// [2] no Zone/Zones parameters
-		// [3] AllowedTopologies with single term with multiple values specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
-		// Note: the test Name suffix is used as the pvcname and it's suffix is important to influence ChooseZonesForVolume
-		// to NOT pick zoneX from AllowedTopologies if zoneFromNode is incorrectly set or not set at all.
+		// 结合节点标签与 AllowedTopologies 选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 单个 term 多值
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
+		// 注意：用例 Name 的后缀被当作 pvcname，会影响 ChooseZonesForVolume，
+		// 用于验证 zoneFromNode 设置错误或缺失时不会误选 AllowedTopologies 里的 zoneX。
 		{
 			Name:         "Node_with_Zone_labels_and_Multiple_Allowed_Topology_values_Superset-1",
 			Node:         nodeWithZoneLabels,
@@ -1185,12 +1185,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:      "zoneV,zoneW,zoneX,zoneY,zoneZ",
 		},
 
-		// Select zones from node label and AllowedTopologies [Pass]
-		// [1] Node with zone labels
-		// [2] no Zone/Zones parameters
-		// [3] AllowedTopologies with single term with multiple values specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 结合节点标签与 AllowedTopologies 选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 单个 term 多值
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Node_with_Zone_labels_and_Multiple_Allowed_Topology_values_Match",
 			Node:         nodeWithZoneLabels,
@@ -1212,12 +1212,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:       "zoneX,zoneY",
 		},
 
-		// Select Zones from AllowedTopologies [Pass]
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with single term with multiple values specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 从 AllowedTopologies 选择多个 zone [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 单个 term 多值
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Nil_Node_with_Multiple_Allowed_Topology_values_Superset",
 			Node:         nil,
@@ -1236,12 +1236,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones: "zoneX,zoneY,zoneZ",
 		},
 
-		// Select Zones from AllowedTopologies [Pass]
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with single term with multiple values specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 从 AllowedTopologies 选择多个 zone [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 单个 term 多值
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Nil_Node_with_Multiple_Allowed_Topology_values_Match",
 			Node:         nil,
@@ -1261,15 +1261,15 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:       "zoneX,zoneY",
 		},
 
-		// Select zones from node label and AllowedTopologies [Pass]
-		// [1] Node with zone labels
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with multiple terms specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
-		// Note: the test Name is used as the pvcname and it's hash is important to influence ChooseZonesForVolume
-		// to NOT pick zoneX from AllowedTopologies of 5 zones. If zoneFromNode (zoneX) is incorrectly set or
-		// not set at all in SelectZonesForVolume it will be detected.
+		// 结合节点标签与 AllowedTopologies 选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 多个 term
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
+		// 注意：用例 Name 被当作 pvcname，其哈希会影响 ChooseZonesForVolume，
+		// 用于验证 zoneFromNode（zoneX）设置错误时不会误选含 5 个 zone 的
+		// AllowedTopologies 中的 zoneX；缺失该字段时同样能被发现。
 		{
 			Name:         "Node_with_Zone_labels_and_Multiple_Allowed_Topology_terms_Superset-2",
 			Node:         nodeWithZoneLabels,
@@ -1322,12 +1322,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:      "zoneV,zoneW,zoneX,zoneY,zoneZ",
 		},
 
-		// Select zones from node label and AllowedTopologies [Pass]
-		// [1] Node with zone labels
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with multiple terms specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 结合节点标签与 AllowedTopologies 选择 [Pass]
+		// [1] Node 带 zone 标签
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 多个 term
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Node_with_Zone_labels_and_Multiple_Allowed_Topology_terms_Match",
 			Node:         nodeWithZoneLabels,
@@ -1357,12 +1357,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones:       "zoneX,zoneY",
 		},
 
-		// Select zones from AllowedTopologies [Pass]
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with multiple terms specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 从 AllowedTopologies 选择 zone [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 多个 term
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Nil_Node_and_Multiple_Allowed_Topology_terms_Superset",
 			Node:         nil,
@@ -1397,12 +1397,12 @@ func TestSelectZonesForVolume(t *testing.T) {
 			ExpectedZones: "zoneX,zoneY,zoneZ",
 		},
 
-		// Select zones from AllowedTopologies [Pass]
-		// [1] nil Node
-		// [2] no Zone/Zones parametes specified
-		// [3] AllowedTopologies with multiple terms specified
-		// [4] ReplicaCount specified
-		// [5] ZonesWithNodes irrelevant
+		// 从 AllowedTopologies 选择 zone [Pass]
+		// [1] Node 为 nil
+		// [2] 未指定 Zone/Zones 参数
+		// [3] AllowedTopologies 多个 term
+		// [4] 指定了 ReplicaCount
+		// [5] ZonesWithNodes 无关
 		{
 			Name:         "Nil_Node_and_Multiple_Allowed_Topology_terms_Match",
 			Node:         nil,
@@ -1497,21 +1497,21 @@ func TestSelectZonesForVolume(t *testing.T) {
 // 选中结果必须包含该 zone，其余 zone 仍按散列挑选。
 func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 	tests := []struct {
-		// Parameters passed by test to chooseZonesForVolumeIncludingZone
+		// 传给 chooseZonesForVolumeIncludingZone 的参数
 		Name          string
 		ReplicaCount  uint32
 		Zones         string
 		ZoneToInclude string
-		// Expectations around returned zones from chooseZonesForVolumeIncludingZone
+		// 对 chooseZonesForVolumeIncludingZone 返回 zone 集合的期望
 		Reject              bool   // expect error due to validation failing
 		ExpectSpecificZones bool   // expect set of returned zones to be equal to ExpectedZones (rather than subset of ExpectedZones)
 		ExpectedZones       string // set of zones that is a superset of returned zones or equal to returned zones (if ExpectSpecificZones is set)
 		ExpectSpecificZone  bool   // expect set of returned zones to include ExpectedZone as a member
 		ExpectedZone        string // zone that should be a member of returned zones
 	}{
-		// NEGATIVE TESTS
+		// 反面用例
 
-		// Not enough zones specified to fit ReplicaCount [Fail]
+		// 指定的 zone 不足以满足 ReplicaCount [Fail]
 		{
 			Name:         "Too_Few_Zones",
 			ReplicaCount: 2,
@@ -1519,7 +1519,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Invalid ReplicaCount [Fail]
+		// ReplicaCount 非法 [Fail]
 		{
 			Name:         "Zero_Replica_Count",
 			ReplicaCount: 0,
@@ -1527,7 +1527,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			Reject:       true,
 		},
 
-		// Invalid ZoneToInclude [Fail]
+		// ZoneToInclude 非法 [Fail]
 		{
 			Name:          "ZoneToInclude_Not_In_Zones_Single_replica_Dual_zones",
 			ReplicaCount:  1,
@@ -1536,7 +1536,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			Reject:        true,
 		},
 
-		// Invalid ZoneToInclude [Fail]
+		// ZoneToInclude 非法 [Fail]
 		{
 			Name:          "ZoneToInclude_Not_In_Zones_Single_replica_Single_zone",
 			ReplicaCount:  1,
@@ -1545,7 +1545,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			Reject:        true,
 		},
 
-		// Invalid ZoneToInclude [Fail]
+		// ZoneToInclude 非法 [Fail]
 		{
 			Name:          "ZoneToInclude_Not_In_Zones_Dual_replica_Multiple_zones",
 			ReplicaCount:  2,
@@ -1554,9 +1554,9 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			Reject:        true,
 		},
 
-		// POSITIVE TESTS
+		// 正面用例
 
-		// Pick any one zone from Zones
+		// 从 Zones 中任选一个 zone
 		{
 			Name:          "No_zones_to_include_and_Single_replica_and_Superset",
 			ReplicaCount:  1,
@@ -1565,7 +1565,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			ExpectedZones: "zoneX,zoneY,zoneZ",
 		},
 
-		// Pick any two zones from Zones
+		// 从 Zones 中任选两个 zone
 		{
 			Name:          "No_zones_to_include_and_Dual_replicas_and_Superset",
 			ReplicaCount:  2,
@@ -1574,7 +1574,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			ExpectedZones: "zoneW,zoneX,zoneY,zoneZ",
 		},
 
-		// Pick the two zones from Zones
+		// 选出 Zones 中的两个 zone
 		{
 			Name:                "No_zones_to_include_and_Dual_replicas_and_Match",
 			ReplicaCount:        2,
@@ -1584,7 +1584,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			ExpectedZones:       "zoneX,zoneY",
 		},
 
-		// Pick one zone from ZoneToInclude (other zones ignored)
+		// 只选 ZoneToInclude 中的 zone（忽略其他）
 		{
 			Name:                "Include_zone_and_Single_replica_and_Match",
 			ReplicaCount:        1,
@@ -1597,7 +1597,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			ExpectedZones:       "zoneX",
 		},
 
-		// Pick one zone from ZoneToInclude (other zones ignored)
+		// 只选 ZoneToInclude 中的 zone（忽略其他）
 		{
 			Name:                "Include_zone_and_single_replica_and_Match",
 			ReplicaCount:        1,
@@ -1610,7 +1610,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			ExpectedZones:       "zoneX",
 		},
 
-		// Pick one zone from Zones and the other from ZoneToInclude
+		// 一个来自 Zones，另一个来自 ZoneToInclude
 		{
 			Name:               "Include_zone_and_dual_replicas_and_Superset",
 			ReplicaCount:       2,
@@ -1622,7 +1622,7 @@ func TestChooseZonesForVolumeIncludingZone(t *testing.T) {
 			ExpectedZones:      "zoneW,zoneX,zoneY,zoneZ",
 		},
 
-		// Pick one zone from Zones and the other from ZoneToInclude
+		// 一个来自 Zones，另一个来自 ZoneToInclude
 		{
 			Name:                "Include_zone_and_dual_replicas_and_Match",
 			ReplicaCount:        2,

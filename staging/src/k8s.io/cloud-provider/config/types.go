@@ -39,23 +39,20 @@ type CloudControllerManagerConfiguration struct {
 	// 即与 kube-controller-manager 共享的云相关配置（云厂商名、集群名、CIDR 等）。
 	KubeCloudShared KubeCloudSharedConfiguration
 
-	// NodeController holds configuration for node controller
-	// related features.
+	// NodeController 保存节点控制器的相关配置。
 	NodeController nodeconfig.NodeControllerConfiguration
 
-	// NodeLifecycleController holds configuration for node lifecycle controller
-	// related features.
+	// NodeLifecycleController 保存节点生命周期控制器的相关配置。
 	NodeLifecycleController nodelifecycleconfig.NodeLifecycleControllerConfiguration
 
-	// ServiceControllerConfiguration holds configuration for ServiceController
-	// related features.
+	// ServiceControllerConfiguration 保存 ServiceController 的相关配置。
 	ServiceController serviceconfig.ServiceControllerConfiguration
 
 	// NodeStatusUpdateFrequency 是控制器更新节点 status 的频率。
 	// 周期性地从云厂商拉取节点地址并回写 Node.Status；过短会放大云 API 调用量。
 	NodeStatusUpdateFrequency metav1.Duration
 
-	// Webhook is the configuration for cloud-controller-manager hosted webhooks
+	// Webhook 是 cloud-controller-manager 内置 webhook 的配置。
 	Webhook WebhookConfiguration
 }
 
@@ -65,7 +62,7 @@ type CloudControllerManagerConfiguration struct {
 // 这些字段与 kube-controller-manager 的同名配置保持语义一致，
 // 便于同一套云配置在两个组件之间复用。
 type KubeCloudSharedConfiguration struct {
-	// CloudProviderConfiguration holds configuration for CloudProvider related features.
+	// CloudProviderConfiguration 保存云 provider 的相关配置。
 	CloudProvider CloudProviderConfiguration
 	// externalCloudVolumePlugin 指定 cloudProvider 为 "external" 时使用的插件；
 	// 目前由仓库内的云提供商用它把节点与卷控制放在 KCM 中处理。
@@ -86,21 +83,18 @@ type KubeCloudSharedConfiguration struct {
 	// clusterCIDR 是集群内 Pod 的 CIDR 范围。
 	// 逗号分隔的 Pod CIDR；route controller 用它界定自己负责的路由范围。
 	ClusterCIDR string
-	// AllocateNodeCIDRs enables CIDRs for Pods to be allocated and, if
-	// ConfigureCloudRoutes is true, to be set on the cloud provider.
+	// AllocateNodeCIDRs 开启为 Pod 分配 CIDR；若 ConfigureCloudRoutes 为真，
+	// 这些 CIDR 还会配置到云 provider 上。
 	AllocateNodeCIDRs bool
-	// CIDRAllocatorType determines what kind of pod CIDR allocator will be used.
+	// CIDRAllocatorType 决定使用哪种 Pod CIDR 分配器。
 	CIDRAllocatorType string
-	// configureCloudRoutes enables CIDRs allocated with allocateNodeCIDRs
-	// to be configured on the cloud provider.
+	// configureCloudRoutes 让 allocateNodeCIDRs 分配出的 CIDR 配置到云 provider 上。
 	ConfigureCloudRoutes bool
-	// nodeSyncPeriod is the period for syncing nodes from cloudprovider. Longer
-	// periods will result in fewer calls to cloud provider, but may delay addition
-	// of new nodes to cluster.
+	// nodeSyncPeriod 是从云 provider 同步节点的周期。周期越长调用越少，但新节点加入集群会被延迟。
 	NodeSyncPeriod metav1.Duration
 }
 
-// CloudProviderConfiguration contains basically elements about cloud provider.
+// CloudProviderConfiguration 包含云 provider 的基本配置项。
 type CloudProviderConfiguration struct {
 	// Name 是云服务的 provider 名称，对应 --cloud-provider；为空表示不使用任何云提供商。
 	Name string
@@ -109,8 +103,7 @@ type CloudProviderConfiguration struct {
 	CloudConfigFile string
 }
 
-// WebhookConfiguration contains configuration related to
-// cloud-controller-manager hosted webhooks
+// WebhookConfiguration 包含 cloud-controller-manager 内置 webhook 的相关配置。
 type WebhookConfiguration struct {
 	// Webhooks 是待启用或禁用的 webhook 列表
 	// '*' 表示“全部默认启用的 webhook”

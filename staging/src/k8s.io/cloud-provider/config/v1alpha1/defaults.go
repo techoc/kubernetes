@@ -43,8 +43,8 @@ func SetDefaults_CloudControllerManagerConfiguration(obj *CloudControllerManager
 		obj.NodeStatusUpdateFrequency = metav1.Duration{Duration: 5 * time.Minute}
 	}
 
-	// These defaults override the recommended defaults from the apimachineryconfigv1alpha1 package that are applied automatically
-	// These client-connection defaults are specific to the cloud-controller-manager
+	// 这里的默认值覆盖 apimachineryconfigv1alpha1 自动应用的推荐默认值；
+	// 客户端连接默认值针对 cloud-controller-manager 定制。
 	// CCM 的并发控制器数量少于 kube-controller-manager，因此放宽 QPS/Burst 上限，
 	// 但仍保留独立取值以避免与通用控制器管理器共享同一组默认值。
 	if obj.Generic.ClientConnection.QPS == 0 {
@@ -54,13 +54,13 @@ func SetDefaults_CloudControllerManagerConfiguration(obj *CloudControllerManager
 		obj.Generic.ClientConnection.Burst = 30
 	}
 
-	// Use the default RecommendedDefaultGenericControllerManagerConfiguration options
+	// 采用 RecommendedDefaultGenericControllerManagerConfiguration 的默认选项。
 	cmconfigv1alpha1.RecommendedDefaultGenericControllerManagerConfiguration(&obj.Generic)
-	// Use the default RecommendedDefaultServiceControllerConfiguration options
+	// 采用 RecommendedDefaultServiceControllerConfiguration 的默认选项。
 	serviceconfigv1alpha1.RecommendedDefaultServiceControllerConfiguration(&obj.ServiceController)
-	// Use the default RecommendedDefaultNodeControllerConfiguration options
+	// 采用 RecommendedDefaultNodeControllerConfiguration 的默认选项。
 	nodeconfigv1alpha1.RecommendedDefaultNodeControllerConfiguration(&obj.NodeController)
-	// Use the default RecommendedDefaultNodeLifecycleControllerConfiguration options
+	// 采用 RecommendedDefaultNodeLifecycleControllerConfiguration 的默认选项。
 	nodelifecycleconfigv1alpha1.RecommendedDefaultNodeLifecycleControllerConfiguration(&obj.NodeLifecycleController)
 }
 

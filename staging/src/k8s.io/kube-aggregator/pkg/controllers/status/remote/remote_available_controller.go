@@ -73,14 +73,14 @@ type AvailableConditionController struct {
 	apiServiceLister listers.APIServiceLister
 	apiServiceSynced cache.InformerSynced
 
-	// serviceLister is used to get the IP to create the transport for
+	// serviceLister 用于取 IP 以构造 transport。
 	serviceLister  v1listers.ServiceLister
 	servicesSynced cache.InformerSynced
 
 	endpointSliceGetter  proxy.EndpointSliceGetter
 	endpointSlicesSynced cache.InformerSynced
 
-	// proxyTransportDial specifies the dial function for creating unencrypted TCP connections.
+	// proxyTransportDial 指定创建明文 TCP 连接的拨号函数。
 	proxyTransportDial         *transport.DialHolder
 	proxyCurrentCertKeyContent certKeyFunc
 	serviceResolver            ServiceResolver
@@ -95,10 +95,10 @@ type AvailableConditionController struct {
 	// 反向索引：Service/EndpointSlice 事件到达时，通过它快速找到受影响的 APIService 入队，
 	// 而不必每次都遍历全部 APIService。
 	cache map[string]map[string][]string
-	// this lock protects operations on the above cache
+	// 该锁保护上面的缓存。
 	cacheLock sync.RWMutex
 
-	// metrics registered into legacy registry
+	// 注册到 legacy registry 的指标。
 	metrics *availabilitymetrics.Metrics
 }
 
@@ -294,7 +294,7 @@ func (c *AvailableConditionController) sync(key string) error {
 	// 结构性检查通过后，再真正发请求验证发现端点可达：前面的检查只能证明“配置上有后端”，
 	// 无法证明网络实际通畅，因此这两层缺一不可。
 	if apiService.Spec.Service != nil && c.serviceResolver != nil {
-		// if a particular transport was specified, use that otherwise build one
+		// 指定了 transport 就直接用，否则自行构造。
 		var proxyClientCert, proxyClientKey []byte
 		if c.proxyCurrentCertKeyContent != nil {
 			proxyClientCert, proxyClientKey = c.proxyCurrentCertKeyContent()
@@ -338,7 +338,7 @@ func (c *AvailableConditionController) sync(key string) error {
 
 				errCh := make(chan error, 1)
 				go func() {
-					// be sure to check a URL that the aggregated API server is required to serve
+					// 探测的 URL 必须是聚合 API server 保证提供的路径。
 					newReq, err := http.NewRequest("GET", discoveryURL.String(), nil)
 					if err != nil {
 						errCh <- err
@@ -352,7 +352,7 @@ func (c *AvailableConditionController) sync(key string) error {
 					resp, err := discoveryClient.Do(newReq)
 					if resp != nil {
 						resp.Body.Close()
-						// we should always been in the 200s or 300s
+						// 正常响应应落在 2xx 或 3xx。
 						if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 							errCh <- fmt.Errorf("bad status from %v: %d", discoveryURL, resp.StatusCode)
 							return
@@ -404,8 +404,7 @@ func (c *AvailableConditionController) sync(key string) error {
 			if updateErr != nil {
 				return updateErr
 			}
-			// force a requeue to make it very obvious that this will be retried at some point in the future
-			// along with other requeues done via service change, endpoint change, and resync
+			// 强制重新入队，让重试行为显而易见；它与 Service/Endpoint 变化和 resync 触发的重入队一起生效。
 			return lastError
 		}
 	}
@@ -439,7 +438,7 @@ func hasAvailableEndpoint(portName string, es ...*discoveryv1.EndpointSlice) boo
 // 每次同步都会刷新不可用 gauge（反映最新观测），但只有 status 真正变化时才发 UpdateStatus，
 // 避免在 30 秒 resync 下对 apiserver 产生大量无效写入。
 func (c *AvailableConditionController) updateAPIServiceStatus(originalAPIService, newAPIService *apiregistrationv1.APIService) (*apiregistrationv1.APIService, error) {
-	// update this metric on every sync operation to reflect the actual state
+	// 每次同步都更新该指标，以反映实际状态。
 	c.metrics.SetUnavailableGauge(newAPIService)
 
 	if equality.Semantic.DeepEqual(originalAPIService.Status, newAPIService.Status) {

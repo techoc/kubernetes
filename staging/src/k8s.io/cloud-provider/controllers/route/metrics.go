@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	// subsystem is the name of this subsystem used for prometheus metrics.
+	// subsystem 是本子系统在 Prometheus 指标中的名字。
 	subsystem = "route_controller"
 
-	// outcome label values for route_sync_total.
+	// route_sync_total 的 outcome 标签取值。
 	// 取值固定为三态，便于计算变更率（changed）与失败率（error）。
 	outcomeChanged = "changed"
 	outcomeNoop    = "noop"
@@ -53,9 +53,8 @@ func registerMetrics() {
 	})
 }
 
-// recordRouteSync increments route_sync_total for a completed reconcile,
-// deriving the outcome label from the reconcile error and whether any route
-// was created or deleted.
+// recordRouteSync 在一轮对账完成后累加 route_sync_total，
+// 根据对账错误以及是否有路由增删得出 outcome 标签值。
 // 错误优先于变更：一次部分成功的对账仍计为 error，避免掩盖失败。
 func recordRouteSync(routesChanged bool, err error, trigger string) {
 	outcome := outcomeNoop

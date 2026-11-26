@@ -41,7 +41,7 @@ const (
 
 // WebhookOptions 保存 webhook 的启用/禁用列表。
 type WebhookOptions struct {
-	// Webhooks is the list of webhook names that should be enabled or disabled
+	// Webhooks 是待启用或禁用的 webhook 名字列表。
 	Webhooks []string
 }
 
@@ -223,7 +223,7 @@ func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookC
 	if o.BindPort <= 0 {
 		return nil
 	}
-	// no need to bind to the address if there are no webhook enabled.
+	// 没有启用任何 webhook 时无需监听地址。
 	if len(webhookCfg.Webhooks) == 0 {
 		return nil
 	}
@@ -279,7 +279,7 @@ func (o *WebhookServingOptions) ApplyTo(cfg **server.SecureServingInfo, webhookC
 		return fmt.Errorf("failed to parse TLS version: %w", err)
 	}
 
-	// load SNI certs
+	// 加载 SNI 证书。
 	namedTLSCerts := make([]dynamiccertificates.SNICertKeyContentProvider, 0, len(o.SNICertKeys))
 	for _, nck := range o.SNICertKeys {
 		tlsCert, err := dynamiccertificates.NewDynamicSNIContentFromFiles("sni-serving-cert", nck.CertFile, nck.KeyFile, nck.Names...)
@@ -302,7 +302,7 @@ func createListener(addr string, config net.ListenConfig) (net.Listener, int, er
 		return nil, 0, fmt.Errorf("failed to listen on %v: %v", addr, err)
 	}
 
-	// get port
+	// 获取端口。
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		// 非 TCP 地址说明配置异常，关闭已建立的监听避免泄漏。

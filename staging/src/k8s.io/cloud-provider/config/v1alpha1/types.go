@@ -33,76 +33,68 @@ import (
 type CloudControllerManagerConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// Generic holds configuration for a generic controller-manager
+	// Generic 保存通用 controller-manager 的配置。
 	Generic cmconfigv1alpha1.GenericControllerManagerConfiguration
-	// KubeCloudSharedConfiguration holds configuration for shared related features
-	// both in cloud controller manager and kube-controller manager.
+	// KubeCloudSharedConfiguration 保存 cloud controller manager 与 kube-controller manager 共用的配置。
 	KubeCloudShared KubeCloudSharedConfiguration
-	// NodeController holds configuration for node controller
-	// related features.
+	// NodeController 保存节点控制器的相关配置。
 	NodeController nodeconfigv1alpha1.NodeControllerConfiguration
-	// NodeLifecycleController holds configuration for node lifecycle controller
-	// related features.
+	// NodeLifecycleController 保存节点生命周期控制器的相关配置。
 	NodeLifecycleController nodelifecycleconfigv1alpha1.NodeLifecycleControllerConfiguration
-	// ServiceControllerConfiguration holds configuration for ServiceController
-	// related features.
+	// ServiceControllerConfiguration 保存 ServiceController 的相关配置。
 	ServiceController serviceconfigv1alpha1.ServiceControllerConfiguration
-	// NodeStatusUpdateFrequency is the frequency at which the controller updates nodes' status
+	// NodeStatusUpdateFrequency 是控制器更新节点 status 的频率。
 	NodeStatusUpdateFrequency metav1.Duration
-	// Webhook is the configuration for cloud-controller-manager hosted webhooks
+	// Webhook 是 cloud-controller-manager 内置 webhook 的配置。
 	Webhook WebhookConfiguration
 }
 
-// KubeCloudSharedConfiguration contains elements shared by both kube-controller manager
-// and cloud-controller manager, but not genericconfig.
+// KubeCloudSharedConfiguration 包含 kube-controller-manager 与 cloud-controller-manager
+// 共用、但不属于 genericconfig 的配置项。
 type KubeCloudSharedConfiguration struct {
-	// CloudProviderConfiguration holds configuration for CloudProvider related features.
+	// CloudProviderConfiguration 保存云 provider 的相关配置。
 	CloudProvider CloudProviderConfiguration
-	// externalCloudVolumePlugin specifies the plugin to use when cloudProvider is "external".
-	// It is currently used by the in repo cloud providers to handle node and volume control in the KCM.
+	// externalCloudVolumePlugin 指定 cloudProvider 为 "external" 时使用的插件；
+	// 目前由仓库内的云提供商用它让 KCM 处理节点与卷控制。
 	ExternalCloudVolumePlugin string
-	// useServiceAccountCredentials indicates whether controllers should be run with
-	// individual service account credentials.
+	// useServiceAccountCredentials 表示控制器是否用各自独立的 service account 凭据运行。
 	UseServiceAccountCredentials bool
-	// run with untagged cloud instances
+	// 允许使用未打标签的云实例运行。
 	AllowUntaggedCloud bool
-	// routeReconciliationPeriod is the period for reconciling routes created for Nodes by cloud provider..
+	// routeReconciliationPeriod 是对账云 provider 为节点创建的路由的周期。
 	RouteReconciliationPeriod metav1.Duration
-	// clusterName is the instance prefix for the cluster.
+	// clusterName 是集群实例名的前缀，也是云资源归属的标识。
 	ClusterName string
-	// clusterCIDR is CIDR Range for Pods in cluster.
+	// clusterCIDR 是集群中 Pod 的 CIDR 范围。
 	ClusterCIDR string
-	// AllocateNodeCIDRs enables CIDRs for Pods to be allocated and, if
-	// ConfigureCloudRoutes is true, to be set on the cloud provider.
+	// AllocateNodeCIDRs 开启为 Pod 分配 CIDR；若 ConfigureCloudRoutes 为真，
+	// 这些 CIDR 还会配置到云 provider 上。
 	AllocateNodeCIDRs bool
-	// CIDRAllocatorType determines what kind of pod CIDR allocator will be used.
+	// CIDRAllocatorType 决定使用哪种 Pod CIDR 分配器。
 	CIDRAllocatorType string
 	// ConfigureCloudRoutes 会把通过 allocateNodeCIDRs 分配出来的 CIDR 配置到云提供商上。
 	//
 	// 使用指针以区分“未设置”和“显式设为 false”——默认值需要覆盖前者，
 	// 但不能抹掉用户明确关闭的选择。
 	ConfigureCloudRoutes *bool
-	// nodeSyncPeriod is the period for syncing nodes from cloudprovider. Longer
-	// periods will result in fewer calls to cloud provider, but may delay addition
-	// of new nodes to cluster.
+	// nodeSyncPeriod 是从云 provider 同步节点的周期。周期越长调用越少，但新节点加入集群会被延迟。
 	NodeSyncPeriod metav1.Duration
 }
 
-// CloudProviderConfiguration contains basically elements about cloud provider.
+// CloudProviderConfiguration 包含云 provider 的基本配置项。
 type CloudProviderConfiguration struct {
-	// Name is the provider for cloud services.
+	// Name 是云服务的 provider 名称。
 	Name string
-	// cloudConfigFile is the path to the cloud provider configuration file.
+	// cloudConfigFile 是云 provider 配置文件的路径。
 	CloudConfigFile string
 }
 
-// WebhookConfiguration contains configuration related to
-// cloud-controller-manager hosted webhooks
+// WebhookConfiguration 包含 cloud-controller-manager 内置 webhook 的相关配置。
 type WebhookConfiguration struct {
-	// Webhooks is the list of webhooks to enable or disable
-	// '*' means "all enabled by default webhooks"
-	// 'foo' means "enable 'foo'"
-	// '-foo' means "disable 'foo'"
-	// first item for a particular name wins
+	// Webhooks 是待启用或禁用的 webhook 列表：
+	// '*' 表示“所有默认启用的 webhook”
+	// 'foo' 表示“启用 foo”
+	// '-foo' 表示“禁用 foo”
+	// 同名条目以第一个为准。
 	Webhooks []string
 }

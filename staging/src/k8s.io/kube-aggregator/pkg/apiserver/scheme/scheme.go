@@ -26,10 +26,9 @@ import (
 // 全局 scheme 让 apiserver、REST 存储和客户端共用同一份类型注册表；
 // 序列化、反序列化和版本转换都依赖它，分散注册会导致各处可用的类型不一致。
 var (
-	// Scheme defines methods for serializing and deserializing API objects.
+	// Scheme 定义 API 对象的序列化与反序列化方法。
 	Scheme = runtime.NewScheme()
-	// Codecs provides methods for retrieving codecs and serializers for specific
-	// versions and content types.
+	// Codecs 按指定版本与内容类型提供 codec 与 serializer。
 	Codecs = serializer.NewCodecFactory(Scheme)
 )
 

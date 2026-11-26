@@ -28,9 +28,9 @@ var (
 	// SchemeGroupVersion 是注册这些对象所使用的 group/version。
 	// 内部版本使用 runtime.APIVersionInternal，只用于进程内传递，不对外序列化。
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 收集本 API 包需要执行的 scheme 初始化函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是把本 API 组与版本注册到 scheme 的全局入口。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 

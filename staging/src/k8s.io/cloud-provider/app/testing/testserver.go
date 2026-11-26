@@ -129,7 +129,7 @@ func StartTestServerWithOptions(t *testing.T,
 	cloudInitializer := func(config *config.CompletedConfig) cloudprovider.Interface {
 		// 捕获命令实际使用的配置，并通知启动流程可以继续。
 		capturedConfig = *config
-		// send signal to indicate the capturedConfig has been properly set
+		// 发信号表明 capturedConfig 已就绪。
 		close(configDoneCh)
 		cloudConfig := config.ComponentConfig.KubeCloudShared.CloudProvider
 		cloud, err := cloudprovider.InitCloudProvider(cloudConfig.Name, cloudConfig.CloudConfigFile)
@@ -248,7 +248,7 @@ func StartTestServerWithOptions(t *testing.T,
 		return result, fmt.Errorf("failed to wait for /healthz to return ok: %v", err)
 	}
 
-	// from here the caller must call tearDown
+	// 从这里开始调用方必须负责清理。
 	result.LoopbackClientConfig = capturedConfig.LoopbackClientConfig
 	result.Options = s
 	result.Config = &capturedConfig
@@ -275,7 +275,7 @@ func createListenerOnFreePort() (net.Listener, int, error) {
 		return nil, 0, err
 	}
 
-	// get port
+	// 获取端口。
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		ln.Close()

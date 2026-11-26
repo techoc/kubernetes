@@ -40,90 +40,83 @@ import (
 // 与返回类型不同（int64 / int / int32），语义完全一致。
 
 const (
-	// GB - GigaByte size
+	// GB 表示十进制千兆字节。
 	GB = 1000 * 1000 * 1000
-	// GiB - GibiByte size
+	// GiB 表示二进制千兆字节。
 	GiB = 1024 * 1024 * 1024
 
-	// MB - MegaByte size
+	// MB 表示十进制兆字节。
 	MB = 1000 * 1000
-	// MiB - MebiByte size
+	// MiB 表示二进制兆字节。
 	MiB = 1024 * 1024
 
-	// KB - KiloByte size
+	// KB 表示十进制千字节。
 	KB = 1000
-	// KiB - KibiByte size
+	// KiB 表示二进制千字节。
 	KiB = 1024
 )
 
-// RoundUpToGiB rounds up given quantity upto chunks of GiB
+// RoundUpToGiB 按 GiB 向上取整。
 func RoundUpToGiB(size resource.Quantity) (int64, error) {
 	return roundUpSizeInt64(size, GiB)
 }
 
-// RoundUpToMB rounds up given quantity to chunks of MB
+// RoundUpToMB 按 MB 向上取整。
 func RoundUpToMB(size resource.Quantity) (int64, error) {
 	return roundUpSizeInt64(size, MB)
 }
 
-// RoundUpToMiB rounds up given quantity upto chunks of MiB
+// RoundUpToMiB 按 MiB 向上取整。
 func RoundUpToMiB(size resource.Quantity) (int64, error) {
 	return roundUpSizeInt64(size, MiB)
 }
 
-// RoundUpToKB rounds up given quantity to chunks of KB
+// RoundUpToKB 按 KB 向上取整。
 func RoundUpToKB(size resource.Quantity) (int64, error) {
 	return roundUpSizeInt64(size, KB)
 }
 
-// RoundUpToKiB rounds up given quantity to chunks of KiB
+// RoundUpToKiB 按 KiB 向上取整。
 func RoundUpToKiB(size resource.Quantity) (int64, error) {
 	return roundUpSizeInt64(size, KiB)
 }
 
-// RoundUpToB rounds up given quantity to chunks of bytes
+// RoundUpToB 按字节向上取整（即原值）。
 func RoundUpToB(size resource.Quantity) (int64, error) {
 	return roundUpSizeInt64(size, 1)
 }
 
-// RoundUpToGiBInt rounds up given quantity upto chunks of GiB. It returns an
-// int instead of an int64 and an error if there's overflow
+// RoundUpToGiBInt 按 GiB 向上取整，返回 int；溢出时返回错误。
 func RoundUpToGiBInt(size resource.Quantity) (int, error) {
 	return roundUpSizeInt(size, GiB)
 }
 
-// RoundUpToMBInt rounds up given quantity to chunks of MB. It returns an
-// int instead of an int64 and an error if there's overflow
+// RoundUpToMBInt 按 MB 向上取整，返回 int；溢出时返回错误。
 func RoundUpToMBInt(size resource.Quantity) (int, error) {
 	return roundUpSizeInt(size, MB)
 }
 
-// RoundUpToMiBInt rounds up given quantity upto chunks of MiB. It returns an
-// int instead of an int64 and an error if there's overflow
+// RoundUpToMiBInt 按 MiB 向上取整，返回 int；溢出时返回错误。
 func RoundUpToMiBInt(size resource.Quantity) (int, error) {
 	return roundUpSizeInt(size, MiB)
 }
 
-// RoundUpToKBInt rounds up given quantity to chunks of KB. It returns an
-// int instead of an int64 and an error if there's overflow
+// RoundUpToKBInt 按 KB 向上取整，返回 int；溢出时返回错误。
 func RoundUpToKBInt(size resource.Quantity) (int, error) {
 	return roundUpSizeInt(size, KB)
 }
 
-// RoundUpToKiBInt rounds up given quantity upto chunks of KiB. It returns an
-// int instead of an int64 and an error if there's overflow
+// RoundUpToKiBInt 按 KiB 向上取整，返回 int；溢出时返回错误。
 func RoundUpToKiBInt(size resource.Quantity) (int, error) {
 	return roundUpSizeInt(size, KiB)
 }
 
-// RoundUpToGiBInt32 rounds up given quantity up to chunks of GiB. It returns an
-// int32 instead of an int64 and an error if there's overflow
+// RoundUpToGiBInt32 按 GiB 向上取整，返回 int32；溢出时返回错误。
 func RoundUpToGiBInt32(size resource.Quantity) (int32, error) {
 	return roundUpSizeInt32(size, GiB)
 }
 
-// roundUpSizeInt calculates how many allocation units are needed to accommodate
-// a volume of a given size. It returns an int and an error if there's overflow
+// roundUpSizeInt 计算容纳给定容量所需的分配单元数，返回 int；溢出时返回错误。
 func roundUpSizeInt(size resource.Quantity, allocationUnitBytes int64) (int, error) {
 	if bits.UintSize == 32 {
 		res, err := roundUpSizeInt32(size, allocationUnitBytes)
@@ -148,15 +141,12 @@ func roundUpSizeInt32(size resource.Quantity, allocationUnitBytes int64) (int32,
 	return int32(roundedUpInt32), nil
 }
 
-// roundUpSizeInt64 calculates how many allocation units are needed to accommodate
-// a volume of a given size. It returns an int64 and an error if there's overflow
+// roundUpSizeInt64 计算容纳给定容量所需的分配单元数，返回 int64；溢出时返回错误。
 func roundUpSizeInt64(size resource.Quantity, allocationUnitBytes int64) (int64, error) {
-	// Use CmpInt64() to find out if the value of "size" would overflow an
-	// int64 and therefore have Value() return a wrong result. Then, retrieve
-	// the value as int64 and perform the rounding.
-	// It's not convenient to use AsScale() and related functions as they don't
-	// support BinarySI format, nor can we use AsInt64() directly since it's
-	// only implemented for int64 scaled numbers (int64Amount).
+	// 先用 CmpInt64() 判断 size 是否超出 int64，否则 Value() 的结果不可信；
+	// 确认后再按 int64 取值并舍入。
+	// 不用 AsScale() 等函数是因为它们不支持 BinarySI 格式；也不能直接用 AsInt64()，
+	// 它只实现了 int64 缩放数（int64Amount）。
 
 	// CmpInt64() 在被比较的量大于 MaxInt64 时实际上返回 0，因此 >= 0 同时覆盖
 	// “等于 MaxInt64”与“溢出”两种情况；此时 Value()

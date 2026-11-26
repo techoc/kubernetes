@@ -59,7 +59,7 @@ type handlerDeprecatedTest struct {
 var _ http.Handler = handlerDeprecatedTest{}
 
 func (h handlerDeprecatedTest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// old server returns 403 on new endpoint
+	// 旧 server 对新端点返回 403。
 	if r.URL.Path == "/openapi/v2" {
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -99,21 +99,21 @@ func assertDownloadedSpec(actualSpec *spec.Swagger, actualEtag string, err error
 func TestDownloadOpenAPISpec(t *testing.T) {
 	s := Downloader{}
 
-	// Test with no eTag
+	// 不带 eTag 的情况。
 	actualSpec, actualEtag, _, err := s.Download(handlerTest{data: []byte("{\"id\": \"test\"}")}, "")
 	assert.NoError(t, assertDownloadedSpec(actualSpec, actualEtag, err, "test", "\"6E8F849B434D4B98A569B9D7718876E9-356ECAB19D7FBE1336BABB1E70F8F3025050DE218BE78256BE81620681CFC9A268508E542B8B55974E17B2184BBFC8FFFAA577E51BE195D32B3CA2547818ABE4\""))
 
-	// Test with eTag
+	// 带 eTag 的情况。
 	actualSpec, actualEtag, _, err = s.Download(
 		handlerTest{data: []byte("{\"id\": \"test\"}"), etag: "etag_test"}, "")
 	assert.NoError(t, assertDownloadedSpec(actualSpec, actualEtag, err, "test", "etag_test"))
 
-	// Test not modified
+	// 内容未修改的情况。
 	actualSpec, actualEtag, _, err = s.Download(
 		handlerTest{data: []byte("{\"id\": \"test\"}"), etag: "etag_test"}, "etag_test")
 	assert.NoError(t, assertDownloadedSpec(actualSpec, actualEtag, err, "", "etag_test"))
 
-	// Test different eTags
+	// eTag 不同的情况。
 	actualSpec, actualEtag, _, err = s.Download(
 		handlerTest{data: []byte("{\"id\": \"test\"}"), etag: "etag_test1"}, "etag_test2")
 	assert.NoError(t, assertDownloadedSpec(actualSpec, actualEtag, err, "test", "etag_test1"))

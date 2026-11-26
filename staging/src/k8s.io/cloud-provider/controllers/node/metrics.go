@@ -54,7 +54,7 @@ var (
 
 var metricRegistration sync.Once
 
-// registerMetrics registers the metrics that are to be monitored.
+// registerMetrics 注册本控制器需要上报的指标。
 // 使用 sync.Once 保证重复创建控制器时不会因重复注册而 panic。
 func registerMetrics() {
 	metricRegistration.Do(func() {

@@ -31,12 +31,12 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // 分页、资源版本这些信息都挂在它上面。
 type APIServiceList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Items is the list of APIService
+	// Items 是 APIService 列表。
 	Items []APIService `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
@@ -46,13 +46,12 @@ type APIServiceList struct {
 // Port 用指针而不是 int32，是为了区分“没指定”和“指定端口 0”；
 // 默认值逻辑只在前者上落 443，后者则留给校验去拒绝。
 type ServiceReference struct {
-	// Namespace is the namespace of the service
+	// Namespace 是该 Service 所在的命名空间。
 	Namespace string `json:"namespace,omitempty" protobuf:"bytes,1,opt,name=namespace"`
-	// Name is the name of the service
+	// Name 是该 Service 的名字。
 	Name string `json:"name,omitempty" protobuf:"bytes,2,opt,name=name"`
-	// If specified, the port on the service that hosting webhook.
-	// Default to 443 for backward compatibility.
-	// `port` should be a valid port number (1-65535, inclusive).
+	// 若指定，则为承载 webhook 的 Service 端口，为向后兼容默认为 443。
+	// `port` 必须是合法端口号（1-65535，含端点）。
 	// +optional
 	Port *int32 `json:"port,omitempty" protobuf:"varint,3,opt,name=port"`
 }
@@ -64,43 +63,34 @@ type ServiceReference struct {
 // GroupPriorityMinimum 决定整个组的位置，VersionPriority 决定组内版本顺序。
 // 两个优先级都要求为正数，校验层会据此拒绝零值和负值。
 type APIServiceSpec struct {
-	// Service is a reference to the service for this API server.  It must communicate
-	// on port 443.
-	// If the Service is nil, that means the handling for the API groupversion is handled locally on this server.
-	// The call will simply delegate to the normal handler chain to be fulfilled.
+	// Service 是对该 API server 对应 Service 的引用，必须在 443 端口通信。
+	// Service 为 nil 表示该 GroupVersion 由本 server 本地处理，调用直接委托给普通 handler 链。
 	// +optional
 	Service *ServiceReference `json:"service,omitempty" protobuf:"bytes,1,opt,name=service"`
-	// Group is the API group name this server hosts
+	// Group 是该 server 承载的 API 组名。
 	Group string `json:"group,omitempty" protobuf:"bytes,2,opt,name=group"`
-	// Version is the API version this server hosts.  For example, "v1"
+	// Version 是该 server 承载的 API 版本，例如 "v1"。
 	Version string `json:"version,omitempty" protobuf:"bytes,3,opt,name=version"`
 
-	// InsecureSkipTLSVerify disables TLS certificate verification when communicating with this server.
-	// This is strongly discouraged.  You should use the CABundle instead.
+	// InsecureSkipTLSVerify 关闭与该 server 通信时的 TLS 证书校验，强烈不建议这样做，应改用 CABundle。
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty" protobuf:"varint,4,opt,name=insecureSkipTLSVerify"`
-	// CABundle is a PEM encoded CA bundle which will be used to validate an API server's serving certificate.
-	// If unspecified, system trust roots on the apiserver are used.
+	// CABundle 是 PEM 编码的 CA 包，用于校验 API server 的服务证书；未指定时使用 apiserver 的系统信任根。
 	// +listType=atomic
 	// +optional
 	CABundle []byte `json:"caBundle,omitempty" protobuf:"bytes,5,opt,name=caBundle"`
 
-	// GroupPriorityMinimum is the priority this group should have at least. Higher priority means that the group is preferred by clients over lower priority ones.
-	// Note that other versions of this group might specify even higher GroupPriorityMinimum values such that the whole group gets a higher priority.
-	// The primary sort is based on GroupPriorityMinimum, ordered highest number to lowest (20 before 10).
-	// The secondary sort is based on the alphabetical comparison of the name of the object.  (v1.bar before v1.foo)
-	// We'd recommend something like: *.k8s.io (except extensions) at 18000 and
-	// PaaSes (OpenShift, Deis) are recommended to be in the 2000s
+	// GroupPriorityMinimum 是该组至少应有的优先级，越高越受客户端偏好。
+	// 同组其他版本可能声明更高值，从而抬高整组优先级。
+	// 主排序按该值从大到小（20 在 10 前），次排序按对象名字母序（v1.bar 在 v1.foo 前）。
+	// 建议 *.k8s.io（extensions 除外）取 18000 左右，PaaS（OpenShift、Deis）取 2000 多。
 	GroupPriorityMinimum int32 `json:"groupPriorityMinimum" protobuf:"varint,7,opt,name=groupPriorityMinimum"`
 
-	// VersionPriority controls the ordering of this API version inside of its group.  Must be greater than zero.
-	// The primary sort is based on VersionPriority, ordered highest to lowest (20 before 10).
-	// Since it's inside of a group, the number can be small, probably in the 10s.
-	// In case of equal version priorities, the version string will be used to compute the order inside a group.
-	// If the version string is "kube-like", it will sort above non "kube-like" version strings, which are ordered
-	// lexicographically. "Kube-like" versions start with a "v", then are followed by a number (the major version),
-	// then optionally the string "alpha" or "beta" and another number (the minor version). These are sorted first
-	// by GA > beta > alpha (where GA is a version with no suffix such as beta or alpha), and then by comparing major
-	// version, then minor version. An example sorted list of versions:
+	// VersionPriority 控制该 API 版本在组内的排序，必须大于 0。
+	// 主排序按该值从大到小（20 在 10 前）；因只影响组内，数值取 10 量级即可。
+	// 值相同时按版本字符串排序："kube-like" 版本排在其他字符串之前，
+	// 后者按字典序。"kube-like" 以 "v" 开头，后跟主版本号，
+	// 可选再跟 "alpha"/"beta" 与次版本号；先按 GA > beta > alpha（GA 即无后缀），
+	// 再比主版本、次版本。例如排序结果：
 	// v10, v2, v1, v11beta2, v10beta3, v3beta1, v12alpha1, v11alpha2, foo1, foo10.
 	VersionPriority int32 `json:"versionPriority" protobuf:"varint,8,opt,name=versionPriority"`
 
@@ -117,10 +107,9 @@ type APIServiceSpec struct {
 // 这个类型在多个 API 组里都有同名定义，彼此独立，转换时靠显式映射而不是隐式相等。
 type ConditionStatus string
 
-// These are valid condition statuses. "ConditionTrue" means a resource is in the condition;
-// "ConditionFalse" means a resource is not in the condition; "ConditionUnknown" means kubernetes
-// can't decide if a resource is in the condition or not. In the future, we could add other
-// intermediate conditions, e.g. ConditionDegraded.
+// 以下是合法的 condition 状态。"ConditionTrue" 表示资源处于该状态；
+// "ConditionFalse" 表示不处于；"ConditionUnknown" 表示 kubernetes 无法判断。
+// 将来可能增加其他中间状态，例如 ConditionDegraded。
 const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
@@ -133,7 +122,7 @@ const (
 type APIServiceConditionType string
 
 const (
-	// Available indicates that the service exists and is reachable
+	// Available 表示 Service 存在且可达。
 	Available APIServiceConditionType = "Available"
 )
 
@@ -142,18 +131,17 @@ const (
 // Message 才是给人看的细节。控制器只在状态真正翻转时才刷新 LastTransitionTime，
 // 这样“为什么当前是这个状态”和“这个状态持续了多久”都能回答。
 type APIServiceCondition struct {
-	// Type is the type of the condition.
+	// Type 是 condition 的类型。
 	Type APIServiceConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=APIServiceConditionType"`
-	// Status is the status of the condition.
-	// Can be True, False, Unknown.
+	// Status 是 condition 的状态，可取 True、False、Unknown。
 	Status ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=ConditionStatus"`
-	// Last time the condition transitioned from one status to another.
+	// LastTransitionTime 是 condition 上次状态转换的时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,3,opt,name=lastTransitionTime"`
-	// Unique, one-word, CamelCase reason for the condition's last transition.
+	// Reason 是上次状态转换的原因，单个 CamelCase 单词。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
-	// Human-readable message indicating details about last transition.
+	// Message 是描述上次状态转换细节的人类可读消息。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
@@ -164,7 +152,7 @@ type APIServiceCondition struct {
 // 条件列表按 type 当主键做合并，而不是整体替换。这样多个控制器各写自己的条件时，
 // 不会互相把对方的条件覆盖掉。
 type APIServiceStatus struct {
-	// Current service state of apiService.
+	// Conditions 是 APIService 当前的服务状态。
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -188,13 +176,13 @@ type APIServiceStatus struct {
 // 两条更新路径互不干扰。
 type APIService struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
+	// 标准对象元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Spec contains information for locating and communicating with a server
+	// Spec 包含定位并与服务端通信所需的信息。
 	Spec APIServiceSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
-	// Status contains derived information about an API server
+	// Status 包含从 API server 派生出的信息。
 	Status APIServiceStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }

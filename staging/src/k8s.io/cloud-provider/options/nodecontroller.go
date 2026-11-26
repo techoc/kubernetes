@@ -52,8 +52,8 @@ func (o *NodeControllerOptions) ApplyTo(cfg *nodeconfig.NodeControllerConfigurat
 	}
 
 	cfg.ConcurrentNodeSyncs = o.ConcurrentNodeSyncs
-	// Concurrent node status updates used to be derived from the concurrent-node-syncs flag,
-	// so for backwards compatibility it will default to concurrent-node-syncs if concurrent-node-status-updates is not specified
+	// 节点状态并发更新数过去由 concurrent-node-syncs 推导；为兼容起见，
+	// 未显式指定 concurrent-node-status-updates 时仍沿用该值。
 	if o.ConcurrentNodeStatusUpdates > 0 {
 		cfg.ConcurrentNodeStatusUpdates = o.ConcurrentNodeStatusUpdates
 	} else {

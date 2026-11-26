@@ -341,7 +341,8 @@ func TestServiceGC(t *testing.T) {
 
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 
-	// Lookup size of cache
+	// 查看缓存大小。
+
 	getCacheLen := func() int {
 		aggregatedManager.resultsLock.Lock()
 		defer aggregatedManager.resultsLock.Unlock()
@@ -400,7 +401,8 @@ func TestDirty(t *testing.T) {
 	go aggregatedManager.Run(testCtx.Done(), nil)
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 
-	// immediately check for ping, since Run() should block for local services
+	// 立即检查 ping：对本地服务 Run() 应当阻塞（就绪依赖已同步）。
+
 	if !pinged.Load() {
 		t.Errorf("service handler never pinged")
 	}
@@ -439,7 +441,8 @@ func TestWaitForSync(t *testing.T) {
 	go aggregatedManager.Run(testCtx.Done(), nil)
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 
-	// immediately check for ping, since Run() should block for local services
+	// 立即检查 ping：对本地服务 Run() 应当阻塞（就绪依赖已同步）。
+
 	if !pinged.Load() {
 		t.Errorf("service handler never pinged")
 	}
@@ -585,10 +588,12 @@ func TestLegacyFallbackNoCache(t *testing.T) {
 		if r.URL.Path == "/apis/stable.example.com" {
 			legacyGroupHandler.ServeHTTP(w, r)
 		} else if r.URL.Path == "/apis/stable.example.com/v1" {
-			// defer to legacy discovery
+			// 委托给 legacy discovery。
+
 			legacyResourceHandlerV1.ServeHTTP(w, r)
 		} else if r.URL.Path == "/apis/stable.example.com/v1beta1" {
-			// defer to legacy discovery
+			// 委托给 legacy discovery。
+
 			legacyResourceHandlerV1Beta1.ServeHTTP(w, r)
 		} else if r.URL.Path == "/apis/stable.example.com/v1alpha1" {
 			legacyResourceHandlerV1Alpha1.ServeHTTP(w, r)
@@ -671,8 +676,9 @@ func TestLegacyFallbackNoCache(t *testing.T) {
 	go aggregatedManager.Run(testCtx.Done(), nil)
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 
-	// At this point external services have synced. Check if discovery document
-	// includes the legacy resources
+	// 此时外部服务已完成同步，检查发现文档
+	// 是否包含 legacy 资源。
+
 	_, _, doc := fetchPath(aggregatedResourceManager, "")
 
 	// 期望值也走一次与生产代码相同的转换函数，测试重点才是
@@ -798,12 +804,14 @@ func testLegacyFallbackWithCustomRootHandler(t *testing.T, rootHandlerFn func(ht
 		if r.URL.Path == "/apis/stable.example.com" {
 			legacyGroupHandler.ServeHTTP(w, r)
 		} else if r.URL.Path == "/apis/stable.example.com/v1" {
-			// defer to legacy discovery
+			// 委托给 legacy discovery。
+
 			legacyResourceHandler.ServeHTTP(w, r)
 		} else if r.URL.Path == "/apis" {
 			rootHandlerFn(w, r)
 		} else {
-			// Unknown url
+			// 未知 URL。
+
 			t.Fatalf("unexpected request sent to %v", r.URL.Path)
 		}
 	}))
@@ -813,8 +821,9 @@ func testLegacyFallbackWithCustomRootHandler(t *testing.T, rootHandlerFn func(ht
 	go aggregatedManager.Run(testCtx.Done(), nil)
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 
-	// At this point external services have synced. Check if discovery document
-	// includes the legacy resources
+	// 此时外部服务已完成同步，检查发现文档
+	// 是否包含 legacy 资源。
+
 	_, _, doc := fetchPath(aggregatedResourceManager, "")
 
 	converted, err := endpoints.ConvertGroupVersionIntoToDiscovery([]metav1.APIResource{resource})
@@ -898,8 +907,9 @@ func TestAPIServiceStale(t *testing.T) {
 	go aggregatedManager.Run(testCtx.Done(), nil)
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 
-	// At this point external services have synced. Check if discovery document
-	// lists the APIService group version as Stale.
+	// 此时外部服务已完成同步，检查发现文档
+	// 是否把该 APIService group/version 标为 Stale。
+
 	_, _, doc := fetchPath(aggregatedResourceManager, "")
 	require.Equal(t, []apidiscoveryv2.APIGroupDiscovery{
 		{
@@ -949,9 +959,11 @@ func TestNotModified(t *testing.T) {
 	}
 
 	aggregatedManager := newDiscoveryManager(aggyService)
-	// Add all except the last group.
-	// Ensure this is done BEFORE the call to run, so they are included in initial
-	// list to keep test focused
+	// 先添加除最后一个组之外的所有组。
+	// 必须在 Run 之前完成，这样它们才会进入初始列表，
+
+	// 让测试聚焦于后续逻辑。
+
 	for _, s := range apiServices[:len(apiServices)-1] {
 		aggregatedManager.AddAPIService(s, service)
 	}
@@ -961,23 +973,26 @@ func TestNotModified(t *testing.T) {
 
 	go aggregatedManager.Run(testCtx.Done(), nil)
 
-	// Important to wait here to ensure we prime the cache with the initial list
-	// of documents in order to exercise 304 Not Modified
+	// 这里必须等待，确保用初始文档预热缓存，
+	// 才能触发 304 Not Modified 分支。
+
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 
-	// Now add all groups. We excluded one group before so that waitForQueueIsComplete
-	// could include it in this round. Now, if waitForQueueIsComplete ever returns
-	// true, it must have synced all the pre-existing groups before, which would
-	// return 304 Not Modified
+	// 现在添加所有组。之前刻意漏掉一个，这样 waitForQueueIsComplete
+	// 才会把它算进这一轮。若它提前返回 true，
+
+	// 说明之前的组都已同步过，而那会返回 304 Not Modified。
+
 	for _, s := range apiServices {
 		aggregatedManager.AddAPIService(s, service)
 	}
 
-	// This would wait the full timeout on 1.26.0.
+	// 在 1.26.0 上这会一直等到超时。
+
 	require.True(t, waitForQueueComplete(testCtx.Done(), aggregatedManager))
 }
 
-// copied from staging/src/k8s.io/apiserver/pkg/endpoints/discovery/v2/handler_test.go
+// 复制自 staging/src/k8s.io/apiserver/pkg/endpoints/discovery/v2/handler_test.go。
 // 用固定 seed 保证失败可复现；填完随机值后要把 TypeMeta、ObjectMeta 和 Freshness
 // 收敛到合法范围，否则 fuzz 出来的“不合法文档”会让测试失败在校验层而非聚合逻辑。
 func fuzzAPIGroups(atLeastNumGroups, maxNumGroups int, seed int64) apidiscoveryv2.APIGroupDiscoveryList {
@@ -987,17 +1002,20 @@ func fuzzAPIGroups(atLeastNumGroups, maxNumGroups int, seed int64) apidiscoveryv
 	fuzzer.Funcs(func(o *apidiscoveryv2.APIGroupDiscovery, c randfill.Continue) {
 		c.FillNoCustom(o)
 
-		// The ResourceManager will just not serve the group if its versions
-		// list is empty
+		// ResourceManager 在版本列表为空时不会返回该组。
+
 		atLeastOne := apidiscoveryv2.APIVersionDiscovery{}
 		c.Fill(&atLeastOne)
 		o.Versions = append(o.Versions, atLeastOne)
 
-		// clear invalid fuzzed values
+		// 清理模糊测试产生的非法值。
+
 		o.TypeMeta = metav1.TypeMeta{}
-		// truncate object meta to just name
+		// 只保留 ObjectMeta 的 name。
+
 		o.ObjectMeta = metav1.ObjectMeta{Name: o.ObjectMeta.Name}
-		// fix version freshness value, make versions unique and non-empty
+		// 修正 freshness 值，并保证版本唯一且非空。
+
 		for i := range o.Versions {
 			o.Versions[i].Freshness = "Current"
 			o.Versions[i].Version = fmt.Sprintf("v%d", i+1)
@@ -1017,19 +1035,22 @@ func fuzzAPIGroups(atLeastNumGroups, maxNumGroups int, seed int64) apidiscoveryv
 
 }
 
-// copied from staging/src/k8s.io/apiserver/pkg/endpoints/discovery/v2/handler_test.go
+// 复制自 staging/src/k8s.io/apiserver/pkg/endpoints/discovery/v2/handler_test.go。
 // 直接构造带 v2 Accept 头的请求，模拟真实客户端的协商过程；只检查解码后的对象，
 // 因为内容协商的处理属于另一个测试职责。
 func fetchPath(handler http.Handler, etag string) (*http.Response, []byte, *apidiscoveryv2.APIGroupDiscoveryList) {
-	// Expect json-formatted apis group list
+	// 期望返回 JSON 格式的 APIGroupList。
+
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/apis", nil)
 
-	// Ask for JSON response
+	// 请求 JSON 响应。
+
 	req.Header.Set("Accept", runtime.ContentTypeJSON+";g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList,"+runtime.ContentTypeJSON+";g=apidiscovery.k8s.io;v=v2beta1;as=APIGroupDiscoveryList")
 
 	if etag != "" {
-		// Quote provided etag if unquoted
+		// 若 etag 未加引号则补上引号。
+
 		quoted := etag
 		if !strings.HasPrefix(etag, "\"") {
 			quoted = strconv.Quote(etag)

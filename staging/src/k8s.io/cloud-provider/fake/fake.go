@@ -138,31 +138,31 @@ func (f *Cloud) addCall(desc string) {
 	f.Calls = append(f.Calls, desc)
 }
 
-// ClearCalls clears internal record of method calls to this Cloud.
+// ClearCalls 清空内部记录的方法调用。
 func (f *Cloud) ClearCalls() {
 	f.Calls = []string{}
 }
 
-// Initialize passes a Kubernetes clientBuilder interface to the cloud provider
+// Initialize 把 Kubernetes clientBuilder 传给云 provider（fake 中为空实现）。
 func (f *Cloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, stop <-chan struct{}) {
 }
 
-// ListClusters lists the names of the available clusters.
+// ListClusters 列出可用的集群名。
 func (f *Cloud) ListClusters(ctx context.Context) ([]string, error) {
 	return f.ClusterList, f.Err
 }
 
-// Master gets back the address (either DNS name or IP address) of the master node for the cluster.
+// Master 返回集群 master 节点的地址（DNS 名或 IP）。
 func (f *Cloud) Master(ctx context.Context, name string) (string, error) {
 	return f.MasterName, f.Err
 }
 
-// Clusters returns a clusters interface.  Also returns true if the interface is supported, false otherwise.
+// Clusters 返回集群接口及该能力是否受支持。
 func (f *Cloud) Clusters() (cloudprovider.Clusters, bool) {
 	return f, !f.DisableClusters
 }
 
-// ProviderName returns the cloud provider ID.
+// ProviderName 返回云 provider ID。
 func (f *Cloud) ProviderName() string {
 	if f.Provider == "" {
 		return defaultProviderName
@@ -170,27 +170,22 @@ func (f *Cloud) ProviderName() string {
 	return f.Provider
 }
 
-// HasClusterID returns true if the cluster has a clusterID
+// HasClusterID 返回集群是否带有 clusterID。
 func (f *Cloud) HasClusterID() bool {
 	return true
 }
 
-// LoadBalancer returns a fake implementation of LoadBalancer.
-// Actually it just returns f itself.
+// LoadBalancer 返回 LoadBalancer 的 fake 实现，实际就是 f 自身。
 func (f *Cloud) LoadBalancer() (cloudprovider.LoadBalancer, bool) {
 	return f, !f.DisableLoadBalancers
 }
 
-// Instances returns a fake implementation of Instances.
-//
-// Actually it just returns f itself.
+// Instances 返回 Instances 的 fake 实现，实际就是 f 自身。
 func (f *Cloud) Instances() (cloudprovider.Instances, bool) {
 	return f, !f.DisableInstances
 }
 
-// InstancesV2 returns a fake implementation of InstancesV2.
-//
-// Actually it just returns f itself.
+// InstancesV2 返回 InstancesV2 的 fake 实现，实际就是 f 自身。
 func (f *Cloud) InstancesV2() (cloudprovider.InstancesV2, bool) {
 	if f.EnableInstancesV2 {
 		return f, true
@@ -198,17 +193,17 @@ func (f *Cloud) InstancesV2() (cloudprovider.InstancesV2, bool) {
 	return nil, false
 }
 
-// Zones returns a zones interface. Also returns true if the interface is supported, false otherwise.
+// Zones 返回可用区接口及该能力是否受支持。
 func (f *Cloud) Zones() (cloudprovider.Zones, bool) {
 	return f, !f.DisableZones
 }
 
-// Routes returns a routes interface along with whether the interface is supported.
+// Routes 返回路由接口及该能力是否受支持。
 func (f *Cloud) Routes() (cloudprovider.Routes, bool) {
 	return f, !f.DisableRoutes
 }
 
-// GetLoadBalancer is a stub implementation of LoadBalancer.GetLoadBalancer.
+// GetLoadBalancer 是 LoadBalancer.GetLoadBalancer 的桩实现。
 func (f *Cloud) GetLoadBalancer(ctx context.Context, clusterName string, service *v1.Service) (*v1.LoadBalancerStatus, bool, error) {
 	status := &v1.LoadBalancerStatus{}
 	status.Ingress = []v1.LoadBalancerIngress{{IP: f.ExternalIP.String()}}
@@ -216,14 +211,14 @@ func (f *Cloud) GetLoadBalancer(ctx context.Context, clusterName string, service
 	return status, f.Exists, f.Err
 }
 
-// GetLoadBalancerName is a stub implementation of LoadBalancer.GetLoadBalancerName.
+// GetLoadBalancerName 是 LoadBalancer.GetLoadBalancerName 的桩实现。
 func (f *Cloud) GetLoadBalancerName(ctx context.Context, clusterName string, service *v1.Service) string {
-	// TODO: replace DefaultLoadBalancerName to generate more meaningful loadbalancer names.
+	// TODO: 用 DefaultLoadBalancerName 替换掉，生成更有意义的负载均衡器名字。
 	return cloudprovider.DefaultLoadBalancerName(service)
 }
 
-// EnsureLoadBalancer is a test-spy implementation of LoadBalancer.EnsureLoadBalancer.
-// It adds an entry "create" into the internal method call record.
+// EnsureLoadBalancer 是 LoadBalancer.EnsureLoadBalancer 的测试间谍实现，
+// 会在方法调用记录中加入 "create"。
 func (f *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
 	f.addCall("create")
 	f.markEnsureCall(service, nodes)
@@ -244,7 +239,7 @@ func (f *Cloud) EnsureLoadBalancer(ctx context.Context, clusterName string, serv
 	f.Balancers[name] = Balancer{name, region, spec.LoadBalancerIP, spec.Ports, nodes}
 
 	status := &v1.LoadBalancerStatus{}
-	// process Ports
+	// 处理端口列表。
 	portStatus := []v1.PortStatus{}
 	for _, port := range spec.Ports {
 		portStatus = append(portStatus, v1.PortStatus{
@@ -280,35 +275,35 @@ func (f *Cloud) markEnsureCall(service *v1.Service, nodes []*v1.Node) {
 	}
 }
 
-// UpdateLoadBalancer is a test-spy implementation of LoadBalancer.UpdateLoadBalancer.
-// It adds an entry "update" into the internal method call record.
+// UpdateLoadBalancer 是 LoadBalancer.UpdateLoadBalancer 的测试间谍实现，
+// 会在方法调用记录中加入 "update"。
 func (f *Cloud) UpdateLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) error {
 	f.addCall("update")
 	f.markUpdateCall(service, nodes)
 	return f.Err
 }
 
-// EnsureLoadBalancerDeleted is a test-spy implementation of LoadBalancer.EnsureLoadBalancerDeleted.
-// It adds an entry "delete" into the internal method call record.
+// EnsureLoadBalancerDeleted 是 LoadBalancer.EnsureLoadBalancerDeleted 的测试间谍实现，
+// 会在方法调用记录中加入 "delete"。
 func (f *Cloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName string, service *v1.Service) error {
 	f.addCall("delete")
 	return f.Err
 }
 
-// AddSSHKeyToAllInstances adds an SSH public key as a legal identity for all instances
-// expected format for the key is standard ssh-keygen format: <protocol> <blob>
+// AddSSHKeyToAllInstances 为所有实例添加 SSH 公钥作为合法身份，
+// 密钥格式须为 ssh-keygen 标准格式：<protocol> <blob>。
 func (f *Cloud) AddSSHKeyToAllInstances(ctx context.Context, user string, keyData []byte) error {
 	return cloudprovider.NotImplemented
 }
 
-// CurrentNodeName returns the name of the node we are currently running on
-// On most clouds (e.g. GCE) this is the hostname, so we provide the hostname
+// CurrentNodeName 返回当前运行所在节点的名字。
+// 大多数云（如 GCE）上它就是主机名，因此直接传入主机名。
 func (f *Cloud) CurrentNodeName(ctx context.Context, hostname string) (types.NodeName, error) {
 	return types.NodeName(hostname), nil
 }
 
-// NodeAddresses is a test-spy implementation of Instances.NodeAddresses.
-// It adds an entry "node-addresses" into the internal method call record.
+// NodeAddresses 是 Instances.NodeAddresses 的测试间谍实现，
+// 会在方法调用记录中加入 "node-addresses"。
 func (f *Cloud) NodeAddresses(ctx context.Context, instance types.NodeName) ([]v1.NodeAddress, error) {
 	f.addCall("node-addresses")
 	f.addressesMux.Lock()
@@ -316,15 +311,15 @@ func (f *Cloud) NodeAddresses(ctx context.Context, instance types.NodeName) ([]v
 	return f.Addresses, f.Err
 }
 
-// SetNodeAddresses sets the addresses for a node
+// SetNodeAddresses 设置节点的地址。
 func (f *Cloud) SetNodeAddresses(nodeAddresses []v1.NodeAddress) {
 	f.addressesMux.Lock()
 	defer f.addressesMux.Unlock()
 	f.Addresses = nodeAddresses
 }
 
-// NodeAddressesByProviderID is a test-spy implementation of Instances.NodeAddressesByProviderID.
-// It adds an entry "node-addresses-by-provider-id" into the internal method call record.
+// NodeAddressesByProviderID 是 Instances.NodeAddressesByProviderID 的测试间谍实现，
+// 会在方法调用记录中加入 "node-addresses-by-provider-id"。
 func (f *Cloud) NodeAddressesByProviderID(ctx context.Context, providerID string) ([]v1.NodeAddress, error) {
 	f.addCall("node-addresses-by-provider-id")
 	f.addressesMux.Lock()
@@ -332,9 +327,8 @@ func (f *Cloud) NodeAddressesByProviderID(ctx context.Context, providerID string
 	return f.Addresses, f.Err
 }
 
-// InstanceID returns the cloud provider ID of the node with the specified Name, unless an entry
-// for the node exists in ExtIDError, in which case it returns the desired error (to facilitate
-// testing of error handling).
+// InstanceID 返回指定 Name 节点在云 provider 侧的 ID；若 ExtIDError 中有该节点的条目，
+// 则返回预设错误，便于测试错误处理路径。
 func (f *Cloud) InstanceID(ctx context.Context, nodeName types.NodeName) (string, error) {
 	f.addCall("instance-id")
 
@@ -346,26 +340,26 @@ func (f *Cloud) InstanceID(ctx context.Context, nodeName types.NodeName) (string
 	return f.ExtID[nodeName], nil
 }
 
-// InstanceType returns the type of the specified instance.
+// InstanceType 返回指定实例的类型。
 func (f *Cloud) InstanceType(ctx context.Context, instance types.NodeName) (string, error) {
 	f.addCall("instance-type")
 	return f.InstanceTypes[instance], nil
 }
 
-// InstanceTypeByProviderID returns the type of the specified instance.
+// InstanceTypeByProviderID 按 providerID 返回指定实例的类型。
 func (f *Cloud) InstanceTypeByProviderID(ctx context.Context, providerID string) (string, error) {
 	f.addCall("instance-type-by-provider-id")
 	return f.InstanceTypes[types.NodeName(providerID)], nil
 }
 
-// InstanceExistsByProviderID returns true if the instance with the given provider id still exists and is running.
-// If false is returned with no error, the instance will be immediately deleted by the cloud controller manager.
+// InstanceExistsByProviderID 判断给定 providerID 的实例是否仍然存在且在运行。
+// 若返回 false 且无错误，cloud controller manager 会立即删除对应节点。
 func (f *Cloud) InstanceExistsByProviderID(ctx context.Context, providerID string) (bool, error) {
 	f.addCall("instance-exists-by-provider-id")
 	return f.ExistsByProviderID, f.ErrByProviderID
 }
 
-// InstanceShutdownByProviderID returns true if the instances is in safe state to detach volumes
+// InstanceShutdownByProviderID 判断实例是否处于可安全卸载卷的状态。
 func (f *Cloud) InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error) {
 	f.addCall("instance-shutdown-by-provider-id")
 
@@ -376,14 +370,14 @@ func (f *Cloud) InstanceShutdownByProviderID(ctx context.Context, providerID str
 	return f.NodeShutdown, f.ErrShutdownByProviderID
 }
 
-// InstanceExists returns true if the instance corresponding to a node still exists and is running.
-// If false is returned with no error, the instance will be immediately deleted by the cloud controller manager.
+// InstanceExists 判断节点对应的实例是否仍然存在且在运行。
+// 若返回 false 且无错误，cloud controller manager 会立即删除对应节点。
 func (f *Cloud) InstanceExists(ctx context.Context, node *v1.Node) (bool, error) {
 	f.addCall("instance-exists")
 	return f.ExistsByProviderID, f.ErrByProviderID
 }
 
-// InstanceShutdown returns true if the instances is in safe state to detach volumes
+// InstanceShutdown 判断实例是否处于可安全卸载卷的状态。
 func (f *Cloud) InstanceShutdown(ctx context.Context, node *v1.Node) (bool, error) {
 	f.addCall("instance-shutdown")
 	return f.NodeShutdown, f.ErrShutdownByProviderID
@@ -433,26 +427,23 @@ func (f *Cloud) List(filter string) ([]types.NodeName, error) {
 	return result, f.Err
 }
 
-// GetZone returns the Zone containing the current failure zone and locality region that the program is running in
-// In most cases, this method is called from the kubelet querying a local metadata service to acquire its zone.
-// For the case of external cloud providers, use GetZoneByProviderID or GetZoneByNodeName since GetZone
-// can no longer be called from the kubelets.
+// GetZone 返回程序当前所在故障域与地域构成的 Zone。
+// 通常由 kubelet 查询本地 metadata service 获取；外部云 provider 场景下
+// kubelet 不能再调用它，应改用 GetZoneByProviderID 或 GetZoneByNodeName。
 func (f *Cloud) GetZone(ctx context.Context) (cloudprovider.Zone, error) {
 	f.addCall("get-zone")
 	return f.Zone, f.Err
 }
 
-// GetZoneByProviderID implements Zones.GetZoneByProviderID
-// This is particularly useful in external cloud providers where the kubelet
-// does not initialize node data.
+// GetZoneByProviderID 实现 Zones.GetZoneByProviderID。
+// 外部云 provider 场景下 kubelet 不初始化节点数据，主要用此方法。
 func (f *Cloud) GetZoneByProviderID(ctx context.Context, providerID string) (cloudprovider.Zone, error) {
 	f.addCall("get-zone-by-provider-id")
 	return f.Zone, f.Err
 }
 
-// GetZoneByNodeName implements Zones.GetZoneByNodeName
-// This is particularly useful in external cloud providers where the kubelet
-// does not initialize node data.
+// GetZoneByNodeName 实现 Zones.GetZoneByNodeName。
+// 外部云 provider 场景下 kubelet 不初始化节点数据，主要用此方法。
 func (f *Cloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) (cloudprovider.Zone, error) {
 	f.addCall("get-zone-by-node-name")
 	return f.Zone, f.Err
@@ -522,7 +513,7 @@ func (f *Cloud) DeleteRoute(ctx context.Context, clusterName string, route *clou
 	return nil
 }
 
-// GetLabelsForVolume returns the labels for a PersistentVolume
+// GetLabelsForVolume 返回卷的标签。
 func (f *Cloud) GetLabelsForVolume(ctx context.Context, pv *v1.PersistentVolume) (map[string]string, error) {
 	if val, ok := f.VolumeLabelMap[pv.Name]; ok {
 		return val, nil

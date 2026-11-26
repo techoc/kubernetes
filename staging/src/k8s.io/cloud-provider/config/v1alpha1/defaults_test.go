@@ -47,8 +47,7 @@ func TestCloudControllerManagerDefaultsRoundTrip(t *testing.T) {
 	}
 }
 
-// convertObjToConfigMap converts an object to a ConfigMap.
-// This is specifically meant for ComponentConfigs.
+// convertObjToConfigMap 把对象转成 ConfigMap，专门用于 ComponentConfig。
 // 用 ConfigMap 模拟组件配置的真实载体，便于验证 JSON 编码路径。
 func convertObjToConfigMap(name string, obj runtime.Object) (*v1.ConfigMap, error) {
 	eJSONBytes, err := json.Marshal(obj)

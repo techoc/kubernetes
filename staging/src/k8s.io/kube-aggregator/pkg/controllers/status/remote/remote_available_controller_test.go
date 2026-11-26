@@ -171,9 +171,8 @@ func setupAPIServices(t T, apiServices []runtime.Object) (*AvailableConditionCon
 		endpointSliceGetter: endpointSliceGetter,
 		serviceResolver:     &fakeServiceResolver{url: testServer.URL},
 		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
-			// We want a fairly tight requeue time.  The controller listens to the API, but because it relies on the routability of the
-			// service network, it is possible for an external, non-watchable factor to affect availability.  This keeps
-			// the maximum disruption time to a minimum, but it does prevent hot loops.
+			// 这里希望重入队间隔较短：控制器虽然监听 API，但可用性还取决于 Service 网络可达性，
+			// 而这类外部因素无法通过 watch 感知。较短间隔能把中断时间压到最低，同时仍避免忙等。
 			// 这个队列配置本身不属于被测逻辑，只是让 setup 能构造出完整控制器；
 			// 你也可以把它看成生产配置的缩小版：起步快、上限低，方便测试里观察重试。
 			workqueue.NewTypedItemExponentialFailureRateLimiter[string](5*time.Millisecond, 30*time.Second),
@@ -191,12 +190,12 @@ func setupAPIServices(t T, apiServices []runtime.Object) (*AvailableConditionCon
 // 看控制器的缓存索引在"大量无关 Service 旁边夹着少数相关 Service"时的表现。
 func BenchmarkBuildCache(b *testing.B) {
 	apiServiceName := "remote.group"
-	// model 1 APIService pointing at a given service, and 30 pointing at local group/versions
+	// 模拟 1 个 APIService 指向给定 Service，另有 30 个指向本地 group/version。
 	apiServices := []runtime.Object{newRemoteAPIService(apiServiceName)}
 	for i := range 30 {
 		apiServices = append(apiServices, newLocalAPIService(fmt.Sprintf("local.group%d", i)))
 	}
-	// model one service backing an API service, and 100 unrelated services
+	// 模拟一个 Service 支撑某个 APIService，另有 100 个无关 Service。
 	services := []*v1.Service{newService("foo", "bar", testServicePort, testServicePortName)}
 	for i := range 100 {
 		services = append(services, newService("foo", fmt.Sprintf("bar%d", i), testServicePort, testServicePortName))
@@ -245,7 +244,7 @@ func TestBuildCache(t *testing.T) {
 
 			c.sync(tc.apiServiceName)
 
-			// ought to have one action writing status
+			// 应有一次写 status 的动作。
 			if e, a := 1, len(fakeClient.Actions()); e != a {
 				t.Fatalf("%v expected %v, got %v", tc.name, e, fakeClient.Actions())
 			}
@@ -493,7 +492,7 @@ func TestSync(t *testing.T) {
 				return
 			}
 
-			// ought to have one action writing status
+			// 应有一次写 status 的动作。
 			if e, a := 1, len(fakeClient.Actions()); e != a {
 				t.Fatalf("%v expected %v, got %v", tc.name, e, fakeClient.Actions())
 			}
@@ -606,8 +605,7 @@ func TestCloseIdleConnections(t *testing.T) {
 	testServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
-	// We want to verify that the client closes the connection.
-	// httptest.Server doesn't expose ConnState, but the underlying http.Server does.
+	// 要验证客户端是否关闭了连接。httptest.Server 不暴露 ConnState，但底层 http.Server 有。
 	testServer.Config.ConnState = func(c net.Conn, state http.ConnState) {
 		if state == http.StateClosed {
 			select {
@@ -629,7 +627,7 @@ func TestCloseIdleConnections(t *testing.T) {
 		metrics:                    availabilitymetrics.New(),
 	}
 
-	// This should trigger the bad gateway response and (with the fix) close the connection.
+	// 这应触发 Bad Gateway 响应，并在修复后关闭连接。
 	err = c.sync(apiServiceName)
 	if err == nil {
 		t.Fatal("expected error from sync")
@@ -637,7 +635,7 @@ func TestCloseIdleConnections(t *testing.T) {
 
 	select {
 	case <-closed:
-		// success, connection was closed
+		// 成功，连接已关闭。
 	case <-time.After(30 * time.Second):
 		t.Fatal("timeout waiting for connection to be closed")
 	}

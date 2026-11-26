@@ -118,7 +118,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 	}
 
 	var zoneFromNode string
-	// pick one zone from node if present
+	// 有 node 时从节点取 zone。
 	if node != nil {
 		// node 非 nil 意味着隐式启用了 VolumeScheduling。
 		// 有 node 说明处于 WaitForFirstConsumer：StorageClass 中再指定 zone 会与调度结果冲突。
@@ -143,7 +143,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 		}
 	}
 
-	// pick zone from allowedZones if specified
+	// 指定 allowedTopologies 时从允许的 zone 中选。
 	allowedZones, err := ZonesFromAllowedTopologies(allowedTopologies)
 	if err != nil {
 		return nil, err
@@ -155,12 +155,12 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 	}
 
 	if allowedZones.Len() > 0 {
-		// VolumeScheduling implicit since allowedZones present
+		// allowedZones 存在即隐含启用了 VolumeScheduling。
 		if zoneParameterPresent || zonesParameterPresent {
 			return nil, fmt.Errorf("zone[s] cannot be specified in StorageClass if allowedTopologies specified")
 		}
-		// scheduler will guarantee if node != null above, zoneFromNode is member of allowedZones.
-		// so if zoneFromNode != "", we can safely assume it is part of allowedZones.
+		// 调度器保证节点存在时其 zone 属于 allowedZones，
+		// 所以 zoneFromNode 非空即可放心当作其中一员。
 		zones, err := chooseZonesForVolumeIncludingZone(allowedZones, pvcName, zoneFromNode, numReplicas)
 		if err != nil {
 			return nil, fmt.Errorf("cannot process zones in allowedTopologies: %v", err)
@@ -168,7 +168,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 		return zones, nil
 	}
 
-	// pick zone from parameters if present
+	// 未指定其他来源时从 StorageClass 参数取 zone。
 	if zoneParameterPresent {
 		// 单 zone 无法满足多副本，要求用户改用 zones 或 allowedTopologies。
 		if numReplicas > 1 {
@@ -181,13 +181,13 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 		if uint32(zonesParameter.Len()) < numReplicas {
 			return nil, fmt.Errorf("not enough zones found in zones parameter to provision a volume with %d replicas. Found %d zones, need %d zones", numReplicas, zonesParameter.Len(), numReplicas)
 		}
-		// directly choose from zones parameter; no zone from node need to be considered
+		// 直接从 zones 参数选取；节点的 zone 已在前面处理过。
 		return ChooseZonesForVolume(zonesParameter, pvcName, numReplicas), nil
 	}
 
-	// pick zone from zones with nodes
+	// 最后从集群中有节点的 zone 中选。
 	if zonesWithNodes.Len() > 0 {
-		// If node != null (and thus zoneFromNode != ""), zoneFromNode will be member of zonesWithNodes
+		// 节点存在时其 zone 必然在 zonesWithNodes 中。
 		zones, err := chooseZonesForVolumeIncludingZone(zonesWithNodes, pvcName, zoneFromNode, numReplicas)
 		if err != nil {
 			return nil, fmt.Errorf("cannot process zones where nodes exist in the cluster: %v", err)
@@ -249,14 +249,13 @@ func chooseZonesForVolumeIncludingZone(zones sets.String, pvcName, zoneToInclude
 // 选择结果只取决于 pvcName 与 zone 列表：同一 PVC 会稳定落在相同 zone，
 // 使 StatefulSet 的卷分布在集群 zone 集合不变时保持可预测。
 func ChooseZonesForVolume(zones sets.String, pvcName string, numZones uint32) sets.String {
-	// No zones available, return empty set.
+	// 没有可用 zone 时返回空集合。
 	replicaZones := sets.NewString()
 	if zones.Len() == 0 {
 		return replicaZones
 	}
 
-	// We create the volume in a zone determined by the name
-	// Eventually the scheduler will coordinate placement into an available zone
+	// 按 PVC 名字的哈希决定卷落在哪个 zone；调度器上线后会与可用 zone 的选择协调。
 	hash, index := getPVCNameHashAndIndexOffset(pvcName)
 
 	// Zones.List 以一致（排序后）的顺序返回 zone。
@@ -283,38 +282,32 @@ func ChooseZonesForVolume(zones sets.String, pvcName string, numZones uint32) se
 // 在 zone 间轮转，而哈希前缀让同一 Pod 的多个 claim 落在同一 zone。
 func getPVCNameHashAndIndexOffset(pvcName string) (hash uint32, index uint32) {
 	if pvcName == "" {
-		// We should always be called with a name; this shouldn't happen
+		// 正常情况下总会传入名字，这里不该发生。
 		klog.Warningf("No name defined during volume create; choosing random zone")
 
 		hash = rand.Uint32()
 	} else {
 		hashString := pvcName
 
-		// Heuristic to make sure that volumes in a StatefulSet are spread across zones
-		// StatefulSet PVCs are (currently) named ClaimName-StatefulSetName-Id,
-		// where Id is an integer index.
-		// Note though that if a StatefulSet pod has multiple claims, we need them to be
-		// in the same zone, because otherwise the pod will be unable to mount both volumes,
-		// and will be unschedulable.  So we hash _only_ the "StatefulSetName" portion when
-		// it looks like `ClaimName-StatefulSetName-Id`.
-		// We continue to round-robin volume names that look like `Name-Id` also; this is a useful
-		// feature for users that are creating statefulset-like functionality without using statefulsets.
+		// 用启发式规则让 StatefulSet 的卷分散在不同 zone。
+		// StatefulSet PVC 当前命名为 ClaimName-StatefulSetName-Id，Id 是整数序号。
+		// 但同一 Pod 的多个 claim 必须落在同一 zone，否则无法同时挂载两个卷而不可调度。
+		// 因此形如 `ClaimName-StatefulSetName-Id` 时只对 StatefulSetName 部分做哈希。
+		// 形如 `Name-Id` 的卷名仍按序号轮转，方便未使用 StatefulSet 的用户实现类似能力。
 		lastDash := strings.LastIndexByte(pvcName, '-')
 		if lastDash != -1 {
 			statefulsetIDString := pvcName[lastDash+1:]
 			statefulsetID, err := strconv.ParseUint(statefulsetIDString, 10, 32)
 			if err == nil {
-				// Offset by the statefulsetID, so we round-robin across zones
+				// 按 StatefulSet 序号偏移，让各副本轮转分布到不同 zone。
 				index = uint32(statefulsetID)
-				// We still hash the volume name, but only the prefix
+				// 哈希仍用卷名，但只取前缀部分。
 				hashString = pvcName[:lastDash]
 
-				// In the special case where it looks like `ClaimName-StatefulSetName-Id`,
-				// hash only the StatefulSetName, so that different claims on the same StatefulSet
-				// member end up in the same zone.
-				// Note that StatefulSetName (and ClaimName) might themselves both have dashes.
-				// We actually just take the portion after the final - of ClaimName-StatefulSetName.
-				// For our purposes it doesn't much matter (just suboptimal spreading).
+				// 形如 `ClaimName-StatefulSetName-Id` 时仅哈希 StatefulSetName，
+				// 使同一 StatefulSet 成员上的多个 claim 落在同一 zone。
+				// StatefulSetName 与 ClaimName 自身也可能含连字符，这里取最后一段，
+				// 对结果影响有限，只是分布稍不理想。
 				lastDash := strings.LastIndexByte(hashString, '-')
 				if lastDash != -1 {
 					hashString = hashString[lastDash+1:]
@@ -324,7 +317,7 @@ func getPVCNameHashAndIndexOffset(pvcName string) (hash uint32, index uint32) {
 			}
 		}
 
-		// We hash the (base) volume name, so we don't bias towards the first N zones
+		// 对卷名基础部分做哈希，避免总是偏向前 N 个 zone。
 		h := fnv.New32()
 		h.Write([]byte(hashString))
 		hash = h.Sum32()

@@ -106,7 +106,7 @@ func (c *APIServiceRegistrationController) sync(key string) error {
 	return c.apiHandlerManager.AddAPIService(apiService)
 }
 
-// Run starts APIServiceRegistrationController which will process all registration requests until stopCh is closed.
+// Run 启动 APIServiceRegistrationController，持续处理注册请求直到 stopCh 关闭。
 func (c *APIServiceRegistrationController) Run(stopCh <-chan struct{}, handlerSyncedCh chan<- struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()

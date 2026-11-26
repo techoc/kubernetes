@@ -129,16 +129,14 @@ func TestAddUpdateAPIService(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// Ensure that the if the APIService OpenAPI is updated, the
-	// aggregated OpenAPI is also updated.
+	// 验证 APIService 的 OpenAPI 更新后，聚合结果也随之更新。
 	expectPath(t, swagger, "/apis/apiservicegroup/v1/path2")
 	expectNoPath(t, swagger, "/apis/apiservicegroup/v1/path1")
 	expectPath(t, swagger, "/apis/apiregistration.k8s.io/v1/")
 }
 
-// Tests that an APIService that registers OpenAPI will only have the OpenAPI
-// for its specific group version served registered.
-// See https://github.com/kubernetes/kubernetes/pull/123570 for full context.
+// 验证注册 OpenAPI 的 APIService 只提供其自身 GroupVersion 的 OpenAPI。
+// 背景见 https://github.com/kubernetes/kubernetes/pull/123570。
 // 后端服务可能顺带暴露多个 group/version 的文档，但一个 APIService 只对应其中一个。
 // 这里刻意让两个 APIService 的 handler 各自夹带不属于自己的路径，
 // 验证聚合器按 APIService 声明的 GroupVersion 做裁剪，而不是照单全收。
@@ -231,7 +229,7 @@ func TestAPIServiceOpenAPIServiceMismatch(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// Ensure that the if the APIService is added then removed, the OpenAPI disappears from the aggregated OpenAPI as well.
+	// 验证 APIService 加入后再移除时，其 OpenAPI 也从聚合结果中消失。
 	expectNoPath(t, swagger, "/apis/apiservicegroup/v1")
 	expectPath(t, swagger, "/apis/apiregistration.k8s.io/v1/")
 	expectNoPath(t, swagger, "/apis/a")
@@ -295,7 +293,7 @@ func TestAddRemoveAPIService(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// Ensure that the if the APIService is added then removed, the OpenAPI disappears from the aggregated OpenAPI as well.
+	// 验证 APIService 加入后再移除时，其 OpenAPI 也从聚合结果中消失。
 	expectNoPath(t, swagger, "/apis/apiservicegroup/v1/")
 	expectPath(t, swagger, "/apis/apiregistration.k8s.io/v1/")
 }
@@ -372,7 +370,7 @@ func TestUpdateAPIService(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// Ensure that the if the APIService is added and then handler is modified, the new data is reflected in the aggregated OpenAPI.
+	// 验证 APIService 加入后 handler 内容变化时，聚合结果反映新数据。
 	expectNoPath(t, swagger, "/apis/apiservicegroup/v1/")
 	expectPath(t, swagger, "/apis/apiregistration.k8s.io/v1/")
 }
@@ -558,8 +556,7 @@ func TestFailingAPIServiceDoesNotBlockAdd(t *testing.T) {
 	}
 	apiServiceFailed.Name = "apiserviceFailed"
 
-	// Create a handler that has a long response time and ensure that
-	// adding the APIService does not block.
+	// 构造一个响应很慢的 handler，验证添加 APIService 不会被阻塞。
 	handlerFailed := &openAPIHandler{
 		delaySeconds: 5,
 		returnErr:    true,

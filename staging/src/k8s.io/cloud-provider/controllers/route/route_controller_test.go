@@ -60,7 +60,7 @@ func TestIsResponsibleForRoute(t *testing.T) {
 		routeCIDR           string
 		expectedResponsible bool
 	}{
-		// Routes that belong to this cluster
+		// 属于本集群的路由。
 		// 命名匹配且 CIDR 落在集群网段内，包括 IPv6 与更宽的前缀。
 		{"10.244.0.0/16", myClusterRoute, "10.244.0.0/24", true},
 		{"10.244.0.0/16", myClusterRoute, "10.244.10.0/24", true},
@@ -68,7 +68,7 @@ func TestIsResponsibleForRoute(t *testing.T) {
 		{"10.244.0.0/14", myClusterRoute, "10.244.0.0/24", true},
 		{"10.244.0.0/14", myClusterRoute, "10.247.255.0/24", true},
 		{"a00:100::/10", myClusterRoute, "a00:100::/24", true},
-		// Routes that match our naming/tagging scheme, but are outside our cidr
+		// 命名匹配但不在集群 CIDR 内的路由。
 		// 命名相同但网段不在集群 CIDR 内，必须判定为不负责，防止误删。
 		{"10.244.0.0/16", myClusterRoute, "10.224.0.0/24", false},
 		{"10.244.0.0/16", myClusterRoute, "10.0.10.0/24", false},
@@ -516,7 +516,7 @@ func TestReconcile(t *testing.T) {
 						}
 					}
 					if index == -1 {
-						// Something's wrong
+						// 索引不匹配，说明用例数据有问题。
 						continue
 					}
 					assert.True(t, check(index), "Invalid NodeNetworkUnavailable condition for Node %q, expected %v, got %v",
@@ -645,7 +645,7 @@ func routeListEqual(list1, list2 []*cloudprovider.Route) bool {
 		return false
 	}
 
-	// nodename+cidr:bool
+	// 以 nodename+cidr 为键记录已匹配的路由。
 	seen := make(map[string]bool)
 
 	for _, route1 := range list1 {
@@ -798,7 +798,7 @@ func TestUpdateNetworkingCondition(t *testing.T) {
 				},
 			}
 
-			// Set existing condition if specified
+			// 用例指定时预置现有 condition。
 			if tc.existingCondition != nil {
 				node.Status.Conditions = []v1.NodeCondition{*tc.existingCondition}
 			}
@@ -810,12 +810,12 @@ func TestUpdateNetworkingCondition(t *testing.T) {
 			require.NoError(t, err)
 			rc.nodeListerSynced = alwaysReady
 
-			// Call updateNetworkingCondition
+			// 调用 updateNetworkingCondition。
 			err = rc.updateNetworkingCondition(node, tc.routesCreated)
 			require.NoError(t, err)
 
 			if tc.expectedUpdate {
-				// Verify that a patch was called
+				// 校验确实发起了 patch。
 				actions := client.Actions()
 				patchFound := false
 				for _, action := range actions {
@@ -826,18 +826,18 @@ func TestUpdateNetworkingCondition(t *testing.T) {
 				}
 				assert.True(t, patchFound, "Expected a patch action but none found")
 
-				// Get the updated node
+				// 取回更新后的节点。
 				updatedNode, err := client.CoreV1().Nodes().Get(context.TODO(), node.Name, metav1.GetOptions{})
 				require.NoError(t, err)
 
-				// Verify the condition was updated correctly
+				// 校验 condition 已按预期更新。
 				_, condition := nodeutil.GetNodeCondition(&updatedNode.Status, v1.NodeNetworkUnavailable)
 				require.NotNil(t, condition, "Expected NodeNetworkUnavailable condition to exist")
 				assert.Equal(t, tc.expectedConditionType, condition.Status, "Unexpected condition status")
 				assert.Equal(t, tc.expectedReason, condition.Reason, "Unexpected condition reason")
 				assert.Equal(t, tc.expectedMessage, condition.Message, "Unexpected condition message")
 			} else {
-				// Verify that no patch was called (or only initial operations)
+				// 校验未发起 patch（或只有初始化操作）。
 				actions := client.Actions()
 				patchCount := 0
 				for _, action := range actions {
@@ -855,8 +855,8 @@ func TestUpdateNetworkingCondition(t *testing.T) {
 // Calico 先写入 NetworkUnavailable=False/CalicoIsUp，RouteController 仍应能将其
 // 改写为自己的 reason，否则节点会一直显示错误的原因与消息。
 func TestUpdateNetworkingConditionWithCalicoScenario(t *testing.T) {
-	// This test specifically covers the bug where Calico sets NetworkUnavailable=False
-	// and RouteController should still be able to update it with its own reason
+	// 专门覆盖 Calico 已写入 NetworkUnavailable=False 的 bug：
+	// RouteController 仍应能把它改写为自己的 reason。
 	cluster := "test-cluster"
 	_, clusterCIDR, _ := netutils.ParseCIDRSloppy("10.244.0.0/16")
 
@@ -888,11 +888,11 @@ func TestUpdateNetworkingConditionWithCalicoScenario(t *testing.T) {
 	require.NoError(t, err)
 	rc.nodeListerSynced = alwaysReady
 
-	// Call updateNetworkingCondition with routes created
+	// 在路由已创建的情况下调用 updateNetworkingCondition。
 	err = rc.updateNetworkingCondition(node, true)
 	require.NoError(t, err)
 
-	// Verify that a patch was called
+	// 校验确实发起了 patch。
 	actions := client.Actions()
 	patchFound := false
 	for _, action := range actions {
@@ -903,11 +903,11 @@ func TestUpdateNetworkingConditionWithCalicoScenario(t *testing.T) {
 	}
 	assert.True(t, patchFound, "Expected a patch action to update the condition")
 
-	// Get the updated node
+	// 取回更新后的节点。
 	updatedNode, err := client.CoreV1().Nodes().Get(context.TODO(), node.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 
-	// Verify the condition was updated with RouteCreated reason
+	// 校验 condition 的 reason 已更新为 RouteCreated。
 	_, condition := nodeutil.GetNodeCondition(&updatedNode.Status, v1.NodeNetworkUnavailable)
 	require.NotNil(t, condition, "Expected NodeNetworkUnavailable condition to exist")
 	assert.Equal(t, v1.ConditionFalse, condition.Status, "Expected Status to remain False")

@@ -25,12 +25,12 @@ import (
 	"k8s.io/cloud-provider/names"
 )
 
-// NodeLifecycleControllerOptions holds the CloudNodeLifecycleController options.
+// NodeLifecycleControllerOptions 保存 CloudNodeLifecycleController 的选项。
 type NodeLifecycleControllerOptions struct {
 	*nodelifecycleconfig.NodeLifecycleControllerConfiguration
 }
 
-// AddFlags adds flags related to CloudNodeLifecycleController for controller manager to the specified FlagSet.
+// AddFlags 把 CloudNodeLifecycleController 相关 flag 加到指定 FlagSet。
 func (o *NodeLifecycleControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -42,7 +42,7 @@ func (o *NodeLifecycleControllerOptions) AddFlags(fs *pflag.FlagSet) {
 		"The period for syncing NodeStatus in CloudNodeLifecycleController.")
 }
 
-// ApplyTo fills up CloudNodeLifecycleController config with options.
+// ApplyTo 把选项写入 CloudNodeLifecycleController 配置。
 func (o *NodeLifecycleControllerOptions) ApplyTo(cfg *nodelifecycleconfig.NodeLifecycleControllerConfiguration) error {
 	if o == nil {
 		return nil
@@ -54,7 +54,7 @@ func (o *NodeLifecycleControllerOptions) ApplyTo(cfg *nodelifecycleconfig.NodeLi
 	return nil
 }
 
-// Validate checks validation of NodeLifecycleControllerOptions.
+// Validate 校验 NodeLifecycleControllerOptions。
 func (o *NodeLifecycleControllerOptions) Validate() []error {
 	if o == nil {
 		return nil

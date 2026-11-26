@@ -39,7 +39,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against API services.
+// NewREST 返回操作 APIService 的 RESTStorage。
 func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) *REST {
 	strategy := apiservice.NewStrategy(scheme)
 	store := &genericregistry.Store{
@@ -56,7 +56,7 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) *REST
 		DeleteStrategy:      strategy,
 		ResetFieldsStrategy: strategy,
 
-		// TODO: define table converter that exposes more than name/creation timestamp
+		// TODO: 定义能暴露 name/创建时间之外字段的 table converter。
 		TableConvertor: rest.NewDefaultTableConvertor(apiregistration.Resource("apiservices")),
 	}
 	options := &generic.StoreOptions{RESTOptions: optsGetter, AttrFunc: apiservice.GetAttrs}
@@ -66,7 +66,7 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) *REST
 	return &REST{store}
 }
 
-// Implement CategoriesProvider
+// 实现 CategoriesProvider。
 var _ rest.CategoriesProvider = &REST{}
 
 // Categories 实现 CategoriesProvider 接口，返回该资源所属的分类列表。
@@ -156,30 +156,29 @@ func NewStatusREST(scheme *runtime.Scheme, rest *REST) *StatusREST {
 	return &StatusREST{store: &statusStore}
 }
 
-// StatusREST implements the REST endpoint for changing the status of an APIService.
+// StatusREST 实现修改 APIService status 的 REST 端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
 var _ = rest.Patcher(&StatusREST{})
 
-// New creates a new APIService object.
+// New 创建一个新的 APIService 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &apiregistration.APIService{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层存储与 REST 共用，这里不显式销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从存储中取对象，Patch 需要它。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 只修改对象的 status 部分。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// 调用底层存储时显式把 forceAllowCreate 设为 false：子资源绝不允许在 update 时创建。
 	// 不信任外层传进来的 forceAllowCreate：即便调用方误开了它，状态子资源
@@ -187,7 +186,7 @@ func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.Updat
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }

@@ -18,15 +18,14 @@ limitations under the License.
 // 使 cloud-provider 相关组件无需依赖 kubelet 的内部凭据包即可解析 dockercfg。
 package credentialconfig
 
-// Code taken from /pkg/credentialprovider/config.go
+// 代码取自 /pkg/credentialprovider/config.go。
 
-// RegistryConfig represents the config file used by the docker CLI.
-// This config that represents the credentials that should be used
-// when pulling images from specific image repositories.
+// RegistryConfig 表示 docker CLI 使用的配置文件，
+// 描述从指定镜像仓库拉取镜像时应使用的凭据。
 // 键是镜像仓库地址（通常为 registry host[:port]），值是该仓库的凭据。
 type RegistryConfig map[string]RegistryConfigEntry
 
-// RegistryConfigEntry wraps a docker config as a entry
+// RegistryConfigEntry 把 docker 配置包装成一条条目。
 // 字段与旧式 .dockercfg 格式对应；空字段表示该凭据未提供对应信息。
 type RegistryConfigEntry struct {
 	Username string

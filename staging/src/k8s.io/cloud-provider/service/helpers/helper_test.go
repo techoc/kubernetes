@@ -93,7 +93,7 @@ func TestGetLoadBalancerSourceRanges(t *testing.T) {
 	if len(cidrs) != 2 {
 		t.Errorf("Expected two CIDRs: %v", cidrs.StringSlice())
 	}
-	// check LoadBalancerSourceRanges not specified
+	// 未指定 LoadBalancerSourceRanges。
 	svc := v1.Service{}
 	cidrs, err := GetLoadBalancerSourceRanges(&svc)
 	if err != nil {
@@ -105,7 +105,7 @@ func TestGetLoadBalancerSourceRanges(t *testing.T) {
 	if !IsAllowAll(cidrs) {
 		t.Errorf("Expected default to be allow-all: %v", cidrs.StringSlice())
 	}
-	// check SourceRanges annotation is empty
+	// SourceRanges 注解为空。
 	annotations := make(map[string]string)
 	annotations[v1.AnnotationLoadBalancerSourceRangesKey] = ""
 	svc = v1.Service{}
@@ -297,14 +297,14 @@ func TestPatchService(t *testing.T) {
 	}
 	fakeCs := fake.NewSimpleClientset(svcOrigin)
 
-	// Issue a separate update and verify patch doesn't fail after this.
+	// 先单独做一次 update，验证之后 patch 不会失败。
 	svcToUpdate := svcOrigin.DeepCopy()
 	addAnnotations(svcToUpdate)
 	if _, err := fakeCs.CoreV1().Services(svcOrigin.Namespace).Update(context.TODO(), svcToUpdate, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Failed to update service: %v", err)
 	}
 
-	// Attempt to patch based the original service.
+	// 基于原始 Service 发起 patch。
 	svcToPatch := svcOrigin.DeepCopy()
 	svcToPatch.Finalizers = []string{"foo"}
 	svcToPatch.Spec.ClusterIP = "10.0.0.2"
@@ -320,13 +320,12 @@ func TestPatchService(t *testing.T) {
 		t.Fatalf("Failed to patch service: %v", err)
 	}
 
-	// Service returned by patch will contain latest content (e.g from
-	// the separate update).
+	// patch 返回的 Service 应包含最新内容（例如来自那次单独 update 的改动）。
 	addAnnotations(svcToPatch)
 	if !reflect.DeepEqual(svcPatched, svcToPatch) {
 		t.Errorf("PatchStatus() = %+v, want %+v", svcPatched, svcToPatch)
 	}
-	// Explicitly validate if spec is unchanged from origin.
+	// 显式校验 spec 与原始对象一致，未被 patch 改动。
 	if !reflect.DeepEqual(svcPatched.Spec, svcOrigin.Spec) {
 		t.Errorf("Got spec = %+v, want %+v", svcPatched.Spec, svcOrigin.Spec)
 	}

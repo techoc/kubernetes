@@ -37,7 +37,7 @@ type handlerTest struct {
 var _ http.Handler = handlerTest{}
 
 func (h handlerTest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Create an APIService with a handler for one group/version
+	// 创建一个只处理某个 group/version 的 APIService 及 handler。
 	if r.URL.Path == "/openapi/v3" {
 		group := &handler3.OpenAPIV3Discovery{
 			Paths: map[string]handler3.OpenAPIV3DiscoveryGroupVersion{

@@ -16,15 +16,10 @@ limitations under the License.
 
 package v1alpha1
 
-// RecommendedDefaultServiceControllerConfiguration defaults a pointer to a
-// ServiceControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultServiceControllerConfiguration 为配置指针填入推荐默认值；
+// 默认值可能随 API 版本变化。该函数有意不注册为 scheme 中的常规 `SetDefaults_Foo`，
+// 以便嵌入该类型的上层自行决定默认值：scheme 的默认值在转换时执行，强制使用它
+// 会让上层无法退出。需要这些默认值时，应在包装结构的 `SetDefaults_` 方法中调用。
 // 换句话说，这里提供“推荐值”而非强制契约：嵌入方可以自行决定采用、覆盖或忽略。
 // 默认 1 个 worker 是为了让 service 对账串行化，避免并发创建同一 LB 资源。
 func RecommendedDefaultServiceControllerConfiguration(obj *ServiceControllerConfiguration) {

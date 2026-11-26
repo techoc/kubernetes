@@ -29,7 +29,7 @@ import (
 	apiservicestorage "k8s.io/kube-aggregator/pkg/registry/apiservice/etcd"
 )
 
-// NewRESTStorage returns an APIGroupInfo object that will work against apiservice.
+// NewRESTStorage 返回用于 apiservice 的 APIGroupInfo。
 // APIGroupInfo 是通用 apiserver 认识的资源装配格式：把"有哪些资源、各自用哪个 storage"
 // 包在一起交出去，路由和版本协商就由通用层统一处理。
 // 注意 shouldServeBeta 参数目前没有被用到：这里只往 v1 下挂资源。
