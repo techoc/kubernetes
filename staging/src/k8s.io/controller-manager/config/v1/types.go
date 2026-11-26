@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// LeaderMigrationConfiguration provides versioned configuration for all migrating leader locks.
+// LeaderMigrationConfiguration 为所有迁移中的 leader lock 提供版本化配置。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // v1 版本的领导者迁移配置。
 // 相比内部版本，这里没有 ResourceLock 字段——v1 起锁类型固定为 leases。
@@ -28,24 +28,24 @@ type LeaderMigrationConfiguration struct {
 	// 内嵌类型元信息，用于反序列化时识别 apiVersion / kind。
 	metav1.TypeMeta `json:""`
 
-	// LeaderName is the name of the leader election resource that protects the migration
-	// E.g. 1-20-KCM-to-1-21-CCM
+	// LeaderName 是保护迁移过程的 leader election 资源名，
+	// 例如 1-20-KCM-to-1-21-CCM。
 	LeaderName string `json:"leaderName"`
 
-	// ControllerLeaders contains a list of migrating leader lock configurations
+	// ControllerLeaders 列出各迁移 leader lock 的配置。
 	// listType=atomic 告诉序列化/合并逻辑该列表应作为整体替换，而不是逐项合并。
 	// +listType=atomic
 	ControllerLeaders []ControllerLeaderConfiguration `json:"controllerLeaders"`
 }
 
-// ControllerLeaderConfiguration provides the configuration for a migrating leader lock.
+// ControllerLeaderConfiguration 描述一个迁移中 leader lock 的配置。
 type ControllerLeaderConfiguration struct {
-	// Name is the name of the controller being migrated
-	// E.g. service-controller, route-controller, cloud-node-controller, etc
+	// Name 是被迁移 controller 的名字，
+	// 例如 service-controller、route-controller、cloud-node-controller 等。
 	Name string `json:"name"`
 
-	// Component is the name of the component in which the controller should be running.
-	// E.g. kube-controller-manager, cloud-controller-manager, etc
-	// Or '*' meaning the controller can be run under any component that participates in the migration
+	// Component 指定该 controller 应运行的组件，
+	// 例如 kube-controller-manager、cloud-controller-manager 等。
+	// 取 '*' 时表示它可运行在参与迁移的任意组件下。
 	Component string `json:"component"`
 }

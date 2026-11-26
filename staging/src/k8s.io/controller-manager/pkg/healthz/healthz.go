@@ -22,23 +22,17 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 )
 
-// NamedPingChecker returns a health check with given name
-// that returns no error when checked.
 // 返回一个带名字的“永远健康”检查器（ping），常用于占位或测试。
 func NamedPingChecker(name string) healthz.HealthChecker {
 	return NamedHealthChecker(name, healthz.PingHealthz)
 }
 
-// NamedHealthChecker creates a named health check from
-// an unnamed one.
 // 给未命名检查器套上名字，使其符合 apiserver healthz 的 HealthChecker 接口。
 // 控制器通常只实现 Check 方法，名字由 manager 统一指定。
 func NamedHealthChecker(name string, check UnnamedHealthChecker) healthz.HealthChecker {
 	return healthz.NamedCheck(name, check.Check)
 }
 
-// UnnamedHealthChecker is an unnamed healthz checker.
-// The name of the check can be set by the controller manager.
 // 未命名健康检查器：控制器只需实现检查逻辑，健康检查的名字由 controller-manager 决定。
 type UnnamedHealthChecker interface {
 	Check(req *http.Request) error

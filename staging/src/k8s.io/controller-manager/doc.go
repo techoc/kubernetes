@@ -25,7 +25,4 @@ limitations under the License.
 //   - 领导者迁移（pkg/leadermigration），用于把控制器在 KCM 与 CCM 之间平滑迁移。
 //
 // 本包本身不实现任何具体控制器，只提供可组合的构件。
-// Package controllermanager contains the common library code for
-// building a controller-manager. It was based on the common code
-// between the kube-controller-manager and the cloud-controller-manager.
 package controllermanager

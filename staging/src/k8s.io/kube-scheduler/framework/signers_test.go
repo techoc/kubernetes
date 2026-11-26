@@ -188,7 +188,7 @@ func TestVolumesSigner(t *testing.T) {
 					},
 				},
 			},
-			// Expected sort order depends on the exact JSON string.
+			// 期望的排序取决于 JSON 字符串的精确内容。
 			// {"emptyDir":{}} comes before {"hostPath":...} alphabetically.
 			want: []string{marshal(emptyDir), marshal(hostPath)},
 		},

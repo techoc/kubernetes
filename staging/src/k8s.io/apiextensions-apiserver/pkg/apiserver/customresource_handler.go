@@ -97,10 +97,10 @@ type crdHandler struct {
 	groupDiscoveryHandler   *groupDiscoveryHandler
 
 	customStorageLock sync.Mutex
-	// customStorage contains a crdStorageMap
-	// atomic.Value has a very good read performance compared to sync.RWMutex
-	// see https://gist.github.com/dim/152e6bf80e1384ea72e17ac717a5000a
-	// which is suited for most read and rarely write cases
+	// customStorage 保存 crdStorageMap，
+	// 选 atomic.Value 而非 sync.RWMutex 是因为读取极快，
+	// 性能对比见 https://gist.github.com/dim/152e6bf80e1384ea72e17ac717a5000a。
+	// 适合这里读多写少的场景。
 	customStorage atomic.Value
 
 	crdLister listers.CustomResourceDefinitionLister
@@ -111,63 +111,63 @@ type crdHandler struct {
 
 	establishingController *establish.EstablishingController
 
-	// MasterCount is used to implement sleep to improve
-	// CRD establishing process for HA clusters.
+	// MasterCount 用于插入等待，缓解 HA 集群下
+	// CRD 建立过程中的竞态。
 	masterCount int
 
 	converterFactory *conversion.CRConverterFactory
 
-	// so that we can do create on update.
+	// 这样可以在 update 路径里完成 create。
 	authorizer authorizer.UnconditionalAuthorizer
 
-	// request timeout we should delay storage teardown for
+	// 请求超时时间，据此决定存储销毁要延迟多久。
 	requestTimeout time.Duration
 
-	// minRequestTimeout applies to CR's list/watch calls
+	// minRequestTimeout 作用于自定义资源的 list/watch。
 	minRequestTimeout time.Duration
 
-	// staticOpenAPISpec is used as a base for the schema of CR's for the
-	// purpose of managing fields, it is how CR handlers get the structure
-	// of TypeMeta and ObjectMeta
+	// staticOpenAPISpec 作为 CR schema 的基础，
+	// CR handler 由此得知 TypeMeta 与 ObjectMeta 的结构，
+	// 以便正确管理字段。
 	staticOpenAPISpec map[string]*spec.Schema
 
-	// The limit on the request size that would be accepted and decoded in a write request
-	// 0 means no limit.
+	// 写请求中接受并解码的请求体大小上限，
+	// 0 表示不限。
 	maxRequestBodyBytes int64
 }
 
-// crdInfo stores enough information to serve the storage for the custom resource
+// crdInfo 保存为自定义资源提供存储所需的全部信息。
 type crdInfo struct {
-	// spec and acceptedNames are used to compare against if a change is made on a CRD. We only update
-	// the storage if one of these changes.
+	// spec 与 acceptedNames 用于判断 CRD 是否变化；只有这两者改变
+	// 才需要更新存储。
 	spec          *apiextensionsv1.CustomResourceDefinitionSpec
 	acceptedNames *apiextensionsv1.CustomResourceDefinitionNames
 
-	// Deprecated per version
+	// 各版本的 deprecated 标记。
 	deprecated map[string]bool
 
-	// Warnings per version
+	// 各版本的 warnings。
 	warnings map[string][]string
 
-	// Storage per version
+	// 各版本的存储。
 	storages map[string]customresource.CustomResourceStorage
 
-	// Request scope per version
+	// 各版本的请求 scope。
 	requestScopes map[string]*handlers.RequestScope
 
-	// Scale scope per version
+	// 各版本的 scale 请求 scope。
 	scaleRequestScopes map[string]*handlers.RequestScope
 
-	// Status scope per version
+	// 各版本的 status 请求 scope。
 	statusRequestScopes map[string]*handlers.RequestScope
 
-	// storageVersion is the CRD version used when storing the object in etcd.
+	// storageVersion 是对象存入 etcd 时使用的 CRD 版本。
 	storageVersion string
 
 	waitGroup *utilwaitgroup.SafeWaitGroup
 }
 
-// crdStorageMap goes from customresourcedefinition to its storage
+// crdStorageMap 把 CRD 映射到其存储：
 // crdStorageMap 映射 CRD 的 UID 到其存储信息（REST Storage、schema 等）。
 type crdStorageMap map[types.UID]*crdInfo
 
@@ -223,13 +223,13 @@ func NewCustomResourceDefinitionHandler(
 	return ret, nil
 }
 
-// watches are expected to handle storage disruption gracefully,
-// both on the server-side (by terminating the watch connection)
-// and on the client side (by restarting the watch)
+// watch 应当优雅处理存储中断：
+// 服务端主动断开连接，
+// 客户端负责重新发起 watch。
 var longRunningFilter = genericfilters.BasicLongRunningRequestCheck(sets.NewString("watch"), sets.NewString())
 
-// possiblyAcrossAllNamespacesVerbs contains those verbs which can be per-namespace and across all
-// namespaces for namespaces resources. I.e. for these an empty namespace in the requestInfo is fine.
+// possiblyAcrossAllNamespacesVerbs 列出那些对命名空间资源既可限定命名空间、
+// 也可跨全部命名空间的 verb；这些情况下 requestInfo 的 namespace 为空是合法的。
 var possiblyAcrossAllNamespacesVerbs = sets.NewString("list", "watch")
 
 func (r *crdHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -244,13 +244,13 @@ func (r *crdHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	if !requestInfo.IsResourceRequest {
 		pathParts := splitPath(requestInfo.Path)
-		// only match /apis/<group>/<version>
-		// only registered under /apis
+		// 只匹配 /apis/<group>/<version>，
+		// 因为路由只注册在 /apis 下。
 		if len(pathParts) == 3 {
 			r.versionDiscoveryHandler.ServeHTTP(w, req)
 			return
 		}
-		// only match /apis/<group>
+		// 只匹配 /apis/<group>。
 		if len(pathParts) == 2 {
 			r.groupDiscoveryHandler.ServeHTTP(w, req)
 			return
@@ -275,8 +275,8 @@ func (r *crdHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// if the scope in the CRD and the scope in request differ (with exception of the verbs in possiblyAcrossAllNamespacesVerbs
-	// for namespaced resources), pass request to the delegate, which is supposed to lead to a 404.
+	// 若 CRD 的作用域与请求的作用域不一致（命名空间资源中 possiblyAcrossAllNamespacesVerbs 所列 verb 除外），
+	// 就把请求交给 delegate，预期返回 404。
 	namespacedCRD, namespacedReq := crd.Spec.Scope == apiextensionsv1.NamespaceScoped, len(requestInfo.Namespace) > 0
 	if !namespacedCRD && namespacedReq {
 		r.delegate.ServeHTTP(w, req)
@@ -292,10 +292,10 @@ func (r *crdHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// There is a small chance that a CRD is being served because NamesAccepted condition is true,
-	// but it becomes "unserved" because another names update leads to a conflict
-	// and EstablishingController wasn't fast enough to put the CRD into the Established condition.
-	// We accept this as the problem is small and self-healing.
+	// CRD 可能因 NamesAccepted 为 true 而暂时对外服务，
+	// 随后因名称更新冲突而变为 unserved；
+	// EstablishingController 未能及时置为 Established 时会放大这个窗口。
+	// 该窗口很短且能自愈，因此接受这一风险。
 	if !apiextensionshelpers.IsCRDConditionTrue(crd, apiextensionsv1.NamesAccepted) &&
 		!apiextensionshelpers.IsCRDConditionTrue(crd, apiextensionsv1.Established) {
 		r.delegate.ServeHTTP(w, req)
@@ -386,9 +386,9 @@ func (r *crdHandler) serveResource(w http.ResponseWriter, req *http.Request, req
 		forceWatch := true
 		return handlers.ListResource(storage, storage, requestScope, forceWatch, r.minRequestTimeout)
 	case "create":
-		// we want to track recently created CRDs so that in HA environments we don't have server A allow a create and server B
-		// not have observed the established, so a followup get,update,delete results in a 404. We've observed about 800ms
-		// delay in some CI environments.  Two seconds looks long enough and reasonably short for hot retriers.
+		// 记录近期创建的 CRD，避免 HA 环境下 A 服务器放行 create 后 B 服务器
+		// 还没观察到 Established，使后续 get/update/delete 得到 404；实测延迟约 800ms。
+		// 两秒足以覆盖该延迟，对频繁重试者也不算太久。
 		justCreated := time.Since(apiextensionshelpers.FindCRDCondition(crd, apiextensionsv1.Established).LastTransitionTime.Time) < 2*time.Second
 		if justCreated {
 			time.Sleep(2 * time.Second)
@@ -462,12 +462,12 @@ func (r *crdHandler) serveScale(w http.ResponseWriter, req *http.Request, reques
 	}
 }
 
-// createCustomResourceDefinition removes potentially stale storage so it gets re-created
+// createCustomResourceDefinition 清理可能残留的旧存储，使其随后重建。
 func (r *crdHandler) createCustomResourceDefinition(obj interface{}) {
 	crd := obj.(*apiextensionsv1.CustomResourceDefinition)
 	r.customStorageLock.Lock()
 	defer r.customStorageLock.Unlock()
-	// this could happen if the create event is merged from create-update events
+	// create 事件若与 update 事件合并，就可能出现这种情况。
 	storageMap := r.customStorage.Load().(crdStorageMap)
 	oldInfo, found := storageMap[crd.UID]
 	if !found {
@@ -481,7 +481,7 @@ func (r *crdHandler) createCustomResourceDefinition(obj interface{}) {
 	r.removeStorage_locked(crd.UID)
 }
 
-// updateCustomResourceDefinition removes potentially stale storage so it gets re-created
+// updateCustomResourceDefinition 清理可能残留的旧存储，使其随后重建。
 func (r *crdHandler) updateCustomResourceDefinition(oldObj, newObj interface{}) {
 	oldCRD := oldObj.(*apiextensionsv1.CustomResourceDefinition)
 	newCRD := newObj.(*apiextensionsv1.CustomResourceDefinition)
@@ -489,10 +489,10 @@ func (r *crdHandler) updateCustomResourceDefinition(oldObj, newObj interface{}) 
 	r.customStorageLock.Lock()
 	defer r.customStorageLock.Unlock()
 
-	// Add CRD to the establishing controller queue.
-	// For HA clusters, we want to prevent race conditions when changing status to Established,
-	// so we want to be sure that CRD is Installing at least for 5 seconds before Establishing it.
-	// TODO: find a real HA safe checkpointing mechanism instead of an arbitrary wait.
+	// 把 CRD 加入 establishing controller 队列。
+	// HA 集群下改状态为 Established 存在竞态，
+	// 因此要求 CRD 至少处于 Installing 状态 5 秒再推进。
+	// TODO: 用真正 HA 安全的检查点机制替代这个拍脑袋的等待。
 	if !apiextensionshelpers.IsCRDConditionTrue(newCRD, apiextensionsv1.Established) &&
 		apiextensionshelpers.IsCRDConditionTrue(newCRD, apiextensionsv1.NamesAccepted) {
 		if r.masterCount > 1 {
@@ -520,26 +520,26 @@ func (r *crdHandler) updateCustomResourceDefinition(oldObj, newObj interface{}) 
 	r.removeStorage_locked(newCRD.UID)
 }
 
-// removeStorage_locked removes the cached storage with the given uid as key from the storage map. This function
-// updates r.customStorage with the cleaned-up storageMap and tears down the old storage.
-// NOTE: Caller MUST hold r.customStorageLock to write r.customStorage thread-safely.
+// removeStorage_locked 按 UID 从缓存移除存储，用清理后的 storageMap
+// 更新 r.customStorage，并销毁旧存储。
+// 注意：调用方必须持有 r.customStorageLock，写 r.customStorage 才安全。
 func (r *crdHandler) removeStorage_locked(uid types.UID) {
 	storageMap := r.customStorage.Load().(crdStorageMap)
 	if oldInfo, ok := storageMap[uid]; ok {
-		// Copy because we cannot write to storageMap without a race
-		// as it is used without locking elsewhere.
+		// 先复制：storageMap 在无锁处被读取，
+		// 直接写入会形成数据竞争。
 		storageMap2 := storageMap.clone()
 
-		// Remove from the CRD info map and store the map
+		// 从 CRD 信息表中删除并写回。
 		delete(storageMap2, uid)
 		r.customStorage.Store(storageMap2)
 
-		// Tear down the old storage
+		// 销毁旧存储。
 		go r.tearDown(oldInfo)
 	}
 }
 
-// removeDeadStorage removes REST storage that isn't being used
+// removeDeadStorage 清理不再使用的 REST 存储。
 func (r *crdHandler) removeDeadStorage() {
 	allCustomResourceDefinitions, err := r.crdLister.List(labels.Everything())
 	if err != nil {
@@ -551,7 +551,7 @@ func (r *crdHandler) removeDeadStorage() {
 	defer r.customStorageLock.Unlock()
 
 	storageMap := r.customStorage.Load().(crdStorageMap)
-	// Copy because we cannot write to storageMap without a race
+	// 先复制：storageMap 在无锁处被读取，
 	storageMap2 := make(crdStorageMap)
 	for _, crd := range allCustomResourceDefinitions {
 		if _, ok := storageMap[crd.UID]; ok {
@@ -568,14 +568,14 @@ func (r *crdHandler) removeDeadStorage() {
 	}
 }
 
-// Wait up to a minute for requests to drain, then tear down storage
+// 最多等待一分钟让请求排空，再销毁存储。
 func (r *crdHandler) tearDown(oldInfo *crdInfo) {
 	requestsDrained := make(chan struct{})
 	go func() {
 		defer close(requestsDrained)
-		// Allow time for in-flight requests with a handle to the old info to register themselves
+		// 留一点时间让持有旧信息的在途请求完成登记。
 		time.Sleep(time.Second)
-		// Wait for in-flight requests to drain
+		// 等待在途请求排空。
 		oldInfo.waitGroup.Wait()
 	}()
 
@@ -586,13 +586,13 @@ func (r *crdHandler) tearDown(oldInfo *crdInfo) {
 	}
 
 	for _, storage := range oldInfo.storages {
-		// destroy only the main storage. Those for the subresources share cacher and etcd clients.
+		// 只销毁主存储；子资源共享 cacher 与 etcd 客户端。
 		storage.CustomResource.DestroyFunc()
 	}
 }
 
-// Destroy shuts down storage layer for all registered CRDs.
-// It should be called as a last step of the shutdown sequence.
+// Destroy 关闭所有已注册 CRD 的存储层。
+// 应在关闭流程的最后一步调用。
 func (r *crdHandler) destroy() {
 	r.customStorageLock.Lock()
 	defer r.customStorageLock.Unlock()
@@ -600,16 +600,15 @@ func (r *crdHandler) destroy() {
 	storageMap := r.customStorage.Load().(crdStorageMap)
 	for _, crdInfo := range storageMap {
 		for _, storage := range crdInfo.storages {
-			// DestroyFunc have to be implemented in idempotent way,
-			// so the potential race with r.tearDown() (being called
-			// from a goroutine) is safe.
+			// DestroyFunc 必须幂等，
+			// 这样才能安全承受与异步调用的 r.tearDown() 之间的竞争。
+			// 与异步 tearDown 的竞争。
 			storage.CustomResource.DestroyFunc()
 		}
 	}
 }
 
-// GetCustomResourceListerCollectionDeleter returns the ListerCollectionDeleter of
-// the given crd.
+// GetCustomResourceListerCollectionDeleter 返回给定 CRD 的 ListerCollectionDeleter。
 func (r *crdHandler) GetCustomResourceListerCollectionDeleter(crd *apiextensionsv1.CustomResourceDefinition) (finalizer.ListerCollectionDeleter, error) {
 	info, err := r.getOrCreateServingInfoFor(crd.UID, crd.Name)
 	if err != nil {
@@ -618,8 +617,8 @@ func (r *crdHandler) GetCustomResourceListerCollectionDeleter(crd *apiextensions
 	return info.storages[info.storageVersion].CustomResource, nil
 }
 
-// getOrCreateServingInfoFor gets the CRD serving info for the given CRD UID if the key exists in the storage map.
-// Otherwise the function fetches the up-to-date CRD using the given CRD name and creates CRD serving info.
+// getOrCreateServingInfoFor 先按 UID 查缓存中的 serving info；
+// 未命中则按名字取最新 CRD 并新建 serving info。
 func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crdInfo, error) {
 	storageMap := r.customStorage.Load().(crdStorageMap)
 	if ret, ok := storageMap[uid]; ok {
@@ -629,10 +628,10 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 	r.customStorageLock.Lock()
 	defer r.customStorageLock.Unlock()
 
-	// Get the up-to-date CRD when we have the lock, to avoid racing with updateCustomResourceDefinition.
-	// If updateCustomResourceDefinition sees an update and happens later, the storage will be deleted and
-	// we will re-create the updated storage on demand. If updateCustomResourceDefinition happens before,
-	// we make sure that we observe the same up-to-date CRD.
+	// 持锁期间读取最新 CRD，避免与 updateCustomResourceDefinition 竞争。
+	// 若对方稍后处理更新，存储会被删除，
+	// 届时按需重建即可；若它先处理完，
+	// 这里保证读到的是同一份最新 CRD。
 	crd, err := r.crdLister.Get(name)
 	if err != nil {
 		return nil, err
@@ -647,7 +646,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 		return nil, err
 	}
 
-	// Scope/Storages per version.
+	// 按版本组织的 request scope 与存储。
 	requestScopes := map[string]*handlers.RequestScope{}
 	storages := map[string]customresource.CustomResourceStorage{}
 	statusScopes := map[string]*handlers.RequestScope{}
@@ -673,17 +672,17 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 		}
 		s, err := structuralschema.NewStructural(internalValidation.OpenAPIV3Schema)
 		if !crd.Spec.PreserveUnknownFields && err != nil {
-			// This should never happen. If it does, it is a programming error.
+			// 理论上不会发生；一旦发生就是程序错误。
 			utilruntime.HandleError(fmt.Errorf("failed to convert schema to structural: %v", err))
 			return nil, fmt.Errorf("the server could not properly serve the CR schema") // validation should avoid this
 		}
 
 		if !crd.Spec.PreserveUnknownFields {
-			// we don't own s completely, e.g. defaults are not deep-copied. So better make a copy here.
+			// s 并非完全归我们所有（例如 defaults 未深拷贝），先复制更稳妥。
 			s = s.DeepCopy()
 
 			if err := structuraldefaulting.PruneDefaults(s); err != nil {
-				// This should never happen. If it does, it is a programming error.
+				// 理论上不会发生；一旦发生就是程序错误。
 				utilruntime.HandleError(fmt.Errorf("failed to prune defaults: %v", err))
 				return nil, fmt.Errorf("the server could not properly serve the CR schema") // validation should avoid this
 			}
@@ -710,7 +709,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 		return nil, err
 	}
 
-	// Create replicasPathInCustomResource
+	// 构造 replicasPathInCustomResource。
 	replicasPathInCustomResource := managedfields.ResourcePathMappings{}
 	for _, v := range crd.Spec.Versions {
 		subresources, err := apiextensionshelpers.GetSubresourcesForVersion(crd, v.Name)
@@ -731,7 +730,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 		replicasPathInCustomResource[schema.GroupVersion{Group: crd.Spec.Group, Version: v.Name}.String()] = path
 	}
 
-	// ensure accepted names are valid
+	// 确保 acceptedNames 合法。
 	if len(crd.Status.AcceptedNames.Plural) == 0 {
 		utilruntime.HandleError(fmt.Errorf("CustomResourceDefinition %s has unexpected empty status.acceptedNames.plural", crd.Name))
 		return nil, fmt.Errorf("the server could not properly serve the resource")
@@ -765,7 +764,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 			return nil, fmt.Errorf("the server could not properly serve the CR subresources")
 		}
 
-		// Register equivalent kinds
+		// 注册等价 kind。
 		equivalentResourceRegistry.RegisterKindFor(versionToResource[v.Name], "", versionToKind[v.Name])
 		if versionToSubresources[v.Name] != nil {
 			if versionToSubresources[v.Name].Status != nil {
@@ -778,13 +777,13 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 	}
 
 	for _, v := range crd.Spec.Versions {
-		// Do not construct storage if version is neither served nor stored
+		// 既不 served 也不 stored 的版本不构造存储。
 		if !v.Storage && !v.Served {
 			continue
 		}
 
-		// In addition to Unstructured objects (Custom Resources), we also may sometimes need to
-		// decode unversioned Options objects, so we delegate to parameterScheme for such types.
+		// 除 Unstructured 对象（自定义资源）外，有时还需要
+		// 有时还需解码无版本的 Options 对象，这类类型交给 parameterScheme。
 		parameterScheme := runtime.NewScheme()
 		parameterScheme.AddUnversionedTypes(schema.GroupVersion{Group: crd.Spec.Group, Version: v.Name},
 			&metav1.ListOptions{},
@@ -828,7 +827,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 			if err := apiextensionsv1.Convert_v1_CustomResourceSubresourceStatus_To_apiextensions_CustomResourceSubresourceStatus(subresources.Status, statusSpec, nil); err != nil {
 				return nil, fmt.Errorf("failed converting CRD status subresource to internal version: %v", err)
 			}
-			// for the status subresource, validate only against the status schema
+			// status 子资源只按 status schema 校验。
 			if internalValidationSchema != nil && internalValidationSchema.OpenAPIV3Schema != nil && internalValidationSchema.OpenAPIV3Schema.Properties != nil {
 				if statusSchema, ok := internalValidationSchema.OpenAPIV3Schema.Properties["status"]; ok {
 					statusValidator, _, err = apiservervalidation.NewSchemaValidator(&statusSchema)
@@ -894,7 +893,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 
 		clusterScoped := crd.Spec.Scope == apiextensionsv1.ClusterScoped
 
-		// CRDs explicitly do not support protobuf, but some objects returned by the API server do
+		// CRD 明确不支持 protobuf，但 API Server 返回的某些对象支持，
 		negotiatedSerializer := unstructuredNegotiatedSerializer{
 			typer:                 typer,
 			creator:               creator,
@@ -978,7 +977,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 			Resource: schema.GroupVersionResource{Group: crd.Spec.Group, Version: v.Name, Resource: crd.Status.AcceptedNames.Plural},
 			Kind:     kind,
 
-			// a handler for a specific group-version of a custom resource uses that version as the in-memory representation
+			// 因此针对特定 group-version 的 handler 以该版本作为内存表示。
 			HubGroupVersion: kind.GroupVersion(),
 
 			MetaGroupVersion: metav1.SchemeGroupVersion,
@@ -1008,8 +1007,8 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 		}
 		scaleTable, _ := tableconvertor.New(scaleColumns)
 
-		// override scale subresource values
-		// shallow copy
+		// 覆盖 scale 子资源的值，
+		// 这里做浅拷贝。
 		scaleScope := *requestScopes[v.Name]
 		scaleConverter := scale.NewScaleConverter()
 		scaleScope.Subresource = "scale"
@@ -1071,8 +1070,8 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 		waitGroup:           &utilwaitgroup.SafeWaitGroup{},
 	}
 
-	// Copy because we cannot write to storageMap without a race
-	// as it is used without locking elsewhere.
+	// 先复制：storageMap 在无锁处被读取，
+	// 直接写入会形成数据竞争。
 	storageMap2 := storageMap.clone()
 
 	storageMap2[crd.UID] = ret
@@ -1081,7 +1080,7 @@ func (r *crdHandler) getOrCreateServingInfoFor(uid types.UID, name string) (*crd
 	return ret, nil
 }
 
-// getStatusResetFields returns the reset fields which include all versions for the status subresource of the CRD.
+// getStatusResetFields 返回 CRD status 子资源在所有版本上的重置字段。
 func getStatusResetFields(crd *apiextensionsv1.CustomResourceDefinition, storages map[string]customresource.CustomResourceStorage) map[fieldpath.APIVersion]*fieldpath.Set {
 	var statusResetFields = make(map[fieldpath.APIVersion]*fieldpath.Set)
 	for _, value := range crd.Spec.Versions {
@@ -1096,7 +1095,7 @@ func getStatusResetFields(crd *apiextensionsv1.CustomResourceDefinition, storage
 	return statusResetFields
 }
 
-// setStatusScope sets the status scope for each version of the CRD.
+// setStatusScope 为 CRD 的每个版本设置 status scope。
 func setStatusScope(crd *apiextensionsv1.CustomResourceDefinition, requestScopes map[string]*handlers.RequestScope, typeConverter managedfields.TypeConverter, resetFields map[fieldpath.APIVersion]*fieldpath.Set, statusScopes map[string]*handlers.RequestScope) (map[string]*handlers.RequestScope, error) {
 	for _, v := range crd.Spec.Versions {
 		clusterScoped := crd.Spec.Scope == apiextensionsv1.ClusterScoped
@@ -1215,7 +1214,7 @@ func newUnstructuredObjectTyper(Delegate runtime.ObjectTyper) UnstructuredObject
 }
 
 func (t UnstructuredObjectTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
-	// Delegate for things other than Unstructured.
+	// 非 Unstructured 对象交给 delegate。
 	if _, ok := obj.(runtime.Unstructured); !ok {
 		return t.Delegate.ObjectKinds(obj)
 	}
@@ -1241,7 +1240,7 @@ type unstructuredDefaulter struct {
 }
 
 func (d unstructuredDefaulter) Default(in runtime.Object) {
-	// Delegate for things other than Unstructured, and other GKs
+	// 非 Unstructured 对象及其它 GK 交给 delegate。
 	u, ok := in.(runtime.Unstructured)
 	if !ok || u.GetObjectKind().GroupVersionKind().GroupKind() != d.structuralSchemaGK {
 		d.delegate.Default(in)
@@ -1251,8 +1250,8 @@ func (d unstructuredDefaulter) Default(in runtime.Object) {
 	structuraldefaulting.Default(u.UnstructuredContent(), d.structuralSchemas[u.GetObjectKind().GroupVersionKind().Version])
 }
 
-// clone returns a clone of the provided crdStorageMap.
-// The clone is a shallow copy of the map.
+// clone 复制给定的 crdStorageMap。
+// 这里只做 map 的浅拷贝。
 func (in crdStorageMap) clone() crdStorageMap {
 	if in == nil {
 		return nil
@@ -1264,8 +1263,8 @@ func (in crdStorageMap) clone() crdStorageMap {
 	return out
 }
 
-// crdConversionRESTOptionsGetter overrides the codec with one using the
-// provided custom converter and custom encoder and decoder version.
+// crdConversionRESTOptionsGetter 用指定的自定义转换器与编解码版本
+// 构造新 codec，覆盖默认 codec。
 type crdConversionRESTOptionsGetter struct {
 	generic.RESTOptionsGetter
 	converter             runtime.ObjectConvertor
@@ -1277,11 +1276,11 @@ type crdConversionRESTOptionsGetter struct {
 }
 
 func (t crdConversionRESTOptionsGetter) GetRESTOptions(resource schema.GroupResource, example runtime.Object) (generic.RESTOptions, error) {
-	// Explicitly ignore example, we override storageconfig below
+	// 显式忽略 example：下面会覆盖 storageconfig。
 	ret, err := t.RESTOptionsGetter.GetRESTOptions(resource, nil)
 	if err == nil {
 		d := schemaCoercingDecoder{delegate: ret.StorageConfig.Codec, validator: unstructuredSchemaCoercer{
-			// drop invalid fields while decoding old CRs (before we haven't had any ObjectMeta validation)
+			// 解码旧 CR 时丢弃非法字段（当时还没有 ObjectMeta 校验）。
 			dropInvalidMetadata:   true,
 			repairGeneration:      true,
 			structuralSchemas:     t.structuralSchemas,
@@ -1312,8 +1311,8 @@ func (t crdConversionRESTOptionsGetter) GetRESTOptions(resource schema.GroupReso
 	return ret, err
 }
 
-// schemaCoercingDecoder calls the delegate decoder, and then applies the Unstructured schema validator
-// to coerce the schema.
+// schemaCoercingDecoder 先调用 delegate 解码器，再用 Unstructured schema 校验器
+// 对结果做强转。
 type schemaCoercingDecoder struct {
 	delegate  runtime.Decoder
 	validator unstructuredSchemaCoercer
@@ -1348,8 +1347,7 @@ func (d schemaCoercingDecoder) Decode(data []byte, defaults *schema.GroupVersion
 	return obj, gvk, nil
 }
 
-// schemaCoercingConverter calls the delegate converter and applies the Unstructured validator to
-// coerce the schema.
+// schemaCoercingConverter 先调用 delegate 转换器，再用 Unstructured 校验器强转 schema。
 type schemaCoercingConverter struct {
 	delegate  runtime.ObjectConvertor
 	validator unstructuredSchemaCoercer
@@ -1390,12 +1388,12 @@ func (v schemaCoercingConverter) ConvertFieldLabel(gvk schema.GroupVersionKind, 
 	return v.delegate.ConvertFieldLabel(gvk, label, value)
 }
 
-// unstructuredSchemaCoercer adds to unstructured unmarshalling what json.Unmarshal does
-// in addition for native types when decoding into Golang structs:
+// unstructuredSchemaCoercer 为 unstructured 反序列化补上 json.Unmarshal 对原生类型
+// 解码到 Go 结构体时额外的处理：
 //
-// - validating and pruning ObjectMeta
-// - generic pruning of unknown fields following a structural schema
-// - removal of non-defaulted non-nullable null map values.
+// - 校验并裁剪 ObjectMeta
+// - 按 structural schema 通用裁剪未知字段
+// - 移除未设默认值且不可为 null 的 map 中的 null 值。
 type unstructuredSchemaCoercer struct {
 	dropInvalidMetadata bool
 	repairGeneration    bool
@@ -1407,7 +1405,7 @@ type unstructuredSchemaCoercer struct {
 }
 
 func (v *unstructuredSchemaCoercer) apply(u *unstructured.Unstructured) (unknownFieldPaths []string, err error) {
-	// save implicit meta fields that don't have to be specified in the validation spec
+	// 先保存那些无需写进校验 schema 的隐式元字段。
 	kind, foundKind, err := unstructured.NestedString(u.UnstructuredContent(), "kind")
 	if err != nil {
 		return nil, err
@@ -1425,7 +1423,7 @@ func (v *unstructuredSchemaCoercer) apply(u *unstructured.Unstructured) (unknown
 	}
 	unknownFieldPaths = append(unknownFieldPaths, metaUnknownFields...)
 
-	// compare group and kind because also other object like DeleteCollection options pass through here
+	// 同时比较 group 与 kind：DeleteCollection options 等对象也会经过这里。
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
 		return nil, err
@@ -1433,7 +1431,7 @@ func (v *unstructuredSchemaCoercer) apply(u *unstructured.Unstructured) (unknown
 
 	if gv.Group == v.structuralSchemaGK.Group && kind == v.structuralSchemaGK.Kind {
 		if !v.preserveUnknownFields {
-			// TODO: switch over pruning and coercing at the root to schemaobjectmeta.Coerce too
+			// TODO: 根部的裁剪与强转也改用 schemaobjectmeta.Coerce。
 			pruneOpts := structuralschema.UnknownFieldPathOptions{}
 			if v.returnUnknownFieldPaths {
 				pruneOpts.TrackUnknownFieldPaths = true
@@ -1451,13 +1449,13 @@ func (v *unstructuredSchemaCoercer) apply(u *unstructured.Unstructured) (unknown
 		}
 		unknownFieldPaths = append(unknownFieldPaths, paths...)
 
-		// fixup missing generation in very old CRs
+		// 修补极旧 CR 中缺失的 generation。
 		if v.repairGeneration && objectMeta.Generation == 0 {
 			objectMeta.Generation = 1
 		}
 	}
 
-	// restore meta fields, starting clean
+	// 从干净状态开始恢复元字段。
 	if foundKind {
 		u.SetKind(kind)
 	}
@@ -1473,7 +1471,7 @@ func (v *unstructuredSchemaCoercer) apply(u *unstructured.Unstructured) (unknown
 	return unknownFieldPaths, nil
 }
 
-// hasServedCRDVersion returns true if the given version is in the list of CRD's versions and the Served flag is set.
+// hasServedCRDVersion 判断给定版本是否在 CRD 版本列表中且 Served 为 true。
 func hasServedCRDVersion(spec *apiextensionsv1.CustomResourceDefinitionSpec, version string) bool {
 	for _, v := range spec.Versions {
 		if v.Name == version {
@@ -1483,15 +1481,15 @@ func hasServedCRDVersion(spec *apiextensionsv1.CustomResourceDefinitionSpec, ver
 	return false
 }
 
-// buildOpenAPIModelsForApply constructs openapi models from any validation schemas specified in the custom resource,
-// and merges it with the models defined in the static OpenAPI spec.
-// Returns nil models ifthe static spec is nil, or an error is encountered.
+// buildOpenAPIModelsForApply 从自定义资源指定的校验 schema 构造 OpenAPI 模型，
+// 并与静态 OpenAPI spec 中的模型合并。
+// 静态 spec 为 nil 或出错时返回 nil 模型。
 func buildOpenAPIModelsForApply(staticOpenAPISpec map[string]*spec.Schema, crd *apiextensionsv1.CustomResourceDefinition) (map[string]*spec.Schema, error) {
 	if staticOpenAPISpec == nil {
 		return nil, nil
 	}
 
-	// Convert static spec to V3 format to be able to merge
+	// 先把静态 spec 转成 V3 格式，才能合并。
 	staticSpecV3 := &spec3.OpenAPI{
 		Version: "3.0.0",
 		Info: &spec.Info{
@@ -1507,8 +1505,8 @@ func buildOpenAPIModelsForApply(staticOpenAPISpec map[string]*spec.Schema, crd *
 
 	specs := []*spec3.OpenAPI{staticSpecV3}
 	for _, v := range crd.Spec.Versions {
-		// Defaults are not pruned here, but before being served.
-		// See flag description in builder.go for flag usage
+		// 默认值不在这里裁剪，而是在对外服务前处理。
+		// 相关开关见 builder.go 中的 flag 说明。
 		s, err := builder.BuildOpenAPIV3(crd, v.Name, builder.Options{})
 		if err != nil {
 			return nil, err
@@ -1523,8 +1521,8 @@ func buildOpenAPIModelsForApply(staticOpenAPISpec map[string]*spec.Schema, crd *
 	return mergedOpenAPI.Components.Schemas, nil
 }
 
-// forbidCreateAdmission is an admission.Interface wrapper that prevents a
-// CustomResource from being created while its CRD is terminating.
+// forbidCreateAdmission 是 admission.Interface 的包装器，
+// 在 CRD 处于 Terminating 时拒绝创建自定义资源。
 type forbidCreateAdmission struct {
 	delegate admission.Interface
 }

@@ -150,8 +150,8 @@ func TestInvalidCustomCollector(t *testing.T) {
 	}
 }
 
-// TestCustomCollectorClearState guarantees `ClearState()` will fully clear a collector.
-// It is necessary because we may forget to clear some new-added fields in the future.
+// TestCustomCollectorClearState 保证 ClearState() 能彻底清空 collector：
+// 以后新增字段时很容易忘记清理，这个测试用来兜底。
 func TestCustomCollectorClearState(t *testing.T) {
 	var currentVersion = parseVersion(apimachineryversion.Info{
 		Major:      "1",

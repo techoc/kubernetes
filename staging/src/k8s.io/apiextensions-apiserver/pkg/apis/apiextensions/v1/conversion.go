@@ -57,7 +57,7 @@ func Convert_apiextensions_JSON_To_v1_JSON(in *apiextensions.JSON, out *JSON, s 
 		return err
 	}
 	if len(raw) == 0 || bytes.Equal(raw, nullLiteral) {
-		// match JSON#UnmarshalJSON treatment of literal nulls
+		// 与 JSON.UnmarshalJSON 对字面 null 的处理保持一致。
 		out.Raw = nil
 	} else {
 		out.Raw = raw

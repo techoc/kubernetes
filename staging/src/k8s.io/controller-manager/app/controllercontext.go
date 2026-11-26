@@ -31,10 +31,10 @@ import (
 // 再打包进这个对象交给控制器。这样控制器无需关心如何连接 apiserver、如何共享 Informer
 // 等横切逻辑，只需从上下文中取用所需能力即可。
 type ControllerContext struct {
-	// ClientBuilder will provide a client for this controller to use
+	// ClientBuilder 为该 controller 提供要用的客户端。
 	ClientBuilder clientbuilder.ControllerClientBuilder
 
-	// InformerFactory gives access to informers for the controller.
+	// InformerFactory 为 controller 提供 informer 的访问入口。
 	InformerFactory informers.SharedInformerFactory
 
 	// ObjectOrMetadataInformerFactory 提供访问 Informer 的入口：既支持结构化（typed）资源，
@@ -42,8 +42,8 @@ type ControllerContext struct {
 	// 目前通用控制器只使用对象元数据；若将来需要完整对象，这里会演变成 GenericInformerFactory 并接收动态客户端。
 	ObjectOrMetadataInformerFactory informerfactory.InformerFactory
 
-	// DeferredDiscoveryRESTMapper is a RESTMapper that will defer
-	// initialization of the RESTMapper until the first mapping is
+	// DeferredDiscoveryRESTMapper 把 RESTMapper 的初始化推迟到首次映射请求，
+	// 避免 controller 启动阶段就依赖 discovery 可用。
 	// requested.
 	// 延迟初始化的 RESTMapper：只有在第一次需要做资源映射时才向 apiserver 发现 API，
 	// 避免启动阶段对 apiserver 产生不必要的请求。

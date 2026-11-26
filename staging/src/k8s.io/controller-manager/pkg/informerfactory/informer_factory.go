@@ -22,7 +22,6 @@ import (
 	"k8s.io/client-go/metadata/metadatainformer"
 )
 
-// InformerFactory creates informers for each group version resource.
 // 统一创建 Informer 的工厂接口：同时支持结构化资源与仅元数据资源。
 // 先查 typed 工厂，找不到再回退到 metadata 工厂。
 type InformerFactory interface {
@@ -57,8 +56,6 @@ func (i *informerFactory) Start(stopCh <-chan struct{}) {
 	i.metadataInformerFactory.Start(stopCh)
 }
 
-// NewInformerFactory creates a new InformerFactory which works with both typed
-// resources and metadata-only resources
 // 用于有 Go 结构体定义的资源。
 // 组合两个工厂，返回对外接口。
 func NewInformerFactory(typedInformerFactory informers.SharedInformerFactory, metadataInformerFactory metadatainformer.SharedInformerFactory) InformerFactory {

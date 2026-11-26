@@ -26,7 +26,7 @@ import (
 	"k8s.io/sample-controller/pkg/generated/openapi"
 )
 
-// Outputs openAPI schema JSON containing the schema definitions in zz_generated.openapi.go.
+// main 输出 zz_generated.openapi.go 中的 schema 定义（OpenAPI JSON）。
 //
 // 本文件位于 generated 目录下的 cmd 子目录，属于手写工具而非生成产物：
 // 它读取生成好的定义并输出稳定的 v2 schema，供其他工具或校验流程消费。
@@ -48,12 +48,6 @@ func output() error {
 	defs := openapi.GetOpenAPIDefinitions(refFunc)
 	schemaDefs := make(map[string]spec.Schema, len(defs))
 	for k, v := range defs {
-		// Replace top-level schema with v2 if a v2 schema is embedded
-		// so that the output of this program is always in OpenAPI v2.
-		// This is done by looking up an extension that marks the embedded v2
-		// schema, and, if the v2 schema is found, make it the resulting schema for
-		// the type.
-		//
 		// 生成器可能同时给出 v3 主 schema 和内嵌的 v2 版本；下游约定只接受 v2，
 		// 所以这里优先取内嵌版本，拿不到才回退到主 schema。
 		if schema, ok := v.Schema.Extensions[common.ExtensionV2Schema]; ok {

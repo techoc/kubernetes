@@ -86,8 +86,8 @@ func TestNodeWatchResourcesResponseToV1Alpha1(t *testing.T) {
 // TestHealthStatusValuesMatch 校验两个版本的枚举数值一致：转换代码直接做 int32 强转，
 // 数值一旦错位，健康状态就会被静默解释成另一种含义。
 func TestHealthStatusValuesMatch(t *testing.T) {
-	// The enums must share the same numeric values for the int32 conversion to
-	// be correct.
+	// 两种枚举的数值必须一致，int32 转换才有意义。
+	// 必须正确。
 	//
 	// 强转依赖数值相同；枚举定义顺序若被调整，这里会先于线上流量报错。
 	cases := []struct {
@@ -105,10 +105,9 @@ func TestHealthStatusValuesMatch(t *testing.T) {
 	}
 }
 
-// requireSameSchema fails when the v1 and v1alpha1 message descriptors have
-// diverged: a field added to one proto but not the other, or with a different
-// number, name, kind, or cardinality. The v1alpha1 serving support relies on
-// the two protos staying wire-identical.
+// 当 v1 与 v1alpha1 的消息描述出现分歧时 requireSameSchema 失败：
+// 例如一侧新增字段、另一侧没有，或字段号、名字、类型、
+// 基数不同。v1alpha1 兼容服务依赖两份 proto 在线路上完全一致。
 //
 // 按字段号查找而不是按位置比对，才能发现“字段号变了”这类在线上最难排查的偏差。
 func requireSameSchema(t *testing.T, a, b protoreflect.MessageDescriptor) {
@@ -135,8 +134,8 @@ func requireSameSchema(t *testing.T, a, b protoreflect.MessageDescriptor) {
 	}
 }
 
-// TestSchemasMatch catches a field being added to the v1 proto without also
-// being added to v1alpha1 (or vice versa).
+// TestSchemasMatch 用于发现只在 v1 proto 中加字段、
+// （反向亦然）。
 //
 // 转换按线格式等价实现；任何一侧单独加字段都会破坏这个前提。
 func TestSchemasMatch(t *testing.T) {
@@ -148,10 +147,9 @@ func TestSchemasMatch(t *testing.T) {
 		(&v1alpha1.NodeWatchResourcesResponse{}).ProtoReflect().Descriptor())
 }
 
-// fillMessage sets every field of the message to a non-zero value via
-// reflection, recursing into nested and repeated messages. Because it
-// discovers fields dynamically, a field added to the proto later is filled
-// automatically without updating this test.
+// fillMessage 通过反射把所有字段填成非零值，
+// 并递归处理嵌套与重复消息。由于字段是动态发现的，
+// 以后新增的字段会自动被填充，无需修改测试。
 //
 // 用反射遍历描述符而非写死字段，是为了让新加字段自动进入回归范围。
 func fillMessage(t *testing.T, m protoreflect.Message) {
@@ -211,12 +209,12 @@ func nonZeroScalar(t *testing.T, fd protoreflect.FieldDescriptor) protoreflect.V
 	}
 }
 
-// TestConversionFidelity catches the conversion code dropping or garbling a
-// field. Every field of the v1 response gets a non-zero value via reflection,
-// so a field added to both protos but forgotten in the hand-written conversion
-// makes this test fail: the v1 and v1alpha1 protos are wire-identical, so a
-// lossless conversion must marshal to exactly the same bytes as the input.
-// Both directions are checked.
+// TestConversionFidelity 用来发现转换代码丢字段或转错字段。
+// v1 响应的每个字段都经反射填成非零值，
+// 若两边都加了字段却忘了写转换，
+// 若两边都加了字段却忘了写转换，测试就会失败：两份 proto 线路相同，
+// 无损转换必须序列化出与输入完全相同的字节。
+// 两个方向都会检查。
 //
 // 比较序列化字节而非结构体相等：字节相同才算真正保真，字段默认值差异不会蒙混过关。
 func TestConversionFidelity(t *testing.T) {
@@ -256,15 +254,14 @@ func TestConversionNilSafe(t *testing.T) {
 	if got := NodeWatchResourcesResponseFromV1Alpha1(nil); got != nil {
 		t.Errorf("expected nil, got %v", got)
 	}
-	// A device with no DeviceIdentifier must not panic and must stay nil.
+	// 设备没有 DeviceIdentifier 时不得 panic，且应保持为 nil。
 	got := NodeWatchResourcesResponseToV1Alpha1(&NodeWatchResourcesResponse{Devices: []*DeviceHealth{{Health: HealthStatus_UNKNOWN}}})
 	if got.GetDevices()[0].GetDevice() != nil {
 		t.Errorf("expected nil device identifier, got %v", got.GetDevices()[0].GetDevice())
 	}
 }
 
-// fakeV1HealthServer is a minimal v1 health server which sends one
-// response and then closes the stream.
+// fakeV1HealthServer 是最简 v1 健康服务：发送一次响应后关闭流。
 //
 // 发一条就关流，正好让测试能同时验证数据转发和流结束语义。
 type fakeV1HealthServer struct {
@@ -275,10 +272,10 @@ func (f *fakeV1HealthServer) NodeWatchResources(_ *NodeWatchResourcesRequest, sr
 	return srv.Send(sampleResponse())
 }
 
-// TestV1ServerWrapper verifies that a v1 health server exposed
-// through [V1ServerWrapper] can be consumed by a plain v1alpha1 client
-// over a real gRPC connection. This is how the kubeletplugin helper serves
-// the older v1alpha1 API to kubelets which do not support v1 yet.
+// TestV1ServerWrapper 验证通过 [V1ServerWrapper] 暴露的 v1 健康服务
+// 能被真实的 v1alpha1 客户端经 gRPC 连接消费；
+// 这正是 kubeletplugin 辅助包向尚不支持 v1 的 kubelet
+// 提供旧版 v1alpha1 API 的方式。
 //
 // 走真实 unix socket 而不是直接调包装方法，是为了连 gRPC 服务注册和流转发一起验证。
 func TestV1ServerWrapper(t *testing.T) {

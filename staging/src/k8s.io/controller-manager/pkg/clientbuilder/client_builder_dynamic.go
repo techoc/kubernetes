@@ -54,7 +54,6 @@ var (
 // 动态客户端构建器：为每个控制器创建对应的 ServiceAccount，
 // 并通过 TokenRequest API 定期申请/刷新令牌，无需把长期凭据写入 kubeconfig。
 type DynamicControllerClientBuilder struct {
-	// ClientConfig is a skeleton config to clone and use as the basis for each controller client
 	ClientConfig *restclient.Config
 
 	// CoreClient 用于在需要时创建 ServiceAccount 并监听其关联的 Token，以构建控制器客户端，
@@ -70,10 +69,8 @@ type DynamicControllerClientBuilder struct {
 	// 避免每个客户端各自刷新令牌造成 TokenRequest 请求风暴。
 	roundTripperFuncMap map[string]func(http.RoundTripper) http.RoundTripper
 
-	// expirationSeconds defines the token expiration seconds
 	expirationSeconds int64
 
-	// leewayPercent defines the percentage of expiration left before the client trigger a token rotation.
 	leewayPercent int
 
 	// 保护 roundTripperFuncMap 的并发访问。
@@ -189,8 +186,8 @@ func (t *DynamicControllerClientBuilder) DiscoveryClient(name string) (discovery
 	if err != nil {
 		return nil, err
 	}
-	// Discovery makes a lot of requests infrequently.  This allows the burst to succeed and refill to happen
-	// in just a few seconds.
+	// Discovery 请求量大但频率低，放宽突发上限可以让请求成功，并有时间补充令牌。
+	// 只需几秒即可完成补充。
 	clientConfig.Burst = 200
 	clientConfig.QPS = 20
 	return clientset.NewForConfig(clientConfig)

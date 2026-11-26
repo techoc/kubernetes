@@ -26,11 +26,10 @@ import (
 
 // Convert_credentialprovider_CredentialProviderRequest_To_v1beta1_CredentialProviderRequest
 // 把内部请求降级为 beta 版本。
-//
 // 这里必须手写而不是直接用生成的转换：内部版本新增了服务账号相关字段，
 // beta 插件没有相应字段也无法处理，静默传递会造成语义错位，因此显式丢弃。
 func Convert_credentialprovider_CredentialProviderRequest_To_v1beta1_CredentialProviderRequest(in *credentialprovider.CredentialProviderRequest, out *CredentialProviderRequest, s conversion.Scope) error {
-	// This conversion intentionally omits the serviceAccountToken and serviceAccountAnnotations fields which are only supported in v1 CredentialProviderRequest.
+	// 该转换有意丢弃 serviceAccountToken 与 serviceAccountAnnotations：这两个字段只在 v1 的 CredentialProviderRequest 中支持。
 	// 只保留 beta 插件能理解的镜像字段，其余字段由生成函数按目标类型自然忽略。
 	return autoConvert_credentialprovider_CredentialProviderRequest_To_v1beta1_CredentialProviderRequest(in, out, s)
 }

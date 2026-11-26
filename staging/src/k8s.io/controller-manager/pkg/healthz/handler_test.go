@@ -128,7 +128,7 @@ func TestMutableHealthzHandler(t *testing.T) {
 				h.AddHealthChecker(badChecker)
 				w := httptest.NewRecorder()
 				h.ServeHTTP(w, req)
-				// should fail
+				// 预期失败
 				if w.Code != http.StatusInternalServerError {
 					t.Errorf("did not fail after adding bad checker")
 				}
@@ -139,7 +139,6 @@ func TestMutableHealthzHandler(t *testing.T) {
 
 // 验证读锁设计：一个“卡住”的检查器不应阻止其它健康检查请求并发进入。
 // 通过计数并发进入的检查器数量来判断是否被串行化。
-// TestConcurrentChecks tests that the handler would not block on concurrent healthz requests.
 func TestConcurrentChecks(t *testing.T) {
 	const N = 5
 	stopChan := make(chan interface{})

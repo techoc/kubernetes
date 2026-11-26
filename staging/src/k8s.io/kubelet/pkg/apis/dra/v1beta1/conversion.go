@@ -37,7 +37,7 @@ var (
 
 // AddToScheme 暴露给调用方注册本版本的类型，底层 builder 保持私有以便集中管理。
 
-// V1ServerWrapper implements the [NodeServer] interface by wrapping a [v1.DRAPluginServer].
+// V1ServerWrapper 包装 [v1.DRAPluginServer] 以实现 [NodeServer] 接口。
 //
 // 把 v1beta1 服务端“伪装”成 v1 服务端：kubelet 说 v1beta1，插件说 v1，
 // 包装层在两次调用之间翻译请求和响应。嵌入 UnsafeDRAPluginServer 是为了补齐
@@ -85,7 +85,7 @@ func (w V1ServerWrapper) NodeUnprepareResources(ctx context.Context, req *NodeUn
 	return &convertedResp, nil
 }
 
-// V1Beta1ServerWrapper implements the [v1.DRAPluginServer] interface by wrapping a [NodeServer].
+// V1Beta1ServerWrapper 包装 [NodeServer] 以实现 [v1.DRAPluginServer] 接口。
 //
 // 反方向的翻译器：插件只实现 v1beta1，却要接住 v1 kubelet 的请求。
 type V1Beta1ServerWrapper struct {
@@ -130,7 +130,7 @@ func (w V1Beta1ServerWrapper) NodeUnprepareResources(ctx context.Context, req *v
 	return &convertedResp, nil
 }
 
-// V1ClientWrapper implements the [NodeClient] interface by wrapping a [v1.DRAPluginClient].
+// V1ClientWrapper 包装 [v1.DRAPluginClient] 以实现 [NodeClient] 接口。
 //
 // 客户端侧的适配：用 v1beta1 的接口调用一个远端只说 v1 的插件。grpc.CallOption
 // 原样透传，调用方设置的超时、认证等选项不能因版本翻译而丢失。
@@ -175,7 +175,7 @@ func (w V1ClientWrapper) NodeUnprepareResources(ctx context.Context, req *NodeUn
 	return &convertedResp, nil
 }
 
-// V1Beta1ClientWrapper implements the [v1.DRAPluginClient] interface by wrapping a [NodeClient].
+// V1Beta1ClientWrapper 包装 [NodeClient] 以实现 [v1.DRAPluginClient] 接口。
 //
 // 让只封装了 v1beta1 协议的客户端也能接入 v1 调用链，方向与前三个包装器相反。
 type V1Beta1ClientWrapper struct {

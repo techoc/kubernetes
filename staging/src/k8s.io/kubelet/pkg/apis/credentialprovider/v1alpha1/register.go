@@ -24,13 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-//
+// GroupName 是本包使用的 API 组名。
 // GroupName 与配置组不同，专用于 kubelet 与 exec 凭证插件之间的请求/响应消息。
 const GroupName = "credentialprovider.kubelet.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-//
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 // SchemeGroupVersion 标识 alpha 版本；localSchemeBuilder 供本包生成器注入额外的初始化函数。
 var (
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
@@ -45,7 +43,6 @@ var (
 )
 
 // addKnownTypes 注册请求与响应两个消息类型。
-//
 // 这里额外调用 metav1.AddToGroupVersion，是为了让 scheme 认识 TypeMeta，
 // 否则解码插件 JSON 时会因缺少元数据类型而报错。
 func addKnownTypes(scheme *runtime.Scheme) error {

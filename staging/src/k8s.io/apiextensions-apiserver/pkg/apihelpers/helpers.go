@@ -64,7 +64,7 @@ const (
 func GetAPIApprovalState(annotations map[string]string) (state APIApprovalState, reason string) {
 	annotation := annotations[apiextensionsv1.KubeAPIApprovedAnnotation]
 
-	// we use the result of this parsing in the switch/case below
+	// 解析结果供下方 switch/case 使用；解析失败也保留错误，用于区分缺失与非法 annotation。
 	url, annotationURLParseErr := url.ParseRequestURI(annotation)
 	switch {
 	case len(annotation) == 0:
@@ -196,7 +196,7 @@ func GetCRDStorageVersion(crd *apiextensionsv1.CustomResourceDefinition) (string
 			return v.Name, nil
 		}
 	}
-	// This should not happened if crd is valid
+	// 走到这里说明 CRD 不合法：合法的 CRD 必须有一个 Storage 版本。
 	return "", fmt.Errorf("invalid apiextensionsv1.CustomResourceDefinition, no storage version")
 }
 

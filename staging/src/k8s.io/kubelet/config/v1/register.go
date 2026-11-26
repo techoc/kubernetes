@@ -23,29 +23,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name used in this package
+// GroupName 是本包使用的 API 组名。
 //
 // GroupName 是节点本地配置的 API 组名，与集群 API 组隔离，
 // 表明此类对象只由 kubelet 自己消费。
 const GroupName = "kubelet.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 //
 // SchemeGroupVersion 标识本组稳定版本，是 scheme 中类型注册的键。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 收集本 API 包需要执行的 scheme 初始化函数。
 	//
 	// SchemeBuilder 把类型注册函数打包，便于与其他 API 包组合后一次性注册。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是把本 API 组与版本注册到 scheme 的全局入口。
 	//
 	// AddToScheme 是 SchemeBuilder.AddToScheme 的别名，调用方用它完成注册。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// addKnownTypes registers known types to the given scheme
+// addKnownTypes 把已知类型注册到给定 scheme。
 //
 // addKnownTypes 只登记本版本实际支持的配置类型，
 // 遗漏任何类型都会让包含该类型的配置文件无法反序列化。

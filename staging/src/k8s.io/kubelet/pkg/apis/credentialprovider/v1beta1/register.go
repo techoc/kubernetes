@@ -22,13 +22,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-//
+// GroupName 是本包使用的 API 组名。
 // 组名与内部版本保持一致，各版本只靠 Version 区分，便于跨版本转换与注册。
 const GroupName = "credentialprovider.kubelet.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
-//
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 // 请求/响应类型只在本版本下注册，序列化器靠 GVK 选择解码目标。
 var (
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}

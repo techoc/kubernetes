@@ -33,8 +33,8 @@ func init() {
 // v1 版本的锁类型常量；v1 只支持 leases。
 const ResourceLockLeases = "leases"
 
-// RegisterConversions adds conversion functions to the given scheme.
-// Public to allow building arbitrary schemes.
+// RegisterConversions 向给定 scheme 注册转换函数；
+// 导出是为了让调用方能自行组装任意 scheme。
 // 向 scheme 注册自动生成的双向转换函数。
 // 公开该函数是为了让调用方能构造任意 scheme 时也能复用这些转换。
 func RegisterConversions(s *runtime.Scheme) error {

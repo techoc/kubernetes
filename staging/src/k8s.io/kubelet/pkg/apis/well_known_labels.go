@@ -27,14 +27,8 @@ import (
 )
 
 const (
-	// LabelOS is a label to indicate the operating system of the node.
-	// The OS labels are promoted to GA in 1.14. kubelet applies GA labels and stop applying the beta OS labels in Kubernetes 1.19.
-	//
 	// beta 名称仍留在允许列表里，是为了兼容升级期间还未清理旧标签的节点。
 	LabelOS = "beta.kubernetes.io/os"
-	// LabelArch is a label to indicate the architecture of the node.
-	// The Arch labels are promoted to GA in 1.14. kubelet applies GA labels and stop applying the beta Arch labels in Kubernetes 1.19.
-	//
 	// 与 LabelOS 同理，保留 beta key 只是为旧标签留出升级过渡期。
 	LabelArch = "beta.kubernetes.io/arch"
 )
@@ -60,23 +54,16 @@ var kubeletLabelNamespaces = sets.NewString(
 	v1.LabelNamespaceSuffixNode,
 )
 
-// KubeletLabels returns the list of label keys kubelets are allowed to set on their own Node objects
-//
 // 返回切片副本，调用方改动不会污染包内集合。
 func KubeletLabels() []string {
 	return kubeletLabels.List()
 }
 
-// KubeletLabelNamespaces returns the list of label key namespaces kubelets are allowed to set on their own Node objects
-//
 // 按 namespace 授权而不是逐个键列举，第三方插件才能用自己的前缀扩展标签。
 func KubeletLabelNamespaces() []string {
 	return kubeletLabelNamespaces.List()
 }
 
-// IsKubeletLabel returns true if the label key is one that kubelets are allowed to set on their own Node object.
-// This checks if the key is in the KubeletLabels() list, or has a namespace in the KubeletLabelNamespaces() list.
-//
 // 后缀匹配（".kubelet.k8s.io" 之类）覆盖子域，便于按组织或插件划分 label 前缀。
 func IsKubeletLabel(key string) bool {
 	if kubeletLabels.Has(key) {

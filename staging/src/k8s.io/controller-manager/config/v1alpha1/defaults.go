@@ -46,14 +46,10 @@ func RecommendedDefaultGenericControllerManagerConfiguration(obj *GenericControl
 	}
 
 	if len(obj.LeaderElection.ResourceLock) == 0 {
-		// Use lease-based leader election to reduce cost.
 		// 锁类型默认选 leases：相比 endpoints 成本更低（1.17 起从 EndpointsLease 迁移，1.20 起使用 Lease）。
-		// We migrated for EndpointsLease lock in 1.17 and starting in 1.20 we
-		// migrated to Lease lock.
 		obj.LeaderElection.ResourceLock = "leases"
 	}
 
-	// Use the default ClientConnectionConfiguration and LeaderElectionConfiguration options
 	// 连接与选举配置中的细粒度默认值交给 component-base 处理。
 	componentbaseconfigv1alpha1.RecommendedDefaultClientConnectionConfiguration(&obj.ClientConnection)
 	componentbaseconfigv1alpha1.RecommendedDefaultLeaderElectionConfiguration(&obj.LeaderElection)

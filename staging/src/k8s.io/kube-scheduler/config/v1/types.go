@@ -37,75 +37,73 @@ const (
 	// SchedulerDefaultLockObjectName defines default scheduler lock object name ("kube-scheduler")
 	SchedulerDefaultLockObjectName = "kube-scheduler"
 
-	// SchedulerDefaultProviderName defines the default provider names
+	// SchedulerDefaultProviderName 是默认 provider 的名字。
 	SchedulerDefaultProviderName = "DefaultProvider"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeSchedulerConfiguration configures a scheduler
-//
+// KubeSchedulerConfiguration 是调度器的配置对象。
 // 这是 scheduler 的顶层配置对象。它用指针字段表示“未指定则沿用默认值”，
 // 这样配置文件只写少量覆盖项，其余仍走程序默认值；布尔值则没有这层区分。
 type KubeSchedulerConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// Parallelism defines the amount of parallelism in algorithms for scheduling a Pods. Must be greater than 0. Defaults to 16
+	// Parallelism 是调度单个 Pod 时算法的并行度，必须大于 0，默认 16。
 	Parallelism *int32 `json:"parallelism,omitempty"`
 
-	// LeaderElection defines the configuration of leader election client.
+	// LeaderElection 是 leader election 客户端的配置。
 	LeaderElection componentbaseconfigv1alpha1.LeaderElectionConfiguration `json:"leaderElection"`
 
-	// ClientConnection specifies the kubeconfig file and client connection
-	// settings for the proxy server to use when communicating with the apiserver.
+	// ClientConnection 指定 proxy 与 apiserver 通信所用的 kubeconfig 文件
+	// 及客户端连接参数。
 	ClientConnection componentbaseconfigv1alpha1.ClientConnectionConfiguration `json:"clientConnection"`
 
-	// DebuggingConfiguration holds configuration for Debugging related features
+	// DebuggingConfiguration 保存调试相关功能的配置。
 	// TODO: We might wanna make this a substruct like Debugging componentbaseconfigv1alpha1.DebuggingConfiguration
 	componentbaseconfigv1alpha1.DebuggingConfiguration `json:""`
 
-	// PercentageOfNodesToScore is the percentage of all nodes that once found feasible
-	// for running a pod, the scheduler stops its search for more feasible nodes in
-	// the cluster. This helps improve scheduler's performance. Scheduler always tries to find
-	// at least "minFeasibleNodesToFind" feasible nodes no matter what the value of this flag is.
-	// Example: if the cluster size is 500 nodes and the value of this flag is 30,
-	// then scheduler stops finding further feasible nodes once it finds 150 feasible ones.
-	// When the value is 0, default percentage (5%--50% based on the size of the cluster) of the
-	// nodes will be scored. It is overridden by profile level PercentageOfNodesToScore.
+	// PercentageOfNodesToScore 是找到足够多可行节点后停止继续搜索的比例。
+	// 它只影响可行节点的搜索范围，
+	// 用于提升调度性能。无论该值多大，
+	// 调度器至少会找 minFeasibleNodesToFind 个可行节点。
+	// 例如集群有 500 个节点、该值为 30 时，
+	// 找到 150 个可行节点后就停止继续搜索。
+	// 值为 0 时按集群规模取默认的 5%~50% 比例；
+	// 该全局值会被 profile 级别的设置覆盖。
 	PercentageOfNodesToScore *int32 `json:"percentageOfNodesToScore,omitempty"`
 
-	// PodInitialBackoffSeconds is the initial backoff for unschedulable pods.
-	// If specified, it must be greater than 0. If this value is null, the default value (1s)
-	// will be used.
+	// PodInitialBackoffSeconds 是不可调度 Pod 的初始退避时长。
+	// 指定时必须大于 0；为 null 时使用默认值 1s。
+	//
 	PodInitialBackoffSeconds *int64 `json:"podInitialBackoffSeconds,omitempty"`
 
-	// PodMaxBackoffSeconds is the max backoff for unschedulable pods.
-	// If specified, it must be greater than podInitialBackoffSeconds. If this value is null,
-	// the default value (10s) will be used.
+	// PodMaxBackoffSeconds 是不可调度 Pod 的最大退避时长。
+	// 指定时必须大于 podInitialBackoffSeconds；为 null 时
+	// 使用默认值 10s。
 	PodMaxBackoffSeconds *int64 `json:"podMaxBackoffSeconds,omitempty"`
 
-	// Profiles are scheduling profiles that kube-scheduler supports. Pods can
-	// choose to be scheduled under a particular profile by setting its associated
-	// scheduler name. Pods that don't specify any scheduler name are scheduled
-	// with the "default-scheduler" profile, if present here.
+	// Profiles 是 kube-scheduler 支持的调度配置集。Pod 可
+	// 通过设置 schedulerName 选择特定 profile；
+	// 未指定 schedulerName 的 Pod 若存在
+	// "default-scheduler" profile，则使用它调度。
 	// +listType=map
 	// +listMapKey=schedulerName
 	Profiles []KubeSchedulerProfile `json:"profiles,omitempty"`
 
-	// Extenders are the list of scheduler extenders, each holding the values of how to communicate
-	// with the extender. These extenders are shared by all scheduler profiles.
+	// Extenders 是调度器扩展列表，每项包含与对应扩展通信所需的参数。
+	// 这些扩展由所有调度 profile 共享。
 	// +listType=set
 	Extenders []Extender `json:"extenders,omitempty"`
 
-	// DelayCacheUntilActive specifies when to start caching. If this is true and leader election is enabled,
-	// the scheduler will wait to fill informer caches until it is the leader. Doing so will have slower
-	// failover with the benefit of lower memory overhead while waiting to become leader.
-	// Defaults to false.
+	// DelayCacheUntilActive 控制何时开始填充缓存。为 true 且启用 leader election 时，
+	// 调度器会等到当选 leader 后才填充 informer 缓存；
+	// 代价是故障切换更慢，好处是等待期间的开销更低。
+	// 默认 false。
 	DelayCacheUntilActive bool `json:"delayCacheUntilActive,omitempty"`
 }
 
-// DecodeNestedObjects decodes plugin args for known types.
-//
+// DecodeNestedObjects 对已知类型的插件参数做解码。
 // PluginConfig.Args 是 RawExtension，普通的 scheme 解码不会进去。插件参数的类型
 // 要等到按插件名拼出 GVK 之后才知道，所以这里单独走一遍。严格解码错误先收集再
 // 合并返回，目的是把所有位置的问题一次性报全，而不是遇到第一个就停。
@@ -131,7 +129,7 @@ func (c *KubeSchedulerConfiguration) DecodeNestedObjects(d runtime.Decoder) erro
 	return nil
 }
 
-// EncodeNestedObjects encodes plugin args.
+// EncodeNestedObjects 对插件参数做解码。
 func (c *KubeSchedulerConfiguration) EncodeNestedObjects(e runtime.Encoder) error {
 	for i := range c.Profiles {
 		prof := &c.Profiles[i]
@@ -145,156 +143,150 @@ func (c *KubeSchedulerConfiguration) EncodeNestedObjects(e runtime.Encoder) erro
 	return nil
 }
 
-// KubeSchedulerProfile is a scheduling profile.
-//
+// KubeSchedulerProfile 是一个调度 profile。
 // Profile 把“用哪些插件”和“插件怎么配”绑定在一个调度器名字上。同一进程里
 // 可以并存多套插件组合，Pod 通过 spec.schedulerName 选一套，互不影响。
 type KubeSchedulerProfile struct {
-	// SchedulerName is the name of the scheduler associated to this profile.
+	// SchedulerName 是该 profile 关联的调度器名字。
 	// If SchedulerName matches with the pod's "spec.schedulerName", then the pod
-	// is scheduled with this profile.
+	// 的 Pod 使用它调度。
 	SchedulerName *string `json:"schedulerName,omitempty"`
 
-	// PercentageOfNodesToScore is the percentage of all nodes that once found feasible
-	// for running a pod, the scheduler stops its search for more feasible nodes in
-	// the cluster. This helps improve scheduler's performance. Scheduler always tries to find
-	// at least "minFeasibleNodesToFind" feasible nodes no matter what the value of this flag is.
-	// Example: if the cluster size is 500 nodes and the value of this flag is 30,
-	// then scheduler stops finding further feasible nodes once it finds 150 feasible ones.
-	// When the value is 0, default percentage (5%--50% based on the size of the cluster) of the
-	// nodes will be scored. It will override global PercentageOfNodesToScore. If it is empty,
+	// PercentageOfNodesToScore 是找到足够多可行节点后停止继续搜索的比例。
+	// 它只影响可行节点的搜索范围，
+	// 用于提升调度性能。无论该值多大，
+	// 调度器至少会找 minFeasibleNodesToFind 个可行节点。
+	// 例如集群有 500 个节点、该值为 30 时，
+	// 找到 150 个可行节点后就停止继续搜索。
+	// 值为 0 时按集群规模取默认的 5%~50% 比例；
+	// 该值会覆盖全局设置；为空时
 	// global PercentageOfNodesToScore will be used.
 	PercentageOfNodesToScore *int32 `json:"percentageOfNodesToScore,omitempty"`
 
-	// Plugins specify the set of plugins that should be enabled or disabled.
-	// Enabled plugins are the ones that should be enabled in addition to the
-	// default plugins. Disabled plugins are any of the default plugins that
-	// should be disabled.
-	// When no enabled or disabled plugin is specified for an extension point,
-	// default plugins for that extension point will be used if there is any.
-	// If a QueueSort plugin is specified, the same QueueSort Plugin and
-	// PluginConfig must be specified for all profiles.
+	// Plugins 指定要启用或禁用的插件集合。
+	// Enabled 是在默认插件之外额外启用的插件；
+	// Disabled 是需要关闭的默认插件。
+	// 某扩展点未指定启用或禁用插件时，
+	// 使用该扩展点的默认插件集。
+	// 一旦指定 QueueSort 插件，所有 profile 都必须指定相同的
+	// QueueSort 插件及其 PluginConfig。
 	Plugins *Plugins `json:"plugins,omitempty"`
 
-	// PluginConfig is an optional set of custom plugin arguments for each plugin.
-	// Omitting config args for a plugin is equivalent to using the default config
+	// PluginConfig 是可选的插件参数集合，按插件分别配置。
+	// 不写某个插件的参数即表示使用该插件的默认配置。
 	// for that plugin.
 	// +listType=map
 	// +listMapKey=name
 	PluginConfig []PluginConfig `json:"pluginConfig,omitempty"`
 }
 
-// Plugins include multiple extension points. When specified, the list of plugins for
-// a particular extension point are the only ones enabled. If an extension point is
-// omitted from the config, then the default set of plugins is used for that extension point.
-// Enabled plugins are called in the order specified here, after default plugins. If they need to
-// be invoked before default plugins, default plugins must be disabled and re-enabled here in desired order.
-//
+// Plugins 包含多个扩展点。一旦指定，该扩展点列出的插件
+// 就是全部启用的插件；未指定的扩展点
+// 则使用默认插件集。
+// Enabled 插件在默认插件之后按此处顺序调用；若需
+// 在默认插件之前调用，须先禁用默认插件，再在此按期望顺序重新启用。
 // 把扩展点列成显式字段而不是 map，好处是配置结构固定、可生成代码，
 // 也让“某个扩展点没写”明确表示沿用默认插件集。
 type Plugins struct {
-	// PreEnqueue is a list of plugins that should be invoked before adding pods to the scheduling queue.
+	// PreEnqueue 是在 Pod 入调度队列前调用的插件列表。
 	PreEnqueue PluginSet `json:"preEnqueue,omitempty"`
 
-	// QueueSort is a list of plugins that should be invoked when sorting pods in the scheduling queue.
+	// QueueSort 是调度队列排序时调用的插件列表。
 	QueueSort PluginSet `json:"queueSort,omitempty"`
 
 	// PreFilter is a list of plugins that should be invoked at "PreFilter" extension point of the scheduling framework.
 	PreFilter PluginSet `json:"preFilter,omitempty"`
 
-	// Filter is a list of plugins that should be invoked when filtering out nodes that cannot run the Pod.
+	// Filter 是过滤掉无法运行 Pod 的节点时调用的插件列表。
 	Filter PluginSet `json:"filter,omitempty"`
 
-	// PostFilter is a list of plugins that are invoked after filtering phase, but only when no feasible nodes were found for the pod.
+	// PostFilter 在过滤阶段之后、且没有任何可行节点时调用。
 	PostFilter PluginSet `json:"postFilter,omitempty"`
 
-	// PreScore is a list of plugins that are invoked before scoring.
+	// PreScore 是打分前调用的插件列表。
 	PreScore PluginSet `json:"preScore,omitempty"`
 
-	// Score is a list of plugins that should be invoked when ranking nodes that have passed the filtering phase.
+	// Score 是对通过过滤的节点打分排序时调用的插件列表。
 	Score PluginSet `json:"score,omitempty"`
 
-	// Reserve is a list of plugins invoked when reserving/unreserving resources
-	// after a node is assigned to run the pod.
+	// Reserve 是在为 Pod 分配节点后预留/释放资源时
+	// 调用的插件列表。
 	Reserve PluginSet `json:"reserve,omitempty"`
 
-	// Permit is a list of plugins that control binding of a Pod. These plugins can prevent or delay binding of a Pod.
+	// Permit 控制 Pod 的绑定，可阻止或延迟绑定。
 	Permit PluginSet `json:"permit,omitempty"`
 
-	// PreBind is a list of plugins that should be invoked before a pod is bound.
+	// PreBind 是绑定 Pod 前调用的插件列表。
 	PreBind PluginSet `json:"preBind,omitempty"`
 
 	// Bind is a list of plugins that should be invoked at "Bind" extension point of the scheduling framework.
-	// The scheduler call these plugins in order. Scheduler skips the rest of these plugins as soon as one returns success.
+	// 调度器按顺序调用，一旦某个插件成功就跳过其余插件。
 	Bind PluginSet `json:"bind,omitempty"`
 
-	// PostBind is a list of plugins that should be invoked after a pod is successfully bound.
+	// PostBind 是 Pod 成功绑定后调用的插件列表。
 	PostBind PluginSet `json:"postBind,omitempty"`
 
-	// MultiPoint is a simplified config section to enable plugins for all valid extension points.
-	// Plugins enabled through MultiPoint will automatically register for every individual extension
-	// point the plugin has implemented. Disabling a plugin through MultiPoint disables that behavior.
+	// MultiPoint 是用于在所有有效扩展点上启用插件的简化配置。
+	// 通过 MultiPoint 启用的插件会自动注册到它实现的每个扩展点；
+	// 通过 MultiPoint 禁用则撤销该行为。
 	// The same is true for disabling "*" through MultiPoint (no default plugins will be automatically registered).
-	// Plugins can still be disabled through their individual extension points.
-	//
-	// In terms of precedence, plugin config follows this basic hierarchy
+	// 仍可通过各扩展点单独禁用插件。
+	// 插件配置的优先级遵循以下层次：
 	//   1. Specific extension points
 	//   2. Explicitly configured MultiPoint plugins
-	//   3. The set of default plugins, as MultiPoint plugins
-	// This implies that a higher precedence plugin will run first and overwrite any settings within MultiPoint.
-	// Explicitly user-configured plugins also take a higher precedence over default plugins.
-	// Within this hierarchy, an Enabled setting takes precedence over Disabled. For example, if a plugin is
+	// 3. 作为 MultiPoint 插件的默认插件集。
+	// 高优先级的配置先生效，并覆盖 MultiPoint 中的设置。
+	// 用户显式配置的插件也优先于默认插件。
+	// 同一层次内 Enabled 优先于 Disabled。例如，某插件既
 	// set in both `multiPoint.Enabled` and `multiPoint.Disabled`, the plugin will be enabled. Similarly,
 	// including `multiPoint.Disabled = '*'` and `multiPoint.Enabled = pluginA` will still register that specific
-	// plugin through MultiPoint. This follows the same behavior as all other extension point configurations.
+	// 又经由 MultiPoint 配置时，与其它扩展点的行为一致。
 	MultiPoint PluginSet `json:"multiPoint,omitempty"`
 
-	// PlacementGenerate is a list of plugins that should be invoked during pod group scheduling cycle when determining placements for a pod group.
+	// PlacementGenerate 是在 PodGroup 调度周期为 PodGroup 确定放置位置时调用的插件列表。
 	PlacementGenerate PluginSet `json:"placementGenerate,omitempty"`
 
-	// PlacementScore is a list of plugins that should be invoked during workload scheduling cycle when ranking pod group assignments.
+	// PlacementScore 是在工作负载调度周期为 PodGroup 分配方案排序时调用的插件列表。
 	PlacementScore PluginSet `json:"placementScore,omitempty"`
 
-	// PodGroupPostFilter is a list of plugins that are invoked after the workload scheduling phase,
-	// but only when the PodGroup cannot be scheduled (equivalent to PostFilter for single pods).
+	// PodGroupPostFilter 是在工作负载调度阶段之后调用的插件列表，
+	// 仅在 PodGroup 无法调度时触发，语义等同于单个 Pod 的 PostFilter。
 	PodGroupPostFilter PluginSet `json:"podGroupPostFilter,omitempty"`
 }
 
-// PluginSet specifies enabled and disabled plugins for an extension point.
-// If an array is empty, missing, or nil, default plugins at that extension point will be used.
-//
+// PluginSet 指定某扩展点上启用与禁用的插件。
+// 数组为空、缺失或为 nil 时，使用该扩展点的默认插件。
 // Enabled 与 Disabled 分开而不是只给一个列表，是为了让“默认插件 + 追加/剔除”
 // 这种增量配置成为常态；全量替换则通过 Disabled: ['*'] 表达。
 type PluginSet struct {
-	// Enabled specifies plugins that should be enabled in addition to default plugins.
-	// If the default plugin is also configured in the scheduler config file, the weight of plugin will
+	// Enabled 列出在默认插件之外额外启用的插件。
+	// 若默认插件也在配置文件中出现，其权重
 	// be overridden accordingly.
-	// These are called after default plugins and in the same order specified here.
+	// 它们在默认插件之后按此处给出的顺序调用。
 	// +listType=atomic
 	Enabled []Plugin `json:"enabled,omitempty"`
-	// Disabled specifies default plugins that should be disabled.
+	// Disabled 列出需要关闭的默认插件。
 	// When all default plugins need to be disabled, an array containing only one "*" should be provided.
 	// +listType=map
 	// +listMapKey=name
 	Disabled []Plugin `json:"disabled,omitempty"`
 }
 
-// Plugin specifies a plugin name and its weight when applicable. Weight is used only for Score and PlacementScore plugins.
+// Plugin 指定插件名及适用的权重；权重只用于 Score 与 PlacementScore 插件。
 type Plugin struct {
-	// Name defines the name of plugin
+	// Name 是插件名。
 	Name string `json:"name"`
-	// Weight defines the weight of plugin, only used for Score and PlacementScore plugins.
+	// Weight 是插件权重，仅用于 Score 与 PlacementScore 插件。
 	Weight *int32 `json:"weight,omitempty"`
 }
 
-// PluginConfig specifies arguments that should be passed to a plugin at the time of initialization.
+// PluginConfig 指定插件初始化时传入的参数。
 // A plugin that is invoked at multiple extension points is initialized once. Args can have arbitrary structure.
-// It is up to the plugin to process these Args.
-//
+// 如何解释这些参数由插件自己决定。
 // Args 用 RawExtension 而非固定结构，是因为参数形状归插件自己定义；
 // 配置 API 无需认识每个插件的参数类型就能把它们原样带进来。
 type PluginConfig struct {
-	// Name defines the name of plugin being configured
+	// Name 是被配置插件的名字。
 	Name string `json:"name"`
 	// Args defines the arguments passed to the plugins at the time of initialization. Args can have arbitrary structure.
 	Args runtime.RawExtension `json:"args,omitempty"`
@@ -302,7 +294,7 @@ type PluginConfig struct {
 
 func (c *PluginConfig) decodeNestedObjects(d runtime.Decoder) error {
 	gvk := SchemeGroupVersion.WithKind(c.Name + "Args")
-	// dry-run to detect and skip out-of-tree plugin args.
+	// 先 dry-run 检测并跳过 out-of-tree 插件的参数。
 	// 树外插件不会注册进这个 scheme；先用空输入探一次，未注册就直接放过，
 	// 把参数的解释权留给插件自己。
 	if _, _, err := d.Decode(nil, &gvk, nil); runtime.IsNotRegisteredError(err) {
@@ -335,8 +327,8 @@ func (c *PluginConfig) encodeNestedObjects(e runtime.Encoder) error {
 	if err != nil {
 		return err
 	}
-	// The <e> encoder might be a YAML encoder, but the parent encoder expects
-	// JSON output, so we convert YAML back to JSON.
+	// <e> 编码器可能输出 YAML，而上层编码器期望
+	// JSON，因此要把 YAML 转回 JSON。
 	// This is a no-op if <e> produces JSON.
 	// 外层配置按 JSON 结构拼装，内层编码器却是可替换的；这里做一次归一，
 	// 免得 RawExtension 里塞进一段 YAML 文本破坏外层输出。
@@ -348,70 +340,65 @@ func (c *PluginConfig) encodeNestedObjects(e runtime.Encoder) error {
 	return nil
 }
 
-// Extender holds the parameters used to communicate with the extender. If a verb is unspecified/empty,
-// it is assumed that the extender chose not to provide that extension.
-//
+// Extender 保存与扩展通信所需的参数。若某个 verb 未指定或为空，
+// 就认为该扩展没有提供对应能力。
 // 每个动词独立配置，调度器靠空字符串判断该扩展点是否存在，这样外部进程可以
 // 只实现自己关心的少数几个回调，不必凑齐整套接口。
 type Extender struct {
-	// URLPrefix at which the extender is available
+	// URLPrefix 是扩展服务的地址前缀。
 	URLPrefix string `json:"urlPrefix"`
-	// Verb for the filter call, empty if not supported. This verb is appended to the URLPrefix when issuing the filter call to extender.
+	// filter 调用的 verb，不支持时留空；调用时追加到 URLPrefix 后。
 	FilterVerb string `json:"filterVerb,omitempty"`
-	// Verb for the preempt call, empty if not supported. This verb is appended to the URLPrefix when issuing the preempt call to extender.
+	// preempt 调用的 verb，不支持时留空；调用时追加到 URLPrefix 后。
 	PreemptVerb string `json:"preemptVerb,omitempty"`
-	// Verb for the prioritize call, empty if not supported. This verb is appended to the URLPrefix when issuing the prioritize call to extender.
+	// prioritize 调用的 verb，不支持时留空；调用时追加到 URLPrefix 后。
 	PrioritizeVerb string `json:"prioritizeVerb,omitempty"`
-	// The numeric multiplier for the node scores that the prioritize call generates.
-	// The weight should be a positive integer
+	// 扩展 prioritize 返回的节点分数的数值乘数。
+	// 权重应为正整数。
 	Weight int64 `json:"weight,omitempty"`
-	// Verb for the bind call, empty if not supported. This verb is appended to the URLPrefix when issuing the bind call to extender.
-	// If this method is implemented by the extender, it is the extender's responsibility to bind the pod to apiserver. Only one extender
+	// bind 调用的 verb，不支持时留空；调用时追加到 URLPrefix 后。
+	// 若扩展实现了该方法，则由它负责把 Pod 绑定到 apiserver，且只允许一个
 	// can implement this function.
 	BindVerb string `json:"bindVerb,omitempty"`
-	// EnableHTTPS specifies whether https should be used to communicate with the extender
+	// EnableHTTPS 指定与扩展通信是否使用 https。
 	EnableHTTPS bool `json:"enableHTTPS,omitempty"`
-	// TLSConfig specifies the transport layer security config
+	// TLSConfig 是传输层安全配置。
 	TLSConfig *ExtenderTLSConfig `json:"tlsConfig,omitempty"`
-	// HTTPTimeout specifies the timeout duration for a call to the extender. Filter timeout fails the scheduling of the pod. Prioritize
-	// timeout is ignored, k8s/other extenders priorities are used to select the node.
+	// HTTPTimeout 是调用扩展的超时时长。filter 超时会使 Pod 调度失败；
+	// prioritize 超时则忽略结果，由 k8s/其它扩展的优先级选节点。
 	HTTPTimeout metav1.Duration `json:"httpTimeout,omitempty"`
-	// NodeCacheCapable specifies that the extender is capable of caching node information,
-	// so the scheduler should only send minimal information about the eligible nodes
-	// assuming that the extender already cached full details of all nodes in the cluster
+	// NodeCacheCapable 表示扩展能缓存节点信息，
+	// 因此调度器只发送候选节点的最少信息，
+	// 假定它已缓存集群中所有节点的完整信息。
 	NodeCacheCapable bool `json:"nodeCacheCapable,omitempty"`
-	// ManagedResources is a list of extended resources that are managed by
-	// this extender.
-	// - A pod will be sent to the extender on the Filter, Prioritize and Bind
-	//   (if the extender is the binder) phases iff the pod requests at least
-	//   one of the extended resources in this list. If empty or unspecified,
-	//   all pods will be sent to this extender.
-	// - If IgnoredByScheduler is set to true for a resource, kube-scheduler
-	//   will skip checking the resource in predicates.
+	// ManagedResources 是该扩展管理的扩展资源列表：
+	// - 只有 Pod 请求了列表中至少一种扩展资源，才会在 Filter、Prioritize
+	//   和 Bind（若它担任 binder）阶段发给该扩展；列表为空时所有 Pod 都发。
+	// - 某资源设置 IgnoredByScheduler 为 true 时，kube-scheduler 会在 predicate 中忽略它。
 	// +optional
 	// +listType=atomic
 	ManagedResources []ExtenderManagedResource `json:"managedResources,omitempty"`
-	// Ignorable specifies if the extender is ignorable, i.e. scheduling should not
-	// fail when the extender returns an error or is not reachable.
+	// Ignorable 表示扩展是否可忽略：出错或不可达时
+	// 不应导致调度失败。
 	Ignorable bool `json:"ignorable,omitempty"`
 }
 
-// ExtenderManagedResource describes the arguments of extended resources
+// ExtenderManagedResource 描述扩展资源的管理参数。
 // managed by an extender.
 type ExtenderManagedResource struct {
-	// Name is the extended resource name.
+	// Name 是扩展资源的名字。
 	Name string `json:"name"`
-	// IgnoredByScheduler indicates whether kube-scheduler should ignore this
+	// IgnoredByScheduler 表示 kube-scheduler 是否应在 predicate
 	// resource when applying predicates.
 	IgnoredByScheduler bool `json:"ignoredByScheduler,omitempty"`
 }
 
-// ExtenderTLSConfig contains settings to enable TLS with extender
+// ExtenderTLSConfig 包含与扩展启用 TLS 的设置。
 type ExtenderTLSConfig struct {
-	// Server should be accessed without verifying the TLS certificate. For testing only.
+	// 不校验服务端 TLS 证书，仅供测试使用。
 	Insecure bool `json:"insecure,omitempty"`
-	// ServerName is passed to the server for SNI and is used in the client to check server
-	// certificates against. If ServerName is empty, the hostname used to contact the
+	// ServerName 作为 SNI 传给服务端，并用于客户端校验证书。
+	// 为空时则使用连接服务端时的主机名校验证书。
 	// server is used.
 	ServerName string `json:"serverName,omitempty"`
 
@@ -419,18 +406,18 @@ type ExtenderTLSConfig struct {
 	CertFile string `json:"certFile,omitempty"`
 	// Server requires TLS client certificate authentication
 	KeyFile string `json:"keyFile,omitempty"`
-	// Trusted root certificates for server
+	// 信任的服务端根证书。
 	CAFile string `json:"caFile,omitempty"`
 
-	// CertData holds PEM-encoded bytes (typically read from a client certificate file).
+	// CertData 是 PEM 编码的字节，通常来自客户端证书文件。
 	// CertData takes precedence over CertFile
 	// +listType=atomic
 	CertData []byte `json:"certData,omitempty"`
-	// KeyData holds PEM-encoded bytes (typically read from a client certificate key file).
+	// KeyData 是 PEM 编码的字节，通常来自客户端证书私钥文件。
 	// KeyData takes precedence over KeyFile
 	// +listType=atomic
 	KeyData []byte `json:"keyData,omitempty"`
-	// CAData holds PEM-encoded bytes (typically read from a root certificates bundle).
+	// CAData 是 PEM 编码的字节，通常来自根证书包。
 	// CAData takes precedence over CAFile
 	// +listType=atomic
 	CAData []byte `json:"caData,omitempty"`
@@ -438,67 +425,52 @@ type ExtenderTLSConfig struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DynamicResourcesArgs holds arguments used to configure the DynamicResources plugin.
-//
+// DynamicResourcesArgs 是 DynamicResources 插件的配置参数。
 // DRA 的过滤成本随 ResourceClaim 数量和设备复杂度变化，不设上限时一个 Pod 就可能
 // 拖住整个调度循环。这两个超时把最坏情况兜住，又允许管理员按实测指标收紧。
 type DynamicResourcesArgs struct {
 	metav1.TypeMeta `json:""`
 
-	// FilterTimeout limits the amount of time that the filter operation may
-	// take per node to search for devices that can be allocated to scheduler
+	// FilterTimeout 限制每个节点上 filter 操作查找可分配设备
+	// 的最长耗时。
 	// a pod to that node.
-	//
-	// In typical scenarios, this operation should complete in 10 to 200
-	// milliseconds, but could also be longer depending on the number of
-	// requests per ResourceClaim, number of ResourceClaims, number of
-	// published devices in ResourceSlices, and the complexity of the
-	// requests. Other checks besides CEL evaluation also take time (usage
+	// 典型情况下该操作耗时 10~200 毫秒，
+	// 但也会随 ResourceClaim 的请求数、Claim 数量、
+	// ResourceSlice 中发布的设备数量以及
+	// 请求复杂程度而增加。除 CEL 求值外，
+	// 其它检查（如容量核对）同样耗时。
 	// checks, match attributes, etc.).
-	//
-	// Therefore the scheduler plugin applies this timeout. If the timeout
-	// is reached, the Pod is considered unschedulable for the node.
-	// If filtering succeeds for some other node(s), those are picked instead.
-	// If filtering fails for all of them, the Pod is placed in the
-	// unschedulable queue. It will get checked again if changes in
-	// e.g. ResourceSlices or ResourceClaims indicate that
-	// another scheduling attempt might succeed. If this fails repeatedly,
-	// exponential backoff slows down future attempts.
-	//
-	// The default is 10 seconds.
-	// This is sufficient to prevent worst-case scenarios while not impacting normal
-	// usage of DRA. However, slow filtering can slow down Pod scheduling
-	// also for Pods not using DRA. Administators can reduce the timeout
-	// after checking the
-	// `scheduler_framework_extension_point_duration_seconds` metrics.
-	//
-	// Setting it to zero completely disables the timeout.
+	// 因此插件施加该超时。超时后该节点上的 Pod
+	// 被视为不可调度。
+	// 若其它节点过滤成功，则选择那些节点。
+	// 若所有节点都失败，Pod 进入不可调度队列；
+	// 当 ResourceSlice 或 ResourceClaim 的变化可能让下一次调度成功时会重新检查；
+	// 反复失败则会指数退避。默认 10 秒。
+	// 这样足以避免最坏情况，又不影响 DRA 的正常使用。
+	// 但过滤过慢也会拖慢不使用 DRA 的 Pod。管理员可参考
+	// `scheduler_framework_extension_point_duration_seconds` 指标缩短该超时。
+	// 设为 0 则完全关闭超时。
 	FilterTimeout *metav1.Duration `json:"filterTimeout"`
 
-	// BindingTimeout limits how long the PreBind extension point may wait for
-	// ResourceClaim device BindingConditions to become satisfied when such
-	// conditions are present. While waiting, the scheduler periodically checks
-	// device status. If the timeout elapses before all required conditions are
-	// true (or any bindingFailureConditions become true), the allocation is
-	// cleared and the Pod re-enters scheduling queue. Note that the same or other node may be
-	// chosen if feasible; otherwise the Pod is placed in the unschedulable queue and
-	// retried based on cluster changes and backoff.
-	//
+	// BindingTimeout 限制 PreBind 扩展点等待 ResourceClaim 设备
+	// BindingConditions 满足的最长时间。等待期间调度器
+	// 定期检查设备状态。若超时前所需条件未全部为真
+	// （或出现 bindingFailureConditions），则清除分配，
+	// Pod 重新进入调度队列。
+	// 若仍可行可能选到同一或其它节点；
+	// 否则进入不可调度队列，
+	// 按集群变化与退避重试。
 	// Defaults & feature gates:
-	//   - Defaults to 10 minutes when the DRADeviceBindingConditions feature gate is enabled.
-	//   - Has effect only when BOTH DRADeviceBindingConditions and
-	//     DRAResourceClaimDeviceStatus are enabled; otherwise omit this field.
-	//   - When DRADeviceBindingConditions is disabled, setting this field is considered an error.
-	//
+	// - 启用 DRADeviceBindingConditions 时默认 10 分钟。
+	// - 仅当 DRADeviceBindingConditions 与 DRAResourceClaimDeviceStatus 同时启用时有效，
+	//   否则不要填写该字段。
+	// - 禁用 DRADeviceBindingConditions 时填写该字段会报错。
 	// Valid values:
 	//   - >=1s (non-zero). No upper bound is enforced.
-	//
 	// Tuning guidance:
-	//   - Lower values reduce time-to-retry when devices aren’t ready but can
-	//     increase churn if drivers typically need longer to report readiness.
-	//   - Review scheduler latency metrics (e.g. PreBind duration in
-	//     `scheduler_framework_extension_point_duration_seconds`) and driver
-	//     readiness behavior before tightening this timeout.
+	// - 值越小，设备未就绪时重试越快，但驱动就绪较慢时抖动会增加。
+	// - 收紧前请结合调度延迟指标（PreBind duration、
+	//   `scheduler_framework_extension_point_duration_seconds`）与驱动就绪行为评估。
 	BindingTimeout *metav1.Duration `json:"bindingTimeout,omitempty"`
 }
 

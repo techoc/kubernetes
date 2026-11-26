@@ -21,9 +21,9 @@ package v1
 // DRA 插件通过 DRAPluginService 声明自己实现的 gRPC 服务版本，
 // kubelet 据此在多个版本中选择双方都支持的协议。
 const (
-	// DRAPluginService needs to be listed in the "supported versions"
-	// array during plugin registration by a DRA plugin which provides
-	// an implementation of the v1 DRAPlugin service.
+	// 提供 v1 DRAPlugin 服务的插件注册时，
+	// 数组中的服务名，供 DRA 插件注册时使用。
+	// 必须把 DRAPluginService 列入 "supported versions" 数组。
 	//
 	// DRAPluginService 必须出现在插件的 supportedVersions 列表中，
 	// 否则 kubelet 会认为该插件不支持 v1 而跳过握手。

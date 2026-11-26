@@ -198,7 +198,6 @@ func TestEnableHiddenStableCollector(t *testing.T) {
 				t.Fatalf("after enable test failed: %v", err)
 			}
 
-			// refresh descriptors to share with cases.
 			// Desc 在用例间共享，重新启用后需清掉隐藏标记，避免污染下一个用例。
 			for _, d := range tc.descriptors {
 				d.ClearState()
@@ -263,7 +262,7 @@ func TestDisabledMetrics(t *testing.T) {
 		Name: "should_be_disabled",
 		Help: "this metric should be disabled",
 	}, []string{"label"})
-	// gauges cannot be reset
+	// 此处 gauge 无法重置。
 	enabledMetric := NewGauge(&GaugeOpts{
 		Name: "should_be_enabled",
 		Help: "this metric should not be disabled",

@@ -17,9 +17,9 @@ limitations under the License.
 package v1beta1
 
 const (
-	// DRAPluginService needs to be listed in the "supported versions"
-	// array during plugin registration by a DRA plugin which provides
-	// an implementation of the v1beta1 DRAPlugin service.
+	// 提供 v1beta1 DRAPlugin 服务的插件注册时，
+	// 数组中的服务名，供 DRA 插件注册时使用。
+	// 必须把 DRAPluginService 列入 "supported versions" 数组。
 	//
 	// 该值是插件注册时相互识别的版本标识；与生成代码里的服务名保持一致，
 	// kubelet 才能按同一版本建立连接。

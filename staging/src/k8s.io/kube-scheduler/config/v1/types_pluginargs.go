@@ -23,9 +23,6 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DefaultPreemptionArgs holds arguments used to configure the
-// DefaultPreemption plugin.
-//
 // 抢占的“试运行”阶段需要遍历候选节点，逐个模拟驱逐受害者，代价随节点数线性增长。
 // 这两个参数一起限制候选集的大小：百分比在大集群里避免固定数值过小，
 // 绝对值在小集群里避免百分比算出零个候选。指针类型是为了区分“用户没填”和“显式填了 0”，
@@ -123,10 +120,8 @@ type PodTopologySpreadArgs struct {
 	DefaultConstraints []corev1.TopologySpreadConstraint `json:"defaultConstraints,omitempty"`
 
 	// DefaultingType 决定 .defaultConstraints 如何推导，可取 "System" 或 "List"。
-	//
 	// - "System": 使用 Kubernetes 定义的、把 Pod 打散到各 Node 和 Zone 的约束。
 	// - "List": 使用 .defaultConstraints 中定义的约束。
-	//
 	// 默认为 "System"。
 	// 默认值选 System，让未配置的集群自动获得合理打散，而不用先写一段约束。
 	// +optional

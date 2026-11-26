@@ -217,7 +217,7 @@ controllerLeaders:
 					t.Errorf("unexpected error: %v", err)
 					return
 				}
-				// expect err and got err, finish the test case.
+				// 期望与实际情况都报错，该用例结束。
 				return
 			}
 			// ApplyTo 没报错但测试期望报错，说明错误场景没有被正确识别。

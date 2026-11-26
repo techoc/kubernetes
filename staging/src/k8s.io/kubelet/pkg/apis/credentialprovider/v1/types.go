@@ -26,35 +26,29 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CredentialProviderRequest includes the image that the kubelet requires authentication for.
-// Kubelet will pass this request object to the plugin via stdin. In general, plugins should
-// prefer responding with the same apiVersion they were sent.
-//
+// CredentialProviderRequest 包含 kubelet 需要凭据才能拉取的镜像。
+// kubelet 通过 stdin 把请求传给插件。一般应
+// 以收到请求时相同的 apiVersion 回复。
 // kubelet 通过 stdin 把请求交给插件，插件按同一版本回包，
 // 才能让 kubelet 用同一套解码逻辑处理结果。
 type CredentialProviderRequest struct {
 	metav1.TypeMeta `json:""`
 
-	// image is the container image that is being pulled as part of the
-	// credential provider plugin request. Plugins may optionally parse the image
-	// to extract any information required to fetch credentials.
-	//
+	// image 是本次凭据请求中要拉取的容器镜像。
+	// 插件可按需解析镜像名，
+	// 提取获取凭据所需的信息。
 	// 镜像字符串是插件匹配与取凭据的主要输入，端口、路径都可能在其中。
 	Image string `json:"image"`
 
-	// serviceAccountToken is the service account token bound to the pod for which
-	// the image is being pulled. This token is only sent to the plugin if the
-	// tokenAttributes.serviceAccountTokenAudience field is configured in the kubelet's credential
-	// provider configuration.
-	//
+	// serviceAccountToken 是待拉取镜像的 Pod 所绑定的 ServiceAccount token。
+	// 只有在 kubelet 凭据插件配置中设置了
+	// tokenAttributes.serviceAccountTokenAudience 后才会传输。
 	// 仅在配置里声明 audience 时才下发 token，避免把凭据交给不需要它的插件。
 	ServiceAccountToken string `json:"serviceAccountToken,omitempty" datapolicy:"token"`
 
-	// serviceAccountAnnotations is a map of annotations on the service account bound to the
-	// pod for which the image is being pulled. The list of annotations in the service account
-	// that need to be passed to the plugin is configured in the kubelet's credential provider
-	// configuration.
-	//
+	// serviceAccountAnnotations 是待拉取镜像的 Pod 所绑定 ServiceAccount 的注解映射。
+	// 需要传给插件的注解列表在 kubelet 的凭据插件配置中指定。
+	// 即需传给插件的注解列表，由 kubelet 凭据插件配置指定。
 	// 注解按需传递而不是全量下发，减少插件可见的服务账号信息。
 	ServiceAccountAnnotations map[string]string `json:"serviceAccountAnnotations,omitempty"`
 }
@@ -64,97 +58,83 @@ type CredentialProviderRequest struct {
 type PluginCacheKeyType string
 
 const (
-	// ImagePluginCacheKeyType means the kubelet will cache credentials on a per-image basis,
-	// using the image passed from the kubelet directly as the cache key. This includes
-	// the registry domain, port (if specified), and path but does not include tags or SHAs.
-	//
+	// ImagePluginCacheKeyType 表示 kubelet 按镜像缓存凭据，
+	// 直接以传入的镜像名为键，包含 registry 域名、端口（若有）和路径，
+	// 但不含 tag 或 SHA。
 	// 不含 tag/SHA 是有意的：同仓库不同 tag 通常共用同一套仓库凭据。
 	ImagePluginCacheKeyType PluginCacheKeyType = "Image"
-	// RegistryPluginCacheKeyType means the kubelet will cache credentials on a per-registry basis.
-	// The cache key will be based on the registry domain and port (if present) parsed from the requested image.
-	//
+	// RegistryPluginCacheKeyType 表示 kubelet 按 registry 缓存凭据。
+	// 缓存键取自请求镜像中的 registry 域名与端口（若有）。
 	// 凭据属于仓库而非具体镜像时选这个粒度，能显著减少插件调用次数。
 	RegistryPluginCacheKeyType PluginCacheKeyType = "Registry"
-	// GlobalPluginCacheKeyType means the kubelet will cache credentials for all images that
-	// match for a given plugin. This cache key should only be returned by plugins that do not use
-	// the image input at all.
-	//
+	// GlobalPluginCacheKeyType 表示 kubelet 为该插件匹配的所有镜像
+	// 共用一份凭据。只有不依赖镜像区分凭据的插件才应返回此类型。
+	// 也不使用镜像信息。
 	// 只有与镜像完全无关的凭据（例如固定 token）才可用，否则会跨仓库误用。
 	GlobalPluginCacheKeyType PluginCacheKeyType = "Global"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CredentialProviderResponse holds credentials that the kubelet should use for the specified
-// image provided in the original request. Kubelet will read the response from the plugin via stdout.
-// This response should be set to the same apiVersion as CredentialProviderRequest.
-//
+// CredentialProviderResponse 携带 kubelet 应为原请求中指定镜像使用的凭据。
+// kubelet 通过 stdout 读取响应。
+// 响应的 apiVersion 应与 CredentialProviderRequest 一致。
 // 插件从 stdout 输出响应；版本不一致时 kubelet 会拒绝使用，防止按错误结构解释凭据。
 type CredentialProviderResponse struct {
 	metav1.TypeMeta `json:""`
 
-	// cacheKeyType indiciates the type of caching key to use based on the image provided
-	// in the request. There are three valid values for the cache key type: Image, Registry, and
-	// Global. If an invalid value is specified, the response will NOT be used by the kubelet.
-	//
+	// cacheKeyType 指定按请求镜像使用哪种缓存键。
+	// 缓存键类型只有三种合法值：Image、Registry、Global。
 	// 非法缓存粒度直接废弃整份响应，避免缓存策略不明确时错误地复用凭据。
 	CacheKeyType PluginCacheKeyType `json:"cacheKeyType"`
 
-	// cacheDuration indicates the duration the provided credentials should be cached for.
-	// The kubelet will use this field to set the in-memory cache duration for credentials
-	// in the AuthConfig. If null, the kubelet will use defaultCacheDuration provided in
-	// CredentialProviderConfig. If set to 0, the kubelet will not cache the provided AuthConfig.
-	//
+	// cacheDuration 是凭据的缓存时长。
+	// kubelet 据此设置 AuthConfig 中凭据的内存缓存时长；
+	// 为 null 时使用 CredentialProviderConfig 中的 defaultCacheDuration，
+	// 设为 0 表示不缓存。
 	// 设为 0 表示凭据一次性使用：插件每次拉取都被调用，但换来更强的隔离性。
 	// +optional
 	CacheDuration *metav1.Duration `json:"cacheDuration,omitempty"`
 
-	// auth is a map containing authentication information passed into the kubelet.
-	// Each key is a match image string (more on this below). The corresponding authConfig value
-	// should be valid for all images that match against this key. A plugin should set
-	// this field to null if no valid credentials can be returned for the requested image.
-	//
-	// Each key in the map is a pattern which can optionally contain a port and a path.
-	// Globs can be used in the domain, but not in the port or the path. Globs are supported
-	// as subdomains like '*.k8s.io' or 'k8s.*.io', and top-level-domains such as 'k8s.*'.
-	// Matching partial subdomains like 'app*.k8s.io' is also supported. Each glob can only match
-	// a single subdomain segment, so *.io does not match *.k8s.io.
-	//
-	// The kubelet will match images against the key when all of the below are true:
-	// - Both contain the same number of domain parts and each part matches.
-	// - The URL path of an imageMatch must be a prefix of the target image URL path.
-	// - If the imageMatch contains a port, then the port must match in the image as well.
-	//
-	// When multiple keys are returned, the kubelet will traverse all keys in reverse order so that:
-	// - longer keys come before shorter keys with the same prefix
-	// - non-wildcard keys come before wildcard keys with the same prefix.
-	//
-	// For any given match, the kubelet will attempt an image pull with the provided credentials,
-	// stopping after the first successfully authenticated pull.
-	//
+	// auth 是传给 kubelet 的认证信息映射。
+	// 每个 key 是一个镜像匹配串（见下文），对应的 authConfig
+	// 必须对该 key 匹配的所有镜像有效；无有效凭据时应
+	// 把该字段设为 null。
+	// 每个 key 是可含端口与路径的匹配模式。
+	// 通配符只用于域名，不用于端口和路径；
+	// 支持子域（如 '*.k8s.io'、'k8s.*.io'）和顶级域（如 'k8s.*'）。
+	// 也支持部分子域匹配（如 'app*.k8s.io'）。每个通配符只匹配
+	// 一段子域，因此 *.io 不匹配 *.k8s.io。
+	// 满足以下全部条件时镜像才算匹配：
+	// - 域名段数相同且逐段匹配；
+	// - imageMatch 的 URL 路径必须是目标镜像路径的前缀；
+	// - imageMatch 若含端口，镜像中也必须一致。
+	// 返回多个 key 时 kubelet 逆序遍历，确保：
+	// - 同前缀下更长的 key 优先；
+	// - 同前缀下非通配符 key 优先。
+	// 对任一匹配，kubelet 用其凭据尝试拉取镜像，
+	// 首次鉴权成功后停止。
 	// Example keys:
 	//   - 123456789.dkr.ecr.us-east-1.amazonaws.com
 	//   - *.azurecr.io
 	//   - gcr.io
 	//   - *.*.registry.io
 	//   - registry.io:8080/path
-	//
 	// 多个键按“更长、更具体者先试”的顺序使用，允许插件同时给出通用与特化凭据。
 	// +optional
 	Auth map[string]AuthConfig `json:"auth,omitempty"`
 }
 
-// AuthConfig contains authentication information for a container registry.
-// Only username/password based authentication is supported today, but more authentication
-// mechanisms may be added in the future.
-//
+// AuthConfig 保存容器 registry 的认证信息。
+// 目前只支持用户名/密码认证，未来可能
+// 增加更多方式。
 // 目前只支持用户名/密码，字段允许为空以便插件表达“无需认证”或匿名拉取。
 type AuthConfig struct {
-	// username is the username used for authenticating to the container registry
-	// An empty username is valid.
+	// username 是认证 registry 所用的用户名。
+	// 空用户名合法。
 	Username string `json:"username"`
 
-	// password is the password used for authenticating to the container registry
-	// An empty password is valid.
+	// password 是认证 registry 所用的密码。
+	// 空密码合法。
 	Password string `json:"password"`
 }

@@ -18,8 +18,6 @@ package config
 
 import internal "k8s.io/controller-manager/config"
 
-// DefaultLeaderMigrationConfiguration returns the default LeaderMigrationConfiguration
-// that is valid for this release of Kubernetes.
 // 返回当前版本推荐的默认迁移配置：
 // 锁名为 cloud-provider-extraction-migration，使用 leases 锁，
 // 并把路由、Service、云节点生命周期三个控制器标记为可由任意组件运行（"*"）。

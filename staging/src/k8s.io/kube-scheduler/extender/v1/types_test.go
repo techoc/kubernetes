@@ -29,9 +29,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// TestCompatibility verifies that the types in extender/v1 can be successfully encoded to json and decoded back, even when lowercased,
-// since these types were written around JSON tags and we need to enforce consistency on them now.
-// @TODO(88634): v2 of these types should be defined with proper JSON tags to enforce field casing to a single approach
+// TestCompatibility 验证 extender/v1 中的类型能成功编码为 JSON 再解码回来，
+// 包括字段名小写的情况；这些类型依赖 JSON tag，必须锁住行为一致性。
+// @TODO(88634): 这些类型的 v2 应定义明确的 JSON tag，统一字段大小写规则。
 // 这里逐一固定每种扩展协议结构体的 JSON 输出，而不是只测“能不能往返”：
 // 这些类型没有显式 json tag，字段名大小写直接来自 Go 字段名，一旦改动就会破坏与既有 extender 的兼容性。
 // 额外做一次小写化再反序列化，是因为历史上有些 extender 依赖大小写不敏感的匹配行为，

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1beta1 contains a legacy implementation of the DRA gRPC
-// interface. Support for it in kubelet is provided via conversion.
+// Package v1beta1 是 DRA gRPC 接口的旧版实现。
+// kubelet 通过转换层提供对它的支持。
 //
 // 本包保留 DRA（Dynamic Resource Allocation）gRPC 接口的旧版本实现。
 // kubelet 并不直接使用它，而是把请求转换到 v1 后再处理，以保证新旧插件兼容。

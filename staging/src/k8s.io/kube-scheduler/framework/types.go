@@ -55,30 +55,30 @@ const (
 	// 避免每次节点状态抖动都触发无意义的重新入队。
 	UpdateNodeAllocatable
 	UpdateNodeLabel
-	// UpdateNodeTaint is an update for node's taints or node.Spec.Unschedulable.
+	// UpdateNodeTaint 表示节点污点或 node.Spec.Unschedulable 的变化。
 	UpdateNodeTaint
 	UpdateNodeCondition
 	UpdateNodeAnnotation
-	// UpdateNodeDeclaredFeature is an update for node's declared features.
+	// UpdateNodeDeclaredFeature 表示节点声明特性的变化。
 	UpdateNodeDeclaredFeature
-	// UpdateNodePreemptionPolicy is an update for node's preemption policy.
+	// UpdateNodePreemptionPolicy 表示节点抢占策略的变化。
 	UpdateNodePreemptionPolicy
 
 	// UpdatePodXYZ 系列仅适用于 Pod 事件。使用它们后，插件的 QueueingHint 只会对
 	// 对应的细分 sub-Update 事件执行；比起直接用 Update 事件，收窄事件范围能提升
 	// 重新入队的性能。同理，Pod 的更新按字段细分；重入队本身有开销，越早过滤掉无关事件越好。
 	UpdatePodLabel
-	// UpdatePodScaleDown is an update for pod's scale down (i.e., any resource request is reduced).
+	// UpdatePodScaleDown 表示 Pod 缩容（任一资源请求减少）。
 	UpdatePodScaleDown
-	// UpdatePodScaleUp is an update for pod's scale up (i.e., any resource request is increased).
+	// UpdatePodScaleUp 表示 Pod 扩容（任一资源请求增加）。
 	UpdatePodScaleUp
-	// UpdatePodToleration is an addition for pod's tolerations.
-	// (Due to API validation, we can add, but cannot modify or remove tolerations.)
+	// UpdatePodToleration 表示新增 Pod toleration。
+	// API 校验只允许新增 toleration，不能修改或删除。
 	UpdatePodToleration
-	// UpdatePodSchedulingGatesEliminated is an update for pod's scheduling gates, which eliminates all scheduling gates in the Pod.
+	// UpdatePodSchedulingGatesEliminated 表示 Pod 的调度 gate 被全部清除。
 	UpdatePodSchedulingGatesEliminated
-	// UpdatePodGeneratedResourceClaim is an update of the list of ResourceClaims generated for the pod.
-	// Depends on the DynamicResourceAllocation feature gate.
+	// UpdatePodGeneratedResourceClaim 表示为该 Pod 生成的 ResourceClaim 列表发生变化。
+	// 依赖 DynamicResourceAllocation 特性开关。
 	UpdatePodGeneratedResourceClaim
 
 	All ActionType = 1<<iota - 1
@@ -268,11 +268,11 @@ type PreQueueingHintFn func(logger klog.Logger, oldObj, newObj interface{}) (Pre
 type QueueingHint int
 
 const (
-	// QueueSkip implies that the cluster event has no impact on
-	// scheduling of the pod.
+	// QueueSkip 表示该集群事件对 Pod 是否可调度
+	// 的调度。
 	QueueSkip QueueingHint = iota
 
-	// Queue implies that the Pod may be schedulable by the event.
+	// Queue 表示该事件可能让 Pod 变得可调度。
 	Queue
 )
 
@@ -294,9 +294,9 @@ type ClusterEvent struct {
 	Resource   EventResource
 	ActionType ActionType
 
-	// CustomLabel describes this cluster event.
-	// It's an optional field to control Label(), which is used in logging and metrics.
-	// Normally, it's not necessary to set this field; only used for special events like UnschedulableTimeout.
+	// CustomLabel 描述该集群事件。
+	// 该可选字段控制 Label()，后者用于日志与指标。
+	// 通常无需设置，只用于 UnschedulableTimeout 之类的特殊事件。
 	CustomLabel string
 }
 
@@ -313,53 +313,53 @@ func (ce ClusterEvent) Label() string {
 // 预计算这些派生数据，是因为 Filter/Score 阶段会被频繁调用，每次重算代价过高。
 // generation 字段让快照可以判断数据是否变化，从而跳过不必要的克隆。
 type NodeInfo interface {
-	// Node returns overall information about this node.
+	// Node 返回节点的整体信息。
 	Node() *v1.Node
-	// GetPods returns Pods running on the node.
+	// GetPods 返回节点上运行的 Pod。
 	GetPods() []PodInfo
-	// GetPodsWithAffinity returns the subset of pods with inter-pod (anti-)affinity.
+	// GetPodsWithAffinity 返回带 Pod 间（反）亲和约束的 Pod 子集。
 	GetPodsWithAffinity() []PodInfo
-	// GetPodsWithRequiredAntiAffinity returns the subset of pods with required inter-pod anti-affinity.
+	// GetPodsWithRequiredAntiAffinity 返回带硬性反亲和约束的 Pod 子集。
 	GetPodsWithRequiredAntiAffinity() []PodInfo
-	// GetPodsWithRequiredNonHostScopedAntiAffinity returns the subset of pods with required inter-pod anti-affinity that is non-hostname scoped.
-	// This must be empty when the InterPodAffinityHostnameFastPath feature gate is disabled.
+	// GetPodsWithRequiredNonHostScopedAntiAffinity 返回带非 hostname 作用域硬性反亲和的 Pod 子集。
+	// InterPodAffinityHostnameFastPath 关闭时必须返回空。
 	GetPodsWithRequiredNonHostScopedAntiAffinity() []PodInfo
-	// GetUsedPorts returns the ports allocated on the node.
+	// GetUsedPorts 返回节点上已分配的端口。
 	GetUsedPorts() HostPortInfo
-	// GetRequested returns total requested resources of all pods on this node. This includes assumed
-	// pods, which scheduler has sent for binding, but may not be scheduled yet.
+	// GetRequested 返回节点上所有 Pod 的请求量总和，包括已发送绑定但可能尚未调度的
+	// 的 assumed Pod。
 	GetRequested() Resource
-	// GetNonZeroRequested return total requested resources of all pods on this node with a minimum value
-	// applied to each container's CPU and memory requests. This does not reflect
-	// the actual resource requests for this node, but is used to avoid scheduling
-	// many zero-request pods onto one node.
+	// GetNonZeroRequested 在汇总请求量时，对每个容器的 CPU/内存请求施加最小值。
+	// 它不反映节点上实际的资源请求量，
+	// 而是用来避免把资源请求极小的 Pod 都调度到同一节点。
+	// 避免把大量零请求 Pod 调度到同一节点。
 	GetNonZeroRequested() Resource
-	// We store allocatedResources (which is Node.Status.Allocatable.*) explicitly
-	// as int64, to avoid conversions and accessing map.
+	// allocatedResources（即 Node.Status.Allocatable.*）显式存为 int64，
+	// 避免反复查 map 与类型转换。
 	GetAllocatable() Resource
-	// GetImageStates returns the entry of an image if and only if this image is on the node. The entry can be used for
-	// checking an image's existence and advanced usage (e.g., image locality scheduling policy) based on the image
+	// GetImageStates 仅当镜像在节点上时才返回其条目，可用于
+	// 判断镜像是否存在，以及基于镜像位置做调度等高级决策。
 	// state information.
 	GetImageStates() map[string]*ImageStateSummary
-	// GetPVCRefCounts returns a mapping of PVC names to the number of pods on the node using it.
+	// GetPVCRefCounts 返回 PVC 名到节点上使用它的 Pod 数的映射。
 	// Keys are in the format "namespace/name".
 	GetPVCRefCounts() map[string]int
-	// Whenever NodeInfo changes, generation is bumped.
-	// This is used to avoid cloning it if the object didn't change.
+	// NodeInfo 每次变化都会递增 generation。
+	// 据此在未变化时跳过克隆。
 	GetGeneration() int64
-	// GetNodeDeclaredFeatures returns the declared feature set of the node.
+	// GetNodeDeclaredFeatures 返回节点声明的特性集合。
 	GetNodeDeclaredFeatures() ndf.FeatureSet
-	// Snapshot returns a copy of this node, Except that ImageStates is copied without the Nodes field.
+	// Snapshot 复制该节点，但 ImageStates 不复制 Nodes 字段。
 	Snapshot() NodeInfo
-	// String returns representation of human readable format of this NodeInfo.
+	// String 返回 NodeInfo 的可读表示。
 	String() string
 
-	// AddPodInfo adds pod information to this NodeInfo.
-	// Consider using this instead of AddPod if a PodInfo is already computed.
+	// AddPodInfo 把 Pod 信息加入该 NodeInfo。
+	// 若已算好 PodInfo，优先用它而非 AddPod。
 	AddPodInfo(podInfo PodInfo)
-	// RemovePod subtracts pod information from this NodeInfo.
+	// RemovePod 从该 NodeInfo 中扣减 Pod 信息。
 	RemovePod(logger klog.Logger, pod *v1.Pod) error
-	// SetNode sets the overall node information.
+	// SetNode 设置节点的整体信息。
 	SetNode(node *v1.Node)
 }
 
@@ -370,53 +370,53 @@ type NodeInfo interface {
 type QueuedEntityInfo interface {
 	// Type returns the type of the entity.
 	Type() EntityKeyType
-	// GetPriority returns the priority of the entity.
+	// GetPriority 返回实体的优先级。
 	GetPriority() int32
-	// GetTimestamp returns the time entity added to the scheduling queue.
+	// GetTimestamp 返回实体入调度队列的时间。
 	GetTimestamp() time.Time
-	// GetAttempts returns the number of all schedule attempts before successfully scheduled.
-	// It's used to record the # attempts metric.
+	// GetAttempts 返回成功调度前的全部尝试次数。
+	// 用于记录尝试次数指标。
 	GetAttempts() int
-	// GetBackoffExpiration returns the time when the entity will complete its backoff.
-	// It's empty for Pods that belong to a pod group. QueuedPodGroupInfo's BackoffExpiration is used instead.
-	// If the SchedulerPopFromBackoffQ feature is enabled, the value is aligned to the backoff ordering window.
-	// Then, two entities with the same BackoffExpiration (time bucket) are ordered by priority and eventually the timestamp,
-	// to make sure popping from the backoffQ considers priority of entities that are close to the expiration time.
+	// GetBackoffExpiration 返回实体退避结束的时间。
+	// 属于 PodGroup 的 Pod 此值为空，改由 QueuedPodGroupInfo 承载。
+	// 启用 SchedulerPopFromBackoffQ 时，该值会对齐到退避排序窗口。
+	// 同一时间桶内的实体再按优先级、最后按时间戳排序，
+	// 确保退避队列出队时兼顾临近到期实体的优先级。
 	GetBackoffExpiration() time.Time
-	// GetUnschedulableCount returns the total number of the scheduling attempts that this entity gets unschedulable.
-	// Basically it equals Attempts, but when the entity fails with the Error status (e.g., the network error),
+	// GetUnschedulableCount 返回该实体被判定不可调度的尝试总数。
+	// 通常等于 Attempts，但 Error 状态（如网络错误）的失败
 	// this count won't be incremented.
-	// It's used to calculate the backoff time this entity is obliged to get before retrying.
+	// 不计入其中；该值用于计算重试前的退避时长。
 	GetUnschedulableCount() int
-	// GetConsecutiveErrorsCount returns the number of the error status that this entity gets sequentially.
-	// This count is reset when the entity gets another status than Error.
+	// GetConsecutiveErrorsCount 返回连续 Error 状态的次数。
+	// 出现非 Error 状态时清零。
 	//
-	// If the error status is returned (e.g., kube-apiserver is unstable), we don't want to immediately retry the entity and hence need a backoff retry mechanism
-	// because that might push more burden to the kube-apiserver.
-	// But, we don't want to calculate the backoff time in the same way as the normal unschedulable reason
-	// since the purpose is different; the backoff for a unschedulable status etc is for the punishment of wasting the scheduling cycles,
-	// whereas the backoff for the error status is for the protection of the kube-apiserver.
-	// That's why we need to distinguish ConsecutiveErrorsCount for the error status and UnschedulableCount for the unschedulable status.
+	// 返回 Error 状态时（如 kube-apiserver 不稳定），不应立即重试，而需退避，
+	// 否则会给 kube-apiserver 增加更多负担。
+	// Error 的退避不能与普通不可调度同一算法，
+	// 因为目的不同：不可调度的退避是对浪费调度周期的惩罚，
+	// 而 Error 的退避是为了保护 kube-apiserver。
+	// 因此需要区分 Error 用的 ConsecutiveErrorsCount 与不可调度用的 UnschedulableCount。
 	// See https://github.com/kubernetes/kubernetes/issues/128744 for the discussion.
 	GetConsecutiveErrorsCount() int
-	// GetInitialAttemptTimestamp returns the time when the entity is added to the queue for the first time. The entity may be added
-	// back to the queue multiple times before it's successfully scheduled.
-	// It shouldn't be updated once initialized. It's used to record the e2e scheduling
+	// GetInitialAttemptTimestamp 返回实体首次入队的时间。实体在成功调度前
+	// 可能被多次重新入队。
+	// 初始化后不应再更新该值，用于记录端到端调度
 	// latency for an entity.
 	GetInitialAttemptTimestamp() *time.Time
-	// GetUnschedulablePlugins records the plugin names that the entity failed with Unschedulable or UnschedulableAndUnresolvable status
-	// at specific extension points: PreFilter, Filter, Reserve, or Permit (WaitOnPermit).
-	// If entities are rejected at other extension points,
-	// they're assumed to be unexpected errors (e.g., temporal network issue, plugin implementation issue, etc)
-	// and retried soon after a backoff period.
-	// That is because such failures could be solved regardless of incoming cluster events (registered in EventsToRegister).
+	// GetUnschedulablePlugins 记录实体在
+	// PreFilter、Filter、Reserve 或 Permit（WaitOnPermit）阶段返回不可调度状态的插件名。
+	// 其它扩展点的拒绝被视为
+	// 非预期错误（如临时网络问题、插件实现问题等），
+	// 退避后很快重试。
+	// 因为这类失败与集群事件无关，无论哪些事件发生都无法解决。
 	GetUnschedulablePlugins() sets.Set[string]
-	// GetPendingPlugins records the plugin names that the entity failed with Pending status.
+	// GetPendingPlugins 记录让实体返回 Pending 状态的插件名。
 	GetPendingPlugins() sets.Set[string]
-	// GetGatingPlugin records the plugin name that gated the entity at PreEnqueue.
+	// GetGatingPlugin 记录在 PreEnqueue 阶段挡住实体的插件名。
 	GetGatingPlugin() string
-	// GetGatingPluginEvents records the events registered by the plugin that gated the entity at PreEnqueue.
-	// We have it as a cache purpose to avoid re-computing which event(s) might ungate the entity.
+	// GetGatingPluginEvents 记录该 gating 插件注册的事件。
+	// 缓存这些事件，避免重复计算哪些事件可能解除阻塞。
 	GetGatingPluginEvents() []ClusterEvent
 }
 
@@ -425,21 +425,21 @@ type QueuedEntityInfo interface {
 // PodInfo 缓存预处理过的亲和性条件：选择器解析一次后可反复使用。
 // 亲和性在调度期间不变，所以这些派生数据可以安全地共享给多个插件。
 type PodInfo interface {
-	// GetPod returns the wrapped Pod
+	// GetPod 返回被包装的 Pod。
 	GetPod() *v1.Pod
-	// GetRequiredAffinityTerms returns the precomputed affinity terms.
+	// GetRequiredAffinityTerms 返回预计算的亲和项。
 	GetRequiredAffinityTerms() []AffinityTerm
-	// GetRequiredAffinitRequiredAntiAffinityTermsyTerms returns the precomputed anti-affinity terms.
+	// GetRequiredAntiAffinityTerms 返回预计算的反亲和项。
 	GetRequiredAntiAffinityTerms() []AffinityTerm
-	// GetPreferredAffinityTerms returns the precomputed affinity terms with weights.
+	// GetPreferredAffinityTerms 返回带权重的预计算亲和项。
 	GetPreferredAffinityTerms() []WeightedAffinityTerm
-	// GetPreferredAntiAffinityTerms returns the precomputed anti-affinity terms with weights.
+	// GetPreferredAntiAffinityTerms 返回带权重的预计算反亲和项。
 	GetPreferredAntiAffinityTerms() []WeightedAffinityTerm
-	// CalculateResource is only intended to be used by NodeInfo.
+	// CalculateResource 仅供 NodeInfo 使用。
 	CalculateResource() PodResource
 }
 
-// PodResource contains the result of CalculateResource and is intended to be used only internally.
+// PodResource 保存 CalculateResource 的结果，仅限内部使用。
 type PodResource struct {
 	Resource Resource
 	Non0CPU  int64
@@ -454,7 +454,7 @@ type AffinityTerm struct {
 	NamespaceSelector labels.Selector
 }
 
-// Matches returns true if the pod matches the label selector and namespaces or namespace selector.
+// Pod 同时匹配 label selector 与 namespace/命名空间选择器时返回 true。
 func (at *AffinityTerm) Matches(pod *v1.Pod, nsLabels labels.Set) bool {
 	if at.Namespaces.Has(pod.Namespace) || at.NamespaceSelector.Matches(nsLabels) {
 		return at.Selector.Matches(labels.Set(pod.Labels))
@@ -468,7 +468,7 @@ type WeightedAffinityTerm struct {
 	Weight int32
 }
 
-// GetAffinityTerms receives a Pod and affinity terms and returns the namespaces and
+// GetAffinityTerms 接收 Pod 与亲和项，返回命名空间及
 // selectors of the terms.
 func GetAffinityTerms(pod *v1.Pod, v1Terms []v1.PodAffinityTerm) ([]AffinityTerm, error) {
 	if v1Terms == nil {
@@ -479,7 +479,7 @@ func GetAffinityTerms(pod *v1.Pod, v1Terms []v1.PodAffinityTerm) ([]AffinityTerm
 	for i := range v1Terms {
 		t, err := newAffinityTerm(pod, &v1Terms[i])
 		if err != nil {
-			// We get here if the label selector failed to process
+			// 走到这里说明 label selector 解析失败，
 			return nil, err
 		}
 		terms = append(terms, *t)
@@ -502,8 +502,8 @@ func newAffinityTerm(pod *v1.Pod, term *v1.PodAffinityTerm) (*AffinityTerm, erro
 	return &AffinityTerm{Namespaces: namespaces, Selector: selector, TopologyKey: term.TopologyKey, NamespaceSelector: nsSelector}, nil
 }
 
-// getNamespacesFromPodAffinityTerm returns a set of names according to the namespaces indicated in podAffinityTerm.
-// If namespaces is empty it considers the given pod's namespace.
+// getNamespacesFromPodAffinityTerm 按项中的 namespaces 返回名字集合。
+// 为空时取给定 Pod 所在的命名空间。
 func getNamespacesFromPodAffinityTerm(pod *v1.Pod, podAffinityTerm *v1.PodAffinityTerm) sets.Set[string] {
 	names := sets.Set[string]{}
 	if len(podAffinityTerm.Namespaces) == 0 && podAffinityTerm.NamespaceSelector == nil {
@@ -514,13 +514,13 @@ func getNamespacesFromPodAffinityTerm(pod *v1.Pod, podAffinityTerm *v1.PodAffini
 	return names
 }
 
-// GetPodAffinityTerms returns the list of PodAffinityTerms specified in the PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution field.
+// GetPodAffinityTerms 返回 PodAffinity 硬约束字段中的亲和项列表。
 func GetPodAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm) {
 	if affinity != nil && affinity.PodAffinity != nil {
 		if len(affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
 			terms = affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		}
-		// TODO: Uncomment this block when implement RequiredDuringSchedulingRequiredDuringExecution.
+		// TODO: 实现 RequiredDuringSchedulingRequiredDuringExecution 后取消此段注释。
 		// if len(affinity.PodAffinity.RequiredDuringSchedulingRequiredDuringExecution) != 0 {
 		//	terms = append(terms, affinity.PodAffinity.RequiredDuringSchedulingRequiredDuringExecution...)
 		// }
@@ -528,7 +528,7 @@ func GetPodAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm) {
 	return terms
 }
 
-// GetWeightedAffinityTerms returns affinity terms with weights, namespaces and selectors of the terms.
+// GetWeightedAffinityTerms 返回带权重、命名空间和选择器的亲和项。
 func GetWeightedAffinityTerms(pod *v1.Pod, v1Terms []v1.WeightedPodAffinityTerm) ([]WeightedAffinityTerm, error) {
 	if v1Terms == nil {
 		return nil, nil
@@ -538,7 +538,7 @@ func GetWeightedAffinityTerms(pod *v1.Pod, v1Terms []v1.WeightedPodAffinityTerm)
 	for i := range v1Terms {
 		t, err := newAffinityTerm(pod, &v1Terms[i].PodAffinityTerm)
 		if err != nil {
-			// We get here if the label selector failed to process
+			// 走到这里说明 label selector 解析失败，
 			return nil, err
 		}
 		terms = append(terms, WeightedAffinityTerm{AffinityTerm: *t, Weight: v1Terms[i].Weight})
@@ -546,13 +546,13 @@ func GetWeightedAffinityTerms(pod *v1.Pod, v1Terms []v1.WeightedPodAffinityTerm)
 	return terms, nil
 }
 
-// GetPodAntiAffinityTerms returns the list of PodAffinityTerms specified in the PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution field.
+// GetPodAntiAffinityTerms 返回 PodAntiAffinity 硬约束字段中的反亲和项列表。
 func GetPodAntiAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm) {
 	if affinity != nil && affinity.PodAntiAffinity != nil {
 		if len(affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
 			terms = affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		}
-		// TODO: Uncomment this block when implement RequiredDuringSchedulingRequiredDuringExecution.
+		// TODO: 实现 RequiredDuringSchedulingRequiredDuringExecution 后取消此段注释。
 		// if len(affinity.PodAntiAffinity.RequiredDuringSchedulingRequiredDuringExecution) != 0 {
 		//	terms = append(terms, affinity.PodAntiAffinity.RequiredDuringSchedulingRequiredDuringExecution...)
 		// }
@@ -568,27 +568,27 @@ type Resource interface {
 	GetMemory() int64
 	GetEphemeralStorage() int64
 	// We return AllowedPodNumber (which is Node.Status.Allocatable.Pods().Value())
-	// explicitly as int, to avoid conversions and improve performance.
+	// 显式存为 int，避免转换开销。
 	GetAllowedPodNumber() int
-	// ScalarResources returns a map for resource names to their scalar values
+	// ScalarResources 返回资源名到标量值的映射。
 	GetScalarResources() map[v1.ResourceName]int64
-	// SetMaxResource compares with ResourceList and takes max value for each Resource.
+	// SetMaxResource 与 ResourceList 逐项比较并取最大值。
 	SetMaxResource(rl v1.ResourceList)
 }
 
-// ImageStateSummary provides summarized information about the state of an image.
+// ImageStateSummary 汇总镜像状态信息。
 type ImageStateSummary struct {
 	// Size of the image
 	Size int64
-	// Used to track how many nodes have this image, it is computed from the Nodes field below
+	// 用于统计有多少节点持有该镜像，由下面的 Nodes 字段计算得出。
 	// during the execution of Snapshot.
 	NumNodes int
-	// A set of node names for nodes having this image present. This field is used for
-	// keeping track of the nodes during update/add/remove events.
+	// 持有该镜像的节点名集合，用于
+	// 在更新/新增/删除事件中跟踪节点。
 	Nodes sets.Set[string]
 }
 
-// Snapshot returns a copy without Nodes field of ImageStateSummary
+// Snapshot 返回不含 Nodes 字段的 ImageStateSummary 副本。
 func (iss *ImageStateSummary) Snapshot() *ImageStateSummary {
 	return &ImageStateSummary{
 		Size:     iss.Size,
@@ -596,10 +596,10 @@ func (iss *ImageStateSummary) Snapshot() *ImageStateSummary {
 	}
 }
 
-// DefaultBindAllHostIP defines the default ip address used to bind to all host.
+// DefaultBindAllHostIP 是bind 到所有主机时使用的默认 IP。
 const DefaultBindAllHostIP = "0.0.0.0"
 
-// ProtocolPort represents a protocol port pair, e.g. tcp:80.
+// ProtocolPort 表示协议与端口对，例如 tcp:80。
 type ProtocolPort struct {
 	Protocol string
 	Port     int32
@@ -621,7 +621,7 @@ func NewProtocolPort(protocol string, port int32) *ProtocolPort {
 	return pp
 }
 
-// HostPortInfo stores mapping from ip to a set of ProtocolPort
+// HostPortInfo 保存 IP 到 ProtocolPort 集合的映射。
 type HostPortInfo map[string]map[ProtocolPort]struct{}
 
 // Add 把 (ip, protocol, port) 加入 HostPortInfo。HostPortInfo 用两层 map 记录三元组，
@@ -662,7 +662,7 @@ func (h HostPortInfo) Remove(ip, protocol string, port int32) {
 	}
 }
 
-// Len returns the total number of (ip, protocol, port) tuple in HostPortInfo
+// Len 返回 HostPortInfo 中 (ip, protocol, port) 三元组的总数。
 func (h HostPortInfo) Len() int {
 	length := 0
 	for _, m := range h {
@@ -683,7 +683,7 @@ func (h HostPortInfo) CheckConflict(ip, protocol string, port int32) bool {
 
 	pp := NewProtocolPort(protocol, port)
 
-	// If ip is 0.0.0.0 check all IP's (protocol, port) pair
+	// ip 为 0.0.0.0 时检查所有 IP 的 (protocol, port) 对。
 	if ip == DefaultBindAllHostIP {
 		for _, m := range h {
 			if _, ok := m[*pp]; ok {
@@ -693,7 +693,7 @@ func (h HostPortInfo) CheckConflict(ip, protocol string, port int32) bool {
 		return false
 	}
 
-	// If ip isn't 0.0.0.0, only check IP and 0.0.0.0's (protocol, port) pair
+	// 否则只检查该 IP 与 0.0.0.0 的 (protocol, port) 对。
 	for _, key := range []string{DefaultBindAllHostIP, ip} {
 		if m, ok := h[key]; ok {
 			if _, ok2 := m[*pp]; ok2 {
@@ -728,26 +728,26 @@ const (
 // 通常作为 pod group 调度周期插件的输入。
 // 区分普通组和复合组，是因为后者没有对应的单一 API 对象，需要从子组聚合信息。
 type PodGroupInfo interface {
-	// GetUnscheduledPods returns pods that are currently being considered for scheduling.
-	// The order of the pods is deterministic and based on signature, priority and timestamp.
+	// GetUnscheduledPods 返回当前正在参与调度决策的 Pod。
+	// 顺序由签名、优先级与时间戳确定，保证可复现。
 	// This structure only contains the pods considered for scheduling in the pod group scheduling cycle.
 	GetUnscheduledPods() []*v1.Pod
 
-	// GetName returns the PodGroup name that is used to identify the pod group.
+	// GetName 返回标识该 PodGroup 的名字。
 	GetName() string
-	// GetNamespace returns the namespace the pod group belongs to.
+	// GetNamespace 返回 PodGroup 所属的命名空间。
 	GetNamespace() string
 	// GetType returns the type of the pod group.
 	GetType() EntityKeyType
-	// GetKey returns the key uniquely identifying the pod group.
+	// GetKey 返回唯一标识该 PodGroup 的 key。
 	GetKey() string
-	// GetPodGroup returns the PodGroup API object or nil if the group is a composite pod group.
+	// GetPodGroup 返回 PodGroup API 对象；组合组返回 nil。
 	GetPodGroup() *schedulingv1beta1.PodGroup
-	// GetCompositePodGroup returns the associated composite pod group or nil if the group is not a composite pod group.
-	// It should only be used when the CompositePodGroup feature gate is enabled.
+	// GetCompositePodGroup 返回关联的组合 PodGroup；非组合组返回 nil。
+	// 仅在启用 CompositePodGroup 特性开关时使用。
 	GetCompositePodGroup() *schedulingv1alpha3.CompositePodGroup
-	// GetChildren returns the child pod groups of this pod group.
-	// Only composite pod groups have children.
+	// GetChildren 返回该 PodGroup 的子组。
+	// 只有组合 PodGroup 才有子组。
 	GetChildren() []PodGroupInfo
 }
 
@@ -756,36 +756,36 @@ type PodGroupInfo interface {
 // Placement 描述一次候选放置方案，名字仅用于诊断，不参与调度语义。
 // 把候选节点集合限制在 Placement 内，便于对同一组尝试多种放置并比较优劣。
 type Placement struct {
-	// Name uniquely identifies the placement.
-	// This is used for diagnostics and debugability.
-	// The choice of the name is up to the PlacementGeneratePlugin.
+	// Name 唯一标识该 Placement。
+	// 用于诊断与调试。
+	// 命名由 PlacementGeneratePlugin 决定。
 	Name string
-	// Nodes specifies the nodes that are valid for this placement.
-	// Scheduler will try to schedule the pod group using only those nodes.
+	// Nodes 指定该 Placement 可用的节点。
+	// 调度器只会尝试在这些节点上调度该 PodGroup。
 	Nodes []NodeInfo
 }
 
 // ProposedAssignment 保存 pod group 调度周期中确定的结果：组内 Pod 与其候选节点的对应关系；
 // CycleState 一并带出，让后续阶段能复用当时的计算数据而不必重新计算。
 type ProposedAssignment interface {
-	// GetPod returns the pod that has the proposed node assignment.
+	// GetPod 返回已获得建议节点的 Pod。
 	GetPod() *v1.Pod
-	// GetPodInfo returns the PodInfo for the pod that has the proposed node assignment.
-	// It should be treated as immutable, read only data.
+	// GetPodInfo 返回该 Pod 的 PodInfo。
+	// 应视为不可变的只读数据。
 	GetPodInfo() PodInfo
-	// GetNodeName returns the name of the proposed node for the pod.
+	// GetNodeName 返回为该 Pod 建议的节点名。
 	GetNodeName() string
-	// GetCycleState returns the CycleState computed for this pod during pod group scheduling cycle.
+	// GetCycleState 返回 PodGroup 调度周期内为该 Pod 计算的 CycleState。
 	GetCycleState() CycleState
 }
 
-// PodGroupAssignments holds the temporary assignments of pods in a pod group to nodes for a placement.
-// Can be used in the pod group scheduling cycle to determine the best placement for a pod group.
+// PodGroupAssignments 保存某 Placement 下 PodGroup 成员到节点的临时分配。
+// 用于 PodGroup 调度周期中挑选最佳 Placement。
 type PodGroupAssignments struct {
 	*Placement
-	// ProposedAssignments associates pods with proposed nodes that were determined for a given placement
-	// during the pod group scheduling cycle.
-	// The pods are guaranteed to also be present in the PodGroupInfo.
+	// ProposedAssignments 把某 Placement 下确定的建议节点与 Pod 关联起来，
+	// 该结果产生于 PodGroup 调度周期。
+	// 这些 Pod 一定也能在 PodGroupInfo 中找到。
 	ProposedAssignments []ProposedAssignment
 }
 
@@ -832,12 +832,12 @@ func PodKey(namespace, name string) EntityKey {
 	return EntityKey{Type: PodKeyType, Namespace: namespace, Name: name}
 }
 
-// PodGroupKey returns the key for a pod group.
+// PodGroupKey 返回 PodGroup 的 key。
 func PodGroupKey(namespace, name string) EntityKey {
 	return EntityKey{Type: PodGroupKeyType, Namespace: namespace, Name: name}
 }
 
-// CompositePodGroupKey returns the key for a composite pod group.
+// CompositePodGroupKey 返回组合 PodGroup 的 key。
 func CompositePodGroupKey(namespace, name string) EntityKey {
 	return EntityKey{Type: CompositePodGroupKeyType, Namespace: namespace, Name: name}
 }

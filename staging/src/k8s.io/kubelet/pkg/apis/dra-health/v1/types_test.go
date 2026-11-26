@@ -22,10 +22,10 @@ import (
 	v1alpha1 "k8s.io/kubelet/pkg/apis/dra-health/v1alpha1"
 )
 
-// TestServiceNameConstants verifies that the service name constants match
-// the service names declared in the generated gRPC code. The constants are
-// what plugins advertise during registration and what the kubelet matches
-// against, so they must stay in sync with the gRPC service definitions.
+// TestServiceNameConstants 验证服务名常量与生成的 gRPC 代码
+// 中声明的名字一致。插件注册时广播的就是这些常量，
+// kubelet 也按它们匹配，必须与 gRPC 服务定义保持同步。
+// kubelet 也按它们匹配，必须与 gRPC 服务定义保持同步。
 //
 // 常量若与生成代码不一致，插件注册时的版本匹配会静默失败，
 // 这类问题在真机上表现为健康检查“没有数据”，很难定位。

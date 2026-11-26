@@ -23,87 +23,83 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Summary is a top-level container for holding NodeStats and PodStats.
-//
+// Summary 是承载 NodeStats 与 PodStats 的顶层容器。
 // Summary 是统计接口的顶层聚合结果：节点级统计与所有 Pod 统计放在同一个响应里，
 // 消费方一次请求就能拿到完整快照，避免逐 Pod 请求带来的开销。
 type Summary struct {
-	// Overall node stats.
+	// 节点整体统计。
 	Node NodeStats `json:"node"`
-	// Per-pod stats.
+	// 每个 Pod 的统计。
 	Pods []PodStats `json:"pods"`
 }
 
-// NodeStats holds node-level unprocessed sample stats.
-//
+// NodeStats 保存节点级未加工采样统计。
 // NodeStats 保存节点级的原始采样值（累计量为主），消费方若要算速率需自行用两次采样做差。
 // 各资源字段用指针表示，便于区分“采集失败/不支持”和“取值为 0”。
 type NodeStats struct {
-	// Reference to the measured Node.
+	// 被统计节点的引用。
 	NodeName string `json:"nodeName"`
-	// Stats of system daemons tracked as raw containers.
-	// The system containers are named according to the SystemContainer* constants.
+	// 作为原始容器跟踪的系统守护进程统计。
+	// 系统容器名遵循 SystemContainer* 常量。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
 	SystemContainers []ContainerStats `json:"systemContainers,omitempty" patchStrategy:"merge" patchMergeKey:"name"`
-	// The time at which data collection for the node-scoped (i.e. aggregate) stats was (re)started.
+	// 节点级（聚合）统计的数据采集（重新）启动时间。
 	StartTime metav1.Time `json:"startTime"`
-	// Stats pertaining to CPU resources.
+	// CPU 资源相关统计。
 	// +optional
 	CPU *CPUStats `json:"cpu,omitempty"`
-	// Stats pertaining to memory (RAM) resources.
+	// 内存（RAM）资源相关统计。
 	// +optional
 	Memory *MemoryStats `json:"memory,omitempty"`
-	// Stats pertaining to IO resources.
+	// IO 资源相关统计。
 	// +optional
 	IO *IOStats `json:"io,omitempty"`
-	// Stats pertaining to network resources.
+	// 网络资源相关统计。
 	// +optional
 	Network *NetworkStats `json:"network,omitempty"`
-	// Stats pertaining to total usage of filesystem resources on the rootfs used by node k8s components.
-	// NodeFs.Used is the total bytes used on the filesystem.
+	// 节点 k8s 组件使用的 rootfs 上文件系统总用量统计。
+	// NodeFs.Used 是文件系统上已用的总字节数。
 	// +optional
 	Fs *FsStats `json:"fs,omitempty"`
-	// Stats about the underlying container runtime.
+	// 底层容器运行时相关统计。
 	// +optional
 	Runtime *RuntimeStats `json:"runtime,omitempty"`
-	// Stats about the rlimit of system.
+	// 系统 rlimit 相关统计。
 	// +optional
 	Rlimit *RlimitStats `json:"rlimit,omitempty"`
-	// Stats pertaining to swap resources. This is reported to non-windows systems only.
+	// 交换空间相关统计，仅在非 Windows 系统上上报。
 	// +optional
 	Swap *SwapStats `json:"swap,omitempty"`
 }
 
-// RlimitStats are stats rlimit of OS.
-//
+// RlimitStats 是操作系统 rlimit 的统计。
 // RlimitStats 记录内核对进程/PID 数量的硬限制，供 kubelet 判断节点是否接近 PID 耗尽，
 // 触发 Pod 驱逐前的关键判据。
 type RlimitStats struct {
 	Time metav1.Time `json:"time"`
 
-	// The max number of extant process (threads, precisely on Linux) of OS. See RLIMIT_NPROC in getrlimit(2).
-	// The operating system ceiling on the number of process IDs that can be assigned.
-	// On Linux, tasks (either processes or threads) consume 1 PID each.
+	// 操作系统当前可存在的最大进程数（Linux 上精确说是线程数），见 getrlimit(2) 的 RLIMIT_NPROC。
+	// 操作系统可分配的 PID 上限。
+	// Linux 上任务（进程或线程）各消耗 1 个 PID。
 	MaxPID *int64 `json:"maxpid,omitempty"`
-	// The number of running process (threads, precisely on Linux) in the OS.
+	// 操作系统中正在运行的进程数（Linux 上精确说是线程数）。
 	NumOfRunningProcesses *int64 `json:"curproc,omitempty"`
 }
 
-// RuntimeStats are stats pertaining to the underlying container runtime.
-//
+// RuntimeStats 是底层容器运行时的统计。
 // RuntimeStats 把运行时占用的文件系统单独列出：镜像层与容器可写层可能共用同一文件系统，
 // 也可能各自独立，分开统计便于定位磁盘被哪一类数据撑满。
 type RuntimeStats struct {
-	// Stats about the underlying filesystem where container images are stored.
-	// This filesystem could be the same as the primary (root) filesystem.
-	// Usage here refers to the total number of bytes occupied by images on the filesystem.
+	// 存放容器镜像的文件系统相关统计。
+	// 该文件系统可能与主（根）文件系统相同。
+	// Usage 指镜像在文件系统上占用的总字节数。
 	// +optional
 	ImageFs *FsStats `json:"imageFs,omitempty"`
-	// Stats about the underlying filesystem where container's writeable layer is stored.
-	// This filesystem could be the same as the primary (root) filesystem or the ImageFS.
-	// Usage here refers to the total number of bytes occupied by the writeable layer on the filesystem.
+	// 存放容器可写层的文件系统相关统计。
+	// 该文件系统可能与主（根）文件系统或 ImageFS 相同。
+	// Usage 指可写层在文件系统上占用的总字节数。
 	// +optional
 	ContainerFs *FsStats `json:"containerFs,omitempty"`
 }
@@ -111,110 +107,106 @@ type RuntimeStats struct {
 // 系统容器名既用于标识统计归属，也用于与 cAdvisor 的容器层级对应；
 // 之所以不直接用二进制名，是为了让消费方按固定枚举解析这些统计。
 const (
-	// SystemContainerKubelet is the container name for the system container tracking Kubelet usage.
+	// SystemContainerKubelet 是跟踪 Kubelet 用量的系统容器名。
 	SystemContainerKubelet = "kubelet"
-	// SystemContainerRuntime is the container name for the system container tracking the runtime (e.g. docker) usage.
+	// SystemContainerRuntime 是跟踪运行时（如 docker）用量的系统容器名。
 	SystemContainerRuntime = "runtime"
-	// SystemContainerMisc is the container name for the system container tracking non-kubernetes processes.
+	// SystemContainerMisc 是跟踪非 Kubernetes 进程用量的系统容器名。
 	SystemContainerMisc = "misc"
-	// SystemContainerPods is the container name for the system container tracking user pods.
+	// SystemContainerPods 是跟踪用户 Pod 用量的系统容器名。
 	SystemContainerPods = "pods"
-	// SystemContainerWindowsGlobalCommitMemory (only used on Windows) is the container name for the system container
-	// tracking global commit memory usage and is used for memory-pressure eviction.
+	// SystemContainerWindowsGlobalCommitMemory（仅 Windows）是跟踪全局提交内存用量的系统容器名，
+	// 用于内存压力驱逐。
 	SystemContainerWindowsGlobalCommitMemory = "windows-global-commit-memory"
 )
 
-// ProcessStats are stats pertaining to processes.
-//
+// ProcessStats 是进程相关统计。
 // ProcessStats 只统计进程数量，是判断节点/Pod 是否触及 PID 限制的最小字段集；
 // 用指针是为了在采集器未实现该功能时省略整个字段。
 type ProcessStats struct {
-	// Number of processes
+	// 进程数。
 	// +optional
 	ProcessCount *uint64 `json:"process_count,omitempty"`
 }
 
-// PodStats holds pod-level unprocessed sample stats.
-//
+// PodStats 保存 Pod 级未加工采样统计。
 // PodStats 既包含 Pod cgroup 聚合值，也包含各容器的明细：聚合值覆盖 Pod 级开销，
 // 所以不等于容器值简单相加。
 type PodStats struct {
-	// Reference to the measured Pod.
+	// 被统计 Pod 的引用。
 	PodRef PodReference `json:"podRef"`
-	// The time at which data collection for the pod-scoped (e.g. network) stats was (re)started.
+	// Pod 级（如网络）统计的数据采集（重新）启动时间。
 	StartTime metav1.Time `json:"startTime"`
-	// Stats of containers in the measured pod.
+	// 被统计 Pod 中各容器的统计。
 	// +patchMergeKey=name
 	// +patchStrategy=merge
 	Containers []ContainerStats `json:"containers" patchStrategy:"merge" patchMergeKey:"name"`
-	// Stats pertaining to CPU resources consumed by pod cgroup (which includes all containers' resource usage and pod overhead).
+	// Pod cgroup 消耗的 CPU 资源统计（含所有容器用量与 Pod 开销）。
 	// +optional
 	CPU *CPUStats `json:"cpu,omitempty"`
-	// Stats pertaining to memory (RAM) resources consumed by pod cgroup (which includes all containers' resource usage and pod overhead).
+	// Pod cgroup 消耗的内存资源统计（含所有容器用量与 Pod 开销）。
 	// +optional
 	Memory *MemoryStats `json:"memory,omitempty"`
-	// Stats pertaining to IO resources consumed by pod cgroup (which includes all containers' resource usage and pod overhead).
+	// Pod cgroup 消耗的 IO 资源统计（含所有容器用量与 Pod 开销）。
 	// +optional
 	IO *IOStats `json:"io,omitempty"`
-	// Stats pertaining to network resources.
+	// 网络资源相关统计。
 	// +optional
 	Network *NetworkStats `json:"network,omitempty"`
-	// Stats pertaining to volume usage of filesystem resources.
-	// VolumeStats.UsedBytes is the number of bytes used by the Volume
+	// 文件系统卷用量统计。
+	// VolumeStats.UsedBytes 是卷已用的字节数。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
 	VolumeStats []VolumeStats `json:"volume,omitempty" patchStrategy:"merge" patchMergeKey:"name"`
-	// EphemeralStorage reports the total filesystem usage for the containers and emptyDir-backed volumes in the measured Pod.
+	// EphemeralStorage 报告被统计 Pod 中容器与 emptyDir 卷的文件系统总用量。
 	// +optional
 	EphemeralStorage *FsStats `json:"ephemeral-storage,omitempty"`
-	// ProcessStats pertaining to processes.
+	// 进程相关 ProcessStats。
 	// +optional
 	ProcessStats *ProcessStats `json:"process_stats,omitempty"`
-	// Stats pertaining to swap resources. This is reported to non-windows systems only.
+	// 交换空间相关统计，仅在非 Windows 系统上上报。
 	// +optional
 	Swap *SwapStats `json:"swap,omitempty"`
 }
 
-// ContainerStats holds container-level unprocessed sample stats.
-//
+// ContainerStats 保存容器级未加工采样统计。
 // ContainerStats 以容器为粒度组织统计；Rootfs 与 Logs 分开列出，
 // 因为二者通常落在不同目录/限额上，排障时需要独立看各自用量。
 type ContainerStats struct {
-	// Reference to the measured container.
+	// 被统计容器的引用。
 	Name string `json:"name"`
-	// The time at which data collection for this container was (re)started.
+	// 该容器数据采集（重新）启动的时间。
 	StartTime metav1.Time `json:"startTime"`
-	// Stats pertaining to CPU resources.
+	// CPU 资源相关统计。
 	// +optional
 	CPU *CPUStats `json:"cpu,omitempty"`
-	// Stats pertaining to memory (RAM) resources.
+	// 内存（RAM）资源相关统计。
 	// +optional
 	Memory *MemoryStats `json:"memory,omitempty"`
-	// Stats pertaining to IO resources.
+	// IO 资源相关统计。
 	// +optional
 	IO *IOStats `json:"io,omitempty"`
-	// Metrics for Accelerators. Each Accelerator corresponds to one element in the array.
+	// 加速器指标。每个加速器对应数组中的一个元素。
 	Accelerators []AcceleratorStats `json:"accelerators,omitempty"`
-	// Stats pertaining to container rootfs usage of filesystem resources.
-	// Rootfs.UsedBytes is the number of bytes used for the container write layer.
+	// 容器 rootfs 的文件系统用量统计。
+	// Rootfs.UsedBytes 是容器写层占用的字节数。
 	// +optional
 	Rootfs *FsStats `json:"rootfs,omitempty"`
-	// Stats pertaining to container logs usage of filesystem resources.
-	// Logs.UsedBytes is the number of bytes used for the container logs.
+	// 容器日志文件系统的用量统计。
+	// Logs.UsedBytes 是容器日志占用的字节数。
 	// +optional
 	Logs *FsStats `json:"logs,omitempty"`
-	// User defined metrics that are exposed by containers in the pod. Typically, we expect only one container in the pod to be exposing user defined metrics. In the event of multiple containers exposing metrics, they will be combined here.
+	// Pod 中容器暴露的用户自定义指标。通常期望只有一个容器暴露；若有多个，结果在此合并。
 	// +patchMergeKey=name
 	// +patchStrategy=merge
 	UserDefinedMetrics []UserDefinedMetric `json:"userDefinedMetrics,omitempty" patchStrategy:"merge" patchMergeKey:"name"`
-	// Stats pertaining to swap resources. This is reported to non-windows systems only.
+	// 交换空间相关统计，仅在非 Windows 系统上上报。
 	// +optional
 	Swap *SwapStats `json:"swap,omitempty"`
 }
 
-// PodReference contains enough information to locate the referenced pod.
-//
+// PodReference 包含定位被引用 Pod 所需的信息。
 // PodReference 同时带 UID，避免同名 Pod 重建后被误认为同一个对象。
 type PodReference struct {
 	Name      string `json:"name"`
@@ -222,192 +214,180 @@ type PodReference struct {
 	UID       string `json:"uid"`
 }
 
-// InterfaceStats contains resource value data about interface.
-//
+// InterfaceStats 包含某网络接口的资源数据。
 // InterfaceStats 的字节/错误计数都是网卡启动以来的累计值，
 // 速率须由消费方对相邻采样点做差得出。
 type InterfaceStats struct {
-	// The name of the interface
+	// 接口名。
 	Name string `json:"name"`
-	// Cumulative count of bytes received.
+	// 累计接收字节数。
 	// +optional
 	RxBytes *uint64 `json:"rxBytes,omitempty"`
-	// Cumulative count of receive errors encountered.
+	// 累计接收错误数。
 	// +optional
 	RxErrors *uint64 `json:"rxErrors,omitempty"`
-	// Cumulative count of bytes transmitted.
+	// 累计发送字节数。
 	// +optional
 	TxBytes *uint64 `json:"txBytes,omitempty"`
-	// Cumulative count of transmit errors encountered.
+	// 累计发送错误数。
 	// +optional
 	TxErrors *uint64 `json:"txErrors,omitempty"`
 }
 
-// NetworkStats contains data about network resources.
-//
+// NetworkStats 包含网络资源数据。
 // NetworkStats 内嵌 InterfaceStats 表达默认网卡，是为了兼容只关心默认网卡的旧消费方；
 // Interfaces 则提供完整明细，二者数据会重复，不应累加。
 type NetworkStats struct {
-	// The time at which these stats were updated.
+	// 这些统计的更新时间。
 	Time metav1.Time `json:"time"`
 
-	// Stats for the default interface, if found
+	// 默认接口的统计（若找到）。
 	InterfaceStats `json:""`
 
 	Interfaces []InterfaceStats `json:"interfaces,omitempty"`
 }
 
-// CPUStats contains data about CPU usage.
-//
+// CPUStats 包含 CPU 用量数据。
 // CPUStats 同时给出瞬时用量与累计用量：前者便于直接展示，
 // 后者不含采样窗口信息，适合消费方自行计算任意时段的平均值。
 type CPUStats struct {
-	// The time at which these stats were updated.
+	// 这些统计的更新时间。
 	Time metav1.Time `json:"time"`
-	// Total CPU usage (sum of all cores) averaged over the sample window.
-	// The "core" unit can be interpreted as CPU core-nanoseconds per second.
+	// 采样窗口内平均总 CPU 用量（所有核之和）。
+	// "core" 单位可理解为每秒 CPU 核心纳秒数。
 	// +optional
 	UsageNanoCores *uint64 `json:"usageNanoCores,omitempty"`
-	// Cumulative CPU usage (sum of all cores) since object creation.
+	// 自对象创建以来的累计 CPU 用量（所有核之和）。
 	// +optional
 	UsageCoreNanoSeconds *uint64 `json:"usageCoreNanoSeconds,omitempty"`
-	// CPU PSI stats.
+	// CPU PSI 统计。
 	// +optional
 	PSI *PSIStats `json:"psi,omitempty"`
 }
 
-// MemoryStats contains data about memory usage.
-//
+// MemoryStats 包含内存用量数据。
 // MemoryStats 区分 usage 与 workingSet：前者包含可回收的 cache，
 // 后者更接近 cgroup 内存压力下真正会被回收的量，驱逐决策看后者。
 type MemoryStats struct {
-	// The time at which these stats were updated.
+	// 这些统计的更新时间。
 	Time metav1.Time `json:"time"`
-	// Available memory for use.  This is defined as the memory limit - workingSetBytes.
-	// If memory limit is undefined, the available bytes is omitted.
+	// 可用内存，定义为 memory limit - workingSetBytes。
+	// 未设置内存 limit 时省略该值。
 	// +optional
 	AvailableBytes *uint64 `json:"availableBytes,omitempty"`
-	// Total memory in use. This includes all memory regardless of when it was accessed.
+	// 已用内存总量，含所有内存，不论访问时间。
 	// +optional
 	UsageBytes *uint64 `json:"usageBytes,omitempty"`
-	// The amount of working set memory. This includes recently accessed memory,
-	// dirty memory, and kernel memory. WorkingSetBytes is <= UsageBytes
+	// 工作集内存量，含最近访问的内存、脏页和内核内存。
+	// WorkingSetBytes <= UsageBytes。
 	// +optional
 	WorkingSetBytes *uint64 `json:"workingSetBytes,omitempty"`
-	// The amount of anonymous and swap cache memory (includes transparent
-	// hugepages).
+	// 匿名页与 swap cache 内存量（含透明大页）。
 	// +optional
 	RSSBytes *uint64 `json:"rssBytes,omitempty"`
-	// Cumulative number of minor page faults.
+	// 累计次要缺页次数。
 	// +optional
 	PageFaults *uint64 `json:"pageFaults,omitempty"`
-	// Cumulative number of major page faults.
+	// 累计主要缺页次数。
 	// +optional
 	MajorPageFaults *uint64 `json:"majorPageFaults,omitempty"`
-	// Memory PSI stats.
+	// 内存 PSI 统计。
 	// +optional
 	PSI *PSIStats `json:"psi,omitempty"`
 }
 
-// IOStats contains data about IO usage.
-//
+// IOStats 包含 IO 用量数据。
 // IOStats 当前仅承载 PSI 数据：cAdvisor 不能跨所有块设备给出可靠的读写速率，
 // 用压力stall 信息比上报含义模糊的计数更有用。
 type IOStats struct {
-	// The time at which these stats were updated.
+	// 这些统计的更新时间。
 	Time metav1.Time `json:"time"`
-	// IO PSI stats.
+	// IO PSI 统计。
 	// +optional
 	PSI *PSIStats `json:"psi,omitempty"`
 }
 
-// PSI statistics for an individual resource.
-//
+// 单个资源的 PSI 统计。
 // PSIStats 区分 full 与 some：前者要求所有任务同时受阻，
 // 后者只要部分任务受阻，两者结合才能判断资源压力是局部还是整体。
 type PSIStats struct {
-	// PSI data for all tasks in the cgroup.
+	// cgroup 中所有任务的 PSI 数据。
 	Full PSIData `json:"full"`
-	// PSI data for some tasks in the cgroup.
+	// cgroup 中部分任务的 PSI 数据。
 	Some PSIData `json:"some"`
 }
 
-// PSI data for an individual resource.
-//
+// 单个资源的 PSI 数据。
 // PSIData 的 avg10/60/300 覆盖不同时间尺度：短窗口反映突发压力，
 // 长窗口过滤毛刺，便于消费方按自身需求选用。
 type PSIData struct {
-	// Total time duration for tasks in the cgroup have waited due to congestion.
-	// Unit: nanoseconds.
+	// cgroup 中任务因拥塞而等待的总时长。
+	// 单位：纳秒。
 	Total uint64 `json:"total"`
-	// The average (in %) tasks have waited due to congestion over a 10 second window.
+	// 10 秒窗口内任务因拥塞等待的平均百分比。
 	Avg10 float64 `json:"avg10"`
-	// The average (in %) tasks have waited due to congestion over a 60 second window.
+	// 60 秒窗口内任务因拥塞等待的平均百分比。
 	Avg60 float64 `json:"avg60"`
-	// The average (in %) tasks have waited due to congestion over a 300 second window.
+	// 300 秒窗口内任务因拥塞等待的平均百分比。
 	Avg300 float64 `json:"avg300"`
 }
 
-// SwapStats contains data about memory usage
-//
+// SwapStats 包含内存用量数据。
 // SwapStats 只在非 Windows 节点上报：Windows 的交换语义与 Linux cgroup 不同，
 // 强行统一会让消费方拿到含义错误的数据。
 type SwapStats struct {
-	// The time at which these stats were updated.
+	// 这些统计的更新时间。
 	Time metav1.Time `json:"time"`
-	// Available swap memory for use.  This is defined as the <swap-limit> - <current-swap-usage>.
-	// If swap limit is undefined, this value is omitted.
+	// 可用 swap 内存，定义为 <swap-limit> - <current-swap-usage>。
+	// 未设置 swap limit 时省略该值。
 	// +optional
 	SwapAvailableBytes *uint64 `json:"swapAvailableBytes,omitempty"`
-	// Total swap memory in use.
+	// 已用 swap 内存总量。
 	// +optional
 	SwapUsageBytes *uint64 `json:"swapUsageBytes,omitempty"`
 }
 
-// AcceleratorStats contains stats for accelerators attached to the container.
-//
+// AcceleratorStats 包含容器所挂加速器的统计。
 // AcceleratorStats 描述单个加速卡；一个容器可挂多张卡，所以该类型出现在数组中，
 // 并由 ID 区分具体设备。
 type AcceleratorStats struct {
-	// Make of the accelerator (nvidia, amd, google etc.)
+	// 加速器厂商（nvidia、amd、google 等）。
 	Make string `json:"make"`
 
-	// Model of the accelerator (tesla-p100, tesla-k80 etc.)
+	// 加速器型号（tesla-p100、tesla-k80 等）。
 	Model string `json:"model"`
 
-	// ID of the accelerator.
+	// 加速器 ID。
 	ID string `json:"id"`
 
-	// Total accelerator memory.
-	// unit: bytes
+	// 加速器总显存。
+	// 单位：字节。
 	MemoryTotal uint64 `json:"memoryTotal"`
 
-	// Total accelerator memory allocated.
-	// unit: bytes
+	// 已分配的加速器总显存。
+	// 单位：字节。
 	MemoryUsed uint64 `json:"memoryUsed"`
 
-	// Percent of time over the past sample period (10s) during which
-	// the accelerator was actively processing.
+	// 上个采样周期（10s）内加速器活跃处理的时间百分比。
+	//
 	DutyCycle uint64 `json:"dutyCycle"`
 }
 
-// VolumeStats contains data about Volume filesystem usage.
-//
+// VolumeStats 包含卷文件系统用量数据。
 // VolumeStats 内嵌 FsStats 以复用文件系统字段；PVCRef 仅在使用 PVC 时填充，
 // 让消费方可以关联到存储对象而不必反查 Pod spec。
 type VolumeStats struct {
-	// Embedded FsStats
+	// 内嵌 FsStats。
 	FsStats `json:""`
-	// Name is the name given to the Volume
+	// Name 是卷的名字。
 	// +optional
 	Name string `json:"name,omitempty"`
-	// Reference to the PVC, if one exists
+	// PVC 的引用（若存在）。
 	// +optional
 	PVCRef *PVCReference `json:"pvcRef,omitempty"`
 }
 
-// PVCReference contains enough information to describe the referenced PVC.
-//
+// PVCReference 包含描述被引用 PVC 所需的信息。
 // PVCReference 不含 UID，因为统计只需定位到当前 PVC 对象，
 // 短生命周期的采样数据没必要绑定对象身份。
 type PVCReference struct {
@@ -415,81 +395,77 @@ type PVCReference struct {
 	Namespace string `json:"namespace"`
 }
 
-// FsStats contains data about filesystem usage.
-//
+// FsStats 包含文件系统用量数据。
 // FsStats 同时给出容量/空闲与“本任务用量”：后者受共享文件系统影响，
 // 不能用 CapacityBytes - AvailableBytes 反推，容器 rootfs 场景尤其明显。
 type FsStats struct {
-	// The time at which these stats were updated.
+	// 这些统计的更新时间。
 	Time metav1.Time `json:"time"`
-	// AvailableBytes represents the storage space available (bytes) for the filesystem.
+	// AvailableBytes 表示文件系统可用存储空间（字节）。
 	// +optional
 	AvailableBytes *uint64 `json:"availableBytes,omitempty"`
-	// CapacityBytes represents the total capacity (bytes) of the filesystems underlying storage.
+	// CapacityBytes 表示文件系统底层存储的总容量（字节）。
 	// +optional
 	CapacityBytes *uint64 `json:"capacityBytes,omitempty"`
-	// UsedBytes represents the bytes used for a specific task on the filesystem.
-	// This may differ from the total bytes used on the filesystem and may not equal CapacityBytes - AvailableBytes.
-	// e.g. For ContainerStats.Rootfs this is the bytes used by the container rootfs on the filesystem.
+	// UsedBytes 表示某任务在文件系统上占用的字节数。
+	// 它可能不同于文件系统总用量，也不等于 CapacityBytes - AvailableBytes。
+	// 例如 ContainerStats.Rootfs 中是容器 rootfs 占用的字节数。
 	// +optional
 	UsedBytes *uint64 `json:"usedBytes,omitempty"`
-	// InodesFree represents the free inodes in the filesystem.
+	// InodesFree 是文件系统中空闲 inode 数。
 	// +optional
 	InodesFree *uint64 `json:"inodesFree,omitempty"`
-	// Inodes represents the total inodes in the filesystem.
+	// Inodes 是文件系统中 inode 总数。
 	// +optional
 	Inodes *uint64 `json:"inodes,omitempty"`
-	// InodesUsed represents the inodes used by the filesystem
-	// This may not equal Inodes - InodesFree because this filesystem may share inodes with other "filesystems"
-	// e.g. For ContainerStats.Rootfs, this is the inodes used only by that container, and does not count inodes used by other containers.
+	// InodesUsed 是文件系统已用 inode 数。
+	// 它可能不等于 Inodes - InodesFree，因为该文件系统可能与其它"文件系统"共享 inode。
+	// 例如 ContainerStats.Rootfs 中只统计该容器用的 inode，不含其它容器。
 	InodesUsed *uint64 `json:"inodesUsed,omitempty"`
 }
 
-// UserDefinedMetricType defines how the metric should be interpreted by the user.
-//
+// UserDefinedMetricType 定义用户如何理解该指标。
 // UserDefinedMetricType 告诉消费方如何解释数值：瞬时值、累计计数器还是区间速率，
 // 三者做差/求平均的方式不同，不能只看 Value 字段猜。
 type UserDefinedMetricType string
 
 // 三种类型对应三种聚合语义，插件必须如实标注，否则消费方绘制的趋势图会失真。
 const (
-	// MetricGauge is an instantaneous value. May increase or decrease.
+	// MetricGauge 是瞬时值，可增可减。
 	MetricGauge UserDefinedMetricType = "gauge"
 
-	// MetricCumulative is a counter-like value that is only expected to increase.
+	// MetricCumulative 是类似计数器的值，只应增加。
 	MetricCumulative UserDefinedMetricType = "cumulative"
 
-	// MetricDelta is a rate over a time period.
+	// MetricDelta 是一段时间内的速率。
 	MetricDelta UserDefinedMetricType = "delta"
 )
 
-// UserDefinedMetricDescriptor contains metadata that describes a user defined metric.
-//
+// UserDefinedMetricDescriptor 包含描述用户自定义指标的元数据。
 // UserDefinedMetricDescriptor 把指标的元信息独立出来，供消费方在看到具体采样值前
 // 就知道如何展示单位与标签。
 type UserDefinedMetricDescriptor struct {
-	// The name of the metric.
+	// 指标名。
 	Name string `json:"name"`
 
-	// Type of the metric.
+	// 指标类型。
 	Type UserDefinedMetricType `json:"type"`
 
-	// Display Units for the stats.
+	// 统计的显示单位。
 	Units string `json:"units"`
 
-	// Metadata labels associated with this metric.
+	// 与该指标关联的元数据标签。
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
-// UserDefinedMetric represents a metric defined and generated by users.
-//
+// UserDefinedMetric 表示用户定义并生成的指标。
 // UserDefinedMetric 内嵌描述符再加时间序列值，避免每条采样重复携带名称/类型等元数据。
 type UserDefinedMetric struct {
 	UserDefinedMetricDescriptor `json:""`
-	// The time at which these stats were updated.
+	// 这些统计的更新时间。
 	Time metav1.Time `json:"time"`
-	// Value of the metric. Float64s have 53 bit precision.
-	// We do not foresee any metrics exceeding that value.
+	// 指标的值。Float64 有 53 位精度。
+	// 预计不会有指标超过该精度。
 	Value float64 `json:"value"`
 }

@@ -117,7 +117,7 @@ func (s JSONSchemaPropsOrBool) MarshalCBOR() ([]byte, error) {
 func (s *JSONSchemaPropsOrBool) UnmarshalCBOR(data []byte) error {
 	switch {
 	case len(data) == 0:
-		// ideally we would avoid modifying *s here, but we are matching the behavior of UnmarshalJSON
+		// 这里不该改 *s，但为与 UnmarshalJSON 行为一致只能如此。
 		*s = JSONSchemaPropsOrBool{}
 		return nil
 	case cborType(data[0]) == cborMap:
@@ -134,8 +134,7 @@ func (s *JSONSchemaPropsOrBool) UnmarshalCBOR(data []byte) error {
 		*s = JSONSchemaPropsOrBool{Allows: false}
 		return nil
 	default:
-		// ideally, this case would not also capture a null input value,
-		// but we are matching the behavior of the UnmarshalJSON
+		// null 本不该落到这里，但为保持与 UnmarshalJSON 一致，仍按非法值处理。
 		return errors.New("boolean or JSON schema expected")
 	}
 }
@@ -205,9 +204,8 @@ func (s *JSONSchemaPropsOrStringArray) UnmarshalCBOR(data []byte) error {
 		*s = JSONSchemaPropsOrStringArray{Schema: &p}
 		return nil
 	}
-	// At this point we either have: empty data, a null value, or an
-	// unexpected type. In order to match the behavior of the existing
-	// UnmarshalJSON, no error is returned and *s is overwritten here.
+	// 走到这里说明数据是空、null 或类型不符；为兼容现有 UnmarshalJSON，
+	// 不报错，直接覆写 *s。
 	*s = JSONSchemaPropsOrStringArray{}
 	return nil
 }
@@ -271,9 +269,8 @@ func (s *JSONSchemaPropsOrArray) UnmarshalCBOR(data []byte) error {
 		*s = JSONSchemaPropsOrArray{JSONSchemas: a}
 		return nil
 	}
-	// At this point we either have: empty data, a null value, or an
-	// unexpected type. In order to match the behavior of the existing
-	// UnmarshalJSON, no error is returned and *s is overwritten here.
+	// 走到这里说明数据是空、null 或类型不符；为兼容现有 UnmarshalJSON，
+	// 不报错，直接覆写 *s。
 	*s = JSONSchemaPropsOrArray{}
 	return nil
 }

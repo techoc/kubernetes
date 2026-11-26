@@ -49,7 +49,7 @@ func TestHostPortInfo_AddRemove(t *testing.T) {
 				{"UDP", "127.0.0.1", 80},
 				{"TCP", "127.0.0.1", 81},
 				{"TCP", "127.0.0.1", 82},
-				// this might not make sense in real case, but the struct doesn't forbid it.
+				// 实际场景中可能不合理，但结构体并不禁止这种取值。
 				{"TCP", "0.0.0.0", 79},
 				{"UDP", "0.0.0.0", 80},
 				{"TCP", "0.0.0.0", 81},

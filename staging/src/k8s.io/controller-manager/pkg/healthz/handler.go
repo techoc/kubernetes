@@ -24,9 +24,6 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 )
 
-// MutableHealthzHandler returns a http.Handler that handles "/healthz"
-// following the standard healthz mechanism.
-//
 // 标准 healthz handler 不允许在创建后再添加检查项。
 // MutableHealthzHandler 通过“加检查时重建内部 handler + 读写锁”绕开这个限制，
 // 使 controller-manager 能在启动后继续把控制器的健康检查挂到 /healthz 上。

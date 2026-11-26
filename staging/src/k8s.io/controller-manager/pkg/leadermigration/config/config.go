@@ -34,7 +34,6 @@ import (
 // 迁移配置中允许的两种资源锁类型常量。
 const ResourceLockLeases = "leases"
 
-// ResourceLockEndpoints is the resourceLock value for 'endpoints' API
 const ResourceLockEndpoints = "endpoints"
 
 // 专用于解析迁移配置文件的 scheme：注册内部版本以及所有支持的外部版本。

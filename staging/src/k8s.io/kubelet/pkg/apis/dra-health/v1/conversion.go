@@ -14,18 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file provides conversion between the v1 and v1alpha1 DRAResourceHealth
-// gRPC APIs together with thin wrappers, modeled after the conversion handling
-// for the main DRA gRPC API (k8s.io/kubelet/pkg/apis/dra/v1beta1/conversion.go).
+// 本文件提供 v1 与 v1alpha1 DRAResourceHealth gRPC API 之间的
+// 转换及薄包装层，写法参照主 DRA gRPC API
+// 参照 k8s.io/kubelet/pkg/apis/dra/v1beta1/conversion.go 的写法。
 //
-// The v1 proto is identical to v1alpha1, so the conversions are mechanical
-// field copies. They exist so that a DRA driver only has to implement the newest
-// (v1) health server while the kubelet helper also serves the older v1alpha1
-// API for kubelets from releases where only v1alpha1 existed, and so that the
-// kubelet can still consume health from drivers which shipped with a v1alpha1
-// health server before v1 existed. Both directions get removed in the 1.40
-// era: three releases of transition for the kubelet's client-side fallback,
-// and the end of the supported version skew for kubelets without v1 support.
+// v1 与 v1alpha1 的 proto 完全一致，这些转换只是机械的字段拷贝。
+// 它们让驱动只需实现最新的
+// v1 健康服务，同时由 kubelet 辅助包继续为旧版 kubelet 提供
+// v1alpha1 API；反过来也让 kubelet 能消费那些在 v1 出现前就发布的、
+// 只带 v1alpha1 健康服务的驱动的健康信息。
+// 两个方向的兼容代码都会在 1.40 前后移除：
+// 客户端回退保留三个版本过渡期，
+// 届时也不再支持没有 v1 的老 kubelet。
 
 // 本文件只在版本过渡期存在：v1 与 v1alpha1 的 proto 完全一致，
 // 因此转换只是逐字段拷贝；真正重要的是两侧的 server/client 包装，
@@ -40,7 +40,7 @@ import (
 	v1alpha1 "k8s.io/kubelet/pkg/apis/dra-health/v1alpha1"
 )
 
-// --- message conversion ---
+// --- 消息转换 ---
 
 // deviceIdentifierToV1Alpha1 把 v1 设备标识转换为 v1alpha1。
 // 两版字段一一对应，nil 输入原样返回 nil，避免把“未指定”变成空对象。
@@ -96,7 +96,7 @@ func deviceHealthFromV1Alpha1(in *v1alpha1.DeviceHealth) *DeviceHealth {
 	}
 }
 
-// NodeWatchResourcesResponseToV1Alpha1 converts a v1 response to v1alpha1.
+// NodeWatchResourcesResponseToV1Alpha1 把 v1 响应转为 v1alpha1。
 //
 // NodeWatchResourcesResponseToV1Alpha1 逐元素转换设备列表；
 // 保留 nil 切片与空切片的区分，因为二者对“无设备”和“未上报”含义不同。
@@ -114,7 +114,7 @@ func NodeWatchResourcesResponseToV1Alpha1(in *NodeWatchResourcesResponse) *v1alp
 	return out
 }
 
-// NodeWatchResourcesResponseFromV1Alpha1 converts a v1alpha1 response to v1.
+// NodeWatchResourcesResponseFromV1Alpha1 把 v1alpha1 响应转为 v1。
 //
 // NodeWatchResourcesResponseFromV1Alpha1 是响应转换的反向路径，
 // 与 server 包装配合让 kubelet 的客户端不必感知驱动实际使用的版本。
@@ -132,12 +132,12 @@ func NodeWatchResourcesResponseFromV1Alpha1(in *v1alpha1.NodeWatchResourcesRespo
 	return out
 }
 
-// --- server wrapper: serve the v1alpha1 API from a v1 implementation ---
+// --- 服务端包装：用 v1 实现提供 v1alpha1 API ---
 
-// V1ServerWrapper implements the [v1alpha1.DRAResourceHealthServer]
-// interface by wrapping a v1 [DRAResourceHealthServer]. The kubelet helper
-// registers it so that a driver which only implements the v1 health server
-// also serves the older v1alpha1 API.
+// V1ServerWrapper 包装 v1 的 [DRAResourceHealthServer]，
+// 接口：包装一个 v1 的 [DRAResourceHealthServer]。kubelet 辅助包
+// 注册它后，只实现 v1 健康服务的驱动
+// 也能提供旧版 v1alpha1 API。
 //
 // V1ServerWrapper 是适配层：老 kubelet 连上来时仍看到 v1alpha1 接口，
 // 而驱动侧只需实现 v1，过渡期结束后可整体删除。
@@ -145,7 +145,7 @@ type V1ServerWrapper struct {
 	// 嵌入 Unsafe 接口使未来新增 RPC 时本类型仍满足接口约束，
 	// 未实现的方法走 protobuf 默认行为，而不是编译期失败。
 	v1alpha1.UnsafeDRAResourceHealthServer
-	// Server is the v1 health server provided by the DRA driver.
+	// Server 是 DRA 驱动提供的 v1 健康服务。
 	Server DRAResourceHealthServer
 }
 
@@ -158,9 +158,9 @@ func (w V1ServerWrapper) NodeWatchResources(_ *v1alpha1.NodeWatchResourcesReques
 	return w.Server.NodeWatchResources(&NodeWatchResourcesRequest{}, &v1ToV1alpha1ServerStream{ServerStream: stream})
 }
 
-// v1ToV1alpha1ServerStream adapts a v1alpha1 server stream so that a
-// v1 server implementation can send v1 responses which are converted
-// to v1alpha1 before being written to the wire.
+// v1ToV1alpha1ServerStream 适配 v1alpha1 服务端流，
+// 使 v1 服务端实现发送的 v1 响应在写入网络前
+// 转换为 v1alpha1。
 //
 // v1ToV1alpha1ServerStream 用组合而非重新实现整个 gRPC 流接口：
 // 只覆盖 Send 做类型转换，其余方法委托给底层流。
@@ -177,21 +177,21 @@ func (s *v1ToV1alpha1ServerStream) Send(resp *NodeWatchResourcesResponse) error 
 	return s.ServerStream.SendMsg(NodeWatchResourcesResponseToV1Alpha1(resp))
 }
 
-// --- client wrapper: consume a v1alpha1 plugin through the v1 client API ---
+// --- 客户端包装：通过 v1 客户端 API 消费 v1alpha1 插件 ---
 
-// V1Alpha1ClientWrapper implements the v1 [DRAResourceHealthClient]
-// interface by wrapping a [v1alpha1.DRAResourceHealthClient]. The kubelet uses
-// it to consume health updates from a driver which only implements the v1alpha1
-// health server, while the rest of the kubelet only deals with v1 types.
+// V1Alpha1ClientWrapper 包装 [v1alpha1.DRAResourceHealthClient]，
+// 接口：包装 [v1alpha1.DRAResourceHealthClient]。kubelet 用它
+// 消费只实现 v1alpha1 健康服务的驱动的上报，
+// 而 kubelet 其余部分只接触 v1 类型。
 //
-// TODO(harche): remove in 1.40, together with the kubelet's v1alpha1 client
-// support. It exists as a three release transition (1.37 through 1.39) for
-// drivers which shipped a v1alpha1 health server before v1 existed.
+// TODO(harche): 1.40 中随 kubelet 的 v1alpha1 客户端支持
+// 一并移除；这是为 v1 出现前就发布 v1alpha1 健康服务的驱动
+// 保留的三个版本（1.37~1.39）过渡期。
 //
 // V1Alpha1ClientWrapper 把旧版客户端包装成 v1 客户端：
 // 上层 kubelet 逻辑只写 v1 代码，版本差异被限制在这个适配层内。
 type V1Alpha1ClientWrapper struct {
-	// Client talks to a plugin that implements the v1alpha1 health server.
+	// Client 连接只实现 v1alpha1 健康服务的插件。
 	Client v1alpha1.DRAResourceHealthClient
 }
 
@@ -208,9 +208,9 @@ func (w V1Alpha1ClientWrapper) NodeWatchResources(ctx context.Context, _ *NodeWa
 	return &v1alpha1ToV1ClientStream{ClientStream: stream}, nil
 }
 
-// v1alpha1ToV1ClientStream adapts a v1alpha1 client stream so that the
-// kubelet can receive v1 responses converted from the v1alpha1 messages
-// sent by the plugin.
+// v1alpha1ToV1ClientStream 适配 v1alpha1 客户端流，
+// 使 kubelet 能收到由插件发来的 v1alpha1 消息转换成的 v1 响应。
+// 由插件发来的 v1alpha1 消息。
 //
 // v1alpha1ToV1ClientStream 只覆盖 Recv 做消息转换，
 // 其余 gRPC 流操作沿用嵌入的 ClientStream。

@@ -25,15 +25,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// This file contains the names and implementations of various functions used
-// to compute pod signatures for use in batching and other scheduling optimizations.
-// See the definition of BatchablePlugin for more details.
+// 本文件定义用于计算 Pod 签名（供批处理及其它调度优化使用）
+// 的各个函数名与实现。
+// 细节见 BatchablePlugin 的定义。
 //
 // 签名用于把“对调度结果影响相同”的 Pod 归为一批，让插件只算一次就能复用结果。
 // 所以这里的统一动作是排序和去重：字段顺序不同但语义相同的 Pod 必须给出同一签名，
 // 否则批处理命中率为零，优化反而变成额外开销。
 
-// Signer names
+// 签名器名称
 const (
 	DynamicResourcesSignerName = "v1.Pod.Spec.DynamicResources"
 	ImageNamesSignerName       = "v1.Pod.Spec.CanonicalImageNames()"
@@ -49,7 +49,7 @@ const (
 	FeaturesSignerName         = "v1.Pod.Spec.RequiredFeatures()"
 )
 
-// Common signers. These are either generic or shared across plugins.
+// 通用签名器：要么与插件无关，要么被多个插件共享。
 
 // HostPortsSigner 只关心真正占用宿主机端口的值：HostPort 为 0 只是声明容器端口，
 // 不会引发端口冲突，计入反而会把本可同批的 Pod 拆开。
@@ -206,9 +206,9 @@ func TolerationsSigner(pod *v1.Pod) any {
 	return ret
 }
 
-// We special case volumes because config and secret volumes don't
-// impact scheduling but are very specific to individual pods. If we
-// don't exclude them no pods will have matching signatures.
+// 卷要单独处理：config 与 secret 卷不影响调度，却又与单个 Pod
+// 强相关；不排除它们就无法得到可批处理的相同签名。
+// 不排除它们就没有 Pod 能得到相同签名。
 //
 // 其余卷类型影响调度（比如 PVC 的 topology），必须留在签名里；
 // 排序是必要的，因为卷在 spec 里的书写顺序没有语义。

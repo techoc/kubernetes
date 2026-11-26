@@ -64,7 +64,7 @@ var (
 	// Codecs 提供基于 Scheme 的编解码器工厂。
 	Codecs = serializer.NewCodecFactory(Scheme)
 
-	// if you modify this, make sure you update the crEncoder
+	// 改动此处必须同步更新 crEncoder，两者对无版本对象的处理要一致。
 	unversionedVersion = schema.GroupVersion{Group: "", Version: "v1"}
 	// unversionedTypes 是无版本类型，用于 Watch 事件、错误状态等跨版本场景。
 	unversionedTypes = []runtime.Object{
@@ -115,7 +115,7 @@ type completedConfig struct {
 }
 
 type CompletedConfig struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
+	// 内嵌私有指针，使外部包无法自行构造 CompletedConfig，只能走完整配置流程。
 	*completedConfig
 }
 
@@ -154,8 +154,8 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 		return nil, err
 	}
 
-	// hasCRDInformerSyncedSignal is closed when the CRD informer this server uses has been fully synchronized.
-	// It ensures that requests to potential custom resource endpoints while the server hasn't installed all known HTTP paths get a 503 error instead of a 404
+	// CRD informer 完成同步后关闭 hasCRDInformerSyncedSignal；
+	// 这样在全部 HTTP 路由安装完成前请求自定义资源端点会得到 503 而非 404。
 	hasCRDInformerSyncedSignal := make(chan struct{})
 	if err := genericServer.RegisterMuxAndDiscoveryCompleteSignal("CRDInformerHasNotSynced", hasCRDInformerSyncedSignal); err != nil {
 		return nil, err
@@ -187,8 +187,8 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 
 	crdClient, err := clientset.NewForConfig(s.GenericAPIServer.LoopbackClientConfig)
 	if err != nil {
-		// it's really bad that this is leaking here, but until we can fix the test (which I'm pretty sure isn't even testing what it wants to test),
-		// we need to be able to move forward
+		// 这个错误往外泄漏并不理想，但测试问题没修好之前只能先这样，
+		// 否则无法继续推进。
 		return nil, fmt.Errorf("failed to create clientset: %v", err)
 	}
 	s.Informers = externalinformers.NewSharedInformerFactory(crdClient, 5*time.Minute)
@@ -250,10 +250,10 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 		return nil
 	})
 	s.GenericAPIServer.AddPostStartHookOrDie("start-apiextensions-controllers", func(hookContext genericapiserver.PostStartHookContext) error {
-		// OpenAPIVersionedService and StaticOpenAPISpec are populated in generic apiserver PrepareRun().
-		// Together they serve the /openapi/v2 endpoint on a generic apiserver. A generic apiserver may
-		// choose to not enable OpenAPI by having null openAPIConfig, and thus OpenAPIVersionedService
-		// and StaticOpenAPISpec are both null. In that case we don't run the CRD OpenAPI controller.
+		// OpenAPIVersionedService 与 StaticOpenAPISpec 由 generic apiserver 的 PrepareRun() 填充。
+		// 二者共同提供 /openapi/v2 端点。若 generic apiserver 未启用 OpenAPI
+		// （openAPIConfig 为 nil），则 OpenAPIVersionedService 与 StaticOpenAPISpec 都为 nil，
+		// 此时就不启动 CRD OpenAPI 控制器。
 		if s.GenericAPIServer.StaticOpenAPISpec != nil {
 			if s.GenericAPIServer.OpenAPIVersionedService != nil {
 				openapiController := openapicontroller.NewController(s.Informers.Apiextensions().V1().CustomResourceDefinitions())
@@ -281,9 +281,9 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 
 		return nil
 	})
-	// we don't want to report healthy until we can handle all CRDs that have already been registered.  Waiting for the informer
-	// to sync makes sure that the lister will be valid before we begin.  There may still be races for CRDs added after startup,
-	// but we won't go healthy until we can handle the ones already present.
+	// 只有能处理所有已注册的 CRD 才算健康；等 informer 同步完成，
+	// 是为了保证 lister 可用。启动后新增的 CRD 仍可能有竞争，
+	// 但至少要等已存在的 CRD 都能处理后才上报健康。
 	s.GenericAPIServer.AddPostStartHookOrDie("crd-informer-synced", func(ctx genericapiserver.PostStartHookContext) error {
 		return wait.PollUntilContextCancel(ctx.Context, 100*time.Millisecond, true, func(ctx context.Context) (bool, error) {
 			if s.Informers.Apiextensions().V1().CustomResourceDefinitions().Informer().HasSynced() {
@@ -301,7 +301,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 // v1 和 v1beta1 版本的 CRD API 默认启用。
 func DefaultAPIResourceConfigSource() *serverstorage.ResourceConfig {
 	ret := serverstorage.NewResourceConfig()
-	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha versions in the list.
+	// 注意：这里列出的 GroupVersion 默认启用，不要把 alpha 版本放进来。
 	ret.EnableVersions(
 		v1beta1.SchemeGroupVersion,
 		v1.SchemeGroupVersion,

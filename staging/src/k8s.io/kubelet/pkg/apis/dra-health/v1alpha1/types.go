@@ -17,19 +17,19 @@ limitations under the License.
 package v1alpha1
 
 const (
-	// DRAResourceHealthService needs to be listed in the "supported versions"
-	// array during plugin registration by a DRA plugin which provides
-	// an implementation of the v1alpha1 DRAResourceHealth service.
+	// 提供 v1alpha1 DRAResourceHealth 服务的插件注册时，
+	// 数组中的服务名，供 DRA 插件注册时使用。
+	// 必须把该服务名列入 "supported versions" 数组。
 	//
-	// It must be exactly [DRAResourceHealth_ServiceDesc.ServiceName], the
-	// string which plugins built before this constant existed advertised
-	// during registration. This is enforced by TestServiceNameConstants in
-	// the v1 package.
+	// 其值必须严格等于 [DRAResourceHealth_ServiceDesc.ServiceName]，
+	// 在该常量出现之前编译的插件曾用这个字符串
+	// 注册服务名，由 TestServiceNameConstants 锁定这一兼容约束。
+	// 与 v1 包一致。
 	//
-	// v1alpha1 is superseded by v1. New drivers should implement v1;
-	// the kubelet helper serves v1alpha1 as well via a conversion wrapper so
-	// that kubelets which only support v1alpha1 can still consume health
-	// updates. See the v1 package for the conversion code.
+	// v1alpha1 已由 v1 取代，新驱动应实现 v1；
+	// kubelet 辅助包通过转换包装也提供 v1alpha1，
+	// 使仅支持 v1alpha1 的 kubelet 仍能消费健康信息。
+	// 更新。转换代码见 v1 包。
 	//
 	// 字符串值不能改：早期插件把此值硬编码进注册信息，改了就无法向后兼容。
 	DRAResourceHealthService = "v1alpha1.DRAResourceHealth"

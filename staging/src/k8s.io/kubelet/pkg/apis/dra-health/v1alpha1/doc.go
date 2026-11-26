@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1alpha1 contains the alpha implementation of the DRA health gRPC
-// interface. It is superseded by k8s.io/kubelet/pkg/apis/dra-health/v1,
-// which uses the same proto. This package is kept for compatibility during
-// the transition and gets removed in the 1.40 era.
+// Package v1alpha1 是 DRA 健康 gRPC 接口的 alpha 实现。
+// 它已由 k8s.io/kubelet/pkg/apis/dra-health/v1 取代。
+// 两者使用同一份 proto。本包仅为过渡期兼容保留，
+// 过渡期中使用，1.40 左右移除。
 //
-// This intentionally does not use a "Deprecated:" marker: the kubelet and
-// the kubeletplugin helper have to keep using this package while it is
-// supported, and the marker would flag those imports in linters.
+// 这里刻意不使用 "Deprecated:" 标记：过渡期内 kubelet 与
+// kubeletplugin 辅助包仍须使用它，加了标记会让 linter 报错。
+// 否则该标记会让 linter 报出这些导入。
 //
 // 已弃用：v1alpha1 与 v1 使用相同的 proto，仅保留用于兼容仍在跑旧版的 kubelet 与驱动。
 // 过渡期结束后整包删除；此处刻意不加 Deprecated 标记，否则会被 linter 误报。

@@ -34,7 +34,7 @@ import (
 	_ "k8s.io/component-base/metrics/prometheus/workqueue" // for workqueue metric registration
 )
 
-// BuildHandlerChain builds a handler chain with a base handler and CompletedConfig.
+// BuildHandlerChain 基于基础 handler 与 CompletedConfig 组装 handler 链。
 // BuildHandlerChain 把核心 API handler 包上一层通用的 HTTP 处理链。
 // 调用方给出的授权/认证信息可选；最终从内到外的顺序为：
 // 业务 handler -> 授权 -> 认证 -> 请求信息解析 -> Cache-Control -> 访问日志 -> panic 恢复。
@@ -67,7 +67,7 @@ func BuildHandlerChain(apiHandler http.Handler, authorizationInfo *apiserver.Aut
 	return handler
 }
 
-// NewBaseHandler takes in CompletedConfig and returns a handler.
+// NewBaseHandler 接收 CompletedConfig，返回基础 handler。
 // NewBaseHandler 构造 controller-manager 的基础 HTTP 路由（不含业务 API handler）。
 // 路由包括：/healthz、/configz、/metrics，以及可选的采集/调试端点。
 func NewBaseHandler(c *componentbaseconfig.DebuggingConfiguration, healthzHandler http.Handler) *mux.PathRecorderMux {

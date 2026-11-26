@@ -22,24 +22,24 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the "group" that is needed to uniquely identify the API
+// GroupName 是唯一标识该 API 所需的 group 名。
 const GroupName = "controllermanager.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 // v1beta1 版本的 GroupVersion。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 收集本 API 包需要执行的 scheme 初始化函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
-	// defaulting and conversion init funcs are registered as well.
+	// localSchemeBuilder 在 SchemeBuilder 上追加外部类型；本包还注册
+	// 默认值与转换的初始化函数。
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是把本 API 组与版本注册到 scheme 的全局入口。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to the given scheme.
+// 把已知类型列表注册到给定 scheme。
 // 注册 v1beta1 类型及元信息，使其参与默认化与转换。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,

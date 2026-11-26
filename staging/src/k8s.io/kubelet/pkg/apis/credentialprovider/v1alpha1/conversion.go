@@ -25,8 +25,7 @@ import (
 // 覆盖生成代码的默认转换：v1alpha1 结构里没有服务账号字段，只能有丢弃。
 // 让旧插件只看到它能理解的字段，避免敏感 token 泄露给不认识它的协议端。
 func Convert_credentialprovider_CredentialProviderRequest_To_v1alpha1_CredentialProviderRequest(in *credentialprovider.CredentialProviderRequest, out *CredentialProviderRequest, s conversion.Scope) error {
-	// This conversion intentionally omits the serviceAccountToken and serviceAccountAnnotations fields which are only supported in v1 CredentialProviderRequest.
-	//
+	// 该转换有意丢弃 serviceAccountToken 与 serviceAccountAnnotations：这两个字段只在 v1 的 CredentialProviderRequest 中支持。
 	// 这是有损转换：需要服务账号信息的插件必须协商到 v1，不能指望 alpha 回包带这些字段。
 	return autoConvert_credentialprovider_CredentialProviderRequest_To_v1alpha1_CredentialProviderRequest(in, out, s)
 }
