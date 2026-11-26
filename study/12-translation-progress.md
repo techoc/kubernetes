@@ -18,9 +18,9 @@
 | 9 | `test/integration/`（拆 3 批） | 290 | [x] |
 | 10 | `test/e2e/` | 671（含 e2e_node 等，拆 5 批） | [x] |
 | 11 | `test/e2e_node/`、`test/e2e_node_windows/` | 已随第 10 项完成 | [x] |
-| 12 | `hack/`、`third_party/`、`cluster/`、`build/`、小 staging 模块 | ~155 | [ ] |
-| 13 | 双语残留清理 | 待枚举 | [ ] |
-| — | 生成物重同步（`make update`） | 1 次以上 | [ ] |
+| 12 | `hack/`、`third_party/`、`cluster/`、`build/`、小 staging 模块 | 41 + staging 分批 | [x] |
+| 13 | 双语残留清理 | 55 | [x] |
+| — | 生成物重同步（swagger doc + openapi spec） | 122 | [x] |
 
 ## 提交记录
 
@@ -48,3 +48,18 @@
 | 2026-11-26 | `a3f409a899a` | e2e storage 与 conformance 注释 |
 | 2026-11-26 | `fcd3bc91ba9` | e2e autoscaling 与 scheduling 注释 |
 | 2026-11-26 | `f2021c3de23` | e2e kubectl 与 utils 注释 |
+| 2026-11-26 | `6520c9e4ac3` | hack 与 third_party 注释 |
+| 2026-11-26 | `c98bddb4cd6` | staging kubelet 与小模块注释 |
+| 2026-11-26 | `6e39de121cb` | staging apimachinery 注释 |
+| 2026-11-26 | `0c7fdcce66c` | staging cli-runtime 与 kubectl 注释 |
+| 2026-11-26 | `3aea3274ed3` | staging cloud provider 与 api 注释 |
+| 2026-11-26 | `3f0da287424` | staging client-go 注释 part 1 |
+| 2026-11-26 | `4193b302251` | staging client-go 注释 part 2 |
+| 2026-11-26 | `8e6de93f78f` | staging code-generator 注释 part 1 |
+| 2026-11-26 | `ad3237bc12b` | staging code-generator 注释 part 2 |
+| 2026-11-26 | `19fabf91b91` | staging apiserver 注释 part 1 |
+| 2026-11-26 | `dd797675d50` | staging apiserver 注释 part 2 |
+| 2026-11-26 | `b388b1d5005` | staging apiserver 注释 part 3 |
+| 2026-11-26 | `3e1ede0e1a7` | staging apiserver 注释 part 4 |
+| 2026-11-26 | `10574dabdac` | 残余英文正文注释 |
+| 2026-11-26 | `792784a7d7b` | 重生成 swagger doc 与 openapi spec |
