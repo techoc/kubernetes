@@ -22,7 +22,7 @@ import (
 	"k8s.io/code-generator/cmd/validation-gen/output_tests/multiple_packages/types"
 )
 
-// Test runs the registering copy through its scheme.
+// 测试通过 scheme 运行已注册的副本。
 //
 // 该包是注册了 scheme 的副本：校验函数通过 scheme 按类型查找，
 // 因此错误路径能反映嵌套字段 t2.s，而不仅仅是顶层字段。

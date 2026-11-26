@@ -82,7 +82,7 @@ func Test(t *testing.T) {
 				field.Invalid(field.NewPath("labelValuePtrField"), nil, "").WithOrigin("format=k8s-label-value"),
 				field.Invalid(field.NewPath("labelValueTypedefField"), nil, "").WithOrigin("format=k8s-label-value"),
 			})
-			// Test validation ratcheting
+			// 测试 ratcheting 行为
 			// 旧值同样非法时不应重新报错（未变化的数据不重复校验）。
 			st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 		})

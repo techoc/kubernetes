@@ -31,12 +31,12 @@ var (
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带 Group 限定的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// Adds the list of known types to the given scheme.
+// 把已知类型列表注册到给定 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&TestType{},

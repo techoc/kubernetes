@@ -41,7 +41,7 @@ func Test(t *testing.T) {
 	}.WithOrigin("union"))
 
 	// 校验 ratcheting：旧值同样违反约束时不再报错。
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{M1: &M1{}, M2: &M2{}}).OldValue(&Struct{M1: &M1{}, M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{}).OldValue(&Struct{}).ExpectValid()
 }

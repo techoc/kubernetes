@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: no types match this.
+// 注意：没有类型匹配此规则。
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 类型过滤器 TypesWithField=TypeMeta 在本包不匹配任何类型，用于验证
 // 生成器在“选择器无命中”时输出空实现而不报错。

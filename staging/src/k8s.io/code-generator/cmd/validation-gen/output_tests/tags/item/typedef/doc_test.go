@@ -46,7 +46,7 @@ func Test(t *testing.T) {
 	})
 
 	// 验证 typedef 上的不可变约束：同一 key 的元素数据被修改应报错。
-	// Test immutability on typedef.
+	// 测试 typedef 上的不可变性校验。
 	oldStruct := &Struct{
 		TypedefItems: ItemList{
 			{Key: "immutable", Data: "original"},
@@ -62,7 +62,7 @@ func Test(t *testing.T) {
 	})
 
 	// 验证 typedef 的 typedef：选择器应沿别名链继续生效。
-	// Test nested typedef (typedef of typedef).
+	// 测试嵌套 typedef（typedef 的 typedef）。
 	st.Value(&Struct{
 		NestedTypedefItems: ItemListAlias{
 			{Key: "normal", Data: "d1"},
@@ -73,7 +73,7 @@ func Test(t *testing.T) {
 	})
 
 	// 字段级与 typedef 级各有一个 item 选择器，两条校验都应触发。
-	// Test tag on field and typedef.
+	// 测试字段与 typedef 上的标签。
 	st.Value(&Struct{
 		DualItems: DualItemList{
 			{ID: "a", Name: "n1"},
@@ -86,7 +86,7 @@ func Test(t *testing.T) {
 	})
 
 	// 字段级与 typedef 级选择器指向同一个 key 时，两条校验都保留。
-	// Test tag on field and typedef with same key.
+	// 测试字段与 typedef 上同键的标签。
 	st.Value(&Struct{
 		ConflictingItems: ConflictingItemList{
 			{ID: "a", Name: "n1"},

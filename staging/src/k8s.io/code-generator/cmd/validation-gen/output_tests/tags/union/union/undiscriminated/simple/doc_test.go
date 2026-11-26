@@ -40,7 +40,7 @@ func Test(t *testing.T) {
 	st.Value(&Struct{M5: []string{"a string"}}).ExpectValid()
 	st.Value(&Struct{M6: map[string]string{"k": "v"}}).ExpectValid()
 
-	// Empty slice/map are "not set" (same as nil for union membership)
+	// 空 slice/map 视为“未设置”（联合体归属判定等同 nil）
 	st.Value(&Struct{M5: []string{}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(nil, nil, "must specify one of"),
 	}.WithOrigin("union"))
@@ -58,20 +58,20 @@ func Test(t *testing.T) {
 		field.Invalid(nil, nil, "must specify exactly one of"),
 	}.WithOrigin("union"))
 
-	// Update only considers whether a field was set, not the value.
+	// 更新校验只关心字段是否被设置，不关心值。
 	st.Value(&Struct{M3: "a string"}).OldValue(&Struct{M3: "different string"}).ExpectValid()
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{}).OldValue(&Struct{}).ExpectValid()
 	st.Value(&Struct{M1: &M1{}, M2: &M2{}}).OldValue(&Struct{M1: &M1{}, M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{M3: "a string", M2: &M2{}}).OldValue(&Struct{M3: "different string", M2: &M2{}}).ExpectValid()
 
-	// Slice/map member ratcheting: unchanged membership, different values
+	// slice/map 成员 ratcheting：成员关系未变、值不同
 	st.Value(&Struct{M5: []string{"a"}}).OldValue(&Struct{M5: []string{"b"}}).ExpectValid()
 	st.Value(&Struct{M6: map[string]string{"k": "v1"}}).OldValue(&Struct{M6: map[string]string{"k": "v2"}}).ExpectValid()
 
-	// Test update with nil old value (simulates new map entry or newly-set pointer field during update).
-	// Union validation should still detect the empty union even though oldObj is nil.
+	// 测试 old value 为 nil（模拟更新时新增 map 条目或新设置的指针字段）。
+	// 即使 oldObj 为 nil，联合体校验仍应发现空联合体。
 	st.Value(&Struct{}).OldValue(nil).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(nil, nil, "must specify one of").WithOrigin("union"),
 	})

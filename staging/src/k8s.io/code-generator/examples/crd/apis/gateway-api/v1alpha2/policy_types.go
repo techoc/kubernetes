@@ -20,7 +20,7 @@ import (
 	v1 "k8s.io/code-generator/examples/crd/apis/gateway-api/v1"
 )
 
-// Copied from Gateway API as a minimal reproducer for #131533
+// 从 Gateway API 拷来，作为 #131533 的最小复现
 //
 // 该文件从 Gateway API 复制而来，是 #131533 的最小复现用例。
 // 手写 DeepCopyInto 用于覆盖“内嵌跨包结构体需要逐层深拷贝”的生成路径。

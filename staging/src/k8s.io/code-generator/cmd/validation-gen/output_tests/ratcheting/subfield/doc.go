@@ -19,7 +19,7 @@ limitations under the License.
 
 // 这是一个测试包：验证 ratcheting（已存对象跳过既有非法值）与 subfield
 // 标签的组合——subfield 校验在旧值相同的情况下不应再次触发。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package subfield
 

@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package maps
 

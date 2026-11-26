@@ -32,7 +32,7 @@ func TestUpdateTags(t *testing.T) {
 	// baseStruct 全零值，作为每次比较的“未设置”基线。
 	baseStruct := UpdateTestStruct{}
 
-	// String NoSet
+	// string NoSet
 	//
 	// 从空串到非空视为设置，被 NoSet 拦截。
 	old := baseStruct
@@ -47,7 +47,7 @@ func TestUpdateTags(t *testing.T) {
 
 	st.Value(&old).OldValue(&old).ExpectValid()
 
-	// String NoUnset
+	// string NoUnset
 	//
 	// 首次设置允许，但从非空清空会被拒绝。
 	oldWithValue := baseStruct
@@ -56,15 +56,15 @@ func TestUpdateTags(t *testing.T) {
 	newUnset := baseStruct
 	newUnset.StringNoUnset = ""
 
-	// Can set initially (empty to non-empty)
+	// 初始可设置（空到非空）
 	st.Value(&oldWithValue).OldValue(&baseStruct).ExpectValid()
 
-	// Cannot unset (non-empty to empty)
+	// 不可取消设置（非空到空）
 	st.Value(&newUnset).OldValue(&oldWithValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("stringNoUnset"), nil, "field cannot be cleared once set").WithOrigin("update"),
 	})
 
-	// String NoModify
+	// string NoModify
 	//
 	// NoModify 允许设置与清空，只拦截两个非空值之间的变化。
 	oldEmpty := baseStruct
@@ -73,18 +73,18 @@ func TestUpdateTags(t *testing.T) {
 	modified := baseStruct
 	modified.StringNoModify = "different"
 
-	// Can set initially (empty to non-empty)
+	// 初始可设置（空到非空）
 	st.Value(&withValue).OldValue(&oldEmpty).ExpectValid()
 
-	// Can unset (non-empty to empty)
+	// 可取消设置（非空到空）
 	st.Value(&oldEmpty).OldValue(&withValue).ExpectValid()
 
-	// Cannot modify (non-empty to different non-empty)
+	// 不可修改（非空到另一个非空）
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("stringNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// String Fully Restricted
+	// string 完全受限
 	//
 	// 三种约束叠加后，任何表意上的变化都会被拒绝。
 	oldEmpty = baseStruct
@@ -93,22 +93,22 @@ func TestUpdateTags(t *testing.T) {
 	modified = baseStruct
 	modified.StringFullyRestricted = "different"
 
-	// Cannot set (NoSet)
+	// 不可设置（NoSet）
 	st.Value(&withValue).OldValue(&oldEmpty).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("stringFullyRestricted"), nil, "field cannot be set once created").WithOrigin("update"),
 	})
 
-	// Cannot unset (NoUnset)
+	// 不可取消设置（NoUnset）
 	st.Value(&oldEmpty).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("stringFullyRestricted"), nil, "field cannot be cleared once set").WithOrigin("update"),
 	})
 
-	// Cannot modify (NoModify)
+	// 不可修改（NoModify）
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("stringFullyRestricted"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// String Set-Once Pattern
+	// string 一次性设置模式
 	//
 	// NoUnset+NoModify 的组合等价于“只能设置一次”。
 	oldEmpty = baseStruct
@@ -117,30 +117,30 @@ func TestUpdateTags(t *testing.T) {
 	modified = baseStruct
 	modified.StringSetOnce = "different"
 
-	// Can set once (empty to non-empty)
+	// 只能设置一次（空到非空）
 	st.Value(&withValue).OldValue(&oldEmpty).ExpectValid()
 
-	// Cannot unset (NoUnset)
+	// 不可取消设置（NoUnset）
 	st.Value(&oldEmpty).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("stringSetOnce"), nil, "field cannot be cleared once set").WithOrigin("update"),
 	})
 
-	// Cannot modify (NoModify)
+	// 不可修改（NoModify）
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("stringSetOnce"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Int NoModify
+	// int NoModify
 	//
 	// 数值类型用零值判断“未设置”，0→10 允许。
 	oldZero := baseStruct
 	withValue = baseStruct
 	withValue.IntNoModify = 10
 
-	// Can transition from 0 to 10 (unset to set is allowed)
+	// 可以从 0 变为 10（未设置到已设置允许）
 	st.Value(&withValue).OldValue(&oldZero).ExpectValid()
 
-	// Cannot modify from one non-zero to another
+	// 不能从一个非零值改为另一个
 	modified = baseStruct
 	modified.IntNoModify = 20
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
@@ -148,93 +148,93 @@ func TestUpdateTags(t *testing.T) {
 	})
 
 	// 其余数值宽度（int32/uint/float32/float64/byte）走同一套零值逻辑。
-	// Int32 NoModify
+	// int32 NoModify
 	old = baseStruct
 	withValue = baseStruct
 	withValue.Int32NoModify = 42
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withValue).OldValue(&old).ExpectValid()
 
-	// Cannot modify
+	// 不可修改
 	modified = baseStruct
 	modified.Int32NoModify = 100
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("int32NoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Uint NoModify
+	// uint NoModify
 	old = baseStruct
 	withValue = baseStruct
 	withValue.UintNoModify = 42
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withValue).OldValue(&old).ExpectValid()
 
-	// Cannot modify
+	// 不可修改
 	modified = baseStruct
 	modified.UintNoModify = 100
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("uintNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Bool NoModify
+	// bool NoModify
 	oldFalse := baseStruct
 	withTrue := baseStruct
 	withTrue.BoolNoModify = true
 
-	// Can transition from false to true (unset to set)
+	// 可以从 false 变为 true（未设置到已设置）
 	st.Value(&withTrue).OldValue(&oldFalse).ExpectValid()
 
-	// Cannot modify back to false
+	// 不能改回 false
 	st.Value(&oldFalse).OldValue(&withTrue).ExpectValid() // This is allowed as it's set->unset
 
-	// Float32 NoModify
+	// float32 NoModify
 	old = baseStruct
 	withValue = baseStruct
 	withValue.Float32NoModify = 3.14
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withValue).OldValue(&old).ExpectValid()
 
-	// Cannot modify
+	// 不可修改
 	modified = baseStruct
 	modified.Float32NoModify = 2.71
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("float32NoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Float64 NoModify
+	// float64 NoModify
 	oldZero = baseStruct
 	withValue = baseStruct
 	withValue.Float64NoModify = 3.14
 
-	// Can transition from 0.0 to 3.14
+	// 可以从 0.0 变为 3.14
 	st.Value(&withValue).OldValue(&oldZero).ExpectValid()
 
-	// Cannot modify to different value
+	// 不能改为不同的值
 	modified = baseStruct
 	modified.Float64NoModify = 2.71
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("float64NoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Byte NoModify
+	// byte NoModify
 	old = baseStruct
 	withValue = baseStruct
 	withValue.ByteNoModify = 255
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withValue).OldValue(&old).ExpectValid()
 
-	// Cannot modify
+	// 不可修改
 	modified = baseStruct
 	modified.ByteNoModify = 128
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("byteNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Struct NoModify
+	// struct NoModify
 	//
 	// 值类型结构体没有 nil，任何值（含零值）都视为“已设置”，
 	// 因此从零值到非零值也算修改。
@@ -244,14 +244,14 @@ func TestUpdateTags(t *testing.T) {
 	modifiedStruct := baseStruct
 	modifiedStruct.StructNoModify = TestStruct{StringField: "different", IntField: 100}
 
-	// Cannot modify (struct fields are always set, never unset)
+	// 不可修改（结构体字段始终为已设置，不存在未设置状态）
 	st.Value(&modifiedStruct).OldValue(&withStruct).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("structNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// NonComparable Struct NoModify - uses reflection
-	// For non-pointer structs, even zero value is considered "set"
-	// So any change is a modification
+	// 不可比较结构体的 NoModify——使用反射
+	// 非指针结构体即使零值也视为“已设置”
+	// 所以任何变化都算修改
 	//
 	// 不可比较结构体必须用反射深比较，不能依赖 ==。
 	old = baseStruct
@@ -263,12 +263,12 @@ func TestUpdateTags(t *testing.T) {
 		IntField:   42,
 	}
 
-	// Cannot change from zero value to non-zero (both are "set")
+	// 不能从零值改为非零值（两者都算“已设置”）
 	st.Value(&withValue).OldValue(&old).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("nonComparableStructNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Also cannot modify between two non-zero values
+	// 两个非零值之间也不能修改
 	modified = baseStruct
 	modified.NonComparableStructNoModify = NonComparableStruct{
 		SliceField: []string{"c", "d"},
@@ -278,91 +278,91 @@ func TestUpdateTags(t *testing.T) {
 		field.Invalid(field.NewPath("nonComparableStructNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Can keep the same value
+	// 可以保持不变
 	st.Value(&withValue).OldValue(&withValue).ExpectValid()
 
-	// Pointer NoSet
+	// 指针 NoSet
 	//
 	// nil 表示未设置，指针的“设置/清空”判断基于 nil，而非指向的内容。
 	withSet := baseStruct
 	withSet.PointerNoSet = ptr.To("value")
 
-	// Cannot set after creation (nil to non-nil)
+	// 创建后不可设置（nil 到非 nil）
 	st.Value(&withSet).OldValue(&baseStruct).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("pointerNoSet"), nil, "field cannot be set once created").WithOrigin("update"),
 	})
 
-	// Pointer NoUnset
+	// 指针 NoUnset
 	withPointer := baseStruct
 	withPointer.PointerNoUnset = ptr.To("value")
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withPointer).OldValue(&baseStruct).ExpectValid()
 
-	// Cannot unset (non-nil to nil)
+	// 不能取消设置（非 nil 到 nil）
 	st.Value(&baseStruct).OldValue(&withPointer).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("pointerNoUnset"), nil, "field cannot be cleared once set").WithOrigin("update"),
 	})
 
-	// Pointer NoModify
+	// 指针 NoModify
 	withPointer = baseStruct
 	withPointer.PointerNoModify = ptr.To("value")
 
 	modifiedPointer := baseStruct
 	modifiedPointer.PointerNoModify = ptr.To("different")
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withPointer).OldValue(&baseStruct).ExpectValid()
 
-	// Can unset (NoModify allows set/unset transitions)
+	// 可取消设置（NoModify 允许设置/取消设置的转换）
 	st.Value(&baseStruct).OldValue(&withPointer).ExpectValid()
 
-	// Cannot modify content
+	// 不可修改内容
 	st.Value(&modifiedPointer).OldValue(&withPointer).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("pointerNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Pointer Fully Restricted
+	// 指针完全受限
 	withPointer = baseStruct
 	withPointer.PointerFullyRestricted = ptr.To("value")
 
 	modifiedPointer = baseStruct
 	modifiedPointer.PointerFullyRestricted = ptr.To("different")
 
-	// Cannot set (NoSet)
+	// 不可设置（NoSet）
 	st.Value(&withPointer).OldValue(&baseStruct).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("pointerFullyRestricted"), nil, "field cannot be set once created").WithOrigin("update"),
 	})
 
-	// Cannot unset (NoUnset)
+	// 不可取消设置（NoUnset）
 	st.Value(&baseStruct).OldValue(&withPointer).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("pointerFullyRestricted"), nil, "field cannot be cleared once set").WithOrigin("update"),
 	})
 
-	// Cannot modify (NoModify)
+	// 不可修改（NoModify）
 	st.Value(&modifiedPointer).OldValue(&withPointer).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("pointerFullyRestricted"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Int Pointer NoModify
+	// int 指针 NoModify
 	withPointer = baseStruct
 	withPointer.IntPointerNoModify = ptr.To(42)
 
 	modifiedPointer = baseStruct
 	modifiedPointer.IntPointerNoModify = ptr.To(100)
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withPointer).OldValue(&baseStruct).ExpectValid()
 
-	// Can unset
+	// 可取消设置
 	st.Value(&baseStruct).OldValue(&withPointer).ExpectValid()
 
-	// Cannot modify content
+	// 不可修改内容
 	st.Value(&modifiedPointer).OldValue(&withPointer).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("intPointerNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Bool Pointer NoModify
+	// bool 指针 NoModify
 	//
 	// 指针指向 false 仍是“已设置”，因此 false→true 属于修改。
 	falseVal := false
@@ -374,53 +374,53 @@ func TestUpdateTags(t *testing.T) {
 	withTrue = baseStruct
 	withTrue.BoolPointerNoModify = &trueVal
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withFalse).OldValue(&baseStruct).ExpectValid()
 
-	// Cannot modify content
+	// 不可修改内容
 	st.Value(&withTrue).OldValue(&withFalse).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("boolPointerNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Struct Pointer NoModify
+	// struct 指针 NoModify
 	withPointer = baseStruct
 	withPointer.StructPointerNoModify = &TestStruct{StringField: "value", IntField: 42}
 
 	modifiedPointer = baseStruct
 	modifiedPointer.StructPointerNoModify = &TestStruct{StringField: "different", IntField: 100}
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withPointer).OldValue(&baseStruct).ExpectValid()
 
-	// Can unset
+	// 可取消设置
 	st.Value(&baseStruct).OldValue(&withPointer).ExpectValid()
 
-	// Cannot modify content
+	// 不可修改内容
 	st.Value(&modifiedPointer).OldValue(&withPointer).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("structPointerNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Custom Type NoModify
+	// 自定义类型 NoModify
 	old = baseStruct
 	withValue = baseStruct
 	withValue.CustomTypeNoModify = "custom-value"
 
-	// Can set initially
+	// 初始可设置
 	st.Value(&withValue).OldValue(&old).ExpectValid()
 
-	// Cannot modify
+	// 不可修改
 	modified = baseStruct
 	modified.CustomTypeNoModify = "different-value"
 	st.Value(&modified).OldValue(&withValue).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("customTypeNoModify"), nil, "field cannot be modified once set").WithOrigin("update"),
 	})
 
-	// Custom Type NoSet
+	// 自定义类型 NoSet
 	old = baseStruct
 	withValue = baseStruct
 	withValue.CustomTypeNoSet = 42
 
-	// Cannot set
+	// 不可设置
 	st.Value(&withValue).OldValue(&old).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("customTypeNoSet"), nil, "field cannot be set once created").WithOrigin("update"),
 	})

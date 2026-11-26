@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 验证在切片 typedef 上用 item 选择器声明 unionMember：列表元素按 key 匹配，
 // 选中的元素成为无 discriminator union 的成员。

@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 验证 +k8s:eachVal 作用在“切片的 typedef”上：校验标记定义在类型上，
 // 使用该类型的字段应继承逐元素校验。
@@ -28,7 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 var localSchemeBuilder = testscheme.New()
 
 // UnvalidatedType 没有校验，用于对照。
-// Note: no validation here
+// 注意：此处没有校验。
 type UnvalidatedType []string
 
 // ListType 在类型上声明 eachVal，[]string 的每个元素都会被校验。
@@ -36,7 +36,7 @@ type UnvalidatedType []string
 type ListType []string
 
 // UnvalidatedPtrType 是指针元素切片且无校验，用于对照。
-// Note: no validation here
+// 注意：此处没有校验。
 type UnvalidatedPtrType []*string
 
 // StringType 作为元素 typedef，用于验证元素为 typedef 时的类型映射。

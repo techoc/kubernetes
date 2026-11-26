@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 //
 // 本包验证 k8s-extended-resource-name 格式校验在字段、指针字段和
@@ -28,7 +28,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// MyType is a struct that contains a field with the extended-resource-name format.
+// MyType 是含 extended-resource-name 格式字段的结构体。
 // +k8s:validation:Required
 type MyType struct {
 	TypeMeta int
@@ -39,7 +39,7 @@ type MyType struct {
 	// +k8s:optional
 	// +k8s:format=k8s-extended-resource-name
 	NamePtrField *string `json:"namePtrField"`
-	// Note: no validation here
+	// 注意：此处没有校验。
 	NameTypedefField NameStringType `json:"nameTypedefField"`
 }
 

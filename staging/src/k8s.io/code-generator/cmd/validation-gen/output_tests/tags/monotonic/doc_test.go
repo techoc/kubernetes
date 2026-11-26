@@ -72,11 +72,11 @@ func Test(t *testing.T) {
 		NegativeInt:       0,
 	}
 
-	// Valid updates
+	// 合法更新
 	st.Value(&structOrig).OldValue(&structOrig).ExpectValid()
 	st.Value(&structIncrease).OldValue(&structOrig).ExpectValid()
 
-	// Invalid updates (decreases)
+	// 非法更新（值变小）
 	st.Value(&structDecrease).OldValue(&structOrig).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("intField"), nil, "").WithOrigin("monotonic"),
 		field.Invalid(field.NewPath("int64Field"), nil, "").WithOrigin("monotonic"),
@@ -90,17 +90,17 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("requiredIntPtr"), nil, "").WithOrigin("monotonic"),
 	})
 
-	// Test special cases: zero and nil
+	// 测试特殊情况：零值与 nil
 	structZero := structOrig
 	structZero.OptionalInt = 0
 	structZero.RequiredInt = 0
 	structZero.OptionalIntPtr = new(0)
 	structZero.RequiredIntPtr = new(0)
 
-	// OptionalInt (non-pointer) -> 0 is INVALID (Fails because +k8s:update=NoUnset is present).
-	// RequiredInt -> 0 is INVALID (Fails because of +k8s:required).
-	// OptionalIntPtr -> 0 is INVALID (Monotonic check detects decreased value).
-	// RequiredIntPtr -> 0 is INVALID (Monotonic check detects decreased value).
+	// OptionalInt（非指针）-> 0 非法（因存在 +k8s:update=NoUnset）。
+	// RequiredInt -> 0 非法（因 +k8s:required）。
+	// OptionalIntPtr -> 0 非法（单调性检查发现值变小）。
+	// RequiredIntPtr -> 0 非法（单调性检查发现值变小）。
 	st.Value(&structZero).OldValue(&structOrig).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("optionalInt"), 0, "").WithOrigin("update"),
 		field.Required(field.NewPath("requiredInt"), ""),
@@ -108,17 +108,17 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("requiredIntPtr"), 0, "").WithOrigin("monotonic"),
 	})
 
-	// OptionalIntPtr -> nil is INVALID because of +k8s:update=NoUnset
+	// OptionalIntPtr -> nil 非法，因 +k8s:update=NoUnset
 	structNil := structOrig
 	structNil.OptionalIntPtr = nil
 	st.Value(&structNil).OldValue(&structOrig).ExpectMatches(field.ErrorMatcher{}.ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("optionalIntPtr"), nil, "").WithOrigin("update"),
 	})
 
-	// Create should be valid (monotonic validation is update-only)
+	// 创建应合法（单调性校验只用于更新）
 	st.Value(&structDecrease).ExpectValid()
 
-	// OptionalIntPtr unset -> set should be valid (transition from nil to value)
+	// OptionalIntPtr 未设置 -> 设置应合法（nil 到值）
 	// nil 到有值视为“增加”，应通过。
 	structSet := structOrig
 	structSet.OptionalIntPtr = new(10)
@@ -126,14 +126,14 @@ func Test(t *testing.T) {
 	oldObjectSet.OptionalIntPtr = nil
 	st.Value(&structSet).OldValue(&oldObjectSet).ExpectValid()
 
-	// OptionalIntPtr set -> unset is now INVALID due to +k8s:update=NoUnset
+	// OptionalIntPtr 已设置 -> 未设置现在非法，因 +k8s:update=NoUnset
 	structUnset := structOrig
 	structUnset.OptionalIntPtr = nil
 	st.Value(&structUnset).OldValue(&structOrig).ExpectMatches(field.ErrorMatcher{}.ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("optionalIntPtr"), nil, "").WithOrigin("update"),
 	})
 
-	// Invalid because it violates the minimum constraint (origin = "minimum")
+	// 非法：违反 minimum 约束（origin = "minimum"）
 	structBad := Struct{RequiredInt: 1, RequiredIntPtr: new(int)}
 	structBad.NegativeInt = -11 // below the declared -10
 

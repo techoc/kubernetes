@@ -33,7 +33,7 @@ func TestAlpha(t *testing.T) {
 		EnumFieldBeta: "A",
 	}).ExpectValid()
 
-	// Test failures marked as alpha
+	// 标记为 alpha 的失败用例
 	st.Value(&Struct{
 		EnumField:     "B",
 		EnumFieldBeta: "A",
@@ -51,7 +51,7 @@ func TestBeta(t *testing.T) {
 		EnumFieldBeta: "A",
 	}).ExpectValid()
 
-	// Test failures marked as beta
+	// 标记为 beta 的失败用例
 	st.Value(&Struct{
 		EnumField:     "A",
 		EnumFieldBeta: "B",

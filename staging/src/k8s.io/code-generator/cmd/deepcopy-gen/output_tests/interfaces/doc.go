@@ -16,7 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // 用于验证 deepcopy-gen 为接口类型生成 DeepCopy 方法，以及包含接口切片的
 // 结构体的复制路径。
 package interfaces

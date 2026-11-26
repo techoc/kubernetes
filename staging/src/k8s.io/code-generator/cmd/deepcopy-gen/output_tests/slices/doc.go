@@ -16,7 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 package slices
 
 // Ttest 用于验证 deepcopy-gen 对 slice 元素各种形态的处理：
@@ -24,7 +24,7 @@ package slices
 // 生成代码必须对 map 与指针字段做深拷贝，对基本类型 slice 直接 make+copy。
 type Ttest struct {
 	Byte []byte
-	// Int8    []int8 //TODO: int8 becomes byte in SnippetWriter
+	// // Int8 []int8 暂不可用：SnippetWriter 把 int8 当作 byte
 	Int16        []int16
 	Int32        []int32
 	Int64        []int64

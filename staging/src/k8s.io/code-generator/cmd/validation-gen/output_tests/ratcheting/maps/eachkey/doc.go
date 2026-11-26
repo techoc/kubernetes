@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:eachKey 与 ratcheting 的交互：key 的类型级校验（含 typedef 与非 typedef）
 // 应作用在 map key 上，而字段级校验只作用于整个 map。
@@ -43,7 +43,7 @@ type Struct struct {
 	ValidatedMapTypeField ValidatedMapType `json:"validatedMapTypeField"`
 }
 
-// Note: no validations.
+// 注意：没有校验。
 type UnvalidatedStringType string
 
 // +k8s:validateFalse="ValidatedStringType"

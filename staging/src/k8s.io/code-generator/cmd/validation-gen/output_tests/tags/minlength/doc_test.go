@@ -32,7 +32,7 @@ func Test(t *testing.T) {
 	// 零值字符串长度为 0；所有字段都是 optional 或 minLength 允许 0，
 	// 因此空对象合法。
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectValid()
 
 	// 所有带 minLength 的字段都只放 1 个字符，低于阈值。
@@ -139,7 +139,7 @@ func Test(t *testing.T) {
 	}
 	st.Value(testVal).ExpectValid()
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	//
 	// 新旧值相同（或旧值同样短）时跳过校验；这里旧值均不满足 minLength，
 	// 但字段未被改动，因此整体应放行。

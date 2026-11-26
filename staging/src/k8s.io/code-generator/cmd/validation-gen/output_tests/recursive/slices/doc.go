@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // slices 验证递归切片类型（T5/T6 持有自身切片）的发现顺序：切片元素类型
 // 在字段处理过程中可能尚未完成发现，生成器必须能正确处理。
 // +k8s:validation-gen-nolint
@@ -28,21 +28,21 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// This test case is carefully constructed to test recursion. We don't want to
-// add more `validateFalse` tags because the bug that motivated this test
-// wasn't looking deep enough into the recursion tree.
+// 这个用例专门构造来测递归。不想再加
+// `validateFalse` 标签，因为促成此测试的那个 bug
+// 就是递归树看得不够深。
 //
-// Expectations:
-// * We should emit validation for T1 because T3 has validation.
-// * We should emit validation for T2 because it uses T1, which has validation.
-// * We should emit validation for T3 because it has validation.
-// * We should emit validation for T4 because it uses T3, which has validation.
-// * T1 should call T2 and T3.
-// * T2 should call eachVal(T1).
-// * T3 should call T4.
-// * T4 should call eachVal(T3).
-// * T5 and T6 hold a slice of themselves, reached via T1 so the slice type is
-//   still being discovered when its own field is processed.
+// 预期：
+// * T1 应生成校验，因为 T3 有校验。
+// * T2 应生成校验，因为它使用了有校验的 T1。
+// * T3 应生成校验，因为它自身有校验。
+// * T4 应生成校验，因为它使用了有校验的 T3。
+// * T1 应调用 T2 和 T3。
+// * T2 应调用 eachVal(T1)。
+// * T3 应调用 T4。
+// * T4 应调用 eachVal(T3)。
+// * T5 和 T6 各持有自身类型的 slice，且经 T1 可达，因此处理其字段时
+// 处理其自身字段时仍在发现中。
 
 type T1 struct {
 	T2 T2   `json:"t2"`

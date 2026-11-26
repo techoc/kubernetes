@@ -29,7 +29,7 @@ func Test(t *testing.T) {
 
 	// 零值（nil slice）按长度 0 处理，只有 minItems=10 的字段报错。
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.TooFew(field.NewPath("min10Field"), 0, 10),
 		field.TooFew(field.NewPath("min10TypedefField"), 0, 10),
@@ -78,7 +78,7 @@ func Test(t *testing.T) {
 	}
 	st.Value(testVal).ExpectValid()
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	//
 	// 新旧值相同且都已违规时放行，避免存量对象升级失败。
 	st.Value(&Struct{

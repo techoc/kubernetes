@@ -63,7 +63,7 @@ func (g *registerExternalGenerator) Finalize(context *generator.Context, w io.Wr
 		typesToGenerateOnlyNames[index] = typeToGenerate.Name.Name
 	}
 
-	// sort the list of types to register, so that the generator produces stable output
+	// // gengo 的类型遍历顺序不保证稳定，排序后生成结果才可复现。
 	// 排序是必需的：gengo 的类型遍历顺序不保证稳定，不排序会导致每次生成产生 diff。
 	sort.Strings(typesToGenerateOnlyNames)
 

@@ -28,7 +28,7 @@ import (
 func TestStrictUnion(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Mode A: FieldA required, FieldB implicitly forbidden
+	// mode A：FieldA 必填，FieldB 隐式禁止
 	st.Value(&StrictUnion{D1: "A", FieldA: ptr.To("val")}).ExpectValid()
 	st.Value(&StrictUnion{D1: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Required(field.NewPath("fieldA"), ""),
@@ -37,7 +37,7 @@ func TestStrictUnion(t *testing.T) {
 		field.Forbidden(field.NewPath("fieldB"), ""),
 	})
 
-	// Mode B: FieldA implicitly forbidden, FieldB required
+	// mode B：FieldA 隐式禁止，FieldB 必填
 	st.Value(&StrictUnion{D1: "B", FieldB: ptr.To("val")}).ExpectValid()
 	st.Value(&StrictUnion{D1: "B"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Required(field.NewPath("fieldB"), ""),
@@ -52,13 +52,13 @@ func TestStrictUnion(t *testing.T) {
 func TestSharedField(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid (optional) in A and B
+	// 在 A 和 B 中可选
 	st.Value(&SharedField{D1: "A"}).ExpectValid()
 	st.Value(&SharedField{D1: "A", FieldA: ptr.To("val")}).ExpectValid()
 	st.Value(&SharedField{D1: "B"}).ExpectValid()
 	st.Value(&SharedField{D1: "B", FieldA: ptr.To("val")}).ExpectValid()
 
-	// Forbidden in C
+	// 在 C 中禁止
 	st.Value(&SharedField{D1: "C", FieldA: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Forbidden(field.NewPath("fieldA"), ""),
 	})
@@ -69,7 +69,7 @@ func TestSharedField(t *testing.T) {
 func TestChainedValidation(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Mode A: Required AND maxLength 5
+	// mode A：必填且 maxLength 5
 	st.Value(&ChainedValidation{D1: "A", FieldA: ptr.To("abc")}).ExpectValid()
 	st.Value(&ChainedValidation{D1: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Required(field.NewPath("fieldA"), ""),
@@ -78,7 +78,7 @@ func TestChainedValidation(t *testing.T) {
 		field.TooLong(field.NewPath("fieldA"), "too-long", 5),
 	})
 
-	// Mode B: Unlisted, so implicitly forbidden
+	// mode B：未列出，因此隐式禁止
 	st.Value(&ChainedValidation{D1: "B", FieldA: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Forbidden(field.NewPath("fieldA"), ""),
 	})
@@ -89,11 +89,11 @@ func TestChainedValidation(t *testing.T) {
 func TestImplicitForbidden(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Mode A: Optional
+	// mode A：可选
 	st.Value(&ImplicitForbidden{D1: "A"}).ExpectValid()
 	st.Value(&ImplicitForbidden{D1: "A", FieldA: ptr.To("val")}).ExpectValid()
 
-	// Mode B: Not listed, so implicitly Forbidden
+	// mode B：未列出，因此隐式禁止
 	st.Value(&ImplicitForbidden{D1: "B", FieldA: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Forbidden(field.NewPath("fieldA"), ""),
 	})
@@ -104,7 +104,7 @@ func TestImplicitForbidden(t *testing.T) {
 func TestNonStringDiscriminator(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Bool mode
+	// Bool 模式
 	st.Value(&NonStringDiscriminator{D1: true, FieldA: ptr.To("val")}).ExpectValid()
 	st.Value(&NonStringDiscriminator{D1: true}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Required(field.NewPath("fieldA"), ""),
@@ -140,7 +140,7 @@ func TestMultipleDiscriminators(t *testing.T) {
 func TestCollections(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Mode A: Collections are valid (optional)
+	// mode A：集合合法（可选）
 	st.Value(&Collections{
 		D1: "A",
 	}).ExpectValid()
@@ -151,7 +151,7 @@ func TestCollections(t *testing.T) {
 		MapField:  map[string]string{"key": "val"},
 	}).ExpectValid()
 
-	// Mode B: Unlisted, so implicitly forbidden
+	// mode B：未列出，因此隐式禁止
 	st.Value(&Collections{
 		D1:        "B",
 		ListField: []string{"item"},
@@ -179,15 +179,15 @@ func TestRatcheting(t *testing.T) {
 
 	st := localSchemeBuilder.Test(t)
 
-	// 1. New object is invalid
+	// 1. 新对象非法
 	st.Value(mkTest()).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.TooLong(field.NewPath("fieldA"), "too-long-string", 5),
 	})
 
-	// 2. Unchanged update is valid (ratcheting)
+	// 2. 未变化的更新合法（ratcheting）
 	st.Value(mkTest()).OldValue(mkTest()).ExpectValid()
 
-	// 3. Changed value re-validates (and fails)
+	// 3. 值变化后重新校验（失败）
 	mkDifferent := func() *ChainedValidation {
 		return &ChainedValidation{
 			D1:     "A",
@@ -198,7 +198,7 @@ func TestRatcheting(t *testing.T) {
 		field.TooLong(field.NewPath("fieldA"), "too-long-string", 5),
 	})
 
-	// 4. Changed discriminator re-validates (and fails)
+	// 4. 判别式变化后重新校验（失败）
 	//
 	// 即使字段值没变，判别器从 B 切到 A 也必须重新校验，否则会绕过 mode 约束。
 	mkDifferentDisc := func() *ChainedValidation {

@@ -16,7 +16,7 @@ limitations under the License.
 
 // +k8s:defaulter-gen=TypeMeta
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // wholepkg 用 +k8s:defaulter-gen=TypeMeta 为整包生成 SetDefaults 函数，
 // 覆盖内嵌 TypeMeta 的类型以及各类字段的默认值传播。

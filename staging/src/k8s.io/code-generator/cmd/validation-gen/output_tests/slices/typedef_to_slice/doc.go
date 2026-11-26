@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 覆盖“typedef 到 slice”的映射：slice 类型本身可以携带 +k8s:eachVal，
 // 也可以作为没有校验的普通类型（Unvalidated*）。
@@ -29,10 +29,10 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Note: no validation here
+// 注意：此处没有校验。
 type UnvalidatedType []string
 
-// Note: no validation here
+// 注意：此处没有校验。
 type UnvalidatedPtrType []*string
 
 // +k8s:validateFalse="type ListType"

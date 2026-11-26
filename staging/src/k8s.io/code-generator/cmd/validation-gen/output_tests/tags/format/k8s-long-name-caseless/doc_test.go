@@ -61,7 +61,7 @@ func TestCaseless(t *testing.T) {
 		field.Invalid(field.NewPath("longNameTypedefField"), nil, "").WithOrigin("format=k8s-long-name-caseless"),
 	})
 	// 校验 ratcheting：旧值同样非法时，错误被吸收。
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 
 	// 非法：包含空格。
@@ -75,6 +75,6 @@ func TestCaseless(t *testing.T) {
 		field.Invalid(field.NewPath("longNamePtrField"), nil, "").WithOrigin("format=k8s-long-name-caseless"),
 		field.Invalid(field.NewPath("longNameTypedefField"), nil, "").WithOrigin("format=k8s-long-name-caseless"),
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 }

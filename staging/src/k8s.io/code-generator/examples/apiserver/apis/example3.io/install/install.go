@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the experimental API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// install 包安装实验性 API group，使其可用于
+// 所有 API 编解码设施。
 //
 // install 包负责把示例 API group（内部版本与 v1 外部版本）注册进 scheme，
 // 并把 v1 设为优先版本。
@@ -28,7 +28,7 @@ import (
 	"k8s.io/code-generator/examples/apiserver/apis/example3.io/v1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API group 并把类型加入 scheme
 // Install 注册内部版本与 v1，并把 v1 设为该 group 的首选版本。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(example3.AddToScheme(scheme))

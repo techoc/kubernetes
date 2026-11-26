@@ -77,7 +77,7 @@ type Kind string
 // PackageVersion 是版本加上其所在源码包路径的组合。
 type PackageVersion struct {
 	Version
-	// The fully qualified package, e.g. k8s.io/kubernetes/pkg/apis/apps, where the types.go is found.
+	// // 类型定义所在包的完整路径，如 k8s.io/kubernetes/pkg/apis/apps。
 	Package string
 }
 
@@ -110,13 +110,13 @@ func (gv GroupVersion) WithKind(kind Kind) GroupVersionKind {
 
 // GroupVersions 是一个群组下所有版本及其 Go 包名的集合。
 type GroupVersions struct {
-	// The name of the package for this group, e.g. apps.
+	// // 该 group 的包名，如 apps。
 	PackageName string
 	Group       Group
 	Versions    []PackageVersion
 }
 
-// GroupVersionInfo contains all the info around a group version.
+// // GroupVersionInfo 汇总单个 group-version 的元信息。
 // GroupGoName 与 LowerCaseGroupGoName 用于生成包别名，需与 client-gen 输出一致。
 type GroupVersionInfo struct {
 	Group                Group

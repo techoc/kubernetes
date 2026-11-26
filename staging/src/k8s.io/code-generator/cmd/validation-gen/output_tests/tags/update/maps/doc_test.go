@@ -32,7 +32,7 @@ func TestUpdateMapTags(t *testing.T) {
 	matcher := field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin()
 	base := UpdateMapStruct{}
 
-	// Map NoSet/NoUnset
+	// map NoSet/NoUnset
 	//
 	// 空 map 视为“未设置”，非空视为“已设置”，nil 同样算清空。
 	{
@@ -53,7 +53,7 @@ func TestUpdateMapTags(t *testing.T) {
 		})
 	}
 
-	// Map NoAddItem/NoRemoveItem
+	// map NoAddItem/NoRemoveItem
 	//
 	// 只约束键集合的增删；已有键的值变化不受影响。
 	{
@@ -65,7 +65,7 @@ func TestUpdateMapTags(t *testing.T) {
 			field.Forbidden(field.NewPath("mapNoAdd").Key("b"), "item may not be added").WithOrigin("update"),
 		})
 
-		// Value-only change to an existing key is allowed.
+		// 修改已有键的值允许。
 		modify := base
 		modify.MapNoAdd = map[string]string{"a": "99"}
 		st.Value(&modify).OldValue(&old).ExpectValid()
@@ -80,17 +80,17 @@ func TestUpdateMapTags(t *testing.T) {
 		})
 	}
 
-	// Map frozen shape
+	// map 固定形状
 	{
 		old := base
 		old.MapFrozenShape = map[string]string{"a": "1", "b": "2"}
 
-		// Value-only change: allowed.
+		// 仅值变化：允许。
 		modify := base
 		modify.MapFrozenShape = map[string]string{"a": "11", "b": "22"}
 		st.Value(&modify).OldValue(&old).ExpectValid()
 
-		// Swap one key: one add + one remove.
+		// 替换一个键：算一次新增加一次删除。
 		//
 		// 交换键会同时触发“新增”和“删除”两条错误。
 		swap := base
@@ -101,14 +101,14 @@ func TestUpdateMapTags(t *testing.T) {
 		})
 	}
 
-	// Map combined NoSet + NoAddItem
+	// map 组合 NoSet + NoAddItem
 	{
 		old := base
 		cur := base
 		cur.MapSetThenFreeze = map[string]MapItem{"k": {Name: "k", Value: "v"}}
 
-		// Both constraints fire: NoSet on the empty->non-empty transition
-		// and NoAddItem on the new key.
+		// 两个约束同时触发：空到非空转换触发 NoSet，
+		// 新键触发 NoAddItem。
 		//
 		// 两条约束检查的是不同层面，因此同时上报，而不是短路。
 		st.Value(&cur).OldValue(&old).ExpectMatches(matcher, field.ErrorList{
@@ -117,14 +117,14 @@ func TestUpdateMapTags(t *testing.T) {
 		})
 	}
 
-	// eachVal composition on a map: per-value NoModify
+	// map 上的 eachVal 组合：逐值 NoModify
 	{
 		old := base
 		old.EachValNoModifyMap = map[string]MapItem{
 			"a": {Name: "a", Value: "1"},
 		}
 
-		// Adding/removing keys is fine.
+		// 增删键是允许的。
 		add := base
 		add.EachValNoModifyMap = map[string]MapItem{
 			"a": {Name: "a", Value: "1"},
@@ -132,7 +132,7 @@ func TestUpdateMapTags(t *testing.T) {
 		}
 		st.Value(&add).OldValue(&old).ExpectValid()
 
-		// Mutating an existing value fires.
+		// 修改已有值会触发校验。
 		mutate := base
 		mutate.EachValNoModifyMap = map[string]MapItem{
 			"a": {Name: "a", Value: "99"},

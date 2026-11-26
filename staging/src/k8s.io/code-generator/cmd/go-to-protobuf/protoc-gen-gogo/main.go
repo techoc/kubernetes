@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package main defines the protoc-gen-gogo binary we use to generate our proto go files,
-// as well as takes dependencies on the correct gogo/protobuf packages for godeps.
+// // protoc-gen-gogo 是 protoc 的插件：protoc 通过 stdin 传入 CodeGeneratorRequest，
+// // 本程序生成 .pb.go 后经 stdout 返回。
 //
 // protoc-gen-gogo 是 protoc 的插件：protoc 通过 stdin 传入 CodeGeneratorRequest，
 // 本程序生成 .pb.go 后经 stdout 返回。它额外把 paths=source_relative 强制打开，
@@ -27,17 +27,17 @@ import (
 
 	"github.com/gogo/protobuf/vanity/command"
 
-	// dependencies that are required for our packages
+	// // 空导入：确保 gogo/protobuf 依赖进入 godeps
 	_ "github.com/gogo/protobuf/gogoproto"
 	_ "github.com/gogo/protobuf/proto"
 	_ "github.com/gogo/protobuf/sortkeys"
 )
 
 func main() {
-	// read input
+	// // 读取 stdin 上的请求。
 	request := command.Read()
 
-	// if we're given paths as inputs, generate .pb.go files based on those paths
+	// // 输入文件名含目录时，按 source-relative 方式生成 .pb.go。
 	// 只要任一待生成文件带目录（说明 protoc 以路径而非文件名调用），就改用
 	// source_relative；空参数时不能直接追加逗号，需单独赋值。
 	for _, file := range request.FileToGenerate {
@@ -52,6 +52,6 @@ func main() {
 		}
 	}
 
-	// generate
+	// // 生成并输出结果。
 	command.Write(command.Generate(request))
 }

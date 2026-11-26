@@ -32,7 +32,7 @@ const (
 
 // 注册时机上必须晚于 list 元数据收集完成：item 依赖 listMapKey 来定位目标元素。
 func init() {
-	// Processing item tags requires the list metadata.
+	// 处理 item 标签需要先拿到列表元数据。
 	RegisterTagValidator(&itemTagValidator{listByPath: globalListMeta})
 }
 
@@ -78,7 +78,7 @@ var (
 // GetValidations 把子标签的校验包成“仅对匹配元素生效”的校验。
 // 由于 list 元数据在解析阶段尚未就绪，立即函数的生成被推迟到 ThisContext。
 func (itv *itemTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
-	// TODO: Support regular maps with syntax like:
+	// TODO: 支持普通 map，语法形如：
 	// +k8s:item("map-key")=+k8s:immutable
 
 	// 该标签可用于值字段和指针字段，也可用于类型别名（类型别名绝不应是指针），
@@ -101,7 +101,7 @@ func (itv *itemTagValidator) GetValidations(context Context, tag codetags.Tag) (
 		return Validations{}, fmt.Errorf("requires a validation tag as its value payload")
 	}
 
-	// Parse key-value pairs from named args.
+	// 从命名参数中解析键值对。
 	criteria, err := criteriaFromArgs(tag.Args)
 	if err != nil {
 		return Validations{}, err
@@ -134,7 +134,7 @@ func (itv *itemTagValidator) GetValidations(context Context, tag codetags.Tag) (
 	result.Functions = nil
 	result.Deferred = nil
 
-	// 1. Handle immediate functions. We need to defer them because listMetadata is not ready yet.
+	// 1. 处理即时函数。由于 listMetadata 尚未就绪，需要先延迟。
 	if len(validations.Functions) > 0 {
 		result.AddDeferred(Deferred(ThisContext, func() (Validations, error) {
 			matchArg, equivArg, err := itv.prepareArgs(context, criteria, elemT)
@@ -152,19 +152,19 @@ func (itv *itemTagValidator) GetValidations(context Context, tag codetags.Tag) (
 		}))
 	}
 
-	// 2. Handle deferred validations from child tag.
+	// 2. 处理子标签返回的延迟校验。
 	for _, d := range validations.Deferred {
 		scope := d.Scope
 		if scope == ParentContext {
-			// A child tag (e.g. +k8s:union) returning a ParentContext validation intends
-			// to evaluate the entire collection (the list) after its items are processed.
-			// Because item tags are evaluated in the context of the list field, the "parent"
-			// of a list element is conceptually the list itself, which maps to ThisContext
-			// (the field phase).
-			// If we left this as ParentContext, the framework would mistakenly defer it to
-			// the struct containing the list. By mapping to ThisContext, we ensure the
-			// deferred validation correctly runs at the end of the list field's phase, naturally
-			// accumulating and running after all immediate item validations for this criteria.
+			// 子标签（如 +k8s:union）返回 ParentContext 校验，意在
+			// 等所有元素处理完后再评估整个集合（列表）。
+			// 由于 item 标签在列表字段的上下文中求值，列表元素的“父”
+			// 概念上是列表本身，对应 ThisContext
+			// （字段阶段）。
+			// 若保留 ParentContext，框架会误把它延迟到
+			// 包含列表的结构体。映射为 ThisContext 可确保延迟校验
+			// 延迟校验会在列表字段阶段末尾运行，自然地在
+			// 该条件下所有即时元素校验之后累积执行。
 			scope = ThisContext
 		}
 		result.AddDeferred(Deferred(scope, func() (Validations, error) {
@@ -180,11 +180,11 @@ func (itv *itemTagValidator) GetValidations(context Context, tag codetags.Tag) (
 
 			return wrapFunctionsWithScope(inner, func(fn FunctionGen, s DeferredScope) FunctionGen {
 				if s == ParentContext {
-					// We reach here if the original deferred scope was ParentContext.
-					// Because the parent of a list element is the list itself, the generated
-					// function `fn` (e.g. a union validation) already expects the full list
-					// as its argument. If we didn't skip wrapping, validateValSliceItem would
-					// mistakenly attempt to pass individual list elements to it.
+					// 原始延迟作用域为 ParentContext 时走到这里。
+					// 因为列表元素的父就是列表本身，生成的
+					// 函数 fn（如联合体校验）已经期望接收完整列表
+					// 作为参数。若不跳过包装，validateValSliceItem 会误把
+					// 单个列表元素传给它。
 					return fn
 				}
 				f := Function(itemTagName, fn.Flags, validateFunc, matchArg, equivArg, WrapperFunction{Function: fn, ObjType: elemT})
@@ -225,7 +225,7 @@ func (itv *itemTagValidator) prepareArgs(context Context, criteria []keyValuePai
 				if member == nil {
 					return nil, nil, fmt.Errorf("no field with JSON name %q", pair.key)
 				}
-				// We don't need to validate type match here, as it's done during generateComparisonRHS
+				// 这里无需校验类型匹配，generateComparisonRHS 中会做。
 				foundKeys[keyName] = true
 				sortedCriteria = append(sortedCriteria, pair)
 				break
@@ -338,7 +338,7 @@ func buildMatchConditions(elemT *types.Type, criteria []keyValuePair, itemRef st
 		if member == nil {
 			return "", fmt.Errorf("no field with JSON name %q", fld.key)
 		}
-		// Generate the comparison based on the field's actual type
+		// 根据字段的实际类型生成比较逻辑。
 		rhs, err := generateComparisonRHS(member, fld.value)
 		if err != nil {
 			return "", err
@@ -399,9 +399,9 @@ func generateComparisonRHS(member *types.Member, value any) (string, error) {
 	}
 }
 
-// selectorString creates a field path for list map items using a JSON-like
-// syntax. The format is {"key": "value", "key2": 42, "key3": true} with quoted
-// keys and appropriately formatted values.
+// selectorString 用 JSON 风格语法为 list-map 元素构造字段路径：
+// 格式为 {"key": "value", "key2": 42, "key3": true}，键加引号，
+// 值按类型格式化。
 func selectorString(criteria []keyValuePair) string {
 	var pairs []string
 	for _, fld := range criteria {

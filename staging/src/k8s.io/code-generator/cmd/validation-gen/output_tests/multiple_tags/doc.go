@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 //
 // 本包验证同一位置多条校验标签的排序：validateFalse 之间保持源码顺序，
@@ -29,8 +29,8 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// validateTrue should sort after validateFalse, but all the validateFalse
-// should retain their order.
+// validateTrue 应排在 validateFalse 之后，但所有 validateFalse
+// 应保持其原有顺序。
 
 // +k8s:validateTrue="type T1 #0"
 // +k8s:validateFalse="type T1 #1"

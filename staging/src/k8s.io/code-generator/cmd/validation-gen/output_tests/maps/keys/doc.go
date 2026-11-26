@@ -53,13 +53,13 @@ type Struct struct {
 	ValidatedMapTypeField ValidatedMapType `json:"validatedMapTypeField"`
 }
 
-// Note: no validations.
+// 注意：没有校验。
 type UnvalidatedStringType string
 
 // +k8s:validateFalse="ValidatedStringType"
 type ValidatedStringType string
 
-// Note: no validations.
+// 注意：没有校验。
 type UnvalidatedMapType map[string]string
 
 // +k8s:validateFalse="ValidatedMapType"

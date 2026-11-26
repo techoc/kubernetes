@@ -52,7 +52,7 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("longNamePtrField"), nil, "").WithOrigin("format=k8s-long-name"),
 		field.Invalid(field.NewPath("longNameTypedefField"), nil, "").WithOrigin("format=k8s-long-name"),
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 
 	invalidStruct = &Struct{
@@ -65,6 +65,6 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("longNamePtrField"), nil, "").WithOrigin("format=k8s-long-name"),
 		field.Invalid(field.NewPath("longNameTypedefField"), nil, "").WithOrigin("format=k8s-long-name"),
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 }

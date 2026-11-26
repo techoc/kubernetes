@@ -32,7 +32,7 @@ func TestUpdateListTags(t *testing.T) {
 	matcher := field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin()
 	base := UpdateListStruct{}
 
-	// Slice NoSet (len == 0 semantics)
+	// slice NoSet（len == 0 语义）
 	{
 		old := base
 		old.StringSliceNoSet = nil
@@ -43,11 +43,11 @@ func TestUpdateListTags(t *testing.T) {
 			field.Invalid(field.NewPath("stringSliceNoSet"), nil, "field cannot be set once created").WithOrigin("update"),
 		})
 
-		// nil -> nil is allowed
+		// nil -> nil 是允许的
 		st.Value(&old).OldValue(&old).ExpectValid()
 	}
 
-	// Slice NoUnset
+	// slice NoUnset
 	{
 		old := base
 		old.StringSliceNoUnset = []string{"a"}
@@ -70,7 +70,7 @@ func TestUpdateListTags(t *testing.T) {
 			field.Forbidden(field.NewPath("stringSetNoAdd").Index(2), "item may not be added").WithOrigin("update"),
 		})
 
-		// Reorder of existing items is allowed.
+		// 已有元素重排允许。
 		reordered := base
 		reordered.StringSetNoAdd = []string{"b", "a"}
 		st.Value(&reordered).OldValue(&old).ExpectValid()
@@ -88,17 +88,17 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// Frozen-shape set: NoAddItem + NoRemoveItem
+	// 固定形状 set：NoAddItem + NoRemoveItem
 	{
 		old := base
 		old.StringSetFrozenShape = []string{"a", "b"}
 
-		// Permutation is valid.
+		// 排列合法。
 		perm := base
 		perm.StringSetFrozenShape = []string{"b", "a"}
 		st.Value(&perm).OldValue(&old).ExpectValid()
 
-		// Swap one item: one add + one remove, both reported.
+		// 替换一个元素：算一次新增加一次删除，两者都上报。
 		swap := base
 		swap.StringSetFrozenShape = []string{"a", "c"}
 		st.Value(&swap).OldValue(&old).ExpectMatches(matcher, field.ErrorList{
@@ -107,7 +107,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// listType=map + single key + NoAddItem
+	// listType=map + 单键 + NoAddItem
 	{
 		old := base
 		old.MapListNoAdd = []UpdateItem{{Name: "alpha", Value: "1"}}
@@ -121,13 +121,13 @@ func TestUpdateListTags(t *testing.T) {
 			field.Forbidden(field.NewPath("mapListNoAdd").Index(1), "item may not be added").WithOrigin("update"),
 		})
 
-		// Modifying the value of an existing keyed item is not an "add".
+		// 修改已有带键元素的值不算“新增”。
 		modified := base
 		modified.MapListNoAdd = []UpdateItem{{Name: "alpha", Value: "999"}}
 		st.Value(&modified).OldValue(&old).ExpectValid()
 	}
 
-	// listType=map + single key + frozen shape
+	// listType=map + 单键 + 固定形状
 	{
 		old := base
 		old.MapListFrozenShape = []UpdateItem{
@@ -135,7 +135,7 @@ func TestUpdateListTags(t *testing.T) {
 			{Name: "beta", Value: "2"},
 		}
 
-		// Value-only change to an existing keyed item is allowed.
+		// 修改已有带键元素的值允许。
 		modify := base
 		modify.MapListFrozenShape = []UpdateItem{
 			{Name: "alpha", Value: "99"},
@@ -143,7 +143,7 @@ func TestUpdateListTags(t *testing.T) {
 		}
 		st.Value(&modify).OldValue(&old).ExpectValid()
 
-		// Removing a key produces a NoRemoveItem error.
+		// 删除键会产生 NoRemoveItem 错误。
 		removed := base
 		removed.MapListFrozenShape = []UpdateItem{{Name: "alpha", Value: "1"}}
 		st.Value(&removed).OldValue(&old).ExpectMatches(matcher, field.ErrorList{
@@ -151,7 +151,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// listType=map + composite key + NoRemoveItem
+	// listType=map + 复合键 + NoRemoveItem
 	{
 		old := base
 		old.CompositeKeyList = []CompositeKeyItem{
@@ -159,7 +159,7 @@ func TestUpdateListTags(t *testing.T) {
 			{Name: "alpha", Priority: 2, Value: "y"},
 		}
 
-		// Same key pair, different value: allowed.
+		// 键相同、值不同：允许。
 		modify := base
 		modify.CompositeKeyList = []CompositeKeyItem{
 			{Name: "alpha", Priority: 1, Value: "x"},
@@ -167,7 +167,7 @@ func TestUpdateListTags(t *testing.T) {
 		}
 		st.Value(&modify).OldValue(&old).ExpectValid()
 
-		// Remove one pair entirely: rejected.
+		// 整对删除：拒绝。
 		removed := base
 		removed.CompositeKeyList = []CompositeKeyItem{
 			{Name: "alpha", Priority: 1, Value: "x"},
@@ -188,7 +188,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// listType=atomic + unique=map: semanticMap path via unique=
+	// listType=atomic + unique=map：经 unique= 走语义 map 路径
 	{
 		old := base
 		old.AtomicUniqueMapFrozenShape = []UpdateItem{
@@ -196,8 +196,8 @@ func TestUpdateListTags(t *testing.T) {
 			{Name: "beta", Value: "2"},
 		}
 
-		// Value-only change on an existing keyed item is allowed. This
-		// matches listType=map behavior.
+		// 修改已有带键元素的值允许。这
+		// 与 listType=map 行为一致。
 		modify := base
 		modify.AtomicUniqueMapFrozenShape = []UpdateItem{
 			{Name: "alpha", Value: "99"},
@@ -205,7 +205,7 @@ func TestUpdateListTags(t *testing.T) {
 		}
 		st.Value(&modify).OldValue(&old).ExpectValid()
 
-		// Adding a new key is rejected.
+		// 新增键被拒绝。
 		add := base
 		add.AtomicUniqueMapFrozenShape = []UpdateItem{
 			{Name: "alpha", Value: "1"},
@@ -217,7 +217,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// listType=set over non-directly-comparable elements
+	// listType=set 用于不可直接比较的元素
 	{
 		old := base
 		old.NonComparableSetFrozenShape = []NonComparableItem{
@@ -225,8 +225,8 @@ func TestUpdateListTags(t *testing.T) {
 			{Name: "beta", Tags: []string{"z"}},
 		}
 
-		// Reordering full-value items is allowed (SemanticDeepEqual matches
-		// each one in the old list).
+		// 整值元素重排允许（SemanticDeepEqual 匹配
+		// 旧列表中的每一个元素）。
 		reordered := base
 		reordered.NonComparableSetFrozenShape = []NonComparableItem{
 			{Name: "beta", Tags: []string{"z"}},
@@ -234,9 +234,9 @@ func TestUpdateListTags(t *testing.T) {
 		}
 		st.Value(&reordered).OldValue(&old).ExpectValid()
 
-		// Mutating a tag inside one element changes its identity under
-		// set semantics (the whole element is the key), so this is
-		// reported as both an add and a remove.
+		// 修改元素内部的标签会改变其在下面的标识：
+		// set 语义（整个元素就是键），因此
+		// 会同时报新增和删除。
 		mutated := base
 		mutated.NonComparableSetFrozenShape = []NonComparableItem{
 			{Name: "alpha", Tags: []string{"x", "y", "NEW"}},
@@ -248,17 +248,17 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// Typedef list: metadata inherited from type
+	// typedef 列表：元数据从类型继承
 	{
 		old := base
 		old.TypedefFrozenList = FrozenUserList{{Name: "alpha", Value: "1"}}
 
-		// Value-only mutation of the existing keyed item: allowed.
+		// 仅修改已有带键元素的值：允许。
 		modify := base
 		modify.TypedefFrozenList = FrozenUserList{{Name: "alpha", Value: "2"}}
 		st.Value(&modify).OldValue(&old).ExpectValid()
 
-		// Add a new keyed item: rejected.
+		// 新增带键的元素：拒绝。
 		add := base
 		add.TypedefFrozenList = FrozenUserList{
 			{Name: "alpha", Value: "1"},
@@ -269,7 +269,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// eachVal composition on a list: per-item NoModify
+	// 列表上的 eachVal 组合：逐元素 NoModify
 	{
 		old := base
 		old.EachValNoModifyList = []UpdateItem{
@@ -277,7 +277,7 @@ func TestUpdateListTags(t *testing.T) {
 			{Name: "beta", Value: "2"},
 		}
 
-		// Adding a new keyed item is allowed. NoModify is per-item.
+		// 新增带键元素允许，NoModify 只约束单个元素。
 		add := base
 		add.EachValNoModifyList = []UpdateItem{
 			{Name: "alpha", Value: "1"},
@@ -286,12 +286,12 @@ func TestUpdateListTags(t *testing.T) {
 		}
 		st.Value(&add).OldValue(&old).ExpectValid()
 
-		// Removing a keyed item is allowed. NoModify is per-item.
+		// 删除带键元素允许，NoModify 只约束单个元素。
 		remove := base
 		remove.EachValNoModifyList = []UpdateItem{{Name: "alpha", Value: "1"}}
 		st.Value(&remove).OldValue(&old).ExpectValid()
 
-		// Mutating the non-key Value field of an existing keyed item fires.
+		// 修改已有带键元素的非键 Value 字段会触发。
 		mutate := base
 		mutate.EachValNoModifyList = []UpdateItem{
 			{Name: "alpha", Value: "99"},
@@ -302,7 +302,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// Pointer Slice NoSet
+	// 指针 slice NoSet
 	{
 		old := base
 		old.PointerSliceNoSet = nil
@@ -313,11 +313,11 @@ func TestUpdateListTags(t *testing.T) {
 			field.Invalid(field.NewPath("pointerSliceNoSet"), nil, "field cannot be set once created").WithOrigin("update"),
 		})
 
-		// nil -> nil is allowed
+		// nil -> nil 是允许的
 		st.Value(&old).OldValue(&old).ExpectValid()
 	}
 
-	// Pointer listType=set + NoAddItem
+	// 指针 listType=set + NoAddItem
 	{
 		old := base
 		old.PointerSetNoAdd = []*string{new("a"), new("b")}
@@ -329,7 +329,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// Pointer listType=map + NoRemoveItem
+	// 指针 listType=map + NoRemoveItem
 	{
 		old := base
 		old.PointerMapListNoRemove = []*UpdateItem{
@@ -346,7 +346,7 @@ func TestUpdateListTags(t *testing.T) {
 		})
 	}
 
-	// Nil element in pointer slice on update should trigger Required error from PtrSliceUpdate
+	// 更新时指针 slice 中的 nil 元素应由 PtrSliceUpdate 报 Required 错误
 	{
 		old := base
 		old.PointerSetNoAdd = []*string{new("a")}

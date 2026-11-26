@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// prerelease-lifecycle-gen is a tool for auto-generating api-status.csv files.
+// // prerelease-lifecycle-gen 自动生成 api-status.csv 文件。
 //
-// Given a list of input directories, it will create a zz_api_status.go file for all beta APIs which indicates the kinds,
-// the release it was introduced, the release it will be deprecated, and the release it will be removed.
+// // 给定输入目录，它为所有 beta API 生成 zz_api_status.go，记录各 Kind
+// // 的引入版本、计划废弃版本与计划移除版本。
 //
-// Generation is governed by comment tags in the source.  Any package may
-// request Status generation by including a comment in the file-comments of
+// // 生成由源码注释标签控制。包只需在某个文件的文件注释中写入：
+// 生成由源码注释标签控制。包只需在某个文件的文件注释中写入：
 // one file, of the form:
 //
 //	// +k8s:prerelease-lifecycle-gen=true
@@ -30,8 +30,8 @@ limitations under the License.
 // // +k8s:prerelease-lifecycle-gen:removed=1.25
 // // +k8s:prerelease-lifecycle-gen:replacement=wardle.example.com,v1,Flunder
 //
-// Note that registration is a whole-package option, and is not available for
-// individual types.
+// // 注册是整包级选项，不能对单个类型开启。
+// 注册是整包级选项，不能对单个类型开启。
 package main
 
 import (
@@ -66,7 +66,7 @@ func main() {
 		return statusgenerators.GetTargets(context, args)
 	}
 
-	// Run it.
+	// // 执行生成流程。
 	if err := gengo.Execute(
 		statusgenerators.NameSystems(),
 		statusgenerators.DefaultNameSystem(),

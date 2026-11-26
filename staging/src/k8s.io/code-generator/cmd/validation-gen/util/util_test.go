@@ -330,7 +330,7 @@ func TestNonPointer(t *testing.T) {
 	}
 }
 
-// gengo has `PointerTo()` but not the rest, so keep this here for consistency.
+// gengo 只提供 `PointerTo()`，其余没有，为保持一致留在这里。
 //
 // 以下构造函数用于在测试里快速拼出各种类型形状；
 // 显式设置 Name 便于失败信息中可读。
@@ -546,7 +546,7 @@ func TestParseSignedInt(t *testing.T) {
 	}
 
 	testcases := []testcase{
-		// --- int32 valid boundaries ---
+		// --- int32 合法边界 ---
 		{
 			name:        "int32 exact minimum boundary",
 			in:          "-2147483648",
@@ -577,7 +577,7 @@ func TestParseSignedInt(t *testing.T) {
 			bitSize:     32,
 			expectedOut: -1,
 		},
-		// --- int32 overflow ---
+		// --- int32 溢出 ---
 		{
 			name:          "int32 one below minimum overflows",
 			in:            "-2147483649",
@@ -596,7 +596,7 @@ func TestParseSignedInt(t *testing.T) {
 			bitSize:     64,
 			expectedOut: 2147483648,
 		},
-		// --- int64 valid boundaries ---
+		// --- int64 合法边界 ---
 		{
 			name:        "int64 exact minimum boundary",
 			in:          "-9223372036854775808",
@@ -609,7 +609,7 @@ func TestParseSignedInt(t *testing.T) {
 			bitSize:     64,
 			expectedOut: 9223372036854775807,
 		},
-		// --- int64 overflow ---
+		// --- int64 溢出 ---
 		{
 			name:          "int64 one above maximum overflows",
 			in:            "9223372036854775808",
@@ -622,7 +622,7 @@ func TestParseSignedInt(t *testing.T) {
 			bitSize:       64,
 			expectedError: true,
 		},
-		// --- int16 boundaries ---
+		// --- int16 边界 ---
 		{
 			name:        "int16 exact minimum boundary",
 			in:          "-32768",
@@ -647,7 +647,7 @@ func TestParseSignedInt(t *testing.T) {
 			bitSize:       16,
 			expectedError: true,
 		},
-		// --- int8 boundaries ---
+		// --- int8 边界 ---
 		{
 			name:        "int8 exact minimum boundary",
 			in:          "-128",
@@ -672,7 +672,7 @@ func TestParseSignedInt(t *testing.T) {
 			bitSize:       8,
 			expectedError: true,
 		},
-		// --- canonical form rejection ---
+		// --- 规范形式拒绝 ---
 		{
 			name:          "leading zeros rejected",
 			in:            "0100",
@@ -764,7 +764,7 @@ func TestParseUnsignedInt(t *testing.T) {
 	}
 
 	testcases := []testcase{
-		// --- uint64 valid boundaries ---
+		// --- uint64 合法边界 ---
 		{
 			name:        "uint64 maximum boundary",
 			in:          "18446744073709551615",
@@ -777,14 +777,14 @@ func TestParseUnsignedInt(t *testing.T) {
 			bitSize:     64,
 			expectedOut: 0,
 		},
-		// --- uint64 overflow ---
+		// --- uint64 溢出 ---
 		{
 			name:          "uint64 one above maximum overflows",
 			in:            "18446744073709551616",
 			bitSize:       64,
 			expectedError: true,
 		},
-		// --- uint32 valid boundaries ---
+		// --- uint32 合法边界 ---
 		{
 			name:        "uint32 maximum boundary",
 			in:          "4294967295",
@@ -803,7 +803,7 @@ func TestParseUnsignedInt(t *testing.T) {
 			bitSize:       32,
 			expectedError: true,
 		},
-		// --- uint16 valid boundaries ---
+		// --- uint16 合法边界 ---
 		{
 			name:        "uint16 maximum boundary",
 			in:          "65535",
@@ -816,7 +816,7 @@ func TestParseUnsignedInt(t *testing.T) {
 			bitSize:       16,
 			expectedError: true,
 		},
-		// --- uint8 valid boundaries ---
+		// --- uint8 合法边界 ---
 		{
 			name:        "uint8 maximum boundary",
 			in:          "255",
@@ -829,7 +829,7 @@ func TestParseUnsignedInt(t *testing.T) {
 			bitSize:       8,
 			expectedError: true,
 		},
-		// --- negative values rejected for unsigned ---
+		// --- 无符号类型拒绝负值 ---
 		{
 			name:          "negative value rejected",
 			in:            "-1",
@@ -842,7 +842,7 @@ func TestParseUnsignedInt(t *testing.T) {
 			bitSize:     64,
 			expectedOut: 4294967296,
 		},
-		// --- canonical form rejection ---
+		// --- 规范形式拒绝 ---
 		{
 			name:          "leading zeros rejected",
 			in:            "0100",

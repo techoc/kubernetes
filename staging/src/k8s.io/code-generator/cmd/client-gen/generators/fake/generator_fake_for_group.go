@@ -29,7 +29,7 @@ import (
 	"k8s.io/code-generator/cmd/client-gen/generators/util"
 )
 
-// genFakeForGroup produces a file for a group client, e.g. ExtensionsClient for the extension group.
+// // genFakeForGroup 为一个 group 生成聚合客户端文件（如 extension group 的 ExtensionsClient）。
 //
 // 它输出的是“每组一个”的聚合类型 Fake<Group><Version>，其中嵌入 client-go/testing
 // 的 Fake，并暴露该组内每个类型的 getter；每类型的具体实现由 genFakeForType 生成。
@@ -39,16 +39,16 @@ type genFakeForGroup struct {
 	realClientPackage string // must be a Go import-path
 	version           string
 	groupGoName       string
-	// types in this group
+	// // 该 group 下的所有类型
 	types   []*types.Type
 	imports namer.ImportTracker
-	// If the genGroup has been called. This generator should only execute once.
+	// // 是否已生成过；group client 只需生成一次
 	called bool
 }
 
 var _ generator.Generator = &genFakeForGroup{}
 
-// We only want to call GenerateType() once per group.
+// // Filter 保证每组只调用一次 GenerateType：首次调用后置位 called。
 // 通过首次调用后置位 called 实现“整组只生成一次”；Filter 由 gengo 对每个类型调用。
 func (g *genFakeForGroup) Filter(c *generator.Context, t *types.Type) bool {
 	if !g.called {

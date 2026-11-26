@@ -71,7 +71,7 @@ func TestUpdateCorrelation(t *testing.T) {
 		},
 	}
 
-	// Same data, different order.
+	// 数据相同，顺序不同。
 	structA2 := Struct{
 		ListField: []OtherStruct{
 			{"key2", 2, "two"},
@@ -87,7 +87,7 @@ func TestUpdateCorrelation(t *testing.T) {
 		},
 	}
 
-	// Different data.
+	// 数据不同。
 	structB := Struct{
 		ListField: []OtherStruct{
 			{"key3", 3, "THREE"},
@@ -148,7 +148,7 @@ func TestRatcheting(t *testing.T) {
 		},
 	}
 
-	// Same data, different order.
+	// 数据相同，顺序不同。
 	struct2 := Struct{
 		ListComparableField: []OtherStruct{
 			{"key2", 2, "two"},

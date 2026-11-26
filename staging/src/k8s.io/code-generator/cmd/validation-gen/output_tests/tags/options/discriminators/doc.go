@@ -19,7 +19,7 @@ limitations under the License.
 
 // 这是一个测试包：验证 ifEnabled/ifDisabled 与 modeDiscriminator 的组合——
 // 特性开关决定哪一组模式校验生效。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package discriminators
 

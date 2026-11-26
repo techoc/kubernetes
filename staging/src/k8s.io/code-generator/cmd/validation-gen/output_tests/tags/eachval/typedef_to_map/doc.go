@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 //
 // 本包验证 eachVal 标注在 map 类型本身（而非字段）时，
@@ -28,13 +28,13 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Note: no validation here
+// 注意：此处没有校验。
 type UnvalidatedType map[string]string
 
 // +k8s:eachVal=+k8s:validateFalse="type MapType[*]"
 type MapType map[string]string
 
-// Note: no validation here
+// 注意：此处没有校验。
 type UnvalidatedPtrType map[string]*string
 
 // +k8s:validateFalse="type StringType"

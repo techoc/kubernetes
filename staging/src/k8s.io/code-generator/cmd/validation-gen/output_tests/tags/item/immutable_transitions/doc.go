@@ -19,7 +19,7 @@ limitations under the License.
 
 // 这是一个测试包：验证 item 标签与 immutable 组合时的更新/状态迁移语义，
 // 包括对指定 key 的整体不可变以及对 item 子字段的不可变。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package transitions
 

@@ -14,82 +14,50 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// conversion-gen is a tool for auto-generating functions that convert
-// between internal and external types.  A general conversion code
-// generation task involves three sets of packages: (1) a set of
-// packages containing internal types, (2) a single package containing
-// the external types, and (3) a single destination package (i.e.,
-// where the generated conversion functions go, and where the
-// developer-authored conversion functions are).  The packages
-// containing the internal types play the role known as "peer
-// packages" in the general code-generation framework of Kubernetes.
+// conversion-gen 自动生成 internal 与 external 类型之间的转换函数。
+// 一次转换生成任务涉及三组包：(1) 若干包含 internal 类型的包，(2) 一个包含
+// external 类型的包，(3) 一个目标包（生成的转换函数与开发者手写的转换函数
+// 都放在这里）。包含 internal 类型的包在 Kubernetes 通用代码生成框架中
+// 被称为“peer packages”。
 //
-// For each conversion task, `conversion-gen` will generate functions
-// that efficiently convert between same-name types in the two
-// (internal, external) packages.  The generated functions include
-// ones named
+// 对每个转换任务，`conversion-gen` 生成能在（internal, external）两个包的
+// 同名类型之间高效转换的函数，包括如下形式的函数：
 //
 //	autoConvert_<pkg1>_<type>_To_<pkg2>_<type>
 //
-// for each such pair of types --- both with (pkg1,pkg2) =
-// (internal,external) and (pkg1,pkg2) = (external,internal).  The
-// generated conversion functions recurse on the structure of the data
-// types.  For structs, source and destination fields are matched up
-// according to name; if a source field has no corresponding
-// destination or there is a fundamental mismatch in the type of the
-// field then the generated autoConvert_... function has just a
-// warning comment about that field.  The generated conversion
-// functions use standard value assignment wherever possible.  For
-// compound types, the generated conversion functions call the
-// `Convert...` functions for the subsidiary types.
+// （pkg1,pkg2）既取 (internal,external)，也取 (external,internal)。
+// 生成的函数按数据结构递归转换：结构体按字段名匹配源字段与目标字段；
+// 字段缺失或类型根本不兼容时，autoConvert_... 中只留下针对该字段的警告注释。
+// 能用普通赋值的地方就直接赋值；复合类型则调用子类型的 `Convert...` 函数。
 //
-// For each pair of types `conversion-gen` will also generate a
-// function named
+// 每对类型还会在同时满足以下条件时生成如下函数：
 //
 //	Convert_<pkg1>_<type>_To_<pkg2>_<type>
 //
-// if both of two conditions are met: (1) the destination package does
-// not contain a function of that name in a non-generated file and (2)
-// the generation of the corresponding autoConvert_...  function did
-// not run into trouble with a missing or fundamentally differently
-// typed field.  A generated Convert_... function simply calls the
-// corresponding `autoConvert...` function.  `conversion_gen` also
-// generates a function that updates a given `runtime.Scheme` by
-// registering all the Convert_... functions found and generated.
-// Thus developers can override the generated behavior for selected
-// type pairs by putting the desired Convert_... functions in
-// non-generated files.  Further, developers are practically required
-// to override the generated behavior when there are missing or
-// fundamentally differently typed fields.
+// 条件：(1) 目标包的非生成文件中没有同名函数；(2) 对应的 autoConvert_...
+// 没有遇到缺失或类型根本不兼容的字段。生成的 Convert_... 只是调用对应的
+// autoConvert...。`conversion_gen` 还会生成一个函数，把找到的和生成的
+// Convert_... 全部注册到给定的 `runtime.Scheme`。因此开发者可以在非生成
+// 文件中放同名的 Convert_... 来覆盖选定类型对的生成行为；字段缺失或类型
+// 根本不兼容时，实际上必须手写覆盖。
 //
-// `conversion-gen` will scan its `--input-dirs`, looking at the
-// package defined in each of those directories for comment tags that
-// define a conversion code generation task.  A package requests
-// conversion code generation by including one or more comment in the
-// package's `doc.go` file (currently anywhere in that file is
-// acceptable, but the recommended location is above the `package`
-// statement), of the form:
+// `conversion-gen` 扫描 `--input-dirs`，查找每个目录中的包里的注释标签，
+// 以确定转换任务。包在 `doc.go` 中写入以下形式的注释即表示请求生成转换代码
+// （当前放在文件任意位置均可，但建议在 `package` 语句之前）：
 //
 //	// +k8s:conversion-gen=<import-path-of-internal-package>
 //
-// This introduces a conversion task, for which the destination
-// package is the one containing the file with the tag and the tag
-// identifies a package containing internal types.  If there is also a
-// tag of the form
+// 该标签引入一个转换任务：带标签的文件所在包是目标包，标签指向包含 internal
+// 类型的包。若还有如下标签：
 //
 //	// +k8s:conversion-gen-external-types=<import-path-of-external-package>
 //
-// then it identifies the package containing the external types;
-// otherwise they are in the destination package.
+// 它指向 external 类型所在的包；否则 external 类型就在目标包中。
 //
-// For each conversion code generation task, the full set of internal
-// packages (AKA peer packages) consists of the ones specified in the
-// `k8s:conversion-gen` tags PLUS any specified in the
-// `--base-peer-dirs` and `--extra-peer-dirs` flags on the command
-// line.
+// 每个任务的完整 internal 包集合（即 peer packages）由 `k8s:conversion-gen`
+// 标签指定的包，加上命令行 `--base-peer-dirs` 与 `--extra-peer-dirs` 指定的包组成。
 //
-// When generating for a package, individual types or fields of structs may opt
-// out of Conversion generation by specifying a comment on the of the form:
+// 生成时，单个类型或结构体字段可用如下注释退出转换生成：
 //
 //	// +k8s:conversion-gen=false
 //
@@ -133,7 +101,7 @@ func main() {
 		return generators.GetTargets(context, args)
 	}
 
-	// Run it.
+	// // 执行生成流程。
 	if err := gengo.Execute(
 		generators.NameSystems(),
 		generators.DefaultNameSystem(),

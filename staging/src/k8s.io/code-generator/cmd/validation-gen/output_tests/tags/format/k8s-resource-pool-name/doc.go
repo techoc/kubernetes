@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 //
 // 本包验证 k8s-resource-pool-name 格式校验：字段与指针字段直接标注，
@@ -37,7 +37,7 @@ type Struct struct {
 	// +k8s:format=k8s-resource-pool-name
 	ResourcePoolNamePtrField *string `json:"resourcePoolNamePtrField"`
 
-	// Note: no validation here
+	// 注意：此处没有校验。
 	ResourcePoolNameTypedefField ResourcePoolNameStringType `json:"resourcePoolNameTypedefField"`
 }
 

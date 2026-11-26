@@ -38,7 +38,7 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("m1"), nil, "must be specified when"),
 	}.WithOrigin("union"))
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{D: DM2, M1: &M1{}, M2: &M2{}}).OldValue(&Struct{D: DM2, M1: &M1{}, M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{D: DM1}).OldValue(&Struct{D: DM1}).ExpectValid()
 }

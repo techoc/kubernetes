@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 覆盖 +k8s:format=k8s-short-name；目录名与 package 名刻意不同（format），
 // 用于确认生成器按包名而非目录名组织输出。
@@ -37,7 +37,7 @@ type Struct struct {
 	// +k8s:format=k8s-short-name
 	ShortNamePtrField *string `json:"shortNamePtrField"`
 
-	// Note: no validation here
+	// 注意：此处没有校验。
 	ShortNameTypedefField ShortNameStringType `json:"shortNameTypedefField"`
 }
 

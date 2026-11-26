@@ -52,6 +52,6 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("validatedTypedefField"), nil, "").WithOrigin("neq"),
 	})
 
-	// Test validation ratcheting.
+	// 测试 ratcheting 行为。
 	st.Value(invalid).OldValue(invalid).ExpectValid()
 }

@@ -30,7 +30,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectValid()
 
 	st.Value(&Struct{
@@ -89,7 +89,7 @@ func Test(t *testing.T) {
 		field.TooLong(field.NewPath("max10ValidatedTypedefPtrField"), "", 10),
 	})
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{
 		Max0Field:                       strings.Repeat("x", 1),
 		Max0PtrField:                    ptr.To(strings.Repeat("x", 1)),

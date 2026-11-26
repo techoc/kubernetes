@@ -68,8 +68,8 @@ var (
 // GetValidations 解析 +k8s:subfield(name)=<sub-tag>，把子标签的校验包一层
 // nil 安全的字段提取，并在需要 ratcheting 时选择 == 或 DeepEqual。
 func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
-	// TODO: Support nested subfields once the generated validation code can
-	// prevent nil pointer dereferences by checking optionality or requiredness
+	// TODO: 等生成的校验代码能通过检查中间字段的可选性/必填性
+	// 来避免 nil 指针解引用后，再支持嵌套子字段。
 	// for intermediate fields.
 	for t := tag.ValueTag; t != nil; t = t.ValueTag {
 		if t.Name == subfieldTagName {
@@ -78,8 +78,8 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 	}
 
 	args := tag.Args
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标签可用于值字段、指针字段以及 typedef
+	// （typedef 不应为指针），因此需检查具体类型。
 	// 剥掉指针和别名后必须是 struct，否则没有“子字段”可访问。
 	t := context.Type
 	nt := util.NonPointer(util.NativeType(t))
@@ -118,7 +118,7 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 		fieldExprPrefix = "&"
 	}
 
-	// getFn is the function that retrieves the subfield value from the
+	// getFn 是从结构体中取出子字段值的函数。
 	// struct.
 	getFn := FunctionLiteral{
 		Parameters: []ParamResult{{"o", nilableStructType}},
@@ -126,11 +126,11 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 	}
 	getFn.Body = fmt.Sprintf("return %so.%s", fieldExprPrefix, submemb.Name)
 
-	// equivArg compares the correlated elements in the old and new lists, for
-	// ratcheting. directComparable selects "==" vs semantic DeepEqual.
+	// equivArg 用于比较新旧列表中对应的元素，
+	// ratcheting；directComparable 决定用 "==" 还是语义 DeepEqual。
 	var equivArg any = Identifier(validateSemanticDeepEqual)
 	if util.IsDirectComparable(util.NonPointer(util.NativeType(submemb.Type))) {
-		// It must be a pointer, since other nilable types are not directly
+		// 必须是指针类型，因为其他可为 nil 的类型不可直接比较。
 		// comparable.
 		equivArg = Identifier(validateDirectEqual)
 	}
@@ -140,17 +140,17 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 		return Validations{}, err
 	}
 
-	// Only the parent-member short-circuit inheritance depends on opaque-tag
-	// globals (see globalOpaqueTypes / globalOpaqueMembers in opaque.go), so
-	// defer just that decision until all opaque tags have been registered. The
-	// rest of the wrapping is independent and runs eagerly.
+	// 只有从父成员继承短路校验依赖 opaque 标签的全局信息
+	// （见 opaque.go 的 globalOpaqueTypes / globalOpaqueMembers），
+	// 因此只把这一步推迟到所有 opaque 标签注册完；
+	// 其余包装逻辑相互独立，立即执行。
 	result := Validations{}
 	result.AddDeferred(Deferred(ThisContext, func() (Validations, error) {
-		// Subfield's own validations (which contain its short-circuits) are added first,
-		// and inherited parent member short-circuits are added second. The cohort-based
-		// partitioner (sortIntoCohorts) will then sort them so that all short-circuits
-		// run first, preserving the relative addition order (subfield short-circuits
-		// first, then inherited short-circuits). Finally, non-short-circuits will run.
+		// 先加入子字段自身的校验（含其短路校验），
+		// 再添加从父成员继承的短路校验。随后基于 cohort 的
+		// 分区器 sortIntoCohorts 会排序，使所有短路校验先运行，
+		// 短路校验先执行，保持加入顺序（子字段短路校验在前，
+		// 继承的短路校验在后）。最后运行非短路校验。
 		var combined Validations
 		combined.Add(tagValidations)
 		if !isFieldOpaque(context) {
@@ -162,7 +162,7 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 		}
 
 		mapped := WrapFunctions(combined, func(fn FunctionGen, scope DeferredScope) FunctionGen {
-			// ParentContext functions (e.g. Union) emit without a cohort.
+			// ParentContext 函数（如 Union）不带 cohort 输出。
 			if scope == ParentContext {
 				return fn
 			}
@@ -173,8 +173,8 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 		})
 
 		for i := range mapped.Deferred {
-			// The validations belong to the subfield, so re-scope ParentContext
-			// (which would target the enclosing struct) to ThisContext.
+			// 这些校验属于子字段，因此把 ParentContext 重设为
+			// ThisContext；否则会作用到外层结构体。
 			if mapped.Deferred[i].Scope == ParentContext {
 				mapped.Deferred[i].Scope = ThisContext
 			}
@@ -185,11 +185,11 @@ func (stv *subfieldTagValidator) GetValidations(context Context, tag codetags.Ta
 	return result, nil
 }
 
-// extractMemberShortCircuits extracts short-circuit validations (e.g. required,
-// immutable) from the child member's own comment lines so that the subfield
-// validator can inherit them. Each subfield path is processed at most once;
-// without this dedup, multiple subfield tags for the same child field would emit
-// duplicate short-circuit validations.
+// extractMemberShortCircuits 从子成员自身的注释中提取短路校验
+// （如 required、immutable），供子字段校验器继承。
+// 每条子字段路径至多处理一次；
+// 否则同一子字段的多个标签会输出重复的
+// 短路校验。
 func (stv *subfieldTagValidator) extractMemberShortCircuits(subContext Context) (Validations, error) {
 	key := subContext.Path.String()
 	if stv.processedShortCircuits[key] {
@@ -234,9 +234,9 @@ func (stv *subfieldTagValidator) Docs() TagDoc {
 	}
 }
 
-// copyShortCircuitsAsNonError recursively traverses the validations (and deferred ones)
-// and returns a new Validations object containing only the functions that have
-// ShortCircuit flag set. The returned functions are also marked as NonError.
+// copyShortCircuitsAsNonError 递归遍历校验（含延迟校验），
+// 返回一个新的 Validations，仅含设置了 ShortCircuit 标志
+// 的函数；返回的函数同时标记为 NonError。
 func copyShortCircuitsAsNonError(v Validations) Validations {
 	res := Validations{}
 	for _, fn := range v.Functions {

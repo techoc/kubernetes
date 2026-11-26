@@ -16,7 +16,7 @@ limitations under the License.
 
 // +k8s:defaulter-gen=TypeMeta
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 包级标签 TypeMeta 表示只为内嵌 TypeMeta 的对象生成默认值函数；
 // 测试用例集中在 slices_test.go，用于验证 slice/map 字段的默认值填充。

@@ -20,8 +20,8 @@ import (
 	"reflect"
 )
 
-// ValueFuzz recursively changes all basic type values in an object. Any kind of references will not
-// be touched, i.e. the addresses of slices, maps, pointers will stay unchanged.
+// // ValueFuzz 递归改写对象中所有基本类型的值，但不碰引用本身：slice、map、指针的
+// // 地址保持不变。测试借此检测深拷贝是否留下了别名。
 // 这是测试辅助：用就地修改来检测深拷贝是否存在别名（副本若与原对象共享底层数组则会被一并改掉）。
 func ValueFuzz(obj interface{}) {
 	valueFuzz(reflect.ValueOf(obj))
@@ -37,7 +37,7 @@ func valueFuzz(obj reflect.Value) {
 		}
 	case reflect.Slice:
 		if obj.IsNil() {
-			// TODO: set non-nil value
+			// // TODO: 设置为非 nil 值
 		} else {
 			for i := 0; i < obj.Len(); i++ {
 				valueFuzz(obj.Index(i))
@@ -45,7 +45,7 @@ func valueFuzz(obj reflect.Value) {
 		}
 	case reflect.Interface, reflect.Pointer:
 		if obj.IsNil() {
-			// TODO: set non-nil value
+			// // TODO: 设置为非 nil 值
 		} else {
 			valueFuzz(obj.Elem())
 		}
@@ -55,17 +55,17 @@ func valueFuzz(obj reflect.Value) {
 		}
 	case reflect.Map:
 		if obj.IsNil() {
-			// TODO: set non-nil value
+			// // TODO: 设置为非 nil 值
 		} else {
 			for _, k := range obj.MapKeys() {
-				// map values are not addressable. We need a copy.
+				// // map 的值不可寻址，需要先复制一份再改。
 				v := obj.MapIndex(k)
 				copy := reflect.New(v.Type())
 				copy.Elem().Set(v)
 				valueFuzz(copy.Elem())
 				obj.SetMapIndex(k, copy.Elem())
 			}
-			// TODO: set some new value
+			// // TODO: 插入一些新值
 		}
 	case reflect.Func: // ignore, we don't have function types in our API
 	default:

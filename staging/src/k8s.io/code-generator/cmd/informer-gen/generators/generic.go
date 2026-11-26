@@ -28,7 +28,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// genericGenerator generates the generic informer.
+// // genericGenerator 生成 generic informer。
 //
 // generic informer 允许调用方按 GroupVersionResource 动态获取 informer，
 // 无需在编译期知道具体类型；ForResource 的 switch 由本生成器展开。

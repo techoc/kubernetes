@@ -26,7 +26,7 @@ import (
 	"k8s.io/code-generator/examples/single/clientset/versioned"
 )
 
-// TestTransforms verified that transform calls are applied as expected.
+// TestTransforms 验证 transform 调用按预期生效。
 // TestTransforms 验证 shared informer factory 的 transform 优先级：
 // factory 级 transform 覆盖 per-informer transform；未设置 factory transform 时
 // 保留 per-informer 的设置。

@@ -34,7 +34,7 @@ func TestAlpha(t *testing.T) {
 	}).ExpectValid()
 
 	// 失败被标记为 alpha：路径定位到 subfield.inner。
-	// Test failures marked as alpha
+	// 标记为 alpha 的失败用例
 	st.Value(&Struct{
 		Subfield:     SubStruct{Inner: 1},
 		SubfieldBeta: SubStruct{Inner: 5},
@@ -68,7 +68,7 @@ func TestBeta(t *testing.T) {
 	}).ExpectValid()
 
 	// 失败被标记为 beta：路径定位到 subfieldBeta.inner。
-	// Test failures marked as beta
+	// 标记为 beta 的失败用例
 	st.Value(&Struct{
 		Subfield:     SubStruct{Inner: 5},
 		SubfieldBeta: SubStruct{Inner: 1},

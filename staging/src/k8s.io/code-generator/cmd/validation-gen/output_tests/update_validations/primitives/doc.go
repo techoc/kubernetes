@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=*
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:immutable 在基本类型上的生成：更新时任何值变化都应被拒绝。
 package primitives

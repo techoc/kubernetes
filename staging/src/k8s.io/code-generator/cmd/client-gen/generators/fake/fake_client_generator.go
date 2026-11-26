@@ -34,7 +34,7 @@ import (
 // 输出目录必须与真实 typed client 的目录结构镜像（typed/<group>/<version>/fake），
 // 否则 fake 包无法以相同导入路径替换真实实现。
 func TargetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clientsetDir, clientsetPkg string, groupPkgName string, groupGoName string, inputPkg string, applyBuilderPackage string, boilerplate []byte) generator.Target {
-	// TODO: should make this a function, called by here and in client-generator.go
+	// TODO: 应抽成函数，由这里和 client-generator.go 共同调用。
 	subdir := []string{"typed", strings.ToLower(groupPkgName), strings.ToLower(gv.Version.NonEmpty())}
 	outputDir := filepath.Join(clientsetDir, filepath.Join(subdir...), "fake")
 	outputPkg := path.Join(clientsetPkg, path.Join(subdir...), "fake")
@@ -46,14 +46,14 @@ func TargetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 		PkgDir:        outputDir,
 		HeaderComment: boilerplate,
 		PkgDocComment: []byte("// Package fake has the automatically generated clients.\n"),
-		// GeneratorsFunc returns a list of generators. Each generator makes a
+		// // GeneratorsFunc 返回生成器列表，每个生成器负责输出一个文件。
 		// single file.
 		GeneratorsFunc: func(c *generator.Context) (generators []generator.Generator) {
 			generators = []generator.Generator{
-				// Always generate a "doc.go" file.
+				// // 始终生成 doc.go，保证包有文档入口。
 				generator.GoGenerator{OutputFilename: "doc.go"},
 			}
-			// Since we want a file per type that we generate a client for, we
+			// // 每个类型单独一个文件，文件名取 private 命名（首字母小写），便于按类型定位。
 			// have to provide a function for this.
 			// 每个类型一个文件，文件名取 private 命名（首字母小写），便于按类型定位。
 			for _, t := range typeList {
@@ -97,18 +97,18 @@ func TargetForGroup(gv clientgentypes.GroupVersion, typeList []*types.Type, clie
 // 类型级 fake 已由 TargetForGroup 生成在各自的子包中。
 func TargetForClientset(args *args.Args, clientsetDir, clientsetPkg string, applyConfigurationPkg string, groupGoNames map[clientgentypes.GroupVersion]string, boilerplate []byte) generator.Target {
 	return &generator.SimpleTarget{
-		// TODO: we'll generate fake clientset for different release in the future.
-		// Package name and path are hard coded for now.
+		// // TODO: 将来按不同 release 生成 fake clientset；目前包名与路径写死。
+		// 目前包名与路径写死。
 		PkgName:       "fake",
 		PkgPath:       path.Join(clientsetPkg, "fake"),
 		PkgDir:        filepath.Join(clientsetDir, "fake"),
 		HeaderComment: boilerplate,
 		PkgDocComment: []byte("// This package has the automatically generated fake clientset.\n"),
-		// GeneratorsFunc returns a list of generators. Each generator generates a
+		// // GeneratorsFunc 返回生成器列表，每个生成器输出一个文件。
 		// single file.
 		GeneratorsFunc: func(c *generator.Context) (generators []generator.Generator) {
 			generators = []generator.Generator{
-				// Always generate a "doc.go" file.
+				// // 始终生成 doc.go，保证包有文档入口。
 				generator.GoGenerator{OutputFilename: "doc.go"},
 
 				&genClientset{

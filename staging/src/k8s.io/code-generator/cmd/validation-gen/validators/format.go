@@ -51,9 +51,9 @@ func (formatTagValidator) ValidScopes() sets.Set[Scope] {
 
 var (
 	// 保持此列表按字母序排列。
-	// Keep this list alphabetized.
-	// TODO: uncomment the following when we've done the homework
-	// to be sure it works the current state of IP manual-ratcheting
+	// 此列表保持字母序。
+	// TODO: 做完功课后取消下面代码的注释
+	// 以确认当前 IP 手动 ratcheting 的实现可用
 	// ipSloppyValidator         = types.Name{Package: libValidationPkg, Name: "IPSloppy"}
 	extendedResourceNameValidator       = types.Name{Package: libValidationPkg, Name: "ExtendedResourceName"}
 	labelKeyValidator                   = types.Name{Package: libValidationPkg, Name: "LabelKey"}
@@ -72,8 +72,8 @@ var (
 func (formatTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
 	// 该标记可作用于值、指针字段以及 typedef（typedef 不应是指针），
 	// 因此需要先取到具体类型。
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
+	// 该标签可用于值字段、指针字段以及 typedef
+	// （typedef 不应为指针），因此需检查具体类型。
 	if t := util.NonPointer(util.NativeType(context.Type)); t != types.String {
 		return Validations{}, fmt.Errorf("can only be used on string types (%s)", rootTypeString(context.Type, t))
 	}
@@ -92,19 +92,19 @@ func (formatTagValidator) GetValidations(context Context, tag codetags.Tag) (Val
 func getFormatValidationFunction(format string) (FunctionGen, error) {
 	// 格式名遵循 JSON schema 风格：全小写、单词间用连字符。
 	// 参见 https://json-schema.org/draft/2020-12/json-schema-validation#name-defined-formats
-	// The naming convention for these formats follows the JSON schema style:
-	// all lower-case, dashes between words. See
+	// 这些格式的命名遵循 JSON Schema 风格：
+	// 全小写、单词间用连字符。参见
 	// https://json-schema.org/draft/2020-12/json-schema-validation#name-defined-formats
-	// for more examples.
+	// 更多示例见此。
 
 	switch format {
 	// 保持按字母序排列。
-	// Keep this sequence alphabetized.
+	// 此序列保持字母序。
 	case "k8s-extended-resource-name":
 		return Function(formatTagName, DefaultFlags, extendedResourceNameValidator).
 			WithEmits(Emission{field.ErrorTypeInvalid, "format=k8s-extended-resource-name", ""}), nil
-	// TODO: uncomment the following when we've done the homework
-	// to be sure it works the current state of IP manual-ratcheting
+	// TODO: 做完功课后取消下面代码的注释
+	// 以确认当前 IP 手动 ratcheting 的实现可用
 	/*
 		case "k8s-ip":
 			return Function(formatTagName, DefaultFlags, ipSloppyValidator), nil
@@ -140,7 +140,7 @@ func getFormatValidationFunction(format string) (FunctionGen, error) {
 		return Function(formatTagName, DefaultFlags, uuidValidator).
 			WithEmits(Emission{field.ErrorTypeInvalid, "format=k8s-uuid", ""}), nil
 	}
-	// TODO: Flesh out the list of validation functions
+	// TODO: 补全校验函数列表
 
 	return FunctionGen{}, fmt.Errorf("unsupported validation format %q", format)
 }

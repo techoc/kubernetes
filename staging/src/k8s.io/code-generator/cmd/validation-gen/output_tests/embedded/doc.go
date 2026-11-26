@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 验证内嵌结构体字段的校验标记：T1 内嵌 T2（值）与 *T3（指针），
 // 生成器应把内嵌字段的校验正确挂到 T1 上。
@@ -32,7 +32,7 @@ var localSchemeBuilder = testscheme.New()
 type T1 struct {
 	TypeMeta int
 
-	// NOTE: It's weird to have IntField in both, but Go allows it.
+	// 注意：两处都放 IntField 看着别扭，但 Go 允许。
 	T2  `json:""`
 	*T3 `json:""`
 }

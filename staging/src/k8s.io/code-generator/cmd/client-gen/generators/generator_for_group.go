@@ -35,12 +35,12 @@ type genGroup struct {
 	version       string
 	groupGoName   string
 	apiPath       string
-	// types in this group
+	// // 该 group 下的所有类型
 	types            []*types.Type
 	imports          namer.ImportTracker
 	inputPackage     string
 	clientsetPackage string // must be a Go import-path
-	// If the genGroup has been called. This generator should only execute once.
+	// // 是否已生成过；group client 只需生成一次
 	called bool
 }
 

@@ -51,22 +51,22 @@ func TestListSet(t *testing.T) {
 			{StringVal: "mno", Value: 9}, // Value 9 < 10 (beta)
 		},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin().ByValidationStabilityLevel(), field.ErrorList{
-		// Set: Duplicate value is SHADOWED
+		// Set：重复值被遮蔽
 		field.Duplicate(field.NewPath("set").Index(1), ComplexSetItem{StringVal: "abc", Value: 10}).MarkAlpha(),
 
-		// BetaSet: Duplicate value is SHADOWED
+		// BetaSet：重复值被遮蔽
 		field.Duplicate(field.NewPath("betaSet").Index(1), ComplexSetItem{StringVal: "abc", Value: 10}).MarkBeta(),
 
-		// ChainedSubfieldSet: Value 9 < 10 is SHADOWED
+		// ChainedSubfieldSet：值 9 < 10 被遮蔽
 		field.Invalid(field.NewPath("chainedSubfieldSet").Index(0).Child("value"), 9, "").WithOrigin("minimum").MarkAlpha(),
 
-		// SetBetaItem: Duplicate value is SHADOWED (Alpha list)
+		// SetBetaItem：重复值被遮蔽（alpha 列表）
 		field.Duplicate(field.NewPath("setBetaItem").Index(1), ComplexSetItemBeta{StringVal: "ghi", Value: 10}).MarkAlpha(),
 
-		// BetaSetBetaItem: Duplicate value is SHADOWED (Beta list)
+		// BetaSetBetaItem：重复值被遮蔽（beta 列表）
 		field.Duplicate(field.NewPath("betaSetBetaItem").Index(1), ComplexSetItemBeta{StringVal: "jkl", Value: 10}).MarkBeta(),
 
-		// ChainedSubfieldSetBeta: Value 9 < 10 is SHADOWED (Beta item)
+		// ChainedSubfieldSetBeta：值 9 < 10 被遮蔽（beta 元素）
 		field.Invalid(field.NewPath("chainedSubfieldSetBeta").Index(0).Child("value"), 9, "").WithOrigin("minimum").MarkBeta(),
 	})
 }

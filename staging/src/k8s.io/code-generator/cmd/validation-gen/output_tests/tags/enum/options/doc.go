@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 覆盖 +k8s:enum / +k8s:enumExclude 的各种组合：无值、单值、多值枚举，
 // 以及 enumExclude 受 +k8s:ifEnabled/ifDisabled 门控时的取值集合。
@@ -72,9 +72,9 @@ const (
 	E2V2 Enum2 = "e2v2"
 )
 
-// Note: this is not an enum because the const values are of type Enum2, and
-// because go elides intermediate typedefs (this is modelled as "NotEnum" ->
-// "string" in the AST).
+// 注意：这不是枚举，因为常量值的类型是 Enum2，而且
+// 因为 Go 会省略中间 typedef（这里建模为 "NotEnum" ->
+// "string"）。
 type NotEnum Enum2
 
 // +k8s:enum
@@ -97,7 +97,7 @@ const (
 	// +k8s:ifDisabled(FeatureB)=+k8s:enumExclude
 	ConditionalB ConditionalEnum = "B"
 
-	// This value is always included.
+	// 该值始终包含。
 	ConditionalC ConditionalEnum = "C"
 
 	// +k8s:ifEnabled(FeatureA)=+k8s:enumExclude

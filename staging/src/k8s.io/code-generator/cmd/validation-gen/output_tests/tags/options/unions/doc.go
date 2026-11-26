@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 覆盖 union/zeroOrOneOf 在 +k8s:ifEnabled/ifDisabled 门控下的行为：
 // 被禁用的成员不参与“恰好一个”判定，整组校验也应随之禁用。

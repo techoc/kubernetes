@@ -16,7 +16,7 @@ limitations under the License.
 
 package wholepkg
 
-// Another type in another file.
+// // 另一个文件中的另一个类型：验证生成器会遍历包内所有文件。
 //
 // 空结构体用于验证生成器会遍历包内所有文件（而非仅 doc.go 所在文件），
 // 且对没有字段的类型仍产出合法的 DeepCopy 实现。

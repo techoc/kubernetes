@@ -16,7 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // pointer 包专门覆盖“指针套指针”的组合：*T、**T，以及指针指向 map/slice/struct
 // 的情形。deepcopy-gen 生成的代码必须对每一层都先判 nil 再解引用，

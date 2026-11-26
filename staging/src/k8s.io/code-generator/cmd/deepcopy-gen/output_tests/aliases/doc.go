@@ -16,14 +16,14 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // 本包用于验证 deepcopy-gen 对 Go 类型定义（type definition）与接口别名的
 // 生成行为：别名会在类型系统中被展开，生成器必须为每种写法生成正确的
 // DeepCopy 实现。
 package aliases
 
-// Note: the following AliasInterface and AliasAliasInterface +k8s:deepcopy-gen:interfaces tags
-// are necessary because Golang flattens interface alias in the type system. I.e. an alias J of
+// // 注意：Go 会在类型系统中展平接口别名——接口 I 的别名 J 实际上等价于 I。
+// // 要支持这些别名的深拷贝，就必须为接口及其所有别名都实现 DeepCopy 方法。
 // an interface I is actually equivalent to I. So support deepcopies of those aliases, we have
 // to implement all aliases of that interface.
 

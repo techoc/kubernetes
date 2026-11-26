@@ -30,7 +30,7 @@ func Test(t *testing.T) {
 
 	// 全零值：nil map 的键数为 0，低于下限的字段报错。
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.TooFew(field.NewPath("min10Field"), 0, 10),
 		field.TooFew(field.NewPath("min10TypedefField"), 0, 10),
@@ -113,7 +113,7 @@ func Test(t *testing.T) {
 	}
 	st.Value(testVal).ExpectValid()
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	// 旧值已经低于下限，新值未变化时不应重新报错。
 	st.Value(&Struct{
 		Min0Field:         min0Field1,

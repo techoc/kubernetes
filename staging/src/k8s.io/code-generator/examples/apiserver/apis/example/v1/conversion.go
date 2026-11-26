@@ -21,7 +21,7 @@ import (
 	example "k8s.io/code-generator/examples/apiserver/apis/example"
 )
 
-// manually created final conversion function required because the object contains private fields that cannot be auto-converted
+// 对象含无法自动转换的私有字段，故需手写最终转换函数
 //
 // 由于 ConversionPrivate 含私有字段，生成器无法自动完成转换，
 // 需手写 Convert_* 并复用生成的 autoConvert_*。
@@ -29,14 +29,14 @@ func Convert_v1_ConversionPrivate_To_example_ConversionPrivate(in *ConversionPri
 	return autoConvert_v1_ConversionPrivate_To_example_ConversionPrivate(in, out, scope)
 }
 
-// manually created final conversion function required because the object contains private fields that cannot be auto-converted
+// 对象含无法自动转换的私有字段，故需手写最终转换函数
 //
 // 反向转换同理，必须手写以处理私有字段。
 func Convert_example_ConversionPrivate_To_v1_ConversionPrivate(in *example.ConversionPrivate, out *ConversionPrivate, scope conversion.Scope) error {
 	return autoConvert_example_ConversionPrivate_To_v1_ConversionPrivate(in, out, scope)
 }
 
-// custom conversion function to exercise use of custom functions in slice/map/pointer fields
+// 自定义转换函数，用于验证 slice/map/指针字段能使用自定义函数
 //
 // 手写 Convert_* 用于验证生成器在 slice/map/pointer 字段中
 // 会优先调用这些自定义转换函数。
@@ -44,7 +44,7 @@ func Convert_v1_ConversionCustom_To_example_ConversionCustom(in *ConversionCusto
 	return autoConvert_v1_ConversionCustom_To_example_ConversionCustom(in, out, scope)
 }
 
-// custom conversion function to exercise use of custom functions in slice/map/pointer fields
+// 自定义转换函数，用于验证 slice/map/指针字段能使用自定义函数
 //
 // 反向自定义转换，保证双向路径都被覆盖。
 func Convert_example_ConversionCustom_To_v1_ConversionCustom(in *example.ConversionCustom, out *ConversionCustom, scope conversion.Scope) error {

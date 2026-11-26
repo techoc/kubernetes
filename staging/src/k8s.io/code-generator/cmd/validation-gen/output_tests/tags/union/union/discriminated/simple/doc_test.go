@@ -43,54 +43,54 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("m1"), nil, "must be specified when"),
 	}.WithOrigin("union"))
 
-	// Slice member: discriminator matches but slice is nil
+	// slice 成员：判别式匹配但 slice 为 nil
 	st.Value(&Struct{D: DM3}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m3"), nil, "must be specified when"),
 	}.WithOrigin("union"))
-	// Slice member: discriminator matches but slice is empty (len==0, not nil)
+	// slice 成员：判别式匹配但 slice 为空（len==0，非 nil）
 	st.Value(&Struct{D: DM3, M3: []string{}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m3"), nil, "must be specified when"),
 	}.WithOrigin("union"))
 
-	// Slice member: discriminator doesn't match but slice is set
+	// slice 成员：判别式不匹配但 slice 已设置
 	st.Value(&Struct{D: DM1, M1: &M1{}, M3: []string{"a"}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m3"), nil, "may only be specified when"),
 	}.WithOrigin("union"))
 
-	// Map member: discriminator matches but map is nil
+	// map 成员：判别式匹配但 map 为 nil
 	st.Value(&Struct{D: DM4}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m4"), nil, "must be specified when"),
 	}.WithOrigin("union"))
-	// Map member: discriminator matches but map is empty (len==0, not nil)
+	// map 成员：判别式匹配但 map 为空（len==0，非 nil）
 	st.Value(&Struct{D: DM4, M4: map[string]string{}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m4"), nil, "must be specified when"),
 	}.WithOrigin("union"))
 
-	// Map member: discriminator doesn't match but map is set
+	// map 成员：判别式不匹配但 map 已设置
 	st.Value(&Struct{D: DM1, M1: &M1{}, M4: map[string]string{"k": "v"}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m4"), nil, "may only be specified when"),
 	}.WithOrigin("union"))
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{D: DM2, M1: &M1{}, M2: &M2{}}).OldValue(&Struct{D: DM2, M1: &M1{}, M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{D: DM1}).OldValue(&Struct{D: DM1}).ExpectValid()
 
-	// Slice member ratcheting: unchanged membership
+	// slice 成员 ratcheting：成员关系未变
 	st.Value(&Struct{D: DM3, M3: []string{"a"}}).OldValue(&Struct{D: DM3, M3: []string{"b"}}).ExpectValid()
-	// Slice member ratcheting: changed from set to unset
+	// slice 成员 ratcheting：从已设置变为未设置
 	st.Value(&Struct{D: DM3}).OldValue(&Struct{D: DM3, M3: []string{"a"}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m3"), nil, "must be specified when"),
 	}.WithOrigin("union"))
 
-	// Map member ratcheting: unchanged membership
+	// map 成员 ratcheting：成员关系未变
 	st.Value(&Struct{D: DM4, M4: map[string]string{"k": "v1"}}).OldValue(&Struct{D: DM4, M4: map[string]string{"k": "v2"}}).ExpectValid()
-	// Map member ratcheting: changed from set to unset
+	// map 成员 ratcheting：从已设置变为未设置
 	st.Value(&Struct{D: DM4}).OldValue(&Struct{D: DM4, M4: map[string]string{"k": "v"}}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m4"), nil, "must be specified when"),
 	}.WithOrigin("union"))
 
-	// Test update with nil old value (simulates newly-set pointer field during update).
-	// Discriminated union validation should still detect mismatches even though oldObj is nil.
+	// 测试 old value 为 nil（模拟更新时新设置的指针字段）。
+	// 即使 oldObj 为 nil，判别式联合体校验仍应发现不匹配。
 	st.Value(&Struct{D: DM1}).OldValue(nil).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Invalid(field.NewPath("m1"), nil, "must be specified when"),
 	}.WithOrigin("union"))

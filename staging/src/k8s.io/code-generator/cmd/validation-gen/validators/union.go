@@ -63,7 +63,7 @@ func getUnionValidations(shared map[string]unions, context Context) (Validations
 	structPath := context.ParentPath
 	parentType := context.ParentType
 
-	// TODO: Add support for map items once map item validation is implemented
+	// TODO: 等 map 元素校验收支持后再添加 map item
 
 	// 取尽可能具体的类型：union 只能作用于结构体或切片。
 	if k := util.NonPointer(util.NativeType(parentType)).Kind; k != types.Struct && k != types.Slice {
@@ -274,9 +274,9 @@ func processUnionValidations(structPath *field.Path, parentType *types.Type, uni
 				return Validations{}, fmt.Errorf("slice type cannot have field members")
 			}
 
-			// TODO: Avoid the "local" here. This was added to avoid errors caused when the package is an empty string.
-			//       The correct package would be the output package but is not known here. This does not show up in generated code.
-			// TODO: Append a consistent hash suffix to avoid generated name conflicts?
+			// TODO: 这里不该用 "local"；当初是为了避免包名为空时的错误而加的。
+			// 正确的包应是输出包，但这里拿不到；生成代码中不会出现这个问题。
+			// TODO: 是否加一致的哈希后缀以避免生成名字冲突？
 			varBaseName := sanitizeName(structPath.String() + "_" + unionName) // unionName 可以为 ""
 			supportVarName := PrivateVar{Name: varPrefix + "_" + varBaseName, Package: "local"}
 

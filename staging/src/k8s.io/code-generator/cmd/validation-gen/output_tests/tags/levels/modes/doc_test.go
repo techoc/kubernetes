@@ -29,23 +29,23 @@ import (
 func TestAlpha(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid: mode A with FieldA set
+	// 合法：mode A 且设置了 FieldA
 	st.Value(&AlphaStruct{D1: "A", FieldA: ptr.To("val")}).ExpectValid()
 
-	// Invalid: mode A with FieldA missing (required), should be stability level alpha
+	// 非法：mode A 缺少 FieldA（必填），应为 alpha 级别
 	st.Value(&AlphaStruct{D1: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("fieldA"), "").MarkAlpha(),
 	})
 
-	// Invalid: mode A with FieldB set (forbidden), should be stability level alpha
+	// 非法：mode A 设置了 FieldB（禁止），应为 alpha 级别
 	st.Value(&AlphaStruct{D1: "A", FieldA: ptr.To("val"), FieldB: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Forbidden(field.NewPath("fieldB"), "").MarkAlpha(),
 	})
 
-	// Valid: mode B with FieldB set
+	// 合法：mode B 且设置了 FieldB
 	st.Value(&AlphaStruct{D1: "B", FieldB: ptr.To("val")}).ExpectValid()
 
-	// Invalid: mode B with FieldB missing (required), should be stability level alpha
+	// 非法：mode B 缺少 FieldB（必填），应为 alpha 级别
 	st.Value(&AlphaStruct{D1: "B"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("fieldB"), "").MarkAlpha(),
 	})
@@ -55,23 +55,23 @@ func TestAlpha(t *testing.T) {
 func TestBeta(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid: mode A with FieldA set
+	// 合法：mode A 且设置了 FieldA
 	st.Value(&BetaStruct{D1: "A", FieldA: ptr.To("val")}).ExpectValid()
 
-	// Invalid: mode A with FieldA missing (required), should be stability level beta
+	// 非法：mode A 缺少 FieldA（必填），应为 beta 级别
 	st.Value(&BetaStruct{D1: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("fieldA"), "").MarkBeta(),
 	})
 
-	// Invalid: mode A with FieldB set (forbidden), should be stability level beta
+	// 非法：mode A 设置了 FieldB（禁止），应为 beta 级别
 	st.Value(&BetaStruct{D1: "A", FieldA: ptr.To("val"), FieldB: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Forbidden(field.NewPath("fieldB"), "").MarkBeta(),
 	})
 
-	// Valid: mode B with FieldB set
+	// 合法：mode B 且设置了 FieldB
 	st.Value(&BetaStruct{D1: "B", FieldB: ptr.To("val")}).ExpectValid()
 
-	// Invalid: mode B with FieldB missing (required), should be stability level beta
+	// 非法：mode B 缺少 FieldB（必填），应为 beta 级别
 	st.Value(&BetaStruct{D1: "B"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("fieldB"), "").MarkBeta(),
 	})
@@ -82,26 +82,26 @@ func TestBeta(t *testing.T) {
 func TestMixedLevels(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid cases
+	// 合法用例
 	st.Value(&MixedLevels{Mode: "A", A: ptr.To("val")}).ExpectValid()
 	st.Value(&MixedLevels{Mode: "B", B: ptr.To("val")}).ExpectValid()
 
-	// Mode=A, missing A -> alpha error (field A is alpha-gated)
+	// Mode=A，缺少 A -> alpha 错误（字段 A 受 alpha 门控）
 	st.Value(&MixedLevels{Mode: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("a"), "").MarkAlpha(),
 	})
 
-	// Mode=B, missing B -> beta error (field B is beta-gated)
+	// Mode=B，缺少 B -> beta 错误（字段 B 受 beta 门控）
 	st.Value(&MixedLevels{Mode: "B"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("b"), "").MarkBeta(),
 	})
 
-	// Mode=A with B set (forbidden) -> beta error (field B's +k8s:modeDiscriminator is beta)
+	// Mode=A 却设置 B（禁止）-> beta 错误（字段 B 的 +k8s:modeDiscriminator 为 beta）
 	st.Value(&MixedLevels{Mode: "A", A: ptr.To("val"), B: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Forbidden(field.NewPath("b"), "").MarkBeta(),
 	})
 
-	// Mode=B with A set (forbidden) -> alpha error (field A's +k8s:modeDiscriminator is alpha)
+	// Mode=B 却设置 A（禁止）-> alpha 错误（字段 A 的 +k8s:modeDiscriminator 为 alpha）
 	st.Value(&MixedLevels{Mode: "B", A: ptr.To("val"), B: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Forbidden(field.NewPath("a"), "").MarkAlpha(),
 	})
@@ -112,21 +112,21 @@ func TestMixedLevels(t *testing.T) {
 func TestCrossLevels(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid cases
+	// 合法用例
 	st.Value(&CrossLevels{Kind: "A", A: ptr.To("val")}).ExpectValid()
 	st.Value(&CrossLevels{Kind: "B", B: ptr.To("val")}).ExpectValid()
 
-	// Kind=A, missing A -> alpha error (field A is alpha-gated, discriminator is beta)
+	// Kind=A，缺少 A -> alpha 错误（字段 A 受 alpha 门控，判别式为 beta）
 	st.Value(&CrossLevels{Kind: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("a"), "").MarkAlpha(),
 	})
 
-	// Kind=B, missing B -> alpha error (field B is alpha-gated, discriminator is beta)
+	// Kind=B，缺少 B -> alpha 错误（字段 B 受 alpha 门控，判别式为 beta）
 	st.Value(&CrossLevels{Kind: "B"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("b"), "").MarkAlpha(),
 	})
 
-	// Kind=A with B set (forbidden) -> alpha error (field B's member tag is alpha)
+	// Kind=A 却设置 B（禁止）-> alpha 错误（字段 B 的成员标签为 alpha）
 	st.Value(&CrossLevels{Kind: "A", A: ptr.To("val"), B: ptr.To("val")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Forbidden(field.NewPath("b"), "").MarkAlpha(),
 	})
@@ -137,35 +137,35 @@ func TestCrossLevels(t *testing.T) {
 func TestSameFieldMixed(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid cases
+	// 合法用例
 	st.Value(&SameFieldMixed{Mode: "A", Value: ptr.To("val")}).ExpectValid()
 	st.Value(&SameFieldMixed{Mode: "B", Value: ptr.To("val")}).ExpectValid()
 
-	// Mode=A, missing Value -> alpha error (member("A") is alpha-gated)
+	// Mode=A，缺少 Value -> alpha 错误（member("A") 受 alpha 门控）
 	st.Value(&SameFieldMixed{Mode: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("value"), "").MarkAlpha(),
 	})
 
-	// Mode=B, missing Value -> beta error (member("B") is beta-gated)
+	// Mode=B，缺少 Value -> beta 错误（member("B") 受 beta 门控）
 	st.Value(&SameFieldMixed{Mode: "B"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("value"), "").MarkBeta(),
 	})
 }
 
-// TestSameValueMixedPayloads verifies that multiple payload validations on
-// the same discriminator value can have different stability levels.
+// TestSameValueMixedPayloads 验证同一判别式值上的多个
+// payload 校验可以有不同的稳定性级别。
 func TestSameValueMixedPayloads(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Valid: Mode=A with Value set and long enough
+	// 合法：Mode=A 且 Value 已设置、长度足够
 	st.Value(&SameValueMixedPayloads{Mode: "A", Value: ptr.To("abc")}).ExpectValid()
 
-	// Mode=A, missing Value -> alpha error (required is alpha-gated)
+	// Mode=A，缺少 Value -> alpha 错误（required 受 alpha 门控）
 	st.Value(&SameValueMixedPayloads{Mode: "A"}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.Required(field.NewPath("value"), "").MarkAlpha(),
 	})
 
-	// Mode=A, Value too short -> beta error (minLength is beta-gated)
+	// Mode=A，Value 太短 -> beta 错误（minLength 受 beta 门控）
 	st.Value(&SameValueMixedPayloads{Mode: "A", Value: ptr.To("ab")}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByValidationStabilityLevel(), field.ErrorList{
 		field.TooShort(field.NewPath("value"), "", 3).MarkBeta(),
 	})

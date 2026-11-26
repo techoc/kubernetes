@@ -14,31 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// defaulter-gen is a tool for auto-generating Defaulter functions.
+// // defaulter-gen 自动生成 Defaulter 函数。给定输入目录，它扫描顶层类型，
 //
-// Given a list of input directories, it will scan for top level types
-// and generate efficient defaulters for an entire object from the sum
-// of the SetDefault_* methods contained in the object tree.
+// // 汇总对象树里的 SetDefault_* 方法，为整个对象生成高效的默认值函数。
+// // 生成行为由源码注释标签控制。包可在包注释中写入：
+// 汇总对象树里的 SetDefault_* 方法，生成整个对象的默认值函数。
 //
-// Generation is governed by comment tags in the source.  Any package may
-// request defaulter generation by including one or more comment tags at
-// the package comment level:
+// // 生成由源码注释标签控制。包只需在某个文件的文件注释中写入：
+// 包可在包注释中写入一个或多个标签，
+// 请求生成默认值函数：
 //
 //	// +k8s:defaulter-gen=<field-name-to-flag>
 //
-// which will create defaulters for any type that contains the provided
-// field name (if the type has defaulters). Any type may request explicit
-// defaulting by providing the comment tag:
+// // 为包含该字段名的类型生成默认值函数（前提是该类型有 defaulter）。类型可用
+// // 以下标签显式开关默认化：
+// 可用以下标签显式开关默认化：
 //
 //	// +k8s:defaulter-gen=true|false
 //
-// An existing defaulter method (`SetDefaults_TYPE`) can provide the
-// comment tag:
+// // 已有的 defaulter 方法（SetDefaults_TYPE）可标注：
+// 可标注如下标签：
 //
 //	// +k8s:defaulter-gen=covers
 //
-// to indicate that the defaulter does not or should not call any nested
-// defaulters.
+// // 表示该方法不调用、也不应调用任何嵌套的 defaulter。
+// 嵌套的 defaulter。
 //
 // 中文概述：defaulter-gen 扫描顶层类型，汇总其对象树中所有 SetDefault_* 方法，
 // 为整个对象生成高效的 SetObjectDefaults_* 函数。生成由包级
@@ -78,7 +78,7 @@ func main() {
 		return generators.GetTargets(context, args)
 	}
 
-	// Run it.
+	// // 执行生成流程。
 	if err := gengo.Execute(
 		generators.NameSystems(),
 		generators.DefaultNameSystem(),

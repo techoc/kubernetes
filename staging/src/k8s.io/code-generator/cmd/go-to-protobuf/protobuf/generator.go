@@ -33,12 +33,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// genProtoIDL produces a .proto IDL.
+// genProtoIDL 生成 .proto IDL。
 //
 // 输出的是 proto2 语法的消息定义；每个 Go 输入包对应一个 .proto 文件。
 // omitGogo 用于生成不依赖 gogoproto 扩展的“干净” IDL。
 type genProtoIDL struct {
-	// This base type is close enough to what we need, if we redefine some
+	// // 复用 GoGenerator 的基础能力，只需覆写少数方法即可满足需要。
 	// methods.
 	generator.GoGenerator
 	localPackage   types.Name
@@ -82,7 +82,7 @@ func (g *genProtoIDL) FileType() string { return "protoidl" }
 // Namers 使用 local namer：proto 类型名需按 package 规则渲染，而非 Go 的限定名。
 func (g *genProtoIDL) Namers(c *generator.Context) namer.NameSystems {
 	return namer.NameSystems{
-		// The local namer returns the correct protobuf name for a proto type
+		// // local namer 按包上下文给出 proto 类型的正确名称
 		// in the context of a package
 		"local": localNamer{g.localPackage},
 	}
@@ -98,17 +98,17 @@ func (g *genProtoIDL) Filter(c *generator.Context, t *types.Type) bool {
 	}
 	if tags["protobuf"] != nil {
 		if tags["protobuf"][0] == "false" {
-			// Type specified "false".
+			// // 类型显式标注 false。
 			return false
 		}
 		if tags["protobuf"][0] == "true" {
-			// Type specified "true".
+			// // 类型显式标注 true。
 			return true
 		}
 		klog.Fatalf(`Comment tag "protobuf" must be true or false, found: %q`, tags["protobuf"][0])
 	}
 	if !g.generateAll {
-		// We're not generating everything.
+		// // 未开启整包生成。
 		return false
 	}
 	seen := map[*types.Type]bool{}
@@ -121,7 +121,7 @@ func (g *genProtoIDL) Filter(c *generator.Context, t *types.Type) bool {
 // struct 只要有一个成员可表示即可（其余成员可能被 protobuf:"-" 排除）。
 func isProtoable(seen map[*types.Type]bool, t *types.Type) bool {
 	if seen[t] {
-		// be optimistic in the case of type cycles.
+		// // 遇到类型环时乐观地视为可表示。
 		return true
 	}
 	seen[t] = true
@@ -156,9 +156,9 @@ func isProtoable(seen map[*types.Type]bool, t *types.Type) bool {
 	}
 }
 
-// isOptionalAlias should return true if the specified type has an underlying type
-// (is an alias) of a map or slice and has the comment tag protobuf.nullable=true,
-// indicating that the type should be nullable in protobuf.
+// // isOptionalAlias 判断指定类型是否为 map/slice 的别名，且标注了
+// // protobuf.nullable=true；这类别名在 proto 中应包装成可空的 message。
+// 表示这类别名在 proto 中应包装成可空的 message。
 func isOptionalAlias(t *types.Type) bool {
 	if t.Underlying == nil || (t.Underlying.Kind != types.Map && t.Underlying.Kind != types.Slice) {
 		return false
@@ -170,7 +170,7 @@ func isOptionalAlias(t *types.Type) bool {
 // (gogoproto.*) 选项在 option 段已被移除，import 也必须一起移除。
 func (g *genProtoIDL) Imports(c *generator.Context) (imports []string) {
 	lines := []string{}
-	// TODO: this could be expressed more cleanly
+	// // TODO: 这里的过滤逻辑可以更简洁。
 	for _, line := range g.imports.ImportLines() {
 		if g.omitGogo && line == "github.com/gogo/protobuf/gogoproto/gogo.proto" {
 			continue
@@ -209,7 +209,7 @@ func (g *genProtoIDL) GenerateType(c *generator.Context, t *types.Type, w io.Wri
 	}
 }
 
-// ProtobufFromGoNamer finds the protobuf name of a type (and its package, and
+// // ProtobufFromGoNamer 根据 Go 名称找到对应的 protobuf 名称、包名与包路径。
 // the package path) from its Go name.
 type ProtobufFromGoNamer interface {
 	GoNameToProtoName(name types.Name) types.Name
@@ -249,19 +249,19 @@ func (p protobufLocator) GoTypeForName(name types.Name) *types.Type {
 	return p.universe.Type(name)
 }
 
-// ProtoTypeFor locates a Protobuf type for the provided Go type (if possible).
+// // ProtoTypeFor 为给定的 Go 类型找到对应的 protobuf 类型（如果可能）。
 func (p protobufLocator) ProtoTypeFor(t *types.Type) (*types.Type, error) {
-	// we've already converted the type, or it's a map
+	// // 已是 proto 类型或 map，直接返回。
 	if t.Kind == types.Protobuf || t.Kind == types.Map {
 		p.tracker.AddType(t)
 		return t, nil
 	}
-	// it's a fundamental type
+	// // 是基础类型。
 	if t, ok := isFundamentalProtoType(t); ok {
 		p.tracker.AddType(t)
 		return t, nil
 	}
-	// it's a message
+	// // 是 message。
 	if t.Kind == types.Struct || isOptionalAlias(t) {
 		t := &types.Type{
 			Name: p.namer.GoNameToProtoName(t.Name),
@@ -361,13 +361,13 @@ func (b bodyGen) doStruct(sw *generator.SnippetWriter) error {
 					options = append(options, fmt.Sprintf("%s = %s", key, v[0]))
 				}
 			}
-		// protobuf.as allows a type to have the same message contents as another Go type
+		// // protobuf.as：让本类型复用另一个 Go 类型的 message 内容
 		case k == "protobuf.as":
 			fields = nil
 			if alias = b.locator.GoTypeForName(types.Name{Name: v[0]}); alias == nil {
 				return fmt.Errorf("type %v references alias %q which does not exist", b.t, v[0])
 			}
-		// protobuf.embed instructs the generator to use the named type in this package
+		// // protobuf.embed：把本包指定类型作为嵌入 message 使用
 		// as an embedded message.
 		case k == "protobuf.embed":
 			fields = []protoField{
@@ -389,7 +389,7 @@ func (b bodyGen) doStruct(sw *generator.SnippetWriter) error {
 		alias = b.t
 	}
 
-	// If we don't explicitly embed anything, generate fields by traversing fields.
+	// // 没有显式指定 as/embed 时，遍历结构体成员生成字段。
 	if fields == nil {
 		memberFields, err := membersToFields(b.locator, alias, b.localPackage, b.omitFieldTypes)
 		if err != nil {
@@ -476,7 +476,7 @@ var (
 // 注意 int/uint 统一映射到 64 位，float64/float 映射 double、float32 映射 float，
 // 这是 k8s proto 序列化格式的既定兼容性要求。
 func isFundamentalProtoType(t *types.Type) (*types.Type, bool) {
-	// TODO: when we enable proto3, also include other fundamental types in the google.protobuf package
+	// // TODO: 启用 proto3 时，还应纳入 google.protobuf 包里的其他基础类型。
 	// switch {
 	// case t.Kind == types.Struct && t.Name == types.Name{Package: "time", Name: "Time"}:
 	// 	return &types.Type{
@@ -504,7 +504,7 @@ func isFundamentalProtoType(t *types.Type) (*types.Type, bool) {
 		case "uintptr":
 			return &types.Type{Name: types.Name{Name: "uint64"}, Kind: types.Protobuf}, true
 		}
-		// TODO: complex?
+		// // TODO: 复数类型？
 	}
 	return t, false
 }
@@ -528,8 +528,8 @@ func memberTypeToProtobufField(locator ProtobufLocator, field *protoField, t *ty
 		if err := memberTypeToProtobufField(locator, keyField, t.Key); err != nil {
 			return err
 		}
-		// All other protobuf types have kind types.Protobuf, so setting types.Map
-		// here would be very misleading.
+		// // 其他 protobuf 类型的 Kind 都是 Protobuf；这里不能设成 Map，
+		// // 否则会误导后续处理。
 		field.Type = &types.Type{
 			Kind: types.Protobuf,
 			Key:  keyField.Type,
@@ -559,7 +559,7 @@ func memberTypeToProtobufField(locator ProtobufLocator, field *protoField, t *ty
 				log.Printf("failed to alias: %s %s: err %v", t.Name, t.Underlying.Name, err)
 				return err
 			}
-			// If this is not an alias to a slice, cast to the alias
+			// // 非切片别名需要用 casttype 保留别名语义
 			if !field.Repeated {
 				if field.Extras == nil {
 					field.Extras = make(map[string]string)
@@ -607,13 +607,13 @@ func protobufTagToField(tag string, field *protoField, m types.Member, t *types.
 	}
 	field.Tag = protoTag
 
-	// In general there is doesn't make sense to parse the protobuf tags to get the type,
-	// as all auto-generated once will have wire type "bytes", "varint" or "fixed64".
-	// However, sometimes we explicitly set them to have a custom serialization, e.g.:
+	// // 通常无需从 protobuf 标签解析类型：自动生成的标签 wire type 只会是
+	// // bytes/varint/fixed64。但有时显式指定类型以获得自定义序列化，例如
+	// 有时显式指定类型以获得自定义序列化，例如：
 	//   type Time struct {
 	//     time.Time `protobuf:"Timestamp,1,req,name=time"`
 	//   }
-	// to force the generator to use a given type (that we manually wrote serialization &
+	// // 强制生成器使用我们手写了序列化/反序列化方法的类型。
 	// deserialization methods for).
 	switch parts[0] {
 	case "varint", "fixed32", "fixed64", "bytes", "group":
@@ -671,7 +671,7 @@ func membersToFields(locator ProtobufLocator, t *types.Type, localPackage types.
 
 	for _, m := range t.Members {
 		if namer.IsPrivateGoName(m.Name) {
-			// skip private fields
+			// // 跳过私有字段
 			continue
 		}
 		if _, ok := omitFieldTypes[types.Name{Name: m.Type.Name.Name, Package: m.Type.Name.Package}]; ok {
@@ -694,7 +694,7 @@ func membersToFields(locator ProtobufLocator, t *types.Type, localPackage types.
 			return nil, err
 		}
 
-		// extract information from JSON field tag
+		// // 从 JSON 标签补充字段名等信息
 		if tag, _ := tags.Lookup("json"); len(tag) > 0 {
 			parts := strings.Split(tag, ",")
 			if len(field.Name) == 0 && len(parts[0]) != 0 {
@@ -715,7 +715,7 @@ func membersToFields(locator ProtobufLocator, t *types.Type, localPackage types.
 		}
 
 		if field.Map && field.Repeated {
-			// maps cannot be repeated
+			// // map 不能是 repeated
 			field.Repeated = false
 			field.Nullable = true
 		}
@@ -733,10 +733,10 @@ func membersToFields(locator ProtobufLocator, t *types.Type, localPackage types.
 		fields = append(fields, field)
 	}
 
-	// assign tags
+	// // 分配字段号
 	highest := 0
 	byTag := make(map[int]*protoField)
-	// fields are in Go struct order, which we preserve
+	// // 保留 Go 结构体中的字段顺序
 	for i := range fields {
 		field := &fields[i]
 		tag := field.Tag
@@ -750,7 +750,7 @@ func membersToFields(locator ProtobufLocator, t *types.Type, localPackage types.
 			highest = tag
 		}
 	}
-	// starting from the highest observed tag, assign new field tags
+	// // 新增字段从当前最大编号之后分配，避免破坏已有编号
 	for i := range fields {
 		field := &fields[i]
 		if field.Tag != -1 {
@@ -784,7 +784,7 @@ func genComment(out io.Writer, lines []string, indent string) {
 
 // formatProtoFile 目前原样返回；protoc 的格式化器不可用时仍需保持接口一致。
 func formatProtoFile(source []byte) ([]byte, error) {
-	// TODO; Is there any protobuf formatter?
+	// // TODO: 有没有可用的 protobuf 格式化器？
 	return source, nil
 }
 

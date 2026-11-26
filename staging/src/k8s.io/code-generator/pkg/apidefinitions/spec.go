@@ -21,58 +21,58 @@ package apidefinitions
 
 import "k8s.io/apimachinery/pkg/util/sets"
 
-// Spec describes one generator's tag protocol. Required for backward compatibility
+// Spec 描述单个生成器的标签协议。为兼容既有标签行为，此结构是必需的。
 // with existing tag behavior.
 type Spec struct {
-	// ActivationTag declare the primary enablement tag for this generator
+	// ActivationTag 声明本生成器的主启用标签
 	ActivationTag string
 
-	// ValueMode declares how the ActivationTag's value is interpreted
+	// ValueMode 声明如何解释 ActivationTag 的值
 	ValueMode ValueMode
 
-	// GroupActivationTag is a package level enablement tag
-	// whose presence activates this generator.
-	// ActivationTag set to "false" always overrides this.
+	// GroupActivationTag 是包级启用标签，
+	// 出现即激活本生成器。
+	// ActivationTag 设为 "false" 时始终覆盖此设置。
 	GroupActivationTag string
 
-	// ScanTypes indicates that, when ActivationTag is absent, the
-	// generator scans the package's types for type-level
+	// ScanTypes 表示当 ActivationTag 缺失时，
+	// 生成器会扫描包内类型上的
 	// +<ActivationTag>=true tags. ActivationTag set to "false"
-	// suppresses the scan and skips the package.
+	// 会跳过扫描并忽略该包。
 	ScanTypes bool
 
-	// DefaultEnabled indicates that the generator runs on every package
-	// it is asked to process unless ActivationTag is set to "false".
+	// DefaultEnabled 表示生成器默认处理所有输入包，
+	// 除非 ActivationTag 设为 "false"。
 	DefaultEnabled bool
 
-	// InputTag declares the tag that declares a list of input packages for this generator
+	// InputTag 声明为本生成器提供输入包列表的标签
 	InputTag string
 
-	// AuxTags declares other tags owned by this generator
+	// AuxTags 声明本生成器拥有的其他标签
 	AuxTags []string
 }
 
-// ValueMode describes how an ActivationTag's value is interpreted.
+// ValueMode 描述如何解释 ActivationTag 的值。
 type ValueMode int
 
 const (
-	// Boolean identifies "true"/"false" values that explicitly turn on or
+	// Boolean 表示显式开启/关闭生成器的 "true"/"false" 值。
 	// off a generator.
 	Boolean ValueMode = iota
 
-	// Package identifies "package"/"false" tags that explicitly turn on or
-	// off a generator for an entire package. Such tags typically can
-	// be turned on individually for types within a package unless the value
-	// is "false".
+	// Package 表示显式开启/关闭整包生成的 "package"/"false" 标签。
+	// 这类标签通常还可
+	// 按类型单独开启，除非取值为
+	// "false"。
 	Package
 
-	// TypeFilterList: values are type-name patterns (e.g. "TypeMeta" for
-	// defaulter-gen and validation-gen). Read via Activation.TypeFilters.
+	// TypeFilterList：取值为类型名模式（如 defaulter-gen
+	// 和 validation-gen 的 "TypeMeta"），经 Activation.TypeFilters 读取。
 	TypeFilterList
 
-	// ConversionPeerList is conversion-gen's bespoke tag protocol.
-	// Values are either peer packages, or "false" which sets
-	// the generator to explicit-only mode.
+	// ConversionPeerList 是 conversion-gen 专用的标签协议。
+	// 取值要么是 peer 包，要么是 "false"，表示
+	// 生成器进入仅显式模式。
 	ConversionPeerList
 )
 
@@ -84,7 +84,7 @@ var allKnownSpecs = []Spec{
 	Client, ApplyConfiguration, Informer, Lister,
 }
 
-// Codify the behavior of the activation tags for API definition generators.
+// 固化 API 定义生成器中激活标签的行为。
 var (
 	Conversion = Spec{
 		ActivationTag: "k8s:conversion-gen",

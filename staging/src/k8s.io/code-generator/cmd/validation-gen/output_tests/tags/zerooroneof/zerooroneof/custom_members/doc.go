@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 覆盖 zeroOrOneOfMember(memberName:...)：自定义错误中引用的成员名，
 // 应使用标签指定的名字而非 Go 字段名；非 union 字段不参与约束。
@@ -27,7 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Non-discriminated zero-or-one-of union with custom member names
+// 无判别式、自定义成员名的零或一联合体
 type Struct struct {
 	TypeMeta int
 

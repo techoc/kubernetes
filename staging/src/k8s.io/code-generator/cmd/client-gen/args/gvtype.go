@@ -112,7 +112,7 @@ func parseGroupVersionType(gvtString string) (gvString string, typeStr string, e
 	length := len(subs)
 	switch length {
 	case 2:
-		// gvtString of the form group/type, e.g. api/Service,extensions/ReplicaSet
+		// // group/type 形式（如 api/Service）表示未版本化类型，version 留空
 		return subs[0] + "/", subs[1], nil
 	case 3:
 		return strings.Join(subs[:length-1], "/"), subs[length-1], nil

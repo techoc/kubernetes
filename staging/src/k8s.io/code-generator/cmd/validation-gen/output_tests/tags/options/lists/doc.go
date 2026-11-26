@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:ifEnabled/+k8s:ifDisabled 包裹列表相关标签：
 // 开关打开时 listType/listMapKey/eachVal 生效，关闭时对应的校验与元数据都不应生成。

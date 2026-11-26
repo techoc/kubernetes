@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 验证同一结构体中的多个无 discriminator zero-or-one-of union：
 // 通过 union 参数把成员分组，各组独立校验。
@@ -27,7 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Two non-discriminated zero-or-one-of unions in the same struct
+// 同一结构体中的两个无判别式零或一联合体
 // Struct 中 union1 与 union2 各自最多只能有一个成员被指定。
 type Struct struct {
 	TypeMeta int

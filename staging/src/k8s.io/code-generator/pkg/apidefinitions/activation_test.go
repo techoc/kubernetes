@@ -24,7 +24,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// TestIdentify code generator identification of API defining packages.
+// TestIdentify 验证代码生成器对 API 定义包的识别。
 func TestIdentify(t *testing.T) {
 	cases := []struct {
 		name               string

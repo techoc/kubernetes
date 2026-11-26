@@ -44,7 +44,7 @@ func TestK8sUUID(t *testing.T) {
 		field.Invalid(field.NewPath("uuidPtrField"), nil, "").WithOrigin("format=k8s-uuid"),
 		field.Invalid(field.NewPath("uuidTypedefField"), nil, "").WithOrigin("format=k8s-uuid"),
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 
 	invalidStruct = &MyType{
@@ -57,6 +57,6 @@ func TestK8sUUID(t *testing.T) {
 		field.Invalid(field.NewPath("uuidPtrField"), nil, "").WithOrigin("format=k8s-uuid"),
 		field.Invalid(field.NewPath("uuidTypedefField"), nil, "").WithOrigin("format=k8s-uuid"),
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 }

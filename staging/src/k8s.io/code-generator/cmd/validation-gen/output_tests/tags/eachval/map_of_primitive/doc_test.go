@@ -27,7 +27,7 @@ func Test(t *testing.T) {
 
 	// 零值 map 没有任何元素，eachVal 不应上报错误。
 	st.Value(&Struct{
-		// All zero values.
+		// 全部零值。
 	}).ExpectValid()
 
 	// 每个 key 对应一条错误，路径带 [key] 后缀，校验信息来自 eachVal 标签。

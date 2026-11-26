@@ -25,15 +25,15 @@ import (
 	struct fields in go AST:
 
      type Struct struct {
-		// fields with a direct field Name as <Ident>
+		// // 有直接字段名（Ident）的字段：
         A X  // regular fields
         B *X // pointer fields
         C    // embedded type field
 
-        // qualified embedded type fields use an <SelExpr> in the AST
+        // // 带包名的内嵌字段在 AST 中是 SelectorExpr
         v1.TypeMeta // X=v1, Sel=TypeMeta
 
-        // fields without a direct name, but
+        // // 没有直接名字、在 AST 中是 StarExpr 的字段：
         // a <StarExpr> in the go-AST
         *D   // type field embedded as pointer
         *v1.ListMeta   // qualified type field embedded as pointer
@@ -50,7 +50,7 @@ func TestProtoParser(t *testing.T) {
 		err  bool
 	}{
 		// 合法结构体字段表达式：普通字段
-		// valid struct field expressions
+		// // 合法结构体字段表达式：
 		{
 			expr: ident,
 			err:  false,
@@ -89,7 +89,7 @@ func TestProtoParser(t *testing.T) {
 		},
 
 		// 其他表达式应报错
-		// something else should provide an error
+		// // 其他表达式应报错：
 		{
 			expr: &ast.KeyValueExpr{
 				Key:   ident,

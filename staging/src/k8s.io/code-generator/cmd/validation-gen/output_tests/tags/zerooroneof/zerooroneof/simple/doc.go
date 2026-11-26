@@ -26,7 +26,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Non-discriminated zero-or-one-of union
+// 无判别式的零或一联合体
 type Struct struct {
 	TypeMeta int
 

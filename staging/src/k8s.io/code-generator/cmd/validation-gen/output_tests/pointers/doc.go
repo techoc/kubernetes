@@ -43,14 +43,14 @@ type T1 struct {
 	// +k8s:validateFalse="field T1.PT2"
 	PT2 *T2 `json:"pt2"`
 
-	// Duplicate types with no validation.
+	// 重复类型，无校验。
 	AnotherPS *string  `json:"anotherps"`
 	AnotherPI *int     `json:"anotherpi"`
 	AnotherPB *bool    `json:"anotherpb"`
 	AnotherPF *float64 `json:"anotherpf"`
 }
 
-// Note: This has validations and is linked into the type-graph of T1.
+// 注意：此类型有校验，且被 T1 的类型图引用。
 type T2 struct {
 	// +k8s:validateFalse="field T2.PS"
 	PS *string `json:"ps"`

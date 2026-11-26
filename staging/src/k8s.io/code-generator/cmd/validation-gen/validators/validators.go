@@ -26,192 +26,192 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// TagValidator describes a single validation tag and how to use it. To be
-// findable by validation-gen, a TagValidator must be registered - see
-// RegisterTagValidator.
+// TagValidator 描述单个校验标签及其用法。要被
+// validation-gen 发现，必须注册 TagValidator——见
+// RegisterTagValidator。
 //
-// TagValidators should not depend on other TagValidators having been run
-// already because users might specify tags in the any order.
+// TagValidators 不应依赖其他 TagValidator 已执行
+// 因为用户可以按任意顺序写标签。
 //
-// No other guarantees are made about the order of execution of TagValidators.
-// Instead of relying on tag ordering, TagValidators can
-// accumulate information internally and use a DeferredGen to finish the work.
+// 不保证 TagValidators 的执行顺序。
+// TagValidators 不应依赖标签顺序，而应
+// 在内部累积信息，再用 DeferredGen 完成后续工作。
 //
 // 每个校验标签对应一个实现；生成器扫描标签时按注册表分派。
 type TagValidator interface {
-	// Init initializes the implementation.  This will be called exactly once.
+	// Init 初始化实现，且只调用一次。
 	Init(cfg Config)
 
-	// TagName returns the full tag name (without the "marker" prefix) for this
-	// tag.
+	// TagName 返回该标签的完整名称（不含 "marker" 前缀）。
+	// 。
 	TagName() string
 
-	// ValidScopes returns the set of scopes where this tag may be used.
+	// ValidScopes 返回该标签可用的作用域集合。
 	ValidScopes() sets.Set[Scope]
 
-	// GetValidations returns any validations described by this tag.
+	// GetValidations 返回该标签描述的校验逻辑。
 	//
 	// 返回值可以是函数调用、变量、注释或 Deferred 回调；生成器再决定
 	// 哪些真正落到代码里。
 	GetValidations(context Context, tag codetags.Tag) (Validations, error)
 
-	// Docs returns user-facing documentation for this tag.
+	// Docs 返回面向用户的标签文档。
 	Docs() TagDoc
 }
 
-// Config carries optional configuration information for use by validators.
+// Config 携带供校验器使用的可选配置信息。
 type Config struct {
-	// GengoContext provides gengo's generator Context.  This allows validators
-	// to look up all sorts of other information.
+	// GengoContext 提供 gengo 的生成器 Context，使校验器能
+	// 查询各种其他信息。
 	GengoContext *generator.Context
 
-	// TagValidator provides a way to compose validations.
+	// TagValidator 提供组合校验的方式。
 	//
-	// For example, it is possible to define a validation such as
-	// "+myValidator=+format=IP" by using the registry to extract the
-	// validation for the embedded "+format=IP" and use those to
-	// create the final Validations returned by the "+myValidator" tag.
+	// 例如，可利用注册表取出内嵌 "+format=IP" 的校验，
+	// 从而定义形如 "+myValidator=+format=IP" 的校验，
+	// 并用它构造
+	// "+myValidator" 标签最终返回的 Validations。
 	//
-	// This field MUST NOT be used during init, since other validators may not
-	// be initialized yet.
+	// 该字段绝不能在 Init 阶段使用，因为届时其他校验器可能尚未
+	// 初始化。
 	TagValidator TagValidationExtractor
 
-	// InputToCanonicalPkg maps each input (API types) package to its canonical
-	// generated validation package (the one cross-package references resolve to).
-	// This is the same mapping the generator uses to locate generated
-	// Validate_<Type> functions, and lets validators reference hand-written
-	// functions that live alongside the generated code (e.g. +k8s:customValidation).
+	// InputToCanonicalPkg 把每个输入（API 类型）包映射到其规范的
+	// 生成校验包（跨包引用指向的那个包）。
+	// 这与生成器定位生成代码时使用的映射一致：
+	// Validate_<Type> 函数，使校验器能引用与生成代码同处的
+	// 手写函数（如 +k8s:customValidation）。
 	InputToCanonicalPkg map[string]string
 }
 
-// Scope describes where a validation (or potential validation) is located.
+// Scope 描述校验（或潜在校验）所在的位置。
 //
 // scope 决定标签允许出现的位置，也影响生成代码中路径与循环的构造方式。
 type Scope string
 
-// Note: All of these values should be strings which can be used in an error
-// message such as "may not be used in %s".
+// 注意：这些值都是字符串，可直接用于
+// "may not be used in %s" 之类的错误消息。
 const (
-	// ScopeType indicates a validation on a type definition, which applies to
-	// all instances of that type.
+	// ScopeType 表示作用于类型定义的校验，适用于
+	// 该类型的所有实例。
 	ScopeType Scope = "type definitions"
 
-	// ScopeField indicates a validation on a particular struct field, which
-	// applies only to that field of that struct.
+	// ScopeField 表示作用于某个结构体字段的校验，
+	// 只适用于该结构体的该字段。
 	ScopeField Scope = "struct fields"
 
-	// ScopeListVal indicates a validation which applies to all elements of a
-	// list field or type.
+	// ScopeListVal 表示作用于列表所有元素的校验。
+	// 列表字段或类型。
 	ScopeListVal Scope = "list values"
 
-	// ScopeMapKey indicates a validation which applies to all keys of a map
-	// field or type.
+	// ScopeMapKey 表示作用于 map 所有键的校验。
+	// 字段或类型。
 	ScopeMapKey Scope = "map keys"
 
-	// ScopeMapVal indicates a validation which applies to all values of a map
-	// field or type.
+	// ScopeMapVal 表示作用于 map 所有值的校验。
+	// 字段或类型。
 	ScopeMapVal Scope = "map values"
 
-	// ScopeConst indicates a validation which applies to constant values only.
+	// ScopeConst 表示只作用于常量值的校验。
 	ScopeConst Scope = "constant values"
 
-	// TODO: It's not clear if we need to distinguish (e.g.) list values of
-	// fields from list values of typedefs.  We could make {type,field} be
-	// orthogonal to {scalar, list, list-value, map, map-key, map-value} (and
-	// maybe even pointers?), but that seems like extra work that is not needed
-	// for now.
+	// TODO: 尚不清楚是否需要区分字段的列表值
+	// 与 typedef 的列表值。可以让 {type,field} 与
+	// {scalar, list, list-value, map, map-key, map-value} 正交（甚至
+	// 包括指针？），但这似乎是没必要的工作量，
+	// 暂时如此。
 )
 
-// Context describes where a tag was used, so that the scope can be checked
-// and so validators can handle different cases if they need.
+// Context 描述标签的使用位置，以便校验作用域，
+// 并让校验器按需区分不同情形。
 //
 // 同一份类型在不同位置使用时 Context 不同（Path/ParentPath 不同），
 // 校验器据此区分“类型级”与“字段级”语义。
 type Context struct {
-	// Scope is where the validation is being considered.
+	// Scope 表示当前在何处考虑该校验。
 	Scope Scope
 
-	// Type provides details about the type being validated.  When Scope is
-	// ScopeType, this is the newly defined type.  When Scope is ScopeField,
-	// this is the field's type (which may be a pointer, an alias, or both).
-	// When Scope indicates a list-value, map-key, or map-value, this is the
-	// type of that key or value (which, again, may be a pointer, and alias, or
-	// both). When Scope is ScopeConst this is the constant's type.
+	// Type 描述被校验的类型。Scope 为
+	// ScopeType 时是新定义的类型；为 ScopeField 时
+	// 是字段类型（可能是指针、别名或两者）。
+	// Scope 为 list-value/map-key/map-value 时是
+	// 该键或值的类型（同样可能是指针、别名或两者）。
+	// Scope 为 ScopeConst 时是常量的类型。
 	Type *types.Type
 
-	// Path provides a path to the type or field being validated. This is
-	// useful for identifying an exact context, e.g. to track information
-	// between related tags. When Scope is ScopeType, this is the Go package
-	// path and type name (e.g. "k8s.io/api/core/v1.Pod"). When Scope is
-	// ScopeField, this is the field path (e.g. "spec.containers[*].image").
-	// When Scope indicates a list-value, map-key, or map-value, this is the
-	// type or field path, as described above, with a suffix indicating
-	// that it refers to the keys or values. For ScopeConst, this will be nil.
+	// Path 是被校验类型或字段的路径，
+	// 用于精确定位上下文，例如在相关标签之间传递信息。
+	// Scope 为 ScopeType 时是 Go 包路径
+	// 与类型名（如 "k8s.io/api/core/v1.Pod"）；为 ScopeField 时
+	// 是字段路径（如 "spec.containers[*].image"）。
+	// Scope 为 list-value/map-key/map-value 时是
+	// 上述类型或字段路径加上后缀，表明
+	// 指向键还是值。ScopeConst 时为 nil。
 	Path *field.Path
 
-	// Member provides details about a field within a struct when Scope is
-	// ScopeField.  For all other values of Scope, this will be nil.
+	// Scope 为 ScopeField 时，Member 描述结构体内的字段；
+	// 其他 Scope 下为 nil。
 	Member *types.Member
 
-	// ListSelector provides a list of key-value pairs that represent criteria
-	// for selecting one or more items from a list.  When Scope is
-	// ScopeListVal, this will be non-nil.  An empty selector means that
-	// all items in the list should be selected.  For all other values of
+	// ListSelector 是一组键值对，表示从列表中
+	// 选择元素的条件。Scope 为 ScopeListVal 时非 nil；
+	// 空选择器表示
+	// 选中列表内所有元素；其他 Scope 下为 nil。
 	// Scope, this will be nil.
 	ListSelector []ListSelectorTerm
 
-	// ParentPath provides a path to the parent type or field of the object
-	// being validated, when applicable. enabling unique identification of
-	// validation contexts for the same type in different locations.  When
-	// Scope is ScopeField, this is the path to the containing struct type or
-	// field (depending on where the validation tag was sepcified).  When Scope
-	// indicates a list-value, map-key, or map-value, this is the path to the
-	// list or map type or field (depending on where the validation tag was
+	// ParentPath 是被校验对象的父类型或父字段路径（适用时），
+	// 用于唯一标识同一类型在不同位置的校验上下文。
+	// Scope 为 ScopeField 时是外层结构体类型或字段路径
+	// （取决于标签写在何处）；
+	// Scope 为 list-value/map-key/map-value 时是
+	// 外层列表或 map 的类型/字段路径；
+	// Scope 为 ScopeType 时为 nil。
 	// specified). When Scope is ScopeType, this is nil.
 	ParentPath *field.Path
 
-	// ParentType provides the type of the parent of the object being validated.
-	// When Scope is ScopeField, this is the containing struct type. When Scope
-	// indicates a list-value, map-key, or map-value, this is the list or map type.
-	// When the scope is ScopeType, this is nil.
+	// ParentType 是被校验对象的父类型。
+	// Scope 为 ScopeField 时是外层结构体类型；为
+	// list-value/map-key/map-value 时是列表或 map 类型；
+	// Scope 为 ScopeType 时为 nil。
 	ParentType *types.Type
 
-	// Constants provides access to all constants of the type being
-	// validated.  Only set when Scope is ScopeType.
+	// Constants 提供被校验类型的全部常量，
+	// 仅 Scope 为 ScopeType 时设置。
 	Constants []*Constant
 
-	// StabilityLevel indicates the stability on the corresponding validation.
+	// StabilityLevel 表示相应校验的稳定性级别。
 	StabilityLevel ValidationStabilityLevel
 }
 
-// Constant represents a constant value.
+// Constant 表示一个常量。
 type Constant struct {
 	Constant *types.Type
 	Tags     []codetags.Tag
 }
 
-// ListSelectorTerm represents a field name and value pair.
+// ListSelectorTerm 表示字段名与值的配对。
 //
 // 用于 listMap 的 item 选择：Field 是 JSON 名，Value 是待匹配的原生值。
 type ListSelectorTerm struct {
-	// Field is the JSON name of the field to match.
+	// Field 是待匹配字段的 JSON 名称。
 	Field string
-	// Value is the value to match.  This must be a primitive type which can
-	// be used as list-map keys: string, int, or bool.
+	// Value 是待匹配的值，必须是能作为 list-map 键的
+	// 基本类型：string、int 或 bool。
 	Value any
 }
 
-// TagStabilityLevel indicates the stability of a validation tag.
+// TagStabilityLevel 表示校验标签的稳定性。
 type TagStabilityLevel string
 
 const (
-	// TagStabilityLevelAlpha indicates that a tag's semantics may change in the future.
+	// TagStabilityLevelAlpha 表示标签语义今后可能变化。
 	TagStabilityLevelAlpha TagStabilityLevel = "Alpha"
-	// TagStabilityLevelBeta indicates that a tag's semantics will remain unchanged for the
-	// foreseeable future. This is used for soaking tags before qualifying to stable.
+	// TagStabilityLevelBeta 表示标签语义在可预见的将来
+	// 保持不变；用于标签转正为 stable 前的试运行。
 	TagStabilityLevelBeta TagStabilityLevel = "Beta"
-	// TagStabilityLevelStable indicates that a tag's semantics will remain unchanged for the
-	// foreseeable future.
+	// TagStabilityLevelStable 表示标签语义在可预见的将来
+	// 保持不变。
 	TagStabilityLevelStable TagStabilityLevel = "Stable"
 )
 
@@ -222,18 +222,18 @@ var stabilityOrder = map[TagStabilityLevel]int{
 	TagStabilityLevelStable: 2,
 }
 
-// Validation stability level denotes the stability of a validation.
+// ValidationStabilityLevel 表示校验的稳定性级别。
 type ValidationStabilityLevel string
 
 const (
-	// Alpha denotes the declarative validations should be run with the handwritten validation. But the handwritten validations are the authoritative.
+	// Alpha 表示声明式校验与手写校验同时运行，但以手写校验为准。
 	ValidationStabilityLevelAlpha ValidationStabilityLevel = "Alpha"
-	// Beta denotes the declarative validations should be run with the handwritten validation. Declarative validations are authoritative.
+	// Beta 表示声明式校验与手写校验同时运行，但以声明式校验为准。
 	ValidationStabilityLevelBeta ValidationStabilityLevel = "Beta"
 )
 
-// Compare returns an integer comparing two stability levels, or an error if either
-// stability level is unknown.
+// Compare 比较两个稳定性级别并返回整数；任一级
+// 别未知时返回错误。
 func (s TagStabilityLevel) Compare(other TagStabilityLevel) (int, error) {
 	sOrder, okS := stabilityOrder[s]
 	if !okS {
@@ -246,33 +246,33 @@ func (s TagStabilityLevel) Compare(other TagStabilityLevel) (int, error) {
 	return sOrder - otherOrder, nil
 }
 
-// TagDoc describes a comment-tag and its usage.
+// TagDoc 描述注释标签及其用法。
 type TagDoc struct {
-	// Tag is the tag name, without the leading '+'.
+	// Tag 是标签名，不含开头的 '+'。
 	Tag string
-	// StabilityLevel is the stability level of the tag.
+	// StabilityLevel 是标签的稳定性级别。
 	StabilityLevel TagStabilityLevel
-	// Args lists any arguments this tag might take.
+	// Args 列出该标签可带的参数。
 	Args []TagArgDoc `json:",omitempty"`
-	// Usage is how the tag is used, including arguments.
+	// Usage 说明标签的用法，含参数。
 	Usage string
-	// Description is a short description of this tag's purpose.
+	// Description 简述该标签的用途。
 	Description string
-	// Docs is a human-oriented string explaining this tag.
+	// Docs 是面向人的标签说明。
 	Docs string
-	// Warning is an optional warning about this tag.
+	// Warning 是关于该标签的可选警告。
 	Warning string `json:",omitempty"`
-	// Scopes lists the place or places this tag may be used.
+	// Scopes 列出该标签可用的位置。
 	Scopes []Scope
-	// Payloads lists zero or more varieties of value for this tag. If this tag
-	// never has a payload, this list should be empty, but if the payload is
-	// optional, this list should include an entry for "<none>".
+	// Payloads 列出该标签允许的零个或多个取值形式。若标签
+	// 从不带 payload，此列表应为空；若 payload 可选，
+	// 则应包含 "<none>" 项。
 	Payloads []TagPayloadDoc `json:",omitempty"`
-	// PayloadsType is the type of the payloads.
+	// PayloadsType 是 payload 的类型。
 	PayloadsType codetags.ValueType `json:",omitempty"`
-	// PayloadsRequired is true if a payload is required.
+	// PayloadsRequired 为 true 表示 payload 必填。
 	PayloadsRequired bool `json:",omitempty"`
-	// AcceptsUnknownArgs is true if unknown args are accepted
+	// AcceptsUnknownArgs 为 true 表示接受未知参数
 	AcceptsUnknownArgs bool `json:",omitempty"`
 }
 
@@ -286,87 +286,87 @@ func (td TagDoc) Arg(name string) (TagArgDoc, bool) {
 	return TagArgDoc{}, false
 }
 
-// TagArgDoc describes an argument for a tag.
+// TagArgDoc 描述标签的一个参数。
 //
-// For example,
+// 例如：
 //
 //	`+tagName(arg)`
 //	`+tagName(name1: arg1, name2: arg2)`
 type TagArgDoc struct {
-	// Name of this arg. Not provided for positional args.
+	// 参数名；位置参数不提供。
 	Name string
-	// Description is a short description of this arg (e.g. `<name>`).
+	// Description 简述该参数（如 `<name>`）。
 	Description string
-	// Type is the type of the arg.
+	// Type 是参数类型。
 	Type codetags.ArgType
-	// Required is true if the argument is required.
+	// Required 为 true 表示该参数必填。
 	Required bool
-	// Default is the effective value if no value is provided.
+	// Default 是未提供参数时的默认值。
 	Default string
-	// Docs is a human-oriented string explaining this arg.
+	// Docs 是面向人的参数说明。
 	Docs string
 }
 
-// TagPayloadDoc describes a value for a tag (e.g. `+tagName=tagValue`).  Some
-// tags support multiple payloads, including <none> (e.g. `+tagName`).
+// TagPayloadDoc 描述标签的取值（如 `+tagName=tagValue`）。部分
+// 标签支持多种 payload，包括 <none>（如 `+tagName`）。
 type TagPayloadDoc struct {
-	// Description is a short description of this payload (e.g. `<number>`).
+	// Description 简述该 payload（如 `<number>`）。
 	Description string
-	// Docs is a human-oriented string explaining this payload.
+	// Docs 是面向人的 payload 说明。
 	Docs string
 }
 
-// Validations define the function calls and variables to generate to perform
-// validation.
+// Validations 定义要生成的函数调用与变量，用于执行
+// 校验。
 //
 // Validations 是校验器输出的中间表示：生成器按作用域把这些片段拼装成
 // 最终的 Go 代码，并处理 Opaque* 的短路语义。
 type Validations struct {
-	// Functions hold the function calls that should be generated to perform
-	// validation.  These functions may not be called in order - they may be
-	// sorted based on their flags and other criteria.
+	// Functions 保存需要生成的函数调用，用于执行
+	// 校验。这些调用不一定按顺序执行，可能依
+	// 据标志等条件排序。
 	//
-	// Each function's signature must be of the form:
+	// 每个函数的签名必须形如：
 	//   func(
 	//        // standard arguments
-	//        ctx context.Context
+	// ctx context.Context
 	//        op operation.Operation,
-	//        fldPath field.Path,
-	//        value, oldValue <ValueType>, // always nilable
+	// fldPath field.Path,
+	// value, oldValue <ValueType>, // 始终可为 nil
 	//        // additional arguments (optional)
 	//        Args[0] <Args[0]Type>,
 	//        Args[1] <Args[1]Type>,
 	//        ...
 	//        Args[N] <Args[N]Type>)
 	//
-	// The standard arguments are not included in the FunctionGen.Args list.
+	// 标准参数不在 FunctionGen.Args 列表中。
 	Functions []FunctionGen
 
-	// Variables hold any variables which must be generated to perform
+	// Variables 保存执行校验所需的变量。
 	// validation.  Variables are not permitted in every context.
 	Variables []VariableGen
 
-	// Comments holds comments to emit (without the leading "//").
+	// Comments 保存要输出的注释（不含开头的 "//"）。
 	Comments []string
 
-	// OpaqueType indicates that the type being validated is opaque, and that
-	// any validations defined on it should not be emitted.
+	// OpaqueType 表示被校验的类型是不透明的，
+	// 其上的校验不应生成。
 	OpaqueType bool
 
-	// OpaqueKeyType indicates that the key type of a map being validated is
+	// OpaqueKeyType 表示被校验 map 的键类型不透明，
 	// opaque, and that any validations defined on it should not be emitted.
 	OpaqueKeyType bool
 
-	// OpaqueValType indicates that the key type of a map or slice being
-	// validated is opaque, and that any validations defined on it should not
-	// be emitted.
+	// OpaqueValType 表示被校验 map 或 slice 的值类型
+	// 不透明，其上的校验不应
+	// 生成。
 	OpaqueValType bool
 
-	// Deferred holds a list of callbacks which will be executed after all other
-	// validation generation is complete. This allows validators to defer
-	// decision making until they have more information (e.g. about other
-	// validators). Deferred callbacks may return further deferred validations,
-	// which will be processed iteratively until exhaustion.
+	// Deferred 保存一组回调，在所有其他校验生成完成后执行。
+	// 这让校验器可以把决策推迟到掌握更多信息之后
+	// （例如其他校验器的情况）。
+	// 延迟回调还可返回新的延迟校验，
+	// 生成器会迭代处理直到队列耗尽。
 	Deferred []DeferredGen
 }
 
@@ -415,7 +415,7 @@ func (v *Validations) Add(o Validations) {
 	v.OpaqueValType = v.OpaqueValType || o.OpaqueValType
 }
 
-// Clone returns a copy of v with new slices for its slice fields.
+// Clone 复制 v，并为其 slice 字段重新分配底层数组。
 //
 // 深拷贝切片（元素本身是值或回调指针，无需再递归），
 // 以便包装函数安全地修改副本而不影响原始 Validations。
@@ -440,10 +440,10 @@ func (v Validations) Clone() Validations {
 	return res
 }
 
-// WrapFunctions applies the given wrap function to all functions in this Validations object
-// and recursively to all Deferred validations, passing the appropriate scope.
-// Useful for applying common transformations (e.g., conditionals, stability levels)
-// to all validations, including deferred ones.
+// WrapFunctions 对 Validations 中的所有函数应用给定的包装函数，
+// 并递归应用到所有 Deferred 校验，传入相应作用域。
+// 便于把通用变换（如条件、稳定性级别）
+// 应用到所有校验，包括延迟校验。
 func WrapFunctions(v Validations, wrapFn func(FunctionGen, DeferredScope) FunctionGen) Validations {
 	return wrapFunctionsWithScope(v, wrapFn, ThisContext)
 }
@@ -474,40 +474,40 @@ func wrapFunctionsWithScope(v Validations, wrapFn func(FunctionGen, DeferredScop
 	return result
 }
 
-// FunctionFlags define optional properties of a validator.  Most validators
-// can just use DefaultFlags.
+// FunctionFlags 定义校验器的可选属性。多数校验器
+// 直接用 DefaultFlags 即可。
 type FunctionFlags uint32
 
-// IsSet returns true if all of the wanted flags are set.
+// IsSet 在所有目标标志都置位时返回 true。
 func (ff FunctionFlags) IsSet(wanted FunctionFlags) bool {
 	return (ff & wanted) == wanted
 }
 
 const (
-	// DefaultFlags is defined for clarity.
+	// DefaultFlags 为清晰起见而定义。
 	DefaultFlags FunctionFlags = 0
 
-	// ShortCircuit indicates that further validations should be skipped if
-	// this validator fails. If there are multiple validators with this flag
-	// set, they will ALL run, and if any of them fail, any non-short-circuit
-	// validators will be skipped.  Most validators are not fatal.
+	// ShortCircuit 表示当前校验失败时跳过后续校验。
+	// 若有多个校验器都带此标志，它们都会执行；
+	// 其中任一失败都会跳过所有非 ShortCircuit
+	// 校验器。多数校验器不会致命中断。
 	ShortCircuit FunctionFlags = 1 << iota
 
-	// NonError indicates that a failure of this validator should not be
-	// accumulated as an error, but should trigger other aspects of the failure
-	// path (e.g. early return when combined with ShortCircuit).
+	// NonError 表示当前校验器失败不应
+	// 计入错误，而应触发失败路径的其他效果
+	// （如与 ShortCircuit 组合时提前返回）。
 	NonError
 )
 
-// Conditions defines what conditions must be true for a resource to be validated.
-// If any of the conditions are not true, the resource is not validated.
+// Conditions 定义资源被校验前必须满足的条件。
+// 任一条件不成立时，资源不会被校验。
 //
 // 对应 +k8s:ifEnabled / +k8s:ifDisabled：生成代码里包一层 if 判断。
 type Conditions struct {
-	// OptionEnabled specifies an option name that must be set to true for the condition to be true.
+	// OptionEnabled 指定条件成立所必须置为 true 的选项名。
 	OptionEnabled string
 
-	// OptionDisabled specifies an option name that must be set to false for the condition to be true.
+	// OptionDisabled 指定条件成立所必须置为 false 的选项名。
 	OptionDisabled string
 }
 
@@ -516,15 +516,15 @@ func (c Conditions) Empty() bool {
 	return len(c.OptionEnabled) == 0 && len(c.OptionDisabled) == 0
 }
 
-// Identifier is a name that the generator will output as an identifier.
-// Identifiers are generated using the RawNamer strategy.
+// Identifier 是生成器作为标识符输出的名字。
+// 标识符用 RawNamer 策略生成。
 type Identifier types.Name
 
-// PrivateVar is a variable name that the generator will output as a private identifier.
-// PrivateVars are generated using the PrivateNamer strategy.
+// PrivateVar 是生成器作为私有标识符输出的变量名。
+// 私有变量用 PrivateNamer 策略生成。
 type PrivateVar types.Name
 
-// Function creates a FunctionGen for a given function name and extraArgs.
+// Function 为给定函数名与额外参数创建 FunctionGen。
 func Function(tagName string, flags FunctionFlags, function types.Name, extraArgs ...any) FunctionGen {
 	return FunctionGen{
 		TagName:  tagName,
@@ -534,17 +534,17 @@ func Function(tagName string, flags FunctionFlags, function types.Name, extraArg
 	}
 }
 
-// DeferredScope indicates how long a validation should be deferred.
+// DeferredScope 表示校验应延迟到何时。
 type DeferredScope string
 
 const (
-	// ThisContext defers validation until the end of the current context (e.g. field or type).
+	// ThisContext 把校验延迟到当前上下文（字段或类型）结束。
 	ThisContext DeferredScope = "ThisContext"
-	// ParentContext defers validation until the end of the parent context (e.g. to accumulate data across fields in a struct).
+	// ParentContext 把校验延迟到父上下文结束，便于跨字段汇总数据。
 	ParentContext DeferredScope = "ParentContext"
 )
 
-// Deferred creates a DeferredGen for a given callback.
+// Deferred 为给定回调创建 DeferredGen。
 func Deferred(scope DeferredScope, callback func() (Validations, error)) DeferredGen {
 	return DeferredGen{
 		Scope:    scope,
@@ -552,119 +552,119 @@ func Deferred(scope DeferredScope, callback func() (Validations, error)) Deferre
 	}
 }
 
-// DeferredGen describes a validation generation task that is deferred until
-// later.
+// DeferredGen 描述延迟到
+// 稍后再做。
 type DeferredGen struct {
 	Scope    DeferredScope
 	Callback func() (Validations, error)
 }
 
-// Emission describes the field.Error a runtime validator produces on failure.
-// Must match what the runtime function emits via .WithOrigin(...).
+// Emission 描述运行时校验失败时产生的 field.Error。
+// 必须与运行时函数通过 .WithOrigin(...) 报出的值一致。
 type Emission struct {
 	Type   field.ErrorType
 	Origin string
-	// PathFragment, when non-empty, is the static field-path component the
-	// runtime validator appends to fldPath before emitting the error (e.g.
-	// "[*]" for Unique, which reports field.Duplicate(fldPath.Index(i), ...)
-	// at the offending element). Used by tools that walk the FunctionGen
-	// tree to reconstruct the path the runtime will emit at.
+	// PathFragment 非空时是由运行时校验器追加到 fldPath 的
+	// 静态字段路径片段，报错前追加（如
+	// "[*]"，Unique 用它报 field.Duplicate(fldPath.Index(i), ...)
+	// 定位到出错元素）。工具遍历 FunctionGen 树重建字段路径时
+	// 树以重建运行时会报出的路径。
 	PathFragment string
 }
 
-// FunctionGen describes a function call that should be generated.
+// FunctionGen 描述需要生成的函数调用。
 type FunctionGen struct {
-	// TagName is the tag which triggered this function.
+	// TagName 是触发该函数的标签。
 	TagName string
 
-	// Cohort indicates a set of related functions which are processed
-	// together.
+	// Cohort 表示一组相关函数，它们在
+	// 一并处理。
 	Cohort string
 
-	// Flags holds the options for this validator function.
+	// Flags 保存该校验函数的选项。
 	Flags FunctionFlags
 
-	// Function is the name of the function to call.
+	// Function 是要调用的函数名。
 	Function types.Name
 
-	// Args holds arguments to pass to the function, and may conatin:
-	// - data literals comprised of maps, slices, strings, ints, floats, and bools
-	// - types.Type (to reference any type in the universe)
-	// - types.Member (to reference members of the current value)
-	// - types.Identifier (to reference any identifier in the universe)
-	// - validators.WrapperFunction (to call another validation function)
-	// - validators.Literal (to pass a literal value)
-	// - validators.FunctionLiteral (to pass a function literal)
-	// - validators.PrivateVar (to reference a variable)
+	// Args 保存传给函数的参数，可包含：
+	// - map、slice、string、int、float、bool 组成的数据字面量
+	// - types.Type（引用 universe 中的任意类型）
+	// - types.Member（引用当前值的成员）
+	// - types.Identifier（引用 universe 中的任意标识符）
+	// - validators.WrapperFunction（调用另一个校验函数）
+	// - validators.Literal（传字面量）
+	// - validators.FunctionLiteral（传函数字面量）
+	// - validators.PrivateVar（引用变量）
 	//
-	// See toGolangSourceDataLiteral for details.
+	// 细节见 toGolangSourceDataLiteral。
 	Args []any
 
-	// TypeArgs assigns types to the type parameters of the function, for
-	// generic function calls which require explicit type arguments.
+	// TypeArgs 为函数的类型参数赋值，用于
+	// 需要显式类型实参的泛型函数调用。
 	TypeArgs []types.Name
 
-	// Conditions holds any conditions that must true for a field to be
+	// Conditions 保存字段被校验前必须成立的条件。
 	// validated by this function.
 	Conditions Conditions
 
-	// Comments holds optional comments that should be added to the generated
-	// code (without the leading "//").
+	// Comments 保存要加到生成代码中的可选注释，
+	// 代码（不含开头的 "//"）。
 	Comments []string
 
-	// StabilityLevel indicates the stability level of the corresponding validation.
+	// StabilityLevel 表示相应校验的稳定性级别。
 	StabilityLevel ValidationStabilityLevel
 
-	// StabilityLevelSelfManaged indicates that the function already has stability levels
-	// embedded or handled, and should not be wrapped by levelTagValidator.
+	// StabilityLevelSelfManaged 表示函数自身已处理稳定性级别，
+	// 不应再被 levelTagValidator 包装。
 	StabilityLevelSelfManaged bool
 
-	// Emits, when non-empty, declares the field.Errors the runtime validator
-	// produces on failure. Set via WithEmits; empty for wrappers and
-	// non-emitting validators. A single function call may emit errors of
-	// different types and/or at different path fragments (e.g. ValSliceUpdate
-	// with NoAddItem and NoRemoveItem), so this is a slice.
+	// Emits 非空时声明运行时校验器在失败时
+	// 产生的 field.Error。由 WithEmits 设置；包装器与非产出
+	// 校验器为空。一次调用可能产生类型或路径片段不同的
+	// 错误（如带 NoAddItem 和 NoRemoveItem 的 ValSliceUpdate），
+	// 所以这里是切片。
 	Emits []Emission
 }
 
-// WithTypeArgs returns a derived FunctionGen with type arguments.
+// WithTypeArgs 返回带类型实参的派生 FunctionGen。
 func (fg FunctionGen) WithTypeArgs(typeArgs ...types.Name) FunctionGen {
 	fg.TypeArgs = typeArgs
 	return fg
 }
 
-// WithConditions returns a derived FunctionGen with conditions.
+// WithConditions 返回带条件的派生 FunctionGen。
 func (fg FunctionGen) WithConditions(conditions Conditions) FunctionGen {
 	fg.Conditions = conditions
 	return fg
 }
 
-// WithComments returns a new FunctionGen with a comment.
+// WithComments 返回带注释的新 FunctionGen。
 func (fg FunctionGen) WithComments(comments ...string) FunctionGen {
 	fg.Comments = append(fg.Comments, comments...)
 	return fg
 }
 
-// WithComment returns a new FunctionGen with a comment.
+// WithComment 返回带注释的新 FunctionGen。
 func (fg FunctionGen) WithComment(comment string) FunctionGen {
 	return fg.WithComments(comment)
 }
 
-// WithStabilityLevel returns a new FunctionGen with the given stability level.
+// WithStabilityLevel 返回指定稳定性级别的 FunctionGen。
 func (fg FunctionGen) WithStabilityLevel(level ValidationStabilityLevel) FunctionGen {
 	fg.StabilityLevel = level
 	return fg
 }
 
-// WithEmits returns a new FunctionGen that declares the field.Errors the
-// runtime validator produces on failure. A function may emit more than one
-// distinct (type, path) tuple — pass each as a separate Emission.
+// WithEmits 返回声明了运行时校验失败时产生的
+// field.Error 的新 FunctionGen。一个函数可能产生多个
+// 不同的 (type, path) 组合，需分别传入 Emission。
 func (fg FunctionGen) WithEmits(emits ...Emission) FunctionGen {
 	fg.Emits = emits
 	return fg
 }
 
-// Variable creates a VariableGen for a given variable name and init value.
+// Variable 为给定变量名和初始值创建 VariableGen。
 func Variable(variable PrivateVar, initializer any) VariableGen {
 	return VariableGen{
 		Variable:    variable,
@@ -674,70 +674,70 @@ func Variable(variable PrivateVar, initializer any) VariableGen {
 
 // VariableGen 描述一个需要生成到校验函数中的局部变量。
 type VariableGen struct {
-	// Variable holds the variable identifier.
+	// Variable 保存变量标识符。
 	Variable PrivateVar
 
-	// Initializer is the value to initialize the variable with.
-	// Initializer may be any function call or literal type supported by toGolangSourceDataLiteral.
+	// Initializer 是变量的初始值。
+	// Initializer 可以是 toGolangSourceDataLiteral 支持的任意函数调用或字面量类型。
 	Initializer any
 }
 
-// WrapperFunction describes a function literal which has the fingerprint of a
-// regular validation function (op, fldPath, obj, oldObj) and calls another
-// validation function with the same signature, plus extra args if needed.
+// WrapperFunction 描述具有普通校验函数签名
+// (op, fldPath, obj, oldObj) 的函数字面量，并调用另一个
+// 同签名的校验函数（必要时附带额外参数）。
 type WrapperFunction struct {
 	Function FunctionGen
 	ObjType  *types.Type
-	// PathFragment, when non-empty, is the static field-path component the
-	// wrapping FunctionGen adds to fldPath before invoking Function (e.g.
-	// "[*]" for slice/map value iteration, ".<name>" for subfield). Used
-	// by tools that walk the FunctionGen tree to reconstruct field paths.
+	// PathFragment 非空时是由运行时校验器追加到 fldPath 的
+	// 包装型 FunctionGen 在调用 Function 前追加到 fldPath 的内容（如
+	// "[*]" 表示遍历 slice/map 值，"."+名字 表示子字段）。工具遍历
+	// FunctionGen 树重建字段路径时会用到。
 	PathFragment string
 }
 
-// MultiWrapperFunction describes a function literal which has the fingerprint
-// of a regular validation function (op, fldPath, obj, oldObj) and calls
-// multiple other validation functions with the same signature.
+// MultiWrapperFunction 描述具有多个
+// 同签名校验函数指纹的函数字面量，并调用
+// 其他多个同签名的校验函数。
 type MultiWrapperFunction struct {
 	Functions []FunctionGen
 	ObjType   *types.Type
-	// PathFragment, when non-empty, is the static field-path component the
-	// wrapping FunctionGen adds to fldPath before invoking the inner Functions
-	// (e.g. ".<jsonName>" for the discriminated-mode validator). Used by tools
-	// that walk the FunctionGen tree to reconstruct field paths.
+	// PathFragment 非空时是由运行时校验器追加到 fldPath 的
+	// 包装型 FunctionGen 在调用内部函数前追加到 fldPath 的内容
+	// （判别模式校验器用 ".<jsonName>"）。工具遍历 FunctionGen 树
+	// 重建字段路径时会用到。
 	PathFragment string
 }
 
-// Literal is a literal value that, when used as an argument to a validator,
-// will be emitted without any further interpretation.  Use this with caution,
-// it will not be subject to Namers.
+// Literal 是作为校验器参数时
+// 将原样输出，不做任何解释。使用时要小心，
+// 它不会经过 Namers 处理。
 type Literal string
 
-// FunctionLiteral describes a function-literal expression that can be used as
-// an argument to a validator.  Unlike WrapperFunction, this does not
-// necessarily have the same signature as a regular validation function.
+// FunctionLiteral 描述可用作校验器参数的函数字面量。
+// 用作校验器的参数。与 WrapperFunction 不同，它不
+// 一定具有普通校验函数的签名。
 type FunctionLiteral struct {
 	Parameters []ParamResult
 	Results    []ParamResult
 	Body       string
 }
 
-// StructLiteral represents a struct literal expression that can be used as
-// an argument to a validator.
+// StructLiteral 描述可用作校验器参数的结构体字面量。
+// 作为校验器的参数。
 type StructLiteral struct {
-	// Type is the type of the struct literal to be generated.
+	// Type 是要生成的结构体字面量的类型。
 	Type types.Name
-	// TypeArgs are the generic type arguments for the struct type.
+	// TypeArgs 是结构体类型的泛型实参。
 	TypeArgs []*types.Type
 	Fields   []StructLiteralField
 }
 
-// SliceLiteral represents a slice literal expression that can be used as
-// an argument to a validator.
+// SliceLiteral 描述可用作校验器参数的 slice 字面量。
+// 作为校验器的参数。
 type SliceLiteral struct {
-	// ElementType is the type of the elements in the slice.
+	// ElementType 是 slice 元素的类型。
 	ElementType types.Name
-	// ElementTypeArgs are the generic type arguments for the element type.
+	// ElementTypeArgs 是元素类型的泛型实参。
 	ElementTypeArgs []*types.Type
 	Elements        []any
 }
@@ -748,14 +748,14 @@ type StructLiteralField struct {
 	Value any
 }
 
-// ParamResult represents a parameter or a result of a function.
+// ParamResult 表示函数的参数或返回值。
 type ParamResult struct {
 	Name string
 	Type *types.Type
 }
 
-// typeCheck checks that the argument and value types of the tag match the types
-// declared in the doc.
+// typeCheck 检查标签的参数类型与值类型是否匹配
+// 文档中的声明。
 //
 // 双向检查：文档声明但标签缺失的必填参数要报错，标签中出现但文档未声明
 // 的参数也要报错（除非显式允许未知参数）。payload 类型同样校验。

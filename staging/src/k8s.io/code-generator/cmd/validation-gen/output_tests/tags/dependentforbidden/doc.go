@@ -19,7 +19,7 @@ limitations under the License.
 
 // 这是一个测试包：验证 dependentForbidden 标签——当 trigger 字段被设置时，
 // 指定的 dependent 字段必须为空。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package dependentforbidden
 

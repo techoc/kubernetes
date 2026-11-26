@@ -28,7 +28,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectValid()
 
 	st.Value(&Struct{
@@ -65,7 +65,7 @@ func Test(t *testing.T) {
 		field.TooMany(field.NewPath("max0TypedefField"), 1, 0),
 		field.TooMany(field.NewPath("max10TypedefField"), 11, 10),
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{
 		Max0Field:         make([]OtherStruct, 1),
 		Max10Field:        make([]OtherStruct, 11),

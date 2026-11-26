@@ -34,7 +34,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NameSystems returns the name system used by the generators in this package.
+// // NameSystems 返回本包生成器使用的命名系统。
 //
 // 除 raw/public 等通用系统外，这里注册了 publicPlural、allLowercasePlural 和
 // lowercaseSingular：lister 的接口名、资源名和构造函数名分别依赖它们，
@@ -50,21 +50,21 @@ func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
 	}
 }
 
-// lowercaseSingularNamer implements Namer
+// lowercaseSingularNamer 实现 Namer 接口。
 type lowercaseSingularNamer struct{}
 
-// Name returns t's name in all lowercase.
+// Name 返回类型名的小写形式。
 func (n *lowercaseSingularNamer) Name(t *types.Type) string {
 	return strings.ToLower(t.Name.Name)
 }
 
-// DefaultNameSystem returns the default name system for ordering the types to be
+// // DefaultNameSystem 指定遍历类型时使用的默认命名系统。
 // processed by the generators in this package.
 func DefaultNameSystem() string {
 	return "public"
 }
 
-// GetTargets makes the client target definition.
+// GetTargets 构造 lister 的生成目标。
 //
 // 只为同时具备 list 和 get 动词的类型生成 lister：lister 的接口正是围绕
 // List/Get 两个操作设计的。每个 GroupVersion 输出到 <group>/<version> 子目录。
@@ -97,7 +97,7 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			klog.Fatal(err)
 		}
 		if objectMeta == nil {
-			// no types in this package had genclient
+			// // 包内没有带 genclient 的类型，不生成 lister
 			continue
 		}
 
@@ -122,9 +122,9 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		}
 		groupPackageName := strings.ToLower(gv.Group.NonEmpty())
 
-		// If there's a comment of the form "// +groupName=somegroup" or
-		// "// +groupName=somegroup.foo.bar.io", use the first field (somegroup) as the name of the
-		// group when generating.
+		// // +groupName 注释（如 +groupName=somegroup.foo.bar.io）可覆盖 group 名；
+		// // 只取点号前的第一段，与 client-gen 的目录命名保持一致。
+		// 生成时取首段作为 group 名。
 		// 只取点号前的第一段，与 client-gen 的 group 目录命名保持一致。
 		override, ok, err := apidefinitions.GroupNameForPackage(p.Comments)
 		if err != nil {
@@ -193,14 +193,14 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 	return targetList
 }
 
-// objectMetaForPackage returns the type of ObjectMeta used by package p.
+// // objectMetaForPackage 返回包 p 使用的 ObjectMeta 类型。
 //
 // 第二个返回值表示该 ObjectMeta 是否来自 internal 版本；调用方据此决定 lister
 // 引用内部类型还是版本化类型。包内有 genclient 类型却找不到 ObjectMeta 时视为错误。
 func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 	generatingForPackage := false
 	for _, t := range p.Types {
-		// filter out types which don't have genclient.
+		// // 过滤掉没有 genclient 的类型。
 		if !util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...)).GenerateClient {
 			continue
 		}
@@ -217,14 +217,14 @@ func objectMetaForPackage(p *types.Package) (*types.Type, bool, error) {
 	return nil, false, nil
 }
 
-// isInternal returns true if the tags for a member do not contain a json tag
+// // isInternal 通过成员缺少 json tag 判断其为内部版本类型。
 //
 // 内部版本类型的字段没有 json tag；这是区分 internal 与版本化 ObjectMeta 的简便判据。
 func isInternal(m types.Member) bool {
 	return !strings.Contains(m.Tags, "json")
 }
 
-// listerGenerator produces a file of listers for a given GroupVersion and
+// // listerGenerator 为给定 GroupVersion 与类型生成 lister 文件。
 // type.
 type listerGenerator struct {
 	generator.GoGenerator
@@ -257,7 +257,7 @@ func (g *listerGenerator) Imports(c *generator.Context) (imports []string) {
 }
 
 // GenerateType 生成 lister 接口、实现结构体和构造函数；命名空间资源额外生成
-// NamespaceLister。
+// 并生成 NamespaceLister。
 func (g *listerGenerator) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
@@ -331,8 +331,8 @@ type $.type|public$Lister interface {
 `
 
 // This embeds a typed resource indexer instead of aliasing, so that the struct
-// is available as a receiver for methods specific to the generated type
-// (from the corresponding expansion interface).
+// 作为生成类型专用方法的接收者，而不是取别名，
+// 这些方法来自对应的 expansion 接口。
 var typeListerStruct = `
 // $.type|private$Lister implements the $.type|public$Lister interface.
 type $.type|private$Lister struct {
@@ -373,8 +373,8 @@ type $.type|public$NamespaceLister interface {
 `
 
 // This embeds a typed namespaced resource indexer instead of aliasing, so that the struct
-// is available as a receiver for methods specific to the generated type
-// (from the corresponding expansion interface).
+// 作为生成类型专用方法的接收者，而不是取别名，
+// 这些方法来自对应的 expansion 接口。
 var namespaceListerStruct = `
 // $.type|private$NamespaceLister implements the $.type|public$NamespaceLister
 // interface.

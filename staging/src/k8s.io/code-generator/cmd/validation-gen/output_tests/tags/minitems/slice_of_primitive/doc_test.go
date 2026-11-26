@@ -28,7 +28,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.TooFew(field.NewPath("min10Field"), 0, 10),
 		field.TooFew(field.NewPath("min10TypedefField"), 0, 10),
@@ -73,7 +73,7 @@ func Test(t *testing.T) {
 	}
 	st.Value(testVal).ExpectValid()
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{
 		Min0Field:         make([]int, 1),
 		Min10Field:        make([]int, 1),

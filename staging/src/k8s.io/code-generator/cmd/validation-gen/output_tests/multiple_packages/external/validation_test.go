@@ -32,7 +32,7 @@ func TestSelfContained(t *testing.T) {
 	ctx := context.Background()
 	matcher := field.ErrorMatcher{}.ByField().ByDetailExact()
 
-	// Shared types must match the registered copy.
+	// 共享类型必须与注册副本一致。
 	// T1/T2 在两个包中都会生成，结果必须逐字段一致。
 	obj := &types.T1{List: []types.T2{{}, {}}}
 	ext := Validate_T1(ctx, operation.Operation{}, nil, obj, nil)
@@ -42,7 +42,7 @@ func TestSelfContained(t *testing.T) {
 	reg := registered.Validate_T1(ctx, operation.Operation{}, nil, obj, nil)
 	matcher.Test(t, reg, ext)
 
-	// T3 is selected only by external; registered has no Validate_T3.
+	// T3 只被 external 选中，registered 中没有 Validate_T3。
 	// 说明 selection（+k8s:validation-gen=*）只影响本包副本。
 	got := Validate_T3(ctx, operation.Operation{}, nil, &types.T3{}, nil)
 	want := field.ErrorList{

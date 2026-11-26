@@ -24,7 +24,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// gengo has `PointerTo()` but not the rest, so keep this here for consistency.
+// gengo 只提供 `PointerTo()`，其余没有，为保持一致留在这里。
 // 这些构造器刻意保留空 Package，用于验证类型学习代码只依赖 Kind/Elem 结构。
 func ptrTo(t *types.Type) *types.Type {
 	return &types.Type{
@@ -383,11 +383,11 @@ func TestSortIntoCohorts(t *testing.T) {
 		in       []validators.FunctionGen
 		expected [][]validators.FunctionGen
 	}{{
-		// empty
+		// 空值
 		in:       []validators.FunctionGen{},
 		expected: [][]validators.FunctionGen{},
 	}, {
-		// default cohort
+		// 默认 cohort
 		in: []validators.FunctionGen{
 			{TagName: "a", Cohort: "", Flags: validators.DefaultFlags},
 			{TagName: "b", Cohort: "", Flags: validators.DefaultFlags},
@@ -399,7 +399,7 @@ func TestSortIntoCohorts(t *testing.T) {
 			{TagName: "c", Cohort: "", Flags: validators.DefaultFlags},
 		}},
 	}, {
-		// default cohort, not already sorted by name
+		// 默认 cohort，未按名称排序
 		in: []validators.FunctionGen{
 			{TagName: "c", Cohort: "", Flags: validators.DefaultFlags},
 			{TagName: "b", Cohort: "", Flags: validators.DefaultFlags},
@@ -411,7 +411,7 @@ func TestSortIntoCohorts(t *testing.T) {
 			{TagName: "a", Cohort: "", Flags: validators.DefaultFlags},
 		}},
 	}, {
-		// default cohort, with a short-circuit
+		// 默认 cohort，含一个短路校验
 		in: []validators.FunctionGen{
 			{TagName: "a", Cohort: "", Flags: validators.DefaultFlags},
 			{TagName: "b", Cohort: "", Flags: validators.ShortCircuit},
@@ -423,7 +423,7 @@ func TestSortIntoCohorts(t *testing.T) {
 			{TagName: "c", Cohort: "", Flags: validators.DefaultFlags},
 		}},
 	}, {
-		// default cohort, with 2 short-circuits
+		// 默认 cohort，含两个短路校验
 		in: []validators.FunctionGen{
 			{TagName: "a", Cohort: "", Flags: validators.DefaultFlags},
 			{TagName: "b", Cohort: "", Flags: validators.ShortCircuit},
@@ -437,7 +437,7 @@ func TestSortIntoCohorts(t *testing.T) {
 			{TagName: "c", Cohort: "", Flags: validators.DefaultFlags},
 		}},
 	}, {
-		// default and non-default cohorts
+		// 默认与非默认 cohort
 		in: []validators.FunctionGen{
 			{TagName: "a", Cohort: "foo", Flags: validators.DefaultFlags},
 			{TagName: "b", Cohort: "bar", Flags: validators.DefaultFlags},
@@ -457,7 +457,7 @@ func TestSortIntoCohorts(t *testing.T) {
 			{TagName: "e", Cohort: "bar", Flags: validators.DefaultFlags},
 		}},
 	}, {
-		// default and non-default cohorts with short-circuit
+		// 默认与非默认 cohort，含短路校验
 		in: []validators.FunctionGen{
 			{TagName: "a", Cohort: "foo", Flags: validators.DefaultFlags},
 			{TagName: "b", Cohort: "bar", Flags: validators.DefaultFlags},

@@ -42,14 +42,14 @@ var globalListMeta = map[string]*listMetadata{} // keyed by the field or type pa
 func init() {
 	// 注册四个会累积列表元数据的标签校验器；它们本身不产生校验代码，
 	// 只负责填充 globalListMeta。
-	// Accumulate list metadata via tags.
+	// 通过标签累积列表元数据。
 	RegisterTagValidator(listTypeTagValidator{byPath: globalListMeta})
 	RegisterTagValidator(listMapKeyTagValidator{byPath: globalListMeta})
 	RegisterTagValidator(uniqueTagValidator{byPath: globalListMeta})
 	RegisterTagValidator(customUniqueTagValidator{byPath: globalListMeta})
 }
 
-// This applies to all tags in this file.
+// 这适用于本文件中的所有标签。
 var listTagsValidScopes = sets.New(ScopeType, ScopeField, ScopeListVal, ScopeMapKey, ScopeMapVal)
 
 // listOwnership 描述列表的所有权语义（是否允许共享/合并）。
@@ -85,19 +85,19 @@ type listMetadata struct {
 // check 校验列表标签之间的基本约束：listMapKey 必须搭配 map 语义，
 // map 语义必须有 key，且 listType 必须显式声明。
 func (lm *listMetadata) check() error {
-	// Check some fundamental constraints on list tags.
+	// 检查列表标签的一些基本约束。
 
-	// If we have listMapKey but no map semantics, that's an error
+	// 有 listMapKey 却没有 map 语义属于配置错误
 	if len(lm.keyMembers) > 0 && lm.semantic != semanticMap {
 		return fmt.Errorf("found listMapKey without listType=map or unique=map")
 	}
 
-	// If we have map semantics but no keys, that's an error
+	// 有 map 语义却没有键属于配置错误
 	if lm.semantic == semanticMap && len(lm.keyMembers) == 0 {
 		return fmt.Errorf("found listType=map or unique=map without listMapKey")
 	}
 
-	// listType is mandatory.
+	// listType 是必填的。
 	if lm.ownership == "" {
 		return fmt.Errorf("listType must be specified - use listType=atomic, listType=set, or listType=map")
 	}
@@ -111,7 +111,7 @@ func (lm *listMetadata) makeListMapMatchFunc(t *types.Type) FunctionLiteral {
 	if lm.semantic != semanticMap {
 		panic("makeListMapMatchFunc called on a non-map list")
 	}
-	// If no keys are defined, we will throw a good error later.
+	// 没有定义键时，后续会给出明确的错误。
 
 	// 两个参数都取非指针类型，保证生成的比较函数对 null 元素也有明确语义。
 	matchFn := FunctionLiteral{
@@ -129,11 +129,11 @@ func (lm *listMetadata) makeListMapMatchFunc(t *types.Type) FunctionLiteral {
 		fldName := memb.Name
 
 		if memb.Type.Kind == types.Pointer {
-			// Dereference pointers for comparison.
-			// This is tricky because they could be nil.
-			// Two keys are equal if all their fields are equal.
-			// For pointer fields, that means either both are nil,
-			// or neither is nil and the pointed-to values are equal.
+			// 比较时先解引用指针。
+			// 这里比较棘手，因为它们可能是 nil。
+			// 两个键的所有字段相等时即相等。
+			// 对指针字段，这意味着要么两者都为 nil，
+			// 要么都非 nil 且所指值相等。
 			buf.WriteString(fmt.Sprintf("((a.%s == nil && b.%s == nil) || (a.%s != nil && b.%s != nil && *a.%s == *b.%s))", fldName, fldName, fldName, fldName, fldName, fldName))
 		} else {
 			buf.WriteString(fmt.Sprintf("a.%s == b.%s", fldName, fldName))
@@ -164,7 +164,7 @@ func (listTypeTagValidator) ValidScopes() sets.Set[Scope] {
 // GetValidations 校验标签值并写入列表元数据，最后通过 Deferred 在
 // 所有列表标签处理完后统一生成校验函数。
 func (lttv listTypeTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
-	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
+	// 注意：不支持指向列表的指针，正常情况下这里不会出现指针。
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", t.Kind)
@@ -185,7 +185,7 @@ func (lttv listTypeTagValidator) GetValidations(context Context, tag codetags.Ta
 	switch tag.Value {
 	case "atomic":
 		lm.ownership = ownershipSingle
-		// Do not overwrite a more specific semantic from uniqueTagValidator
+		// 不要覆盖 uniqueTagValidator 给出的更具体语义。
 		if lm.semantic == "" {
 			lm.semantic = semanticAtomic
 		}
@@ -200,8 +200,8 @@ func (lttv listTypeTagValidator) GetValidations(context Context, tag codetags.Ta
 		lm.semantic = semanticSet
 	case "map":
 		lm.ownership = ownershipShared
-		// If uniqueTagValidator has run for `unique=set` or `unique=map`,
-		// lm.semantic will be non-empty and non-atomic.
+		// 若 uniqueTagValidator 已按 `unique=set` 或 `unique=map` 运行，
+		// lm.semantic 将非空且非 atomic。
 		if lm.semantic != "" && lm.semantic != semanticAtomic {
 			return Validations{}, fmt.Errorf("unique tag is redundant for listType=%q", tag.Value)
 		}
@@ -262,7 +262,7 @@ func (listMapKeyTagValidator) ValidScopes() sets.Set[Scope] {
 
 // GetValidations 校验 key 字段存在且类型可作为 key，然后累积到元数据。
 func (lmktv listMapKeyTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
-	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
+	// 注意：不支持指向列表的指针，正常情况下这里不会出现指针。
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", t.Kind)
@@ -297,7 +297,7 @@ func (lmktv listMapKeyTagValidator) GetValidations(context Context, tag codetags
 	lm.keyMembers = append(lm.keyMembers, memb)
 	lm.keyNames = append(lm.keyNames, tag.Value)
 
-	// Validations will be generated by listTypeTagValidator. This validator just computes the keys required for list-map.
+	// 校验由 listTypeTagValidator 生成；本校验器只计算 list-map 所需的键。
 	return Validations{}, nil
 }
 
@@ -339,7 +339,7 @@ func (uniqueTagValidator) ValidScopes() sets.Set[Scope] {
 
 // GetValidations 校验 unique 与 listType 的组合合法性并更新元数据。
 func (utv uniqueTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
-	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
+	// 注意：不支持指向列表的指针，正常情况下这里不会出现指针。
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", t.Kind)
@@ -425,7 +425,7 @@ func (customUniqueTagValidator) ValidScopes() sets.Set[Scope] {
 
 // GetValidations 只设置 customUnique 标志，不直接产生校验。
 func (cutv customUniqueTagValidator) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
-	// NOTE: pointers to lists are not supported, so we should never see a pointer here.
+	// 注意：不支持指向列表的指针，正常情况下这里不会出现指针。
 	t := util.NativeType(context.Type)
 	if t.Kind != types.Slice && t.Kind != types.Array {
 		return Validations{}, fmt.Errorf("can only be used on list types (%s)", t.Kind)
@@ -439,7 +439,7 @@ func (cutv customUniqueTagValidator) GetValidations(context Context, tag codetag
 
 	lm.customUnique = true
 
-	// Configures metadata, Validations are emitted by the ListValidator.
+	// 这里只配置元数据，校验由 ListValidator 输出。
 	return Validations{}, nil
 }
 
@@ -466,16 +466,16 @@ var (
 // getListMeta 是查找给定上下文对应列表元数据的辅助函数。
 func getListMeta(byPath map[string]*listMetadata, context Context) (*listMetadata, error) {
 	// 先查字段自身的元数据。
-	// Look up the list metadata which is defined on this field.
+	// 查找定义在该字段上的列表元数据。
 	lm := byPath[context.Path.String()]
 
-	// NOTE: We don't really support list-of-list or map-of-list, so this does
-	// not consider the case of ScopeListVal or ScopeMapVal. If we want to
-	// support those, we need to look at this and make sure the paths work the
+	// 注意：并不真正支持 list-of-list 或 map-of-list，因此这里
+	// 没有考虑 ScopeListVal 或 ScopeMapVal。若要支持，
+	// 需要重新审视这里，确认路径处理正确。
 	// way we need.
 	if context.Scope == ScopeField {
 		// 字段本身没有时，回退到其类型上声明的元数据。
-		// If this is a field, look up the list metadata for the type.
+		// 若是字段，则按其类型查找列表元数据。
 		tm := byPath[context.Type.String()]
 		// 字段与类型同时声明元数据会让语义冲突，直接报错。
 		if lm != nil && tm != nil {
@@ -484,8 +484,8 @@ func getListMeta(byPath map[string]*listMetadata, context Context) (*listMetadat
 		if tm != nil {
 			return tm, nil
 		}
-		// TODO(thockin): enable this once the whole codebase is converted or
-		// if we only run against fields which are opted-in.
+		// TODO(thockin): 等整个代码库改造完，或
+		// 只在显式 opt-in 的字段上运行时再启用。
 		// if lm == nil && tm == nil {
 		//       return Validations{}, fmt.Errorf("found a list field without list metadata")
 		// }
@@ -512,37 +512,37 @@ func getListValidations(byPath map[string]*listMetadata, context Context) (Valid
 	}
 
 	if lm == nil {
-		// If we don't have metadata for this field, we might have it for the
-		// field's type.
+		// 字段本身没有元数据时，其类型上可能有；
+		// 类型上的元数据也能用。
 		return Validations{}, nil
 	}
 
-	// If we have processed this path before, we don't want to do it again.
-	// This could be because there are multiple keys or even just a
-	// listType=map and listMapKey=field.
+	// 已处理过的路径不再重复处理。
+	// 可能是因为存在多个键，或仅仅因为
+	// 同时有 listType=map 与 listMapKey=field。
 	if p := context.Path.String(); listsGenerated[p] {
 		return Validations{}, nil
 	}
 	listsGenerated[context.Path.String()] = true
 
-	// Do this after the above - if we only get one error, the one(s) above
+	// 放在上面之后处理——如果只报一个错误，上面那些更重要。
 	// this are more important.
 	if err := lm.check(); err != nil {
 		return Validations{}, err
 	}
 	result := Validations{}
 	if lm.customUnique {
-		// Uniqueness validation is disabled in generated validation for this list.
-		// It would defer to handwritten validation to check the uniqueness.
+		// 该列表的生成校验中已禁用唯一性校验。
+		// 唯一性交由手写校验负责。
 		result.AddComment("Uniqueness validation is implemented via custom, handwritten validation")
 		return result, nil
 	}
 
-	// Generate uniqueness checks for lists with higher-order semantics.
+	// 为具有高阶语义的列表生成唯一性校验。
 	if lm.semantic == semanticSet {
-		// Only compare primitive values when possible. Slices and maps are not
-		// comparable, and structs might hold pointer fields, which are directly
-		// comparable but not what we need.
+		// 尽量只比较基本类型：slice 与 map 不可比较；
+		// 结构体可能含指针字段，虽然可直接使用 == 比较，
+		// 但那并不是我们需要的语义。
 		//
 		// 可直接比较的元素用 DirectEqual 更快；否则退回语义深比较。
 		matchArg := validateSemanticDeepEqual
@@ -565,9 +565,9 @@ func getListValidations(byPath map[string]*listMetadata, context Context) (Valid
 		result.AddFunction(f)
 	}
 	if lm.semantic == semanticMap {
-		// TODO: There are some fields which are declared as maps which do not
-		// enforce uniqueness in manual validation. Those either need to not be
-		// maps or we need to allow types to opt-out from this validation.  SSA
+		// TODO: 有些字段声明为 map，但手写校验并不检查其唯一性。
+		// 它们要么不该声明为 map，要么需要允许类型退出此校验。
+		// SSA 也处理不好这种情况。
 		// is also not able to handle these well.
 		// map 语义的比较函数由 key 字段拼装而成。
 		matchArg := lm.makeListMapMatchFunc(nt.Elem)

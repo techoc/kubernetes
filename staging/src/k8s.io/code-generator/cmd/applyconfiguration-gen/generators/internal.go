@@ -41,7 +41,7 @@ var _ generator.Generator = &internalGenerator{}
 
 // Filter 让整个生成器只运行一次：schema 是全局的，不需要按类型重复生成。
 func (g *internalGenerator) Filter(*generator.Context, *types.Type) bool {
-	// generate file exactly once
+	// // 整个文件只生成一次：schema 是全局的，无需按类型重复生成
 	if !g.filtered {
 		g.filtered = true
 		return true

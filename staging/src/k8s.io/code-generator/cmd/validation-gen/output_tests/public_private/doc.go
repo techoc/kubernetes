@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// Package publicprivate is a test package.
+// publicprivate 包是测试包。
 //
 // 覆盖导出/非导出字段与类型的组合：私有字段带 json tag 也能被
 // 指令 +k8s:validateFalse 命中，私有类型自身也可作为校验目标。

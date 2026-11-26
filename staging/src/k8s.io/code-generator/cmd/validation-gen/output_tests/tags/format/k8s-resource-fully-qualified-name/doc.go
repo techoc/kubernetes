@@ -36,7 +36,7 @@ type Struct struct {
 	// +k8s:format=k8s-resource-fully-qualified-name
 	FullyQualifiedNamePtrField *string `json:"fullyQualifiedNamePtrField"`
 
-	// Note: no validation here
+	// 注意：此处没有校验。
 	FullyQualifiedNameTypedefField FullyQualifiedNameStringType `json:"fullyQualifiedNameTypedefField"`
 }
 

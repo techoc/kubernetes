@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package shortcircuit contains test types for testing subfield short-circuit behavior.
+// shortcircuit 包包含测试 subfield 短路行为的类型。
 // +k8s:validation-gen-nolint
 // 验证 subfield 校验与目标字段自身校验（required/immutable/optional/forbidden/
 // update 等）的短路关系：目标字段的校验失败时，subfield 校验不应再执行。

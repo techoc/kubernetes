@@ -37,28 +37,28 @@ func TestMapValidation(t *testing.T) {
 		AlphaValidation: map[string]string{"a": "foo"},
 		BetaValidation:  map[string]string{"a": "foo"},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin().ByValidationStabilityLevel(), field.ErrorList{
-		// Case: Standard eachVal -> Normal Error
+		// 用例：标准 eachVal -> 普通错误
 		field.TooLong(field.NewPath("standardEachVal").Key("a"), "foo", 2).WithOrigin("maxLength"),
 
-		// Case: Alpha eachVal -> Alpha Error
+		// 用例：alpha eachVal -> alpha 错误
 		field.TooLong(field.NewPath("AlphaEachVal").Key("a"), "foo", 2).WithOrigin("maxLength").MarkAlpha(),
 
-		// Case: Beta eachVal -> Beta Error
+		// 用例：beta eachVal -> beta 错误
 		field.TooLong(field.NewPath("BetaEachVal").Key("a"), "foo", 2).WithOrigin("maxLength").MarkBeta(),
 
-		// Case: Standard eachKey -> Normal Error
+		// 用例：标准 eachKey -> 普通错误
 		field.TooLong(field.NewPath("standardEachKey"), "foo", 2).WithOrigin("maxLength"),
 
-		// Case: Alpha eachKey -> Alpha Error
+		// 用例：alpha eachKey -> alpha 错误
 		field.TooLong(field.NewPath("AlphaEachKey"), "foo", 2).WithOrigin("maxLength").MarkAlpha(),
 
-		// Case: Beta eachKey -> Beta Error
+		// 用例：beta eachKey -> beta 错误
 		field.TooLong(field.NewPath("BetaEachKey"), "foo", 2).WithOrigin("maxLength").MarkBeta(),
 
-		// Case: Alpha Validation -> Alpha Error
+		// 用例：alpha 校验 -> alpha 错误
 		field.TooLong(field.NewPath("AlphaValidation").Key("a"), "foo", 2).WithOrigin("maxLength").MarkAlpha(),
 
-		// Case: Beta Validation -> Beta Error
+		// 用例：beta 校验 -> beta 错误
 		field.TooLong(field.NewPath("BetaValidation").Key("a"), "foo", 2).WithOrigin("maxLength").MarkBeta(),
 	})
 }

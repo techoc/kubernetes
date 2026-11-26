@@ -30,7 +30,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero-values (nil slices/maps).
+		// 全为零值（nil slice/map）。
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField(), field.ErrorList{
 		field.Required(field.NewPath("stringField"), ""),
 		field.Required(field.NewPath("stringPtrField"), ""),
@@ -52,7 +52,7 @@ func Test(t *testing.T) {
 	})
 
 	st.Value(&Struct{
-		// Explicit zero-values and empty slices/maps.
+		// 显式零值与空 slice/map。
 		StringField:           "",
 		StringPtrField:        nil,
 		StringTypedefField:    "",

@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: this selects all types in the package.
+// 注意：这会选中包内所有类型。
 // +k8s:validation-gen=*
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
 // 这是一个测试包：所有类型都参与生成，验证类型级校验。
 // 只有带校验的类型（T1、E1）应出现在生成结果中，T2/E2 即使可被引用也不生成。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package withtypevalidations
 
@@ -36,11 +36,11 @@ type T1 struct {
 	S string `json:"s"`
 }
 
-// Note: this has no validations.
+// 注意：此类型没有校验。
 type T2 struct{}
 
 // +k8s:validateFalse="type E1"
 type E1 string
 
-// Note: this has no validations.
+// 注意：此类型没有校验。
 type E2 string

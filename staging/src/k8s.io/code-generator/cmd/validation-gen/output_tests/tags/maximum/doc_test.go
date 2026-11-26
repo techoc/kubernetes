@@ -30,7 +30,7 @@ func Test(t *testing.T) {
 
 	// 所有字段取 2（超过最大值 1），每个字段都应报错。
 	st.Value(&Struct{
-		// invalid values (greater than maximum=1)
+		// 非法值（大于 maximum=1）
 		IntField:        2,
 		IntPtrField:     ptr.To(2),
 		Int16Field:      2,
@@ -58,7 +58,7 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("typedefPtrField"), nil, ""),
 	})
 	// 校验 ratcheting：新旧值相同（都非法）时不报错。
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{
 		IntField:        2,
 		IntPtrField:     ptr.To(2),

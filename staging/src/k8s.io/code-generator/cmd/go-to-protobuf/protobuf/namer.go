@@ -117,8 +117,8 @@ type typeNameSet map[types.Name]*protobufPackage
 
 // assignGoTypeToProtoPackage 沿 t 的引用关系递归查找其依赖的 Go 与 Protobuf 类型，
 // 并登记到 p 的导入中；遇到已是 protobuf 的类型不再深入。
-// assignGoTypeToProtoPackage looks for Go and Protobuf types that are referenced by a type in
-// a package. It will not recurse into protobuf types.
+// 沿 t 的引用关系递归查找其依赖的 Go 与 Protobuf 类型，
+// 并登记到 p 的导入中；遇到已是 protobuf 的类型不再深入。
 func assignGoTypeToProtoPackage(p *protobufPackage, t *types.Type, local, global typeNameSet, optional map[types.Name]struct{}) {
 	// 基本类型若本身对应 proto 基本类型，先换成 proto 表示。
 	newT, isProto := isFundamentalProtoType(t)
@@ -137,14 +137,14 @@ func assignGoTypeToProtoPackage(p *protobufPackage, t *types.Type, local, global
 	}
 	if t.Name.Package == p.Path() {
 		// 类型只归属于其所在包，避免跨包重复登记。
-		// Associate types only to their own package
+		// 类型只归属于其所在包，避免跨包重复登记。
 		global[t.Name] = p
 	}
 	if _, ok := local[t.Name]; ok {
 		return
 	}
 	// 已是 proto 类型则直接加入导入，不再递归。
-	// don't recurse into existing proto types
+	// 已是 proto 类型则直接加入导入，不再递归。
 	if isProto {
 		p.Imports.AddType(t)
 		return
@@ -169,7 +169,7 @@ func assignGoTypeToProtoPackage(p *protobufPackage, t *types.Type, local, global
 		}
 		assignGoTypeToProtoPackage(p, m.Type, local, global, optional)
 	}
-	// TODO: should methods be walked?
+	// // TODO: 是否需要遍历方法？
 	// 沿着 map/slice 等复合类型的 key/elem 以及底层类型继续深入。
 	if t.Elem != nil {
 		assignGoTypeToProtoPackage(p, t.Elem, local, global, optional)
@@ -188,16 +188,16 @@ func assignGoTypeToProtoPackage(p *protobufPackage, t *types.Type, local, global
 
 // isTypeApplicableToProtobuf 判断类型是否需要参与 protobuf 处理。
 // 目前过滤掉函数与私有类型。
-// isTypeApplicableToProtobuf checks to see if a type is relevant for protobuf processing.
-// Currently, it filters out functions and private types.
+// 判断类型是否需要参与 protobuf 处理。
+// 目前过滤掉函数与私有类型。
 func isTypeApplicableToProtobuf(t *types.Type) bool {
 	// 函数与“声明为函数”的类型与 protobuf 无关。
-	// skip functions -- we don't care about them for protobuf
+	// 函数与 protobuf 无关，跳过。
 	if t.Kind == types.Func || (t.Kind == types.DeclarationOf && t.Underlying.Kind == types.Func) {
 		return false
 	}
 	// 私有类型无法出现在 IDL 中。
-	// skip private types
+	// 私有类型无法出现在 IDL 中，跳过。
 	if namer.IsPrivateGoName(t.Name.Name) {
 		return false
 	}
@@ -220,7 +220,7 @@ func (n *protobufNamer) AssignTypesToPackages(c *generator.Context) error {
 			}
 			if !isTypeApplicableToProtobuf(t) {
 				// 跳过不关心的类型，如函数。
-				// skip types that we don't care about, like functions
+				// 跳过不关心的类型，如函数。
 				continue
 			}
 			assignGoTypeToProtoPackage(p, t, local, global, optional)

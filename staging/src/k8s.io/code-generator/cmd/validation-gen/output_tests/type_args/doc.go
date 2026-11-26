@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 // +k8s:validation-gen-test-fixture=validateFalse
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 覆盖校验标签的 typeArg 参数：显式指定类型参数后，生成代码应以该类型
 // 渲染（且必须是指针，见下方 T1 的说明）。
@@ -32,9 +32,9 @@ import (
 
 var localSchemeBuilder = testscheme.New()
 
-// Explicitly set the type-arg to prove it renders properly.
-// NOTE: because of how validation code is generated, these must always be
-// pointers, because that is what gets passed around.
+// 显式指定类型实参，以验证渲染正确。
+// 注意：受校验代码生成方式所限，这些必须始终是指针，
+// 因为传递的就是指针。
 type T1 struct {
 	TypeMeta int
 

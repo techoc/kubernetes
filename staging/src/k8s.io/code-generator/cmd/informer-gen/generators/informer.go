@@ -31,7 +31,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// informerGenerator produces a file of listers for a given GroupVersion and
+// // informerGenerator 为给定 GroupVersion 下的类型生成 informer 文件。
 // type.
 //
 // 每个带 +genclient 的类型生成一个 informer 文件，包含新旧两套 API：

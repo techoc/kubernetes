@@ -50,14 +50,14 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 		return nil, fmt.Errorf("failed to read openapi-schema file: %w", err)
 	}
 
-	// Read in the provided openAPI schema.
+	// // 反序列化给定的 OpenAPI schema，后续按类型裁剪。
 	openAPISchema := &spec.Swagger{}
 	err = json.Unmarshal(rawOpenAPISchema, openAPISchema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal typeModels JSON: %w", err)
 	}
 
-	// Build a mapping from openAPI type name to GVK.
+	// // 建立 GVK 到 OpenAPI 类型名的映射：
 	// 找出 client-go apply 所需的根类型：
 	// 只有同时具备 +genclient 与 apply/applyStatus verb 的类型才是 apply 根对象，
 	// 其余类型通过引用闭包被间接纳入。
@@ -90,7 +90,7 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 	}
 	openAPISchema.Definitions = requiredDefs
 
-	// Convert the openAPI schema to the models format and validate it.
+	// // 转成 kube-openapi 模型格式，同时完成引用校验。
 	models, err := toValidatedModels(openAPISchema)
 	if err != nil {
 		return nil, err
@@ -107,8 +107,8 @@ var emptyModels = &typeModels{
 // toValidatedModels 把 spec.Swagger 转成 kube-openapi 的模型格式。
 // 走 openapiv2.ParseDocument 是为了复用 Its 引用校验；代价是一次多余的 JSON 往返。
 func toValidatedModels(openAPISchema *spec.Swagger) (utilproto.Models, error) {
-	// openapi_v2.ParseDocument only accepts a []byte of the JSON or YAML file to be parsed.
-	// so we do an inefficient marshal back to json and then read it back in as yaml
+	// ParseDocument 只接受 JSON/YAML 字节，因此这里多一次序列化往返；
+	// 换来的是用 utilproto.NewOpenAPIData 校验所有类型间引用。
 	// but get the benefit of running the models through utilproto.NewOpenAPIData to
 	// validate all the references between types
 	rawMinimalOpenAPISchema, err := json.Marshal(openAPISchema)
@@ -120,7 +120,7 @@ func toValidatedModels(openAPISchema *spec.Swagger) (utilproto.Models, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OpenAPI document for file: %w", err)
 	}
-	// Construct the models and validate all references are valid.
+	// // 构造模型时一并校验所有引用有效，避免裁剪后出现悬空 $ref。
 	models, err := utilproto.NewOpenAPIData(document)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OpenAPI models for file: %w", err)
@@ -128,12 +128,12 @@ func toValidatedModels(openAPISchema *spec.Swagger) (utilproto.Models, error) {
 	return models, nil
 }
 
-// findReferenced recursively finds all schemas referenced from the given def.
+// // findReferenced 递归收集 def 引用的所有 schema。
 // toValidatedModels 确保不会漏掉任何引用。
 // 递归覆盖 OpenAPI schema 中所有可能嵌套 schema 的位置；漏掉任一分支都会导致
 // 裁剪后的文档出现悬空 $ref，从而在模型校验阶段报错。
 func findReferenced(def *spec.Schema, allSchemas, referencedOut map[string]spec.Schema) {
-	// follow $ref, if any
+	// // 先处理 $ref，再下钻嵌套 schema
 	refPtr := def.Ref.GetPointer()
 	if refPtr != nil && !refPtr.IsEmpty() {
 		name := refPtr.String()
@@ -153,7 +153,7 @@ func findReferenced(def *spec.Schema, allSchemas, referencedOut map[string]spec.
 		}
 	}
 
-	// follow any nested schemas
+	// // 递归处理所有可能嵌套 schema 的位置；漏掉任一分支都会留下悬空引用
 	if def.Items != nil {
 		if def.Items.Schema != nil {
 			findReferenced(def.Items.Schema, allSchemas, referencedOut)

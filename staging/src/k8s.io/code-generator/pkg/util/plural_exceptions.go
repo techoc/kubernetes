@@ -21,9 +21,9 @@ import (
 	"strings"
 )
 
-// PluralExceptionListToMapOrDie converts the list in "Type:PluralType" to map[string]string.
-// This is used for pluralizer.
-// If the format is wrong, this function will panic.
+// PluralExceptionListToMapOrDie 把 "Type:PluralType" 列表转为 map[string]string。
+// 供复数化器使用。
+// 格式错误时此函数会 panic。
 // 参数来自命令行，格式错误属于调用方配置错误，panic 比静默忽略更安全。
 func PluralExceptionListToMapOrDie(pluralExceptions []string) map[string]string {
 	pluralExceptionMap := make(map[string]string, len(pluralExceptions))

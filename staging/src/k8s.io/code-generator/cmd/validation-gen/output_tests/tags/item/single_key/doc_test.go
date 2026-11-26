@@ -84,7 +84,7 @@ func Test(t *testing.T) {
 		},
 	})
 
-	// Test typedef slice.
+	// 测试 typedef 到 slice。
 	st.Value(&Struct{
 		TypedefItems: TypedefItemList{
 			{ID: "a", Description: "d1"},
@@ -104,7 +104,7 @@ func Test(t *testing.T) {
 		},
 	}).ExpectValid()
 
-	// Test nested typedef.
+	// 测试嵌套 typedef。
 	st.Value(&StructWithNestedTypedef{
 		NestedItems: []NestedTypedefItem{
 			{Key: "a", Name: "n1"},
@@ -121,7 +121,7 @@ func Test(t *testing.T) {
 		},
 	}).ExpectValid()
 
-	// Test atomic + unique=map + item combination
+	// 测试 atomic + unique=map + item 组合
 	st.Value(&Struct{
 		AtomicUniqueMapItems: []Item{
 			{Key: "a", Data: "d1"},
@@ -168,7 +168,7 @@ func Test(t *testing.T) {
 		},
 	}).ExpectValid()
 
-	// Test pointer items (PtrSliceItem)
+	// 测试指针元素（PtrSliceItem）
 	st.Value(&Struct{
 		PointerItems: []*Item{
 			{Key: "a", Data: "d1"},
@@ -187,7 +187,7 @@ func Test(t *testing.T) {
 		},
 	}).ExpectValid()
 
-	// Nil element in list should trigger Required error
+	// 列表中的 nil 元素应触发 Required 错误
 	st.Value(&Struct{
 		PointerItems: []*Item{
 			{Key: "a", Data: "d1"},

@@ -19,18 +19,18 @@ limitations under the License.
 // 从而在不修改生成代码的前提下扩展行为。
 package v1
 
-// TestTypeListerExpansion allows custom methods to be added to
+// TestTypeListerExpansion 允许向 TestTypeLister 添加自定义方法。
 // TestTypeLister.
 type TestTypeListerExpansion interface {
 	CheckExpansionSupport()
 }
 
-// TestTypeNamespaceListerExpansion allows custom methods to be added to
+// TestTypeNamespaceListerExpansion 允许向 TestTypeNamespaceLister 添加自定义方法。
 // TestTypeNamespaceLister.
 type TestTypeNamespaceListerExpansion interface{}
 
 // CheckExpansionSupport 是一个空实现，用来证明 lister-gen 生成的类型
 // 会内嵌对应的 Expansion 接口，手写方法因此可用。
 func (*testTypeLister) CheckExpansionSupport() {
-	// This checks that lister-gen correctly supports expansions
+	// 用于验证 lister-gen 正确支持接口扩展
 }

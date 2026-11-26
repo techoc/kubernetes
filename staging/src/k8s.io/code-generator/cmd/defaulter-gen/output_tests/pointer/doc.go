@@ -18,5 +18,5 @@ limitations under the License.
 
 // 这是一个测试包：验证当类型内嵌 TypeMeta 时，defaulter-gen 会为包含
 // TypeMeta 字段的类型生成默认值函数。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 package pointer

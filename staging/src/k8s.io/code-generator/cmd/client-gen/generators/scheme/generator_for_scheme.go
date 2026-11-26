@@ -32,7 +32,7 @@ import (
 	"k8s.io/gengo/v2/types"
 )
 
-// GenScheme produces a package for a clientset with the scheme, codecs and parameter codecs.
+// // GenScheme 为 clientset 生成包含 scheme、codecs 与 parameter codec 的包。
 //
 // 该生成器只运行一次（见 Filter），为整个 clientset 输出单个 scheme 包。
 // PrivateScheme 用于 internal clientset：全局变量改为小写，不导出 ParameterCodec；
@@ -57,7 +57,7 @@ func (g *GenScheme) Namers(c *generator.Context) namer.NameSystems {
 	}
 }
 
-// We only want to call GenerateType() once.
+// // Filter 保证 scheme 包只生成一次，与类型数量无关。
 func (g *GenScheme) Filter(c *generator.Context, t *types.Type) bool {
 	ret := !g.schemeGenerated
 	g.schemeGenerated = true
@@ -73,7 +73,7 @@ func (g *GenScheme) Imports(c *generator.Context) (imports []string) {
 			packagePath := g.InputPackages[clientgentypes.GroupVersion{Group: group.Group, Version: version.Version}]
 			groupAlias := strings.ToLower(g.GroupGoNames[clientgentypes.GroupVersion{Group: group.Group, Version: version.Version}])
 			if g.CreateRegistry {
-				// import the install package for internal clientsets instead of the type package with register.go
+				// // 内部 clientset 走 install 包注册，而非带 register.go 的类型包；
 				// 版本目录的 install 包负责把该版本类型注册到 scheme，因此上溯一层再拼 install。
 				if version.Version != "" {
 					packagePath = path.Dir(packagePath)

@@ -29,7 +29,7 @@ func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectValid()
 
 	st.Value(&Struct{
@@ -66,7 +66,7 @@ func Test(t *testing.T) {
 		field.TooMany(field.NewPath("max10TypedefKeyField"), 11, 10),
 	})
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{
 		Max0Field:            generateMapStringStringWithLength(1),
 		Max10Field:           generateMapStringStringWithLength(11),

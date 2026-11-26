@@ -19,7 +19,7 @@ limitations under the License.
 
 // 这是一个测试包：验证 enum 标签对没有枚举值、只有一个值、多个值
 // 以及“看起来像 enum 但实际不是”的类型分别如何生成。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package enum
 
@@ -65,7 +65,7 @@ const (
 	E2V2 Enum2 = "e2v2"
 )
 
-// Note: this is not an enum because the const values are of type Enum2, and
-// because go elides intermediate typedefs (this is modelled as "NotEnum" ->
-// "string" in the AST).
+// 注意：这不是枚举，因为常量值的类型是 Enum2，而且
+// 因为 Go 会省略中间 typedef（这里建模为 "NotEnum" ->
+// "string"）。
 type NotEnum Enum2

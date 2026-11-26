@@ -47,9 +47,9 @@ var (
 	runtimeAssertCovSymbols = mkPkgNames(runtimeTestPkg, "AssertDeclarativeCoverage")
 )
 
-// apiVersionRe matches Kubernetes-style API versions: v1, v1alpha1, v2beta3.
-// Used to detect whether an input package is a versioned API package (vs. a
-// helper or main package, which we skip).
+// apiVersionRe 匹配 Kubernetes 风格的版本号：v1、v1alpha1、v2beta3。
+// 用于判断输入包是否为版本化 API 包
+// （辅助包或 main 包会被跳过）。
 var apiVersionRe = regexp.MustCompile(`^v\d+(alpha\d+|beta\d+)?$`)
 
 // rule 表示一条已声明的字段校验错误。
@@ -59,11 +59,11 @@ type rule struct {
 	Origin    string
 }
 
-// fieldRules maps field path → declared rules for a single Kind.
+// fieldRules 把字段路径映射到单个 Kind 声明的规则。
 type fieldRules map[string][]rule
 
-// report is one GVK's declared rules. Used as in-memory scaffolding while
-// emitting per-Kind test fixtures; not serialized.
+// report 保存一个 GVK 的声明规则，作为生成测试 fixture 时的
+// 内存中间结构，不序列化。
 type report struct {
 	Group   string
 	Version string
@@ -71,11 +71,11 @@ type report struct {
 	Rules   fieldRules
 }
 
-// allowlistEntry filters a declared rule out of coverage fixture generation.
-// Every field is required: apiVersion matches by literal equality (in the
-// "<group>/<version>" form, or just "<version>" for core); kind/path/
-// errorType/origin match literally or wildcard with "*". Empty is rejected
-// at load time so an entry can never silently overexclude.
+// allowlistEntry 从覆盖率 fixture 中过滤掉声明的规则。
+// 所有字段必填：apiVersion 按字面匹配（形如
+// "<group>/<version>"，core 组只有 "<version>"）；kind/path/
+// errorType/origin 按字面匹配，或用 "*" 通配。空值在加载时
+// 即被拒绝，避免条目悄悄过滤掉过多内容。
 type allowlistEntry struct {
 	APIVersion string `json:"apiVersion"`
 	Kind       string `json:"kind"`
@@ -85,8 +85,8 @@ type allowlistEntry struct {
 	Reason     string `json:"reason"`
 }
 
-// groupVersion splits e.APIVersion into (group, version). "v1" → ("", "v1");
-// "apps/v1" → ("apps", "v1").
+// groupVersion 把 e.APIVersion 拆成 (group, version)："v1" -> ("", "v1")；
+// "apps/v1" -> ("apps", "v1")。
 func (e *allowlistEntry) groupVersion() (string, string) {
 	if i := strings.IndexByte(e.APIVersion, '/'); i >= 0 {
 		return e.APIVersion[:i], e.APIVersion[i+1:]
@@ -94,8 +94,8 @@ func (e *allowlistEntry) groupVersion() (string, string) {
 	return "", e.APIVersion
 }
 
-// matches reports whether the entry filters out the given rule. apiVersion
-// must match exactly; the remaining fields match by literal equality or
+// matches 判断该条目是否过滤掉给定规则。apiVersion
+// 必须精确匹配；其余字段按字面值或通配符 "*" 匹配。
 // wildcard with "*".
 func (e *allowlistEntry) matches(group, version, kind, path string, rule rule) bool {
 	g, v := e.groupVersion()
@@ -107,8 +107,8 @@ func (e *allowlistEntry) matches(group, version, kind, path string, rule rule) b
 		(e.Origin == "*" || e.Origin == rule.Origin)
 }
 
-// filterReports returns reports with allowlisted rules removed. Reports
-// left with no rules are dropped. Returns reports unchanged if allowlist is empty.
+// filterReports 返回移除 allowlist 规则后的 report；
+// 规则被清空的 report 会丢弃。allowlist 为空时原样返回。
 func filterReports(reports []*report, allowlist []allowlistEntry) []*report {
 	if len(allowlist) == 0 {
 		return reports
@@ -136,8 +136,8 @@ func filterReports(reports []*report, allowlist []allowlistEntry) []*report {
 	return out
 }
 
-// loadAllowlist reads the YAML file at path. Returns nil when path is empty.
-// Errors on read/parse failure or any entry missing the required reason.
+// loadAllowlist 从指定路径读取 YAML；路径为空时返回 nil。
+// 读取/解析失败，或条目缺少必填 reason 时报错。
 func loadAllowlist(path string) ([]allowlistEntry, error) {
 	if path == "" {
 		return nil, nil
@@ -291,16 +291,16 @@ func (g *coverageTestGen) Init(c *generator.Context, w io.Writer) error {
 	return sw.Error()
 }
 
-// collectReports appends a *report into groupKindReports for each
-// Kind in pkg with at least one declared rule. Records all packages; testTargets
-// filters out non-API packages (empty Version) at emit time.
+// collectReports 为 pkg 中每个至少有一条声明规则的 Kind
+// 向 groupKindReports 追加一个 report；记录所有包，
+// testTargets 在输出阶段过滤掉非 API 包（Version 为空）。
 func collectReports(pkg *types.Package, rootTypes []*types.Type, td *typeDiscoverer, groupKindReports map[schema.GroupKind][]*report) {
-	// Derive (group, version) from the input package:
-	//   group:   the GroupName const if defined (the established API
-	//            convention); otherwise the package path as a fallback.
-	//   version: the package name when it looks like an API version
-	//            (vN[alphaM|betaM]); empty otherwise — testTargets uses the
-	//            empty version to skip non-API packages.
+	// 从输入包推导 (group, version)：
+	// group：若定义了 GroupName 常量（既有 API 约定）则取它，
+	// 否则回退到包路径。
+	// version：包名看起来像 API 版本（vN[alphaM|betaM]）时取包名，
+	// 否则为空——testTargets 据此
+	// 跳过非 API 包。
 	var group, version string
 	if c, ok := pkg.Constants["GroupName"]; ok && c.ConstValue != nil {
 		group = *c.ConstValue
@@ -328,18 +328,18 @@ func collectReports(pkg *types.Package, rootTypes []*types.Type, td *typeDiscove
 	}
 }
 
-// testTargets returns one SimpleTarget per Kind in groupKindReports. Each
-// target's directory is <testOutputRoot>/<short-group>/<lowercase(kind)>/
-// and contains one <prefix><version>_test.go per version plus a
-// shared <prefix>main_test.go. Skips Kinds with empty Version
-// (non-API packages) and Kinds whose every rule is allowlisted.
+// testTargets 为 groupKindReports 中每个 Kind 返回一个 SimpleTarget。
+// 输出目录为 <testOutputRoot>/<short-group>/<lowercase(kind)>/，
+// 每个版本一个 <prefix><version>_test.go，
+// 外加共享的 <prefix>main_test.go。跳过 Version 为空的 Kind
+// （非 API 包）以及所有规则都被 allowlist 过滤的 Kind。
 func testTargets(testOutputRoot, filePrefix string, groupKindReports map[schema.GroupKind][]*report, allowlist []allowlistEntry, boilerplate []byte) []generator.Target {
 	if testOutputRoot == "" || len(groupKindReports) == 0 {
 		return nil
 	}
 	out := make([]generator.Target, 0, len(groupKindReports))
 	for _, reports := range groupKindReports {
-		// reports is non-empty by construction in collectReports.
+		// collectReports 保证 reports 非空。
 		first := reports[0]
 		if first.Version == "" {
 			continue // not a real API package
@@ -349,8 +349,8 @@ func testTargets(testOutputRoot, filePrefix string, groupKindReports map[schema.
 			continue // every rule was allowlisted away
 		}
 		lowerKind := strings.ToLower(first.Kind)
-		// Short group name (first DNS label) as the directory; "core" for the
-		// empty legacy group — matches client-gen / informer-gen convention.
+		// 用短 group 名（首段 DNS 标签）作目录；空的旧 group 用 "core"，
+		// 与 client-gen / informer-gen 的约定一致。
 		group := first.Group
 		if group == "" {
 			group = "core"
@@ -450,11 +450,11 @@ func collectRules(node *typeNode) fieldRules {
 	return rules
 }
 
-// recordRules descends fg, accumulating Wrapper/MultiWrapperFunction
-// PathFragments into suffix, and records (basePath+suffix, Rule) at each
-// emitting leaf. A FunctionGen may declare multiple Emissions when the
-// runtime emits errors of different types or at different path fragments
-// from the same call (e.g. ValSliceUpdate with NoAddItem and NoRemoveItem).
+// recordRules 递归遍历 fg，把 Wrapper/MultiWrapperFunction 的
+// PathFragment 累积到 suffix，在每个产出叶子处记录 (basePath+suffix, Rule)。
+// 同一次调用若运行时在不同类型或路径片段上报多个错误，
+// FunctionGen 可声明多个 Emission。
+// 例如带 NoAddItem 和 NoRemoveItem 的 ValSliceUpdate。
 func recordRules(rules fieldRules, basePath string, fg validators.FunctionGen, suffix string) {
 	if len(fg.Emits) > 0 {
 		for _, e := range fg.Emits {

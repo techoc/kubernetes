@@ -38,25 +38,25 @@ func TestListMapItem(t *testing.T) {
 		BetaValidation: []MapItem{{Key: "foo", Value: 5}},
 		DoubleBeta:     []MapItem{{Key: "foo", Value: 5}},
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByOrigin().ByValidationStabilityLevel(), field.ErrorList{
-		// Case 1: Standard Item -> Normal Error
+		// 用例 1：标准 Item -> 普通错误
 		field.Invalid(field.NewPath("standardItem").Index(0).Child("value"), 5, "").WithOrigin("minimum"),
 
-		// Case 2: Alpha Item tag -> Alpha Error
+		// 用例 2：alpha Item 标签 -> alpha 错误
 		field.Invalid(field.NewPath("alphaItemTag").Index(0).Child("value"), 5, "").WithOrigin("minimum").MarkAlpha(),
 
-		// Case 3: Alpha validation -> Alpha Error
+		// 用例 3：alpha 校验 -> alpha 错误
 		field.Invalid(field.NewPath("alphaValidation").Index(0).Child("value"), 5, "").WithOrigin("minimum").MarkAlpha(),
 
-		// Case 4: Double Alpha -> Alpha Error
+		// 用例 4：双重 alpha -> alpha 错误
 		field.Invalid(field.NewPath("doubleAlpha").Index(0).Child("value"), 5, "").WithOrigin("minimum").MarkAlpha(),
 
-		// Case 5: Beta Item tag -> Beta Error
+		// 用例 5：beta Item 标签 -> beta 错误
 		field.Invalid(field.NewPath("betaItemTag").Index(0).Child("value"), 5, "").WithOrigin("minimum").MarkBeta(),
 
-		// Case 6: Beta validation -> Beta Error
+		// 用例 6：beta 校验 -> beta 错误
 		field.Invalid(field.NewPath("betaValidation").Index(0).Child("value"), 5, "").WithOrigin("minimum").MarkBeta(),
 
-		// Case 7: Double Beta -> Beta Error
+		// 用例 7：双重 beta -> beta 错误
 		field.Invalid(field.NewPath("doubleBeta").Index(0).Child("value"), 5, "").WithOrigin("minimum").MarkBeta(),
 	})
 }

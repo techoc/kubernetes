@@ -44,38 +44,38 @@ type T1 struct {
 	E2 E2 `json:"e2"`
 }
 
-// Note: this has validations and is linked into T1.
+// 注意：此类型有校验，且被 T1 引用。
 type T2 struct {
 	// +k8s:validateFalse="field T2.S"
 	S string `json:"s"`
 }
 
-// Note: this has no validations and is linked into T1.
+// 注意：此类型无校验，但被 T1 引用。
 type T3 struct {
 	S string `json:"s"`
 }
 
-// Note: this has validations and is not linked into T1.
+// 注意：此类型有校验，但未被 T1 引用。
 type T4 struct {
 	// +k8s:validateFalse="field T4.S"
 	S string `json:"s"`
 }
 
-// Note: this has no validations and is not linked into T1.
+// 注意：此类型无校验，也未被 T1 引用。
 type T5 struct {
 	S string `json:"s"`
 }
 
-// Note: this has validations and is linked into T1.
+// 注意：此类型有校验，且被 T1 引用。
 // +k8s:validateFalse="type E1"
 type E1 string
 
-// Note: this has no validations and is linked into T1.
+// 注意：此类型无校验，但被 T1 引用。
 type E2 string
 
-// Note: this has validations and is not linked into T1.
+// 注意：此类型有校验，但未被 T1 引用。
 // +k8s:validateFalse="field type E3"
 type E3 string
 
-// Note: this has no validations and is not linked into T1.
+// 注意：此类型无校验，也未被 T1 引用。
 type E4 string

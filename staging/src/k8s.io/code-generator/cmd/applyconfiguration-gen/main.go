@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// applyconfiguration-gen is a tool for auto-generating apply builder functions.
+// applyconfiguration-gen 为带 +genclient 的 API 类型生成 ApplyConfiguration 类型及其 With/WithXxx 构造方法，使客户端可以以声明式方式构造 apply 请求体。
 //
 // applyconfiguration-gen 为带 +genclient 的 API 类型生成 ApplyConfiguration
 // 类型及其 With/WithXxx 构造方法，使客户端可以以声明式方式构造 apply 请求体。
@@ -53,7 +53,7 @@ func main() {
 		return generators.GetTargets(context, args)
 	}
 
-	// Run it.
+	// // 执行生成流程。
 	if err := gengo.Execute(
 		generators.NameSystems(),
 		generators.DefaultNameSystem(),

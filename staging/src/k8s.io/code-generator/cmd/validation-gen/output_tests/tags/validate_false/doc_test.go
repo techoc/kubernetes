@@ -27,11 +27,11 @@ func Test(t *testing.T) {
 
 	// 零值同样触发校验。
 	st.Value(&Struct{
-		// All zero-values.
+		// 全为零值。
 	}).ExpectValidateFalseByPath(map[string][]string{
 		"stringField": {"field Struct.StringField"},
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{}).OldValue(&Struct{}).ExpectValid()
 
 	st.Value(&Struct{
@@ -39,7 +39,7 @@ func Test(t *testing.T) {
 	}).ExpectValidateFalseByPath(map[string][]string{
 		"stringField": {"field Struct.StringField"},
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{
 		StringField: "abc",
 	}).OldValue(&Struct{

@@ -27,7 +27,7 @@ import "k8s.io/code-generator/cmd/validation-gen/testscheme"
 
 var localSchemeBuilder = testscheme.New()
 
-// Basic one-to-one dependency.
+// 基本的一对一依赖。
 type Struct struct {
 	TypeMeta int
 
@@ -42,7 +42,7 @@ type Struct struct {
 	OtherField *string `json:"otherField"`
 }
 
-// One trigger, many dependents (repeated tags).
+// 一个触发项、多个依赖项（重复标签）。
 type MultiDependent struct {
 	TypeMeta int
 
@@ -58,7 +58,7 @@ type MultiDependent struct {
 	DependentB *string `json:"dependentB"`
 }
 
-// Many triggers, one dependent.
+// 多个触发项、一个依赖项。
 type MultiTrigger struct {
 	TypeMeta int
 
@@ -74,7 +74,7 @@ type MultiTrigger struct {
 	Dependent *string `json:"dependent"`
 }
 
-// All four "is set" extractor kinds.
+// 四种“是否设置”提取器。
 type AllKinds struct {
 	TypeMeta int
 

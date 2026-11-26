@@ -42,7 +42,7 @@ func TestAlpha(t *testing.T) {
 		ImmutableFieldBeta: "foo",
 	}).ExpectValid()
 
-	// Test failures marked as alpha
+	// 标记为 alpha 的失败用例
 	// 设置 OldValue 以让 immutable 规则感知“值发生了变化”。
 	st.Value(&Struct{
 		IntField:           5,
@@ -85,7 +85,7 @@ func TestBeta(t *testing.T) {
 		ImmutableFieldBeta: "foo",
 	}).ExpectValid()
 
-	// Test failures marked as beta
+	// 标记为 beta 的失败用例
 	st.Value(&Struct{
 		IntField:           10,
 		StringField:        "abc",

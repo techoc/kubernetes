@@ -127,7 +127,7 @@ func parseExternalMapping(mapping string) (typ types.Name, pkg string, err error
 	}
 	packageTypeStr := parts[0]
 	pkg = parts[1]
-	// need to split on the *last* dot, since k8s.io (and other valid packages) have a dot in it
+	// // 按最后一个点分割：k8s.io 等合法包名自身也含点
 	lastDot := strings.LastIndex(packageTypeStr, ".")
 	if lastDot == -1 || lastDot == len(packageTypeStr)-1 {
 		return types.Name{}, "", fmt.Errorf("expected package and type of the form <package>.<typeName> but got %s", packageTypeStr)

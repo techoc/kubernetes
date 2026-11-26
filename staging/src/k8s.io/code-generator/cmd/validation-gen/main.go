@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// validation-gen is a tool for auto-generating Validation functions.
+// validation-gen 自动生成 Validation 函数。
 //
 // 该工具把类型与字段上的声明式标记（+k8s:required、+k8s:minLength 等）翻译成
 // Go 校验函数，并生成注册代码。生成器只依赖标记，不解析手写校验逻辑，

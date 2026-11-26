@@ -49,15 +49,15 @@ func init() {
 	RegisterTagValidator(customValidationValidator)
 }
 
-// customValidationTagValidator wires a hand-written ValidateCustom_* function
-// (in the generated package, found by naming convention) into the generated
-// traversal, so it inherits traversal, ratcheting and short-circuiting.
+// customValidationTagValidator 把手写的 ValidateCustom_* 函数
+// （按命名约定在生成包中找到）接入生成遍历，
+// 从而继承遍历、ratcheting 与短路行为。
 type customValidationTagValidator struct {
 	gengoContext        *generator.Context
 	inputToCanonicalPkg map[string]string
-	// claimed records every function a tag wired (directly or via a composing
-	// tag such as ifEnabled), so verifyCustomFunctions can spot ValidateCustom_*
-	// functions defined without a tag.
+	// claimed 记录标签接入的每个函数（直接或经 ifEnabled 等
+	// 组合标签），使 verifyCustomFunctions 能发现未加标签的
+	// ValidateCustom_* 函数。
 	claimed map[types.Name]bool
 }
 
@@ -110,24 +110,24 @@ func (v *customValidationTagValidator) GetValidations(context Context, _ codetag
 		valueType = types.PointerTo(valueType)
 	}
 
-	// Fail with a clear error if the function is missing or mis-typed, rather
-	// than silently skipping validation or emitting code that won't compile.
+	// 函数缺失或签名错误时给出明确错误，而不是
+	// 静默跳过校验或生成无法编译的代码。
 	if err := v.checkFunction(fn, valueType); err != nil {
 		return Validations{}, err
 	}
 	v.claimed[fn] = true
 
-	// Declare no Emission: the generator can't know a hand-written function's
-	// error type or path, so the declarative-validation test generator must not
-	// synthesize a coverage case for it. The runtime call is unaffected.
+	// 不声明 Emission：生成器无法知道手写函数会报出什么
+	// 错误类型或路径，因此声明式校验测试生成器不应
+	// 为其合成覆盖用例；运行时调用不受影响。
 	var result Validations
 	result.AddFunction(Function(customValidationTagName, DefaultFlags, fn).WithComment("custom validation"))
 	return result, nil
 }
 
-// VerifyCustomValidationsHaveTags errors for any ValidateCustom_* function that
-// is untagged, or defined in an input package instead of the generated one.
-// Call it after all inputs have been processed.
+// VerifyCustomValidationsHaveTags 对未声明标签的
+// 未加标签，或定义在输入包而非生成包中的情况。
+// 在所有输入处理完后调用。
 func VerifyCustomValidationsHaveTags() error {
 	return customValidationValidator.verifyCustomFunctions()
 }
@@ -141,9 +141,9 @@ func (v *customValidationTagValidator) verifyCustomFunctions() error {
 	var issues []string
 	scanned := map[string]bool{}
 	for inPkg, outPkg := range v.inputToCanonicalPkg {
-		// A ValidateCustom_* function in the input package is misplaced; it must
-		// live in the generated package. (inPkg == outPkg for self-contained
-		// packages, e.g. test fixtures.)
+		// 输入包中的 ValidateCustom_* 函数放错了位置，必须
+		// 放在生成包里。（自包含包中 inPkg == outPkg，
+		// 如测试夹具。）
 		if inPkg != outPkg {
 			if pkg := v.gengoContext.Universe[inPkg]; pkg != nil {
 				for name := range pkg.Functions {
@@ -174,8 +174,8 @@ func (v *customValidationTagValidator) verifyCustomFunctions() error {
 	return nil
 }
 
-// checkFunction verifies that the referenced hand-written function exists in the
-// universe and has the canonical validator signature for the given value type.
+// checkFunction 检查被引用的手写函数是否存在于
+// universe 中，并具有该值类型的规范校验器签名。
 func (v customValidationTagValidator) checkFunction(fn types.Name, valueType *types.Type) error {
 	if v.gengoContext == nil {
 		return nil // docs/lint path: nothing to verify against.
@@ -196,8 +196,8 @@ func (v customValidationTagValidator) checkFunction(fn types.Name, valueType *ty
 	return nil
 }
 
-// signatureMatches reports whether sig is the canonical custom-validation
-// signature for a value of the given type.
+// signatureMatches 判断 sig 是否为给定值类型的
+// 规范自定义校验签名。
 func signatureMatches(sig *types.Signature, valueType *types.Type) bool {
 	if sig.Variadic || len(sig.Parameters) != 5 || len(sig.Results) != 1 {
 		return false
@@ -220,7 +220,7 @@ func isPointerTo(t *types.Type, name types.Name) bool {
 	return t != nil && t.Kind == types.Pointer && t.Elem != nil && t.Elem.Name == name
 }
 
-// sameType structurally compares two types by kind and (for leaves) name.
+// sameType 按 Kind（叶节点还比较名字）做结构化类型比较。
 func sameType(a, b *types.Type) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -238,7 +238,7 @@ func sameType(a, b *types.Type) bool {
 	}
 }
 
-// renderType formats a type for an error message (e.g. "*Struct", "[]StringType").
+// renderType 为错误消息格式化类型（如 "*Struct"、"[]StringType"）。
 func renderType(t *types.Type) string {
 	if t == nil {
 		return "?"

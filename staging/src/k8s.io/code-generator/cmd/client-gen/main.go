@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// client-gen makes the individual typed clients using gengo.
+// // client-gen 使用 gengo 为各类型生成独立的 typed client。
 package main
 
 import (

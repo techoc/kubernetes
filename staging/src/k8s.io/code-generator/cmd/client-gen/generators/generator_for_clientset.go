@@ -73,8 +73,8 @@ func (g *genClientset) Imports(c *generator.Context) (imports []string) {
 // 模板按“接口 -> 结构体 -> 各 group 实现 -> 构造函数”的顺序输出，
 // 该顺序决定生成文件的内容布局，必须保持稳定以便 diff 审查。
 func (g *genClientset) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
-	// TODO: We actually don't need any type information to generate the clientset,
-	// perhaps we can adapt the go2ild framework to this kind of usage.
+	// TODO: 生成 clientset 其实不需要类型信息，
+	// 或许可以让 gengo 支持这种用法。
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
 
 	allGroups := clientgentypes.ToGroupVersionInfo(g.groups, g.groupGoNames)

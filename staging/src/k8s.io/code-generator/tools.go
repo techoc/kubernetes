@@ -16,8 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This package contains code generation utilities
-// This package imports things required by build scripts, to force `go mod` to see them as dependencies
+// 本包包含代码生成工具
+// 本包空导入构建脚本所需的依赖，迫使 `go mod` 将其视为直接依赖
 // 全部使用空白导入：这里只关心模块依赖图，不需要在运行时引用任何生成器符号。
 
 package codegenerator

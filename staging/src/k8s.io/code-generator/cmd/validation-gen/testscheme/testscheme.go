@@ -52,7 +52,7 @@ type Scheme struct {
 	registrationErrors field.ErrorList
 }
 
-// New creates a new Scheme.
+// New 创建新的 Scheme。
 func New() *Scheme {
 	return &Scheme{validationFuncs: map[reflect.Type]func(ctx context.Context, op operation.Operation, object interface{}, oldObject interface{}) field.ErrorList{}}
 }
@@ -74,7 +74,7 @@ func (s *Scheme) Validate(ctx context.Context, options map[string]bool, object a
 	return nil
 }
 
-// ValidateUpdate validates an update to an object using the registered validation function.
+// ValidateUpdate 用已注册的校验函数校验对象更新。
 func (s *Scheme) ValidateUpdate(ctx context.Context, options map[string]bool, object, oldObject any, subresources ...string) field.ErrorList {
 	if len(s.registrationErrors) > 0 {
 		return s.registrationErrors // short circuit with registration errors if any are present
@@ -102,7 +102,7 @@ func toRegistrationError(err error) *field.Error {
 	return field.InternalError(nil, fmt.Errorf("registration error: %w", err))
 }
 
-// Test returns a ValidationTestBuilder for this scheme.
+// Test 为该 scheme 返回 ValidationTestBuilder。
 func (s *Scheme) Test(t *testing.T) *ValidationTestBuilder {
 	return &ValidationTestBuilder{t, s}
 }
@@ -118,15 +118,15 @@ type ValidationTestBuilder struct {
 // fixtureEnvVar 控制是否重写 fixture 文件；仅用于本地更新期望值。
 const fixtureEnvVar = "UPDATE_VALIDATION_GEN_FIXTURE_DATA"
 
-// ValidateFixtures ensures that the validation errors of all registered types match what is expected by the test fixture files.
-// For each registered type, a value is created for the type, and populated by fuzzing the value, before validating the type.
-// See ValueFuzzed for details.
+// ValidateFixtures 确认所有注册类型的校验错误与测试 fixture 文件的预期一致。
+// 对每个注册类型，先创建值并随机填充，再执行校验。
+// 细节见 ValueFuzzed。
 //
-// If the UPDATE_VALIDATION_GEN_FIXTURE_DATA=true environment variable is set, test fixture files are created or overridden.
+// 设置 UPDATE_VALIDATION_GEN_FIXTURE_DATA=true 时会创建或覆盖测试 fixture 文件。
 //
-// Fixtures:
-//   - validate-false.json: defines a map of registered type to a map of field path to  +validateFalse validations args
-//     that are expected to be returned as errors when the type is validated.
+// fixture：
+// - validate-false.json：定义“注册类型 -> 字段路径 -> +validateFalse 参数”的映射，
+// 即校验该类型时预期报出的错误。
 //
 // 该测试会遍历所有注册类型，因此新增类型若未更新 fixture 会失败；
 // 这是刻意的，防止生成器悄悄漏掉校验。
@@ -134,11 +134,11 @@ func (s *ValidationTestBuilder) ValidateFixtures() {
 	s.T.Helper()
 
 	flag := os.Getenv(fixtureEnvVar)
-	// Run validation
+	// 执行校验
 	got := map[string]map[string][]string{}
 	for t := range s.s.validationFuncs {
 		var v any
-		// TODO: this should handle maps and slices
+		// TODO: 这里应支持 map 和 slice
 		// 为类型构造指针值，使可空类型也能被 fuzz 填充。
 		if t.Kind() == reflect.Pointer {
 			v = reflect.New(t.Elem()).Interface()
@@ -156,7 +156,7 @@ func (s *ValidationTestBuilder) ValidateFixtures() {
 
 	testdataFilename := "testdata/validate-false.json"
 	if flag == "true" {
-		// Generate fixture file
+		// 生成 fixture 文件
 		if err := os.MkdirAll(path.Dir(testdataFilename), os.FileMode(0755)); err != nil {
 			s.Fatal("error making directory", err)
 		}
@@ -169,7 +169,7 @@ func (s *ValidationTestBuilder) ValidateFixtures() {
 			s.Fatal(err)
 		}
 	} else {
-		// Load fixture file
+		// 加载 fixture 文件
 		testdataFile, err := os.Open(testdataFilename)
 		if errors.Is(err, os.ErrNotExist) {
 			s.Fatalf("%s test fixture data not found. Run go test with the environment variable %s=true to create test fixture data.",
@@ -193,7 +193,7 @@ func (s *ValidationTestBuilder) ValidateFixtures() {
 		if err != nil {
 			s.Fatal(err)
 		}
-		// Compare fixture with validation results
+		// 将 fixture 与校验结果比较
 		expectedKeys := sets.New[string]()
 		gotKeys := sets.New[string]()
 		for k := range got {
@@ -234,20 +234,20 @@ func (s *ValidationTestBuilder) ValidateFixtures() {
 // randfiller 返回固定种子的 randfill 填充器：保证测试可重复，
 // 并强制产生非空集合，以覆盖迭代分支。
 func randfiller() *randfill.Filler {
-	// Ensure that lists and maps are not empty and use a deterministic seed.
-	// But also, don't recurse infinitely.
+	// 确保列表与 map 非空，并使用确定性随机种子。
+	// 但也不要无限递归。
 	return randfill.New().NilChance(0.0).NumElements(2, 2).MaxDepth(8).RandSource(rand.NewSource(0))
 }
 
-// ValueFuzzed automatically populates the given value using a deterministic filler.
-// The filler sets pointers to values and always includes a two map keys and slice elements.
+// ValueFuzzed 用确定性填充器自动填充给定值。
+// 填充器把指针设为具体值，并总是放入两个 map 键和 slice 元素。
 func (s *ValidationTestBuilder) ValueFuzzed(value any) *ValidationTester {
 	randfiller().Fill(value)
 	return &ValidationTester{ValidationTestBuilder: s, value: value}
 }
 
-// Value returns a ValidationTester for the given value. The value
-// must be a registered with the scheme for validation.
+// Value 为给定值返回 ValidationTester。该值
+// 必须已在 scheme 中注册，才能执行校验。
 func (s *ValidationTestBuilder) Value(value any) *ValidationTester {
 	return &ValidationTester{ValidationTestBuilder: s, value: value}
 }
@@ -263,18 +263,18 @@ type ValidationTester struct {
 	subresources []string
 }
 
-// OldValue sets the oldValue for this ValidationTester. When oldValue is set,
-// update validation will be used to test validation.
-// oldValue must be the same type as value.
-// Returns ValidationTester to support call chaining.
+// OldValue 为 ValidationTester 设置 oldValue；设置后
+// 将使用更新校验来测试。
+// oldValue 必须与 value 类型相同。
+// 返回 ValidationTester 以支持链式调用。
 func (v *ValidationTester) OldValue(oldValue any) *ValidationTester {
 	v.oldValue = oldValue
 	v.isUpdate = true
 	return v
 }
 
-// OldValueFuzzed automatically populates the given value using a deterministic filler.
-// The filler sets pointers to values and always includes a two map keys and slice elements.
+// OldValueFuzzed 用确定性填充器自动填充给定值。
+// 填充器把指针设为具体值，并总是放入两个 map 键和 slice 元素。
 func (v *ValidationTester) OldValueFuzzed(oldValue any) *ValidationTester {
 	randfiller().Fill(oldValue)
 	v.oldValue = oldValue
@@ -282,13 +282,13 @@ func (v *ValidationTester) OldValueFuzzed(oldValue any) *ValidationTester {
 	return v
 }
 
-// Opts sets the ValidationOpts to use.
+// Opts 设置要使用的 ValidationOpts。
 func (v *ValidationTester) Opts(options map[string]bool) *ValidationTester {
 	v.options = options
 	return v
 }
 
-// Subresource sets the ValidationOpts to use.
+// Subresource 设置要使用的 ValidationOpts。
 func (v *ValidationTester) Subresources(subresources []string) *ValidationTester {
 	v.subresources = subresources
 	return v
@@ -311,8 +311,8 @@ func multiline(errs field.ErrorList) string {
 	return buf.String()
 }
 
-// ExpectValid validates the value and calls t.Errorf if any validation errors are returned.
-// Returns ValidationTester to support call chaining.
+// ExpectValid 校验值，若有错误则调用 t.Errorf。
+// 返回 ValidationTester 以支持链式调用。
 func (v *ValidationTester) ExpectValid() *ValidationTester {
 	v.T.Helper()
 
@@ -327,11 +327,11 @@ func (v *ValidationTester) ExpectValid() *ValidationTester {
 	return v
 }
 
-// ExpectValidateFalseByPath validates the value and looks for the errors
-// specifically produced by `+k8s:validateFalse` tags. Each field (the map key)
-// can have multiple error strings (the map value). Test which are trying
-// to prove that the validation logic itself (e.g. validation-gen) produces the
-// expected errors should use this method.
+// ExpectValidateFalseByPath 校验值并查找
+// 由 `+k8s:validateFalse` 标签产生的错误。每个字段（map 键）
+// 可对应多个错误字符串（map 值）。若要证明
+// 校验逻辑本身（如 validation-gen）产生了预期错误，
+// 应使用此方法。
 func (v *ValidationTester) ExpectValidateFalseByPath(expectedByPath map[string][]string) *ValidationTester {
 	v.T.Helper()
 
@@ -339,7 +339,7 @@ func (v *ValidationTester) ExpectValidateFalseByPath(expectedByPath map[string][
 		t.Helper()
 
 		actualByPath := v.validateFalseArgsByPath()
-		// ensure args are sorted
+		// 确保参数已排序
 		for _, args := range expectedByPath {
 			sort.Strings(args)
 		}
@@ -367,17 +367,17 @@ func (v *ValidationTester) validateFalseArgsByPath() map[string][]string {
 			byPath[f] = append(byPath[f], arg)
 		}
 	}
-	// ensure args are sorted
+	// 确保参数已排序
 	for _, args := range byPath {
 		sort.Strings(args)
 	}
 	return byPath
 }
 
-// ExpectMatches compares the expected errors with the actual errors returned
-// by the validation, using the provided ErrorMatcher. Tests which are trying
-// to prove that a use-case of validation (e.g. testing pod validation)
-// produces the expected errors should use this method.
+// ExpectMatches 用给定的 ErrorMatcher 比较预期错误
+// 与校验实际返回的错误。若要证明
+// 某个校验用例（如测试 pod 校验）
+// 产生预期错误，应使用此方法。
 func (v *ValidationTester) ExpectMatches(matcher field.ErrorMatcher, expected field.ErrorList) *ValidationTester {
 	v.Helper()
 

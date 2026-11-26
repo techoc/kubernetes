@@ -27,12 +27,10 @@ const (
 	opaqueTypeTagName = "k8s:opaqueType"
 )
 
-// globalOpaqueTypes and globalOpaqueMembers record the set of types and struct
-// members tagged with +k8s:opaqueType, populated as opaqueTypeTagValidator
-// processes those tags. Other validators (currently subfield) consult these to
-// decide whether to inherit short-circuit validations from the field. Lookups
-// must therefore happen in a deferred callback so that all opaque tags have
-// been registered first.
+// globalOpaqueTypes 与 globalOpaqueMembers 记录标为 opaque 的类型与结构体成员，
+// 由 opaqueTypeTagValidator 在处理标签时填充。其他校验器（目前是 subfield）
+// 据此决定是否从字段继承短路校验。因此查找必须放在延迟回调中，
+// 等所有 opaque 标签都注册完再查。
 //
 // 全局状态是刻意为之：标签处理顺序无法保证，opaque 信息必须在所有标签都
 // 处理完后才能查询，因此查询点放在 Deferred 回调里。
@@ -68,8 +66,8 @@ func (opaqueTypeTagValidator) ValidScopes() sets.Set[Scope] {
 // 只在不透明类型或字段的实际声明位置登记；调用方的字段查找使用
 // globalOpaqueMembers，因此 Member 为 nil 时跳过。
 func (opaqueTypeTagValidator) GetValidations(context Context, _ codetags.Tag) (Validations, error) {
-	// Store information about opaque types and fields, so that other validators
-	// don't have to extract it again.
+	// 记录不透明类型与字段的信息，避免其他校验器
+	// 重复提取。
 	switch context.Scope {
 	case ScopeType:
 		globalOpaqueTypes[util.NonPointer(util.NativeType(context.Type))] = true
@@ -81,10 +79,10 @@ func (opaqueTypeTagValidator) GetValidations(context Context, _ codetags.Tag) (V
 	return Validations{OpaqueType: true}, nil
 }
 
-// isFieldOpaque reports whether the field or its type was tagged
+// isFieldOpaque 判断字段或其类型是否被标记
 // +k8s:opaqueType. It reads from the package-level registries above, so
-// callers must invoke it from a deferred callback (or any other context
-// where opaque-tag processing has finished).
+// 调用方必须在延迟回调中（或其他 opaque 标签处理已完成的
+// 上下文中）调用它。
 //
 // 同时检查字段级与类型级：字段级覆盖更精确，类型级让同一类型的所有使用处
 // 都保持不透明；查询前先剥掉指针与 alias，确保比较的是底层类型。

@@ -38,7 +38,7 @@ func Test(t *testing.T) {
 		ValidatedStructField: ValidatedInnerStruct{StringField: "allowed"},
 	}).ExpectValid()
 
-	// Test empty collections and unset.
+	// 测试空集合与未设置。
 	st.Value(&Struct{
 		StructField:          InnerStruct{},
 		StructPtrField:       &InnerStruct{StringField: "valid"},
@@ -49,7 +49,7 @@ func Test(t *testing.T) {
 		ValidatedStructField: ValidatedInnerStruct{StringField: "allowed"},
 	}).ExpectValid()
 
-	// Test invalid values trigger all expected validation errors
+	// 测试非法值触发所有预期的校验错误
 	// 每个被禁止的位置都应独立报错，索引/键路径用于精确定位。
 	invalidStruct := &Struct{
 		StructField:          InnerStruct{StringField: "disallowed-subfield"},
@@ -74,6 +74,6 @@ func Test(t *testing.T) {
 		field.Invalid(field.NewPath("validatedStructField", "stringField"), nil, "").WithOrigin("neq"),
 	})
 
-	// Test validation ratcheting allows existing invalid values
+	// 测试 ratcheting 对已有非法值的放行
 	st.Value(invalidStruct).OldValue(invalidStruct).ExpectValid()
 }

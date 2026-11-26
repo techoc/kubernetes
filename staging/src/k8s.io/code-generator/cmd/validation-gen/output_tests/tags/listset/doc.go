@@ -83,8 +83,8 @@ type NonComparableStruct struct {
 	SliceField []string `json:"sliceField"`
 }
 
-// FalselyComparableStruct contains a pointer field which makes Go's == operator
-// only compare the pointers, not the underlying values
+// FalselyComparableStruct 含指针字段，使 Go 的 ==
+// 只比较指针，不比较底层值
 type FalselyComparableStruct struct {
 	StringPtrField *string `json:"stringPtrField"`
 }

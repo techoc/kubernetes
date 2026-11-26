@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 验证 +k8s:item 多 key 选择器：listMapKey 可声明多个 key，
 // 且 item 的 key 参数顺序与 listMapKey 不一致时也应正确匹配。

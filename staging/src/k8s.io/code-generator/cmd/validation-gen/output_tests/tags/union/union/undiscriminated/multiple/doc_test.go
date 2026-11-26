@@ -54,7 +54,7 @@ func Test(t *testing.T) {
 		field.Invalid(nil, nil, "must specify exactly one of: `u2m1`, `u2m2`").WithOrigin("union"),
 	})
 
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	st.Value(&Struct{}).OldValue(&Struct{}).ExpectValid()
 	st.Value(&Struct{U1M1: &M1{}, U1M2: &M2{}}).OldValue(&Struct{U1M1: &M1{}, U1M2: &M2{}}).ExpectValid()
 	st.Value(&Struct{U2M1: &M1{}, U2M2: &M2{}}).OldValue(&Struct{U2M1: &M1{}, U2M2: &M2{}}).ExpectValid()

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// go-to-protobuf generates a Protobuf IDL from a Go struct, respecting any
+// // go-to-protobuf 从 Go 结构体生成 Protobuf IDL，并保留结构体上已有的 IDL 标签。
 // existing IDL tags on the Go struct.
 package main
 

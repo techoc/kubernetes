@@ -20,7 +20,7 @@ limitations under the License.
 
 //nolint:unused
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 //
 // 本包验证跨包类型引用：内嵌的外部包类型（primitives/typedefs/other）
 // 应决定校验函数被生成在哪个包，并通过 opaqueType 控制是否深入其字段。
@@ -51,8 +51,8 @@ type T1 struct {
 	PrimitivesT3 primitives.T3 `json:"primitivest3"`
 	// +k8s:validateTrue="field T1.PrimitivesT3Ptr"
 	PrimitivesT3Ptr *primitives.T1 `json:"primitivest3Ptr"`
-	// T4 and T5 are not root types in that pkg and are not linked into any
-	// root type's transitive graph, so they have no functions.
+	// T4 和 T5 不是该包中的根类型，也没有被任何
+	// 根类型的传递图引用，因此没有生成函数。
 
 	// +k8s:validateTrue="field T1.TypedefsE1"
 	TypedefsE1 typedefs.E1 `json:"typedefse1"`
@@ -110,9 +110,9 @@ type T1 struct {
 	MapOfOtherStringToOtherStruct map[other.StringType]other.StructType `json:"mapOfOtherStringToOtherStruct"`
 }
 
-// TODO: the validateFalse test fixture doesn't handle map and slice types, and
-// fixing it requires fixing randfill.  That is a tomorrow problem.  For now, the
-// following types have been tested to fail without +k8s:opaqueType.
+// TODO: validateFalse 测试夹具还处理不了 map 和 slice 类型，
+// 要修得先修 randfill，这是明天的问题。目前先测试以下类型：
+// 它们在不加 +k8s:opaqueType 时校验失败。
 
 /*
 // +k8s:validateTrue="type TypedefSliceOther"

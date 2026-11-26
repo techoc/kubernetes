@@ -89,8 +89,8 @@ func TestGetTargets(t *testing.T) {
 			inputs:   []string{"example.com/api/v1beta1"},
 			wantPkgs: []string{"example.com/api/v1beta1"},
 		},
-		// Ecosystem regression: a third-party generator's tag in the same
-		// doc.go must NOT cause prerelease-gen to fail or skip.
+		// // 回归用例：同一 doc.go 中第三方生成器的标签不应让本生成器
+		// // 失败或跳过该包。
 		{
 			name: "foreign third-party generator tag is ignored",
 			pkgs: map[string]*types.Package{

@@ -28,9 +28,9 @@ func TestBasicStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	// 零值低于 minimum=1，应被拒绝。
-	// Test that zero values are rejected because they are below the minimum of 1.
+	// 测试零值因低于 minimum=1 而被拒绝。
 	st.Value(&BasicStruct{
-		// all zero values
+		// 全零值
 		IntPtrField:     ptr.To(0),
 		UintPtrField:    ptr.To(uint(0)),
 		TypedefPtrField: ptr.To(IntType(0)),
@@ -50,7 +50,7 @@ func TestBasicStruct(t *testing.T) {
 	})
 
 	// 校验 ratcheting：新旧值相同（都非法）时不报错。
-	// Test validation ratcheting: unchanged invalid data is allowed.
+	// 测试 ratcheting：未变化的非法数据应放行。
 	st.Value(&BasicStruct{
 		IntPtrField:     ptr.To(0),
 		UintPtrField:    ptr.To(uint(0)),
@@ -62,7 +62,7 @@ func TestBasicStruct(t *testing.T) {
 	}).ExpectValid()
 
 	// 值变得更小（从 0 改为 -1）时仍应报错。
-	// Changed invalid data is still rejected.
+	// 值发生变化后仍被拒绝。
 	st.Value(&BasicStruct{
 		IntField:        -1,
 		IntPtrField:     ptr.To(-1),
@@ -90,7 +90,7 @@ func TestBasicStruct(t *testing.T) {
 	})
 
 	// 满足 minimum=1 的值合法。
-	// Test that values meeting the minimum of 1 are valid.
+	// 测试满足 minimum=1 的值合法。
 	st.Value(&BasicStruct{
 		IntField:        1,
 		IntPtrField:     ptr.To(1),
@@ -113,9 +113,9 @@ func TestOptionalStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	// 显式提供零值的 optional 指针仍会触发 minimum 校验。
-	// Test that explicitly provided zero values for optional pointers are still validated against minimum.
+	// 测试显式提供的 optional 指针零值仍受 minimum 校验。
 	st.Value(&OptionalStruct{
-		// zero values
+		// 零值
 		OptionalIntPtrField:     ptr.To(0),
 		OptionalTypedefPtrField: ptr.To(IntType(0)),
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
@@ -124,14 +124,14 @@ func TestOptionalStruct(t *testing.T) {
 	})
 
 	// 省略 optional 指针字段（nil）时，optional 先短路，minimum 不会执行。
-	// Test that omitting an optional pointer field (nil) short-circuits minimum validation.
+	// 测试省略 optional 指针字段（nil）会短路 minimum。
 	st.Value(&OptionalStruct{
-		// OptionalIntField is zero and OptionalIntPtrField is nil, so optional
-		// short-circuits before minimum runs.
+		// OptionalIntField 为零且 OptionalIntPtrField 为 nil，因此 optional
+		// 会在 minimum 之前短路。
 	}).ExpectValid()
 
 	// 校验 ratcheting：新旧值相同（都非法）时不报错。
-	// Test validation ratcheting: unchanged invalid data is allowed.
+	// 测试 ratcheting：未变化的非法数据应放行。
 	st.Value(&OptionalStruct{
 		OptionalIntField:        -1,
 		OptionalIntPtrField:     ptr.To(-1),
@@ -145,7 +145,7 @@ func TestOptionalStruct(t *testing.T) {
 	}).ExpectValid()
 
 	// 值变得更小（从 -1 改为 -2）时仍应报错。
-	// Changed invalid data is still rejected.
+	// 值发生变化后仍被拒绝。
 	st.Value(&OptionalStruct{
 		OptionalIntField:        -2,
 		OptionalIntPtrField:     ptr.To(-2),
@@ -163,7 +163,7 @@ func TestOptionalStruct(t *testing.T) {
 		field.Invalid(field.NewPath("optionalTypedefPtrField"), nil, "").WithOrigin("minimum"),
 	})
 
-	// Test that values meeting the minimum of 1 are valid.
+	// 测试满足 minimum=1 的值合法。
 	st.Value(&OptionalStruct{
 		OptionalIntField:        1,
 		OptionalIntPtrField:     ptr.To(1),
@@ -171,7 +171,7 @@ func TestOptionalStruct(t *testing.T) {
 		OptionalTypedefPtrField: ptr.To(IntType(1)),
 	}).ExpectValid()
 
-	// Test that invalid values below the minimum are rejected.
+	// 测试低于 minimum 的非法值被拒绝。
 	st.Value(&OptionalStruct{
 		OptionalIntField:        -1,
 		OptionalIntPtrField:     ptr.To(-1),
@@ -191,10 +191,10 @@ func TestRequiredStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	// 显式提供指针零值时按 minimum 校验；非指针零值触发 required。
-	// Test that explicitly provided zero values for pointers are validated against minimum,
-	// while zero values for non-pointers trigger required validation.
+	// 测试显式提供的指针零值按 minimum 校验，
+	// 而非指针零值触发 required 校验。
 	st.Value(&RequiredStruct{
-		// zero values
+		// 零值
 		RequiredIntField:        0,
 		RequiredIntPtrField:     ptr.To(0),
 		RequiredTypedefField:    IntType(0),
@@ -207,9 +207,9 @@ func TestRequiredStruct(t *testing.T) {
 	})
 
 	// 省略 required 指针（nil）时只报 Required，并短路 minimum。
-	// Test that omitted required pointer fields (nil) emit field.Required and short-circuit minimum validation.
+	// 测试省略 required 指针字段（nil）只报 field.Required，并短路 minimum。
 	st.Value(&RequiredStruct{
-		// RequiredIntField is zero and RequiredIntPtrField is nil.
+		// RequiredIntField 为零且 RequiredIntPtrField 为 nil。
 	}).ExpectMatches(field.ErrorMatcher{}.ByType().ByField().ByDetailSubstring().ByOrigin(), field.ErrorList{
 		field.Required(field.NewPath("requiredIntField"), ""),
 		field.Required(field.NewPath("requiredIntPtrField"), ""),
@@ -218,7 +218,7 @@ func TestRequiredStruct(t *testing.T) {
 	})
 
 	// 校验 ratcheting：新旧值相同（都非法）时不报错。
-	// Test validation ratcheting: unchanged invalid data is allowed.
+	// 测试 ratcheting：未变化的非法数据应放行。
 	st.Value(&RequiredStruct{
 		RequiredIntField:        0,
 		RequiredIntPtrField:     ptr.To(0),
@@ -232,7 +232,7 @@ func TestRequiredStruct(t *testing.T) {
 	}).ExpectValid()
 
 	// 值变得更小（从 0 改为 -1）时仍应报错。
-	// Changed invalid data is still rejected.
+	// 值发生变化后仍被拒绝。
 	st.Value(&RequiredStruct{
 		RequiredIntField:        -1,
 		RequiredIntPtrField:     ptr.To(-1),
@@ -251,7 +251,7 @@ func TestRequiredStruct(t *testing.T) {
 	})
 
 	// 满足 minimum=1 的值合法。
-	// Test that values meeting the minimum of 1 are valid.
+	// 测试满足 minimum=1 的值合法。
 	st.Value(&RequiredStruct{
 		RequiredIntField:        1,
 		RequiredIntPtrField:     ptr.To(1),
@@ -260,7 +260,7 @@ func TestRequiredStruct(t *testing.T) {
 	}).ExpectValid()
 
 	// 低于 minimum 的值不合法。
-	// Test that invalid values below the minimum are rejected.
+	// 测试低于 minimum 的非法值被拒绝。
 	st.Value(&RequiredStruct{
 		RequiredIntField:        -1,
 		RequiredIntPtrField:     ptr.To(-1),
@@ -280,10 +280,10 @@ func TestNegativeMinimumStruct(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
 	// 零值对 -10 合法；required 非指针零值仍触发 Required。
-	// Test that zero values for required pointers are validated against the negative minimum,
-	// while zero values for non-pointers trigger required validation.
+	// 测试 required 指针零值按负 minimum 校验，
+	// 而非指针零值触发 required 校验。
 	st.Value(&NegativeMinimumStruct{
-		// zero values (valid for -10)
+		// 零值（对 -10 合法）
 		NegativeMinimumPtrField:         ptr.To(0),
 		OptionalNegativeMinimumPtrField: ptr.To(0),
 		RequiredNegativeMinimumField:    0,
@@ -293,7 +293,7 @@ func TestNegativeMinimumStruct(t *testing.T) {
 	})
 
 	// 边界值 -10 合法。
-	// Test that valid values at the negative minimum boundary (-10) are accepted.
+	// 测试负 minimum 边界值（-10）合法。
 	st.Value(&NegativeMinimumStruct{
 		NegativeMinimumField:            -10,
 		NegativeMinimumPtrField:         ptr.To(-10),
@@ -304,7 +304,7 @@ func TestNegativeMinimumStruct(t *testing.T) {
 	}).ExpectValid()
 
 	// 校验 ratcheting：新旧值相同（都非法）时不报错。
-	// Test validation ratcheting: unchanged invalid data is allowed.
+	// 测试 ratcheting：未变化的非法数据应放行。
 	st.Value(&NegativeMinimumStruct{
 		NegativeMinimumField:            -11,
 		NegativeMinimumPtrField:         ptr.To(-11),
@@ -322,7 +322,7 @@ func TestNegativeMinimumStruct(t *testing.T) {
 	}).ExpectValid()
 
 	// 值变得更小（从 -11 改为 -12）时仍应报错。
-	// Changed invalid data is still rejected.
+	// 值发生变化后仍被拒绝。
 	st.Value(&NegativeMinimumStruct{
 		NegativeMinimumField:            -12,
 		NegativeMinimumPtrField:         ptr.To(-12),
@@ -347,7 +347,7 @@ func TestNegativeMinimumStruct(t *testing.T) {
 	})
 
 	// 低于负 minimum（-10）的值不合法。
-	// Test that invalid values below the negative minimum (-10) are rejected.
+	// 测试低于负 minimum（-10）的非法值被拒绝。
 	st.Value(&NegativeMinimumStruct{
 		NegativeMinimumField:            -11,
 		NegativeMinimumPtrField:         ptr.To(-11),

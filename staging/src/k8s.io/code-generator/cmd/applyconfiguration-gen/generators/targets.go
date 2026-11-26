@@ -97,8 +97,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 
 		var toGenerate []applyConfig
 		for _, t := range p.Types {
-			// If we don't have an ObjectMeta field, we lack the information required to make the Apply or ApplyStatus call
-			// to the kube-apiserver, so we don't need to generate the type at all
+			// // 没有 ObjectMeta 就无法向 apiserver 发起 Apply/ApplyStatus 调用，
+			// // 这类类型不必生成
 			clientTags := genclientTags(t)
 			if clientTags.GenerateClient && !hasObjectMetaField(t) {
 				klog.V(5).Infof("skipping type %v because does not have ObjectMeta", t)
@@ -123,19 +123,19 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		// 排序保证生成结果稳定，避免 map 迭代顺序导致 diff 抖动。
 		sort.Sort(applyConfigSort(toGenerate))
 
-		// Apparently we allow the groupName to be overridden in a way that it
-		// no longer maps to a Go package by name.  So we have to figure out
+		// groupName 可被覆盖为与 Go 包名无直接对应关系的值，因此输出包的
+		// 子目录要按实际输入包路径相对 args.OutputPkg 计算，而非按 group 名推导。
 		// the offset of this particular output package (pkg) from the base
 		// output package (args.OutputPkg).
 		pkgSubdir := strings.TrimPrefix(pkg, args.OutputPkg+"/")
 
-		// generate the apply configurations
+		// // 生成 apply configuration 包
 		targetList = append(targetList,
 			targetForApplyConfigurationsPackage(
 				args.OutputDir, args.OutputPkg, pkgSubdir,
 				boilerplate, gv, toGenerate, refs, typeModels))
 
-		// group all the generated apply configurations by gv so ForKind() can be generated
+		// 按 gv 汇总生成的 apply configuration，供 ForKind() 使用
 		groupPackageName := gv.Group.NonEmpty()
 		groupVersionsEntry, ok := groupVersions[groupPackageName]
 		if !ok {
@@ -157,11 +157,11 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 		groupVersions[groupPackageName] = groupVersionsEntry
 	}
 
-	// generate ForKind() utility function
+	// // 生成 ForKind() 工具包
 	targetList = append(targetList,
 		targetForUtils(args.OutputDir, args.OutputPkg,
 			boilerplate, groupVersions, applyConfigsForGroupVersion, groupGoNames, typeModels))
-	// generate internal embedded schema, required for generated Extract functions
+	// // 生成内嵌 schema 的 internal 包，Extract 函数在运行时依赖它
 	targetList = append(targetList,
 		targetForInternal(args.OutputDir, args.OutputPkg,
 			boilerplate, typeModels))
@@ -299,9 +299,9 @@ func packageTypesForInputs(context *generator.Context, outPkgBase string, idOpts
 			klog.Warningf("Skipping internal package: %s", p.Path)
 			continue
 		}
-		// This is how the client generator finds the package we are creating. It uses the API package name, not the group name.
-		// This matches the approach of the client-gen, so the two generator can work together.
-		// For example, if openshift/api/cloudnetwork/v1 contains an apigroup cloud.network.openshift.io, the client-gen
+		// 输出路径按 API 包路径而非 group 名计算，与 client-gen 的约定保持一致，
+		// 两个生成器才能落在同一目录树。例如 openshift/api/cloudnetwork/v1 对应的
+		// apigroup 是 cloud.network.openshift.io，client-gen 生成的包仍叫 cloudnetwork/v1。
 		// builds a package called cloudnetwork/v1 to contain it. This change makes the applyconfiguration-gen use the same.
 		_, gvPackageString := util.ParsePathGroupVersion(p.Path)
 		pkg := path.Join(outPkgBase, strings.ToLower(gvPackageString))
@@ -317,9 +317,9 @@ func groupVersion(p *types.Package) (gv clientgentypes.GroupVersion, err error) 
 	gv.Group = clientgentypes.Group(parts[len(parts)-2])
 	gv.Version = clientgentypes.Version(parts[len(parts)-1])
 
-	// If there's a comment of the form "// +groupName=somegroup" or
-	// "// +groupName=somegroup.foo.bar.io", use the first field (somegroup) as the name of the
-	// group when generating.
+	// // +groupName 注释（如 +groupName=somegroup.foo.bar.io）可覆盖 group 名；
+	// // 只取点号前的第一段，与 client-gen 的目录命名保持一致。
+	// 生成时取首段作为 group 名。
 	override, ok, err := apidefinitions.GroupNameForPackage(p.Comments)
 	if err != nil {
 		return gv, err

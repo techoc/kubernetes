@@ -29,27 +29,27 @@ var localSchemeBuilder = testscheme.New()
 type AtomicSliceStruct struct {
 	TypeMeta int
 
-	// Case: Standard eachVal
+	// 用例：标准 eachVal
 	// +k8s:listType=atomic
 	// +k8s:eachVal=+k8s:minimum=10
 	Standard []int `json:"standard"`
 
-	// Case: Alpha eachVal
+	// 用例：alpha eachVal
 	// +k8s:listType=atomic
 	// +k8s:alpha=+k8s:eachVal=+k8s:minimum=10
 	Alpha []int `json:"Alpha"`
 
-	// Case: Beta eachVal
+	// 用例：beta eachVal
 	// +k8s:listType=atomic
 	// +k8s:beta=+k8s:eachVal=+k8s:minimum=10
 	Beta []int `json:"Beta"`
 
-	// Case: Standard eachVal, Alpha validation
+	// 用例：标准 eachVal + alpha 校验
 	// +k8s:listType=atomic
 	// +k8s:eachVal=+k8s:alpha=+k8s:minimum=10
 	AlphaValidation []int `json:"AlphaValidation"`
 
-	// Case: Standard eachVal, Beta validation
+	// 用例：标准 eachVal + beta 校验
 	// +k8s:listType=atomic
 	// +k8s:eachVal=+k8s:beta=+k8s:minimum=10
 	BetaValidation []int `json:"BetaValidation"`

@@ -27,14 +27,14 @@ import (
 	"k8s.io/code-generator/pkg/apidefinitions"
 )
 
-// Args is used by the gengo framework to pass args specific to this generator.
+// // Args 保存 gengo 框架传给本生成器的参数。
 type Args struct {
 	OutputDir    string // must be a directory path
 	OutputPkg    string // must be a Go import-path
 	GoHeaderFile string
 
-	// PluralExceptions specify list of exceptions used when pluralizing certain types.
-	// For example 'Endpoints:Endpoints', otherwise the pluralizer will generate 'Endpointes'.
+	// // PluralExceptions 列出复数化规则的例外，如 Endpoints:Endpoints；
+	// // 否则复数化器会生成错误的 Endpointes。
 	//
 	// 复数例外同时影响生成的 lister 方法名，必须与 client-gen 传入的一致，
 	// 否则 lister 与 client 的资源名会对不上。
@@ -43,12 +43,12 @@ type Args struct {
 	apidefinitions.LintArgs
 }
 
-// New returns default arguments for the generator.
+// // New 返回生成器的默认参数。
 func New() *Args {
 	return &Args{}
 }
 
-// AddFlags add the generator flags to the flag set.
+// // AddFlags 把生成器参数注册到 flag set。
 func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&args.OutputDir, "output-dir", "",
 		"the base directory under which to generate results")
@@ -61,7 +61,7 @@ func (args *Args) AddFlags(fs *pflag.FlagSet) {
 	apidefinitions.AddFlags(&args.LintArgs, fs)
 }
 
-// Validate checks the given arguments.
+// // Validate 校验参数，尽早暴露错误配置。
 //
 // 校验失败直接返回错误而不是 panic，便于 main 统一打印可操作的提示。
 func (args *Args) Validate() error {

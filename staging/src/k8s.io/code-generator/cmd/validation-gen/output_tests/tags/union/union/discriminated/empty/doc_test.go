@@ -25,9 +25,9 @@ import (
 func Test(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Unions discriminators may be optional.
+	// 联合体的判别式可选。
 	st.Value(&Struct{D: D("")}).ExpectValid()
 
-	// Unions discriminators Should be validated for valid values.
+	// 联合体的判别式应校验合法取值。
 	st.Value(&Struct{D: D("Unknown")}).ExpectValid()
 }

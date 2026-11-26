@@ -31,7 +31,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +genclient:method=ApplySubresource,verb=apply,subresource=subresource,input=k8s.io/code-generator/examples/crd/apis/extensions/v1.TestSubresource,result=k8s.io/code-generator/examples/crd/apis/extensions/v1.TestSubresource
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TestType is a top-level type. A client is created for it.
+// TestType 是顶层类型，会为其生成 client。
 //
 // 上面一组 +genclient:method 让 client-gen 为它生成额外的方法：
 // Get/List/Create/Update/Patch/Apply 的扩展形式，以及带子资源的
@@ -55,8 +55,8 @@ type TestSubresource struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TestTypeList is a top-level list type. The client methods for lists are automatically created.
-// You are not supposed to create a separate client for this one.
+// TestTypeList 是顶层列表类型，其 client 方法自动生成。
+// 不应为这个类型单独生成 client。
 type TestTypeList struct {
 	metav1.TypeMeta `json:""`
 	// +optional

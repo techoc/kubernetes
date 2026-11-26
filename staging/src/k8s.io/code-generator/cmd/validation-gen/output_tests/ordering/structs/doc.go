@@ -21,7 +21,7 @@ limitations under the License.
 // 这是一个测试包：验证结构体上多个校验标签的生成顺序。
 // T00~T03 用 4 位组合覆盖“有无 ShortCircuit 标志”，TMultiple 故意乱序声明，
 // 用来断言生成器会按稳定规则重排。
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 package structs
 
@@ -35,11 +35,11 @@ type Tother struct {
 	OS string `json:"os"`
 }
 
-// Treat these as 4 bits, and ensure all combinations
-//   bit 0: no flags
-//   bit 1: ShortCircuit
+// 把它们当作 4 个比特位，确保覆盖所有组合。
+// bit 0：无标志
+// bit 1：ShortCircuit
 
-// Note: No validations.
+// 注意：没有校验。
 type T00 struct {
 	TypeMeta int
 	S        string  `json:"s"`
@@ -92,7 +92,7 @@ type T03 struct {
 	PT *Tother `json:"pt"`
 }
 
-// Note: these are intentionally in the wrong final order.
+// 注意：这些类型刻意按错误的最终顺序排列。
 // +k8s:validateFalse="TMultiple, no flags 1"
 // +k8s:validateFalse(flags: "ShortCircuit")="TMultiple, ShortCircuit 1"
 // +k8s:validateFalse="T0, string payload"

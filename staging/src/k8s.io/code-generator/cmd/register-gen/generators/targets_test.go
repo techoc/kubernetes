@@ -37,9 +37,9 @@ func TestGetTargets(t *testing.T) {
 		path     string
 		dir      string // optional; will use t.TempDir() if needRegisterFile
 		comments []string
-		// typeMembers describes a single struct type in the package. nil means no types.
+		// 描述包内唯一的结构体类型；nil 表示没有类型。
 		typeMembers []types.Member
-		// needRegisterFile, when true, creates dir/register.go before invoking GetTargets.
+		// 为 true 时在调用 GetTargets 前先创建 dir/register.go。
 		needRegisterFile bool
 	}
 
@@ -96,8 +96,8 @@ func TestGetTargets(t *testing.T) {
 			wantPaths: nil,
 		},
 		{
-			// isInternal returns an error when the package has no TypeMeta-
-			// bearing types at all, and GetTargets treats that error as a skip.
+			// // 包内没有任何带 TypeMeta 的类型时 isInternal 会报错，
+			// // GetTargets 将其视为跳过。
 			name: "+groupName but no TypeMeta types is skipped (isInternal errors)",
 			pkgs: []pkgSpec{{
 				path:     "k8s.io/api/foo/v1",
@@ -124,9 +124,9 @@ func TestGetTargets(t *testing.T) {
 			}},
 			wantPaths: nil,
 		},
-		// Ecosystem regression: a third-party generator's tag in the same
-		// doc.go must NOT cause register-gen to fail. The +groupName= still
-		// activates as expected.
+		// // 回归用例：同一 doc.go 中第三方生成器的标签不应让本生成器
+		// 同一 doc.go 中第三方生成器的标签不应让 register-gen 失败，
+		// // +groupName 仍应正常激活。
 		{
 			name: "foreign third-party generator tag is ignored",
 			pkgs: []pkgSpec{{
@@ -193,8 +193,8 @@ func TestGetTargets(t *testing.T) {
 				t.Fatalf("target paths: got %v, want %v", gotPaths, wantPaths)
 			}
 
-			// Verify per-package group and typesToGenerate by exercising the
-			// generator function the SimpleTarget would run.
+			// // 通过执行 SimpleTarget 的生成器函数来校验各包的 group
+			// // 与 typesToGenerate。
 			for _, tgt := range got {
 				st, ok := tgt.(*generator.SimpleTarget)
 				if !ok {

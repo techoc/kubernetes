@@ -29,7 +29,7 @@ func Test(t *testing.T) {
 
 	// 全零值：未校验字段与上限字段都不应报错。
 	st.Value(&Struct{
-		// All zero values
+		// 全部零值
 	}).ExpectValid()
 
 	// 空切片（显式 make）同样合法。
@@ -73,7 +73,7 @@ func Test(t *testing.T) {
 		field.TooMany(field.NewPath("max0TypedefField"), 1, 0),
 		field.TooMany(field.NewPath("max10TypedefField"), 11, 10),
 	})
-	// Test validation ratcheting
+	// 测试 ratcheting 行为
 	// 新旧值都超限且未变化，不应重新报错。
 	st.Value(&Struct{
 		UnvalidatedField:  make(UnvalidatedType, 1),

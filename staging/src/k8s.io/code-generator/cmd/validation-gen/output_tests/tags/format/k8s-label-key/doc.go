@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// Package format is the internal version of the API.
+// format 包是 API 的 internal 版本。
 //
 // 覆盖 +k8s:format=k8s-label-key：普通字段、指针字段以及带类型级
 // 格式校验的 typedef 都应执行同一套标签键校验。
@@ -38,7 +38,7 @@ type Struct struct {
 	// +k8s:format=k8s-label-key
 	LabelKeyPtrField *string `json:"labelKeyPtrField"`
 
-	// Note: no validation here
+	// 注意：此处没有校验。
 	LabelKeyTypedefField LabelKeyStringType `json:"labelKeyTypedefField"`
 }
 

@@ -17,7 +17,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-scheme-registry=k8s.io/code-generator/cmd/validation-gen/testscheme.Scheme
 
-// This is a test package.
+// // 本包是测试夹具，用于验证生成器的行为。
 // +k8s:validation-gen-nolint
 // 覆盖 +k8s:ifEnabled/+k8s:ifDisabled 门控 +k8s:immutable 与 +k8s:update：
 // 两种约束都只在特性开关打开时进入生成代码。

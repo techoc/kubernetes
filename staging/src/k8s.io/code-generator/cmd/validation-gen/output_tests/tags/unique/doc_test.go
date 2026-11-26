@@ -27,10 +27,10 @@ import (
 func TestUnique(t *testing.T) {
 	st := localSchemeBuilder.Test(t)
 
-	// Test empty struct (should be valid)
+	// 测试空结构体（应合法）
 	st.Value(&Struct{}).ExpectValid()
 
-	// Test valid cases with no duplicates
+	// 测试无重复的合法用例
 	//
 	// 注意 CustomUniqueListWithTypeSet/Map 故意放了重复元素：它们使用自定义
 	// 的 unique 规则（而非默认全量比较），此处应通过。
@@ -69,7 +69,7 @@ func TestUnique(t *testing.T) {
 		},
 	}).ExpectValid()
 
-	// Test empty lists
+	// 测试空列表
 	st.Value(&Struct{
 		PrimitiveListUniqueSet:           []string{},
 		SliceMapFieldWithMultipleKeys:    []ItemWithMultipleKeys{},
@@ -83,7 +83,7 @@ func TestUnique(t *testing.T) {
 		PointerListUniqueMap:             []*Item{},
 	}).ExpectValid()
 
-	// Test single element lists
+	// 测试单元素列表
 	st.Value(&Struct{
 		PrimitiveListUniqueSet:           []string{"single"},
 		SliceMapFieldWithMultipleKeys:    []ItemWithMultipleKeys{{Key1: "a", Key2: "b", Data: "one"}},
@@ -97,7 +97,7 @@ func TestUnique(t *testing.T) {
 		PointerListUniqueMap:             []*Item{{Key: "single", Data: "one"}},
 	}).ExpectValid()
 
-	// Test duplicate values (should fail validation)
+	// 测试重复值（应校验失败）
 	//
 	// 错误位置指向重复出现的那个元素（索引 2/3/4/5）；
 	// atomic 列表只按 Key 判断重复，所以 Data 不同也算重复。
@@ -155,7 +155,7 @@ func TestUnique(t *testing.T) {
 		field.Duplicate(field.NewPath("pointerListUniqueMap").Index(2), nil),
 	})
 
-	// Test with zero values and empty strings
+	// 测试零值与空字符串
 	//
 	// 空字符串同样参与去重，不会因“零值”被特殊跳过。
 	st.Value(&Struct{
@@ -172,7 +172,7 @@ func TestUnique(t *testing.T) {
 		field.Duplicate(field.NewPath("atomicListUniqueMap").Index(2), nil),
 	})
 
-	// Test nil elements in pointer lists (should trigger Required errors)
+	// 测试指针列表中的 nil 元素（应触发 Required 错误）
 	//
 	// nil 元素在去重前先被 required 拦截，避免解引用 panic。
 	st.Value(&Struct{
@@ -224,7 +224,7 @@ func TestRatcheting(t *testing.T) {
 		},
 	}
 
-	// Same data, different order.
+	// 数据相同，顺序不同。
 	//
 	// 注意 CustomUniqueListWithTypeSet/Map 的重复元素位置也变了，
 	// 但作为多重集合内容一致。
@@ -263,11 +263,11 @@ func TestRatcheting(t *testing.T) {
 		},
 	}
 
-	// Test that reordering doesn't trigger validation errors
+	// 测试重排不会触发校验错误
 	st.Value(&struct1).OldValue(&struct2).ExpectValid()
 	st.Value(&struct2).OldValue(&struct1).ExpectValid()
 
-	// Test that the same data is considered valid regardless of order
+	// 测试相同数据无论顺序如何都合法
 	st.Value(&struct1).ExpectValid()
 	st.Value(&struct2).ExpectValid()
 }

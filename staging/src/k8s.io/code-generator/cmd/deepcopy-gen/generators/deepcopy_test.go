@@ -37,7 +37,7 @@ func Test_deepCopyMethod(t *testing.T) {
 			typ: types.Type{
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
-				// No DeepCopy method.
+				// // 没有 DeepCopy 方法。
 				Methods: map[string]*types.Type{},
 			},
 			expect: false,
@@ -47,7 +47,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// No DeepCopy method.
+					// // 没有 DeepCopy 方法。
 					"method": {
 						Name: types.Name{Package: "pkgname", Name: "func()"},
 						Kind: types.Func,
@@ -69,7 +69,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (no result).
+					// // 签名错误：缺少返回值。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func()"},
 						Kind: types.Func,
@@ -92,7 +92,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (wrong result).
+					// // 签名错误：返回值类型不对。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func() int"},
 						Kind: types.Func,
@@ -119,7 +119,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature with pointer receiver, but non-pointer result.
+					// // 签名错误：指针接收者却返回非指针。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func() pkgname.typename"},
 						Kind: types.Func,
@@ -149,7 +149,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature with non-pointer receiver, but pointer result.
+					// // 签名错误：值接收者却返回指针。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func() pkgname.typename"},
 						Kind: types.Func,
@@ -176,7 +176,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Correct signature with non-pointer receiver.
+					// // 合法签名：值接收者。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func() pkgname.typename"},
 						Kind: types.Func,
@@ -202,7 +202,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Correct signature with pointer receiver.
+					// // 合法签名：指针接收者。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func() pkgname.typename"},
 						Kind: types.Func,
@@ -231,7 +231,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (has params).
+					// // 签名错误：带了参数。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func(int) pkgname.typename"},
 						Kind: types.Func,
@@ -268,7 +268,7 @@ func Test_deepCopyMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (extra results).
+					// // 签名错误：返回值多了一个。
 					"DeepCopy": {
 						Name: types.Name{Package: "pkgname", Name: "func() (pkgname.typename, int)"},
 						Kind: types.Func,
@@ -327,7 +327,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 			typ: types.Type{
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
-				// No DeepCopyInto method.
+				// // 没有 DeepCopyInto 方法。
 				Methods: map[string]*types.Type{},
 			},
 			expect: false,
@@ -337,7 +337,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// No DeepCopyInto method.
+					// // 没有 DeepCopyInto 方法。
 					"method": {
 						Name: types.Name{Package: "pkgname", Name: "func()"},
 						Kind: types.Func,
@@ -359,7 +359,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (no parameter).
+					// // 签名错误：缺少参数。
 					"DeepCopyInto": {
 						Name: types.Name{Package: "pkgname", Name: "func()"},
 						Kind: types.Func,
@@ -382,7 +382,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (unexpected result).
+					// // 签名错误：多出了返回值。
 					"DeepCopyInto": {
 						Name: types.Name{Package: "pkgname", Name: "func(*pkgname.typename) int"},
 						Kind: types.Func,
@@ -419,7 +419,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (non-pointer parameter, pointer receiver).
+					// // 签名错误：指针接收者却用了非指针参数。
 					"DeepCopyInto": {
 						Name: types.Name{Package: "pkgname", Name: "func(pkgname.typename)"},
 						Kind: types.Func,
@@ -447,7 +447,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Wrong signature (non-pointer parameter, non-pointer receiver).
+					// // 签名错误：值接收者却用了非指针参数。
 					"DeepCopyInto": {
 						Name: types.Name{Package: "pkgname", Name: "func(pkgname.typename)"},
 						Kind: types.Func,
@@ -473,7 +473,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Correct signature with non-pointer receiver.
+					// // 合法签名：值接收者。
 					"DeepCopyInto": {
 						Name: types.Name{Package: "pkgname", Name: "func(*pkgname.typename)"},
 						Kind: types.Func,
@@ -499,7 +499,7 @@ func Test_deepCopyIntoMethod(t *testing.T) {
 				Name: types.Name{Package: "pkgname", Name: "typename"},
 				Kind: types.Builtin,
 				Methods: map[string]*types.Type{
-					// Correct signature with pointer receiver.
+					// // 合法签名：指针接收者。
 					"DeepCopyInto": {
 						Name: types.Name{Package: "pkgname", Name: "func(*pkgname.typename)"},
 						Kind: types.Func,
