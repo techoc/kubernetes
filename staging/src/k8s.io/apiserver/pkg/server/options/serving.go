@@ -42,87 +42,87 @@ import (
 // 证书的生成与落盘。
 type SecureServingOptions struct {
 	BindAddress net.IP
-	// BindPort is ignored when Listener is set, will serve https even with 0.
+	// 设置 Listener 时忽略 BindPort，此时即使端口为 0 也提供 HTTPS。
 	//
 	// 显式提供 Listener 时以监听器实际端口为准，此字段被忽略。
 	BindPort int
-	// BindNetwork is the type of network to bind to - defaults to "tcp", accepts "tcp",
-	// "tcp4", and "tcp6".
+	// BindNetwork 是要绑定的网络类型，默认为 "tcp"，可选 "tcp4" 与 "tcp6"。
+	// 取值为 "tcp"、"tcp4" 与 "tcp6"。
 	BindNetwork string
-	// DisableHTTP2Serving indicates that http2 serving should not be enabled.
+	// DisableHTTP2Serving 表示不应启用 http2。
 	DisableHTTP2Serving bool
-	// Required set to true means that BindPort cannot be zero.
+	// Required 为 true 时 BindPort 不能为 0。
 	Required bool
-	// ExternalAddress is the address advertised, even if BindAddress is a loopback. By default this
-	// is set to BindAddress if the later no loopback, or to the first host interface address.
+	// ExternalAddress 是对外公布的地址，即使 BindAddress 是环回地址也照常公布。
+	// 默认取 BindAddress（若非环回），否则取第一个主机接口地址。
 	//
 	// 对外公布的地址：绑定到环回地址时仍可公布一个集群可达地址，
 	// 用于生成证书 SAN 与向客户端广播 endpoint。
 	ExternalAddress net.IP
 
-	// Listener is the secure server network listener.
-	// either Listener or BindAddress/BindPort/BindNetwork is set,
-	// if Listener is set, use it and omit BindAddress/BindPort/BindNetwork.
+	// Listener 是安全服务端的网络监听器。
+	// Listener 与 BindAddress/BindPort/BindNetwork 二者只能设其一；
+	// 设置 Listener 时使用它并忽略 BindAddress/BindPort/BindNetwork。
 	Listener net.Listener
 
-	// ServerCert is the TLS cert info for serving secure traffic
+	// ServerCert 是用于提供 HTTPS 服务的 TLS 证书信息。
 	ServerCert GeneratableKeyCert
-	// SNICertKeys are named CertKeys for serving secure traffic with SNI support.
+	// SNICertKeys 是支持 SNI 的具名 CertKey，用于按域名提供证书。
 	SNICertKeys []cliflag.NamedCertKey
-	// CipherSuites is the list of allowed cipher suites for the server.
-	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	// CipherSuites 是服务端允许的加密套件列表。
+	// 取值来自 tls 包常量（https://golang.org/pkg/crypto/tls/#pkg-constants）。
 	CipherSuites []string
-	// CurvePreferences is the set of allowed key exchange mechanisms for the server,
-	// specified as numeric Go crypto/tls CurveID values.
-	// The supported values depend on the Go version used.
-	// See https://pkg.go.dev/crypto/tls#CurveID for values supported for each Go version.
-	// The order of the list is ignored, and key exchange mechanisms are
-	// chosen by Go from this list using an internal preference order.
-	// If empty, the default Go curves will be used.
+	// CurvePreferences 是服务端允许的密钥交换机制集合，
+	// 以 Go crypto/tls CurveID 数值指定。
+	// 支持哪些值取决于所使用的 Go 版本。
+	// 各 Go 版本支持的值见 https://pkg.go.dev/crypto/tls#CurveID。
+	// 列表顺序会被忽略；Go 会按内部优先级从这些值中选择密钥交换机制。
+	//
+	// 留空时使用 Go 默认曲线。
 	CurvePreferences []int32
-	// MinTLSVersion is the minimum TLS version supported.
-	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	// MinTLSVersion 是支持的最低 TLS 版本。
+	// 取值来自 tls 包常量（https://golang.org/pkg/crypto/tls/#pkg-constants）。
 	MinTLSVersion string
 
-	// HTTP2MaxStreamsPerConnection is the limit that the api server imposes on each client.
-	// A value of zero means to use the default provided by golang's HTTP/2 support.
+	// HTTP2MaxStreamsPerConnection 是 api server 对每个客户端施加的流数量上限。
+	// 值为 0 时使用 golang HTTP/2 支持提供的默认值。
 	HTTP2MaxStreamsPerConnection int
 
-	// PermitPortSharing controls if SO_REUSEPORT is used when binding the port, which allows
-	// more than one instance to bind on the same address and port.
+	// PermitPortSharing 控制绑定端口时是否使用 SO_REUSEPORT，
+	// 它允许多个实例绑定同一地址与端口。
 	PermitPortSharing bool
 
-	// PermitAddressSharing controls if SO_REUSEADDR is used when binding the port.
+	// PermitAddressSharing 控制绑定端口时是否使用 SO_REUSEADDR。
 	PermitAddressSharing bool
 }
 
 // CertKey 是一对 PEM 证书/私钥文件路径。
 type CertKey struct {
-	// CertFile is a file containing a PEM-encoded certificate, and possibly the complete certificate chain
+	// CertFile 是包含 PEM 编码证书（可能含完整证书链）的文件。
 	CertFile string
-	// KeyFile is a file containing a PEM-encoded private key for the certificate specified by CertFile
+	// KeyFile 是包含 CertFile 所指定证书的 PEM 编码私钥的文件。
 	KeyFile string
 }
 
 // GeneratableKeyCert 描述服务端证书的来源优先级：显式文件 > 目录中
 // 已存在的文件 > 新生成并落盘 > 内存中生成。
 type GeneratableKeyCert struct {
-	// CertKey allows setting an explicit cert/key file to use.
+	// CertKey 允许设置要使用的显式证书/私钥文件。
 	CertKey CertKey
 
-	// CertDirectory specifies a directory to write generated certificates to if CertFile/KeyFile aren't explicitly set.
-	// PairName is used to determine the filenames within CertDirectory.
-	// If CertDirectory and PairName are not set, an in-memory certificate will be generated.
+	// CertDirectory 指定在 CertFile/KeyFile 未显式设置时，生成证书写入的目录。
+	// PairName 用于确定 CertDirectory 内的文件名。
+	// 若 CertDirectory 与 PairName 都未设置，则生成内存证书。
 	CertDirectory string
-	// PairName is the name which will be used with CertDirectory to make a cert and key filenames.
-	// It becomes CertDirectory/PairName.crt and CertDirectory/PairName.key
+	// PairName 与 CertDirectory 一起决定证书与私钥的文件名，
+	// 即 CertDirectory/PairName.crt 与 CertDirectory/PairName.key。
 	PairName string
 
-	// GeneratedCert holds an in-memory generated certificate if CertFile/KeyFile aren't explicitly set, and CertDirectory/PairName are not set.
+	// 若 CertFile/KeyFile 未显式设置且 CertDirectory/PairName 未设置，
 	GeneratedCert dynamiccertificates.CertKeyContentProvider
 
-	// FixtureDirectory is a directory that contains test fixture used to avoid regeneration of certs during tests.
-	// The format is:
+	// FixtureDirectory 是包含测试固定文件的目录，用于避免测试期间重复生成证书。
+	// 格式为：
 	// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.crt
 	// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.key
 	FixtureDirectory string
@@ -256,7 +256,7 @@ func (s *SecureServingOptions) AddFlags(fs *pflag.FlagSet) {
 			"for the kernel to release sockets in TIME_WAIT state. [default=false]")
 }
 
-// ApplyTo fills up serving information in the server configuration.
+// ApplyTo 在服务端配置中填入服务信息。
 //
 // ApplyTo 创建或接管监听器并装配 SecureServingInfo。端口为 0 且未提供
 // Listener 时表示不启用 HTTPS，直接返回。显式 Listener 必须是 TCP，
@@ -310,37 +310,34 @@ func (s *SecureServingOptions) ApplyTo(config **server.SecureServingInfo) error 
 	c := *config
 
 	serverCertFile, serverKeyFile := s.ServerCert.CertKey.CertFile, s.ServerCert.CertKey.KeyFile
-	// load main cert *original description until 2023-08-18*
+	// 加载主证书 *原始说明，截至 2023-08-18*
 
 	/*
-		kubernetes mutual (2-way) x509 between client and apiserver:
+		kubernetes 客户端与 apiserver 之间的双向（2-way）x509：
 
-			>1. apiserver sending its apiserver certificate along with its publickey to client
-			2. client verifies the apiserver certificate sent against its cluster certificate authority data
-			3. client sending its client certificate along with its public key to the apiserver
-			4. apiserver verifies the client certificate sent against its cluster certificate authority data
+			>1. apiserver 把自身证书及公钥发送给客户端
+			2. 客户端用集群 CA 数据校验 apiserver 发来的证书
+			3. 客户端把客户端证书及公钥发送给 apiserver
+			4. apiserver 用集群 CA 数据校验客户端发来的证书
 
-			description:
-				here, with this block,
-				apiserver certificate and pub key data (along with priv key)get loaded into server.SecureServingInfo
-				for client to later in the step 2 verify the apiserver certificate during the handshake
-				when making a request
+			说明：
+				在此处，apiserver 证书与公钥数据（连同私钥）被加载到 server.SecureServingInfo，
+				以便客户端在后续第 2 步握手时校验 apiserver 证书。
 
-			normal args related to this stage:
-				--tls-cert-file string  File containing the default x509 Certificate for HTTPS.
-					(CA cert, if any, concatenated after server cert). If HTTPS serving is enabled, and
-					--tls-cert-file and --tls-private-key-file are not provided, a self-signed certificate
-					and key are generated for the public address and saved to the directory specified by
-					--cert-dir
-				--tls-private-key-file string  File containing the default x509 private key matching --tls-cert-file.
+				该阶段相关参数：
+				--tls-cert-file string  包含 HTTPS 默认 x509 证书的文件。
+					（若有 CA 证书，则拼接在服务端证书之后）。若启用了 HTTPS 服务，且
+					未提供 --tls-cert-file 与 --tls-private-key-file，则会为公开地址生成自签名证书
+					与私钥，并保存到 --cert-dir 指定的目录。
+				--tls-private-key-file string  包含与 --tls-cert-file 匹配的默认 x509 私钥的文件。
 
-				(retrievable from "kube-apiserver --help" command)
-				(suggested by @deads2k)
+				（可通过 "kube-apiserver --help" 命令获取）
+				（由 @deads2k 建议）
 
-			see also:
-				- for the step 2, see: staging/src/k8s.io/client-go/transport/transport.go
-				- for the step 3, see: staging/src/k8s.io/client-go/transport/transport.go
-				- for the step 4, see: staging/src/k8s.io/apiserver/pkg/authentication/request/x509/x509.go
+			另见：
+				- 第 2 步：staging/src/k8s.io/client-go/transport/transport.go
+				- 第 3 步：staging/src/k8s.io/client-go/transport/transport.go
+				- 第 4 步：staging/src/k8s.io/apiserver/pkg/authentication/request/x509/x509.go
 	*/
 
 	// 显式文件优先；文件内容由 dynamiccertificates 监听并在变化时热更新，
@@ -377,7 +374,7 @@ func (s *SecureServingOptions) ApplyTo(config **server.SecureServingInfo) error 
 		return err
 	}
 
-	// load SNI certs
+	// 加载 SNI 证书
 	// SNI 证书同样使用动态提供器，支持按域名热更新。
 	namedTLSCerts := make([]dynamiccertificates.SNICertKeyContentProvider, 0, len(s.SNICertKeys))
 	for _, nck := range s.SNICertKeys {
@@ -420,7 +417,7 @@ func (s *SecureServingOptions) MaybeDefaultWithSelfSignedCerts(publicAddress str
 	}
 
 	if !canReadCertAndKey {
-		// add either the bind address or localhost to the valid alternates
+		// 把绑定地址或 localhost 加入合法备用名称。
 		// 绑定到 unspecified 地址时客户端通常通过 localhost 访问，否则把
 		// 具体绑定地址加入 SAN。
 		if s.BindAddress.IsUnspecified() {
@@ -465,7 +462,7 @@ func CreateListener(network, addr string, config net.ListenConfig) (net.Listener
 		return nil, 0, fmt.Errorf("failed to listen on %v: %v", addr, err)
 	}
 
-	// get port
+	// 获取端口
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		ln.Close()

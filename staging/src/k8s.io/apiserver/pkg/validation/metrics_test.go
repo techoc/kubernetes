@@ -28,14 +28,14 @@ import (
 const testIdentifier = "test_validation_identifier"
 const anotherTestIdentifier = "another_test_validation_identifier"
 
-// TestDeclarativeValidationMismatchMetric tests that the mismatch metric correctly increments once
+// TestDeclarativeValidationMismatchMetric 验证 mismatch 指标每次正确递增 1。
 //
 // 每次递增应同时影响“按标识细分”的 alpha 指标与“总量”beta 指标。
 func TestDeclarativeValidationMismatchMetric(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
 
-	// Increment the metric once
+	// 指标递增一次。
 	Metrics.IncDeclarativeValidationMismatchMetric(testIdentifier)
 
 	expected := `
@@ -53,14 +53,14 @@ func TestDeclarativeValidationMismatchMetric(t *testing.T) {
 	}
 }
 
-// TestDeclarativeValidationPanicMetric tests that the panic metric correctly increments once
+// TestDeclarativeValidationPanicMetric 验证 panic 指标每次正确递增 1。
 //
 // 与 mismatch 同理：panic 也需同时体现在细分与总量两个指标上。
 func TestDeclarativeValidationPanicMetric(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
 
-	// Increment the metric once
+	// 指标递增一次。
 	Metrics.IncDeclarativeValidationPanicMetric(testIdentifier)
 
 	expected := `
@@ -78,14 +78,14 @@ func TestDeclarativeValidationPanicMetric(t *testing.T) {
 	}
 }
 
-// TestDuplicateValidationErrorMetric tests that the duplicate error metric correctly increments once
+// TestDuplicateValidationErrorMetric 验证 duplicate error 指标每次正确递增 1。
 //
 // 重复错误本身没有标签维度，只验证内部指标（INTERNAL）的计数。
 func TestDuplicateValidationErrorMetric(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
 
-	// Increment the metric once
+	// 指标递增一次。
 	Metrics.IncDuplicateValidationErrorMetric()
 
 	expected := `
@@ -99,14 +99,14 @@ func TestDuplicateValidationErrorMetric(t *testing.T) {
 	}
 }
 
-// TestDeclarativeValidationMismatchMetricMultiple tests that the mismatch metric correctly increments multiple times
+// TestDeclarativeValidationMismatchMetricMultiple 验证 mismatch 指标多次递增正确。
 //
 // 同时使用两个不同标识，验证按标签累计（2/1）与总量累计（3）互不干扰。
 func TestDeclarativeValidationMismatchMetricMultiple(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
 
-	// Increment the metric three times
+	// 指标递增三次。
 	Metrics.IncDeclarativeValidationMismatchMetric(testIdentifier)
 	Metrics.IncDeclarativeValidationMismatchMetric(testIdentifier)
 	Metrics.IncDeclarativeValidationMismatchMetric(anotherTestIdentifier)
@@ -126,14 +126,14 @@ func TestDeclarativeValidationMismatchMetricMultiple(t *testing.T) {
 	}
 }
 
-// TestDeclarativeValidationPanicMetricMultiple tests that the panic metric correctly increments multiple times
+// TestDeclarativeValidationPanicMetricMultiple 验证 panic 指标多次递增正确。
 //
 // 与 mismatch 的多标识累计场景对称。
 func TestDeclarativeValidationPanicMetricMultiple(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
 
-	// Increment the metric three times
+	// 指标递增三次。
 	Metrics.IncDeclarativeValidationPanicMetric(testIdentifier)
 	Metrics.IncDeclarativeValidationPanicMetric(testIdentifier)
 	Metrics.IncDeclarativeValidationPanicMetric(anotherTestIdentifier)
@@ -153,12 +153,12 @@ func TestDeclarativeValidationPanicMetricMultiple(t *testing.T) {
 	}
 }
 
-// TestDuplicateValidationErrorMetricMultiple tests that the duplicate error metric correctly increments multiple times
+// TestDuplicateValidationErrorMetricMultiple 验证 duplicate error 指标多次递增正确。
 func TestDuplicateValidationErrorMetricMultiple(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
 
-	// Increment the metric three times
+	// 指标递增三次。
 	Metrics.IncDuplicateValidationErrorMetric()
 	Metrics.IncDuplicateValidationErrorMetric()
 	Metrics.IncDuplicateValidationErrorMetric()
@@ -174,22 +174,22 @@ func TestDuplicateValidationErrorMetricMultiple(t *testing.T) {
 	}
 }
 
-// TestDeclarativeValidationMetricsReset tests that the Reset function correctly resets the metrics to zero
+// TestDeclarativeValidationMetricsReset 验证 Reset 函数能把指标正确归零。
 //
 // 先归零再重新累加，验证 Reset 之后计数器仍可正常使用（不会被置为不可用状态）。
 func TestDeclarativeValidationMetricsReset(t *testing.T) {
 	defer legacyregistry.Reset()
 	defer ResetValidationMetricsInstance()
 
-	// Increment both metrics
+	// 让两个指标都递增。
 	Metrics.IncDeclarativeValidationMismatchMetric(testIdentifier)
 	Metrics.IncDeclarativeValidationPanicMetric(testIdentifier)
 	Metrics.IncDuplicateValidationErrorMetric()
 
-	// Reset the metrics
+	// 重置指标。
 	Metrics.Reset()
 
-	// Verify they've been reset to zero
+	// 验证它们已被归零。
 	expected := `
 	# HELP apiserver_validation_declarative_validation_mismatch_total [BETA] Number of times declarative validation results differed from handwritten validation results for core types.
 	# TYPE apiserver_validation_declarative_validation_mismatch_total counter
@@ -209,12 +209,12 @@ func TestDeclarativeValidationMetricsReset(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Increment the metrics again to ensure they're still functional
+	// 再次递增指标，确认它们仍然可用。
 	Metrics.IncDeclarativeValidationMismatchMetric(testIdentifier)
 	Metrics.IncDeclarativeValidationPanicMetric(testIdentifier)
 	Metrics.IncDuplicateValidationErrorMetric()
 
-	// Verify they've been incremented correctly
+	// 验证递增结果正确。
 	expected = `
 	# HELP apiserver_validation_declarative_validation_mismatch_total [BETA] Number of times declarative validation results differed from handwritten validation results for core types.
 	# TYPE apiserver_validation_declarative_validation_mismatch_total counter

@@ -149,7 +149,7 @@ func (c *DynamicFileCAContent) hasCAChanged(caBundle []byte) bool {
 		return true
 	}
 
-	// check to see if we have a change. If the values are the same, do nothing.
+	// 检查是否有变化。若值相同则不处理。
 	existing, ok := uncastExisting.(*caBundleAndVerifier)
 	if !ok {
 		// 理论上不会发生；返回 true 让上层重新解析，避免静默沿用错误状态。
@@ -224,7 +224,7 @@ func (c *DynamicFileCAContent) watchCAFile(stopCh <-chan struct{}) error {
 
 // handleWatchEvent 对任意事件都触发一次重载；Remove/Rename 后必须重建 watch，因为底层 inode 可能已更换。
 func (c *DynamicFileCAContent) handleWatchEvent(e fsnotify.Event, w *fsnotify.Watcher) error {
-	// This should be executed after restarting the watch (if applicable) to ensure no file event will be missing.
+	// 应在重启 watch（若适用）之后执行，以确保不会漏掉任何文件事件。
 	defer c.queue.Add(workItemKey)
 	if !e.Has(fsnotify.Remove) && !e.Has(fsnotify.Rename) {
 		return nil

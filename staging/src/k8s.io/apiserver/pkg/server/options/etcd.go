@@ -55,19 +55,19 @@ type EtcdOptions struct {
 
 	EtcdServersOverrides []string
 
-	// To enable protobuf as storage format, it is enough
-	// to set it to "application/vnd.kubernetes.protobuf".
+	// 要把 protobuf 作为存储格式，只需把它设为
+	// "application/vnd.kubernetes.protobuf"。
 	DefaultStorageMediaType string
 	DeleteCollectionWorkers int
 	EnableGarbageCollection bool
 
-	// Set EnableWatchCache to false to disable all watch caches
+	// 把 EnableWatchCache 设为 false 可禁用所有 watch cache。
 	EnableWatchCache bool
-	// WatchCacheSizes represents override to a given resource
+	// WatchCacheSizes 表示对给定资源的覆盖配置。
 	WatchCacheSizes []string
 
-	// SkipHealthEndpoints, when true, causes the Apply methods to not set up health endpoints.
-	// This allows multiple invocations of the Apply methods without duplication of said endpoints.
+	// SkipHealthEndpoints 为 true 时，Apply 方法不再设置健康检查端点。
+	// 这样可多次调用 Apply 而不重复注册这些端点。
 	SkipHealthEndpoints bool
 }
 
@@ -129,7 +129,7 @@ func (s *EtcdOptions) Validate() []error {
 	return allErrors
 }
 
-// AddFlags adds flags related to etcd storage for a specific APIServer to the specified FlagSet
+// AddFlags 为指定 APIServer 向给定 FlagSet 注册 etcd 存储相关标志。
 //
 // 每个标志直接绑定到 EtcdOptions 的对应字段；多数标志由各 apiserver 二进制
 // 自行暴露，因此默认值必须与 NewEtcdOptions 保持一致。
@@ -219,7 +219,7 @@ func (s *EtcdOptions) AddFlags(fs *pflag.FlagSet) {
 		"The time in seconds that each lease is reused. A lower value could avoid large number of objects reusing the same lease. Notice that a too small value may cause performance problems at storage layer.")
 }
 
-// ApplyTo mutates the provided server.Config.  It must never mutate the receiver (EtcdOptions).
+// ApplyTo 修改传入的 server.Config，绝不修改接收者（EtcdOptions）。
 //
 // 复制一份 StorageConfig 再补 tracker，避免把 server 级状态写回共享的 options。
 func (s *EtcdOptions) ApplyTo(c *server.Config) error {
@@ -235,7 +235,7 @@ func (s *EtcdOptions) ApplyTo(c *server.Config) error {
 	return s.ApplyWithStorageFactoryTo(&SimpleStorageFactory{StorageConfig: storageConfigCopy}, c)
 }
 
-// ApplyWithStorageFactoryTo mutates the provided server.Config.  It must never mutate the receiver (EtcdOptions).
+// ApplyWithStorageFactoryTo 修改传入的 server.Config，绝不修改接收者（EtcdOptions）。
 //
 // 顺序有讲究：先注册健康检查与加密 transformer，最后才设置 RESTOptionsGetter，
 // 确保 REST 层初始化时 transformer 与 monitor 已就绪。
@@ -250,7 +250,7 @@ func (s *EtcdOptions) ApplyWithStorageFactoryTo(factory serverstorage.StorageFac
 		}
 	}
 
-	// setup encryption
+	// 设置加密。
 	if err := s.maybeApplyResourceTransformers(c); err != nil {
 		return err
 	}
@@ -294,7 +294,7 @@ func newMonitorCache(factory serverstorage.StorageFactory, stopCh <-chan struct{
 // get 返回缓存的监控器；首次调用走写锁初始化。
 // 读路径使用 RLock，指标采集是高频操作，不能每次都拿写锁。
 func (c *monitorCache) get() ([]metrics.Monitor, error) {
-	// Fast path: check if already initialized with read lock
+	// 快速路径：用读锁检查是否已初始化。
 	c.mu.RLock()
 	if c.closed {
 		c.mu.RUnlock()
@@ -307,7 +307,7 @@ func (c *monitorCache) get() ([]metrics.Monitor, error) {
 	}
 	c.mu.RUnlock()
 
-	// Slow path: initialize with write lock
+	// 慢速路径：用写锁初始化。
 	return c.initialize()
 }
 
@@ -385,7 +385,7 @@ func (s *EtcdOptions) maybeApplyResourceTransformers(c *server.Config) (err erro
 	ctxServer := wait.ContextForChannel(c.DrainedNotify())
 	ctxTransformers, closeTransformers := context.WithCancel(ctxServer)
 	defer func() {
-		// in case of error, we want to close partially initialized (if any) transformers
+		// 出错时关闭部分已初始化的 transformer（如果有）。
 		if err != nil {
 			closeTransformers()
 		}
@@ -398,16 +398,16 @@ func (s *EtcdOptions) maybeApplyResourceTransformers(c *server.Config) (err erro
 	encryptionconfigmetrics.RecordEncryptionConfigLastConfigInfo(c.APIServerID, encryptionConfiguration.EncryptionFileContentHash)
 
 	if s.EncryptionProviderConfigAutomaticReload {
-		// with reload=true we will always have 1 health check
+		// reload=true 时始终只有 1 个健康检查。
 		if len(encryptionConfiguration.HealthChecks) != 1 {
 			return fmt.Errorf("failed to start kms encryption config hot reload controller. only 1 health check should be available when reload is enabled")
 		}
 
-		// Here the dynamic transformers take ownership of the transformers and their cancellation.
+		// 动态 transformer 接管 transformer 本身及其取消逻辑。
 		dynamicTransformers := encryptionconfig.NewDynamicTransformers(encryptionConfiguration.Transformers, encryptionConfiguration.HealthChecks[0], closeTransformers, encryptionConfiguration.KMSCloseGracePeriod)
 
-		// add post start hook to start hot reload controller
-		// adding this hook here will ensure that it gets configured exactly once
+		// 添加 post start hook 以启动热重载控制器。
+		// 在此添加 hook 可确保它只被配置一次。
 		err = c.AddPostStartHook(
 			"start-encryption-provider-config-automatic-reload",
 			func(_ server.PostStartHookContext) error {
@@ -469,18 +469,18 @@ func (s *EtcdOptions) addEtcdHealthEndpoint(c *server.Config) error {
 	}))
 
 	if len(s.EtcdServersOverrides) != 0 {
-		// multi overrides servers may in different order
-		// example: ["apps/deployments#s2.example.com;s1.example.com","apps/replicasets#s1.example.com;s2.example.com"]
+		// 多个 override 的服务器顺序可能不同。
+		// 例如：["apps/deployments#s2.example.com;s1.example.com","apps/replicasets#s1.example.com;s2.example.com"]
 		overrides, err := ParseEtcdServersOverrides(s.EtcdServersOverrides)
 		if err != nil {
 			return err
 		}
-		// multi overrides may point to the same servers
-		// example: ["apps/deployments#s1.example.com;s2.example.com","apps/replicasets#s1.example.com;s2.example.com"]
+		// 多个 override 可能指向相同的服务器。
+		// 例如：["apps/deployments#s1.example.com;s2.example.com","apps/replicasets#s1.example.com;s2.example.com"]
 		serversSets := sets.NewString()
 		for _, override := range overrides {
 			sortedServers := make([]string, len(override.Servers))
-			// use a copied slice to avoid modifying the original slice for client in SetEtcdLocation
+			// 使用复制的 slice，避免通过 SetEtcdLocation 修改调用方持有的原始 slice。
 			copy(sortedServers, override.Servers)
 			sort.Strings(sortedServers)
 			serversKeyStr := strings.Join(sortedServers, ";")
@@ -560,8 +560,7 @@ func (f *StorageFactoryRestOptionsFactory) GetRESTOptions(resource schema.GroupR
 	return ret, nil
 }
 
-// ParseWatchCacheSizes turns a list of cache size values into a map of group resources
-// to requested sizes.
+// ParseWatchCacheSizes 把缓存大小值列表转换为 group resource 到请求大小的映射。
 //
 // 格式为 "resource[.group]#size"；负数没有意义，直接报错。
 func ParseWatchCacheSizes(cacheSizes []string) (map[schema.GroupResource]int, error) {
@@ -584,7 +583,7 @@ func ParseWatchCacheSizes(cacheSizes []string) (map[schema.GroupResource]int, er
 	return watchCacheSizes, nil
 }
 
-// WriteWatchCacheSizes turns a map of cache size values into a list of string specifications.
+// WriteWatchCacheSizes 把缓存大小值映射转换为字符串规格列表。
 func WriteWatchCacheSizes(watchCacheSizes map[schema.GroupResource]int) ([]string, error) {
 	var cacheSizes []string
 
@@ -599,10 +598,10 @@ func WriteWatchCacheSizes(watchCacheSizes map[schema.GroupResource]int) ([]strin
 
 var _ serverstorage.StorageFactory = &SimpleStorageFactory{}
 
-// SimpleStorageFactory provides a StorageFactory implementation that should be used when different
-// resources essentially share the same storage config (as defined by the given storagebackend.Config).
-// It assumes the resources are stored at a path that is purely based on the schema.GroupResource.
-// Users that need flexibility and per resource overrides should use DefaultStorageFactory instead.
+// SimpleStorageFactory 提供 StorageFactory 实现，适用于不同资源基本共享同一存储配置
+// （由给定 storagebackend.Config 定义）的场景。它假定资源存储在完全由 schema.GroupResource 决定的路径上。
+//
+// 需要灵活性及按资源覆盖的用户应改用 DefaultStorageFactory。
 type SimpleStorageFactory struct {
 	StorageConfig storagebackend.Config
 }
@@ -624,7 +623,7 @@ func (s *SimpleStorageFactory) Configs() []storagebackend.Config {
 
 // Backends 返回后端描述；当前实现不会调用它，但需满足接口。
 func (s *SimpleStorageFactory) Backends() []serverstorage.Backend {
-	// nothing should ever call this method but we still provide a functional implementation
+	// 不应有任何代码调用此方法，但仍提供可用实现。
 	return serverstorage.Backends(s.StorageConfig)
 }
 

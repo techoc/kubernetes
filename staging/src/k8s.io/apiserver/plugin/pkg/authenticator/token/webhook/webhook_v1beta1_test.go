@@ -43,15 +43,15 @@ import (
 // apiAuds 是测试中 apiserver 的隐式 audience 集合。
 var apiAuds = authenticator.Audiences{"api"}
 
-// V1beta1Service mocks a remote authentication service.
+// V1beta1Service 模拟远端认证服务。
 type V1beta1Service interface {
-	// Review looks at the TokenReviewSpec and provides an authentication
-	// response in the TokenReviewStatus.
+	// Review 检查 TokenReviewSpec，并在 TokenReviewStatus 中给出认证响应。
+	//
 	Review(*authenticationv1beta1.TokenReview)
 	HTTPStatusCode() int
 }
 
-// NewV1beta1TestServer wraps a V1beta1Service as an httptest.Server.
+// NewV1beta1TestServer 把 V1beta1Service 包装为 httptest.Server。
 //
 // 服务端强制以 v1beta1 收发，并可选地要求客户端证书，
 // 用来验证认证器在旧版本协议与双向 TLS 下的行为。
@@ -93,12 +93,12 @@ func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest
 			http.Error(w, fmt.Sprintf("failed to decode body: %v", err), http.StatusBadRequest)
 			return
 		}
-		// ensure we received the serialized tokenreview as expected
+		// 确认按预期收到了序列化后的 tokenreview。
 		if review.APIVersion != "authentication.k8s.io/v1beta1" {
 			http.Error(w, fmt.Sprintf("wrong api version: %s", string(bodyData)), http.StatusBadRequest)
 			return
 		}
-		// once we have a successful request, always call the review to record that we were called
+		// 一旦请求成功，始终调用 review，以记录它被调用过。
 		s.Review(&review)
 		if s.HTTPStatusCode() < 200 || s.HTTPStatusCode() >= 300 {
 			http.Error(w, "HTTP Error", s.HTTPStatusCode())
@@ -150,7 +150,7 @@ func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest
 	server.TLS = tlsConfig
 	server.StartTLS()
 
-	// Adjust the path to point to our custom path
+	// 调整路径，指向我们自定义的路径。
 	serverURL, _ := url.Parse(server.URL)
 	serverURL.Path = webhookPath
 	server.URL = serverURL.String()
@@ -158,7 +158,7 @@ func NewV1beta1TestServer(s V1beta1Service, cert, key, caCert []byte) (*httptest
 	return server, nil
 }
 
-// A service that can be set to say yes or no to authentication requests.
+// 一个可设置为对认证请求回答 yes 或 no 的服务。
 type mockV1beta1Service struct {
 	allow      bool
 	statusCode int
@@ -179,8 +179,8 @@ func (m *mockV1beta1Service) Allow()              { m.allow = true }
 func (m *mockV1beta1Service) Deny()               { m.allow = false }
 func (m *mockV1beta1Service) HTTPStatusCode() int { return m.statusCode }
 
-// newV1beta1TokenAuthenticator creates a temporary kubeconfig file from the provided
-// arguments and attempts to load a new WebhookTokenAuthenticator from it.
+// newV1beta1TokenAuthenticator 根据给定参数创建临时 kubeconfig 文件，
+// 并尝试从中加载新的 WebhookTokenAuthenticator。
 //
 // 刻意走真实 kubeconfig 加载路径，以覆盖证书/CA 的解析与校验逻辑，
 // 而不是直接构造 rest.Config 绕过它们。
@@ -265,13 +265,13 @@ func TestV1beta1TLSConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Plugin does not support insecure configurations.
+			// 插件不支持不安全配置。
 			test:    "Server is using insecure connection",
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包让 defer 在每次循环迭代之间触发。
 		func() {
 			service := new(mockV1beta1Service)
 			service.statusCode = 200
@@ -289,7 +289,7 @@ func TestV1beta1TLSConfig(t *testing.T) {
 				return
 			}
 
-			// Allow all and see if we get an error.
+			// 全部放行，看看是否会报错。
 			service.Allow()
 			_, authenticated, err := wh.AuthenticateToken(context.Background(), "t0k3n")
 			if tt.wantErr {
@@ -315,7 +315,7 @@ func TestV1beta1TLSConfig(t *testing.T) {
 	}
 }
 
-// recorderV1beta1Service records all token review requests, and responds with the
+// recorderV1beta1Service 记录所有 token review 请求，并给出响应。
 // provided TokenReviewStatus.
 type recorderV1beta1Service struct {
 	lastRequest authenticationv1beta1.TokenReview
@@ -453,7 +453,7 @@ func TestV1beta1WebhookTokenAuthenticator(t *testing.T) {
 			description:  "bad audiences",
 			implicitAuds: apiAuds,
 			reqAuds:      authenticator.Audiences{"other"},
-			// webhook authenticator hasn't been upgraded to support audience.
+			// webhook 认证器尚未升级以支持 audience。
 			serverResponse: authenticationv1beta1.TokenReviewStatus{
 				Authenticated: true,
 				User: authenticationv1beta1.UserInfo{
@@ -507,7 +507,7 @@ func TestV1beta1WebhookTokenAuthenticator(t *testing.T) {
 			expectedAuthenticated: false,
 		},
 	}
-	token := "my-s3cr3t-t0ken" // Fake token for testing.
+	token := "my-s3cr3t-t0ken" // 用于测试的假 token。
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			wh, err := newV1beta1TokenAuthenticator(s.URL, clientCert, clientKey, caCert, 0, tt.implicitAuds)
@@ -569,13 +569,13 @@ func (a *authenticationV1beta1UserInfo) GetExtra() map[string][]string {
 	return ret
 }
 
-// Ensure authenticationv1beta1.UserInfo contains the fields necessary to implement the
+// 确认 authenticationv1beta1.UserInfo 包含实现该接口所需的字段。
 // user.Info interface.
 var _ user.Info = (*authenticationV1beta1UserInfo)(nil)
 
-// TestWebhookCache verifies that error responses from the server are not
-// cached, but successful responses are. It also ensures that the webhook
-// call is retried on 429 and 500+ errors
+// TestWebhookCache 验证服务端错误响应不会被缓存，成功响应会被缓存；
+// 同时验证遇到 429 与 500+ 错误时会重试 webhook 调用。
+// 遇到 429 与 500+ 错误时重试调用。
 //
 // 成功结果缓存后，后续相同 token 的请求不再打到 webhook（expectCalls=0）；
 // 失败不缓存，因此 5xx/429 会重试并在下一次请求时再次尝试。
@@ -587,7 +587,7 @@ func TestV1beta1WebhookCacheAndRetry(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Create an authenticator that caches successful responses "forever" (100 days).
+	// 创建一个“永久”（100 天）缓存成功响应的认证器。
 	wh, err := newV1beta1TokenAuthenticator(s.URL, clientCert, clientKey, caCert, 2400*time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)

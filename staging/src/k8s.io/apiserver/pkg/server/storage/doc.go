@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package storage contains the plumbing to setup the etcd storage of the apiserver.
+// Package storage 包含搭建 apiserver etcd 存储所需的管道代码。
 //
 // 本包负责把存储配置（storagebackend.Config）转换成可用的 storage.Interface，
 // 包括编解码、加密转换、前缀与资源组映射。它是启动期一次性装配逻辑，

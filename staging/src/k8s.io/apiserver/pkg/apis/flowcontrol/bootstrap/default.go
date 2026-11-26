@@ -26,11 +26,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// The objects that define an apiserver's initial behavior.  The
-// registered defaulting procedures make no changes to these
-// particular objects (this is verified in the unit tests of the
-// internalbootstrap package; it can not be verified in this package
-// because that would require importing k8s.io/kubernetes).
+// 这些对象定义 apiserver 的初始行为。默认的默认值填充流程不会改动这些对象
+// （这一点在 internalbootstrap 包的单测中验证；在本包无法验证，
+// 因为那需要导入 k8s.io/kubernetes）。
+//
+// 因为那需要导入 k8s.io/kubernetes）。
 //
 // 强制对象必须在 APIServer 启动时存在且不可删除，否则流控策略出现缺口；
 // 它们不参与自动更新（见 AutoUpdateAnnotationKey 的语义）。
@@ -45,49 +45,49 @@ var (
 	}
 )
 
-// The objects that define the current suggested additional configuration
+// 以下对象定义当前建议的附加配置。
 //
 // 建议对象在启动时写入、之后由系统定期校正；管理员可修改其参数，但不应删除，
 // 删除后会被重新创建。
 var (
 	SuggestedPriorityLevelConfigurations = []*flowcontrol.PriorityLevelConfiguration{
-		// "system" priority-level is for the system components that affects self-maintenance of the
-		// cluster and the availability of those running pods in the cluster, including kubelet and
+		// "system" 优先级面向影响集群自维护能力的系统组件，以及运行中的 Pod 的可用性，
+		// 包括 kubelet 和 kube-proxy。
 		// kube-proxy.
 		SuggestedPriorityLevelConfigurationSystem,
-		// "node-high" priority-level is for the node health reporting. It is separated from "system"
-		// to make sure that nodes are able to report their health even if kube-apiserver is not capable of
-		// handling load caused by pod startup (fetching secrets, events etc).
-		// NOTE: In large clusters 50% - 90% of all API calls use this priority-level.
+		// "node-high" 优先级用于节点健康上报。它与 "system" 分开，是为了在 kube-apiserver
+		// 忙于处理 Pod 启动（拉取 secret、写 event 等）带来的负载时，节点仍能上报健康状态。
+		// 处理 Pod 启动（拉取 secret、event 等）带来的负载。
+		// 注意：在大型集群中，50% - 90% 的 API 调用使用该优先级。
 		SuggestedPriorityLevelConfigurationNodeHigh,
-		// "leader-election" is dedicated for controllers' leader-election, which majorly affects the
-		// availability of any controller runs in the cluster.
+		// "leader-election" 专用于控制器的选主，主要影响集群内各控制器的可用性。
+		// 集群中运行的任何控制器的可用性。
 		SuggestedPriorityLevelConfigurationLeaderElection,
-		// "workload-high" is used by those workloads with higher priority but their failure won't directly
-		// impact the existing running pods in the cluster, which includes kube-scheduler, and those well-known
-		// built-in workloads such as "deployments", "replicasets" and other low-level custom workload which
-		// is important for the cluster.
+		// "workload-high" 用于优先级较高、但失败不会直接影响集群中现有运行中 Pod 的工作负载，
+		// 包括 kube-scheduler，以及 "deployments"、"replicasets" 等众所周知的内置工作负载
+		// 和其他对集群重要的底层自定义工作负载。
+		// 对集群重要。
 		SuggestedPriorityLevelConfigurationWorkloadHigh,
-		// "workload-low" is used by those workloads with lower priority which availability only has a
-		// minor impact on the cluster.
+		// "workload-low" 用于优先级较低、其可用性对集群影响较小的工作负载。
+		// 对集群影响较小。
 		SuggestedPriorityLevelConfigurationWorkloadLow,
-		// "global-default" serves the rest traffic not handled by the other suggested flow-schemas above.
+		// "global-default" 承接上述建议流控模式未覆盖的其余流量。
 		SuggestedPriorityLevelConfigurationGlobalDefault,
 	}
 	SuggestedFlowSchemas = []*flowcontrol.FlowSchema{
-		SuggestedFlowSchemaSystemNodes,               // references "system" priority-level
-		SuggestedFlowSchemaSystemNodeHigh,            // references "node-high" priority-level
-		SuggestedFlowSchemaProbes,                    // references "exempt" priority-level
-		SuggestedFlowSchemaSystemLeaderElection,      // references "leader-election" priority-level
-		SuggestedFlowSchemaKubeControllerManager,     // references "workload-high" priority-level
-		SuggestedFlowSchemaKubeScheduler,             // references "workload-high" priority-level
-		SuggestedFlowSchemaKubeSystemServiceAccounts, // references "workload-high" priority-level
-		SuggestedFlowSchemaServiceAccounts,           // references "workload-low" priority-level
-		SuggestedFlowSchemaGlobalDefault,             // references "global-default" priority-level
+		SuggestedFlowSchemaSystemNodes,               // 引用 "system" 优先级
+		SuggestedFlowSchemaSystemNodeHigh,            // 引用 "node-high" 优先级
+		SuggestedFlowSchemaProbes,                    // 引用 "exempt" 优先级
+		SuggestedFlowSchemaSystemLeaderElection,      // 引用 "leader-election" 优先级
+		SuggestedFlowSchemaKubeControllerManager,     // 引用 "workload-high" 优先级
+		SuggestedFlowSchemaKubeScheduler,             // 引用 "workload-high" 优先级
+		SuggestedFlowSchemaKubeSystemServiceAccounts, // 引用 "workload-high" 优先级
+		SuggestedFlowSchemaServiceAccounts,           // 引用 "workload-low" 优先级
+		SuggestedFlowSchemaGlobalDefault,             // 引用 "global-default" 优先级
 	}
 )
 
-// Mandatory PriorityLevelConfiguration objects
+// 必需的 PriorityLevelConfiguration 对象
 var (
 	// Exempt 级别不占用并发额度，任何请求都不会被排队或拒绝；
 	// 份额与借出比例显式置 0，表示该级别不参与公平分配。
@@ -117,7 +117,7 @@ var (
 		})
 )
 
-// Mandatory FlowSchema objects
+// 必需的 FlowSchema 对象
 var (
 	// "exempt" priority-level 用于防止优先级反转并确保系统管理员的请求始终可提交；
 	// 该 FlowSchema 优先级最高（precedence 1），覆盖所有动词、资源与非资源 URL，
@@ -125,8 +125,8 @@ var (
 	MandatoryFlowSchemaExempt = newFlowSchema(
 		"exempt",
 		flowcontrol.PriorityLevelConfigurationNameExempt,
-		1,  // matchingPrecedence
-		"", // distinguisherMethodType
+		1,  // 匹配优先级
+		"", // 区分方法类型
 		flowcontrol.PolicyRulesWithSubjects{
 			Subjects: groups(user.SystemPrivilegedGroup),
 			ResourceRules: []flowcontrol.ResourcePolicyRule{
@@ -146,7 +146,7 @@ var (
 			},
 		},
 	)
-	// "catch-all" priority-level 只保留最小的正并发份额；理想情况下不应命中，除非故意删除了建议的 "global-default"。
+	// "catch-all" 优先级只保留最小的正并发份额；理想情况下不应命中，除非故意删除了建议的 "global-default"。
 	// precedence 10000 保证它在所有其他 FlowSchema 之后匹配。
 	MandatoryFlowSchemaCatchAll = newFlowSchema(
 		flowcontrol.FlowSchemaNameCatchAll,
@@ -174,7 +174,7 @@ var (
 	)
 )
 
-// Suggested PriorityLevelConfiguration objects
+// 建议的 PriorityLevelConfiguration 对象
 var (
 	// system priority-level：
 	// 允许借出 33% 的并发额度给其他级别，系统组件繁忙时仍能回收闲置份额。
@@ -292,15 +292,15 @@ var (
 		})
 )
 
-// Suggested FlowSchema objects.
-// Ordered by matching precedence, so that their interactions are easier
-// to follow while reading this source.
+// 建议的 FlowSchema 对象。
+// 按匹配优先级排序，便于阅读源码时理清各对象之间的相互作用。
+// 便于阅读源码时理清相互作用。
 var (
 	// 探针放行到 exempt 级别：kubelet 依赖探针结果决定是否重启容器，
 	// 若被流控排队会引发误判与连锁重启。
 	SuggestedFlowSchemaProbes = newFlowSchema(
 		"probes", "exempt", 2,
-		"", // distinguisherMethodType
+		"", // 区分方法类型
 		flowcontrol.PolicyRulesWithSubjects{
 			Subjects: groups(user.AllUnauthenticated, user.AllAuthenticated),
 			NonResourceRules: []flowcontrol.NonResourcePolicyRule{
@@ -335,7 +335,7 @@ var (
 		"system-node-high", "node-high", 400,
 		flowcontrol.FlowDistinguisherMethodByUserType,
 		flowcontrol.PolicyRulesWithSubjects{
-			Subjects: groups(user.NodesGroup), // the nodes group
+			Subjects: groups(user.NodesGroup), // nodes 组
 			ResourceRules: []flowcontrol.ResourcePolicyRule{
 				resourceRule(
 					[]string{flowcontrol.VerbAll},
@@ -358,7 +358,7 @@ var (
 		// 节点组的其余全部流量进入 system 级别，按节点身份区分队列，
 		// 单个异常节点不会挤占其他节点。
 		flowcontrol.PolicyRulesWithSubjects{
-			Subjects: groups(user.NodesGroup), // the nodes group
+			Subjects: groups(user.NodesGroup), // nodes 组
 			ResourceRules: []flowcontrol.ResourcePolicyRule{resourceRule(
 				[]string{flowcontrol.VerbAll},
 				[]string{flowcontrol.APIGroupAll},

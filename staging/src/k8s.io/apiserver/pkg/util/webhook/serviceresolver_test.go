@@ -31,13 +31,13 @@ func TestDefaultServiceResolver(t *testing.T) {
 		expectedOutput   string
 		expectError      bool
 	}{
-		// scenario 1: a service name along with a namespace resolves
+		// 场景 1：服务名带命名空间，应能解析。
 		{serviceName: "ross", serviceNamespace: "andromeda", port: 443, expectedOutput: "https://ross.andromeda.svc:443"},
-		// scenario 2: a service name without a namespace does not resolve
+		// 场景 2：服务名不带命名空间，不应解析。
 		{serviceName: "ross", expectError: true},
-		// scenario 3: cannot resolve an empty service name
+		// 场景 3：空服务名无法解析。
 		{serviceNamespace: "andromeda", expectError: true},
-		// scenario 1: a service name along with a namespace and different port resolves
+		// 场景 1：服务名带命名空间且指定不同端口，应能解析。
 		{serviceName: "ross", serviceNamespace: "andromeda", port: 1002, expectedOutput: "https://ross.andromeda.svc:1002"},
 	}
 

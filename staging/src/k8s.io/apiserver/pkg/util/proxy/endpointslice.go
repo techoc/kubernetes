@@ -26,19 +26,19 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// EndpointSliceGetter is an interface for a helper that lets you easily get all
-// EndpointSlices for a Service.
+// EndpointSliceGetter 是一个辅助接口，用于便捷地获取某个 Service 的全部 EndpointSlice。
+// 获取某 Service 的全部 EndpointSlice。
 type EndpointSliceGetter interface {
-	// GetEndpointSlices returns all of the known slices associated with the given
-	// service. If there are no slices associated with the service, it will return an
-	// empty list, not an error.
+	// GetEndpointSlices 返回与给定 service 关联的全部已知切片。
+	// 若没有关联切片，返回空列表而不是错误。
+	// 返回空列表而不是错误。
 	GetEndpointSlices(namespaceName, serviceName string) ([]*discoveryv1.EndpointSlice, error)
 }
 
 // indexKey 是索引名；值与索引函数返回的 "namespace/serviceName" 格式对应。
 const indexKey = "namespaceName_serviceName"
 
-// ensureServiceNameIndexer ensures that indexer has a namespace/serviceName indexer
+// ensureServiceNameIndexer 确保索引器包含 namespace/serviceName 索引。
 //
 // 先检查再添加，因为同一个 informer 可能被多个组件共享；并发添加时依赖
 // AddIndexers 的报错检测竞态，若索引最终存在则视为成功。
@@ -53,15 +53,15 @@ func ensureServiceNameIndexer(indexer cache.Indexer) error {
 		}
 		serviceName, labelExists := ep.Labels[discoveryv1.LabelServiceName]
 		if !labelExists {
-			// Not associated with a service; don't add to this index.
+			// 不与任何 Service 关联，不加入该索引。
 			return nil, nil
 		}
 		return []string{ep.Namespace + "/" + serviceName}, nil
 	}})
 	if err != nil {
-		// Check if the indexer exists now; if so, that means we were racing with
-		// another thread, and they successfully installed the indexer, so we can
-		// ignore the error.
+		// 再次检查索引是否已存在；若存在，说明与另一线程竞争且对方已成功安装索引，
+		// 因此可以忽略错误。
+		//
 		if _, exists := indexer.GetIndexers()[indexKey]; exists {
 			err = nil
 		}
@@ -69,12 +69,12 @@ func ensureServiceNameIndexer(indexer cache.Indexer) error {
 	return err
 }
 
-// NewEndpointSliceIndexerGetter returns an EndpointSliceGetter that wraps an informer and
-// updates its indexes so that you can efficiently find the EndpointSlices associated with
-// a Service later. (Note that sliceInformer will continue the additional indexing for as
-// long as it runs, even if if the EndpointSliceGetter is destroyed. Use
-// NewEndpointSliceListerGetter if you want want to fetch EndpointSlices without changing
-// the underlying cache.)
+// NewEndpointSliceIndexerGetter 返回一个包装 informer 的 EndpointSliceGetter，
+// 它会更新索引以便后续高效查找与某 Service 关联的 EndpointSlice。
+// 注意：只要 sliceInformer 还在运行，索引就会持续维护，即使 EndpointSliceGetter 已被销毁。
+// 若不想改动底层缓存，应使用 NewEndpointSliceListerGetter。
+//
+// 改动底层缓存。）
 //
 // 该实现以 O(1) 的索引查询换取对共享 informer 缓存的副作用，适合长期运行、
 // 查询频繁的场景。
@@ -107,7 +107,7 @@ func (e *endpointSliceIndexerGetter) GetEndpointSlices(namespaceName, serviceNam
 	return eps, nil
 }
 
-// NewEndpointSliceListerGetter returns an EndpointSliceGetter that uses a lister to do a
+// NewEndpointSliceListerGetter 返回一个使用 lister 在每次查询时做全量选择的 EndpointSliceGetter。
 // full selection on every lookup.
 //
 // 相比索引版本，它不修改共享缓存，但每次查询都要遍历命名空间下的全部切片。

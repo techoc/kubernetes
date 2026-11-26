@@ -39,7 +39,7 @@ import (
 type DeprecatedInsecureServingInfo struct {
 	// Listener 是服务器的网络监听器。名称中的 secure 是历史遗留笔误，这里实际是明文监听器。
 	Listener net.Listener
-	// optional server name for log messages
+	// 可选的服务端名，用于日志。
 	Name string
 }
 
@@ -55,7 +55,7 @@ func (s *DeprecatedInsecureServingInfo) Serve(handler http.Handler, shutdownTime
 		MaxHeaderBytes: 1 << 20,
 
 		IdleTimeout:       90 * time.Second, // matches http.DefaultTransport keep-alive timeout
-		ReadHeaderTimeout: 32 * time.Second, // just shy of requestTimeoutUpperBound
+		ReadHeaderTimeout: 32 * time.Second, // 略小于 requestTimeoutUpperBound。
 	}
 
 	// 仅在 go1.27+ 生效；旧版本为空实现，保持构建兼容。
@@ -67,7 +67,7 @@ func (s *DeprecatedInsecureServingInfo) Serve(handler http.Handler, shutdownTime
 		klog.Infof("Serving insecurely on %s", s.Listener.Addr())
 	}
 	_, _, err := RunServer(insecureServer, s.Listener, shutdownTimeout, stopCh)
-	// NOTE: we do not handle stoppedCh returned by RunServer for graceful termination here
+	// 注意：这里不处理 RunServer 返回的 stoppedCh 以做优雅终止。
 	return err
 }
 
@@ -87,9 +87,9 @@ func (s *DeprecatedInsecureServingInfo) NewLoopbackClientConfig() (*rest.Config,
 
 	return &rest.Config{
 		Host: "http://" + net.JoinHostPort(host, port),
-		// Increase QPS limits. The client is currently passed to all admission plugins,
-		// and those can be throttled in case of higher load on apiserver - see #22340 and #22422
-		// for more details. Once #22422 is fixed, we may want to remove it.
+		// 提高 QPS 限制。client 目前会传给所有准入插件，
+		// apiserver 负载较高时这些插件可能被限流，详见 #22340 与 #22422；
+		// #22422 修复后或许可以移除。
 		QPS:   50,
 		Burst: 100,
 	}, nil

@@ -40,7 +40,7 @@ func WithWatchTerminationDuringShutdown(handler http.Handler, termination apireq
 		ctx := req.Context()
 		requestInfo, ok := apirequest.RequestInfoFrom(ctx)
 		if !ok {
-			// if this happens, the handler chain isn't setup correctly because there is no request info
+			// 出现这种情况说明 handler 链装配有误，缺少 request info。
 			responsewriters.InternalError(w, req, errors.New("no RequestInfo found in the context"))
 			return
 		}
@@ -51,17 +51,17 @@ func WithWatchTerminationDuringShutdown(handler http.Handler, termination apireq
 		}
 
 		if err := wg.Add(1); err != nil {
-			// When apiserver is shutting down, signal clients to retry
-			// There is a good chance the client hit a different server, so a tight retry is good for client responsiveness.
+			// apiserver 关闭时通知客户端重试。
+			// 客户端很可能访问到了另一台服务器，因此快速重试有利于响应性。
 			//
 			// 返回 Retry-After 让客户端快速重连到其他实例，而不是等到 TCP 超时。
 			waitGroupWriteRetryAfterToResponse(w)
 			return
 		}
 
-		// attach ServerShutdownSignal to the watch request so that the
-		// watch handler loop can return as soon as the server signals
-		// that it is shutting down.
+		// 把 ServerShutdownSignal 附加到 watch 请求上，
+		// 让 watch handler 循环在服务端发出关闭信号时立即返回。
+		//
 		ctx = apirequest.WithServerShutdownSignal(req.Context(), termination)
 		req = req.WithContext(ctx)
 

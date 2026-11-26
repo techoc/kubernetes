@@ -46,9 +46,9 @@ func newDecoratedWatcher(ctx context.Context, w watch.Interface, decorator func(
 	return d
 }
 
-// run decorates watch events from the underlying watcher until its result channel
-// is closed or the passed in context is done.
-// When run() returns, decoratedWatcher#resultCh is closed.
+// run 装饰底层 watcher 的事件，直到其结果 channel 关闭或传入的 context 结束。
+//
+// run() 返回时，decoratedWatcher#resultCh 会被关闭。
 func (d *decoratedWatcher) run(ctx context.Context) {
 	var recv, send watch.Event
 	var ok bool
@@ -57,7 +57,7 @@ func (d *decoratedWatcher) run(ctx context.Context) {
 		select {
 		case recv, ok = <-d.w.ResultChan():
 			if !ok {
-				// The underlying channel was closed, cancel our context
+				// 底层 channel 已关闭，取消我们的 context。
 				d.cancel()
 				return
 			}
@@ -77,12 +77,12 @@ func (d *decoratedWatcher) run(ctx context.Context) {
 			case d.resultCh <- send:
 				// propagated event successfully
 			case <-ctx.Done():
-				// context timed out or was cancelled, stop the underlying watcher
+				// context 超时或被取消，停止底层 watcher。
 				d.w.Stop()
 				return
 			}
 		case <-ctx.Done():
-			// context timed out or was cancelled, stop the underlying watcher
+			// context 超时或被取消，停止底层 watcher。
 			d.w.Stop()
 			return
 		}
@@ -92,9 +92,9 @@ func (d *decoratedWatcher) run(ctx context.Context) {
 // Stop 先停止底层 watcher，再取消上下文；顺序保证 run 不会在停止后
 // 继续从 ResultChan 读取。
 func (d *decoratedWatcher) Stop() {
-	// stop the underlying watcher
+	// 停止底层 watcher。
 	d.w.Stop()
-	// cancel our context
+	// 取消我们的 context。
 	d.cancel()
 }
 

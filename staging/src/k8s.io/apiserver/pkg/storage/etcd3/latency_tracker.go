@@ -24,32 +24,32 @@ import (
 	endpointsrequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// NewETCDLatencyTracker returns an implementation of
-// clientv3.KV that times the calls from the specified
-// 'delegate' KV instance in order to track latency incurred.
+// NewETCDLatencyTracker 返回一个 clientv3.KV 实现，
+// 它对指定 'delegate' KV 实例的调用计时，
+// 以追踪所产生的延迟。
 //
 // 通过装饰器而非修改调用点来采集延迟，保证所有经此 KV 的调用都被覆盖。
 func NewETCDLatencyTracker(delegate clientv3.KV) clientv3.KV {
 	return &clientV3KVLatencyTracker{KV: delegate}
 }
 
-// clientV3KVLatencyTracker decorates a clientv3.KV instance and times
-// each call so we can track the latency an API request incurs in etcd
-// round trips (the time it takes to send data to etcd and get the
-// complete response back)
+// clientV3KVLatencyTracker 装饰 clientv3.KV 实例，对每次调用计时，
+// 以追踪一个 API 请求在 etcd 往返中产生的延迟
+// （把数据发送到 etcd 并收到完整响应所需的时间）。
 //
-// If an API request involves N (N>=1) round trips to etcd, then we will sum
-// up the latenciy incurred in each roundtrip.
+//
+// 若一个 API 请求涉及 N 次（N>=1）etcd 往返，则累加
+// 每次往返产生的延迟。
 
-// It uses the context associated with the request in flight, so there
-// are no states shared among the requests in flight, and so there is no
-// concurrency overhead.
-// If the goroutine executing the request handler makes concurrent calls
-// to the underlying storage layer, that is protected since the latency
-// tracking function TrackStorageLatency is thread safe.
+// 它使用进行中请求关联的 context，因此各请求之间不共享状态，
+// 没有并发开销。
 //
-// NOTE: Compact is an asynchronous process and is not associated with
-// any request, so we will not be tracking its latency.
+// 若处理请求的 goroutine 并发调用底层存储，也没有问题，
+// 因为延迟追踪函数 TrackStorageLatency 是线程安全的。
+// 追踪函数 TrackStorageLatency 是线程安全的。
+//
+// 注意：Compact 是异步过程，不与任何请求关联，
+// 因此不追踪它的延迟。
 //
 // 只嵌入 clientv3.KV 而非另存字段，未覆盖的方法也能透明透传。
 type clientV3KVLatencyTracker struct {

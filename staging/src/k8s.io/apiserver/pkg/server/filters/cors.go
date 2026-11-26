@@ -24,11 +24,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// TODO: use restful.CrossOriginResourceSharing
-// See github.com/emicklei/go-restful/blob/master/examples/cors/restful-CORS-filter.go, and
-// github.com/emicklei/go-restful/blob/master/examples/basicauth/restful-basic-authentication.go
-// Or, for a more detailed implementation use https://github.com/martini-contrib/cors
-// or implement CORS at your proxy layer.
+// TODO: 使用 restful.CrossOriginResourceSharing。
+// 参见 github.com/emicklei/go-restful/blob/master/examples/cors/restful-CORS-filter.go 与
+// github.com/emicklei/go-restful/blob/master/examples/basicauth/restful-basic-authentication.go。
+// 更完整的实现可参考 https://github.com/martini-contrib/cors，
+// 或在代理层实现 CORS。
 
 // WithCORS 是一个包装 http Handler 的简单 CORS 实现。
 // allowedMethods 与 allowedHeaders 传 nil 时使用默认值；allowedOriginPatterns
@@ -84,26 +84,23 @@ func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMetho
 			return
 		}
 
-		// Dispatch to the next handler
+		// 分发给下一个 handler。
 		handler.ServeHTTP(w, req)
 	})
 }
 
-// isOriginAllowed returns true if the given origin header in the
-// request is allowed CORS.
+// isOriginAllowed 判断请求中给定的 Origin 头是否被 CORS 允许。
 //
-// From https://www.rfc-editor.org/rfc/rfc6454#page-13
+// 参见 https://www.rfc-editor.org/rfc/rfc6454#page-13
 //
-//	 a) The origin header can contain host and/or port
+//	 a) Origin 头可以包含主机和/或端口
 //			serialized-origin   = scheme "://" host [ ":" port ]
 //
-//	 b) In some cases, a number of origins contribute to causing the user
-//	 agents to issue an HTTP request.  In those cases, the user agent MAY
-//	 list all the origins in the Origin header field. For example, if the
-//	 HTTP request was initially issued by one origin but then later
-//	 redirected by another origin, the user agent MAY inform the server
-//	 that two origins were involved in causing the user agent to issue the
-//	 request
+//	 b) 某些情况下，多个 origin 共同促使用户代理发出 HTTP 请求。
+//	 此时用户代理可以在 Origin 头字段中列出所有 origin。例如，
+//	 若 HTTP 请求最初由一个 origin 发起，随后被另一个 origin 重定向，
+//	 用户代理可以告知服务器有两个 origin 促使其发出了该请求。
+//
 //			origin-list = serialized-origin *( SP serialized-origin )
 func isOriginAllowed(originHeader string, allowedOriginPatternsREs []*regexp.Regexp) bool {
 	for _, re := range allowedOriginPatternsREs {
@@ -124,7 +121,7 @@ func allowedOriginRegexps(allowedOrigins []string) []*regexp.Regexp {
 	return res
 }
 
-// Takes a list of strings and compiles them into a list of regular expressions
+// 接受一个字符串列表并编译为正则列表。
 func compileRegexps(regexpStrings []string) ([]*regexp.Regexp, error) {
 	regexps := []*regexp.Regexp{}
 	for _, regexpStr := range regexpStrings {

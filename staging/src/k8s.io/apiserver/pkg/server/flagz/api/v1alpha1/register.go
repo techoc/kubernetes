@@ -31,13 +31,13 @@ const (
 	Version = "v1alpha1"
 )
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是用于注册这些对象的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: Version}
 
 var (
-	// SchemeBuilder initializes a scheme builder
+	// SchemeBuilder 初始化 scheme builder。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is a global function that adds this group's types to a scheme
+	// AddToScheme 是把本组类型加入 scheme 的全局函数。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 

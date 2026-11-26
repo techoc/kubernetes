@@ -39,14 +39,14 @@ import (
 // testCertSpec 描述测试证书的自签名参数：host 作为 CN，names/ips 作为 SAN。
 type testCertSpec struct {
 	host       string
-	names, ips []string // in certificate
+	names, ips []string // 证书中的名字。
 }
 
 // namedtestCertSpec 在证书参数之外附带“显式 SNI 名称”（对应
 // --tls-sni-cert-key 的显式名字列表）。
 type namedtestCertSpec struct {
 	testCertSpec
-	explicitNames []string // as --tls-sni-cert-key explicit names
+	explicitNames []string // 作为 --tls-sni-cert-key 的显式名字。
 }
 
 // TestBuiltNamedCertificates 验证 SNI 证书映射的构建规则：DNS SAN 与显式
@@ -56,7 +56,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 	tests := []struct {
 		certs         []namedtestCertSpec
 		explicitNames []string
-		expected      map[string]int // name to certs[*] index
+		expected      map[string]int // 名字到 certs[*] 索引的映射。
 		errorString   string
 	}{
 		{
@@ -64,7 +64,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			expected: map[string]int{},
 		},
 		{
-			// only one cert
+			// 只有一个证书。
 			certs: []namedtestCertSpec{
 				{
 					testCertSpec: testCertSpec{
@@ -77,7 +77,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			},
 		},
 		{
-			// ip as cns are ignored
+			// 用 IP 作为 CN 会被忽略。
 			certs: []namedtestCertSpec{
 				{
 					testCertSpec: testCertSpec{
@@ -91,7 +91,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			},
 		},
 		{
-			// ips are ignored
+			// IP 会被忽略。
 			certs: []namedtestCertSpec{
 				{
 					testCertSpec: testCertSpec{
@@ -105,7 +105,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			},
 		},
 		{
-			// two certs with the same name
+			// 两个同名的证书。
 			certs: []namedtestCertSpec{
 				{
 					testCertSpec: testCertSpec{
@@ -123,7 +123,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			},
 		},
 		{
-			// two certs with different names
+			// 两个不同名的证书。
 			certs: []namedtestCertSpec{
 				{
 					testCertSpec: testCertSpec{
@@ -143,7 +143,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 		},
 		{
 			// 显式名称优先于证书内 SAN：同一名称出现冲突时后者胜出。
-			// two certs with the same name, explicit trumps
+			// 两个同名证书，显式名字优先。
 			certs: []namedtestCertSpec{
 				{
 					testCertSpec: testCertSpec{
@@ -162,7 +162,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 			},
 		},
 		{
-			// certs with partial overlap; ips are ignored
+			// 证书部分重叠；IP 会被忽略。
 			certs: []namedtestCertSpec{
 				{
 					testCertSpec: testCertSpec{
@@ -212,7 +212,7 @@ func TestBuiltNamedCertificates(t *testing.T) {
 NextTest:
 	for i, test := range tests {
 		var sniCerts []SNICertKeyContentProvider
-		bySignature := map[string]int{} // index in test.certs by cert signature
+		bySignature := map[string]int{} // 按证书签名在 test.certs 中的索引。
 		for j, c := range test.certs {
 			certProvider, err := createTestTLSCerts(c.testCertSpec, c.explicitNames)
 			if err != nil {
@@ -295,9 +295,9 @@ func certSignature(certProvider CertKeyContentProvider) (string, error) {
 	return x509CertSignature(x509Certs[0]), nil
 }
 
-// generateSelfSignedCertKey creates a self-signed certificate and key for the given host.
-// Host may be an IP or a DNS name
-// You may also specify additional subject alt names (either ip or dns names) for the certificate
+// generateSelfSignedCertKey 为给定 host 创建自签名证书与私钥。
+// Host 可以是 IP 或 DNS 名。
+// 还可为证书指定额外的 subject alt name（IP 或 DNS 名）。
 // 有效期 100 年、IsCA=true 仅为了让测试证书无需额外信任链即可使用；
 // 这不是生产证书生成器。
 func generateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS []string) ([]byte, []byte, error) {

@@ -238,7 +238,7 @@ func TestJWKSHashCollector_UpdateExistingHash(t *testing.T) {
 
 	recordJWKSFetchKeySetSuccess(testIssuer, testAPIServerID, testKeySet)
 
-	// Update with new JWKS - should replace old hash with new one
+	// 用新的 JWKS 更新，应用新 hash 替换旧 hash。
 	updatedKeySet := `{"keys":[{"kty":"EC","use":"sig","kid":"test2"}]}`
 	recordJWKSFetchKeySetSuccess(testIssuer, testAPIServerID, updatedKeySet)
 
@@ -258,7 +258,7 @@ func TestJWKSHashCollector_DeleteHash(t *testing.T) {
 	secondKeySet := `{"keys":[{"kty":"EC","use":"sig","kid":"test2"}]}`
 	recordJWKSFetchKeySetSuccess(secondIssuer, testAPIServerID, secondKeySet)
 
-	// Delete first authenticator's metrics and verify only second authenticator's hash remains
+	// 删除第一个认证器的指标，确认只剩第二个认证器的 hash。
 	DeleteJWKSFetchMetrics(testIssuer, testAPIServerID)
 
 	expectedValue := `

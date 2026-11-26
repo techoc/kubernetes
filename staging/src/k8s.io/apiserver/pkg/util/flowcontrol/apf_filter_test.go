@@ -36,8 +36,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestQueueWaitTimeLatencyTracker tests the queue wait times recorded by the P&F latency tracker
-// when calling Handle.
+// TestQueueWaitTimeLatencyTracker 验证调用 Handle 时 P&F 延迟追踪器记录的队列等待时间。
+// 在调用 Handle 时记录。
 //
 // 通过 QueueNoteFn 推进 fake clock 来制造确定的排队时长，从而避免依赖
 // 真实时间，稳定断言 APFQueueWaitTracker 的记录值。
@@ -134,7 +134,7 @@ func TestQueueWaitTimeLatencyTracker(t *testing.T) {
 		controller.Run(stopCh)
 	}()
 
-	// ensure that the controller has run its first loop.
+	// 确保控制器已跑完第一轮循环。
 	err := wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		return controller.hasPriorityLevelState(plcObj.Name), nil
 	})
@@ -156,7 +156,7 @@ func TestQueueWaitTimeLatencyTracker(t *testing.T) {
 		User:        flowUser,
 	}
 
-	// Add 1 second to the fake clock during QueueNoteFn
+	// 在 QueueNoteFn 期间给假时钟加 1 秒。
 	// QueueNoteFn 在请求入队/出队时被调用，借此把时钟推进 1s，模拟
 	// 请求在队列中等待了 1 秒。
 	newTime := startTime.Add(time.Second)

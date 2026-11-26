@@ -26,7 +26,7 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 )
 
-// EtcdTestServer encapsulates the datastructures needed to start local instance for testing
+// EtcdTestServer 封装启动本地测试实例所需的数据结构。
 type EtcdTestServer struct {
 	V3Client *kubernetes.Client
 }
@@ -34,10 +34,10 @@ type EtcdTestServer struct {
 // Terminate 保留为空操作：etcd 进程的生命周期已交给 testing.TB 的 cleanup 管理，
 // 由 t.Cleanup 保证测试结束时回收。
 func (e *EtcdTestServer) Terminate(t testing.TB) {
-	// no-op, server termination moved to test cleanup
+	// 空操作：服务端终止已交给测试清理逻辑处理。
 }
 
-// NewUnsecuredEtcd3TestClientServer creates a new client and server for testing
+// NewUnsecuredEtcd3TestClientServer 为测试创建新的客户端与服务端。
 //
 // 返回未启用 TLS 的本地 etcd 客户端，以及指向该实例、带测试前缀的存储配置。
 func NewUnsecuredEtcd3TestClientServer(t testing.TB) (*EtcdTestServer, *storagebackend.Config) {

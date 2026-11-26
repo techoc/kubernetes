@@ -107,7 +107,7 @@ func TestValidateDeclaratively(t *testing.T) {
 			subresource: "scale",
 			object:      valid,
 			oldObject:   valid,
-			expected:    field.ErrorList{}, // Expect no errors if there is no registered validation
+			expected:    field.ErrorList{}, // 未注册校验器时不应报错。
 		},
 		{
 			name:        "invalid subresource",
@@ -229,8 +229,8 @@ func TestGatherDeclarativeValidationMismatches(t *testing.T) {
 
 	// Alpha Errors
 	errDVAlpha := field.Invalid(pathAlpha, "val", "decAlpha").MarkAlpha().WithOrigin("min")
-	// Note: No HV Alpha by convention, so if it exists it would be a mismatch if DV is missing.
-	// But we usually don't mark HV as covered for Alpha rules.
+	// 注意：按惯例 HV 没有 Alpha，因此若出现且缺少 DV，即为不匹配。
+	// 但通常不会把 Alpha 规则的 HV 标记为已覆盖。
 
 	// Normalization / Fuzzy match helpers
 	errDVStandardDiffDetail := field.Invalid(pathStandard, "val", "decStandardDiffDetail").WithOrigin("min")
@@ -378,11 +378,11 @@ func TestGatherDeclarativeValidationMismatches(t *testing.T) {
 					ShortCircuitMismatch: tc.shortCircuitMismatch,
 				},
 			})
-			// Check if mismatches were found if expected
+			// 按预期检查是否发现不匹配。
 			if tc.expectMismatches && len(details) == 0 {
 				t.Errorf("Expected mismatches but got none")
 			}
-			// Check if details contain expected text
+			// 检查详情是否包含预期文本。
 			detailsStr := strings.Join(details, " ")
 			for _, expectedContent := range tc.expectDetailsContaining {
 				if !strings.Contains(detailsStr, expectedContent) {
@@ -390,7 +390,7 @@ func TestGatherDeclarativeValidationMismatches(t *testing.T) {
 						expectedContent, strings.Join(details, "\n"))
 				}
 			}
-			// If we don't expect any details, make sure none provided
+			// 若预期没有详情，确保没有提供。
 			if len(tc.expectDetailsContaining) == 0 && len(details) > 0 {
 				t.Errorf("Expected no details, but got %d details: %v", len(details), details)
 			}
@@ -425,7 +425,7 @@ func TestCompareDeclarativeErrorsAndEmitMismatches(t *testing.T) {
 			declarativeErrs: field.ErrorList{errA},
 			enforced:        true,
 			expectLogs:      true,
-			// logs have a prefix of the form - E0309 21:05:33.865030 1926106 validate.go:199]
+			// 日志前缀形如 - E0309 21:05:33.865030 1926106 validate.go:199]
 			expectedRegex: "E.*Unexpected difference between hand written validation and declarative validation error results.*Consider disabling the DeclarativeValidationBeta feature gate to keep data persisted in etcd consistent with prior versions of Kubernetes",
 		},
 		{
@@ -610,15 +610,15 @@ func TestRecordDuplicateValidationErrors(t *testing.T) {
 // equalErrorLists 比较两个错误列表，对 nil/空切片的差异保持宽容
 // （语义上二者都表示“无错误”）。
 func equalErrorLists(a, b field.ErrorList) bool {
-	// If both are nil, consider them equal
+	// 两者都为 nil 时视为相等。
 	if a == nil && b == nil {
 		return true
 	}
-	// If one is nil and the other not, they're different
+	// 一个为 nil 另一个不为 nil，则不同。
 	if (a == nil && b != nil) || (a != nil && b == nil) {
 		return false
 	}
-	// Both non-nil: do a normal DeepEqual
+	// 两者都非 nil：执行普通 DeepEqual。
 	return reflect.DeepEqual(a, b)
 }
 
@@ -656,7 +656,7 @@ func TestMetricIdentifier(t *testing.T) {
 		},
 		{
 			name:      "unknown operation",
-			opType:    3, // not a valid operation.Type
+			opType:    3, // 不是合法的 operation.Type。
 			obj:       &v1.Pod{TypeMeta: metav1.TypeMeta{Kind: "Pod"}},
 			scheme:    scheme,
 			expected:  "pod_unknown_op",
@@ -680,7 +680,7 @@ func TestMetricIdentifier(t *testing.T) {
 		{
 			name:      "unknown type with scheme",
 			opType:    operation.Create,
-			obj:       &runtime.Unknown{}, // Not registered in the scheme
+			obj:       &runtime.Unknown{}, // 未注册到 scheme 中。
 			scheme:    scheme,
 			expected:  "unknown_resource_create",
 			expectErr: true,
@@ -688,7 +688,7 @@ func TestMetricIdentifier(t *testing.T) {
 		{
 			name:      "unknown type without scheme",
 			opType:    operation.Type(4),
-			obj:       &runtime.Unknown{}, // Not registered in the scheme
+			obj:       &runtime.Unknown{}, // 未注册到 scheme 中。
 			expected:  "unknown_resource_unknown_op",
 			expectErr: true,
 		},
@@ -719,28 +719,28 @@ func TestMetricIdentifier(t *testing.T) {
 // 这些规则决定最终返回给用户的是 imperative 还是 declarative 错误，
 // 直接关系到版本升级期间的兼容性。
 func TestValidateDeclarativelyWithMigrationChecks(t *testing.T) {
-	// Standard Lifecycle (Enforced by default in explicit strategy)
-	// Standard HV error marked as covered. In a fully migrated state, this should be deleted from source.
-	// We include it here to verify it persists (duplicate) if not deleted, rather than being implicitly filtered.
+	// 标准生命周期（在显式策略中默认强制）。
+	// 标准 HV 错误标记为已覆盖。完全迁移后应从源码中删除它。
+	// 这里保留是为了验证未删除时会持续存在（重复），而非被隐式过滤。
 	errHVStandardCovered := field.Forbidden(field.NewPath("spec", "standard"), "imperative standard").MarkCoveredByDeclarative()
 	errDVStandard := field.Forbidden(field.NewPath("spec", "standard"), "decStandard")
 
 	// Additional Declarative (No HV counterpart)
 	errDVAdditional := field.Invalid(field.NewPath("spec", "additional"), "decAdditional", "declarative additional")
 
-	// Beta Lifecycle (Gated by DeclarativeValidationBeta).
-	// The HV error carries no lifecycle marker; it is removed when a matching enforced beta DV
-	// error exists. The pair shares type, field, and origin, as real HV/DV counterparts do.
+	// Beta 生命周期（由 DeclarativeValidationBeta 门控）。
+	// HV 错误不带生命周期标记；当存在匹配的强制 beta DV 错误时会被移除。
+	// 该配对与真实 HV/DV 对应项一样，共享 type、field 与 origin。
 	errHVBetaCovered := field.Invalid(field.NewPath("spec", "beta"), "val", "imperative beta").WithOrigin("min").MarkCoveredByDeclarative()
 	errDVBeta := field.Invalid(field.NewPath("spec", "beta"), "decBeta", "declarative beta").WithOrigin("min").MarkBeta()
 
-	// Beta Lifecycle, origin-less non-Invalid pair. Forbidden errors carry no origin, so
-	// RequireOriginWhenInvalid does not apply and the pair matches on type and field alone.
+	// Beta 生命周期，无 origin 的非 Invalid 配对。Forbidden 错误不带 origin，因此
+	// RequireOriginWhenInvalid 不适用，配对仅按 type 与 field 匹配。
 	errHVBetaForbidden := field.Forbidden(field.NewPath("spec", "betaForbidden"), "imperative beta forbidden").MarkCoveredByDeclarative()
 	errDVBetaForbidden := field.Forbidden(field.NewPath("spec", "betaForbidden"), "declarative beta forbidden").MarkBeta()
 
 	// Alpha Lifecycle (Shadowed)
-	// Alpha rules should NOT mark HV as covered, so HV remains authoritative.
+	// Alpha 规则不应把 HV 标记为已覆盖，因此 HV 仍是权威。
 	errHVAlpha := field.Forbidden(field.NewPath("spec", "alpha"), "imperative alpha")
 	errDVAlpha := field.Invalid(field.NewPath("spec", "alpha"), "decAlpha", "declarative alpha").MarkAlpha()
 
@@ -770,7 +770,7 @@ func TestValidateDeclarativelyWithMigrationChecks(t *testing.T) {
 			name:             "Feature Disabled, Panics -> Returns InternalError",
 			imperativeErrors: field.ErrorList{errHVStandardCovered},
 			shouldPanic:      true,
-			// Standard HV is kept. Panic error appended.
+			// 保留标准 HV，并追加 panic 错误。
 			expectedErrors: append(field.ErrorList{errHVStandardCovered}, field.InternalError(nil, fmt.Errorf("panic during declarative validation: test panic"))),
 		},
 		{
@@ -825,16 +825,16 @@ func TestValidateDeclarativelyWithMigrationChecks(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Set feature gate
+			// 设置特性门控。
 			if !tc.dvFeatureEnabled {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 			} else {
-				// Only set Beta gate if we are not emulating an older version where it doesn't exist
+				// 仅当模拟的是该门控存在的版本时才设置 Beta gate。
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DeclarativeValidationBeta, tc.betaGateEnabled)
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DeclarativeValidation, tc.dvFeatureEnabled)
 
-			// Setup scheme for this run
+			// 为本次运行装配 scheme。
 			localScheme := runtime.NewScheme()
 			localScheme.AddKnownTypes(schema.GroupVersion{Group: "", Version: "v1"}, &v1.Pod{})
 			localScheme.AddValidationFunc(&v1.Pod{}, func(ctx context.Context, op operation.Operation, object, oldObject interface{}) field.ErrorList {
@@ -856,7 +856,7 @@ func TestValidateDeclarativelyWithMigrationChecks(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-pod"},
 			}
 
-			// Copy imperative errors because they might be modified/appended to
+			// 复制 imperative 错误，因为它们可能被修改或追加。
 			inputErrs := make(field.ErrorList, len(tc.imperativeErrors))
 			copy(inputErrs, tc.imperativeErrors)
 

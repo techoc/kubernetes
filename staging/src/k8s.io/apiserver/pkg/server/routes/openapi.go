@@ -74,7 +74,7 @@ func (oa OpenAPI) InstallV3(c *restful.Container, mux *mux.PathRecorderMux) *han
 	grouped := make(map[string][]*restful.WebService)
 
 	for _, t := range c.RegisteredWebServices() {
-		// Strip the "/" prefix from the name
+		// 去掉名字中的 "/" 前缀。
 		gvName := t.RootPath()[1:]
 		grouped[gvName] = []*restful.WebService{t}
 	}

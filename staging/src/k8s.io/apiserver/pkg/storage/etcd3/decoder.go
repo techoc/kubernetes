@@ -29,7 +29,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NewDefaultDecoder returns the default decoder for etcd3 store
+// NewDefaultDecoder 返回 etcd3 store 使用的默认解码器。
 func NewDefaultDecoder(codec runtime.Codec, versioner storage.Versioner) Decoder {
 	return &defaultDecoder{
 		codec:     codec,
@@ -37,15 +37,15 @@ func NewDefaultDecoder(codec runtime.Codec, versioner storage.Versioner) Decoder
 	}
 }
 
-// Decoder is used by the etcd storage implementation to decode
-// transformed data from the storage into an object
+// Decoder 被 etcd 存储实现用来把存储中的转换后数据解码为对象。
+// 把存储中的转换后数据解码为对象。
 type Decoder interface {
-	// Decode decodes value of bytes into object. It will also
-	// set the object resource version to rev.
-	// On success, objPtr would be set to the object.
+	// Decode 把字节值解码为对象，并把对象的 resource version 设为 rev。
+	// 成功时 objPtr 会被设置为解码出的对象。
+	// 成功时 objPtr 被设置为该对象。
 	Decode(value []byte, objPtr runtime.Object, rev int64) error
 
-	// DecodeListItem decodes bytes value in array into object.
+	// DecodeListItem 把数组中的字节值解码为对象。
 	DecodeListItem(ctx context.Context, data []byte, rev uint64, newItemFunc func() runtime.Object) (runtime.Object, error)
 }
 
@@ -56,8 +56,8 @@ type defaultDecoder struct {
 	versioner storage.Versioner
 }
 
-// decode decodes value of bytes into object. It will also set the object resource version to rev.
-// On success, objPtr would be set to the object.
+// decode 把字节值解码为对象，并把对象的 resource version 设为 rev。成功时 objPtr 会被设置。
+// 成功时 objPtr 被设置为该对象。
 func (d *defaultDecoder) Decode(value []byte, objPtr runtime.Object, rev int64) error {
 	// 校验传入的是指针：codec 要求目标必须是可写的指针，否则无法填充对象。
 	if _, err := conversion.EnforcePtr(objPtr); err != nil {
@@ -68,15 +68,15 @@ func (d *defaultDecoder) Decode(value []byte, objPtr runtime.Object, rev int64) 
 	if err != nil {
 		return err
 	}
-	// being unable to set the version does not prevent the object from being extracted
-	// 版本不一致会导致后续写操作的冲突校验失败，但对象本身仍可读取，因此只告警不报错。
+	// 无法设置版本并不妨碍对象被提取出来
+	//
 	if err := d.versioner.UpdateObject(objPtr, uint64(rev)); err != nil {
 		klog.Errorf("failed to update object version: %v", err)
 	}
 	return nil
 }
 
-// decodeListItem decodes bytes value in array into object.
+// decodeListItem 把数组中的字节值解码为对象。
 //
 // 列表条目解码会在每次迭代中被调用，因此这里统计逐条目解码延迟，帮助定位
 // 大规模 List 请求的耗时瓶颈。

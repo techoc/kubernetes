@@ -24,7 +24,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
-// Test provides a test() function that returns true.
+// Test 提供始终返回 true 的 test() 函数。
 //
 // 仅供测试使用：默认版本号取 MaxUint32，即“所有版本的函数都注册”。
 // 通过 TestVersion 可以模拟特定 CEL 库版本下的函数集合，用于验证库版本控制逻辑。
@@ -74,8 +74,8 @@ func (t *testLib) CompileOptions() []cel.EnvOption {
 		options = append(options, cel.Function("test",
 			cel.Overload("test", []*cel.Type{}, cel.BoolType,
 				cel.FunctionBinding(func(args ...ref.Val) ref.Val {
-					// Return false here so tests can observe which version of the function is registered
-					// Actual function libraries must not break backward compatibility
+					// 这里返回 false，让测试能观察到实际注册的是哪个版本的函数。
+					// 实际函数库不得破坏向后兼容性。
 					return types.False
 				}))))
 		options = append(options, cel.Function("testV1",

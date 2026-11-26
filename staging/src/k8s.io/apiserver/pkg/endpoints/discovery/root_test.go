@@ -120,7 +120,7 @@ func TestDiscoveryAtAPIS(t *testing.T) {
 	}
 	assert.Empty(t, groupList.Groups)
 
-	// Add a Group.
+	// 添加一个 Group。
 	extensionsGroupName := "extensions"
 	extensionsVersions := []metav1.GroupVersionForDiscovery{
 		{
@@ -206,7 +206,7 @@ func TestDiscoveryOrdering(t *testing.T) {
 	assert.Equal(t, "b", groupList.Groups[4].Name)
 	assert.Equal(t, "c", groupList.Groups[5].Name)
 
-	// Remove a group.
+	// 移除一个 group。
 	handler.RemoveGroup("a")
 	groupList, err = getGroupList(t, server)
 	if err != nil {

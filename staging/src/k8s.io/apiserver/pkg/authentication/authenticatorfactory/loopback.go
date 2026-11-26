@@ -23,7 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// NewFromTokens returns an authenticator.Request or an error
+// NewFromTokens 返回一个 authenticator.Request 或错误。
 //
 // NewFromTokens 用静态 token 表构造 Bearer token 认证器，主要服务于
 // --token-auth-file 这类回环/测试场景。

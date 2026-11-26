@@ -41,10 +41,10 @@ import (
 //
 // 示例：
 //
-//	ip('127.0.0.1') // returns an IPv4 address
-//	ip('::1') // returns an IPv6 address
-//	ip('127.0.0.256') // error
-//	ip(':::1') // error
+//	ip('127.0.0.1') // 返回 IPv4 地址
+//	ip('::1') // 返回 IPv6 地址
+//	ip('127.0.0.256') // 错误
+//	ip(':::1') // 错误
 //
 // isIP
 //
@@ -58,10 +58,10 @@ import (
 //
 // 示例：
 //
-//	isIP('127.0.0.1') // returns true
-//	isIP('::1') // returns true
-//	isIP('127.0.0.256') // returns false
-//	isIP(':::1') // returns false
+//	isIP('127.0.0.1') // 返回 true
+//	isIP('::1') // 返回 true
+//	isIP('127.0.0.256') // 返回 false
+//	isIP(':::1') // 返回 false
 //
 // ip.isCanonical
 //
@@ -73,10 +73,10 @@ import (
 //
 // 示例：
 //
-//	ip.isCanonical('127.0.0.1') // returns true; all valid IPv4 addresses are canonical
-//	ip.isCanonical('2001:db8::abcd') // returns true
-//	ip.isCanonical('2001:DB8::ABCD') // returns false
-//	ip.isCanonical('2001:db8::0:0:0:abcd') // returns false
+//	ip.isCanonical('127.0.0.1') // 返回 true；所有合法 IPv4 地址都是规范形式
+//	ip.isCanonical('2001:db8::abcd') // 返回 true
+//	ip.isCanonical('2001:DB8::ABCD') // 返回 false
+//	ip.isCanonical('2001:db8::0:0:0:abcd') // 返回 false
 //
 // family / isUnspecified / isLoopback / isLinkLocalMulticast / isLinkLocalUnicast / isGlobalUnicast
 //
@@ -100,30 +100,30 @@ import (
 //
 // 示例：
 //
-//	ip('127.0.0.1').family() // returns '4”
-//	ip('::1').family() // returns '6'
-//	ip('127.0.0.1').family() == 4 // returns true
-//	ip('::1').family() == 6 // returns true
-//	ip('0.0.0.0').isUnspecified() // returns true
-//	ip('127.0.0.1').isUnspecified() // returns false
-//	ip('::').isUnspecified() // returns true
-//	ip('::1').isUnspecified() // returns false
-//	ip('127.0.0.1').isLoopback() // returns true
-//	ip('192.168.0.1').isLoopback() // returns false
-//	ip('::1').isLoopback() // returns true
-//	ip('2001:db8::abcd').isLoopback() // returns false
-//	ip('224.0.0.1').isLinkLocalMulticast() // returns true
-//	ip('224.0.1.1').isLinkLocalMulticast() // returns false
-//	ip('ff02::1').isLinkLocalMulticast() // returns true
-//	ip('fd00::1').isLinkLocalMulticast() // returns false
-//	ip('169.254.169.254').isLinkLocalUnicast() // returns true
-//	ip('192.168.0.1').isLinkLocalUnicast() // returns false
-//	ip('fe80::1').isLinkLocalUnicast() // returns true
-//	ip('fd80::1').isLinkLocalUnicast() // returns false
-//	ip('192.168.0.1').isGlobalUnicast() // returns true
-//	ip('255.255.255.255').isGlobalUnicast() // returns false
-//	ip('2001:db8::abcd').isGlobalUnicast() // returns true
-//	ip('ff00::1').isGlobalUnicast() // returns false
+//	ip('127.0.0.1').family() // 返回 '4'
+//	ip('::1').family() // 返回 '6'
+//	ip('127.0.0.1').family() == 4 // 返回 true
+//	ip('::1').family() == 6 // 返回 true
+//	ip('0.0.0.0').isUnspecified() // 返回 true
+//	ip('127.0.0.1').isUnspecified() // 返回 false
+//	ip('::').isUnspecified() // 返回 true
+//	ip('::1').isUnspecified() // 返回 false
+//	ip('127.0.0.1').isLoopback() // 返回 true
+//	ip('192.168.0.1').isLoopback() // 返回 false
+//	ip('::1').isLoopback() // 返回 true
+//	ip('2001:db8::abcd').isLoopback() // 返回 false
+//	ip('224.0.0.1').isLinkLocalMulticast() // 返回 true
+//	ip('224.0.1.1').isLinkLocalMulticast() // 返回 false
+//	ip('ff02::1').isLinkLocalMulticast() // 返回 true
+//	ip('fd00::1').isLinkLocalMulticast() // 返回 false
+//	ip('169.254.169.254').isLinkLocalUnicast() // 返回 true
+//	ip('192.168.0.1').isLinkLocalUnicast() // 返回 false
+//	ip('fe80::1').isLinkLocalUnicast() // 返回 true
+//	ip('fd80::1').isLinkLocalUnicast() // 返回 false
+//	ip('192.168.0.1').isGlobalUnicast() // 返回 true
+//	ip('255.255.255.255').isGlobalUnicast() // 返回 false
+//	ip('2001:db8::abcd').isGlobalUnicast() // 返回 true
+//	ip('ff00::1').isGlobalUnicast() // 返回 false
 //
 // 实现说明：所有入口最终都经过 parseIPAddr，以保证错误信息与拒绝规则
 // （zone、IPv4-mapped）在整个库里完全一致，避免同一字符串在不同函数下

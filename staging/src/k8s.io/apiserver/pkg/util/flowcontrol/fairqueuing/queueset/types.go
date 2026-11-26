@@ -28,8 +28,8 @@ import (
 	fcrequest "k8s.io/apiserver/pkg/util/flowcontrol/request"
 )
 
-// request is a temporary container for "requests" with additional
-// tracking fields required for QueueSet functionality.
+// request 是“请求”的临时容器，带有 QueueSet 功能所需的额外跟踪字段。
+// QueueSet 功能所需的跟踪字段。
 //
 // 字段分两段：前半段在创建后只读，后半段受 queueSet 锁保护。这个划分是
 // 该包并发正确性的核心约定——凡是在锁外读取后半段字段都是 bug。
@@ -41,50 +41,50 @@ type request struct {
 	flowDistinguisher string
 	fsName            string
 
-	// The relevant queue.  Is nil if this request did not go through
-	// a queue.
+	// 相关的 queue；若请求未经过队列则为 nil。
+	// 相关的 queue；请求未经过队列时为 nil。
 	queue *queue
 
-	// estimated amount of work of the request
+	// 请求工作量的估算值。
 	workEstimate completedWorkEstimate
 
-	// decision gets set to a `requestDecision` indicating what to do
-	// with this request.  It gets set exactly once, when the request
-	// is removed from its queue.  The value will be decisionReject,
-	// decisionCancel, or decisionExecute.
+	// decision 被设置为一个 requestDecision，指示对该请求的处理方式。
+	// 仅在请求从队列中移除时设置一次。取值是 decisionReject、
+	// decisionCancel 或 decisionExecute 之一。
 	//
-	// decision.Set is called with the queueSet locked.
-	// decision.Get is called without the queueSet locked.
+	//
+	// 调用 decision.Set 时必须持有 queueSet 锁。
+	// 调用 decision.Get 时不持有 queueSet 锁。
 	//
 	// 用 write-once promise 而不是 channel：等待方可能在任意时刻多次读取结果，
 	// promise 既保证单次写入，又允许无锁读。
 	decision promise.WriteOnce
 
-	// arrivalTime is the real time when the request entered this system
+	// arrivalTime 是请求进入本系统的真实时间。
 	arrivalTime time.Time
 
-	// descr1 and descr2 are not used in any logic but they appear in
-	// log messages
+	// descr1 与 descr2 不参与任何逻辑，只出现在日志中。
+	//
 	descr1, descr2 interface{}
 
 	queueNoteFn fq.QueueNoteFn
 
-	// The preceding fields are filled in at creation and not modified since;
-	// the following fields may be modified later and must only be accessed while
-	// holding the queueSet's lock.
+	// 前面的字段在创建时填充，之后不再修改；
+	// 后面的字段可能被修改，只能在持有 queueSet 锁时访问。
+	//
 
-	// Removes this request from its queue. If the request is not put into a
-	// a queue it will be nil.
+	// 把该请求从其队列中移除。若请求未进入队列，则为 nil。
+	//
 	removeFromQueueLocked removeFromFIFOFunc
 
-	// arrivalR is R(arrivalTime).  R is, confusingly, also called "virtual time".
-	// This field is meaningful only while the request is waiting in the virtual world.
+	// arrivalR 是 R(arrivalTime)。容易混淆的是，R 也叫“虚拟时间”。
+	// 该字段仅在请求于虚拟世界中等待时有意义。
 	arrivalR fcrequest.SeatSeconds
 
-	// startTime is the real time when the request began executing
+	// startTime 是请求开始执行的真实时间。
 	startTime time.Time
 
-	// Indicates whether client has called Request::Wait()
+	// 表示客户端是否已调用 Request::Wait()。
 	waitStarted bool
 }
 
@@ -92,43 +92,43 @@ type request struct {
 // 初始部分按估算的服务时长计，最终部分按实际额外延迟计，二者用于不同的公平性计算。
 type completedWorkEstimate struct {
 	fcrequest.WorkEstimate
-	totalWork fcrequest.SeatSeconds // initial plus final work
-	finalWork fcrequest.SeatSeconds // only final work
+	totalWork fcrequest.SeatSeconds // 初始工作量 + 最终工作量
+	finalWork fcrequest.SeatSeconds // 仅最终工作量
 }
 
-// queue is a sequence of requests that have arrived but not yet finished
-// execution in both the real and virtual worlds.
+// queue 是在真实与虚拟世界中都已到达但尚未执行完的请求序列。
+// 在真实与虚拟世界中执行完毕。
 type queue struct {
-	// The requestsWaiting not yet executing in the real world are stored in a FIFO list.
+	// 尚未在真实世界执行的 requestsWaiting 保存在 FIFO 链表中。
 	requestsWaiting fifo
 
-	// nextDispatchR is the R progress meter reading at
-	// which the next request will be dispatched in the virtual world.
+	// nextDispatchR 是 R 进度计数器的读数，
+	// 表示虚拟世界中下一个请求将被分发的位置。
 	nextDispatchR fcrequest.SeatSeconds
 
-	// requestsExecuting is the set of requests executing in the real world.
+	// requestsExecuting 是在真实世界中正在执行的请求集合。
 	requestsExecuting sets.Set[*request]
 
-	// index is the position of this queue among those in its queueSet.
+	// index 是该 queue 在其 queueSet 各 queue 中的位置。
 	index int
 
-	// seatsInUse is the total number of "seats" currently occupied
-	// by all the requests that are currently executing in this queue.
+	// seatsInUse 是该队列中当前正在执行的所有请求
+	// 占用的“席位”总数。
 	seatsInUse int
 }
 
-// queueSum tracks the sum of initial seats, max seats, and
-// totalWork from all requests in a given queue
+// queueSum 跟踪给定队列中所有请求的初始席位数、最大席位数
+// 与 totalWork 之和。
 type queueSum struct {
-	// InitialSeatsSum is the sum of InitialSeats
-	// associated with all requests in a given queue.
+	// InitialSeatsSum 是给定队列中所有请求的 InitialSeats 之和。
+	//
 	InitialSeatsSum int
 
-	// MaxSeatsSum is the sum of MaxSeats
-	// associated with all requests in a given queue.
+	// MaxSeatsSum 是给定队列中所有请求的 MaxSeats 之和。
+	//
 	MaxSeatsSum int
 
-	// TotalWorkSum is the sum of totalWork of the waiting requests
+	// TotalWorkSum 是等待中请求的 totalWork 之和。
 	TotalWorkSum fcrequest.SeatSeconds
 }
 
@@ -206,7 +206,7 @@ func dumpRequest(includeDetails bool) func(*request) debug.RequestDump {
 	}
 }
 
-// SetMapReduce is map-reduce starting from a set type in the sets package.
+// SetMapReduce 是从 sets 包的 set 类型出发的 map-reduce。
 func SetMapReduce[Elt comparable, Result, Accumulator any](mapFn func(Elt) Result, reduceFn func(Accumulator, Result) Accumulator) func(map[Elt]sets.Empty) Accumulator {
 	return func(set map[Elt]sets.Empty) Accumulator {
 		var ans Accumulator
@@ -217,7 +217,7 @@ func SetMapReduce[Elt comparable, Result, Accumulator any](mapFn func(Elt) Resul
 	}
 }
 
-// SliceMapReduce is map-reduce starting from a slice.
+// SliceMapReduce 是从 slice 出发的 map-reduce。
 func SliceMapReduce[Elt, Result, Accumulator any](mapFn func(Elt) Result, reduceFn func(Accumulator, Result) Accumulator) func([]Elt) Accumulator {
 	return func(slice []Elt) Accumulator {
 		var ans Accumulator
@@ -228,8 +228,8 @@ func SliceMapReduce[Elt, Result, Accumulator any](mapFn func(Elt) Result, reduce
 	}
 }
 
-// or 作为 reduce 函数用于"任一为真"的归约。
+// or 作为 reduce 函数，实现“任一为真”的归约。
 func or(x, y bool) bool { return x || y }
 
-// append1 作为 reduce 函数用于收集元素；具名是为了满足泛型函数值传参的需要。
+// append1 作为 reduce 函数收集元素；具名是为了满足泛型函数值传参的需要。
 func append1[Elt any](slice []Elt, next Elt) []Elt { return append(slice, next) }

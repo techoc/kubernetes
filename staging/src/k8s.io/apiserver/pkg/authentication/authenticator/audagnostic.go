@@ -27,8 +27,8 @@ import (
 // 否则调用委托认证器并填充交集结果。
 func authenticate(ctx context.Context, implicitAuds Audiences, authenticate func() (*Response, bool, error)) (*Response, bool, error) {
 	targetAuds, ok := AudiencesFrom(ctx)
-	// We can remove this once api audiences is never empty. That will probably
-	// be N releases after TokenRequest is GA.
+	// 当 api audiences 永不为空时可以移除此包装；那大概要等 TokenRequest GA 之后再过 N 个版本。
+	// 旧客户端不传 audience 时退化为无条件认证，保持向后兼容。
 	// 老客户端不传 audience 时退化为无条件认证，保持向后兼容。
 	if !ok {
 		return authenticate()
@@ -43,7 +43,7 @@ func authenticate(ctx context.Context, implicitAuds Audiences, authenticate func
 		return nil, false, err
 	}
 	if len(resp.Audiences) > 0 {
-		// maybe the authenticator was audience aware after all.
+		// 也许该认证器本就感知 audience。
 		// 包装了感知 audience 的认证器属于误用，显式报错以免 audience 被错误覆盖。
 		return nil, false, fmt.Errorf("audience agnostic authenticator wrapped an authenticator that returned audiences: %q", resp.Audiences)
 	}
@@ -67,8 +67,8 @@ func (a *audAgnosticRequestAuthenticator) AuthenticateRequest(req *http.Request)
 	})
 }
 
-// WrapAudienceAgnosticRequest wraps an audience agnostic request authenticator
-// to restrict its accepted audiences to a set of implicit audiences.
+// WrapAudienceAgnosticRequest 包装不感知 audience 的请求认证器，
+// 将其接受的 audience 限制为一组隐式 audience。
 func WrapAudienceAgnosticRequest(implicit Audiences, delegate Request) Request {
 	return &audAgnosticRequestAuthenticator{
 		implicit: implicit,
@@ -92,8 +92,8 @@ func (a *audAgnosticTokenAuthenticator) AuthenticateToken(ctx context.Context, t
 	})
 }
 
-// WrapAudienceAgnosticToken wraps an audience agnostic token authenticator to
-// restrict its accepted audiences to a set of implicit audiences.
+// WrapAudienceAgnosticToken 包装不感知 audience 的 token 认证器，
+// 将其接受的 audience 限制为一组隐式 audience。
 func WrapAudienceAgnosticToken(implicit Audiences, delegate Token) Token {
 	return &audAgnosticTokenAuthenticator{
 		implicit: implicit,

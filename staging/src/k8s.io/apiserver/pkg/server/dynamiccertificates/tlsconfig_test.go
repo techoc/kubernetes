@@ -99,7 +99,7 @@ func TestNewStaticCertKeyContent(t *testing.T) {
 			sniCerts:    []SNICertKeyContentProvider{testCertProvider},
 			expected: &dynamicCertificateContent{
 				clientCA: caBundleContent{caBundle: []byte("content-1")},
-				// ignore sni names for serving cert
+				// 服务端证书忽略 sni 名字。
 				servingCert: certKeyContent{cert: serverCert, key: serverKey},
 				sniCerts:    []sniCertKeyContent{{certKeyContent: certKeyContent{cert: serverCert, key: serverKey}, sniNames: []string{"foo"}}},
 			},

@@ -26,7 +26,7 @@ import (
 	"k8s.io/apiserver/pkg/apis/apiserver/v1beta1"
 )
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组，并把类型加入 scheme。
 //
 // 注册顺序与版本优先级决定了解码未指定 apiVersion 的对象时的默认版本，
 // 以及编码时的首选版本。internal 版本必须先注册，之后各外部版本才能通过
@@ -34,15 +34,15 @@ import (
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(apiserver.AddToScheme(scheme))
 
-	// v1alpha is in the k8s.io-suffixed API group
+	// v1alpha 位于以 k8s.io 为后缀的 API 组。
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	utilruntime.Must(scheme.SetVersionPriority(v1alpha1.SchemeGroupVersion))
 
-	// v1alpha is in the k8s.io-suffixed API group
+	// v1alpha 位于以 k8s.io 为后缀的 API 组。
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
 	utilruntime.Must(scheme.SetVersionPriority(v1beta1.SchemeGroupVersion))
 
-	// v1 is in the config.k8s.io-suffixed API group
+	// v1 位于以 config.k8s.io 为后缀的 API 组。
 	utilruntime.Must(v1.AddToScheme(scheme))
 	utilruntime.Must(scheme.SetVersionPriority(v1.SchemeGroupVersion))
 }

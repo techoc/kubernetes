@@ -156,7 +156,7 @@ func TestLogEventsJson(t *testing.T) {
 			var buf bytes.Buffer
 			backend := NewBackend(&buf, FormatJson, version)
 			backend.ProcessEvents(event)
-			// decode events back and compare with the original one.
+			// 解码事件并与原始事件比较。
 			result := &auditinternal.Event{}
 			decoder := audit.Codecs.UniversalDecoder(version)
 			if err := runtime.DecodeInto(decoder, buf.Bytes(), result); err != nil {

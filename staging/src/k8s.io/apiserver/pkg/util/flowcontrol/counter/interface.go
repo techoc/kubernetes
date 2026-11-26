@@ -24,11 +24,11 @@ package counter
 // 计数的语义是“可能还会做事的 goroutine 数”，而非物理线程数；
 // 等待/阻塞前减一、唤醒对方前加一，测试据此判断何时推进虚拟时钟。
 type GoRoutineCounter interface {
-	// Add adds the given delta to the count of active goroutines.
-	// Call Add(1) before forking a goroutine, Add(-1) at the end of that goroutine.
-	// Call Add(-1) just before waiting on something from another goroutine (e.g.,
-	// just before a `select`).
-	// Call Add(1) just before doing something that unblocks a goroutine that is
-	// waiting on that something.
+	// Add 把给定增量加到活跃 goroutine 计数上。
+	// fork goroutine 前调用 Add(1)，该 goroutine 结束时调用 Add(-1)。
+	// 在等待来自另一个 goroutine 的某物之前调用 Add(-1)（例如
+	// 在 `select` 之前）。
+	// 在做某件会解除另一个 goroutine 阻塞的事情之前调用 Add(1)。
+	//
 	Add(delta int)
 }

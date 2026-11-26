@@ -31,8 +31,8 @@ func StaticVerifierFn(opts x509.VerifyOptions) VerifyOptionFunc {
 	}
 }
 
-// NewStaticVerifierFromFile creates a new verification func from a file.  It reads the content and then fails.
-// It will return a nil function if you pass an empty CA file.
+// NewStaticVerifierFromFile 从文件创建校验函数：读取内容后即固化。
+// 若传入空的 CA 文件路径，则返回 nil 函数。
 //
 // 一次性读取 CA 文件并构造证书池，之后不再重读；需要热加载的场景应使用动态证书实现。
 func NewStaticVerifierFromFile(clientCA string) (VerifyOptionFunc, error) {
@@ -41,7 +41,7 @@ func NewStaticVerifierFromFile(clientCA string) (VerifyOptionFunc, error) {
 		return nil, nil
 	}
 
-	// Wrap with an x509 verifier
+	// 用 x509 校验器包装。
 	var err error
 	opts := DefaultVerifyOptions()
 	opts.Roots, err = cert.NewPool(clientCA)
@@ -55,22 +55,22 @@ func NewStaticVerifierFromFile(clientCA string) (VerifyOptionFunc, error) {
 // StringSliceProvider 是获取字符串切片值的抽象，认证头等场景大量使用它。
 // 抽象成接口是为了支持动态值（如轮转的请求头/证书），同时保持调用方无锁读取。
 type StringSliceProvider interface {
-	// Value returns the current string slice.  Callers should never mutate the returned value.
+	// Value 返回当前的字符串切片。调用方绝不能修改返回值。
 	Value() []string
 }
 
-// StringSliceProviderFunc is a function that matches the StringSliceProvider interface
+// StringSliceProviderFunc 是匹配 StringSliceProvider 接口的函数类型。
 type StringSliceProviderFunc func() []string
 
-// Value returns the current string slice.  Callers should never mutate the returned value.
+// Value 返回当前的字符串切片。调用方绝不能修改返回值。
 func (d StringSliceProviderFunc) Value() []string {
 	return d()
 }
 
-// StaticStringSlice a StringSliceProvider that returns a fixed value
+// StaticStringSlice 是返回固定值的 StringSliceProvider。
 type StaticStringSlice []string
 
-// Value returns the current string slice.  Callers should never mutate the returned value.
+// Value 返回当前的字符串切片。调用方绝不能修改返回值。
 func (s StaticStringSlice) Value() []string {
 	return s
 }

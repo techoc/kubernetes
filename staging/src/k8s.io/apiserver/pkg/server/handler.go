@@ -34,43 +34,43 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 )
 
-// APIServerHandlers holds the different http.Handlers used by the API server.
-// This includes the full handler chain, the director (which chooses between gorestful and nonGoRestful,
-// the gorestful handler (used for the API) which falls through to the nonGoRestful handler on unregistered paths,
-// and the nonGoRestful handler (which can contain a fallthrough of its own)
-// FullHandlerChain -> Director -> {GoRestfulContainer,NonGoRestfulMux} based on inspection of registered web services
+// APIServerHandlers 持有 API server 使用的各种 http.Handler。
+// 包括完整的 handler 链、director（在 gorestful 与非 gorestful 之间选择）、
+// gorestful handler（用于 API，未注册路径会落到非 gorestful handler），
+// 以及非 gorestful handler（自身也可能继续向下传递）。
+// FullHandlerChain -> Director -> {GoRestfulContainer,NonGoRestfulMux}，由已注册的 web service 决定分发。
 //
 // 分层原因：gorestful 无法在不破坏 swagger 的前提下做通配路由，所以用一个 director
 // 在其前面做路由判定，未匹配的请求交给普通 mux 处理。
 type APIServerHandler struct {
-	// FullHandlerChain is the one that is eventually served with.  It should include the full filter
-	// chain and then call the Director.
+	// FullHandlerChain 是最终处理请求的 handler，应包含完整过滤器链并调用 Director。
+	// 然后调用 Director。
 	FullHandlerChain http.Handler
-	// The registered APIs.  InstallAPIs uses this.  Other servers probably shouldn't access this directly.
+	// 已注册的 API。InstallAPIs 使用此字段；其他 server 一般不应直接访问。
 	GoRestfulContainer *restful.Container
-	// NonGoRestfulMux is the final HTTP handler in the chain.
-	// It comes after all filters and the API handling
-	// This is where other servers can attach handler to various parts of the chain.
+	// NonGoRestfulMux 是链中的最后一个 HTTP handler。
+	// 位于所有过滤器与 API 处理之后。
+	// 其它 server 可在此把 handler 挂到链的不同位置。
 	NonGoRestfulMux *mux.PathRecorderMux
 
-	// Director is here so that we can properly handle fall through and proxy cases.
-	// This looks a bit bonkers, but here's what's happening.  We need to have /apis handling registered in gorestful in order to have
-	// swagger generated for compatibility.  Doing that with `/apis` as a webservice, means that it forcibly 404s (no defaulting allowed)
-	// all requests which are not /apis or /apis/.  We need those calls to fall through behind gorestful for proper delegation.  Trying to
-	// register for a pattern which includes everything behind it doesn't work because gorestful negotiates for verbs and content encoding
-	// and all those things go crazy when gorestful really just needs to pass through.  In addition, openapi enforces unique verb constraints
-	// which we don't fit into and it still muddies up swagger.  Trying to switch the webservices into a route doesn't work because the
-	//  containing webservice faces all the same problems listed above.
-	// This leads to the crazy thing done here.  Our mux does what we need, so we'll place it in front of gorestful.  It will introspect to
-	// decide if the route is likely to be handled by gorestful and route there if needed.  Otherwise, it goes to NonGoRestfulMux mux in
-	// order to handle "normal" paths and delegation. Hopefully no API consumers will ever have to deal with this level of detail.  I think
-	// we should consider completely removing gorestful.
-	// Other servers should only use this opaquely to delegate to an API server.
+	// Director 用于正确处理请求下传与代理的情况。
+	// 看起来有点离谱，但背景是这样的：为兼容 swagger 生成，必须在 gorestful 中注册 /apis。
+	// 把 `/apis` 注册为 webservice 后，它会对所有非 /apis 与 /apis/ 的请求强制返回 404；
+	// 这些请求需要穿透 gorestful 才能正确委托给其它 handler。
+	// 注册一个覆盖所有子路径的 pattern 也行不通，因为 gorestful 会协商动词与内容类型，
+	// 而它真正需要做的只是透传；此外 openapi 强制动词唯一，我们并不符合这一约束，
+	// 这还会把 swagger 搞乱。把 webservice 换成 route 也不行，因为
+	// 包含 webservice 会面临上述所有问题。
+	// 于是有了这里的“疯狂”做法：我们的 mux 能做所需的事，因此把它放在 gorestful 前面。
+	// 它先判断路由是否可能由 gorestful 处理，是则转过去，否则交给 NonGoRestfulMux
+	// 处理“普通”路径与委托。希望 API 消费者永远不必了解这一层细节。
+	// 或许我们该考虑彻底移除 gorestful。
+	// 其它 server 只应把它当作不透明的委托入口。
 	Director http.Handler
 }
 
-// HandlerChainBuilderFn is used to wrap the GoRestfulContainer handler using the provided handler chain.
-// It is normally used to apply filtering like authentication and authorization
+// HandlerChainBuilderFn 用给定的 handler 链包装 GoRestfulContainer handler。
+// 通常用于套上认证与授权等过滤。
 type HandlerChainBuilderFn func(apiHandler http.Handler) http.Handler
 
 // NewAPIServerHandler 组装 director、gorestful 容器与非 gorestful mux。
@@ -82,7 +82,7 @@ func NewAPIServerHandler(name string, s runtime.NegotiatedSerializer, handlerCha
 	}
 
 	gorestfulContainer := restful.NewContainer()
-	gorestfulContainer.Router(restful.CurlyRouter{}) // e.g. for proxy/{kind}/{name}/{*}
+	gorestfulContainer.Router(restful.CurlyRouter{}) // 例如 proxy/{kind}/{name}/{*}。
 	gorestfulContainer.RecoverHandler(func(panicReason interface{}, httpWriter http.ResponseWriter) {
 		logStackOnRecover(s, panicReason, httpWriter)
 	})
@@ -104,10 +104,10 @@ func NewAPIServerHandler(name string, s runtime.NegotiatedSerializer, handlerCha
 	}
 }
 
-// ListedPaths returns the paths that should be shown under /
+// ListedPaths 返回应在 / 下展示的路径。
 func (a *APIServerHandler) ListedPaths() []string {
 	var handledPaths []string
-	// Extract the paths handled using restful.WebService
+	// 提取通过 restful.WebService 处理的路径。
 	for _, ws := range a.GoRestfulContainer.RegisteredWebServices() {
 		handledPaths = append(handledPaths, ws.RootPath())
 	}
@@ -129,44 +129,44 @@ type director struct {
 func (d director) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	path := req.URL.Path
 
-	// check to see if our webservices want to claim this path
+	// 检查我们的 webservice 是否要认领该路径。
 	for _, ws := range d.goRestfulContainer.RegisteredWebServices() {
 		switch {
 		case ws.RootPath() == "/apis":
-			// if we are exactly /apis or /apis/, then we need special handling in loop.
-			// normally these are passed to the nonGoRestfulMux, but if discovery is enabled, it will go directly.
-			// We can't rely on a prefix match since /apis matches everything (see the big comment on Director above)
+			// 若恰好是 /apis 或 /apis/，需要特殊处理。
+			// 通常这些请求交给 nonGoRestfulMux，但启用发现时会直接处理。
+			// 不能依赖前缀匹配，因为 /apis 匹配一切（见上方 Director 的长注释）。
 			if path == "/apis" || path == "/apis/" {
 				klog.V(5).Infof("%v: %v %q satisfied by gorestful with webservice %v", d.name, req.Method, path, ws.RootPath())
-				// don't use servemux here because gorestful servemuxes get messed up when removing webservices
-				// TODO fix gorestful, remove TPRs, or stop using gorestful
+				// 这里不用 servemux：移除 webservice 时 gorestful 的 servemux 会被搞乱。
+				// TODO 修复 gorestful、移除 TPR，或停止使用 gorestful。
 				d.goRestfulContainer.Dispatch(w, req)
 				return
 			}
 
 		case strings.HasPrefix(path, ws.RootPath()):
-			// ensure an exact match or a path boundary match
+			// 要求精确匹配或路径边界匹配。
 			//
 			// 仅前缀匹配不够：/apis/appsfoo 不应被 /apis/apps 认领，
 			// 因此要求下一字符是 '/' 或路径已结束。
 			if len(path) == len(ws.RootPath()) || path[len(ws.RootPath())] == '/' {
 				klog.V(5).Infof("%v: %v %q satisfied by gorestful with webservice %v", d.name, req.Method, path, ws.RootPath())
-				// don't use servemux here because gorestful servemuxes get messed up when removing webservices
-				// TODO fix gorestful, remove TPRs, or stop using gorestful
+				// 这里不用 servemux：移除 webservice 时 gorestful 的 servemux 会被搞乱。
+				// TODO 修复 gorestful、移除 TPR，或停止使用 gorestful。
 				d.goRestfulContainer.Dispatch(w, req)
 				return
 			}
 		}
 	}
 
-	// if we didn't find a match, then we just skip gorestful altogether
+	// 若未找到匹配，就完全跳过 gorestful。
 	klog.V(5).Infof("%v: %v %q satisfied by nonGoRestful", d.name, req.Method, path)
 	d.nonGoRestfulMux.ServeHTTP(w, req)
 }
 
 // logStackOnRecover 是 gorestful 的 panic 恢复钩子：记录完整调用栈并返回 500。
 // 用独立的 buffer 一次性输出，避免 panic 路径上的多行日志交错。
-// TODO: Unify with RecoverPanics?
+// TODO: 与 RecoverPanics 统一？
 func logStackOnRecover(s runtime.NegotiatedSerializer, panicReason interface{}, w http.ResponseWriter) {
 	var buffer bytes.Buffer
 	buffer.WriteString(fmt.Sprintf("recover from panic situation: - %v\r\n", panicReason))
@@ -186,7 +186,7 @@ func logStackOnRecover(s runtime.NegotiatedSerializer, panicReason interface{}, 
 	responsewriters.ErrorNegotiated(apierrors.NewGenericServerResponse(http.StatusInternalServerError, "", schema.GroupResource{}, "", "", 0, false), s, schema.GroupVersion{}, w, &http.Request{Header: headers})
 }
 
-// serviceErrorHandler 把 gorestful 内部错误转换为标准的 Status 响应，
+// serviceErrorHandler 把 gorestful 内部错误转换为标准 Status 响应，
 // 保证错误格式与 API 其他部分一致（客户端只需处理一种错误结构）。
 func serviceErrorHandler(s runtime.NegotiatedSerializer, serviceErr restful.ServiceError, request *restful.Request, resp *restful.Response) {
 	responsewriters.ErrorNegotiated(
@@ -198,7 +198,7 @@ func serviceErrorHandler(s runtime.NegotiatedSerializer, serviceErr restful.Serv
 	)
 }
 
-// ServeHTTP makes it an http.Handler
+// ServeHTTP 使其成为 http.Handler。
 func (a *APIServerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.FullHandlerChain.ServeHTTP(w, r)
 }

@@ -60,32 +60,32 @@ type EgressSelector struct {
 	egressToDialer map[EgressType]utilnet.DialFunc
 }
 
-// EgressType is an indicator of which egress selection should be used for sending traffic.
-// See https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/1281-network-proxy/README.md#network-context
+// EgressType 指示发送流量时应使用哪种出口选择。
+// 参见 https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/1281-network-proxy/README.md#network-context
 type EgressType int
 
 const (
 	// ControlPlane 是发往控制面的流量对应的 EgressType：
 	// apiserver 访问 kubelet/其他控制面组件时使用。
 	ControlPlane EgressType = iota
-	// Etcd is the EgressType for traffic intended to go to Kubernetes persistence store.
+	// Etcd 是发往 Kubernetes 持久化存储的流量对应的 EgressType。
 	Etcd
-	// Cluster is the EgressType for traffic intended to go to the system being managed by Kubernetes.
+	// Cluster 是发往由 Kubernetes 管理的系统的流量对应的 EgressType。
 	Cluster
 )
 
-// NetworkContext is the struct used by Kubernetes API Server to indicate where it intends traffic to be sent.
+// NetworkContext 是 Kubernetes API Server 用来指示流量发往何处的结构体。
 type NetworkContext struct {
-	// EgressSelectionName is the unique name of the
-	// EgressSelectorConfiguration which determines
-	// the network we route the traffic to.
+	// EgressSelectionName 是 EgressSelectorConfiguration 中的唯一名字，
+	// 决定把流量路由到哪个网络。
+	//
 	EgressSelectionName EgressType
 }
 
-// Lookup is the interface to get the dialer function for the network context.
+// Lookup 用于获取网络上下文对应的拨号函数。
 type Lookup func(networkContext NetworkContext) (utilnet.DialFunc, error)
 
-// String returns the canonical string representation of the egress type
+// String 返回出口类型的规范字符串表示。
 func (s EgressType) String() string {
 	switch s {
 	case ControlPlane:
@@ -99,7 +99,7 @@ func (s EgressType) String() string {
 	}
 }
 
-// AsNetworkContext is a helper function to make it easy to get the basic NetworkContext objects.
+// AsNetworkContext 是便捷 helper，用于获取基本的 NetworkContext 对象。
 func (s EgressType) AsNetworkContext() NetworkContext {
 	return NetworkContext{EgressSelectionName: s}
 }
@@ -124,11 +124,11 @@ func lookupServiceName(name string) (EgressType, error) {
 func tunnelHTTPConnect(proxyConn net.Conn, proxyAddress, addr string) (net.Conn, error) {
 	fmt.Fprintf(proxyConn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", addr, "127.0.0.1")
 
-	// As described in https://go.dev/issue/74633 a misbehaving proxy server
-	// can cause memory exhaustion in the client. The fix in https://go.dev/cl/698915
-	// only covers http.Transport users. Apply the same limit here.
+	// 如 https://go.dev/issue/74633 所述，行为异常的代理服务器
+	// 可能导致客户端内存耗尽。https://go.dev/cl/698915 中的修复
+	// 只覆盖 http.Transport 的使用者，这里施加同样的限制。
 	//
-	// Limit the size of the response headers the proxy server can send us.
+	// 限制代理服务器可发送给我们的响应头大小。
 	br := bufio.NewReader(io.LimitReader(proxyConn, http.DefaultMaxHeaderBytes))
 
 	res, err := http.ReadResponse(br, nil)
@@ -143,10 +143,10 @@ func tunnelHTTPConnect(proxyConn net.Conn, proxyAddress, addr string) (net.Conn,
 			proxyAddress, addr, res.StatusCode, res.Status)
 	}
 
-	// It's safe to discard the bufio.Reader here and return the
-	// original TCP conn directly because we only use this for
-	// TLS, and in TLS the client speaks first, so we know there's
-	// no unbuffered data. But we can double-check.
+	// 这里可以安全地丢弃 bufio.Reader 并直接返回原始 TCP 连接，因为只用于 TLS；
+	// TLS 中客户端先发话，因此不会有未缓冲的数据。但仍做一次检查确认。
+	//
+	// 不会有未缓冲的数据。但仍然复查一次。
 	if br.Buffered() > 0 {
 		proxyConn.Close()
 		return nil, fmt.Errorf("unexpected %d bytes of buffered data from CONNECT proxy %q",
@@ -156,7 +156,7 @@ func tunnelHTTPConnect(proxyConn net.Conn, proxyAddress, addr string) (net.Conn,
 }
 
 type proxier interface {
-	// proxy returns a connection to addr.
+	// proxy 返回指向 addr 的连接。
 	proxy(ctx context.Context, addr string) (net.Conn, error)
 }
 
@@ -185,12 +185,12 @@ func (g *grpcProxier) proxy(ctx context.Context, addr string) (net.Conn, error) 
 }
 
 type proxyServerConnector interface {
-	// connect establishes connection to the proxy server, and returns a
-	// proxier based on the connection.
+	// connect 建立到代理服务器的连接，并返回基于该连接的 proxier。
 	//
-	// The provided Context must be non-nil. The context is used for connecting to the proxy only.
-	// If the context expires before the connection is complete, an error is returned.
-	// Once successfully connected to the proxy, any expiration of the context will not affect the connection.
+	//
+	// 传入的 Context 必须非 nil，且只用于建立连接。
+	// 若连接在 context 过期前未完成，则返回错误。
+	// 一旦连接成功建立，之后 context 过期不会影响该连接。
 	connect(context.Context) (proxier, error)
 }
 
@@ -231,8 +231,8 @@ type udsGRPCConnector struct {
 	udsName string
 }
 
-// connect establishes a connection to a proxy over gRPC.
-// TODO At the moment, it does not use the provided context.
+// connect 通过 gRPC 建立到代理的连接。
+// TODO 目前不使用传入的 context。
 func (u *udsGRPCConnector) connect(_ context.Context) (proxier, error) {
 	udsName := u.udsName
 	dialOption := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
@@ -244,14 +244,14 @@ func (u *udsGRPCConnector) connect(_ context.Context) (proxier, error) {
 		return c, err
 	})
 
-	// CreateSingleUseGrpcTunnel() unfortunately couples dial and connection contexts. Because of that,
-	// we cannot use ctx just for dialing and control the connection lifetime separately.
+	// CreateSingleUseGrpcTunnel() 不巧把拨号与连接 context 耦合在一起，因此无法只用 ctx 拨号而单独控制连接生命周期。
+	//
 	// See https://github.com/kubernetes-sigs/apiserver-network-proxy/issues/357.
 	tunnelCtx := context.TODO()
 	tunnel, err := client.CreateSingleUseGrpcTunnel(tunnelCtx, udsName, dialOption,
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
-		grpc.WithTimeout(30*time.Second), // matches http.DefaultTransport dial timeout
+		grpc.WithTimeout(30*time.Second), // 与 http.DefaultTransport 的拨号超时一致。
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ func getTLSConfig(t *apiserver.TLSConfig) (*tls.Config, error) {
 			return nil, fmt.Errorf("failed to append CA cert to the cert pool")
 		}
 	} else {
-		// Use host's root CA set instead of providing our own
+		// 使用主机的根 CA 集合，而不是自带 CA。
 		certPool = nil
 	}
 	return &tls.Config{
@@ -405,7 +405,7 @@ func connectionToDialerCreator(c apiserver.Connection) (*dialerCreator, error) {
 // 任一选择项配置错误都会让整个构造失败，避免部分流量走错路径。
 func NewEgressSelector(config *apiserver.EgressSelectorConfiguration) (*EgressSelector, error) {
 	if config == nil || config.EgressSelections == nil {
-		// No Connection Services configured, leaving the serviceMap empty, will return default dialer.
+		// 未配置任何 Connection Services 时 serviceMap 为空，将返回默认拨号器。
 		return nil, nil
 	}
 	cs := &EgressSelector{
@@ -438,11 +438,11 @@ func NewEgressSelectorWithMap(m map[EgressType]utilnet.DialFunc) *EgressSelector
 
 // Lookup 获取该网络上下文对应的拨号器函数。
 // 该配置在 Kubernetes API Server 启动时确定。
-// 返回 nil 拨号器是合法结果，表示使用默认网络栈；未在配置中出现的
+// 返回 nil 拨号器是合法结果，表示使用默认网络栈；未在配置中出现的上下文也按直连处理，而不是报错。
 // 上下文也按直连处理，而不是报错。
 func (cs *EgressSelector) Lookup(networkContext NetworkContext) (utilnet.DialFunc, error) {
 	if cs.egressToDialer == nil {
-		// The round trip wrapper will over-ride the dialContext method appropriately
+		// round trip wrapper 会相应地覆盖 dialContext 方法。
 		return nil, nil
 	}
 

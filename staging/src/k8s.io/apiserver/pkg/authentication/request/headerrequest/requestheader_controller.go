@@ -42,24 +42,24 @@ const (
 	authenticationRoleName = "extension-apiserver-authentication-reader"
 )
 
-// RequestHeaderAuthRequestProvider a provider that knows how to dynamically fill parts of RequestHeaderConfig struct
+// RequestHeaderAuthRequestProvider 能动态填充 RequestHeaderConfig 的部分字段。
 type RequestHeaderAuthRequestProvider interface {
-	// UsernameHeaders lists the headers searched, in order, for the user name.
+	// UsernameHeaders 列出按顺序查找用户名的 header。
 	UsernameHeaders() []string
-	// UIDHeaders lists the headers searched, in order, for the user UID.
+	// UIDHeaders 列出按顺序查找用户 UID 的 header。
 	UIDHeaders() []string
-	// GroupHeaders lists the headers whose values are treated as groups.
+	// GroupHeaders 列出其值被视为用户组的 header。
 	GroupHeaders() []string
-	// ExtraHeaderPrefixes lists prefixes of headers mapped into user extras.
+	// ExtraHeaderPrefixes 列出被映射到 user extra 的 header 前缀。
 	ExtraHeaderPrefixes() []string
-	// AllowedClientNames restricts which client certs may send these headers.
+	// AllowedClientNames 限制哪些客户端证书可以发送这些 header。
 	AllowedClientNames() []string
 }
 
 var _ RequestHeaderAuthRequestProvider = &RequestHeaderAuthRequestController{}
 
-// requestHeaderBundle is an immutable snapshot of the configmap data. It is
-// stored wholesale via atomic.Value so readers never observe a partial update.
+// requestHeaderBundle 是 ConfigMap 数据的不可变快照，
+// 通过 atomic.Value 整体存储，读者不会看到部分更新。
 type requestHeaderBundle struct {
 	UsernameHeaders     []string
 	UIDHeaders          []string
@@ -68,10 +68,10 @@ type requestHeaderBundle struct {
 	AllowedClientNames  []string
 }
 
-// RequestHeaderAuthRequestController a controller that exposes a set of methods for dynamically filling parts of RequestHeaderConfig struct.
-// The methods are sourced from the config map which is being monitored by this controller.
-// The controller is primed from the server at the construction time for components that don't want to dynamically react to changes
-// in the config map.
+// RequestHeaderAuthRequestController 提供动态填充 RequestHeaderConfig 部分字段的方法。
+// 这些方法的数据来自本控制器监听的 ConfigMap。
+// 对不想动态响应配置变化的组件，构造时会从服务端预取一次初始数据。
+// 来自 ConfigMap。
 type RequestHeaderAuthRequestController struct {
 	name string
 
@@ -85,7 +85,7 @@ type RequestHeaderAuthRequestController struct {
 
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// exportedRequestHeaderBundle is a requestHeaderBundle that contains the last read, non-zero length content of the configmap
+	// exportedRequestHeaderBundle 保存最近一次读取到的非空 ConfigMap 内容。
 	//
 	// 使用 atomic.Value 而非互斥锁：请求鉴权路径上的读取远多于写入，
 	// 且读者总是看到完整的、不可变的快照。
@@ -98,7 +98,7 @@ type RequestHeaderAuthRequestController struct {
 	allowedClientNamesKey  string
 }
 
-// NewRequestHeaderAuthRequestController creates a new controller that implements RequestHeaderAuthRequestController
+// NewRequestHeaderAuthRequestController 创建一个实现 RequestHeaderAuthRequestController 的控制器。
 //
 // 注意：controller 创建时不读取任何数据，调用方必须随后调用 RunOnce 或 Run，
 // 否则所有 getter 都会返回 nil，等同于关闭了 request header 认证。
@@ -127,8 +127,8 @@ func NewRequestHeaderAuthRequestController(
 		),
 	}
 
-	// we construct our own informer because we need such a small subset of the information available.  Just one namespace.
-	// 用字段选择器把关注范围缩到一个 ConfigMap，避免缓存整个命名空间；
+	// 自建 informer 是因为只需要很小一部分信息：单个命名空间中的单个 ConfigMap。
+	//
 	// 12 小时的 resync 只是兜底，实际变更由 watch 驱动。
 	c.configmapInformer = coreinformers.NewFilteredConfigMapInformer(client, c.configmapNamespace, 12*time.Hour, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, func(listOptions *metav1.ListOptions) {
 		listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name", c.configmapName).String()
@@ -146,11 +146,11 @@ func NewRequestHeaderAuthRequestController(
 					return cast.Name == c.configmapName && cast.Namespace == c.configmapNamespace
 				}
 			}
-			return true // always return true just in case.  The checks are fairly cheap
+			return true //  conservatively always return true；检查成本很低。
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
-			// we have a filter, so any time we're called, we may as well queue. We only ever check one configmap
-			// so we don't have to be choosy about our key.
+			// 既然设有过滤函数，被调用时直接入队即可。只关注一个 ConfigMap，
+			// 无需对 key 挑三拣四。
 			AddFunc: func(obj interface{}) {
 				c.queue.Add(c.keyFn())
 			},
@@ -169,33 +169,33 @@ func NewRequestHeaderAuthRequestController(
 	return c
 }
 
-// UsernameHeaders returns the configured username header list, or nil before
-// the configmap has been loaded.
+// UsernameHeaders 返回配置的用户名 header 列表；ConfigMap 尚未加载时返回 nil。
+// ConfigMap 已加载。
 func (c *RequestHeaderAuthRequestController) UsernameHeaders() []string {
 	return c.loadRequestHeaderFor(c.usernameHeadersKey)
 }
 
-// UIDHeaders returns the configured UID header list, or nil before load.
+// UIDHeaders 返回配置的 UID header 列表；加载前返回 nil。
 func (c *RequestHeaderAuthRequestController) UIDHeaders() []string {
 	return c.loadRequestHeaderFor(c.uidHeadersKey)
 }
 
-// GroupHeaders returns the configured group header list, or nil before load.
+// GroupHeaders 返回配置的组 header 列表；加载前返回 nil。
 func (c *RequestHeaderAuthRequestController) GroupHeaders() []string {
 	return c.loadRequestHeaderFor(c.groupHeadersKey)
 }
 
-// ExtraHeaderPrefixes returns the configured extra header prefixes, or nil before load.
+// ExtraHeaderPrefixes 返回配置的 extra header 前缀；加载前返回 nil。
 func (c *RequestHeaderAuthRequestController) ExtraHeaderPrefixes() []string {
 	return c.loadRequestHeaderFor(c.extraHeaderPrefixesKey)
 }
 
-// AllowedClientNames returns the configured allowed client names, or nil before load.
+// AllowedClientNames 返回配置的允许客户端名；加载前返回 nil。
 func (c *RequestHeaderAuthRequestController) AllowedClientNames() []string {
 	return c.loadRequestHeaderFor(c.allowedClientNamesKey)
 }
 
-// Run starts RequestHeaderAuthRequestController controller and blocks until stopCh is closed.
+// Run 启动 RequestHeaderAuthRequestController，并阻塞直到 stopCh 关闭。
 //
 // 只启动一个 worker：全部工作都是同步同一个 ConfigMap，多 worker 只会增加
 // 无谓的锁竞争。workers 参数仅为满足通用 controller 签名而保留。
@@ -208,18 +208,18 @@ func (c *RequestHeaderAuthRequestController) Run(ctx context.Context, workers in
 
 	go c.configmapInformer.Run(ctx.Done())
 
-	// wait for caches to fill before starting your work
+	// 开始前等待缓存填充完毕。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.configmapInformerSynced) {
 		return
 	}
 
-	// doesn't matter what workers say, only start one.
+	//  worker 数量无关紧要，只启动一个。
 	go wait.Until(c.runWorker, time.Second, ctx.Done())
 
 	<-ctx.Done()
 }
 
-// // RunOnce runs a single sync loop
+// // RunOnce 执行一次同步循环
 //
 // 供不关心动态更新的组件在启动时做一次同步；NotFound 视为正常（尚未部署
 // ConfigMap），Forbidden 则给出可操作的 RBAC 提示后返回错误。
@@ -227,7 +227,7 @@ func (c *RequestHeaderAuthRequestController) RunOnce(ctx context.Context) error 
 	configMap, err := c.client.CoreV1().ConfigMaps(c.configmapNamespace).Get(ctx, c.configmapName, metav1.GetOptions{})
 	switch {
 	case errors.IsNotFound(err):
-		// ignore, authConfigMap is nil now
+		// 忽略：authConfigMap 现在为 nil。
 		return nil
 	case errors.IsForbidden(err):
 		// 权限不足几乎总是 RBAC 配置问题，打印可直接照抄的修复命令。
@@ -241,14 +241,14 @@ func (c *RequestHeaderAuthRequestController) RunOnce(ctx context.Context) error 
 	return c.syncConfigMap(configMap)
 }
 
-// runWorker drains the work queue until it is shut down.
+// runWorker 消费工作队列，直到队列被关闭。
 func (c *RequestHeaderAuthRequestController) runWorker() {
 	for c.processNextWorkItem() {
 	}
 }
 
-// processNextWorkItem handles one queue entry, requeueing with rate limiting
-// on error so a transient API failure does not wedge the controller.
+// processNextWorkItem 处理一个队列条目；出错时按速率限制重新入队，
+// 避免短暂的 API 故障把控制器卡死。
 func (c *RequestHeaderAuthRequestController) processNextWorkItem() bool {
 	dsKey, quit := c.queue.Get()
 	if quit {
@@ -268,8 +268,8 @@ func (c *RequestHeaderAuthRequestController) processNextWorkItem() bool {
 	return true
 }
 
-// sync reads the config and propagates the changes to exportedRequestHeaderBundle
-// which is exposed by the set of methods that are used to fill RequestHeaderConfig struct
+// sync 读取配置并把变更传播到 exportedRequestHeaderBundle，
+// 后者由一组用于填充 RequestHeaderConfig 的方法暴露。
 //
 // 从 lister 读取而非直接访问 API server，保证与 informer 缓存视图一致，
 // 避免因 API 抖动读到比已处理事件更旧的数据。
@@ -281,8 +281,8 @@ func (c *RequestHeaderAuthRequestController) sync() error {
 	return c.syncConfigMap(configMap)
 }
 
-// syncConfigMap parses the configmap and atomically swaps the published bundle
-// only when the parsed content actually changed.
+// syncConfigMap 解析 ConfigMap，仅在解析内容确实变化时原子替换已发布的 bundle。
+// 仅在解析内容确实变化时。
 func (c *RequestHeaderAuthRequestController) syncConfigMap(configMap *corev1.ConfigMap) error {
 	hasChanged, newRequestHeaderBundle, err := c.hasRequestHeaderBundleChanged(configMap)
 	if err != nil {
@@ -295,8 +295,8 @@ func (c *RequestHeaderAuthRequestController) syncConfigMap(configMap *corev1.Con
 	return nil
 }
 
-// hasRequestHeaderBundleChanged compares the configmap against the currently
-// published bundle. A parse error aborts the whole sync: we never publish a
+// hasRequestHeaderBundleChanged 比较 ConfigMap 与当前已发布 bundle。
+// 解析错误会中止整个同步：绝不发布只反序列化了一半的配置。
 // partially deserialized configuration.
 func (c *RequestHeaderAuthRequestController) hasRequestHeaderBundleChanged(cm *corev1.ConfigMap) (bool, *requestHeaderBundle, error) {
 	currentHeadersBundle, err := c.getRequestHeaderBundleFromConfigMap(cm)
@@ -309,7 +309,7 @@ func (c *RequestHeaderAuthRequestController) hasRequestHeaderBundleChanged(cm *c
 		return true, currentHeadersBundle, nil
 	}
 
-	// check to see if we have a change. If the values are the same, do nothing.
+	// 检查是否有变更。若值相同则不处理。
 	loadedHeadersBundle, ok := rawHeaderBundle.(*requestHeaderBundle)
 	if !ok {
 		return true, currentHeadersBundle, nil
@@ -321,9 +321,9 @@ func (c *RequestHeaderAuthRequestController) hasRequestHeaderBundleChanged(cm *c
 	return false, nil, nil
 }
 
-// getRequestHeaderBundleFromConfigMap deserializes each configured key. Missing
-// keys deserialize to nil rather than an error, which is the documented way to
-// disable a header class.
+// getRequestHeaderBundleFromConfigMap 反序列化每个配置的 key。
+// 缺失的 key 反序列化为 nil 而不是错误，这是禁用某类 header 的约定方式。
+// 禁用某类 header。
 func (c *RequestHeaderAuthRequestController) getRequestHeaderBundleFromConfigMap(cm *corev1.ConfigMap) (*requestHeaderBundle, error) {
 	usernameHeaderCurrentValue, err := deserializeStrings(cm.Data[c.usernameHeadersKey])
 	if err != nil {
@@ -360,13 +360,13 @@ func (c *RequestHeaderAuthRequestController) getRequestHeaderBundleFromConfigMap
 	}, nil
 }
 
-// loadRequestHeaderFor reads the requested field out of the current snapshot.
-// It is called on the request path, so it must stay allocation-light and
+// loadRequestHeaderFor 从当前快照读取请求的字段。
+// 它在请求路径上调用，因此必须尽量少分配内存且无锁。
 // lock-free.
 func (c *RequestHeaderAuthRequestController) loadRequestHeaderFor(key string) []string {
 	rawHeaderBundle := c.exportedRequestHeaderBundle.Load()
 	if rawHeaderBundle == nil {
-		return nil // this can happen if we've been unable load data from the apiserver for some reason
+		return nil // 当因某种原因一直无法从 apiserver 加载数据时会出现这种情况。
 	}
 	headerBundle := rawHeaderBundle.(*requestHeaderBundle)
 
@@ -386,14 +386,14 @@ func (c *RequestHeaderAuthRequestController) loadRequestHeaderFor(key string) []
 	}
 }
 
-// keyFn produces the queue key for our single ConfigMap.
+// keyFn 为唯一的 ConfigMap 生成队列 key。
 func (c *RequestHeaderAuthRequestController) keyFn() string {
-	// this format matches DeletionHandlingMetaNamespaceKeyFunc for our single key
+	// 这个格式与 DeletionHandlingMetaNamespaceKeyFunc 对单个 key 的处理一致。
 	return c.configmapNamespace + "/" + c.configmapName
 }
 
-// deserializeStrings decodes a JSON string array. An empty string means the
-// key is absent and yields nil with no error.
+// deserializeStrings 解码一个 JSON 字符串数组。空字符串表示 key 不存在，
+// 此时返回 nil 且无错误。
 func deserializeStrings(in string) ([]string, error) {
 	if len(in) == 0 {
 		return nil, nil

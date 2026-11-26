@@ -37,26 +37,26 @@ func TestEnabledPluginNames(t *testing.T) {
 		setDisablePlugins         []string
 		setAdmissionControl       []string
 	}{
-		// scenario 0: check if a call to enabledPluginNames sets expected values.
+		// 场景 0：检查调用 enabledPluginNames 是否设置了预期值。
 		{
 			expectedPluginNames: []string{"NamespaceLifecycle", "MutatingAdmissionPolicy", "MutatingAdmissionWebhook", "ValidatingAdmissionPolicy", "ValidatingAdmissionWebhook"},
 		},
 
-		// scenario 1: use default off plugins if no specified
+		// 场景 1：未指定时使用 default-off 插件。
 		{
 			expectedPluginNames:       []string{"pluginB"},
 			setRecommendedPluginOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
 			setDefaultOffPlugins:      sets.New("pluginA", "pluginC", "pluginD"),
 		},
 
-		// scenario 2: use default off plugins and with RecommendedPluginOrder
+		// 场景 2：使用 default-off 插件并给定 RecommendedPluginOrder。
 		{
 			expectedPluginNames:       []string{"pluginA", "pluginB", "pluginC", "pluginD"},
 			setRecommendedPluginOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
 			setDefaultOffPlugins:      sets.Set[string]{},
 		},
 
-		// scenario 3: use default off plugins and specified by enable-admission-plugins with RecommendedPluginOrder
+		// 场景 3：使用 default-off 插件，并由 enable-admission-plugins 与 RecommendedPluginOrder 指定。
 		{
 			expectedPluginNames:       []string{"pluginA", "pluginB", "pluginC", "pluginD"},
 			setRecommendedPluginOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
@@ -64,7 +64,7 @@ func TestEnabledPluginNames(t *testing.T) {
 			setEnablePlugins:          []string{"pluginD", "pluginC"},
 		},
 
-		// scenario 4: use default off plugins and specified by disable-admission-plugins with RecommendedPluginOrder
+		// 场景 4：使用 default-off 插件，并由 disable-admission-plugins 与 RecommendedPluginOrder 指定。
 		{
 			expectedPluginNames:       []string{"pluginB"},
 			setRecommendedPluginOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
@@ -72,7 +72,7 @@ func TestEnabledPluginNames(t *testing.T) {
 			setDisablePlugins:         []string{"pluginA"},
 		},
 
-		// scenario 5: use default off plugins and specified by enable-admission-plugins and disable-admission-plugins with RecommendedPluginOrder
+		// 场景 5：使用 default-off 插件，并由 enable/disable-admission-plugins 与 RecommendedPluginOrder 指定。
 		{
 			expectedPluginNames:       []string{"pluginA", "pluginC"},
 			setRecommendedPluginOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
@@ -81,7 +81,7 @@ func TestEnabledPluginNames(t *testing.T) {
 			setDisablePlugins:         []string{"pluginB"},
 		},
 
-		// scenario 6: use default off plugins and specified by admission-control with RecommendedPluginOrder
+		// 场景 6：使用 default-off 插件，并由 admission-control 与 RecommendedPluginOrder 指定。
 		{
 			expectedPluginNames:       []string{"pluginA", "pluginB", "pluginC"},
 			setRecommendedPluginOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
@@ -89,7 +89,7 @@ func TestEnabledPluginNames(t *testing.T) {
 			setAdmissionControl:       []string{"pluginA", "pluginB"},
 		},
 
-		// scenario 7: use default off plugins and specified by admission-control with RecommendedPluginOrder
+		// 场景 7：使用 default-off 插件，并由 admission-control 与 RecommendedPluginOrder 指定。
 		{
 			expectedPluginNames:       []string{"pluginA", "pluginB", "pluginC"},
 			setRecommendedPluginOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
@@ -98,7 +98,7 @@ func TestEnabledPluginNames(t *testing.T) {
 		},
 	}
 
-	// act
+	// 执行。
 	for index, scenario := range scenarios {
 		t.Run(fmt.Sprintf("scenario %d", index), func(t *testing.T) {
 			target := NewAdmissionOptions()
@@ -144,68 +144,68 @@ func TestValidate(t *testing.T) {
 		setRecommendedPluginsOrder []string
 		expectedResult             bool
 	}{
-		// scenario 0: not set any flag
+		// 场景 0：未设置任何 flag。
 		{
 			expectedResult: true,
 		},
 
-		// scenario 1: set both `--enable-admission-plugins` `--disable-admission-plugins`
+		// 场景 1：同时设置 `--enable-admission-plugins` 与 `--disable-admission-plugins`。
 		{
 			setEnablePlugins:  []string{"pluginA", "pluginB"},
 			setDisablePlugins: []string{"pluginC"},
 			expectedResult:    true,
 		},
 
-		// scenario 2: set invalid `--enable-admission-plugins` `--disable-admission-plugins`
+		// 场景 2：设置非法的 `--enable-admission-plugins` 与 `--disable-admission-plugins`。
 		{
 			setEnablePlugins:  []string{"pluginA", "pluginB"},
 			setDisablePlugins: []string{"pluginB"},
 			expectedResult:    false,
 		},
 
-		// scenario 3: set only invalid `--enable-admission-plugins`
+		// 场景 3：只设置非法的 `--enable-admission-plugins`。
 		{
 			setEnablePlugins: []string{"pluginA", "pluginE"},
 			expectedResult:   false,
 		},
 
-		// scenario 4: set only invalid `--disable-admission-plugins`
+		// 场景 4：只设置非法的 `--disable-admission-plugins`。
 		{
 			setDisablePlugins: []string{"pluginA", "pluginE"},
 			expectedResult:    false,
 		},
 
-		// scenario 5: set valid `--enable-admission-plugins`
+		// 场景 5：设置合法的 `--enable-admission-plugins`。
 		{
 			setEnablePlugins: []string{"pluginA", "pluginB"},
 			expectedResult:   true,
 		},
 
-		// scenario 6: set valid `--disable-admission-plugins`
+		// 场景 6：设置合法的 `--disable-admission-plugins`。
 		{
 			setDisablePlugins: []string{"pluginA"},
 			expectedResult:    true,
 		},
 
-		// scenario 7: RecommendedPluginOrder has duplicated plugin
+		// 场景 7：RecommendedPluginOrder 中有重复插件。
 		{
 			setRecommendedPluginsOrder: []string{"pluginA", "pluginB", "pluginB", "pluginC"},
 			expectedResult:             false,
 		},
 
-		// scenario 8: RecommendedPluginOrder not equal to registered
+		// 场景 8：RecommendedPluginOrder 与已注册插件不一致。
 		{
 			setRecommendedPluginsOrder: []string{"pluginA", "pluginB", "pluginC"},
 			expectedResult:             false,
 		},
 
-		// scenario 9: RecommendedPluginOrder equal to registered
+		// 场景 9：RecommendedPluginOrder 与已注册插件一致。
 		{
 			setRecommendedPluginsOrder: []string{"pluginA", "pluginB", "pluginC", "pluginD"},
 			expectedResult:             true,
 		},
 
-		// scenario 10: RecommendedPluginOrder not equal to registered
+		// 场景 10：RecommendedPluginOrder 与已注册插件不一致。
 		{
 			setRecommendedPluginsOrder: []string{"pluginA", "pluginB", "pluginC", "pluginE"},
 			expectedResult:             false,

@@ -75,8 +75,8 @@ const headerFmt = `
 Warning: This endpoint is not meant to be machine parseable, has no formatting compatibility guarantees and is for debugging purposes only.
 `
 
-// statuszCodecFactory wraps a CodecFactory to filter out unsupported media types (like protobuf)
-// from the supported media types list, so error messages only show actually supported types.
+// statuszCodecFactory 包装 CodecFactory，从支持的媒体类型列表中过滤掉不支持的类型（如 protobuf），
+// 使错误消息只显示实际可用的媒体类型。
 type statuszCodecFactory struct {
 	serializer.CodecFactory
 	supportedMediaTypes []runtime.SerializerInfo
@@ -120,9 +120,9 @@ func Install(m mux, componentName string, reg statuszRegistry) {
 	m.Handle(DefaultStatuszPath, handleStatusz(componentName, reg, filteredCodecFactory, restrictions))
 }
 
-// newStatuszCodecFactory creates a codec factory with the standard serializers for statusz,
-// filtering out unsupported media types (e.g., protobuf).
-// 过滤 protobuf：statusz 的类型没有 protobuf 定义，若保留会在协商错误消息中
+// newStatuszCodecFactory 用 statusz 的标准序列化器创建编解码工厂，
+// 过滤掉不支持的媒体类型（如 protobuf）。
+// 过滤掉不支持的媒体类型（如 protobuf）。
 // 出现实际不可用的媒体类型。
 func newStatuszCodecFactory(scheme *runtime.Scheme, componentName string, reg statuszRegistry) (*statuszCodecFactory, error) {
 	codecFactoryOpts := []serializer.CodecFactoryOptionsMutator{
@@ -150,10 +150,10 @@ func newStatuszCodecFactory(scheme *runtime.Scheme, componentName string, reg st
 	var unknownTypes []string
 	for _, info := range allTypes {
 		switch info.MediaType {
-		// Supported media types
+		// 支持的媒体类型
 		case "text/plain", runtime.ContentTypeJSON, runtime.ContentTypeYAML, runtime.ContentTypeCBOR:
 			filtered = append(filtered, info)
-		// Unsupported media types
+		// 不支持的媒体类型
 		case runtime.ContentTypeProtobuf:
 			continue
 		default:
@@ -191,11 +191,11 @@ func handleStatusz(componentName string, reg statuszRegistry, serializer runtime
 		delegate := &metrics.ResponseWriterDelegator{ResponseWriter: w}
 		w = responsewriter.WrapForHTTP1Or2(delegate)
 
-		// Use MonitorRequest instead of InstrumentHandlerFunc because the group,
-		// version, and deprecated status depend on per-request content negotiation.
-		// For text/plain requests, group and version remain empty. For structured
-		// responses (JSON/YAML/CBOR), they are set to the negotiated API group and
-		// version (e.g., config.k8s.io/v1alpha1).
+		// 使用 MonitorRequest 而非 InstrumentHandlerFunc，因为 group、version 和弃用状态
+		// 取决于每次请求的内容协商。
+		// text/plain 请求的 group 和 version 为空；结构化响应（JSON/YAML/CBOR）
+		// 则填入协商出的 API group 和 version
+		// （如 config.k8s.io/v1alpha1）。
 		var group, version string
 		var deprecated bool
 		defer func() {
@@ -242,8 +242,8 @@ func handleStatusz(componentName string, reg statuszRegistry, serializer runtime
 				)
 				return
 			}
-			// Set group, version, and deprecated from the negotiated target so
-			// the deferred MonitorRequest records the actual requested API version.
+			// 从协商出的目标设置 group、version 和 deprecated，
+			// 让延迟执行的 MonitorRequest 记录实际请求的 API 版本。
 			group = mediaType.Convert.Group
 			version = mediaType.Convert.Version
 			deprecated = reg.deprecatedVersions()[version]
@@ -292,7 +292,7 @@ func handleStructuredResponse(w http.ResponseWriter, r *http.Request, componentN
 // 时返回 500，因为此时内容已不可信。
 func writePlainTextResponse(obj runtime.Object, serializer runtime.NegotiatedSerializer, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	// Find the text/plain serializer
+	// 查找 text/plain 序列化器。
 	var textSerializer runtime.Serializer
 	for _, info := range serializer.SupportedMediaTypes() {
 		if info.MediaType == "text/plain" {

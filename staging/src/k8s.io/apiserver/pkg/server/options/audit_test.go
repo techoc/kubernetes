@@ -175,7 +175,7 @@ func TestAuditValidOptions(t *testing.T) {
 			w, err := options.LogOptions.getWriter()
 			require.NoError(t, err, "Writer creation should not fail.")
 
-			// Don't check writer if logging is disabled.
+			// 禁用日志时不检查 writer。
 			if w == nil {
 				return
 			}
@@ -217,11 +217,11 @@ func TestAuditLogMaxSizeZero(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, w)
 
-	// When MaxSize is 0, we return a raw file writer (os.File) for unlimited size
+	// 当 MaxSize 为 0 时，返回原始文件 writer（os.File）表示大小不限。
 	file, ok := w.(*os.File)
 	require.True(t, ok, "Should be an os.File when MaxSize is 0")
 
-	// Verify that the file was opened correctly
+	// 验证文件已正确打开。
 	require.NotNil(t, file)
 	require.NoError(t, file.Close())
 }

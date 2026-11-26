@@ -36,11 +36,11 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// TestToValue tests that both UnstructuredToValue and TypedToValue correctly
-// convert Kubernetes typed objects and unstructured objects to CEL values.
+// TestToValue 验证 UnstructuredToValue 与 TypedToValue 都能正确把 Kubernetes 类型对象
+// 和非结构化对象转换为 CEL 值。
 //
-// TestToValue also tests that UnstructuredToValue and TypedToValue behave identically
-// for a Kubernetes object.
+// TestToValue 还验证对同一 Kubernetes 对象，两种转换方式的行为完全一致。
+// 对同一 Kubernetes 对象的行为一致。
 //
 // 核心不变量：同一对象经 typed 与 unstructured 两条路径转换后，在 CEL 中求值结果必须一致。
 // 测试用例以表达式 + 期望 true 的形式编写，差异会直接表现为求值失败。
@@ -126,13 +126,13 @@ func TestToValue(t *testing.T) {
 		NestedZero:  Nested{Name: "nested4"},
 		Timeout:     metav1.Duration{Duration: 10 * time.Second},
 		RawBytes:    []byte("bytes2"),
-		NilBytes:    []byte{}, // Non-nil but empty
+		NilBytes:    []byte{}, // 非 nil 但为空
 		ChildPtr:    &struct1value,
 		NilPtr:      nil,
-		EmptySlice:  []int{1},               // Non-empty
-		NilSlice:    []int{1},               // Non-nil
-		EmptyMap:    map[string]int{"a": 1}, // Non-empty
-		NilMap:      map[string]int{"a": 1}, // Non-nil
+		EmptySlice:  []int{1},               // 非空
+		NilSlice:    []int{1},               // 非 nil
+		EmptyMap:    map[string]int{"a": 1}, // 非空
+		NilMap:      map[string]int{"a": 1}, // 非 nil
 		IntOrString: intstr.FromString("port"),
 		Quantity:    resource.MustParse("200m"),
 		I32:         int32(42),
@@ -194,7 +194,7 @@ func TestToValue(t *testing.T) {
 	}
 	complex4 := typedValue{value: complex4value, schema: complexSchema}
 
-	complex1Again := complex1 // Create a copy for equality checks
+	complex1Again := complex1 // 复制一份用于相等性检查
 
 	slice1 := []int{1, 2, 3}
 	slice1Again := []int{1, 2, 3}
@@ -203,12 +203,12 @@ func TestToValue(t *testing.T) {
 
 	map1 := map[string]int{"a": 1, "b": 2}
 	map1Again := map[string]int{"b": 2, "a": 1}
-	map2 := map[string]int{"a": 1, "b": 3}        // Different value
-	map3 := map[string]int{"a": 1, "c": 2}        // Different key
-	map4 := map[string]string{"a": "1", "b": "2"} // Different value type
+	map2 := map[string]int{"a": 1, "b": 3}        // 不同的值
+	map3 := map[string]int{"a": 1, "c": 2}        // 不同的键
+	map4 := map[string]string{"a": "1", "b": "2"} // 不同的值类型
 
 	tests := []testCase{
-		// Basic Type Conversions
+		// 基础类型转换
 		{
 			name:       "basic: int32",
 			expression: "c.i32 == 32",
@@ -235,7 +235,7 @@ func TestToValue(t *testing.T) {
 			activation: map[string]typedValue{"c": complex1},
 		},
 
-		// Struct Tests
+		// 结构体测试
 		{
 			name:       "struct: zero value struct",
 			expression: "obj.s == '' && obj.i == 0 && obj.b == false && obj.f == 0.0",
@@ -350,7 +350,7 @@ func TestToValue(t *testing.T) {
 			activation: map[string]typedValue{"c": structOmitZero1},
 		},
 
-		// Comparison Tests
+		// 比较测试
 		{
 			name:       "compare: identity (struct)",
 			expression: "s1 == s1",
@@ -556,7 +556,7 @@ func TestToValue(t *testing.T) {
 			},
 		},
 
-		// Nested Struct Tests
+		// 嵌套结构体测试
 		{
 			name:       "nested: access field",
 			expression: "c.nestedObj.info.s == 'hello'",
@@ -579,7 +579,7 @@ func TestToValue(t *testing.T) {
 			},
 		},
 
-		// Slice Tests
+		// 切片测试
 		{
 			name:       "slice: access element",
 			expression: "c.tags[1] == 'b'",
@@ -692,7 +692,7 @@ func TestToValue(t *testing.T) {
 			activation: map[string]typedValue{"c": complex1},
 		},
 
-		// Map Tests
+		// Map 测试
 		{
 			name:       "map: access element",
 			expression: "c.labels['key1'] == 'val1'",
@@ -775,7 +775,7 @@ func TestToValue(t *testing.T) {
 			activation: map[string]typedValue{"c": complex1},
 		},
 
-		// Pointer Tests
+		// 指针测试
 		{
 			name:       "pointer: access through non-nil pointer field",
 			expression: "c.childPtr.s == 'world'",
@@ -793,7 +793,7 @@ func TestToValue(t *testing.T) {
 			name:       "pointer: access through nil pointer field (error)",
 			expression: "c.nilPtr.s",
 			activation: map[string]typedValue{"c": complex1},
-			wantErr:    "no such key: nilPtr", // Accessing field 's' on a null object
+			wantErr:    "no such key: nilPtr", // 在 null 对象上访问字段 's'
 		},
 		{
 			name:       "pointer: check has() nil pointer",
@@ -801,7 +801,7 @@ func TestToValue(t *testing.T) {
 			activation: map[string]typedValue{"c": complex1},
 		},
 
-		// Type Tests
+		// 类型测试
 		{
 			name:       "type: string",
 			expression: "type(obj.s) == string",
@@ -943,7 +943,7 @@ func TestToValue(t *testing.T) {
 			},
 		},
 
-		// Special K8s Types
+		// 特殊 K8s 类型
 		{
 			name:       "time: comparison equals",
 			expression: "c.time == timestamp('2000-01-01T12:00:00Z')",
@@ -1101,12 +1101,12 @@ func TestReflectiveMapListWithThreeKeysEqual(t *testing.T) {
 // TestListAdd 覆盖 listType=map/set 语义下 `+` 运算符的合并行为，
 // 包括 map key 冲突、set 去重、嵌套 set 以及 CEL 保留字键的转义。
 func TestListAdd(t *testing.T) {
-	// IfEntry has a map key prop that is a CEL reserved word and so requires escaping.
+	// IfEntry 的 map key 属性是 CEL 保留字，因此需要转义。
 	type IfEntry struct {
 		If    string `json:"if"`
 		Value int64  `json:"value"`
 	}
-	// WideEntry has enough key props to exercise the serialized map key fallback.
+	// WideEntry 的键属性足够多，可以触发序列化 map key 的回退路径。
 	type WideEntry struct {
 		Key1  string `json:"key1"`
 		Key2  string `json:"key2"`
@@ -1261,9 +1261,9 @@ func TestListAdd(t *testing.T) {
 		Empty:   []int64{},
 		MapList: []MapListEntry{{Key1: "k1v1", Key2: "k2v1", Value: 10}, {Key1: "k1v3", Key2: "k2v3", Value: 3}},
 		IfList:  []IfEntry{{If: "a", Value: 10}, {If: "c", Value: 3}},
-		// y.wide[0] has the same key prop values as x.wide[0] except that the
-		// whitespace boundary between key1 and key2 is shifted. The two must be
-		// treated as distinct keys.
+		// y.wide[0] 的键属性值与 x.wide[0] 相同，只是 key1 与 key2 之间的
+		// 空白边界位置不同。两者必须被视为不同的键。
+		//
 		Wide:       []WideEntry{{Key1: "a", Key2: "b c", Key3: "d", Key4: "e", Value: 2}},
 		Tri:        []WideEntry{{Key1: "tg", Key2: "th", Key3: "ti", Value: 3}},
 		PtrList:    []PtrEntry{{Name: strptr("b"), Port: intptr(81), Value: 20}, {Name: strptr("c"), Port: intptr(82), Value: 3}},
@@ -1271,9 +1271,9 @@ func TestListAdd(t *testing.T) {
 		PtrSet:     []*int64{intptr(81), intptr(82)},
 		SetOfLists: [][]string{{"a", "b c"}, {"x"}},
 	}, schema: addListsSchema}
-	// z.mapList contains the same entries as (x.mapList + y.mapList), in a different order.
-	// z.ifList and z.tri contain the same entries as x.ifList and x.tri, in a different order.
-	// z.wide contains the same entries as (x.wide + y.wide), in a different order.
+	// z.mapList 与 (x.mapList + y.mapList) 包含相同条目，但顺序不同。
+	// z.ifList 与 z.tri 分别与 x.ifList 和 x.tri 包含相同条目，顺序不同。
+	//
 	z := typedValue{value: AddListsStruct{
 		MapList:    []MapListEntry{{Key1: "k1v3", Key2: "k2v3", Value: 3}, {Key1: "k1v1", Key2: "k2v1", Value: 10}, {Key1: "k1v2", Key2: "k2v2", Value: 2}},
 		IfList:     []IfEntry{{If: "b", Value: 2}, {If: "a", Value: 1}},
@@ -1285,10 +1285,10 @@ func TestListAdd(t *testing.T) {
 		SetOfLists: [][]string{{"x"}, {"a b", "c"}},
 	}, schema: addListsSchema}
 
-	// w.mapList contains entries with duplicate keys and w.setList contains duplicate
-	// elements. Such data is invalid, but may be encountered as the right operand of an
-	// equality check and must not be treated as equal to a valid map or set list of the
-	// same size.
+	// w.mapList 含重复键的条目，w.setList 含重复元素。
+	// 这类数据无效，但作为相等性检查的右操作数时可能出现，
+	// 不得被视为与同等大小的合法 map 或 set 列表相等。
+	//
 	w := typedValue{value: AddListsStruct{
 		MapList: []MapListEntry{{Key1: "k1v1", Key2: "k2v1", Value: 1}, {Key1: "k1v1", Key2: "k2v1", Value: 1}},
 		SetList: []SetEntry{1, 1, 1},
@@ -1299,7 +1299,7 @@ func TestListAdd(t *testing.T) {
 	tests := []struct {
 		testCase
 		skipTyped bool
-		// skipSchemaless: SchemalessTypedToVal has no schema, so map/set lists behave atomically.
+		// skipSchemaless：SchemalessTypedToVal 没有 schema，因此 map/set 列表按 atomic 处理。
 		skipSchemaless   bool
 		skipUnstructured bool
 	}{
@@ -1377,7 +1377,7 @@ func TestListAdd(t *testing.T) {
 			expression: "(x.i32s + [4])[10] == 1",
 			wantErr:    "index out of bounds: 10",
 		}},
-		// Lists with x-kubernetes-list-type=map.
+		// x-kubernetes-list-type=map 的列表。
 		{testCase: testCase{
 			name:       "map list merge overwrites intersecting keys in place",
 			expression: "(x.mapList + y.mapList)[0].value == 10 && size(x.mapList + y.mapList) == 3",
@@ -1417,7 +1417,7 @@ func TestListAdd(t *testing.T) {
 		{testCase: testCase{
 			name:       "map list equality with escaped key prop ignores element order",
 			expression: "x.ifList == z.ifList",
-		}, // skipUnstructured: unstructuredMapList.Equal looks up escaped key prop names in raw JSON data, where field names are unescaped.
+		}, // skipUnstructured：unstructuredMapList.Equal 在原始 JSON 数据中查找转义后的键属性名，而字段名并未转义。
 			skipSchemaless: true, skipUnstructured: true},
 		{testCase: testCase{
 			name:       "serialized map keys distinguish value boundaries on merge",
@@ -1473,7 +1473,7 @@ func TestListAdd(t *testing.T) {
 			expression: "(x.mapList + y.mapList + dyn(1)) == x.mapList",
 			wantErr:    "no such overload",
 		}},
-		// Lists with x-kubernetes-list-type=set.
+		// x-kubernetes-list-type=set 的列表。
 		{testCase: testCase{
 			name:       "set list union with literal list",
 			expression: "(x.setList + [3, 4]) == [1, 2, 3, 4]",
@@ -1808,13 +1808,13 @@ type Complex struct {
 	Time        metav1.Time        `json:"time"`
 	MicroTime   metav1.MicroTime   `json:"microTime"`
 	RawBytes    []byte             `json:"rawBytes"`
-	NilBytes    []byte             `json:"nilBytes"` // Always nil
+	NilBytes    []byte             `json:"nilBytes"` // 恒为 nil
 	ChildPtr    *Struct            `json:"childPtr"`
-	NilPtr      *Struct            `json:"nilPtr"` // Always nil
+	NilPtr      *Struct            `json:"nilPtr"` // 恒为 nil
 	EmptySlice  []int              `json:"emptySlice"`
-	NilSlice    []int              `json:"nilSlice"` // Always nil
+	NilSlice    []int              `json:"nilSlice"` // 恒为 nil
 	EmptyMap    map[string]int     `json:"emptyMap"`
-	NilMap      map[string]int     `json:"nilMap"` // Always nil
+	NilMap      map[string]int     `json:"nilMap"` // 恒为 nil
 	IntOrString intstr.IntOrString `json:"intOrString"`
 	Quantity    resource.Quantity  `json:"quantity"`
 	I32         int32              `json:"i32"`
@@ -1867,7 +1867,7 @@ var complexSchema = &spec.Schema{
 			"intOrString": {
 				VendorExtensible: intOrStringSchema,
 			},
-			"quantity": *stringSchema, // TODO: If we add a quantity format to OpenAPI, test it here
+			"quantity": *stringSchema, // TODO: 如果给 OpenAPI 增加 quantity 格式，在此处测试
 			"i32":      *int32Schema,
 			"i64":      *int64Schema,
 			"f32":      *float32Schema,
@@ -1940,7 +1940,7 @@ func typedToValActivation(vals map[string]typedValue) map[string]interface{} {
 	return activation
 }
 
-// unstructuredToValActivation converts the values in the activation map to map[string]interface{}.
+// unstructuredToValActivation 把 activation map 中的值转换为 map[string]interface{}。
 func unstructuredToValActivation(vals map[string]typedValue) (map[string]interface{}, error) {
 	activation := make(map[string]interface{}, len(vals))
 	for k, tv := range vals {

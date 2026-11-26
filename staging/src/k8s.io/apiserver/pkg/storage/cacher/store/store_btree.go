@@ -326,7 +326,7 @@ func (s *btreeStore) Count(prefix, continueKey string) (count int) {
 }
 
 // newIndexer 返回一个与 client-go/tools/cache 中 storeIndex 类似的索引器。
-// TODO: Unify the indexer code with client-go/cache package.
+// TODO: 与 client-go/cache 包中的 indexer 代码统一。
 // 主要区别在于存储值的类型及其可变性：
 // * client-go 中的 Indexer 存储对象 key，且 key 不可变。
 // * cacher 中的 Indexer 存储整个对象，且对象可变。
@@ -410,7 +410,7 @@ func (i *indexer) updateElem(key string, oldObj, newObj *Element) (err error) {
 			i.indices[name] = index
 		}
 		if len(indexValues) == 1 && len(oldIndexValues) == 1 && indexValues[0] == oldIndexValues[0] {
-			// We optimize for the most common case where indexFunc returns a single value which has not been changed
+			// 针对最常见情况优化：indexFunc 返回单个未改变的值。
 			i.add(key, indexValues[0], newObj, index)
 			continue
 		}
@@ -477,7 +477,7 @@ func (i *indexer) delete(key, value string, index map[string]map[string]*Element
 // 例如，在 (RV, snapshot) 循环缓冲上做二分查找可以减少分配次数并改善
 // 删除复杂度。但该方案更复杂，留待将来实现。
 //
-// TODO: Rewrite to use a cyclic buffer
+// TODO: 重写为环形缓冲区。
 // 以 RV 为键的 btree 让「找到 ≤ 请求 RV 的最新快照」成为一次有序查找，
 // 这是支持 resourceVersion 精确读与分页续读的基础。
 func NewSnapshotter() Snapshotter {

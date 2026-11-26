@@ -75,14 +75,14 @@ func GetPodAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(pod.ObjectMeta.Labels), PodToSelectableFields(pod), nil
 }
 
-// PodToSelectableFields returns a field set that represents the object
-// TODO: fields are not labels, and the validation rules for them do not apply.
+// PodToSelectableFields 返回一个代表该对象的字段集合。
+// TODO: 字段不是 label，不适用于 label 的校验规则。
 // 预分配容量 5 是为了减少构造 fields.Set 时的扩容分配。
 func PodToSelectableFields(pod *example.Pod) fields.Set {
-	// The purpose of allocation with a given number of elements is to reduce
-	// amount of allocations needed to create the fields.Set. If you add any
-	// field here or the number of object-meta related fields changes, this should
-	// be adjusted.
+	// 预分配指定容量的目的，是减少创建 fields.Set 时的分配次数。
+	// 若在此添加字段或 object-meta 相关字段数量发生变化，
+	// 应相应调整该容量。
+	//
 	podSpecificFieldsSet := make(fields.Set, 5)
 	podSpecificFieldsSet["spec.nodeName"] = pod.Spec.NodeName
 	podSpecificFieldsSet["spec.restartPolicy"] = string(pod.Spec.RestartPolicy)
@@ -101,7 +101,7 @@ func AddObjectMetaFieldsSet(source fields.Set, objectMeta *metav1.ObjectMeta, ha
 
 // checkStorageInvariants 是空实现：cacher 把创建直接透传给底层存储，无需额外校验。
 func checkStorageInvariants(ctx context.Context, t *testing.T, key string) {
-	// No-op function since cacher simply passes object creation to the underlying storage.
+	// 空操作：cacher 只是把创建请求透传给底层存储。
 }
 
 // TestCreate 验证通过 cacher 创建对象的基础语义。
@@ -254,8 +254,8 @@ func TestDeleteWithConflictAndExpectedTransformError(t *testing.T) {
 func TestDeleteWithConflictAndExpectedDecodeError(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AllowUnsafeMalformedObjectDeletion, true)
 
-	// Decode errors cause a panic when they occur during tests. Disable for this particular
-	// test since it is deliberately exercising a case where the stored bytes cannot be decoded.
+	// 测试中解码错误会触发 panic。本用例刻意构造存储字节无法解码的场景，
+	// 因此需要临时关闭该行为。
 	etcd3.TestOnlySetFatalOnDecodeError(t, false)
 
 	codec := &testCodec{Codec: apitesting.TestCodec(codecs, examplev1.SchemeGroupVersion)}
@@ -328,7 +328,7 @@ func TestLists(t *testing.T) {
 
 // TestCompactRevision 验证 etcd 压缩版本变化能被 cacher 感知并反映到列表行为。
 func TestCompactRevision(t *testing.T) {
-	// Test requires store to observe extenal changes to compaction revision, requiring dedicated watch on compact key which is enabled by ListFromCacheSnapshot.
+	// 该测试要求存储能观察到压缩 revision 的外部变化，需要开启对 compact key 的专用 watch。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ListFromCacheSnapshot, true)
 	ctx, cacher, server, terminate := testSetupWithEtcdServer(t)
 	t.Cleanup(terminate)
@@ -425,7 +425,7 @@ func TestGetListRecursivePrefix(t *testing.T) {
 
 // checkStorageCalls 是空实现：分页调用直接透传给底层存储，cacher 不额外拦截。
 func checkStorageCalls(t *testing.T, pageSize, estimatedProcessedObjects uint64) {
-	// No-op function for now, since cacher passes pagination calls to underlying storage.
+	// 目前为空操作：cacher 把分页调用透传给底层存储。
 }
 
 // TestListContinuation 验证列表续页的连续性。
@@ -451,12 +451,12 @@ func TestListContinuationWithFilter(t *testing.T) {
 
 // TestListInconsistentContinuation 暂未启用，等待 #109831 提供压缩控制后再接入共享用例。
 func TestListInconsistentContinuation(t *testing.T) {
-	// TODO(#109831): Enable use of this by setting compaction.
+	// TODO(#109831): 设置压缩后启用该用例。
 }
 
 // TestListResourceVersionMatch 暂未启用，原因同 TestListInconsistentContinuation。
 func TestListResourceVersionMatch(t *testing.T) {
-	// TODO(#109831): Enable use of this test and run it.
+	// TODO(#109831): 设置压缩后启用该用例。
 }
 
 // TestNamespaceScopedList 在配置了 nodeName/namespace 索引时验证命名空间级列表。
@@ -468,7 +468,7 @@ func TestNamespaceScopedList(t *testing.T) {
 
 // TestGuaranteedUpdate 暂未启用，等待 #109831。
 func TestGuaranteedUpdate(t *testing.T) {
-	// TODO(#109831): Enable use of this test and run it.
+	// TODO(#109831): 设置压缩后启用该用例。
 }
 
 // TestGuaranteedUpdateWithTTL 验证带 TTL 的保证更新。
@@ -480,7 +480,7 @@ func TestGuaranteedUpdateWithTTL(t *testing.T) {
 
 // TestGuaranteedUpdateChecksStoredData 暂未启用，等待 #109831。
 func TestGuaranteedUpdateChecksStoredData(t *testing.T) {
-	// TODO(#109831): Enable use of this test and run it.
+	// TODO(#109831): 设置压缩后启用该用例。
 }
 
 // TestGuaranteedUpdateWithConflict 验证更新冲突时的重试语义。
@@ -499,7 +499,7 @@ func TestGuaranteedUpdateWithSuggestionAndConflict(t *testing.T) {
 
 // TestTransformationFailure 暂未启用，等待 #109831。
 func TestTransformationFailure(t *testing.T) {
-	// TODO(#109831): Enable use of this test and run it.
+	// TODO(#109831): 设置压缩后启用该用例。
 }
 
 // TestStats 在 SizeBasedListCostEstimate 开/关两种模式下验证存储统计指标。
@@ -550,10 +550,10 @@ func TestWatch(t *testing.T) {
 		storagetesting.RunTestDelayedWatchDelivery(ctx, t, cacher)
 	})
 	t.Run("WatchError", func(t *testing.T) {
-		// TODO(#109831): Enable use of this test and run it.
+		// TODO(#109831): 设置压缩后启用该用例。
 	})
 	t.Run("WatchContextCancel", func(t *testing.T) {
-		// TODO(#109831): Enable use of this test and run it.
+		// TODO(#109831): 设置压缩后启用该用例。
 	})
 	t.Run("WatcherTimeout", func(t *testing.T) {
 		ctx, cacher, terminate := testSetup(t)
@@ -613,7 +613,7 @@ func TestWatch(t *testing.T) {
 }
 
 // ===================================================
-// Test-setup related function are following.
+// 以下是测试装配相关的函数。
 // ===================================================
 
 // tearDownFunc 清理测试启动的 cacher、delegator 与 etcd 服务。
@@ -708,11 +708,11 @@ func testSetupWithEtcdServer(t testing.TB, opts ...setupOption) (context.Context
 	}
 
 	server, etcdStorage := newEtcdTestStorageWithOptions(t, etcd3testing.PathPrefix(), setupOpts.codec, setupOpts.transformer)
-	// Inject one list error to make sure we test the relist case.
+	// 注入一次 list 错误，以覆盖重新列举路径。
 	listErrors := 1
 	if clientfeatures.FeatureGates().Enabled(clientfeatures.WatchListClient) {
-		// The WatchListClient feature changes the reflector to use WATCH
-		// instead of LIST, therefore we don't expect any errors
+		// WatchListClient 特性会改变 reflector 使用 WATCH 的方式。
+		// 而非 LIST，因此不应出现错误。
 		listErrors = 0
 	}
 	wrappedStorage := &storagetesting.StorageInjectingListErrors{
@@ -741,15 +741,15 @@ func testSetupWithEtcdServer(t testing.TB, opts ...setupOption) (context.Context
 	}
 	ctx := context.Background()
 
-	// Since some tests depend on the fact that GetList shouldn't fail,
-	// we wait until the error from the underlying storage is consumed.
+	// 某些测试依赖 GetList 不失败，
+	// 等待底层存储的错误被消费掉。
 	if err := wait.PollInfinite(100*time.Millisecond, wrappedStorage.ErrorsConsumed); err != nil {
 		t.Fatalf("Failed to inject list errors: %v", err)
 	}
 
-	// The tests assume that Get/GetList/Watch calls shouldn't fail.
-	// However, 429 error can now be returned if watchcache is under initialization.
-	// To avoid rewriting all tests, we wait for watchcache to initialize.
+	// 测试假定 Get/GetList/Watch 调用不会失败。
+	// 不过，watchcache 初始化期间现在也可能返回 429。
+	// 为避免改写所有测试，这里等待 watchcache 完成初始化。
 	if err := cacher.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -838,7 +838,7 @@ func BenchmarkStoreWriteThroughput(b *testing.B) {
 // BenchmarkStoreList 在多种集群规模下比较使用索引与全量扫描的列表性能。
 func BenchmarkStoreList(b *testing.B) {
 	klog.SetLogger(logr.Discard())
-	// Based on https://github.com/kubernetes/community/blob/master/sig-scalability/configs-and-limits/thresholds.md
+	// 参考 https://github.com/kubernetes/community/blob/master/sig-scalability/configs-and-limits/thresholds.md
 	dimensions := []struct {
 		namespaceCount       int
 		podPerNamespaceCount int

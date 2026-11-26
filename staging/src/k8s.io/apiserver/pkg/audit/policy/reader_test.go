@@ -24,7 +24,7 @@ import (
 
 	"k8s.io/apiserver/pkg/apis/audit"
 
-	// import to call webhook's init() function to register audit.Policy to schema
+	// 必须导入以触发 webhook 的 init()，把 audit.Policy 注册到 scheme。
 	_ "k8s.io/apiserver/plugin/pkg/audit/webhook"
 
 	"github.com/google/go-cmp/cmp"

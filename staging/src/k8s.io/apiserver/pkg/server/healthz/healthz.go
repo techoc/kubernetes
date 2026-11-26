@@ -37,7 +37,7 @@ import (
 
 const DefaultHealthzPath = "/healthz"
 
-// HealthChecker is a named healthz checker.
+// HealthChecker 是带名称的 healthz 检查项。
 //
 // Name 会出现在 URL（/healthz/<name>）与排除列表（?exclude=<name>）中，
 // 因此必须在同一 handler 内唯一且稳定。
@@ -52,10 +52,10 @@ type GroupedHealthChecker interface {
 	GroupName() string
 }
 
-// PingHealthz returns true automatically when checked
+// PingHealthz 在被检查时自动返回 true。
 var PingHealthz HealthChecker = ping{}
 
-// ping implements the simplest possible healthz checker.
+// ping 实现最简单的 healthz 检查。
 type ping struct{}
 
 // Name 返回固定名称 "ping"。
@@ -63,12 +63,12 @@ func (ping) Name() string {
 	return "ping"
 }
 
-// PingHealthz is a health check that returns true.
+// PingHealthz 是始终返回 true 的健康检查。
 func (ping) Check(_ *http.Request) error {
 	return nil
 }
 
-// LogHealthz returns true if logging is not blocked
+// 日志未被阻塞时 LogHealthz 返回 true。
 var LogHealthz HealthChecker = &log{}
 
 // log 通过周期性 Flush 检测日志管道是否卡死。
@@ -112,7 +112,7 @@ type informerSync struct {
 
 var _ HealthChecker = &informerSync{}
 
-// NewInformerSyncHealthz returns a new HealthChecker that will pass only if all informers in the given cacheSyncWaiter sync.
+// NewInformerSyncHealthz 返回一个 HealthChecker，仅当给定 cacheSyncWaiter 中所有 informer 都同步时才通过。
 func NewInformerSyncHealthz(cacheSyncWaiter cacheSyncWaiter) HealthChecker {
 	return &informerSync{
 		cacheSyncWaiter: cacheSyncWaiter,
@@ -129,8 +129,8 @@ type shutdown struct {
 	stopCh <-chan struct{}
 }
 
-// NewShutdownHealthz returns a new HealthChecker that will fail if the embedded channel is closed.
-// This is intended to allow for graceful shutdown sequences.
+// NewShutdownHealthz 返回一个 HealthChecker，内嵌 channel 关闭时检查失败。
+// 用于在优雅退出过程中让流量尽快摘除。
 func NewShutdownHealthz(stopCh <-chan struct{}) HealthChecker {
 	return &shutdown{stopCh}
 }
@@ -154,7 +154,7 @@ func (s *shutdown) Check(req *http.Request) error {
 // 已关闭的 stopCh 让 WaitForCacheSync 立刻给出快照，因此健康检查本身不会挂起。
 func (i *informerSync) Check(_ *http.Request) error {
 	stopCh := make(chan struct{})
-	// Close stopCh to force checking if informers are synced now.
+	// 关闭 stopCh 以立即检查 informer 是否已同步。
 	close(stopCh)
 
 	informersByStarted := make(map[bool][]string)
@@ -168,12 +168,12 @@ func (i *informerSync) Check(_ *http.Request) error {
 	return nil
 }
 
-// NamedCheck returns a healthz checker for the given name and function.
+// NamedCheck 返回给定名称与函数对应的 healthz 检查项。
 func NamedCheck(name string, check func(r *http.Request) error) HealthChecker {
 	return &healthzCheck{name, check}
 }
 
-// NamedGroupedCheck returns a healthz checker for the given name and function.
+// NamedGroupedCheck 返回给定名称与函数对应的 healthz 检查项。
 //
 // 分组检查既能按 name 单独排除，也能按 groupName 整组排除。
 func NamedGroupedCheck(name string, groupName string, check func(r *http.Request) error) HealthChecker {
@@ -183,41 +183,41 @@ func NamedGroupedCheck(name string, groupName string, check func(r *http.Request
 	}
 }
 
-// InstallHandler registers handlers for health checking on the path
-// "/healthz" to mux. *All handlers* for mux must be specified in
-// exactly one call to InstallHandler. Calling InstallHandler more
-// than once for the same mux will result in a panic.
+// InstallHandler 在 mux 的 "/healthz" 路径注册健康检查处理器。
+// 同一 mux 的所有处理器必须在一次 InstallHandler 调用中全部指定。
+// 对同一 mux 多次调用 InstallHandler 会 panic。
+// 对同一 mux 多次调用会 panic。
 func InstallHandler(mux mux, checks ...HealthChecker) {
 	InstallPathHandler(mux, DefaultHealthzPath, checks...)
 }
 
-// InstallReadyzHandler registers handlers for health checking on the path
-// "/readyz" to mux. *All handlers* for mux must be specified in
-// exactly one call to InstallHandler. Calling InstallHandler more
-// than once for the same mux will result in a panic.
+// InstallReadyzHandler 在 mux 的 "/readyz" 路径注册健康检查处理器。
+// 同一 mux 的所有处理器必须在一次 InstallHandler 调用中全部指定。
+// 对同一 mux 多次调用 InstallHandler 会 panic。
+// 对同一 mux 多次调用会 panic。
 func InstallReadyzHandler(mux mux, checks ...HealthChecker) {
 	InstallPathHandler(mux, "/readyz", checks...)
 }
 
-// InstallLivezHandler registers handlers for liveness checking on the path
-// "/livez" to mux. *All handlers* for mux must be specified in
-// exactly one call to InstallHandler. Calling InstallHandler more
-// than once for the same mux will result in a panic.
+// InstallLivezHandler 在 mux 的 "/livez" 路径注册存活检查处理器。
+// 同一 mux 的所有处理器必须在一次 InstallHandler 调用中全部指定。
+// 对同一 mux 多次调用 InstallHandler 会 panic。
+// 对同一 mux 多次调用会 panic。
 func InstallLivezHandler(mux mux, checks ...HealthChecker) {
 	InstallPathHandler(mux, "/livez", checks...)
 }
 
-// InstallPathHandler registers handlers for health checking on
-// a specific path to mux. *All handlers* for the path must be
-// specified in exactly one call to InstallPathHandler. Calling
-// InstallPathHandler more than once for the same path and mux will
-// result in a panic.
+// InstallPathHandler 在 mux 的指定路径注册健康检查处理器。
+// 同一路径的所有处理器必须在一次 InstallPathHandler 调用中全部指定。
+// 对同一路径与 mux 多次调用 InstallPathHandler 会 panic。
+// 对同一路径与 mux 多次调用 InstallPathHandler
+// 会 panic。
 func InstallPathHandler(mux mux, path string, checks ...HealthChecker) {
 	InstallPathHandlerWithHealthyFunc(mux, path, nil, checks...)
 }
 
-// InstallPathHandlerWithHealthyFunc is like InstallPathHandler, but calls firstTimeHealthy exactly once
-// when the handler succeeds for the first time.
+// InstallPathHandlerWithHealthyFunc 与 InstallPathHandler 类似，但会在处理器首次成功时
+// 恰好调用一次 firstTimeHealthy。
 //
 // 根路径的响应只聚合全部检查，不泄漏细节；每个检查另有独立的
 // <path>/<name> 端点，但注意这些端点会直接暴露检查错误信息，
@@ -248,12 +248,12 @@ func InstallPathHandlerWithHealthyFunc(mux mux, path string, firstTimeHealthy fu
 	}
 }
 
-// mux is an interface describing the methods InstallHandler requires.
+// mux 描述 InstallHandler 所需方法的接口。
 type mux interface {
 	Handle(pattern string, handler http.Handler)
 }
 
-// healthzCheck implements HealthChecker on an arbitrary name and check function.
+// healthzCheck 用任意名称与检查函数实现 HealthChecker。
 type healthzCheck struct {
 	name  string
 	check func(r *http.Request) error
@@ -284,7 +284,7 @@ func (c *groupedHealthzCheck) GroupName() string {
 	return c.groupName
 }
 
-// getExcludedChecks extracts the health check names to be excluded from the query param
+// getExcludedChecks 从查询参数中提取要排除的健康检查名称。
 func getExcludedChecks(r *http.Request) sets.String {
 	checks, found := r.URL.Query()["exclude"]
 	if found {
@@ -293,7 +293,7 @@ func getExcludedChecks(r *http.Request) sets.String {
 	return sets.NewString()
 }
 
-// handleRootHealth returns an http.HandlerFunc that serves the provided checks.
+// handleRootHealth 返回提供这些检查的 http.HandlerFunc。
 //
 // 安全边界：失败原因只写入日志，响应体中只给出 "reason withheld"。
 // 该端点通常无需认证，详细错误可能泄漏内部状态。
@@ -302,18 +302,18 @@ func handleRootHealth(name string, firstTimeHealthy func(), checks ...HealthChec
 	return func(w http.ResponseWriter, r *http.Request) {
 		excluded := getExcludedChecks(r)
 		unknownExcluded := excluded.Clone()
-		// failedVerboseLogOutput is for output to the log.  It indicates detailed failed output information for the log.
+		// failedVerboseLogOutput 用于写日志，表示失败的详细信息。
 		var failedVerboseLogOutput bytes.Buffer
 		var failedChecks []string
 		var individualCheckOutput bytes.Buffer
 		for _, check := range checks {
-			// no-op the check if we've specified we want to exclude the check
+			// 若指定排除该检查，则不做检查。
 			if excluded.Has(check.Name()) {
 				unknownExcluded.Delete(check.Name())
 				fmt.Fprintf(&individualCheckOutput, "[+]%s excluded: ok\n", check.Name())
 				continue
 			}
-			// no-op the check if it is a grouped check and we want to exclude the group
+			// 若是分组检查且要排除该组，则不做检查。
 			if check, ok := check.(GroupedHealthChecker); ok && excluded.Has(check.GroupName()) {
 				unknownExcluded.Delete(check.GroupName())
 				fmt.Fprintf(&individualCheckOutput, "[+]%s excluded with %s: ok\n", check.Name(), check.GroupName())
@@ -321,10 +321,10 @@ func handleRootHealth(name string, firstTimeHealthy func(), checks ...HealthChec
 			}
 			if err := check.Check(r); err != nil {
 				slis.ObserveHealthcheck(context.Background(), check.Name(), name, slis.Error)
-				// don't include the error since this endpoint is public.  If someone wants more detail
-				// they should have explicit permission to the detailed checks.
+				// 响应中不带错误，因为该端点是公开的。若需要更多细节，
+				// 访问者应对详细检查拥有明确权限。
 				fmt.Fprintf(&individualCheckOutput, "[-]%s failed: reason withheld\n", check.Name())
-				// but we do want detailed information for our log
+				// 但日志中需要详细信息。
 				fmt.Fprintf(&failedVerboseLogOutput, "[-]%s failed: %v\n", check.Name(), err)
 				failedChecks = append(failedChecks, check.Name())
 			} else {
@@ -338,7 +338,7 @@ func handleRootHealth(name string, firstTimeHealthy func(), checks ...HealthChec
 			klog.V(6).Infof("cannot exclude some health checks, no health checks are installed matching %s",
 				formatQuoted(unknownExcluded.List()...))
 		}
-		// always be verbose on failure
+		// 失败时始终输出详细信息。
 		if len(failedChecks) > 0 {
 			klog.V(2).Infof("%s check failed: %s\n%v", strings.Join(failedChecks, ","), name, failedVerboseLogOutput.String())
 			// 健康检查失败是预期内的状态报告，不应打印堆栈。
@@ -347,7 +347,7 @@ func handleRootHealth(name string, firstTimeHealthy func(), checks ...HealthChec
 			return
 		}
 
-		// signal first time this is healthy
+		// 标记首次变为健康。
 		if firstTimeHealthy != nil {
 			notifyOnce.Do(firstTimeHealthy)
 		}
@@ -366,7 +366,7 @@ func handleRootHealth(name string, firstTimeHealthy func(), checks ...HealthChec
 	}
 }
 
-// adaptCheckToHandler returns an http.HandlerFunc that serves the provided checks.
+// adaptCheckToHandler 返回提供这些检查的 http.HandlerFunc。
 //
 // 注意与根路径不同：单检查端点会回显错误详情，因此不应无条件暴露给匿名用户。
 func adaptCheckToHandler(c func(r *http.Request) error) http.HandlerFunc {
@@ -380,9 +380,9 @@ func adaptCheckToHandler(c func(r *http.Request) error) http.HandlerFunc {
 	})
 }
 
-// checkerNames returns the names of the checks in the same order as passed in.
+// checkerNames 按传入顺序返回检查项的名称。
 func checkerNames(checks ...HealthChecker) []string {
-	// accumulate the names of checks for printing them out.
+	// 收集检查项名称以便输出。
 	checkerNames := make([]string, 0, len(checks))
 	for _, check := range checks {
 		checkerNames = append(checkerNames, check.Name())
@@ -390,8 +390,8 @@ func checkerNames(checks ...HealthChecker) []string {
 	return checkerNames
 }
 
-// formatQuoted returns a formatted string of the health check names,
-// preserving the order passed in.
+// formatQuoted 返回格式化后的健康检查名称字符串，
+// 保留传入顺序。
 //
 // 保留传入顺序是为了让日志与错误输出稳定、可 diff。
 func formatQuoted(names ...string) string {

@@ -27,7 +27,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
-// IP provides a CEL representation of an IP address.
+// IP 提供 IP 地址的 CEL 表示。
 //
 // 包装 netip.Addr 而非字符串，使 CEL 中的比较是地址语义（IPv4/IPv6 归一化）而不是字节语义。
 type IP struct {
@@ -39,7 +39,7 @@ var (
 	IPType = cel.OpaqueType("net.IP")
 )
 
-// ConvertToNative implements ref.Val.ConvertToNative.
+// ConvertToNative 实现 ref.Val.ConvertToNative。
 //
 // 支持转为 netip.Addr 或字符串，后者便于输出与日志。
 func (d IP) ConvertToNative(typeDesc reflect.Type) (any, error) {
@@ -52,7 +52,7 @@ func (d IP) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	return nil, fmt.Errorf("type conversion error from 'IP' to '%v'", typeDesc)
 }
 
-// ConvertToType implements ref.Val.ConvertToType.
+// ConvertToType 实现 ref.Val.ConvertToType。
 func (d IP) ConvertToType(typeVal ref.Type) ref.Val {
 	switch typeVal {
 	case IPType:
@@ -65,7 +65,7 @@ func (d IP) ConvertToType(typeVal ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", IPType, typeVal)
 }
 
-// Equal implements ref.Val.Equal.
+// Equal 实现 ref.Val.Equal。
 //
 // 与不同类型比较时返回 "no such overload" 而不是 false，遵循 CEL 的类型严格性。
 func (d IP) Equal(other ref.Val) ref.Val {
@@ -76,18 +76,18 @@ func (d IP) Equal(other ref.Val) ref.Val {
 	return types.Bool(d.Addr == otherD.Addr)
 }
 
-// Type implements ref.Val.Type.
+// Type 实现 ref.Val.Type。
 func (d IP) Type() ref.Type {
 	return IPType
 }
 
-// Value implements ref.Val.Value.
+// Value 实现 ref.Val.Value。
 func (d IP) Value() any {
 	return d.Addr
 }
 
-// Size returns the size of the IP address in bytes.
-// Used in the size estimation of the runtime cost.
+// Size 返回 IP 地址的字节数。
+// 用于运行时成本的体积估算。
 //
 // CEL 运行时成本估算依赖 Size 计算内存占用，因此必须返回字节数而非字符串长度。
 func (d IP) Size() ref.Val {

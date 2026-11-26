@@ -46,8 +46,8 @@ func newSchema(ref string) *spec.Schema {
 	}
 }
 
-// rootSchema returns a schema with references in all places where TestPopulateRefs
-// resolves references.
+// rootSchema 返回一个在各处都含引用的 schema，覆盖 TestPopulateRefs
+// 解析引用的所有位置。
 //
 // 覆盖 PopulateRefs 支持的三类引用位置：properties、additionalProperties 和 items。
 // 只要解析器漏掉其中一类，测试就会失败。
@@ -90,8 +90,8 @@ func TestPopulateRefs(t *testing.T) {
 		"root": rootSchema(),
 	}
 
-	// Add one schema for each of the references above, with an ID that allows
-	// verifying that the right schema got resolved.
+	// 为上述每个引用各添加一个 schema，并用 ID 验证
+	// 解析到的是正确的那一个。
 	for _, ref := range []string{"prop", "additional", "item"} {
 		schemas[ref] = newSchema(ref)
 	}
@@ -101,10 +101,10 @@ func TestPopulateRefs(t *testing.T) {
 		return schema, ok
 	}
 
-	// Comparing the root schema below detects mutations where the data is semantically different,
-	// but it cannot detect undesired writes where the thing being written is the same (unlikely,
-	// but it could happen). Therefore we run two PopulateRefs calls and let the data race
-	// detector warn about concurrent, uncoordinated writes.
+	// 比较根 schema 能检测出语义不同的改写，但检测不出“写入相同值”的多余写入
+	// （不太可能，但确实可能发生）。因此这里并发执行两次 PopulateRefs，
+	// 让数据竞争检测器报告未经协调的并发写入。
+	//
 	//
 	// 并发跑两次是关键：解析器必须为每个调用方构造新对象，不能就地改写共享的输入
 	// schema（OpenAPI 定义会被多个 CEL 编译共用）。语义比较查不出"写入相同值"的问题，

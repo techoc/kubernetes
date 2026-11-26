@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package union implements an authorizer that combines multiple subauthorizer.
-// The union authorizer iterates over each subauthorizer and returns the first
-// decision that is either an Allow decision or a Deny decision. If a
-// subauthorizer returns a NoOpinion, then the union authorizer moves onto the
-// next authorizer or, if the subauthorizer was the last authorizer, returns
-// NoOpinion as the aggregate decision. I.e. union authorizer creates an
-// aggregate decision and supports short-circuit allows and denies from
+// Package union 实现把多个子授权器组合起来的授权器。
+// union 授权器依次调用各子授权器，返回第一个 Allow 或 Deny 决策。
+// 若子授权器返回 NoOpinion，则继续下一个；若已是最后一个，则以 NoOpinion 作为聚合结果。
+// 也就是说，union 授权器在聚合决策的同时，支持子授权器的短路允许与拒绝。
+//
+// 作为聚合结果返回。也就是说，union 授权器在聚合决策的同时，
+// 支持子授权器的短路允许与拒绝。
 // subauthorizers.
 package union
 
@@ -38,21 +38,21 @@ import (
 
 var _ = authorizer.Authorizer(unionAuthzHandler{})
 
-// unionAuthzHandler authorizer against a chain of authorizer.Authorizer
+// unionAuthzHandler 针对一串 authorizer.Authorizer 做授权。
 type unionAuthzHandler struct {
 	chain            []NamedAuthorizer
 	nameToAuthorizer map[string]authorizer.Authorizer
 }
 
-// NamedAuthorizer is a (string, Authorizer) tuple that associates each
-// Authorizer with a name, that must be unique locally within one union
-// authorizer. Each authorizer must be non-nil.
+// NamedAuthorizer 是 (string, Authorizer) 二元组，为每个 Authorizer 关联一个名字。
+// 名字在同一个 union 授权器内必须唯一，且 Authorizer 不能为 nil。
+// 名字在同一个 union 授权器内必须唯一，且 Authorizer 不能为 nil。
 type NamedAuthorizer struct {
 	AuthorizerName string
 	Authorizer     authorizer.Authorizer
 }
 
-// New returns an authorizer that authorizes against a chain of authorizer.Authorizer objects
+// New 返回一个针对一串 authorizer.Authorizer 做授权的授权器。
 //
 // 名称必须唯一，因为 ConditionsAwareAuthorize 之后需要按名称找回对应的
 // authorizer 来求值条件；重名会导致条件被错误地交给另一个授权器处理。
@@ -75,7 +75,7 @@ func New(authorizationHandlers ...NamedAuthorizer) (authorizer.Authorizer, error
 	}, nil
 }
 
-// Authorizes against a chain of authorizer.Authorizer objects and returns nil if successful and returns error if unsuccessful
+// Authorize 针对一串 authorizer.Authorizer 做授权；成功返回 nil，失败返回错误。
 //
 // 短路语义：第一个返回 Allow 或 Deny 的授权器决定结果；NoOpinion 继续向后。
 // 全部为 NoOpinion 时聚合各授权器的 reason 与 error 一并返回，便于诊断。
@@ -99,25 +99,25 @@ func (authzHandler unionAuthzHandler) Authorize(ctx context.Context, a authorize
 		case authorizer.DecisionAllow, authorizer.DecisionDeny:
 			return decision, reason, err
 		case authorizer.DecisionNoOpinion:
-			// continue to the next authorizer
+			// 继续处理下一个授权器
 		}
 	}
 
 	return authorizer.DecisionNoOpinion, strings.Join(reasonlist, "\n"), utilerrors.NewAggregate(errlist)
 }
 
-// ConditionsAwareAuthorize uses the chain of sub-authorizers to authorize the request with the given attributes,
-// potentially returning a Union-typed ConditionsAwareDecision if the sub-authorizer return conditional decisions.
+// ConditionsAwareAuthorize 使用子授权器链对给定 attributes 做条件感知授权；
+// 若子授权器返回条件式决策，可能返回 Union 类型的 ConditionsAwareDecision。
 func (authzHandler unionAuthzHandler) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	var decisions authorizer.ConditionsAwareDecisionUnion
 
 	for _, currAuthzHandler := range authzHandler.chain {
-		// Precondition: All previously seen leaf decisions were either of NoOpinion or ConditionsMap type.
+		// 前置条件：此前见过的叶子决策均为 NoOpinion 或 ConditionsMap 类型。
 
-		// Call the authorizer on its conditions-aware method, and add the decision to the slice,
-		// regardless of type. This due to that later in EvaluateConditions, the decision index
-		// in the slice is what correlates a decision with the authorizer that should be used
-		// for evaluating it (if needed).
+		// 调用子授权器的条件感知方法，并把决策加入切片，无论其类型如何。
+		// 因为后续 EvaluateConditions 依赖切片中的决策索引，
+		// 来关联决策与应当求值它的授权器（若需要）。
+		//
 		decision := currAuthzHandler.Authorizer.ConditionsAwareAuthorize(ctx, a)
 		decisions.Add(currAuthzHandler.AuthorizerName, decision)
 
@@ -126,45 +126,45 @@ func (authzHandler unionAuthzHandler) ConditionsAwareAuthorize(ctx context.Conte
 		if decision.ContainsUnconditionalAllowOrDeny() {
 			return decisions.ToDecision()
 		}
-		// => all leaves are NoOpinion or ConditionsMap, continue to the next authorizer
+		// => 所有叶子均为 NoOpinion 或 ConditionsMap，继续处理下一个授权器
 	}
 
-	// If we reached here, all leaf decisions were either of NoOpinion or ConditionsMap type.
-	// If all decisions were NoOpinions, the constructor folds into a single NoOpinion decision.
+	// 走到这里说明所有叶子决策均为 NoOpinion 或 ConditionsMap 类型。
+	// 若全部为 NoOpinion，构造函数会折叠为单个 NoOpinion 决策。
 	return decisions.ToDecision()
 }
 
-// EvaluateConditions evaluates a Union-typed unevaluatedDecision returned from ConditionsAwareAuthorize using the
-// union authorizer's sub-authorizer chain and the provided data.
+// EvaluateConditions 使用 union 授权器的子授权器链和给定数据，
+// 求值 ConditionsAwareAuthorize 返回的 Union 类型未求值决策。
 func (authzHandler unionAuthzHandler) EvaluateConditions(ctx context.Context, unevaluatedDecision authorizer.ConditionsAwareDecision, data authorizer.ConditionsData) (authorizer.Decision, string, error) {
-	// This should never happen, an authorizer shall only be called back on the union unevaluatedDecision that was returned from
-	// AuthorizeConditionsAware(). The caller should never call EvaluateConditions on an Allow/Deny/NoOpinion
+	// 不应发生此情况：授权器只会对自身返回的 union 未求值决策回调。
+	// 调用方也不应对 Allow/Deny/NoOpinion 决策调用 EvaluateConditions。
 	if !unevaluatedDecision.IsUnion() {
 		return unevaluatedDecision.FailureDecision(), "failed closed", errors.New("the union authorizer can only evaluate union ConditionsAwareDecisions")
 	}
 
-	// This logic directly maps 1:1 with Authorize(), now that we get unconditional responses from the evaluation process.
+	// 求值流程返回无条件结果后，这里与 Authorize() 的逻辑一一对应。
 	var (
 		errlist    []error
 		reasonlist []string
 	)
 
 	for currentAuthorizerName, unevaluatedSubDecision := range unevaluatedDecision.UnionedDecisions() {
-		// Precondition: All previously seen leaf decisions were or evaluated to NoOpinion, or some unrecognized mode.
+		// 前置条件：此前见过的叶子决策均已求值为 NoOpinion，或属于无法识别的模式。
 
 		var decision authorizer.Decision
 		var reason string
 		var err error
 		switch {
-		// If we get to an Allow or Deny in the union chain, we have our answer.
+		// 若在 union 链中遇到 Allow 或 Deny，即为最终答案。
 		case unevaluatedSubDecision.IsDeny():
 			return authorizer.DecisionDeny, unevaluatedSubDecision.Reason(), unevaluatedSubDecision.Error()
 		case unevaluatedSubDecision.IsAllow():
 			return authorizer.DecisionAllow, unevaluatedSubDecision.Reason(), unevaluatedSubDecision.Error()
-		// NoOpinions cannot be evaluated, but we should make sure to save the reason and error.
+		// NoOpinion 无法求值，但仍需保存其 reason 和 error。
 		case unevaluatedSubDecision.IsNoOpinion():
 			decision, reason, err = authorizer.DecisionNoOpinion, unevaluatedSubDecision.Reason(), unevaluatedSubDecision.Error()
-		// ConditionsMap or Union types are evaluated by their authorizer
+		// ConditionsMap 或 Union 类型由其对应的授权器求值。
 		case unevaluatedSubDecision.IsConditionsMap(), unevaluatedSubDecision.IsUnion():
 			decision, reason, err = authzHandler.evaluateConditions(ctx, currentAuthorizerName, unevaluatedSubDecision, data)
 			// 防御不可能的求值结果：求值结果必须是该子决策声明过的可能结果之一，否则 fail closed。
@@ -179,7 +179,7 @@ func (authzHandler unionAuthzHandler) EvaluateConditions(ctx context.Context, un
 		case authorizer.DecisionAllow, authorizer.DecisionDeny:
 			return decision, reason, err
 		case authorizer.DecisionNoOpinion:
-			// continue to the next authorizer, save the errors and reason for later
+			// 继续处理下一个授权器，保存错误与 reason 供后续使用。
 
 			if err != nil {
 				errlist = append(errlist, err)
@@ -202,15 +202,15 @@ func (authzHandler unionAuthzHandler) evaluateConditions(ctx context.Context, au
 	return authorizer.EvaluateConditions(ctx, unevaluatedSubDecision, data)
 }
 
-// unionAuthzRulesHandler authorizer against a chain of authorizer.RuleResolver
+// unionAuthzRulesHandler 针对一串 authorizer.RuleResolver 做授权。
 type unionAuthzRulesHandler []authorizer.RuleResolver
 
-// NewRuleResolvers returns an authorizer that authorizes against a chain of authorizer.Authorizer objects
+// NewRuleResolvers 返回一个针对一串 authorizer.Authorizer 做授权的授权器。
 func NewRuleResolvers(authorizationHandlers ...authorizer.RuleResolver) authorizer.RuleResolver {
 	return unionAuthzRulesHandler(authorizationHandlers)
 }
 
-// RulesFor against a chain of authorizer.RuleResolver objects and returns nil if successful and returns error if unsuccessful
+// RulesFor 针对一串 authorizer.RuleResolver 查询规则；成功返回 nil，失败返回错误。
 //
 // 与 Authorize 不同，规则查询需要汇总所有子授权器的结果，无法短路；
 // 任一子授权器报告不完整（incomplete）时整体即为不完整。

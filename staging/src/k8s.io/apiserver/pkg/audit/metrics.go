@@ -33,12 +33,9 @@ const (
 )
 
 /*
- * By default, all the following metrics are defined as falling under
- * ALPHA stability level https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
+ * 默认地，以下所有指标的稳定性等级均为 ALPHA：https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
  *
- * Promoting the stability level of the metric is a responsibility of the component owner, since it
- * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
- * the metric stability policy.
+ * 提升指标稳定性等级是组件所有者的责任，因为按照指标稳定性策略，这涉及明确承诺在多个发布版本中支持该指标。
  */
 var (
 	eventCounter = metrics.NewCounter(
@@ -100,17 +97,17 @@ func ObservePolicyLevel(ctx context.Context, level auditinternal.Level) {
 	levelCounter.WithContext(ctx).WithLabelValues(string(level)).Inc()
 }
 
-// HandlePluginError handles an error that occurred in an audit plugin. This method should only be
-// used if the error may have prevented the audit event from being properly recorded. The events are
-// logged to the debug log.
+// HandlePluginError 处理审计插件中发生的错误。仅当该错误可能导致审计事件未被正确记录时才应调用。
+// 相关事件会写入 debug 日志。
+// 相关事件会写入 debug 日志。
 //
 // 计数按受影响事件数累加（而非按错误次数），这样能直观看出丢失了多少条审计记录；
 // 事件内容打到日志里是为了事后取证，可能包含敏感信息，日志级别应保持可控。
 func HandlePluginError(plugin string, err error, impacted ...*auditinternal.Event) {
-	// Count the error.
+	// 对错误计数。
 	errorCounter.WithLabelValues(plugin).Add(float64(len(impacted)))
 
-	// Log the audit events to the debug log.
+	// 将审计事件写入 debug 日志。
 	msg := fmt.Sprintf("Error in audit plugin '%s' affecting %d audit events: %v\nImpacted events:\n",
 		plugin, len(impacted), err)
 	for _, ev := range impacted {

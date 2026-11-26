@@ -36,7 +36,7 @@ var (
 	QuantityType      = cel.ObjectType("kubernetes.Quantity")
 )
 
-// Quantity provdes a CEL representation of a resource.Quantity
+// Quantity 提供 resource.Quantity 的 CEL 表示。
 //
 // 内嵌 *resource.Quantity，因此可以直接复用其比较与字符串化逻辑；
 // CEL 侧看到的类型名是 kubernetes.Quantity。

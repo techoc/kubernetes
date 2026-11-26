@@ -25,16 +25,13 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 /*
-EncryptionConfiguration stores the complete configuration for encryption providers.
-It also allows the use of wildcards to specify the resources that should be encrypted.
-Use '*.<group>' to encrypt all resources within a group or '*.*' to encrypt all resources.
-'*.' can be used to encrypt all resource in the core group.  '*.*' will encrypt all
-resources, even custom resources that are added after API server start.
-Use of wildcards that overlap within the same resource list or across multiple
-entries are not allowed since part of the configuration would be ineffective.
-Resource lists are processed in order, with earlier lists taking precedence.
+EncryptionConfiguration 保存加密 provider 的完整配置。
+支持用通配符指定需要加密的资源：'*.<group>' 加密某组内全部资源，'*.*' 加密全部资源。
+'*.' 可用于核心组，'*.*' 甚至覆盖 API Server 启动后新增的自定义资源。
+同一资源列表内或不同条目之间的通配符不得重叠，否则部分配置不会生效。
+资源列表按顺序处理，靠前的条目优先。
 
-Example:
+示例：
 
 	kind: EncryptionConfiguration
 	apiVersion: apiserver.config.k8s.io/v1
@@ -78,53 +75,53 @@ type EncryptionConfiguration struct {
 // provider 链；链中第一个是写入使用的 provider，其余用于读取历史数据
 // （轮换密钥时的关键约束）。
 type ResourceConfiguration struct {
-	// resources is a list of kubernetes resources which have to be encrypted. The resource names are derived from `resource` or `resource.group` of the group/version/resource.
-	// eg: pandas.awesome.bears.example is a custom resource with 'group': awesome.bears.example, 'resource': pandas.
-	// Use '*.*' to encrypt all resources and '*.<group>' to encrypt all resources in a specific group.
-	// eg: '*.awesome.bears.example' will encrypt all resources in the group 'awesome.bears.example'.
-	// eg: '*.' will encrypt all resources in the core group (such as pods, configmaps, etc).
+	// resources 是需要加密的 Kubernetes 资源列表。资源名来自 group/version/resource 中的 `resource` 或 `resource.group`。
+	// 例如 pandas.awesome.bears.example 是自定义资源，'group': awesome.bears.example，'resource': pandas。
+	// 使用 '*.*' 加密所有资源，'*.<group>' 加密特定组内的所有资源。
+	// 例如 '*.awesome.bears.example' 加密 awesome.bears.example 组内的所有资源。
+	// 例如 '*.' 加密核心组的所有资源（如 pods、configmaps 等）。
 	Resources []string `json:"resources"`
-	// providers is a list of transformers to be used for reading and writing the resources to disk.
-	// eg: aesgcm, aescbc, secretbox, identity, kms.
+	// providers 是用于读写磁盘上资源的转换器列表。
+	// 例如 aesgcm、aescbc、secretbox、identity、kms。
 	Providers []ProviderConfiguration `json:"providers"`
 }
 
 // ProviderConfiguration 保存所配置的加密 provider 的配置。每个字段对应一种
 // provider，同一结构内通常只设置一个；由校验逻辑保证互斥，而不是靠类型系统。
 type ProviderConfiguration struct {
-	// aesgcm is the configuration for the AES-GCM transformer.
+	// aesgcm 是 AES-GCM 转换器的配置。
 	AESGCM *AESConfiguration `json:"aesgcm,omitempty"`
-	// aescbc is the configuration for the AES-CBC transformer.
+	// aescbc 是 AES-CBC 转换器的配置。
 	AESCBC *AESConfiguration `json:"aescbc,omitempty"`
-	// secretbox is the configuration for the Secretbox based transformer.
+	// secretbox 是基于 Secretbox 的转换器的配置。
 	Secretbox *SecretboxConfiguration `json:"secretbox,omitempty"`
-	// identity is the (empty) configuration for the identity transformer.
+	// identity 是 identity 转换器的（空）配置。
 	Identity *IdentityConfiguration `json:"identity,omitempty"`
-	// kms contains the name, cache size and path to configuration file for a KMS based envelope transformer.
+	// kms 包含基于 KMS 的 envelope 转换器的名称、缓存大小和配置文件路径。
 	KMS *KMSConfiguration `json:"kms,omitempty"`
 }
 
 // AESConfiguration 包含 AES transformer 的 API 配置。密钥长度校验发生在
 // provider 构建阶段，配置 API 层只做结构描述。
 type AESConfiguration struct {
-	// keys is a list of keys to be used for creating the AES transformer.
-	// Each key has to be 32 bytes long for AES-CBC and 16, 24 or 32 bytes for AES-GCM.
+	// keys 是用于创建 AES 转换器的密钥列表。
+	// AES-CBC 的密钥必须为 32 字节；AES-GCM 为 16、24 或 32 字节。
 	Keys []Key `json:"keys"`
 }
 
-// SecretboxConfiguration contains the API configuration for an Secretbox transformer.
+// SecretboxConfiguration 包含 Secretbox 转换器的 API 配置。
 type SecretboxConfiguration struct {
-	// keys is a list of keys to be used for creating the Secretbox transformer.
-	// Each key has to be 32 bytes long.
+	// keys 是用于创建 Secretbox 转换器的密钥列表。
+	// 每个密钥必须为 32 字节。
 	Keys []Key `json:"keys"`
 }
 
 // Key 包含为 transformer 提供的密钥的名称与密文。name 用于标识轮换中的某一代
 // 密钥，必须稳定且唯一；secret 是 base64 编码的原始密钥材料。
 type Key struct {
-	// name is the name of the key to be used while storing data to disk.
+	// name 是数据落盘时使用的密钥名称。
 	Name string `json:"name"`
-	// secret is the actual key, encoded in base64.
+	// secret 是 base64 编码的实际密钥。
 	Secret string `json:"secret"`
 }
 
@@ -138,22 +135,22 @@ func (k Key) String() string {
 // 它作为显式“不加密”的标记，与字段缺失（未配置）在语义上区分开。
 type IdentityConfiguration struct{}
 
-// KMSConfiguration contains the name, cache size and path to configuration file for a KMS based envelope transformer.
+// KMSConfiguration 包含基于 KMS 的 envelope 转换器的名称、缓存大小和配置文件路径。
 type KMSConfiguration struct {
 	// apiVersion 是 KeyManagementService 的 apiVersion。
 	// +optional
 	//
 	// 留空时按实现默认版本处理，便于配置在版本升级间复用。
 	APIVersion string `json:"apiVersion"`
-	// name is the name of the KMS plugin to be used.
+	// name 是要使用的 KMS 插件名称。
 	Name string `json:"name"`
-	// cachesize is the maximum number of secrets which are cached in memory. The default value is 1000.
-	// Set to a negative value to disable caching. This field is only allowed for KMS v1 providers.
+	// cachesize 是内存中最多缓存的 secret 数量，默认值为 1000。
+	// 设置为负数可禁用缓存。此字段仅允许用于 KMS v1 provider。
 	// +optional
 	CacheSize *int32 `json:"cachesize,omitempty"`
-	// endpoint is the gRPC server listening address, for example "unix:///var/run/kms-provider.sock".
+	// endpoint 是 gRPC server 的监听地址，例如 "unix:///var/run/kms-provider.sock"。
 	Endpoint string `json:"endpoint"`
-	// timeout for gRPC calls to kms-plugin (ex. 5s). The default is 3 seconds.
+	// 调用 kms-plugin 的 gRPC 超时时间（如 5s），默认为 3 秒。
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package aes transforms values for storage at rest using AES-GCM.
+// Package aes 用 AES-GCM 对静态存储的数据做加解密转换。
 //
 // 同时保留 CBC 实现，仅用于读取历史数据；新写入一律使用 GCM。
 package aes
@@ -36,8 +36,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// commonSize is the length of various security sensitive byte slices such as encryption keys.
-// Do not change this value.  It would be a backward incompatible change.
+// commonSize 是各类安全敏感字节切片（如加密密钥）的长度。
+// 不要改动此值，否则会破坏向后兼容。
 //
 // 32 字节即 AES-256 密钥长度；改动会导致已加密数据无法解密。
 const commonSize = 32
@@ -45,21 +45,21 @@ const commonSize = 32
 // keySizeCounterNonceGCM 是计数器型 nonce 模式要求的密钥长度，与 commonSize 保持一致。
 const keySizeCounterNonceGCM = commonSize
 
-// NewGCMTransformerWithUniqueKeyUnsafe is the same as NewGCMTransformer but is unsafe for general
-// use because it makes assumptions about the key underlying the block cipher.  Specifically,
-// it uses a 96-bit nonce where the first 32 bits are random data and the remaining 64 bits are
-// a monotonically incrementing atomic counter.  This means that the key must be randomly generated
-// on process startup and must never be used for encryption outside the lifetime of the process.
-// Unlike NewGCMTransformer, this function is immune to the birthday attack and thus the key can
-// be used for 2^64-1 writes without rotation.  Furthermore, cryptographic wear out of AES-GCM with
-// a sequential nonce occurs after 2^64 encryptions, which is not a concern for our use cases.
-// Even if that occurs, the nonce counter would overflow and crash the process.  We have no concerns
-// around plaintext length because all stored items are small (less than 2 MB).  To prevent the
-// chance of the block cipher being accidentally re-used, it is not taken in as input.  Instead,
-// a new random key is generated and returned on every invocation of this function.  This key is
-// used as the input to the block cipher.  If the key is stored and retrieved at a later point,
-// it can be passed to NewGCMTransformer(aes.NewCipher(key)) to construct a transformer capable
-// of decrypting values encrypted by this transformer (that transformer must not be used for encryption).
+// NewGCMTransformerWithUniqueKeyUnsafe 与 NewGCMTransformer 功能相同，但不适合通用场景：
+// 它对底层块密码的密钥作了假设。具体而言，它使用 96 位 nonce，
+// 前 32 位随机、后 64 位为单调递增的原子计数器。这意味着密钥必须在进程启动时随机生成，
+// 且绝不能在进程生命周期之外用于加密。
+// 与 NewGCMTransformer 不同，该函数不受生日攻击影响，因此密钥可
+// 用于 2^64-1 次写入而无需轮换。此外，顺序 nonce 下 AES-GCM 的密码学磨损出现在
+// 2^64 次加密之后，对我们的用例不构成问题。
+// 即便发生，nonce 计数器也会回绕并使进程崩溃。所有存储项都很小（<2 MB），
+// 因此不担心明文长度。为防止块密码被意外复用，它不作为输入传入；
+// 每次调用都会生成一个新的随机 key 并返回。该 key 用作块密码的输入。
+// 若把 key 保存下来，日后可传给 NewGCMTransformer(aes.NewCipher(key))
+// 构造能解密本 transformer 加密数据的转换器（但那个转换器不得用于加密）。
+//
+// 关键安全性质：nonce 由随机前缀 + 单调递增计数器组成，因此不存在随机 nonce 的生日碰撞问题，
+// 同一密钥可安全使用至 2^64 次写入。代价是密钥不能持久化后复用，只能随进程生命周期存在。
 //
 // 关键安全性质：nonce 由随机前缀 + 单调递增计数器组成，因此不存在随机 nonce 的生日碰撞问题，
 // 同一密钥可安全使用至 2^64 次写入。代价是密钥不能持久化后复用，只能随进程生命周期存在。
@@ -75,8 +75,8 @@ func NewGCMTransformerWithUniqueKeyUnsafe() (value.Transformer, []byte, error) {
 	}
 
 	nonceGen := &nonceGenerator{
-		// we start the nonce counter at one billion so that we are
-		// guaranteed to detect rollover across different go routines
+		// 计数器从十亿开始，以便在不同 goroutine 之间
+		// 可靠检测回绕。
 		//
 		// 起点远高于 0，使计数器回绕时必然落到 <= zero 的区间从而被检测到。
 		zero:  1_000_000_000,
@@ -100,9 +100,9 @@ func newGCMTransformerWithUniqueKeyUnsafe(block cipher.Block, nonceGen *nonceGen
 	}
 
 	nonceFunc := func(b []byte) error {
-		// we only need 8 bytes to store our 64 bit incrementing nonce
-		// instead of leaving the unused bytes as zeros, set those to random bits
-		// this mostly protects us from weird edge cases like a VM restore that rewinds our atomic counter
+		// 只需 8 字节存储 64 位递增 nonce；
+		// 把未使用的字节设为随机位而不是零，
+		// 主要防范 VM 恢复导致原子计数器回退之类的诡异边界情况。
 		//
 		// 随机前缀 + 递增后缀：即便计数器因 VM 回滚而重复，随机部分也能避免 nonce 完全碰撞。
 		randNonceSize := len(b) - 8
@@ -127,8 +127,8 @@ func randomNonce(b []byte) error {
 
 // nonceGenerator 生成 64 位单调递增 nonce，并在回绕时终止进程。
 type nonceGenerator struct {
-	// even at one million encryptions per second, this counter is enough for half a million years
-	// using this struct avoids alignment bugs: https://pkg.go.dev/sync/atomic#pkg-note-BUG
+	// 即便每秒一百万次加密，该计数器也够用五十万年。
+	// 使用本结构体是为了避免对齐问题：https://pkg.go.dev/sync/atomic#pkg-note-BUG
 	//
 	// 用 atomic.Uint64 而非裸 uint64 + atomic 包函数，避免 32 位平台上的对齐问题。
 	nonce atomic.Uint64
@@ -140,7 +140,7 @@ type nonceGenerator struct {
 func (n *nonceGenerator) next(b []byte) {
 	incrementingNonce := n.nonce.Add(1)
 	if incrementingNonce <= n.zero {
-		// this should never happen, and is unrecoverable if it does
+		// 这不应发生，一旦发生便无法恢复。
 		n.fatal("aes-gcm detected nonce overflow - cryptographic wear out has occurred")
 	}
 	binary.LittleEndian.PutUint64(b, incrementingNonce)
@@ -152,7 +152,7 @@ func die(msg string) {
 	klog.FatalDepth(1, msg)
 }
 
-// GenerateKey generates a random key using system randomness.
+// GenerateKey 用系统随机源生成一个随机 key。
 //
 // 用 defer 记录密钥生成耗时与错误，供 KMS/加密相关指标使用。
 func GenerateKey(length int) (key []byte, err error) {
@@ -167,19 +167,19 @@ func GenerateKey(length int) (key []byte, err error) {
 	return key, nil
 }
 
-// NewGCMTransformer takes the given block cipher and performs encryption and decryption on the given data.
-// It implements AEAD encryption of the provided values given a cipher.Block algorithm.
-// The authenticated data provided as part of the value.Context method must match when the same
-// value is set to and loaded from storage. In order to ensure that values cannot be copied by
-// an attacker from a location under their control, use characteristics of the storage location
-// (such as the etcd key) as part of the authenticated data.
+// NewGCMTransformer 用给定的块密码对数据进行加解密。
+// 它基于 cipher.Block 算法实现 AEAD 加密。
+// 通过 value.Context 提供的认证数据在对象写入与读取时必须一致。为确保攻击者无法从
+// 自己控制的位置复制值，应使用存储位置的特征（如 etcd key）作为认证数据的一部分。
 //
-// Because this mode requires a generated IV and IV reuse is a known weakness of AES-GCM, keys
-// must be rotated before a birthday attack becomes feasible. NIST SP 800-38D
-// (http://csrc.nist.gov/publications/nistpubs/800-38D/SP-800-38D.pdf) recommends using the same
-// key with random 96-bit nonces (the default nonce length) no more than 2^32 times, and
-// therefore transformers using this implementation *must* ensure they allow for frequent key
-// rotation. Future work should include investigation of AES-GCM-SIV as an alternative to
+// 该模式需要生成 IV，而 IV 重用是 AES-GCM 的已知弱点，因此必须在生日攻击可行之前
+// 轮换密钥。NIST SP 800-38D
+// (http://csrc.nist.gov/publications/nistpubs/800-38D/SP-800-38D.pdf) 建议同一个 key 配合
+// 随机 96 位 nonce（默认长度）使用不超过 2^32 次，因此采用本实现的转换器必须允许频繁轮换密钥。
+// 后续工作应研究用 AES-GCM-SIV 替代随机 nonce。
+//
+// 因此采用本实现的转换器必须允许频繁轮换密钥。
+// 后续应研究用 AES-GCM-SIV 替代随机 nonce。
 // random nonces.
 //
 // 与计数器版本不同，这里的 nonce 完全随机，因此密钥必须频繁轮换（NIST 建议 ≤2^32 次），
@@ -200,7 +200,7 @@ func newGCM(block cipher.Block) (cipher.AEAD, error) {
 	if err != nil {
 		return nil, err
 	}
-	if nonceSize := aead.NonceSize(); nonceSize != 12 { // all data in etcd will be broken if this ever changes
+	if nonceSize := aead.NonceSize(); nonceSize != 12 { // 若改动此值，etcd 中的所有数据都会失效。
 		return nil, fmt.Errorf("crypto/cipher.NewGCM returned unexpected nonce size: %d", nonceSize)
 	}
 	return aead, nil
@@ -237,14 +237,14 @@ func (t *gcm) TransformToStorage(ctx context.Context, data []byte, dataCtx value
 	return result[:nonceSize+len(cipherText)], nil
 }
 
-// cbc implements encryption at rest of the provided values given a cipher.Block algorithm.
+// cbc 用给定的块密码对存储值做静态加密。
 //
 // 仅用于向后兼容：读取早期版本写入的 CBC 数据。CBC 无认证，故不作为写入格式。
 type cbc struct {
 	block cipher.Block
 }
 
-// NewCBCTransformer takes the given block cipher and performs encryption and decryption on the
+// NewCBCTransformer 用给定的块密码对数据进行加解密。
 // data.
 func NewCBCTransformer(block cipher.Block) value.Transformer {
 	return &cbc{block: block}
@@ -276,7 +276,7 @@ func (t *cbc) TransformFromStorage(ctx context.Context, data []byte, dataCtx val
 	mode := cipher.NewCBCDecrypter(t.block, iv)
 	mode.CryptBlocks(result, result)
 
-	// remove and verify PKCS#7 padding for CBC
+	// 移除并校验 CBC 的 PKCS#7 填充。
 	c := result[len(result)-1]
 	paddingSize := int(c)
 	size := len(result) - paddingSize
@@ -304,7 +304,7 @@ func (t *cbc) TransformToStorage(ctx context.Context, data []byte, dataCtx value
 	}
 	copy(result[blockSize:], data)
 
-	// add PKCS#7 padding for CBC
+	// 为 CBC 添加 PKCS#7 填充。
 	copy(result[blockSize+len(data):], bytes.Repeat([]byte{byte(paddingSize)}, paddingSize))
 
 	mode := cipher.NewCBCEncrypter(t.block, iv)

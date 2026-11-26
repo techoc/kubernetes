@@ -102,12 +102,12 @@ const (
 )
 
 var (
-	// responseBody is the response body which test GOAWAY server sent for each request,
-	// for watch request, test GOAWAY server push 1 byte in every second.
+	// responseBody 是测试 GOAWAY server 对每个请求返回的响应体；
+	// 对 watch 请求，测试 server 每秒推送 1 字节。
 	responseBody = []byte("hello")
 
-	// requestPostBody is the request body which client must send to test GOAWAY server for POST method,
-	// otherwise, test GOAWAY server will respond 400 HTTP status code.
+	// requestPostBody 是客户端以 POST 方法请求测试 GOAWAY server 时必须发送的请求体，
+	// 否则测试 server 会返回 400 HTTP 状态码。
 	requestPostBody = responseBody
 )
 
@@ -179,11 +179,11 @@ func newTestGOAWAYServer() (*httptest.Server, error) {
 	return s, nil
 }
 
-// watchResponse wraps watch response with data which server send and an error may occur.
+// watchResponse 包装 watch 响应，包含服务端发送的数据及可能发生的错误。
 type watchResponse struct {
-	// body is the response data which test GOAWAY server sent to client
+	// body 是测试 GOAWAY server 发送给客户端的响应数据。
 	body []byte
-	// err will be set to be a non-nil value if watch request is not end with EOF nor http2.GoAwayError
+	// 若 watch 请求既未以 EOF 结束，也未产生 http2.GoAwayError，err 会被设为非 nil。
 	err error
 }
 
@@ -218,7 +218,7 @@ func requestGOAWAYServer(client *http.Client, serverBaseURL, url string) (<-chan
 		return nil, fmt.Errorf("expect response status code: %d, but got: %d. response body: %s", http.StatusOK, resp.StatusCode, body)
 	}
 
-	// encounter watch bytes received, does not expect to be broken
+	// 已收到 watch 字节，不应被打断。
 	if url == urlWatch || url == urlWatchWithGoaway {
 		ch := make(chan watchResponse)
 		go func() {
@@ -229,8 +229,8 @@ func requestGOAWAYServer(client *http.Client, serverBaseURL, url string) (<-chan
 			for {
 				n, err := resp.Body.Read(buffer)
 				if err != nil {
-					// urlWatch will receive io.EOF,
-					// urlWatchWithGoaway will receive http2.GoAwayError
+					// urlWatch 会收到 io.EOF；
+					// urlWatchWithGoaway 会收到 http2.GoAwayError。
 					if err == io.EOF {
 						err = nil
 					} else if _, ok := err.(http2.GoAwayError); ok {
@@ -276,7 +276,7 @@ func TestClientReceivedGOAWAY(t *testing.T) {
 	cases := []struct {
 		name string
 		reqs []string
-		// expectConnections always equals to GOAWAY requests(urlGoaway or urlWatchWithGoaway) + 1
+		// expectConnections 恒等于 GOAWAY 请求数（urlGoaway 或 urlWatchWithGoaway）+ 1。
 		expectConnections int
 	}{
 		{
@@ -308,10 +308,10 @@ func TestClientReceivedGOAWAY(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// localAddr indicates how many TCP connection set up
+			// localAddr 表示建立了多少条 TCP 连接。
 			localAddr := make([]string, 0)
 
-			// create the http client
+			// 创建 http client。
 			dialFn := func(network, addr string, cfg *tls.Config) (conn net.Conn, err error) {
 				conn, err = tls.Dial(network, addr, cfg)
 				if err != nil {
@@ -328,8 +328,8 @@ func TestClientReceivedGOAWAY(t *testing.T) {
 			tr := &http.Transport{
 				TLSHandshakeTimeout: 10 * time.Second,
 				TLSClientConfig:     tlsConfig,
-				// Disable connection pooling to avoid additional connections
-				// that cause the test to flake
+				// 禁用连接池，避免额外连接导致测试不稳定。
+				//
 				MaxIdleConnsPerHost: -1,
 				DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 					return dialFn(network, addr, tlsConfig)
@@ -354,12 +354,12 @@ func TestClientReceivedGOAWAY(t *testing.T) {
 				}
 			}
 
-			// check TCP connection count
+			// 检查 TCP 连接数。
 			if tc.expectConnections != len(localAddr) {
 				t.Fatalf("expect TCP connection: %d, actual: %d", tc.expectConnections, len(localAddr))
 			}
 
-			// check if watch request is broken by GOAWAY frame
+			// 检查 watch 请求是否被 GOAWAY 帧打断。
 			watchTimeout := time.NewTimer(time.Second * 10)
 			defer watchTimeout.Stop()
 			for _, watchCh := range watchChs {
@@ -427,7 +427,7 @@ func TestGOAWAYConcurrency(t *testing.T) {
 	s.StartTLS()
 	defer s.Close()
 
-	// create the http client
+	// 创建 http client。
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{http2.NextProtoTLS},
@@ -497,7 +497,7 @@ func TestGOAWAYConcurrency(t *testing.T) {
 
 	wg.Wait()
 
-	// check if watch request is broken by GOAWAY frame
+	// 检查 watch 请求是否被 GOAWAY 帧打断。
 	watchTimeout := time.NewTimer(time.Second * 10)
 	defer watchTimeout.Stop()
 	for i := 0; i < expectWatchers; i++ {

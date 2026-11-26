@@ -119,72 +119,72 @@ type PodCondition struct {
 // PodSpec 是对 Pod 的描述。部分字段关闭了 conversion-gen，说明它们在内部版本中
 // 不存在，转换时会丢失——测试正是用来确认这种有意的信息损失被正确处理。
 type PodSpec struct {
-	// Restart policy for all containers within the pod.
-	// One of Always, OnFailure, Never.
-	// Default to Always.
-	// More info: http://kubernetes.io/docs/user-guide/pod-states#restartpolicy
+	// 容器内所有 Pod 的重启策略。
+	// 取值：Always、OnFailure、Never。
+	// 默认Always。
+	// 更多信息：http://kubernetes.io/docs/user-guide/pod-states#restartpolicy
 	// +optional
 	RestartPolicy RestartPolicy `json:"restartPolicy,omitempty" protobuf:"bytes,3,opt,name=restartPolicy,casttype=RestartPolicy"`
-	// Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request.
-	// Value must be non-negative integer. The value zero indicates delete immediately.
-	// If this value is nil, the default grace period will be used instead.
-	// The grace period is the duration in seconds after the processes running in the pod are sent
-	// a termination signal and the time when the processes are forcibly halted with a kill signal.
-	// Set this value longer than the expected cleanup time for your process.
-	// Defaults to 30 seconds.
+	// 优雅终止 Pod 的可选秒数；删除请求可将其调小。
+	// 必须是非负整数；0 表示立即删除。
+	// 若为 nil，则使用默认宽限期。
+	// 宽限期是从向 Pod 内进程发送终止信号，到强制杀死进程之间的秒数。
+	// 发送终止信号到进程被强制杀死之间的秒数。
+	// 该值应大于进程的预期清理时间。
+	// 默认为 30 秒。
 	// +optional
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty" protobuf:"varint,4,opt,name=terminationGracePeriodSeconds"`
-	// Optional duration in seconds the pod may be active on the node relative to
-	// StartTime before the system will actively try to mark it failed and kill associated containers.
-	// Value must be a positive integer.
+	// Pod 在节点上可保持活动的可选秒数，从 StartTime 起算；超过后系统会将其标记为失败并杀死相关容器。
+	// 超过 StartTime 后系统会主动将其标记为失败并杀死相关容器。
+	// 必须是正整数。
 	// +optional
 	ActiveDeadlineSeconds *int64 `json:"activeDeadlineSeconds,omitempty" protobuf:"varint,5,opt,name=activeDeadlineSeconds"`
-	// NodeSelector is a selector which must be true for the pod to fit on a node.
-	// Selector which must match a node's labels for the pod to be scheduled on that node.
-	// More info: http://kubernetes.io/docs/user-guide/node-selection/README
+	// NodeSelector 是 Pod 调度到节点时必须满足的选择器。
+	// 选择器必须匹配目标节点的标签。
+	// 更多信息：http://kubernetes.io/docs/user-guide/node-selection/README
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty" protobuf:"bytes,7,rep,name=nodeSelector"`
 
-	// ServiceAccountName is the name of the ServiceAccount to use to run this pod.
-	// More info: https://kubernetes.io/docs/concepts/security/service-accounts/
+	// ServiceAccountName 是运行此 Pod 所使用的 ServiceAccount 的名称。
+	// 更多信息：https://kubernetes.io/docs/concepts/security/service-accounts/
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty" protobuf:"bytes,8,opt,name=serviceAccountName"`
-	// DeprecatedServiceAccount is a deprecated alias for ServiceAccountName.
+	// DeprecatedServiceAccount 是 ServiceAccountName 已弃用的别名。
 	// Deprecated: Use serviceAccountName instead.
 	// +k8s:conversion-gen=false
 	// +optional
 	DeprecatedServiceAccount string `json:"serviceAccount,omitempty" protobuf:"bytes,9,opt,name=serviceAccount"`
 
-	// NodeName is a request to schedule this pod onto a specific node. If it is non-empty,
-	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
+	// NodeName 是请求将 Pod 调度到指定节点。若非空，调度器会直接将其调度到该节点（前提是资源满足）。
+	// 调度器会直接把 Pod 调度到该节点（前提是资源满足）。
 	// requirements.
 	// +optional
 	NodeName string `json:"nodeName,omitempty" protobuf:"bytes,10,opt,name=nodeName"`
-	// Host networking requested for this pod. Use the host's network namespace.
-	// Default to false.
+	// 请求此 Pod 使用主机网络命名空间。
+	// 默认为 false。
 	// +k8s:conversion-gen=false
 	// +optional
 	HostNetwork bool `json:"hostNetwork,omitempty" protobuf:"varint,11,opt,name=hostNetwork"`
-	// Use the host's pid namespace.
-	// Optional: Default to false.
+	// 使用宿主机的 pid 命名空间。
+	// 可选：默认为 false。
 	// +k8s:conversion-gen=false
 	// +optional
 	HostPID bool `json:"hostPID,omitempty" protobuf:"varint,12,opt,name=hostPID"`
-	// Use the host's ipc namespace.
-	// Optional: Default to false.
+	// 使用宿主机的 ipc 命名空间。
+	// 可选：默认为 false。
 	// +k8s:conversion-gen=false
 	// +optional
 	HostIPC bool `json:"hostIPC,omitempty" protobuf:"varint,13,opt,name=hostIPC"`
-	// Specifies the hostname of the Pod
-	// If not specified, the pod's hostname will be set to a system-defined value.
+	// 指定 Pod 的 hostname。
+	// 未指定时，Pod 的 hostname 由系统设定。
 	// +optional
 	Hostname string `json:"hostname,omitempty" protobuf:"bytes,16,opt,name=hostname"`
-	// If specified, the fully qualified Pod hostname will be "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>".
-	// If not specified, the pod will not have a domainname at all.
+	// 若指定，则 Pod 的完整主机名格式为 "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>"。
+	// 未指定时，Pod 完全没有域名。
 	// +optional
 	Subdomain string `json:"subdomain,omitempty" protobuf:"bytes,17,opt,name=subdomain"`
-	// If specified, the pod will be dispatched by specified scheduler.
-	// If not specified, the pod will be dispatched by default scheduler.
+	// 若指定，则由指定调度器分发该 Pod。
+	// 未指定时，由默认调度器分发。
 	// +optional
 	SchedulerName string `json:"schedulername,omitempty" protobuf:"bytes,19,opt,name=schedulername"`
 }
@@ -195,12 +195,12 @@ type PodSpec struct {
 // 携带 resourceVersion；Items 不加 omitempty 以区分空列表与缺省字段。
 type PodList struct {
 	metav1.TypeMeta `json:""`
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// List of pods.
-	// More info: http://kubernetes.io/docs/user-guide/pods
+	// Pod 列表。
+	// 更多信息：http://kubernetes.io/docs/user-guide/pods
 	Items []Pod `json:"items" protobuf:"bytes,2,rep,name=items"`
 }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package webhook implements the audit.Backend interface using HTTP webhooks.
+// Package webhook 用 HTTP webhook 实现 audit.Backend 接口。
 package webhook
 
 import (
@@ -36,11 +36,11 @@ import (
 )
 
 const (
-	// PluginName is the name of this plugin, to be used in help and logs.
+	// PluginName 是本插件名称，用于帮助文本与日志。
 	PluginName = "webhook"
 
-	// DefaultInitialBackoffDelay is the default amount of time to wait before
-	// retrying sending audit events through a webhook.
+	// DefaultInitialBackoffDelay 是通过 webhook 重试发送审计事件前的默认等待时长。
+	//
 	DefaultInitialBackoffDelay = 10 * time.Second
 )
 
@@ -99,7 +99,7 @@ func NewDynamicBackend(rc *rest.RESTClient, retryBackoff wait.Backoff) audit.Bac
 	}
 }
 
-// NewBackend returns an audit backend that sends events over HTTP to an external service.
+// NewBackend 返回一个通过 HTTP 把事件发送到外部服务的审计后端。
 func NewBackend(kubeConfigFile string, groupVersion schema.GroupVersion, retryBackoff wait.Backoff, customDial utilnet.DialFunc) (audit.Backend, error) {
 	w, err := loadWebhook(kubeConfigFile, groupVersion, retryBackoff, customDial)
 	if err != nil {
@@ -108,14 +108,14 @@ func NewBackend(kubeConfigFile string, groupVersion schema.GroupVersion, retryBa
 	return &backend{w: w, name: PluginName}, nil
 }
 
-// Run 无需后台协程：事件在 ProcessEvents 中同步发送，故立即返回 nil。
+// Run 无需后台协程：事件在 ProcessEvents 中同步发送，因此立即返回 nil。
 func (b *backend) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-// Shutdown 无事可做：没有需要关闭的本地资源，连接由 REST client 自行管理。
+// Shutdown 无事可做：没有需要关闭的本地资源，连接由 REST client 管理。
 func (b *backend) Shutdown() {
-	// nothing to do here
+	//
 }
 
 // ProcessEvents 批量发送事件；失败时通过 audit.HandlePluginError 记录并返回 false，
@@ -142,10 +142,10 @@ func (b *backend) processEvents(ev ...*auditinternal.Event) error {
 			attribute.String("name", b.name),
 			attribute.Int("event-count", len(list.Items)),
 		)
-		// Only log audit webhook traces that exceed a 25ms per object limit plus a 50ms
-		// request overhead allowance. The high per object limit used here is primarily to
-		// allow enough time for the serialization/deserialization of audit events, which
-		// contain nested request and response objects plus additional event fields.
+		// 只为超过 25ms/对象限制加 50ms 请求开销余量的审计 webhook trace 记录日志。
+		// 这里单对象上限较高，主要是为了给审计事件的序列化/反序列化留出足够时间，
+		// 因为审计事件包含嵌套的请求/响应对象及额外的事件字段。
+		//
 		defer span.End(time.Duration(50+25*len(list.Items)) * time.Millisecond)
 		return b.w.RestClient.Post().Body(&list).Do(ctx)
 	}).Error()

@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-// split cache lookups across N striped caches
+// 把缓存查找分散到 N 个分片缓存。
 // 分片降低单把锁的争用；每个分片内部各自加锁，互不影响。
 type stripedCache struct {
 	stripeCount uint32

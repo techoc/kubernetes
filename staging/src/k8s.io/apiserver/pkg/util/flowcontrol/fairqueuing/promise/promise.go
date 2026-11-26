@@ -21,7 +21,7 @@ import (
 	"sync"
 )
 
-// promise implements the WriteOnce interface.
+// promise 实现 WriteOnce 接口。
 // 并发语义：Set 只生效一次；Get 在未设置前阻塞，直到被 Set 或 doneCtx 结束。
 type promise struct {
 	doneCtx context.Context
@@ -33,13 +33,12 @@ type promise struct {
 
 var _ WriteOnce = &promise{}
 
-// NewWriteOnce makes a new thread-safe WriteOnce.
+// NewWriteOnce 创建一个新的线程安全 WriteOnce。
 //
-// If `initial` is non-nil then that value is Set at creation time.
+// 若 `initial` 非 nil，则在创建时即 Set 该值。
 //
-// If a `Get` is waiting soon after the channel associated with the
-// `doneCtx` becomes selectable (which never happens for the nil
-// channel) then `Set(doneVal)` effectively happens at that time.
+// 若 `doneCtx` 对应的 channel 变为可选（nil channel 永不发生）后，
+// 立即有 `Get` 开始等待，则相当于在该时刻执行了 `Set(doneVal)`。
 //
 // doneCtx 用于给等待设一个上界：超时后以 doneVal 作为结果，避免 Get 永久阻塞。
 func NewWriteOnce(initial interface{}, doneCtx context.Context, doneVal interface{}) WriteOnce {

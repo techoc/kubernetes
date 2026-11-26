@@ -30,7 +30,7 @@ import (
 // 所有通过认证的非匿名用户都应属于 system:authenticated，但认证器本身
 // 不保证这一点；该包装器补上该组，使 RBAC 的 group 绑定对任意认证方式一致生效。
 type AuthenticatedGroupAdder struct {
-	// Authenticator is delegated to make the authentication decision
+	// 认证决策委托给底层认证器。
 	Authenticator authenticator.Request
 }
 

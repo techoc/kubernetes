@@ -288,7 +288,7 @@ func TestGetInterestedWatchCountWithIndex(t *testing.T) {
 		httpRequest("GET", "api/v1/namespaces/foo/pods", "watch=true"),
 		httpRequest("GET", "api/v1/namespaces/foo/pods", "watch=true&fieldSelector=metadata.name=mypod"),
 		httpRequest("GET", "api/v1/namespaces/foo/pods", "watch=true&fieldSelector=spec.nodeName="),
-		// The watches below will be ignored due to index.
+		// 以下 watch 因索引原因会被忽略。
 		httpRequest("GET", "api/v1/namespaces/foo/pods", "watch=true&fieldSelector=spec.nodeName=node1"),
 		httpRequest("GET", "api/v1/namespaces/foo/pods", "watch=true&fieldSelector=spec.nodeName=node2"),
 	}

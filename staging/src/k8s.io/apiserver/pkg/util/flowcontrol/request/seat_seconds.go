@@ -22,45 +22,45 @@ import (
 	"time"
 )
 
-// SeatSeconds is a measure of work, in units of seat-seconds, using a fixed-point representation.
-// `SeatSeconds(n)` represents `n/ssScale` seat-seconds.
-// The `ssScale` constant is private to the implementation here,
-// no other code should use it.
+// SeatSeconds 是以 seat-second 为单位的工作量度量，采用定点数表示。
+// `SeatSeconds(n)` 表示 `n/ssScale` 个 seat-second。
+// `ssScale` 常量是本实现私有的，
+// 其它代码不应使用它。
 //
 // 使用无符号定点数而非浮点，是为了让 APF 的账务累加在长时间运行后仍然精确、可比较。
 type SeatSeconds uint64
 
-// MaxSeatsSeconds is the maximum representable value of SeatSeconds
+// MaxSeatsSeconds 是 SeatSeconds 可表示的最大值。
 const MaxSeatSeconds = SeatSeconds(math.MaxUint64)
 
-// MinSeatSeconds is the lowest representable value of SeatSeconds
+// MinSeatSeconds 是 SeatSeconds 可表示的最小值。
 const MinSeatSeconds = SeatSeconds(0)
 
-// SeatsTimeDuration produces the SeatSeconds value for the given factors.
-// This is intended only to produce small values, increments in work
-// rather than amount of work done since process start.
+// SeatsTimeDuration 根据给定因子产生 SeatSeconds 值。
+// 仅用于产生较小的值，即工作量的增量，
+// 而非自进程启动以来完成的工作量。
 //
 // 参数是"并发份额 × 持续时间"：先换算成纳秒再按 ssScale 放大，四舍五入避免长期偏差。
 func SeatsTimesDuration(seats float64, duration time.Duration) SeatSeconds {
 	return SeatSeconds(int64(math.Round(seats * float64(duration/time.Nanosecond) / (1e9 / ssScale))))
 }
 
-// ToFloat converts to a floating-point representation.
-// This conversion may lose precision.
+// ToFloat 转换为浮点表示。
+// 该转换可能损失精度。
 func (ss SeatSeconds) ToFloat() float64 {
 	return float64(ss) / ssScale
 }
 
-// DurationPerSeat returns duration per seat.
-// This division may lose precision.
+// DurationPerSeat 返回每个 seat 对应的时长。
+// 该除法可能损失精度。
 //
 // 用于把累计工作量换算成"每份额可用的时长"，供公平性算法比较。
 func (ss SeatSeconds) DurationPerSeat(seats float64) time.Duration {
 	return time.Duration(float64(ss) / seats * (float64(time.Second) / ssScale))
 }
 
-// String converts to a string.
-// This is suitable for large as well as small values.
+// String 转换为字符串。
+// 对大值和小值都适用。
 //
 // 手工拆分整数/小数部分，避免浮点格式化在大数值下丢失精度。
 func (ss SeatSeconds) String() string {

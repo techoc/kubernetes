@@ -20,10 +20,10 @@ import (
 	"strings"
 )
 
-// HasPathPrefix returns true if the string s matches pathPrefix exactly, or if s is prefixed with pathPrefix at a path segment boundary.
+// HasPathPrefix 判断字符串 s 是否与 pathPrefix 完全相等，或是否在路径分段边界处以 pathPrefix 开头。
 // 必须以路径分隔符为边界，避免 "ns" 误匹配 "ns2"；整个函数不分配内存，供缓存热路径调用。
 func HasPathPrefix(s, pathPrefix string) bool {
-	// Short circuit if s doesn't contain the prefix at all
+	// 若 s 根本不包含该前缀，直接短路返回。
 	if !strings.HasPrefix(s, pathPrefix) {
 		return false
 	}
@@ -31,16 +31,16 @@ func HasPathPrefix(s, pathPrefix string) bool {
 	pathPrefixLength := len(pathPrefix)
 
 	if len(s) == pathPrefixLength {
-		// Exact match
+		// 完全相等
 		return true
 	}
 	if strings.HasSuffix(pathPrefix, "/") {
-		// pathPrefix already ensured a path segment boundary
+		// pathPrefix 已确保位于路径分段边界。
 		return true
 	}
 	if s[pathPrefixLength:pathPrefixLength+1] == "/" {
-		// The next character in s is a path segment boundary
-		// Check this instead of normalizing pathPrefix to avoid allocating on every call
+		// s 的下一个字符是路径分段边界。
+		// 检查这个条件而不是规范化 pathPrefix，避免每次调用都分配内存。
 		return true
 	}
 	return false

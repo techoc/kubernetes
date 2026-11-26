@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package audit contains implementations for pkg/audit/AuditBackend interface
+// Package audit 包含 pkg/audit/AuditBackend 接口的实现。
 //
 // Package audit 提供 pkg/audit 中 AuditBackend 接口的各种后端实现
 // （如日志文件、webhook）。拆分到 plugin 目录是为了让 apiserver 核心

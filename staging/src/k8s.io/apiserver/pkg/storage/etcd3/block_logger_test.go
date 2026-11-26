@@ -54,7 +54,7 @@ func TestBlockLogger(t *testing.T) {
 			waits:         []time.Duration{200 * time.Millisecond},
 			timePassed:    2 * time.Second,
 			expectLog:     true,
-			expectedCount: 2, // 1 from waits + 1 from the triggering recordWait
+			expectedCount: 2, // 1 来自 waits + 1 来自触发的 recordWait
 			expectedWait:  200 * time.Millisecond,
 		},
 		{
@@ -83,7 +83,7 @@ func TestBlockLogger(t *testing.T) {
 			waits:         []time.Duration{100 * time.Millisecond, 200 * time.Millisecond},
 			timePassed:    2 * time.Second,
 			expectLog:     true,
-			expectedCount: 3, // 2 from waits + 1 from the triggering recordWait
+			expectedCount: 3, // 2 来自 waits + 1 来自触发的 recordWait
 			expectedWait:  300 * time.Millisecond,
 		},
 	}
@@ -105,15 +105,15 @@ func TestBlockLogger(t *testing.T) {
 			fakeClock := testingclock.NewFakeClock(currentTime)
 			logger := newBlockLogger(tc.interval, tc.threshold, msg, "Pod", groupResource, fakeClock)
 
-			// Record waits
+			// 记录等待次数
 			for _, w := range tc.waits {
 				logger.recordWait(w)
 			}
 
-			// Simulate time passing
+			// 模拟时间流逝
 			fakeClock.Step(tc.timePassed)
 
-			// Trigger another recordWait to check if it logs
+			// 再次触发 recordWait，检查是否会记录日志
 			logger.recordWait(0)
 
 			klog.Flush()
@@ -129,7 +129,7 @@ func TestBlockLogger(t *testing.T) {
 					t.Errorf("expected log to contain message %q, got %q", msg, logOutput)
 				}
 
-				// Check for count and wait duration in the log output.
+				// 检查日志输出中的计数与等待时长。
 				countStr := fmt.Sprintf("eventCount=%d", tc.expectedCount)
 				if !strings.Contains(logOutput, countStr) {
 					t.Errorf("expected log to contain %q, got %q", countStr, logOutput)

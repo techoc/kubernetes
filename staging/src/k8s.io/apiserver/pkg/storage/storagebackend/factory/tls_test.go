@@ -57,7 +57,7 @@ func TestTLSConnection(t *testing.T) {
 	certFile, keyFile, caFile := configureTLSCerts(t)
 	defer os.RemoveAll(filepath.Dir(certFile))
 
-	// override server config to be TLS-enabled
+	// 覆盖服务端配置以启用 TLS。
 	etcdConfig := testserver.NewTestConfig(t)
 	etcdConfig.ClientTLSInfo = transport.TLSInfo{
 		CertFile:      certFile,

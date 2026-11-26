@@ -28,7 +28,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
-// SetFlowSchemaCondition sets conditions.
+// SetFlowSchemaCondition 设置条件。
 // 相同 Type 的条件已存在时原地更新；仅当 Status 变化才推进 LastTransitionTime，
 // 避免每次调谐都刷新时间戳导致外部观察者误判状态抖动。
 func SetFlowSchemaCondition(flowSchema *flowcontrol.FlowSchema, newCondition flowcontrol.FlowSchemaCondition) {
@@ -58,7 +58,7 @@ func GetFlowSchemaConditionByType(flowSchema *flowcontrol.FlowSchema, conditionT
 	return nil
 }
 
-// SetPriorityLevelConfigurationCondition sets conditions.
+// SetPriorityLevelConfigurationCondition 设置条件。
 // 语义与 SetFlowSchemaCondition 相同，同样只在 Status 变化时更新时间戳。
 func SetPriorityLevelConfigurationCondition(priorityLevel *flowcontrol.PriorityLevelConfiguration, newCondition flowcontrol.PriorityLevelConfigurationCondition) {
 	existingCondition := GetPriorityLevelConfigurationConditionByType(priorityLevel, newCondition.Type)
@@ -88,7 +88,7 @@ func GetPriorityLevelConfigurationConditionByType(priorityLevel *flowcontrol.Pri
 
 var _ sort.Interface = FlowSchemaSequence{}
 
-// FlowSchemaSequence holds sorted set of pointers to FlowSchema objects.
+// FlowSchemaSequence 保存指向 FlowSchema 对象的已排序指针集合。
 // FlowSchemaSequence implements `sort.Interface`
 //
 // 排序规则与流控匹配顺序一致：matchingPrecedence 小的在前，相同时按名称升序，
@@ -102,7 +102,7 @@ func (s FlowSchemaSequence) Len() int {
 
 // Less 先比较 matchingPrecedence，再以名称打破平局。
 func (s FlowSchemaSequence) Less(i, j int) bool {
-	// the flow-schema w/ lower matching-precedence is prior
+	// matching-precedence 较小的 flow-schema 优先。
 	if ip, jp := s[i].Spec.MatchingPrecedence, s[j].Spec.MatchingPrecedence; ip != jp {
 		return ip < jp
 	}
@@ -119,9 +119,9 @@ func (s FlowSchemaSequence) Swap(i, j int) {
 // 预先构造以避免每次请求都新建 codec factory。
 var metaInternalVersionCodecsWithCBOR = serializer.NewCodecFactory(metainternalversionscheme.Scheme, serializer.WithSerializer(cbor.NewSerializerInfo))
 
-// GetMetaInternalVersionCodecs returns a negotiated serializer that recognizes the types from
-// k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme.Scheme. It will or will include a CBOR
-// serializer if CBOR is enabled.
+// GetMetaInternalVersionCodecs 返回一个协商后的序列化器，能识别
+// k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme.Scheme 中的类型；若启用 CBOR，
+// 则会（或不会）包含 CBOR 序列化器。
 func GetMetaInternalVersionCodecs() runtime.NegotiatedSerializer {
 	if utilfeature.DefaultFeatureGate.Enabled(features.CBORServingAndStorage) {
 		return metaInternalVersionCodecsWithCBOR

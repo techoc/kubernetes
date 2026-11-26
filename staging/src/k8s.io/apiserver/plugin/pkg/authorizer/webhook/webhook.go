@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package webhook implements the authorizer.Authorizer interface using HTTP webhooks.
+// Package webhook 用 HTTP webhook 实现 authorizer.Authorizer 接口。
 //
 // 该包把授权请求编码为 SubjectAccessReview 发给远程服务，并对结果做
 // 带 TTL 的本地缓存。缓存键只包含请求方可控、且不影响鉴权语义的字段；
@@ -60,13 +60,13 @@ const (
 	maxControlledAttrCacheSize = 10000
 )
 
-// DefaultRetryBackoff returns the default backoff parameters for webhook retry.
+// DefaultRetryBackoff 返回 webhook 重试的默认退避参数。
 func DefaultRetryBackoff() *wait.Backoff {
 	backoff := webhook.DefaultRetryBackoffWithInitialDelay(500 * time.Millisecond)
 	return &backoff
 }
 
-// Ensure Webhook implements the authorizer.Authorizer interface.
+// 确保 Webhook 实现了 authorizer.Authorizer 接口。
 var _ authorizer.Authorizer = (*WebhookAuthorizer)(nil)
 
 // subjectAccessReviewer 抽象 SAR 客户端，便于测试与不同版本的实现互换。
@@ -89,30 +89,30 @@ type WebhookAuthorizer struct {
 	name                string
 }
 
-// NewFromInterface creates a WebhookAuthorizer using the given subjectAccessReview client
+// NewFromInterface 用给定的 subjectAccessReview 客户端创建一个 WebhookAuthorizer。
 func NewFromInterface(subjectAccessReview authorizationv1client.AuthorizationV1Interface, authorizedTTL, unauthorizedTTL time.Duration, retryBackoff wait.Backoff, decisionOnError authorizer.Decision, metrics metrics.AuthorizerMetrics, compiler authorizationcel.Compiler) (*WebhookAuthorizer, error) {
 	return newWithBackoff(&subjectAccessReviewV1Client{subjectAccessReview.RESTClient()}, authorizedTTL, unauthorizedTTL, retryBackoff, decisionOnError, nil, metrics, compiler, "")
 }
 
-// New creates a new WebhookAuthorizer from the provided kubeconfig file.
-// The config's cluster field is used to refer to the remote service, user refers to the returned authorizer.
+// New 根据给定的 kubeconfig 文件创建一个新的 WebhookAuthorizer。
+// 配置的 cluster 字段用于指向远程服务，user 字段指向返回的授权器。
 //
-//	# clusters refers to the remote service.
+//	# clusters 指向远程服务。
 //	clusters:
 //	- name: name-of-remote-authz-service
 //	  cluster:
-//	    certificate-authority: /path/to/ca.pem      # CA for verifying the remote service.
-//	    server: https://authz.example.com/authorize # URL of remote service to query. Must use 'https'.
+//	    certificate-authority: /path/to/ca.pem      # 用于校验远程服务的 CA。
+//	    server: https://authz.example.com/authorize # 要查询的远程服务 URL，必须使用 'https'。
 //
-//	# users refers to the API server's webhook configuration.
+//	# users 指向 API server 的 webhook 配置。
 //	users:
 //	- name: name-of-api-server
 //	  user:
-//	    client-certificate: /path/to/cert.pem # cert for the webhook plugin to use
-//	    client-key: /path/to/key.pem          # key matching the cert
+//	    client-certificate: /path/to/cert.pem # webhook 插件使用的证书
+//	    client-key: /path/to/key.pem          # 与证书匹配的私钥
 //
-// For additional HTTP configuration, refer to the kubeconfig documentation
-// https://kubernetes.io/docs/user-guide/kubeconfig-file/.
+// 更多 HTTP 配置参见 kubeconfig 文档：
+// https://kubernetes.io/docs/user-guide/kubeconfig-file/。
 func New(config *rest.Config, version string, authorizedTTL, unauthorizedTTL time.Duration, retryBackoff wait.Backoff, decisionOnError authorizer.Decision, matchConditions []apiserver.WebhookMatchCondition, name string, metrics metrics.AuthorizerMetrics, compiler authorizationcel.Compiler) (*WebhookAuthorizer, error) {
 	subjectAccessReview, err := subjectAccessReviewInterfaceFromConfig(config, version, retryBackoff)
 	if err != nil {
@@ -121,7 +121,7 @@ func New(config *rest.Config, version string, authorizedTTL, unauthorizedTTL tim
 	return newWithBackoff(subjectAccessReview, authorizedTTL, unauthorizedTTL, retryBackoff, decisionOnError, matchConditions, metrics, compiler, name)
 }
 
-// newWithBackoff allows tests to skip the sleep.
+// newWithBackoff 让测试跳过等待。
 func newWithBackoff(subjectAccessReview subjectAccessReviewer, authorizedTTL, unauthorizedTTL time.Duration, retryBackoff wait.Backoff, decisionOnError authorizer.Decision, matchConditions []apiserver.WebhookMatchCondition, am metrics.AuthorizerMetrics, compiler authorizationcel.Compiler, name string) (*WebhookAuthorizer, error) {
 	// 构造期编译一次，运行期只做求值；编译失败直接让 authorizer 初始化失败。
 	cm, fieldErr := apiservervalidation.ValidateAndCompileMatchConditions(compiler, matchConditions)
@@ -147,9 +147,9 @@ func newWithBackoff(subjectAccessReview subjectAccessReviewer, authorizedTTL, un
 	}, nil
 }
 
-// Authorize makes a REST request to the remote service describing the attempted action as a JSON
-// serialized api.authorization.v1beta1.SubjectAccessReview object. An example request body is
-// provided below.
+// Authorize 向远程服务发起 REST 请求，把待执行的动作描述为 JSON 序列化的
+// api.authorization.v1beta1.SubjectAccessReview 对象。下面给出一个请求体示例。
+// 下面给出一个请求体示例。
 //
 //	{
 //	  "apiVersion": "authorization.k8s.io/v1beta1",
@@ -169,8 +169,8 @@ func newWithBackoff(subjectAccessReview subjectAccessReviewer, authorizedTTL, un
 //	  }
 //	}
 //
-// The remote service is expected to fill the SubjectAccessReviewStatus field to either allow or
-// disallow access. A permissive response would return:
+// 远程服务应填写 SubjectAccessReviewStatus 字段以允许或拒绝访问。
+// 允许访问的响应示例：
 //
 //	{
 //	  "apiVersion": "authorization.k8s.io/v1beta1",
@@ -180,7 +180,7 @@ func newWithBackoff(subjectAccessReview subjectAccessReviewer, authorizedTTL, un
 //	  }
 //	}
 //
-// To disallow access, the remote service would return:
+// 拒绝访问的响应示例：
 //
 //	{
 //	  "apiVersion": "authorization.k8s.io/v1beta1",
@@ -191,8 +191,8 @@ func newWithBackoff(subjectAccessReview subjectAccessReviewer, authorizedTTL, un
 //	  }
 //	}
 //
-// TODO(mikedanese): We should eventually support failing closed when we
-// encounter an error. We are failing open now to preserve backwards compatible
+// TODO(mikedanese): 遇到错误时最终应支持 fail closed。
+// 目前为保持向后兼容，采用的是 fail open。
 // behavior.
 func (w *WebhookAuthorizer) Authorize(ctx context.Context, attr authorizer.Attributes) (decision authorizer.Decision, reason string, err error) {
 	// 构造 SubjectAccessReview：用户信息 + 资源/非资源属性。
@@ -214,21 +214,21 @@ func (w *WebhookAuthorizer) Authorize(ctx context.Context, attr authorizer.Attri
 			Verb: attr.GetVerb(),
 		}
 	}
-	// Process Match Conditions before calling the webhook
+	// 调用 webhook 之前先处理 matchConditions。
 	matches, err := w.match(ctx, r)
-	// If at least one matchCondition evaluates to an error (but none are FALSE):
-	// If failurePolicy=Deny, then the webhook rejects the request
-	// If failurePolicy=NoOpinion, then the error is ignored and the webhook is skipped
+	// 若至少一个 matchCondition 求值出错（但没有一个为 FALSE）：
+	// 若 failurePolicy=Deny，webhook 拒绝该请求。
+	// 若 failurePolicy=NoOpinion，忽略错误并跳过该 webhook。
 	if err != nil {
 		return w.decisionOnError, "", err
 	}
-	// If at least one matchCondition successfully evaluates to FALSE,
-	// then the webhook is skipped.
+	// 若至少一个 matchCondition 成功求值为 FALSE，
+	// 则跳过该 webhook。
 	if !matches {
 		return authorizer.DecisionNoOpinion, "", nil
 	}
-	// If all evaluated successfully and ALL matchConditions evaluate to TRUE,
-	// then the webhook is called.
+	// 若全部求值成功且所有 matchConditions 均为 TRUE，
+	// 则调用该 webhook。
 	//
 	// 缓存键是 Spec 的 JSON：Spec 同时编码了用户与属性，因此不同主体不会
 	// 误命中；但它不包含 status，缓存的是远程判定结果。
@@ -241,7 +241,7 @@ func (w *WebhookAuthorizer) Authorize(ctx context.Context, attr authorizer.Attri
 	} else {
 		var result *authorizationv1.SubjectAccessReview
 		var metricsResult string
-		// WithExponentialBackoff will return SAR create error (sarErr) if any.
+		// WithExponentialBackoff 在出现错误时返回 SAR 创建错误（sarErr）。
 		if err := webhook.WithExponentialBackoff(ctx, w.retryBackoff, func() error {
 			var sarErr error
 			var statusCode int
@@ -320,7 +320,7 @@ func (w *WebhookAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a auth
 	return authorizer.ConditionsAwareDecisionFromParts(w.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// 该授权器不支持 EvaluateConditions。
 func (*WebhookAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -378,16 +378,16 @@ func fieldSelectorToAuthorizationAPI(attr authorizer.Attributes) ([]metav1.Field
 			retRequirement.Key = requirement.Field
 			retRequirement.Values = []string{requirement.Value}
 		default:
-			// ignore this particular requirement. since requirements are AND'd, it is safe to ignore unknown requirements
-			// for authorization since the resulting check will only be as broad or broader than the intended.
+			// 忽略该条要求。由于 requirements 之间是 AND 关系，忽略未知要求对本场景是安全的：
+			// 最终检查只会与预期一样宽或更宽。
 			continue
 		}
 		retRequirements = append(retRequirements, retRequirement)
 	}
 
 	if len(retRequirements) == 0 {
-		// this means that all requirements were dropped (likely due to unknown operators), so we are checking the broader
-		// unrestricted action.
+		// 表示所有要求都被丢弃（很可能是未知操作符），因此当前检查的是范围更大的
+		// 无约束动作。
 		return nil, getFieldSelectorErr
 	}
 	return retRequirements, getFieldSelectorErr
@@ -419,22 +419,22 @@ func labelSelectorToAuthorizationAPI(attr authorizer.Attributes) ([]metav1.Label
 		case selection.DoesNotExist:
 			retRequirement.Operator = metav1.LabelSelectorOpDoesNotExist
 		default:
-			// ignore this particular requirement. since requirements are AND'd, it is safe to ignore unknown requirements
-			// for authorization since the resulting check will only be as broad or broader than the intended.
+			// 忽略该条要求。由于 requirements 之间是 AND 关系，忽略未知要求对本场景是安全的：
+			// 最终检查只会与预期一样宽或更宽。
 			continue
 		}
 		retRequirements = append(retRequirements, retRequirement)
 	}
 
 	if len(retRequirements) == 0 {
-		// this means that all requirements were dropped (likely due to unknown operators), so we are checking the broader
-		// unrestricted action.
+		// 表示所有要求都被丢弃（很可能是未知操作符），因此当前检查的是范围更大的
+		// 无约束动作。
 		return nil, getLabelSelectorErr
 	}
 	return retRequirements, getLabelSelectorErr
 }
 
-// TODO: need to finish the method to get the rules when using webhook mode
+// TODO: 需要补全该方法，以便 webhook 模式下获取规则。
 // RulesFor 未实现：webhook 授权器没有可枚举的规则集，因此总是返回
 // incomplete=true 与错误。
 func (w *WebhookAuthorizer) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
@@ -446,12 +446,12 @@ func (w *WebhookAuthorizer) RulesFor(ctx context.Context, user user.Info, namesp
 	return resourceRules, nonResourceRules, incomplete, fmt.Errorf("webhook authorizer does not support user rule resolution")
 }
 
-// Match is used to evaluate the SubjectAccessReviewSpec against
-// the authorizer's matchConditions in the form of cel expressions
-// to return match or no match found, which then is used to
-// determine if the webhook should be skipped.
+// Match 用 CEL 表达式形式的 authorizer matchConditions 评估
+// SubjectAccessReviewSpec，返回是否匹配；结果用于决定是否跳过 webhook。
+// 返回是否匹配，用于决定
+// 是否跳过该 webhook。
 func (w *WebhookAuthorizer) match(ctx context.Context, r *authorizationv1.SubjectAccessReview) (bool, error) {
-	// celMatcher 为 nil 或 CompilationResults 为空时匹配全部请求，
+	//
 	// 即未配置 matchConditions 时视为匹配全部，保持原有行为。
 	if w.celMatcher == nil || w.celMatcher.CompilationResults == nil {
 		return true, nil
@@ -581,8 +581,8 @@ func (t *subjectAccessReviewV1beta1ClientGW) Create(ctx context.Context, subject
 	return subjectAccessReview, statusCode, err
 }
 
-// shouldCache determines whether it is safe to cache the given request attributes. If the
-// requester-controlled attributes are too large, this may be a DoS attempt, so we skip the cache.
+// shouldCache 判断缓存给定请求属性是否安全。
+// 若请求方可控属性过大，可能是 DoS 尝试，因此跳过缓存。
 func shouldCache(attr authorizer.Attributes) bool {
 	controlledAttrSize := int64(len(attr.GetNamespace())) +
 		int64(len(attr.GetVerb())) +

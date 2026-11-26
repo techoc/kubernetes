@@ -62,14 +62,14 @@ func init() {
 	install.Install(cfgScheme)
 }
 
-// TracingOptions contain configuration options for tracing
-// exporters
+// TracingOptions 包含 tracing 的配置选项
+// exporter。
 type TracingOptions struct {
-	// ConfigFile is the file path with api-server tracing configuration.
+	// ConfigFile 是 api-server tracing 配置文件路径。
 	ConfigFile string
 }
 
-// NewTracingOptions creates a new instance of TracingOptions
+// NewTracingOptions 创建 TracingOptions 的新实例。
 func NewTracingOptions() *TracingOptions {
 	return &TracingOptions{}
 }
@@ -134,7 +134,7 @@ func (o *TracingOptions) ApplyTo(es *egressselector.EgressSelector, c *server.Co
 	return nil
 }
 
-// Validate verifies flags passed to TracingOptions.
+// Validate 校验传给 TracingOptions 的 flag。
 func (o *TracingOptions) Validate() (errs []error) {
 	if o == nil || o.ConfigFile == "" {
 		return
@@ -149,7 +149,7 @@ func (o *TracingOptions) Validate() (errs []error) {
 	return
 }
 
-// ReadTracingConfiguration reads the tracing configuration from a file
+// ReadTracingConfiguration 从文件读取 tracing 配置。
 func ReadTracingConfiguration(configFilePath string) (*tracingapi.TracingConfiguration, error) {
 	if configFilePath == "" {
 		return nil, fmt.Errorf("tracing config file was empty")

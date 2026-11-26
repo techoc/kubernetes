@@ -164,7 +164,7 @@ func TestCopyWithoutManagedFields(t *testing.T) {
 							},
 						},
 					},
-					// add an empty row to make sure we don't panic
+					// 添加一行空记录，确保不会 panic。
 					{
 						Object: runtime.RawExtension{},
 					},
@@ -220,7 +220,7 @@ func TestCopyWithoutManagedFields(t *testing.T) {
 					t.Errorf("expected the returned object to be nil, but got %#v", objectGot)
 				}
 			default:
-				// verify that a deep copy of the specified object is made before mutating it.
+				// 验证在修改前对指定对象做了深拷贝。
 				// 指针相同说明返回的是入参本身，后续剥离会污染调用方对象。
 				if expected, actual := reflect.ValueOf(test.object), reflect.ValueOf(objectGot); expected.Pointer() == actual.Pointer() {
 					t.Error("expected the returned object to be a deep copy of the input object")
@@ -231,7 +231,7 @@ func TestCopyWithoutManagedFields(t *testing.T) {
 				}
 			}
 
-			// we always expect the original object to be unchanged.
+			// 始终期望原始对象未被修改。
 			if !cmp.Equal(original, test.object) {
 				t.Errorf("the original object has mutated, diff: %s", cmp.Diff(original, test.object))
 			}

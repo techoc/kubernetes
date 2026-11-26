@@ -27,31 +27,30 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// TimingRatioHistogram is essentially a gauge for a ratio where the client
-// independently controls the numerator and denominator.
-// When scraped it produces a histogram of samples of the ratio
-// taken at the end of every nanosecond.
-// `*TimingRatioHistogram` implements both Registerable and RatioedGauge.
+// TimingRatioHistogram 本质上是一个比值 gauge，客户端可独立控制分子与分母。
+// 被抓取时，它产生一份对每一纳秒末尾采样的比值直方图。
+//
+// `*TimingRatioHistogram` 同时实现 Registerable 与 RatioedGauge。
 type TimingRatioHistogram struct {
-	// The implementation is layered on TimingHistogram,
-	// adding the division by an occasionally adjusted denominator.
+	// 该实现基于 TimingHistogram，
+	// 额外除以一个偶尔调整的分母。
 
-	// Registerable is the registerable aspect.
-	// That is the registerable aspect of the underlying TimingHistogram.
+	// Registerable 是可注册相关的部分。
+	// 即底层 TimingHistogram 的可注册能力。
 	compbasemetrics.Registerable
 
-	// timingRatioHistogramInner implements the RatioedGauge aspect.
+	// timingRatioHistogramInner 实现 RatioedGauge 部分。
 	timingRatioHistogramInner
 }
 
-// TimingRatioHistogramOpts is the constructor parameters of a TimingRatioHistogram.
-// The `TimingHistogramOpts.InitialValue` is the initial numerator.
+// TimingRatioHistogramOpts 是 TimingRatioHistogram 的构造参数。
+// `TimingHistogramOpts.InitialValue` 是初始分子。
 type TimingRatioHistogramOpts struct {
 	compbasemetrics.TimingHistogramOpts
 	InitialDenominator float64
 }
 
-// timingRatioHistogramInner implements the instrumentation aspect
+// timingRatioHistogramInner 实现埋点部分
 //
 // 分子分母的更新必须原子完成，否则并发 Set/SetDenominator 会产生
 // 与任一真实状态都不对应的中间比值。
@@ -59,7 +58,7 @@ type timingRatioHistogramInner struct {
 	nowFunc         func() time.Time
 	getGaugeOfRatio func() Gauge
 	sync.Mutex
-	// access only with mutex locked
+	// 仅在持有 mutex 时访问
 	numerator, denominator float64
 }
 
@@ -67,13 +66,13 @@ var _ RatioedGauge = &timingRatioHistogramInner{}
 var _ RatioedGauge = &TimingRatioHistogram{}
 var _ compbasemetrics.Registerable = &TimingRatioHistogram{}
 
-// NewTimingHistogram returns an object which is TimingHistogram-like. However, nothing
-// will be measured until the histogram is registered in at least one registry.
+// NewTimingHistogram 返回一个类 TimingHistogram 的对象。但在至少注册到一个 registry 之前，
+// 不会测量任何数据。
 func NewTimingRatioHistogram(opts *TimingRatioHistogramOpts) *TimingRatioHistogram {
 	return NewTestableTimingRatioHistogram(time.Now, opts)
 }
 
-// NewTestableTimingHistogram adds injection of the clock
+// NewTestableTimingHistogram 额外支持注入时钟。
 //
 // 构造时把 InitialValue 视为分子并除以初始分母，保证底层直方图一开始
 // 就持有“比值”而非原始分子。
@@ -135,39 +134,38 @@ func (trh *timingRatioHistogramInner) SetDenominator(denominator float64) {
 	trh.getGaugeOfRatio().Set(ratio)
 }
 
-// WithContext allows the normal TimingHistogram metric to pass in context.
-// The context is no-op at the current level of development.
+// WithContext 让普通 TimingHistogram 指标可以传入 context。
+// 当前阶段 context 不起任何作用。
 func (trh *timingRatioHistogramInner) WithContext(ctx context.Context) RatioedGauge {
 	return trh
 }
 
-// TimingRatioHistogramVec is a collection of TimingRatioHistograms that differ
-// only in label values.
-// `*TimingRatioHistogramVec` implements both Registerable and RatioedGaugeVec.
+// TimingRatioHistogramVec 是一组 TimingRatioHistogram，彼此仅在标签值上不同。
+// TimingRatioHistogramVec 是一组 TimingRatioHistogram，彼此仅在标签值上不同。
+// `*TimingRatioHistogramVec` 同时实现 Registerable 与 RatioedGaugeVec。
 type TimingRatioHistogramVec struct {
-	// promote only the Registerable methods
+	// 只提升 Registerable 方法
 	compbasemetrics.Registerable
-	// delegate is TimingHistograms of the ratio
+	// delegate 是存放比值的 TimingHistogram。
 	delegate compbasemetrics.GaugeVecMetric
 }
 
 var _ RatioedGaugeVec = &TimingRatioHistogramVec{}
 var _ compbasemetrics.Registerable = &TimingRatioHistogramVec{}
 
-// NewTimingHistogramVec constructs a new vector.
-// `opts.InitialValue` is the initial ratio, but this applies
-// only for the tiny period of time until NewForLabelValuesSafe sets
-// the ratio based on the given initial numerator and denominator.
-// Thus there is a tiny splinter of time during member construction when
-// its underlying TimingHistogram is given the initial numerator rather than
-// the initial ratio (which is obviously a non-issue when both are zero).
-// Note the difficulties associated with extracting a member
-// before registering the vector.
+// NewTimingHistogramVec 构造一个新 vector。
+// `opts.InitialValue` 是初始比值，但这一设定只在极短时间内有效：
+// 之后 NewForLabelValuesSafe 会根据给定的初始分子与分母
+// 重新设置比值。
+// 因此在成员构造期间有极短一段时间，底层 TimingHistogram 拿到的是初始分子而非
+// 初始比值（两者都为 0 时显然无所谓）。
+//
+// 注意在注册 vector 之前取出成员会遇到的困难。
 func NewTimingRatioHistogramVec(opts *compbasemetrics.TimingHistogramOpts, labelNames ...string) *TimingRatioHistogramVec {
 	return NewTestableTimingRatioHistogramVec(time.Now, opts, labelNames...)
 }
 
-// NewTestableTimingHistogramVec adds injection of the clock.
+// NewTestableTimingHistogramVec 额外支持注入时钟。
 func NewTestableTimingRatioHistogramVec(nowFunc func() time.Time, opts *compbasemetrics.TimingHistogramOpts, labelNames ...string) *TimingRatioHistogramVec {
 	delegate := compbasemetrics.NewTestableTimingHistogramVec(nowFunc, opts, labelNames)
 	return &TimingRatioHistogramVec{
@@ -180,8 +178,8 @@ func (v *TimingRatioHistogramVec) metrics() Registerables {
 	return Registerables{v}
 }
 
-// NewForLabelValuesChecked will return an error if this vec is not hidden and not yet registered
-// or there is a syntactic problem with the labelValues.
+// 若该 vec 未隐藏且尚未注册，或 labelValues 存在语法问题，
+// NewForLabelValuesChecked 返回错误。
 //
 // 返回的 gauge 直接绑定到具体的 vector member，后续更新无需再次查找。
 func (v *TimingRatioHistogramVec) NewForLabelValuesChecked(initialNumerator, initialDenominator float64, labelValues []string) (RatioedGauge, error) {
@@ -197,11 +195,10 @@ func (v *TimingRatioHistogramVec) NewForLabelValuesChecked(initialNumerator, ini
 	}, nil
 }
 
-// NewForLabelValuesSafe is the same as NewForLabelValuesChecked in cases where that does not
-// return an error.  When the unsafe version returns an error due to the vector not being
-// registered yet, the safe version returns an object that implements its methods
-// by looking up the relevant vector member in each call (thus getting a non-noop after registration).
-// In the other error cases the object returned here is a noop.
+// NewForLabelValuesSafe 在 NewForLabelValuesChecked 不返回错误时与其行为一致。
+// 当非安全版本因 vector 尚未注册而返回错误时，安全版本返回一个对象，
+// 它的方法在每次调用时查找对应的 vector 成员（注册后便不再是 noop）。
+// 在其它错误情形下，这里返回的对象是 noop。
 func (v *TimingRatioHistogramVec) NewForLabelValuesSafe(initialNumerator, initialDenominator float64, labelValues []string) RatioedGauge {
 	tro, err := v.NewForLabelValuesChecked(initialNumerator, initialDenominator, labelValues)
 	if err == nil {
@@ -213,9 +210,9 @@ func (v *TimingRatioHistogramVec) NewForLabelValuesSafe(initialNumerator, initia
 		return tro
 	}
 	klog.V(3).InfoS("TimingRatioHistogramVec.NewForLabelValuesSafe hit the inefficient case", "fqName", v.FQName(), "labelValues", labelValues)
-	// At this point we know v.NewForLabelValuesChecked(..) returns a permanent noop,
-	// which we precisely want to avoid using.  Instead, make our own gauge that
-	// fetches the element on every Set.
+	// 此时已知 v.NewForLabelValuesChecked(..) 返回永久 noop，
+	// 这正是我们要避免使用的。因此自己实现 gauge，
+	// 在每次 Set 时获取元素。
 	return &timingRatioHistogramInner{
 		getGaugeOfRatio: func() Gauge { return v.delegate.WithLabelValues(labelValues...) },
 		numerator:       initialNumerator,

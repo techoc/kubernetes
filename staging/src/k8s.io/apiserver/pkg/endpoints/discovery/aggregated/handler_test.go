@@ -586,7 +586,7 @@ func TestAbuse(t *testing.T) {
 			for j := 0; j < numWritesPerWriter; j++ {
 				switch source.Int63() % 3 {
 				case 0:
-					// Add a fuzzed group
+					// 添加一个经过 fuzz 的 group。
 					apis := fuzzAPIGroups(1, 2, 15)
 					for _, group := range apis.Items {
 						for _, version := range group.Versions {

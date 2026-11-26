@@ -20,17 +20,17 @@ import (
 	"sync"
 )
 
-// MaxSeatsTracker is used to track max seats allocatable per priority level from the work estimator
+// MaxSeatsTracker 用于记录工作估算器给出的每个优先级可分配的最大 seats。
 // 工作估算器（work estimator）会为请求估算所需并发份额（seats）；
 // 这里记录每个优先级历史估算的最大值，用于避免估算抖动导致的过度限流。
 type MaxSeatsTracker interface {
-	// GetMaxSeats returns the maximum seats a request should occupy for a given priority level.
+	// GetMaxSeats 返回给定优先级下请求应占用的最大 seats。
 	GetMaxSeats(priorityLevelName string) uint64
 
-	// SetMaxSeats configures max seats for a priority level.
+	// SetMaxSeats 配置某优先级的最大 seats。
 	SetMaxSeats(priorityLevelName string, maxSeats uint64)
 
-	// ForgetPriorityLevel removes max seats tracking for a priority level.
+	// ForgetPriorityLevel 移除某优先级的最大 seats 记录。
 	ForgetPriorityLevel(priorityLevelName string)
 }
 

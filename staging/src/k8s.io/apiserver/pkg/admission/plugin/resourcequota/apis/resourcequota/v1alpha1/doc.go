@@ -19,7 +19,7 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=resourcequota.admission.k8s.io
 
-// Package v1alpha1 is the v1alpha1 version of the API.
+// Package v1alpha1 是 API 的 v1alpha1 版本。
 //
 // 这是 resourcequota 准入配置的外部版本；conversion-gen 会生成到内部
 // 包（apis/resourcequota）的转换代码，因此字段语义必须与内部类型保持一致。

@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TestWipeObjectMetaSystemFields validates that system populated fields are set on an object
+// TestWipeObjectMetaSystemFields 验证系统填充字段被置空。
 //
 // TestWipeObjectMetaSystemFields 验证清空系统字段后，创建时间、UID、
 // 删除相关字段与 SelfLink 都回到零值。这些字段只能由服务端填写，
@@ -48,7 +48,7 @@ func TestWipeObjectMetaSystemFields(t *testing.T) {
 	}
 }
 
-// TestFillObjectMetaSystemFields validates that system populated fields are set on an object
+// TestFillObjectMetaSystemFields 验证系统字段被填充到对象上。
 //
 // TestFillObjectMetaSystemFields 验证新建对象时服务端会填充创建时间与
 // 唯一 UID，这是对象持久化前必须满足的元数据不变量。
@@ -63,7 +63,7 @@ func TestFillObjectMetaSystemFields(t *testing.T) {
 	}
 }
 
-// TestHasObjectMetaSystemFieldValues validates that true is returned if and only if all fields are populated
+// TestHasObjectMetaSystemFieldValues 验证只有所有字段都已填充时才返回 true。
 //
 // TestHasObjectMetaSystemFieldValues 验证该判定只在全部系统字段就绪时
 // 返回 true；存储层用它区分"新建对象"与"已持久化对象"，误判会导致
@@ -107,14 +107,14 @@ func TestEnsureObjectNamespaceMatchesRequestNamespace(t *testing.T) {
 			reqNS:       "",
 			objNS:       "foo",
 			expectErr:   false,
-			expectObjNS: "", // no error, object is forced to cluster-scoped for backwards compatibility
+			expectObjNS: "", // 无错误，对象被强制设为集群作用域以保持向后兼容。
 		},
 		{
 			name:        "namespaced req, no-namespace obj",
 			reqNS:       "foo",
 			objNS:       "",
 			expectErr:   false,
-			expectObjNS: "foo", // no error, object is updated to match request for backwards compatibility
+			expectObjNS: "foo", // 无错误，对象被更新以匹配请求以保持向后兼容。
 		},
 		{
 			name:        "namespaced req, matching obj",

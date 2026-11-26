@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package validation validates EncryptionConfiguration.
+// Package validation 校验 EncryptionConfiguration。
 //
 // 校验分为两类：结构性校验（每个资源项至少一个资源/提供者、单个提供者只能
 // 配置一种算法）和安全性校验（资源不重叠、密钥长度、KMS endpoint 必须为
@@ -135,7 +135,7 @@ var anyGroupAnyResource = schema.GroupResource{
 // 重叠（如 secrets 与 *.）会让后者被前者遮蔽，属于易错配置，
 // 因此直接拒绝而不是按顺序取第一个。
 func validateResourceOverlap(resources []string, fieldPath *field.Path) field.ErrorList {
-	if len(resources) < 2 { // cannot have overlap with a single resource
+	if len(resources) < 2 { // 单个资源不能同时与某个通配项重叠。
 		return nil
 	}
 
@@ -216,7 +216,7 @@ func validateResourceNames(resources []string, fieldPath *field.Path) field.Erro
 	for j, res := range resources {
 		jj := fieldPath.Index(j)
 
-		// check if resource name has capital letters
+		// 检查资源名是否含大写字母。
 		if hasCapital(res) {
 			allErrs = append(
 				allErrs,
@@ -229,7 +229,7 @@ func validateResourceNames(resources []string, fieldPath *field.Path) field.Erro
 			continue
 		}
 
-		// check if resource is '*'
+		// 检查资源是否为 '*'。
 		if res == "*" {
 			allErrs = append(
 				allErrs,
@@ -242,10 +242,10 @@ func validateResourceNames(resources []string, fieldPath *field.Path) field.Erro
 			continue
 		}
 
-		// check if resource is:
-		// 'apiserveripinfo' OR
-		// 'serviceipallocations' OR
-		// 'servicenodeportallocations' OR
+		// 检查资源是否为下列内部资源之一：
+		// 'apiserveripinfo' 或
+		// 'serviceipallocations' 或
+		// 'servicenodeportallocations'。
 		if res == "apiserveripinfo" ||
 			res == "serviceipallocations" ||
 			res == "servicenodeportallocations" {
@@ -260,7 +260,7 @@ func validateResourceNames(resources []string, fieldPath *field.Path) field.Erro
 			continue
 		}
 
-		// check if group is 'events.k8s.io'
+		// 检查组是否为 'events.k8s.io'。
 		gr := schema.ParseGroupResource(res)
 		if gr.Group == "events.k8s.io" {
 			allErrs = append(
@@ -274,7 +274,7 @@ func validateResourceNames(resources []string, fieldPath *field.Path) field.Erro
 			continue
 		}
 
-		// check if group is 'extensions'
+		// 检查组是否为 'extensions'。
 		if gr.Group == "extensions" {
 			allErrs = append(
 				allErrs,
@@ -287,7 +287,7 @@ func validateResourceNames(resources []string, fieldPath *field.Path) field.Erro
 			continue
 		}
 
-		// disallow resource.* as encrypting the same resource across groups does not make sense
+		// 禁止 resource.*：跨组加密同名资源没有意义。
 		if gr.Group == "*" && gr.Resource != "*" {
 			allErrs = append(
 				allErrs,
@@ -404,8 +404,8 @@ func validateKMSConfiguration(c *apiserver.KMSConfiguration, fieldPath *field.Pa
 func validateKMSCacheSize(c *apiserver.KMSConfiguration, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	// In defaulting, we set the cache size to the default value only when API version is v1.
-	// So, for v2 API version, we expect the cache size field to be nil.
+	// 默认值填充时，仅在 API 版本为 v1 时设置缓存大小。
+	// 因此对于 v2 版本，期望 cachesize 字段为 nil。
 	if c.APIVersion != "v1" && c.CacheSize != nil {
 		allErrs = append(allErrs, field.Invalid(fieldPath, *c.CacheSize, "cachesize is not supported in v2"))
 	}
@@ -466,13 +466,13 @@ func validateKMSConfigName(c *apiserver.KMSConfiguration, fieldPath *field.Path,
 		allErrs = append(allErrs, field.Required(fieldPath, fmt.Sprintf(mandatoryFieldErrFmt, "name", "provider")))
 	}
 
-	// kms v2 providers are not allowed to have a ":" in their name
+	// kms v2 provider 的名称不允许包含 ":"。
 	if c.APIVersion != "v1" && strings.Contains(c.Name, ":") {
 		allErrs = append(allErrs, field.Invalid(fieldPath, c.Name, fmt.Sprintf(invalidKMSConfigNameErrFmt, c.Name)))
 	}
 
-	// kms v2 providers name must always be unique across all kms providers (v1 and v2)
-	// kms v1 provider names must be unique across all kms providers (v1 and v2) when hot reloading of encryption configuration is enabled (reload=true)
+	// kms v2 provider 的名称在所有 kms provider（v1 和 v2）中必须唯一。
+	// 启用加密配置热重载（reload=true）时，kms v1 provider 的名称在所有 kms provider（v1 和 v2）中也必须唯一。
 	if reload || c.APIVersion != "v1" {
 		if kmsProviderNames.Has(c.Name) {
 			allErrs = append(allErrs, field.Invalid(fieldPath, c.Name, fmt.Sprintf(duplicateKMSConfigNameErrFmt, c.Name)))

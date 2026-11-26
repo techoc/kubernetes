@@ -24,17 +24,17 @@ import (
 // 其中缓存的明文响应由 Mutex 保护，因为 HTTP 处理是并发的，而 flag 值在进程生命周期内不变，
 // 缓存可以避免每次请求都重新序列化全部参数。
 type registry struct {
-	// reader is a Reader where we can get the flags.
+	// reader 是可获取 flag 的 Reader。
 	reader Reader
-	// deprecatedVersionsMap is a map of deprecated flagz versions.
+	// deprecatedVersionsMap 是已弃用 flagz 版本的映射。
 	deprecatedVersionsMap map[string]bool
-	// cachedPlainTextResponse is a cached response of the flagz endpoint.
+	// cachedPlainTextResponse 是 flagz 端点的缓存响应。
 	cachedPlainTextResponse []byte
-	// cachedPlainTextResponseLock is a lock for the cachedPlainTextResponse.
+	// cachedPlainTextResponseLock 保护缓存响应。
 	cachedPlainTextResponseLock sync.Mutex
 }
 
-// Option is a function to configure registry.
+// Option 是配置 registry 的函数。
 // 采用函数式选项，便于在不破坏调用方的前提下扩展 registry 的配置项。
 type Option func(reg *registry)
 

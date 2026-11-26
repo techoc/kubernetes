@@ -532,7 +532,7 @@ func TestResolveEndpointDistribution(t *testing.T) {
 				makeEndpointSlice(dualStackService, "v4-1",
 					discoveryv1.AddressTypeIPv4, svcPort,
 					discoveryv1.Endpoint{
-						// Not ready
+						// 未就绪。
 						Addresses: []string{"10.0.0.1"},
 						Conditions: discoveryv1.EndpointConditions{
 							Ready: ptr.To(false),
@@ -563,7 +563,7 @@ func TestResolveEndpointDistribution(t *testing.T) {
 				makeEndpointSlice(dualStackService, "v4-3",
 					discoveryv1.AddressTypeIPv4, svcPort,
 					discoveryv1.Endpoint{
-						// This is the good one
+						// 这是正确的那个。
 						Addresses: []string{"10.0.0.2"},
 						Conditions: discoveryv1.EndpointConditions{
 							Ready: ptr.To(true),
@@ -573,8 +573,8 @@ func TestResolveEndpointDistribution(t *testing.T) {
 				makeEndpointSlice(dualStackService, "v4-4",
 					discoveryv1.AddressTypeIPv4, wrongPort,
 					discoveryv1.Endpoint{
-						// Uses wrongPort above, so it won't have
-						// the right port name.
+						// 使用上面的 wrongPort，因此它不会有
+						// 正确的端口名。
 						Addresses: []string{"10.0.0.3"},
 						Conditions: discoveryv1.EndpointConditions{
 							Ready: ptr.To(true),

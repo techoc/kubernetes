@@ -168,7 +168,7 @@ func TestEnvelopeCacheLimit(t *testing.T) {
 
 	transformedOutputs := map[int][]byte{}
 
-	// Overwrite lots of entries in the map
+	// 大量覆盖写入 map 中的条目。
 	for i := 0; i < 2*testEnvelopeCacheSize; i++ {
 		numberText := []byte(strconv.Itoa(i))
 
@@ -179,7 +179,7 @@ func TestEnvelopeCacheLimit(t *testing.T) {
 		}
 	}
 
-	// Try reading all the data now, ensuring cache misses don't cause a concern.
+	// 此时再尝试读取全部数据，确认缓存未命中不会造成问题。
 	for i := 0; i < 2*testEnvelopeCacheSize; i++ {
 		numberText := []byte(strconv.Itoa(i))
 
@@ -284,7 +284,7 @@ func TestBackwardsCompatibility(t *testing.T) {
 	}
 
 	envelopeService.SetDisabledStatus(true)
-	// Subsequent read for the same data should work fine due to caching.
+	// 由于缓存，后续读取相同数据应当正常工作。
 	untransformedData, _, err = envelopeTransformerInst.TransformFromStorage(ctx, transformedData, dataCtx)
 	if err != nil {
 		t.Fatalf("could not decrypt Envelope transformer's encrypted data using just cache: %v", err)
@@ -312,7 +312,7 @@ func oldTransformToStorage(ctx context.Context, t *envelopeTransformer, data []b
 		return nil, err
 	}
 
-	// Append the length of the encrypted DEK as the first 2 bytes.
+	// 把加密 DEK 的长度作为前 2 字节追加。
 	encKeyLen := make([]byte, 2)
 	encKeyBytes := []byte(encKey)
 	binary.BigEndian.PutUint16(encKeyLen, uint16(len(encKeyBytes)))

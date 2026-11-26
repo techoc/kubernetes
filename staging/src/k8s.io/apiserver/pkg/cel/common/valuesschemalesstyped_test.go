@@ -82,8 +82,8 @@ type OmitTestStruct struct {
 	FieldOmit   *int `json:"fieldOmit,omitempty"`
 }
 
-// The following Equiv structures mirror those in runtime/converter_test.go
-// to verify equivalence between SchemalessTypedToVal and ToUnstructured.
+// 以下 Equiv 结构对应 runtime/converter_test.go 中的定义，
+// 用于验证 SchemalessTypedToVal 与 ToUnstructured 的等价性。
 //
 // 这些结构的字段覆盖嵌套结构体、嵌入字段、map、slice、指针、interface{}、
 // 自定义 JSON 序列化与 RawExtension，用于交叉验证两条转换路径的结果一致。
@@ -225,7 +225,7 @@ func assertEquivalence(t *testing.T, val interface{}) {
 			unstrMap, expectedCEL, expectedCEL.Type(), gotCEL.Value(), gotCEL, gotCEL.Type())
 	}
 
-	// Verify inverse equality (NativeToValue.Equal(SchemalessTypedToVal)).
+	// 反向验证相等性（NativeToValue.Equal(SchemalessTypedToVal)）。
 	if expectedCEL.Equal(gotCEL) != types.True {
 		t.Errorf("Inverse equivalence mismatch!")
 	}
@@ -486,9 +486,9 @@ func TestSchemalessTypedToVal_UnsupportedTypes(t *testing.T) {
 	}
 }
 
-// Note: The equivalence test (assertEquivalence) is not used here because
-// runtime.DefaultUnstructuredConverter.ToUnstructured requires structured types (objects/maps)
-// and will panic if passed primitive values.
+// 注意：这里不使用 assertEquivalence，因为
+// runtime.DefaultUnstructuredConverter.ToUnstructured 要求结构化类型（对象/map），
+// 传入标量会 panic。
 //
 // 这里直接断言标量转换结果，并特别覆盖 uint64 超出 int64 的溢出路径。
 func TestSchemalessTypedToVal_Primitives(t *testing.T) {

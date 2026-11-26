@@ -20,15 +20,15 @@ import (
 	"context"
 )
 
-// AuthenticatorMetrics specifies a set of methods that are used to register various metrics
+// AuthenticatorMetrics 定义一组方法，用于注册 webhook 的各种指标。
 //
 // AuthenticatorMetrics 把指标上报抽象为两个函数，使 webhook 认证器
 // 不直接依赖 metrics 包，便于测试与复用。
 type AuthenticatorMetrics struct {
-	// RecordRequestTotal increments the total number of requests for webhooks
+	// RecordRequestTotal 增加 webhook 的总请求数。
 	RecordRequestTotal func(ctx context.Context, code string)
 
-	// RecordRequestLatency measures request latency in seconds for webhooks. Broken down by status code.
+	// RecordRequestLatency 以秒为单位记录 webhook 请求延迟，并按状态码拆分。
 	RecordRequestLatency func(ctx context.Context, code string, latency float64)
 }
 

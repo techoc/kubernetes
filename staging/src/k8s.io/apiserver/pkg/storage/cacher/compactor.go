@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	// compactorPollPeriod determines period of reading compaction revision from storage.
+	// compactorPollPeriod 决定从存储读取压缩 revision 的周期。
 	// 15 秒的轮询间隔在“及时释放历史事件”和“避免频繁访问 etcd”之间取值；
 	// CompactionRevision 是 etcd 元数据读取，成本不高但不应每个请求都做。
 	compactorPollPeriod = 15 * time.Second

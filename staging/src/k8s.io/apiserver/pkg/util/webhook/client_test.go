@@ -92,16 +92,16 @@ func TestWebhookClientConfig(t *testing.T) {
 // 显式设置则必须包含 http2.NextProtoTLS。
 func allowHTTP2(nextProtos []string) bool {
 	if len(nextProtos) == 0 {
-		// the transport expressed no NextProto preference, allow
+		// transport 未表达 NextProto 偏好，允许。
 		return true
 	}
 	for _, p := range nextProtos {
 		if p == http2.NextProtoTLS {
-			// the transport explicitly allowed http/2
+			// transport 显式允许 http/2。
 			return true
 		}
 	}
-	// the transport explicitly set NextProtos and excluded http/2
+	// transport 显式设置了 NextProtos 且排除了 http/2。
 	return false
 }
 
@@ -124,7 +124,7 @@ func (f *fakeAuthInfoResolver) ClientConfigForService(serviceName, namespace str
 	}, nil
 }
 
-// fakeDynamicServiceResolver returns the next endpoint in the list for each request.
+// fakeDynamicServiceResolver 对每次请求返回列表中的下一个 endpoint。
 type fakeDynamicServiceResolver struct {
 	endpoints []*url.URL
 	counter   int32
@@ -138,8 +138,8 @@ func (f *fakeDynamicServiceResolver) ResolveEndpoint(namespace, name string, por
 	return f.endpoints[val], nil
 }
 
-// TestWebhookClientIdleConnectionIPReuse tests that the webhook client follow the resolver
-// endpoint instead of reusing the previous endpoint when there are IP address changes.
+// TestWebhookClientIdleConnectionIPReuse 验证 webhook 客户端在 IP 地址变化时，
+// 遵循 resolver 给出的 endpoint，而不是复用旧 endpoint。
 func TestWebhookClientIdleConnectionIPReuse(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -193,7 +193,7 @@ func TestWebhookClientIdleConnectionIPReuse(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Combine CAs from both test servers
+			// 合并两个测试 server 的 CA。
 			var caBundle []byte
 			for _, cert := range serverA.TLS.Certificates[0].Certificate {
 				caBundle = append(caBundle, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert})...)
@@ -228,7 +228,7 @@ func TestWebhookClientIdleConnectionIPReuse(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Request 1: Resolves to Server A
+			// 请求 1：解析到 Server A。
 			req1 := client.Post().Body([]byte("test"))
 			res1, err := req1.DoRaw(context.Background())
 			if err != nil {
@@ -238,7 +238,7 @@ func TestWebhookClientIdleConnectionIPReuse(t *testing.T) {
 				t.Errorf("Expected Response ServerA, got %s", string(res1))
 			}
 
-			// Request 2: Resolves to Server B if feature gate enabled, Server A if disabled
+			// 请求 2：特性门控开启时解析到 Server B，关闭时仍为 Server A。
 			req2 := client.Post().Body([]byte("test"))
 			res2, err := req2.DoRaw(context.Background())
 			if err != nil {

@@ -69,7 +69,7 @@ func TestConditionsAwareDecisionUnionAdd(t *testing.T) {
 		var u authorizer.ConditionsAwareDecisionUnion
 		u.Add("0.example.com", noOp)
 		u.Add("1.example.com", allow)
-		// These additions must be silently dropped by the ContainsUnconditionalAllowOrDeny short-circuit.
+		// 这些追加必须被 ContainsUnconditionalAllowOrDeny 短路逻辑静默丢弃。
 		u.Add("2.example.com", deny)
 		u.Add("3.example.com", condMapAllow)
 
@@ -78,12 +78,12 @@ func TestConditionsAwareDecisionUnionAdd(t *testing.T) {
 			t.Errorf("expected Allow after short-circuit, got %s", d.String())
 		}
 
-		// Iterating the resulting union should only see the entries before/at the short-circuit point.
+		// 遍历结果并集时，只应看到短路点之前（含该点）的条目。
 		seen := map[string]bool{}
 		for name := range d.UnionedDecisions() {
 			seen[name] = true
 		}
-		// The wrapped decision is unconditional Allow, so UnionedDecisions is empty.
+		// 被包装的决策是无条件 Allow，因此 UnionedDecisions 为空。
 		if len(seen) != 0 {
 			t.Errorf("expected unconditional Allow to expose no unioned decisions, got %v", seen)
 		}
@@ -105,7 +105,7 @@ func TestConditionsAwareDecisionUnionAdd(t *testing.T) {
 	t.Run("ConditionsMap leaves do not short-circuit Add", func(t *testing.T) {
 		var u authorizer.ConditionsAwareDecisionUnion
 		u.Add("0.example.com", condMapAllow)
-		u.Add("1.example.com", condMapAllow) // distinct authorizerName, still appended
+		u.Add("1.example.com", condMapAllow) // authorizerName 不同，仍会被追加。
 		u.Add("2.example.com", noOp)
 
 		d := u.ToDecision()
@@ -124,15 +124,15 @@ func TestConditionsAwareDecisionUnionAdd(t *testing.T) {
 	})
 }
 
-// TestConditionsAwareDecisionUnion_AddAfterToDecisionDoesNotMutate verifies that once
-// ConditionsAwareDecisionUnion.ToDecision has produced a decision, further calls to
-// the builder's Add cannot mutate that decision — the builder's internal state
-// (including its memoized possible-decisions set) is defensively copied.
+// TestConditionsAwareDecisionUnion_AddAfterToDecisionDoesNotMutate 验证：
+// 一旦 ConditionsAwareDecisionUnion.ToDecision 产出决策，构建器后续 Add 就不能再改动该决策——
+// 构建器内部状态（包括缓存的 possible-decisions 集合）都是防御性复制的。
+// （包括缓存的 possible-decisions 集合）都做了防御性复制。
 //
 // 该不变量保证决策对象可以安全地跨 goroutine 共享，而不受构建器后续修改影响。
 func TestConditionsAwareDecisionUnion_AddAfterToDecisionDoesNotMutate(t *testing.T) {
-	// Build a union with two ConditionsMap sub-decisions. Neither is an unconditional
-	// Allow/Deny leaf, so the builder does NOT short-circuit subsequent Add calls.
+	// 构造一个含两个 ConditionsMap 子决策的并集；两者都不是无条件 Allow/Deny 叶子，
+	// 因此构建器不会短路后续的 Add 调用。
 	cmAllow1 := authorizer.ConditionsAwareDecisionConditionsMap(
 		nil, nil, []authorizer.Condition{authorizer.GenericCondition{ID: "allow-1"}},
 	)
@@ -159,9 +159,9 @@ func TestConditionsAwareDecisionUnion_AddAfterToDecisionDoesNotMutate(t *testing
 	namesBefore := []string{"first.example.com", "second.example.com"}
 	possibleBefore := d.PossibleDecisions()
 
-	// Add a further sub-decision to the builder, introducing a new possible outcome
-	// (Deny) not previously present. If ToDecision failed to defensively copy the
-	// builder's memoized state, this Add would leak into the already-returned decision.
+	// 再向构建器追加一个子决策，引入此前不存在的新结果（Deny）。
+	// 若 ToDecision 没有防御性复制构建器的缓存状态，这次 Add 就会泄漏到已经返回的决策中。
+	//
 	cmDeny := authorizer.ConditionsAwareDecisionConditionsMap(
 		[]authorizer.Condition{authorizer.GenericCondition{ID: "deny-1"}}, nil, nil,
 	)

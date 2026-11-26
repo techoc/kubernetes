@@ -29,7 +29,7 @@ type fakeHandler struct {
 	served bool
 }
 
-// ServeHTTP stores the fact that this fake handler was called.
+// ServeHTTP 记录这个 fake handler 被调用过。
 func (fh *fakeHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fh.served = true
 }

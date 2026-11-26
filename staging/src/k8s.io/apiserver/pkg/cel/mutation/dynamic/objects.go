@@ -32,9 +32,9 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// ObjectType is the implementation of the Object type for use when compiling
-// CEL expressions without schema information about the object.
-// This is to provide CEL expressions with access to Object{} types constructors.
+// ObjectType 是在没有对象 schema 信息时，用于编译 CEL 表达式的 Object 类型实现。
+// 它为 CEL 表达式提供 Object{} 类型构造器。
+// 为 CEL 表达式提供 Object{} 类型构造器。
 //
 // 该类型不校验字段名与类型，任何字段都按 DynType 处理；
 // 严格的类型名检查推迟到求值后的 CheckTypeNamesMatchFieldPathNames。
@@ -46,12 +46,12 @@ func (o *ObjectType) HasTrait(trait int) bool {
 	return o.objectType.HasTrait(trait)
 }
 
-// TypeName returns the name of this ObjectType.
+// TypeName 返回该 ObjectType 的名字。
 func (o *ObjectType) TypeName() string {
 	return o.objectType.TypeName()
 }
 
-// Val returns an instance given the fields.
+// Val 根据给定字段返回一个实例。
 func (o *ObjectType) Val(fields map[string]ref.Val) ref.Val {
 	return NewObjectVal(o.objectType, fields)
 }
@@ -60,13 +60,13 @@ func (o *ObjectType) Type() *types.Type {
 	return o.objectType
 }
 
-// Field looks up the field by name.
-// This is the unstructured version that allows any name as the field name.
-// The returned field is of DynType type.
+// Field 按名字查找字段。
+// 这是非结构化版本，允许任意字段名。
+// 返回的字段是 DynType 类型。
 func (o *ObjectType) Field(name string) (*types.FieldType, bool) {
 	return &types.FieldType{
-		// for unstructured, we do not check for its type,
-		// use DynType for all fields.
+		// 非结构化场景不检查字段类型，
+		// 所有字段都用 DynType。
 		Type: types.DynType,
 		// IsSet 支撑 CEL 的 has() 语义：只有显式赋值的字段才视为已设置。
 		IsSet: func(target any) bool {
@@ -86,24 +86,24 @@ func (o *ObjectType) Field(name string) (*types.FieldType, bool) {
 }
 
 func (o *ObjectType) FieldNames() ([]string, bool) {
-	return nil, true // Field names are not known for dynamic types. All field names are allowed.
+	return nil, true // 动态类型的字段名未知，因此允许所有字段名。
 }
 
-// NewObjectType creates a ObjectType by the given field name.
+// NewObjectType 根据给定字段名创建一个 ObjectType。
 func NewObjectType(name string) *ObjectType {
 	return &ObjectType{
 		objectType: types.NewObjectType(name),
 	}
 }
 
-// ObjectVal is the CEL Val for an object that is constructed via the Object{} in
-// CEL expressions without schema information about the object.
+// ObjectVal 是在没有对象 schema 信息时，由 CEL 表达式中的 Object{} 构造出的对象的 CEL Val。
+// 在没有对象 schema 信息时由 CEL 表达式中的 Object{} 构造。
 type ObjectVal struct {
 	objectType *types.Type
 	fields     map[string]ref.Val
 }
 
-// NewObjectVal creates an ObjectVal by its ResolvedType and its fields.
+// NewObjectVal 根据 ResolvedType 和字段创建一个 ObjectVal。
 func NewObjectVal(objectType *types.Type, fields map[string]ref.Val) *ObjectVal {
 	return &ObjectVal{
 		objectType: objectType,
@@ -114,11 +114,11 @@ func NewObjectVal(objectType *types.Type, fields map[string]ref.Val) *ObjectVal 
 var _ ref.Val = (*ObjectVal)(nil)
 var _ traits.Zeroer = (*ObjectVal)(nil)
 
-// ConvertToNative converts the object to map[string]any.
-// All nested lists are converted into []any native type.
+// ConvertToNative 把对象转换为 map[string]any。
+// 所有嵌套列表转换为 []any 原生类型。
 //
-// It returns an error if the target type is not map[string]any,
-// or any recursive conversion fails.
+// 目标类型不是 map[string]any，或递归转换中任一步失败时返回错误。
+// 或递归转换中任一步失败。
 //
 // 支持 structpb 目标类型是为了让 Object 字面量能直接作为 JSON patch 的值被序列化。
 func (v *ObjectVal) ConvertToNative(typeDesc reflect.Type) (any, error) {
@@ -133,10 +133,10 @@ func (v *ObjectVal) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	switch typeDesc {
 	case reflect.TypeFor[map[string]any]():
 		return result, nil
-	// CEL's builtin data literal values all support conversion to structpb.Value, which
-	// can then be serialized to JSON. This is convenient for CEL expressions that return
-	// an arbitrary JSON value, such as our MutatingAdmissionPolicy JSON Patch valueExpression
-	// field, so we support the conversion here, for Object data literals, as well.
+	// CEL 内置的数据字面量都支持转换为 structpb.Value，进而序列化为 JSON。
+	// 这便于 CEL 表达式返回任意 JSON 值，例如 MutatingAdmissionPolicy 的 JSON Patch
+	// valueExpression 字段；因此这里也为 Object 数据字面量支持该转换。
+	//
 	case reflect.TypeFor[*structpb.Struct]():
 		return structpb.NewStruct(result)
 	case reflect.TypeFor[*structpb.Value]():
@@ -146,7 +146,7 @@ func (v *ObjectVal) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	}
 }
 
-// ConvertToType supports type conversions between CEL value types supported by the expression language.
+// ConvertToType 支持表达式语言所支持的 CEL 值类型之间的转换。
 func (v *ObjectVal) ConvertToType(typeValue ref.Type) ref.Val {
 	if v.objectType.TypeName() == typeValue.TypeName() {
 		return v
@@ -158,7 +158,7 @@ func (v *ObjectVal) ConvertToType(typeValue ref.Type) ref.Val {
 	return types.NewErr("unsupported conversion into %v", typeValue)
 }
 
-// Equal returns true if the `other` value has the same type and content as the implementing struct.
+// Equal 当 `other` 与实现结构体类型和内容相同时返回 true。
 // 类型名不同即不相等；字段比较使用 DeepEqual，嵌套 Object 会递归比较。
 func (v *ObjectVal) Equal(other ref.Val) ref.Val {
 	if rhs, ok := other.(*ObjectVal); ok {
@@ -170,12 +170,12 @@ func (v *ObjectVal) Equal(other ref.Val) ref.Val {
 	return types.False
 }
 
-// Type returns the TypeValue of the value.
+// Type 返回该值的 TypeValue。
 func (v *ObjectVal) Type() ref.Type {
 	return types.NewObjectType(v.objectType.TypeName())
 }
 
-// Value returns its value as a map[string]any.
+// Value 以 map[string]any 形式返回其值。
 func (v *ObjectVal) Value() any {
 	var result any
 	var object map[string]any
@@ -186,12 +186,12 @@ func (v *ObjectVal) Value() any {
 	return result
 }
 
-// CheckTypeNamesMatchFieldPathNames transitively checks the CEL object type names of this ObjectVal. Returns all
-// found type name mismatch errors.
-// Children ObjectVal types under <field> or this ObjectVal
-// must have type names of the form "<ObjectVal.TypeName>.<field>", children of that type must have type names of the
-// form "<ObjectVal.TypeName>.<field>.<field>" and so on.
-// Intermediate maps and lists are unnamed and ignored.
+// CheckTypeNamesMatchFieldPathNames 递归检查 ObjectVal 的 CEL 对象类型名，返回所有
+// 发现的类型名不匹配错误。
+// 该 ObjectVal 下或 <field> 下的子 ObjectVal 类型名
+// 必须是 "<ObjectVal.TypeName>.<field>" 形式，其子元素再追加 ".<field>"，依此类推。
+//
+// 中间的 map 和 list 没有名字，予以忽略。
 //
 // 该约束保证 Object{} 构造出的类型名与字段路径一致，防止表达式伪造任意类型。
 func (v *ObjectVal) CheckTypeNamesMatchFieldPathNames() error {
@@ -226,23 +226,23 @@ func typeCheck(v ref.Val, typeNamePath []string) []error {
 	return errs
 }
 
-// IsZeroValue indicates whether the object is the zero value for the type.
-// For the ObjectVal, it is zero value if and only if the fields map is empty.
+// IsZeroValue 指示对象是否为该类型的零值。
+// 对于 ObjectVal，当且仅当 fields map 为空时是零值。
 func (v *ObjectVal) IsZeroValue() bool {
 	return len(v.fields) == 0
 }
 
-// convertField converts a referred ref.Val to its expected type.
-// For objects, the expected type is map[string]any
-// For lists, the expected type is []any
-// For maps, the expected type is map[string]any
-// For anything else, it is converted via value.Value()
+// convertField 把被引用的 ref.Val 转换为期望类型。
+// 对象期望 map[string]any。
+// 列表期望 []any。
+// map 期望 map[string]any。
+// 其他类型通过 value.Value() 转换。
 //
-// It will return an error if the request type is a map but the key
-// is not a string.
+// 若请求类型是 map 但键不是字符串，返回错误。
+// 键不是字符串。
 func convertField(value ref.Val) (any, error) {
-	// special handling for lists, where the elements are converted with Value() instead of ConvertToNative
-	// to allow them to become native value of any type.
+	// 列表特殊处理：元素用 Value() 而非 ConvertToNative 转换，
+	// 以允许它们变成任意原生类型的值。
 	if listOfVal, ok := value.Value().([]ref.Val); ok {
 		var result []any
 		for _, v := range listOfVal {
@@ -250,8 +250,8 @@ func convertField(value ref.Val) (any, error) {
 		}
 		return result, nil
 	}
-	// unstructured maps, as seen in annotations
-	// map keys must be strings
+	// 非结构化 map，例如 annotations。
+	// map 的键必须是字符串。
 	if mapOfVal, ok := value.Value().(map[ref.Val]ref.Val); ok {
 		result := make(map[string]any, len(mapOfVal))
 		for k, v := range mapOfVal {
@@ -277,7 +277,7 @@ func convertField(value ref.Val) (any, error) {
 		return result, nil
 	}
 	if mapper, ok := value.(traits.Mapper); ok {
-		// ObjectVal handles its own fast path and returns map[string]any directly via ConvertToNative
+		// ObjectVal 自己处理快速路径，直接通过 ConvertToNative 返回 map[string]any。
 		if objVal, isObj := value.(*ObjectVal); isObj {
 			native, err := objVal.ConvertToNative(reflect.TypeFor[map[string]any]())
 			if err != nil {

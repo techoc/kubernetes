@@ -132,7 +132,7 @@ etcd_bookmark_total{group="apps",resource="deployments"} 1
 func TestRecordEtcdRequest(t *testing.T) {
 	registry := metrics.NewKubeRegistry()
 
-	// modify default sinceInSeconds to constant NOW
+	// 把默认 sinceInSeconds 修改为常量 NOW。
 	// 把时基固定为 0.3s，使直方图分桶结果可预测，避免依赖真实时钟。
 	sinceInSeconds = func(t time.Time) float64 {
 		return time.Unix(0, 300*int64(time.Millisecond)).Sub(t).Seconds()

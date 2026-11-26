@@ -47,7 +47,7 @@ func TestBaseEnvironment(t *testing.T) {
 			},
 		})
 
-	// The escaping happens while construct declType hence we use escaped format here directly.
+	// 构造 declType 时会进行转义，因此这里直接使用转义后的格式。
 	gadgetsType := apiservercel.NewObjectType("Gadget",
 		map[string]*apiservercel.DeclField{
 			"__namespace__": {
@@ -56,7 +56,7 @@ func TestBaseEnvironment(t *testing.T) {
 			},
 		})
 
-	// Gated functions like 'includes' become available at 1.37. When the default compatibility version rolls over to 1.37 or later, 'includes' will be valid. We dynamically select valid/invalid expressions depending on the current DefaultCompatibilityVersion to prevent test failures during Kubernetes version bump.
+	// 'includes' 等门控函数在 1.37 可用。待默认兼容版本滚动到 1.37 或更高后，
 	var defaultCompatibilityInvalid []string
 	var defaultCompatibilityValid []string
 	if DefaultCompatibilityVersion().AtLeast(version.MajorMinor(1, 37)) {
@@ -84,17 +84,17 @@ func TestBaseEnvironment(t *testing.T) {
 				{version.MajorMinor(1, 23), StoredExpressions},
 			},
 			validExpressions: []string{
-				"[1, 2, 3].indexOf(2) == 1",      // lists
-				"'abc'.contains('bc')",           //strings
-				"isURL('http://example.com')",    // urls
-				"'a 1 b 2'.find('[0-9]') == '1'", // regex
+				"[1, 2, 3].indexOf(2) == 1",      // 列表
+				"'abc'.contains('bc')",           // 字符串
+				"isURL('http://example.com')",    // URL
+				"'a 1 b 2'.find('[0-9]') == '1'", // 正则
 			},
 		},
 		{
 			name: "authz disabled",
 			typeVersionCombinations: []envTypeAndVersion{
 				{version.MajorMinor(1, 26), NewExpressions},
-				// always enabled for StoredExpressions
+				// 对 StoredExpressions 始终启用
 			},
 			invalidExpressions: []string{"authorizer.path('/healthz').check('get').allowed()"},
 			activation:         map[string]any{"authorizer": library.NewAuthorizerVal(nil, fakeAuthorizer{decision: authorizer.DecisionAllow})},
@@ -118,7 +118,7 @@ func TestBaseEnvironment(t *testing.T) {
 			name: "cross numeric comparisons disabled",
 			typeVersionCombinations: []envTypeAndVersion{
 				{version.MajorMinor(1, 27), NewExpressions},
-				// always enabled for StoredExpressions
+				// 对 StoredExpressions 始终启用
 			},
 			invalidExpressions: []string{"1.5 > 1"},
 		},
@@ -134,7 +134,7 @@ func TestBaseEnvironment(t *testing.T) {
 			name: "user defined variable disabled",
 			typeVersionCombinations: []envTypeAndVersion{
 				{version.MajorMinor(1, 27), NewExpressions},
-				// always enabled for StoredExpressions
+				// 对 StoredExpressions 始终启用
 			},
 			invalidExpressions: []string{"fizz == 'buzz'"},
 			activation:         map[string]any{"fizz": "buzz"},
@@ -158,7 +158,7 @@ func TestBaseEnvironment(t *testing.T) {
 			name: "declared type enabled before removed",
 			typeVersionCombinations: []envTypeAndVersion{
 				{version.MajorMinor(1, 28), NewExpressions},
-				// always disabled for StoredExpressions
+				// 对 StoredExpressions 始终禁用
 			},
 			validExpressions: []string{"widget.x == 'buzz'"},
 			activation:       map[string]any{"widget": map[string]any{"x": "buzz"}},
@@ -196,7 +196,7 @@ func TestBaseEnvironment(t *testing.T) {
 			name: "declared type disabled",
 			typeVersionCombinations: []envTypeAndVersion{
 				{version.MajorMinor(1, 27), NewExpressions},
-				// always enabled for StoredExpressions
+				// 对 StoredExpressions 始终启用
 			},
 			invalidExpressions: []string{"widget.x == 'buzz'"},
 			activation:         map[string]any{"widget": map[string]any{"x": "buzz"}},
@@ -232,7 +232,7 @@ func TestBaseEnvironment(t *testing.T) {
 			name: "library version 0 enabled, version 1 disabled",
 			typeVersionCombinations: []envTypeAndVersion{
 				{version.MajorMinor(1, 27), NewExpressions},
-				// version 1 always enabled for StoredExpressions
+				// 版本 1 对 StoredExpressions 始终启用
 			},
 			validExpressions:   []string{"test() == true"},
 			invalidExpressions: []string{"testV1() == true"},
@@ -281,7 +281,7 @@ func TestBaseEnvironment(t *testing.T) {
 			name: "recognizeKeywordAsFieldName disabled",
 			typeVersionCombinations: []envTypeAndVersion{
 				{version.MajorMinor(1, 30), NewExpressions},
-				// always enabled for StoredExpressions
+				// 对 StoredExpressions 始终启用
 			},
 			invalidExpressions: []string{"gadget.namespace == 'buzz'"},
 			activation:         map[string]any{"gadget": map[string]any{"namespace": "buzz"}},

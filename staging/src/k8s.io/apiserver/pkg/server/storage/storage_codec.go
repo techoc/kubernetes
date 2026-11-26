@@ -40,8 +40,8 @@ type StorageCodecConfig struct {
 	DecoderDecoratorFn func([]runtime.Decoder) []runtime.Decoder
 }
 
-// NewStorageCodec assembles a storage codec for the provided storage media type, the provided serializer, and the requested
-// storage and memory versions.
+// NewStorageCodec 根据给定的存储媒体类型、序列化器以及存储和内存版本组装一个存储编解码器。
+// 编解码器根据存储媒体类型、序列化器及存储/内存版本组装。
 //
 // 编码时把对象统一转换到 StorageVersion 再落盘；解码时依次尝试多个解码器，
 // 最终强制转换为 MemoryVersion，保证不同时期写入的 etcd 数据都能被读取。
@@ -71,11 +71,11 @@ func NewStorageCodec(opts StorageCodecConfig) (runtime.Codec, runtime.GroupVersi
 		encoder = opts.EncoderDecoratorFn(encoder)
 	}
 	decoders := []runtime.Decoder{
-		// selected decoder as the primary
+		// 将选中的解码器作为主解码器
 		s,
-		// universal deserializer as a fallback
+		// 以通用反序列化器作为兜底
 		opts.StorageSerializer.UniversalDeserializer(),
-		// TODO: flag this type of data if we encounter it, require migration (read to decode, write to persist using a supported encoder), and remove in 1.8
+		// TODO: 遇到此类数据时标记它，要求迁移（读取时解码、写入时用受支持的编码器持久化），并在 1.8 中移除。
 		// base64 包装的通用反序列化器是最后的兜底手段，用于读取 base64 编码的 protobuf；
 		// 这类历史遗留格式只在早期用过 etcd2+protobuf 时才会出现，数据可能仍在 etcd2 中，
 		// 也可能已迁移到 etcd3。
@@ -92,7 +92,7 @@ func NewStorageCodec(opts StorageCodecConfig) (runtime.Codec, runtime.GroupVersi
 		schema.GroupKind{Group: opts.MemoryVersion.Group},
 	)
 
-	// Ensure the storage receives the correct version.
+	// 确保存储收到正确的版本。
 	encoder = opts.StorageSerializer.EncoderForVersion(
 		encoder,
 		encodeVersioner,

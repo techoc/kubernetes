@@ -86,7 +86,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				return config
 			},
 			expectedEnabledAPIs: map[schema.GroupVersionResource]bool{
-				extensionsapiv1beta1.SchemeGroupVersion.WithResource("ingresses"):   false, // this becomes false because the DisableVersions set in the defaultConfig is now order dependent.
+				extensionsapiv1beta1.SchemeGroupVersion.WithResource("ingresses"):   false, // 由于 defaultConfig 中设置的 DisableVersions 现在与顺序有关，结果会变为 false。
 				extensionsapiv1beta1.SchemeGroupVersion.WithResource("deployments"): false,
 				extensionsapiv1beta1.SchemeGroupVersion.WithResource("replicasets"): false,
 				extensionsapiv1beta1.SchemeGroupVersion.WithResource("daemonsets"):  false,
@@ -285,7 +285,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("deployments"):               false,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       true,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "disable-all-beta-resources",
@@ -308,7 +308,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("deployments"):               true,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       true,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-disable-resource-over-user-version-enable",
@@ -333,7 +333,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("deployments"):               false,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       true,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-enable-resource-over-user-version-disable",
@@ -359,7 +359,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("other"):                     false,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       true,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-disable-resource-over-user-stability-enable",
@@ -383,7 +383,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("deployments"):               false,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       true,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-enable-resource-over-user-stability-disable",
@@ -409,7 +409,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("deployments"):               true,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       false,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-disable-resource-over-user-version-enable-over-user-stability-disable",
@@ -437,7 +437,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("other"):                     true,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       false,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-enable-resource-over-user-version-disable-over-user-stability-disable",
@@ -464,7 +464,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("deployments"):               true,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       false,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-disable-resource-over-user-version-enable-over-user-stability-enable",
@@ -490,7 +490,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("deployments"):               false,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       true,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 		{
 			name: "user-explicit-enable-resource-over-user-version-disable-over-user-stability-enable",
@@ -517,7 +517,7 @@ func TestParseRuntimeConfig(t *testing.T) {
 				appsv1.SchemeGroupVersion.WithResource("other"):                     false,
 				apiv1.SchemeGroupVersion.WithResource("pods"):                       true,
 			},
-			err: false, // no error for backwards compatibility
+			err: false, // 无错误，保持向后兼容。
 		},
 	}
 	for _, test := range testCases {
@@ -743,7 +743,7 @@ func TestEmulationForwardCompatibleResourceConfig(t *testing.T) {
 // 并对 extensions/v1beta1 下的资源做细粒度启停。
 func newFakeAPIResourceConfigSource() *serverstore.ResourceConfig {
 	ret := serverstore.NewResourceConfig()
-	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha versions in the list.
+	// 注意：此处列出的 GroupVersion 默认会被启用，不要把 alpha 版本放进来。
 	ret.EnableVersions(
 		apiv1.SchemeGroupVersion,
 		appsv1.SchemeGroupVersion,
@@ -761,7 +761,7 @@ func newFakeAPIResourceConfigSource() *serverstore.ResourceConfig {
 	return ret
 }
 
-// apiResourcesToCheck are the apis we use in this set of unit tests.  They will be check for enable/disable status
+// apiResourcesToCheck 是这一组单测中检查的资源，会逐一验证其启用/禁用状态。
 func apiResourcesToCheck() []schema.GroupVersionResource {
 	return []schema.GroupVersionResource{
 		extensionsapiv1beta1.SchemeGroupVersion.WithResource("ingresses"),

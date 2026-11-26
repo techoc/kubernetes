@@ -42,14 +42,14 @@ import (
 // 委托授权通过 SubjectAccessReview 询问上层 kube-apiserver；
 // 认证通过不等于已授权，每个请求都必须显式经过此授权器。
 type DelegatingAuthorizationOptions struct {
-	// RemoteKubeConfigFile is the file to use to connect to a "normal" kube API server which hosts the
-	// SubjectAccessReview.authorization.k8s.io endpoint for checking tokens.
+	// RemoteKubeConfigFile 是用于连接“普通” kube API server 的文件，
+	// 该 server 承载用于校验 token 的 SubjectAccessReview.authorization.k8s.io 端点。
 	RemoteKubeConfigFile string
-	// RemoteKubeConfigFileOptional is specifying whether not specifying the kubeconfig or
-	// a missing in-cluster config will be fatal.
+	// RemoteKubeConfigFileOptional 指定未提供 kubeconfig 或
+	// 缺少 in-cluster 配置时是否致命。
 	RemoteKubeConfigFileOptional bool
 
-	// AllowCacheTTL is the length of time that a successful authorization response will be cached
+	// AllowCacheTTL 是成功授权响应的缓存时长。
 	AllowCacheTTL time.Duration
 
 	// DenyCacheTTL 是不成功授权响应的缓存时长；
@@ -57,30 +57,30 @@ type DelegatingAuthorizationOptions struct {
 	// 因此拒绝结果缓存更短，以便权限授予后能较快生效。
 	DenyCacheTTL time.Duration
 
-	// AlwaysAllowPaths are HTTP paths which are excluded from authorization. They can be plain
-	// paths or end in * in which case prefix-match is applied. A leading / is optional.
+	// AlwaysAllowPaths 是不经过授权的 HTTP 路径。可以是普通路径，
+	// 也可以以 * 结尾表示前缀匹配；开头斜杠可有可无。
 	AlwaysAllowPaths []string
 
-	// AlwaysAllowGroups are groups which are allowed to take any actions.  In kube, this is system:masters.
+	// AlwaysAllowGroups 是可执行任意操作的组。在 kube 中是 system:masters。
 	AlwaysAllowGroups []string
 
-	// ClientTimeout specifies a time limit for requests made by SubjectAccessReviews client.
-	// The default value is set to 10 seconds.
+	// ClientTimeout 指定 SubjectAccessReviews 客户端发起请求的时间限制。
+	// 默认值为 10 秒。
 	ClientTimeout time.Duration
 
-	// WebhookRetryBackoff specifies the backoff parameters for the authorization webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// WebhookRetryBackoff 指定授权 webhook 重试逻辑的退避参数。
+	// 用于配置每次迭代的等待时间与最大重试次数，
+	// 以限制系统退化时引发的扇出。
 	WebhookRetryBackoff *wait.Backoff
 
-	// CustomRoundTripperFn allows for specifying a middleware function for custom HTTP behaviour for the authorization webhook client.
+	// CustomRoundTripperFn 允许为授权 webhook 客户端指定自定义 HTTP 行为的中间件函数。
 	CustomRoundTripperFn transport.WrapperFunc
 }
 
 // NewDelegatingAuthorizationOptions 返回带安全默认值的委托授权选项。
 func NewDelegatingAuthorizationOptions() *DelegatingAuthorizationOptions {
 	return &DelegatingAuthorizationOptions{
-		// very low for responsiveness, but high enough to handle storms
+		// 很低以保证响应性，但足够高以处理突发流量。
 		AllowCacheTTL:       10 * time.Second,
 		DenyCacheTTL:        10 * time.Second,
 		ClientTimeout:       10 * time.Second,
@@ -88,37 +88,37 @@ func NewDelegatingAuthorizationOptions() *DelegatingAuthorizationOptions {
 		// 这使得 kubelet 无需触发授权检查就能始终获取健康与就绪状态；调用方若不想保留该行为可以清空此字段。
 		// 健康检查端点必须忽略授权，否则节点无法在授权系统故障时判断自身状态。
 		AlwaysAllowPaths: []string{"/healthz", "/readyz", "/livez"},
-		// In an authorization call delegated to a kube-apiserver (the expected common-case), system:masters has full
-		// authority in a hard-coded authorizer.  This means that our default can reasonably be to skip an authorization
-		// check for system:masters.
-		// This field can be cleared by callers if they don't want this behavior.
+		// 在委托给 kube-apiserver 的授权调用中（常见情况），system:masters 在硬编码授权器中拥有完全权限。
+		// 因此默认可以跳过对 system:masters 的授权检查。
+		//
+		// 调用方若不希望该行为可清空此字段。
 		AlwaysAllowGroups: []string{"system:masters"},
 	}
 }
 
-// WithAlwaysAllowGroups appends the list of paths to AlwaysAllowGroups
+// WithAlwaysAllowGroups 把路径列表追加到 AlwaysAllowGroups。
 func (s *DelegatingAuthorizationOptions) WithAlwaysAllowGroups(groups ...string) *DelegatingAuthorizationOptions {
 	s.AlwaysAllowGroups = append(s.AlwaysAllowGroups, groups...)
 	return s
 }
 
-// WithAlwaysAllowPaths appends the list of paths to AlwaysAllowPaths
+// WithAlwaysAllowPaths 把路径列表追加到 AlwaysAllowPaths。
 func (s *DelegatingAuthorizationOptions) WithAlwaysAllowPaths(paths ...string) *DelegatingAuthorizationOptions {
 	s.AlwaysAllowPaths = append(s.AlwaysAllowPaths, paths...)
 	return s
 }
 
-// WithClientTimeout sets the given timeout for SAR client used by this authorizer
+// WithClientTimeout 为此授权器使用的 SAR 客户端设置给定超时。
 func (s *DelegatingAuthorizationOptions) WithClientTimeout(timeout time.Duration) {
 	s.ClientTimeout = timeout
 }
 
-// WithCustomRetryBackoff sets the custom backoff parameters for the authorization webhook retry logic.
+// WithCustomRetryBackoff 为授权 webhook 重试逻辑设置自定义退避参数。
 func (s *DelegatingAuthorizationOptions) WithCustomRetryBackoff(backoff wait.Backoff) {
 	s.WebhookRetryBackoff = &backoff
 }
 
-// WithCustomRoundTripper allows for specifying a middleware function for custom HTTP behaviour for the authorization webhook client.
+// WithCustomRoundTripper 允许为授权 webhook 客户端指定自定义 HTTP 行为的中间件函数。
 func (s *DelegatingAuthorizationOptions) WithCustomRoundTripper(rt transport.WrapperFunc) {
 	s.CustomRoundTripperFn = rt
 }
@@ -184,7 +184,7 @@ func (s *DelegatingAuthorizationOptions) ApplyTo(c *server.AuthorizationInfo) er
 }
 
 // toAuthorizer 按顺序组合授权器：特权组 -> 白名单路径 -> SubjectAccessReview webhook。
-// union 采用"第一个非 NoOpinion 决定生效"的语义。
+// union 采用“第一个非 NoOpinion 决策生效”的语义。
 func (s *DelegatingAuthorizationOptions) toAuthorizer(client kubernetes.Interface) (authorizer.Authorizer, error) {
 	var authorizers []union.NamedAuthorizer
 
@@ -239,8 +239,8 @@ func (s *DelegatingAuthorizationOptions) getClient() (kubernetes.Interface, erro
 
 		clientConfig, err = loader.ClientConfig()
 	} else {
-		// without the remote kubeconfig file, try to use the in-cluster config.  Most addon API servers will
-		// use this path. If it is optional, ignore errors.
+		// 没有远程 kubeconfig 文件时尝试使用 in-cluster 配置。大多数 addon API server 走这条路径。
+		// 若配置为可选则忽略错误。
 		clientConfig, err = rest.InClusterConfig()
 		if err != nil && s.RemoteKubeConfigFileOptional {
 			// 非 in-cluster 且明确要求可选时静默返回 nil；其他错误仍打警告便于排查。
@@ -254,7 +254,7 @@ func (s *DelegatingAuthorizationOptions) getClient() (kubernetes.Interface, erro
 		return nil, fmt.Errorf("failed to get delegated authorization kubeconfig: %v", err)
 	}
 
-	// 设置较高的 qps/burst 限制，因为这实际上决定了 API server 的响应能力：
+	// 设置较高的 qps/burst 限制，因为这实际决定了 API server 的响应能力：
 	// 授权是请求路径上的同步调用，QPS 过低会直接拖慢整个 apiserver。
 	clientConfig.QPS = 200
 	clientConfig.Burst = 400

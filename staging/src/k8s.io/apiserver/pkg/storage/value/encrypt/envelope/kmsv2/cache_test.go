@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kmsv2 transforms values for storage at rest using a Envelope v2 provider
+// Package kmsv2 用 Envelope v2 provider 对静态存储的数据做加解密转换。
 package kmsv2
 
 import (
@@ -73,7 +73,7 @@ func TestKeyFunc(t *testing.T) {
 	cache := newSimpleCache(fakeClock, time.Second, "providerName")
 
 	t.Run("AllocsPerRun test", func(t *testing.T) {
-		key, err := generateKey(encryptedDEKSourceMaxSize) // simulate worst case EDEK
+		key, err := generateKey(encryptedDEKSourceMaxSize) // 模拟最坏情况下的 EDEK。
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +85,7 @@ func TestKeyFunc(t *testing.T) {
 			}
 		}
 
-		// prime the key func
+		// 预热 key func。
 		var wg sync.WaitGroup
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
@@ -134,10 +134,10 @@ func TestSimpleCache(t *testing.T) {
 		}
 	}
 
-	// Wait for the cache to expire
+	// 等待缓存过期。
 	fakeClock.Step(6 * time.Second)
 
-	// expired reads still work until GC runs on write
+	// 过期条目在写入触发 GC 前仍可读。
 	for i := 0; i < 10; i++ {
 		k := fmt.Sprintf("key-%d", i)
 		if cache.get([]byte(k)) != transformer {
@@ -145,7 +145,7 @@ func TestSimpleCache(t *testing.T) {
 		}
 	}
 
-	// run GC by performing a write
+	// 通过写入触发 GC。
 	cache.set([]byte("some-other-unrelated-key"), transformer)
 
 	for i := 0; i < 10; i++ {

@@ -21,19 +21,19 @@ import (
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// Flagz is the structured response for the /flagz endpoint.
+// Flagz 是 /flagz 端点的结构化响应。
 // Flagz 暴露本进程生效的命令行 flag，便于运维核对实际配置；敏感值由
 // 生成端脱敏，而不是依赖客户端过滤。
 type Flagz struct {
-	// TypeMeta is the type metadata for the object.
+	// TypeMeta 是对象的类型元数据。
 	metav1.TypeMeta `json:""`
 	// Standard object's metadata.
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Flags contains the command-line flags and their values.
-	// The keys are the flag names and the values are the flag values,
-	// possibly with confidential values redacted.
+	// Flags 包含命令行 flag 及其取值。
+	// 键是 flag 名，值是 flag 值，
+	// 敏感值可能已被脱敏。
 	// +optional
 	Flags map[string]string `json:"flags,omitempty"`
 }

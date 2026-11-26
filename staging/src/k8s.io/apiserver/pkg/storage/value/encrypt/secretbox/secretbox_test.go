@@ -141,7 +141,7 @@ func benchmarkSecretboxRead(b *testing.B, keyLength int, valueLength int, expect
 	if err != nil {
 		b.Fatal(err)
 	}
-	// reverse the key order if expecting stale
+	// 若期望 stale，则反转密钥顺序。
 	if expectStale {
 		p = value.NewPrefixTransformers(nil,
 			value.PrefixTransformer{Prefix: []byte("second:"), Transformer: NewSecretboxTransformer(key2)},

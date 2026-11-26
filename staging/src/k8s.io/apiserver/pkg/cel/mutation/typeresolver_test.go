@@ -58,15 +58,15 @@ func TestTypeResolver(t *testing.T) {
 			expression: "Object{spec: Object.spec{replicas: 3}}",
 			expectedValue: map[string]any{
 				"spec": map[string]any{
-					// an integer maps to int64
+					// 整数映射为 int64
 					"replicas": int64(3),
 				},
 			},
 		},
 		{
-			// list literal does not require new Path code of the type provider
-			// comparing to the object literal.
-			// This test case serves as a note of "supported syntax"
+			// 列表字面量不需要类型解析器新增 Path 代码，
+			// 与对象字面量相比。
+			// 该用例用于记录“支持的语法”。
 			//
 			// 列表字面量不需要类型解析器新增路径逻辑，但仍需保证嵌套元素能正确解析。
 			name: "Object.spec.template.containers",
@@ -178,19 +178,19 @@ func TestTypeResolver(t *testing.T) {
 			name:          "JSONPatch invalid op",
 			expression:    `JSONPatch{op: "invalid", path: "/spec/replicas", value: 3}`,
 			expectedValue: &JSONPatchVal{Op: "invalid", Path: "/spec/replicas", Val: types.Int(3)},
-			// no error because the values are not checked in compilation.
+			// 无错误，因为编译期不检查值的语义。
 		},
 		{
 			name:          "JSONPatch missing path",
 			expression:    `JSONPatch{op: "add", value: 3}`,
 			expectedValue: &JSONPatchVal{Op: "add", Val: types.Int(3)},
-			// no error because the values are not checked in compilation.
+			// 无错误，因为编译期不检查值的语义。
 		},
 		{
 			name:          "JSONPatch missing value",
 			expression:    `JSONPatch{op: "add", path: "/spec/replicas"}`,
 			expectedValue: &JSONPatchVal{Op: "add", Path: "/spec/replicas"},
-			// no error because the values are not checked in compilation.
+			// 无错误，因为编译期不检查值的语义。
 		},
 		{
 			name:               "JSONPatch invalid value",
@@ -256,8 +256,8 @@ func TestTypeResolver(t *testing.T) {
 	}
 }
 
-// TestCELOptional is an exploration test to demonstrate how CEL optional library
-// behave for the use cases that the mutation library requires.
+// TestCELOptional 探索性测试，演示 CEL optional 库如何满足 mutation 库的用例。
+// 满足 mutation 库所需的使用场景。
 //
 // 说明 optional 语义在“对象字面量”与“map 索引”两种语法下的差异，
 // 这些差异会直接影响策略作者能否安全地表达“字段缺失时保持不设置”。
@@ -274,14 +274,14 @@ func TestCELOptional(t *testing.T) {
 				?existing: optional.none()
 			}`,
 			expectedVal: dynamic.NewObjectVal(types.NewObjectType("Object"), map[string]ref.Val{
-				// "existing" field was not set.
+				// "existing" 字段未设置。
 			}),
 		},
 		{
 			name:        "object of zero value, ofNonZeroValue",
 			expression:  `Object{?spec: optional.ofNonZeroValue(Object.spec{?replicas: Object{}.?replicas})}`,
 			expectedVal: dynamic.NewObjectVal(types.NewObjectType("Object"), map[string]ref.Val{
-				// "existing" field was not set.
+				// "existing" 字段未设置。
 			}),
 		},
 		{
@@ -300,25 +300,25 @@ func TestCELOptional(t *testing.T) {
 			expectedVal: types.OptionalOf(types.Int(1)),
 		},
 		{
-			// Map has a different behavior than Object
+			// map 的行为与 Object 不同。
 			//
-			// Quoting from
+			// 引自
 			// https://github.com/google/cel-spec/blob/master/doc/langdef.md#field-selection
 			//
-			// To test for the presence of a field, the boolean-valued macro has(e.f) can be used.
+			// 要测试字段是否存在，可使用布尔宏 has(e.f)。
 			//
-			// 1. If e evaluates to a map, then has(e.f) indicates whether the string f is
-			// a key in the map (note that f must syntactically be an identifier).
+			// 1. 若 e 求值为 map，has(e.f) 表示字符串 f 是否是 map 中的 key
+			//   （注意 f 在语法上必须是标识符）。
 			//
 			// 对 map 使用 has 时，存在性判断基于 key，而不是对象字段元数据。
 			name: "has on a map, de-sugared, non-existing field, returns false",
-			// has marco supports only the dot access syntax.
+			// has 宏仅支持点号访问语法。
 			expression:  `has({"foo": 1}.bar)`,
 			expectedVal: types.False,
 		},
 		{
 			name: "has on a map, de-sugared, existing field, returns true",
-			// has marco supports only the dot access syntax.
+			// has 宏仅支持点号访问语法。
 			expression:  `has({"foo": 1}.foo)`,
 			expectedVal: types.True,
 		},
@@ -354,14 +354,14 @@ func TestCELOptional(t *testing.T) {
 	}
 }
 
-// mustCreateEnv creates the default env for testing, with given option.
-// it fatally fails the test if the env fails to set up.
+// mustCreateEnv 用给定选项创建默认测试环境，
+// 环境创建失败时直接终止测试。
 //
 // 使用 StoredExpressions 环境，模拟策略被写入 API 后再次编译的情形。
 func mustCreateEnv(t testing.TB, envOptions ...cel.EnvOption) *cel.Env {
 	envSet, err := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()).
 		Extend(environment.VersionedOptions{
-			IntroducedVersion: version.MajorMinor(1, 0), // Always enabled. This is just for test.
+			IntroducedVersion: version.MajorMinor(1, 0), // 始终启用。仅用于测试。
 			EnvOptions:        envOptions,
 		})
 	if err != nil {
@@ -374,9 +374,9 @@ func mustCreateEnv(t testing.TB, envOptions ...cel.EnvOption) *cel.Env {
 	return env
 }
 
-// mustCreateEnvWithOptional creates the default env for testing, with given option,
-// and set up the optional library with default configuration.
-// it fatally fails the test if the env fails to set up.
+// mustCreateEnvWithOptional 用给定选项创建默认测试环境，
+// 并以默认配置设置 optional 库。
+// 环境创建失败时直接终止测试。
 func mustCreateEnvWithOptional(t testing.TB, envOptions ...cel.EnvOption) *cel.Env {
 	return mustCreateEnv(t, append(envOptions, cel.OptionalTypes())...)
 }

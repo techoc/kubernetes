@@ -28,7 +28,7 @@ import (
 
 var registerMetrics sync.Once
 
-// RegisterMetrics registers authorizer metrics.
+// RegisterMetrics 注册授权器指标。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(requestTotal)
@@ -63,9 +63,9 @@ var _ = webhookmetrics.AuthorizerMetrics(delegatingAuthorizerMetrics{})
 // webhook 自身的指标与 matchConditions 指标都使用 no-op 实现，
 // 因为委托场景下这两类信息由被委托的 apiserver 负责。
 type delegatingAuthorizerMetrics struct {
-	// no-op for webhook metrics for now, delegating authorization reports original total/latency metrics
+	// webhook 指标暂用 no-op：委托授权会上报原始的总请求数与延迟指标。
 	webhookmetrics.NoopWebhookMetrics
-	// no-op for matchCondition metrics for now, delegating authorization doesn't configure match conditions
+	// matchCondition 指标暂用 no-op：委托授权不配置 match conditions。
 	celmetrics.NoopMatcherMetrics
 }
 
@@ -75,12 +75,12 @@ func NewDelegatingAuthorizerMetrics() delegatingAuthorizerMetrics {
 	return delegatingAuthorizerMetrics{}
 }
 
-// RecordRequestTotal increments the total number of requests for the delegated authorization.
+// RecordRequestTotal 累加委托授权的总请求数。
 func (delegatingAuthorizerMetrics) RecordRequestTotal(ctx context.Context, code string) {
 	requestTotal.WithContext(ctx).WithLabelValues(code).Add(1)
 }
 
-// RecordRequestLatency measures request latency in seconds for the delegated authorization. Broken down by status code.
+// RecordRequestLatency 以秒为单位记录委托授权的请求延迟，并按状态码拆分。
 func (delegatingAuthorizerMetrics) RecordRequestLatency(ctx context.Context, code string, latency float64) {
 	requestLatency.WithContext(ctx).WithLabelValues(code).Observe(latency)
 }

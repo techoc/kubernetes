@@ -42,21 +42,21 @@ func TestTimeBudget(t *testing.T) {
 		t.Errorf("Expected: %v, got: %v", time.Duration(0), res)
 	}
 
-	// wait for longer than the maxBudget
+	// 等待超过 maxBudget。
 	nextTime := time.Now().Add(10 * time.Second)
 	fakeClock.SetTime(nextTime)
 	// 空闲时间超过上限时只给到 maxBudget，防止长时间空闲后突发大额预算压垮下游。
 	if res := budget.takeAvailable(); res != budget.maxBudget {
 		t.Errorf("Expected: %v, got: %v", budget.maxBudget, res)
 	}
-	// add two refresh intervals to accumulate 2*refresh durations
+	// 再加两个刷新间隔，累计 2 倍 refresh 时长。
 	nextTime = nextTime.Add(2 * time.Second)
 	fakeClock.SetTime(nextTime)
 	if res := budget.takeAvailable(); res != 2*budget.refresh {
 		t.Errorf("Expected: %v, got: %v", 2*budget.refresh, res)
 	}
-	// return one refresh duration to have only one refresh duration available
-	// we didn't advanced on time yet
+	// 只返回一个刷新间隔，使可用预算只有一个 refresh 时长。
+	// 尚未推进时间。
 	budget.returnUnused(budget.refresh)
 	if res := budget.takeAvailable(); res != budget.refresh {
 		t.Errorf("Expected: %v, got: %v", budget.refresh, res)
@@ -75,8 +75,8 @@ func TestTimeBudget(t *testing.T) {
 	if res := budget.takeAvailable(); res != time.Duration(0) {
 		t.Errorf("Expected: %v, got: %v", time.Duration(0), res)
 	}
-	// wait for longer than the maxBudget
-	// verify that adding a negative value didn't affected
+	// 等待超过 maxBudget。
+	// 验证加负值不会产生效果。
 	nextTime = nextTime.Add(10 * time.Minute)
 	fakeClock.SetTime(nextTime)
 	if res := budget.takeAvailable(); res != budget.maxBudget {

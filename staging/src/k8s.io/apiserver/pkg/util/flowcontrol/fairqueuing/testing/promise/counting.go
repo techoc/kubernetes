@@ -27,11 +27,11 @@ import (
 	promiseifc "k8s.io/apiserver/pkg/util/flowcontrol/fairqueuing/promise"
 )
 
-// countingPromise implements the WriteOnce interface.
-// This implementation is based on a condition variable.
-// This implementation tracks active goroutines:
-// the given counter is decremented for a goroutine waiting for this
-// varible to be set and incremented when such a goroutine is
+// countingPromise 实现 WriteOnce 接口。
+// 该实现基于条件变量。
+// 同时跟踪活跃 goroutine：
+// 等待该变量被设置的 goroutine 会使计数减 1，
+// 此类 goroutine 解除阻塞时再增加。
 // unblocked.
 //
 // 计数约定：进入 Wait 前 -1，被唤醒时按 waitingCount 一次性 +N，
@@ -39,27 +39,27 @@ import (
 type countingPromise struct {
 	lock          sync.Locker
 	cond          sync.Cond
-	activeCounter counter.GoRoutineCounter // counter of active goroutines
-	waitingCount  int                      // number of goroutines idle due to this being unset
+	activeCounter counter.GoRoutineCounter // 活跃 goroutine 计数
+	waitingCount  int                      // 因该变量未设置而空闲的 goroutine 数
 	isSet         bool
 	value         interface{}
 }
 
 var _ promiseifc.WriteOnce = &countingPromise{}
 
-// NewCountingWriteOnce creates a WriteOnce that uses locking and counts goroutine activity.
+// NewCountingWriteOnce 创建一个使用锁并统计 goroutine 活动情况的 WriteOnce。
 //
-// The final three arguments are like those for a regular WriteOnce factory:
-// - an optional initial value,
-// - an optional "done" channel,
-// - the value that is Set after the "done" channel becomes selectable.
-// Note that for this implementation, the reaction to `doneCh`
-// becoming selectable does not wait for a Get.
-// If `doneCh != nil` then the caller promises to close it reasonably promptly
-// (to the degree allowed by the Go runtime scheduler), and increment the
-// goroutine counter before that.
-// The WriteOnce's Get method must be called without the lock held.
-// The WriteOnce's Set method must be called with the lock held.
+// 最后三个参数与普通 WriteOnce 工厂类似：
+// - 可选的初始值，
+// - 可选的 "done" channel，
+// - "done" channel 可选后设置的值。
+// 注意：该实现对 `doneCh` 变为可选的响应不等 Get 调用。
+//
+// 若 `doneCh != nil`，调用方承诺及时关闭它
+// （在 Go 运行时调度器允许的范围内），并在关闭前增加 goroutine 计数。
+//
+// WriteOnce 的 Get 方法必须在不持有锁的情况下调用。
+// WriteOnce 的 Set 方法必须在持有锁的情况下调用。
 func NewCountingWriteOnce(activeCounter counter.GoRoutineCounter, lock sync.Locker, initial interface{}, doneCh <-chan struct{}, doneVal interface{}) promiseifc.WriteOnce {
 	p := &countingPromise{
 		lock:          lock,
@@ -70,15 +70,15 @@ func NewCountingWriteOnce(activeCounter counter.GoRoutineCounter, lock sync.Lock
 		value: initial,
 	}
 	if doneCh != nil {
-		activeCounter.Add(1) // count start of the following goroutine
+		activeCounter.Add(1) // 为紧接着启动的 goroutine 增加计数。
 		go func() {
-			defer activeCounter.Add(-1) // count completion of this goroutine
+			defer activeCounter.Add(-1) // 为该 goroutine 的完成减少计数。
 			defer runtime.HandleCrash()
-			// 阻塞在 channel receive 前先“挂起”本 goroutine，防止计数器虚高。
-			activeCounter.Add(-1) // count suspension for channel receive
+			// 在 channel receive 阻塞前先“挂起”本 goroutine，防止计数器虚高。
+			activeCounter.Add(-1) // 为 channel receive 记录挂起。
 			<-doneCh
-			// Whatever goroutine unblocked the preceding receive MUST
-			// have already accounted for this activation.
+			// 解除上述 receive 阻塞的 goroutine 必须已为该激活记过账。
+			//
 			lock.Lock()
 			defer lock.Unlock()
 			p.Set(doneVal)

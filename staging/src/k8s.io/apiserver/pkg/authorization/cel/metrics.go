@@ -25,15 +25,15 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// MatcherMetrics defines methods for reporting matchCondition metrics
+// MatcherMetrics 定义上报 matchCondition 指标的方法。
 //
 // 接口化是为了让调用方在不需要指标时注入 Noop 实现，避免在生产路径上引入空指针判断。
 type MatcherMetrics interface {
-	// RecordAuthorizationMatchConditionEvaluation records the total time taken to evaluate matchConditions for an Authorize() call to the given authorizer
+	// RecordAuthorizationMatchConditionEvaluation 记录一次 Authorize 中求值 matchConditions 的总耗时。
 	RecordAuthorizationMatchConditionEvaluation(ctx context.Context, authorizerType, authorizerName string, elapsed time.Duration)
-	// RecordAuthorizationMatchConditionEvaluationFailure increments if any evaluation error was encountered evaluating matchConditions for an Authorize() call to the given authorizer
+	// RecordAuthorizationMatchConditionEvaluationFailure 在求值 matchConditions 遇到任意错误时累加计数。
 	RecordAuthorizationMatchConditionEvaluationFailure(ctx context.Context, authorizerType, authorizerName string)
-	// RecordAuthorizationMatchConditionExclusion records increments when at least one matchCondition evaluates to false and excludes an Authorize() call to the given authorizer
+	// RecordAuthorizationMatchConditionExclusion 在至少一个 matchCondition 求值为 false 且跳过 webhook 时累加计数。
 	RecordAuthorizationMatchConditionExclusion(ctx context.Context, authorizerType, authorizerName string)
 }
 

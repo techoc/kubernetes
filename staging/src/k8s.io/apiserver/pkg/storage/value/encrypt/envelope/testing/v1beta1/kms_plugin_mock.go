@@ -38,15 +38,15 @@ import (
 )
 
 const (
-	// Now only supported unix domain socket.
+	// 目前只支持 unix domain socket。
 	unixProtocol = "unix"
 
-	// Current version for the protocol interface definition.
+	// 协议接口定义的当前版本。
 	kmsapiVersion = "v1beta1"
 )
 
-// Base64Plugin gRPC sever for a mock KMS provider.
-// Uses base64 to simulate encrypt and decrypt.
+// Base64Plugin 是模拟 KMS provider 的 gRPC server。
+// 用 base64 模拟加密与解密。
 //
 // 这是测试替身而非真正的加密实现：base64 只做可逆编码，用来验证 KMS v2
 // 客户端的协议交互（重载、健康检查、失败状态）而不引入真实密钥管理。
@@ -62,7 +62,7 @@ type Base64Plugin struct {
 	kmsapi.UnsafeKeyManagementServiceServer
 }
 
-// NewBase64Plugin is a constructor for Base64Plugin.
+// NewBase64Plugin 构造 Base64Plugin。
 func NewBase64Plugin(t *testing.T, socketPath string) *Base64Plugin {
 	server := grpc.NewServer()
 	result := &Base64Plugin{
@@ -72,7 +72,7 @@ func NewBase64Plugin(t *testing.T, socketPath string) *Base64Plugin {
 		socketPath: socketPath,
 	}
 
-	// Make sure we don't have a leftover socket.
+	// 确保没有残留的 socket。
 	// 上一次测试异常退出可能残留 socket 文件，listen 会因此失败。
 	_ = os.Remove(socketPath)
 	kmsapi.RegisterKeyManagementServiceServer(server, result)
@@ -87,7 +87,7 @@ func NewBase64Plugin(t *testing.T, socketPath string) *Base64Plugin {
 	return result
 }
 
-// waitForBase64PluginToBeUp waits until the plugin is ready to serve requests.
+// waitForBase64PluginToBeUp 等待插件就绪可服务请求。
 //
 // Serve 在独立 goroutine 中启动，监听建立后仍可能尚未可服务，因此用一次
 // Encrypt 探活作为就绪信号。
@@ -105,17 +105,17 @@ func waitForBase64PluginToBeUp(plugin *Base64Plugin) error {
 	return nil
 }
 
-// LastEncryptRequest returns the last EncryptRequest.Plain sent to the plugin.
+// LastEncryptRequest 返回最后一次发送给插件的 EncryptRequest.Plain。
 func (s *Base64Plugin) LastEncryptRequest() []byte {
 	return s.lastEncryptRequest.Plain
 }
 
-// SetVersion sets the version of kms-plugin.
+// SetVersion 设置 kms-plugin 的版本。
 func (s *Base64Plugin) SetVersion(ver string) {
 	s.ver = ver
 }
 
-// start starts plugin's gRPC service.
+// start 启动插件的 gRPC service。
 func (s *Base64Plugin) start() error {
 	var err error
 	s.listener, err = net.Listen(unixProtocol, s.socketPath)
@@ -129,7 +129,7 @@ func (s *Base64Plugin) start() error {
 	return nil
 }
 
-// CleanUp stops gRPC server and the underlying listener.
+// CleanUp 停止 gRPC server 与底层 listener。
 //
 // 同时删除 socket 文件，否则下一次测试可能复用到已失效的 socket。
 func (s *Base64Plugin) CleanUp() {
@@ -138,7 +138,7 @@ func (s *Base64Plugin) CleanUp() {
 	_ = os.Remove(s.socketPath)
 }
 
-// EnterFailedState places the plugin into failed state.
+// EnterFailedState 让插件进入失败态。
 //
 // 进入失败态后所有加解密返回 FailedPrecondition，用于模拟 KMS 密钥被禁用。
 func (s *Base64Plugin) EnterFailedState() {
@@ -147,20 +147,20 @@ func (s *Base64Plugin) EnterFailedState() {
 	s.inFailedState = true
 }
 
-// ExitFailedState removes the plugin from the failed state.
+// ExitFailedState 让插件退出失败态。
 func (s *Base64Plugin) ExitFailedState() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inFailedState = false
 }
 
-// Version returns the version of the kms-plugin.
+// Version 返回 kms-plugin 的版本。
 func (s *Base64Plugin) Version(ctx context.Context, request *kmsapi.VersionRequest) (*kmsapi.VersionResponse, error) {
 	klog.V(3).InfoS("Received request for Version", "request", request)
 	return &kmsapi.VersionResponse{Version: s.ver, RuntimeName: "testKMS", RuntimeVersion: "0.0.1"}, nil
 }
 
-// Decrypt performs base64 decoding of the payload of kms.DecryptRequest.
+// Decrypt 对 kms.DecryptRequest 的载荷做 base64 解码。
 func (s *Base64Plugin) Decrypt(ctx context.Context, request *kmsapi.DecryptRequest) (*kmsapi.DecryptResponse, error) {
 	klog.V(3).InfoS("Received Decrypt Request", "cipher", string(request.Cipher))
 
@@ -180,7 +180,7 @@ func (s *Base64Plugin) Decrypt(ctx context.Context, request *kmsapi.DecryptReque
 	return &kmsapi.DecryptResponse{Plain: buf[:n]}, nil
 }
 
-// Encrypt performs base64 encoding of the payload of kms.EncryptRequest.
+// Encrypt 对 kms.EncryptRequest 的载荷做 base64 编码。
 func (s *Base64Plugin) Encrypt(ctx context.Context, request *kmsapi.EncryptRequest) (*kmsapi.EncryptResponse, error) {
 	klog.V(3).InfoS("Received Encrypt Request", "plain", string(request.Plain))
 	s.mu.Lock()

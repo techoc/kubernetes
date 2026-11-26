@@ -23,14 +23,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// RunLocalDiscoveryCacheSync populated the localDiscoveryInfoCache and
-// starts a goroutine to periodically refresh the local discovery cache.
+// RunLocalDiscoveryCacheSync 填充 localDiscoveryInfoCache，
+// 并启动一个 goroutine 定期刷新本地发现缓存。
 //
 // 初始填充失败会直接返回错误，阻止 server 启动：没有发现缓存就无法判断某资源应由本机
 // 还是 peer 处理，贸然运行会把请求转发到错误的位置。
 func (h *peerProxyHandler) RunLocalDiscoveryCacheSync(stopCh <-chan struct{}) error {
 	klog.Info("localDiscoveryCacheInvalidation goroutine started")
-	// Populate the cache initially.
+	// 初始填充缓存。
 	if err := h.populateLocalDiscoveryCache(); err != nil {
 		return fmt.Errorf("failed to populate initial local discovery cache: %w", err)
 	}
@@ -76,15 +76,15 @@ func (h *peerProxyHandler) populateLocalDiscoveryCache() error {
 	}
 
 	h.localDiscoveryInfoCache.Store(freshLocalDiscoveryResponse)
-	// Signal that the cache has been populated.
+	// 发出缓存已填充的信号。
 	h.localDiscoveryInfoCachePopulatedOnce.Do(func() {
 		close(h.localDiscoveryInfoCachePopulated)
 	})
 	return nil
 }
 
-// shouldServeLocally checks if the requested resource is present in the local
-// discovery cache indicating the request can be served by this server.
+// shouldServeLocally 检查请求的资源是否在本地发现缓存中，
+// 若在则说明该请求可由本机处理。
 //
 // 缓存缺失或类型异常时返回 false（交给 peer 处理），属于保守选择。
 func (h *peerProxyHandler) shouldServeLocally(gvr schema.GroupVersionResource) bool {

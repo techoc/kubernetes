@@ -37,8 +37,8 @@ const (
 	// cacheWithStreamingMaxMemoryUsage 是流式（chunked）list 从缓存读取时计入的成本上限：
 	// 流式发送意味着对象不会同时驻留内存，实际峰值远小于总量。
 	cacheWithStreamingMaxMemoryUsage = 1_000_000
-	// 1.5MB is the recommended client request size in byte
-	// the etcd server should accept. See
+	// 1.5MB 是客户端请求大小的推荐值（字节），
+	// etcd server 应当接受该大小。参见
 	// https://github.com/etcd-io/etcd/blob/release-3.4/embed/config.go#L56.
 	maxObjectSize = 1_500_000
 	// infiniteObjectCount 用于“计数过期/未知”时保守估计：相当于把 list 视为无界。
@@ -77,14 +77,14 @@ func (e *listWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLe
 
 	requestInfo, ok := apirequest.RequestInfoFrom(r.Context())
 	if !ok {
-		// no RequestInfo should never happen, but to be on the safe side
-		// let's return maximumSeats
+		// 不应出现没有 RequestInfo 的情况，但为了安全起见
+		// 返回 maximumSeats。
 		return WorkEstimate{InitialSeats: maxSeats}
 	}
 
-	// Requests with metadata.name specified are usually executed as get
-	// requests in storage layer so their width should be 1.
-	// Example of such list requests:
+	// 指定了 metadata.name 的请求通常在存储层按 get 执行，宽度应为 1。
+	//
+	// 这类 list 请求示例：
 	// /apis/certificates.k8s.io/v1/certificatesigningrequests?fieldSelector=metadata.name%3Dcsr-xxs4m
 	// /api/v1/namespaces/test/configmaps?fieldSelector=metadata.name%3Dbig-deployment-1&limit=500&resourceVersion=0
 	//
@@ -96,13 +96,13 @@ func (e *listWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLe
 	if err := metav1.Convert_url_Values_To_v1_ListOptions(&query, &listOptions, nil); err != nil {
 		klog.ErrorS(err, "Failed to convert options while estimating work for the list request")
 
-		// This request is destined to fail in the validation layer,
-		// return maximumSeats for this request to be consistent.
+		// 该请求注定会在校验层失败，
+		// 为保持一致，返回 maximumSeats。
 		return WorkEstimate{InitialSeats: maxSeats}
 	}
 
-	// For watch requests we want to set the cost low if they aren't requesting for init events,
-	// either via the explicit SendInitialEvents param or via legacy watches that have RV=0 or unset.
+	// 对 watch 请求，若不请求初始事件，我们希望成本较低：
+	// 无论是显式 SendInitialEvents 参数，还是 RV=0/未设置的旧式 watch。
 	//
 	// 普通 watch 建立后只推送增量，单次成本低；而带 SendInitialEvents 或 RV=0 的 watch
 	// 会一次性回放全量，必须按 list 计费。
@@ -113,11 +113,11 @@ func (e *listWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLe
 			return WorkEstimate{InitialSeats: e.config.MinimumSeats}
 		}
 	}
-	// TODO: Check whether watchcache is enabled.
+	// TODO: 检查是否启用了 watchcache。
 	var listFromStorage bool
 	result, err := delegator.ShouldDelegateListMeta(&listOptions, delegator.CacheWithoutSnapshots{})
 	if err != nil {
-		// Assume worse case where we need to reach to etcd.
+		// 按最坏情况处理：需要访问 etcd。
 		listFromStorage = true
 	} else {
 		listFromStorage = result.ShouldDelegate
@@ -128,33 +128,33 @@ func (e *listWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLe
 	stats, err := e.statsGetterFn(key(requestInfo))
 	switch {
 	case err == ObjectCountStaleErr:
-		// object count going stale is indicative of degradation, so we should
-		// be conservative here and return maximum object count and size.
-		// NOTE: if a CRD is removed, its count will go stale first and then the
-		// pruner will eventually remove the CRD from the cache.
+		// 对象计数过期说明系统已退化，这里应保守处理，
+		// 返回最大的对象数量与大小。
+		// 注意：CRD 被删除时，其计数会先过期，
+		// 然后 pruner 最终把该 CRD 从缓存中移除。
 		//
 		// 计数过期本身是异常信号，按最坏情况计费可以避免在系统退化时进一步过载。
 		stats = storage.Stats{ObjectCount: infiniteObjectCount, EstimatedAverageObjectSizeBytes: maxObjectSize}
 	case err == ObjectCountNotFoundErr:
-		// there are multiple scenarios in which we can see this error:
-		//  a. the type is truly unknown, a typo on the caller's part.
-		//  b. the count has gone stale for too long and the pruner
-		//     has removed the type from the cache.
-		//  c. the type is an aggregated resource that is served by a
-		//     different apiserver (thus its object count is not updated)
-		// we don't have a way to distinguish between those situations.
-		// However, in case c, the request is delegated to a different apiserver,
-		// and thus its cost for our server is minimal. To avoid the situation
-		// when aggregated API calls are overestimated, we allocate the minimum
-		// possible seats (see #109106 as an example when being more conservative
-		// led to problems).
+		// 出现该错误可能有多种情况：
+		//  a. 类型确实未知，调用方写错了；
+		//  b. 计数过期太久，pruner 已把该类型从缓存中移除；
+		//     已从缓存中移除该类型。
+		//  c. 类型是由其它 apiserver 提供的聚合资源（因此其对象计数不会更新）。
+		//     不同的 apiserver（因此其对象计数不会更新）。
+		// 我们无法区分这些情况。
+		// 但在情况 c 下，请求会被委托给其它 apiserver，
+		// 对本服务的开销极小。为避免高估聚合 API 调用，
+		// 这里分配尽可能小的 seats（见 #109106：更保守的做法曾引发问题）。
+		//
+		// 引发过问题）。
 		//
 		// 与过期场景相反，这里取最小值：聚合资源在本服务上的真实开销接近于零，
 		// 若按最大值计费会误伤使用聚合 API 的客户端。
 		return WorkEstimate{InitialSeats: minSeats}
 	case err != nil:
-		// we should never be here since Get returns either ObjectCountStaleErr or
-		// ObjectCountNotFoundErr, return maximum object count and size.
+		// 按理不会走到这里，因为 Get 只返回 ObjectCountStaleErr 或
+		// ObjectCountNotFoundErr；此处返回最大对象数量与大小。
 		klog.ErrorS(err, "Unexpected error from object count tracker")
 		stats = storage.Stats{ObjectCount: infiniteObjectCount, EstimatedAverageObjectSizeBytes: maxObjectSize}
 	}
@@ -168,7 +168,7 @@ func (e *listWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLe
 		seats = e.seatsBasedOnObjectCount(stats, listOptions, isListFromCache, matchesSingle)
 	}
 
-	// make sure we never return a seat of zero
+	// 确保永远不会返回 0 个 seat。
 	if seats < minSeats {
 		seats = minSeats
 	}
@@ -192,8 +192,8 @@ func (e *listWorkEstimator) seatsBasedOnObjectCount(stats storage.Stats, listOpt
 	case matchesSingle:
 		estimatedObjectsToBeProcessed = 1
 	case isListFromCache:
-		// TODO: For resources that implement indexes at the watchcache level,
-		//  we need to adjust the cost accordingly
+		// TODO: 对于在 watchcache 层实现索引的资源，
+		//  需相应调整成本估算。
 		estimatedObjectsToBeProcessed = numStored
 	case listOptions.FieldSelector != "" || listOptions.LabelSelector != "":
 		// 带选择器时存储层要先全量扫描再过滤，成本约为“总量 + 返回量”。
@@ -203,10 +203,10 @@ func (e *listWorkEstimator) seatsBasedOnObjectCount(stats storage.Stats, listOpt
 		estimatedObjectsToBeProcessed = 2 * limit
 	}
 
-	// for now, our rough estimate is to allocate one seat to each 100 obejcts that
-	// will be processed by the list request.
-	// we will come up with a different formula for the transformation function and/or
-	// fine tune this number in future iteratons.
+	// 目前粗略估算：list 请求每处理 100 个对象分配一个 seat。
+	//
+	// 未来迭代会为转换函数采用不同公式，并/或微调此数值。
+	//
 	return uint64(math.Ceil(float64(estimatedObjectsToBeProcessed) / e.config.ObjectsPerSeat))
 }
 
@@ -235,7 +235,7 @@ func (e *listWorkEstimator) seatsBasedOnObjectSize(stats storage.Stats, listOpti
 
 	memoryUsedAtOnce := objectsLoadedInMemory * stats.EstimatedAverageObjectSizeBytes
 	if isListFromCache {
-		// TODO: Identify if the resource is streamed
+		// TODO: 识别资源是否为流式传输。
 		// 从缓存读取可能是流式发送，峰值内存不会随对象总量线性增长，故设上限。
 		memoryUsedAtOnce = min(memoryUsedAtOnce, cacheWithStreamingMaxMemoryUsage)
 	}

@@ -25,28 +25,28 @@ import (
 type priorityAndFairnessKeyType int
 
 const (
-	// priorityAndFairnessInitializationSignalKey is a key under which
-	// initialization signal function for watch requests is stored
-	// in the context.
+	// priorityAndFairnessInitializationSignalKey 是在 context 中存放
+	// watch 请求初始化信号函数的 key。
+	// 存放在 context 中。
 	priorityAndFairnessInitializationSignalKey priorityAndFairnessKeyType = iota
 )
 
-// WithInitializationSignal creates a copy of parent context with
-// priority and fairness initialization signal value.
+// WithInitializationSignal 创建 parent context 的副本，
+// 并设置优先级与公平性的初始化信号值。
 func WithInitializationSignal(ctx context.Context, signal InitializationSignal) context.Context {
 	return context.WithValue(ctx, priorityAndFairnessInitializationSignalKey, signal)
 }
 
-// initializationSignalFrom returns an initialization signal function
-// which when called signals that watch initialization has already finished
-// to priority and fairness dispatcher.
+// initializationSignalFrom 返回一个初始化信号函数，
+// 调用时向优先级与公平性调度器通知 watch 初始化已完成。
+// 通知优先级与公平性调度器。
 func initializationSignalFrom(ctx context.Context) (InitializationSignal, bool) {
 	signal, ok := ctx.Value(priorityAndFairnessInitializationSignalKey).(InitializationSignal)
 	return signal, ok && signal != nil
 }
 
-// WatchInitialized sends a signal to priority and fairness dispatcher
-// that a given watch request has already been initialized.
+// WatchInitialized 向优先级与公平性调度器发送信号，
+// 表示给定 watch 请求已完成初始化。
 //
 // 只有 watch 的首次同步完成才需要通知调度器：在此之前占用的并发份额不能释放，
 // 否则会在缓存未就绪时涌入大量请求。
@@ -56,23 +56,23 @@ func WatchInitialized(ctx context.Context) {
 	}
 }
 
-// RequestDelegated informs the priority and fairness dispatcher that
-// a given request has been delegated to an aggregated API
-// server. No-op when priority and fairness is disabled.
+// RequestDelegated 通知优先级与公平性调度器：
+// 给定请求已被委托给聚合 API server。
+// 优先级与公平性未启用时为空操作。
 func RequestDelegated(ctx context.Context) {
-	// The watch initialization signal doesn't traverse request
-	// boundaries, so we generously fire it as soon as we know
-	// that the request won't be serviced locally. Safe to call
-	// for non-watch requests.
+	// watch 初始化信号不跨越请求边界，因此只要知道请求不会在本机处理，
+	// 就大方可触发该信号。对非 watch 请求调用也是安全的。
+	//
+	// 对非 watch 请求也是安全的。
 	WatchInitialized(ctx)
 }
 
-// InitializationSignal is an interface that allows sending and handling
+// InitializationSignal 是允许发送与处理初始化信号的接口。
 // initialization signals.
 type InitializationSignal interface {
-	// Signal notifies the dispatcher about finished initialization.
+	// Signal 通知调度器初始化已完成。
 	Signal()
-	// Wait waits for the initialization signal.
+	// Wait 等待初始化信号。
 	Wait()
 }
 

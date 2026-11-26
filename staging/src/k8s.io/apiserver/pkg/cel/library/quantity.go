@@ -27,9 +27,9 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
-// Quantity provides a CEL function library extension of Kubernetes
+// Quantity 提供 Kubernetes resource.Quantity 解析函数的 CEL 库扩展。
 // resource.Quantity parsing functions. See `resource.Quantity`
-// documentation for more detailed information about the format itself:
+// 文档了解更多格式细节：
 // https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity
 //
 // Quantity 把字符串解析为资源数量，并提供比较、四则运算与标量转换。
@@ -38,46 +38,44 @@ import (
 //
 // quantity
 //
-// Converts a string to a Quantity or results in an error if the string is not a valid Quantity. Refer
-// to resource.Quantity documentation for information on accepted patterns.
+// 把字符串转换为 Quantity；字符串不是合法 Quantity 时报错。格式参见
+// resource.Quantity 文档。
 //
 //	quantity(<string>) <Quantity>
 //
 // Examples:
 //
-//	quantity('1.5G') // returns a Quantity
-//	quantity('200k') // returns a Quantity
+//	quantity('1.5G') // 返回一个 Quantity
+//	quantity('200k') // 返回一个 Quantity
 //	quantity('200K') // error
 //	quantity('Three') // error
 //	quantity('Mi') // error
 //
 // isQuantity
 //
-// Returns true if a string is a valid Quantity. isQuantity returns true if and
-// only if quantity does not result in error.
+// 若字符串是合法 Quantity 则返回 true，当且仅当 quantity 不会报错。
+// 当且仅当 quantity 不会报错时返回 true。
 //
 //	isQuantity( <string>) <bool>
 //
 // Examples:
 //
-//	isQuantity('1.3G') // returns true
-//	isQuantity('1.3Gi') // returns true
-//	isQuantity('1,3G') // returns false
-//	isQuantity('10000k') // returns true
-//	isQuantity('200K') // returns false
-//	isQuantity('Three') // returns false
-//	isQuantity('Mi') // returns false
+//	isQuantity('1.3G') // 返回 true
+//	isQuantity('1.3Gi') // 返回 true
+//	isQuantity('1,3G') // 返回 false
+//	isQuantity('10000k') // 返回 true
+//	isQuantity('200K') // 返回 false
+//	isQuantity('Three') // 返回 false
+//	isQuantity('Mi') // 返回 false
 //
-// Conversion to Scalars:
+// 转换为标量：
 //
-//   - isInteger: returns true if and only if asInteger is safe to call without an error
+//   - isInteger：可无错调用 asInteger 时返回 true。
 //
-//   - asInteger: returns a representation of the current value as an int64 if
-//     possible or results in an error if conversion would result in overflow
-//     or loss of precision.
+//   - asInteger：如可能，以 int64 表示当前值；转换会溢出或丢失精度时报错。
 //
-//   - asApproximateFloat: returns a float64 representation of the quantity which may
-//     lose precision. If the value of the quantity is outside the range of a float64
+//   - asApproximateFloat：返回可能损失精度的 float64 表示；
+//     若值超出 float64 范围，
 //     +Inf/-Inf will be returned.
 //
 //     <Quantity>.isInteger() <bool>
@@ -86,20 +84,20 @@ import (
 //
 // Examples:
 //
-//	quantity("50000000G").isInteger() // returns true
-//	quantity("50k").isInteger() // returns true
-//	quantity("9999999999999999999999999999999999999G").asInteger() // error: cannot convert value to integer
-//	quantity("9999999999999999999999999999999999999G").isInteger() // returns false
-//	quantity("50k").asInteger() == 50000 // returns true
-//	quantity("50k").sub(20000).asApproximateFloat() == 30000 // returns true
+//	quantity("50000000G").isInteger() // 返回 true
+//	quantity("50k").isInteger() // 返回 true
+//	quantity("9999999999999999999999999999999999999G").asInteger() // 错误：无法转换为整数
+//	quantity("9999999999999999999999999999999999999G").isInteger() // 返回 false
+//	quantity("50k").asInteger() == 50000 // 返回 true
+//	quantity("50k").sub(20000).asApproximateFloat() == 30000 // 返回 true
 //
 // Arithmetic
 //
-//   - sign: Returns `1` if the quantity is positive, `-1` if it is negative. `0` if it is zero
+//   - sign：Quantity 为正返回 `1`，为负返回 `-1`，为零返回 `0`。
 //
-//   - add: Returns sum of two quantities or a quantity and an integer
+//   - add：返回两个 Quantity 之和，或 Quantity 与整数之和。
 //
-//   - sub: Returns difference between two quantities or a quantity and an integer
+//   - sub：返回两个 Quantity 之差，或 Quantity 与整数之差。
 //
 //     <Quantity>.sign() <int>
 //     <Quantity>.add(<quantity>) <quantity>
@@ -109,19 +107,19 @@ import (
 //
 // Examples:
 //
-//	quantity("50k").add("20k") == quantity("70k") // returns true
-//	quantity("50k").add(20) == quantity("50020") // returns true
-//	quantity("50k").sub("20k") == quantity("30k") // returns true
-//	quantity("50k").sub(20000) == quantity("30k") // returns true
-//	quantity("50k").add(20).sub(quantity("100k")).sub(-50000) == quantity("20") // returns true
+//	quantity("50k").add("20k") == quantity("70k") // 返回 true
+//	quantity("50k").add(20) == quantity("50020") // 返回 true
+//	quantity("50k").sub("20k") == quantity("30k") // 返回 true
+//	quantity("50k").sub(20000) == quantity("30k") // 返回 true
+//	quantity("50k").add(20).sub(quantity("100k")).sub(-50000) == quantity("20") // 返回 true
 //
 // Comparisons
 //
-//   - isGreaterThan: Returns true if and only if the receiver is greater than the operand
+//   - isGreaterThan：接收者大于操作数时返回 true。
 //
-//   - isLessThan: Returns true if and only if the receiver is less than the operand
+//   - isLessThan：接收者小于操作数时返回 true。
 //
-//   - compareTo: Compares receiver to operand and returns 0 if they are equal, 1 if the receiver is greater, or -1 if the receiver is less than the operand
+//   - compareTo：比较接收者与操作数，相等返回 0，接收者更大返回 1，更小返回 -1。
 //
 //     <Quantity>.isLessThan(<quantity>) <bool>
 //     <Quantity>.isGreaterThan(<quantity>) <bool>
@@ -129,13 +127,13 @@ import (
 //
 // Examples:
 //
-//	quantity("200M").compareTo(quantity("0.2G")) // returns 0
-//	quantity("50M").compareTo(quantity("50Mi")) // returns -1
-//	quantity("50Mi").compareTo(quantity("50M")) // returns 1
-//	quantity("150Mi").isGreaterThan(quantity("100Mi")) // returns true
-//	quantity("50Mi").isGreaterThan(quantity("100Mi")) // returns false
-//	quantity("50M").isLessThan(quantity("100M")) // returns true
-//	quantity("100M").isLessThan(quantity("50M")) // returns false
+//	quantity("200M").compareTo(quantity("0.2G")) // 返回 0
+//	quantity("50M").compareTo(quantity("50Mi")) // 返回 -1
+//	quantity("50Mi").compareTo(quantity("50M")) // 返回 1
+//	quantity("150Mi").isGreaterThan(quantity("100Mi")) // 返回 true
+//	quantity("50Mi").isGreaterThan(quantity("100Mi")) // 返回 false
+//	quantity("50M").isLessThan(quantity("100M")) // 返回 true
+//	quantity("100M").isLessThan(quantity("50M")) // 返回 false
 func Quantity() cel.EnvOption {
 	return cel.Lib(quantityLib)
 }

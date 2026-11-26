@@ -41,7 +41,7 @@ func createMaxInflightServer(t *testing.T, callsWg, blockWg *sync.WaitGroup, dis
 	requestInfoFactory := &apirequest.RequestInfoFactory{APIPrefixes: sets.NewString("apis", "api"), GrouplessAPIPrefixes: sets.NewString("api")}
 	handler := WithMaxInFlightLimit(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// A short, accounted request that does not wait for block WaitGroup.
+			// 不等待 block WaitGroup 的短请求（计入配额）。
 			// dontwait 路径用于验证未饱和时请求可正常通过。
 			if strings.Contains(r.URL.Path, "dontwait") {
 				return
@@ -90,20 +90,20 @@ func withFakeUser(handler http.Handler) http.Handler {
 func TestMaxInFlightNonMutating(t *testing.T) {
 	const AllowedNonMutatingInflightRequestsNo = 3
 
-	// Calls is used to wait until all server calls are received. We are sending
-	// AllowedNonMutatingInflightRequestsNo of 'long' not-accounted requests and the same number of
+	// Calls 用于等待所有服务端调用到达。测试会发送
+	// 与“短”请求数量相同的“长”请求。
 	// 'short' accounted ones.
 	calls := &sync.WaitGroup{}
 	calls.Add(AllowedNonMutatingInflightRequestsNo * 2)
 
-	// Responses is used to wait until all responses are
-	// received. This prevents some async requests getting EOF
-	// errors from prematurely closing the server
+	// Responses 用于等待所有响应
+	// 收到。这可以避免部分异步请求收到 EOF
+	// 后过早关闭服务端。
 	responses := &sync.WaitGroup{}
 	responses.Add(AllowedNonMutatingInflightRequestsNo * 2)
 
-	// Block is used to keep requests in flight for as long as we need to. All requests will
-	// be unblocked at the same time.
+	// Block 用于按需让请求保持在途；所有请求会
+	// 在同一时刻解除阻塞。
 	block := &sync.WaitGroup{}
 	block.Add(1)
 
@@ -117,9 +117,9 @@ func TestMaxInFlightNonMutating(t *testing.T) {
 	defer cancel()
 	StartMaxInFlightWatermarkMaintenance(ctx.Done())
 
-	// These should hang, but not affect accounting.  use a query param match
+	// 这些请求应挂起但不影响计数，使用 query param 匹配。
 	for i := 0; i < AllowedNonMutatingInflightRequestsNo; i++ {
-		// These should hang waiting on block...
+		// 这些请求应挂起等待 block……
 		go func() {
 			if err := expectHTTPGet(server.URL+"/api/v1/namespaces/default/wait?watch=true", http.StatusOK); err != nil {
 				t.Error(err)
@@ -128,14 +128,14 @@ func TestMaxInFlightNonMutating(t *testing.T) {
 		}()
 	}
 
-	// Check that sever is not saturated by not-accounted calls
+	// 确认未被计入的请求不会让服务端饱和。
 	if err := expectHTTPGet(server.URL+"/dontwait", http.StatusOK); err != nil {
 		t.Error(err)
 	}
 
-	// These should hang and be accounted, i.e. saturate the server
+	// 这些请求应挂起且被计数，即使服务端饱和。
 	for i := 0; i < AllowedNonMutatingInflightRequestsNo; i++ {
-		// These should hang waiting on block...
+		// 这些请求应挂起等待 block……
 		go func() {
 			if err := expectHTTPGet(server.URL, http.StatusOK); err != nil {
 				t.Error(err)
@@ -143,34 +143,34 @@ func TestMaxInFlightNonMutating(t *testing.T) {
 			responses.Done()
 		}()
 	}
-	// We wait for all calls to be received by the server
+	// 等待服务端收到所有调用。
 	calls.Wait()
-	// Disable calls notifications in the server
+	// 关闭服务端的调用通知。
 	waitForCallsMutex.Lock()
 	waitForCalls = false
 	waitForCallsMutex.Unlock()
 
-	// Do this multiple times to show that rate limit rejected requests don't block.
+	// 多试几次，证明被限流拒绝的请求不会阻塞。
 	for i := 0; i < 2; i++ {
 		if err := expectHTTPGet(server.URL, http.StatusTooManyRequests); err != nil {
 			t.Error(err)
 		}
 	}
-	// Validate that non-accounted URLs still work.  use a path regex match
+	// 验证未被计入的 URL 仍可用，使用路径正则匹配。
 	if err := expectHTTPGet(server.URL+"/api/v1/watch/namespaces/default/dontwait", http.StatusOK); err != nil {
 		t.Error(err)
 	}
 
-	// We should allow a single mutating request.
+	// 应允许单个变更请求。
 	if err := expectHTTPPost(server.URL+"/dontwait", http.StatusOK); err != nil {
 		t.Error(err)
 	}
 
-	// Let all hanging requests finish
+	// 让所有挂起的请求结束。
 	block.Done()
 
-	// Show that we recover from being blocked up.
-	// Too avoid flakyness we need to wait until at least one of the requests really finishes.
+	// 验证从饱和状态恢复。
+	// 为避免不稳定，需等到至少一个请求真正结束。
 	responses.Wait()
 	if err := expectHTTPGet(server.URL, http.StatusOK); err != nil {
 		t.Error(err)
@@ -188,8 +188,8 @@ func TestMaxInFlightMutating(t *testing.T) {
 	responses := &sync.WaitGroup{}
 	responses.Add(AllowedMutatingInflightRequestsNo)
 
-	// Block is used to keep requests in flight for as long as we need to. All requests will
-	// be unblocked at the same time.
+	// Block 用于让请求保持在途；所有请求同时解除阻塞。
+	//
 	block := &sync.WaitGroup{}
 	block.Add(1)
 
@@ -203,9 +203,9 @@ func TestMaxInFlightMutating(t *testing.T) {
 	defer cancel()
 	StartMaxInFlightWatermarkMaintenance(ctx.Done())
 
-	// These should hang and be accounted, i.e. saturate the server
+	// 这些请求应挂起且被计数，即使服务端饱和。
 	for i := 0; i < AllowedMutatingInflightRequestsNo; i++ {
-		// These should hang waiting on block...
+		// 这些请求应挂起等待 block……
 		go func() {
 			if err := expectHTTPPost(server.URL+"/foo/bar", http.StatusOK); err != nil {
 				t.Error(err)
@@ -213,37 +213,37 @@ func TestMaxInFlightMutating(t *testing.T) {
 			responses.Done()
 		}()
 	}
-	// We wait for all calls to be received by the server
+	// 等待服务端收到所有调用。
 	calls.Wait()
-	// Disable calls notifications in the server
-	// Disable calls notifications in the server
+	// 关闭服务端的调用通知。
+	//
 	waitForCallsMutex.Lock()
 	waitForCalls = false
 	waitForCallsMutex.Unlock()
 
-	// Do this multiple times to show that rate limit rejected requests don't block.
+	// 多试几次，证明被限流拒绝的请求不会阻塞。
 	for i := 0; i < 2; i++ {
 		if err := expectHTTPPost(server.URL+"/foo/bar/", http.StatusTooManyRequests); err != nil {
 			t.Error(err)
 		}
 	}
-	// Validate that non-mutating URLs still work.  use a path regex match
+	// 验证非变更 URL 仍可用，使用路径正则匹配。
 	if err := expectHTTPGet(server.URL+"/dontwait", http.StatusOK); err != nil {
 		t.Error(err)
 	}
 
-	// Let all hanging requests finish
+	// 让所有挂起的请求结束。
 	block.Done()
 
-	// Show that we recover from being blocked up.
-	// Too avoid flakyness we need to wait until at least one of the requests really finishes.
+	// 验证从饱和状态恢复。
+	// 为避免不稳定，需等到至少一个请求真正结束。
 	responses.Wait()
 	if err := expectHTTPPost(server.URL+"/foo/bar", http.StatusOK); err != nil {
 		t.Error(err)
 	}
 }
 
-// We use GET as a sample non-mutating request.
+// 用 GET 作为非变更请求示例。
 func expectHTTPGet(url string, code int) error {
 	r, err := http.Get(url)
 	if err != nil {
@@ -255,7 +255,7 @@ func expectHTTPGet(url string, code int) error {
 	return nil
 }
 
-// We use POST as a sample mutating request.
+// 用 POST 作为变更请求示例。
 func expectHTTPPost(url string, code int, groups ...string) error {
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader("foo bar"))
 	if err != nil {
@@ -286,8 +286,8 @@ func TestMaxInFlightSkipsMasters(t *testing.T) {
 	responses := &sync.WaitGroup{}
 	responses.Add(AllowedMutatingInflightRequestsNo)
 
-	// Block is used to keep requests in flight for as long as we need to. All requests will
-	// be unblocked at the same time.
+	// Block 用于让请求保持在途；所有请求同时解除阻塞。
+	//
 	block := &sync.WaitGroup{}
 	block.Add(1)
 
@@ -301,9 +301,9 @@ func TestMaxInFlightSkipsMasters(t *testing.T) {
 	defer cancel()
 	StartMaxInFlightWatermarkMaintenance(ctx.Done())
 
-	// These should hang and be accounted, i.e. saturate the server
+	// 这些请求应挂起且被计数，即使服务端饱和。
 	for i := 0; i < AllowedMutatingInflightRequestsNo; i++ {
-		// These should hang waiting on block...
+		// 这些请求应挂起等待 block……
 		go func() {
 			if err := expectHTTPPost(server.URL+"/foo/bar", http.StatusOK); err != nil {
 				t.Error(err)
@@ -311,22 +311,22 @@ func TestMaxInFlightSkipsMasters(t *testing.T) {
 			responses.Done()
 		}()
 	}
-	// We wait for all calls to be received by the server
+	// 等待服务端收到所有调用。
 	calls.Wait()
-	// Disable calls notifications in the server
-	// Disable calls notifications in the server
+	// 关闭服务端的调用通知。
+	//
 	waitForCallsMutex.Lock()
 	waitForCalls = false
 	waitForCallsMutex.Unlock()
 
-	// Do this multiple times to show that rate limit rejected requests don't block.
+	// 多试几次，证明被限流拒绝的请求不会阻塞。
 	for i := 0; i < 2; i++ {
 		if err := expectHTTPPost(server.URL+"/dontwait", http.StatusOK, user.SystemPrivilegedGroup); err != nil {
 			t.Error(err)
 		}
 	}
 
-	// Let all hanging requests finish
+	// 让所有挂起的请求结束。
 	block.Done()
 
 	responses.Wait()

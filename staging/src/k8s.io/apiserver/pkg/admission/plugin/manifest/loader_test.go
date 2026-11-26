@@ -31,7 +31,7 @@ func Test_splitYAMLDocuments(t *testing.T) {
 		input     string
 		wantCount int
 		wantErr   bool
-		// wantContains checks that each returned doc contains the expected substring
+		// wantContains 检查每个返回的文档都包含预期的子串。
 		wantContains []string
 	}{
 		{
@@ -130,14 +130,14 @@ kind: C
 			if len(docs) != tc.wantCount {
 				t.Fatalf("splitYAMLDocuments() returned %d documents, want %d", len(docs), tc.wantCount)
 			}
-			// Verify no empty documents were returned
+			// 确认没有返回空文档；空文档进入后续处理只会产生无法解码的对象。
 			for i, doc := range docs {
 				trimmed := strings.TrimSpace(string(doc))
 				if trimmed == "" {
 					t.Errorf("document %d is empty after trim", i)
 				}
 			}
-			// Verify expected content
+			// 校验文档内容符合预期，避免切分过程改写原文。
 			for i, want := range tc.wantContains {
 				if i >= len(docs) {
 					break

@@ -81,7 +81,7 @@ var (
 	retryBackoff  = DefaultRetryBackoffWithInitialDelay(time.Duration(500) * time.Millisecond)
 )
 
-// TestKubeConfigFile ensures that a kube config file, regardless of validity, is handled properly
+// TestKubeConfigFile 确保无论 kube config 文件是否有效，都能被妥善处理。
 func TestKubeConfigFile(t *testing.T) {
 	badCAPath := "/tmp/missing/ca.pem"
 	badClientCertPath := "/tmp/missing/client.pem"
@@ -90,8 +90,8 @@ func TestKubeConfigFile(t *testing.T) {
 
 	defer os.RemoveAll(dir)
 
-	// These tests check for all of the ways in which a Kubernetes config file could be malformed within the context of
-	// configuring a webhook.  Configuration issues that arise while using the webhook are tested elsewhere.
+	// 这些用例覆盖在配置 webhook 场景下 kubeconfig 文件可能格式错误的所有方式。
+	// 使用 webhook 期间出现的问题在别处测试。
 	tests := []struct {
 		test           string
 		cluster        *v1.NamedCluster
@@ -129,7 +129,7 @@ func TestKubeConfigFile(t *testing.T) {
 				Name: "testing-context",
 			},
 			currentContext: "testing-context",
-			errRegex:       "", // Not an error at parse time, only when using the webhook
+			errRegex:       "", // 解析时不算错误，只有在使用 webhook 时才报错。
 		},
 		{
 			test:    "context with missing cluster",
@@ -153,7 +153,7 @@ func TestKubeConfigFile(t *testing.T) {
 				Name: "testing-context",
 			},
 			currentContext: "testing-context",
-			errRegex:       "", // Not an error at parse time, only when using the webhook
+			errRegex:       "", // 解析时不算错误，只有在使用 webhook 时才报错。
 		},
 		{
 			test: "cluster with invalid CA certificate path",
@@ -171,7 +171,7 @@ func TestKubeConfigFile(t *testing.T) {
 			cluster: &v1.NamedCluster{
 				Cluster: v1.Cluster{
 					Server:                   namedCluster.Cluster.Server,
-					CertificateAuthorityData: caKey, // pretend user put caKey here instead of caCert
+					CertificateAuthorityData: caKey, // 假装用户把 caKey 写在了 caCert 的位置。
 				},
 			},
 			user:     &defaultUser,
@@ -273,7 +273,7 @@ MIIDGTCCAgGgAwIBAgIUOS2M
 
 	for _, tt := range tests {
 		t.Run(tt.test, func(t *testing.T) {
-			// Use a closure so defer statements trigger between loop iterations.
+			// 用闭包让 defer 在每次循环迭代之间触发。
 			err := func() error {
 				kubeConfig := v1.Config{}
 
@@ -322,7 +322,7 @@ MIIDGTCCAgGgAwIBAgIUOS2M
 	}
 }
 
-// TestMissingKubeConfigFile ensures that a kube config path to a missing file is handled properly
+// TestMissingKubeConfigFile 确保 kubeconfig 路径指向不存在文件能被妥善处理。
 func TestMissingKubeConfigFile(t *testing.T) {
 	kubeConfigPath := "/some/missing/path"
 	_, err := LoadKubeconfig(kubeConfigPath, nil)
@@ -334,7 +334,7 @@ func TestMissingKubeConfigFile(t *testing.T) {
 	}
 }
 
-// TestTLSConfig ensures that the TLS-based communication between client and server works as expected
+// TestTLSConfig 确保客户端与服务端之间基于 TLS 的通信正常工作。
 func TestTLSConfig(t *testing.T) {
 	invalidCert := []byte("invalid")
 	tests := []struct {
@@ -399,8 +399,8 @@ func TestTLSConfig(t *testing.T) {
 			errRegex: errSignedByUnknownCA,
 		},
 		{
-			// this will fail when GODEBUG is set to x509ignoreCN=0 with
-			// expected err, but the SAN counter gets increased
+			// 当 GODEBUG 设置为 x509ignoreCN=0 时这里会失败：
+			// 预期报错，但 SAN 计数增加了。
 			test:       "server cert does not have SAN extension",
 			clientCA:   caCert,
 			serverCert: serverCertNoSAN, serverKey: serverKey,
@@ -425,9 +425,9 @@ func TestTLSConfig(t *testing.T) {
 
 	lastSHA1SigCounter := 0
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 用闭包让 defer 在每次循环迭代之间触发。
 		func() {
-			// Create and start a simple HTTPS server
+			// 创建并启动一个简单的 HTTPS server。
 			server, err := newTestServer(tt.serverCert, tt.serverKey, tt.serverCA, nil)
 			if err != nil {
 				t.Errorf("%s: failed to create server: %v", tt.test, err)
@@ -443,7 +443,7 @@ func TestTLSConfig(t *testing.T) {
 
 			defer server.Close()
 
-			// Create a Kubernetes client configuration file
+			// 创建 Kubernetes 客户端配置文件。
 			configFile, err := newKubeConfigFile(v1.Config{
 				Clusters: []v1.NamedCluster{
 					{
@@ -530,16 +530,16 @@ func TestRequestTimeout(t *testing.T) {
 		<-done
 	}
 
-	// Create and start a simple HTTPS server
+	// 创建并启动一个简单的 HTTPS server。
 	server, err := newTestServer(clientCert, clientKey, caCert, handler)
 	if err != nil {
 		t.Errorf("failed to create server: %v", err)
 		return
 	}
 	defer server.Close()
-	defer close(done) // done channel must be closed before server is.
+	defer close(done) // done channel 必须先于 server 关闭。
 
-	// Create a Kubernetes client configuration file
+	// 创建 Kubernetes 客户端配置文件。
 	configFile, err := newKubeConfigFile(v1.Config{
 		Clusters: []v1.NamedCluster{
 			{
@@ -588,36 +588,36 @@ func TestRequestTimeout(t *testing.T) {
 	}
 }
 
-// TestWithExponentialBackoff ensures that the webhook's exponential backoff support works as expected
+// TestWithExponentialBackoff 确保 webhook 的指数退避支持按预期工作。
 //
 // 服务端依次返回可重试的超时、500、不可重试的 406、200；第一次调用应止步于 406，
 // 第二次调用应成功，验证重试判定与状态码传播。
 func TestWithExponentialBackoff(t *testing.T) {
-	count := 0 // To keep track of the requests
+	count := 0 // 用于跟踪请求。
 	gr := schema.GroupResource{
 		Group:    "webhook.util.k8s.io",
 		Resource: "test",
 	}
 
-	// Handler that will handle all backoff CONDITIONS
+	// 处理所有退避条件的 handler。
 	ebHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		switch count++; count {
 		case 1:
-			// Timeout error with retry supplied
+			// 带 retry 的超时错误。
 			w.WriteHeader(http.StatusGatewayTimeout)
 			json.NewEncoder(w).Encode(apierrors.NewServerTimeout(gr, "get", 2))
 		case 2:
-			// Internal server error
+			// 服务端内部错误。
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(apierrors.NewInternalError(fmt.Errorf("nope")))
 		case 3:
-			// HTTP error that is not retryable
+			// 不可重试的 HTTP 错误。
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(apierrors.NewGenericServerResponse(http.StatusNotAcceptable, "get", gr, "testing", "nope", 0, false))
 		case 4:
-			// Successful request
+			// 请求成功。
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]string{
 				"status": "OK",
@@ -625,7 +625,7 @@ func TestWithExponentialBackoff(t *testing.T) {
 		}
 	}
 
-	// Create and start a simple HTTPS server
+	// 创建并启动一个简单的 HTTPS server。
 	server, err := newTestServer(clientCert, clientKey, caCert, ebHandler)
 
 	if err != nil {
@@ -635,7 +635,7 @@ func TestWithExponentialBackoff(t *testing.T) {
 
 	defer server.Close()
 
-	// Create a Kubernetes client configuration file
+	// 创建 Kubernetes 客户端配置文件。
 	configFile, err := newKubeConfigFile(v1.Config{
 		Clusters: []v1.NamedCluster{
 			{
@@ -704,14 +704,14 @@ func bootstrapTestDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	// The certificates needed on disk for the tests
+	// 测试所需的磁盘证书文件。
 	files := map[string][]byte{
 		"ca.pem":         caCert,
 		"client.pem":     clientCert,
 		"client-key.pem": clientKey,
 	}
 
-	// Write the certificate files to disk or fail
+	// 把证书文件写入磁盘，失败则放弃。
 	for fileName, fileData := range files {
 		if err := os.WriteFile(filepath.Join(dir, fileName), fileData, 0400); err != nil {
 			os.RemoveAll(dir)
@@ -798,7 +798,7 @@ func TestWithExponentialBackoffContextIsAlreadyCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 
-	// We don't expect the webhook function to be called since the context is already canceled.
+	// 由于 context 已取消，不应调用 webhook 函数。
 	retryBackoff := wait.Backoff{Steps: 5}
 	err := WithExponentialBackoff(ctx, retryBackoff, webhookFunc, alwaysRetry)
 
@@ -824,13 +824,13 @@ func TestWithExponentialBackoffWebhookErrorIsMostImportant(t *testing.T) {
 	webhookFunc := func() error {
 		attemptsGot++
 
-		// after the first attempt, the context is canceled
+		// 首次尝试后 context 被取消。
 		cancel()
 
 		return errExpected
 	}
 
-	// webhook err has higher priority than ctx error. we expect the webhook error to be returned.
+	// webhook 错误优先于 ctx 错误，预期返回 webhook 错误。
 	retryBackoff := wait.Backoff{Steps: 5}
 	err := WithExponentialBackoff(ctx, retryBackoff, webhookFunc, alwaysRetry)
 
@@ -859,7 +859,7 @@ func TestWithExponentialBackoffWithRetryExhaustedWhileContextIsNotCanceled(t *te
 		return errExpected
 	}
 
-	// webhook err has higher priority than ctx error. we expect the webhook error to be returned.
+	// webhook 错误优先于 ctx 错误，预期返回 webhook 错误。
 	retryBackoff := wait.Backoff{Steps: 5}
 	err := WithExponentialBackoff(ctx, retryBackoff, webhookFunc, alwaysRetry)
 
@@ -918,7 +918,7 @@ func TestGenericWebhookWithExponentialBackoff(t *testing.T) {
 		return rest.Result{}
 	}
 
-	// number of retries should always be local to each call.
+	// 重试次数应始终是每次调用独立的。
 	totalAttemptsExpected := attemptsPerCallExpected * 2
 	webhook.WithExponentialBackoff(context.TODO(), webhookFunc)
 	webhook.WithExponentialBackoff(context.TODO(), webhookFunc)

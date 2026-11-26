@@ -133,8 +133,8 @@ func TestSelectionPredicate(t *testing.T) {
 	}
 }
 
-// shardSelectorMatchingEverything matches all objects but, unlike
-// sharding.Everything(), is not Empty().
+// shardSelectorMatchingEverything 匹配所有对象，但与
+// sharding.Everything() 不同，它不是 Empty()。
 //
 // 这个区别很重要：Empty() 会让 SelectionPredicate 走“无分片”的快速路径，
 // 而这里要测试的是“有分片但范围覆盖全部对象”的行为。

@@ -33,25 +33,25 @@ import (
 type TestCase struct {
 	Name string
 
-	// Expected old value after traversal. If nil, then the traversal should fail.
+	// 遍历后旧值的期望值；为 nil 表示遍历应当失败。
 	OldValue interface{}
 
-	// Expected value after traversal. If nil, then the traversal should fail.
+	// 遍历后新值的期望值；为 nil 表示遍历应当失败。
 	NewValue interface{}
 
-	// Whether OldValue and NewValue are considered to be equal.
-	// Defaults to reflect.DeepEqual comparison of the two. Can be overridden to
-	// true here if the two values are not DeepEqual, but are considered equal
-	// for instance due to map-list reordering.
+	// OldValue 与 NewValue 是否应视为相等。
+	// 默认用 reflect.DeepEqual 比较两者。若两者并非 DeepEqual 但语义相等
+	// （例如 map 列表顺序不同），可在此覆盖为 true。
+	// 例如 map 列表顺序变化。
 	ExpectEqual bool
 
-	// Schema to provide to the correlated object
+	// 提供给关联对象的 schema。
 	Schema common.Schema
 
-	// Array of field names and indexes to traverse to get to the value
+	// 为取到目标值而要遍历的字段名与索引数组。
 	KeyPath []interface{}
 
-	// Root object to traverse from
+	// 遍历的起点根对象。
 	RootObject    interface{}
 	RootOldObject interface{}
 }
@@ -59,10 +59,10 @@ type TestCase struct {
 // Run 执行一次遍历并校验三件事：新值、旧值、相等性判定。
 // 遍历到不可关联节点时 NewValue/OldValue 都必须期望为 nil。
 func (c TestCase) Run() error {
-	// Create the correlated object
+	// 构造关联对象。
 	correlatedObject := common.NewCorrelatedObject(c.RootObject, c.RootOldObject, c.Schema)
 
-	// Traverse the correlated object
+	// 遍历关联对象。
 	var err error
 	for _, key := range c.KeyPath {
 		if correlatedObject == nil {
@@ -87,7 +87,7 @@ func (c TestCase) Run() error {
 			return fmt.Errorf("expected non-nil value, got nil")
 		}
 	} else {
-		// Check that the correlated object has the expected values
+		// 校验关联对象是否具有期望的值。
 		if !reflect.DeepEqual(correlatedObject.Value, c.NewValue) {
 			return fmt.Errorf("expected value %v, got %v", c.NewValue, correlatedObject.Value)
 		}
@@ -95,7 +95,7 @@ func (c TestCase) Run() error {
 			return fmt.Errorf("expected old value %v, got %v", c.OldValue, correlatedObject.OldValue)
 		}
 
-		// Check that the correlated object is considered equal to the expected value
+		// 校验关联对象与期望值是否被视为相等。
 		if (c.ExpectEqual || reflect.DeepEqual(correlatedObject.Value, correlatedObject.OldValue)) != correlatedObject.CachedDeepEqual() {
 			return fmt.Errorf("expected equal, got not equal")
 		}
@@ -104,7 +104,7 @@ func (c TestCase) Run() error {
 	return nil
 }
 
-// Creates a *spec.Schema Schema by decoding the given YAML. Panics on error
+// 解码给定 YAML 创建 *spec.Schema Schema；出错时 panic。
 // YAML 形式让测试用例可以贴近真实的 OpenAPI 片段；解码失败说明用例本身写错，故 panic。
 func mustSchema(source string) *openapi.Schema {
 	d := yaml.NewYAMLOrJSONDecoder(strings.NewReader(source), 4096)
@@ -115,7 +115,7 @@ func mustSchema(source string) *openapi.Schema {
 	return &openapi.Schema{Schema: res}
 }
 
-// Creates an *unstructured by decoding the given YAML. Panics on error
+// 解码给定 YAML 创建 *unstructured；出错时 panic。
 func mustUnstructured(source string) interface{} {
 	d := yaml.NewYAMLOrJSONDecoder(strings.NewReader(source), 4096)
 	var res interface{}
@@ -127,12 +127,11 @@ func mustUnstructured(source string) interface{} {
 
 // TestCorrelation 验证按 keypath 遍历关联树的结果。
 //
-// Tests ensure that the output of following keypath using the given
-// schema and root objects yields the provided new value and old value.
-// If new or old are nil, then ensures that the traversal failed due to
-// uncorrelatable field path.
-// Also confirms that CachedDeepEqual output is equal to expected result of
-// reflect.DeepEqual of the new and old values.
+// 用例验证：按给定 schema 从根对象沿 keypath 遍历，得到的新旧值是否符合预期。
+//
+// 若 new 或 old 为 nil，则验证遍历是否因字段路径不可关联而失败。
+//
+// 同时确认 CachedDeepEqual 的输出与新旧值的 reflect.DeepEqual 结果一致。
 //
 // 用例围绕 x-kubernetes-list-type 的语义展开：map 类型按 map-key 跨顺序关联，
 // atomic/set 不可逐项关联，只能整体比较。

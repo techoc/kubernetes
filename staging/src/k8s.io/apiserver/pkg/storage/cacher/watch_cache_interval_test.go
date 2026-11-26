@@ -231,8 +231,8 @@ func TestFillBuffer(t *testing.T) {
 				if err := verifyEvent(ok, event, events[i]); err != nil {
 					t.Error(err)
 				}
-				// If we have already received bufferSize number of events,
-				// buffer should be empty and we should receive no event.
+				// 若已收到 bufferSize 个事件，缓冲应为空且不应再返回事件。
+				// 缓冲应为空且不应收到事件。
 				if i%bufferSize == bufferSize-1 {
 					event, ok := src.buffer.next()
 					if err := verifyNoEvent(ok, event); err != nil {
@@ -240,13 +240,13 @@ func TestFillBuffer(t *testing.T) {
 					}
 				}
 			}
-			// buffer should be empty and return no event.
+			// 缓冲应为空且不返回事件。
 			event, ok := src.buffer.next()
 			if err := verifyNoEvent(ok, event); err != nil {
 				t.Error(err)
 			}
-			// Buffer should be empty now, an additional fillBuffer()
-			// should make no difference.
+			// 此时缓冲应为空，再调用一次 fillBuffer()
+			// 不应产生任何变化。
 			src.fillBuffer()
 			event, ok = src.buffer.next()
 			if err := verifyNoEvent(ok, event); err != nil {
@@ -260,16 +260,16 @@ func TestFillBuffer(t *testing.T) {
 // 覆盖未填满、恰好填满、超出容量三种传播程度，以及起始索引偏移；
 // 并在每次重新填充缓冲时人为缩短历史窗口，确认区间失效能被检测并返回错误。
 func TestCacheIntervalNextFromWatchCache(t *testing.T) {
-	// Have the capacity such that it facilitates
-	// filling the interval buffer more than once
-	// completely and then some more - 10 here is
+	// 容量设置为便于把 interval buffer 完整填充多次后再多填一些，这里取 10 是任意值。
+	//
+	//
 	// arbitrary.
 	const capacity = 2*bufferSize + 10
 
 	cases := []struct {
 		name string
-		// The total number of events that the watch
-		// cache will be populated with to start with.
+		// watch cache 初始填充的事件总数。
+		//
 		eventsAddedToWatchcache int
 		intervalStartIndex      int
 	}{
@@ -333,15 +333,15 @@ func TestCacheIntervalNextFromWatchCache(t *testing.T) {
 
 			numExpectedEvents := wc.history.endIndex - c.intervalStartIndex
 			for i := 0; i < numExpectedEvents; i++ {
-				// Simulate and test interval invalidation iff
-				// the watchCache itself is not empty.
+				// 模拟并测试仅当 watchCache 本身非空时的区间失效。
+				//
 				if c.eventsAddedToWatchcache > 0 {
-					// The points at which we want to artificially
-					// invalidate the interval and test its behaviour
-					// should be multiples of bufferSize. This is because
-					// invalidation only needs to be checked when we are
-					// copying over events from the underlying watch cache,
-					// i.e. freshly filling in the interval buffer.
+					// 人为使区间失效并测试其行为的时机点
+					// 应为 bufferSize 的倍数：因为失效只需在从底层 watch cache 拷贝事件时检查，
+					// 也就是重新填充 interval buffer 的时候。
+					//
+					// 也就是从底层 watch cache 拷贝事件时，
+					// 即重新填充 interval buffer 时。
 					if i%bufferSize == 0 && i != c.eventsAddedToWatchcache {
 						originalCacheStartIndex := wc.history.startIndex
 						wc.history.startIndex = src.startIndex + 1
@@ -352,17 +352,17 @@ func TestCacheIntervalNextFromWatchCache(t *testing.T) {
 						if event != nil {
 							t.Errorf("expected nil event, got %v", *event)
 						}
-						// Restore startIndex.
+						// 恢复 startIndex。
 						wc.history.startIndex = originalCacheStartIndex
 					}
 				}
 
-				// Check if the state of the interval buffer is as expected.
-				// The interval buffer can be empty either when received is
-				// either a multiple of bufferSize (after one complete fill)
-				// or when received is equal to the number of expected events.
-				// The latter happens when partial filling occurs and no more
-				// events are left post the partial fill.
+				// 检查 interval buffer 的状态是否符合预期。
+				// interval buffer 为空有两种情形：received 是 bufferSize 的整数倍（一次完整填充后），
+				// 或 received 等于期望事件总数。
+				// 后者出现在部分填充且填充后已无剩余事件时。
+				//
+				// 部分填充后没有剩余事件。
 				if src.buffer.isEmpty() != (i%bufferSize == 0 || i == numExpectedEvents) {
 					t.Error("expected empty interval buffer")
 					return
@@ -402,7 +402,7 @@ func TestCacheIntervalNextFromStore(t *testing.T) {
 	const numEvents = 50
 	store := store.NewIndexer(nil)
 	events := make(map[string]*watchCacheEvent)
-	var rv uint64 = 1 // arbitrary number; rv till which the watch cache has progressed.
+	var rv uint64 = 1 // 任意数值：watch cache 已推进到的 rv。
 
 	for i := 0; i < numEvents; i++ {
 		elem := makeTestStoreElement(makeTestPod(fmt.Sprintf("pod%d", i), uint64(i)))
@@ -444,7 +444,7 @@ func TestCacheIntervalNextFromStore(t *testing.T) {
 		}
 	}
 
-	// All events should have been consumed.
+	// 所有事件都应已被消费。
 	event, err := wci.Next()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -454,8 +454,7 @@ func TestCacheIntervalNextFromStore(t *testing.T) {
 	}
 }
 
-// TestCacheIntervalFromStoreSorted verifies newCacheIntervalFromStore returns
-// events sorted by Key for both indexer backends.
+// TestCacheIntervalFromStoreSorted 验证 newCacheIntervalFromStore 对两种 indexer 后端都返回按 Key 排序的事件。
 //
 // 逆序插入是刻意的：任何按插入顺序返回的实现都会直接失败。
 func TestCacheIntervalFromStoreSorted(t *testing.T) {
@@ -468,8 +467,8 @@ func TestCacheIntervalFromStoreSorted(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			const n = 50
-			// Insert in reverse-key order so any code path that returns
-			// items in insertion order trivially fails the sorted check below.
+			// 按 key 逆序插入，使任何按插入顺序返回的实现都无法通过下面的排序检查。
+			//
 			for i := n - 1; i >= 0; i-- {
 				key := fmt.Sprintf("pod-%08d", i)
 				elem := makeTestStoreElement(makeTestPod(key, uint64(i)))
@@ -499,9 +498,9 @@ func TestCacheIntervalFromStoreSorted(t *testing.T) {
 	}
 }
 
-// TestCacheIntervalSourceSelection verifies that getIntervalFromStoreLocked builds the
-// interval from the lazy snapshot source when snapshotting is enabled and falls back to the
-// eager snapshot source when it is disabled.
+// TestCacheIntervalSourceSelection 验证 getIntervalFromStoreLocked：启用快照时从惰性快照源构造区间，
+// 禁用时回退到即时快照源。
+// 禁用时使用即时快照源。
 func TestCacheIntervalSourceSelection(t *testing.T) {
 	cases := []struct {
 		name             string
@@ -565,8 +564,8 @@ func (s *countingSnapshot) OrderedListPrefix(_, _ string) ([]interface{}, error)
 	return s.items, nil
 }
 
-// TestLazySnapshotCacheIntervalSourceEmpty checks that on an empty snapshot Next() returns
-// no events, and that repeated calls still read the snapshot only once.
+// TestLazySnapshotCacheIntervalSourceEmpty 检查空快照时 Next() 不返回事件，
+// 且重复调用仍只读一次快照。
 //
 // 只读一次是性能与一致性要求：重复读取会在快照变化时产生重复或遗漏。
 func TestLazySnapshotCacheIntervalSourceEmpty(t *testing.T) {

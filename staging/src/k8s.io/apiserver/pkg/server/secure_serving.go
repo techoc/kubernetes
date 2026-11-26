@@ -47,15 +47,15 @@ const (
 // 从而支持运行期热更新证书而无需重建 listener。
 func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
-		// Can't use SSLv3 because of POODLE and BEAST
-		// Can't use TLSv1.0 because of POODLE and BEAST using CBC cipher
-		// Can't use TLSv1.1 because of RC4 cipher usage
+		// 不能用 SSLv3：存在 POODLE 与 BEAST 漏洞。
+		// 不能用 TLSv1.0：使用 CBC 加密套件时存在 POODLE 与 BEAST 漏洞。
+		// 不能用 TLSv1.1：使用了 RC4 加密套件。
 		MinVersion: tls.VersionTLS12,
-		// enable HTTP2 for go's 1.7 HTTP Server
+		// 为 Go 1.7 的 HTTP Server 启用 HTTP2。
 		NextProtos: []string{"h2", "http/1.1"},
 	}
 
-	// these are static aspects of the tls.Config
+	// 这些是 tls.Config 的静态部分。
 	if s.DisableHTTP2 {
 		klog.Info("Forcing use of http/1.1 only")
 		tlsConfig.NextProtos = []string{"http/1.1"}
@@ -92,7 +92,7 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 			s.ClientCA,
 			s.Cert,
 			s.SNICerts,
-			nil, // TODO see how to plumb an event recorder down in here. For now this results in simply klog messages.
+			nil, // TODO 研究如何把 event recorder 传到这里。目前只输出 klog 消息。
 		)
 
 		if s.ClientCA != nil {
@@ -101,21 +101,21 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 		if s.Cert != nil {
 			s.Cert.AddListener(dynamicCertificateController)
 		}
-		// generate a context from stopCh. This is to avoid modifying files which are relying on apiserver
-		// TODO: See if we can pass ctx to the current method
+		// 从 stopCh 生成 context，避免修改那些仍依赖 apiserver 的文件。
+		// TODO: 看看能否把 ctx 传给当前方法。
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			select {
 			case <-stopCh:
-				cancel() // stopCh closed, so cancel our context
+				cancel() // stopCh 已关闭，因此取消 context。
 			case <-ctx.Done():
 			}
 		}()
 		// RunOnce 仅用于预热；文件必须已经存在，失败并不致命，
 		// 后续 Run 阶段仍会重试并最终 fail closed。
 		if controller, ok := s.ClientCA.(dynamiccertificates.ControllerRunner); ok {
-			// runonce to try to prime data.  If this fails, it's ok because we fail closed.
-			// Files are required to be populated already, so this is for convenience.
+			// 预热一次数据；即使失败也没关系，因为最终会 fail closed。
+			// 文件必须已存在，这里只是为了方便。
 			if err := controller.RunOnce(ctx); err != nil {
 				klog.Warningf("Initial population of client CA failed: %v", err)
 			}
@@ -123,8 +123,8 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 			go controller.Run(ctx, 1)
 		}
 		if controller, ok := s.Cert.(dynamiccertificates.ControllerRunner); ok {
-			// runonce to try to prime data.  If this fails, it's ok because we fail closed.
-			// Files are required to be populated already, so this is for convenience.
+			// 预热一次数据；即使失败也没关系，因为最终会 fail closed。
+			// 文件必须已存在，这里只是为了方便。
 			if err := controller.RunOnce(ctx); err != nil {
 				klog.Warningf("Initial population of default serving certificate failed: %v", err)
 			}
@@ -134,8 +134,8 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 		for _, sniCert := range s.SNICerts {
 			sniCert.AddListener(dynamicCertificateController)
 			if controller, ok := sniCert.(dynamiccertificates.ControllerRunner); ok {
-				// runonce to try to prime data.  If this fails, it's ok because we fail closed.
-				// Files are required to be populated already, so this is for convenience.
+				// 预热一次数据；即使失败也没关系，因为最终会 fail closed。
+				// 文件必须已存在，这里只是为了方便。
 				if err := controller.RunOnce(ctx); err != nil {
 					klog.Warningf("Initial population of SNI serving certificate failed: %v", err)
 				}
@@ -144,8 +144,8 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 			}
 		}
 
-		// runonce to try to prime data.  If this fails, it's ok because we fail closed.
-		// Files are required to be populated already, so this is for convenience.
+		// 预热一次数据；即使失败也没关系，因为最终会 fail closed。
+		// 文件必须已存在，这里只是为了方便。
 		if err := dynamicCertificateController.RunOnce(); err != nil {
 			klog.Warningf("Initial population of dynamic certificates failed: %v", err)
 		}
@@ -158,10 +158,10 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 	return tlsConfig, nil
 }
 
-// Serve runs the secure http server. It fails only if certificates cannot be loaded or the initial listen call fails.
-// The actual server loop (stoppable by closing stopCh) runs in a go routine, i.e. Serve does not block.
-// It returns a stoppedCh that is closed when all non-hijacked active requests have been processed.
-// It returns a listenerStoppedCh that is closed when the underlying http Server has stopped listening.
+// Serve 运行安全的 HTTP 服务。仅当证书无法加载或首次监听失败时返回错误。
+// 实际的服务循环（可通过关闭 stopCh 停止）运行在 goroutine 中，因此 Serve 不阻塞。
+// 返回的 stoppedCh 在所有非接管的活跃请求处理完成后关闭。
+// 返回的 listenerStoppedCh 在底层 http Server 停止监听后关闭。
 func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Duration, stopCh <-chan struct{}) (<-chan struct{}, <-chan struct{}, error) {
 	if s.Listener == nil {
 		return nil, nil, fmt.Errorf("listener must not be nil")
@@ -180,38 +180,38 @@ func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Dur
 
 		// IdleTimeout 与客户端 transport 的 keep-alive 对齐，
 		// 避免两端对连接空闲时间判断不一致而反复重建连接。
-		IdleTimeout:       90 * time.Second, // matches http.DefaultTransport keep-alive timeout
-		ReadHeaderTimeout: 32 * time.Second, // just shy of requestTimeoutUpperBound
+		IdleTimeout:       90 * time.Second, // 与 http.DefaultTransport 的 keep-alive 超时一致。
+		ReadHeaderTimeout: 32 * time.Second, // 略小于 requestTimeoutUpperBound。
 	}
 
 	setMaxHeaderValueCount(secureServer)
 
 	if !s.DisableHTTP2 {
-		// At least 99% of serialized resources in surveyed clusters were smaller than 256kb.
-		// This should be big enough to accommodate most API POST requests in a single frame,
-		// and small enough to allow a per connection buffer of this size multiplied by `MaxConcurrentStreams`.
+		// 调研显示，集群中至少 99% 的序列化资源小于 256kb。
+		// 该值足够大，可让大多数 API POST 请求装进单帧；
+		// 同时足够小，使得每连接缓冲区乘以 MaxConcurrentStreams 后仍可接受。
 		const resourceBody99Percentile = 256 * 1024
 
 		http2Options := &http2.Server{
-			IdleTimeout: 90 * time.Second, // matches http.DefaultTransport keep-alive timeout
-			// shrink the per-stream buffer and max framesize from the 1MB default while still accommodating most API POST requests in a single frame
+			IdleTimeout: 90 * time.Second, // 与 http.DefaultTransport 的 keep-alive 超时一致。
+			// 把默认 1MB 的每流缓冲区与最大帧大小缩小，同时仍能容纳大多数 API POST 请求。
 			MaxUploadBufferPerStream: resourceBody99Percentile,
 			MaxReadFrameSize:         resourceBody99Percentile,
 		}
 
-		// use the overridden concurrent streams setting or make the default of 250 explicit so we can size MaxUploadBufferPerConnection appropriately
+		// 使用覆盖后的并发流设置，或显式采用默认值 250，以便确定 MaxUploadBufferPerConnection 的大小。
 		if s.HTTP2MaxStreamsPerConnection > 0 {
 			http2Options.MaxConcurrentStreams = uint32(s.HTTP2MaxStreamsPerConnection)
 		} else {
-			// match http2.initialMaxConcurrentStreams used by clients
-			// this makes it so that a malicious client can only open 400 streams before we forcibly close the connection
+			// 与客户端使用的 http2.initialMaxConcurrentStreams 一致。
+			// 这使得恶意客户端最多只能打开 400 个流，随后连接会被强制关闭。
 			// https://github.com/golang/net/commit/b225e7ca6dde1ef5a5ae5ce922861bda011cfabd
 			http2Options.MaxConcurrentStreams = 100
 		}
 
-		// increase the connection buffer size from the 1MB default to handle the specified number of concurrent streams
+		// 把连接缓冲区从默认 1MB 增大，以处理指定数量的并发流。
 		http2Options.MaxUploadBufferPerConnection = http2Options.MaxUploadBufferPerStream * int32(http2Options.MaxConcurrentStreams)
-		// apply settings to the server
+		// 把设置应用到服务端。
 		if err := http2.ConfigureServer(secureServer, http2Options); err != nil {
 			return nil, nil, fmt.Errorf("error configuring http2: %v", err)
 		}
@@ -227,12 +227,12 @@ func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Dur
 	return RunServer(secureServer, s.Listener, shutdownTimeout, stopCh)
 }
 
-// RunServer spawns a go-routine continuously serving until the stopCh is
-// closed.
-// It returns a stoppedCh that is closed when all non-hijacked active requests
-// have been processed.
-// This function does not block
-// TODO: make private when insecure serving is gone from the kube-apiserver
+// RunServer 启动一个 goroutine 持续服务，直到 stopCh 关闭。
+//
+// 返回的 stoppedCh 在所有非接管的活跃请求处理完成后关闭。
+//
+// 该函数不阻塞。
+// TODO: 当 kube-apiserver 移除不安全服务后，改为私有。
 func RunServer(
 	server *http.Server,
 	ln net.Listener,
@@ -283,12 +283,11 @@ func RunServer(
 	return serverShutdownCh, listenerStoppedCh, nil
 }
 
-// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
-// connections. It's used by ListenAndServe and ListenAndServeTLS so
-// dead TCP connections (e.g. closing laptop mid-download) eventually
-// go away.
+// tcpKeepAliveListener 为接受的连接设置 TCP keep-alive 超时。
+// ListenAndServe 与 ListenAndServeTLS 使用它，使失效的 TCP 连接
+// （例如下载途中合上笔记本）最终被回收。
 //
-// Copied from Go 1.7.2 net/http/server.go
+// 抄自 Go 1.7.2 net/http/server.go。
 type tcpKeepAliveListener struct {
 	net.Listener
 }
@@ -306,8 +305,8 @@ func (ln tcpKeepAliveListener) Accept() (net.Conn, error) {
 	return c, nil
 }
 
-// tlsHandshakeErrorWriter writes TLS handshake errors to klog with
-// trace level - V(5), to avoid flooding of tls handshake errors.
+// tlsHandshakeErrorWriter 把 TLS 握手错误以 V(5) 的 trace 级别写入 klog，
+// 避免握手错误刷屏。
 type tlsHandshakeErrorWriter struct {
 	out io.Writer
 }
@@ -323,6 +322,6 @@ func (w *tlsHandshakeErrorWriter) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 
-	// for non tls handshake error, log it as usual
+	// 非 TLS 握手错误照常记录。
 	return w.out.Write(p)
 }

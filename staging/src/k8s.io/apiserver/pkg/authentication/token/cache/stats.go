@@ -68,9 +68,9 @@ var (
 
 var registerMetricsOnce sync.Once
 
-// registerMetrics registers the token cache metrics with the legacy registry.
-// Do not use an init() function because feature gates (e.g., NativeHistograms)
-// must be parsed before the histogram metric is created and registered.
+// registerMetrics 向 legacy registry 注册 token 缓存指标。
+// 不使用 init()，因为 feature gate（如 NativeHistograms）
+// 必须在创建并注册 histogram 指标之前完成解析。
 func registerMetrics() {
 	// sync.Once 保证重复构造 authenticator 时不会重复注册（重复注册会 panic）。
 	registerMetricsOnce.Do(func() {

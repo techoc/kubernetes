@@ -103,9 +103,9 @@ func NewInvalidObjError(key, msg string) *StorageError {
 	}
 }
 
-// NewCorruptObjError returns a new StorageError, it represents a corrupt object:
-// a) object data retrieved from the storage failed to transform with the given err.
-// b) the given object failed to decode with the given err
+// NewCorruptObjError 返回一个表示对象损坏的 StorageError：
+// a) 从存储取回的对象数据无法按给定 err 转换；
+// b) 给定对象无法按给定 err 解码。
 func NewCorruptObjError(key string, err error) *StorageError {
 	return &StorageError{
 		Code: ErrCodeCorruptObj,
@@ -120,7 +120,7 @@ type StorageError struct {
 	Key             string
 	ResourceVersion int64
 
-	// inner error
+	// 内部错误
 	err error
 }
 
@@ -134,39 +134,39 @@ func (e *StorageError) Error() string {
 		errCodeToMessage[e.Code], e.Code, e.Key, e.ResourceVersion, e.err)
 }
 
-// IsNotFound returns true if and only if err is "key" not found error.
+// IsNotFound 仅当 err 是 "key" 未找到错误时返回 true。
 func IsNotFound(err error) bool {
 	return isErrCode(err, ErrCodeKeyNotFound)
 }
 
-// IsExist returns true if and only if err is "key" already exists error.
+// IsExist 仅当 err 是 "key" 已存在错误时返回 true。
 func IsExist(err error) bool {
 	return isErrCode(err, ErrCodeKeyExists)
 }
 
-// IsUnreachable returns true if and only if err indicates the server could not be reached.
+// IsUnreachable 仅当 err 表示无法访问服务端时返回 true。
 func IsUnreachable(err error) bool {
 	return isErrCode(err, ErrCodeUnreachable)
 }
 
-// IsConflict returns true if and only if err is a write conflict.
+// IsConflict 仅当 err 是写冲突时返回 true。
 func IsConflict(err error) bool {
 	return isErrCode(err, ErrCodeResourceVersionConflicts)
 }
 
-// IsRequestTimeout returns true if and only if err indicates that the request has timed out.
+// IsRequestTimeout 仅当 err 表示请求已超时时返回 true。
 func IsRequestTimeout(err error) bool {
 	return isErrCode(err, ErrCodeTimeout)
 }
 
-// IsInvalidObj returns true if and only if err is invalid error
+// IsInvalidObj 仅当 err 是 invalid 错误时返回 true。
 func IsInvalidObj(err error) bool {
 	return isErrCode(err, ErrCodeInvalidObj)
 }
 
-// IsCorruptObject returns true if and only if:
-// a) the given object data retrieved from the storage is not transformable, or
-// b) the given object failed to decode properly
+// IsCorruptObject 仅当满足以下任一条件时返回 true：
+// a) 从存储取回的对象数据无法转换；或
+// b) 给定对象无法正确解码。
 //
 // 与 isErrCode 不同，这里使用 errors.As 以支持被包装的错误链。
 func IsCorruptObject(err error) bool {
@@ -191,8 +191,8 @@ func isErrCode(err error, code int) bool {
 	return false
 }
 
-// InvalidError is generated when an error caused by invalid API object occurs
-// in the storage package.
+// InvalidError 表示存储包中因 API 对象非法而产生的错误。
+// 它汇总了所有字段级校验失败项。
 type InvalidError struct {
 	Errs field.ErrorList
 }
@@ -202,7 +202,7 @@ func (e InvalidError) Error() string {
 	return e.Errs.ToAggregate().Error()
 }
 
-// IsInvalidError returns true if and only if err is an InvalidError.
+// IsInvalidError 仅当 err 是 InvalidError 时返回 true。
 func IsInvalidError(err error) bool {
 	_, ok := err.(InvalidError)
 	return ok
@@ -212,13 +212,13 @@ func NewInvalidError(errors field.ErrorList) InvalidError {
 	return InvalidError{errors}
 }
 
-// InternalError is generated when an error occurs in the storage package, i.e.,
-// not from the underlying storage backend (e.g., etcd).
+// InternalError 表示存储包内部产生的错误，而非底层存储后端（如 etcd）的错误。
+// 而非来自底层存储后端（如 etcd）。
 type InternalError struct {
 	Reason string
 
-	// retain the inner error to maintain the error tree, so as to enable us
-	// to do proper error checking, but we also need to be backward compatible.
+	// 保留内部错误以便维护错误树、支持正确的错误检查，
+	// 同时保持向后兼容。
 	//
 	// Reason 是公开的稳定文本，err 仅用于错误链，不参与 Error() 输出。
 	err error
@@ -229,10 +229,10 @@ func (e InternalError) Error() string {
 	return e.Reason
 }
 
-// Unwrap 暴露内部错误以支持 errors.Is/As。
+// IsInternalError 仅当 err 是 InternalError 时返回 true。
 func (e InternalError) Unwrap() error { return e.err }
 
-// IsInternalError returns true if and only if err is an InternalError.
+// IsInternalError 仅当 err 是 InternalError 时返回 true。
 func IsInternalError(err error) bool {
 	_, ok := err.(InternalError)
 	return ok
@@ -244,8 +244,8 @@ func NewInternalError(err error) InternalError {
 
 var tooLargeResourceVersionCauseMsg = "Too large resource version"
 
-// NewTooLargeResourceVersionError returns a timeout error with the given retrySeconds for a request for
-// a minimum resource version that is larger than the largest currently available resource version for a requested resource.
+// NewTooLargeResourceVersionError 返回一个超时错误，附带给定 retrySeconds，
+// 用于请求的最小 resourceVersion 大于当前可用的最大 resourceVersion 的场景。
 //
 // 使用 Timeout + 特定 Cause 而不是自定义错误类型：这样既能让通用客户端
 // 识别为可重试，又能让 watch 缓存逻辑通过 IsTooLargeResourceVersion
@@ -261,7 +261,7 @@ func NewTooLargeResourceVersionError(minimumResourceVersion, currentRevision uin
 	return err
 }
 
-// IsTooLargeResourceVersion returns true if the error is a TooLargeResourceVersion error.
+// IsTooLargeResourceVersion 判断错误是否为 TooLargeResourceVersion 错误。
 func IsTooLargeResourceVersion(err error) bool {
 	if !apierrors.IsTimeout(err) {
 		return false

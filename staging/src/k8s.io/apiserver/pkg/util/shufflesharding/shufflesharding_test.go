@@ -177,7 +177,7 @@ func TestCardDuplication(t *testing.T) {
 				return
 			}
 
-			// check cards range and duplication
+			// 检查卡牌范围与重复情况。
 			cardMap := make(map[int]struct{})
 			for _, card := range hand {
 				if card < 0 || card >= int(test.deckSize) {
@@ -195,9 +195,9 @@ func TestCardDuplication(t *testing.T) {
 	}
 }
 
-// ff computes the falling factorial `n!/(n-m)!` and requires n to be
-// positive and m to be in the range [0, n] and requires the answer to
-// fit in an int
+// ff 计算下降阶乘 `n!/(n-m)!`，要求 n 为正、m 在 [0, n] 范围内，
+// 且结果能放进 int。
+// 且结果能放进 int。
 func ff(n, m int) int {
 	ans := 1
 	for f := n; f > n-m; f-- {
@@ -227,7 +227,7 @@ func TestUniformDistribution(t *testing.T) {
 			t.Errorf("fail to create Dealer: %v", err)
 			return
 		}
-		handCoordinateMap := make(map[int]int) // maps coded hand to count of times seen
+		handCoordinateMap := make(map[int]int) // 把编码后的手牌映射到出现次数。
 
 		// 计算理论命中区间：哈希空间除以组合数，再乘每组的排列数。
 		fallingFactorial := ff(test.deckSize, test.handSize)
@@ -251,7 +251,7 @@ func TestUniformDistribution(t *testing.T) {
 
 		t.Logf("Deck size = %v, hand size = %v, number of possible hands = %d, number of hands seen = %d, number of deals = %d, expected count range = [%v, %v]", test.deckSize, test.handSize, allCoordinateCount, numHandsSeen, test.hashMax, minCount, maxCount)
 
-		// histogram maps (count of times a hand is seen) to (number of hands having that count)
+		// histogram 把（某手牌出现的次数）映射到（出现该次数的手牌数量）。
 		histogram := make(map[int]int)
 		for _, count := range handCoordinateMap {
 			histogram[count] = histogram[count] + 1

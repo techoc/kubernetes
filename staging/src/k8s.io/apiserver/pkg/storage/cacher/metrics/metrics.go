@@ -35,29 +35,28 @@ const (
 	subsystem = "watch_cache"
 )
 
-// DispatchStage identifies a single stage of an event's lifecycle as it moves
-// through the watch cache dispatch pipeline. It is used as the "stage" label
-// value on the dispatchStageDuration metric.
+// DispatchStage 标识事件在 watch cache 分发流水线中的单个生命周期阶段。
+// 它作为 "stage" 标签值用于 dispatchStageDuration 指标。
 //
-// StageTotal is the end-to-end latency of a successfully delivered event.
-// The remaining stages measure individual segments of that path.
+// StageTotal 是成功投递事件的端到端延迟。
+// 其余阶段度量该路径上的各个分段。
 //
 // 分段设计便于定位瓶颈：storage_to_cache 高说明 etcd 解码或反射器处理慢，
 // cache_to_watcher 高说明下游客户端消费不过来（背压）。
 type DispatchStage int
 
 const (
-	// StageTotal: end-to-end, etcd decode -> written to the result channel.
+	// StageTotal：端到端，从 etcd 解码到写入结果 channel。
 	StageTotal DispatchStage = iota
 
-	// StageStorageToCache: event decoded from etcd -> event received by cacher.
-	// Captures the delay between when an event is decoded from the storage backend
-	// and when it is first processed by the cacher's reflector loop.
+	// StageStorageToCache：事件从 etcd 解码到被 cacher 接收。
+	// 度量事件从存储后端解码完成，到 cacher 的 reflector 循环首次处理之间的延迟。
+	//
 	StageStorageToCache
 
-	// StageCacheToWatcher: watch.Event built -> written to watcher's result channel.
-	// Captures time spent blocked handing the event off to the client,
-	// i.e. downstream (result channel) backpressure.
+	// StageCacheToWatcher：watch.Event 构建完成到写入 watcher 的结果 channel。
+	// 度量把事件交给客户端时阻塞的时间，
+	// 即下游（结果 channel）的背压。
 	StageCacheToWatcher
 
 	numDispatchStages
@@ -70,12 +69,9 @@ var dispatchStageName = [numDispatchStages]string{
 }
 
 /*
- * By default, all the following metrics are defined as falling under
- * ALPHA stability level https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
+ * 默认地，以下所有指标的稳定性等级均为 ALPHA：https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
  *
- * Promoting the stability level of the metric is a responsibility of the component owner, since it
- * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
- * the metric stability policy.
+ * 提升指标稳定性等级是组件所有者的责任，因为按照指标稳定性策略，这涉及明确承诺在多个发布版本中支持该指标。
  */
 var (
 	// 注意：cache_list_* 系列已标记 DeprecatedVersion 1.37.0，
@@ -287,12 +283,12 @@ var (
 
 var registerMetrics sync.Once
 
-// Register all metrics.
+// 注册所有指标。
 //
-// 使用 sync.Once 保证重复调用安全；分片相关指标只在特性门控开启时注册，
-// 否则会在指标暴露时凭空多出恒为零的 series。
+// 用 sync.Once 保证重复调用安全；分片相关指标只在特性门控开启时注册，
+// 否则指标暴露时会凭空多出恒为零的 series。
 func Register() {
-	// Register the metrics.
+	// 注册指标。
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(listCacheCount)
 		legacyregistry.MustRegister(listCacheNumFetched)
@@ -319,7 +315,7 @@ func Register() {
 	})
 }
 
-// RecordListCacheMetrics notes various metrics of the cost to serve a LIST request
+// RecordListCacheMetrics 记录为 LIST 请求提供服务的各项成本指标。
 func RecordListCacheMetrics(groupResource schema.GroupResource, indexName string, numFetched, numReturned int) {
 	listCacheCount.WithLabelValues(groupResource.Group, groupResource.Resource, indexName).Inc()
 	listCacheNumFetched.WithLabelValues(groupResource.Group, groupResource.Resource, indexName).Add(float64(numFetched))
@@ -327,32 +323,32 @@ func RecordListCacheMetrics(groupResource schema.GroupResource, indexName string
 	storagemetrics.RecordStorageListMetrics(groupResource, storagemetrics.StorageBackendWatchCache, indexName, numFetched, 0, numReturned)
 }
 
-// RecordResourceVersion sets the current resource version for a given resource type.
-// The resource version is truncated to the 15 least significant digits to prevent
-// the metric from growing indefinitely and losing precision when it exceeds 2^53-1.
+// RecordResourceVersion 为给定资源类型设置当前 resource version。
+// resource version 被截断到最低 15 位数字，以防指标无界增长，
+// 也避免超过 2^53-1 时丢失精度。
 //
 // 指标只用于观察增长趋势，取模不影响该用途。
 func RecordResourceVersion(groupResource schema.GroupResource, resourceVersion uint64) {
 	watchCacheResourceVersion.WithLabelValues(groupResource.Group, groupResource.Resource).Set(float64(resourceVersion % 1000000000000000))
 }
 
-// RecordShardedWatchStarted increments the active sharded watch gauge for the given resource.
+// RecordShardedWatchStarted 为给定资源增加活跃分片 watch gauge。
 // 必须与 RecordShardedWatchStopped 成对调用，否则 gauge 会漂移。
 func RecordShardedWatchStarted(groupResource schema.GroupResource) {
 	WatchShardsTotal.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
 
-// RecordShardedWatchStopped decrements the active sharded watch gauge for the given resource.
+// RecordShardedWatchStopped 为给定资源减少活跃分片 watch gauge。
 func RecordShardedWatchStopped(groupResource schema.GroupResource) {
 	WatchShardsTotal.WithLabelValues(groupResource.Group, groupResource.Resource).Dec()
 }
 
-// RecordWatchFilteredEvent increments the counter for events filtered by shard selector.
+// RecordWatchFilteredEvent 为被分片选择器过滤掉的事件增加计数。
 func RecordWatchFilteredEvent(groupResource schema.GroupResource) {
 	WatchFilteredEventsTotal.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
 
-// RecordsWatchCacheCapacityChange records watchCache capacity resize(increase or decrease) operations.
+// RecordsWatchCacheCapacityChange 记录 watchCache 容量调整（增大或减小）操作。
 func RecordsWatchCacheCapacityChange(groupResource schema.GroupResource, old, new int) {
 	WatchCacheCapacity.WithLabelValues(groupResource.Group, groupResource.Resource).Set(float64(new))
 	if old < new {
@@ -362,8 +358,8 @@ func RecordsWatchCacheCapacityChange(groupResource schema.GroupResource, old, ne
 	watchCacheCapacityDecreaseTotal.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
 
-// WatcherMetricsObservers holds pre-resolved (group, resource) observers for
-// every dispatch stage, so the hot path never touches the label map.
+// WatcherMetricsObservers 为每个分发阶段保存预解析好的 (group, resource) observer，
+// 让热路径不再触碰 label map。
 //
 // 预解析（WithLabelValues）把标签查找从每次事件分发移到连接建立时，
 // 这对高频 watch 事件路径是显著优化。
@@ -371,7 +367,7 @@ type WatcherMetricsObservers struct {
 	stageDurations [numDispatchStages]compbasemetrics.ObserverMetric
 }
 
-// NewWatcherMetricsObservers creates a pre-resolved metrics observer for watch connections.
+// NewWatcherMetricsObservers 为 watch 连接创建预解析的指标 observer。
 func NewWatcherMetricsObservers(groupResource schema.GroupResource) *WatcherMetricsObservers {
 	o := &WatcherMetricsObservers{}
 	for s := range numDispatchStages {
@@ -380,7 +376,7 @@ func NewWatcherMetricsObservers(groupResource schema.GroupResource) *WatcherMetr
 	return o
 }
 
-// ObserveStage records the duration spent in the given dispatch stage.
+// ObserveStage 记录给定分发阶段耗时。
 func (d *WatcherMetricsObservers) ObserveStage(stage DispatchStage, duration time.Duration) {
 	// 越界的 stage 直接忽略，避免热路径 panic。
 	if stage < 0 || stage >= numDispatchStages {
@@ -405,7 +401,7 @@ func (noopObserver) Observe(float64) {}
 
 var noopObs noopObserver
 
-// NewNoopWatcherMetricsObservers returns a metrics observers struct that does nothing.
+// NewNoopWatcherMetricsObservers 返回一个什么都不做的指标 observers 结构体。
 func NewNoopWatcherMetricsObservers() *WatcherMetricsObservers {
 	o := &WatcherMetricsObservers{}
 	for s := range o.stageDurations {

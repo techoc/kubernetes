@@ -35,10 +35,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// StacktracePred returns true if a stacktrace should be logged for this status.
+// StacktracePred 判断给定状态码是否应记录栈。
 type StacktracePred func(httpStatus int) (logStacktrace bool)
 
-// ShouldLogRequestPred returns true if logging should be enabled for this request
+// ShouldLogRequestPred 判断该请求是否应启用日志。
 type ShouldLogRequestPred func() bool
 
 type logger interface {
@@ -64,8 +64,8 @@ type respLogger struct {
 	statusRecorded bool
 	status         int
 	statusStack    string
-	// mutex is used when accessing addedInfo, addedKeyValuePairs and logStacktracePred.
-	// They can be modified by other goroutine when logging happens (in case of request timeout)
+	// 访问 addedInfo、addedKeyValuePairs 与 logStacktracePred 时需要加锁。
+	// 请求超时时这些字段可能被其它 goroutine 修改。
 	mutex              sync.Mutex
 	addedInfo          strings.Builder
 	addedKeyValuePairs []interface{}
@@ -89,10 +89,10 @@ func (rl *respLogger) Unwrap() http.ResponseWriter {
 	return rl.w
 }
 
-// Simple logger that logs immediately when Addf is called
+// 简单的 logger，Addf 调用时立即写日志。
 type passthroughLogger struct{}
 
-// Addf logs info immediately.
+// Addf 立即记录信息。
 func (passthroughLogger) Addf(format string, data ...interface{}) {
 	klog.V(2).Info(fmt.Sprintf(format, data...))
 }
@@ -154,18 +154,18 @@ func withLogging(handler http.Handler, stackTracePred StacktracePred, shouldLogR
 		w = responsewriter.WrapForHTTP1Or2(rl)
 		handler.ServeHTTP(w, req)
 
-		// We need to ensure that the request is logged after it is processed.
-		// In case the request is executed in a separate goroutine created via
-		// WithRoutine handler in the handler chain (i.e. above handler.ServeHTTP()
-		// would return request is completely responsed), we want the logging to
-		// happen in that goroutine too, so we append it to the task.
+		// 需要确保请求处理完成后再记录日志。
+		// 若请求在 WithRoutine handler 创建的独立 goroutine 中执行
+		// （即 handler.ServeHTTP() 返回时请求尚未完全响应），
+		// 日志也要在该 goroutine 中完成，因此把它追加到任务里。
+		// 也在该 goroutine 中完成，因此把它追加到任务里。
 		if routine.AppendTask(ctx, &routine.Task{Func: rl.Log}) {
 			logFunc = nil
 		}
 	})
 }
 
-// respLoggerFromContext returns the respLogger or nil.
+// respLoggerFromContext 返回 respLogger 或 nil。
 func respLoggerFromContext(ctx context.Context) *respLogger {
 	val := ctx.Value(respLoggerContextKey)
 	if rl, ok := val.(*respLogger); ok {
@@ -193,7 +193,7 @@ func newLoggedWithStartTime(req *http.Request, w http.ResponseWriter, startTime 
 	return logger
 }
 
-// newLogged turns a normal response writer into a logged response writer.
+// newLogged 把普通 response writer 变成带日志的 response writer。
 func newLogged(req *http.Request, w http.ResponseWriter) *respLogger {
 	return newLoggedWithStartTime(req, w, time.Now())
 }
@@ -218,8 +218,8 @@ func Unlogged(req *http.Request, w http.ResponseWriter) http.ResponseWriter {
 	return w
 }
 
-// StacktraceWhen sets the stacktrace logging predicate, which decides when to log a stacktrace.
-// There's a default, so you don't need to call this unless you don't like the default.
+// StacktraceWhen 设置决定何时记录栈的谓词。
+// 已有默认值，只有不满意默认行为时才需要调用。
 func (rl *respLogger) StacktraceWhen(pred StacktracePred) *respLogger {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
@@ -227,8 +227,8 @@ func (rl *respLogger) StacktraceWhen(pred StacktracePred) *respLogger {
 	return rl
 }
 
-// StatusIsNot returns a StacktracePred which will cause stacktraces to be logged
-// for any status *not* in the given list.
+// StatusIsNot 返回一个 StacktracePred：状态码不在给定列表中时记录栈。
+// 状态码不在给定列表中时记录栈。
 func StatusIsNot(statuses ...int) StacktracePred {
 	statusesNoTrace := map[int]bool{}
 	for _, s := range statuses {
@@ -240,7 +240,7 @@ func StatusIsNot(statuses ...int) StacktracePred {
 	}
 }
 
-// Addf adds additional data to be logged with this request.
+// Addf 追加要随该请求一起记录的数据。
 func (rl *respLogger) Addf(format string, data ...interface{}) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
@@ -261,18 +261,18 @@ func (rl *respLogger) AddKeyValue(key string, value interface{}) {
 	rl.addedKeyValuePairs = append(rl.addedKeyValuePairs, key, value)
 }
 
-// AddKeyValue adds a (key, value) pair to the httplog associated
-// with the request.
-// Use this function if you want your data to show up in httplog
-// in a more structured and readable way.
+// AddKeyValue 向请求关联的 httplog 追加 (key, value) 对。
+// 若希望数据以更结构化、可读的方式出现在 httplog 中，
+// 请使用该函数。
+// 以更结构化、可读的方式呈现。
 func AddKeyValue(ctx context.Context, key string, value interface{}) {
 	if rl := respLoggerFromContext(ctx); rl != nil {
 		rl.AddKeyValue(key, value)
 	}
 }
 
-// SetStacktracePredicate sets a custom stacktrace predicate for the
-// logger associated with the given request context.
+// SetStacktracePredicate 为给定请求 context 关联的 logger 设置自定义栈谓词。
+// 与给定请求 context 关联的 logger。
 func SetStacktracePredicate(ctx context.Context, pred StacktracePred) {
 	if rl := respLoggerFromContext(ctx); rl != nil {
 		rl.StacktraceWhen(pred)
@@ -291,17 +291,17 @@ func (rl *respLogger) Log() {
 		"verb", verb,
 		"URI", rl.req.RequestURI,
 		"latency", latency,
-		// We can't get UserAgent from rl.req.UserAgent() here as it accesses headers map,
-		// which can be modified in another goroutine when apiserver request times out.
-		// For example authentication filter modifies request's headers,
-		// This can cause apiserver to crash with unrecoverable fatal error.
-		// More info about concurrent read and write for maps: https://golang.org/doc/go1.6#runtime
+		// 此处不能通过 rl.req.UserAgent() 获取 UserAgent，因为它会访问 headers map，
+		// 而 apiserver 请求超时后该 map 可能被另一个 goroutine 修改。
+		// 例如认证过滤器会修改请求头，
+		// 这可能导致 apiserver 因不可恢复的致命错误而崩溃。
+		// map 并发读写的更多信息见 https://golang.org/doc/go1.6#runtime
 		"userAgent", rl.userAgent,
 		"contentType", rl.contentType,
 		"audit-ID", auditID,
 		"srcIP", rl.req.RemoteAddr,
 	}
-	// Lock for accessing addedKeyValuePairs and addedInfo
+	// 访问 addedKeyValuePairs 与 addedInfo 时加锁。
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 	keysAndValues = append(keysAndValues, rl.addedKeyValuePairs...)
@@ -323,7 +323,7 @@ func (rl *respLogger) Log() {
 	klog.V(withLoggingLevel).InfoSDepth(1, "HTTP", keysAndValues...)
 }
 
-// Header implements http.ResponseWriter.
+// Header 实现 http.ResponseWriter。
 func (rl *respLogger) Header() http.Header {
 	return rl.w.Header()
 }
@@ -333,7 +333,7 @@ func (rl *respLogger) Header() http.Header {
 // 与 net/http 的行为一致；否则日志中的状态码会是零值。
 func (rl *respLogger) Write(b []byte) (int, error) {
 	if !rl.statusRecorded {
-		rl.recordStatus(http.StatusOK) // Default if WriteHeader hasn't been called
+		rl.recordStatus(http.StatusOK) // WriteHeader 实现 http.ResponseWriter 接口。
 	}
 	if rl.captureErrorOutput {
 		rl.Addf("logging error output: %q\n", string(b))
@@ -353,8 +353,8 @@ func (rl *respLogger) WriteHeader(status int) {
 func (rl *respLogger) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	rl.hijacked = true
 
-	// the outer ResponseWriter object returned by WrapForHTTP1Or2 implements
-	// http.Hijacker if the inner object (rl.w) implements http.Hijacker.
+	// WrapForHTTP1Or2 返回的外层 ResponseWriter 在内层对象（rl.w）实现 http.Hijacker 时
+	// 也实现 http.Hijacker。
 	return rl.w.(http.Hijacker).Hijack()
 }
 
@@ -367,7 +367,7 @@ func (rl *respLogger) recordStatus(status int) {
 	rl.status = status
 	rl.statusRecorded = true
 	if rl.logStacktracePred(status) {
-		// Only log stacks for errors
+		// 只为错误记录栈。
 		stack := make([]byte, 50*1024)
 		stack = stack[:runtime.Stack(stack, false)]
 		rl.statusStack = "\n" + string(stack)

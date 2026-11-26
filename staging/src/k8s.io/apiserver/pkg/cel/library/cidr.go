@@ -27,79 +27,79 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
-// CIDR provides a CEL function library extension of CIDR notation parsing functions.
+// CIDR 提供 CIDR 记法解析函数的 CEL 函数库扩展。
 //
 // cidr
 //
-// Converts a string in CIDR notation to a network address representation or results in an error if the string is not a valid CIDR notation.
-// The CIDR must be an IPv4 or IPv6 subnet address with a mask.
-// Leading zeros in IPv4 address octets are not allowed.
-// IPv4-mapped IPv6 addresses (e.g. ::ffff:1.2.3.4/24) are not allowed.
+// 把 CIDR 记法的字符串转换为网络地址表示；字符串不是合法 CIDR 时返回错误。
+// CIDR 必须是带掩码的 IPv4 或 IPv6 子网地址。
+// IPv4 地址段不允许前导零。
+// 不允许 IPv4 映射的 IPv6 地址（如 ::ffff:1.2.3.4/24）。
 //
 //	cidr(<string>) <CIDR>
 //
-// Examples:
+// 示例：
 //
-//	cidr('192.168.0.0/16') // returns an IPv4 address with a CIDR mask
-//	cidr('::1/128') // returns an IPv6 address with a CIDR mask
-//	cidr('192.168.0.0/33') // error
-//	cidr('::1/129') // error
-//	cidr('192.168.0.1/16') // error, because there are non-0 bits after the prefix
+//	cidr('192.168.0.0/16') // 返回带 CIDR 掩码的 IPv4 地址
+//	cidr('::1/128') // 返回带 CIDR 掩码的 IPv6 地址
+//	cidr('192.168.0.0/33') // 错误
+//	cidr('::1/129') // 错误
+//	cidr('192.168.0.1/16') // 错误，因为前缀后仍有非零位
 //
 // isCIDR
 //
-// Returns true if a string is a valid CIDR notation respresentation of a subnet with mask.
-// The CIDR must be an IPv4 or IPv6 subnet address with a mask.
-// Leading zeros in IPv4 address octets are not allowed.
-// IPv4-mapped IPv6 addresses (e.g. ::ffff:1.2.3.4/24) are not allowed.
+// 若字符串是带掩码子网的合法 CIDR 记法，则返回 true。
+// CIDR 必须是带掩码的 IPv4 或 IPv6 子网地址。
+// IPv4 地址段不允许前导零。
+// 不允许 IPv4 映射的 IPv6 地址（如 ::ffff:1.2.3.4/24）。
 //
 //	isCIDR(<string>) <bool>
 //
-// Examples:
+// 示例：
 //
-//	isCIDR('192.168.0.0/16') // returns true
-//	isCIDR('::1/128') // returns true
-//	isCIDR('192.168.0.0/33') // returns false
-//	isCIDR('::1/129') // returns false
+//	isCIDR('192.168.0.0/16') // 返回 true
+//	isCIDR('::1/128') // 返回 true
+//	isCIDR('192.168.0.0/33') // 返回 false
+//	isCIDR('::1/129') // 返回 false
 //
 // containsIP / containerCIDR / ip / masked / prefixLength
 //
-// - containsIP: Returns true if a the CIDR contains the given IP address.
-// The IP address must be an IPv4 or IPv6 address.
-// May take either a string or IP address as an argument.
+// - containsIP：CIDR 包含给定 IP 地址时返回 true。
+// IP 地址必须是 IPv4 或 IPv6 地址。
+// 参数可以是字符串或 IP 地址。
 //
-// - containsCIDR: Returns true if a the CIDR contains the given CIDR.
-// The CIDR must be an IPv4 or IPv6 subnet address with a mask.
-// May take either a string or CIDR as an argument.
+// - containsCIDR：CIDR 包含给定 CIDR 时返回 true。
+// 给定 CIDR 必须是带掩码的 IPv4 或 IPv6 子网地址。
+// 参数可以是字符串或 CIDR。
 //
-// - ip: Returns the IP address representation of the CIDR.
+// - ip：返回该 CIDR 的 IP 地址表示。
 //
-// - masked: Returns the CIDR representation of the network address with a masked prefix.
-// This can be used to return the canonical form of the CIDR network.
+// - masked：返回带掩码前缀的网络地址的 CIDR 表示。
+// 可用于返回 CIDR 网络的规范形式。
 //
-// - prefixLength: Returns the prefix length of the CIDR in bits.
-// This is the number of bits in the mask.
+// - prefixLength：返回 CIDR 的掩码位数。
+// 即掩码中 1 的个数。
 //
-// Examples:
+// 示例：
 //
-//	cidr('192.168.0.0/24').containsIP(ip('192.168.0.1')) // returns true
-//	cidr('192.168.0.0/24').containsIP(ip('192.168.1.1')) // returns false
-//	cidr('192.168.0.0/24').containsIP('192.168.0.1') // returns true
-//	cidr('192.168.0.0/24').containsIP('192.168.1.1') // returns false
-//	cidr('192.168.0.0/16').containsCIDR(cidr('192.168.10.0/24')) // returns true
-//	cidr('192.168.1.0/24').containsCIDR(cidr('192.168.2.0/24')) // returns false
-//	cidr('192.168.0.0/16').containsCIDR('192.168.10.0/24') // returns true
-//	cidr('192.168.1.0/24').containsCIDR('192.168.2.0/24') // returns false
-//	cidr('192.168.0.1/24').ip() // returns ipAddr('192.168.0.1')
-//	cidr('192.168.0.1/24').ip().family() // returns '4'
-//	cidr('::1/128').ip() // returns ipAddr('::1')
-//	cidr('::1/128').ip().family() // returns '6'
-//	cidr('192.168.0.0/24').masked() // returns cidr('192.168.0.0/24')
-//	cidr('192.168.0.1/24').masked() // returns cidr('192.168.0.0/24')
-//	cidr('192.168.0.0/24') == cidr('192.168.0.0/24').masked() // returns true, CIDR was already in canonical format
-//	cidr('192.168.0.1/24') == cidr('192.168.0.1/24').masked() // returns false, CIDR was not in canonical format
-//	cidr('192.168.0.0/16').prefixLength() // returns 16
-//	cidr('::1/128').prefixLength() // returns 128
+//	cidr('192.168.0.0/24').containsIP(ip('192.168.0.1')) // 返回 true
+//	cidr('192.168.0.0/24').containsIP(ip('192.168.1.1')) // 返回 false
+//	cidr('192.168.0.0/24').containsIP('192.168.0.1') // 返回 true
+//	cidr('192.168.0.0/24').containsIP('192.168.1.1') // 返回 false
+//	cidr('192.168.0.0/16').containsCIDR(cidr('192.168.10.0/24')) // 返回 true
+//	cidr('192.168.1.0/24').containsCIDR(cidr('192.168.2.0/24')) // 返回 false
+//	cidr('192.168.0.0/16').containsCIDR('192.168.10.0/24') // 返回 true
+//	cidr('192.168.1.0/24').containsCIDR('192.168.2.0/24') // 返回 false
+//	cidr('192.168.0.1/24').ip() // 返回 ipAddr('192.168.0.1')
+//	cidr('192.168.0.1/24').ip().family() // 返回 '4'
+//	cidr('::1/128').ip() // 返回 ipAddr('::1')
+//	cidr('::1/128').ip().family() // 返回 '6'
+//	cidr('192.168.0.0/24').masked() // 返回 cidr('192.168.0.0/24')
+//	cidr('192.168.0.1/24').masked() // 返回 cidr('192.168.0.0/24')
+//	cidr('192.168.0.0/24') == cidr('192.168.0.0/24').masked() // 返回 true，CIDR 本就是规范格式
+//	cidr('192.168.0.1/24') == cidr('192.168.0.1/24').masked() // 返回 false，CIDR 不是规范格式
+//	cidr('192.168.0.0/16').prefixLength() // 返回 16
+//	cidr('::1/128').prefixLength() // 返回 128
 //
 // CIDR 返回一个可装入 CEL 环境的库选项。解析刻意比 net.ParseCIDR 更严格：
 // 拒绝 IPv4 映射的 IPv6 地址与掩码后非零的网络地址，保证 cidr() 的结果
@@ -300,10 +300,10 @@ func masked(arg ref.Val) ref.Val {
 	}
 }
 
-// parseCIDR parses a string into an CIDR.
-// We use this function to parse CIDR notation in the CEL library
-// so that we can share the common logic of rejecting strings
-// that IPv4-mapped IPv6 addresses or contain non-zero bits after the mask.
+// parseCIDR 把字符串解析为 CIDR。
+// CEL 库用它解析 CIDR 记法，
+// 以便共享拒绝 IPv4 映射 IPv6 地址的逻辑。
+// 同时拒绝掩码后仍有非零位的字符串。
 // netip.ParsePrefix 本身已拒绝掩码后仍有主机位的写法；这里额外拒绝
 // IPv4-mapped IPv6，避免同一地址族出现两种表示。
 func parseCIDR(raw string) (netip.Prefix, error) {

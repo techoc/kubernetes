@@ -16,28 +16,28 @@ limitations under the License.
 
 package user
 
-// Info describes a user that has been authenticated to the system.
+// Info 描述已通过系统认证的用户。
 type Info interface {
-	// GetName returns the name that uniquely identifies this user among all
-	// other active users.
+	// GetName 返回在所有活跃用户中唯一标识该用户的名字。
+	// 中的其他活跃用户区分开来。
 	GetName() string
-	// GetUID returns a unique value for a particular user that will change
-	// if the user is removed from the system and another user is added with
-	// the same name.
+	// GetUID 返回特定用户的唯一标识；用户被删除后若有同名新用户加入，该值会变化。
+	// 若该用户被移除、系统中又新增了同名用户，该值会变化。
+	//
 	GetUID() string
-	// GetGroups returns the names of the groups the user is a member of
+	// GetGroups 返回用户所属组的名字。
 	GetGroups() []string
 
-	// GetExtra can contain any additional information that the authenticator
-	// thought was interesting.  One example would be scopes on a token.
-	// Keys in this map should be namespaced to the authenticator or
-	// authenticator/authorizer pair making use of them.
-	// For instance: "example.org/foo" instead of "foo"
-	// This is a map[string][]string because it needs to be serializeable into
-	// a SubjectAccessReviewSpec.authorization.k8s.io for proper authorization
+	// GetExtra 携带认证器附加的额外信息，例如 token 的 scopes。
+	// 认证器认为有用的信息，例如 token 的 scopes。
+	// 键应按使用它的认证器或认证器/授权器组合加命名空间，
+	// 以免不同组件之间的键冲突。
+	// 例如使用 "example.org/foo" 而不是 "foo"。
+	// 使用 map[string][]string 是为了能序列化进 SubjectAccessReviewSpec.authorization.k8s.io，
+	// 从而支持授权委托流程。
 	// delegation flows
-	// In order to faithfully round-trip through an impersonation flow, these keys
-	// MUST be lowercase.
+	// 为了在 impersonation 流程中无损往返，这些键必须是小写。
+	// 必须是小写。
 	GetExtra() map[string][]string
 }
 
@@ -82,7 +82,7 @@ const (
 	Anonymous     = "system:anonymous"
 	APIServerUser = "system:apiserver"
 
-	// core kubernetes process identities
+	// Kubernetes 核心进程身份。
 	KubeProxy             = "system:kube-proxy"
 	KubeControllerManager = "system:kube-controller-manager"
 	KubeScheduler         = "system:kube-scheduler"

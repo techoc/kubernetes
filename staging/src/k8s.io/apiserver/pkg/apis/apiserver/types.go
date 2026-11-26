@@ -489,6 +489,6 @@ type WebhookMatchCondition struct {
 	// - 'extra' 对应认证器提供的 user.Info.GetExtra() 方法。
 	// - 'uid' 是关于发起请求用户的信息。例如 request.uid == '1'
 	//
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	Expression string
 }
