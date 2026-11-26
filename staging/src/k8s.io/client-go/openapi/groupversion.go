@@ -29,7 +29,7 @@ import (
 
 const ContentTypeOpenAPIV3PB = "application/com.github.proto-openapi.spec.v3@v1.0+protobuf"
 
-// Contextual logging: Use GroupVersionWithContext instead.
+// 上下文日志：请改用 GroupVersionWithContext。
 //
 // GroupVersion 的旧接口不接收 context，无法取消请求或传递日志上下文；
 // 新代码应优先使用 GroupVersionWithContext。
@@ -37,10 +37,8 @@ type GroupVersion interface {
 	// Schema 返回指定 content type 的序列化 schema 字节。
 	Schema(contentType string) ([]byte, error)
 
-	// ServerRelativeURL. Returns the path and parameters used to fetch the schema.
-	// You should use the Schema method to fetch it, but this value can be used
-	// to key the current version of the schema in a cache since it contains a
-	// hash string which changes upon schema update.
+	// ServerRelativeURL 返回获取 schema 所用的路径与参数，含随 schema 更新变化的 hash，
+	// 可用作缓存键。实际获取仍应调用 Schema 方法。
 	//
 	// 中文：不要直接用该 URL 自行请求，交给 Schema 处理；它更适合做缓存键。
 	ServerRelativeURL() string
@@ -51,7 +49,7 @@ type GroupVersionWithContext interface {
 	// SchemaWithContext 返回指定 content type 的序列化 schema 字节，可被 ctx 取消。
 	SchemaWithContext(ctx context.Context, contentType string) ([]byte, error)
 
-	// ServerRelativeURL. 返回获取 schema 所用的路径与查询参数，带有随 schema
+	// ServerRelativeURL 返回获取 schema 所用的路径与查询参数，带有随 schema
 	// 更新而变化的 hash，可用作缓存键。实际获取请使用 SchemaWithContext。
 	ServerRelativeURL() string
 }
@@ -127,9 +125,8 @@ func (g *groupversion) SchemaWithContext(ctx context.Context, contentType string
 		AbsPath(locator.Path).
 		SetHeader("Accept", contentType)
 
-	// Other than root endpoints(openapiv3/apis), resources have hash query parameter to support etags.
-	// However, absPath does not support handling query parameters internally,
-	// so that hash query parameter is added manually
+	// 除根端点（openapiv3/apis）外，资源请求都带 hash 查询参数以支持 etag。
+	// absPath 不处理查询参数，因此必须手工追加 hash 参数。
 	// 中文：hash 参数用于支持 etag 语义，必须原样保留，否则缓存与条件请求会失效。
 	for k, value := range locator.Query() {
 		for _, v := range value {

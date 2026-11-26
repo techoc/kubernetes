@@ -25,7 +25,7 @@ import (
 // GroupName 是本包使用的 API group 名：client.authentication.k8s.io，即 exec 凭据对象所属的 group。
 const GroupName = "client.authentication.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 // Resource 把裸资源名补全为带 group 的 GroupResource，便于构造错误或 REST 路径。

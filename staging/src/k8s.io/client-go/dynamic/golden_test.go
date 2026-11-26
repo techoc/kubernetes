@@ -230,8 +230,7 @@ func TestGoldenRequest(t *testing.T) {
 				Host:      "example.com",
 				UserAgent: "TestGoldenRequest",
 				Transport: &http.Transport{
-					// The client will send a static Host header while always
-					// connecting to the test server.
+					// 客户端会发送固定的 Host 头，实际仍连接测试服务端。
 					DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
 						u, err := url.Parse(srv.URL)
 						if err != nil {
@@ -248,9 +247,8 @@ func TestGoldenRequest(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			if err := tc.do(ctx, client); err != nil {
-				// This test detects server-perceptible changes to the request. As
-				// long as the server receives the expected request, a non-nil error
-				// returned from a client method is not a failure.
+				// 本测试只关心服务端看到的请求是否变化：只要请求符合预期，客户端方法
+				// 返回非 nil 错误也不算失败。
 				t.Logf("client returned non-nil error: %v", err)
 			}
 
@@ -270,8 +268,7 @@ func (f RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
 
-// TestGoldenResponse tests that the objects returned from dynamic client methods, given a fixed
-// HTTP response, are not changed unintentionally by changes to the client.
+// TestGoldenResponse 用固定的 HTTP 响应验证动态客户端返回的对象不会因客户端改动而被无意改变。
 //
 // 与请求侧对称：用固定的 HTTP 响应文件喂给真实的客户端，再比较解析出的结构化结果，
 // 防止反序列化路径（尤其 list 与 watch）被无意改变。

@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
-// traceQueue traces whether items are touched
+// traceQueue 记录条目是否被 Touch。
 //
 // traceQueue 记录哪些条目被 Touch 过，用于验证“处理中重复入队”是否走 Touch 而非重新排队。
 type traceQueue struct {
@@ -65,9 +65,9 @@ func TestBasic(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		// If something is seriously wrong this test will never complete.
+		// 若出现严重问题，该测试将永远不会结束。
 
-		// Start producers
+		// 启动生产者。
 		const producers = 50
 		producerWG := sync.WaitGroup{}
 		producerWG.Add(producers)
@@ -81,7 +81,7 @@ func TestBasic(t *testing.T) {
 			}(i)
 		}
 
-		// Start consumers
+		// 启动消费者。
 		const consumers = 10
 		consumerWG := sync.WaitGroup{}
 		consumerWG.Add(consumers)
@@ -133,7 +133,7 @@ func TestAddWhileProcessing(t *testing.T) {
 	}
 	for _, test := range tests {
 
-		// Start producers
+		// 启动生产者。
 		const producers = 50
 		producerWG := sync.WaitGroup{}
 		producerWG.Add(producers)
@@ -144,15 +144,14 @@ func TestAddWhileProcessing(t *testing.T) {
 			}(i)
 		}
 
-		// Start consumers
+		// 启动消费者。
 		const consumers = 10
 		consumerWG := sync.WaitGroup{}
 		consumerWG.Add(consumers)
 		for i := 0; i < consumers; i++ {
 			go func(i int) {
 				defer consumerWG.Done()
-				// Every worker will re-add every item up to two times.
-				// This tests the dirty-while-processing case.
+				// 每个 worker 会把每个条目重新入队最多两次，以覆盖“处理中变 dirty”的场景。
 				counters := map[interface{}]int{}
 				for {
 					item, quit := test.queue.Get()
@@ -199,25 +198,25 @@ func TestReinsert(t *testing.T) {
 	q := workqueue.New()
 	q.Add("foo")
 
-	// Start processing
+	// 开始处理。
 	i, _ := q.Get()
 	if i != "foo" {
 		t.Errorf("Expected %v, got %v", "foo", i)
 	}
 
-	// Add it back while processing
+	// 处理期间重新入队。
 	q.Add(i)
 
-	// Finish it up
+	// 完成处理。
 	q.Done(i)
 
-	// It should be back on the queue
+	// 条目应重新出现在队列中。
 	i, _ = q.Get()
 	if i != "foo" {
 		t.Errorf("Expected %v, got %v", "foo", i)
 	}
 
-	// Finish that one up
+	// 完成该条目的处理。
 	q.Done(i)
 
 	if a := q.Len(); a != 0 {
@@ -232,20 +231,20 @@ func TestCollapse(t *testing.T) {
 		Name:  "",
 		Queue: tq,
 	})
-	// Add a new one twice
+	// 连续两次加入同一个新条目。
 	q.Add("bar")
 	q.Add("bar")
 
-	// It should get the new one
+	// 应取到该新条目。
 	i, _ := q.Get()
 	if i != "bar" {
 		t.Errorf("Expected %v, got %v", "bar", i)
 	}
 
-	// Finish that one up
+	// 完成该条目的处理。
 	q.Done(i)
 
-	// There should be no more objects in the queue
+	// 队列中应不再有条目。
 	if a := q.Len(); a != 0 {
 		t.Errorf("Expected queue to be empty. Has %v items", a)
 	}
@@ -265,32 +264,31 @@ func TestCollapseWhileProcessing(t *testing.T) {
 	})
 	q.Add("foo")
 
-	// Start processing
+	// 开始处理。
 	i, _ := q.Get()
 	if i != "foo" {
 		t.Errorf("Expected %v, got %v", "foo", i)
 	}
 
-	// Add the same one twice
+	// 连续两次加入同一条目。
 	q.Add("foo")
 	q.Add("foo")
 
 	waitCh := make(chan struct{})
-	// simulate another worker consuming the queue
+	// 模拟另一个 worker 消费队列。
 	go func() {
 		defer close(waitCh)
 		i, _ := q.Get()
 		if i != "foo" {
 			t.Errorf("Expected %v, got %v", "foo", i)
 		}
-		// Finish that one up
+		// 完成该条目的处理。
 		q.Done(i)
 	}()
 
-	// give the worker some head start to avoid races
-	// on the select statement that cause flakiness
+	// 让 worker 先跑一会儿，避免 select 上的竞态导致偶发失败。
 	time.Sleep(100 * time.Millisecond)
-	// Finish the first one to unblock the other worker
+	// 完成第一个条目以解除另一个 worker 的阻塞。
 	select {
 	case <-waitCh:
 		t.Errorf("worker should be blocked until we are done")
@@ -298,8 +296,8 @@ func TestCollapseWhileProcessing(t *testing.T) {
 		q.Done("foo")
 	}
 
-	// wait for the worker to consume the new object
-	// There should be no more objects in the queue
+	// 等待 worker 消费新条目。
+	// 队列中应不再有条目。
 	<-waitCh
 	if a := q.Len(); a != 0 {
 		t.Errorf("Expected queue to be empty. Has %v items", a)
@@ -329,15 +327,13 @@ func TestQueueDrainageUsingShutDownWithDrain(t *testing.T) {
 		q.ShutDownWithDrain()
 	}()
 
-	// This is done as to simulate a sequence of events where ShutDownWithDrain
-	// is called before we start marking all items as done - thus simulating a
-	// drain where we wait for all items to finish processing.
+	// 模拟 ShutDownWithDrain 先于所有条目标记完成被调用的场景，即等待全部条目处理完毕的排空过程。
 	shuttingDown := false
 	for !shuttingDown {
 		_, shuttingDown = q.Get()
 	}
 
-	// Mark the first two items as done, as to finish up
+	// 把前两个条目标记为完成。
 	q.Done(firstItem)
 	q.Done(secondItem)
 
@@ -359,12 +355,11 @@ func TestNoQueueDrainageUsingShutDown(t *testing.T) {
 	finishedWG.Add(1)
 	go func() {
 		defer finishedWG.Done()
-		// Invoke ShutDown: suspending the execution immediately.
+		// 调用 ShutDown：立即停止执行。
 		q.ShutDown()
 	}()
 
-	// We can now do this and not have the test timeout because we didn't call
-	// Done on the first two items before arriving here.
+	// 现在可以这样做而不会超时，因为到达这里之前没有对前两个条目调用 Done。
 	finishedWG.Wait()
 }
 
@@ -387,19 +382,16 @@ func TestForceQueueShutdownUsingShutDown(t *testing.T) {
 		q.ShutDownWithDrain()
 	}()
 
-	// This is done as to simulate a sequence of events where ShutDownWithDrain
-	// is called before ShutDown
+	// 模拟 ShutDownWithDrain 先于 ShutDown 被调用的事件序列。
 	shuttingDown := false
 	for !shuttingDown {
 		_, shuttingDown = q.Get()
 	}
 
-	// Use ShutDown to force the queue to shut down (simulating a caller
-	// which can invoke this function on a second SIGTERM/SIGINT)
+	// 用 ShutDown 强制关闭队列（模拟调用方收到第二次 SIGTERM/SIGINT 时的行为）。
 	q.ShutDown()
 
-	// We can now do this and not have the test timeout because we didn't call
-	// done on any of the items before arriving here.
+	// 现在可以这样做而不会超时，因为到达这里之前没有对任何条目调用 Done。
 	finishedWG.Wait()
 }
 
@@ -419,24 +411,23 @@ func TestQueueDrainageUsingShutDownWithDrainWithDirtyItem(t *testing.T) {
 		q.ShutDownWithDrain()
 	}()
 
-	// Ensure that ShutDownWithDrain has started and is blocked.
+	// 确认 ShutDownWithDrain 已启动并处于阻塞状态。
 	shuttingDown := false
 	for !shuttingDown {
 		_, shuttingDown = q.Get()
 	}
 
-	// Finish "working".
+	// 结束“处理中”状态。
 	q.Done(gotten)
 
-	// `shuttingDown` becomes false because Done caused an item to go back into
-	// the queue.
+	// Done 使条目重新入队，因此 `shuttingDown` 变回 false。
 	again, shuttingDown := q.Get()
 	if shuttingDown {
 		t.Fatalf("should not have been done")
 	}
 	q.Done(again)
 
-	// Now we are really done.
+	// 现在才真正完成。
 	_, shuttingDown = q.Get()
 	if !shuttingDown {
 		t.Fatalf("should have been done")
@@ -445,8 +436,7 @@ func TestQueueDrainageUsingShutDownWithDrainWithDirtyItem(t *testing.T) {
 	finishedWG.Wait()
 }
 
-// TestGarbageCollection ensures that objects that are added then removed from the queue are
-// able to be garbage collected.
+// TestGarbageCollection 确保加入后又被移除的对象能够被 GC 回收。
 //
 // 验证队列处理后不残留对条目的引用（否则会造成内存泄漏）。
 func TestGarbageCollection(t *testing.T) {
@@ -455,7 +445,7 @@ func TestGarbageCollection(t *testing.T) {
 	}
 	leakQueue := workqueue.New()
 	t.Cleanup(func() {
-		// Make sure leakQueue doesn't go out of scope too early
+		// 确保 leakQueue 不会过早离开作用域。
 		runtime.KeepAlive(leakQueue)
 	})
 	c := &bigObject{data: []byte("hello")}
@@ -465,8 +455,7 @@ func TestGarbageCollection(t *testing.T) {
 	leakQueue.Done(o)
 }
 
-// mustGarbageCollect asserts than an object was garbage collected by the end of the test.
-// The input must be a pointer to an object.
+// mustGarbageCollect 断言测试结束时对象已被 GC 回收，入参必须是指针。
 func mustGarbageCollect(t *testing.T, i interface{}) {
 	t.Helper()
 	var collected int32 = 0
@@ -475,7 +464,7 @@ func mustGarbageCollect(t *testing.T, i interface{}) {
 	})
 	t.Cleanup(func() {
 		if err := wait.PollImmediate(time.Millisecond*100, wait.ForeverTestTimeout, func() (done bool, err error) {
-			// Trigger GC explicitly, otherwise we may need to wait a long time for it to run
+			// 显式触发 GC，否则可能要等很久。
 			runtime.GC()
 			return atomic.LoadInt32(&collected) == 1, nil
 		}); err != nil {

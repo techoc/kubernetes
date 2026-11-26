@@ -20,9 +20,8 @@ limitations under the License.
 // 直接构造退出错误，而不必真的启动子进程。
 package exec
 
-// ExitError is an interface that presents an API similar to os.ProcessState, which is
-// what ExitError from os/exec is.  This is designed to make testing a bit easier and
-// probably loses some of the cross-platform properties of the underlying library.
+// ExitError 提供类似 os/exec.ExitError（底层为 os.ProcessState）的 API，便于测试构造，
+// 但会损失底层库的一些跨平台特性。
 type ExitError interface {
 	String() string
 	Error() string
@@ -30,8 +29,7 @@ type ExitError interface {
 	ExitStatus() int
 }
 
-// CodeExitError is an implementation of ExitError consisting of an error object
-// and an exit code (the upper bits of os.exec.ExitStatus).
+// CodeExitError 是 ExitError 的实现，由错误对象与退出码（os.exec.ExitStatus 的高位）组成。
 type CodeExitError struct {
 	// Err 是底层错误，Error()/String() 直接返回其文本。
 	Err error

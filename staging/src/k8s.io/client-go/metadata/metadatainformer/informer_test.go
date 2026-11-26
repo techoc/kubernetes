@@ -128,8 +128,7 @@ func TestUnSupportWatchListSemantics(t *testing.T) {
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add appsv1 to scheme: %v", err)
 	}
-	// The fake client doesn’t support WatchList semantics,
-	// so we don’t need to prepare a response.
+	// fake 客户端不支持 WatchList 语义，无需准备响应。
 	// 这里的关键是验证回退路径，而不是 watch 事件内容。
 	fakeClient := fake.NewSimpleMetadataClient(scheme)
 	factory := NewFilteredSharedInformerFactory(fakeClient, 0, "ns", nil)
@@ -156,7 +155,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 		trigger     func(gvr schema.GroupVersionResource, ns string, fakeClient *fake.FakeMetadataClient, testObject *metav1.PartialObjectMetadata) *metav1.PartialObjectMetadata
 		handler     func(rcvCh chan<- *metav1.PartialObjectMetadata) *cache.ResourceEventHandlerFuncs
 	}{
-		// scenario 1
+		// 场景 1
 		{
 			// 新建对象应触发 AddFunc。
 			name: "scenario 1: test if adding an object triggers AddFunc",
@@ -179,7 +178,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 			},
 		},
 
-		// scenario 2
+		// 场景 2
 		{
 			// 修改注解应触发 UpdateFunc，且处理器收到的是更新后的对象。
 			name:        "scenario 2: tests if updating an object triggers UpdateFunc",
@@ -206,7 +205,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 			},
 		},
 
-		// scenario 3
+		// 场景 3
 		{
 			// 删除对象应触发 DeleteFunc。
 			name:        "scenario 3: test if deleting an object triggers DeleteFunc",
@@ -232,7 +231,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 
 	for _, ts := range scenarios {
 		t.Run(ts.name, func(t *testing.T) {
-			// test data
+			// 准备测试数据
 			timeout := time.Duration(3 * time.Second)
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
@@ -247,7 +246,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 			fakeClient := fake.NewSimpleMetadataClient(scheme, objs...)
 			target := NewSharedInformerFactory(fakeClient, 0)
 
-			// act
+			// 执行
 			informerListerForGvr := target.ForResource(ts.gvr)
 			informerListerForGvr.Informer().AddEventHandler(ts.handler(informerReciveObjectCh))
 			target.Start(ctx.Done())

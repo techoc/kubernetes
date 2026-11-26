@@ -31,13 +31,13 @@ import (
 	streamhttp "k8s.io/streaming/pkg/httpstream"
 )
 
-// Upgrader validates a response from the server after a SPDY upgrade.
+// Upgrader 在 SPDY 升级后校验服务端响应。
 type Upgrader interface {
-	// NewConnection validates the response and creates a new Connection.
+	// NewConnection 校验响应并创建连接。
 	NewConnection(resp *http.Response) (httpstream.Connection, error)
 }
 
-// RoundTripperFor returns a round tripper and upgrader to use with SPDY.
+// RoundTripperFor 返回配套的 SPDY round tripper 与 upgrader。
 //
 // 返回的 upgrader 与 round tripper 必须配套使用：请求经 round tripper 发出后，
 // 由 upgrader 校验 101 响应并从连接中接管底层流。
@@ -68,7 +68,7 @@ func RoundTripperFor(config *restclient.Config) (http.RoundTripper, Upgrader, er
 	return wrapper, upgradeRoundTripper, nil
 }
 
-// dialer implements the httpstream.Dialer interface.
+// dialer 实现 httpstream.Dialer 接口。
 type dialer struct {
 	client   *http.Client
 	upgrader Upgrader
@@ -79,7 +79,7 @@ type dialer struct {
 // 编译期断言拨号器实现标准接口，便于在 remotecommand 等通用代码中复用。
 var _ httpstream.Dialer = &dialer{}
 
-// NewDialer will create a dialer that connects to the provided URL and upgrades the connection to SPDY.
+// NewDialer 创建拨号器，连接到给定 URL 并把连接升级为 SPDY。
 func NewDialer(upgrader Upgrader, client *http.Client, method string, url *url.URL) httpstream.Dialer {
 	return &dialer{
 		client:   client,
@@ -89,14 +89,12 @@ func NewDialer(upgrader Upgrader, client *http.Client, method string, url *url.U
 	}
 }
 
-// NewDialerForStreaming creates a SPDY dialer for in-tree callers that use
-// k8s.io/streaming/pkg/httpstream types.
+// NewDialerForStreaming 为使用 k8s.io/streaming/pkg/httpstream 类型的仓库内调用方创建 SPDY 拨号器。
 func NewDialerForStreaming(upgrader Upgrader, client *http.Client, method string, url *url.URL) streamhttp.Dialer {
 	return &streamingDialerAdapter{delegate: NewDialer(upgrader, client, method, url)}
 }
 
-// NewUpgraderForStreaming adapts a streaming upgrader for callers that need
-// the compatibility Upgrader interface.
+// NewUpgraderForStreaming 把 streaming upgrader 适配为兼容版 Upgrader 接口。
 func NewUpgraderForStreaming(upgrader streamhttp.UpgradeRoundTripper) Upgrader {
 	return &compatUpgraderAdapter{delegate: upgrader}
 }
@@ -110,9 +108,8 @@ func (d *dialer) Dial(protocols ...string) (httpstream.Connection, string, error
 	return Negotiate(d.upgrader, d.client, req, protocols...)
 }
 
-// Negotiate opens a connection to a remote server and attempts to negotiate
-// a SPDY connection. Upon success, it returns the connection and the protocol selected by
-// the server. The client transport must use the upgradeRoundTripper - see RoundTripperFor.
+// Negotiate 连接远端服务端并协商 SPDY；成功后返回连接及服务端选定的协议。
+// 客户端 transport 必须使用 upgradeRoundTripper，见 RoundTripperFor。
 func Negotiate(upgrader Upgrader, client *http.Client, req *http.Request, protocols ...string) (httpstream.Connection, string, error) {
 	// 同一 header 可重复添加，等价于逗号分隔的候选协议列表。
 	for i := range protocols {
@@ -131,8 +128,7 @@ func Negotiate(upgrader Upgrader, client *http.Client, req *http.Request, protoc
 	return conn, resp.Header.Get(httpstream.HeaderProtocolVersion), nil
 }
 
-// NegotiateStreaming is for in-tree callers that still operate on
-// k8s.io/streaming/pkg/httpstream types.
+// NegotiateStreaming 供仍使用 k8s.io/streaming/pkg/httpstream 类型的仓库内调用方使用。
 func NegotiateStreaming(upgrader Upgrader, client *http.Client, req *http.Request, protocols ...string) (streamhttp.Connection, string, error) {
 	conn, protocol, err := Negotiate(upgrader, client, req, protocols...)
 	if err != nil {

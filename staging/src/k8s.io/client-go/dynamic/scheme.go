@@ -137,9 +137,9 @@ func (t unstructuredTyper) Recognizes(gvk schema.GroupVersionKind) bool {
 	return true
 }
 
-// The dynamic client has historically accepted Unstructured objects with missing or empty
-// apiVersion and/or kind as arguments to its write request methods. This typer will return the type
-// of a runtime.Unstructured with no error, even if the type is missing or empty.
+// 动态客户端历来允许写入请求传入缺少或为空 apiVersion/kind 的 Unstructured 对象。
+// 该 Typer 对 runtime.Unstructured 一律返回类型且不报错，即使类型信息缺失或为空，
+// 以维持既有兼容性。
 //
 // 该宽松行为是既有 API 兼容性的一部分：很多调用方只构造 data 字段就发起请求，
 // 由 URL 决定实际资源类型。

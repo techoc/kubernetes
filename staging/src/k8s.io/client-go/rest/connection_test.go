@@ -120,7 +120,7 @@ func TestReconnectBrokenTCP(t *testing.T) {
 		Host:      "https://" + lb.ln.Addr().String(),
 		Transport: utilnet.SetTransportDefaults(transport),
 		Timeout:   1 * time.Second,
-		// These fields are required to create a REST client.
+		// 这些字段是创建 REST 客户端的必填项。
 		ContentConfig: ContentConfig{
 			GroupVersion:         &schema.GroupVersion{},
 			NegotiatedSerializer: &serializer.CodecFactory{},
@@ -138,20 +138,15 @@ func TestReconnectBrokenTCP(t *testing.T) {
 		t.Fatalf("unexpected response: %s", data)
 	}
 
-	// Deliberately let the LB stop proxying traffic for the current
-	// connection. This mimics a broken TCP connection that's not properly
-	// closed.
+	// 故意让 LB 停止代理当前连接的流量，模拟 TCP 连接损坏但未正确关闭的场景。
 	close(stopCh)
 
 	stopCh = make(chan struct{})
 	go lb.serve(stopCh)
-	// Sleep enough time for the HTTP/2 health check to detect and close
-	// the broken TCP connection.
+	// 等待足够长时间，让 HTTP/2 健康检查发现并关闭损坏的连接。
 	time.Sleep(time.Duration(1+readIdleTimeout+pingTimeout) * time.Second)
-	// If the HTTP/2 health check were disabled, the broken connection
-	// would still be in the connection pool, the following request would
-	// then reuse the broken connection instead of creating a new one, and
-	// thus would fail.
+	// 若禁用 HTTP/2 健康检查，损坏连接仍留在连接池中，后续请求会复用它而非新建，
+	// 从而失败。
 	data, err = client.Get().AbsPath("/").DoRaw(context.TODO())
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -168,11 +163,8 @@ func TestReconnectBrokenTCP(t *testing.T) {
 // TestReconnectBrokenTCP_HTTP1 验证 HTTP/1.1 场景：连接损坏后关闭空闲连接，客户端应重新拨号
 // 而不是复用已损坏的连接。
 //
-// 1. connect to https server with http1.1 using a TCP proxy
-// 2. the connection has keepalive enabled so it will be reused
-// 3. break the TCP connection stopping the proxy
-// 4. close the idle connection to force creating a new connection
-// 5. count that there are 2 connections to the server (we didn't reuse the original connection)
+// 1) 通过 TCP 代理以 HTTP/1.1 连接 HTTPS 服务端；2) 连接启用 keepalive 因而会被复用；
+// 3) 停止代理以损坏 TCP 连接；4) 关闭空闲连接强制新建；5) 断言服务端收到 2 次连接（未复用旧连接）。
 func TestReconnectBrokenTCP_HTTP1(t *testing.T) {
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %s", r.Proto)
@@ -196,9 +188,9 @@ func TestReconnectBrokenTCP_HTTP1(t *testing.T) {
 	config := &Config{
 		Host:      "https://" + lb.ln.Addr().String(),
 		Transport: utilnet.SetTransportDefaults(transport),
-		// large timeout, otherwise the broken connection will be cleaned by it
+		// 超时设得足够大，否则损坏连接会先被超时清理。
 		Timeout: wait.ForeverTestTimeout,
-		// These fields are required to create a REST client.
+		// 这些字段是创建 REST 客户端的必填项。
 		ContentConfig: ContentConfig{
 			GroupVersion:         &schema.GroupVersion{},
 			NegotiatedSerializer: &serializer.CodecFactory{},
@@ -218,20 +210,15 @@ func TestReconnectBrokenTCP_HTTP1(t *testing.T) {
 		t.Fatalf("unexpected response: %s", data)
 	}
 
-	// Deliberately let the LB stop proxying traffic for the current
-	// connection. This mimics a broken TCP connection that's not properly
-	// closed.
+	// 故意让 LB 停止代理当前连接的流量，模拟 TCP 连接损坏但未正确关闭的场景。
 	close(stopCh)
 
 	stopCh = make(chan struct{})
 	go lb.serve(stopCh)
-	// Close the idle connections
+	// 关闭空闲连接。
 	utilnet.CloseIdleConnectionsFor(client.Client.Transport)
 
-	// If the client didn't close the idle connections, the broken connection
-	// would still be in the connection pool, the following request would
-	// then reuse the broken connection instead of creating a new one, and
-	// thus would fail.
+	// 若客户端不关闭空闲连接，损坏连接仍留在池中，后续请求会复用它而非新建，从而失败。
 	data, err = client.Get().AbsPath("/").DoRaw(context.TODO())
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -248,10 +235,8 @@ func TestReconnectBrokenTCP_HTTP1(t *testing.T) {
 // TestReconnectBrokenTCPInFlight_HTTP1 验证存在在途请求且连接损坏时，新请求会另建连接，
 // 而原来的在途请求最终只能超时失败。
 //
-// 1. connect to https server with http1.1 using a TCP proxy making the connection to timeout
-// 2. the connection has keepalive enabled so it will be reused
-// 3. close the in-flight connection to force creating a new connection
-// 4. count that there are 2 connections on the LB but only one succeeds
+// 1) 通过 TCP 代理以 HTTP/1.1 连接 HTTPS 服务端并让连接超时；2) keepalive 使连接被复用；
+// 3) 关闭在途连接强制新建；4) 断言 LB 上有 2 次连接但只有一次成功。
 func TestReconnectBrokenTCPInFlight_HTTP1(t *testing.T) {
 	done := make(chan struct{})
 	defer close(done)
@@ -287,9 +272,9 @@ func TestReconnectBrokenTCPInFlight_HTTP1(t *testing.T) {
 	config := &Config{
 		Host:      "https://" + lb.ln.Addr().String(),
 		Transport: utilnet.SetTransportDefaults(transport),
-		// Use something extraordinary large to not hit the timeout
+		// 超时设得极大，避免触发超时。
 		Timeout: wait.ForeverTestTimeout,
-		// These fields are required to create a REST client.
+		// 这些字段是创建 REST 客户端的必填项。
 		ContentConfig: ContentConfig{
 			GroupVersion:         &schema.GroupVersion{},
 			NegotiatedSerializer: &serializer.CodecFactory{},
@@ -302,9 +287,7 @@ func TestReconnectBrokenTCPInFlight_HTTP1(t *testing.T) {
 		t.Fatalf("failed to create REST client: %v", err)
 	}
 
-	// The request will connect, hang and eventually time out
-	// but we can use a context to close once the test is done
-	// we are only interested in have an inflight connection
+	// 该请求会连上后挂起直至超时；测试结束时用 context 关闭即可。这里只关心存在一个在途连接。
 	ctx, cancel := context.WithCancel(context.Background())
 	reqErrCh := make(chan error, 1)
 	defer close(reqErrCh)
@@ -313,22 +296,20 @@ func TestReconnectBrokenTCPInFlight_HTTP1(t *testing.T) {
 		reqErrCh <- err
 	}()
 
-	// wait until it connect to the server
+	// 等待其连接到服务端。
 	select {
 	case <-received:
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatal("Test timed out waiting for first request to fail")
 	}
 
-	// Deliberately let the LB stop proxying traffic for the current
-	// connection. This mimics a broken TCP connection that's not properly
-	// closed.
+	// 故意让 LB 停止代理当前连接的流量，模拟 TCP 连接损坏但未正确关闭的场景。
 	close(stopCh)
 
 	stopCh = make(chan struct{})
 	go lb.serve(stopCh)
 
-	// New request will fail if tries to reuse the connection
+	// 新请求若复用该连接就会失败。
 	data, err := client.Get().AbsPath("/").DoRaw(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -341,7 +322,7 @@ func TestReconnectBrokenTCPInFlight_HTTP1(t *testing.T) {
 		t.Fatalf("expected %d dials, got %d", 2, dials)
 	}
 
-	// cancel the in-flight connection
+	// 取消在途请求。
 	cancel()
 	select {
 	case <-reqErrCh:
@@ -367,7 +348,7 @@ func TestRestClientTimeout(t *testing.T) {
 	config := &Config{
 		Host:    ts.URL,
 		Timeout: 1 * time.Second,
-		// These fields are required to create a REST client.
+		// 这些字段是创建 REST 客户端的必填项。
 		ContentConfig: ContentConfig{
 			GroupVersion:         &schema.GroupVersion{},
 			NegotiatedSerializer: &serializer.CodecFactory{},

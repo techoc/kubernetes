@@ -26,114 +26,93 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
-// Fake implements client.Interface. Meant to be embedded into a struct to get
-// a default implementation. This makes faking out just the method you want to
-// test easier.
+// Fake 实现 client.Interface，供嵌入结构体以获得默认实现，这样只需覆写待测方法即可。
 type Fake struct {
 	// 内嵌读写锁：reactor 链和 action 记录都可能被并发访问。
 	sync.RWMutex
 	actions []Action // these may be castable to other types, but "Action" is the minimum
 
-	// ReactionChain is the list of reactors that will be attempted for every
-	// request in the order they are tried.
+	// ReactionChain 是按顺序尝试的 reactor 列表。
 	ReactionChain []Reactor
-	// WatchReactionChain is the list of watch reactors that will be attempted
-	// for every request in the order they are tried.
+	// WatchReactionChain 是按顺序尝试的 watch reactor 列表。
 	WatchReactionChain []WatchReactor
-	// ProxyReactionChain is the list of proxy reactors that will be attempted
-	// for every request in the order they are tried.
+	// ProxyReactionChain 是按顺序尝试的 proxy reactor 列表。
 	ProxyReactionChain []ProxyReactor
 
 	// Resources 供 fake discovery 返回的 API 资源列表；为 nil 时按需构造。
 	Resources []*metav1.APIResourceList
 }
 
-// Reactor is an interface to allow the composition of reaction functions.
+// Reactor 用于组合响应函数。
 type Reactor interface {
-	// Handles indicates whether or not this Reactor deals with a given
-	// action.
+	// Handles 判断该 Reactor 是否处理给定 action。
 	Handles(action Action) bool
-	// React handles the action and returns results.  It may choose to
-	// delegate by indicated handled=false.
+	// React 处理 action 并返回结果，可通过 handled=false 交给下一个 reactor。
 	React(action Action) (handled bool, ret runtime.Object, err error)
 }
 
-// WatchReactor is an interface to allow the composition of watch functions.
+// WatchReactor 用于组合 watch 响应函数。
 type WatchReactor interface {
-	// Handles indicates whether or not this Reactor deals with a given
-	// action.
+	// Handles 判断该 Reactor 是否处理给定 action。
 	Handles(action Action) bool
-	// React handles a watch action and returns results.  It may choose to
-	// delegate by indicating handled=false.
+	// React 处理 watch action 并返回结果，可通过 handled=false 交给下一个 reactor。
 	React(action Action) (handled bool, ret watch.Interface, err error)
 }
 
-// ProxyReactor is an interface to allow the composition of proxy get
-// functions.
+// ProxyReactor 用于组合 proxy GET 响应函数。
 type ProxyReactor interface {
-	// Handles indicates whether or not this Reactor deals with a given
-	// action.
+	// Handles 判断该 Reactor 是否处理给定 action。
 	Handles(action Action) bool
-	// React handles a watch action and returns results.  It may choose to
-	// delegate by indicating handled=false.
+	// React 处理 watch action 并返回结果，可通过 handled=false 交给下一个 reactor。
 	React(action Action) (handled bool, ret restclient.ResponseWrapper, err error)
 }
 
-// ReactionFunc is a function that returns an object or error for a given
-// Action.  If "handled" is false, then the test client will ignore the
-// results and continue to the next ReactionFunc.  A ReactionFunc can describe
-// reactions on subresources by testing the result of the action's
-// GetSubresource() method.
+// ReactionFunc 按 Action 返回对象或错误。handled 为 false 时测试客户端忽略结果，继续尝试下一个函数。
+// 可通过 action 的 GetSubresource() 为子资源定义不同响应。
 type ReactionFunc func(action Action) (handled bool, ret runtime.Object, err error)
 
-// WatchReactionFunc is a function that returns a watch interface.  If
-// "handled" is false, then the test client will ignore the results and
-// continue to the next ReactionFunc.
+// WatchReactionFunc 返回 watch 接口；handled 为 false 时继续尝试下一个函数。
 type WatchReactionFunc func(action Action) (handled bool, ret watch.Interface, err error)
 
-// ProxyReactionFunc is a function that returns a ResponseWrapper interface
-// for a given Action.  If "handled" is false, then the test client will
-// ignore the results and continue to the next ProxyReactionFunc.
+// ProxyReactionFunc 按 Action 返回 ResponseWrapper；handled 为 false 时继续尝试下一个函数。
 type ProxyReactionFunc func(action Action) (handled bool, ret restclient.ResponseWrapper, err error)
 
-// AddReactor appends a reactor to the end of the chain.
+// AddReactor 把 reactor 追加到链尾。
 // 后添加的 reactor 优先级更低：链前面的 reactor 先处理。
 func (c *Fake) AddReactor(verb, resource string, reaction ReactionFunc) {
 	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{verb, resource, reaction})
 }
 
-// PrependReactor adds a reactor to the beginning of the chain.
+// PrependReactor 把 reactor 插入链首。
 func (c *Fake) PrependReactor(verb, resource string, reaction ReactionFunc) {
 	c.ReactionChain = append([]Reactor{&SimpleReactor{verb, resource, reaction}}, c.ReactionChain...)
 }
 
-// AddWatchReactor appends a reactor to the end of the chain.
+// AddWatchReactor 把 watch reactor 追加到链尾。
 func (c *Fake) AddWatchReactor(resource string, reaction WatchReactionFunc) {
 	c.Lock()
 	defer c.Unlock()
 	c.WatchReactionChain = append(c.WatchReactionChain, &SimpleWatchReactor{resource, reaction})
 }
 
-// PrependWatchReactor adds a reactor to the beginning of the chain.
+// PrependWatchReactor 把 watch reactor 插入链首。
 func (c *Fake) PrependWatchReactor(resource string, reaction WatchReactionFunc) {
 	c.Lock()
 	defer c.Unlock()
 	c.WatchReactionChain = append([]WatchReactor{&SimpleWatchReactor{resource, reaction}}, c.WatchReactionChain...)
 }
 
-// AddProxyReactor appends a reactor to the end of the chain.
+// AddProxyReactor 把 proxy reactor 追加到链尾。
 func (c *Fake) AddProxyReactor(resource string, reaction ProxyReactionFunc) {
 	c.ProxyReactionChain = append(c.ProxyReactionChain, &SimpleProxyReactor{resource, reaction})
 }
 
-// PrependProxyReactor adds a reactor to the beginning of the chain.
+// PrependProxyReactor 把 proxy reactor 插入链首。
 func (c *Fake) PrependProxyReactor(resource string, reaction ProxyReactionFunc) {
 	c.ProxyReactionChain = append([]ProxyReactor{&SimpleProxyReactor{resource, reaction}}, c.ProxyReactionChain...)
 }
 
-// Invokes records the provided Action and then invokes the ReactionFunc that
-// handles the action if one exists. defaultReturnObj is expected to be of the
-// same type a normal call would return.
+// Invokes 记录 Action 并调用可处理它的 ReactionFunc；defaultReturnObj 应与正常调用的返回类型一致。
 func (c *Fake) Invokes(action Action, defaultReturnObj runtime.Object) (runtime.Object, error) {
 	c.Lock()
 	defer c.Unlock()
@@ -159,8 +138,7 @@ func (c *Fake) Invokes(action Action, defaultReturnObj runtime.Object) (runtime.
 	return defaultReturnObj, nil
 }
 
-// InvokesWatch records the provided Action and then invokes the ReactionFunc
-// that handles the action if one exists.
+// InvokesWatch 记录 Action 并调用可处理它的 ReactionFunc。
 func (c *Fake) InvokesWatch(action Action) (watch.Interface, error) {
 	c.Lock()
 	defer c.Unlock()
@@ -183,8 +161,7 @@ func (c *Fake) InvokesWatch(action Action) (watch.Interface, error) {
 	return nil, fmt.Errorf("unhandled watch: %#v", action)
 }
 
-// InvokesProxy records the provided Action and then invokes the ReactionFunc
-// that handles the action if one exists.
+// InvokesProxy 记录 Action 并调用可处理它的 ReactionFunc。
 func (c *Fake) InvokesProxy(action Action) restclient.ResponseWrapper {
 	c.Lock()
 	defer c.Unlock()
@@ -208,7 +185,7 @@ func (c *Fake) InvokesProxy(action Action) restclient.ResponseWrapper {
 	return nil
 }
 
-// ClearActions clears the history of actions called on the fake client.
+// ClearActions 清空 fake 客户端记录的 action 历史。
 func (c *Fake) ClearActions() {
 	c.Lock()
 	defer c.Unlock()
@@ -216,8 +193,7 @@ func (c *Fake) ClearActions() {
 	c.actions = make([]Action, 0)
 }
 
-// Actions returns a chronologically ordered slice fake actions called on the
-// fake client.
+// Actions 按时间顺序返回 fake 客户端收到的 action。
 func (c *Fake) Actions() []Action {
 	c.RLock()
 	defer c.RUnlock()

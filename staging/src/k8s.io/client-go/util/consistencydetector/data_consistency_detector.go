@@ -43,14 +43,12 @@ func init() {
 	dataConsistencyDetectionForWatchListEnabled, _ = strconv.ParseBool(os.Getenv("KUBE_WATCHLIST_INCONSISTENCY_DETECTOR"))
 }
 
-// IsDataConsistencyDetectionForWatchListEnabled returns true when
-// the KUBE_WATCHLIST_INCONSISTENCY_DETECTOR environment variable was set during a binary startup.
+// 二进制启动时设置了 KUBE_WATCHLIST_INCONSISTENCY_DETECTOR 环境变量时，该函数返回 true。
 func IsDataConsistencyDetectionForWatchListEnabled() bool {
 	return dataConsistencyDetectionForWatchListEnabled
 }
 
-// SetDataConsistencyDetectionForWatchListEnabledForTest allows to enable/disable data consistency detection for testing purposes.
-// It returns a function that restores the original value.
+// 该函数供测试开启/关闭数据一致性检测，返回用于恢复原值的函数。
 func SetDataConsistencyDetectionForWatchListEnabledForTest(enabled bool) func() {
 	original := dataConsistencyDetectionForWatchListEnabled
 	dataConsistencyDetectionForWatchListEnabled = enabled
@@ -68,11 +66,8 @@ type ListFunc[T runtime.Object] func(ctx context.Context, options metav1.ListOpt
 // TransformFunc 在比较前对对象做归一化（例如剥离版本相关字段）。
 type TransformFunc func(interface{}) (interface{}, error)
 
-// CheckDataConsistency exists solely for testing purposes.
-// we cannot use checkWatchListDataConsistencyIfRequested because
-// it is guarded by an environmental variable.
-// we cannot manipulate the environmental variable because
-// it will affect other tests in this package.
+// CheckDataConsistency 仅供测试使用。不能直接调用 checkWatchListDataConsistencyIfRequested，
+// 因为它受环境变量控制；又不能修改环境变量，否则会影响本包其他测试。
 //
 // 若上下文中的 logger 已经能标识被监听的对象，identity 字符串可以留空。
 // 检测逻辑会额外发起一次指向 etcd 的 LIST，因此只应在 CI/测试中开启。
@@ -93,9 +88,7 @@ func CheckDataConsistency[T runtime.Object, U any](ctx context.Context, identity
 	err := wait.PollUntilContextCancel(ctx, time.Second, true, func(_ context.Context) (done bool, err error) {
 		list, err = listFn(ctx, listOptions)
 		if err != nil {
-			// the consistency check will only be enabled in the CI
-			// and LIST calls in general will be retired by the client-go library
-			// if we fail simply log and retry
+			// 一致性检测只在 CI 开启，LIST 调用本身终将由 client-go 淘汰；失败时只记日志并重试。
 			logger.Info("Failed to list data from the server, retrying until context is canceled", "err", err)
 			return false, nil
 		}
@@ -135,15 +128,13 @@ func CheckDataConsistency[T runtime.Object, U any](ctx context.Context, identity
 // canFormAdditionalListCall 确保能够构造出用于一致性校验的合法 LIST 请求。
 // Exact RV 查询不允许带 continue，也不允许 RV="0"，否则请求会被 apiserver 拒绝。
 func canFormAdditionalListCall(lastSyncedResourceVersion string, listOptions metav1.ListOptions) bool {
-	// since we are setting ResourceVersionMatch to metav1.ResourceVersionMatchExact
-	// we need to make sure that the continuation hasn't been set
+	// 由于设置了 ResourceVersionMatch=Exact，必须确保没有 continue 参数。
 	// https://github.com/kubernetes/kubernetes/blob/be4afb9ef90b19ccb6f7e595cbdb247e088b2347/staging/src/k8s.io/apimachinery/pkg/apis/meta/internalversion/validation/validation.go#L38
 	if len(listOptions.Continue) > 0 {
 		return false
 	}
 
-	// since we are setting ResourceVersionMatch to metav1.ResourceVersionMatchExact
-	// we need to make sure that the RV is valid because the validation code forbids RV == "0"
+	// 由于设置了 ResourceVersionMatch=Exact，必须保证 RV 合法：校验逻辑禁止 RV == "0"。
 	// https://github.com/kubernetes/kubernetes/blob/be4afb9ef90b19ccb6f7e595cbdb247e088b2347/staging/src/k8s.io/apimachinery/pkg/apis/meta/internalversion/validation/validation.go#L44
 	if lastSyncedResourceVersion == "0" {
 		return false
@@ -152,25 +143,16 @@ func canFormAdditionalListCall(lastSyncedResourceVersion string, listOptions met
 	return true
 }
 
-// prepareListCallOptions changes the input list options so that
-// the list call goes directly to etcd
+// prepareListCallOptions 调整输入选项，使 LIST 请求直达 etcd。
 func prepareListCallOptions(lastSyncedResourceVersion string, listOptions metav1.ListOptions, retrievedItemsCount int) metav1.ListOptions {
-	// this is our legacy case:
-	//
-	// the watch cache skips the Limit if the ResourceVersion was set to "0"
-	// thus, to compare with data retrieved directly from etcd
-	// we need to skip the limit to for the list call as well.
-	//
-	// note that when the number of retrieved items is less than the request limit,
-	// it means either the watch cache is disabled, or there is not enough data.
-	// in both cases, we can use the limit because we will be able to compare
-	// the data with the items retrieved from etcd.
+	// 这是兼容旧行为的分支：ResourceVersion 为 "0" 时 watch cache 会忽略 Limit，因此要与
+	// 直达 etcd 的数据比较，这里也必须去掉 Limit。
+	// 若返回条目数少于 Limit，说明 watch cache 被禁用或数据不足，此时保留 Limit 也能与 etcd 结果比较。
 	if listOptions.ResourceVersion == "0" && listOptions.Limit > 0 && int64(retrievedItemsCount) > listOptions.Limit {
 		listOptions.Limit = 0
 	}
 
-	// set the RV and RVM so that we get the snapshot of data
-	// directly from etcd.
+	// 设置 RV 与 RVM，以便直接从 etcd 获取快照。
 	listOptions.ResourceVersion = lastSyncedResourceVersion
 	listOptions.ResourceVersionMatch = metav1.ResourceVersionMatchExact
 

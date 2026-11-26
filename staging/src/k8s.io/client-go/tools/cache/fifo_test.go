@@ -23,8 +23,7 @@ import (
 	"time"
 )
 
-// List returns a list of all the items.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// List 返回所有条目。因语义与常规 List 不一致，该函数被移到这里仅供单测使用。
 func (f *FIFO) List() []interface{} {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
@@ -35,18 +34,16 @@ func (f *FIFO) List() []interface{} {
 	return list
 }
 
-// LastStoreSyncResourceVersion is unimplemented for FIFO, only used in unit testing.
+// FIFO 未实现 LastStoreSyncResourceVersion，该方法仅供单测使用。
 func (f *FIFO) LastStoreSyncResourceVersion() string {
 	return ""
 }
 
-// Bookmark is unimplemented for FIFO, only used in unit testing.
+// FIFO 未实现 Bookmark，该方法仅供单测使用。
 func (f *FIFO) Bookmark(rv string) {
 }
 
-// ListKeys returns a list of all the keys of the objects currently
-// in the FIFO.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// ListKeys 返回 FIFO 中当前所有对象的 key。因语义与常规 List 不一致，该函数被移到这里仅供单测使用。
 func (f *FIFO) ListKeys() []string {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
@@ -57,8 +54,7 @@ func (f *FIFO) ListKeys() []string {
 	return list
 }
 
-// Get returns the requested item, or sets exists=false.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// Get 返回指定条目，或在不存在时置 exists=false。因语义与常规 List 不一致，该函数被移到这里仅供单测使用。
 func (f *FIFO) Get(obj interface{}) (item interface{}, exists bool, err error) {
 	key, err := f.keyFunc(obj)
 	if err != nil {
@@ -67,8 +63,7 @@ func (f *FIFO) Get(obj interface{}) (item interface{}, exists bool, err error) {
 	return f.GetByKey(key)
 }
 
-// GetByKey returns the requested item, or sets exists=false.
-// This function was moved here because it is not consistent with normal list semantics, but is used in unit testing.
+// GetByKey 返回指定条目，或在不存在时置 exists=false。因语义与常规 List 不一致，该函数被移到这里仅供单测使用。
 func (f *FIFO) GetByKey(key string) (item interface{}, exists bool, err error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
@@ -76,12 +71,8 @@ func (f *FIFO) GetByKey(key string) (item interface{}, exists bool, err error) {
 	return item, exists, nil
 }
 
-// Pop is helper function for popping from Queue.
-// WARNING: Do NOT use this function in non-test code to avoid races
-// unless you really really really really know what you are doing.
-//
-// NOTE: This function is deprecated and may be removed in the future without
-// additional warning.
+// Pop 是从队列中取元素的辅助函数。警告：非测试代码请勿使用，以免竞态，除非你非常清楚自己在做什么。
+// 注意：该函数已弃用，未来可能不另行通知就移除。
 func Pop(queue Queue) interface{} {
 	var result interface{}
 	queue.Pop(func(obj interface{}, isInInitialList bool) error {
@@ -306,8 +297,7 @@ func TestFIFO_HasSynced(t *testing.T) {
 	}
 }
 
-// TestFIFO_PopShouldUnblockWhenClosed checks that any blocking Pop on an empty queue
-// should unblock and return after Close is called.
+// TestFIFO_PopShouldUnblockWhenClosed 校验空队列上阻塞的 Pop 在 Close 后应解除阻塞并返回。
 func TestFIFO_PopShouldUnblockWhenClosed(t *testing.T) {
 	f := NewFIFO(testFifoObjectKeyFunc)
 

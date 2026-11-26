@@ -56,10 +56,7 @@ func Convert_scheme_ScaleStatus_To_v1beta1_ScaleStatus(in *scheme.ScaleStatus, o
 func Convert_v1beta1_ScaleStatus_To_scheme_ScaleStatus(in *v1beta1.ScaleStatus, out *scheme.ScaleStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 
-	// Normally when 2 fields map to the same internal value we favor the old field, since
-	// old clients can't be expected to know about new fields but clients that know about the
-	// new field can be expected to know about the old field (though that's not quite true, due
-	// to kubectl apply). However, these fields are readonly, so any non-nil value should work.
+	// 通常两个字段映射到同一内部值时优先旧字段，但这里两者皆只读，任一非空值都可用。
 	// 此处反其道优先新字段：两者都是只读字段，不存在旧客户端回写覆盖的问题。
 	if in.TargetSelector != "" {
 		labelSelector, err := metav1.ParseToLabelSelector(in.TargetSelector)

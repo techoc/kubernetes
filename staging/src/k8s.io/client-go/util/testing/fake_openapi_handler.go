@@ -42,13 +42,9 @@ type FakeOpenAPIServer struct {
 	RequestCounters map[string]int
 }
 
-// Creates a mock OpenAPIV3 server as it would be on a standing kubernetes
-// API server.
-//
-// specsPath - Give a path to some test data organized so that each GroupVersion
-// has its own OpenAPI V3 JSON file.
-//
-//	i.e. apps/v1beta1 is stored in <specsPath>/apps/v1beta1.json
+// 创建一个模拟 Kubernetes API Server 的 OpenAPI V3 服务端。
+// specsPath 指向测试数据的路径，其中每个 GroupVersion 各有一个 OpenAPI V3 JSON 文件，
+// 例如 apps/v1beta1 存为 <specsPath>/apps/v1beta1.json。
 func NewFakeOpenAPIV3Server(specsPath string) (*FakeOpenAPIServer, error) {
 	mux := &testMux{
 		counts: map[string]int{},
@@ -114,10 +110,9 @@ func NewFakeOpenAPIV3Server(specsPath string) (*FakeOpenAPIServer, error) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Tiny Test HTTP Mux
+// 极简测试用 HTTP 路由器。
 ////////////////////////////////////////////////////////////////////////////////
-// Implements the mux interface used by handler3 for registering the OpenAPI
-//	handlers
+// 实现 handler3 注册 OpenAPI handler 所需的 mux 接口。
 
 // testMux 是最小可用的 http 路由：支持精确匹配与最长前缀匹配，并统计请求次数。
 type testMux struct {

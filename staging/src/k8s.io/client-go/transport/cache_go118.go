@@ -18,28 +18,20 @@ limitations under the License.
 
 package transport
 
-// this is just to make the "unused" linter rule happy
+// 只为让 "unused" 检查通过。
 // 同时触发下方的编译期严格可比较断言。
 var _ = isCacheKeyComparable[tlsCacheKey]
 
-// assert at compile time that tlsCacheKey is comparable in a way that will never panic at runtime.
+// 在编译期断言 tlsCacheKey 的比较绝不会在运行时 panic。
 //
-// Golang 1.20 introduced an exception to type constraints that allows comparable, but not
-// necessarily strictly comparable type arguments to satisfy the `comparable` type constraint,
-// thus allowing interfaces to fulfil the `comparable` constraint.
-// However, by definition, "A comparison of two interface values with identical
-// dynamic types causes a run-time panic if that type is not comparable".
+// Go 1.20 放宽了类型约束：只要「可比较」即可满足 `comparable` 约束，并不要求严格可比较，
+// 于是接口也能满足该约束。但按定义，"两个动态类型相同的接口值比较时，若该类型不可比较就会 panic"。
 //
-// We want to make sure that comparing two `tlsCacheKey` elements won't cause a
-// runtime panic. In order to do that, we'll force the `tlsCacheKey` to be strictly
-// comparable, thus making it impossible for it to contain interfaces.
-// To assert strict comparability, we'll use another definition: "Type
-// parameters are comparable if they are strictly comparable".
-// Below, we first construct a type parameter from the `tlsCacheKey` type so that
-// we can then push this type parameter to a comparable check, thus checking these
-// are strictly comparable.
+// 为确保比较两个 tlsCacheKey 不会 panic，这里强制它严格可比较，从而排除包含接口字段的可能。
+// 做法是利用另一条规则："类型参数严格可比较时才可比较"。先从 tlsCacheKey 构造类型参数，
+// 再把它用于 comparable 检查，以此验证严格可比较性。
 //
-// Original suggestion from https://github.com/golang/go/issues/56548#issuecomment-1317673963
+// 思路来自 https://github.com/golang/go/issues/56548#issuecomment-1317673963
 func isCacheKeyComparable[K tlsCacheKey]() {
 	// 若 tlsCacheKey 含 interface 等非严格可比较字段，此处无法满足 comparable 约束。
 	_ = isComparable[K]

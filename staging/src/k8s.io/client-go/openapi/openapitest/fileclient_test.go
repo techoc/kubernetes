@@ -29,7 +29,7 @@ import (
 func TestOpenAPIEmbeddedTest(t *testing.T) {
 	client := openapitest.NewEmbeddedFileClient()
 
-	// make sure we get paths
+	// 确认能取到路径列表。
 	paths, err := client.Paths()
 	if err != nil {
 		t.Fatalf("error fetching paths: %v", err)
@@ -74,7 +74,7 @@ func TestOpenAPIEmbeddedTest(t *testing.T) {
 func TestOpenAPITest(t *testing.T) {
 	client := openapitest.NewFileClient("testdata")
 
-	// make sure we get paths
+	// 确认能取到路径列表。
 	paths, err := client.Paths()
 	if err != nil {
 		t.Fatalf("error fetching paths: %v", err)
@@ -83,7 +83,7 @@ func TestOpenAPITest(t *testing.T) {
 		t.Error("empty paths")
 	}
 
-	// spot check specific paths
+	// 抽查若干路径。
 	expectedPaths := []string{
 		"api/v1",
 		"apis/apps/v1",
@@ -97,7 +97,7 @@ func TestOpenAPITest(t *testing.T) {
 		}
 	}
 
-	// make sure all paths can load
+	// 确认所有路径都能加载。
 	for path, gv := range paths {
 		data, err := gv.Schema("application/json")
 		if err != nil {

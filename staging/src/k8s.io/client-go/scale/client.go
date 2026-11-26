@@ -43,11 +43,8 @@ func init() {
 	metav1.AddToGroupVersion(parameterScheme, versionV1)
 }
 
-// scaleClient is an implementation of ScalesGetter
-// which makes use of a RESTMapper and a generic REST
-// client to support an discoverable resource.
-// It behaves somewhat similarly to the dynamic ClientPool,
-// but is more specifically scoped to Scale.
+// scaleClient 是 ScalesGetter 的实现，借助 RESTMapper 与通用 REST 客户端支持可发现的资源。
+// 行为类似 dynamic ClientPool，但专门面向 Scale。
 //
 // 它本身不持有任何按资源区分的客户端，所有请求都复用同一个 REST client，
 // 只是每次调用前动态计算路径和版本：mapper 把调用方给出的（可能不带版本的）资源
@@ -60,9 +57,8 @@ type scaleClient struct {
 	clientBase          restclient.Interface
 }
 
-// NewForConfig creates a new ScalesGetter which resolves kinds
-// to resources using the given RESTMapper, and API paths using
-// the given dynamic.APIPathResolverFunc.
+// NewForConfig 创建 ScalesGetter，用给定的 RESTMapper 把 Kind 解析为资源，
+// 用 dynamic.APIPathResolverFunc 解析 API 路径。
 func NewForConfig(cfg *restclient.Config, mapper PreferredResourceMapper, resolver dynamic.APIPathResolverFunc, scaleKindResolver ScaleKindResolver) (ScalesGetter, error) {
 	// 显式清空 GroupVersion，免得 RESTClientFor 报错：通用 REST client 不绑定单一 GV。
 	cfg.GroupVersion = &schema.GroupVersion{}
@@ -81,8 +77,7 @@ func NewForConfig(cfg *restclient.Config, mapper PreferredResourceMapper, resolv
 	return New(client, mapper, resolver, scaleKindResolver), nil
 }
 
-// New creates a new ScalesGetter using the given client to make requests.
-// The GroupVersion on the client is ignored.
+// New 用给定客户端创建 ScalesGetter，客户端上的 GroupVersion 会被忽略。
 func New(baseClient restclient.Interface, mapper PreferredResourceMapper, resolver dynamic.APIPathResolverFunc, scaleKindResolver ScaleKindResolver) ScalesGetter {
 	return &scaleClient{
 		mapper: mapper,
@@ -93,7 +88,7 @@ func New(baseClient restclient.Interface, mapper PreferredResourceMapper, resolv
 	}
 }
 
-// apiPathFor returns the absolute api path for the given GroupVersion
+// apiPathFor 返回给定 GroupVersion 的绝对 API 路径。
 func (c *scaleClient) apiPathFor(groupVer schema.GroupVersion) string {
 	// 需要按 GroupVersion 决定 API 路径（解析不出时回退到 legacy 路径）。
 	// TODO: 这里算是"作弊"：API 路径实际只取决于 group，但这里或许更应接受
@@ -107,8 +102,7 @@ func (c *scaleClient) apiPathFor(groupVer schema.GroupVersion) string {
 	return restclient.DefaultVersionedAPIPath(apiPath, groupVer)
 }
 
-// pathAndVersionFor returns the appropriate base path and the associated full GroupVersionResource
-// for the given GroupResource
+// pathAndVersionFor 为给定 GroupResource 返回合适的基础路径及完整 GroupVersionResource。
 func (c *scaleClient) pathAndVersionFor(resource schema.GroupResource) (string, schema.GroupVersionResource, error) {
 	// 清空版本，让 mapper 返回该资源的首选版本；后续请求都基于该版本构造。
 	gvr, err := c.mapper.ResourceFor(resource.WithVersion(""))
@@ -121,14 +115,13 @@ func (c *scaleClient) pathAndVersionFor(resource schema.GroupResource) (string, 
 	return c.apiPathFor(groupVer), gvr, nil
 }
 
-// namespacedScaleClient is an ScaleInterface for fetching
-// Scales in a given namespace.
+// namespacedScaleClient 是在给定命名空间内获取 Scale 的 ScaleInterface。
 type namespacedScaleClient struct {
 	client    *scaleClient
 	namespace string
 }
 
-// convertToScale converts the response body to autoscaling/v1.Scale
+// convertToScale 把响应体转换为 autoscaling/v1.Scale。
 func convertToScale(result *restclient.Result) (*autoscaling.Scale, error) {
 	scaleBytes, err := result.Raw()
 	if err != nil {
@@ -158,10 +151,8 @@ func (c *scaleClient) Scales(namespace string) ScaleInterface {
 }
 
 func (c *namespacedScaleClient) Get(ctx context.Context, resource schema.GroupResource, name string, opts metav1.GetOptions) (*autoscaling.Scale, error) {
-	// Currently, a /scale endpoint can return different scale types.
-	// Until we have support for the alternative API representations proposal,
-	// we need to deal with accepting different API versions.
-	// In practice, this is autoscaling/v1.Scale and extensions/v1beta1.Scale
+	// 目前 /scale 端点可能返回不同类型，在替代 API 表示提案落地前必须兼容多种版本，
+	// 实际就是 autoscaling/v1.Scale 与 extensions/v1beta1.Scale。
 
 	path, gvr, err := c.client.pathAndVersionFor(resource)
 	if err != nil {
@@ -190,9 +181,7 @@ func (c *namespacedScaleClient) Update(ctx context.Context, resource schema.Grou
 		return nil, fmt.Errorf("unable to get client for %s: %v", resource.String(), err)
 	}
 
-	// Currently, a /scale endpoint can receive and return different scale types.
-	// Until we have support for the alternative API representations proposal,
-	// we need to deal with sending and accepting different API versions.
+	// 目前 /scale 端点可能接收和返回不同类型，在替代 API 表示提案落地前必须兼容多版本。
 
 	// 弄清楚这里实际需要哪个版本的 scale：写请求必须先确定端点接受的具体 GVK，再做编码，否则 server 会拒绝。
 	desiredGVK, err := c.client.scaleKindResolver.ScaleForResource(gvr)
@@ -200,7 +189,7 @@ func (c *namespacedScaleClient) Update(ctx context.Context, resource schema.Grou
 		return nil, fmt.Errorf("could not find proper group-version for scale subresource of %s: %v", gvr.String(), err)
 	}
 
-	// convert this to whatever this endpoint wants
+	// 转换为该端点期望的版本。
 	scaleUpdate, err := scaleConverter.ConvertToVersion(scale, desiredGVK.GroupVersion())
 	if err != nil {
 		return nil, fmt.Errorf("could not convert scale update to external Scale: %v", err)

@@ -28,10 +28,8 @@ import (
 // JobListerExpansion 允许向 JobLister 添加自定义方法。
 // 手写扩展接口，属于生成 lister 的一部分。
 type JobListerExpansion interface {
-	// GetPodJobs returns a list of Jobs that potentially
-	// match a Pod. Only the one specified in the Pod's ControllerRef
-	// will actually manage it.
-	// Returns an error only if no matching Jobs are found.
+	// GetPodJobs 返回可能与 Pod 匹配的 Job 列表；真正管理该 Pod 的只有
+	// ControllerRef 指向的那一个。找不到任何候选时才返回错误。
 	GetPodJobs(pod *v1.Pod) (jobs []batch.Job, err error)
 }
 
@@ -57,7 +55,7 @@ func (l *jobLister) GetPodJobs(pod *v1.Pod) (jobs []batch.Job, err error) {
 		// 不会污染最终返回的 error。
 		selector, err := metav1.LabelSelectorAsSelector(job.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
+			// selector 无效即视为与 Pod 不匹配。
 			continue
 		}
 		if !selector.Matches(labels.Set(pod.Labels)) {

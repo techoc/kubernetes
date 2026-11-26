@@ -24,19 +24,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 )
 
-// NOTE: types Feature, FeatureSpec, prerelease (and its values)
-// were duplicated from the component-base repository
+// 注意：Feature、FeatureSpec、prerelease（及其取值）等类型复制自 component-base 仓库。
 //
-// for more information please refer to https://docs.google.com/document/d/1g9BGCRw-7ucUxO6OtCWbb3lfzUGA_uU9178wLdXAIfs
+// 更多信息参见 https://docs.google.com/document/d/1g9BGCRw-7ucUxO6OtCWbb3lfzUGA_uU9178wLdXAIfs
 
 const (
-	// Values for PreRelease.
+	// prerelease 的取值。
 	// 这些取值与 component-base 中的定义保持字符串一致，便于注册表之间互相接线。
 	Alpha = prerelease("ALPHA")
 	Beta  = prerelease("BETA")
 	GA    = prerelease("")
 
-	// Deprecated
+	// 已弃用。
 	// 已弃用：仍可被显式启用，但表示该特性计划在未来移除。
 	Deprecated = prerelease("DEPRECATED")
 )
@@ -49,56 +48,50 @@ type Feature string
 
 // FeatureSpec 描述某个特性的默认值和生命周期元数据。
 type FeatureSpec struct {
-	// Default is the default enablement state for the feature
+	// Default 是该特性的默认启用状态。
 	Default bool
-	// LockToDefault indicates that the feature is locked to its default and cannot be changed
+	// LockToDefault 表示特性锁定在默认值上，不可更改。
 	LockToDefault bool
-	// PreRelease indicates the maturity level of the feature
+	// PreRelease 表示特性的成熟度阶段。
 	PreRelease prerelease
-	// Version indicates the earliest version from which this FeatureSpec is valid.
-	// If multiple FeatureSpecs exist for a Feature, the one with the highest version that is less
-	// than or equal to the effective version of the component is used.
+	// Version 是该规格生效的最早版本。同一特性有多条规格时，取不高于组件实际版本的
+	// 最高版本那条。
 	Version *version.Version
 }
 
 // VersionedSpecs 是按版本排序的特性定义列表，由支持版本化门控的注册表使用。
 type VersionedSpecs []FeatureSpec
 
-// Gates indicates whether a given feature is enabled or not.
+// Gates 用于查询某个特性是否启用。
 type Gates interface {
-	// Enabled returns true if the key is enabled.
+	// Enabled 在特性启用时返回 true。
 	Enabled(key Feature) bool
 }
 
-// Registry represents an external feature gates registry.
+// Registry 表示外部特性门控注册表。
 type Registry interface {
-	// Add adds existing feature gates to the provided registry.
+	// Add 把已有门控加入给定注册表。
 	//
-	// As of today, this method is used by AddFeaturesToExistingFeatureGates and
-	// ReplaceFeatureGates to take control of the features exposed by this library.
+	// 目前 AddFeaturesToExistingFeatureGates 和 ReplaceFeatureGates 通过它接管本库
+	// 暴露的特性。
 	Add(map[Feature]FeatureSpec) error
 }
 
-// VersionedRegistry represents an external versioned feature gates registry.
+// VersionedRegistry 表示支持版本的外部特性门控注册表。
 type VersionedRegistry interface {
-	// AddVersioned adds existing versioned feature gates to the provided registry.
+	// AddVersioned 把已有的版本化门控加入给定注册表。
 	//
-	// As of today, this method is used by AddVersionedFeaturesToExistingFeatureGates and
-	// ReplaceFeatureGates to take control of the features exposed by this library.
+	// 目前 AddVersionedFeaturesToExistingFeatureGates 和 ReplaceFeatureGates 通过它
+	// 接管本库暴露的特性。
 	AddVersioned(in map[Feature]VersionedSpecs) error
 }
 
-// FeatureGates returns the feature gates exposed by this library.
+// FeatureGates 返回本库暴露的门控。
 //
-// By default, only the default features gates will be returned.
-// The default implementation allows controlling the features
-// via environmental variables.
-// For example, if you have a feature named "MyFeature"
-// setting an environmental variable "KUBE_FEATURE_MyFeature"
-// will allow you to configure the state of that feature.
+// 默认返回默认门控实现，该实现允许通过环境变量控制特性。例如特性名为 "MyFeature" 时，
+// 设置环境变量 "KUBE_FEATURE_MyFeature" 即可配置其状态。
 //
-// Please note that the actual set of the feature gates
-// might be overwritten by calling ReplaceFeatureGates method.
+// 注意实际门控集合可能被 ReplaceFeatureGates 替换。
 //
 // 每次调用都从原子变量读取当前实现，因此可以在启动后安全地看到 ReplaceFeatureGates 的结果；
 // 但调用方应在初始化阶段完成替换，避免运行中行为突变。
@@ -106,9 +99,8 @@ func FeatureGates() Gates {
 	return featureGates.Load().(*featureGatesWrapper).Gates
 }
 
-// AddFeaturesToExistingFeatureGates adds the default feature gates to the provided registry.
-// Usually this function is combined with ReplaceFeatureGates to take control of the
-// features exposed by this library.
+// AddFeaturesToExistingFeatureGates 把默认门控加入给定注册表。
+// 通常与 ReplaceFeatureGates 配合使用，以接管本库暴露的特性。
 //
 // 注册时传入的是“非版本化”视图：每个特性只保留最新一条规格并清空版本，
 // 因为外部注册表通常只理解单一的布尔默认值。
@@ -116,24 +108,19 @@ func AddFeaturesToExistingFeatureGates(registry Registry) error {
 	return registry.Add(unversionedFeatureGates(defaultVersionedKubernetesFeatureGates))
 }
 
-// AddFeaturesToExistingFeatureGates adds the default versioned feature gates to the provided registry.
-// Usually this function is combined with ReplaceFeatureGates to take control of the
-// features exposed by this library.
-// Generally only used by k/k.
+// AddVersionedFeaturesToExistingFeatureGates 把默认版本化门控加入给定注册表。
+// 通常与 ReplaceFeatureGates 配合使用以接管本库特性，一般只由 k/k 使用。
 //
 // 与上一个函数不同，这里保留完整的版本化规格，供支持按版本解析的门控实现使用。
 func AddVersionedFeaturesToExistingFeatureGates(registry VersionedRegistry) error {
 	return registry.AddVersioned(defaultVersionedKubernetesFeatureGates)
 }
 
-// ReplaceFeatureGates overwrites the default implementation of the feature gates
-// used by this library.
+// ReplaceFeatureGates 替换本库默认使用的门控实现。
 //
-// Useful for binaries that would like to have full control of the features
-// exposed by this library, such as allowing consumers of a binary
-// to interact with the features via a command line flag.
+// 适合需要完全掌控本库特性的二进制文件，例如让使用者通过命令行开关配置特性。
 //
-// For example:
+// 例如：
 //
 //	// first, register client-go's features to your registry.
 //	clientgofeaturegate.AddFeaturesToExistingFeatureGates(utilfeature.DefaultMutableFeatureGate)
@@ -141,8 +128,7 @@ func AddVersionedFeaturesToExistingFeatureGates(registry VersionedRegistry) erro
 //	clientgofeaturegate.ReplaceFeatureGates(utilfeature.DefaultMutableFeatureGate)
 func ReplaceFeatureGates(newFeatureGates Gates) {
 	if replaceFeatureGatesWithWarningIndicator(newFeatureGates) {
-		// TODO (?): A new API would be needed where callers pass in a context or logger.
-		// Probably not worth it.
+		// TODO (?): 需要新 API 才能把 context 或 logger 传给调用方，但多半不值得。
 		// 默认实现已被读取过再替换，可能让同一进程内不同组件看到不一致的门控状态。
 		utilruntime.HandleErrorWithContext(context.TODO(), nil, "The default feature gates implementation has already been used and now it's being overwritten. This might lead to unexpected behaviour. Check your initialization order.")
 	}
@@ -166,8 +152,8 @@ func replaceFeatureGatesWithWarningIndicator(newFeatureGates Gates) bool {
 	return shouldProduceWarning
 }
 
-// unversionedFeatureGates takes the latest entry from the VersionedSpecs of each feature, and clears out the version information,
-// so that the result can be used with an unversioned feature gate.
+// unversionedFeatureGates 取每个特性 VersionedSpecs 中的最新条目并清空版本信息，
+// 以便结果能传给非版本化门控。
 //
 // 这里假设 VersionedSpecs 已按版本升序排列，因此取末尾元素即最新的规格。
 func unversionedFeatureGates(featureGates map[Feature]VersionedSpecs) map[Feature]FeatureSpec {
@@ -191,17 +177,17 @@ func init() {
 	featureGates.Store(wrappedFeatureGates)
 }
 
-// featureGatesWrapper a thin wrapper to satisfy featureGates variable (atomic.Value).
-// That is, all calls to Store for a given Value must use values of the same concrete type.
+// featureGatesWrapper 只是为满足 featureGates（atomic.Value）的类型约束而包的一层：
+// 同一个 atomic.Value 的 Store 必须使用相同的具体类型。
 type featureGatesWrapper struct {
 	Gates
 }
 
 var (
-	// featureGates is a shared global FeatureGates.
+	// featureGates 是全局共享的 FeatureGates。
 	//
-	// Top-level commands/options setup that needs to modify this feature gates
-	// should use AddFeaturesToExistingFeatureGates followed by ReplaceFeatureGates.
+	// 顶层命令/选项若需修改门控，应先调用 AddFeaturesToExistingFeatureGates，
+	// 再调用 ReplaceFeatureGates。
 	//
 	// 使用 atomic.Value 而非普通变量，是为了让无锁读取在并发下安全：
 	// Enabled 可能在多个 worker goroutine 中高频调用。

@@ -130,7 +130,7 @@ func TestGetServerGroupsWithV1Server(t *testing.T) {
 // TestDiscoveryToleratesMissingCoreGroup 覆盖聚合 apiserver 可能不提供 /api 的情况：
 // 核心组 404 可被容忍，非核心组仍应正常返回。
 func TestDiscoveryToleratesMissingCoreGroup(t *testing.T) {
-	// Discovery tolerates 404 from /api. Aggregated api servers can do this.
+	// 聚合 apiserver 可能不提供 /api，发现逻辑应容忍该路径返回 404。
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var obj interface{}
 		switch req.URL.Path {
@@ -162,7 +162,7 @@ func TestDiscoveryToleratesMissingCoreGroup(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewDiscoveryClientForConfigOrDie(&restclient.Config{Host: server.URL})
-	// ServerGroups should not return an error even if server returns 404 at /api.
+	// /api 返回 404 时 ServerGroups 不应报错。
 	apiGroupList, err := client.ServerGroups()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -176,7 +176,7 @@ func TestDiscoveryToleratesMissingCoreGroup(t *testing.T) {
 // TestDiscoveryFailsWhenNonCoreGroupsMissing 与上例相反：/apis 不可用属于致命错误，
 // 因为非核心组无法从其他途径获知。
 func TestDiscoveryFailsWhenNonCoreGroupsMissing(t *testing.T) {
-	// Discovery fails when /apis returns 404.
+	// /apis 返回 404 时发现流程应失败。
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var obj interface{}
 		switch req.URL.Path {
@@ -212,8 +212,7 @@ func TestDiscoveryFailsWhenNonCoreGroupsMissing(t *testing.T) {
 // TestGetServerGroupsWithBrokenServer 用 404/403 两种“服务端不配合”的响应确认
 // ServerGroups 都会返回错误，而不是静默给出空列表。
 func TestGetServerGroupsWithBrokenServer(t *testing.T) {
-	// 404 Not Found errors because discovery at /apis returns an error.
-	// 403 Forbidden errors because discovery at both /api and /apis returns error.
+	// 404 是因为 /apis 发现失败；403 是因为 /api 与 /apis 均失败。
 	for _, statusCode := range []int{http.StatusNotFound, http.StatusForbidden} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(statusCode)
@@ -630,13 +629,11 @@ func TestGetOpenAPISchemaV3(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					// Cannot use DeepEqual directly due to differences in how
-					// default key is being handled in gnostic vs kube-openapi
-					// Our test server parses the files in directly as gnostic
-					// which retains empty maps/lists, etc.
+					// gnostic 与 kube-openapi 对默认键的处理不同，不能直接 DeepEqual。
+					// 假服务端用 gnostic 直接解析文件，会保留空 map/list 等结构。
 					require.EqualValues(t, expected, &actualSpec)
 				case openapi.ContentTypeOpenAPIV3PB:
-					// Convert to JSON then to gnostic then to PB for comparison
+					// 先转 JSON 再经 gnostic 转 PB，消除上述差异后比较。
 					expectedJSON, err := json.Marshal(expected)
 					if err != nil {
 						t.Fatal(err)
@@ -658,7 +655,7 @@ func TestGetOpenAPISchemaV3(t *testing.T) {
 					panic(fmt.Errorf("unrecognized content type: %v", contentType))
 				}
 
-				// Ensure that fetching schema once again does not return same instance
+				// 再次拉取 schema 应返回新实例，而不是复用旧实例。
 				actualAgain, err := v.Schema(contentType)
 				if err != nil {
 					t.Fatal(err)
@@ -945,7 +942,7 @@ func TestServerPreferredNamespacedResources(t *testing.T) {
 		expected map[schema.GroupVersionResource]struct{}
 	}{
 		{
-			// Combines discovery for /api and /apis.
+			// 同时覆盖 /api 与 /apis 的发现数据。
 			response: func(w http.ResponseWriter, req *http.Request) {
 				var list interface{}
 				switch req.URL.Path {
@@ -993,8 +990,7 @@ func TestServerPreferredNamespacedResources(t *testing.T) {
 			},
 		},
 		{
-			// Only return /apis (not legacy /api); does not error. 404 for legacy
-			// core/v1 at /api is tolerated.
+			// 只返回 /apis 的数据（不返回旧版 /api），此时 /api 的 404 应被容忍。
 			response: func(w http.ResponseWriter, req *http.Request) {
 				var list interface{}
 				switch req.URL.Path {
@@ -1104,7 +1100,7 @@ func TestServerPreferredNamespacedResources(t *testing.T) {
 	}
 }
 
-// Tests of the aggregated discovery format.
+// 验证聚合发现格式。
 //
 // 聚合发现（aggregated discovery）把组、版本与资源合并成单个文档返回，避免每个
 // group/version 各发一次请求。
@@ -1204,7 +1200,7 @@ func TestAggregatedServerGroups(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v2 is preferred since it is first
+							// 排在首位，因此选 v2 为首选版本。
 							{
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -1281,7 +1277,7 @@ func TestAggregatedServerGroups(t *testing.T) {
 							Name: "batch",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v1 is preferred since it is first
+							// 排在首位，因此选 v1 为首选版本。
 							{
 								Version: "v1",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -1357,8 +1353,7 @@ func TestAggregatedServerGroups(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-Type is "aggregated" discovery format. Add extra parameter
-			// to ensure we are resilient to these extra parameters.
+			// 声明聚合发现格式，并附加额外参数以验证解析对参数的容忍度。
 			w.Header().Set("Content-Type", AcceptV2+"; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			_, err = w.Write(output)
@@ -1371,17 +1366,17 @@ func TestAggregatedServerGroups(t *testing.T) {
 		client := NewDiscoveryClientForConfigOrDie(&restclient.Config{Host: server.URL})
 		apiGroupList, err := client.ServerGroups()
 		require.NoError(t, err)
-		// Test the expected groups are returned for the aggregated format.
+		// 校验聚合格式返回的 group 集合。
 		expectedGroupNames := sets.NewString(test.expectedGroupNames...)
 		actualGroupNames := sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
-		// Test the expected group versions for the aggregated discovery is correct.
+		// 校验聚合发现返回的 group/version 集合。
 		expectedGroupVersions := sets.NewString(test.expectedGroupVersions...)
 		actualGroupVersions := sets.NewString(groupVersionsFromGroups(apiGroupList)...)
 		assert.True(t, expectedGroupVersions.Equal(actualGroupVersions),
 			"%s: Expected group/versions (%s), got (%s)", test.name, expectedGroupVersions.List(), actualGroupVersions.List())
-		// Test the groups preferred version is correct.
+		// 校验每个 group 的首选版本。
 		expectedPreferredVersions := sets.NewString(test.expectedPreferredVersions...)
 		actualPreferredVersions := sets.NewString(preferredVersionsFromList(apiGroupList)...)
 		assert.True(t, expectedPreferredVersions.Equal(actualPreferredVersions),
@@ -1640,7 +1635,7 @@ func TestAggregatedServerGroupsAndResources(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// Stale "v2" version not included.
+							// v2 已失效，不应纳入结果。
 							{
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -1772,7 +1767,7 @@ func TestAggregatedServerGroupsAndResources(t *testing.T) {
 							Name: "batch",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// Stale Group/Version is not included
+							// 已失效的 GroupVersion 不应纳入结果。
 							{
 								Version: "v1",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -1900,7 +1895,7 @@ func TestAggregatedServerGroupsAndResources(t *testing.T) {
 								},
 							},
 							{
-								// Stale "v1beta1" not included.
+								// v1beta1 已失效，不应纳入结果。
 								Version: "v1beta1",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
@@ -1957,8 +1952,7 @@ func TestAggregatedServerGroupsAndResources(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-Type is "aggregated" discovery format. Add extra parameter
-			// to ensure we are resilient to these extra parameters.
+			// 声明聚合发现格式，并附加额外参数以验证解析对参数的容忍度。
 			w.Header().Set("Content-Type", AcceptV2+"; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			_, err = w.Write(output)
@@ -1979,12 +1973,12 @@ func TestAggregatedServerGroupsAndResources(t *testing.T) {
 		} else {
 			require.NoError(t, err)
 		}
-		// Test the expected groups are returned for the aggregated format.
+		// 校验聚合格式返回的 group 集合。
 		expectedGroupNames := sets.NewString(test.expectedGroupNames...)
 		actualGroupNames := sets.NewString(groupNames(apiGroups)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected GVKs (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
-		// If the core V1 group is returned from /api, it should be the first group.
+		// 核心 v1 组来自 /api，应排在结果首位。
 		if expectedGroupNames.Has("") {
 			assert.NotEmpty(t, apiGroups)
 			actualFirstGroup := apiGroups[0]
@@ -1992,12 +1986,12 @@ func TestAggregatedServerGroupsAndResources(t *testing.T) {
 			actualFirstGroupVersion := actualFirstGroup.Versions[0].GroupVersion
 			assert.Equal(t, "v1", actualFirstGroupVersion)
 		}
-		// Test the expected group/versions are returned from the aggregated discovery.
+		// 校验聚合发现返回的 group/version 集合。
 		expectedGroupVersions := sets.NewString(test.expectedGroupVersions...)
 		actualGroupVersions := sets.NewString(groupVersions(resources)...)
 		assert.True(t, expectedGroupVersions.Equal(actualGroupVersions),
 			"%s: Expected GroupVersions(%s), got (%s)", test.name, expectedGroupVersions.List(), actualGroupVersions.List())
-		// Test the expected GVKs are returned from the aggregated discovery.
+		// 校验聚合发现返回的 GVK 集合。
 		expectedGVKs := sets.NewString(test.expectedGVKs...)
 		actualGVKs := sets.NewString(groupVersionKinds(resources)...)
 		assert.True(t, expectedGVKs.Equal(actualGVKs),
@@ -2109,8 +2103,7 @@ func TestAggregatedServerGroupsAndResourcesWithErrors(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-Type is "aggregated" discovery format. Add extra parameter
-			// to ensure we are resilient to these extra parameters.
+			// 声明聚合发现格式，并附加额外参数以验证解析对参数的容忍度。
 			w.Header().Set("Content-Type", AcceptV2+"; charset=utf-8")
 			w.WriteHeader(status)
 			_, err = w.Write(output)
@@ -2129,12 +2122,12 @@ func TestAggregatedServerGroupsAndResourcesWithErrors(t *testing.T) {
 			continue
 		}
 		require.NoError(t, err)
-		// First check the returned groups
+		// 先校验返回的 group。
 		expectedGroups := sets.NewString(test.expectedGroups...)
 		actualGroups := sets.NewString(groupNames(apiGroups)...)
 		assert.True(t, expectedGroups.Equal(actualGroups),
 			"%s: Expected GVKs (%s), got (%s)", test.name, expectedGroups.List(), actualGroups.List())
-		// Next check the returned resources
+		// 再校验返回的资源。
 		expectedGVKs := sets.NewString(test.expectedResources...)
 		actualGVKs := sets.NewString(groupVersionKinds(resources)...)
 		assert.True(t, expectedGVKs.Equal(actualGVKs),
@@ -2237,7 +2230,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v2 is "preferred version since it is first
+							// v2 排在首位，因此是首选版本。
 							{
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -2270,7 +2263,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 					},
 				},
 			},
-			// Only v2 resources from apps group, since v2 is preferred version.
+			// 只应返回 apps 组的 v2 资源，因为 v2 是首选版本。
 			expectedGVKs: []string{
 				"/v1/Pod",
 				"apps/v2/Deployment",
@@ -2307,7 +2300,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v2 is "stale", so it can not be "preferred".
+							// v2 已失效，不能作为首选版本。
 							{
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -2341,7 +2334,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 					},
 				},
 			},
-			// Only v1 resources from apps group; v2 would be preferred but it is "stale".
+			// 只应返回 apps 组的 v1 资源；v2 虽排在前面但已失效，不能作为首选。
 			expectedGVKs: []string{
 				"/v1/Pod",
 				"apps/v1/Deployment",
@@ -2511,7 +2504,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 								},
 							},
 							{
-								// Not included because "v1" is preferred.
+								// 首选版本是 v1，因此该条目不纳入结果。
 								Version: "v1beta1",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
@@ -2671,7 +2664,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 								},
 							},
 							{
-								// Not included, since "v1" is preferred.
+								// 首选版本是 v1，因此该条目不纳入结果。
 								Version: "v1beta1",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
@@ -2698,7 +2691,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 					},
 				},
 			},
-			// Only preferred resources expected--not batch/v1beta1 resources.
+			// 只应返回首选版本的资源，不应包含 batch/v1beta1。
 			expectedGVKs: []string{
 				"/v1/Pod",
 				"/v1/Service",
@@ -2729,8 +2722,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-Type is "aggregated" discovery format. Add extra parameter
-			// to ensure we are resilient to these extra parameters.
+			// 声明聚合发现格式，并附加额外参数以验证解析对参数的容忍度。
 			w.Header().Set("Content-Type", AcceptV2+"; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			_, err = w.Write(output)
@@ -2750,7 +2742,7 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 		} else {
 			require.NoError(t, err)
 		}
-		// Test the expected preferred GVKs are returned from the aggregated discovery.
+		// 校验聚合发现返回的首选 GVK 集合。
 		expectedGVKs := sets.NewString(test.expectedGVKs...)
 		actualGVKs := sets.NewString(groupVersionKinds(resources)...)
 		assert.True(t, expectedGVKs.Equal(actualGVKs),
@@ -2775,21 +2767,21 @@ func TestDiscoveryContentTypeVersion(t *testing.T) {
 			expectErr:   false,
 		},
 		{
-			// content-type parameters are not in correct order, but comparison ignores order.
+			// Content-Type 参数顺序不对，但比较逻辑应忽略顺序。
 			contentType: "application/json; v=v2;as=APIGroupDiscoveryList;g=apidiscovery.k8s.io",
 			gvk:         v2,
 			match:       true,
 			expectErr:   false,
 		},
 		{
-			// content-type parameters are not in correct order, but comparison ignores order.
+			// Content-Type 参数顺序不对，但比较逻辑应忽略顺序。
 			contentType: "application/json; as=APIGroupDiscoveryList;g=apidiscovery.k8s.io;v=v2",
 			gvk:         v2,
 			match:       true,
 			expectErr:   false,
 		},
 		{
-			// Ignores extra parameter "charset=utf-8"
+			// 应忽略额外参数 charset=utf-8。
 			contentType: "application/json; g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList;charset=utf-8",
 			gvk:         v2,
 			match:       true,
@@ -2837,7 +2829,7 @@ func TestDiscoveryContentTypeVersion(t *testing.T) {
 // TestUseLegacyDiscovery 验证 UseLegacyDiscovery 开关只影响 Accept 头：
 // 默认为聚合+旧格式组合，打开后仅请求旧格式，以便与不理解聚合格式的服务端兼容。
 func TestUseLegacyDiscovery(t *testing.T) {
-	// Default client sends aggregated discovery accept format (first) as well as legacy format.
+	// 默认客户端的 Accept 同时包含聚合格式（优先）与旧格式。
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// 默认客户端的 Accept 应同时包含聚合格式与旧格式，服务端可任选其一。
 		acceptHeader := req.Header.Get("Accept")
@@ -2846,7 +2838,7 @@ func TestUseLegacyDiscovery(t *testing.T) {
 	defer server.Close()
 	client := NewDiscoveryClientForConfigOrDie(&restclient.Config{Host: server.URL})
 	client.ServerGroups()
-	// When "UseLegacyDiscovery" field is set, only the legacy discovery format is requested.
+	// 设置 UseLegacyDiscovery 后只请求旧版发现格式。
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		acceptHeader := req.Header.Get("Accept")
 		assert.Equal(t, AcceptV1, acceptHeader)

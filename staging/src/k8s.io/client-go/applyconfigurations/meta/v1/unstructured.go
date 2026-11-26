@@ -31,14 +31,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/typed"
 )
 
-// openAPISchemaTTL is how frequently we need to check
-// whether the open API schema has changed or not.
+// openAPISchemaTTL 是检查 OpenAPI schema 是否变化的间隔。
 // 之所以不在每次提取时都重新解析，是因为 OpenAPI 文档可能相当大，而 schema 的变化频率
 // 远低于字段提取请求；一分钟的 TTL 是对陈旧度与开销的折中。
 const openAPISchemaTTL = time.Minute
 
-// UnstructuredExtractor enables extracting the applied configuration state from object for fieldManager into an
-// unstructured object type.
+// UnstructuredExtractor 从对象中提取指定 fieldManager 的 apply 配置状态，
+// 结果以非结构化对象表示。
 //
 // 提取结果是某个字段管理者（fieldManager）当前“拥有”的字段集合，即其 apply 配置的
 // 反推视图。提取依赖 OpenAPI schema 来确定哪些字段可原子/粒度的归属，因此需要 discovery 客户端。
@@ -49,25 +48,23 @@ type UnstructuredExtractor interface {
 	ExtractStatus(object *unstructured.Unstructured, fieldManager string) (*unstructured.Unstructured, error)
 }
 
-// gvkParserCache caches the GVKParser in order to prevent from having to repeatedly
-// parse the models from the open API schema when the schema itself changes infrequently.
+// gvkParserCache 缓存 GVKParser，避免 schema 本身很少变化时反复解析 OpenAPI 模型。
 //
 // 缓存按 TTL 惰性刷新：只有在调用 objectTypeForGVK 且距上次检查超过 openAPISchemaTTL 时
 // 才会重新拉取并解析 schema。加锁保证并发提取时不会同时重建解析器。
 type gvkParserCache struct {
-	// discoveryClient is the client for retrieving the openAPI document and checking
-	// whether the document has changed recently
+	// discoveryClient 用于拉取 OpenAPI 文档并检查其是否发生变化。
 	discoveryClient discovery.DiscoveryInterface
-	// mu protects the gvkParser
+	// mu 保护 gvkParser，
 	// 同时保护 lastChecked，避免并发的 TTL 判断导致重复重建。
 	mu sync.Mutex
-	// gvkParser retrieves the objectType for a given gvk
+	// gvkParser 按给定 gvk 返回对应的 objectType。
 	gvkParser *managedfields.GvkParser
-	// lastChecked is the last time we checked if the openAPI doc has changed.
+	// lastChecked 是上次检查 OpenAPI 文档是否变化的时间。
 	lastChecked time.Time
 }
 
-// regenerateGVKParser builds the parser from the raw OpenAPI schema.
+// regenerateGVKParser 从原始 OpenAPI schema 构建 GVK 解析器。
 //
 // 先拉取 OpenAPI 文档，再转换为 proto 模型树，最后构建可按键查找的 GVK 解析器。
 // 第二步返回的模型一旦确定，后续提取不再依赖网络。
@@ -85,15 +82,14 @@ func regenerateGVKParser(dc discovery.DiscoveryInterface) (*managedfields.GvkPar
 	return managedfields.NewGVKParser(models, false)
 }
 
-// objectTypeForGVK retrieves the typed.ParseableType for a given gvk from the cache
+// objectTypeForGVK 从缓存中取给定 gvk 的 typed.ParseableType。
 //
 // 这里采用“先更新 lastChecked 再重建”的顺序：即使重建失败，也会等到下一个 TTL 周期
 // 再重试，避免在服务端持续不可用时每个请求都打满 discovery 接口。
 func (c *gvkParserCache) objectTypeForGVK(gvk schema.GroupVersionKind) (*typed.ParseableType, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// if the ttl on the openAPISchema has expired,
-	// regenerate the gvk parser
+	// OpenAPI schema 的 TTL 到期时重建 GVK 解析器。
 	if time.Since(c.lastChecked) > openAPISchemaTTL {
 		c.lastChecked = time.Now()
 		parser, err := regenerateGVKParser(c.discoveryClient)
@@ -110,8 +106,7 @@ type extractor struct {
 	cache *gvkParserCache
 }
 
-// NewUnstructuredExtractor creates the extractor with which you can extract the applied configuration
-// for a given manager from an unstructured object.
+// NewUnstructuredExtractor 创建提取器，用于从非结构化对象中提取指定管理者的 apply 配置。
 //
 // 构造时立即构建一次解析器，使 schema 拉取失败在创建阶段就暴露出来，而不是等到首次提取。
 func NewUnstructuredExtractor(dc discovery.DiscoveryInterface) (UnstructuredExtractor, error) {
@@ -127,15 +122,14 @@ func NewUnstructuredExtractor(dc discovery.DiscoveryInterface) (UnstructuredExtr
 	}, nil
 }
 
-// Extract extracts the applied configuration owned by fieldManager from an unstructured object.
-// Note that the apply configuration itself is also an unstructured object.
+// Extract 从非结构化对象中提取 fieldManager 拥有的 apply 配置。
+// 注意 apply 配置本身也是非结构化对象。
 func (e *extractor) Extract(object *unstructured.Unstructured, fieldManager string) (*unstructured.Unstructured, error) {
 	return e.extractUnstructured(object, fieldManager, "")
 }
 
-// ExtractStatus is the same as ExtractUnstructured except
-// that it extracts the status subresource applied configuration.
-// Experimental!
+// ExtractStatus 与 Extract 类似，但提取的是 status 子资源的 apply 配置。
+// 实验性接口！
 func (e *extractor) ExtractStatus(object *unstructured.Unstructured, fieldManager string) (*unstructured.Unstructured, error) {
 	return e.extractUnstructured(object, fieldManager, "status")
 }

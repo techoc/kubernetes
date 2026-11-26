@@ -79,9 +79,8 @@ func TestMutationCacheOnAddOrUpdate(t *testing.T) {
 
 			mc.OnAddOrUpdate(makeMutationTestPod("pod", tc.storeUID, tc.storeRV))
 
-			// Add the pod to the backing store at RV "1" (always older than the
-			// mutation's RV "2"), so we can tell whether GetByKey returns the
-			// mutation or the backing copy.
+			// 以 RV "1" 把 Pod 加入底层存储，始终旧于 mutation 的 RV "2"，
+			// 这样就能判断 GetByKey 返回的是 mutation 还是底层副本。
 			require.NoError(t, store.Add(makeMutationTestPod("pod", "uid-1", "1")))
 
 			got, exists, err := mc.GetByKey("pod")
@@ -130,10 +129,10 @@ func TestMutationCacheOnDelete(t *testing.T) {
 			indexer := NewIndexer(MetaNamespaceKeyFunc, Indexers{})
 			mc := NewIntegerResourceVersionMutationCache(klog.Background(), store, indexer, time.Minute, true)
 
-			// Backing store has the pod at RV "2".
+			// 底层存储中的 Pod 版本为 RV "2"。
 			require.NoError(t, store.Add(makeMutationTestPod("pod", "uid-1", "2")))
 
-			// Mutation brings it to RV "3".
+			// mutation 把它推进到 RV "3"。
 			mc.Mutation(makeMutationTestPod("pod", "uid-1", "3"))
 			deletedPod := makeMutationTestPod("pod", tc.deleteUID, tc.deleteRV)
 			require.NoError(t, store.Delete(deletedPod))
@@ -155,22 +154,20 @@ func TestMutationCacheUpdateConcurrentDelete(t *testing.T) {
 	indexer := NewIndexer(MetaNamespaceKeyFunc, Indexers{})
 	mc := NewIntegerResourceVersionMutationCache(klog.Background(), store, indexer, time.Hour, true)
 
-	// Backing store has the pod at RV "1".
+	// 底层存储中的 Pod 版本为 RV "1"。
 	require.NoError(t, store.Add(makeMutationTestPod("pod", "uid-1", "1")))
 
-	// Client starts an update leading to RV "2", which immediately gets
-	// deleted by some other client. That deletion is received before the
-	// client finishes its update.
+	// 客户端发起更新得到 RV "2"，随后对象被其他客户端删除；删除事件先于更新完成到达。
 	updatedPod := makeMutationTestPod("pod", "uid-1", "2")
 	require.NoError(t, store.Update(updatedPod))
 	require.NoError(t, store.Delete(updatedPod))
 
-	// Informer events get delivered with a delay.
+	// Informer 事件延迟投递。
 	mc.OnAddOrUpdate(updatedPod)
 	mc.OnDelete(updatedPod)
 
-	// This Mutation call is stale, which gets detected because
-	// the mutation cache contains a tombstone object.
+	// 这次 Mutation 已过期，之所以能检测到，是因为
+	// mutation 缓存中包含一个 tombstone 对象。
 	mc.Mutation(updatedPod)
 
 	_, exists, err := mc.GetByKey("pod")
@@ -188,25 +185,23 @@ func TestMutationCacheUpdateConcurrentRecreate(t *testing.T) {
 	indexer := NewIndexer(MetaNamespaceKeyFunc, Indexers{})
 	mc := NewIntegerResourceVersionMutationCache(klog.Background(), store, indexer, time.Hour, true)
 
-	// Backing store has the pod at RV "1".
+	// 底层存储中的 Pod 版本为 RV "1"。
 	require.NoError(t, store.Add(makeMutationTestPod("pod", "uid-1", "1")))
 
-	// Client starts an update leading to RV "2", which immediately gets
-	// replaced by some other pod using the same name. Those changes are
-	// received before the client finishes its update.
+	// 客户端发起更新得到 RV "2"，随后同名 Pod 被其他客户端替换；变更先于更新完成到达。
 	updatedPod := makeMutationTestPod("pod", "uid-1", "2")
 	require.NoError(t, store.Update(updatedPod))
 	require.NoError(t, store.Delete(updatedPod))
 	replacementPod := makeMutationTestPod("pod", "uid-2", "3")
 	require.NoError(t, store.Add(replacementPod))
 
-	// Informer events get delivered with a delay.
+	// Informer 事件延迟投递。
 	mc.OnAddOrUpdate(updatedPod)
 	mc.OnDelete(updatedPod)
 	mc.OnAddOrUpdate(replacementPod)
 
-	// This Mutation call is stale, which gets detected because there is a more
-	// recent object in the store.
+	// 这次 Mutation 已过期，因为存储中存在更新的对象，故能被检测到。
+	// 存储中较新的对象。
 	mc.Mutation(updatedPod)
 
 	got, exists, err := mc.GetByKey("pod")
@@ -238,17 +233,14 @@ func TestMutationCacheOnDeleteClearsStaleMutation(t *testing.T) {
 	})
 	mc := NewIntegerResourceVersionMutationCache(klog.Background(), store, indexer, time.Minute, true /* includeAdds */)
 
-	// Simulate an update: mutation cache holds the pod at RV "2" while the
-	// backing store is still empty (informer hasn't caught up yet).
+	// 模拟更新：mutation 缓存中 Pod 为 RV "2"，底层存储仍为空（informer 尚未跟上）。
 	mc.Mutation(makeMutationTestPod("pod", "uid-1", "2"))
 
 	items, err := mc.ByIndex(byNameIndex, "pod")
 	require.NoError(t, err)
 	assert.Len(t, items, 1, "mutation should be visible via ByIndex when backing store is empty")
 
-	// Informer reports the delete: OnDelete must clear the stale mutation so
-	// that the next ByIndex call returns nothing and lets the caller recreate
-	// the object.
+	// Informer 报告删除：OnDelete 必须清除陈旧 mutation，使下次 ByIndex 返回空，允许调用方重建对象。
 	mc.OnDelete(makeMutationTestPod("pod", "uid-1", "1"))
 
 	items, err = mc.ByIndex(byNameIndex, "pod")

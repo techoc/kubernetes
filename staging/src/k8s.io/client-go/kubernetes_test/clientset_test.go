@@ -127,12 +127,11 @@ func TestUnSupportWatchListSemantics(t *testing.T) {
 	// TestUnSupportWatchListSemantics 验证 fake clientset 不支持 watch-list 时能自动回退，
 	// informer 仍可正常同步（fake 客户端只实现普通 List/Watch）。
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
-	// The fake client doesn’t support WatchList semantics,
-	// so we don’t need to prepare a response.
+	// fake 客户端不支持 WatchList 语义，无需准备响应。
 	fakeClient := fakeclientset.NewClientset()
 	factory := informers.NewSharedInformerFactory(fakeClient, 0)
 
-	// register a deployment infm
+	// 注册 Deployment Informer。
 	target := factory.Apps().V1().Deployments().Informer()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

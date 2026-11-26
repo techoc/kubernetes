@@ -250,7 +250,7 @@ func TestConfigToExecClusterRoundtrip(t *testing.T) {
 		func(h *WarningHandlerWithContext, f randfill.Continue) {
 			*h = &fakeWarningHandlerWithContext{}
 		},
-		// Authentication does not require fuzzer
+		// 认证字段无需 fuzz。
 		func(r *AuthProviderConfigPersister, f randfill.Continue) {},
 		func(r *clientcmdapi.AuthProviderConfig, f randfill.Continue) {
 			r.Config = map[string]string{}
@@ -271,8 +271,7 @@ func TestConfigToExecClusterRoundtrip(t *testing.T) {
 		expected := &Config{}
 		f.Fill(expected)
 
-		// This is the list of known fields that this roundtrip doesn't care about. We should add new
-		// fields to this list if we don't want to roundtrip them on exec cluster conversion.
+		// 以下字段不参与往返比较；新增不希望被往返转换的字段时应加入此列表。
 		expected.APIPath = ""
 		expected.ContentConfig = ContentConfig{}
 		expected.Username = ""
@@ -301,7 +300,7 @@ func TestConfigToExecClusterRoundtrip(t *testing.T) {
 		expected.Timeout = 0
 		expected.Dial = nil
 
-		// Manually set URLs so we don't get an error when parsing these during the roundtrip.
+		// 手工设置 URL，避免往返解析时报错。
 		if expected.Host != "" {
 			expected.Host = "https://some-server-url.com/tuna/fish"
 		}
@@ -358,8 +357,7 @@ func TestExecClusterToConfigRoundtrip(t *testing.T) {
 	f := randfill.New().NilChance(0.5).NumElements(1, 1)
 	f.Funcs(
 		func(r *runtime.Object, f randfill.Continue) {
-			// We don't expect the clientauthentication.Cluster.Config to show up in the Config that
-			// comes back from the roundtrip, so just set it to nil.
+			// clientauthentication.Cluster.Config 不会出现在往返后的 Config 中，因此固定设为 nil。
 			*r = nil
 		},
 	)
@@ -367,7 +365,7 @@ func TestExecClusterToConfigRoundtrip(t *testing.T) {
 		expected := &clientauthenticationapi.Cluster{}
 		f.Fill(expected)
 
-		// Manually set URLs so we don't get an error when parsing these during the roundtrip.
+		// 手工设置 URL，避免往返解析时报错。
 		if expected.Server != "" {
 			expected.Server = "https://some-server-url.com/tuna/fish"
 		}
@@ -380,7 +378,7 @@ func TestExecClusterToConfigRoundtrip(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// ConfigToExecCluster assumes config.ExecProvider is not nil.
+		// ConfigToExecCluster 假定 config.ExecProvider 非 nil。
 		config.ExecProvider = &clientcmdapi.ExecConfig{}
 
 		actual, err := ConfigToExecCluster(config)

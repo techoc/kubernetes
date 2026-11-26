@@ -131,8 +131,7 @@ func (tc *patchTestCase) runner(t *testing.T) {
 
 }
 
-// verifyErr verifies that the given error returned from Patch is the error
-// expected by the test case.
+// verifyErr 校验 Patch 返回的错误是否与用例期望一致。
 func (tc *patchTestCase) verifyErr(err error) error {
 	if tc.wantErrMsg != "" && err == nil {
 		return fmt.Errorf("want error, got nil")
@@ -178,35 +177,35 @@ func TestPatch(t *testing.T) {
 			name:      "jsonpatch works with empty patch",
 			object:    newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 			patchType: types.JSONPatchType,
-			// No-op
+			// 空补丁是合法的 no-op。
 			patchBytes:            []byte(`[]`),
 			expectedPatchedObject: newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 		}, {
 			name:      "jsonpatch works with simple change patch",
 			object:    newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 			patchType: types.JSONPatchType,
-			// change spec.foo from bar to foobar
+			// 把 spec.foo 从 bar 改为 foobar。
 			patchBytes:            []byte(`[{"op": "replace", "path": "/metadata/annotations/foo", "value": "foobar"}]`),
 			expectedPatchedObject: newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "foobar"}),
 		}, {
 			name:      "jsonpatch works with simple addition",
 			object:    newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 			patchType: types.JSONPatchType,
-			// add spec.newvalue = dummy
+			// 添加 spec.newvalue = dummy。
 			patchBytes:            []byte(`[{"op": "add", "path": "/metadata/annotations/newvalue", "value": "dummy"}]`),
 			expectedPatchedObject: newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar", "newvalue": "dummy"}),
 		}, {
 			name:      "jsonpatch works with simple deletion",
 			object:    newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar", "toremove": "shouldnotbehere"}),
 			patchType: types.JSONPatchType,
-			// remove spec.newvalue = dummy
+			// 删除 spec.newvalue = dummy。
 			patchBytes:            []byte(`[{"op": "remove", "path": "/metadata/annotations/toremove"}]`),
 			expectedPatchedObject: newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 		}, {
 			name:      "strategic merge patch fails with JSONPatch",
 			object:    newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 			patchType: types.StrategicMergePatchType,
-			// add spec.newvalue = dummy
+			// 添加 spec.newvalue = dummy。
 			patchBytes: []byte(`[{"op": "add", "path": "/metadata/annotations/newvalue", "value": "dummy"}]`),
 			wantErrMsg: "invalid JSON document",
 		}, {
@@ -217,8 +216,7 @@ func TestPatch(t *testing.T) {
 			patchBytes:            []byte(`{ "metadata": {"annotations": { "foo": "baz" } } }`),
 			expectedPatchedObject: newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "baz"}),
 		},
-		// TODO: Add tests for strategic merge using v1.Pod for example to ensure the test cases
-		// demonstrate expected use cases.
+		// TODO: 补充以 v1.Pod 为例的 strategic merge 测试，确保用例覆盖预期行为。
 	}
 
 	for _, tc := range testCases {

@@ -23,8 +23,7 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// This file provides abstractions for setting the provider (e.g., prometheus)
-// of metrics.
+// 本文件提供设置指标后端（如 Prometheus）的抽象层。
 //
 // 本文件定义 workqueue 的指标抽象层：队列实现只依赖这里的最小接口，
 // 具体的指标后端（如 Prometheus）由 MetricsProvider 注入，从而避免核心逻辑依赖具体监控库。
@@ -37,33 +36,30 @@ type queueMetrics[T comparable] interface {
 	updateUnfinishedWork()
 }
 
-// GaugeMetric represents a single numerical value that can arbitrarily go up
-// and down.
+// GaugeMetric 表示可任意增减的单个数值。
 type GaugeMetric interface {
 	Inc()
 	Dec()
 }
 
-// SettableGaugeMetric represents a single numerical value that can arbitrarily go up
-// and down. (Separate from GaugeMetric to preserve backwards compatibility.)
+// SettableGaugeMetric 表示可任意增减的单个数值，与 GaugeMetric 分开是为了向后兼容。
 //
 // 之所以与 GaugeMetric 分开，是因为 Set 语义无法从旧接口平滑添加（向后兼容）。
 type SettableGaugeMetric interface {
 	Set(float64)
 }
 
-// CounterMetric represents a single numerical value that only ever
-// goes up.
+// CounterMetric 表示只增不减的单个数值。
 type CounterMetric interface {
 	Inc()
 }
 
-// SummaryMetric captures individual observations.
+// SummaryMetric 记录单次观测值。
 type SummaryMetric interface {
 	Observe(float64)
 }
 
-// HistogramMetric counts individual observations.
+// HistogramMetric 按区间统计观测值。
 type HistogramMetric interface {
 	Observe(float64)
 }
@@ -76,27 +72,27 @@ func (noopMetric) Dec()            {}
 func (noopMetric) Set(float64)     {}
 func (noopMetric) Observe(float64) {}
 
-// defaultQueueMetrics expects the caller to lock before setting any metrics.
+// defaultQueueMetrics 要求调用方在更新指标前先加锁。
 //
 // defaultQueueMetrics 记录单个队列的即时指标。调用方（队列）必须在持有自身锁时调用，
 // 因此这里内部不做同步；addTimes / processingStartTimes 只在锁内读写。
 type defaultQueueMetrics[T comparable] struct {
 	clock clock.Clock
 
-	// current depth of a workqueue
+	// 队列当前深度。
 	depth GaugeMetric
-	// total number of adds handled by a workqueue
+	// 队列累计入队次数。
 	adds CounterMetric
-	// how long an item stays in a workqueue
+	// 条目在队列中的停留时长。
 	latency HistogramMetric
-	// how long processing an item from a workqueue takes
+	// 处理队列中一个条目的耗时。
 	workDuration HistogramMetric
 	// addTimes 记录条目首次入队时间，用于计算排队时延；重复入队不会刷新。
 	addTimes map[T]time.Time
 	// processingStartTimes 记录条目开始处理的时间，用于计算处理时长与未完成工作。
 	processingStartTimes map[T]time.Time
 
-	// how long have current threads been working?
+	// 当前 worker 已工作多久。
 	unfinishedWorkSeconds   SettableGaugeMetric
 	longestRunningProcessor SettableGaugeMetric
 }
@@ -146,8 +142,7 @@ func (m *defaultQueueMetrics[T]) done(item T) {
 // 总计值与最老条目的耗时。用两个 gauge 而非 summary，
 // 是因为 Prometheus summary 难以在进程重启以外重置。
 func (m *defaultQueueMetrics[T]) updateUnfinishedWork() {
-	// Note that a summary metric would be better for this, but prometheus
-	// doesn't seem to have non-hacky ways to reset the summary metrics.
+	// 这里用 summary 更合适，但 Prometheus 似乎没有体面的方式来重置 summary 指标。
 	var total float64
 	var oldest float64
 	for _, t := range m.processingStartTimes {
@@ -169,7 +164,7 @@ func (noMetrics[T]) get(item T)            {}
 func (noMetrics[T]) done(item T)           {}
 func (noMetrics[T]) updateUnfinishedWork() {}
 
-// Gets the time since the specified start in seconds.
+// 返回自给定起始时刻以来的秒数。
 func (m *defaultQueueMetrics[T]) sinceInSeconds(start time.Time) float64 {
 	return m.clock.Since(start).Seconds()
 }
@@ -191,7 +186,7 @@ func (m *defaultRetryMetrics) retry() {
 	m.retries.Inc()
 }
 
-// MetricsProvider generates various metrics used by the queue.
+// MetricsProvider 提供队列使用的各类指标。
 //
 // MetricsProvider 由调用方实现（例如 controller-runtime 或 Prometheus 适配器），
 // 每个方法以队列名作为标签区分不同队列。
@@ -278,8 +273,7 @@ func newRetryMetrics(name string, provider MetricsProvider) retryMetrics {
 	}
 }
 
-// SetProvider sets the metrics provider for all subsequently created work
-// queues. Only the first call has an effect.
+// SetProvider 为之后创建的所有工作队列设置指标后端，仅首次调用生效。
 func SetProvider(metricsProvider MetricsProvider) {
 	setGlobalMetricsProviderOnce.Do(func() {
 		globalMetricsProvider = metricsProvider

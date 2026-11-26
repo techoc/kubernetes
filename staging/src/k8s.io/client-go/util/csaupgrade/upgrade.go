@@ -32,11 +32,8 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// Finds all managed fields owners of the given operation type which owns all of
-// the fields in the given set
-//
-// If there is an error decoding one of the fieldsets for any reason, it is ignored
-// and assumed not to match the query.
+// 查找拥有给定字段集合中全部字段、且操作类型匹配的 managedFields 所有者。
+// 任一字段集解码失败时忽略该条目，视为不匹配。
 //
 // “owns all of fields”通过差集是否为空判断：fields - entry 为空即包含。
 func FindFieldsOwners(
@@ -63,26 +60,17 @@ func FindFieldsOwners(
 	return result
 }
 
-// Upgrades the Manager information for fields managed with client-side-apply (CSA)
-// Prepares fields owned by `csaManager` for 'Update' operations for use now
-// with the given `ssaManager` for `Apply` operations.
+// 把 CSA 管理的字段迁移到 SSA manager 名下：原先由 `csaManager` 通过 Update 拥有的字段，
+// 此后由 `ssaManager` 通过 Apply 管理。适用于曾用 CSA 管理、准备改用 SSA 的对象。
 //
-// This transformation should be performed on an object if it has been previously
-// managed using client-side-apply to prepare it for future use with
-// server-side-apply.
+// 注意：
+// 1) 操作不可逆，原有字段所有权信息会丢失；
+// 2) 可在首次 SSA 之前或之后执行；
+// 3) CSA 往往拥有更多字段（含默认值字段），迁移可能暂时去掉这些默认值，之后会被重新默认化；
+// 4) 发送 patch 前要确认服务端 managedFields 未变化，避免覆盖。
 //
-// Caveats:
-//  1. This operation is not reversible. Information about which fields the client
-//     owned will be lost in this operation.
-//  2. Supports being performed either before or after initial server-side apply.
-//  3. Client-side apply tends to own more fields (including fields that are defaulted),
-//     this will possibly remove this defaults, they will be re-defaulted, that's fine.
-//  4. Care must be taken to not overwrite the managed fields on the server if they
-//     have changed before sending a patch.
-//
-// obj - Target of the operation which has been managed with CSA in the past
-// csaManagerNames - Names of FieldManagers to merge into ssaManagerName
-// ssaManagerName - Name of FieldManager to be used for `Apply` operations
+// obj 是曾被 CSA 管理的目标对象；csaManagerNames 是要合并的 FieldManager 名称；
+// ssaManagerName 是后续 Apply 使用的 FieldManager 名称。
 //
 // 就地修改 obj 的 managedFields；如需并发安全的写回，请使用 UpgradeManagedFieldsPatch。
 func UpgradeManagedFields(
@@ -113,20 +101,13 @@ func UpgradeManagedFields(
 		}
 	}
 
-	// Commit changes to object
+	// 把改动写回对象。
 	accessor.SetManagedFields(filteredManagers)
 	return nil
 }
 
-// Calculates a minimal JSON Patch to send to upgrade managed fields
-// See `UpgradeManagedFields` for more information.
-//
-// obj - Target of the operation which has been managed with CSA in the past
-// csaManagerNames - Names of FieldManagers to merge into ssaManagerName
-// ssaManagerName - Name of FieldManager to be used for `Apply` operations
-//
-// Returns non-nil error if there was an error, a JSON patch, or nil bytes if
-// there is no work to be done.
+// 计算迁移 managedFields 所需的最小 JSON Patch，参数含义见 UpgradeManagedFields。
+// 出错时返回非 nil 错误；无需改动时返回 nil 字节。
 func UpgradeManagedFieldsPatch(
 	obj runtime.Object,
 	csaManagerNames sets.Set[string],
@@ -154,8 +135,7 @@ func UpgradeManagedFieldsPatch(
 	}
 
 	if reflect.DeepEqual(managedFields, filteredManagers) {
-		// If the managed fields have not changed from the transformed version,
-		// there is no patch to perform
+		// managedFields 与转换后一致时无需生成 patch。
 		return nil, nil
 	}
 
@@ -171,8 +151,7 @@ func UpgradeManagedFieldsPatch(
 			"value": filteredManagers,
 		},
 		{
-			// Use "replace" instead of "test" operation so that etcd rejects with
-			// 409 conflict instead of apiserver with an invalid request
+			// 用 "replace" 而非 "test"，让 etcd 以 409 冲突拒绝，而不是 apiserver 报非法请求。
 			"op":    "replace",
 			"path":  "/metadata/resourceVersion",
 			"value": accessor.GetResourceVersion(),
@@ -182,8 +161,7 @@ func UpgradeManagedFieldsPatch(
 	return json.Marshal(jsonPatch)
 }
 
-// Returns a copy of the provided managed fields that has been migrated from
-// client-side-apply to server-side-apply, or an error if there was an issue
+// 返回从 CSA 迁移到 SSA 后的 managedFields 副本，出错时返回错误。
 func upgradedManagedFields(
 	managedFields []metav1.ManagedFieldsEntry,
 	csaManagerName string,
@@ -194,14 +172,14 @@ func upgradedManagedFields(
 		return nil, nil
 	}
 
-	// Create managed fields clone since we modify the values
+	// 克隆 managedFields，因为后续会修改其中的值。
 	managedFieldsCopy := make([]metav1.ManagedFieldsEntry, len(managedFields))
 	if copy(managedFieldsCopy, managedFields) != len(managedFields) {
 		return nil, errors.New("failed to copy managed fields")
 	}
 	managedFields = managedFieldsCopy
 
-	// Locate SSA manager
+	// 查找 SSA manager。
 	replaceIndex, managerExists := findFirstIndex(managedFields,
 		func(entry metav1.ManagedFieldsEntry) bool {
 			return entry.Manager == ssaManagerName &&
@@ -210,11 +188,7 @@ func upgradedManagedFields(
 		})
 
 	if !managerExists {
-		// SSA manager does not exist. Find the most recent matching CSA manager,
-		// convert it to an SSA manager.
-		//
-		// (find first index, since managed fields are sorted so that most recent is
-		//  first in the list)
+		// SSA manager 不存在时，找最近的 CSA manager 转换为 SSA。managedFields 按最近者在前排序，因此取第一个匹配项。
 		replaceIndex, managerExists = findFirstIndex(managedFields,
 			func(entry metav1.ManagedFieldsEntry) bool {
 				return entry.Manager == csaManagerName &&
@@ -223,8 +197,7 @@ func upgradedManagedFields(
 			})
 
 		if !managerExists {
-			// There are no CSA managers that need to be converted. Nothing to do
-			// Return early
+			// 没有需要转换的 CSA manager，直接返回。
 			return managedFields, nil
 		}
 
@@ -249,9 +222,8 @@ func upgradedManagedFields(
 	return filteredManagers, nil
 }
 
-// Locates an Update manager entry named `csaManagerName` with the same APIVersion
-// as the manager at the targetIndex. Unions both manager's fields together
-// into the manager specified by `targetIndex`. No other managers are modified.
+// 查找与目标 manager APIVersion 相同、名为 `csaManagerName` 的 Update manager，把两者的字段合并到
+// targetIndex 指定的 manager 中，不修改其他 manager。
 func unionManagerIntoIndex(
 	entries []metav1.ManagedFieldsEntry,
 	targetIndex int,
@@ -278,8 +250,7 @@ func unionManagerIntoIndex(
 
 	combinedFieldSet := &targetFieldSet
 
-	// Union the csa manager with the existing SSA manager. Do nothing if
-	// there was no good candidate found
+	// 把 CSA manager 的字段并入现有 SSA manager；找不到合适对象时什么都不做。
 	if csaManagerExists {
 		csaManager := entries[csaManagerIndex]
 
@@ -291,7 +262,7 @@ func unionManagerIntoIndex(
 		combinedFieldSet = combinedFieldSet.Union(&csaFieldSet)
 	}
 
-	// Encode the fields back to the serialized format
+	// 把字段集编码回序列化格式。
 	err = encodeManagedFieldsEntrySet(&entries[targetIndex], *combinedFieldSet)
 	if err != nil {
 		return fmt.Errorf("failed to encode field set: %w", err)
@@ -334,14 +305,14 @@ func filter[T any](
 	return result
 }
 
-// Included from fieldmanager.internal to avoid dependency cycle
-// FieldsToSet creates a set paths from an input trie of fields
+// 从 fieldmanager.internal 复制而来，以避免循环依赖。
+// FieldsToSet 从字段 trie 构造路径集合。
 func decodeManagedFieldsEntrySet(f metav1.ManagedFieldsEntry) (s fieldpath.Set, err error) {
 	err = s.FromJSON(f.FieldsV1.GetRawReader())
 	return s, err
 }
 
-// SetToFields creates a trie of fields from an input set of paths
+// SetToFields 从路径集合构造字段 trie。
 func encodeManagedFieldsEntrySet(f *metav1.ManagedFieldsEntry, s fieldpath.Set) (err error) {
 	raw, err := s.ToJSON()
 	f.FieldsV1.SetRawBytes(raw)

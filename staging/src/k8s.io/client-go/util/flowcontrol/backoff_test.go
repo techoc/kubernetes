@@ -42,7 +42,7 @@ func TestSlowBackoff(t *testing.T) {
 		b.Next(id, tc.Now())
 	}
 
-	//Now confirm that the Reset cancels backoff.
+	// 确认 Reset 会清零退避。
 	// 即使已经达到高水位，Reset 也应立即把退避清零。
 	b.Next(id, tc.Now())
 	b.Reset(id)
@@ -62,13 +62,13 @@ func TestBackoffReset(t *testing.T) {
 	b := NewFakeBackOff(step, maxDuration, tc)
 	startTime := tc.Now()
 
-	// get to backoff = maxDuration
+	// 推进到退避值等于 maxDuration。
 	for i := 0; i <= int(maxDuration/step); i++ {
 		tc.Step(step)
 		b.Next(id, tc.Now())
 	}
 
-	// backoff should be capped at maxDuration
+	// 退避应被 maxDuration 封顶。
 	if !b.IsInBackOffSince(id, tc.Now()) {
 		t.Errorf("expected to be in Backoff got %s", b.Get(id))
 	}
@@ -89,13 +89,13 @@ func TestBackoffHighWaterMark(t *testing.T) {
 	maxDuration := 5 * step
 	b := NewFakeBackOff(step, maxDuration, tc)
 
-	// get to backoff = maxDuration
+	// 推进到退避值等于 maxDuration。
 	for i := 0; i <= int(maxDuration/step); i++ {
 		tc.Step(step)
 		b.Next(id, tc.Now())
 	}
 
-	// backoff high watermark expires after 2*maxDuration
+	// 退避高水位在 2*maxDuration 后过期。
 	tc.Step(maxDuration + step)
 	b.Next(id, tc.Now())
 
@@ -174,21 +174,21 @@ func TestAlternateBackoffGC(t *testing.T) {
 			b.HasExpiredFunc = tt.hasExpiredFunc
 		}
 
-		// initialize backoff
+		// 初始化退避。
 		lastUpdate := clock.Now()
 		b.Next(id, lastUpdate)
 
-		// increment to a time within GC expiration
+		// 推进到仍在 GC 过期窗口内的时刻。
 		clock.Step(tt.nonExpiredTime)
 		b.GC()
 
-		// confirm we did not GC this entry
+		// 确认该条目未被 GC。
 		_, found := b.perItemBackoff[id]
 		if !found {
 			t.Errorf("[%s] expected GC to skip entry, elapsed time=%s", tt.name, clock.Since(lastUpdate))
 		}
 
-		// increment to a time beyond GC expiration
+		// 推进到超出 GC 过期窗口的时刻。
 		clock.Step(tt.expiredTime)
 		b.GC()
 		r, found := b.perItemBackoff[id]
@@ -278,16 +278,12 @@ func TestBackoffWithJitter(t *testing.T) {
 	id := "_idJitter"
 	tc := testingclock.NewFakeClock(time.Now())
 
-	// test setup: we show 11 iterations, series of delays we expect with
-	// a jitter factor of zero each time:
+	// 测试设置：下面给出 11 轮迭代，先列出抖动因子恒为 0 时的预期延迟序列：
 	// 100ms  200ms  400ms  800ms  1.6s  3.2s  06.4s  12.8s  25.6s  51.2s  1m42s
-	// and with jitter factor of 0.1 (max) each time:
+	// 再列出抖动因子恒为 0.1（最大值）时的序列：
 	// 110ms  231ms  485ms  1.0s   2.1s  4.4s  09.4s  19.8s  41.6s  1m27s  2m6s
 	//
-	// with the following configuration, it is guaranteed that the maximum delay
-	// will be reached even though we are unlucky and get jitter factor of zero.
-	// This ensures that this test covers the code path for checking whether
-	// maximum delay has been reached with jitter enabled.
+	// 在该配置下，即使一直取到抖动因子 0，也必然到达最大延迟，从而覆盖启用抖动时判断是否已达上限的代码路径。
 	initial := 100 * time.Millisecond
 	maxDuration := time.Minute
 	maxJitterFactor := 0.1
@@ -373,24 +369,24 @@ func TestAlternateHasExpiredFunc(t *testing.T) {
 		if tt.hasExpiredFunc != nil {
 			b.HasExpiredFunc = tt.hasExpiredFunc
 		}
-		// initialize backoff
+		// 初始化退避。
 		b.Next(id, clock.Now())
 
-		// increment to a time within expiration
+		// 推进到仍在过期窗口内的时刻。
 		clock.Step(tt.nonExpiredTime)
 		b.Next(id, clock.Now())
 
-		// confirm we did a backoff
+		// 确认已进入退避。
 		w := b.Get(id)
 		if w < base*2 {
 			t.Errorf("case %v: backoff object has not incremented like expected: want %s, got %s", tt.name, base*2, w)
 		}
 
-		// increment to a time beyond expiration
+		// 推进到超出过期窗口的时刻。
 		clock.Step(tt.expiredTime)
 		b.Next(id, clock.Now())
 
-		// confirm we have reset the backoff to base
+		// 确认退避已重置为初始值。
 		w = b.Get(id)
 		if w != base {
 			t.Errorf("case %v: hasexpired value: expected %s (backoff to be reset to initial), got %s", tt.name, base, w)

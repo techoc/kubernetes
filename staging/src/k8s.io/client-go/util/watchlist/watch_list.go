@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package watchlist turns a List request into a streaming watch-list request
-// (sendInitialEvents) when the client feature gate allows it.
+// 客户端特性门控允许时，Package watchlist 把 List 请求改写为流式 watch-list（sendInitialEvents）请求。
 //
 // Package watchlist 负责把普通 List 选项改写为 watch-list 请求：服务端先发送
 // 初始事件再持续 watch，客户端无需单独 List。改写只在语义等价时进行，
@@ -39,11 +38,8 @@ func init() {
 	utilruntime.Must(metainternalversion.AddToScheme(scheme))
 }
 
-// PrepareWatchListOptionsFromListOptions creates a new ListOptions
-// that can be used for a watch-list request from the given listOptions.
-//
-// This function also determines if the given listOptions can be used to form a watch-list request,
-// which would result in streaming semantically equivalent data from the server.
+// PrepareWatchListOptionsFromListOptions 根据给定 ListOptions 生成可用于 watch-list 请求的新选项，
+// 并判断能否构造出与原始 List 语义等价的流式请求。
 //
 // 返回的布尔值为 false 时调用方必须使用原始 List；为 true 时 options 已改为
 // Watch=true + SendInitialEvents=true，且限制条件与原始 List 等价。
@@ -62,17 +58,14 @@ func PrepareWatchListOptionsFromListOptions(listOptions metav1.ListOptions) (met
 	}
 
 	watchListOptions := listOptions
-	// this is our legacy case, the cache ignores LIMIT for
-	// ResourceVersion == 0 and RVM=unset|NotOlderThan
+	// 兼容旧行为：ResourceVersion==0 且 RVM 未设置或为 NotOlderThan 时，watch cache 会忽略 Limit。
 	// 这些组合下 List 会忽略 Limit，watch-list 也必须去掉 Limit 才语义一致。
 	if listOptions.Limit > 0 && listOptions.ResourceVersion != "0" {
 		return metav1.ListOptions{}, false, nil
 	}
 	watchListOptions.Limit = 0
 
-	// to ensure that we can create a watch-list request that returns
-	// semantically equivalent data for the given listOptions,
-	// we need to validate that the RVM for the list is supported by watch-list requests.
+	// 要保证 watch-list 返回与原始 List 语义等价的数据，必须确认该 RVM 受 watch-list 支持。
 	// Exact 语义要求锁定到某个 RV，watch-list 无法保证，故不转换。
 	if listOptions.ResourceVersionMatch == metav1.ResourceVersionMatchExact {
 		return metav1.ListOptions{}, false, nil
@@ -100,13 +93,10 @@ type unSupportedWatchListSemantics interface {
 	IsWatchListSemanticsUnSupported() bool
 }
 
-// DoesClientNotSupportWatchListSemantics reports whether the given client
-// does NOT support WatchList semantics.
+// DoesClientNotSupportWatchListSemantics 判断给定客户端是否明确不支持 WatchList 语义。
+// 只有实现 `IsWatchListSemanticsUnSupported` 且返回 true 时才视为不支持。
 //
-// A client does NOT support WatchList only if
-// it implements `IsWatchListSemanticsUnSupported` and that returns true.
-//
-// For an explanation of how WatchList works, see:
+// WatchList 的工作原理参见：
 // https://kubernetes.io/docs/reference/using-api/api-concepts/#streaming-lists
 //
 // 采用“显式禁用”语义：未实现该接口的客户端视为支持，以保持旧客户端行为不变。

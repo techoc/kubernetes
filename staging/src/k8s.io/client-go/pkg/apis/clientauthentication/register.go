@@ -21,23 +21,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API group 名。
 //
 // ExecCredential 等类型在 API 上属于该组；实际序列化格式由 v1/v1beta1 等外部版本定义。
 const GroupName = "client.authentication.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 //
 // 这里注册的是内部版本（APIVersionInternal），只用于在内存中做类型转换，
 // 不会被直接写入 exec 插件的 stdin/stdout 协议。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 把裸 kind 补全为带 group 的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 把裸资源名补全为带 group 的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }

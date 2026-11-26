@@ -24,14 +24,13 @@ import (
 )
 
 const (
-	// CertificateBlockType is a possible value for pem.Block.Type.
+	// CertificateBlockType 是 pem.Block.Type 的一种取值。
 	CertificateBlockType = "CERTIFICATE"
-	// CertificateRequestBlockType is a possible value for pem.Block.Type.
+	// CertificateRequestBlockType 是 pem.Block.Type 的一种取值。
 	CertificateRequestBlockType = "CERTIFICATE REQUEST"
 )
 
-// ParseCertsPEM returns the x509.Certificates contained in the given PEM-encoded byte array
-// Returns an error if a certificate could not be parsed, or if the data does not contain any certificates
+// ParseCertsPEM 返回给定 PEM 字节数组中的 x509 证书，解析失败或不含任何证书时返回错误。
 //
 // 遇到无法解析的证书立即返回已解析部分与错误；完全没有有效证书时也报错，
 // 防止调用方拿着空列表继续建立不安全的连接。
@@ -44,7 +43,7 @@ func ParseCertsPEM(pemCerts []byte) ([]*x509.Certificate, error) {
 		if block == nil {
 			break
 		}
-		// Only use PEM "CERTIFICATE" blocks without extra headers
+		// 只接受没有额外头的 PEM "CERTIFICATE" 块。
 		if block.Type != CertificateBlockType || len(block.Headers) != 0 {
 			continue
 		}
@@ -64,7 +63,7 @@ func ParseCertsPEM(pemCerts []byte) ([]*x509.Certificate, error) {
 	return certs, nil
 }
 
-// EncodeCertificates returns the PEM-encoded byte array that represents by the specified certs.
+// EncodeCertificates 返回指定证书的 PEM 编码字节数组。
 func EncodeCertificates(certs ...*x509.Certificate) ([]byte, error) {
 	b := bytes.Buffer{}
 	for _, cert := range certs {

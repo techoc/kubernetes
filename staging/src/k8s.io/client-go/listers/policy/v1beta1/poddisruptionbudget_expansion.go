@@ -36,7 +36,7 @@ type PodDisruptionBudgetListerExpansion interface {
 // 目前没有命名空间级扩展方法，仅保留占位接口，便于日后在不破坏兼容性的前提下新增。
 type PodDisruptionBudgetNamespaceListerExpansion interface{}
 
-// GetPodPodDisruptionBudgets returns a list of PodDisruptionBudgets matching a pod.  Returns an error only if no matching PodDisruptionBudgets are found.
+// GetPodPodDisruptionBudgets 返回与 Pod 匹配的 PDB 列表，找不到任何候选时才返回错误。
 func (s *podDisruptionBudgetLister) GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*policy.PodDisruptionBudget, error) {
 	var selector labels.Selector
 
@@ -51,7 +51,7 @@ func (s *podDisruptionBudgetLister) GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*
 		pdb := list[i]
 		selector, err = metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
+			// selector 无效即视为与 Pod 不匹配。
 			continue
 		}
 

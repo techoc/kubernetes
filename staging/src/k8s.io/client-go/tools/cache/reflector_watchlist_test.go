@@ -125,12 +125,11 @@ func TestInitialEventsEndBookmarkTicker(t *testing.T) {
 		actualWarning := target.produceWarningIfExpired()
 
 		require.Empty(t, actualWarning, "didn't expect any warning")
-		// validate if the other methods don't produce panic
+		// 验证其他方法不会 panic。
 		target.warnIfExpired()
 		target.observeLastEventTimeStamp(clock.Now())
 
-		// make sure that after calling the other methods
-		// nothing hasn't changed
+		// 确认调用其他方法后状态没有变化。
 		actualWarning = target.produceWarningIfExpired()
 		require.Empty(t, actualWarning, "didn't expect any warning")
 		assertNoEvents(t, target.C())
@@ -245,14 +244,14 @@ func TestWatchList(t *testing.T) {
 		name                string
 		disableUseWatchList bool
 
-		// closes listWatcher after sending the specified number of watch events
+		// 发出指定数量的 watch 事件后关闭 listWatcher。
 		closeAfterWatchEvents int
-		// closes listWatcher after getting the specified number of watch requests
+		// 收到指定数量的 watch 请求后关闭 listWatcher。
 		closeAfterWatchRequests int
-		// closes listWatcher after getting the specified number of list requests
+		// 收到指定数量的 list 请求后关闭 listWatcher。
 		closeAfterListRequests int
 
-		// stops Watcher after sending the specified number of watch events
+		// 发出指定数量的 watch 事件后停止 Watcher。
 		stopAfterWatchEvents int
 
 		watchOptionsPredicate func(options metav1.ListOptions) error
@@ -478,7 +477,7 @@ func TestWatchList(t *testing.T) {
 			closeAfterWatchEvents: 3,
 			watchEvents: []watch.Event{
 				{Type: watch.Added, Object: makePod("p1", "1")},
-				// second request
+				// 第二次请求。
 				{Type: watch.Added, Object: makePod("p1", "1")},
 				{Type: watch.Bookmark, Object: &v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
@@ -518,7 +517,7 @@ func TestWatchList(t *testing.T) {
 					},
 				}},
 				{Type: watch.Added, Object: makePod("p3", "3")},
-				// second request
+				// 第二次请求。
 				{Type: watch.Added, Object: makePod("p4", "4")},
 			},
 			expectedWatchRequests: 2,
@@ -655,7 +654,7 @@ func verifyRequestOptions(t *testing.T, lw *fakeListWatcher, expectedRequestOpti
 		if actualRequestOption.TimeoutSeconds != nil && expectedRequestOption.TimeoutSeconds == nil {
 			t.Fatalf("unexpected TimeoutSeconds option specified, actual = %#v, expected = %#v", actualRequestOption, expectedRequestOption)
 		}
-		// ignore actual values
+		// 忽略具体取值。
 		actualRequestOption.TimeoutSeconds = nil
 		expectedRequestOption.TimeoutSeconds = nil
 		if !cmp.Equal(actualRequestOption, expectedRequestOption) {

@@ -59,7 +59,7 @@ func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 				"api/v1":             nil,
 				"apis/batch/v1beta1": nil,
 			},
-			// Alphabetical ordering, since GV's are returned sorted.
+			// GV 按字母序返回。
 			expectedGVs: []schema.GroupVersion{
 				{Group: "apps", Version: "v1"},
 				{Group: "batch", Version: "v1beta1"},
@@ -78,7 +78,7 @@ func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 				"apis/apps":                       nil, // Missing Version
 				"apis/apps/v1":                    nil,
 			},
-			// Alphabetical ordering, since GV's are returned sorted.
+			// GV 按字母序返回。
 			expectedGVs: []schema.GroupVersion{
 				{Group: "apps", Version: "v1"},
 				{Group: "batch", Version: "v1beta1"},

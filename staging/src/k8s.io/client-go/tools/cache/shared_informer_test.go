@@ -107,7 +107,7 @@ func (l *testListener) ok() bool {
 		return false
 	}
 
-	// wait just a bit to allow any unexpected stragglers to come in
+	// 稍等片刻，让意外滞留的事件有机会到达。
 	l.println("sleeping")
 	time.Sleep(1 * time.Second)
 	l.println("final check")
@@ -153,7 +153,7 @@ func isRegistered(i SharedInformer, h ResourceEventHandlerRegistration) bool {
 // 且 ListIndexFuncValues 能反映所有已索引的标签值。
 func TestIndexer(t *testing.T) {
 	assert := assert.New(t)
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 	pod1 := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Labels: map[string]string{"a": "a-val", "b": "b-val1"}}}
 	pod2 := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Labels: map[string]string{"b": "b-val2"}}}
@@ -161,7 +161,7 @@ func TestIndexer(t *testing.T) {
 	source.Add(pod1)
 	source.Add(pod2)
 
-	// create the shared informer and resync every 1s
+	// 创建共享 informer，每 1 秒 resync 一次。
 	informer := NewSharedInformer(source, &v1.Pod{}, 1*time.Second).(*sharedIndexInformer)
 	err := informer.AddIndexers(map[string]IndexFunc{
 		"labels": func(obj interface{}) ([]string, error) {
@@ -190,22 +190,22 @@ func TestIndexer(t *testing.T) {
 		return a.(*v1.Pod).Name < b.(*v1.Pod).Name
 	})
 
-	// We should be able to lookup by index
+	// 应能按索引查找。
 	res, err := informer.GetIndexer().ByIndex("labels", "a")
 	assert.NoError(err)
 	if diff := cmp.Diff([]any{pod1}, res); diff != "" {
 		t.Fatal(diff)
 	}
 
-	// Adding an item later is fine as well
+	// 之后新增条目同样可以。
 	source.Add(pod3)
-	// Event is async, need to poll
+	// 事件是异步的，需要轮询等待。
 	assert.Eventually(func() bool {
 		res, _ := informer.GetIndexer().ByIndex("labels", "a")
 		return cmp.Diff([]any{pod1, pod3}, res, cmpOps) == ""
 	}, time.Second*3, time.Millisecond)
 
-	// Adding an index later is also fine
+	// 之后添加索引同样可以。
 	err = informer.AddIndexers(map[string]IndexFunc{
 		"labels-again": func(obj interface{}) ([]string, error) {
 			res := []string{}
@@ -217,7 +217,7 @@ func TestIndexer(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	// Should be immediately available
+	// 应立即可用。
 	res, err = informer.GetIndexer().ByIndex("labels-again", "a")
 	assert.NoError(err)
 	if diff := cmp.Diff([]any{pod1, pod3}, res, cmpOps); diff != "" {
@@ -238,12 +238,10 @@ func TestListenerResyncPeriods(t *testing.T) {
 }
 
 func TestListenerResyncPeriodsDelayed(t *testing.T) {
-	// sharedProcessor used to deadlock when sharedProcessor.run happened
-	// to be reached after the first sharedProcessor.distribute.
-	// This artififical delay simulates that situation.
+	// sharedProcessor.run 曾在这里发生死锁：
+	// 经过第一次 sharedProcessor.distribute 后才会到达；这里人为加延迟模拟该情况。
 	//
-	// Must not run in parallel to other tests, but it doesn't need to:
-	// it doesn't sleep in real-world time and therefore completes quickly.
+	// 不能与其他测试并行，但其实无需并行：它不按真实时间睡眠，很快就能完成。
 	//
 	// 该用例人为让 processor.run 晚于第一次 distribute，覆盖历史死锁回归。
 	synctest.Test(t, func(t *testing.T) { testListenerResyncPeriods(t, time.Second) })
@@ -266,25 +264,25 @@ func testListenerResyncPeriods(t *testing.T, startupDelay time.Duration) {
 		defer sharedProcessorRunHook.Store(nil)
 	}
 
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2"}})
 
-	// create the shared informer and resync every 1s
+	// 创建共享 informer，每 1 秒 resync 一次。
 	informer := NewSharedInformer(source, &v1.Pod{}, 1*time.Second).(*sharedIndexInformer)
 
-	// listener 1, never resync
+	// listener1：从不 resync。
 	listener1 := newTestListener("listener1", 0, "pod1", "pod2")
 	listener1.printlnFunc = println
 	informer.AddEventHandlerWithResyncPeriod(listener1, listener1.resyncPeriod)
 
-	// listener 2, resync every 2s
+	// listener2：每 2 秒 resync。
 	listener2 := newTestListener("listener2", 2*time.Second, "pod1", "pod2")
 	listener2.printlnFunc = println
 	informer.AddEventHandlerWithResyncPeriod(listener2, listener2.resyncPeriod)
 
-	// listener 3, resync every 3s
+	// listener3：每 3 秒 resync。
 	listener3 := newTestListener("listener3", 3*time.Second, "pod1", "pod2")
 	listener3.printlnFunc = println
 	informer.AddEventHandlerWithResyncPeriod(listener3, listener3.resyncPeriod)
@@ -298,16 +296,14 @@ func testListenerResyncPeriods(t *testing.T, startupDelay time.Duration) {
 		wg.Wait()
 	}()
 
-	// We must potentially advance time to unblock sharedProcess.run,
-	// otherwise synctest.Wait() below returns without anything
-	// being done.
+	// 可能需要推进时间以解除 sharedProcess.run 的阻塞，否则下面的 synctest.Wait()
+	// 会在什么都没发生时返回。
 	time.Sleep(startupDelay)
 
-	// Ensure all listeners got the initial after the initial processing, at the initial start time.
+	// 确认在初始时刻完成初次处理后，所有 listener 都收到了初始事件。
 	//
-	// synctest.Wait doesn't detect deadlocks involving mutexes: they are considered not durably
-	// blocking, so in case of such a deadlock it'll just keep waiting until the entire unit test
-	// times out. The backtraces then show the deadlock.
+	// synctest.Wait 检测不到涉及互斥量的死锁：这类阻塞不算「持久阻塞」，因此会一直等到整个单元测试
+	// 否则会超时，回溯信息将显示死锁。
 	synctest.Wait()
 	for _, listener := range listeners {
 		if !listener.satisfiedExpectations() {
@@ -320,16 +316,16 @@ func testListenerResyncPeriods(t *testing.T, startupDelay time.Duration) {
 		listener.reset()
 	}
 
-	// advance so listener2 gets a resync
+	// 推进时间，让 listener2 收到 resync。
 	time.Sleep(2*time.Second - startupDelay)
 	synctest.Wait()
 
-	// make sure listener2 got the resync
+	// 确认 listener2 收到了 resync。
 	if !listener2.satisfiedExpectations() {
 		t.Errorf("%s: %s: expected %v, got %v", time.Since(start), listener2.name, listener2.expectedItemNames, listener2.receivedItemNames)
 	}
 
-	// make sure listeners 1 and 3 got nothing
+	// 确认 listener1 与 listener3 没有收到任何事件。
 	if len(listener1.receivedItemNames) != 0 {
 		t.Errorf("%s: listener1: should not have resynced (got %d)", time.Since(start), len(listener1.receivedItemNames))
 	}
@@ -342,16 +338,16 @@ func testListenerResyncPeriods(t *testing.T, startupDelay time.Duration) {
 		listener.reset()
 	}
 
-	// advance so listener3 gets a resync
+	// 推进时间，让 listener3 收到 resync。
 	time.Sleep(1 * time.Second)
 	synctest.Wait()
 
-	// make sure listener3 got the resync
+	// 确认 listener3 收到了 resync。
 	if !listener3.satisfiedExpectations() {
 		t.Errorf("%s: %s: expected %v, got %v", time.Since(start), listener3.name, listener3.expectedItemNames, listener3.receivedItemNames)
 	}
 
-	// make sure listeners 1 and 2 got nothing
+	// 确认 listener1 与 listener2 没有收到任何事件。
 	if len(listener1.receivedItemNames) != 0 {
 		t.Errorf("%s: listener1: should not have resynced (got %d)", time.Since(start), len(listener1.receivedItemNames))
 	}
@@ -363,10 +359,10 @@ func testListenerResyncPeriods(t *testing.T, startupDelay time.Duration) {
 // TestResyncCheckPeriod 验证 resyncCheckPeriod 取所有监听器周期的最小值，
 // 已有监听器的 resync 周期不会因后续注册而改变。
 func TestResyncCheckPeriod(t *testing.T) {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
-	// create the shared informer and resync every 12 hours
+	// 创建共享 informer，每 12 小时 resync 一次。
 	informer := NewSharedInformer(source, &v1.Pod{}, 12*time.Hour).(*sharedIndexInformer)
 	gl := informer.processor.getListener
 
@@ -374,7 +370,7 @@ func TestResyncCheckPeriod(t *testing.T) {
 	informer.clock = clock
 	informer.processor.clock = clock
 
-	// listener 1, never resync
+	// listener1：从不 resync。
 	listener1 := newTestListener("listener1", 0)
 	handler1, _ := informer.AddEventHandlerWithResyncPeriod(listener1, listener1.resyncPeriod)
 
@@ -385,7 +381,7 @@ func TestResyncCheckPeriod(t *testing.T) {
 		t.Errorf("expected %d, got %d", e, a)
 	}
 
-	// listener 2, resync every minute
+	// listener2：每分钟 resync。
 	listener2 := newTestListener("listener2", 1*time.Minute)
 	handler2, _ := informer.AddEventHandlerWithResyncPeriod(listener2, listener2.resyncPeriod)
 	if e, a := 1*time.Minute, informer.resyncCheckPeriod; e != a {
@@ -398,7 +394,7 @@ func TestResyncCheckPeriod(t *testing.T) {
 		t.Errorf("expected %d, got %d", e, a)
 	}
 
-	// listener 3, resync every 55 seconds
+	// listener3：每 55 秒 resync。
 	listener3 := newTestListener("listener3", 55*time.Second)
 	handler3, _ := informer.AddEventHandlerWithResyncPeriod(listener3, listener3.resyncPeriod)
 	if e, a := 55*time.Second, informer.resyncCheckPeriod; e != a {
@@ -414,7 +410,7 @@ func TestResyncCheckPeriod(t *testing.T) {
 		t.Errorf("expected %d, got %d", e, a)
 	}
 
-	// listener 4, resync every 5 seconds
+	// listener4：每 5 秒 resync。
 	listener4 := newTestListener("listener4", 5*time.Second)
 	handler4, _ := informer.AddEventHandlerWithResyncPeriod(listener4, listener4.resyncPeriod)
 	if e, a := 5*time.Second, informer.resyncCheckPeriod; e != a {
@@ -434,7 +430,7 @@ func TestResyncCheckPeriod(t *testing.T) {
 	}
 }
 
-// verify that https://github.com/kubernetes/kubernetes/issues/59822 is fixed
+// 验证 https://github.com/kubernetes/kubernetes/issues/59822 已修复。
 // 并发 AddEventHandler 与 Run 不应产生数据竞争或 panic。
 func TestSharedInformerInitializationRace(t *testing.T) {
 	source := newFakeControllerSource(t)
@@ -451,20 +447,19 @@ func TestSharedInformerInitializationRace(t *testing.T) {
 	}()
 }
 
-// TestSharedInformerWatchDisruption simulates a watch that was closed
-// with updates to the store during that time. We ensure that handlers with
-// resync and no resync see the expected state.
+// TestSharedInformerWatchDisruption 模拟 watch 被关闭的场景。
+// 同时更新 store。确保启用/未启用 resync 的 handler 都能看到预期状态。
 //
 // 关键语义：不重同步的监听器在 relist 后只会看到发生变化的增量对象，
 // 而重同步的监听器会看到全量对象。
 func TestSharedInformerWatchDisruption(t *testing.T) {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: "pod1", ResourceVersion: "1"}})
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: "pod2", ResourceVersion: "2"}})
 
-	// create the shared informer and resync every 1s
+	// 创建共享 informer，每 1 秒 resync 一次。
 	informer := NewSharedInformer(source, &v1.Pod{}, 1*time.Second).(*sharedIndexInformer)
 
 	clock := testingclock.NewFakeClock(time.Now())
@@ -493,11 +488,11 @@ func TestSharedInformerWatchDisruption(t *testing.T) {
 		}
 	}
 
-	// Add pod3, bump pod2 but don't broadcast it, so that the change will be seen only on relist
+	// 加入 pod3，更新 pod2 但不广播，使该变更只在 relist 时可见。
 	source.AddDropWatch(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod3", UID: "pod3", ResourceVersion: "3"}})
 	source.ModifyDropWatch(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2", UID: "pod2", ResourceVersion: "4"}})
 
-	// Ensure that nobody saw any changes
+	// 确认没有任何 handler 看到变更。
 	for _, listener := range listeners {
 		if !listener.ok() {
 			t.Errorf("%s: expected %v, got %v", listener.name, listener.expectedItemNames, listener.receivedItemNames)
@@ -511,22 +506,20 @@ func TestSharedInformerWatchDisruption(t *testing.T) {
 	listenerNoResync.expectedItemNames = sets.New("pod2", "pod3")
 	listenerResync.expectedItemNames = sets.New("pod1", "pod2", "pod3")
 
-	// This calls shouldSync, which deletes noResync from the list of syncingListeners
+	// 这会调用 shouldSync，把 noResync 从同步中的 listener 列表里移除。
 	clock.Step(1 * time.Second)
 
-	// Simulate a connection loss (or even just a too-old-watch)
+	// 模拟连接断开（或 watch 过旧）。
 	source.ResetWatch()
 
-	// Wait long enough for the reflector to exit and the backoff function to start waiting
-	// on the fake clock, otherwise advancing the fake clock will have no effect.
-	// TODO: Make this deterministic by counting the number of waiters on FakeClock
+	// 等待足够长的时间，让 reflector 退出且退避函数开始在假时钟上等待，否则推进假时钟无效。
+	// TODO：通过统计 FakeClock 上的等待者数量让这里变得确定。
 	time.Sleep(10 * time.Millisecond)
 
-	// Advance the clock to cause the backoff wait to expire.
+	// 推进时钟使退避等待结束。
 	clock.Step(1601 * time.Millisecond)
 
-	// Wait long enough for backoff to invoke ListWatch a second time and distribute events
-	// to listeners.
+	// 等待足够长时间，让退避后再次调用 ListWatch 并向 listener 分发事件。
 	time.Sleep(10 * time.Millisecond)
 
 	for _, listener := range listeners {
@@ -567,8 +560,8 @@ func TestSharedInformerErrorHandling(t *testing.T) {
 	}
 }
 
-// TestSharedInformerStartRace is a regression test to ensure there is no race between
-// Run and SetWatchErrorHandler, and Run and SetTransform.
+// TestSharedInformerStartRace 是回归测试，确保以下两者之间不存在竞态：
+// 覆盖 Run 与 SetWatchErrorHandler、Run 与 SetTransform 的组合。
 func TestSharedInformerStartRace(t *testing.T) {
 	source := newFakeControllerSource(t)
 	informer := NewSharedInformer(source, &v1.Pod{}, 1*time.Second).(*sharedIndexInformer)
@@ -580,7 +573,7 @@ func TestSharedInformerStartRace(t *testing.T) {
 				return
 			default:
 			}
-			// Set dummy functions, just to test for race
+			// 设置占位函数，仅用于检测竞态。
 			informer.SetTransform(func(i interface{}) (interface{}, error) {
 				return i, nil
 			})
@@ -599,7 +592,7 @@ func TestSharedInformerStartRace(t *testing.T) {
 
 // TestSharedInformerTransformer 验证 SetTransform 改写后的事件会以变换后的形式送达监听器。
 func TestSharedInformerTransformer(t *testing.T) {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: "pod1", ResourceVersion: "1"}})
@@ -706,7 +699,7 @@ func TestSharedInformerRemoveForeignHandler(t *testing.T) {
 		t.Errorf("informer2 has %d registered handler, instead of 0", eventHandlerCount(informer2))
 	}
 
-	// remove handle at foreign informer
+	// 移除另一个 informer 上的 handler。
 	if isRegistered(informer2, handle1) {
 		t.Errorf("handle1 registered for informer2")
 	}
@@ -859,9 +852,8 @@ func TestRemovingRemovedSharedInformer(t *testing.T) {
 	}
 }
 
-// Shows that many concurrent goroutines can be manipulating shared informer
-// listeners without tripping it up. There are not really many assertions in this
-// test. Meant to be run with -race to find race conditions
+// 展示多个并发 goroutine 可以操作共享 informer 的 listener 而不会出错。这里断言不多，
+// 用于发现竞态，应以 -race 运行。
 //
 // 100 个 worker 随机增删监听器，同时持续产生 10k 个事件，重点在于竞争检测。
 func TestSharedInformerHandlerAbuse(t *testing.T) {
@@ -878,8 +870,7 @@ func TestSharedInformerHandlerAbuse(t *testing.T) {
 	}()
 
 	worker := func() {
-		// Keep adding and removing handler
-		// Make sure no duplicate events?
+		// 不断添加和移除 handler，检查是否出现重复事件。
 		funcs := ResourceEventHandlerDetailedFuncs{
 			AddFunc:    func(obj interface{}, isInInitialList bool) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {},
@@ -894,11 +885,11 @@ func TestSharedInformerHandlerAbuse(t *testing.T) {
 			default:
 				switch rand.Intn(2) {
 				case 0:
-					// Register handler again
+					// 再次注册 handler。
 					reg, err := informer.AddEventHandlerWithResyncPeriod(funcs, 1*time.Second)
 					if err != nil {
 						if strings.Contains(err.Error(), "stopped already") {
-							// test is over
+							// 测试结束。
 							return
 						}
 						t.Errorf("failed to add handler: %v", err)
@@ -906,7 +897,7 @@ func TestSharedInformerHandlerAbuse(t *testing.T) {
 					}
 					handles = append(handles, reg)
 				case 1:
-					//  Remove a random handler
+					// 随机移除一个 handler。
 					if len(handles) == 0 {
 						continue
 					}
@@ -915,7 +906,7 @@ func TestSharedInformerHandlerAbuse(t *testing.T) {
 					err := informer.RemoveEventHandler(handles[idx])
 					if err != nil {
 						if strings.Contains(err.Error(), "stopped already") {
-							// test is over
+							// 测试结束。
 							return
 						}
 						t.Errorf("failed to remove handler: %v", err)
@@ -938,45 +929,44 @@ func TestSharedInformerHandlerAbuse(t *testing.T) {
 
 	objs := []*v1.Pod{}
 
-	// While workers run, randomly create events for the informer
+	// worker 运行期间，随机为 informer 制造事件。
 	for i := 0; i < 10000; i++ {
 		if len(objs) == 0 {
-			// Make sure there is always an object
+			// 确保始终有一个对象存在。
 			obj := &v1.Pod{ObjectMeta: metav1.ObjectMeta{
 				Name: "pod" + strconv.Itoa(i),
 			}}
 			objs = append(objs, obj)
 
-			// deep copy before adding since the Modify function mutates the obj
+			// 加入前先深拷贝，因为 Modify 会修改原对象。
 			source.Add(obj.DeepCopy())
 		}
 
 		switch rand.Intn(3) {
 		case 0:
-			// Add Object
+			// 添加对象。
 			obj := &v1.Pod{ObjectMeta: metav1.ObjectMeta{
 				Name: "pod" + strconv.Itoa(i),
 			}}
 			objs = append(objs, obj)
 			source.Add(obj.DeepCopy())
 		case 1:
-			// Update Object
+			// 更新对象。
 			idx := rand.Intn(len(objs))
 			source.Modify(objs[idx].DeepCopy())
 
 		case 2:
-			// Remove Object
+			// 删除对象。
 			idx := rand.Intn(len(objs))
 			source.Delete(objs[idx].DeepCopy())
 			objs = append(objs[:idx], objs[idx+1:]...)
 		}
 	}
 
-	// sotp informer which stops workers. stopping informer first to exercise
-	// contention for informer while it is closing
+	// 停止 informer 也会停止 worker。先停 informer 以模拟关闭期间的竞争。
 	informerCancel()
 
-	// wait for workers to finish since they may throw errors
+	// 等待 worker 结束，因为它们可能抛出错误。
 	wg.Wait()
 }
 
@@ -1102,10 +1092,10 @@ func TestRemoveOnStoppedSharedInformer(t *testing.T) {
 
 // TestRemoveWhileActive 验证运行中移除监听器后，后续事件不再送达该监听器。
 func TestRemoveWhileActive(t *testing.T) {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
-	// create the shared informer and resync every 12 hours
+	// 创建共享 informer，每 12 小时 resync 一次。
 	informer := NewSharedInformer(source, &v1.Pod{}, 0).(*sharedIndexInformer)
 
 	listener := newTestListener("listener", 0, "pod1")
@@ -1144,10 +1134,10 @@ func TestRemoveWhileActive(t *testing.T) {
 // TestAddWhileActive 验证运行中新增的监听器会先补发当前全量对象完成同步，
 // 之后才接收增量事件；HasSynced 在同步前为 false。
 func TestAddWhileActive(t *testing.T) {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
-	// create the shared informer and resync every 12 hours
+	// 创建共享 informer，每 12 小时 resync 一次。
 	informer := NewSharedInformer(source, &v1.Pod{}, 0).(*sharedIndexInformer)
 	listener1 := newTestListener("originalListener", 0, "pod1")
 	listener2 := newTestListener("listener2", 0, "pod1", "pod2")
@@ -1215,8 +1205,8 @@ func TestAddWhileActive(t *testing.T) {
 	}
 }
 
-// TestShutdown depends on goleak.VerifyTestMain in main_test.go to verify that
-// all goroutines really have stopped in the different scenarios.
+// TestShutdown 依赖 main_test.go 中的 goleak.VerifyTestMain 来验证：
+// 各场景下所有 goroutine 确实都已停止。
 //
 // 覆盖“先加 handler 再 Run”“Run 后再加 handler”“只加 handler 不 Run”三种生命周期。
 func TestShutdown(t *testing.T) {
@@ -1272,8 +1262,7 @@ func TestShutdown(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// At this point, neither informer nor handler have any goroutines running
-		// and it doesn't matter that nothing gets stopped or removed.
+		// 此时 informer 与 handler 都没有 goroutine 在运行，是否再停止或移除都无关紧要。
 	})
 }
 
@@ -1282,7 +1271,7 @@ func TestShutdown(t *testing.T) {
 func TestEventPanics(t *testing.T) {
 	// timeInUTC := time.Date(2009, 12, 1, 13, 30, 40, 42000, time.UTC)
 	// timeString := "1201 13:30:40.000042"
-	// Initialized by init.
+	// 由 init 初始化。
 	var (
 		buffer threadSafeBuffer
 		logger klog.Logger
@@ -1290,10 +1279,8 @@ func TestEventPanics(t *testing.T) {
 	)
 
 	init := func(t *testing.T) {
-		// Restoring state is very sensitive to ordering. All goroutines spawned
-		// by a test must have completed and there has to be a check that they
-		// have completed that is visible to the race detector. This also
-		// applies to all other tests!
+		// 恢复状态对顺序非常敏感：测试启动的所有 goroutine 必须结束，且必须有竞态检测器
+		// 可见的完成检查。其他测试也必须遵守！
 		t.Cleanup(klog.CaptureState().Restore) //nolint:logcheck // CaptureState shouldn't be used in packages with contextual logging, but here it is okay.
 		buffer.buffer.Reset()
 		logger = textlogger.NewLogger(textlogger.NewConfig(
@@ -1346,12 +1333,10 @@ func TestEventPanics(t *testing.T) {
 		}()
 		require.Eventually(t, informer.HasSynced, time.Minute, time.Millisecond, "informer has synced")
 
-		// This times out (https://github.com/kubernetes/kubernetes/issues/129024) because the
-		// handler never syncs when the callback panics:
+		// 这会超时（https://github.com/kubernetes/kubernetes/issues/129024）：回调 panic 时 handler 永远不会同步。
 		//    require.Eventually(t, handle.HasSynced, time.Minute, time.Millisecond, "handler has synced")
 		//
-		// Wait for a non-empty buffer instead. This implies that we have to make
-		// the buffer thread-safe, which wouldn't be necessary otherwise.
+		// 改为等待非空缓冲区，这意味着必须让缓冲区线程安全，否则本不需要。
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			assert.Contains(t, buffer.String(), expectedLog(""))
 		}, time.Minute, time.Millisecond, "handler has panicked")
@@ -1359,7 +1344,7 @@ func TestEventPanics(t *testing.T) {
 
 	t.Run("many", func(t *testing.T) {
 		init(t)
-		// One pod was already created in init, add some more.
+		// init 中已创建一个 Pod，这里再加一些。
 		numPods := 5
 		for i := 1; i < numPods; i++ {
 			source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pod%d", i+1)}})
@@ -1409,9 +1394,7 @@ func TestEventPanics(t *testing.T) {
 			assert.Equal(t, numPods, numOccurrences(output, expected), "Log output should have the right number of panics for %q (search string %q, got instead:\n%s", name2, expected, output)
 		}, 30*time.Second, time.Millisecond, "handler has panicked")
 
-		// Both handlers should have slept for one second after each panic,
-		// except after the last pod event because then the input channel
-		// gets closed.
+		// 除最后一个 Pod 事件（此时输入 channel 会关闭）外，两个 handler 应在每次 panic 后各睡一秒。
 		assert.GreaterOrEqual(t, time.Since(start), time.Duration(numPods-1)*time.Second, "Delay in processorListener.run")
 	})
 }
@@ -1470,25 +1453,25 @@ func TestRemoveEventHandler_AsynchronousPanic(t *testing.T) {
 		t.Fatalf("Failed to add event handler: %v", err)
 	}
 
-	// Trigger the event
+	// 触发事件。
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
 
-	// Wait for handler to start and block
+	// 等待 handler 启动并阻塞。
 	<-handlerStarted
 
-	// Now remove the handler. This should return immediately.
+	// 现在移除 handler，应立即返回。
 	err = informer.RemoveEventHandler(handle)
 	if err != nil {
 		t.Fatalf("Failed to remove event handler: %v", err)
 	}
 
-	// Close the channel that the handler writes to
+	// 关闭 handler 写入的 channel。
 	close(scheduledPods)
 
-	// Unblock the handler
+	// 解除 handler 的阻塞。
 	close(blockChan)
 
-	// Wait for handler to finish
+	// 等待 handler 结束。
 	<-handlerFinished
 
 	if !panicked {
@@ -1538,25 +1521,25 @@ func TestRemoveEventHandler_SynchronousShutdown(t *testing.T) {
 		t.Fatalf("Failed to add event handler: %v", err)
 	}
 
-	// Trigger the event
+	// 触发事件。
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
 
-	// Wait for handler to start and block
+	// 等待 handler 启动并阻塞。
 	<-handlerStarted
 
-	// Unblock the handler so it can run and exit
+	// 解除 handler 的阻塞，使其运行并退出。
 	close(blockChan)
 
-	// Now remove the handler and wait for it to fully stop.
+	// 现在移除 handler 并等待其完全停止。
 	err = ShutDownEventHandler(informer, handle)
 	if err != nil {
 		t.Fatalf("Failed to shutdown event handler: %v", err)
 	}
 
-	// NOW it is safe to close the channel
+	// 现在可以安全地关闭 channel。
 	close(scheduledPods)
 
-	// Wait for handler function to finish (should already be done)
+	// 等待 handler 函数结束（应已完成）。
 	<-handlerFinished
 
 	if panicked {
@@ -1579,7 +1562,7 @@ func TestShutDownEventHandler_Lifecycles(t *testing.T) {
 			t.Fatalf("Failed to add event handler: %v", err)
 		}
 
-		// Shutdown should return immediately because the informer was never started.
+		// informer 从未启动，Shutdown 应立即返回。
 		err = ShutDownEventHandler(informer, handle)
 		if err != nil {
 			t.Fatalf("Failed to shutdown event handler: %v", err)
@@ -1598,7 +1581,7 @@ func TestShutDownEventHandler_Lifecycles(t *testing.T) {
 			wg.Wait()
 		}()
 
-		// Wait deterministically for the informer to sync (proving it has started)
+		// 确定性地等待 informer 同步（证明它已启动）。
 		syncCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if !WaitFor(syncCtx, "informer sync", informer.HasSyncedChecker()) {
@@ -1639,7 +1622,7 @@ func TestShutDownEventHandler_Lifecycles(t *testing.T) {
 			wg.Wait()
 		}()
 
-		// Wait deterministically for the informer to sync (proving it has started)
+		// 确定性地等待 informer 同步（证明它已启动）。
 		syncCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if !WaitFor(syncCtx, "informer sync", informer.HasSyncedChecker()) {

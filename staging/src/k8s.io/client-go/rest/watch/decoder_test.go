@@ -34,7 +34,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-// getDecoder mimics how k8s.io/client-go/rest.createSerializers creates a decoder
+// getDecoder 模仿 k8s.io/client-go/rest.createSerializers 创建解码器的方式。
 func getDecoder() runtime.Decoder {
 	jsonSerializer := runtimejson.NewSerializerWithOptions(runtimejson.DefaultMetaFactory, scheme.Scheme, scheme.Scheme, runtimejson.SerializerOptions{})
 	directCodecFactory := scheme.Codecs.WithoutConversion()

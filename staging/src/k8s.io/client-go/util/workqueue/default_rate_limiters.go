@@ -34,29 +34,26 @@ type RateLimiter TypedRateLimiter[any]
 // 实现需要按条目记录失败次数，因此必须并发安全；Forget 是释放记录的
 // 唯一入口，长期不调用会导致内存持续增长。
 type TypedRateLimiter[T comparable] interface {
-	// When gets an item and gets to decide how long that item should wait
+	// When 接收条目并决定它应等待多久。
 	When(item T) time.Duration
-	// Forget indicates that an item is finished being retried.  Doesn't matter whether it's for failing
-	// or for success, we'll stop tracking it
+	// Forget 表示条目已结束重试（无论成功或失败），此后不再追踪。
 	Forget(item T)
-	// NumRequeues returns back how many failures the item has had
+	// NumRequeues 返回该条目累计的失败次数。
 	NumRequeues(item T) int
 }
 
-// DefaultControllerRateLimiter is a no-arg constructor for a default rate limiter for a workqueue.  It has
-// both overall and per-item rate limiting.  The overall is a token bucket and the per-item is exponential
+// DefaultControllerRateLimiter 是工作队列默认限流器的无参构造函数，同时提供整体（令牌桶）与条目级（指数退避）限流。
 //
 // Deprecated: Use DefaultTypedControllerRateLimiter instead.
 func DefaultControllerRateLimiter() RateLimiter {
 	return DefaultTypedControllerRateLimiter[any]()
 }
 
-// DefaultTypedControllerRateLimiter is a no-arg constructor for a default rate limiter for a workqueue.  It has
-// both overall and per-item rate limiting.  The overall is a token bucket and the per-item is exponential
+// DefaultTypedControllerRateLimiter 是工作队列默认限流器的无参构造函数，同时提供整体（令牌桶）与条目级（指数退避）限流。
 func DefaultTypedControllerRateLimiter[T comparable]() TypedRateLimiter[T] {
 	return NewTypedMaxOfRateLimiter(
 		NewTypedItemExponentialFailureRateLimiter[T](5*time.Millisecond, 1000*time.Second),
-		// 10 qps, 100 bucket size.  This is only for retry speed and its only the overall factor (not per item)
+		// 10 QPS、桶容量 100：只控制整体重试速度，不针对单个条目。
 		&TypedBucketRateLimiter[T]{Limiter: rate.NewLimiter(rate.Limit(10), 100)},
 	)
 }
@@ -64,7 +61,7 @@ func DefaultTypedControllerRateLimiter[T comparable]() TypedRateLimiter[T] {
 // Deprecated: BucketRateLimiter is deprecated, use TypedBucketRateLimiter instead.
 type BucketRateLimiter = TypedBucketRateLimiter[any]
 
-// TypedBucketRateLimiter adapts a standard bucket to the workqueue ratelimiter API
+// TypedBucketRateLimiter 把标准令牌桶适配为工作队列的限流器接口。
 //
 // 令牌桶只限制整体重试速率，不跟踪单个条目；因此 NumRequeues 恒为 0，
 // 需要条目级退避时应与指数退避限流器组合使用。
@@ -91,8 +88,7 @@ func (r *TypedBucketRateLimiter[T]) Forget(item T) {
 // Deprecated: ItemExponentialFailureRateLimiter is deprecated, use TypedItemExponentialFailureRateLimiter instead.
 type ItemExponentialFailureRateLimiter = TypedItemExponentialFailureRateLimiter[any]
 
-// TypedItemExponentialFailureRateLimiter does a simple baseDelay*2^<num-failures> limit
-// dealing with max failures and expiration are up to the caller
+// TypedItemExponentialFailureRateLimiter 按 baseDelay*2^失败次数 计算延迟，失败次数上限与过期清理由调用方负责。
 type TypedItemExponentialFailureRateLimiter[T comparable] struct {
 	failuresLock sync.Mutex
 	failures     map[T]int
@@ -136,7 +132,7 @@ func (r *TypedItemExponentialFailureRateLimiter[T]) When(item T) time.Duration {
 	exp := r.failures[item]
 	r.failures[item] = r.failures[item] + 1
 
-	// The backoff is capped such that 'calculated' value never overflows.
+	// 退避值设有上限，避免计算结果溢出。
 	// 用浮点计算后再判断溢出，避免整数移位在极端次数下回绕成负值。
 	backoff := float64(r.baseDelay.Nanoseconds()) * math.Pow(2, float64(exp))
 	if backoff > math.MaxInt64 {
@@ -167,11 +163,11 @@ func (r *TypedItemExponentialFailureRateLimiter[T]) Forget(item T) {
 	delete(r.failures, item)
 }
 
-// ItemFastSlowRateLimiter does a quick retry for a certain number of attempts, then a slow retry after that
+// ItemFastSlowRateLimiter 前若干次快速重试，之后转为慢速重试。
 // Deprecated: Use TypedItemFastSlowRateLimiter instead.
 type ItemFastSlowRateLimiter = TypedItemFastSlowRateLimiter[any]
 
-// TypedItemFastSlowRateLimiter does a quick retry for a certain number of attempts, then a slow retry after that
+// TypedItemFastSlowRateLimiter 前若干次快速重试，之后转为慢速重试。
 type TypedItemFastSlowRateLimiter[T comparable] struct {
 	failuresLock sync.Mutex
 	failures     map[T]int
@@ -227,16 +223,12 @@ func (r *TypedItemFastSlowRateLimiter[T]) Forget(item T) {
 	delete(r.failures, item)
 }
 
-// MaxOfRateLimiter calls every RateLimiter and returns the worst case response
-// When used with a token bucket limiter, the burst could be apparently exceeded in cases where particular items
-// were separately delayed a longer time.
+// MaxOfRateLimiter 调用所有限流器并返回最坏（最长）的等待时间。与令牌桶组合时，若某些条目被单独延迟较久，看起来可能突破突发上限。
 //
 // Deprecated: Use TypedMaxOfRateLimiter instead.
 type MaxOfRateLimiter = TypedMaxOfRateLimiter[any]
 
-// TypedMaxOfRateLimiter calls every RateLimiter and returns the worst case response
-// When used with a token bucket limiter, the burst could be apparently exceeded in cases where particular items
-// were separately delayed a longer time.
+// TypedMaxOfRateLimiter 调用所有限流器并返回最坏（最长）的等待时间。与令牌桶组合时，若某些条目被单独延迟较久，看起来可能突破突发上限。
 type TypedMaxOfRateLimiter[T comparable] struct {
 	limiters []TypedRateLimiter[T]
 }
@@ -284,11 +276,11 @@ func (r *TypedMaxOfRateLimiter[T]) Forget(item T) {
 	}
 }
 
-// WithMaxWaitRateLimiter have maxDelay which avoids waiting too long
+// WithMaxWaitRateLimiter 设置 maxDelay，避免等待过长。
 // Deprecated: Use TypedWithMaxWaitRateLimiter instead.
 type WithMaxWaitRateLimiter = TypedWithMaxWaitRateLimiter[any]
 
-// TypedWithMaxWaitRateLimiter have maxDelay which avoids waiting too long
+// TypedWithMaxWaitRateLimiter 设置 maxDelay，避免等待过长。
 type TypedWithMaxWaitRateLimiter[T comparable] struct {
 	limiter  TypedRateLimiter[T]
 	maxDelay time.Duration

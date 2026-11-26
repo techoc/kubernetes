@@ -43,7 +43,7 @@ type APIGroupResources struct {
 // NewDiscoveryRESTMapperWithContext 是更好的替代：支持上下文日志与取消，
 // 新代码应优先使用 ...WithContext 版本。
 //
-// Contextual logging: Use NewDiscoveryRESTMapperWithContext instead.
+// 上下文日志：请改用 NewDiscoveryRESTMapperWithContext。
 func NewDiscoveryRESTMapper(groupResources []*APIGroupResources) meta.RESTMapper {
 	mappers, resourcePriority, kindPriority := newDiscoveryRESTMapper(groupResources)
 	multiMapper := make(meta.MultiRESTMapper, len(mappers))
@@ -59,8 +59,7 @@ func NewDiscoveryRESTMapper(groupResources []*APIGroupResources) meta.RESTMapper
 	}
 }
 
-// NewDiscoveryRESTMapperWithContext returns a PriorityRESTMapper based on the discovered
-// groups and resources passed in.
+// NewDiscoveryRESTMapperWithContext 根据传入的发现结果构造 PriorityRESTMapper。
 func NewDiscoveryRESTMapperWithContext(groupResources []*APIGroupResources) meta.RESTMapperWithContext {
 	mappers, resourcePriority, kindPriority := newDiscoveryRESTMapper(groupResources)
 	multiMapper := make(meta.MultiRESTMapperWithContext, len(mappers))
@@ -82,7 +81,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 	var unionMapper []*meta.DefaultRESTMapper
 
 	var groupPriority []string
-	// /v1 is special.  It should always come first
+	// /v1 是特例，必须始终排在最前。
 	resourcePriority := []schema.GroupVersionResource{{Group: "", Version: "v1", Resource: meta.AnyResource}}
 	kindPriority := []schema.GroupVersionKind{{Group: "", Version: "v1", Kind: meta.AnyKind}}
 
@@ -113,7 +112,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 				continue
 			}
 
-			// Add non-preferred versions after the preferred version, in case there are resources that only exist in those versions
+			// 非首选版本排在首选之后，以覆盖仅存在于这些版本的资源。
 			if discoveryVersion.Version != group.Group.PreferredVersion.Version {
 				resourcePriority = append(resourcePriority, schema.GroupVersionResource{
 					Group:    group.Group.Name,
@@ -144,7 +143,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 
 				plural := gv.WithResource(resource.Name)
 				singular := gv.WithResource(resource.SingularName)
-				// this is for legacy resources and servers which don't list singular forms.  For those we must still guess.
+				// 兼容旧资源与不返回单数形式的服务端，此时只能靠猜测。
 				if len(resource.SingularName) == 0 {
 					_, singular = meta.UnsafeGuessKindToResource(gv.WithKind(resource.Kind))
 				}
@@ -152,10 +151,10 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 				// 同时注册小写与原始大小写的 Kind，兼容历史客户端传入不同大小写的行为。
 				versionMapper.AddSpecific(gv.WithKind(strings.ToLower(resource.Kind)), plural, singular, scope)
 				versionMapper.AddSpecific(gv.WithKind(resource.Kind), plural, singular, scope)
-				// TODO this is producing unsafe guesses that don't actually work, but it matches previous behavior
+				// TODO：这里产生的不安全猜测并不总是有效，但为保持旧行为暂不改动。
 				versionMapper.Add(gv.WithKind(resource.Kind+"List"), scope)
 			}
-			// TODO why is this type not in discovery (at least for "v1")
+			// TODO：为何该类型不出现在发现结果中（至少 "v1" 下）？
 			versionMapper.Add(gv.WithKind("List"), meta.RESTScopeRoot)
 			unionMapper = append(unionMapper, versionMapper)
 		}
@@ -178,24 +177,22 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 	return unionMapper, resourcePriority, kindPriority
 }
 
-// GetAPIGroupResources uses the provided discovery client to gather
-// discovery information and populate a slice of APIGroupResources.
+// GetAPIGroupResources 用给定的 discovery 客户端收集发现信息，填充 APIGroupResources 切片。
 //
-// GetAPIGroupResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// GetAPIGroupResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use GetAPIGroupResourcesWithContext instead.
+// 上下文日志：请改用 GetAPIGroupResourcesWithContext。
 func GetAPIGroupResources(cl discovery.DiscoveryInterface) ([]*APIGroupResources, error) {
 	return GetAPIGroupResourcesWithContext(context.Background(), discovery.ToDiscoveryInterfaceWithContext(cl))
 }
 
-// GetAPIGroupResourcesWithContext uses the provided discovery client to gather
-// discovery information and populate a slice of APIGroupResources.
+// GetAPIGroupResourcesWithContext 用给定的 discovery 客户端收集发现信息，填充 APIGroupResources 切片。
 func GetAPIGroupResourcesWithContext(ctx context.Context, cl discovery.DiscoveryInterfaceWithContext) ([]*APIGroupResources, error) {
 	gs, rs, err := cl.ServerGroupsAndResourcesWithContext(ctx)
 	// 只有部分结果时也直接返回错误，避免基于不完整映射做出误判。
 	if rs == nil || gs == nil {
 		return nil, err
-		// TODO track the errors and update callers to handle partial errors.
+		// TODO：记录这些错误并让调用方处理部分失败。
 	}
 	// 先按 groupVersion 建索引，避免在每个 group/version 上重复线性查找。
 	rsm := map[string]*metav1.APIResourceList{}
@@ -239,22 +236,18 @@ var (
 	_ fmt.Stringer                         = &DeferredDiscoveryRESTMapper{}
 )
 
-// NewDeferredDiscoveryRESTMapper returns a
-// DeferredDiscoveryRESTMapper that will lazily query the provided
-// client for discovery information to do REST mappings.
+// NewDeferredDiscoveryRESTMapper 返回 DeferredDiscoveryRESTMapper，首次映射时才惰性查询给定客户端的发现信息。
 //
-// NewDeferredDiscoveryRESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
+// NewDeferredDiscoveryRESTMapperWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use NewDeferredDiscoveryRESTMapperWithContext instead. NewDeferredDiscoveryRESTMapper will try to convert cl to discovery.CachedDiscoveryInterfaceWithContext and use a wrapper if that is not possible, but NewDeferredDiscoveryRESTMapperWithContext ensures that no such conversion is necessary.
+// 上下文日志：请改用 NewDeferredDiscoveryRESTMapperWithContext。当前函数会尝试把 cl 转换为 discovery.CachedDiscoveryInterfaceWithContext，失败时用包装器适配；WithContext 版本则无需转换。
 func NewDeferredDiscoveryRESTMapper(cl discovery.CachedDiscoveryInterface) *DeferredDiscoveryRESTMapper {
 	return &DeferredDiscoveryRESTMapper{
 		cl: discovery.ToCachedDiscoveryInterfaceWithContext(cl),
 	}
 }
 
-// NewDeferredDiscoveryRESTMapperWithContext returns a
-// DeferredDiscoveryRESTMapper that will lazily query the provided
-// client for discovery information to do REST mappings.
+// NewDeferredDiscoveryRESTMapperWithContext 返回 DeferredDiscoveryRESTMapper，首次映射时才惰性查询给定客户端的发现信息。
 func NewDeferredDiscoveryRESTMapperWithContext(cl discovery.CachedDiscoveryInterfaceWithContext) *DeferredDiscoveryRESTMapper {
 	return &DeferredDiscoveryRESTMapper{
 		cl: cl,
@@ -280,14 +273,12 @@ func (d *DeferredDiscoveryRESTMapper) getDelegate(ctx context.Context) (meta.RES
 	return d.delegate, nil
 }
 
-// Reset resets the internally cached Discovery information and will
-// cause the next mapping request to re-discover.
+// Reset 清空内部缓存的发现信息，使下一次映射请求重新发现。
 func (d *DeferredDiscoveryRESTMapper) Reset() {
 	d.ResetWithContext(context.Background())
 }
 
-// ResetWithContext resets the internally cached Discovery information and will
-// cause the next mapping request to re-discover.
+// ResetWithContext 清空内部缓存的发现信息，使下一次映射请求重新发现。
 func (d *DeferredDiscoveryRESTMapper) ResetWithContext(ctx context.Context) {
 	klog.FromContext(ctx).V(5).Info("Invalidating discovery information")
 
@@ -299,18 +290,16 @@ func (d *DeferredDiscoveryRESTMapper) ResetWithContext(ctx context.Context) {
 	d.delegate = nil
 }
 
-// KindFor takes a partial resource and returns back the single match.
-// It returns an error if there are multiple matches.
+// KindFor 接受部分资源信息并返回唯一匹配；多个匹配时返回错误。
 //
-// KindForWithContext is a better alternative because it supports contextual logging and cancellation.
+// KindForWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use KindForWithContext instead.
+// 上下文日志：请改用 KindForWithContext。
 func (d *DeferredDiscoveryRESTMapper) KindFor(resource schema.GroupVersionResource) (gvk schema.GroupVersionKind, err error) {
 	return d.KindForWithContext(context.Background(), resource)
 }
 
-// KindForWithContext takes a partial resource and returns back the single match.
-// It returns an error if there are multiple matches.
+// KindForWithContext 接受部分资源信息并返回唯一匹配；多个匹配时返回错误。
 func (d *DeferredDiscoveryRESTMapper) KindForWithContext(ctx context.Context, resource schema.GroupVersionResource) (gvk schema.GroupVersionKind, err error) {
 	del, err := d.getDelegate(ctx)
 	if err != nil {
@@ -325,18 +314,16 @@ func (d *DeferredDiscoveryRESTMapper) KindForWithContext(ctx context.Context, re
 	return
 }
 
-// KindsFor takes a partial resource and returns back the list of
-// potential kinds in priority order.
+// KindsFor 接受部分资源信息，按优先级返回可能的 Kind 列表。
 //
-// KindsForWithContext is a better alternative because it supports contextual logging and cancellation.
+// KindsForWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use KindsForWithContext instead.
+// 上下文日志：请改用 KindsForWithContext。
 func (d *DeferredDiscoveryRESTMapper) KindsFor(resource schema.GroupVersionResource) (gvks []schema.GroupVersionKind, err error) {
 	return d.KindsForWithContext(context.Background(), resource)
 }
 
-// KindsForWithContext takes a partial resource and returns back the list of
-// potential kinds in priority order.
+// KindsForWithContext 接受部分资源信息，按优先级返回可能的 Kind 列表。
 func (d *DeferredDiscoveryRESTMapper) KindsForWithContext(ctx context.Context, resource schema.GroupVersionResource) (gvks []schema.GroupVersionKind, err error) {
 	del, err := d.getDelegate(ctx)
 	if err != nil {
@@ -351,18 +338,16 @@ func (d *DeferredDiscoveryRESTMapper) KindsForWithContext(ctx context.Context, r
 	return
 }
 
-// ResourceFor takes a partial resource and returns back the single
-// match. It returns an error if there are multiple matches.
+// ResourceFor 接受部分资源信息并返回唯一匹配；多个匹配时返回错误。
 //
-// ResourceForWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResourceForWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ResourceForWithContext instead.
+// 上下文日志：请改用 ResourceForWithContext。
 func (d *DeferredDiscoveryRESTMapper) ResourceFor(input schema.GroupVersionResource) (gvr schema.GroupVersionResource, err error) {
 	return d.ResourceForWithContext(context.Background(), input)
 }
 
-// ResourceForWithContext takes a partial resource and returns back the single
-// match. It returns an error if there are multiple matches.
+// ResourceForWithContext 接受部分资源信息并返回唯一匹配；多个匹配时返回错误。
 func (d *DeferredDiscoveryRESTMapper) ResourceForWithContext(ctx context.Context, input schema.GroupVersionResource) (gvr schema.GroupVersionResource, err error) {
 	del, err := d.getDelegate(ctx)
 	if err != nil {
@@ -377,18 +362,16 @@ func (d *DeferredDiscoveryRESTMapper) ResourceForWithContext(ctx context.Context
 	return
 }
 
-// ResourcesFor takes a partial resource and returns back the list of
-// potential resource in priority order.
+// ResourcesFor 接受部分资源信息，按优先级返回可能的资源列表。
 //
-// ResourcesForWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResourcesForWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ResourcesForWithContext instead.
+// 上下文日志：请改用 ResourcesForWithContext。
 func (d *DeferredDiscoveryRESTMapper) ResourcesFor(input schema.GroupVersionResource) (gvrs []schema.GroupVersionResource, err error) {
 	return d.ResourcesForWithContext(context.Background(), input)
 }
 
-// ResourcesForWithContext takes a partial resource and returns back the list of
-// potential resource in priority order.
+// ResourcesForWithContext 接受部分资源信息，按优先级返回可能的资源列表。
 func (d *DeferredDiscoveryRESTMapper) ResourcesForWithContext(ctx context.Context, input schema.GroupVersionResource) (gvrs []schema.GroupVersionResource, err error) {
 	del, err := d.getDelegate(ctx)
 	if err != nil {
@@ -403,18 +386,16 @@ func (d *DeferredDiscoveryRESTMapper) ResourcesForWithContext(ctx context.Contex
 	return
 }
 
-// RESTMapping identifies a preferred resource mapping for the
-// provided group kind.
+// RESTMapping 为给定 GroupKind 找出首选资源映射。
 //
-// RESTMappingWithContext is a better alternative because it supports contextual logging and cancellation.
+// RESTMappingWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use RESTMappingWithContext instead.
+// 上下文日志：请改用 RESTMappingWithContext。
 func (d *DeferredDiscoveryRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (m *meta.RESTMapping, err error) {
 	return d.RESTMappingWithContext(context.Background(), gk, versions...)
 }
 
-// RESTMappingWithContext identifies a preferred resource mapping for the
-// provided group kind.
+// RESTMappingWithContext 为给定 GroupKind 找出首选资源映射。
 func (d *DeferredDiscoveryRESTMapper) RESTMappingWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (m *meta.RESTMapping, err error) {
 	del, err := d.getDelegate(ctx)
 	if err != nil {
@@ -429,20 +410,16 @@ func (d *DeferredDiscoveryRESTMapper) RESTMappingWithContext(ctx context.Context
 	return
 }
 
-// RESTMappings returns the RESTMappings for the provided group kind
-// in a rough internal preferred order. If no kind is found, it will
-// return a NoResourceMatchError.
+// RESTMappings 按大致的内部优先级返回给定 GroupKind 的所有 RESTMappings；无匹配时返回 NoResourceMatchError。
 //
-// RESTMappingsWithContext is a better alternative because it supports contextual logging and cancellation.
+// RESTMappingsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use RESTMappingsWithContext instead.
+// 上下文日志：请改用 RESTMappingsWithContext。
 func (d *DeferredDiscoveryRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string) (ms []*meta.RESTMapping, err error) {
 	return d.RESTMappingsWithContext(context.Background(), gk, versions...)
 }
 
-// RESTMappingsWithContext returns the RESTMappings for the provided group kind
-// in a rough internal preferred order. If no kind is found, it will
-// return a NoResourceMatchError.
+// RESTMappingsWithContext 按大致的内部优先级返回给定 GroupKind 的所有 RESTMappings；无匹配时返回 NoResourceMatchError。
 func (d *DeferredDiscoveryRESTMapper) RESTMappingsWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (ms []*meta.RESTMapping, err error) {
 	del, err := d.getDelegate(ctx)
 	if err != nil {
@@ -457,18 +434,16 @@ func (d *DeferredDiscoveryRESTMapper) RESTMappingsWithContext(ctx context.Contex
 	return
 }
 
-// ResourceSingularizer converts a resource name from plural to
-// singular (e.g., from pods to pod).
+// ResourceSingularizer 把资源名从复数转为单数（如 pods 转为 pod）。
 //
-// ResourceSingularizerWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResourceSingularizerWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ResourceSingularizerWithContext instead.
+// 上下文日志：请改用 ResourceSingularizerWithContext。
 func (d *DeferredDiscoveryRESTMapper) ResourceSingularizer(resource string) (singular string, err error) {
 	return d.ResourceSingularizerWithContext(context.Background(), resource)
 }
 
-// ResourceSingularizerWithContext converts a resource name from plural to
-// singular (e.g., from pods to pod).
+// ResourceSingularizerWithContext 把资源名从复数转为单数（如 pods 转为 pod）。
 func (d *DeferredDiscoveryRESTMapper) ResourceSingularizerWithContext(ctx context.Context, resource string) (singular string, err error) {
 	del, err := d.getDelegate(ctx)
 	if err != nil {

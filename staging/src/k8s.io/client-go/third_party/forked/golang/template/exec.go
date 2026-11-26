@@ -1,6 +1,4 @@
-// This package is copied from Go library text/template.
-// The original private functions indirect and printableValue
-// are exported as public functions.
+// 本包复制自 Go 标准库 text/template，只把原本私有的 indirect 与 printableValue 导出。
 //
 // 该包复制自标准库 text/template，只把原本私有的 indirect 与 printableValue
 // 导出，供 Kubernetes 的模板工具（如 kubectl 的一些输出模板）复用，
@@ -18,9 +16,8 @@ var (
 	fmtStringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
 )
 
-// Indirect returns the item at the end of indirection, and a bool to indicate if it's nil.
-// We indirect through pointers and empty interfaces (only) because
-// non-empty interfaces have methods we might need.
+// Indirect 返回穿透间接层后的最终值，并报告其是否为 nil。
+// 只穿透指针与空接口：非空接口带有可能需要调用的方法，必须保留。
 //
 // 只穿透指针与空接口；遇到带方法的非空接口即停止，避免丢失调用方法所需的具体类型。
 func Indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
@@ -35,8 +32,7 @@ func Indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
 	return v, false
 }
 
-// PrintableValue returns the, possibly indirected, interface value inside v that
-// is best for a call to formatted printer.
+// PrintableValue 从 v 中取出（可能经过间接寻址）最适合传给格式化打印器的值。
 //
 // 优先返回能实现 error/fmt.Stringer 的值（含指针接收者方法），
 // 否则退化为普通取值；chan/func 无法直接打印为有意义内容，返回 ok=false。

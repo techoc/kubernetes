@@ -14,11 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package appsint contains the necessary scaffolding of the
-// internal version of extensions as required by conversion logic.
-// It doesn't have any of its own types -- it's just necessary to
-// get the expected behavior out of runtime.Scheme.ConvertToVersion
-// and associated methods.
+// Package appsint 提供转换逻辑所需的内部版本脚手架，自身不定义类型，
+// 只是为了让 runtime.Scheme.ConvertToVersion 等方法按预期工作。
 //
 // appsint 包提供 extensions/apps 内部版本所需的“脚手架”，仅供 conversion 逻辑使用。
 // 包内没有自有类型，只是为了让 runtime.Scheme.ConvertToVersion 及其相关方法

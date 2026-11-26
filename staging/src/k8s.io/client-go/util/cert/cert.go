@@ -39,7 +39,7 @@ import (
 
 const duration365d = time.Hour * 24 * 365
 
-// Config contains the basic fields required for creating a certificate
+// Config 包含创建证书所需的基本字段。
 //
 // 仅用于 NewSelfSignedCACert；服务端证书请使用 SelfSignedCertKeyOptions。
 type Config struct {
@@ -50,18 +50,16 @@ type Config struct {
 	NotBefore    time.Time
 }
 
-// AltNames contains the domain names and IP addresses that will be added
-// to the API Server's x509 certificate SubAltNames field. The values will
-// be passed directly to the x509.Certificate object.
+// AltNames 包含要写入 API Server x509 证书 SAN 字段的域名与 IP，取值会直接传给 x509.Certificate。
 type AltNames struct {
 	DNSNames []string
 	IPs      []net.IP
 }
 
-// NewSelfSignedCACert creates a CA certificate
+// NewSelfSignedCACert 创建自签名 CA 证书。
 func NewSelfSignedCACert(cfg Config, key crypto.Signer) (*x509.Certificate, error) {
 	now := time.Now()
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 先取 [0, max-1) 内的均匀随机数再加 1，使序列号均匀分布在 [1, max)。
 	// 随机序列号避免不同 CA 之间发生序列号冲突。
 	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
@@ -97,32 +95,28 @@ func NewSelfSignedCACert(cfg Config, key crypto.Signer) (*x509.Certificate, erro
 	return x509.ParseCertificate(certDERBytes)
 }
 
-// SelfSignedCertKeyOptions contains configuration parameters for generating self-signed certificates.
+// SelfSignedCertKeyOptions 包含生成自签名证书的配置参数。
 type SelfSignedCertKeyOptions struct {
-	// Host is required, and identifies the host of the serving certificate. Can be a DNS name or IP address.
+	// Host 必填，标识服务证书的主机，可以是 DNS 名或 IP 地址。
 	Host string
-	// AlternateIPs is optional, and identifies additional IPs the serving certificate should be valid for.
+	// AlternateIPs 可选，指定服务证书额外的有效 IP。
 	AlternateIPs []net.IP
-	// AlternateDNS is optional, and identifies additional DNS names the serving certificate should be valid for.
+	// AlternateDNS 可选，指定服务证书额外的有效 DNS 名。
 	AlternateDNS []string
 
-	// MaxAge controls the duration of the issued certificate.
-	// Defaults to 1 year if unset.
-	// Ignored if FixtureDirectory is set.
+	// MaxAge 控制证书有效期，未设置时默认 1 年；设置 FixtureDirectory 时忽略。
 	MaxAge time.Duration
 
-	// FixtureDirectory is intended for use in tests.
-	// If non-empty, it is a directory path which can contain pre-generated certs. The format is:
+	// FixtureDirectory 供测试使用。非空时指向存放预生成证书的目录，文件名格式为：
 	// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.crt
 	// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.key
-	// Certs/keys not existing in that directory are created with a duration of 100 years.
+	// 目录中缺失的证书/密钥会以 100 年有效期生成。
 	//
 	// 复用 fixture 可避免测试每次运行都重新生成密钥，显著缩短测试时间。
 	FixtureDirectory string
 }
 
-// GenerateSelfSignedCertKey creates a self-signed certificate and key for the given host.
-// Host may be an IP or a DNS name
+// GenerateSelfSignedCertKey 为给定主机创建自签名证书与私钥，主机可以是 IP 或 DNS 名。
 // You may also specify additional subject alt names (either ip or dns names) for the certificate.
 func GenerateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS []string) ([]byte, []byte, error) {
 	return GenerateSelfSignedCertKeyWithOptions(SelfSignedCertKeyOptions{
@@ -132,14 +126,9 @@ func GenerateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS 
 	})
 }
 
-// GenerateSelfSignedCertKeyWithFixtures creates a self-signed certificate and key for the given host.
-// Host may be an IP or a DNS name. You may also specify additional subject alt names (either ip or dns names)
-// for the certificate.
-//
-// If fixtureDirectory is non-empty, it is a directory path which can contain pre-generated certs. The format is:
-// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.crt
-// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.key
-// Certs/keys not existing in that directory are created.
+// GenerateSelfSignedCertKeyWithFixtures 为给定主机创建自签名证书与私钥，主机可以是 IP 或 DNS 名，
+// 也可指定额外的 SAN（IP 或 DNS）。fixtureDirectory 非空时指向预生成证书的目录，文件名格式同上；
+// 目录中缺失的证书/密钥会被创建。
 func GenerateSelfSignedCertKeyWithFixtures(host string, alternateIPs []net.IP, alternateDNS []string, fixtureDirectory string) ([]byte, []byte, error) {
 	return GenerateSelfSignedCertKeyWithOptions(SelfSignedCertKeyOptions{
 		Host:             host,
@@ -149,7 +138,7 @@ func GenerateSelfSignedCertKeyWithFixtures(host string, alternateIPs []net.IP, a
 	})
 }
 
-// GenerateSelfSignedCertKeyWithOptions generates a self-signed certificate and key based on the provided options.
+// GenerateSelfSignedCertKeyWithOptions 按给定选项生成自签名证书与私钥。
 func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte, []byte, error) {
 	host := opts.Host
 	alternateIPs := opts.AlternateIPs
@@ -183,7 +172,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 	if err != nil {
 		return nil, nil, err
 	}
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 先取 [0, max-1) 内的均匀随机数再加 1，使序列号均匀分布在 [1, max)。
 	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		return nil, nil, err
@@ -216,7 +205,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 	if err != nil {
 		return nil, nil, err
 	}
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 先取 [0, max-1) 内的均匀随机数再加 1，使序列号均匀分布在 [1, max)。
 	serial, err = cryptorand.Int(cryptorand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		return nil, nil, err
@@ -251,7 +240,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 		return nil, nil, err
 	}
 
-	// Generate cert, followed by ca
+	// 先写叶子证书，再写 CA。
 	// PEM 中依次写入叶子证书与 CA，便于使用者直接作为完整证书链加载。
 	certBuffer := bytes.Buffer{}
 	if err := pem.Encode(&certBuffer, &pem.Block{Type: CertificateBlockType, Bytes: derBytes}); err != nil {
@@ -261,7 +250,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 		return nil, nil, err
 	}
 
-	// Generate key
+	// 生成私钥。
 	keyBuffer := bytes.Buffer{}
 	if err := pem.Encode(&keyBuffer, &pem.Block{Type: keyutil.RSAPrivateKeyBlockType, Bytes: x509.MarshalPKCS1PrivateKey(priv)}); err != nil {
 		return nil, nil, err

@@ -48,34 +48,27 @@ type fileStore struct {
 	keyFile        string
 }
 
-// FileStore is a store that provides certificate retrieval as well as
-// the path on disk of the current PEM.
+// FileStore 在 Store 之上额外提供当前 PEM 文件的磁盘路径。
 //
 // FileStore 在 Store 之外额外暴露当前证书在磁盘上的 PEM 路径。
 type FileStore interface {
 	Store
-	// CurrentPath returns the path on disk of the current certificate/key
-	// pair encoded as PEM files.
+	// CurrentPath 返回当前证书/私钥对（PEM）在磁盘上的路径。
 	//
 	// CurrentPath 返回当前证书/私钥对（PEM）在磁盘上的路径。
 	CurrentPath() string
 }
 
-// NewFileStore returns a concrete implementation of a Store that is based on
-// storing the cert/key pairs in a single file per pair on disk in the
-// designated directory. When starting up it will look for the currently
-// selected cert/key pair in:
+// NewFileStore 返回一个基于磁盘文件的 Store：每个证书/私钥对存为一个文件，放在指定目录中。启动时按以下顺序查找当前证书对：
 //
-// 1. ${certDirectory}/${pairNamePrefix}-current.pem - both cert and key are in the same file.
+// 1. ${certDirectory}/${pairNamePrefix}-current.pem —— 证书与私钥在同一文件中。
 // 2. ${certFile}, ${keyFile}
 // 3. ${certDirectory}/${pairNamePrefix}.crt, ${keyDirectory}/${pairNamePrefix}.key
 //
-// The first one found will be used. If rotation is enabled, future cert/key
-// updates will be written to the ${certDirectory} directory and
-// ${certDirectory}/${pairNamePrefix}-current.pem will be created as a soft
-// link to the currently selected cert/key pair.
+// 取第一个找到的证书对。启用轮换后，后续证书写入 ${certDirectory}，
+// 并创建 ${certDirectory}/${pairNamePrefix}-current.pem 软链接指向当前证书对。
 //
-// Contextual logging: NewFileStoreWithLogger should be used instead of NewFileStore in code which supports contextual logging.
+// 上下文日志：支持上下文日志的代码应改用 NewFileStoreWithLogger。
 //
 // NewFileStore 创建基于文件系统的证书存储。启动时按上述顺序查找已存在的证书/私钥对，
 // 使用第一个找到的；启用轮转后，新证书写入 certDirectory，并更新 current 符号链接。
@@ -88,9 +81,7 @@ func NewFileStore(
 	return NewFileStoreWithLogger(klog.Background(), pairNamePrefix, certDirectory, keyDirectory, certFile, keyFile)
 }
 
-// NewFileStoreWithLogger is a variant of NewFileStore where the caller is in
-// control of logging. All log messages get emitted with logger.Info, so
-// pass e.g. logger.V(3) to make logging less verbose.
+// NewFileStoreWithLogger 由调用方控制日志，所有日志都经 logger.Info 输出，因此可传入 logger.V(3) 降低详细度。
 //
 // NewFileStoreWithLogger 是允许调用方控制日志的 NewFileStore 变体。
 func NewFileStoreWithLogger(
@@ -116,7 +107,7 @@ func NewFileStoreWithLogger(
 	return &s, nil
 }
 
-// CurrentPath returns the path to the current version of these certificates.
+// CurrentPath 返回当前证书文件的路径。
 func (s *fileStore) CurrentPath() string {
 	return filepath.Join(s.certDirectory, s.filename(currentPair))
 }

@@ -52,7 +52,7 @@ func TestSimpleQueue(t *testing.T) {
 	item, _ := q.Get()
 	q.Done(item)
 
-	// step past the next heartbeat
+	// 推进到下一次心跳之后。
 	fakeClock.Step(10 * time.Second)
 
 	err := wait.Poll(1*time.Millisecond, 30*time.Millisecond, func() (done bool, err error) {
@@ -91,7 +91,7 @@ func TestDeduping(t *testing.T) {
 		t.Errorf("should not have added")
 	}
 
-	// step past the first block, we should receive now
+	// 推进过第一段阻塞，现在应能收到条目。
 	fakeClock.Step(60 * time.Millisecond)
 	if err := waitForAdded(q, 1); err != nil {
 		t.Errorf("should have added")
@@ -99,13 +99,13 @@ func TestDeduping(t *testing.T) {
 	item, _ := q.Get()
 	q.Done(item)
 
-	// step past the second add
+	// 推进到第二次 Add 之后。
 	fakeClock.Step(20 * time.Millisecond)
 	if q.Len() != 0 {
 		t.Errorf("should not have added")
 	}
 
-	// test again, but this time the earlier should override
+	// 再测一次，这次较早的到期时间应覆盖较晚的。
 	q.AddAfter(first, 50*time.Millisecond)
 	q.AddAfter(first, 30*time.Millisecond)
 	if err := waitForWaitingQueueToFill(q); err != nil {
@@ -122,7 +122,7 @@ func TestDeduping(t *testing.T) {
 	item, _ = q.Get()
 	q.Done(item)
 
-	// step past the second add
+	// 推进到第二次 Add 之后。
 	fakeClock.Step(20 * time.Millisecond)
 	if q.Len() != 0 {
 		t.Errorf("should not have added")
@@ -225,13 +225,13 @@ func BenchmarkDelayingQueue_AddAfter(b *testing.B) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	q := NewTypedDelayingQueueWithConfig(TypedDelayingQueueConfig[string]{Clock: fakeClock})
 
-	// Add items
+	// 添加条目。
 	for n := 0; n < b.N; n++ {
 		data := fmt.Sprintf("%d", n)
 		q.AddAfter(data, time.Duration(rand.Int63n(int64(10*time.Minute))))
 	}
 
-	// Exercise item removal as well
+	// 同时测试条目删除。
 	fakeClock.Step(11 * time.Minute)
 	for n := 0; n < b.N; n++ {
 		_, _ = q.Get()

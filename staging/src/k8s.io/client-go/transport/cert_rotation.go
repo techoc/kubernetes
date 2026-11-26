@@ -67,14 +67,14 @@ func certRotatingDialer(logger klog.Logger, reload reloadFunc, dial utilnet.Dial
 	return d
 }
 
-// loadClientCert calls the callback and rotates connections if needed
+// loadClientCert 调用回调获取证书，必要时轮换连接。
 func (c *dynamicClientCert) loadClientCert() (*tls.Certificate, error) {
 	cert, err := c.reload(nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// check to see if we have a change. If the values are the same, do nothing.
+	// 检查证书是否变化；相同则不做任何事。
 	c.certMtx.RLock()
 	haveCert := c.clientCert != nil
 	if certsEqual(c.clientCert, cert) {
@@ -99,7 +99,7 @@ func (c *dynamicClientCert) loadClientCert() (*tls.Certificate, error) {
 	return cert, nil
 }
 
-// certsEqual compares tls Certificates, ignoring the Leaf which may get filled in dynamically
+// certsEqual 比较 tls.Certificate，忽略可能被动态填充的 Leaf 字段。
 func certsEqual(left, right *tls.Certificate) bool {
 	if left == nil || right == nil {
 		return left == right
@@ -139,7 +139,7 @@ func byteMatrixEqual(left, right [][]byte) bool {
 	return true
 }
 
-// run starts the controller and blocks until stopCh is closed.
+// run 启动控制器并阻塞，直到 stopCh 关闭。
 func (c *dynamicClientCert) run(stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrashWithLogger(c.logger)
 	defer c.queue.ShutDown()

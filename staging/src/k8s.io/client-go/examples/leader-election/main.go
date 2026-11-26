@@ -69,8 +69,7 @@ func main() {
 	flag.StringVar(&leaseLockNamespace, "lease-lock-namespace", "", "the lease lock resource namespace")
 	flag.Parse()
 
-	// Some more complete example could also allow configuring different logging backends.
-	// In this one we use the klog default.
+	// 更完整的示例可能允许配置不同日志后端；这里直接使用 klog 默认值。
 	logger := klog.Background()
 
 	if leaseLockName == "" {
@@ -82,11 +81,8 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	// leader election uses the Kubernetes API by writing to a
-	// lock object, which can be a LeaseLock object (preferred),
-	// a ConfigMap, or an Endpoints (deprecated) object.
-	// Conflicting writes are detected and each client handles those actions
-	// independently.
+	// Leader election 通过写锁对象使用 Kubernetes API。锁可以是 LeaseLock（推荐）、
+	// ConfigMap 或已弃用的 Endpoints。冲突写入会被检测到，各客户端自行处理。
 	config, err := buildConfig(kubeconfig)
 	if err != nil {
 		logger.Error(err, "Building Kubernetes client configuration failed")
@@ -101,14 +97,11 @@ func main() {
 		select {}
 	}
 
-	// use a Go context so we can tell the leaderelection code when we
-	// want to step down
+	// 用 Go context 通知 leader election 何时让出领导权。
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// listen for interrupts or the Linux SIGTERM signal and cancel
-	// our context, which the leader election code will observe and
-	// step down
+	// 监听中断或 SIGTERM 信号并取消 context，leader election 检测到后会退出。
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -117,8 +110,7 @@ func main() {
 		cancel()
 	}()
 
-	// we use the Lease lock type since edits to Leases are less common
-	// and fewer objects in the cluster watch "all Leases".
+	// 选用 Lease 锁：Lease 写入频率较低，且集群中监听「所有 Lease」的对象更少。
 	//
 	// Identity 必须全局唯一，否则多个副本会互相覆盖租约记录。
 	lock := &resourcelock.LeaseLock{
@@ -132,37 +124,29 @@ func main() {
 		},
 	}
 
-	// start the leader election code loop
+	// 启动 leader election 循环。
 	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 		Lock: lock,
-		// IMPORTANT: you MUST ensure that any code you have that
-		// is protected by the lease must terminate **before**
-		// you call cancel. Otherwise, you could have a background
-		// loop still running and another process could
-		// get elected before your background loop finished, violating
-		// the stated goal of the lease.
+		// 重要：受租约保护的代码必须在调用 cancel 之前**全部结束**，否则后台循环可能
+		// 仍在运行时另一个进程已当选，违背租约要保证的互斥目标。
 		ReleaseOnCancel: true,
 		LeaseDuration:   60 * time.Second,
 		RenewDeadline:   15 * time.Second,
 		RetryPeriod:     5 * time.Second,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
-				// we're notified when we start - this is where you would
-				// usually put your code
+				// 当选时收到通知，通常在这里启动控制器逻辑。
 				startedLeading.Store(true)
 				run(ctx)
 			},
 			OnStoppedLeading: func() {
-				// we can do cleanup here, but note that this callback is always called
-				// when the LeaderElector exits, even if it did not start leading.
-				// Therefore, we should check if we actually started leading before
-				// performing any cleanup operations to avoid unexpected behavior.
+				// 可在此清理资源，但该回调在 LeaderElector 退出时总会触发，即使从未当选。
+				// 因此先确认确实当过 leader，避免误清理。
 				logger.Info("Leader lost", "identity", id)
 
-				// Example check to ensure we only perform cleanup if we actually started leading
+				// 示例：仅在确实当选过时才清理。
 				if startedLeading.Load() {
-					// Perform cleanup operations here
-					// For example, releasing resources, closing connections, etc.
+					// 在这里执行清理，例如释放资源、关闭连接等。
 					logger.Info("Performing cleanup operations...")
 				} else {
 					logger.Info("Skipping cleanup because we never started leading")
@@ -170,9 +154,9 @@ func main() {
 				os.Exit(0)
 			},
 			OnNewLeader: func(identity string) {
-				// we're notified when new leader elected
+				// 新 leader 当选时收到通知。
 				if identity == id {
-					// I just got the lock
+					// 我刚拿到锁。
 					return
 				}
 				logger.Info("New leader elected", "identity", identity)

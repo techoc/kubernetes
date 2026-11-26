@@ -23,18 +23,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// The NodeExpansion interface allows manually adding extra methods to the NodeInterface.
+// NodeExpansion 为生成的 NodeInterface 追加手写方法。
 type NodeExpansion interface {
-	// PatchStatus modifies the status of an existing node. It returns the copy
-	// of the node that the server returns, or an error.
+	// PatchStatus 修改已有 Node 的状态，返回服务端返回的副本或错误。
 	//
 	// 之所以单独暴露，是因为生成的 NodeInterface 不包含 status 子资源操作；
 	// 走 status 子资源可以绕过 spec 的写入校验，仅由 kubelet 等特权组件使用。
 	PatchStatus(ctx context.Context, nodeName string, data []byte) (*v1.Node, error)
 }
 
-// PatchStatus modifies the status of an existing node. It returns the copy of
-// the node that the server returns, or an error.
+// PatchStatus 修改已有 Node 的状态，返回服务端返回的副本或错误。
 func (c *nodes) PatchStatus(ctx context.Context, nodeName string, data []byte) (*v1.Node, error) {
 	result := &v1.Node{}
 	// 使用 strategic merge patch：调用方只需提交要改动的 status 字段，

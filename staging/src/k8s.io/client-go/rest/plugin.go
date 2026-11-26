@@ -27,25 +27,22 @@ import (
 // AuthProvider 是云厂商认证插件的统一抽象。
 // 插件在进程启动时通过 RegisterAuthProviderPlugin 注册，之后由 REST 客户端按名称实例化。
 type AuthProvider interface {
-	// WrapTransport allows the plugin to create a modified RoundTripper that
-	// attaches authorization headers (or other info) to requests.
+	// WrapTransport 让插件包装 RoundTripper，为请求附加认证头等信息。
 	WrapTransport(http.RoundTripper) http.RoundTripper
-	// Login allows the plugin to initialize its configuration. It must not
-	// require direct user interaction.
+	// Login 让插件初始化自身配置，但不得要求用户直接交互。
 	Login() error
 }
 
-// Factory generates an AuthProvider plugin.
+// Factory 创建 AuthProvider 插件实例。
 //
-//	clusterAddress is the address of the current cluster.
-//	config is the initial configuration for this plugin.
-//	persister allows the plugin to save updated configuration.
+//	clusterAddress 是当前集群地址。
+//	config 是插件的初始配置。
+//	persister 让插件保存更新后的配置。
 //
 // Factory 在每次构建客户端时被调用，因此不应在其中做阻塞式的交互登录。
 type Factory func(clusterAddress string, config map[string]string, persister AuthProviderConfigPersister) (AuthProvider, error)
 
-// AuthProviderConfigPersister allows a plugin to persist configuration info
-// for just itself.
+// AuthProviderConfigPersister 让插件只持久化自己的配置。
 //
 // 插件只能写入自己的配置节，避免互相覆盖 kubeconfig 中的其他内容。
 type AuthProviderConfigPersister interface {
@@ -56,11 +53,11 @@ type AuthProviderConfigPersister interface {
 type noopPersister struct{}
 
 func (n *noopPersister) Persist(_ map[string]string) error {
-	// no operation persister
+	// noopPersister 是空实现，不持久化任何配置。
 	return nil
 }
 
-// All registered auth provider plugins.
+// 所有已注册的认证插件。
 //
 // 注册表由 pluginsLock 保护：注册发生在 init 阶段，读取可能来自多个并发构建的客户端。
 var pluginsLock sync.Mutex
@@ -75,9 +72,8 @@ func RegisterAuthProviderPlugin(name string, plugin Factory) error {
 	if _, found := plugins[name]; found {
 		return fmt.Errorf("auth Provider Plugin %q was registered twice", name)
 	}
-	// RegisterAuthProviderPlugin gets called during the init phase before
-	// logging is initialized and therefore should not emit logs. If you
-	// need this message for debugging something, then uncomment it.
+	// RegisterAuthProviderPlugin 在 init 阶段调用，此时日志系统尚未初始化，因此不输出日志。
+	// 若调试需要该信息，可取消下面这行的注释。
 	// klog.V(4).Infof("Registered Auth Provider Plugin %q", name)
 	plugins[name] = plugin
 	return nil

@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// package jsonpath is a template engine using jsonpath syntax,
-// which can be seen at http://goessner.net/articles/JsonPath/.
-// In addition, it has {range} {end} function to iterate list and slice.
+// Package jsonpath 是使用 jsonpath 语法（见 http://goessner.net/articles/JsonPath/）的模板引擎，
+// 另外提供 {range}...{end} 用于遍历列表和切片。
 //
 // jsonpath 是基于 jsonpath 语法的模板引擎，用于从任意 Go 结构/JSON 中按路径取值并格式化输出；
 // 在标准语法之外额外提供 {range}...{end} 用于遍历列表与切片。

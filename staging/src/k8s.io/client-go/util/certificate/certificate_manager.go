@@ -50,32 +50,25 @@ import (
 )
 
 var (
-	// certificateWaitTimeout controls the amount of time we wait for certificate
-	// approval in one iteration.
+	// certificateWaitTimeout 控制单轮等待证书签发的最长时间。
 	certificateWaitTimeout = 15 * time.Minute
 
 	kubeletServingUsagesWithEncipherment = []certificates.KeyUsage{
 		// https://tools.ietf.org/html/rfc5280#section-4.2.1.3
 		//
-		// Digital signature allows the certificate to be used to verify
-		// digital signatures used during TLS negotiation.
+		// 数字签名用途：允许证书校验 TLS 握手中使用的数字签名。
 		certificates.UsageDigitalSignature,
-		// KeyEncipherment allows the cert/key pair to be used to encrypt
-		// keys, including the symmetric keys negotiated during TLS setup
-		// and used for data transfer.
+		// 密钥加密用途：允许该证书/密钥对加密密钥，包括 TLS 协商出的对称密钥。
 		certificates.UsageKeyEncipherment,
-		// ServerAuth allows the cert to be used by a TLS server to
-		// authenticate itself to a TLS client.
+		// 服务端认证用途：允许 TLS 服务端用它向客户端证明身份。
 		certificates.UsageServerAuth,
 	}
 	kubeletServingUsagesNoEncipherment = []certificates.KeyUsage{
 		// https://tools.ietf.org/html/rfc5280#section-4.2.1.3
 		//
-		// Digital signature allows the certificate to be used to verify
-		// digital signatures used during TLS negotiation.
+		// 数字签名用途：允许证书校验 TLS 握手中使用的数字签名。
 		certificates.UsageDigitalSignature,
-		// ServerAuth allows the cert to be used by a TLS server to
-		// authenticate itself to a TLS client.
+		// 服务端认证用途：允许 TLS 服务端用它向客户端证明身份。
 		certificates.UsageServerAuth,
 	}
 	// DefaultKubeletServingGetUsages 返回 kubelet serving 证书所需的 KeyUsage。
@@ -93,25 +86,19 @@ var (
 	kubeletClientUsagesWithEncipherment = []certificates.KeyUsage{
 		// https://tools.ietf.org/html/rfc5280#section-4.2.1.3
 		//
-		// Digital signature allows the certificate to be used to verify
-		// digital signatures used during TLS negotiation.
+		// 数字签名用途：允许证书校验 TLS 握手中使用的数字签名。
 		certificates.UsageDigitalSignature,
-		// KeyEncipherment allows the cert/key pair to be used to encrypt
-		// keys, including the symmetric keys negotiated during TLS setup
-		// and used for data transfer.
+		// 密钥加密用途：允许该证书/密钥对加密密钥，包括 TLS 协商出的对称密钥。
 		certificates.UsageKeyEncipherment,
-		// ClientAuth allows the cert to be used by a TLS client to
-		// authenticate itself to the TLS server.
+		// 客户端认证用途：允许 TLS 客户端用它向服务端证明身份。
 		certificates.UsageClientAuth,
 	}
 	kubeletClientUsagesNoEncipherment = []certificates.KeyUsage{
 		// https://tools.ietf.org/html/rfc5280#section-4.2.1.3
 		//
-		// Digital signature allows the certificate to be used to verify
-		// digital signatures used during TLS negotiation.
+		// 数字签名用途：允许证书校验 TLS 握手中使用的数字签名。
 		certificates.UsageDigitalSignature,
-		// ClientAuth allows the cert to be used by a TLS client to
-		// authenticate itself to the TLS server.
+		// 客户端认证用途：允许 TLS 客户端用它向服务端证明身份。
 		certificates.UsageClientAuth,
 	}
 	// DefaultKubeletClientGetUsages 返回 kubelet client 证书所需的 KeyUsage，
@@ -126,155 +113,92 @@ var (
 	}
 )
 
-// Manager maintains and updates the certificates in use by this certificate
-// manager. In the background it communicates with the API server to get new
-// certificates for certificates about to expire.
+// Manager 维护并更新当前使用的证书，后台与 API server 通信，为即将过期的证书申请新证书。
 type Manager interface {
-	// Start the API server status sync loop.
+	// 启动与 API server 的状态同步循环。
 	Start()
-	// Stop the cert manager loop.
+	// 停止证书管理循环。
 	Stop()
-	// Current returns the currently selected certificate from the
-	// certificate manager, as well as the associated certificate and key data
-	// in PEM format.
+	// Current 返回当前选定的证书及其 PEM 格式的证书/私钥数据。
 	Current() *tls.Certificate
-	// ServerHealthy returns true if the manager is able to communicate with
-	// the server. This allows a caller to determine whether the cert manager
-	// thinks it can potentially talk to the API server. The cert manager may
-	// be very conservative and only return true if recent communication has
-	// occurred with the server.
+	// ServerHealthy 表示 manager 是否认为能与服务端通信。判断可能很保守：只有近期确实通信过才返回 true。
 	ServerHealthy() bool
 }
 
-// Config is the set of configuration parameters available for a new Manager.
+// Config 是创建新 Manager 可用的一组配置参数。
 type Config struct {
-	// ClientsetFn will be used to create a clientset for
-	// creating/fetching new certificate requests generated when a key rotation occurs.
-	// The function will never be invoked in parallel.
-	// It is passed the current client certificate if one exists.
+	// ClientsetFn 用于创建 clientset，以便轮换密钥时创建/获取 CSR；该函数绝不会并行调用，
+	// 调用时会传入当前客户端证书（若存在）。
 	ClientsetFn ClientsetFunc
-	// Template is the CertificateRequest that will be used as a template for
-	// generating certificate signing requests for all new keys generated as
-	// part of rotation. It follows the same rules as the template parameter of
-	// crypto.x509.CreateCertificateRequest in the Go standard libraries.
+	// Template 是轮换时为新密钥生成 CSR 所用的模板，规则同标准库 crypto.x509.CreateCertificateRequest 的模板参数。
 	Template *x509.CertificateRequest
-	// GetTemplate returns the CertificateRequest that will be used as a template for
-	// generating certificate signing requests for all new keys generated as
-	// part of rotation. It follows the same rules as the template parameter of
-	// crypto.x509.CreateCertificateRequest in the Go standard libraries.
-	// If no template is available, nil may be returned, and no certificate will be requested.
-	// If specified, takes precedence over Template.
+	// GetTemplate 动态返回 CSR 模板，规则同标准库 crypto.x509.CreateCertificateRequest 的模板参数。
+	// 返回 nil 表示不申请证书；若设置则优先于 Template。
 	GetTemplate func() *x509.CertificateRequest
-	// SignerName is the name of the certificate signer that should sign certificates
-	// generated by the manager.
+	// SignerName 是应为 manager 生成证书签名的 signer 名称。
 	SignerName string
-	// RequestedCertificateLifetime is the requested lifetime length for certificates generated by the manager.
-	// Optional.
-	// This will set the spec.expirationSeconds field on the CSR.  Controlling the lifetime of
-	// the issued certificate is not guaranteed as the signer may choose to ignore the request.
+	// RequestedCertificateLifetime 是期望的有效期，可选，会写入 CSR 的 spec.expirationSeconds。
+	// signer 可以忽略该请求，因此无法保证实际有效期。
 	RequestedCertificateLifetime *time.Duration
-	// Usages is the types of usages that certificates generated by the manager
-	// can be used for. It is mutually exclusive with GetUsages.
+	// Usages 指定证书的用途列表，与 GetUsages 互斥。
 	Usages []certificates.KeyUsage
-	// GetUsages is dynamic way to get the types of usages that certificates generated by the manager
-	// can be used for. If Usages is not nil, GetUsages has to be nil, vice versa.
-	// It is mutually exclusive with Usages.
+	// GetUsages 动态返回证书用途，与 Usages 互斥：两者只能设置其一。
 	GetUsages func(privateKey interface{}) []certificates.KeyUsage
-	// CertificateStore is a persistent store where the current cert/key is
-	// kept and future cert/key pairs will be persisted after they are
-	// generated.
+	// CertificateStore 持久化保存当前证书/私钥及后续生成的密钥对。
 	//
 	// 该 Store 同时也承担重启后恢复证书的职责，因此实现必须落盘。
 	CertificateStore Store
-	// BootstrapCertificatePEM is the certificate data that will be returned
-	// from the Manager if the CertificateStore doesn't have any cert/key pairs
-	// currently available and has not yet had a chance to get a new cert/key
-	// pair from the API. If the CertificateStore does have a cert/key pair,
-	// this will be ignored. If there is no cert/key pair available in the
-	// CertificateStore, as soon as Start is called, it will request a new
-	// cert/key pair from the CertificateSigningRequestClient. This is intended
-	// to allow the first boot of a component to be initialized using a
-	// generic, multi-use cert/key pair which will be quickly replaced with a
-	// unique cert/key pair.
+	// BootstrapCertificatePEM 是 Store 中暂无证书且尚未从 API 获取到新证书时由 Manager 返回的自举证书。
+	// 若 Store 已有证书则忽略。Start 后 Manager 会立即申请新证书，以便组件首次启动时先用通用证书
+	// 完成初始化，再尽快换成专属证书。
 	BootstrapCertificatePEM []byte
-	// BootstrapKeyPEM is the key data that will be returned from the Manager
-	// if the CertificateStore doesn't have any cert/key pairs currently
-	// available. If the CertificateStore does have a cert/key pair, this will
-	// be ignored. If the bootstrap cert/key pair are used, they will be
-	// rotated at the first opportunity, possibly well in advance of expiring.
-	// This is intended to allow the first boot of a component to be
-	// initialized using a generic, multi-use cert/key pair which will be
-	// quickly replaced with a unique cert/key pair.
+	// BootstrapKeyPEM 是 Store 中暂无证书时由 Manager 返回的自举私钥；Store 已有证书则忽略。
+	// 使用自举证书/私钥后会尽快轮换，远早于到期，从而让组件首启时用通用凭据初始化，再换成专属凭据。
 	BootstrapKeyPEM []byte `datapolicy:"security-key"`
-	// CertificateRotation will record a metric showing the time in seconds
-	// that certificates lived before being rotated. This metric is a histogram
-	// because there is value in keeping a history of rotation cadences. It
-	// allows one to setup monitoring and alerting of unexpected rotation
-	// behavior and track trends in rotation frequency.
+	// CertificateRotation 记录证书轮换前的存活秒数。用直方图保存轮换节奏的历史，便于监控异常轮换行为并跟踪趋势。
 	CertificateRotation Histogram
-	// CertifcateRenewFailure will record a metric that keeps track of
-	// certificate renewal failures.
+	// CertifcateRenewFailure 记录证书续期失败次数。
 	CertificateRenewFailure Counter
-	// GenerateKey is an optional function to generate the private key for a new
-	// certificate signing request. If not set, an ECDSA P-256 key is generated.
-	// Currently only *ecdsa.PrivateKey and *rsa.PrivateKey are supported.
-	// The custom key must be strong enough or an error will be returned
-	// when attempting to generate a CSR. For RSA the minimum bits must be 2048,
-	// for ECDSA the minimum curve size must be 256 bits.
+	// GenerateKey 可选，用于为新 CSR 生成私钥；未设置时生成 ECDSA P-256 密钥。
+	// 目前只支持 *ecdsa.PrivateKey 与 *rsa.PrivateKey，且强度必须达标（RSA >= 2048 位，ECDSA 曲线 >= 256 位），
+	// 否则生成 CSR 时会报错。
 	GenerateKey func() (crypto.Signer, error)
-	// Name is an optional string that will be used when writing log output
-	// via logger.WithName or returning errors from manager methods.
-	//
-	// If not set, SignerName will
-	// be used, if SignerName is not set, if Usages includes client auth the
-	// name will be "client auth", otherwise the value will be "server".
+	// Name 可选，用于 logger.WithName 与错误信息中的组件名。未设置时依次回退到 SignerName、
+	// "client auth"（若含客户端认证用途）或 "server"。
 	Name string
-	// Ctx is an optional context. Cancelling it is equivalent to
-	// calling Stop. A logger is extracted from it if non-nil, otherwise
-	// klog.Background() is used.
+	// Ctx 可选。取消它等价于调用 Stop；若其中带有 logger 则使用它，否则用 klog.Background()。
 	//
 	// 在 Ctx 中携带的 logger 会贯穿轮换循环，便于按组件区分日志。
 	Ctx *context.Context
 }
 
-// Store is responsible for getting and updating the current certificate.
-// Depending on the concrete implementation, the backing store for this
-// behavior may vary.
+// Store 负责获取与更新当前证书，具体后端由实现决定。
 type Store interface {
-	// Current returns the currently selected certificate, as well as the
-	// associated certificate and key data in PEM format. If the Store doesn't
-	// have a cert/key pair currently, it should return a NoCertKeyError so
-	// that the Manager can recover by using bootstrap certificates to request
-	// a new cert/key pair.
+	// Current 返回当前证书及 PEM 数据；暂无证书时应返回 NoCertKeyError，让 Manager 用自举证书申请新证书。
 	Current() (*tls.Certificate, error)
-	// Update accepts the PEM data for the cert/key pair and makes the new
-	// cert/key pair the 'current' pair, that will be returned by future calls
-	// to Current().
+	// Update 接收证书/私钥的 PEM 数据，把它设为后续 Current() 返回的当前证书对。
 	Update(cert, key []byte) (*tls.Certificate, error)
 }
 
-// Gauge will record the remaining lifetime of the certificate each time it is
-// updated.
+// Gauge 在每次更新时记录证书的剩余有效期。
 type Gauge interface {
 	Set(float64)
 }
 
-// Histogram will record the time a rotated certificate was used before being
-// rotated.
+// Histogram 记录轮换下来的证书此前被使用了多久。
 type Histogram interface {
 	Observe(float64)
 }
 
-// Counter will wrap a counter with labels
+// Counter 包装带标签的计数器。
 type Counter interface {
 	Inc()
 }
 
-// NoCertKeyError indicates there is no cert/key currently available.
+// NoCertKeyError 表示当前没有可用的证书/私钥。
 type NoCertKeyError string
 
-// ClientsetFunc returns a new clientset for discovering CSR API availability and requesting CSRs.
-// It is passed the current certificate if one is available and valid.
+// ClientsetFunc 返回用于探测 CSR API 与申请 CSR 的 clientset；存在有效证书时会把它传入。
 type ClientsetFunc func(current *tls.Certificate) (clientset.Interface, error)
 
 func (e *NoCertKeyError) Error() string { return string(*e) }
@@ -283,7 +207,7 @@ func (e *NoCertKeyError) Error() string { return string(*e) }
 type manager struct {
 	getTemplate func() *x509.CertificateRequest
 
-	// lastRequestLock guards lastRequestCancel and lastRequest
+	// lastRequestLock 保护 lastRequestCancel 与 lastRequest。
 	lastRequestLock   sync.Mutex
 	lastRequestCancel context.CancelFunc
 	lastRequest       *x509.CertificateRequest
@@ -301,12 +225,12 @@ type manager struct {
 	certificateRotation     Histogram
 	certificateRenewFailure Counter
 
-	// the following variables must only be accessed under certAccessLock
+	// 以下变量只能在持有 certAccessLock 时访问。
 	certAccessLock sync.RWMutex
 	cert           *tls.Certificate
 	serverHealth   bool
 
-	// Context and cancel function for background goroutines.
+	// 后台 goroutine 使用的 context 与取消函数。
 	ctx    context.Context
 	cancel func(err error)
 
@@ -315,13 +239,11 @@ type manager struct {
 	clientAccessLock sync.Mutex
 	clientsetFn      ClientsetFunc
 
-	// Set to time.Now but can be stubbed out for testing
+	// 默认取 time.Now，测试中可替换为假时钟。
 	now func() time.Time
 }
 
-// NewManager returns a new certificate manager. A certificate manager is
-// responsible for being the authoritative source of certificates in the
-// Kubelet and handling updates due to rotation.
+// NewManager 创建证书管理器，作为 Kubelet 中证书的权威来源并处理轮换更新。
 func NewManager(config *Config) (Manager, error) {
 
 	// 未提供动态模板时退化为固定模板，两种情况共享同一 getTemplate 入口。
@@ -373,7 +295,7 @@ func NewManager(config *Config) (Manager, error) {
 		}
 	}
 
-	// The name gets included through contextual logging.
+	// 该名称会通过上下文日志带入。
 	logger := klog.Background()
 	if config.Ctx != nil {
 		logger = klog.FromContext(*config.Ctx)
@@ -390,13 +312,12 @@ func NewManager(config *Config) (Manager, error) {
 	}
 	m.cert, m.forceRotation = cert, forceRotation
 
-	// cancel will be called by Stop, ctx.Done is our stop channel.
+	// cancel 由 Stop 调用；外部 ctx.Done 用作停止信号。
 	m.ctx, m.cancel = context.WithCancelCause(context.Background())
 	// 外部 context 只用于传递取消信号；把它的 Done 映射到 Stop，避免两套停止机制。
 	if config.Ctx != nil && (*config.Ctx).Done() != nil {
 		ctx := *config.Ctx
-		// If we have been passed a context and it has a Done channel, then
-		// we need to map its cancellation to our Done method.
+		// 传入的 context 若带 Done channel，就把它的取消映射到本管理器的 Done。
 		go func() {
 			<-ctx.Done()
 			m.Stop()
@@ -407,10 +328,7 @@ func NewManager(config *Config) (Manager, error) {
 	return &m, nil
 }
 
-// Current returns the currently selected certificate from the certificate
-// manager. This can be nil if the manager was initialized without a
-// certificate and has not yet received one from the
-// CertificateSigningRequestClient, or if the current cert has expired.
+// Current 返回 manager 当前选定的证书。初始化时没有证书、尚未从 CSR 客户端收到证书，或当前证书过期时返回 nil。
 func (m *manager) Current() *tls.Certificate {
 	m.certAccessLock.RLock()
 	defer m.certAccessLock.RUnlock()
@@ -422,31 +340,27 @@ func (m *manager) Current() *tls.Certificate {
 	return m.cert
 }
 
-// ServerHealthy returns true if the cert manager believes the server
-// is currently alive.
+// ServerHealthy 表示 cert manager 是否认为服务端当前可用。
 func (m *manager) ServerHealthy() bool {
 	m.certAccessLock.RLock()
 	defer m.certAccessLock.RUnlock()
 	return m.serverHealth
 }
 
-// Stop terminates the manager.
+// Stop 终止 manager。
 func (m *manager) Stop() {
 	m.cancel(errors.New("asked to stop"))
 }
 
-// Start will start the background work of rotating the certificates.
+// Start 启动后台证书轮换工作。
 func (m *manager) Start() {
 	go m.run()
 }
 
-// run, in contrast to Start, blocks while the manager is running.
-// It waits for all goroutines to stop.
+// 与 Start 不同，run 在 manager 运行期间阻塞，并等待所有 goroutine 停止。
 func (m *manager) run() {
 	logger := klog.FromContext(m.ctx)
-	// Certificate rotation depends on access to the API server certificate
-	// signing API, so don't start the certificate manager if we don't have a
-	// client.
+	// 证书轮换依赖 API server 的签发 API，没有 clientset 时不应启动管理器。
 	if m.clientsetFn == nil {
 		logger.V(2).Info("Certificate rotation is not enabled, no connection to the apiserver")
 		return
@@ -468,19 +382,19 @@ func (m *manager) run() {
 
 			select {
 			case <-timer.C:
-				// unblock when deadline expires
+				// 截止时间到期时解除阻塞。
 			case <-templateChanged:
 				// 模板变化通知：若当前待签发的请求已匹配新模板，继续等待即可。
 				_, lastRequestTemplate := m.getLastRequest()
 				if reflect.DeepEqual(lastRequestTemplate, m.getTemplate()) {
-					// if the template now matches what we last requested, restart the rotation deadline loop
+					// 若模板已与最近一次请求一致，则重新开始轮换截止时间循环。
 					return
 				}
 				logger.V(2).Info("Certificate template changed, rotating")
 			}
 		}
 
-		// Don't enter rotateCerts and trigger backoff if we don't even have a template to request yet
+		// 尚无可用模板时不进入 rotateCerts，避免触发退避。
 		if m.getTemplate() == nil {
 			return
 		}
@@ -506,15 +420,14 @@ func (m *manager) run() {
 
 	if m.dynamicTemplate {
 		template := func(ctx context.Context) {
-			// check if the current template matches what we last requested
+			// 检查当前模板是否与最近一次请求一致。
 			lastRequestCancel, lastRequestTemplate := m.getLastRequest()
 
 			if !m.certSatisfiesTemplate(logger) && !reflect.DeepEqual(lastRequestTemplate, m.getTemplate()) {
-				// if the template is different, queue up an interrupt of the rotation deadline loop.
-				// if we've requested a CSR that matches the new template by the time the interrupt is handled, the interrupt is disregarded.
+				// 模板变化时排队中断轮换截止时间循环；若处理中断时请求已与新模板一致，则忽略该中断。
 				if lastRequestCancel != nil {
 					// 旧请求已不符合当前模板，取消等待以免阻塞在新的签发请求上。
-					// if we're currently waiting on a submitted request that no longer matches what we want, stop waiting
+					// 若正在等待的已提交请求已不符合当前需求，就停止等待。
 					lastRequestCancel()
 				}
 				select {
@@ -543,7 +456,7 @@ func getCurrentCertificateOrBootstrap(
 
 	currentCert, err := store.Current()
 	if err == nil {
-		// if the current cert is expired, fall back to the bootstrap cert
+		// 当前证书已过期时退回自举证书。
 		if currentCert.Leaf != nil && time.Now().Before(currentCert.Leaf.NotAfter) {
 			return currentCert, false, nil
 		}
@@ -593,19 +506,14 @@ func (m *manager) getClientset() (clientset.Interface, error) {
 	return m.clientsetFn(current)
 }
 
-// RotateCerts is exposed for testing only and is not a part of the public interface.
-// Returns true if it changed the cert, false otherwise. Error is only returned in
-// exceptional cases.
+// RotateCerts 仅供测试使用，不属于公开接口。证书被更换时返回 true，否则 false；仅在异常情况下返回错误。
 func (m *manager) RotateCerts() (bool, error) {
 	return m.rotateCerts(m.ctx)
 }
 
-// rotateCerts attempts to request a client cert from the server, wait a reasonable
-// period of time for it to be signed, and then update the cert on disk. If it cannot
-// retrieve a cert, it will return false. It will only return error in exceptional cases.
-// This method also keeps track of "server health" by interpreting the responses it gets
-// from the server on the various calls it makes.
-// TODO: return errors, have callers handle and log them correctly
+// rotateCerts 尝试向服务端申请客户端证书，等待签发后更新磁盘证书；拿不到证书时返回 false，
+// 仅在异常情况下返回错误。过程中还会根据各次调用的响应推断「服务端健康状态」。
+// TODO：改为返回错误，让调用方正确处理与记录。
 func (m *manager) rotateCerts(ctx context.Context) (bool, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Rotating certificates")
@@ -635,8 +543,7 @@ func (m *manager) rotateCerts(ctx context.Context) (bool, error) {
 		getUsages = DefaultKubeletClientGetUsages
 	}
 	usages := getUsages(privateKey)
-	// Call the Certificate Signing Request API to get a certificate for the
-	// new private key
+	// 调用 CSR API 为新私钥申请证书。
 	reqName, reqUID, err := csr.RequestCertificateWithContext(ctx, clientSet, csrPEM, "", m.signerName, m.requestedCertificateLifetime, usages, privateKey)
 	if err != nil {
 		utilruntime.HandleErrorWithContext(ctx, err, "Failed while requesting a signed certificate from the control plane")
@@ -654,8 +561,7 @@ func (m *manager) rotateCerts(ctx context.Context) (bool, error) {
 	// CSR 成功提交后记下本次请求：保存 cancel 与模板，模板监视线程可据此取消已过时的等待。
 	m.setLastRequest(cancel, template)
 
-	// Wait for the certificate to be signed. This interface and internal timout
-	// is a remainder after the old design using raw watch wrapped with backoff.
+	// 等待证书签发。该接口及内部超时是旧设计的遗留：当时用原始 watch 加退避实现。
 	crtPEM, err := csr.WaitForCertificate(ctx, clientSet, reqName, reqUID)
 	if err != nil {
 		utilruntime.HandleErrorWithContext(ctx, err, "Certificate request was not signed")
@@ -682,13 +588,8 @@ func (m *manager) rotateCerts(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Check that the current certificate on disk satisfies the requests from the
-// current template.
-//
-// Note that extra items in the certificate's SAN or orgs that don't exist in
-// the template will not trigger a renewal.
-//
-// Requires certAccessLock to be locked.
+// 检查磁盘上当前证书是否满足当前模板的要求。
+// 证书中模板未要求的额外 SAN/org 不会触发续期。调用前必须持有 certAccessLock。
 func (m *manager) certSatisfiesTemplateLocked(logger klog.Logger) bool {
 	if m.cert == nil {
 		return false
@@ -741,9 +642,7 @@ func (m *manager) certSatisfiesTemplate(logger klog.Logger) bool {
 	return m.certSatisfiesTemplateLocked(logger)
 }
 
-// nextRotationDeadline returns a value for the threshold at which the
-// current certificate should be rotated, 80%+/-10% of the expiration of the
-// certificate.
+// nextRotationDeadline 返回当前证书的轮换阈值，约为有效期的 80%±10%。
 func (m *manager) nextRotationDeadline(logger klog.Logger) time.Time {
 	// forceRotation 不受锁保护：自举证书需要立即可轮换，因此这里返回 now 并清除标记。
 	if m.forceRotation {
@@ -767,20 +666,14 @@ func (m *manager) nextRotationDeadline(logger klog.Logger) time.Time {
 	return deadline
 }
 
-// jitteryDuration uses some jitter to set the rotation threshold so each node
-// will rotate at approximately 70-90% of the total lifetime of the
-// certificate.  With jitter, if a number of nodes are added to a cluster at
-// approximately the same time (such as cluster creation time), they won't all
-// try to rotate certificates at the same time for the rest of the life of the
-// cluster.
-//
-// This function is represented as a variable to allow replacement during testing.
+// jitteryDuration 加抖动设置轮换阈值，使各节点在证书生命周期的 70%-90% 左右轮换。
+// 抖动可避免同一批加入集群的节点（如建集群时）此后总在同一时刻轮换。
+// 该函数定义为变量，便于测试替换。
 var jitteryDuration = func(totalDuration float64) time.Duration {
 	return wait.Jitter(time.Duration(totalDuration), 0.2) - time.Duration(totalDuration*0.3)
 }
 
-// updateCached sets the most recent retrieved cert and returns the old cert.
-// It also sets the server as assumed healthy.
+// updateCached 更新最近获取的证书并返回旧证书，同时把服务端标记为健康。
 func (m *manager) updateCached(cert *tls.Certificate) *tls.Certificate {
 	m.certAccessLock.Lock()
 	defer m.certAccessLock.Unlock()
@@ -791,10 +684,7 @@ func (m *manager) updateCached(cert *tls.Certificate) *tls.Certificate {
 	return old
 }
 
-// updateServerError takes an error returned by the server and infers
-// the health of the server based on the error. It will return nil if
-// the error does not require immediate termination of any wait loops,
-// and otherwise it will return the error.
+// updateServerError 根据服务端返回的错误推断其健康状态：错误无需立即终止等待循环时返回 nil，否则返回该错误。
 func (m *manager) updateServerError(err error) error {
 	m.certAccessLock.Lock()
 	defer m.certAccessLock.Unlock()
@@ -803,8 +693,7 @@ func (m *manager) updateServerError(err error) error {
 		// 终结 SSL 的代理可能代替 master 报出该错误：401 往往来自中间代理而非控制面，因此仍认为服务器可达。
 		m.serverHealth = true
 	case apierrors.IsUnexpectedServerError(err):
-		// generally indicates a proxy or other load balancer problem, rather than a problem coming
-		// from the master
+		// 通常表示代理或负载均衡器出问题，而非 master 本身。
 		m.serverHealth = false
 	default:
 		// 识别证书请求中预期可能出现、表明一切正常的已知错误：
@@ -828,7 +717,7 @@ func (m *manager) generateCSR() (template *x509.CertificateRequest, csrPEM []byt
 	if generateKey == nil {
 		generateKey = generateKeyFunc
 	}
-	// Generate a new private key.
+	// 生成新私钥。
 	privateKey, err := generateKey()
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("unable to generate a new private key: %w", err)
@@ -877,8 +766,7 @@ func hasKeyUsage(usages []certificates.KeyUsage, usage certificates.KeyUsage) bo
 	return false
 }
 
-// validateKeyStrength checks that the key is strong enough to be used for a certificate.
-// For RSA the minimum bits must be 2048, for ECDSA the minimum curve size must be 256 bits.
+// validateKeyStrength 检查密钥强度是否足以签发证书：RSA 至少 2048 位，ECDSA 曲线至少 256 位。
 func validateKeyStrength(key crypto.Signer) error {
 	const (
 		minRSAKeyBits   = 2048

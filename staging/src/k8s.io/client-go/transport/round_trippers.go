@@ -39,11 +39,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// HTTPWrappersForConfig wraps a round tripper with any relevant layered
-// behavior from the config. Exposed to allow more clients that need HTTP-like
-// behavior but then must hijack the underlying connection (like WebSocket or
-// HTTP2 clients). Pure HTTP clients should use the RoundTripper returned from
-// New.
+// HTTPWrappersForConfig 给 RoundTripper 套上配置要求的各层行为。暴露出来供需要 HTTP 语义但
+// 要劫持底层连接（如 WebSocket/HTTP2）的客户端使用；纯 HTTP 客户端应使用 New 返回的 RoundTripper。
 //
 // 包装顺序从内到外依次是 Debug、认证、User-Agent、伪装；越靠外的层越晚
 // 写入请求头，后写者覆盖先写者。
@@ -54,7 +51,7 @@ func HTTPWrappersForConfig(config *Config, rt http.RoundTripper) (http.RoundTrip
 
 	rt = DebugWrappers(rt)
 
-	// Set authentication wrappers
+	// 安装认证相关的包装器。
 	switch {
 	case config.HasBasicAuth() && config.HasTokenAuth():
 		return nil, fmt.Errorf("username/password or bearer token may be set, but not both")
@@ -79,11 +76,8 @@ func HTTPWrappersForConfig(config *Config, rt http.RoundTripper) (http.RoundTrip
 	return rt, nil
 }
 
-// DebugWrappers potentially wraps a round tripper with a wrapper that logs
-// based on the log level in the context of each individual request.
-//
-// At the moment, wrapping depends on the global log verbosity and is done
-// if that verbosity is >= 6. This may change in the future.
+// DebugWrappers 可能给 RoundTripper 包一层，按每个请求上下文中的日志级别输出日志。
+// 目前是否包装取决于全局日志详细度（>= 6 时包装），将来可能改变。
 func DebugWrappers(rt http.RoundTripper) http.RoundTripper {
 	//nolint:logcheck // The actual logging is done with a different logger, so only checking here is okay.
 	// 这里只看全局 verbosity 决定是否安装包装器；真正的日志级别在
@@ -106,17 +100,10 @@ type authProxyRoundTripper struct {
 
 var _ utilnet.RoundTripperWrapper = &authProxyRoundTripper{}
 
-// NewAuthProxyRoundTripper provides a roundtripper which will add auth proxy fields to requests for
-// authentication terminating proxy cases
-// assuming you pull the user from the context:
-// username is the user.Info.GetName() of the user
-// uid is the user.Info.GetUID() of the user
-// groups is the user.Info.GetGroups() of the user
-// extra is the user.Info.GetExtra() of the user
-// extra can contain any additional information that the authenticator
-// thought was interesting, for example authorization scopes.
-// In order to faithfully round-trip through an impersonation flow, these keys
-// MUST be lowercase.
+// NewAuthProxyRoundTripper 返回一个 RoundTripper，为「认证终止代理」场景在请求上附加认证代理字段。
+// 前提是从 context 中取出 user：username 对应 user.Info.GetName()，uid 对应 GetUID()，
+// groups 对应 GetGroups()，extra 对应 GetExtra()。extra 可携带认证器认为有用的附加信息（如授权范围）。
+// 为能在伪装流程中原样传递，这些键必须是小写。
 func NewAuthProxyRoundTripper(username, uid string, groups []string, extra map[string][]string, rt http.RoundTripper) http.RoundTripper {
 	return &authProxyRoundTripper{
 		username: username,
@@ -135,7 +122,7 @@ func (rt *authProxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	return rt.rt.RoundTrip(req)
 }
 
-// SetAuthProxyHeaders stomps the auth proxy header fields.  It mutates its argument.
+// SetAuthProxyHeaders 直接覆盖参数中的认证代理头字段。
 func SetAuthProxyHeaders(req *http.Request, username, uid string, groups []string, extra map[string][]string) {
 	// 先清空所有可能的旧值，防止调用方注入伪造身份；extra 头是动态前缀，
 	// 必须遍历已有头而不是只删已知键。
@@ -176,7 +163,7 @@ type userAgentRoundTripper struct {
 
 var _ utilnet.RoundTripperWrapper = &userAgentRoundTripper{}
 
-// NewUserAgentRoundTripper will add User-Agent header to a request unless it has already been set.
+// NewUserAgentRoundTripper 在请求未设置 User-Agent 时补上该头。
 func NewUserAgentRoundTripper(agent string, rt http.RoundTripper) http.RoundTripper {
 	return &userAgentRoundTripper{agent, rt}
 }
@@ -205,8 +192,7 @@ type basicAuthRoundTripper struct {
 
 var _ utilnet.RoundTripperWrapper = &basicAuthRoundTripper{}
 
-// NewBasicAuthRoundTripper will apply a BASIC auth authorization header to a
-// request unless it has already been set.
+// NewBasicAuthRoundTripper 在请求未设置 Authorization 时加上 Basic 认证头。
 func NewBasicAuthRoundTripper(username, password string, rt http.RoundTripper) http.RoundTripper {
 	return &basicAuthRoundTripper{username, password, rt}
 }
@@ -226,26 +212,22 @@ func (rt *basicAuthRoundTripper) CancelRequest(req *http.Request) {
 
 func (rt *basicAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt }
 
-// These correspond to the headers used in pkg/apis/authentication.  We don't want the package dependency,
-// but you must not change the values.
+// 这些头与 pkg/apis/authentication 中的定义对应。这里刻意不引入包依赖，但取值绝不能更改。
 const (
-	// ImpersonateUserHeader is used to impersonate a particular user during an API server request
+	// ImpersonateUserHeader 用于在 API server 请求中伪装为指定用户。
 	ImpersonateUserHeader = "Impersonate-User"
 
-	// ImpersonateUIDHeader is used to impersonate a particular UID during an API server request
+	// ImpersonateUIDHeader 用于在 API server 请求中伪装为指定 UID。
 	ImpersonateUIDHeader = "Impersonate-Uid"
 
-	// ImpersonateGroupHeader is used to impersonate a particular group during an API server request.
-	// It can be repeated multiplied times for multiple groups.
+	// ImpersonateGroupHeader 用于在 API server 请求中伪装用户组，可重复出现以指定多个组。
 	ImpersonateGroupHeader = "Impersonate-Group"
 
-	// ImpersonateUserExtraHeaderPrefix is a prefix for a header used to impersonate an entry in the
-	// extra map[string][]string for user.Info.  The key for the `extra` map is suffix.
-	// The same key can be repeated multiple times to have multiple elements in the slice under a single key.
-	// For instance:
+	// ImpersonateUserExtraHeaderPrefix 是用于伪装 user.Info.extra 中某项的前缀，后缀即 extra map 的键。
+	// 同一个键可重复出现，使该键对应多个值，例如：
 	// Impersonate-Extra-Foo: one
 	// Impersonate-Extra-Foo: two
-	// results in extra["Foo"] = []string{"one", "two"}
+	// 结果为 extra["Foo"] = []string{"one", "two"}。
 	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
 )
 
@@ -257,13 +239,13 @@ type impersonatingRoundTripper struct {
 
 var _ utilnet.RoundTripperWrapper = &impersonatingRoundTripper{}
 
-// NewImpersonatingRoundTripper will add an Act-As header to a request unless it has already been set.
+// NewImpersonatingRoundTripper 在请求未设置伪装头时补上 Act-As 头。
 func NewImpersonatingRoundTripper(impersonate ImpersonationConfig, delegate http.RoundTripper) http.RoundTripper {
 	return &impersonatingRoundTripper{impersonate, delegate}
 }
 
 func (rt *impersonatingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// use the user header as marker for the rest.
+	// 以用户头作为是否已设置伪装信息的标志。
 	//
 	// 只要已有 Impersonate-User 就认为调用方自行设置了伪装，整体跳过，
 	// 避免把两套身份信息拼在一起。
@@ -302,18 +284,13 @@ type bearerAuthRoundTripper struct {
 
 var _ utilnet.RoundTripperWrapper = &bearerAuthRoundTripper{}
 
-// NewBearerAuthRoundTripper adds the provided bearer token to a request
-// unless the authorization header has already been set.
+// NewBearerAuthRoundTripper 在请求未设置 Authorization 时加上给定的 Bearer token。
 func NewBearerAuthRoundTripper(bearer string, rt http.RoundTripper) http.RoundTripper {
 	return &bearerAuthRoundTripper{bearer, nil, rt}
 }
 
-// NewBearerAuthWithRefreshRoundTripper adds the provided bearer token to a request
-// unless the authorization header has already been set.
-// If tokenFile is non-empty, it is periodically read,
-// and the last successfully read content is used as the bearer token.
-// If tokenFile is non-empty and bearer is empty, the tokenFile is read
-// immediately to populate the initial bearer token.
+// NewBearerAuthWithRefreshRoundTripper 在请求未设置 Authorization 时加上给定的 Bearer token。
+// tokenFile 非空时会定期读取，最后一次成功读取的内容作为 token；若 bearer 为空则立即读取一次以填充初值。
 func NewBearerAuthWithRefreshRoundTripper(bearer string, tokenFile string, rt http.RoundTripper) (http.RoundTripper, error) {
 	if len(tokenFile) == 0 {
 		return &bearerAuthRoundTripper{bearer, nil, rt}, nil
@@ -353,7 +330,7 @@ func (rt *bearerAuthRoundTripper) CancelRequest(req *http.Request) {
 
 func (rt *bearerAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt }
 
-// requestInfo keeps track of information about a request/response combination
+// requestInfo 记录一次请求/响应组合的相关信息。
 //
 // 详细计时字段由 httptrace 回调并发写入，因此用 muTrace 保护；其余字段只在
 // RoundTrip 协程内读写。
@@ -377,7 +354,7 @@ type requestInfo struct {
 	Duration time.Duration
 }
 
-// newRequestInfo creates a new RequestInfo based on an http request
+// newRequestInfo 基于 http 请求创建 RequestInfo。
 func newRequestInfo(req *http.Request) *requestInfo {
 	return &requestInfo{
 		RequestURL:     req.URL.String(),
@@ -386,7 +363,7 @@ func newRequestInfo(req *http.Request) *requestInfo {
 	}
 }
 
-// complete adds information about the response to the requestInfo
+// complete 把响应信息补进 requestInfo。
 func (r *requestInfo) complete(response *http.Response, err error) {
 	if err != nil {
 		r.ResponseErr = err
@@ -396,7 +373,7 @@ func (r *requestInfo) complete(response *http.Response, err error) {
 	r.ResponseHeaders = response.Header
 }
 
-// toCurl returns a string that can be run as a command in a terminal (minus the body)
+// toCurl 返回可在终端执行的等价 curl 命令（不含 body）。
 func (r *requestInfo) toCurl() string {
 	headers := ""
 	for key, values := range r.RequestHeaders {
@@ -406,14 +383,11 @@ func (r *requestInfo) toCurl() string {
 		}
 	}
 
-	// Newline at the end makes this look better in the text log output (the
-	// only usage of this method) because it becomes a multi-line string with
-	// no quoting.
+	// 末尾换行让文本日志输出更美观（这是该方法的唯一用途）：变成无需引号的多行字符串。
 	return fmt.Sprintf("curl -v -X%s %s '%s'\n", r.RequestVerb, headers, r.RequestURL)
 }
 
-// debuggingRoundTripper will display information about the requests passing
-// through it based on what is configured
+// debuggingRoundTripper 按配置展示经过它的请求信息。
 //
 // debuggingRoundTripper 按 levels 位掩码输出请求/响应诊断信息。
 type debuggingRoundTripper struct {
@@ -424,50 +398,41 @@ type debuggingRoundTripper struct {
 
 var _ utilnet.RoundTripperWrapper = &debuggingRoundTripper{}
 
-// DebugLevel is used to enable debugging of certain
-// HTTP requests and responses fields via the debuggingRoundTripper.
+// DebugLevel 用于让 debuggingRoundTripper 输出指定的 HTTP 请求/响应字段。
 type DebugLevel int
 
 const (
-	// DebugJustURL will add to the debug output HTTP requests method and url.
+	// DebugJustURL 在调试输出中加入请求方法与 URL。
 	DebugJustURL DebugLevel = iota
-	// DebugURLTiming will add to the debug output the duration of HTTP requests.
+	// DebugURLTiming 在调试输出中加入 HTTP 请求耗时。
 	DebugURLTiming
-	// DebugCurlCommand will add to the debug output the curl command equivalent to the
-	// HTTP request.
+	// DebugCurlCommand 在调试输出中加入等价的 curl 命令。
 	DebugCurlCommand
-	// DebugRequestHeaders will add to the debug output the HTTP requests headers.
+	// DebugRequestHeaders 在调试输出中加入请求头。
 	DebugRequestHeaders
-	// DebugResponseStatus will add to the debug output the HTTP response status.
+	// DebugResponseStatus 在调试输出中加入响应状态码。
 	DebugResponseStatus
-	// DebugResponseHeaders will add to the debug output the HTTP response headers.
+	// DebugResponseHeaders 在调试输出中加入响应头。
 	DebugResponseHeaders
-	// DebugDetailedTiming will add to the debug output the duration of the HTTP requests events.
+	// DebugDetailedTiming 在调试输出中加入 HTTP 请求各阶段的耗时。
 	DebugDetailedTiming
-	// DebugByContext will add any of the above depending on the verbosity of the per-request logger obtained from the requests context.
-	//
-	// Can be combined in NewDebuggingRoundTripper with some of the other options, in which case the
-	// debug roundtripper will always log what is requested there plus the information that gets
-	// enabled by the context's log verbosity.
+	// DebugByContext 根据请求上下文中 logger 的详细度决定输出上述哪些信息。
+	// 可与 NewDebuggingRoundTripper 的其他选项组合：此时既输出选项指定的内容，也输出上下文详细度启用的内容。
 	DebugByContext
 )
 
-// Different log levels include different sets of information.
-//
-// Not exported because the exact content of log messages is not part
-// of of the package API.
+// 不同日志级别包含不同信息集合。该类型未导出，因为日志的确切内容不属于包 API。
 const (
 	levelsV6 = (1 << DebugURLTiming)
-	// Logging *less* information for the response at level 7 compared to 6 replicates prior behavior:
+	// 级别 7 比 6 记录更少的响应信息，这是为了复现旧行为：
 	//  https://github.com/kubernetes/kubernetes/blob/2b472fe4690c83a2b343995f88050b2a3e9ff0fa/staging/src/k8s.io/client-go/transport/round_trippers.go#L79
-	// Presumably that was done because verb and URL are already in the request log entry.
+	// 大概是因为方法与 URL 已出现在请求日志中，无需重复。
 	levelsV7 = (1 << DebugJustURL) | (1 << DebugRequestHeaders) | (1 << DebugResponseStatus)
 	levelsV8 = (1 << DebugJustURL) | (1 << DebugRequestHeaders) | (1 << DebugResponseStatus) | (1 << DebugResponseHeaders)
 	levelsV9 = (1 << DebugCurlCommand) | (1 << DebugURLTiming) | (1 << DebugDetailedTiming) | (1 << DebugResponseHeaders)
 )
 
-// NewDebuggingRoundTripper allows to display in the logs output debug information
-// on the API requests performed by the client.
+// NewDebuggingRoundTripper 让日志输出客户端所发 API 请求的调试信息。
 func NewDebuggingRoundTripper(rt http.RoundTripper, levels ...DebugLevel) http.RoundTripper {
 	drt := &debuggingRoundTripper{
 		delegatedRoundTripper: rt,
@@ -488,8 +453,7 @@ var knownAuthTypes = map[string]bool{
 	"negotiate": true,
 }
 
-// maskValue masks credential content from authorization headers
-// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization
+// maskValue 对 Authorization 头中的凭证脱敏，详见 https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization。
 //
 // 保留认证类型前缀（如 Bearer）便于排查，但隐藏凭证本身；未知类型整体
 // 替换为 <masked>，避免把自定义格式的密钥打进日志。
@@ -521,15 +485,13 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	logger := klog.FromContext(req.Context())
 	levels := rt.levels
 
-	// When logging depends on the context, it uses the verbosity of the per-context logger
-	// and a hard-coded mapping of verbosity to debug details. Otherwise all messages
-	// are logged as V(0).
+	// 依赖上下文时按每请求 logger 的详细度及硬编码映射决定输出内容，否则所有消息都以 V(0) 记录。
 	//
 	// 逐级提升以便一次判定；高级别包含低级别信息。
 	if levels&(1<<DebugByContext) != 0 {
 		if loggerV := logger.V(9); loggerV.Enabled() {
 			logger = loggerV
-			// The curl command replaces logging of the URL.
+			// 输出 curl 命令时不再单独输出 URL。
 			levels |= levelsV9
 		} else if loggerV := logger.V(8); loggerV.Enabled() {
 			logger = loggerV
@@ -568,7 +530,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 		var getConn, dnsStart, dialStart, tlsStart, serverStart time.Time
 		var host string
 		trace := &httptrace.ClientTrace{
-			// DNS
+			// DNS 解析。
 			DNSStart: func(info httptrace.DNSStartInfo) {
 				reqInfo.muTrace.Lock()
 				defer reqInfo.muTrace.Unlock()
@@ -581,7 +543,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 				reqInfo.DNSLookup = time.Since(dnsStart)
 				logger.Info("HTTP Trace: DNS Lookup resolved", "host", host, "address", info.Addrs)
 			},
-			// Dial
+			// 拨号。
 			ConnectStart: func(network, addr string) {
 				reqInfo.muTrace.Lock()
 				defer reqInfo.muTrace.Unlock()
@@ -597,7 +559,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 					logger.Info("HTTP Trace: Dial succeed", "network", network, "address", addr)
 				}
 			},
-			// TLS
+			// TLS 握手。
 			TLSHandshakeStart: func() {
 				tlsStart = time.Now()
 			},
@@ -606,7 +568,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 				defer reqInfo.muTrace.Unlock()
 				reqInfo.TLSHandshake = time.Since(tlsStart)
 			},
-			// Connection (it can be DNS + Dial or just the time to get one from the connection pool)
+			// 连接建立（可能是 DNS + 拨号，或仅是从连接池取连接的耗时）。
 			GetConn: func(hostPort string) {
 				getConn = time.Now()
 			},
@@ -616,7 +578,7 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 				reqInfo.GetConnection = time.Since(getConn)
 				reqInfo.ConnectionReused = info.Reused
 			},
-			// Server Processing (time since we wrote the request until first byte is received)
+			// 服务端处理（从写完请求到收到首字节的时间）。
 			WroteRequest: func(info httptrace.WroteRequestInfo) {
 				reqInfo.muTrace.Lock()
 				defer reqInfo.muTrace.Unlock()
@@ -670,13 +632,11 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	return response, err
 }
 
-// headerMap formats headers sorted and across multiple lines with no quoting
-// when using string output and as JSON when using zapr.
+// headerMap 在字符串输出时排序并分行且不加引号，使用 zapr 时输出为 JSON。
 type headersMap http.Header
 
-// newHeadersMap masks all sensitive values. This has to be done before
-// passing the map to a logger because while in practice all loggers
-// either use String or MarshalLog, that is not guaranteed.
+// newHeadersMap 在把 header map 交给 logger 之前对所有敏感值脱敏；虽然实践中 logger 都会
+// 调用 String 或 MarshalLog，但这并非保证。
 //
 // 复制而不是原地修改，避免把脱敏结果写回真实请求头。
 func newHeadersMap(header http.Header) headersMap {
@@ -695,7 +655,7 @@ var _ fmt.Stringer = headersMap{}
 var _ logr.Marshaler = headersMap{}
 
 func (h headersMap) String() string {
-	// The fixed size typically avoids memory allocations when it is large enough.
+	// 预分配足够大的固定容量，通常可避免扩容分配。
 	keys := make([]string, 0, 20)
 	for key := range h {
 		keys = append(keys, key)
@@ -726,8 +686,7 @@ func legalHeaderByte(b byte) bool {
 }
 
 func shouldEscape(b byte) bool {
-	// url.PathUnescape() returns an error if any '%' is not followed by two
-	// hexadecimal digits, so we'll intentionally encode it.
+	// url.PathUnescape() 遇到 '%' 后不是两位十六进制数会报错，因此这里主动编码 '%'。
 	return !legalHeaderByte(b) || b == '%'
 }
 
@@ -739,7 +698,7 @@ func headerKeyEscape(key string) string {
 	for i := 0; i < len(key); i++ {
 		b := key[i]
 		if shouldEscape(b) {
-			// %-encode bytes that should be escaped:
+			// 对需要转义的字节做 % 编码：
 			// https://tools.ietf.org/html/rfc3986#section-2.1
 			fmt.Fprintf(&buf, "%%%02X", b)
 			continue

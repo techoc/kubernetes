@@ -29,32 +29,26 @@ import (
 	"k8s.io/client-go/tools/metrics"
 )
 
-// The following constants shadow the special values used in the prometheus metrics implementation.
+// 以下常量对应 Prometheus 指标实现中使用的特殊取值。
 const (
-	// noError indicates that the plugin process was successfully started and exited with an exit
-	// code of 0.
+	// noError 表示插件进程成功启动并以退出码 0 结束。
 	noError = "no_error"
-	// pluginExecutionError indicates that the plugin process was successfully started and then
-	// it returned a non-zero exit code.
+	// pluginExecutionError 表示插件进程成功启动但返回了非零退出码。
 	pluginExecutionError = "plugin_execution_error"
-	// pluginNotFoundError indicates that we could not find the exec plugin.
+	// pluginNotFoundError 表示找不到 exec 插件。
 	pluginNotFoundError = "plugin_not_found_error"
-	// clientInternalError indicates that we attempted to start the plugin process, but failed
-	// for some reason.
+	// clientInternalError 表示尝试启动插件进程但失败。
 	clientInternalError = "client_internal_error"
 
-	// successExitCode represents an exec plugin invocation that was successful.
+	// successExitCode 表示插件调用成功。
 	successExitCode = 0
-	// failureExitCode represents an exec plugin invocation that was not successful. This code is
-	// used in some failure modes (e.g., plugin not found, client internal error) so that someone
-	// can more easily monitor all unsuccessful invocations.
+	// failureExitCode 表示插件调用失败。插件未找到、客户端内部错误等场景都用它，
+	// 便于统一监控所有失败的调用。
 	failureExitCode = 1
 
-	// pluginAllowed represents an exec plugin invocation that was allowed by
-	// the plugin policy and/or the allowlist
+	// pluginAllowed 表示插件调用被插件策略或 allowlist 允许。
 	pluginAllowed = "allowed"
-	// pluginAllowed represents an exec plugin invocation that was denied by
-	// the plugin policy and/or the allowlist
+	// pluginDenied 表示插件调用被插件策略或 allowlist 拒绝。
 	pluginDenied = "denied"
 )
 
@@ -76,8 +70,7 @@ var expirationMetrics = &certificateExpirationTracker{
 	},
 }
 
-// set stores the given expiration time and updates the updates the certificate
-// expiry metric to the earliest expiration time.
+// set 记录该认证器的证书过期时间，并把指标更新为所有认证器中最早的过期时间。
 //
 // 零值表示该认证器尚未提供证书；若所有值都是零，指标设为 nil 表示未知。
 func (c *certificateExpirationTracker) set(a *Authenticator, t time.Time) {
@@ -102,9 +95,7 @@ func (c *certificateExpirationTracker) set(a *Authenticator, t time.Time) {
 	}
 }
 
-// incrementCallsMetric increments a global metrics counter for the number of calls to an exec
-// plugin, partitioned by exit code. The provided err should be the return value from
-// exec.Cmd.Run().
+// incrementCallsMetric 按退出码分类累加 exec 插件调用次数，err 应传入 exec.Cmd.Run() 的返回值。
 //
 // 退出码和错误类别分开统计：插件未找到与插件执行失败对运维的含义不同，
 // 前者通常意味着环境配置问题，后者才是插件自身逻辑失败。

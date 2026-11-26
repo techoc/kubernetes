@@ -27,28 +27,28 @@ import (
 // TestMultithreadedThrottling 用 10 个 goroutine 争抢令牌，验证在并发情况下
 // 限速依然是全局的：100 QPS、burst=1 时取满 100 个令牌至少需要约 1 秒。
 func TestMultithreadedThrottling(t *testing.T) {
-	// Bucket with 100QPS and no burst
+	// 100 QPS、无突发的令牌桶。
 	r := NewTokenBucketRateLimiter(100, 1)
 
 	// taken 容量设为 100，配合 default 分支实现“收集满即停止”的 lambda。
-	// channel to collect 100 tokens
+	// 收集 100 个令牌的 channel。
 	taken := make(chan bool, 100)
 
-	// Set up goroutines to hammer the throttler
+	// 启动多个 goroutine 争抢令牌。
 	startCh := make(chan bool)
 	endCh := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func() {
-			// wait for the starting signal
+			// 等待起跑信号。
 			<-startCh
 			for {
-				// get a token
+				// 取一个令牌。
 				r.Accept()
 				select {
-				// try to add it to the taken channel
+				// 尝试放入已取令牌 channel。
 				case taken <- true:
 					continue
-				// if taken is full, notify and return
+				// channel 已满时发通知并返回。
 				default:
 					endCh <- true
 					return
@@ -57,20 +57,20 @@ func TestMultithreadedThrottling(t *testing.T) {
 		}()
 	}
 
-	// record wall time
+	// 记录墙钟时间。
 	startTime := time.Now()
-	// take the initial capacity so all tokens are the result of refill
+	// 先耗尽初始容量，确保后续令牌都来自补充。
 	r.Accept()
-	// start the thundering herd
+	// 启动并发争抢。
 	close(startCh)
-	// wait for the first signal that we collected 100 tokens
+	// 等待收满 100 个令牌的信号。
 	<-endCh
-	// record wall time
+	// 记录墙钟时间。
 	endTime := time.Now()
 
-	// tolerate a 1% clock change because these things happen
+	// 容忍 1% 的时钟偏差。
 	if duration := endTime.Sub(startTime); duration < (time.Second * 99 / 100) {
-		// We shouldn't be able to get 100 tokens out of the bucket in less than 1 second of wall clock time, no matter what
+		// 无论怎样，都不应在不到 1 秒内从桶中取到 100 个令牌。
 		t.Errorf("Expected it to take at least 1 second to get 100 tokens, took %v", duration)
 	} else {
 		t.Logf("Took %v to get 100 tokens", duration)
@@ -100,7 +100,7 @@ func TestIncrementThrottle(t *testing.T) {
 		t.Error("unexpected true accept")
 	}
 
-	// Allow to refill
+	// 等待令牌补充。
 	time.Sleep(2 * time.Second)
 
 	if !r.TryAccept() {
@@ -113,8 +113,7 @@ func TestIncrementThrottle(t *testing.T) {
 func TestThrottle(t *testing.T) {
 	r := NewTokenBucketRateLimiter(10, 5)
 
-	// Should consume 5 tokens immediately, then
-	// the remaining 11 should take at least 1 second (0.1s each)
+	// 前 5 个令牌应立即取到，剩余 11 个按 0.1s/个至少需要 1 秒。
 	expectedFinish := time.Now().Add(time.Second * 1)
 	for i := 0; i < 16; i++ {
 		r.Accept()
@@ -130,7 +129,7 @@ func TestAlwaysFake(t *testing.T) {
 	if !rl.TryAccept() {
 		t.Error("TryAccept in AlwaysFake should return true.")
 	}
-	// If this will block the test will timeout
+	// 若此处阻塞，测试就会超时。
 	rl.Accept()
 }
 
@@ -151,7 +150,7 @@ func TestNeverFake(t *testing.T) {
 		wg.Done()
 	}()
 
-	// Wait some time to make sure it never finished.
+	// 等待一段时间，确认它始终没有结束。
 	time.Sleep(time.Second)
 	if finished {
 		t.Error("Accept should block forever in NeverFake.")
@@ -210,9 +209,7 @@ func (fc *fakeClock) Since(ts time.Time) time.Duration {
 // 累积后会出现浮点误差，导致本应可用的令牌被误判为不足。这里用极高的时间精度、
 // 反复推进 120 秒来确保问题不会复现。
 func TestRatePrecisionBug(t *testing.T) {
-	// golang.org/x/time/rate used to have bugs around precision and this
-	// proves that they don't recur (at least in the form we know about).  This
-	// case is specifically designed to trigger the problem after 14 seconds.
+	// golang.org/x/time/rate 曾有精度问题，这里验证其不再复现（至少已知形式）。该用例专门设计成在 14 秒后触发问题。
 	qps := float32(time.Second) / float32(1031425*time.Microsecond)
 	clock := newFakeClock()
 	tb := NewTokenBucketRateLimiterWithClock(qps, 1, clock)

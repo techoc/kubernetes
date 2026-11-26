@@ -44,7 +44,7 @@ import (
 // WebSocket 连接（wsRt）。通过服务端配合完成 upgrade 后，可从 wsRt.Connection()
 // 读到协商结果。
 func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
-	// Create fake WebSocket server.
+	// 创建假的 WebSocket 服务端。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w)
 		if err != nil {
@@ -54,7 +54,7 @@ func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Create the wrapped roundtripper and websocket upgrade roundtripper and call "RoundTrip()".
+	// 创建包装后的 roundtripper 与 WebSocket 升级 roundtripper，并调用 RoundTrip()。
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	require.NoError(t, err)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", websocketServer.URL, nil)
@@ -66,8 +66,7 @@ func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
 	req.Header[wsstream.WebSocketProtocolHeader] = []string{requestedProtocol}
 	_, err = rt.RoundTrip(req)
 	require.NoError(t, err)
-	// WebSocket Connection is stored in websocket RoundTripper.
-	// Compare the expected negotiated subprotocol with the actual subprotocol.
+	// WebSocket 连接保存在 wsRt 中，比较实际协商出的子协议与期望值。
 	actualProtocol := wsRt.Connection().Subprotocol()
 	assert.Equal(t, requestedProtocol, actualProtocol)
 
@@ -121,7 +120,7 @@ func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 	encoder := statusCodecs.LegacyCodec(metav1.SchemeGroupVersion)
 	for testName, testCase := range testCases {
 		t.Run(testName, func(t *testing.T) {
-			// Create fake WebSocket server.
+			// 创建假的 WebSocket 服务端。
 			websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				// 中文：按用例构造失败响应，不执行升级。
 				if testCase.statusCode > 0 {
@@ -148,7 +147,7 @@ func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 			}))
 			defer websocketServer.Close()
 
-			// Create the wrapped roundtripper and websocket upgrade roundtripper and call "RoundTrip()".
+			// 创建包装后的 roundtripper 与 WebSocket 升级 roundtripper，并调用 RoundTrip()。
 			websocketLocation, err := url.Parse(websocketServer.URL)
 			require.NoError(t, err)
 			req, err := http.NewRequestWithContext(context.Background(), "GET", websocketServer.URL, nil)
@@ -181,7 +180,7 @@ func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 //
 // 中文：与 RoundTrip 路径不同，Negotiate 不经过外层 RoundTripper 的响应处理。
 func TestWebSocketRoundTripper_NegotiateCreatesConnection(t *testing.T) {
-	// Create fake WebSocket server.
+	// 创建假的 WebSocket 服务端。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w)
 		if err != nil {
@@ -191,7 +190,7 @@ func TestWebSocketRoundTripper_NegotiateCreatesConnection(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Create the websocket roundtripper and call "Negotiate" to create websocket connection.
+	// 创建 WebSocket roundtripper 并调用 Negotiate 建立连接。
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	require.NoError(t, err)
 	req, err := http.NewRequestWithContext(context.Background(), "GET", websocketServer.URL, nil)
@@ -201,12 +200,12 @@ func TestWebSocketRoundTripper_NegotiateCreatesConnection(t *testing.T) {
 	requestedProtocol := remotecommand.StreamProtocolV5Name
 	conn, err := Negotiate(rt, wsRt, req, requestedProtocol)
 	require.NoError(t, err)
-	// Compare the expected negotiated subprotocol with the actual subprotocol.
+	// 比较实际协商出的子协议与期望值。
 	actualProtocol := conn.Subprotocol()
 	assert.Equal(t, requestedProtocol, actualProtocol)
 }
 
-// websocketStreams contains the WebSocket connection and streams from a server.
+// websocketStreams 保存来自服务端的 WebSocket 连接与流。
 type websocketStreams struct {
 	conn io.Closer
 }
@@ -222,8 +221,7 @@ func webSocketServerStreams(req *http.Request, w http.ResponseWriter) (*websocke
 		},
 	})
 	conn.SetIdleTimeout(4 * time.Hour)
-	// Opening the connection responds to WebSocket client, negotiating
-	// the WebSocket upgrade connection and the subprotocol.
+	// 打开连接即响应 WebSocket 客户端，完成升级与子协议协商。
 	_, _, err := conn.Open(w, req)
 	if err != nil {
 		return nil, err

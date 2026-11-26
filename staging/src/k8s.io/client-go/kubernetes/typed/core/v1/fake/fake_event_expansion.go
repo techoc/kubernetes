@@ -53,7 +53,7 @@ func (c *fakeEvents) CreateWithEventNamespaceWithContext(_ context.Context, even
 	return obj.(*v1.Event), err
 }
 
-// Update replaces an existing event. Returns the copy of the event the server returns, or an error.
+// Update 替换已有事件，返回服务端返回的副本或错误。
 //
 // Deprecated: use UpdateWithEventNamespaceWithContext instead.
 //
@@ -62,7 +62,7 @@ func (c *fakeEvents) UpdateWithEventNamespace(event *v1.Event) (*v1.Event, error
 	return c.UpdateWithEventNamespaceWithContext(context.Background(), event)
 }
 
-// Update replaces an existing event. Returns the copy of the event the server returns, or an error.
+// Update 替换已有事件，返回服务端返回的副本或错误。
 func (c *fakeEvents) UpdateWithEventNamespaceWithContext(_ context.Context, event *v1.Event) (*v1.Event, error) {
 	var action core.UpdateActionImpl
 	// 与 Create 相同：优先使用客户端命名空间，否则使用 Event 自带命名空间。
@@ -79,8 +79,8 @@ func (c *fakeEvents) UpdateWithEventNamespaceWithContext(_ context.Context, even
 	return obj.(*v1.Event), err
 }
 
-// PatchWithEventNamespace patches an existing event. Returns the copy of the event the server returns, or an error.
-// TODO: Should take a PatchType as an argument probably.
+// PatchWithEventNamespace 修补已有事件，返回服务端返回的副本或错误。
+// TODO: 也许应该接受 PatchType 参数。
 //
 // Deprecated: use PatchWithEventNamespaceWithContext instead.
 //
@@ -89,8 +89,8 @@ func (c *fakeEvents) PatchWithEventNamespace(event *v1.Event, data []byte) (*v1.
 	return c.PatchWithEventNamespaceWithContext(context.Background(), event, data)
 }
 
-// PatchWithEventNamespaceWithContext patches an existing event. Returns the copy of the event the server returns, or an error.
-// TODO: Should take a PatchType as an argument probably.
+// PatchWithEventNamespaceWithContext 修补已有事件，返回服务端返回的副本或错误。
+// TODO: 也许应该接受 PatchType 参数。
 func (c *fakeEvents) PatchWithEventNamespaceWithContext(_ context.Context, event *v1.Event, data []byte) (*v1.Event, error) {
 	// TODO: 应可配置以支持更多补丁策略。
 	// 当前 fake 使用战略合并补丁，与真实客户端对 Event 的默认补丁策略一致。
@@ -109,7 +109,7 @@ func (c *fakeEvents) PatchWithEventNamespaceWithContext(_ context.Context, event
 	return obj.(*v1.Event), err
 }
 
-// Search returns a list of events matching the specified object.
+// Search 返回与指定对象相关的事件列表。
 //
 // Deprecated: use SearchWithContext instead.
 //
@@ -118,7 +118,7 @@ func (c *fakeEvents) Search(scheme *runtime.Scheme, objOrRef runtime.Object) (*v
 	return c.SearchWithContext(context.Background(), scheme, objOrRef)
 }
 
-// SearchWithContext returns a list of events matching the specified object.
+// SearchWithContext 返回与指定对象相关的事件列表。
 //
 // SearchWithContext 在 fake 中仅做一次 List 并交给 reactor 处理；
 // 真实的字段筛选（involvedObject）由 GetFieldSelector 以 "everything" 的形式近似。

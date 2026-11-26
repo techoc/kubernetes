@@ -565,7 +565,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 								Version: "v1beta1",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
-										// resilient to nil GVK for parent
+										// 父资源 GVK 为 nil 时也要能容忍。
 										Resource:         "*",
 										Scope:            apidiscovery.ScopeNamespace,
 										SingularResource: "",
@@ -606,7 +606,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 				{Group: "external.metrics.k8s.io", Version: "v1beta1"}: {
 					GroupVersion: "external.metrics.k8s.io/v1beta1",
 					APIResources: []metav1.APIResource{
-						// Since parent GVK was nil, it is NOT returned--only the subresource.
+						// 父资源 GVK 为 nil，因此不返回父条目，只返回子资源。
 						{
 							Name:         "*/other-external-metric",
 							SingularName: "",
@@ -635,7 +635,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 								Version: "v1beta1",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
-										// resilient to empty GVK for parent
+										// 父资源 GVK 为空时也要能容忍。
 										Resource:         "*",
 										Scope:            apidiscovery.ScopeNamespace,
 										SingularResource: "",
@@ -677,7 +677,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 				{Group: "external.metrics.k8s.io", Version: "v1beta1"}: {
 					GroupVersion: "external.metrics.k8s.io/v1beta1",
 					APIResources: []metav1.APIResource{
-						// Since parent GVK was nil, it is NOT returned--only the subresource.
+						// 父资源 GVK 为 nil，因此不返回父条目，只返回子资源。
 						{
 							Name:         "*/other-external-metric",
 							SingularName: "",
@@ -828,11 +828,11 @@ func TestSplitGroupsAndResources(t *testing.T) {
 					},
 				},
 			},
-			// Single core Group/Version is stale, so no Version within Group.
+			// 核心组唯一的 GroupVersion 已失效，因此组内没有可用版本。
 			expectedGroups: metav1.APIGroupList{
 				Groups: []metav1.APIGroup{{Name: ""}},
 			},
-			// Single core Group/Version is stale, so there are no expected resources.
+			// 核心组唯一的 GroupVersion 已失效，因此不应返回任何资源。
 			expectedGVResources: map[schema.GroupVersion]*metav1.APIResourceList{},
 			expectedFailedGVs: map[schema.GroupVersion]error{
 				{Group: "", Version: "v1"}: StaleGroupVersionError{gv: schema.GroupVersion{Group: "", Version: "v1"}},
@@ -876,11 +876,11 @@ func TestSplitGroupsAndResources(t *testing.T) {
 					},
 				},
 			},
-			// Single apps/v1 Group/Version is stale, so no Version within Group.
+			// apps/v1 是组内唯一 GroupVersion 且已失效，因此组内没有可用版本。
 			expectedGroups: metav1.APIGroupList{
 				Groups: []metav1.APIGroup{{Name: "apps"}},
 			},
-			// Single apps/v1 Group/Version is stale, so there are no expected resources.
+			// apps/v1 是唯一 GroupVersion 且已失效，因此不应返回任何资源。
 			expectedGVResources: map[schema.GroupVersion]*metav1.APIResourceList{},
 			expectedFailedGVs: map[schema.GroupVersion]error{
 				{Group: "apps", Version: "v1"}: StaleGroupVersionError{gv: schema.GroupVersion{Group: "apps", Version: "v1"}},
@@ -897,7 +897,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// Stale v2 should report failed GV.
+							// v2 已失效，应作为失败 GV 上报。
 							{
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -931,7 +931,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 					},
 				},
 			},
-			// Only apps/v1 is non-stale expected Group/Version
+			// 只有 apps/v1 未失效，应作为唯一的 GroupVersion。
 			expectedGroups: metav1.APIGroupList{
 				Groups: []metav1.APIGroup{
 					{
@@ -942,7 +942,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 								Version:      "v1",
 							},
 						},
-						// PreferredVersion must be apps/v1
+						// 首选版本必须是仍有效的 apps/v1。
 						PreferredVersion: metav1.GroupVersionForDiscovery{
 							GroupVersion: "apps/v1",
 							Version:      "v1",
@@ -950,7 +950,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 					},
 				},
 			},
-			// Only apps/v1 resources expected.
+			// 只应返回 apps/v1 的资源。
 			expectedGVResources: map[schema.GroupVersion]*metav1.APIResourceList{
 				{Group: "apps", Version: "v1"}: {
 					GroupVersion: "apps/v1",

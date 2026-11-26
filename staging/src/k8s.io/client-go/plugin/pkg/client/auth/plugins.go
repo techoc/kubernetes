@@ -22,7 +22,7 @@ limitations under the License.
 package auth
 
 import (
-	// Initialize common client auth plugins.
+	// 触发通用客户端认证插件的初始化。
 	// 空导入触发 oidc 插件的 init()，完成认证提供者注册。
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )

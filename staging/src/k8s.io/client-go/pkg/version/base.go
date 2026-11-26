@@ -16,44 +16,35 @@ limitations under the License.
 
 package version
 
-// Base version information.
+// 基础版本信息。
 //
-// This is the fallback data used when version information from git is not
-// provided via go ldflags. It provides an approximation of the Kubernetes
-// version for ad-hoc builds (e.g. `go build`) that cannot get the version
-// information from git.
+// 当构建时未通过 go ldflags 注入 git 版本信息时，以这里的数据兜底，为 `go build`
+// 等无法获取 git 信息的临时构建提供近似的 Kubernetes 版本。
 //
-// If you are looking at these fields in the git tree, they look
-// strange. They are set by the build process with ldflags -X. The
-// in-tree values are dummy values used for "git archive", which also
-// works for GitHub tar downloads.
+// 源码树中的这些字段看起来很奇怪：构建流程会用 ldflags -X 覆盖它们，仓库内的值
+// 只是给 "git archive"（以及 GitHub tarball 下载）用的占位符。
 //
 // 中文：这些变量在发布构建中通过 -ldflags -X 覆盖；源码中的值只是归档时的占位符。
 var (
-	// TODO: Deprecate gitMajor and gitMinor, use only gitVersion
-	// instead. First step in deprecation, keep the fields but make
-	// them irrelevant. (Next we'll take it out, which may muck with
-	// scripts consuming the kubectl version output - but most of
-	// these should be looking at gitVersion already anyways.)
+	// TODO: 弃用 gitMajor/gitMinor，只保留 gitVersion。第一步是保留字段但使其
+	// 不再参与逻辑；之后再移除。移除可能影响解析 kubectl version 输出的脚本，
+	// 不过这些脚本大多本就该读 gitVersion。
 
 	// 中文：gitMajor/gitMinor 已仅作兼容保留，解析版本时应以 gitVersion 为准。
 	gitMajor string = "" // major version, always numeric
 	gitMinor string = "" // minor version, numeric possibly followed by "+"
 
-	// semantic version, derived by build scripts (see
+	// 由构建脚本生成的语义化版本，详见
 	// https://github.com/kubernetes/sig-release/blob/master/release-engineering/versioning.md#kubernetes-release-versioning
 	// https://kubernetes.io/releases/version-skew-policy/
-	// for a detailed discussion of this field)
+	// 关于该字段的详细讨论。
 	//
-	// TODO: This field is still called "gitVersion" for legacy
-	// reasons. For prerelease versions, the build metadata on the
-	// semantic version is a git hash, but the version itself is no
-	// longer the direct output of "git describe", but a slight
-	// translation to be semver compliant.
+	// TODO: 出于历史原因该字段仍叫 "gitVersion"。预发布版本的语义化版本元数据
+	// 是 git hash，但版本号本身已不是 "git describe" 的直接输出，而是为满足
+	// semver 规范做过转换。
 
-	// NOTE: The $Format strings are replaced during 'git archive' thanks to the
-	// companion .gitattributes file containing 'export-subst' in this same
-	// directory.  See also https://git-scm.com/docs/gitattributes
+	// 注意：$Format 字符串在 'git archive' 时由同目录 .gitattributes 中的
+	// 'export-subst' 替换，详见 https://git-scm.com/docs/gitattributes。
 	//
 	// 中文：归档时由 export-subst 替换 $Format 占位符；正常构建则由 ldflags 注入。
 	gitVersion   string = "v0.0.0-master+$Format:%H$"

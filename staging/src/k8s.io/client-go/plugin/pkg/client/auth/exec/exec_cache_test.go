@@ -28,14 +28,10 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-// TestExecTLSCache asserts the semantics of the TLS cache when exec auth is used.
+// TestExecTLSCache 验证使用 exec 认证时 TLS 缓存的语义。
 //
-// In particular, when:
-//   - multiple identical rest configs exist as distinct objects, and
-//   - these rest configs use exec auth, and
-//   - these rest configs are used to create distinct clientsets, then
-//
-// the underlying TLS config is shared between those clientsets.
+// 当多份内容相同的 rest.Config 是不同对象、都使用 exec 认证、并分别创建 clientset 时，
+// 底层 TLS 配置应在这些 clientset 之间共享。
 //
 // 缓存键由 exec 插件命令与参数等配置内容派生，而非 *rest.Config 指针：
 // 因此配置内容相同的客户端复用同一个 TLS 配置（共享证书与刷新状态），

@@ -39,7 +39,7 @@ func TestDaemonSetLister(t *testing.T) {
 		outDaemonSetNames sets.Set[string]
 		expectErr         bool
 	}{
-		// Basic listing
+		// 基本列举。
 		{
 			inDSs: []*extensions.DaemonSet{
 				{ObjectMeta: metav1.ObjectMeta{Name: "basic"}},
@@ -49,7 +49,7 @@ func TestDaemonSetLister(t *testing.T) {
 			},
 			outDaemonSetNames: sets.New[string]("basic"),
 		},
-		// Listing multiple daemon sets
+		// 列举多个 DaemonSet。
 		{
 			inDSs: []*extensions.DaemonSet{
 				{ObjectMeta: metav1.ObjectMeta{Name: "basic"}},
@@ -61,7 +61,7 @@ func TestDaemonSetLister(t *testing.T) {
 			},
 			outDaemonSetNames: sets.New[string]("basic", "complex", "complex2"),
 		},
-		// No pod labels
+		// Pod 无标签。
 		{
 			inDSs: []*extensions.DaemonSet{
 				{
@@ -80,7 +80,7 @@ func TestDaemonSetLister(t *testing.T) {
 			outDaemonSetNames: sets.New[string](),
 			expectErr:         true,
 		},
-		// No DS selectors
+		// DaemonSet 无选择器。
 		{
 			inDSs: []*extensions.DaemonSet{
 				{
@@ -100,7 +100,7 @@ func TestDaemonSetLister(t *testing.T) {
 			outDaemonSetNames: sets.New[string](),
 			expectErr:         true,
 		},
-		// Matching labels to selectors and namespace
+		// 标签、选择器与命名空间均匹配。
 		{
 			inDSs: []*extensions.DaemonSet{
 				{

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: the example only works with the code within the same release/branch.
+// 注意：该示例只适用于同一 release/branch 内的代码。
 //
 // 该示例演示用 dynamic 客户端对 Deployment 完成创建、更新、列举、删除。
 // 对象以 unstructured 形式构造，字段名与 apps/v1 的 JSON 结构一一对应。
@@ -37,10 +37,10 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"k8s.io/client-go/util/retry"
 	//
-	// Uncomment to load all auth plugins
+	// 取消注释可加载所有认证插件。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth"
 	//
-	// Or uncomment to load specific auth plugins
+	// 或取消注释以加载指定的认证插件。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
@@ -112,7 +112,7 @@ func main() {
 		},
 	}
 
-	// Create Deployment
+	// 创建 Deployment。
 	// Namespace(apiv1.NamespaceDefault) 显式指定命名空间；返回结果中的 metadata
 	// 已由服务端补全（含 resourceVersion、uid 等）。
 	fmt.Println("Creating deployment...")
@@ -125,41 +125,37 @@ func main() {
 	// Update Deployment
 	prompt()
 	fmt.Println("Updating deployment...")
-	//    You have two options to Update() this Deployment:
+	// 更新 Deployment 有两种方式：
 	//
-	//    1. Modify the "deployment" variable and call: Update(deployment).
-	//       This works like the "kubectl replace" command and it overwrites/loses changes
-	//       made by other clients between you Create() and Update() the object.
-	//    2. Modify the "result" returned by Get() and retry Update(result) until
-	//       you no longer get a conflict error. This way, you can preserve changes made
-	//       by other clients between Create() and Update(). This is implemented below
-	//			 using the retry utility package included with client-go. (RECOMMENDED)
+	// 1. 修改 "deployment" 变量后调用 Update(deployment)，类似 "kubectl replace"，
+	//    但会覆盖掉 Create 与 Update 之间其他客户端的改动。
+	// 2. 修改 Get() 返回的 "result" 并重试 Update(result) 直到不再冲突，可保留
+	//    其他客户端的改动。下面采用此方案，并用 client-go 自带的 retry 包实现（推荐）。
 	//
-	// More Info:
+	// 更多信息：
 	// https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
 	//
 	// 下面采用方案 2：冲突时重新读取最新对象再改，避免覆盖他人写入。
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Retrieve the latest version of Deployment before attempting update
-		// RetryOnConflict uses exponential backoff to avoid exhausting the apiserver
+		// 更新前先读取最新版本；RetryOnConflict 使用指数退避，避免打满 apiserver。
 		result, getErr := client.Resource(deploymentRes).Namespace(apiv1.NamespaceDefault).Get(context.TODO(), "demo-deployment", metav1.GetOptions{})
 		if getErr != nil {
 			panic(fmt.Errorf("failed to get latest version of Deployment: %v", getErr))
 		}
 
-		// update replicas to 1
+		// 把副本数改为 1。
 		if err := unstructured.SetNestedField(result.Object, int64(1), "spec", "replicas"); err != nil {
 			panic(fmt.Errorf("failed to set replica value: %v", err))
 		}
 
-		// extract spec containers
+		// 取出 spec.containers。
 		containers, found, err := unstructured.NestedSlice(result.Object, "spec", "template", "spec", "containers")
 		if err != nil || !found || containers == nil {
 			panic(fmt.Errorf("deployment containers not found or error in spec: %v", err))
 		}
 
-		// update container[0] image
+		// 更新 container[0] 的镜像。
 		// 先改副本再写回整个 containers 切片，保持嵌套结构一致。
 		if err := unstructured.SetNestedField(containers[0].(map[string]interface{}), "nginx:1.13", "image"); err != nil {
 			panic(err)
@@ -176,7 +172,7 @@ func main() {
 	}
 	fmt.Println("Updated deployment...")
 
-	// List Deployments
+	// 列举 Deployment。
 	prompt()
 	fmt.Printf("Listing deployments in namespace %q:\n", apiv1.NamespaceDefault)
 	list, err := client.Resource(deploymentRes).Namespace(apiv1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
@@ -193,7 +189,7 @@ func main() {
 		fmt.Printf(" * %s (%d replicas)\n", d.GetName(), replicas)
 	}
 
-	// Delete Deployment
+	// 删除 Deployment。
 	// 使用 Foreground 删除：等待依赖对象清理完毕后再返回，便于示例串行演示。
 	prompt()
 	fmt.Println("Deleting deployment...")

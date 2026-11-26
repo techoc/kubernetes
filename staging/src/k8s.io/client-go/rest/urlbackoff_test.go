@@ -41,7 +41,7 @@ func TestURLBackoffFunctionalityCollisions(t *testing.T) {
 		Backoff: flowcontrol.NewBackOff(1*time.Second, 60*time.Second),
 	}
 
-	// Add some noise and make sure backoff for a clean URL is zero.
+	// 加入一些干扰后，确认未被退避的 URL 退避值仍为 0。
 	myBackoff.UpdateBackoff(parse("http://100.200.300.400:8080"), nil, 500)
 
 	myBackoff.UpdateBackoff(parse("http://1.2.3.4:8080"), nil, 500)
@@ -51,7 +51,7 @@ func TestURLBackoffFunctionalityCollisions(t *testing.T) {
 	}
 }
 
-// TestURLBackoffFunctionality generally tests the URLBackoff wrapper.  We avoid duplicating tests from backoff and request.
+// TestURLBackoffFunctionality 总体测试 URLBackoff 包装器，避免与 backoff/request 的测试重复。
 //
 // 用一条包含递增、重置、再递增的返回码序列，验证 2xx/3xx 会清零退避，而
 // 429/5xx 会按指数增长（断言允许 ±5s 的抖动余量）。
@@ -60,9 +60,7 @@ func TestURLBackoffFunctionality(t *testing.T) {
 		Backoff: flowcontrol.NewBackOff(1*time.Second, 60*time.Second),
 	}
 
-	// Now test that backoff increases, then recovers.
-	// 200 and 300 should both result in clearing the backoff.
-	// all others like 429 should result in increased backoff.
+	// 测试退避先增长后恢复：200/300 应清零退避，其他如 429 应增长退避。
 	seconds := []int{0,
 		1, 2, 4, 8, 0,
 		1, 2}
@@ -119,7 +117,7 @@ func TestNoBackoff(t *testing.T) {
 	backoff.Sleep(0 * time.Second)
 	assert.WithinDuration(t, start, time.Now(), time.Minute /* pretty generous, but we don't want to flake */, time.Since(start), "backoff.Sleep")
 
-	// Cancel right away to prevent sleeping.
+	// 立即取消 context，避免真正睡眠。
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	start = time.Now()

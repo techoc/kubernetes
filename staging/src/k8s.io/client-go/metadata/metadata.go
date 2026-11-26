@@ -48,20 +48,16 @@ func init() {
 	metav1.AddToGroupVersion(deleteScheme, versionV1)
 }
 
-// Client allows callers to retrieve the object metadata for any
-// Kubernetes-compatible API endpoint. The client uses the
-// meta.k8s.io/v1 PartialObjectMetadata resource to more efficiently
-// retrieve just the necessary metadata, but on older servers
-// (Kubernetes 1.14 and before) will retrieve the object and then
-// convert the metadata.
+// Client 让调用方能获取任意兼容 Kubernetes 的 API 端点的对象元数据。
+// 它优先通过 meta.k8s.io/v1 PartialObjectMetadata 只取所需元数据以节省带宽；
+// 对旧服务端（Kubernetes 1.14 及更早）则拉回整个对象再提取元数据。
 type Client struct {
 	client *rest.RESTClient
 }
 
 var _ Interface = &Client{}
 
-// ConfigFor returns a copy of the provided config with the
-// appropriate metadata client defaults set.
+// ConfigFor 复制配置并设置 metadata 客户端所需的默认值。
 func ConfigFor(inConfig *rest.Config) *rest.Config {
 	config := rest.CopyConfig(inConfig)
 	// 优先请求 protobuf 以降低带宽；回退 JSON 兼容不支持 protobuf 的端点。
@@ -75,8 +71,7 @@ func ConfigFor(inConfig *rest.Config) *rest.Config {
 	return config
 }
 
-// NewForConfigOrDie creates a new metadata client for the given config and
-// panics if there is an error in the config.
+// NewForConfigOrDie 根据配置创建 metadata 客户端，配置有误时直接 panic。
 func NewForConfigOrDie(c *rest.Config) Interface {
 	ret, err := NewForConfig(c)
 	if err != nil {
@@ -85,12 +80,9 @@ func NewForConfigOrDie(c *rest.Config) Interface {
 	return ret
 }
 
-// NewForConfig creates a new metadata client that can retrieve object
-// metadata details about any Kubernetes object (core, aggregated, or custom
-// resource based) in the form of PartialObjectMetadata objects, or returns
-// an error.
-// NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
-// where httpClient was generated with rest.HTTPClientFor(c).
+// NewForConfig 创建 metadata 客户端，以 PartialObjectMetadata 形式获取核心、
+// 聚合或自定义资源的元数据；配置有误时返回错误。
+// 等价于 NewForConfigAndClient(c, httpClient)，其中 httpClient 由 rest.HTTPClientFor(c) 生成。
 func NewForConfig(inConfig *rest.Config) (Interface, error) {
 	config := ConfigFor(inConfig)
 
@@ -101,11 +93,10 @@ func NewForConfig(inConfig *rest.Config) (Interface, error) {
 	return NewForConfigAndClient(config, httpClient)
 }
 
-// NewForConfigAndClient creates a new metadata client for the given config and http client.
-// Note the http client provided takes precedence over the configured transport values.
+// NewForConfigAndClient 根据配置与 http client 创建 metadata 客户端，传入的 http client 优先于配置中的 transport 设置。
 func NewForConfigAndClient(inConfig *rest.Config, h *http.Client) (Interface, error) {
 	config := ConfigFor(inConfig)
-	// for serializing the options
+	// 用于序列化选项。
 	// GroupVersion 与 APIPath 留占位值：实际路径由每个请求的 AbsPath 决定，
 	// 这里的值绝不会出现在线上请求中。
 	config.GroupVersion = &schema.GroupVersion{}
@@ -129,30 +120,26 @@ type client struct {
 	resource  schema.GroupVersionResource
 }
 
-// Resource returns an interface that can access cluster or namespace
-// scoped instances of resource.
+// Resource 返回可访问集群级或命名空间级资源的接口。
 func (c *Client) Resource(resource schema.GroupVersionResource) Getter {
 	return &client{client: c, resource: resource}
 }
 
-// Namespace returns an interface that can access namespace-scoped instances of the
-// provided resource.
+// Namespace 返回可访问指定资源命名空间级实例的接口。
 func (c *client) Namespace(ns string) ResourceInterface {
 	ret := *c
 	ret.namespace = ns
 	return &ret
 }
 
-// Delete removes the provided resource from the server.
+// Delete 从服务端删除指定资源。
 func (c *client) Delete(ctx context.Context, name string, opts metav1.DeleteOptions, subresources ...string) error {
 	if len(name) == 0 {
 		return fmt.Errorf("name is required")
 	}
-	// if DeleteOptions are delivered to Negotiator for serialization,
-	// HTTP-Request header will bring "Content-Type: application/vnd.kubernetes.protobuf"
-	// apiextensions-apiserver uses unstructuredNegotiatedSerializer to decode the input,
-	// server-side will reply with 406 errors.
-	// The special treatment here is to be compatible with CRD Handler
+	// 若把 DeleteOptions 交给 Negotiator 序列化，请求会带 "Content-Type: application/vnd.kubernetes.protobuf"；
+	// apiextensions-apiserver 用 unstructuredNegotiatedSerializer 解码后会返回 406。
+	// 这里特殊处理以兼容 CRD Handler，详见：
 	// see: https://github.com/kubernetes/kubernetes/blob/1a845ccd076bbf1b03420fe694c85a5cd3bd6bed/staging/src/k8s.io/apiextensions-apiserver/pkg/apiserver/customresource_handler.go#L843
 	//
 	// 因此这里手工编码 JSON 并显式设置 Content-Type，绕过协商序列化器。
@@ -170,9 +157,9 @@ func (c *client) Delete(ctx context.Context, name string, opts metav1.DeleteOpti
 	return result.Error()
 }
 
-// DeleteCollection triggers deletion of all resources in the specified scope (namespace or cluster).
+// DeleteCollection 删除指定范围（命名空间或集群）内的所有资源。
 func (c *client) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOptions metav1.ListOptions) error {
-	// See comment on Delete
+	// 与 Delete 同理。
 	// 同样手工编码 DeleteOptions，避免 CRD 端点因 protobuf Content-Type 返回 406。
 	deleteOptionsByte, err := runtime.Encode(deleteOptionsCodec.LegacyCodec(schema.GroupVersion{Version: "v1"}), &opts)
 	if err != nil {
@@ -189,7 +176,7 @@ func (c *client) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions
 	return result.Error()
 }
 
-// Get returns the resource with name from the specified scope (namespace or cluster).
+// Get 从指定范围（命名空间或集群）返回指定名称的资源。
 func (c *client) Get(ctx context.Context, name string, opts metav1.GetOptions, subresources ...string) (*metav1.PartialObjectMetadata, error) {
 	if len(name) == 0 {
 		return nil, fmt.Errorf("name is required")
@@ -233,7 +220,7 @@ func (c *client) Get(ctx context.Context, name string, opts metav1.GetOptions, s
 	return partial, nil
 }
 
-// List returns all resources within the specified scope (namespace or cluster).
+// List 返回指定范围（命名空间或集群）内的所有资源。
 func (c *client) List(ctx context.Context, opts metav1.ListOptions) (*metav1.PartialObjectMetadataList, error) {
 	result := c.client.client.Get().AbsPath(c.makeURLSegments("")...).
 		SetHeader("Accept", "application/vnd.kubernetes.protobuf;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json").
@@ -267,7 +254,7 @@ func (c *client) List(ctx context.Context, opts metav1.ListOptions) (*metav1.Par
 	return partial, nil
 }
 
-// Watch finds all changes to the resources in the specified scope (namespace or cluster).
+// Watch 监听指定范围（命名空间或集群）内资源的所有变化。
 func (c *client) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
@@ -283,7 +270,7 @@ func (c *client) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Inte
 		Watch(ctx)
 }
 
-// Patch modifies the named resource in the specified scope (namespace or cluster).
+// Patch 修改指定范围（命名空间或集群）内的具名资源。
 func (c *client) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (*metav1.PartialObjectMetadata, error) {
 	if len(name) == 0 {
 		return nil, fmt.Errorf("name is required")

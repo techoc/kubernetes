@@ -22,16 +22,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API group 名。
 //
 // 这是 client-go 私有的 API 组：只用于 exec 插件与 client-go 进程之间的本地协议，
 // 不会在 apiserver 上暴露。
 const GroupName = "client.authentication.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 把裸资源名补全为带 group 的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
@@ -45,9 +45,8 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写函数，生成函数的注册放在生成文件中。两者分离，使得生成文件
+	// 缺失时本包仍能编译。
 	//
 	// 这种分离让本包在未生成 zz_generated 文件时也能编译通过，便于代码生成前的引导。
 	localSchemeBuilder.Register(addKnownTypes)

@@ -373,8 +373,7 @@ func TestWrapPreviousError(t *testing.T) {
 					return
 				}
 			case test.expectedErr != nil:
-				// make sure the message from the returned error contains
-				// message from the "previous" error from retries.
+				// 确认返回错误的消息中包含上一次重试的错误信息。
 				if !strings.Contains(err.Error(), test.contains) {
 					t.Errorf("Expected error message to contain %q, but got: %v", test.contains, err)
 				}
@@ -401,8 +400,7 @@ func TestWrapPreviousError(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		// we pass zero Request object since we expect 'Before'
-		// to check the context for error at the very beginning.
+		// 这里传入零值 Request，因为预期 Before 一开始就检查 context 错误。
 		err := retry.Before(ctx, &Request{})
 		if err != context.Canceled {
 			t.Errorf("Expected error: %v, but got: %v", context.Canceled, err)

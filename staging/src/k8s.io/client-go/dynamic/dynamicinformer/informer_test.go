@@ -155,8 +155,7 @@ func TestUnSupportWatchListSemantics(t *testing.T) {
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add corev1 to scheme: %v", err)
 	}
-	// The fake client doesn’t support WatchList semantics,
-	// so we don’t need to prepare a response.
+	// fake 客户端不支持 WatchList 语义，无需准备响应。
 	fakeClient := fake.NewSimpleDynamicClient(scheme)
 	factory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(fakeClient, 0, "ns", nil)
 	target := factory.ForResource(schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"})
@@ -185,7 +184,7 @@ func TestFilteredDynamicSharedInformerFactory(t *testing.T) {
 		handler          func(rcvCh chan<- *unstructured.Unstructured) *cache.ResourceEventHandlerFuncs
 		tweakListOptions dynamicinformer.TweakListOptionsFunc
 	}{
-		// scenario 1
+		// 场景 1
 		{
 			// 中文：informer 监听 ns-bar，对象创建在 ns-foo，不应收到事件。
 			name:     "scenario 1: test adding an object in different namespace should not trigger AddFunc",
@@ -195,7 +194,7 @@ func TestFilteredDynamicSharedInformerFactory(t *testing.T) {
 			trigger:  triggerFactory(t),
 			handler:  handler,
 		},
-		// scenario 2
+		// 场景 2
 		{
 			// 中文：命名空间一致，应收到 AddFunc。
 			name:     "scenario 2: test adding an object should trigger AddFunc",
@@ -257,7 +256,7 @@ func TestFilteredDynamicSharedInformerFactory(t *testing.T) {
 
 	for _, ts := range scenarios {
 		t.Run(ts.name, func(t *testing.T) {
-			// test data
+			// 准备测试数据
 			timeout := time.Duration(3 * time.Second)
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
@@ -275,7 +274,7 @@ func TestFilteredDynamicSharedInformerFactory(t *testing.T) {
 			fakeClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, objs...)
 			target := dynamicinformer.NewFilteredDynamicSharedInformerFactory(fakeClient, 0, ts.informNS, nil)
 
-			// act
+			// 执行
 			informerListerForGvr := target.ForResource(ts.gvr)
 			informerListerForGvr.Informer().AddEventHandler(ts.handler(informerReciveObjectCh))
 			target.Start(ctx.Done())
@@ -316,7 +315,7 @@ func TestDynamicSharedInformerFactory(t *testing.T) {
 		trigger     func(gvr schema.GroupVersionResource, ns string, fakeClient *fake.FakeDynamicClient, testObject *unstructured.Unstructured) *unstructured.Unstructured
 		handler     func(rcvCh chan<- *unstructured.Unstructured) *cache.ResourceEventHandlerFuncs
 	}{
-		// scenario 1
+		// 场景 1
 		{
 			// 中文：直接 Create 应触发 AddFunc。
 			name: "scenario 1: test if adding an object triggers AddFunc",
@@ -339,7 +338,7 @@ func TestDynamicSharedInformerFactory(t *testing.T) {
 			},
 		},
 
-		// scenario 2
+		// 场景 2
 		{
 			// 中文：先预置对象，再修改 spec 触发 UpdateFunc；只把新对象送入 channel。
 			name:        "scenario 2: tests if updating an object triggers UpdateFunc",
@@ -363,7 +362,7 @@ func TestDynamicSharedInformerFactory(t *testing.T) {
 			},
 		},
 
-		// scenario 3
+		// 场景 3
 		{
 			// 中文：预置对象后删除，DeleteFunc 收到的对象应与删除前的对象一致。
 			name:        "scenario 3: test if deleting an object triggers DeleteFunc",
@@ -389,7 +388,7 @@ func TestDynamicSharedInformerFactory(t *testing.T) {
 
 	for _, ts := range scenarios {
 		t.Run(ts.name, func(t *testing.T) {
-			// test data
+			// 准备测试数据
 			timeout := time.Duration(3 * time.Second)
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
@@ -407,7 +406,7 @@ func TestDynamicSharedInformerFactory(t *testing.T) {
 			fakeClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, objs...)
 			target := dynamicinformer.NewDynamicSharedInformerFactory(fakeClient, 0)
 
-			// act
+			// 执行
 			informerListerForGvr := target.ForResource(ts.gvr)
 			informerListerForGvr.Informer().AddEventHandler(ts.handler(informerReciveObjectCh))
 			target.Start(ctx.Done())

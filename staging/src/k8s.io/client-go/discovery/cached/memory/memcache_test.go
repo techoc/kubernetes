@@ -53,9 +53,8 @@ type resourceMapEntry struct {
 // 因为被测代码只依赖并部分覆盖该接口；如果继承完整的 FakeDiscovery，
 // 还需要额外覆盖 ServerGroupsWithContext 等方法，得不偿失。
 type fakeDiscovery struct {
-	// Intentionally limited to discovery.DiscoveryInterface because that is all that this
-	// code knows about and partly overrides. *fake.FakeDiscovery would inherit
-	// e.g. ServerGroupsWithContext which then would have to be overridden.
+	// 有意只实现 discovery.DiscoveryInterface：被测代码只认识并部分覆盖该接口。
+	// 若嵌入 *fake.FakeDiscovery，还得额外覆盖继承来的 ServerGroupsWithContext 等方法。
 	discovery.DiscoveryInterface
 
 	lock         sync.Mutex
@@ -91,7 +90,7 @@ type fakeDiscoveryWithContext struct {
 	*fakeDiscovery
 	discovery.DiscoveryInterfaceWithContext
 
-	// Invoked at the end of each ServerGroupsWithContext.
+	// 每次 ServerGroupsWithContext 返回前调用。
 	serverGroupsWithContextPostCallback func()
 }
 
@@ -181,7 +180,7 @@ func testClient(t *testing.T, fake *fakeDiscovery, delegate discovery.DiscoveryI
 		t.Errorf("Expected fresh.")
 	}
 	c.Invalidate()
-	// Invalidate 之后立即回到不新鲜状态。
+	// Invalidate 后缓存应立即回到不新鲜状态。
 	if c.Fresh() {
 		t.Errorf("Expected not fresh.")
 	}
@@ -270,8 +269,7 @@ func TestRetryAfterCancellation(t *testing.T) {
 
 	c := NewMemCacheClientWithContext(fake)
 
-	// The context gets canceled in the middle of refreshLocked.
-	// This is important for code path which handles per-gv errors.
+	// 在 refreshLocked 中途取消 context，以覆盖按 groupVersion 处理错误的代码路径。
 	fake.serverGroupsWithContextPostCallback = cancel
 	_, err := c.ServerResourcesForGroupVersionWithContext(cancelCtx, "astronomy/v8beta1")
 	if err == nil {
@@ -419,14 +417,14 @@ func TestPartialPermanentFailure(t *testing.T) {
 		err: nil,
 	}
 	fake.lock.Unlock()
-	// We don't retry permanent errors, so it should fail.
+	// 永久错误不应重试，因此这里仍应失败。
 	_, err = c.ServerResourcesForGroupVersion("astronomy/v8beta1")
 	if err == nil {
 		t.Errorf("Expected error, got nil")
 	}
 	c.Invalidate()
 
-	// After Invalidate, we should retry.
+	// Invalidate 后应重新尝试。
 	r, err = c.ServerResourcesForGroupVersion("astronomy/v8beta1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -514,8 +512,7 @@ func TestPartialRetryableFailure(t *testing.T) {
 		err: nil,
 	}
 	fake.lock.Unlock()
-	// We should retry retryable error even without Invalidate() being called,
-	// so no error is expected.
+	// retryable 错误无需 Invalidate 也会重试，因此这里不应报错。
 	r, err = c.ServerResourcesForGroupVersion("astronomy/v8beta1")
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
@@ -524,7 +521,7 @@ func TestPartialRetryableFailure(t *testing.T) {
 		t.Errorf("Expected %#v, got %#v", e, a)
 	}
 
-	// Check that the last result was cached and we don't retry further.
+	// 确认最后一次的结果已缓存，后续不再重试。
 	fake.lock.Lock()
 	fake.resourceMap["astronomy/v8beta1"].err = errors.New("some permanent error")
 	fake.lock.Unlock()
@@ -568,8 +565,7 @@ func TestOpenAPIMemCache(t *testing.T) {
 					continue
 				}
 
-				// This is the original OpenAPI client. It is not affected
-				// by client.Invalidate() below.
+				// 这是最初的 OpenAPI 客户端，不受后续 Invalidate 影响。
 				pathsAgain, err := openapiClient.Paths()
 				if !assert.NoError(t, err) {
 					continue
@@ -580,11 +576,11 @@ func TestOpenAPIMemCache(t *testing.T) {
 					continue
 				}
 
-				// The map itself might be different, but the content should not be.
+				// map 指针可能不同，但内容应保持一致。
 				assert.Equal(t, reflect.ValueOf(paths[k]).Pointer(), reflect.ValueOf(pathsAgain[k]).Pointer())
 				assert.Equal(t, reflect.ValueOf(original).Pointer(), reflect.ValueOf(schemaAgain).Pointer())
 
-				// Invalidate and try again. This time pointers should not be equal
+				// Invalidate 后重新获取，此时指针不应相同。
 				client.Invalidate()
 
 				pathsAgain, err = client.OpenAPIV3().Paths()
@@ -637,8 +633,7 @@ func TestOpenAPIMemCacheWithContext(t *testing.T) {
 					continue
 				}
 
-				// This is the original OpenAPI client. It is not affected
-				// by client.Invalidate() below.
+				// 这是最初的 OpenAPI 客户端，不受后续 Invalidate 影响。
 				pathsAgain, err := openapiClient.PathsWithContext(ctx)
 				if !assert.NoError(t, err) {
 					continue
@@ -649,11 +644,11 @@ func TestOpenAPIMemCacheWithContext(t *testing.T) {
 					continue
 				}
 
-				// When using the *WithContext API, the map itself is cached.
+				// 使用 *WithContext API 时，连 map 本身也会被缓存。
 				assert.Equal(t, reflect.ValueOf(paths).Pointer(), reflect.ValueOf(pathsAgain).Pointer())
 				assert.Equal(t, reflect.ValueOf(original).Pointer(), reflect.ValueOf(schemaAgain).Pointer())
 
-				// Invalidate and try again. This time pointers should not be equal
+				// Invalidate 后重新获取，此时指针不应相同。
 				client.InvalidateWithContext(ctx)
 
 				pathsAgain, err = client.OpenAPIV3WithContext(ctx).PathsWithContext(ctx)
@@ -796,7 +791,7 @@ func TestMemCacheGroupsAndMaybeResources(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-type is "unaggregated" discovery format -- no resources returned.
+			// 声明旧版未聚合发现格式，该响应不返回资源。
 			w.Header().Set("Content-Type", discovery.AcceptV1)
 			w.WriteHeader(http.StatusOK)
 			w.Write(output)
@@ -810,29 +805,29 @@ func TestMemCacheGroupsAndMaybeResources(t *testing.T) {
 		assert.False(t, memClient.Fresh())
 		apiGroupList, resourcesMap, failedGVs, err := memClient.GroupsAndMaybeResources()
 		require.NoError(t, err)
-		// "Unaggregated" discovery always returns nil for resources.
+		// 旧版未聚合发现格式下资源列表恒为 nil。
 		assert.Nil(t, resourcesMap)
 		assert.Emptyf(t, failedGVs, "expected empty failed GroupVersions, got (%d)", len(failedGVs))
 		assert.False(t, memClient.receivedAggregatedDiscovery)
 		assert.True(t, memClient.Fresh())
-		// Test the expected groups are returned for the aggregated format.
+		// 校验返回的 group 集合。
 		expectedGroupNames := sets.NewString(test.expectedGroupNames...)
 		actualGroupNames := sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
-		// Test the expected group versions for the aggregated discovery is correct.
+		// 校验返回的 group/version 集合。
 		expectedGroupVersions := sets.NewString(test.expectedGroupVersions...)
 		actualGroupVersions := sets.NewString(groupVersionsFromGroups(apiGroupList)...)
 		assert.True(t, expectedGroupVersions.Equal(actualGroupVersions),
 			"%s: Expected group/versions (%s), got (%s)", test.name, expectedGroupVersions.List(), actualGroupVersions.List())
-		// Invalidate the cache and retrieve the server groups and resources again.
+		// 使缓存失效后重新获取 group 与资源。
 		memClient.Invalidate()
 		assert.False(t, memClient.Fresh())
 		apiGroupList, resourcesMap, _, err = memClient.GroupsAndMaybeResources()
 		require.NoError(t, err)
 		assert.Nil(t, resourcesMap)
 		assert.False(t, memClient.receivedAggregatedDiscovery)
-		// Test the expected groups are returned for the aggregated format.
+		// 校验返回的 group 集合。
 		actualGroupNames = sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected after invalidation groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
@@ -953,7 +948,7 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 								},
 							},
 							{
-								// Stale Version is not included in discovery.
+								// 已失效的版本不应出现在发现结果中。
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
@@ -1121,7 +1116,7 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 								},
 							},
 							{
-								// Stale version is not included in discovery.
+								// 已失效的版本不应出现在发现结果中。
 								Version: "v1beta1",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
@@ -1201,7 +1196,7 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// Statel "v1" Version is not included in discovery.
+							// 已失效的 v1 不应出现在发现结果中。
 							{
 								Version: "v1",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -1280,7 +1275,7 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 								},
 							},
 							{
-								// Stale Version is not included in discovery.
+								// 已失效的版本不应出现在发现结果中。
 								Version: "v1beta1",
 								Resources: []apidiscovery.APIResourceDiscovery{
 									{
@@ -1328,7 +1323,7 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-type is "aggregated" discovery format.
+			// 声明聚合发现格式。
 			w.Header().Set("Content-Type", discovery.AcceptV2)
 			w.WriteHeader(http.StatusOK)
 			w.Write(output)
@@ -1344,17 +1339,17 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, memClient.receivedAggregatedDiscovery)
 		assert.True(t, memClient.Fresh())
-		// Test the expected groups are returned for the aggregated format.
+		// 校验返回的 group 集合。
 		expectedGroupNames := sets.NewString(test.expectedGroupNames...)
 		actualGroupNames := sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
-		// Test the expected group versions for the aggregated discovery is correct.
+		// 校验返回的 group/version 集合。
 		expectedGroupVersions := sets.NewString(test.expectedGroupVersions...)
 		actualGroupVersions := sets.NewString(groupVersionsFromGroups(apiGroupList)...)
 		assert.True(t, expectedGroupVersions.Equal(actualGroupVersions),
 			"%s: Expected group/versions (%s), got (%s)", test.name, expectedGroupVersions.List(), actualGroupVersions.List())
-		// Test the resources are correct.
+		// 校验返回的资源列表。
 		expectedGVKs := sets.NewString(test.expectedGVKs...)
 		resources := []*metav1.APIResourceList{}
 		for _, resourceList := range resourcesMap {
@@ -1363,18 +1358,18 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 		actualGVKs := sets.NewString(groupVersionKinds(resources)...)
 		assert.True(t, expectedGVKs.Equal(actualGVKs),
 			"%s: Expected GVKs (%s), got (%s)", test.name, expectedGVKs.List(), actualGVKs.List())
-		// Test the returned failed GroupVersions are correct.
+		// 校验返回的失败 GroupVersion 集合。
 		expectedFailedGVs := sets.NewString(test.expectedFailedGVs...)
 		actualFailedGVs := sets.NewString(failedGroupVersions(failedGVs)...)
 		assert.True(t, expectedFailedGVs.Equal(actualFailedGVs),
 			"%s: Expected Failed GroupVersions (%s), got (%s)", test.name, expectedFailedGVs.List(), actualFailedGVs.List())
-		// Invalidate the cache and retrieve the server groups again.
+		// 使缓存失效后重新获取 group 列表。
 		memClient.Invalidate()
 		assert.False(t, memClient.Fresh())
 		apiGroupList, _, _, err = memClient.GroupsAndMaybeResources()
 
 		require.NoError(t, err)
-		// Test the expected groups are returned for the aggregated format.
+		// 校验返回的 group 集合。
 		actualGroupNames = sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected after invalidation groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
@@ -1478,7 +1473,7 @@ func TestMemCacheAggregatedServerGroups(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v2 is preferred since it is first
+							// 排在首位，因此选 v2 为首选版本。
 							{
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -1555,7 +1550,7 @@ func TestMemCacheAggregatedServerGroups(t *testing.T) {
 							Name: "batch",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v1 is preferred since it is first
+							// 排在首位，因此选 v1 为首选版本。
 							{
 								Version: "v1",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -1629,7 +1624,7 @@ func TestMemCacheAggregatedServerGroups(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-type is "aggregated" discovery format.
+			// 声明聚合发现格式。
 			w.Header().Set("Content-Type", discovery.AcceptV2)
 			w.WriteHeader(http.StatusOK)
 			w.Write(output)
@@ -1641,27 +1636,27 @@ func TestMemCacheAggregatedServerGroups(t *testing.T) {
 		apiGroupList, err := memCacheClient.ServerGroups()
 		require.NoError(t, err)
 		assert.True(t, memCacheClient.Fresh())
-		// Test the expected groups are returned for the aggregated format.
+		// 校验返回的 group 集合。
 		expectedGroupNames := sets.NewString(test.expectedGroupNames...)
 		actualGroupNames := sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
-		// Test the expected group versions for the aggregated discovery is correct.
+		// 校验返回的 group/version 集合。
 		expectedGroupVersions := sets.NewString(test.expectedGroupVersions...)
 		actualGroupVersions := sets.NewString(groupVersionsFromGroups(apiGroupList)...)
 		assert.True(t, expectedGroupVersions.Equal(actualGroupVersions),
 			"%s: Expected group/versions (%s), got (%s)", test.name, expectedGroupVersions.List(), actualGroupVersions.List())
-		// Test the groups preferred version is correct.
+		// 校验每个 group 的首选版本。
 		expectedPreferredVersions := sets.NewString(test.expectedPreferredVersions...)
 		actualPreferredVersions := sets.NewString(preferredVersionsFromList(apiGroupList)...)
 		assert.True(t, expectedPreferredVersions.Equal(actualPreferredVersions),
 			"%s: Expected preferred group/version (%s), got (%s)", test.name, expectedPreferredVersions.List(), actualPreferredVersions.List())
-		// Invalidate the cache and retrieve the server groups again.
+		// 使缓存失效后重新获取 group 列表。
 		memCacheClient.Invalidate()
 		assert.False(t, memCacheClient.Fresh())
 		apiGroupList, err = memCacheClient.ServerGroups()
 		require.NoError(t, err)
-		// Test the expected groups are returned for the aggregated format.
+		// 校验返回的 group 集合。
 		actualGroupNames = sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected after invalidation groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())

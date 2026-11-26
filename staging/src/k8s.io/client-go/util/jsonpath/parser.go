@@ -54,9 +54,7 @@ var (
 	sliceOperatorRex = regexp.MustCompile(`^(-?[\d]*)(:-?[\d]*)?(:-?[\d]*)?$`)
 )
 
-// Parse parsed the given text and return a node Parser.
-// If an error is encountered, parsing stops and an empty
-// Parser is returned with the error
+// Parse 解析给定文本并返回 Parser；出错时停止解析，返回空 Parser 与错误。
 //
 // Parse 解析文本并返回 Parser；出错时返回 nil，便于调用方直接判空。
 func Parse(name, text string) (*Parser, error) {
@@ -75,12 +73,12 @@ func NewParser(name string) *Parser {
 	}
 }
 
-// parseAction parsed the expression inside delimiter
+// parseAction 解析分隔符之间的表达式。
 //
 // parseAction 解析两个分隔符之间的动作表达式，并返回以该动作根节点为 Root 的 Parser。
 func parseAction(name, text string) (*Parser, error) {
 	p, err := Parse(name, fmt.Sprintf("%s%s%s", leftDelim, text, rightDelim))
-	// when error happens, p will be nil, so we need to return here
+	// 出错时 p 会是 nil，必须在此返回。
 	if err != nil {
 		return p, err
 	}
@@ -96,7 +94,7 @@ func (p *Parser) Parse(text string) error {
 	return p.parseText(p.Root)
 }
 
-// consumeText return the parsed text since last cosumeText
+// consumeText 返回自上次调用以来解析到的文本。
 //
 // consumeText 返回自上次消费以来的文本，并把起点移动到当前位置。
 func (p *Parser) consumeText() string {
@@ -105,7 +103,7 @@ func (p *Parser) consumeText() string {
 	return value
 }
 
-// next returns the next rune in the input.
+// next 返回输入中的下一个 rune。
 func (p *Parser) next() rune {
 	if p.pos >= len(p.input) {
 		p.width = 0
@@ -117,14 +115,14 @@ func (p *Parser) next() rune {
 	return r
 }
 
-// peek returns but does not consume the next rune in the input.
+// peek 查看但不消费输入中的下一个 rune。
 func (p *Parser) peek() rune {
 	r := p.next()
 	p.backup()
 	return r
 }
 
-// backup steps back one rune. Can only be called once per call of next.
+// backup 回退一个 rune，每次 next 后只能调用一次。
 func (p *Parser) backup() {
 	p.pos -= p.width
 }
@@ -143,14 +141,14 @@ func (p *Parser) parseText(cur *ListNode) error {
 			break
 		}
 	}
-	// Correctly reached EOF.
+	// 正常到达输入末尾。
 	if p.pos > p.start {
 		cur.append(newText(p.consumeText()))
 	}
 	return nil
 }
 
-// parseLeftDelim scans the left delimiter, which is known to be present.
+// parseLeftDelim 消费已知存在的左分隔符。
 //
 // parseLeftDelim 消费左分隔符，新建一个列表节点进入动作内部继续解析。
 func (p *Parser) parseLeftDelim(cur *ListNode) error {
@@ -201,7 +199,7 @@ func (p *Parser) parseInsideAction(cur *ListNode) error {
 	return p.parseInsideAction(cur)
 }
 
-// parseRightDelim scans the right delimiter, which is known to be present.
+// parseRightDelim 消费已知存在的右分隔符。
 //
 // parseRightDelim 消费右分隔符，回到文本模式继续解析。
 func (p *Parser) parseRightDelim(cur *ListNode) error {
@@ -210,7 +208,7 @@ func (p *Parser) parseRightDelim(cur *ListNode) error {
 	return p.parseText(p.Root)
 }
 
-// parseIdentifier scans build-in keywords, like "range" "end"
+// parseIdentifier 扫描内置关键字，如 "range"、"end"。
 //
 // parseIdentifier 扫描标识符；true/false 会被解析为布尔字面量，其余作为 identifier 节点。
 func (p *Parser) parseIdentifier(cur *ListNode) error {
@@ -238,7 +236,7 @@ func (p *Parser) parseIdentifier(cur *ListNode) error {
 	return p.parseInsideAction(cur)
 }
 
-// parseRecursive scans the recursive descent operator ..
+// parseRecursive 解析递归下降操作符 ".."。
 //
 // parseRecursive 解析递归下降运算符 ".."；不允许连续出现两个 ".."。
 func (p *Parser) parseRecursive(cur *ListNode) error {
@@ -254,7 +252,7 @@ func (p *Parser) parseRecursive(cur *ListNode) error {
 	return p.parseInsideAction(cur)
 }
 
-// parseNumber scans number
+// parseNumber 解析数字。
 //
 // parseNumber 解析整数或浮点数（支持前导正负号）。
 func (p *Parser) parseNumber(cur *ListNode) error {
@@ -284,7 +282,7 @@ func (p *Parser) parseNumber(cur *ListNode) error {
 	return fmt.Errorf("cannot parse number %s", value)
 }
 
-// parseArray scans array index selection
+// parseArray 解析数组下标选择。
 //
 // parseArray 解析方括号内的索引、通配、并集、字典键或切片表达式。
 func (p *Parser) parseArray(cur *ListNode) error {
@@ -304,7 +302,7 @@ Loop:
 		text = ":"
 	}
 
-	//union operator
+	// 并集操作符。
 	strs := strings.Split(text, ",")
 	if len(strs) > 1 {
 		union := []*ListNode{}
@@ -319,7 +317,7 @@ Loop:
 		return p.parseInsideAction(cur)
 	}
 
-	// dict key
+	// 字典键。
 	// 'key' 形式的字典下标，转换为字段访问。
 	value := dictKeyRex.FindStringSubmatch(text)
 	if value != nil {
@@ -333,7 +331,7 @@ Loop:
 		return p.parseInsideAction(cur)
 	}
 
-	//slice operator
+	// 切片操作符。
 	value = sliceOperatorRex.FindStringSubmatch(text)
 	if value == nil {
 		return fmt.Errorf("invalid array index %s", text)
@@ -372,7 +370,7 @@ Loop:
 	return p.parseInsideAction(cur)
 }
 
-// parseFilter scans filter inside array selection
+// parseFilter 解析数组选择中的过滤器。
 //
 // parseFilter 解析 "[?(...)]" 过滤器；无法识别比较运算符时按“字段存在”处理。
 func (p *Parser) parseFilter(cur *ListNode) error {
@@ -390,18 +388,17 @@ Loop:
 			return fmt.Errorf("unterminated filter")
 		case '"', '\'':
 			if begin == false {
-				//save the paired rune
+				// 保存配对的引号字符。
 				begin = true
 				pair = r
 				continue
 			}
-			//only add when met paired rune
+			// 只有遇到配对的引号才加入。
 			if p.input[p.pos-2] != '\\' && r == pair {
 				end = true
 			}
 		case ')':
-			//in rightParser below quotes only appear zero or once
-			//and must be paired at the beginning and end
+			// 在后续的 rightParser 中引号只会不出现或出现一次，且必须首尾配对。
 			if begin == end {
 				break Loop
 			}
@@ -435,7 +432,7 @@ Loop:
 	return p.parseInsideAction(cur)
 }
 
-// parseQuote unquotes string inside double or single quote
+// parseQuote 去掉单引号或双引号字符串的引号。
 //
 // parseQuote 解析单/双引号字符串，支持转义引号。
 func (p *Parser) parseQuote(cur *ListNode, end rune) error {
@@ -445,7 +442,7 @@ Loop:
 		case eof, '\n':
 			return fmt.Errorf("unterminated quoted string")
 		case end:
-			//if it's not escape break the Loop
+			// 不是转义字符就结束循环。
 			if p.input[p.pos-2] != '\\' {
 				break Loop
 			}
@@ -460,7 +457,7 @@ Loop:
 	return p.parseInsideAction(cur)
 }
 
-// parseField scans a field until a terminator
+// parseField 解析字段名直到终止符。
 //
 // parseField 解析字段名直到终止符；"*" 会被解析为通配符节点。
 func (p *Parser) parseField(cur *ListNode) error {
@@ -477,7 +474,7 @@ func (p *Parser) parseField(cur *ListNode) error {
 	return p.parseInsideAction(cur)
 }
 
-// advance scans until next non-escaped terminator
+// advance 前进到下一个未转义的终止符之前。
 //
 // advance 前进一个 rune；遇到转义符时跳过其后一个字符，遇到未转义的终止符则回退并返回 false。
 func (p *Parser) advance() bool {
@@ -491,7 +488,7 @@ func (p *Parser) advance() bool {
 	return true
 }
 
-// isTerminator reports whether the input is at valid termination character to appear after an identifier.
+// isTerminator 判断当前输入是否位于可作为标识符结尾的合法终止字符处。
 func isTerminator(r rune) bool {
 	if isSpace(r) || isEndOfLine(r) {
 		return true
@@ -503,27 +500,27 @@ func isTerminator(r rune) bool {
 	return false
 }
 
-// isSpace reports whether r is a space character.
+// isSpace 判断 r 是否为空白字符。
 func isSpace(r rune) bool {
 	return r == ' ' || r == '\t'
 }
 
-// isEndOfLine reports whether r is an end-of-line character.
+// isEndOfLine 判断 r 是否为行尾字符。
 func isEndOfLine(r rune) bool {
 	return r == '\r' || r == '\n'
 }
 
-// isAlphaNumeric reports whether r is an alphabetic, digit, or underscore.
+// isAlphaNumeric 判断 r 是否为字母、数字或下划线。
 func isAlphaNumeric(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
-// isBool reports whether s is a boolean value.
+// isBool 判断 s 是否为布尔值。
 func isBool(s string) bool {
 	return s == "true" || s == "false"
 }
 
-// UnquoteExtend is almost same as strconv.Unquote(), but it support parse single quotes as a string
+// UnquoteExtend 与 strconv.Unquote() 基本相同，但额外支持单引号字符串。
 //
 // UnquoteExtend 与 strconv.Unquote 基本相同，但额外支持单引号字符串。
 func UnquoteExtend(s string) (string, error) {
@@ -541,7 +538,7 @@ func UnquoteExtend(s string) (string, error) {
 		return "", ErrSyntax
 	}
 
-	// Is it trivial?  Avoid allocation.
+	// 能否直接返回以免分配？
 	if !contains(s, '\\') && !contains(s, quote) {
 		return s, nil
 	}

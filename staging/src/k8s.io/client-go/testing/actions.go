@@ -36,9 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// All NewRoot... functions return non-namespaced actions, and are equivalent to
-// calling the corresponding New... function with an empty namespace.
-// This is assumed by the fake client generator.
+// 所有 NewRoot... 函数返回非命名空间级动作，等价于以空 namespace 调用对应的 New... 函数；fake client 生成器依赖这一约定。
 //
 // 所有 NewRoot... 构造函数返回集群级（非命名空间）动作，等价于以空
 // namespace 调用对应的 New... 构造函数；fake client 生成器依赖这一约定。
@@ -608,8 +606,7 @@ type Action interface {
 	GetSubresource() string
 	Matches(verb, resource string) bool
 
-	// DeepCopy is used to copy an action to avoid any risk of accidental mutation.  Most people never need to call this
-	// because the invocation logic deep copies before calls to storage and reactors.
+	// DeepCopy 复制动作以避免意外修改。通常无需手动调用：调用逻辑在传给存储与 reactor 前已做深拷贝。
 	DeepCopy() Action
 }
 
@@ -713,7 +710,7 @@ func (a ActionImpl) GetSubresource() string {
 // resource 可以写成 "resource" 或 "resource/subresource"。为兼容旧的
 // 匹配方式，不含 "/" 时只比较 resource。比较不区分大小写。
 func (a ActionImpl) Matches(verb, resource string) bool {
-	// Stay backwards compatible.
+	// 保持向后兼容。
 	if !strings.Contains(resource, "/") {
 		return strings.EqualFold(verb, a.Verb) &&
 			strings.EqualFold(resource, a.Resource.Resource)
@@ -748,7 +745,7 @@ func (a GenericActionImpl) GetValue() interface{} {
 func (a GenericActionImpl) DeepCopy() Action {
 	return GenericActionImpl{
 		ActionImpl: a.ActionImpl.DeepCopy().(ActionImpl),
-		// TODO this is wrong, but no worse than before
+		// TODO：这样并不正确，但与旧行为一致。
 		// Value 未做深拷贝：其类型未知，保持历史行为。
 		Value: a.Value,
 	}

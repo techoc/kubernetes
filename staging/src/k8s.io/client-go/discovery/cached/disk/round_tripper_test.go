@@ -31,7 +31,7 @@ import (
 )
 
 // testRoundTripper 是记录请求并返回预置响应的桩，便于观察缓存层是否真正发出了请求。
-// copied from k8s.io/client-go/transport/round_trippers_test.go
+// 抄自 k8s.io/client-go/transport/round_trippers_test.go。
 type testRoundTripper struct {
 	Request  *http.Request
 	Response *http.Response
@@ -83,7 +83,7 @@ func TestCacheRoundTripper(t *testing.T) {
 	}
 	cache := newCacheRoundTripper(cacheDir, rt)
 
-	// First call, caches the response
+	// 首次调用应写入缓存。
 	req := &http.Request{
 		Method: http.MethodGet,
 		URL:    &url.URL{Host: "localhost"},
@@ -105,7 +105,7 @@ func TestCacheRoundTripper(t *testing.T) {
 		t.Errorf(`Expected Body to be "Content", got %q`, string(content))
 	}
 
-	// Second call, returns cached response
+	// 二次调用应返回缓存内容。
 	req = &http.Request{
 		Method: http.MethodGet,
 		URL:    &url.URL{Host: "localhost"},
@@ -120,7 +120,7 @@ func TestCacheRoundTripper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Read body and make sure we have the initial content
+	// 读取响应体，确认拿到的仍是首次缓存的内容。
 	content, err = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
@@ -145,7 +145,7 @@ func TestCacheRoundTripperPathPerm(t *testing.T) {
 	}
 	cache := newCacheRoundTripper(cacheDir, rt)
 
-	// First call, caches the response
+	// 首次调用应写入缓存。
 	req := &http.Request{
 		Method: http.MethodGet,
 		URL:    &url.URL{Host: "localhost"},
@@ -186,7 +186,7 @@ func TestCacheRoundTripperPathPerm(t *testing.T) {
 func TestSumDiskCache(t *testing.T) {
 	assert := assert.New(t)
 
-	// Ensure that we'll return a cache miss if the backing file doesn't exist.
+	// 底层文件不存在时应视为缓存未命中。
 	t.Run("NoSuchKey", func(t *testing.T) {
 		cacheDir, err := os.MkdirTemp("", "cache-test")
 		if err != nil {
@@ -203,7 +203,7 @@ func TestSumDiskCache(t *testing.T) {
 		assert.Equal([]byte{}, got)
 	})
 
-	// Ensure that we'll return a cache miss if the backing file is empty.
+	// 底层文件为空时应视为缓存未命中。
 	t.Run("EmptyFile", func(t *testing.T) {
 		cacheDir, err := os.MkdirTemp("", "cache-test")
 		if err != nil {
@@ -226,8 +226,7 @@ func TestSumDiskCache(t *testing.T) {
 		assert.Equal([]byte{}, got)
 	})
 
-	// Ensure that we'll return a cache miss if the backing has an invalid
-	// checksum.
+	// 底层文件校验和无效时应视为缓存未命中。
 	t.Run("InvalidChecksum", func(t *testing.T) {
 		cacheDir, err := os.MkdirTemp("", "cache-test")
 		if err != nil {
@@ -242,8 +241,7 @@ func TestSumDiskCache(t *testing.T) {
 		mismatchedValue := []byte("testink")
 		sum := sha256.Sum256(value)
 
-		// Create a file with the sum of 'value' followed by the bytes of
-		// 'mismatchedValue'.
+		// 文件内容用 value 的校验和拼接 mismatchedValue 的字节，制造校验和冲突。
 		f, err := os.Create(filepath.Join(cacheDir, sanitize(key)))
 		if err != nil {
 			t.Fatal(err)
@@ -252,17 +250,14 @@ func TestSumDiskCache(t *testing.T) {
 		f.Write(mismatchedValue)
 		f.Close()
 
-		// The mismatched checksum should result in a cache miss.
+		// 校验和不匹配应导致缓存未命中。
 		got, ok := c.Get(key)
 		assert.False(ok)
 		assert.Equal([]byte{}, got)
 	})
 
-	// Ensure that our disk cache will happily cache over the top of an existing
-	// value. We depend on this behaviour to recover from corrupted cache
-	// entries. When Get detects a bad checksum it will return a cache miss.
-	// This should cause httpcache to fall back to its underlying transport and
-	// to subsequently cache the new value, overwriting the corrupt one.
+	// 磁盘缓存应允许覆盖已有值：Get 发现校验和错误时返回 miss，httpcache 便会回源，
+	// 再把新值写入缓存以覆盖损坏条目。自检机制依赖这一行为才能自愈。
 	t.Run("OverwriteExistingKey", func(t *testing.T) {
 		cacheDir, err := os.MkdirTemp("", "cache-test")
 		if err != nil {
@@ -275,26 +270,26 @@ func TestSumDiskCache(t *testing.T) {
 		key := "testing"
 		value := []byte("cool value!")
 
-		// Write a value.
+		// 写入一个值。
 		c.Set(key, value)
 		got, ok := c.Get(key)
 
-		// Ensure we can read back what we wrote.
+		// 确认写入后能读回原值。
 		assert.True(ok)
 		assert.Equal(value, got)
 
 		differentValue := []byte("I'm different!")
 
-		// Write a different value.
+		// 再写入另一个值。
 		c.Set(key, differentValue)
 		got, ok = c.Get(key)
 
-		// Ensure we can read back the different value.
+		// 确认读到的是后写入的新值。
 		assert.True(ok)
 		assert.Equal(differentValue, got)
 	})
 
-	// Ensure that deleting a key does in fact delete it.
+	// 确认删除 key 后数据确实被移除。
 	t.Run("DeleteKey", func(t *testing.T) {
 		cacheDir, err := os.MkdirTemp("", "cache-test")
 		if err != nil {
@@ -309,19 +304,19 @@ func TestSumDiskCache(t *testing.T) {
 
 		c.Set(key, value)
 
-		// Ensure we successfully set the value.
+		// 确认成功写入值。
 		got, ok := c.Get(key)
 		assert.True(ok)
 		assert.Equal(value, got)
 
 		c.Delete(key)
 
-		// Ensure the value is gone.
+		// 确认值已被删除。
 		got, ok = c.Get(key)
 		assert.False(ok)
 		assert.Equal([]byte{}, got)
 
-		// Ensure that deleting a non-existent value is a no-op.
+		// 删除不存在的 key 应是空操作。
 		c.Delete(key)
 	})
 }

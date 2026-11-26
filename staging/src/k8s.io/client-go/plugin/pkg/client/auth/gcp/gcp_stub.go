@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package gcp is a stub that keeps the "gcp" auth provider name registered.
+// Package gcp 是占位包，仅保留 "gcp" 认证提供者名称的注册。
 //
 // Package gcp 只是一个占位实现：GCP 认证插件已被移除，但为了让包含
 // auth-provider: gcp 的旧 kubeconfig 得到明确、可操作的错误提示，

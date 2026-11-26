@@ -14,11 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package extensionsint contains the necessary scaffolding of the
-// internal version of extensions as required by conversion logic.
-// It doesn't have any of its own types -- it's just necessary to
-// get the expected behavior out of runtime.Scheme.ConvertToVersion
-// and associated methods.
+// Package extensionsint 提供转换逻辑所需的内部版本脚手架，自身不定义类型，
+// 只是为了让 runtime.Scheme.ConvertToVersion 等方法按预期工作。
 //
 // Package extensionsint 只提供 extensions 内部版本在转换逻辑中的脚手架，
 // 自身不定义类型。这样 runtime.Scheme.ConvertToVersion 才能在

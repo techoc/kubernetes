@@ -21,7 +21,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
-// The ServiceExpansion interface allows manually adding extra methods to the ServiceInterface.
+// ServiceExpansion 为生成的 ServiceInterface 追加手写方法。
 //
 // ProxyGet 仅暴露 GET 语义的服务代理访问；它不返回已解析的对象，而是直接给出
 // 请求构造器，交由调用方读取原始响应。
@@ -29,7 +29,7 @@ type ServiceExpansion interface {
 	ProxyGet(scheme, name, port, path string, params map[string]string) restclient.ResponseWrapper
 }
 
-// ProxyGet returns a response of the service by calling it through the proxy.
+// ProxyGet 经代理调用服务并返回响应。
 //
 // 名称采用 "scheme:name:port" 的形式，由 net.JoinSchemeNamePort 负责转义；
 // 请求路径构造为 /api/v1/namespaces/<ns>/services/<scheme:name:port>/proxy/<path>。

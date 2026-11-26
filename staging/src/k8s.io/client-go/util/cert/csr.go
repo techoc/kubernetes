@@ -25,8 +25,7 @@ import (
 	"net"
 )
 
-// MakeCSR generates a PEM-encoded CSR using the supplied private key, subject, and SANs.
-// All key types that are implemented via crypto.Signer are supported (This includes *rsa.PrivateKey and *ecdsa.PrivateKey.)
+// MakeCSR 用给定的私钥、subject 与 SAN 生成 PEM 编码的 CSR。支持所有实现 crypto.Signer 的密钥类型（含 *rsa.PrivateKey 与 *ecdsa.PrivateKey）。
 //
 // MakeCSR 用给定的私钥、subject 与 SAN 生成 PEM 编码的 CSR。
 // 支持所有实现 crypto.Signer 的密钥类型（包括 *rsa.PrivateKey 与 *ecdsa.PrivateKey）。
@@ -40,10 +39,7 @@ func MakeCSR(privateKey interface{}, subject *pkix.Name, dnsSANs []string, ipSAN
 	return MakeCSRFromTemplate(privateKey, template)
 }
 
-// MakeCSRFromTemplate generates a PEM-encoded CSR using the supplied private
-// key and certificate request as a template. All key types that are
-// implemented via crypto.Signer are supported (This includes *rsa.PrivateKey
-// and *ecdsa.PrivateKey.)
+// MakeCSRFromTemplate 以给定私钥与证书请求模板生成 PEM 编码的 CSR，支持所有实现 crypto.Signer 的密钥类型（含 *rsa.PrivateKey 与 *ecdsa.PrivateKey）。
 //
 // MakeCSRFromTemplate 以给定的私钥和证书请求模板生成 PEM 编码的 CSR。
 func MakeCSRFromTemplate(privateKey interface{}, template *x509.CertificateRequest) ([]byte, error) {
@@ -67,7 +63,7 @@ func MakeCSRFromTemplate(privateKey interface{}, template *x509.CertificateReque
 // sigType 根据私钥类型与长度选择签名算法。
 // RSA 按密钥长度选择更强的摘要算法；其他类型交给标准库按默认规则处理。
 func sigType(privateKey interface{}) x509.SignatureAlgorithm {
-	// Customize the signature for RSA keys, depending on the key size
+	// RSA 密钥按长度定制签名算法。
 	if privateKey, ok := privateKey.(*rsa.PrivateKey); ok {
 		keySize := privateKey.N.BitLen()
 		switch {

@@ -21,16 +21,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API group 名。
 const GroupName = autoscalingapiv1.GroupName
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的 group version。
 //
 // 版本固定为 v1：scale 子资源在客户端侧始终以 autoscaling/v1 表示，
 // 与服务器的 scale 接口约定保持一致。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 把裸资源名补全为带 group 的 GroupResource。
 //
 // 用于把 "deployments" 这类裸资源名补全为 "deployments.autoscaling"，
 // 以匹配 scale 子资源请求中的 GroupResource。
@@ -46,9 +46,7 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写函数，生成函数的注册放在生成文件中。两者分离，使生成文件缺失时仍可编译。
 	//
 	// 这里传入的转换函数（若有）需手写；conversion-gen 生成的版本由
 	// zz_generated.conversion.go 自行注册，二者分离保证缺少生成文件时仍可编译。

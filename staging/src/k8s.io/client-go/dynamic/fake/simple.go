@@ -77,17 +77,14 @@ func NewSimpleDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) *
 	return NewSimpleDynamicClientWithCustomListKinds(unstructuredScheme, nil, objects...)
 }
 
-// NewSimpleDynamicClientWithCustomListKinds try not to use this.  In general you want to have the scheme have the List types registered
-// and allow the default guessing for resources match.  Sometimes that doesn't work, so you can specify a custom mapping here.
+// NewSimpleDynamicClientWithCustomListKinds 尽量不要直接调用：通常只需在 scheme 中注册 List 类型，
+// 由默认规则推断资源映射即可。推断不适用时才需要在这里显式指定映射。
 func NewSimpleDynamicClientWithCustomListKinds(scheme *runtime.Scheme, gvrToListKind map[schema.GroupVersionResource]string, objects ...runtime.Object) *FakeDynamicClient {
-	// In order to use List with this client, you have to have your lists registered so that the object tracker will find them
-	// in the scheme to support the t.scheme.New(listGVK) call when it's building the return value.
-	// Since the base fake client needs the listGVK passed through the action (in cases where there are no instances, it
-	// cannot look up the actual hits), we need to know a mapping of GVR to listGVK here.  For GETs and other types of calls,
-	// there is no return value that contains a GVK, so it doesn't have to know the mapping in advance.
+	// List 能工作前提是 scheme 中注册了 List 类型，tracker 构造返回值时需要通过 scheme.New(listGVK) 创建它。
+	// 基础 fake 客户端要求 action 携带 listGVK：空列表时无法从已有对象推断，只能靠这里的 GVR→listGVK 映射。
+	// GET 等调用的返回值不含 GVK，因此无需预先知道映射。
 
-	// first we attempt to invert known List types from the scheme to auto guess the resource with unsafe guesses
-	// this covers common usage of registering types in scheme and passing them
+	// 先从 scheme 中已知的 List 类型反推资源映射，覆盖“注册类型后直接传入”的常见用法。
 	completeGVRToListKind := map[schema.GroupVersionResource]string{}
 	for listGVK := range scheme.AllKnownTypes() {
 		if !strings.HasSuffix(listGVK.Kind, "List") {
@@ -143,9 +140,8 @@ func NewSimpleDynamicClientWithCustomListKinds(scheme *runtime.Scheme, gvrToList
 	return cs
 }
 
-// Clientset implements clientset.Interface. Meant to be embedded into a
-// struct to get a default implementation. This makes faking out just the method
-// you want to test easier.
+// FakeDynamicClient 实现 clientset.Interface，供嵌入到结构体中获得默认实现，
+// 这样只需覆写待测方法即可。
 type FakeDynamicClient struct {
 	testing.Fake
 	scheme        *runtime.Scheme
@@ -451,7 +447,7 @@ func (c *dynamicResourceClient) Watch(ctx context.Context, opts metav1.ListOptio
 	panic("math broke")
 }
 
-// TODO: opts are currently ignored.
+// TODO：目前忽略 opts。
 func (c *dynamicResourceClient) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
 	var uncastRet runtime.Object
 	var err error
@@ -488,7 +484,7 @@ func (c *dynamicResourceClient) Patch(ctx context.Context, name string, pt types
 	return ret, err
 }
 
-// TODO: opts are currently ignored.
+// TODO：目前忽略 opts。
 func (c *dynamicResourceClient) Apply(ctx context.Context, name string, obj *unstructured.Unstructured, options metav1.ApplyOptions, subresources ...string) (*unstructured.Unstructured, error) {
 	// Server-side apply 在协议上就是一次 apply patch，这里把对象编码成 patch body。
 	outBytes, err := runtime.Encode(unstructured.UnstructuredJSONScheme, obj)

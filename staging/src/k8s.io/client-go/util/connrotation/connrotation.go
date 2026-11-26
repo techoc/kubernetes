@@ -26,10 +26,10 @@ import (
 	"sync"
 )
 
-// DialFunc is a shorthand for signature of net.DialContext.
+// DialFunc 是 net.DialContext 签名的简写。
 type DialFunc func(ctx context.Context, network, address string) (net.Conn, error)
 
-// Dialer opens connections through Dial and tracks them.
+// Dialer 通过 Dial 建立连接并追踪它们。
 //
 // 中文：嵌入 ConnectionTracker，使所有经此 Dialer 建立的连接都可被统一关闭。
 type Dialer struct {
@@ -37,8 +37,7 @@ type Dialer struct {
 	*ConnectionTracker
 }
 
-// NewDialer creates a new Dialer instance.
-// Equivalent to NewDialerWithTracker(dial, nil).
+// NewDialer 创建 Dialer 实例，等价于 NewDialerWithTracker(dial, nil)。
 func NewDialer(dial DialFunc) *Dialer {
 	return NewDialerWithTracker(dial, nil)
 }
@@ -58,7 +57,7 @@ func NewDialerWithTracker(dial DialFunc, tracker *ConnectionTracker) *Dialer {
 	}
 }
 
-// ConnectionTracker keeps track of opened connections
+// ConnectionTracker 追踪已建立的连接。
 //
 // 中文：用 map 而非切片，便于关闭时以 O(1) 删除单条记录。
 type ConnectionTracker struct {
@@ -66,7 +65,7 @@ type ConnectionTracker struct {
 	conns map[*closableConn]struct{}
 }
 
-// NewConnectionTracker returns a connection tracker for use with NewDialerWithTracker
+// NewConnectionTracker 创建供 NewDialerWithTracker 使用的连接追踪器。
 func NewConnectionTracker() *ConnectionTracker {
 	return &ConnectionTracker{
 		conns: make(map[*closableConn]struct{}),
@@ -89,15 +88,11 @@ func (c *ConnectionTracker) CloseAll() {
 	}
 }
 
-// Track adds the connection to the list of tracked connections,
-// and returns a wrapped copy of the connection that stops tracking the connection
-// when it is closed.
+// Track 把连接加入追踪列表，并返回包装后的连接：关闭时自动停止追踪。
 func (c *ConnectionTracker) Track(conn net.Conn) net.Conn {
 	closable := &closableConn{Conn: conn}
 
-	// When the connection is closed, remove it from the map. This will
-	// be no-op if the connection isn't in the map, e.g. if CloseAll()
-	// is called.
+	// 连接关闭时从 map 中移除；若已被 CloseAll 清空，这里是无操作。
 	// 中文：正常关闭时及时清理，防止 map 随连接建立无界增长；CloseAll 已清空时
 	// delete 是安全的空操作。
 	closable.onClose = func() {
@@ -106,7 +101,7 @@ func (c *ConnectionTracker) Track(conn net.Conn) net.Conn {
 		c.mu.Unlock()
 	}
 
-	// Start tracking the connection
+	// 开始追踪该连接。
 	c.mu.Lock()
 	c.conns[closable] = struct{}{}
 	c.mu.Unlock()
@@ -114,14 +109,14 @@ func (c *ConnectionTracker) Track(conn net.Conn) net.Conn {
 	return closable
 }
 
-// Dial creates a new tracked connection.
+// Dial 创建一条被追踪的连接。
 //
 // 中文：无 context 版本，内部使用 Background。
 func (d *Dialer) Dial(network, address string) (net.Conn, error) {
 	return d.DialContext(context.Background(), network, address)
 }
 
-// DialContext creates a new tracked connection.
+// DialContext 创建一条被追踪的连接。
 //
 // 中文：拨号成功后立即登记，确保 CloseAll 能看到该连接。
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {

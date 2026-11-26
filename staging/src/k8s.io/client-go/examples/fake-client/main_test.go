@@ -31,7 +31,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// TestFakeClient demonstrates how to use a fake client with SharedInformerFactory in tests.
+// TestFakeClient 演示在测试中如何把 fake client 与 SharedInformerFactory 配合使用。
 //
 // 示例刻意展示 fake client 与 informer 配合时的两个坑：fake client 不维护
 // resourceVersion，且需要显式等到 watch 建立后再写入，否则事件会丢失。
@@ -40,9 +40,9 @@ func TestFakeClient(t *testing.T) {
 	defer cancel()
 
 	watcherStarted := make(chan struct{})
-	// Create the fake client.
+	// 创建 fake client。
 	client := fake.NewSimpleClientset()
-	// A catch-all watch reactor that allows us to inject the watcherStarted channel.
+	// 通配 watch reactor，用于注入 watcherStarted 通道。
 	//
 	// Prepend 确保该 reactor 先于 tracker 默认实现执行：我们自己调用
 	// Tracker().Watch 并把结果返回，从而能在 watch 真正建立时 close 通道。
@@ -74,22 +74,17 @@ func TestFakeClient(t *testing.T) {
 		},
 	})
 
-	// Make sure informers are running.
+	// 确保 Informer 已启动。
 	informers.Start(ctx.Done())
 
-	// This is not required in tests, but it serves as a proof-of-concept by
-	// ensuring that the informer goroutine have warmed up and called List before
-	// we send any events to it.
+	// 测试中并非必需，但可借此确认 informer goroutine 已预热并完成 List，
+	// 再向其发送事件。
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 
-	// The fake client doesn't support resource version. Any writes to the client
-	// after the informer's initial LIST and before the informer establishing the
-	// watcher will be missed by the informer. Therefore we wait until the watcher
-	// starts.
-	// Note that the fake client isn't designed to work with informer. It
-	// doesn't support resource version. It's encouraged to use a real client
-	// in an integration/E2E test if you need to test complex behavior with
-	// informer/controllers.
+	// fake client 不支持 resourceVersion。informer 初次 LIST 之后、watch 建立之前
+	// 发生的写入会被漏掉，因此这里等到 watch 启动后再写。
+	// fake client 本就不是为 informer 设计的；若需测试 informer/controller 的复杂
+	// 行为，建议在集成/E2E 测试中使用真实客户端。
 	<-watcherStarted
 	// 向 fake client 注入一个事件。
 	// 需要注意：Create 的命名空间是 test-ns，而 informer 监听所有命名空间。

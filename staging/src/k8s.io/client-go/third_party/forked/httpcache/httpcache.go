@@ -1,7 +1,6 @@
-// This package is copied from github.com/gregjones/httpcache
-// with the following changes:
-// - ioutil.NopCloser replaced with io.NopCloser (deprecated)
-// - ioutil.ReadAll replaced with io.ReadAll (deprecated)
+// 本包复制自 github.com/gregjones/httpcache，改动如下：
+// - ioutil.NopCloser 替换为 io.NopCloser（已弃用）
+// - ioutil.ReadAll 替换为 io.ReadAll（已弃用）
 
 // Package httpcache 提供一个 http.RoundTripper 实现，用作 HTTP 响应缓存。
 // 该缓存基本符合 RFC，且只适合作为「私有」缓存
@@ -27,19 +26,18 @@ const (
 	stale = iota
 	fresh
 	transparent
-	// XFromCache is the header added to responses that are returned from the cache
+	// XFromCache 是缓存命中响应上附加的头。
 	XFromCache = "X-From-Cache"
 )
 
 // Cache 接口被 Transport 用于存取响应。实现必须并发安全，
 // 因为 Transport 可能被多个请求同时使用。
 type Cache interface {
-	// Get returns the []byte representation of a cached response and a bool
-	// set to true if the value isn't empty
+	// Get 返回缓存响应的字节表示，值非空时第二个返回值为 true。
 	Get(key string) (responseBytes []byte, ok bool)
-	// Set stores the []byte representation of a response against a key
+	// Set 按 key 存储响应的字节表示。
 	Set(key string, responseBytes []byte)
-	// Delete removes the value associated with the key
+	// Delete 删除 key 对应的值。
 	Delete(key string)
 }
 
@@ -84,32 +82,30 @@ func (c *MemoryCache) Get(key string) (resp []byte, ok bool) {
 	return resp, ok
 }
 
-// Set saves response resp to the cache with key
+// Set 按 key 把响应存入缓存。
 func (c *MemoryCache) Set(key string, resp []byte) {
 	c.mu.Lock()
 	c.items[key] = resp
 	c.mu.Unlock()
 }
 
-// Delete removes key from the cache
+// Delete 从缓存中移除 key。
 func (c *MemoryCache) Delete(key string) {
 	c.mu.Lock()
 	delete(c.items, key)
 	c.mu.Unlock()
 }
 
-// NewMemoryCache returns a new Cache that will store items in an in-memory map
+// NewMemoryCache 返回一个用内存 map 存储条目的 Cache。
 func NewMemoryCache() *MemoryCache {
 	c := &MemoryCache{items: map[string][]byte{}}
 	return c
 }
 
-// Transport is an implementation of http.RoundTripper that will return values from a cache
-// where possible (avoiding a network request) and will additionally add validators (etag/if-modified-since)
-// to repeated requests allowing servers to return 304 / Not Modified
+// Transport 实现 http.RoundTripper：尽量从缓存返回响应以避免网络请求，并在重复请求上附加
+// etag/if-modified-since 等校验头，让服务端可以返回 304 Not Modified。
 type Transport struct {
-	// The RoundTripper interface actually used to make requests
-	// If nil, http.DefaultTransport is used
+	// 实际发起请求的 RoundTripper；为 nil 时使用 http.DefaultTransport。
 	Transport http.RoundTripper
 	Cache     Cache
 	// 为 true 时，来自缓存的响应会额外带上 X-From-Cache 头。
@@ -117,13 +113,12 @@ type Transport struct {
 	MarkCachedResponses bool
 }
 
-// NewTransport returns a new Transport with the
-// provided Cache implementation and MarkCachedResponses set to true
+// NewTransport 用给定 Cache 创建 Transport，并把 MarkCachedResponses 设为 true。
 func NewTransport(c Cache) *Transport {
 	return &Transport{Cache: c, MarkCachedResponses: true}
 }
 
-// Client returns an *http.Client that caches responses.
+// Client 返回带响应缓存的 *http.Client。
 func (t *Transport) Client() *http.Client {
 	return &http.Client{Transport: t}
 }
@@ -141,14 +136,9 @@ func varyMatches(cachedResp *http.Response, req *http.Request) bool {
 	return true
 }
 
-// RoundTrip takes a Request and returns a Response
-//
-// If there is a fresh Response already in cache, then it will be returned without connecting to
-// the server.
-//
-// If there is a stale Response, then any validators it contains will be set on the new request
-// to give the server a chance to respond with NotModified. If this happens, then the cached Response
-// will be returned.
+// RoundTrip 接收 Request 返回 Response：缓存中有新鲜响应时直接返回，不连接服务端；
+// 若只有陈旧响应，则把其校验头设到新请求上，让服务端有机会返回 NotModified，
+// 此时再返回缓存响应。
 func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	cacheKey := cacheKey(req)
 	// Range 请求要的是部分内容，与缓存的完整响应语义不同，因此不缓存。
@@ -172,7 +162,7 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 		}
 
 		if varyMatches(cachedResp, req) {
-			// Can only use cached value if the new request doesn't Vary significantly
+			// 只有新请求与缓存时的 Vary 头一致才能使用缓存值。
 			freshness := getFreshness(cachedResp.Header, req.Header)
 			if freshness == fresh {
 				return cachedResp, nil
@@ -181,7 +171,7 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 			if freshness == stale {
 				// 过期但可校验：带上条件请求头，让服务端有机会返回 304。
 				var req2 *http.Request
-				// Add validators if caller hasn't already done so
+				// 调用方未设置校验头时，补上缓存响应的校验头。
 				etag := cachedResp.Header.Get("etag")
 				if etag != "" && req.Header.Get("etag") == "" {
 					req2 = cloneRequest(req)
@@ -273,10 +263,10 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 	return resp, nil
 }
 
-// ErrNoDateHeader indicates that the HTTP headers contained no Date header.
+// ErrNoDateHeader 表示 HTTP 头中缺少 Date 头。
 var ErrNoDateHeader = errors.New("no Date header")
 
-// Date parses and returns the value of the Date header.
+// Date 解析并返回 Date 头的值。
 func Date(respHeaders http.Header) (date time.Time, err error) {
 	dateHeader := respHeaders.Get("date")
 	if dateHeader == "" {
@@ -330,8 +320,7 @@ func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
 	var lifetime time.Duration
 	var zeroDuration time.Duration
 
-	// If a response includes both an Expires header and a max-age directive,
-	// the max-age directive overrides the Expires header, even if the Expires header is more restrictive.
+	// 响应同时含 Expires 与 max-age 时，max-age 优先，即使 Expires 更严格。
 	if maxAge, ok := respCacheControl["max-age"]; ok {
 		lifetime, err = time.ParseDuration(maxAge + "s")
 		if err != nil {
@@ -350,14 +339,14 @@ func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
 	}
 
 	if maxAge, ok := reqCacheControl["max-age"]; ok {
-		// the client is willing to accept a response whose age is no greater than the specified time in seconds
+		// 表示客户端愿意接受年龄不超过指定秒数的响应。
 		lifetime, err = time.ParseDuration(maxAge + "s")
 		if err != nil {
 			lifetime = zeroDuration
 		}
 	}
 	if minfresh, ok := reqCacheControl["min-fresh"]; ok {
-		//  the client wants a response that will still be fresh for at least the specified number of seconds.
+		// 表示客户端要求响应至少在指定秒数内保持新鲜。
 		minfreshDuration, err := time.ParseDuration(minfresh + "s")
 		if err == nil {
 			currentAge = time.Duration(currentAge + minfreshDuration)
@@ -365,14 +354,9 @@ func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
 	}
 
 	if maxstale, ok := reqCacheControl["max-stale"]; ok {
-		// Indicates that the client is willing to accept a response that has exceeded its expiration time.
-		// If max-stale is assigned a value, then the client is willing to accept a response that has exceeded
-		// its expiration time by no more than the specified number of seconds.
-		// If no value is assigned to max-stale, then the client is willing to accept a stale response of any age.
-		//
-		// Responses served only because of a max-stale value are supposed to have a Warning header added to them,
-		// but that seems like a  hassle, and is it actually useful? If so, then there needs to be a different
-		// return-value available here.
+		// max-stale 表示客户端愿意接受已过期的响应：有值时接受过期不超过指定秒数的响应，
+		// 无值则接受任意陈旧度的响应。按 RFC 这类响应应带 Warning 头，但实现起来麻烦且价值存疑；
+		// 若确实需要，应另设返回值来区分。
 		if maxstale == "" {
 			return fresh
 		}
@@ -389,8 +373,7 @@ func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
 	return stale
 }
 
-// Returns true if either the request or the response includes the stale-if-error
-// cache control extension: https://tools.ietf.org/html/rfc5861
+// 请求或响应任一方的 cache-control 含 stale-if-error 扩展时返回 true：https://tools.ietf.org/html/rfc5861
 func canStaleOnError(respHeaders, reqHeaders http.Header) bool {
 	respCacheControl := parseCacheControl(respHeaders)
 	reqCacheControl := parseCacheControl(reqHeaders)
@@ -436,7 +419,7 @@ func canStaleOnError(respHeaders, reqHeaders http.Header) bool {
 // 304 合并时只采用端到端头；逐跳头（Connection、Transfer-Encoding 等）属于当前连接，
 // 不能写回缓存副本。
 func getEndToEndHeaders(respHeaders http.Header) []string {
-	// These headers are always hop-by-hop
+	// 这些头始终是逐跳头。
 	hopByHopHeaders := map[string]struct{}{
 		"Connection":          {},
 		"Keep-Alive":          {},
@@ -449,7 +432,7 @@ func getEndToEndHeaders(respHeaders http.Header) []string {
 	}
 
 	for _, extra := range strings.Split(respHeaders.Get("connection"), ",") {
-		// any header listed in connection, if present, is also considered hop-by-hop
+		// Connection 头中列出的头同样视为逐跳头。
 		if strings.Trim(extra, " ") != "" {
 			hopByHopHeaders[http.CanonicalHeaderKey(extra)] = struct{}{}
 		}
@@ -484,14 +467,13 @@ func newGatewayTimeoutResponse(req *http.Request) *http.Response {
 	return resp
 }
 
-// cloneRequest returns a clone of the provided *http.Request.
-// The clone is a shallow copy of the struct and its Header map.
-// (This function copyright goauth2 authors: https://code.google.com/p/goauth2)
+// cloneRequest 克隆给定的 *http.Request：结构体与 Header map 都只做浅拷贝。
+// （本函数版权归 goauth2 作者：https://code.google.com/p/goauth2）
 func cloneRequest(r *http.Request) *http.Request {
-	// shallow copy of the struct
+	// 结构体浅拷贝。
 	r2 := new(http.Request)
 	*r2 = *r
-	// deep copy of the Header
+	// Header 深拷贝。
 	r2.Header = make(http.Header)
 	for k, s := range r.Header {
 		r2.Header[k] = s
@@ -521,12 +503,9 @@ func parseCacheControl(headers http.Header) cacheControl {
 	return cc
 }
 
-// headerAllCommaSepValues returns all comma-separated values (each
-// with whitespace trimmed) for header name in headers. According to
-// Section 4.2 of the HTTP/1.1 spec
-// (http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2),
-// values from multiple occurrences of a header should be concatenated, if
-// the header's value is a comma-separated list.
+// headerAllCommaSepValues 返回指定头的全部逗号分隔值（已去空白）。按 HTTP/1.1 规范
+// http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2 第 4.2 节，同一头多次出现时，
+// 若其值为逗号分隔列表，应拼接起来。
 func headerAllCommaSepValues(headers http.Header, name string) []string {
 	var vals []string
 	for _, val := range headers[http.CanonicalHeaderKey(name)] {
@@ -544,18 +523,15 @@ func headerAllCommaSepValues(headers http.Header, name string) []string {
 //
 // 保留完整副本是为了在响应被消费完后仍能序列化入缓存；代价是响应体会在内存中多留一份。
 type cachingReadCloser struct {
-	// Underlying ReadCloser.
+	// 底层的 ReadCloser。
 	R io.ReadCloser
-	// OnEOF is called with a copy of the content of R when EOF is reached.
+	// 读到 EOF 时以 R 内容的副本调用 OnEOF。
 	OnEOF func(io.Reader)
 
 	buf bytes.Buffer // buf stores a copy of the content of R.
 }
 
-// Read reads the next len(p) bytes from R or until R is drained. The
-// return value n is the number of bytes read. If R has no data to
-// return, err is io.EOF and OnEOF is called with a full copy of what
-// has been read so far.
+// Read 从 R 读取最多 len(p) 字节，返回读取字节数；数据读尽时返回 io.EOF，并以已读内容的完整副本调用 OnEOF。
 func (r *cachingReadCloser) Read(p []byte) (n int, err error) {
 	n, err = r.R.Read(p)
 	r.buf.Write(p[:n])
@@ -570,7 +546,7 @@ func (r *cachingReadCloser) Close() error {
 	return r.R.Close()
 }
 
-// NewMemoryCacheTransport returns a new Transport using the in-memory cache implementation
+// NewMemoryCacheTransport 返回一个使用内存缓存实现的 Transport。
 func NewMemoryCacheTransport() *Transport {
 	c := NewMemoryCache()
 	t := NewTransport(c)

@@ -138,7 +138,7 @@ func (s sequence) Step(n int) {
 	}
 }
 
-// asyncGet runs a goroutine to do the get so it doesn't block.
+// asyncGet 用 goroutine 执行 Get，避免阻塞调用方。
 //
 // 中文：Get 在 pre 步骤放行后开始，完成后放行 post 步骤；返回一个阻塞式取值函数，
 // 调用它即等待 goroutine 结束并拿到结果。
@@ -164,10 +164,7 @@ func asyncGet[T any](t *testing.T, seq sequence, z *synctrack.Lazy[T], pre, post
 // 预期结果是不把较旧的求值结果写入缓存，也不为纠正它而额外调用 Evaluate；
 // 后发起的较新结果应胜出，且所有 Get 最终拿到相同（较新）的值。
 func TestLazySlowEval(t *testing.T) {
-	// This tests the case where the first invocation of eval finishes
-	// after a subseqent invocation. The old value should not be put into
-	// the cache and returned. Nor should eval be called an extra time to
-	// correct the old value having been placed into the cache.
+	// 测试首次求值晚于第二次求值完成的情况：旧值不应写入缓存或返回，也不应为纠正旧值而额外调用求值。
 
 	seq := newSequence(10)
 
@@ -214,10 +211,7 @@ func TestLazySlowEval(t *testing.T) {
 // TestLazySlowEval2 覆盖“先发起的求值先完成”的竞态：旧值应被后续结果覆盖，
 // 且不应额外调用 Evaluate 去修正。
 func TestLazySlowEval2(t *testing.T) {
-	// This tests the case where the first invocation of eval finishes
-	// before a subseqent invocation. The old value should be overwritten.
-	// Eval should not be called an extra time to correct the wrong value
-	// having been placed into the cache.
+	// 测试首次求值早于第二次求值完成的情况：旧值应被新值覆盖，不应为纠正旧值而额外调用求值。
 
 	seq := newSequence(11)
 
@@ -264,7 +258,7 @@ func TestLazySlowEval2(t *testing.T) {
 
 // TestLazyOnlyOnce 验证并发 Get 只触发一次 Evaluate（即请求合并）。
 func TestLazyOnlyOnce(t *testing.T) {
-	// This demonstrates that multiple Gets don't cause multiple Evaluates.
+	// 验证多次 Get 不会触发多次求值。
 
 	seq := newSequence(8)
 
@@ -316,7 +310,7 @@ func TestLazyError(t *testing.T) {
 	if _, err := z.Get(); err == nil {
 		t.Fatalf("expected error")
 	}
-	// Note: no notify, proving the error was not cached
+	// 注意：这里没有 Notify，说明错误未被缓存。
 	succeed = true
 	if _, err := z.Get(); err != nil {
 		t.Fatalf("unexpected error")

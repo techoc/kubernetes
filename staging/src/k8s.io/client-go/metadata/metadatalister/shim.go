@@ -29,18 +29,17 @@ import (
 var _ cache.GenericLister = &metadataListerShim{}
 var _ cache.GenericNamespaceLister = &metadataNamespaceListerShim{}
 
-// metadataListerShim implements the cache.GenericLister interface.
+// metadataListerShim 实现 cache.GenericLister 接口。
 type metadataListerShim struct {
 	lister Lister
 }
 
-// NewRuntimeObjectShim returns a new shim for Lister.
-// It wraps Lister so that it implements cache.GenericLister interface
+// NewRuntimeObjectShim 为 Lister 创建适配器，使其实现 cache.GenericLister 接口。
 func NewRuntimeObjectShim(lister Lister) cache.GenericLister {
 	return &metadataListerShim{lister: lister}
 }
 
-// List will return all objects across namespaces
+// List 返回所有命名空间中的对象。
 func (s *metadataListerShim) List(selector labels.Selector) (ret []runtime.Object, err error) {
 	objs, err := s.lister.List(selector)
 	if err != nil {
@@ -56,7 +55,7 @@ func (s *metadataListerShim) List(selector labels.Selector) (ret []runtime.Objec
 	return ret, err
 }
 
-// Get will attempt to retrieve assuming that name==key
+// Get 假定 name 等于 key，据此尝试读取对象。
 func (s *metadataListerShim) Get(name string) (runtime.Object, error) {
 	return s.lister.Get(name)
 }
@@ -68,13 +67,12 @@ func (s *metadataListerShim) ByNamespace(namespace string) cache.GenericNamespac
 	}
 }
 
-// metadataNamespaceListerShim implements the NamespaceLister interface.
-// It wraps NamespaceLister so that it implements cache.GenericNamespaceLister interface
+// metadataNamespaceListerShim 包装 NamespaceLister，使其实现 cache.GenericNamespaceLister 接口。
 type metadataNamespaceListerShim struct {
 	namespaceLister NamespaceLister
 }
 
-// List will return all objects in this namespace
+// List 返回该命名空间中的所有对象。
 func (ns *metadataNamespaceListerShim) List(selector labels.Selector) (ret []runtime.Object, err error) {
 	objs, err := ns.namespaceLister.List(selector)
 	if err != nil {
@@ -89,7 +87,7 @@ func (ns *metadataNamespaceListerShim) List(selector labels.Selector) (ret []run
 	return ret, err
 }
 
-// Get will attempt to retrieve by namespace and name
+// Get 按命名空间与名称读取对象。
 func (ns *metadataNamespaceListerShim) Get(name string) (runtime.Object, error) {
 	return ns.namespaceLister.Get(name)
 }

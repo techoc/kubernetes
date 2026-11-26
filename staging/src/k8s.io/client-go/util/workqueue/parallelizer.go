@@ -35,10 +35,7 @@ type options struct {
 // Options 是 ParallelizeUntil 的配置函数，参见 WithChunkSize。
 type Options func(*options)
 
-// WithChunkSize allows to set chunks of work items to the workers, rather than
-// processing one by one.
-// It is recommended to use this option if the number of pieces significantly
-// higher than the number of workers and the work done for each item is small.
+// WithChunkSize 让 worker 按块领取工作项，而不是逐项领取。当工作项数量远大于 worker 数且每项工作量很小时推荐使用。
 //
 // 增大 chunkSize 可摊薄每个 worker 抢占 channel 的开销，但会降低负载均衡粒度，
 // 并让取消响应变慢（一个 chunk 内不会中途停下）。
@@ -48,8 +45,7 @@ func WithChunkSize(c int) func(*options) {
 	}
 }
 
-// ParallelizeUntil is a framework that allows for parallelizing N
-// independent pieces of work until done or the context is canceled.
+// ParallelizeUntil 并行处理 N 个独立工作单元，直到全部完成或 context 被取消。
 //
 // ctx 为 nil 时表示不可取消（仅依赖 pieces 全部完成）；函数会等待所有
 // worker 退出后才返回，因此返回即代表“已完成或被取消”。

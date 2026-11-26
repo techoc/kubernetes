@@ -32,7 +32,7 @@ func newFakeControllerSource(tb testing.TB) *fcache.FakeControllerSource {
 	return source
 }
 
-// threadSafeBuffer is a thread-safe wrapper around bytes.Buffer.
+// threadSafeBuffer 是 bytes.Buffer 的线程安全包装。
 //
 // 测试中 reflector 等组件会从多个 goroutine 并发写日志缓冲，普通 bytes.Buffer
 // 并不安全，因此用互斥锁保护。

@@ -25,9 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// DefaultServerURL converts a host, host:port, or URL string to the default base server API path
-// to use with a Client at a given API version following the standard conventions for a
-// Kubernetes API.
+// DefaultServerURL 按 Kubernetes API 约定，把 host、host:port 或 URL 字符串转换为客户端
+// 在给定 API 版本下使用的默认 base 路径。
 //
 // 三个返回值分别是：带（可选）前缀路径的 base URL、相对 base 的版本化 API 路径、错误。
 // 若传入的 host 不含 scheme，则按 defaultTLS 补上 http:// 或 https://。
@@ -53,29 +52,24 @@ func DefaultServerURL(host, apiPath string, groupVersion schema.GroupVersion, de
 		}
 	}
 
-	// hostURL.Path is optional; a non-empty Path is treated as a prefix that is to be applied to
-	// all URIs used to access the host. this is useful when there's a proxy in front of the
-	// apiserver that has relocated the apiserver endpoints, forwarding all requests from, for
-	// example, /a/b/c to the apiserver. in this case the Path should be /a/b/c.
+	// hostURL.Path 可选，非空时作为访问该主机所有 URI 的前缀。适用于 apiserver 前有反向代理
+	// 改写端点路径的场景：例如代理把 /a/b/c 的请求转发给 apiserver，此时 Path 应为 /a/b/c。
+	// 没有这类代理时应留空。
 	//
-	// if running without a frontend proxy (that changes the location of the apiserver), then
-	// hostURL.Path should be blank.
-	//
-	// versionedAPIPath, a path relative to baseURL.Path, points to a versioned API base
+	// versionedAPIPath 是相对 baseURL.Path 的版本化 API 基路径。
 	versionedAPIPath := DefaultVersionedAPIPath(apiPath, groupVersion)
 
 	return hostURL, versionedAPIPath, nil
 }
 
-// DefaultVersionedAPIPath constructs the default path for the given group version, assuming the given
-// API path, following the standard conventions of the Kubernetes API.
+// DefaultVersionedAPIPath 按 Kubernetes API 约定，基于给定的 API 路径为指定 group version 构造默认路径。
 //
 // 核心组不带 group 段（/api/v1），其他组形如 /apis/<group>/<version>；这里只负责把
 // apiPath、group、version 拼接起来，具体是 api 还是 apis 前缀由调用方传入的 apiPath 决定。
 func DefaultVersionedAPIPath(apiPath string, groupVersion schema.GroupVersion) string {
 	versionedAPIPath := path.Join("/", apiPath)
 
-	// Add the version to the end of the path
+	// 在路径末尾追加版本。
 	if len(groupVersion.Group) > 0 {
 		versionedAPIPath = path.Join(versionedAPIPath, groupVersion.Group, groupVersion.Version)
 
@@ -86,14 +80,13 @@ func DefaultVersionedAPIPath(apiPath string, groupVersion schema.GroupVersion) s
 	return versionedAPIPath
 }
 
-// DefaultServerUrlFor is shared between IsConfigTransportTLS and RESTClientFor. It
-// requires Host and Version to be set prior to being called.
+// DefaultServerUrlFor 由 IsConfigTransportTLS 与 RESTClientFor 共用，调用前必须设置 Host 与 Version。
 //
 // 是否默认使用 TLS 取决于配置里是否出现任何凭据材料（CA 或客户端证书），或者显式设置了
 // Insecure。Insecure 的语义是“仍用 HTTPS，但不校验证书”，并非改用明文 HTTP。
 func DefaultServerUrlFor(config *Config) (*url.URL, string, error) {
-	// TODO: move the default to secure when the apiserver supports TLS by default
-	// config.Insecure is taken to mean "I want HTTPS but don't bother checking the certs against a CA."
+	// TODO: 待 apiserver 默认支持 TLS 后，把默认行为改为安全连接。
+	// config.Insecure 的语义是“仍用 HTTPS，但不校验证书”。
 	hasCA := len(config.CAFile) != 0 || len(config.CAData) != 0
 	hasCert := len(config.CertFile) != 0 || len(config.CertData) != 0
 	defaultTLS := hasCA || hasCert || config.Insecure

@@ -37,14 +37,12 @@ type FakeClient struct {
 // 编译期断言：确保 FakeClient 实现了 openapi.Client。
 var _ openapi.Client = &FakeClient{}
 
-// NewFakeClient returns a fake openapi client with an empty PathsMap.
+// NewFakeClient 返回一个 PathsMap 为空的 fake openapi 客户端。
 func NewFakeClient() *FakeClient {
 	return &FakeClient{PathsMap: make(map[string]openapi.GroupVersion)}
 }
 
-// Paths returns stored PathsMap field, creating an empty one if
-// it does not already exist. If ForcedErr is set, this function
-// returns the error instead.
+// Paths 返回保存的 PathsMap（为空则先创建）；若设置了 ForcedErr 则返回该错误。
 func (f FakeClient) Paths() (map[string]openapi.GroupVersion, error) {
 	if f.ForcedErr != nil {
 		return nil, f.ForcedErr
@@ -64,11 +62,8 @@ type FakeGroupVersion struct {
 // 编译期断言：确保 FakeGroupVersion 实现了 openapi.GroupVersion。
 var _ openapi.GroupVersion = &FakeGroupVersion{}
 
-// Schema returns the hard-coded byte slice, including creating an
-// empty slice if it has not been set yet. If the ForcedErr is set,
-// this function returns the error instead of the GVSpec field. If
-// content type other than application/json is passed, and error is
-// returned.
+// Schema 返回硬编码字节（未设置时返回空切片）；设置了 ForcedErr 则返回错误。
+// 仅支持 application/json，其他 content type 一律报错。
 func (f FakeGroupVersion) Schema(contentType string) ([]byte, error) {
 	// 测试替身只支持 JSON，遇到其他 content type 立即报错，避免误用。
 	if contentType != runtime.ContentTypeJSON {
@@ -80,7 +75,7 @@ func (f FakeGroupVersion) Schema(contentType string) ([]byte, error) {
 	return f.GVSpec, nil
 }
 
-// ServerRelativeURL returns an empty string.
+// ServerRelativeURL 返回空字符串。
 func (f FakeGroupVersion) ServerRelativeURL() string {
 	// 未实现：测试替身不提供相对 URL，调用即 panic 以尽早暴露依赖。
 	panic("unimplemented")

@@ -43,7 +43,7 @@ func consume(t *testing.T, w watch.Interface, rvs []string, done *sync.WaitGroup
 			t.Logf("Got %v as expected", gotRV)
 		}
 	}
-	// We should not get anything else.
+	// 不应再收到其他事件。
 	got, open := <-w.ResultChan()
 	if open {
 		t.Errorf("%#v: unwanted object %#v", rvs, got)
@@ -119,22 +119,22 @@ func TestResetWatch(t *testing.T) {
 	source.Modify(pod("foo")) // RV = 2
 	source.Modify(pod("foo")) // RV = 3
 
-	// Kill watch, delete change history
+	// 关闭 watch 并删除变更历史。
 	source.ResetWatch()
 
-	// This should fail, RV=1 was lost with ResetWatch
+	// 应失败：RV=1 已随 ResetWatch 丢失。
 	_, err := source.Watch(metav1.ListOptions{ResourceVersion: "1"})
 	if err == nil {
 		t.Fatalf("Unexpected non-error")
 	}
 
-	// This should succeed, RV=3 is current
+	// 应成功：RV=3 是当前版本。
 	w, err := source.Watch(metav1.ListOptions{ResourceVersion: "3"})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// Modify again, ensure the watch is still working
+	// 再次修改，确认 watch 仍正常工作。
 	source.Modify(pod("foo"))
 	go consume(t, w, []string{"4"}, wg)
 	source.Shutdown()

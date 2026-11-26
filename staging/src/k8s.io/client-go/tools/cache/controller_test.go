@@ -50,19 +50,17 @@ import (
 // 控制器对每个到达的 Pod 先写入下游 Store，再立即从假数据源删除它，
 // 因此最终只会观察到删除事件；输出顺序经集合排序以保证稳定。
 func Example() {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := fcache.NewFakeControllerSource()
 	defer source.Shutdown()
 
-	// This will hold the downstream state, as we know it.
+	// 保存我们观察到的下游状态。
 	downstream := NewStore(DeletionHandlingMetaNamespaceKeyFunc)
 
-	// This will hold incoming changes. Note how we pass downstream in as a
-	// KeyLister, that way resync operations will result in the correct set
-	// of update/delete deltas.
+	// 保存进来的变更。把 downstream 作为 KeyLister 传入，resync 才能产生正确的 update/delete delta。
 	fifo := NewRealFIFO(MetaNamespaceKeyFunc, downstream, nil)
 
-	// Let's do threadsafe output to get predictable test results.
+	// 用线程安全的输出以便测试结果可预测。
 	deletionCounter := make(chan string, 1000)
 
 	cfg := &Config{
@@ -71,56 +69,54 @@ func Example() {
 		ObjectType:       &v1.Pod{},
 		FullResyncPeriod: time.Millisecond * 100,
 
-		// Let's implement a simple controller that just deletes
-		// everything that comes in.
+		// 实现一个简单的控制器：删除所有进来的对象。
 		Process: func(obj interface{}, isInInitialList bool) error {
-			// Obj is from the Pop method of the Queue we make above.
+			// Obj 来自上面队列的 Pop。
 			newest := obj.(Deltas).Newest()
 
 			if newest.Type != Deleted {
-				// Update our downstream store.
+				// 更新下游存储。
 				err := downstream.Add(newest.Object)
 				if err != nil {
 					return err
 				}
 
-				// Delete this object.
+				// 删除该对象。
 				source.Delete(newest.Object.(runtime.Object))
 			} else {
-				// Update our downstream store.
+				// 更新下游存储。
 				err := downstream.Delete(newest.Object)
 				if err != nil {
 					return err
 				}
 
-				// fifo's KeyOf is easiest, because it handles
-				// DeletedFinalStateUnknown markers.
+				// 用 fifo 的 KeyOf 最简单，因为它能处理
+				// 处理 DeletedFinalStateUnknown 标记。
 				key, err := fifo.keyOf(newest.Object)
 				if err != nil {
 					return err
 				}
 
-				// Report this deletion.
+				// 记录这次删除。
 				deletionCounter <- key
 			}
 			return nil
 		},
 	}
 
-	// Create the controller and run it until we cancel.
+	// 创建控制器并运行，直到取消。
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go New(cfg).RunWithContext(ctx)
 
-	// Let's add a few objects to the source.
+	// 向 source 加入若干对象。
 	testIDs := []string{"a-hello", "b-controller", "c-framework"}
 	for _, name := range testIDs {
-		// Note that these pods are not valid-- the fake source doesn't
-		// call validation or anything.
+		// 这些 Pod 并不合法——fake source 不做校验。
 		source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name}})
 	}
 
-	// Let's wait for the controller to process the things we just added.
+	// 等待控制器处理刚加入的对象。
 	outputSet := sets.Set[string]{}
 	for i := 0; i < len(testIDs); i++ {
 		outputSet.Insert(<-deletionCounter)
@@ -138,15 +134,14 @@ func Example() {
 // ExampleNewInformer 演示 NewInformer 的用法：AddFunc 中立即删除对象，
 // DeleteFunc 中记录键，最终输出被删除对象的键。
 func ExampleNewInformer() {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := fcache.NewFakeControllerSource()
 	defer source.Shutdown()
 
-	// Let's do threadsafe output to get predictable test results.
+	// 用线程安全的输出以便测试结果可预测。
 	deletionCounter := make(chan string, 1000)
 
-	// Make a controller that immediately deletes anything added to it, and
-	// logs anything deleted.
+	// 创建一个立即删除所有新增对象并记录删除的控制器。
 	_, controller := NewInformer(
 		source,
 		&v1.Pod{},
@@ -161,26 +156,25 @@ func ExampleNewInformer() {
 					key = "oops something went wrong with the key"
 				}
 
-				// Report this deletion.
+				// 记录这次删除。
 				deletionCounter <- key
 			},
 		},
 	)
 
-	// Run the controller and run it until we cancel.
+	// 运行控制器直至取消。
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go controller.RunWithContext(ctx)
 
-	// Let's add a few objects to the source.
+	// 向 source 加入若干对象。
 	testIDs := []string{"a-hello", "b-controller", "c-framework"}
 	for _, name := range testIDs {
-		// Note that these pods are not valid-- the fake source doesn't
-		// call validation or anything.
+		// 这些 Pod 并不合法——fake source 不做校验。
 		source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name}})
 	}
 
-	// Let's wait for the controller to process the things we just added.
+	// 等待控制器处理刚加入的对象。
 	outputSet := sets.Set[string]{}
 	for range testIDs {
 		outputSet.Insert(<-deletionCounter)
@@ -198,17 +192,15 @@ func ExampleNewInformer() {
 // TestHammerController 并发地增删改大量对象，用来暴露锁与协程错误；
 // 失败通常表现为死锁、竞态检测器报错或测试挂起。
 func TestHammerController(t *testing.T) {
-	// This test executes a bunch of requests through the fake source and
-	// controller framework to make sure there's no locking/threading
-	// errors. If an error happens, it should hang forever or trigger the
-	// race detector.
+	// 本测试通过 fake source 与控制器框架执行大量请求，以排查锁/线程问题；
+	// 若有问题，测试会永久挂起或触发竞态检测器。
 
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
-	// Let's do threadsafe output to get predictable test results.
+	// 用线程安全的输出以便测试结果可预测。
 	outputSetLock := sync.Mutex{}
-	// map of key to operations done on the key
+	// key 到该 key 上执行的操作的映射。
 	outputSet := map[string][]string{}
 
 	recordFunc := func(eventType string, obj interface{}) {
@@ -218,13 +210,13 @@ func TestHammerController(t *testing.T) {
 			key = "oops something went wrong with the key"
 		}
 
-		// Record some output when items are deleted.
+		// 删除条目时记录一些输出。
 		outputSetLock.Lock()
 		defer outputSetLock.Unlock()
 		outputSet[key] = append(outputSet[key], eventType)
 	}
 
-	// Make a controller which just logs all the changes it gets.
+	// 创建一个只记录收到的所有变更的控制器。
 	_, controller := NewInformer(
 		source,
 		&v1.Pod{},
@@ -240,7 +232,7 @@ func TestHammerController(t *testing.T) {
 		t.Errorf("Expected HasSynced() to return false before we started the controller")
 	}
 
-	// Run the controller and run it until we cancel.
+	// 运行控制器直至取消。
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	var controllerWG sync.WaitGroup
@@ -250,7 +242,7 @@ func TestHammerController(t *testing.T) {
 		controller.RunWithContext(ctx)
 	}()
 
-	// Let's wait for the controller to do its initial sync
+	// 等待控制器完成初始同步。
 	// 轮询而非阻塞等待，因为此处要验证的是 HasSynced 状态本身。
 	wait.Poll(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		return controller.HasSynced(), nil
@@ -265,7 +257,7 @@ func TestHammerController(t *testing.T) {
 	for i := 0; i < threads; i++ {
 		go func() {
 			defer wg.Done()
-			// Let's add a few objects to the source.
+			// 向 source 加入若干对象。
 			currentNames := sets.Set[string]{}
 			rs := rand.NewSource(rand.Int63())
 			f := randfill.New().NilChance(.5).NumElements(0, 2).RandSource(rs)
@@ -284,9 +276,8 @@ func TestHammerController(t *testing.T) {
 				f.Fill(pod)
 				pod.ObjectMeta.Name = name
 				pod.ObjectMeta.Namespace = "default"
-				// Add, update, or delete randomly.
-				// Note that these pods are not valid-- the fake source doesn't
-				// call validation or perform any other checking.
+				// 随机添加、更新或删除。
+				// 这些 Pod 并不合法——fake source 不做校验或其他检查。
 				if isNew {
 					currentNames.Insert(name)
 					source.Add(pod)
@@ -305,15 +296,13 @@ func TestHammerController(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Let's wait for the controller to finish processing the things we just added.
-	// TODO: look in the queue to see how many items need to be processed.
+	// 等待控制器处理完刚加入的对象。
+	// TODO：检查队列中有多少条目待处理。
 	time.Sleep(100 * time.Millisecond)
 	cancel()
 
-	// Before we permanently lock this mutex, we have to be sure
-	// that the controller has stopped running. At this point,
-	// all goroutines should have stopped. Leak checking is
-	// done by TestMain.
+	// 永久锁定该互斥量前，必须确认控制器已停止运行，此时所有 goroutine 都应已退出。泄漏检查
+	// 泄漏检查由 TestMain 完成。
 	controllerWG.Wait()
 
 	outputSetLock.Lock()
@@ -325,10 +314,10 @@ func TestHammerController(t *testing.T) {
 // 由于重同步与 watch 事件异步到达，测试只接受 {from->to, to->to, from->from}
 // 三种迁移，其他组合说明事件顺序或缓存状态有误。
 func TestUpdate(t *testing.T) {
-	// This test is going to exercise the various paths that result in a
-	// call to update.
+	// 本测试覆盖导致
+	// 触发更新的调用。
 
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
 	const (
@@ -336,16 +325,14 @@ func TestUpdate(t *testing.T) {
 		TO   = "to"
 	)
 
-	// These are the transitions we expect to see; because this is
-	// asynchronous, there are a lot of valid possibilities.
+	// 以下是预期观察到的状态转换；由于是异步的，存在多种合法可能。
 	type pair struct{ from, to string }
 	allowedTransitions := map[pair]bool{
 		{FROM, TO}: true,
 
-		// Because a resync can happen when we've already observed one
-		// of the above but before the item is deleted.
+		// 因为 resync 可能发生在已观察到上述变更之后、条目被删除之前。
 		{TO, TO}: true,
-		// Because a resync could happen before we observe an update.
+		// 因为 resync 可能发生在我们观察到更新之前。
 		{FROM, FROM}: true,
 	}
 
@@ -378,9 +365,7 @@ func TestUpdate(t *testing.T) {
 	var testDoneWG sync.WaitGroup
 	testDoneWG.Add(threads * len(tests))
 
-	// Make a controller that deletes things once it observes an update.
-	// It calls Done() on the wait group on deletions so we can tell when
-	// everything we've added has been deleted.
+	// 创建一个观察到更新就删除对象的控制器；删除时调用 WaitGroup.Done()，以便判断所有加入的对象是否都已删除。
 	watchCh := make(chan struct{})
 	_, controller := NewInformer(
 		toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
@@ -412,16 +397,15 @@ func TestUpdate(t *testing.T) {
 		},
 	)
 
-	// Run the controller and run it until we cancel.
-	// Once Run() is called, calls to testDoneWG.Done() might start, so
-	// all testDoneWG.Add() calls must happen before this point
+	// 运行控制器直至取消。
+	// 一旦调用 Run()，testDoneWG.Done() 就可能开始，因此所有 Add() 必须在此之前完成。
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go controller.RunWithContext(ctx)
 	<-watchCh
 
-	// run every test a few times, in parallel
+	// 并行把每个测试跑几遍。
 	var wg sync.WaitGroup
 	wg.Add(threads * len(tests))
 	for i := 0; i < threads; i++ {
@@ -434,30 +418,30 @@ func TestUpdate(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Let's wait for the controller to process the things we just added.
+	// 等待控制器处理刚加入的对象。
 	testDoneWG.Wait()
 }
 
 // TestPanicPropagated 验证 handler 中的 panic 不会被控制器吞掉，而是向调用
 // RunWithContext 的协程传播，便于上层决定是否崩溃。
 func TestPanicPropagated(t *testing.T) {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
-	// Make a controller that just panic if the AddFunc is called.
+	// 创建一个 AddFunc 被调用就 panic 的控制器。
 	_, controller := NewInformer(
 		source,
 		&v1.Pod{},
 		time.Millisecond*100,
 		ResourceEventHandlerDetailedFuncs{
 			AddFunc: func(obj interface{}, isInInitialList bool) {
-				// Create a panic.
+				// 触发 panic。
 				panic("Just panic.")
 			},
 		},
 	)
 
-	// Run the controller and run it until we cancel.
+	// 运行控制器直至取消。
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -471,10 +455,10 @@ func TestPanicPropagated(t *testing.T) {
 		}()
 		controller.RunWithContext(ctx)
 	}()
-	// Let's add a object to the source. It will trigger a panic.
+	// 向 source 加入一个对象，将触发 panic。
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test"}})
 
-	// Check if the panic propagated up.
+	// 检查 panic 是否已向上传播。
 	select {
 	case p := <-propagated:
 		if p == "Just panic." {
@@ -490,7 +474,7 @@ func TestPanicPropagated(t *testing.T) {
 // TestTransformingInformer 验证 Transform 在对象进入 Store 之前生效，
 // 且 handler 收到的是转换后的对象。
 func TestTransformingInformer(t *testing.T) {
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
 	makePod := func(name, generation string) *v1.Pod {
@@ -552,7 +536,7 @@ func TestTransformingInformer(t *testing.T) {
 		pod.Spec.Subdomain = ""
 		pod.Spec.NodeName = "nodename"
 
-		// Clear out ResourceVersion to simplify comparisons.
+		// 清空 ResourceVersion 以简化比较。
 		pod.ResourceVersion = ""
 
 		return pod, nil
@@ -615,14 +599,14 @@ func TestTransformingInformer(t *testing.T) {
 // 不会因共享指针被二次转换或并发修改；badTransform 一旦置位即失败。
 func TestTransformingInformerRace(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
-	// Canceled *only* when the test is done.
+	// 仅在测试结束时取消。
 	testCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// Canceled *also* during the test.
+	// 测试过程中也可能取消。
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 
-	// source simulates an apiserver object endpoint.
+	// source 模拟 apiserver 的对象端点。
 	source := newFakeControllerSource(t)
 
 	label := "to-be-transformed"
@@ -664,7 +648,7 @@ func TestTransformingInformerRace(t *testing.T) {
 		select {
 		case events <- event{}:
 		case <-testCtx.Done():
-			// Don't block forever in the write above when test is already done.
+			// 测试已结束时不要在上面的写入处永久阻塞。
 		}
 	}
 	checkEvents := func(count int) {
@@ -688,7 +672,7 @@ func TestTransformingInformerRace(t *testing.T) {
 
 	checkEvents(numObjs)
 
-	// Periodically fetch objects to ensure no access races.
+	// 周期性读取对象，检测是否存在并发访问竞态。
 	wg := sync.WaitGroup{}
 	errors := make(chan error, numObjs)
 	for i := 0; i < numObjs; i++ {
@@ -717,7 +701,7 @@ func TestTransformingInformerRace(t *testing.T) {
 		}(i)
 	}
 
-	// Let resyncs to happen for some time.
+	// 让 resync 运行一段时间。
 	time.Sleep(time.Second)
 
 	cancel()
@@ -797,8 +781,7 @@ func TestDeletedObjectGetObjectName(t *testing.T) {
 		t.Errorf("Expected %#v, got %#v", expected, actual)
 	}
 
-	// FinalStateUnknown may have a nil Obj if the informer never saw the
-	// object; the key is still authoritative.
+	// informer 从未见过该对象时 FinalStateUnknown.Obj 可能为 nil，但 key 仍然可信。
 	deletedUnknownNoObj := DeletedObject[*v1.ConfigMap]{
 		FinalStateUnknown: &DeletedFinalStateUnknown{
 			Key: stringKey,
@@ -810,8 +793,7 @@ func TestDeletedObjectGetObjectName(t *testing.T) {
 		t.Errorf("Expected %#v, got %#v", expected, actual)
 	}
 
-	// A completely empty DeletedObject (no FinalStateUnknown, nil
-	// OptionalObj) must not panic and returns the zero ObjectName.
+	// 完全空的 DeletedObject（无 FinalStateUnknown、OptionalObj 为 nil）不得 panic，应返回零值 ObjectName。
 	var empty DeletedObject[*v1.ConfigMap]
 	if actual := empty.GetObjectName(); actual != (ObjectName{}) {
 		t.Errorf("Expected empty ObjectName, got %#v", actual)
@@ -849,8 +831,7 @@ func TestDeletedObjectGetKey(t *testing.T) {
 		t.Errorf("Expected %#v, got %#v", expected, actual)
 	}
 
-	// FinalStateUnknown may have a nil Obj if the informer never saw the
-	// object; the key is still authoritative.
+	// informer 从未见过该对象时 FinalStateUnknown.Obj 可能为 nil，但 key 仍然可信。
 	deletedUnknownNoObj := DeletedObject[*v1.ConfigMap]{
 		FinalStateUnknown: &DeletedFinalStateUnknown{
 			Key: expected,
@@ -862,8 +843,7 @@ func TestDeletedObjectGetKey(t *testing.T) {
 		t.Errorf("Expected %#v, got %#v", expected, actual)
 	}
 
-	// A completely empty DeletedObject (no FinalStateUnknown, nil
-	// OptionalObj) must not panic and returns the empty string.
+	// 完全空的 DeletedObject（无 FinalStateUnknown、OptionalObj 为 nil）不得 panic，应返回空字符串。
 	var empty DeletedObject[*v1.ConfigMap]
 	if actual := empty.GetKey(); actual != "" {
 		t.Errorf("Expected empty key, got %#v", actual)
@@ -1045,8 +1025,7 @@ func TestReplaceEvents(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// Test that both atomic and non-atomic replace have the same behavior
-	// in regards to events and store state.
+	// 验证原子与非原子 Replace 在事件和 store 状态上表现一致。
 	for _, atomic := range []bool{false, true} {
 		source := fcache.NewFakeControllerSource()
 		t.Cleanup(func() {
@@ -1147,28 +1126,28 @@ func testReplaceEvents(t *testing.T, ctx context.Context, fifo Queue, m *eventRe
 	for _, tc := range tcs {
 		testName := tc.name + " atomic: " + strconv.FormatBool(atomic)
 		t.Run(testName, func(t *testing.T) {
-			// Clear history to ensure we don't count events from previous tests
+			// 清空历史，避免计入之前测试的事件。
 			m.clearHistory()
 
 			for _, obj := range tc.initialObjs {
 				require.NoError(t, fifo.Add(obj), "failed to add")
 			}
 
-			// Wait for all create events to appear
+			// 等待所有创建事件到达。
 			require.NoError(t, m.waitForEventCount(ctx, len(tc.initialObjs), 5*time.Second), "Controller failed to receive initial setup all events, got: %v", m.getHistory())
 
-			// Clear history so we only compare what happens during the RESYNC/REPLACE
+			// 清空历史，只比较 RESYNC/REPLACE 期间的事件。
 			m.clearHistory()
 
-			// Run replace
+			// 执行 Replace。
 			require.NoError(t, fifo.Replace(tc.replacedItems, tc.replaceRV), "failed to replace")
 
-			// Wait for all expected events to be received
+			// 等待所有预期事件到达。
 			require.NoError(t, m.waitForEventCount(ctx, len(tc.expectedHistory), 5*time.Second), "Controller failed to receive all events, got: %v", m.getHistory())
 
 			items := sortItemsByKey(store.List(), DeletionHandlingMetaNamespaceKeyFunc)
 			assert.Equal(t, tc.replacedItems, items)
-			// synthetic delete events from a replace are not ordered, sort by key to make the test deterministic
+			// Replace 产生的合成删除事件无序，按 key 排序使测试可稳定断言。
 			history := sortDeleteEventsByKey(m.getHistory())
 			assert.Equal(t, tc.expectedHistory, history)
 		})
@@ -1236,7 +1215,7 @@ func TestResetWatch(t *testing.T) {
 // ModifyDropWatch/AddDropWatch 先模拟事件丢失，ResetWatch 再强制一次重新
 // List，从而验证增量事件丢失后状态仍能收敛。
 func testResetWatch(t *testing.T, ctx context.Context, source *fcache.FakeControllerSource, recorder *eventRecorder) {
-	// The first event should be the initial add.
+	// 首个事件应是初始 Add。
 	require.NoError(t, recorder.waitForEventCount(ctx, 1, 5*time.Second), "Controller failed to receive initial setup all events, got: %v", recorder.getHistory())
 	history := recorder.getHistory()
 	assert.Len(t, history, 1)
@@ -1262,7 +1241,7 @@ func testResetWatch(t *testing.T, ctx context.Context, source *fcache.FakeContro
 	source.AddDropWatch(pod2)
 	source.ResetWatch()
 
-	// We should get an add for the second pod and update for the initial pod on reset.
+	// Reset 后应收到第二个 Pod 的 Add 与首个 Pod 的 Update。
 	require.NoError(t, recorder.waitForEventCount(ctx, 2, 5*time.Second), "Controller failed to receive initial setup all events, got: %v", recorder.getHistory())
 	history = recorder.getHistory()
 	assert.Len(t, history, 2)
@@ -1332,7 +1311,7 @@ func TestStoreResourceVersion(t *testing.T) {
 
 // testResourceVersion 断言事件携带的 resourceVersion 最终反映到 Store 上。
 func testResourceVersion(t *testing.T, ctx context.Context, source *fcache.FakeControllerSource, recorder *eventRecorder, store Store) {
-	// The first event should be the initial add.
+	// 首个事件应是初始 Add。
 	require.NoError(t, recorder.waitForEventCount(ctx, 1, 5*time.Second), "Controller failed to receive initial setup all events, got: %v", recorder.getHistory())
 	history := recorder.getHistory()
 	assert.Len(t, history, 1)
@@ -1341,7 +1320,7 @@ func testResourceVersion(t *testing.T, ctx context.Context, source *fcache.FakeC
 	assert.True(t, history[0].IsInInitialList)
 
 	recorder.clearHistory()
-	// Update the pod labels to increment the resource version.
+	// 更新 Pod 标签以提升 resourceVersion。
 	source.Modify(&v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pod-1",
@@ -1434,7 +1413,7 @@ func TestStoreResourceVersionWithNonMetaTransform(t *testing.T) {
 
 // testResourceVersionWithNonMetaTransform 校验非元数据 Transform 下的版本推进规则。
 func testResourceVersionWithNonMetaTransform(t *testing.T, ctx context.Context, source *fcache.FakeControllerSource, recorder *eventRecorder, store Store) {
-	// The first event should be the initial add.
+	// 首个事件应是初始 Add。
 	require.NoError(t, recorder.waitForEventCount(ctx, 1, 5*time.Second), "Controller failed to receive initial setup all events, got: %v", recorder.getHistory())
 	history := recorder.getHistory()
 	assert.Len(t, history, 1)
@@ -1446,7 +1425,7 @@ func testResourceVersionWithNonMetaTransform(t *testing.T, ctx context.Context, 
 	// the update event does not have metadata.
 	replaceRV := store.LastStoreSyncResourceVersion()
 	recorder.clearHistory()
-	// Update the pod labels to increment the resource version.
+	// 更新 Pod 标签以提升 resourceVersion。
 	source.Modify(&v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pod-1",

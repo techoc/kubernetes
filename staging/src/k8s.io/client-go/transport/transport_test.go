@@ -368,11 +368,8 @@ func TestNew(t *testing.T) {
 	}
 	for k, testCase := range testCases {
 		t.Run(k, func(t *testing.T) {
-			// The Close method of httptest Server mutates the
-			// `http.DefaultTransport` object, the 'TLSClientConfig'
-			// field mutates from nil to a non nil instance. This introduces flake
-			// and data race when running tests under transport package in parallel.
-			// To work around it we reset the TLSClientConfig field.
+			// httptest.Server.Close 会把 http.DefaultTransport 的 TLSClientConfig 从 nil 改成非 nil，
+			// 并行运行 transport 包测试时会引发偶发失败与数据竞争，因此这里重置该字段。
 			//
 			// See: https://github.com/golang/go/issues/65796
 			if testCase.Default {
@@ -617,10 +614,10 @@ func TestRootCertPoolEmptyData(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Set the feature gate according to the test case
+			// 按用例设置特性门控。
 			clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, tc.featureGateEnabled)
 
-			// Call the function with empty caData
+			// 传入空 caData 调用被测函数。
 			pool, err := rootCertPool([]byte{})
 			if err != nil {
 				t.Fatalf("Expected no error, got %v", err)
@@ -635,7 +632,7 @@ func TestRootCertPoolEmptyData(t *testing.T) {
 					t.Fatalf("Expected pool to be non-nil (empty pool) when feature gate is enabled, but got nil")
 				}
 
-				// Verify it is truly an empty pool
+				// 确认确实是空证书池。
 				emptyPool := x509.NewCertPool()
 				if !pool.Equal(emptyPool) {
 					t.Fatalf("Expected the returned pool to be completely empty")

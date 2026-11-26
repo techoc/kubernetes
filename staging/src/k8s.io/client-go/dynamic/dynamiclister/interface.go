@@ -34,8 +34,8 @@ type Lister interface {
 
 // NamespaceLister 是对单个命名空间进行列举与获取的只读接口。
 type NamespaceLister interface {
-	// List lists all resources in the indexer for a given namespace.
+	// List 返回索引器中指定命名空间下的所有资源。
 	List(selector labels.Selector) (ret []*unstructured.Unstructured, err error)
-	// Get retrieves a resource from the indexer for a given namespace and name.
+	// Get 按命名空间与名称从索引器读取资源。
 	Get(name string) (*unstructured.Unstructured, error)
 }

@@ -80,8 +80,7 @@ func TestNameForHandler(t *testing.T) {
 			wantName: "<nil>",
 		},
 		"stored-nil": {
-			// This is a bit odd, but one unit test actually registered
-			// such an event handler and it somehow worked.
+			// 看着奇怪，但确实有个单元测试注册过这样的处理器，而且居然能工作。
 			handler:  (*mockHandler)(nil),
 			wantName: "*cache.mockHandler",
 		},

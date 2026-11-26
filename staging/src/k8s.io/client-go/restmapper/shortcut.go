@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
-// shortcutExpander is a RESTMapper that can be used for Kubernetes resources.   It expands the resource first, then invokes the wrapped
+// shortcutExpander 是用于 Kubernetes 资源的 RESTMapper：先展开资源短名，再调用被包装的 mapper。
 //
 // 它把用户输入的短名（如 "deploy"、"cm"）展开为完整资源名后，再委托给底层
 // RESTMapper，因此兼容 kubectl 风格的简写。
@@ -45,16 +45,16 @@ type shortcutExpander struct {
 var _ meta.ResettableRESTMapper = shortcutExpander{}
 var _ meta.ResettableRESTMapperWithContext = shortcutExpander{}
 
-// NewShortcutExpander wraps a restmapper in a layer that expands shortcuts found via discovery
+// NewShortcutExpander 给 RESTMapper 包一层，把通过发现得到的短名展开为完整资源名。
 //
-// NewShortcutExpanderWithContext is a better alternative because it supports contextual logging and cancellation.
+// NewShortcutExpanderWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use NewShortcutExpanderWithContext instead.
+// 上下文日志：请改用 NewShortcutExpanderWithContext。
 func NewShortcutExpander(delegate meta.RESTMapper, client discovery.DiscoveryInterface, warningHandler func(string)) meta.RESTMapper {
 	return newShortcutExpander(meta.ToRESTMapperWithContext(delegate), discovery.ToDiscoveryInterfaceWithContext(client), warningHandler)
 }
 
-// NewShortcutExpanderWithContext wraps a restmapper in a layer that expands shortcuts found via discovery
+// NewShortcutExpanderWithContext 给 RESTMapper 包一层，把通过发现得到的短名展开为完整资源名。
 func NewShortcutExpanderWithContext(delegate meta.RESTMapperWithContext, client discovery.DiscoveryInterfaceWithContext, warningHandler func(string)) meta.RESTMapperWithContext {
 	return newShortcutExpander(delegate, client, warningHandler)
 }
@@ -63,12 +63,12 @@ func newShortcutExpander(delegate meta.RESTMapperWithContext, client discovery.D
 	return shortcutExpander{RESTMapper: delegate, discoveryClient: client, warningHandler: warningHandler}
 }
 
-// KindFor fulfills meta.RESTMapper
+// KindFor 实现 meta.RESTMapper。
 func (e shortcutExpander) KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	return e.KindForWithContext(context.Background(), resource)
 }
 
-// KindForWithContext fulfills meta.RESTMapperWithContext
+// KindForWithContext 实现 meta.RESTMapperWithContext。
 func (e shortcutExpander) KindForWithContext(ctx context.Context, resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	// expandResourceShortcut 基于 discovery 缓存里读到的当前 API 资源来展开资源短名。
 	// 对新建的 CRD 而言，这意味着我们可能没有最新的发现结果。
@@ -86,68 +86,68 @@ func (e shortcutExpander) KindForWithContext(ctx context.Context, resource schem
 	return gvk, err
 }
 
-// KindsFor fulfills meta.RESTMapper
+// KindsFor 实现 meta.RESTMapper。
 //
-// KindsForWithContext is a better alternative because it supports contextual logging and cancellation.
+// KindsForWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use KindsForWithContext instead.
+// 上下文日志：请改用 KindsForWithContext。
 func (e shortcutExpander) KindsFor(resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
 	return e.KindsForWithContext(context.Background(), resource)
 }
 
-// KindsForWithContext fulfills meta.RESTMapperWithContext
+// KindsForWithContext 实现 meta.RESTMapperWithContext。
 func (e shortcutExpander) KindsForWithContext(ctx context.Context, resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
 	return e.RESTMapper.KindsForWithContext(ctx, e.expandResourceShortcut(ctx, resource))
 }
 
-// ResourcesFor fulfills meta.RESTMapper
+// ResourcesFor 实现 meta.RESTMapper。
 //
-// ResourcesForWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResourcesForWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ResourcesForWithContext instead.
+// 上下文日志：请改用 ResourcesForWithContext。
 func (e shortcutExpander) ResourcesFor(resource schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
 	return e.ResourcesForWithContext(context.Background(), resource)
 }
 
-// ResourcesForWithContext fulfills meta.RESTMapperWithContext
+// ResourcesForWithContext 实现 meta.RESTMapperWithContext。
 func (e shortcutExpander) ResourcesForWithContext(ctx context.Context, resource schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
 	return e.RESTMapper.ResourcesForWithContext(ctx, e.expandResourceShortcut(ctx, resource))
 }
 
-// ResourceFor fulfills meta.RESTMapper
+// ResourceFor 实现 meta.RESTMapper。
 //
-// ResourceForWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResourceForWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ResourceForWithContext instead.
+// 上下文日志：请改用 ResourceForWithContext。
 func (e shortcutExpander) ResourceFor(resource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	return e.ResourceForWithContext(context.Background(), resource)
 }
 
-// ResourceForWithContext fulfills meta.RESTMapperWithContext
+// ResourceForWithContext 实现 meta.RESTMapperWithContext。
 func (e shortcutExpander) ResourceForWithContext(ctx context.Context, resource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	return e.RESTMapper.ResourceForWithContext(ctx, e.expandResourceShortcut(ctx, resource))
 }
 
-// ResourceSingularizer fulfills meta.RESTMapper
+// ResourceSingularizer 实现 meta.RESTMapper。
 //
-// ResourceSingularizerWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResourceSingularizerWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ResourceSingularizerWithContext instead.
+// 上下文日志：请改用 ResourceSingularizerWithContext。
 func (e shortcutExpander) ResourceSingularizer(resource string) (string, error) {
 	return e.ResourceSingularizerWithContext(context.Background(), resource)
 }
 
-// ResourceSingularizerWithContext fulfills meta.RESTMapperWithContext
+// ResourceSingularizerWithContext 实现 meta.RESTMapperWithContext。
 func (e shortcutExpander) ResourceSingularizerWithContext(ctx context.Context, resource string) (string, error) {
 	// 先把短名展开，再用展开后的资源名去求单数形式。
 	return e.RESTMapper.ResourceSingularizerWithContext(ctx, e.expandResourceShortcut(ctx, schema.GroupVersionResource{Resource: resource}).Resource)
 }
 
-// RESTMapping fulfills meta.RESTMapper
+// RESTMapping 实现 meta.RESTMapper。
 //
-// RESTMappingWithContext is a better alternative because it supports contextual logging and cancellation.
+// RESTMappingWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use RESTMappingWithContext instead.
+// 上下文日志：请改用 RESTMappingWithContext。
 func (e shortcutExpander) RESTMapping(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
 	return e.RESTMappingWithContext(context.Background(), gk, versions...)
 }
@@ -158,24 +158,22 @@ func (e shortcutExpander) RESTMappingWithContext(ctx context.Context, gk schema.
 	return e.RESTMapper.RESTMappingWithContext(ctx, gk, versions...)
 }
 
-// RESTMappings fulfills meta.RESTMapper
+// RESTMappings 实现 meta.RESTMapper。
 //
-// RESTMappingsWithContext is a better alternative because it supports contextual logging and cancellation.
+// RESTMappingsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use RESTMappingsWithContext instead.
+// 上下文日志：请改用 RESTMappingsWithContext。
 func (e shortcutExpander) RESTMappings(gk schema.GroupKind, versions ...string) ([]*meta.RESTMapping, error) {
 	return e.RESTMappingsWithContext(context.Background(), gk, versions...)
 }
 
-// RESTMappingsWithContext fulfills meta.RESTMapperWithContext
+// RESTMappingsWithContext 实现 meta.RESTMapperWithContext。
 func (e shortcutExpander) RESTMappingsWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) ([]*meta.RESTMapping, error) {
 	return e.RESTMapper.RESTMappingsWithContext(ctx, gk, versions...)
 }
 
-// getShortcutMappings returns a set of tuples which holds short names for resources.
-// First the list of potential resources will be taken from the API server.
-// Next we will append the hardcoded list of resources - to be backward compatible with old servers.
-// NOTE that the list is ordered by group priority.
+// getShortcutMappings 返回资源短名与完整名的映射组：先从 API server 获取候选资源，
+// 再追加硬编码列表以兼容不返回短名的旧服务端。结果按 group 优先级排序。
 func (e shortcutExpander) getShortcutMappings(ctx context.Context) ([]*metav1.APIResourceList, []resourceShortcuts, error) {
 	res := []resourceShortcuts{}
 	// 获取服务端资源：这里可能同时返回错误 *和* 已经找到的结果，不必因为错误而失败。
@@ -205,12 +203,10 @@ func (e shortcutExpander) getShortcutMappings(ctx context.Context) ([]*metav1.AP
 	return apiResList, res, nil
 }
 
-// expandResourceShortcut will return the expanded version of resource
-// (something that a pkg/api/meta.RESTMapper can understand), if it is
-// indeed a shortcut. If no match has been found, we will match on group prefixing.
-// Lastly we will return resource unmodified.
+// expandResourceShortcut 在资源确为短名时返回 RESTMapper 可理解的完整名；未精确匹配时
+// 尝试按 group 前缀匹配，最后才原样返回输入。
 func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource schema.GroupVersionResource) schema.GroupVersionResource {
-	// get the shortcut mappings and return on first match.
+	// 获取短名映射，首个匹配即返回。
 	if allResources, shortcutResources, err := e.getShortcutMappings(ctx); err == nil {
 		// 已经与完整资源名精确匹配时就不要再做短名展开：
 		// 完整资源名（或其单数形式）优先，绝不能被短名规则误改。
@@ -243,9 +239,7 @@ func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource s
 			if resource.Resource == item.ShortForm.Resource {
 				if found {
 					if item.LongForm.Group == rsc.Group && item.LongForm.Resource == rsc.Resource {
-						// It is common and acceptable that group/resource has multiple
-						// versions registered in cluster. This does not introduce ambiguity
-						// in terms of shortname usage.
+						// 同一 group/resource 在集群中注册多个版本是正常现象，不会导致短名歧义。
 						continue
 					}
 					if !warnedAmbiguousShortcut[item.LongForm] {
@@ -285,9 +279,9 @@ func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource s
 	return resource
 }
 
-// ResetWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResetWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ResetWithContext instead.
+// 上下文日志：请改用 ResetWithContext。
 func (e shortcutExpander) Reset() {
 	e.ResetWithContext(context.Background())
 }
@@ -297,8 +291,7 @@ func (e shortcutExpander) ResetWithContext(ctx context.Context) {
 	meta.MaybeResetRESTMapperWithContext(ctx, e.RESTMapper)
 }
 
-// ResourceShortcuts represents a structure that holds the information how to
-// transition from resource's shortcut to its full name.
+// ResourceShortcuts 保存资源短名到完整名的映射信息。
 type resourceShortcuts struct {
 	ShortForm schema.GroupResource
 	LongForm  schema.GroupResource

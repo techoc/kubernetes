@@ -24,16 +24,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 )
 
-// Every feature gate should have an entry here following this template:
+// 每个特性门控都应按以下模板在此登记：
 //
 // // owner: @username
 // // alpha: v1.4
 // MyFeature featuregate.Feature = "MyFeature"
 //
-// Feature gates should be listed in alphabetical, case-sensitive
-// (upper before any lower case character) order. This reduces the risk
-// of code conflicts because changes are more likely to be scattered
-// across the file.
+// 门控按区分大小写（大写字母在前）的字母序排列，这样改动更分散，能降低代码冲突风险。
 //
 // 每个常量上方的 owner/alpha/beta/GA/kep 注释是元数据，不能删除或改写；
 // 新增门控时保持字母序，并在 defaultVersionedKubernetesFeatureGates 中登记。
@@ -41,8 +38,7 @@ const (
 	// owner: @michaelasp
 	// beta: v1.36
 	//
-	// Allow the client to process events atomically rather than a stream of
-	// events for items popped off the FIFO.
+	// 允许客户端以原子事件而非逐条事件流的方式处理从 FIFO 取出的对象。
 	//
 	// 开启后 FIFO 以原子事件（ReplacedAll 等）交付，配合事务性 Store 可避免
 	// 中间状态被处理；关闭时回落到传统的逐条 Delta 流。
@@ -51,8 +47,7 @@ const (
 	// owner: @yt2985
 	// beta: 1.36
 	//
-	// If enabled, allows clients to gracefully handle Certificate Authority (CA)
-	// rotations without dropping connections or requiring a restart.
+	// 开启后客户端可平滑处理 CA 轮换，既不丢连接也无需重启。
 	//
 	// 客户端会同时信任旧新两组 CA 并在轮换完成后重建连接池，避免滚动更新
 	// API Server 证书时出现连接中断。
@@ -62,10 +57,9 @@ const (
 	// kep: https://kep.k8s.io/4222
 	// alpha: 1.32
 	//
-	// If disabled, clients configured to accept "application/cbor" will instead accept
-	// "application/json" with the same relative preference, and clients configured to write
-	// "application/cbor" or "application/apply-patch+cbor" will instead write
-	// "application/json" or "application/apply-patch+yaml", respectively.
+	// 关闭时，原本接受 "application/cbor" 的客户端改为以相同优先级接受 "application/json"；
+	// 原本写入 "application/cbor" 或 "application/apply-patch+cbor" 的客户端分别改为写入
+	// "application/json" 或 "application/apply-patch+yaml"。
 	//
 	// 关闭时即使服务端支持 CBOR 也退回 JSON，用于排除 CBOR 解析差异导致的问题。
 	ClientsAllowCBOR Feature = "ClientsAllowCBOR"
@@ -73,8 +67,8 @@ const (
 	// owner: @enj
 	// beta: v1.36
 	//
-	// If enabled, the client-go TLS transport cache uses weak pointers to allow
-	// garbage collection of unused transports, preventing unbounded cache growth.
+	// 开启后 client-go 的 TLS transport 缓存使用弱引用，使不再使用的 transport 可被 GC，
+	// 防止缓存无界增长。
 	//
 	// 缓存键包含 TLS 配置，长期运行的客户端频繁变更配置时若不回收会持续增长。
 	ClientsAllowTLSCacheGC Feature = "ClientsAllowTLSCacheGC"
@@ -83,11 +77,9 @@ const (
 	// kep: https://kep.k8s.io/4222
 	// alpha: 1.32
 	//
-	// If enabled, and only if ClientsAllowCBOR is also enabled, the default request content
-	// type (if not explicitly configured) and the dynamic client's request content type both
-	// become "application/cbor" instead of "application/json". The default content type for
-	// apply patch requests becomes "application/apply-patch+cbor" instead of
-	// "application/apply-patch+yaml".
+	// 开启且 ClientsAllowCBOR 也开启时，默认请求内容类型（未显式配置时）与动态客户端的
+	// 请求内容类型都从 "application/json" 改为 "application/cbor"；apply patch 的默认
+	// 内容类型从 "application/apply-patch+yaml" 改为 "application/apply-patch+cbor"。
 	//
 	// 仅在 ClientsAllowCBOR 同样开启时生效；偏好 CBOR 是为了减少序列化开销和
 	// 传输体积，但服务端必须显式协商支持。
@@ -96,7 +88,7 @@ const (
 	// owner: @deads2k
 	// beta: v1.33
 	//
-	// Refactor informers to deliver watch stream events in order instead of out of order.
+	// 重构 Informer，按顺序而非乱序交付 watch 事件流。
 	//
 	// 有序交付让 handler 观察到的对象状态与 watch 事件顺序一致，减少控制器
 	// 基于乱序旧状态做出错误决策的概率。
@@ -105,7 +97,7 @@ const (
 	// owner: @yue9944882
 	// beta: v1.35
 	//
-	// Allow InOrderInformer to process incoming events in batches to expedite the process rate.
+	// 允许 InOrderInformer 批量处理事件，提高处理速率。
 	//
 	// 批量处理在保证同对象事件顺序的前提下摊薄调度与锁开销，提高吞吐。
 	InOrderInformersBatchProcess Feature = "InOrderInformersBatchProcess"
@@ -121,7 +113,7 @@ const (
 	// owner: @michaelasp
 	// beta: v1.36
 	//
-	// Allow the FIFO to unlock while processing items to allow other goroutines to add items to the queue.
+	// 允许 FIFO 处理条目期间释放锁，使其他 goroutine 能向队列添加元素。
 	//
 	// 处理期间释放锁可减少生产者阻塞，但需要 FIFO 内部保证同一对象不会被
 	// 并发处理。
@@ -130,18 +122,15 @@ const (
 	// owner: @p0lyn0mial
 	// beta: v1.30
 	//
-	// Allow the client to get a stream of individual items instead of chunking from the server.
+	// 允许客户端从服务端获取逐项流式数据，而非分块列表。
 	//
 	// WatchList 用流式初始事件替代分页 List，降低大规模集合首次同步的
 	// 内存与延迟，但要求服务端支持相应语义。
 	WatchListClient Feature = "WatchListClient"
 )
 
-// defaultVersionedKubernetesFeatureGates consists of all known Kubernetes-specific feature keys.
-//
-// To add a new feature, define a key for it above and add it here.
-// After registering with the binary, the features are, by default, controllable using environment variables.
-// For more details, please see envVarFeatureGates implementation.
+// 新增门控时先在上方定义键，再加入本表。注册到二进制后，默认可用环境变量控制特性，
+// 详见 envVarFeatureGates 的实现。
 //
 // 每个条目按版本列出默认值和成熟度；LockToDefault 表示 GA 后不可再关闭，
 // 以避免已删除旧代码路径被重新启用。查找时取不高于当前版本的最后一条。

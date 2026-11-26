@@ -14,13 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cache is a client-side caching mechanism. It is useful for
-// reducing the number of server calls you'd otherwise need to make.
-// Reflector watches a server and updates a Store. Two stores are provided;
-// one that simply caches objects (for example, to allow a scheduler to
-// list currently available nodes), and one that additionally acts as
-// a FIFO queue (for example, to allow a scheduler to process incoming
-// pods).
+// Package cache 是客户端缓存机制，用于减少发往服务端的请求。Reflector 监听服务端并更新 Store；
+// 包内提供两种 Store：一种只缓存对象（如供调度器列出可用节点），另一种还兼作 FIFO 队列
+// （如供调度器处理新来的 Pod）。
 package cache
 
 import (
@@ -176,27 +172,27 @@ func TestRelease(t *testing.T) {
 		t.Fatalf("NewInformerName() error = %v", err)
 	}
 
-	// Get a reserved identifier
+	// 获取一个已保留的标识。
 	id := n.WithResource(podsGVR)
 	if !id.Reserved() {
 		t.Error("Expected Reserved() = true before Release()")
 	}
 
-	// Release the name
+	// 释放名称。
 	n.Release()
 
-	// The identifier should no longer be reserved
+	// 标识应不再处于保留状态。
 	if id.Reserved() {
 		t.Error("Expected Reserved() = false after Release()")
 	}
 
-	// Should be able to reuse the name
+	// 名称应可重新使用。
 	n2, err := NewInformerName("my-informer")
 	if err != nil {
 		t.Errorf("NewInformerName() after Release() error = %v", err)
 	}
 
-	// New identifier from new name should be reserved
+	// 由新名称产生的新标识应处于保留状态。
 	id2 := n2.WithResource(podsGVR)
 	if !id2.Reserved() {
 		t.Error("Expected Reserved() = true for new InformerName after Release()")

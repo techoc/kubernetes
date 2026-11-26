@@ -27,9 +27,7 @@ import (
 	"k8s.io/client-go/transport"
 )
 
-// HTTPClientFor returns an http.Client that will provide the authentication
-// or transport level security defined by the provided Config. Will return the
-// default http.DefaultClient if no special case behavior is needed.
+// HTTPClientFor 返回按 Config 提供认证与传输层安全的 http.Client；无需特殊行为时返回 http.DefaultClient。
 //
 // HTTPClientFor 返回使用 Config 中认证/TLS 设置的 http.Client。
 // 无需特殊行为时返回 http.DefaultClient，以复用其连接池。
@@ -53,8 +51,7 @@ func HTTPClientFor(config *Config) (*http.Client, error) {
 	return httpClient, nil
 }
 
-// TLSConfigFor returns a tls.Config that will provide the transport level security defined
-// by the provided Config. Will return nil if no transport level security is requested.
+// TLSConfigFor 根据 Config 构造提供传输层安全的 tls.Config；未要求时返回 nil。
 //
 // TLSConfigFor 根据 Config 构造 tls.Config；未要求传输层安全时返回 nil。
 func TLSConfigFor(config *Config) (*tls.Config, error) {
@@ -65,9 +62,7 @@ func TLSConfigFor(config *Config) (*tls.Config, error) {
 	return transport.TLSConfigFor(cfg)
 }
 
-// TransportFor returns an http.RoundTripper that will provide the authentication
-// or transport level security defined by the provided Config. Will return the
-// default http.DefaultTransport if no special case behavior is needed.
+// TransportFor 返回按 Config 提供认证与传输层安全的 http.RoundTripper；无需特殊行为时返回 http.DefaultTransport。
 //
 // TransportFor 返回带有认证/TLS 等中间件的 RoundTripper。
 func TransportFor(config *Config) (http.RoundTripper, error) {
@@ -78,10 +73,8 @@ func TransportFor(config *Config) (http.RoundTripper, error) {
 	return transport.New(cfg)
 }
 
-// HTTPWrappersForConfig wraps a round tripper with any relevant layered behavior from the
-// config. Exposed to allow more clients that need HTTP-like behavior but then must hijack
-// the underlying connection (like WebSocket or HTTP2 clients). Pure HTTP clients should use
-// the higher level TransportFor or RESTClientFor methods.
+// HTTPWrappersForConfig 给 RoundTripper 套上配置中的各层行为，供需要劫持底层连接但仍使用
+// HTTP 语义的客户端（如 WebSocket/HTTP2）使用；纯 HTTP 客户端应使用 TransportFor 或 RESTClientFor。
 //
 // HTTPWrappersForConfig 只给已有 RoundTripper 套上配置中的中间件，
 // 供需要劫持底层连接（如 WebSocket/HTTP2）的客户端使用；普通 HTTP 客户端应使用 TransportFor。
@@ -93,7 +86,7 @@ func HTTPWrappersForConfig(config *Config, rt http.RoundTripper) (http.RoundTrip
 	return transport.HTTPWrappersForConfig(cfg, rt)
 }
 
-// TransportConfig converts a client config to an appropriate transport config.
+// TransportConfig 把客户端配置转换为相应的 transport 配置。
 //
 // TransportConfig 把 client-go 的 Config 转换成更底层的 transport.Config。
 func (c *Config) TransportConfig() (*transport.Config, error) {
@@ -131,7 +124,7 @@ func (c *Config) TransportConfig() (*transport.Config, error) {
 		conf.DialHolder = &transport.DialHolder{Dial: c.Dial}
 	}
 
-	// exec 插件与旧式 auth provider 是两套互斥的认证机制，同时设置会导致行为不确定。
+	// exec 插件与旧式 auth provider 互斥，同时设置会导致行为不确定。
 	if c.ExecProvider != nil && c.AuthProvider != nil {
 		return nil, errors.New("execProvider and authProvider cannot be used in combination")
 	}
@@ -164,10 +157,8 @@ func (c *Config) TransportConfig() (*transport.Config, error) {
 	return conf, nil
 }
 
-// Wrap adds a transport middleware function that will give the caller
-// an opportunity to wrap the underlying http.RoundTripper prior to the
-// first API call being made. The provided function is invoked after any
-// existing transport wrappers are invoked.
+// Wrap 追加一个 transport 中间件，在首次 API 调用前包装底层 http.RoundTripper。
+// 新中间件位于已有包装之外，因此最先被调用。
 //
 // Wrap 追加一个 transport 中间件；新中间件在已有包装之外，即最先被调用。
 func (c *Config) Wrap(fn transport.WrapperFunc) {

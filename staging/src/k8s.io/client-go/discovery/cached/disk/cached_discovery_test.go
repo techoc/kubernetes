@@ -139,25 +139,24 @@ func TestNewCachedDiscoveryClient_PathPerm(t *testing.T) {
 	assert.NoError(err)
 }
 
-// Tests that schema instances returned by openapi cached and returned after
-// successive calls
+// 验证连续多次调用 OpenAPI 客户端时，返回的是被缓存的 schema 实例。
 //
 // 验证 OpenAPI v3 的三级缓存：实例内存 -> 磁盘 HTTP 缓存 -> 服务端。Invalidate
 // 只清 discovery 缓存，不应使已落盘的 OpenAPI schema 失效。
 func TestOpenAPIDiskCache(t *testing.T) {
-	// Create discovery cache dir (unused)
+	// 创建 discovery 缓存目录（本用例不使用）。
 	discoCache, err := os.MkdirTemp("", "test-cached-discovery-client-disco-*")
 	require.NoError(t, err)
 	os.RemoveAll(discoCache)
 	defer os.RemoveAll(discoCache)
 
-	// Create http cache dir
+	// 创建 HTTP 缓存目录。
 	httpCache, err := os.MkdirTemp("", "test-cached-discovery-client-http-*")
 	require.NoError(t, err)
 	os.RemoveAll(httpCache)
 	defer os.RemoveAll(httpCache)
 
-	// Start test OpenAPI server
+	// 启动测试用 OpenAPI 服务端。
 	fakeServer, err := testutil.NewFakeOpenAPIV3Server("../../testdata")
 	require.NoError(t, err)
 	defer fakeServer.HttpServer.Close()
@@ -174,14 +173,12 @@ func TestOpenAPIDiskCache(t *testing.T) {
 
 	openapiClient := client.OpenAPIV3()
 
-	// Ensure initial Paths call hits server
+	// 首次 Paths 调用应打到服务端。
 	_, err = openapiClient.Paths()
 	require.NoError(t, err)
 	assert.Equal(t, 1, fakeServer.RequestCounters["/openapi/v3"])
 
-	// Ensure Paths call does hits server again
-	// This is expected since openapiClient is the same instance, so Paths()
-	// should be cached in memory.
+	// 再次调用 Paths 不应打到服务端：同一个客户端实例的 Paths() 结果缓存在内存中。
 	paths, err := openapiClient.Paths()
 	require.NoError(t, err)
 	assert.Equal(t, 1, fakeServer.RequestCounters["/openapi/v3"])
@@ -193,7 +190,7 @@ func TestOpenAPIDiskCache(t *testing.T) {
 
 	for _, contentType := range contentTypes {
 		t.Run(contentType, func(t *testing.T) {
-			// Reset all counters (cant just reset to nil since reference is shared)
+			// 清空所有计数（计数器 map 被共享，不能直接置 nil）。
 			for k := range fakeServer.RequestCounters {
 				delete(fakeServer.RequestCounters, k)
 			}
@@ -208,21 +205,20 @@ func TestOpenAPIDiskCache(t *testing.T) {
 				path := "/openapi/v3/" + strings.TrimPrefix(k, "/")
 				assert.Equal(t, 1, fakeServer.RequestCounters[path])
 
-				// Ensure schema call is served from memory
+				// 再次请求 schema 应由内存缓存提供。
 				_, err = v.Schema(contentType)
 				assert.NoError(t, err)
 				assert.Equal(t, 1, fakeServer.RequestCounters[path])
 
 				client.Invalidate()
 
-				// Refetch the schema from a new openapi client to try to force a new
-				// http request
+				// 用新的 openapi 客户端重新拉取，试图强制产生新的 HTTP 请求。
 				newPaths, err := client.OpenAPIV3().Paths()
 				if !assert.NoError(t, err) {
 					continue
 				}
 
-				// Ensure schema call is still served from disk
+				// 即使换了客户端实例，schema 仍应由磁盘缓存提供。
 				_, err = newPaths[k].Schema(contentType)
 				assert.NoError(t, err)
 				assert.Equal(t, 1, fakeServer.RequestCounters[path])
@@ -232,7 +228,7 @@ func TestOpenAPIDiskCache(t *testing.T) {
 
 }
 
-// Tests function "ServerGroups" when the "unaggregated" discovery is returned.
+// 验证服务端返回旧版「未聚合」发现数据时 ServerGroups 的行为。
 //
 // 覆盖旧版 /api + /apis 发现格式：多 group 的多个版本应被合并到同一 group 下，
 // 且只写出一份 servergroups.json。
@@ -341,12 +337,12 @@ func TestCachedDiscoveryClientUnaggregatedServerGroups(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Create discovery cache dir
+		// 创建 discovery 缓存目录。
 		discoCache, err := os.MkdirTemp("", "test-cached-discovery-client-disco-*")
 		require.NoError(t, err)
 		os.RemoveAll(discoCache)
 		defer os.RemoveAll(discoCache)
-		// Create http cache dir (unused)
+		// 创建 HTTP 缓存目录（本用例不使用）。
 		httpCache, err := os.MkdirTemp("", "test-cached-discovery-client-http-*")
 		require.NoError(t, err)
 		os.RemoveAll(httpCache)
@@ -367,7 +363,7 @@ func TestCachedDiscoveryClientUnaggregatedServerGroups(t *testing.T) {
 				t.Errorf("unexpected error %v", err)
 				return
 			}
-			// Content-type is "unaggregated" discovery format -- no resources returned.
+			// 声明旧版未聚合发现格式，该响应不返回资源。
 			w.Header().Set("Content-Type", discovery.AcceptV1)
 			w.WriteHeader(http.StatusOK)
 			w.Write(output)
@@ -382,17 +378,17 @@ func TestCachedDiscoveryClientUnaggregatedServerGroups(t *testing.T) {
 		require.NoError(t, err)
 		apiGroupList, err := client.ServerGroups()
 		require.NoError(t, err)
-		// Discovery groups cached in servergroups.json file.
+		// 发现的 group 应写入 servergroups.json 缓存。
 		numFound, err := numFilesFound(discoCache, "servergroups.json")
 		assert.NoError(t, err)
 		assert.Equal(t, 1, numFound,
 			"%s: expected 1 discovery cache file servergroups.json found, got %d", test.name, numFound)
-		// Test expected groups returned by server groups.
+		// 校验 ServerGroups 返回的 group 集合。
 		expectedGroupNames := sets.NewString(test.expectedGroupNames...)
 		actualGroupNames := sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
-		// Test the expected group versions for the aggregated discovery is correct.
+		// 校验返回的 group/version 集合。
 		expectedGroupVersions := sets.NewString(test.expectedGroupVersions...)
 		actualGroupVersions := sets.NewString(groupVersionsFromGroups(apiGroupList)...)
 		assert.True(t, expectedGroupVersions.Equal(actualGroupVersions),
@@ -400,7 +396,7 @@ func TestCachedDiscoveryClientUnaggregatedServerGroups(t *testing.T) {
 	}
 }
 
-// Aggregated discovery format returned
+// 验证服务端返回聚合发现格式（apidiscovery/v2）时 ServerGroups 的行为。
 //
 // 覆盖 apidiscovery/v2 聚合格式：首个版本即 preferred version；/api 为空时
 // 只应出现 /apis 中的 group；缓存同样只生成一份 servergroups.json。
@@ -500,7 +496,7 @@ func TestCachedDiscoveryClientAggregatedServerGroups(t *testing.T) {
 							Name: "apps",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v2 is preferred since it is first
+							// 聚合列表中排在首位，因此选 v2 为首选版本。
 							{
 								Version: "v2",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -577,7 +573,7 @@ func TestCachedDiscoveryClientAggregatedServerGroups(t *testing.T) {
 							Name: "batch",
 						},
 						Versions: []apidiscovery.APIVersionDiscovery{
-							// v1 is preferred since it is first
+							// 排在首位，因此选 v1 为首选版本。
 							{
 								Version: "v1",
 								Resources: []apidiscovery.APIResourceDiscovery{
@@ -635,12 +631,12 @@ func TestCachedDiscoveryClientAggregatedServerGroups(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Create discovery cache dir
+		// 创建 discovery 缓存目录。
 		discoCache, err := os.MkdirTemp("", "test-cached-discovery-client-disco-*")
 		require.NoError(t, err)
 		os.RemoveAll(discoCache)
 		defer os.RemoveAll(discoCache)
-		// Create http cache dir (unused)
+		// 创建 HTTP 缓存目录（本用例不使用）。
 		httpCache, err := os.MkdirTemp("", "test-cached-discovery-client-http-*")
 		require.NoError(t, err)
 		os.RemoveAll(httpCache)
@@ -661,7 +657,7 @@ func TestCachedDiscoveryClientAggregatedServerGroups(t *testing.T) {
 				t.Fatalf("unexpected encoding error: %v", err)
 				return
 			}
-			// Content-type is "aggregated" discovery format.
+			// 声明聚合发现格式。
 			w.Header().Set("Content-Type", discovery.AcceptV2)
 			w.WriteHeader(http.StatusOK)
 			w.Write(output)
@@ -676,22 +672,22 @@ func TestCachedDiscoveryClientAggregatedServerGroups(t *testing.T) {
 		require.NoError(t, err)
 		apiGroupList, err := client.ServerGroups()
 		require.NoError(t, err)
-		// Discovery groups cached in servergroups.json file.
+		// 发现的 group 应写入 servergroups.json 缓存。
 		numFound, err := numFilesFound(discoCache, "servergroups.json")
 		assert.NoError(t, err)
 		assert.Equal(t, 1, numFound,
 			"%s: expected 1 discovery cache file servergroups.json found, got %d", test.name, numFound)
-		// Test expected groups returned by server groups.
+		// 校验 ServerGroups 返回的 group 集合。
 		expectedGroupNames := sets.NewString(test.expectedGroupNames...)
 		actualGroupNames := sets.NewString(groupNamesFromList(apiGroupList)...)
 		assert.True(t, expectedGroupNames.Equal(actualGroupNames),
 			"%s: Expected groups (%s), got (%s)", test.name, expectedGroupNames.List(), actualGroupNames.List())
-		// Test the expected group versions for the aggregated discovery is correct.
+		// 校验返回的 group/version 集合。
 		expectedGroupVersions := sets.NewString(test.expectedGroupVersions...)
 		actualGroupVersions := sets.NewString(groupVersionsFromGroups(apiGroupList)...)
 		assert.True(t, expectedGroupVersions.Equal(actualGroupVersions),
 			"%s: Expected group/versions (%s), got (%s)", test.name, expectedGroupVersions.List(), actualGroupVersions.List())
-		// Test the groups preferred version is correct.
+		// 校验每个 group 的首选版本。
 		expectedPreferredVersions := sets.NewString(test.expectedPreferredVersions...)
 		actualPreferredVersions := sets.NewString(preferredVersionsFromList(apiGroupList)...)
 		assert.True(t, expectedPreferredVersions.Equal(actualPreferredVersions),

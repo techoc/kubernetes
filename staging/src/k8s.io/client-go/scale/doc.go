@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package scale provides a polymorphic scale client capable of fetching
-// and updating Scale for any resource which implements the `scale` subresource,
-// as long as that subresource operates on a version of scale convertable to
-// autoscaling.Scale.
+// Package scale 提供多态 Scale 客户端，可获取和更新任意实现了 `scale` 子资源的资源的 Scale，
+// 前提是该子资源使用的版本可转换为 autoscaling.Scale。
 //
 // 中文概述：本包面向“任意实现了 scale 子资源的资源”提供统一客户端。调用方只给出
 // GroupResource，包内通过 RESTMapper 找到首选版本，并用 ScaleKindResolver 把结果

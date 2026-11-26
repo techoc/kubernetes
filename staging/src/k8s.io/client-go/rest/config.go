@@ -58,115 +58,91 @@ var ErrNotInCluster = errors.New("unable to load in-cluster configuration, KUBER
 // 它同时被 kubeconfig 加载、controller 与 generated clientset 使用，
 // 因此字段语义变化需考虑向后兼容（见各字段注释）。
 type Config struct {
-	// Host must be a host string, a host:port pair, or a URL to the base of the apiserver.
-	// If a URL is given then the (optional) Path of that URL represents a prefix that must
-	// be appended to all request URIs used to access the apiserver. This allows a frontend
-	// proxy to easily relocate all of the apiserver endpoints.
+	// Host 是主机字符串、host:port 或指向 apiserver 根路径的 URL。URL 中的可选 Path 会作为前缀
+	// 加到所有访问 apiserver 的请求 URI 上，便于前端代理搬迁 apiserver 端点。
 	Host string
-	// APIPath is a sub-path that points to an API root.
+	// APIPath 是指向 API 根的子路径。
 	APIPath string
 
-	// ContentConfig contains settings that affect how objects are transformed when
-	// sent to the server.
+	// ContentConfig 包含影响对象发送到服务端时如何序列化的设置。
 	ContentConfig
 
-	// Server requires Basic authentication
+	// 服务端要求 Basic 认证。
 	Username string
 	Password string `datapolicy:"password"`
 
-	// Server requires Bearer authentication. This client will not attempt to use
-	// refresh tokens for an OAuth2 flow.
-	// TODO: demonstrate an OAuth2 compatible client.
+	// 服务端要求 Bearer 认证；本客户端不会为 OAuth2 流程使用 refresh token。
+	// TODO：给出兼容 OAuth2 的客户端示例。
 	BearerToken string `datapolicy:"token"`
 
-	// Path to a file containing a BearerToken.
-	// If set, the contents are periodically read.
-	// The last successfully read value takes precedence over BearerToken.
+	// 存放 BearerToken 的文件路径。设置后会定期读取，最后一次成功读取的值优先于 BearerToken。
 	BearerTokenFile string
 
-	// Impersonate is the configuration that RESTClient will use for impersonation.
+	// Impersonate 是 RESTClient 用于身份伪装的配置。
 	Impersonate ImpersonationConfig
 
-	// Server requires plugin-specified authentication.
+	// 服务端要求由插件指定的认证方式。
 	AuthProvider *clientcmdapi.AuthProviderConfig
 
-	// Callback to persist config for AuthProvider.
+	// 用于持久化 AuthProvider 配置的回调。
 	AuthConfigPersister AuthProviderConfigPersister
 
-	// Exec-based authentication provider.
+	// 基于 exec 插件的认证提供者。
 	ExecProvider *clientcmdapi.ExecConfig
 
-	// TLSClientConfig contains settings to enable transport layer security
+	// TLSClientConfig 包含启用传输层安全的设置。
 	TLSClientConfig
 
-	// UserAgent is an optional field that specifies the caller of this request.
+	// UserAgent 可选，用于标识请求调用方。
 	UserAgent string
 
-	// DisableCompression bypasses automatic GZip compression requests to the
-	// server.
+	// DisableCompression 关闭自动向服务端请求 GZip 压缩。
 	DisableCompression bool
 
-	// Transport may be used for custom HTTP behavior. This attribute may not
-	// be specified with the TLS client certificate options. Use WrapTransport
-	// to provide additional per-server middleware behavior.
+	// Transport 用于自定义 HTTP 行为，不能与 TLS 客户端证书选项同时指定；需要按服务端添加中间件时使用 WrapTransport。
 	Transport http.RoundTripper
-	// WrapTransport will be invoked for custom HTTP behavior after the underlying
-	// transport is initialized (either the transport created from TLSClientConfig,
-	// Transport, or http.DefaultTransport). The config may layer other RoundTrippers
-	// on top of the returned RoundTripper.
+	// WrapTransport 在底层 transport（由 TLSClientConfig、Transport 创建，或 http.DefaultTransport）
+	// 初始化后调用，用于自定义 HTTP 行为。配置可在返回的 RoundTripper 上继续叠加中间件。
 	//
-	// A future release will change this field to an array. Use config.Wrap()
-	// instead of setting this value directly.
+	// 未来该字段会改为数组，请改用 config.Wrap() 而不是直接赋值。
 	WrapTransport transport.WrapperFunc
 
-	// QPS indicates the maximum QPS to the master from this client.
-	// If it's zero, the created RESTClient will use DefaultQPS: 5
-	//
-	// Setting this to a negative value will disable client-side ratelimiting
-	// unless `Ratelimiter` is also set.
+	// QPS 是该客户端向 master 发起请求的最大每秒次数；为 0 时创建的 RESTClient 使用 DefaultQPS: 5。
+	// 设为负数会关闭客户端限流，除非同时设置了 `Ratelimiter`。
 	QPS float32
 
-	// Maximum burst for throttle.
-	// If it's zero, the created RESTClient will use DefaultBurst: 10.
+	// 限流的最大突发量；为 0 时创建的 RESTClient 使用 DefaultBurst: 10。
 	Burst int
 
-	// Rate limiter for limiting connections to the master from this client. If present overwrites QPS/Burst
+	// 限制该客户端到 master 连接速率的限流器，设置后会覆盖 QPS/Burst。
 	RateLimiter flowcontrol.RateLimiter
 
-	// WarningHandler handles warnings in server responses.
-	// If this and WarningHandlerWithContext are not set, the
-	// default warning handler is used. If both are set,
-	// WarningHandlerWithContext is used.
+	// WarningHandler 处理服务端响应中的 warning。两者都未设置时使用默认处理器；
+	// 同时设置时优先 WarningHandlerWithContext。
 	//
-	// See documentation for [SetDefaultWarningHandler] for details.
+	// 详见 [SetDefaultWarningHandler] 的文档。
 	//
 	//logcheck:context // WarningHandlerWithContext should be used instead of WarningHandler in code which supports contextual logging.
 	WarningHandler WarningHandler
 
-	// WarningHandlerWithContext handles warnings in server responses.
-	// If this and WarningHandler are not set, the
-	// default warning handler is used. If both are set,
-	// WarningHandlerWithContext is used.
+	// WarningHandlerWithContext 处理服务端响应中的 warning。两者都未设置时使用默认处理器；
+	// 同时设置时优先 WarningHandlerWithContext。
 	//
-	// See documentation for [SetDefaultWarningHandler] for details.
+	// 详见 [SetDefaultWarningHandler] 的文档。
 	WarningHandlerWithContext WarningHandlerWithContext
 
-	// The maximum length of time to wait before giving up on a server request. A value of zero means no timeout.
+	// 放弃服务端请求前的最长等待时间；0 表示不超时。
 	Timeout time.Duration
 
-	// Dial specifies the dial function for creating unencrypted TCP connections.
+	// Dial 指定创建明文 TCP 连接的拨号函数。
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
 
-	// Proxy is the proxy func to be used for all requests made by this
-	// transport. If Proxy is nil, http.ProxyFromEnvironment is used. If Proxy
-	// returns a nil *URL, no proxy is used.
-	//
-	// socks5 proxying does not currently support spdy streaming endpoints.
+	// Proxy 是该 transport 所有请求使用的代理函数；nil 时用 http.ProxyFromEnvironment，
+	// 返回 nil *URL 表示不使用代理。socks5 目前不支持 SPDY 流式端点。
 	Proxy func(*http.Request) (*url.URL, error)
 
-	// Version forces a specific version to be used (if registered)
-	// Do we need this?
-	// Version string
+	// Version 强制使用指定版本（前提是已注册）。是否仍需要该字段？
+	// Version 字符串。
 }
 
 var _ fmt.Stringer = new(Config)
@@ -196,8 +172,7 @@ func (sanitizedObject) String() string {
 	return "runtime.Object(--- REDACTED ---)"
 }
 
-// GoString implements fmt.GoStringer and sanitizes sensitive fields of Config
-// to prevent accidental leaking via logs.
+// GoString 实现 fmt.GoStringer，并对 Config 的敏感字段脱敏，防止日志意外泄露。
 func (c *Config) GoString() string {
 	return c.String()
 }
@@ -209,7 +184,7 @@ func (c *Config) String() string {
 		return "<nil>"
 	}
 	cc := sanitizedConfig(CopyConfig(c))
-	// Explicitly mark non-empty credential fields as redacted.
+	// 显式把非空的凭证字段标记为已脱敏。
 	if cc.Password != "" {
 		cc.Password = "--- REDACTED ---"
 	}
@@ -228,14 +203,13 @@ func (c *Config) String() string {
 // ImpersonationConfig 对应 kubeconfig 的 impersonate 配置，通过 Imprsonate-*
 // 请求头让 apiserver 以其他身份完成鉴权；调用方自身的 RBAC 仍需允许 impersonate。
 type ImpersonationConfig struct {
-	// UserName is the username to impersonate on each request.
+	// UserName 是每次请求要伪装成的用户名。
 	UserName string
-	// UID is a unique value that identifies the user.
+	// UID 是标识用户的唯一值。
 	UID string
-	// Groups are the groups to impersonate on each request.
+	// Groups 是每次请求要伪装成的用户组。
 	Groups []string
-	// Extra is a free-form field which can be used to link some authentication information
-	// to authorization information.  This field allows you to impersonate it.
+	// Extra 是自由格式的字段，用于把认证信息关联到授权信息，也可被伪装。
 	Extra map[string][]string
 }
 
@@ -243,34 +217,28 @@ type ImpersonationConfig struct {
 // TLSClientConfig 描述客户端 TLS 行为。*Data 字段优先于对应的 *File 字段，
 // 便于直接嵌入 kubeconfig；若同时提供，文件路径会被忽略。
 type TLSClientConfig struct {
-	// Server should be accessed without verifying the TLS certificate. For testing only.
+	// 访问服务端时不校验 TLS 证书，仅限测试使用。
 	Insecure bool
-	// ServerName is passed to the server for SNI and is used in the client to check server
-	// certificates against. If ServerName is empty, the hostname used to contact the
-	// server is used.
+	// ServerName 作为 SNI 传给服务端，并用于客户端校验证书；为空时使用连接服务端的主机名。
 	ServerName string
 
-	// Server requires TLS client certificate authentication
+	// 服务端要求 TLS 客户端证书认证。
 	CertFile string
-	// Server requires TLS client certificate authentication
+	// 服务端要求 TLS 客户端证书认证。
 	KeyFile string
-	// Trusted root certificates for server
+	// 服务端的可信根证书。
 	CAFile string
 
-	// CertData holds PEM-encoded bytes (typically read from a client certificate file).
-	// CertData takes precedence over CertFile
+	// CertData 保存 PEM 编码的字节（通常来自客户端证书文件），优先于 CertFile。
 	CertData []byte
-	// KeyData holds PEM-encoded bytes (typically read from a client certificate key file).
-	// KeyData takes precedence over KeyFile
+	// KeyData 保存 PEM 编码的字节（通常来自客户端证书私钥文件），优先于 KeyFile。
 	KeyData []byte `datapolicy:"security-key"`
-	// CAData holds PEM-encoded bytes (typically read from a root certificates bundle).
-	// CAData takes precedence over CAFile
+	// CAData 保存 PEM 编码的字节（通常来自根证书包），优先于 CAFile。
 	CAData []byte
 
-	// NextProtos is a list of supported application level protocols, in order of preference.
-	// Used to populate tls.Config.NextProtos.
-	// To indicate to the server http/1.1 is preferred over http/2, set to ["http/1.1", "h2"] (though the server is free to ignore that preference).
-	// To use only http/1.1, set to ["http/1.1"].
+	// NextProtos 是按偏好排序的应用层协议列表，用于填充 tls.Config.NextProtos。
+	// 要告知服务端偏好 http/1.1 而非 http/2，设为 ["http/1.1", "h2"]（服务端可忽略该偏好）；
+	// 只用 http/1.1 则设为 ["http/1.1"]。
 	NextProtos []string
 }
 
@@ -279,8 +247,7 @@ var _ fmt.GoStringer = TLSClientConfig{}
 
 type sanitizedTLSClientConfig TLSClientConfig
 
-// GoString implements fmt.GoStringer and sanitizes sensitive fields of
-// TLSClientConfig to prevent accidental leaking via logs.
+// GoString 实现 fmt.GoStringer，并对 TLSClientConfig 的敏感字段脱敏，防止日志意外泄露。
 func (c TLSClientConfig) GoString() string {
 	return c.String()
 }
@@ -299,7 +266,7 @@ func (c TLSClientConfig) String() string {
 		CAData:     c.CAData,
 		NextProtos: c.NextProtos,
 	}
-	// Explicitly mark non-empty credential fields as redacted.
+	// 显式把非空的凭证字段标记为已脱敏。
 	if len(cc.CertData) != 0 {
 		cc.CertData = []byte("--- TRUNCATED ---")
 	}
@@ -312,32 +279,21 @@ func (c TLSClientConfig) String() string {
 // ContentConfig 定义请求/响应的媒体类型与序列化器，与连接和认证无关，
 // 因此常被整体复用或复制到派生配置中。
 type ContentConfig struct {
-	// AcceptContentTypes specifies the types the client will accept and is optional.
-	// If not set, ContentType will be used to define the Accept header
+	// AcceptContentTypes 指定客户端可接受的类型，可选；未设置时用 ContentType 填充 Accept 头。
 	AcceptContentTypes string
-	// ContentType specifies the wire format used to communicate with the server.
-	// This value will be set as the Accept header on requests made to the server, and
-	// as the default content type on any object sent to the server. If not set,
-	// "application/json" is used.
+	// ContentType 指定与服务端通信的线上格式，作为 Accept 头及发送给服务端的对象的默认类型；未设置时取 "application/json"。
 	ContentType string
-	// GroupVersion is the API version to talk to. Must be provided when initializing
-	// a RESTClient directly. When initializing a Client, will be set with the default
-	// code version.
+	// GroupVersion 是通信所用的 API 版本。直接初始化 RESTClient 时必须提供，通过 Client 初始化时取默认代码版本。
 	GroupVersion *schema.GroupVersion
-	// NegotiatedSerializer is used for obtaining encoders and decoders for multiple
-	// supported media types.
+	// NegotiatedSerializer 用于为多种媒体类型获取编解码器。
 	//
-	// TODO: NegotiatedSerializer will be phased out as internal clients are removed
-	//   from Kubernetes.
+	// TODO：随着 Kubernetes 移除内部客户端，NegotiatedSerializer 将被淘汰。
 	NegotiatedSerializer runtime.NegotiatedSerializer
 }
 
-// RESTClientFor returns a RESTClient that satisfies the requested attributes on a client Config
-// object. Note that a RESTClient may require fields that are optional when initializing a Client.
-// A RESTClient created by this method is generic - it expects to operate on an API that follows
-// the Kubernetes conventions, but may not be the Kubernetes API.
-// RESTClientFor is equivalent to calling RESTClientForConfigAndClient(config, httpClient),
-// where httpClient was generated with HTTPClientFor(config).
+// RESTClientFor 按 Config 中要求的属性返回 RESTClient。注意 RESTClient 可能需要初始化 Client 时可选项的字段。
+// 该方法创建的 RESTClient 是通用的：期望 API 遵循 Kubernetes 约定，但不一定是 Kubernetes API。
+// 等价于 RESTClientForConfigAndClient(config, httpClient)，其中 httpClient 由 HTTPClientFor(config) 生成。
 func RESTClientFor(config *Config) (*RESTClient, error) {
 	if config.GroupVersion == nil {
 		return nil, fmt.Errorf("GroupVersion is required when initializing a RESTClient")
@@ -361,12 +317,9 @@ func RESTClientFor(config *Config) (*RESTClient, error) {
 	return RESTClientForConfigAndClient(config, httpClient)
 }
 
-// RESTClientForConfigAndClient returns a RESTClient that satisfies the requested attributes on a
-// client Config object.
-// Unlike RESTClientFor, RESTClientForConfigAndClient allows to pass an http.Client that is shared
-// between all the API Groups and Versions.
-// Note that the http client takes precedence over the transport values configured.
-// The http client defaults to the `http.DefaultClient` if nil.
+// RESTClientForConfigAndClient 按 Config 中要求的属性返回 RESTClient。
+// 与 RESTClientFor 不同，它接受一个可在所有 API 组与版本间共享的 http.Client；传入的 client
+// 优先于配置中的 transport 设置，nil 时默认使用 `http.DefaultClient`。
 func RESTClientForConfigAndClient(config *Config, httpClient *http.Client) (*RESTClient, error) {
 	metrics.EnsureRegistered()
 
@@ -437,8 +390,7 @@ func UnversionedRESTClientFor(config *Config) (*RESTClient, error) {
 		return nil, fmt.Errorf("NegotiatedSerializer is required when initializing a RESTClient")
 	}
 
-	// Validate config.Host before constructing the transport/client so we can fail fast.
-	// ServerURL will be obtained later in UnversionedRESTClientForConfigAndClient()
+	// 构造 transport/client 前先校验 config.Host，尽快失败；ServerURL 稍后由 UnversionedRESTClientForConfigAndClient() 获取。
 	_, _, err := DefaultServerUrlFor(config)
 	if err != nil {
 		return nil, err
@@ -452,8 +404,7 @@ func UnversionedRESTClientFor(config *Config) (*RESTClient, error) {
 	return UnversionedRESTClientForConfigAndClient(config, httpClient)
 }
 
-// UnversionedRESTClientForConfigAndClient is the same as RESTClientForConfigAndClient,
-// except that it allows the config.Version to be empty.
+// UnversionedRESTClientForConfigAndClient 与 RESTClientForConfigAndClient 相同，但允许 config.Version 为空。
 func UnversionedRESTClientForConfigAndClient(config *Config, httpClient *http.Client) (*RESTClient, error) {
 	if config.NegotiatedSerializer == nil {
 		return nil, fmt.Errorf("NegotiatedSerializer is required when initializing a RESTClient")
@@ -519,8 +470,7 @@ func adjustCommit(c string) string {
 	return c
 }
 
-// adjustVersion strips "alpha", "beta", etc. from version in form
-// major.minor.patch-[alpha|beta|etc].
+// adjustVersion 从 major.minor.patch-[alpha|beta|etc] 形式的版本号中去掉 "alpha"、"beta" 等后缀。
 func adjustVersion(v string) string {
 	if len(v) == 0 {
 		return "unknown"
@@ -529,23 +479,22 @@ func adjustVersion(v string) string {
 	return seg[0]
 }
 
-// adjustCommand returns the last component of the
-// OS-specific command path for use in User-Agent.
+// adjustCommand 取操作系统相关命令路径的最后一段，用于 User-Agent。
 func adjustCommand(p string) string {
-	// Unlikely, but better than returning "".
+	// 几乎不会发生，但比返回空字符串好。
 	if len(p) == 0 {
 		return "unknown"
 	}
 	return filepath.Base(p)
 }
 
-// buildUserAgent builds a User-Agent string from given args.
+// buildUserAgent 根据给定参数构造 User-Agent 字符串。
 func buildUserAgent(command, version, os, arch, commit string) string {
 	return fmt.Sprintf(
 		"%s/%s (%s/%s) kubernetes/%s", command, version, os, arch, commit)
 }
 
-// DefaultKubernetesUserAgent returns a User-Agent string built from static global vars.
+// DefaultKubernetesUserAgent 返回由静态全局变量构造的 User-Agent 字符串。
 func DefaultKubernetesUserAgent() string {
 	return buildUserAgent(
 		adjustCommand(os.Args[0]),
@@ -587,7 +536,7 @@ func InClusterConfig() (*Config, error) {
 	}
 
 	return &Config{
-		// TODO: switch to using cluster DNS.
+		// TODO：改用集群 DNS。
 		Host:            "https://" + net.JoinHostPort(host, port),
 		TLSClientConfig: tlsClientConfig,
 		BearerToken:     string(token),
@@ -595,13 +544,8 @@ func InClusterConfig() (*Config, error) {
 	}, nil
 }
 
-// IsConfigTransportTLS returns true if and only if the provided
-// config will result in a protected connection to the server when it
-// is passed to restclient.RESTClientFor().  Use to determine when to
-// send credentials over the wire.
-//
-// Note: the Insecure flag is ignored when testing for this value, so MITM attacks are
-// still possible.
+// IsConfigTransportTLS 判断给定 config 传给 restclient.RESTClientFor() 后是否得到受保护的连接，
+// 用于决定是否在线路上发送凭证。注意该判断忽略 Insecure 标志，因此仍可能遭受中间人攻击。
 func IsConfigTransportTLS(config Config) bool {
 	// 只看 URL scheme：Insecure 表示“跳过证书校验”，并不等于明文传输。
 	baseURL, _, err := DefaultServerUrlFor(&config)
@@ -611,9 +555,7 @@ func IsConfigTransportTLS(config Config) bool {
 	return baseURL.Scheme == "https"
 }
 
-// LoadTLSFiles copies the data from the CertFile, KeyFile, and CAFile fields into the CertData,
-// KeyData, and CAFile fields, or returns an error. If no error is returned, all three fields are
-// either populated or were empty to start.
+// LoadTLSFiles 把 CertFile、KeyFile、CAFile 的内容复制到 CertData、KeyData、CAData；无错误时三者要么已填充，要么原本为空。
 func LoadTLSFiles(c *Config) error {
 	var err error
 	c.CAData, err = dataFromSliceOrFile(c.CAData, c.CAFile)
@@ -746,8 +688,7 @@ func CopyConfig(config *Config) *Config {
 // 避免为每个生成客户端重复构建 CodecFactory。
 func CodecFactoryForGeneratedClient(scheme *runtime.Scheme, codecs serializer.CodecFactory) serializer.CodecFactory {
 	if !features.FeatureGates().Enabled(features.ClientsAllowCBOR) {
-		// NOTE: This assumes client-gen will not generate CBOR-enabled Codecs as long as
-		// the feature gate exists.
+		// 注意：这里假设只要该特性门控存在，client-gen 就不会生成启用 CBOR 的 Codecs。
 		return codecs
 	}
 

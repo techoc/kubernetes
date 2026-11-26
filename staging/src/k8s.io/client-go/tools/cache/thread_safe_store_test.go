@@ -46,7 +46,7 @@ func TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex(t *testing.T) {
 
 	store.Add(testKey, testKey)
 
-	// Assumption check, there should be a set for the `testKey` with one element in the added index
+	// 前置假设：新增索引中 `testKey` 应对应一个含单个元素的集合。
 	set := store.index.indices[testIndexer][testKey]
 
 	if len(set) != 1 {
@@ -81,7 +81,7 @@ func TestThreadSafeStoreAddKeepsNonEmptySetPostDeleteFromIndex(t *testing.T) {
 	store.Add("retain", "retain")
 	store.Add("delete", "delete")
 
-	// Assumption check, there should be a set for the `testIndex` with two elements
+	// 前置假设：`testIndex` 应对应一个含两个元素的集合。
 	set := store.index.indices[testIndexer][testIndex]
 
 	if len(set) != 2 {
@@ -188,44 +188,44 @@ func TestThreadSafeStoreRV(t *testing.T) {
 	t.Run("Add Update and Delete", func(t *testing.T) {
 		store := NewThreadSafeStore(Indexers{}, Indices{}).(*threadSafeMap)
 
-		// Add obj with RV "10"
+		// 加入 RV 为 "10" 的对象。
 		store.Add("key1", &metav1.ObjectMeta{ResourceVersion: "10"})
 		if rv := store.LastStoreSyncResourceVersion(); rv != "10" {
 			t.Errorf("Expected RV to be \"10\", got %q", rv)
 		}
 
-		// Add obj with same RV "10"
+		// 加入 RV 同为 "10" 的对象。
 		store.Add("key3", &metav1.ObjectMeta{ResourceVersion: "10"})
 		if rv := store.LastStoreSyncResourceVersion(); rv != "10" {
 			t.Errorf("Expected RV to remain \"10\" after adding same RV, got %q", rv)
 		}
 
-		// Add obj with higher RV "20"
+		// 加入 RV 更高（"20"）的对象。
 		store.Add("key4", &metav1.ObjectMeta{ResourceVersion: "20"})
 		if rv := store.LastStoreSyncResourceVersion(); rv != "20" {
 			t.Errorf("Expected RV to be \"20\", got %q", rv)
 		}
 
-		// Delete an earlier object with a newer RV
+		// 用更新的 RV 删除较早的对象。
 		// 删除携带的 RV 也应被计入，因为 watch 事件中的删除同样推进了同步进度。
 		store.DeleteWithObject("key4", &metav1.ObjectMeta{ResourceVersion: "30"})
 		if rv := store.LastStoreSyncResourceVersion(); rv != "30" {
 			t.Errorf("Expected RV to become \"30\" after deletion %q", rv)
 		}
 
-		// Add non-meta object, should not be updated
+		// 加入非元数据对象，不应触发更新。
 		store.Add("key5", "just a string")
 		if rv := store.LastStoreSyncResourceVersion(); rv != "30" {
 			t.Errorf("Expected RV to remain \"30\" after adding non-meta object, got %q", rv)
 		}
 
-		// Add obj with RV "40"
+		// 加入 RV 为 "40" 的对象。
 		store.Add("key6", &metav1.ObjectMeta{ResourceVersion: "40"})
 		if rv := store.LastStoreSyncResourceVersion(); rv != "40" {
 			t.Errorf("Expected RV to be \"40\", got %q", rv)
 		}
 
-		// Nil delete
+		// 删除 nil。
 		store.Delete("key6")
 		if rv := store.LastStoreSyncResourceVersion(); rv != "40" {
 			t.Errorf("Expected RV to remain \"40\" after delete, got %q", rv)
@@ -313,10 +313,8 @@ func BenchmarkIndexer(b *testing.B) {
 	indices := Indices{}
 	store := NewThreadSafeStore(indexers, indices).(*threadSafeMap)
 
-	// The following benchmark imitates what is happening in indexes
-	// used in storage layer, where indexing is mostly static (e.g.
-	// indexing objects by their (namespace, name)).
-	// The 5000 number imitates indexing nodes in a 5000-node cluster.
+	// 下面的基准模拟存储层索引的场景：索引大多静态（例如按 namespace/name 索引对象）。
+	// 5000 模拟一个 5000 节点集群的索引规模。
 	objectCount := 5000
 	objects := make([]string, 0, 5000)
 	for i := 0; i < objectCount; i++ {

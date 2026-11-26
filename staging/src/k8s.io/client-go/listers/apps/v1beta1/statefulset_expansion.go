@@ -29,21 +29,18 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// StatefulSetListerExpansion allows custom methods to be added to
-// StatefulSetLister.
+// StatefulSetListerExpansion 为 StatefulSetLister 提供扩展点。
 //
 // 通过独立的 Expansion 接口扩展生成的 Lister，避免手工修改生成代码。
 type StatefulSetListerExpansion interface {
 	GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet, error)
 }
 
-// StatefulSetNamespaceListerExpansion allows custom methods to be added to
-// StatefulSetNamespaceLister.
+// StatefulSetNamespaceListerExpansion 为 StatefulSetNamespaceLister 提供扩展点。
 type StatefulSetNamespaceListerExpansion interface{}
 
-// GetPodStatefulSets returns a list of StatefulSets that potentially match a pod.
-// Only the one specified in the Pod's ControllerRef will actually manage it.
-// Returns an error only if no matching StatefulSets are found.
+// GetPodStatefulSets 返回可能与 Pod 匹配的 StatefulSet 列表；真正管理该 Pod 的只有
+// ControllerRef 指向的那一个。找不到任何候选时才返回错误。
 //
 // 潜在匹配意味着同一 Pod 可能被多个 selector 命中，调用方仍需检查
 // ControllerRef 才能确定真正的属主。
@@ -69,11 +66,11 @@ func (s *statefulSetLister) GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet
 		}
 		selector, err = metav1.LabelSelectorAsSelector(ps.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
+			// selector 无效即视为与 Pod 不匹配。
 			continue
 		}
 
-		// If a StatefulSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 selector 为 nil 或空的 StatefulSet，应视为不匹配任何对象，而不是匹配全部。
 		//
 		// 空 selector 在 labels.Selector 语义下会匹配所有标签，这里必须显式排除，
 		// 防止错误配置的 StatefulSet 抢占所有 Pod。

@@ -52,12 +52,10 @@ import (
 )
 
 const (
-	// longThrottleLatency defines threshold for logging requests. All requests being
-	// throttled (via the provided rateLimiter) for more than longThrottleLatency will
-	// be logged.
+	// longThrottleLatency 是记录限流日志的阈值：被限流超过该时长的请求会被记日志。
 	longThrottleLatency = 50 * time.Millisecond
 
-	// extraLongThrottleLatency defines the threshold for logging requests at log level 2.
+	// extraLongThrottleLatency 是在日志级别 2 记录请求的阈值。
 	extraLongThrottleLatency = 1 * time.Second
 )
 
@@ -66,19 +64,18 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// ResponseWrapper is an interface for getting a response.
-// The response may be either accessed as a raw data (the whole output is put into memory) or as a stream.
+// ResponseWrapper 用于获取响应，既可以一次性读入内存，也可以流式读取。
 type ResponseWrapper interface {
 	DoRaw(context.Context) ([]byte, error)
 	Stream(context.Context) (io.ReadCloser, error)
 }
 
-// RequestConstructionError is returned when there's an error assembling a request.
+// RequestConstructionError 表示组装请求时出错。
 type RequestConstructionError struct {
 	Err error
 }
 
-// Error returns a textual description of 'r'.
+// Error 返回 r 的文本描述。
 func (r *RequestConstructionError) Error() string {
 	return fmt.Sprintf("request construction error: '%v'", r.Err)
 }
@@ -111,21 +108,21 @@ type Request struct {
 	timeout     time.Duration
 	maxRetries  int
 
-	// generic components accessible via method setters
+	// 通过 setter 设置的通用组件。
 	verb       string
 	pathPrefix string
 	subpath    string
 	params     url.Values
 	headers    http.Header
 
-	// structural elements of the request that are part of the Kubernetes API conventions
+	// 请求的结构部分，遵循 Kubernetes API 约定。
 	namespace    string
 	namespaceSet bool
 	resource     string
 	resourceName string
 	subresource  string
 
-	// output
+	// 输出。
 	err error
 
 	// body 与 bodyBytes 只能设置其一。body 是流式 reader，只能消费一次，
@@ -136,7 +133,7 @@ type Request struct {
 	retryFn requestRetryFunc
 }
 
-// NewRequest creates a new request helper object for accessing runtime.Objects on a server.
+// NewRequest 创建请求辅助对象，用于访问服务端上的 runtime.Object。
 func NewRequest(c *RESTClient) *Request {
 	// backoff 由 client 注入；未配置时使用 no-op，避免调用方必须显式初始化。
 	var backoff BackoffManagerWithContext
@@ -159,9 +156,8 @@ func NewRequest(c *RESTClient) *Request {
 		timeout = c.Client.Timeout
 	}
 
-	// A request needs to know whether the content type was explicitly configured or selected by
-	// default in order to support the per-request Protobuf override used by clients generated
-	// with --prefers-protobuf.
+	// 请求需要知道内容类型是显式配置还是默认选择的，以支持 --prefers-protobuf 生成的客户端
+	// 在单个请求上覆盖为 Protobuf。
 	contentConfig, contentTypeDefaulted := c.content.GetClientContentConfig()
 
 	r := &Request{
@@ -182,7 +178,7 @@ func NewRequest(c *RESTClient) *Request {
 	return r
 }
 
-// NewRequestWithClient creates a Request with an embedded RESTClient for use in test scenarios.
+// NewRequestWithClient 创建内嵌 RESTClient 的 Request，供测试场景使用。
 func NewRequestWithClient(base *url.URL, versionedAPIPath string, content ClientContentConfig, client *http.Client) *Request {
 	return NewRequest(&RESTClient{
 		base:             base,
@@ -223,15 +219,14 @@ func (r *Request) setAcceptHeader() {
 	}
 }
 
-// Verb sets the verb this request will use.
+// Verb 设置该请求使用的动词。
 func (r *Request) Verb(verb string) *Request {
 	r.verb = verb
 	return r
 }
 
-// Prefix adds segments to the relative beginning to the request path. These
-// items will be placed before the optional Namespace, Resource, or Name sections.
-// Setting AbsPath will clear any previously set Prefix segments
+// Prefix 在相对路径开头追加路径段，位于可选的 Namespace、Resource、Name 之前。
+// 调用 AbsPath 会清除此前设置的 Prefix。
 func (r *Request) Prefix(segments ...string) *Request {
 	if r.err != nil {
 		return r
@@ -240,8 +235,7 @@ func (r *Request) Prefix(segments ...string) *Request {
 	return r
 }
 
-// Suffix appends segments to the end of the path. These items will be placed after the prefix and optional
-// Namespace, Resource, or Name sections.
+// Suffix 在路径末尾追加路径段，位于 prefix 及可选的 Namespace、Resource、Name 之后。
 func (r *Request) Suffix(segments ...string) *Request {
 	if r.err != nil {
 		return r
@@ -286,8 +280,7 @@ func (r *Request) BackOff(manager BackoffManager) *Request {
 	return r
 }
 
-// BackOffWithContext sets the request's backoff manager to the one specified,
-// or defaults to the stub implementation if nil is provided.
+// BackOffWithContext 设置请求的退避管理器；传入 nil 时使用空实现。
 func (r *Request) BackOffWithContext(manager BackoffManagerWithContext) *Request {
 	if manager == nil {
 		r.backoff = &NoBackoff{}
@@ -298,8 +291,7 @@ func (r *Request) BackOffWithContext(manager BackoffManagerWithContext) *Request
 	return r
 }
 
-// WarningHandler sets the handler this client uses when warning headers are encountered.
-// If set to nil, this client will use the default warning handler (see [SetDefaultWarningHandler]).
+// WarningHandler 设置客户端遇到 warning 头时使用的处理器；设为 nil 则使用默认处理器（见 [SetDefaultWarningHandler]）。
 //
 //logcheck:context // WarningHandlerWithContext should be used instead of WarningHandler in code which supports contextual logging.
 func (r *Request) WarningHandler(handler WarningHandler) *Request {
@@ -311,21 +303,19 @@ func (r *Request) WarningHandler(handler WarningHandler) *Request {
 	return r
 }
 
-// WarningHandlerWithContext sets the handler this client uses when warning headers are encountered.
-// If set to nil, this client will use the default warning handler (see [SetDefaultWarningHandlerWithContext]).
+// WarningHandlerWithContext 设置客户端遇到 warning 头时使用的处理器；设为 nil 则使用默认处理器（见 [SetDefaultWarningHandlerWithContext]）。
 func (r *Request) WarningHandlerWithContext(handler WarningHandlerWithContext) *Request {
 	r.warningHandler = handler
 	return r
 }
 
-// Throttle receives a rate-limiter and sets or replaces an existing request limiter
+// Throttle 设置或替换请求的限速器。
 func (r *Request) Throttle(limiter flowcontrol.RateLimiter) *Request {
 	r.rateLimiter = limiter
 	return r
 }
 
-// SubResource sets a sub-resource path which can be multiple segments after the resource
-// name but before the suffix.
+// SubResource 设置子资源路径，可包含多段，位于资源名之后、suffix 之前。
 func (r *Request) SubResource(subresources ...string) *Request {
 	if r.err != nil {
 		return r
@@ -346,7 +336,7 @@ func (r *Request) SubResource(subresources ...string) *Request {
 	return r
 }
 
-// Name sets the name of a resource to access (<resource>/[ns/<namespace>/]<name>)
+// Name 设置要访问的资源名，路径形态为 <resource>/[ns/<namespace>/]<name>。
 func (r *Request) Name(resourceName string) *Request {
 	if r.err != nil {
 		return r
@@ -367,7 +357,7 @@ func (r *Request) Name(resourceName string) *Request {
 	return r
 }
 
-// Namespace applies the namespace scope to a request (<resource>/[ns/<namespace>/]<name>)
+// Namespace 为请求设置命名空间范围，路径形态为 <resource>/[ns/<namespace>/]<name>。
 func (r *Request) Namespace(namespace string) *Request {
 	if r.err != nil {
 		return r
@@ -385,7 +375,7 @@ func (r *Request) Namespace(namespace string) *Request {
 	return r
 }
 
-// NamespaceIfScoped is a convenience function to set a namespace if scoped is true
+// NamespaceIfScoped 在 scoped 为 true 时设置命名空间，是便捷封装。
 func (r *Request) NamespaceIfScoped(namespace string, scoped bool) *Request {
 	if scoped {
 		return r.Namespace(namespace)
@@ -393,9 +383,7 @@ func (r *Request) NamespaceIfScoped(namespace string, scoped bool) *Request {
 	return r
 }
 
-// AbsPath overwrites an existing path with the segments provided.
-// Trailing slashes are preserved when a single segment is passed.
-// Any path in the request's REST client's base URL is preserved as a prefix.
+// AbsPath 用给定路径段覆盖已有路径。传入单段时会保留尾部斜杠；RESTClient base URL 中的路径始终作为前缀保留。
 func (r *Request) AbsPath(segments ...string) *Request {
 	if r.err != nil {
 		return r
@@ -403,14 +391,13 @@ func (r *Request) AbsPath(segments ...string) *Request {
 	// 直接替换 pathPrefix，因此会清除之前 Prefix/VersionedAPIPath 设置的路径。
 	r.pathPrefix = path.Join(r.c.base.Path, path.Join(segments...))
 	if len(segments) == 1 && (len(r.c.base.Path) > 1 || len(segments[0]) > 1) && strings.HasSuffix(segments[0], "/") {
-		// preserve any trailing slashes for legacy behavior
+		// 保留尾部斜杠以兼容旧行为。
 		r.pathPrefix += "/"
 	}
 	return r
 }
 
-// RequestURI overwrites existing path and parameters with the value of the provided server relative URI.
-// This is equivalent to clearing params, then calling AbsPath() + Param() for each query parameter.
+// RequestURI 用给定的服务端相对 URI 覆盖已有路径与参数，等价于清空参数后依次调用 AbsPath() 和 Param()。
 func (r *Request) RequestURI(uri string) *Request {
 	if r.err != nil {
 		return r
@@ -420,22 +407,22 @@ func (r *Request) RequestURI(uri string) *Request {
 		r.err = err
 		return r
 	}
-	// AbsPath handles prepending r.c.base.Path, if set
+	// 若设置了 r.c.base.Path，AbsPath 会自动加上该前缀。
 	r.AbsPath(locator.Path)
 	if len(locator.Query()) > 0 {
-		// clear any existing params
+		// 清空已有参数。
 		r.params = make(url.Values)
 		for k, v := range locator.Query() {
 			r.params[k] = v
 		}
 	} else {
-		// clear any existing params
+		// 清空已有参数。
 		r.params = nil
 	}
 	return r
 }
 
-// Param creates a query parameter with the given string value.
+// Param 用给定字符串值创建查询参数。
 func (r *Request) Param(paramName, s string) *Request {
 	if r.err != nil {
 		return r
@@ -443,11 +430,9 @@ func (r *Request) Param(paramName, s string) *Request {
 	return r.setParam(paramName, s)
 }
 
-// VersionedParams will take the provided object, serialize it to a map[string][]string using the
-// implicit RESTClient API version and the default parameter codec, and then add those as parameters
-// to the request. Use this to provide versioned query parameters from client libraries.
-// VersionedParams will not write query parameters that have omitempty set and are empty. If a
-// parameter has already been set it is appended to (Params and VersionedParams are additive).
+// VersionedParams 用 RESTClient 的隐式 API 版本与默认参数编解码器把对象序列化为 map[string][]string，
+// 再作为参数加入请求，供客户端库提供带版本的查询参数。带 omitempty 且为空的字段不会写出；
+// 已存在的参数会被追加而非覆盖（Params 与 VersionedParams 是累加的）。
 func (r *Request) VersionedParams(obj runtime.Object, codec runtime.ParameterCodec) *Request {
 	return r.SpecificallyVersionedParams(obj, codec, r.contentConfig.GroupVersion)
 }
@@ -494,8 +479,7 @@ func (r *Request) SetHeader(key string, values ...string) *Request {
 	return r
 }
 
-// Timeout makes the request use the given duration as an overall timeout for the
-// request. Additionally, if set passes the value as "timeout" parameter in URL.
+// Timeout 设置整个请求的超时时间，同时把该值作为 "timeout" 查询参数传给服务端。
 func (r *Request) Timeout(d time.Duration) *Request {
 	if r.err != nil {
 		return r
@@ -504,10 +488,7 @@ func (r *Request) Timeout(d time.Duration) *Request {
 	return r
 }
 
-// MaxRetries makes the request use the given integer as a ceiling of retrying upon receiving
-// "Retry-After" headers and 429 status-code in the response. The default is 10 unless this
-// function is specifically called with a different value.
-// A zero maxRetries prevent it from doing retires and return an error immediately.
+// MaxRetries 设置收到 "Retry-After" 或 429 时的最大重试次数，默认 10。设为 0 则不重试，立即返回错误。
 func (r *Request) MaxRetries(maxRetries int) *Request {
 	if maxRetries < 0 {
 		maxRetries = 0
@@ -516,13 +497,8 @@ func (r *Request) MaxRetries(maxRetries int) *Request {
 	return r
 }
 
-// Body makes the request use obj as the body. Optional.
-// If obj is a string, try to read a file of that name.
-// If obj is a []byte, send it directly.
-// If obj is an io.Reader, use it directly.
-// If obj is a runtime.Object, marshal it correctly, and set Content-Type header.
-// If obj is a runtime.Object and nil, do nothing.
-// Otherwise, set an error.
+// Body 设置请求体，可选。string 按文件名读取内容，[]byte 直接发送，io.Reader 直接使用，
+// runtime.Object 会被正确序列化并设置 Content-Type；nil 的 runtime.Object 不做处理，其他类型记录错误。
 func (r *Request) Body(obj interface{}) *Request {
 	if r.err != nil {
 		return r
@@ -544,7 +520,7 @@ func (r *Request) Body(obj interface{}) *Request {
 		r.body = t
 		r.bodyBytes = nil
 	case runtime.Object:
-		// callers may pass typed interface pointers, therefore we must check nil with reflection
+		// 调用方可能传入类型化接口指针，因此必须用反射判空。
 		if reflect.ValueOf(t).IsNil() {
 			return r
 		}
@@ -567,13 +543,12 @@ func (r *Request) Body(obj interface{}) *Request {
 	return r
 }
 
-// Error returns any error encountered constructing the request, if any.
+// Error 返回构造请求过程中遇到的错误。
 func (r *Request) Error() error {
 	return r.err
 }
 
-// URL returns the current working URL. Check the result of Error() to ensure
-// that the returned URL is valid.
+// URL 返回当前工作 URL。应先检查 Error() 以确保 URL 有效。
 func (r *Request) URL() *url.URL {
 	p := r.pathPrefix
 	// 路径顺序固定为 <prefix>/namespaces/<ns>/<resource>/<name>/<subresource>/<suffix>，
@@ -584,7 +559,7 @@ func (r *Request) URL() *url.URL {
 	if len(r.resource) != 0 {
 		p = path.Join(p, strings.ToLower(r.resource))
 	}
-	// Join trims trailing slashes, so preserve r.pathPrefix's trailing slash for backwards compatibility if nothing was changed
+	// Join 会裁掉尾部斜杠，若路径未改动则保留 r.pathPrefix 的尾部斜杠以兼容旧行为。
 	if len(r.resourceName) != 0 || len(r.subpath) != 0 || len(r.subresource) != 0 {
 		p = path.Join(p, r.resourceName, r.subresource, r.subpath)
 	}
@@ -638,8 +613,7 @@ func (r Request) finalURLTemplate() url.URL {
 		if !strings.HasPrefix(p, "/") {
 			p = "/" + p
 		}
-		// store the base path that we have trimmed so we can append it
-		// before returning the URL
+		// 保存裁掉的基础路径，返回 URL 前再拼回去。
 		trimmedBasePath = r.c.base.Path
 		segments = strings.Split(p, "/")
 		groupIndex = 1
@@ -653,16 +627,15 @@ func (r Request) finalURLTemplate() url.URL {
 	isCoreGroup := segments[groupIndex] == CoreGroupPrefix
 	isNamedGroup := segments[groupIndex] == NamedGroupPrefix
 	if isCoreGroup {
-		// checking the case of core group with /api/v1/... format
+		// 处理核心组的 /api/v1/... 形式。
 		index = groupIndex + 2
 	} else if isNamedGroup {
-		// checking the case of named group with /apis/apps/v1/... format
+		// 处理带组名的 /apis/apps/v1/... 形式。
 		index = groupIndex + 3
 	} else {
-		// this should not happen that the only two possibilities are /api... and /apis..., just want to put an
-		// outlet here in case more API groups are added in future if ever possible:
+		// 目前只应有 /api... 与 /apis... 两种形式，这里留个兜底分支，以防将来新增其他形式。
 		// https://kubernetes.io/docs/concepts/overview/kubernetes-api/#api-groups
-		// if a wrong API groups name is encountered, return the {prefix} for url.Path
+		// 遇到非法的 API group 名时，url.Path 返回 {prefix}。
 		u.Path = "/{prefix}"
 		u.RawQuery = ""
 		return *u
@@ -672,23 +645,23 @@ func (r Request) finalURLTemplate() url.URL {
 	// 把其中类似名字的段替换为 {name}/{namespace} 占位符。
 	switch {
 	// case len(segments) - index == 1:
-	// resource (with no name) do nothing
+	// 只有资源名，无需处理。
 	case len(segments)-index == 2:
-		// /$RESOURCE/$NAME: replace $NAME with {name}
+		// /$RESOURCE/$NAME：把 $NAME 替换为 {name}。
 		segments[index+1] = "{name}"
 	case len(segments)-index == 3:
 		if segments[index+2] == "finalize" || segments[index+2] == "status" {
-			// /$RESOURCE/$NAME/$SUBRESOURCE: replace $NAME with {name}
+			// /$RESOURCE/$NAME/$SUBRESOURCE：把 $NAME 替换为 {name}。
 			segments[index+1] = "{name}"
 		} else {
-			// /namespace/$NAMESPACE/$RESOURCE: replace $NAMESPACE with {namespace}
+			// /namespace/$NAMESPACE/$RESOURCE：把 $NAMESPACE 替换为 {namespace}。
 			segments[index+1] = "{namespace}"
 		}
 	case len(segments)-index >= 4:
 		segments[index+1] = "{namespace}"
-		// /namespace/$NAMESPACE/$RESOURCE/$NAME: replace $NAMESPACE with {namespace},  $NAME with {name}
+		// /namespace/$NAMESPACE/$RESOURCE/$NAME：$NAMESPACE 换成 {namespace}，$NAME 换成 {name}。
 		if segments[index+3] != "finalize" && segments[index+3] != "status" {
-			// /$RESOURCE/$NAME/$SUBRESOURCE: replace $NAME with {name}
+			// /$RESOURCE/$NAME/$SUBRESOURCE：把 $NAME 替换为 {name}。
 			segments[index+3] = "{name}"
 		}
 	}
@@ -707,7 +680,7 @@ func (r *Request) tryThrottleWithInfo(ctx context.Context, retryInfo string) err
 	now := time.Now()
 
 	err := r.rateLimiter.Wait(ctx)
-	// Don't wrap context errors as caller initiated ctx cancellations is not a rate limiter error.
+	// 调用方主动取消 context 不属于限速错误，不要包装 context 错误。
 	if err != nil && !stderrors.Is(err, context.Canceled) && !stderrors.Is(err, context.DeadlineExceeded) {
 		err = fmt.Errorf("client rate limiter Wait returned an error: %w", err)
 	}
@@ -768,7 +741,7 @@ var globalThrottledLogger = &throttledLogger{
 func (b *throttledLogger) attemptToLog(logger klog.Logger) (int, bool) {
 	for _, setting := range b.settings {
 		if bool(logger.V(setting.logLevel).Enabled()) {
-			// Return early without write locking if possible.
+			// 尽量不走写锁提前返回。
 			if func() bool {
 				setting.lock.RLock()
 				defer setting.lock.RUnlock()
@@ -787,23 +760,20 @@ func (b *throttledLogger) attemptToLog(logger klog.Logger) (int, bool) {
 	return -1, false
 }
 
-// Infof will write a log message at each logLevel specified by the receiver's throttleSettings
-// as long as it hasn't written a log message more recently than minLogInterval.
+// Infof 按接收者的 throttleSettings 指定的日志级别输出日志，前提是距上次输出已超过 minLogInterval。
 func (b *throttledLogger) info(logger klog.Logger, message string, kv ...any) {
 	if logLevel, ok := b.attemptToLog(logger); ok {
 		logger.V(logLevel).Info(message, kv...)
 	}
 }
 
-// Watch attempts to begin watching the requested location.
-// Returns a watch.Interface, or an error.
+// Watch 尝试监听目标位置，返回 watch.Interface 或错误。
 func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
 	if r.body == nil {
 		logBody(klog.FromContext(ctx), 2, "Request Body", r.bodyBytes)
 	}
 
-	// We specifically don't want to rate limit watches, so we
-	// don't use r.rateLimiter here.
+	// 刻意不对 watch 限速，因此这里不使用 r.rateLimiter。
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -848,7 +818,7 @@ func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
 			}
 
 			if resp == nil {
-				// the server must have sent us an error in 'err'
+				// 服务端必然已通过 err 返回了错误。
 				return true, nil
 			}
 			result := r.transformResponse(ctx, resp, req)
@@ -862,8 +832,7 @@ func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
 				return watch.NewEmptyWatch(), nil
 			}
 			if err == nil {
-				// if the server sent us an HTTP Response object,
-				// we need to return the error object from that.
+				// 若服务端返回了 HTTP Response 对象，需要从中提取错误对象返回。
 				err = transformErr
 			}
 			return nil, retry.WrapPreviousError(err)
@@ -891,23 +860,18 @@ func (r *Request) newStreamWatcher(ctx context.Context, resp *http.Response) (wa
 	return watch.NewStreamWatcherWithLogger(
 		klog.FromContext(ctx),
 		restclientwatch.NewDecoder(watchEventDecoder, objectDecoder),
-		// use 500 to indicate that the cause of the error is unknown - other error codes
-		// are more specific to HTTP interactions, and set a reason
+		// 原因不明时用 500；其他错误码更贴近具体的 HTTP 交互场景，并附带 reason。
 		errors.NewClientErrorReporter(http.StatusInternalServerError, r.verb, "ClientWatchDecoding"),
 	), nil
 }
 
-// updateRequestResultMetric increments the RequestResult metric counter,
-// it should be called with the (response, err) tuple from the final
-// reply from the server.
+// updateRequestResultMetric 累加 RequestResult 计数，应传入服务端最终响应的 (response, err)。
 func updateRequestResultMetric(ctx context.Context, req *Request, resp *http.Response, err error) {
 	code, host := sanitize(req, resp, err)
 	metrics.RequestResult.Increment(ctx, code, req.verb, host)
 }
 
-// updateRequestRetryMetric increments the RequestRetry metric counter,
-// it should be called with the (response, err) tuple for each retry
-// except for the final attempt.
+// updateRequestRetryMetric 累加 RequestRetry 计数，每次重试（不含最后一次）都应传入对应的 (response, err)。
 func updateRequestRetryMetric(ctx context.Context, req *Request, resp *http.Response, err error) {
 	code, host := sanitize(req, resp, err)
 	metrics.RequestRetry.IncrementRetry(ctx, code, req.verb, host)
@@ -921,8 +885,7 @@ func sanitize(req *Request, resp *http.Response, err error) (string, string) {
 		host = req.c.base.Host
 	}
 
-	// Errors can be arbitrary strings. Unbound label cardinality is not suitable for a metric
-	// system so we just report them as `<error>`.
+	// 错误文本可能是任意字符串，直接作为标签会导致基数失控，统一记为 `<error>`。
 	code := "<error>"
 	if resp != nil {
 		code = strconv.Itoa(resp.StatusCode)
@@ -931,10 +894,8 @@ func sanitize(req *Request, resp *http.Response, err error) (string, string) {
 	return code, host
 }
 
-// Stream formats and executes the request, and offers streaming of the response.
-// Returns io.ReadCloser which could be used for streaming of the response, or an error
-// Any non-2xx http status code causes an error.  If we get a non-2xx code, we try to convert the body into an APIStatus object.
-// If we can, we return that as an error.  Otherwise, we create an error that lists the http status and the content of the response.
+// Stream 构造并发送请求，以流的形式返回响应。非 2xx 状态码一律视为错误：先尝试把响应体解析为 APIStatus 并返回，
+// 否则返回包含 HTTP 状态码与响应内容的错误。
 func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 	if r.body == nil {
 		logBody(klog.FromContext(ctx), 2, "Request Body", r.bodyBytes)
@@ -967,7 +928,7 @@ func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 		resp, err := client.Do(req)
 		retry.After(ctx, r, resp, err)
 		if err != nil {
-			// we only retry on an HTTP response with 'Retry-After' header
+			// 只在响应带 'Retry-After' 头时重试。
 			return nil, err
 		}
 
@@ -1033,8 +994,7 @@ func (r *Request) newHTTPRequest(ctx context.Context) (*http.Request, error) {
 	case r.body != nil:
 		body = r.body
 	case r.bodyBytes != nil:
-		// Create a new reader specifically for this request.
-		// Giving each request a dedicated reader allows retries to avoid races resetting the request body.
+		// 为每次（重试）请求创建独立的 reader，避免重置请求体时发生竞争。
 		body = bytes.NewReader(r.bodyBytes)
 	}
 
@@ -1047,8 +1007,7 @@ func (r *Request) newHTTPRequest(ctx context.Context) (*http.Request, error) {
 	return req, nil
 }
 
-// newDNSMetricsTrace returns an HTTP trace that tracks time spent on DNS lookups per host.
-// This metric is available in client as "rest_client_dns_resolution_duration_seconds".
+// newDNSMetricsTrace 返回按主机统计 DNS 查询耗时的 HTTP trace，对应指标 "rest_client_dns_resolution_duration_seconds"。
 func newDNSMetricsTrace(ctx context.Context) *httptrace.ClientTrace {
 	// DNS 回调可能并发触发，用互斥量保护共享的 start/host。
 	type dnsMetric struct {
@@ -1072,10 +1031,8 @@ func newDNSMetricsTrace(ctx context.Context) *httptrace.ClientTrace {
 	}
 }
 
-// request connects to the server and invokes the provided function when a server response is
-// received. It handles retry behavior and up front validation of requests. It will invoke
-// fn at most once. It will return an error if a problem occurred prior to connecting to the
-// server - the provided function is responsible for handling server errors.
+// request 连接服务端并在收到响应时调用 fn，负责重试与前置校验。fn 最多调用一次；
+// 连接前发生的错误由本函数返回，服务端响应层面的错误由 fn 处理。
 func (r *Request) request(ctx context.Context, fn func(*http.Request, *http.Response)) error { // Metrics for total request latency
 	start := time.Now()
 	defer func() {
@@ -1096,9 +1053,7 @@ func (r *Request) request(ctx context.Context, fn func(*http.Request, *http.Resp
 		client = http.DefaultClient
 	}
 
-	// Throttle the first try before setting up the timeout configured on the
-	// client. We don't want a throttled client to return timeouts to callers
-	// before it makes a single request.
+	// 首次尝试先等待限速，再设置客户端超时，避免请求尚未发出就向调用方报超时。
 	if err := r.tryThrottle(ctx); err != nil {
 		return err
 	}
@@ -1111,20 +1066,19 @@ func (r *Request) request(ctx context.Context, fn func(*http.Request, *http.Resp
 	}
 
 	isErrRetryableFunc := func(req *http.Request, err error) bool {
-		// "Connection reset by peer" or "apiserver is shutting down" are usually a transient errors.
-		// Thus in case of "GET" operations, we simply retry it.
-		// We are not automatically retrying "write" operations, as they are not idempotent.
+		// "Connection reset by peer" 与 "apiserver is shutting down" 通常是瞬时错误，因此 GET 可直接重试。
+		// 写操作不自动重试，因为它们不具备幂等性。
 		if req.Method != "GET" {
 			return false
 		}
-		// For connection errors and apiserver shutdown errors retry.
+		// 连接错误与 apiserver 关闭错误应重试。
 		if net.IsConnectionReset(err) || net.IsProbableEOF(err) || net.IsHTTP2ConnectionLost(err) {
 			return true
 		}
 		return false
 	}
 
-	// Right now we make about ten retry attempts if we get a Retry-After response.
+	// 目前收到 Retry-After 响应时大约重试十次。
 	retry := r.retryFn(r.maxRetries)
 	for {
 		if err := retry.Before(ctx, r); err != nil {
@@ -1135,7 +1089,7 @@ func (r *Request) request(ctx context.Context, fn func(*http.Request, *http.Resp
 			return err
 		}
 		resp, err := client.Do(req)
-		// The value -1 or a value of 0 with a non-nil Body indicates that the length is unknown.
+		// -1，或 Body 非空时为 0，都表示长度未知。
 		// https://pkg.go.dev/net/http#Request
 		if req.ContentLength >= 0 && !(req.Body != nil && req.ContentLength == 0) {
 			metrics.RequestSize.Observe(ctx, r.verb, r.URL().Host, float64(req.ContentLength))
@@ -1150,7 +1104,7 @@ func (r *Request) request(ctx context.Context, fn func(*http.Request, *http.Resp
 			// 每次尝试都关闭响应体；若返回 false 表示还要重试，否则已完成。
 			defer readAndCloseResponseBody(resp)
 
-			// if the server returns an error in err, the response will be nil.
+			// 若服务端通过 err 返回错误，response 会是 nil。
 			f := func(req *http.Request, resp *http.Response) {
 				if resp == nil {
 					return
@@ -1171,12 +1125,11 @@ func (r *Request) request(ctx context.Context, fn func(*http.Request, *http.Resp
 	}
 }
 
-// Do formats and executes the request. Returns a Result object for easy response
-// processing.
+// Do 构造并执行请求，返回便于处理响应的 Result。
 //
-// Error type:
-//   - If the server responds with a status: *errors.StatusError or *errors.UnexpectedObjectError
-//   - http.Client.Do errors are returned directly.
+// 错误类型：
+//   - 服务端返回 status 时：*errors.StatusError 或 *errors.UnexpectedObjectError
+//   - http.Client.Do 的错误直接返回。
 func (r *Request) Do(ctx context.Context) Result {
 	logger := klog.FromContext(ctx)
 	if r.body == nil {
@@ -1236,13 +1189,9 @@ func (r *Request) transformResponse(ctx context.Context, resp *http.Response, re
 		case nil:
 			body = data
 		case http2.StreamError:
-			// This is trying to catch the scenario that the server may close the connection when sending the
-			// response body. This can be caused by server timeout due to a slow network connection.
-			// TODO: Add test for this. Steps may be:
-			// 1. client-go (or kubectl) sends a GET request.
-			// 2. Apiserver sends back the headers and then part of the body
-			// 3. Apiserver closes connection.
-			// 4. client-go should catch this and return an error.
+			// 用于捕获服务端在发送响应体过程中关闭连接的情况，可能由慢网络导致的服务端超时引起。
+			// TODO: 补测试：1) client-go（或 kubectl）发 GET；2) apiserver 返回头及部分 body；
+			// 3) apiserver 关闭连接；4) client-go 应捕获并返回错误。
 			logger.V(2).Info("Stream error when reading response body, may be caused by closed connection", "err", err)
 			streamErr := fmt.Errorf("stream error when reading response body, may be caused by closed connection. Please retry. Original error: %w", err)
 			return Result{
@@ -1259,10 +1208,10 @@ func (r *Request) transformResponse(ctx context.Context, resp *http.Response, re
 		}
 	}
 
-	// Call depth is tricky. This one is okay for Do and DoRaw.
+	// 调用层数容易出错，该值适用于 Do 与 DoRaw。
 	logBody(logger, 7, "Response Body", body)
 
-	// verify the content type is accurate
+	// 校验 Content-Type 是否准确。
 	var decoder runtime.Decoder
 	contentType := resp.Header.Get("Content-Type")
 	if len(contentType) == 0 {
@@ -1280,7 +1229,7 @@ func (r *Request) transformResponse(ctx context.Context, resp *http.Response, re
 			// 优先把非 2xx 转成通用错误；协议升级（101）则视为正常，交由调用方处理。
 			switch {
 			case resp.StatusCode == http.StatusSwitchingProtocols:
-				// no-op, we've been upgraded
+				// 协议已升级，无需处理。
 			case resp.StatusCode < http.StatusOK || resp.StatusCode > http.StatusPartialContent:
 				return Result{err: r.transformUnstructuredResponseError(resp, req, body), logger: logger}
 			}
@@ -1296,10 +1245,9 @@ func (r *Request) transformResponse(ctx context.Context, resp *http.Response, re
 
 	switch {
 	case resp.StatusCode == http.StatusSwitchingProtocols:
-		// no-op, we've been upgraded
+		// 协议已升级，无需处理。
 	case resp.StatusCode < http.StatusOK || resp.StatusCode > http.StatusPartialContent:
-		// calculate an unstructured error from the response which the Result object may use if the caller
-		// did not return a structured error.
+		// 从响应中构造非结构化错误，供调用方未返回结构化错误时的 Result 使用。
 		retryAfter, _ := retryAfterSeconds(resp)
 		err := r.newUnstructuredResponseError(body, isTextResponse(resp), resp.StatusCode, req.Method, retryAfter)
 		return Result{
@@ -1343,11 +1291,8 @@ func truncateBody(logger klog.Logger, body string) string {
 	return body[:max] + fmt.Sprintf(" [truncated %d chars]", len(body)-max)
 }
 
-// logBody logs a body output that could be either JSON or protobuf. It explicitly guards against
-// allocating a new string for the body output unless necessary. Uses a simple heuristic to determine
-// whether the body is printable.
-//
-// It needs to be called by all functions which send or receive the data.
+// logBody 记录可能是 JSON 或 protobuf 的响应体，尽量避免不必要的字符串分配，并用简单启发式判断
+// body 是否可打印。所有发送或接收数据的函数都应调用它。
 func logBody(logger klog.Logger, callDepth int, prefix string, body []byte) {
 	// 只有 V(8) 才需要做任何工作；其余情况直接返回，避免字符串分配。
 	if loggerV := logger.V(8); loggerV.Enabled() {
@@ -1397,7 +1342,7 @@ func (r *Request) transformUnstructuredResponseError(resp *http.Response, req *h
 
 // newUnstructuredResponseError instantiates the appropriate generic error for the provided input. It also logs the body.
 func (r *Request) newUnstructuredResponseError(body []byte, isTextResponse bool, statusCode int, method string, retryAfter int) error {
-	// cap the amount of output we create
+	// 限制输出长度。
 	if len(body) > maxUnstructuredResponseTextBytes {
 		body = body[:maxUnstructuredResponseTextBytes]
 	}
@@ -1423,7 +1368,7 @@ func (r *Request) newUnstructuredResponseError(body []byte, isTextResponse bool,
 	)
 }
 
-// isTextResponse returns true if the response appears to be a textual media type.
+// isTextResponse 判断响应是否为文本媒体类型。
 func isTextResponse(resp *http.Response) bool {
 	contentType := resp.Header.Get("Content-Type")
 	if len(contentType) == 0 {
@@ -1437,8 +1382,7 @@ func isTextResponse(resp *http.Response) bool {
 	return strings.HasPrefix(media, "text/")
 }
 
-// retryAfterSeconds returns the value of the Retry-After header and true, or 0 and false if
-// the header was missing or not a valid number.
+// retryAfterSeconds 返回 Retry-After 头的值及 true；头缺失或不是合法数字时返回 0 和 false。
 func retryAfterSeconds(resp *http.Response) (int, bool) {
 	if h := resp.Header.Get("Retry-After"); len(h) > 0 {
 		if i, err := strconv.Atoi(h); err == nil {
@@ -1463,17 +1407,15 @@ type Result struct {
 	decoder runtime.Decoder
 }
 
-// Raw returns the raw result.
+// Raw 返回原始结果。
 func (r Result) Raw() ([]byte, error) {
 	return r.body, r.err
 }
 
-// Get returns the result as an object, which means it passes through the decoder.
-// If the returned object is of type Status and has .Status != StatusSuccess, the
-// additional information in Status will be used to enrich the error.
+// Get 返回经解码后的对象。若结果是 Status 且 .Status != StatusSuccess，会用其中的信息丰富错误。
 func (r Result) Get() (runtime.Object, error) {
 	if r.err != nil {
-		// Check whether the result has a Status object in the body and prefer that.
+		// 优先使用 body 中的 Status 对象。
 		return nil, r.Error()
 	}
 	if r.decoder == nil {
@@ -1488,7 +1430,7 @@ func (r Result) Get() (runtime.Object, error) {
 	}
 	switch t := out.(type) {
 	case *metav1.Status:
-		// any status besides StatusSuccess is considered an error.
+		// 除 StatusSuccess 外的状态一律视为错误。
 		if t.Status != metav1.StatusSuccess {
 			return nil, errors.FromObject(t)
 		}
@@ -1496,27 +1438,23 @@ func (r Result) Get() (runtime.Object, error) {
 	return out, nil
 }
 
-// StatusCode returns the HTTP status code of the request. (Only valid if no
-// error was returned.)
+// StatusCode 返回请求的 HTTP 状态码，仅在未返回错误时有效。
 func (r Result) StatusCode(statusCode *int) Result {
 	*statusCode = r.statusCode
 	return r
 }
 
-// ContentType returns the "Content-Type" response header into the passed
-// string, returning the Result for possible chaining. (Only valid if no
-// error code was returned.)
+// ContentType 把 "Content-Type" 响应头写入传入的字符串并返回 Result 以支持链式调用，仅在未返回错误时有效。
 func (r Result) ContentType(contentType *string) Result {
 	*contentType = r.contentType
 	return r
 }
 
-// Into stores the result into obj, if possible. If obj is nil it is ignored.
-// If the returned object is of type Status and has .Status != StatusSuccess, the
-// additional information in Status will be used to enrich the error.
+// Into 尽可能把结果存入 obj；obj 为 nil 时忽略。若结果是 Status 且 .Status != StatusSuccess，
+// 会用其中的信息丰富错误。
 func (r Result) Into(obj runtime.Object) error {
 	if r.err != nil {
-		// Check whether the result has a Status object in the body and prefer that.
+		// 优先使用 body 中的 Status 对象。
 		return r.Error()
 	}
 	if r.decoder == nil {
@@ -1529,14 +1467,13 @@ func (r Result) Into(obj runtime.Object) error {
 
 	out, _, err := r.decoder.Decode(r.body, nil, obj)
 	if err != nil || out == obj {
-		// out == obj 表示解码器直接就地把结果写入了目标对象，无需再检查 Status。
+		// 解码器已把结果就地写入目标对象时，无需再检查 Status。
 		return err
 	}
-	// if a different object is returned, see if it is Status and avoid double decoding
-	// the object.
+	// 若返回的是另一个对象，检查它是否为 Status，避免重复解码。
 	switch t := out.(type) {
 	case *metav1.Status:
-		// any status besides StatusSuccess is considered an error.
+		// 除 StatusSuccess 外的状态一律视为错误。
 		if t.Status != metav1.StatusSuccess {
 			return errors.FromObject(t)
 		}
@@ -1544,16 +1481,14 @@ func (r Result) Into(obj runtime.Object) error {
 	return nil
 }
 
-// WasCreated updates the provided bool pointer to whether the server returned
-// 201 created or a different response.
+// WasCreated 根据服务端是否返回 201 更新传入的 bool 指针。
 func (r Result) WasCreated(wasCreated *bool) Result {
 	*wasCreated = r.statusCode == http.StatusCreated
 	return r
 }
 
-// Error returns the error executing the request, nil if no error occurred.
-// If the returned object is of type Status and has Status != StatusSuccess, the
-// additional information in Status will be used to enrich the error.
+// Error 返回执行请求时的错误，无错误时返回 nil。若结果是 Status 且 Status != StatusSuccess，
+// 会用其中的信息丰富错误。
 // See the Request.Do() comment for what errors you might get.
 func (r Result) Error() error {
 	// 若收到的是意外的服务端错误，且有 body 和 decoder，就尝试从中提取 Status 对象。
@@ -1562,8 +1497,7 @@ func (r Result) Error() error {
 		return r.err
 	}
 
-	// attempt to convert the body into a Status object
-	// to be backwards compatible with old servers that do not return a version, default to "v1"
+	// 尝试把 body 转成 Status 对象。为兼容不返回版本的旧服务端，默认使用 "v1"。
 	out, _, err := r.decoder.Decode(r.body, &schema.GroupVersionKind{Version: "v1"}, nil)
 	if err != nil {
 		r.logger.V(5).Info("Body was not decodable (unable to check for Status)", "err", err)
@@ -1571,7 +1505,7 @@ func (r Result) Error() error {
 	}
 	switch t := out.(type) {
 	case *metav1.Status:
-		// because we default the kind, we *must* check for StatusFailure
+		// 由于 kind 是默认填充的，必须检查 StatusFailure。
 		if t.Status == metav1.StatusFailure {
 			return errors.FromObject(t)
 		}
@@ -1579,15 +1513,15 @@ func (r Result) Error() error {
 	return r.err
 }
 
-// Warnings returns any warning headers received in the response
+// Warnings 返回响应中收到的所有 warning 头。
 func (r Result) Warnings() []net.WarningHeader {
 	return r.warnings
 }
 
-// NameMayNotBe specifies strings that cannot be used as names specified as path segments (like the REST API or etcd store)
+// NameMayNotBe 指定不能用作路径段名称（如 REST API 或 etcd 存储）的字符串。
 var NameMayNotBe = []string{".", ".."}
 
-// NameMayNotContain specifies substrings that cannot be used in names specified as path segments (like the REST API or etcd store)
+// NameMayNotContain 指定不能出现在路径段名称中的子串。
 var NameMayNotContain = []string{"/", "%"}
 
 // IsValidPathSegmentName 校验名字能否被安全地编码为路径段，
@@ -1623,7 +1557,7 @@ func IsValidPathSegmentPrefix(name string) []string {
 	return errors
 }
 
-// ValidatePathSegmentName validates the name can be safely encoded as a path segment
+// ValidatePathSegmentName 校验名称能否安全地编码为路径段。
 func ValidatePathSegmentName(name string, prefix bool) []string {
 	// prefix 为 true 时放宽对 "."/".." 的检查。
 	if prefix {

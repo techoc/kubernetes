@@ -25,46 +25,41 @@ import (
 // FakeClient 是各类 fake 客户端（clientset、metadata、dynamic 等）的公共行为集合。
 // reactor 链按顺序匹配，Prepend 的方法优先于 Add 的方法执行。
 type FakeClient interface {
-	// Tracker gives access to the ObjectTracker internal to the fake client.
+	// Tracker 暴露 fake 客户端内部的 ObjectTracker。
 	Tracker() ObjectTracker
 
-	// AddReactor appends a reactor to the end of the chain.
+	// AddReactor 把 reactor 追加到链尾。
 	AddReactor(verb, resource string, reaction ReactionFunc)
 
-	// PrependReactor adds a reactor to the beginning of the chain.
+	// PrependReactor 把 reactor 插入链首。
 	PrependReactor(verb, resource string, reaction ReactionFunc)
 
-	// AddWatchReactor appends a reactor to the end of the chain.
+	// AddWatchReactor 把 watch reactor 追加到链尾。
 	AddWatchReactor(resource string, reaction WatchReactionFunc)
 
-	// PrependWatchReactor adds a reactor to the beginning of the chain.
+	// PrependWatchReactor 把 watch reactor 插入链首。
 	PrependWatchReactor(resource string, reaction WatchReactionFunc)
 
-	// AddProxyReactor appends a reactor to the end of the chain.
+	// AddProxyReactor 把 proxy reactor 追加到链尾。
 	AddProxyReactor(resource string, reaction ProxyReactionFunc)
 
-	// PrependProxyReactor adds a reactor to the beginning of the chain.
+	// PrependProxyReactor 把 proxy reactor 插入链首。
 	PrependProxyReactor(resource string, reaction ProxyReactionFunc)
 
-	// Invokes records the provided Action and then invokes the ReactionFunc that
-	// handles the action if one exists. defaultReturnObj is expected to be of the
-	// same type a normal call would return.
+	// Invokes 记录 Action 并调用可处理它的 ReactionFunc；defaultReturnObj 应与正常调用的返回类型一致。
 	Invokes(action Action, defaultReturnObj runtime.Object) (runtime.Object, error)
 
-	// InvokesWatch records the provided Action and then invokes the ReactionFunc
-	// that handles the action if one exists.
+	// InvokesWatch 记录 Action 并调用可处理它的 ReactionFunc。
 	InvokesWatch(action Action) (watch.Interface, error)
 
-	// InvokesProxy records the provided Action and then invokes the ReactionFunc
-	// that handles the action if one exists.
+	// InvokesProxy 记录 Action 并调用可处理它的 ReactionFunc。
 	InvokesProxy(action Action) restclient.ResponseWrapper
 
-	// ClearActions clears the history of actions called on the fake client.
+	// ClearActions 清空 fake 客户端记录的 action 历史。
 	// 只清空记录，不影响 tracker 中的对象或 reactor。
 	ClearActions()
 
-	// Actions returns a chronologically ordered slice fake actions called on the
-	// fake client.
+	// Actions 按时间顺序返回 fake 客户端收到的 action。
 	// 返回副本语义的实现应保证调用方修改切片不会影响内部记录。
 	Actions() []Action
 }

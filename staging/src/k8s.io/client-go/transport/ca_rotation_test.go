@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	// Use the same rootCACert as transport_test.go
+	// 复用 transport_test.go 中的 rootCACert。
 	testCACert1 = `-----BEGIN CERTIFICATE-----
 MIIC4DCCAcqgAwIBAgIBATALBgkqhkiG9w0BAQswIzEhMB8GA1UEAwwYMTAuMTMu
 MTI5LjEwNkAxNDIxMzU5MDU4MB4XDTE1MDExNTIxNTczN1oXDTE2MDExNTIxNTcz
@@ -57,7 +57,7 @@ W+MmJCVDvd4eEqPwbp7146ZWTqpIJ8lvA6wuChtqV8lhAPka2hD/LMqY8iXNmfXD
 uml0obOEy+ON91k+SWTJ3ggmF/U=
 -----END CERTIFICATE-----`
 
-	// A different CA cert for testing rotation (modified version of certData from transport_test.go)
+	// 另一份 CA 证书，用于测试轮换（由 transport_test.go 的 certData 修改而来）。
 	testCACert2 = `-----BEGIN CERTIFICATE-----
 MIIC6jCCAdSgAwIBAgIBCzALBgkqhkiG9w0BAQswIzEhMB8GA1UEAwwYMTAuMTMu
 MTI5LjEwNkAxNDIxMzU5MDU4MB4XDTE1MDExNTIyMDEzMVoXDTE2MDExNTIyMDEz
@@ -184,7 +184,7 @@ func TestCheckCAFileAndRotate(t *testing.T) {
 			holder.transportLastChecked = clock.Now()
 
 			if tt.updateCA != nil {
-				// Update the file with new CA content
+				// 用新 CA 内容更新文件。
 				err := os.WriteFile(caFile, tt.updateCA, 0644)
 				if err != nil {
 					t.Errorf("Failed to update CA data with file address: %s", caFile)
@@ -193,7 +193,7 @@ func TestCheckCAFileAndRotate(t *testing.T) {
 
 			clock.Step(holder.caRefreshDuration)
 
-			// Check CA file rotation
+			// 检查 CA 文件轮换是否生效。
 			newTransport := holder.getTransport(t.Context())
 			newRoots := newTransport.TLSClientConfig.RootCAs
 
@@ -230,25 +230,23 @@ func generateServerCertAndCA(t testing.TB) (servingCertPEM, servingKeyPEM, caCer
 	return certPEM, keyPEM, caPEM
 }
 
-// TestCARotationConnectionBehavior tests end-to-end CA rotation:
-// 1. Client trusts server CA via a CA file on disk
-// 2. Server rotates to a new CA + serving cert
-// 3. Client fails (doesn't trust new CA yet)
-// 4. CA file updated, transport reloads, client reconnects
+// TestCARotationConnectionBehavior 端到端测试 CA 轮换：
+// 1) 客户端通过磁盘 CA 文件信任服务端 CA；2) 服务端换成新 CA 与新证书；
+// 3) 客户端因不信任新 CA 而失败；4) 更新 CA 文件后 transport 重载，客户端重连成功。
 func TestCARotationConnectionBehavior(t *testing.T) {
 	t.Log("Testing CA Rotation Connection Behavior")
 
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, true)
 
-	// Generate initial server v1 cert and CA
+	// 生成初始的服务端 v1 证书与 CA。
 	servingCertPEM1, servingKeyPEM1, caCertPEM1 := generateServerCertAndCA(t)
 
-	// Start server v1 (no client cert required - test focuses on server CA rotation)
+	// 启动 v1 服务端（无需客户端证书，本测试只关注服务端 CA 轮换）。
 	srv1 := newTestServer(t, servingCertPEM1, servingKeyPEM1)
 	srv1.StartTLS()
 	defer srv1.Close()
 
-	// Set up the client
+	// 配置客户端。
 	clientCAFile := writeCAFile(t, caCertPEM1)
 	config := &Config{
 		TLS: TLSConfig{
@@ -267,7 +265,7 @@ func TestCARotationConnectionBehavior(t *testing.T) {
 		Timeout:   30 * time.Second,
 	}
 
-	// Initial connection must succeed
+	// 初次连接应成功。
 	t.Log("Making initial request to server v1, expecting success...")
 	resp, err := client.Get(srv1.URL)
 	if err != nil {
@@ -282,7 +280,7 @@ func TestCARotationConnectionBehavior(t *testing.T) {
 
 	t.Log("Initial connection successful.")
 
-	// Rotate: new CA, new server cert, same address
+	// 轮换：换用新 CA 与新服务端证书，地址不变。
 	t.Log("Stopping server v1 and starting server v2 with new CA...")
 	srv1Addr := srv1.Listener.Addr().String()
 	srv1.Close()
@@ -298,7 +296,7 @@ func TestCARotationConnectionBehavior(t *testing.T) {
 	srv2.StartTLS()
 	defer srv2.Close()
 
-	// Must fail - client still trusts old CA
+	// 应失败：客户端仍只信任旧 CA。
 	t.Log("Making request to server v2, expecting failure...")
 	_, err = client.Get(srv2.URL)
 	if err == nil {
@@ -306,13 +304,13 @@ func TestCARotationConnectionBehavior(t *testing.T) {
 	}
 	t.Log("Request failed as expected.")
 
-	// Update CA file to trust new CA
+	// 更新 CA 文件以信任新 CA。
 	t.Log("Updating client CA file on disk to trust new CA...")
 	if err := os.WriteFile(clientCAFile, caCertPEM2, 0644); err != nil {
 		t.Fatalf("Failed to update CA file: %v", err)
 	}
 
-	// Poll until transport reloads
+	// 轮询等待 transport 重新加载。
 	t.Log("Polling server v2 until the client's transport reloads the new CA...")
 	var lastPollErr error
 	ctx, ctxCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -347,15 +345,15 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, false)
 
-	// Generate initial server v1 cert and CA
+	// 生成初始的服务端 v1 证书与 CA。
 	servingCertPEM1, servingKeyPEM1, caCertPEM1 := generateServerCertAndCA(t)
 
-	// Start server v1 (no client cert required - test focuses on server CA rotation)
+	// 启动 v1 服务端（无需客户端证书，本测试只关注服务端 CA 轮换）。
 	srv1 := newTestServer(t, servingCertPEM1, servingKeyPEM1)
 	srv1.StartTLS()
 	defer srv1.Close()
 
-	// Set up the client
+	// 配置客户端。
 	clientCAFile := writeCAFile(t, caCertPEM1)
 	config := &Config{
 		TLS: TLSConfig{
@@ -376,7 +374,7 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 		Timeout:   30 * time.Second,
 	}
 
-	// Initial connection must succeed
+	// 初次连接应成功。
 	t.Log("Making initial request to server v1, expecting success...")
 	resp, err := client.Get(srv1.URL)
 	if err != nil {
@@ -391,7 +389,7 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 
 	t.Log("Initial connection successful.")
 
-	// Rotate: new CA, new server cert, same address
+	// 轮换：换用新 CA 与新服务端证书，地址不变。
 	t.Log("Stopping server v1 and starting server v2 with new CA...")
 	srv1Addr := srv1.Listener.Addr().String()
 	srv1.Close()
@@ -407,7 +405,7 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 	srv2.StartTLS()
 	defer srv2.Close()
 
-	// Must fail - client still trusts old CA
+	// 应失败：客户端仍只信任旧 CA。
 	t.Log("Making request to server v2, expecting failure...")
 	_, err = client.Get(srv2.URL)
 	if err == nil {
@@ -415,13 +413,13 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 	}
 	t.Log("Request failed as expected.")
 
-	// Update CA file to trust new CA
+	// 更新 CA 文件以信任新 CA。
 	t.Log("Updating client CA file on disk to trust new CA...")
 	if err := os.WriteFile(clientCAFile, caCertPEM2, 0644); err != nil {
 		t.Fatalf("Failed to update CA file: %v", err)
 	}
 
-	// Poll to ensure transport DOES NOT reload
+	// 轮询确认 transport 没有重新加载。
 	t.Log("Polling server v2 to verify the client DOES NOT reconnect...")
 	var lastPollErr error
 	ctx, ctxCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -443,7 +441,7 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 		return false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	})
 
-	// If pollErr is nil, it means the connection succeeded, which is wrong for this test.
+	// pollErr 为 nil 表示连接成功，这与本测试的预期相反。
 	if pollErr == nil {
 		t.Fatalf("Client unexpectedly reconnected after CA rotation! The feature gate is disabled, so this should have failed.")
 	}
@@ -466,8 +464,7 @@ func (m *testCAReloadsMetric) Increment(result, reason string) {
 	m.calls = append(m.calls, caReloadCall{result, reason})
 }
 
-// TestCARotationMetricsEmitted verifies that ca_rotation.go emits the correct
-// metrics during actual CA reload operations.
+// TestCARotationMetricsEmitted 验证 CA 实际重载时 ca_rotation.go 上报的指标正确。
 //
 // 每个子用例只触发一次刷新，断言恰好产生一条指标，且结果与原因符合预期。
 func TestCARotationMetricsEmitted(t *testing.T) {
@@ -562,7 +559,7 @@ func newTestServer(t *testing.T, certPEM, keyPEM []byte) *httptest.Server {
 			t.Fatal("Failed to write to the response.")
 		}
 	}))
-	// Configure server TLS
+	// 配置服务端 TLS。
 	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		t.Fatalf("Failed to create server cert: %v", err)

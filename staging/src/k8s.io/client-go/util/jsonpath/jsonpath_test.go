@@ -80,7 +80,7 @@ func testJSONPathSortOutput(tests []jsonpathTest, t *testing.T) {
 			t.Errorf("in %s, execute error %v", test.name, err)
 		}
 		out := buf.String()
-		//since map is visited in random order, we need to sort the results.
+		// map 遍历顺序随机，因此需要排序后再比较。
 		sortedOut := strings.Fields(out)
 		sort.Strings(sortedOut)
 		sortedExpect := strings.Fields(test.expect)
@@ -141,42 +141,42 @@ func TestTypesInput(t *testing.T) {
 	}
 
 	sliceTests := []jsonpathTest{
-		// boolean slice tests
+		// 布尔切片。
 		{"boolSlice", `{ .bools }`, types, `[true,false,true,false]`, false},
 		{"boolSliceIndex", `{ .bools[0] }`, types, `true`, false},
 		{"boolSliceIndex", `{ .bools[-1] }`, types, `false`, false},
 		{"boolSubSlice", `{ .bools[0:2] }`, types, `true false`, false},
 		{"boolSubSliceFirst2", `{ .bools[:2] }`, types, `true false`, false},
 		{"boolSubSliceStep2", `{ .bools[:4:2] }`, types, `true true`, false},
-		// integer slice tests
+		// 整数切片。
 		{"integerSlice", `{ .integers }`, types, `[1,2,3,4]`, false},
 		{"integerSliceIndex", `{ .integers[0] }`, types, `1`, false},
 		{"integerSliceIndexReverse", `{ .integers[-2] }`, types, `3`, false},
 		{"integerSubSliceFirst2", `{ .integers[0:2] }`, types, `1 2`, false},
 		{"integerSubSliceFirst2Alt", `{ .integers[:2] }`, types, `1 2`, false},
 		{"integerSubSliceStep2", `{ .integers[:4:2] }`, types, `1 3`, false},
-		// float slice tests
+		// 浮点切片。
 		{"floatSlice", `{ .floats }`, types, `[1,2.2,3.3,4]`, false},
 		{"floatSliceIndex", `{ .floats[0] }`, types, `1`, false},
 		{"floatSliceIndexReverse", `{ .floats[-2] }`, types, `3.3`, false},
 		{"floatSubSliceFirst2", `{ .floats[0:2] }`, types, `1 2.2`, false},
 		{"floatSubSliceFirst2Alt", `{ .floats[:2] }`, types, `1 2.2`, false},
 		{"floatSubSliceStep2", `{ .floats[:4:2] }`, types, `1 3.3`, false},
-		// strings slice tests
+		// 字符串切片。
 		{"stringSlice", `{ .strings }`, types, `["one","two","three","four"]`, false},
 		{"stringSliceIndex", `{ .strings[0] }`, types, `one`, false},
 		{"stringSliceIndexReverse", `{ .strings[-2] }`, types, `three`, false},
 		{"stringSubSliceFirst2", `{ .strings[0:2] }`, types, `one two`, false},
 		{"stringSubSliceFirst2Alt", `{ .strings[:2] }`, types, `one two`, false},
 		{"stringSubSliceStep2", `{ .strings[:4:2] }`, types, `one three`, false},
-		// interfaces slice tests
+		// interface 切片。
 		{"interfaceSlice", `{ .interfaces }`, types, `[true,"one",1,1.1]`, false},
 		{"interfaceSliceIndex", `{ .interfaces[0] }`, types, `true`, false},
 		{"interfaceSliceIndexReverse", `{ .interfaces[-2] }`, types, `1`, false},
 		{"interfaceSubSliceFirst2", `{ .interfaces[0:2] }`, types, `true one`, false},
 		{"interfaceSubSliceFirst2Alt", `{ .interfaces[:2] }`, types, `true one`, false},
 		{"interfaceSubSliceStep2", `{ .interfaces[:4:2] }`, types, `true 1`, false},
-		// maps slice tests
+		// map 切片。
 		{"mapSlice", `{ .maps }`, types,
 			`[{"name":"one","value":1},{"name":"two","value":2.02},{"name":"three","value":3.03},{"name":"four","value":4.04}]`, false},
 		{"mapSliceIndex", `{ .maps[0] }`, types, `{"name":"one","value":1}`, false},
@@ -185,7 +185,7 @@ func TestTypesInput(t *testing.T) {
 		{"mapSubSliceFirst2Alt", `{ .maps[:2] }`, types, `{"name":"one","value":1} {"name":"two","value":2.02}`, false},
 		{"mapSubSliceStepOdd", `{ .maps[::2] }`, types, `{"name":"one","value":1} {"name":"three","value":3.03}`, false},
 		{"mapSubSliceStepEven", `{ .maps[1::2] }`, types, `{"name":"two","value":2.02} {"name":"four","value":4.04}`, false},
-		// structs slice tests
+		// 结构体切片。
 		{"structSlice", `{ .structs }`, types,
 			`[{"name":"one","value":1,"type":"integer"},{"name":"two","value":2.002,"type":"float"},{"name":"three","value":3,"type":"integer"},{"name":"four","value":4.004,"type":"float"}]`, false},
 		{"structSliceIndex", `{ .structs[0] }`, types, `{"name":"one","value":1,"type":"integer"}`, false},
@@ -557,7 +557,7 @@ func TestNestedRanges(t *testing.T) {
 // TestFilterPartialMatchesSometimesMissingAnnotations 验证过滤器遇到缺少 annotations 的条目时，
 // AllowMissingKeys=true 只返回匹配项，false 则报错。
 func TestFilterPartialMatchesSometimesMissingAnnotations(t *testing.T) {
-	// for https://issues.k8s.io/45546
+	// 对应 https://issues.k8s.io/45546
 	var input = []byte(`{
 		"kind": "List",
 		"items": [

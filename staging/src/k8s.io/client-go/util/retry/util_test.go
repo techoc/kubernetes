@@ -33,7 +33,7 @@ func TestRetryOnConflict(t *testing.T) {
 	opts := wait.Backoff{Factor: 1.0, Steps: 3}
 	conflictErr := errors.NewConflict(schema.GroupResource{Resource: "test"}, "other", nil)
 
-	// never returns
+	// 一直返回冲突。
 	// 冲突错误会持续重试，步数耗尽后把最后一次冲突错误原样返回。
 	err := RetryOnConflict(opts, func() error {
 		return conflictErr
@@ -42,7 +42,7 @@ func TestRetryOnConflict(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// returns immediately
+	// 立即成功。
 	// 首次成功即停止，函数恰好只被调用一次。
 	i := 0
 	err = RetryOnConflict(opts, func() error {
@@ -53,7 +53,7 @@ func TestRetryOnConflict(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// returns immediately on error
+	// 遇错立即返回。
 	// 非冲突错误不属于可重试范畴，必须立即透出。
 	testErr := fmt.Errorf("some other error")
 	err = RetryOnConflict(opts, func() error {
@@ -63,7 +63,7 @@ func TestRetryOnConflict(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// keeps retrying
+	// 持续重试。
 	// 前两次冲突、第三次成功，验证重试计数与最终 nil 结果。
 	i = 0
 	err = RetryOnConflict(opts, func() error {

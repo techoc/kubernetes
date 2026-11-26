@@ -225,7 +225,7 @@ func TestTokenSourceTransportRoundTrip(t *testing.T) {
 			cachedTokenSource.tok = test.cachedToken
 
 			rt := ResettableTokenSourceWrapTransport(cachedTokenSource)(&testTransport{})
-			// workaround for https://github.com/golang/oauth2/pull/779
+			// 绕过 https://github.com/golang/oauth2/pull/779 中的问题。
 			if test.header == nil {
 				test.header = make(http.Header)
 			}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package listers provides generated listers for Kubernetes APIs.
+// Package listers 提供为 Kubernetes API 生成的 Lister。
 //
 // Package listers 提供由代码生成器产出的 Lister：它们从本地 Informer 缓存读取对象，
 // 不发起网络请求，因此读取结果可能滞后于 apiserver，且返回的对象应视为只读，

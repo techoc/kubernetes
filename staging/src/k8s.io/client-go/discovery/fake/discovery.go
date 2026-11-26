@@ -49,12 +49,11 @@ var (
 	_ discovery.DiscoveryInterfaceWithContext = &FakeDiscovery{}
 )
 
-// ServerResourcesForGroupVersion returns the supported resources for a group
-// and version.
+// ServerResourcesForGroupVersion 返回指定 group/version 支持的资源列表。
 //
-// ServerResourcesForGroupVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerResourcesForGroupVersionWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerResourcesForGroupVersionWithContext instead.
+// 上下文日志：请改用 ServerResourcesForGroupVersionWithContext。
 //
 // ServerResourcesForGroupVersion 返回指定 group/version 支持的资源列表；
 // 新代码应使用带 context 的版本。
@@ -62,8 +61,7 @@ func (c *FakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 	return c.ServerResourcesForGroupVersionWithContext(context.Background(), groupVersion)
 }
 
-// ServerResourcesForGroupVersionWithContext returns the supported resources for a group
-// and version.
+// ServerResourcesForGroupVersionWithContext 返回指定 group/version 支持的资源列表。
 //
 // 在 FakeDiscovery.Resources 中按 GroupVersion 查找；找不到时返回 NotFound 的 StatusError，
 // 模拟真实服务端的行为。
@@ -90,16 +88,16 @@ func (c *FakeDiscovery) ServerResourcesForGroupVersionWithContext(ctx context.Co
 		}}
 }
 
-// ServerGroupsAndResources returns the supported groups and resources for all groups and versions.
+// ServerGroupsAndResources 返回所有 group/version 的组信息与资源列表。
 //
-// ServerGroupsAndResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsAndResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsAndResourcesWithContext instead.
+// 上下文日志：请改用 ServerGroupsAndResourcesWithContext。
 func (c *FakeDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return c.ServerGroupsAndResourcesWithContext(context.Background())
 }
 
-// ServerGroupsAndResourcesWithContext returns the supported groups and resources for all groups and versions.
+// ServerGroupsAndResourcesWithContext 返回所有 group/version 的组信息与资源列表。
 func (c *FakeDiscovery) ServerGroupsAndResourcesWithContext(ctx context.Context) ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	sgs, err := c.ServerGroupsWithContext(ctx)
 	if err != nil {
@@ -121,54 +119,48 @@ func (c *FakeDiscovery) ServerGroupsAndResourcesWithContext(ctx context.Context)
 	return resultGroups, c.Resources, nil
 }
 
-// ServerPreferredResources returns the supported resources with the version
-// preferred by the server.
+// ServerPreferredResources 返回服务端首选版本下的资源列表。
 //
-// ServerPreferredResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredResourcesWithContext。
 func (c *FakeDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	return c.ServerPreferredResourcesWithContext(context.Background())
 }
 
-// ServerPreferredResourcesWithContext returns the supported resources with the version
-// preferred by the server.
+// ServerPreferredResourcesWithContext 返回服务端首选版本下的资源列表。
 //
 // fake 实现始终返回空结果。
 func (c *FakeDiscovery) ServerPreferredResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	return nil, nil
 }
 
-// ServerPreferredNamespacedResources returns the supported namespaced resources
-// with the version preferred by the server.
+// ServerPreferredNamespacedResources 返回服务端首选版本下的命名空间级资源。
 //
-// ServerPreferredNamespacedResourcesWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerPreferredNamespacedResourcesWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerPreferredNamespacedResourcesWithContext instead.
+// 上下文日志：请改用 ServerPreferredNamespacedResourcesWithContext。
 func (c *FakeDiscovery) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	return c.ServerPreferredNamespacedResourcesWithContext(context.Background())
 }
 
-// ServerPreferredNamespacedResourcesWithContext returns the supported namespaced resources
-// with the version preferred by the server.
+// ServerPreferredNamespacedResourcesWithContext 返回服务端首选版本下的命名空间级资源。
 //
 // fake 实现始终返回空结果。
 func (c *FakeDiscovery) ServerPreferredNamespacedResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	return nil, nil
 }
 
-// ServerGroups returns the supported groups, with information like supported
-// versions and the preferred version.
+// ServerGroups 返回支持的 API 组，包括版本列表与首选版本。
 //
-// ServerGroupsWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerGroupsWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerGroupsWithContext instead.
+// 上下文日志：请改用 ServerGroupsWithContext。
 func (c *FakeDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 	return c.ServerGroupsWithContext(context.Background())
 }
 
-// ServerGroupsWithContext returns the supported groups, with information like supported
-// versions and the preferred version.
+// ServerGroupsWithContext 返回支持的 API 组，包括版本列表与首选版本。
 //
 // 从 Resources 推导出所有 API 组；每个组第一次出现时被记录为 preferred version。
 func (c *FakeDiscovery) ServerGroupsWithContext(ctx context.Context) (*metav1.APIGroupList, error) {
@@ -215,16 +207,16 @@ func (c *FakeDiscovery) ServerGroupsWithContext(ctx context.Context) (*metav1.AP
 
 }
 
-// ServerVersion retrieves and parses the server's version.
+// ServerVersion 获取并解析服务端版本。
 //
-// ServerVersionWithContext is a better alternative because it supports contextual logging and cancellation.
+// ServerVersionWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use ServerVersionWithContext instead.
+// 上下文日志：请改用 ServerVersionWithContext。
 func (c *FakeDiscovery) ServerVersion() (*version.Info, error) {
 	return c.ServerVersionWithContext(context.Background())
 }
 
-// ServerVersionWithContext retrieves and parses the server's version.
+// ServerVersionWithContext 获取并解析服务端版本。
 //
 // 优先返回 FakedServerVersion；未设置时返回编译期的客户端版本信息，保证测试中非空。
 func (c *FakeDiscovery) ServerVersionWithContext(ctx context.Context) (*version.Info, error) {
@@ -244,25 +236,25 @@ func (c *FakeDiscovery) ServerVersionWithContext(ctx context.Context) (*version.
 	return &versionInfo, nil
 }
 
-// OpenAPISchema retrieves and parses the swagger API schema the server supports.
+// OpenAPISchema 获取并解析服务端支持的 swagger API schema。
 //
-// OpenAPISchemaWithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPISchemaWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPISchemaWithContext instead.
+// 上下文日志：请改用 OpenAPISchemaWithContext。
 func (c *FakeDiscovery) OpenAPISchema() (*openapi_v2.Document, error) {
 	return c.OpenAPISchemaWithContext(context.Background())
 }
 
-// OpenAPISchemaWithContext retrieves and parses the swagger API schema the server supports.
+// OpenAPISchemaWithContext 获取并解析服务端支持的 swagger API schema。
 //
 // fake 实现返回空文档，调用方无需处理 nil。
 func (c *FakeDiscovery) OpenAPISchemaWithContext(ctx context.Context) (*openapi_v2.Document, error) {
 	return &openapi_v2.Document{}, nil
 }
 
-// OpenAPIV3WithContext is a better alternative because it supports contextual logging and cancellation.
+// OpenAPIV3WithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use OpenAPIV3WithContext instead.
+// 上下文日志：请改用 OpenAPIV3WithContext。
 //
 // OpenAPIV3 在 fake 中未实现，调用会 panic。
 func (c *FakeDiscovery) OpenAPIV3() openapi.Client {
@@ -274,17 +266,16 @@ func (c *FakeDiscovery) OpenAPIV3WithContext(ctx context.Context) openapi.Client
 	panic("unimplemented")
 }
 
-// RESTClient returns a RESTClient that is used to communicate with API server
-// by this client implementation.
+// RESTClient 返回该客户端用于与 API server 通信的 RESTClient。
 //
 // fake 没有真实 REST 客户端，返回 nil。
 func (c *FakeDiscovery) RESTClient() restclient.Interface {
 	return nil
 }
 
-// WithLegacyWithContext is a better alternative because it supports contextual logging and cancellation.
+// WithLegacyWithContext 支持上下文日志与取消，应优先使用。
 //
-// Contextual logging: Use WithLegacyWithContext instead.
+// 上下文日志：请改用 WithLegacyWithContext。
 //
 // WithLegacy 在 fake 中未实现，调用会 panic。
 func (c *FakeDiscovery) WithLegacy() discovery.DiscoveryInterface {
