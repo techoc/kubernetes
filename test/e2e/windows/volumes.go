@@ -152,8 +152,8 @@ func doReadWriteReadOnlyTest(ctx context.Context, f *framework.Framework, source
 	framework.ExpectNoError(err, readmsg)
 }
 
-// testPodWithROVolume makes a minimal pod defining a volume input source. Similarly to
-// other tests for sig-windows this should append a nodeSelector for windows.
+// testPodWithROVolume 定义一个带 volume input source 的最小 pod。与 sig-windows 的
+// 其他测试类似，这里也应追加一个 windows 的 nodeSelector。
 func testPodWithROVolume(podName string, source v1.VolumeSource, path string) *v1.Pod {
 	return &v1.Pod{
 		TypeMeta: metav1.TypeMeta{

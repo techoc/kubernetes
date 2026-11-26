@@ -58,9 +58,9 @@ var _ = SIGDescribe("LimitRange", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
 	/*
-		Release: v1.18
-		Testname: LimitRange, resources
-		Description: Creating a Limitrange and verifying the creation of Limitrange, updating the Limitrange and validating the Limitrange. Creating Pods with resources and validate the pod resources are applied to the Limitrange
+		发布版本：v1.18
+		测试名称：LimitRange, resources
+		描述：创建 Limitrange 并验证其创建、更新 Limitrange 并校验 Limitrange。创建带资源的 Pod，验证 pod 资源受 Limitrange 约束。
 	*/
 	framework.ConformanceIt("should create a LimitRange with defaults and ensure pod has those defaults applied.", func(ctx context.Context) {
 		ginkgo.By("Creating a LimitRange")
@@ -136,7 +136,7 @@ var _ = SIGDescribe("LimitRange", func() {
 		for i := range pod.Spec.Containers {
 			err = equalResourceRequirement(expected, pod.Spec.Containers[i].Resources)
 			if err != nil {
-				// Print the pod to help in debugging.
+				// 打印 pod 以辅助调试。
 				framework.Logf("Pod %+v does not have the expected requirements", pod)
 				framework.ExpectNoError(err)
 			}
@@ -150,14 +150,14 @@ var _ = SIGDescribe("LimitRange", func() {
 		ginkgo.By("Ensuring Pod has merged resource requirements applied from LimitRange")
 		pod, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
-		// This is an interesting case, so it's worth a comment
-		// If you specify a Limit, and no Request, the Limit will default to the Request
-		// This means that the LimitRange.DefaultRequest will ONLY take affect if a container.resources.limit is not supplied
+		// 这是个有趣的场景，值得加个注释
+		// 如果指定了 Limit 但没指定 Request，Limit 会默认为 Request
+		// 这意味着 LimitRange.DefaultRequest 只有在未提供 container.resources.limit 时才会生效
 		expected = v1.ResourceRequirements{Requests: getResourceList("300m", "150Mi", "150Gi"), Limits: getResourceList("300m", "500Mi", "500Gi")}
 		for i := range pod.Spec.Containers {
 			err = equalResourceRequirement(expected, pod.Spec.Containers[i].Resources)
 			if err != nil {
-				// Print the pod to help in debugging.
+				// 打印 pod 以辅助调试。
 				framework.Logf("Pod %+v does not have the expected requirements", pod)
 				framework.ExpectNoError(err)
 			}
@@ -226,16 +226,16 @@ var _ = SIGDescribe("LimitRange", func() {
 
 		ginkgo.By("Creating a Pod with more than former max resources")
 		pod = newTestPod(podName+"2", getResourceList("600m", "600Mi", "600Gi"), v1.ResourceList{})
-		// When the LimitRanger admission plugin find 0 items from the LimitRange informer cache,
-		// it will try to lookup LimitRanges from the local LiveLookupCache which liveTTL is 30s.
-		// If a LimitRange was deleted from the apiserver, informer watch the delete event and then
-		// handle it lead to the informer cache doesn't have any other items, but the local LiveLookupCache
-		// has it and not expired at the same time, the LimitRanger admission plugin will use the
-		// deleted LimitRange to validate the request. So the request will be rejected by the plugin
-		// till the item is expired.
+		// 当 LimitRanger admission 插件从 LimitRange informer cache 中找不到条目时，
+		// 它会尝试从本地 LiveLookupCache 查找，其 liveTTL 为 30 秒。
+		// 如果某个 LimitRange 从 apiserver 删除，informer 监听到 delete 事件后
+		// 处理它，导致 informer cache 里没有其他条目，但本地 LiveLookupCache
+		// 中仍有该条目且未过期，LimitRanger admission 插件就会用
+		// 已删除的 LimitRange 校验请求，于是请求会被拒绝，
+		// 直到条目过期。
 		//
-		// With the following retry, we can make sure the item is expired and the request will be
-		// validated as expected.
+		// 通过下面的重试，确保条目过期后请求按预期
+		// 被校验。
 		err = framework.Gomega().Eventually(ctx, func(ctx context.Context) error {
 			_, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{})
 			return err
@@ -244,14 +244,14 @@ var _ = SIGDescribe("LimitRange", func() {
 	})
 
 	/*
-		Release: v1.26
-		Testname: LimitRange, list, patch and delete a LimitRange by collection
-		Description: When two limitRanges are created in different namespaces,
-		both MUST succeed. Listing limitRanges across all namespaces with a
-		labelSelector MUST find both limitRanges. When patching the first limitRange
-		it MUST succeed and the fields MUST equal the new values. When deleting
-		the limitRange by collection with a labelSelector it MUST delete only one
-		limitRange.
+		发布版本：v1.26
+		测试名称：LimitRange, list, patch and delete a LimitRange by collection
+		描述：在不同 namespace 中创建两个 limitRange，
+		两者都必须成功。用 labelSelector 跨所有 namespace 列举
+		必须找到两个 limitRange。patch 第一个 limitRange
+		必须成功且字段必须等于新值。用 labelSelector 按集合
+		删除 limitRange 时，必须只删除一个
+		limitRange。
 	*/
 	framework.ConformanceIt("should list, patch and delete a LimitRange by collection", ginkgo.NodeTimeout(wait.ForeverTestTimeout), func(ctx context.Context) {
 
@@ -288,7 +288,7 @@ var _ = SIGDescribe("LimitRange", func() {
 				},
 			},
 		}
-		// Create a copy to be used in a second namespace
+		// 创建一份副本，用于第二个 namespace
 		limitRange2 := &v1.LimitRange{}
 		*limitRange2 = *limitRange
 
@@ -305,7 +305,7 @@ var _ = SIGDescribe("LimitRange", func() {
 		_, err = f.ClientSet.CoreV1().LimitRanges(lrNamespace.ObjectMeta.Name).Create(ctx, limitRange2, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "Failed to create limitRange %q in %q namespace", lrName, lrNamespace.ObjectMeta.Name)
 
-		// Listing across all namespaces to verify api endpoint: listCoreV1LimitRangeForAllNamespaces
+		// 跨所有 namespace 列举，验证 api endpoint: listCoreV1LimitRangeForAllNamespaces
 		ginkgo.By(fmt.Sprintf("Listing all LimitRanges with label %q", e2eLabelSelector))
 		limitRangeList, err := f.ClientSet.CoreV1().LimitRanges("").List(ctx, metav1.ListOptions{LabelSelector: e2eLabelSelector})
 		framework.ExpectNoError(err, "Failed to list any limitRanges: %v", err)
@@ -395,7 +395,7 @@ func getResourceList(cpu, memory string, ephemeralStorage string) v1.ResourceLis
 	return res
 }
 
-// newLimitRange returns a limit range with specified data
+// newLimitRange 返回一个带指定数据的 limit range
 func newLimitRange(name, value string, limitType v1.LimitType,
 	min, max,
 	defaultLimit, defaultRequest,
@@ -422,7 +422,7 @@ func newLimitRange(name, value string, limitType v1.LimitType,
 	}
 }
 
-// newTestPod returns a pod that has the specified requests and limits
+// newTestPod 返回一个带指定 requests 和 limits 的 pod
 func newTestPod(name string, requests v1.ResourceList, limits v1.ResourceList) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

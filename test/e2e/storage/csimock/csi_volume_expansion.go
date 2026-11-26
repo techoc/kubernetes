@@ -129,7 +129,7 @@ var _ = utils.SIGDescribe("CSI Mock volume expansion", func() {
 					enableNodeExpansion:     test.nodeExpansionRequired,
 					disableResizingOnDriver: test.disableResizingOnDriver,
 				}
-				// disabling attach requires drive registration feature
+				// 禁用 attach 需要 driver 注册特性
 				if test.disableAttach {
 					tp.disableAttach = true
 					tp.registerDriver = true
@@ -178,7 +178,7 @@ var _ = utils.SIGDescribe("CSI Mock volume expansion", func() {
 					testsuites.ExpectNoResizeConditions(pvcConditions)
 				}
 
-				// if node expansion is not required PVC should be resized as well
+				// 如果不需要节点扩容，PVC 也应调整大小
 				if !test.nodeExpansionRequired {
 					checkPVCSize()
 				} else {
@@ -218,8 +218,8 @@ var _ = utils.SIGDescribe("CSI Mock volume expansion", func() {
 			disableAttach bool
 			expectedCalls []csiCall
 
-			// Called for each NodeExpandVolume calls, with counter incremented atomically before
-			// the invocation (i.e first value will be 1).
+			// 每次 NodeExpandVolume 调用时触发，调用前原子递增计数器
+			// （即第一次值为 1）。
 			nodeExpandHook func(counter int64) error
 		}{
 			{
@@ -322,11 +322,11 @@ var _ = utils.SIGDescribe("CSI Mock volume expansion", func() {
 						return true, err
 					}
 					if index == 0 {
-						// No CSI call received yet
+						// 尚未收到 CSI 调用
 						return false, nil
 					}
 					if len(test.expectedCalls) == index {
-						// all calls received
+						// 所有调用已收到
 						return true, nil
 					}
 					return false, nil
@@ -807,16 +807,16 @@ func validateRecoveryBehaviour(ctx context.Context, pvc *v1.PersistentVolumeClai
 		framework.Failf("error updating pvc size %q", pvc.Name)
 	}
 
-	// If expansion failed on controller (infeasible or final), recovery should be possible.
-	// Wait for the recovery resize to settle before checking quota.
+	// 如果 controller 上扩容失败（不可行或最终错误），应能恢复。
+	// 检查配额前，先等待恢复性调整大小稳定。
 	if test.simulatedCSIDriverError == expansionFailedOnControllerWithInfeasibleError ||
 		test.simulatedCSIDriverError == expansionFailedOnControllerWithFinalError {
 		validateExpansionSuccess(ctx, pvc, m, test, test.recoverySize.String())
 		return
 	}
 
-	// if expansion failed on node with final error but volume was only expanded on the node
-	// then recovery should be possible
+	// 如果节点上扩容因最终错误失败，但 volume 只在节点上
+	// 被扩容过，则应能恢复
 	if test.disableControllerExpansion &&
 		(test.simulatedCSIDriverError == expansionFailedOnNodeWithInfeasibleError ||
 			test.simulatedCSIDriverError == expansionFailedOnNodeWithFinalError) {
@@ -824,7 +824,7 @@ func validateRecoveryBehaviour(ctx context.Context, pvc *v1.PersistentVolumeClai
 		return
 	}
 
-	// if expansion succeeded on controller but failed on the node
+	// 如果 controller 上扩容成功但节点上失败
 	if test.simulatedCSIDriverError == expansionFailedOnNodeWithInfeasibleError {
 		ginkgo.By("Wait for expansion to fail on node again")
 		err = waitForResizeToFailOnNode(ctx, pvc, m.cs)
@@ -957,7 +957,7 @@ func createExpansionHook(expectedExpansionStatus expansionStatus) *drivers.Hooks
 					}
 				}
 			case expansionFailedOnControllerWithFinalError:
-				// This simulates a condition that a final, but not infeasible error is returned when expansion fails in the controller.
+				// 这模拟 controller 扩容失败时返回最终但非不可行错误的场景。
 				expansionRequest, ok := request.(*csipbv1.ControllerExpandVolumeRequest)
 				if ok {
 					requestedSize := resource.NewQuantity(expansionRequest.CapacityRange.RequiredBytes, resource.BinarySI)

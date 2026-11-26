@@ -61,15 +61,15 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, with validation schema
-		Description: Register a custom resource definition with a validating schema consisting of objects, arrays and
-		primitives. Attempt to create and apply a change a custom resource using valid properties, via kubectl;
-		kubectl validation MUST pass. Attempt both operations with unknown properties and without required
-		properties; kubectl validation MUST reject the operations. Attempt kubectl explain; the output MUST
-		explain the custom resource properties. Attempt kubectl explain on custom resource properties; the output MUST
-		explain the nested custom resource properties.
-		All validation should be the same.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, with validation schema
+		描述：注册带对象、数组和基本类型校验 schema 的自定义资源定义。
+		用 kubectl 创建自定义资源并用合法属性应用变更；kubectl 校验必须通过。
+		用未知属性和缺失必填属性执行同样的操作；kubectl 校验必须拒绝。
+		执行 kubectl explain；输出必须解释自定义资源的属性。
+		对自定义资源属性执行 kubectl explain；输出必须
+		解释嵌套的自定义资源属性。
+		所有校验应保持一致。
 	*/
 	framework.ConformanceIt("works for CRD with validation schema", func(ctx context.Context) {
 		crd, err := setupCRD(f, schemaFoo, "foo", "v1")
@@ -101,8 +101,8 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 			framework.Failf("unexpected no error when creating CR with unknown enum value: %v", err)
 		}
 
-		// TODO: server-side validation and client-side validation produce slightly different error messages.
-		// Because server-side is default in beta but not GA yet, we will produce different behaviors in the default vs GA only conformance tests. We have made the error generic enough to pass both, but should go back and make the error more specific once server-side validation goes GA.
+		// TODO: 服务端校验和客户端校验产生的错误信息略有不同。
+		// 由于服务端校验在 beta 中是默认但尚未 GA，默认测试与仅 GA 的一致性测试会表现不同。我们已把错误信息写得足够通用以同时通过两者，但服务端校验 GA 后应改回更具体的错误。
 		ginkgo.By("kubectl validation (kubectl create and apply) rejects request with unknown properties when disallowed by the schema")
 		unknownCR := fmt.Sprintf(`{%s,"spec":{"foo":true}}`, meta)
 		if _, err := e2ekubectl.RunKubectlInput(f.Namespace.Name, unknownCR, ns, "create", "-f", "-"); err == nil || (!strings.Contains(err.Error(), `unknown field "foo"`) && !strings.Contains(err.Error(), `unknown field "spec.foo"`)) {
@@ -112,7 +112,7 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 			framework.Failf("unexpected no error when applying CR with unknown field: %v", err)
 		}
 
-		// TODO: see above note, we should check the value of the error once server-side validation is GA.
+		// TODO: 见上面的说明，服务端校验 GA 后应检查错误的具体值。
 		ginkgo.By("kubectl validation (kubectl create and apply) rejects request without required properties")
 		noRequireCR := fmt.Sprintf(`{%s,"spec":{"bars":[{"age":"10"}]}}`, meta)
 		if _, err := e2ekubectl.RunKubectlInput(f.Namespace.Name, noRequireCR, ns, "create", "-f", "-"); err == nil || (!strings.Contains(err.Error(), `missing required field "name"`) && !strings.Contains(err.Error(), `spec.bars[0].name: Required value`)) {
@@ -149,11 +149,11 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, with x-kubernetes-preserve-unknown-fields in object
-		Description: Register a custom resource definition with x-kubernetes-preserve-unknown-fields in the top level object.
-		Attempt to create and apply a change a custom resource, via kubectl; kubectl validation MUST accept unknown
-		properties. Attempt kubectl explain; the output MUST contain a valid DESCRIPTION stanza.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, with x-kubernetes-preserve-unknown-fields in object
+		描述：注册一个顶层对象带 x-kubernetes-preserve-unknown-fields 的自定义资源定义。
+		用 kubectl 创建自定义资源并应用变更；kubectl 校验必须接受未知
+		属性。执行 kubectl explain；输出必须包含有效的 DESCRIPTION 段。
 	*/
 	framework.ConformanceIt("works for CRD without validation schema", func(ctx context.Context) {
 		crd, err := setupCRD(f, nil, "empty", "v1")
@@ -190,11 +190,11 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, with x-kubernetes-preserve-unknown-fields at root
-		Description: Register a custom resource definition with x-kubernetes-preserve-unknown-fields in the schema root.
-		Attempt to create and apply a change a custom resource, via kubectl; kubectl validation MUST accept unknown
-		properties. Attempt kubectl explain; the output MUST show the custom resource KIND.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, with x-kubernetes-preserve-unknown-fields at root
+		描述：注册一个 schema 根部带 x-kubernetes-preserve-unknown-fields 的自定义资源定义。
+		用 kubectl 创建自定义资源并应用变更；kubectl 校验必须接受未知
+		属性。执行 kubectl explain；输出必须显示自定义资源的 KIND。
 	*/
 	framework.ConformanceIt("works for CRD preserving unknown fields at the schema root", func(ctx context.Context) {
 		crd, err := setupCRDAndVerifySchema(f, schemaPreserveRoot, nil, "unknown-at-root", "v1")
@@ -231,12 +231,12 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, with x-kubernetes-preserve-unknown-fields in embedded object
-		Description: Register a custom resource definition with x-kubernetes-preserve-unknown-fields in an embedded object.
-		Attempt to create and apply a change a custom resource, via kubectl; kubectl validation MUST accept unknown
-		properties. Attempt kubectl explain; the output MUST show that x-preserve-unknown-properties is used on the
-		nested field.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, with x-kubernetes-preserve-unknown-fields in embedded object
+		描述：注册一个内嵌对象带 x-kubernetes-preserve-unknown-fields 的自定义资源定义。
+		用 kubectl 创建自定义资源并应用变更；kubectl 校验必须接受未知
+		属性。执行 kubectl explain；输出必须显示
+		嵌套字段上使用了 x-preserve-unknown-properties。
 	*/
 	framework.ConformanceIt("works for CRD preserving unknown fields in an embedded object", func(ctx context.Context) {
 		crd, err := setupCRDAndVerifySchema(f, schemaPreserveNested, nil, "unknown-in-nested", "v1")
@@ -273,10 +273,10 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, varying groups
-		Description: Register multiple custom resource definitions spanning different groups and versions;
-		OpenAPI definitions MUST be published for custom resource definitions.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, varying groups
+		描述：注册跨不同 group 和 version 的多个自定义资源定义；
+		必须为每个自定义资源定义发布 OpenAPI 定义。
 	*/
 	framework.ConformanceIt("works for multiple CRDs of different groups", func(ctx context.Context) {
 		ginkgo.By("CRs in different groups (two CRDs) show up in OpenAPI documentation")
@@ -306,10 +306,10 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, varying versions
-		Description: Register a custom resource definition with multiple versions; OpenAPI definitions MUST be published
-		for custom resource definitions.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, varying versions
+		描述：注册含多个版本的自定义资源定义；必须为自定义资源定义
+		发布 OpenAPI 定义。
 	*/
 	framework.ConformanceIt("works for multiple CRDs of same group but different versions", func(ctx context.Context) {
 		ginkgo.By("CRs in the same group but different versions (one multiversion CRD) show up in OpenAPI documentation")
@@ -354,10 +354,10 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, varying kinds
-		Description: Register multiple custom resource definitions in the same group and version but spanning different kinds;
-		OpenAPI definitions MUST be published for custom resource definitions.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, varying kinds
+		描述：在同一 group 和 version 下注册多个不同 kind 的自定义资源定义；
+		必须为每个自定义资源定义发布 OpenAPI 定义。
 	*/
 	framework.ConformanceIt("works for multiple CRDs of same group and version but different kinds", func(ctx context.Context) {
 		ginkgo.By("CRs in the same group and version but different kinds (two CRDs) show up in OpenAPI documentation")
@@ -387,11 +387,11 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, version rename
-		Description: Register a custom resource definition with multiple versions; OpenAPI definitions MUST be published
-		for custom resource definitions. Rename one of the versions of the custom resource definition via a patch;
-		OpenAPI definitions MUST update to reflect the rename.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, version rename
+		描述：注册含多个版本的自定义资源定义；必须为自定义资源定义
+		发布 OpenAPI 定义。通过 patch 重命名其中一个版本；
+		OpenAPI 定义必须随之更新以反映重命名。
 	*/
 	framework.ConformanceIt("updates the published spec when one version gets renamed", func(ctx context.Context) {
 		ginkgo.By("set up a multi version CRD")
@@ -429,8 +429,8 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 			framework.Failf("%v", err)
 		}
 
-		// TestCrd.Versions is different from TestCrd.Crd.Versions, we have to manually
-		// update the name there. Used by cleanupCRD
+		// TestCrd.Versions 与 TestCrd.Crd.Versions 不同，必须手动
+		// 更新后者。cleanupCRD 会用到它。
 		crdMultiVer.Crd.Spec.Versions[1].Name = "v4"
 		if err := cleanupCRD(ctx, f, crdMultiVer); err != nil {
 			framework.Failf("%v", err)
@@ -438,11 +438,11 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource OpenAPI Publish, stop serving version
-		Description: Register a custom resource definition with multiple versions. OpenAPI definitions MUST be published
-		for custom resource definitions. Update the custom resource definition to not serve one of the versions. OpenAPI
-		definitions MUST be updated to not contain the version that is no longer served.
+		发布版本：v1.16
+		测试名称：Custom Resource OpenAPI Publish, stop serving version
+		描述：注册含多个版本的自定义资源定义。必须为自定义资源定义
+		发布 OpenAPI 定义。更新定义使其中一个版本不再提供服务。OpenAPI
+		定义必须更新，移除不再提供服务的版本。
 	*/
 	framework.ConformanceIt("removes definition from spec when one version gets changed to not be served", func(ctx context.Context) {
 		ginkgo.By("set up a multi version CRD")
@@ -451,7 +451,7 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 			framework.Failf("%v", err)
 		}
 		gomega.Expect(crd.Crd).To(apimachineryutils.HaveValidResourceVersion())
-		// just double check. setupCRD() checked this for us already
+		// 再做一次确认。setupCRD() 已经检查过这一点
 		if err := waitForDefinition(f.ClientSet, definitionName(crd, "v6alpha1"), schemaFoo); err != nil {
 			framework.Failf("%v", err)
 		}
@@ -518,8 +518,8 @@ var _ = SIGDescribe("CustomResourcePublishOpenAPI [Privileged:ClusterAdmin]", fu
 func setupCRD(f *framework.Framework, schema []byte, groupSuffix string, versions ...string) (*crd.TestCrd, error) {
 	expect := schema
 	if schema == nil {
-		// to be backwards compatible, we expect CRD controller to treat
-		// CRD with nil schema specially and publish an empty schema
+		// 为向后兼容，期望 CRD controller 对
+		// schema 为 nil 的 CRD 特殊处理并发布空 schema
 		expect = []byte(`type: object`)
 	}
 	return setupCRDAndVerifySchema(f, schema, expect, groupSuffix, versions...)
@@ -550,7 +550,7 @@ func setupCRDAndVerifySchemaWithOptions(f *framework.Framework, schema, expect [
 				Served:  true,
 				Storage: i == 0,
 			}
-			// set up validation when input schema isn't nil
+			// 当输入 schema 不为 nil 时设置校验
 			if schema != nil {
 				version.Schema = &apiextensionsv1.CustomResourceValidation{
 					OpenAPIV3Schema: props,
@@ -593,9 +593,9 @@ func cleanupCRD(ctx context.Context, f *framework.Framework, crd *crd.TestCrd) e
 
 const waitSuccessThreshold = 10
 
-// mustSucceedMultipleTimes calls f multiple times on success and only returns true if all calls are successful.
-// This is necessary to avoid flaking tests where one call might hit a good apiserver while in HA other apiservers
-// might be lagging behind. Calling f multiple times reduces the chance exponentially.
+// mustSucceedMultipleTimes 多次调用 f，只有每次都成功才返回 true。
+// 这是为了避免测试偶发失败：HA 集群中某次调用可能命中正常的 apiserver，
+// 而其他 apiserver 可能还在同步。多次调用可指数级降低这种概率。
 func mustSucceedMultipleTimes(n int, f func() (bool, error)) func() (bool, error) {
 	return func() (bool, error) {
 		for range n {
@@ -608,8 +608,8 @@ func mustSucceedMultipleTimes(n int, f func() (bool, error)) func() (bool, error
 	}
 }
 
-// waitForDefinition waits for given definition showing up in swagger with given schema.
-// If schema is nil, only the existence of the given name is checked.
+// waitForDefinition 等待给定定义以给定 schema 出现在 swagger 中。
+// 若 schema 为 nil，只检查给定名称是否存在。
 func waitForDefinition(c k8sclientset.Interface, name string, schema []byte) error {
 	expect := spec.Schema{}
 	if err := convertJSONSchemaProps(schema, &expect); err != nil {
@@ -622,7 +622,7 @@ func waitForDefinition(c k8sclientset.Interface, name string, schema []byte) err
 			return false, fmt.Sprintf("spec.SwaggerProps.Definitions[\"%s\"] not found", name)
 		}
 		if schema != nil {
-			// drop properties and extension that we added
+			// 去掉我们添加的属性和扩展
 			dropDefaults(&d)
 			if !apiequality.Semantic.DeepEqual(expect, d) {
 				return false, fmt.Sprintf("spec.SwaggerProps.Definitions[\"%s\"] not match; expect: %v, actual: %v", name, expect, d)
@@ -636,7 +636,7 @@ func waitForDefinition(c k8sclientset.Interface, name string, schema []byte) err
 	return nil
 }
 
-// waitForDefinitionCleanup waits for given definition to be removed from swagger
+// waitForDefinitionCleanup 等待给定定义从 swagger 中移除
 func waitForDefinitionCleanup(c k8sclientset.Interface, name string) error {
 	err := waitForOpenAPISchema(c, func(spec *spec.Swagger) (bool, string) {
 		if _, ok := spec.SwaggerProps.Definitions[name]; ok {
@@ -657,7 +657,7 @@ func waitForOpenAPISchema(c k8sclientset.Interface, pred func(*spec.Swagger) (bo
 	etag := ""
 	var etagSpec *spec.Swagger
 	if err := wait.Poll(500*time.Millisecond, 60*time.Second, mustSucceedMultipleTimes(waitSuccessThreshold, func() (bool, error) {
-		// download spec with etag support
+		// 下载 spec 并支持 etag
 		spec := &spec.Swagger{}
 		req, err := http.NewRequest("GET", url.String(), nil)
 		if err != nil {
@@ -694,7 +694,7 @@ func waitForOpenAPISchema(c k8sclientset.Interface, pred func(*spec.Swagger) (bo
 	return nil
 }
 
-// convertJSONSchemaProps converts JSONSchemaProps in YAML to spec.Schema
+// convertJSONSchemaProps 将 YAML 中的 JSONSchemaProps 转换为 spec.Schema
 func convertJSONSchemaProps(in []byte, out *spec.Schema) error {
 	external := apiextensionsv1.JSONSchemaProps{}
 	if err := yaml.UnmarshalStrict(in, &external); err != nil {
@@ -716,7 +716,7 @@ func convertJSONSchemaProps(in []byte, out *spec.Schema) error {
 	return json.Unmarshal(bs, out)
 }
 
-// dropDefaults drops properties and extension that we added to a schema
+// dropDefaults 移除我们添加到 schema 的属性和扩展
 func dropDefaults(s *spec.Schema) {
 	delete(s.Properties, "metadata")
 	delete(s.Properties, "apiVersion")
@@ -737,7 +737,7 @@ func verifyKubectlExplain(ns, name, pattern string) error {
 	return nil
 }
 
-// definitionName returns the openapi definition name for given CRD in given version
+// definitionName 返回给定版本中给定 CRD 的 openapi 定义名称
 func definitionName(crd *crd.TestCrd, version string) string {
 	return openapiutil.ToRESTFriendlyName(fmt.Sprintf("%s/%s/%s", crd.Crd.Spec.Group, version, crd.Crd.Spec.Names.Kind))
 }

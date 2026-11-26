@@ -33,15 +33,15 @@ import (
 )
 
 const (
-	// TokenIDBytes is the length of the byte array to generate tokenID.
+	// TokenIDBytes 是生成 tokenID 的字节数组长度。
 	TokenIDBytes = 3
 
-	// TokenSecretBytes is the length of the byte array to generate tokenSecret.
+	// TokenSecretBytes 是生成 tokenSecret 的字节数组长度。
 	TokenSecretBytes = 8
 )
 
-// secretNeedClean holds the name of a bootstrap token secret that a spec created
-// and expects the AfterEach cleanup to delete.
+// secretNeedClean 保存 spec 创建并期望 AfterEach 清理
+// 删除的 bootstrap token secret 名称。
 var secretNeedClean string
 
 func newTokenSecret(tokenID, tokenSecret string) *v1.Secret {
@@ -59,7 +59,7 @@ func newTokenSecret(tokenID, tokenSecret string) *v1.Secret {
 	}
 }
 
-// GenerateTokenID generates tokenID.
+// GenerateTokenID 生成 tokenID。
 func GenerateTokenID() (string, error) {
 	tokenID, err := randBytes(TokenIDBytes)
 	if err != nil {
@@ -68,7 +68,7 @@ func GenerateTokenID() (string, error) {
 	return tokenID, nil
 }
 
-// GenerateTokenSecret generates tokenSecret.
+// GenerateTokenSecret 生成 tokenSecret。
 func GenerateTokenSecret() (string, error) {
 	tokenSecret, err := randBytes(TokenSecretBytes)
 	if err != nil {
@@ -90,13 +90,13 @@ func addSecretExpiration(s *v1.Secret, expiration string) {
 	s.Data[bootstrapapi.BootstrapTokenExpirationKey] = []byte(expiration)
 }
 
-// TimeStringFromNow returns the time as a string from now.
-// e.g: 2019-12-03T06:30:40Z.
+// TimeStringFromNow 返回从现在起算的时间字符串。
+// 例如：2019-12-03T06:30:40Z。
 func TimeStringFromNow(delta time.Duration) string {
 	return time.Now().Add(delta).UTC().Format(time.RFC3339)
 }
 
-// WaitforSignedClusterInfoByBootStrapToken waits for signed cluster info by bootstrap token.
+// WaitforSignedClusterInfoByBootStrapToken 等待 bootstrap token 签名的 cluster info。
 func WaitforSignedClusterInfoByBootStrapToken(c clientset.Interface, tokenID string) error {
 
 	return wait.Poll(framework.Poll, 2*time.Minute, func() (bool, error) {
@@ -113,7 +113,7 @@ func WaitforSignedClusterInfoByBootStrapToken(c clientset.Interface, tokenID str
 	})
 }
 
-// WaitForSignedClusterInfoGetUpdatedByBootstrapToken waits for signed cluster info to be updated by bootstrap token.
+// WaitForSignedClusterInfoGetUpdatedByBootstrapToken 等待签名的 cluster info 被 bootstrap token 更新。
 func WaitForSignedClusterInfoGetUpdatedByBootstrapToken(c clientset.Interface, tokenID string, signedToken string) error {
 
 	return wait.Poll(framework.Poll, 2*time.Minute, func() (bool, error) {
@@ -130,7 +130,7 @@ func WaitForSignedClusterInfoGetUpdatedByBootstrapToken(c clientset.Interface, t
 	})
 }
 
-// WaitForSignedClusterInfoByBootstrapTokenToDisappear waits for signed cluster info to be disappeared by bootstrap token.
+// WaitForSignedClusterInfoByBootstrapTokenToDisappear 等待签名的 cluster info 被 bootstrap token 移除。
 func WaitForSignedClusterInfoByBootstrapTokenToDisappear(c clientset.Interface, tokenID string) error {
 
 	return wait.Poll(framework.Poll, 2*time.Minute, func() (bool, error) {
@@ -147,7 +147,7 @@ func WaitForSignedClusterInfoByBootstrapTokenToDisappear(c clientset.Interface, 
 	})
 }
 
-// WaitForBootstrapTokenSecretToDisappear waits for bootstrap token secret to be disappeared.
+// WaitForBootstrapTokenSecretToDisappear 等待 bootstrap token secret 消失。
 func WaitForBootstrapTokenSecretToDisappear(c clientset.Interface, tokenID string) error {
 
 	return wait.Poll(framework.Poll, 1*time.Minute, func() (bool, error) {
@@ -159,7 +159,7 @@ func WaitForBootstrapTokenSecretToDisappear(c clientset.Interface, tokenID strin
 	})
 }
 
-// WaitForBootstrapTokenSecretNotDisappear waits for bootstrap token secret not to be disappeared and takes time for the specified timeout as success path.
+// WaitForBootstrapTokenSecretNotDisappear 等待 bootstrap token secret 不消失，并在指定超时内保持为成功路径。
 func WaitForBootstrapTokenSecretNotDisappear(c clientset.Interface, tokenID string, t time.Duration) error {
 	err := wait.Poll(framework.Poll, t, func() (bool, error) {
 		secret, err := c.CoreV1().Secrets(metav1.NamespaceSystem).Get(context.TODO(), bootstrapapi.BootstrapTokenSecretPrefix+tokenID, metav1.GetOptions{})

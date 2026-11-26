@@ -54,7 +54,7 @@ var _ = SIGDescribe("EmptyDir volumes", func() {
 	f.Context("when FSGroup is specified [LinuxOnly]", f.WithNodeConformance(), func() {
 
 		ginkgo.BeforeEach(func() {
-			// Windows does not support the FSGroup SecurityContext option.
+			// Windows 不支持 FSGroup SecurityContext 选项。
 			e2eskipper.SkipIfNodeOSDistroIs("windows")
 		})
 
@@ -84,150 +84,150 @@ var _ = SIGDescribe("EmptyDir volumes", func() {
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium memory, volume mode default
-		Description: A Pod created with an 'emptyDir' Volume and 'medium' as 'Memory', the volume MUST have mode set as -rwxrwxrwx and mount type set to tmpfs.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or the medium = 'Memory'.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium memory, volume mode default
+		描述：创建带 'emptyDir' volume 且 'medium' 为 'Memory' 的 Pod，volume 模式必须为 -rwxrwxrwx，挂载类型为 tmpfs。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限，也不支持 medium = 'Memory'。
 	*/
 	framework.ConformanceIt("volume on tmpfs should have the correct mode [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTestVolumeMode(ctx, f, 0, v1.StorageMediumMemory)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium memory, volume mode 0644
-		Description: A Pod created with an 'emptyDir' Volume and 'medium' as 'Memory', the volume mode set to 0644. The volume MUST have mode -rw-r--r-- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID, or the medium = 'Memory'.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium memory, volume mode 0644
+		描述：创建带 'emptyDir' volume 且 'medium' 为 'Memory'、volume 模式为 0644 的 Pod。volume 模式必须为 -rw-r--r--，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限、以 UID / GID 运行，或 medium = 'Memory'。
 	*/
 	framework.ConformanceIt("should support (root,0644,tmpfs) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0644(ctx, f, 0, v1.StorageMediumMemory)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium memory, volume mode 0666
-		Description: A Pod created with an 'emptyDir' Volume and 'medium' as 'Memory', the volume mode set to 0666. The volume MUST have mode -rw-rw-rw- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID, or the medium = 'Memory'.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium memory, volume mode 0666
+		描述：创建带 'emptyDir' volume 且 'medium' 为 'Memory'、volume 模式为 0666 的 Pod。volume 模式必须为 -rw-rw-rw-，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限、以 UID / GID 运行，或 medium = 'Memory'。
 	*/
 	framework.ConformanceIt("should support (root,0666,tmpfs) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0666(ctx, f, 0, v1.StorageMediumMemory)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium memory, volume mode 0777
-		Description: A Pod created with an 'emptyDir' Volume and 'medium' as 'Memory', the volume mode set to 0777.  The volume MUST have mode set as -rwxrwxrwx and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID, or the medium = 'Memory'.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium memory, volume mode 0777
+		描述：创建带 'emptyDir' volume 且 'medium' 为 'Memory'、volume 模式为 0777 的 Pod。volume 模式必须为 -rwxrwxrwx，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限、以 UID / GID 运行，或 medium = 'Memory'。
 	*/
 	framework.ConformanceIt("should support (root,0777,tmpfs) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0777(ctx, f, 0, v1.StorageMediumMemory)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium memory, volume mode 0644, non-root user
-		Description: A Pod created with an 'emptyDir' Volume and 'medium' as 'Memory', the volume mode set to 0644. Volume is mounted into the container where container is run as a non-root user. The volume MUST have mode -rw-r--r-- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID, or the medium = 'Memory'.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium memory, volume mode 0644, non-root user
+		描述：创建带 'emptyDir' volume 且 'medium' 为 'Memory'、volume 模式为 0644 的 Pod。volume 挂载到以非 root 用户运行的容器中。volume 模式必须为 -rw-r--r--，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限、以 UID / GID 运行，或 medium = 'Memory'。
 	*/
 	framework.ConformanceIt("should support (non-root,0644,tmpfs) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0644(ctx, f, nonRootUID, v1.StorageMediumMemory)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium memory, volume mode 0666,, non-root user
-		Description: A Pod created with an 'emptyDir' Volume and 'medium' as 'Memory', the volume mode set to 0666. Volume is mounted into the container where container is run as a non-root user. The volume MUST have mode -rw-rw-rw- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID, or the medium = 'Memory'.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium memory, volume mode 0666,, non-root user
+		描述：创建带 'emptyDir' volume 且 'medium' 为 'Memory'、volume 模式为 0666 的 Pod。volume 挂载到以非 root 用户运行的容器中。volume 模式必须为 -rw-rw-rw-，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限、以 UID / GID 运行，或 medium = 'Memory'。
 	*/
 	framework.ConformanceIt("should support (non-root,0666,tmpfs) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0666(ctx, f, nonRootUID, v1.StorageMediumMemory)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium memory, volume mode 0777, non-root user
-		Description: A Pod created with an 'emptyDir' Volume and 'medium' as 'Memory', the volume mode set to 0777. Volume is mounted into the container where container is run as a non-root user. The volume MUST have mode -rwxrwxrwx and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID, or the medium = 'Memory'.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium memory, volume mode 0777, non-root user
+		描述：创建带 'emptyDir' volume 且 'medium' 为 'Memory'、volume 模式为 0777 的 Pod。volume 挂载到以非 root 用户运行的容器中。volume 模式必须为 -rwxrwxrwx，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限、以 UID / GID 运行，或 medium = 'Memory'。
 	*/
 	framework.ConformanceIt("should support (non-root,0777,tmpfs) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0777(ctx, f, nonRootUID, v1.StorageMediumMemory)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium default, volume mode default
-		Description: A Pod created with an 'emptyDir' Volume, the volume MUST have mode set as -rwxrwxrwx and mount type set to tmpfs.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium default, volume mode default
+		描述：创建带 'emptyDir' volume 的 Pod，volume 模式必须为 -rwxrwxrwx，挂载类型为 tmpfs。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限。
 	*/
 	framework.ConformanceIt("volume on default medium should have the correct mode [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTestVolumeMode(ctx, f, 0, v1.StorageMediumDefault)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium default, volume mode 0644
-		Description: A Pod created with an 'emptyDir' Volume, the volume mode set to 0644. The volume MUST have mode -rw-r--r-- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium default, volume mode 0644
+		描述：创建带 'emptyDir' volume 且 volume 模式为 0644 的 Pod。volume 模式必须为 -rw-r--r--，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限或以 UID / GID 运行。
 	*/
 	framework.ConformanceIt("should support (root,0644,default) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0644(ctx, f, 0, v1.StorageMediumDefault)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium default, volume mode 0666
-		Description: A Pod created with an 'emptyDir' Volume, the volume mode set to 0666. The volume MUST have mode -rw-rw-rw- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium default, volume mode 0666
+		描述：创建带 'emptyDir' volume 且 volume 模式为 0666 的 Pod。volume 模式必须为 -rw-rw-rw-，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限或以 UID / GID 运行。
 	*/
 	framework.ConformanceIt("should support (root,0666,default) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0666(ctx, f, 0, v1.StorageMediumDefault)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium default, volume mode 0777
-		Description: A Pod created with an 'emptyDir' Volume, the volume mode set to 0777.  The volume MUST have mode set as -rwxrwxrwx and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium default, volume mode 0777
+		描述：创建带 'emptyDir' volume 且 volume 模式为 0777 的 Pod。volume 模式必须为 -rwxrwxrwx，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限或以 UID / GID 运行。
 	*/
 	framework.ConformanceIt("should support (root,0777,default) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0777(ctx, f, 0, v1.StorageMediumDefault)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium default, volume mode 0644
-		Description: A Pod created with an 'emptyDir' Volume, the volume mode set to 0644. Volume is mounted into the container where container is run as a non-root user. The volume MUST have mode -rw-r--r-- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium default, volume mode 0644
+		描述：创建带 'emptyDir' volume 且 volume 模式为 0644 的 Pod。volume 挂载到以非 root 用户运行的容器中。volume 模式必须为 -rw-r--r--，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限或以 UID / GID 运行。
 	*/
 	framework.ConformanceIt("should support (non-root,0644,default) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0644(ctx, f, nonRootUID, v1.StorageMediumDefault)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium default, volume mode 0666
-		Description: A Pod created with an 'emptyDir' Volume, the volume mode set to 0666. Volume is mounted into the container where container is run as a non-root user. The volume MUST have mode -rw-rw-rw- and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium default, volume mode 0666
+		描述：创建带 'emptyDir' volume 且 volume 模式为 0666 的 Pod。volume 挂载到以非 root 用户运行的容器中。volume 模式必须为 -rw-rw-rw-，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限或以 UID / GID 运行。
 	*/
 	framework.ConformanceIt("should support (non-root,0666,default) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0666(ctx, f, nonRootUID, v1.StorageMediumDefault)
 	})
 
 	/*
-		Release: v1.9
-		Testname: EmptyDir, medium default, volume mode 0777
-		Description: A Pod created with an 'emptyDir' Volume, the volume mode set to 0777. Volume is mounted into the container where container is run as a non-root user. The volume MUST have mode -rwxrwxrwx and mount type set to tmpfs and the contents MUST be readable.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+		发布版本：v1.9
+		测试名称：EmptyDir, medium default, volume mode 0777
+		描述：创建带 'emptyDir' volume 且 volume 模式为 0777 的 Pod。volume 挂载到以非 root 用户运行的容器中。volume 模式必须为 -rwxrwxrwx，挂载类型为 tmpfs，内容必须可读。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限或以 UID / GID 运行。
 	*/
 	framework.ConformanceIt("should support (non-root,0777,default) [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		doTest0777(ctx, f, nonRootUID, v1.StorageMediumDefault)
 	})
 
 	/*
-		Release: v1.15
-		Testname: EmptyDir, Shared volumes between containers
-		Description: A Pod created with an 'emptyDir' Volume, should share volumes between the containeres in the pod. The two busybox image containers should share the volumes mounted to the pod.
-		The main container should wait until the sub container drops a file, and main container access the shared data.
+		发布版本：v1.15
+		测试名称：EmptyDir, Shared volumes between containers
+		描述：创建带 'emptyDir' volume 的 Pod，volume 应在 pod 中的容器之间共享。两个 busybox 镜像容器应共享挂载到 pod 的 volume。
+		主容器应等待子容器放下文件，然后访问共享数据。
 	*/
 	framework.ConformanceIt("pod should support shared volumes between containers", func(ctx context.Context) {
 		var (
@@ -322,10 +322,10 @@ var _ = SIGDescribe("EmptyDir volumes", func() {
 	})
 
 	/*
-		Release: v1.20
-		Testname: EmptyDir, Memory backed volume is sized to specified limit
-		Description: A Pod created with an 'emptyDir' Volume backed by memory should be sized to user provided value.
-		This test is marked LinuxOnly since Windows supports emptyDir volumes, but not memory-backed emptyDir volumes.
+		发布版本：v1.20
+		测试名称：EmptyDir, Memory backed volume is sized to specified limit
+		描述：创建带内存支持的 'emptyDir' volume 的 Pod，其大小应为用户提供的值。
+		此测试标记为 LinuxOnly，因为 Windows 支持 emptyDir volume，但不支持内存支持的 emptyDir volume。
 	*/
 	f.It("pod should support memory backed volumes of specified size [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
@@ -618,8 +618,8 @@ func formatMedium(medium v1.StorageMedium) string {
 	return "node default medium"
 }
 
-// testPodWithVolume creates a Pod that runs as the given UID and with the given empty dir source mounted at the given path.
-// If the uid is 0, the Pod will run as its default user (root).
+// testPodWithVolume 创建一个以给定 UID 运行、并在给定路径挂载给定 empty dir source 的 Pod。
+// 如果 uid 为 0，Pod 将以其默认用户（root）运行。
 func testPodWithVolume(uid int64, path string, source *v1.EmptyDirVolumeSource) *v1.Pod {
 	podName := "pod-" + string(uuid.NewUUID())
 	pod := &v1.Pod{

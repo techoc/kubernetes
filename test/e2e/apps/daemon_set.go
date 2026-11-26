@@ -63,7 +63,7 @@ import (
 )
 
 const (
-	// this should not be a multiple of 5, because node status updates
+	// 这里不能是 5 的倍数，否则会跟 node 状态更新撞上
 	// every 5 seconds. See https://github.com/kubernetes/kubernetes/pull/14915.
 	dsRetryPeriod  = 1 * time.Second
 	dsRetryTimeout = 5 * time.Minute
@@ -73,8 +73,8 @@ const (
 	daemonsetColorLabel  = daemonsetLabelPrefix + "color"
 )
 
-// NamespaceNodeSelectors the annotation key scheduler.alpha.kubernetes.io/node-selector is for assigning
-// node selectors labels to namespaces
+// NamespaceNodeSelectors 是注解 scheduler.alpha.kubernetes.io/node-selector 的键，用于为
+// namespace 分配 node selector 标签
 var NamespaceNodeSelectors = []string{"scheduler.alpha.kubernetes.io/node-selector"}
 
 var nonTerminalPhaseSelector = func() labels.Selector {
@@ -89,8 +89,8 @@ var nonTerminalPhaseSelector = func() labels.Selector {
 
 type updateDSFunc func(*appsv1.DaemonSet)
 
-// updateDaemonSetWithRetries updates daemonsets with the given applyUpdate func
-// until it succeeds or a timeout expires.
+// updateDaemonSetWithRetries 用给定的 applyUpdate 函数更新 daemonset，
+// 直到成功或超时。
 func updateDaemonSetWithRetries(ctx context.Context, c clientset.Interface, namespace, name string, applyUpdate updateDSFunc) (ds *appsv1.DaemonSet, err error) {
 	daemonsets := c.AppsV1().DaemonSets(namespace)
 	var updateErr error
@@ -98,7 +98,7 @@ func updateDaemonSetWithRetries(ctx context.Context, c clientset.Interface, name
 		if ds, err = daemonsets.Get(ctx, name, metav1.GetOptions{}); err != nil {
 			return false, err
 		}
-		// Apply the update, then attempt to push it to the apiserver.
+		// 应用更新，然后尝试推送到 apiserver。
 		applyUpdate(ds)
 		if ds, err = daemonsets.Update(ctx, ds, metav1.UpdateOptions{}); err == nil {
 			framework.Logf("Updating DaemonSet %s", name)
@@ -113,16 +113,16 @@ func updateDaemonSetWithRetries(ctx context.Context, c clientset.Interface, name
 	return ds, pollErr
 }
 
-// This test must be run in serial because it assumes the Daemon Set pods will
-// always get scheduled.  If we run other tests in parallel, this may not
-// happen.  In the future, running in parallel may work if we have an eviction
-// model which lets the DS controller kick out other pods to make room.
+// 本测试必须串行运行，因为它假设 Daemon Set 的 pod
+// 总会被调度。如果并行运行其他测试，这个假设可能不成立。
+// 将来如果有驱逐模型让 DS controller 能踢掉其他 pod 腾出空间，
+// 并行运行或许可行。
 // See https://issues.k8s.io/21767 for more details
 var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	var f *framework.Framework
 
 	ginkgo.AfterEach(func(ctx context.Context) {
-		// Clean up
+		// 清理
 		daemonsets, err := f.ClientSet.AppsV1().DaemonSets(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 		framework.ExpectNoError(err, "unable to dump DaemonSets")
 		if daemonsets != nil && len(daemonsets.Items) > 0 {
@@ -171,10 +171,10 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	})
 
 	/*
-	  Release: v1.10
-	  Testname: DaemonSet-Creation
-	  Description: A conformant Kubernetes distribution MUST support the creation of DaemonSets. When a DaemonSet
-	  Pod is deleted, the DaemonSet controller MUST create a replacement Pod.
+	  发布版本：v1.10
+	  测试名称：DaemonSet-Creation
+	  描述：符合规范的 Kubernetes 发行版必须支持创建 DaemonSet。DaemonSet
+	  Pod 被删除后，DaemonSet controller 必须创建替代 Pod。
 	*/
 	framework.ConformanceIt("should run and stop simple daemon", func(ctx context.Context) {
 		label := map[string]string{daemonsetNameLabel: dsName}
@@ -199,10 +199,10 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	})
 
 	/*
-	  Release: v1.10
-	  Testname: DaemonSet-NodeSelection
-	  Description: A conformant Kubernetes distribution MUST support DaemonSet Pod node selection via label
-	  selectors.
+	  发布版本：v1.10
+	  测试名称：DaemonSet-NodeSelection
+	  描述：符合规范的 Kubernetes 发行版必须支持通过 label selector
+	  选择 DaemonSet Pod 的 node。
 	*/
 	framework.ConformanceIt("should run and stop complex daemon", func(ctx context.Context) {
 		complexLabel := map[string]string{daemonsetNameLabel: dsName}
@@ -249,8 +249,8 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		framework.ExpectNoError(err)
 	})
 
-	// We defer adding this test to conformance pending the disposition of moving DaemonSet scheduling logic to the
-	// default scheduler.
+	// 暂不将该测试纳入一致性测试，需等 DaemonSet 调度逻辑迁移到
+	// 默认 scheduler 的方案确定后再说。
 	ginkgo.It("should run and stop complex daemon with node affinity", func(ctx context.Context) {
 		complexLabel := map[string]string{daemonsetNameLabel: dsName}
 		nodeSelector := map[string]string{daemonsetColorLabel: "blue"}
@@ -300,9 +300,9 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	})
 
 	/*
-	  Release: v1.10
-	  Testname: DaemonSet-FailedPodCreation
-	  Description: A conformant Kubernetes distribution MUST create new DaemonSet Pods when they fail.
+	  发布版本：v1.10
+	  测试名称：DaemonSet-FailedPodCreation
+	  描述：符合规范的 Kubernetes 发行版必须在 DaemonSet Pod 失败时创建新的 Pod。
 	*/
 	framework.ConformanceIt("should retry creating failed daemon pods", func(ctx context.Context) {
 		label := map[string]string{daemonsetNameLabel: dsName}
@@ -332,8 +332,8 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		framework.ExpectNoError(err, "error waiting for the failed daemon pod to be completely deleted")
 	})
 
-	// This test should not be added to conformance. We will consider deprecating OnDelete when the
-	// extensions/v1beta1 and apps/v1beta1 are removed.
+	// 这个测试不应纳入一致性测试。等 extensions/v1beta1 和
+	// apps/v1beta1 移除后，我们会考虑弃用 OnDelete。
 	ginkgo.It("should not update pod when spec was updated and update strategy is OnDelete", func(ctx context.Context) {
 		label := map[string]string{daemonsetNameLabel: dsName}
 
@@ -347,7 +347,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkRunningOnAllNodes(f, ds))
 		framework.ExpectNoError(err, "error waiting for daemon pod to start")
 
-		// Check history and labels
+		// 检查历史和标签
 		ds, err = c.AppsV1().DaemonSets(ns).Get(ctx, ds.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		waitForHistoryCreated(ctx, c, ns, label, 1)
@@ -369,7 +369,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkRunningOnAllNodes(f, ds))
 		framework.ExpectNoError(err, "error waiting for daemon pod to start")
 
-		// Check history and labels
+		// 检查历史和标签
 		ds, err = c.AppsV1().DaemonSets(ns).Get(ctx, ds.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		waitForHistoryCreated(ctx, c, ns, label, 2)
@@ -380,9 +380,9 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	})
 
 	/*
-	  Release: v1.10
-	  Testname: DaemonSet-RollingUpdate
-	  Description: A conformant Kubernetes distribution MUST support DaemonSet RollingUpdates.
+	  发布版本：v1.10
+	  测试名称：DaemonSet-RollingUpdate
+	  描述：符合规范的 Kubernetes 发行版必须支持 DaemonSet 滚动更新。
 	*/
 	framework.ConformanceIt("should update pod when spec was updated and update strategy is RollingUpdate", func(ctx context.Context) {
 		label := map[string]string{daemonsetNameLabel: dsName}
@@ -398,7 +398,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkRunningOnAllNodes(f, ds))
 		framework.ExpectNoError(err, "error waiting for daemon pod to start")
 
-		// Check history and labels
+		// 检查历史和标签
 		ds, err = c.AppsV1().DaemonSets(ns).Get(ctx, ds.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		waitForHistoryCreated(ctx, c, ns, label, 1)
@@ -414,8 +414,8 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		framework.ExpectNoError(err)
 		gomega.Expect(resourceversion.CompareResourceVersion(oldDsResourceVersion, ds.ResourceVersion)).To(gomega.BeNumerically("==", -1), "patched object should have a larger resource version")
 
-		// Time to complete the rolling upgrade is proportional to the number of nodes in the cluster.
-		// Get the number of nodes, and set the timeout appropriately.
+		// 滚动升级的完成时间与集群节点数成正比。
+		// 先获取节点数，再相应设置超时。
 		nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		framework.ExpectNoError(err)
 		nodeCount := len(nodes.Items)
@@ -429,7 +429,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkRunningOnAllNodes(f, ds))
 		framework.ExpectNoError(err, "error waiting for daemon pod to start")
 
-		// Check history and labels
+		// 检查历史和标签
 		ds, err = c.AppsV1().DaemonSets(ns).Get(ctx, ds.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		waitForHistoryCreated(ctx, c, ns, label, 2)
@@ -440,10 +440,10 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	})
 
 	/*
-	  Release: v1.10
-	  Testname: DaemonSet-Rollback
-	  Description: A conformant Kubernetes distribution MUST support automated, minimally disruptive
-	  rollback of updates to a DaemonSet.
+	  发布版本：v1.10
+	  测试名称：DaemonSet-Rollback
+	  描述：符合规范的 Kubernetes 发行版必须支持自动且中断最小的
+	  DaemonSet 更新回滚。
 	*/
 	framework.ConformanceIt("should rollback without unnecessary restarts", func(ctx context.Context) {
 		schedulableNodes, err := e2enode.GetReadySchedulableNodes(ctx, c)
@@ -461,14 +461,14 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		framework.ExpectNoError(err, "error waiting for daemon pod to start")
 
 		framework.Logf("Update the DaemonSet to trigger a rollout")
-		// We use a nonexistent image here, so that we make sure it won't finish
+		// 这里使用一个不存在的镜像，以确保它不会完成
 		newImage := "foo:non-existent"
 		newDS, err := updateDaemonSetWithRetries(ctx, c, ns, ds.Name, func(update *appsv1.DaemonSet) {
 			update.Spec.Template.Spec.Containers[0].Image = newImage
 		})
 		framework.ExpectNoError(err)
 
-		// Make sure we're in the middle of a rollout
+		// 确保正处于滚动更新中
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkAtLeastOneNewPod(c, ns, label, newImage))
 		framework.ExpectNoError(err)
 
@@ -505,7 +505,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkDaemonPodsImageAndAvailability(c, rollbackDS, image, 1))
 		framework.ExpectNoError(err)
 
-		// After rollback is done, compare current pods with previous old pods during rollout, to make sure they're not restarted
+		// 回滚完成后，将当前 pod 与滚动更新期间的旧 pod 比较，确保它们没有被重启
 		pods = listDaemonPods(ctx, c, ns, label)
 		rollbackPods := map[string]bool{}
 		for _, pod := range pods.Items {
@@ -518,7 +518,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		}
 	})
 
-	// TODO: This test is expected to be promoted to conformance after the feature is promoted
+	// TODO: 该功能晋级后，这个测试预计会被提升为一致性测试
 	ginkgo.It("should surge pods onto nodes when spec was updated and update strategy is RollingUpdate", func(ctx context.Context) {
 		label := map[string]string{daemonsetNameLabel: dsName}
 
@@ -532,7 +532,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		ds.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{
 			{Name: "VERSION", Value: oldVersion},
 		}
-		// delay shutdown by 15s to allow containers to overlap in time
+		// 延迟关闭 15 秒，让容器在时间上有重叠
 		ds.Spec.Template.Spec.Containers[0].Lifecycle = &v1.Lifecycle{
 			PreStop: &v1.LifecycleHandler{
 				Exec: &v1.ExecAction{
@@ -540,7 +540,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 				},
 			},
 		}
-		// use a readiness probe that can be forced to fail (by changing the contents of /var/tmp/ready)
+		// 使用可强制失败的 readiness 探针（修改 /var/tmp/ready 的内容）
 		ds.Spec.Template.Spec.Containers[0].ReadinessProbe = &v1.Probe{
 			ProbeHandler: v1.ProbeHandler{
 				Exec: &v1.ExecAction{
@@ -552,7 +552,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 			SuccessThreshold:    1,
 			FailureThreshold:    1,
 		}
-		// use a simple surge strategy
+		// 使用简单的 surge 策略
 		ds.Spec.UpdateStrategy = appsv1.DaemonSetUpdateStrategy{
 			Type: appsv1.RollingUpdateDaemonSetStrategyType,
 			RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -560,7 +560,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 				MaxSurge:       &surgePercent,
 			},
 		}
-		// The pod must be ready for at least 10s before we delete the old pod
+		// 删除旧 pod 前，新 pod 必须至少 ready 10 秒
 		ds.Spec.MinReadySeconds = 10
 
 		ds, err := c.AppsV1().DaemonSets(ns).Create(ctx, ds, metav1.CreateOptions{})
@@ -570,7 +570,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkRunningOnAllNodes(f, ds))
 		framework.ExpectNoError(err, "error waiting for daemon pod to start")
 
-		// Check history and labels
+		// 检查历史和标签
 		ds, err = c.AppsV1().DaemonSets(ns).Get(ctx, ds.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		waitForHistoryCreated(ctx, c, ns, label, 1)
@@ -585,12 +585,12 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		ds, err = c.AppsV1().DaemonSets(ns).Patch(ctx, dsName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 		framework.ExpectNoError(err)
 
-		// Time to complete the rolling upgrade is proportional to the number of nodes in the cluster.
-		// Get the number of nodes, and set the timeout appropriately.
+		// 滚动升级的完成时间与集群节点数成正比。
+		// 先获取节点数，再相应设置超时。
 		nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		framework.ExpectNoError(err)
 		nodeCount := len(nodes.Items)
-		// We disturb daemonset progress by randomly terminating pods.
+		// 通过随机终止 pod 干扰 daemonset 的更新进度。
 		randomPodTerminationTimeout := 5 * time.Minute
 		retryTimeout := dsRetryTimeout + randomPodTerminationTimeout + time.Duration(nodeCount*30)*time.Second
 
@@ -658,7 +658,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 				fmt.Fprintf(pw, "%s\t%s\t%s\t%s\t%t\t%t\n", pod.Spec.NodeName, podVersion, pod.Name, pod.UID, pod.DeletionTimestamp != nil, ready)
 			}
 
-			// print a stable sorted list of pods by node for debugging
+			// 按节点打印稳定的 pod 排序列表，便于调试
 			pw.Flush()
 			lines := strings.Split(buf.String(), "\n")
 			lines = lines[:len(lines)-1]
@@ -667,13 +667,13 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 				framework.Logf("%s", line)
 			}
 
-			// if there is an old and new pod at the same time, record a timestamp
+			// 如果同时存在新旧版本的 pod，记录时间戳
 			deletedPerNode := make(map[string]int)
 			for _, pod := range pods {
 				if !metav1.IsControlledBy(&pod, ds) {
 					continue
 				}
-				// ignore deleted pods
+				// 忽略已删除的 pod
 				if pod.DeletionTimestamp != nil {
 					deletedPodUIDs.Insert(string(pod.UID))
 					if !deliberatelyDeletedPods.Has(string(pod.UID)) {
@@ -686,8 +686,8 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 				if podVersion == newVersion {
 					continue
 				}
-				// if this is a pod in an older version AND there is a new version of this pod, record when
-				// we started seeing this, otherwise delete the record (perhaps the node was drained)
+				// 如果这是旧版本的 pod 且存在该 pod 的新版本，记录
+				// 开始观察到它的时间，否则删除记录（可能节点被排空了）
 				if nodesToVersions[pod.Spec.NodeName][newVersion] > 0 {
 					if _, ok := nodeToAgeOfOldPod[pod.Spec.NodeName][string(pod.UID)]; !ok {
 						if _, ok := nodeToAgeOfOldPod[pod.Spec.NodeName]; !ok {
@@ -699,7 +699,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 					delete(nodeToAgeOfOldPod, pod.Spec.NodeName)
 				}
 			}
-			// purge the old pods list of any deleted pods
+			// 从旧 pod 列表中清除所有已删除的 pod
 			for node, uidToTime := range nodeToAgeOfOldPod {
 				for uid := range uidToTime {
 					if !podUIDs.Has(uid) {
@@ -720,14 +720,14 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 
 			var errs []string
 
-			// invariant: we should not see more than 1 deleted pod per node unless a severe node problem is occurring or the controller is misbehaving
+			// 不变量：每个节点上最多只能看到一个已删除的 pod，除非出现严重节点问题或 controller 行为异常
 			for node, count := range deletedPerNode {
 				if count > 1 {
 					errs = append(errs, fmt.Sprintf("Node %s has %d deleted pods, which may indicate a problem on the node or a controller race condition", node, count))
 				}
 			}
 
-			// invariant: the controller must react to the new pod becoming ready within a reasonable timeframe (2x grace period)
+			// 不变量：controller 必须在合理时间内（2 倍 grace period）响应新 pod 变为 ready
 			for node, uidToTime := range nodeToAgeOfOldPod {
 				for uid, firstSeenSinceNewVersionPod := range uidToTime {
 					if now.Sub(firstSeenSinceNewVersionPod) > maxSurgeOverlap {
@@ -736,36 +736,36 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 				}
 			}
 
-			// invariant: we should never have more than maxSurge + oldUnavailableCount instances of the new version unready unless a flake in the infrastructure happens, or
-			//            if we deliberately deleted one of the new pods
+			// 不变量：新版本未就绪的实例数永远不应超过 maxSurge + oldUnavailableCount，除非
+			// 基础设施出现偶发问题，或者是我们故意删除了某个新 pod
 			if newUnavailableCount > (maxSurge + oldUnavailableCount + newDeliberatelyDeletedCount + nodesWithoutOldVersion) {
 				errs = append(errs, fmt.Sprintf("observed %d new unavailable pods greater than (surge count %d + old unavailable count %d + deliberately deleted new count %d + nodes without old version %d), may be infrastructure flake", newUnavailableCount, maxSurge, oldUnavailableCount, newDeliberatelyDeletedCount, nodesWithoutOldVersion))
 			}
-			// invariant: the total number of versions created should be 2
+			// 不变量：创建的版本总数应为 2
 			if versions.Len() > 2 {
 				errs = append(errs, fmt.Sprintf("observed %d versions running simultaneously, must have max 2", versions.Len()))
 			}
 			for _, node := range nodes.List() {
-				// ignore pods that haven't been scheduled yet
+				// 忽略尚未调度的 pod
 				if len(node) == 0 {
 					continue
 				}
 				versionCount := make(map[string]int)
-				// invariant: surge should never have more than one instance of a pod per node running
+				// 不变量：surge 期间每个节点上同一 pod 最多只能有一个实例在运行
 				for version, count := range nodesToVersions[node] {
 					if count > 1 {
 						errs = append(errs, fmt.Sprintf("node %s has %d instances of version %s running simultaneously, must have max 1", node, count, version))
 					}
 					versionCount[version] += count
 				}
-				// invariant: when surging, the most number of pods we should allow to be deleted is 2 (if we are getting evicted)
+				// 不变量：surge 期间允许删除的 pod 最多为 2 个（如果被驱逐）
 				for version, count := range nodesToDeletedVersions[node] {
 					if count > 2 {
 						errs = append(errs, fmt.Sprintf("node %s has %d deleted instances of version %s running simultaneously, must have max 1", node, count, version))
 					}
 					versionCount[version] += count
 				}
-				// invariant: on any node, we should never have more than two instances of a version (if we are getting evicted)
+				// 不变量：任何节点上同一版本最多只能有两个实例（如果被驱逐）
 				for version, count := range versionCount {
 					if count > 2 {
 						errs = append(errs, fmt.Sprintf("node %s has %d total instances of version %s running simultaneously, must have max 2 (one deleted and one running)", node, count, version))
@@ -778,29 +778,29 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 				return false, fmt.Errorf("invariants were violated during daemonset update:\n%s", strings.Join(errs, "\n"))
 			}
 
-			// Make sure every daemon pod on the node has been updated
+			// 确保节点上每个 daemon pod 都已更新
 			nodeNames := e2edaemonset.SchedulableNodes(ctx, c, ds)
 			for _, node := range nodeNames {
 				switch {
 				case
-					// if we don't have the new version yet
+					// 如果还没有新版本
 					nodesToVersions[node][newVersion] == 0,
-					// if there are more than one version on a node
+					// 如果某个节点上有多个版本
 					len(nodesToVersions[node]) > 1,
-					// if there are still any deleted pods
+					// 如果仍有已删除的 pod
 					len(nodesToDeletedVersions[node]) > 0,
-					// if any of the new pods are unavailable
+					// 如果有新 pod 不可用
 					newUnavailableCount > 0:
 
-					// inject a failure randomly to ensure the controller recovers
+					// 随机注入故障，确保 controller 能恢复
 					switch rand.Intn(25) {
-					// cause a random old pod to go unready
+					// 让一个随机的旧 pod 变为未就绪
 					case 0:
-						// select a not-deleted pod of the old version
+						// 选择一个未删除的旧版本 pod
 						if pod := randomPod(pods, func(pod *v1.Pod) bool {
 							return pod.DeletionTimestamp == nil && oldVersion == pod.Spec.Containers[0].Env[0].Value
 						}); pod != nil {
-							// make the /tmp/ready file read only, which will cause readiness to fail
+							// 将 /tmp/ready 文件设为只读，使 readiness 检查失败
 							if _, err := e2ekubectl.RunKubectl(pod.Namespace, "exec", "-c", pod.Spec.Containers[0].Name, pod.Name, "--", "/bin/sh", "-ec", "echo 0 > /var/tmp/ready"); err != nil {
 								framework.Logf("Failed to mark pod %s as unready via exec: %v", pod.Name, err)
 							} else {
@@ -808,7 +808,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 							}
 						}
 					case 1:
-						// delete a random pod
+						// 删除一个随机 pod
 						if pod := randomPod(pods, func(pod *v1.Pod) bool {
 							return pod.DeletionTimestamp == nil
 						}); pod != nil {
@@ -817,14 +817,14 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 							} else {
 								framework.Logf("Deleted pod %s prematurely", pod.Name)
 								deliberatelyDeletedPods.Insert(string(pod.UID))
-								// If it is an old version we do not need to measure the controller reaction because we have done it instead.
-								// If it is a new version, we have to reset the time to start counting the time for the replacement pod to reach readiness again.
+								// 如果是旧版本，不需要测量 controller 的反应时间，因为我们已经手动做了。
+								// 如果是新版本，必须重置计时起点，重新计算替代 pod 达到 ready 的时间。
 								delete(nodeToAgeOfOldPod, pod.Spec.NodeName)
 							}
 						}
 					}
 
-					// then wait
+					// 然后等待
 					return false, nil
 				}
 			}
@@ -836,7 +836,7 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		err = wait.PollUntilContextTimeout(ctx, dsRetryPeriod, dsRetryTimeout, true, checkRunningOnAllNodes(f, ds))
 		framework.ExpectNoError(err, "error waiting for daemon pod to start")
 
-		// Check history and labels
+		// 检查历史和标签
 		ds, err = c.AppsV1().DaemonSets(ns).Get(ctx, ds.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		waitForHistoryCreated(ctx, c, ns, label, 2)
@@ -847,11 +847,11 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	})
 
 	/*
-		Release: v1.22
-		Testname: DaemonSet, list and delete a collection of DaemonSets
-		Description: When a DaemonSet is created it MUST succeed. It
-		MUST succeed when listing DaemonSets via a label selector. It
-		MUST succeed when deleting the DaemonSet via deleteCollection.
+		发布版本：v1.22
+		测试名称：DaemonSet, list and delete a collection of DaemonSets
+		描述：创建 DaemonSet 必须成功。通过 label selector
+		列举 DaemonSet 必须成功。通过 deleteCollection
+		删除 DaemonSet 必须成功。
 	*/
 	framework.ConformanceIt("should list and delete a collection of DaemonSets", func(ctx context.Context) {
 		label := map[string]string{daemonsetNameLabel: dsName}
@@ -886,11 +886,11 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 		gomega.Expect(dsList.Items).To(gomega.BeEmpty(), "filtered list should have no daemonset")
 	})
 
-	/*	Release: v1.22
-		Testname: DaemonSet, status sub-resource
-		Description: When a DaemonSet is created it MUST succeed.
-		Attempt to read, update and patch its status sub-resource; all
-		mutating sub-resource operations MUST be visible to subsequent reads.
+	/*	发布版本：v1.22
+		测试名称：DaemonSet, status sub-resource
+		描述：创建 DaemonSet 必须成功。
+		尝试读取、更新和 patch 其 status 子资源；所有
+		变更子资源的操作必须对后续读取可见。
 	*/
 	framework.ConformanceIt("should verify changes to a daemon set status", func(ctx context.Context) {
 		label := map[string]string{daemonsetNameLabel: dsName}
@@ -1026,8 +1026,8 @@ var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	})
 })
 
-// randomPod selects a random pod within pods that causes fn to return true, or nil
-// if no pod can be found matching the criteria.
+// randomPod 从 pod 列表中随机选择一个使 fn 返回 true 的 pod，如果
+// 找不到符合条件的 pod 则返回 nil。
 func randomPod(pods []v1.Pod, fn func(p *v1.Pod) bool) *v1.Pod {
 	podCount := len(pods)
 	for offset, i := rand.Intn(podCount), 0; i < (podCount - 1); i++ {
@@ -1039,7 +1039,7 @@ func randomPod(pods []v1.Pod, fn func(p *v1.Pod) bool) *v1.Pod {
 	return nil
 }
 
-// getDaemonSetImagePatch generates a patch for updating a DaemonSet's container image
+// getDaemonSetImagePatch 生成用于更新 DaemonSet 容器镜像的 patch
 func getDaemonSetImagePatch(containerName, containerImage string) string {
 	return fmt.Sprintf(`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"%s"}]}}}}`, containerName, containerImage)
 }
@@ -1093,7 +1093,7 @@ func clearDaemonSetNodeLabels(ctx context.Context, c clientset.Interface) error 
 	return nil
 }
 
-// patchNamespaceAnnotations sets node selectors related annotations on tests namespaces to empty
+// patchNamespaceAnnotations 将测试 namespace 上与 node selector 相关的注解置空
 func patchNamespaceAnnotations(ctx context.Context, c clientset.Interface, nsName string) (*v1.Namespace, error) {
 	nsClient := c.CoreV1().Namespaces()
 
@@ -1123,7 +1123,7 @@ func setDaemonSetNodeLabels(ctx context.Context, c clientset.Interface, nodeName
 			return false, err
 		}
 
-		// remove all labels this test is creating
+		// 移除本测试创建的所有标签
 		daemonSetLabels, otherLabels := separateDaemonSetNodeLabels(node.Labels)
 		if reflect.DeepEqual(daemonSetLabels, labels) {
 			newNode = node
@@ -1186,7 +1186,7 @@ func checkDaemonPodsImageAndAvailability(c clientset.Interface, ds *appsv1.Daemo
 		unavailablePods := 0
 		nodesToUpdatedPodCount := make(map[string]int)
 		for _, pod := range pods {
-			// Ignore the pod on the node that is supposed to be deleted
+			// 忽略节点上预期会被删除的 pod
 			if pod.DeletionTimestamp != nil {
 				continue
 			}
@@ -1207,7 +1207,7 @@ func checkDaemonPodsImageAndAvailability(c clientset.Interface, ds *appsv1.Daemo
 		if unavailablePods > maxUnavailable {
 			return false, fmt.Errorf("number of unavailable pods: %d is greater than maxUnavailable: %d", unavailablePods, maxUnavailable)
 		}
-		// Make sure every daemon pod on the node has been updated
+		// 确保节点上每个 daemon pod 都已更新
 		nodeNames := e2edaemonset.SchedulableNodes(ctx, c, ds)
 		for _, node := range nodeNames {
 			if nodesToUpdatedPodCount[node] == 0 {
@@ -1220,7 +1220,7 @@ func checkDaemonPodsImageAndAvailability(c clientset.Interface, ds *appsv1.Daemo
 
 func checkDaemonSetPodsLabels(podList *v1.PodList, hash string) {
 	for _, pod := range podList.Items {
-		// Ignore all the DS pods that will be deleted
+		// 忽略所有将被删除的 DS pod
 		if pod.DeletionTimestamp != nil {
 			continue
 		}
@@ -1264,7 +1264,7 @@ func curHistory(historyList *appsv1.ControllerRevisionList, ds *appsv1.DaemonSet
 	foundCurHistories := 0
 	for i := range historyList.Items {
 		history := &historyList.Items[i]
-		// Every history should have the hash label
+		// 每个 history 都应有 hash 标签
 		gomega.Expect(history.Labels[appsv1.DefaultDaemonSetUniqueLabelKey]).ToNot(gomega.BeEmpty())
 		match, err := daemon.Match(ds, history)
 		framework.ExpectNoError(err)

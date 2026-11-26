@@ -66,7 +66,7 @@ import (
 )
 
 const (
-	// how long to wait for a resource quota update to occur
+	// 等待 resource quota 更新的超时时间
 	resourceQuotaTimeout = time.Minute
 	podName              = "pfpod"
 )
@@ -80,9 +80,9 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, resourcequotas
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, resourcequotas
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
 	*/
 	framework.ConformanceIt("should create a ResourceQuota and ensure its status is promptly calculated.", func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -103,11 +103,11 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, service
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a Service. Its creation MUST be successful and resource usage count against the Service object and resourceQuota object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the Service. Deletion MUST succeed and resource usage count against the Service object MUST be released from ResourceQuotaStatus of the ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, service
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 Service。创建必须成功，Service 对象和 resourceQuota 对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 Service。删除必须成功，Service 对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
 	*/
 	framework.ConformanceIt("should create a ResourceQuota and capture the life of a service.", func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -163,22 +163,22 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, secret
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a Secret. Its creation MUST be successful and resource usage count against the Secret object and resourceQuota object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the Secret. Deletion MUST succeed and resource usage count against the Secret object MUST be released from ResourceQuotaStatus of the ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, secret
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 Secret。创建必须成功，Secret 对象和 resourceQuota 对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 Secret。删除必须成功，Secret 对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
 	*/
 	framework.ConformanceIt("should create a ResourceQuota and capture the life of a secret.", func(ctx context.Context) {
 		ginkgo.By("Discovering how many secrets are in namespace by default")
 		found, unchanged := 0, 0
-		// On contended servers the service account controller can slow down, leading to the count changing during a run.
-		// Wait up to 5s for the count to stabilize, assuming that updates come at a consistent rate, and are not held indefinitely.
+		// 高负载的服务器上 service account controller 可能变慢，导致测试运行期间计数发生变化。
+		// 最多等 5 秒让计数稳定，前提是更新以稳定速率到来且不会无限期停滞。
 		err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 			secrets, err := f.ClientSet.CoreV1().Secrets(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 			if len(secrets.Items) == found {
-				// loop until the number of secrets has stabilized for 5 seconds
+				// 循环等待 secret 数量稳定 5 秒
 				unchanged++
 				return unchanged > 4, nil
 			}
@@ -216,8 +216,8 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		ginkgo.By("Ensuring resource quota status captures secret creation")
 		usedResources = v1.ResourceList{}
 		usedResources[v1.ResourceSecrets] = resource.MustParse(hardSecrets)
-		// we expect there to be two secrets because each namespace will receive
-		// a service account token secret by default
+		// 预期有两个 secret：每个 namespace 默认会收到
+		// 一个 service account token secret
 		err = waitForResourceQuota(ctx, f.ClientSet, f.Namespace.Name, quotaName, usedResources)
 		framework.ExpectNoError(err)
 
@@ -232,13 +232,13 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, pod
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a Pod with resource request count for CPU, Memory, EphemeralStorage and ExtendedResourceName. Pod creation MUST be successful and respective resource usage count MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Create another Pod with resource request exceeding remaining quota. Pod creation MUST fail as the request exceeds ResourceQuota limits.
-		Update the successfully created pod's resource requests. Updation MUST fail as a Pod can not dynamically update its resource requirements.
-		Delete the successfully created Pod. Pod Deletion MUST be scuccessful and it MUST release the allocated resource counts from ResourceQuotaStatus of the ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, pod
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建带 CPU、Memory、EphemeralStorage 和 ExtendedResourceName 资源请求的 Pod。Pod 创建必须成功，各资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		再创建一个资源请求超出剩余配额的 Pod。请求超过 ResourceQuota 限制，Pod 创建必须失败。
+		更新已成功创建 Pod 的资源请求。更新必须失败，因为 Pod 不能动态修改资源需求。
+		删除成功创建的 Pod。删除必须成功，且必须从 ResourceQuota 的 ResourceQuotaStatus 中释放已分配的资源计数。
 	*/
 	framework.ConformanceIt("should create a ResourceQuota and capture the life of a pod.", func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -302,7 +302,7 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		gomega.Expect(err).To(gomega.HaveOccurred())
 
 		ginkgo.By("Ensuring a pod cannot update its resource requirements")
-		// a pod cannot dynamically update its resource requirements.
+		// pod 无法动态更新资源需求。
 		requests = v1.ResourceList{}
 		requests[v1.ResourceCPU] = resource.MustParse("100m")
 		requests[v1.ResourceMemory] = resource.MustParse("100Mi")
@@ -330,21 +330,21 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		framework.ExpectNoError(err)
 	})
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, configmap
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a ConfigMap. Its creation MUST be successful and resource usage count against the ConfigMap object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the ConfigMap. Deletion MUST succeed and resource usage count against the ConfigMap object MUST be released from ResourceQuotaStatus of the ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, configmap
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 ConfigMap。创建必须成功，ConfigMap 对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 ConfigMap。删除必须成功，ConfigMap 对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
 	*/
 	framework.ConformanceIt("should create a ResourceQuota and capture the life of a configMap.", func(ctx context.Context) {
 		found, unchanged := 0, 0
-		// On contended servers the service account controller can slow down, leading to the count changing during a run.
-		// Wait up to 15s for the count to stabilize, assuming that updates come at a consistent rate, and are not held indefinitely.
+		// 高负载的服务器上 service account controller 可能变慢，导致测试运行期间计数发生变化。
+		// 最多等 15 秒让计数稳定，前提是更新以稳定速率到来且不会无限期停滞。
 		err := wait.PollUntilContextTimeout(ctx, 1*time.Second, time.Minute, false, func(ctx context.Context) (bool, error) {
 			configmaps, err := f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 			if len(configmaps.Items) == found {
-				// loop until the number of configmaps has stabilized for 15 seconds
+				// 循环等待 configmap 数量稳定 15 秒
 				unchanged++
 				return unchanged > 15, nil
 			}
@@ -397,11 +397,11 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, replicationController
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a ReplicationController. Its creation MUST be successful and resource usage count against the ReplicationController object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the ReplicationController. Deletion MUST succeed and resource usage count against the ReplicationController object MUST be released from ResourceQuotaStatus of the ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, replicationController
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 ReplicationController。创建必须成功，ReplicationController 对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 ReplicationController。删除必须成功，ReplicationController 对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
 	*/
 	framework.ConformanceIt("should create a ResourceQuota and capture the life of a replication controller.", func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -433,11 +433,11 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		framework.ExpectNoError(err)
 
 		ginkgo.By("Deleting a ReplicationController")
-		// Without the delete options, the object isn't actually
-		// removed until the GC verifies that all children have been
-		// detached. ReplicationControllers default to "orphan", which
-		// is different from most resources. (Why? To preserve a common
-		// workflow from prior to the GC's introduction.)
+		// 不带 delete options 时，对象要等 GC 确认
+		// 所有子对象已分离后才会真正
+		// 移除。ReplicationControllers 默认使用 "orphan"，与
+		// 多数资源不同。（为什么？为了保留 GC 引入之前
+		// 就存在的常见工作流。）
 		err = f.ClientSet.CoreV1().ReplicationControllers(f.Namespace.Name).Delete(ctx, replicationController.Name, metav1.DeleteOptions{
 			PropagationPolicy: func() *metav1.DeletionPropagation {
 				p := metav1.DeletePropagationBackground
@@ -453,11 +453,11 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, replicaSet
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a ReplicaSet. Its creation MUST be successful and resource usage count against the ReplicaSet object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the ReplicaSet. Deletion MUST succeed and resource usage count against the ReplicaSet object MUST be released from ResourceQuotaStatus of the ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, replicaSet
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 ReplicaSet。创建必须成功，ReplicaSet 对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 ReplicaSet。删除必须成功，ReplicaSet 对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
 	*/
 	framework.ConformanceIt("should create a ResourceQuota and capture the life of a replica set.", func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -499,12 +499,12 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.31
-		Testname: ResourceQuota, object count quota, ResourceClaim
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create ResourceClaim. Creation MUST be successful and resource usage count against the ResourceClaim object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the ResourceClaim. Deletion MUST succeed and resource usage count against the ResourceClaim object MUST be released from ResourceQuotaStatus of the ResourceQuota.
-		[NotConformancePromotable] alpha feature
+		发布版本：v1.31
+		测试名称：ResourceQuota, object count quota, ResourceClaim
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 ResourceClaim。创建必须成功，ResourceClaim 对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 ResourceClaim。删除必须成功，ResourceClaim 对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
+		[NotConformancePromotable] alpha 特性
 	*/
 	f.It("should create a ResourceQuota and capture the life of a ResourceClaim", f.WithFeatureGate(features.DynamicResourceAllocation), f.WithLabel("DRA"), func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -549,12 +549,12 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, pvc
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create PersistentVolumeClaim (PVC) to request storage capacity of 1G. PVC creation MUST be successful and resource usage count against the PVC and storage object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the PVC. Deletion MUST succeed and resource usage count against its PVC and storage object MUST be released from ResourceQuotaStatus of the ResourceQuota.
-		[NotConformancePromotable] as test suite do not have any e2e at this moment which are explicitly verifying PV and PVC behaviour.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, pvc
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 PersistentVolumeClaim（PVC）请求 1G 存储。PVC 创建必须成功，PVC 和存储对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 PVC。删除必须成功，PVC 和存储对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
+		[NotConformancePromotable] 当前测试套件没有明确验证 PV 和 PVC 行为的 e2e。
 	*/
 	ginkgo.It("should create a ResourceQuota and capture the life of a persistent volume claim", func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -599,12 +599,12 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, object count quota, storageClass
-		Description: Create a ResourceQuota. Creation MUST be successful and its ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create PersistentVolumeClaim (PVC) with specified storageClass to request storage capacity of 1G. PVC creation MUST be successful and resource usage count against PVC, storageClass and storage object MUST be captured in ResourceQuotaStatus of the ResourceQuota.
-		Delete the PVC. Deletion MUST succeed and resource usage count against  PVC, storageClass and storage object MUST be released from ResourceQuotaStatus of the ResourceQuota.
-		[NotConformancePromotable] as test suite do not have any e2e at this moment which are explicitly verifying PV and PVC behaviour.
+		发布版本：v1.16
+		测试名称：ResourceQuota, object count quota, storageClass
+		描述：创建 ResourceQuota。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建指定 storageClass 的 PersistentVolumeClaim（PVC）请求 1G 存储。PVC 创建必须成功，PVC、storageClass 和存储对象的资源使用计数必须记录在 ResourceQuota 的 ResourceQuotaStatus 中。
+		删除 PVC。删除必须成功，PVC、storageClass 和存储对象的资源使用计数必须从 ResourceQuota 的 ResourceQuotaStatus 中释放。
+		[NotConformancePromotable] 当前测试套件没有明确验证 PV 和 PVC 行为的 e2e。
 	*/
 	ginkgo.It("should create a ResourceQuota and capture the life of a persistent volume claim with a storage class", func(ctx context.Context) {
 		ginkgo.By("Counting existing ResourceQuota")
@@ -664,9 +664,9 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		framework.ExpectNoError(err)
 		ginkgo.DeferCleanup(testcrd.CleanUp)
 		countResourceName := "count/" + testcrd.Crd.Spec.Names.Plural + "." + testcrd.Crd.Spec.Group
-		// resourcequota controller needs to take 30 seconds at most to detect the new custom resource.
-		// in order to make sure the resourcequota controller knows this resource, we create one test
-		// resourcequota object, and triggering updates on it until the status is updated.
+		// resourcequota controller 最多需要 30 秒发现新的自定义资源。
+		// 为确保 controller 认识这个资源，我们创建一个测试
+		// resourcequota 对象，并持续触发更新直到状态被更新。
 		quotaName := "quota-for-" + testcrd.Crd.Spec.Names.Plural
 		_, err = createResourceQuota(ctx, f.ClientSet, f.Namespace.Name, &v1.ResourceQuota{
 			ObjectMeta: metav1.ObjectMeta{Name: quotaName},
@@ -729,7 +729,7 @@ var _ = SIGDescribe("ResourceQuota", func() {
 				},
 			},
 		}, resourceClient, testcrd.Crd)
-		// since we only give one quota, this creation should fail.
+		// 只给了一份配额，因此这次创建应该失败。
 		gomega.Expect(err).To(gomega.HaveOccurred())
 
 		ginkgo.By("Deleting a custom resource")
@@ -743,13 +743,13 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, quota scope, Terminating and NotTerminating scope
-		Description: Create two ResourceQuotas, one with 'Terminating' scope and another 'NotTerminating' scope. Request and the limit counts for CPU and Memory resources are set for the ResourceQuota. Creation MUST be successful and their ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a Pod with specified CPU and Memory ResourceRequirements fall within quota limits. Pod creation MUST be successful and usage count MUST be captured in ResourceQuotaStatus of 'NotTerminating' scoped ResourceQuota but MUST NOT in 'Terminating' scoped ResourceQuota.
-		Delete the Pod. Pod deletion MUST succeed and Pod resource usage count MUST be released from ResourceQuotaStatus of 'NotTerminating' scoped ResourceQuota.
-		Create a pod with specified activeDeadlineSeconds and resourceRequirements for CPU and Memory fall within quota limits. Pod creation MUST be successful and usage count MUST be captured in ResourceQuotaStatus of 'Terminating' scoped ResourceQuota but MUST NOT in 'NotTerminating' scoped ResourceQuota.
-		Delete the Pod. Pod deletion MUST succeed and Pod resource usage count MUST be released from ResourceQuotaStatus of 'Terminating' scoped ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, quota scope, Terminating and NotTerminating scope
+		描述：创建两个 ResourceQuota，一个 scope 为 'Terminating'，另一个为 'NotTerminating'。为 ResourceQuota 设置 CPU 和 Memory 资源的请求和限制计数。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		创建 CPU 和 Memory ResourceRequirements 在配额范围内的 Pod。Pod 创建必须成功，使用计数必须记录在 'NotTerminating' scope 的 ResourceQuota 中，但不得出现在 'Terminating' scope 的 ResourceQuota 中。
+		删除 Pod。删除必须成功，Pod 资源使用计数必须从 'NotTerminating' scope 的 ResourceQuota 中释放。
+		创建带 activeDeadlineSeconds 且 CPU 和 Memory 资源需求在配额范围内的 Pod。Pod 创建必须成功，使用计数必须记录在 'Terminating' scope 的 ResourceQuota 中，但不得出现在 'NotTerminating' scope 的 ResourceQuota 中。
+		删除 Pod。删除必须成功，Pod 资源使用计数必须从 'Terminating' scope 的 ResourceQuota 中释放。
 	*/
 	framework.ConformanceIt("should verify ResourceQuota with terminating scopes.", func(ctx context.Context) {
 		ginkgo.By("Creating a ResourceQuota with terminating scope")
@@ -858,13 +858,13 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, quota scope, BestEffort and NotBestEffort scope
-		Description: Create two ResourceQuotas, one with 'BestEffort' scope and another with 'NotBestEffort' scope. Creation MUST be successful and their ResourceQuotaStatus MUST match to expected used and total allowed resource quota count within namespace.
-		Create a 'BestEffort' Pod by not explicitly specifying resource limits and requests. Pod creation MUST be successful and usage count MUST be captured in ResourceQuotaStatus of 'BestEffort' scoped ResourceQuota but MUST NOT in 'NotBestEffort' scoped ResourceQuota.
-		Delete the Pod. Pod deletion MUST succeed and Pod resource usage count MUST be released from ResourceQuotaStatus of 'BestEffort' scoped ResourceQuota.
-		Create a 'NotBestEffort' Pod by explicitly specifying resource limits and requests. Pod creation MUST be successful and usage count MUST be captured in ResourceQuotaStatus of 'NotBestEffort' scoped ResourceQuota but MUST NOT in 'BestEffort' scoped ResourceQuota.
-		Delete the Pod. Pod deletion MUST succeed and Pod resource usage count MUST be released from ResourceQuotaStatus of 'NotBestEffort' scoped ResourceQuota.
+		发布版本：v1.16
+		测试名称：ResourceQuota, quota scope, BestEffort and NotBestEffort scope
+		描述：创建两个 ResourceQuota，一个 scope 为 'BestEffort'，另一个为 'NotBestEffort'。创建必须成功，其 ResourceQuotaStatus 必须与 namespace 内预期已用和总允许配额数一致。
+		不显式指定资源限制和请求，创建一个 'BestEffort' Pod。Pod 创建必须成功，使用计数必须记录在 'BestEffort' scope 的 ResourceQuota 中，但不得出现在 'NotBestEffort' scope 的 ResourceQuota 中。
+		删除 Pod。删除必须成功，Pod 资源使用计数必须从 'BestEffort' scope 的 ResourceQuota 中释放。
+		显式指定资源限制和请求，创建一个 'NotBestEffort' Pod。Pod 创建必须成功，使用计数必须记录在 'NotBestEffort' scope 的 ResourceQuota 中，但不得出现在 'BestEffort' scope 的 ResourceQuota 中。
+		删除 Pod。删除必须成功，Pod 资源使用计数必须从 'NotBestEffort' scope 的 ResourceQuota 中释放。
 	*/
 	framework.ConformanceIt("should verify ResourceQuota with best effort scope.", func(ctx context.Context) {
 		ginkgo.By("Creating a ResourceQuota with best effort scope")
@@ -941,11 +941,11 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: ResourceQuota, update and delete
-		Description: Create a ResourceQuota for CPU and Memory quota limits. Creation MUST be successful.
-		When ResourceQuota is updated to modify CPU and Memory quota limits, update MUST succeed with updated values for CPU and Memory limits.
-		When ResourceQuota is deleted, it MUST not be available in the namespace.
+		发布版本：v1.16
+		测试名称：ResourceQuota, update and delete
+		描述：创建一个限制 CPU 和 Memory 的 ResourceQuota。创建必须成功。
+		更新 ResourceQuota 修改 CPU 和 Memory 配额限制时，更新必须成功并反映新值。
+		删除 ResourceQuota 后，它必须不再存在于 namespace 中。
 	*/
 	framework.ConformanceIt("should be able to update and delete ResourceQuota.", func(ctx context.Context) {
 		client := f.ClientSet
@@ -996,15 +996,15 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.25
-		Testname: ResourceQuota, manage lifecycle of a ResourceQuota
-		Description: Attempt to create a ResourceQuota for CPU and Memory
-		quota limits. Creation MUST be successful. Attempt to list all
-		namespaces with a label selector which MUST succeed. One list
-		MUST be found. The ResourceQuota when patched MUST succeed.
-		Given the patching of the ResourceQuota, the fields MUST equal
-		the new values. It MUST succeed at deleting a collection of
-		ResourceQuota via a label selector.
+		发布版本：v1.25
+		测试名称：ResourceQuota, manage lifecycle of a ResourceQuota
+		描述：尝试创建 CPU 和 Memory 配额限制的
+		ResourceQuota。创建必须成功。尝试用 label selector 列出所有
+		namespace，必须成功。必须找到一个列表
+		项。patch ResourceQuota 必须成功。
+		patch 之后，各字段必须等于
+		新值。必须能通过 label selector 成功删除一组
+		ResourceQuota。
 	*/
 	framework.ConformanceIt("should manage the lifecycle of a ResourceQuota", func(ctx context.Context) {
 		client := f.ClientSet
@@ -1061,19 +1061,19 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 
 	/*
-		Release: v1.26
-		Testname: ResourceQuota, apply changes to a ResourceQuota status
-		Description: Attempt to create a ResourceQuota for CPU and Memory
-		quota limits. Creation MUST be successful. Updating the hard
-		status values MUST succeed and the new values MUST be found. The
-		reported hard status values MUST equal the spec hard values.
-		Patching the spec hard values MUST succeed and the new values MUST
-		be found. Patching the hard status values MUST succeed. The
-		reported hard status values MUST equal the new spec hard values.
-		Getting the /status MUST succeed and the reported hard status
-		values MUST equal the spec hard values. Repatching the hard status
-		values MUST succeed. The spec MUST NOT be changed when
-		patching /status.
+		发布版本：v1.26
+		测试名称：ResourceQuota, apply changes to a ResourceQuota status
+		描述：尝试创建 CPU 和 Memory 配额限制的
+		ResourceQuota。创建必须成功。更新 hard
+		状态值必须成功，且必须能查到新值。
+		上报的 hard 状态值必须等于 spec 中的 hard 值。
+		patch spec hard 值必须成功，且必须能查到
+		新值。patch hard 状态值必须成功。
+		上报的 hard 状态值必须等于 spec 中新的 hard 值。
+		获取 /status 必须成功，且上报的 hard 状态
+		值必须等于 spec hard 值。再次 patch hard 状态
+		值必须成功。patch /status 时 spec 必须保持
+		不变。
 	*/
 	framework.ConformanceIt("should apply changes to a resourcequota status", func(ctx context.Context) {
 		ns := f.Namespace.Name
@@ -1152,7 +1152,7 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		framework.ExpectNoError(err, "failed to locate ResourceQuota %q in namespace %q", updatedResourceQuota.Name, ns)
 		framework.Logf("ResourceQuota %q /status was updated", updatedResourceQuota.Name)
 
-		// Sync resourceQuota list before patching /status
+		// patch /status 前先同步 resourceQuota 列表
 		rqList, err = f.ClientSet.CoreV1().ResourceQuotas("").List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 		framework.ExpectNoError(err, "failed to list Services")
 
@@ -1209,7 +1209,7 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		gomega.Expect(*rq.Status.Hard.Memory()).To(gomega.Equal(resource.MustParse("1Gi")), "Hard memory value for ResourceQuota %q is %s not 1Gi.", rq.Name, rq.Status.Hard.Memory().String())
 		framework.Logf("Resourcequota %q reports status: hard memory of %s", rqName, rq.Status.Hard.Memory())
 
-		// Sync resourceQuota list before repatching /status
+		// 再次 patch /status 前先同步 resourceQuota 列表
 		rqList, err = f.ClientSet.CoreV1().ResourceQuotas("").List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 		framework.ExpectNoError(err, "failed to list Services")
 
@@ -1249,10 +1249,10 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		})
 		framework.ExpectNoError(err, "failed to locate ResourceQuota %q in namespace %q", patchedResourceQuota.Name, ns)
 
-		// the resource_quota_controller ignores changes to the status so we have to wait for a full resync of the controller
-		// to reconcile the status again, this full resync is set every 5 minutes by default so we need to poll at least one
-		// minute more just in case we we start to poll just after the full resync has happened and he have to wait until
-		// next full resync.
+		// resource_quota_controller 会忽略状态变更，因此必须等 controller 完整
+		// 重新同步后再协调状态。默认每 5 分钟全量同步一次，所以至少要额外轮询
+		// 一分钟，以防刚开始轮询时全量同步刚发生过，必须再等
+		// 下一次全量同步。
 		// Ref: https://issues.k8s.io/121911
 		err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 6*time.Minute, true, func(ctx context.Context) (bool, error) {
 			resourceQuotaResult, err := rqClient.Get(ctx, rqName, metav1.GetOptions{})
@@ -1387,8 +1387,8 @@ var _ = SIGDescribe("ResourceQuota", framework.WithFeatureGate(features.VolumeAt
 		framework.ExpectNoError(err)
 
 		ginkgo.By("Ensuring resource quota with volume attributes class scope captures the pvc usage")
-		// the pvc references two different classes, one is in the spec which represents the desired class
-		// and another is in the status which represents the current class. so the actual usage is 1 for each quota.
+		// pvc 引用两个不同的 class：spec 中的代表期望的 class，
+		// status 中的代表当前的 class。因此每项配额的实际用量都是 1。
 		usedResources[v1.ResourceRequestsStorage] = resource.MustParse("1Gi")
 		usedResources[v1.ResourcePersistentVolumeClaims] = resource.MustParse("1")
 		err = waitForResourceQuota(ctx, f.ClientSet, f.Namespace.Name, quotaSilver.Name, usedResources)
@@ -1614,7 +1614,7 @@ var _ = SIGDescribe("ResourceQuota", func() {
 		framework.ExpectNoError(err)
 
 		ginkgo.By("Creating a terminating pod")
-		// Retry creating the pod as the admission controller's view of the quota usage may lag behind the ResourceQuota status.
+		// 重试创建 pod，因为 admission controller 看到的配额用量可能滞后于 ResourceQuota 状态。
 		err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 			_, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod2, metav1.CreateOptions{})
 			if err != nil {
@@ -2077,7 +2077,7 @@ var _ = SIGDescribe("ResourceQuota", func() {
 	})
 })
 
-// newTestResourceQuotaWithScopeSelector returns a quota that enforces default constraints for testing with scopeSelectors
+// newTestResourceQuotaWithScopeSelector 返回一个 quota，对 scopeSelector 测试强制默认约束
 func newTestResourceQuotaWithScopeSelector(name string, scope v1.ResourceQuotaScope) *v1.ResourceQuota {
 	hard := v1.ResourceList{}
 	hard[v1.ResourcePods] = resource.MustParse("5")
@@ -2103,7 +2103,7 @@ func newTestResourceQuotaWithScopeSelector(name string, scope v1.ResourceQuotaSc
 	}
 }
 
-// newTestResourceQuotaWithScope returns a quota that enforces default constraints for testing with scopes
+// newTestResourceQuotaWithScope 返回一个 quota，对 scope 测试强制默认约束
 func newTestResourceQuotaWithScope(name string, scope v1.ResourceQuotaScope) *v1.ResourceQuota {
 	hard := v1.ResourceList{}
 	hard[v1.ResourcePods] = resource.MustParse("5")
@@ -2120,8 +2120,8 @@ func newTestResourceQuotaWithScope(name string, scope v1.ResourceQuotaScope) *v1
 	}
 }
 
-// newTestResourceQuotaWithScopeForPriorityClass returns a quota
-// that enforces default constraints for testing with ResourceQuotaScopePriorityClass scope
+// newTestResourceQuotaWithScopeForPriorityClass 返回一个 quota，
+// 对 ResourceQuotaScopePriorityClass scope 测试强制默认约束
 func newTestResourceQuotaWithScopeForPriorityClass(name string, hard v1.ResourceList, op v1.ScopeSelectorOperator, values []string) *v1.ResourceQuota {
 	return &v1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -2139,8 +2139,8 @@ func newTestResourceQuotaWithScopeForPriorityClass(name string, hard v1.Resource
 	}
 }
 
-// newTestResourceQuotaWithScopeForVolumeAttributesClass returns a quota
-// that enforces default constraints for testing with ResourceQuotaScopeVolumeAttributesClass scope
+// newTestResourceQuotaWithScopeForVolumeAttributesClass 返回一个 quota，
+// 对 ResourceQuotaScopeVolumeAttributesClass scope 测试强制默认约束
 func newTestResourceQuotaWithScopeForVolumeAttributesClass(name string, hard v1.ResourceList, op v1.ScopeSelectorOperator, values []string) *v1.ResourceQuota {
 	return &v1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -2158,7 +2158,7 @@ func newTestResourceQuotaWithScopeForVolumeAttributesClass(name string, hard v1.
 	}
 }
 
-// newTestResourceQuota returns a quota that enforces default constraints for testing
+// newTestResourceQuota 返回一个强制默认约束的 quota，用于测试
 func newTestResourceQuota(name string) *v1.ResourceQuota {
 	hard := v1.ResourceList{}
 	hard[v1.ResourcePods] = resource.MustParse("5")
@@ -2176,9 +2176,9 @@ func newTestResourceQuota(name string) *v1.ResourceQuota {
 	hard[v1.ResourceEphemeralStorage] = resource.MustParse("50Gi")
 	hard[core.V1ResourceByStorageClass(classGold, v1.ResourcePersistentVolumeClaims)] = resource.MustParse("10")
 	hard[core.V1ResourceByStorageClass(classGold, v1.ResourceRequestsStorage)] = resource.MustParse("10Gi")
-	// test quota on discovered resource type
+	// 测试对已发现资源类型的配额
 	hard[v1.ResourceName("count/replicasets.apps")] = resource.MustParse("5")
-	// test quota on extended resource
+	// 测试对扩展资源的配额
 	hard[v1.ResourceName(v1.DefaultResourceRequestsPrefix+extendedResourceName)] = resource.MustParse("3")
 	return &v1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -2186,7 +2186,7 @@ func newTestResourceQuota(name string) *v1.ResourceQuota {
 	}
 }
 
-// newTestResourceQuotaDRA returns a quota that includes hard limits for ResourceClaim objects.
+// newTestResourceQuotaDRA 返回一个包含 ResourceClaim 对象硬限制的 quota。
 func newTestResourceQuotaDRA(name string) *v1.ResourceQuota {
 	quota := newTestResourceQuota(name)
 	quota.Spec.Hard[core.ClaimObjectCountName] = resource.MustParse("1")
@@ -2194,15 +2194,15 @@ func newTestResourceQuotaDRA(name string) *v1.ResourceQuota {
 	return quota
 }
 
-// newTestPodForQuota returns a pod that has the specified requests and limits
+// newTestPodForQuota 返回一个带指定 requests 和 limits 的 pod
 func newTestPodForQuota(f *framework.Framework, name string, requests v1.ResourceList, limits v1.ResourceList) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 		Spec: v1.PodSpec{
-			// prevent disruption to other test workloads in parallel test runs by ensuring the quota
-			// test pods don't get scheduled onto a node
+			// 通过确保 quota 测试 pod 不会被调度到节点上，
+			// 避免并行测试运行时干扰其他测试负载
 			NodeSelector: map[string]string{
 				"x-test.k8s.io/unsatisfiable": "not-schedulable",
 			},
@@ -2220,15 +2220,15 @@ func newTestPodForQuota(f *framework.Framework, name string, requests v1.Resourc
 	}
 }
 
-// newTestPodForQuotaWithPriority returns a pod that has the specified requests, limits and priority class
+// newTestPodForQuotaWithPriority 返回一个带指定 requests、limits 和 priority class 的 pod
 func newTestPodForQuotaWithPriority(f *framework.Framework, name string, requests v1.ResourceList, limits v1.ResourceList, pclass string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 		Spec: v1.PodSpec{
-			// prevent disruption to other test workloads in parallel test runs by ensuring the quota
-			// test pods don't get scheduled onto a node
+			// 通过确保 quota 测试 pod 不会被调度到节点上，
+			// 避免并行测试运行时干扰其他测试负载
 			NodeSelector: map[string]string{
 				"x-test.k8s.io/unsatisfiable": "not-schedulable",
 			},
@@ -2247,15 +2247,15 @@ func newTestPodForQuotaWithPriority(f *framework.Framework, name string, request
 	}
 }
 
-// newTestPodForQuota returns a pod that has the specified requests and limits
+// newTestPodForQuota 返回一个带指定 requests 和 limits 的 pod
 func newTestPodWithAffinityForQuota(f *framework.Framework, name string, affinity *v1.Affinity) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 		Spec: v1.PodSpec{
-			// prevent disruption to other test workloads in parallel test runs by ensuring the quota
-			// test pods don't get scheduled onto a node
+			// 通过确保 quota 测试 pod 不会被调度到节点上，
+			// 避免并行测试运行时干扰其他测试负载
 			NodeSelector: map[string]string{
 				"x-test.k8s.io/unsatisfiable": "not-schedulable",
 			},
@@ -2271,7 +2271,7 @@ func newTestPodWithAffinityForQuota(f *framework.Framework, name string, affinit
 	}
 }
 
-// newTestPersistentVolumeClaimForQuota returns a simple persistent volume claim
+// newTestPersistentVolumeClaimForQuota 返回一个简单的 persistent volume claim
 func newTestPersistentVolumeClaimForQuota(name string) *v1.PersistentVolumeClaim {
 	return &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2303,8 +2303,8 @@ func newTestPersistentVolumeClaimWithFakeCSIVolumeForQuota(namespace, name strin
 			VolumeAttributesClassName: vacName,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					// prevent disruption to other test workloads in parallel test runs by ensuring the quota
-					// test claims don't get bound to a volume in use by other tests
+					// 通过确保 quota 测试 claim 不会绑定到其他测试正在使用的 volume，
+					// 避免并行测试运行时干扰其他测试负载
 					"x-test.k8s.io/satisfiable": "fake-volume",
 				},
 			},
@@ -2349,7 +2349,7 @@ func newTestPersistentVolumeClaimWithFakeCSIVolumeForQuota(namespace, name strin
 	return pvc, pv
 }
 
-// newTestResourceClaimForQuota returns a simple resource claim
+// newTestResourceClaimForQuota 返回一个简单的 resource claim
 func newTestResourceClaimForQuota(name string) *resourceapi.ResourceClaim {
 	return &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2368,7 +2368,7 @@ func newTestResourceClaimForQuota(name string) *resourceapi.ResourceClaim {
 	}
 }
 
-// newTestReplicationControllerForQuota returns a simple replication controller
+// newTestReplicationControllerForQuota 返回一个简单的 replication controller
 func newTestReplicationControllerForQuota(name, image string, replicas int32) *v1.ReplicationController {
 	return &v1.ReplicationController{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2396,7 +2396,7 @@ func newTestReplicationControllerForQuota(name, image string, replicas int32) *v
 	}
 }
 
-// newTestReplicaSetForQuota returns a simple replica set
+// newTestReplicaSetForQuota 返回一个简单的 replica set
 func newTestReplicaSetForQuota(name, image string, replicas int32) *appsv1.ReplicaSet {
 	zero := int64(0)
 	return &appsv1.ReplicaSet{
@@ -2424,10 +2424,10 @@ func newTestReplicaSetForQuota(name, image string, replicas int32) *appsv1.Repli
 	}
 }
 
-// newTestServiceForQuota returns a simple service
+// newTestServiceForQuota 返回一个简单的 service
 func newTestServiceForQuota(name string, serviceType v1.ServiceType, allocateLoadBalancerNodePorts bool) *v1.Service {
 	var allocateNPs *bool
-	// Only set allocateLoadBalancerNodePorts when service type is LB
+	// 仅当 service 类型为 LB 时才设置 allocateLoadBalancerNodePorts
 	if serviceType == v1.ServiceTypeLoadBalancer {
 		allocateNPs = &allocateLoadBalancerNodePorts
 	}
@@ -2471,26 +2471,26 @@ func newTestSecretForQuota(name string) *v1.Secret {
 	}
 }
 
-// createResourceQuota in the specified namespace
+// 在指定 namespace 中创建 resourceQuota
 func createResourceQuota(ctx context.Context, c clientset.Interface, namespace string, resourceQuota *v1.ResourceQuota) (*v1.ResourceQuota, error) {
 	return c.CoreV1().ResourceQuotas(namespace).Create(ctx, resourceQuota, metav1.CreateOptions{})
 }
 
-// deleteResourceQuota with the specified name
+// 删除指定名称的 resourceQuota
 func deleteResourceQuota(ctx context.Context, c clientset.Interface, namespace, name string) error {
 	return c.CoreV1().ResourceQuotas(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-// countResourceQuota counts the number of ResourceQuota in the specified namespace
-// On contended servers the service account controller can slow down, leading to the count changing during a run.
-// Wait up to 5s for the count to stabilize, assuming that updates come at a consistent rate, and are not held indefinitely.
+// countResourceQuota 统计指定 namespace 中 ResourceQuota 的数量
+// 高负载的服务器上 service account controller 可能变慢，导致测试运行期间计数发生变化。
+// 最多等 5 秒让计数稳定，前提是更新以稳定速率到来且不会无限期停滞。
 func countResourceQuota(ctx context.Context, c clientset.Interface, namespace string) (int, error) {
 	found, unchanged := 0, 0
 	return found, wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		resourceQuotas, err := c.CoreV1().ResourceQuotas(namespace).List(ctx, metav1.ListOptions{})
 		framework.ExpectNoError(err)
 		if len(resourceQuotas.Items) == found {
-			// loop until the number of resource quotas has stabilized for 5 seconds
+			// 循环等待 resource quota 数量稳定 5 秒
 			unchanged++
 			return unchanged > 4, nil
 		}
@@ -2500,8 +2500,8 @@ func countResourceQuota(ctx context.Context, c clientset.Interface, namespace st
 	})
 }
 
-// Wait for resource quota status to show the expected used resources value.
-// Other resources are ignored.
+// 等待 resource quota 状态显示预期的已用资源值。
+// 其他资源忽略。
 func waitForResourceQuota(ctx context.Context, c clientset.Interface, ns, quotaName string, used v1.ResourceList) error {
 	var lastResourceQuota *v1.ResourceQuota
 	err := framework.Gomega().Eventually(ctx, framework.GetObject(c.CoreV1().ResourceQuotas(ns).Get, quotaName, metav1.GetOptions{})).Should(haveUsedResources(used, &lastResourceQuota))
@@ -2511,28 +2511,28 @@ func waitForResourceQuota(ctx context.Context, c clientset.Interface, ns, quotaN
 	return err
 }
 
-// Ensure that the resource quota status shows the expected used resources value and does not change.
-// Other resources are ignored.
+// 确保 resource quota 状态显示预期的已用资源值且不再变化。
+// 其他资源忽略。
 func ensureResourceQuota(ctx context.Context, c clientset.Interface, ns, quotaName string, used v1.ResourceList) error {
-	// The longer we check the higher the confidence that it really remains the same.
-	// But we don't want to delay too long because it makes the test slower.
+	// 检查时间越长，越有把握确认值确实没变。
+	// 但也不能等太久，否则测试会变慢。
 	err := framework.Gomega().Consistently(ctx, framework.GetObject(c.CoreV1().ResourceQuotas(ns).Get, quotaName, metav1.GetOptions{})).WithTimeout(10 * time.Second).Should(haveUsedResources(used, nil))
 	return err
 }
 
 func haveUsedResources(used v1.ResourceList, lastResourceQuota **v1.ResourceQuota) gomegatypes.GomegaMatcher {
-	// The template emits the actual ResourceQuota object as YAML.
-	// In particular the ManagedFields are interesting because both
-	// kube-apiserver and kube-controller-manager set the status.
+	// 模板会输出实际的 ResourceQuota 对象 YAML。
+	// 其中 ManagedFields 尤其值得关注，因为
+	// kube-apiserver 和 kube-controller-manager 都会设置 status。
 	return gcustom.MakeMatcher(func(resourceQuota *v1.ResourceQuota) (bool, error) {
 		if lastResourceQuota != nil {
 			*lastResourceQuota = resourceQuota
 		}
-		// used may not yet be calculated
+		// used 可能还未计算出来
 		if resourceQuota.Status.Used == nil {
 			return false, nil
 		}
-		// verify that the quota shows the expected used resource values
+		// 验证 quota 显示预期的已用资源值
 		for k, v := range used {
 			if actualValue, found := resourceQuota.Status.Used[k]; !found || (actualValue.Cmp(v) != 0) {
 				return false, nil
@@ -2542,15 +2542,15 @@ func haveUsedResources(used v1.ResourceList, lastResourceQuota **v1.ResourceQuot
 	}).WithTemplate("Expected:\n{{.FormattedActual}}\n{{.To}} have the following .status.used entries:\n{{range $key, $value := .Data}}    {{$key}}: \"{{$value.ToUnstructured}}\"\n{{end}}").WithTemplateData(used /* Formatting of the map is done inside the template. */)
 }
 
-// updateResourceQuotaUntilUsageAppears updates the resource quota object until the usage is populated
-// for the specific resource name.
+// updateResourceQuotaUntilUsageAppears 持续更新 resource quota 对象，
+// 直到指定资源名的用量被填充。
 func updateResourceQuotaUntilUsageAppears(ctx context.Context, c clientset.Interface, ns, quotaName string, resourceName v1.ResourceName) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, resourceQuotaTimeout, false, func(ctx context.Context) (bool, error) {
 		resourceQuota, err := c.CoreV1().ResourceQuotas(ns).Get(ctx, quotaName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
-		// verify that the quota shows the expected used resource values
+		// 验证 quota 显示预期的已用资源值
 		_, ok := resourceQuota.Status.Used[resourceName]
 		if ok {
 			return true, nil
@@ -2560,7 +2560,7 @@ func updateResourceQuotaUntilUsageAppears(ctx context.Context, c clientset.Inter
 		current.Add(resource.MustParse("1"))
 		resourceQuota.Spec.Hard[resourceName] = current
 		_, err = c.CoreV1().ResourceQuotas(ns).Update(ctx, resourceQuota, metav1.UpdateOptions{})
-		// ignoring conflicts since someone else may already updated it.
+		// 忽略冲突，因为可能已有其他人更新过它。
 		if apierrors.IsConflict(err) {
 			return false, nil
 		}

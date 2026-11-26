@@ -14,22 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package node implements `e2e_node.test remote <flags>`, i.e.
-// it gets built into e2e_node.test. This avoids shipping another binary
-// in release packages. Only remote execution of the E2E suite is
-// supported.
+// Package node 实现 `e2e_node.test remote <flags>`，即
+// 它被编译进 e2e_node.test。这样 release 包里
+// 就不必再附带另一个二进制文件。只支持
+// E2E suite 的远端执行。
 //
-// It gets called by `kubetest2 noop -test=node -- <flags>`
-// when the flags include any of the "use or build binaries" variants.
-// This enables running E2E node tests without the Kubernetes source code.
+// 当 flag 包含任一"使用或构建二进制"变体时，它由
+// `kubetest2 noop -test=node -- <flags>` 调用。
+// 这样无需 Kubernetes 源代码也能运行 E2E node 测试。
 //
-// It provides the command line flags of the kubetest2 node tester (with some
-// changes, see below) and maps them to the way how `make test-e2e-node` would
-// have invoked test/e2e_node/runner/remote.
+// 它提供 kubetest2 node tester 的命令行 flag（有些
+// 改动，见下文），并映射到 `make test-e2e-node` 原本调用
+// test/e2e_node/runner/remote 的方式。
 //
-// It's derived from
+// 它衍生自
 // https://github.com/kubernetes-sigs/kubetest2/blob/master/pkg/testers/node/node.go
-// (revision 558f16b589d15d031595af7d035330b8e87bcaaf).
+// （revision 558f16b589d15d031595af7d035330b8e87bcaaf）。
 package node
 
 import (
@@ -50,12 +50,12 @@ import (
 	_ "k8s.io/kubernetes/test/e2e_node/remote/gce" // Register remote execution via GCE.
 )
 
-// Tester is intentionally as similar as possible to
+// Tester 刻意尽可能与
 // https://github.com/kubernetes-sigs/kubetest2/blob/master/pkg/testers/node/node.go
-// to make it more obvious that the command line is the same,
-// with a few flags added for binary paths.
+// 保持一致，让命令行相同这一点更明显，
+// 只是为二进制路径增加了几个 flag。
 type Tester struct {
-	// Flags passed through by node tester.
+	// node tester 透传的 flag。
 	GCPProject       string        `desc:"GCP Project to create VMs in."`
 	GCPZone          string        `desc:"GCP Zone to create VMs in."`
 	SkipRegex        string        `desc:"Regular expression of jobs to skip."`
@@ -76,12 +76,12 @@ type Tester struct {
 	DeleteInstances  bool          `desc:"Where to delete instances after running the test"`
 	NodeEnv          string        `desc:"Additional metadata keys to add to a gce instance"`
 
-	// Flags for pre-built binary support. Required, building from source is not supported.
+	// 预构建二进制支持的 flag。必需，不支持从源码构建。
 	GinkgoBinary  string `desc:"Existing Ginkgo binary to be used on the target instead of building from source"`
 	KubeletBinary string `desc:"Existing kubelet binary to be used on the target instead of building from source"`
 	E2ENodeBinary string `desc:"Existing e2e-node.test binary to be used on the target instead of building from source"`
 
-	// Flags for values determined by node tester.
+	// 由 node tester 确定的值的 flag。
 	SSHUser string `desc:"Used for ssh into the remote node."`
 	SSHKey  string `desc:"Used for ssh into the remote node."`
 }
@@ -96,7 +96,7 @@ func NewDefaultTester() *Tester {
 func (t *Tester) Execute(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet(`"e2e_node.test remote"`, flag.ExitOnError)
 
-	// Bind all exported fields to flags. This replaces github.com/octago/sflags/gen/gpflag.
+	// 把所有导出字段绑定到 flag。这取代了 github.com/octago/sflags/gen/gpflag。
 	value := reflect.ValueOf(t).Elem()
 	for field := range reflect.TypeOf(*t).Fields() {
 		if !field.IsExported() {
@@ -130,9 +130,9 @@ func (t *Tester) Execute(ctx context.Context, args []string) error {
 	return t.Test()
 }
 
-// fieldToFlagName converts to lower case and inserts hyphens between the boundary
-// between upper and lower characters. As a special case, e.g. "GCPProject" becomes
-// "gcp-project".
+// fieldToFlagName 转成小写，并在大小写边界之间
+// 插入连字符。特例中，例如 "GCPProject" 变成
+// "gcp-project"。
 func fieldToFlagName(in string) string {
 	parts := regexp.MustCompile(`[a-z0-9]+|[A-Z0-9]+`).FindAllString(in, -1)
 	for i, part := range parts {
@@ -140,7 +140,7 @@ func fieldToFlagName(in string) string {
 			continue
 		}
 		if l := len(part); l > 1 {
-			// Split before the last upper character.
+			// 在最后一个大写字符前拆分。
 			part = part[:l-1] + "-" + part[l-1:]
 		}
 		if i > 0 {
@@ -167,15 +167,15 @@ func (t *Tester) validateFlags() error {
 	return nil
 }
 
-// configureRemote configures the "remote" package through it's flags.
-// This corresponds to test/e2e_node/runner/remote/run_remote.go
-// as invoked by hack/make-rules/test-e2e-node.sh.
+// configureRemote 通过 flag 配置 "remote" 包。
+// 这对应 test/e2e_node/runner/remote/run_remote.go
+// 被 hack/make-rules/test-e2e-node.sh 调用的方式。
 func (t *Tester) configureRemote() (finalErr error) {
 	for name, value := range map[string]string{
 		"ssh-env": "gce", // Hard-coded as in https://github.com/kubernetes/kubernetes/blob/34341909b3e9a4854ab5d336b056b934bbbd9f16/hack/make-rules/test-e2e-node.sh#L218
 
-		// See test/e2e_node/remote/run_remote_suite.go and test/e2e_node/remote/gce/gce_runner.go
-		// for the definition of these flags or check `go run ./test/e2e_node/runner/remote/ -help`.
+		// 这些 flag 的定义见 test/e2e_node/remote/run_remote_suite.go 和 test/e2e_node/remote/gce/gce_runner.go，
+		// 或查看 `go run ./test/e2e_node/runner/remote/ -help`。
 		"project":           t.GCPProject,
 		"zone":              t.GCPZone,
 		"test_args":         t.TestArgs,
@@ -196,18 +196,18 @@ func (t *Tester) configureRemote() (finalErr error) {
 		"ssh-user": t.SSHUser,
 		"ssh-key":  t.SSHKey,
 
-		// Not used by the remote runner and cannot be set because the flag is only defined in the command:
-		// https://github.com/kubernetes/kubernetes/blob/a5098cf9a1405b6b6ed6cf9e0e4e49270c5a0996/test/e2e_node/runner/remote/run_remote.go#L37-L41
+		// remote runner 不使用，且不能设置，因为该 flag 只在命令中定义：
 		//
-		// We accept the parameter for the sake of consistency and because it might make
-		// migrating jobs easier. Maybe it will also be supported in the future, if there
-		// turns out to be a need for it.
+		//为保持一致性、方便迁移 job，我们接受该参数。将来如果有需求，
+		// 也许也会支持它。
+		//
+		//
 		// "runtime-config":    t.RuntimeConfig,
 
-		// Combining multiple different parameters inside a single parameter is problematic
-		// because of quoting, but that is what the existing code uses. A better solution
-		// would be have a `ginkgo-flag` parameter that can be used once for each individual
-		// Ginkgo parameter.
+		// 把多个不同参数合到一个参数里会因引号而有问题，
+		// 但现有代码就是这么做的。更好的方案是提供 `ginkgo-flag`
+		// 参数，每个 Ginkgo 参数用一次。
+		//
 		"ginkgo-flags": fmt.Sprintf("--nodes=%d --label-filter=%q --skip=%q --focus=%q", t.Parallelism, t.LabelFilter, t.SkipRegex, t.FocusRegex),
 	} {
 		if err := remote.CommandLine.Set(name, value); err != nil {
@@ -232,7 +232,7 @@ func (t *Tester) Test() error {
 }
 
 func Main(args []string) {
-	// No cancellation, there's nothing to clean up when killed.
+	// 没有 cancellation，被杀死时无需清理。
 	ctx := context.Background()
 
 	t := NewDefaultTester()

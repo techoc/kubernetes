@@ -23,7 +23,7 @@ import (
 	testdriver "k8s.io/kubernetes/test/e2e/dra/test-driver/app"
 )
 
-// BeRegistered checks that plugin registration has completed.
+// BeRegistered 检查插件注册是否完成。
 var BeRegistered = gcustom.MakeMatcher(func(actualCalls []testdriver.GRPCCall) (bool, error) {
 	for _, call := range actualCalls {
 		if call.FullMethod == "/pluginregistration.Registration/NotifyRegistrationStatus" &&
@@ -56,7 +56,7 @@ func NotifyRegistrationStatusFailed() gcustom.CustomGomegaMatcher {
 	}).WithMessage("contain unsuccessful NotifyRegistrationStatus call")
 }
 
-// NodePrepareResoucesSucceeded checks that NodePrepareResources API has been called and succeeded
+// NodePrepareResoucesSucceeded 检查 NodePrepareResources API 已被调用且成功
 var NodePrepareResourcesSucceeded = gcustom.MakeMatcher(func(actualCalls []testdriver.GRPCCall) (bool, error) {
 	for _, call := range actualCalls {
 		if strings.HasSuffix(call.FullMethod, "/NodePrepareResources") && call.Response != nil && call.Err == nil {
@@ -66,7 +66,7 @@ var NodePrepareResourcesSucceeded = gcustom.MakeMatcher(func(actualCalls []testd
 	return false, nil
 }).WithMessage("contain successful NodePrepareResources call")
 
-// NodePrepareResoucesFailed checks that NodePrepareResources API has been called and returned an error
+// NodePrepareResoucesFailed 检查 NodePrepareResources API 已被调用且返回错误
 var NodePrepareResourcesFailed = gcustom.MakeMatcher(func(actualCalls []testdriver.GRPCCall) (bool, error) {
 	for _, call := range actualCalls {
 		if strings.HasSuffix(call.FullMethod, "/NodePrepareResources") && call.Err != nil {
@@ -76,7 +76,7 @@ var NodePrepareResourcesFailed = gcustom.MakeMatcher(func(actualCalls []testdriv
 	return false, nil
 }).WithMessage("contain unsuccessful NodePrepareResources call")
 
-// NodeUnprepareResoucesSucceeded checks that NodeUnprepareResources API has been called and succeeded
+// NodeUnprepareResoucesSucceeded 检查 NodeUnprepareResources API 已被调用且成功
 var NodeUnprepareResourcesSucceeded = gcustom.MakeMatcher(func(actualCalls []testdriver.GRPCCall) (bool, error) {
 	for _, call := range actualCalls {
 		if strings.HasSuffix(call.FullMethod, "/NodeUnprepareResources") && call.Response != nil && call.Err == nil {
@@ -86,7 +86,7 @@ var NodeUnprepareResourcesSucceeded = gcustom.MakeMatcher(func(actualCalls []tes
 	return false, nil
 }).WithMessage("contain successful NodeUnprepareResources call")
 
-// NodeUnprepareResoucesFailed checks that NodeUnprepareResources API has been called and returned an error
+// NodeUnprepareResoucesFailed 检查 NodeUnprepareResources API 已被调用且返回错误
 var NodeUnprepareResourcesFailed = gcustom.MakeMatcher(func(actualCalls []testdriver.GRPCCall) (bool, error) {
 	for _, call := range actualCalls {
 		if strings.HasSuffix(call.FullMethod, "/NodeUnprepareResources") && call.Err != nil {

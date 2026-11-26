@@ -68,10 +68,10 @@ var _ = utils.SIGDescribe("CSI Mock VolumeLimitScaling scheduling", framework.Wi
 		}
 
 		for _, t := range tests {
-			// capture range variable
+			// 捕获 range 变量
 			tc := t
 			testFunc := func(ctx context.Context) {
-				// Create a CSIDriver for a fake, not-installed driver name
+				// 为一个不存在的假 driver 名称创建 CSIDriver
 				fakeDriver := fmt.Sprintf("csi-mock-uninstalled-%s", f.Namespace.Name)
 				csiDriver := &storagev1.CSIDriver{
 					ObjectMeta: metav1.ObjectMeta{Name: fakeDriver},
@@ -88,7 +88,7 @@ var _ = utils.SIGDescribe("CSI Mock VolumeLimitScaling scheduling", framework.Wi
 					})
 				}
 
-				// Create a StorageClass that uses the fake driver with WaitForFirstConsumer
+				// 创建一个使用假 driver 且 WaitForFirstConsumer 的 StorageClass
 				scTest := testsuites.StorageClassTest{
 					Name:         fakeDriver,
 					Provisioner:  fakeDriver,
@@ -120,18 +120,18 @@ var _ = utils.SIGDescribe("CSI Mock VolumeLimitScaling scheduling", framework.Wi
 				err = e2epv.WaitOnPVandPVC(ctx, f.ClientSet, f.Timeouts, f.Namespace.Name, volume, claim)
 				framework.ExpectNoError(err, "waiting for PV and PVC to be bound each other")
 
-				// Create a pod using that PVC
+				// 用该 PVC 创建一个 pod
 				pod, err := createPodWithPVCWithoutNodeSelection(f.ClientSet, claim, f.Namespace.Name)
 				framework.ExpectNoError(err, "creating pod")
 
 				if tc.expectSchedulable {
-					// Pod should get scheduled to some node (NodeName set). Allow more time in case binders are slow.
+					// pod 应被调度到某个节点（NodeName 已设置）。binder 较慢，多给点时间。
 					err = e2epod.WaitForPodCondition(ctx, f.ClientSet, pod.Namespace, pod.Name, "pod is scheduled", f.Timeouts.PodStart, func(p *v1.Pod) (bool, error) {
 						return p.Spec.NodeName != "", nil
 					})
 					framework.ExpectNoError(err, "waiting for pod to be scheduled when prevent=false")
 				} else {
-					// Expect FailedScheduling event with driver-not-installed message
+					// 预期出现带 driver-not-installed 消息的 FailedScheduling 事件
 					framework.Logf("Waiting for FailedScheduling event with driver-not-installed message")
 					framework.Logf("Pod status: %+v", pod.Status)
 					failedMsg := fmt.Sprintf("%s CSI driver is not installed on the node", fakeDriver)
@@ -146,7 +146,7 @@ var _ = utils.SIGDescribe("CSI Mock VolumeLimitScaling scheduling", framework.Wi
 				}
 			}
 
-			// Compose It with feature tags
+			// 用特性标签组合 It
 			args := []any{tc.name, testFunc}
 			framework.It(args...)
 		}

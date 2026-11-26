@@ -48,7 +48,7 @@ var _ = sigDescribe(feature.Windows, "DNS", skipUnlessWindows(func() {
 		framework.ExpectNoError(err)
 
 		ginkgo.By("Preparing a test DNS service with injected DNS names...")
-		// the default service IP will vary from cluster to cluster, but will always be present and is a good DNS test target
+		// 默认 service IP 因集群而异，但始终存在，是很好的 DNS 测试目标
 		testInjectedIP := svc.Spec.ClusterIP
 		testSearchPath := "default.svc.cluster.local"
 
@@ -77,7 +77,7 @@ var _ = sigDescribe(feature.Windows, "DNS", skipUnlessWindows(func() {
 		}()
 		framework.ExpectNoError(e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, testPod.Name, f.Namespace.Name), "failed to wait for pod %s to be running", testPod.Name)
 
-		// This isn't the best 'test' but it is a great diagnostic, see later test for the 'real' test.
+		// 这不是最好的"测试"，但是很好的诊断手段，真正的测试见后面的用例。
 		ginkgo.By("Calling ipconfig to get debugging info for this pod's DNS and confirm that a dns server 1.1.1.1 can be injected, along with ")
 		cmd := []string{"ipconfig", "/all"}
 		stdout, _, err := e2epod.Exec(f.TContext(ctx), e2epod.ExecOptions{
@@ -95,14 +95,14 @@ var _ = sigDescribe(feature.Windows, "DNS", skipUnlessWindows(func() {
 			framework.Failf("One of the custom DNS options 1.1.1.1, not found in ipconfig /all")
 		}
 
-		// We've now verified that the DNS stuff is injected...  now lets make sure that curl'ing 'wrong' endpoints fails, i.e.
-		// a negative control, to run before we run our final test...
+		// 我们已经验证了 DNS 配置被注入……现在确认 curl '错误' 端点会失败，即
+		// 设置阴性对照，在运行最终测试之前执行……
 
 		ginkgo.By("Verifying that curl queries FAIL for wrong URLs")
 
-		// the below tests use curl because nslookup doesn't seem to use ndots properly
-		// ideally we'd use the powershell native ResolveDns but, that is not a part of agnhost images (as of k8s 1.20)
-		// TODO @jayunit100 add ResolveHost to agn images
+		// 下面的测试用 curl，因为 nslookup 似乎没有正确使用 ndots
+		// 理想情况下应使用 powershell 原生的 ResolveDns，但（截至 k8s 1.20）agnhost 镜像中
+		// TODO @jayunit100 把 ResolveHost 加入 agnhost 镜像
 
 		cmd = []string{"curl.exe", "-k", "https://kubernetezzzzzzzz:443"}
 		stdout, _, err = e2epod.Exec(f.TContext(ctx), e2epod.ExecOptions{
@@ -130,11 +130,11 @@ var _ = sigDescribe(feature.Windows, "DNS", skipUnlessWindows(func() {
 		})
 		framework.Logf("Result of curling the kubernetes service... (Failure ok, only testing for the sake of DNS resolution) %v ... error = %v", stdout, err)
 
-		// curl returns an error if the host isn't resolved, otherwise, it will return a passing result.
+		// 如果主机无法解析，curl 返回错误，否则返回成功结果。
 		if err != nil {
 			framework.ExpectNoError(err)
 		}
 
-		// TODO: Add more test cases for other DNSPolicies.
+		// TODO: 为其他 DNSPolicy 添加更多测试用例。
 	})
 }))

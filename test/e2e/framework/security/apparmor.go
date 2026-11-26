@@ -39,15 +39,15 @@ const (
 	loaderLabelValue = "e2e-apparmor-loader"
 )
 
-// LoadAppArmorProfiles creates apparmor-profiles ConfigMap and apparmor-loader ReplicationController.
+// LoadAppArmorProfiles 创建 apparmor-profiles ConfigMap 和 apparmor-loader ReplicationController。
 func LoadAppArmorProfiles(ctx context.Context, nsName string, clientset clientset.Interface) {
 	createAppArmorProfileCM(ctx, nsName, clientset)
 	createAppArmorProfileLoader(ctx, nsName, clientset)
 }
 
-// CreateAppArmorTestPod creates a pod that tests apparmor profile enforcement. The pod exits with
-// an error code if the profile is incorrectly enforced. If runOnce is true the pod will exit after
-// a single test, otherwise it will repeat the test every 1 second until failure.
+// CreateAppArmorTestPod 创建一个测试 apparmor profile 强制执行的 pod。profile 被错误执行时
+// pod 会以错误码退出。runOnce 为 true 时 pod 执行一次测试后
+// 退出，否则每 1 秒重复一次直到失败。
 func AppArmorTestPod(nsName string, unconfined bool, runOnce bool) *v1.Pod {
 	localhostProfile := appArmorProfilePrefix + nsName
 	testCmd := fmt.Sprintf(`
@@ -138,7 +138,7 @@ func RunAppArmorTestPod(ctx context.Context, pod *v1.Pod, clientset clientset.In
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, clientset, pod.Name, pod.Namespace, framework.PodStartTimeout))
 	}
 
-	// Verify Pod affinity colocated the Pods.
+	// 验证 Pod affinity 把 Pod 放在同一位置。
 	loader := getRunningLoaderPod(ctx, pod.Namespace, clientset)
 	gomega.Expect(pod.Spec.NodeName).To(gomega.Equal(loader.Spec.NodeName))
 
@@ -238,7 +238,7 @@ func createAppArmorProfileLoader(ctx context.Context, nsName string, clientset c
 	_, err := clientset.CoreV1().ReplicationControllers(nsName).Create(ctx, loader, metav1.CreateOptions{})
 	framework.ExpectNoError(err, "Failed to create apparmor-loader ReplicationController")
 
-	// Wait for loader to be ready.
+	// 等待 loader 就绪。
 	getRunningLoaderPod(ctx, nsName, clientset)
 }
 

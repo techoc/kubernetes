@@ -23,24 +23,24 @@ import (
 	"k8s.io/kubernetes/test/e2e/perftype"
 )
 
-// CurrentKubeletPerfMetricsVersion is the current kubelet performance metrics
-// version. This is used by multiple perf related data structures. We should
-// bump up the version each time we make an incompatible change to the metrics.
+// CurrentKubeletPerfMetricsVersion 是当前 kubelet 性能指标
+// 版本。多个性能相关数据结构都使用它。每次对指标做
+// 不兼容更改时都应提升版本。
 const CurrentKubeletPerfMetricsVersion = "v2"
 
-// ResourceUsageToPerfData transforms ResourceUsagePerNode to PerfData. Notice that this function
-// only cares about memory usage, because cpu usage information will be extracted from NodesCPUSummary.
+// ResourceUsageToPerfData 把 ResourceUsagePerNode 转换为 PerfData。注意该函数
+// 只关心内存用量，因为 cpu 用量信息会从 NodesCPUSummary 中提取。
 func ResourceUsageToPerfData(usagePerNode e2ekubelet.ResourceUsagePerNode) *perftype.PerfData {
 	return ResourceUsageToPerfDataWithLabels(usagePerNode, nil)
 }
 
-// CPUUsageToPerfData transforms NodesCPUSummary to PerfData.
+// CPUUsageToPerfData 把 NodesCPUSummary 转换为 PerfData。
 func CPUUsageToPerfData(usagePerNode e2ekubelet.NodesCPUSummary) *perftype.PerfData {
 	return CPUUsageToPerfDataWithLabels(usagePerNode, nil)
 }
 
-// ResourceUsageToPerfDataWithLabels transforms ResourceUsagePerNode to PerfData with additional labels.
-// Notice that this function only cares about memory usage, because cpu usage information will be extracted from NodesCPUSummary.
+// ResourceUsageToPerfDataWithLabels 把 ResourceUsagePerNode 转换为带附加标签的 PerfData。
+// 注意该函数只关心内存用量，因为 cpu 用量信息会从 NodesCPUSummary 中提取。
 func ResourceUsageToPerfDataWithLabels(usagePerNode e2ekubelet.ResourceUsagePerNode, labels map[string]string) *perftype.PerfData {
 	items := []perftype.DataItem{}
 	for node, usages := range usagePerNode {
@@ -69,7 +69,7 @@ func ResourceUsageToPerfDataWithLabels(usagePerNode e2ekubelet.ResourceUsagePerN
 	}
 }
 
-// CPUUsageToPerfDataWithLabels transforms NodesCPUSummary to PerfData with additional labels.
+// CPUUsageToPerfDataWithLabels 把 NodesCPUSummary 转换为带附加标签的 PerfData。
 func CPUUsageToPerfDataWithLabels(usagePerNode e2ekubelet.NodesCPUSummary, labels map[string]string) *perftype.PerfData {
 	items := []perftype.DataItem{}
 	for node, usages := range usagePerNode {

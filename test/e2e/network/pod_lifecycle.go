@@ -69,15 +69,15 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 		pausePod = podClient.CreateSync(ctx, pausePod)
 
 		ginkgo.By("Try to connect to the webserver")
-		// Wait until we are able to connect to the Pod
+		// 等待能够连接到 Pod
 		podIPAddress := net.JoinHostPort(webserverPod.Status.PodIP, strconv.Itoa(80))
 		execHostnameTest(*pausePod, podIPAddress, webserverPod.Name)
 
-		// webserver should continue to serve traffic after delete
-		// since will be gracefully terminating
+		// 删除后 webserver 应继续提供流量，
+		// 因为会优雅终止
 		err := cs.CoreV1().Pods(ns).Delete(ctx, webserverPod.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "error deleting webserver pod")
-		// wait some time to ensure the test hit the pod during the terminating phase
+		// 等待一段时间，确保测试在 terminating 阶段命中了 pod
 		time.Sleep(15 * time.Second)
 		execHostnameTest(*pausePod, podIPAddress, webserverPod.Name)
 	})
@@ -94,15 +94,15 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 		pausePod = podClient.CreateSync(ctx, pausePod)
 
 		ginkgo.By("Try to connect to the webserver")
-		// Wait until we are able to connect to the Pod
+		// 等待能够连接到 Pod
 		podIPAddress := net.JoinHostPort(webserverPod.Status.PodIP, strconv.Itoa(80))
 		execHostnameTest(*pausePod, podIPAddress, webserverPod.Name)
 
-		// pod client should continue to connect to the webserver after delete
-		// since will be gracefully terminating
+		// 删除后 pod client 应继续能连接 webserver，
+		// 因为会优雅终止
 		err := cs.CoreV1().Pods(ns).Delete(ctx, pausePod.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "error deleting client pod")
-		// wait some time to ensure the test hit the pod during the terminating
+		// 等待一段时间，确保测试在 terminating 阶段命中了 pod
 		time.Sleep(15 * time.Second)
 		execHostnameTest(*pausePod, podIPAddress, webserverPod.Name)
 	})
@@ -163,7 +163,7 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 			framework.Failf("failed to patch %s pod condition: %v", bluePod.Name, err)
 		}
 
-		// Expect EndpointSlice resource to have the blue pod ready to serve traffic
+		// 预期 EndpointSlice 资源显示蓝色 pod 就绪，可提供流量
 		if err := e2eendpointslice.WaitForEndpointSlices(ctx, cs, blueGreenJig.Namespace, blueGreenJig.Name, 2*time.Second, wait.ForeverTestTimeout, func(ctx context.Context, endpointSlices []discoveryv1.EndpointSlice) (bool, error) {
 			for _, slice := range endpointSlices {
 				for _, ep := range slice.Endpoints {
@@ -182,7 +182,7 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 
 		ginkgo.By("Try to connect to the blue pod through the service")
 		scvAddress := net.JoinHostPort(blueGreenService.Spec.ClusterIP, strconv.Itoa(80))
-		// assert 5 times that we can connect only to the blue pod
+		// 断言 5 次只能连接到蓝色 pod
 		for range 5 {
 			err := wait.PollUntilContextTimeout(ctx, 3*time.Second, 30*time.Second, true, func(ctx context.Context) (done bool, err error) {
 				cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, scvAddress)
@@ -195,7 +195,7 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 					framework.Logf("got empty stdout, retry until timeout")
 					return false, nil
 				}
-				// Ensure we're comparing hostnames and not FQDNs
+				// 确保比较的是 hostname 而非 FQDN
 				targetHostname := strings.Split(bluePod.Name, ".")[0]
 				hostname := strings.TrimSpace(strings.Split(stdout, ".")[0])
 				if hostname != targetHostname {
@@ -208,14 +208,14 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 			}
 		}
 
-		// Switch from blue to green
+		// 从蓝色切换到绿色
 		ginkgo.By(fmt.Sprintf("patching green pod status with condition %q to true", readinessGate))
 		_, err = podClient.Patch(ctx, greenPod.Name, types.StrategicMergePatchType, []byte(fmt.Sprintf(patchStatusFmt, readinessGate, "True")), metav1.PatchOptions{}, "status")
 		if err != nil {
 			framework.Failf("failed to patch %s pod condition: %v", greenPod.Name, err)
 		}
 
-		// Expect EndpointSlice resource to have the green pod ready to serve traffic
+		// 预期 EndpointSlice 资源显示绿色 pod 就绪，可提供流量
 		if err := e2eendpointslice.WaitForEndpointSlices(ctx, cs, blueGreenJig.Namespace, blueGreenJig.Name, 2*time.Second, wait.ForeverTestTimeout, func(ctx context.Context, endpointSlices []discoveryv1.EndpointSlice) (bool, error) {
 			for _, slice := range endpointSlices {
 				for _, ep := range slice.Endpoints {
@@ -238,7 +238,7 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 			framework.Failf("failed to patch %s pod condition: %v", bluePod.Name, err)
 		}
 
-		// Expect EndpointSlice resource to have the blue pod NOT ready to serve traffic
+		// 预期 EndpointSlice 资源显示蓝色 pod 未就绪，不提供流量
 		if err := e2eendpointslice.WaitForEndpointSlices(ctx, cs, blueGreenJig.Namespace, blueGreenJig.Name, 2*time.Second, wait.ForeverTestTimeout, func(ctx context.Context, endpointSlices []discoveryv1.EndpointSlice) (bool, error) {
 			for _, slice := range endpointSlices {
 				for _, ep := range slice.Endpoints {
@@ -255,16 +255,16 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 			framework.Failf("No EndpointSlice found for Service %s/%s: %s", blueGreenJig.Namespace, blueGreenJig.Name, err)
 		}
 
-		// We have checked the endpoint slices reflect the desired state:
-		// bluePod not ready and greenPod ready, but we need to remember kubernetes
-		// is a distributed system eventually consistent, so there is a propagation
-		// delay until this information is present on the nodes and a programming delay
-		// until the corresponding node components program the information on the dataplane.
-		// Since there are only two backends, we need to ensure that only one is active,
-		// the chance of hitting any backend is 50% and each request is independent.
-		// We can use binomial probability to calculate the probability of hitting only
-		// the new pod despite there are two active pods, using 6 requests gives us
-		// a 0.5^6=0.015625,  1.5625% of chances of not able to detect the transition.
+		// 我们已经确认 endpoint slice 反映了期望状态：
+		// bluePod 未就绪、greenPod 就绪，但要记得 kubernetes
+		// 是最终一致的分布式系统，这些信息传播到节点
+		// 存在延迟，节点组件把信息写入数据面
+		// 也有延迟。
+		// 由于只有两个后端，需要确保只有一个处于活动状态，
+		// 命中任一后端的概率为 50%，且每次请求相互独立。
+		// 可用二项分布概率计算，在两个后端都活跃时
+		// 只命中新 pod 的概率。用 6 次请求得到
+		// 0.5^6=0.015625，即 1.5625% 的概率检测不到切换。
 		consecutiveHits := 0
 		expectedHits := 6
 		err = wait.PollUntilContextTimeout(ctx, 3*time.Second, e2eservice.ServiceReachabilityShortPollTimeout, true, func(ctx context.Context) (done bool, err error) {
@@ -280,7 +280,7 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 				consecutiveHits = 0
 				return false, nil
 			}
-			// Ensure we're comparing hostnames and not FQDNs
+			// 确保比较的是 hostname 而非 FQDN
 			targetHostname := strings.Split(greenPod.Name, ".")[0]
 			hostname := strings.TrimSpace(strings.Split(stdout, ".")[0])
 			if hostname != targetHostname {
@@ -300,7 +300,7 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 		}
 
 		ginkgo.By("Try to connect to the green pod through the service")
-		// assert 5 times that we can connect ONLY to the green pod
+		// 断言 5 次只能连接到绿色 pod
 		for range 5 {
 			err := wait.PollUntilContextTimeout(ctx, 3*time.Second, e2eservice.KubeProxyEndpointLagTimeout, true, func(ctx context.Context) (done bool, err error) {
 				cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, scvAddress)
@@ -313,10 +313,10 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 					framework.Logf("got empty stdout, retry until timeout")
 					return false, nil
 				}
-				// Ensure we're comparing hostnames and not FQDNs
+				// 确保比较的是 hostname 而非 FQDN
 				targetHostname := strings.Split(greenPod.Name, ".")[0]
 				hostname := strings.TrimSpace(strings.Split(stdout, ".")[0])
-				// At this point we should only receive traffic from the green Pod.
+				// 此时我们只应收到来自绿色 Pod 的流量。
 				if hostname != targetHostname {
 					return false, fmt.Errorf("expecting hostname %s got %s", targetHostname, hostname)
 				}
@@ -327,9 +327,9 @@ var _ = common.SIGDescribe("Connectivity Pod Lifecycle", func() {
 			}
 		}
 
-		// TODO there can be multiple combinations like:
-		// test zero downtime deleting the blue pod instead setting the readiness to false
-		// test roll back setting back the readiness to true on the blue pod
+		// TODO 还可以有更多组合，例如：
+		// 通过删除蓝色 pod 而非把 readiness 设为 false 测试零停机
+		// 通过把蓝色 pod 的 readiness 改回 true 测试回滚
 		// ...
 
 	})

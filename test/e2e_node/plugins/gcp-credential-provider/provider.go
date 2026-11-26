@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Originally copied from pkg/credentialproviders/gcp
+// 最初从 pkg/credentialproviders/gcp 复制
 package main
 
 import (
@@ -33,7 +33,7 @@ const (
 
 var containerRegistryUrls = []string{"container.cloud.google.com", "gcr.io", "*.gcr.io", "*.pkg.dev"}
 
-// HTTPError wraps a non-StatusOK error code as an error.
+// HTTPError 把非 StatusOK 的错误码包装成 error。
 type HTTPError struct {
 	StatusCode int
 	URL        string
@@ -41,14 +41,14 @@ type HTTPError struct {
 
 var _ error = &HTTPError{}
 
-// Error implements error
+// Error 实现 error 接口
 func (h *HTTPError) Error() string {
 	return fmt.Sprintf("http status code: %d while fetching url %s",
 		h.StatusCode, h.URL)
 }
 
-// TokenBlob is used to decode the JSON blob containing an access token
-// that is returned by GCE metadata.
+// TokenBlob 用于解码包含 access token 的 JSON blob
+// 它由 GCE metadata 返回。
 type TokenBlob struct {
 	AccessToken string `json:"access_token"`
 }
@@ -76,7 +76,7 @@ func (p *provider) Provide(image string) (map[string]credentialproviderv1.AuthCo
 		Password: parsedBlob.AccessToken,
 	}
 
-	// Add our entry for each of the supported container registry URLs
+	// 为每个支持的容器仓库 URL 添加我们的条目
 	for _, k := range containerRegistryUrls {
 		cfg[k] = authConfig
 	}

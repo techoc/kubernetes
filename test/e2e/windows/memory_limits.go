@@ -47,7 +47,7 @@ var _ = sigDescribe(feature.Windows, "Memory Limits", framework.WithSerial(), fr
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.BeforeEach(func() {
-		// NOTE(vyta): these tests are Windows specific
+		// 注意(vyta)：这些测试是 Windows 特有的
 		e2eskipper.SkipUnlessNodeOSDistroIs("windows")
 	})
 
@@ -65,40 +65,40 @@ var _ = sigDescribe(feature.Windows, "Memory Limits", framework.WithSerial(), fr
 }))
 
 type nodeMemory struct {
-	// capacity
+	// 容量
 	capacity resource.Quantity
-	// allocatable memory
+	// 可分配内存
 	allocatable resource.Quantity
-	// memory reserved for OS level processes
+	// 为 OS 级进程预留的内存
 	systemReserve resource.Quantity
-	// memory reserved for kubelet (not implemented)
+	// 为 kubelet 预留的内存（未实现）
 	kubeReserve resource.Quantity
-	// grace period memory limit (not implemented)
+	// grace period 内存限制（未实现）
 	softEviction resource.Quantity
-	// no grace period memory limit
+	// 无 grace period 内存限制
 	hardEviction resource.Quantity
 }
 
-// runDensityBatchTest runs the density batch pod creation test
-// checks that a calculated value for NodeAllocatable is equal to the reported value
+// runDensityBatchTest 运行批量创建 pod 的密度测试
+// 检查计算出的 NodeAllocatable 值与上报值是否相等
 func checkNodeAllocatableTest(ctx context.Context, f *framework.Framework) {
 
 	nodeMem := getFirstNodeMemory(ctx, f)
 	framework.Logf("nodeMem says: %+v", nodeMem)
 
-	// calculate the allocatable mem based on capacity - reserved amounts
+	// 根据容量减去预留量计算可分配内存
 	calculatedNodeAlloc := nodeMem.capacity.DeepCopy()
 	calculatedNodeAlloc.Sub(nodeMem.systemReserve)
 	calculatedNodeAlloc.Sub(nodeMem.kubeReserve)
 	calculatedNodeAlloc.Sub(nodeMem.softEviction)
 	calculatedNodeAlloc.Sub(nodeMem.hardEviction)
 
-	// sanity check against stated allocatable
+	// 对照上报的可分配值做健全性检查
 	gomega.Expect(calculatedNodeAlloc.Cmp(nodeMem.allocatable)).To(gomega.Equal(0), "calculated allocatable memory %+v and stated allocatable memory %+v are same", calculatedNodeAlloc, nodeMem.allocatable)
 }
 
-// Deploys `allocatablePods + 1` pods, each with a memory limit of `1/allocatablePods` of the total allocatable
-// memory, then confirms that the last pod failed because of failedScheduling
+// 部署 `allocatablePods + 1` 个 pod，每个 pod 的内存限制为总可分配
+// 内存的 `1/allocatablePods`，然后确认最后一个 pod 因 failedScheduling 失败
 func overrideAllocatableMemoryTest(ctx context.Context, f *framework.Framework, allocatablePods int) {
 	selector := labels.Set{"kubernetes.io/os": "windows"}.AsSelector()
 	nodeList, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{
@@ -106,16 +106,16 @@ func overrideAllocatableMemoryTest(ctx context.Context, f *framework.Framework, 
 	})
 	framework.ExpectNoError(err)
 
-	// Subtract any per-pod overhead the cluster's admission chain injects
-	// (Pod Overhead, KEP-688) so limit+overhead fits Allocatable.Memory.
+	// 减去集群 admission 链注入的每个 pod 的 overhead
+	// （Pod Overhead，KEP-688），使 limit+overhead 适配 Allocatable.Memory。
 	overhead, err := detectPodOverheadMemory(ctx, f.ClientSet, f.Namespace.Name)
 	framework.ExpectNoError(err, "detecting pod overhead memory")
 
 	framework.Logf("Scheduling 1 pod per node to consume all allocatable memory (detected overhead: %d bytes)", overhead)
 	for _, node := range nodeList.Items {
 		status := node.Status
-		// Subtract overhead (consume pod's own), existing (DaemonSets/system pods,
-		// incl. their overhead), and safety buffer (kubelet accounting noise).
+		// 减去 overhead（消耗 pod 自身的）、已有量（DaemonSets/系统 pod，
+		// 含它们的 overhead）和安全缓冲（kubelet 记账噪声）。
 		existing := sumExistingPodMemoryReservation(ctx, f.ClientSet, node.Name)
 		podMemLimt := resource.NewQuantity(
 			status.Allocatable.Memory().Value()-existing-overhead-windowsTestMemorySafetyBuffer,
@@ -181,7 +181,7 @@ func overrideAllocatableMemoryTest(ctx context.Context, f *framework.Framework, 
 			return fmt.Errorf("error getting events: %w", err)
 		}
 		for _, e := range eventList.Items {
-			// Look for an event that shows FailedScheduling
+			// 寻找显示 FailedScheduling 的事件
 			if e.Type == "Warning" && e.Reason == "FailedScheduling" && e.InvolvedObject.Name == failurePod.ObjectMeta.Name {
 				framework.Logf("Found %+v event with message %+v", e.Reason, e.Message)
 				return nil
@@ -228,8 +228,8 @@ func getNodeMemory(ctx context.Context, f *framework.Framework, node v1.Node) no
 	return nodeMem
 }
 
-// getNodeMemory populates a nodeMemory struct with information from the first Windows node
-// that is found in the cluster.
+// getNodeMemory 用集群中找到的第一个 Windows 节点的信息
+// 填充 nodeMemory 结构体。
 func getFirstNodeMemory(ctx context.Context, f *framework.Framework) nodeMemory {
 	selector := labels.Set{"kubernetes.io/os": "windows"}.AsSelector()
 	nodeList, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{
@@ -237,8 +237,8 @@ func getFirstNodeMemory(ctx context.Context, f *framework.Framework) nodeMemory 
 	})
 	framework.ExpectNoError(err)
 
-	// Assuming that agent nodes have the same config
-	// Make sure there is >0 agent nodes, then use the first one for info
+	// 假设 agent 节点配置相同
+	// 确保有 >0 个 agent 节点，然后用第一个获取信息
 	gomega.Expect(nodeList.Items).ToNot(gomega.BeEmpty())
 
 	ginkgo.By("Getting memory details from first Windows")
@@ -246,9 +246,9 @@ func getFirstNodeMemory(ctx context.Context, f *framework.Framework) nodeMemory 
 }
 
 // modified from https://github.com/kubernetes/kubernetes/blob/master/test/e2e/framework/kubelet/config.go#L110
-// the proxy version was causing and non proxy used a value that isn't set by e2e
+// proxy 版本导致的问题，非 proxy 使用了 e2e 未设置的值
 func decodeConfigz(contentsBytes []byte) (*kubeletconfig.KubeletConfiguration, error) {
-	// This hack because /configz reports the following structure:
+	// 这个 hack 是因为 /configz 上报如下结构：
 	// {"kubeletconfig": {the JSON representation of kubeletconfigv1beta1.KubeletConfiguration}}
 	type configzWrapper struct {
 		ComponentConfig kubeletconfigv1beta1.KubeletConfiguration `json:"kubeletconfig"`

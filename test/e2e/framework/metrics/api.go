@@ -22,7 +22,7 @@ import (
 	e2eperftype "k8s.io/kubernetes/test/e2e/perftype"
 )
 
-// APICall is a struct for managing API call.
+// APICall 是管理 API 调用的结构体。
 type APICall struct {
 	Resource    string        `json:"resource"`
 	Subresource string        `json:"subresource"`
@@ -32,22 +32,22 @@ type APICall struct {
 	Count       int           `json:"count"`
 }
 
-// APIResponsiveness is a struct for managing multiple API calls.
+// APIResponsiveness 是管理多个 API 调用的结构体。
 type APIResponsiveness struct {
 	APICalls []APICall `json:"apicalls"`
 }
 
-// SummaryKind returns the summary of API responsiveness.
+// SummaryKind 返回 API 响应性的摘要。
 func (a *APIResponsiveness) SummaryKind() string {
 	return "APIResponsiveness"
 }
 
-// PrintHumanReadable returns metrics with JSON format.
+// PrintHumanReadable 以 JSON 格式返回指标。
 func (a *APIResponsiveness) PrintHumanReadable() string {
 	return PrettyPrintJSON(a)
 }
 
-// PrintJSON returns metrics of PerfData(50, 90 and 99th percentiles) with JSON format.
+// PrintJSON 以 JSON 格式返回 PerfData（50、90 和 99 分位数）指标。
 func (a *APIResponsiveness) PrintJSON() string {
 	return PrettyPrintJSON(APICallToPerfData(a))
 }
@@ -60,11 +60,11 @@ func (a *APIResponsiveness) Less(i, j int) bool {
 	return a.APICalls[i].Latency.Perc99 < a.APICalls[j].Latency.Perc99
 }
 
-// currentAPICallMetricsVersion is the current apicall performance metrics version. We should
-// bump up the version each time we make incompatible change to the metrics.
+// currentAPICallMetricsVersion 是当前 apicall 性能指标版本。每次对指标做
+// 不兼容更改时都应提升版本。
 const currentAPICallMetricsVersion = "v1"
 
-// APICallToPerfData transforms APIResponsiveness to PerfData.
+// APICallToPerfData 把 APIResponsiveness 转换为 PerfData。
 func APICallToPerfData(apicalls *APIResponsiveness) *e2eperftype.PerfData {
 	perfData := &e2eperftype.PerfData{Version: currentAPICallMetricsVersion}
 	for _, apicall := range apicalls.APICalls {

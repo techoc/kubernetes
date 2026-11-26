@@ -18,10 +18,10 @@ package metrics
 
 import "k8s.io/component-base/metrics/testutil"
 
-// SnapshotControllerMetrics is metrics for controller manager
+// SnapshotControllerMetrics 是 controller manager 的指标
 type SnapshotControllerMetrics testutil.Metrics
 
-// Equal returns true if all metrics are the same as the arguments.
+// Equal 在所有指标与参数相同时返回 true。
 func (m *SnapshotControllerMetrics) Equal(o SnapshotControllerMetrics) bool {
 	return (*testutil.Metrics)(m).Equal(testutil.Metrics(o))
 }

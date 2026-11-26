@@ -25,34 +25,34 @@ import (
 	"github.com/onsi/ginkgo/v2/types"
 )
 
-// WriteJUnitReport generates a JUnit file that is shorter than the one
-// normally written by `ginkgo --junit-report`. This is needed because the full
-// report can become too large for tools like Spyglass
+// WriteJUnitReport 生成的 JUnit 文件比
+// `ginkgo --junit-report` 通常生成的更短。因为完整
+// 报告对 Spyglass 等工具可能太大。
 // (https://github.com/kubernetes/kubernetes/issues/111510).
 func WriteJUnitReport(report ginkgo.Report, filename string) error {
 	config := reporters.JunitReportConfig{
-		// Remove details for specs where we don't care.
+		// 去掉我们不关心的 spec 的详情。
 		OmitTimelinesForSpecState: types.SpecStatePassed | types.SpecStateSkipped,
 
-		// Don't write <failure message="summary">. The same text is
-		// also in the full text for the failure. If we were to write
-		// both, then tools like kettle and spyglass would concatenate
-		// the two strings and thus show duplicated information.
+		// 不写 <failure message="summary">。同样的文本
+		// 也在失败的完整文本中。如果两者都写，
+		// kettle 和 spyglass 等工具会拼接
+		// 这两个字符串，从而显示重复信息。
 		OmitFailureMessageAttr: true,
 
-		// All labels are also part of the spec texts in inline [] tags,
-		// so we don't need to write them separately.
+		// 所有标签也已作为内联 [] 标签出现在 spec 文本中，
+		// 无需单独写出。
 		OmitSpecLabels: true,
 	}
 
-	// Sort specs by full name. The default is by start (or completion?) time,
-	// which is less useful in spyglass because those times are not shown
-	// and thus tests seem to be listed with no apparent order.
+	// 按完整名称排序 spec。默认按开始（或完成？）时间排序，
+	// 在 spyglass 中用处不大，因为那里不显示这些时间，
+	// 测试看起来像是无序列出的。
 	slices.SortFunc(report.SpecReports, func(a, b types.SpecReport) int {
 		res := strings.Compare(a.FullText(), b.FullText())
 		if res == 0 {
-			// Use start time as tie-breaker in the unlikely
-			// case that two specs have the same full name.
+			// 两个 spec 完整名称相同时，用开始时间作为决胜键
+			// （这种可能性很小）。
 			return a.StartTime.Compare(b.StartTime)
 		}
 		return res

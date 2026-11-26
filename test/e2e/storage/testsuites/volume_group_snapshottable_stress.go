@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This suite tests volume group snapshots under stress conditions.
+// 这个 suite 在压力条件下测试 volume group snapshot。
 
 package testsuites
 
@@ -53,15 +53,15 @@ type volumeGroupSnapshottableStressTest struct {
 	statefulSet     *appsv1.StatefulSet
 	volumeResources []*storageframework.VolumeResource
 	groupSnapshots  []*storageframework.VolumeGroupSnapshotResource
-	// Because we are appending snapshot resources in parallel goroutines.
+	// 因为我们并行地在 goroutine 中追加 snapshot 资源。
 	groupSnapshotsMutex sync.Mutex
 
-	// Stop and wait for any async routines.
+	// 停止并等待所有异步例程。
 	wg sync.WaitGroup
 }
 
-// InitCustomVolumeGroupSnapshottableStressTestSuite returns volumeGroupSnapshottableStressTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeGroupSnapshottableStressTestSuite 返回 volumeGroupSnapshottableStressTestSuite，
+// 它使用自定义测试模式实现 TestSuite 接口
 func InitCustomVolumeGroupSnapshottableStressTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeGroupSnapshottableStressTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -75,8 +75,8 @@ func InitCustomVolumeGroupSnapshottableStressTestSuite(patterns []storageframewo
 	}
 }
 
-// InitVolumeGroupSnapshottableStressTestSuite returns volumeGroupSnapshottableStressTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeGroupSnapshottableStressTestSuite 返回 volumeGroupSnapshottableStressTestSuite，
+// 它使用测试套件默认模式实现 TestSuite 接口
 func InitVolumeGroupSnapshottableStressTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.VolumeGroupSnapshotDelete,
@@ -123,8 +123,8 @@ func (t *volumeGroupSnapshottableStressTestSuite) DefineTests(driver storagefram
 	labelKey := "group"
 	labelValue := "test-group-stress"
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewDefaultFramework("volumegroupsnapshottable-stress")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -143,13 +143,13 @@ func (t *volumeGroupSnapshottableStressTestSuite) DefineTests(driver storagefram
 	}
 
 	createStatefulSetAndVolumes := func(ctx context.Context) {
-		// Create volume resource which includes storage class
+		// 创建包含 storage class 的 volume 资源
 		volumeResource := storageframework.CreateVolumeResource(ctx, driver, stressTest.config, pattern, t.GetTestSuiteInfo().SupportedSizeRange)
 		stressTest.volumeResources = append(stressTest.volumeResources, volumeResource)
 
-		// Create StatefulSet with volumeClaimTemplates
-		// StatefulSet name must be ≤52 chars so the auto-generated controller-revision-hash
-		// label (format: "<name>-<10-char-hash>") stays within Kubernetes' 63-byte label limit.
+		// 创建带 volumeClaimTemplates 的 StatefulSet
+		// StatefulSet 名称必须 ≤52 字符，这样自动生成的 controller-revision-hash
+		// 标签（格式："<name>-<10-char-hash>"）不会超出 Kubernetes 63 字节标签限制。
 		statefulSetName := fmt.Sprintf("vgs-stress-%s", f.Namespace.Name)
 		replicas := int32(stressTest.testOptions.NumPods)
 
@@ -219,7 +219,7 @@ func (t *volumeGroupSnapshottableStressTestSuite) DefineTests(driver storagefram
 		stressTest.statefulSet, err = cs.AppsV1().StatefulSets(f.Namespace.Name).Create(ctx, statefulSet, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create StatefulSet")
 
-		// Wait for StatefulSet to be ready
+		// 等待 StatefulSet 就绪
 		framework.Logf("Waiting for StatefulSet %s to be ready with %d replicas", statefulSetName, replicas)
 		e2estatefulset.WaitForRunningAndReady(ctx, cs, replicas, stressTest.statefulSet)
 		framework.Logf("StatefulSet %s is ready", statefulSetName)
@@ -235,13 +235,13 @@ func (t *volumeGroupSnapshottableStressTestSuite) DefineTests(driver storagefram
 			wg   sync.WaitGroup
 		)
 
-		// Clean up StatefulSet first
+		// 先清理 StatefulSet
 		if stressTest.statefulSet != nil {
 			framework.Logf("Deleting StatefulSet %s", stressTest.statefulSet.Name)
 			e2estatefulset.DeleteAllStatefulSets(ctx, cs, stressTest.statefulSet.Namespace)
 		}
 
-		// Clean up group snapshots
+		// 清理 group snapshot
 		wg.Add(len(stressTest.groupSnapshots))
 		for _, groupSnapshot := range stressTest.groupSnapshots {
 			go func(groupSnapshot *storageframework.VolumeGroupSnapshotResource) {
@@ -257,7 +257,7 @@ func (t *volumeGroupSnapshottableStressTestSuite) DefineTests(driver storagefram
 		}
 		wg.Wait()
 
-		// Clean up volumes
+		// 清理 volume
 		wg.Add(len(stressTest.volumeResources))
 		for _, volume := range stressTest.volumeResources {
 			go func(volume *storageframework.VolumeResource) {
@@ -283,7 +283,7 @@ func (t *volumeGroupSnapshottableStressTestSuite) DefineTests(driver storagefram
 		ginkgo.DeferCleanup(cleanup)
 		createStatefulSetAndVolumes(ctx)
 
-		// Repeatedly create volume group snapshots
+		// 反复创建 volume group snapshot
 		for i := 0; i < stressTest.testOptions.NumSnapshots; i++ {
 			stressTest.wg.Add(1)
 

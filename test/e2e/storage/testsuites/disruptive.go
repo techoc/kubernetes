@@ -37,8 +37,8 @@ type disruptiveTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomDisruptiveTestSuite returns subPathTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomDisruptiveTestSuite 返回 subPathTestSuite，它使用自定义测试模式
+// 实现 TestSuite 接口
 func InitCustomDisruptiveTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &disruptiveTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -49,11 +49,11 @@ func InitCustomDisruptiveTestSuite(patterns []storageframework.TestPattern) stor
 	}
 }
 
-// InitDisruptiveTestSuite returns subPathTestSuite that implements TestSuite interface
-// using test suite default patterns
+// InitDisruptiveTestSuite 返回 subPathTestSuite，它使用测试套件
+// 默认模式实现 TestSuite 接口
 func InitDisruptiveTestSuite() storageframework.TestSuite {
 	testPatterns := []storageframework.TestPattern{
-		// FSVolMode is already covered in subpath testsuite
+		// FSVolMode 已在 subpath testsuite 中覆盖
 		storageframework.DefaultFsInlineVolume,
 		storageframework.FsVolModePreprovisionedPV,
 		storageframework.FsVolModeDynamicPV,
@@ -84,14 +84,14 @@ func (s *disruptiveTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		cs clientset.Interface
 		ns *v1.Namespace
 
-		// VolumeResource contains pv, pvc, sc, etc., owns cleaning that up
+		// VolumeResource 包含 pv、pvc、sc 等，负责清理它们
 		resource *storageframework.VolumeResource
 		pod      *v1.Pod
 	}
 	var l local
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("disruptive", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -100,7 +100,7 @@ func (s *disruptiveTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		l.ns = f.Namespace
 		l.cs = f.ClientSet
 
-		// Now do the more expensive test initialization.
+		// 现在做开销更大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 
 		testVolumeSizeRange := s.GetTestSuiteInfo().SupportedSizeRange
@@ -155,12 +155,12 @@ func (s *disruptiveTestSuite) DefineTests(driver storageframework.TestDriver, pa
 		},
 		{
 			testItStmt: "Should test that pv used in a pod that is deleted while the kubelet is down cleans up when the kubelet returns.",
-			// File test is covered by subpath testsuite
+			// File test 已在 subpath testsuite 中覆盖
 			runTestBlock: storageutils.TestVolumeUnmapsFromDeletedPod,
 		},
 		{
 			testItStmt: "Should test that pv used in a pod that is force deleted while the kubelet is down cleans up when the kubelet returns.",
-			// File test is covered by subpath testsuite
+			// File test 已在 subpath testsuite 中覆盖
 			runTestBlock: storageutils.TestVolumeUnmapsFromForceDeletedPod,
 		},
 	}
@@ -265,11 +265,11 @@ func (s *disruptiveTestSuite) DefineTests(driver storageframework.TestDriver, pa
 					l.pod, err = e2epod.CreateSecPodWithNodeSelection(ctx, l.cs, &podConfig, f.Timeouts.PodStart)
 					framework.ExpectNoError(err, "While creating pods for kubelet restart test")
 					if t.changeSELinuxContexts {
-						// Different than e2epv.SELinuxLabel
+						// 与 e2epv.SELinuxLabel 不同
 						podConfig.SeLinuxLabel = &v1.SELinuxOptions{Level: "s0:c98,c99"}
 					}
 					pod2, err := e2epod.MakeSecPod(&podConfig)
-					// Instantly schedule the second pod on the same node as the first one.
+					// 立即把第二个 pod 调度到与第一个相同的节点上。
 					pod2.Spec.NodeName = l.pod.Spec.NodeName
 					framework.ExpectNoError(err, "While creating second pod for kubelet restart test")
 					if pattern.VolMode == v1.PersistentVolumeFilesystem && t.runTestFile != nil {

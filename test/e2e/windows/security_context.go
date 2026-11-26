@@ -71,11 +71,11 @@ var _ = sigDescribe(feature.Windows, "SecurityContext", skipUnlessWindows(func()
 		hcsschimError := "The user name or password is incorrect."
 
 		// Hostprocess updated the cri to pass RunAsUserName to sandbox: https://github.com/kubernetes/kubernetes/pull/99576/commits/51a02fdb80cb7ba042a66362eb76facd2fd82401
-		// Some runtimes might use that and set the username on the podsandbox. Containerd 1.6+ is known to do this.
-		// If there is an error when creating the pod sandbox then the pod stays in pending state by design
+		// 有些 runtime 可能会用它并在 podsandbox 上设置 username。已知 Containerd 1.6+ 会这么做。
+		// 如果创建 pod sandbox 时出错，pod 按设计会停留在 pending 状态
 		// See https://github.com/kubernetes/kubernetes/issues/104635
-		// Not all runtimes use the sandbox information.  This means the test needs to check if the pod
-		// sandbox failed or workload pod failed.
+		// 并非所有 runtime 都使用 sandbox 信息。因此测试需要检查 pod
+		// sandbox 失败还是 workload pod 失败。
 		framework.Logf("Waiting for pod %s to enter the error state.", podInvalid.Name)
 		gomega.Eventually(ctx, func(ctx context.Context) bool {
 			failedSandbox, err := eventOccurred(ctx, f.ClientSet, podInvalid.Namespace, failedSandboxEventSelector, hcsschimError)
@@ -138,11 +138,11 @@ var _ = sigDescribe(feature.Windows, "SecurityContext", skipUnlessWindows(func()
 
 	ginkgo.It("should ignore Linux Specific SecurityContext if set", func(ctx context.Context) {
 		ginkgo.By("Creating a pod with SELinux options")
-		// It is sufficient to show that the pod comes up here. Since we're stripping the SELinux and other linux
-		// security contexts in apiserver and not updating the pod object in the apiserver, we cannot validate the
-		// pod object to not have those security contexts. However the pod coming to running state is a sufficient
+		// 只要 pod 能在这里启动就足够了。由于我们在 apiserver 中去掉了 SELinux 和其他 linux
+		// security context，且没有更新 apiserver 中的 pod 对象，无法验证
+		// pod 对象是否不含这些 security context。但 pod 进入 running 状态足以
 		// enough condition for us to validate since prior to https://github.com/kubernetes/kubernetes/pull/93475
-		// the pod would have failed to come up.
+		// 说明 pod 本来会启动失败。
 		windowsPodWithSELinux := createTestPod(f, imageutils.GetE2EImage(imageutils.Agnhost), windowsOS)
 		windowsPodWithSELinux.Spec.Containers[0].Args = []string{"test-webserver-with-selinux"}
 		windowsPodWithSELinux.Spec.SecurityContext = &v1.PodSecurityContext{}
@@ -231,7 +231,7 @@ var _ = sigDescribe(feature.Windows, "SecurityContext", skipUnlessWindows(func()
 
 		podErr := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 
-		// Get the logs and events before calling ExpectNoError, so we can debug any errors.
+		// 在调用 ExpectNoError 之前获取日志和事件，以便调试错误。
 		var logs string
 		var events *v1.EventList
 		if err := wait.PollUntilContextTimeout(ctx, 30*time.Second, 2*time.Minute, true, func(ctx context.Context) (done bool, err error) {

@@ -60,9 +60,9 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 	})
 
 	/*
-		Release: v1.21, v1.35
-		Testname: EndpointSlice, "empty" Service
-		Description: The EndpointSlice controller should create and delete empty EndpointSlices for a Service that matches no pods.
+		发布版本：v1.21, v1.35
+		测试名称：EndpointSlice, "empty" Service
+		描述：EndpointSlice controller 应为不匹配任何 pod 的 Service 创建和删除空的 EndpointSlice。
 	*/
 	framework.ConformanceIt("should create and delete EndpointSlices for a Service with a selector that matches no pods", func(ctx context.Context) {
 		svc := &v1.Service{
@@ -83,7 +83,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 		svc, err := cs.CoreV1().Services(f.Namespace.Name).Create(ctx, svc, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "error creating Service")
 
-		// Expect EndpointSlice resource to be created.
+		// 预期 EndpointSlice 资源被创建。
 		var endpointSlice discoveryv1.EndpointSlice
 		if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 			endpointSliceList, err := cs.DiscoveryV1().EndpointSlices(svc.Namespace).List(ctx, metav1.ListOptions{
@@ -101,7 +101,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 			framework.Failf("No EndpointSlice found for Service %s/%s: %s", svc.Namespace, svc.Name, err)
 		}
 
-		// Ensure EndpointSlice has expected values.
+		// 确认 EndpointSlice 具有预期的值。
 		managedBy, ok := endpointSlice.Labels[discoveryv1.LabelManagedBy]
 		expectedManagedBy := "endpointslice-controller.k8s.io"
 		if !ok {
@@ -116,10 +116,10 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 		err = cs.CoreV1().Services(svc.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "error deleting Service")
 
-		// Expect EndpointSlice resource to be deleted when Service is. Wait for
-		// up to 90 seconds since garbage collector only polls every 30 seconds
-		// and may need to retry informer resync at some point during an e2e
-		// run.
+		// 预期 Service 删除时 EndpointSlice 资源也被删除。最多等待
+		// 90 秒，因为 garbage collector 每 30 秒才轮询一次，
+		// 且在 e2e 运行中可能需要在某个时刻重试 informer resync。
+		//
 		if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 90*time.Second, true, func(ctx context.Context) (bool, error) {
 			endpointSliceList, err := cs.DiscoveryV1().EndpointSlices(svc.Namespace).List(ctx, metav1.ListOptions{
 				LabelSelector: "kubernetes.io/service-name=" + svc.Name,
@@ -137,9 +137,9 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 	})
 
 	/*
-		Release: v1.21, v1.35
-		Testname: EndpointSlice, creation/deletion
-		Description: The endpointslice controller must create and delete EndpointSlices for Pods matching a Service.
+		发布版本：v1.21, v1.35
+		测试名称：EndpointSlice, creation/deletion
+		描述：endpointslice controller 必须为匹配 Service 的 Pod 创建和删除 EndpointSlice。
 	*/
 	framework.ConformanceIt("should create Endpoints and EndpointSlices for Pods matching a Service", func(ctx context.Context) {
 		labelPod1 := "pod1"
@@ -264,15 +264,15 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 	})
 
 	/*
-		Release: v1.21
-		Testname: EndpointSlice API
-		Description: The discovery.k8s.io API group MUST exist in the /apis discovery document.
-		The discovery.k8s.io/v1 API group/version MUST exist in the /apis/discovery.k8s.io discovery document.
-		The endpointslices resource MUST exist in the /apis/discovery.k8s.io/v1 discovery document.
-		The endpointslices resource must support create, get, list, watch, update, patch, delete, and deletecollection.
+		发布版本：v1.21
+		测试名称：EndpointSlice API
+		描述：discovery.k8s.io API group 必须出现在 /apis discovery 文档中。
+		discovery.k8s.io/v1 API group/version 必须出现在 /apis/discovery.k8s.io discovery 文档中。
+		endpointslices 资源必须出现在 /apis/discovery.k8s.io/v1 discovery 文档中。
+		endpointslices 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support creating EndpointSlice API operations", func(ctx context.Context) {
-		// Setup
+		// 准备
 		ns := f.Namespace.Name
 		epsVersion := "v1"
 		epsClient := f.ClientSet.DiscoveryV1().EndpointSlices(ns)
@@ -288,7 +288,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 				{Addresses: []string{"2.2.3.4", "6.6.7.8"}},
 			},
 		}
-		// Discovery
+		// 发现
 		ginkgo.By("getting /apis")
 		{
 			discoveryGroups, err := f.ClientSet.Discovery().ServerGroups()
@@ -342,7 +342,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 			}
 		}
 
-		// EndpointSlice resource create/read/update/watch verbs
+		// EndpointSlice 资源的 create/read/update/watch 操作
 		ginkgo.By("creating")
 		_, err := epsClient.Create(ctx, epsTemplate, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
@@ -367,7 +367,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 		epsWatch, err := epsClient.Watch(ctx, metav1.ListOptions{ResourceVersion: epsList.ResourceVersion, LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
 
-		// Test cluster-wide list and watch
+		// 测试集群范围的 list 和 watch
 		clusterEPSClient := f.ClientSet.DiscoveryV1().EndpointSlices("")
 		ginkgo.By("cluster-wide listing")
 		clusterEPSList, err := clusterEPSClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
@@ -449,11 +449,11 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 	})
 
 	/*
-		Release: v1.34
-		Testname: EndpointSlice, single IP, multiple ports
-		Description: Given a selector-less Service with multiple manually-created
-		EndpointSlices (and no Endpoints) where the endpoints have the same IP
-		but different Ports, the service proxy MUST allow connections to both ports.
+		发布版本：v1.34
+		测试名称：EndpointSlice, single IP, multiple ports
+		描述：给定一个无 selector 的 Service，手工创建多个
+		EndpointSlice（且无 Endpoints），endpoint 的 IP 相同
+		但端口不同，service proxy 必须允许连接两个端口。
 	*/
 	framework.ConformanceIt("should support a Service with multiple ports specified in multiple EndpointSlices", func(ctx context.Context) {
 		ns := f.Namespace.Name
@@ -479,7 +479,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 		svc, err := cs.CoreV1().Services(ns).Create(ctx, svc, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "error creating Service")
 
-		// Add a backend pod to the service in the other node
+		// 在另一个节点上给 service 加一个后端 pod
 		port8090 := []v1.ContainerPort{
 			{
 				ContainerPort: 8090,
@@ -510,7 +510,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 			addressType = discoveryv1.AddressTypeIPv6
 		}
 
-		// create custom endpoint slices
+		// 创建自定义 endpoint slice
 		tcpProtocol := v1.ProtocolTCP
 		readyCondTrue := true
 		epsTemplate := &discoveryv1.EndpointSlice{
@@ -548,7 +548,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 		_, err = f.ClientSet.DiscoveryV1().EndpointSlices(ns).Create(ctx, eps2, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		// connect to the service must work
+		// 连接 service 必须成功
 		ginkgo.By("Creating a pause pods that will try to connect to the webserver")
 		pausePod0 := e2epod.NewAgnhostPod(ns, "pause-pod-0", nil, nil, nil)
 		e2epod.NewPodClient(f).CreateSync(ctx, pausePod0)
@@ -561,11 +561,11 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 	})
 
 	/*
-		Release: v1.34
-		Testname: EndpointSlice, multiple IPs, multiple ports
-		Description: Given a selector-less Service with multiple manually-created
-		EndpointSlices (and no Endpoints) where the endpoints have different IPs
-		and different Ports, the service proxy MUST allow connections to both ports.
+		发布版本：v1.34
+		测试名称：EndpointSlice, multiple IPs, multiple ports
+		描述：给定一个无 selector 的 Service，手工创建多个
+		EndpointSlice（且无 Endpoints），endpoint 的 IP 和端口
+		都不同，service proxy 必须允许连接两个端口。
 	*/
 	framework.ConformanceIt("should support a Service with multiple endpoint IPs specified in multiple EndpointSlices", func(ctx context.Context) {
 		ns := f.Namespace.Name
@@ -591,7 +591,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 		svc, err := cs.CoreV1().Services(ns).Create(ctx, svc, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "error creating Service")
 
-		// Add a backend pod to the service in the other node
+		// 在另一个节点上给 service 加一个后端 pod
 		port8090 := []v1.ContainerPort{
 			{
 				ContainerPort: 8090,
@@ -624,7 +624,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 			addressType = discoveryv1.AddressTypeIPv6
 		}
 
-		// create custom endpoint slices
+		// 创建自定义 endpoint slice
 		tcpProtocol := v1.ProtocolTCP
 		readyCondTrue := true
 		epsTemplate := &discoveryv1.EndpointSlice{
@@ -667,7 +667,7 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 		_, err = f.ClientSet.DiscoveryV1().EndpointSlices(ns).Create(context.TODO(), eps2, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		// connect to the service must work
+		// 连接 service 必须成功
 		ginkgo.By("Creating a pause pods that will try to connect to the webserver")
 		pausePod0 := e2epod.NewAgnhostPod(ns, "pause-pod-0", nil, nil, nil)
 		e2epod.NewPodClient(f).CreateSync(ctx, pausePod0)
@@ -681,11 +681,11 @@ var _ = common.SIGDescribe("EndpointSlice", func() {
 
 })
 
-// expectEndpointSlices verifies that EndpointSlices exist for a given Service and
-// Namespace with the appropriate attributes set. This is a relatively complex function as
-// the order of attributes or resources is not necessarily consistent. It is used as a
-// helper function for the tests above and takes some shortcuts with the assumption that
-// those test cases will be the only caller of this function.
+// expectEndpointSlices 验证给定 Service 和
+// Namespace 的 EndpointSlice 存在且设置了适当属性。这个函数相对复杂，因为
+// 属性或资源的顺序不一定一致。它作为
+// 上述测试的辅助函数，并做了一些简化，前提是
+// 那些测试用例是它唯一的调用方。
 func expectEndpointSlices(ctx context.Context, cs clientset.Interface, ns string, svc *v1.Service, pods []*v1.Pod, numSlices int, namedPort bool) {
 	endpointSlices := []discoveryv1.EndpointSlice{}
 	if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
@@ -711,8 +711,8 @@ func expectEndpointSlices(ctx context.Context, cs clientset.Interface, ns string
 		framework.Failf("Expected 1 EndpointSlice, got %d", len(endpointSlices))
 	}
 
-	// Use a set for deduping values. Duplicate addresses are technically valid
-	// here although rare.
+	// 用 set 去重。重复地址在技术上
+	// 是有效的，虽然很少见。
 	esAddresses := sets.NewString()
 	for _, endpointSlice := range endpointSlices {
 		for _, endpoint := range endpointSlice.Endpoints {
@@ -725,8 +725,8 @@ func expectEndpointSlices(ctx context.Context, cs clientset.Interface, ns string
 			framework.Failf("Expected EndpointSlice to have %d ports, got %d", len(svc.Spec.Ports), len(endpointSlice.Ports))
 		}
 
-		// If not a named port, the EndpointSlice ports should directly
-		// correspond with the Service ports.
+		// 如果不是命名端口，EndpointSlice 的端口应直接
+		// 对应 Service 的端口。
 		if !namedPort {
 			for i, esPort := range endpointSlice.Ports {
 				svcPort := svc.Spec.Ports[i]
@@ -753,8 +753,8 @@ func expectEndpointSlices(ctx context.Context, cs clientset.Interface, ns string
 
 			ensurePodTargetRef(pod, endpoint.TargetRef)
 
-			// If a named port, the EndpointSlice ports should directly
-			// correspond with each individual pod.
+			// 如果是命名端口，EndpointSlice 的端口应直接
+			// 对应每个单独的 pod。
 			if namedPort {
 				container := pod.Spec.Containers[0]
 				for _, port := range container.Ports {
@@ -777,7 +777,7 @@ func expectEndpointSlices(ctx context.Context, cs clientset.Interface, ns string
 	}
 }
 
-// deleteEndpointSlices deletes EndpointSlices for the specified Service.
+// deleteEndpointSlices 删除指定 Service 的 EndpointSlice。
 func deleteEndpointSlices(ctx context.Context, cs clientset.Interface, ns string, svc *v1.Service) {
 	listOptions := metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", discoveryv1.LabelServiceName, svc.Name)}
 	esList, err := cs.DiscoveryV1().EndpointSlices(ns).List(ctx, listOptions)
@@ -789,9 +789,9 @@ func deleteEndpointSlices(ctx context.Context, cs clientset.Interface, ns string
 	}
 }
 
-// hasMatchingEndpointSlices returns any EndpointSlices that match the
-// conditions along with a boolean indicating if all the conditions have been
-// met.
+// hasMatchingEndpointSlices 返回匹配条件的任意 EndpointSlice，
+// 以及一个布尔值，表示所有条件是否都
+// 满足。
 func hasMatchingEndpointSlices(ctx context.Context, cs clientset.Interface, ns, svcName string, numEndpoints, numSlices int) ([]discoveryv1.EndpointSlice, bool) {
 	listOptions := metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", discoveryv1.LabelServiceName, svcName)}
 	esList, err := cs.DiscoveryV1().EndpointSlices(ns).List(ctx, listOptions)
@@ -801,10 +801,10 @@ func hasMatchingEndpointSlices(ctx context.Context, cs clientset.Interface, ns, 
 		framework.Logf("EndpointSlice for Service %s/%s not found", ns, svcName)
 		return []discoveryv1.EndpointSlice{}, false
 	}
-	// In some cases the EndpointSlice controller will create more
-	// EndpointSlices than necessary resulting in some duplication. This is
-	// valid and tests should only fail here if less EndpointSlices than
-	// expected are added.
+	// 有些情况下 EndpointSlice controller 会创建比
+	// 必要的更多的 EndpointSlice，导致一些重复。这是
+	// 有效的，只有当添加的 EndpointSlice 比预期少时
+	// 测试才应失败。
 	if len(esList.Items) < numSlices {
 		framework.Logf("Expected at least %d EndpointSlices for Service %s/%s, got %d", numSlices, ns, svcName, len(esList.Items))
 		for i, epSlice := range esList.Items {
@@ -822,10 +822,10 @@ func hasMatchingEndpointSlices(ctx context.Context, cs clientset.Interface, ns, 
 	for _, endpointSlice := range esList.Items {
 		actualNumEndpoints += len(endpointSlice.Endpoints)
 	}
-	// In some cases the EndpointSlice controller will create more
-	// EndpointSlices than necessary resulting in some duplication. This is
-	// valid and tests should only fail here if less EndpointSlices than
-	// expected are added.
+	// 有些情况下 EndpointSlice controller 会创建比
+	// 必要的更多的 EndpointSlice，导致一些重复。这是
+	// 有效的，只有当添加的 EndpointSlice 比预期少时
+	// 测试才应失败。
 	if actualNumEndpoints < numEndpoints {
 		framework.Logf("EndpointSlices for %s/%s Service have %d/%d endpoints", ns, svcName, actualNumEndpoints, numEndpoints)
 		return esList.Items, false
@@ -834,7 +834,7 @@ func hasMatchingEndpointSlices(ctx context.Context, cs clientset.Interface, ns, 
 	return esList.Items, true
 }
 
-// ensurePodTargetRef ensures that a Pod matches the provided target reference.
+// ensurePodTargetRef 确保 Pod 匹配提供的 target reference。
 func ensurePodTargetRef(pod *v1.Pod, targetRef *v1.ObjectReference) {
 	if targetRef == nil {
 		framework.Failf("Expected TargetRef to not be nil")

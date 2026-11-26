@@ -28,9 +28,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// matchObjectList is a custom matcher for the result of a generic lister List result
-// ([]runtime.Object where each entry is *unstructured.Unstructed). The list is
-// expected to have exactly one element or none.
+// matchObjectList 是针对通用 lister List 结果的自定义 matcher
+// （[]runtime.Object，每项为 *unstructured.Unstructed）。列表
+// 应恰好有一个元素或为空。
 type matchObjectList struct {
 	expectedObject *unstructured.Unstructured
 	verifyContent  bool
@@ -40,7 +40,7 @@ type matchObjectList struct {
 var _ gtypes.GomegaMatcher = &matchObjectList{}
 
 func (m *matchObjectList) Match(actual any) (bool, error) {
-	// Reset state.
+	// 重置状态。
 	m.lastDiff = ""
 
 	actualObjects, ok := actual.([]runtime.Object)
@@ -49,22 +49,22 @@ func (m *matchObjectList) Match(actual any) (bool, error) {
 	}
 
 	if m.expectedObject == nil {
-		// Must be empty,
+		// 必须为空，
 		return len(actualObjects) == 0, nil
 	}
 
-	// Must have exactly the expected object.
+	// 必须恰好是预期对象。
 	if len(actualObjects) != 1 {
 		return false, nil
 	}
 	actualObject, ok := actualObjects[0].(*unstructured.Unstructured)
 	if !ok {
-		// Shouldn't happen.
+		// 不应发生。
 		return false, fmt.Errorf("expected *unstructured.Unstructured, got %T", actualObjects[0])
 	}
 
 	if m.verifyContent {
-		// Remember diff for failure message.
+		// 记住 diff 用于失败消息。
 		m.lastDiff = compareObjects(m.expectedObject, actualObject)
 		if m.lastDiff != "" {
 			return false, nil
@@ -83,8 +83,8 @@ func (m *matchObjectList) NegatedFailureMessage(actual any) string {
 }
 
 func (m *matchObjectList) message(actual any, to string) string {
-	// Gomega renders []runtime.Object as nested maps.
-	// YAML is more readable.
+	// Gomega 把 []runtime.Object 渲染为嵌套 map。
+	// YAML 更易读。
 	var buffer strings.Builder
 	buffer.WriteString("Expected\n")
 	if actualObjects, ok := actual.([]runtime.Object); ok {

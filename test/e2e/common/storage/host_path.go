@@ -32,22 +32,22 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// TODO : Consolidate this code with the code for emptyDir.
-// This will require some smart.
+// TODO: 把这段代码和 emptyDir 的代码合并。
+// 这需要一些技巧。
 var _ = SIGDescribe("HostPath", func() {
 	f := framework.NewDefaultFramework("hostpath")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.BeforeEach(func() {
-		// TODO permission denied cleanup failures
-		//cleanup before running the test.
+		// TODO: 处理权限拒绝导致的清理失败
+		//测试运行前先清理。
 		_ = os.Remove("/tmp/test-file")
 	})
 
 	/*
 	   Host path, volume mode default
-	   Create a Pod with host volume mounted. The volume mounted MUST be a directory with permissions mode -rwxrwxrwx and that is has the sticky bit (mode flag t) set.
-	   This test is marked LinuxOnly since Windows does not support setting the sticky bit (mode flag t).
+	   创建挂载 host volume 的 Pod。挂载的 volume 必须是权限为 -rwxrwxrwx 且设置了 sticky bit（模式标志 t）的目录。
+	   此测试标记为 LinuxOnly，因为 Windows 不支持设置 sticky bit（模式标志 t）。
 	*/
 	f.It("should give a volume the correct mode [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		source := &v1.HostPathVolumeSource{
@@ -65,14 +65,14 @@ var _ = SIGDescribe("HostPath", func() {
 		})
 	})
 
-	// This test requires mounting a folder into a container with write privileges.
+	// 本测试需要以写权限将文件夹挂载到容器中。
 	f.It("should support r/w", f.WithNodeConformance(), func(ctx context.Context) {
 		filePath := path.Join(volumePath, "test-file")
 		retryDuration := 180
 		source := &v1.HostPathVolumeSource{
 			Path: "/tmp",
 		}
-		// we can't spawn privileged containers on Windows, nor do we need to.
+		// Windows 上不能启动特权容器，也不需要。
 		privileged := !framework.NodeOSDistroIs("windows")
 		pod := testPodWithHostVol(volumePath, source, privileged)
 
@@ -87,8 +87,8 @@ var _ = SIGDescribe("HostPath", func() {
 			fmt.Sprintf("--file_content_in_loop=%v", filePath),
 			fmt.Sprintf("--retry_time=%d", retryDuration),
 		}
-		//Read the content of the file with the second container to
-		//verify volumes  being shared properly among containers within the pod.
+		//用第二个容器读取文件内容，
+		//验证 volume 在 pod 内各容器间正确共享。
 		e2epodoutput.TestContainerOutput(ctx, f, "hostPath r/w", pod, 1, []string{
 			"content of file \"/test-volume/test-file\": mount-tester new file",
 		})
@@ -106,11 +106,11 @@ var _ = SIGDescribe("HostPath", func() {
 			Path: "/tmp",
 		}
 
-		// we can't spawn privileged containers on Windows, nor do we need to.
+		// Windows 上不能启动特权容器，也不需要。
 		privileged := !framework.NodeOSDistroIs("windows")
 		pod := testPodWithHostVol(volumePath, source, privileged)
 
-		// Write the file in the subPath from container 0
+		// 从容器 0 在 subPath 中写文件
 		container := &pod.Spec.Containers[0]
 		container.VolumeMounts[0].SubPath = subPath
 		container.Args = []string{
@@ -119,7 +119,7 @@ var _ = SIGDescribe("HostPath", func() {
 			fmt.Sprintf("--file_mode=%v", filePathInWriter),
 		}
 
-		// Read it from outside the subPath from container 1
+		// 从容器 1 在 subPath 外读取它
 		pod.Spec.Containers[1].Args = []string{
 			"mounttest",
 			fmt.Sprintf("--file_content_in_loop=%v", filePathInReader),
@@ -132,7 +132,7 @@ var _ = SIGDescribe("HostPath", func() {
 	})
 })
 
-// These constants are borrowed from the other test.
+// 这些常量借自其他测试。
 // const volumeName = "test-volume"
 const containerName1 = "test-container-1"
 const containerName2 = "test-container-2"
@@ -148,7 +148,7 @@ func mount(source *v1.HostPathVolumeSource) []v1.Volume {
 	}
 }
 
-// TODO: To merge this with the emptyDir tests, we can make source a lambda.
+// TODO: 要将它与 emptyDir 测试合并，可以把 source 改成 lambda。
 func testPodWithHostVol(path string, source *v1.HostPathVolumeSource, privileged bool) *v1.Pod {
 	podName := "pod-host-path-test"
 

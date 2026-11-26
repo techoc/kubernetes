@@ -144,7 +144,7 @@ func doTest(ctx context.Context, f *framework.Framework, targetRestarts int, con
 	podErr := e2epod.WaitForPodContainerToFail(ctx, f.ClientSet, f.Namespace.Name, pod.Name, 0, "CrashLoopBackOff", 1*time.Minute)
 	gomega.Expect(podErr).To(gomega.HaveOccurred())
 
-	// Hard wait 30 seconds for targetRestarts in the best case; longer timeout later will handle if infra was slow.
+	// 最佳情况下硬等 30 秒观察 targetRestarts；基础设施慢时，后面的更长超时会处理。
 	time.Sleep(30 * time.Second)
 	podErr = waitForContainerRestartedNTimes(ctx, f, f.Namespace.Name, pod.Name, containerName, 5*time.Minute, targetRestarts)
 	gomega.Expect(podErr).ShouldNot(gomega.HaveOccurred(), "Expected container to repeatedly back off container failures")

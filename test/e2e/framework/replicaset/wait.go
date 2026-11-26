@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// WaitForReadyReplicaSet waits until the replicaset has all of its replicas ready.
+// WaitForReadyReplicaSet 等待 replicaset 的所有副本就绪。
 func WaitForReadyReplicaSet(ctx context.Context, c clientset.Interface, ns, name string) error {
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, framework.PodStartTimeout, false, func(ctx context.Context) (bool, error) {
 		rs, err := c.AppsV1().ReplicaSets(ns).Get(ctx, name, metav1.GetOptions{})
@@ -43,13 +43,13 @@ func WaitForReadyReplicaSet(ctx context.Context, c clientset.Interface, ns, name
 	return err
 }
 
-// WaitForReplicaSetTargetAvailableReplicas waits for .status.availableReplicas of a RS to equal targetReplicaNum
+// WaitForReplicaSetTargetAvailableReplicas 等待 RS 的 .status.availableReplicas 等于 targetReplicaNum
 func WaitForReplicaSetTargetAvailableReplicas(ctx context.Context, c clientset.Interface, replicaSet *appsv1.ReplicaSet, targetReplicaNum int32) error {
 	return WaitForReplicaSetTargetAvailableReplicasWithTimeout(ctx, c, replicaSet, targetReplicaNum, framework.PodStartTimeout)
 }
 
-// WaitForReplicaSetTargetAvailableReplicasWithTimeout waits for .status.availableReplicas of a RS to equal targetReplicaNum
-// with given timeout.
+// WaitForReplicaSetTargetAvailableReplicasWithTimeout 在给定超时内等待
+// RS 的 .status.availableReplicas 等于 targetReplicaNum
 func WaitForReplicaSetTargetAvailableReplicasWithTimeout(ctx context.Context, c clientset.Interface, replicaSet *appsv1.ReplicaSet, targetReplicaNum int32, timeout time.Duration) error {
 	desiredGeneration := replicaSet.Generation
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, func(ctx context.Context) (bool, error) {

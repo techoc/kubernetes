@@ -41,19 +41,19 @@ var _ = SIGDescribe("Projected configMap", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, volume mode default
-	   Description: A Pod is created with projected volume source 'ConfigMap' to store a configMap with default permission mode. Pod MUST be able to read the content of the ConfigMap successfully and the mode on the volume MUST be -rw-r--r--.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, volume mode default
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod，以默认权限模式存储 configMap。Pod 必须能成功读取 ConfigMap 内容，volume 模式必须为 -rw-r--r--。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		doProjectedConfigMapE2EWithoutMappings(ctx, f, false, 0, nil, nil)
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, volume mode 0400
-	   Description: A Pod is created with projected volume source 'ConfigMap' to store a configMap with permission mode set to 0400. Pod MUST be able to read the content of the ConfigMap successfully and the mode on the volume MUST be -r--------.
-	   This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, volume mode 0400
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod，以 0400 权限模式存储 configMap。Pod 必须能成功读取 ConfigMap 内容，volume 模式必须为 -r--------。
+	   此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with defaultMode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		defaultMode := int32(0400)
@@ -61,48 +61,48 @@ var _ = SIGDescribe("Projected configMap", func() {
 	})
 
 	f.It("should be consumable from pods in volume as non-root with defaultMode and fsGroup set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options, and it does not support setting file permissions.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项，也不支持设置文件权限。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		defaultMode := int32(0440) /* setting fsGroup sets mode to at least 440 */
 		doProjectedConfigMapE2EWithoutMappings(ctx, f, true, 1001, &defaultMode, nil)
 	})
 
 	f.It("should be consumable from pods in volume as non-root with defaultUser set [LinuxOnly]", f.WithFeatureGate(features.AtomicWriteVolumeUserFields), func(ctx context.Context) {
-		// Windows does not support setting file ownership for virtualized container accounts.
+		// Windows 不支持为虚拟化容器账号设置文件属主。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		defaultUser := int64(1000)
 		doProjectedConfigMapE2EWithoutMappings(ctx, f, true, 1001, nil, &defaultUser)
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, non-root user
-	   Description: A Pod is created with projected volume source 'ConfigMap' to store a configMap as non-root user with uid 1000. Pod MUST be able to read the content of the ConfigMap successfully and the mode on the volume MUST be -rw-r--r--.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, non-root user
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod，以 uid 1000 的非 root 用户存储 configMap。Pod 必须能成功读取 ConfigMap 内容，volume 模式必须为 -rw-r--r--。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume as non-root", f.WithNodeConformance(), func(ctx context.Context) {
 		doProjectedConfigMapE2EWithoutMappings(ctx, f, true, 0, nil, nil)
 	})
 
 	f.It("should be consumable from pods in volume as non-root with FSGroup [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		doProjectedConfigMapE2EWithoutMappings(ctx, f, true, 1001, nil, nil)
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, mapped
-	   Description: A Pod is created with projected volume source 'ConfigMap' to store a configMap with default permission mode. The ConfigMap is also mapped to a custom path. Pod MUST be able to read the content of the ConfigMap from the custom location successfully and the mode on the volume MUST be -rw-r--r--.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, mapped
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod，以默认权限模式存储 configMap，并映射到自定义路径。Pod 必须能从自定义位置成功读取 ConfigMap 内容，volume 模式必须为 -rw-r--r--。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings", f.WithNodeConformance(), func(ctx context.Context) {
 		doProjectedConfigMapE2EWithMappings(ctx, f, false, 0, nil, nil)
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, mapped, volume mode 0400
-	   Description: A Pod is created with projected volume source 'ConfigMap' to store a configMap with permission mode set to 0400. The ConfigMap is also mapped to a custom path. Pod MUST be able to read the content of the ConfigMap from the custom location successfully and the mode on the volume MUST be -r--r--r--.
-	   This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, mapped, volume mode 0400
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod，以 0400 权限模式存储 configMap，并映射到自定义路径。Pod 必须能从自定义位置成功读取 ConfigMap 内容，volume 模式必须为 -r--r--r--。
+	   此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings and Item mode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		mode := int32(0400)
@@ -110,31 +110,31 @@ var _ = SIGDescribe("Projected configMap", func() {
 	})
 
 	f.It("should be consumable from pods in volume with mappings and Item user set [LinuxOnly]", f.WithFeatureGate(features.AtomicWriteVolumeUserFields), func(ctx context.Context) {
-		// Windows does not support setting file ownership for virtualized container accounts.
+		// Windows 不支持为虚拟化容器账号设置文件属主。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		user := int64(1000)
 		doProjectedConfigMapE2EWithMappings(ctx, f, true, 1001, nil, &user)
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, mapped, non-root user
-	   Description: A Pod is created with projected volume source 'ConfigMap' to store a configMap as non-root user with uid 1000. The ConfigMap is also mapped to a custom path. Pod MUST be able to read the content of the ConfigMap from the custom location successfully and the mode on the volume MUST be -r--r--r--.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, mapped, non-root user
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod，以 uid 1000 的非 root 用户存储 configMap，并映射到自定义路径。Pod 必须能从自定义位置成功读取 ConfigMap 内容，volume 模式必须为 -r--r--r--。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings as non-root", f.WithNodeConformance(), func(ctx context.Context) {
 		doProjectedConfigMapE2EWithMappings(ctx, f, true, 0, nil, nil)
 	})
 
 	f.It("should be consumable from pods in volume with mappings as non-root with FSGroup [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		doProjectedConfigMapE2EWithMappings(ctx, f, true, 1001, nil, nil)
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, update
-	   Description: A Pod is created with projected volume source 'ConfigMap' to store a configMap and performs a create and update to new value. Pod MUST be able to create the configMap with value-1. Pod MUST be able to update the value in the confgiMap to value-2.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, update
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod 存储 configMap，并执行创建和更新为新值。Pod 必须能用 value-1 创建 configMap，必须能把 configMap 中的值更新为 value-2。
 	*/
 	framework.ConformanceIt("updates should be reflected in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		podLogTimeout := e2epod.GetPodSecretUpdateTimeout(ctx, f.ClientSet)
@@ -182,9 +182,9 @@ var _ = SIGDescribe("Projected configMap", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, create, update and delete
-	   Description: Create a Pod with three containers with ConfigMaps namely a create, update and delete container. Create Container when started MUST not have configMap, update and delete containers MUST be created with a ConfigMap value as 'value-1'. Create a configMap in the create container, the Pod MUST be able to read the configMap from the create container. Update the configMap in the update container, Pod MUST be able to read the updated configMap value. Delete the configMap in the delete container. Pod MUST fail to read the configMap from the delete container.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, create, update and delete
+	   描述：创建带三个容器的 Pod，分别用 create、update 和 delete 容器操作 ConfigMap。create 容器启动时必须没有 configMap，update 和 delete 容器必须以 'value-1' 的 ConfigMap 值创建。在 create 容器中创建 configMap，Pod 必须能从 create 容器读取它。在 update 容器中更新 configMap，Pod 必须能读到更新后的值。在 delete 容器中删除 configMap，Pod 必须无法从 delete 容器读取它。
 	*/
 	framework.ConformanceIt("optional updates should be reflected in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		podLogTimeout := e2epod.GetPodSecretUpdateTimeout(ctx, f.ClientSet)
@@ -383,9 +383,9 @@ var _ = SIGDescribe("Projected configMap", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, ConfigMap, multiple volume paths
-	   Description: A Pod is created with a projected volume source 'ConfigMap' to store a configMap. The configMap is mapped to two different volume mounts. Pod MUST be able to read the content of the configMap successfully from the two volume mounts.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, ConfigMap, multiple volume paths
+	   描述：创建带 projected volume source 'ConfigMap' 的 Pod 存储 configMap。configMap 映射到两个不同的 volume mount。Pod 必须能从两个挂载点成功读取 configMap 内容。
 	*/
 	framework.ConformanceIt("should be consumable in multiple volumes in the same pod", f.WithNodeConformance(), func(ctx context.Context) {
 		var (
@@ -472,9 +472,9 @@ var _ = SIGDescribe("Projected configMap", func() {
 
 	})
 
-	//The pod is in pending during volume creation until the configMap objects are available
-	//or until mount the configMap volume times out. There is no configMap object defined for the pod, so it should return timeout exception unless it is marked optional.
-	//Slow (~5 mins)
+	//volume 创建期间 pod 处于 pending，直到 configMap 对象可用
+	//或挂载 configMap volume 超时。pod 没有定义 configMap 对象，因此除非标记为 optional，否则应返回超时异常。
+	//慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to configMap object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/projected-configmap-volumes"
 		pod := createNonOptionalConfigMapPod(ctx, f, volumeMountPath)
@@ -482,9 +482,9 @@ var _ = SIGDescribe("Projected configMap", func() {
 		gomega.Consistently(ctx, getPod).WithTimeout(f.Timeouts.PodStart).Should(e2epod.BeInPhase(v1.PodPending))
 	})
 
-	//ConfigMap object defined for the pod, If a key is specified which is not present in the ConfigMap,
-	// the volume setup will error unless it is marked optional, during the pod creation.
-	//Slow (~5 mins)
+	//为 pod 定义了 ConfigMap 对象。如果指定的 key 在 ConfigMap 中不存在，
+	// pod 创建时 volume 设置会报错，除非标记为 optional。
+	//慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to the key in the configMap object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/configmap-volumes"
 		pod := createNonOptionalConfigMapPodWithConfig(ctx, f, volumeMountPath)
@@ -579,8 +579,8 @@ func doProjectedConfigMapE2EWithMappings(ctx context.Context, f *framework.Frame
 		pod.Spec.Volumes[0].VolumeSource.Projected.Sources[0].ConfigMap.Items[0].User = itemUser
 	}
 
-	// Just check file mode if fsGroup is not set. If fsGroup is set, the
-	// final mode is adjusted and we are not testing that case.
+	// 如果没设置 fsGroup，只检查文件模式。如果设置了 fsGroup，
+	// 最终模式会被调整，这不是我们要测的场景。
 	output := []string{
 		"content of file \"/etc/projected-configmap-volume/path/to/data-2\": value-2",
 	}

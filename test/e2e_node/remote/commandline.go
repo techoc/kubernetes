@@ -20,7 +20,7 @@ import (
 	"flag"
 )
 
-// CommandLine is where this package adds its command line flags.
-// A command using it should call Init to choose name and error handling
-// or copy the flags.
+// CommandLine 是本包添加命令行 flag 的地方。
+// 使用它的命令应调用 Init 来选择名称及错误处理
+// 或复制这些 flag。
 var CommandLine = &flag.FlagSet{}

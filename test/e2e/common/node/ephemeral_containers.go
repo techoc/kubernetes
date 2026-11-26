@@ -45,9 +45,9 @@ var _ = SIGDescribe("Ephemeral Containers", framework.WithNodeConformance(), fun
 		podClient = e2epod.NewPodClient(f)
 	})
 
-	// Release: 1.25
-	// Testname: Ephemeral Container Creation
-	// Description: Adding an ephemeral container to pod.spec MUST result in the container running.
+	// 发布版本：1.25
+	// 测试名称：Ephemeral Container Creation
+	// 描述：向 pod.spec 添加 ephemeral container 必须使该容器运行起来。
 	framework.ConformanceIt("will start an ephemeral container in an existing pod", func(ctx context.Context) {
 		ginkgo.By("creating a target pod")
 		pod := podClient.CreateSync(ctx, &v1.Pod{
@@ -85,12 +85,12 @@ var _ = SIGDescribe("Ephemeral Containers", framework.WithNodeConformance(), fun
 		gomega.Expect(pod.Generation).To(gomega.BeEquivalentTo(2))
 
 		ginkgo.By("checking pod container endpoints")
-		// Can't use anything depending on kubectl here because it's not available in the node test environment
+		// 这里不能用任何依赖 kubectl 的方式，node 测试环境里没有它
 		output := e2epod.ExecCommandInContainer(f, pod.Name, ecName, "/bin/echo", "marco")
 		gomega.Expect(output).To(gomega.ContainSubstring("marco"))
-		// Poll for the expected log output. The ephemeral container may report Running before
-		// it has actually executed the command and produced "polo" stdout, especially on
-		// runtimes with slower container startup (e.g. VM-isolated containers).
+		// 轮询预期的日志输出。ephemeral container 可能在实际
+		// 执行命令并产生 "polo" 标准输出之前就报告 Running，尤其是在
+		// 容器启动较慢的 runtime（例如 VM 隔离容器）上。
 		gomega.Eventually(ctx, func() (string, error) {
 			return e2epod.GetPodLogs(ctx, f.ClientSet, pod.Namespace, pod.Name, ecName)
 		}, f.Timeouts.PodStartShort, framework.PollInterval()).Should(gomega.ContainSubstring("polo"),
@@ -98,12 +98,12 @@ var _ = SIGDescribe("Ephemeral Containers", framework.WithNodeConformance(), fun
 	})
 
 	/*
-		Release: v1.28
-		Testname: Ephemeral Container, update ephemeral containers
-		Description: Adding an ephemeral container to pod.spec MUST result in the container
-		running. There MUST now be only one ephermal container found. Updating the pod with
-		another ephemeral container MUST succeed. There MUST now be two ephermal containers
-		found.
+		发布版本：v1.28
+		测试名称：Ephemeral Container, update ephemeral containers
+		描述：向 pod.spec 添加 ephemeral container 必须使该容器
+		运行。此时必须只有一个 ephemeral container。带
+		另一个 ephemeral container 更新 pod 必须成功。此时必须有
+		两个 ephemeral container。
 	*/
 	framework.ConformanceIt("should update the ephemeral containers in an existing pod", func(ctx context.Context) {
 		ginkgo.By("creating a target pod")
@@ -142,12 +142,12 @@ var _ = SIGDescribe("Ephemeral Containers", framework.WithNodeConformance(), fun
 		gomega.Expect(pod.Generation).To(gomega.BeEquivalentTo(2))
 
 		ginkgo.By("checking pod container endpoints")
-		// Can't use anything depending on kubectl here because it's not available in the node test environment
+		// 这里不能用任何依赖 kubectl 的方式，node 测试环境里没有它
 		output := e2epod.ExecCommandInContainer(f, pod.Name, ecName, "/bin/echo", "marco")
 		gomega.Expect(output).To(gomega.ContainSubstring("marco"))
-		// Poll for the expected log output. The ephemeral container may report Running before
-		// it has actually executed the command and produced "polo" stdout, especially on
-		// runtimes with slower container startup (e.g. VM-isolated containers).
+		// 轮询预期的日志输出。ephemeral container 可能在实际
+		// 执行命令并产生 "polo" 标准输出之前就报告 Running，尤其是在
+		// 容器启动较慢的 runtime（例如 VM 隔离容器）上。
 		gomega.Eventually(ctx, func() (string, error) {
 			return e2epod.GetPodLogs(ctx, f.ClientSet, pod.Namespace, pod.Name, ecName)
 		}, f.Timeouts.PodStartShort, framework.PollInterval()).Should(gomega.ContainSubstring("polo"),

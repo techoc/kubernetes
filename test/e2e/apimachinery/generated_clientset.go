@@ -147,8 +147,8 @@ var _ = SIGDescribe("Generated clientset", func() {
 		ginkgo.By("verifying pod creation was observed")
 		observeCreation(w)
 
-		// We need to wait for the pod to be scheduled, otherwise the deletion
-		// will be carried out immediately rather than gracefully.
+		// 需要等 pod 被调度，否则删除会
+		// 立即执行而非优雅退出。
 		framework.ExpectNoError(e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, pod.Name, f.Namespace.Name))
 
 		ginkgo.By("deleting the pod gracefully")
@@ -261,7 +261,7 @@ var _ = SIGDescribe("Generated clientset", func() {
 		observeCreation(w)
 
 		ginkgo.By("deleting the cronJob")
-		// Use DeletePropagationBackground so the CronJob is really gone when the call returns.
+		// 使用 DeletePropagationBackground，确保调用返回时 CronJob 已真正删除。
 		propagationPolicy := metav1.DeletePropagationBackground
 		if err := cronJobClient.Delete(ctx, cronJob.Name, metav1.DeleteOptions{PropagationPolicy: &propagationPolicy}); err != nil {
 			framework.Failf("Failed to delete cronJob: %v", err)

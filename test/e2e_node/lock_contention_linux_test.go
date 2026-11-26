@@ -33,43 +33,43 @@ import (
 
 const contentionLockFile = "/var/run/kubelet.lock"
 
-// Kubelet Lock contention tests the lock contention feature.
-// Disruptive because the kubelet is restarted in the test.
-// Feature:LockContention because we don't want the test to be picked up by any other
-// test suite, hence the unique name "LockContention".
+// Kubelet Lock contention 测试锁竞争特性。
+// 具有破坏性，因为测试中会重启 kubelet。
+// Feature:LockContention，因为我们不希望该测试被其他
+// 测试套件选中，因此使用唯一名称 "LockContention"。
 var _ = SIGDescribe("Lock contention", framework.WithSlow(), framework.WithDisruptive(), feature.LockContention, func() {
 
-	// Requires `--lock-file` & `--exit-on-lock-contention` flags to be set on the Kubelet.
+	// 需要在 Kubelet 上设置 `--lock-file` 和 `--exit-on-lock-contention` flag。
 	ginkgo.It("Kubelet should stop when the test acquires the lock on lock file and restart once the lock is released", func(ctx context.Context) {
 
 		ginkgo.By("perform kubelet health check to check if kubelet is healthy and running.")
-		// Precautionary check that kubelet is healthy before running the test.
+		// 运行测试前预防性检查 kubelet 是否健康。
 		gomega.Expect(e2enode.HealthCheck(kubeletHealthCheckURL)).To(gomega.BeTrueBecause("expected kubelet to be in healthy state"))
 
 		ginkgo.By("acquiring the lock on lock file i.e /var/run/kubelet.lock")
-		// Open the file with the intention to acquire the lock, this would imitate the behaviour
-		// of the another kubelet(self-hosted) trying to start. When this lock contention happens
-		// it is expected that the running kubelet must terminate and wait until the lock on the
-		// lock file is released.
-		// Kubelet uses the same approach to acquire the lock on lock file as shown here:
+		// 打开文件意图获取锁，模拟另一个 kubelet（self-hosted）
+		// 尝试启动的行为。发生锁竞争时，
+		// 预期正在运行的 kubelet 必须终止，并等待
+		// 锁文件上的锁被释放。
+		// Kubelet 使用与此处相同的方式获取锁文件上的锁：
 		// https://github.com/kubernetes/kubernetes/blob/9d2b361ebc7ef28f7cb75596ef40b7c239732d37/cmd/kubelet/app/server.go#L512-#L523
-		// and the function definition of Acquire is here:
+		// Acquire 的函数定义在这里：
 		// https://github.com/kubernetes/kubernetes/blob/9d2b361ebc7ef28f7cb75596ef40b7c239732d37/pkg/util/flock/flock_unix.go#L26
 		fd, err := unix.Open(contentionLockFile, unix.O_CREAT|unix.O_RDWR|unix.O_CLOEXEC, 0600)
 		framework.ExpectNoError(err)
-		// Defer the lock release in case test fails and we don't reach the step of the release
-		// lock. This ensures that we release the lock for sure.
+		// 延迟释放锁，以防测试失败、没走到释放步骤。
+		// 这样确保一定会释放锁。
 		defer func() {
 			err = unix.Flock(fd, unix.LOCK_UN)
 			framework.ExpectNoError(err)
 		}()
-		// Acquire lock.
+		// 获取锁。
 		err = unix.Flock(fd, unix.LOCK_EX)
 		framework.ExpectNoError(err)
 
 		ginkgo.By("verifying the kubelet is not healthy as there was a lock contention.")
-		// Once the lock is acquired, check if the kubelet is in healthy state or not.
-		// It should not be as the lock contention forces the kubelet to stop.
+		// 拿到锁后，检查 kubelet 是否健康。
+		// 它应该不健康，因为锁竞争会迫使 kubelet 停止。
 		gomega.Eventually(ctx, func() bool {
 			return e2enode.HealthCheck(kubeletHealthCheckURL)
 		}, 10*time.Second, time.Second).Should(gomega.BeFalseBecause("expected kubelet to not be in healthy state"))

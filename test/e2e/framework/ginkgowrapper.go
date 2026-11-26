@@ -34,12 +34,12 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
-// Feature is the name of a certain feature that the cluster under test must have.
-// Such features are different from feature gates.
+// Feature 是被测集群必须具备的某项特性的名称。
+// 这类特性不同于 feature gate。
 type Feature string
 
-// Environment is the name for the environment in which a test can run, like
-// "Linux" or "Windows".
+// Environment 是测试可运行环境的名称，例如
+// "Linux" 或 "Windows"。
 type Environment string
 
 type Valid[T comparable] struct {
@@ -47,13 +47,13 @@ type Valid[T comparable] struct {
 	frozen bool
 }
 
-// Add registers a new valid item name. The expected usage is
+// Add 注册一个新的有效条目名称。预期用法是
 //
-//	var SomeFeature = framework.ValidFeatures.Add("Some")
+// var SomeFeature = framework.ValidFeatures.Add("Some")
 //
-// during the init phase of an E2E suite. Individual tests should not register
-// their own, to avoid uncontrolled proliferation of new items. E2E suites can,
-// but don't have to, enforce that by freezing the set of valid names.
+// 在 E2E suite 的 init 阶段调用。单个测试不应注册
+// 自己的条目，以免新条目失控地增殖。E2E suite 可以
+// 但不必通过冻结有效名称集合来强制这一点。
 func (v *Valid[T]) Add(item T) T {
 	if v.frozen {
 		RecordBug(NewBug(fmt.Sprintf(`registry %T is already frozen, "%v" must not be added anymore`, *v, item), 1))
@@ -72,10 +72,10 @@ func (v *Valid[T]) Freeze() {
 	v.frozen = true
 }
 
-// These variables contain the parameters that [WithFeature] and [WithEnvironment] accept.
-// The framework itself has no pre-defined
-// constants. Test suites and tests may define their own and then add them here
-// before calling these With functions.
+// 这些变量包含 [WithFeature] 和 [WithEnvironment] 接受的参数。
+// 框架本身没有预定义的
+// 常量。测试套件和测试可以自定义常量，并在调用这些 With 函数前
+// 把它们加进来。
 var (
 	ValidFeatures     Valid[Feature]
 	ValidEnvironments Valid[Environment]
@@ -83,11 +83,11 @@ var (
 
 var errInterface = reflect.TypeOf((*error)(nil)).Elem()
 
-// IgnoreNotFound can be used to wrap an arbitrary function in a call to
-// [ginkgo.DeferCleanup]. When the wrapped function returns an error that
-// `apierrors.IsNotFound` considers as "not found", the error is ignored
-// instead of failing the test during cleanup. This is useful for cleanup code
-// that just needs to ensure that some object does not exist anymore.
+// IgnoreNotFound 可用于把任意函数包装进
+// [ginkgo.DeferCleanup] 调用。当被包装函数返回的错误被
+// `apierrors.IsNotFound` 视为"未找到"时，忽略该错误，
+// 而不是在清理阶段让测试失败。适用于只需确保某对象
+// 已不存在的清理代码。
 func IgnoreNotFound(in any) any {
 	inType := reflect.TypeOf(in)
 	inValue := reflect.ValueOf(in)
@@ -109,15 +109,15 @@ func IgnoreNotFound(in any) any {
 	}).Interface()
 }
 
-// AnnotatedLocation can be used to provide more informative source code
-// locations by passing the result as additional parameter to a
-// BeforeEach/AfterEach/DeferCleanup/It/etc.
+// AnnotatedLocation 可用于提供更详细的源代码
+// 位置信息，方法是把结果作为额外参数传给
+// BeforeEach/AfterEach/DeferCleanup/It 等。
 func AnnotatedLocation(annotation string) types.CodeLocation {
 	return AnnotatedLocationWithOffset(annotation, 1)
 }
 
-// AnnotatedLocationWithOffset skips additional call stack levels. With 0 as offset
-// it is identical to [AnnotatedLocation].
+// AnnotatedLocationWithOffset 会跳过额外的调用栈层级。offset 为 0 时
+// 与 [AnnotatedLocation] 相同。
 func AnnotatedLocationWithOffset(annotation string, offset int) types.CodeLocation {
 	codeLocation := types.NewCodeLocation(offset + 1)
 	codeLocation.FileName = path.Base(codeLocation.FileName)
@@ -125,9 +125,9 @@ func AnnotatedLocationWithOffset(annotation string, offset int) types.CodeLocati
 	return codeLocation
 }
 
-// SIGDescribe returns a wrapper function for ginkgo.Describe which injects
-// the SIG name as annotation. The parameter should be lowercase with
-// no spaces and no sig- or SIG- prefix.
+// SIGDescribe 返回 ginkgo.Describe 的包装函数，把
+// SIG 名称作为注解注入。参数应为小写、
+// 无空格且不带 sig- 或 SIG- 前缀。
 func SIGDescribe(sig string) func(...interface{}) bool {
 	ginkgo.GinkgoHelper()
 	if !sigRE.MatchString(sig) || strings.HasPrefix(sig, "sig-") {
@@ -142,59 +142,59 @@ func SIGDescribe(sig string) func(...interface{}) bool {
 
 var sigRE = regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
 
-// ConformanceIt is wrapper function for ginkgo It.  Adds "[Conformance]" tag and makes static analysis easier.
+// ConformanceIt 是 ginkgo It 的包装函数。添加 "[Conformance]" 标签并简化静态分析。
 func ConformanceIt(args ...interface{}) bool {
 	args = append(args, ginkgo.Offset(1), WithConformance())
 	return It(args...)
 }
 
-// It is a wrapper around [ginkgo.It] which removes the requirement
-// to start parameters with a text string.
-// Text and arguments may be mixed. The final text is a concatenation
-// of the text arguments and special tags from the With functions.
+// It 是 [ginkgo.It] 的包装器，取消了参数
+// 必须以文本字符串开头的要求。
+// 文本和参数可以混用。最终文本是文本参数与 With 函数中特殊标签
+// 的拼接。
 func It(args ...interface{}) bool {
 	ginkgo.GinkgoHelper()
 	return registerInSuite(ginkgo.It, args)
 }
 
-// It is a shorthand for the corresponding package function.
+// It 是对应包函数的简写。
 func (f *Framework) It(args ...interface{}) bool {
 	ginkgo.GinkgoHelper()
 	return registerInSuite(ginkgo.It, args)
 }
 
-// Describe is a wrapper around [ginkgo.Describe] which removes the requirement
-// to start parameters with a text string.
-// Text and arguments may be mixed. The final text is a concatenation
-// of the text arguments and special tags from the With functions.
+// Describe 是 [ginkgo.Describe] 的包装器，取消了参数
+// 必须以文本字符串开头的要求。
+// 文本和参数可以混用。最终文本是文本参数与 With 函数中特殊标签
+// 的拼接。
 func Describe(args ...interface{}) bool {
 	ginkgo.GinkgoHelper()
 	return registerInSuite(ginkgo.Describe, args)
 }
 
-// Describe is a shorthand for the corresponding package function.
+// Describe 是对应包函数的简写。
 func (f *Framework) Describe(args ...interface{}) bool {
 	ginkgo.GinkgoHelper()
 	return registerInSuite(ginkgo.Describe, args)
 }
 
-// Context is a wrapper around [ginkgo.Context] which removes the requirement
-// to start parameters with a text string.
-// Text and arguments may be mixed. The final text is a concatenation
-// of the text arguments and special tags from the With functions.
+// Context 是 [ginkgo.Context] 的包装器，取消了参数
+// 必须以文本字符串开头的要求。
+// 文本和参数可以混用。最终文本是文本参数与 With 函数中特殊标签
+// 的拼接。
 func Context(args ...interface{}) bool {
 	ginkgo.GinkgoHelper()
 	return registerInSuite(ginkgo.Context, args)
 }
 
-// Context is a shorthand for the corresponding package function.
+// Context 是对应包函数的简写。
 func (f *Framework) Context(args ...interface{}) bool {
 	ginkgo.GinkgoHelper()
 	return registerInSuite(ginkgo.Context, args)
 }
 
-// registerInSuite is the common implementation of all wrapper functions. It
-// expects to be called through one intermediate wrapper.
+// registerInSuite 是所有包装函数的通用实现。它
+// 预期通过一个中间包装器调用。
 func registerInSuite(ginkgoCall func(string, ...interface{}) bool, args []interface{}) bool {
 	var offset ginkgo.Offset
 	for arg := range allArgs(args) {
@@ -206,14 +206,14 @@ func registerInSuite(ginkgoCall func(string, ...interface{}) bool, args []interf
 	return ginkgoCall("", args, offset)
 }
 
-// allArgs produces an iterator which handles nesting without flattening the slices.
+// allArgs 生成一个迭代器，处理嵌套而不展开切片。
 func allArgs(args []any) func(yield func(arg any) bool) {
 	return func(yield func(arg any) bool) {
 		iterArgs(args, yield)
 	}
 }
 
-// iterArgs descends recursively into []any and calls yield for all other arguments.
+// iterArgs 递归下降到 []any 中，对其他所有参数调用 yield。
 func iterArgs(args []any, yield func(arg any) bool) bool {
 	for _, arg := range args {
 		switch arg := arg.(type) {
@@ -230,26 +230,26 @@ func iterArgs(args []any, yield func(arg any) bool) bool {
 	return true
 }
 
-// If the framework is used, the user might also use our special test
-// arguments.  To ensure that test registration works we inject our code into
-// the test tree construction. Therefore it doesn't matter anymore whether
-// ginkgo.It or framework.It is used.
+// 如果使用了 framework，用户可能也会使用我们的特殊测试
+// 参数。为确保测试注册正常，我们把代码注入
+// 测试树构建过程。因此用 ginkgo.It 还是 framework.It
+// 都无关紧要了。
 //
-// Code flow is as follows:
-//   - init registers transformGinkgoNodeArgs.
-//     From now on, all ginkgo.Describe/Context/It invocations invoke
-//     transformGinkgoNodeArgs. transformGinkgoNodeArgs replaces
-//     our special arguments with something that Ginkgo can handle.
-//   - Top-level Describe calls register callbacks with more test definitions.
-//     Callbacks are not invoked yet.
-//   - Argument parsing.
-//   - Ginkgo invokes the callbacks recursively to get a complete tree of tests.
-//   - Ginkgo runs those tests.
+// 代码流程如下：
+//   - init 注册 transformGinkgoNodeArgs。
+//     从此以后，所有 ginkgo.Describe/Context/It 调用都会调用
+//     transformGinkgoNodeArgs，它把我们的特殊参数替换为
+//     Ginkgo 能处理的内容。
+//   - 顶层 Describe 调用注册含更多测试定义的回调。
+//     此时回调尚未被调用。
+//   - 参数解析。
+//   - Ginkgo 递归调用回调，得到完整的测试树。
+//   - Ginkgo 运行这些测试。
 //
-// This init is guaranteed to happen before our special argument functions
-// can be called because this is the init code of their package.
-// Code which does not use the framework might call ginkgo.Describe before
-// transformGinkgoNodeArgs is registered. This is not a problem because none of the parameters can be special.
+// 这个 init 保证在我们的特殊参数函数
+// 被调用之前发生，因为它就是这些包的 init 代码。
+// 不使用 framework 的代码可能在 transformGinkgoNodeArgs 注册前
+// 就调用 ginkgo.Describe。这没问题，因为那样参数都不可能是特殊的。
 func init() {
 	ginkgo.AddTreeConstructionNodeArgsTransformer(transformGinkgoNodeArgs)
 }
@@ -259,21 +259,21 @@ func transformGinkgoNodeArgs(nodeType types.NodeType, offset ginkgo.Offset, text
 	return text, args, nil
 }
 
-// leafNodeLabels contains labels that
-// - might get added multiple times while constructing the spec tree and
-// - only need to be shown once and
-// - is very likely not considered part of the full test name string.
+// leafNodeLabels 包含这样的标签：
+// - 构建 spec 树时可能被多次添加
+// - 只需显示一次
+// - 很可能不被视为完整测试名字符串的一部分
 //
-// Injecting their tag multiple times directly into the text at the place which
-// triggers their addition, they get only added as label (not visible) and the
-// text then gets added at the end of the leaf node text (= ginkgo.It name)
-// based on the previously added labels.
+// 如果把它们多次直接插入触发添加位置的文本中，它们只会作为
+// 标签（不可见）添加，文本则根据之前添加的标签
+// 在叶节点文本（即 ginkgo.It 名称）末尾
+// 添加一次。
 //
-// The initial set contains the labels defined in the E2E framework. Feature
-// gate stability texts (Alpha, Beta, etc.) and feature gate dependencies
-// get added when we encounter them
-// to avoid making assumptions about what those strings are or because
-// they simply aren't known upfront.
+// 初始集合包含 E2E framework 定义的标签。Feature
+// gate 稳定性文本（Alpha、Beta 等）和 feature gate 依赖
+// 在遇到时添加，
+// 以免对这些字符串的含义做假设，或因为它们
+// 根本无法预先得知。
 var leafNodeLabels = sets.New[string](
 	"Conformance",
 	"Disruptive",
@@ -284,9 +284,9 @@ var leafNodeLabels = sets.New[string](
 	"Slow",
 )
 
-// expandGinkgoArgs concatenates all strings and translates our custom
-// arguments into something that Ginkgo can handle. It gets called
-// through ginkgo.AddTreeConstructionNodeArgsTransformer.
+// expandGinkgoArgs 拼接所有字符串，并把我们的自定义
+// 参数转换为 Ginkgo 能处理的内容。它经由
+// ginkgo.AddTreeConstructionNodeArgsTransformer 调用。
 func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []any) (string, []any) {
 	var ginkgoArgs []interface{}
 	var texts []string
@@ -296,11 +296,11 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 	}
 	previousText := ""
 
-	// All labels for a leaf node, from parent and added in this call.
+	// 叶节点的所有标签，包括来自父节点的和本次调用添加的。
 	allLabels := sets.New[string]()
 	if leafNode {
-		// May only be called during tree construction, i.e. not for the top-level node,
-		// so we have to be a bit careful.
+		// 只能在树构建期间调用，即不能用于顶层节点，
+		// 所以要小心。
 		report := ginkgo.CurrentTreeConstructionNodeReport()
 		previousText = report.FullText()
 		allLabels = sets.New[string](report.Labels()...)
@@ -312,11 +312,11 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 
 	featureDependencies := utilfeature.DefaultMutableFeatureGate.Dependencies()
 
-	// addFeatureGate handles feature gates:
-	// - The [Feature:<name>] text for the directly named feature gate gets
-	//   inserted in place because the test name may depend on it.
-	// - The text for dependencies gets added at the end (additional information).
-	// - Meta data like [Beta] always gets added at the end.
+	// addFeatureGate 处理 feature gate：
+	// - 直接命名的 feature gate 的 [Feature:<name>] 文本
+	//   就地插入，因为测试名称可能依赖它。
+	// - 依赖项的文本添加在末尾（附加信息）。
+	// - [Beta] 之类的元数据总是添加在末尾。
 	var addFeatureGate func(name featuregate.Feature, spec featuregate.FeatureSpec, direct bool)
 	addFeatureGate = func(name featuregate.Feature, spec featuregate.FeatureSpec, direct bool) {
 		fullLabel := "FeatureGate:" + string(name)
@@ -327,7 +327,7 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 			leafNodeLabels.Insert(fullLabel)
 		}
 
-		// We use mixed case (i.e. Beta instead of BETA). GA feature gates have no level string.
+		// 我们用混合大小写（即 Beta 而非 BETA）。GA feature gate 没有级别字符串。
 		var level string
 		if spec.PreRelease != "" {
 			level = string(spec.PreRelease)
@@ -339,11 +339,11 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 			addLabel("Feature:OffByDefault")
 		}
 		if level == "Beta" && !spec.Default {
-			// Not embedded in text!
+			// 不嵌入文本中！
 			ginkgoArgs = append(ginkgoArgs, ginkgo.Label("BetaOffByDefault"))
 		}
 
-		// Also add dependencies, recursively.
+		// 也递归添加依赖项。
 		for _, name := range featureDependencies[name] {
 			spec := utilfeature.DefaultMutableFeatureGate.GetAll()[name]
 			addFeatureGate(name, spec, false)
@@ -360,10 +360,10 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 	}
 	injectSkipUnlessProviderIs := func() {
 		if leafNode {
-			// Check directly inside It.
+			// 直接在 It 中检查。
 			skipUnlessProviderIs()
 		} else {
-			// Insert BeforeEach with the same check.
+			// 插入带相同检查的 BeforeEach。
 			ginkgo.BeforeEach(skipUnlessProviderIs)
 		}
 	}
@@ -377,12 +377,12 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 			fullLabel := arg.String()
 			if arg.parts[0] == "Provider" {
 				providerChecks = append(providerChecks, strings.Split(arg.parts[1], ","))
-				// Only add text, not as label: Ginkgo labels must not contain commas.
-				// We could split up into separate labels, but then the semantic is not clear:
-				// [Provider:gce,aws] means "provider must be one of these two",
-				// but [Provider:gce] [Provider:aws] could be either that or "must be
-				// gce and aws", i.e. the test always needs to be skipped (for example,
-				// because there are different independent WithProvider calls in different places).
+				// 只添加文本，不作为标签：Ginkgo 标签不能包含逗号。
+				// 可以拆成多个标签，但语义会不明确：
+				// [Provider:gce,aws] 表示"provider 必须是这两者之一"，
+				// 但 [Provider:gce] [Provider:aws] 可能是那个意思，也可能是"必须同时是
+				// gce 和 aws"，即测试总是需要跳过（例如
+				// 因为不同地方有独立的 WithProvider 调用）。
 				texts = append(texts, fmt.Sprintf("[%s]", fullLabel))
 				continue
 			}
@@ -397,9 +397,9 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 			case "Serial":
 				ginkgoArgs = append(ginkgoArgs, ginkgo.Serial)
 			case "Slow":
-				// Start slow tests first. This avoids the risk
-				// that they get started towards the end of a
-				// run and then make the run longer overall.
+				// 先启动慢测试。这样可避免它们
+				// 在一轮运行的末尾才启动，
+				// 从而拖长整体运行时间。
 				ginkgoArgs = append(ginkgoArgs, ginkgo.SpecPriority(1))
 			}
 		case string:
@@ -408,7 +408,7 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 			}
 			texts = append(texts, arg)
 		case func(context.Context):
-			// Wrapping shows up in stack backtraces. Avoid it if possible.
+			// 包装会出现在栈回溯中。尽量避免。
 			if len(providerChecks) > 0 {
 				body := arg
 				arg = func(ctx context.Context) {
@@ -444,16 +444,16 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 		RecordBug(NewBug("empty strings as separators are unnecessary and need to be removed", int(offset)))
 	}
 
-	// Enforce that text snippets to not start or end with spaces because
-	// those lead to double spaces when concatenating below.
+	// 强制文本片段不以空格开头或结尾，因为
+	// 下面的拼接会产生双空格。
 	for _, text := range texts {
 		if strings.HasPrefix(text, " ") || strings.HasSuffix(text, " ") {
 			RecordBug(NewBug(fmt.Sprintf("trailing or leading spaces are unnecessary and need to be removed: %q", text), int(offset)))
 		}
 	}
 
-	// Ensure that each leaf node text contains all additional labels collected so far.
-	// We get those labels from the set of labels associated with the container node(s).
+	// 确保每个叶节点文本包含目前收集到的所有附加标签。
+	// 这些标签来自与容器节点关联的标签集合。
 	if leafNode {
 		var delayedLabels []string
 
@@ -468,13 +468,13 @@ func expandGinkgoArgs(leafNode bool, offset ginkgo.Offset, text string, args []a
 			text := fmt.Sprintf("[%s]", label)
 			if strings.Contains(previousText, text) ||
 				slices.Contains(texts, text) {
-				// Never repeat text at the end which was already included earlier.
-				// In practice, this can happen for a FeatureGate when it was both
-				// explicitly mentioned and a dependency.
+				// 末尾不要重复前面已包含的文本。
+				// 实践中 FeatureGate 可能既是显式提及又是依赖项，
+				// 这时就会发生重复。
 				continue
 			}
 			texts = append(texts, text)
-			// This keeps validateText happy.
+			// 这样 validateText 就满意了。
 			ginkgoArgs = append(ginkgoArgs, ginkgo.Label(label))
 		}
 	}
@@ -490,11 +490,11 @@ var (
 	deprecatedStability   = sets.New("Alpha", "Beta")
 )
 
-// validateSpecs checks that the test specs were registered as intended.
+// validateSpecs 检查测试 spec 是否按预期注册。
 func validateSpecs(specs types.SpecReports) {
 	checked := sets.New[call]()
 
-	// Each full test name should only be used once.
+	// 每个完整测试名只应使用一次。
 	specNames := make(map[string][]types.SpecReport)
 
 	for _, spec := range specs {
@@ -504,7 +504,7 @@ func validateSpecs(specs types.SpecReports) {
 				location: spec.ContainerHierarchyLocations[i],
 			}
 			if checked.Has(c) {
-				// No need to check the same container more than once.
+				// 同一个容器不需要检查多次。
 				continue
 			}
 			checked.Insert(c)
@@ -519,8 +519,8 @@ func validateSpecs(specs types.SpecReports) {
 			checked.Insert(c)
 		}
 
-		// Track what the same name is used for. The empty name is used more
-		// than once for special nodes (e.g. ReportAfterSuite).
+		// 记录同名被用于什么。空名在特殊节点
+		// （如 ReportAfterSuite）上会被多次使用。
 		fullText := spec.FullText()
 		if fullText != "" {
 			specNames[fullText] = append(specNames[fullText], spec)
@@ -529,9 +529,9 @@ func validateSpecs(specs types.SpecReports) {
 
 	for fullText, specs := range specNames {
 		if len(specs) > 1 {
-			// The exact same It call might be made twice, in which case full
-			// text and location are the same in two different specs. We show
-			// that as "<location> (2x)"
+			// 完全相同的 It 调用可能出现两次，此时
+			// 两个不同 spec 的完整文本和位置相同。我们显示为
+			// "<location> (2x)"
 			locationCounts := make(map[string]int)
 			for _, spec := range specs {
 				locationCounts[spec.LeafNodeLocation.String()]++
@@ -549,33 +549,32 @@ func validateSpecs(specs types.SpecReports) {
 	}
 }
 
-// call acts as (mostly) unique identifier for a container node call like
-// Describe or Context. It's not perfect because theoretically a line might
-// have multiple calls with the same text, but that isn't a problem in
-// practice.
+// call 作为 Describe 或 Context 等容器节点调用的（近似）唯一标识符。
+// 它并不完美，因为理论上同一行可能有多个文本相同的调用，
+// 但实践中这不是问题。
 type call struct {
 	text     string
 	location types.CodeLocation
 }
 
-// validateText checks for some known tags that should not be added through the
-// plain text strings anymore. Eventually, all such tags should get replaced
-// with the new APIs.
+// validateText 检查一些不应再通过
+// 纯文本字符串添加的已知标签。最终所有这些标签都应替换
+// 为新 API。
 func validateText(location types.CodeLocation, text string, labels []string) {
 	for _, tag := range tagRe.FindAllString(text, -1) {
 		if tag == "[]" {
 			recordTextBug(location, "[] in plain text is invalid")
 			continue
 		}
-		// Strip square brackets.
+		// 去掉方括号。
 		tag = tag[1 : len(tag)-1]
 		if slices.Contains(labels, tag) {
-			// Okay, was also set as label.
+			// 好的，也被设为标签了。
 			continue
 		}
-		// TODO: we currently only set this as a text value
-		// We should probably reflect it into labels, but that could break some
-		// existing jobs and we're still setting on an exact plan
+		// TODO: 目前我们只把它设为文本值
+		// 也许应该反映到标签中，但那可能破坏一些
+		// 现有 job，而且我们仍按精确计划设置
 		if tag == "Feature:OffByDefault" {
 			continue
 		}
@@ -584,7 +583,7 @@ func validateText(location types.CodeLocation, text string, labels []string) {
 		}
 		if deprecatedStability.Has(tag) {
 			if slices.Contains(labels, "Feature:"+tag) {
-				// Okay, was also set as label.
+				// 好的，也被设为标签了。
 				continue
 			}
 			recordTextBug(location, fmt.Sprintf("[%s] in plain text is deprecated and must be added by defining the feature gate through WithFeatureGate instead", tag))
@@ -602,16 +601,16 @@ func recordTextBug(location types.CodeLocation, message string) {
 	RecordBug(Bug{FileName: location.FileName, LineNumber: location.LineNumber, Message: message})
 }
 
-// WithFeature specifies that a certain test or group of tests only works
-// with a feature available. The return value may be passed as additional
-// argument to the framework wrappers and the Ginkgo functions directly.
+// WithFeature 表示某个测试或一组测试只有在
+// 某项特性可用时才有效。返回值可作为额外
+// 参数传给 framework 包装器和直接用 Ginkgo 函数。
 //
-// The feature must be listed in ValidFeatures.
+// 该特性必须列在 ValidFeatures 中。
 func WithFeature(name Feature) interface{} {
 	return withFeature(name)
 }
 
-// WithFeature is a shorthand for the corresponding package function.
+// WithFeature 是对应包函数的简写。
 func (f *Framework) WithFeature(name Feature) interface{} {
 	return withFeature(name)
 }
@@ -623,42 +622,42 @@ func withFeature(name Feature) interface{} {
 	return newLabel("Feature", string(name))
 }
 
-// WithFeatureGate specifies that a certain test or group of tests depends on a
-// feature gate and the corresponding API group (if there is one)
-// being enabled. The return value may be passed as additional
-// argument to the framework wrappers and the Ginkgo functions directly.
+// WithFeatureGate 表示某个测试或一组测试依赖于某个
+// feature gate 及对应的 API group（如果存在）
+// 被启用。返回值可作为额外参数
+// 传给 framework 包装器和直接用 Ginkgo 函数。
 //
-// The feature gate must be listed in
-// [k8s.io/apiserver/pkg/util/feature.DefaultMutableFeatureGate]. Once a
-// feature gate gets removed from there, the WithFeatureGate calls using it
-// also need to be removed.
+// feature gate 必须列在
+// [k8s.io/apiserver/pkg/util/feature.DefaultMutableFeatureGate] 中。一旦
+// feature gate 从中移除，使用它的 WithFeatureGate 调用
+// 也需要移除。
 //
-// [Alpha] resp. [Beta] get added to the test name automatically depending
-// on the current stability level of the feature, to emulate historic
-// usage of those tags.
+// 根据特性当前的稳定级别，[Alpha] 或 [Beta] 会自动加到测试名中，
+// 以模拟历史上
+// 这些标签的用法。
 //
-// For label filtering, Alpha resp. Beta get added to the Ginkgo labels.
+// 对标签过滤，Alpha 或 Beta 会被加入 Ginkgo 标签。
 //
-// [Feature:OffByDefault] gets added to support skipping a test with
-// a dependency on an alpha or beta feature gate in jobs which use the
-// traditional \[Feature:.*\] skip regular expression.
+// 添加 [Feature:OffByDefault] 是为了支持在使用传统
+// \[Feature:.*\] 跳过正则表达式的 job 中，跳过依赖
+// alpha 或 beta feature gate 的测试。
 //
-// Feature:OffByDefault is also available for label filtering.
+// Feature:OffByDefault 也可用于标签过滤。
 //
-// BetaOffByDefault is also added *only as a label* when the feature gate is
-// an off by default beta feature. This can be used to include/exclude based
-// on beta + defaulted-ness. Alpha has no equivalent because all alphas are
-// off by default.
+// feature gate 是默认关闭的 beta 特性时，还会*仅作为标签*添加
+// BetaOffByDefault。这可用于按 beta 加默认状态
+// 来包含或排除测试。Alpha 没有等价标签，因为所有 alpha 都是
+// 默认关闭的。
 //
-// If the test can run in any cluster that has alpha resp. beta features and
-// API groups enabled, then annotating it with just WithFeatureGate is
-// sufficient. Otherwise, WithFeature has to be used to define the additional
-// requirements.
+// 如果测试能在任何启用了 alpha 或 beta 特性的集群上
+// 运行（相应 API group 也已启用），只用 WithFeatureGate 标注
+// 就足够。否则必须用 WithFeature 定义额外的
+// 要求。
 func WithFeatureGate(featureGate featuregate.Feature) interface{} {
 	return withFeatureGate(featureGate)
 }
 
-// WithFeatureGate is a shorthand for the corresponding package function.
+// WithFeatureGate 是对应包函数的简写。
 func (f *Framework) WithFeatureGate(featureGate featuregate.Feature) interface{} {
 	return withFeatureGate(featureGate)
 }
@@ -676,16 +675,16 @@ type featureGate struct {
 	spec featuregate.FeatureSpec
 }
 
-// WithEnvironment specifies that a certain test or group of tests only works
-// in a certain environment. The return value may be passed as additional
-// argument to the framework wrappers and the Ginkgo functions directly.
+// WithEnvironment 表示某个测试或一组测试只能在
+// 特定环境中运行。返回值可作为额外参数
+// 传给 framework 包装器和直接用 Ginkgo 函数。
 //
-// The environment must be listed in ValidEnvironments.
+// 环境必须列在 ValidEnvironments 中。
 func WithEnvironment(name Environment) interface{} {
 	return withEnvironment(name)
 }
 
-// WithEnvironment is a shorthand for the corresponding package function.
+// WithEnvironment 是对应包函数的简写。
 func (f *Framework) WithEnvironment(name Environment) interface{} {
 	return withEnvironment(name)
 }
@@ -697,21 +696,21 @@ func withEnvironment(name Environment) interface{} {
 	return newLabel("Environment", string(name))
 }
 
-// WithProvider specifies that a certain test or group of tests depend on
-// features that are only available with one of the listed cluster providers.
-// It inserts the [Provider: <provider1>,<provider2>, ...] tag into the test name
-// and injects a runtime skip check at the start of the function.
+// WithProvider 表示某个测试或一组测试依赖于
+// 仅在所列 cluster provider 之一上可用的特性。
+// 它把 [Provider: <provider1>,<provider2>, ...] 标签插入测试名
+// 并在函数开头注入运行时跳过检查。
 //
-// Filtering by provider is a legacy mechanism with unclear semantics: which
-// provider supports which features is undefined. Prefer defining features and
-// calling WithFeature instead.
+// 按 provider 过滤是语义不明确的遗留机制：哪些
+// provider 支持哪些特性并未定义。更推荐定义特性并
+// 改用 WithFeature。
 //
-// Note that this must come before the function in the Describe/Context/It call!
+// 注意在 Describe/Context/It 调用中它必须放在函数之前！
 func WithProvider(providers ...string) interface{} {
 	return withProvider(providers)
 }
 
-// WithProvider is a shorthand for the corresponding package function.
+// WithProvider 是对应包函数的简写。
 func (f *Framework) WithProvider(providers ...string) interface{} {
 	return withProvider(providers)
 }
@@ -720,14 +719,14 @@ func withProvider(providers []string) interface{} {
 	return newLabel("Provider", strings.Join(providers, ","))
 }
 
-// WithConformance specifies that a certain test or group of tests must pass in
-// all conformant Kubernetes clusters. The return value may be passed as additional
-// argument to the framework wrappers and the Ginkgo functions directly.
+// WithConformance 表示某个测试或一组测试必须在
+// 所有符合规范的 Kubernetes 集群中通过。返回值可作为额外参数
+// 传给 framework 包装器和直接用 Ginkgo 函数。
 func WithConformance() interface{} {
 	return withConformance()
 }
 
-// WithConformance is a shorthand for the corresponding package function.
+// WithConformance 是对应包函数的简写。
 func (f *Framework) WithConformance() interface{} {
 	return withConformance()
 }
@@ -736,15 +735,15 @@ func withConformance() interface{} {
 	return newLabel("Conformance")
 }
 
-// WithNodeConformance specifies that a certain test or group of tests for node
-// functionality that does not depend on runtime or Kubernetes distro specific
-// behavior. The return value may be passed as additional
-// argument to the framework wrappers and the Ginkgo functions directly.
+// WithNodeConformance 表示某个 node 功能测试或一组测试
+// 不依赖特定运行时或 Kubernetes 发行版的
+// 行为。返回值可作为额外参数
+// 传给 framework 包装器和直接用 Ginkgo 函数。
 func WithNodeConformance() interface{} {
 	return withNodeConformance()
 }
 
-// WithNodeConformance is a shorthand for the corresponding package function.
+// WithNodeConformance 是对应包函数的简写。
 func (f *Framework) WithNodeConformance() interface{} {
 	return withNodeConformance()
 }
@@ -753,15 +752,15 @@ func withNodeConformance() interface{} {
 	return newLabel("NodeConformance")
 }
 
-// WithDisruptive specifies that a certain test or group of tests temporarily
-// affects the functionality of the Kubernetes cluster. The return value must
-// be passed as additional argument to [framework.It], [framework.Describe],
-// [framework.Context].
+// WithDisruptive 表示某个测试或一组测试会暂时
+// 影响 Kubernetes 集群的功能。返回值必须
+// 作为额外参数传给 [framework.It]、[framework.Describe]、
+// [framework.Context]。
 func WithDisruptive() interface{} {
 	return withDisruptive()
 }
 
-// WithDisruptive is a shorthand for the corresponding package function.
+// WithDisruptive 是对应包函数的简写。
 func (f *Framework) WithDisruptive() interface{} {
 	return withDisruptive()
 }
@@ -770,18 +769,18 @@ func withDisruptive() interface{} {
 	return newLabel("Disruptive")
 }
 
-// WithSerial specifies that a certain test or group of tests must not run in
-// parallel with other tests. The return value may be passed as additional
-// argument to the framework wrappers and the Ginkgo functions directly.
+// WithSerial 表示某个测试或一组测试不得与
+// 其他测试并行运行。返回值可作为额外参数
+// 传给 framework 包装器和直接用 Ginkgo 函数。
 //
-// Starting with ginkgo v2, serial and parallel tests can be executed in the
-// same invocation. Ginkgo itself will ensure that the serial tests run
-// sequentially.
+// 从 ginkgo v2 开始，串行和并行测试可以在
+// 同一次调用中执行。Ginkgo 自身会确保串行测试
+// 顺序执行。
 func WithSerial() interface{} {
 	return withSerial()
 }
 
-// WithSerial is a shorthand for the corresponding package function.
+// WithSerial 是对应包函数的简写。
 func (f *Framework) WithSerial() interface{} {
 	return withSerial()
 }
@@ -790,15 +789,15 @@ func withSerial() interface{} {
 	return newLabel("Serial")
 }
 
-// WithSlow specifies that a certain test, or each test within a group of
-// tests, is slow (is expected to take longer than 5 minutes to run in CI).
-// The return value may be passed as additional
-// argument to the framework wrappers and the Ginkgo functions directly.
+// WithSlow 表示某个测试或一组测试中的每个测试
+// 都很慢（在 CI 中运行预计超过 5 分钟）。
+// 返回值可作为额外参数
+// 传给 framework 包装器和直接用 Ginkgo 函数。
 func WithSlow() interface{} {
 	return withSlow()
 }
 
-// WithSlow is a shorthand for the corresponding package function.
+// WithSlow 是对应包函数的简写。
 func (f *Framework) WithSlow() interface{} {
 	return WithSlow()
 }
@@ -807,14 +806,14 @@ func withSlow() interface{} {
 	return newLabel("Slow")
 }
 
-// WithLabel is a wrapper around [ginkgo.Label]. Besides adding an arbitrary
-// label to a test, it also injects the label in square brackets into the test
-// name.
+// WithLabel 是 [ginkgo.Label] 的包装器。除了给测试添加任意
+// 标签外，它还把标签以方括号形式注入测试
+// 名称。
 func WithLabel(label string) interface{} {
 	return withLabel(label)
 }
 
-// WithLabel is a shorthand for the corresponding package function.
+// WithLabel 是对应包函数的简写。
 func (f *Framework) WithLabel(label string) interface{} {
 	return withLabel(label)
 }
@@ -823,13 +822,13 @@ func withLabel(label string) interface{} {
 	return newLabel(label)
 }
 
-// WithFlaky specifies that a certain test or group of tests are failing randomly.
-// These tests are usually filtered out and ran separately from other tests.
+// WithFlaky 表示某个测试或一组测试会随机失败。
+// 这些测试通常会被过滤出来，与其他测试分开运行。
 func WithFlaky() interface{} {
 	return withFlaky()
 }
 
-// WithFlaky is a shorthand for the corresponding package function.
+// WithFlaky 是对应包函数的简写。
 func (f *Framework) WithFlaky() interface{} {
 	return withFlaky()
 }
@@ -838,24 +837,24 @@ func withFlaky() interface{} {
 	return newLabel("Flaky")
 }
 
-// WithKubeletMinVersion specifies that a certain test or group tests needs
-// a kubelet version >= the given version string. Specifying the minimum
-// version as `<major>.<minor>` is sufficient. The patch version may be
-// added, but is not required.
+// WithKubeletMinVersion 表示某个测试或一组测试需要
+// kubelet 版本 >= 给定版本字符串。把最低版本写成
+// `<major>.<minor>` 就够，patch 版本可以
+// 加上但不是必需的。
 //
-// This adds
-// - a `[KubeletMinVersion:<version>]` tag in the text,
-// - a `KubeletMinVersion:<version>` label,
-// - and a Ginkgo semver constraint for the "kubelet" component.
+// 这会添加
+// - 文本中的 `[KubeletMinVersion:<version>]` 标签
+// - `KubeletMinVersion:<version>` 标签
+// - 以及 "kubelet" 组件的 Ginkgo semver 约束。
 //
-// The easiest way to filter tests is via `ginkgo
-// --sem-ver-filter="kubelet=1.35"` which filters out tests that need a newer
-// kubelet.
+// 过滤测试最简单的方式是用 `ginkgo
+// --sem-ver-filter="kubelet=1.35"`，它会过滤掉需要更新
+// kubelet 的测试。
 func WithKubeletMinVersion(version string) interface{} {
 	return withKubeletMinVersion(version)
 }
 
-// WithKubeletMinVersion is a shorthand for the corresponding package function.
+// WithKubeletMinVersion 是对应包函数的简写。
 func (f *Framework) WithKubeletMinVersion(version string) interface{} {
 	return withKubeletMinVersion(version)
 }
@@ -864,9 +863,9 @@ func withKubeletMinVersion(version string) interface{} {
 	return newLabel("KubeletMinVersion", version)
 }
 
-// label must be comparable, some code uses that to detect feature.Windows.
+// label 必须可比较，有代码用它检测 feature.Windows。
 type label struct {
-	// parts get concatenated with ":" to build the full label.
+	// 各部分用 ":" 连接构成完整标签。
 	parts [2]string
 	len   int
 }

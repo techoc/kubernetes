@@ -113,13 +113,13 @@ var _ = SIGDescribe("CustomResourceFieldSelectors [Privileged:ClusterAdmin]", fu
 		})
 
 		/*
-			Release: v1.32
-			Testname: custom-resource-definition-field-selectors-list-watch-register-informers
-			Description: Create a Custom Resource Definition with SelectableFields. Create a custom resource with
-			two versions and a conversion webhook that converts between the versions. Attempt to list, watch and register
-			informers for the custom resources with field selectors; the lists, watches and informers MUST return only
-			custom resources matching the field selector. Delete and update some of the resources with field selectors;
-			the lists, watches and informers MUST return only the custom resources matching custom resources.
+			发布版本：v1.32
+			测试名称：custom-resource-definition-field-selectors-list-watch-register-informers
+			描述：创建带 SelectableFields 的 Custom Resource Definition。创建具有
+			两个版本及版本间转换 webhook 的自定义资源。用 field selector
+			list、watch 并注册 informer；list、watch 和 informer 必须只返回匹配
+			field selector 的自定义资源。用 field selector 删除并更新部分资源；
+			list、watch 和 informer 必须只返回匹配的自定义资源。
 		*/
 		framework.ConformanceIt("MUST list and watch custom resources matching the field selector", func(ctx context.Context) {
 			ginkgo.By("Creating a custom resource definition with selectable fields")
@@ -361,7 +361,7 @@ func informerAccumulator(informer cache.SharedIndexInformer) func(ctx context.Co
 		},
 		UpdateFunc: func(oldObj, newObj any) {
 			defer ginkgo.GinkgoRecover()
-			// ignoring
+			// 忽略
 		},
 		DeleteFunc: func(obj any) {
 			defer ginkgo.GinkgoRecover()

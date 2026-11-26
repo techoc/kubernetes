@@ -132,10 +132,10 @@ var _ = SIGDescribe("CustomResourceConversionWebhook [Privileged:ClusterAdmin]",
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource Definition Conversion Webhook, conversion custom resource
-		Description: Register a conversion webhook and a custom resource definition. Create a v1 custom
-		resource. Attempts to read it at v2 MUST succeed.
+		发布版本：v1.16
+		测试名称：Custom Resource Definition Conversion Webhook, conversion custom resource
+		描述：注册 conversion webhook 和自定义资源定义，创建 v1 自定义
+		资源。以 v2 读取必须成功。
 	*/
 	framework.ConformanceIt("should be able to convert from CR v1 to CR v2", func(ctx context.Context) {
 		testcrd, err := crd.CreateMultiVersionTestCRD(f, "stable.example.com", func(crd *apiextensionsv1.CustomResourceDefinition) {
@@ -166,11 +166,11 @@ var _ = SIGDescribe("CustomResourceConversionWebhook [Privileged:ClusterAdmin]",
 	})
 
 	/*
-		Release: v1.16
-		Testname: Custom Resource Definition Conversion Webhook, convert mixed version list
-		Description: Register a conversion webhook and a custom resource definition. Create a custom resource stored at
-		v1. Change the custom resource definition storage to v2. Create a custom resource stored at v2. Attempt to list
-		the custom resources at v2; the list result MUST contain both custom resources at v2.
+		发布版本：v1.16
+		测试名称：Custom Resource Definition Conversion Webhook, convert mixed version list
+		描述：注册 conversion webhook 和自定义资源定义，创建以
+		v1 存储的自定义资源。将 CRD 存储版本改为 v2，再创建以 v2 存储的资源。以 v2
+		列举自定义资源；结果必须同时包含两个 v2 版本的自定义资源。
 	*/
 	framework.ConformanceIt("should be able to convert a non homogeneous list of CRs", func(ctx context.Context) {
 		testcrd, err := crd.CreateMultiVersionTestCRD(f, "stable.example.com", func(crd *apiextensionsv1.CustomResourceDefinition) {
@@ -211,7 +211,7 @@ func cleanCRDWebhookTest(ctx context.Context, client clientset.Interface, namesp
 func createAuthReaderRoleBindingForCRDConversion(ctx context.Context, f *framework.Framework, namespace string) {
 	ginkgo.By("Create role binding to let cr conversion webhook read extension-apiserver-authentication")
 	client := f.ClientSet
-	// Create the role binding to allow the webhook read the extension-apiserver-authentication configmap
+	// 创建 role binding，让 webhook 能读取 extension-apiserver-authentication configmap
 	_, err := client.RbacV1().RoleBindings("kube-system").Create(ctx, &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: roleBindingCRDName,
@@ -241,7 +241,7 @@ func deployCustomResourceWebhookAndService(ctx context.Context, f *framework.Fra
 	ginkgo.By("Deploying the custom resource conversion webhook pod")
 	client := f.ClientSet
 
-	// Creating the secret that contains the webhook's cert.
+	// 创建包含 webhook 证书的 secret。
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: secretCRDName,
@@ -256,7 +256,7 @@ func deployCustomResourceWebhookAndService(ctx context.Context, f *framework.Fra
 	_, err := client.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	framework.ExpectNoError(err, "creating secret %q in namespace %q", secretName, namespace)
 
-	// Create the deployment of the webhook
+	// 创建 webhook 的 deployment
 	podLabels := map[string]string{"app": "sample-crd-conversion-webhook", "crd-webhook": "true"}
 	replicas := int32(1)
 	mounts := []v1.VolumeMount{
@@ -283,7 +283,7 @@ func deployCustomResourceWebhookAndService(ctx context.Context, f *framework.Fra
 				"--tls-cert-file=/webhook.local.config/certificates/tls.crt",
 				"--tls-private-key-file=/webhook.local.config/certificates/tls.key",
 				"-v=4",
-				// Use a non-default port for containers.
+				// 容器使用非默认端口。
 				fmt.Sprintf("--port=%d", containerPort),
 			},
 			ReadinessProbe: &v1.Probe{
@@ -423,7 +423,7 @@ func testCRListConversion(ctx context.Context, f *framework.Framework, testCrd *
 	_, err := customResourceClients["v1"].Create(ctx, crInstance, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Now cr-instance-1 is stored as v1. lets change storage version
+	// 现在 cr-instance-1 以 v1 存储。切换存储版本
 	crd, err = integration.UpdateV1CustomResourceDefinitionWithRetry(testCrd.APIExtensionClient, crd.Name, func(c *apiextensionsv1.CustomResourceDefinition) {
 		c.Spec.Versions = alternativeAPIVersions
 	})
@@ -441,11 +441,11 @@ func testCRListConversion(ctx context.Context, f *framework.Framework, testCrd *
 		},
 	}
 
-	// After changing a CRD, the resources for versions will be re-created that can be result in
-	// cancelled connection (e.g. "grpc connection closed" or "context canceled").
-	// Just retrying fixes that.
+	// 修改 CRD 后，各版本的资源会被重建，可能导致
+	// 连接被取消（例如 "grpc connection closed" 或 "context canceled"）。
+	// 重试即可解决。
 	//
-	// TODO: we have to wait for the storage version to become effective. Storage version changes are not instant.
+	// TODO: 需要等待存储版本生效；存储版本切换不是即时完成的。
 	for range 5 {
 		_, err = customResourceClients["v1"].Create(ctx, crInstance, metav1.CreateOptions{})
 		if err == nil {
@@ -454,7 +454,7 @@ func testCRListConversion(ctx context.Context, f *framework.Framework, testCrd *
 	}
 	framework.ExpectNoError(err)
 
-	// Now that we have a v1 and v2 object, both list operation in v1 and v2 should work as expected.
+	// 现在 v1 和 v2 对象都有了，v1 和 v2 的 list 操作都应按预期工作。
 
 	ginkgo.By("List CRs in v1")
 	list, err := customResourceClients["v1"].List(ctx, metav1.ListOptions{})
@@ -479,7 +479,7 @@ func testCRListConversion(ctx context.Context, f *framework.Framework, testCrd *
 	verifyV2Object(crd, &list.Items[1])
 }
 
-// waitWebhookConversionReady sends stub custom resource creation requests requiring conversion until one succeeds.
+// waitWebhookConversionReady 持续发送需要转换的自定义资源创建请求，直到成功一次。
 func waitWebhookConversionReady(ctx context.Context, f *framework.Framework, crd *apiextensionsv1.CustomResourceDefinition, customResourceClients map[string]dynamic.ResourceInterface, version string) {
 	framework.ExpectNoError(wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		crInstance := &unstructured.Unstructured{
@@ -494,8 +494,8 @@ func waitWebhookConversionReady(ctx context.Context, f *framework.Framework, crd
 		}
 		_, err := customResourceClients[version].Create(ctx, crInstance, metav1.CreateOptions{})
 		if err != nil {
-			// tolerate clusters that do not set --enable-aggregator-routing and have to wait for kube-proxy
-			// to program the service network, during which conversion requests return errors
+			// 容忍未设置 --enable-aggregator-routing 的集群：需要等 kube-proxy
+			// 配置好 service 网络，期间转换请求会返回错误
 			framework.Logf("error waiting for conversion to succeed during setup: %v", err)
 			return false, nil
 		}

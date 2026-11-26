@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apimachinery contains e2e tests owned by SIG-API-Machinery.
+// Package apimachinery 包含由 SIG-API-Machinery 负责的 e2e 测试。
 package apimachinery
 
 import (
@@ -69,8 +69,8 @@ var _ = SIGDescribe("CRDValidationRatcheting [Privileged:ClusterAdmin]", framewo
 			Resource: testCRD.Crd.Spec.Names.Plural,
 		}
 
-		// Full discovery restmapper pretty heavy handed for this test, just
-		// use hardcoded mappings
+		// 完整 discovery 的 restmapper 对本测试来说太重，
+		// 直接用硬编码映射即可
 		restmapper = &fakeRESTMapper{
 			m: map[schema.GroupVersionResource]schema.GroupVersionKind{
 				testCRDGVR: {
@@ -86,9 +86,9 @@ var _ = SIGDescribe("CRDValidationRatcheting [Privileged:ClusterAdmin]", framewo
 		framework.ExpectNoError(testCRD.CleanUp(ctx), "cleaning up test CRD")
 	})
 
-	// Applies the given patch to the given GVR. The patch can be a string or a
-	// map[string]interface{}. If it is a string, it will be parsed as YAML or
-	// JSON. If it is a map, it will be used as-is.
+	// 将给定 patch 应用到给定 GVR。patch 可以是字符串或
+	// map[string]interface{}。字符串会按 YAML 或
+	// JSON 解析；map 则直接使用。
 	applyPatch := func(gvr schema.GroupVersionResource, name string, patchObj map[string]interface{}) error {
 		gvk, err := restmapper.KindFor(gvr)
 		if err != nil {
@@ -118,8 +118,8 @@ var _ = SIGDescribe("CRDValidationRatcheting [Privileged:ClusterAdmin]", framewo
 		return err
 	}
 
-	// Updates the CRD schema for the given GVR. Waits for the CRD to be properly
-	// updated by attempting a create using a sentinel error before returning.
+	// 更新给定 GVR 的 CRD schema。返回前会通过一次带哨兵错误的
+	// 创建请求，等待 CRD 真正更新完成。
 	updateCRDSchema := func(gvr schema.GroupVersionResource, props apiextensionsv1.JSONSchemaProps) error {
 		myCRD, err := apiExtensionClient.
 			ApiextensionsV1().
@@ -133,8 +133,8 @@ var _ = SIGDescribe("CRDValidationRatcheting [Privileged:ClusterAdmin]", framewo
 			return fmt.Errorf("getting CRD %s: %v", gvr, err)
 		}
 
-		// Inject a special field that will throw a unique error string so we know
-		// when the schema as been updated on the server side.
+		// 注入一个特殊字段，触发唯一的错误字符串，以便
+		// 判断服务端 schema 何时更新完成。
 		uniqueErrorUUID := string(uuid.NewUUID())
 		sentinelName := "__update_schema_sentinel_field__"
 		props.Properties[sentinelName] = apiextensionsv1.JSONSchemaProps{
@@ -157,8 +157,8 @@ var _ = SIGDescribe("CRDValidationRatcheting [Privileged:ClusterAdmin]", framewo
 			return fmt.Errorf("updating CRD %s: %v", gvr, err)
 		}
 
-		// Keep trying to create an invalid instance of the CRD until we
-		// get an error containing the ResourceVersion we are looking for
+		// 持续尝试创建 CRD 的非法实例，
+		// 直到拿到包含目标 ResourceVersion 的错误
 		//
 		counter := 0
 		err = wait.PollUntilContextCancel(context.TODO(), 100*time.Millisecond, true, func(_ context.Context) (done bool, err error) {
@@ -172,16 +172,16 @@ var _ = SIGDescribe("CRDValidationRatcheting [Privileged:ClusterAdmin]", framewo
 						"#inv/($%)/alid=": ">htt$://",
 					},
 				},
-				// Just keep using different values
+				// 每次换不同的值即可
 				sentinelName: fmt.Sprintf("%v", counter),
 			})
 
 			if err == nil {
 				return false, fmt.Errorf("expected error when creating sentinel resource")
 			}
-			// Check to see if the returned error message contains our
-			// unique string. UUID should be unique enough to just check
-			// simple existence in the error.
+			// 检查返回的错误信息是否包含我们的
+			// 唯一字符串。UUID 足够独特，只需
+			// 检查错误中是否出现即可。
 			if strings.Contains(err.Error(), uniqueErrorUUID) {
 				return true, nil
 			}
@@ -241,8 +241,8 @@ var _ = SIGDescribe("CRDValidationRatcheting [Privileged:ClusterAdmin]", framewo
 		ginkgo.By("updating CRD schema with constraints on correlatable fields to make instance invalid")
 		framework.ExpectNoError(updateCRDSchema(testCRDGVR, *sch), "failed to update schema")
 
-		// Make an update to a label. The unchanged fields should be allowed
-		// to pass through.
+		// 修改标签。未改动的字段应允许
+		// 通过校验。
 		ginkgo.By("updating label on now-invalid test resource")
 		instance.SetLabels(map[string]string{
 			"foo": "bar",
@@ -859,18 +859,17 @@ func parseUnstructured(source string) (*unstructured.Unstructured, error) {
 	return obj, d.Decode(&obj.Object)
 }
 
-// fixTabs counts the number of tab characters preceding the first
-// line in the given yaml object. It removes that many tabs from every
-// line. It returns error (it's a test function) if some line has fewer tabs
-// than the first line.
+// fixTabs 统计给定 yaml 对象首行前面的
+// tab 数量，并从每行移除相同数量的 tab。
+// 若某行的 tab 少于首行则返回错误（这是测试函数）。
 //
-// The purpose of this is to make it easier to read tests.
+// 这样做的目的是让测试更易读。
 func fixTabs(in string) (string, error) {
 	lines := bytes.Split([]byte(in), []byte{'\n'})
 	if len(lines[0]) == 0 && len(lines) > 1 {
 		lines = lines[1:]
 	}
-	// Create prefix made of tabs that we want to remove.
+	// 构造要移除的 tab 前缀。
 	var prefix []byte
 	for _, c := range lines[0] {
 		if c != '\t' {
@@ -878,10 +877,10 @@ func fixTabs(in string) (string, error) {
 		}
 		prefix = append(prefix, byte('\t'))
 	}
-	// Remove prefix from all tabs, fail otherwise.
+	// 从所有行移除该前缀，否则报错。
 	for i := range lines {
 		line := lines[i]
-		// It's OK for the last line to be blank (trailing \n)
+		// 最后一行为空是可以的（末尾有 \n）
 		if i == len(lines)-1 && len(line) <= len(prefix) && bytes.TrimSpace(line) == nil {
 			lines[i] = []byte{}
 			break
@@ -901,8 +900,8 @@ func fixTabs(in string) (string, error) {
 	}
 	joined := string(bytes.Join(lines, []byte{'\n'}))
 
-	// Convert rest of tabs to spaces since yaml doesnt like tabs
-	// (assuming 2 space alignment)
+	// 剩余的 tab 转成空格，yaml 不接受 tab
+	// （假设按 2 空格对齐）
 	return strings.ReplaceAll(joined, "\t", "  "), nil
 }
 

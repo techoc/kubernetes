@@ -36,26 +36,26 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// TODO: Cleanup this file.
+// TODO: 清理这个文件。
 
-// Suite represents test suite.
+// Suite 表示测试套件。
 type Suite string
 
 const (
-	// E2E represents a test suite for e2e.
+	// E2E 表示 e2e 测试套件。
 	E2E Suite = "e2e"
-	// NodeE2E represents a test suite for node e2e.
+	// NodeE2E 表示 node e2e 测试套件。
 	NodeE2E Suite = "node e2e"
 )
 
-// CurrentSuite represents current test suite.
+// CurrentSuite 表示当前测试套件。
 var CurrentSuite Suite
 
-// PrePulledImages are a list of images used in e2e/common tests. These images should be prepulled
-// before tests starts, so that the tests won't fail due image pulling flakes.
-// Currently, this is only used by node e2e test and E2E tests.
-// See also updateImageAllowList() in ../../e2e_node/image_list.go
-// TODO(random-liu): Change the image puller pod to use similar mechanism.
+// PrePulledImages 是 e2e/common 测试中使用的镜像列表。这些镜像应在
+// 测试开始前预拉取，以免测试因镜像拉取偶发失败。
+// 目前只有 node e2e 测试和 E2E 测试使用它。
+// 另见 ../../e2e_node/image_list.go 中的 updateImageAllowList()
+// TODO(random-liu): 让镜像拉取 pod 也使用类似的机制。
 var PrePulledImages = sets.NewString(
 	imageutils.GetE2EImage(imageutils.AgnhostPrev),
 	imageutils.GetE2EImage(imageutils.Agnhost),
@@ -66,9 +66,9 @@ var PrePulledImages = sets.NewString(
 	imageutils.GetE2EImage(imageutils.NonRoot),
 )
 
-// WindowsPrePulledImages are a list of images used in e2e/common tests. These images should be prepulled
-// before tests starts, so that the tests won't fail due image pulling flakes. These images also have
-// Windows support. Currently, this is only used by E2E tests.
+// WindowsPrePulledImages 是 e2e/common 测试中使用的镜像列表。这些镜像应在
+// 测试开始前预拉取，以免测试因镜像拉取偶发失败。这些镜像
+// 还支持 Windows。目前只有 E2E 测试使用它们。
 var WindowsPrePulledImages = sets.NewString(
 	imageutils.GetE2EImage(imageutils.AgnhostPrev),
 	imageutils.GetE2EImage(imageutils.Agnhost),
@@ -102,7 +102,7 @@ func init() {
 	}
 }
 
-// SubstituteImageName replaces image name in content.
+// SubstituteImageName 替换 content 中的镜像名称。
 func SubstituteImageName(content string) string {
 	contentWithImageName := new(bytes.Buffer)
 	tmpl, err := template.New("imagemanifest").Parse(content)
@@ -132,14 +132,14 @@ func svcByName(name string, port int, selector map[string]string) *v1.Service {
 	}
 }
 
-// NewSVCByName creates a service with the specified selector.
+// NewSVCByName 用指定的 selector 创建 service。
 func NewSVCByName(c clientset.Interface, ns, name string, selector map[string]string) error {
 	const testPort = 9376
 	_, err := c.CoreV1().Services(ns).Create(context.TODO(), svcByName(name, testPort, selector), metav1.CreateOptions{})
 	return err
 }
 
-// NewRCByName creates a replication controller with a selector by a specified set of labels.
+// NewRCByName 用指定标签集合作为 selector 创建 replication controller。
 func NewRCByName(c clientset.Interface, ns, name string, replicas int32, gracePeriod *int64, containerArgs []string, rcLabels map[string]string) (*v1.ReplicationController, error) {
 	ginkgo.By(fmt.Sprintf("creating replication controller %s", name))
 
@@ -151,9 +151,9 @@ func NewRCByName(c clientset.Interface, ns, name string, replicas int32, gracePe
 		name, replicas, imageutils.GetE2EImage(imageutils.Agnhost), containerArgs, 9376, v1.ProtocolTCP, rcLabels, gracePeriod), metav1.CreateOptions{})
 }
 
-// RestartNodes restarts specific nodes.
+// RestartNodes 重启指定的节点。
 func RestartNodes(c clientset.Interface, nodes []v1.Node) error {
-	// Build mapping from zone to nodes in that zone.
+	// 构建从 zone 到该 zone 内节点的映射。
 	nodeNamesByZone := make(map[string][]string)
 	for i := range nodes {
 		node := &nodes[i]
@@ -166,7 +166,7 @@ func RestartNodes(c clientset.Interface, nodes []v1.Node) error {
 		nodeNamesByZone[zone] = append(nodeNamesByZone[zone], node.Name)
 	}
 
-	// Reboot the nodes.
+	// 重启节点。
 	for zone, nodeNames := range nodeNamesByZone {
 		args := []string{
 			"compute",
@@ -182,7 +182,7 @@ func RestartNodes(c clientset.Interface, nodes []v1.Node) error {
 		}
 	}
 
-	// Wait for their boot IDs to change.
+	// 等待它们的 boot ID 发生变化。
 	for i := range nodes {
 		node := &nodes[i]
 		if err := wait.Poll(30*time.Second, framework.RestartNodeReadyAgainTimeout, func() (bool, error) {
@@ -198,7 +198,7 @@ func RestartNodes(c clientset.Interface, nodes []v1.Node) error {
 	return nil
 }
 
-// rcByNamePort returns a ReplicationController with specified name and port
+// rcByNamePort 返回一个带指定名称和端口的 ReplicationController
 func rcByNamePort(name string, replicas int32, image string, containerArgs []string, port int, protocol v1.Protocol,
 	labels map[string]string, gracePeriod *int64) *v1.ReplicationController {
 

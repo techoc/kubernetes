@@ -64,9 +64,9 @@ var _ = SIGDescribe("Pods Extended", func() {
 		})
 
 		/*
-			Release: v1.15
-			Testname: Pods, delete grace period
-			Description: Create a pod, make sure it is running. Using the http client send a 'delete' with gracePeriodSeconds=30. Pod SHOULD get terminated within gracePeriodSeconds and removed from API server within a window.
+			发布版本：v1.15
+			测试名称：Pods, delete grace period
+			描述：创建一个 pod，确认它在运行。用 http client 发送带 gracePeriodSeconds=30 的 'delete'。Pod 应在 gracePeriodSeconds 内终止，并在某个时间窗口内从 API server 移除。
 		*/
 		ginkgo.It("should be submitted and removed", func(ctx context.Context) {
 			ginkgo.By("creating the pod")
@@ -95,10 +95,10 @@ var _ = SIGDescribe("Pods Extended", func() {
 			framework.ExpectNoError(err, "failed to query for pod")
 			gomega.Expect(pods.Items).To(gomega.HaveLen(1))
 
-			// We need to wait for the pod to be running, otherwise the deletion
-			// may be carried out immediately rather than gracefully.
+			// 需要等 pod 进入 running，否则删除可能
+			// 立即执行而非优雅退出。
 			framework.ExpectNoError(e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, pod.Name, f.Namespace.Name))
-			// save the running pod
+			// 保存运行中的 pod
 			pod, err = podClient.Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "failed to GET scheduled pod")
 
@@ -111,9 +111,9 @@ var _ = SIGDescribe("Pods Extended", func() {
 
 			ginkgo.By("verifying the kubelet observed the termination notice")
 
-			// allow up to 3x grace period (which allows process termination)
-			// for the kubelet to remove from api.  need to follow-up on if this
-			// latency between termination and reportal can be isolated further.
+			// 最多等 3 倍 grace period（留给进程终止），
+			// 让 kubelet 从 api 移除。后续还要确认终止和上报之间的
+			// 延迟能否进一步隔离。
 			start := time.Now()
 			err = wait.Poll(time.Second*5, time.Second*30*3, func() (bool, error) {
 				podList, err := e2ekubelet.GetKubeletPods(ctx, f.ClientSet, pod.Spec.NodeName)
@@ -156,9 +156,9 @@ var _ = SIGDescribe("Pods Extended", func() {
 		})
 
 		/*
-			Release: v1.9
-			Testname: Pods, QOS
-			Description:  Create a Pod with CPU and Memory request and limits. Pod status MUST have QOSClass set to PodQOSGuaranteed.
+			发布版本：v1.9
+			测试名称：Pods, QOS
+			描述：创建带 CPU 和 Memory requests 及 limits 的 Pod。Pod 状态的 QOSClass 必须为 PodQOSGuaranteed。
 		*/
 		framework.ConformanceIt("should be set on Pods with matching resource requests and limits for memory and cpu", func(ctx context.Context) {
 			ginkgo.By("creating the pod")
@@ -335,7 +335,7 @@ var _ = SIGDescribe("Pods Extended", func() {
 				return podClient.Delete(ctx, pod.Name, metav1.DeleteOptions{})
 			})
 
-			// Intentionally increase the timeout to ensure the metrics availability required for this test.
+			// 有意增加超时，确保本测试所需的指标可用。
 			err := e2epod.WaitForPodTerminatedInNamespaceTimeout(ctx, f.ClientSet, pod.Name, "Evicted", f.Namespace.Name, 10*time.Minute)
 			if err != nil {
 				framework.Failf("error waiting for pod to be evicted: %v", err)
@@ -386,7 +386,7 @@ var _ = SIGDescribe("Pods Extended", func() {
 				framework.Failf("pod spec TerminationGracePeriodSeconds is not 1: %d", *pod.Spec.TerminationGracePeriodSeconds)
 			}
 
-			// retry if the TerminationGracePeriodSeconds is overrided
+			// 如果 TerminationGracePeriodSeconds 被覆盖则重试
 			// see more in https://github.com/kubernetes/kubernetes/pull/115606
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				pod, err := podClient.Get(ctx, pod.Name, metav1.GetOptions{})
@@ -428,9 +428,9 @@ var _ = SIGDescribe("Pods Extended (pod generation)", func() {
 		})
 
 		/*
-			Release: v1.35
-			Testname: Pods Generation, updates
-			Description: Create a Pod, and perform a few updates, ensuring that the pod's metadata.generation and status.observedGeneration are updated as expected.
+			发布版本：v1.35
+			测试名称：Pods Generation, updates
+			描述：创建一个 Pod，做几次更新，确认 pod 的 metadata.generation 和 status.observedGeneration 按预期更新。
 		*/
 		framework.ConformanceIt("pod generation should start at 1 and increment per update [MinimumKubeletVersion:1.34]", func(ctx context.Context) {
 			ginkgo.By("creating the pod")
@@ -532,10 +532,10 @@ var _ = SIGDescribe("Pods Extended (pod generation)", func() {
 			}
 		})
 
-		/*
-			Release: v1.35
-			Testname: Pods Generation, graceful delete
-			Description: Create a Pod, ensure that triggering a graceful delete causes the generation to be updated.
+		/*发布版本：v1.35
+		测试名称：Pods Generation, graceful delete
+		描述：创建一个 Pod，确认触发优雅删除会导致 generation 更新。
+		Description: Create a Pod, ensure that triggering a graceful delete causes the generation to be updated.
 		*/
 		framework.ConformanceIt("custom-set generation on new pods and graceful delete", func(ctx context.Context) {
 			ginkgo.By("creating the pod")
@@ -554,15 +554,15 @@ var _ = SIGDescribe("Pods Extended (pod generation)", func() {
 			gomega.Expect(pod.Generation).To(gomega.BeEquivalentTo(1))
 
 			ginkgo.By("issue a graceful delete to trigger generation bump")
-			// We need to wait for the pod to be running, otherwise the deletion
-			// may be carried out immediately rather than gracefully.
+			// 需要等 pod 进入 running，否则删除可能
+			// 立即执行而非优雅退出。
 			framework.ExpectNoError(e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, pod.Name, f.Namespace.Name))
 			pod, err := podClient.Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "failed to GET scheduled pod")
 
 			var lastPod v1.Pod
 			var statusCode int
-			// Set gracePeriodSeconds to 60 to give us time to verify the generation bump.
+			// 把 gracePeriodSeconds 设为 60，留出时间验证 generation 递增。
 			err = f.ClientSet.CoreV1().RESTClient().Delete().AbsPath("/api/v1/namespaces", pod.Namespace, "pods", pod.Name).Param("gracePeriodSeconds", "60").Do(ctx).StatusCode(&statusCode).Into(&lastPod)
 			framework.ExpectNoError(err, "failed to use http client to send delete")
 			gomega.Expect(statusCode).To(gomega.Equal(http.StatusOK), "failed to delete gracefully by client request")
@@ -573,10 +573,10 @@ var _ = SIGDescribe("Pods Extended (pod generation)", func() {
 			gomega.Expect(pod.Generation).To(gomega.BeEquivalentTo(2))
 		})
 
-		/*
-			Release: v1.35
-			Testname: Pods Generation, 500 updates
-			Description: Create a Pod, issue 499 podSpec updates and verify generation and observedGeneration eventually converge to 500.
+		/*发布版本：v1.35
+		测试名称：Pods Generation, 500 updates
+		描述：创建一个 Pod，执行 499 次 podSpec 更新，验证 generation 和 observedGeneration 最终收敛到 500。
+		Description: Create a Pod, issue 499 podSpec updates and verify generation and observedGeneration eventually converge to 500.
 		*/
 		framework.ConformanceIt("issue 500 podspec updates and verify generation and observedGeneration eventually converge [MinimumKubeletVersion:1.34]", func(ctx context.Context) {
 			ginkgo.By("creating the pod")
@@ -601,11 +601,11 @@ var _ = SIGDescribe("Pods Extended (pod generation)", func() {
 				})
 			}
 
-			// Verify pod observedGeneration converges to the expected generation.
+			// 验证 pod 的 observedGeneration 收敛到预期的 generation。
 			expectedPodGeneration := int64(500)
 			framework.ExpectNoError(e2epod.WaitForPodObservedGeneration(ctx, f.ClientSet, f.Namespace.Name, pod.Name, expectedPodGeneration, framework.PodStartTimeout))
 
-			// Verify pod generation converges to the expected generation.
+			// 验证 pod 的 generation 收敛到预期的 generation。
 			pod, err := podClient.Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err, "failed to query for pod")
 			gomega.Expect(pod.Generation).To(gomega.BeEquivalentTo(expectedPodGeneration))
@@ -615,8 +615,8 @@ var _ = SIGDescribe("Pods Extended (pod generation)", func() {
 			name := "pod-generation-" + string(uuid.NewUUID())
 			pod := e2epod.NewAgnhostPod(f.Namespace.Name, name, nil, nil, nil)
 
-			// Set the pod image to something that doesn't exist to induce a pull error
-			// to start with.
+			// 先把 pod 镜像设为一个不存在的镜像，
+			// 以触发拉取错误。
 			agnImage := pod.Spec.Containers[0].Image
 			pod.Spec.Containers[0].Image = "localhost/some-image-that-doesnt-exist"
 
@@ -643,8 +643,8 @@ var _ = SIGDescribe("Pods Extended (pod generation)", func() {
 			}
 
 			ginkgo.By("waiting for the container to fail to pull the image")
-			// We need to wait for the container to fail to pull the image to avoid a race condition
-			// where the pod is still being initialized by kubelet while the pod update is received.
+			// 需要等容器拉取镜像失败，避免竞态：
+			// 收到 pod 更新时 kubelet 仍在初始化 pod。
 			framework.ExpectNoError(e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, pod.Name, "image pull failure", framework.PodStartTimeout, func(pod *v1.Pod) (bool, error) {
 				if len(pod.Status.ContainerStatuses) > 0 {
 					status := pod.Status.ContainerStatuses[0]
@@ -698,7 +698,7 @@ func createAndTestPodRepeatedly(ctx context.Context, workers, iterations int, sc
 			for retries := range iterations {
 				pod := scenario.Pod(i, retries)
 
-				// create the pod, capture the change events, then delete the pod
+				// 创建 pod，捕获变更事件，然后删除 pod
 				start := time.Now()
 				created, err := podClient.Create(ctx, pod, metav1.CreateOptions{})
 				framework.ExpectNoError(err, "failed to create pod")
@@ -923,8 +923,8 @@ func (s podFastDeleteScenario) Pod(worker, attempt int) *v1.Pod {
 	}
 }
 
-// podStartVerifier checks events for a given pod and looks for unexpected
-// transitions. It assumes one container running to completion.
+// podStartVerifier 检查给定 pod 的事件并寻找意外的
+// 状态转换。它假设只有一个容器运行到完成。
 type podStartVerifier struct {
 	pod                  *v1.Pod
 	hasInitContainers    bool
@@ -938,8 +938,8 @@ type podStartVerifier struct {
 
 var reBug88766 = regexp.MustCompile(`rootfs_linux.*kubernetes\.io~(secret|projected).*no such file or directory`)
 
-// Verify takes successive watch events for a given pod and returns an error if the status is unexpected.
-// This verifier works for any pod which has 0 init containers and 1 regular container.
+// Verify 接收给定 pod 的连续 watch 事件，状态意外时返回错误。
+// 这个 verifier 适用于没有 init container 且只有一个普通容器的 pod。
 func (v *podStartVerifier) Verify(event watch.Event) error {
 	var ok bool
 	pod, ok := event.Object.(*v1.Pod)
@@ -1013,16 +1013,16 @@ func (v *podStartVerifier) Verify(event watch.Event) error {
 		defer func() { v.hasTerminated = true }()
 		switch {
 		case t.ExitCode == 1:
-			// expected
+			// 预期
 		case t.ExitCode == 2 && t.Reason == "Error" && t.Message == "":
-			// Some runtimes occasionally surface exit code 2 if stopped before execve makes
-			// it to launching /bin/false in fast-delete scenarios. The test only cares
-			// that the container failed.
+			// 某些 runtime 偶尔会在 fast-delete 场景中，容器还没 execve 到
+			// 启动 /bin/false 前就被停止，从而上报退出码 2。测试只关心
+			// 容器失败即可。
 			framework.Logf("pod %s on node %s failed with the symptoms of https://github.com/kubernetes/kubernetes/issues/135713", pod.Name, pod.Spec.NodeName)
 		case t.ExitCode == 137 && (t.Reason == "ContainerStatusUnknown" || t.Reason == "Error"):
-			// expected, pod was force-killed after grace period
+			// 预期，pod 在 grace period 后被强制杀死
 		case t.ExitCode == 128 && (t.Reason == "StartError" || t.Reason == "ContainerCannotRun") && reBug88766.MatchString(t.Message):
-			// pod volume teardown races with container start in CRI, which reports a failure
+			// CRI 中 pod volume 拆除与容器启动竞态，上报失败
 			framework.Logf("pod %s on node %s failed with the symptoms of https://github.com/kubernetes/kubernetes/issues/88766", pod.Name, pod.Spec.NodeName)
 		default:
 			data, _ := json.MarshalIndent(pod.Status, "", "  ")
@@ -1031,10 +1031,10 @@ func (v *podStartVerifier) Verify(event watch.Event) error {
 		}
 		switch {
 		case v.duration > time.Hour:
-			// problem with status reporting
+			// 状态上报有问题
 			return fmt.Errorf("pod %s container %s on node %s had very long duration %s: start=%s end=%s", pod.Name, status.Name, pod.Spec.NodeName, v.duration, t.StartedAt, t.FinishedAt)
 		case hasNoStartTime:
-			// should never happen
+			// 不应发生
 			return fmt.Errorf("pod %s container %s on node %s had finish time but not start time: end=%s", pod.Name, status.Name, pod.Spec.NodeName, t.FinishedAt)
 		}
 	}

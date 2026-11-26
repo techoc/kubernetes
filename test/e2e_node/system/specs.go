@@ -17,6 +17,6 @@ limitations under the License.
 package system
 
 const (
-	// SystemSpecPath is a path to spec files used for performing node conformance tests.
+	// SystemSpecPath 是执行 node 一致性测试所用 spec 文件的路径。
 	SystemSpecPath = "test/e2e_node/system/specs"
 )

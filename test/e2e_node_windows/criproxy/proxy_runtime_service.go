@@ -67,23 +67,23 @@ const (
 	ListPodSandboxMetrics     = "ListPodSandboxMetrics"
 	RuntimeConfig             = "RuntimeConfig"
 	UpdatePodSandboxResources = "UpdatePodSandboxResources"
-	// Streaming APIs
+	// 流式 API
 	StreamPodSandboxes      = "StreamPodSandboxes"
 	StreamContainers        = "StreamContainers"
 	StreamContainerStats    = "StreamContainerStats"
 	StreamPodSandboxStats   = "StreamPodSandboxStats"
 	StreamPodSandboxMetrics = "StreamPodSandboxMetrics"
-	// Per-send injection points for streaming APIs, called before each stream.Send().
+	// 流式 API 的每次发送注入点，在每次 stream.Send() 前调用。
 	StreamPodSandboxesSend = "StreamPodSandboxesSend"
 	StreamContainersSend   = "StreamContainersSend"
 )
 
-// AddInjector inject the error or delay to the next call to the RuntimeService.
+// AddInjector 向下一次 RuntimeService 调用注入错误或延迟。
 func (p *RemoteRuntime) AddInjector(injector func(string) error) {
 	p.injectors = append(p.injectors, injector)
 }
 
-// ResetInjectors resets all registered injectors.
+// ResetInjectors 重置所有已注册的 injector。
 func (p *RemoteRuntime) ResetInjectors() {
 	p.injectors = []func(string) error{}
 }
@@ -97,7 +97,7 @@ func (p *RemoteRuntime) runInjectors(apiName string) error {
 	return nil
 }
 
-// RemoteRuntime represents a proxy for remote container runtime.
+// RemoteRuntime 表示远端容器运行时的代理。
 type RemoteRuntime struct {
 	server         *grpc.Server
 	injectors      []func(string) error
@@ -107,7 +107,7 @@ type RemoteRuntime struct {
 	runtimeapi.UnsafeRuntimeServiceServer
 }
 
-// NewRemoteRuntimeProxy creates a new RemoteRuntime.
+// NewRemoteRuntimeProxy 创建一个新的 RemoteRuntime。
 func NewRemoteRuntimeProxy(runtimeService internalapi.RuntimeService, imageService internalapi.ImageManagerService) *RemoteRuntime {
 	p := &RemoteRuntime{
 		server:         grpc.NewServer(),
@@ -120,7 +120,7 @@ func NewRemoteRuntimeProxy(runtimeService internalapi.RuntimeService, imageServi
 	return p
 }
 
-// Start starts the remote runtime proxy.
+// Start 启动远端运行时代理。
 func (p *RemoteRuntime) Start(endpoint string) error {
 	l, err := util.CreateListener(endpoint)
 	if err != nil {
@@ -135,12 +135,12 @@ func (p *RemoteRuntime) Start(endpoint string) error {
 	return nil
 }
 
-// Stop stops the fake remote runtime proxy.
+// Stop 停止假的远端运行时代理。
 func (p *RemoteRuntime) Stop() {
 	p.server.Stop()
 }
 
-// Version returns the runtime name, runtime version, and runtime API version.
+// Version 返回运行时名称、运行时版本和运行时 API 版本。
 func (p *RemoteRuntime) Version(ctx context.Context, req *runtimeapi.VersionRequest) (*runtimeapi.VersionResponse, error) {
 	if err := p.runInjectors(Version); err != nil {
 		return nil, err
@@ -148,8 +148,8 @@ func (p *RemoteRuntime) Version(ctx context.Context, req *runtimeapi.VersionRequ
 	return p.runtimeService.Version(ctx, req.Version)
 }
 
-// RunPodSandbox creates and starts a pod-level sandbox. Runtimes must ensure
-// the sandbox is in the ready state on success.
+// RunPodSandbox 创建并启动 pod 级别的 sandbox。runtime 必须确保
+// 成功时 sandbox 处于 ready 状态。
 func (p *RemoteRuntime) RunPodSandbox(ctx context.Context, req *runtimeapi.RunPodSandboxRequest) (*runtimeapi.RunPodSandboxResponse, error) {
 	if err := p.runInjectors(RunPodSandbox); err != nil {
 		return nil, err
@@ -162,10 +162,10 @@ func (p *RemoteRuntime) RunPodSandbox(ctx context.Context, req *runtimeapi.RunPo
 	return &runtimeapi.RunPodSandboxResponse{PodSandboxId: sandboxID}, nil
 }
 
-// StopPodSandbox stops any running process that is part of the sandbox and
-// reclaims network resources (e.g., IP addresses) allocated to the sandbox.
-// If there are any running containers in the sandbox, they must be forcibly
-// terminated.
+// StopPodSandbox 停止 sandbox 中所有正在运行的进程，并
+// 回收分配给 sandbox 的网络资源（如 IP 地址）。
+// 如果 sandbox 中还有运行中的容器，必须强制
+// 终止它们。
 func (p *RemoteRuntime) StopPodSandbox(ctx context.Context, req *runtimeapi.StopPodSandboxRequest) (*runtimeapi.StopPodSandboxResponse, error) {
 	if err := p.runInjectors(StopPodSandbox); err != nil {
 		return nil, err
@@ -178,10 +178,10 @@ func (p *RemoteRuntime) StopPodSandbox(ctx context.Context, req *runtimeapi.Stop
 	return &runtimeapi.StopPodSandboxResponse{}, nil
 }
 
-// RemovePodSandbox removes the sandbox. If there are any running containers
-// in the sandbox, they must be forcibly terminated and removed.
-// This call is idempotent, and must not return an error if the sandbox has
-// already been removed.
+// RemovePodSandbox 移除 sandbox。如果其中有正在运行的容器，
+// 必须强制终止并移除它们。
+// 此调用是幂等的，sandbox 已被移除时
+// 不得返回错误。
 func (p *RemoteRuntime) RemovePodSandbox(ctx context.Context, req *runtimeapi.RemovePodSandboxRequest) (*runtimeapi.RemovePodSandboxResponse, error) {
 	if err := p.runInjectors(RemovePodSandbox); err != nil {
 		return nil, err
@@ -194,8 +194,8 @@ func (p *RemoteRuntime) RemovePodSandbox(ctx context.Context, req *runtimeapi.Re
 	return &runtimeapi.RemovePodSandboxResponse{}, nil
 }
 
-// PodSandboxStatus returns the status of the PodSandbox. If the PodSandbox is not
-// present, returns an error.
+// PodSandboxStatus 返回 PodSandbox 的状态。如果 PodSandbox
+// 不存在，返回错误。
 func (p *RemoteRuntime) PodSandboxStatus(ctx context.Context, req *runtimeapi.PodSandboxStatusRequest) (*runtimeapi.PodSandboxStatusResponse, error) {
 	if err := p.runInjectors(PodSandboxStatus); err != nil {
 		return nil, err
@@ -208,7 +208,7 @@ func (p *RemoteRuntime) PodSandboxStatus(ctx context.Context, req *runtimeapi.Po
 	return resp, nil
 }
 
-// ListPodSandbox returns a list of PodSandboxes.
+// ListPodSandbox 返回 PodSandbox 列表。
 func (p *RemoteRuntime) ListPodSandbox(ctx context.Context, req *runtimeapi.ListPodSandboxRequest) (*runtimeapi.ListPodSandboxResponse, error) {
 	if err := p.runInjectors(ListPodSandbox); err != nil {
 		return nil, err
@@ -221,7 +221,7 @@ func (p *RemoteRuntime) ListPodSandbox(ctx context.Context, req *runtimeapi.List
 	return &runtimeapi.ListPodSandboxResponse{Items: items}, nil
 }
 
-// CreateContainer creates a new container in specified PodSandbox
+// CreateContainer 在指定 PodSandbox 中创建新容器
 func (p *RemoteRuntime) CreateContainer(ctx context.Context, req *runtimeapi.CreateContainerRequest) (*runtimeapi.CreateContainerResponse, error) {
 	if err := p.runInjectors(CreateContainer); err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func (p *RemoteRuntime) CreateContainer(ctx context.Context, req *runtimeapi.Cre
 	return &runtimeapi.CreateContainerResponse{ContainerId: containerID}, nil
 }
 
-// StartContainer starts the container.
+// StartContainer 启动容器。
 func (p *RemoteRuntime) StartContainer(ctx context.Context, req *runtimeapi.StartContainerRequest) (*runtimeapi.StartContainerResponse, error) {
 	if err := p.runInjectors(StartContainer); err != nil {
 		return nil, err
@@ -247,9 +247,9 @@ func (p *RemoteRuntime) StartContainer(ctx context.Context, req *runtimeapi.Star
 	return &runtimeapi.StartContainerResponse{}, nil
 }
 
-// StopContainer stops a running container with a grace period (i.e., timeout).
-// This call is idempotent, and must not return an error if the container has
-// already been stopped.
+// StopContainer 在 grace period（即超时）内停止运行中的容器。
+// 此调用是幂等的，容器已被停止时
+// 不得返回错误。
 func (p *RemoteRuntime) StopContainer(ctx context.Context, req *runtimeapi.StopContainerRequest) (*runtimeapi.StopContainerResponse, error) {
 	if err := p.runInjectors(StopContainer); err != nil {
 		return nil, err
@@ -262,10 +262,10 @@ func (p *RemoteRuntime) StopContainer(ctx context.Context, req *runtimeapi.StopC
 	return &runtimeapi.StopContainerResponse{}, nil
 }
 
-// RemoveContainer removes the container. If the container is running, the
-// container must be forcibly removed.
-// This call is idempotent, and must not return an error if the container has
-// already been removed.
+// RemoveContainer 移除容器。如果容器正在运行，
+// 必须强制移除。
+// 此调用是幂等的，容器已被移除时
+// 不得返回错误。
 func (p *RemoteRuntime) RemoveContainer(ctx context.Context, req *runtimeapi.RemoveContainerRequest) (*runtimeapi.RemoveContainerResponse, error) {
 	if err := p.runInjectors(RemoveContainer); err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func (p *RemoteRuntime) RemoveContainer(ctx context.Context, req *runtimeapi.Rem
 	return &runtimeapi.RemoveContainerResponse{}, nil
 }
 
-// ListContainers lists all containers by filters.
+// ListContainers 按 filter 列出所有容器。
 func (p *RemoteRuntime) ListContainers(ctx context.Context, req *runtimeapi.ListContainersRequest) (*runtimeapi.ListContainersResponse, error) {
 	if err := p.runInjectors(ListContainers); err != nil {
 		return nil, err
@@ -291,8 +291,8 @@ func (p *RemoteRuntime) ListContainers(ctx context.Context, req *runtimeapi.List
 	return &runtimeapi.ListContainersResponse{Containers: items}, nil
 }
 
-// ContainerStatus returns status of the container. If the container is not
-// present, returns an error.
+// ContainerStatus 返回容器状态。如果容器
+// 不存在，返回错误。
 func (p *RemoteRuntime) ContainerStatus(ctx context.Context, req *runtimeapi.ContainerStatusRequest) (*runtimeapi.ContainerStatusResponse, error) {
 	if err := p.runInjectors(ContainerStatus); err != nil {
 		return nil, err
@@ -305,7 +305,7 @@ func (p *RemoteRuntime) ContainerStatus(ctx context.Context, req *runtimeapi.Con
 	return resp, nil
 }
 
-// ExecSync runs a command in a container synchronously.
+// ExecSync 在容器中同步执行命令。
 func (p *RemoteRuntime) ExecSync(ctx context.Context, req *runtimeapi.ExecSyncRequest) (*runtimeapi.ExecSyncResponse, error) {
 	if err := p.runInjectors(ExecSync); err != nil {
 		return nil, err
@@ -328,7 +328,7 @@ func (p *RemoteRuntime) ExecSync(ctx context.Context, req *runtimeapi.ExecSyncRe
 	}, nil
 }
 
-// Exec prepares a streaming endpoint to execute a command in the container.
+// Exec 准备一个流式端点，在容器中执行命令。
 func (p *RemoteRuntime) Exec(ctx context.Context, req *runtimeapi.ExecRequest) (*runtimeapi.ExecResponse, error) {
 	if err := p.runInjectors(Exec); err != nil {
 		return nil, err
@@ -337,7 +337,7 @@ func (p *RemoteRuntime) Exec(ctx context.Context, req *runtimeapi.ExecRequest) (
 	return p.runtimeService.Exec(ctx, req)
 }
 
-// Attach prepares a streaming endpoint to attach to a running container.
+// Attach 准备一个流式端点，附加到运行中的容器。
 func (p *RemoteRuntime) Attach(ctx context.Context, req *runtimeapi.AttachRequest) (*runtimeapi.AttachResponse, error) {
 	if err := p.runInjectors(Attach); err != nil {
 		return nil, err
@@ -346,7 +346,7 @@ func (p *RemoteRuntime) Attach(ctx context.Context, req *runtimeapi.AttachReques
 	return p.runtimeService.Attach(ctx, req)
 }
 
-// PortForward prepares a streaming endpoint to forward ports from a PodSandbox.
+// PortForward 准备一个流式端点，从 PodSandbox 转发端口。
 func (p *RemoteRuntime) PortForward(ctx context.Context, req *runtimeapi.PortForwardRequest) (*runtimeapi.PortForwardResponse, error) {
 	if err := p.runInjectors(PortForward); err != nil {
 		return nil, err
@@ -355,8 +355,8 @@ func (p *RemoteRuntime) PortForward(ctx context.Context, req *runtimeapi.PortFor
 	return p.runtimeService.PortForward(ctx, req)
 }
 
-// ContainerStats returns stats of the container. If the container does not
-// exist, the call returns an error.
+// ContainerStats 返回容器统计信息。如果容器
+// 不存在，调用返回错误。
 func (p *RemoteRuntime) ContainerStats(ctx context.Context, req *runtimeapi.ContainerStatsRequest) (*runtimeapi.ContainerStatsResponse, error) {
 	if err := p.runInjectors(ContainerStats); err != nil {
 		return nil, err
@@ -369,7 +369,7 @@ func (p *RemoteRuntime) ContainerStats(ctx context.Context, req *runtimeapi.Cont
 	return &runtimeapi.ContainerStatsResponse{Stats: stats}, nil
 }
 
-// ListContainerStats returns stats of all running containers.
+// ListContainerStats 返回所有运行中容器的统计信息。
 func (p *RemoteRuntime) ListContainerStats(ctx context.Context, req *runtimeapi.ListContainerStatsRequest) (*runtimeapi.ListContainerStatsResponse, error) {
 	if err := p.runInjectors(ListContainerStats); err != nil {
 		return nil, err
@@ -382,8 +382,8 @@ func (p *RemoteRuntime) ListContainerStats(ctx context.Context, req *runtimeapi.
 	return &runtimeapi.ListContainerStatsResponse{Stats: stats}, nil
 }
 
-// PodSandboxStats returns stats of the pod. If the pod does not
-// exist, the call returns an error.
+// PodSandboxStats 返回 pod 的统计信息。如果 pod
+// 不存在，调用返回错误。
 func (p *RemoteRuntime) PodSandboxStats(ctx context.Context, req *runtimeapi.PodSandboxStatsRequest) (*runtimeapi.PodSandboxStatsResponse, error) {
 	if err := p.runInjectors(PodSandboxStats); err != nil {
 		return nil, err
@@ -396,7 +396,7 @@ func (p *RemoteRuntime) PodSandboxStats(ctx context.Context, req *runtimeapi.Pod
 	return &runtimeapi.PodSandboxStatsResponse{Stats: stats}, nil
 }
 
-// ListPodSandboxStats returns stats of all running pods.
+// ListPodSandboxStats 返回所有运行中 pod 的统计信息。
 func (p *RemoteRuntime) ListPodSandboxStats(ctx context.Context, req *runtimeapi.ListPodSandboxStatsRequest) (*runtimeapi.ListPodSandboxStatsResponse, error) {
 	if err := p.runInjectors(ListPodSandboxStats); err != nil {
 		return nil, err
@@ -409,7 +409,7 @@ func (p *RemoteRuntime) ListPodSandboxStats(ctx context.Context, req *runtimeapi
 	return &runtimeapi.ListPodSandboxStatsResponse{Stats: stats}, nil
 }
 
-// UpdateRuntimeConfig updates the runtime configuration based on the given request.
+// UpdateRuntimeConfig 根据给定请求更新运行时配置。
 func (p *RemoteRuntime) UpdateRuntimeConfig(ctx context.Context, req *runtimeapi.UpdateRuntimeConfigRequest) (*runtimeapi.UpdateRuntimeConfigResponse, error) {
 	if err := p.runInjectors(UpdateRuntimeConfig); err != nil {
 		return nil, err
@@ -422,7 +422,7 @@ func (p *RemoteRuntime) UpdateRuntimeConfig(ctx context.Context, req *runtimeapi
 	return &runtimeapi.UpdateRuntimeConfigResponse{}, nil
 }
 
-// UpdatePodSandboxResources synchronously updates the PodSandboxConfig.
+// UpdatePodSandboxResources 同步更新 PodSandboxConfig。
 func (p *RemoteRuntime) UpdatePodSandboxResources(ctx context.Context, req *runtimeapi.UpdatePodSandboxResourcesRequest) (*runtimeapi.UpdatePodSandboxResourcesResponse, error) {
 	if err := p.runInjectors(UpdatePodSandboxResources); err != nil {
 		return nil, err
@@ -431,7 +431,7 @@ func (p *RemoteRuntime) UpdatePodSandboxResources(ctx context.Context, req *runt
 	return p.runtimeService.UpdatePodSandboxResources(ctx, req)
 }
 
-// Status returns the status of the runtime.
+// Status 返回运行时状态。
 func (p *RemoteRuntime) Status(ctx context.Context, req *runtimeapi.StatusRequest) (*runtimeapi.StatusResponse, error) {
 	if err := p.runInjectors(Status); err != nil {
 		return nil, err
@@ -444,7 +444,7 @@ func (p *RemoteRuntime) Status(ctx context.Context, req *runtimeapi.StatusReques
 	return resp, nil
 }
 
-// UpdateContainerResources updates ContainerConfig of the container.
+// UpdateContainerResources 更新容器的 ContainerConfig。
 func (p *RemoteRuntime) UpdateContainerResources(ctx context.Context, req *runtimeapi.UpdateContainerResourcesRequest) (*runtimeapi.UpdateContainerResourcesResponse, error) {
 	if err := p.runInjectors(UpdateContainerResources); err != nil {
 		return nil, err
@@ -457,7 +457,7 @@ func (p *RemoteRuntime) UpdateContainerResources(ctx context.Context, req *runti
 	return &runtimeapi.UpdateContainerResourcesResponse{}, nil
 }
 
-// ReopenContainerLog reopens the container log file.
+// ReopenContainerLog 重新打开容器日志文件。
 func (p *RemoteRuntime) ReopenContainerLog(ctx context.Context, req *runtimeapi.ReopenContainerLogRequest) (*runtimeapi.ReopenContainerLogResponse, error) {
 	if err := p.runInjectors(ReopenContainerLog); err != nil {
 		return nil, err
@@ -470,7 +470,7 @@ func (p *RemoteRuntime) ReopenContainerLog(ctx context.Context, req *runtimeapi.
 	return &runtimeapi.ReopenContainerLogResponse{}, nil
 }
 
-// CheckpointContainer checkpoints the given container.
+// CheckpointContainer 为给定容器创建 checkpoint。
 func (p *RemoteRuntime) CheckpointContainer(ctx context.Context, req *runtimeapi.CheckpointContainerRequest) (*runtimeapi.CheckpointContainerResponse, error) {
 	if err := p.runInjectors(CheckpointContainer); err != nil {
 		return nil, err
@@ -483,7 +483,7 @@ func (p *RemoteRuntime) CheckpointContainer(ctx context.Context, req *runtimeapi
 	return &runtimeapi.CheckpointContainerResponse{}, nil
 }
 
-// CheckpointPod checkpoints the given pod sandbox.
+// CheckpointPod 为给定 pod sandbox 创建 checkpoint。
 func (p *RemoteRuntime) CheckpointPod(ctx context.Context, req *runtimeapi.CheckpointPodRequest) (*runtimeapi.CheckpointPodResponse, error) {
 	if err := p.runInjectors(CheckpointPod); err != nil {
 		return nil, err
@@ -496,7 +496,7 @@ func (p *RemoteRuntime) CheckpointPod(ctx context.Context, req *runtimeapi.Check
 	return &runtimeapi.CheckpointPodResponse{}, nil
 }
 
-// RestorePod restores a pod sandbox from a checkpoint.
+// RestorePod 从 checkpoint 恢复 pod sandbox。
 func (p *RemoteRuntime) RestorePod(ctx context.Context, req *runtimeapi.RestorePodRequest) (*runtimeapi.RestorePodResponse, error) {
 	if err := p.runInjectors(RestorePod); err != nil {
 		return nil, err
@@ -517,8 +517,8 @@ func (p *RemoteRuntime) GetContainerEvents(req *runtimeapi.GetEventsRequest, ces
 	ctx, cancel := context.WithCancel(ces.Context())
 	defer cancel()
 
-	// Capacity of the channel for receiving pod lifecycle events. This number
-	// is a bit arbitrary and may be adjusted in the future.
+	// 接收 pod 生命周期事件的 channel 容量。这个数字
+	// 有点随意，将来可能调整。
 	plegChannelCapacity := 1000
 	containerEventsResponseCh := make(chan *runtimeapi.ContainerEventResponse, plegChannelCapacity)
 	errCh := make(chan error, 1)
@@ -541,7 +541,7 @@ func (p *RemoteRuntime) GetContainerEvents(req *runtimeapi.GetEventsRequest, ces
 	return nil
 }
 
-// ListMetricDescriptors gets the descriptors for the metrics that will be returned in ListPodSandboxMetrics.
+// ListMetricDescriptors 获取将在 ListPodSandboxMetrics 中返回的指标描述符。
 func (p *RemoteRuntime) ListMetricDescriptors(ctx context.Context, req *runtimeapi.ListMetricDescriptorsRequest) (*runtimeapi.ListMetricDescriptorsResponse, error) {
 	if err := p.runInjectors(ListMetricDescriptors); err != nil {
 		return nil, err
@@ -554,7 +554,7 @@ func (p *RemoteRuntime) ListMetricDescriptors(ctx context.Context, req *runtimea
 	return &runtimeapi.ListMetricDescriptorsResponse{Descriptors: descs}, nil
 }
 
-// ListPodSandboxMetrics retrieves the metrics for all pod sandboxes.
+// ListPodSandboxMetrics 获取所有 pod sandbox 的指标。
 func (p *RemoteRuntime) ListPodSandboxMetrics(ctx context.Context, req *runtimeapi.ListPodSandboxMetricsRequest) (*runtimeapi.ListPodSandboxMetricsResponse, error) {
 	if err := p.runInjectors(ListPodSandboxMetrics); err != nil {
 		return nil, err
@@ -567,7 +567,7 @@ func (p *RemoteRuntime) ListPodSandboxMetrics(ctx context.Context, req *runtimea
 	return &runtimeapi.ListPodSandboxMetricsResponse{PodMetrics: podMetrics}, nil
 }
 
-// RuntimeConfig returns the configuration information of the runtime.
+// RuntimeConfig 返回运行时的配置信息。
 func (p *RemoteRuntime) RuntimeConfig(ctx context.Context, req *runtimeapi.RuntimeConfigRequest) (*runtimeapi.RuntimeConfigResponse, error) {
 	if err := p.runInjectors(RuntimeConfig); err != nil {
 		return nil, err
@@ -580,7 +580,7 @@ func (p *RemoteRuntime) RuntimeConfig(ctx context.Context, req *runtimeapi.Runti
 	return resp, nil
 }
 
-// StreamPodSandboxes returns a stream of PodSandboxes.
+// StreamPodSandboxes 返回 PodSandbox 流。
 func (p *RemoteRuntime) StreamPodSandboxes(req *runtimeapi.StreamPodSandboxesRequest, stream runtimeapi.RuntimeService_StreamPodSandboxesServer) error {
 	if err := p.runInjectors(StreamPodSandboxes); err != nil {
 		return err
@@ -601,7 +601,7 @@ func (p *RemoteRuntime) StreamPodSandboxes(req *runtimeapi.StreamPodSandboxesReq
 	return nil
 }
 
-// StreamContainers returns a stream of containers.
+// StreamContainers 返回容器流。
 func (p *RemoteRuntime) StreamContainers(req *runtimeapi.StreamContainersRequest, stream runtimeapi.RuntimeService_StreamContainersServer) error {
 	if err := p.runInjectors(StreamContainers); err != nil {
 		return err
@@ -622,7 +622,7 @@ func (p *RemoteRuntime) StreamContainers(req *runtimeapi.StreamContainersRequest
 	return nil
 }
 
-// StreamContainerStats returns a stream of container stats.
+// StreamContainerStats 返回容器统计信息流。
 func (p *RemoteRuntime) StreamContainerStats(req *runtimeapi.StreamContainerStatsRequest, stream runtimeapi.RuntimeService_StreamContainerStatsServer) error {
 	if err := p.runInjectors(StreamContainerStats); err != nil {
 		return err
@@ -640,7 +640,7 @@ func (p *RemoteRuntime) StreamContainerStats(req *runtimeapi.StreamContainerStat
 	return nil
 }
 
-// StreamPodSandboxStats returns a stream of pod sandbox stats.
+// StreamPodSandboxStats 返回 pod sandbox 统计信息流。
 func (p *RemoteRuntime) StreamPodSandboxStats(req *runtimeapi.StreamPodSandboxStatsRequest, stream runtimeapi.RuntimeService_StreamPodSandboxStatsServer) error {
 	if err := p.runInjectors(StreamPodSandboxStats); err != nil {
 		return err
@@ -658,7 +658,7 @@ func (p *RemoteRuntime) StreamPodSandboxStats(req *runtimeapi.StreamPodSandboxSt
 	return nil
 }
 
-// StreamPodSandboxMetrics returns a stream of pod sandbox metrics.
+// StreamPodSandboxMetrics 返回 pod sandbox 指标流。
 func (p *RemoteRuntime) StreamPodSandboxMetrics(req *runtimeapi.StreamPodSandboxMetricsRequest, stream runtimeapi.RuntimeService_StreamPodSandboxMetricsServer) error {
 	if err := p.runInjectors(StreamPodSandboxMetrics); err != nil {
 		return err

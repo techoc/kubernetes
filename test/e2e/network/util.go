@@ -40,10 +40,10 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 )
 
-// secondNodePortSvcName is the name of the secondary node port service
+// secondNodePortSvcName 是第二个 node port service 的名称
 const secondNodePortSvcName = "second-node-port-service"
 
-// GetHTTPContent returns the content of the given url by HTTP.
+// GetHTTPContent 通过 HTTP 返回给定 url 的内容。
 func GetHTTPContent(host string, port int, timeout time.Duration, url string) (string, error) {
 	var body bytes.Buffer
 	pollErr := wait.PollImmediate(framework.Poll, timeout, func() (bool, error) {
@@ -60,7 +60,7 @@ func GetHTTPContent(host string, port int, timeout time.Duration, url string) (s
 	return body.String(), pollErr
 }
 
-// GetHTTPContentFromTestContainer returns the content of the given url by HTTP via a test container.
+// GetHTTPContentFromTestContainer 通过测试容器用 HTTP 返回给定 url 的内容。
 func GetHTTPContentFromTestContainer(ctx context.Context, config *e2enetwork.NetworkingTestConfig, host string, port int, timeout time.Duration, dialCmd string) (string, error) {
 	var body string
 	pollFn := func() (bool, error) {
@@ -77,7 +77,7 @@ func GetHTTPContentFromTestContainer(ctx context.Context, config *e2enetwork.Net
 	return body, nil
 }
 
-// DescribeSvc logs the output of kubectl describe svc for the given namespace
+// DescribeSvc 记录给定 namespace 下 kubectl describe svc 的输出
 func DescribeSvc(ns string) {
 	framework.Logf("\nOutput of kubectl describe svc:\n")
 	desc, _ := e2ekubectl.RunKubectl(
@@ -85,11 +85,11 @@ func DescribeSvc(ns string) {
 	framework.Logf("%s", desc)
 }
 
-// CheckSCTPModuleLoadedOnNodes checks whether any node on the list has the
-// sctp.ko module loaded
-// For security reasons, and also to allow clusters to use userspace SCTP implementations,
-// we require that just creating an SCTP Pod/Service/NetworkPolicy must not do anything
-// that would cause the sctp kernel module to be loaded.
+// CheckSCTPModuleLoadedOnNodes 检查列表中是否有节点加载了
+// sctp.ko 模块
+// 出于安全考虑，也为了允许集群使用用户态 SCTP 实现，
+// 我们要求仅创建 SCTP Pod/Service/NetworkPolicy 不得导致
+// sctp 内核模块被加载。
 func CheckSCTPModuleLoadedOnNodes(ctx context.Context, f *framework.Framework, nodes *v1.NodeList) bool {
 	hostExec := utils.NewHostExec(f)
 	ginkgo.DeferCleanup(hostExec.Cleanup)
@@ -112,8 +112,8 @@ func CheckSCTPModuleLoadedOnNodes(ctx context.Context, f *framework.Framework, n
 	return false
 }
 
-// execSourceIPTest executes curl to access "/clientip" endpoint on target address
-// from given Pod to check if source ip is preserved.
+// execSourceIPTest 从给定 Pod 执行 curl 访问目标地址的 "/clientip" 端点，
+// 检查源 IP 是否被保留。
 func execSourceIPTest(sourcePod v1.Pod, targetAddr string) (string, string) {
 	var (
 		err     error
@@ -129,7 +129,7 @@ func execSourceIPTest(sourcePod v1.Pod, targetAddr string) (string, string) {
 			framework.Logf("got err: %v, retry until timeout", err)
 			continue
 		}
-		// Need to check output because it might omit in case of error.
+		// 需要检查输出，因为出错时可能会省略。
 		if strings.TrimSpace(stdout) == "" {
 			framework.Logf("got empty stdout, retry until timeout")
 			continue
@@ -139,19 +139,19 @@ func execSourceIPTest(sourcePod v1.Pod, targetAddr string) (string, string) {
 
 	framework.ExpectNoError(err)
 
-	// The stdout return from RunHostCmd is in this format: x.x.x.x:port or [xx:xx:xx::x]:port
+	// RunHostCmd 返回的 stdout 格式为 x.x.x.x:port 或 [xx:xx:xx::x]:port
 	host, _, err := net.SplitHostPort(stdout)
 	if err != nil {
-		// ginkgo.Fail the test if output format is unexpected.
+		// 输出格式不符预期时让 ginkgo 测试失败。
 		framework.Failf("exec pod returned unexpected stdout: [%v]\n", stdout)
 	}
 	return sourcePod.Status.PodIP, host
 }
 
-// execHostnameTest executes curl to access "/hostname" endpoint on target address
-// from given Pod to check the hostname of the target destination.
-// It also converts FQDNs to hostnames, so if an FQDN is passed as
-// targetHostname only the hostname part will be considered for comparison.
+// execHostnameTest 从给定 Pod 执行 curl 访问目标地址的 "/hostname" 端点，
+// 检查目标目标的 hostname。
+// 它还会把 FQDN 转成 hostname，因此如果
+// targetHostname 传入 FQDN，比较时只考虑 hostname 部分。
 func execHostnameTest(sourcePod v1.Pod, targetAddr, targetHostname string) {
 	var (
 		err     error
@@ -167,7 +167,7 @@ func execHostnameTest(sourcePod v1.Pod, targetAddr, targetHostname string) {
 			framework.Logf("got err: %v, retry until timeout", err)
 			continue
 		}
-		// Need to check output because it might omit in case of error.
+		// 需要检查输出，因为出错时可能会省略。
 		if strings.TrimSpace(stdout) == "" {
 			framework.Logf("got empty stdout, retry until timeout")
 			continue
@@ -175,7 +175,7 @@ func execHostnameTest(sourcePod v1.Pod, targetAddr, targetHostname string) {
 		break
 	}
 
-	// Ensure we're comparing hostnames and not FQDNs
+	// 确保比较的是 hostname 而非 FQDN
 	targetHostname = strings.Split(targetHostname, ".")[0]
 	hostname := strings.TrimSpace(strings.Split(stdout, ".")[0])
 
@@ -183,9 +183,9 @@ func execHostnameTest(sourcePod v1.Pod, targetAddr, targetHostname string) {
 	gomega.Expect(hostname).To(gomega.Equal(targetHostname))
 }
 
-// execNodenameTest executes curl to access "/envvar?var=NODE_NAME" endpoint on target address
-// from given Pod. Unlike execHostnameTest it does not strip FQDN suffixes because Kubernetes
-// node names are always short identifiers, not FQDNs.
+// execNodenameTest 从给定 Pod 执行 curl 访问目标地址的 "/envvar?var=NODE_NAME" 端点。
+// 与 execHostnameTest 不同，它不去掉 FQDN 后缀，因为 Kubernetes
+// node 名称始终是短标识符，不是 FQDN。
 // xref: https://issues.k8s.io/121018
 func execNodenameTest(sourcePod v1.Pod, targetAddr, expectedNodeName string) {
 	var (
@@ -213,7 +213,7 @@ func execNodenameTest(sourcePod v1.Pod, targetAddr, expectedNodeName string) {
 	gomega.Expect(strings.TrimSpace(stdout)).To(gomega.Equal(expectedNodeName))
 }
 
-// createSecondNodePortService creates a service with the same selector as config.NodePortService and same HTTP Port
+// createSecondNodePortService 创建一个与 config.NodePortService 使用相同 selector 和相同 HTTP 端口的 service
 func createSecondNodePortService(ctx context.Context, f *framework.Framework, config *e2enetwork.NetworkingTestConfig) (*v1.Service, int) {
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -251,8 +251,8 @@ func createSecondNodePortService(ctx context.Context, f *framework.Framework, co
 	return createdService, httpPort
 }
 
-// testEndpointReachability tests reachability to endpoints (i.e. IP, ServiceName) and ports. Test request is initiated from specified execPod.
-// TCP and UDP protocol based service are supported at this moment
+// testEndpointReachability 测试到 endpoint（即 IP、ServiceName）和端口的连通性。测试请求从指定的 execPod 发起。
+// 目前支持基于 TCP 和 UDP 协议的 service
 func testEndpointReachability(ctx context.Context, endpoint string, port int32, protocol v1.Protocol, execPod *v1.Pod, timeout time.Duration) error {
 	cmd := ""
 	switch protocol {

@@ -39,13 +39,13 @@ import (
 )
 
 const (
-	// It can take 10-15 seconds for node memory-pressure taint to show up on the node
-	// so we'll wait 45 seconds for the taint to show up so the e2e test case can catch
-	// it and the wait for the taint to be removed so other serial/slow tests can run
-	// against the same node.
+	// 节点内存压力 taint 可能需要 10-15 秒才出现在节点上，
+	// 所以等待 45 秒让 taint 出现，以便 e2e 测试用例能捕获
+	// 它，并等待 taint 被移除，让其他串行/慢速测试能
+	// 在同一节点上运行。
 	waitForNodeMemoryPressureTaintDelayDuration = 45 * time.Second
 
-	// eviction pod namespace base name
+	// eviction pod namespace 基础名称
 	evictionPodNamespaceBaseName = "eviction-test-windows"
 )
 
@@ -57,11 +57,11 @@ var _ = sigDescribe(feature.Windows, "Eviction", framework.WithSerial(), framewo
 	f := framework.NewDefaultFramework(evictionPodNamespaceBaseName)
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// This test will first find a Windows node memory-pressure hard-eviction enabled.
-	// The test will then schedule a pod that requests and consumes 500Mi of memory and then
-	// another pod that will consume the rest of the node's memory.
-	// The test will then verify that the second pod gets evicted and then the node again becomes
-	// ready for schedule after the second pod gets evicted.
+	// 这个测试先找到一个开启内存压力硬驱逐的 Windows 节点。
+	// 然后调度一个请求并消耗 500Mi 内存的 pod，再调度
+	// 另一个消耗节点剩余内存的 pod。
+	// 然后验证第二个 pod 被驱逐，且节点在驱逐后
+	// 重新变为可调度。
 	ginkgo.It("should evict a pod when a node experiences memory pressure", func(ctx context.Context) {
 		framework.Logf("Looking for a Windows node with memory-pressure eviction enabled")
 		selector := labels.Set{"kubernetes.io/os": "windows"}.AsSelector()
@@ -74,9 +74,9 @@ var _ = sigDescribe(feature.Windows, "Eviction", framework.WithSerial(), framewo
 		var nodeMem nodeMemory
 		for _, n := range nodeList.Items {
 			// Due to a known issue (https://github.com/projectcalico/calico/issues/6974),
-			// pods on Windows nodes may become undeletable after a reboot. As a result,
-			// the eviction manager may rank such pods for eviction, but fail to remove them.
-			// TODO: Remove this workaround once the upstream issue is resolved.
+			// Windows 节点重启后 pod 可能变得无法删除。因此，
+			// eviction manager 可能把这些 pod 列为驱逐目标，但无法删除它们。
+			// TODO: 上游问题修复后移除这个 workaround。
 			if n.Labels["test/reboot-used"] == "true" {
 				framework.Logf("Skipping node %s because it was used for reboot test", n.Name)
 				continue
@@ -185,13 +185,13 @@ var _ = sigDescribe(feature.Windows, "Eviction", framework.WithSerial(), framewo
 		framework.Logf("Waiting for pod2 to be evicted")
 
 		gomega.Eventually(ctx, func() error {
-			// Get updated node info
+			// 获取更新后的节点信息
 			node, err = f.ClientSet.CoreV1().Nodes().Get(ctx, node.Name, metav1.GetOptions{})
 			if err != nil {
 				return fmt.Errorf("failed to get node: %w", err)
 			}
 
-			// Log node memory pressure condition and taints
+			// 记录节点内存压力 condition 和 taint
 			for _, cond := range node.Status.Conditions {
 				if cond.Type == v1.NodeMemoryPressure {
 					framework.Logf("Node condition: MemoryPressure = %v (Reason: %s, Message: %s)",
@@ -202,7 +202,7 @@ var _ = sigDescribe(feature.Windows, "Eviction", framework.WithSerial(), framewo
 				framework.Logf("Node %q has taint %q (Effect: %q)", node.Name, taint.Key, taint.Effect)
 			}
 
-			// Check for eviction events in the namespace
+			// 检查 namespace 中的驱逐事件
 			events, err := f.ClientSet.CoreV1().Events(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				return fmt.Errorf("failed to list events: %w", err)
@@ -230,9 +230,9 @@ var _ = sigDescribe(feature.Windows, "Eviction", framework.WithSerial(), framewo
 		}).WithTimeout(10*time.Minute).WithPolling(10*time.Second).Should(gomega.Succeed(), "pod2 should eventually be evicted")
 
 		ginkgo.By("Waiting for node.kubernetes.io/memory-pressure taint to be removed")
-		// ensure e2e test framework catches the memory-pressure taint
+		// 确保 e2e test framework 捕获到内存压力 taint
 		time.Sleep(waitForNodeMemoryPressureTaintDelayDuration)
-		// wait for node.kubernetes.io/memory-pressure=NoSchedule to be removed so other tests can run
+		// 等待 node.kubernetes.io/memory-pressure=NoSchedule 被移除，让其他测试能运行
 		err = e2enode.WaitForAllNodesSchedulable(ctx, f.ClientSet, 10*time.Minute)
 		framework.ExpectNoError(err)
 	})
@@ -247,14 +247,14 @@ func waitForMemoryPressureTaintRemoval(ctx context.Context, f *framework.Framewo
 			return false, err
 		}
 
-		// Log node conditions
+		// 记录节点 condition
 		for _, cond := range node.Status.Conditions {
 			if cond.Type == v1.NodeMemoryPressure {
 				framework.Logf("Node condition: MemoryPressure = %v (reason: %s, message: %s)", cond.Status, cond.Reason, cond.Message)
 			}
 		}
 
-		// Log taints
+		// 记录 taint
 		hasTaint := false
 		for _, taint := range node.Spec.Taints {
 			if taint.Key == v1.TaintNodeMemoryPressure && taint.Effect == v1.TaintEffectNoSchedule {
@@ -263,7 +263,7 @@ func waitForMemoryPressureTaintRemoval(ctx context.Context, f *framework.Framewo
 			}
 		}
 
-		// Log all pods on the node
+		// 记录节点上的所有 pod
 		podList, err := f.ClientSet.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 			FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 		})

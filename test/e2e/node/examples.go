@@ -56,8 +56,8 @@ var _ = SIGDescribe(feature.Example, func() {
 		c = f.ClientSet
 		ns = f.Namespace.Name
 
-		// this test wants powerful permissions.  Since the namespace names are unique, we can leave this
-		// lying around so we don't have to race any caches
+		// 这个测试需要较强的权限。由于 namespace 名称唯一，可以把它
+		// 留着不清理，这样就不用和任何 cache 竞争
 		err := e2eauth.BindClusterRoleInNamespace(ctx, c.RbacV1(), "edit", f.Namespace.Name,
 			rbacv1.Subject{Kind: rbacv1.ServiceAccountKind, Namespace: f.Namespace.Name, Name: "default"})
 		framework.ExpectNoError(err)
@@ -77,7 +77,7 @@ var _ = SIGDescribe(feature.Example, func() {
 			e2ekubectl.RunKubectlOrDieInput(ns, execYaml, "create", "-f", "-")
 			e2ekubectl.RunKubectlOrDieInput(ns, httpYaml, "create", "-f", "-")
 
-			// Since both containers start rapidly, we can easily run this test in parallel.
+			// 两个容器都很快启动，因此这个测试很容易并行运行。
 			var wg sync.WaitGroup
 			passed := true
 			checkRestart := func(podName string, timeout time.Duration) {
@@ -101,9 +101,9 @@ var _ = SIGDescribe(feature.Example, func() {
 
 			ginkgo.By("Check restarts")
 
-			// Start the "actual test", and wait for both pods to complete.
-			// If 2 fail: Something is broken with the test (or maybe even with liveness).
-			// If 1 fails: Its probably just an error in the examples/ files themselves.
+			// 启动"实际测试"，等待两个 pod 都完成。
+			// 如果 2 个都失败：测试出了问题（甚至可能是 liveness 有问题）。
+			// 如果 1 个失败：多半是 examples/ 文件本身有错误。
 			wg.Add(2)
 			for _, c := range []string{"liveness-http", "liveness-exec"} {
 				go checkRestart(c, 2*time.Minute)

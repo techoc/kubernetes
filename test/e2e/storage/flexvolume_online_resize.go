@@ -173,19 +173,19 @@ var _ = utils.SIGDescribe(feature.Flexvolumes, "Mounted flexvolume volume expand
 	})
 })
 
-// createNginxPod creates an nginx pod.
+// createNginxPod 创建一个 nginx pod。
 func createNginxPod(ctx context.Context, client clientset.Interface, namespace string, nodeSelector map[string]string, pvclaims []*v1.PersistentVolumeClaim) (*v1.Pod, error) {
 	pod := makeNginxPod(namespace, nodeSelector, pvclaims)
 	pod, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("pod Create API error: %w", err)
 	}
-	// Waiting for pod to be running
+	// 等待 pod 进入 running
 	err = e2epod.WaitForPodNameRunningInNamespace(ctx, client, pod.Name, namespace)
 	if err != nil {
 		return pod, fmt.Errorf("pod %q is not Running: %w", pod.Name, err)
 	}
-	// get fresh pod info
+	// 获取最新的 pod 信息
 	pod, err = client.CoreV1().Pods(namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return pod, fmt.Errorf("pod Get API error: %w", err)
@@ -193,7 +193,7 @@ func createNginxPod(ctx context.Context, client clientset.Interface, namespace s
 	return pod, nil
 }
 
-// makeNginxPod returns a pod definition based on the namespace using nginx image
+// makeNginxPod 基于 namespace 返回一个使用 nginx 镜像的 pod 定义
 func makeNginxPod(ns string, nodeSelector map[string]string, pvclaims []*v1.PersistentVolumeClaim) *v1.Pod {
 	podSpec := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{

@@ -32,17 +32,17 @@ import (
 )
 
 /*
-* Unknown pods are pods which are unknown pods to the kubelet, but are still
-* running in the container runtime. If kubelet detects a pod which is not in
-* the config (i.e. not present in API-server or static pod), but running as
-* detected in container runtime, kubelet should aggressively terminate the pod.
+* 未知 pod 是 kubelet 不认识、但仍在容器运行时中
+* 运行的 pod。如果 kubelet 检测到一个不在配置中
+* （即 API-server 或 static pod 中不存在）、但在容器运行时中
+* 发现正在运行的 pod，kubelet 应果断终止它。
 *
-* This situation can be encountered if a pod is running, then kubelet is
-* stopped, and while stopped, the manifest is deleted (by force deleting the
-* API pod or deleting the static pod manifest), and then restarting the
-* kubelet. Upon restart, kubelet will see the pod as running via the container
-* runtime, but it will not be present in the config, thus making the pod a
-* "unknown pod". Kubelet should then proceed to terminate these unknown pods.
+* 以下情况可能出现：pod 正在运行，然后 kubelet
+* 停止，在停止期间 manifest 被删除（强制删除
+* API pod 或删除 static pod manifest），然后重启
+* kubelet。重启后，kubelet 会通过容器运行时看到 pod 在运行，
+* 但配置中不存在它，因此该 pod 成为
+* "未知 pod"。kubelet 应继续终止这些未知 pod。
  */
 var _ = SIGDescribe("Unknown Pods", framework.WithSerial(), framework.WithDisruptive(), func() {
 	f := framework.NewDefaultFramework("unknown-pods")
@@ -136,7 +136,7 @@ var _ = SIGDescribe("Unknown Pods", framework.WithSerial(), framework.WithDisrup
 			framework.ExpectNoError(err)
 
 			framework.Logf("Delete the pod while the kubelet is not running")
-			// Delete pod sync by name will force delete the pod, removing it from kubelet's config
+			// 按名称同步删除 pod 会强制删除它，将其从 kubelet 的配置中移除
 			deletePodSyncByName(ctx, f, podName)
 
 			framework.Logf("Restarting the kubelet")

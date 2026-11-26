@@ -29,8 +29,8 @@ import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
-// containerIDForContainer returns the runtime container ID for ctnName
-// inside pod, with the runtime scheme prefix ("containerd://") stripped.
+// containerIDForContainer 返回 pod 中 ctnName 的运行时容器 ID，
+// 去掉运行时 scheme 前缀（"containerd://"）。
 func containerIDForContainer(pod *v1.Pod, ctnName string) (string, error) {
 	for _, cs := range append(pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses...) {
 		if cs.Name != ctnName {
@@ -45,8 +45,8 @@ func containerIDForContainer(pod *v1.Pod, ctnName string) (string, error) {
 	return "", fmt.Errorf("container %q not found in pod %s/%s status", ctnName, pod.Namespace, pod.Name)
 }
 
-// getWindowsContainerCPUAffinity queries the CRI for the CPU group affinities
-// currently set on the named container. Returns nil when no affinity is set.
+// getWindowsContainerCPUAffinity 向 CRI 查询当前
+// 指定容器上设置的 CPU group affinity。未设置 affinity 时返回 nil。
 func getWindowsContainerCPUAffinity(
 	ctx context.Context,
 	criClient internalapi.RuntimeService,
@@ -68,8 +68,8 @@ func getWindowsContainerCPUAffinity(
 	return resp.Status.Resources.Windows.AffinityCpus, nil
 }
 
-// countCPUsInAffinities returns the total number of logical CPUs represented
-// across all WindowsCpuGroupAffinity entries by counting set bits in each mask.
+// countCPUsInAffinities 统计所有 WindowsCpuGroupAffinity 条目中
+// 掩码置位比特的总数，返回逻辑 CPU 总数。
 func countCPUsInAffinities(affinities []*runtimeapi.WindowsCpuGroupAffinity) int {
 	total := 0
 	for _, a := range affinities {
@@ -78,8 +78,8 @@ func countCPUsInAffinities(affinities []*runtimeapi.WindowsCpuGroupAffinity) int
 	return total
 }
 
-// windowsAffinitiesOverlap returns true when two sets of CPU group affinities
-// share at least one CPU (same bit set in the same processor group).
+// 两组 CPU group affinity 至少共享一个 CPU 时
+// （同一 processor group 中同一比特置位），windowsAffinitiesOverlap 返回 true。
 func windowsAffinitiesOverlap(a, b []*runtimeapi.WindowsCpuGroupAffinity) bool {
 	maskA := make(map[uint32]uint64, len(a))
 	for _, aff := range a {

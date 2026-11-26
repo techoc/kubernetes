@@ -43,21 +43,21 @@ var _ = SIGDescribe("Node Lifecycle", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	/*
-		Release: v1.32
-		Testname: Node, resource lifecycle
-		Description: Creating and Reading a Node MUST succeed with required name retrieved.
-		Patching a Node MUST succeed with its new label found. Listing Nodes with a labelSelector
-		MUST succeed with only a single node found. Updating a Node MUST succeed with
-		its new label found. Deleting the Node MUST succeed and its deletion MUST be confirmed.
+		发布版本：v1.32
+		测试名称：Node, resource lifecycle
+		描述：创建和读取 Node 必须成功，且能取回所需名称。
+		patch Node 必须成功且能找到新标签。用 labelSelector 列举 Nodes
+		必须成功且只找到一个 node。更新 Node 必须成功且
+		能找到新标签。删除 Node 必须成功且必须确认其已被删除。
 	*/
 	framework.ConformanceIt("should run through the lifecycle of a node", func(ctx context.Context) {
-		// the scope of this test only covers the api-server
+		// 这个测试的范围只覆盖 api-server
 
 		nodeClient := f.ClientSet.CoreV1().Nodes()
 
-		// Create a fake node with a ready condition but unschedulable, so it won't be selected by
-		// the scheduler and won't be deleted by the cloud controller manager when the test runs on
-		// a specific cloud provider.
+		// 创建一个处于 ready 状态但不可调度的假 node，这样它不会被
+		// scheduler 选中，当测试运行在特定 cloud provider 上时也不会被
+		// cloud controller manager 删除。
 		fakeNode := v1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "e2e-fake-node-" + utilrand.String(5),

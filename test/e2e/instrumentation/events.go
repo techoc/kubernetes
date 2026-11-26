@@ -90,12 +90,12 @@ var _ = common.SIGDescribe("Events API", func() {
 	})
 
 	/*
-		Release: v1.19
-		Testname: New Event resource lifecycle, testing a single event
-		Description: Create an event, the event MUST exist.
-		The event is patched with a new note, the check MUST have the update note.
-		The event is updated with a new series, the check MUST have the update series.
-		The event is deleted and MUST NOT show up when listing all events.
+		发布版本：v1.19
+		测试名称：New Event resource lifecycle, testing a single event
+		描述：创建一个 event，该 event 必须存在。
+		给 event patch 一个新 note，检查必须看到更新后的 note。
+		给 event 更新一个新 series，检查必须看到更新后的 series。
+		删除 event，列举所有 event 时不得再出现。
 	*/
 	framework.ConformanceIt("should ensure that an event can be fetched, patched, deleted, and listed", func(ctx context.Context) {
 		eventName := "event-test"
@@ -156,7 +156,7 @@ var _ = common.SIGDescribe("Events API", func() {
 		event, err := client.Get(ctx, eventName, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to get test event")
 		gomega.Expect(resourceversion.CompareResourceVersion(createdEvent.ResourceVersion, event.ResourceVersion)).To(gomega.BeNumerically("==", -1), "patched object should have a larger resource version")
-		// clear ResourceVersion and ManagedFields which are set by control-plane
+		// 清掉由 control-plane 设置的 ResourceVersion 和 ManagedFields
 		event.ObjectMeta.ResourceVersion = ""
 		testEvent.ObjectMeta.ResourceVersion = ""
 		event.ObjectMeta.ManagedFields = nil
@@ -178,7 +178,7 @@ var _ = common.SIGDescribe("Events API", func() {
 		ginkgo.By("getting the test event")
 		event, err = client.Get(ctx, eventName, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to get test event")
-		// clear ResourceVersion and ManagedFields which are set by control-plane
+		// 清掉由 control-plane 设置的 ResourceVersion 和 ManagedFields
 		event.ObjectMeta.ResourceVersion = ""
 		event.ObjectMeta.ManagedFields = nil
 		if !apiequality.Semantic.DeepEqual(testEvent, event) {
@@ -203,10 +203,10 @@ var _ = common.SIGDescribe("Events API", func() {
 	})
 
 	/*
-		Release: v1.19
-		Testname: New Event resource lifecycle, testing a list of events
-		Description: Create a list of events, the events MUST exist.
-		The events are deleted and MUST NOT show up when listing all events.
+		发布版本：v1.19
+		测试名称：New Event resource lifecycle, testing a list of events
+		描述：创建一组 event，这些 event 必须存在。
+		删除这些 event，列举所有 event 时不得再出现。
 	*/
 	framework.ConformanceIt("should delete a collection of events", func(ctx context.Context) {
 		eventNames := []string{"test-event-1", "test-event-2", "test-event-3"}

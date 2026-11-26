@@ -30,14 +30,14 @@ import (
 )
 
 const (
-	// ContainerStatusRetryTimeout represents polling threshold before giving up to get the container status
+	// ContainerStatusRetryTimeout 是放弃获取容器状态前的轮询阈值
 	ContainerStatusRetryTimeout = time.Minute * 5
-	// ContainerStatusPollInterval represents duration between polls to get the container status
+	// ContainerStatusPollInterval 是获取容器状态的轮询间隔
 	ContainerStatusPollInterval = time.Second * 1
 )
 
-// ConformanceContainer defines the types for running container conformance test cases
-// One pod one container
+// ConformanceContainer 定义运行容器一致性测试用例的类型
+// 一个 pod 一个容器
 type ConformanceContainer struct {
 	Container        v1.Container
 	RestartPolicy    v1.RestartPolicy
@@ -50,7 +50,7 @@ type ConformanceContainer struct {
 	PodSecurityContext *v1.PodSecurityContext
 }
 
-// Create creates the defined conformance container
+// Create 创建定义的一致性容器
 func (cc *ConformanceContainer) Create(ctx context.Context) *v1.Pod {
 	cc.podName = cc.Container.Name + string(uuid.NewUUID())
 	imagePullSecrets := []v1.LocalObjectReference{}
@@ -75,12 +75,12 @@ func (cc *ConformanceContainer) Create(ctx context.Context) *v1.Pod {
 	return cc.PodClient.Create(ctx, pod)
 }
 
-// Delete deletes the defined conformance container
+// Delete 删除定义的一致性容器
 func (cc *ConformanceContainer) Delete(ctx context.Context) error {
 	return cc.PodClient.Delete(ctx, cc.podName, *metav1.NewDeleteOptions(0))
 }
 
-// IsReady returns whether this container is ready and error if any
+// IsReady 返回此容器是否就绪，以及可能的错误
 func (cc *ConformanceContainer) IsReady(ctx context.Context) (bool, error) {
 	pod, err := cc.PodClient.Get(ctx, cc.podName, metav1.GetOptions{})
 	if err != nil {
@@ -89,17 +89,17 @@ func (cc *ConformanceContainer) IsReady(ctx context.Context) (bool, error) {
 	return podutil.IsPodReady(pod), nil
 }
 
-// GetPhase returns the phase of the pod lifecycle and error if any
+// GetPhase 返回 pod 生命周期的阶段，以及可能的错误
 func (cc *ConformanceContainer) GetPhase(ctx context.Context) (v1.PodPhase, error) {
 	pod, err := cc.PodClient.Get(ctx, cc.podName, metav1.GetOptions{})
 	if err != nil {
-		// it doesn't matter what phase to return as error would not be nil
+		// 返回哪个阶段都无所谓，因为错误不会是 nil
 		return v1.PodSucceeded, err
 	}
 	return pod.Status.Phase, nil
 }
 
-// GetStatus returns the details of the current status of this container and error if any
+// GetStatus 返回此容器当前状态的详情，以及可能的错误
 func (cc *ConformanceContainer) GetStatus(ctx context.Context) (v1.ContainerStatus, error) {
 	pod, err := cc.PodClient.Get(ctx, cc.podName, metav1.GetOptions{})
 	if err != nil {
@@ -112,7 +112,7 @@ func (cc *ConformanceContainer) GetStatus(ctx context.Context) (v1.ContainerStat
 	return statuses[0], nil
 }
 
-// Present returns whether this pod is present and error if any
+// Present 返回此 pod 是否存在，以及可能的错误
 func (cc *ConformanceContainer) Present(ctx context.Context) (bool, error) {
 	_, err := cc.PodClient.Get(ctx, cc.podName, metav1.GetOptions{})
 	if err == nil {
@@ -124,21 +124,21 @@ func (cc *ConformanceContainer) Present(ctx context.Context) (bool, error) {
 	return false, err
 }
 
-// ContainerState represents different states of its lifecycle
+// ContainerState 表示其生命周期中的不同状态
 type ContainerState string
 
 const (
-	// ContainerStateWaiting represents 'Waiting' container state
+	// ContainerStateWaiting 表示 'Waiting' 容器状态
 	ContainerStateWaiting ContainerState = "Waiting"
-	// ContainerStateRunning represents 'Running' container state
+	// ContainerStateRunning 表示 'Running' 容器状态
 	ContainerStateRunning ContainerState = "Running"
-	// ContainerStateTerminated represents 'Terminated' container state
+	// ContainerStateTerminated 表示 'Terminated' 容器状态
 	ContainerStateTerminated ContainerState = "Terminated"
-	// ContainerStateUnknown represents 'Unknown' container state
+	// ContainerStateUnknown 表示 'Unknown' 容器状态
 	ContainerStateUnknown ContainerState = "Unknown"
 )
 
-// GetContainerState returns current state the container represents among its lifecycle
+// GetContainerState 返回容器在生命周期中所处的当前状态
 func GetContainerState(state v1.ContainerState) ContainerState {
 	if state.Waiting != nil {
 		return ContainerStateWaiting

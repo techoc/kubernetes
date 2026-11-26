@@ -35,8 +35,8 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// ExecOptions controls how [Exec] runs a command inside a pod container.
-// At minimum, Command, Namespace, and PodName must be set.
+// ExecOptions 控制 [Exec] 如何在 pod 容器内运行命令。
+// 至少要设置 Command、Namespace 和 PodName。
 type ExecOptions struct {
 	Command       []string
 	Namespace     string
@@ -45,14 +45,14 @@ type ExecOptions struct {
 	Stdin         io.Reader
 	CaptureStdout bool
 	CaptureStderr bool
-	// If false, whitespace in std{err,out} will be removed.
+	// 为 false 时，会去掉 std{err,out} 中的空白。
 	PreserveWhitespace bool
 	Quiet              bool
 }
 
-// Exec executes a command in the specified container,
-// returning stdout, stderr and error. `options` allowed for
-// additional parameters to be passed.
+// Exec 在指定容器中执行命令，
+// 返回 stdout、stderr 和 error。`options` 允许
+// 传入额外参数。
 func Exec(tCtx ktesting.TContext, options ExecOptions) (string, string, error) {
 	if !options.Quiet {
 		tCtx.Logf("Exec %+v", options)
@@ -85,10 +85,10 @@ func Exec(tCtx ktesting.TContext, options ExecOptions) (string, string, error) {
 	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()), err
 }
 
-// ExecCommandInContainerWithFullOutput executes a command in the
-// specified container and return stdout, stderr and error
+// ExecCommandInContainerWithFullOutput 在
+// 指定容器中执行命令并返回 stdout、stderr 和 error
 func ExecCommandInContainerWithFullOutput(f *framework.Framework, podName, containerName string, cmd ...string) (string, string, error) {
-	// TODO (pohly): add context support
+	// TODO (pohly): 添加 context 支持
 	return Exec(f.TContext(context.Background()), ExecOptions{
 		Command:            cmd,
 		Namespace:          f.Namespace.Name,
@@ -101,7 +101,7 @@ func ExecCommandInContainerWithFullOutput(f *framework.Framework, podName, conta
 	})
 }
 
-// ExecCommandInContainer executes a command in the specified container.
+// ExecCommandInContainer 在指定容器中执行命令。
 func ExecCommandInContainer(f *framework.Framework, podName, containerName string, cmd ...string) string {
 	stdout, stderr, err := ExecCommandInContainerWithFullOutput(f, podName, containerName, cmd...)
 	framework.Logf("Exec stderr: %q", stderr)
@@ -111,12 +111,12 @@ func ExecCommandInContainer(f *framework.Framework, podName, containerName strin
 	return stdout
 }
 
-// ExecShellInContainer executes the specified command on the pod's container.
+// ExecShellInContainer 在 pod 的容器上执行指定命令。
 func ExecShellInContainer(f *framework.Framework, podName, containerName string, cmd string) string {
 	return ExecCommandInContainer(f, podName, containerName, "/bin/sh", "-c", cmd)
 }
 
-// ExecShellInPod executes the specified command on the pod.
+// ExecShellInPod 在 pod 上执行指定命令。
 func ExecShellInPod(ctx context.Context, f *framework.Framework, podName string, cmd string) string {
 	pod, err := NewPodClient(f).Get(ctx, podName, metav1.GetOptions{})
 	framework.ExpectNoError(err, "failed to get pod %v", podName)
@@ -124,7 +124,7 @@ func ExecShellInPod(ctx context.Context, f *framework.Framework, podName string,
 	return ExecCommandInContainer(f, podName, pod.Spec.Containers[0].Name, "/bin/sh", "-c", cmd)
 }
 
-// ExecShellInPodWithFullOutput executes the specified command on the Pod and returns stdout, stderr and error.
+// ExecShellInPodWithFullOutput 在 Pod 上执行指定命令并返回 stdout、stderr 和 error。
 func ExecShellInPodWithFullOutput(ctx context.Context, f *framework.Framework, podName string, cmd string) (string, string, error) {
 	pod, err := NewPodClient(f).Get(ctx, podName, metav1.GetOptions{})
 	framework.ExpectNoError(err, "failed to get pod %v", podName)
@@ -132,7 +132,7 @@ func ExecShellInPodWithFullOutput(ctx context.Context, f *framework.Framework, p
 	return ExecCommandInContainerWithFullOutput(f, podName, pod.Spec.Containers[0].Name, "/bin/sh", "-c", cmd)
 }
 
-// VerifyExecInPodSucceed verifies shell cmd in target pod succeed
+// VerifyExecInPodSucceed 验证目标 pod 中的 shell 命令成功
 func VerifyExecInPodSucceed(ctx context.Context, f *framework.Framework, pod *v1.Pod, shExec string) error {
 	stdout, stderr, err := ExecShellInPodWithFullOutput(ctx, f, pod.Name, shExec)
 	if err != nil {
@@ -149,7 +149,7 @@ func VerifyExecInPodSucceed(ctx context.Context, f *framework.Framework, pod *v1
 	return nil
 }
 
-// VerifyExecInPodFail verifies shell cmd in target pod fail with certain exit code
+// VerifyExecInPodFail 验证目标 pod 中的 shell 命令以指定退出码失败
 func VerifyExecInPodFail(ctx context.Context, f *framework.Framework, pod *v1.Pod, shExec string, exitCode int) error {
 	stdout, stderr, err := ExecShellInPodWithFullOutput(ctx, f, pod.Name, shExec)
 	if err != nil {

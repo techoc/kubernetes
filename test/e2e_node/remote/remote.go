@@ -73,7 +73,7 @@ func copyKubeletConfigIfExists(kubeletConfigFile, dstDir string) error {
 	return err
 }
 
-// CreateTestArchive creates the archive package for the node e2e test.
+// CreateTestArchive 为 node e2e 测试创建归档包。
 func CreateTestArchive(suite TestSuite, systemSpecName, kubeletConfigFile string) (string, error) {
 	klog.V(2).Infof("Building archive...")
 	tardir, err := os.MkdirTemp("", "node-e2e-archive")
@@ -87,13 +87,13 @@ func CreateTestArchive(suite TestSuite, systemSpecName, kubeletConfigFile string
 		return "", fmt.Errorf("failed to copy kubelet config: %w", err)
 	}
 
-	// Call the suite function to setup the test package.
+	// 调用 suite 函数设置测试包。
 	err = suite.SetupTestPackage(tardir, systemSpecName)
 	if err != nil {
 		return "", fmt.Errorf("failed to setup test package %q: %w", tardir, err)
 	}
 
-	// Build the tar
+	// 构建 tar
 	out, err := exec.Command("tar", "-zcvf", archiveName, "-C", tardir, ".").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to build tar %v.  Output:\n%s", err, out)
@@ -106,7 +106,7 @@ func CreateTestArchive(suite TestSuite, systemSpecName, kubeletConfigFile string
 	return filepath.Join(dir, archiveName), nil
 }
 
-// RunRemote returns the command Output, whether the exit was ok, and any errors
+// RunRemote 返回命令输出、退出是否正常以及任何错误
 type RunRemoteConfig struct {
 	Suite                                                                                    TestSuite
 	Archive                                                                                  string
@@ -116,12 +116,12 @@ type RunRemoteConfig struct {
 }
 
 func RunRemote(cfg RunRemoteConfig) (string, bool, error) {
-	// Create the temp staging directory
+	// 创建临时 staging 目录
 	klog.V(2).Infof("Staging test binaries on %q", cfg.Host)
 	workspace := newWorkspaceDir()
-	// Do not sudo here, so that we can use scp to copy test archive to the directory.
+	// 这里不用 sudo，以便用 scp 把测试归档复制到该目录。
 	if output, err := SSHNoSudo(cfg.Host, "mkdir", workspace); err != nil {
-		// Exit failure with the error
+		// 出错则退出失败
 		return "", false, fmt.Errorf("failed to create workspace directory %q on Host %q: %v Output: %q", workspace, cfg.Host, err, output)
 	}
 	if cfg.Cleanup {
@@ -133,29 +133,29 @@ func RunRemote(cfg RunRemoteConfig) (string, bool, error) {
 		}()
 	}
 
-	// Copy the archive to the staging directory
+	// 把归档复制到 staging 目录
 	if output, err := runSSHCommand(cfg.Host, "scp", cfg.Archive, fmt.Sprintf("%s:%s/", GetHostnameOrIP(cfg.Host), workspace)); err != nil {
-		// Exit failure with the error
+		// 出错则退出失败
 		return "", false, fmt.Errorf("failed to copy test archive: %v, Output: %q", err, output)
 	}
 
-	// Extract the archive
+	// 解压归档
 	cmd := getSSHCommand(" && ",
 		fmt.Sprintf("cd %s", workspace),
 		fmt.Sprintf("tar -xzvf ./%s", archiveName),
 	)
 	klog.V(2).Infof("Extracting tar on %q", cfg.Host)
-	// Do not use sudo here, because `sudo tar -x` will recover the file ownership inside the tar ball, but
-	// we want the extracted files to be owned by the current user.
+	// 这里不用 sudo，因为 `sudo tar -x` 会恢复 tarball 中的文件属主，
+	// 而我们希望解压出的文件属于当前用户。
 	if output, err := SSHNoSudo(cfg.Host, "sh", "-c", cmd); err != nil {
-		// Exit failure with the error
+		// 出错则退出失败
 		return "", false, fmt.Errorf("failed to extract test archive: %v, Output: %q", err, output)
 	}
 
-	// Create the test result directory.
+	// 创建测试结果目录。
 	resultDir := filepath.Join(workspace, "results")
 	if output, err := SSHNoSudo(cfg.Host, "mkdir", resultDir); err != nil {
-		// Exit failure with the error
+		// 出错则退出失败
 		return "", false, fmt.Errorf("failed to create test result directory %q on Host %q: %v Output: %q", resultDir, cfg.Host, err, output)
 	}
 
@@ -163,8 +163,8 @@ func RunRemote(cfg RunRemoteConfig) (string, bool, error) {
 	if !strings.Contains(allGinkgoFlags, "-timeout") {
 		klog.Warningf("ginkgo flags are missing explicit --timeout (ginkgo defaults to 60 minutes)")
 		// see https://github.com/onsi/ginkgo/blob/master/docs/index.md#:~:text=ginkgo%20%2D%2Dtimeout%3Dduration
-		// ginkgo suite timeout should be more than the default but less than the
-		// full test timeout, so we should use the average of the two.
+		// ginkgo suite 超时应大于默认值但小于
+		// 完整测试超时，因此取两者的平均值。
 		suiteTimeout := int(testTimeout.Minutes())
 		suiteTimeout = (60 + suiteTimeout) / 2
 		allGinkgoFlags = fmt.Sprintf("%s --timeout=%dm", allGinkgoFlags, suiteTimeout)
@@ -176,7 +176,7 @@ func RunRemote(cfg RunRemoteConfig) (string, bool, error) {
 		allGinkgoFlags, cfg.SystemSpecName, cfg.ExtraEnvs, cfg.RuntimeConfig, *testTimeout)
 
 	var aggErrs []error
-	// Do not log the Output here, let the caller deal with the test Output.
+	// 这里不记录 Output，交给调用方处理测试 Output。
 	if err != nil {
 		aggErrs = append(aggErrs, err)
 		collectSystemLog(cfg.Host)
@@ -192,9 +192,9 @@ func RunRemote(cfg RunRemoteConfig) (string, bool, error) {
 }
 
 const (
-	// workspaceDirPrefix is the string prefix used in the workspace directory name.
+	// workspaceDirPrefix 是 workspace 目录名中使用的字符串前缀。
 	workspaceDirPrefix = "node-e2e-"
-	// timestampFormat is the timestamp format used in the node e2e directory name.
+	// timestampFormat 是 node e2e 目录名中使用的 timestamp 格式。
 	timestampFormat = "20060102T150405"
 )
 
@@ -206,17 +206,17 @@ func newWorkspaceDir() string {
 	return filepath.Join("/tmp", workspaceDirPrefix+getTimestamp())
 }
 
-// GetTimestampFromWorkspaceDir parses the workspace directory name and gets the timestamp part of it.
-// This can later be used to name other artifacts (such as the
-// kubelet-${instance}.service systemd transient service used to launch
-// Kubelet) so that they can be matched to each other.
+// GetTimestampFromWorkspaceDir 解析 workspace 目录名并取出其中的 timestamp 部分。
+// 之后可用它命名其他产物（例如用于启动
+// kubelet-${instance}.service 的 systemd transient service），
+// 使它们能互相关联。
 func GetTimestampFromWorkspaceDir(dir string) string {
 	dirTimestamp := strings.TrimPrefix(filepath.Base(dir), workspaceDirPrefix)
 	re := regexp.MustCompile("^\\d{8}T\\d{6}$")
 	if re.MatchString(dirTimestamp) {
 		return dirTimestamp
 	}
-	// Fallback: if we can't find that timestamp, default to using Now()
+	// 回退：如果找不到 timestamp，默认用 Now()
 	return getTimestamp()
 }
 
@@ -225,26 +225,26 @@ func getTestArtifacts(host, testDir string) error {
 	if err := os.MkdirAll(logPath, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory %q: %w", logPath, err)
 	}
-	// Copy logs (if any) to artifacts/hostname
+	// 把日志（如有）复制到 artifacts/hostname
 	if _, err := SSH(host, "ls", fmt.Sprintf("%s/results/*.log", testDir)); err == nil {
 		if _, err := runSSHCommand(host, "scp", "-r", fmt.Sprintf("%s:%s/results/*.log", GetHostnameOrIP(host), testDir), logPath); err != nil {
 			return err
 		}
 	}
-	// Copy json files (if any) to artifacts.
+	// 把 json 文件（如有）复制到 artifacts。
 	if _, err := SSH(host, "ls", fmt.Sprintf("%s/results/*.json", testDir)); err == nil {
 		if _, err = runSSHCommand(host, "scp", "-r", fmt.Sprintf("%s:%s/results/*.json", GetHostnameOrIP(host), testDir), *resultsDir); err != nil {
 			return err
 		}
 	}
-	// Copy junit results (if any) to artifacts
+	// 把 junit 结果（如有）复制到 artifacts
 	if _, err := SSH(host, "ls", fmt.Sprintf("%s/results/junit*", testDir)); err == nil {
-		// Copy junit (if any) to the top of artifacts
+		// 把 junit（如有）复制到 artifacts 顶层
 		if _, err = runSSHCommand(host, "scp", fmt.Sprintf("%s:%s/results/junit*", GetHostnameOrIP(host), testDir), *resultsDir); err != nil {
 			return err
 		}
 	}
-	// Copy container logs to artifacts/hostname
+	// 把容器日志复制到 artifacts/hostname
 	klog.V(4).Info("Add 'execute' permission to /var/log/pods to copy logs")
 	if _, err := SSH(host, "chmod", "o+x", "/var/log/pods"); err == nil {
 		if _, err := SSH(host, "chmod", "-R", "a+r", "/var/log/pods"); err == nil {
@@ -256,23 +256,23 @@ func getTestArtifacts(host, testDir string) error {
 	return nil
 }
 
-// collectSystemLog is a temporary hack to collect system log when encountered on
-// unexpected error.
+// collectSystemLog 是一个临时 hack，遇到
+// 意外错误时收集系统日志。
 func collectSystemLog(host string) {
-	// Encountered an unexpected error. The remote test harness may not
-	// have finished retrieved and stored all the logs in this case. Try
-	// to get some logs for debugging purposes.
-	// TODO: This is a best-effort, temporary hack that only works for
-	// journald nodes. We should have a more robust way to collect logs.
+	// 遇到意外错误。这种情况下远端测试框架可能
+	// 还没完成所有日志的取回和存储。尝试
+	// 获取一些日志以便调试。
+	// TODO: 这是尽力而为的临时 hack，只对
+	// journald 节点有效。应有更健壮的日志收集方式。
 	var (
 		logName  = "system.log"
 		logPath  = fmt.Sprintf("/tmp/%s-%s", getTimestamp(), logName)
 		destPath = fmt.Sprintf("%s/%s-%s", *resultsDir, host, logName)
 	)
 	klog.V(2).Infof("Test failed unexpectedly. Attempting to retrieving system logs (only works for nodes with journald)")
-	// Try getting the system logs from journald and store it to a file.
-	// Don't reuse the original test directory on the remote host because
-	// it could've be been removed if the node was rebooted.
+	// 尝试从 journald 获取系统日志并存到文件。
+	// 不要复用远端主机上原来的测试目录，因为
+	// 节点重启后它可能已被删除。
 	if output, err := SSH(host, "sh", "-c", fmt.Sprintf("'journalctl --system --all > %s'", logPath)); err == nil {
 		klog.V(2).Infof("Got the system logs from journald; copying it back...")
 		if output, err := runSSHCommand(host, "scp", fmt.Sprintf("%s:%s", GetHostnameOrIP(host), logPath), destPath); err != nil {
@@ -283,9 +283,9 @@ func collectSystemLog(host string) {
 	}
 }
 
-// WriteLog is a temporary function to make it possible to write log
-// in the runner. This is used to collect serial console log.
-// TODO(random-liu): Use the log-dump script in cluster e2e.
+// WriteLog 是一个临时函数，让 runner 中
+// 也能写日志，用于收集串口控制台日志。
+// TODO(random-liu): 改用 cluster e2e 中的 log-dump 脚本。
 func WriteLog(host, filename, content string) error {
 	logPath := filepath.Join(*resultsDir, host)
 	if err := os.MkdirAll(logPath, 0755); err != nil {

@@ -69,7 +69,7 @@ var _ = SIGDescribe("ContainerLogRotation", framework.WithSlow(), framework.With
 							Command: []string{
 								"sh",
 								"-c",
-								// ~12Kb/s. Exceeding 40Kb in 4 seconds. Log rotation period is 10 seconds.
+								// 约 12Kb/s，4 秒超过 40Kb。日志轮转周期为 10 秒。
 								"while true; do echo hello world; sleep 0.001; done;",
 							},
 						},
@@ -138,7 +138,7 @@ var _ = SIGDescribe("ContainerLogRotationWithMultipleWorkers", framework.WithSlo
 								Command: []string{
 									"sh",
 									"-c",
-									// ~12Kb/s. Exceeding 40Kb in 4 seconds. Log rotation period is 10 seconds.
+									// 约 12Kb/s，4 秒超过 40Kb。日志轮转周期为 10 秒。
 									"while true; do echo hello world; sleep 0.001; done;",
 								},
 							},

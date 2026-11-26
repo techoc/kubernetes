@@ -46,17 +46,17 @@ var (
 	}
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm creates the cluster-info ConfigMap, that it is properly configured
-// and that all the related RBAC rules are in place
+// 为所有旨在验证 kubeadm 是否创建了 cluster-info ConfigMap、
+// 是否正确配置它以及所有相关 RBAC 规则是否就位的
+// 测试定义 container
 var _ = Describe("kubeadm-config ConfigMap", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s test framework 的实例
 	f := framework.NewDefaultFramework("kubeadm-config")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 这个 container 中的测试不应在集群中创建新对象，
+	// 所以禁用 namespace 创建以加快执行
 	f.SkipNamespaceCreation = true
 
 	ginkgo.It("should exist and be properly configured", func(ctx context.Context) {

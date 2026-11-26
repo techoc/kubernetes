@@ -39,7 +39,7 @@ import (
 	e2epodoutput "k8s.io/kubernetes/test/e2e/framework/pod/output"
 )
 
-// CreateStatefulSet creates a StatefulSet from the manifest at manifestPath in the Namespace ns using kubectl create.
+// CreateStatefulSet 用 kubectl create 从 ns namespace 中 manifestPath 的 manifest 创建 StatefulSet。
 func CreateStatefulSet(ctx context.Context, c clientset.Interface, manifestPath, ns string) *appsv1.StatefulSet {
 	mkpath := func(file string) string {
 		return filepath.Join(manifestPath, file)
@@ -63,7 +63,7 @@ func CreateStatefulSet(ctx context.Context, c clientset.Interface, manifestPath,
 	return ss
 }
 
-// GetPodList gets the current Pods in ss.
+// GetPodList 获取 ss 中当前的 Pod。
 func GetPodList(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) (*v1.PodList, error) {
 	selector, err := metav1.LabelSelectorAsSelector(ss.Spec.Selector)
 	if err != nil {
@@ -73,13 +73,13 @@ func GetPodList(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulS
 	return c.CoreV1().Pods(ss.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
 }
 
-// DeleteAllStatefulSets deletes all StatefulSet API Objects in Namespace ns.
+// DeleteAllStatefulSets 删除 namespace ns 中所有 StatefulSet API 对象。
 func DeleteAllStatefulSets(ctx context.Context, c clientset.Interface, ns string) {
 	ssList, err := c.AppsV1().StatefulSets(ns).List(ctx, metav1.ListOptions{LabelSelector: labels.Everything().String()})
 	framework.ExpectNoError(err)
 
-	// Scale down each statefulset, then delete it completely.
-	// Deleting a pvc without doing this will leak volumes, #25101.
+	// 先缩小每个 statefulset，再彻底删除。
+	// 不这样做就删除 pvc 会泄漏 volume，#25101。
 	errList := []string{}
 	for i := range ssList.Items {
 		ss := &ssList.Items[i]
@@ -89,16 +89,16 @@ func DeleteAllStatefulSets(ctx context.Context, c clientset.Interface, ns string
 		}
 		WaitForStatusReplicas(ctx, c, ss, 0)
 		framework.Logf("Deleting statefulset %v", ss.Name)
-		// Use OrphanDependents=false so it's deleted synchronously.
-		// We already made sure the Pods are gone inside Scale().
+		// 用 OrphanDependents=false 让它同步删除。
+		// 我们已经通过 Scale() 确保 Pod 都消失了。
 		if err := c.AppsV1().StatefulSets(ss.Namespace).Delete(ctx, ss.Name, metav1.DeleteOptions{OrphanDependents: new(bool)}); err != nil {
 			errList = append(errList, fmt.Sprintf("%v", err))
 		}
 	}
 
-	// pvs are global, so we need to wait for the exact ones bound to the statefulset pvcs.
+	// pv 是全局的，所以要等待与 statefulset pvc 绑定的那些。
 	pvNames := sets.NewString()
-	// TODO: Don't assume all pvcs in the ns belong to a statefulset
+	// TODO: 不要假设 ns 中所有 pvc 都属于 statefulset
 	pvcPollErr := wait.PollUntilContextTimeout(ctx, StatefulSetPoll, StatefulSetTimeout, true, func(ctx context.Context) (bool, error) {
 		pvcList, err := c.CoreV1().PersistentVolumeClaims(ns).List(ctx, metav1.ListOptions{LabelSelector: labels.Everything().String()})
 		if err != nil {
@@ -107,7 +107,7 @@ func DeleteAllStatefulSets(ctx context.Context, c clientset.Interface, ns string
 		}
 		for _, pvc := range pvcList.Items {
 			pvNames.Insert(pvc.Spec.VolumeName)
-			// TODO: Double check that there are no pods referencing the pvc
+			// TODO: 再确认没有 pod 引用该 pvc
 			framework.Logf("Deleting pvc: %v with volume %v", pvc.Name, pvc.Spec.VolumeName)
 			if err := c.CoreV1().PersistentVolumeClaims(ns).Delete(ctx, pvc.Name, metav1.DeleteOptions{}); err != nil {
 				return false, nil
@@ -145,7 +145,7 @@ func DeleteAllStatefulSets(ctx context.Context, c clientset.Interface, ns string
 	}
 }
 
-// Scale scales ss to count replicas.
+// Scale 把 ss 扩缩容到 count 个副本。
 func Scale(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, count int32) (*appsv1.StatefulSet, error) {
 	name := ss.Name
 	ns := ss.Namespace
@@ -178,24 +178,24 @@ func Scale(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, c
 	return ss, nil
 }
 
-// UpdateReplicas updates the replicas of ss to count.
+// UpdateReplicas 把 ss 的副本数更新为 count。
 func UpdateReplicas(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, count int32) {
 	update(ctx, c, ss.Namespace, ss.Name, count)
 }
 
-// Restart scales ss to 0 and then back to its previous number of replicas.
+// Restart 把 ss 缩到 0 再恢复到之前的副本数。
 func Restart(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) {
 	oldReplicas := *(ss.Spec.Replicas)
 	ss, err := Scale(ctx, c, ss, 0)
 	framework.ExpectNoError(err)
-	// Wait for controller to report the desired number of Pods.
-	// This way we know the controller has observed all Pod deletions
-	// before we scale it back up.
+	// 等待 controller 上报期望数量的 Pod。
+	// 这样我们知道在扩回去之前
+	// controller 已观察到所有 Pod 删除。
 	WaitForStatusReplicas(ctx, c, ss, 0)
 	update(ctx, c, ss.Namespace, ss.Name, oldReplicas)
 }
 
-// CheckHostname verifies that all Pods in ss have the correct Hostname. If the returned error is not nil than verification failed.
+// CheckHostname 验证 ss 中所有 Pod 都有正确的 Hostname。返回错误非 nil 表示验证失败。
 func CheckHostname(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) error {
 	cmd := "printf $(hostname)"
 	podList, err := GetPodList(ctx, c, ss)
@@ -215,14 +215,14 @@ func CheckHostname(ctx context.Context, c clientset.Interface, ss *appsv1.Statef
 	return nil
 }
 
-// CheckMount checks that the mount at mountPath is valid for all Pods in ss.
+// CheckMount 检查 ss 中所有 Pod 在 mountPath 的挂载有效。
 func CheckMount(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, mountPath string) error {
 	for _, cmd := range []string{
-		// Print inode, size etc
+		// 打印 inode、大小等
 		fmt.Sprintf("ls -idlh %v", mountPath),
-		// Print subdirs
+		// 打印子目录
 		fmt.Sprintf("find %v", mountPath),
-		// Try writing
+		// 尝试写入
 		fmt.Sprintf("touch %v", filepath.Join(mountPath, fmt.Sprintf("%v", time.Now().UnixNano()))),
 	} {
 		if err := ExecInStatefulPods(ctx, c, ss, cmd); err != nil {
@@ -232,7 +232,7 @@ func CheckMount(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulS
 	return nil
 }
 
-// CheckServiceName asserts that the ServiceName for ss is equivalent to expectedServiceName.
+// CheckServiceName 断言 ss 的 ServiceName 等于 expectedServiceName。
 func CheckServiceName(ss *appsv1.StatefulSet, expectedServiceName string) error {
 	framework.Logf("Checking if statefulset spec.serviceName is %s", expectedServiceName)
 
@@ -244,7 +244,7 @@ func CheckServiceName(ss *appsv1.StatefulSet, expectedServiceName string) error 
 	return nil
 }
 
-// CheckPodIndexLabel asserts that the pods for ss have expected index label and values.
+// CheckPodIndexLabel 断言 ss 的 pod 具有预期的 index label 和值。
 func CheckPodIndexLabel(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) error {
 	pods, err := GetPodList(ctx, c, ss)
 	if err != nil {
@@ -268,7 +268,7 @@ func CheckPodIndexLabel(ctx context.Context, c clientset.Interface, ss *appsv1.S
 	return nil
 }
 
-// ExecInStatefulPods executes cmd in all Pods in ss. If a error occurs it is returned and cmd is not execute in any subsequent Pods.
+// ExecInStatefulPods 在 ss 的所有 Pod 中执行命令。出错则返回，后续 Pod 不再执行。
 func ExecInStatefulPods(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, cmd string) error {
 	podList, err := GetPodList(ctx, c, ss)
 	if err != nil {
@@ -285,7 +285,7 @@ func ExecInStatefulPods(ctx context.Context, c clientset.Interface, ss *appsv1.S
 	return nil
 }
 
-// update updates a statefulset, and it is only used within rest.go
+// update 更新 statefulset，仅在 rest.go 内部使用
 func update(ctx context.Context, c clientset.Interface, ns, name string, replicas int32) (ss *appsv1.StatefulSet) {
 	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var err error

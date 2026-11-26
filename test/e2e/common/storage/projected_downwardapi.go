@@ -40,7 +40,7 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	f := framework.NewDefaultFramework("projected")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
-	// How long to wait for a log pod to be displayed
+	// 等待 log pod 显示的超时时间
 	const podLogTimeout = 2 * time.Minute
 	var podClient *e2epod.PodClient
 	ginkgo.BeforeEach(func() {
@@ -48,9 +48,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, pod name
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests. Pod MUST be able to read the pod name from the mounted DownwardAPIVolumeFiles.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, pod name
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取 pod name。
 	*/
 	framework.ConformanceIt("should provide podname only", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -62,10 +62,10 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, volume mode 0400
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests. The default mode for the volume mount is set to 0400. Pod MUST be able to read the pod name from the mounted DownwardAPIVolumeFiles and the volume mode must be -r--------.
-	   This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, volume mode 0400
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。volume mount 的默认模式设为 0400。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取 pod name，volume 模式必须为 -r--------。
+	   此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限。
 	*/
 	framework.ConformanceIt("should set DefaultMode on files [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -88,10 +88,10 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, volume mode 0400
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests. The default mode for the volume mount is set to 0400. Pod MUST be able to read the pod name from the mounted DownwardAPIVolumeFiles and the volume mode must be -r--------.
-	   This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, volume mode 0400
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。volume mount 的默认模式设为 0400。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取 pod name，volume 模式必须为 -r--------。
+	   此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限。
 	*/
 	framework.ConformanceIt("should set mode on item file [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -114,7 +114,7 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	f.It("should provide podname as non-root with fsgroup [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		podName := "metadata-volume-" + string(uuid.NewUUID())
 		gid := int64(1234)
@@ -129,7 +129,7 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	f.It("should provide podname as non-root with fsgroup and defaultMode [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options, and it does not support setting file permissions.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项，也不支持设置文件权限。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		podName := "metadata-volume-" + string(uuid.NewUUID())
 		gid := int64(1234)
@@ -145,9 +145,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, update labels
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests and label items. Pod MUST be able to read the labels from the mounted DownwardAPIVolumeFiles. Labels are then updated. Pod MUST be able to read the updated values for the Labels.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, update labels
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits、requests 以及 label items。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取标签。随后更新标签，Pod 必须能读到更新后的值。
 	*/
 	framework.ConformanceIt("should update labels on modification", f.WithNodeConformance(), func(ctx context.Context) {
 		labels := map[string]string{}
@@ -165,7 +165,7 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 		},
 			podLogTimeout, framework.Poll).Should(gomega.ContainSubstring("key1=\"value1\"\n"))
 
-		//modify labels
+		//修改标签
 		podClient.Update(ctx, podName, func(pod *v1.Pod) {
 			pod.Labels["key3"] = "value3"
 		})
@@ -177,9 +177,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, update annotation
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests and annotation items. Pod MUST be able to read the annotations from the mounted DownwardAPIVolumeFiles. Annotations are then updated. Pod MUST be able to read the updated values for the Annotations.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, update annotation
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits、requests 以及 annotation items。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取注解。随后更新注解，Pod 必须能读到更新后的值。
 	*/
 	framework.ConformanceIt("should update annotations on modification", f.WithNodeConformance(), func(ctx context.Context) {
 		annotations := map[string]string{}
@@ -196,7 +196,7 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 		},
 			podLogTimeout, framework.Poll).Should(gomega.ContainSubstring("builder=\"bar\"\n"))
 
-		//modify annotations
+		//修改注解
 		podClient.Update(ctx, podName, func(pod *v1.Pod) {
 			pod.Annotations["builder"] = "foo"
 		})
@@ -208,9 +208,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, CPU limits
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests. Pod MUST be able to read the cpu limits from the mounted DownwardAPIVolumeFiles.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, CPU limits
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取 cpu limits。
 	*/
 	framework.ConformanceIt("should provide container's cpu limit", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -222,9 +222,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, memory limits
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests. Pod MUST be able to read the memory limits from the mounted DownwardAPIVolumeFiles.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, memory limits
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取 memory limits。
 	*/
 	framework.ConformanceIt("should provide container's memory limit", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -236,9 +236,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, CPU request
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests. Pod MUST be able to read the cpu request from the mounted DownwardAPIVolumeFiles.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, CPU request
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取 cpu request。
 	*/
 	framework.ConformanceIt("should provide container's cpu request", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -250,9 +250,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, memory request
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests. Pod MUST be able to read the memory request from the mounted DownwardAPIVolumeFiles.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, memory request
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取 memory request。
 	*/
 	framework.ConformanceIt("should provide container's memory request", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -264,9 +264,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, CPU limit, node allocatable
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests.  The CPU and memory resources for requests and limits are NOT specified for the container. Pod MUST be able to read the default cpu limits from the mounted DownwardAPIVolumeFiles.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, CPU limit, node allocatable
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。容器没有指定 requests 和 limits 的 CPU 与内存资源。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取默认 cpu limits。
 	*/
 	framework.ConformanceIt("should provide node allocatable (cpu) as default cpu limit if the limit is not set", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -276,9 +276,9 @@ var _ = SIGDescribe("Projected downwardAPI", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Projected Volume, DownwardAPI, memory limit, node allocatable
-	   Description: A Pod is created with a projected volume source for downwardAPI with pod name, cpu and memory limits and cpu and memory requests.  The CPU and memory resources for requests and limits are NOT specified for the container. Pod MUST be able to read the default memory limits from the mounted DownwardAPIVolumeFiles.
+	   发布版本：v1.9
+	   测试名称：Projected Volume, DownwardAPI, memory limit, node allocatable
+	   描述：创建带 downwardAPI projected volume source 的 Pod，包含 pod name、cpu 和 memory limits 以及 requests。容器没有指定 requests 和 limits 的 CPU 与内存资源。Pod 必须能从挂载的 DownwardAPIVolumeFiles 中读取默认 memory limits。
 	*/
 	framework.ConformanceIt("should provide node allocatable (memory) as default memory limit if the limit is not set", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())

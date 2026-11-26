@@ -48,22 +48,22 @@ var _ = common.SIGDescribe("DNS", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
 	/*
-		Release: v1.9
-		Testname: DNS, cluster
-		Description: When a Pod is created, the pod MUST be able to resolve cluster dns entries such as kubernetes.default via DNS.
+		发布版本：v1.9
+		测试名称：DNS, cluster
+		描述：创建 Pod 后，该 pod 必须能通过 DNS 解析集群 dns 条目，如 kubernetes.default。
 	*/
 	framework.ConformanceIt("should provide DNS for the cluster", func(ctx context.Context) {
-		// All the names we need to be able to resolve.
-		// TODO: Spin up a separate test service and test that dns works for that service.
-		// NOTE: This only contains the FQDN and the Host name, for testing partial name, see the test below
+		// 我们需要能够解析的所有名称。
+		// TODO: 启动一个独立的测试 service，验证对该 service 的 dns 解析可用。
+		// 注意：这里只包含 FQDN 和主机名；部分名称的测试见下面的用例
 		namesToResolve := []string{
 			fmt.Sprintf("kubernetes.default.svc.%s", framework.TestContext.ClusterDNSDomain),
 		}
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
-		// TODO: We should change this whole test mechanism to run the same probes
-		// against a known list of different base images. Currently we test against
-		// agnhost (which is Alpine, which uses musl libc) and glibc-dns-testing
-		// (which as the name suggests, uses glibc).
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
+		// TODO: 应该改变整个测试机制，用同一组探测
+		// 针对一组已知的不同基础镜像运行。目前只针对
+		// agnhost（Alpine，使用 musl libc）和 glibc-dns-testing
+		// （顾名思义，使用 glibc）测试。
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, nil, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, nil, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -71,21 +71,21 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		validateDNSResults(ctx, f, pod, append(muslFileNames, glibcFileNames...))
 	})
 
-	// Added due to #8512. This is critical for GCE and GKE deployments.
+	// 因 #8512 添加。这对 GCE 和 GKE 部署至关重要。
 	f.It("should provide DNS for the cluster", f.WithProvider("gce"), func(ctx context.Context) {
 		namesToResolve := []string{"google.com"}
-		// Windows containers do not have a route to the GCE metadata server by default.
+		// Windows 容器默认没有到 GCE metadata server 的路由。
 		if !framework.NodeOSDistroIs("windows") {
 			namesToResolve = append(namesToResolve, "metadata")
 		}
 
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, nil, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, nil, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -93,22 +93,22 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		validateDNSResults(ctx, f, pod, append(muslFileNames, glibcFileNames...))
 	})
 
-	// [LinuxOnly]: As Windows currently does not support resolving PQDNs.
+	// [LinuxOnly]：Windows 目前不支持解析 PQDN。
 	ginkgo.It("should resolve DNS of partial qualified names for the cluster [LinuxOnly]", func(ctx context.Context) {
-		// All the names we need to be able to resolve.
+		// 我们需要能够解析的所有名称。
 		namesToResolve := []string{
 			"kubernetes.default",
 			"kubernetes.default.svc",
 		}
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", dnsTestPodHostName, dnsTestServiceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		hostEntries := []string{hostFQDN, dnsTestPodHostName}
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, hostEntries, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, hostEntries, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -116,21 +116,21 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		validateDNSResults(ctx, f, pod, append(muslFileNames, glibcFileNames...))
 	})
 
 	/*
-		Release: v1.14
-		Testname: DNS, cluster
-		Description: When a Pod is created, the pod MUST be able to resolve cluster dns entries such as kubernetes.default via /etc/hosts.
+		发布版本：v1.14
+		测试名称：DNS, cluster
+		描述：创建 Pod 后，该 pod 必须能通过 /etc/hosts 解析集群 dns 条目，如 kubernetes.default。
 	*/
 	framework.ConformanceIt("should provide /etc/hosts entries for the cluster", func(ctx context.Context) {
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", dnsTestPodHostName, dnsTestServiceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		hostEntries := []string{hostFQDN, dnsTestPodHostName}
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(nil, hostEntries, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(nil, hostEntries, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -138,20 +138,20 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes /etc/hosts and exposes the results by HTTP.
+		// 运行一个探测 /etc/hosts 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe /etc/hosts")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		validateDNSResults(ctx, f, pod, append(muslFileNames, glibcFileNames...))
 	})
 
 	/*
-		Release: v1.9
-		Testname: DNS, services
-		Description: When a headless service is created, the service MUST be able to resolve all the required service endpoints. When the service is created, any pod in the same namespace must be able to resolve the service by all of the expected DNS names.
+		发布版本：v1.9
+		测试名称：DNS, services
+		描述：创建 headless service 后，该 service 必须能解析所有必需的 service endpoint。创建 service 后，同一 namespace 中的任何 pod 都必须能通过所有预期的 DNS 名称解析该 service。
 	*/
 	framework.ConformanceIt("should provide DNS for services", func(ctx context.Context) {
-		// NOTE: This only contains the FQDN and the Host name, for testing partial name, see the test below
-		// Create a test headless service.
+		// 注意：这里只包含 FQDN 和主机名；部分名称的测试见下面的用例
+		// 创建一个测试用 headless service。
 		ginkgo.By("Creating a test headless service")
 		testServiceSelector := map[string]string{
 			"dns-test": "true",
@@ -165,16 +165,16 @@ var _ = common.SIGDescribe("DNS", func() {
 		regularService, err = f.ClientSet.CoreV1().Services(f.Namespace.Name).Create(ctx, regularService, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create regular service: %s", regularServiceName)
 
-		// All the names we need to be able to resolve.
-		// TODO: Create more endpoints and ensure that multiple A records are returned
-		// for headless service.
+		// 我们需要能够解析的所有名称。
+		// TODO: 创建更多 endpoint，验证 headless service
+		// 会返回多条 A 记录。
 		namesToResolve := []string{
 			fmt.Sprintf("%s.%s.svc.%s", headlessService.Name, f.Namespace.Name, framework.TestContext.ClusterDNSDomain),
 			fmt.Sprintf("_http._tcp.%s.%s.svc.%s", headlessService.Name, f.Namespace.Name, framework.TestContext.ClusterDNSDomain),
 			fmt.Sprintf("_http._tcp.%s.%s.svc.%s", regularService.Name, f.Namespace.Name, framework.TestContext.ClusterDNSDomain),
 		}
 
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, nil, regularService.Spec.ClusterIP, "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, nil, regularService.Spec.ClusterIP, "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -182,7 +182,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		pod.ObjectMeta.Labels = testServiceSelector
@@ -260,7 +260,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 
@@ -268,13 +268,13 @@ var _ = common.SIGDescribe("DNS", func() {
 	})
 
 	/*
-		Release: v1.17
-		Testname: DNS, PQDN for services
-		Description: Create a headless service and normal service. Both the services MUST be able to resolve partial qualified DNS entries of their service endpoints by serving A records and SRV records.
-		[LinuxOnly]: As Windows currently does not support resolving PQDNs.
+		发布版本：v1.17
+		测试名称：DNS, PQDN for services
+		描述：创建 headless service 和普通 service。两个 service 都必须能通过提供 A 记录和 SRV 记录，解析其 service endpoint 的部分限定 DNS 名称。
+		[LinuxOnly]：Windows 目前不支持解析 PQDN。
 	*/
 	framework.ConformanceIt("should resolve DNS of partial qualified names for services [LinuxOnly]", func(ctx context.Context) {
-		// Create a test headless service.
+		// 创建一个测试用 headless service。
 		ginkgo.By("Creating a test headless service")
 		testServiceSelector := map[string]string{
 			"dns-test": "true",
@@ -288,8 +288,8 @@ var _ = common.SIGDescribe("DNS", func() {
 		regularService, err = f.ClientSet.CoreV1().Services(f.Namespace.Name).Create(ctx, regularService, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create regular service: %s", regularServiceName)
 
-		// All the names we need to be able to resolve.
-		// for headless service.
+		// 我们需要能够解析的所有名称。
+		// 针对 headless service。
 		namesToResolve := []string{
 			headlessService.Name,
 			fmt.Sprintf("%s.%s", headlessService.Name, f.Namespace.Name),
@@ -298,7 +298,7 @@ var _ = common.SIGDescribe("DNS", func() {
 			fmt.Sprintf("_http._tcp.%s.%s.svc", regularService.Name, f.Namespace.Name),
 		}
 
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, nil, regularService.Spec.ClusterIP, "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, nil, regularService.Spec.ClusterIP, "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -306,7 +306,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		pod.ObjectMeta.Labels = testServiceSelector
@@ -315,13 +315,13 @@ var _ = common.SIGDescribe("DNS", func() {
 	})
 
 	/*
-		Release: v1.15
-		Testname: DNS, resolve the hostname
-		Description: Create a headless service with label. Create a Pod with label to match service's label, with hostname and a subdomain same as service name.
-		Pod MUST be able to resolve its fully qualified domain name as well as hostname by serving an A record at that name.
+		发布版本：v1.15
+		测试名称：DNS, resolve the hostname
+		描述：创建带标签的 headless service。创建带匹配 service 标签的 Pod，其 hostname 和 subdomain 与 service 名称相同。
+		Pod 必须能通过在该名称提供 A 记录，解析自己的完全限定域名和 hostname。
 	*/
 	framework.ConformanceIt("should provide DNS for pods for Hostname", func(ctx context.Context) {
-		// Create a test headless service.
+		// 创建一个测试用 headless service。
 		ginkgo.By("Creating a test headless service")
 		testServiceSelector := map[string]string{
 			"dns-test-hostname-attribute": "true",
@@ -334,7 +334,7 @@ var _ = common.SIGDescribe("DNS", func() {
 
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", podHostname, serviceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		hostNames := []string{hostFQDN, podHostname}
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(nil, hostNames, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(nil, hostNames, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -342,7 +342,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod1 := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		pod1.ObjectMeta.Labels = testServiceSelector
@@ -353,13 +353,13 @@ var _ = common.SIGDescribe("DNS", func() {
 	})
 
 	/*
-		Release: v1.15
-		Testname: DNS, resolve the subdomain
-		Description: Create a headless service with label. Create a Pod with label to match service's label, with hostname and a subdomain same as service name.
-		Pod MUST be able to resolve its fully qualified domain name as well as subdomain by serving an A record at that name.
+		发布版本：v1.15
+		测试名称：DNS, resolve the subdomain
+		描述：创建带标签的 headless service。创建带匹配 service 标签的 Pod，其 hostname 和 subdomain 与 service 名称相同。
+		Pod 必须能通过在该名称提供 A 记录，解析自己的完全限定域名和 subdomain。
 	*/
 	framework.ConformanceIt("should provide DNS for pods for Subdomain", func(ctx context.Context) {
-		// Create a test headless service.
+		// 创建一个测试用 headless service。
 		ginkgo.By("Creating a test headless service")
 		testServiceSelector := map[string]string{
 			"dns-test-hostname-attribute": "true",
@@ -373,7 +373,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", podHostname, serviceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		subdomain := fmt.Sprintf("%s.%s.svc.%s", serviceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		namesToResolve := []string{hostFQDN, subdomain}
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, nil, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, nil, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -381,7 +381,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod1 := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		pod1.ObjectMeta.Labels = testServiceSelector
@@ -392,13 +392,13 @@ var _ = common.SIGDescribe("DNS", func() {
 	})
 
 	/*
-		Release: v1.15
-		Testname: DNS, for ExternalName Services
-		Description: Create a service with externalName. Pod MUST be able to resolve the address for this service via CNAME. When externalName of this service is changed, Pod MUST resolve to new DNS entry for the service.
-		Change the service type from externalName to ClusterIP, Pod MUST resolve DNS to the service by serving A records.
+		发布版本：v1.15
+		测试名称：DNS, for ExternalName Services
+		描述：创建带 externalName 的 service。Pod 必须能通过 CNAME 解析该 service 的地址。修改 service 的 externalName 后，Pod 必须解析到新的 DNS 条目。
+		把 service 类型从 externalName 改为 ClusterIP，Pod 必须能通过 A 记录解析该 service。
 	*/
 	framework.ConformanceIt("should provide DNS for ExternalName services", func(ctx context.Context) {
-		// Create a test ExternalName service.
+		// 创建一个测试用 ExternalName service。
 		ginkgo.By("Creating a test externalName service")
 		serviceName := "dns-test-service-3"
 		externalNameService := e2eservice.CreateServiceSpec(serviceName, "foo.example.com", false, nil)
@@ -413,13 +413,13 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod1 := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 
 		validateTargetedProbeOutput(ctx, f, pod1, []string{muslFileName, glibcFileName}, "foo.example.com.")
 
-		// Test changing the externalName field
+		// 测试修改 externalName 字段
 		ginkgo.By("changing the externalName to bar.example.com")
 		_, err = e2eservice.UpdateService(ctx, f.ClientSet, f.Namespace.Name, serviceName, func(s *v1.Service) {
 			s.Spec.ExternalName = "bar.example.com"
@@ -432,13 +432,13 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a second pod to probe DNS")
 		pod2 := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 
 		validateTargetedProbeOutput(ctx, f, pod2, []string{muslFileName, glibcFileName}, "bar.example.com.")
 
-		// Test changing type from ExternalName to ClusterIP
+		// 测试把类型从 ExternalName 改为 ClusterIP
 		ginkgo.By("changing the service to type=ClusterIP")
 		_, err = e2eservice.UpdateService(ctx, f.ClientSet, f.Namespace.Name, serviceName, func(s *v1.Service) {
 			s.Spec.Type = v1.ServiceTypeClusterIP
@@ -451,8 +451,8 @@ var _ = common.SIGDescribe("DNS", func() {
 		if framework.TestContext.ClusterIsIPv6() {
 			targetRecord = "AAAA"
 		}
-		// TODO: For dual stack we can run from here two createTargetedProbeCommand()
-		// one looking for an A record and another one for an AAAA record
+		// TODO: 双栈时可以从这里运行两次 createTargetedProbeCommand()
+		// 一个查 A 记录，另一个查 AAAA 记录
 		muslProbeCmd, muslFileName = createTargetedProbeCommand(hostFQDN, targetRecord, "musl")
 		muslProber = dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileName = createTargetedProbeCommand(hostFQDN, targetRecord, "glibc")
@@ -460,7 +460,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a third pod to probe DNS")
 		pod3 := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 
@@ -471,10 +471,10 @@ var _ = common.SIGDescribe("DNS", func() {
 	})
 
 	/*
-		Release: v1.17
-		Testname: DNS, custom dnsConfig
-		Description: Create a Pod with DNSPolicy as None and custom DNS configuration, specifying nameservers and search path entries.
-		Pod creation MUST be successful and provided DNS configuration MUST be configured in the Pod.
+		发布版本：v1.17
+		测试名称：DNS, custom dnsConfig
+		描述：创建一个 DNSPolicy 为 None 且带自定义 DNS 配置的 Pod，指定 nameservers 和 search path 条目。
+		Pod 创建必须成功，且提供的 DNS 配置必须在 Pod 中生效。
 	*/
 	framework.ConformanceIt("should support configurable pod DNS nameservers", func(ctx context.Context) {
 		ginkgo.By("Creating a pod with dnsPolicy=None and customized dnsConfig...")
@@ -539,7 +539,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		err = e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, testServerPod.Name, f.Namespace.Name)
 		framework.ExpectNoError(err, "failed to wait for pod %s to be running", testServerPod.Name)
 
-		// Retrieve server pod IP.
+		// 获取 server pod 的 IP。
 		testServerPod, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, testServerPod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to get pod %v", testServerPod.Name)
 		testServerIP := testServerPod.Status.PodIP
@@ -566,7 +566,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		framework.ExpectNoError(err, "failed to wait for pod %s to be running", testUtilsPod.Name)
 
 		ginkgo.By("Verifying customized DNS option is configured on pod...")
-		// TODO: Figure out a better way other than checking the actual resolv,conf file.
+		// TODO: 找到比检查实际 resolv.conf 文件更好的方式。
 		cmd := []string{"cat", "/etc/resolv.conf"}
 		stdout, stderr, err := e2epod.Exec(f.TContext(ctx), e2epod.ExecOptions{
 			Command:       cmd,
@@ -582,10 +582,10 @@ var _ = common.SIGDescribe("DNS", func() {
 		}
 
 		ginkgo.By("Verifying customized name server and search path are working...")
-		// Do dig on not-exist-dns-name and see if the injected DNS record is returned.
-		// This verifies both:
-		// - Custom search path is appended.
-		// - DNS query is sent to the specified server.
+		// 对 not-exist-dns-name 执行 dig，看是否返回注入的 DNS 记录。
+		// 这同时验证两点：
+		// - 自定义 search path 被追加。
+		// - DNS 查询被发送到指定服务器。
 		cmd = []string{"dig", "+short", "+search", testDNSNameShort}
 		digFunc := func() (bool, error) {
 			stdout, stderr, err := e2epod.Exec(f.TContext(ctx), e2epod.ExecOptions{
@@ -610,18 +610,18 @@ var _ = common.SIGDescribe("DNS", func() {
 		err = wait.PollImmediate(5*time.Second, 3*time.Minute, digFunc)
 		framework.ExpectNoError(err, "failed to verify customized name server and search path")
 
-		// TODO: Add more test cases for other DNSPolicies.
+		// TODO: 为其他 DNSPolicy 添加更多测试用例。
 	})
 
 	ginkgo.It("should work with the pod containing more than 6 DNS search paths and longer than 256 search list characters", func(ctx context.Context) {
-		// All the names we need to be able to resolve.
+		// 我们需要能够解析的所有名称。
 		namesToResolve := []string{
 			"kubernetes.default",
 			"kubernetes.default.svc",
 		}
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", dnsTestPodHostName, dnsTestServiceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		hostEntries := []string{hostFQDN, dnsTestPodHostName}
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, hostEntries, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, hostEntries, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -654,14 +654,14 @@ var _ = common.SIGDescribe("DNS", func() {
 	})
 
 	ginkgo.It("should work with a search path containing an underscore and a search path with a single dot", func(ctx context.Context) {
-		// All the names we need to be able to resolve.
+		// 我们需要能够解析的所有名称。
 		namesToResolve := []string{
 			"kubernetes.default",
 			"kubernetes.default.svc",
 		}
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", dnsTestPodHostName, dnsTestServiceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		hostEntries := []string{hostFQDN, dnsTestPodHostName}
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, hostEntries, "", "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, hostEntries, "", "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -706,7 +706,7 @@ var _ = common.SIGDescribe("DNS", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		validateDNSResults(ctx, f, pod, append(muslFileNames, glibcFileNames...))
@@ -718,7 +718,7 @@ var _ = common.SIGDescribe("DNS HostNetwork", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.It("should resolve DNS of partial qualified names for services on hostNetwork pods with dnsPolicy: ClusterFirstWithHostNet [LinuxOnly]", func(ctx context.Context) {
-		// Create a test headless service.
+		// 创建一个测试用 headless service。
 		ginkgo.By("Creating a test headless service")
 		testServiceSelector := map[string]string{
 			"dns-test": "true",
@@ -732,8 +732,8 @@ var _ = common.SIGDescribe("DNS HostNetwork", func() {
 		regularService, err = f.ClientSet.CoreV1().Services(f.Namespace.Name).Create(ctx, regularService, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create regular service: %s", regularServiceName)
 
-		// All the names we need to be able to resolve.
-		// for headless service.
+		// 我们需要能够解析的所有名称。
+		// 针对 headless service。
 		namesToResolve := []string{
 			headlessService.Name,
 			fmt.Sprintf("%s.%s", headlessService.Name, f.Namespace.Name),
@@ -742,7 +742,7 @@ var _ = common.SIGDescribe("DNS HostNetwork", func() {
 			fmt.Sprintf("_http._tcp.%s.%s.svc", regularService.Name, f.Namespace.Name),
 		}
 
-		// TODO: Validate both IPv4 and IPv6 families for dual-stack
+		// TODO: 双栈下要同时验证 IPv4 和 IPv6 地址族
 		muslProbeCmd, muslFileNames := createProbeCommand(namesToResolve, nil, regularService.Spec.ClusterIP, "musl", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
 		muslProber := dnsQuerier{name: "musl", image: imageutils.Agnhost, cmd: muslProbeCmd}
 		glibcProbeCmd, glibcFileNames := createProbeCommand(namesToResolve, nil, regularService.Spec.ClusterIP, "glibc", f.Namespace.Name, framework.TestContext.ClusterDNSDomain, framework.TestContext.ClusterIsIPv6())
@@ -750,7 +750,7 @@ var _ = common.SIGDescribe("DNS HostNetwork", func() {
 		ginkgo.By("Running these commands against musl: " + muslProbeCmd + "\n")
 		ginkgo.By("Running these commands against glibc: " + glibcProbeCmd + "\n")
 
-		// Run a pod which probes DNS and exposes the results by HTTP.
+		// 运行一个探测 DNS 并通过 HTTP 暴露结果的 pod。
 		ginkgo.By("creating a pod to probe DNS")
 		pod := createDNSPod(f.Namespace.Name, []dnsQuerier{muslProber, glibcProber}, dnsTestPodHostName, dnsTestServiceName)
 		pod.ObjectMeta.Labels = testServiceSelector

@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-// LatencyMetric is a struct for dashboard metrics.
+// LatencyMetric 是仪表盘指标的结构体。
 type LatencyMetric struct {
 	Perc50  time.Duration `json:"Perc50"`
 	Perc90  time.Duration `json:"Perc90"`

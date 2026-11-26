@@ -46,10 +46,10 @@ import (
 )
 
 var (
-	// non-root UID used in tests.
+	// 测试中使用的非 root UID。
 	nonRootTestUserID = int64(1000)
 
-	// kubelet user used for userns mapping.
+	// 用于 userns 映射的 kubelet 用户。
 	kubeletUserForUsernsMapping = "kubelet"
 	getsubuidsBinary            = "getsubids"
 )
@@ -88,7 +88,7 @@ var _ = SIGDescribe("Security Context", func() {
 		}
 
 		f.It("must create the user namespace if set to false [LinuxOnly]", feature.UserNamespacesSupport, func(ctx context.Context) {
-			// with hostUsers=false the pod must use a new user namespace
+			// hostUsers=false 时，pod 必须使用新的 user namespace
 			podClient := e2epod.PodClientNS(f, f.Namespace.Name)
 
 			createdPod1 := podClient.Create(ctx, makePod(false))
@@ -115,8 +115,8 @@ var _ = SIGDescribe("Security Context", func() {
 			logs2, err := getLogs(createdPod2)
 			framework.ExpectNoError(err)
 
-			// 65536 is the size used for a user namespace.  Verify that the value is present
-			// in the /proc/self/uid_map file.
+			// 65536 是 user namespace 的大小。确认该值出现在
+			// /proc/self/uid_map 文件中。
 			if !strings.Contains(logs1, "65536") || !strings.Contains(logs2, "65536") {
 				framework.Failf("user namespace not created")
 			}
@@ -126,15 +126,15 @@ var _ = SIGDescribe("Security Context", func() {
 		})
 
 		f.It("must create the user namespace in the configured hostUID/hostGID range [LinuxOnly]", feature.UserNamespacesSupport, func(ctx context.Context) {
-			// We need to check with the binary "getsubuids" the mappings for the kubelet.
-			// If something is not present, we skip the test as the node wasn't configured to run this test.
+			// 需要用 "getsubuids" 二进制检查 kubelet 的映射。
+			// 如果缺少某些内容，跳过测试，因为节点未配置为运行此测试。
 			id, length, err := kubeletUsernsMappings(getsubuidsBinary)
 			if err != nil {
 				e2eskipper.Skipf("node is not setup for userns with kubelet mappings: %v", err)
 			}
 
 			for range 4 {
-				// makePod(false) creates the pod with user namespace
+				// makePod(false) 创建带 user namespace 的 pod
 				podClient := e2epod.PodClientNS(f, f.Namespace.Name)
 				createdPod := podClient.Create(ctx, makePod(false))
 				ginkgo.DeferCleanup(func(ctx context.Context) {
@@ -156,7 +156,7 @@ var _ = SIGDescribe("Security Context", func() {
 				logs, err := getLogs(createdPod)
 				framework.ExpectNoError(err)
 
-				// The hostUID is the second field in the /proc/self/uid_map file.
+				// hostUID 是 /proc/self/uid_map 文件中的第二个字段。
 				hostMap := strings.Fields(logs)
 				if len(hostMap) != 3 {
 					framework.Failf("can't detect hostUID for container, is the format of /proc/self/uid_map correct?")
@@ -168,25 +168,24 @@ var _ = SIGDescribe("Security Context", func() {
 				}
 				hostUID := uint32(tmp)
 
-				// Here we check the pod got a userns mapping within the range
-				// configured for the kubelet.
-				// To make sure the pod mapping doesn't fall within range by chance,
-				// we do the following:
-				// * The configured kubelet range as small as possible (enough to
-				// fit 110 pods, the default of the kubelet) to minimize the chance
-				// of this range being used "by chance" in the node configuration.
-				// * We also run this in a loop, so it is less likely to get lucky
-				// several times in a row.
+				// 这里检查 pod 获得的 userns 映射落在
+				// 为 kubelet 配置的范围内。
+				// 为确保 pod 的映射不是偶然落在该范围内，
+				// 我们这样做：
+				// - 把 kubelet 配置范围设得尽量小（足以
+				// 容纳 110 个 pod，kubelet 默认值），降低
+				// 该范围被节点配置"偶然"使用的概率。
+				// - 同时循环运行多次，连续几次
+				// 都碰巧通过的可能性更低。
 				//
-				// There are 65536 ranges possible and we configured the kubelet to
-				// use 110 of them. The chances of this test passing by chance 4
-				// times in a row and the kubelet not using only the configured
-				// range are:
+				// 可能的范围有 65536 个，我们配置 kubelet
+				// 使用其中 110 个。测试连续 4 次偶然通过、且 kubelet
+				// 实际并未只使用配置范围的概率为：
 				//
-				//	(110/65536) ^ 4 = 4.73e-12. IOW, less than 1 in a trillion.
+				//	(110/65536) ^ 4 = 4.73e-12。换言之，不到万亿分之一。
 				//
-				// Furthermore, the unit tests would also need to be buggy and not
-				// detect the bug. We expect to catch off-by-one errors there.
+				// 此外，单元测试也必须恰好有 bug 且未能
+				// 发现该问题。我们预期单元测试能捕获 off-by-one 错误。
 				if hostUID < id || hostUID > id+length {
 					framework.Failf("user namespace created outside of the configured range. Expected range: %v-%v, got: %v", id, id+length, hostUID)
 				}
@@ -194,18 +193,18 @@ var _ = SIGDescribe("Security Context", func() {
 		})
 
 		f.It("must not create the user namespace if set to true [LinuxOnly]", feature.UserNamespacesSupport, func(ctx context.Context) {
-			// with hostUsers=true the pod must use the host user namespace
+			// hostUsers=true 时，pod 必须使用宿主机 user namespace
 			pod := makePod(true)
-			// When running in the host's user namespace, the /proc/self/uid_map file content looks like:
+			// 在宿主机 user namespace 中运行时，/proc/self/uid_map 内容形如：
 			// 0          0 4294967295
-			// Verify the value 4294967295 is present in the output.
+			// 确认输出中存在值 4294967295。
 			e2epodoutput.TestContainerOutput(ctx, f, "read namespace", pod, 0, []string{
 				"4294967295",
 			})
 		})
 
 		f.It("should mount all volumes with proper permissions with hostUsers=false [LinuxOnly]", feature.UserNamespacesSupport, func(ctx context.Context) {
-			// Create configmap.
+			// 创建 configmap。
 			name := "userns-volumes-test-" + string(uuid.NewUUID())
 			configMap := newConfigMap(f, name)
 			ginkgo.By(fmt.Sprintf("Creating configMap %v/%v", f.Namespace.Name, configMap.Name))
@@ -214,14 +213,14 @@ var _ = SIGDescribe("Security Context", func() {
 				framework.Failf("unable to create test configMap %s: %v", configMap.Name, err)
 			}
 
-			// Create secret.
+			// 创建 secret。
 			secret := secretForTest(f.Namespace.Name, name)
 			ginkgo.By(fmt.Sprintf("Creating secret with name %s", secret.Name))
 			if secret, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
 				framework.Failf("unable to create test secret %s: %v", secret.Name, err)
 			}
 
-			// downwardAPI definition.
+			// downwardAPI 定义。
 			downwardVolSource := &v1.DownwardAPIVolumeSource{
 				Items: []v1.DownwardAPIVolumeFile{
 					{
@@ -234,7 +233,7 @@ var _ = SIGDescribe("Security Context", func() {
 				},
 			}
 
-			// Create a pod with all the volumes
+			// 创建带所有 volume 的 pod
 			falseVar := false
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -245,9 +244,9 @@ var _ = SIGDescribe("Security Context", func() {
 						{
 							Name:  "userns-file-permissions",
 							Image: imageutils.GetE2EImage(imageutils.BusyBox),
-							// Print (numeric) GID of the files in /vol/.
-							// We limit to "type f" as kubelet uses symlinks to those files, but we
-							// don't care about the owner of the symlink itself, just the files.
+							// 打印 /vol/ 中文件的（数字）GID。
+							// 只取 "type f"，因为 kubelet 对这些文件使用符号链接，但
+							// 我们关心的是文件本身，不是符号链接的属主。
 							Command: []string{"sh", "-c", "stat -c='%g' $(find /vol/ -type f)"},
 							VolumeMounts: []v1.VolumeMount{
 								{
@@ -317,8 +316,8 @@ var _ = SIGDescribe("Security Context", func() {
 				},
 			}
 
-			// Expect one line for each file on all the volumes.
-			// Each line should be "=0" that means root inside the container is the owner of the file.
+			// 所有 volume 上的每个文件应输出一行。
+			// 每行应为 "=0"，表示容器内 root 是文件属主。
 			downwardAPIVolFiles := 1
 			projectedFiles := len(secret.Data) + downwardAPIVolFiles
 			e2epodoutput.TestContainerOutput(ctx, f, "check file permissions", pod, 0, []string{
@@ -327,7 +326,7 @@ var _ = SIGDescribe("Security Context", func() {
 		})
 
 		f.It("should set FSGroup to user inside the container with hostUsers=false [LinuxOnly]", feature.UserNamespacesSupport, func(ctx context.Context) {
-			// Create configmap.
+			// 创建 configmap。
 			name := "userns-volumes-test-" + string(uuid.NewUUID())
 			configMap := newConfigMap(f, name)
 			ginkgo.By(fmt.Sprintf("Creating configMap %v/%v", f.Namespace.Name, configMap.Name))
@@ -336,7 +335,7 @@ var _ = SIGDescribe("Security Context", func() {
 				framework.Failf("unable to create test configMap %s: %v", configMap.Name, err)
 			}
 
-			// Create a pod with hostUsers=false
+			// 创建 hostUsers=false 的 pod
 			falseVar := false
 			fsGroup := int64(200)
 			pod := &v1.Pod{
@@ -348,9 +347,9 @@ var _ = SIGDescribe("Security Context", func() {
 						{
 							Name:  "userns-fsgroup",
 							Image: imageutils.GetE2EImage(imageutils.BusyBox),
-							// Print (numeric) GID of the files in /vol/.
-							// We limit to "type f" as kubelet uses symlinks to those files, but we
-							// don't care about the owner of the symlink itself, just the files.
+							// 打印 /vol/ 中文件的（数字）GID。
+							// 只取 "type f"，因为 kubelet 对这些文件使用符号链接，但
+							// 我们关心的是文件本身，不是符号链接的属主。
 							Command: []string{"sh", "-c", "stat -c='%g' $(find /vol/ -type f)"},
 							VolumeMounts: []v1.VolumeMount{
 								{
@@ -378,9 +377,9 @@ var _ = SIGDescribe("Security Context", func() {
 				},
 			}
 
-			// Expect one line for each file on all the volumes.
-			// Each line should be "=200" (fsGroup) that means it was mapped to the
-			// right user inside the container.
+			// 所有 volume 上的每个文件应输出一行。
+			// 每行应为 "=200"（fsGroup），表示它被映射为容器内的
+			// 正确用户。
 			e2epodoutput.TestContainerOutput(ctx, f, "check FSGroup is mapped correctly", pod, 0, []string{
 				strings.Repeat(fmt.Sprintf("=%v\n", fsGroup), len(configMap.Data)),
 			})
@@ -452,21 +451,21 @@ var _ = SIGDescribe("Security Context", func() {
 		}
 
 		/*
-			Release: v1.15
-			Testname: Security Context, runAsUser=65534
-			Description: Container is created with runAsUser option by passing uid 65534 to run as unpriviledged user. Pod MUST be in Succeeded phase.
-			[LinuxOnly]: This test is marked as LinuxOnly since Windows does not support running as UID / GID.
+			发布版本：v1.15
+			测试名称：Security Context, runAsUser=65534
+			描述：创建带 runAsUser 选项的容器，传入 uid 65534 以非特权用户运行。Pod 必须处于 Succeeded 阶段。
+			[LinuxOnly]：此测试标记为 LinuxOnly，因为 Windows 不支持以 UID / GID 运行。
 		*/
 		framework.ConformanceIt("should run the container with uid 65534 [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			createAndWaitUserPod(ctx, 65534)
 		})
 
 		/*
-			Release: v1.15
-			Testname: Security Context, runAsUser=0
-			Description: Container is created with runAsUser option by passing uid 0 to run as root privileged user. Pod MUST be in Succeeded phase.
-			This e2e can not be promoted to Conformance because a Conformant platform may not allow to run containers with 'uid 0' or running privileged operations.
-			[LinuxOnly]: This test is marked as LinuxOnly since Windows does not support running as UID / GID.
+			发布版本：v1.15
+			测试名称：Security Context, runAsUser=0
+			描述：创建带 runAsUser 选项的容器，传入 uid 0 以 root 特权用户运行。Pod 必须处于 Succeeded 阶段。
+			此 e2e 不能晋升为一致性测试，因为符合规范的平台可能不允许以 'uid 0' 运行容器或执行特权操作。
+			[LinuxOnly]：此测试标记为 LinuxOnly，因为 Windows 不支持以 UID / GID 运行。
 		*/
 		f.It("should run the container with uid 0 [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			createAndWaitUserPod(ctx, 0)
@@ -499,7 +498,7 @@ var _ = SIGDescribe("Security Context", func() {
 		}
 
 		ginkgo.It("should run with an explicit non-root user ID [LinuxOnly]", func(ctx context.Context) {
-			// creates a pod with RunAsUser, which is not supported on Windows.
+			// 创建带 RunAsUser 的 pod，Windows 不支持该选项。
 			e2eskipper.SkipIfNodeOSDistroIs("windows")
 			name := "explicit-nonroot-uid"
 			pod := makeNonRootPod(name, rootImage, ptr.To[int64](nonRootTestUserID))
@@ -509,7 +508,7 @@ var _ = SIGDescribe("Security Context", func() {
 			framework.ExpectNoError(podClient.MatchContainerOutput(ctx, name, name, "1000"))
 		})
 		ginkgo.It("should not run with an explicit root user ID [LinuxOnly]", func(ctx context.Context) {
-			// creates a pod with RunAsUser, which is not supported on Windows.
+			// 创建带 RunAsUser 的 pod，Windows 不支持该选项。
 			e2eskipper.SkipIfNodeOSDistroIs("windows")
 			name := "explicit-root-uid"
 			pod := makeNonRootPod(name, nonRootImage, ptr.To[int64](0))
@@ -579,22 +578,22 @@ var _ = SIGDescribe("Security Context", func() {
 		}
 
 		/*
-			Release: v1.15
-			Testname: Security Context, readOnlyRootFilesystem=true.
-			Description: Container is configured to run with readOnlyRootFilesystem to true which will force containers to run with a read only root file system.
-			Write operation MUST NOT be allowed and Pod MUST be in Failed state.
-			At this moment we are not considering this test for Conformance due to use of SecurityContext.
-			[LinuxOnly]: This test is marked as LinuxOnly since Windows does not support creating containers with read-only access.
+			发布版本：v1.15
+			测试名称：Security Context, readOnlyRootFilesystem=true.
+			描述：容器配置为 readOnlyRootFilesystem 为 true，强制以只读根文件系统运行。
+			写操作必须不被允许，Pod 必须处于 Failed 状态。
+			由于使用了 SecurityContext，目前不考虑将此测试纳入一致性测试。
+			[LinuxOnly]：此测试标记为 LinuxOnly，因为 Windows 不支持创建只读访问的容器。
 		*/
 		f.It("should run the container with readonly rootfs when readOnlyRootFilesystem=true [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			createAndWaitUserPod(ctx, true)
 		})
 
 		/*
-			Release: v1.15
-			Testname: Security Context, readOnlyRootFilesystem=false.
-			Description: Container is configured to run with readOnlyRootFilesystem to false.
-			Write operation MUST be allowed and Pod MUST be in Succeeded state.
+			发布版本：v1.15
+			测试名称：Security Context, readOnlyRootFilesystem=false.
+			描述：容器配置为 readOnlyRootFilesystem 为 false。
+			写操作必须被允许，Pod 必须处于 Succeeded 状态。
 		*/
 		framework.ConformanceIt("should run the container with writable rootfs when readOnlyRootFilesystem=false", f.WithNodeConformance(), func(ctx context.Context) {
 			createAndWaitUserPod(ctx, false)
@@ -633,10 +632,10 @@ var _ = SIGDescribe("Security Context", func() {
 			return podName
 		}
 		/*
-			Release: v1.15
-			Testname: Security Context, privileged=false.
-			Description: Create a container to run in unprivileged mode by setting pod's SecurityContext Privileged option as false. Pod MUST be in Succeeded phase.
-			[LinuxOnly]: This test is marked as LinuxOnly since it runs a Linux-specific command.
+			发布版本：v1.15
+			测试名称：Security Context, privileged=false.
+			描述：通过将 pod 的 SecurityContext Privileged 设为 false，创建以非特权模式运行的容器。Pod 必须处于 Succeeded 阶段。
+			[LinuxOnly]：此测试标记为 LinuxOnly，因为它运行 Linux 特有的命令。
 		*/
 		framework.ConformanceIt("should run the container as unprivileged when false [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			podName := createAndWaitUserPod(ctx, false)
@@ -696,13 +695,13 @@ var _ = SIGDescribe("Security Context", func() {
 		}
 
 		/*
-			Release: v1.15
-			Testname: Security Context, allowPrivilegeEscalation unset, uid != 0.
-			Description: Configuring the allowPrivilegeEscalation unset, allows the privilege escalation operation.
-			A container is configured with allowPrivilegeEscalation not specified (nil) and a given uid which is not 0.
-			When the container is run, container's output MUST match with expected output verifying container ran with uid=0.
-			This e2e Can not be promoted to Conformance as it is Container Runtime dependent and not all conformant platforms will require this behavior.
-			[LinuxOnly]: This test is marked LinuxOnly since Windows does not support running as UID / GID, or privilege escalation.
+			发布版本：v1.15
+			测试名称：Security Context, allowPrivilegeEscalation unset, uid != 0.
+			描述：不设置 allowPrivilegeEscalation，允许特权提升操作。
+			容器配置为不指定 allowPrivilegeEscalation（nil），并给定一个非 0 的 uid。
+			容器运行时，输出必须与预期一致，验证容器以 uid=0 运行。
+			此 e2e 不能晋升为一致性测试，因为它依赖容器运行时，并非所有符合规范的平台都要求这种行为。
+			[LinuxOnly]：此测试标记为 LinuxOnly，因为 Windows 不支持以 UID / GID 运行或特权提升。
 		*/
 		f.It("should allow privilege escalation when not explicitly set and uid != 0 [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			podName := "alpine-nnp-nil-" + string(uuid.NewUUID())
@@ -712,12 +711,12 @@ var _ = SIGDescribe("Security Context", func() {
 		})
 
 		/*
-			Release: v1.15
-			Testname: Security Context, allowPrivilegeEscalation=false.
-			Description: Configuring the allowPrivilegeEscalation to false, does not allow the privilege escalation operation.
-			A container is configured with allowPrivilegeEscalation=false and a given uid (1000) which is not 0.
-			When the container is run, container's output MUST match with expected output verifying container ran with given uid i.e. uid=1000.
-			[LinuxOnly]: This test is marked LinuxOnly since Windows does not support running as UID / GID, or privilege escalation.
+			发布版本：v1.15
+			测试名称：Security Context, allowPrivilegeEscalation=false.
+			描述：将 allowPrivilegeEscalation 设为 false，不允许特权提升操作。
+			容器配置为 allowPrivilegeEscalation=false，并给定一个非 0 的 uid（1000）。
+			容器运行时，输出必须与预期一致，验证容器以给定 uid 即 uid=1000 运行。
+			[LinuxOnly]：此测试标记为 LinuxOnly，因为 Windows 不支持以 UID / GID 运行或特权提升。
 		*/
 		framework.ConformanceIt("should not allow privilege escalation when false [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			podName := "alpine-nnp-false-" + string(uuid.NewUUID())
@@ -728,13 +727,13 @@ var _ = SIGDescribe("Security Context", func() {
 		})
 
 		/*
-			Release: v1.15
-			Testname: Security Context, allowPrivilegeEscalation=true.
-			Description: Configuring the allowPrivilegeEscalation to true, allows the privilege escalation operation.
-			A container is configured with allowPrivilegeEscalation=true and a given uid (1000) which is not 0.
-			When the container is run, container's output MUST match with expected output verifying container ran with uid=0 (making use of the privilege escalation).
-			This e2e Can not be promoted to Conformance as it is Container Runtime dependent and runtime may not allow to run.
-			[LinuxOnly]: This test is marked LinuxOnly since Windows does not support running as UID / GID.
+			发布版本：v1.15
+			测试名称：Security Context, allowPrivilegeEscalation=true.
+			描述：将 allowPrivilegeEscalation 设为 true，允许特权提升操作。
+			容器配置为 allowPrivilegeEscalation=true，并给定一个非 0 的 uid（1000）。
+			容器运行时，输出必须与预期一致，验证容器以 uid=0 运行（利用了特权提升）。
+			此 e2e 不能晋升为一致性测试，因为它依赖容器运行时，且运行时可能不允许运行。
+			[LinuxOnly]：此测试标记为 LinuxOnly，因为 Windows 不支持以 UID / GID 运行。
 		*/
 		f.It("should allow privilege escalation when true [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 			podName := "alpine-nnp-true-" + string(uuid.NewUUID())
@@ -754,16 +753,16 @@ var _ = SIGDescribe("Security Context", func() {
 		supplementalGroup := int64(60000)
 
 		mkPod := func(policy *v1.SupplementalGroupsPolicy) *v1.Pod {
-			// In specified image(agnhost E2E image),
-			// - user-defined-in-image(uid=1000) is defined
-			// - user-defined-in-image belongs to group-defined-in-image(gid=50000)
-			// thus, resultant supplementary group of the container processes should be
-			// - 1000 : self
-			// - 50000: pre-defined groups defined in the container image(/etc/group) of self(uid=1000)
-			// - 60000: specified in SupplementalGroups
+			// 在指定镜像（agnhost E2E 镜像）中，
+			// 定义了 user-defined-in-image(uid=1000)
+			// 且 user-defined-in-image 属于 group-defined-in-image(gid=50000)
+			// 因此容器进程的附加组应为
+			// - 1000：自身
+			// - 50000：容器镜像(/etc/group)中为自身(uid=1000)预定义的组
+			// - 60000：SupplementalGroups 中指定的组
 			// $ id -G
-			// 1000 50000 60000 (if SupplementalGroupsPolicy=Merge or not set)
-			// 1000 60000       (if SupplementalGroupsPolicy=Strict)
+			// 1000 50000 60000（SupplementalGroupsPolicy=Merge 或未设置时）
+			// 1000 60000（SupplementalGroupsPolicy=Strict 时）
 			podName := "sppl-grp-plcy-" + string(uuid.NewUUID())
 			return &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -952,7 +951,7 @@ var _ = SIGDescribe("User Namespaces for Restricted Pod Security Standards [Linu
 	})
 })
 
-// waitForFailure waits for pod to fail.
+// waitForFailure 等待 pod 失败。
 func waitForFailure(ctx context.Context, f *framework.Framework, name string, timeout time.Duration) {
 	gomega.Expect(e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, name, fmt.Sprintf("%s or %s", v1.PodSucceeded, v1.PodFailed), timeout,
 		func(pod *v1.Pod) (bool, error) {
@@ -968,15 +967,15 @@ func waitForFailure(ctx context.Context, f *framework.Framework, name string, ti
 	)).To(gomega.Succeed(), "wait for pod %q to fail", name)
 }
 
-// parseGetSubIdsOutput parses the output from the `getsubids` tool, which is used to query subordinate user or group ID ranges for
-// a given user or group. getsubids produces a line for each mapping configured.
-// Here we expect that there is a single mapping, and the same values are used for the subordinate user and group ID ranges.
-// The output is something like:
+// parseGetSubIdsOutput 解析 `getsubids` 工具的输出，该工具用于查询
+// 给定用户或组的从属用户或组 ID 范围。每条配置映射输出一行。
+// 这里预期只有一条映射，且从属用户和组 ID 范围使用相同的值。
+// 输出形如：
 // $ getsubids kubelet
 // 0: kubelet 65536 2147483648
 // $ getsubids -g kubelet
 // 0: kubelet 65536 2147483648
-// XXX: this is a c&p from pkg/kubelet/kubelet_pods.go. It is simpler to c&p than to try to reuse it.
+// XXX: 这是从 pkg/kubelet/kubelet_pods.go 复制粘贴来的。复制比尝试复用更简单。
 func parseGetSubIdsOutput(input string) (uint32, uint32, error) {
 	lines := strings.Split(strings.Trim(input, "\n"), "\n")
 	if len(lines) != 1 {
@@ -988,7 +987,7 @@ func parseGetSubIdsOutput(input string) (uint32, uint32, error) {
 		return 0, 0, fmt.Errorf("invalid line %q", input)
 	}
 
-	// Parsing the numbers
+	// 解析数字
 	num1, err := strconv.ParseUint(parts[2], 10, 32)
 	if err != nil {
 		return 0, 0, fmt.Errorf("error parsing line %q: %w", input, err)
@@ -1022,8 +1021,8 @@ func kubeletUsernsMappings(subuidBinary string) (uint32, uint32, error) {
 	return parseGetSubIdsOutput(string(outUids))
 }
 
-// getCurrentUserNamespacedPodsMetrics returns a UserNamespacedPodsMetrics object. Any metrics that do not have any
-// values reported will be set to 0.
+// getCurrentUserNamespacedPodsMetrics 返回一个 UserNamespacedPodsMetrics 对象。任何
+// 没有上报值的指标都设为 0。
 func getCurrentUserNamespacedPodsMetrics(ctx context.Context, f *framework.Framework, nodeName string) (UserNamespacedPodsMetrics, error) {
 	var result UserNamespacedPodsMetrics
 

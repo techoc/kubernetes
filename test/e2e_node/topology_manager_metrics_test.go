@@ -69,8 +69,8 @@ var _ = SIGDescribe("Topology Manager Metrics", framework.WithSerial(), feature.
 		})
 
 		ginkgo.It("should report zero admission counters after a fresh restart", func(ctx context.Context) {
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// 我们在 BeforeEach 中更新了 kubelet 配置，可以假设从头开始。
+			// 因为是 [Serial]，也可以假设除了我们没人在运行 pod。
 			ginkgo.By("Checking the topologymanager metrics right after the kubelet restart, with no pods running")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -100,8 +100,8 @@ var _ = SIGDescribe("Topology Manager Metrics", framework.WithSerial(), feature.
 			ginkgo.By("Creating the test pod which will be rejected for TopologyAffinity")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("topology-affinity-err", cpusNumPerNUMA+1))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// 我们在 BeforeEach 中更新了 kubelet 配置，可以假设从头开始。
+			// 因为是 [Serial]，也可以假设除了我们没人在运行 pod。
 			ginkgo.By("Checking the topologymanager metrics right after the kubelet restart, with pod failed to admit")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -131,8 +131,8 @@ var _ = SIGDescribe("Topology Manager Metrics", framework.WithSerial(), feature.
 			ginkgo.By("Creating the test pod")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("topology-alignment-ok", cpusNumPerNUMA))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// 我们在 BeforeEach 中更新了 kubelet 配置，可以假设从头开始。
+			// 因为是 [Serial]，也可以假设除了我们没人在运行 pod。
 			ginkgo.By("Checking the topologymanager metrics right after the kubelet restart, with pod should be admitted")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -162,8 +162,8 @@ var _ = SIGDescribe("Topology Manager Metrics", framework.WithSerial(), feature.
 			ginkgo.By("Creating the test pod")
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusiveSleeperPod("count-align-numa-ok", cpusNumPerNUMA))
 
-			// we updated the kubelet config in BeforeEach, so we can assume we start fresh.
-			// being [Serial], we can also assume noone else but us is running pods.
+			// 我们在 BeforeEach 中更新了 kubelet 配置，可以假设从头开始。
+			// 因为是 [Serial]，也可以假设除了我们没人在运行 pod。
 			ginkgo.By("Checking the cpumanager metrics right after the kubelet restart, with pod should be admitted")
 
 			idFn := makeCustomPairID("scope", "boundary")
@@ -187,8 +187,8 @@ var _ = SIGDescribe("Topology Manager Metrics", framework.WithSerial(), feature.
 })
 
 func hostCheck() (int, int, int, int) {
-	// this is a very rough check. We just want to rule out system that does NOT have
-	// multi-NUMA nodes or at least 4 cores
+	// 这是一个非常粗略的检查，只想排除没有
+	// 多 NUMA 节点或至少 4 核的系统
 
 	numaNodes := detectNUMANodes()
 	if numaNodes < minNumaNodes {
@@ -204,9 +204,9 @@ func hostCheck() (int, int, int, int) {
 
 	cpusNumPerNUMA := coreCount * threadsPerCore
 
-	// It is safe to assume that the CPUs are distributed equally across
-	// NUMA nodes and therefore number of CPUs on all NUMA nodes are same
-	// so we just check the CPUs on the first NUMA node
+	// 可以安全地假设 CPU 在 NUMA 节点间均匀分布，
+	// 因此所有 NUMA 节点上的 CPU 数相同，
+	// 所以只检查第一个 NUMA 节点上的 CPU 即可
 
 	framework.Logf("numaNodes on the system %d", numaNodes)
 	framework.Logf("Cores per NUMA on the system %d", coreCount)
@@ -218,7 +218,7 @@ func hostCheck() (int, int, int, int) {
 
 func checkMetricValueGreaterThan(value interface{}) types.GomegaMatcher {
 	return gstruct.PointTo(gstruct.MatchAllFields(gstruct.Fields{
-		// We already check Metric when matching the Id
+		// 匹配 Id 时已经检查过 Metric 了
 		"Metric":    gstruct.Ignore(),
 		"Value":     gomega.BeNumerically(">", value),
 		"Timestamp": gstruct.Ignore(),

@@ -46,7 +46,7 @@ var _ = SIGDescribe(feature.NodeAuthorizer, func() {
 
 	f := framework.NewDefaultFramework("node-authz")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
-	// client that will impersonate a node
+	// 用于模拟 node 的 client
 	var c clientset.Interface
 	var ns string
 	var asUser string
@@ -194,9 +194,9 @@ var _ = SIGDescribe(feature.NodeAuthorizer, func() {
 		ginkgo.By(fmt.Sprintf("Create node foo by user: %v", asUser))
 		_, err := c.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
 
-		// NOTE: If the test fails and a new node IS created, we need to delete it. If we don't, we'd have
-		// a zombie node in a NotReady state which will delay further tests since we're waiting for all
-		// tests to be in the Ready state.
+		// 注意：如果测试失败且确实创建了新 node，需要删除它。否则会留下
+		// 一个 NotReady 状态的僵尸 node，拖慢后续测试，因为我们等待所有
+		// 测试节点都处于 Ready 状态。
 		ginkgo.DeferCleanup(framework.IgnoreNotFound(f.ClientSet.CoreV1().Nodes().Delete), node.Name, metav1.DeleteOptions{})
 
 		if !apierrors.IsForbidden(err) {

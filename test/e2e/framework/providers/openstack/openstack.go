@@ -28,10 +28,10 @@ func newProvider() (framework.ProviderInterface, error) {
 	return &Provider{}, nil
 }
 
-// Provider is a structure to handle OpenStack clouds for e2e testing
-// It does not do anything useful, it's there only to provide valid
-// --provider=openstack cmdline option to allow testing of CSI migration
-// tests of kubernetes.io/cinder volume plugin.
+// Provider 是处理 OpenStack 云 e2e 测试的结构体
+// 它实际上什么也不做，只是为了提供有效的
+// --provider=openstack 命令行选项，以便测试 kubernetes.io/cinder
+// volume plugin 的 CSI 迁移测试。
 type Provider struct {
 	framework.NullProvider
 }

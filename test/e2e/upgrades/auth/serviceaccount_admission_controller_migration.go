@@ -37,25 +37,25 @@ const (
 	podAfterMigrationName  = "pod-after-migration"
 )
 
-// ServiceAccountAdmissionControllerMigrationTest test that a pod is functioning before and after
-// a cluster upgrade.
+// ServiceAccountAdmissionControllerMigrationTest 测试 pod 在集群升级前后
+// 均能正常工作。
 type ServiceAccountAdmissionControllerMigrationTest struct {
 	pod *v1.Pod
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (ServiceAccountAdmissionControllerMigrationTest) Name() string {
 	return "[sig-auth] serviceaccount-admission-controller-migration"
 }
 
-// Setup creates pod-before-migration which has legacy service account token.
+// Setup 创建 pod-before-migration，它带有旧版 service account token。
 func (t *ServiceAccountAdmissionControllerMigrationTest) Setup(ctx context.Context, f *framework.Framework) {
 	t.pod = createPod(ctx, f, podBeforeMigrationName)
 	inClusterClientMustWork(ctx, f, t.pod)
 }
 
-// Test waits for the upgrade to complete, and then verifies pod-before-migration
-// and pod-after-migration are able to make requests using in cluster config.
+// Test 等待升级完成，然后验证 pod-before-migration
+// 和 pod-after-migration 能用 in-cluster config 发起请求。
 func (t *ServiceAccountAdmissionControllerMigrationTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	ginkgo.By("Waiting for upgrade to finish")
 	<-done
@@ -82,9 +82,9 @@ func (t *ServiceAccountAdmissionControllerMigrationTest) Test(ctx context.Contex
 	ginkgo.By("Finishing post-upgrade check")
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *ServiceAccountAdmissionControllerMigrationTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 靠 namespace 删除来清理所有内容
 }
 
 func inClusterClientMustWork(ctx context.Context, f *framework.Framework, pod *v1.Pod) {
@@ -112,7 +112,7 @@ func inClusterClientMustWork(ctx context.Context, f *framework.Framework, pod *v
 	}
 }
 
-// createPod creates a pod.
+// createPod 创建一个 pod。
 func createPod(ctx context.Context, f *framework.Framework, podName string) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

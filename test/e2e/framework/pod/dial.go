@@ -39,8 +39,8 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
-// NewTransport creates a transport which uses the port forward dialer.
-// URLs must use <namespace>.<pod>:<port> as host.
+// NewTransport 创建一个使用 port forward dialer 的 transport。
+// URL 的 host 必须使用 <namespace>.<pod>:<port>。
 func NewTransport(client kubernetes.Interface, restConfig *rest.Config) *http.Transport {
 	return &http.Transport{
 		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
@@ -54,7 +54,7 @@ func NewTransport(client kubernetes.Interface, restConfig *rest.Config) *http.Tr
 	}
 }
 
-// NewDialer creates a dialer that supports connecting to container ports.
+// NewDialer 创建一个支持连接容器端口的 dialer。
 func NewDialer(client kubernetes.Interface, restConfig *rest.Config) *Dialer {
 	return &Dialer{
 		client:     client,
@@ -62,13 +62,13 @@ func NewDialer(client kubernetes.Interface, restConfig *rest.Config) *Dialer {
 	}
 }
 
-// Dialer holds the relevant parameters that are independent of a particular connection.
+// Dialer 保存与特定连接无关的相关参数。
 type Dialer struct {
 	client     kubernetes.Interface
 	restConfig *rest.Config
 }
 
-// DialContainerPort connects to a certain container port in a pod.
+// DialContainerPort 连接到 pod 中的指定容器端口。
 func (d *Dialer) DialContainerPort(ctx context.Context, addr Addr) (conn net.Conn, finalErr error) {
 	restClient := d.client.CoreV1().RESTClient()
 	restConfig := d.restConfig
@@ -79,7 +79,7 @@ func (d *Dialer) DialContainerPort(ctx context.Context, addr Addr) (conn net.Con
 		restConfig.NegotiatedSerializer = scheme.Codecs
 	}
 
-	// The setup code around the actual portforward is from
+	// 实际 portforward 周围的 setup 代码来自
 	// https://github.com/kubernetes/kubernetes/blob/c652ffbe4a29143623a1aaec39f745575f7e43ad/staging/src/k8s.io/kubectl/pkg/cmd/portforward/portforward.go
 	req := restClient.Post().
 		Resource("pods").
@@ -96,7 +96,7 @@ func (d *Dialer) DialContainerPort(ctx context.Context, addr Addr) (conn net.Con
 	if err != nil {
 		return nil, err
 	}
-	// First attempt tunneling (websocket) dialer, then fallback to spdy dialer.
+	// 先尝试隧道（websocket）dialer，失败则回退到 spdy dialer。
 	dialer = portforward.NewFallbackDialerForStreaming(tunnelingDialer, dialer, func(err error) bool {
 		if httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err) {
 			framework.Logf("fallback to secondary dialer from primary dialer err: %v", err)
@@ -117,14 +117,14 @@ func (d *Dialer) DialContainerPort(ctx context.Context, addr Addr) (conn net.Con
 		}
 	}()
 
-	// create error stream
+	// 创建 error stream
 	headers := http.Header{}
 	headers.Set(v1.StreamType, v1.StreamTypeError)
 	headers.Set(v1.PortHeader, fmt.Sprintf("%d", addr.Port))
 	headers.Set(v1.PortForwardRequestIDHeader, requestID)
 
-	// We're not writing to this stream, just reading an error message from it.
-	// This happens asynchronously.
+	// 我们不往这个 stream 写数据，只从中读取错误消息。
+	// 这是异步发生的。
 	errorStream, err := streamConn.CreateStream(headers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating error stream: %w", err)
@@ -140,7 +140,7 @@ func (d *Dialer) DialContainerPort(ctx context.Context, addr Addr) (conn net.Con
 		}
 	}()
 
-	// create data stream
+	// 创建 data stream
 	headers.Set(v1.StreamType, v1.StreamTypeData)
 	dataStream, err := streamConn.CreateStream(headers)
 	if err != nil {
@@ -153,9 +153,9 @@ func (d *Dialer) DialContainerPort(ctx context.Context, addr Addr) (conn net.Con
 	}, nil
 }
 
-// Addr contains all relevant parameters for a certain port in a pod.
-// The container should be running before connections are attempted,
-// otherwise the connection will fail.
+// Addr 包含 pod 中某个端口的所有相关参数。
+// 尝试连接前容器应已运行，
+// 否则连接会失败。
 type Addr struct {
 	Namespace, PodName string
 	Port               int
@@ -171,8 +171,8 @@ func (a Addr) String() string {
 	return fmt.Sprintf("%s.%s:%d", a.Namespace, a.PodName, a.Port)
 }
 
-// ParseAddr expects a <namespace>.<pod>:<port number> as produced
-// by Addr.String.
+// ParseAddr 期望 <namespace>.<pod>:<port number> 格式，
+// 由 Addr.String 生成。
 func ParseAddr(addr string) (*Addr, error) {
 	parts := addrRegex.FindStringSubmatch(addr)
 	if parts == nil {

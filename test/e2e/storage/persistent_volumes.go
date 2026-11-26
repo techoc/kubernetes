@@ -50,33 +50,33 @@ import (
 	"github.com/onsi/gomega/gstruct"
 )
 
-// Validate PV/PVC, create and verify writer pod, delete the PVC, and validate the PV's
-// phase. Note: the PV is deleted in the AfterEach, not here.
+// 校验 PV/PVC，创建并验证 writer pod，删除 PVC，并校验 PV 的
+// phase。注意：PV 在 AfterEach 中删除，不在这里。
 func completeTest(ctx context.Context, f *framework.Framework, c clientset.Interface, ns string, pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) {
-	// 1. verify that the PV and PVC have bound correctly
+	// 1. 验证 PV 和 PVC 正确绑定
 	ginkgo.By("Validating the PV-PVC binding")
 	framework.ExpectNoError(e2epv.WaitOnPVandPVC(ctx, c, f.Timeouts, ns, pv, pvc))
 
-	// 2. create the nfs writer pod, test if the write was successful,
-	//    then delete the pod and verify that it was deleted
+	// 2. 创建 nfs writer pod，测试写入是否成功，
+	//    然后删除 pod 并验证它已被删除
 	ginkgo.By("Checking pod has write access to PersistentVolume")
 	framework.ExpectNoError(createWaitAndDeletePod(ctx, c, f.Timeouts, ns, pvc, "touch /mnt/volume1/SUCCESS && (id -G | grep -E '\\b777\\b')"))
 
-	// 3. delete the PVC, wait for PV to become "Released"
+	// 3. 删除 PVC，等待 PV 变为 "Released"
 	ginkgo.By("Deleting the PVC to invoke the reclaim policy.")
 	framework.ExpectNoError(e2epv.DeletePVCandValidatePV(ctx, c, f.Timeouts, ns, pvc, pv, v1.VolumeReleased))
 }
 
-// Validate pairs of PVs and PVCs, create and verify writer pod, delete PVC and validate
-// PV. Ensure each step succeeds.
-// Note: the PV is deleted in the AfterEach, not here.
-// Note: this func is serialized, we wait for each pod to be deleted before creating the
+// 校验多对 PV 和 PVC，创建并验证 writer pod，删除 PVC 并校验
+// PV。确保每一步都成功。
+// 注意：PV 在 AfterEach 中删除，不在这里。
+// 注意：这个函数是串行的，创建下一个 pod 前会等待
 //
-//	next pod. Adding concurrency is a TODO item.
+// 前一个 pod 被删除。增加并发是待办事项。
 func completeMultiTest(ctx context.Context, f *framework.Framework, c clientset.Interface, ns string, pvols e2epv.PVMap, claims e2epv.PVCMap, expectPhase v1.PersistentVolumePhase) error {
 	var err error
 
-	// 1. verify each PV permits write access to a client pod
+	// 1. 验证每个 PV 都允许 client pod 写入
 	ginkgo.By("Checking pod has write access to PersistentVolumes")
 	for pvcKey := range claims {
 		pvc, err := c.CoreV1().PersistentVolumeClaims(pvcKey.Namespace).Get(ctx, pvcKey.Name, metav1.GetOptions{})
@@ -86,18 +86,18 @@ func completeMultiTest(ctx context.Context, f *framework.Framework, c clientset.
 		if len(pvc.Spec.VolumeName) == 0 {
 			continue // claim is not bound
 		}
-		// sanity test to ensure our maps are in sync
+		// 健全性检查，确保我们的 map 同步
 		_, found := pvols[pvc.Spec.VolumeName]
 		if !found {
 			return fmt.Errorf("internal: pvols map is missing volume %q", pvc.Spec.VolumeName)
 		}
-		// TODO: currently a serialized test of each PV
+		// TODO: 目前对每个 PV 都是串行测试
 		if err = createWaitAndDeletePod(ctx, c, f.Timeouts, pvcKey.Namespace, pvc, "touch /mnt/volume1/SUCCESS && (id -G | grep -E '\\b777\\b')"); err != nil {
 			return err
 		}
 	}
 
-	// 2. delete each PVC, wait for its bound PV to reach `expectedPhase`
+	// 2. 删除每个 PVC，等待其绑定的 PV 达到 `expectedPhase`
 	ginkgo.By("Deleting PVCs to invoke reclaim policy")
 	if err = e2epv.DeletePVCandValidatePVGroup(ctx, c, f.Timeouts, ns, pvols, claims, expectPhase); err != nil {
 		return err
@@ -107,7 +107,7 @@ func completeMultiTest(ctx context.Context, f *framework.Framework, c clientset.
 
 var _ = utils.SIGDescribe("PersistentVolumes", func() {
 
-	// global vars for the ginkgo.Context()s and ginkgo.It()'s below
+	// 下面 ginkgo.Context() 和 ginkgo.It() 的全局变量
 	f := framework.NewDefaultFramework("pv")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 	var (
@@ -126,13 +126,13 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 	ginkgo.BeforeEach(func() {
 		c = f.ClientSet
 		ns = f.Namespace.Name
-		// Enforce binding only within test space via selector labels
+		// 通过 selector label 强制只在测试空间内绑定
 		volLabel = labels.Set{e2epv.VolumeSelectorKey: ns}
 		selector = metav1.SetAsLabelSelector(volLabel)
 	})
 
-	// Testing configurations of a single a PV/PVC pair, multiple evenly paired PVs/PVCs,
-	// and multiple unevenly paired PV/PVCs
+	// 测试单个 PV/PVC 对、多个均匀配对的 PV/PVC，
+	// 以及多个非均匀配对的 PV/PVC 的配置
 	ginkgo.Describe("NFS", func() {
 
 		var (
@@ -167,7 +167,7 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 		})
 
 		ginkgo.Context("with Single PV - PVC pairs", func() {
-			// Note: this is the only code where the pv is deleted.
+			// 注意：这是唯一删除 pv 的代码。
 			ginkgo.AfterEach(func(ctx context.Context) {
 				framework.Logf("AfterEach: Cleaning up test resources.")
 				if errs := e2epv.PVPVCCleanup(ctx, c, ns, pv, pvc); len(errs) > 0 {
@@ -175,45 +175,45 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				}
 			})
 
-			// Individual tests follow:
+			// 各个测试如下：
 			//
-			// Create an nfs PV, then a claim that matches the PV, and a pod that
-			// contains the claim. Verify that the PV and PVC bind correctly, and
-			// that the pod can write to the nfs volume.
+			// 创建一个 nfs PV，再创建一个匹配该 PV 的 claim，以及一个
+			// 包含该 claim 的 pod。验证 PV 和 PVC 正确绑定，且
+			// pod 能写入 nfs volume。
 			ginkgo.It("should create a non-pre-bound PV and PVC: test write access", func(ctx context.Context) {
 				pv, pvc, err = e2epv.CreatePVPVC(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, false)
 				framework.ExpectNoError(err)
 				completeTest(ctx, f, c, ns, pv, pvc)
 			})
 
-			// Create a claim first, then a nfs PV that matches the claim, and a
-			// pod that contains the claim. Verify that the PV and PVC bind
-			// correctly, and that the pod can write to the nfs volume.
+			// 先创建一个 claim，再创建匹配该 claim 的 nfs PV，以及一个
+			// 包含该 claim 的 pod。验证 PV 和 PVC 正确
+			// 绑定，且 pod 能写入 nfs volume。
 			ginkgo.It("create a PVC and non-pre-bound PV: test write access", func(ctx context.Context) {
 				pv, pvc, err = e2epv.CreatePVCPV(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, false)
 				framework.ExpectNoError(err)
 				completeTest(ctx, f, c, ns, pv, pvc)
 			})
 
-			// Create a claim first, then a pre-bound nfs PV that matches the claim,
-			// and a pod that contains the claim. Verify that the PV and PVC bind
-			// correctly, and that the pod can write to the nfs volume.
+			// 先创建一个 claim，再创建匹配该 claim 的预绑定 nfs PV，
+			// 以及一个包含该 claim 的 pod。验证 PV 和 PVC 正确
+			// 绑定，且 pod 能写入 nfs volume。
 			ginkgo.It("create a PVC and a pre-bound PV: test write access", func(ctx context.Context) {
 				pv, pvc, err = e2epv.CreatePVCPV(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, true)
 				framework.ExpectNoError(err)
 				completeTest(ctx, f, c, ns, pv, pvc)
 			})
 
-			// Create a nfs PV first, then a pre-bound PVC that matches the PV,
-			// and a pod that contains the claim. Verify that the PV and PVC bind
-			// correctly, and that the pod can write to the nfs volume.
+			// 先创建一个 nfs PV，再创建匹配该 PV 的预绑定 PVC，
+			// 以及一个包含该 claim 的 pod。验证 PV 和 PVC 正确
+			// 绑定，且 pod 能写入 nfs volume。
 			ginkgo.It("create a PV and a pre-bound PVC: test write access", func(ctx context.Context) {
 				pv, pvc, err = e2epv.CreatePVPVC(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, true)
 				framework.ExpectNoError(err)
 				completeTest(ctx, f, c, ns, pv, pvc)
 			})
 
-			// The same as above, but with multiple volumes reference the same PVC in the pod.
+			// 与上面相同，但 pod 中有多个 volume 引用同一个 PVC。
 			ginkgo.It("create a PVC and use it multiple times in a single pod", func(ctx context.Context) {
 				pv, pvc, err = e2epv.CreatePVPVC(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, true)
 				framework.ExpectNoError(err)
@@ -232,17 +232,17 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				framework.ExpectNoError(err)
 			})
 
-			// Create new PV without claim, verify it's in Available state and LastPhaseTransitionTime is set.
+			// 创建无 claim 的新 PV，验证其处于 Available 状态且设置了 LastPhaseTransitionTime。
 			f.It("create a PV: test phase transition timestamp is set and phase is Available", func(ctx context.Context) {
 				pvObj := e2epv.MakePersistentVolume(pvConfig)
 				pv, err = e2epv.CreatePV(ctx, c, f.Timeouts, pvObj)
 				framework.ExpectNoError(err)
 
-				// The new PV should transition phase to: Available
+				// 新 PV 应转换 phase 到：Available
 				err = e2epv.WaitForPersistentVolumePhase(ctx, v1.VolumeAvailable, c, pv.Name, 2*time.Second, framework.ClaimProvisionShortTimeout)
 				framework.ExpectNoError(err)
 
-				// Verify that new PV has phase transition timestamp set.
+				// 验证新 PV 设置了 phase 转换时间戳。
 				pv, err = c.CoreV1().PersistentVolumes().Get(ctx, pv.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 				if pv.Status.LastPhaseTransitionTime == nil {
@@ -250,13 +250,13 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				}
 			})
 
-			// Create PV and pre-bound PVC that matches the PV, verify that when PV and PVC bind
-			// the LastPhaseTransitionTime filed of the PV is updated.
+			// 创建 PV 和匹配该 PV 的预绑定 PVC，验证 PV 和 PVC 绑定时
+			// PV 的 LastPhaseTransitionTime 字段被更新。
 			f.It("create a PV and a pre-bound PVC: test phase transition timestamp is set", func(ctx context.Context) {
 				pv, pvc, err = e2epv.CreatePVPVC(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, true)
 				framework.ExpectNoError(err)
 
-				// The claim should transition phase to: Bound
+				// claim 应转换 phase 到：Bound
 				err = e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, c, ns, pvc.Name, 2*time.Second, framework.ClaimProvisionShortTimeout)
 				framework.ExpectNoError(err)
 				pvc, err = c.CoreV1().PersistentVolumeClaims(ns).Get(ctx, pvc.Name, metav1.GetOptions{})
@@ -269,14 +269,14 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				completeTest(ctx, f, c, ns, pv, pvc)
 			})
 
-			// Create PV and pre-bound PVC that matches the PV, verify that when PV and PVC bind
-			// the LastPhaseTransitionTime field of the PV is set, then delete the PVC to change PV phase to
-			// released and validate PV LastPhaseTransitionTime correctly updated timestamp.
+			// 创建 PV 和匹配该 PV 的预绑定 PVC，验证 PV 和 PVC 绑定时
+			// PV 的 LastPhaseTransitionTime 字段被设置，然后删除 PVC 使 PV phase 变为
+			// released，并验证 PV LastPhaseTransitionTime 正确更新时间戳。
 			f.It("create a PV and a pre-bound PVC: test phase transition timestamp multiple updates", func(ctx context.Context) {
 				pv, pvc, err = e2epv.CreatePVPVC(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, true)
 				framework.ExpectNoError(err)
 
-				// The claim should transition phase to: Bound.
+				// claim 应转换 phase 到：Bound。
 				err = e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, c, ns, pvc.Name, 2*time.Second, framework.ClaimProvisionShortTimeout)
 				framework.ExpectNoError(err)
 				pvc, err = c.CoreV1().PersistentVolumeClaims(ns).Get(ctx, pvc.Name, metav1.GetOptions{})
@@ -284,17 +284,17 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				pv, err = c.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// Save first phase transition time.
+				// 保存第一次 phase 转换时间。
 				firstPhaseTransition := pv.Status.LastPhaseTransitionTime
 
-				// Let test finish and delete PVC.
+				// 让测试完成并删除 PVC。
 				completeTest(ctx, f, c, ns, pv, pvc)
 
-				// The claim should transition phase to: Released.
+				// claim 应转换 phase 到：Released。
 				err = e2epv.WaitForPersistentVolumePhase(ctx, v1.VolumeReleased, c, pv.Name, 2*time.Second, framework.ClaimProvisionShortTimeout)
 				framework.ExpectNoError(err)
 
-				// Verify the phase transition timestamp got updated chronologically *after* first phase transition.
+				// 验证 phase 转换时间戳在第一次转换*之后*按时间顺序更新。
 				pv, err = c.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
 				if !firstPhaseTransition.Before(pv.Status.LastPhaseTransitionTime) {
 					framework.Failf("Persistent volume %v should have LastPhaseTransitionTime value updated to be chronologically after previous phase change: %v, but it's %v.", pv.GetName(), firstPhaseTransition, pv.Status.LastPhaseTransitionTime)
@@ -302,19 +302,19 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 			})
 		})
 
-		// Create multiple pvs and pvcs, all in the same namespace. The PVs-PVCs are
-		// verified to bind, though it's not known in advanced which PV will bind to
-		// which claim. For each pv-pvc pair create a pod that writes to the nfs mount.
-		// Note: when the number of PVs exceeds the number of PVCs the max binding wait
-		//   time will occur for each PV in excess. This is expected but the delta
-		//   should be kept small so that the tests aren't unnecessarily slow.
-		// Note: future tests may wish to incorporate the following:
-		//   a) pre-binding, b) create pvcs before pvs, c) create pvcs and pods
-		//   in different namespaces.
+		// 创建多个 pv 和 pvc，都在同一 namespace。验证 PV-PVC
+		// 能绑定，但事先不知道哪个 PV 会绑定到
+		// 哪个 claim。为每对 pv-pvc 创建一个写入 nfs mount 的 pod。
+		// 注意：当 PV 数量超过 PVC 数量时，每个多余的 PV
+		//   都会产生最大绑定等待时间。这是预期的，但 delta
+		//   应保持较小，以免测试不必要的缓慢。
+		// 注意：未来的测试可能希望加入以下内容：
+		//   a) 预绑定，b) 先创建 pvc 再创建 pv，c) 在不同 namespace
+		//   中创建 pvc 和 pod。
 		ginkgo.Context("with multiple PVs and PVCs all in same ns", func() {
 
-			// scope the pv and pvc maps to be available in the AfterEach
-			// note: these maps are created fresh in CreatePVsPVCs()
+			// 把 pv 和 pvc 的 map 作用域限定为 AfterEach 可用
+			// 注意：这些 map 在 CreatePVsPVCs() 中重新创建
 			var pvols e2epv.PVMap
 			var claims e2epv.PVCMap
 
@@ -330,8 +330,8 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				}
 			})
 
-			// Create 2 PVs and 4 PVCs.
-			// Note: PVs are created before claims and no pre-binding
+			// 创建 2 个 PV 和 4 个 PVC。
+			// 注意：PV 在 claim 之前创建，且无预绑定
 			ginkgo.It("should create 2 PVs and 4 PVCs: test write access", func(ctx context.Context) {
 				numPVs, numPVCs := 2, 4
 				pvols, claims, err = e2epv.CreatePVsPVCs(ctx, numPVs, numPVCs, c, f.Timeouts, ns, pvConfig, pvcConfig)
@@ -340,8 +340,8 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				framework.ExpectNoError(completeMultiTest(ctx, f, c, ns, pvols, claims, v1.VolumeReleased))
 			})
 
-			// Create 3 PVs and 3 PVCs.
-			// Note: PVs are created before claims and no pre-binding
+			// 创建 3 个 PV 和 3 个 PVC。
+			// 注意：PV 在 claim 之前创建，且无预绑定
 			ginkgo.It("should create 3 PVs and 3 PVCs: test write access", func(ctx context.Context) {
 				numPVs, numPVCs := 3, 3
 				pvols, claims, err = e2epv.CreatePVsPVCs(ctx, numPVs, numPVCs, c, f.Timeouts, ns, pvConfig, pvcConfig)
@@ -350,8 +350,8 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				framework.ExpectNoError(completeMultiTest(ctx, f, c, ns, pvols, claims, v1.VolumeReleased))
 			})
 
-			// Create 4 PVs and 2 PVCs.
-			// Note: PVs are created before claims and no pre-binding.
+			// 创建 4 个 PV 和 2 个 PVC。
+			// 注意：PV 在 claim 之前创建，且无预绑定。
 			f.It("should create 4 PVs and 2 PVCs: test write access", f.WithSlow(), func(ctx context.Context) {
 				numPVs, numPVCs := 4, 2
 				pvols, claims, err = e2epv.CreatePVsPVCs(ctx, numPVs, numPVCs, c, f.Timeouts, ns, pvConfig, pvcConfig)
@@ -361,9 +361,9 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 			})
 		})
 
-		// This Context isolates and tests the "Recycle" reclaim behavior.  On deprecation of the
-		// Recycler, this entire context can be removed without affecting the test suite or leaving behind
-		// dead code.
+		// 这个 Context 专门隔离并测试 "Recycle" reclaim 行为。Recycler
+		// 被弃用后，整个 context 可以删除，不会影响测试套件，也不会留下
+		// 死代码。
 		ginkgo.Context("when invoking the Recycle reclaim policy", func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
 				pvConfig.ReclaimPolicy = v1.PersistentVolumeReclaimRecycle
@@ -379,9 +379,9 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				}
 			})
 
-			// This ginkgo.It() tests a scenario where a PV is written to by a Pod, recycled, then the volume checked
-			// for files. If files are found, the checking Pod fails, failing the test.  Otherwise, the pod
-			// (and test) succeed.
+			// 这个 ginkgo.It() 测试如下场景：PV 被 Pod 写入、回收，然后检查
+			// volume 中是否有文件。发现文件则检查 Pod 失败，测试失败。否则 pod
+			// （和测试）成功。
 			ginkgo.It("should test that a PV becomes Available and is clean after the PVC is deleted.", func(ctx context.Context) {
 				ginkgo.By("Writing to the volume.")
 				pod := e2epod.MakePod(ns, nil, []*v1.PersistentVolumeClaim{pvc}, f.NamespacePodSecurityLevel, "touch /mnt/volume1/SUCCESS && (id -G | grep -E '\\b777\\b')")
@@ -399,7 +399,7 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				framework.ExpectNoError(err)
 				framework.ExpectNoError(e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, c, ns, pvc.Name, 2*time.Second, 60*time.Second), "Failed to reach 'Bound' for PVC ", pvc.Name)
 
-				// If a file is detected in /mnt, fail the pod and do not restart it.
+				// 如果在 /mnt 中发现文件，让 pod 失败且不重启它。
 				ginkgo.By("Verifying the mount has been cleaned.")
 				mount := pod.Spec.Containers[0].VolumeMounts[0].MountPath
 				pod = e2epod.MakePod(ns, nil, []*v1.PersistentVolumeClaim{pvc}, f.NamespacePodSecurityLevel, fmt.Sprintf("[ $(ls -A %s | wc -l) -eq 0 ] && exit 0 || exit 1", mount))
@@ -410,7 +410,7 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				framework.ExpectNoError(e2epod.DeletePodWithWait(ctx, c, pod))
 				framework.Logf("Pod exited without failure; the volume has been recycled.")
 
-				// Delete the PVC and wait for the recycler to finish before the NFS server gets shutdown during cleanup.
+				// 删除 PVC，等待 recycler 完成后再在清理时关闭 NFS server。
 				framework.Logf("Removing second PVC, waiting for the recycler to finish before cleanup.")
 				framework.ExpectNoError(e2epv.DeletePVCandValidatePV(ctx, c, f.Timeouts, ns, pvc, pv, v1.VolumeAvailable))
 				pvc = nil
@@ -436,16 +436,16 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 		})
 
 		/*
-			Release: v1.29
-			Testname: PersistentVolumes(Claims), lifecycle
-			Description: Creating PV and PVC MUST succeed. Listing PVs with a labelSelector
-			MUST succeed. Listing PVCs in a namespace MUST succeed. Patching a PV MUST succeed
-			with its new label found. Patching a PVC MUST succeed with its new label found.
-			Reading a PV and PVC MUST succeed with required UID retrieved. Deleting a PVC
-			and PV MUST succeed and it MUST be confirmed. Replacement PV and PVC MUST be created.
-			Updating a PV MUST succeed with its new label found. Updating a PVC MUST succeed
-			with its new label found. Deleting the PVC and PV via deleteCollection MUST succeed
-			and it MUST be confirmed.
+			发布版本：v1.29
+			测试名称：PersistentVolumes(Claims), lifecycle
+			描述：创建 PV 和 PVC 必须成功。用 labelSelector 列举 PV
+			必须成功。列举 namespace 中的 PVC 必须成功。patch PV 必须成功
+			且能找到新标签。patch PVC 必须成功且能找到新标签。
+			读取 PV 和 PVC 必须成功且能取回所需 UID。删除 PVC
+			和 PV 必须成功且必须被确认。必须创建替代的 PV 和 PVC。
+			更新 PV 必须成功且能找到新标签。更新 PVC 必须成功
+			且能找到新标签。通过 deleteCollection 删除 PVC 和 PV 必须成功
+			且必须被确认。
 		*/
 		framework.ConformanceIt("should run through the lifecycle of a PV and a PVC", func(ctx context.Context) {
 
@@ -454,7 +454,7 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 
 			ginkgo.By("Creating initial PV and PVC")
 
-			// Configure csiDriver
+			// 配置 csiDriver
 			defaultFSGroupPolicy := storagev1.ReadWriteOnceWithFSTypeFSGroupPolicy
 			csiDriverLabel := map[string]string{"e2e-test": f.UniqueName}
 			csiDriver := &storagev1.CSIDriver{
@@ -680,15 +680,15 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 		})
 
 		/*
-			Release: v1.29
-			Testname: PersistentVolumes(Claims), apply changes to a pv/pvc status
-			Description: Creating PV and PVC MUST succeed. Listing PVs with a labelSelector
-			 MUST succeed. Listing PVCs in a namespace MUST succeed. Reading PVC status MUST
-			 succeed with a valid phase found. Reading PV status MUST succeed with a valid
-			 phase found. Patching the PVC status MUST succeed with its new condition found.
-			 Patching the PV status MUST succeed with the new reason/message found. Updating
-			 the PVC status MUST succeed with its new condition found. Updating the PV status
-			 MUST succeed with the new reason/message found.
+			发布版本：v1.29
+			测试名称：PersistentVolumes(Claims), apply changes to a pv/pvc status
+			描述：创建 PV 和 PVC 必须成功。用 labelSelector 列举 PV
+			 必须成功。列举 namespace 中的 PVC 必须成功。读取 PVC status 必须
+			 成功且找到有效 phase。读取 PV status 必须成功且找到有效
+			 phase。patch PVC status 必须成功且找到新 condition。
+			 patch PV status 必须成功且找到新的 reason/message。更新
+			 PVC status 必须成功且找到新 condition。更新 PV status
+			 必须成功且找到新的 reason/message。
 		*/
 		framework.ConformanceIt("should apply changes to a pv/pvc status", func(ctx context.Context) {
 
@@ -811,11 +811,11 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 		})
 	})
 
-	// testsuites/multivolume tests can now run with windows nodes
-	// This test is not compatible with windows because the default StorageClass
-	// doesn't have the ntfs parameter, we can't change the status of the cluster
-	// to add a StorageClass that's compatible with windows which is also the
-	// default StorageClass
+	// testsuites/multivolume 测试现在可以在 windows 节点上运行
+	// 这个测试与 windows 不兼容，因为默认 StorageClass
+	// 没有 ntfs 参数，我们不能改变集群状态
+	// 来添加一个兼容 windows 且同时是
+	// 默认 StorageClass 的 StorageClass
 	ginkgo.Describe("Default StorageClass [LinuxOnly]", func() {
 		ginkgo.Context("pods that use multiple volumes", func() {
 
@@ -824,7 +824,7 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 			})
 
 			f.It("should be reschedulable", f.WithSlow(), func(ctx context.Context) {
-				// Only run on providers with default storageclass
+				// 只在有默认 storageclass 的 provider 上运行
 				e2epv.SkipIfNoDefaultStorageClass(ctx, c)
 
 				numVols := 4
@@ -839,7 +839,7 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				probe := &v1.Probe{
 					ProbeHandler: v1.ProbeHandler{
 						Exec: &v1.ExecAction{
-							// Check that the last file got created
+							// 检查最后一个文件已创建
 							Command: []string{"test", "-f", getVolumeFile(numVols - 1)},
 						},
 					},
@@ -863,7 +863,7 @@ var _ = utils.SIGDescribe("PersistentVolumes", func() {
 				e2estatefulset.WaitForRunningAndReady(ctx, c, 1, ss)
 
 				ginkgo.By("Deleting the StatefulSet but not the volumes")
-				// Scale down to 0 first so that the Delete is quick
+				// 先缩容到 0，让 Delete 更快
 				ss, err = e2estatefulset.Scale(ctx, c, ss, 0)
 				framework.ExpectNoError(err)
 				e2estatefulset.WaitForStatusReplicas(ctx, c, ss, 0)
@@ -933,10 +933,10 @@ func makeStatefulSetWithPVCs(ns, cmd string, mounts []v1.VolumeMount, claims []v
 	}
 }
 
-// createWaitAndDeletePod creates the test pod, wait for (hopefully) success, and then delete the pod.
-// Note: need named return value so that the err assignment in the defer sets the returned error.
+// createWaitAndDeletePod 创建测试 pod，等待（希望）成功，然后删除 pod。
+// 注意：需要命名返回值，这样 defer 中的 err 赋值才能设置返回的错误。
 //
-//	Has been shown to be necessary using Go 1.7.
+// 已证明在 Go 1.7 中有必要这样做。
 func createWaitAndDeletePod(ctx context.Context, c clientset.Interface, t *framework.TimeoutContext, ns string, pvc *v1.PersistentVolumeClaim, command string) (err error) {
 	framework.Logf("Creating nfs test pod")
 	pod := e2epod.MakePod(ns, nil, []*v1.PersistentVolumeClaim{pvc}, admissionapi.LevelPrivileged, command)
@@ -958,7 +958,7 @@ func createWaitAndDeletePod(ctx context.Context, c clientset.Interface, t *frame
 	return // note: named return value
 }
 
-// testPodSuccessOrFail tests whether the pod's exit code is zero.
+// testPodSuccessOrFail 测试 pod 的退出码是否为 0。
 func testPodSuccessOrFail(ctx context.Context, c clientset.Interface, t *framework.TimeoutContext, ns string, pod *v1.Pod) error {
 	framework.Logf("Pod should terminate with exitcode 0 (success)")
 	if err := e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, c, pod.Name, ns, t.PodStart); err != nil {

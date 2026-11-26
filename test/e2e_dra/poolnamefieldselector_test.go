@@ -44,10 +44,10 @@ func poolNameFieldSelectorFallbackResources(nodes *drautils.Nodes) map[string]re
 	}
 }
 
-// poolNameFieldSelectorFallback verifies that the current ResourceSlice
-// controller keeps reconciling after the previous release rejects the
-// spec.pool.name field selector. The controller keeps using local filtering
-// after upgrade and downgrade.
+// poolNameFieldSelectorFallback 验证当前 ResourceSlice
+// controller 在上一版本 release 拒绝 spec.pool.name field selector 后
+// 仍能继续协调。升级和降级后 controller
+// 继续使用本地过滤。
 func poolNameFieldSelectorFallback(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc {
 	recreatePoolNameFieldSelectorFallbackSlice(tCtx, b)
 	return func(tCtx ktesting.TContext) downgradedTestFunc {

@@ -36,12 +36,12 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// configzWrapper is a wrapper for the KubeletConfiguration returned by the /configz endpoint.
+// configzWrapper 是 /configz endpoint 返回的 KubeletConfiguration 的包装器。
 type configzWrapper struct {
 	ComponentConfig kubeletconfigv1beta1.KubeletConfiguration `json:"kubeletconfig"`
 }
 
-// getKubeletConfigz fetches and decodes the kubelet's configuration from the /configz endpoint.
+// getKubeletConfigz 从 /configz endpoint 获取并解码 kubelet 配置。
 func getKubeletConfigz(ctx context.Context) (*configzWrapper, error) {
 	endpoint := fmt.Sprintf("https://127.0.0.1:%d/configz", ports.KubeletPort)
 	tr := &http.Transport{
@@ -82,7 +82,7 @@ func getKubeletConfigz(ctx context.Context) (*configzWrapper, error) {
 	return configz, nil
 }
 
-// Serial because it has a test case for config reloading and kubelet restart.
+// 串行运行，因为其中有一个测试用例涉及配置重载和 kubelet 重启。
 var _ = SIGDescribe("Kubelet Endpoints", framework.WithNodeConformance(), framework.WithSerial(), func() {
 	f := framework.NewDefaultFramework("kubelet-endpoints-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged

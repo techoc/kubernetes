@@ -16,9 +16,9 @@ limitations under the License.
 
 package framework
 
-// NamespacedName comprises a resource name, with a mandatory namespace,
-// rendered as "<namespace>/<name>". It implements NamedObject and thus can be
-// used as function parameter instead of a full API object.
+// NamespacedName 由资源名称和必需的 namespace 组成，
+// 渲染为 "<namespace>/<name>"。它实现了 NamedObject，因此可
+// 作为函数参数代替完整的 API 对象。
 type NamespacedName struct {
 	Namespace string
 	Name      string
@@ -26,24 +26,24 @@ type NamespacedName struct {
 
 var _ NamedObject = NamespacedName{}
 
-// NamedObject is a subset of metav1.Object which provides read-only access
-// to name and namespace of an object.
+// NamedObject 是 metav1.Object 的子集，提供对对象
+// 名称和 namespace 的只读访问。
 type NamedObject interface {
 	GetNamespace() string
 	GetName() string
 }
 
-// GetNamespace implements NamedObject.
+// GetNamespace 实现 NamedObject。
 func (n NamespacedName) GetNamespace() string {
 	return n.Namespace
 }
 
-// GetName implements NamedObject.
+// GetName 实现 NamedObject。
 func (n NamespacedName) GetName() string {
 	return n.Name
 }
 
-// String returns the general purpose string representation
+// String 返回通用的字符串表示
 func (n NamespacedName) String() string {
 	return n.Namespace + "/" + n.Name
 }

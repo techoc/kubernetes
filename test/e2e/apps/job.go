@@ -76,7 +76,7 @@ var _ = SIGDescribe("Job", func() {
 	f := framework.NewDefaultFramework("job")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Simplest case: N pods succeed
+	// 最简单的场景：N 个 pod 成功
 	ginkgo.It("should run a job to completion when tasks succeed", func(ctx context.Context) {
 		parallelism := int32(2)
 		completions := int32(4)
@@ -254,20 +254,20 @@ var _ = SIGDescribe("Job", func() {
 	})
 
 	/*
-		Release: v1.31
-		Testname: Verify Pod Failure policy allows to fail job early on exit code.
-		Description: Create a job with pod failure policy, and exactly one
-		pod failing. The exit code of the failed pod matches the pod failure
-		policy triggering the Job failure.
+		发布版本：v1.31
+		测试名称：Verify Pod Failure policy allows to fail job early on exit code.
+		描述：创建一个带 pod failure policy 的 job，并恰好有一个
+		pod 失败。失败 pod 的退出码匹配触发 Job 失败的
+		pod failure policy。
 	*/
 	framework.ConformanceIt("should allow to use the pod failure policy on exit code to fail the job early", func(ctx context.Context) {
 
-		// We fail the Job's pod only once to ensure the backoffLimit is not
-		// reached and thus the job is failed due to the pod failure policy
-		// with FailJob action.
-		// In order to ensure a Job's pod fails once before succeeding we force
-		// the Job's Pods to be scheduled to a single Node and use a hostPath
-		// volume to persist data across new Pods.
+		// 我们只让 Job 的 pod 失败一次，以确保不会触及 backoffLimit，
+		// 从而确认 Job 失败是由带 FailJob action 的
+		// pod failure policy 导致的。
+		// 为确保 Job 的 pod 先失败一次再成功，我们强制
+		// Job 的 Pod 调度到单个 Node 上，并使用 hostPath
+		// volume 在新 Pod 之间持久化数据。
 		ginkgo.By("Looking for a node to schedule job pod")
 		node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
 		framework.ExpectNoError(err)
@@ -297,17 +297,17 @@ var _ = SIGDescribe("Job", func() {
 	})
 
 	/*
-		Testname: Ensure pod failure policy allows to ignore failure matching on the exit code
-		Description: This test is using an indexed job. The pod corresponding to each index
-		creates a marker file on the host and fails. Once the marker file is
-		created the pod succeeds seeing it on restart. Thus, we trigger one
-		failure per index, so the Job would be marked as failed, if not for the
-		ignore rule matching on exit codes.
+		测试名称：Ensure pod failure policy allows to ignore failure matching on the exit code
+		描述：本测试使用 indexed job。每个 index 对应的 pod
+		在宿主机上创建标记文件然后失败。重启后看到标记文件存在则
+		成功。这样每个 index 触发一次失败；如果没有按退出码匹配的
+		ignore 规则，Job 就会被标记为失败。
+
 	*/
 	ginkgo.It("should allow to use a pod failure policy to ignore failure matching on exit code", func(ctx context.Context) {
-		// We set the backoffLimit = numPods-1  so that we can tolerate random
-		// failures (like OutOfPods from kubelet). Yet, the Job would fail if the
-		// pod failures were not be ignored.
+		// 设置 backoffLimit = numPods-1，以便容忍随机
+		// 失败（比如 kubelet 的 OutOfPods）。但如果 pod 失败未被忽略，
+		// Job 仍会失败。
 		numPods := 3
 		parallelism := int32(numPods)
 		completions := int32(numPods)
@@ -340,19 +340,19 @@ var _ = SIGDescribe("Job", func() {
 	})
 
 	/*
-		Release: v1.32
-		Testname: Ensure pod failure policy allows to ignore failure matching on the DisruptionTarget condition
-		Description: This test is using an indexed job. The pod corresponding to each index
-		creates a marker file on the host and runs 'forever' until evicted. Once
-		the marker file is created the pod succeeds seeing it on restart. Thus,
-		we trigger one failure per index due to eviction (DisruptionTarget
-		condition is added in the process). The Job would be marked as failed,
-		if not for the ignore rule matching on exit codes.
+		发布版本：v1.32
+		测试名称：Ensure pod failure policy allows to ignore failure matching on the DisruptionTarget condition
+		描述：本测试使用 indexed job。每个 index 对应的 pod
+		在宿主机上创建标记文件，然后一直运行直到被驱逐。标记文件
+		创建后，pod 重启看到它就会成功。因此每个 index 因驱逐
+		触发一次失败（过程中会添加 DisruptionTarget
+		condition）。如果没有按退出码匹配的 ignore 规则，
+		Job 就会被标记为失败。
 	*/
 	framework.ConformanceIt("should allow to use a pod failure policy to ignore failure matching on DisruptionTarget condition", func(ctx context.Context) {
-		// We set the backoffLimit = numPods-1 so that we can tolerate random
-		// failures (like OutOfPods from kubelet). Yet, the Job would fail if the
-		// pod failures were not be ignored.
+		// 设置 backoffLimit = numPods-1，以便容忍随机
+		// 失败（比如 kubelet 的 OutOfPods）。但如果 pod 失败未被忽略，
+		// Job 仍会失败。
 		numPods := 3
 		parallelism := int32(numPods)
 		completions := int32(numPods)
@@ -368,8 +368,8 @@ var _ = SIGDescribe("Job", func() {
 		job.Spec.PodFailurePolicy = &batchv1.PodFailurePolicy{
 			Rules: []batchv1.PodFailurePolicyRule{
 				{
-					// Ignore the pod failure caused by the eviction based on the
-					// DisruptionTarget condition
+					// 忽略由 DisruptionTarget condition 触发的
+					// 驱逐导致的 pod 失败
 					Action: batchv1.PodFailurePolicyActionIgnore,
 					OnPodConditions: []batchv1.PodFailurePolicyOnPodConditionsPattern{
 						{
@@ -404,7 +404,7 @@ var _ = SIGDescribe("Job", func() {
 					Namespace: pod.Namespace,
 				},
 			}
-			// use new variable explicitly here, to ensure it doesn't escape the scope of goroutines
+			// 这里显式使用新变量，确保它不会逃逸到 goroutine 的作用域之外
 			err := f.ClientSet.CoreV1().Pods(pod.Namespace).EvictV1(ctx, evictTarget)
 			framework.ExpectNoError(err, "failed to evict the pod: %s/%s", pod.Name, pod.Namespace)
 
@@ -553,10 +553,10 @@ done`}
 	})
 
 	/*
-		  Release: v1.24
-			Testname: Ensure Pods of an Indexed Job get a unique index.
-			Description: Create an Indexed job. Job MUST complete successfully.
-			Ensure that created pods have completion index annotation and environment variable.
+		  发布版本：v1.24
+			测试名称：Ensure Pods of an Indexed Job get a unique index.
+			描述：创建一个 Indexed job。Job 必须成功完成。
+			确认创建的 pod 具有 completion index 注解和环境变量。
 	*/
 	framework.ConformanceIt("should create pods for an Indexed job with completion indexes and specified hostname", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -593,13 +593,13 @@ done`}
 	})
 
 	/*
-		  Release: v1.32
-			Testname: Ensure Pods of an Indexed Job get a unique index for PodIndexLabel key.
-			Description: Create an Indexed job. Job MUST complete successfully.
-			Ensure that created pods have completion index label.
+		  发布版本：v1.32
+			测试名称：Ensure Pods of an Indexed Job get a unique index for PodIndexLabel key.
+			描述：创建一个 Indexed job。Job 必须成功完成。
+			确认创建的 pod 具有 completion index 标签。
 	*/
-	// TODO: once this test is stable, squash the functionality into pre-existing conformance test called "should create
-	//   pods for an Indexed job with completion indexes and specified hostname" earlier in this file.
+	// TODO: 这个测试稳定后，把功能合并到本文件前面已有的
+	// 一致性测试中："should create pods for an Indexed job with completion indexes and specified hostname"。
 	framework.It("should create pods with completion indexes for an Indexed Job", func(ctx context.Context) {
 		parallelism := int32(2)
 		completions := int32(4)
@@ -630,11 +630,11 @@ done`}
 	})
 
 	/*
-		Release: v1.33
-		Testname: Ensure that job with successPolicy succeeded when all indexes succeeded
-		Description: Create an indexed job with successPolicy.
-		Verify that job got SuccessCriteriaMet with SuccessPolicy reason and Complete condition
-		once all indexes succeeded.
+		发布版本：v1.33
+		测试名称：Ensure that job with successPolicy succeeded when all indexes succeeded
+		描述：创建一个带 successPolicy 的 indexed job。
+		验证所有 index 成功后，job 获得 SuccessCriteriaMet（原因为 SuccessPolicy）
+		和 Complete condition。
 	*/
 	framework.ConformanceIt("with successPolicy should succeeded when all indexes succeeded", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -670,11 +670,11 @@ done`}
 	})
 
 	/*
-		Release: v1.33
-		Testname: Ensure that job with successPolicy succeededIndexes rule succeeded even when some indexes remain pending
-		Description: Create an indexed job with successPolicy succeededIndexes rule.
-		Verify that the job got SuccessCriteriaMet with SuccessPolicy reason condition and Complete condition
-		when the job met successPolicy even if some indexed remain pending.
+		发布版本：v1.33
+		测试名称：Ensure that job with successPolicy succeededIndexes rule succeeded even when some indexes remain pending
+		描述：创建一个带 successPolicy succeededIndexes 规则的 indexed job。
+		验证即使部分 index 仍处于 pending，只要满足 successPolicy，
+		job 就获得 SuccessCriteriaMet（原因为 SuccessPolicy）和 Complete condition。
 	*/
 	framework.ConformanceIt("with successPolicy succeededIndexes rule should succeeded even when some indexes remain pending", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -710,11 +710,11 @@ done`}
 	})
 
 	/*
-		Release: v1.33
-		Testname: Ensure that job with successPolicy succeededCount rule succeeded even when some indexes remain pending
-		Description: Create an indexed job with successPolicy succeededCount rule.
-		Verify that the job got the SuccessCriteriaMet with SuccessPolicy reason condition and Complete condition
-		when the job met successPolicy even if some indexed remain pending.
+		发布版本：v1.33
+		测试名称：Ensure that job with successPolicy succeededCount rule succeeded even when some indexes remain pending
+		描述：创建一个带 successPolicy succeededCount 规则的 indexed job。
+		验证即使部分 index 仍处于 pending，只要满足 successPolicy，
+		job 就获得 SuccessCriteriaMet（原因为 SuccessPolicy）和 Complete condition。
 	*/
 	framework.ConformanceIt("with successPolicy succeededCount rule should succeeded even when some indexes remain pending", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -750,12 +750,12 @@ done`}
 	})
 
 	/*
-		Release: v1.33
-		Testname: Ensure that all indexes are executed for an indexed job with backoffLimitPerIndex despite some failing
-		Description: Create an indexed job and ensure that all indexes are either failed or succeeded, depending
-		on the end state of the corresponding pods. Pods with odd indexes fail, while the pods with even indexes
-		succeeded. Also, verify that the number of failed pods doubles the number of failing indexes, as the
-		backoffLimitPerIndex=1, allowing for one pod recreation before marking that indexed failed.
+		发布版本：v1.33
+		测试名称：Ensure that all indexes are executed for an indexed job with backoffLimitPerIndex despite some failing
+		描述：创建一个 indexed job，确保所有 index 都已失败或成功，
+		取决于对应 pod 的终态。奇数 index 的 pod 失败，偶数 index 的
+		成功。同时验证失败 pod 数量是失败 index 数量的两倍，因为
+		backoffLimitPerIndex=1，允许在标记 index 失败前重建一次 pod。
 	*/
 	framework.ConformanceIt("should execute all indexes despite some failing when using backoffLimitPerIndex", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -785,14 +785,14 @@ done`}
 	})
 
 	/*
-		Release: v1.33
-		Testname: Terminate job execution when the maxFailedIndexes is exceeded
-		Description: Create an indexed job with backoffLimitPerIndex and maxFailedIndexes.
-		Verify the job execution is terminated as soon as the number of failed
-		indexes exceeds maxFailedIndexes.
+		发布版本：v1.33
+		测试名称：Terminate job execution when the maxFailedIndexes is exceeded
+		描述：创建一个带 backoffLimitPerIndex 和 maxFailedIndexes 的 indexed job。
+		验证失败 index 数一旦超过 maxFailedIndexes，
+		job 执行即被终止。
 	*/
 	framework.ConformanceIt("should terminate job execution when the number of failed indexes exceeds maxFailedIndexes", func(ctx context.Context) {
-		// we use parallelism=1 to make sure in the asserts only one pod was created
+		// 使用 parallelism=1，确保断言中只创建了一个 pod
 		parallelism := int32(1)
 		completions := int32(4)
 		backoffLimit := int32(6) // default value
@@ -820,10 +820,10 @@ done`}
 	})
 
 	/*
-		Testname: Track the failure count per index in Pod annotation when backoffLimitPerIndex is used
-		Description: Create an indexed job and ensure that the Pods are
-		re-created with the failure-count Pod annotation set properly to
-		indicate the number of so-far failures per index.
+		测试名称：Track the failure count per index in Pod annotation when backoffLimitPerIndex is used
+		描述：创建一个 indexed job，确认 pod 重建时
+		failure-count pod 注解被正确设置，
+		反映该 index 到目前为止的失败次数。
 	*/
 	ginkgo.It("should record the failure-count in the Pod annotation when using backoffLimitPerIndex", func(ctx context.Context) {
 		jobName := "e2e-backofflimitperindex-" + utilrand.String(5)
@@ -852,10 +852,10 @@ done`}
 		framework.ExpectNoError(err, "failed to ensure job completion in namespace: %s", f.Namespace.Name)
 
 		ginkgo.By("Verify the failure-count annotation on Pods")
-		// Since the Job is already failed all the relevant Pod events are
-		// already being distributed. Still, there might be a little bit of lag
-		// between the events being receiced by the Job controller and the test
-		// code so we need to wait a little bit.
+		// 由于 Job 已经失败，所有相关 Pod 事件都
+		// 已在分发中。但 Job controller 收到事件
+		// 与测试代码之间仍可能有轻微延迟，
+		// 因此需要稍等片刻。
 		gomega.Eventually(ctx, tracker.cloneTrackedAnnotations).
 			WithTimeout(15 * time.Second).
 			WithPolling(500 * time.Millisecond).
@@ -871,12 +871,12 @@ done`}
 	})
 
 	/*
-		Release: v1.33
-		Testname: Mark indexes as failed when the FailIndex action is matched in podFailurePolicy
-		Description: Create an indexed job with backoffLimitPerIndex, and podFailurePolicy
-		with the FailIndex action. Verify the failed pods matching the pod failure policy
-		result in marking the corresponding indexes as failed without restarts, despite
-		backoffLimitPerIndex > 0.
+		发布版本：v1.33
+		测试名称：Mark indexes as failed when the FailIndex action is matched in podFailurePolicy
+		描述：创建一个带 backoffLimitPerIndex 的 indexed job，以及带
+		FailIndex action 的 podFailurePolicy。验证匹配 pod failure policy
+		的失败 pod 会让对应 index 直接标记为失败而不重启，即使
+		backoffLimitPerIndex > 0。
 	*/
 	framework.ConformanceIt("should mark indexes as failed when the FailIndex action is matched in podFailurePolicy", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -917,9 +917,9 @@ done`}
 	})
 
 	/*
-		Testcase: Ensure that the pods associated with the job are removed once the job is deleted
-		Description: Create a job and ensure the associated pod count is equal to parallelism count. Delete the
-		job and ensure if the pods associated with the job have been removed
+		测试名称：Ensure that the pods associated with the job are removed once the job is deleted
+		描述：创建一个 job，确认相关 pod 数等于 parallelism。删除
+		job，确认相关 pod 已被移除
 	*/
 	ginkgo.It("should remove pods when job is deleted", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -945,10 +945,10 @@ done`}
 	})
 
 	/*
-		Release: v1.16
-		Testname: Jobs, completion after task failure
-		Description: Explicitly cause the tasks to fail once initially. After restarting, the Job MUST
-		execute to completion.
+		发布版本：v1.16
+		测试名称：Jobs, completion after task failure
+		描述：显式让任务初次失败一次。重启后，Job 必须
+		执行直到完成。
 	*/
 	framework.ConformanceIt("should run a job to completion when tasks sometimes fail and are locally restarted", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -956,11 +956,11 @@ done`}
 		backoffLimit := int32(6) // default value
 
 		ginkgo.By("Creating a job")
-		// One failure, then a success, local restarts.
-		// We can't use the random failure approach, because kubelet will
-		// throttle frequently failing containers in a given pod, ramping
-		// up to 5 minutes between restarts, making test timeout due to
-		// successive failures too likely with a reasonable test timeout.
+		// 先失败一次，再成功，本地重启。
+		// 不能用随机失败的方式，因为 kubelet 会
+		// 对同一 pod 中频繁失败的容器进行限流，
+		// 重启间隔最长增至 5 分钟，在合理的测试超时下
+		// 连续失败太容易导致超时。
 		job := e2ejob.NewTestJob("failOnce", "fail-once-local", v1.RestartPolicyOnFailure, parallelism, completions, nil, backoffLimit)
 		job, err := e2ejob.CreateJob(ctx, f.ClientSet, f.Namespace.Name, job)
 		framework.ExpectNoError(err, "failed to create job in namespace: %s", f.Namespace.Name)
@@ -970,15 +970,15 @@ done`}
 		framework.ExpectNoError(err, "failed to ensure job completion in namespace: %s", f.Namespace.Name)
 	})
 
-	// Pods sometimes fail, but eventually succeed, after pod restarts
+	// pod 有时会失败，但 pod 重启后最终会成功
 	ginkgo.It("should run a job to completion when tasks sometimes fail and are not locally restarted", func(ctx context.Context) {
-		// One failure, then a success, no local restarts.
-		// We can't use the random failure approach, because JobController
-		// will throttle frequently failing Pods of a given Job, ramping
-		// up to 6 minutes between restarts, making test timeout due to
+		// 先失败一次，再成功，不做本地重启。
+		// 不能用随机失败的方式，因为 JobController
+		// 会对同一 Job 中频繁失败的 Pod 进行限流，
+		// 重启间隔最长增至 6 分钟，导致连续失败时超时。
 		// successive failures.
-		// Instead, we force the Job's Pods to be scheduled to a single Node
-		// and use a hostPath volume to persist data across new Pods.
+		// 改为强制 Job 的 Pod 调度到单个 Node，
+		// 并用 hostPath volume 在新 Pod 之间持久化数据。
 		ginkgo.By("Looking for a node to schedule job pod")
 		node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
 		framework.ExpectNoError(err)
@@ -1036,9 +1036,9 @@ done`}
 	})
 
 	/*
-		Release: v1.15
-		Testname: Jobs, active pods, graceful termination
-		Description: Create a job. Ensure the active pods reflect parallelism in the namespace and delete the job. Job MUST be deleted successfully.
+		发布版本：v1.15
+		测试名称：Jobs, active pods, graceful termination
+		描述：创建一个 job。确认 active pod 数量反映 namespace 内的 parallelism 并删除 job。Job 必须删除成功。
 	*/
 	framework.ConformanceIt("should delete a job", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -1063,11 +1063,11 @@ done`}
 	})
 
 	/*
-		Release: v1.16
-		Testname: Jobs, orphan pods, re-adoption
-		Description: Create a parallel job. The number of Pods MUST equal the level of parallelism.
-		Orphan a Pod by modifying its owner reference. The Job MUST re-adopt the orphan pod.
-		Modify the labels of one of the Job's Pods. The Job MUST release the Pod.
+		发布版本：v1.16
+		测试名称：Jobs, orphan pods, re-adoption
+		描述：创建一个并行 job。Pod 数量必须等于 parallelism 级别。
+		修改某个 Pod 的 owner reference 使其成为孤儿。Job 必须重新收养该孤儿 pod。
+		修改 Job 某个 Pod 的标签。Job 必须释放该 Pod。
 	*/
 	framework.ConformanceIt("should adopt matching orphans and release non-matching pods", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -1076,8 +1076,8 @@ done`}
 
 		ginkgo.By("Creating a job")
 		job := e2ejob.NewTestJob("notTerminate", "adopt-release", v1.RestartPolicyNever, parallelism, completions, nil, backoffLimit)
-		// Replace job with the one returned from Create() so it has the UID.
-		// Save Kind since it won't be populated in the returned job.
+		// 用 Create() 返回的 job 替换原对象，以获取 UID。
+		// 保存 Kind，因为返回的 job 中不会填充它。
 		kind := job.Kind
 		job, err := e2ejob.CreateJob(ctx, f.ClientSet, f.Namespace.Name, job)
 		framework.ExpectNoError(err, "failed to create job in namespace: %s", f.Namespace.Name)
@@ -1208,13 +1208,13 @@ done`}
 	})
 
 	/*
-		Release: v1.24
-		Testname: Jobs, apply changes to status
-		Description: Attempt to create a running Job which MUST succeed.
-		Attempt to patch the Job status which MUST succeed.
-		An annotation for the job that was patched MUST be found.
-		Attempt to replace the job status with update which MUST succeed.
-		Attempt to read its status sub-resource which MUST succeed
+		发布版本：v1.24
+		测试名称：Jobs, apply changes to status
+		描述：尝试创建一个运行中的 Job，必须成功。
+		尝试 patch Job status，必须成功。
+		必须能找到被 patch 的 job 注解。
+		尝试用 update 替换 job status，必须成功。
+		尝试读取其 status 子资源，必须成功
 	*/
 	framework.ConformanceIt("should apply changes to a job status", func(ctx context.Context) {
 
@@ -1235,9 +1235,9 @@ done`}
 		framework.ExpectNoError(err, "failed to ensure number of pods associated with job %s is equal to parallelism count in namespace: %s", job.Name, f.Namespace.Name)
 
 		customConditionType := batchv1.JobConditionType("CustomConditionType")
-		// /status subresource operations
+		// /status 子资源操作
 		ginkgo.By("patching /status")
-		// we need to use RFC3339 version since conversion over the wire cuts nanoseconds
+		// 需要使用 RFC3339 版本，因为网络传输的转换会截掉纳秒
 		now1 := metav1.Now().Rfc3339Copy()
 		jStatus := batchv1.JobStatus{
 			Conditions: []batchv1.JobCondition{
@@ -1265,7 +1265,7 @@ done`}
 		gomega.Expect(patchedStatus.Annotations).To(gomega.HaveKeyWithValue("patchedstatus", "true"), "patched object should have the applied annotation")
 
 		ginkgo.By("updating /status")
-		// we need to use RFC3339 version since conversion over the wire cuts nanoseconds
+		// 需要使用 RFC3339 版本，因为网络传输的转换会截掉纳秒
 		now2 := metav1.Now().Rfc3339Copy()
 		var statusToUpdate, updatedStatus *batchv1.Job
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -1300,15 +1300,15 @@ done`}
 	})
 
 	/*
-		Release: v1.25
-		Testname: Jobs, manage lifecycle
-		Description: Attempt to create a suspended Job which MUST succeed.
-		Attempt to patch the Job to include a new label which MUST succeed.
-		The label MUST be found. Attempt to replace the Job to include a
-		new annotation which MUST succeed. The annotation MUST be found.
-		Attempt to list all namespaces with a label selector which MUST
-		succeed. One list MUST be found. It MUST succeed at deleting a
-		collection of jobs via a label selector.
+		发布版本：v1.25
+		测试名称：Jobs, manage lifecycle
+		描述：尝试创建一个挂起的 Job，必须成功。
+		尝试 patch Job 添加新标签，必须成功。
+		必须能找到该标签。尝试替换 Job 添加
+		新注解，必须成功。必须能找到该注解。
+		尝试用 label selector 列出所有 namespace，必须
+		成功。必须找到一个列表项。必须能通过 label selector
+		成功删除一组 job。
 	*/
 	framework.ConformanceIt("should manage the lifecycle of a job", func(ctx context.Context) {
 		jobName := "e2e-" + utilrand.String(5)
@@ -1461,10 +1461,10 @@ done`}
 	})
 
 	/*
-		Testname: Jobs, managed-by mechanism
-		Description: This test verifies the built-in Job controller does not
-		reconcile the Job, allowing to delegate the reconciliation to an
-		external controller.
+		测试名称：Jobs, managed-by mechanism
+		描述：本测试验证内置 Job controller 不会
+		协调该 Job，从而把协调工作交给
+		外部 controller。
 	*/
 	ginkgo.It("should allow to delegate reconciliation to external controller", func(ctx context.Context) {
 		parallelism := int32(2)
@@ -1478,7 +1478,7 @@ done`}
 		framework.ExpectNoError(err, "failed to create job in namespace: %s/%s", job.Namespace, job.Name)
 
 		ginkgo.By(fmt.Sprintf("Verify the Job %s/%s status isn't updated by the built-in controller", job.Namespace, job.Name))
-		// This get function uses HandleRetry to retry on transient API errors
+		// 这个 get 函数使用 HandleRetry 对瞬时 API 错误进行重试
 		get := framework.GetObject(f.ClientSet.BatchV1().Jobs(f.Namespace.Name).Get, job.Name, metav1.GetOptions{})
 		gomega.Consistently(ctx, get).
 			WithPolling(time.Second).WithTimeout(3 * time.Second).
@@ -1628,11 +1628,11 @@ done`}
 		})
 
 	/*
-		Testname: Allow updating pod resources for suspended Jobs
-		Description: Create a suspended Job with initial container resources.
-		Update the container resources while the job is suspended.
-		Unsuspend the job and verify that pods are created with the updated resources.
-		This verifies KEP-5440: Mutable Job Pod Resource Updates.
+		测试名称：Allow updating pod resources for suspended Jobs
+		描述：创建一个带初始容器资源的挂起 Job。
+		在 job 挂起期间更新容器资源。
+		取消挂起 job，验证创建的 pod 使用了更新后的资源。
+		这验证了 KEP-5440: Mutable Job Pod Resource Updates。
 	*/
 	framework.It("should allow updating pod resources for a suspended job", framework.WithFeatureGate(features.MutablePodResourcesForSuspendedJobs), func(ctx context.Context) {
 		jobName := "e2e-mutable-resources" + utilrand.String(5)
@@ -1720,11 +1720,11 @@ done`}
 	})
 
 	/*
-		Testname: Allow updating pod resources for a job that started and was suspended
-		Description: Create a job that starts running, suspend it, update the
-		container resources while suspended, then unsuspend and verify that newly
-		created pods have the updated resources. This verifies that resource updates
-		are allowed even for jobs that have previously started.
+		测试名称：Allow updating pod resources for a job that started and was suspended
+		描述：创建一个开始运行的 job，将其挂起，在挂起期间更新
+		容器资源，然后取消挂起，验证新创建的
+		pod 使用了更新后的资源。这验证了即使 job 之前
+		已经启动过，也允许更新资源。
 	*/
 	framework.It("should allow updating pod resources for a job that started and then was suspended", framework.WithFeatureGate(features.MutablePodResourcesForSuspendedJobs), func(ctx context.Context) {
 		jobName := "e2e-start-suspend" + utilrand.String(5)
@@ -1835,9 +1835,9 @@ func updateJobSuspendWithRetries(ctx context.Context, f *framework.Framework, jo
 	})
 }
 
-// waitForJobEvent is used to track and log Job events.
-// As delivery of events is not actually guaranteed we
-// will not return an error if we miss the required event.
+// waitForJobEvent 用于跟踪并记录 Job 事件。
+// 由于事件投递实际上没有保障，
+// 如果漏掉了所需事件，我们不会返回错误。
 func waitForJobEvent(ctx context.Context, config watchEventConfig) {
 	f := config.framework
 	ctx, cancel := context.WithTimeout(ctx, f.Timeouts.PodStartShort)

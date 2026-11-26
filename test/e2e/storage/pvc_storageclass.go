@@ -54,37 +54,37 @@ var _ = utils.SIGDescribe("Retroactive StorageClass Assignment", func() {
 		framework.ExpectNoError(err, "Failed to get default StorageClasses")
 
 		ginkgo.DeferCleanup(func(cleanupContext context.Context) {
-			// Restore existing default StorageClasses at the end of the test
+			// 测试结束时恢复原有的默认 StorageClass
 			for _, sc := range defaultSCs {
 				updateDefaultStorageClass(cleanupContext, client, sc.Name, "true")
 			}
 		})
 
-		// Unset all default StorageClasses
+		// 取消所有默认 StorageClass
 		for _, sc := range defaultSCs {
 			klog.InfoS("Unsetting default StorageClass", "StorageClass", sc.Name)
 			updateDefaultStorageClass(ctx, client, sc.Name, "false")
 		}
 
-		// Ensure no default StorageClasses exist
+		// 确保没有默认 StorageClass
 		if len(defaultSCs) > 0 {
 			ensureNoDefaultStorageClasses(ctx, client)
 		}
 
-		// Create a PVC with nil StorageClass
+		// 创建 StorageClass 为 nil 的 PVC
 		pvc := createPVCDefaultSC(ctx, client, namespace)
 		ginkgo.DeferCleanup(func(ctx context.Context) {
 			err := client.CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, pvc.Name, *metav1.NewDeleteOptions(0))
 			framework.ExpectNoError(err, "Error deleting PVC")
 		})
 
-		// Create a default StorageClass
+		// 创建默认 StorageClass
 		sc := createDefaultStorageClass(ctx, client)
 		ginkgo.DeferCleanup(func(cleanupContext context.Context) {
 			deleteStorageClass(cleanupContext, client, sc.Name)
 		})
 
-		// Verify that the PVC is assigned the default StorageClass
+		// 验证 PVC 被分配了默认 StorageClass
 		gomega.Eventually(ctx, framework.GetObject(client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get, pvc.Name, metav1.GetOptions{})).
 			WithPolling(framework.Poll).
 			WithTimeout(2*time.Minute).

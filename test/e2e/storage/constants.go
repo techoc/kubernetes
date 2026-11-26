@@ -21,6 +21,6 @@ import "time"
 const (
 	minNodes = 2
 
-	// total time to wait for cloudprovider or file system resize to finish
+	// 等待 cloudprovider 或文件系统调整大小完成的总时间
 	totalResizeWaitPeriod = 10 * time.Minute
 )

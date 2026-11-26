@@ -17,7 +17,7 @@ limitations under the License.
 package gpu
 
 const (
-	// NVIDIAGPUResourceName is the extended name of the GPU resource since v1.8
-	// this uses the device plugin mechanism
+	// NVIDIAGPUResourceName 是自 v1.8 起 GPU 资源的扩展名称，
+	// 它使用 device plugin 机制。
 	NVIDIAGPUResourceName = "nvidia.com/gpu"
 )

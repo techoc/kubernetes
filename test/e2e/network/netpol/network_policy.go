@@ -44,11 +44,11 @@ const (
 	isVerbose = true
 
 	// See https://github.com/kubernetes/kubernetes/issues/95879
-	// The semantics of the effect of network policies on loopback calls may be undefined: should
-	//   they always be ALLOWED; how do Services affect this?
-	//   Calico, Cilium, Antrea seem to do different things.
-	// Since different CNIs have different results, that causes tests including loopback to fail
-	//   on some CNIs.  So let's just ignore loopback calls for the purposes of deciding test pass/fail.
+	// network policy 对 loopback 调用的影响语义可能没有定义：它们是否
+	// 应始终 ALLOWED；Service 对此有何影响？
+	// Calico、Cilium、Antrea 的做法似乎各不相同。
+	// 不同 CNI 结果不同，导致包含 loopback 的测试在
+	// 某些 CNI 上失败。因此在判断测试通过与否时，干脆忽略 loopback 调用。
 	ignoreLoopback    = true
 	namespaceLabelKey = "kubernetes.io/metadata.name"
 )
@@ -60,13 +60,13 @@ var (
 )
 
 /*
-You might be wondering, why are there multiple namespaces used for each test case?
+你可能会疑惑，为什么每个测试用例要用多个 namespace？
 
-These tests are based on "truth tables" that compare the expected and actual connectivity of each pair of pods.
-Since network policies live in namespaces, and peers can be selected by namespace,
-showing the connectivity of pods in other namespaces is key information to show whether a network policy is working as intended or not.
+这些测试基于"真值表"，比较每对 pod 的预期和实际连通性。
+由于 network policy 存在于 namespace 中，且 peer 可按 namespace 选择，
+展示其他 namespace 中 pod 的连通性是判断 network policy 是否按预期工作的关键信息。
 
-Each test specifies the exact pod topology it needs (for example: x/a, x/b, y/a, z/a).
+每个测试指定它需要的确切 pod 拓扑（例如 x/a、x/b、y/a、z/a）。
 */
 
 var _ = common.SIGDescribe("Netpol", func() {
@@ -79,40 +79,40 @@ var _ = common.SIGDescribe("Netpol", func() {
 
 		f.It("should support a 'default-deny-ingress' policy", feature.NetworkPolicy, func(ctx context.Context) {
 
-			// Only poll TCP
+			// 只轮询 TCP
 			protocols := []v1.Protocol{protocolTCP}
 
-			// Only testing port 80
+			// 只测试端口 80
 			ports := []int32{80}
 
-			// Namespace X has a default-deny-ingress policy, so we need 2 pods in X to
-			// verify X-to-X ingress is blocked, and 2 pods in Y to verify Y-to-X is
-			// also blocked while X-to-Y and Y-to-Y traffic remain allowed.
-			// (In later tests, we just assume that a policy in X will not affect Y-to-Y traffic.)
+			// Namespace X 有 default-deny-ingress 策略，所以 X 中需要 2 个 pod 来
+			// 验证 X 到 X 的 ingress 被阻断，Y 中需要 2 个 pod 来验证 Y 到 X 也被
+			// 阻断，同时 X 到 Y 和 Y 到 Y 的流量仍被允许。
+			// （后面的测试中，我们假设 X 中的策略不会影响 Y 到 Y 的流量。）
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b")
 
-			// Only going to make a policy in namespace X
+			// 只在 namespace X 中制定策略
 			nsX, _, _ := getK8sNamespaces(k8s)
 			policy := GenNetworkPolicyWithNameAndPodSelector("deny-ingress", metav1.LabelSelector{}, SetSpecIngressRules())
 
-			// Create the policy
+			// 创建策略
 			CreatePolicy(ctx, k8s, policy, nsX)
 
-			// Make a truth table of connectivity for all pods in ns x y z
+			// 为 x、y、z 中所有 pod 制作连通性真值表
 			reachability := NewReachability(k8s.AllPodStrings(), true)
-			// Set the nsX as false, since it has a policy that blocks traffic
+			// 把 nsX 设为 false，因为它有阻断流量的策略
 			reachability.ExpectPeer(&Peer{}, &Peer{Namespace: nsX}, false)
 
-			// Confirm that the real world connectivity matches our matrix
+			// 确认真实世界的连通性与我们的矩阵一致
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachability})
 		})
 
 		f.It("should support a 'default-deny-all' policy", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Namespace X has a default-deny for both ingress and egress, so we need 2
-			// pods in X to verify X-to-X traffic is blocked, and a pod in Y to verify
-			// X<->Y traffic is blocked in both directions.
+			// Namespace X 对 ingress 和 egress 都 default-deny，所以需要 2 个
+			// X 中的 pod 验证 X 到 X 流量被阻断，Y 中一个 pod 验证
+			// X<->Y 流量双向都被阻断。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -129,9 +129,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy to allow traffic from pods within server namespace based on PodSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy isolates x/a and only allows ingress from x/b, so we need x/b as the
-			// allowed same-namespace peer, x/c as a same-namespace non-matching pod, and
-			// y/a as a cross-namespace peer that must not be able to reach x/a.
+			// 策略隔离 x/a 且只允许来自 x/b 的 ingress，因此需要 x/b 作为
+			// 允许的同 namespace peer，x/c 作为同 namespace 不匹配的 pod，
+			// y/a 作为不能访问 x/a 的跨 namespace peer。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "x/c", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -155,18 +155,18 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy to allow ingress traffic for a target", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Namespace X is default-deny-ingress, but we then allow ingress to x/a.
-			// We need both x/a and x/b to show the target-specific behavior, and y/a to
-			// exercise cross-namespace ingress.
+			// Namespace X 是 default-deny-ingress，但我们允许 ingress 到 x/a。
+			// 需要 x/a 和 x/b 来展示针对特定目标的行为，并用 y/a
+			// 验证跨 namespace 的 ingress。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
 			ginkgo.By("having a deny all ingress policy")
-			// Deny all Ingress traffic policy to pods on namespace nsX
+			// 对 nsX namespace 中的 pod 设置拒绝所有 Ingress 流量的策略
 			policy := GenNetworkPolicyWithNameAndPodSelector("deny-all", metav1.LabelSelector{}, SetSpecIngressRules())
 			CreatePolicy(ctx, k8s, policy, nsX)
 
-			// Allow Ingress traffic only to pod x/a from any pod
+			// 只允许来自任意 pod 的 Ingress 流量到 pod x/a
 			ingressRule := networkingv1.NetworkPolicyIngressRule{}
 			ingressRule.From = append(ingressRule.From, networkingv1.NetworkPolicyPeer{PodSelector: &metav1.LabelSelector{}, NamespaceSelector: &metav1.LabelSelector{}})
 			allowPolicy := GenNetworkPolicyWithNameAndPodMatchLabel("allow-all-to-a", map[string]string{"pod": "a"}, SetSpecIngressRules(ingressRule))
@@ -182,9 +182,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy to allow ingress traffic from pods in all namespaces", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a should allow ingress from any namespace, including its own.
-			// We include x/b as a same-namespace client, plus one pod in Y and Z as
-			// cross-namespace clients.
+			// x/a 上的策略应允许来自任意 namespace 的 ingress，包括自己的 namespace。
+			// 我们用 x/b 作为同 namespace client，Y 和 Z 中各一个 pod 作为
+			// 跨 namespace client。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -200,9 +200,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy to allow traffic only from a different namespace, based on NamespaceSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a allows ingress only from namespace Y. We need x/b to show
-			// same-namespace ingress is denied, y/a as the allowed source, and z/a as an
-			// unrelated namespace that must be denied.
+			// x/a 上的策略只允许来自 namespace Y 的 ingress。需要 x/b 来展示
+			// 同 namespace ingress 被拒绝，y/a 作为允许的来源，z/a 作为
+			// 必须被拒绝的无关 namespace。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -212,7 +212,7 @@ var _ = common.SIGDescribe("Netpol", func() {
 			CreatePolicy(ctx, k8s, policy, nsX)
 
 			reachability := NewReachability(k8s.AllPodStrings(), true)
-			// disallow all traffic from the x or z namespaces
+			// 拒绝来自 x 或 z namespace 的所有流量
 			reachability.ExpectPeer(&Peer{Namespace: nsX}, &Peer{Namespace: nsX, Pod: "a"}, false)
 			reachability.ExpectPeer(&Peer{Namespace: nsZ}, &Peer{Namespace: nsX, Pod: "a"}, false)
 
@@ -222,8 +222,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy based on PodSelector with MatchExpressions", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Same as the basic PodSelector test, but using MatchExpressions: x/b must be
-			// able to reach x/a, while y/a (other namespace) must not be able to reach x/a.
+			// 与基本 PodSelector 测试相同，但使用 MatchExpressions：x/b 必须
+			// 能访问 x/a，而 y/a（其他 namespace）不能访问 x/a。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -249,9 +249,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy based on NamespaceSelector with MatchExpressions", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Same as the basic NamespaceSelector test, but using MatchExpressions: y/a is
-			// the allowed source namespace, while x/b (same namespace) and z/a must be
-			// denied when connecting to x/a.
+			// 与基本 NamespaceSelector 测试相同，但使用 MatchExpressions：y/a 是
+			// 允许的来源 namespace，而 x/b（同 namespace）和 z/a 连接 x/a 时
+			// 必须被拒绝。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -268,7 +268,7 @@ var _ = common.SIGDescribe("Netpol", func() {
 			CreatePolicy(ctx, k8s, policy, nsX)
 
 			reachability := NewReachability(k8s.AllPodStrings(), true)
-			// disallow all traffic from the x or z namespaces
+			// 拒绝来自 x 或 z namespace 的所有流量
 			reachability.ExpectPeer(&Peer{Namespace: nsX}, &Peer{Namespace: nsX, Pod: "a"}, false)
 			reachability.ExpectPeer(&Peer{Namespace: nsZ}, &Peer{Namespace: nsX, Pod: "a"}, false)
 
@@ -278,10 +278,10 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy based on PodSelector or NamespaceSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a allows ingress from either (a) any namespace other than X, or
-			// (b) pod x/b. We include x/b as the PodSelector-allowed source, x/c as a
-			// non-matching pod in X that must be denied, and y/a as the NamespaceSelector-
-			// allowed source.
+			// x/a 上的策略允许来自 (a) 除 X 外的任意 namespace，或
+			// (b) pod x/b 的 ingress。我们用 x/b 作为 PodSelector 允许的来源，x/c 作为
+			// X 中不匹配、必须被拒绝的 pod，y/a 作为 NamespaceSelector
+			// 允许的来源。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "x/c", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -312,10 +312,10 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy based on PodSelector and NamespaceSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a requires BOTH a namespace match and a pod match. We use y/b
-			// and z/b as the sources that match both selectors, x/b as the negative case
-			// (pod matches but namespace does not), and y/a as the negative case (namespace
-			// matches but pod does not).
+			// x/a 上的策略要求 namespace 匹配且 pod 匹配。我们用 y/b
+			// 和 z/b 作为同时匹配两个 selector 的来源，x/b 作为反例
+			// （pod 匹配但 namespace 不匹配），y/a 作为反例（namespace
+			// 匹配但 pod 不匹配）。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b", "z/b")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -347,9 +347,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy based on Multiple PodSelectors and NamespaceSelectors", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a allows ingress only from pods {b,c} in namespaces other than X.
-			// We need x/b to prove same-namespace traffic is denied, y/b and y/c as allowed
-			// sources, and y/a as a non-matching pod in an allowed namespace.
+			// x/a 上的策略只允许来自除 X 外 namespace 中 {b,c} 的 pod 的 ingress。
+			// 需要 x/b 证明同 namespace 流量被拒绝，y/b 和 y/c 作为允许的
+			// 来源，y/a 作为允许 namespace 中不匹配的 pod。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b", "y/c")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
@@ -382,8 +382,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy based on any PodSelectors", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a uses multiple "from" entries (pod=b OR pod=c). We need both
-			// x/b and x/c as allowed sources and x/a as the isolated target pod.
+			// x/a 上的策略使用多个 "from" 条目（pod=b 或 pod=c）。需要
+			// x/b 和 x/c 作为允许的来源，x/a 作为被隔离的目标 pod。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "x/c")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -397,7 +397,7 @@ var _ = common.SIGDescribe("Netpol", func() {
 			reachability := NewReachability(k8s.AllPodStrings(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
 
-			// Connect Pods b and c to pod a from namespace nsX
+			// 从 namespace nsX 把 Pod b 和 c 连到 pod a
 			reachability.Expect(NewPodString(nsX, "b"), NewPodString(nsX, "a"), true)
 			reachability.Expect(NewPodString(nsX, "c"), NewPodString(nsX, "a"), true)
 
@@ -407,9 +407,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy to allow traffic only from a pod in a different namespace based on PodSelector and NamespaceSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a allows ingress only from y/a (namespace+pod selectors). We keep
-			// x/b as a same-namespace/non-matching pod, plus y/b and z/a as non-matching
-			// cross-namespace pods, to ensure they cannot reach x/a.
+			// x/a 上的策略只允许来自 y/a 的 ingress（namespace+pod selector）。保留
+			// x/b 作为同 namespace/不匹配的 pod，y/b 和 z/a 作为不匹配的
+			// 跨 namespace pod，确保它们无法访问 x/a。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b", "z/a")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
@@ -438,10 +438,10 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policy based on Ports", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{81}
-			// This test is port-specific: namespace X should allow ingress to x/a on
-			// port 81 from namespace Y only. We include x/b as a same-namespace source
-			// (denied), y/a,y/b as namespace-Y sources (allowed), and z/a as a denied
-			// third-namespace source.
+			// 这个测试是按端口的：namespace X 只允许来自 namespace Y 的
+			// 端口 81 ingress 到 x/a。我们用 x/b 作为同 namespace 来源
+			// （拒绝），y/a、y/b 作为 namespace Y 的来源（允许），z/a 作为被拒绝的
+			// 第三 namespace 来源。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -468,9 +468,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce multiple, stacked policies with overlapping podSelectors", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80, 81}
-			// We stack multiple policies to verify per-port behavior and policy precedence.
-			// We need x/a as the target, x/b as a same-namespace source, y/a,y/b as the
-			// allowed namespace, and z/a as a namespace that must remain denied.
+			// 我们叠加多个策略来验证按端口的行为和策略优先级。
+			// 需要 x/a 作为目标，x/b 作为同 namespace 来源，y/a、y/b 作为
+			// 允许的 namespace，z/a 作为必须保持拒绝的 namespace。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -513,8 +513,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should support allow-all policy", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80, 81}
-			// Allow-all should not restrict anything. We include two pods in X and one in Y
-			// so we cover both intra-namespace (x/a<->x/b) and cross-namespace traffic.
+			// allow-all 不应限制任何东西。我们在 X 中放两个 pod、Y 中放一个，
+			// 以覆盖同 namespace（x/a<->x/b）和跨 namespace 流量。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -531,9 +531,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should allow ingress access on one named port", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80, 81}
-			// Policy applies to all pods in X and only allows the named port serve-81-tcp.
-			// We need two pods in X to validate X-to-X traffic is blocked on port 80, and a
-			// pod in Y to validate cross-namespace ingress is also restricted as expected.
+			// 策略作用于 X 中所有 pod，只允许命名端口 serve-81-tcp。
+			// 需要 X 中两个 pod 验证 X 到 X 流量在端口 80 被阻断，
+			// Y 中一个 pod 验证跨 namespace ingress 也按预期受限。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -546,7 +546,7 @@ var _ = common.SIGDescribe("Netpol", func() {
 			reachabilityPort81 := NewReachability(k8s.AllPodStrings(), true)
 			ValidateOrFail(k8s, &TestCase{ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachabilityPort81})
 
-			// disallow all traffic to the x namespace
+			// 拒绝所有到 x namespace 的流量
 			reachabilityPort80 := NewReachability(k8s.AllPodStrings(), true)
 			reachabilityPort80.ExpectPeer(&Peer{}, &Peer{Namespace: nsX}, false)
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityPort80})
@@ -555,10 +555,10 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should allow ingress access from namespace on one named port", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80, 81}
-			// Only namespace Y should be able to reach x/a on the named port serve-80-tcp,
-			// and port 81 should be blocked for everyone. We include x/b as a
-			// same-namespace peer (denied), y/a as the allowed namespace, and z/a as a
-			// denied namespace.
+			// 只有 namespace Y 应能通过命名端口 serve-80-tcp 访问 x/a，
+			// 端口 81 应对所有人阻断。我们用 x/b 作为
+			// 同 namespace peer（拒绝），y/a 作为允许的 namespace，z/a 作为
+			// 被拒绝的 namespace。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -574,7 +574,7 @@ var _ = common.SIGDescribe("Netpol", func() {
 			CreatePolicy(ctx, k8s, policy, nsX)
 
 			reachability := NewReachability(k8s.AllPodStrings(), true)
-			// disallow all traffic from the x or z namespaces
+			// 拒绝来自 x 或 z namespace 的所有流量
 			reachability.ExpectPeer(&Peer{Namespace: nsX}, &Peer{Namespace: nsX, Pod: "a"}, false)
 			reachability.ExpectPeer(&Peer{Namespace: nsZ}, &Peer{Namespace: nsX, Pod: "a"}, false)
 
@@ -590,9 +590,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should allow egress access on one named port", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80, 81}
-			// Policy restricts egress from x/a by named port: port 80 allowed, port 81
-			// denied. One pod in X and one pod in Y is sufficient to validate egress
-			// behavior.
+			// 策略按命名端口限制 x/a 的 egress：端口 80 允许，端口 81
+			// 拒绝。X 中一个 pod 和 Y 中一个 pod 足以验证 egress
+			// 行为。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -604,21 +604,21 @@ var _ = common.SIGDescribe("Netpol", func() {
 			reachabilityPort80 := NewReachability(k8s.AllPodStrings(), true)
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityPort80})
 
-			// meanwhile no traffic over 81 should work, since our egress policy is on 80
+			// 同时端口 81 上不应有任何流量，因为 egress 策略是在 80 上
 			reachabilityPort81 := NewReachability(k8s.AllPodStrings(), true)
 			reachabilityPort81.ExpectPeer(&Peer{Namespace: nsX}, &Peer{}, false)
 			ValidateOrFail(k8s, &TestCase{ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachabilityPort81})
 		})
 
-		// This test *does* apply to plugins that do not implement named ports
-		// (and the test specifically does not have the string "named port" in its
-		// title to ensure that doesn't get accidentally skipped by plugins that
-		// skip named port tests). It is a security hole if you fail this test,
+		// 这个测试*确实*适用于不实现命名端口的插件
+		// （测试标题特意不含 "named port" 字符串，以免
+		// 被跳过此类测试的插件意外跳过）。如果测试失败，说明存在
+		// 安全漏洞，因为你放行了本应被阻断的流量。
 		// because you are allowing traffic that is supposed to be blocked.
 		f.It("should not allow all ports if it cannot limit to the requested port", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// One server (x/a) and one client (y/a) is sufficient
+			// 一个 server（x/a）和一个 client（y/a）就足够了
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -637,21 +637,21 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce updated policy", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{81}
-			// This test mutates a policy in namespace X and validates connectivity changes
-			// from allowed -> denied. One pod in X and one in Y is enough to observe the
-			// before/after behavior.
+			// 这个测试修改 namespace X 中的策略并验证连通性变化
+			// 从允许变为拒绝。X 中一个 pod 和 Y 中一个足以观察
+			// 修改前后的行为。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
 			ginkgo.By("Using the simplest possible mutation: start with allow all, then switch to deny all")
-			// part 1) allow all
+			// 第 1 部分）全部允许
 			policy := GenNetworkPolicyWithNameAndPodMatchLabel("allow-all-mutate-to-deny-all", map[string]string{}, SetSpecIngressRules(networkingv1.NetworkPolicyIngressRule{}))
 			CreatePolicy(ctx, k8s, policy, nsX)
 
 			reachability := NewReachability(k8s.AllPodStrings(), true)
 			ValidateOrFail(k8s, &TestCase{ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachability})
 
-			// part 2) update the policy to deny all
+			// 第 2 部分）更新策略为全部拒绝
 			policy.Spec.Ingress = []networkingv1.NetworkPolicyIngressRule{}
 			UpdatePolicy(ctx, k8s, policy, nsX)
 
@@ -663,8 +663,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should allow ingress access from updated namespace", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Namespace label changes are what we are testing here. We need x/a as the
-			// target and y/a as the external client whose namespace labels are updated.
+			// 这里测试的是 namespace 标签变化。需要 x/a 作为
+			// 目标，y/a 作为要更新 namespace 标签的外部 client。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 			ginkgo.DeferCleanup(DeleteNamespaceLabel, k8s, nsY, "ns2")
@@ -683,10 +683,10 @@ var _ = common.SIGDescribe("Netpol", func() {
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachability})
 
-			// add a new label
+			// 添加新标签
 			AddNamespaceLabel(ctx, k8s, nsY, "ns2", "updated")
 
-			// anything from namespace 'y' should be able to get to x/a
+			// 来自 namespace 'y' 的任何流量都应能访问 x/a
 			reachabilityWithLabel := NewReachability(k8s.AllPodStrings(), true)
 			reachabilityWithLabel.ExpectAllIngress(NewPodString(nsX, "a"), false)
 			reachabilityWithLabel.ExpectPeer(&Peer{Namespace: nsY}, &Peer{}, true)
@@ -696,13 +696,13 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should allow ingress access from updated pod", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Pod label changes are what we are testing here. We need x/a as the target and
-			// x/b as the client whose labels are updated to match the PodSelector.
+			// 这里测试的是 pod 标签变化。需要 x/a 作为目标，
+			// x/b 作为标签被更新以匹配 PodSelector 的 client。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b")
 			nsX, _, _ := getK8sNamespaces(k8s)
 			ginkgo.DeferCleanup(ResetPodLabels, k8s, nsX, "b")
 
-			// add a new label
+			// 添加新标签
 			matchLabels := map[string]string{"pod": "b", "pod2": "updated"}
 			allowedLabels := &metav1.LabelSelector{MatchLabels: matchLabels}
 			ingressRule := networkingv1.NetworkPolicyIngressRule{}
@@ -727,9 +727,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should deny ingress from pods on other namespaces", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Ingress policy in X should only allow same-namespace pods. We need two pods
-			// in X to verify X-to-X is allowed, plus one pod in each of Y and Z to verify
-			// that cross-namespace ingress into X is denied.
+			// X 中的 Ingress 策略应只允许同 namespace 的 pod。需要 X 中两个 pod
+			// 验证 X 到 X 被允许，Y 和 Z 中各一个 pod 验证
+			// 进入 X 的跨 namespace ingress 被拒绝。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -748,9 +748,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should deny ingress access to updated pod", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// This test verifies that x/a becomes isolated when its labels are updated to
-			// match a deny-ingress policy. We need x/a as the target and y/a as an external
-			// source.
+			// 这个测试验证 x/a 的标签更新为匹配 deny-ingress 策略后变为
+			// 被隔离。需要 x/a 作为目标，y/a 作为外部
+			// 来源。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 			ginkgo.DeferCleanup(ResetPodLabels, k8s, nsX, "a")
@@ -773,8 +773,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should deny egress from pods based on PodSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Egress policy selects x/a and denies all egress. We include x/b to verify
-			// non-selected pods are unaffected, plus y/a as a cross-namespace destination.
+			// Egress 策略选中 x/a 并拒绝所有 egress。用 x/b 验证
+			// 未被选中的 pod 不受影响，加上 y/a 作为跨 namespace 目的地。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -790,8 +790,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should deny egress from all pods in a namespace", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Namespace-wide egress deny in X: we include x/b to verify x/a->x/b is denied,
-			// and y/a to verify cross-namespace egress from X is denied as well.
+			// X 中 namespace 级别的 egress 拒绝：用 x/b 验证 x/a->x/b 被拒绝，
+			// 用 y/a 验证从 X 出发的跨 namespace egress 也被拒绝。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -807,9 +807,9 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should work with Ingress, Egress specified together", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80, 81}
-			// Policy on x/a allows ingress only from x/a and x/b, and allows egress only to
-			// port 80. We include x/c as a same-namespace disallowed ingress source and y/a
-			// as a cross-namespace destination for egress checks.
+			// x/a 上的策略只允许来自 x/a 和 x/b 的 ingress，且只允许 egress 到
+			// 端口 80。用 x/c 作为同 namespace 不允许的 ingress 来源，y/a
+			// 作为 egress 检查的跨 namespace 目的地。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "x/c", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -818,12 +818,12 @@ var _ = common.SIGDescribe("Netpol", func() {
 			ingressRule.From = append(ingressRule.From, networkingv1.NetworkPolicyPeer{PodSelector: allowedPodLabels})
 			policy := GenNetworkPolicyWithNameAndPodMatchLabel("allow-client-a-via-pod-selector", map[string]string{"pod": "a"}, SetSpecIngressRules(ingressRule))
 
-			// add an egress rule on to it...
+			// 给它加一条 egress 规则...
 			policy.Spec.Egress = []networkingv1.NetworkPolicyEgressRule{
 				{
 					Ports: []networkingv1.NetworkPolicyPort{
 						{
-							// don't use named ports
+							// 不使用命名端口
 							Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 80},
 						},
 					},
@@ -838,7 +838,7 @@ var _ = common.SIGDescribe("Netpol", func() {
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityPort80})
 
 			ginkgo.By("validating that port 81 doesn't work")
-			// meanwhile no egress traffic on 81 should work, since our egress policy is on 80
+			// 同时端口 81 上不应有 egress 流量，因为 egress 策略是在 80 上
 			reachabilityPort81 := NewReachability(k8s.AllPodStrings(), true)
 			reachabilityPort81.ExpectAllIngress(NewPodString(nsX, "a"), false)
 			reachabilityPort81.ExpectAllEgress(NewPodString(nsX, "a"), false)
@@ -847,20 +847,20 @@ var _ = common.SIGDescribe("Netpol", func() {
 		})
 
 		f.It("should support denying of egress traffic on the client side (even if the server explicitly allows this traffic)", feature.NetworkPolicy, func(ctx context.Context) {
-			// x/a --> y/a and y/b
-			// Egress allowed to y/a only. Egress to y/b should be blocked
-			// Ingress on y/a and y/b allow traffic from x/a
-			// Expectation: traffic from x/a to y/a allowed only, traffic from x/a to y/b denied by egress policy
+			// x/a --> y/a 和 y/b
+			// 只允许 egress 到 y/a，到 y/b 的 egress 应被阻断
+			// y/a 和 y/b 上的 Ingress 允许来自 x/a 的流量
+			// 预期：x/a 到 y/a 的流量允许，x/a 到 y/b 的流量被 egress 策略拒绝
 
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// We need x/a as the client selected by the egress policy, and two pods in Y so
-			// we can show y/a is the allowed destination while y/b is denied by egress even
-			// though ingress on the server side allows both.
+			// 需要 x/a 作为被 egress 策略选中的 client，Y 中两个 pod 以便
+			// 展示 y/a 是允许的目的地，而 y/b 被 egress 拒绝，即使
+			// server 端的 ingress 允许两者。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a", "y/b")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
-			// Building egress policy for x/a to y/a only
+			// 构建只允许 x/a 到 y/a 的 egress 策略
 			allowedEgressNamespaces := &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					namespaceLabelKey: nsY,
@@ -876,7 +876,7 @@ var _ = common.SIGDescribe("Netpol", func() {
 			egressPolicy := GenNetworkPolicyWithNameAndPodMatchLabel("allow-to-ns-y-pod-a", map[string]string{"pod": "a"}, SetSpecEgressRules(egressRule1))
 			CreatePolicy(ctx, k8s, egressPolicy, nsX)
 
-			// Creating ingress policy to allow from x/a to y/a and y/b
+			// 创建 ingress 策略，允许从 x/a 到 y/a 和 y/b
 			allowedIngressNamespaces := &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					namespaceLabelKey: nsX,
@@ -907,8 +907,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce egress policy allowing traffic to a server in a different namespace based on PodSelector and NamespaceSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Egress policy on x/a only allows traffic to y/a (namespace+pod selectors).
-			// We include y/b as a non-matching destination to ensure it is denied.
+			// x/a 上的 Egress 策略只允许到 y/a 的流量（namespace+pod selector）。
+			// 用 y/b 作为不匹配的目的地，确保它被拒绝。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a", "y/b")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
@@ -936,8 +936,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce ingress policy allowing any port traffic to a server on a specific protocol", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP, protocolUDP}
 			ports := []int32{80}
-			// Protocol-only ingress allowlist: one server (x/a) and one client (y/a) is
-			// enough to validate TCP is allowed while UDP is denied.
+			// 仅按协议的 ingress allowlist：一个 server（x/a）和一个 client（y/a）
+			// 足以验证 TCP 被允许而 UDP 被拒绝。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -957,8 +957,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce multiple ingress policies with ingress allow-all policy taking precedence", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{81}
-			// We only need x/a as the policy target and y/a as the client to observe that
-			// an allow-all ingress policy overrides a more restrictive ingress policy.
+			// 只需要 x/a 作为策略目标，y/a 作为 client，就能观察
+			// allow-all ingress 策略覆盖了更严格的 ingress 策略。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -985,8 +985,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce multiple egress policies with egress allow-all policy taking precedence", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{81}
-			// We only need x/a as the policy target and y/a as the destination to observe
-			// that an allow-all egress policy overrides a more restrictive egress policy.
+			// 只需要 x/a 作为策略目标，y/a 作为目的地，就能观察
+			// allow-all egress 策略覆盖了更严格的 egress 策略。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -1013,18 +1013,18 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should stop enforcing policies after they are deleted", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// A single client/server pair is sufficient to validate connectivity is denied
-			// while the policy exists and returns to allowed after the policy is deleted.
+			// 一对 client/server 足以验证策略存在时连通性被拒绝，
+			// 策略删除后恢复允许。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
 			ginkgo.By("Creating a network policy for the server which denies all traffic.")
-			// Deny all traffic into and out of "x".
+			// 拒绝所有进出 "x" 的流量。
 			policy := GenNetworkPolicyWithNameAndPodSelector("deny-all", metav1.LabelSelector{}, SetSpecIngressRules(), SetSpecEgressRules())
 			CreatePolicy(ctx, k8s, policy, nsX)
 			reachability := NewReachability(k8s.AllPodStrings(), true)
 
-			// Expect all traffic into, and out of "x" to be False.
+			// 预期所有进出 "x" 的流量都为 False。
 			reachability.ExpectPeer(&Peer{Namespace: nsX}, &Peer{}, false)
 			reachability.ExpectPeer(&Peer{}, &Peer{Namespace: nsX}, false)
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachability})
@@ -1033,20 +1033,20 @@ var _ = common.SIGDescribe("Netpol", func() {
 			time.Sleep(3 * time.Second) // TODO we can remove this eventually, its just a hack to keep CI stable.
 			framework.ExpectNoError(err, "unable to clean network policies")
 
-			// Now the policy is deleted, we expect all connectivity to work again.
+			// 现在策略已删除，预期所有连通性恢复。
 			reachabilityAll := NewReachability(k8s.AllPodStrings(), true)
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachabilityAll})
 		})
 
-		// TODO, figure out how the next 3 tests should work with dual stack : do we need a different abstraction then just "podIP"?
+		// TODO: 弄清楚接下来 3 个测试在双栈下该如何工作：是否需要不同于单纯 "podIP" 的抽象？
 
 		f.It("should allow egress access to server in CIDR block", feature.NetworkPolicy, func(ctx context.Context) {
-			// Getting podServer's status to get podServer's IP, to create the CIDR
+			// 获取 podServer 的 status 以拿到它的 IP，用来构造 CIDR
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// This test needs the IP of a real pod to build the IPBlock CIDR. We create y/b
-			// as the server (to source the IP), y/a as a non-matching destination, and x/a
-			// as the client whose egress is restricted.
+			// 这个测试需要真实 pod 的 IP 来构造 IPBlock CIDR。创建 y/b
+			// 作为 server（提供 IP），y/a 作为不匹配的目的地，x/a
+			// 作为 egress 受限的 client。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a", "y/b")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
@@ -1074,18 +1074,18 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce except clause while egress access to server in CIDR block", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// We need x/b to supply the IP used in the IPBlock (and as the destination),
-			// x/a as the client, and x/c to verify non-excepted traffic still works.
+			// 需要 x/b 提供 IPBlock 使用的 IP（并作为目的地），
+			// x/a 作为 client，x/c 验证非例外流量仍然可用。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "x/c")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
-			// Getting podServer's status to get podServer's IP, to create the CIDR with except clause
+			// 获取 podServer 的 status 以拿到它的 IP，用来构造带 except 子句的 CIDR
 			podList, err := f.ClientSet.CoreV1().Pods(nsX).List(ctx, metav1.ListOptions{LabelSelector: "pod=b"})
 			framework.ExpectNoError(err, "Failing to find pod x/b")
 			podB := podList.Items[0]
 
-			// Create a rule that allows egress to a large set of IPs around
-			// podB, but not podB itself.
+			// 创建一条规则，允许 egress 到 podB 周围
+			// 一大片 IP，但不包括 podB 本身。
 
 			podServerAllowCIDR := makeLargeCIDRForIP(podB.Status.PodIP)
 			hostMask := 32
@@ -1109,19 +1109,19 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should ensure an IP overlapping both IPBlock.CIDR and IPBlock.Except is allowed", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// We need x/b to supply the IP used in the IPBlock (and as the destination),
-			// x/a as the client, and x/c to verify non-excepted traffic still works for
-			// CIDR/Except overlap behavior.
+			// 需要 x/b 提供 IPBlock 使用的 IP（并作为目的地），
+			// x/a 作为 client，x/c 验证非例外流量对
+			// CIDR/Except 重叠行为仍然有效。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "x/c")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
-			// Getting podServer's status to get podServer's IP, to create the CIDR with except clause
+			// 获取 podServer 的 status 以拿到它的 IP，用来构造带 except 子句的 CIDR
 			podList, err := f.ClientSet.CoreV1().Pods(nsX).List(ctx, metav1.ListOptions{LabelSelector: "pod=b"})
 			framework.ExpectNoError(err, "Failing to find pod x/b")
 			podB := podList.Items[0]
 
-			// Create a rule that allows egress to a large set of IPs around
-			// podB, but not podB itself.
+			// 创建一条规则，允许 egress 到 podB 周围
+			// 一大片 IP，但不包括 podB 本身。
 
 			podServerAllowCIDR := makeLargeCIDRForIP(podB.Status.PodIP)
 			hostMask := 32
@@ -1140,13 +1140,13 @@ var _ = common.SIGDescribe("Netpol", func() {
 
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachability})
 
-			// Create a second NetworkPolicy which allows access to podB
+			// 创建第二个 NetworkPolicy 允许访问 podB
 			podBIP := fmt.Sprintf("%s/%d", podB.Status.PodIP, hostMask)
 			egressRule3 := networkingv1.NetworkPolicyEgressRule{}
 			egressRule3.To = append(egressRule3.To, networkingv1.NetworkPolicyPeer{IPBlock: &networkingv1.IPBlock{CIDR: podBIP}})
 			allowPolicy := GenNetworkPolicyWithNameAndPodMatchLabel("allow-client-a-via-cidr-egress-rule",
 				map[string]string{"pod": "a"}, SetSpecEgressRules(egressRule3))
-			// SHOULD THIS BE UPDATE OR CREATE JAY TESTING 10/31
+			// 这该用 UPDATE 还是 CREATE？JAY TESTING 10/31
 			UpdatePolicy(ctx, k8s, allowPolicy, nsX)
 
 			reachabilityAllow := NewReachability(k8s.AllPodStrings(), true)
@@ -1159,19 +1159,19 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should enforce policies to check ingress and egress policies can be controlled independently based on PodSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policies target x/a. We need x/b to verify a->b allowed while b->a can be
-			// denied, and y/a as an external pod so the initial "all traffic allowed" step
-			// covers cross-namespace connectivity as well.
+			// 策略目标是 x/a。需要 x/b 验证 a->b 允许而 b->a 可以
+			// 被拒绝，y/a 作为外部 pod，使初始的"所有流量允许"步骤
+			// 也覆盖跨 namespace 连通性。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
 			/*
-					Test steps:
-					1. Verify every pod in every namespace can talk to each other
-				       - including a -> b and b -> a
-					2. Create a policy to allow egress a -> b (target = a)
-				    3. Create a policy to *deny* ingress b -> a (target = a)
-					4. Verify a -> b allowed; b -> a blocked
+					测试步骤：
+					1. 验证每个 namespace 中的每个 pod 都能互相通信
+				          - 包括 a -> b 和 b -> a
+					2. 创建一条策略允许 egress a -> b（target = a）
+				    3. 创建一条策略*拒绝* ingress b -> a（target = a）
+					4. 验证 a -> b 允许；b -> a 被阻断
 			*/
 			targetLabels := map[string]string{"pod": "a"}
 
@@ -1194,19 +1194,19 @@ var _ = common.SIGDescribe("Netpol", func() {
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: denyIngressToXReachability})
 		})
 
-		// This test *does* apply to plugins that do not implement SCTP. It is a
-		// security hole if you fail this test, because you are allowing TCP
-		// traffic that is supposed to be blocked.
+		// 这个测试*确实*适用于不实现 SCTP 的插件。如果测试失败，说明存在
+		// 安全漏洞，因为你放行了本应被阻断的 TCP
+		// 流量。
 		f.It("should not mistakenly treat 'protocol: SCTP' as 'protocol: TCP', even if the plugin doesn't support SCTP", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{81}
-			// One server (x/a) and one client (y/a) is sufficient: we create an SCTP-only
-			// allow policy and verify that TCP to the same port remains blocked.
+			// 一个 server（x/a）和一个 client（y/a）就足够：创建仅允许
+			// SCTP 的策略，验证到同一端口的 TCP 仍被阻断。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
 			ginkgo.By("Creating a default-deny ingress policy.")
-			// Empty podSelector blocks the entire namespace
+			// 空的 podSelector 阻断整个 namespace
 			policy := GenNetworkPolicyWithNameAndPodSelector("deny-ingress", metav1.LabelSelector{}, SetSpecIngressRules())
 			CreatePolicy(ctx, k8s, policy, nsX)
 
@@ -1222,14 +1222,14 @@ var _ = common.SIGDescribe("Netpol", func() {
 			ValidateOrFail(k8s, &TestCase{ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachability})
 		})
 
-		// This test *does* apply to plugins that do not implement SCTP. It is a
-		// security hole if you fail this test, because you are allowing TCP
-		// traffic that is supposed to be blocked.
+		// 这个测试*确实*适用于不实现 SCTP 的插件。如果测试失败，说明存在
+		// 安全漏洞，因为你放行了本应被阻断的 TCP
+		// 流量。
 		f.It("should properly isolate pods that are selected by a policy allowing SCTP, even if the plugin doesn't support SCTP", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{81}
-			// One server (x/a) and one client (y/a) is sufficient: an SCTP-only allow rule
-			// should still isolate the pod for TCP traffic on other ports.
+			// 一个 server（x/a）和一个 client（y/a）就足够：仅允许 SCTP 的规则
+			// 仍应使 pod 在其他端口的 TCP 流量上保持隔离。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -1248,8 +1248,8 @@ var _ = common.SIGDescribe("Netpol", func() {
 		f.It("should not allow access by TCP when a policy specifies only UDP", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{81}
-			// One server (x/a) and one client (y/a) is sufficient: a UDP-only allow rule
-			// must not accidentally permit TCP connectivity.
+			// 一个 server（x/a）和一个 client（y/a）就足够：仅允许 UDP 的规则
+			// 不得意外放行 TCP 连通性。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "y/a")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -1260,19 +1260,19 @@ var _ = common.SIGDescribe("Netpol", func() {
 
 			ginkgo.By("Creating a network policy for the server which allows traffic only via UDP on port 81.")
 
-			// Probing with TCP, so all traffic should be dropped.
+			// 用 TCP 探测，因此所有流量都应被丢弃。
 			reachability := NewReachability(k8s.AllPodStrings(), true)
 			reachability.ExpectAllIngress(NewPodString(nsX, "a"), false)
 			ValidateOrFail(k8s, &TestCase{ToPort: 81, Protocol: v1.ProtocolTCP, Reachability: reachability})
 		})
 
-		// Note that this default ns functionality is maintained by the APIMachinery group, but we test it here anyways because its an important feature.
+		// 注意这个默认 namespace 功能由 APIMachinery 组维护，但我们仍在这里测试，因为它是重要特性。
 		f.It("should enforce policy to allow traffic based on NamespaceSelector with MatchLabels using default ns label", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// Policy on x/a allows ingress only from namespace Y (using the default ns name
-			// label). We need x/b (same namespace) and z/a (other namespace) as negative
-			// cases.
+			// x/a 上的策略只允许来自 namespace Y 的 ingress（使用默认 ns 名称
+			// 标签）。需要 x/b（同 namespace）和 z/a（其他 namespace）作为
+			// 反例。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -1293,13 +1293,13 @@ var _ = common.SIGDescribe("Netpol", func() {
 			ValidateOrFail(k8s, &TestCase{ToPort: 80, Protocol: v1.ProtocolTCP, Reachability: reachability})
 		})
 
-		// Note that this default ns functionality is maintained by the APIMachinery group, but we test it here anyways because its an important feature.
+		// 注意这个默认 namespace 功能由 APIMachinery 组维护，但我们仍在这里测试，因为它是重要特性。
 		f.It("should enforce policy based on NamespaceSelector with MatchExpressions using default ns label", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolTCP}
 			ports := []int32{80}
-			// This uses MatchExpressions on the default namespace-name label for an egress
-			// policy selecting x/a. The selector is NotIn{Y}, so x/a -> Y must be denied
-			// while x/a -> X and x/a -> Z remain allowed.
+			// 这里对默认 namespace 名称标签使用 MatchExpressions，用于
+			// 选中 x/a 的 egress 策略。selector 是 NotIn{Y}，所以 x/a -> Y 必须被拒绝，
+			// 而 x/a -> X 和 x/a -> Z 保持允许。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
@@ -1328,7 +1328,7 @@ var _ = common.SIGDescribe("Netpol [LinuxOnly]", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 	var k8s *kubeManager
 	ginkgo.BeforeEach(func() {
-		// Windows does not support UDP testing via agnhost.
+		// Windows 不支持通过 agnhost 测试 UDP。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 	})
 
@@ -1337,9 +1337,9 @@ var _ = common.SIGDescribe("Netpol [LinuxOnly]", func() {
 		f.It("should support a 'default-deny-ingress' policy", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolUDP}
 			ports := []int32{80}
-			// UDP: namespace X has a default-deny-ingress policy, so we need 2 pods in X to
-			// verify X-to-X ingress is blocked, and 2 pods in Y to verify Y-to-X is also
-			// blocked while X-to-Y and Y-to-Y traffic remain allowed.
+			// UDP：namespace X 有 default-deny-ingress 策略，所以 X 中需要 2 个 pod 来
+			// 验证 X 到 X 的 ingress 被阻断，Y 中 2 个 pod 验证 Y 到 X 也被
+			// 阻断，同时 X 到 Y 和 Y 到 Y 的流量仍被允许。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -1355,10 +1355,10 @@ var _ = common.SIGDescribe("Netpol [LinuxOnly]", func() {
 		f.It("should enforce policy based on Ports", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolUDP}
 			ports := []int32{81}
-			// UDP port test: namespace X should allow ingress to x/a on port 81 from
-			// namespace Y only. We include x/b as a same-namespace source (denied) and z/a
-			// as an unrelated namespace (denied). One pod in Y is enough because the rule
-			// is namespace-based.
+			// UDP 端口测试：namespace X 应只允许来自 namespace Y 的
+			// 端口 81 ingress 到 x/a。用 x/b 作为同 namespace 来源（拒绝），z/a 作为
+			// 无关 namespace（拒绝）。Y 中一个 pod 就够，因为规则
+			// 是基于 namespace 的。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -1384,9 +1384,9 @@ var _ = common.SIGDescribe("Netpol [LinuxOnly]", func() {
 		f.It("should enforce policy to allow traffic only from a pod in a different namespace based on PodSelector and NamespaceSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolUDP}
 			ports := []int32{80}
-			// UDP: policy on x/a allows ingress only from y/a (namespace+pod selectors).
-			// We keep x/b as a same-namespace/non-matching pod to ensure it cannot reach
-			// x/a.
+			// UDP：x/a 上的策略只允许来自 y/a 的 ingress（namespace+pod selector）。
+			// 保留 x/b 作为同 namespace/不匹配的 pod，确保它无法访问
+			// x/a。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
@@ -1420,7 +1420,7 @@ var _ = common.SIGDescribe("Netpol", feature.SCTPConnectivity, "[LinuxOnly]", fu
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 	var k8s *kubeManager
 	ginkgo.BeforeEach(func() {
-		// Windows does not support SCTP
+		// Windows 不支持 SCTP
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 	})
 
@@ -1429,9 +1429,9 @@ var _ = common.SIGDescribe("Netpol", feature.SCTPConnectivity, "[LinuxOnly]", fu
 		f.It("should support a 'default-deny-ingress' policy", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolSCTP}
 			ports := []int32{80}
-			// SCTP: namespace X has a default-deny-ingress policy, so we need 2 pods in X
-			// to verify X-to-X ingress is blocked, and 2 pods in Y to verify Y-to-X is also
-			// blocked while X-to-Y and Y-to-Y traffic remain allowed.
+			// SCTP：namespace X 有 default-deny-ingress 策略，所以 X 中需要 2 个 pod
+			// 验证 X 到 X 的 ingress 被阻断，Y 中 2 个 pod 验证 Y 到 X 也被
+			// 阻断，同时 X 到 Y 和 Y 到 Y 的流量仍被允许。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "y/b")
 			nsX, _, _ := getK8sNamespaces(k8s)
 
@@ -1447,10 +1447,10 @@ var _ = common.SIGDescribe("Netpol", feature.SCTPConnectivity, "[LinuxOnly]", fu
 		f.It("should enforce policy based on Ports", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolSCTP}
 			ports := []int32{81}
-			// SCTP port test: namespace X should allow ingress to x/a on port 81 from
-			// namespace Y only. We include x/b as a same-namespace source (denied) and z/a
-			// as an unrelated namespace (denied). One pod in Y is enough because the rule
-			// is namespace-based.
+			// SCTP 端口测试：namespace X 应只允许来自 namespace Y 的
+			// 端口 81 ingress 到 x/a。用 x/b 作为同 namespace 来源（拒绝），z/a 作为
+			// 无关 namespace（拒绝）。Y 中一个 pod 就够，因为规则
+			// 是基于 namespace 的。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a", "z/a")
 			nsX, nsY, nsZ := getK8sNamespaces(k8s)
 
@@ -1476,9 +1476,9 @@ var _ = common.SIGDescribe("Netpol", feature.SCTPConnectivity, "[LinuxOnly]", fu
 		f.It("should enforce policy to allow traffic only from a pod in a different namespace based on PodSelector and NamespaceSelector", feature.NetworkPolicy, func(ctx context.Context) {
 			protocols := []v1.Protocol{protocolSCTP}
 			ports := []int32{80}
-			// SCTP: policy on x/a allows ingress only from y/a (namespace+pod selectors).
-			// We keep x/b as a same-namespace/non-matching pod to ensure it cannot reach
-			// x/a.
+			// SCTP：x/a 上的策略只允许来自 y/a 的 ingress（namespace+pod selector）。
+			// 保留 x/b 作为同 namespace/不匹配的 pod，确保它无法访问
+			// x/a。
 			k8s = initializeResources(ctx, f, protocols, ports, "x/a", "x/b", "y/a")
 			nsX, nsY, _ := getK8sNamespaces(k8s)
 
@@ -1506,9 +1506,9 @@ var _ = common.SIGDescribe("Netpol", feature.SCTPConnectivity, "[LinuxOnly]", fu
 	})
 })
 
-// getNamespaceNames returns the set of base namespace names used by this test, taking a root ns as input.
-// The framework will also append a unique suffix when creating the namespaces.
-// This allows tests to run in parallel.
+// getNamespaceNames 返回本测试使用的基础 namespace 名称集合，以根 ns 为输入。
+// framework 创建 namespace 时还会追加唯一后缀。
+// 这样测试就能并行运行。
 func getNamespaceNames(rootNs string) []string {
 	if rootNs != "" {
 		rootNs += "-"
@@ -1519,8 +1519,8 @@ func getNamespaceNames(rootNs string) []string {
 	return []string{nsX, nsY, nsZ}
 }
 
-// modelFromPodStrings converts pod references like "x/a" into a model that uses the
-// actual generated namespace names.
+// modelFromPodStrings 把 "x/a" 这样的 pod 引用转换为使用
+// 实际生成的 namespace 名称的 model。
 func modelFromPodStrings(namespaces []string, modelPods []string, protocols []v1.Protocol, ports []int32) (*Model, error) {
 	if len(modelPods) == 0 {
 		return nil, fmt.Errorf("model pod list must not be empty")
@@ -1554,7 +1554,7 @@ func modelFromPodStrings(namespaces []string, modelPods []string, protocols []v1
 	return newModelWithPerNamespacePodNames(namespaces, podNamesByNamespace, ports, protocols), nil
 }
 
-// getK8sNamespaces returns the 3 actual namespace names.
+// getK8sNamespaces 返回 3 个实际的 namespace 名称。
 func getK8sNamespaces(k8s *kubeManager) (string, string, string) {
 	ns := k8s.NamespaceNames()
 	return ns[0], ns[1], ns[2]
@@ -1588,17 +1588,17 @@ func initializeCluster(ctx context.Context, f *framework.Framework, protocols []
 	return k8s, nil
 }
 
-// initializeResources uses the e2e framework to create all necessary namespace resources, based on the network policy
-// model derived from the framework.  It then waits for the resources described by the model to be up and running
-// (i.e. all pods are ready and running in their namespaces).
+// initializeResources 使用 e2e framework，根据从 framework 推导出的 network policy
+// model 创建所有必要的 namespace 资源，然后等待 model 描述的资源
+// 启动并运行（即所有 pod 在自己的 namespace 中就绪并运行）。
 func initializeResources(ctx context.Context, f *framework.Framework, protocols []v1.Protocol, ports []int32, modelPods ...string) *kubeManager {
 	k8s, err := initializeCluster(ctx, f, protocols, ports, modelPods...)
 	framework.ExpectNoError(err, "unable to initialize resources")
 	return k8s
 }
 
-// makeLargeCIDRForIP returns a CIDR that matches the given IP and many many many other
-// IPs. (Specifically, it returns the /4 that contains the IP.)
+// makeLargeCIDRForIP 返回一个 CIDR，匹配给定 IP 以及非常非常多的其他
+// IP。（具体说，返回包含该 IP 的 /4 网段。）
 func makeLargeCIDRForIP(ip string) string {
 	podIP := utilnet.ParseIPSloppy(ip)
 	if ip4 := podIP.To4(); ip4 != nil {

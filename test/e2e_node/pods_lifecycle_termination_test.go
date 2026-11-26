@@ -32,9 +32,9 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// Pod sigkill test will cover pods with graceful termination period set but failed
-// to terminate and forcefully killed by kubelet. This test examine pod's container's
-// exit code is 137 and the exit reason is `Error`
+// Pod sigkill 测试覆盖设置了优雅终止期但未能
+// 终止、被 kubelet 强制杀死的 pod。本测试检查 pod 容器的
+// 退出码是 137 且退出原因是 `Error`
 var _ = SIGDescribe("Pod SIGKILL [LinuxOnly]", framework.WithNodeConformance(), func() {
 	f := framework.NewDefaultFramework("sigkill-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
@@ -54,7 +54,7 @@ var _ = SIGDescribe("Pod SIGKILL [LinuxOnly]", framework.WithNodeConformance(), 
 			err := e2epod.WaitForPodNameRunningInNamespace(context.TODO(), f.ClientSet, podSpec.Name, f.Namespace.Name)
 			framework.ExpectNoError(err, "Failed to await for the pod to be running: %q", podSpec.Name)
 
-			// Checking pod's readiness to confirm the signal handler has registered successfully.
+			// 检查 pod 是否就绪，确认 signal handler 已成功注册。
 			err = e2epod.WaitForPodCondition(context.TODO(), f.ClientSet, f.Namespace.Name, podSpec.Name, "Ready", f.Timeouts.PodStart, testutils.PodRunningReady)
 			framework.ExpectNoError(err, "Failed to await Pod (%v/%v) become ready after registering signal handler: %v", f.Namespace.Name, podSpec.Name, err)
 
@@ -97,8 +97,8 @@ func getSigkillTargetPod(podName string, ctnName string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: podName,
-			// Using default test finalizer to keep exit status and code can be
-			// preserved after deleting the pod
+			// 用默认测试 finalizer 保留退出状态和代码，
+			// 以便删除 pod 后仍能保留
 			Finalizers: []string{testFinalizer},
 		},
 		Spec: v1.PodSpec{
@@ -107,15 +107,15 @@ func getSigkillTargetPod(podName string, ctnName string) *v1.Pod {
 				{
 					Name:  ctnName,
 					Image: busyboxImage,
-					// In the main container, SIGTERM was trapped and later /tmp/healthy
-					// will be created for readiness probe to verify if the trap was
-					// executed successfully
+					// 在主容器中，SIGTERM 被捕获，随后会创建 /tmp/healthy
+					// 供 readiness 探针验证 trap 是否
+					// 成功执行
 					Command: []string{
 						"sh",
 						"-c",
 						"trap \"echo SIGTERM caught\" SIGTERM SIGINT; touch /tmp/healthy; /bin/sleep 1000",
 					},
-					// Using readiness probe to guarantee signal handler registering finished
+					// 用 readiness 探针确保 signal handler 注册完成
 					ReadinessProbe: &v1.Probe{
 						InitialDelaySeconds: 1,
 						TimeoutSeconds:      2,

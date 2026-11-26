@@ -56,7 +56,7 @@ const (
 
 var localStorageVersion = utilversion.MustParseSemantic("v1.8.0-beta.0")
 
-// variable populated in BeforeEach, never modified afterwards
+// 在 BeforeEach 中填充的变量，之后不再修改
 var workerNodes = sets.Set[string]{}
 
 type pausePodConfig struct {
@@ -123,9 +123,9 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 
 	})
 
-	// This test verifies we don't allow scheduling of pods in a way that sum of local ephemeral storage resource requests of pods is greater than machines capacity.
-	// It assumes that cluster add-on pods stay stable and cannot be run in parallel with any other test that touches Nodes or Pods.
-	// It is so because we need to have precise control on what's running in the cluster.
+	// 这个测试验证我们不允许以这样的方式调度 pod：pod 的本地临时存储资源 requests 之和大于机器容量。
+	// 它假设集群 add-on pod 保持稳定，且不能与任何其他触及 Node 或 Pod 的测试并行运行。
+	// 因为我们需要精确控制集群中运行的内容。
 	f.It("validates local ephemeral storage resource limits of pods that are allowed to run", func(ctx context.Context) {
 
 		e2eskipper.SkipUnlessServerVersionGTE(localStorageVersion, f.ClientSet.Discovery())
@@ -166,10 +166,10 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 
 		ginkgo.By(fmt.Sprintf("Starting additional %v Pods to fully saturate the cluster local ephemeral resource and trying to start another one", podsNeededForSaturation))
 
-		// As the pods are distributed randomly among nodes,
-		// it can easily happen that all nodes are saturated
-		// and there is no need to create additional pods.
-		// StartPods requires at least one pod to replicate.
+		// 由于 pod 随机分布在各节点上，
+		// 很容易出现所有节点都饱和、
+		// 不需要创建更多 pod 的情况。
+		// StartPods 至少需要复制一个 pod。
 		if podsNeededForSaturation > 0 {
 			framework.ExpectNoError(testutils.StartPods(cs, podsNeededForSaturation, ns, "overcommit",
 				*initPausePod(f, pausePodConfig{
@@ -202,18 +202,18 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 		verifyResult(ctx, cs, podsNeededForSaturation, 1, ns)
 	})
 
-	// This test verifies we don't allow scheduling of pods in a way that sum of limits +
-	// associated overhead is greater than machine's capacity.
-	// It assumes that cluster add-on pods stay stable and cannot be run in parallel
-	// with any other test that touches Nodes or Pods.
-	// Because of this we need to have precise control on what's running in the cluster.
-	// Test scenario:
-	// 1. Find the first ready node on the system, and add a fake resource for test
-	// 2. Create one with affinity to the particular node that uses 70% of the fake resource.
-	// 3. Wait for the pod to be scheduled.
-	// 4. Create another pod with affinity to the particular node that needs 20% of the fake resource and
-	//    an overhead set as 25% of the fake resource.
-	// 5. Make sure this additional pod is not scheduled.
+	// 这个测试验证我们不允许以这样的方式调度 pod：limits 之和
+	// 加上相关 overhead 大于机器容量。
+	// 它假设集群 add-on pod 保持稳定，且不能与
+	// 任何其他触及 Node 或 Pod 的测试并行运行。
+	// 因此我们需要精确控制集群中运行的内容。
+	// 测试场景：
+	// 1. 找到系统上第一个就绪的节点，为其添加一个 fake 资源
+	// 2. 创建一个 affinity 到该节点、使用 70% fake 资源的 pod。
+	// 3. 等待该 pod 被调度。
+	// 4. 再创建一个 affinity 到该节点的 pod，需要 20% 的 fake 资源，且
+	//    overhead 设为 fake 资源的 25%。
+	// 5. 确保这个额外的 pod 未被调度。
 
 	ginkgo.Context("validates pod overhead is considered along with resource limits of pods that are allowed to run", func() {
 		var testNodeName string
@@ -224,14 +224,14 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 			WaitForStableCluster(cs, workerNodes)
 			ginkgo.By("Add RuntimeClass and fake resource")
 
-			// find a node which can run a pod:
+			// 找一个能运行 pod 的节点：
 			testNodeName = GetNodeThatCanRunPod(ctx, f)
 
-			// Get node object:
+			// 获取 node 对象：
 			node, err := cs.CoreV1().Nodes().Get(ctx, testNodeName, metav1.GetOptions{})
 			framework.ExpectNoError(err, "unable to get node object for node %v", testNodeName)
 
-			// update Node API object with a fake resource
+			// 用 fake 资源更新 Node API 对象
 			nodeCopy := node.DeepCopy()
 			nodeCopy.ResourceVersion = "0"
 
@@ -239,7 +239,7 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 			_, err = cs.CoreV1().Nodes().UpdateStatus(ctx, nodeCopy, metav1.UpdateOptions{})
 			framework.ExpectNoError(err, "unable to apply fake resource to %v", testNodeName)
 
-			// Register a runtimeClass with overhead set as 25% of the available beard-seconds
+			// 注册一个 runtimeClass，overhead 设为可用 beard-seconds 的 25%
 			handler = e2eruntimeclass.PreconfiguredRuntimeClassHandler
 
 			rc := &nodev1.RuntimeClass{
@@ -257,21 +257,21 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 
 		ginkgo.AfterEach(func(ctx context.Context) {
 			ginkgo.By("Remove fake resource and RuntimeClass")
-			// remove fake resource:
+			// 移除 fake 资源：
 			if testNodeName != "" {
-				// Get node object:
+				// 获取 node 对象：
 				node, err := cs.CoreV1().Nodes().Get(ctx, testNodeName, metav1.GetOptions{})
 				framework.ExpectNoError(err, "unable to get node object for node %v", testNodeName)
 
 				nodeCopy := node.DeepCopy()
-				// force it to update
+				// 强制更新
 				nodeCopy.ResourceVersion = "0"
 				delete(nodeCopy.Status.Capacity, beardsecond)
 				_, err = cs.CoreV1().Nodes().UpdateStatus(ctx, nodeCopy, metav1.UpdateOptions{})
 				framework.ExpectNoError(err, "unable to update node %v", testNodeName)
 			}
 
-			// remove RuntimeClass
+			// 移除 RuntimeClass
 			_ = cs.NodeV1().RuntimeClasses().Delete(ctx, e2eruntimeclass.PreconfiguredRuntimeClassHandler, metav1.DeleteOptions{})
 		})
 
@@ -282,7 +282,7 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 
 			ginkgo.By("Starting Pod to consume most of the node's resource.")
 
-			// Create pod which requires 70% of the available beard-seconds.
+			// 创建一个需要 70% 可用 beard-seconds 的 pod。
 			fillerPod := createPausePod(ctx, f, pausePodConfig{
 				Name: "filler-pod-" + string(uuid.NewUUID()),
 				Resources: &v1.ResourceRequirements{
@@ -291,14 +291,14 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 				},
 			})
 
-			// Wait for filler pod to schedule.
+			// 等待 filler pod 被调度。
 			framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, cs, fillerPod))
 
 			ginkgo.By("Creating another pod that requires unavailable amount of resources.")
-			// Create another pod that requires 20% of available beard-seconds, but utilizes the RuntimeClass
-			// which defines a pod overhead that requires an additional 25%.
-			// This pod should remain pending as at least 70% of beard-second in
-			// the node are already consumed.
+			// 再创建一个需要 20% 可用 beard-seconds 的 pod，但使用
+			// 定义了额外 25% pod overhead 的 RuntimeClass。
+			// 这个 pod 应保持 pending，因为节点中至少 70% 的 beard-second
+			// 已被占用。
 			podName := "additional-pod" + string(uuid.NewUUID())
 			conf := pausePodConfig{
 				RuntimeClassHandler: &handler,
@@ -314,21 +314,21 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 		})
 	})
 
-	// This test verifies we don't allow scheduling of pods in a way that sum of
-	// resource requests of pods is greater than machines capacity.
-	// It assumes that cluster add-on pods stay stable and cannot be run in parallel
-	// with any other test that touches Nodes or Pods.
-	// It is so because we need to have precise control on what's running in the cluster.
-	// Test scenario:
-	// 1. Find the amount CPU resources on each node.
-	// 2. Create one pod with affinity to each node that uses 70% of the node CPU.
-	// 3. Wait for the pods to be scheduled.
-	// 4. Create another pod with no affinity to any node that need 50% of the largest node CPU.
-	// 5. Make sure this additional pod is not scheduled.
+	// 这个测试验证我们不允许以这样的方式调度 pod：pod 的
+	// 资源 requests 之和大于机器容量。
+	// 它假设集群 add-on pod 保持稳定，且不能与
+	// 任何其他触及 Node 或 Pod 的测试并行运行。
+	// 因为我们需要精确控制集群中运行的内容。
+	// 测试场景：
+	// 1. 找出每个节点上的 CPU 资源量。
+	// 2. 为每个节点创建一个 affinity 到它、使用 70% 节点 CPU 的 pod。
+	// 3. 等待这些 pod 被调度。
+	// 4. 再创建一个不 affinity 到任何节点、需要最大节点 CPU 50% 的 pod。
+	// 5. 确保这个额外的 pod 未被调度。
 	/*
-		Release: v1.9
-		Testname: Scheduler, resource limits
-		Description: Scheduling Pods MUST fail if the resource requests exceed Machine capacity.
+		发布版本：v1.9
+		测试名称：Scheduler, resource limits
+		描述：如果资源 requests 超过机器容量，Pod 调度必须失败。
 	*/
 	framework.ConformanceIt("validates resource limits of pods that are allowed to run", func(ctx context.Context) {
 		WaitForStableCluster(cs, workerNodes)
@@ -345,10 +345,10 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 			if !nodeReady {
 				continue
 			}
-			// Apply node label to each node
+			// 给每个节点打上 node label
 			e2enode.AddOrUpdateLabelOnNode(cs, node.Name, "node", node.Name)
 			e2enode.ExpectNodeHasLabel(ctx, cs, node.Name, "node", node.Name)
-			// Find allocatable amount of CPU.
+			// 找出可分配的 CPU 量。
 			allocatable, found := node.Status.Allocatable[v1.ResourceCPU]
 			if !found {
 				framework.Failf("node.Status.Allocatable %v does not contain entry %v", node.Status.Allocatable, v1.ResourceCPU)
@@ -358,7 +358,7 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 				nodeMaxAllocatable = allocatable.MilliValue()
 			}
 		}
-		// Clean up added labels after this test.
+		// 本测试后清理添加的标签。
 		defer func() {
 			for nodeName := range nodeToAllocatableMap {
 				e2enode.RemoveLabelOffNode(cs, nodeName, "node")
@@ -376,7 +376,7 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 		}
 
 		ginkgo.By("Starting Pods to consume most of the cluster CPU.")
-		// Create one pod per node that requires 70% of the node remaining CPU.
+		// 每个节点创建一个需要节点剩余 CPU 70% 的 pod。
 		fillerPods := []*v1.Pod{}
 		for nodeName, cpu := range nodeToAllocatableMap {
 			requestedCPU := cpu * 7 / 10
@@ -410,14 +410,14 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 				},
 			}))
 		}
-		// Wait for filler pods to schedule.
+		// 等待 filler pod 被调度。
 		for _, pod := range fillerPods {
 			framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, cs, pod))
 		}
 		ginkgo.By("Creating another pod that requires unavailable amount of CPU.")
-		// Create another pod that requires 50% of the largest node CPU resources.
-		// This pod should remain pending as at least 70% of CPU of other nodes in
-		// the cluster are already consumed.
+		// 再创建一个需要最大节点 CPU 资源 50% 的 pod。
+		// 这个 pod 应保持 pending，因为集群中其他节点至少 70% 的 CPU
+		// 已被占用。
 		podName := "additional-pod"
 		conf := pausePodConfig{
 			Name:   podName,
@@ -435,12 +435,12 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 		verifyResult(ctx, cs, len(fillerPods), 1, ns)
 	})
 
-	// Test Nodes does not have any label, hence it should be impossible to schedule Pod with
-	// nonempty Selector set.
+	// 测试节点没有任何 label，因此带非空 Selector 的 Pod
+	// 应无法调度。
 	/*
-		Release: v1.9
-		Testname: Scheduler, node selector not matching
-		Description: Create a Pod with a NodeSelector set to a value that does not match a node in the cluster. Since there are no nodes matching the criteria the Pod MUST not be scheduled.
+		发布版本：v1.9
+		测试名称：Scheduler, node selector not matching
+		描述：创建一个 NodeSelector 设为与集群中节点都不匹配的值的 Pod。由于没有符合条件的节点，该 Pod 不得被调度。
 	*/
 	framework.ConformanceIt("validates that NodeSelector is respected if not matching", func(ctx context.Context) {
 		ginkgo.By("Trying to schedule Pod with nonempty NodeSelector.")
@@ -461,9 +461,9 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 	})
 
 	/*
-		Release: v1.9
-		Testname: Scheduler, node selector matching
-		Description: Create a label on the node {k: v}. Then create a Pod with a NodeSelector set to {k: v}. Check to see if the Pod is scheduled. When the NodeSelector matches then Pod MUST be scheduled on that node.
+		发布版本：v1.9
+		测试名称：Scheduler, node selector matching
+		描述：在节点上创建标签 {k: v}，然后创建一个 NodeSelector 设为 {k: v} 的 Pod。检查 Pod 是否被调度。NodeSelector 匹配时，Pod 必须调度到该节点上。
 	*/
 	framework.ConformanceIt("validates that NodeSelector is respected if matching", func(ctx context.Context) {
 		nodeName := GetNodeThatCanRunPod(ctx, f)
@@ -484,19 +484,19 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 			},
 		})
 
-		// check that pod got scheduled. We intentionally DO NOT check that the
-		// pod is running because this will create a race condition with the
-		// kubelet and the scheduler: the scheduler might have scheduled a pod
-		// already when the kubelet does not know about its new label yet. The
-		// kubelet will then refuse to launch the pod.
+		// 检查 pod 是否被调度。我们特意不检查
+		// pod 是否在运行，因为那会与
+		// kubelet 和 scheduler 产生竞态：scheduler 可能已经调度了 pod，
+		// 而 kubelet 还不知道它的新 label。这样
+		// kubelet 会拒绝启动该 pod。
 		framework.ExpectNoError(e2epod.WaitForPodNotPending(ctx, cs, ns, labelPodName))
 		labelPod, err := cs.CoreV1().Pods(ns).Get(ctx, labelPodName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		gomega.Expect(labelPod.Spec.NodeName).To(gomega.Equal(nodeName))
 	})
 
-	// Test Nodes does not have any label, hence it should be impossible to schedule Pod with
-	// non-nil NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
+	// 测试节点没有任何 label，因此带非 nil 的
+	// NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution 的 Pod 应无法调度。
 	ginkgo.It("validates that NodeAffinity is respected if not matching", func(ctx context.Context) {
 		ginkgo.By("Trying to schedule Pod with nonempty NodeSelector.")
 		podName := "restricted-pod"
@@ -536,8 +536,8 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 		verifyResult(ctx, cs, 0, 1, ns)
 	})
 
-	// Keep the same steps with the test on NodeSelector,
-	// but specify Affinity in Pod.Spec.Affinity, instead of NodeSelector.
+	// 与 NodeSelector 测试步骤相同，
+	// 但在 Pod.Spec.Affinity 中指定 Affinity，而不是 NodeSelector。
 	ginkgo.It("validates that required NodeAffinity setting is respected if matching", func(ctx context.Context) {
 		nodeName := GetNodeThatCanRunPod(ctx, f)
 
@@ -571,21 +571,21 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 			},
 		})
 
-		// check that pod got scheduled. We intentionally DO NOT check that the
-		// pod is running because this will create a race condition with the
-		// kubelet and the scheduler: the scheduler might have scheduled a pod
-		// already when the kubelet does not know about its new label yet. The
-		// kubelet will then refuse to launch the pod.
+		// 检查 pod 是否被调度。我们特意不检查
+		// pod 是否在运行，因为那会与
+		// kubelet 和 scheduler 产生竞态：scheduler 可能已经调度了 pod，
+		// 而 kubelet 还不知道它的新 label。这样
+		// kubelet 会拒绝启动该 pod。
 		framework.ExpectNoError(e2epod.WaitForPodNotPending(ctx, cs, ns, labelPodName))
 		labelPod, err := cs.CoreV1().Pods(ns).Get(ctx, labelPodName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		gomega.Expect(labelPod.Spec.NodeName).To(gomega.Equal(nodeName))
 	})
 
-	// 1. Run a pod to get an available node, then delete the pod
-	// 2. Taint the node with a random taint
-	// 3. Try to relaunch the pod with tolerations tolerate the taints on node,
-	// and the pod's nodeName specified to the name of node found in step 1
+	// 1. 运行一个 pod 找到一个可用节点，然后删除该 pod
+	// 2. 用随机 taint 给节点打污点
+	// 3. 尝试用能容忍节点 taint 的 tolerations 重新启动 pod，
+	// 并把 pod 的 nodeName 指定为第 1 步找到的节点名
 	ginkgo.It("validates that taints-tolerations is respected if matching", func(ctx context.Context) {
 		nodeName := getNodeThatCanRunPodWithoutToleration(ctx, f)
 
@@ -614,21 +614,21 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 			NodeSelector: map[string]string{labelKey: labelValue},
 		})
 
-		// check that pod got scheduled. We intentionally DO NOT check that the
-		// pod is running because this will create a race condition with the
-		// kubelet and the scheduler: the scheduler might have scheduled a pod
-		// already when the kubelet does not know about its new taint yet. The
-		// kubelet will then refuse to launch the pod.
+		// 检查 pod 是否被调度。我们特意不检查
+		// pod 是否在运行，因为那会与
+		// kubelet 和 scheduler 产生竞态：scheduler 可能已经调度了 pod，
+		// 而 kubelet 还不知道它的新 taint。这样
+		// kubelet 会拒绝启动该 pod。
 		framework.ExpectNoError(e2epod.WaitForPodNotPending(ctx, cs, ns, tolerationPodName))
 		deployedPod, err := cs.CoreV1().Pods(ns).Get(ctx, tolerationPodName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		gomega.Expect(deployedPod.Spec.NodeName).To(gomega.Equal(nodeName))
 	})
 
-	// 1. Run a pod to get an available node, then delete the pod
-	// 2. Taint the node with a random taint
-	// 3. Try to relaunch the pod still no tolerations,
-	// and the pod's nodeName specified to the name of node found in step 1
+	// 1. 运行一个 pod 找到一个可用节点，然后删除该 pod
+	// 2. 用随机 taint 给节点打污点
+	// 3. 尝试不带任何 tolerations 重新启动 pod，
+	// 并把 pod 的 nodeName 指定为第 1 步找到的节点名
 	ginkgo.It("validates that taints-tolerations is respected if not matching", func(ctx context.Context) {
 		nodeName := getNodeThatCanRunPodWithoutToleration(ctx, f)
 
@@ -673,7 +673,7 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 		}
 		hostIP := getNodeHostIP(ctx, f, nodeName)
 
-		// use nodeSelector to make sure the testing pods get assigned on the same node to explicitly verify there exists conflict or not
+		// 用 nodeSelector 确保测试 pod 被分配到同一节点，以明确验证是否存在冲突
 		ginkgo.By("Trying to apply a random label on the found node.")
 		k := fmt.Sprintf("kubernetes.io/e2e-%s", string(uuid.NewUUID()))
 		v := "90"
@@ -698,15 +698,15 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 	})
 
 	/*
-		Release: v1.16
-		Testname: Scheduling, HostPort and Protocol match, HostIPs different but one is default HostIP (0.0.0.0)
-		Description: Pods with the same HostPort and Protocol, but different HostIPs, MUST NOT schedule to the
-		same node if one of those IPs is the default HostIP of 0.0.0.0, which represents all IPs on the host.
+		发布版本：v1.16
+		测试名称：Scheduling, HostPort and Protocol match, HostIPs different but one is default HostIP (0.0.0.0)
+		描述：HostPort 和 Protocol 相同但 HostIP 不同的 Pod，如果其中一个 IP 是默认 HostIP 0.0.0.0（代表主机上所有 IP），
+		则不得调度到同一节点。
 	*/
 	framework.ConformanceIt("validates that there exists conflict between pods with same hostPort and protocol but one using 0.0.0.0 hostIP", func(ctx context.Context) {
 		nodeName := GetNodeThatCanRunPod(ctx, f)
 		hostIP := getNodeHostIP(ctx, f, nodeName)
-		// use nodeSelector to make sure the testing pods get assigned on the same node to explicitly verify there exists conflict or not
+		// 用 nodeSelector 确保测试 pod 被分配到同一节点，以明确验证是否存在冲突
 		ginkgo.By("Trying to apply a random label on the found node.")
 		k := fmt.Sprintf("kubernetes.io/e2e-%s", string(uuid.NewUUID()))
 		v := "95"
@@ -883,7 +883,7 @@ var _ = SIGDescribe("SchedulerPredicates", framework.WithSerial(), func() {
 								{
 									Key:      hostLabel,
 									Operator: v1.NodeSelectorOpIn,
-									// add non-existent nodes to the list
+									// 把不存在的节点加入列表
 									Values: []string{nodeName, nonExistentNodeName1, nonExistentNodeName2},
 								},
 							},
@@ -947,7 +947,7 @@ func patchPod(cs clientset.Interface, old, new *v1.Pod) (*v1.Pod, error) {
 	return cs.CoreV1().Pods(new.Namespace).Patch(context.TODO(), new.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 }
 
-// printAllPodsOnNode outputs status of all kubelet pods into log.
+// printAllPodsOnNode 把所有 kubelet pod 的状态输出到日志。
 func printAllPodsOnNode(ctx context.Context, c clientset.Interface, nodeName string) {
 	podList, err := c.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{FieldSelector: "spec.nodeName=" + nodeName})
 	if err != nil {
@@ -1000,8 +1000,8 @@ func initPausePod(f *framework.Framework, conf pausePodConfig) *v1.Pod {
 	for key, value := range conf.Annotations {
 		pod.ObjectMeta.Annotations[key] = value
 	}
-	// TODO: setting the Pod's nodeAffinity instead of setting .spec.nodeName works around the
-	// Preemption e2e flake (#88441), but we should investigate deeper to get to the bottom of it.
+	// TODO: 设置 Pod 的 nodeAffinity 而非设置 .spec.nodeName 可以规避
+	// Preemption e2e 偶发失败（#88441），但应深入调查以找到根因。
 	if len(conf.NodeName) != 0 {
 		e2epod.SetNodeAffinity(&pod.Spec, conf.NodeName)
 	}
@@ -1045,10 +1045,10 @@ func runPausePod(ctx context.Context, f *framework.Framework, conf pausePodConfi
 }
 
 func runPodAndGetNodeName(ctx context.Context, f *framework.Framework, conf pausePodConfig) string {
-	// launch a pod to find a node which can launch a pod. We intentionally do
-	// not just take the node list and choose the first of them. Depending on the
-	// cluster and the scheduler it might be that a "normal" pod cannot be
-	// scheduled onto it.
+	// 启动一个 pod 来找到能启动 pod 的节点。我们特意不
+	// 直接取节点列表并选第一个。取决于
+	// 集群和 scheduler，"普通" pod 可能无法
+	// 调度到该节点上。
 	pod := runPausePod(ctx, f, conf)
 
 	ginkgo.By("Explicitly delete pod here to free the resource it takes.")
@@ -1074,8 +1074,8 @@ func getRequestedStorageEphemeralStorage(pod v1.Pod) int64 {
 	return result
 }
 
-// removeTaintFromNodeAction returns a closure that removes the given taint
-// from the given node upon invocation.
+// removeTaintFromNodeAction 返回一个闭包，调用时从
+// 给定节点移除给定 taint。
 func removeTaintFromNodeAction(cs clientset.Interface, nodeName string, testTaint v1.Taint) Action {
 	return func(ctx context.Context) error {
 		e2enode.RemoveTaintOffNode(ctx, cs, nodeName, testTaint)
@@ -1083,7 +1083,7 @@ func removeTaintFromNodeAction(cs clientset.Interface, nodeName string, testTain
 	}
 }
 
-// createPausePodAction returns a closure that creates a pause pod upon invocation.
+// createPausePodAction 返回一个闭包，调用时创建 pause pod。
 func createPausePodAction(f *framework.Framework, conf pausePodConfig) Action {
 	return func(ctx context.Context) error {
 		_, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, initPausePod(f, conf), metav1.CreateOptions{})
@@ -1091,8 +1091,8 @@ func createPausePodAction(f *framework.Framework, conf pausePodConfig) Action {
 	}
 }
 
-// WaitForSchedulerAfterAction performs the provided action and then waits for
-// scheduler to act on the given pod.
+// WaitForSchedulerAfterAction 执行提供的操作，然后等待
+// scheduler 对给定 pod 采取行动。
 func WaitForSchedulerAfterAction(ctx context.Context, f *framework.Framework, action Action, ns, podName string, expectSuccess bool) {
 	predicate := scheduleFailureEvent(podName)
 	if expectSuccess {
@@ -1108,7 +1108,7 @@ func WaitForSchedulerAfterAction(ctx context.Context, f *framework.Framework, ac
 	}
 }
 
-// TODO: upgrade calls in PodAffinity tests when we're able to run them
+// TODO: 等我们能运行 PodAffinity 测试时，升级其中的调用
 func verifyResult(ctx context.Context, c clientset.Interface, expectedScheduled int, expectedNotScheduled int, ns string) {
 	allPods, err := c.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err)
@@ -1118,13 +1118,13 @@ func verifyResult(ctx context.Context, c clientset.Interface, expectedScheduled 
 	gomega.Expect(scheduledPods).To(gomega.HaveLen(expectedScheduled), fmt.Sprintf("Scheduled Pods: %#v", scheduledPods))
 }
 
-// GetNodeThatCanRunPod trying to launch a pod without a label to get a node which can launch it
+// GetNodeThatCanRunPod 尝试启动一个不带 label 的 pod，以找到能运行它的节点
 func GetNodeThatCanRunPod(ctx context.Context, f *framework.Framework) string {
 	ginkgo.By("Trying to launch a pod without a label to get a node which can launch it.")
 	return runPodAndGetNodeName(ctx, f, pausePodConfig{Name: "without-label"})
 }
 
-// Get2NodesThatCanRunPod return a 2-node slice where can run pod.
+// Get2NodesThatCanRunPod 返回一个长度为 2 的切片，其中的节点可以运行 pod。
 func Get2NodesThatCanRunPod(ctx context.Context, f *framework.Framework) []string {
 	firstNode := GetNodeThatCanRunPod(ctx, f)
 	ginkgo.By("Trying to launch a pod without a label to get a node which can launch it.")
@@ -1153,7 +1153,7 @@ func getNodeThatCanRunPodWithoutToleration(ctx context.Context, f *framework.Fra
 	return runPodAndGetNodeName(ctx, f, pausePodConfig{Name: "without-toleration"})
 }
 
-// CreateHostPortPods creates RC with host port 4321
+// CreateHostPortPods 创建 host port 为 4321 的 RC
 func CreateHostPortPods(ctx context.Context, f *framework.Framework, id string, replicas int, expectRunning bool) {
 	ginkgo.By("Running RC which reserves host port")
 	config := &testutils.RCConfig{
@@ -1171,7 +1171,7 @@ func CreateHostPortPods(ctx context.Context, f *framework.Framework, id string, 
 	}
 }
 
-// CreateNodeSelectorPods creates RC with host port 4321 and defines node selector
+// CreateNodeSelectorPods 创建 host port 为 4321 且定义 node selector 的 RC
 func CreateNodeSelectorPods(ctx context.Context, f *framework.Framework, id string, replicas int, nodeSelector map[string]string, expectRunning bool) error {
 	ginkgo.By("Running RC which reserves host port and defines node selector")
 
@@ -1192,8 +1192,8 @@ func CreateNodeSelectorPods(ctx context.Context, f *framework.Framework, id stri
 	return nil
 }
 
-// create pod which using hostport on the specified node according to the nodeSelector
-// it starts an http server on the exposed port
+// 根据 nodeSelector 在指定节点上创建使用 hostport 的 pod
+// 它在暴露的端口上启动一个 http server
 func createHostPortPodOnNode(ctx context.Context, f *framework.Framework, podName, ns, hostIP string, port int32, protocol v1.Protocol, nodeSelector map[string]string, expectScheduled bool) {
 	hostPortPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1238,7 +1238,7 @@ func createHostPortPodOnNode(ctx context.Context, f *framework.Framework, podNam
 	}
 }
 
-// GetPodsScheduled returns a number of currently scheduled and not scheduled Pods on worker nodes.
+// GetPodsScheduled 返回 worker 节点上当前已调度和未调度的 Pod 数量。
 func GetPodsScheduled(workerNodes sets.Set[string], pods *v1.PodList) (scheduledPods, notScheduledPods []v1.Pod) {
 	for _, pod := range pods.Items {
 		if pod.Spec.NodeName != "" && workerNodes.Has(pod.Spec.NodeName) {
@@ -1257,9 +1257,9 @@ func GetPodsScheduled(workerNodes sets.Set[string], pods *v1.PodList) (scheduled
 	return
 }
 
-// getNodeHostIP returns the first internal IP on the node matching the main Cluster IP family
+// getNodeHostIP 返回节点上匹配主 Cluster IP 地址族的第一个内部 IP
 func getNodeHostIP(ctx context.Context, f *framework.Framework, nodeName string) string {
-	// Get the internal HostIP of the node
+	// 获取节点的内部 HostIP
 	family := v1.IPv4Protocol
 	if framework.TestContext.ClusterIsIPv6() {
 		family = v1.IPv6Protocol

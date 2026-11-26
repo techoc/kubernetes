@@ -29,9 +29,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// deviceTaints checks that:
-// - A pod which gets scheduled on the previous release because of a toleration is kept running after an upgrade.
-// - A DeviceTaintRule created to evict the pod before a downgrade prevents pod scheduling after a downgrade.
+// deviceTaints 检查：
+// - 因 toleration 而调度到上一版本 release 的 pod，升级后仍保持运行。
+// - 为在降级前驱逐 pod 而创建的 DeviceTaintRule，会阻止降级后 pod 被调度。
 func deviceTaints(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc {
 	tCtx.Skip("v1.36.1 artifacts have a bug that prevent this from passing: https://github.com/kubernetes/kubernetes/pull/139651")
 
@@ -41,9 +41,9 @@ func deviceTaints(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc 
 	taintValueFromRule := "from-rule"
 	taintedDevice := "tainted-device"
 
-	// We need additional devices which are only used by this test.
-	// We achieve that with cluster-scoped devices that start out with
-	// a taint.
+	// 我们需要一些只由本测试使用的额外设备。
+	// 通过带有 taint 的集群作用域设备
+	// 来实现。
 	slice := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "devicetaints",
@@ -128,10 +128,10 @@ func deviceTaints(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc 
 			b.Create(tCtx, pod)
 			tCtx.ExpectNoError(e2epod.WaitForPodNameUnschedulableInNamespace(tCtx, tCtx.Client(), pod.Name, namespace))
 
-			// We must clean up manually, otherwise the code which checks for ResourceSlice deletion after
-			// driver removal gets stuck waiting for the removal of special ResourceSlice.
-			// This cannot be scheduled via tCtx.Cleanup after creating it because then it would be removed
-			// after the first sub-test.
+			// 必须手动清理，否则检查 driver 移除后 ResourceSlice
+			// 是否删除的代码会卡在等待特殊 ResourceSlice 移除上。
+			// 创建后不能用 tCtx.Cleanup 清理，因为那样会在
+			// 第一个子测试之后就被移除。
 			tCtx.ExpectNoError(tCtx.Client().ResourceV1().ResourceSlices().Delete(tCtx, slice.Name, metav1.DeleteOptions{}))
 		}
 	}

@@ -69,8 +69,8 @@ func CheckRunningOnAllNodes(ctx context.Context, f *framework.Framework, ds *app
 	return CheckDaemonPodOnNodes(f, ds, nodeNames)(ctx)
 }
 
-// CheckPresentOnNodes will check that the daemonset will be present on at least the given number of
-// schedulable nodes.
+// CheckPresentOnNodes 检查 daemonset 是否至少出现在
+// 给定数量的可调度节点上。
 func CheckPresentOnNodes(ctx context.Context, c clientset.Interface, ds *appsv1.DaemonSet, ns string, numNodes int) (bool, error) {
 	nodeNames := SchedulableNodes(ctx, c, ds)
 	if len(nodeNames) < numNodes {
@@ -127,7 +127,7 @@ func checkDaemonPodStateOnNodes(ctx context.Context, c clientset.Interface, ds *
 	}
 	framework.Logf("Number of nodes with available pods controlled by daemonset %s: %d", ds.Name, len(nodesToPodCount))
 
-	// Ensure that exactly 1 pod is running on all nodes in nodeNames.
+	// 确保 nodeNames 中所有节点上恰好有 1 个 pod 在运行。
 	for _, nodeName := range nodeNames {
 		if nodesToPodCount[nodeName] != 1 {
 			framework.Logf("Node %s is running %d daemon pod, expected 1", nodeName, nodesToPodCount[nodeName])
@@ -136,16 +136,16 @@ func checkDaemonPodStateOnNodes(ctx context.Context, c clientset.Interface, ds *
 	}
 
 	framework.Logf("Number of running nodes: %d, number of available pods: %d in daemonset %s", len(nodeNames), len(nodesToPodCount), ds.Name)
-	// Ensure that sizes of the lists are the same. We've verified that every element of nodeNames is in
-	// nodesToPodCount, so verifying the lengths are equal ensures that there aren't pods running on any
-	// other nodes.
+	// 确保两个列表长度相同。我们已确认 nodeNames 中每个元素都在
+	// nodesToPodCount 中，因此长度相等就能确保没有其他节点上
+	// 运行着 pod。
 	return len(nodesToPodCount) == len(nodeNames), nil
 }
 
-// CheckDaemonStatus ensures that eventually the daemon set has the desired
-// number of pods scheduled and ready. It returns a descriptive error if that
-// state is not reached in the amount of time it takes to start
-// pods. f.Timeouts.PodStart can be changed to influence that timeout.
+// CheckDaemonStatus 确保最终 daemon set 拥有期望数量的
+// 已调度且就绪的 pod。如果未在启动 pod 所需时间内
+// 达到该状态，则返回描述性错误。
+// 可修改 f.Timeouts.PodStart 调整该超时。
 func CheckDaemonStatus(ctx context.Context, f *framework.Framework, dsName string) error {
 	return framework.Gomega().Eventually(ctx, framework.GetObject(f.ClientSet.AppsV1().DaemonSets(f.Namespace.Name).Get, dsName, metav1.GetOptions{})).
 		WithTimeout(f.Timeouts.PodStart).

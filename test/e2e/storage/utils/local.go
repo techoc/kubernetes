@@ -17,7 +17,7 @@ limitations under the License.
 package utils
 
 /*
- * Various local test resource implementations.
+ * 各种本地测试资源实现。
  */
 
 import (
@@ -33,59 +33,59 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// LocalVolumeType represents type of local volume, e.g. tmpfs, directory,
-// block, etc.
+// LocalVolumeType 表示本地 volume 的类型，例如 tmpfs、directory、
+// block 等。
 type LocalVolumeType string
 
 const (
-	// LocalVolumeDirectory reprensents a simple directory as local volume
+	// LocalVolumeDirectory 表示用作本地 volume 的简单目录
 	LocalVolumeDirectory LocalVolumeType = "dir"
-	// LocalVolumeDirectoryLink is like LocalVolumeDirectory but it's a symbolic link to directory
+	// LocalVolumeDirectoryLink 类似 LocalVolumeDirectory，但指向目录的符号链接
 	LocalVolumeDirectoryLink LocalVolumeType = "dir-link"
-	// LocalVolumeDirectoryBindMounted is like LocalVolumeDirectory but bind mounted
+	// LocalVolumeDirectoryBindMounted 类似 LocalVolumeDirectory，但是 bind mount
 	LocalVolumeDirectoryBindMounted LocalVolumeType = "dir-bindmounted"
-	// LocalVolumeDirectoryLinkBindMounted is like LocalVolumeDirectory but it's a symbolic link to self bind mounted directory
-	// Note that bind mounting at symbolic link actually mounts at directory it
-	// links to
+	// LocalVolumeDirectoryLinkBindMounted 类似 LocalVolumeDirectory，但指向自 bind mount 目录的符号链接
+	// 注意在符号链接上 bind mount 实际上挂载到它
+	// 指向的目录
 	LocalVolumeDirectoryLinkBindMounted LocalVolumeType = "dir-link-bindmounted"
-	// LocalVolumeTmpfs represents a temporary filesystem to be used as local volume
+	// LocalVolumeTmpfs 表示用作本地 volume 的临时文件系统
 	LocalVolumeTmpfs LocalVolumeType = "tmpfs"
-	// LocalVolumeBlock represents a Block device, creates a local file, and maps it as a block device
+	// LocalVolumeBlock 表示块设备，创建本地文件并映射为块设备
 	LocalVolumeBlock LocalVolumeType = "block"
-	// LocalVolumeBlockFS represents a filesystem backed by a block device
+	// LocalVolumeBlockFS 表示由块设备支持的文件系统
 	LocalVolumeBlockFS LocalVolumeType = "blockfs"
-	// LocalVolumeGCELocalSSD represents a Filesystem backed by GCE Local SSD as local volume
+	// LocalVolumeGCELocalSSD 表示由 GCE Local SSD 支持的文件系统，用作本地 volume
 	LocalVolumeGCELocalSSD LocalVolumeType = "gce-localssd-scsi-fs"
 )
 
-// LocalTestResource represents test resource of a local volume.
+// LocalTestResource 表示本地 volume 的测试资源。
 type LocalTestResource struct {
 	VolumeType LocalVolumeType
 	Node       *v1.Node
-	// Volume path, path to filesystem or block device on the node
+	// volume 路径、节点上文件系统或块设备的路径
 	Path string
-	// If volume is backed by a loop device, we create loop device storage file
-	// under this directory.
+	// 如果 volume 由 loop 设备支持，我们在此目录下
+	// 创建 loop 设备存储文件。
 	loopDir string
 }
 
-// LocalTestResourceManager represents interface to create/destroy local test resources on node
+// LocalTestResourceManager 表示在节点上创建/销毁本地测试资源的接口
 type LocalTestResourceManager interface {
 	Create(ctx context.Context, node *v1.Node, volumeType LocalVolumeType, parameters map[string]string) *LocalTestResource
 	ExpandBlockDevice(ctx context.Context, ltr *LocalTestResource, mbToAdd int) error
 	Remove(ctx context.Context, ltr *LocalTestResource)
 }
 
-// ltrMgr implements LocalTestResourceManager
+// ltrMgr 实现 LocalTestResourceManager
 type ltrMgr struct {
 	prefix   string
 	hostExec HostExec
-	// hostBase represents a writable directory on the host under which we
-	// create test directories
+	// hostBase 表示宿主机上一个可写目录，我们在其中
+	// 创建测试目录
 	hostBase string
 }
 
-// NewLocalResourceManager returns a instance of LocalTestResourceManager
+// NewLocalResourceManager 返回 LocalTestResourceManager 的实例
 func NewLocalResourceManager(prefix string, hostExec HostExec, hostBase string) LocalTestResourceManager {
 	return &ltrMgr{
 		prefix:   prefix,
@@ -94,7 +94,7 @@ func NewLocalResourceManager(prefix string, hostExec HostExec, hostBase string) 
 	}
 }
 
-// getTestDir returns a test dir under `hostBase` directory with randome name.
+// getTestDir 返回 `hostBase` 目录下带随机名称的测试目录。
 func (l *ltrMgr) getTestDir() string {
 	testDirName := fmt.Sprintf("%s-%s", l.prefix, string(uuid.NewUUID()))
 	return filepath.Join(l.hostBase, testDirName)
@@ -121,12 +121,12 @@ func (l *ltrMgr) cleanupLocalVolumeTmpfs(ctx context.Context, ltr *LocalTestReso
 	framework.ExpectNoError(err)
 }
 
-// createAndSetupLoopDevice creates an empty file and associates a loop devie with it.
+// createAndSetupLoopDevice 创建一个空文件并关联一个 loop 设备。
 func (l *ltrMgr) createAndSetupLoopDevice(ctx context.Context, dir string, node *v1.Node, size int) {
 	ginkgo.By(fmt.Sprintf("Creating block device on node %q using path %q", node.Name, dir))
 	mkdirCmd := fmt.Sprintf("mkdir -p %s", dir)
 	count := size / 4096
-	// xfs requires at least 4096 blocks
+	// xfs 至少需要 4096 个块
 	if count < 4096 {
 		count = 4096
 	}
@@ -136,7 +136,7 @@ func (l *ltrMgr) createAndSetupLoopDevice(ctx context.Context, dir string, node 
 	framework.ExpectNoError(err)
 }
 
-// findLoopDevice finds loop device path by its associated storage directory.
+// findLoopDevice 通过关联的存储目录查找 loop 设备路径。
 func (l *ltrMgr) findLoopDevice(ctx context.Context, dir string, node *v1.Node) string {
 	cmd := fmt.Sprintf("E2E_LOOP_DEV=$(losetup | grep %s/file | awk '{ print $1 }') 2>&1 > /dev/null && echo ${E2E_LOOP_DEV}", dir)
 	loopDevResult, err := l.hostExec.IssueCommandWithResult(ctx, cmd, node)
@@ -155,7 +155,7 @@ func (l *ltrMgr) setupLocalVolumeBlock(ctx context.Context, node *v1.Node, param
 	}
 }
 
-// teardownLoopDevice tears down loop device by its associated storage directory.
+// teardownLoopDevice 通过关联的存储目录拆掉 loop 设备。
 func (l *ltrMgr) teardownLoopDevice(ctx context.Context, dir string, node *v1.Node) {
 	loopDev := l.findLoopDevice(ctx, dir, node)
 	ginkgo.By(fmt.Sprintf("Tear down block device %q on node %q at path %s/file", loopDev, node.Name, dir))
@@ -177,7 +177,7 @@ func (l *ltrMgr) setupLocalVolumeBlockFS(ctx context.Context, node *v1.Node, par
 	ltr := l.setupLocalVolumeBlock(ctx, node, parameters)
 	loopDev := ltr.Path
 	loopDir := ltr.loopDir
-	// Format and mount at loopDir and give others rwx for read/write testing
+	// 在 loopDir 格式化并挂载，给其他人 rwx 以便读写测试
 	cmd := fmt.Sprintf("mkfs -t ext4 %s && mount -t ext4 %s %s && chmod o+rwx %s", loopDev, loopDev, loopDir, loopDir)
 	err := l.hostExec.IssueCommand(ctx, cmd, node)
 	framework.ExpectNoError(err)
@@ -286,7 +286,7 @@ func (l *ltrMgr) setupLocalVolumeGCELocalSSD(ctx context.Context, node *v1.Node,
 }
 
 func (l *ltrMgr) cleanupLocalVolumeGCELocalSSD(ctx context.Context, ltr *LocalTestResource) {
-	// This filesystem is attached in cluster initialization, we clean all files to make it reusable.
+	// 这个文件系统在集群初始化时挂载，我们清理所有文件以便复用。
 	removeCmd := fmt.Sprintf("find '%s' -mindepth 1 -maxdepth 1 -print0 | xargs -r -0 rm -rf", ltr.Path)
 	err := l.hostExec.IssueCommand(ctx, removeCmd, ltr.Node)
 	framework.ExpectNoError(err)

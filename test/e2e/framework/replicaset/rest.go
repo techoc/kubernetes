@@ -23,7 +23,7 @@ import (
 	testutils "k8s.io/kubernetes/test/utils"
 )
 
-// UpdateReplicaSetWithRetries updates replicaset template with retries.
+// UpdateReplicaSetWithRetries 带重试地更新 replicaset 模板。
 func UpdateReplicaSetWithRetries(c clientset.Interface, namespace, name string, applyUpdate testutils.UpdateReplicaSetFunc) (*appsv1.ReplicaSet, error) {
 	return testutils.UpdateReplicaSetWithRetries(c, namespace, name, applyUpdate, framework.Logf, framework.Poll, framework.PollShortTimeout)
 }

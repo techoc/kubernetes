@@ -28,104 +28,104 @@ import (
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 )
 
-// TestDriver represents an interface for a driver to be tested in TestSuite.
-// Except for GetDriverInfo, all methods will be called at test runtime and thus
-// can use e2eskipper.Skipf, framework.Fatal, Gomega assertions, etc.
+// TestDriver 表示在 TestSuite 中待测 driver 的接口。
+// 除 GetDriverInfo 外，所有方法都在测试运行时调用，因此
+// 可以使用 e2eskipper.Skipf、framework.Fatal、Gomega 断言等。
 type TestDriver interface {
-	// GetDriverInfo returns DriverInfo for the TestDriver. This must be static
-	// information.
+	// GetDriverInfo 返回 TestDriver 的 DriverInfo。这些信息必须是静态的。
+	//
 	GetDriverInfo() *DriverInfo
 
-	// SkipUnsupportedTest returns the reason for skipping test if Testpattern is not
-	// suitable to test with the TestDriver. It gets called after
-	// parsing parameters of the test suite and before the
-	// framework is initialized.
+	// 如果 Testpattern 不适合用该 TestDriver 测试，SkipUnsupportedTest 返回跳过测试的原因。
+	// 它在解析测试套件参数之后、
+	// framework 初始化之前被调用。
 	//
-	// Tests that
-	// depend on a connection to the cluster can be done in
-	// PrepareTest once the framework is ready.
+	//
+	// 依赖集群连接的操作可以在 framework 就绪后
+	// 于 PrepareTest 中完成。
+	//
 	SkipUnsupportedTest(TestPattern) string
 
-	// PrepareTest is called at test execution time each time a new test case is about to start.
-	// It sets up all necessary resources and returns the per-test configuration.
-	// Cleanup is handled via ginkgo.DeferCleanup inside PrepareTest.
+	// PrepareTest 在测试执行时、每个新测试用例即将开始前调用。
+	// 它设置所有必要资源，并返回每个测试的配置。
+	// 清理通过 PrepareTest 中的 ginkgo.DeferCleanup 处理。
 	PrepareTest(ctx context.Context, f *framework.Framework) *PerTestConfig
 }
 
-// TestVolume is the result of PreprovisionedVolumeTestDriver.CreateVolume.
-// The only common functionality is to delete it. Individual driver interfaces
-// have additional methods that work with volumes created by them.
+// TestVolume 是 PreprovisionedVolumeTestDriver.CreateVolume 的结果。
+// 唯一的通用功能是删除它。各 driver 接口
+// 有自己处理其创建 volume 的额外方法。
 type TestVolume interface {
 	DeleteVolume(ctx context.Context)
 }
 
-// PreprovisionedVolumeTestDriver represents an interface for a TestDriver that has pre-provisioned volume
+// PreprovisionedVolumeTestDriver 表示拥有预置 volume 的 TestDriver 接口
 type PreprovisionedVolumeTestDriver interface {
 	TestDriver
-	// CreateVolume creates a pre-provisioned volume of the desired volume type.
+	// CreateVolume 创建所需 volume 类型的预置 volume。
 	CreateVolume(ctx context.Context, config *PerTestConfig, volumeType TestVolType) TestVolume
 }
 
-// InlineVolumeTestDriver represents an interface for a TestDriver that supports InlineVolume
+// InlineVolumeTestDriver 表示支持 InlineVolume 的 TestDriver 接口
 type InlineVolumeTestDriver interface {
 	PreprovisionedVolumeTestDriver
 
-	// GetVolumeSource returns a volumeSource for inline volume.
-	// It will set readOnly and fsType to the volumeSource, if TestDriver supports both of them.
-	// It will return nil, if the TestDriver doesn't support either of the parameters.
+	// GetVolumeSource 返回 inline volume 的 volumeSource。
+	// 如果 TestDriver 同时支持 readOnly 和 fsType，会把它们设置到 volumeSource。
+	// 如果 TestDriver 不支持其中任何一个参数，则返回 nil。
 	GetVolumeSource(readOnly bool, fsType string, testVolume TestVolume) *v1.VolumeSource
 }
 
-// PreprovisionedPVTestDriver represents an interface for a TestDriver that supports PreprovisionedPV
+// PreprovisionedPVTestDriver 表示支持 PreprovisionedPV 的 TestDriver 接口
 type PreprovisionedPVTestDriver interface {
 	PreprovisionedVolumeTestDriver
-	// GetPersistentVolumeSource returns a PersistentVolumeSource with volume node affinity for pre-provisioned Persistent Volume.
-	// It will set readOnly and fsType to the PersistentVolumeSource, if TestDriver supports both of them.
-	// It will return nil, if the TestDriver doesn't support either of the parameters.
+	// GetPersistentVolumeSource 返回一个带 volume node affinity 的 PersistentVolumeSource，用于预置 PV。
+	// 如果 TestDriver 同时支持 readOnly 和 fsType，会把它们设置到 PersistentVolumeSource。
+	// 如果 TestDriver 不支持其中任何一个参数，则返回 nil。
 	GetPersistentVolumeSource(readOnly bool, fsType string, testVolume TestVolume) (*v1.PersistentVolumeSource, *v1.VolumeNodeAffinity)
 }
 
-// DynamicPVTestDriver represents an interface for a TestDriver that supports DynamicPV
+// DynamicPVTestDriver 表示支持 DynamicPV 的 TestDriver 接口
 type DynamicPVTestDriver interface {
 	TestDriver
-	// GetDynamicProvisionStorageClass returns a StorageClass dynamic provision Persistent Volume.
-	// The StorageClass must have
-	// a unique name because GetDynamicProvisionStorageClass might
-	// be called more than once per test.
-	// It will set fsType to the StorageClass, if TestDriver supports it.
-	// It will return nil, if the TestDriver doesn't support it.
+	// GetDynamicProvisionStorageClass 返回一个动态供应 Persistent Volume 的 StorageClass。
+	// StorageClass 必须有
+	// 唯一的名称，因为每个测试中 GetDynamicProvisionStorageClass 可能
+	// 被调用多次。
+	// 如果 TestDriver 支持 fsType，会设置到 StorageClass。
+	// 如果 TestDriver 不支持，则返回 nil。
 	GetDynamicProvisionStorageClass(ctx context.Context, config *PerTestConfig, fsType string) *storagev1.StorageClass
 }
 
-// EphemeralTestDriver represents an interface for a TestDriver that supports ephemeral inline volumes.
+// EphemeralTestDriver 表示支持 ephemeral inline volume 的 TestDriver 接口。
 type EphemeralTestDriver interface {
 	TestDriver
 
-	// GetVolume returns the volume attributes for a certain
-	// inline ephemeral volume, enumerated starting with #0. Some
-	// tests might require more than one volume. They can all be
-	// the same or different, depending what the driver supports
-	// and/or wants to test.
+	// GetVolume 返回某个 inline ephemeral volume 的属性，
+	// 编号从 #0 开始。有些
+	// 测试可能需要多个 volume。它们可以
+	// 相同或不同，取决于 driver 支持
+	// 和/或想测试什么。
 	//
-	// For each volume, the test driver can return volume attributes,
-	// whether the resulting volume is shared between different pods (i.e.
-	// changes made in one pod are visible in another), and whether the
-	// volume can be mounted read/write or only read-only.
+	// 对每个 volume，test driver 可以返回 volume 属性、
+	// 结果 volume 是否在不同 pod 间共享（即
+	// 一个 pod 中的修改在另一个中可见），以及
+	// volume 能否以读写或仅只读方式挂载。
 	GetVolume(config *PerTestConfig, volumeNumber int) (attributes map[string]string, shared bool, readOnly bool)
 
-	// GetCSIDriverName returns the name that was used when registering with
-	// kubelet. Depending on how the driver was deployed, this can be different
-	// from DriverInfo.Name. Starting with Kubernetes 1.16, there must also
-	// be a CSIDriver object under the same name with a "mode" field that enables
-	// usage of the driver for ephemeral inline volumes.
+	// GetCSIDriverName 返回向 kubelet 注册时使用的名称。取决于
+	// driver 的部署方式，它可能与
+	// DriverInfo.Name 不同。从 Kubernetes 1.16 起，必须还有
+	// 一个同名的 CSIDriver 对象，其 "mode" 字段要启用
+	// 该 driver 用于 ephemeral inline volume。
 	GetCSIDriverName(config *PerTestConfig) string
 }
 
-// SnapshottableTestDriver represents an interface for a TestDriver that supports DynamicSnapshot
+// SnapshottableTestDriver 表示支持 DynamicSnapshot 的 TestDriver 接口
 type SnapshottableTestDriver interface {
 	TestDriver
-	// GetSnapshotClass returns a SnapshotClass to create snapshot.
-	// It will return nil, if the TestDriver doesn't support it.
+	// GetSnapshotClass 返回一个用于创建 snapshot 的 SnapshotClass。
+	// 如果 TestDriver 不支持，则返回 nil。
 	GetSnapshotClass(ctx context.Context, config *PerTestConfig, parameters map[string]string) *unstructured.Unstructured
 }
 
@@ -133,29 +133,29 @@ type SnapshotMetadataTestDriver interface {
 	TestDriver
 }
 
-// VolumeGroupSnapshottableTestDriver represents an interface for a TestDriver that supports DynamicGroupSnapshot
+// VolumeGroupSnapshottableTestDriver 表示支持 DynamicGroupSnapshot 的 TestDriver 接口
 type VolumeGroupSnapshottableTestDriver interface {
 	TestDriver
-	// GetVolumeGroupSnapshotClass returns a VolumeGroupSnapshotClass to create group snapshot.
+	// GetVolumeGroupSnapshotClass 返回一个用于创建 group snapshot 的 VolumeGroupSnapshotClass。
 	GetVolumeGroupSnapshotClass(ctx context.Context, config *PerTestConfig, parameters map[string]string) *unstructured.Unstructured
 }
 
-// VolumeAttributesClassTestDriver represents an interface for a TestDriver that supports
-// creating and modifying volumes via VolumeAttributesClass objects
+// VolumeAttributesClassTestDriver 表示支持
+// 通过 VolumeAttributesClass 对象创建和修改 volume 的 TestDriver 接口
 type VolumeAttributesClassTestDriver interface {
 	TestDriver
-	// GetVolumeAttributesClass returns a VolumeAttributesClass to create/modify PVCs
-	// It will return nil if the TestDriver does not support VACs
+	// GetVolumeAttributesClass 返回一个用于创建/修改 PVC 的 VolumeAttributesClass
+	// 如果 TestDriver 不支持 VAC，则返回 nil
 	GetVolumeAttributesClass(ctx context.Context, config *PerTestConfig) *storagev1.VolumeAttributesClass
 }
 
-// CustomTimeoutsTestDriver represents an interface fo a TestDriver that supports custom timeouts.
+// CustomTimeoutsTestDriver 表示支持自定义超时的 TestDriver 接口
 type CustomTimeoutsTestDriver interface {
 	TestDriver
 	GetTimeouts() *framework.TimeoutContext
 }
 
-// GetDriverTimeouts returns the timeout of the driver operation
+// GetDriverTimeouts 返回 driver 操作的超时时间
 func GetDriverTimeouts(driver TestDriver) *framework.TimeoutContext {
 	if d, ok := driver.(CustomTimeoutsTestDriver); ok {
 		return d.GetTimeouts()
@@ -163,10 +163,10 @@ func GetDriverTimeouts(driver TestDriver) *framework.TimeoutContext {
 	return framework.NewTimeoutContext()
 }
 
-// Capability represents a feature that a volume plugin supports
+// Capability 表示 volume plugin 支持的一项特性
 type Capability string
 
-// Constants related to capabilities and behavior of the driver.
+// 与 driver 的能力和行为相关的常量。
 const (
 	CapPersistence         Capability = "persistence"        // data is persisted across pod restarts
 	CapBlock               Capability = "block"              // raw block mode
@@ -178,22 +178,22 @@ const (
 	CapVolumeGroupSnapshot Capability = "groupSnapshot"      // support group snapshot
 	CapPVCDataSource       Capability = "pvcDataSource"      // support populate data from pvc
 
-	// multiple pods on a node can use the same volume concurrently;
-	// for CSI, see:
+	// 同一节点上的多个 pod 可以并发使用同一个 volume；
+	// 对于 CSI，参见：
 	// - https://github.com/container-storage-interface/spec/pull/150
 	// - https://github.com/container-storage-interface/spec/issues/178
-	// - NodeStageVolume in the spec
+	// - 规范中的 NodeStageVolume
 	CapMultiPODs Capability = "multipods"
 
 	CapRWX                 Capability = "RWX"                 // support ReadWriteMany access modes
 	CapControllerExpansion Capability = "controllerExpansion" // support volume expansion for controller
 	CapNodeExpansion       Capability = "nodeExpansion"       // support volume expansion for node
 
-	// offlineExpansion and onlineExpansion both default to true when
-	// controllerExpansion is true. The only reason to set offlineExpansion
-	// to false is when a CSI driver can only expand a volume while it's
-	// attached to a pod. Conversely, onlineExpansion can be set to false
-	// if the driver can only expand a volume while it is detached.
+	// 当 controllerExpansion 为 true 时，offlineExpansion 和 onlineExpansion 都默认为 true。
+	// 只有在 CSI driver 只能在 volume 挂载到 pod 时扩容的情况下，
+	// 才需要把 offlineExpansion 设为 false。反之，如果 driver
+	// 只能在 volume 未挂载时扩容，则可把 onlineExpansion 设为 false。
+	//
 	CapOfflineExpansion Capability = "offlineExpansion" // supports offline volume expansion (default: true)
 	CapOnlineExpansion  Capability = "onlineExpansion"  // supports online volume expansion (default: true)
 
@@ -201,135 +201,135 @@ const (
 	CapSingleNodeVolume Capability = "singleNodeVolume" // support volume that can run on single node (like hostpath)
 	CapTopology         Capability = "topology"         // support topology
 
-	// The driver publishes storage capacity information: when the storage class
-	// for dynamic provisioning exists, the driver is expected to provide
-	// capacity information for it.
+	// driver 发布存储容量信息：当用于动态供应的 storage class
+	// 存在时，driver 应为其提供
+	// 容量信息。
 	CapCapacity Capability = "capacity"
 
-	// Anti-capability for drivers that do not support filesystem resizing of PVCs
-	// that are cloned or restored from a snapshot.
+	// 对不支持调整从快照克隆或恢复的 PVC 文件系统的 driver，
+	// 这是一个反向能力标记。
 	CapFSResizeFromSourceNotSupported Capability = "FSResizeFromSourceNotSupported"
 
-	// To support ReadWriteOncePod, the following CSI sidecars must be
-	// updated to these versions or greater:
+	// 要支持 ReadWriteOncePod，以下 CSI sidecar 必须
+	// 更新到这些版本或更高：
 	// - csi-provisioner:v3.0.0+
 	// - csi-attacher:v3.3.0+
 	// - csi-resizer:v1.3.0+
 	CapReadWriteOncePod Capability = "readWriteOncePod"
 
-	// The driver can handle two PersistentVolumes with the same VolumeHandle (= volume_id in CSI spec).
-	// This capability is highly recommended for volumes that support ReadWriteMany access mode,
-	// because creating multiple PVs for the same VolumeHandle is frequently used to share a single
-	// volume among multiple namespaces.
-	// Note that this capability needs to be disabled only for CSI drivers that break CSI boundary and
-	// inspect Kubernetes PersistentVolume objects. A CSI driver that implements only CSI and does not
-	// talk to Kubernetes API server in any way should keep this capability enabled, because
-	// they will see the same NodeStage / NodePublish requests as if only one PV existed.
+	// driver 能处理两个 VolumeHandle 相同（CSI 规范中的 volume_id）的 PersistentVolume。
+	// 对于支持 ReadWriteMany 访问模式的 volume，强烈建议具备此能力，
+	// 因为为同一 VolumeHandle 创建多个 PV 常被用于
+	// 在多个 namespace 间共享单个 volume。
+	// 注意，只有那些突破 CSI 边界、会检查 Kubernetes PersistentVolume 对象的 CSI driver
+	// 才需要禁用此能力。只实现 CSI、不以任何方式与 Kubernetes API server
+	// 通信的 CSI driver 应保持此能力启用，因为
+	// 它们看到的 NodeStage / NodePublish 请求与只有一个 PV 时相同。
 	CapMultiplePVsSameID Capability = "multiplePVsSameID"
 
-	// The driver supports ReadOnlyMany (ROX) access mode
+	// driver 支持 ReadOnlyMany (ROX) 访问模式
 	CapReadOnlyMany Capability = "capReadOnlyMany"
 
-	// The driver supports SELinuxMount feature
+	// driver 支持 SELinuxMount 特性
 	CapSELinuxMount Capability = "seLinuxMount"
 )
 
-// DriverInfo represents static information about a TestDriver.
+// DriverInfo 表示 TestDriver 的静态信息。
 type DriverInfo struct {
-	// Internal name of the driver, this is used as a display name in the test
-	// case and test objects
+	// driver 的内部名称，用作测试用例和对象中的
+	// 显示名称
 	Name string
-	// Fully qualified plugin name as registered in Kubernetes of the in-tree
-	// plugin if it exists and is empty if this DriverInfo represents a CSI
-	// Driver
+	// 如果 in-tree plugin 存在，为其在 Kubernetes 中注册的完全限定 plugin 名称；
+	// 如果该 DriverInfo 表示 CSI
+	// Driver，则为空
 	InTreePluginName string
 	TestTags         []interface{} // tags for the driver (e.g. framework.WithSlow())
 
-	// Maximum single file size supported by this driver
+	// 该 driver 支持的最大单文件大小
 	MaxFileSize int64
-	// The range of disk size supported by this driver
+	// 该 driver 支持的磁盘大小范围
 	SupportedSizeRange e2evolume.SizeRange
-	// Map of string for supported fs type
+	// 支持的 fs type 的字符串 map
 	SupportedFsType sets.String
-	// Map of string for supported mount option
+	// 支持的 mount option 的字符串 map
 	SupportedMountOption sets.String
-	// [Optional] Map of string for required mount option
+	// [可选] 必需的 mount option 的字符串 map
 	RequiredMountOption sets.String
-	// Map that represents plugin capabilities
+	// 表示 plugin 能力的 map
 	Capabilities map[Capability]bool
-	// [Optional] List of access modes required for provisioning, defaults to
-	// RWO if unset
+	// [可选] 供应所需的访问模式列表，未设置时默认为
+	// RWO
 	RequiredAccessModes []v1.PersistentVolumeAccessMode
-	// [Optional] List of topology keys driver supports
+	// [可选] driver 支持的 topology key 列表
 	TopologyKeys []string
-	// [Optional] Number of allowed topologies the driver requires.
-	// Only relevant if TopologyKeys is set. Defaults to 1.
-	// Example: multi-zonal disk requires at least 2 allowed topologies.
+	// [可选] driver 要求的允许 topology 数量。
+	// 仅在设置了 TopologyKeys 时相关。默认为 1。
+	// 例如：多可用区磁盘至少需要 2 个允许的 topology。
 	NumAllowedTopologies int
-	// [Optional] Scale parameters for stress tests.
-	// TODO(#96241): Rename this field to reflect the tests that consume it.
+	// [可选] 压力测试的规模参数。
+	// TODO(#96241): 重命名此字段，以反映使用它的测试。
 	StressTestOptions *StressTestOptions
-	// [Optional] Scale parameters for volume snapshot stress tests.
+	// [可选] volume snapshot 压力测试的规模参数。
 	VolumeSnapshotStressTestOptions *VolumeSnapshotStressTestOptions
-	// [Optional] Scale parameters for volume modify stress tests.
+	// [可选] volume modify 压力测试的规模参数。
 	VolumeModifyStressTestOptions *VolumeModifyStressTestOptions
-	// [Optional] Parameters for performance tests
+	// [可选] 性能测试参数
 	PerformanceTestOptions *PerformanceTestOptions
-	// [Optional] Scale parameters for volume group snapshot stress tests.
+	// [可选] volume group snapshot 压力测试的规模参数。
 	VolumeGroupSnapshotStressTestOptions *VolumeGroupSnapshotStressTestOptions
 }
 
-// StressTestOptions contains parameters used for stress tests.
+// StressTestOptions 包含压力测试使用的参数。
 type StressTestOptions struct {
-	// Number of pods to create in the test. This may also create
-	// up to 1 volume per pod.
+	// 测试中创建的 pod 数。每个 pod 最多也会创建
+	// 1 个 volume。
 	NumPods int
-	// Number of times to restart each Pod.
+	// 每个 Pod 重启的次数。
 	NumRestarts int
 }
 
-// VolumeSnapshotStressTestOptions contains parameters used for volume snapshot stress tests.
+// VolumeSnapshotStressTestOptions 包含 volume snapshot 压力测试使用的参数。
 type VolumeSnapshotStressTestOptions struct {
-	// Number of pods to create in the test. This may also create
-	// up to 1 volume per pod.
+	// 测试中创建的 pod 数。每个 pod 最多也会创建
+	// 1 个 volume。
 	NumPods int
-	// Number of snapshots to create for each volume.
+	// 每个 volume 创建的 snapshot 数量。
 	NumSnapshots int
 }
 
-// VolumeModifyStressTestOptions contains parameters used for volume modify stress tests.
+// VolumeModifyStressTestOptions 包含 volume modify 压力测试使用的参数。
 type VolumeModifyStressTestOptions struct {
-	// Number of pods to create in the test. This may also create
-	// up to 1 volume with volumeAttributesClass per pod.
+	// 测试中创建的 pod 数。每个 pod 最多也会创建
+	// 1 个带 volumeAttributesClass 的 volume。
 	NumPods int
 }
 
-// Metrics to evaluate performance of an operation
-// TODO: Add metrics like median, mode, standard deviation, percentile
+// 用于评估操作性能的指标
+// TODO: 添加中位数、众数、标准差、百分位等指标
 type Metrics struct {
 	AvgLatency time.Duration
 	Throughput float64
 }
 
-// PerformanceTestProvisioningOptions contains parameters for
-// testing provisioning operation performance.
+// PerformanceTestProvisioningOptions 包含用于
+// 测试供应操作性能的参数。
 type PerformanceTestProvisioningOptions struct {
 	VolumeSize string
 	Count      int
-	// Expected metrics from PVC creation till PVC being Bound.
+	// 从 PVC 创建到 PVC 变为 Bound 的预期指标。
 	ExpectedMetrics *Metrics
 }
 
-// PerformanceTestOptions contains parameters used for performance tests
+// PerformanceTestOptions 包含性能测试使用的参数
 type PerformanceTestOptions struct {
 	ProvisioningOptions *PerformanceTestProvisioningOptions
 }
 
-// VolumeGroupSnapshotStressTestOptions contains parameters used for volume group snapshot stress tests.
+// VolumeGroupSnapshotStressTestOptions 包含 volume group snapshot 压力测试使用的参数。
 type VolumeGroupSnapshotStressTestOptions struct {
-	// Number of pods to create in the StatefulSet. This will create
-	// that many PVCs with the same label for group snapshotting.
+	// StatefulSet 中创建的 pod 数。这将创建
+	// 相同数量的 PVC，带相同标签用于 group snapshot。
 	NumPods int
-	// Number of volume group snapshots to create.
+	// 要创建的 volume group snapshot 数量。
 	NumSnapshots int
 }

@@ -59,7 +59,7 @@ var _ = utils.SIGDescribe("CSI Mock honor pv reclaim policy", func() {
 			ginkgo.By(fmt.Sprintf("PVC %s is bound to PV %s", pvc.Name, pv.Name))
 			gomega.Expect(pv.Spec.PersistentVolumeReclaimPolicy).To(gomega.Equal(v1.PersistentVolumeReclaimDelete),
 				"expected PV %s to have reclaim policy %s, got %s", pv.Name, v1.PersistentVolumeReclaimDelete, pv.Spec.PersistentVolumeReclaimPolicy)
-			// For dynamic provisioning, the PV should be created with the deletion protection finalizer.
+			// 动态供应时，PV 应带删除保护 finalizer 创建。
 			gomega.Expect(pv.Finalizers).To(gomega.ContainElement(storagehelpers.PVDeletionProtectionFinalizer),
 				"expected PV %s to have finalizer %s", pv.Name, storagehelpers.PVDeletionProtectionFinalizer)
 
@@ -93,7 +93,7 @@ var _ = utils.SIGDescribe("CSI Mock honor pv reclaim policy", func() {
 			ginkgo.By(fmt.Sprintf("PVC %s is bound to PV %s", pvc.Name, pv.Name))
 			gomega.Expect(pv.Spec.PersistentVolumeReclaimPolicy).To(gomega.Equal(v1.PersistentVolumeReclaimDelete),
 				"expected PV %s to have reclaim policy %s, got %s", pv.Name, v1.PersistentVolumeReclaimDelete, pv.Spec.PersistentVolumeReclaimPolicy)
-			// For dynamic provisioning, the PV should be created with the deletion protection finalizer.
+			// 动态供应时，PV 应带删除保护 finalizer 创建。
 			gomega.Expect(pv.Finalizers).To(gomega.ContainElement(storagehelpers.PVDeletionProtectionFinalizer),
 				"expected PV %s to have finalizer %s", pv.Name, storagehelpers.PVDeletionProtectionFinalizer)
 
@@ -410,7 +410,7 @@ var _ = utils.SIGDescribe("CSI Mock honor pv reclaim policy", func() {
 			ginkgo.By(fmt.Sprintf("PVC %s is bound to PV %s", pvc.Name, pv.Name))
 			gomega.Expect(pv.Spec.PersistentVolumeReclaimPolicy).To(gomega.Equal(v1.PersistentVolumeReclaimDelete),
 				"expected PV %s to have reclaim policy %s, got %s", pv.Name, v1.PersistentVolumeReclaimDelete, pv.Spec.PersistentVolumeReclaimPolicy)
-			// For dynamic provisioning, the PV should be created with the deletion protection finalizer.
+			// 动态供应时，PV 应带删除保护 finalizer 创建。
 			gomega.Expect(pv.Finalizers).To(gomega.ContainElement(storagehelpers.PVDeletionProtectionFinalizer),
 				"expected PV %s to have finalizer %s", pv.Name, storagehelpers.PVDeletionProtectionFinalizer)
 

@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package network are the end-to-end tests for Kubernetes networking.
+// Package network 是 Kubernetes 网络相关的端到端测试。
 package network

@@ -48,7 +48,7 @@ const (
 )
 
 var (
-	// TODO: cgroup version shouldn't be cached as a global for a cluster where v1 and v2 are mixed.
+	// TODO: 对于 v1 和 v2 混合的集群，cgroup 版本不应作为全局变量缓存。
 	podOnCgroupv2Node      *bool
 	podOnCgroupv2NodeMutex sync.Mutex
 )
@@ -136,13 +136,13 @@ func getPodCgroupPath(f *framework.Framework, pod *v1.Pod, podOnCgroupv2 bool, s
 	if !podOnCgroupv2 {
 		rootPath += "/" + subsystem
 	}
-	// search path for both systemd driver and cgroupfs driver
+	// 同时搜索 systemd driver 和 cgroupfs driver 的路径
 	cmd := fmt.Sprintf("find %s -name '*%s*' -o -name '*%s*'", rootPath, strings.ReplaceAll(string(pod.UID), "-", "_"), string(pod.UID))
 	framework.Logf("Namespace %s Pod %s - looking for Pod cgroup directory path: %q", f.Namespace, pod.Name, cmd)
 	podCgPath, stderr, err := e2epod.ExecCommandInContainerWithFullOutput(f, pod.Name, pod.Spec.Containers[0].Name, []string{"/bin/sh", "-c", cmd}...)
 	if podCgPath == "" {
-		// This command may hit 'No such file or directory' for another cgroup if another test running in parallel has deleted a pod.
-		// We ignore errors if podCgPath is found.
+		// 如果另一个并行测试删除了 pod，该命令对其他 cgroup 可能报 'No such file or directory'。
+		// 只要找到 podCgPath，我们就忽略错误。
 		if err != nil || len(stderr) > 0 {
 			return "", fmt.Errorf("encountered error while running command: %q, \nerr: %w \nstdErr: %q", cmd, err, stderr)
 		}
@@ -219,9 +219,9 @@ func getExpectedMemLimitString(memLimit *resource.Quantity, podOnCgroupv2 bool) 
 func verifyContainerCPUWeight(ctx context.Context, f *framework.Framework, pod *v1.Pod, containerName string, expectedResources *v1.ResourceRequirements, podOnCgroupv2 bool) error {
 	cpuWeightCgPath := getCgroupCPURequestPath(cgroupFsPath, podOnCgroupv2)
 	cpuReq := expectedResources.Requests.Cpu()
-	// Bug - Skip comparing cpu.weight if cpu requests are not set for pod with only
-	// pod-level limits. There's a bug in calculation of cpu.weight when containers without
-	// limits are resized and then restarted because of pod-level limits resize.
+	// Bug - 对于只有 pod 级 limits 的 pod，如果没设置 cpu requests，跳过
+	// cpu.weight 的比较。无 limits 的容器因 pod 级 limits 调整而
+	// 重启后，cpu.weight 的计算存在 bug。
 	// Check for cpu.weight when the bug is fixed - https://github.com/kubernetes/kubernetes/issues/135260
 	if cpuReq.IsZero() && pod.Spec.Resources != nil {
 		return nil
@@ -287,13 +287,13 @@ func verifyPodCPUWeight(ctx context.Context, f *framework.Framework, pod *v1.Pod
 	return err
 }
 
-// RetrieveContainerCPUWeight reads the cpu.weight or cpu.shares value for a container.
+// RetrieveContainerCPUWeight 读取容器的 cpu.weight 或 cpu.shares 值。
 func RetrieveContainerCPUWeight(ctx context.Context, f *framework.Framework, pod *v1.Pod, containerName string, podOnCgroupv2 bool) (int64, error) {
 	cpuWeightCgPath := getCgroupCPURequestPath(cgroupFsPath, podOnCgroupv2)
 	return retrieveCgroupValueInt(ctx, f, pod.Name, containerName, cpuWeightCgPath, false)
 }
 
-// RetrievePodCPUWeight reads the cpu.weight or cpu.shares value for the pod cgroup.
+// RetrievePodCPUWeight 读取 pod cgroup 的 cpu.weight 或 cpu.shares 值。
 func RetrievePodCPUWeight(ctx context.Context, f *framework.Framework, pod *v1.Pod, podOnCgroupv2 bool) (int64, error) {
 	podCgPath, err := getPodCgroupPath(f, pod, podOnCgroupv2, "cpu")
 	if err != nil {
@@ -333,7 +333,7 @@ func retrieveCgroupValueInt(ctx context.Context, f *framework.Framework, podName
 	return val, err
 }
 
-// GetEffectiveCPUMilli returns the effective CPU request/limit milli-value for weight/shares scaling.
+// GetEffectiveCPUMilli 返回用于 weight/shares 换算的有效 CPU request/limit 毫核值。
 func GetEffectiveCPUMilli(reqs, lims v1.ResourceList) int64 {
 	cpuReq := reqs.Cpu()
 	cpuLim := lims.Cpu()
@@ -390,13 +390,13 @@ func verifyPodMemoryLimit(ctx context.Context, f *framework.Framework, pod *v1.P
 	return nil
 }
 
-// VerifyPodCgroups verifies pod cgroup is configured on a node as expected.
+// VerifyPodCgroups 验证 pod cgroup 在节点上按预期配置。
 func VerifyPodCgroups(ctx context.Context, f *framework.Framework, pod *v1.Pod, info *ContainerResources) error {
 	ginkgo.GinkgoHelper()
 
 	onCgroupV2 := IsPodOnCgroupv2Node(f, pod.Name, pod.Spec.Containers[0].Name)
 
-	// Verify cgroup values
+	// 验证 cgroup 值
 	expectedResources := info.ResourceRequirements()
 	var errs []error
 	errs = append(errs, verifyPodCPUWeight(ctx, f, pod, expectedResources, onCgroupV2))
@@ -420,10 +420,10 @@ func BuildPodResourceInfo(podCPURequestMilliValue, podCPULimitMilliValue, podMem
 	return podResourceInfo
 }
 
-// VerifyCgroupValue verifies that the given cgroup path has the expected value in
-// the specified container of the pod. It execs into the container to retrieve the
-// cgroup value, and ensures that the retrieved cgroup value is equivalent to at
-// least one of the values in expectedCgValues.
+// VerifyCgroupValue 验证给定 cgroup 路径在 pod 指定容器中
+// 具有预期值。它 exec 进入容器读取
+// cgroup 值，并确认读到的值等价于
+// expectedCgValues 中至少一个值。
 func VerifyCgroupValue(ctx context.Context, f *framework.Framework, pod *v1.Pod, cName, cgPath string, expectedCgValues ...string) error {
 	cmd := fmt.Sprintf("head -n 1 %s", cgPath)
 	framework.Logf("Namespace %s Pod %s Container %s - looking for one of the expected cgroup values %s in path %s",
@@ -442,9 +442,9 @@ func VerifyCgroupValue(ctx context.Context, f *framework.Framework, pod *v1.Pod,
 	})).WithTimeout(framework.PollShortTimeout).Should(gomega.Succeed())
 }
 
-// VerifyOomScoreAdjValue verifies that oom_score_adj for pid 1 (pidof init/systemd -> app)
-// has the expected value in specified container of the pod. It execs into the container,
-// reads the oom_score_adj value from procfs, and compares it against the expected value.
+// VerifyOomScoreAdjValue 验证 pod 指定容器中 pid 1（pidof init/systemd -> app）的
+// oom_score_adj 具有预期值。它 exec 进入容器，
+// 从 procfs 读取 oom_score_adj 值，并与预期值比较。
 func VerifyOomScoreAdjValue(f *framework.Framework, pod *v1.Pod, cName, expectedOomScoreAdj string) error {
 	cmd := "cat /proc/1/oom_score_adj"
 	framework.Logf("Namespace %s Pod %s Container %s - looking for oom_score_adj value %s",
@@ -460,8 +460,8 @@ func VerifyOomScoreAdjValue(f *framework.Framework, pod *v1.Pod, cName, expected
 	return nil
 }
 
-// IsPodOnCgroupv2Node checks whether the pod is running on cgroupv2 node.
-// TODO: Deduplicate this function with NPD cluster e2e test:
+// IsPodOnCgroupv2Node 检查 pod 是否运行在 cgroupv2 节点上。
+// TODO: 与 NPD cluster e2e 测试中的该函数去重：
 // https://github.com/kubernetes/kubernetes/blob/2049360379bcc5d6467769cef112e6e492d3d2f0/test/e2e/node/node_problem_detector.go#L369
 func IsPodOnCgroupv2Node(f *framework.Framework, podName, containerName string) (result bool) {
 	podOnCgroupv2NodeMutex.Lock()
@@ -478,13 +478,13 @@ func IsPodOnCgroupv2Node(f *framework.Framework, podName, containerName string) 
 	if err != nil {
 		return false
 	}
-	// Some tests mount host cgroup using HostPath for verifying pod cgroup values.
-	// In this case, "<mount path>/unified" is detected by "mount -t cgroup2" if cgroup hybrid mode is configured on the host.
-	// So, we need to see if "/sys/fs/cgroup" is contained in the output.
+	// 有些测试用 HostPath 挂载宿主机 cgroup 来验证 pod cgroup 值。
+	// 这种情况下，如果宿主机配置了 cgroup 混合模式，"mount -t cgroup2" 会检测到 "<mount path>/unified"。
+	// 因此需要检查输出中是否包含 "/sys/fs/cgroup"。
 	return strings.Contains(out, "/sys/fs/cgroup")
 }
 
-// VerifyPodHugepagesLimit verifies the pod-level hugepages limit.
+// VerifyPodHugepagesLimit 验证 pod 级别的 hugepages 限制。
 func VerifyPodHugepagesLimit(ctx context.Context, f *framework.Framework, pod *v1.Pod, pageSize string, expectedLimit string, onCgroupV2 bool) error {
 	podCgPath, err := getPodCgroupPath(f, pod, onCgroupV2, "hugetlb")
 	if err != nil {
@@ -500,7 +500,7 @@ func VerifyPodHugepagesLimit(ctx context.Context, f *framework.Framework, pod *v
 	return VerifyCgroupValue(ctx, f, pod, pod.Spec.Containers[0].Name, hugepageCgPath, expectedLimit)
 }
 
-// VerifyContainerHugepagesLimit verifies the container-level hugepages limit.
+// VerifyContainerHugepagesLimit 验证容器级别的 hugepages 限制。
 func VerifyContainerHugepagesLimit(ctx context.Context, f *framework.Framework, pod *v1.Pod, containerName string, pageSize string, expectedLimit string, onCgroupV2 bool) error {
 	var hugepageCgPath string
 	if onCgroupV2 {

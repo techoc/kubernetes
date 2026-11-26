@@ -50,7 +50,7 @@ import (
 )
 
 const (
-	// How long to wait for a cronjob
+	// 等待 cronjob 的超时时间
 	cronJobTimeout = 5 * time.Minute
 )
 
@@ -60,14 +60,14 @@ var _ = SIGDescribe("CronJob", func() {
 
 	sleepCommand := []string{"sleep", "300"}
 
-	// Pod will complete instantly
+	// Pod 会立即完成
 	successCommand := []string{"/bin/true"}
 	failureCommand := []string{"/bin/false"}
 
 	/*
-	   Release: v1.21
-	   Testname: CronJob AllowConcurrent
-	   Description: CronJob MUST support AllowConcurrent policy, allowing to run multiple jobs at the same time.
+	   发布版本：v1.21
+	   测试名称：CronJob AllowConcurrent
+	   描述：CronJob 必须支持 AllowConcurrent 策略，允许同时运行多个 job。
 	*/
 	framework.ConformanceIt("should schedule multiple jobs concurrently", func(ctx context.Context) {
 		ginkgo.By("Creating a cronjob")
@@ -92,9 +92,9 @@ var _ = SIGDescribe("CronJob", func() {
 	})
 
 	/*
-	   Release: v1.21
-	   Testname: CronJob Suspend
-	   Description: CronJob MUST support suspension, which suppresses creation of new jobs.
+	   发布版本：v1.21
+	   测试名称：CronJob Suspend
+	   描述：CronJob 必须支持暂停，暂停期间不再创建新 job。
 	*/
 	framework.ConformanceIt("should not schedule jobs when suspended", f.WithSlow(), func(ctx context.Context) {
 		ginkgo.By("Creating a suspended cronjob")
@@ -120,9 +120,9 @@ var _ = SIGDescribe("CronJob", func() {
 	})
 
 	/*
-	   Release: v1.21
-	   Testname: CronJob ForbidConcurrent
-	   Description: CronJob MUST support ForbidConcurrent policy, allowing to run single, previous job at the time.
+	   发布版本：v1.21
+	   测试名称：CronJob ForbidConcurrent
+	   描述：CronJob 必须支持 ForbidConcurrent 策略，同一时间只允许运行一个先前的 job。
 	*/
 	framework.ConformanceIt("should not schedule new jobs when ForbidConcurrent", f.WithSlow(), func(ctx context.Context) {
 		ginkgo.By("Creating a ForbidConcurrent cronjob")
@@ -163,9 +163,9 @@ var _ = SIGDescribe("CronJob", func() {
 	})
 
 	/*
-	   Release: v1.21
-	   Testname: CronJob ReplaceConcurrent
-	   Description: CronJob MUST support ReplaceConcurrent policy, allowing to run single, newer job at the time.
+	   发布版本：v1.21
+	   测试名称：CronJob ReplaceConcurrent
+	   描述：CronJob 必须支持 ReplaceConcurrent 策略，同一时间只允许运行一个较新的 job。
 	*/
 	framework.ConformanceIt("should replace jobs when ReplaceConcurrent", func(ctx context.Context) {
 		ginkgo.By("Creating a ReplaceConcurrent cronjob")
@@ -224,7 +224,7 @@ var _ = SIGDescribe("CronJob", func() {
 		framework.ExpectNoError(err, "Failed to delete CronJob %s in namespace %s", cronJob.Name, f.Namespace.Name)
 	})
 
-	// shouldn't give us unexpected warnings
+	// 不应出现意外的 warning
 	ginkgo.It("should not emit unexpected warnings", func(ctx context.Context) {
 		ginkgo.By("Creating a cronjob")
 		cronJob := newTestCronJob("concurrent", "*/1 * * * ?", batchv1.AllowConcurrent,
@@ -288,7 +288,7 @@ var _ = SIGDescribe("CronJob", func() {
 		framework.ExpectNoError(err, "Failed to delete CronJob %s in namespace %s", cronJob.Name, f.Namespace.Name)
 	})
 
-	// deleted jobs should be removed from the active list
+	// 已删除的 job 应从 active 列表中移除
 	ginkgo.It("should remove from active list jobs that have been deleted", func(ctx context.Context) {
 		ginkgo.By("Creating a ForbidConcurrent cronjob")
 		cronJob := newTestCronJob("forbid", "*/1 * * * ?", batchv1.ForbidConcurrent,
@@ -326,7 +326,7 @@ var _ = SIGDescribe("CronJob", func() {
 		framework.ExpectNoError(err, "Failed to remove %s cronjob in namespace %s", cronJob.Name, f.Namespace.Name)
 	})
 
-	// cleanup of successful finished jobs, with limit of one successful job
+	// 清理已成功完成的 job，最多保留一个成功 job
 	ginkgo.It("should delete successful finished jobs with limit of one successful job", func(ctx context.Context) {
 		ginkgo.By("Creating an AllowConcurrent cronjob with custom history limit")
 		successLimit := int32(1)
@@ -337,7 +337,7 @@ var _ = SIGDescribe("CronJob", func() {
 		ensureHistoryLimits(ctx, f.ClientSet, f.Namespace.Name, cronJob)
 	})
 
-	// cleanup of failed finished jobs, with limit of one failed job
+	// 清理已失败的 job，最多保留一个失败 job
 	ginkgo.It("should delete failed finished jobs with limit of one job", func(ctx context.Context) {
 		ginkgo.By("Creating an AllowConcurrent cronjob with custom history limit")
 		successLimit := int32(0)
@@ -359,11 +359,11 @@ var _ = SIGDescribe("CronJob", func() {
 	})
 
 	/*
-	   Release: v1.21
-	   Testname: CronJob API Operations
-	   Description:
-	   CronJob MUST support create, get, list, watch, update, patch, delete, and deletecollection.
-	   CronJob/status MUST support get, update and patch.
+	   发布版本：v1.21
+	   测试名称：CronJob API Operations
+	   描述：
+	   CronJob 必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
+	   CronJob/status 必须支持 get、update 和 patch。
 	*/
 	framework.ConformanceIt("should support CronJob API operations", func(ctx context.Context) {
 		ginkgo.By("Creating a cronjob")
@@ -399,7 +399,7 @@ var _ = SIGDescribe("CronJob", func() {
 		cjWatch, err := cjClient.Watch(ctx, metav1.ListOptions{ResourceVersion: cjs.ResourceVersion, LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
 
-		// Test cluster-wide list and watch
+		// 测试集群范围的 list 和 watch
 		clusterCJClient := f.ClientSet.BatchV1().CronJobs("")
 		ginkgo.By("cluster-wide listing")
 		clusterCJs, err := clusterCJClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
@@ -457,9 +457,9 @@ var _ = SIGDescribe("CronJob", func() {
 			}
 		}
 
-		// /status subresource operations
+		// /status 子资源操作
 		ginkgo.By("patching /status")
-		// we need to use RFC3339 version since conversion over the wire cuts nanoseconds
+		// 需要使用 RFC3339 版本，因为网络传输的转换会截掉纳秒
 		now1 := metav1.Now().Rfc3339Copy()
 		cjStatus := batchv1.CronJobStatus{
 			LastScheduleTime: &now1,
@@ -476,7 +476,7 @@ var _ = SIGDescribe("CronJob", func() {
 		gomega.Expect(patchedStatus.Annotations).To(gomega.HaveKeyWithValue("patchedstatus", "true"), "patched object should have the applied annotation")
 
 		ginkgo.By("updating /status")
-		// we need to use RFC3339 version since conversion over the wire cuts nanoseconds
+		// 需要使用 RFC3339 版本，因为网络传输的转换会截掉纳秒
 		now2 := metav1.Now().Rfc3339Copy()
 		var statusToUpdate, updatedStatus *batchv1.CronJob
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -502,7 +502,7 @@ var _ = SIGDescribe("CronJob", func() {
 		framework.ExpectNoError(err)
 		gomega.Expect(string(createdCronJob.UID)).To(gomega.Equal(statusUID), "createdCronJob.UID: %v expected to match statusUID: %v ", createdCronJob.UID, statusUID)
 
-		// CronJob resource delete operations
+		// CronJob 资源删除操作
 		expectFinalizer := func(cj *batchv1.CronJob, msg string) {
 			gomega.Expect(cj.DeletionTimestamp).NotTo(gomega.BeNil(), fmt.Sprintf("expected deletionTimestamp, got nil on step: %q, cronjob: %+v", msg, cj))
 			gomega.Expect(cj.Finalizers).ToNot(gomega.BeEmpty(), "expected finalizers on cronjob, got none on step: %q, cronjob: %+v", msg, cj)
@@ -515,7 +515,7 @@ var _ = SIGDescribe("CronJob", func() {
 		err = cjClient.Delete(ctx, forRemovalCronJob.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 		cj, err := cjClient.Get(ctx, forRemovalCronJob.Name, metav1.GetOptions{})
-		// If controller does not support finalizers, we expect a 404.  Otherwise we validate finalizer behavior.
+		// 如果 controller 不支持 finalizer，预期返回 404；否则验证 finalizer 行为。
 		if err == nil {
 			expectFinalizer(cj, "deleting cronjob")
 		} else if !apierrors.IsNotFound(err) {
@@ -527,9 +527,9 @@ var _ = SIGDescribe("CronJob", func() {
 		framework.ExpectNoError(err)
 		cjs, err = cjClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
-		// Should have <= 2 items since some cronjobs might not have been deleted yet due to finalizers
+		// 由于某些 cronjob 可能因 finalizer 尚未删除，剩余项应 <= 2
 		gomega.Expect(len(cjs.Items)).To(gomega.BeNumerically("<=", 2), "filtered list length should be <= 2, got:\n%s", format.Object(cjs.Items, 1))
-		// Validate finalizers
+		// 验证 finalizer
 		for _, cj := range cjs.Items {
 			expectFinalizer(&cj, "deleting cronjob collection")
 		}
@@ -541,8 +541,8 @@ func ensureHistoryLimits(ctx context.Context, c clientset.Interface, ns string, 
 	cronJob, err := createCronJob(ctx, c, ns, cronJob)
 	framework.ExpectNoError(err, "Failed to create allowconcurrent cronjob with custom history limits in namespace %s", ns)
 
-	// Job is going to complete instantly: do not check for an active job
-	// as we are most likely to miss it
+	// Job 会立即完成，很可能捕捉不到 active 状态，
+	// 因此不检查 active job。
 
 	ginkgo.By("Ensuring a finished job exists")
 	err = waitForAnyFinishedJob(ctx, c, ns)
@@ -557,7 +557,7 @@ func ensureHistoryLimits(ctx context.Context, c clientset.Interface, ns string, 
 		gomega.Expect(finishedJobs).To(gomega.HaveLen(1))
 	}
 
-	// Job should get deleted when the next job finishes the next minute
+	// 下一分钟下一个 job 完成时，Job 应被删除
 	ginkgo.By("Ensuring this job and its pods does not exist anymore")
 	err = waitForJobToDisappear(ctx, c, ns, finishedJobs[0])
 	framework.ExpectNoError(err, "Failed to ensure that job does not exists anymore in namespace %s", ns)
@@ -578,7 +578,7 @@ func ensureHistoryLimits(ctx context.Context, c clientset.Interface, ns string, 
 	framework.ExpectNoError(err, "Failed to remove the %s cronjob in namespace %s", cronJob.Name, ns)
 }
 
-// newTestCronJob returns a cronjob which does one of several testing behaviors.
+// newTestCronJob 返回一个执行某种测试行为的 cronjob。
 func newTestCronJob(name, schedule string, concurrencyPolicy batchv1.ConcurrencyPolicy,
 	command []string, successfulJobsHistoryLimit *int32, failedJobsHistoryLimit *int32) *batchv1.CronJob {
 	parallelism := int32(1)
@@ -649,7 +649,7 @@ func deleteCronJob(ctx context.Context, c clientset.Interface, ns, name string) 
 	return c.BatchV1().CronJobs(ns).Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &propagationPolicy})
 }
 
-// Wait for at least given amount of active jobs.
+// 等待至少指定数量的 active job。
 func waitForActiveJobs(ctx context.Context, c clientset.Interface, ns, cronJobName string, active int) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, cronJobTimeout, false, func(ctx context.Context) (bool, error) {
 		curr, err := getCronJob(ctx, c, ns, cronJobName)
@@ -660,7 +660,7 @@ func waitForActiveJobs(ctx context.Context, c clientset.Interface, ns, cronJobNa
 	})
 }
 
-// Wait till a given job actually goes away from the Active list for a given cronjob
+// 等待给定 job 真正从 cronjob 的 Active 列表中消失
 func waitForJobNotActive(ctx context.Context, c clientset.Interface, ns, cronJobName, jobName string) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, cronJobTimeout, false, func(ctx context.Context) (bool, error) {
 		curr, err := getCronJob(ctx, c, ns, cronJobName)
@@ -677,7 +677,7 @@ func waitForJobNotActive(ctx context.Context, c clientset.Interface, ns, cronJob
 	})
 }
 
-// Wait for a job to disappear by listing them explicitly.
+// 通过显式列举 job，等待某个 job 消失。
 func waitForJobToDisappear(ctx context.Context, c clientset.Interface, ns string, targetJob *batchv1.Job) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, cronJobTimeout, false, func(ctx context.Context) (bool, error) {
 		jobs, err := c.BatchV1().Jobs(ns).List(ctx, metav1.ListOptions{})
@@ -694,7 +694,7 @@ func waitForJobToDisappear(ctx context.Context, c clientset.Interface, ns string
 	})
 }
 
-// Wait for a pod to disappear by listing them explicitly.
+// 通过显式列举 pod，等待某个 pod 消失。
 func waitForJobsPodToDisappear(ctx context.Context, c clientset.Interface, ns string, targetJob *batchv1.Job) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, cronJobTimeout, false, func(ctx context.Context) (bool, error) {
 		options := metav1.ListOptions{LabelSelector: fmt.Sprintf("controller-uid=%s", targetJob.UID)}
@@ -706,14 +706,14 @@ func waitForJobsPodToDisappear(ctx context.Context, c clientset.Interface, ns st
 	})
 }
 
-// Wait for a job to be replaced with a new one.
+// 等待某个 job 被新 job 替换。
 func waitForJobReplaced(ctx context.Context, c clientset.Interface, ns, previousJobName string) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, cronJobTimeout, false, func(ctx context.Context) (bool, error) {
 		jobs, err := c.BatchV1().Jobs(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return false, err
 		}
-		// Ignore Jobs pending deletion, since deletion of Jobs is now asynchronous.
+		// 忽略待删除的 Job，因为 Job 删除现在是异步的。
 		aliveJobs := filterNotDeletedJobs(jobs)
 		if len(aliveJobs) > 1 {
 			return false, fmt.Errorf("more than one job is running %+v", jobs.Items)
@@ -725,7 +725,7 @@ func waitForJobReplaced(ctx context.Context, c clientset.Interface, ns, previous
 	})
 }
 
-// waitForJobsAtLeast waits for at least a number of jobs to appear.
+// waitForJobsAtLeast 等待至少出现指定数量的 job。
 func waitForJobsAtLeast(ctx context.Context, c clientset.Interface, ns string, atLeast int) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, cronJobTimeout, false, func(ctx context.Context) (bool, error) {
 		jobs, err := c.BatchV1().Jobs(ns).List(ctx, metav1.ListOptions{})
@@ -736,7 +736,7 @@ func waitForJobsAtLeast(ctx context.Context, c clientset.Interface, ns string, a
 	})
 }
 
-// waitForAnyFinishedJob waits for any completed job to appear.
+// waitForAnyFinishedJob 等待任意已完成 job 出现。
 func waitForAnyFinishedJob(ctx context.Context, c clientset.Interface, ns string) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, cronJobTimeout, false, func(ctx context.Context) (bool, error) {
 		jobs, err := c.BatchV1().Jobs(ns).List(ctx, metav1.ListOptions{})
@@ -752,7 +752,7 @@ func waitForAnyFinishedJob(ctx context.Context, c clientset.Interface, ns string
 	})
 }
 
-// waitForEventWithReason waits for events with a reason within a list has occurred
+// waitForEventWithReason 等待列表中出现带指定 reason 的事件
 func waitForEventWithReason(ctx context.Context, c clientset.Interface, ns, cronJobName string, reasons []string) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		sj, err := getCronJob(ctx, c, ns, cronJobName)
@@ -774,8 +774,7 @@ func waitForEventWithReason(ctx context.Context, c clientset.Interface, ns, cron
 	})
 }
 
-// filterNotDeletedJobs returns the job list without any jobs that are pending
-// deletion.
+// filterNotDeletedJobs 返回剔除待删除 job 后的列表。
 func filterNotDeletedJobs(jobs *batchv1.JobList) []*batchv1.Job {
 	var alive []*batchv1.Job
 	for i := range jobs.Items {

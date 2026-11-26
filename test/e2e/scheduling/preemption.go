@@ -119,30 +119,30 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 	})
 
 	/*
-		Release: v1.19
-		Testname: Scheduler, Basic Preemption
-		Description: When a higher priority pod is created and no node with enough
-		resources is found, the scheduler MUST preempt a lower priority pod and
-		schedule the high priority pod.
+		发布版本：v1.19
+		测试名称：Scheduler, Basic Preemption
+		描述：创建高优先级 pod 后，如果找不到资源充足的
+		节点，scheduler 必须抢占低优先级 pod，并
+		调度高优先级 pod。
 	*/
 	framework.ConformanceIt("validates basic preemption works", func(ctx context.Context) {
 		var podRes v1.ResourceList
 
-		// Create two pods per node that uses a lot of the node's resources.
+		// 每个节点创建两个消耗大量节点资源的 pod。
 		ginkgo.By("Create pods that use 4/5 of node resources.")
 		pods := make([]*v1.Pod, 0, 2*len(nodeList.Items))
-		// Create pods in the cluster.
-		// One of them has low priority, making it the victim for preemption.
+		// 在集群中创建 pod。
+		// 其中一个优先级低，作为被抢占的受害者。
 		for i, node := range nodeList.Items {
-			// Update each node to advertise 3 available extended resources
+			// 更新每个节点，通告 3 个可用的扩展资源
 			e2enode.AddExtendedResource(ctx, cs, node.Name, testExtendedResource, resource.MustParse("5"))
 
 			for j := range 2 {
-				// Request 2 of the available resources for the victim pods
+				// 为受害者 pod 请求可用资源中的 2 个
 				podRes = v1.ResourceList{}
 				podRes[testExtendedResource] = resource.MustParse("2")
 
-				// make the first pod low priority and the rest medium priority.
+				// 让第一个 pod 为低优先级，其余为中等优先级。
 				priorityName := mediumPriorityClassName
 				if len(pods) == 0 {
 					priorityName = lowPriorityClassName
@@ -181,11 +181,11 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, cs, pod))
 		}
 
-		// Set the pod request to the first pod's resources (should be low priority pod)
+		// 把 pod request 设为第一个 pod 的资源（应该是低优先级 pod）
 		podRes = pods[0].Spec.Containers[0].Resources.Requests
 
 		ginkgo.By("Run a high priority pod that has same requirements as that of lower priority pod")
-		// Create a high priority pod and make sure it is scheduled on the same node as the low priority pod.
+		// 创建高优先级 pod，确认它与低优先级 pod 调度到同一节点。
 		runPausePod(ctx, f, pausePodConfig{
 			Name:              "preemptor-pod",
 			PriorityClassName: highPriorityClassName,
@@ -209,11 +209,11 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 	})
 
 	/*
-		Release: v1.19
-		Testname: Scheduler, Preemption for critical pod
-		Description: When a critical pod is created and no node with enough
-		resources is found, the scheduler MUST preempt a lower priority pod to
-		schedule the critical pod.
+		发布版本：v1.19
+		测试名称：Scheduler, Preemption for critical pod
+		描述：创建 critical pod 后，如果找不到资源充足的
+		节点，scheduler 必须抢占低优先级 pod 来
+		调度 critical pod。
 	*/
 	framework.ConformanceIt("validates lower priority pod preemption by critical pod", func(ctx context.Context) {
 		var podRes v1.ResourceList
@@ -221,15 +221,15 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 		ginkgo.By("Create pods that use 4/5 of node resources.")
 		pods := make([]*v1.Pod, 0, len(nodeList.Items))
 		for i, node := range nodeList.Items {
-			// Update each node to advertise 3 available extended resources
+			// 更新每个节点，通告 3 个可用的扩展资源
 			e2enode.AddExtendedResource(ctx, cs, node.Name, testExtendedResource, resource.MustParse("5"))
 
 			for j := range 2 {
-				// Request 2 of the available resources for the victim pods
+				// 为受害者 pod 请求可用资源中的 2 个
 				podRes = v1.ResourceList{}
 				podRes[testExtendedResource] = resource.MustParse("2")
 
-				// make the first pod low priority and the rest medium priority.
+				// 让第一个 pod 为低优先级，其余为中等优先级。
 				priorityName := mediumPriorityClassName
 				if len(pods) == 0 {
 					priorityName = lowPriorityClassName
@@ -268,13 +268,13 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, cs, pod))
 		}
 
-		// We want this pod to be preempted
+		// 我们希望这个 pod 被抢占
 		podRes = pods[0].Spec.Containers[0].Resources.Requests
 		ginkgo.By("Run a critical pod that use same resources as that of a lower priority pod")
-		// Create a critical pod and make sure it is scheduled.
+		// 创建 critical pod，确认它被调度。
 		defer func() {
-			// Clean-up the critical pod
-			// Always run cleanup to make sure the pod is properly cleaned up.
+			// 清理 critical pod
+			// 始终执行清理，确保 pod 被正确清理。
 			err := f.ClientSet.CoreV1().Pods(metav1.NamespaceSystem).Delete(ctx, "critical-pod", *metav1.NewDeleteOptions(0))
 			if err != nil && !apierrors.IsNotFound(err) {
 				framework.Failf("Error cleanup pod `%s/%s`: %v", metav1.NamespaceSystem, "critical-pod", err)
@@ -291,11 +291,11 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 		})
 
 		defer func() {
-			// Clean-up the critical pod
+			// 清理 critical pod
 			err := f.ClientSet.CoreV1().Pods(metav1.NamespaceSystem).Delete(ctx, "critical-pod", *metav1.NewDeleteOptions(0))
 			framework.ExpectNoError(err)
 		}()
-		// Make sure that the lowest priority pod is deleted.
+		// 确保最低优先级的 pod 被删除。
 		preemptedPod, err := cs.CoreV1().Pods(pods[0].Namespace).Get(ctx, pods[0].Name, metav1.GetOptions{})
 		podPreempted := (err != nil && apierrors.IsNotFound(err)) ||
 			(err == nil && preemptedPod.DeletionTimestamp != nil)
@@ -311,25 +311,25 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 	})
 
 	/*
-		Release: v1.32
-		Testname: Scheduler runs the preemption with various priority classes expectedly
-		Description: When there are Pods with various priority classes running the preemption,
-		the scheduler must prioritize the Pods with the higher priority class.
+		发布版本：v1.32
+		测试名称：Scheduler runs the preemption with various priority classes expectedly
+		描述：当具有不同 priority class 的 pod 参与抢占时，
+		scheduler 必须优先处理 priority class 更高的 Pod。
 	*/
 	framework.It("validates various priority Pods preempt expectedly with the async preemption", feature.SchedulerAsyncPreemption, framework.WithFeatureGate(features.SchedulerAsyncPreemption), func(ctx context.Context) {
 		var podRes v1.ResourceList
-		// Create 10 pods per node that will eat up all the node's resources.
+		// 每个节点创建 10 个 pod，占满节点所有资源。
 		ginkgo.By("Create 10 low-priority pods on each node.")
 		nodeListLen := len(nodeList.Items)
 		lowPriorityPods := make([]*v1.Pod, 0, 10*nodeListLen)
-		// Create pods in the cluster.
+		// 在集群中创建 pod。
 		for i, node := range nodeList.Items {
-			// Update each node to advertise 3 available extended resources
+			// 更新每个节点，通告 3 个可用的扩展资源
 			e2enode.AddExtendedResource(ctx, cs, node.Name, testExtendedResource, resource.MustParse("10"))
 
-			// Create 10 low priority pods on each node, which will use up 10/10 of the node's resources.
+			// 每个节点创建 10 个低优先级 pod，占满节点 10/10 的资源。
 			for j := range 10 {
-				// Request 1 of the available resources for the victim pods
+				// 为受害者 pod 请求可用资源中的 1 个
 				podRes = v1.ResourceList{}
 				podRes[testExtendedResource] = resource.MustParse("1")
 				pausePod := createPausePod(ctx, f, pausePodConfig{
@@ -352,13 +352,13 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 							},
 						},
 					},
-					// This victim pod will be preempted by the high priority pod.
-					// But, the deletion will be blocked by the preStop hook with
-					// TerminationGracePeriodSeconds set.
+					// 这个受害者 pod 会被高优先级 pod 抢占。
+					// 但删除会被设置了
+					// TerminationGracePeriodSeconds 的 preStop hook 阻塞。
 					//
-					// The preStop hook + TerminationGracePeriodSeconds are needed to prevent the medium Pods
-					// from being scheduled instead of the high Pods,
-					// depending on when the scheduler notices the existence of all the high Pods we create.
+					// 需要 preStop hook 加 TerminationGracePeriodSeconds 来阻止中等优先级 Pod
+					// 被调度而不是高优先级 Pod，
+					// 这取决于 scheduler 何时发现我们创建的所有高优先级 Pod。
 					TerminationGracePeriodSeconds: ptr.To[int64](80),
 					PreStopHookSleepSeconds:       ptr.To[int64](79),
 				})
@@ -377,16 +377,16 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 
 		ginkgo.By("Run medium priority pods that have same requirements as that of lower priority pod")
 		for i := range nodeList.Items {
-			// Create medium priority pods first
-			// to confirm the scheduler finally prioritize the high priority pods, ignoring the medium priority pods.
+			// 先创建中等优先级 pod
+			// 以确认 scheduler 最终优先处理高优先级 pod，忽略中等优先级 pod。
 			for j := range 10 {
-				// 5 pods per node will be unschedulable
-				// because the node only has 10 resource, and high priority pods will use 5 resource.
+				// 每个节点有 5 个 pod 无法调度
+				// 因为节点只有 10 个资源，高优先级 pod 会用掉 5 个。
 				p := createPausePod(ctx, f, pausePodConfig{
 					Name:              fmt.Sprintf("pod%d-%d-%v", i, j, mediumPriorityClassName),
 					PriorityClassName: mediumPriorityClassName,
 					Resources: &v1.ResourceRequirements{
-						// Set the pod request to the low priority pod's resources
+						// 把 pod request 设为低优先级 pod 的资源
 						Requests: lowPriorityPods[0].Spec.Containers[0].Resources.Requests,
 						Limits:   lowPriorityPods[0].Spec.Containers[0].Resources.Requests,
 					},
@@ -395,8 +395,8 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			}
 		}
 
-		// All low priority Pods should be the target of preemption.
-		// Those Pods have a finalizer and hence should not be deleted yet at this point.
+		// 所有低优先级 Pod 都应成为抢占目标。
+		// 这些 Pod 带 finalizer，因此此时不应被删除。
 		ginkgo.By("Check all low priority pods to be about to preempted.")
 		for _, pod := range lowPriorityPods {
 			framework.ExpectNoError(wait.PollUntilContextTimeout(ctx, time.Second, framework.PodStartTimeout, false, func(ctx context.Context) (bool, error) {
@@ -415,7 +415,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 					Name:              fmt.Sprintf("pod%d-%d-%v", i, j, highPriorityClassName),
 					PriorityClassName: highPriorityClassName,
 					Resources: &v1.ResourceRequirements{
-						// Set the pod request to the low priority pod's resources
+						// 把 pod request 设为低优先级 pod 的资源
 						Requests: lowPriorityPods[0].Spec.Containers[0].Resources.Requests,
 						Limits:   lowPriorityPods[0].Spec.Containers[0].Resources.Requests,
 					},
@@ -424,7 +424,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			}
 		}
 
-		// All high priority Pods should be schedulable by removing the low priority Pods.
+		// 移除低优先级 Pod 后，所有高优先级 Pod 都应可调度。
 		ginkgo.By("Wait for high priority pods to be ready for the preemption.")
 		for _, pod := range highPriorityPods {
 			framework.ExpectNoError(wait.PollUntilContextTimeout(ctx, time.Second, framework.PodStartTimeout, false, func(ctx context.Context) (bool, error) {
@@ -471,13 +471,13 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 	})
 
 	/*
-		Release: v1.31
-		Testname: Verify the DisruptionTarget condition is added to the preempted pod
-		Description:
-		1. Run a low priority pod with finalizer which consumes 1/1 of node resources
-		2. Schedule a higher priority pod which also consumes 1/1 of node resources
-		3. See if the pod with lower priority is preempted and has the pod disruption condition
-		4. Remove the finalizer so that the pod can be deleted by GC
+		发布版本：v1.31
+		测试名称：Verify the DisruptionTarget condition is added to the preempted pod
+		描述：
+		1. 运行一个带 finalizer 的低优先级 pod，消耗 1/1 的节点资源
+		2. 调度一个同样消耗 1/1 节点资源的更高优先级 pod
+		3. 查看低优先级 pod 是否被抢占并带有 pod disruption condition
+		4. 移除 finalizer，让 pod 能被 GC 删除
 	*/
 	framework.ConformanceIt("validates pod disruption condition is added to the preempted pod", func(ctx context.Context) {
 		podRes := v1.ResourceList{testExtendedResource: resource.MustParse("1")}
@@ -487,7 +487,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 		node := nodeList.Items[0]
 		e2enode.AddExtendedResource(ctx, cs, node.Name, testExtendedResource, resource.MustParse("1"))
 
-		// prepare node affinity to make sure both the lower and higher priority pods are scheduled on the same node
+		// 准备 node affinity，确保低优先级和高优先级 pod 调度到同一节点
 		testNodeAffinity := v1.Affinity{
 			NodeAffinity: &v1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -518,7 +518,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 		ginkgo.By("Wait for the victim pod to be scheduled")
 		framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, cs, victimPod))
 
-		// Remove the finalizer so that the victim pod can be GCed
+		// 移除 finalizer，让受害者 pod 能被 GC
 		defer e2epod.NewPodClient(f).RemoveFinalizer(ctx, victimPod.Name, testFinalizer)
 
 		ginkgo.By("Create a high priority pod to trigger preemption of the lower priority pod")
@@ -559,7 +559,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 
 				node, err := cs.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 				framework.ExpectNoError(err)
-				// update Node API object with a fake resource
+				// 用 fake resource 更新 Node API 对象
 				ginkgo.By(fmt.Sprintf("Apply 10 fake resource to node %v.", node.Name))
 				e2enode.AddExtendedResource(ctx, cs, node.Name, fakeRes, resource.MustParse("10"))
 				nodes = append(nodes, node)
@@ -616,7 +616,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			}
 
 			ginkgo.By("Create 1 High Pod and 3 Low Pods to occupy 9/10 of fake resources on both nodes.")
-			// Prepare 1 High Pod and 3 Low Pods
+			// 准备 1 个高优先级 Pod 和 3 个低优先级 Pod
 			runPausePod(ctx, f, highPodCfg)
 			for i := 1; i <= 3; i++ {
 				lowPodCfg.Name = fmt.Sprintf("low-%v", i)
@@ -650,22 +650,22 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 					},
 				},
 			}
-			// To fulfil resource.requests, the medium Pod only needs to preempt one low pod.
-			// However, in that case, the Pods spread becomes [<high>, <medium, low, low>], which doesn't
-			// satisfy the pod topology spread constraints. Hence it needs to preempt another low pod
-			// to make the Pods spread like [<high>, <medium, low>].
+			// 为满足 resource.requests，中等优先级 Pod 只需抢占一个低优先级 pod。
+			// 但那样 Pod 分布会变成 [<high>, <medium, low, low>]，不满足
+			// pod topology spread constraints。因此需要再抢占一个低优先级 pod
+			// 让 Pod 分布变成 [<high>, <medium, low>]。
 			runPausePod(ctx, f, mediumPodCfg)
 
 			ginkgo.By("Verify there are 3 Pods left in this namespace")
 			wantPods := sets.New("high", "medium", "low")
 
-			// Wait until the number of pods stabilizes. Note that `medium` pod can get scheduled once the
-			// second low priority pod is marked as terminating.
+			// 等待 pod 数量稳定。注意 `medium` pod 在
+			// 第二个低优先级 pod 被标记为 terminating 后就可以调度。
 			pods, err := e2epod.WaitForNumberOfPods(ctx, cs, ns, 3, framework.PollShortTimeout)
 			framework.ExpectNoError(err)
 
 			for _, pod := range pods.Items {
-				// Remove the ordinal index for low pod.
+				// 去掉低优先级 pod 的序号索引。
 				podName := strings.Split(pod.Name, "-")[0]
 				if wantPods.Has(podName) {
 					ginkgo.By(fmt.Sprintf("Pod %q is as expected to be running.", pod.Name))
@@ -678,8 +678,8 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 	})
 
 	ginkgo.Context("PreemptionExecutionPath", func() {
-		// construct a fakecpu so as to set it to status of Node object
-		// otherwise if we update CPU/Memory/etc, those values will be corrected back by kubelet
+		// 构造一个 fakecpu 以便设置到 Node 对象的 status 中，
+		// 否则更新 CPU/Memory 等后，kubelet 会把值改回去
 		var fakecpu v1.ResourceName = "example.com/fakecpu"
 		var cs clientset.Interface
 		var node *v1.Node
@@ -690,9 +690,9 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 		priorityPairs := make([]priorityPair, 0)
 
 		ginkgo.AfterEach(func(ctx context.Context) {
-			// print out additional info if tests failed
+			// 测试失败时打印附加信息
 			if ginkgo.CurrentSpecReport().Failed() {
-				// List existing PriorityClasses.
+				// 列举已有的 PriorityClass。
 				priorityList, err := cs.SchedulingV1().PriorityClasses().List(ctx, metav1.ListOptions{})
 				if err != nil {
 					framework.Logf("Unable to list PriorityClasses: %v", err)
@@ -716,12 +716,12 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			cs = f.ClientSet
 			ns = f.Namespace.Name
 
-			// find an available node
+			// 找一个可用节点
 			ginkgo.By("Finding an available node")
 			nodeName := GetNodeThatCanRunPod(ctx, f)
 			framework.Logf("found a healthy node: %s", nodeName)
 
-			// get the node API object
+			// 获取 node API 对象
 			var err error
 			node, err = cs.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 			if err != nil {
@@ -733,10 +733,10 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 				framework.Failf("error getting kubernetes.io/hostname label on node %s", nodeName)
 			}
 
-			// update Node API object with a fake resource
+			// 用 fake resource 更新 Node API 对象
 			e2enode.AddExtendedResource(ctx, cs, node.Name, fakecpu, resource.MustParse("1000"))
 
-			// create four PriorityClass: p1, p2, p3, p4
+			// 创建四个 PriorityClass：p1、p2、p3、p4
 			for i := 1; i <= 4; i++ {
 				priorityName := fmt.Sprintf("p%d", i)
 				priorityVal := int32(i)
@@ -752,9 +752,9 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 		})
 
 		/*
-			Release: v1.19
-			Testname: Pod preemption verification
-			Description: Four levels of Pods in ReplicaSets with different levels of Priority, restricted by given CPU limits MUST launch. Priority 1 - 3 Pods MUST spawn first followed by Priority 4 Pod. The ReplicaSets with Replicas MUST contain the expected number of Replicas.
+			发布版本：v1.19
+			测试名称：Pod preemption verification
+			描述：ReplicaSet 中四个不同优先级的 Pod 在给定 CPU 限制下必须能启动。优先级 1 - 3 的 Pod 必须先启动，然后是优先级 4 的 Pod。带 Replicas 的 ReplicaSet 必须包含预期数量的副本。
 		*/
 		framework.ConformanceIt("runs ReplicaSets to verify preemption running path", func(ctx context.Context) {
 			var podNamesSeen [3]atomic.Int32
@@ -789,7 +789,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 
 			go podController.Run(ctx.Done())
 
-			// prepare three ReplicaSet
+			// 准备三个 ReplicaSet
 			rsConfs := []pauseRSConfig{
 				{
 					Replicas: int32(1),
@@ -834,7 +834,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 					},
 				},
 			}
-			// create ReplicaSet{1,2,3} so as to occupy 950/1000 fake resource
+			// 创建 ReplicaSet{1,2,3} 占用 950/1000 的 fake resource
 			for i := range rsConfs {
 				runPauseRS(ctx, f, rsConfs[i])
 			}
@@ -847,7 +847,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			)
 			framework.Logf("length of pods created so far: %v", len(podNamesSeen))
 
-			// create a Preemptor Pod
+			// 创建一个 Preemptor Pod
 			preemptorPodConf := pausePodConfig{
 				Name:              "pod4",
 				Namespace:         ns,
@@ -869,10 +869,10 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 				podNamesSeen[2].Load(),
 			)
 
-			// count pods number of ReplicaSet{1,2,3}:
-			// - if it's more than expected replicas, it denotes its pods have been over-preempted
-			// - if it's less than expected replicas, it denotes its pods are under-preempted
-			// "*2" means pods of ReplicaSet{1,2} are expected to be only preempted once.
+			// 统计 ReplicaSet{1,2,3} 的 pod 数：
+			// - 如果超过预期副本数，说明 pod 被过度抢占
+			// - 如果少于预期副本数，说明 pod 抢占不足
+			// "*2" 表示 ReplicaSet{1,2} 的 pod 预期各只被抢占一次。
 			expectedRSPods := []int32{1 * 2, 1 * 2, 1}
 			err := wait.PollUntilContextTimeout(ctx, framework.Poll, framework.PollShortTimeout, false, func(ctx context.Context) (bool, error) {
 				for i := range len(podNamesSeen) {
@@ -896,8 +896,8 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 				framework.Failf("failed pod observation expectations: %v", err)
 			}
 
-			// If logic continues to here, we should do a final check to ensure within a time period,
-			// the state is stable; otherwise, pods may be over-preempted.
+			// 如果逻辑走到这里，应做最后检查，确保一段时间内
+			// 状态稳定；否则 pod 可能被过度抢占。
 			time.Sleep(5 * time.Second)
 			for i := range len(podNamesSeen) {
 				got := podNamesSeen[i].Load()
@@ -919,7 +919,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			cs = f.ClientSet
-			// Create 2 PriorityClass: p1, p2.
+			// 创建 2 个 PriorityClass：p1、p2。
 			for i := 1; i <= 2; i++ {
 				name, val := fmt.Sprintf("p%d", i), int32(i)
 				pc, err := cs.SchedulingV1().PriorityClasses().Create(ctx, &schedulingv1.PriorityClass{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{"e2e": testUUID}}, Value: val}, metav1.CreateOptions{})
@@ -934,9 +934,9 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 		})
 
 		ginkgo.AfterEach(func(ctx context.Context) {
-			// Print out additional info if tests failed.
+			// 测试失败时打印附加信息。
 			if ginkgo.CurrentSpecReport().Failed() {
-				// List existing PriorityClasses.
+				// 列举已有的 PriorityClass。
 				priorityList, err := cs.SchedulingV1().PriorityClasses().List(ctx, metav1.ListOptions{})
 				if err != nil {
 					framework.Logf("Unable to list PriorityClasses: %v", err)
@@ -948,20 +948,20 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 				}
 			}
 
-			// Collection deletion on created PriorityClasses.
+			// 对创建的 PriorityClass 执行集合删除。
 			err := cs.SchedulingV1().PriorityClasses().DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: fmt.Sprintf("e2e=%v", testUUID)})
 			framework.ExpectNoError(err)
 		})
 
-		/*
-			Release: v1.20
-			Testname: Scheduler, Verify PriorityClass endpoints
-			Description: Verify that PriorityClass endpoints can be listed. When any mutable field is
-			either patched or updated it MUST succeed. When any immutable field is either patched or
-			updated it MUST fail.
+		/*发布版本：v1.20
+		测试名称：Scheduler, Verify PriorityClass endpoints
+		描述：验证 PriorityClass endpoint 可被列举。patch 或 update 任何可变字段
+		都必须成功。patch 或 update 任何不可变字段
+		都必须失败。
+
 		*/
 		framework.ConformanceIt("verify PriorityClass endpoints can be operated with different HTTP methods", func(ctx context.Context) {
-			// 1. Patch/Update on immutable fields will fail.
+			// 1. 对不可变字段 Patch/Update 会失败。
 			pcCopy := pcs[0].DeepCopy()
 			pcCopy.Value = pcCopy.Value * 10
 			err := patchPriorityClass(ctx, cs, pcs[0], pcCopy)
@@ -974,7 +974,7 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			gomega.Expect(err).To(gomega.HaveOccurred(), "expect an update error on an immutable field")
 			framework.Logf("%v", err)
 
-			// 2. Patch/Update on mutable fields will succeed.
+			// 2. 对可变字段 Patch/Update 会成功。
 			newDesc := "updated description"
 			pcCopy = pcs[0].DeepCopy()
 			pcCopy.Description = newDesc
@@ -986,11 +986,11 @@ var _ = SIGDescribe("SchedulerPreemption", framework.WithSerial(), func() {
 			_, err = cs.SchedulingV1().PriorityClasses().Update(ctx, pcCopy, metav1.UpdateOptions{})
 			framework.ExpectNoError(err)
 
-			// 3. List existing PriorityClasses.
+			// 3. 列举已有的 PriorityClass。
 			_, err = cs.SchedulingV1().PriorityClasses().List(ctx, metav1.ListOptions{})
 			framework.ExpectNoError(err)
 
-			// 4. Verify fields of updated PriorityClasses.
+			// 4. 验证更新后 PriorityClass 的字段。
 			for _, pc := range pcs {
 				livePC, err := cs.SchedulingV1().PriorityClasses().Get(ctx, pc.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
@@ -1055,8 +1055,8 @@ func createPod(ctx context.Context, f *framework.Framework, conf pausePodConfig)
 	return pod
 }
 
-// waitForPreemptingWithTimeout verifies if 'pod' is preempting within 'timeout', specifically it checks
-// if the 'spec.NodeName' field of preemptor 'pod' has been set.
+// waitForPreemptingWithTimeout 验证 'pod' 是否在 'timeout' 内进行抢占，具体检查
+// 抢占者 'pod' 的 'spec.NodeName' 字段是否已被设置。
 func waitForPreemptingWithTimeout(ctx context.Context, f *framework.Framework, pod *v1.Pod, timeout time.Duration) {
 	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, false, func(ctx context.Context) (bool, error) {
 		pod, err := f.ClientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})

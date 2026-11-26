@@ -46,13 +46,13 @@ var _ = sigDescribe(feature.WindowsHyperVContainers, "HyperV containers", skipUn
 
 	ginkgo.It("should start a hyperv isolated container", func(ctx context.Context) {
 
-		// HyperV isolated containers are only supported on containerd 1.7+
+		// HyperV 隔离容器仅在 containerd 1.7+ 上支持
 		skipUnlessContainerdOneSevenOrGreater(ctx, f)
 
-		// check if hyperv runtime class is on node and skip otherwise
-		// Note: the runtime class is expected to be added to a cluster before running this test.
+		// 检查节点上是否有 hyperv runtime class，没有则跳过
+		// 注意：运行本测试前，预期该 runtime class 已加入集群。
 		// see https://github.com/kubernetes-sigs/windows-testing/tree/master/helpers/hyper-v-mutating-webhook/hyperv-runtimeclass.yaml
-		// for an example.
+		// 示例。
 		_, err := f.ClientSet.NodeV1().RuntimeClasses().Get(ctx, WindowsHyperVContainerRuntimeClass, metav1.GetOptions{})
 		if err != nil {
 			framework.Logf("error getting runtime class: %v", err)
@@ -100,8 +100,8 @@ var _ = sigDescribe(feature.WindowsHyperVContainers, "HyperV containers", skipUn
 
 		ginkgo.By("creating a host process container in another pod to verify the pod is running hyperv isolated containers")
 
-		// Note: each pod runs in a separate UVM so even though we are scheduling 2 containers in the test pod
-		// we should only expect a single UVM to be running on the host.
+		// 注意：每个 pod 运行在独立的 UVM 中，因此即使测试 pod 中调度了 2 个容器，
+		// 宿主机上也只应有 1 个 UVM 在运行。
 		podName := "validation-pod"
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{

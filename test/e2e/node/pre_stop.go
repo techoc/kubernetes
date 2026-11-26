@@ -38,19 +38,19 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// State partially cloned from webserver.go
+// 状态部分克隆自 webserver.go
 type State struct {
 	Received map[string]int
 }
 
 func testPreStop(ctx context.Context, c clientset.Interface, ns string) {
-	// This is the server that will receive the preStop notification
+	// 这是将接收 preStop 通知的 server
 	podDescr := e2epod.NewAgnhostPod(ns, "server", nil, nil, []v1.ContainerPort{{ContainerPort: 8080}}, "nettest")
 	ginkgo.By(fmt.Sprintf("Creating server pod %s in namespace %s", podDescr.Name, ns))
 	podDescr, err := c.CoreV1().Pods(ns).Create(ctx, podDescr, metav1.CreateOptions{})
 	framework.ExpectNoError(err, fmt.Sprintf("creating pod %s", podDescr.Name))
 
-	// At the end of the test, clean up by removing the pod.
+	// 测试结束时，通过删除 pod 清理。
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
 		ginkgo.By("Deleting the server pod")
 		return c.CoreV1().Pods(ns).Delete(ctx, podDescr.Name, metav1.DeleteOptions{})
@@ -96,7 +96,7 @@ func testPreStop(ctx context.Context, c clientset.Interface, ns string) {
 	framework.ExpectNoError(err, fmt.Sprintf("creating pod %s", preStopDescr.Name))
 	deletePreStop := true
 
-	// At the end of the test, clean up by removing the pod.
+	// 测试结束时，通过删除 pod 清理。
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
 		if deletePreStop {
 			ginkgo.By("Deleting the tester pod")
@@ -108,14 +108,14 @@ func testPreStop(ctx context.Context, c clientset.Interface, ns string) {
 	err = e2epod.WaitForPodRunningInNamespace(ctx, c, preStopDescr)
 	framework.ExpectNoError(err, "waiting for tester pod to start")
 
-	// Delete the pod with the preStop handler.
+	// 删除带 preStop handler 的 pod。
 	ginkgo.By("Deleting pre-stop pod")
 	if err := c.CoreV1().Pods(ns).Delete(ctx, preStopDescr.Name, metav1.DeleteOptions{}); err == nil {
 		deletePreStop = false
 	}
 	framework.ExpectNoError(err, fmt.Sprintf("deleting pod: %s", preStopDescr.Name))
 
-	// Validate that the server received the web poke.
+	// 验证 server 收到了 web poke。
 	err = wait.Poll(time.Second*5, time.Second*60, func() (bool, error) {
 
 		ctx, cancel := context.WithTimeout(ctx, framework.SingleCallTimeout)
@@ -162,9 +162,9 @@ var _ = SIGDescribe("PreStop", func() {
 	})
 
 	/*
-		Release: v1.9
-		Testname: Pods, prestop hook
-		Description: Create a server pod with a rest endpoint '/write' that changes state.Received field. Create a Pod with a pre-stop handle that posts to the /write endpoint on the server Pod. Verify that the Pod with pre-stop hook is running. Delete the Pod with the pre-stop hook. Before the Pod is deleted, pre-stop handler MUST be called when configured. Verify that the Pod is deleted and a call to prestop hook is verified by checking the status received on the server Pod.
+		发布版本：v1.9
+		测试名称：Pods, prestop hook
+		描述：创建一个带 rest 端点 '/write' 的 server pod，该端点会修改 state.Received 字段。创建一个带 pre-stop handler 的 Pod，它向 server Pod 的 /write 端点发送请求。验证带 pre-stop hook 的 Pod 正在运行。删除带 pre-stop hook 的 Pod。Pod 被删除前，如果配置了 handler，必须调用它。验证 Pod 已删除，并通过检查 server Pod 上收到的状态确认 prestop hook 被调用。
 	*/
 	framework.ConformanceIt("should call prestop when killing a pod", func(ctx context.Context) {
 		testPreStop(ctx, f.ClientSet, f.Namespace.Name)
@@ -190,8 +190,8 @@ var _ = SIGDescribe("PreStop", func() {
 		err = podClient.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(gracefulTerminationPeriodSeconds))
 		framework.ExpectNoError(err, "failed to delete pod")
 
-		// wait for less than the gracePeriod termination ensuring the
-		// preStop hook is still executing.
+		// 等待时间小于 gracePeriod 终止时间，确保
+		// preStop hook 仍在执行。
 		time.Sleep(15 * time.Second)
 
 		ginkgo.By("verifying the pod is running while in the graceful period termination")

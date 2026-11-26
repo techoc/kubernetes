@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// please speak to SIG-Testing leads before adding anything to this package
+// 向这个 package 添加内容前请先咨询 SIG-Testing 负责人
 // see: https://git.k8s.io/enhancements/keps/sig-testing/5468-invariant-testing
 package invariants
 
@@ -29,24 +29,24 @@ import (
 	ginkgotypes "github.com/onsi/ginkgo/v2/types"
 )
 
-// checks for api-server metrics that indicate an internal bug has occurred
+// 检查 api-server 指标中是否存在表明发生内部 bug 的情况
 const invariantMetricsLeafText = "should enable checking invariant metrics"
 
 var _ = framework.SIGDescribe("testing")("Invariant Metrics", func() {
-	// this test is a sentinel for selecting the report after suite logic
+	// 这个测试是选择 report after suite 逻辑的哨兵
 	//
-	// this allows us to run it by default in most jobs, but it can be opted-out,
-	// does not run when selecting Conformance, and it can be tagged Flaky
-	// if we encounter issues with it
+	// 这让我们能在多数 job 中默认运行它，但也可以选择退出，
+	// 选择 Conformance 时不运行，遇到问题还可以
+	// 给它打上 Flaky 标签
 	ginkgo.It(invariantMetricsLeafText, func() {})
 })
 
 var _ = ginkgo.ReportAfterSuite("Invariant Metrics", func(ctx ginkgo.SpecContext, report ginkgo.Report) {
-	// skip early if we are in dry-run mode and didn't really run any tests
+	// dry-run 模式下如果没真正运行任何测试，提前跳过
 	if report.SuiteConfig.DryRun {
 		return
 	}
-	// check if we ran the 'should enabled checking invariants' "test"
+	// 检查是否运行了 'should enabled checking invariants' 这个"测试"
 	invariantsSelected := false
 	for _, spec := range report.SpecReports {
 		if spec.LeafNodeText == invariantMetricsLeafText {
@@ -54,16 +54,16 @@ var _ = ginkgo.ReportAfterSuite("Invariant Metrics", func(ctx ginkgo.SpecContext
 			break
 		}
 	}
-	// skip if the associated "test" was skipped
+	// 如果关联的"测试"被跳过则跳过
 	if !invariantsSelected {
 		return
 	}
-	// otherwise actually check invariants now
+	// 否则现在真正检查 invariants
 	checkInvariantMetrics(ctx)
 })
 
 func checkInvariantMetrics(ctx context.Context) {
-	// Grab metrics
+	// 获取指标
 	config, err := framework.LoadConfig()
 	if err != nil {
 		framework.Failf("error loading client config: %v", err)
@@ -73,7 +73,7 @@ func checkInvariantMetrics(ctx context.Context) {
 		framework.Failf("error loading client config: %v", err)
 	}
 
-	// Check invariant metrics.
+	// 检查 invariant 指标。
 	if err := metrics.CheckMetricInvariants(ctx, c, false); err != nil {
 		framework.Failf("Invariant check failed: %v", err)
 	}

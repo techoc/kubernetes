@@ -27,8 +27,8 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// Model defines the namespaces, deployments, services, pods, containers and associated
-// data for network policy test cases and provides the source of truth
+// Model 定义 network policy 测试用例的 namespace、deployment、service、pod、container
+// 及相关数据，是测试数据的唯一来源
 type Model struct {
 	Namespaces []*Namespace
 	PodNames   []string
@@ -36,14 +36,14 @@ type Model struct {
 	Protocols  []v1.Protocol
 }
 
-// NewModel instantiates a model based on:
+// NewModel 基于以下内容实例化 model：
 // - namespaceNames
 // - pods
-// - ports to listen on
-// - protocols to listen on
-// The total number of pods is the number of namespaces x the number of pods per namespace.
-// The number of containers per pod is the number of ports x the number of protocols.
-// The *total* number of containers is namespaces x pods x ports x protocols.
+// - 要监听的端口
+// - 要监听的协议
+// pod 总数为 namespace 数乘以每 namespace 的 pod 数。
+// 每 pod 的容器数为端口数乘以协议数。
+// 容器*总数*为 namespace x pod x 端口 x 协议。
 func NewModel(namespaceNames []string, podNames []string, ports []int32, protocols []v1.Protocol) *Model {
 	podNamesByNamespace := make(map[string]sets.Set[string], len(namespaceNames))
 	for _, ns := range namespaceNames {
@@ -52,7 +52,7 @@ func NewModel(namespaceNames []string, podNames []string, ports []int32, protoco
 	return newModelWithPerNamespacePodNames(namespaceNames, podNamesByNamespace, ports, protocols)
 }
 
-// newModelWithPerNamespacePodNames instantiates a model where each namespace can define a different pod set.
+// newModelWithPerNamespacePodNames 实例化一个 model，每个 namespace 可定义不同的 pod 集合。
 func newModelWithPerNamespacePodNames(namespaceNames []string, podNamesByNamespace map[string]sets.Set[string], ports []int32, protocols []v1.Protocol) *Model {
 	model := &Model{
 		Ports:     ports,
@@ -60,8 +60,8 @@ func newModelWithPerNamespacePodNames(namespaceNames []string, podNamesByNamespa
 	}
 	allPodNames := sets.New[string]()
 
-	// build the entire "model" for the overall test, which means, building
-	// namespaces, pods, containers for each protocol.
+	// 构建整个测试的"模型"，也就是为每种协议构建
+	// namespace、pod、container。
 	for _, ns := range namespaceNames {
 		var pods []*Pod
 		podNames := sets.List(podNamesByNamespace[ns])
@@ -82,15 +82,15 @@ func newModelWithPerNamespacePodNames(namespaceNames []string, podNamesByNamespa
 	return model
 }
 
-// Namespace is the abstract representation of what matters to network policy
-// tests for a namespace; i.e. it ignores kube implementation details
+// Namespace 是对 network policy 测试所关心的 namespace
+// 内容的抽象表示，忽略 kube 实现细节
 type Namespace struct {
 	Name string
 	Pods []*Pod
 }
 
-// Pod is the abstract representation of what matters to network policy tests for
-// a pod; i.e. it ignores kube implementation details
+// Pod 是对 network policy 测试所关心的 pod
+// 内容的抽象表示，忽略 kube 实现细节
 type Pod struct {
 	Name      string
 	Ports     []int32
@@ -101,15 +101,15 @@ func podNameLabelKey() string {
 	return "pod"
 }
 
-// Labels returns the default labels that should be placed on a pod/deployment
-// in order for it to be uniquely selectable by label selectors
+// Labels 返回应放在 pod/deployment 上的默认标签，
+// 以便通过 label selector 唯一选中它
 func (p *Pod) Labels() map[string]string {
 	return map[string]string{
 		podNameLabelKey(): p.Name,
 	}
 }
 
-// KubePod returns the kube pod (will add label selectors for windows if needed).
+// KubePod 返回 kube pod（必要时为 windows 添加 label selector）。
 func (p *Pod) KubePod(namespace string) *v1.Pod {
 	zero := int64(0)
 
@@ -133,17 +133,17 @@ func (p *Pod) KubePod(namespace string) *v1.Pod {
 	return thePod
 }
 
-// QualifiedServiceAddress returns the address that can be used to access the service
+// QualifiedServiceAddress 返回可用于访问 service 的地址
 func (p *Pod) QualifiedServiceAddress(namespace string, dnsDomain string) string {
 	return fmt.Sprintf("%s.%s.svc.%s", p.ServiceName(namespace), namespace, dnsDomain)
 }
 
-// ServiceName returns the unqualified service name
+// ServiceName 返回非限定 service 名称
 func (p *Pod) ServiceName(namespace string) string {
 	return fmt.Sprintf("s-%s-%s", namespace, p.Name)
 }
 
-// Service returns a kube service spec
+// Service 返回 kube service spec
 func (p *Pod) Service(namespace string) *v1.Service {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -166,7 +166,7 @@ func (p *Pod) Service(namespace string) *v1.Service {
 	return service
 }
 
-// ContainerSpecs builds kubernetes container specs for the pod
+// ContainerSpecs 为 pod 构建 kubernetes container spec
 func (p *Pod) ContainerSpecs() []v1.Container {
 	env := make([]v1.EnvVar, 0, len(p.Ports)*len(p.Protocols))
 	ports := make([]v1.ContainerPort, 0, len(p.Ports)*len(p.Protocols))

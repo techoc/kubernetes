@@ -357,8 +357,8 @@ Goroutine created at:
 		"kubelet-long": {
 			numWorkers: 3,
 			kubeletLogs: map[string]string{
-				// This is a real example. The race detector seems to replicate stack entries,
-				// so we should better truncate in the middle to keep failure messages short.
+				// 这是一个真实例子。race detector 似乎会复制栈条目，
+				// 所以最好在中间截断，让失败消息保持简短。
 				"worker2": `==================
 WARNING: DATA RACE
 Write at 0x00c0010def18 by goroutine 285:
@@ -1071,9 +1071,9 @@ DATA RACE:
 			}
 			lc.start(ctx, startPodLogs, startNodeLog)
 
-			// Wait for goroutines to spin up.
-			// lc.stop() alone is not enough because it races
-			// with adding more background goroutines.
+			// 等待 goroutine 启动。
+			// 单靠 lc.stop() 不够，因为会和
+			// 添加更多后台 goroutine 竞争。
 			synctest.Wait()
 
 			actualFailure, actualStdout := lc.stop(tCtx.Logger())

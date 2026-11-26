@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package framework contains provider-independent helper code for
-// building and running E2E tests with Ginkgo. The actual Ginkgo test
-// suites gets assembled by combining this framework, the optional
-// provider support code and specific tests via a separate .go file
-// like Kubernetes' test/e2e.go.
+// Package framework 包含与 provider 无关的辅助代码，用于
+// 用 Ginkgo 构建和运行 E2E 测试。实际的 Ginkgo 测试
+// suite 由本框架、可选的
+// provider 支持代码以及通过单独 .go 文件引入的具体测试
+// （如 Kubernetes 的 test/e2e.go）组合而成。
 package framework
 
 import (
@@ -56,63 +56,63 @@ import (
 )
 
 const (
-	// DefaultNamespaceDeletionTimeout is timeout duration for waiting for a namespace deletion.
+	// DefaultNamespaceDeletionTimeout 是等待 namespace 删除的超时时间。
 	DefaultNamespaceDeletionTimeout = 5 * time.Minute
 	defaultServiceAccountName       = "default"
 )
 
 var (
-	// NewFrameworkExtensions lists functions that get called by
-	// NewFramework after constructing a new framework and after
-	// calling ginkgo.BeforeEach for the framework.
+	// NewFrameworkExtensions 列出一些函数，它们在
+	// NewFramework 构建完新 framework 后、调用该 framework 的
+	// ginkgo.BeforeEach 之后被调用。
 	//
-	// This can be used by extensions of the core framework to modify
-	// settings in the framework instance or to add additional callbacks
-	// with ginkgo.BeforeEach/AfterEach/DeferCleanup.
+	// 核心框架的扩展可用它来修改 framework 实例中的设置，
+	// 或通过 ginkgo.BeforeEach/AfterEach/DeferCleanup
+	// 添加额外的回调。
 	//
-	// When a test runs, functions will be invoked in this order:
-	// - BeforeEaches defined by tests before f.NewDefaultFramework
-	//   in the order in which they were defined (first-in-first-out)
+	// 测试运行时，函数按以下顺序调用：
+	// - 测试在 f.NewDefaultFramework 之前定义的 BeforeEach，
+	//   按定义顺序（先进先出）
 	// - f.BeforeEach
-	// - BeforeEaches defined by tests after f.NewDefaultFramework
-	// - It callback
-	// - all AfterEaches in the order in which they were defined
-	// - all DeferCleanups with the order reversed (first-in-last-out)
+	// - 测试在 f.NewDefaultFramework 之后定义的 BeforeEach
+	// - It 回调
+	// - 所有 AfterEach，按定义顺序
+	// - 所有 DeferCleanup，按相反顺序（先进后出）
 	// - f.AfterEach
 	//
-	// Because a test might skip test execution in a BeforeEach that runs
-	// before f.BeforeEach, AfterEach callbacks that depend on the
-	// framework instance must check whether it was initialized. They can
-	// do that by checking f.ClientSet for nil. DeferCleanup callbacks
-	// don't need to do this because they get defined when the test
-	// runs.
+	// 由于测试可能在 f.BeforeEach 之前运行的 BeforeEach 中被跳过，
+	// 依赖 framework 实例的 AfterEach 回调必须检查它是否
+	// 已初始化。可通过检查 f.ClientSet 是否为 nil 来判断。DeferCleanup
+	// 回调不需要这样做，因为它们是在测试
+	// 运行时定义的。
+	//
 	NewFrameworkExtensions []func(f *Framework)
 )
 
-// Framework supports common operations used by e2e tests; it will keep a client & a namespace for you.
-// Eventual goal is to merge this with integration test framework.
+// Framework 支持 e2e 测试常用的操作；它会为你维护一个 client 和一个 namespace。
+// 最终目标是将它与 integration 测试框架合并。
 //
-// You can configure the pod security level for your test by setting the `NamespacePodSecurityLevel`
-// which will set all three of pod security admission enforce, warn and audit labels on the namespace.
-// The default pod security profile is "restricted".
-// Each of the labels can be overridden by using more specific NamespacePodSecurity* attributes of this
-// struct.
+// 你可以通过设置 `NamespacePodSecurityLevel` 来配置测试的 pod 安全级别，
+// 它会为 namespace 设置 pod security admission 的 enforce、warn 和 audit 三个标签。
+// 默认的 pod security profile 是 "restricted"。
+// 每个标签都可以通过本
+// 结构体中更具体的 NamespacePodSecurity* 属性覆盖。
 //
-// A framework instance implements ktesting.TB and thus can be passed as
-// first parameter to [github.com/stretchr/testify/assert].
-// There are just two caveats:
-//   - Error and Errorf abort the currently running test.
-//   - This only works while a test runs, not while defining tests.
-//     Incorrect tests may panic. The same applies to using ginkgo.Fail
-//     outside of tests.
+// Framework 实例实现了 ktesting.TB，可作为
+// 第一个参数传给 [github.com/stretchr/testify/assert]。
+// 但有两个注意点：
+//   - Error 和 Errorf 会中止当前正在运行的测试。
+//   - 这只在测试运行期间有效，定义测试阶段无效。
+//     错误的测试可能 panic。在测试之外使用 ginkgo.Fail
+//     也是如此。
 type Framework struct {
 	ktesting.TB
 
 	BaseName string
 
-	// Set together with creating the ClientSet and the namespace.
-	// Guaranteed to be unique in the cluster even when running the same
-	// test multiple times in parallel.
+	// 在创建 ClientSet 和 namespace 时一并设置。
+	// 即使并行多次运行同一测试，也保证在集群中唯一。
+	//
 	UniqueName string
 
 	clientConfig                     *rest.Config
@@ -134,55 +134,55 @@ type Framework struct {
 	NamespacePodSecurityAuditLevel   admissionapi.Level // The pod security audit (server logging) level for namespaces to be applied.
 	NamespacePodSecurityLevel        admissionapi.Level // The pod security level to be used for all of enforcement, warn and audit. Can be rewritten by more specific configuration attributes.
 
-	// Flaky operation failures in an e2e test can be captured through this.
+	// e2e 测试中的偶发操作失败可通过它捕获。
 	flakeReport *FlakeReport
 
-	// configuration for framework's client
+	// framework 客户端的配置
 	Options Options
 
-	// Place where various additional data is stored during test run to be printed to ReportDir,
-	// or stdout if ReportDir is not set once test ends.
+	// 测试运行期间存放各种附加数据的地方，测试结束后打印到 ReportDir，
+	// 若未设置 ReportDir 则打印到 stdout。
 	TestSummaries []TestDataSummary
 
-	// Timeouts contains the custom timeouts used during the test execution.
+	// Timeouts 包含测试执行期间使用的自定义超时。
 	Timeouts *TimeoutContext
 
-	// DumpAllNamespaceInfo is invoked by the framework to record
-	// information about a namespace after a test failure.
+	// framework 调用 DumpAllNamespaceInfo 在测试失败后记录
+	// namespace 的信息。
 	DumpAllNamespaceInfo DumpAllNamespaceInfoAction
 }
 
-// CleanupCtx implements [ktesting.ContextTB.CleanupCtx]. It's identical to
-// ginkgo.DeferCleanup.
+// CleanupCtx 实现了 [ktesting.ContextTB.CleanupCtx]，与
+// ginkgo.DeferCleanup 相同。
 func (f *Framework) CleanupCtx(cb func(context.Context)) {
 	ginkgo.GinkgoHelper()
 	ginkgo.DeferCleanup(cb)
 }
 
-// Log implements TB.Log. It overrides the implementation from Ginkgo to ensure consistent output.
+// Log 实现 TB.Log。它覆盖 Ginkgo 的实现以确保输出一致。
 func (f *Framework) Log(args ...any) {
 	log(1, strings.TrimSuffix(fmt.Sprintln(args...), "\n"))
 }
 
-// Logf implements TB.Logf. It overrides the implementation from Ginkgo to ensure consistent output.
+// Logf 实现 TB.Logf。它覆盖 Ginkgo 的实现以确保输出一致。
 func (f *Framework) Logf(format string, args ...any) {
 	log(1, fmt.Sprintf(format, args...))
 }
 
 var _ ktesting.ContextTB = &Framework{}
 
-// TContext combines the framework and the context in a [ktesting.TContext].
+// TContext 把 framework 和 context 组合进一个 [ktesting.TContext]。
 //
-// Legacy code which accepts separate [context.Context] and [clientset.Interface]
-// parameters can call [ContextTODO] with those two parameters to
-// create a [ktesting.TContext] which also has all clients, but this is
-// an interim solution. It's cleaner to rewrite that code to accept
-// a [ktesting.TContext].
+// 接受独立 [context.Context] 和 [clientset.Interface] 参数的
+// 遗留代码，可以把这两个参数传给 [ContextTODO]，
+// 创建一个同样持有所有 client 的 [ktesting.TContext]，但这是
+// 过渡方案。更干净的做法是改写那些代码，让它接受
+// 一个 [ktesting.TContext]。
 func (f *Framework) TContext(ctx context.Context) ktesting.TContext {
 	if f.TB == nil {
-		// Test setup typically has no context, so this is unlikely to be reached.
-		// A sufficiently determined developer might pass in context.Background(),
-		// so let's be explicit anyway.
+		// 测试设置阶段通常没有 context，所以不太会走到这里。
+		// 但也可能有开发者铁了心传入 context.Background()，
+		// 所以还是显式处理。
 		panic("TContext may only be used while a test runs.")
 	}
 	tCtx := ktesting.InitCtx(ctx, f /* intentionally using f here and not f.TB because f overrides some methods */)
@@ -194,17 +194,17 @@ func (f *Framework) TContext(ctx context.Context) ktesting.TContext {
 	return tCtx
 }
 
-// ContextTODO can be used as interim solution in functions which currently
-// accept a [context.Context] and [clientset.Interface] to create
-// a [ktesting.TContext] for other code which already uses that instead
-// of different parameters. If the client is [Framework.ClientSet],
-// the result is identical to the one from [Framework.TContext].
-// In particular, dynamic client and rest config are available.
+// ContextTODO 可作为过渡方案，用于当前接受
+// [context.Context] 和 [clientset.Interface] 的函数，为已使用
+// [ktesting.TContext] 而非不同参数的其他代码创建
+// 一个 [ktesting.TContext]。如果 client 来自 [Framework.ClientSet]，
+// 结果与 [Framework.TContext] 的完全相同。
+// 特别地，dynamic client 和 rest config 都可用。
 //
-// Long-term code relying on ContextTODO should get rewritten.
+// 长期来看，依赖 ContextTODO 的代码应被重写。
 func ContextTODO(ctx context.Context, client clientset.Interface) ktesting.TContext {
-	// If the client was taken from a framework instance, then
-	// we can cast it here to prepare a complete context.
+	// 如果 client 来自某个 framework 实例，
+	// 可以在这里把它转换类型，准备一个完整的 context。
 	if fc, ok := client.(fClient); ok {
 		return fc.f.TContext(ctx)
 	}
@@ -215,13 +215,12 @@ func ContextTODO(ctx context.Context, client clientset.Interface) ktesting.TCont
 	return tCtx
 }
 
-// ensureLogger installs the Ginkgo logger in the context if there isn't one
-// already.
+// ensureLogger 在 context 中安装 Ginkgo logger（如果还没有的话）。
 //
-// This isn't needed for code which uses klog.FromContext because that uses the
-// klog logger as default, which is the Gingko logger. But there might also be
-// code which uses go-logr directly: then providing the logger through the
-// context is useful.
+// 对于使用 klog.FromContext 的代码，这一步并非必需，因为 klog
+// logger 本身就是默认的 Ginkgo logger。但也可能有
+// 直接使用 go-logr 的代码：这时通过 context 提供 logger
+// 很有用。
 func ensureLogger(tCtx ktesting.TContext) ktesting.TContext {
 	_, ok := logr.FromContext(tCtx)
 	if ok == nil {
@@ -231,36 +230,34 @@ func ensureLogger(tCtx ktesting.TContext) ktesting.TContext {
 	return tCtx.WithLogger(ginkgoLogger)
 }
 
-// fClient is stored in framework.ClientSet and used by ContextTODO.
+// fClient 存储在 framework.ClientSet 中，由 ContextTODO 使用。
 //
-// TODO: remove this and ContextTODO once it is no longer needed, i.e.
-// when all code accepts a TContext.
+// TODO: 当不再需要时删除它和 ContextTODO，即
+// 所有代码都接受 TContext 时。
 type fClient struct {
 	clientset.Interface
 	f *Framework
 }
 
-// DumpAllNamespaceInfoAction is called after each failed test for namespaces
-// created for the test.
+// 每个失败测试为测试创建的 namespace 调用 DumpAllNamespaceInfoAction。
 type DumpAllNamespaceInfoAction func(ctx context.Context, f *Framework, namespace string)
 
-// TestDataSummary is an interface for managing test data.
+// TestDataSummary 是管理测试数据的接口。
 type TestDataSummary interface {
 	SummaryKind() string
 	PrintHumanReadable() string
 	PrintJSON() string
 }
 
-// Options is a struct for managing test framework options.
+// Options 是管理测试框架选项的结构体。
 type Options struct {
 	ClientQPS    float32
 	ClientBurst  int
 	GroupVersion *schema.GroupVersion
 }
 
-// NewFrameworkWithCustomTimeouts makes a framework with custom timeouts.
-// For timeout values that are zero the normal default value continues to
-// be used.
+// NewFrameworkWithCustomTimeouts 创建一个带自定义超时的 framework。
+// 超时值为零时继续使用正常默认值。
 func NewFrameworkWithCustomTimeouts(baseName string, timeouts *TimeoutContext) *Framework {
 	f := NewDefaultFramework(baseName)
 	in := reflect.ValueOf(timeouts).Elem()
@@ -274,10 +271,10 @@ func NewFrameworkWithCustomTimeouts(baseName string, timeouts *TimeoutContext) *
 	return f
 }
 
-// NewDefaultFramework makes a new framework and sets up a BeforeEach which
-// initializes the framework instance. It cleans up with a DeferCleanup,
-// which runs last, so a AfterEach in the test still has a valid framework
-// instance.
+// NewDefaultFramework 创建新 framework 并设置 BeforeEach 来
+// 初始化 framework 实例。它用 DeferCleanup 清理，
+// 清理最后运行，因此测试中的 AfterEach 仍能拿到有效的 framework
+// 实例。
 func NewDefaultFramework(baseName string) *Framework {
 	options := Options{
 		ClientQPS:   20,
@@ -286,19 +283,19 @@ func NewDefaultFramework(baseName string) *Framework {
 	return NewFramework(baseName, options, nil)
 }
 
-// NewFramework creates a test framework.
+// NewFramework 创建一个测试框架。
 func NewFramework(baseName string, options Options, client clientset.Interface) *Framework {
 	f := &Framework{
-		// TB initially not set yet. It may only be used while tests run.
+		// TB 起初尚未设置，只能在测试运行期间使用。
 		BaseName:  baseName,
 		Options:   options,
 		ClientSet: client,
 		Timeouts:  NewTimeoutContext(),
 	}
 
-	// The order is important here: if the extension calls ginkgo.BeforeEach
-	// itself, then it can be sure that f.BeforeEach already ran when its
-	// own callback gets invoked.
+	// 这里的顺序很重要：如果扩展自己调用 ginkgo.BeforeEach，
+	// 就能确保它的回调被调用时 f.BeforeEach 已运行完毕。
+	//
 	ginkgo.BeforeEach(f.BeforeEach, AnnotatedLocation("set up framework"))
 	for _, extension := range NewFrameworkExtensions {
 		extension(f)
@@ -307,18 +304,18 @@ func NewFramework(baseName string, options Options, client clientset.Interface) 
 	return f
 }
 
-// BeforeEach gets a client and makes a namespace.
+// BeforeEach 获取 client 并创建 namespace。
 func (f *Framework) BeforeEach(ctx context.Context) {
 	f.TB = ginkgo.GinkgoT()
 
-	// DeferCleanup, in contrast to AfterEach, triggers execution in
-	// first-in-last-out order. This ensures that the framework instance
-	// remains valid as long as possible.
+	// 与 AfterEach 不同，DeferCleanup 按
+	// 先进后出的顺序触发，这保证 framework 实例
+	// 尽可能长时间保持有效。
 	//
-	// In addition, AfterEach will not be called if a test never gets here.
+	// 此外，如果测试根本没走到这里，AfterEach 也不会被调用。
 	ginkgo.DeferCleanup(f.AfterEach, AnnotatedLocation("tear down framework"))
 
-	// Registered later and thus runs before deleting namespaces.
+	// 注册得更晚，因此在删除 namespace 之前运行。
 	ginkgo.DeferCleanup(f.dumpNamespaceInfo, AnnotatedLocation("dump namespaces"))
 
 	ginkgo.By("Creating a kubernetes client")
@@ -343,8 +340,8 @@ func (f *Framework) BeforeEach(ctx context.Context) {
 	f.DynamicClient, err = dynamic.NewForConfig(config)
 	ExpectNoError(err)
 
-	// create scales getter, set GroupVersion and NegotiatedSerializer to default values
-	// as they are required when creating a REST client.
+	// 创建 scales getter，把 GroupVersion 和 NegotiatedSerializer 设为默认值，
+	// 因为创建 REST client 时需要它们。
 	if config.GroupVersion == nil {
 		config.GroupVersion = &schema.GroupVersion{}
 	}
@@ -386,7 +383,7 @@ func (f *Framework) BeforeEach(ctx context.Context) {
 
 		f.UniqueName = f.Namespace.GetName()
 	} else {
-		// not guaranteed to be unique, but very likely
+		// 不保证唯一，但大概率唯一
 		f.UniqueName = fmt.Sprintf("%s-%08x", f.BaseName, rand.Int31())
 	}
 
@@ -412,7 +409,7 @@ func (f *Framework) dumpNamespaceInfo(ctx context.Context) {
 	})
 }
 
-// printSummaries prints summaries of tests.
+// printSummaries 打印测试摘要。
 func printSummaries(summaries []TestDataSummary, testBaseName string) {
 	now := time.Now()
 	for i := range summaries {
@@ -422,7 +419,7 @@ func printSummaries(summaries []TestDataSummary, testBaseName string) {
 			if TestContext.ReportDir == "" {
 				Logf("%s", summaries[i].PrintHumanReadable())
 			} else {
-				// TODO: learn to extract test name and append it to the kind instead of timestamp.
+				// TODO: 学会提取测试名称并追加到 kind 上，而不是用时间戳。
 				filePath := path.Join(TestContext.ReportDir, summaries[i].SummaryKind()+"_"+testBaseName+"_"+now.Format(time.RFC3339)+".txt")
 				if err := os.WriteFile(filePath, []byte(summaries[i].PrintHumanReadable()), 0644); err != nil {
 					Logf("Failed to write file %v with test performance data: %v", filePath, err)
@@ -438,7 +435,7 @@ func printSummaries(summaries []TestDataSummary, testBaseName string) {
 				Logf("%v JSON\n%v", summaries[i].SummaryKind(), summaries[i].PrintJSON())
 				Logf("Finished")
 			} else {
-				// TODO: learn to extract test name and append it to the kind instead of timestamp.
+				// TODO: 学会提取测试名称并追加到 kind 上，而不是用时间戳。
 				filePath := path.Join(TestContext.ReportDir, summaries[i].SummaryKind()+"_"+testBaseName+"_"+now.Format(time.RFC3339)+".json")
 				Logf("Writing to %s", filePath)
 				if err := os.WriteFile(filePath, []byte(summaries[i].PrintJSON()), 0644); err != nil {
@@ -449,21 +446,21 @@ func printSummaries(summaries []TestDataSummary, testBaseName string) {
 	}
 }
 
-// AfterEach deletes the namespace, after reading its events.
+// AfterEach 在读取 namespace 事件后删除它。
 func (f *Framework) AfterEach(ctx context.Context) {
-	// This should not happen. Given ClientSet is a public field a test must have updated it!
-	// Error out early before any API calls during cleanup.
+	// 这不应该发生。ClientSet 是公开字段，说明测试改动过它！
+	// 在清理阶段的任何 API 调用之前尽早报错。
 	if f.ClientSet == nil {
 		Failf("The framework ClientSet must not be nil at this point")
 	}
 
-	// DeleteNamespace at the very end in defer, to avoid any
-	// expectation failures preventing deleting the namespace.
+	// 把 DeleteNamespace 放在最后的 defer 中，避免
+	// 断言失败阻止 namespace 删除。
 	defer func() {
 		nsDeletionErrors := map[string]error{}
-		// Whether to delete namespace is determined by 3 factors: delete-namespace flag, delete-namespace-on-failure flag and the test result
-		// if delete-namespace set to false, namespace will always be preserved.
-		// if delete-namespace is true and delete-namespace-on-failure is false, namespace will be preserved if test failed.
+		// 是否删除 namespace 由三个因素决定：delete-namespace flag、delete-namespace-on-failure flag 和测试结果
+		// 如果 delete-namespace 设为 false，namespace 总会保留。
+		// 如果 delete-namespace 为 true 且 delete-namespace-on-failure 为 false，测试失败时保留 namespace。
 		if TestContext.DeleteNamespace && (TestContext.DeleteNamespaceOnFailure || !ginkgo.CurrentSpecReport().Failed()) {
 			for _, ns := range f.namespacesToDelete {
 				ginkgo.By(fmt.Sprintf("Destroying namespace %q for this suite.", ns.Name))
@@ -471,7 +468,7 @@ func (f *Framework) AfterEach(ctx context.Context) {
 					if !apierrors.IsNotFound(err) {
 						nsDeletionErrors[ns.Name] = err
 
-						// Dump namespace if we are unable to delete the namespace and the dump was not already performed.
+						// 如果无法删除 namespace 且尚未转储，则转储它。
 						if !ginkgo.CurrentSpecReport().Failed() && TestContext.DumpLogsOnFailure && f.DumpAllNamespaceInfo != nil {
 							f.DumpAllNamespaceInfo(ctx, f, ns.Name)
 						}
@@ -488,16 +485,16 @@ func (f *Framework) AfterEach(ctx context.Context) {
 			}
 		}
 
-		// Unsetting this is relevant for a following test that uses
-		// the same instance because it might not reach f.BeforeEach
-		// when some other BeforeEach skips the test first.
+		// 取消设置这一点对后续使用同一实例的测试很重要，
+		// 因为如果其他 BeforeEach 先跳过了测试，它可能到不了 f.BeforeEach。
+		//
 		f.Namespace = nil
 		f.clientConfig = nil
 		f.ClientSet = nil
 		f.namespacesToDelete = nil
 		f.TB = nil
 
-		// if we had errors deleting, report them now.
+		// 如果删除时出错，现在报告。
 		if len(nsDeletionErrors) != 0 {
 			messages := []string{}
 			for namespaceKey, namespaceErr := range nsDeletionErrors {
@@ -509,7 +506,7 @@ func (f *Framework) AfterEach(ctx context.Context) {
 
 	TestContext.CloudConfig.Provider.FrameworkAfterEach(f)
 
-	// Report any flakes that were observed in the e2e test and reset.
+	// 报告 e2e 测试中观察到的偶发问题并重置。
 	if f.flakeReport != nil && f.flakeReport.GetFlakeCount() > 0 {
 		f.TestSummaries = append(f.TestSummaries, f.flakeReport)
 		f.flakeReport = nil
@@ -518,9 +515,9 @@ func (f *Framework) AfterEach(ctx context.Context) {
 	printSummaries(f.TestSummaries, f.BaseName)
 }
 
-// DeleteNamespace can be used to delete a namespace. Additionally it can be used to
-// dump namespace information so as it can be used as an alternative of framework
-// deleting the namespace towards the end.
+// DeleteNamespace 用于删除 namespace。也可用于
+// 转储 namespace 信息，从而在测试结束时替代 framework
+// 删除 namespace 的行为。
 func (f *Framework) DeleteNamespace(ctx context.Context, name string) {
 	defer func() {
 		err := f.ClientSet.CoreV1().Namespaces().Delete(ctx, name, metav1.DeleteOptions{})
@@ -533,7 +530,7 @@ func (f *Framework) DeleteNamespace(ctx context.Context, name string) {
 			Logf("error deleting namespace %s: %v", name, err)
 			return
 		}
-		// remove deleted namespace from namespacesToDelete map
+		// 从 namespacesToDelete map 中移除已删除的 namespace
 		for i, ns := range f.namespacesToDelete {
 			if ns == nil {
 				continue
@@ -543,14 +540,14 @@ func (f *Framework) DeleteNamespace(ctx context.Context, name string) {
 			}
 		}
 	}()
-	// if current test failed then we should dump namespace information
+	// 如果当前测试失败，应转储 namespace 信息
 	if !f.SkipNamespaceCreation && ginkgo.CurrentSpecReport().Failed() && TestContext.DumpLogsOnFailure && f.DumpAllNamespaceInfo != nil {
 		f.DumpAllNamespaceInfo(ctx, f, name)
 	}
 
 }
 
-// CreateNamespace creates a namespace for e2e testing.
+// CreateNamespace 为 e2e 测试创建 namespace。
 func (f *Framework) CreateNamespace(ctx context.Context, baseName string, labels map[string]string) (*v1.Namespace, error) {
 	createTestingNS := TestContext.CreateTestingNS
 	if createTestingNS == nil {
@@ -572,13 +569,13 @@ func (f *Framework) CreateNamespace(ctx context.Context, baseName string, labels
 	labels[admissionapi.AuditLevelLabel] = firstNonEmptyPSaLevelOrRestricted(f.NamespacePodSecurityAuditLevel, f.NamespacePodSecurityLevel)
 
 	ns, err := createTestingNS(ctx, baseName, f.ClientSet, labels)
-	// check ns instead of err to see if it's nil as we may
-	// fail to create serviceAccount in it.
+	// 检查 ns 而不是 err 是否为 nil，因为可能
+	// 在其中创建 serviceAccount 失败。
 	f.AddNamespacesToDelete(ns)
 
 	if TestContext.E2EDockerConfigFile != "" && !f.SkipSecretCreation {
-		// With the Secret created, the default service account (in the new namespace)
-		// is patched with the secret and can then be referenced by all the pods spawned by E2E process, and repository authentication should be successful.
+		// Secret 创建后，默认 service account（在新 namespace 中）
+		// 会被 patch 上该 secret，从而可供 E2E 进程创建的所有 pod 引用，仓库认证应当成功。
 		secret, err := f.createSecretFromDockerConfig(ctx, ns.Name)
 		if err != nil {
 			return ns, fmt.Errorf("failed to create secret from docker config file: %v", err)
@@ -607,8 +604,8 @@ func firstNonEmptyPSaLevelOrRestricted(levelConfig ...admissionapi.Level) string
 	return string(admissionapi.LevelRestricted)
 }
 
-// createSecretFromDockerConfig creates a secret using the private image registry credentials.
-// The credentials are provided by --e2e-docker-config-file flag.
+// createSecretFromDockerConfig 使用私有镜像仓库凭据创建 secret。
+// 凭据由 --e2e-docker-config-file flag 提供。
 func (f *Framework) createSecretFromDockerConfig(ctx context.Context, namespace string) (*v1.Secret, error) {
 	contents, err := os.ReadFile(TestContext.E2EDockerConfigFile)
 	if err != nil {
@@ -627,14 +624,14 @@ func (f *Framework) createSecretFromDockerConfig(ctx context.Context, namespace 
 	return secret, err
 }
 
-// RecordFlakeIfError records flakeness info if error happens.
+// RecordFlakeIfError 在发生错误时记录偶发问题信息。
 // NOTE: This function is not used at any places yet, but we are in progress for https://github.com/kubernetes/kubernetes/issues/66239 which requires this. Please don't remove this.
 func (f *Framework) RecordFlakeIfError(err error, optionalDescription ...interface{}) {
 	f.flakeReport.RecordFlakeIfError(err, optionalDescription...)
 }
 
-// AddNamespacesToDelete adds one or more namespaces to be deleted when the test
-// completes.
+// AddNamespacesToDelete 添加一个或多个 namespace，在测试
+// 结束时删除。
 func (f *Framework) AddNamespacesToDelete(namespaces ...*v1.Namespace) {
 	for _, ns := range namespaces {
 		if ns == nil {
@@ -645,21 +642,21 @@ func (f *Framework) AddNamespacesToDelete(namespaces ...*v1.Namespace) {
 	}
 }
 
-// ClientConfig an externally accessible method for reading the kube client config.
+// ClientConfig 是读取 kube client 配置的外部可访问方法。
 func (f *Framework) ClientConfig() *rest.Config {
 	ret := rest.CopyConfig(f.clientConfig)
-	// json is least common denominator
+	// json 是最小公分母
 	ret.ContentType = runtime.ContentTypeJSON
 	ret.AcceptContentTypes = runtime.ContentTypeJSON
 	return ret
 }
 
-// SetClientConfig allows setting or updating the REST config in the Framework instance.
+// SetClientConfig 允许设置或更新 Framework 实例中的 REST config。
 func (f *Framework) SetClientConfig(config *rest.Config) {
 	f.clientConfig = rest.CopyConfig(config)
 }
 
-// KubeUser is a struct for managing kubernetes user info.
+// KubeUser 是管理 kubernetes 用户信息的结构体。
 type KubeUser struct {
 	Name string `yaml:"name"`
 	User struct {
@@ -669,7 +666,7 @@ type KubeUser struct {
 	} `yaml:"user"`
 }
 
-// KubeCluster is a struct for managing kubernetes cluster info.
+// KubeCluster 是管理 kubernetes 集群信息的结构体。
 type KubeCluster struct {
 	Name    string `yaml:"name"`
 	Cluster struct {
@@ -678,7 +675,7 @@ type KubeCluster struct {
 	} `yaml:"cluster"`
 }
 
-// KubeConfig is a struct for managing kubernetes config.
+// KubeConfig 是管理 kubernetes 配置的结构体。
 type KubeConfig struct {
 	Contexts []struct {
 		Name    string `yaml:"name"`
@@ -693,7 +690,7 @@ type KubeConfig struct {
 	Users []KubeUser `yaml:"users"`
 }
 
-// FindUser returns user info which is the specified user name.
+// FindUser 返回指定用户名对应的用户信息。
 func (kc *KubeConfig) FindUser(name string) *KubeUser {
 	for _, user := range kc.Users {
 		if user.Name == name {
@@ -703,7 +700,7 @@ func (kc *KubeConfig) FindUser(name string) *KubeUser {
 	return nil
 }
 
-// FindCluster returns cluster info which is the specified cluster name.
+// FindCluster 返回指定集群名对应的集群信息。
 func (kc *KubeConfig) FindCluster(name string) *KubeCluster {
 	for _, cluster := range kc.Clusters {
 		if cluster.Name == name {
@@ -713,35 +710,35 @@ func (kc *KubeConfig) FindCluster(name string) *KubeCluster {
 	return nil
 }
 
-// PodStateVerification represents a verification of pod state.
-// Any time you have a set of pods that you want to operate against or query,
-// this struct can be used to declaratively identify those pods.
+// PodStateVerification 表示对 pod 状态的验证。
+// 任何时候你有一组要操作或查询的 pod，
+// 都可以用这个结构体声明式地识别它们。
 type PodStateVerification struct {
-	// Optional: only pods that have k=v labels will pass this filter.
+	// 可选：只有带 k=v 标签的 pod 才能通过此过滤器。
 	Selectors map[string]string
 
-	// Required: The phases which are valid for your pod.
+	// 必填：对 pod 有效的阶段。
 	ValidPhases []v1.PodPhase
 
-	// Optional: only pods passing this function will pass the filter
-	// Verify a pod.
-	// As an optimization, in addition to specifying filter (boolean),
-	// this function allows specifying an error as well.
-	// The error indicates that the polling of the pod spectrum should stop.
+	// 可选：只有通过该函数的 pod 才能通过过滤器
+	// 验证 pod。
+	// 作为优化，除布尔过滤器外，
+	// 该函数还允许返回 error。
+	// error 表示应停止对 pod 集合的轮询。
 	Verify func(v1.Pod) (bool, error)
 
-	// Optional: only pods with this name will pass the filter.
+	// 可选：只有该名称的 pod 才能通过过滤器。
 	PodName string
 }
 
-// ClusterVerification is a struct for a verification of cluster state.
+// ClusterVerification 是用于验证集群状态的结构体。
 type ClusterVerification struct {
 	client    clientset.Interface
 	namespace *v1.Namespace // pointer rather than string, since ns isn't created until before each.
 	podState  PodStateVerification
 }
 
-// NewClusterVerification creates a new cluster verification.
+// NewClusterVerification 创建一个新的集群验证。
 func (f *Framework) NewClusterVerification(namespace *v1.Namespace, filter PodStateVerification) *ClusterVerification {
 	return &ClusterVerification{
 		f.ClientSet,
@@ -760,7 +757,7 @@ func passesVerifyFilter(pod v1.Pod, verify func(p v1.Pod) (bool, error)) (bool, 
 	}
 
 	verified, err := verify(pod)
-	// If an error is returned, by definition, pod verification fails
+	// 如果返回错误，按定义 pod 验证失败
 	if err != nil {
 		return false, err
 	}
@@ -777,13 +774,13 @@ func passesPhasesFilter(pod v1.Pod, validPhases []v1.PodPhase) bool {
 	return passesPhaseFilter
 }
 
-// filterLabels returns a list of pods which have labels.
+// filterLabels 返回带标签的 pod 列表。
 func filterLabels(ctx context.Context, selectors map[string]string, cli clientset.Interface, ns string) (*v1.PodList, error) {
 	var err error
 	var selector labels.Selector
 	var pl *v1.PodList
-	// List pods based on selectors.  This might be a tiny optimization rather then filtering
-	// everything manually.
+	// 基于 selector 列举 pod。相比手动过滤
+	// 所有内容，这可能只是个微小的优化。
 	if len(selectors) > 0 {
 		selector = labels.SelectorFromSet(labels.Set(selectors))
 		options := metav1.ListOptions{LabelSelector: selector.String()}
@@ -794,9 +791,9 @@ func filterLabels(ctx context.Context, selectors map[string]string, cli clientse
 	return pl, err
 }
 
-// filter filters pods which pass a filter.  It can be used to compose
-// the more useful abstractions like ForEach, WaitFor, and so on, which
-// can be used directly by tests.
+// filter 过滤通过过滤条件的 pod。它可用于组合
+// 更有用的抽象，如 ForEach、WaitFor 等，
+// 测试可以直接使用它们。
 func (p *PodStateVerification) filter(ctx context.Context, c clientset.Interface, namespace *v1.Namespace) ([]v1.Pod, error) {
 	if len(p.ValidPhases) == 0 || namespace == nil {
 		panic(fmt.Errorf("Need to specify a valid pod phases (%v) and namespace (%v). ", p.ValidPhases, namespace))
@@ -812,7 +809,7 @@ func (p *PodStateVerification) filter(ctx context.Context, c clientset.Interface
 	unfilteredPods := pl.Items
 	filteredPods := []v1.Pod{}
 ReturnPodsSoFar:
-	// Next: Pod must match at least one of the states that the user specified
+	// 下一步：pod 必须匹配用户指定的至少一个状态
 	for _, pod := range unfilteredPods {
 		if !(passesPhasesFilter(pod, p.ValidPhases) && passesPodNameFilter(pod, p.PodName)) {
 			continue
@@ -829,8 +826,8 @@ ReturnPodsSoFar:
 	return filteredPods, err
 }
 
-// WaitFor waits for some minimum number of pods to be verified, according to the PodStateVerification
-// definition.
+// WaitFor 按 PodStateVerification 定义等待
+// 至少指定数量的 pod 验证通过。
 func (cl *ClusterVerification) WaitFor(ctx context.Context, atLeast int, timeout time.Duration) ([]v1.Pod, error) {
 	pods := []v1.Pod{}
 	var returnedErr error
@@ -838,27 +835,27 @@ func (cl *ClusterVerification) WaitFor(ctx context.Context, atLeast int, timeout
 	err := wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, false, func(ctx context.Context) (bool, error) {
 		pods, returnedErr = cl.podState.filter(ctx, cl.client, cl.namespace)
 
-		// Failure
+		// 失败
 		if returnedErr != nil {
 			Logf("Cutting polling short: We got an error from the pod filtering layer.")
-			// stop polling if the pod filtering returns an error.  that should never happen.
-			// it indicates, for example, that the client is broken or something non-pod related.
+			// pod 过滤返回错误时停止轮询，这不该发生，
+			// 它表示例如 client 坏了或与 pod 无关的问题。
 			return false, returnedErr
 		}
 		Logf("Found %v / %v", len(pods), atLeast)
 
-		// Success
+		// 成功
 		if len(pods) >= atLeast {
 			return true, nil
 		}
-		// Keep trying...
+		// 继续尝试...
 		return false, nil
 	})
 	Logf("WaitFor completed with timeout %v.  Pods found = %v out of %v", timeout, len(pods), atLeast)
 	return pods, err
 }
 
-// WaitForOrFail provides a shorthand WaitFor with failure as an option if anything goes wrong.
+// WaitForOrFail 提供 WaitFor 的简写，出错即失败。
 func (cl *ClusterVerification) WaitForOrFail(ctx context.Context, atLeast int, timeout time.Duration) {
 	pods, err := cl.WaitFor(ctx, atLeast, timeout)
 	if err != nil || len(pods) < atLeast {
@@ -866,11 +863,11 @@ func (cl *ClusterVerification) WaitForOrFail(ctx context.Context, atLeast int, t
 	}
 }
 
-// ForEach runs a function against every verifiable pod.  Be warned that this doesn't wait for "n" pods to verify,
-// so it may return very quickly if you have strict pod state requirements.
+// ForEach 对每个可验证的 pod 运行函数。注意它不等待 "n" 个 pod 验证通过，
+// 所以如果你对 pod 状态要求严格，它可能很快返回。
 //
-// For example, if you require at least 5 pods to be running before your test will pass,
-// its smart to first call "clusterVerification.WaitFor(5)" before you call clusterVerification.ForEach.
+// 例如，如果你要求至少 5 个 pod 运行测试才算通过，
+// 最好先调用 "clusterVerification.WaitFor(5)"，再调用 clusterVerification.ForEach。
 func (cl *ClusterVerification) ForEach(ctx context.Context, podFunc func(v1.Pod)) error {
 	pods, err := cl.podState.filter(ctx, cl.client, cl.namespace)
 	if err == nil {

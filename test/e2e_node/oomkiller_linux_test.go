@@ -43,8 +43,7 @@ type testCase struct {
 	expectPodRunning        bool
 }
 
-// KubeReservedMemory is default fraction value of node capacity memory to
-// be reserved for K8s components.
+// KubeReservedMemory 是为 K8s 组件预留的节点内存容量的默认比例
 const KubeReservedMemory = 0.35
 
 var _ = SIGDescribe("OOMKiller for pod using more memory than node allocatable [LinuxOnly]", framework.WithSerial(), func() {
@@ -84,8 +83,8 @@ var _ = SIGDescribe("OOMKiller [LinuxOnly]", framework.WithNodeConformance(), fr
 		},
 	}
 
-	// If using cgroup v2, we set memory.oom.group=1 for the container cgroup so that any process which gets OOM killed
-	// in the process, causes all processes in the container to get OOM killed
+	// 如果使用 cgroup v2，我们为容器 cgroup 设置 memory.oom.group=1，这样其中任何进程
+	// 被 OOM 杀死时，容器内所有进程都会被 OOM 杀死
 	if libcontainercgroups.IsCgroup2UnifiedMode() {
 		testCases = append(testCases, testCase{
 			name:                   "multi process container",
@@ -119,16 +118,16 @@ var _ = SIGDescribe("OOMKiller [LinuxOnly]", framework.WithNodeConformance(), fr
 
 func runOomKillerTest(f *framework.Framework, testCase testCase, kubeReservedMemory float64) {
 	ginkgo.Context(testCase.name, func() {
-		// Update KubeReservedMemory in KubeletConfig.
+		// 在 KubeletConfig 中更新 KubeReservedMemory。
 		tempSetCurrentKubeletConfig(f, func(ctx context.Context, initialConfig *kubeletconfig.KubeletConfiguration) {
 			if kubeReservedMemory > 0 {
 				if initialConfig.KubeReserved == nil {
 					initialConfig.KubeReserved = map[string]string{}
 				}
-				// There's a race condition observed between system OOM and cgroup OOM if node alocatable
-				// memory is equal to node capacity. Hence, reserving a fraction of node's memory capacity for
-				// K8s components such that node allocatable memory is less than node capacity to
-				// observe OOM kills at cgroup level instead of system OOM kills.
+				// 当节点可分配内存等于节点容量时，观察到系统 OOM 和 cgroup OOM 之间存在竞态。因此为
+				// K8s 组件预留一部分节点内存容量，使节点可分配内存小于节点容量，
+				// 从而在 cgroup 级别而非系统级别观察 OOM 杀死。
+				//
 				initialConfig.KubeReserved["memory"] = fmt.Sprintf("%d", int(kubeReservedMemory*getLocalNode(context.TODO(), f).Status.Capacity.Memory().AsApproximateFloat64()))
 			}
 
@@ -136,7 +135,7 @@ func runOomKillerTest(f *framework.Framework, testCase testCase, kubeReservedMem
 		})
 
 		ginkgo.BeforeEach(func() {
-			// Precautionary check that kubelet is healthy before running the test.
+			// 运行测试前预防性检查 kubelet 是否健康。
 			waitForKubeletToStart(context.TODO(), f)
 
 			ginkgo.By("setting up the pod to be used in the test")
@@ -194,7 +193,7 @@ func verifyReasonForOOMKilledContainer(pod *v1.Pod, oomTargetContainerName strin
 		"pod: %q, container: %q has unexpected exitCode: %q", pod.Name, container.Name, container.State.Terminated.ExitCode)
 
 	// This check is currently causing tests to flake on containerd & crio, https://github.com/kubernetes/kubernetes/issues/119600
-	// so we'll skip the reason check if we know its going to fail.
+	// 所以如果知道 reason 检查会失败，就跳过它。
 	// TODO: Remove this once https://github.com/containerd/containerd/issues/8893 is resolved
 	if container.State.Terminated.Reason == "OOMKilled" {
 		gomega.Expect(container.State.Terminated.Reason).To(gomega.Equal("OOMKilled"),
@@ -238,8 +237,8 @@ func getInitContainerOOMTargetPod(podName string, ctnName string, createContaine
 	}
 }
 
-// getOOMTargetContainer returns a container with a single process, which attempts to allocate more memory than is
-// allowed by the container memory limit.
+// getOOMTargetContainer 返回一个只有单个进程的容器，它尝试分配超过
+// 容器内存限制允许的内存。
 func getOOMTargetContainer(name string) v1.Container {
 	return v1.Container{
 		Name:  name,
@@ -247,7 +246,7 @@ func getOOMTargetContainer(name string) v1.Container {
 		Command: []string{
 			"sh",
 			"-c",
-			// use the dd tool to attempt to allocate 20M in a block which exceeds the limit
+			// 用 dd 工具尝试在一个块中分配 20M，超过限制
 			"sleep 5 && dd if=/dev/zero of=/dev/null bs=20M",
 		},
 		Resources: v1.ResourceRequirements{
@@ -271,8 +270,8 @@ func getOOMTargetContainer(name string) v1.Container {
 	}
 }
 
-// getOOMTargetContainerMultiProcess returns a container with two processes, one of which attempts to allocate more
-// memory than is allowed by the container memory limit, and a second process which just sleeps.
+// getOOMTargetContainerMultiProcess 返回一个有两个进程的容器，其中一个尝试分配更多
+// 内存，超过容器内存限制，另一个进程只是睡眠。
 func getOOMTargetContainerMultiProcess(name string) v1.Container {
 	return v1.Container{
 		Name:  name,
@@ -280,7 +279,7 @@ func getOOMTargetContainerMultiProcess(name string) v1.Container {
 		Command: []string{
 			"sh",
 			"-c",
-			// use the dd tool to attempt to allocate 20M in a block which exceeds the limit
+			// 用 dd 工具尝试在一个块中分配 20M，超过限制
 			"sleep 5 && dd if=/dev/zero of=/dev/null bs=20M & sleep 86400",
 		},
 		Resources: v1.ResourceRequirements{
@@ -304,8 +303,8 @@ func getOOMTargetContainerMultiProcess(name string) v1.Container {
 	}
 }
 
-// getOOMTargetContainerWithoutLimit returns a container with a single process which attempts to allocate more memory
-// than node allocatable and doesn't have resource limits set.
+// getOOMTargetContainerWithoutLimit 返回一个只有单个进程的容器，它尝试分配超过
+// 节点可分配量的内存，且没有设置资源限制。
 func getOOMTargetContainerWithoutLimit(name string) v1.Container {
 	return v1.Container{
 		Name:  name,
@@ -313,7 +312,7 @@ func getOOMTargetContainerWithoutLimit(name string) v1.Container {
 		Command: []string{
 			"sh",
 			"-c",
-			// use the dd tool to attempt to allocate huge block of memory which exceeds the node allocatable
+			// 用 dd 工具尝试分配一个超过节点可分配量的大内存块
 			"sleep 5 && dd if=/dev/zero of=/dev/null iflag=fullblock count=10 bs=1024G",
 		},
 		SecurityContext: &v1.SecurityContext{

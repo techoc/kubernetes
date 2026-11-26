@@ -42,8 +42,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Embed manifests that we leave as yaml to make it clear to users how to these permissions are created.
-// These will match future docs.
+// 嵌入以 yaml 形式保留的 manifest，让用户能直观看到这些权限是如何创建的。
+// 这些将与未来的文档保持一致。
 var (
 	//go:embed e2edata/per_node_validatingadmissionpolicy.yaml
 	perNodeCheckValidatingAdmissionPolicy string
@@ -107,7 +107,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy", func() {
 			Status: v1.PodStatus{},
 		})
 
-		// cleanup the ValidatingAdmissionPolicy.
+		// 清理 ValidatingAdmissionPolicy。
 
 		var err error
 		_, err = f.ClientSet.AdmissionregistrationV1().ValidatingAdmissionPolicies().Create(ctx, admissionToCreate, metav1.CreateOptions{})
@@ -118,22 +118,22 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy", func() {
 		framework.ExpectNoError(err)
 		g.DeferCleanup(f.ClientSet.AdmissionregistrationV1().ValidatingAdmissionPolicyBindings().Delete, admissionBindingToCreate.Name, metav1.DeleteOptions{})
 
-		// create permissions that will allow unrestricted access to mutate configmaps in this namespace.
-		// We limited these permissions in the step above.
-		// This means the admission policy must fail closed or permissions will be too broad.
+		// 创建允许无限制修改本 namespace 中 configmap 的权限。
+		// 上面一步已经限制过这些权限。
+		// 这意味着 admission policy 必须 fail closed，否则权限会过宽。
 		_, err = f.ClientSet.RbacV1().RoleBindings(f.Namespace.Name).Create(ctx, saTokenRoleBinding, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		// run an actual pod to prove that the token is injected, not just creatable via the API
+		// 运行真实的 pod，证明 token 被注入，而不只是能通过 API 创建
 		actualPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, sleeperPod, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 		err = e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, actualPod.Name, actualPod.Namespace)
 		framework.ExpectNoError(err)
-		// need the pod that contains the node name
+		// 需要那个包含 node 名称的 pod
 		actualPod, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, actualPod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 
-		// get the actual projected token from the pod.
+		// 从 pod 中取出实际投影的 token。
 		nodeScopedSAToken, stderr, err := e2epod.Exec(f.TContext(ctx), e2epod.ExecOptions{
 			Command:            []string{"cat", "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 			Namespace:          actualPod.Namespace,
@@ -146,7 +146,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy", func() {
 		framework.ExpectNoError(err)
 		o.Expect(stderr).To(o.BeEmpty(), "stderr from cat")
 
-		// make a kubeconfig with the token and confirm the kube-apiserver has the expected claims
+		// 用 token 构造 kubeconfig，确认 kube-apiserver 看到预期的 claims
 		nodeScopedClientConfig := rest.AnonymousClientConfig(f.ClientConfig())
 		nodeScopedClientConfig.BearerToken = nodeScopedSAToken
 		nodeScopedClient, err := kubernetes.NewForConfig(nodeScopedClientConfig)
@@ -178,7 +178,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy", func() {
 		o.Expect(err).To(o.HaveOccurred())
 		o.Expect(err.Error()).To(o.ContainSubstring(disallowedMessage))
 
-		// now create so we can see the update cases
+		// 现在创建它们，以便观察更新场景
 		actualDisallowedConfigMap, err := f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Create(ctx, disallowedConfigMap, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
@@ -194,16 +194,16 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy", func() {
 		o.Expect(err).To(o.HaveOccurred())
 		o.Expect(err.Error()).To(o.ContainSubstring(disallowedMessage))
 
-		// recreate the allowedConfigMap and then do a delete collection
+		// 重建 allowedConfigMap，然后执行 delete collection
 		_, err = nodeScopedClient.CoreV1().ConfigMaps(f.Namespace.Name).Create(ctx, allowedConfigMap, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 		err = nodeScopedClient.CoreV1().ConfigMaps(f.Namespace.Name).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})
 		o.Expect(err).To(o.HaveOccurred())
-		// Delete collection can happen in random/racy orders.  We'll match on everything except the name
+		// Delete collection 的顺序可能随机且有竞态。除名称外全部匹配
 		disallowedAnyNameMessage := fmt.Sprintf("this user running on node '%s' may not modify ConfigMap .* because the name does not match the node name", actualPod.Spec.NodeName)
 		o.Expect(err.Error()).To(o.MatchRegexp(disallowedAnyNameMessage))
 
-		// ensure that if the node claim is missing from the restricted service-account user, we reject the request
+		// 确保受限 service-account 用户缺少 node claim 时，请求会被拒绝
 		tokenRequest := &authenticationv1.TokenRequest{
 			Spec: authenticationv1.TokenRequestSpec{
 				ExpirationSeconds: ptr.To[int64](600),
@@ -215,7 +215,7 @@ var _ = SIGDescribe("ValidatingAdmissionPolicy", func() {
 		serviceAccountConfigWithoutNodeClaim.BearerToken = tokenRequestResponse.Status.Token
 		serviceAccountClientWithoutNodeClaim, err := kubernetes.NewForConfig(serviceAccountConfigWithoutNodeClaim)
 		framework.ExpectNoError(err)
-		// now confirm this token lacks a node name claim.
+		// 现在确认这个 token 没有 node name claim。
 		selfSubjectResults, err := serviceAccountClientWithoutNodeClaim.AuthenticationV1().SelfSubjectReviews().Create(ctx, &authenticationv1.SelfSubjectReview{}, metav1.CreateOptions{})
 		framework.Logf("Token: %q expires at %v", serviceAccountConfigWithoutNodeClaim.BearerToken, tokenRequestResponse.Status.ExpirationTimestamp)
 		framework.ExpectNoError(err)

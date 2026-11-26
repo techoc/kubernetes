@@ -16,7 +16,7 @@ limitations under the License.
 
 package network
 
-// Tests network performance using iperf or other containers.
+// 用 iperf2 或其他容器测试网络性能。
 import (
 	"context"
 	"fmt"
@@ -42,20 +42,20 @@ import (
 )
 
 const (
-	// use this timeout for larger clusters
+	// 较大集群使用这个超时
 	largeClusterTimeout = 400 * time.Second
-	// iperf2BaselineBandwidthMegabytesPerSecond sets a baseline for iperf2 bandwidth of 10 MBps = 80 Mbps
-	// this limits is chosen in order to support small devices with 100 mbps cards.
+	// iperf2BaselineBandwidthMegabytesPerSecond 为 iperf2 带宽设置基线 10 MBps = 80 Mbps
+	// 选这个值是为了兼容只有 100 mbps 网卡的小设备。
 	iperf2BaselineBandwidthMegabytesPerSecond = 10
-	// iperf2Port selects an arbitrary, unique port to run iperf2's client and server on
+	// iperf2Port 为 iperf2 的客户端和服务端选一个任意且唯一的端口
 	iperf2Port = 6789
-	// labelKey is used as a key for selectors
+	// labelKey 用作 selector 的 key
 	labelKey = "app"
-	// clientLabelValue is used as a value for iperf2 client selectors
+	// clientLabelValue 用作 iperf2 客户端 selector 的值
 	clientLabelValue = "iperf2-client"
-	// serverLabelValue is used as a value for iperf2 server selectors
+	// serverLabelValue 用作 iperf2 服务端 selector 的值
 	serverLabelValue = "iperf2-server"
-	// serverServiceName defines the service name used for the iperf2 server
+	// serverServiceName 定义 iperf2 服务端使用的 service 名称
 	serverServiceName = "iperf2-server"
 )
 
@@ -126,21 +126,21 @@ func iperf2ClientDaemonSet(ctx context.Context, client clientset.Interface, name
 	return ds, nil
 }
 
-// Test summary:
+// 测试摘要：
 //
-//	This test uses iperf2 to obtain bandwidth data between nodes in the cluster, providing a coarse measure
-//	of the health of the cluster network.  The test runs two sets of pods:
-//	  1. an iperf2 server on a single node
-//	  2. a daemonset of iperf2 clients
-//	The test then iterates through the clients, one by one, running iperf2 from each of them to transfer
-//	data to the server and back for ten seconds, after which the results are collected and parsed.
-//	Thus, if your cluster has 10 nodes, then 10 test runs are performed.
-//	  Note: a more complete test could run this scenario with a daemonset of servers as well; however, this
-//	  would require n^2 tests, n^2 time, and n^2 network resources which quickly become prohibitively large
-//	  as the cluster size increases.
-//	Finally, after collecting all data, the results are analyzed and tabulated.
+//	本测试用 iperf2 获取集群节点间的带宽数据，粗略衡量
+//	集群网络的健康状况。测试运行两组 pod：
+//	  1. 单个节点上的 iperf2 server
+//	  2. 一组 iperf2 client 的 daemonset
+//	测试逐个遍历 client，从每个 client 运行 iperf2，向 server 传输
+//	数据十秒再传回，然后收集并解析结果。
+//	因此，如果集群有 10 个节点，就执行 10 轮测试。
+//	  注意：更完整的测试可以也用 daemonset 部署 server；但那样
+//	  需要 n^2 次测试、n^2 的时间和 n^2 的网络资源，随着集群增大
+//	  很快变得难以承受。
+//	最后，收集完所有数据后，对结果进行分析和制表。
 var _ = common.SIGDescribe("Networking IPerf2", feature.NetworkingPerformance, func() {
-	// this test runs iperf2: one pod as a server, and a daemonset of clients
+	// 本测试运行 iperf2：一个 pod 作为 server，一组 client 的 daemonset
 	f := framework.NewDefaultFramework("network-perf")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
@@ -157,21 +157,21 @@ var _ = common.SIGDescribe("Networking IPerf2", feature.NetworkingPerformance, f
 			LabelSelector: fmt.Sprintf("%s=%s", labelKey, serverLabelValue),
 		}
 
-		// Step 1: set up iperf2 server -- a single pod on any node
+		// 第 1 步：搭建 iperf2 server —— 任意节点上的一个 pod
 		_, err = iperf2ServerDeployment(ctx, f.ClientSet, f.Namespace.Name, framework.TestContext.ClusterIsIPv6())
 		framework.ExpectNoError(err, "deploy iperf2 server deployment")
 
 		_, err = iperf2ServerService(ctx, f.ClientSet, f.Namespace.Name)
 		framework.ExpectNoError(err, "deploy iperf2 server service")
 
-		// Step 2: set up iperf2 client daemonset
-		//   initially, the clients don't do anything -- they simply pause until they're called
+		// 第 2 步：搭建 iperf2 client daemonset
+		// 起初 client 什么都不做，只是暂停等待被调用
 		_, err = iperf2ClientDaemonSet(ctx, f.ClientSet, f.Namespace.Name)
 		framework.ExpectNoError(err, "deploy iperf2 client daemonset")
 
-		// Make sure the server is ready to go. (We use WaitForEndpointSlices
-		// rather than the simpler WaitForEndpointCount because we want to use
-		// largeClusterTimeout.)
+		// 确保 server 准备好了。（我们用 WaitForEndpointSlices
+		// 而不是更简单的 WaitForEndpointCount，因为想使用
+		// largeClusterTimeout。）
 		framework.Logf("waiting for iperf2 server endpoints")
 		err = e2eendpointslice.WaitForEndpointSlices(ctx, f.ClientSet, f.Namespace.Name, serverServiceName, 2*time.Second, largeClusterTimeout, func(ctx context.Context, endpointSlices []discoveryv1.EndpointSlice) (bool, error) {
 			if len(endpointSlices) == 0 {
@@ -207,7 +207,7 @@ var _ = common.SIGDescribe("Networking IPerf2", feature.NetworkingPerformance, f
 		framework.ExpectNoError(err, "unable to wait for client pods to come up")
 		framework.Logf("all client pods are ready: %d pods", len(clientPodList.Items))
 
-		// Get a reference to the server pod for later
+		// 保存 server pod 的引用，后面要用
 		serverPodList, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).List(ctx, serverPodsListOptions)
 		framework.ExpectNoError(err)
 		if len(serverPodList.Items) != 1 {
@@ -229,8 +229,8 @@ var _ = common.SIGDescribe("Networking IPerf2", feature.NetworkingPerformance, f
 			Results:    map[string]*IPerf2EnhancedCSVResults{},
 		}
 
-		// Step 3: iterate through the client pods one by one, running iperf2 in client mode to transfer
-		//   data to the server and back and measure bandwidth
+		// 第 3 步：逐个遍历 client pod，以 client 模式运行 iperf2，向 server
+		// 传输数据再传回并测量带宽
 		for _, pod := range clientPodList.Items {
 			podName := pod.Name
 			nodeName := pod.Spec.NodeName
@@ -263,7 +263,7 @@ var _ = common.SIGDescribe("Networking IPerf2", feature.NetworkingPerformance, f
 			}
 		}
 
-		// Step 4: after collecting all the client<->server data, compile and present the results
+		// 第 4 步：收集完所有 client<->server 数据后，整理并展示结果
 		/*
 						Example output:
 

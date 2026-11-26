@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	//TODO (dashpole): Once dynamic config is possible, test different values for maxPerPodContainer and maxContainers
-	// Currently using default values for maxPerPodContainer and maxTotalContainers
+	//TODO (dashpole): 动态配置可用后，测试 maxPerPodContainer 和 maxContainers 的不同值
+	// 目前 maxPerPodContainer 和 maxTotalContainers 使用默认值
 	maxPerPodContainer = 1
 	maxTotalContainers = -1
 
@@ -48,14 +48,14 @@ const (
 
 type testPodSpec struct {
 	podName string
-	// containerPrefix must be unique for each pod, and cannot end in a number.
-	// containerPrefix is used to identify which containers belong to which pod in the test.
+	// containerPrefix 对每个 pod 必须唯一，且不能以数字结尾。
+	// 测试中用它标识哪些容器属于哪个 pod。
 	containerPrefix string
-	// the number of times each container should restart
+	// 每个容器应重启的次数
 	restartCount int32
-	// the number of containers in the test pod
+	// 测试 pod 中的容器数量
 	numContainers int
-	// a function that returns the number of containers currently on the node (including dead containers).
+	// 一个函数，返回节点上当前的容器数（包括已死亡的容器）。
 	getContainerNames func() ([]string, error)
 }
 
@@ -64,13 +64,13 @@ func (pod *testPodSpec) getContainerName(containerNumber int) string {
 }
 
 type testRun struct {
-	// Name for logging purposes
+	// 用于记录日志的名称
 	testName string
-	// Pod specs for the test
+	// 测试的 Pod spec
 	testPods []*testPodSpec
 }
 
-// GarbageCollect tests that the Kubelet conforms to the Kubelet Garbage Collection Policy, found here:
+// GarbageCollect 测试 Kubelet 是否符合 Kubelet 垃圾回收策略，见：
 // http://kubernetes.io/docs/admin/garbage-collection/
 var _ = SIGDescribe("GarbageCollect", framework.WithSerial(), framework.WithNodeConformance(), func() {
 	f := framework.NewDefaultFramework("garbage-collect-test")
@@ -78,10 +78,10 @@ var _ = SIGDescribe("GarbageCollect", framework.WithSerial(), framework.WithNode
 	containerNamePrefix := "gc-test-container-"
 	podNamePrefix := "gc-test-pod-"
 
-	// These suffixes are appended to pod and container names.
-	// They differentiate pods from one another, and allow filtering
-	// by names to identify which containers belong to which pods
-	// They must be unique, and must not end in a number
+	// 这些后缀追加到 pod 和容器名称上。
+	// 它们区分不同 pod，并允许
+	// 按名称过滤，识别哪些容器属于哪些 pod
+	// 它们必须唯一，且不能以数字结尾
 	firstSuffix := "one-container-no-restarts"
 	secondSuffix := "many-containers-many-restarts-one-pod"
 	thirdSuffix := "many-containers-many-restarts-"
@@ -137,13 +137,13 @@ var _ = SIGDescribe("GarbageCollect", framework.WithSerial(), framework.WithNode
 	}
 })
 
-// Tests the following:
+// 测试以下内容：
 //
-//	pods are created, and all containers restart the specified number of times
-//	while containers are running, the number of copies of a single container does not exceed maxPerPodContainer
-//	while containers are running, the total number of containers does not exceed maxTotalContainers
-//	while containers are running, if not constrained by maxPerPodContainer or maxTotalContainers, keep an extra copy of each container
-//	once pods are killed, all containers are eventually cleaned up
+// 创建 pod，所有容器重启指定次数
+// 容器运行期间，单个容器的副本数不超过 maxPerPodContainer
+// 容器运行期间，容器总数不超过 maxTotalContainers
+// 容器运行期间，如果不受 maxPerPodContainer 或 maxTotalContainers 限制，保留每个容器的额外副本
+// pod 被杀死后，所有容器最终被清理
 func containerGCTest(f *framework.Framework, test testRun) {
 	var runtime internalapi.RuntimeService
 	ginkgo.BeforeEach(func(ctx context.Context) {
@@ -152,7 +152,7 @@ func containerGCTest(f *framework.Framework, test testRun) {
 		framework.ExpectNoError(err)
 	})
 	for _, pod := range test.testPods {
-		// Initialize the getContainerNames function to use CRI runtime client.
+		// 初始化 getContainerNames 函数以使用 CRI runtime client。
 		pod.getContainerNames = func() ([]string, error) {
 			relevantContainers := []string{}
 			containers, err := runtime.ListContainers(context.Background(), &runtimeapi.ContainerFilter{
@@ -200,7 +200,7 @@ func containerGCTest(f *framework.Framework, test testRun) {
 						return err
 					}
 					total += len(containerNames)
-					// Check maxPerPodContainer for each container in the pod
+					// 检查 pod 中每个容器的 maxPerPodContainer
 					for i := 0; i < pod.numContainers; i++ {
 						containerCount := 0
 						for _, containerName := range containerNames {
@@ -214,7 +214,7 @@ func containerGCTest(f *framework.Framework, test testRun) {
 						}
 					}
 				}
-				//Check maxTotalContainers.  Currently, the default is -1, so this will never happen until we can configure maxTotalContainers
+				//检查 maxTotalContainers。当前默认为 -1，因此在能配置 maxTotalContainers 前这永远不会发生
 				if maxTotalContainers > 0 && totalContainers <= maxTotalContainers && total > maxTotalContainers {
 					return fmt.Errorf("expected total number of containers: %v, to be <= maxTotalContainers: %v", total, maxTotalContainers)
 				}

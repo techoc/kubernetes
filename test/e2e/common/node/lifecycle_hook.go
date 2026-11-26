@@ -54,28 +54,28 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 			targetIP, targetURL, targetNode string
 		)
 
-		// We test the probes by creating an HTTP server and looking at its logs
-		// to verify that it got hit with the expected probes. This is tricky
-		// though: when testing PostStart, the HTTP server can't be the container
-		// we're starting, because PostStart may run before the container starts.
-		// We can solve that by using a sidecar container, but that doesn't work
-		// for PreStop, because we can't reliably ensure that the sidecar stays
-		// around long enough after we Delete the pod for us to have a chance to
-		// read the logs.
+		// 通过创建 HTTP server 并查看其日志来测试探针，
+		// 确认它收到了预期的探测请求。但这里有个难点：
+		// 测试 PostStart 时，HTTP server 不能是
+		// 我们正在启动的容器，因为 PostStart 可能在容器启动前运行。
+		// 可以用 sidecar 容器解决，但对 PreStop 不行，
+		// 因为我们无法可靠保证 sidecar 在 Delete pod 后
+		// 还能存活足够久，让我们有机会
+		// 读取日志。
 		//
-		// To make both cases work, we run a separate pod to do the logging, and
-		// then use a sidecar container in the test pod that can receive probes at
-		// the test pod's IP and handle them by making a request to the logging
-		// pod.
+		// 为了让两种情况都成立，我们运行一个独立的 pod 负责记录日志，
+		// 再在测试 pod 中用 sidecar 容器接收发往
+		// 测试 pod IP 的探测请求，并通过向日志
+		// pod 发起请求来处理它们。
 		//
-		// (The Exec case is much simpler, since we can just have it curl the
-		// logging pod directly.)
+		// （Exec 场景简单得多，直接让它 curl
+		// 日志 pod 即可。）
 		podHandleHookRequest := e2epod.NewAgnhostPodFromContainers(
 			"", "pod-handle-http-request", nil,
 			e2epod.NewAgnhostContainer("container-handle-http-request", nil, nil, "netexec"),
 		)
-		// netexecConnect takes a target and a request, and returns a netexec
-		// command that will connect to `target` and request `req`.
+		// netexecConnect 接受 target 和 request，返回一个 netexec
+		// 命令，该命令会连接 `target` 并请求 `req`。
 		netexecConnect := func(target, req string) string {
 			return fmt.Sprintf("/dial?host=%s&port=8080&request=%s",
 				target,
@@ -156,9 +156,9 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 			}
 		}
 		/*
-			Release: v1.9
-			Testname: Pod Lifecycle, post start exec hook
-			Description: When a post start handler is specified in the container lifecycle using a 'Exec' action, then the handler MUST be invoked after the start of the container. A server pod is created that will serve http requests, create a second pod with a container lifecycle specifying a post start that invokes the server pod using ExecAction to validate that the post start is executed.
+			发布版本：v1.9
+			测试名称：Pod Lifecycle, post start exec hook
+			描述：当容器生命周期中通过 'Exec' action 指定 post start handler 时，handler 必须在容器启动后被调用。创建一个提供 http 请求的 server pod，再创建第二个带容器生命周期的 pod，其 post start 通过 ExecAction 调用 server pod，以验证 post start 已执行。
 		*/
 		framework.ConformanceIt("should execute poststart exec hook properly", f.WithNodeConformance(), func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -173,9 +173,9 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release: v1.9
-			Testname: Pod Lifecycle, prestop exec hook
-			Description: When a pre-stop handler is specified in the container lifecycle using a 'Exec' action, then the handler MUST be invoked before the container is terminated. A server pod is created that will serve http requests, create a second pod with a container lifecycle specifying a pre-stop that invokes the server pod using ExecAction to validate that the pre-stop is executed.
+			发布版本：v1.9
+			测试名称：Pod Lifecycle, prestop exec hook
+			描述：当容器生命周期中通过 'Exec' action 指定 pre-stop handler 时，handler 必须在容器终止前被调用。创建一个提供 http 请求的 server pod，再创建第二个带容器生命周期的 pod，其 pre-stop 通过 ExecAction 调用 server pod，以验证 pre-stop 已执行。
 		*/
 		framework.ConformanceIt("should execute prestop exec hook properly", f.WithNodeConformance(), func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -189,9 +189,9 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release: v1.9
-			Testname: Pod Lifecycle, post start http hook
-			Description: When a post start handler is specified in the container lifecycle using a HttpGet action, then the handler MUST be invoked after the start of the container. A server pod is created that will serve http requests, create a second pod on the same node with a container lifecycle specifying a post start that invokes the server pod to validate that the post start is executed.
+			发布版本：v1.9
+			测试名称：Pod Lifecycle, post start http hook
+			描述：当容器生命周期中通过 HttpGet action 指定 post start handler 时，handler 必须在容器启动后被调用。创建一个提供 http 请求的 server pod，在同一节点上创建第二个带容器生命周期的 pod，其 post start 调用 server pod，以验证 post start 已执行。
 		*/
 		framework.ConformanceIt("should execute poststart http hook properly", f.WithNodeConformance(), func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -203,16 +203,16 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 				},
 			}
 			podWithHook := getPodWithHook("pod-with-poststart-http-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release : v1.23
-			Testname: Pod Lifecycle, poststart https hook
-			Description: When a post-start handler is specified in the container lifecycle using a 'HttpGet' action, then the handler MUST be invoked before the container is terminated. A server pod is created that will serve https requests, create a second pod on the same node with a container lifecycle specifying a post-start that invokes the server pod to validate that the post-start is executed.
+			发布版本：v1.23
+			测试名称：Pod Lifecycle, poststart https hook
+			描述：当容器生命周期中通过 'HttpGet' action 指定 post-start handler 时，handler 必须在容器终止前被调用。创建一个提供 https 请求的 server pod，在同一节点上创建第二个带容器生命周期的 pod，其 post-start 调用 server pod，以验证 post-start 已执行。
 		*/
 		f.It("should execute poststart https hook properly", f.WithNodeConformance(), func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -225,16 +225,16 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 				},
 			}
 			podWithHook := getPodWithHook("pod-with-poststart-https-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release : v1.9
-			Testname: Pod Lifecycle, prestop http hook
-			Description: When a pre-stop handler is specified in the container lifecycle using a 'HttpGet' action, then the handler MUST be invoked before the container is terminated. A server pod is created that will serve http requests, create a second pod on the same node with a container lifecycle specifying a pre-stop that invokes the server pod to validate that the pre-stop is executed.
+			发布版本：v1.9
+			测试名称：Pod Lifecycle, prestop http hook
+			描述：当容器生命周期中通过 'HttpGet' action 指定 pre-stop handler 时，handler 必须在容器终止前被调用。创建一个提供 http 请求的 server pod，在同一节点上创建第二个带容器生命周期的 pod，其 pre-stop 调用 server pod，以验证 pre-stop 已执行。
 		*/
 		framework.ConformanceIt("should execute prestop http hook properly", f.WithNodeConformance(), func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -246,16 +246,16 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 				},
 			}
 			podWithHook := getPodWithHook("pod-with-prestop-http-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release : v1.23
-			Testname: Pod Lifecycle, prestop https hook
-			Description: When a pre-stop handler is specified in the container lifecycle using a 'HttpGet' action, then the handler MUST be invoked before the container is terminated. A server pod is created that will serve https requests, create a second pod on the same node with a container lifecycle specifying a pre-stop that invokes the server pod to validate that the pre-stop is executed.
+			发布版本：v1.23
+			测试名称：Pod Lifecycle, prestop https hook
+			描述：当容器生命周期中通过 'HttpGet' action 指定 pre-stop handler 时，handler 必须在容器终止前被调用。创建一个提供 https 请求的 server pod，在同一节点上创建第二个带容器生命周期的 pod，其 pre-stop 调用 server pod，以验证 pre-stop 已执行。
 		*/
 		f.It("should execute prestop https hook properly", f.WithNodeConformance(), func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -268,7 +268,7 @@ var _ = SIGDescribe("Container Lifecycle Hook", func() {
 				},
 			}
 			podWithHook := getPodWithHook("pod-with-prestop-https-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
@@ -291,7 +291,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 			targetIP, targetURL, targetNode string
 		)
 
-		// See description above in the "Container Lifecycle Hook" tests
+		// 参见上文 "Container Lifecycle Hook" 测试中的说明
 		podHandleHookRequest := e2epod.NewAgnhostPodFromContainers(
 			"", "pod-handle-http-request", nil,
 			e2epod.NewAgnhostContainer("container-handle-http-request", nil, nil, "netexec"),
@@ -376,14 +376,14 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 			}
 		}
 		/*
-			Release: v1.28
-			Testname: Pod Lifecycle with restartable init container, post start exec hook
-			Description: When a post start handler is specified in the container
-			lifecycle using a 'Exec' action, then the handler MUST be invoked after
-			the start of the container. A server pod is created that will serve http
-			requests, create a second pod with a container lifecycle specifying a
-			post start that invokes the server pod using ExecAction to validate that
-			the post start is executed.
+			发布版本：v1.28
+			测试名称：Pod Lifecycle with restartable init container, post start exec hook
+			描述：当容器生命周期中通过 'Exec' action 指定
+			post start handler 时，handler 必须在
+			容器启动后被调用。创建一个提供 http
+			请求的 server pod，再创建第二个带容器生命周期的
+			pod，其 post start 通过 ExecAction 调用 server pod，
+			以验证 post start 已执行。
 		*/
 		ginkgo.It("should execute poststart exec hook properly", func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -398,14 +398,14 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release: v1.28
-			Testname: Pod Lifecycle with restartable init container, prestop exec hook
-			Description: When a pre-stop handler is specified in the container
-			lifecycle using a 'Exec' action, then the handler MUST be invoked before
-			the container is terminated. A server pod is created that will serve http
-			requests, create a second pod with a container lifecycle specifying a
-			pre-stop that invokes the server pod using ExecAction to validate that
-			the pre-stop is executed.
+			发布版本：v1.28
+			测试名称：Pod Lifecycle with restartable init container, prestop exec hook
+			描述：当容器生命周期中通过 'Exec' action 指定
+			pre-stop handler 时，handler 必须在
+			容器终止前被调用。创建一个提供 http
+			请求的 server pod，再创建第二个带容器生命周期的
+			pod，其 pre-stop 通过 ExecAction 调用 server pod，
+			以验证 pre-stop 已执行。
 		*/
 		ginkgo.It("should execute prestop exec hook properly", func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -419,14 +419,14 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release: v1.28
-			Testname: Pod Lifecycle with restartable init container, post start http hook
-			Description: When a post start handler is specified in the container
-			lifecycle using a HttpGet action, then the handler MUST be invoked after
-			the start of the container. A server pod is created that will serve http
-			requests, create a second pod on the same node with a container lifecycle
-			specifying a post start that invokes the server pod to validate that the
-			post start is executed.
+			发布版本：v1.28
+			测试名称：Pod Lifecycle with restartable init container, post start http hook
+			描述：当容器生命周期中通过 HttpGet action 指定
+			post start handler 时，handler 必须在
+			容器启动后被调用。创建一个提供 http
+			请求的 server pod，在同一节点上创建第二个带容器
+			生命周期的 pod，其 post start 调用 server pod，
+			以验证 post start 已执行。
 		*/
 		ginkgo.It("should execute poststart http hook properly", func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -438,21 +438,21 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 				},
 			}
 			podWithHook := getSidecarPodWithHook("pod-with-poststart-http-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release : v1.28
-			Testname: Pod Lifecycle with restartable init container, poststart https hook
-			Description: When a post-start handler is specified in the container
-			lifecycle using a 'HttpGet' action, then the handler MUST be invoked
-			before the container is terminated. A server pod is created that will
-			serve https requests, create a second pod on the same node with a
-			container lifecycle specifying a post-start that invokes the server pod
-			to validate that the post-start is executed.
+			发布版本：v1.28
+			测试名称：Pod Lifecycle with restartable init container, poststart https hook
+			描述：当容器生命周期中通过 'HttpGet' action 指定
+			post-start handler 时，handler 必须在
+			容器终止前被调用。创建一个提供 https
+			请求的 server pod，在同一节点上创建第二个带
+			容器生命周期的 pod，其 post-start 调用 server pod，
+			以验证 post-start 已执行。
 		*/
 		ginkgo.It("should execute poststart https hook properly", func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -465,21 +465,21 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 				},
 			}
 			podWithHook := getSidecarPodWithHook("pod-with-poststart-https-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release : v1.28
-			Testname: Pod Lifecycle with restartable init container, prestop http hook
-			Description: When a pre-stop handler is specified in the container
-			lifecycle using a 'HttpGet' action, then the handler MUST be invoked
-			before the container is terminated. A server pod is created that will
-			serve http requests, create a second pod on the same node with a
-			container lifecycle specifying a pre-stop that invokes the server pod to
-			validate that the pre-stop is executed.
+			发布版本：v1.28
+			测试名称：Pod Lifecycle with restartable init container, prestop http hook
+			描述：当容器生命周期中通过 'HttpGet' action 指定
+			pre-stop handler 时，handler 必须在
+			容器终止前被调用。创建一个提供 http
+			请求的 server pod，在同一节点上创建第二个带
+			容器生命周期的 pod，其 pre-stop 调用 server pod，
+			以验证 pre-stop 已执行。
 		*/
 		ginkgo.It("should execute prestop http hook properly", func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -491,21 +491,21 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 				},
 			}
 			podWithHook := getSidecarPodWithHook("pod-with-prestop-http-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
 			testPodWithHook(ctx, podWithHook)
 		})
 		/*
-			Release : v1.28
-			Testname: Pod Lifecycle with restartable init container, prestop https hook
-			Description: When a pre-stop handler is specified in the container
-			lifecycle using a 'HttpGet' action, then the handler MUST be invoked
-			before the container is terminated. A server pod is created that will
-			serve https requests, create a second pod on the same node with a
-			container lifecycle specifying a pre-stop that invokes the server pod to
-			validate that the pre-stop is executed.
+			发布版本：v1.28
+			测试名称：Pod Lifecycle with restartable init container, prestop https hook
+			描述：当容器生命周期中通过 'HttpGet' action 指定
+			pre-stop handler 时，handler 必须在
+			容器终止前被调用。创建一个提供 https
+			请求的 server pod，在同一节点上创建第二个带
+			容器生命周期的 pod，其 pre-stop 调用 server pod，
+			以验证 pre-stop 已执行。
 		*/
 		ginkgo.It("should execute prestop https hook properly", func(ctx context.Context) {
 			lifecycle := &v1.Lifecycle{
@@ -518,7 +518,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Restartable Init Container
 				},
 			}
 			podWithHook := getSidecarPodWithHook("pod-with-prestop-https-hook", imageutils.GetPauseImageName(), lifecycle)
-			// make sure we spawn the test pod on the same node as the webserver.
+			// 确保测试 pod 与 webserver 在同一节点上创建。
 			nodeSelection := e2epod.NodeSelection{}
 			e2epod.SetAffinity(&nodeSelection, targetNode)
 			e2epod.SetNodeSelection(&podWithHook.Spec, nodeSelection)
@@ -587,9 +587,9 @@ var _ = SIGDescribe("Lifecycle Sleep Hook", framework.WithNodeConformance(), fun
 
 		var finalizer = "test/finalizer"
 		/*
-			Release : v1.34
-			Testname: Pod Lifecycle, prestop sleep hook
-			Description: When a pre-stop handler is specified in the container lifecycle using a 'Sleep' action, then the handler MUST be invoked before the container is terminated. A test pod will be created to verify if its termination time aligns with the sleep time specified when it is terminated.
+			发布版本：v1.34
+			测试名称：Pod Lifecycle, prestop sleep hook
+			描述：当容器生命周期中通过 'Sleep' action 指定 pre-stop handler 时，handler 必须在容器终止前被调用。创建一个测试 pod，验证其终止时间与终止时指定的 sleep 时间一致。
 		*/
 		ginkgo.It("valid prestop hook using sleep action", func(ctx context.Context) {
 			const sleepSeconds = 50
@@ -612,9 +612,9 @@ var _ = SIGDescribe("Lifecycle Sleep Hook", framework.WithNodeConformance(), fun
 			if err != nil {
 				framework.Failf("failed getting pod after deletion")
 			}
-			// deletionTimestamp equals to delete_time + tgps
-			// TODO: reduce sleep_seconds and tgps after issues.k8s.io/132205 is solved
-			// we get deletionTimestamp before container become terminated here because of issues.k8s.io/132205
+			// deletionTimestamp 等于 delete_time + tgps
+			// TODO: issues.k8s.io/132205 解决后减小 sleep_seconds 和 tgps
+			// 由于 issues.k8s.io/132205，这里在容器变为 terminated 之前就拿到了 deletionTimestamp
 			deletionTS := p.DeletionTimestamp.Time
 			if err := e2epod.WaitForContainerTerminated(ctx, f.ClientSet, p.Namespace, p.Name, name, sleepSeconds*2*time.Second); err != nil {
 				framework.Failf("failed waiting for container terminated")
@@ -624,24 +624,24 @@ var _ = SIGDescribe("Lifecycle Sleep Hook", framework.WithNodeConformance(), fun
 			if err != nil {
 				framework.Failf("failed getting pod after deletion")
 			}
-			// finishAt equals to delete_time + sleep_duration
+			// finishAt 等于 delete_time + sleep_duration
 			finishAt := p.Status.ContainerStatuses[0].State.Terminated.FinishedAt
 
 			// sleep_duration = (delete_time + sleep_duration) - (delete_time + tgps) + tgps
 			sleepDuration := finishAt.Sub(deletionTS) + time.Second*gracePeriod
 
-			// sleep_duration should be
-			// longer than 50 seconds (pod should sleep for 50 seconds)
-			// shorter than gracePeriodSeconds (100 seconds here)
+			// sleep_duration 应满足
+			// 大于 50 秒（pod 应 sleep 50 秒）
+			// 小于 gracePeriodSeconds（此处为 100 秒）
 			if !validDuration(sleepDuration, sleepSeconds, gracePeriod) {
 				framework.Failf("unexpected delay duration before killing the pod, finishAt = %v, deletionAt= %v", finishAt, deletionTS)
 			}
 		})
 
 		/*
-			Release : v1.34
-			Testname: Pod Lifecycle, prestop sleep hook with low gracePeriodSeconds
-			Description: When a pre-stop handler is specified in the container lifecycle using a 'Sleep' action, then the handler MUST be invoked before the container is terminated. A test pod will be created, and its `gracePeriodSeconds` will be modified to a value less than the sleep time before termination. The termination time will then be checked to ensure it aligns with the `gracePeriodSeconds` value.
+			发布版本：v1.34
+			测试名称：Pod Lifecycle, prestop sleep hook with low gracePeriodSeconds
+			描述：当容器生命周期中通过 'Sleep' action 指定 pre-stop handler 时，handler 必须在容器终止前被调用。创建一个测试 pod，终止前将其 `gracePeriodSeconds` 改为小于 sleep 时间的值。然后检查终止时间是否与 `gracePeriodSeconds` 一致。
 		*/
 		ginkgo.It("reduce GracePeriodSeconds during runtime", func(ctx context.Context) {
 			const sleepSeconds = 50
@@ -665,9 +665,9 @@ var _ = SIGDescribe("Lifecycle Sleep Hook", framework.WithNodeConformance(), fun
 			if err != nil {
 				framework.Failf("failed getting pod after deletion")
 			}
-			// deletionTimestamp equals to delete_time + tgps
-			// TODO: reduce sleep_seconds and tgps after issues.k8s.io/132205 is solved
-			// we get deletionTimestamp before container become terminated here because of issues.k8s.io/132205
+			// deletionTimestamp 等于 delete_time + tgps
+			// TODO: issues.k8s.io/132205 解决后减小 sleep_seconds 和 tgps
+			// 由于 issues.k8s.io/132205，这里在容器变为 terminated 之前就拿到了 deletionTimestamp
 			deletionTS := p.DeletionTimestamp.Time
 			if err := e2epod.WaitForContainerTerminated(ctx, f.ClientSet, p.Namespace, p.Name, name, sleepSeconds*2*time.Second); err != nil {
 				framework.Failf("failed waiting for container terminated")
@@ -676,23 +676,23 @@ var _ = SIGDescribe("Lifecycle Sleep Hook", framework.WithNodeConformance(), fun
 			if err != nil {
 				framework.Failf("failed getting pod after deletion")
 			}
-			// finishAt equals to delete_time + sleep_duration
+			// finishAt 等于 delete_time + sleep_duration
 			finishAt := p.Status.ContainerStatuses[0].State.Terminated.FinishedAt
 
 			// sleep_duration = (delete_time + sleep_duration) - (delete_time + tgps) + tgps
 			sleepDuration := finishAt.Sub(deletionTS) + time.Second*gracePeriod
-			// sleep_duration should be
-			// longer than 30 seconds (we change gracePeriodSeconds to 30 seconds here, and it's less than sleep action)
-			// shorter than sleep action (to make sure it doesn't take effect)
+			// sleep_duration 应满足
+			// 大于 30 秒（这里把 gracePeriodSeconds 改为 30 秒，小于 sleep action）
+			// 小于 sleep action（确保它没有生效）
 			if !validDuration(sleepDuration, gracePeriod, sleepSeconds) {
 				framework.Failf("unexpected delay duration before killing the pod, finishAt = %v, deletionAt= %v", finishAt, deletionTS)
 			}
 		})
 
 		/*
-			Release : v1.34
-			Testname: Pod Lifecycle, prestop sleep hook with erroneous startup command
-			Description: When a pre-stop handler is specified in the container lifecycle using a 'Sleep' action, then the handler MUST be invoked before the container is terminated. A test pod with an erroneous startup command will be created, and upon termination, it will be checked whether it ignored the sleep time.
+			发布版本：v1.34
+			测试名称：Pod Lifecycle, prestop sleep hook with erroneous startup command
+			描述：当容器生命周期中通过 'Sleep' action 指定 pre-stop handler 时，handler 必须在容器终止前被调用。创建一个启动命令错误的测试 pod，终止时检查它是否忽略了 sleep 时间。
 		*/
 		ginkgo.It("ignore terminated container", func(ctx context.Context) {
 			const sleepSeconds = 10
@@ -706,19 +706,19 @@ var _ = SIGDescribe("Lifecycle Sleep Hook", framework.WithNodeConformance(), fun
 			podWithHook := getPodWithHook(name, imageutils.GetE2EImage(imageutils.BusyBox), lifecycle)
 			podWithHook.Spec.TerminationGracePeriodSeconds = ptr.To[int64](gracePeriod)
 			podWithHook.Spec.Containers[0].Command = []string{"/bin/sh"}
-			// If we exit the container as soon as it's created,
-			// finishAt - startedAt can be negative due to some internal race
-			// so we need to keep it running for a while
+			// 如果容器一创建就退出，
+			// 由于内部竞态，finishAt - startedAt 可能为负
+			// 所以需要让它运行一段时间
 			podWithHook.Spec.Containers[0].Args = []string{"-c", "sleep 3"}
 			podWithHook.Spec.RestartPolicy = v1.RestartPolicyNever
 			ginkgo.By("create the pod with lifecycle hook using sleep action")
 			p := podClient.Create(ctx, podWithHook)
 			defer podClient.DeleteSync(ctx, podWithHook.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
-			// Use the framework PodDelete timeout instead of gracePeriod*time.Second so
-			// we have headroom for slower runtimes (e.g. VM-isolated containers) to
-			// transition through Terminated. The actual correctness check below uses
-			// the container's intrinsic StartedAt/FinishedAt timestamps and is unaffected
-			// by how long we waited here.
+			// 使用 framework 的 PodDelete 超时而非 gracePeriod*time.Second，
+			// 为较慢的 runtime（例如 VM 隔离容器）留出余量
+			// 完成 Terminated 状态转换。下面的实际正确性检查使用
+			// 容器自身的 StartedAt/FinishedAt 时间戳，不受
+			// 这里等待时长的影响。
 			framework.ExpectNoError(e2epod.WaitForContainerTerminated(ctx, f.ClientSet, f.Namespace.Name, p.Name, name, f.Timeouts.PodDelete))
 
 			p, err := podClient.Get(ctx, p.Name, metav1.GetOptions{})
@@ -728,8 +728,8 @@ var _ = SIGDescribe("Lifecycle Sleep Hook", framework.WithNodeConformance(), fun
 			finishAt := p.Status.ContainerStatuses[0].State.Terminated.FinishedAt
 			startedAt := p.Status.ContainerStatuses[0].State.Terminated.StartedAt
 			cost := finishAt.Sub(startedAt.Time)
-			// cost should be
-			// shorter than sleep action (container is terminated and sleep action should be ignored)
+			// cost 应满足
+			// 小于 sleep action（容器已终止，sleep action 应被忽略）
 			if !validDuration(cost, 0, sleepSeconds) {
 				framework.Failf("unexpected delay duration before killing the pod, cost = %v", cost)
 			}
@@ -759,9 +759,9 @@ var _ = SIGDescribe("Lifecycle sleep action zero value", framework.WithNodeConfo
 			start := time.Now()
 			podClient.DeleteSync(ctx, podWithHook.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			cost := time.Since(start)
-			// cost should be
-			// longer than 0 seconds (pod shouldn't sleep and the handler should return immediately)
-			// shorter than gracePeriodSeconds (default 30 seconds here)
+			// cost 应满足
+			// 大于 0 秒（pod 不应 sleep，handler 应立即返回）
+			// 小于 gracePeriodSeconds（此处默认 30 秒）
 			if !validDuration(cost, 0, 30) {
 				framework.Failf("unexpected delay duration before killing the pod, cost = %v", cost)
 			}

@@ -96,12 +96,12 @@ func TestCompareObjects(t *testing.T) {
 			require.NoError(t, actual.UnmarshalJSON([]byte(tc.actual)), "unmarshal actual")
 			actualDiff := compareObjects(&expected, &actual)
 			t.Logf("Actual diff:\n%s", actualDiff)
-			// Upstream go-cmp does not want the diff output to be checked in
-			// tests because it is not stable. They intentionally randomly
-			// switch between space and non-break space to enforce that
-			// (https://github.com/google/go-cmp/issues/366).
+			// 上游 go-cmp 不希望在测试中检查 diff 输出，
+			// 因为它不稳定。他们故意在
+			// 普通空格和不换行空格之间随机切换，
 			//
-			// Therefore the expected diff is merely informative, we only check
+			//因此预期的 diff 仅供参考，我们只检查
+			// 为空与非空两种情况。
 			// for empty vs. not empty.
 			if tc.expectedDiff == "" {
 				require.Empty(t, actualDiff)

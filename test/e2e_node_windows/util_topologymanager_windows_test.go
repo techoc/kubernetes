@@ -37,20 +37,20 @@ import (
 	e2emetrics "k8s.io/kubernetes/test/e2e/framework/metrics"
 )
 
-// nodeID is the identity extractor used by gstruct.MatchAllElements for
-// node-scoped kubelet metrics: these samples carry no distinguishing label, so
-// every sample maps to the same (empty) key. It mirrors the Linux e2e_node
-// helper of the same name.
+// nodeID 是 gstruct.MatchAllElements 用于 node 级 kubelet 指标的身份提取器：
+// 这些样本没有区分性的 label，因此
+// 每个样本映射到相同的（空）key。它对应 Linux e2e_node
+// 中同名的 helper。
 func nodeID(element interface{}) string {
 	return ""
 }
 
-// timelessSample matches a single Prometheus sample by value while ignoring the
-// metric labels, timestamp, and histogram. It mirrors the Linux e2e_node helper
-// so the Windows topology manager metrics assertions read identically.
+// timelessSample 只按值匹配单个 Prometheus 样本，忽略
+// 指标 label、时间戳和 histogram。它对应 Linux e2e_node 的 helper，
+// 使 Windows topology manager 指标的断言写法一致。
 func timelessSample(value interface{}) types.GomegaMatcher {
 	return gstruct.PointTo(gstruct.MatchAllFields(gstruct.Fields{
-		// We already check Metric when matching the Id.
+		// 匹配 Id 时已经检查过 Metric 了。
 		"Metric":    gstruct.Ignore(),
 		"Value":     gomega.BeNumerically("==", value),
 		"Timestamp": gstruct.Ignore(),
@@ -58,18 +58,18 @@ func timelessSample(value interface{}) types.GomegaMatcher {
 	}))
 }
 
-// getWindowsKubeletMetrics scrapes the kubelet's Prometheus metrics from the
-// read-only port on the local node. It is the Windows counterpart of the Linux
-// getKubeletMetrics helper and is used as a gomega.Eventually poll function.
+// getWindowsKubeletMetrics 从本地节点的只读端口抓取
+// kubelet 的 Prometheus 指标。它是 Linux 的 getKubeletMetrics helper
+// 的 Windows 对应版本，用作 gomega.Eventually 的轮询函数。
 func getWindowsKubeletMetrics(ctx context.Context) (e2emetrics.KubeletMetrics, error) {
 	ginkgo.By("Getting Kubelet metrics from the metrics API")
 	return e2emetrics.GrabKubeletMetricsWithoutProxy(ctx, fmt.Sprintf("%s:%d", nodeNameOrIP(), ports.KubeletReadOnlyPort), "/metrics")
 }
 
-// windowsDetectCPUsPerNUMANode returns a map of NUMA node number to the count of
-// logical CPUs on that node, as reported by the Windows kernel. It walks NUMA
-// node numbers from 0 upward and stops at the first node that reports no CPUs
-// (or that the OS rejects), which marks the end of the populated nodes.
+// windowsDetectCPUsPerNUMANode 返回 NUMA 节点编号到该节点逻辑 CPU 数的
+// map，数据来自 Windows 内核。它从 0 开始遍历 NUMA
+// 节点编号，在第一个报告没有 CPU（或操作系统拒绝）的节点处停止，
+// 该节点即为已填充节点的末尾。
 func windowsDetectCPUsPerNUMANode() map[int]int {
 	perNode := map[int]int{}
 	for node := 0; node <= 0xffff; node++ {
@@ -89,30 +89,30 @@ func windowsDetectCPUsPerNUMANode() map[int]int {
 	return perNode
 }
 
-// buildWindowsMemoryManagerKubeletConfig returns a KubeletConfiguration with the
-// static CPU manager (feature gate on) and the memory manager's BestEffort
-// policy enabled together. The memory manager validates at startup that the sum
-// of ReservedMemory across NUMA nodes equals the node's allocatable memory
-// reservation (SystemReserved + KubeReserved + hard-eviction); it does not care
-// how that total is distributed, so — like the Linux memory_manager_test — the
-// whole reservation is placed on NUMA node 0.
+// buildWindowsMemoryManagerKubeletConfig 返回一个 KubeletConfiguration，
+// 同时开启静态 CPU manager（feature gate 打开）和 memory manager 的
+// BestEffort 策略。memory manager 启动时校验各 NUMA 节点的
+// ReservedMemory 之和等于节点的可分配内存预留
+// （SystemReserved + KubeReserved + hard-eviction）；它不关心
+// 总量如何分布，所以像 Linux 的 memory_manager_test 一样，把
+// 全部预留放在 NUMA 节点 0 上。
 func buildWindowsMemoryManagerKubeletConfig(oldCfg *kubeletconfig.KubeletConfiguration) *kubeletconfig.KubeletConfiguration {
 	const (
 		systemReservedMem = "500Mi"
 		kubeReservedMem   = "500Mi"
 		evictionHardMem   = "100Mi"
-		// Total reservation = systemReserved + kubeReserved + hard-eviction.
+		// 总预留量 = systemReserved + kubeReserved + hard-eviction。
 		totalReservedMem = "1100Mi"
 	)
 
 	newCfg := buildWindowsCPUManagerKubeletConfig(oldCfg, true)
 	newCfg.MemoryManagerPolicy = "BestEffort"
-	// Keep the topology manager out of the admission decision so the memory
-	// manager's Allocate always runs. With single-numa-node/restricted the
-	// topology manager would reject an unsatisfiable request at the hint-merge
-	// stage before Allocate is called, and the pinning counters would never
-	// increment. "none" (like the Linux memory manager metrics test) admits the
-	// pod to the allocate phase so the failure path is exercised.
+	// 让 topology manager 不参与准入决策，这样 memory
+	// manager 的 Allocate 总会运行。如果用 single-numa-node/restricted，
+	// topology manager 会在 Allocate 调用前的 hint-merge 阶段
+	// 就拒绝无法满足的请求，pinning 计数器永远不会
+	// 递增。"none"（和 Linux memory manager metrics 测试一样）让 pod
+	// 进入 allocate 阶段，从而覆盖失败路径。
 	newCfg.TopologyManagerPolicy = topologymanager.PolicyNone
 
 	if newCfg.SystemReserved == nil {
@@ -141,10 +141,10 @@ func buildWindowsMemoryManagerKubeletConfig(oldCfg *kubeletconfig.KubeletConfigu
 	return newCfg
 }
 
-// makeGuaranteedMemoryManagerPodWindows builds a Guaranteed-QoS Windows pod with
-// a single container named "gu-ctr" whose CPU and memory requests equal their
-// limits. It is used to exercise the memory manager's allocation paths (e.g. an
-// oversized memory request that no NUMA node can satisfy).
+// makeGuaranteedMemoryManagerPodWindows 构建一个 Guaranteed-QoS 的 Windows pod，
+// 其中只有一个名为 "gu-ctr" 的容器，其 CPU 和内存 requests 等于
+// limits。它用于覆盖 memory manager 的分配路径（例如
+// 任何 NUMA 节点都无法满足的超大内存 request）。
 func makeGuaranteedMemoryManagerPodWindows(name, cpu, memory string) *v1.Pod {
 	rl := v1.ResourceList{
 		v1.ResourceCPU:    resource.MustParse(cpu),
@@ -162,7 +162,7 @@ func makeGuaranteedMemoryManagerPodWindows(name, cpu, memory string) *v1.Pod {
 						Requests: rl,
 						Limits:   rl,
 					},
-					// Long-running sleep; powershell.exe is available in the Windows BusyBox image.
+					// 长时间运行的 sleep；powershell.exe 在 Windows BusyBox 镜像中可用。
 					Command: []string{"powershell.exe", "-Command", "Start-Sleep -Seconds 86400"},
 				},
 			},

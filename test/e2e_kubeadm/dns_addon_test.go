@@ -37,16 +37,16 @@ const (
 	coreDNSDeploymentName     = "coredns"
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm configures the DNS addon as expected
+// 为所有旨在验证 kubeadm 是否按预期配置 DNS addon 的
+// 测试定义 container
 var _ = Describe("DNS addon", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s test framework 的实例
 	f := framework.NewDefaultFramework("DNS")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 这个 container 中的测试不应在集群中创建新对象，
+	// 所以禁用 namespace 创建以加快执行
 	f.SkipNamespaceCreation = true
 
 	ginkgo.Context("CoreDNS", func() {

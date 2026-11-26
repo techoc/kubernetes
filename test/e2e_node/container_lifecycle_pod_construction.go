@@ -34,38 +34,38 @@ import (
 )
 
 type execCommand struct {
-	// ExitCode is the exit status of the container
+	// ExitCode 是容器的退出状态
 	ExitCode int
-	// StartDelay is how long the container should delay before starting
+	// StartDelay 是容器启动前应延迟的时间
 	StartDelay int
-	// Delay is how long the container should delay before exiting
+	// Delay 是容器退出前应延迟的时间
 	Delay int
-	// LoopForever if set will cause the command to log once per second in a loop until
-	// terminated
+	// 设置 LoopForever 会让命令每秒记录一次日志，循环直到
+	// 被终止
 	LoopForever bool
-	// TerminationSeconds is the time it takes for the container before
-	// terminating if it catches SIGTERM.
+	// TerminationSeconds 是容器收到 SIGTERM 后
+	// 终止所需的时间。
 	TerminationSeconds int
-	// ContainerName is the name of the container to append the log. If empty,
-	// the name specified in ExecCommand will be used.
+	// ContainerName 是要追加日志的容器名称。为空时，
+	// 使用 ExecCommand 中指定的名称。
 	ContainerName string
-	// LoopPeriod is the time interval for executing the loop.
+	// LoopPeriod 是执行循环的时间间隔。
 	LoopPeriod float32
 }
 
-// ExecCommand returns the command to execute in the container that implements
-// execCommand and logs activities to a container specific log that persists
-// across container restarts. The final log is written to container log so it
-// can be retrieved by the test harness during the container execution.
-// Log to /proc/1/fd/1 so that the lifecycle hook handler logs are captured as
-// well.
+// ExecCommand 返回要在容器中执行的命令，它实现
+// execCommand 并把活动记录到容器专属日志中，该日志在
+// 容器重启后仍保留。最终日志写入容器日志，以便
+// 测试框架在容器执行期间取回。
+// 同时写入 /proc/1/fd/1，让 lifecycle hook handler 的日志
+// 也能被捕获。
 func ExecCommand(name string, c execCommand) []string {
 	var cmd bytes.Buffer
-	// all outputs are in the format of:
+	// 所有输出格式为：
 	// time-since-boot timestamp container-name message
 
-	// The busybox time command doesn't support sub-second display.
-	// We have to use nmeter to get the milliseconds part.
+	// busybox 的 time 命令不支持亚秒显示。
+	// 必须用 nmeter 获取毫秒部分。
 	timeCmd := "`date -u +%FT$(nmeter -d0 '%3t' | head -n1)Z`"
 	containerName := name
 	if c.ContainerName != "" {
@@ -84,7 +84,7 @@ func ExecCommand(name string, c execCommand) []string {
 	if c.StartDelay != 0 {
 		fmt.Fprint(&cmd, sleepCommand(c.StartDelay))
 	}
-	// You can check started file to see if the container has started
+	// 可以检查 started 文件看容器是否已启动
 	fmt.Fprintf(&cmd, "echo %s '%s Started' | tee -a %s >> /proc/1/fd/1; ", timeCmd, name, containerLog)
 	fmt.Fprintf(&cmd, "touch started; ")
 	fmt.Fprintf(&cmd, "echo %s '%s Delaying %d' | tee -a %s >> /proc/1/fd/1; ", timeCmd, name, c.Delay, containerLog)
@@ -104,15 +104,15 @@ func ExecCommand(name string, c execCommand) []string {
 	return e2epod.GenerateScriptCmd(cmd.String())
 }
 
-// sleepCommand returns a command that sleeps for the given number of seconds
-// in background and waits for it to finish so that the parent process can
-// handle signals.
+// sleepCommand 返回一个命令，它在后台睡眠指定秒数
+// 并等待其完成，好让父进程
+// 处理信号。
 func sleepCommand(seconds int) string {
 	return fmt.Sprintf("exec sleep %d & wait $!; ", seconds)
 }
 
 type containerOutput struct {
-	// time the message was seen to the nearest second
+	// 看到消息的时间，精确到秒
 	timestamp     time.Time
 	containerName string
 	command       string
@@ -127,7 +127,7 @@ func (o containerOutputList) String() string {
 	return b.String()
 }
 
-// RunTogether returns an error if containers don't run together
+// 如果容器没有同时运行，RunTogether 返回错误
 func (o containerOutputList) RunTogether(lhs, rhs string) error {
 	if err := o.RunTogetherLhsFirst(lhs, rhs); err != nil {
 		if err := o.RunTogetherLhsFirst(rhs, lhs); err != nil {
@@ -137,7 +137,7 @@ func (o containerOutputList) RunTogether(lhs, rhs string) error {
 	return nil
 }
 
-// RunTogetherLhsFirst returns an error if containers don't run together or if rhs starts before lhs
+// 如果容器没有同时运行，或 rhs 在 lhs 之前启动，RunTogetherLhsFirst 返回错误
 func (o containerOutputList) RunTogetherLhsFirst(lhs, rhs string) error {
 	lhsStart := o.findIndex(lhs, "Started", 0)
 	if lhsStart == -1 {
@@ -170,7 +170,7 @@ func (o containerOutputList) RunTogetherLhsFirst(lhs, rhs string) error {
 	return nil
 }
 
-// StartsBefore returns an error if lhs did not start before rhs
+// 如果 lhs 没有在 rhs 之前启动，StartsBefore 返回错误
 func (o containerOutputList) StartsBefore(lhs, rhs string) error {
 	lhsStart := o.findIndex(lhs, "Started", 0)
 
@@ -178,7 +178,7 @@ func (o containerOutputList) StartsBefore(lhs, rhs string) error {
 		return fmt.Errorf("couldn't find that %s ever started, got\n%v", lhs, o)
 	}
 
-	// this works even for the same names (restart case)
+	// 即使名称相同（重启场景）也有效
 	rhsStart := o.findIndex(rhs, "Starting", lhsStart+1)
 
 	if rhsStart == -1 {
@@ -187,7 +187,7 @@ func (o containerOutputList) StartsBefore(lhs, rhs string) error {
 	return nil
 }
 
-// ExitsBefore returns an error if lhs did not end before rhs
+// 如果 lhs 没有在 rhs 之前结束，ExitsBefore 返回错误
 func (o containerOutputList) ExitsBefore(lhs, rhs string) error {
 	lhsExit := o.findIndex(lhs, "Exiting", 0)
 
@@ -195,7 +195,7 @@ func (o containerOutputList) ExitsBefore(lhs, rhs string) error {
 		return fmt.Errorf("couldn't find that %s ever exited, got\n%v", lhs, o)
 	}
 
-	// this works even for the same names (restart case)
+	// 即使名称相同（重启场景）也有效
 	rhsExit := o.findIndex(rhs, "Exiting", lhsExit+1)
 
 	if rhsExit == -1 {
@@ -204,7 +204,7 @@ func (o containerOutputList) ExitsBefore(lhs, rhs string) error {
 	return nil
 }
 
-// Starts returns an error if the container was not found to have started
+// 如果未发现容器已启动，Starts 返回错误
 func (o containerOutputList) Starts(name string) error {
 	if idx := o.findIndex(name, "Started", 0); idx == -1 {
 		return fmt.Errorf("couldn't find that %s ever started, got\n%v", name, o)
@@ -212,7 +212,7 @@ func (o containerOutputList) Starts(name string) error {
 	return nil
 }
 
-// DoesntStart returns an error if the container was found to have started
+// 如果发现容器已启动，DoesntStart 返回错误
 func (o containerOutputList) DoesntStart(name string) error {
 	if idx := o.findIndex(name, "Started", 0); idx != -1 {
 		return fmt.Errorf("find %s started, but didn't expect to, got\n%v", name, o)
@@ -220,7 +220,7 @@ func (o containerOutputList) DoesntStart(name string) error {
 	return nil
 }
 
-// Exits returns an error if the container was not found to have exited
+// 如果未发现容器已退出，Exits 返回错误
 func (o containerOutputList) Exits(name string) error {
 	if idx := o.findIndex(name, "Exiting", 0); idx == -1 {
 		return fmt.Errorf("couldn't find that %s ever exited, got\n%v", name, o)
@@ -228,7 +228,7 @@ func (o containerOutputList) Exits(name string) error {
 	return nil
 }
 
-// HasRestarted returns an error if the container was not found to have restarted
+// 如果未发现容器已重启，HasRestarted 返回错误
 func (o containerOutputList) HasRestarted(name string) error {
 	idx := o.findIndex(name, "Starting", 0)
 	if idx == -1 {
@@ -244,7 +244,7 @@ func (o containerOutputList) HasRestarted(name string) error {
 	return nil
 }
 
-// HasNotRestarted returns an error if the container was found to have restarted
+// 如果发现容器已重启，HasNotRestarted 返回错误
 func (o containerOutputList) HasNotRestarted(name string) error {
 	idx := o.findIndex(name, "Starting", 0)
 	if idx == -1 {
@@ -298,7 +298,7 @@ func (o containerOutputList) findLastIndex(name string, command string) int {
 	return found
 }
 
-// TimeOfStart returns the UNIX time in milliseconds when the specified container started.
+// TimeOfStart 返回指定容器启动时的 UNIX 时间（毫秒）。
 func (o containerOutputList) TimeOfStart(name string) (int64, error) {
 	idx := o.findIndex(name, "Starting", 0)
 	if idx == -1 {
@@ -307,7 +307,7 @@ func (o containerOutputList) TimeOfStart(name string) (int64, error) {
 	return o[idx].timestamp.UnixMilli(), nil
 }
 
-// TimeOfLastLoop returns the UNIX time in milliseconds when the specified container last looped.
+// TimeOfLastLoop 返回指定容器最后一次循环时的 UNIX 时间（毫秒）。
 func (o containerOutputList) TimeOfLastLoop(name string) (int64, error) {
 	idx := o.findLastIndex(name, "Looping")
 	if idx == -1 {
@@ -318,10 +318,10 @@ func (o containerOutputList) TimeOfLastLoop(name string) (int64, error) {
 
 var logRe = regexp.MustCompile(`unable to retrieve container logs for (cri-o|containerd)://[0-9a-f]{64}`)
 
-// parseOutput combines the container log from all of the init and regular
-// containers and parses/sorts the outputs to produce an execution log
+// parseOutput 合并所有 init 容器和普通容器的
+// 容器日志，并解析/排序输出，生成执行日志
 func parseOutput(ctx context.Context, f *framework.Framework, pod *v1.Pod) containerOutputList {
-	// accumulate all of our statuses
+	// 累积所有状态
 	var statuses []v1.ContainerStatus
 	statuses = append(statuses, pod.Status.InitContainerStatuses...)
 	statuses = append(statuses, pod.Status.ContainerStatuses...)
@@ -343,13 +343,13 @@ func parseOutput(ctx context.Context, f *framework.Framework, pod *v1.Pod) conta
 		buf.WriteString(log)
 	}
 
-	// parse
+	// 解析
 	sc := bufio.NewScanner(&buf)
 	var res containerOutputList
 	for sc.Scan() {
 		log := sc.Text()
 
-		// Trim possible prefixed output if the container logs are not available for the time being
+		// 容器日志暂时不可用时，去掉可能的前缀输出
 		log = logRe.ReplaceAllString(log, "")
 
 		fields := strings.Fields(log)
@@ -365,14 +365,14 @@ func parseOutput(ctx context.Context, f *framework.Framework, pod *v1.Pod) conta
 		})
 	}
 
-	// sort using the timeSinceBoot since it has more precision
+	// 用 timeSinceBoot 排序，因为它精度更高
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].timestamp.Before(res[j].timestamp)
 	})
 	return res
 }
 
-// preparePod adds an empty dir volume and mounts it to each container at /persistent
+// preparePod 添加一个 empty dir volume 并挂载到每个容器的 /persistent
 func preparePod(pod *v1.Pod) {
 	var defaultResourceRequirements = v1.ResourceRequirements{
 		Requests: v1.ResourceList{
@@ -414,8 +414,8 @@ func preparePod(pod *v1.Pod) {
 	}
 }
 
-// startedPostStartGate generates a LifecycleHandler for a PostStart hook that waits for the main
-// container process to reach the `Started` point.
+// startedPostStartGate 为 PostStart hook 生成一个 LifecycleHandler，它等待主
+// 容器进程到达 `Started` 点。
 func startedPostStartGate() *v1.LifecycleHandler {
 	return &v1.LifecycleHandler{
 		Exec: &v1.ExecAction{

@@ -54,18 +54,18 @@ var _ = SIGDescribe("MutatingAdmissionPolicy [Privileged:ClusterAdmin]", func() 
 	})
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
-		// Make sure the namespace created for the test is labeled to be selected
-		// in binding.spec.matchResources.namespaceSelector.matchLabels
-		// By containing the tests within the marked namespace, they will not
-		// disturb concurrent tests that run in other namespaces.
+		// 确保为测试创建的 namespace 带有标签，可被
+		// binding.spec.matchResources.namespaceSelector.matchLabels 选中
+		// 将测试限制在带标记的 namespace 内，就不会
+		// 干扰其他 namespace 中并发运行的测试。
 		labelNamespace(ctx, f, f.Namespace.Name)
 	})
 
 	/*
-	   Release: v1.36
-	   Testname: MutatingAdmissionPolicy
-	   Description:
-	   The MutatingAdmissionPolicy should mutate a deployment by adding annotations as defined in the policy.
+	   发布版本：v1.36
+	   测试名称：MutatingAdmissionPolicy
+	   描述：
+	   MutatingAdmissionPolicy 应按策略中的定义，通过添加注解来变更 deployment。
 	*/
 	framework.ConformanceIt("should mutate a Deployment with annotations", func(ctx context.Context) {
 		ginkgo.By("creating the policy", func() {
@@ -123,10 +123,10 @@ var _ = SIGDescribe("MutatingAdmissionPolicy [Privileged:ClusterAdmin]", func() 
 	})
 
 	/*
-	   Release: v1.36
-	   Testname: MutatingAdmissionPolicy
-	   Description:
-	   The MutatingAdmissionPolicy should mutate a deployment as the expression defined inside the policy.
+	   发布版本：v1.36
+	   测试名称：MutatingAdmissionPolicy
+	   描述：
+	   MutatingAdmissionPolicy 应按策略中定义的表达式变更 deployment。
 	*/
 	framework.ConformanceIt("should mutate a Deployment", func(ctx context.Context) {
 		ginkgo.By("creating the policy", func() {
@@ -177,17 +177,17 @@ var _ = SIGDescribe("MutatingAdmissionPolicy [Privileged:ClusterAdmin]", func() 
 	})
 
 	/*
-	   Release: v1.36
-	   Testname: MutatingAdmissionPolicy API
-	   Description:
-	   The admissionregistration.k8s.io API group MUST exist in the
-	     /apis discovery document.
-	   The admissionregistration.k8s.io/v1 API group/version MUST exist
-	     in the /apis/admissionregistration.k8s.io discovery document.
-	   The mutatingadmissionpolicies resource MUST exist in the
-	     /apis/admissionregistration.k8s.io/v1 discovery document.
-	   The mutatingadmissionpolicies resource must support create, get,
-	     list, watch, update, patch, delete, and deletecollection.
+	   发布版本：v1.36
+	   测试名称：MutatingAdmissionPolicy API
+	   描述：
+	   admissionregistration.k8s.io API group 必须出现在
+	     /apis discovery 文档中。
+	   admissionregistration.k8s.io/v1 API group/version 必须出现在
+	     /apis/admissionregistration.k8s.io discovery 文档中。
+	   mutatingadmissionpolicies 资源必须出现在
+	     /apis/admissionregistration.k8s.io/v1 discovery 文档中。
+	   mutatingadmissionpolicies 资源必须支持 create、get、
+	     list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support MutatingAdmissionPolicy API operations", func(ctx context.Context) {
 		mapVersion := "v1"
@@ -364,11 +364,11 @@ var _ = SIGDescribe("MutatingAdmissionPolicy [Privileged:ClusterAdmin]", func() 
 		mapTmp, err := client.Get(ctx, mapCreated.Name, metav1.GetOptions{})
 		switch {
 		case err == nil && mapTmp.GetDeletionTimestamp() != nil && len(mapTmp.GetFinalizers()) > 0:
-			// deletion requested successfully, object is blocked by finalizers
+			// 删除请求已成功，但对象被 finalizer 阻塞
 		case err == nil:
 			framework.Failf("expected deleted object, got %#v", mapTmp)
 		case apierrors.IsNotFound(err):
-			// deleted successfully
+			// 删除成功
 		default:
 			framework.Failf("expected 404, got %#v", err)
 		}
@@ -399,17 +399,17 @@ var _ = SIGDescribe("MutatingAdmissionPolicy [Privileged:ClusterAdmin]", func() 
 	})
 
 	/*
-	   Release: v1.36
-	   Testname: MutatingAdmissionPolicyBinding API
-	   Description:
-	   The admissionregistration.k8s.io API group MUST exist in the
-	     /apis discovery document.
-	   The admissionregistration.k8s.io/v1 API group/version MUST exist
-	     in the /apis/admissionregistration.k8s.io discovery document.
-	   The MutatingAdmissionPolicyBinding resources MUST exist in the
-	     /apis/admissionregistration.k8s.io/v1 discovery document.
-	   The MutatingAdmissionPolicyBinding resource must support create, get,
-	     list, watch, update, patch, delete, and deletecollection.
+	   发布版本：v1.36
+	   测试名称：MutatingAdmissionPolicyBinding API
+	   描述：
+	   admissionregistration.k8s.io API group 必须出现在
+	     /apis discovery 文档中。
+	   admissionregistration.k8s.io/v1 API group/version 必须出现在
+	     /apis/admissionregistration.k8s.io discovery 文档中。
+	   MutatingAdmissionPolicyBinding 资源必须出现在
+	     /apis/admissionregistration.k8s.io/v1 discovery 文档中。
+	   MutatingAdmissionPolicyBinding 资源必须支持 create、get、
+	     list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support MutatingAdmissionPolicyBinding API operations", func(ctx context.Context) {
 		mapbVersion := "v1"
@@ -563,11 +563,11 @@ var _ = SIGDescribe("MutatingAdmissionPolicy [Privileged:ClusterAdmin]", func() 
 		mapbTmp, err := client.Get(ctx, mapbCreated.Name, metav1.GetOptions{})
 		switch {
 		case err == nil && mapbTmp.GetDeletionTimestamp() != nil && len(mapbTmp.GetFinalizers()) > 0:
-			// deletion requested successfully, object is blocked by finalizers
+			// 删除请求已成功，但对象被 finalizer 阻塞
 		case err == nil:
 			framework.Failf("expected deleted object, got %#v", mapbTmp)
 		case apierrors.IsNotFound(err):
-			// deleted successfully
+			// 删除成功
 		default:
 			framework.Failf("expected 404, got %#v", err)
 		}

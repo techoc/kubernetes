@@ -139,7 +139,7 @@ func runKubeletAuthzTest(ctx context.Context, f *framework.Framework, endpoint, 
 	ginkgo.By("Running command in Pod")
 
 	var hostWarpStart, hostWarpEnd string
-	// IPv6 host must be wrapped within [] if you specify a port.
+	// 如果指定了端口，IPv6 主机必须用 [] 包裹。
 	if framework.TestContext.ClusterIsIPv6() {
 		hostWarpStart = "["
 		hostWarpEnd = "]"

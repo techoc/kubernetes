@@ -67,15 +67,15 @@ import (
 
 const (
 	cockroachDBManifestPath = "test/e2e/testing-manifests/statefulset/cockroachdb"
-	// We don't restart MySQL cluster regardless of restartCluster, since MySQL doesn't handle restart well
+	// 无论 restartCluster 如何，都不重启 MySQL 集群，因为 MySQL 不擅长处理重启
 	restartCluster = true
 
-	// Timeout for reads from databases running on stateful pods.
+	// 从有状态 pod 上运行的数据库读取数据的超时时间。
 	readTimeout = 60 * time.Second
 
-	// statefulSetTimeout is a timeout interval for StatefulSet operations
+	// statefulSetTimeout 是 StatefulSet 操作的超时时间间隔
 	statefulSetTimeout = 10 * time.Minute
-	// statefulPodTimeout is a timeout for stateful pods to change state
+	// statefulPodTimeout 是有状态 pod 改变状态的超时时间
 	statefulPodTimeout = 5 * time.Minute
 
 	testFinalizer = "example.com/test-finalizer"
@@ -93,8 +93,8 @@ var httpProbe = &v1.Probe{
 	FailureThreshold: 1,
 }
 
-// GCE Quota requirements: 3 pds, one per stateful pod manifest declared above.
-// GCE Api requirements: nodes and master need storage r/w permissions.
+// GCE Quota 要求：3 个 pd，上面声明的每个有状态 pod manifest 各一个。
+// GCE Api 要求：node 和 master 需要存储读写权限。
 var _ = SIGDescribe("StatefulSet", func() {
 	f := framework.NewDefaultFramework("statefulset")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -135,8 +135,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			e2estatefulset.DeleteAllStatefulSets(ctx, c, ns)
 		})
 
-		// This can't be Conformance yet because it depends on a default
-		// StorageClass and a dynamic provisioner.
+		// 这个测试还不能纳入一致性测试，因为它依赖默认
+		// StorageClass 和动态 provisioner。
 		ginkgo.It("should provide basic identity", func(ctx context.Context) {
 			ginkgo.By("Creating statefulset " + ssName + " in namespace " + ns)
 			e2epv.SkipIfNoDefaultStorageClass(ctx, c)
@@ -185,16 +185,16 @@ var _ = SIGDescribe("StatefulSet", func() {
 			framework.ExpectNoError(e2estatefulset.ExecInStatefulPods(ctx, c, ss, cmd))
 		})
 
-		// This can't be Conformance yet because it depends on a default
-		// StorageClass and a dynamic provisioner.
+		// 这个测试还不能纳入一致性测试，因为它依赖默认
+		// StorageClass 和动态 provisioner。
 		ginkgo.It("should adopt matching orphans and release non-matching pods", func(ctx context.Context) {
 			ginkgo.By("Creating statefulset " + ssName + " in namespace " + ns)
 			e2epv.SkipIfNoDefaultStorageClass(ctx, c)
 			*(ss.Spec.Replicas) = 1
 			e2estatefulset.PauseNewPods(ss)
 
-			// Replace ss with the one returned from Create() so it has the UID.
-			// Save Kind since it won't be populated in the returned ss.
+			// 用 Create() 返回的 ss 替换原对象，以获取 UID。
+			// 保存 Kind，因为返回的 ss 中不会填充它。
 			kind := ss.Kind
 			ss, err := c.AppsV1().StatefulSets(ns).Create(ctx, ss, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
@@ -251,7 +251,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 				},
 			)).To(gomega.Succeed(), "wait for pod %q to be released", pod.Name)
 
-			// If we don't do this, the test leaks the Pod and PVC.
+			// 如果不这样做，测试会泄漏 Pod 和 PVC。
 			ginkgo.By("Readding labels to the stateful set's pod")
 			e2epod.NewPodClient(f).Update(ctx, pod.Name, func(pod *v1.Pod) {
 				pod.Labels = prevLabels
@@ -272,8 +272,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			)).To(gomega.Succeed(), "wait for pod %q to be readopted", pod.Name)
 		})
 
-		// This can't be Conformance yet because it depends on a default
-		// StorageClass and a dynamic provisioner.
+		// 这个测试还不能纳入一致性测试，因为它依赖默认
+		// StorageClass 和动态 provisioner。
 		ginkgo.It("should not deadlock when a pod's predecessor fails", func(ctx context.Context) {
 			ginkgo.By("Creating statefulset " + ssName + " in namespace " + ns)
 			e2epv.SkipIfNoDefaultStorageClass(ctx, c)
@@ -291,9 +291,9 @@ var _ = SIGDescribe("StatefulSet", func() {
 			ginkgo.By("Waiting for stateful pod at index 1 to enter running.")
 			e2estatefulset.WaitForRunning(ctx, c, 2, 1, ss)
 
-			// Now we have 1 healthy and 1 unhealthy stateful pod. Deleting the healthy stateful pod should *not*
-			// create a new stateful pod till the remaining stateful pod becomes healthy, which won't happen till
-			// we set the healthy bit.
+			// 现在有 1 个健康、1 个不健康的有状态 pod。删除健康 pod 后，
+			// 在剩下的 pod 恢复健康前不应创建新的有状态 pod，而在我们
+			// 设置 healthy 标志前它不会恢复健康。
 
 			ginkgo.By("Deleting healthy stateful pod at index 0.")
 			deleteStatefulPodAtIndex(ctx, c, 0, ss)
@@ -308,8 +308,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			e2estatefulset.WaitForRunningAndReady(ctx, c, *ss.Spec.Replicas, ss)
 		})
 
-		// This can't be Conformance yet because it depends on a default
-		// StorageClass and a dynamic provisioner.
+		// 这个测试还不能纳入一致性测试，因为它依赖默认
+		// StorageClass 和动态 provisioner。
 		ginkgo.It("should perform rolling updates and roll backs of template modifications with PVCs", func(ctx context.Context) {
 			ginkgo.By("Creating a new StatefulSet with PVCs")
 			e2epv.SkipIfNoDefaultStorageClass(ctx, c)
@@ -318,9 +318,9 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-		   Release: v1.9
-		   Testname: StatefulSet, Rolling Update
-		   Description: StatefulSet MUST support the RollingUpdate strategy to automatically replace Pods one at a time when the Pod template changes. The StatefulSet's status MUST indicate the CurrentRevision and UpdateRevision. If the template is changed to match a prior revision, StatefulSet MUST detect this as a rollback instead of creating a new revision. This test does not depend on a preexisting default StorageClass or a dynamic provisioner.
+		   发布版本：v1.9
+		   测试名称：StatefulSet, Rolling Update
+		   描述：StatefulSet 必须支持 RollingUpdate 策略，在 Pod 模板变化时自动逐个替换 Pod。StatefulSet 的状态必须指明 CurrentRevision 和 UpdateRevision。如果模板改回匹配之前的 revision，StatefulSet 必须识别为回滚而不是创建新 revision。本测试不依赖预先存在的默认 StorageClass 或动态 provisioner。
 		*/
 		framework.ConformanceIt("should perform rolling updates and roll backs of template modifications", func(ctx context.Context) {
 			ginkgo.By("Creating a new StatefulSet")
@@ -329,9 +329,9 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-		   Release: v1.9
-		   Testname: StatefulSet, Rolling Update with Partition
-		   Description: StatefulSet's RollingUpdate strategy MUST support the Partition parameter for canaries and phased rollouts. If a Pod is deleted while a rolling update is in progress, StatefulSet MUST restore the Pod without violating the Partition. This test does not depend on a preexisting default StorageClass or a dynamic provisioner.
+		   发布版本：v1.9
+		   测试名称：StatefulSet, Rolling Update with Partition
+		   描述：StatefulSet 的 RollingUpdate 策略必须支持 Partition 参数，用于金丝雀和分阶段发布。滚动更新过程中如果某个 Pod 被删除，StatefulSet 必须恢复该 Pod 且不违反 Partition。本测试不依赖预先存在的默认 StorageClass 或动态 provisioner。
 		*/
 		framework.ConformanceIt("should perform canary updates and phased rolling updates of template modifications", func(ctx context.Context) {
 			ginkgo.By("Creating a new StatefulSet")
@@ -634,8 +634,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 				*ss.Spec.Replicas)
 		})
 
-		// Do not mark this as Conformance.
-		// The legacy OnDelete strategy only exists for backward compatibility with pre-v1 APIs.
+		// 不要将其标记为一致性测试。
+		// 遗留的 OnDelete 策略只是为了兼容 v1 之前的 API。
 		ginkgo.It("should implement legacy replacement when the update strategy is OnDelete", func(ctx context.Context) {
 			ginkgo.By("Creating a new StatefulSet")
 			ss := e2estatefulset.NewStatefulSet("ss2", ns, headlessSvcName, 3, nil, nil, labels)
@@ -716,9 +716,9 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-		   Release: v1.9
-		   Testname: StatefulSet, Scaling
-		   Description: StatefulSet MUST create Pods in ascending order by ordinal index when scaling up, and delete Pods in descending order when scaling down. Scaling up or down MUST pause if any Pods belonging to the StatefulSet are unhealthy. This test does not depend on a preexisting default StorageClass or a dynamic provisioner.
+		   发布版本：v1.9
+		   测试名称：StatefulSet, Scaling
+		   描述：StatefulSet 扩容时必须按序号递增顺序创建 Pod，缩容时必须按递减顺序删除 Pod。只要有属于 StatefulSet 的 Pod 不健康，扩缩容就必须暂停。本测试不依赖预先存在的默认 StorageClass 或动态 provisioner。
 		*/
 		framework.ConformanceIt("Scaling should happen in predictable order and halt if any stateful pod is unhealthy", f.WithSlow(), func(ctx context.Context) {
 			psLabels := klabels.Set(labels)
@@ -734,7 +734,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			})
 			framework.ExpectNoError(err)
 
-			// Verify that stateful set will be scaled up in order.
+			// 验证 stateful set 按顺序扩容。
 			wg := sync.WaitGroup{}
 			var orderErr error
 			wg.Add(1)
@@ -788,7 +788,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			})
 			framework.ExpectNoError(err)
 
-			// Verify that stateful set will be scaled down in order.
+			// 验证 stateful set 按顺序缩容。
 			wg.Add(1)
 			go func() {
 				defer ginkgo.GinkgoRecover()
@@ -826,9 +826,9 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-		   Release: v1.9
-		   Testname: StatefulSet, Burst Scaling
-		   Description: StatefulSet MUST support the Parallel PodManagementPolicy for burst scaling. This test does not depend on a preexisting default StorageClass or a dynamic provisioner.
+		   发布版本：v1.9
+		   测试名称：StatefulSet, Burst Scaling
+		   描述：StatefulSet 必须支持 Parallel PodManagementPolicy 以实现快速扩缩容。本测试不依赖预先存在的默认 StorageClass 或动态 provisioner。
 		*/
 		framework.ConformanceIt("Burst scaling should run to completion even with unhealthy pods", f.WithSlow(), func(ctx context.Context) {
 			psLabels := klabels.Set(labels)
@@ -868,9 +868,9 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-		   Release: v1.9
-		   Testname: StatefulSet, Recreate Failed Pod
-		   Description: StatefulSet MUST delete and recreate Pods it owns that go into a Failed state, such as when they are rejected or evicted by a Node. This test does not depend on a preexisting default StorageClass or a dynamic provisioner.
+		   发布版本：v1.9
+		   测试名称：StatefulSet, Recreate Failed Pod
+		   描述：StatefulSet 必须删除并重建其拥有的、进入 Failed 状态的 Pod，例如被 Node 拒绝或驱逐的情况。本测试不依赖预先存在的默认 StorageClass 或动态 provisioner。
 		*/
 		framework.ConformanceIt("Should recreate evicted statefulset", func(ctx context.Context) {
 			podName := "test-pod"
@@ -934,7 +934,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			}
 			ctx, cancel := watchtools.ContextWithOptionalTimeout(ctx, statefulPodTimeout)
 			defer cancel()
-			// we need to get UID from pod in any state and wait until stateful set controller will remove pod at least once
+			// 需要从任意状态的 pod 获取 UID，并等待 stateful set controller 至少删除一次 pod
 			_, err = watchtools.Until(ctx, pl.ResourceVersion, lw, func(event watch.Event) (bool, error) {
 				pod := event.Object.(*v1.Pod)
 				switch event.Type {
@@ -959,7 +959,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			framework.ExpectNoError(err)
 
 			ginkgo.By("Waiting when stateful pod " + statefulPodName + " will be recreated in namespace " + f.Namespace.Name + " and will be in running state")
-			// we may catch delete event, that's why we are waiting for running phase like this, and not with watchtools.UntilWithoutRetry
+			// 可能会捕获到 delete 事件，所以这样等 running 阶段，而不用 watchtools.UntilWithoutRetry
 			gomega.Eventually(ctx, func() error {
 				statefulPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, statefulPodName, metav1.GetOptions{})
 				if err != nil {
@@ -975,11 +975,11 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-			Release: v1.16, v1.21
-			Testname: StatefulSet resource Replica scaling
-			Description: Create a StatefulSet resource.
-			Newly created StatefulSet resource MUST have a scale of one.
-			Bring the scale of the StatefulSet resource up to two. StatefulSet scale MUST be at two replicas.
+			发布版本：v1.16, v1.21
+			测试名称：StatefulSet resource Replica scaling
+			描述：创建一个 StatefulSet 资源。
+			新建的 StatefulSet 资源副本数必须为 1。
+			将副本数扩到 2。StatefulSet 副本数必须为 2。
 		*/
 		framework.ConformanceIt("should have a working scale subresource", func(ctx context.Context) {
 			ginkgo.By("Creating statefulset " + ssName + " in namespace " + ns)
@@ -1034,12 +1034,12 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-			Release: v1.22
-			Testname: StatefulSet, list, patch and delete a collection of StatefulSets
-			Description: When a StatefulSet is created it MUST succeed. It
-			MUST succeed when listing StatefulSets via a label selector. It
-			MUST succeed when patching a StatefulSet. It MUST succeed when
-			deleting the StatefulSet via deleteCollection.
+			发布版本：v1.22
+			测试名称：StatefulSet, list, patch and delete a collection of StatefulSets
+			描述：创建 StatefulSet 必须成功。通过 label selector
+			列举 StatefulSet 必须成功。patch StatefulSet
+			必须成功。通过 deleteCollection
+			删除 StatefulSet 必须成功。
 		*/
 		framework.ConformanceIt("should list, patch and delete a collection of StatefulSets", func(ctx context.Context) {
 
@@ -1048,7 +1048,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			one := int64(1)
 			ssName := "test-ss"
 
-			// Define StatefulSet Labels
+			// 定义 StatefulSet 标签
 			ssPodLabels := map[string]string{
 				"name": "sample-pod",
 				"pod":  AgnhostImageName,
@@ -1106,11 +1106,11 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 
 		/*
-			Release: v1.22
-			Testname: StatefulSet, status sub-resource
-			Description: When a StatefulSet is created it MUST succeed.
-			Attempt to read, update and patch its status sub-resource; all
-			mutating sub-resource operations MUST be visible to subsequent reads.
+			发布版本：v1.22
+			测试名称：StatefulSet, status sub-resource
+			描述：创建 StatefulSet 必须成功。
+			尝试读取、更新和 patch 其 status 子资源；所有
+			变更子资源的操作必须对后续读取可见。
 		*/
 		framework.ConformanceIt("should validate Statefulset Status endpoints", func(ctx context.Context) {
 			ssClient := c.AppsV1().StatefulSets(ns)
@@ -1358,11 +1358,11 @@ var _ = SIGDescribe("StatefulSet", func() {
 			ss = waitForStatus(ctx, c, ss)
 
 			ginkgo.By("Waiting for pods to be stuck in ImagePullBackOff")
-			// we are expecting only 1 pod to exist and to be failing since the PodManagementPolicy is set to OrderedReady
+			// 预期只有 1 个 pod 存在且处于失败状态，因为 PodManagementPolicy 设为 OrderedReady
 			e2estatefulset.WaitForFailedWithImagePullErr(ctx, c, 1, ss)
 
 			ginkgo.By("Updating pods image to a working image")
-			// now we update the set to a working image
+			// 现在将 set 更新为可用的镜像
 			newImage = AgnhostImage
 			oldImage = "broken-image"
 			ginkgo.By(fmt.Sprintf("Updating stateful set template: update image from %s to %s", oldImage, newImage))
@@ -1495,8 +1495,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			e2estatefulset.DeleteAllStatefulSets(ctx, c, ns)
 		})
 
-		// Do not mark this as Conformance.
-		// StatefulSet Conformance should not be dependent on specific applications.
+		// 不要将其标记为一致性测试。
+		// StatefulSet 一致性测试不应依赖特定应用。
 		ginkgo.It("should creating a working CockroachDB cluster", func(ctx context.Context) {
 			e2epv.SkipIfNoDefaultStorageClass(ctx, c)
 			appTester.statefulPod = &cockroachDBTester{client: c}
@@ -1504,12 +1504,12 @@ var _ = SIGDescribe("StatefulSet", func() {
 		})
 	})
 
-	// Make sure minReadySeconds is honored
-	// Don't mark it as conformance yet
+	// 确保 minReadySeconds 被遵守
+	// 暂时不要标记为一致性测试
 	ginkgo.It("MinReadySeconds should be honored when enabled", func(ctx context.Context) {
 		ssName := "test-ss"
 		headlessSvcName := "test"
-		// Define StatefulSet Labels
+		// 定义 StatefulSet 标签
 		ssPodLabels := map[string]string{
 			"name": "sample-pod",
 			"pod":  AgnhostImageName,
@@ -1524,7 +1524,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 	ginkgo.It("AvailableReplicas should get updated accordingly when MinReadySeconds is enabled", func(ctx context.Context) {
 		ssName := "test-ss"
 		headlessSvcName := "test"
-		// Define StatefulSet Labels
+		// 定义 StatefulSet 标签
 		ssPodLabels := map[string]string{
 			"name": "sample-pod",
 			"pod":  AgnhostImageName,
@@ -1535,7 +1535,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 		ss, err := c.AppsV1().StatefulSets(ns).Create(ctx, ss, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 		e2estatefulset.WaitForStatusAvailableReplicas(ctx, c, ss, 0)
-		// let's check that the availableReplicas have still not updated
+		// 检查 availableReplicas 仍未更新
 		time.Sleep(5 * time.Second)
 		ss, err = c.AppsV1().StatefulSets(ns).Get(ctx, ss.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
@@ -1548,7 +1548,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			update.Spec.MinReadySeconds = 3600
 		})
 		framework.ExpectNoError(err)
-		// We don't expect replicas to be updated till 1 hour, so the availableReplicas should be 0
+		// 预期 1 小时内副本数都不会更新，因此 availableReplicas 应为 0
 		e2estatefulset.WaitForStatusAvailableReplicas(ctx, c, ss, 0)
 
 		ss, err = updateStatefulSetWithRetries(ctx, c, ns, ss.Name, func(update *appsv1.StatefulSet) {
@@ -1660,7 +1660,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			}, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
 			defer func() {
-				// Will be cleaned up with the namespace if this fails.
+				// 如果这里失败，会随 namespace 一起被清理。
 				_ = c.CoreV1().ConfigMaps(ns).Delete(ctx, dummyConfigMap.Name, metav1.DeleteOptions{})
 			}()
 
@@ -1809,7 +1809,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			}, metav1.CreateOptions{})
 			framework.ExpectNoError(err)
 			defer func() {
-				// Will be cleaned up by the namespace delete if this fails
+				// 如果这里失败，会随 namespace 删除一起被清理
 				_ = c.CoreV1().ConfigMaps(ns).Delete(ctx, randomConfigMap.Name, metav1.DeleteOptions{})
 			}()
 
@@ -1909,7 +1909,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 				if err != nil {
 					return false, nil // retry
 				}
-				// Claim 1's external owner is neither its pod nor its set, so it should get updated with a controller.
+				// Claim 1 的外部 owner 既不是它的 pod 也不是它的 set，所以应由 controller 更新。
 				if !reflect.DeepEqual(claim.GetOwnerReferences(), slices.Concat(expectedExternalRef, expectedOwnerRef)) {
 					return false, nil // retry
 				}
@@ -1960,7 +1960,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			})
 			framework.ExpectNoError(err)
 
-			// Claim 1 has an external owner, and 3 has a finalizer still, so they will not be deleted.
+			// Claim 1 有外部 owner，3 仍有 finalizer，所以它们不会被删除。
 			ginkgo.By("Delete the stateful set and wait for claims 0 and 2 but not 1 and 3 to disappear")
 			err = c.AppsV1().StatefulSets(ns).Delete(ctx, ssName, metav1.DeleteOptions{})
 			framework.ExpectNoError(err)
@@ -2028,7 +2028,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 			newData, err := json.Marshal(node)
 			framework.ExpectNoError(err)
 
-			// cordon node, to make sure pod does not get scheduled to the node until the pvc is deleted
+			// 隔离 node，确保在 PVC 删除前 pod 不会被调度到该节点
 			patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, v1.Node{})
 			framework.ExpectNoError(err)
 			ginkgo.By("Cordoning Node")
@@ -2042,14 +2042,14 @@ var _ = SIGDescribe("StatefulSet", func() {
 				}
 			}()
 
-			// wait for the node to be unschedulable
+			// 等待 node 变为不可调度
 			e2enode.WaitForNodeSchedulable(ctx, c, nodeName, 10*time.Second, false)
 
 			ginkgo.By("Deleting Pod")
 			err = c.CoreV1().Pods(ns).Delete(ctx, podName, metav1.DeleteOptions{})
 			framework.ExpectNoError(err)
 
-			// wait for the pod to be recreated
+			// 等待 pod 被重建
 			waitForStatusCurrentReplicas(ctx, c, ss, 1)
 			_, err = c.CoreV1().Pods(ns).Get(ctx, podName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
@@ -2129,8 +2129,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			})
 			framework.ExpectNoError(err)
 
-			// we need to ensure we wait for all the new ones to show up, not
-			// just for any random 3
+			// 需要确保所有新 pod 都出现，而不是
+			// 随便等任意 3 个
 			waitForStatus(ctx, c, ss)
 			waitForPodNames(ctx, c, ss, []string{"ss-2", "ss-3", "ss-4"})
 			ginkgo.By("Confirming 3 replicas, with start ordinal 2")
@@ -2165,8 +2165,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			})
 			framework.ExpectNoError(err)
 
-			// since we are replacing 2 pods for 2, we need to ensure we wait
-			// for the new ones to show up, not just for any random 2
+			// 由于是 2 换 2，需要确保等待
+			// 新 pod 出现，而不是随便等任意 2 个
 			ginkgo.By("Confirming 2 replicas, with start ordinal 4")
 			waitForStatus(ctx, c, ss)
 			waitForPodNames(ctx, c, ss, []string{"ss-4", "ss-5"})
@@ -2201,8 +2201,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			})
 			framework.ExpectNoError(err)
 
-			// since we are replacing 2 pods for 2, we need to ensure we wait
-			// for the new ones to show up, not just for any random 2
+			// 由于是 2 换 2，需要确保等待
+			// 新 pod 出现，而不是随便等任意 2 个
 			ginkgo.By("Confirming 2 replicas, with start ordinal 2")
 			waitForStatus(ctx, c, ss)
 			waitForPodNames(ctx, c, ss, []string{"ss-2", "ss-3"})
@@ -2234,8 +2234,8 @@ var _ = SIGDescribe("StatefulSet", func() {
 			})
 			framework.ExpectNoError(err)
 
-			// since we are replacing 2 pods for 2, we need to ensure we wait
-			// for the new ones to show up, not just for any random 2
+			// 由于是 2 换 2，需要确保等待
+			// 新 pod 出现，而不是随便等任意 2 个
 			ginkgo.By("Confirming 2 replicas, with start ordinal 0")
 			waitForStatus(ctx, c, ss)
 			waitForPodNames(ctx, c, ss, []string{"ss-0", "ss-1"})
@@ -2247,7 +2247,7 @@ var _ = SIGDescribe("StatefulSet", func() {
 
 func uncordonNode(ctx context.Context, c clientset.Interface, oldData, newData []byte, nodeName string) {
 	ginkgo.By("Uncordoning Node")
-	// uncordon node, by reverting patch
+	// 通过回滚 patch 恢复 node 可调度
 	revertPatchBytes, err := strategicpatch.CreateTwoWayMergePatch(newData, oldData, v1.Node{})
 	framework.ExpectNoError(err)
 	_, err = c.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, revertPatchBytes, metav1.PatchOptions{})
@@ -2350,8 +2350,8 @@ func pollReadWithTimeout(ctx context.Context, statefulPod statefulPodTester, sta
 	return err
 }
 
-// This function is used by two tests to test StatefulSet rollbacks: one using
-// PVCs and one using no storage.
+// 这个函数被两个测试用来验证 StatefulSet 回滚：一个使用
+// PVC，另一个不使用存储。
 func rollbackTest(ctx context.Context, c clientset.Interface, ns string, ss *appsv1.StatefulSet) {
 	setHTTPProbe(ss)
 	ss, err := c.AppsV1().StatefulSets(ns).Create(ctx, ss, metav1.CreateOptions{})
@@ -2459,7 +2459,7 @@ func rollbackTest(ctx context.Context, c clientset.Interface, ns string, ss *app
 	}
 }
 
-// This function is used canary updates and phased rolling updates of template modifications for partiton1 and delete pod-0
+// 该函数用于测试 partition1 场景下模板修改的金丝雀更新和分阶段滚动更新，以及删除 pod-0
 func deletingPodForRollingUpdatePartitionTest(ctx context.Context, f *framework.Framework, c clientset.Interface, ns string, ss *appsv1.StatefulSet) {
 	setHTTPProbe(ss)
 	ss.Spec.UpdateStrategy = appsv1.StatefulSetUpdateStrategy{
@@ -2518,7 +2518,7 @@ func deletingPodForRollingUpdatePartitionTest(ctx context.Context, f *framework.
 		ss = set2
 		pods = pods2
 		if ss.Status.UpdatedReplicas == *ss.Spec.Replicas-1 && ss.Status.Replicas == *ss.Spec.Replicas && ss.Status.ReadyReplicas == *ss.Spec.Replicas {
-			// rolling updated is not completed, because replica 0 isn't ready
+			// 滚动更新尚未完成，因为 replica 0 还未就绪
 			return true, nil
 		}
 		return false, nil
@@ -2601,8 +2601,8 @@ func deletingPodForRollingUpdatePartitionTest(ctx context.Context, f *framework.
 	}
 }
 
-// confirmStatefulPodCount asserts that the current number of Pods in ss is count, waiting up to timeout for ss to
-// scale to count.
+// confirmStatefulPodCount 断言 ss 中当前 Pod 数量为 count，最多等待 timeout
+// 让 ss 扩缩容到 count。
 func confirmStatefulPodCount(ctx context.Context, c clientset.Interface, count int, ss *appsv1.StatefulSet, timeout time.Duration, hard bool) {
 	start := time.Now()
 	deadline := start.Add(timeout)
@@ -2626,25 +2626,25 @@ func confirmStatefulPodCount(ctx context.Context, c clientset.Interface, count i
 	}
 }
 
-// setHTTPProbe sets the pod template's ReadinessProbe for Webserver StatefulSet containers.
-// This probe can then be controlled with BreakHTTPProbe() and RestoreHTTPProbe().
-// Note that this cannot be used together with PauseNewPods().
+// setHTTPProbe 为 Webserver StatefulSet 容器的 pod 模板设置 ReadinessProbe。
+// 之后可通过 BreakHTTPProbe() 和 RestoreHTTPProbe() 控制该探针。
+// 注意它不能与 PauseNewPods() 一起使用。
 func setHTTPProbe(ss *appsv1.StatefulSet) {
 	ss.Spec.Template.Spec.Containers[0].ReadinessProbe = httpProbe
 }
 
-// breakHTTPProbe breaks the readiness probe for Nginx StatefulSet containers in ss.
+// breakHTTPProbe 破坏 ss 中 Nginx StatefulSet 容器的 readiness 探针。
 func breakHTTPProbe(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) error {
 	path := httpProbe.HTTPGet.Path
 	if path == "" {
 		return fmt.Errorf("path expected to be not empty: %v", path)
 	}
-	// Ignore 'mv' errors to make this idempotent.
+	// 忽略 'mv' 错误，使其可重复执行。
 	cmd := fmt.Sprintf("mv -v %v /tmp/ || true", path)
 	return e2estatefulset.ExecInStatefulPods(ctx, c, ss, cmd)
 }
 
-// breakPodHTTPProbe breaks the readiness probe for Nginx StatefulSet containers in one pod.
+// breakPodHTTPProbe 破坏某个 pod 中 Nginx StatefulSet 容器的 readiness 探针。
 func breakPodHTTPProbe(ss *appsv1.StatefulSet, pod *v1.Pod) error {
 	path := httpProbe.HTTPGet.Path
 	if path == "" {
@@ -2656,31 +2656,31 @@ func breakPodHTTPProbe(ss *appsv1.StatefulSet, pod *v1.Pod) error {
 	return err
 }
 
-// restoreHTTPProbe restores the readiness probe for Nginx StatefulSet containers in ss.
+// restoreHTTPProbe 恢复 ss 中 Nginx StatefulSet 容器的 readiness 探针。
 func restoreHTTPProbe(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) error {
 	path := httpProbe.HTTPGet.Path
 	if path == "" {
 		return fmt.Errorf("path expected to be not empty: %v", path)
 	}
-	// Ignore 'mv' errors to make this idempotent.
+	// 忽略 'mv' 错误，使其可重复执行。
 	cmd := fmt.Sprintf("mv -v /tmp%v / || true", path)
 	return e2estatefulset.ExecInStatefulPods(ctx, c, ss, cmd)
 }
 
-// restorePodHTTPProbe restores the readiness probe for Nginx StatefulSet containers in pod.
+// restorePodHTTPProbe 恢复 pod 中 Nginx StatefulSet 容器的 readiness 探针。
 func restorePodHTTPProbe(ss *appsv1.StatefulSet, pod *v1.Pod) error {
 	path := httpProbe.HTTPGet.Path
 	if path == "" {
 		return fmt.Errorf("path expected to be not empty: %v", path)
 	}
-	// Ignore 'mv' errors to make this idempotent.
+	// 忽略 'mv' 错误，使其可重复执行。
 	cmd := fmt.Sprintf("mv -v /tmp%v / || true", path)
 	stdout, err := e2eoutput.RunHostCmdWithRetries(pod.Namespace, pod.Name, cmd, e2estatefulset.StatefulSetPoll, statefulPodTimeout)
 	framework.Logf("stdout of %v on %v: %v", cmd, pod.Name, stdout)
 	return err
 }
 
-// deleteStatefulPodAtIndex deletes the Pod with ordinal index in ss.
+// deleteStatefulPodAtIndex 删除 ss 中指定序号的 Pod。
 func deleteStatefulPodAtIndex(ctx context.Context, c clientset.Interface, index int, ss *appsv1.StatefulSet) {
 	name := getStatefulSetPodNameAtIndex(index, ss)
 	noGrace := int64(0)
@@ -2689,16 +2689,16 @@ func deleteStatefulPodAtIndex(ctx context.Context, c clientset.Interface, index 
 	}
 }
 
-// getStatefulSetPodNameAtIndex gets formatted pod name given index.
+// getStatefulSetPodNameAtIndex 根据给定序号生成格式化的 pod 名称。
 func getStatefulSetPodNameAtIndex(index int, ss *appsv1.StatefulSet) string {
-	// TODO: we won't use "-index" as the name strategy forever,
-	// pull the name out from an identity mapper.
+	// TODO: 我们不会永远用 "-index" 作为命名策略，
+	// 应从 identity mapper 中取出名称。
 	return fmt.Sprintf("%v-%v", ss.Name, index)
 }
 
 type updateStatefulSetFunc func(*appsv1.StatefulSet)
 
-// updateStatefulSetWithRetries updates statefulset template with retries.
+// updateStatefulSetWithRetries 带重试地更新 statefulset 模板。
 func updateStatefulSetWithRetries(ctx context.Context, c clientset.Interface, namespace, name string, applyUpdate updateStatefulSetFunc) (statefulSet *appsv1.StatefulSet, err error) {
 	statefulSets := c.AppsV1().StatefulSets(namespace)
 	var updateErr error
@@ -2706,7 +2706,7 @@ func updateStatefulSetWithRetries(ctx context.Context, c clientset.Interface, na
 		if statefulSet, err = statefulSets.Get(ctx, name, metav1.GetOptions{}); err != nil {
 			return false, err
 		}
-		// Apply the update, then attempt to push it to the apiserver.
+		// 应用更新，然后尝试推送到 apiserver。
 		applyUpdate(statefulSet)
 		if statefulSet, err = statefulSets.Update(ctx, statefulSet, metav1.UpdateOptions{}); err == nil {
 			framework.Logf("Updating stateful set %s", name)
@@ -2721,7 +2721,7 @@ func updateStatefulSetWithRetries(ctx context.Context, c clientset.Interface, na
 	return statefulSet, pollErr
 }
 
-// updatePVCWithRetries updates PVCs with retries.
+// updatePVCWithRetries 带重试地更新 PVC。
 func updatePVCWithRetries(ctx context.Context, c clientset.Interface, namespace, name string, applyUpdate func(*v1.PersistentVolumeClaim)) (pvc *v1.PersistentVolumeClaim, err error) {
 	pvcs := c.CoreV1().PersistentVolumeClaims(namespace)
 	var updateErr error
@@ -2729,7 +2729,7 @@ func updatePVCWithRetries(ctx context.Context, c clientset.Interface, namespace,
 		if pvc, err = pvcs.Get(ctx, name, metav1.GetOptions{}); err != nil {
 			return false, err
 		}
-		// Apply the update, then attempt to push it to the apiserver.
+		// 应用更新，然后尝试推送到 apiserver。
 		applyUpdate(pvc)
 		if pvc, err = pvcs.Update(ctx, pvc, metav1.UpdateOptions{}); err == nil {
 			framework.Logf("Updating pvc %s", name)
@@ -2744,7 +2744,7 @@ func updatePVCWithRetries(ctx context.Context, c clientset.Interface, namespace,
 	return pvc, pollErr
 }
 
-// getStatefulSet gets the StatefulSet named name in namespace.
+// getStatefulSet 获取 namespace 中名为 name 的 StatefulSet。
 func getStatefulSet(ctx context.Context, c clientset.Interface, namespace, name string) *appsv1.StatefulSet {
 	ss, err := c.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -2753,7 +2753,7 @@ func getStatefulSet(ctx context.Context, c clientset.Interface, namespace, name 
 	return ss
 }
 
-// verifyStatefulSetPVCsExist confirms that exactly the PVCs for ss with the specified ids exist. This polls until the situation occurs, an error happens, or until timeout (in the latter case an error is also returned). Beware that this cannot tell if a PVC will be deleted at some point in the future, so if used to confirm that no PVCs are deleted, the caller should wait for some event giving the PVCs a reasonable chance to be deleted, before calling this function.
+// verifyStatefulSetPVCsExist 确认恰好存在指定 id 对应的 ss PVC。它会一直轮询直到条件满足、出错或超时（超时也会返回错误）。注意它无法判断某个 PVC 将来是否会被删除，因此若用它确认没有 PVC 被删除，调用方应先等待某个事件，给 PVC 留出合理的删除机会，再调用该函数。
 func verifyStatefulSetPVCsExist(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, claimIds []int) error {
 	idSet := map[int]struct{}{}
 	for _, id := range claimIds {
@@ -2793,7 +2793,7 @@ func verifyStatefulSetPVCsExist(ctx context.Context, c clientset.Interface, ss *
 	})
 }
 
-// verifyStatefulSetPVCsExistWithOwnerRefs works as verifyStatefulSetPVCsExist, but also waits for the ownerRefs to match.
+// verifyStatefulSetPVCsExistWithOwnerRefs 与 verifyStatefulSetPVCsExist 类似，但还会等待 ownerRefs 匹配。
 func verifyStatefulSetPVCsExistWithOwnerRefs(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, claimIndicies []int, wantSetRef, wantPodRef bool) error {
 	indexSet := map[int]struct{}{}
 	for _, id := range claimIndicies {
@@ -2861,15 +2861,15 @@ func verifyStatefulSetPVCsExistWithOwnerRefs(ctx context.Context, c clientset.In
 	})
 }
 
-// expectPodNames compares the names of the pods from actualPods with expectedPodNames.
-// actualPods can be in any list, since we'll sort by their ordinals and filter
-// active ones. expectedPodNames should be ordered by statefulset ordinals.
+// expectPodNames 比较 actualPods 中的 pod 名称与 expectedPodNames。
+// actualPods 可以是任意列表，因为我们会按序号排序并
+// 过滤活跃项。expectedPodNames 应按 statefulset 序号排列。
 func expectPodNames(actualPods *v1.PodList, expectedPodNames []string) error {
 	e2estatefulset.SortStatefulPods(actualPods)
 	pods := []string{}
 	for _, pod := range actualPods.Items {
-		// ignore terminating pods, similarly to how the controller does it
-		// when calculating status information
+		// 忽略正在终止的 pod，和 controller 计算状态信息时
+		// 的做法一致
 		if e2epod.IsPodActive(&pod) {
 			pods = append(pods, pod.Name)
 		}

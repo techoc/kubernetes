@@ -37,13 +37,13 @@ var _ = SIGDescribe("SSH", framework.WithProvider(framework.ProvidersWithSSH...)
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.BeforeEach(func() {
-		// This test SSH's into the node for which it needs the $HOME/.ssh/id_rsa key to be present. So
-		// we should skip if the environment does not have the key (not all CI systems support this use case)
+		// 这个测试要 SSH 到 node，需要 $HOME/.ssh/id_rsa 密钥存在。因此
+		// 如果环境没有该密钥就跳过（不是所有 CI 系统都支持这个用例）
 		e2eskipper.SkipUnlessSSHKeyPresent()
 	})
 
 	ginkgo.It("should SSH to all nodes and run commands", func(ctx context.Context) {
-		// Get all nodes' external IPs.
+		// 获取所有节点的外部 IP。
 		ginkgo.By("Getting all nodes' SSH-able IP addresses")
 		hosts, err := e2essh.NodeSSHHosts(ctx, f.ClientSet)
 		if err != nil {
@@ -59,17 +59,17 @@ var _ = SIGDescribe("SSH", framework.WithProvider(framework.ProvidersWithSSH...)
 			expectedCode   int
 			expectedError  error
 		}{
-			// Keep this test first - this variant runs on all nodes.
+			// 把这个测试放在最前面 —— 这个变体在所有节点上运行。
 			{`echo "Hello from $(whoami)@$(hostname)"`, false, "", "", 0, nil},
 			{`echo "foo" | grep "bar"`, true, "", "", 1, nil},
 			{`echo "stdout" && echo "stderr" >&2 && exit 7`, true, "stdout", "stderr", 7, nil},
 		}
 
 		for i, testCase := range testCases {
-			// Only run the first testcase against max 100 nodes. Run
-			// the rest against the first node we find only, since
-			// they're basically testing SSH semantics (and we don't
-			// need to do that against each host in the cluster).
+			// 第一个测试最多对 100 个节点运行。其余的
+			// 只对找到的第一个节点运行，因为它们本质上
+			// 测试的是 SSH 语义（不需要
+			// 对集群中的每个主机都做一遍）。
 			nodes := len(hosts)
 			if i > 0 {
 				nodes = 1
@@ -96,7 +96,7 @@ var _ = SIGDescribe("SSH", framework.WithProvider(framework.ProvidersWithSSH...)
 				if result.Code != testCase.expectedCode {
 					framework.Failf("Ran %s on %s, got exit code %d, expected %d", testCase.cmd, host, result.Code, testCase.expectedCode)
 				}
-				// Show stdout, stderr for logging purposes.
+				// 为记录日志，显示 stdout 和 stderr。
 				if len(stdout) > 0 {
 					framework.Logf("Got stdout from %s: %s", host, strings.TrimSpace(stdout))
 				}
@@ -106,7 +106,7 @@ var _ = SIGDescribe("SSH", framework.WithProvider(framework.ProvidersWithSSH...)
 			}
 		}
 
-		// Quickly test that SSH itself errors correctly.
+		// 快速验证 SSH 自身能正确报错。
 		ginkgo.By("SSH'ing to a nonexistent host")
 		if _, err = e2essh.SSH(ctx, `echo "hello"`, "i.do.not.exist", framework.TestContext.Provider); err == nil {
 			framework.Failf("Expected error trying to SSH to nonexistent host.")

@@ -21,24 +21,24 @@ import (
 )
 
 const (
-	// SampleDevicePluginDSYAML is the path of the daemonset template of the sample device plugin. // TODO: Parametrize it by making it a feature in TestFramework.
+	// SampleDevicePluginDSYAML 是 sample device plugin 的 daemonset 模板路径。TODO: 把它做成 TestFramework 的一个特性来参数化。
 	SampleDevicePluginDSYAML                    = "test/e2e/testing-manifests/sample-device-plugin/sample-device-plugin.yaml"
 	SampleDevicePluginControlRegistrationDSYAML = "test/e2e/testing-manifests/sample-device-plugin/sample-device-plugin-control-registration.yaml"
 
-	// SampleDevicePluginName is the name of the device plugin pod
+	// SampleDevicePluginName 是 device plugin pod 的名称
 	SampleDevicePluginName = "sample-device-plugin"
 
-	// SampleDeviceResourceName is the name of the resource provided by the sample device plugin
+	// SampleDeviceResourceName 是 sample device plugin 提供的资源名称
 	SampleDeviceResourceName = "example.com/resource"
 
 	SampleDeviceEnvVarNamePluginSockDir = "PLUGIN_SOCK_DIR"
 
-	// SampleDevsAmount is an amount of devices provided by the sample device plugin:
+	// SampleDevsAmount 是 sample device plugin 提供的设备数量：
 	// https://github.com/kubernetes/kubernetes/blob/111a2a0d2dfe13639724506f674bc4f342ccfbab/test/images/sample-device-plugin/sampledeviceplugin.go#L100-L101
 	SampleDevsAmount int64 = 2
 )
 
-// CountSampleDeviceCapacity returns the number of devices of SampleDeviceResourceName advertised by a node capacity
+// CountSampleDeviceCapacity 返回节点容量中通告的 SampleDeviceResourceName 设备数量
 func CountSampleDeviceCapacity(node *v1.Node) int64 {
 	val, ok := node.Status.Capacity[v1.ResourceName(SampleDeviceResourceName)]
 	if !ok {
@@ -47,7 +47,7 @@ func CountSampleDeviceCapacity(node *v1.Node) int64 {
 	return val.Value()
 }
 
-// CountSampleDeviceAllocatable returns the number of devices of SampleDeviceResourceName advertised by a node allocatable
+// CountSampleDeviceAllocatable 返回节点可分配量中通告的 SampleDeviceResourceName 设备数量
 func CountSampleDeviceAllocatable(node *v1.Node) int64 {
 	val, ok := node.Status.Allocatable[v1.ResourceName(SampleDeviceResourceName)]
 	if !ok {

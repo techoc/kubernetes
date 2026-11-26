@@ -72,10 +72,10 @@ var _ = SIGDescribe(framework.WithFeatureGate(features.ClusterTrustBundle), fram
 
 	ginkgo.Context("CRUD Tests", func() {
 		/*
-			  Release: v1.37
-			  Testname: CRUD operations for clustertrustbundles
-			  Description: kube-apiserver must support create/update/list/patch/delete operations
-						   for certificates.k8s.io/v1 ClusterTrustBundles
+			  发布版本：v1.37
+			  测试名称：CRUD operations for clustertrustbundles
+			  描述：kube-apiserver 必须支持对
+						   certificates.k8s.io/v1 ClusterTrustBundles 的 create/update/list/patch/delete 操作
 		*/
 		framework.ConformanceIt("certificates.k8s.io/v1 ClusterTrustBundles [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 			initialPEMBundle := mustMakeCAPEM("crud-root-initial")
@@ -106,10 +106,10 @@ var _ = SIGDescribe(framework.WithFeatureGate(features.ClusterTrustBundle), fram
 	})
 
 	/*
-		  Release: v1.37
-		  Testname: Mounting a single ClusterTrustBundle
-		  Description: The API server MUST serve the ClusterTrustBundle API and the kubelet
-					   MUST be able to mount contents of these API objects inside of pods.
+		  发布版本：v1.37
+		  测试名称：Mounting a single ClusterTrustBundle
+		  描述：API server 必须提供 ClusterTrustBundle API，kubelet
+					   必须能把这些 API 对象的内容挂载到 pod 中。
 	*/
 	framework.ConformanceIt("should be able to mount a single ClusterTrustBundle by name [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 
@@ -188,11 +188,11 @@ var _ = SIGDescribe(framework.WithFeatureGate(features.ClusterTrustBundle), fram
 			},
 		} {
 			/*
-				  Release: v1.37
-				  Testname: Mounting multiple ClusterTrustBundles
-				  Description: The API server MUST serve the ClusterTrustBundle API and the kubelet
-							   MUST be able to mount contents of these API objects inside of pods
-							   using different kinds of selectors.
+				  发布版本：v1.37
+				  测试名称：Mounting multiple ClusterTrustBundles
+				  描述：API server 必须提供 ClusterTrustBundle API，kubelet
+							   必须能用不同类型的 selector 把这些 API 对象的
+							   内容挂载到 pod 中。
 			*/
 			framework.ConformanceIt(tt.name+" [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 				signerName := tt.signerName + f.UniqueName
@@ -242,10 +242,10 @@ var _ = SIGDescribe(framework.WithFeatureGate(features.ClusterTrustBundle), fram
 		} {
 
 			/*
-				  Release: v1.37
-				  Testname: Failing to mount improperly defined ClusterTrustBundles
-				  Description: The API server MUST serve the ClusterTrustBundle API and the kubelet
-							   MUST fail to mount these objects if none match the provided selector.
+				  发布版本：v1.37
+				  测试名称：Failing to mount improperly defined ClusterTrustBundles
+				  描述：API server 必须提供 ClusterTrustBundle API，如果 selector
+							   没有匹配任何对象，kubelet 必须挂载失败。
 			*/
 			framework.ConformanceIt(tt.name+" [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 				pod := podForCTBProjection(v1.VolumeProjection{ClusterTrustBundle: tt.ctb})
@@ -294,10 +294,10 @@ var _ = SIGDescribe(framework.WithFeatureGate(features.ClusterTrustBundle), fram
 	})
 
 	/*
-		  Release: v1.37
-		  Testname: Mounting multiple ClusterTrustBundle volumes
-		  Description: The API server MUST serve the ClusterTrustBundle API and the kubelet
-					   MUST be able to mount multiple volumes of ClusterTrustBundle type.
+		  发布版本：v1.37
+		  测试名称：Mounting multiple ClusterTrustBundle volumes
+		  描述：API server 必须提供 ClusterTrustBundle API，kubelet
+					   必须能挂载多个 ClusterTrustBundle 类型的 volume。
 	*/
 	framework.ConformanceIt("should be able to specify multiple CTB volumes [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 		pod := podForCTBProjection(
@@ -328,10 +328,10 @@ var _ = SIGDescribe(framework.WithFeatureGate(features.ClusterTrustBundle), fram
 	})
 
 	/*
-		  Release: v1.37
-		  Testname: Mounting big number (>100) of ClusterTrustBundle volumes
-		  Description: The API server MUST serve the ClusterTrustBundle API and the kubelet
-					   MUST be able to mount a big number of volumes of ClusterTrustBundle type.
+		  发布版本：v1.37
+		  测试名称：Mounting big number (>100) of ClusterTrustBundle volumes
+		  描述：API server 必须提供 ClusterTrustBundle API，kubelet
+					   必须能挂载大量 ClusterTrustBundle 类型的 volume。
 	*/
 	framework.ConformanceIt("should be able to mount a big number (>100) of CTBs [MinimumKubeletVersion:1.37]", func(ctx context.Context) {
 		const numCTBs = 150
@@ -549,17 +549,17 @@ func podForCTBProjection(projectionSources ...v1.VolumeProjection) *v1.Pod {
 	return pod
 }
 
-// mustInitCTBs creates a testSet of ClusterTrustBundles and spreads them into several
-// categories based on their signer name and labels.
-// It returns a cleanup function for all the ClusterTrustBundle objects it created.
-// It also returns a map of sets of PEMs like so:
+// mustInitCTBs 创建一组测试用 ClusterTrustBundles，并根据
+// signer name 和标签把它们分到几个类别中。
+// 它返回一个清理函数，用于删除自己创建的所有 ClusterTrustBundle 对象。
+// 它还返回一个 PEM 集合的 map，形如：
 //
 //	{
-//	  "test.test/signer-one": <set of all PEMs that are owned by test.test/signer-one>,
-//	  "test.test/signer-two": <set of all PEMs that are owned by test.test/signer-two>,
-//	  "signer.alive=true": <set of all PEMs whose CTBs contain `signer.alive: true` labels>,
-//	  "signer.alive=false": <set of all PEMs whose CTBs contain `signer.alive: false` labels>,
-//	  "no-signer": <set of all PEMs that appear in CTBs with no specific signers>,
+//	  "test.test/signer-one": <test.test/signer-one 拥有的所有 PEM 集合>,
+//	  "test.test/signer-two": <test.test/signer-two 拥有的所有 PEM 集合>,
+//	  "signer.alive=true": <CTB 含 `signer.alive: true` 标签的所有 PEM 集合>,
+//	  "signer.alive=false": <CTB 含 `signer.alive: false` 标签的所有 PEM 集合>,
+//	  "no-signer": <出现在无特定 signer 的 CTB 中的所有 PEM 集合>,
 //	}
 func initCTBData() ([]*certificatesv1.ClusterTrustBundle, map[string]sets.Set[string]) {
 	var pemSets = map[string]sets.Set[string]{
@@ -680,8 +680,8 @@ func mustMakePEMBlock(blockType string, headers map[string]string, data []byte) 
 	}))
 }
 
-// getFileModeRegex returns a file mode related regex which should be matched by the mounttest pods' output.
-// If the given mask is nil, then the regex will contain the default OS file modes, which are 0644 for Linux and 0775 for Windows.
+// getFileModeRegex 返回文件模式相关的正则，mounttest pod 的输出应匹配它。
+// 如果给定的 mask 为 nil，则正则包含默认 OS 文件模式：Linux 为 0644，Windows 为 0775。
 func getFileModeRegex(filePath string, mask *int32) string {
 	var (
 		linuxMask   int32
@@ -709,8 +709,8 @@ func ctbsToPEMs(ctbs []*certificatesv1.ClusterTrustBundle) []string {
 	return certPEMs
 }
 
-// mutateCTBForTesting mutates the .spec.signerName and .name so that the created cluster
-// objects are unique and the tests can run in parallel
+// mutateCTBForTesting 修改 .spec.signerName 和 .name，
+// 使创建的集群对象唯一，测试可以并行运行
 func mutateCTBForTesting(ctb *certificatesv1.ClusterTrustBundle, uniqueName string) {
 	signer := ctb.Spec.SignerName
 	if len(signer) == 0 {

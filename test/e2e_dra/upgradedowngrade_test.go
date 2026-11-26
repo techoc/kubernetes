@@ -50,7 +50,7 @@ import (
 var errHTTP404 = errors.New("resource not found (404)")
 
 func init() {
-	// -v=5 may be useful to debug driver operations, but usually isn't needed.
+	// -v=5 可能有助于调试 driver 操作，但通常不需要。
 	ktesting.SetDefaultVerbosity(2)
 }
 
@@ -60,8 +60,8 @@ type upgradedTestFunc func(tCtx ktesting.TContext) downgradedTestFunc
 
 type downgradedTestFunc func(tCtx ktesting.TContext)
 
-// countSlices returns how many ResourceSlices will be created for a given
-// set of driver resources (one per slice in each pool in each entry).
+// countSlices 返回为给定
+// driver 资源集创建多少 ResourceSlice（每个 entry 的每个 pool 中每个 slice 一个）。
 func countSlices(driverResources map[string]resourceslice.DriverResources) int {
 	n := 0
 	for _, dr := range driverResources {
@@ -72,11 +72,11 @@ func countSlices(driverResources map[string]resourceslice.DriverResources) int {
 	return n
 }
 
-// waitForSlices waits for a driver's ResourceSlices to be recreated.
+// waitForSlices 等待 driver 的 ResourceSlice 被重建。
 func waitForSlices(tCtx ktesting.TContext, name string, b *drautils.Builder, driverResources map[string]resourceslice.DriverResources) {
 	if driverResources == nil {
-		// Skip waiting for the slices to be ready.
-		// Still each test might have its own slices, and they should be handled in each test.
+		// 跳过等待 slice 就绪。
+		// 但每个测试仍可能有自己的 slice，应在各测试中处理。
 		return
 	}
 	numSlices := countSlices(driverResources)
@@ -98,9 +98,9 @@ func currentBinDir() (envName, content string) {
 	return
 }
 
-// repoRootDefault figures out whether an E2E suite is invoked in its directory (as in `go test ./test/e2e`),
-// directly in the root (as in `make test-e2e` or `ginkgo ./test/e2e`), or somewhere deep inside
-// the _output directory (`ginkgo _output/bin/e2e.test` where `_output/bin` is actually a symlink).
+// repoRootDefault 判断 E2E suite 是在其目录中调用（如 `go test ./test/e2e`），
+// 直接在根目录调用（如 `make test-e2e` 或 `ginkgo ./test/e2e`），还是
+// 在 _output 目录深处调用（`ginkgo _output/bin/e2e.test`，其中 `_output/bin` 实际是符号链接）。
 func repoRootDefault() string {
 	for i := range 10 {
 		path := "." + strings.Repeat("/..", i)
@@ -108,18 +108,18 @@ func repoRootDefault() string {
 			return path
 		}
 	}
-	// Traditional default.
+	// 传统的默认值。
 	return "../../"
 }
 
 func TestUpgradeDowngrade(t *testing.T) { testUpgradeDowngrade(ktesting.Init(t)) }
 func testUpgradeDowngrade(tCtx ktesting.TContext) {
-	// Some other things normally done by test/e2e.
+	// 通常由 test/e2e 完成的其他事情。
 	e2etestfiles.AddFileSource(e2etestfiles.RootFileSource{Root: repoRoot})
 
-	// Ideally we shouldn't have any code which directly calls gomega.Expect,
-	// but we are not there yet (e.g. e2epod.MakePod). So for now we install
-	// one fail handler which records failures in the main test context.
+	// 理想情况下不应有直接调用 gomega.Expect 的代码，
+	// 但目前还没做到（如 e2epod.MakePod）。所以现在安装
+	// 一个 fail handler，把失败记录到主测试 context 中。
 	gomega.RegisterFailHandler(func(message string, callerSkip ...int) {
 		tCtx.Helper()
 		tCtx.Fatal(message)
@@ -130,7 +130,7 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 		tCtx.Fatalf("%s must be set to test DRA upgrade/downgrade scenarios.", envName)
 	}
 
-	// Determine what we need to downgrade to.
+	// 确定要降级到哪个版本。
 	var major, previousMinor uint
 	var gitVersion string
 
@@ -142,30 +142,30 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 		tCtx.ExpectNoError(err, "parse version %s of repo root %q", gitVersion, repoRoot)
 		major, previousMinor = version.Major(), version.Minor()-1
 		if strings.Contains(gitVersion, "-alpha.0") {
-			// All version up to and including x.y.z-alpha.0 are treated as if we were
-			// still the previous minor version x.(y-1). There are two reason for this:
+			// 所有直到并包括 x.y.z-alpha.0 的版本都视为
+			// 仍是上一个 minor 版本 x.(y-1)。原因有两个：
 			//
-			// - During code freeze around (at?) -rc.0, the master branch already
-			//   identfies itself as the next release with -alpha.0. Without this
-			//   special case, we would change the version skew testing from what
-			//   has been tested and been known to work to something else, which
-			//   can and at least once did break.
+			// - 在 -rc.0 前后的代码冻结期，master 分支已经
+			//   用 -alpha.0 标识自己为下一个 release。没有这个
+			//   特例，我们会把版本偏差测试从已验证可行的做法
+			//   改成别的做法，这可能会出问题，而且至少出过一次问题。
 			//
-			// - Early in the next cycle the differences compared to the previous
-			//   release are small, so it's more interesting to go back further.
+			// - 在下一个周期早期，与上一个 release 的差异
+			//   很小，所以回退更早的版本更有意义。
+			//
 			previousMinor--
 		}
 		tCtx.Logf("got version: major: %d, minor: %d, previous minor: %d", major, version.Minor(), previousMinor)
 	})
 
-	// KUBERNETES_SERVER_CACHE_DIR can be set to keep downloaded files across test restarts.
+	// 可以设置 KUBERNETES_SERVER_CACHE_DIR，在测试重启间保留下载文件。
 	binDir, cacheBinaries := os.LookupEnv("KUBERNETES_SERVER_CACHE_DIR")
 	if !cacheBinaries {
 		binDir = tCtx.TempDir()
 	}
 	haveBinaries := false
 
-	// Get the previous release.
+	// 获取上一个 release。
 	var previousURL, previousVersion string
 	tCtx.Step("get previous release info", func(tCtx ktesting.TContext) {
 		tCtx.Logf("stable release %d.%d", major, previousMinor)
@@ -222,7 +222,7 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 		localUpClusterEnv := map[string]string{
 			"RUNTIME_CONFIG": localUpClusterRuntimeConfig,
 			"FEATURE_GATES":  "DynamicResourceAllocation=true,DRADeviceTaintRules=true,DRADeviceTaints=true,DRAExtendedResource=true,DRAPartitionableDevices=true",
-			// *not* needed because driver will run in "local filesystem" mode (= driver.IsLocal): "ALLOW_PRIVILEGED": "1",
+			// 不需要，因为 driver 将以 "local filesystem" 模式运行（即 driver.IsLocal）："ALLOW_PRIVILEGED": "1",
 		}
 		cluster.Start(tCtx, fmt.Sprintf("0-initial-%d.%d", major, previousMinor), binDir, localUpClusterEnv, "")
 	})
@@ -237,33 +237,33 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 		nodes = drautils.NewNodesNow(tCtx, 1, 1)
 	})
 
-	// The overall flow of upgrade/downgrade testing is always the same:
+	// 升级/降级测试的整体流程始终相同：
 	//
-	//   - Bring up a cluster with the previous release.
-	//   - Deploy a test DRA driver (with a unique driver name per sub-test, if specified).
-	//     A DeviceClass for it is accessible through the builder passed to each sub-test.
-	//   - Step 1: run test code on the previous release.
-	//   - Upgrade the cluster to the current code.
-	//   - Step 2: run test code on the upgraded cluster.
-	//   - Downgrade the cluster back to the previous release.
-	//   - Step 3: run test code on the downgraded cluster.
+	// - 用上一个 release 启动集群。
+	// - 部署测试用 DRA driver（如果指定，每个子测试用唯一 driver 名称）。
+	//   通过传给每个子测试的 builder 可访问它的 DeviceClass。
+	// - 第 1 步：在上一个 release 上运行测试代码。
+	// - 把集群升级到当前代码。
+	// - 第 2 步：在升级后的集群上运行测试代码。
+	// - 把集群降级回上一个 release。
+	// - 第 3 步：在降级后的集群上运行测试代码。
 	//
-	// The "test code" gets registered here with a single function for each
-	// sub-test. That function then returns the next piece of code, which then
-	// returns the final code. Each callback function is executed as a sub-test.
-	// The builder is configured to not delete objects when that sub-test ends,
-	// so objects persist until the entire test is done.
+	// "测试代码"在这里为每个子测试注册一个函数。
+	// 该函数再返回下一段代码，后者再返回最终代码。每个
+	// 回调函数都作为一个子测试执行。
+	// builder 配置为子测试结束时删除对象，
+	// 因此对象会保留到整个测试结束。
 	//
-	// Each sub-test may provide driverResources to define the
-	// ResourceSlices the driver publishes. After upgrade/downgrade,
-	// kubelet wipes all slices; the framework automatically waits for
-	// them to be re-created. Sub-tests with nil driverResources can manage
-	// their own slices, but must wait for slice re-creation themselves
-	// after upgrade/downgrade.
+	// 每个子测试可提供 driverResources 来定义
+	// driver 发布的 ResourceSlice。升级/降级后 kubelet 会清除所有 slice；
+	// 框架会自动等待它们被重建。driverResources 为 nil 的子测试
+	// 可自行管理 slice，但必须在升级/降级后
+	// 自己等待 slice 重建。
 	//
-	// Sub-tests run in an unspecified order due to map iteration, so each
-	// must be self-contained. They share the same cluster but each has its
-	// own driver and devices.
+	//由于 map 迭代，子测试以未指定的顺序运行，因此每个
+	// 都必须自包含。它们共享同一个集群，但各自有
+	// 自己的 driver 和 device。
+	//
 	var subTests = map[string]struct {
 		test            initialTestFunc
 		driverResources map[string]resourceslice.DriverResources
@@ -301,11 +301,11 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 		},
 	}
 
-	// Create a driver and builder for each sub-test. Opening sockets locally
-	// avoids intermittent errors and delays caused by proxying through the
-	// restarted apiserver. Builders are created on the outer tCtx so that
-	// cleanup runs at the end of the entire test, not at the end of a
-	// sub-test step.
+	// 为每个子测试创建 driver 和 builder。本地打开 socket
+	// 可避免通过重启的 apiserver 代理带来的偶发错误和延迟。builder
+	// 在外层 tCtx 上创建，这样清理会在整个测试结束时运行，
+	// 而不是在某个子测试步骤结束时。
+	//
 	builders := make(map[string]*drautils.Builder, len(subTests))
 	for name, def := range subTests {
 		d := drautils.NewDriverInstance(tCtx)
@@ -324,21 +324,21 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 	tCtx.Run("after-cluster-creation", func(tCtx ktesting.TContext) {
 		for subTest, def := range subTests {
 			tCtx.Run(subTest, func(tCtx ktesting.TContext) {
-				// This only gets set if def.test doesn't panic because of a fatal error,
-				// so below we won't continue if step 1 already failed.
-				// Other sub-tests are not affected.
+				// 只有当 def.test 没有因致命错误 panic 时才会设置它，
+				// 所以如果第 1 步已经失败，下面不会继续。
+				// 其他子测试不受影响。
 				upgradedTestFuncs[subTest] = def.test(tCtx, builders[subTest])
 			})
 		}
 	})
 
-	// We could split this up into first updating the apiserver, then control plane components, then restarting kubelet.
-	// For the purpose of this test here we we primarily care about full before/after comparisons, so not done yet.
+	// 可以把它拆成先更新 apiserver，再更新控制面组件，然后重启 kubelet。
+	// 对本测试而言，我们主要关心完整的前后对比，所以暂不这样做。
 	// TODO
 	restoreOptions := cluster.Modify(tCtx.WithStep(fmt.Sprintf("update to %s", gitVersion)), "1-"+gitVersion, localupcluster.ModifyOptions{BinDir: dir})
 
-	// kubelet wipes all resource slices because it doesn't know which drivers were running.
-	// We need to wait for them to be recreated.
+	// kubelet 会清除所有 resource slice，因为它不知道哪些 driver 在运行。
+	// 需要等待它们被重建。
 	for name, b := range builders {
 		waitForSlices(tCtx, name, b, subTests[name].driverResources)
 	}
@@ -352,11 +352,11 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 		}
 	})
 
-	// Roll back.
+	// 回滚。
 	cluster.Modify(tCtx.WithStep("downgrade"), fmt.Sprintf("2-restored-%d.%d", major, previousMinor), restoreOptions)
 
-	// kubelet wipes all resource slices because it doesn't know which drivers were running.
-	// We need to wait for them to be recreated.
+	// kubelet 会清除所有 resource slice，因为它不知道哪些 driver 在运行。
+	// 需要等待它们被重建。
 	for name, b := range builders {
 		waitForSlices(tCtx, name, b, subTests[name].driverResources)
 	}
@@ -370,11 +370,11 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 	})
 }
 
-// sourceVersion identifies the Kubernetes git version based on hack/print-workspace-status.sh.
+// sourceVersion 根据 hack/print-workspace-status.sh 识别 Kubernetes git 版本。
 //
 // Adapted from https://github.com/kubernetes-sigs/kind/blob/3df64e784cc0ea74125b2a2e9877817418afa3af/pkg/build/nodeimage/internal/kube/source.go#L71-L104
 func sourceVersion(tCtx ktesting.TContext, kubeRoot string) (gitVersion string, dockerTag string, err error) {
-	// Get the version output.
+	// 获取版本输出。
 	cmd := exec.CommandContext(tCtx, "hack/print-workspace-status.sh")
 	cmd.Dir = kubeRoot
 	output, err := cmd.Output()
@@ -383,7 +383,7 @@ func sourceVersion(tCtx ktesting.TContext, kubeRoot string) (gitVersion string, 
 	}
 	tCtx.Logf("workspace status:\n%s", output)
 
-	// Parse it.
+	// 解析它。
 	for _, line := range strings.Split(string(output), "\n") {
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) != 2 {
@@ -406,24 +406,24 @@ func sourceVersion(tCtx ktesting.TContext, kubeRoot string) (gitVersion string, 
 	return
 }
 
-// serverDownloadURL constructs a download URL for a Kubernetes server tarball based on the given
-// prefix, major, and minor version numbers. It performs an HTTP GET request to retrieve the version
-// string from a remote text file, then builds the final tarball URL using the retrieved version,
-// the current OS, and architecture. If the version file is not found (HTTP 404), it returns
-// errHTTP404 to allow the caller to try another prefix. Returns the tarball URL, the version string,
-// or an error if any step fails.
-// The function uses the provided testing context for logging and error handling.
+// serverDownloadURL 根据给定的前缀、major 和 minor 版本号构造
+// Kubernetes server tarball 的下载 URL。它发起 HTTP GET 请求从远程
+// 文本文件获取版本字符串，然后用取回的版本、
+// 当前 OS 和架构构造最终 tarball URL。如果版本文件不存在（HTTP 404），
+// 返回 errHTTP404，让调用方尝试其他前缀。返回 tarball URL、版本字符串，
+// 或任一步骤失败时的错误。
+// 该函数使用提供的 testing context 进行日志和错误处理。
 //
-// Parameters:
-//   - tCtx: a ktesting.TContext used for test context and error handling.
-//   - prefix: the release prefix (e.g., "stable", "latest").
-//   - major: the major version number.
-//   - minor: the minor version number.
+// 参数：
+// - tCtx: 用于测试 context 和错误处理的 ktesting.TContext。
+// - prefix: release 前缀（例如 "stable"、"latest"）。
+// - major: major 版本号。
+// - minor: minor 版本号。
 //
-// Returns:
-//   - The constructed tarball download URL as a string.
-//   - The version string as retrieved from the remote file.
-//   - An error if the request fails, the response is invalid, or the version file is not found.
+// 返回：
+// - 构造好的 tarball 下载 URL 字符串。
+// - 从远程文件取回的版本字符串。
+// - 请求失败、响应无效或版本文件不存在时的错误。
 func serverDownloadURL(tCtx ktesting.TContext, prefix string, major, minor uint) (string, string, error) {
 	tCtx.Helper()
 	url := fmt.Sprintf("https://dl.k8s.io/release/%s-%d.%d.txt", prefix, major, minor)
@@ -436,8 +436,8 @@ func serverDownloadURL(tCtx ktesting.TContext, prefix string, major, minor uint)
 		return "", "", fmt.Errorf("downloading %s failed: %w", url, err)
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		// Caller should be able to distinguish HTTP 404
-		// to try another prefix (usually 'latest' if 'stable' returns 404)
+		// 调用方应能区分 HTTP 404
+		// 以尝试其他前缀（'stable' 返回 404 时通常试 'latest'）
 		return "", "", errHTTP404
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -456,7 +456,7 @@ func serverDownloadURL(tCtx ktesting.TContext, prefix string, major, minor uint)
 	return fmt.Sprintf("https://dl.k8s.io/release/%s/kubernetes-server-%s-%s.tar.gz", string(version), runtime.GOOS, runtime.GOARCH), string(version), nil
 }
 
-// eventuallyClaimsGone polls until all named ResourceClaims are gone (404).
+// eventuallyClaimsGone 轮询直到所有指定的 ResourceClaim 都消失（404）。
 func eventuallyClaimsGone(tCtx ktesting.TContext, claimNames []string, timeout time.Duration) {
 	tCtx.Helper()
 	ns := tCtx.Namespace()

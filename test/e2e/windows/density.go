@@ -46,19 +46,19 @@ var _ = sigDescribe(feature.Windows, "Density", framework.WithSerial(), framewor
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.Context("create a batch of pods", func() {
-		// TODO(coufon): the values are generous, set more precise limits with benchmark data
-		// and add more tests
+		// TODO(coufon): 这些值比较宽松，应根据基准数据设置更精确的限值
+		// 并增加更多测试
 		dTests := []densityTest{
 			{
 				podsNr:   10,
 				interval: 0 * time.Millisecond,
-				// percentile limit of single pod startup latency
+				// 单个 pod 启动延迟的百分位限值
 				podStartupLimits: e2emetrics.LatencyMetric{
 					Perc50: 30 * time.Second,
 					Perc90: 54 * time.Second,
 					Perc99: 59 * time.Second,
 				},
-				// upbound of startup latency of a batch of pods
+				// 一批 pod 启动延迟的上界
 				podBatchStartupLimit: 10 * time.Minute,
 			},
 		}
@@ -75,20 +75,20 @@ var _ = sigDescribe(feature.Windows, "Density", framework.WithSerial(), framewor
 }))
 
 type densityTest struct {
-	// number of pods
+	// pod 数量
 	podsNr int
-	// interval between creating pod (rate control)
+	// 创建 pod 的间隔（速率控制）
 	interval time.Duration
-	// create pods in 'batch' or 'sequence'
+	// 以 'batch' 或 'sequence' 方式创建 pod
 	createMethod string
-	// API QPS limit
+	// API QPS 限制
 	APIQPSLimit int
-	// performance limits
+	// 性能限值
 	podStartupLimits     e2emetrics.LatencyMetric
 	podBatchStartupLimit time.Duration
 }
 
-// runDensityBatchTest runs the density batch pod creation test
+// runDensityBatchTest 运行批量创建 pod 的密度测试
 func runDensityBatchTest(ctx context.Context, f *framework.Framework, testArg densityTest) (time.Duration, []e2emetrics.PodLatencyData) {
 	const (
 		podType = "density_test_pod"
@@ -99,16 +99,16 @@ func runDensityBatchTest(ctx context.Context, f *framework.Framework, testArg de
 		stopCh     = make(chan struct{})
 	)
 
-	// create test pod data structure
+	// 创建测试 pod 数据结构
 	pods := newDensityTestPods(testArg.podsNr, false, imageutils.GetPauseImageName(), podType)
 
-	// the controller watches the change of pod status
+	// controller 监听 pod 状态变化
 	controller := newInformerWatchPod(ctx, f, mutex, watchTimes, podType)
 	go controller.Run(stopCh)
 	defer close(stopCh)
 
 	ginkgo.By("Creating a batch of pods")
-	// It returns a map['pod name']'creation time' containing the creation timestamps
+	// 它返回 map['pod name']'creation time'，包含创建时间戳
 	createTimes := createBatchPodWithRateControl(ctx, f, pods, testArg.interval)
 
 	ginkgo.By("Waiting for all Pods to be observed by the watch...")
@@ -121,7 +121,7 @@ func runDensityBatchTest(ctx context.Context, f *framework.Framework, testArg de
 		framework.Failf("Timeout reached waiting for all Pods to be observed by the watch.")
 	}
 
-	// Analyze results
+	// 分析结果
 	var (
 		firstCreate metav1.Time
 		lastRunning metav1.Time
@@ -159,8 +159,8 @@ func runDensityBatchTest(ctx context.Context, f *framework.Framework, testArg de
 	return batchLag, e2eLags
 }
 
-// createBatchPodWithRateControl creates a batch of pods concurrently, uses one goroutine for each creation.
-// between creations there is an interval for throughput control
+// createBatchPodWithRateControl 并发创建一批 pod，每次创建用一个 goroutine。
+// 创建之间留有间隔以控制吞吐量
 func createBatchPodWithRateControl(ctx context.Context, f *framework.Framework, pods []*v1.Pod, interval time.Duration) map[string]metav1.Time {
 	createTimes := make(map[string]metav1.Time)
 	for _, pod := range pods {
@@ -171,7 +171,7 @@ func createBatchPodWithRateControl(ctx context.Context, f *framework.Framework, 
 	return createTimes
 }
 
-// newInformerWatchPod creates an informer to check whether all pods are running.
+// newInformerWatchPod 创建一个 informer，检查所有 pod 是否都在运行。
 func newInformerWatchPod(ctx context.Context, f *framework.Framework, mutex *sync.Mutex, watchTimes map[string]metav1.Time, podType string) cache.Controller {
 	ns := f.Namespace.Name
 	checkPodRunning := func(p *v1.Pod) {
@@ -220,7 +220,7 @@ func newInformerWatchPod(ctx context.Context, f *framework.Framework, mutex *syn
 	return controller
 }
 
-// newDensityTestPods creates a list of pods (specification) for test.
+// newDensityTestPods 为测试创建一组 pod（specification）。
 func newDensityTestPods(numPods int, volume bool, imageName, podType string) []*v1.Pod {
 	var pods []*v1.Pod
 
@@ -236,7 +236,7 @@ func newDensityTestPods(numPods int, volume bool, imageName, podType string) []*
 				},
 			},
 			Spec: v1.PodSpec{
-				// Restart policy is always (default).
+				// 重启策略始终是（默认的）。
 				Containers: []v1.Container{
 					{
 						Image: imageName,
@@ -264,7 +264,7 @@ func newDensityTestPods(numPods int, volume bool, imageName, podType string) []*
 	return pods
 }
 
-// deletePodsSync deletes a list of pods and block until pods disappear.
+// deletePodsSync 删除一组 pod 并阻塞直到它们消失。
 func deletePodsSync(ctx context.Context, f *framework.Framework, pods []*v1.Pod) {
 	var wg sync.WaitGroup
 	for _, pod := range pods {

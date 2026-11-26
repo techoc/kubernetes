@@ -62,9 +62,9 @@ var _ = SIGDescribe("CoordinatedLeaderElection", feature.CoordinatedLeaderElecti
 	})
 
 	/*
-		Release : v1.33
-		Testname: single LeaseCandidate
-		Description: Create a lease candidate. A lease must be created and renewed.
+		发布版本：v1.33
+		测试名称：single LeaseCandidate
+		描述：创建一个 lease candidate。必须创建并续约 lease。
 	*/
 	ginkgo.It("single LeaseCandidate", func(ctx context.Context) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
@@ -75,9 +75,9 @@ var _ = SIGDescribe("CoordinatedLeaderElection", feature.CoordinatedLeaderElecti
 	})
 
 	/*
-		Release : v1.33
-		Testname: multiple LeaseCandidate
-		Description: Create multiple lease candidates. The best candidate must be selected.
+		发布版本：v1.33
+		测试名称：multiple LeaseCandidate
+		描述：创建多个 lease candidate。必须选出最佳候选者。
 	*/
 	ginkgo.It("multiple LeaseCandidate", func(ctx context.Context) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
@@ -91,9 +91,9 @@ var _ = SIGDescribe("CoordinatedLeaderElection", feature.CoordinatedLeaderElecti
 	})
 
 	/*
-		Release : v1.33
-		Testname: multiple LeaseCandidate third party strategy
-		Description: Create multiple lease candidates. The leader lease MUST be created but with the holder identity unset.
+		发布版本：v1.33
+		测试名称：multiple LeaseCandidate third party strategy
+		描述：创建多个 lease candidate。必须创建 leader lease，但 holder identity 不设置。
 	*/
 	ginkgo.It("multiple LeaseCandidates third party strategy", func(ctx context.Context) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
@@ -105,11 +105,11 @@ var _ = SIGDescribe("CoordinatedLeaderElection", feature.CoordinatedLeaderElecti
 	})
 
 	/*
-		Release : v1.33
-		Testname: CLE Preemption
-		Description: Create a lease candidate. When another more suitable
-		candidate is created, the leader lease MUST transition to the new
-		candidate.
+		发布版本：v1.33
+		测试名称：CLE Preemption
+		描述：创建一个 lease candidate。当出现更合适的
+		候选者时，leader lease 必须转移到该新
+		候选者。
 	*/
 	ginkgo.It("CLE Preemption", func(ctx context.Context) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
@@ -122,12 +122,12 @@ var _ = SIGDescribe("CoordinatedLeaderElection", feature.CoordinatedLeaderElecti
 	})
 
 	/*
-		Release : v1.33
-		Testname: CLE upgrade to enabled
-		Description: Create a lease candidate. When another candidate is added
-		with coordinated leader election supported, the lease should not
-		transition. When the old controller is shutdown, leader election should
-		transition to the new controller.
+		发布版本：v1.33
+		测试名称：CLE upgrade to enabled
+		描述：创建一个 lease candidate。当加入另一个支持
+		协同 leader 选举的候选者时，lease 不应
+		发生转移。旧控制器关闭后，leader 选举应
+		转移到新控制器。
 	*/
 	ginkgo.It("CLE upgrade to enabled", func(ctx context.Context) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
@@ -137,20 +137,20 @@ var _ = SIGDescribe("CoordinatedLeaderElection", feature.CoordinatedLeaderElecti
 		go cletest.createAndRunFakeLegacyController("foo1-130", "default", "foobar")
 		cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-130"))
 		go cletest.createAndRunFakeController("foo1-131", "default", "foobar", "1.31.0", "1.31.0", coordinationv1.OldestEmulationVersion)
-		// running a new controller should not kick off old leader
+		// 启动新控制器不应让旧 leader 退出
 		cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-130"))
-		// If the 130 (non CLE) controller is stopped, leader should transition to 131 (CLE)
+		// 若停止 130（非 CLE）控制器，leader 应转移到 131（CLE）
 		cletest.cancelController("foo1-130", "default")
 		cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-131"))
 	})
 
 	/*
-		Release : v1.33
-		Testname: CLE downgrade to disabled
-		Description: Create a lease candidate with coordinated leader election
-		enabled. When another candidate is added without CLE, the lease should
-		not transition. When the old controller is shutdown, leader election
-		should transition to the new controller.
+		发布版本：v1.33
+		测试名称：CLE downgrade to disabled
+		描述：创建一个启用协同 leader 选举的
+		lease candidate。当加入另一个不支持 CLE 的候选者时，lease
+		不应转移。旧控制器关闭后，leader 选举
+		应转移到新控制器。
 	*/
 	ginkgo.It("CLE downgrade to disabled", func(ctx context.Context) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
@@ -160,9 +160,9 @@ var _ = SIGDescribe("CoordinatedLeaderElection", feature.CoordinatedLeaderElecti
 		go cletest.createAndRunFakeController("foo1-131", "default", "foobar", "1.31.0", "1.31.0", coordinationv1.OldestEmulationVersion)
 		cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-131"))
 		go cletest.createAndRunFakeLegacyController("foo1-130", "default", "foobar")
-		// running a new controller should not kick off old leader
+		// 启动新控制器不应让旧 leader 退出
 		cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-131"))
-		// If the 131 (CLE) controller is stopped, leader should transition to 130 (non-CLE)
+		// 若停止 131（CLE）控制器，leader 应转移到 130（非 CLE）
 		cletest.cancelController("foo1-131", "default")
 		cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-130"))
 	})

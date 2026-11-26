@@ -71,9 +71,9 @@ var _ = SIGDescribe("MirrorPod", func() {
 			}, 2*time.Minute, time.Second*4).Should(gomega.BeNil())
 		})
 		/*
-			Release: v1.9
-			Testname: Mirror Pod, update
-			Description: Updating a static Pod MUST recreate an updated mirror Pod. Create a static pod, verify that a mirror pod is created. Update the static pod by changing the container image, the mirror pod MUST be re-created and updated with the new image.
+			发布版本：v1.9
+			测试名称：Mirror Pod, update
+			描述：更新 static Pod 必须重新创建更新后的 mirror Pod。创建一个 static pod，验证 mirror pod 被创建。通过修改容器镜像更新 static pod，mirror pod 必须使用新镜像重新创建并更新。
 		*/
 		f.It("should be updated when static pod updated", f.WithNodeConformance(), func(ctx context.Context) {
 			ginkgo.By("get mirror pod uid")
@@ -98,9 +98,9 @@ var _ = SIGDescribe("MirrorPod", func() {
 			gomega.Expect(pod.Spec.Containers[0].Image).To(gomega.Equal(image))
 		})
 		/*
-			Release: v1.9
-			Testname: Mirror Pod, delete
-			Description:  When a mirror-Pod is deleted then the mirror pod MUST be re-created. Create a static pod, verify that a mirror pod is created. Delete the mirror pod, the mirror pod MUST be re-created and running.
+			发布版本：v1.9
+			测试名称：Mirror Pod, delete
+			描述：删除 mirror-Pod 后，必须重新创建 mirror pod。创建一个 static pod，验证 mirror pod 被创建。删除 mirror pod，必须重新创建并运行它。
 		*/
 		f.It("should be recreated when mirror pod gracefully deleted", f.WithNodeConformance(), func(ctx context.Context) {
 			ginkgo.By("get mirror pod uid")
@@ -118,9 +118,9 @@ var _ = SIGDescribe("MirrorPod", func() {
 			}, 2*time.Minute, time.Second*4).Should(gomega.BeNil())
 		})
 		/*
-			Release: v1.9
-			Testname: Mirror Pod, force delete
-			Description: When a mirror-Pod is deleted, forcibly, then the mirror pod MUST be re-created. Create a static pod, verify that a mirror pod is created. Delete the mirror pod with delete wait time set to zero forcing immediate deletion, the mirror pod MUST be re-created and running.
+			发布版本：v1.9
+			测试名称：Mirror Pod, force delete
+			描述：强制删除 mirror-Pod 后，必须重新创建 mirror pod。创建一个 static pod，验证 mirror pod 被创建。用零删除等待时间强制立即删除 mirror pod，必须重新创建并运行它。
 		*/
 		f.It("should be recreated when mirror pod forcibly deleted", f.WithNodeConformance(), func(ctx context.Context) {
 			ginkgo.By("get mirror pod uid")
@@ -153,9 +153,9 @@ var _ = SIGDescribe("MirrorPod", func() {
 		ginkgo.BeforeEach(func() {
 		})
 		/*
-			Release: v1.23
-			Testname: Mirror Pod, recreate
-			Description: When a static pod's manifest is removed and readded, the mirror pod MUST successfully recreate. Create the static pod, verify it is running, remove its manifest and then add it back, and verify the static pod runs again.
+			发布版本：v1.23
+			测试名称：Mirror Pod, recreate
+			描述：static pod 的 manifest 被移除再重新加入后，mirror pod 必须成功重建。创建 static pod，验证它运行，移除 manifest 后再加回来，验证 static pod 再次运行。
 		*/
 		f.It("should successfully recreate when file is removed and recreated", f.WithNodeConformance(), func(ctx context.Context) {
 			ns = f.Namespace.Name
@@ -242,7 +242,7 @@ var _ = SIGDescribe("MirrorPod", func() {
 			err = deleteStaticPod(podPath, staticPodName, ns)
 			framework.ExpectNoError(err)
 
-			// Wait 5 mins for syncTerminatedPod to fail. We expect that the pod volume should not be cleaned up because the NFS server is down.
+			// 等待 5 分钟让 syncTerminatedPod 失败。预期 pod volume 不应被清理，因为 NFS server 已关闭。
 			gomega.Consistently(func() bool {
 				return podVolumeDirectoryExists(types.UID(hash))
 			}, 5*time.Minute, 10*time.Second).Should(gomega.BeTrueBecause("pod volume should exist while nfs server is stopped"))
@@ -255,7 +255,7 @@ var _ = SIGDescribe("MirrorPod", func() {
 				return podVolumeDirectoryExists(types.UID(hash))
 			}, 5*time.Minute, 10*time.Second).Should(gomega.BeFalseBecause("pod volume should be deleted after nfs server is started"))
 
-			// Create the static pod again with the same config and expect it to start running
+			// 用相同配置再次创建 static pod，预期它开始运行
 			err = createStaticPodUsingNfs(nfsServerHost, node, "sleep 999999", podPath, staticPodName, ns)
 			framework.ExpectNoError(err)
 			ginkgo.By(fmt.Sprintf("Wating for nfs test pod: %s to start running (after being recreated)", staticPodName))
@@ -601,7 +601,7 @@ func createStaticPodWithSpec(dir, name, namespace string, podSpec v1.PodSpec) er
 		return err
 	}
 	defer func() {
-		// Don't mask other errors.
+		// 不要掩盖其他错误。
 		_ = f.Close()
 	}()
 
@@ -684,14 +684,14 @@ func checkMirrorPodRunningWithRestartCount(ctx context.Context, interval time.Du
 		}
 		for i := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[i].State.Waiting != nil {
-				// retry if pod is in waiting state
+				// 如果 pod 处于 waiting 状态则重试
 				return false, nil
 			}
 			if pod.Status.ContainerStatuses[i].State.Running == nil {
 				return false, fmt.Errorf("expected the mirror pod %q with container %q to be running (got containers=%v)", name, pod.Status.ContainerStatuses[i].Name, pod.Status.ContainerStatuses[i].State)
 			}
 			if pod.Status.ContainerStatuses[i].RestartCount == count {
-				// found the restart count
+				// 找到了重启次数
 				return true, nil
 			}
 		}
@@ -860,7 +860,7 @@ var _ = SIGDescribe("MirrorPod", framework.WithSerial(), func() {
 				gomega.Expect(status.Ready).To(gomega.BeTrueBecause("The Ready field should be set to true when a pod enters the Ready condition."))
 			}
 
-			// The grace period for kubelet startup is 10 seconds, so we wait here for 11 seconds.
+			// kubelet 启动的 grace period 是 10 秒，所以这里等 11 秒。
 			time.Sleep(time.Second * 11)
 
 			stopCh := make(chan struct{})
@@ -922,7 +922,7 @@ var _ = SIGDescribe("MirrorPod", framework.WithSerial(), func() {
 			restartKubelet := mustStopKubelet(ctx, f)
 			restartKubelet(ctx)
 
-			// Let the goroutine run for a few more seconds to catch any delayed changes
+			// 让 goroutine 多运行几秒，以捕获任何延迟的变化
 			time.Sleep(5 * time.Second)
 			close(stopCh)
 

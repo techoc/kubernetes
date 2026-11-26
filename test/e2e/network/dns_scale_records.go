@@ -55,9 +55,9 @@ var _ = common.SIGDescribe(feature.PerformanceDNS, framework.WithSerial(), func(
 		framework.ExpectNoError(err)
 	})
 
-	// answers dns for service - creates the maximum number of services, and then check dns record for one
+	// 为 service 提供 dns 应答 - 创建最大数量的 service，然后检查其中一个的 dns 记录
 	ginkgo.It("Should answer DNS query for maximum number of services per cluster", func(ctx context.Context) {
-		// get integer ceiling of maxServicesPerCluster / maxServicesPerNamespace
+		// 取 maxServicesPerCluster / maxServicesPerNamespace 的向上取整
 		numNs := (maxServicesPerCluster + maxServicesPerNamespace - 1) / maxServicesPerNamespace
 
 		var namespaces []string

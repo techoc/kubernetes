@@ -31,17 +31,17 @@ import (
 )
 
 const (
-	// ControllerUpdateTimeout is the maximum expected wait before a change to a Pod
-	// or Service is reflected in its EndpointSlices. (This is the same as
-	// e2eservice.ServiceEndpointsTimeout, but duplicated here to avoid import loops.)
+	// ControllerUpdateTimeout 是 Pod 或 Service 变更反映到
+	// 其 EndpointSlices 的最大预期等待时间。（与
+	// e2eservice.ServiceEndpointsTimeout 相同，但这里复制一份以避免 import 循环。）
 	ControllerUpdateTimeout = 2 * time.Minute
 )
 
 type EndpointSliceConditionFunc func(ctx context.Context, endpointSlices []discoveryv1.EndpointSlice) (done bool, err error)
 
-// WaitForEndpointSlices is an EndpointSlice-specific wrapper around
-// wait.PollUntilContextTimeout that polls conditionFunc with a list of serviceName's
-// EndpointSlices.
+// WaitForEndpointSlices 是 EndpointSlice 专用的包装器，围绕
+// wait.PollUntilContextTimeout，用 serviceName 的 EndpointSlices
+// 列表轮询 conditionFunc。
 func WaitForEndpointSlices(ctx context.Context, cs clientset.Interface, namespace, serviceName string, interval, timeout time.Duration, conditionFunc EndpointSliceConditionFunc) error {
 	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
 		esList, err := cs.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", discoveryv1.LabelServiceName, serviceName)})
@@ -53,14 +53,13 @@ func WaitForEndpointSlices(ctx context.Context, cs clientset.Interface, namespac
 	})
 }
 
-// WaitForEndpointCount waits (up to ControllerUpdateTimeout) for the named service to
-// have at least one EndpointSlice, where the total length of the `Endpoints` arrays
-// across all EndpointSlices is expectNum. (For simple services, this is equivalent to
-// saying that it waits for there to be exactly expectNum pods backing the service, but
-// for dual-stack services or some services with named ports, the mapping between
-// `Endpoints` and pods may not be 1-to-1. Note also that waiting for 0 endpoints means
-// "wait for the Service to exist but not have any endpoints", not "wait for the Service
-// to be deleted".)
+// WaitForEndpointCount 等待（最多 ControllerUpdateTimeout）指定服务的
+// EndpointSlice 至少有一个，且所有 EndpointSlice 的 `Endpoints` 数组
+// 总长度为 expectNum。（简单服务等价于等待恰好有 expectNum 个
+// pod 支撑该服务，但双栈服务或带命名端口的服务中，
+// `Endpoints` 与 pod 可能不是一一对应。另注意等待 0 个 endpoint 表示
+// "等待 Service 存在但没有 endpoint"，而不是"等待 Service
+// 被删除"。）
 func WaitForEndpointCount(ctx context.Context, cs clientset.Interface, namespace, serviceName string, expectNum int) error {
 	framework.Logf("Waiting for amount of service %s/%s endpoints to be %d", namespace, serviceName, expectNum)
 	return WaitForEndpointSlices(ctx, cs, namespace, serviceName, time.Second, ControllerUpdateTimeout, func(ctx context.Context, endpointSlices []discoveryv1.EndpointSlice) (bool, error) {
@@ -69,7 +68,7 @@ func WaitForEndpointCount(ctx context.Context, cs clientset.Interface, namespace
 			return false, nil
 		}
 
-		// EndpointSlices can contain the same address on multiple Slices
+		// 同一个地址可能出现在多个 EndpointSlice 上
 		addresses := sets.Set[string]{}
 		for _, epSlice := range endpointSlices {
 			for _, ep := range epSlice.Endpoints {
@@ -87,11 +86,10 @@ func WaitForEndpointCount(ctx context.Context, cs clientset.Interface, namespace
 	})
 }
 
-// WaitForEndpointPods waits (up to ControllerUpdateTimeout) for the named service to have
-// at least one EndpointSlice, with the set of `Endpoints` across all slices covering
-// exactly the pods named in expectPods. (Note that if called on a dual-stack service, it
-// may return before both EndpointSlices have been written, since the first EndpointSlice
-// alone will normally target all pods.)
+// WaitForEndpointPods 等待（最多 ControllerUpdateTimeout）指定服务至少有一个
+// EndpointSlice，且所有 slice 的 `Endpoints` 集合恰好覆盖
+// expectPods 中的 pod。（注意双栈服务上它可能提前返回，
+// 因为第一个 EndpointSlice 通常已覆盖所有 pod。）
 func WaitForEndpointPods(ctx context.Context, cs clientset.Interface, namespace, serviceName string, expectPods ...string) error {
 	framework.Logf("Waiting for service %s/%s to have endpoints pointing to %v", namespace, serviceName, expectPods)
 	expectPodSet := sets.New(expectPods...)
@@ -118,23 +116,23 @@ func WaitForEndpointPods(ctx context.Context, cs clientset.Interface, namespace,
 	})
 }
 
-// PortMapping contains data used by WaitForEndpointPorts
+// PortMapping 包含 WaitForEndpointPorts 使用的数据
 type PortMapping struct {
-	// Name is the name of the ServicePort / EndpointPort
+	// Name 是 ServicePort / EndpointPort 的名称
 	Name string
-	// Protocol is the protocol (defaults to TCP if left empty)
+	// Protocol 是协议（为空时默认 TCP）
 	Protocol v1.Protocol
-	// Target is the name of the endpoint Pod
+	// Target 是 endpoint Pod 的名称
 	Target string
-	// TargetPort is the port on Target
+	// TargetPort 是 Target 上的端口
 	TargetPort int32
 }
 
-// WaitForEndpointPorts waits (up to ControllerUpdateTimeout) for the named service to
-// have at least one EndpointSlice, with the set of `Endpoints` across all slices having
-// endpoints covering exactly portMappings. (Note that if called on a dual-stack service,
-// it may return before all EndpointSlices have been written, since just the
-// EndpointSlices for a single family will normally target all ports.)
+// WaitForEndpointPorts 等待（最多 ControllerUpdateTimeout）指定服务至少有一个
+// EndpointSlice，且所有 slice 的 `Endpoints` 集合恰好覆盖
+// portMappings。（注意双栈服务上它可能提前返回，
+// 因为单一地址族的
+// EndpointSlice 通常已覆盖所有端口。）
 func WaitForEndpointPorts(ctx context.Context, cs clientset.Interface, namespace, service string, portMappings []PortMapping) error {
 	framework.Logf("Waiting for service %s/%s to have endpoints for ports %v", namespace, service, portMappings)
 

@@ -41,19 +41,19 @@ var _ = SIGDescribe("Secrets", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
 	/*
-		Release: v1.9
-		Testname: Secrets Volume, default
-		Description: Create a secret. Create a Pod with secret volume source configured into the container. Pod MUST be able to read the secret from the mounted volume from the container runtime and the file mode of the secret MUST be -rw-r--r-- by default.
+		发布版本：v1.9
+		测试名称：Secrets Volume, default
+		描述：创建一个 secret。创建带 secret volume source 并挂载到容器的 Pod。Pod 必须能从容器运行时的挂载 volume 中读取 secret，secret 的文件模式默认必须为 -rw-r--r--。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		doSecretE2EWithoutMapping(ctx, f, nil, nil, "secret-test-"+string(uuid.NewUUID()), nil, nil)
 	})
 
 	/*
-		Release: v1.9
-		Testname: Secrets Volume, volume mode 0400
-		Description: Create a secret. Create a Pod with secret volume source configured into the container with file mode set to 0x400. Pod MUST be able to read the secret from the mounted volume from the container runtime and the file mode of the secret MUST be -r-------- by default.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+		发布版本：v1.9
+		测试名称：Secrets Volume, volume mode 0400
+		描述：创建一个 secret。创建带 secret volume source 并挂载到容器、文件模式设为 0x400 的 Pod。Pod 必须能从容器运行时的挂载 volume 中读取 secret，secret 的文件模式默认必须为 -r--------。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with defaultMode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		defaultMode := int32(0400)
@@ -61,10 +61,10 @@ var _ = SIGDescribe("Secrets", func() {
 	})
 
 	/*
-		Release: v1.9
-		Testname: Secrets Volume, volume mode 0440, fsGroup 1001 and uid 1000
-		Description: Create a secret. Create a Pod with secret volume source configured into the container with file mode set to 0x440 as a non-root user with uid 1000 and fsGroup id 1001. Pod MUST be able to read the secret from the mounted volume from the container runtime and the file mode of the secret MUST be -r--r-----by default.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+		发布版本：v1.9
+		测试名称：Secrets Volume, volume mode 0440, fsGroup 1001 and uid 1000
+		描述：创建一个 secret。创建带 secret volume source 并挂载到容器、文件模式设为 0x440、以 uid 1000 非 root 用户和 fsGroup 1001 运行的 Pod。Pod 必须能从容器运行时的挂载 volume 中读取 secret，secret 的文件模式默认必须为 -r--r-----。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限或以 UID / GID 运行。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume as non-root with defaultMode and fsGroup set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		defaultMode := int32(0440) /* setting fsGroup sets mode to at least 440 */
@@ -78,19 +78,19 @@ var _ = SIGDescribe("Secrets", func() {
 	})
 
 	/*
-		Release: v1.9
-		Testname: Secrets Volume, mapping
-		Description: Create a secret. Create a Pod with secret volume source configured into the container with a custom path. Pod MUST be able to read the secret from the mounted volume from the specified custom path. The file mode of the secret MUST be -rw-r--r-- by default.
+		发布版本：v1.9
+		测试名称：Secrets Volume, mapping
+		描述：创建一个 secret。创建带 secret volume source 并挂载到容器自定义路径的 Pod。Pod 必须能从指定自定义路径的挂载 volume 中读取 secret。secret 的文件模式默认必须为 -rw-r--r--。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings", f.WithNodeConformance(), func(ctx context.Context) {
 		doSecretE2EWithMapping(ctx, f, nil, nil, nil)
 	})
 
 	/*
-		Release: v1.9
-		Testname: Secrets Volume, mapping, volume mode 0400
-		Description: Create a secret. Create a Pod with secret volume source configured into the container with a custom path and file mode set to 0x400. Pod MUST be able to read the secret from the mounted volume from the specified custom path. The file mode of the secret MUST be -r--r--r--.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+		发布版本：v1.9
+		测试名称：Secrets Volume, mapping, volume mode 0400
+		描述：创建一个 secret。创建带 secret volume source 并挂载到容器自定义路径、文件模式设为 0x400 的 Pod。Pod 必须能从指定自定义路径的挂载 volume 中读取 secret。secret 的文件模式必须为 -r--r--r--。
+		此测试标记为 LinuxOnly，因为 Windows 不支持设置特定文件权限。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings and Item Mode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		mode := int32(0400)
@@ -103,9 +103,9 @@ var _ = SIGDescribe("Secrets", func() {
 	})
 
 	/*
-		Release: v1.12
-		Testname: Secrets Volume, volume mode default, secret with same name in different namespace
-		Description: Create a secret with same name in two namespaces. Create a Pod with secret volume source configured into the container. Pod MUST be able to read the secrets from the mounted volume from the container runtime and only secrets which are associated with namespace where pod is created. The file mode of the secret MUST be -rw-r--r-- by default.
+		发布版本：v1.12
+		测试名称：Secrets Volume, volume mode default, secret with same name in different namespace
+		描述：在两个 namespace 中创建同名 secret。创建带 secret volume source 并挂载到容器的 Pod。Pod 必须能从容器运行时的挂载 volume 中读取 secret，且只能读取与 pod 所在 namespace 关联的 secret。secret 的文件模式默认必须为 -rw-r--r--。
 	*/
 	framework.ConformanceIt("should be able to mount in a volume regardless of a different secret existing with same name in different namespace", f.WithNodeConformance(), func(ctx context.Context) {
 		var (
@@ -129,14 +129,14 @@ var _ = SIGDescribe("Secrets", func() {
 	})
 
 	/*
-		Release: v1.9
-		Testname: Secrets Volume, mapping multiple volume paths
-		Description: Create a secret. Create a Pod with two secret volume sources configured into the container in to two different custom paths. Pod MUST be able to read the secret from the both the mounted volumes from the two specified custom paths.
+		发布版本：v1.9
+		测试名称：Secrets Volume, mapping multiple volume paths
+		描述：创建一个 secret。创建带两个 secret volume source 并挂载到容器两个不同自定义路径的 Pod。Pod 必须能从两个指定自定义路径的挂载 volume 中读取 secret。
 	*/
 	framework.ConformanceIt("should be consumable in multiple volumes in a pod", f.WithNodeConformance(), func(ctx context.Context) {
-		// This test ensures that the same secret can be mounted in multiple
-		// volumes in the same pod.  This test case exists to prevent
-		// regressions that break this use-case.
+		// 本测试确保同一个 secret 可以在同一个 pod 中
+		// 挂载到多个 volume。这个用例是为了防止
+		// 破坏该场景的回归。
 		var (
 			name             = "secret-test-" + string(uuid.NewUUID())
 			volumeName       = "secret-volume"
@@ -209,9 +209,9 @@ var _ = SIGDescribe("Secrets", func() {
 	})
 
 	/*
-		Release: v1.9
-		Testname: Secrets Volume, create, update and delete
-		Description: Create a Pod with three containers with secrets volume sources namely a create, update and delete container. Create Container when started MUST not have secret, update and delete containers MUST be created with a secret value. Create a secret in the create container, the Pod MUST be able to read the secret from the create container. Update the secret in the update container, Pod MUST be able to read the updated secret value. Delete the secret in the delete container. Pod MUST fail to read the secret from the delete container.
+		发布版本：v1.9
+		测试名称：Secrets Volume, create, update and delete
+		描述：创建带三个容器的 Pod，分别用 create、update 和 delete 容器操作 secret volume source。create 容器启动时必须没有 secret，update 和 delete 容器必须以某个 secret 值创建。在 create 容器中创建 secret，Pod 必须能从 create 容器读取它。在 update 容器中更新 secret，Pod 必须能读到更新后的值。在 delete 容器中删除 secret，Pod 必须无法从 delete 容器读取它。
 	*/
 	framework.ConformanceIt("optional updates should be reflected in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		podLogTimeout := e2epod.GetPodSecretUpdateTimeout(ctx, f.ClientSet)
@@ -386,13 +386,13 @@ var _ = SIGDescribe("Secrets", func() {
 	})
 
 	/*
-		Release: v1.21
-		Testname: Secrets Volume, immutability
-		Description: Create a secret. Update it's data field, the update MUST succeed.
-			Mark the secret as immutable, the update MUST succeed. Try to update its data, the update MUST fail.
-			Try to mark the secret back as not immutable, the update MUST fail.
-			Try to update the secret`s metadata (labels), the update must succeed.
-			Try to delete the secret, the deletion must succeed.
+		发布版本：v1.21
+		测试名称：Secrets Volume, immutability
+		描述：创建一个 secret。更新其 data 字段，更新必须成功。
+			将 secret 标记为 immutable，更新必须成功。尝试更新其 data，更新必须失败。
+			尝试将 secret 改回非 immutable，更新必须失败。
+			尝试更新 secret 的 metadata（标签），更新必须成功。
+			尝试删除 secret，删除必须成功。
 	*/
 	framework.ConformanceIt("should be immutable if `immutable` field is set", func(ctx context.Context) {
 		name := "immutable"
@@ -405,20 +405,20 @@ var _ = SIGDescribe("Secrets", func() {
 		currentSecret, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Update(ctx, currentSecret, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to update secret %q in namespace %q", secret.Name, secret.Namespace)
 
-		// Mark secret as immutable.
+		// 将 secret 标记为 immutable。
 		trueVal := true
 		currentSecret.Immutable = &trueVal
 		currentSecret, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Update(ctx, currentSecret, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to mark secret %q in namespace %q as immutable", secret.Name, secret.Namespace)
 
-		// Ensure data can't be changed now.
+		// 确保现在不能更改 data。
 		currentSecret.Data["data-5"] = []byte("value-5\n")
 		_, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Update(ctx, currentSecret, metav1.UpdateOptions{})
 		if !apierrors.IsInvalid(err) {
 			framework.Failf("expected 'invalid' as error, got instead: %v", err)
 		}
 
-		// Ensure secret can't be switched from immutable to mutable.
+		// 确保 secret 不能从 immutable 切回 mutable。
 		currentSecret, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Get(ctx, name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "Failed to get secret %q in namespace %q", secret.Name, secret.Namespace)
 		if !*currentSecret.Immutable {
@@ -432,21 +432,21 @@ var _ = SIGDescribe("Secrets", func() {
 			framework.Failf("expected 'invalid' as error, got instead: %v", err)
 		}
 
-		// Ensure that metadata can be changed.
+		// 确保 metadata 可以更改。
 		currentSecret, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Get(ctx, name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "Failed to get secret %q in namespace %q", secret.Name, secret.Namespace)
 		currentSecret.Labels = map[string]string{"label1": "value1"}
 		_, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Update(ctx, currentSecret, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to update secret %q in namespace %q", secret.Name, secret.Namespace)
 
-		// Ensure that immutable secret can be deleted.
+		// 确保 immutable secret 可以被删除。
 		err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Delete(ctx, name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "Failed to delete secret %q in namespace %q", secret.Name, secret.Namespace)
 	})
 
-	// The secret is in pending during volume creation until the secret objects are available
-	// or until mount the secret volume times out. There is no secret object defined for the pod, so it should return timeout exception unless it is marked optional.
-	// Slow (~5 mins)
+	// volume 创建期间 pod 处于 pending，直到 secret 对象可用
+	// 或挂载 secret volume 超时。pod 没有定义 secret 对象，因此除非标记为 optional，否则应返回超时异常。
+	// 慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to secret object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/secret-volumes"
 		podName := "pod-secrets-" + string(uuid.NewUUID())
@@ -455,9 +455,9 @@ var _ = SIGDescribe("Secrets", func() {
 		gomega.Consistently(ctx, getPod).WithTimeout(f.Timeouts.PodStart).Should(e2epod.BeInPhase(v1.PodPending))
 	})
 
-	// Secret object defined for the pod, If a key is specified which is not present in the secret,
-	// the volume setup will error unless it is marked optional, during the pod creation.
-	// Slow (~5 mins)
+	// 为 pod 定义了 Secret 对象。如果指定的 key 在 secret 中不存在，
+	// pod 创建时 volume 设置会报错，除非标记为 optional。
+	// 慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to the key in the secret object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/secret-volumes"
 		podName := "pod-secrets-" + string(uuid.NewUUID())
@@ -649,7 +649,7 @@ func createNonOptionalSecretPod(ctx context.Context, f *framework.Framework, vol
 	createContainerName := "creates-volume-test"
 	createVolumeName := "creates-volume"
 
-	// creating a pod without secret object created, by mentioning the secret volume source reference name
+	// 创建一个 pod，没有创建 secret 对象，但指定了 secret volume source 引用名称
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: podName,
@@ -704,7 +704,7 @@ func createNonOptionalSecretPodWithSecret(ctx context.Context, f *framework.Fram
 	if secret, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
 		framework.Failf("unable to create test secret %s: %v", secret.Name, err)
 	}
-	// creating a pod with secret object, with the key which is not present in secret object.
+	// 创建一个 pod 带有 secret 对象，但使用的 key 在 secret 对象中不存在。
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: podName,

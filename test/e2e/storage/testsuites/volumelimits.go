@@ -50,19 +50,19 @@ type volumeLimitsTestSuite struct {
 }
 
 const (
-	// The test uses generic pod startup / PV deletion timeouts. As it creates
-	// much more volumes at once, these timeouts are multiplied by this number.
-	// Using real nr. of volumes (e.g. 128 on GCE) would be really too much.
+	// 测试使用通用的 pod 启动 / PV 删除超时。由于它一次创建
+	// 更多 volume，这些超时会乘以这个数字。
+	// 使用真实 volume 数（例如 GCE 上的 128）实在太多。
 	testSlowMultiplier = 10
 
-	// How long to wait until CSINode gets attach limit from installed CSI driver.
+	// 等待 CSINode 从已安装 CSI driver 获取 attach 限制的时长。
 	csiNodeInfoTimeout = 2 * time.Minute
 )
 
 var _ storageframework.TestSuite = &volumeLimitsTestSuite{}
 
-// InitCustomVolumeLimitsTestSuite returns volumeLimitsTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeLimitsTestSuite 返回 volumeLimitsTestSuite，它使用自定义测试模式
+// 实现 TestSuite 接口
 func InitCustomVolumeLimitsTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeLimitsTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -72,8 +72,8 @@ func InitCustomVolumeLimitsTestSuite(patterns []storageframework.TestPattern) st
 	}
 }
 
-// InitVolumeLimitsTestSuite returns volumeLimitsTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeLimitsTestSuite 返回 volumeLimitsTestSuite，它使用测试套件
+// 默认模式实现 TestSuite 接口
 func InitVolumeLimitsTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.FsVolModeDynamicPV,
@@ -103,16 +103,16 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 
 		cs clientset.Interface
 		ns *v1.Namespace
-		// VolumeResource contains pv, pvc, sc, etc. of the first pod created
+		// 第一个 pod 创建的 VolumeResource，包含 pv、pvc、sc 等
 		resource *storageframework.VolumeResource
 
-		// All created PVCs
+		// 所有创建的 PVC
 		pvcNames []string
 
-		// All created Pods
+		// 所有创建的 Pod
 		podNames []string
 
-		// All created PVs, incl. the one in resource
+		// 所有创建的 PV，包括 resource 中的那个
 		pvNames sets.Set[string]
 	}
 	var (
@@ -121,8 +121,8 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 		dDriver storageframework.DynamicPVTestDriver
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 不可用。任何使用
+	// f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("volumelimits", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -146,9 +146,9 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 				cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete PVC %s: %s", pvcName, err))
 			}
 		}
-		// Wait for the PVs to be deleted. It includes also pod and PVC deletion because of PVC protection.
-		// We use PVs to make sure that the test does not leave orphan PVs when a CSI driver is destroyed
-		// just after the test ends.
+		// 等待 PV 被删除。由于 PVC 保护，这也包括 pod 和 PVC 删除。
+		// 用 PV 来确保测试不会在 CSI driver 刚被销毁时
+		// 留下孤儿 PV。
 		err := wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, false, func(ctx context.Context) (bool, error) {
 			existing := 0
 			for _, pvName := range l.pvNames.UnsortedList() {
@@ -178,14 +178,14 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 		return nil
 	}
 
-	// This checks that CSIMaxVolumeLimitChecker works as expected.
-	// A randomly chosen node should be able to handle as many CSI volumes as
-	// it claims to handle in CSINode.Spec.Drivers[x].Allocatable.
-	// The test uses one single pod with a lot of volumes to work around any
-	// max pod limit on a node.
-	// And one extra pod with a CSI volume should get Pending with a condition
-	// that says it's unschedulable because of volume limit.
-	// BEWARE: the test may create lot of volumes and it's really slow.
+	// 这检查 CSIMaxVolumeLimitChecker 是否按预期工作。
+	// 随机选中的节点应能处理
+	// CSINode.Spec.Drivers[x].Allocatable 中声明的 CSI volume 数量。
+	// 测试用一个带大量 volume 的 pod 来规避
+	// 节点上的最大 pod 数限制。
+	// 再加一个带 CSI volume 的 pod，应变为 Pending，condition
+	// 说明因 volume 限制而不可调度。
+	// 注意：测试可能创建大量 volume，非常慢。
 	f.It("should support volume limits", f.WithSerial(), func(ctx context.Context) {
 		driverInfo := driver.GetDriverInfo()
 		l.ns = f.Namespace
@@ -194,8 +194,8 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 		l.config = driver.PrepareTest(ctx, f)
 
 		ginkgo.By("Picking a node")
-		// Some CSI drivers are deployed to a single node (e.g csi-hostpath),
-		// so we use that node instead of picking a random one.
+		// 有些 CSI driver 只部署在单个节点上（例如 csi-hostpath），
+		// 所以用那个节点，而不是随机选一个。
 		nodeName := l.config.ClientNodeSelection.Name
 		if nodeName == "" {
 			node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
@@ -209,7 +209,7 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 		framework.ExpectNoError(err)
 
 		framework.Logf("Node %s can handle %d volumes of driver %s", nodeName, limit, driverInfo.Name)
-		// Create a storage class and generate a PVC. Do not instantiate the PVC yet, keep it for the last pod.
+		// 创建 storage class 并生成一个 PVC。先不实例化 PVC，留给最后一个 pod 用。
 		testVolumeSizeRange := t.GetTestSuiteInfo().SupportedSizeRange
 		driverVolumeSizeRange := dDriver.GetDriverInfo().SupportedSizeRange
 		claimSize, err := storageutils.GetSizeRangesIntersection(testVolumeSizeRange, driverVolumeSizeRange)
@@ -222,7 +222,7 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 		selection := e2epod.NodeSelection{Name: nodeName}
 
 		if pattern.VolType == storageframework.GenericEphemeralVolume {
-			// Create <limit> Pods.
+			// 创建 <limit> 个 Pod。
 			ginkgo.By(fmt.Sprintf("Creating %d Pod(s) with one volume each", limit))
 			for range limit {
 				pod := StartInPodWithVolumeSource(ctx, l.cs, *l.resource.VolSource, l.ns.Name, "volume-limits", e2epod.InfiniteSleepCommand, selection)
@@ -230,7 +230,7 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 				l.pvcNames = append(l.pvcNames, ephemeral.VolumeClaimName(pod, &pod.Spec.Volumes[0]))
 			}
 		} else {
-			// Create <limit> PVCs for one gigantic pod.
+			// 为一个巨型 pod 创建 <limit> 个 PVC。
 			var pvcs []*v1.PersistentVolumeClaim
 			ginkgo.By(fmt.Sprintf("Creating %d PVC(s)", limit))
 			for range limit {
@@ -306,8 +306,8 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 
 		nodeNames := []string{}
 		if l.config.ClientNodeSelection.Name != "" {
-			// Some CSI drivers are deployed to a single node (e.g csi-hostpath),
-			// so we check that node instead of checking all of them
+			// 有些 CSI driver 只部署在单个节点上（例如 csi-hostpath），
+			// 所以检查那个节点，而不是全部。
 			nodeNames = append(nodeNames, l.config.ClientNodeSelection.Name)
 		} else {
 			nodeList, err := e2enode.GetReadySchedulableNodes(ctx, f.ClientSet)
@@ -327,7 +327,7 @@ func (t *volumeLimitsTestSuite) DefineTests(driver storageframework.TestDriver, 
 	})
 }
 
-// waitForAllPVCsBound waits until the given PVCs are all bound. It then returns the bound PVC names as a set.
+// waitForAllPVCsBound 等待给定 PVC 全部绑定，然后以 set 形式返回已绑定的 PVC 名称。
 func waitForAllPVCsBound(ctx context.Context, cs clientset.Interface, timeout time.Duration, ns string, pvcNames []string) sets.Set[string] {
 	pvNames := sets.New[string]()
 	gomega.Eventually(ctx, func() (int, error) {
@@ -364,7 +364,7 @@ func getNodeLimits(ctx context.Context, cs clientset.Interface, config *storagef
 }
 
 func getCSINodeLimits(ctx context.Context, cs clientset.Interface, config *storageframework.PerTestConfig, nodeName, driverName string) (int, error) {
-	// Retry with a timeout, the driver might just have been installed and kubelet takes a while to publish everything.
+	// 带超时重试，因为 driver 可能刚装好，kubelet 需要一点时间发布所有内容。
 	var limit int
 	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, csiNodeInfoTimeout, true, func(ctx context.Context) (bool, error) {
 		csiNode, err := cs.StorageV1().CSINodes().Get(ctx, nodeName, metav1.GetOptions{})

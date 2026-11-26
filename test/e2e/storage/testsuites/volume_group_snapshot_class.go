@@ -40,8 +40,8 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Error substrings emitted by the group-snapshot sidecar controller when default
-// VolumeGroupSnapshotClass selection fails. Sourced from:
+// 默认 VolumeGroupSnapshotClass 选择失败时，group-snapshot sidecar controller
+// 发出的错误子串。来源：
 // https://github.com/kubernetes-csi/external-snapshotter/blob/master/pkg/common-controller/groupsnapshot_controller_helper.go
 const (
 	errNoDefaultVGSClass         = "cannot find default group snapshot class"
@@ -50,22 +50,21 @@ const (
 	defaultVGSClassAnnotationKey = "groupsnapshot.storage.kubernetes.io/is-default-class"
 )
 
-// VolumeGroupSnapshotClassTestSuite tests VolumeGroupSnapshotClass default class
-// selection behavior: whether the controller correctly picks a default class when
-// no className is specified in the VolumeGroupSnapshot, and whether it rejects
-// ambiguous configurations (no default or multiple defaults).
+// VolumeGroupSnapshotClassTestSuite 测试默认 class 选择行为：
+// controller 在 VolumeGroupSnapshot 未指定 className 时是否正确选择默认 class，
+// 以及是否拒绝歧义配置（无默认或多个默认）。
 type VolumeGroupSnapshotClassTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitVolumeGroupSnapshotClassTestSuite initializes the test suite for
-// VolumeGroupSnapshotClass default class selection tests.
+// InitVolumeGroupSnapshotClassTestSuite 初始化
+// VolumeGroupSnapshotClass 默认 class 选择测试的测试套件。
 func InitVolumeGroupSnapshotClassTestSuite() storageframework.TestSuite {
 	return &VolumeGroupSnapshotClassTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
 			Name: "volumegroupsnapshotclass",
-			// A single pattern is sufficient: these tests exercise class selection
-			// logic and do not depend on snapshot deletion policy.
+			// 单个模式就足够：这些测试只验证 class 选择
+			// 逻辑，不依赖 snapshot 删除策略。
 			TestPatterns: []storageframework.TestPattern{
 				storageframework.VolumeGroupSnapshotDelete,
 			},
@@ -77,12 +76,12 @@ func InitVolumeGroupSnapshotClassTestSuite() storageframework.TestSuite {
 	}
 }
 
-// GetTestSuiteInfo returns the test suite information.
+// GetTestSuiteInfo 返回测试套件信息。
 func (s *VolumeGroupSnapshotClassTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 	return s.tsInfo
 }
 
-// SkipUnsupportedTests skips tests if the driver does not support group snapshots.
+// SkipUnsupportedTests 在 driver 不支持 group snapshot 时跳过测试。
 func (s *VolumeGroupSnapshotClassTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) string {
 	dInfo := driver.GetDriverInfo()
 	_, ok := driver.(storageframework.VolumeGroupSnapshottableTestDriver)
@@ -92,7 +91,7 @@ func (s *VolumeGroupSnapshotClassTestSuite) SkipUnsupportedTests(driver storagef
 	return ""
 }
 
-// DefineTests defines the test cases for VolumeGroupSnapshotClass default class selection.
+// DefineTests 为 VolumeGroupSnapshotClass 默认 class 选择定义测试用例。
 func (s *VolumeGroupSnapshotClassTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	labelKey := "pvc-group"
 	labelValue := "test-vgsclass"
@@ -113,8 +112,8 @@ func (s *VolumeGroupSnapshotClassTestSuite) DefineTests(driver storageframework.
 			config = driver.PrepareTest(ctx, f)
 		})
 
-		// createPVCsWithPod creates two labeled PVCs and a pod that mounts them,
-		// ensuring the PVCs enter the Bound state.
+		// createPVCsWithPod 创建两个带标签的 PVC 和一个挂载它们的 pod，
+		// 确保 PVC 进入 Bound 状态。
 		createPVCsWithPod := func(ctx context.Context) (*storageframework.VolumeResource, *storageframework.VolumeResource, *v1.Pod) {
 			ginkgo.By("creating two PVCs with labels for the VGS selector")
 			vr1 := storageframework.CreateVolumeResource(ctx, driver, config, pattern, s.GetTestSuiteInfo().SupportedSizeRange)
@@ -143,8 +142,8 @@ func (s *VolumeGroupSnapshotClassTestSuite) DefineTests(driver storageframework.
 			return vr1, vr2, pod
 		}
 
-		// createDefaultVGSClass creates a VolumeGroupSnapshotClass with the default
-		// annotation and registers a DeferCleanup to delete it.
+		// createDefaultVGSClass 创建带默认
+		// 注解的 VolumeGroupSnapshotClass，并注册 DeferCleanup 删除它。
 		createDefaultVGSClass := func(ctx context.Context) *unstructured.Unstructured {
 			vgsclassSpec := snapshottableDriver.GetVolumeGroupSnapshotClass(ctx, config, map[string]string{"deletionPolicy": "Delete"})
 			annotations := vgsclassSpec.GetAnnotations()
@@ -164,8 +163,8 @@ func (s *VolumeGroupSnapshotClassTestSuite) DefineTests(driver storageframework.
 			return vgsclass
 		}
 
-		// createVGSWithoutClassName creates a VolumeGroupSnapshot without specifying
-		// volumeGroupSnapshotClassName and registers a DeferCleanup to delete it.
+		// createVGSWithoutClassName 创建一个不指定
+		// volumeGroupSnapshotClassName 的 VolumeGroupSnapshot，并注册 DeferCleanup 删除它。
 		createVGSWithoutClassName := func(ctx context.Context) *unstructured.Unstructured {
 			vgs, err := f.DynamicClient.Resource(utils.VolumeGroupSnapshotGVR).Namespace(f.Namespace.Name).Create(ctx,
 				storageframework.GetVolumeGroupSnapshot(f.Namespace.Name, map[string]interface{}{labelKey: labelValue}, ""),
@@ -180,10 +179,10 @@ func (s *VolumeGroupSnapshotClassTestSuite) DefineTests(driver storageframework.
 			return vgs
 		}
 
-		// removeAndRestoreDefaultVGSClasses removes the default annotation from any
-		// existing VolumeGroupSnapshotClasses for the same CSI driver, and restores
-		// them via DeferCleanup after the test. This prevents interference with
-		// default class selection tests.
+		// removeAndRestoreDefaultVGSClasses 移除同一 CSI driver 下已有
+		// VolumeGroupSnapshotClass 的默认注解，并在测试后通过
+		// DeferCleanup 恢复它们。这样避免干扰
+		// 默认 class 选择测试。
 		removeAndRestoreDefaultVGSClasses := func(ctx context.Context) {
 			driverName := driver.GetDriverInfo().Name
 			list, err := f.DynamicClient.Resource(utils.VolumeGroupSnapshotClassGVR).List(ctx, metav1.ListOptions{})
@@ -211,12 +210,12 @@ func (s *VolumeGroupSnapshotClassTestSuite) DefineTests(driver storageframework.
 			}
 		}
 
-		// expectVolumeGroupSnapshotClassName fetches the named VolumeGroupSnapshot and
-		// asserts spec.volumeGroupSnapshotClassName against expectedClassName.
-		// Pass nil to assert the field is absent.
-		// Pass a pointer to a string to assert the field equals that exact value,
-		// including "" for the edge case where a VolumeGroupSnapshotClass carries a
-		// "groupsnapshot.storage.kubernetes.io/is-default-class"="" annotation.
+		// expectVolumeGroupSnapshotClassName 获取指定名称的 VolumeGroupSnapshot，
+		// 并断言 spec.volumeGroupSnapshotClassName 等于 expectedClassName。
+		// 传 nil 断言该字段不存在。
+		// 传字符串指针断言该字段恰好等于该值，
+		// 包括 "" 这一边界情况：VolumeGroupSnapshotClass 带有
+		// "groupsnapshot.storage.kubernetes.io/is-default-class"="" 注解。
 		expectVolumeGroupSnapshotClassName := func(ctx context.Context, vgsName string, expectedClassName *string) {
 			ginkgo.GinkgoHelper()
 			vgs, err := f.DynamicClient.Resource(utils.VolumeGroupSnapshotGVR).Namespace(f.Namespace.Name).Get(ctx, vgsName, metav1.GetOptions{})
@@ -313,11 +312,11 @@ func (s *VolumeGroupSnapshotClassTestSuite) DefineTests(driver storageframework.
 	})
 }
 
-// waitForVolumeGroupSnapshotError polls until the given VolumeGroupSnapshot has a
-// non-nil error field in its status, then immediately asserts that the message
-// contains expectedErrSubstr. Separating the two phases ensures that a controller
-// message change surfaces as an immediate assertion failure rather than a silent
-// timeout. Use the package-level error constants as expectedErrSubstr.
+// waitForVolumeGroupSnapshotError 轮询直到给定 VolumeGroupSnapshot 的
+// status 中出现非 nil 的 error 字段，然后立即断言消息
+// 包含 expectedErrSubstr。分成两个阶段确保 controller 的消息
+// 变化会直接导致断言失败，而不是静默
+// 超时。用包级错误常量作为 expectedErrSubstr。
 func waitForVolumeGroupSnapshotError(ctx context.Context, dc dynamic.Interface, ns, name string, poll, timeout time.Duration, expectedErrSubstr string) error {
 	framework.Logf("Waiting up to %v for VolumeGroupSnapshot %s/%s to enter an error state", timeout, ns, name)
 	var errorMessage string

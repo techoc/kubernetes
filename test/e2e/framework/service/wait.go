@@ -30,7 +30,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// WaitForServiceDeletedWithFinalizer waits for the service with finalizer to be deleted.
+// WaitForServiceDeletedWithFinalizer 等待带 finalizer 的 service 被删除。
 func WaitForServiceDeletedWithFinalizer(ctx context.Context, cs clientset.Interface, namespace, name string) {
 	ginkgo.By("Delete service with finalizer")
 	if err := cs.CoreV1().Services(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
@@ -54,8 +54,8 @@ func WaitForServiceDeletedWithFinalizer(ctx context.Context, cs clientset.Interf
 	}
 }
 
-// WaitForServiceUpdatedWithFinalizer waits for the service to be updated to have or
-// don't have a finalizer.
+// WaitForServiceUpdatedWithFinalizer 等待 service 被更新为带
+// 或不带 finalizer。
 func WaitForServiceUpdatedWithFinalizer(ctx context.Context, cs clientset.Interface, namespace, name string, hasFinalizer bool) {
 	ginkgo.By(fmt.Sprintf("Wait for service to hasFinalizer=%t", hasFinalizer))
 	if pollErr := wait.PollUntilContextTimeout(ctx, LoadBalancerPollInterval, GetServiceLoadBalancerCreationTimeout(ctx, cs), true, func(ctx context.Context) (bool, error) {
