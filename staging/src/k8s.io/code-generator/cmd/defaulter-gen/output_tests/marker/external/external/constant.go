@@ -19,5 +19,5 @@ limitations under the License.
 package external
 
 // AnotherConstant 用于制造与同名包的符号冲突，测试生成代码能否正确区分。
-// Used for test with multiple packages of the same name
+// 用于测试多个同名包的场景。
 const AnotherConstant string = "AnotherConstantString"

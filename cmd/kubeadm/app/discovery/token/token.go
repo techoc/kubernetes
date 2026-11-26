@@ -135,7 +135,8 @@ func retrieveValidatedConfigInfo(client clientset.Interface, cfg *kubeadmapi.Dis
 		return nil, err
 	}
 
-	// Pull the kubeconfig from the securely-obtained ConfigMap and validate that it's the same as what we found the first time
+	// 从 TLS 验证过的 ConfigMap 再取一次 kubeconfig，确认与首次拿到的内容一致，
+	// 防止两次连接看到不同的集群。
 	secureKubeconfigBytes := []byte(secureClusterInfo.Data[bootstrapapi.KubeConfigKey])
 	if !bytes.Equal(secureKubeconfigBytes, insecureKubeconfigBytes) {
 		return nil, errors.Errorf("the second kubeconfig from the %s ConfigMap (using validated TLS) was different from the first", bootstrapapi.ConfigMapClusterInfo)
@@ -151,7 +152,7 @@ func retrieveValidatedConfigInfo(client clientset.Interface, cfg *kubeadmapi.Dis
 	return secureKubeconfig, nil
 }
 
-// BuildInsecureBootstrapKubeConfig makes a kubeconfig object that connects insecurely to the API Server for bootstrapping purposes
+// BuildInsecureBootstrapKubeConfig 生成引导阶段使用的 kubeconfig，此时还没有可信 CA，只能跳过 TLS 校验。
 func BuildInsecureBootstrapKubeConfig(endpoint string) *clientcmdapi.Config {
 	controlPlaneEndpoint := fmt.Sprintf("https://%s", endpoint)
 	clusterName := kubeadmapiv1.DefaultClusterName
@@ -160,14 +161,14 @@ func BuildInsecureBootstrapKubeConfig(endpoint string) *clientcmdapi.Config {
 	return bootstrapConfig
 }
 
-// buildSecureBootstrapKubeConfig makes a kubeconfig object that connects securely to the API Server for bootstrapping purposes (validating with the specified CA)
+// buildSecureBootstrapKubeConfig 生成引导阶段使用的 kubeconfig，用指定的 CA 校验 API Server 证书。
 func buildSecureBootstrapKubeConfig(endpoint string, caCert []byte, clustername string) *clientcmdapi.Config {
 	controlPlaneEndpoint := fmt.Sprintf("https://%s", endpoint)
 	bootstrapConfig := kubeconfigutil.CreateBasic(controlPlaneEndpoint, clustername, BootstrapUser, caCert)
 	return bootstrapConfig
 }
 
-// validateClusterInfoToken validates that the JWS token present in the cluster info ConfigMap is valid
+// validateClusterInfoToken 校验 cluster-info ConfigMap 中的 JWS 签名，确认 API Server 持有该 token。
 func validateClusterInfoToken(insecureClusterInfo *v1.ConfigMap, token *bootstraptokenv1.BootstrapTokenString) ([]byte, error) {
 	insecureKubeconfigString, ok := insecureClusterInfo.Data[bootstrapapi.KubeConfigKey]
 	if !ok || len(insecureKubeconfigString) == 0 {
@@ -187,7 +188,7 @@ func validateClusterInfoToken(insecureClusterInfo *v1.ConfigMap, token *bootstra
 	return []byte(insecureKubeconfigString), nil
 }
 
-// validateClusterCA validates the cluster CA found in the insecure kubeconfig
+// validateClusterCA 用固定的公钥集合校验不安全 kubeconfig 中的集群 CA。
 func validateClusterCA(insecureConfig *clientcmdapi.Config, pubKeyPins *pubkeypin.Set) ([]byte, error) {
 	var clusterCABytes []byte
 	for _, cluster := range insecureConfig.Clusters {
@@ -199,7 +200,7 @@ func validateClusterCA(insecureConfig *clientcmdapi.Config, pubKeyPins *pubkeypi
 		return nil, errors.Wrapf(err, "failed to parse cluster CA from the %s ConfigMap", bootstrapapi.ConfigMapClusterInfo)
 	}
 
-	// Validate the cluster CA public key against the pinned set
+	// 用固定的公钥集合校验集群 CA，防止引导阶段被中间人替换。
 	err = pubKeyPins.CheckAny(clusterCAs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cluster CA found in %s ConfigMap is invalid", bootstrapapi.ConfigMapClusterInfo)
@@ -208,7 +209,7 @@ func validateClusterCA(insecureConfig *clientcmdapi.Config, pubKeyPins *pubkeypi
 	return clusterCABytes, nil
 }
 
-// getClusterInfo requests the cluster-info ConfigMap with the provided client.
+// getClusterInfo 用给定客户端获取 cluster-info ConfigMap，并等待 JWS 签名出现。
 func getClusterInfo(client clientset.Interface, cfg *kubeadmapi.Discovery, interval, duration time.Duration, dryRun bool) (*v1.ConfigMap, error) {
 	var (
 		cm        *v1.ConfigMap
@@ -236,13 +237,13 @@ func getClusterInfo(client clientset.Interface, cfg *kubeadmapi.Discovery, inter
 				klog.V(1).Infof("[discovery] Retrying due to error: %v", lastError)
 				return false, nil
 			}
-			// Even if the ConfigMap is available the JWS signature is patched-in a bit later.
+			// ConfigMap 可能先创建、签名后补写，所以取到 ConfigMap 不代表签名已就位。
 			if _, ok := cm.Data[bootstrapapi.JWSSignatureKeyPrefix+token.ID]; !ok {
 				lastError = errors.Errorf("could not find a JWS signature in the cluster-info ConfigMap"+
 					" for token ID %q", token.ID)
 				if dryRun {
-					// Assume the user is dry-running with a token that will never appear in the cluster-info
-					// ConfigMap. Use the default dry-run token and CA cert hash.
+					// dry-run 时用户给的 token 不会真的出现在 cluster-info 里，
+					// 因此换成 dry-run 专用的 token 与 CA 哈希。
 					mutateTokenDiscoveryForDryRun(cfg)
 					return false, nil
 				}
@@ -258,10 +259,8 @@ func getClusterInfo(client clientset.Interface, cfg *kubeadmapi.Discovery, inter
 	return cm, nil
 }
 
-// mutateTokenDiscoveryForDryRun mutates the JoinConfiguration.Discovery so that it includes a dry-run token
-// CA cert hash and fake API server endpoint to comply with the fake "cluster-info" ConfigMap
-// that this reactor returns. The information here should be in sync with what the GetClusterInfoReactor()
-// dry-run reactor does.
+// mutateTokenDiscoveryForDryRun 把 Discovery 改成 dry-run reactor 伪造的 cluster-info 所匹配的值：
+// 固定 token、CA 哈希和 API Server 地址。两者必须同步修改，否则 dry-run 走不通。
 func mutateTokenDiscoveryForDryRun(cfg *kubeadmapi.Discovery) {
 	const (
 		tokenID     = "abcdef"

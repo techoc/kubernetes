@@ -38,7 +38,7 @@ type AtomicHashProvider struct {
 	hashes *atomic.Pointer[[]string]
 }
 
-// NewAtomicHashProvider creates a new atomic hash provider
+// NewAtomicHashProvider 创建一个原子哈希提供者。
 func NewAtomicHashProvider() *AtomicHashProvider {
 	p := &AtomicHashProvider{
 		hashes: &atomic.Pointer[[]string]{},

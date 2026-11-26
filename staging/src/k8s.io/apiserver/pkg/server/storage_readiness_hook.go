@@ -40,7 +40,7 @@ type StorageReadinessHook struct {
 	checks map[string]func() error
 }
 
-// NewStorageReadinessHook created new StorageReadinessHook.
+// NewStorageReadinessHook 创建一个 StorageReadinessHook。
 func NewStorageReadinessHook(timeout time.Duration) *StorageReadinessHook {
 	return &StorageReadinessHook{
 		checks:  make(map[string]func() error),

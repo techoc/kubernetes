@@ -47,7 +47,7 @@ func SetFlowSchemaCondition(flowSchema *flowcontrol.FlowSchema, newCondition flo
 	existingCondition.Message = newCondition.Message
 }
 
-// GetFlowSchemaConditionByType gets conditions.
+// GetFlowSchemaConditionByType 按类型查找条件。
 // 返回切片元素的指针，调用方可直接修改；未找到返回 nil。
 func GetFlowSchemaConditionByType(flowSchema *flowcontrol.FlowSchema, conditionType flowcontrol.FlowSchemaConditionType) *flowcontrol.FlowSchemaCondition {
 	for i := range flowSchema.Status.Conditions {
@@ -76,7 +76,7 @@ func SetPriorityLevelConfigurationCondition(priorityLevel *flowcontrol.PriorityL
 	existingCondition.Message = newCondition.Message
 }
 
-// GetPriorityLevelConfigurationConditionByType gets conditions.
+// GetPriorityLevelConfigurationConditionByType 按类型查找条件。
 func GetPriorityLevelConfigurationConditionByType(priorityLevel *flowcontrol.PriorityLevelConfiguration, conditionType flowcontrol.PriorityLevelConfigurationConditionType) *flowcontrol.PriorityLevelConfigurationCondition {
 	for i := range priorityLevel.Status.Conditions {
 		if priorityLevel.Status.Conditions[i].Type == conditionType {
@@ -89,7 +89,7 @@ func GetPriorityLevelConfigurationConditionByType(priorityLevel *flowcontrol.Pri
 var _ sort.Interface = FlowSchemaSequence{}
 
 // FlowSchemaSequence 保存指向 FlowSchema 对象的已排序指针集合。
-// FlowSchemaSequence implements `sort.Interface`
+// FlowSchemaSequence 实现 `sort.Interface`。
 //
 // 排序规则与流控匹配顺序一致：matchingPrecedence 小的在前，相同时按名称升序，
 // 保证同一组配置在任何 API server 上得到相同顺序。
@@ -106,7 +106,7 @@ func (s FlowSchemaSequence) Less(i, j int) bool {
 	if ip, jp := s[i].Spec.MatchingPrecedence, s[j].Spec.MatchingPrecedence; ip != jp {
 		return ip < jp
 	}
-	// sort alphabetically
+	// 同优先级时按名称排序。
 	return s[i].Name < s[j].Name
 }
 

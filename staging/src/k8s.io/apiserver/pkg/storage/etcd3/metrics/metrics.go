@@ -36,12 +36,11 @@ import (
 )
 
 /*
- * By default, all the following metrics are defined as falling under
- * ALPHA stability level https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
+ * 以下指标默认均为 ALPHA 稳定性级别，参见
+ * https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
  *
- * Promoting the stability level of the metric is a responsibility of the component owner, since it
- * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
- * the metric stability policy.
+ * 提升指标稳定性级别由组件负责人决定：这需要按指标稳定性策略，明确承诺
+ * 在多个版本中持续支持该指标。
  */
 var (
 	etcdRequestLatency = compbasemetrics.NewHistogramVec(
@@ -272,7 +271,7 @@ func SetStorageMonitorGetter(getter func() ([]Monitor, error)) {
 // UpdateLeaseObjectCount 更新 etcd_lease_object_counts 指标。
 func UpdateLeaseObjectCount(count int64) {
 	// 目前只需保存一个上一轮的 lease，因为同一批事件的 TTL 相同。
-	// See pkg/storage/etcd3/lease_manager.go
+	// 背景见 pkg/storage/etcd3/lease_manager.go
 	etcdLeaseObjectCounts.WithLabelValues().Observe(float64(count))
 }
 
@@ -316,7 +315,7 @@ func (m *monitorCollector) getGetter() func() ([]Monitor, error) {
 	return m.monitorGetter
 }
 
-// DescribeWithStability implements compbasemetrics.StableColletor
+// DescribeWithStability 实现 compbasemetrics.StableCollector。
 func (c *monitorCollector) DescribeWithStability(ch chan<- *compbasemetrics.Desc) {
 	ch <- storageSizeDescription
 }

@@ -160,7 +160,8 @@ func TestDeltaFIFO_basic(t *testing.T) {
 // TestDeltaFIFO_replaceWithDeleteDeltaIn 验证：调用 .Replace 且 `O` 位于待删除对象之中时，
 // 会为 ID `X` 的对象 `O` 加入 `Sync` delta；若不加 `Sync` delta，则只会有 ID `X` 的
 // `Delete` delta。
-// SharedIndexInformers to miss `O`'s create notification, see https://github.com/kubernetes/kubernetes/issues/83810
+// 若不补 Sync delta，SharedIndexInformer 会漏掉 `O` 的创建通知，见
+// https://github.com/kubernetes/kubernetes/issues/83810
 // 详见相关说明。
 func TestDeltaFIFO_replaceWithDeleteDeltaIn(t *testing.T) {
 	oldObj := mkFifoObj("foo", 1)
@@ -399,7 +400,7 @@ func TestDeltaFIFO_transformer(t *testing.T) {
 	must(f.Add(mk("bar", 16)))
 	must(f.Replace([]interface{}{}, ""))
 
-	// Should be empty
+	// 这里预期为空。
 	if e, a := []string{"foo", "bar"}, f.listKeys(); !reflect.DeepEqual(e, a) {
 		t.Errorf("Expected %+v, got %+v", e, a)
 	}

@@ -209,7 +209,7 @@ func (p *Backoff) jitter(delay time.Duration) time.Duration {
 	return time.Duration(p.rand.Float64() * p.maxJitterFactor * float64(delay))
 }
 
-// Unless an alternate function is provided, after 2*maxDuration we restart the backoff factor to the beginning
+// 未提供 HasExpiredFunc 时，超过 2*maxDuration 就把退避系数重置。
 //
 // hasExpired 判断退避是否已过期；未提供 HasExpiredFunc 时默认阈值为 2*maxDuration。
 func (p *Backoff) hasExpired(eventTime time.Time, lastUpdate time.Time, maxDuration time.Duration) bool {

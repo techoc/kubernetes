@@ -61,11 +61,10 @@ type ListWorkEstimatorConfig struct {
 	ObjectsPerSeat float64 `json:"objectsPerSeat,omitempty"`
 }
 
-// MutatingWorkEstimatorConfig holds work estimator
+// MutatingWorkEstimatorConfig 保存监听对象变更相关的工作量估算参数。
 // 与监听对象变更相关的参数。
 type MutatingWorkEstimatorConfig struct {
-	// TODO(wojtekt): Remove it once we tune the algorithm to not fail
-	// scalability tests.
+	// TODO(wojtekt): 待算法调优到不会让可扩展性测试失败后移除该开关。
 	Enabled                 bool            `json:"enable,omitempty"`
 	EventAdditionalDuration metav1.Duration `json:"eventAdditionalDurationMs,omitempty"`
 	WatchesPerSeat          float64         `json:"watchesPerSeat,omitempty"`

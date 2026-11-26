@@ -31,8 +31,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// // informerGenerator 为给定 GroupVersion 下的类型生成 informer 文件。
-// type.
+// informerGenerator 为给定 GroupVersion 下的类型生成 informer 文件。
 //
 // 每个带 +genclient 的类型生成一个 informer 文件，包含新旧两套 API：
 // 返回 SharedIndexInformer 的兼容接口，以及类型安全的 Typed* 变体。

@@ -70,7 +70,8 @@ type Interface interface {
 	MaxSeatsTracker
 }
 
-// This request filter implements https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/1040-priority-and-fairness/README.md
+// 本请求过滤器实现了 API 优先级与公平性（APF）提案：
+// https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/1040-priority-and-fairness/README.md
 
 // New 构造一个 APF 过滤器实例。
 func New(

@@ -176,7 +176,7 @@ func (w *watchTracker) forgetWatch(identifier *watchIdentifier, index *indexValu
 	}
 }
 
-// GetInterestedWatchCount implements WatchTracker interface.
+// GetInterestedWatchCount 实现 WatchTracker 接口。
 //
 // TODO(wojtek-t): 创建请求（POST）的 requestInfo 目前没有 Name，
 // 需研究如何取得以更准确地估算成本。

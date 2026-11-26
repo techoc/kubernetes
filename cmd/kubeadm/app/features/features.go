@@ -29,16 +29,14 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/errors"
 )
 
-// Feature gates should be listed in alphabetical, case-sensitive
-// (upper before any lower case character) order. This reduces the risk
-// of code conflicts because changes are more likely to be scattered
-// across the file.
+// Feature gate 按区分大小写的字母序排列（大写字母在小写字母之前）。
+// 这样新增项会分散在文件各处，而不是挤在一起，减少合并冲突。
 const (
-	// RootlessControlPlane is expected to be in alpha in v1.22
+	// RootlessControlPlane 预计在 v1.22 进入 alpha。
 	RootlessControlPlane = "RootlessControlPlane"
 )
 
-// InitFeatureGates are the default feature gates for the init command
+// InitFeatureGates 是 init 命令使用的默认 feature gate 集合。
 var InitFeatureGates = FeatureList{
 	RootlessControlPlane: {FeatureSpec: featuregate.FeatureSpec{Default: false, PreRelease: featuregate.Alpha},
 		DeprecationMessage: "Deprecated in favor of the core kubelet feature UserNamespacesSupport which is beta since 1.30." +
@@ -46,7 +44,7 @@ var InitFeatureGates = FeatureList{
 	},
 }
 
-// Feature represents a feature being gated
+// Feature 表示一个受 feature gate 控制的功能。
 type Feature struct {
 	featuregate.FeatureSpec
 	// MinimumVersion 是启用该 feature gate 所需的最低 Kubernetes 版本；nil 表示不额外限制。
@@ -57,10 +55,10 @@ type Feature struct {
 	DeprecationMessage string
 }
 
-// FeatureList represents a list of feature gates
+// FeatureList 是 feature gate 名称到配置的映射。
 type FeatureList map[string]Feature
 
-// ValidateVersion ensures that a feature gate list is compatible with the chosen Kubernetes version
+// ValidateVersion 检查 feature gate 列表与目标 Kubernetes 版本是否兼容。
 func ValidateVersion(allFeatures FeatureList, requestedFeatures map[string]bool, requestedVersion string) error {
 	if requestedVersion == "" {
 		return nil
@@ -81,7 +79,7 @@ func ValidateVersion(allFeatures FeatureList, requestedFeatures map[string]bool,
 	return nil
 }
 
-// Enabled indicates whether a feature name has been enabled
+// Enabled 判断某个 feature gate 是否已启用。
 func Enabled(featureList map[string]bool, featureName string) bool {
 	if enabled, ok := featureList[featureName]; ok {
 		return enabled
@@ -89,8 +87,7 @@ func Enabled(featureList map[string]bool, featureName string) bool {
 	return InitFeatureGates[featureName].Default
 }
 
-// Supports indicates whether a feature name is supported on the given
-// feature set
+// Supports 判断给定的 feature gate 集合是否包含该 feature。
 func Supports(featureList FeatureList, featureName string) bool {
 	for k := range featureList {
 		if featureName == k {
@@ -100,7 +97,7 @@ func Supports(featureList FeatureList, featureName string) bool {
 	return false
 }
 
-// KnownFeatures returns a slice of strings describing the FeatureList features.
+// KnownFeatures 返回 FeatureList 中所有已知 feature 的名称列表。
 func KnownFeatures(f *FeatureList) []string {
 	var known []string
 	for k, v := range *f {
@@ -118,8 +115,8 @@ func KnownFeatures(f *FeatureList) []string {
 	return known
 }
 
-// NewFeatureGate parses a string of the form "key1=value1,key2=value2,..." into a
-// map[string]bool of known keys or returns an error.
+// NewFeatureGate 解析 "key1=value1,key2=value2,..." 形式的字符串，
+// 返回已知 key 的 map[string]bool；遇到未知 key 则报错。
 func NewFeatureGate(f *FeatureList, value string) (map[string]bool, error) {
 	featureGate := map[string]bool{}
 	for _, s := range strings.Split(value, ",") {
@@ -154,16 +151,15 @@ func NewFeatureGate(f *FeatureList, value string) (map[string]bool, error) {
 	return featureGate, nil
 }
 
-// CheckDeprecatedFlags takes a list of existing feature gate flags and validates against the current feature flag set.
-// It used during upgrades for ensuring consistency of feature gates used in an existing cluster, that might
-// be created with a previous version of kubeadm, with the set of features currently supported by kubeadm
+// CheckDeprecatedFlags 对照当前 feature gate 集合检查已有的 feature gate flag。
+// 升级时用它确认旧版 kubeadm 创建的集群所用 feature gate 仍受当前版本支持。
 func CheckDeprecatedFlags(f *FeatureList, features map[string]bool) map[string]string {
 	deprecatedMsg := map[string]string{}
 	for k := range features {
 		featureSpec, ok := (*f)[k]
 		if !ok {
-			// This case should never happen, it is implemented only as a sentinel
-			// for removal of flags executed when flags are still in use (always before deprecate, then after one cycle remove)
+			// 理论上不会走到这里：这个分支只是哨兵，用来在 flag 仍被使用时
+			// 阻止误删（先标记废弃，过一个发布周期再删除）。
 			deprecatedMsg[k] = fmt.Sprintf("Unknown feature gate flag: %s", k)
 		}
 

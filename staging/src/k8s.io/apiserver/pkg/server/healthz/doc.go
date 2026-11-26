@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package healthz implements basic http server health checking.
-// Usage:
+// Package healthz 提供 HTTP server 的基础健康检查。
+// 用法：
 //
 //	import "k8s.io/apiserver/pkg/server/healthz"
 //	healthz.InstallHandler(mux)

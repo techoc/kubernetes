@@ -64,7 +64,7 @@ import (
 
 const (
 	// 这里不能是 5 的倍数，否则会跟 node 状态更新撞上
-	// every 5 seconds. See https://github.com/kubernetes/kubernetes/pull/14915.
+	// node 状态每 5 秒更新一次，见 https://github.com/kubernetes/kubernetes/pull/14915。
 	dsRetryPeriod  = 1 * time.Second
 	dsRetryTimeout = 5 * time.Minute
 
@@ -117,7 +117,7 @@ func updateDaemonSetWithRetries(ctx context.Context, c clientset.Interface, name
 // 总会被调度。如果并行运行其他测试，这个假设可能不成立。
 // 将来如果有驱逐模型让 DS controller 能踢掉其他 pod 腾出空间，
 // 并行运行或许可行。
-// See https://issues.k8s.io/21767 for more details
+// 详见 https://issues.k8s.io/21767
 var _ = SIGDescribe("Daemon set", framework.WithSerial(), func() {
 	var f *framework.Framework
 

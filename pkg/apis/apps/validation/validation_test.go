@@ -860,7 +860,7 @@ func TestValidateStatefulSet(t *testing.T) {
 	}
 }
 
-// generateStatefulSetSpec generates a valid StatefulSet spec
+// generateStatefulSetSpec 生成一份校验可通过的 StatefulSet spec。
 func generateStatefulSetSpec(minSeconds int32) *apps.StatefulSetSpec {
 	labels := map[string]string{"a": "b"}
 	podTemplate := api.PodTemplate{
@@ -887,7 +887,7 @@ func generateStatefulSetSpec(minSeconds int32) *apps.StatefulSetSpec {
 	return ss
 }
 
-// TestValidateStatefulSetMinReadySeconds tests the StatefulSet Spec's minReadySeconds field
+// TestValidateStatefulSetMinReadySeconds 覆盖 StatefulSet spec 的 minReadySeconds 校验。
 func TestValidateStatefulSetMinReadySeconds(t *testing.T) {
 	testCases := map[string]struct {
 		ss        *apps.StatefulSetSpec
@@ -2052,7 +2052,7 @@ func TestValidateDaemonSetUpdate(t *testing.T) {
 	}
 	invalidPodTemplate := api.PodTemplate{
 		Template: api.PodTemplateSpec{
-			// no containers specified
+			// 未指定容器时应报错
 			Spec: podtest.MakePodSpec(podtest.SetContainers()),
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: validSelector,
@@ -2739,7 +2739,7 @@ func TestValidateDeployment(t *testing.T) {
 			Namespace: metav1.NamespaceDefault,
 		},
 	}
-	// selector should match the labels in pod template.
+	// selector 必须能匹配 pod 模板的标签。
 	invalidSelectorDeployment := validDeployment()
 	invalidSelectorDeployment.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: map[string]string{
@@ -2748,17 +2748,17 @@ func TestValidateDeployment(t *testing.T) {
 	}
 	errorCases["`selector` does not match template `labels`"] = invalidSelectorDeployment
 
-	// RestartPolicy should be always.
+	// Deployment 的 RestartPolicy 只能是 Always。
 	invalidRestartPolicyDeployment := validDeployment()
 	invalidRestartPolicyDeployment.Spec.Template.Spec.RestartPolicy = api.RestartPolicyNever
 	errorCases["Unsupported value: \"Never\""] = invalidRestartPolicyDeployment
 
-	// must have valid strategy type
+	// 策略类型必须为已知值。
 	invalidStrategyDeployment := validDeployment()
 	invalidStrategyDeployment.Spec.Strategy.Type = apps.DeploymentStrategyType("randomType")
 	errorCases[`supported values: "Recreate", "RollingUpdate"`] = invalidStrategyDeployment
 
-	// rollingUpdate should be nil for recreate.
+	// Recreate 策略不允许带 rollingUpdate 配置。
 	invalidRecreateDeployment := validDeployment()
 	invalidRecreateDeployment.Spec.Strategy = apps.DeploymentStrategy{
 		Type:          apps.RecreateDeploymentStrategyType,
@@ -2766,7 +2766,7 @@ func TestValidateDeployment(t *testing.T) {
 	}
 	errorCases["may not be specified when strategy `type` is 'Recreate'"] = invalidRecreateDeployment
 
-	// MaxSurge should be in the form of 20%.
+	// MaxSurge 百分比必须形如 20%。
 	invalidMaxSurgeDeployment := validDeployment()
 	invalidMaxSurgeDeployment.Spec.Strategy = apps.DeploymentStrategy{
 		Type: apps.RollingUpdateDeploymentStrategyType,
@@ -2776,7 +2776,7 @@ func TestValidateDeployment(t *testing.T) {
 	}
 	errorCases["a valid percent string must be"] = invalidMaxSurgeDeployment
 
-	// MaxSurge and MaxUnavailable cannot both be zero.
+	// MaxSurge 与 MaxUnavailable 不能同时为 0，否则滚动更新无法推进。
 	invalidRollingUpdateDeployment := validDeployment()
 	invalidRollingUpdateDeployment.Spec.Strategy = apps.DeploymentStrategy{
 		Type: apps.RollingUpdateDeploymentStrategyType,
@@ -2787,7 +2787,7 @@ func TestValidateDeployment(t *testing.T) {
 	}
 	errorCases["may not be 0 when `maxSurge` is 0"] = invalidRollingUpdateDeployment
 
-	// MaxUnavailable should not be more than 100%.
+	// MaxUnavailable 不能超过 100%。
 	invalidMaxUnavailableDeployment := validDeployment()
 	invalidMaxUnavailableDeployment.Spec.Strategy = apps.DeploymentStrategy{
 		Type: apps.RollingUpdateDeploymentStrategyType,
@@ -2797,19 +2797,19 @@ func TestValidateDeployment(t *testing.T) {
 	}
 	errorCases["must not be greater than 100%"] = invalidMaxUnavailableDeployment
 
-	// Rollback.Revision must be non-negative
+	// RollbackTo.Revision 不能为负数。
 	invalidRollbackRevisionDeployment := validDeployment()
 	invalidRollbackRevisionDeployment.Spec.RollbackTo.Revision = -3
 	errorCases["must be greater than or equal to 0"] = invalidRollbackRevisionDeployment
 
-	// ProgressDeadlineSeconds should be greater than MinReadySeconds
+	// ProgressDeadlineSeconds 必须大于 MinReadySeconds，否则进度判定没有意义。
 	invalidProgressDeadlineDeployment := validDeployment()
 	seconds := int32(600)
 	invalidProgressDeadlineDeployment.Spec.ProgressDeadlineSeconds = &seconds
 	invalidProgressDeadlineDeployment.Spec.MinReadySeconds = seconds
 	errorCases["must be greater than minReadySeconds"] = invalidProgressDeadlineDeployment
 
-	// Must not have ephemeral containers
+	// 不允许使用 ephemeral containers。
 	invalidEphemeralContainersDeployment := validDeployment()
 	invalidEphemeralContainersDeployment.Spec.Template.Spec.EphemeralContainers = []api.EphemeralContainer{{
 		EphemeralContainerCommon: api.EphemeralContainerCommon{
@@ -3072,7 +3072,7 @@ func TestValidateDeploymentUpdate(t *testing.T) {
 	invalidLabels := map[string]string{"NoUppercaseOrSpecialCharsLike=Equals": "b"}
 	invalidPodTemplate := api.PodTemplate{
 		Template: api.PodTemplateSpec{
-			// no containers specified
+			// 未指定容器时应报错
 			Spec: podtest.MakePodSpec(podtest.SetContainers()),
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: invalidLabels,

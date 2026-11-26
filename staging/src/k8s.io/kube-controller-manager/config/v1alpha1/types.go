@@ -92,7 +92,7 @@ type VolumeConfiguration struct {
 	FlexVolumePluginDir string
 }
 
-// GroupResource describes an group resource.
+// GroupResource 描述一个组资源。
 //
 // 用一个独立结构而不是拼接后的字符串表示“组/资源”，是为了在 GC 忽略列表里
 // 按字段匹配，避免调用方约定分隔符或在字符串上做脆弱的解析。
@@ -127,41 +127,29 @@ type KubeControllerManagerConfiguration struct {
 	// 共有的功能配置。
 	KubeCloudShared cpconfigv1alpha1.KubeCloudSharedConfiguration
 
-	// AttachDetachControllerConfiguration holds configuration for
-	// AttachDetachController related features.
+	// AttachDetachControllerConfiguration 保存 AttachDetachController 相关功能的配置。
 	AttachDetachController AttachDetachControllerConfiguration
-	// CSRSigningControllerConfiguration holds configuration for
-	// CSRSigningController related features.
+	// CSRSigningControllerConfiguration 保存 CSRSigningController 相关功能的配置。
 	CSRSigningController CSRSigningControllerConfiguration
 	// DaemonSetControllerConfiguration 是 DaemonSetController 的配置。
-	// related features.
 	DaemonSetController DaemonSetControllerConfiguration
-	// DeploymentControllerConfiguration holds configuration for
-	// DeploymentController related features.
+	// DeploymentControllerConfiguration 保存 DeploymentController 相关功能的配置。
 	DeploymentController DeploymentControllerConfiguration
-	// DisruptionControllerConfiguration holds configuration for
-	// DisruptionController related features.
+	// DisruptionControllerConfiguration 保存 DisruptionController 相关功能的配置。
 	DisruptionController DisruptionControllerConfiguration
-	// StatefulSetControllerConfiguration holds configuration for
-	// StatefulSetController related features.
+	// StatefulSetControllerConfiguration 保存 StatefulSetController 相关功能的配置。
 	StatefulSetController StatefulSetControllerConfiguration
 	// DeprecatedControllerConfiguration 保存若干已弃用
-	// features.
 	DeprecatedController DeprecatedControllerConfiguration
 	// EndpointControllerConfiguration 是 EndpointController 的配置。
-	// related features.
 	EndpointController EndpointControllerConfiguration
-	// EndpointSliceControllerConfiguration holds configuration for
-	// EndpointSliceController related features.
+	// EndpointSliceControllerConfiguration 保存 EndpointSliceController 相关功能的配置。
 	EndpointSliceController EndpointSliceControllerConfiguration
-	// EndpointSliceMirroringControllerConfiguration holds configuration for
-	// EndpointSliceMirroringController related features.
+	// EndpointSliceMirroringControllerConfiguration 保存 EndpointSliceMirroringController 相关功能的配置。
 	EndpointSliceMirroringController EndpointSliceMirroringControllerConfiguration
 	// EphemeralVolumeControllerConfiguration 是 EphemeralVolumeController 的配置。
-	// related features.
 	EphemeralVolumeController EphemeralVolumeControllerConfiguration
-	// GarbageCollectorControllerConfiguration holds configuration for
-	// GarbageCollectorController related features.
+	// GarbageCollectorControllerConfiguration 保存 GarbageCollectorController 相关功能的配置。
 	GarbageCollectorController GarbageCollectorControllerConfiguration
 	// HPAControllerConfiguration 是 HPA 控制器相关功能的配置。
 	HPAController HPAControllerConfiguration
@@ -172,39 +160,29 @@ type KubeControllerManagerConfiguration struct {
 	// LegacySATokenCleanerConfiguration 是旧版 ServiceAccount token 清理器相关功能的配置。
 	LegacySATokenCleaner LegacySATokenCleanerConfiguration
 	// NamespaceControllerConfiguration 是 NamespaceController 的配置。
-	// related features.
 	NamespaceController NamespaceControllerConfiguration
 	// NodeIPAMControllerConfiguration 是 NodeIPAMController 的配置。
-	// related features.
 	NodeIPAMController NodeIPAMControllerConfiguration
-	// NodeLifecycleControllerConfiguration holds configuration for
-	// NodeLifecycleController related features.
+	// NodeLifecycleControllerConfiguration 保存 NodeLifecycleController 相关功能的配置。
 	NodeLifecycleController NodeLifecycleControllerConfiguration
-	// PersistentVolumeBinderControllerConfiguration holds configuration for
-	// PersistentVolumeBinderController related features.
+	// PersistentVolumeBinderControllerConfiguration 保存 PersistentVolumeBinderController 相关功能的配置。
 	PersistentVolumeBinderController PersistentVolumeBinderControllerConfiguration
 	// PodGCControllerConfiguration 是 PodGCController 的配置。
-	// related features.
 	PodGCController PodGCControllerConfiguration
 	// ReplicaSetControllerConfiguration 是 ReplicaSet 控制器相关功能的配置。
 	ReplicaSetController ReplicaSetControllerConfiguration
-	// ReplicationControllerConfiguration holds configuration for
-	// ReplicationController related features.
+	// ReplicationControllerConfiguration 保存 ReplicationController 相关功能的配置。
 	ReplicationController ReplicationControllerConfiguration
-	// ResourceQuotaControllerConfiguration holds configuration for
-	// ResourceQuotaController related features.
+	// ResourceQuotaControllerConfiguration 保存 ResourceQuotaController 相关功能的配置。
 	ResourceQuotaController ResourceQuotaControllerConfiguration
 	// SAControllerConfiguration 是 ServiceAccountController 的配置。
-	// related features.
 	SAController SAControllerConfiguration
 	// ServiceControllerConfiguration 是 ServiceController 的配置。
-	// related features.
 	ServiceController serviceconfigv1alpha1.ServiceControllerConfiguration
-	// TTLAfterFinishedControllerConfiguration holds configuration for
-	// TTLAfterFinishedController related features.
+	// TTLAfterFinishedControllerConfiguration 保存 TTLAfterFinishedController 相关功能的配置。
 	TTLAfterFinishedController TTLAfterFinishedControllerConfiguration
-	// ValidatingAdmissionPolicyStatusControllerConfiguration holds configuration for
-	// ValidatingAdmissionPolicyStatusController related features.
+	// ValidatingAdmissionPolicyStatusControllerConfiguration 保存
+	// ValidatingAdmissionPolicyStatusController 相关功能的配置。
 	ValidatingAdmissionPolicyStatusController ValidatingAdmissionPolicyStatusControllerConfiguration
 	// DeviceTaintEvictionControllerConfiguration 是设备污点驱逐控制器的配置。
 	DeviceTaintEvictionController DeviceTaintEvictionControllerConfiguration
@@ -268,8 +246,7 @@ type CSRSigningControllerConfiguration struct {
 // 这里存的是文件路径而不是证书内容，便于挂载密钥卷后原地轮换文件，
 // 不必因为证书更新而重写配置文件。
 type CSRSigningConfiguration struct {
-	// certFile 是 PEM 编码的
-	// X509 CA certificate used to issue certificates
+	// certFile 是 PEM 编码的 X509 CA 证书，用于签发证书。
 	CertFile string
 	// keyFile 是 PEM 编码的
 	// 用于签发证书的 RSA 或 ECDSA 私钥文件。
@@ -315,7 +292,7 @@ type StatefulSetControllerConfiguration struct {
 	ConcurrentStatefulSetSyncs int32
 }
 
-// DeprecatedControllerConfiguration contains elements be deprecated.
+// DeprecatedControllerConfiguration 保存已弃用的配置项。
 //
 // 空结构体是历史遗留的占位：原先这里放已弃用控制器的开关，
 // 移除字段后保留类型本身，可以让仍引用该类型的代码和旧配置文件继续工作。
@@ -381,11 +358,9 @@ type EndpointSliceMirroringControllerConfiguration struct {
 	MirroringMaxEndpointsPerSubset int32
 
 	// mirroringEndpointUpdatesBatchPeriod 用于批量处理 EndpointSlice 更新。
-	// 由 EndpointSlice 变化触发的更新都会延迟这段时间，
-	// by up to 'mirroringEndpointUpdatesBatchPeriod'. If other addresses in the
-	// 同一窗口内的多次 Endpoints 变化会合并为
-	// 一次 EndpointSlice 更新。默认值 0 表示每个 Endpoints
-	// update triggers an EndpointSlice update.
+	// 由 EndpointSlice 变化触发的更新都会延迟至多 mirroringEndpointUpdatesBatchPeriod，
+	// 同一窗口内的多次 Endpoints 变化会合并为一次 EndpointSlice 更新。
+	// 默认值 0 表示每次 Endpoints 更新都立即生成一次 EndpointSlice 更新。
 	MirroringEndpointUpdatesBatchPeriod metav1.Duration
 }
 
@@ -411,8 +386,7 @@ type GarbageCollectorControllerConfiguration struct {
 	// EnableGarbageCollector 启用通用垃圾回收器（WARNING：这是 alpha 特性），
 	// 必须与 kube-apiserver 的同名开关保持同步；用指针布尔值是为了显式表达“关闭”。
 	EnableGarbageCollector *bool
-	// concurrentGCSyncs 是并发运行的垃圾回收 worker 数。
-	// allowed to sync concurrently.
+	// concurrentGCSyncs 是允许并发同步的垃圾回收 worker 数。
 	ConcurrentGCSyncs int32
 	// gcIgnoredResources 是垃圾回收应忽略的 GroupResource 列表；
 	// 忽略列表按 GroupResource 精确匹配，不会误伤同组下的其他资源。
@@ -430,8 +404,7 @@ type HPAControllerConfiguration struct {
 	// ConcurrentHorizontalPodAutoscalerSyncs 是允许并发同步的 HPA 对象数量：数量越大
 	// HPA 处理越及时，但需要更多 CPU、网络与 API 调用开销。
 	ConcurrentHorizontalPodAutoscalerSyncs int32
-	// HorizontalPodAutoscalerSyncPeriod 是同步 Pod 副本数的周期；
-	// pods in horizontal pod autoscaler.
+	// HorizontalPodAutoscalerSyncPeriod 是 HPA 同步 Pod 副本数的周期。
 	HorizontalPodAutoscalerSyncPeriod metav1.Duration
 	// HorizontalPodAutoscalerDowncaleStabilizationWindow 是自动扩缩容回看历史的窗口，
 	// 期间不会缩容到低于窗口内给出的任何建议值。
@@ -439,8 +412,8 @@ type HPAControllerConfiguration struct {
 	// HorizontalPodAutoscalerTolerance 是判断资源用量是否建议扩缩容的容忍度：
 	// 为相对比例，只有指标偏离目标值超过该比例才触发扩缩，用于过滤噪声。
 	HorizontalPodAutoscalerTolerance float64
-	// HorizontalPodAutoscalerCPUInitializationPeriod 是 Pod 启动后 CPU 样本尚不稳定的
-	// might be skipped.
+	// HorizontalPodAutoscalerCPUInitializationPeriod 是 Pod 启动后 CPU 样本尚不稳定的观察窗口，
+	// 此期间的指标可能被跳过。
 	HorizontalPodAutoscalerCPUInitializationPeriod metav1.Duration
 	// HorizontalPodAutoscalerInitialReadinessDelay 是 Pod 启动后首次就绪状态变化的观察窗口，
 	// 此窗口内的变化都视为首次就绪；唯一影响是
@@ -530,14 +503,13 @@ type NodeLifecycleControllerConfiguration struct {
 	NodeEvictionRate float32
 	// secondaryNodeEvictionRate 是可用区不健康时对应的驱逐速率。
 	SecondaryNodeEvictionRate float32
-	// nodeStartupGracePeriod 是允许启动中的节点
-	// be unresponsive before marking it unhealthy.
+	// nodeStartupGracePeriod 是启动中节点允许无响应的时长，超过后标记为不健康。
 	NodeStartupGracePeriod metav1.Duration
 	// nodeMontiorGracePeriod 是允许运行中的节点
 	// 无响应多久才标记为不健康。必须大于 kubelet 的
 	// nodeStatusUpdateFrequency 的 N 倍，N 即 kubelet
 	// 上报节点状态的重试次数。该值还应大于以下之和：
-	// HTTP2_PING_TIMEOUT_SECONDS and HTTP2_READ_IDLE_TIMEOUT_SECONDS.
+	// HTTP2_PING_TIMEOUT_SECONDS 与 HTTP2_READ_IDLE_TIMEOUT_SECONDS 之和。
 	NodeMonitorGracePeriod metav1.Duration
 	// podEvictionTimeout 是故障节点上删除 Pod 的宽限期。
 	PodEvictionTimeout metav1.Duration
@@ -602,8 +574,7 @@ type ReplicationControllerConfiguration struct {
 // 这样可以把大量 Pod 变更合并成较少的用量写回；代价是统计存在短暂延迟。
 // 并发数控制同时处理的配额对象数量，避免大规模命名空间下集中重算。
 type ResourceQuotaControllerConfiguration struct {
-	// resourceQuotaSyncPeriod 是同步配额使用状态的周期。
-	// in the system.
+	// resourceQuotaSyncPeriod 是同步系统中配额使用状态的周期。
 	ResourceQuotaSyncPeriod metav1.Duration
 	// concurrentResourceQuotaSyncs 是允许并发同步的 resource quota 数量：数量越大配额管理越及时，
 	// 但 CPU（及网络）负载也越高。提高并发可让更多命名空间的配额状态及时重算，代价是更多 API 调用。
@@ -619,8 +590,7 @@ type SAControllerConfiguration struct {
 	// serviceAccountKeyFile 是 PEM 编码 RSA 私钥文件，
 	// 用于签发 ServiceAccount token。
 	ServiceAccountKeyFile string
-	// concurrentSATokenSyncs 是并发执行的 ServiceAccount token 同步操作数。
-	// that will be done concurrently.
+	// concurrentSATokenSyncs 是允许并发执行的 ServiceAccount token 同步操作数。
 	ConcurrentSATokenSyncs int32
 	// rootCAFile 是会被包含进 ServiceAccount token secret 的根证书颁发机构，供 Pod 校验
 	// API Server，必须是合法的 PEM 编码 CA bundle。
@@ -632,8 +602,7 @@ type SAControllerConfiguration struct {
 // 该控制器按 TTL 清理已完成的 Job 等对象，避免历史执行记录无限堆积；
 // 并发数决定同时执行清理的 worker 数量。
 type TTLAfterFinishedControllerConfiguration struct {
-	// concurrentTTLSyncs 是并发运行的 TTL-after-finished 回收 worker 数。
-	// allowed to sync concurrently.
+	// concurrentTTLSyncs 是允许并发同步的 TTL-after-finished 回收 worker 数。
 	ConcurrentTTLSyncs int32
 }
 

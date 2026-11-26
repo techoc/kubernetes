@@ -81,7 +81,7 @@ func (rt *cacheRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt
 // 但选择在读取时通过 SHA256 校验完整性，而不是对每条缓存 fsync 以提高写入
 // 持久化概率。这样避免 MacOS 上明显的性能退化。
 //
-// See https://github.com/kubernetes/kubernetes/issues/110753 for more.
+// 背景见 https://github.com/kubernetes/kubernetes/issues/110753。
 type sumDiskCache struct {
 	disk *diskv.Diskv
 }

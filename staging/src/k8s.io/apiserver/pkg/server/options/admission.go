@@ -83,19 +83,11 @@ type AdmissionOptions struct {
 	Decorators admission.Decorators
 }
 
-// NewAdmissionOptions 构造一个 AdmissionOptions 实例。
-// Note:
-//
-//	In addition it calls RegisterAllAdmissionPlugins to register
-//	all generic admission plugins.
-//
-//	Provides the list of RecommendedPluginOrder that holds sane values
-//	that can be used by servers that don't care about admission chain.
-//	Servers that do care can overwrite/append that field after creation.
-//
 // NewAdmissionOptions 构造默认选项：注册全部通用插件，并带上一层
 // admissionmetrics 装饰器。默认顺序把所有变更型插件放在校验型之前，
 // 因为 apiserver 总是先完成全部变更再执行校验。
+// 不在意准入链顺序的 server 可以直接使用 RecommendedPluginOrder；
+// 有要求的 server 可在构造后覆盖或追加该列表。
 func NewAdmissionOptions() *AdmissionOptions {
 	options := &AdmissionOptions{
 		Plugins:    admission.NewPlugins(),
@@ -234,7 +226,7 @@ func (a *AdmissionOptions) Validate() []error {
 			"overlapped", enablePlugins.Intersection(disablePlugins).List()))
 	}
 
-	// Verify RecommendedPluginOrder.
+	// 校验 RecommendedPluginOrder 中的插件都已注册。
 	recommendPlugins := sets.NewString(a.RecommendedPluginOrder...)
 	intersections := registeredPlugins.Intersection(recommendPlugins)
 	if !intersections.Equal(recommendPlugins) {

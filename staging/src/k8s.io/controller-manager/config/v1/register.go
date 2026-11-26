@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the "group" that is needed to uniquely identify the API
+// GroupName 是唯一标识该 API group 所需的 group 名。
 const GroupName = "controllermanager.config.k8s.io"
 
 // SchemeGroupVersion 是注册这些对象所用的 group version。

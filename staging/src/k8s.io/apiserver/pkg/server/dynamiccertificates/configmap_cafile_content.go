@@ -204,7 +204,7 @@ func (c *ConfigMapCAController) hasCAChanged(caBundle []byte) bool {
 	return false
 }
 
-// RunOnce runs a single sync loop
+// RunOnce 执行一次同步。
 func (c *ConfigMapCAController) RunOnce(ctx context.Context) error {
 	// 单次同步时忽略错误：动态 CA 场景下，短暂没有 CA 好过整体崩溃；
 	// 若确需失败，应由健康检查等上层逻辑决定。
@@ -278,7 +278,7 @@ func (c *ConfigMapCAController) Name() string {
 	return c.name
 }
 
-// CurrentCABundleContent provides ca bundle byte content
+// CurrentCABundleContent 返回当前的 CA bundle 字节。
 func (c *ConfigMapCAController) CurrentCABundleContent() []byte {
 	uncastObj := c.caBundle.Load()
 	if uncastObj == nil {

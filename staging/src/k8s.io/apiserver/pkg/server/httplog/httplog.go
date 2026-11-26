@@ -341,7 +341,7 @@ func (rl *respLogger) Write(b []byte) (int, error) {
 	return rl.w.Write(b)
 }
 
-// WriteHeader implements http.ResponseWriter.
+// WriteHeader 实现 http.ResponseWriter。
 func (rl *respLogger) WriteHeader(status int) {
 	rl.recordStatus(status)
 	rl.w.WriteHeader(status)

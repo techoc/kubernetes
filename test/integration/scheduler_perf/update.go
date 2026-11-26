@@ -27,31 +27,24 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// updateAny defines an op where some object gets updated from a YAML file.
-// The nameset can be specified.
+// updateAny 定义从 YAML 文件读取并更新对象的操作，可指定要使用的 nameset。
 type updateAny struct {
-	// Must match updateAny.
+	// 必须与 updateAny 的操作码一致。
 	Opcode operationCode
-	// Namespace the object should be updated in. Must be empty for cluster-scoped objects.
+	// 目标对象所在的 namespace；集群级资源必须留空。
 	Namespace string
-	// Path to spec file describing the object to update.
-	// This will be processed with text/template.
-	// .Index will be in the range [0, Count-1] when updating
-	// more than one object. .Count is the total number of objects.
+	// 描述待更新对象的文件，会经 text/template 处理。
+	// 更新多个对象时，.Index 取值 [0, Count-1]，.Count 为对象总数。
 	TemplatePath string
-	// Count determines how many objects get updated. Defaults to 1 if unset.
+	// 要更新的对象数量，未设置时默认为 1。
 	Count *int
-	// Template parameter for Count.
+	// Count 对应的模板参数名。
 	CountParam string
-	// Number of objects to be updated per second.
-	// If set to 0, all objects are updated at once.
-	// Optional
+	// 每秒更新的对象数；为 0 表示一次性全部更新。可选。
 	UpdatePerSecond int
-	// Internal field of the struct used for caching the mapping.
+	// 内部缓存字段，用于保存 RESTMapping。
 	cachedMapping *meta.RESTMapping
-	// List of subresources to update.
-	// If empty, update operation is performed on the actual resource.
-	// Optional
+	// 要更新的子资源列表；为空时更新主资源。可选。
 	Subresources []string
 }
 
@@ -64,8 +57,7 @@ func (c *updateAny) isValid(allowParameterization bool) error {
 	if c.UpdatePerSecond < 0 {
 		return fmt.Errorf("invalid UpdatePerSecond=%d; should be non-negative", c.UpdatePerSecond)
 	}
-	// The namespace can only be checked during later because we don't know yet
-	// whether the object is namespaced or cluster-scoped.
+	// namespace 的合法性只能在读取对象后校验，此时还不知道对象是命名空间级还是集群级。
 	return nil
 }
 

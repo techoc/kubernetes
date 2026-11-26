@@ -345,7 +345,7 @@ func normalizeAndParse(s string) (semver.Version, error) {
 		}
 	}
 
-	// Fill up shortened versions.
+	// 短版本缺少的段补 0，否则 semver 无法解析。
 	if len(parts) < 3 {
 		// 短版本不允许携带预发布/构建元数据，否则补齐后会改变其含义。
 		if strings.ContainsAny(parts[len(parts)-1], "+-") {

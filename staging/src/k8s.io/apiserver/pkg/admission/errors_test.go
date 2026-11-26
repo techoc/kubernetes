@@ -25,7 +25,7 @@ import (
 )
 
 // 确保永远不会出现如下内部错误：
-// Internal error occurred: [some error, object does not implement the Object interfaces]
+// 这条错误文本必须原样保留：Internal error occurred: [some error, object does not implement the Object interfaces]
 //
 // fakeObj 没有实现 ObjectMeta 访问器，用于验证取名字失败时不会把内部错误
 // 泄露成 Internal error，而是退化为固定的 "Unknown/errorGettingName"。

@@ -112,13 +112,12 @@ func (s *fileStore) CurrentPath() string {
 	return filepath.Join(s.certDirectory, s.filename(currentPair))
 }
 
-// recover checks if there is a certificate rotation that was interrupted while
-// progress, and if so, attempts to recover to a good state.
+// recover 检查证书轮转是否中途被打断，若是则尝试恢复到一致状态。
 //
 // recover 处理轮转中途崩溃的情况：若 current 不存在但 updated 符号链接存在，
 // 说明轮转在最后一步改名之前中断，将其重命名为 current 完成切换。
 func (s *fileStore) recover() error {
-	// If the 'current' file doesn't exist, continue on with the recovery process.
+	// current 不存在时才需要恢复；存在说明切换已完成。
 	currentPath := filepath.Join(s.certDirectory, s.filename(currentPair))
 	if exists, err := fileExists(currentPath); err != nil {
 		return err
@@ -126,8 +125,7 @@ func (s *fileStore) recover() error {
 		return nil
 	}
 
-	// If the 'updated' file exists, and it is a symbolic link, continue on
-	// with the recovery process.
+	// updated 必须是符号链接，否则状态被外部破坏，不能安全恢复。
 	updatedPath := filepath.Join(s.certDirectory, s.filename(updatedPair))
 	if fi, err := os.Lstat(updatedPath); err != nil {
 		if os.IsNotExist(err) {
@@ -139,7 +137,7 @@ func (s *fileStore) recover() error {
 		return fmt.Errorf("expected %q to be a symlink but it is a file", updatedPath)
 	}
 
-	// Move the 'updated' symlink to 'current'.
+	// 把 updated 改名为 current，补上中断的最后一步。
 	if err := os.Rename(updatedPath, currentPath); err != nil {
 		return fmt.Errorf("unable to rename %q to %q: %v", updatedPath, currentPath, err)
 	}
@@ -196,8 +194,7 @@ func (s *fileStore) Current() (*tls.Certificate, error) {
 
 // loadFile 从单个 PEM 文件加载证书与私钥，并填充 Leaf 缓存解析结果。
 func loadFile(pairFile string) (*tls.Certificate, error) {
-	// LoadX509KeyPair knows how to parse combined cert and private key from
-	// the same file.
+	// 证书和私钥放在同一个文件里，直接交给 tls.LoadX509KeyPair 解析。
 	cert, err := tls.LoadX509KeyPair(pairFile, pairFile)
 	if err != nil {
 		return nil, fmt.Errorf("could not convert data from %q into cert/key pair: %v", pairFile, err)
@@ -227,7 +224,7 @@ func (s *fileStore) Update(certData, keyData []byte) (*tls.Certificate, error) {
 	}
 	defer f.Close()
 
-	// First cert is leaf, remainder are intermediates
+	// 第一个证书是叶证书，其余为中间证书。
 	certs, err := certutil.ParseCertsPEM(certData)
 	if err != nil {
 		return nil, fmt.Errorf("invalid certificate data: %v", err)
@@ -242,7 +239,7 @@ func (s *fileStore) Update(certData, keyData []byte) (*tls.Certificate, error) {
 	}
 	pem.Encode(f, keyBlock)
 
-	// Ensure data is written to disk
+	// 先落盘，再切换符号链接。
 	// 落盘后再切换符号链接，避免指向尚未持久化的文件。
 	if err := f.Sync(); err != nil {
 		return nil, fmt.Errorf("failed to sync certificate data to disk: %w (file: %q)", err, certPath)
@@ -259,15 +256,13 @@ func (s *fileStore) Update(certData, keyData []byte) (*tls.Certificate, error) {
 	return cert, nil
 }
 
-// updateSymLink updates the current symlink to point to the file that is
-// passed it. It will fail if there is a non-symlink file exists where the
-// symlink is expected to be.
+// updateSymlink 把 current 指向传入的文件；目标位置若已有普通文件则报错，
+// 避免覆盖用户手工放置的内容。
 //
 // updateSymlink 通过“先建 updated 再 rename”的方式原子替换 current 符号链接；
 // 若 target 不是符号链接则报错，防止覆盖用户手工放置的文件。
 func (s *fileStore) updateSymlink(filename string) error {
-	// If the 'current' file either doesn't exist, or is already a symlink,
-	// proceed. Otherwise, this is an unrecoverable error.
+	// current 可以不存在或已是符号链接；若为普通文件则无法安全替换。
 	currentPath := filepath.Join(s.certDirectory, s.filename(currentPair))
 	currentPathExists := false
 	if fi, err := os.Lstat(currentPath); err != nil {
@@ -280,8 +275,7 @@ func (s *fileStore) updateSymlink(filename string) error {
 		currentPathExists = true
 	}
 
-	// If the 'updated' file doesn't exist, proceed. If it exists but it is a
-	// symlink, delete it.  Otherwise, this is an unrecoverable error.
+	// updated 不存在可继续；存在但为符号链接则删除重建；普通文件无法恢复。
 	updatedPath := filepath.Join(s.certDirectory, s.filename(updatedPair))
 	if fi, err := os.Lstat(updatedPath); err != nil {
 		if !os.IsNotExist(err) {
@@ -296,27 +290,25 @@ func (s *fileStore) updateSymlink(filename string) error {
 		}
 	}
 
-	// Check that the new cert/key pair file exists to avoid rotating to an
-	// invalid cert/key.
+	// 先确认目标文件存在，避免切换到无效的证书/私钥。
 	if filenameExists, err := fileExists(filename); err != nil {
 		return err
 	} else if !filenameExists {
 		return fmt.Errorf("file %q does not exist so it can not be used as the currently selected cert/key", filename)
 	}
 
-	// Ensure the source path is absolute to ensure the symlink target is
-	// correct when certDirectory is a relative path.
+	// 符号链接目标必须使用绝对路径，certDirectory 为相对路径时才有意义。
 	filename, err := filepath.Abs(filename)
 	if err != nil {
 		return err
 	}
 
-	// Create the 'updated' symlink pointing to the requested file name.
+	// 先建 updated 符号链接。
 	if err := os.Symlink(filename, updatedPath); err != nil {
 		return fmt.Errorf("unable to create a symlink from %q to %q: %v", updatedPath, filename, err)
 	}
 
-	// Replace the 'current' symlink.
+	// 用 updated 替换 current。
 	if currentPathExists {
 		if err := os.Remove(currentPath); err != nil {
 			return fmt.Errorf("unable to remove %q: %v", currentPath, err)
@@ -347,7 +339,7 @@ func loadX509KeyPair(certFile, keyFile string) (*tls.Certificate, error) {
 	return &cert, nil
 }
 
-// FileExists checks if specified file exists.
+// FileExists 判断指定文件是否存在。
 //
 // fileExists 判断文件是否存在；不存在返回 (false, nil)，其他错误原样返回。
 func fileExists(filename string) (bool, error) {

@@ -240,7 +240,7 @@ func Run(g *Generator) {
 	var localOutputPackages []generator.Target
 	for _, p := range protobufNames.packages {
 		if _, ok := nonOutputPackages[p.Name()]; ok {
-			// if we're not outputting the package, don't include it in either package list
+			// 不输出的包不加入任何包列表。
 			continue
 		}
 		localOutputPackages = append(localOutputPackages, p)
@@ -270,16 +270,11 @@ func Run(g *Generator) {
 			searchArgs = append(searchArgs, "-I", s)
 		}
 	}
-	// Despite docs saying that `--gogo_out=paths=source_relative:.` will
-	// output the .pb.go file to the same directory as the .proto file, it
-	// doesn't. Given example.com/foo/bar.proto (found in one of the -I paths
-	// above), the output becomes
-	// $output_base/example.com/foo/example.com/foo/bar.pb.go - basically
-	// useless.  Users should set the output-dir to a single dir under which
-	// all the packages in question live (e.g. staging/src in kubernetes).
-	// Alternately, we could generate into a temp path and then move the
-	// resulting file back to the input dir, but that seems brittle in other
-	// ways.
+	// 文档声称 `--gogo_out=paths=source_relative:.` 会把 .pb.go 输出到 .proto 同目录，实际并非如此：
+	// 比如 -I 路径下的 example.com/foo/bar.proto 会生成
+	// $output_base/example.com/foo/example.com/foo/bar.pb.go，基本不可用。
+	// 因此 output-dir 应设为能覆盖所有目标包的上级目录（如 kubernetes 中的 staging/src）。
+	// 也可以生成到临时目录再搬回输入目录，但那样在其他方面更脆弱。
 	args := searchArgs
 	args = append(args, fmt.Sprintf("--gogo_out=%s", g.OutputDir))
 
@@ -431,7 +426,7 @@ func importOrder(deps map[string][]string) ([]string, error) {
 }
 
 // edge 描述图中一条 from->to 的依赖边（from 依赖 to）。
-// edge describes a from->to relationship in a graph
+// edge 描述图中一条 from->to 的依赖边（from 依赖 to）。
 type edge struct {
 	from string
 	to   string
@@ -439,8 +434,8 @@ type edge struct {
 
 // findAndRemoveNodesWithoutDependencies 找出图中没有任何入边指向的节点，
 // 将它们从节点集合中移除并按字典序返回。
-// findAndRemoveNodesWithoutDependencies finds nodes in the given set which are not pointed to by any edges in the graph,
-// removes them from the set of nodes, and returns them in sorted order
+// findAndRemoveNodesWithoutDependencies 找出图中没有任何入边指向的节点，
+// 将它们从节点集合中移除并按字典序返回。
 func findAndRemoveNodesWithoutDependencies(nodes map[string]struct{}, graph map[edge]struct{}) []string {
 	roots := []string{}
 	// 遍历所有节点，寻找潜在的 "to" 节点。

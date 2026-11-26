@@ -473,7 +473,7 @@ func (g *GCERunner) testGCEImage(suite remote.TestSuite, archivePath string, ima
 	return &result
 }
 
-// Provision a gce instance using image
+// createGCEInstance 按给定镜像创建 GCE 实例。
 func (g *GCERunner) createGCEInstance(imageConfig *internalGCEImage) (string, error) {
 	data, err := runGCPCommand("compute", "project-info", "describe", "--format=json", "--project="+*project)
 	if err != nil {
@@ -485,7 +485,7 @@ func (g *GCERunner) createGCEInstance(imageConfig *internalGCEImage) (string, er
 	if err != nil {
 		return "", fmt.Errorf("failed parse project info %q: %w", *project, err)
 	}
-	// Use default service account
+	// 未显式指定时使用项目默认服务账号。
 	serviceAccount := p.DefaultServiceAccount
 	klog.V(1).Infof("Creating instance %+v  with service account %q", *imageConfig, serviceAccount)
 	name := g.imageToInstanceName(imageConfig)

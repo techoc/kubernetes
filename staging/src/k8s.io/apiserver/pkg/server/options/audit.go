@@ -73,7 +73,7 @@ type AuditOptions struct {
 	// 未配置策略文件时不会产生任何审计事件（evaluator 为 nil），后端即便启用也是空转。
 	PolicyFile string
 
-	// Plugin options
+	// 各审计后端的插件选项。
 	LogOptions     AuditLogOptions
 	WebhookOptions AuditWebhookOptions
 }
@@ -112,7 +112,7 @@ type AuditTruncateOptions struct {
 	// 是否启用事件截断。
 	Enabled bool
 
-	// Truncating configuration.
+	// 截断策略配置。
 	TruncateConfig plugintruncate.Config
 }
 
@@ -183,7 +183,7 @@ func NewAuditTruncateOptions() AuditTruncateOptions {
 	}
 }
 
-// Validate checks invalid config combination
+// Validate 检查配置组合是否合法。
 func (o *AuditOptions) Validate() []error {
 	if o == nil {
 		return nil
@@ -294,13 +294,13 @@ func (o *AuditOptions) ApplyTo(
 		return fmt.Errorf("server config must be non-nil")
 	}
 
-	// 1. Build policy evaluator
+	// 1. 构造审计策略求值器。
 	evaluator, err := o.newPolicyRuleEvaluator()
 	if err != nil {
 		return err
 	}
 
-	// 2. Build log backend
+	// 2. 构造日志后端。
 	var logBackend audit.Backend
 	w, err := o.LogOptions.getWriter()
 	if err != nil {
@@ -314,7 +314,7 @@ func (o *AuditOptions) ApplyTo(
 		}
 	}
 
-	// 3. Build webhook backend
+	// 3. 构造 webhook 后端。
 	var webhookBackend audit.Backend
 	if o.WebhookOptions.enabled() {
 		if evaluator == nil {
@@ -342,7 +342,7 @@ func (o *AuditOptions) ApplyTo(
 		return err
 	}
 
-	// 4. Apply dynamic options.
+	// 4. 应用动态配置选项。
 	var dynamicBackend audit.Backend
 	if webhookBackend != nil {
 		// 仅启用 webhook 时，也要套上截断包装。
@@ -503,7 +503,7 @@ func (o *AuditLogOptions) Validate() []error {
 		allErrors = append(allErrors, err)
 	}
 
-	// Check log format
+	// 校验日志格式。
 	if !sets.NewString(pluginlog.AllowedFormats...).Has(o.Format) {
 		allErrors = append(allErrors, fmt.Errorf("invalid audit log format %s, allowed formats are %q", o.Format, strings.Join(pluginlog.AllowedFormats, ",")))
 	}

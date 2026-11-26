@@ -25,18 +25,17 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.30
 
-// StorageVersionMigration represents a migration of stored data to the latest
-// storage version.
+// StorageVersionMigration 表示把存储的数据迁移到最新的存储版本。
 type StorageVersionMigration struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
-	// Specification of the migration.
+	// 迁移的规格定义。
 	// +optional
 	Spec StorageVersionMigrationSpec
-	// Status of the migration.
+	// 迁移的状态。
 	// +optional
 	Status StorageVersionMigrationStatus
 }
@@ -61,7 +60,7 @@ const (
 
 // StorageVersionMigrationStatus 描述存储版本迁移的状态。
 type StorageVersionMigrationStatus struct {
-	// The latest available observations of the migration's current state.
+	// 最近一次观察到的迁移状态。
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map

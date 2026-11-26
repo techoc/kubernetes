@@ -33,7 +33,7 @@ type ServiceResolver interface {
 // defaultServiceResolver 按集群内 Service DNS 规则解析地址。
 type defaultServiceResolver struct{}
 
-// NewDefaultServiceResolver creates a new default server resolver.
+// NewDefaultServiceResolver 创建默认的 Service 地址解析器。
 func NewDefaultServiceResolver() ServiceResolver {
 	return &defaultServiceResolver{}
 }

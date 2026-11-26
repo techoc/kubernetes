@@ -52,7 +52,7 @@ func newStorage(t *testing.T) (*ReplicaSetStorage, *etcd3testing.EtcdTestServer)
 	return &replicaSetStorage, server
 }
 
-// createReplicaSet is a helper function that returns a ReplicaSet with the updated resource version.
+// createReplicaSet 返回带有指定 resourceVersion 的 ReplicaSet，供测试更新冲突等场景。
 func createReplicaSet(storage *REST, rs apps.ReplicaSet, t *testing.T) (apps.ReplicaSet, error) {
 	ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, rs.Namespace)
 	obj, err := storage.Create(ctx, &rs, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
@@ -96,9 +96,9 @@ func TestCreate(t *testing.T) {
 	rs := validNewReplicaSet()
 	rs.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		rs,
-		// invalid (invalid selector)
+		// 非法输入（selector 不合法）
 		&apps.ReplicaSet{
 			Spec: apps.ReplicaSetSpec{
 				Replicas: 2,
@@ -115,15 +115,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.ReplicaSet.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.ReplicaSet.Store)
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewReplicaSet(),
-		// valid updateFunc
+		// 合法更新
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*apps.ReplicaSet)
 			object.Spec.Replicas = object.Spec.Replicas + 1
 			return object
 		},
-		// invalid updateFunc
+		// 非法更新
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*apps.ReplicaSet)
 			object.Name = ""
@@ -164,12 +164,12 @@ func TestGenerationNumber(t *testing.T) {
 	}
 	storedRS, _ := etcdRS.(*apps.ReplicaSet)
 
-	// Generation initialization
+	// 新建时 generation 初始化为 1。
 	if storedRS.Generation != 1 || storedRS.Status.ObservedGeneration != 0 {
 		t.Fatalf("Unexpected generation number %v, status generation %v", storedRS.Generation, storedRS.Status.ObservedGeneration)
 	}
 
-	// Updates to spec should increment the generation number
+	// 更新 spec 应递增 generation。
 	storedRS.Spec.Replicas++
 	if _, _, err := storage.ReplicaSet.Update(ctx, storedRS.Name, rest.DefaultUpdatedObjectInfo(storedRS), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -183,7 +183,7 @@ func TestGenerationNumber(t *testing.T) {
 		t.Fatalf("Unexpected generation, spec: %v, status: %v", storedRS.Generation, storedRS.Status.ObservedGeneration)
 	}
 
-	// Updates to status should not increment either spec or status generation numbers
+	// 只更新 status 不应改动 generation。
 	storedRS.Status.Replicas++
 	if _, _, err := storage.ReplicaSet.Update(ctx, storedRS.Name, rest.DefaultUpdatedObjectInfo(storedRS), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -221,22 +221,22 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.ReplicaSet.Store)
 	test.TestWatch(
 		validNewReplicaSet(),
-		// matching labels
+		// 能匹配的 label
 		[]labels.Set{
 			{"a": "b"},
 		},
-		// not matching labels
+		// 不能匹配的 label
 		[]labels.Set{
 			{"a": "c"},
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 能匹配的 field
 		[]fields.Set{
 			{"status.replicas": "5"},
 			{"metadata.name": "foo"},
 			{"status.replicas": "5", "metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不能匹配的 field
 		[]fields.Set{
 			{"status.replicas": "10"},
 			{"metadata.name": "bar"},
@@ -479,7 +479,7 @@ func TestScalePatchConflicts(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// continuously submits a patch that updates a label and verifies the label update was effective
+		// 持续提交 label patch，并确认每次更新都生效。
 		labelName := "timestamp"
 		for i := 0; ; i++ {
 			select {
@@ -501,7 +501,7 @@ func TestScalePatchConflicts(t *testing.T) {
 		}
 	}()
 
-	// continuously submits a scale patch of replicas for a monotonically increasing replica value
+	// 持续提交 scale patch，副本数递增。
 	applyReplicaPatch := func(replicas int) rest.TransformFunc {
 		return func(_ context.Context, _, currentObject runtime.Object) (objToUpdate runtime.Object, patchErr error) {
 			currentObject.(*autoscaling.Scale).Spec.Replicas = int32(replicas)

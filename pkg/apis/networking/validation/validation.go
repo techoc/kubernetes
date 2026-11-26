@@ -302,7 +302,7 @@ func validateIngress(ingress *networking.Ingress, opts IngressValidationOptions)
 	return allErrs
 }
 
-// ValidateIngressCreate validates Ingresses on create.
+// ValidateIngressCreate 校验创建 Ingress 的请求。
 func ValidateIngressCreate(ingress *networking.Ingress) field.ErrorList {
 	allErrs := field.ErrorList{}
 	opts := IngressValidationOptions{
@@ -336,8 +336,7 @@ func ValidateIngressUpdate(ingress, oldIngress *networking.Ingress) field.ErrorL
 // validateIngressTLS 校验 Ingress TLS 配置的 host 和 secretName。
 func validateIngressTLS(spec *networking.IngressSpec, fldPath *field.Path, opts IngressValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
-	// TODO: Perform a more thorough validation of spec.TLS.Hosts that takes
-	// the wildcard spec from RFC 6125 into account.
+	// TODO: 按 RFC 6125 的通配符规则更严格地校验 spec.TLS.Hosts。
 	for tlsIndex, itls := range spec.TLS {
 		for i, host := range itls.Hosts {
 			// 带通配符的 host 使用专门的校验规则，合法的前提是仅包含一段前缀通配符。
@@ -438,8 +437,7 @@ func validateIngressRules(ingressRules []networking.IngressRule, fldPath *field.
 			if isIP := (netutils.ParseIPSloppy(ih.Host) != nil); isIP {
 				allErrs = append(allErrs, field.Invalid(fldPath.Index(i).Child("host"), ih.Host, "must be a DNS name, not an IP address"))
 			}
-			// TODO: Ports and ips are allowed in the host part of a url
-			// according to RFC 3986, consider allowing them.
+			// TODO: RFC 3986 允许 URL 的 host 部分包含端口和 IP，考虑放宽限制。
 			if strings.Contains(ih.Host, "*") {
 				for _, msg := range validation.IsWildcardDNS1123Subdomain(ih.Host) {
 					allErrs = append(allErrs, field.Invalid(fldPath.Index(i).Child("host"), ih.Host, msg))

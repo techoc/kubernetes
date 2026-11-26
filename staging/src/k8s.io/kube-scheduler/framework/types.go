@@ -339,10 +339,10 @@ type NodeInfo interface {
 	GetAllocatable() Resource
 	// GetImageStates 仅当镜像在节点上时才返回其条目，可用于
 	// 判断镜像是否存在，以及基于镜像位置做调度等高级决策。
-	// state information.
+	// 返回的状态包含镜像大小等信息。
 	GetImageStates() map[string]*ImageStateSummary
 	// GetPVCRefCounts 返回 PVC 名到节点上使用它的 Pod 数的映射。
-	// Keys are in the format "namespace/name".
+	// map 的 key 形如 "namespace/name"。
 	GetPVCRefCounts() map[string]int
 	// NodeInfo 每次变化都会递增 generation。
 	// 据此在未变化时跳过克隆。
@@ -368,7 +368,7 @@ type NodeInfo interface {
 // QueuedEntityInfo 统一单个 Pod 和 PodGroup 的队列元数据。
 // 队列的排序、退避和统计只需要这些共性字段，不需要知道实体具体是 Pod 还是组。
 type QueuedEntityInfo interface {
-	// Type returns the type of the entity.
+	// Type 返回实体的类型。
 	Type() EntityKeyType
 	// GetPriority 返回实体的优先级。
 	GetPriority() int32
@@ -385,7 +385,7 @@ type QueuedEntityInfo interface {
 	GetBackoffExpiration() time.Time
 	// GetUnschedulableCount 返回该实体被判定不可调度的尝试总数。
 	// 通常等于 Attempts，但 Error 状态（如网络错误）的失败
-	// this count won't be incremented.
+	// 网络错误等 Error 状态不会增加该计数。
 	// 不计入其中；该值用于计算重试前的退避时长。
 	GetUnschedulableCount() int
 	// GetConsecutiveErrorsCount 返回连续 Error 状态的次数。
@@ -402,7 +402,7 @@ type QueuedEntityInfo interface {
 	// GetInitialAttemptTimestamp 返回实体首次入队的时间。实体在成功调度前
 	// 可能被多次重新入队。
 	// 初始化后不应再更新该值，用于记录端到端调度
-	// latency for an entity.
+	// 端到端调度延迟，用于后续指标统计。
 	GetInitialAttemptTimestamp() *time.Time
 	// GetUnschedulablePlugins 记录实体在
 	// PreFilter、Filter、Reserve 或 Permit（WaitOnPermit）阶段返回不可调度状态的插件名。
@@ -446,7 +446,7 @@ type PodResource struct {
 	Non0Mem  int64
 }
 
-// AffinityTerm is a processed version of v1.PodAffinityTerm.
+// AffinityTerm 是 v1.PodAffinityTerm 的预处理形式。
 type AffinityTerm struct {
 	Namespaces        sets.Set[string]
 	Selector          labels.Selector
@@ -462,14 +462,14 @@ func (at *AffinityTerm) Matches(pod *v1.Pod, nsLabels labels.Set) bool {
 	return false
 }
 
-// WeightedAffinityTerm is a "processed" representation of v1.WeightedAffinityTerm.
+// WeightedAffinityTerm 是 v1.WeightedAffinityTerm 的预处理形式。
 type WeightedAffinityTerm struct {
 	AffinityTerm
 	Weight int32
 }
 
 // GetAffinityTerms 接收 Pod 与亲和项，返回命名空间及
-// selectors of the terms.
+// 预处理亲和项，避免调度时反复解析 selector。
 func GetAffinityTerms(pod *v1.Pod, v1Terms []v1.PodAffinityTerm) ([]AffinityTerm, error) {
 	if v1Terms == nil {
 		return nil, nil
@@ -567,7 +567,7 @@ type Resource interface {
 	GetMilliCPU() int64
 	GetMemory() int64
 	GetEphemeralStorage() int64
-	// We return AllowedPodNumber (which is Node.Status.Allocatable.Pods().Value())
+	// 返回 AllowedPodNumber（即 Node.Status.Allocatable.Pods().Value()），
 	// 显式存为 int，避免转换开销。
 	GetAllowedPodNumber() int
 	// ScalarResources 返回资源名到标量值的映射。
@@ -578,10 +578,10 @@ type Resource interface {
 
 // ImageStateSummary 汇总镜像状态信息。
 type ImageStateSummary struct {
-	// Size of the image
+	// 镜像大小。
 	Size int64
 	// 用于统计有多少节点持有该镜像，由下面的 Nodes 字段计算得出。
-	// during the execution of Snapshot.
+	// 在 Snapshot 执行期间只需构造一次。
 	NumNodes int
 	// 持有该镜像的节点名集合，用于
 	// 在更新/新增/删除事件中跟踪节点。
@@ -715,7 +715,7 @@ func (h HostPortInfo) sanitize(ip, protocol *string) {
 	}
 }
 
-// EntityKeyType is the type of an entity.
+// EntityKeyType 表示实体的类型。
 type EntityKeyType string
 
 const (
@@ -730,14 +730,14 @@ const (
 type PodGroupInfo interface {
 	// GetUnscheduledPods 返回当前正在参与调度决策的 Pod。
 	// 顺序由签名、优先级与时间戳确定，保证可复现。
-	// This structure only contains the pods considered for scheduling in the pod group scheduling cycle.
+	// 该结构只包含 pod group 调度周期内参与调度的 Pod。
 	GetUnscheduledPods() []*v1.Pod
 
 	// GetName 返回标识该 PodGroup 的名字。
 	GetName() string
 	// GetNamespace 返回 PodGroup 所属的命名空间。
 	GetNamespace() string
-	// GetType returns the type of the pod group.
+	// GetType 返回 pod group 的类型。
 	GetType() EntityKeyType
 	// GetKey 返回唯一标识该 PodGroup 的 key。
 	GetKey() string

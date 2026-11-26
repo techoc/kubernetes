@@ -100,9 +100,9 @@ func TestCreate(t *testing.T) {
 	deployment := validNewDeployment()
 	deployment.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		deployment,
-		// invalid (invalid selector)
+		// 非法输入（selector 不合法）
 		&apps.Deployment{
 			Spec: apps.DeploymentSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{}},
@@ -118,15 +118,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.Deployment.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Deployment.Store)
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewDeployment(),
-		// updateFunc
+		// 合法更新
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*apps.Deployment)
 			object.Spec.Template.Spec.NodeSelector = map[string]string{"c": "d"}
 			return object
 		},
-		// invalid updateFunc
+		// 非法更新
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*apps.Deployment)
 			object.Name = ""
@@ -176,18 +176,18 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Deployment.Store)
 	test.TestWatch(
 		validNewDeployment(),
-		// matching labels
+		// 能匹配的 label
 		[]labels.Set{},
-		// not matching labels
+		// 不能匹配的 label
 		[]labels.Set{
 			{"a": "c"},
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 能匹配的 field
 		[]fields.Set{
 			{"metadata.name": name},
 		},
-		// not matching fields
+		// 不能匹配的 field
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": name},
@@ -362,7 +362,7 @@ func TestEtcdCreateDeploymentRollback(t *testing.T) {
 		if !test.errOK(err) {
 			t.Errorf("%s: unexpected error: %v", k, err)
 		} else if err == nil {
-			// If rollback succeeded, verify Rollback response and Rollback field of deployment
+			// 回滚成功后，响应和 Deployment 的 RollbackTo 字段都要核对。
 			status, ok := rollbackRespStatus.(*metav1.Status)
 			if !ok {
 				t.Errorf("%s: unexpected response format", k)
@@ -409,8 +409,7 @@ func TestCreateDeploymentRollbackValidation(t *testing.T) {
 	server.Terminate(t)
 }
 
-// Ensure that when a deploymentRollback is created for a deployment that has already been deleted
-// by the API server, API server returns not-found error.
+// Deployment 已被删除时再创建 rollback，应返回 not-found。
 func TestEtcdCreateDeploymentRollbackNoDeployment(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -535,7 +534,7 @@ func TestScalePatchConflicts(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// continuously submits a patch that updates a label and verifies the label update was effective
+		// 持续提交 label patch，并确认每次更新都生效。
 		labelName := "timestamp"
 		for i := 0; ; i++ {
 			select {
@@ -557,7 +556,7 @@ func TestScalePatchConflicts(t *testing.T) {
 		}
 	}()
 
-	// continuously submits a scale patch of replicas for a monotonically increasing replica value
+	// 持续提交 scale patch，副本数递增。
 	applyReplicaPatch := func(replicas int) rest.TransformFunc {
 		return func(_ context.Context, _, currentObject runtime.Object) (objToUpdate runtime.Object, patchErr error) {
 			currentObject.(*autoscaling.Scale).Spec.Replicas = int32(replicas)

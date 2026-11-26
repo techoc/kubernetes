@@ -45,34 +45,34 @@ type mockCacheableObject struct {
 	obj runtime.Object
 }
 
-// DeepCopyObject implements runtime.Object interface.
+// DeepCopyObject 实现 runtime.Object 接口。
 func (m *mockCacheableObject) DeepCopyObject() runtime.Object {
 	panic("DeepCopy unimplemented for mockCacheableObject")
 }
 
-// GetObjectKind implements runtime.Object interface.
+// GetObjectKind 实现 runtime.Object 接口。
 func (m *mockCacheableObject) GetObjectKind() schema.ObjectKind {
 	return m
 }
 
-// GroupVersionKind implements schema.ObjectKind interface.
+// GroupVersionKind 实现 schema.ObjectKind 接口。
 func (m *mockCacheableObject) GroupVersionKind() schema.GroupVersionKind {
 	return m.gvk
 }
 
-// SetGroupVersionKind implements schema.ObjectKind interface.
+// SetGroupVersionKind 实现 schema.ObjectKind 接口。
 func (m *mockCacheableObject) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	m.gvk = gvk
 }
 
-// CacheEncode implements runtime.CacheableObject interface.
+// CacheEncode 实现 runtime.CacheableObject 接口。
 //
 // 先深拷贝再编码，模拟缓存对象的不可变语义，防止编码过程改动缓存内容。
 func (m *mockCacheableObject) CacheEncode(id runtime.Identifier, encode func(runtime.Object, io.Writer) error, w io.Writer) error {
 	return encode(m.obj.DeepCopyObject(), w)
 }
 
-// GetObject implements runtime.CacheableObject interface.
+// GetObject 实现 runtime.CacheableObject 接口。
 func (m *mockCacheableObject) GetObject() runtime.Object {
 	return m.obj
 }

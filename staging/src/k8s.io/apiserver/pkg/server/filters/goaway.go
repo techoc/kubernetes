@@ -63,7 +63,7 @@ type goaway struct {
 	decider GoawayDecider
 }
 
-// ServeHTTP implement HTTP handler
+// ServeHTTP 实现 HTTP handler。
 //
 // 只在 HTTP/2 上生效：HTTP/1.1 的 "Connection: close" 语义不同，且该过滤器
 // 的目的是让长连接（HTTP/2 复用）有机会重新负载均衡。
@@ -82,7 +82,7 @@ type probabilisticGoawayDecider struct {
 	next   func() float64
 }
 
-// Goaway implement GoawayDecider
+// Goaway 实现 GoawayDecider。
 func (p *probabilisticGoawayDecider) Goaway(r *http.Request) bool {
 	return p.next() < p.chance
 }

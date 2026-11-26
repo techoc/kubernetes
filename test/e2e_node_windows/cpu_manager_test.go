@@ -43,23 +43,23 @@ import (
 )
 
 /*
- * Windows CPU Affinity Node E2E Tests
+ * Windows CPU 亲和性 Node E2E 测试。
  *
- * These tests verify that the CPU manager correctly sets Windows CPU group
- * affinity on containers via the CRI, as implemented in:
+ * 这些测试验证 CPU manager 能通过 CRI 正确设置容器的 Windows CPU group 亲和性，
+ * 对应实现位于：
  *   - pkg/kubelet/cm/cpumanager/cpu_manager_windows.go
  *   - pkg/kubelet/cm/internal_container_lifecycle_windows.go
  *
- * Prerequisites:
- *   - Windows node with kubelet running as a Windows service named "kubelet"
- *   - At least 2 allocatable integer CPUs on the node
- *   - containerd as the container runtime
+ * 前置条件：
+ *   - Windows 节点上 kubelet 以名为 "kubelet" 的 Windows 服务运行
+ *   - 节点至少可分配 2 个整数 CPU
+ *   - 容器运行时为 containerd
  *
- * Linux-only features intentionally NOT covered here:
- *   - SMT/HT alignment (FullPCPUsOnlyOption) — no equivalent in Windows CRI
- *   - Uncore cache alignment (PreferAlignByUnCoreCacheOption) — no L3 topology via Windows CRI
- *   - CFS quota management — cgroup concept, not applicable on Windows
- *   - Strict CPU reservation option — implemented via cgroup on Linux
+ * 以下仅 Linux 支持的功能不在本测试覆盖范围内：
+ *   - SMT/HT 对齐（FullPCPUsOnlyOption）—— Windows CRI 无对应概念
+ *   - Uncore cache 对齐（PreferAlignByUnCoreCacheOption）—— Windows CRI 不提供 L3 拓扑
+ *   - CFS 配额管理 —— cgroup 概念，Windows 不适用
+ *   - 严格 CPU 预留选项 —— Linux 上通过 cgroup 实现
  */
 
 var _ = SIGWindowsDescribe(feature.CPUManager, feature.Windows, ginkgo.Ordered, ginkgo.ContinueOnFailure, framework.WithSerial(), func() {
@@ -709,7 +709,6 @@ func makeWindowsCPUManagerPod(podName string, attrs []windowsCtnAttribute) *v1.P
 
 // verifyHostMatchesCRI 断言 Windows 内核中 ctnName 的 job-object 亲和性
 // 与 CRI 上报的 affinity 逐位一致。这证明运行时真正应用了该 mask，而不只是 containerd 记录了它。
-// runtime actually applied the mask, not just that containerd recorded it.
 func verifyHostMatchesCRI(ctx context.Context, criClient internalapi.RuntimeService, pod *v1.Pod, ctnName string) {
 	ginkgo.GinkgoHelper()
 	criAff, err := getWindowsContainerCPUAffinity(ctx, criClient, pod, ctnName)
@@ -833,7 +832,6 @@ func updateWindowsKubeletConfig(ctx context.Context, f *framework.Framework, cfg
 // 是否属于默认池），必须这样做，否则 kubelet 会拒绝启动并报
 // "invalid state, please drain node and remove policy state file"。
 // 它对应 Linux 的 updateKubeletConfig(..., deleteStateFiles=true)。
-// It mirrors the Linux updateKubeletConfig(..., deleteStateFiles=true).
 func updateWindowsKubeletConfigClearState(ctx context.Context, f *framework.Framework, cfg *kubeletconfig.KubeletConfiguration) {
 	ginkgo.GinkgoHelper()
 	kubeletStart := mustStopKubelet(ctx, f)
@@ -845,7 +843,6 @@ func updateWindowsKubeletConfigClearState(ctx context.Context, f *framework.Fram
 
 // updateWindowsKubeletConfigIfNeeded 只在期望配置与当前运行配置不同时才调用 updateWindowsKubeletConfig，
 // 避免同一 When 块内测试之间不必要的 kubelet 重启。
-// unnecessary kubelet restarts between tests in the same When block.
 func updateWindowsKubeletConfigIfNeeded(ctx context.Context, f *framework.Framework, desired *kubeletconfig.KubeletConfiguration) {
 	ginkgo.GinkgoHelper()
 	current, err := getCurrentKubeletConfig(ctx)

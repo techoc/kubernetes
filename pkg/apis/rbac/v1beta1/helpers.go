@@ -23,8 +23,7 @@ import (
 )
 
 // PolicyRuleBuilder 允许挂接方法，这在普通 API 类型上是不允许的。
-// We use it to construct rules in code.  It's more compact than trying to write them
-// out in a literal and allows us to perform some basic checking during construction
+// 用它可以在代码中构造 rule：比逐字写字面量更紧凑，还能在构造时做基本校验。
 type PolicyRuleBuilder struct {
 	PolicyRule rbacv1beta1.PolicyRule `protobuf:"bytes,1,opt,name=policyRule"`
 }
@@ -82,9 +81,8 @@ func (r *PolicyRuleBuilder) Rule() (rbacv1beta1.PolicyRule, error) {
 	return r.PolicyRule, nil
 }
 
-// ClusterRoleBindingBuilder let's us attach methods.  A no-no for API types.
-// We use it to construct bindings in code.  It's more compact than trying to write them
-// out in a literal.
+// ClusterRoleBindingBuilder 让我们能给绑定挂方法，API 类型本身不允许这样做。
+// 用它可以在代码中构造绑定，比写字面量更紧凑。
 type ClusterRoleBindingBuilder struct {
 	ClusterRoleBinding rbacv1beta1.ClusterRoleBinding `protobuf:"bytes,1,opt,name=clusterRoleBinding"`
 }

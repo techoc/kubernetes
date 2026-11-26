@@ -334,7 +334,7 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 
 	// 可以把它拆成先更新 apiserver，再更新控制面组件，然后重启 kubelet。
 	// 对本测试而言，我们主要关心完整的前后对比，所以暂不这样做。
-	// TODO
+	// TODO: 暂不拆分升级步骤。
 	restoreOptions := cluster.Modify(tCtx.WithStep(fmt.Sprintf("update to %s", gitVersion)), "1-"+gitVersion, localupcluster.ModifyOptions{BinDir: dir})
 
 	// kubelet 会清除所有 resource slice，因为它不知道哪些 driver 在运行。
@@ -372,7 +372,7 @@ func testUpgradeDowngrade(tCtx ktesting.TContext) {
 
 // sourceVersion 根据 hack/print-workspace-status.sh 识别 Kubernetes git 版本。
 //
-// Adapted from https://github.com/kubernetes-sigs/kind/blob/3df64e784cc0ea74125b2a2e9877817418afa3af/pkg/build/nodeimage/internal/kube/source.go#L71-L104
+// 改写自 https://github.com/kubernetes-sigs/kind/blob/3df64e784cc0ea74125b2a2e9877817418afa3af/pkg/build/nodeimage/internal/kube/source.go#L71-L104
 func sourceVersion(tCtx ktesting.TContext, kubeRoot string) (gitVersion string, dockerTag string, err error) {
 	// 获取版本输出。
 	cmd := exec.CommandContext(tCtx, "hack/print-workspace-status.sh")

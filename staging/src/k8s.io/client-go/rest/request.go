@@ -1308,27 +1308,20 @@ func logBody(logger klog.Logger, callDepth int, prefix string, body []byte) {
 	}
 }
 
-// maxUnstructuredResponseTextBytes is an upper bound on how much output to include in the unstructured error.
+// maxUnstructuredResponseTextBytes 限制非结构化错误里包含的响应文本长度。
 const maxUnstructuredResponseTextBytes = 2048
 
-// transformUnstructuredResponseError handles an error from the server that is not in a structured form.
-// It is expected to transform any response that is not recognizable as a clear server sent error from the
-// K8S API using the information provided with the request. In practice, HTTP proxies and client libraries
-// introduce a level of uncertainty to the responses returned by servers that in common use result in
-// unexpected responses. The rough structure is:
+// transformUnstructuredResponseError 处理无法识别为 K8s API 标准错误的响应。
+// 代理和客户端库都会给响应引入不确定性，因此按可信度分层处理：
 //
-// 1. Assume the server sends you something sane - JSON + well defined error objects + proper codes
-//   - this is the happy path
-//   - when you get this output, trust what the server sends
-//     2. Guard against empty fields / bodies in received JSON and attempt to cull sufficient info from them to
-//     generate a reasonable facsimile of the original failure.
-//   - Be sure to use a distinct error type or flag that allows a client to distinguish between this and error 1 above
-//     3. Handle true disconnect failures / completely malformed data by moving up to a more generic client error
-//     4. Distinguish between various connection failures like SSL certificates, timeouts, proxy errors, unexpected
-//     initial contact, the presence of mismatched body contents from posted content types
-//   - Give these a separate distinct error type and capture as much as possible of the original message
+//  1. 正常 JSON + 明确的 error 对象 + 合理的状态码：直接信任服务端的输出。
+//  2. JSON 字段或 body 为空：尽量从残余信息还原错误，并用独立的错误类型标记，
+//     让调用方能与第 1 类区分。
+//  3. 连接真正断开或数据完全损坏：退化为通用的客户端错误。
+//  4. SSL 证书、超时、代理报错、首次连接异常、响应体与请求内容类型不符等：
+//     分别给出独立错误类型，并尽可能保留原始信息。
 //
-// TODO: introduce transformation of generic http.Client.Do() errors that separates 4.
+// TODO: 对 http.Client.Do() 的通用错误也做转换，以区分第 4 类。
 func (r *Request) transformUnstructuredResponseError(resp *http.Response, req *http.Request, body []byte) error {
 	// 非结构化调用方可能还没读 body，这里限量读取，避免把超大响应当作错误信息。
 	if body == nil && resp.Body != nil {
@@ -1340,7 +1333,7 @@ func (r *Request) transformUnstructuredResponseError(resp *http.Response, req *h
 	return r.newUnstructuredResponseError(body, isTextResponse(resp), resp.StatusCode, req.Method, retryAfter)
 }
 
-// newUnstructuredResponseError instantiates the appropriate generic error for the provided input. It also logs the body.
+// newUnstructuredResponseError 按输入构造对应的通用错误，并记录响应体。
 func (r *Request) newUnstructuredResponseError(body []byte, isTextResponse bool, statusCode int, method string, retryAfter int) error {
 	// 限制输出长度。
 	if len(body) > maxUnstructuredResponseTextBytes {
@@ -1489,7 +1482,7 @@ func (r Result) WasCreated(wasCreated *bool) Result {
 
 // Error 返回执行请求时的错误，无错误时返回 nil。若结果是 Status 且 Status != StatusSuccess，
 // 会用其中的信息丰富错误。
-// See the Request.Do() comment for what errors you might get.
+// 可能返回的错误见 Request.Do() 的说明。
 func (r Result) Error() error {
 	// 若收到的是意外的服务端错误，且有 body 和 decoder，就尝试从中提取 Status 对象。
 	// 仅对“非结构化服务器错误”做二次解析；其他错误（含连接错误）原样返回。

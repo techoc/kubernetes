@@ -36,8 +36,7 @@ import (
 // factoryGenerator 生成 shared informer factory 的文件。
 // 它同时输出 factory 结构体、选项函数、SharedInformerFactory 接口以及
 // 每个 group 的访问器方法。
-// factoryGenerator produces a file of listers for a given GroupVersion and
-// type.
+// factoryGenerator 为给定 GroupVersion 与类型生成 informer 文件。
 type factoryGenerator struct {
 	generator.GoGenerator
 	outputPackage             string

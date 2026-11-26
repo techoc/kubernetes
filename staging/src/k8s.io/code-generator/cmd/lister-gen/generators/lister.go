@@ -58,8 +58,7 @@ func (n *lowercaseSingularNamer) Name(t *types.Type) string {
 	return strings.ToLower(t.Name.Name)
 }
 
-// // DefaultNameSystem 指定遍历类型时使用的默认命名系统。
-// processed by the generators in this package.
+// DefaultNameSystem 指定遍历类型时使用的默认命名系统。
 func DefaultNameSystem() string {
 	return "public"
 }
@@ -224,8 +223,7 @@ func isInternal(m types.Member) bool {
 	return !strings.Contains(m.Tags, "json")
 }
 
-// // listerGenerator 为给定 GroupVersion 与类型生成 lister 文件。
-// type.
+// listerGenerator 为给定 GroupVersion 与类型生成 lister 文件。
 type listerGenerator struct {
 	generator.GoGenerator
 	outputPackage  string
@@ -330,9 +328,8 @@ type $.type|public$Lister interface {
 }
 `
 
-// This embeds a typed resource indexer instead of aliasing, so that the struct
-// 作为生成类型专用方法的接收者，而不是取别名，
-// 这些方法来自对应的 expansion 接口。
+// 这里嵌入带类型信息的资源索引器而非取别名，使生成的结构体
+// 能作为 expansion 接口中专用方法的接收者。
 var typeListerStruct = `
 // $.type|private$Lister implements the $.type|public$Lister interface.
 type $.type|private$Lister struct {
@@ -372,9 +369,8 @@ type $.type|public$NamespaceLister interface {
 }
 `
 
-// This embeds a typed namespaced resource indexer instead of aliasing, so that the struct
-// 作为生成类型专用方法的接收者，而不是取别名，
-// 这些方法来自对应的 expansion 接口。
+// 这里嵌入带类型信息的 namespaced 资源索引器而非取别名，使生成的结构体
+// 能作为 expansion 接口中专用方法的接收者。
 var namespaceListerStruct = `
 // $.type|private$NamespaceLister implements the $.type|public$NamespaceLister
 // interface.

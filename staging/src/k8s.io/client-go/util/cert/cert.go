@@ -117,7 +117,7 @@ type SelfSignedCertKeyOptions struct {
 }
 
 // GenerateSelfSignedCertKey 为给定主机创建自签名证书与私钥，主机可以是 IP 或 DNS 名。
-// You may also specify additional subject alt names (either ip or dns names) for the certificate.
+// 还可以通过 alternateIPs/alternateDNS 为证书指定额外的 subject alt name。
 func GenerateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS []string) ([]byte, []byte, error) {
 	return GenerateSelfSignedCertKeyWithOptions(SelfSignedCertKeyOptions{
 		Host:         host,

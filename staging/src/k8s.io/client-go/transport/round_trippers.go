@@ -708,7 +708,8 @@ func headerKeyEscape(key string) string {
 	return buf.String()
 }
 
-// legalHeaderKeyBytes was copied from net/http/lex.go's isTokenTable.
+// legalHeaderKeyBytes 复制自 net/http/lex.go 的 isTokenTable，
+// 因为 token 字符集合由 RFC 7230 定义，需要保持完全一致。
 // See https://httpwg.github.io/specs/rfc7230.html#rule.token.separators
 var legalHeaderKeyBytes = [127]bool{
 	'%':  true,

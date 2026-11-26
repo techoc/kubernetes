@@ -119,7 +119,7 @@ type groupResourceOverrides struct {
 	decoderDecoratorFn func([]runtime.Decoder) []runtime.Decoder
 }
 
-// Apply overrides the provided config and options if the override has a value in that position
+// Apply 用覆盖配置中不为空的字段改写传入的 config 与 options。
 //
 // 零值字段表示"不覆盖"，因此无法用空字符串显式清空某项配置。
 func (o groupResourceOverrides) Apply(config *storagebackend.Config, options *StorageCodecConfig) {
@@ -188,7 +188,7 @@ func (s *DefaultStorageFactory) SetEtcdPrefix(groupResource schema.GroupResource
 	s.Overrides[groupResource] = overrides
 }
 
-// SetResourceEtcdPrefix sets the prefix for a resource, but not the base-dir.  You'll end up in `etcdPrefix/resourceEtcdPrefix`.
+// SetResourceEtcdPrefix 只设置资源级前缀，不动根目录；最终路径形如 `etcdPrefix/resourceEtcdPrefix`。
 func (s *DefaultStorageFactory) SetResourceEtcdPrefix(groupResource schema.GroupResource, prefix string) {
 	overrides := s.Overrides[groupResource]
 	overrides.etcdResourcePrefix = prefix
@@ -203,7 +203,7 @@ func (s *DefaultStorageFactory) SetSerializer(groupResource schema.GroupResource
 	s.Overrides[groupResource] = overrides
 }
 
-// AddCohabitatingResources links resources together the order of the slice matters!  its the priority order of lookup for finding a storage location
+// AddCohabitatingResources 把多个资源关联到同一存储位置，切片顺序即查找优先级。
 func (s *DefaultStorageFactory) AddCohabitatingResources(groupResources ...schema.GroupResource) {
 	for _, groupResource := range groupResources {
 		overrides := s.Overrides[groupResource]
@@ -231,7 +231,7 @@ func getAllResourcesAlias(resource schema.GroupResource) schema.GroupResource {
 // 保证被弃用的 API 组仍能读写同一份数据。
 func (s *DefaultStorageFactory) getStorageGroupResource(groupResource schema.GroupResource) schema.GroupResource {
 	for _, potentialStorageResource := range s.Overrides[groupResource].cohabitatingResources {
-		// TODO deads2k or liggitt determine if have ever stored any of our cohabitating resources in a different location on new clusters
+		// TODO(deads2k/liggitt): 确认新集群是否曾把共存资源存到别的位置。
 		if s.APIResourceConfigSource.AnyResourceForGroupEnabled(potentialStorageResource.Group) {
 			return potentialStorageResource
 		}
@@ -240,12 +240,11 @@ func (s *DefaultStorageFactory) getStorageGroupResource(groupResource schema.Gro
 	return groupResource
 }
 
-// New finds the storage destination for the given group and resource. It will
-// return an error if the group has no storage destination configured.
+// NewConfig 查找给定 group/resource 的存储目标；group 未配置存储目标时报错。
 func (s *DefaultStorageFactory) NewConfig(groupResource schema.GroupResource, example runtime.Object) (*storagebackend.ConfigForResource, error) {
 	chosenStorageResource := s.getStorageGroupResource(groupResource)
 
-	// operate on copy
+	// 必须操作副本，不能改动共享配置。
 	// 必须复制：后续 Apply 会修改配置，不能污染工厂中共享的 StorageConfig。
 	storageConfig := s.StorageConfig
 	codecConfig := StorageCodecConfig{
@@ -292,17 +291,17 @@ func (s *DefaultStorageFactory) NewConfig(groupResource schema.GroupResource, ex
 	return storageConfig.ForResource(groupResource), nil
 }
 
-// Configs implements StorageFactory.
+// Configs 实现 StorageFactory 接口。
 func (s *DefaultStorageFactory) Configs() []storagebackend.Config {
 	return configs(s.StorageConfig, s.Overrides)
 }
 
-// Configs gets configurations for all of registered storage destinations.
+// Configs 返回所有已注册存储目标的配置。
 func Configs(storageConfig storagebackend.Config) []storagebackend.Config {
 	return configs(storageConfig, nil)
 }
 
-// Returns all storage configurations including those for group resource overrides
+// 连同 group/resource 覆盖项的配置一起返回。
 func configs(storageConfig storagebackend.Config, grOverrides map[schema.GroupResource]groupResourceOverrides) []storagebackend.Config {
 	configs := []storagebackend.Config{storageConfig}
 
@@ -310,7 +309,7 @@ func configs(storageConfig storagebackend.Config, grOverrides map[schema.GroupRe
 		if len(override.etcdLocation) == 0 {
 			continue
 		}
-		// copy
+		// 复制一份再应用覆盖，避免污染基础配置。
 		newConfig := storageConfig
 		override.Apply(&newConfig, &StorageCodecConfig{})
 		newConfig.Transport.ServerList = override.etcdLocation
@@ -319,13 +318,12 @@ func configs(storageConfig storagebackend.Config, grOverrides map[schema.GroupRe
 	return configs
 }
 
-// Backends implements StorageFactory.
+// Backends 实现 StorageFactory 接口。
 func (s *DefaultStorageFactory) Backends() []Backend {
 	return backends(s.StorageConfig, s.Overrides)
 }
 
-// Backends returns all backends for all registered storage destinations.
-// Used for getting all instances for health validations.
+// Backends 返回所有已注册存储目标的后端，用于健康检查。
 // Deprecated: Validate health by passing storagebackend.Config directly to storagefactory.CreateProber.
 //
 // 已弃用：此处返回的 TLS 配置仅宽松地用于连通性探测，不代表实际存储客户端的安全设置。
@@ -367,7 +365,7 @@ func backends(storageConfig storagebackend.Config, grOverrides map[schema.GroupR
 	for server := range servers {
 		backends = append(backends, Backend{
 			Server: server,
-			// We can't share TLSConfig across different backends to avoid races.
+			// 各后端不能共享同一个 TLSConfig，否则会并发竞争。
 			// For more details see: https://pr.k8s.io/59338
 			TLSConfig: tlsConfig.Clone(),
 		})

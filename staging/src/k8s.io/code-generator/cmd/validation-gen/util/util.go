@@ -62,19 +62,19 @@ func IsNilableType(t *types.Type) bool {
 //
 // 示例：
 // * 平凡类型：
-//   - given `int`, returns `int`
-//   - given `*int`, returns `*int`
-//   - given `[]int`, returns `[]int`
+//   - 输入 `int`，返回 `int`
+//   - 输入 `*int`，返回 `*int`
+//   - 输入 `[]int`，返回 `[]int`
 //
 // * 类型定义
-//   - given `type X int; X`, returns `int`
-//   - given `type X int; []X`, returns `[]X`
+//   - 输入 `type X int; X`，返回 `int`
+//   - 输入 `type X int; []X`，返回 `[]X`
 //
-// * 类型定义 and pointers:
-//   - given `type X int; *X`, returns `*int`
-//   - given `type X *int; *X`, returns `**int`
-//   - given `type X []int; X`, returns `[]int`
-//   - given `type X []int; *X`, returns `*[]int`
+// * 类型定义与指针：
+//   - 输入 `type X int; *X`，返回 `*int`
+//   - 输入 `type X *int; *X`，返回 `**int`
+//   - 输入 `type X []int; X`，返回 `[]int`
+//   - 输入 `type X []int; *X`，返回 `*[]int`
 func NativeType(t *types.Type) *types.Type {
 	ptrs := 0
 	conditionMet := false

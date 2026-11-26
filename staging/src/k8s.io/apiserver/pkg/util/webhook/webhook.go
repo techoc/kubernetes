@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package webhook implements a generic HTTP webhook plugin.
+// Package webhook 提供通用的 HTTP webhook 插件。
 package webhook
 
 import (

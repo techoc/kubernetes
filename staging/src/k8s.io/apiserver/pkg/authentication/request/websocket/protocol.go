@@ -40,8 +40,8 @@ var protocolHeader = textproto.CanonicalMIMEHeaderKey("Sec-WebSocket-Protocol")
 
 var errInvalidToken = errors.New("invalid bearer token")
 
-// ProtocolAuthenticator allows a websocket connection to provide a bearer token as a subprotocol
-// in the format "base64url.bearer.authorization.<base64url-without-padding(bearer-token)>"
+// ProtocolAuthenticator 允许 WebSocket 连接通过子协议传递 bearer token，格式为
+// "base64url.bearer.authorization.<base64url-without-padding(bearer-token)>"。
 //
 // 之所以使用子协议而不是查询参数：token 不应出现在 URL/访问日志中，
 // 而子协议同样只存在于请求头里。
@@ -114,8 +114,9 @@ func (a *ProtocolAuthenticator) AuthenticateRequest(req *http.Request) (*authent
 
 	// 认证成功后移除含 token 的子协议
 	if ok {
-		// https://tools.ietf.org/html/rfc6455#section-11.3.4 indicates the Sec-WebSocket-Protocol header may appear multiple times
-		// in a request, and is logically the same as a single Sec-WebSocket-Protocol header field that contains all values
+		// RFC 6455 第 11.3.4 节规定 Sec-WebSocket-Protocol 头可以出现多次，
+		// 语义上等价于单个包含所有值的头字段。
+		// https://tools.ietf.org/html/rfc6455#section-11.3.4
 		//
 		// 回写时必须移除 token，防止它被下游处理器或日志记录。
 		req.Header.Set(protocolHeader, strings.Join(filteredProtocols, ","))

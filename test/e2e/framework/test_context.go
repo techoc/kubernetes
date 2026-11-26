@@ -311,7 +311,7 @@ func (tc TestContextType) ClusterIsIPv6() bool {
 //
 // 下面其他 Register*Flags 方法可用于添加更多
 // 测试特有 flag。但无论测试是否真的在测试套件中，这些设置都会被加入。
-// regardless whether the test is actually in the test suite.
+// 这些 flag 会被无条件加入，无论当前测试是否真的在测试套件中。
 //
 // 对于已经改为自行注册选项的测试，可参照 HandleFlags，
 // 从 test/e2e/framework/config 复制 flag。

@@ -29,9 +29,8 @@ import (
 	discoveryfuzzer "k8s.io/kubernetes/pkg/apis/discovery/fuzzer"
 )
 
-// TestEndpointSliceMemoryIdenticalConversion ensures the internal and v1 EndpointSlice types
-// remain memory-identical. These types must be kept memory-identical
-// for performance reasons.
+// TestEndpointSliceMemoryIdenticalConversion 确保 internal 与 v1 的 EndpointSlice 内存布局一致。
+// 转换时可以直接复用内存布局，避免逐个字段拷贝带来的开销。
 func TestEndpointSliceMemoryIdenticalConversion(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, discoveryfuzzer.Funcs), rand.NewSource(1), legacyscheme.Codecs).NilChance(0).NumElements(1, 1)
 	t.Run("v1 to internal", func(t *testing.T) {

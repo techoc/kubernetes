@@ -125,7 +125,8 @@ func TestRealFIFO_basic(t *testing.T) {
 // TestRealFIFO_replaceWithDeleteDeltaIn 验证：调用 .Replace 且 `O` 位于待删除对象之中时，
 // 会为 ID `X` 的对象 `O` 加入 `Sync` delta；若不加 `Sync` delta，只会有 ID `X` 的
 // `Delete` delta。注意：与 delta_fifo_test 不同，RealFIFO 没有 emitDeltaTypeReplaced 选项。
-// SharedIndexInformers to miss `O`'s create notification, see https://github.com/kubernetes/kubernetes/issues/83810
+// 若不补 Sync delta，SharedIndexInformer 会漏掉 `O` 的创建通知，见
+// https://github.com/kubernetes/kubernetes/issues/83810
 // 详见相关说明。
 func TestRealFIFO_replaceWithDeleteDeltaIn(t *testing.T) {
 	oldObj := mkFifoObj("foo", 1)
