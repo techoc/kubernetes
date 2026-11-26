@@ -55,8 +55,8 @@ func DefaultAuthWebhookRetryBackoff() *wait.Backoff {
 // RequestHeaderAuthenticationOptions 配置“前置代理通过请求头传递用户身份”的认证方式。
 // 安全性依赖 ClientCAFile：只有携带受信客户端证书的连接，其请求头才可信。
 type RequestHeaderAuthenticationOptions struct {
-	// ClientCAFile is the root certificate bundle to verify client certificates on incoming requests
-	// before trusting usernames in headers.
+	// ClientCAFile 是用于校验请求中客户端证书的根证书 bundle，
+	// 校验通过后才信任 header 中的用户名。
 	ClientCAFile string
 
 	// 各类身份字段对应的请求头名称；可配置多个以支持代理切换。
@@ -107,7 +107,7 @@ func (s *RequestHeaderAuthenticationOptions) Validate() []error {
 			allErrors = append(allErrors, err)
 		}
 		if len(s.UIDHeaders) > 0 && !caseInsensitiveHas(s.UIDHeaders, "X-Remote-Uid") {
-			// this was added later and so we are able to error out
+			// 这是后来加入的，因此可以直接报错
 			allErrors = append(allErrors, fmt.Errorf("--requestheader-uid-headers is set without specifying the standard X-Remote-Uid header - API aggregation will not work"))
 		}
 	}
@@ -188,15 +188,15 @@ func (s *RequestHeaderAuthenticationOptions) ToAuthenticationRequestHeaderConfig
 	}, nil
 }
 
-// ClientCertAuthenticationOptions provides different options for client cert auth. You should use `GetClientVerifyOptionFn` to
-// get the verify options for your authenticator.
+// ClientCertAuthenticationOptions 为客户端证书认证提供不同选项。应使用 `GetClientVerifyOptionFn`
+// 获取认证器所需的 verify options。
 type ClientCertAuthenticationOptions struct {
-	// ClientCA is the certificate bundle for all the signers that you'll recognize for incoming client certificates
+	// ClientCA 是所有可识别的客户端证书签发者的证书 bundle
 	ClientCA string
 
-	// CAContentProvider are the options for verifying incoming connections using mTLS and directly assigning to users.
-	// Generally this is the CA bundle file used to authenticate client certificates
-	// If non-nil, this takes priority over the ClientCA file.
+	// CAContentProvider 是用 mTLS 校验接入连接并直接赋值给用户的选项。
+	// 通常是用于认证客户端证书的 CA bundle 文件
+	// 若非 nil，则优先于 ClientCA 文件。
 	CAContentProvider dynamiccertificates.CAContentProvider
 }
 
@@ -225,39 +225,39 @@ func (s *ClientCertAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 // DelegatingAuthenticationOptions 让组合式 API 服务器可以便捷地把认证委托给集群根 kube API 服务器。API 联邦组件将充当前置代理，定向来的连接能够委托给核心 kube API 服务器。
 // 聚合 apiserver 通常自身不持有用户数据，而是通过 TokenReview/SubjectAccessReview 委托给核心 apiserver 判定。
 type DelegatingAuthenticationOptions struct {
-	// RemoteKubeConfigFile is the file to use to connect to a "normal" kube API server which hosts the
-	// TokenAccessReview.authentication.k8s.io endpoint for checking tokens.
+	// RemoteKubeConfigFile 用于连接托管 TokenAccessReview.authentication.k8s.io
+	// 端点以校验 token 的"普通" kube API server。
 	RemoteKubeConfigFile string
-	// RemoteKubeConfigFileOptional is specifying whether not specifying the kubeconfig or
-	// a missing in-cluster config will be fatal.
+	// RemoteKubeConfigFileOptional 指定未提供 kubeconfig 或
+	// in-cluster 配置缺失是否致命。
 	RemoteKubeConfigFileOptional bool
 
-	// CacheTTL is the length of time that a token authentication answer will be cached.
+	// CacheTTL 是 token 认证结果被缓存的时长。
 	CacheTTL time.Duration
 
 	ClientCert    ClientCertAuthenticationOptions
 	RequestHeader RequestHeaderAuthenticationOptions
 
-	// SkipInClusterLookup indicates missing authentication configuration should not be retrieved from the cluster configmap
+	// SkipInClusterLookup 表示缺失认证配置时不应从集群 configmap 获取
 	SkipInClusterLookup bool
 
-	// TolerateInClusterLookupFailure indicates failures to look up authentication configuration from the cluster configmap should not be fatal.
-	// Setting this can result in an authenticator that will reject all requests.
+	// TolerateInClusterLookupFailure 表示从集群 configmap 获取认证配置失败不应致命。
+	// 设置该项可能导致认证器拒绝所有请求。
 	TolerateInClusterLookupFailure bool
 
-	// WebhookRetryBackoff specifies the backoff parameters for the authentication webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// WebhookRetryBackoff 指定认证 webhook 重试逻辑的退避参数。
+	// 它可配置每次迭代的等待时间与最大重试次数，
+	// 以限制系统降级时的请求放大。
 	WebhookRetryBackoff *wait.Backoff
 
-	// TokenRequestTimeout specifies a time limit for requests made by the authorization webhook client.
-	// The default value is set to 10 seconds.
+	// TokenRequestTimeout 指定鉴权 webhook 客户端发起请求的时间限制。
+	// 默认值为 10 秒。
 	TokenRequestTimeout time.Duration
 
-	// CustomRoundTripperFn allows for specifying a middleware function for custom HTTP behaviour for the authentication webhook client.
+	// CustomRoundTripperFn 允许为认证 webhook 客户端指定自定义 HTTP 行为的中间件函数。
 	CustomRoundTripperFn transport.WrapperFunc
 
-	// Anonymous gives user an option to enable/disable Anonymous authentication.
+	// Anonymous 让用户可以选择启用/禁用匿名认证。
 	Anonymous *apiserver.AnonymousAuthConfig
 }
 
@@ -269,11 +269,11 @@ func NewDelegatingAuthenticationOptions() *DelegatingAuthenticationOptions {
 		ClientCert: ClientCertAuthenticationOptions{},
 		RequestHeader: RequestHeaderAuthenticationOptions{
 			UsernameHeaders: []string{"x-remote-user"},
-			// we specifically don't default UID headers as these were introduced
-			// later (kube 1.32) and we don't want 3rd parties to be trusting the default headers
-			// before we can safely say that all KAS instances know they should
-			// remove them from an incoming request in its WithAuthentication handler.
-			// The defaulting will be enabled in a future (1.33+) version.
+			// 这里特意不为 UID header 设置默认值，因为它们引入较晚
+			// （kube 1.32），在能确信所有 KAS 实例都会在 WithAuthentication
+			// 处理器中从请求里移除这些 header 之前，
+			// 不希望第三方信任默认的 header。
+			// 默认值将在未来版本（1.33+）中启用。
 			UIDHeaders:          nil,
 			GroupHeaders:        []string{"x-remote-group"},
 			ExtraHeaderPrefixes: []string{"x-remote-extra-"},
@@ -284,17 +284,17 @@ func NewDelegatingAuthenticationOptions() *DelegatingAuthenticationOptions {
 	}
 }
 
-// WithCustomRetryBackoff sets the custom backoff parameters for the authentication webhook retry logic.
+// WithCustomRetryBackoff 为认证 webhook 重试逻辑设置自定义退避参数。
 func (s *DelegatingAuthenticationOptions) WithCustomRetryBackoff(backoff wait.Backoff) {
 	s.WebhookRetryBackoff = &backoff
 }
 
-// WithRequestTimeout sets the given timeout for requests made by the authentication webhook client.
+// WithRequestTimeout 为认证 webhook 客户端的请求设置给定超时。
 func (s *DelegatingAuthenticationOptions) WithRequestTimeout(timeout time.Duration) {
 	s.TokenRequestTimeout = timeout
 }
 
-// WithCustomRoundTripper allows for specifying a middleware function for custom HTTP behaviour for the authentication webhook client.
+// WithCustomRoundTripper 允许为认证 webhook 客户端指定自定义 HTTP 行为的中间件函数。
 func (s *DelegatingAuthenticationOptions) WithCustomRoundTripper(rt transport.WrapperFunc) {
 	s.CustomRoundTripperFn = rt
 }
@@ -364,7 +364,7 @@ func (s *DelegatingAuthenticationOptions) ApplyTo(authenticationInfo *server.Aut
 		return fmt.Errorf("failed to get delegated authentication kubeconfig: %v", err)
 	}
 
-	// configure token review
+	// 配置 token review
 	if client != nil {
 		cfg.TokenAccessReviewClient = client.AuthenticationV1()
 	}
@@ -432,7 +432,7 @@ func (s *DelegatingAuthenticationOptions) ApplyTo(authenticationInfo *server.Aut
 		}
 	}
 
-	// create authenticator
+	// 创建认证器
 	authenticator, securityDefinitions, err := cfg.New()
 	if err != nil {
 		return err
@@ -447,10 +447,10 @@ func (s *DelegatingAuthenticationOptions) ApplyTo(authenticationInfo *server.Aut
 
 const (
 	authenticationConfigMapNamespace = metav1.NamespaceSystem
-	// authenticationConfigMapName is the name of ConfigMap in the kube-system namespace holding the root certificate
-	// bundle to use to verify client certificates on incoming requests before trusting usernames in headers specified
-	// by --requestheader-username-headers. This is created in the cluster by the kube-apiserver.
-	// "WARNING: generally do not depend on authorization being already done for incoming requests.")
+	// authenticationConfigMapName 是 kube-system 命名空间中 ConfigMap 的名称，
+	// 其中保存的根证书 bundle 用于在信任 --requestheader-username-headers
+	// 指定的 header 中的用户名前校验客户端证书。由 kube-apiserver 在集群中创建。
+	// "警告：通常不要依赖接入请求已完成鉴权。"
 	authenticationConfigMapName = "extension-apiserver-authentication"
 )
 
@@ -462,9 +462,9 @@ func (s *DelegatingAuthenticationOptions) createRequestHeaderConfig(client kuber
 		return nil, fmt.Errorf("unable to create request header authentication config: %v", err)
 	}
 
-	//  look up authentication configuration in the cluster and in case of an err defer to authentication-tolerate-lookup-failure flag
-	//  We are passing the context to ProxyCerts.RunOnce as it needs to implement RunOnce(ctx) however the
-	//  context is not used at all. So passing a empty context shouldn't be a problem
+	//  在集群中查找认证配置，出错时根据 authentication-tolerate-lookup-failure flag 决定如何处理
+	//  把 context 传给 ProxyCerts.RunOnce，因为它实现 RunOnce(ctx)；
+	//  但该 context 完全未被使用，传入空 context 没有问题
 	ctx := context.TODO()
 	if err := dynamicRequestHeaderProvider.RunOnce(ctx); err != nil {
 		return nil, err
@@ -491,8 +491,8 @@ func (s *DelegatingAuthenticationOptions) getClient() (kubernetes.Interface, err
 
 		clientConfig, err = loader.ClientConfig()
 	} else {
-		// without the remote kubeconfig file, try to use the in-cluster config.  Most addon API servers will
-		// use this path. If it is optional, ignore errors.
+		// 没有远程 kubeconfig 文件时，尝试使用 in-cluster 配置。多数 addon API server 会
+		// 走这条路径。若为可选，则忽略错误。
 		clientConfig, err = rest.InClusterConfig()
 		if err != nil && s.RemoteKubeConfigFileOptional {
 			if err != rest.ErrNotInCluster {
@@ -505,13 +505,13 @@ func (s *DelegatingAuthenticationOptions) getClient() (kubernetes.Interface, err
 		return nil, fmt.Errorf("failed to get delegated authentication kubeconfig: %v", err)
 	}
 
-	// set high qps/burst limits since this will effectively limit API server responsiveness
+	// 设置较高的 qps/burst 限制，因为它们实际上会限制 API server 的响应能力
 	clientConfig.QPS = 200
 	clientConfig.Burst = 400
-	// do not set a timeout on the http client, instead use context for cancellation
-	// if multiple timeouts were set, the request will pick the smaller timeout to be applied, leaving other useless.
+	// 不在 http client 上设置超时，而是用 context 做取消
+	// 若设置多个超时，请求会采用较小的那个，其余无效。
 	//
-	// see https://github.com/golang/go/blob/a937729c2c2f6950a32bc5cd0f5b88700882f078/src/net/http/client.go#L364
+	// 参见 https://github.com/golang/go/blob/a937729c2c2f6950a32bc5cd0f5b88700882f078/src/net/http/client.go#L364
 	if s.CustomRoundTripperFn != nil {
 		clientConfig.Wrap(s.CustomRoundTripperFn)
 	}

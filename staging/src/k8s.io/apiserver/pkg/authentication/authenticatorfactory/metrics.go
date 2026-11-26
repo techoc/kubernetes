@@ -32,9 +32,9 @@ type registerables []compbasemetrics.Registerable
 // 保证重复调用 RegisterMetrics 不会因重复注册而 panic。
 var registerMetricsOnce sync.Once
 
-// RegisterMetrics registers the delegated authentication metrics with the legacy
-// registry. Do not use an init() function because feature gates (e.g., NativeHistograms)
-// must be parsed before the histogram metric is created and registered.
+// RegisterMetrics 把委托认证指标注册到旧 registry。
+// 不用 init()，因为特性门控（如 NativeHistograms）必须在
+// 直方图指标创建并注册前完成解析。
 //
 // 因此注册必须由启动流程在 flag 解析之后显式调用。
 func RegisterMetrics() {
@@ -73,12 +73,12 @@ var (
 	}
 )
 
-// RecordRequestTotal increments the total number of requests for the delegated authentication.
+// RecordRequestTotal 增加委托认证的请求总数。
 func RecordRequestTotal(ctx context.Context, code string) {
 	requestTotal.WithContext(ctx).WithLabelValues(code).Inc()
 }
 
-// RecordRequestLatency measures request latency in seconds for the delegated authentication. Broken down by status code.
+// RecordRequestLatency 记录委托认证的请求耗时（秒），按状态码细分。
 func RecordRequestLatency(ctx context.Context, code string, latency float64) {
 	requestLatency.WithContext(ctx).WithLabelValues(code).Observe(latency)
 }

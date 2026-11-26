@@ -30,8 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// RESTDeleteStrategy defines deletion behavior on an object that follows Kubernetes
-// API conventions.
+// RESTDeleteStrategy 定义遵循 Kubernetes API 约定的对象删除行为。
 type RESTDeleteStrategy interface {
 	runtime.ObjectTyper
 }
@@ -45,38 +44,35 @@ const (
 	DeleteDependents GarbageCollectionPolicy = "DeleteDependents"
 	// OrphanDependents 保留依赖对象，仅移除其 ownerReferences。
 	OrphanDependents GarbageCollectionPolicy = "OrphanDependents"
-	// Unsupported means that the resource knows that it cannot be GC'd, so the finalizers
-	// should never be set in storage.
+	// Unsupported 表示该资源无法被 GC，因此 finalizer
+	// 绝不应写入存储。
 	Unsupported GarbageCollectionPolicy = "Unsupported"
 )
 
-// GarbageCollectionDeleteStrategy must be implemented by the registry that wants to
-// orphan dependents by default.
+// 默认孤立依赖对象的 registry 必须实现 GarbageCollectionDeleteStrategy。
 type GarbageCollectionDeleteStrategy interface {
 	// DefaultGarbageCollectionPolicy 返回默认的垃圾回收行为。
 	// 仅当请求未显式指定 orphanDependents / propagationPolicy 时使用。
 	DefaultGarbageCollectionPolicy(ctx context.Context) GarbageCollectionPolicy
 }
 
-// RESTGracefulDeleteStrategy must be implemented by the registry that supports
-// graceful deletion.
+// 支持优雅删除的 registry 必须实现 RESTGracefulDeleteStrategy。
 type RESTGracefulDeleteStrategy interface {
-	// CheckGracefulDelete should return true if the object can be gracefully deleted and set
-	// any default values on the DeleteOptions.
-	// NOTE: if return true, `options.GracePeriodSeconds` must be non-nil (nil will fail),
-	// that's what tells the deletion how "graceful" to be.
+	// 对象可优雅删除时 CheckGracefulDelete 应返回 true，并为 DeleteOptions
+	// 设置默认值。
+	// 注意：返回 true 时 `options.GracePeriodSeconds` 必须非 nil（nil 会失败），
+	// 它决定删除的“优雅”程度。
 	CheckGracefulDelete(ctx context.Context, obj runtime.Object, options *metav1.DeleteOptions) bool
 }
 
-// BeforeDelete tests whether the object can be gracefully deleted.
-// If graceful is set, the object should be gracefully deleted.  If gracefulPending
-// is set, the object has already been gracefully deleted (and the provided grace
-// period is longer than the time to deletion). An error is returned if the
-// condition cannot be checked or the gracePeriodSeconds is invalid. The options
-// argument may be updated with default values if graceful is true. Second place
-// where we set deletionTimestamp is pkg/registry/generic/registry/store.go.
-// This function is responsible for setting deletionTimestamp during gracefulDeletion,
-// other one for cascading deletions.
+// BeforeDelete 测试对象能否被优雅删除。
+// graceful 置位时应优雅删除；gracefulPending 置位表示
+// 对象此前已被优雅删除（且所给宽限期长于删除所需时间）。
+// 无法检查条件或 gracePeriodSeconds 非法时返回错误。graceful 为 true 时
+// options 参数可被更新为默认值。设置 deletionTimestamp 的第二处
+// 在 pkg/registry/generic/registry/store.go。
+// 本函数负责在优雅删除期间设置 deletionTimestamp，
+// 另一处负责级联删除。
 //
 // 两个布尔返回值的语义：
 //   - graceful: 本次请求应执行优雅删除，调用方需持久化更新后的对象；
@@ -117,23 +113,23 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 
 	gracefulStrategy, ok := strategy.(RESTGracefulDeleteStrategy)
 	if !ok {
-		// If we're not deleting gracefully there's no point in updating Generation, as we won't update
-		// the obcject before deleting it.
+		// 非优雅删除时无需更新 Generation，因为删除前
+		// 不会更新对象本身。
 		return false, false, nil
 	}
-	// if the object is already being deleted, no need to update generation.
+	// 对象已在删除中时，无需更新 generation。
 	if objectMeta.GetDeletionTimestamp() != nil {
-		// if we are already being deleted, we may only shorten the deletion grace period
-		// this means the object was gracefully deleted previously but deletionGracePeriodSeconds was not set,
-		// so we force deletion immediately
-		// IMPORTANT:
-		// The deletion operation happens in two phases.
-		// 1. Update to set DeletionGracePeriodSeconds and DeletionTimestamp
-		// 2. Delete the object from storage.
-		// If the update succeeds, but the delete fails (network error, internal storage error, etc.),
-		// a resource was previously left in a state that was non-recoverable.  We
-		// check if the existing stored resource has a grace period as 0 and if so
-		// attempt to delete immediately in order to recover from this scenario.
+		// 已在删除中时，只能缩短宽限期。
+		// 这说明对象此前已被优雅删除，但未设置 deletionGracePeriodSeconds，
+		// 因此强制立即删除。
+		// 重要：
+		// 删除分两个阶段进行。
+		// 1. 更新以设置 DeletionGracePeriodSeconds 与 DeletionTimestamp
+		// 2. 从存储中删除对象。
+		// 若更新成功但删除失败（网络错误、内部存储错误等），
+		// 资源此前会陷入不可恢复状态。这里检查已存储资源
+		// 的宽限期是否为 0，若是则尝试立即删除以恢复。
+		// 若更新成功但删除失败（网络错误、内部存储错误等），
 		if objectMeta.GetDeletionGracePeriodSeconds() == nil || *objectMeta.GetDeletionGracePeriodSeconds() == 0 {
 			return false, false, nil
 		}
@@ -144,19 +140,19 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 			if period >= *objectMeta.GetDeletionGracePeriodSeconds() {
 				return false, true, nil
 			}
-			// Move the existing deletionTimestamp back by existing object.DeletionGracePeriod, then forward by options.DeletionGracePeriod.
-			// This moves the deletionTimestamp back, since the grace period can only be shortened in this code path.
+			// 先把现有 deletionTimestamp 回退现有的 DeletionGracePeriod，再前进 options 的宽限期。
+			// 回退是因为此代码路径只能缩短宽限期。
 			newDeletionTimestamp := metav1.NewTime(
 				objectMeta.GetDeletionTimestamp().Add(-time.Second * time.Duration(*objectMeta.GetDeletionGracePeriodSeconds())).
 					Add(time.Second * time.Duration(*options.GracePeriodSeconds)))
-			// Prevent shortening the grace period moving deletionTimestamp into the past
+			// 防止缩短宽限期导致 deletionTimestamp 落到过去
 			if now := metav1Now(); newDeletionTimestamp.Before(&now) {
 				newDeletionTimestamp = now
 				if period != 0 {
-					// Since a graceful deletion was requested (options.GracePeriodSeconds != 0), but the entire grace period has already expired,
-					// shorten to the minimum period possible while still treating this as a graceful delete.
-					// This means the API server updates the object, another actor observes the update
-					// and is still responsible for the final delete with options.GracePeriodSeconds == 0.
+					// 请求了优雅删除（options.GracePeriodSeconds != 0），但整个宽限期已过，
+					// 因此缩短到仍视为优雅删除的最小周期。
+					// 这意味着 apiserver 更新对象，另一个角色观察到该更新，
+					// 并仍负责以 options.GracePeriodSeconds == 0 完成最终删除。
 					period = int64(1)
 				}
 			}
@@ -164,7 +160,7 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 			objectMeta.SetDeletionGracePeriodSeconds(&period)
 			return true, false, nil
 		}
-		// graceful deletion is pending, do nothing
+		// 优雅删除待处理时，不做任何操作
 		options.GracePeriodSeconds = objectMeta.GetDeletionGracePeriodSeconds()
 		return false, true, nil
 	}
@@ -182,10 +178,10 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 	requestedDeletionTimestamp := metav1.NewTime(metav1Now().Add(time.Second * time.Duration(*options.GracePeriodSeconds)))
 	objectMeta.SetDeletionTimestamp(&requestedDeletionTimestamp)
 	objectMeta.SetDeletionGracePeriodSeconds(options.GracePeriodSeconds)
-	// If it's the first graceful deletion we are going to set the DeletionTimestamp to non-nil.
-	// Controllers of the object that's being deleted shouldn't take any nontrivial actions, hence its behavior changes.
-	// Thus we need to bump object's Generation (if set). This handles generation bump during graceful deletion.
-	// The bump for objects that don't support graceful deletion is handled in pkg/registry/generic/registry/store.go.
+	// 首次优雅删除时，要把 DeletionTimestamp 设为非 nil。
+	// 被删除对象的控制器不应执行任何重要操作，因此其行为会改变。
+	// 所以需要增加对象的 Generation（若存在）。这里处理优雅删除时的 generation 递增。
+	// 不支持优雅删除的对象的递增在 pkg/registry/generic/registry/store.go 中处理。
 	if objectMeta.GetGeneration() > 0 {
 		objectMeta.SetGeneration(objectMeta.GetGeneration() + 1)
 	}
@@ -193,7 +189,7 @@ func BeforeDelete(strategy RESTDeleteStrategy, ctx context.Context, obj runtime.
 	return true, false, nil
 }
 
-// AdmissionToValidateObjectDeleteFunc returns a admission validate func for object deletion
+// AdmissionToValidateObjectDeleteFunc 返回用于对象删除的准入校验函数
 //
 // 删除路径的准入使用一个“虚拟”的属性记录：新对象为 nil，旧对象为待删除对象
 // 的深拷贝，避免准入插件意外修改存储中的对象。
@@ -211,7 +207,7 @@ func AdmissionToValidateObjectDeleteFunc(admit admission.Interface, staticAttrib
 		}
 		finalAttributes := admission.NewAttributesRecord(
 			nil,
-			// Deep copy the object to avoid accidentally changing the object.
+			// 深拷贝对象，避免意外修改原对象。
 			old.DeepCopyObject(),
 			staticAttributes.GetKind(),
 			staticAttributes.GetNamespace(),

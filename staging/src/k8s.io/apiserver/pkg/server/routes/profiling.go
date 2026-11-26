@@ -23,12 +23,12 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 )
 
-// Profiling adds handlers for pprof under /debug/pprof.
+// Profiling 在 /debug/pprof 下添加 pprof 处理器。
 // 注意：pprof 端点会暴露调用栈与运行时细节，应由鉴权层（通常仅允许 system:masters 或
 // 本地回环地址）保护，因此这里使用 Unlisted 注册，不出现在 API 发现文档中。
 type Profiling struct{}
 
-// Install adds the Profiling webservice to the given mux.
+// Install 把 Profiling webservice 添加到给定的 mux。
 func (d Profiling) Install(c *mux.PathRecorderMux) {
 	// 裸 /debug/pprof 重定向到带斜杠的索引页，保持标准库 pprof 的行为。
 	c.UnlistedHandleFunc("/debug/pprof", redirectTo("/debug/pprof/"))
@@ -38,7 +38,7 @@ func (d Profiling) Install(c *mux.PathRecorderMux) {
 	c.UnlistedHandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
-// redirectTo redirects request to a certain destination.
+// redirectTo 把请求重定向到指定目标。
 func redirectTo(to string) func(http.ResponseWriter, *http.Request) {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		http.Redirect(rw, req, to, http.StatusFound)

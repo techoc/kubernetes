@@ -25,11 +25,11 @@ import (
 )
 
 const (
-	// DefaultAuditLevel is the default level to audit at, if no policy rules are matched.
+	// DefaultAuditLevel 是没有策略规则命中时使用的默认审计级别
 	DefaultAuditLevel = audit.LevelNone
 )
 
-// NewPolicyRuleEvaluator creates a new policy rule evaluator.
+// NewPolicyRuleEvaluator 创建一个新的策略规则求值器
 //
 // 构造时把全局 OmitStages 合并进每条规则，使后续匹配无需再重复计算；
 // 这也意味着规则级别的 OmitStages 是"全局 + 规则"的并集，只能扩大省略范围。
@@ -55,8 +55,8 @@ func unionStages(stageLists ...[]audit.Stage) []audit.Stage {
 	return result
 }
 
-// NewFakePolicyRuleEvaluator creates a fake policy rule evaluator that returns
-// a constant level for all requests (for testing).
+// NewFakePolicyRuleEvaluator 创建一个假的策略规则求值器，
+// 对所有请求返回固定级别（用于测试）。
 func NewFakePolicyRuleEvaluator(level audit.Level, stage []audit.Stage) auditinternal.PolicyRuleEvaluator {
 	return &fakePolicyRuleEvaluator{level, stage}
 }
@@ -87,10 +87,10 @@ func (p *policyRuleEvaluator) EvaluatePolicyRule(attrs authorizer.Attributes) au
 	}
 }
 
-// isOmitManagedFields returns whether to omit managed fields from the request
-// and response bodies from being written to the API audit log.
-// If a user specifies OmitManagedFields inside a policy rule, that overrides
-// the global policy default in Policy.OmitManagedFields.
+// isOmitManagedFields 判断是否从写入 API 审计日志的请求与响应体中
+// 省略 managed fields。
+// 若策略规则中指定了 OmitManagedFields，则它覆盖
+// Policy.OmitManagedFields 中的全局默认值。
 func isOmitManagedFields(policyRule *audit.PolicyRule, policyDefault bool) bool {
 	if policyRule.OmitManagedFields == nil {
 		return policyDefault
@@ -99,7 +99,7 @@ func isOmitManagedFields(policyRule *audit.PolicyRule, policyDefault bool) bool 
 	return *policyRule.OmitManagedFields
 }
 
-// Check whether the rule matches the request attrs.
+// 检查规则是否匹配请求属性
 //
 // 所有已设置的过滤字段都必须匹配（AND 语义）；未设置的字段视为通配。
 // 资源规则与非资源规则互斥：一旦指定 Namespaces/Resources 就不再匹配
@@ -143,7 +143,7 @@ func ruleMatches(r *audit.PolicyRule, attrs authorizer.Attributes) bool {
 	return true
 }
 
-// Check whether the rule's non-resource URLs match the request attrs.
+// 检查规则的非资源 URL 是否匹配请求属性
 func ruleMatchesNonResource(r *audit.PolicyRule, attrs authorizer.Attributes) bool {
 	if attrs.IsResourceRequest() {
 		return false
@@ -159,27 +159,27 @@ func ruleMatchesNonResource(r *audit.PolicyRule, attrs authorizer.Attributes) bo
 	return false
 }
 
-// Check whether the path matches the path specification.
+// 检查路径是否匹配路径规格
 //
 // 支持三种形式：精确路径、尾随 "*" 的前缀路径、单独的 "*"。
 // 前缀比较前先去掉所有 "*"，因此 "/foo*" 与 "/foo/**" 等价。
 func pathMatches(path, spec string) bool {
-	// Allow wildcard match
+	// 允许通配匹配
 	if spec == "*" {
 		return true
 	}
-	// Allow exact match
+	// 允许精确匹配
 	if spec == path {
 		return true
 	}
-	// Allow a trailing * subpath match
+	// 允许匹配尾随 * 的子路径
 	if strings.HasSuffix(spec, "*") && strings.HasPrefix(path, strings.TrimRight(spec, "*")) {
 		return true
 	}
 	return false
 }
 
-// Check whether the rule's resource fields match the request attrs.
+// 检查规则的资源字段是否匹配请求属性
 //
 // 资源项支持通配组合："*"、resource、"*/subresource"、"resource/*"。
 // ResourceNames 为空表示匹配任意名称，否则按名称精确过滤。
@@ -201,7 +201,7 @@ func ruleMatchesResource(r *audit.PolicyRule, attrs authorizer.Attributes) bool 
 	resource := attrs.GetResource()
 	subresource := attrs.GetSubresource()
 	combinedResource := resource
-	// If subresource, the resource in the policy must match "(resource)/(subresource)"
+	// 若带子资源，策略中的资源必须匹配 "(resource)/(subresource)"
 	if subresource != "" {
 		combinedResource = resource + "/" + subresource
 	}
@@ -215,15 +215,15 @@ func ruleMatchesResource(r *audit.PolicyRule, attrs authorizer.Attributes) bool 
 			}
 			for _, res := range gr.Resources {
 				if len(gr.ResourceNames) == 0 || hasString(gr.ResourceNames, name) {
-					// match "*"
+					// 匹配 "*"
 					if res == combinedResource || res == "*" {
 						return true
 					}
-					// match "*/subresource"
+					// 匹配 "*/subresource"
 					if len(subresource) > 0 && strings.HasPrefix(res, "*/") && subresource == strings.TrimPrefix(res, "*/") {
 						return true
 					}
-					// match "resource/*"
+					// 匹配 "resource/*"
 					if strings.HasSuffix(res, "/*") && resource == strings.TrimSuffix(res, "/*") {
 						return true
 					}
@@ -234,7 +234,7 @@ func ruleMatchesResource(r *audit.PolicyRule, attrs authorizer.Attributes) bool 
 	return false
 }
 
-// Utility function to check whether a string slice contains a string.
+// 检查字符串切片是否包含某个字符串的工具函数
 //
 // 规则列表通常很短，线性扫描比构造 set 更划算。
 func hasString(slice []string, value string) bool {

@@ -65,7 +65,7 @@ func TestListsCost(t *testing.T) {
 	}{
 		{
 			opts: []string{".sum()"},
-			// 10 cost for the list declaration, the rest is the due to the function call
+			// list 声明占 10 cost，其余来自函数调用
 			costs: []comparableCost{
 				{
 					comparableLiteral:     intListLiteral,
@@ -87,7 +87,7 @@ func TestListsCost(t *testing.T) {
 		},
 		{
 			opts: []string{".isSorted()", ".max()", ".min()"},
-			// 10 cost for the list declaration, the rest is the due to the function call
+			// list 声明占 10 cost，其余来自函数调用
 			costs: []comparableCost{
 				{
 					comparableLiteral:     intListLiteral,
@@ -144,7 +144,7 @@ func TestIndexOfCost(t *testing.T) {
 	}{
 		{
 			opts: []string{".indexOf(%s)", ".lastIndexOf(%s)"},
-			// 10 cost for the list declaration, the rest is the due to the function call
+			// list 声明占 10 cost，其余来自函数调用
 			costs: []comparableCost{
 				{
 					comparableLiteral: intListLiteral, param: "3",
@@ -179,7 +179,7 @@ func TestIndexOfCost(t *testing.T) {
 					expectedEstimatedCost: checker.CostEstimate{Min: 21, Max: 21}, expectedRuntimeCost: 21, // +6 for casts from timestamp to byte
 				},
 
-				// index of operations are also defined for strings
+				// 字符串也定义了索引操作
 				{
 					comparableLiteral: stringLiteral, param: "'123'",
 					expectedEstimatedCost: checker.CostEstimate{Min: 5, Max: 5}, expectedRuntimeCost: 5,
@@ -310,14 +310,14 @@ func TestIPCost(t *testing.T) {
 		expectRuntimeCost  func(uint64) uint64
 	}{
 		{
-			// For just parsing the IP, the cost is expected to be the base.
+			// 仅解析 IP 时，cost 应为基础值。
 			ops:                []string{""},
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate { return c },
 			expectRuntimeCost:  func(c uint64) uint64 { return c },
 		},
 		{
 			ops: []string{".family()", ".isUnspecified()", ".isLoopback()", ".isLinkLocalMulticast()", ".isLinkLocalUnicast()", ".isGlobalUnicast()"},
-			// For most other operations, the cost is expected to be the base + 1.
+			// 大多数其他操作的 cost 应为基础值 + 1。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 1, Max: c.Max + 1}
 			},
@@ -325,7 +325,7 @@ func TestIPCost(t *testing.T) {
 		},
 		{
 			ops: []string{" == ip('192.168.0.1')"},
-			// For most other operations, the cost is expected to be the base + 1.
+			// 大多数其他操作的 cost 应为基础值 + 1。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return c.Add(ipv4BaseEstimatedCost).Add(checker.CostEstimate{Min: 1, Max: 1})
 			},
@@ -395,14 +395,14 @@ func TestCIDRCost(t *testing.T) {
 
 	cases := []testCase{
 		{
-			// For just parsing the IP, the cost is expected to be the base.
+			// 仅解析 IP 时，cost 应为基础值。
 			ops:                []string{""},
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate { return c },
 			expectRuntimeCost:  func(c uint64) uint64 { return c },
 		},
 		{
 			ops: []string{".ip()", ".prefixLength()", ".masked()"},
-			// For most other operations, the cost is expected to be the base + 1.
+			// 大多数其他操作的 cost 应为基础值 + 1。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 1, Max: c.Max + 1}
 			},
@@ -410,7 +410,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{" == cidr('2001:db8::/32')"},
-			// For most other operations, the cost is expected to be the base + 1.
+			// 大多数其他操作的 cost 应为基础值 + 1。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return c.Add(ipv6BaseEstimatedCost).Add(checker.CostEstimate{Min: 1, Max: 1})
 			},
@@ -489,7 +489,7 @@ func TestCIDRCost(t *testing.T) {
 	ipv6Cases := append(cases, []testCase{
 		{
 			ops: []string{".containsCIDR(cidr('2001:db8::/126'))"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 5, Max: c.Max + 9}
 			},
@@ -497,7 +497,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{".containsCIDR(cidr('2001:db8::/32'))"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 5, Max: c.Max + 9}
 			},
@@ -505,7 +505,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{".containsCIDR('2001:db8::/126')"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 5, Max: c.Max + 9}
 			},
@@ -513,7 +513,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{".containsCIDR('2001:db8::/32')"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 5, Max: c.Max + 9}
 			},
@@ -521,7 +521,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{".containsIP(ip('2001:db8:3333:4444:5555:6666:7777:8888'))"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 5, Max: c.Max + 8}
 			},
@@ -529,7 +529,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{".containsIP(ip('2001:db8::1'))"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 3, Max: c.Max + 6}
 			},
@@ -537,7 +537,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{".containsIP('2001:db8:3333:4444:5555:6666:7777:8888')"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 5, Max: c.Max + 8}
 			},
@@ -545,7 +545,7 @@ func TestCIDRCost(t *testing.T) {
 		},
 		{
 			ops: []string{".containsIP('2001:db8::1')"},
-			// For operations like checking if an IP is in a CIDR, the cost is expected to higher.
+			// 检查 IP 是否属于 CIDR 等操作，cost 应更高。
 			expectEsimatedCost: func(c checker.CostEstimate) checker.CostEstimate {
 				return checker.CostEstimate{Min: c.Min + 3, Max: c.Max + 6}
 			},
@@ -920,8 +920,8 @@ func TestNameFormatCost(t *testing.T) {
 		{
 			name: "format.dns1123Subdomain.validate",
 			expr: `format.named("dns1123Subdomain").value().validate("my-name")`,
-			// Estimated cost doesnt know value at runtime so it is
-			// using an estimated maximum regex length
+			// 估算 cost 时无法知道运行时的值，
+			// 因此按估计的最大正则长度计算。
 			expectEstimatedCost: checker.CostEstimate{Min: 34, Max: 34},
 			expectRuntimeCost:   17,
 		},
@@ -1018,7 +1018,7 @@ func TestSetsCost(t *testing.T) {
 		},
 		{
 			expr: `sets.contains([[1], [2, 3]], [[2, 3.0]])`,
-			// 10 for each list creation, top-level list sizes are 2, 1
+			// 每次创建 list 计 10，顶层 list 大小分别为 2、1
 			expectEstimatedCost: checker.CostEstimate{Min: 53, Max: 53},
 			expectRuntimeCost:   53,
 		},
@@ -1043,7 +1043,7 @@ func TestSetsCost(t *testing.T) {
 			expectRuntimeCost:   24,
 		},
 
-		// set equivalence (note the cost factor is higher as it's basically two contains checks)
+		// 集合等价（注意 cost 系数更高，因为本质上要做两次 contains 检查）
 		{
 			expr:                `sets.equivalent([], [])`,
 			expectEstimatedCost: checker.CostEstimate{Min: 21, Max: 21},
@@ -1215,7 +1215,7 @@ func TestSemverCost(t *testing.T) {
 			expectEstimatedCost: checker.CostEstimate{Min: 4, Max: 4},
 			expectRuntimeCost:   4,
 		},
-		// major(), minor(), patch()
+		// major()、minor()、patch()
 		{
 			name:                "major",
 			expr:                `semver("1.2.3").major()`,
@@ -1378,8 +1378,8 @@ func testCost(t *testing.T, expr string, expectEsimatedCost checker.CostEstimate
 		Format(),
 		JSONPatch(),
 		cel.OptionalTypes(),
-		// cel-go v0.17.7 introduced CostEstimatorOptions.
-		// Previous the presence has a cost of 0 but cel fixed it to 1. We still set to 0 here to avoid breaking changes.
+		// cel-go v0.17.7 引入了 CostEstimatorOptions。
+		// 此前 presence 的 cost 为 0，cel 修复后变为 1；这里仍设为 0，避免破坏兼容性。
 		cel.CostEstimatorOptions(checker.PresenceTestHasCost(false)),
 		ext.TwoVarComprehensions(),
 		SemverLib(SemverVersion(1)),
@@ -1507,12 +1507,12 @@ func TestSize(t *testing.T) {
 	}
 }
 
-// TestTypeEquality ensures that cost is tested for all custom types used by Kubernetes libraries.
+// TestTypeEquality 确保 Kubernetes 库使用的所有自定义类型都测到了 cost。
 // TestTypeEquality 确保每种自定义 CEL 类型的 Type() 唯一：若两个类型共用一个类型名，
 // 相等性判断会给出错误结果。新增类型时必须在此登记。
 func TestTypeEquality(t *testing.T) {
 	examples := map[string]ref.Val{
-		// Add example ref.Val's for custom types in Kubernetes here:
+		// 在此添加 Kubernetes 自定义类型的示例 ref.Val：
 		"kubernetes.authorization.Authorizer":    authorizerVal{},
 		"kubernetes.authorization.PathCheck":     pathCheckVal{},
 		"kubernetes.authorization.GroupCheck":    groupCheckVal{},

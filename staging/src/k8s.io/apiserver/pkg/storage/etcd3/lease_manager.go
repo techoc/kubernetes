@@ -35,15 +35,15 @@ const (
 	defaultLeaseMaxObjectCount       = 1000
 )
 
-// LeaseManagerConfig is configuration for creating a lease manager.
+// LeaseManagerConfig 是创建 lease manager 的配置。
 type LeaseManagerConfig struct {
-	// ReuseDurationSeconds specifies time in seconds that each lease is reused
+	// ReuseDurationSeconds 指定每个 lease 复用的秒数
 	ReuseDurationSeconds int64
-	// MaxObjectCount specifies how many objects that a lease can attach
+	// MaxObjectCount 指定一个 lease 可关联的对象数
 	MaxObjectCount int64
 }
 
-// NewDefaultLeaseManagerConfig creates a LeaseManagerConfig with default values
+// NewDefaultLeaseManagerConfig 创建使用默认值的 LeaseManagerConfig
 func NewDefaultLeaseManagerConfig() LeaseManagerConfig {
 	return LeaseManagerConfig{
 		ReuseDurationSeconds: defaultLeaseReuseDurationSeconds,
@@ -51,11 +51,10 @@ func NewDefaultLeaseManagerConfig() LeaseManagerConfig {
 	}
 }
 
-// leaseManager is used to manage leases requested from etcd. If a new write
-// needs a lease that has similar expiration time to the previous one, the old
-// lease will be reused to reduce the overhead of etcd, since lease operations
-// are expensive. In the implementation, we only store one previous lease,
-// since all the events have the same ttl.
+// leaseManager 管理从 etcd 请求的 lease。若新写入
+// 需要一个过期时间与上一次相近的 lease，就复用旧的，
+// 以降低 etcd 开销——lease 操作很昂贵。实现中只保存一个旧 lease，
+// 因为所有事件的 ttl 都相同。
 //
 // leaseManager 管理 etcd lease。所有事件的 TTL 相同，因此只需缓存上一个
 // lease；复用可以显著降低 LeaseGrant 调用频率。leaseMu 保护以下所有
@@ -65,16 +64,15 @@ type leaseManager struct {
 	leaseMu                 sync.Mutex
 	prevLeaseID             clientv3.LeaseID
 	prevLeaseExpirationTime time.Time
-	// The period of time in seconds and percent of TTL that each lease is
-	// reused. The minimum of them is used to avoid unreasonably large
-	// numbers.
+	// 每个 lease 的复用时长（秒）与 TTL 百分比。
+	// 取两者中较小值，避免出现不合理的大数。
 	leaseReuseDurationSeconds   int64
 	leaseReuseDurationPercent   float64
 	leaseMaxAttachedObjectCount int64
 	leaseAttachedObjectCount    int64
 }
 
-// newDefaultLeaseManager creates a new lease manager using default setting.
+// newDefaultLeaseManager 用默认设置创建一个新的 lease manager。
 //
 // 默认复用策略为 TTL 的 5%，同时受配置的秒数上限约束；MaxObjectCount
 // 非正时回退到默认值，避免配置错误导致 lease 被无限复用。
@@ -85,9 +83,9 @@ func newDefaultLeaseManager(client *clientv3.Client, config LeaseManagerConfig) 
 	return newLeaseManager(client, config.ReuseDurationSeconds, 0.05, config.MaxObjectCount)
 }
 
-// newLeaseManager creates a new lease manager with the number of buffered
-// leases, lease reuse duration in seconds and percentage. The percentage
-// value x means x*100%.
+// newLeaseManager 用指定的缓存 lease 数、复用秒数与百分比创建新的 lease manager。
+//
+// 百分比值 x 表示 x*100%。
 func newLeaseManager(client *clientv3.Client, leaseReuseDurationSeconds int64, leaseReuseDurationPercent float64, maxObjectCount int64) *leaseManager {
 	return &leaseManager{
 		client:                      client,
@@ -97,8 +95,8 @@ func newLeaseManager(client *clientv3.Client, leaseReuseDurationSeconds int64, l
 	}
 }
 
-// GetLease returns a lease based on requested ttl: if the cached previous
-// lease can be reused, reuse it; otherwise request a new one from etcd.
+// GetLease 根据请求的 ttl 返回 lease：缓存的旧 lease 可复用就复用，
+// 否则向 etcd 请求新的。
 //
 // GetLease 的复用条件必须同时满足：
 //  1. 旧 lease 在 now+ttl 时仍未过期（valid），保证写入的对象活到预期
@@ -113,38 +111,37 @@ func (l *leaseManager) GetLease(ctx context.Context, ttl int64) (clientv3.LeaseI
 	now := time.Now()
 	l.leaseMu.Lock()
 	defer l.leaseMu.Unlock()
-	// check if previous lease can be reused
+	// 检查旧 lease 是否可复用
 	reuseDurationSeconds := l.getReuseDurationSecondsLocked(ttl)
 	valid := now.Add(time.Duration(ttl) * time.Second).Before(l.prevLeaseExpirationTime)
 	sufficient := now.Add(time.Duration(ttl+reuseDurationSeconds) * time.Second).After(l.prevLeaseExpirationTime)
 
-	// We count all operations that happened in the same lease, regardless of success or failure.
-	// Currently each GetLease call only attach 1 object
+	// 统计同一 lease 中的所有操作，无论成功或失败。
+	// 目前每次 GetLease 调用只关联 1 个对象
 	l.leaseAttachedObjectCount++
 
 	if valid && sufficient && l.leaseAttachedObjectCount <= l.leaseMaxAttachedObjectCount {
 		return l.prevLeaseID, nil
 	}
 
-	// request a lease with a little extra ttl from etcd
+	// 向 etcd 请求一个稍长 ttl 的 lease
 	// 多要一个复用窗口，使 lease 在最后一个对象 TTL 到期后仍短暂存活。
 	ttl += reuseDurationSeconds
 	lcr, err := l.client.Lease.Grant(ctx, ttl)
 	if err != nil {
 		return clientv3.LeaseID(0), err
 	}
-	// cache the new lease id
+	// 缓存新的 lease id
 	l.prevLeaseID = lcr.ID
 	l.prevLeaseExpirationTime = now.Add(time.Duration(ttl) * time.Second)
-	// refresh count
+	// 刷新计数
 	metrics.UpdateLeaseObjectCount(l.leaseAttachedObjectCount)
 	l.leaseAttachedObjectCount = 1
 	return lcr.ID, nil
 }
 
-// getReuseDurationSecondsLocked returns the reusable duration in seconds
-// based on the configuration. Lock has to be acquired before calling this
-// function.
+// getReuseDurationSecondsLocked 根据配置返回可复用的秒数。
+// 调用前必须持有锁。
 //
 // 取 TTL 百分比与绝对秒数上限中的较小值，防止 TTL 很大时复用窗口随之
 // 膨胀。

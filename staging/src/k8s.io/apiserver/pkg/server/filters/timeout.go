@@ -34,7 +34,7 @@ import (
 	"k8s.io/apiserver/pkg/server/httplog"
 )
 
-// WithTimeoutForNonLongRunningRequests times out non-long-running requests after the time given by timeout.
+// WithTimeoutForNonLongRunningRequests 在给定时间后让非长时运行请求超时。
 //
 // 只对非长时请求生效：watch、exec、proxy 等长连接若被 60s 超时切断，功能会直接不可用。
 // 超时由请求 context 的 deadline 驱动（上游的 WithRequestDeadline 设置），此处不再自设时长。
@@ -43,12 +43,12 @@ func WithTimeoutForNonLongRunningRequests(handler http.Handler, longRunning apir
 		return handler
 	}
 	timeoutFunc := func(req *http.Request) (*http.Request, bool, func(), *apierrors.StatusError) {
-		// TODO unify this with apiserver.MaxInFlightLimit
+		// TODO 与 apiserver.MaxInFlightLimit 统一
 		ctx := req.Context()
 
 		requestInfo, ok := apirequest.RequestInfoFrom(ctx)
 		if !ok {
-			// if this happens, the handler chain isn't setup correctly because there is no request info
+			// 若发生这种情况，说明 handler 链装配有误——没有 request info
 			return req, false, func() {}, apierrors.NewInternalError(fmt.Errorf("no request info found for request during timeout"))
 		}
 
@@ -68,15 +68,15 @@ func WithTimeoutForNonLongRunningRequests(handler http.Handler, longRunning apir
 // timeoutFunc 根据请求决定是否跳过超时控制（长时请求），并给出超时时的错误与收尾回调。
 type timeoutFunc = func(*http.Request) (req *http.Request, longRunning bool, postTimeoutFunc func(), err *apierrors.StatusError)
 
-// WithTimeout returns an http.Handler that runs h with a timeout
-// determined by timeoutFunc. The new http.Handler calls h.ServeHTTP to handle
-// each request, but if a call runs for longer than its time limit, the
-// handler responds with a 504 Gateway Timeout error and the message
-// provided. (If msg is empty, a suitable default message will be sent.) After
-// the handler times out, writes by h to its http.ResponseWriter will return
-// http.ErrHandlerTimeout. If timeoutFunc returns a nil timeout channel, no
-// timeout will be enforced. recordFn is a function that will be invoked whenever
-// a timeout happens.
+// WithTimeout 返回一个 http.Handler，它用 timeoutFunc 决定的超时时间运行 h。
+// 新的 http.Handler 调用 h.ServeHTTP 处理每个请求，但若执行时间
+// 超过限制，handler 会以 504 Gateway Timeout 错误及给定的消息
+// 响应。（msg 为空时发送合适的默认消息。）超时之后，
+// h 对其 http.ResponseWriter 的写入将返回
+// http.ErrHandlerTimeout。若 timeoutFunc 返回 nil 超时 channel，则不
+// 强制超时。recordFn 在每次超时时被调用。
+//
+// 强制超时。recordFn 在每次超时时被调用。
 func WithTimeout(h http.Handler, timeoutFunc timeoutFunc) http.Handler {
 	return &timeoutHandler{h, timeoutFunc}
 }
@@ -99,21 +99,21 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	timeoutCh := r.Context().Done()
 
-	// resultCh is used as both errCh and stopCh
+	// resultCh 同时用作 errCh 与 stopCh
 	resultCh := make(chan interface{})
 	var tw timeoutWriter
 	tw, w = newTimeoutWriter(w)
 
-	// Make a copy of request and work on it in new goroutine
-	// to avoid race condition when accessing/modifying request (e.g. headers)
+	// 拷贝 request 并在新 goroutine 中处理，
+	// 避免访问/修改 request（如 header）时发生竞态
 	rCopy := r.Clone(r.Context())
 	go func() {
 		defer func() {
 			err := recover()
-			// do not wrap the sentinel ErrAbortHandler panic value
+			// 不包装哨兵值 ErrAbortHandler
 			if err != nil && err != http.ErrAbortHandler {
-				// Same as stdlib http server code. Manually allocate stack
-				// trace buffer size to prevent excessively large logs
+				// 与标准库 http server 代码一致。手动指定栈
+				// trace 缓冲区大小，避免日志过大
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
@@ -126,7 +126,7 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 	select {
 	case err := <-resultCh:
-		// panic if error occurs; stop otherwise
+		// 发生错误则 panic，否则停止
 		//
 		// 把 panic 重新抛到处理请求的 goroutine 上，交给 http.Server 统一记录与断连，
 		// 保持与未包装时一致的可观测行为。
@@ -136,9 +136,9 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case <-timeoutCh:
 		defer func() {
-			// resultCh needs to have a reader, since the function doing
-			// the work needs to send to it. This is defer'd to ensure it runs
-			// ever if the post timeout work itself panics.
+			// resultCh 必须有读者，因为执行工作的函数
+			// 需要向它发送结果。用 defer 确保即使超时后的处理本身 panic，
+			// 也仍会执行。
 			//
 			// 后台 goroutine 稍后收尾：记录超时后处理器又运行了多久，用于发现“卡死”的 handler。
 			go func() {
@@ -147,7 +147,7 @@ func (t *timeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 				status := metrics.PostTimeoutHandlerOK
 				if res != nil {
-					// a non nil res indicates that there was a panic.
+					// res 非 nil 表示发生了 panic。
 					status = metrics.PostTimeoutHandlerPanic
 				}
 
@@ -188,15 +188,15 @@ var _ responsewriter.UserProvidedDecorator = &baseTimeoutWriter{}
 type baseTimeoutWriter struct {
 	w http.ResponseWriter
 
-	// headers written by the normal handler
+	// 正常 handler 写入的 header
 	handlerHeaders http.Header
 
 	mu sync.Mutex
-	// if the timeout handler has timeout
+	// 超时 handler 是否已超时
 	timedOut bool
-	// if this timeout writer has wrote header
+	// 该 timeout writer 是否已写入 header
 	wroteHeader bool
-	// if this timeout writer has been hijacked
+	// 该 timeout writer 是否已被劫持
 	hijacked bool
 }
 
@@ -244,8 +244,8 @@ func (tw *baseTimeoutWriter) Flush() {
 		return
 	}
 
-	// the outer ResponseWriter object returned by WrapForHTTP1Or2 implements
-	// http.Flusher if the inner object (tw.w) implements http.Flusher.
+	// 当内部对象（tw.w）实现 http.Flusher 时，
+	// WrapForHTTP1Or2 返回的外层 ResponseWriter 也实现 http.Flusher。
 	tw.w.(http.Flusher).Flush()
 }
 
@@ -276,28 +276,27 @@ func (tw *baseTimeoutWriter) timeout(err *apierrors.StatusError) {
 
 	tw.timedOut = true
 
-	// The timeout writer has not been used by the inner handler.
-	// We can safely timeout the HTTP request by sending by a timeout
-	// handler
+	// 内部 handler 尚未使用 timeout writer。
+	// 此时可安全地用超时 handler 让
+	// HTTP 请求超时。
 	if !tw.wroteHeader && !tw.hijacked {
 		tw.w.WriteHeader(http.StatusGatewayTimeout)
 		enc := json.NewEncoder(tw.w)
 		enc.Encode(&err.ErrStatus)
 	} else {
-		// The timeout writer has been used by the inner handler. There is
-		// no way to timeout the HTTP request at the point. We have to shutdown
-		// the connection for HTTP1 or reset stream for HTTP2.
+		// 内部 handler 已使用 timeout writer。此时
+		// 无法再让 HTTP 请求超时，只能关闭 HTTP1 连接
+		// 或重置 HTTP2 流。
 		//
-		// Note from the golang's docs:
-		// If ServeHTTP panics, the server (the caller of ServeHTTP) assumes
-		// that the effect of the panic was isolated to the active request.
-		// It recovers the panic, logs a stack trace to the server error log,
-		// and either closes the network connection or sends an HTTP/2
-		// RST_STREAM, depending on the HTTP protocol. To abort a handler so
-		// the client sees an interrupted response but the server doesn't log
-		// an error, panic with the value ErrAbortHandler.
+		// Go 文档说明：
+		// 若 ServeHTTP panic，服务器（ServeHTTP 的调用方）会认为
+		// panic 的影响仅限当前活动请求。
+		// 它会恢复 panic，向服务器错误日志记录栈跟踪，
+		// 并根据 HTTP 协议关闭网络连接或发送 HTTP/2
+		// RST_STREAM。若要中止 handler，使客户端看到响应中断但服务器不记录
+		// 错误，应使用 ErrAbortHandler 作为 panic 值。
 		//
-		// We are throwing http.ErrAbortHandler deliberately so that a client is notified and to suppress a not helpful stacktrace in the logs
+		// 特意抛出 http.ErrAbortHandler，既让客户端得到通知，又避免日志中出现无用的栈跟踪
 		//
 		// 已经写出 header 时无法再改状态码，唯一能让客户端知道“响应不完整”的办法就是断开连接。
 		panic(http.ErrAbortHandler)
@@ -315,8 +314,8 @@ func (tw *baseTimeoutWriter) CloseNotify() <-chan bool {
 		return done
 	}
 
-	// the outer ResponseWriter object returned by WrapForHTTP1Or2 implements
-	// http.CloseNotifier if the inner object (tw.w) implements http.CloseNotifier.
+	// 当内部对象（tw.w）实现 http.CloseNotifier 时，
+	// WrapForHTTP1Or2 返回的外层 ResponseWriter 也实现 http.CloseNotifier。
 	return tw.w.(http.CloseNotifier).CloseNotify()
 }
 
@@ -330,8 +329,8 @@ func (tw *baseTimeoutWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return nil, nil, http.ErrHandlerTimeout
 	}
 
-	// the outer ResponseWriter object returned by WrapForHTTP1Or2 implements
-	// http.Hijacker if the inner object (tw.w) implements http.Hijacker.
+	// 当内部对象（tw.w）实现 http.Hijacker 时，
+	// WrapForHTTP1Or2 返回的外层 ResponseWriter 也实现 http.Hijacker。
 	conn, rw, err := tw.w.(http.Hijacker).Hijack()
 	if err == nil {
 		tw.hijacked = true

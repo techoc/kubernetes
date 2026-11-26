@@ -188,9 +188,9 @@ func compactWatch(c *CacheDelegator, client *clientv3.Client) storagetesting.Com
 		}
 
 		if len(c.cacher.watchers.allWatchers) > 0 || len(c.cacher.watchers.valueWatchers) > 0 {
-			// We could consider terminating those watchers, but given
-			// watchcache doesn't really support compaction and we don't
-			// exercise it in tests, we just throw an error here.
+			// 可以考虑终止这些 watcher，但考虑到
+			// watchcache 并不真正支持压缩，测试中也
+			// 不涉及它，这里直接抛错。
 			t.Error("Open watchers are not supported during compaction")
 		}
 
@@ -225,7 +225,7 @@ func compactStore(c *CacheDelegator, client *clientv3.Client) storagetesting.Com
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Wait for compaction to be observed.
+		// 等待观察到压缩完成。
 		if c.cacher.compactor != nil {
 			for {
 				select {

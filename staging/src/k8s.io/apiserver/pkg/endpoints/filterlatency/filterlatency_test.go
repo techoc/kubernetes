@@ -206,7 +206,7 @@ func TestStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	fakeRecorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(fakeRecorder))
 
-	// base handler func
+	// 基础 handler 函数
 	var callCount int
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		// 预期处理器恰好被调用一次。
@@ -245,7 +245,7 @@ func TestNestedStartedAndCompletedOpenTelemetryTracing(t *testing.T) {
 	fakeRecorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(fakeRecorder))
 
-	// base handler func
+	// 基础 handler 函数
 	var callCount int
 	handler := http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		// 预期处理器恰好被调用一次。

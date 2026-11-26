@@ -28,7 +28,7 @@ type Reader interface {
 	GetFlagz() map[string]string
 }
 
-// NamedFlagSetsReader implements Reader for cliflag.NamedFlagSets
+// NamedFlagSetsReader 为 cliflag.NamedFlagSets 实现 Reader
 type NamedFlagSetsReader struct {
 	FlagSets cliflag.NamedFlagSets
 }

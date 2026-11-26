@@ -25,14 +25,14 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 /*
-EncryptionConfiguration stores the complete configuration for encryption providers.
-It also allows the use of wildcards to specify the resources that should be encrypted.
-Use '*.<group>' to encrypt all resources within a group or '*.*' to encrypt all resources.
-'*.' can be used to encrypt all resource in the core group.  '*.*' will encrypt all
-resources, even custom resources that are added after API server start.
-Use of wildcards that overlap within the same resource list or across multiple
-entries are not allowed since part of the configuration would be ineffective.
-Resource lists are processed in order, with earlier lists taking precedence.
+EncryptionConfiguration 保存加密提供方的完整配置。
+可用通配符指定需要加密的资源。
+用 '*.<group>' 加密某组内所有资源，'*.*' 加密所有资源；
+'*.' 表示核心组内的所有资源。'*.*' 连 apiserver 启动后新增的
+自定义资源也会加密。
+同一资源列表内或不同条目间的通配符若相互重叠则不允许，
+因为重叠部分的配置不会生效。
+资源列表按顺序处理，靠前的列表优先。
 
 为什么顺序重要：解密时必须能用写入时的同一个 provider 读回数据，因此
 配置是“读优先”的有序列表——排在前面的 provider 先尝试解密，而写入始终
@@ -73,96 +73,90 @@ Example:
 */
 type EncryptionConfiguration struct {
 	metav1.TypeMeta
-	// resources is a list containing resources, and their corresponding encryption providers.
+	// resources 是资源列表及其对应的加密提供方
 	//
 	// 每个条目独立匹配一组资源；列表顺序即解密尝试顺序。
 	Resources []ResourceConfiguration
 }
 
-// ResourceConfiguration stores per resource configuration.
+// ResourceConfiguration 保存单个资源的配置
 //
 // 资源名使用 "resource" 或 "resource.group" 形式（注意不是 GVK），
 // 与 RBAC 中的资源表示保持一致。
 type ResourceConfiguration struct {
-	// resources is a list of kubernetes resources which have to be encrypted. The resource names are derived from `resource` or `resource.group` of the group/version/resource.
-	// eg: pandas.awesome.bears.example is a custom resource with 'group': awesome.bears.example, 'resource': pandas.
-	// Use '*.*' to encrypt all resources and '*.<group>' to encrypt all resources in a specific group.
-	// eg: '*.awesome.bears.example' will encrypt all resources in the group 'awesome.bears.example'.
-	// eg: '*.' will encrypt all resources in the core group (such as pods, configmaps, etc).
+	// resources 是需要加密的 Kubernetes 资源列表。资源名取自 group/version/resource
+	// 中的 `resource` 或 `resource.group`，例如自定义资源
+	// pandas.awesome.bears.example 的 group 为 awesome.bears.example、resource 为 pandas。
+	// 用 '*.*' 加密所有资源，用 '*.<group>' 加密指定组内所有资源，
+	// 例如 '*.awesome.bears.example' 加密 awesome.bears.example 组的所有资源，
 	Resources []string
-	// providers is a list of transformers to be used for reading and writing the resources to disk.
-	// eg: aesgcm, aescbc, secretbox, identity, kms.
+	// '*.' 则加密核心组（如 pods、configmaps 等）的所有资源。
+	// providers 是用于读写磁盘资源的 transformer 列表，
 	Providers []ProviderConfiguration
 }
 
-// ProviderConfiguration stores the provided configuration for an encryption provider.
-//
+// ProviderConfiguration 保存加密提供方的配置
 // 各字段互斥：同一 provider 条目中只能设置一个 transformer，校验在
 // validation 包中完成。
 type ProviderConfiguration struct {
-	// aesgcm is the configuration for the AES-GCM transformer.
+	// aesgcm 是 AES-GCM transformer 的配置
 	AESGCM *AESConfiguration
-	// aescbc is the configuration for the AES-CBC transformer.
+	// aescbc 是 AES-CBC transformer 的配置
 	AESCBC *AESConfiguration
-	// secretbox is the configuration for the Secretbox based transformer.
+	// secretbox 是基于 Secretbox 的 transformer 的配置
 	Secretbox *SecretboxConfiguration
-	// identity is the (empty) configuration for the identity transformer.
+	// identity 是 identity transformer 的空配置
 	Identity *IdentityConfiguration
-	// kms contains the name, cache size and path to configuration file for a KMS based envelope transformer.
+	// kms 包含基于 KMS 的 envelope transformer 的名称、缓存大小和配置文件路径
 	KMS *KMSConfiguration
 }
 
-// AESConfiguration contains the API configuration for an AES transformer.
+// AESConfiguration 保存 AES transformer 的 API 配置
 type AESConfiguration struct {
-	// keys is a list of keys to be used for creating the AES transformer.
-	// Each key has to be 32 bytes long for AES-CBC and 16, 24 or 32 bytes for AES-GCM.
+	// keys 是用于创建 AES transformer 的密钥列表。
 	Keys []Key
 }
 
-// SecretboxConfiguration contains the API configuration for an Secretbox transformer.
+// SecretboxConfiguration 保存 Secretbox transformer 的 API 配置
 type SecretboxConfiguration struct {
-	// keys is a list of keys to be used for creating the Secretbox transformer.
-	// Each key has to be 32 bytes long.
+	// keys 是用于创建 Secretbox transformer 的密钥列表。
 	Keys []Key
 }
 
-// Key contains name and secret of the provided key for a transformer.
+// Key 包含 transformer 所用密钥的名称与秘密值
 type Key struct {
-	// name is the name of the key to be used while storing data to disk.
+	// name 是数据写入磁盘时标识密钥的名称
 	Name string
-	// secret is the actual key, encoded in base64.
+	// secret 是实际密钥，以 base64 编码
 	Secret string
 }
 
-// String implements Stringer interface in a log safe way.
-//
+// String 以日志安全的方式实现 Stringer 接口
 // 密钥材料绝不能进日志：这里只输出名称，Secret 固定替换为 [REDACTED]。
 // 所有打印 Key 的地方都应依赖该方法，而不是 fmt 结构体。
 func (k Key) String() string {
 	return fmt.Sprintf("Name: %s, Secret: [REDACTED]", k.Name)
 }
 
-// IdentityConfiguration is an empty struct to allow identity transformer in provider configuration.
-// identity 表示明文存储，常用于关闭特定资源的加密（例如 events）。
+// IdentityConfiguration 是空结构体，用于在 provider 配置中启用 identity transformer
 type IdentityConfiguration struct{}
 
-// KMSConfiguration contains the name, cache size and path to configuration file for a KMS based envelope transformer.
-//
+// KMSConfiguration 包含基于 KMS 的 envelope transformer 的名称、缓存大小和配置文件路径
 // KMS 负责保护 DEK，真正的数据加密由本地 AES 完成；因此 KMS 不可用时
 // 已有数据仍可读取（只要 DEK 已缓存），但新写入会失败。
 type KMSConfiguration struct {
-	// apiVersion of KeyManagementService
+	// KeyManagementService 的 apiVersion
 	// +optional
 	APIVersion string
-	// name is the name of the KMS plugin to be used.
+	// name 是使用的 KMS 插件名称
 	Name string
-	// cachesize is the maximum number of secrets which are cached in memory. The default value is 1000.
-	// Set to a negative value to disable caching. This field is only allowed for KMS v1 providers.
+	// cachesize 是内存中缓存 secret 的最大数量，默认 1000。
+	// 设为负值可禁用缓存。此字段只允许用于 KMS v1 provider。
 	// +optional
 	CacheSize *int32
-	// endpoint is the gRPC server listening address, for example "unix:///var/run/kms-provider.sock".
+	// endpoint 是 gRPC 服务器监听地址，例如 "unix:///var/run/kms-provider.sock"。
 	Endpoint string
-	// timeout for gRPC calls to kms-plugin (ex. 5s). The default is 3 seconds.
+	// 调用 kms-plugin 的 gRPC 超时时间（如 5s），默认 3 秒。
 	// +optional
 	Timeout *metav1.Duration
 }

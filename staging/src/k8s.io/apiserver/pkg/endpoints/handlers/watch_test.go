@@ -84,7 +84,7 @@ func TestWatchHTTPErrors(t *testing.T) {
 	}
 	serializer := info.StreamSerializer
 
-	// Setup a new watchserver
+	// 新建一个 watchserver
 	watchServer := &WatchServer{
 		Scope:    &RequestScope{},
 		Watching: watcher,
@@ -100,7 +100,7 @@ func TestWatchHTTPErrors(t *testing.T) {
 	s := httptest.NewServer(serveWatch(watcher, watchServer, nil))
 	defer s.Close()
 
-	// Setup a client
+	// 新建一个客户端
 	dest, _ := url.Parse(s.URL)
 	dest.Path = "/" + namedGroupPrefix + "/" + testGroupV2.Group + "/" + testGroupV2.Version + "/simple"
 	dest.RawQuery = "watch=true"
@@ -153,7 +153,7 @@ func TestWatchHTTPErrorsBeforeServe(t *testing.T) {
 	}
 	serializer := info.StreamSerializer
 
-	// Setup a new watchserver
+	// 新建一个 watchserver
 	watchServer := &WatchServer{
 		Scope: &RequestScope{
 			Serializer: runtime.NewSimpleNegotiatedSerializer(info),
@@ -175,7 +175,7 @@ func TestWatchHTTPErrorsBeforeServe(t *testing.T) {
 	s := httptest.NewServer(serveWatch(watcher, watchServer, statusErr))
 	defer s.Close()
 
-	// Setup a client
+	// 新建一个客户端
 	dest, _ := url.Parse(s.URL)
 	dest.Path = "/" + namedGroupPrefix + "/" + testGroupV2.Group + "/" + testGroupV2.Version + "/simple"
 	dest.RawQuery = "watch=true"
@@ -222,7 +222,7 @@ func TestWatchHTTPDynamicClientErrors(t *testing.T) {
 	}
 	serializer := info.StreamSerializer
 
-	// Setup a new watchserver
+	// 新建一个 watchserver
 	watchServer := &WatchServer{
 		Scope:    &RequestScope{},
 		Watching: watcher,
@@ -262,7 +262,7 @@ func TestWatchHTTPTimeout(t *testing.T) {
 	}
 	serializer := info.StreamSerializer
 
-	// Setup a new watchserver
+	// 新建一个 watchserver
 	watchServer := &WatchServer{
 		Scope:    &RequestScope{},
 		Watching: watcher,
@@ -278,7 +278,7 @@ func TestWatchHTTPTimeout(t *testing.T) {
 	s := httptest.NewServer(serveWatch(watcher, watchServer, nil))
 	defer s.Close()
 
-	// Setup a client
+	// 新建一个客户端
 	dest, _ := url.Parse(s.URL)
 	dest.Path = "/" + namedGroupPrefix + "/" + testGroupV2.Group + "/" + testGroupV2.Version + "/simple"
 	dest.RawQuery = "watch=true"
@@ -466,7 +466,7 @@ func TestWatchEventSizes(t *testing.T) {
 			s := httptest.NewServer(serveWatch(watcher, watchServer, nil))
 			defer s.Close()
 
-			// Setup a client
+			// 新建一个客户端
 			dest, _ := url.Parse(s.URL)
 			dest.Path = "/" + namedGroupPrefix + "/" + testGroupV2.Group + "/" + testGroupV2.Version + "/simple"
 			dest.RawQuery = "watch=true"

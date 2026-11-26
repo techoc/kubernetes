@@ -53,20 +53,20 @@ const (
 	DefaultReadinessTimeout = 2 * time.Second
 )
 
-// TransportConfig holds all connection related info,  i.e. equal TransportConfig means equal servers we talk to.
+// TransportConfig 保存所有连接相关信息，即 TransportConfig 相同意味着通信的服务器相同。
 //
 // 可比较性是刻意设计的：上层以 TransportConfig 作为键来复用 etcd 客户端，
 // 因此新增字段必须保持可比较（不要加入 slice/map/func 之外的不可比较类型）。
 type TransportConfig struct {
-	// ServerList is the list of storage servers to connect with.
+	// ServerList 是要连接的存储服务器列表。
 	ServerList []string
-	// TLS credentials
+	// TLS 凭据
 	KeyFile       string
 	CertFile      string
 	TrustedCAFile string
-	// function to determine the egress dialer. (i.e. konnectivity server dialer)
+	// 决定出站 dialer 的函数（如 konnectivity server dialer）
 	EgressLookup egressselector.Lookup
-	// The TracerProvider can add tracing the connection
+	// TracerProvider 可为连接添加追踪
 	TracerProvider oteltrace.TracerProvider
 }
 
@@ -74,50 +74,50 @@ type TransportConfig struct {
 // 一个 Config 描述“同一组 etcd 服务器上的同一套编码/加密设置”，可被多个
 // GroupResource 共享；按资源特化的部分见 ConfigForResource。
 type Config struct {
-	// Type defines the type of storage backend. Default ("") is "etcd3".
+	// Type 定义存储后端的类型。默认值（""）为 "etcd3"。
 	Type string
-	// Prefix is the prefix to all keys passed to storage.Interface methods.
+	// Prefix 是传给 storage.Interface 方法的所有 key 的前缀。
 	Prefix string
-	// Transport holds all connection related info, i.e. equal TransportConfig means equal servers we talk to.
+	// Transport 保存所有连接相关信息，即 TransportConfig 相同意味着通信的服务器相同。
 	Transport TransportConfig
 
 	Codec runtime.Codec
-	// EncodeVersioner is the same groupVersioner used to build the
-	// storage encoder. Given a list of kinds the input object might belong
-	// to, the EncodeVersioner outputs the gvk the object will be
-	// converted to before persisted in etcd.
+	// EncodeVersioner 与构建存储编码器时使用的 groupVersioner 相同。
+	// 给定输入对象可能属于的 kind 列表，EncodeVersioner 输出该对象
+	// 在持久化到 etcd 前会被转换成的 gvk。
+	//
 	EncodeVersioner runtime.GroupVersioner
-	// Transformer allows the value to be transformed prior to persisting into etcd.
+	// Transformer 允许在持久化到 etcd 前对值做变换。
 	Transformer value.Transformer
 
 	// CompactionInterval 是 apiserver 向 etcd 发起压缩请求的间隔；为 0 表示不发起压缩。
 	// 压缩是回收 etcd 历史版本空间的手段，缺失会导致 etcd 磁盘无限增长。
 	CompactionInterval time.Duration
-	// CountMetricPollPeriod specifies how often should count metric be updated
+	// CountMetricPollPeriod 指定计数指标的更新频率
 	CountMetricPollPeriod time.Duration
-	// DBMetricPollInterval specifies how often should storage backend metric be updated.
+	// DBMetricPollInterval 指定存储后端指标的更新频率。
 	DBMetricPollInterval time.Duration
-	// EventsHistoryWindow specifies minimum history duration that storage is keeping.
+	// EventsHistoryWindow 指定存储保留的最短历史时长。
 	EventsHistoryWindow time.Duration
-	// HealthcheckTimeout specifies the timeout used when checking health
+	// HealthcheckTimeout 指定健康检查使用的超时
 	HealthcheckTimeout time.Duration
-	// ReadycheckTimeout specifies the timeout used when checking readiness
+	// ReadycheckTimeout 指定就绪检查使用的超时
 	ReadycheckTimeout time.Duration
 
 	// LeaseManagerConfig 控制 etcd3 租约的复用与回收参数。
 	LeaseManagerConfig etcd3.LeaseManagerConfig
 
-	// StorageObjectCountTracker is used to keep track of the total
-	// number of objects in the storage per resource.
+	// StorageObjectCountTracker 用于跟踪存储中
+	// 每个资源的对象总数。
 	StorageObjectCountTracker flowcontrolrequest.StorageObjectCountTracker
 }
 
-// ConfigForResource is a Config specialized to a particular `schema.GroupResource`
+// ConfigForResource 是专用于特定 `schema.GroupResource` 的 Config
 type ConfigForResource struct {
-	// Config is the resource-independent configuration
+	// Config 是与资源无关的配置
 	Config
 
-	// GroupResource is the relevant one
+	// GroupResource 是相关的资源
 	GroupResource schema.GroupResource
 }
 

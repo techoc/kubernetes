@@ -84,10 +84,10 @@ func TestServerRunWithSNI(t *testing.T) {
 		SNICerts          []NamedTestCertSpec
 		ExpectedCertIndex int
 
-		// passed in the client hello info, "localhost" if unset
+		// 在 client hello 信息中传入，"未设置"时为 "localhost"
 		ServerName string
 
-		// optional ip or hostname to pass to NewLoopbackClientConfig
+		// 传给 NewLoopbackClientConfig 的可选 IP 或主机名
 		LoopbackClientBindAddressOverride string
 	}{
 		"only one cert": {
@@ -136,8 +136,8 @@ func TestServerRunWithSNI(t *testing.T) {
 			ServerName:        "test.com",
 		},
 		"matching IP in SNI cert and the server cert": {
-			// IPs must not be passed via SNI. Hence, the ServerName in the
-			// HELLO packet is empty and the server should select the non-SNI cert.
+			// IP 不能通过 SNI 传递，因此 HELLO 包中的 ServerName
+			// 为空，服务器应选择非 SNI 证书。
 			Cert: TestCertSpec{
 				host: "localhost",
 				ips:  []string{"10.0.0.1", "127.0.0.1"},
@@ -231,7 +231,7 @@ func TestServerRunWithSNI(t *testing.T) {
 			ctx, cancel := context.WithCancelCause(ctx)
 			defer cancel(errors.New("test has completed"))
 
-			// create server cert
+			// 创建服务端证书
 			certDir := "testdata/" + specToName(test.Cert)
 			serverCertBundleFile := filepath.Join(certDir, "cert")
 			serverKeyFile := filepath.Join(certDir, "key")
@@ -245,7 +245,7 @@ func TestServerRunWithSNI(t *testing.T) {
 			}
 			caCerts := []*x509.Certificate{ca}
 
-			// create SNI certs
+			// 创建 SNI 证书
 			var namedCertKeys []cliflag.NamedCertKey
 			serverSig, err := certFileSignature(serverCertBundleFile, serverKeyFile)
 			if err != nil {
@@ -275,7 +275,7 @@ func TestServerRunWithSNI(t *testing.T) {
 				}
 				caCerts = append(caCerts, ca)
 
-				// store index in namedCertKeys with the signature as the key
+				// 以签名为 key，把索引存入 namedCertKeys
 				sig, err := certFileSignature(certBundleFile, keyFile)
 				if err != nil {
 					t.Fatalf("failed get SNI cert %d signature: %v", j, err)
@@ -283,7 +283,7 @@ func TestServerRunWithSNI(t *testing.T) {
 				signatures[sig] = j
 			}
 
-			// launch server
+			// 启动服务器
 			config := setUp(t)
 			info := fakeVersionInfo()
 			config.EffectiveVersion = basecompatibility.NewEffectiveVersionFromString(fmt.Sprintf("%s.%s", info.Major, info.Minor), "", "")
@@ -300,14 +300,14 @@ func TestServerRunWithSNI(t *testing.T) {
 				DisableHTTP2Serving: true,
 				SNICertKeys:         namedCertKeys,
 			}).WithLoopback()
-			// use a random free port
+			// 使用随机空闲端口
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			if err != nil {
 				t.Fatalf("failed to listen on 127.0.0.1:0")
 			}
 
 			secureOptions.Listener = ln
-			// get port
+			// 获取端口
 			secureOptions.BindPort = ln.Addr().(*net.TCPAddr).Port
 			config.LoopbackClientConfig = &restclient.Config{}
 			if err := secureOptions.ApplyTo(&config.SecureServing, &config.LoopbackClientConfig); err != nil {
@@ -319,7 +319,7 @@ func TestServerRunWithSNI(t *testing.T) {
 				t.Fatalf("failed creating the server: %v", err)
 			}
 
-			// add poststart hook to know when the server is up.
+			// 添加 poststart hook 以获知服务器何时就绪。
 			startedCh := make(chan struct{})
 			s.AddPostStartHookOrDie("test-notifier", func(context server.PostStartHookContext) error {
 				close(startedCh)
@@ -333,7 +333,7 @@ func TestServerRunWithSNI(t *testing.T) {
 				}
 			}()
 
-			// load ca certificates into a pool
+			// 把 CA 证书加载进 pool
 			roots := x509.NewCertPool()
 			for _, caCert := range caCerts {
 				roots.AddCert(caCert)
@@ -341,7 +341,7 @@ func TestServerRunWithSNI(t *testing.T) {
 
 			<-startedCh
 
-			// try to dial
+			// 尝试拨号
 			addr := fmt.Sprintf("localhost:%d", secureOptions.BindPort)
 			t.Logf("Dialing %s as %q", addr, test.ServerName)
 			conn, err := tls.Dial("tcp", addr, &tls.Config{
@@ -353,7 +353,7 @@ func TestServerRunWithSNI(t *testing.T) {
 			}
 			defer conn.Close()
 
-			// check returned server certificate
+			// 检查返回的服务端证书
 			sig := x509CertSignature(conn.ConnectionState().PeerCertificates[0])
 			gotCertIndex, found := signatures[sig]
 			if !found {
@@ -363,7 +363,7 @@ func TestServerRunWithSNI(t *testing.T) {
 				t.Errorf("expected cert index %d, got cert index %d", test.ExpectedCertIndex, gotCertIndex)
 			}
 
-			// check that the loopback client can connect
+			// 检查 loopback 客户端能否连接
 			host := "127.0.0.1"
 			if len(test.LoopbackClientBindAddressOverride) != 0 {
 				host = test.LoopbackClientBindAddressOverride
@@ -440,7 +440,7 @@ func caCertFromBundle(bundlePath string) (*x509.Certificate, error) {
 		return nil, err
 	}
 
-	// fetch last block
+	// 取最后一块
 	var block *pem.Block
 	for {
 		var nextBlock *pem.Block
@@ -491,9 +491,9 @@ func fakeVersionInfo() version.Info {
 	return baseVer
 }
 
-// generateSelfSignedCertKey creates a self-signed certificate and key for the given host.
-// Host may be an IP or a DNS name
-// You may also specify additional subject alt names (either ip or dns names) for the certificate
+// generateSelfSignedCertKey 为给定 host 创建自签名证书和 key。
+// Host 可以是 IP 或 DNS 名称
+// 也可为证书指定额外的 subject alt name（IP 或 DNS 名称）
 //
 // 证书同时带 IsCA=true，便于测试直接把叶子证书当作信任根。
 func generateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS []string) ([]byte, []byte, error) {
@@ -530,13 +530,13 @@ func generateSelfSignedCertKey(host string, alternateIPs []net.IP, alternateDNS 
 		return nil, nil, err
 	}
 
-	// Generate cert
+	// 生成证书
 	certBuffer := bytes.Buffer{}
 	if err := pem.Encode(&certBuffer, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
 		return nil, nil, err
 	}
 
-	// Generate key
+	// 生成 key
 	keyBuffer := bytes.Buffer{}
 	if err := pem.Encode(&keyBuffer, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}); err != nil {
 		return nil, nil, err

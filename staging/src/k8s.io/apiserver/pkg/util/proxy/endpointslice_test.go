@@ -58,43 +58,43 @@ func makeEndpointSlice(namespace, service, slice int, ip string) *discoveryv1.En
 	}
 }
 
-// Note that we resuse the same service names in the two namespaces to test proper
-// indexing/namespacing.
+// 注意：两个命名空间使用相同的 service 名称，以测试正确的
+// 索引与命名空间隔离。
 var (
-	// namespace1 service1:
-	// - initial: 1 slice
-	// - phase1:  add 1 slice
-	// - phase2:  no change
+	// namespace1 service1：
+	// - 初始：1 个 slice
+	// - 阶段1：新增 1 个 slice
+	// - 阶段2：无变化
 	n1s1FirstSlice    = makeEndpointSlice(1, 1, 1, "10.1.1.1")
 	n1s1SecondSlice   = makeEndpointSlice(1, 1, 2, "10.1.1.2")
 	n1s1InitialSlices = []*discoveryv1.EndpointSlice{n1s1FirstSlice}
 	n1s1Phase1Slices  = []*discoveryv1.EndpointSlice{n1s1FirstSlice, n1s1SecondSlice}
 	n1s1Phase2Slices  = []*discoveryv1.EndpointSlice{n1s1FirstSlice, n1s1SecondSlice}
 
-	// namespace1 service2:
-	// - initial: 1 slice
-	// - phase1:  update slice
-	// - phase2:  delete slice
+	// namespace1 service2：
+	// - 初始：1 个 slice
+	// - 阶段1：更新 slice
+	// - 阶段2：删除 slice
 	n1s2FirstSlice    = makeEndpointSlice(1, 2, 1, "10.1.2.1")
 	n1s2UpdatedSlice  = makeEndpointSlice(1, 2, 1, "10.1.2.99")
 	n1s2InitialSlices = []*discoveryv1.EndpointSlice{n1s2FirstSlice}
 	n1s2Phase1Slices  = []*discoveryv1.EndpointSlice{n1s2UpdatedSlice}
 	n1s2Phase2Slices  = []*discoveryv1.EndpointSlice{}
 
-	// namespace2 service 1:
-	// - initial: 2 slices
-	// - phase1:  delete first slice
-	// - phase2:  delete second slice
+	// namespace2 service 1：
+	// - 初始：2 个 slice
+	// - 阶段1：删除第一个 slice
+	// - 阶段2：删除第二个 slice
 	n2s1FirstSlice    = makeEndpointSlice(2, 1, 1, "10.2.1.1")
 	n2s1SecondSlice   = makeEndpointSlice(2, 1, 2, "10.2.1.2")
 	n2s1InitialSlices = []*discoveryv1.EndpointSlice{n2s1FirstSlice, n2s1SecondSlice}
 	n2s1Phase1Slices  = []*discoveryv1.EndpointSlice{n2s1SecondSlice}
 	n2s1Phase2Slices  = []*discoveryv1.EndpointSlice{}
 
-	// namespace2 service 2:
-	// - initial: no slices
-	// - phase1:  no change
-	// - phase2:  create slice
+	// namespace2 service 2：
+	// - 初始：无 slice
+	// - 阶段1：无变化
+	// - 阶段2：创建 slice
 	n2s2FirstSlice    = makeEndpointSlice(2, 2, 1, "10.2.2.1")
 	n2s2InitialSlices = []*discoveryv1.EndpointSlice{}
 	n2s2Phase1Slices  = []*discoveryv1.EndpointSlice{}
@@ -112,7 +112,7 @@ var (
 func assertSlices(t *testing.T, getter EndpointSliceGetter, namespace, service string, expected []*discoveryv1.EndpointSlice) {
 	t.Helper()
 
-	// Poll because the informers may not sync immediately
+	// 轮询等待，因为 informer 可能不会立即同步
 	var lastErr error
 	err := wait.PollUntilContextTimeout(context.Background(), 10*time.Millisecond, time.Second, true, func(ctx context.Context) (bool, error) {
 		slices, err := getter.GetEndpointSlices(namespace, service)
@@ -120,7 +120,7 @@ func assertSlices(t *testing.T, getter EndpointSliceGetter, namespace, service s
 			lastErr = fmt.Errorf("unexpected error getting %s/%s slices: %w", namespace, service, err)
 			return false, nil
 		}
-		// cmp.Diff doesn't deal with nil vs []
+		// cmp.Diff 不处理 nil 与 [] 的差异
 		if len(expected) == 0 && len(slices) == 0 {
 			return true, nil
 		}
@@ -141,7 +141,7 @@ func assertSlices(t *testing.T, getter EndpointSliceGetter, namespace, service s
 func testGetter(t *testing.T, client clientset.Interface, getter EndpointSliceGetter) {
 	ctx := context.Background()
 
-	// Check initial state
+	// 检查初始状态
 	assertSlices(t, getter, "namespace1", "service1", n1s1InitialSlices)
 	assertSlices(t, getter, "namespace1", "service2", n1s2InitialSlices)
 	assertSlices(t, getter, "namespace2", "service1", n2s1InitialSlices)

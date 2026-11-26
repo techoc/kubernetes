@@ -54,8 +54,8 @@ func TestOptional(t *testing.T) {
 				"absent": types.OptionalNone,
 			},
 			expected: map[string]any{
-				// right now no way to differ from a plain null.
-				// we will need to filter out optional.none() before this conversion.
+				// 目前无法与普通的 null 区分。
+				// 转换前需要先过滤掉 optional.none()。
 				"absent": nil,
 			},
 		},

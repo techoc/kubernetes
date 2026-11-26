@@ -18,23 +18,23 @@ package authenticator
 
 import "context"
 
-// Audiences is a container for the Audiences of a token.
+// Audiences 是 token 的 audience 容器
 //
 // audience 是令牌的预期接收方。校验时要求令牌的 audience 与请求声明的 audience
 // 有交集，否则视为令牌被用于错误的服务，从而限制令牌在集群内的横向复用。
 type Audiences []string
 
-// The key type is unexported to prevent collisions
+// key 类型不导出，防止与其他包定义的 key 冲突
 //
 // 使用未导出的 key 类型，防止其他包构造出同名的 context key 而覆盖本包的取值。
 type key int
 
 const (
-	// audiencesKey is the context key for request audiences.
+	// audiencesKey 是存储请求 audience 的 context key
 	audiencesKey key = iota
 )
 
-// WithAudiences returns a context that stores a request's expected audiences.
+// WithAudiences 返回存储了请求期望 audience 的 context
 func WithAudiences(ctx context.Context, auds Audiences) context.Context {
 	return context.WithValue(ctx, audiencesKey, auds)
 }

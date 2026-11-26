@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package flushwriter implements a wrapper for a writer that flushes on every
-// write if that writer implements the io.Flusher interface
+// Package flushwriter 提供 flush writer 工具
+// 当 writer 实现 io.Flusher 接口时调用其 Flush
 //
 // 该包服务于流式响应场景：apiserver 的 watch、日志、exec 等接口依赖每次写入后立即
 // flush，才能让客户端及时看到增量数据。把 flush 与写入绑定在一起，调用方只需写入，

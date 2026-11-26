@@ -94,7 +94,7 @@ func testQuantity(t *testing.T, expr string, expectResult ref.Val, expectRuntime
 		t.Fatalf("%v", errorStrings)
 	}
 
-	// Typecheck expression
+	// 对表达式做类型检查
 	_, err = cel.AstToCheckedExpr(compiled)
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -152,8 +152,8 @@ func TestQuantity(t *testing.T) {
 			expectedRuntimeErr: "quantities must match the regular expression.*",
 		},
 		{
-			// The above case fails due to a regex check. This case passes the
-			// regex check and fails a suffix check
+			// 上面的用例因正则检查失败；本用例通过正则检查，但会失败在后缀检查上
+			//
 			name:               "parseInvalidSuffixPassesRegex",
 			expr:               `quantity("10Mm")`,
 			expectedRuntimeErr: "unable to parse quantity's suffix",

@@ -47,17 +47,17 @@ func init() {
 	endpointsMap = make(map[string]*compactor)
 }
 
-// StartCompactorPerEndpoint starts a compactor but prevents multiple compactors per client endpoint.
-// Calling the function twice on single endpoint will return the same compactor.
-// Compactor removes old version of keys from etcd.
-// By default, we save the most recent 5 minutes data and compact versions > 5minutes ago.
-// It should be enough for slow watchers and to tolerate burst.
+// StartCompactorPerEndpoint 启动一个 compactor，并防止同一客户端 endpoint 出现多个 compactor。
+// 对同一个 endpoint 调用两次会返回同一个 compactor。
+// Compactor 从 etcd 中移除旧版本的 key。
+// 默认保留最近 5 分钟的数据，压缩更早的版本。
+// 这足以应付较慢的 watcher 并容忍突发流量。
 func StartCompactorPerEndpoint(client *clientv3.Client, compactInterval time.Duration) *compactor {
 	endpointsMapMu.Lock()
 	defer endpointsMapMu.Unlock()
 
-	// In one process, we can have only one compactor for one cluster.
-	// Currently we rely on endpoints to differentiate clusters.
+	// 在一个进程中，一个集群只能有一个 compactor。
+	// 目前依靠 endpoint 来区分不同集群。
 	for _, ep := range client.Endpoints() {
 		if c, ok := endpointsMap[ep]; ok {
 			klog.V(4).Infof("compactor already exists for endpoints %v", client.Endpoints())
@@ -84,8 +84,8 @@ type Compactor interface {
 	CompactRevision() int64
 }
 
-// NewCompactor runs dedicated compactor, that removes old versions of keys from etcd.
-// Prefer calling StartCompactorPerEndpoint as this function doesn't prevent multiple compactors running per single endpoint.
+// NewCompactor 运行独立的 compactor，从 etcd 中移除旧版本的 key。
+// 优先调用 StartCompactorPerEndpoint，因为本函数不防止同一 endpoint 上运行多个 compactor。
 func NewCompactor(client *clientv3.Client, compactInterval time.Duration, clock clock.Clock, onClose func()) *compactor {
 	c := &compactor{
 		client:   client,
@@ -130,7 +130,7 @@ type compactor struct {
 
 // Stop 幂等地停止后台循环；stopOnce 让集成测试重复调用 Stop 不会 panic。
 func (c *compactor) Stop() {
-	// Prevent integration tests stopping compactor twice.
+	// 防止集成测试重复停止 compactor。
 	c.stopOnce.Do(func() {
 		if c.onClose != nil {
 			c.onClose()
@@ -157,31 +157,31 @@ func (c *compactor) UpdateCompactRevision(rev int64) {
 	c.compactRevision = max(c.compactRevision, rev)
 }
 
-// compactor periodically compacts historical versions of keys in etcd.
-// It will compact keys with versions older than given interval.
-// In other words, after compaction, it will only contain keys set during last interval.
-// Any API call for the older versions of keys will return error.
-// Interval is the time interval between each compaction. The first compaction happens after "interval".
+// compactor 定期压缩 etcd 中 key 的历史版本。
+// 它会压缩早于给定时间间隔的 key 版本。
+// 也就是说，压缩后只保留最近一个时间间隔内设置的 key。
+// 任何读取更旧版本的 API 调用都会返回错误。
+// Interval 是两次压缩之间的时间间隔。第一次压缩在 "interval" 之后发生。
 func (c *compactor) runCompactLoop(stopCh chan struct{}) {
-	// Technical definitions:
-	// We have a special key in etcd defined as *compactRevKey*.
-	// compactRevKey's value will be set to the string of last compacted revision.
-	// compactRevKey's version will be used as logical time for comparison. THe version is referred as compact time.
-	// Initially, because the key doesn't exist, the compact time (version) is 0.
+	// 技术定义：
+	// 在 etcd 中有一个特殊 key，定义为 *compactRevKey*。
+	// compactRevKey 的值会被设为上次压缩 revision 的字符串。
+	// compactRevKey 的版本用作比较的逻辑时间，称为压缩时间。
+	// 最初该 key 不存在，因此压缩时间（版本）为 0。
 	//
-	// Algorithm:
-	// - Compare to see if (local compact_time) = (remote compact_time).
-	// - If yes, increment both local and remote compact_time, and do a compaction.
-	// - If not, set local to remote compact_time.
+	// 算法：
+	// - 比较本地 compact_time 与远端 compact_time 是否相等。
+	// - 相等则同时递增本地与远端的 compact_time，并执行一次压缩。
+	// - 不相等则把本地值设为远端的 compact_time。
 	//
-	// Technical details/insights:
+	// 技术细节/要点：
 	//
-	// The protocol here is lease based. If one compactor CAS successfully, the others would know it when they fail in
-	// CAS later and would try again in 5 minutes. If an APIServer crashed, another one would "take over" the lease.
+	// 这里的协议基于 lease。若一个 compactor CAS 成功，其他 compactor 会在
+	// 之后的 CAS 失败时得知，并在 5 分钟后重试。若某个 APIServer 崩溃，另一个会"接管"这个 lease。
 	//
-	// For example, in the following diagram, we have a compactor C1 doing compaction in t1, t2. Another compactor C2
-	// at t1' (t1 < t1' < t2) would CAS fail, set its known oldRev to rev at t1', and try again in t2' (t2' > t2).
-	// If C1 crashed and wouldn't compact at t2, C2 would CAS successfully at t2'.
+	// 例如在下图中，compactor C1 在 t1、t2 执行压缩。另一个 compactor C2
+	// 在 t1'（t1 < t1' < t2）CAS 失败，把已知的 oldRev 设为 t1' 时的 rev，并在 t2'（t2' > t2）重试。
+	// 若 C1 崩溃、未在 t2 压缩，C2 会在 t2' CAS 成功。
 	//
 	//                 oldRev(t2)     curRev(t2)
 	//                                  +
@@ -192,15 +192,15 @@ func (c *compactor) runCompactLoop(stopCh chan struct{}) {
 	// +---v-------------v----^---------v------^---->
 	//     t0           t1             t2
 	//
-	// We have the guarantees:
-	// - in normal cases, the interval is 5 minutes.
-	// - in failover, the interval is >5m and <10m
+	// 保证：
+	// - 正常情况下，间隔为 5 分钟。
+	// - 故障转移时，间隔 >5 分钟且 <10 分钟
 	//
-	// FAQ:
-	// - What if time is not accurate? We don't care as long as someone did the compaction. Atomicity is ensured using
+	// 常见问题：
+	// - 时间不准确怎么办？只要有人完成了压缩就无所谓。原子性由 etcd API 保证。
 	//   etcd API.
-	// - What happened under heavy load scenarios? Initially, each apiserver will do only one compaction
-	//   every 5 minutes. This is very unlikely affecting or affected w.r.t. server load.
+	// - 高负载下会怎样？最初每个 apiserver 每 5 分钟只做一次压缩，
+	//   几乎不会影响服务器负载，也不太受其影响。
 
 	ctx := wait.ContextForChannel(stopCh)
 	var compactTime int64
@@ -226,9 +226,9 @@ func (c *compactor) runCompactLoop(stopCh chan struct{}) {
 	}
 }
 
-// Compact compacts etcd store and returns current rev.
-// It will return the current Compact time and global revision if no error occurred.
-// Note that CAS fail will not incur any error.
+// Compact 压缩 etcd 存储并返回当前 revision。
+// 无错误时返回当前压缩时间与全局 revision。
+// 注意 CAS 失败不会产生错误。
 //
 // 通过 compactRevKey 的 Version 做 CAS 实现跨实例互斥：只有 CAS 成功者执行实际压缩，
 // 其余实例读取对方写入的 revision 后等到下一轮。
@@ -258,7 +258,7 @@ func Compact(ctx context.Context, client *clientv3.Client, expectVersion, rev in
 	currentVersion = expectVersion + 1
 
 	if rev == 0 {
-		// We don't compact on bootstrap.
+		// 启动时不做压缩。
 		return currentVersion, currentRev, 0, nil
 	}
 	if _, err = client.Compact(ctx, rev); err != nil {
@@ -268,7 +268,7 @@ func Compact(ctx context.Context, client *clientv3.Client, expectVersion, rev in
 	return currentVersion, currentRev, rev, nil
 }
 
-// runWatchLoops gets and watches changes to compact_rev_key and updates the compaction revision based on it.
+// runWatchLoops 获取并监听 compact_rev_key 的变化，据此更新压缩 revision。
 //
 // watch 断开后按秒重试，先重新读取当前值再继续 watch，避免漏掉断连期间的变化。
 func (c *compactor) runWatchLoop(stopCh chan struct{}) {
@@ -298,7 +298,7 @@ func (c *compactor) runWatchLoop(stopCh chan struct{}) {
 	}
 }
 
-// getCompactRev returns the etcd compaction revision by reading the value stored under compact_rev_key.
+// getCompactRev 通过读取 compact_rev_key 下的值返回 etcd 的压缩 revision。
 func (c *compactor) getCompactRev(ctx context.Context) (compactRev int64, currentRev int64, err error) {
 	resp, err := c.client.Get(ctx, compactRevKey)
 	if err != nil {

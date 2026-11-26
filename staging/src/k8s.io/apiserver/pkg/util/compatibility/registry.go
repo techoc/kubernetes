@@ -22,16 +22,16 @@ import (
 	basecompatibility "k8s.io/component-base/compatibility"
 )
 
-// DefaultComponentGlobalsRegistry is the global var to store the effective versions and feature gates for all components for easy access.
-// Example usage:
-// // register the component effective version and feature gate first
+// DefaultComponentGlobalsRegistry 是存储所有组件的有效版本与特性门控的全局变量，便于访问。
+// 使用示例：
+// // 首先注册组件的有效版本与特性门控
 // wardleEffectiveVersion := basecompatibility.NewEffectiveVersion("1.2")
 // wardleFeatureGate := featuregate.NewFeatureGate()
 // utilruntime.Must(compatibility.DefaultComponentGlobalsRegistry.Register(apiserver.WardleComponentName, wardleEffectiveVersion, wardleFeatureGate, false))
 //
 //	cmd := &cobra.Command{
 //	 ...
-//		// call DefaultComponentGlobalsRegistry.Set() in PersistentPreRunE to ensure the feature gates are set based on emulation version right after parsing the flags.
+//		// 在 PersistentPreRunE 中调用 DefaultComponentGlobalsRegistry.Set()，确保解析 flag 后立即根据模拟版本设置特性门控。
 //		PersistentPreRunE: func(*cobra.Command, []string) error {
 //			if err := compatibility.DefaultComponentGlobalsRegistry.Set(); err != nil {
 //				return err
@@ -39,12 +39,12 @@ import (
 //	 ...
 //		},
 //		RunE: func(c *cobra.Command, args []string) error {
-//			// call compatibility.DefaultComponentGlobalsRegistry.Validate() somewhere
+//			// 在别处调用 compatibility.DefaultComponentGlobalsRegistry.Validate()
 //		},
 //	}
 //
 // flags := cmd.Flags()
-// // add flags
+// // 添加 flag
 // compatibility.DefaultComponentGlobalsRegistry.AddFlags(flags)
 //
 // 该注册表把"组件有效版本（emulation version）"与"特性门控"绑在一起：

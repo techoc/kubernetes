@@ -64,51 +64,51 @@ const (
 // 客户端连到任一实例都期望成功，因此需要按"谁有该 GVR"来路由。
 type peerProxyHandler struct {
 	name string
-	// Identity for this server.
+	// 本服务器的身份。
 	serverID     string
 	finishedSync atomic.Bool
 
-	// Label to check against in identity leases to make sure
-	// we are working with apiserver identity leases only.
+	// 在身份 lease 中检查的 label，确保
+	// 只处理 apiserver 身份 lease。
 	identityLeaseLabelSelector labels.Selector
 	apiserverIdentityInformer  coordinationv1informers.LeaseInformer
 	leaseRegistration          cache.ResourceEventHandlerRegistration
-	// Reconciler that is used to fetch host port of peer apiserver when proxying request to a peer.
+	// 代理请求到 peer 时，用于获取 peer apiserver host port 的 reconciler。
 	reconciler reconcilers.PeerEndpointLeaseReconciler
-	// Client to make discovery calls locally.
+	// 用于在本地发起发现调用的客户端。
 	discoveryClient     *discovery.DiscoveryClient
 	discoverySerializer serializer.CodecFactory
-	// Cache that stores resources served by this apiserver. Refreshed periodically.
-	// We always look up in the local discovery cache first, to check whether the
-	// request can be served by this apiserver instead of proxying it to a peer.
+	// 缓存本 apiserver 提供的资源，定期刷新。
+	// 总是先查本地发现缓存，判断请求能否由本 apiserver
+	// 直接服务，而不必代理给 peer。
 	//
 	// 先查本地、再考虑转发，可以避免"本机能服务却绕一圈"的额外延迟与故障面。
 	localDiscoveryInfoCache              atomic.Value
 	localDiscoveryCacheTicker            *time.Ticker
 	localDiscoveryInfoCachePopulated     chan struct{}
 	localDiscoveryInfoCachePopulatedOnce sync.Once
-	// rawPeerDiscoveryCache stores unfiltered resources and groups served by peer apiservers.
-	// The map is from string (serverID) to PeerDiscoveryCacheEntry.
-	// Written ONLY by peerLeaseQueue worker when peer leases change.
+	// rawPeerDiscoveryCache 保存 peer apiserver 提供的未过滤资源与组。
+	// map 的 key 是字符串（serverID），value 是 PeerDiscoveryCacheEntry。
+	// 只由 peerLeaseQueue worker 在 peer lease 变化时写入。
 	//
 	// 用 atomic.Value 发布整张 map：读者永远看到某个完整版本，不会观察到写一半的状态。
 	rawPeerDiscoveryCache atomic.Value // map[string]PeerDiscoveryCacheEntry
 	proxyTransport        http.RoundTripper
-	// Worker queue that keeps the rawPeerDiscoveryCache up-to-date.
+	// 保持 rawPeerDiscoveryCache 最新的 worker 队列。
 	peerLeaseQueue            workqueue.TypedRateLimitingInterface[string]
 	serializer                runtime.NegotiatedSerializer
 	cacheInvalidationCallback atomic.Pointer[func()]
-	// Manager for GV exclusions (CRDs/APIServices)
+	// GV 排除项管理器（CRD/APIServices）
 	gvExclusionManager *GVExclusionManager
 }
 
-// PeerDiscoveryCacheEntry holds the GVRs and group-level discovery info for a peer.
+// PeerDiscoveryCacheEntry 保存 peer 的 GVR 与组级别发现信息。
 type PeerDiscoveryCacheEntry struct {
 	GVRs           map[schema.GroupVersionResource]bool
 	GroupDiscovery []apidiscoveryv2.APIGroupDiscovery
 }
 
-// responder implements rest.Responder for assisting a connector in writing objects or errors.
+// responder 实现 rest.Responder，帮助 connector 写入对象或错误。
 type responder struct {
 	w   http.ResponseWriter
 	ctx context.Context
@@ -144,7 +144,7 @@ func (h *peerProxyHandler) WaitForCacheSync(stopCh <-chan struct{}) error {
 		}
 	}
 
-	// Wait for localDiscoveryInfoCache to be populated.
+	// 等待 localDiscoveryInfoCache 填充完毕。
 	// 本地发现缓存由独立 ticker 填充，必须等到首份数据，否则所有请求都会走转发路径。
 	select {
 	case <-h.localDiscoveryInfoCachePopulated:
@@ -156,8 +156,8 @@ func (h *peerProxyHandler) WaitForCacheSync(stopCh <-chan struct{}) error {
 	return nil
 }
 
-// WrapHandler will fetch the apiservers that can serve the request and either serve it locally
-// or route it to a peer
+// WrapHandler 获取能服务该请求的 apiserver，并在本地服务
+// 或路由到 peer。
 func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -167,7 +167,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 			return
 		}
 
-		// Allow non-resource requests
+		// 允许非资源请求
 		// /healthz、/version 等请求不涉及具体资源，本机即可应答。
 		if !requestInfo.IsResourceRequest {
 			klog.V(3).Infof("Not a resource request skipping proxying")
@@ -175,7 +175,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 			return
 		}
 
-		// Request has already been proxied once, it must be served locally
+		// 请求已被代理过一次，必须在本地服务
 		// 环路防护：已经转发过的请求若再转发，会在集群内无限乒乓。
 		if r.Header.Get(PeerProxiedHeader) == "true" {
 			klog.V(3).Infof("Already rerouted once, skipping proxying to peer")
@@ -183,9 +183,9 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 			return
 		}
 
-		// Apiserver Identity Informers is not synced yet, pass request to next handler
-		// This will happen for self requests from the kube-apiserver because we have a poststarthook
-		// to ensure that external requests are not served until the ApiserverIdentity Informer has synced
+		// Apiserver Identity Informer 尚未同步，把请求传给下一个 handler
+		// kube-apiserver 的自请求会遇到这种情况，因为有一个 poststarthook
+		// 用来保证 ApiserverIdentity Informer 同步前不服务外部请求
 		if !h.HasFinishedSync() {
 			handler.ServeHTTP(w, r)
 			return
@@ -198,7 +198,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 			return
 		}
 
-		// find servers that are capable of serving this request
+		// 查找能够服务该请求的服务器
 		peerServerIDs := h.findServiceableByPeerFromPeerDiscoveryCache(gvr)
 		if len(peerServerIDs) == 0 {
 			// 没有任何实例声明可服务该 GVR：交给本地处理，让原生逻辑返回 404 等标准错误。
@@ -223,7 +223,7 @@ func (h *peerProxyHandler) WrapHandler(handler http.Handler) http.Handler {
 	})
 }
 
-// resolveServingLocation resolves the host:port addresses for the given peer IDs.
+// resolveServingLocation 解析给定 peer ID 的 host:port 地址。
 //
 // 部分对等端解析失败不影响可用性：只要还有至少一个可解析地址就继续转发，
 // 仅在全部失败时才返回错误。
@@ -241,7 +241,7 @@ func (h *peerProxyHandler) resolveServingLocation(peerIDs []string) ([]string, e
 		peerServerEndpoints = append(peerServerEndpoints, hostPort)
 	}
 
-	// reset err if there was atleast one valid peer server found.
+	// 只要找到至少一个有效 peer 服务器，就重置 err。
 	if len(peerServerEndpoints) > 0 {
 		errs = nil
 	}
@@ -269,7 +269,7 @@ func (h *peerProxyHandler) hostportInfo(apiserverKey string) (string, error) {
 // 使用 AuthProxyRoundTripper 以原用户身份转发：授权仍在对等端重新执行一次，
 // 代理本身不构成权限提升路径。
 func (h *peerProxyHandler) proxyRequestToDestinationAPIServer(req *http.Request, rw http.ResponseWriter, host string, gvr schema.GroupVersionResource) {
-	// write a new location based on the existing request pointed at the target service
+	// 基于已有请求写一个指向目标服务的新 location
 	location := &url.URL{}
 	location.Scheme = "https"
 	location.Host = host
@@ -313,8 +313,8 @@ func (r *responder) Error(w http.ResponseWriter, req *http.Request, err error) {
 	http.Error(w, err.Error(), http.StatusServiceUnavailable)
 }
 
-// GetPeerResources implements PeerDiscoveryProvider interface
-// Returns a map of serverID -> []apidiscoveryv2.APIGroupDiscovery served by peer servers
+// GetPeerResources 实现 PeerDiscoveryProvider 接口
+// 返回 serverID -> []apidiscoveryv2.APIGroupDiscovery 的映射，即 peer 服务器提供的内容
 //
 // 排除本机：调用方聚合的是"其他实例"的发现信息，混入自身会重复。
 func (h *peerProxyHandler) GetPeerResources() map[string][]apidiscoveryv2.APIGroupDiscovery {

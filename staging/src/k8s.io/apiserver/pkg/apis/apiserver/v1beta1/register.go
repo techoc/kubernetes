@@ -30,12 +30,12 @@ const ConfigGroupName = "apiserver.config.k8s.io"
 // 分开，避免配置对象被当作普通 API 资源暴露。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// ConfigSchemeGroupVersion is group version used to register these objects
+// ConfigSchemeGroupVersion 是注册这些对象所用的组版本
 var ConfigSchemeGroupVersion = schema.GroupVersion{Group: ConfigGroupName, Version: "v1beta1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 会留在 k8s.io/kubernetes。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme

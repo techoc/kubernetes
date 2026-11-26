@@ -119,7 +119,7 @@ func (w *testWatchCache) getCacheIntervalForEvents(resourceVersion uint64, opts 
 	return w.getAllEventsSinceLocked(resourceVersion, "", opts)
 }
 
-// newTestWatchCache just adds a fake clock.
+// newTestWatchCache 只是加了一个假时钟。
 //
 // 强制把容量设为用例期望值：真实实现会按负载动态调整容量，而多数用例需要确定性行为。
 func newTestWatchCache(capacity int, eventFreshDuration time.Duration, indexers *cache.Indexers) *testWatchCache {
@@ -146,8 +146,8 @@ func newTestWatchCache(capacity int, eventFreshDuration time.Duration, indexers 
 		return wc.resourceVersion, nil
 	}
 	wc.watchCache = newWatchCache(keyFunc, mockHandler, getAttrsFunc, versioner, indexers, testingclock.NewFakeClock(time.Now()), eventFreshDuration, schema.GroupResource{Resource: "pods"}, pr, getCurrentRV)
-	// To preserve behavior of tests that assume a given capacity,
-	// resize it to th expected size.
+	// 为保持那些假定固定容量的测试的行为，
+	// 将其调整为预期大小。
 	wc.history.capacity = capacity
 	wc.history.cache = make([]*watchCacheEvent, capacity)
 	wc.history.lowerBoundCapacity = min(capacity, defaultLowerBoundCapacity)
@@ -226,7 +226,7 @@ func TestWatchCacheBasic(t *testing.T) {
 	s := newTestWatchCache(2, DefaultEventFreshDuration, &cache.Indexers{})
 	defer s.Stop()
 
-	// Test Add/Update/Delete.
+	// 测试 Add/Update/Delete。
 	pod1 := makeTestPod("pod", 1)
 	if err := s.Add(pod1); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -259,7 +259,7 @@ func TestWatchCacheBasic(t *testing.T) {
 		t.Errorf("found pod")
 	}
 
-	// Test List.
+	// 测试 List。
 	s.Add(makeTestPod("pod1", 4))
 	s.Add(makeTestPod("pod2", 5))
 	s.Add(makeTestPod("pod3", 6))
@@ -279,7 +279,7 @@ func TestWatchCacheBasic(t *testing.T) {
 		}
 	}
 
-	// Test Replace.
+	// 测试 Replace。
 	s.Replace([]interface{}{
 		makeTestPod("pod4", 7),
 		makeTestPod("pod5", 8),
@@ -305,13 +305,13 @@ func TestEvents(t *testing.T) {
 	store := newTestWatchCache(5, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
 
-	// no dynamic-size cache to fit old tests.
+	// 用非动态大小的缓存适配旧测试。
 	store.history.lowerBoundCapacity = 5
 	store.history.upperBoundCapacity = 5
 
 	store.Add(makeTestPod("pod", 3))
 
-	// Test for Added event.
+	// 针对 Added 事件的测试。
 	{
 		_, err := store.getAllEventsSince(1, storage.ListOptions{Predicate: storage.Everything})
 		if err == nil {
@@ -344,7 +344,7 @@ func TestEvents(t *testing.T) {
 	store.Update(makeTestPod("pod", 4))
 	store.Update(makeTestPod("pod", 5))
 
-	// Test with not full cache.
+	// 缓存未满时的测试。
 	{
 		_, err := store.getAllEventsSince(1, storage.ListOptions{Predicate: storage.Everything})
 		if err == nil {
@@ -378,7 +378,7 @@ func TestEvents(t *testing.T) {
 		store.Update(makeTestPod("pod", uint64(i)))
 	}
 
-	// Test with full cache - there should be elements from 5 to 9.
+	// 缓存已满时的测试——应包含 5 到 9 的元素。
 	{
 		_, err := store.getAllEventsSince(3, storage.ListOptions{Predicate: storage.Everything})
 		if err == nil {
@@ -401,7 +401,7 @@ func TestEvents(t *testing.T) {
 		}
 	}
 
-	// Test for delete event.
+	// 针对 delete 事件的测试。
 	store.Delete(makeTestPod("pod", uint64(10)))
 
 	{
@@ -432,7 +432,7 @@ func TestMarker(t *testing.T) {
 	store := newTestWatchCache(3, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
 
-	// First thing that is called when propagated from storage is Replace.
+	// 从 storage 传播过来的第一个调用是 Replace。
 	store.Replace([]interface{}{
 		makeTestPod("pod1", 5),
 		makeTestPod("pod2", 9),
@@ -442,8 +442,8 @@ func TestMarker(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "too old resource version") {
 		t.Errorf("unexpected error: %v", err)
 	}
-	// Getting events from 8 should return no events,
-	// even though there is a marker there.
+	// 从 8 开始取事件应返回空，
+	// 即使那里有一个标记。
 	result, err := store.getAllEventsSince(9, storage.ListOptions{Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -454,7 +454,7 @@ func TestMarker(t *testing.T) {
 
 	pod := makeTestPod("pods", 12)
 	store.Add(pod)
-	// Getting events from 8 should still work and return one event.
+	// 从 8 开始取事件仍应正常并返回一个事件。
 	result, err = store.getAllEventsSince(9, storage.ListOptions{Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -488,14 +488,14 @@ func TestWaitUntilFreshAndGetList(t *testing.T) {
 		},
 	})
 	defer store.Stop()
-	// In background, update the store.
+	// 在后台更新 store。
 	go func() {
 		store.Add(makeTestPodDetails("pod1", 2, "node1", map[string]string{"label": "value1"}))
 		store.Add(makeTestPodDetails("pod2", 3, "node1", map[string]string{"label": "value1"}))
 		store.Add(makeTestPodDetails("pod3", 5, "node2", map[string]string{"label": "value2"}))
 	}()
 
-	// list by empty MatchValues.
+	// 以空的 MatchValues 做 LIST。
 	resp, indexUsed, err := store.WaitUntilFreshAndGetList(ctx, "/prefix/", storage.ListOptions{ResourceVersion: "5", Recursive: true, Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -510,7 +510,7 @@ func TestWaitUntilFreshAndGetList(t *testing.T) {
 		t.Errorf("Used index %q but expected none to be used", indexUsed)
 	}
 
-	// list by label index.
+	// 按 label 索引做 LIST。
 	resp, indexUsed, err = store.WaitUntilFreshAndGetList(ctx, "/prefix/", storage.ListOptions{ResourceVersion: "5", Recursive: true, Predicate: storage.SelectionPredicate{
 		Label: labels.SelectorFromSet(map[string]string{
 			"label": "value1",
@@ -533,7 +533,7 @@ func TestWaitUntilFreshAndGetList(t *testing.T) {
 		t.Errorf("Used index %q but expected %q", indexUsed, "l:label")
 	}
 
-	// list with spec.nodeName index.
+	// 按 spec.nodeName 索引做 LIST。
 	resp, indexUsed, err = store.WaitUntilFreshAndGetList(ctx, "/prefix/", storage.ListOptions{ResourceVersion: "5", Recursive: true, Predicate: storage.SelectionPredicate{
 		Label: labels.SelectorFromSet(map[string]string{
 			"not-exist-label": "whatever",
@@ -556,7 +556,7 @@ func TestWaitUntilFreshAndGetList(t *testing.T) {
 		t.Errorf("Used index %q but expected %q", indexUsed, "f:spec.nodeName")
 	}
 
-	// list with index not exists.
+	// 按不存在的索引做 LIST。
 	resp, indexUsed, err = store.WaitUntilFreshAndGetList(ctx, "/prefix/", storage.ListOptions{ResourceVersion: "5", Recursive: true, Predicate: storage.SelectionPredicate{
 		Label: labels.SelectorFromSet(map[string]string{
 			"not-exist-label": "whatever",
@@ -585,13 +585,13 @@ func TestWaitUntilFreshAndListFromCache(t *testing.T) {
 	ctx := context.Background()
 	store := newTestWatchCache(3, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
-	// In background, update the store.
+	// 在后台更新 store。
 	go func() {
 		store.Add(makeTestPod("pod1", 2))
 		store.bookmarkRevision <- 3
 	}()
 
-	// list from future revision. Requires watch cache to request bookmark to get it.
+	// 从未来版本做 LIST，需要 watch cache 请求 bookmark 才能拿到。
 	resp, indexUsed, err := store.WaitUntilFreshAndGetList(ctx, "/prefix/", storage.ListOptions{ResourceVersion: "3", Recursive: true, Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -613,7 +613,7 @@ func TestWaitUntilFreshAndGet(t *testing.T) {
 	store := newTestWatchCache(3, DefaultEventFreshDuration, &cache.Indexers{})
 	defer store.Stop()
 
-	// In background, update the store.
+	// 在后台更新 store。
 	go func() {
 		store.Add(makeTestPod("foo", 2))
 		store.Add(makeTestPod("bar", 5))
@@ -643,7 +643,7 @@ func TestWaitUntilFreshAndListTimeout(t *testing.T) {
 	defer store.Stop()
 	fc := store.config.clock.(*testingclock.FakeClock)
 
-	// In background, step clock after the below call starts the timer.
+	// 在后台，于下方调用启动计时器之后推进时钟。
 	go func() {
 		for !fc.HasWaiters() {
 			time.Sleep(time.Millisecond)
@@ -652,9 +652,9 @@ func TestWaitUntilFreshAndListTimeout(t *testing.T) {
 		store.bookmarkRevision <- 3
 		fc.Step(blockTimeout)
 
-		// Add an object to make sure the test would
-		// eventually fail instead of just waiting
-		// forever.
+		// 添加一个对象，确保测试最终会失败
+		// 而不是一直等待
+		// 下去。
 		time.Sleep(30 * time.Second)
 		store.Add(makeTestPod("bar", 4))
 	}()
@@ -735,7 +735,7 @@ func TestDynamicCache(t *testing.T) {
 		eventCount    int
 		cacheCapacity int
 		startIndex    int
-		// interval is time duration between adjacent events.
+		// interval 是相邻事件之间的时间间隔。
 		lowerBoundCapacity int
 		upperBoundCapacity int
 		interval           time.Duration
@@ -969,7 +969,7 @@ func TestDynamicCache(t *testing.T) {
 				t.Errorf("expect capacity %d, but get %d", test.expectCapacity, store.history.capacity)
 			}
 
-			// check cache's startIndex, endIndex and all elements.
+			// 检查缓存的 startIndex、endIndex 与所有元素。
 			if store.history.startIndex != test.expectStartIndex {
 				t.Errorf("expect startIndex %d, but get %d", test.expectStartIndex, store.history.startIndex)
 			}
@@ -1023,17 +1023,17 @@ func TestCacheIncreaseDoesNotBreakWatch(t *testing.T) {
 		store.history.updateCache(event)
 	}
 
-	// Initial LIST comes from the moment of RV=10.
+	// 初次 LIST 来自 RV=10 的时刻。
 	store.Replace(nil, "10")
 
 	addEvent("key1", 20, now)
 
-	// Force "key1" to rotate our of cache.
+	// 强制 "key1" 从缓存中轮转出去。
 	later := now.Add(2 * DefaultEventFreshDuration)
 	addEvent("key2", 30, later)
 	addEvent("key3", 40, later)
 
-	// Force cache resize.
+	// 强制缓存调整大小。
 	addEvent("key4", 50, later.Add(time.Second))
 
 	_, err := store.getAllEventsSince(15, storage.ListOptions{Predicate: storage.Everything})

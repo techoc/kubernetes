@@ -20,19 +20,19 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
-// Library represents a CEL library used by kubernetes.
+// Library 表示 Kubernetes 使用的 CEL 库
 type Library interface {
-	// SingletonLibrary provides the library name and ensures the library can be safely registered into environments.
+	// SingletonLibrary 提供库名称，并确保该库可安全注册到环境中。
 	cel.SingletonLibrary
 
-	// Types provides all custom types introduced by the library.
+	// Types 提供该库引入的所有自定义类型。
 	Types() []*cel.Type
 
-	// declarations returns all function declarations provided by the library.
+	// declarations 返回该库提供的所有函数声明。
 	declarations() map[string][]cel.FunctionOpt
 }
 
-// KnownLibraries returns all libraries used in Kubernetes.
+// KnownLibraries 返回 Kubernetes 使用的所有库。
 //
 // 返回的集合决定了 CEL 环境里可用的函数与类型；新增库必须同时在这里注册，
 // 否则编译期会报“未声明函数”，而运行期不会有任何补救机会。
@@ -52,7 +52,7 @@ func KnownLibraries() []Library {
 	}
 }
 
-// isRegisteredType reports whether typeName is declared by any known library.
+// isRegisteredType 报告 typeName 是否由任何已知库声明。
 // 用于在编译前做类型名校验，避免把拼写错误的类型名当作合法的动态类型。
 func isRegisteredType(typeName string) bool {
 	for _, lib := range KnownLibraries() {

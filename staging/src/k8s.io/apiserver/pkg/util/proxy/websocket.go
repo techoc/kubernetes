@@ -77,10 +77,10 @@ func webSocketServerStreams(req *http.Request, w http.ResponseWriter, opts Optio
 	if ctx.resizeStream != nil {
 		ctx.resizeChan = make(chan remotecommand.TerminalSize)
 		go func() {
-			// Resize channel closes in panic case, and panic does not take down caller.
+			// panic 时 resize channel 会关闭，且 panic 不会拖垮调用方。
 			defer func() {
 				if p := recover(); p != nil {
-					// Standard panic logging.
+					// 标准的 panic 日志。
 					for _, fn := range runtime.PanicHandlers {
 						fn(req.Context(), p)
 					}
@@ -109,9 +109,9 @@ func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- re
 		select {
 		case channel <- size:
 		case <-ctx.Done():
-			// To avoid leaking this routine, exit if the http request finishes. This path
-			// would generally be hit if starting the process fails and nothing is started to
-			// ingest these resize events.
+			// 为避免该 goroutine 泄漏，HTTP 请求结束时就退出。若启动过程失败、
+			// 没有任何角色消费这些 resize 事件，通常会走到这里。
+			//
 			return
 		}
 	}
@@ -121,7 +121,7 @@ func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- re
 // 及近似的 duplex 值，同时创建错误（3）与 resize（4）通道。
 // 错误通道始终写、resize 始终读——客户端必须能收到错误，也能随时调整窗口。
 func createChannels(opts Options) []wsstream.ChannelType {
-	// open the requested channels, and always open the error channel
+	// 打开请求的各 channel，并总是打开错误 channel
 	channels := make([]wsstream.ChannelType, 5)
 	channels[constants.StreamStdIn] = readChannel(opts.Stdin)
 	channels[constants.StreamStdOut] = writeChannel(opts.Stdout)
@@ -131,7 +131,7 @@ func createChannels(opts Options) []wsstream.ChannelType {
 	return channels
 }
 
-// readChannel returns wsstream.ReadChannel if real is true, or wsstream.IgnoreChannel.
+// real 为 true 时返回 wsstream.ReadChannel，否则返回 wsstream.IgnoreChannel。
 func readChannel(real bool) wsstream.ChannelType {
 	if real {
 		return wsstream.ReadChannel
@@ -139,7 +139,7 @@ func readChannel(real bool) wsstream.ChannelType {
 	return wsstream.IgnoreChannel
 }
 
-// writeChannel returns wsstream.WriteChannel if real is true, or wsstream.IgnoreChannel.
+// real 为 true 时返回 wsstream.WriteChannel，否则返回 wsstream.IgnoreChannel。
 func writeChannel(real bool) wsstream.ChannelType {
 	if real {
 		return wsstream.WriteChannel
@@ -153,21 +153,21 @@ func writeChannel(real bool) wsstream.ChannelType {
 func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts Options) (*conns, error) {
 	channels := createChannels(opts)
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{
-		// WebSocket server only supports remote command version 5.
+		// WebSocket 服务端只支持 remote command 版本 5。
 		constants.StreamProtocolV5Name: {
 			Binary:   true,
 			Channels: channels,
 		},
 	})
 	conn.SetIdleTimeout(defaultIdleConnectionTimeout)
-	// Opening the connection responds to WebSocket client, negotiating
-	// the WebSocket upgrade connection and the subprotocol.
+	// 打开连接即响应 WebSocket 客户端，协商
+	// WebSocket 升级连接与子协议。
 	_, streams, err := conn.Open(w, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Send an empty message to the lowest writable channel to notify the client the connection is established
+	// 向最低的可写 channel 发送空消息，通知客户端连接已建立
 	switch {
 	case opts.Stdout:
 		_, err = streams[constants.StreamStdOut].Write([]byte{})
@@ -190,14 +190,14 @@ func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts Optio
 		resizeStream: streams[constants.StreamResize],
 	}
 
-	// writeStatus returns a WriteStatusFunc that marshals a given api Status
-	// as json in the error channel.
+	// writeStatus 返回一个 WriteStatusFunc，把给定的 api Status
+	// 以 json 形式写入错误 channel。
 	ctx.writeStatus = func(status *apierrors.StatusError) error {
 		bs, err := json.Marshal(status.Status())
 		if err != nil {
 			return err
 		}
-		// Write status error to error stream with deadline.
+		// 带 deadline 把状态错误写入错误流。
 		conn.SetWriteDeadline(writeErrorDeadline)
 		_, err = streams[constants.StreamErr].Write(bs)
 		return err

@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-// calculateRetryAfterForUnreadyCache calculates the retry duration based on the cache downtime.
+// calculateRetryAfterForUnreadyCache 根据缓存停机时长计算重试时间。
 //
 // 指数退避：停机越久，客户端重试间隔越长，避免缓存刚恢复就被大量重试打垮；
 // 结果限制在 [1, 30] 秒，兼顾恢复速度与保护。

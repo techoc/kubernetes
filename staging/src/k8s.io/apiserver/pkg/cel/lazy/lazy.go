@@ -36,16 +36,16 @@ type GetFieldFunc func(*MapValue) ref.Val
 var _ ref.Val = (*MapValue)(nil)
 var _ traits.Mapper = (*MapValue)(nil)
 
-// MapValue is a map that lazily evaluate its value when a field is first accessed.
-// The map value is not designed to be thread-safe.
+// MapValue 是一个在字段首次访问时才惰性求值其值的 map。
+// 该 map 不保证线程安全。
 //
 // 求值结果写入 values 后即被复用，因此同一个 MapValue 只能用于一次 CEL 求值。
 type MapValue struct {
 	typeValue *types.Type
 
-	// values are previously evaluated values obtained from callbacks
+	// values 是此前从 callback 求值得到的结果
 	values map[string]ref.Val
-	// callbacks are a map of field name to the function that returns the field Val
+	// callbacks 是字段名到返回字段 Val 的函数的映射
 	callbacks map[string]GetFieldFunc
 	// knownValues 保存已注册的字段名，供迭代使用：保留注册顺序使迭代结果稳定；不能直接遍历 callbacks（map 顺序随机）。
 	knownValues []string
@@ -75,12 +75,12 @@ func (m *MapValue) Contains(key ref.Val) ref.Val {
 	return types.Bool(found)
 }
 
-// Iterator returns an iterator to traverse the map.
+// Iterator 返回遍历该 map 的迭代器。
 func (m *MapValue) Iterator() traits.Iterator {
 	return &iterator{parent: m, index: 0}
 }
 
-// Size returns the number of currently known fields
+// Size 返回当前已知字段的数量
 func (m *MapValue) Size() ref.Val {
 	return types.Int(len(m.callbacks))
 }
@@ -90,8 +90,8 @@ func (m *MapValue) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	return nil, fmt.Errorf("disallowed conversion from %q to %q", m.typeValue.TypeName(), typeDesc.Name())
 }
 
-// ConvertToType converts the map to the given type.
-// Only its own type and "Type" type are allowed.
+// ConvertToType 把 map 转换为给定类型。
+// 只允许转换到自身类型与 "Type" 类型。
 func (m *MapValue) ConvertToType(typeVal ref.Type) ref.Val {
 	switch typeVal {
 	case m.typeValue:
@@ -111,12 +111,12 @@ func (m *MapValue) Equal(other ref.Val) ref.Val {
 	return types.Bool(m == otherMap)
 }
 
-// Type returns its registered type.
+// Type 返回其注册的类型。
 func (m *MapValue) Type() ref.Type {
 	return m.typeValue
 }
 
-// Value is not allowed.
+// 不允许使用 Value。
 func (m *MapValue) Value() any {
 	return types.NoSuchOverloadErr()
 }

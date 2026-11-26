@@ -26,9 +26,9 @@ import (
 // GroupAdder 把组附加到已认证的 user.Info 上。
 // 典型用途是把 system:masters 等特权组附加到回环客户端身份上。
 type GroupAdder struct {
-	// Authenticator is delegated to make the authentication decision
+	// Authenticator 被委派来作出认证决定
 	Authenticator authenticator.Request
-	// Groups are additional groups to add to the user.Info from a successful authentication
+	// Groups 是在认证成功后追加到 user.Info 的额外组
 	Groups []string
 }
 

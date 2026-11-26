@@ -99,18 +99,18 @@ func TestTimingRatioHistogramVecElementSafeLate(t *testing.T) {
 	exerciseTimingRatioHistogram(t, testHistogramName, t0, clk, registry, tro)
 }
 
-// exerciseTimingRatioHistogram does a rough behavioral test of a
-// RatioedObserver.  A fake clock is used, and the exercise consists
-// of repeatedly changing that fake clock by an amount of time chosen
-// uniformly at random from a range that goes from a little negative
-// to somewhat more than two milliseconds.  The negative changes are
-// included because small negative changes have been observed in real
-// monotonic clock readings (see issue #96459) and we want to test
-// that they are properly tolerated.  The designed toleration is to
-// pretend that the clock did not change, until it resumes net forward
-// progress.  The exercise checks that the count in the observer is
-// correct at each step.  The observer is expected to get one
-// observation at the end of each nanosecond.
+// exerciseTimingRatioHistogram 对 RatioedObserver 做粗略的行为测试。
+// 使用假时钟，反复给它加上一个从"略为负"到"略大于两毫秒"
+// 的范围内均匀随机选取的时间量。
+//
+// 包含负增量是因为真实单调时钟读数中确实观察到过
+// 微小的负变化（见 issue #96459），我们要测试它
+// 是否被正确处理。设计上的容忍方式是：在时钟净向前
+// 前进之前，假装时钟没有变化。
+// 测试会检查每一步 observer 中的计数是否正确，
+// 预期在每一纳秒结束时产生一次观测。
+//
+// 预期在每一纳秒结束时产生一次观测。
 //
 // 测试刻意包含小幅负向时间跳变，模拟问题 #96459 中观测到的单调时钟回退；
 // 设计约定是忽略回退、只按净前进量记数，因此期望计数始终基于不回退的 dt。
@@ -118,17 +118,17 @@ func exerciseTimingRatioHistogram(t *testing.T, histogramName string, t0 time.Ti
 	samplingPeriod := time.Nanosecond
 	steppingPeriod := time.Millisecond
 	tro.Set(1)
-	// `dt` is the admitted cumulative difference in fake time
-	// since the start of the test.  "admitted" means this is
-	// never allowed to decrease, which matches the designed
-	// toleration for negative monotonic clock changes.
+	// `dt` 是自测试开始以来假时间中累计被接纳的差值。
+	// "被接纳"意味着它永不允许减小，这与对负的单调时钟变化
+	// 的容忍设计一致。
+	//
 	var dt time.Duration
-	// `t1` is the current fake time
+	// `t1` 是当前的假时间
 	t1 := t0.Add(dt)
 	klog.Infof("Expect about %v warnings about time going backwards; this is fake time deliberately misbehaving.", (numIterations*ddtOffsetCentiPeriods)/ddtRangeCentiPeriods)
 	t.Logf("t0=%s", t0)
 	for i := 0; i < numIterations; i++ {
-		// `ddt` is the next step to take in fake time
+		// `ddt` 是假时间的下一个步长
 		ddt := time.Duration(rand.Intn(ddtRangeCentiPeriods)-ddtOffsetCentiPeriods) * steppingPeriod / 100
 		t1 = t1.Add(ddt)
 		diff := t1.Sub(t0)

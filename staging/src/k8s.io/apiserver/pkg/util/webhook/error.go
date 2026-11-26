@@ -22,9 +22,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-// ErrCallingWebhook is returned for transport-layer errors calling webhooks. It
-// represents a failure to talk to the webhook, not the webhook rejecting a
-// request.
+// ErrCallingWebhook 用于调用 webhook 时的传输层错误。它
+// 表示无法与 webhook 通信，而非 webhook 拒绝了
+// 请求。
 //
 // 区分“调用失败”和“webhook 明确拒绝”很重要：前者受 failurePolicy 影响，
 // 后者是正常的准入决策。
@@ -43,7 +43,7 @@ func (e *ErrCallingWebhook) Error() string {
 	return fmt.Sprintf("failed calling webhook %q; no further details available", e.WebhookName)
 }
 
-// ErrWebhookRejection represents a webhook properly rejecting a request.
+// ErrWebhookRejection 表示 webhook 正常拒绝了请求。
 type ErrWebhookRejection struct {
 	Status *apierrors.StatusError
 }

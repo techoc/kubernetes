@@ -30,24 +30,23 @@ type (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Pod is a collection of containers, used as either input (create, update) or as output (list, get).
+// Pod 是容器的集合，既可作为输入（create、update），也可作为输出（list、get）。
 type Pod struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the behavior of a pod.
+	// Spec 定义 Pod 的行为
 	// +optional
 	Spec PodSpec
 
-	// Status represents the current information about a pod. This data may not be up
-	// to date.
+	// Status 表示 Pod 的当前信息。这些数据可能并非最新。
+	//
 	// +optional
 	Status PodStatus
 }
 
-// PodStatus represents information about the status of a pod. Status may trail the actual
-// state of a system.
+// PodStatus 表示 Pod 的状态信息。状态可能滞后于系统的实际状态。
 //
 // 示例 API 不实现状态机，字段仅用于验证序列化与默认值处理路径。
 type PodStatus struct {
@@ -55,10 +54,10 @@ type PodStatus struct {
 	Phase PodPhase
 	// +optional
 	Conditions []PodCondition
-	// A human readable message indicating details about why the pod is in this state.
+	// 人类可读的消息，说明 Pod 处于该状态的原因。
 	// +optional
 	Message string
-	// A brief CamelCase message indicating details about why the pod is in this state. e.g. 'DiskPressure'
+	// 简短的 CamelCase 消息，说明 Pod 处于该状态的原因，如 'DiskPressure'。
 	// +optional
 	Reason string
 
@@ -67,8 +66,8 @@ type PodStatus struct {
 	// +optional
 	PodIP string
 
-	// Date and time at which the object was acknowledged by the Kubelet.
-	// This is before the Kubelet pulled the container image(s) for the pod.
+	// Kubelet 确认该对象的时间。
+	// 该时间早于 Kubelet 为 Pod 拉取容器镜像的时间。
 	// +optional
 	StartTime *metav1.Time
 }
@@ -87,55 +86,55 @@ type PodCondition struct {
 	Message string
 }
 
-// PodSpec is a description of a pod
+// PodSpec 是对 Pod 的描述
 //
 // 这些字段是从 core/v1 复制的子集，用于让示例 API 具备足够的结构
 // 深度以覆盖 conversion 与 field selector 等测试。
 type PodSpec struct {
 	// +optional
 	RestartPolicy RestartPolicy
-	// Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request.
-	// Value must be non-negative integer. The value zero indicates delete immediately.
-	// If this value is nil, the default grace period will be used instead.
-	// The grace period is the duration in seconds after the processes running in the pod are sent
-	// a termination signal and the time when the processes are forcibly halted with a kill signal.
-	// Set this value longer than the expected cleanup time for your process.
+	// 优雅终止 Pod 的可选秒数。删除请求可将其调小。
+	// 必须是非负整数；0 表示立即删除。
+	// 若为 nil，则使用默认宽限期。
+	// 宽限期是从向 Pod 内进程发送终止信号，到进程被强制杀死之间的秒数。
+	//
+	// 该值应大于进程的预期清理时间。
 	// +optional
 	TerminationGracePeriodSeconds *int64
-	// Optional duration in seconds relative to the StartTime that the pod may be active on a node
-	// before the system actively tries to terminate the pod; value must be positive integer
+	// Pod 在节点上可保持活动的可选秒数，从 StartTime 起算；
+	// 超过后系统会主动终止 Pod；必须是正整数。
 	// +optional
 	ActiveDeadlineSeconds *int64
-	// NodeSelector is a selector which must be true for the pod to fit on a node
+	// NodeSelector 是 Pod 能调度到某节点必须满足的选择器
 	// +optional
 	NodeSelector map[string]string
 
-	// ServiceAccountName is the name of the ServiceAccount to use to run this pod
-	// The pod will be allowed to use secrets referenced by the ServiceAccount
+	// ServiceAccountName 是运行此 Pod 所用的 ServiceAccount 名称
+	// Pod 将被允许使用该 ServiceAccount 引用的 secret
 	ServiceAccountName string
 
-	// NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
-	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
-	// requirements.
+	// NodeName 是请求将 Pod 调度到指定节点。若非空，调度器会直接
+	// 将其调度到该节点，前提是满足资源
+	// 要求。
 	// +optional
 	NodeName string
-	// Specifies the hostname of the Pod.
-	// If not specified, the pod's hostname will be set to a system-defined value.
+	// 指定 Pod 的 hostname。
+	// 未指定时，Pod 的 hostname 由系统设定。
 	// +optional
 	Hostname string
-	// If specified, the fully qualified Pod hostname will be "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>".
-	// If not specified, the pod will not have a domainname at all.
+	// 若指定，则 Pod 的完整主机名格式为 "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>"。
+	// 未指定时，Pod 完全没有域名。
 	// +optional
 	Subdomain string
-	// If specified, the pod will be dispatched by specified scheduler.
-	// If not specified, the pod will be dispatched by default scheduler.
+	// 若指定，则由指定调度器分发该 Pod。
+	// 未指定时，由默认调度器分发。
 	// +optional
 	SchedulerName string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodList is a list of Pods.
+// PodList 是 Pod 列表。
 type PodList struct {
 	metav1.TypeMeta
 	// +optional
@@ -146,35 +145,35 @@ type PodList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ReplicaSet ensures that a specified number of pod replicas are running at any given time.
+// ReplicaSet 确保任意时刻都有指定数量的 Pod 副本在运行。
 type ReplicaSet struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the desired behavior of this ReplicaSet.
+	// Spec 定义此 ReplicaSet 的期望行为。
 	// +optional
 	Spec ReplicaSetSpec
 
-	// Status is the current status of this ReplicaSet. This data may be
-	// out of date by some window of time.
+	// Status 是此 ReplicaSet 的当前状态。这些数据可能
+	// 滞后一段时间。
 	// +optional
 	Status ReplicaSetStatus
 }
 
-// ReplicaSetSpec is the specification of a ReplicaSet.
-// As the internal representation of a ReplicaSet, it must have
-// a Template set.
+// ReplicaSetSpec 是 ReplicaSet 的规格。
+// 作为 ReplicaSet 的内部表示，必须设置
+// Template。
 //
 // 注意 Replicas 在内部版本是值类型，而 v1 外部版本用指针以区分
 // “未设置”与“显式 0”，这正是 conversion.go 需要特殊处理的原因。
 type ReplicaSetSpec struct {
-	// Replicas is the number of desired replicas.
+	// Replicas 是期望的副本数。
 	Replicas int32
 }
 
-// ReplicaSetStatus represents the current status of a ReplicaSet.
+// ReplicaSetStatus 表示 ReplicaSet 的当前状态。
 type ReplicaSetStatus struct {
-	// Replicas is the number of actual replicas.
+	// Replicas 是实际的副本数。
 	Replicas int32
 }

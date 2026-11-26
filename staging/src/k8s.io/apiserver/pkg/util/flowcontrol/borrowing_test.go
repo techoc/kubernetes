@@ -44,20 +44,20 @@ type borrowingTestConstraints struct {
 	lendable, borrowing int32
 }
 
-// TestBorrowing tests borrowing of concurrency between priority levels.
-// It runs two scenarios, one where the borrowing hits the limit on
-// lendable concurrency and one where the borrowing hits the limit on
-// borrowing of concurrency.
-// Both scenarios are the same except for the limits.
-// The test defines two priority levels, identified as "flows" 0 and 1.
-// Both priority levels have a nominal concurrency limit of 12.
-// The test maintains 24 concurrent clients for priority level 0
-// and 6 for level 1,
-// using an exec func that simply sleeps for 250 ms, for
-// 25 seconds.  The first 10 seconds of behavior are ignored, allowing
-// the borrowing to start at any point during that time.  The test
-// continues for another 15 seconds, and checks that the delivered
-// concurrency is about 16 for flow 0 and 6 for flow 1.
+// TestBorrowing 测试优先级之间的并发额度借用。
+// 它运行两个场景，一个让借用触及可借出并发数的上限，
+// 另一个让借用触及借入并发数的上限。
+// 两个场景除限制值外完全相同。
+// 测试定义两个优先级，标识为 "flow" 0 与 1。
+//
+// 两个优先级的名义并发上限均为 12。
+// 测试为优先级 0 维持 24 个并发客户端，
+// 为优先级 1 维持 6 个，
+// exec func 只休眠 250 ms，持续
+// 25 秒。前 10 秒的行为被忽略，以允许
+// 借用在这段时间内的任意时刻开始。测试
+// 再持续 15 秒，检查实际交付的并发数
+// 约为 flow 0 的 16 与 flow 1 的 6。
 func TestBorrowing(t *testing.T) {
 	clientsPerFlow := [2]int{24, 6}
 	metrics.Register()
@@ -191,7 +191,7 @@ func TestBorrowing(t *testing.T) {
 			qnf := fq.QueueNoteFn(func(bool) {})
 			var startWG sync.WaitGroup
 			startWG.Add(clientsPerFlow[0] + clientsPerFlow[1])
-			// Launch 20 client threads for each flow
+			// 为每条 flow 启动 20 个客户端线程
 			for flow := 0; flow < 2; flow++ {
 				username := usernames[flow]
 				flowUser := testUser{name: username}
@@ -220,19 +220,19 @@ func TestBorrowing(t *testing.T) {
 			// 确保控制器有时间感知负载并作出调整。
 			// 前 10 秒用于预热，借入可能在这段时间内的任意时刻开始，故不计入统计。
 			clk.Sleep(10 * time.Second)
-			// Start the stats that matter from now
+			// 从现在开始统计关键指标
 			for _, ci := range concIntegrators {
 				ci.Reset()
 			}
-			// Run for 15 seconds
+			// 运行 15 秒
 			clk.Sleep(15 * time.Second)
-			// Collect the delivered concurrency stats
+			// 收集实际交付的并发数统计
 			results0 := concIntegrators[0].Reset()
 			results1 := concIntegrators[1].Reset()
-			// shut down all the async stuff
+			// 关闭所有异步任务
 			cancel()
 
-			// Do the checking
+			// 执行检查
 
 			t.Log("waiting for the controller Run function to shutdown gracefully")
 			controllerErr := <-controllerCompletionCh

@@ -34,18 +34,18 @@ type event struct {
 	isDeleted        bool
 	isCreated        bool
 	isProgressNotify bool
-	// isInitialEventsEndBookmark helps us keep track
-	// of whether we have sent an annotated bookmark event.
+	// isInitialEventsEndBookmark 用于跟踪
+	// 是否已发送带注解的 bookmark 事件。
 	//
-	// when this variable is set to true,
-	// a special annotation will be added
-	// to the bookmark event.
+	// 该变量设为 true 时，
+	// 会向 bookmark 事件添加一个
+	// 特殊注解。
 	//
 	// 为消除 startWatching 与 processEvent 两个 goroutine 对同一标记的争用，
 	// 这里选择扩展事件结构体字段，而非用共享状态传递“初始事件已同步完”的标记，
 	// 避免两个 goroutine 为同一个标记加锁。
 	isInitialEventsEndBookmark bool
-	// isInitialEvent indicates the event was generated from an initial state sync.
+	// isInitialEvent 表示该事件由初始状态同步产生。
 	isInitialEvent bool
 	recordTime     time.Time
 }
@@ -68,7 +68,7 @@ func parseKV(kv *mvccpb.KeyValue) *event {
 // 否则无法判断对象此前是否存在/内容是否匹配（常见于 revision 已被压缩）。
 func parseEvent(e *clientv3.Event) (*event, error) {
 	if !e.IsCreate() && e.PrevKv == nil {
-		// If the previous value is nil, error. One example of how this is possible is if the previous value has been compacted already.
+		// 若之前的值为 nil 则报错，例如该值已被压缩掉的情况。
 		return nil, fmt.Errorf("etcd event received with PrevKv=nil (key=%q, modRevision=%d, type=%s)", string(e.Kv.Key), e.Kv.ModRevision, e.Type.String())
 
 	}

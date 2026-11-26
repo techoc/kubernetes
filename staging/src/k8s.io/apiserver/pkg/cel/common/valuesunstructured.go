@@ -32,9 +32,9 @@ import (
 	"k8s.io/apiserver/pkg/cel"
 )
 
-// UnstructuredToVal converts a Kubernetes unstructured data element to a CEL Val.
-// The root schema of custom resource schemas is expected to contain type meta and object meta schemas.
-// If Embedded resources do not contain type meta and object meta schemas, they will be added automatically.
+// UnstructuredToVal 把 Kubernetes 非结构化数据元素转换为 CEL Val。
+// 自定义资源 schema 的根 schema 应包含 type meta 与 object meta 的 schema。
+// 若嵌入资源缺少这两部分 schema，会自动补上。
 //
 // 转换严格以 OpenAPI schema 为准：数据与 schema 不符时返回 CEL error 值而不是 panic，
 // 让策略求值失败而不是让 apiserver 崩溃。
@@ -90,14 +90,14 @@ func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 			}
 		}
 
-		// properties and additionalProperties are mutual exclusive, but nothing prevents the situation
-		// where both are missing.
-		// An object that (1) has no properties (2) has no additionalProperties or additionalProperties == false
-		// is treated as an empty object.
-		// An object that has additionalProperties == true is treated as an unstructured map.
-		// An object that has x-kubernetes-preserve-unknown-field extension set is treated as an unstructured map.
-		// Empty object vs unstructured map is differentiated by unstructuredMap implementation with the set schema.
-		// The resulting result remains the same.
+		// properties 与 additionalProperties 互斥，但两者都缺失的情况
+		// 也无法阻止。
+		// 满足 (1) 无 properties (2) 无 additionalProperties 或其值为 false 的对象
+		// 视为空对象。
+		// additionalProperties == true 的对象视为非结构化 map。
+		// 设置了 x-kubernetes-preserve-unknown-field 扩展的对象也视为非结构化 map。
+		// 空对象与非结构化 map 由 unstructuredMap 实现结合 schema 加以区分，
+		// 但最终结果保持一致。
 		return &unstructuredMap{
 			value:  m,
 			schema: schema,
@@ -172,8 +172,8 @@ func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 	}
 	if schema.Type() == "number" {
 		switch v := unstructured.(type) {
-		// float representations of whole numbers (e.g. 1.0, 0.0) can convert to int representations (e.g. 1, 0) in yaml
-		// to json translation, and then get parsed as int64s
+		// 整数的小数表示（如 1.0、0.0）在 yaml 转 json 时可能变为整数表示（如 1、0），
+		// 随后被解析为 int64。
 		case int:
 			return types.Double(v)
 		case int32:
@@ -217,10 +217,10 @@ func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
 	return types.NewErr("invalid type, expected object, array, number, integer, boolean or string, or no type with x-kubernetes-int-or-string or x-kubernetes-preserve-unknown-fields is true, got %s", schema.Type())
 }
 
-// unknownPreserved represents unknown data preserved in custom resources via x-kubernetes-preserve-unknown-fields.
-// It preserves the data at runtime without assuming it is of any particular type and supports only equality checking.
-// unknownPreserved should be used only for values are not directly accessible in CEL expressions, i.e. for data
-// where there is no corresponding CEL type declaration.
+// unknownPreserved 表示通过 x-kubernetes-preserve-unknown-fields 保留在自定义资源中的未知数据。
+// 它在运行时保留数据，不假定其具体类型，且只支持相等比较。
+// unknownPreserved 只用于 CEL 表达式中无法直接访问的值，即那些
+// 没有对应 CEL 类型声明的数据。
 type unknownPreserved struct {
 	u interface{}
 }
@@ -250,7 +250,7 @@ func (t *unknownPreserved) Value() interface{} {
 	return t.u // used by Equal checks
 }
 
-// unstructuredMapList represents an unstructured data instance of an OpenAPI array with x-kubernetes-list-type=map.
+// unstructuredMapList 表示带 x-kubernetes-list-type=map 的 OpenAPI 数组的非结构化实例。
 type unstructuredMapList struct {
 	unstructuredList
 	escapedKeyProps []string
@@ -270,17 +270,17 @@ func (t *unstructuredMapList) getMap() map[interface{}]interface{} {
 	return t.mapOfList
 }
 
-// toMapKey returns a valid golang map key for the given element of the map list.
-// element must be a valid map list entry where all map key props are scalar types (which are comparable in go
-// and valid for use in a golang map key).
+// toMapKey 为 map list 的给定元素构造合法的 Go map key。
+// element 必须是合法的 map list 条目，其所有 map key 属性均为标量类型
+// （在 Go 中可比较，因而可作 map key）。
 func (t *unstructuredMapList) toMapKey(element interface{}) interface{} {
 	eObj, ok := element.(map[string]interface{})
 	if !ok {
 		return types.NewErr("unexpected data format for element of array with x-kubernetes-list-type=map: %T", element)
 	}
-	// Arrays are comparable in go and may be used as map keys, but maps and slices are not.
-	// So we can special case small numbers of key props as arrays and fall back to serialization
-	// for larger numbers of key props
+	// Go 中数组可比较、可作 map key，而 map 与 slice 不行。
+	// 因此少量 key 属性用数组特化处理，更多时
+	// 回退到序列化。
 	if len(t.escapedKeyProps) == 1 {
 		return eObj[t.escapedKeyProps[0]]
 	}
@@ -295,11 +295,11 @@ func (t *unstructuredMapList) toMapKey(element interface{}) interface{} {
 	for i, kf := range t.escapedKeyProps {
 		key[i] = eObj[kf]
 	}
-	// Serialize to a string for more than 3 keys. %#v quotes strings.
+	// 超过 3 个 key 时序列化为字符串。%#v 会为字符串加引号。
 	return fmt.Sprintf("%#v", key)
 }
 
-// Equal on a map list ignores list element order.
+// map list 上的 Equal 忽略列表元素顺序。
 func (t *unstructuredMapList) Equal(other ref.Val) ref.Val {
 	oMapList, ok := other.(traits.Lister)
 	if !ok {
@@ -328,9 +328,9 @@ func (t *unstructuredMapList) Equal(other ref.Val) ref.Val {
 	return types.Bool(len(seen) == len(tMap))
 }
 
-// Add for a map list `X + Y` performs a merge where the array positions of all keys in `X` are preserved but the values
-// are overwritten by values in `Y` when the key sets of `X` and `Y` intersect. Elements in `Y` with
-// non-intersecting keys are appended, retaining their partial order.
+// map list 的 `X + Y` 执行合并：`X` 中所有 key 的数组位置保留，
+// 当 `X` 与 `Y` 的 key 集合相交时，值被 `Y` 中的值覆盖。
+// `Y` 中 key 不相交的元素追加到末尾，保持其偏序。
 func (t *unstructuredMapList) Add(other ref.Val) ref.Val {
 	oMapList, ok := other.(traits.Lister)
 	if !ok {
@@ -343,9 +343,9 @@ func (t *unstructuredMapList) Add(other ref.Val) ref.Val {
 	return addToMapList(elements, oMapList, t.escapedKeyProps)
 }
 
-// escapeKeyProps returns identifiers with Escape applied to each.
-// Identifiers that cannot be escaped are left as-is. They are inaccessible to CEL programs but are
-// are still needed internally to perform equality checks.
+// escapeKeyProps 返回对每个标识符应用 Escape 后的结果。
+// 无法转义的标识符保持原样，CEL 程序虽无法访问它们，
+// 但内部进行相等比较时仍需保留。
 func escapeKeyProps(idents []string) []string {
 	result := make([]string, len(idents))
 	for i, prop := range idents {
@@ -358,7 +358,7 @@ func escapeKeyProps(idents []string) []string {
 	return result
 }
 
-// unstructuredSetList represents an unstructured data instance of an OpenAPI array with x-kubernetes-list-type=set.
+// unstructuredSetList 表示带 x-kubernetes-list-type=set 的 OpenAPI 数组的非结构化实例。
 type unstructuredSetList struct {
 	unstructuredList
 
@@ -383,7 +383,7 @@ func (t *unstructuredSetList) getSet() (map[interface{}]struct{}, ref.Val) {
 	return t.set, t.setErr
 }
 
-// Equal on a set list ignores list element order.
+// set list 上的 Equal 忽略列表元素顺序。
 func (t *unstructuredSetList) Equal(other ref.Val) ref.Val {
 	oSetList, ok := other.(traits.Lister)
 	if !ok {
@@ -411,8 +411,8 @@ func (t *unstructuredSetList) Equal(other ref.Val) ref.Val {
 	return types.Bool(len(seen) == len(tSet))
 }
 
-// Add for a set list `X + Y` performs a union where the array positions of all elements in `X` are preserved and
-// non-intersecting elements in `Y` are appended, retaining their partial order.
+// set list 的 `X + Y` 执行并集：保留 `X` 中所有元素的数组位置，
+// 追加 `Y` 中不相交的元素，并保持其偏序。
 func (t *unstructuredSetList) Add(other ref.Val) ref.Val {
 	oSetList, ok := other.(traits.Lister)
 	if !ok {
@@ -425,7 +425,7 @@ func (t *unstructuredSetList) Add(other ref.Val) ref.Val {
 	return addToSetList(elements, oSetList)
 }
 
-// unstructuredList represents an unstructured data instance of an OpenAPI array with x-kubernetes-list-type=atomic (the default).
+// unstructuredList 表示带 x-kubernetes-list-type=atomic（默认）的 OpenAPI 数组的非结构化实例。
 type unstructuredList struct {
 	elements    []interface{}
 	itemsSchema Schema
@@ -439,8 +439,8 @@ func (t *unstructuredList) ConvertToNative(typeDesc reflect.Type) (interface{}, 
 	switch typeDesc.Kind() {
 	case reflect.Slice:
 		switch t.itemsSchema.Type() {
-		// Workaround for https://github.com/kubernetes/kubernetes/issues/117590 until we
-		// resolve the desired behavior in cel-go via https://github.com/google/cel-go/issues/688
+		// 在 cel-go 中确定期望行为（见 https://github.com/google/cel-go/issues/688）之前，
+		// 这是针对 https://github.com/kubernetes/kubernetes/issues/117590 的权宜之计。
 		case "string":
 			var result []string
 			for _, e := range t.elements {
@@ -585,11 +585,11 @@ func (t *unstructuredList) Size() ref.Val {
 	return types.Int(len(t.elements))
 }
 
-// unstructuredMap represented an unstructured data instance of an OpenAPI object.
+// unstructuredMap 表示 OpenAPI 对象的非结构化数据实例。
 type unstructuredMap struct {
 	value  map[string]interface{}
 	schema Schema
-	// propSchema finds the schema to use for a particular map key.
+	// propSchema 查找特定 map key 应使用的 schema。
 	propSchema func(key string) (Schema, bool)
 }
 
@@ -641,11 +641,11 @@ func (t *unstructuredMap) Equal(other ref.Val) ref.Val {
 				return vEq // either false or error
 			}
 		} else {
-			// Must be an object with properties.
-			// Since we've encountered an unknown field, fallback to unstructured equality checking.
+			// 必须是带 properties 的对象。
+			// 既然遇到未知字段，就回退到非结构化相等比较。
 			ouMap, ok := other.(*unstructuredMap)
 			if !ok {
-				// The compiler ensures equality is against the same type of object, so this should be unreachable
+				// 编译器保证相等比较双方是同一对象类型，因此这里不应可达。
 				return types.MaybeNoSuchOverloadErr(other)
 			}
 			if oValue, ok := ouMap.value[key]; ok {
@@ -746,8 +746,8 @@ func (t *unstructuredMap) Find(key ref.Val) (ref.Val, bool) {
 		}
 	}
 	if v, ok := t.value[k]; ok {
-		// If this is an object with properties, not an object with additionalProperties,
-		// then null valued nullable fields are treated the same as absent optional fields.
+		// 若是带 properties 的对象而非带 additionalProperties 的对象，
+		// 则为 null 的 nullable 字段与缺失的 optional 字段视为相同。
 		if isObject && v == nil {
 			return nil, false
 		}

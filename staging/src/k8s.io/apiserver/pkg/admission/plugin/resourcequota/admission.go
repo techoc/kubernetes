@@ -33,7 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// PluginName is a string with the name of the plugin
+// PluginName 是插件名称字符串
 const PluginName = "ResourceQuota"
 
 var (
@@ -41,18 +41,18 @@ var (
 	stopChUnconfiguredErr = fmt.Errorf("quota configuration configured between stop channel")
 )
 
-// Register registers a plugin
+// Register 注册插件
 // 配置在插件注册时解析并校验，配置错误会直接导致 apiserver 启动失败，
 // 而不是在首个请求时才暴露。5 是评估器并发数。
 func Register(plugins *admission.Plugins) {
 	plugins.Register(PluginName,
 		func(config io.Reader) (admission.Interface, error) {
-			// load the configuration provided (if any)
+			// 加载已提供的配置（如有）
 			configuration, err := LoadConfiguration(config)
 			if err != nil {
 				return nil, err
 			}
-			// validate the configuration (if any)
+			// 校验已提供的配置（如有）
 			if configuration != nil {
 				if errs := validation.ValidateConfiguration(configuration); len(errs) != 0 {
 					return nil, errs.ToAggregate()
@@ -62,7 +62,7 @@ func Register(plugins *admission.Plugins) {
 		})
 }
 
-// QuotaAdmission implements an admission controller that can enforce quota constraints
+// QuotaAdmission 实现可强制执行配额约束的准入控制器
 //
 // 只实现 ValidationInterface，即只在 create/update 时做校验；配额的实际
 // 扣减由 quota controller 异步完成，这里负责拒绝超额请求。
@@ -90,9 +90,9 @@ type liveLookupEntry struct {
 	items  []*corev1.ResourceQuota
 }
 
-// NewResourceQuota configures an admission controller that can enforce quota constraints
-// using the provided registry.  The registry must have the capability to handle group/kinds that
-// are persisted by the server this admission controller is intercepting
+// NewResourceQuota 用给定的 registry 配置可强制执行配额约束的准入控制器。
+// registry 必须能处理本准入控制器所拦截服务器持久化的 group/kind，
+// 否则查询配额资源时无法解码。
 //
 // 此处只注册 create/update；Delete 不需要准入校验，配额回收由 controller 处理。
 func NewResourceQuota(config *resourcequotaapi.Configuration, numEvaluators int) (*QuotaAdmission, error) {
@@ -110,24 +110,24 @@ func NewResourceQuota(config *resourcequotaapi.Configuration, numEvaluators int)
 	}, nil
 }
 
-// SetDrainedNotification sets the stop channel into QuotaAdmission.
+// SetDrainedNotification 将停止通道注入 QuotaAdmission
 func (a *QuotaAdmission) SetDrainedNotification(stopCh <-chan struct{}) {
 	a.stopCh = stopCh
 }
 
-// SetExternalKubeClientSet registers the client into QuotaAdmission
+// SetExternalKubeClientSet 将客户端注入 QuotaAdmission
 func (a *QuotaAdmission) SetExternalKubeClientSet(client kubernetes.Interface) {
 	a.quotaAccessor.client = client
 }
 
-// SetExternalKubeInformerFactory registers an informer factory into QuotaAdmission
+// SetExternalKubeInformerFactory 将 informer 工厂注入 QuotaAdmission
 func (a *QuotaAdmission) SetExternalKubeInformerFactory(f informers.SharedInformerFactory) {
 	quotas := f.Core().V1().ResourceQuotas()
 	a.quotaAccessor.lister = quotas.Lister()
 	a.quotaAccessor.hasSynced = quotas.Informer().HasSynced
 }
 
-// SetQuotaConfiguration assigns and initializes configuration and evaluator for QuotaAdmission
+// SetQuotaConfiguration 为 QuotaAdmission 赋值并初始化配置与评估器
 //
 // evaluator 需要 stopCh 才能启动后台 worker；initializer 的调用顺序不保证
 // stopCh 先于配置注入，因此这里记录错误，留给 ValidateInitialization 统一报出。
@@ -140,7 +140,7 @@ func (a *QuotaAdmission) SetQuotaConfiguration(c quota.Configuration) {
 	a.evaluator = NewQuotaEvaluator(a.quotaAccessor, a.quotaConfiguration.IgnoredResources(), generic.NewRegistry(a.quotaConfiguration.Evaluators()), nil, a.config, a.numEvaluators, a.stopCh)
 }
 
-// ValidateInitialization ensures an authorizer is set.
+// ValidateInitialization 确保已设置 authorizer
 func (a *QuotaAdmission) ValidateInitialization() error {
 	if a.initializationErr != nil {
 		return a.initializationErr
@@ -169,12 +169,12 @@ func (a *QuotaAdmission) ValidateInitialization() error {
 	return nil
 }
 
-// Validate makes admission decisions while enforcing quota
+// Validate 在执行配额校验时作出准入决定
 //
 // 非 namespace 作用域的请求不受配额约束；创建 Namespace 本身也跳过，
 // 否则 Namespace 创建会因尚不存在配额对象而出现自引用问题。
 func (a *QuotaAdmission) Validate(ctx context.Context, attr admission.Attributes, o admission.ObjectInterfaces) (err error) {
-	// ignore all operations that are not namespaced or creation of namespaces
+	// 忽略所有非 namespace 作用域的操作以及 Namespace 的创建
 	if attr.GetNamespace() == "" || isNamespaceCreation(attr) {
 		return nil
 	}

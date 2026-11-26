@@ -21,30 +21,30 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名
 const GroupName = "resourcequota.admission.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本
 //
 // 该组版本只用于解析 ResourceQuota 准入插件的 Configuration 配置对象，
 // 不对外暴露 REST API；修改组名会破坏现有配置文件的反序列化。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 会留在 k8s.io/kubernetes。
 
-	// SchemeBuilder is a pointer used to call AddToScheme
+	// SchemeBuilder 是用于调用 AddToScheme 的指针
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is used to register the types to API encoding/decoding machinery
+	// AddToScheme 用于向 API 编解码机制注册类型
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 此处只注册手写函数，生成函数的注册位于生成文件中。
+	// 这样即使生成文件缺失，代码也能编译通过。
+	// 否则生成文件缺失时包无法编译。
 	//
 	// 手写注册与生成代码分离：生成文件缺失时包仍可编译，只是缺少默认值等生成逻辑。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)

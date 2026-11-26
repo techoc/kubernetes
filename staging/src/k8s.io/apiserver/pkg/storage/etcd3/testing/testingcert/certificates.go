@@ -19,22 +19,22 @@ limitations under the License.
 // 它们仅用于本地测试，绝不能用于任何真实环境。
 package testingcert
 
-// You can use cfssl tool to generate certificates, please refer
+// 可用 cfssl 工具生成证书，详情参见
 // https://github.com/etcd-io/etcd/tree/main/hack/tls-setup for more details.
 //
 // ca-config.json:
 //
-//	expiry was changed from 1 year to 100 years (876000h)
+//	有效期从 1 年改为 100 年（876000h）
 //
 // ca-csr.json:
 //
 //	ca expiry was set to 100 years (876000h) ("ca":{"expiry":"876000h"})
-//	key was changed from ecdsa,384 to rsa,2048
+//	key 从 ecdsa,384 改为 rsa,2048
 //
 // req-csr.json:
 //
-//	key was changed from ecdsa,384 to rsa,2048
-//	hosts were changed to "localhost","127.0.0.1"
+//	key 从 ecdsa,384 改为 rsa,2048
+//	hosts 改为 "localhost"、"127.0.0.1"
 //
 // CAFileContent 是测试用 CA 证书（PEM）。etcd 与客户端都信任它，
 // 这样测试无需访问系统根证书库。

@@ -27,13 +27,13 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// AuthorizerMetrics specifies a set of methods that are used to register various metrics for the webhook authorizer
+// AuthorizerMetrics 指定一组方法，用于为 webhook 授权器注册各种指标
 type AuthorizerMetrics interface {
-	// Request total and latency metrics
+	// 请求总数与延迟指标
 	RequestMetrics
-	// Webhook count, latency, and fail open metrics
+	// webhook 次数、延迟与 fail open 指标
 	WebhookMetrics
-	// match condition metrics
+	// 匹配条件指标
 	cel.MatcherMetrics
 }
 
@@ -46,10 +46,10 @@ type NoopAuthorizerMetrics struct {
 
 // RequestMetrics 记录整个 webhook 授权请求的计数与延迟。
 type RequestMetrics interface {
-	// RecordRequestTotal increments the total number of requests for the webhook authorizer
+	// RecordRequestTotal 增加 webhook 授权器的请求总数。
 	RecordRequestTotal(ctx context.Context, code string)
 
-	// RecordRequestLatency measures request latency in seconds for webhooks. Broken down by status code.
+	// RecordRequestLatency 记录 webhook 请求延迟（秒），按状态码细分。
 	RecordRequestLatency(ctx context.Context, code string, latency float64)
 }
 
@@ -64,25 +64,25 @@ func (NoopRequestMetrics) RecordRequestLatency(context.Context, string, float64)
 
 // WebhookMetrics 按单个 webhook 维度记录调用结果。
 type WebhookMetrics interface {
-	// RecordWebhookEvaluation increments with each round-trip of a webhook authorizer.
-	// result is one of:
-	// - canceled: the call invoking the webhook request was canceled
-	// - timeout: the webhook request timed out
-	// - error: the webhook response completed and was invalid
-	// - success: the webhook response completed and was well-formed
+	// RecordWebhookEvaluation 在 webhook 授权器每次往返时递增。
+	// result 是以下之一：
+	// - canceled：调用 webhook 请求的操作被取消
+	// - timeout：webhook 请求超时
+	// - error：webhook 响应完成但无效
+	// - success：webhook 响应完成且格式正确
 	RecordWebhookEvaluation(ctx context.Context, name, result string)
-	// RecordWebhookDuration records latency for each round-trip of a webhook authorizer.
-	// result is one of:
-	// - canceled: the call invoking the webhook request was canceled
-	// - timeout: the webhook request timed out
-	// - error: the webhook response completed and was invalid
-	// - success: the webhook response completed and was well-formed
+	// RecordWebhookDuration 记录 webhook 授权器每次往返的延迟。
+	// result 是以下之一：
+	// - canceled：调用 webhook 请求的操作被取消
+	// - timeout：webhook 请求超时
+	// - error：webhook 响应完成但无效
+	// - success：webhook 响应完成且格式正确
 	RecordWebhookDuration(ctx context.Context, name, result string, duration float64)
-	// RecordWebhookFailOpen increments when a webhook timeout or error results in a fail open
-	// of a request which has not been canceled.
-	// result is one of:
-	// - timeout: the webhook request timed out
-	// - error: the webhook response completed and was invalid
+	// webhook 超时或错误导致一个未被取消的请求 fail open 时，
+	// RecordWebhookFailOpen 递增。
+	// result 是以下之一：
+	// - timeout：webhook 请求超时
+	// - error：webhook 响应完成但无效
 	RecordWebhookFailOpen(ctx context.Context, name, result string)
 }
 
@@ -102,7 +102,7 @@ func (NoopWebhookMetrics) RecordWebhookFailOpen(ctx context.Context, name, resul
 // 指标只注册一次；重复注册会 panic，用 Once 保证并发初始化安全。
 var registerWebhookMetrics sync.Once
 
-// RegisterMetrics registers authorizer metrics.
+// RegisterMetrics 注册授权器指标。
 func RegisterWebhookMetrics() {
 	registerWebhookMetrics.Do(func() {
 		legacyregistry.MustRegister(webhookEvaluations)

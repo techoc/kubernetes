@@ -39,10 +39,10 @@ import (
 )
 
 const (
-	// Now only supported unix domain socket.
+	// 当前只支持 Unix 域 socket。
 	unixProtocol = "unix"
 
-	// Current version for the protocol interface definition.
+	// 协议接口定义的当前版本。
 	kmsapiVersion = "v2beta1"
 )
 
@@ -174,14 +174,14 @@ func (s *Base64Plugin) CleanUp() {
 	_ = os.Remove(s.socketPath)
 }
 
-// EnterFailedState places the plugin into failed state.
+// EnterFailedState 让插件进入失败状态。
 func (s *Base64Plugin) EnterFailedState() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inFailedState = true
 }
 
-// ExitFailedState removes the plugin from the failed state.
+// ExitFailedState 让插件退出失败状态。
 func (s *Base64Plugin) ExitFailedState() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package server contains the plumbing to create kubernetes-like API server command.
+// Package server 包含创建 Kubernetes 风格 API server 命令的基础设施。
 //
 // 本包提供组装 Kubernetes 风格 API Server 所需的骨架：配置与默认值、鉴权/准入链、
 // 处理器安装、优雅关闭，以及后台动态证书加载等。它只负责“通用”服务端装配，

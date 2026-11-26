@@ -48,25 +48,25 @@ type x509DeprecatedCertificateMetricsRTWrapper struct {
 // 与握手成功但证书本身已弃用（peer certificates）。两条路径都需要，
 // 否则 GODEBUG 开关不同时只能观测到其中一半。
 type deprecatedCertificateAttributeChecker interface {
-	// CheckRoundTripError returns true if the err is an error specific
-	// to this deprecated certificate attribute
+	// err 是与本弃用证书属性相关的错误时，CheckRoundTripError 返回 true
+	//
 	CheckRoundTripError(err error) bool
-	// CheckPeerCertificates returns true if the deprecated attribute/value pair
-	// was found in a given certificate in the http.Response.TLS.PeerCertificates bundle
+	// 在给定证书的 http.Response.TLS.PeerCertificates bundle 中发现
+	// 该弃用属性/值对时，CheckPeerCertificates 返回 true
 	CheckPeerCertificates(certs []*x509.Certificate) bool
-	// IncreaseCounter increases the counter internal to this interface
-	// Use the req to derive and log information useful for troubleshooting the certificate issue
+	// IncreaseCounter 增加该接口内部的计数器
+	// 用 req 派生并记录有助于排查证书问题的信息
 	IncreaseMetricsCounter(req *http.Request)
 }
 
-// counterRaiser is a helper structure to include in certificate deprecation checkers.
-// It implements the IncreaseMetricsCounter() method so that, when included in the checker,
-// it does not have to be reimplemented.
+// counterRaiser 是可嵌入到证书弃用检查器中的辅助结构。
+// 它实现 IncreaseMetricsCounter() 方法，这样嵌入后
+// 就不必重复实现。
 type counterRaiser struct {
 	counter *metrics.Counter
-	// programmatic id used in log and audit annotations prefixes
+	// 用于日志与审计注解前缀的编程 ID
 	id string
-	// human readable explanation
+	// 人类可读的说明
 	reason string
 }
 
@@ -156,19 +156,19 @@ func NewSANDeprecatedChecker(counter *metrics.Counter) *missingSANChecker {
 	}
 }
 
-// CheckRoundTripError returns true when we're running w/o GODEBUG=x509ignoreCN=0
-// and the client reports a HostnameError about the legacy CN fields
+// 在未设置 GODEBUG=x509ignoreCN=0 的情况下运行时，CheckRoundTripError 返回 true，
+// 且客户端报告了关于旧 CN 字段的 HostnameError
 func (c *missingSANChecker) CheckRoundTripError(err error) bool {
 	if err != nil && errors.As(err, &x509.HostnameError{}) && strings.Contains(err.Error(), "x509: certificate relies on legacy Common Name field") {
-		// increase the count of registered failures due to Go 1.15 x509 cert Common Name deprecation
+		// 增加因 Go 1.15 x509 证书 Common Name 弃用导致的登记失败计数
 		return true
 	}
 
 	return false
 }
 
-// CheckPeerCertificates returns true when the server response contains
-// a leaf certificate w/o the SAN extension
+// 服务端响应包含
+// 缺少 SAN 扩展的叶子证书时，CheckPeerCertificates 返回 true
 func (c *missingSANChecker) CheckPeerCertificates(peerCertificates []*x509.Certificate) bool {
 	if len(peerCertificates) > 0 {
 		if serverCert := peerCertificates[0]; !hasSAN(serverCert) {
@@ -207,8 +207,8 @@ func NewSHA1SignatureDeprecatedChecker(counter *metrics.Counter) *sha1SignatureC
 	}
 }
 
-// CheckRoundTripError returns true when we're running w/o GODEBUG=x509sha1=1
-// and the client reports an InsecureAlgorithmError about a SHA1 signature
+// 在未设置 GODEBUG=x509sha1=1 的情况下运行时，CheckRoundTripError 返回 true，
+// 且客户端报告了关于 SHA1 签名的 InsecureAlgorithmError
 func (c *sha1SignatureChecker) CheckRoundTripError(err error) bool {
 	var unknownAuthorityError x509.UnknownAuthorityError
 	if err == nil {
@@ -220,21 +220,21 @@ func (c *sha1SignatureChecker) CheckRoundTripError(err error) bool {
 
 	errMsg := err.Error()
 	if strIdx := strings.Index(errMsg, "x509: cannot verify signature: insecure algorithm"); strIdx != -1 && strings.Contains(errMsg[strIdx:], "SHA1") {
-		// increase the count of registered failures due to Go 1.18 x509 sha1 signature deprecation
+		// 增加因 Go 1.18 x509 SHA1 签名弃用导致的登记失败计数
 		return true
 	}
 
 	return false
 }
 
-// CheckPeerCertificates returns true when the server response contains
-// a non-root non-self-signed  certificate with a deprecated SHA1 signature
+// 服务端响应包含
+// 使用已弃用 SHA1 签名的非根、非自签证书时返回 true
 func (c *sha1SignatureChecker) CheckPeerCertificates(peerCertificates []*x509.Certificate) bool {
 	// 检查所有收到的非自签名证书是否使用了弃用的签名算法。自签名根证书使用
 	// SHA1 不在弃用范围内（无法由 CA 重新签发），因此用 Issuer==Subject 排除。
 	for _, cert := range peerCertificates {
 		if cert.SignatureAlgorithm == x509.SHA1WithRSA || cert.SignatureAlgorithm == x509.ECDSAWithSHA1 {
-			// the SHA-1 deprecation does not involve self-signed root certificates
+			// SHA-1 弃用不涉及自签名的根证书
 			if !reflect.DeepEqual(cert.Issuer, cert.Subject) {
 				return true
 			}

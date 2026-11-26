@@ -72,7 +72,7 @@ var (
 	registerMetrics sync.Once
 )
 
-// Register registers storage LIST metrics.
+// Register 注册存储 LIST 指标。
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(listStorageCount)
@@ -82,7 +82,7 @@ func Register() {
 	})
 }
 
-// RecordStorageListMetrics notes various metrics of the cost to serve a LIST request.
+// RecordStorageListMetrics 记录服务一次 LIST 请求的各项开销指标。
 func RecordStorageListMetrics(groupResource schema.GroupResource, storageBackend, index string, numFetched, numEvald, numReturned int) {
 	listStorageCount.WithLabelValues(groupResource.Group, groupResource.Resource, storageBackend, index).Inc()
 	listStorageNumFetched.WithLabelValues(groupResource.Group, groupResource.Resource, storageBackend, index).Add(float64(numFetched))

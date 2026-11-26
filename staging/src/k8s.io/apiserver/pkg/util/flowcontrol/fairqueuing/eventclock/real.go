@@ -24,7 +24,7 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// RealEventClock fires event on real world time
+// RealEventClock 按真实世界时间触发事件
 // 嵌入 clock.RealClock 复用 Now/Since 等时间读取方法。
 type Real struct {
 	clock.RealClock
@@ -32,7 +32,7 @@ type Real struct {
 
 var _ Interface = Real{}
 
-// EventAfterDuration schedules an EventFunc
+// EventAfterDuration 调度一个 EventFunc
 // 每个事件一个 goroutine；调用方通过 ctx 取消队列时，未触发的回调
 // 仍会执行一次（接口未提供取消），因此 EventFunc 必须能容忍过期触发。
 func (Real) EventAfterDuration(f EventFunc, d time.Duration) {
@@ -43,7 +43,7 @@ func (Real) EventAfterDuration(f EventFunc, d time.Duration) {
 	}()
 }
 
-// EventAfterTime schedules an EventFunc
+// EventAfterTime 调度一个 EventFunc
 // 若 t 已过去，time.Until 返回负值，time.After 会立即触发。
 func (r Real) EventAfterTime(f EventFunc, t time.Time) {
 	r.EventAfterDuration(f, time.Until(t))

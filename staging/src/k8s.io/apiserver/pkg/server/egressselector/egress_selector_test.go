@@ -120,9 +120,9 @@ func TestEgressSelector(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the various pieces such as the fake dialer prior to initializing the egress selector.
-			// Go doesn't allow function pointer comparison, nor does its reflect package
-			// So overriding the default dialer to detect if it is returned.
+			// 在初始化 egress selector 前设置 fake dialer 等组件。
+			// Go 不支持函数指针比较，reflect 包也不行，
+			// 因此覆盖默认 dialer 以检测它是否被返回。
 			fake := &fakeEgressSelection{}
 			directDialer = fake.fakeDirectDialer
 			cs, err := NewEgressSelector(tc.input)

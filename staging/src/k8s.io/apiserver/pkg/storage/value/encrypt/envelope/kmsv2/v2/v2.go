@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v2 contains definition of kms-plugin's serialized types.
+// Package v2 包含 kms-plugin 序列化类型的定义。
 //
 // 这些类型是 KMS v2 插件与 apiserver 之间加密数据的线格式（wire format）。
 // 字段一旦发布即受持久化数据兼容性约束：已写入 etcd 的密文必须始终能被解码，

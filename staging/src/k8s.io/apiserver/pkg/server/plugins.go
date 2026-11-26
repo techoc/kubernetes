@@ -16,7 +16,7 @@ limitations under the License.
 
 package server
 
-// This file exists to force the desired plugin implementations to be linked into genericapi pkg.
+// 本文件的存在是为了强制把所需的插件实现链接进 genericapi 包。
 //
 // 该文件通过空导入（实际是直接引用并调用 Register）把准入插件的实现编译进通用 apiserver 二进制。
 // 插件按名字在运行时查找，若只靠配置字符串，编译器无法得知依赖，链接器会把实现裁掉；
@@ -30,7 +30,7 @@ import (
 	validatingwebhook "k8s.io/apiserver/pkg/admission/plugin/webhook/validating"
 )
 
-// RegisterAllAdmissionPlugins registers all admission plugins
+// RegisterAllAdmissionPlugins 注册所有准入插件
 //
 // 把所有通用准入插件注册进 registry。NamespaceLifecycle 必须最先注册/最先执行，
 // 因为它负责阻止向正在终止的命名空间写入对象，其他插件都应看到这一前置结论。

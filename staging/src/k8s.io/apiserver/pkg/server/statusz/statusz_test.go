@@ -74,7 +74,7 @@ Paths: /livez /readyz
 // 结构化输出（JSON/YAML/CBOR）、v1alpha1 的弃用警告，以及各种不可接受的
 // Accept 头。
 func TestHandleStatusz(t *testing.T) {
-	// Enable CBOR feature gate for CBOR test case
+	// 为 CBOR 测试用例启用 CBOR 特性门控
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 
 	delimiters = []string{":"}
@@ -476,10 +476,10 @@ func timeEqual() cmp.Option {
 	})
 }
 
-// TestNewStatuszCodecFactory ensures all media types in the codec factory
-// are explicitly handled. If this test fails, a new media type was added
-// to the codec factory and needs to be explicitly added to the supported
-// or unsupported list in newStatuszCodecFactory.
+// TestNewStatuszCodecFactory 确保 codec factory 中的所有媒体类型
+// 都被显式处理。若此测试失败，说明向 codec factory 添加了新的媒体类型，
+// 需要把它显式添加到 newStatuszCodecFactory 中受支持
+// 或不受支持的列表里。
 func TestNewStatuszCodecFactory(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CBORServingAndStorage, true)
 	scheme := runtime.NewScheme()
@@ -513,14 +513,14 @@ func TestMetrics(t *testing.T) {
 	metrics.Register()
 	metrics.Reset()
 
-	// text/plain request: group and version should be empty
+	// text/plain 请求：group 与 version 应为空
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://example.com%s", DefaultStatuszPath), nil)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
 	mux.ServeHTTP(httptest.NewRecorder(), req)
 
-	// structured request: group and version should reflect the negotiated version
+	// 结构化请求：group 与 version 应反映协商出的版本
 	req, err = http.NewRequest(http.MethodGet, fmt.Sprintf("http://example.com%s", DefaultStatuszPath), nil)
 	if err != nil {
 		t.Errorf("%v", err)

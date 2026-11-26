@@ -34,9 +34,9 @@ func TestSimpleCache(t *testing.T) {
 	testCache(newSimpleCache(clock.RealClock{}), t)
 }
 
-// Note: the performance profile of this benchmark may not match that in the production.
-// When making change to SimpleCache, run test with and without concurrency to better understand the impact.
-// This is a tool to test and measure high concurrency of the cache in isolation and not to the Kubernetes usage of the Cache.
+// 注意：该 benchmark 的性能特征可能与生产环境不同。
+// 修改 SimpleCache 时，应分别在有并发和无并发的情况下运行测试，以了解影响。
+// 本工具用于在隔离环境下测试与度量缓存的高并发表现，并非评估 Kubernetes 对缓存的使用方式。
 //
 // BenchmarkCacheContentions 对比单分片与 32 分片缓存在高并发下的争用差异，
 // 并覆盖不同 key 数量（256/4096/65536），用来判断分片是否值得引入。
@@ -91,20 +91,20 @@ func testCache(cache cache, t *testing.T) {
 	record1 := &cacheRecord{resp: &authenticator.Response{User: &user.DefaultInfo{Name: "bob"}}}
 	record2 := &cacheRecord{resp: &authenticator.Response{User: &user.DefaultInfo{Name: "alice"}}}
 
-	// when empty, record is stored
+	// 为空时，记录会被存储
 	cache.set("foo", record1, time.Hour)
 	if result, ok := cache.get("foo"); !ok || result != record1 {
 		t.Errorf("Expected %#v, true, got %#v, %v", record1, result, ok)
 	}
 
-	// newer record overrides
+	// 较新的记录覆盖旧记录
 	// 后写覆盖先写，保证刷新令牌后旧身份不会残留。
 	cache.set("foo", record2, time.Hour)
 	if result, ok := cache.get("foo"); !ok || result != record2 {
 		t.Errorf("Expected %#v, true, got %#v, %v", record2, result, ok)
 	}
 
-	// removing the current value removes
+	// 移除当前值会一并移除
 	cache.remove("foo")
 	if result, ok := cache.get("foo"); ok || result != nil {
 		t.Errorf("Expected null, false, got %#v, %v", result, ok)

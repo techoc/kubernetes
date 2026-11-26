@@ -36,9 +36,9 @@ import (
 type DynamicCertKeyPairContent struct {
 	name string
 
-	// certFile is the name of the certificate file to read.
+	// certFile 是要读取的证书文件名。
 	certFile string
-	// keyFile is the name of the key file to read.
+	// keyFile 是要读取的私钥文件名。
 	keyFile string
 
 	// certKeyPair 保存 *certKeyContent，即最近一次读取到的证书与私钥的非空内容；用 atomic.Value 发布，读路径无需锁，写入的是不可变快照。
@@ -46,7 +46,7 @@ type DynamicCertKeyPairContent struct {
 
 	listeners []Listener
 
-	// queue only ever has one item, but it has nice error handling backoff/retry semantics
+	// queue 中始终只有一项，但它有良好的错误处理退避/重试语义
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
@@ -83,7 +83,7 @@ func (c *DynamicCertKeyPairContent) AddListener(listener Listener) {
 	c.listeners = append(c.listeners, listener)
 }
 
-// loadCertKeyPair determines the next set of content for the file.
+// loadCertKeyPair 确定文件的下一组内容。
 func (c *DynamicCertKeyPairContent) loadCertKeyPair() error {
 	cert, err := os.ReadFile(c.certFile)
 	if err != nil {
@@ -124,12 +124,12 @@ func (c *DynamicCertKeyPairContent) loadCertKeyPair() error {
 	return nil
 }
 
-// RunOnce runs a single sync loop
+// RunOnce 执行一次同步循环
 func (c *DynamicCertKeyPairContent) RunOnce(ctx context.Context) error {
 	return c.loadCertKeyPair()
 }
 
-// Run starts the controller and blocks until context is killed.
+// Run 启动控制器并阻塞，直到 context 被取消。
 func (c *DynamicCertKeyPairContent) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	defer c.queue.ShutDown()
@@ -152,7 +152,7 @@ func (c *DynamicCertKeyPairContent) Run(ctx context.Context, workers int) {
 
 // watchCertKeyFile 用 fsnotify 监听两个文件；watch 建立前先入队一次以兜底。
 func (c *DynamicCertKeyPairContent) watchCertKeyFile(stopCh <-chan struct{}) error {
-	// Trigger a check here to ensure the content will be checked periodically even if the following watch fails.
+	// 此处触发一次检查，确保即使后续 watch 失败，内容也会被定期检查。
 	c.queue.Add(workItemKey)
 
 	w, err := fsnotify.NewWatcher()
@@ -167,7 +167,7 @@ func (c *DynamicCertKeyPairContent) watchCertKeyFile(stopCh <-chan struct{}) err
 	if err := w.Add(c.keyFile); err != nil {
 		return fmt.Errorf("error adding watch for file %s: %v", c.keyFile, err)
 	}
-	// Trigger a check in case the file is updated before the watch starts.
+	// 触发一次检查，以防文件在 watch 启动前就已更新。
 	c.queue.Add(workItemKey)
 
 	for {
@@ -184,10 +184,10 @@ func (c *DynamicCertKeyPairContent) watchCertKeyFile(stopCh <-chan struct{}) err
 	}
 }
 
-// handleWatchEvent triggers reloading the cert and key file, and restarts a new watch if it's a Remove or Rename event.
-// If one file is updated before the other, the loadCertKeyPair method will catch the mismatch and will not apply the
-// change. When an event of the other file is received, it will trigger reloading the files again and the new content
-// will be loaded and used.
+// handleWatchEvent 触发重新加载证书与私钥文件，并在事件为 Remove 或 Rename 时重启新的 watch。
+// 若其中一个文件先于另一个更新，loadCertKeyPair 会检测到不匹配，不应用
+// 该变更。收到另一个文件的事件后会再次触发重载，届时新内容
+// 才会被加载使用。
 func (c *DynamicCertKeyPairContent) handleWatchEvent(e fsnotify.Event, w *fsnotify.Watcher) error {
 	// 该操作应在重挂 watch（如适用）之后执行，以确保不遗漏文件事件；defer 保证“重挂 watch 失败”时也仍会触发一次重载。
 	defer c.queue.Add(workItemKey)
@@ -230,12 +230,12 @@ func (c *DynamicCertKeyPairContent) processNextWorkItem() bool {
 	return true
 }
 
-// Name is just an identifier
+// Name 只是标识符
 func (c *DynamicCertKeyPairContent) Name() string {
 	return c.name
 }
 
-// CurrentCertKeyContent provides cert and key byte content
+// CurrentCertKeyContent 提供证书与私钥的字节内容
 func (c *DynamicCertKeyPairContent) CurrentCertKeyContent() ([]byte, []byte) {
 	// 构造时已保证至少加载过一次，因此这里的类型断言是安全的。
 	certKeyContent := c.certKeyPair.Load().(*certKeyContent)

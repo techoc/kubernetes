@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package webhook implements the authorizer.Authorizer interface using HTTP webhooks.
+// Package webhook 用 HTTP webhook 实现 authorizer.Authorizer 接口。
 package webhook
 
 import (

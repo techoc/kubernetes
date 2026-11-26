@@ -385,7 +385,7 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 			baseTransport = http.DefaultTransport
 		}
 		// 此处与 go-oidc v2.2.1 中 oidc.NewProvider 的 URL 构造方式保持一致。
-		// xref: https://github.com/coreos/go-oidc/blob/40cd342c4a2076195294612a834d11df23c1b25a/oidc.go#L114
+		// 参考：https://github.com/coreos/go-oidc/blob/40cd342c4a2076195294612a834d11df23c1b25a/oidc.go#L114
 		urlToRewrite := strings.TrimSuffix(opts.JWTAuthenticator.Issuer.URL, "/") + wellKnownEndpointPath
 		clientWithDiscoveryURL.Transport = &discoveryURLRoundTripper{baseTransport, discoveryURL, urlToRewrite}
 		client = &clientWithDiscoveryURL
@@ -409,7 +409,7 @@ func New(lifecycleCtx context.Context, opts Options) (AuthenticatorTokenWithHeal
 		// 设置 SkipClientIDCheck 为 true，是因为我们要在认证配置中支持多个
 		// audience。go oidc 库不支持校验多个 audience，因此我们不得不跳过
 		// client ID 检查并自行完成它。
-		// xref: https://github.com/coreos/go-oidc/issues/397
+		// 参考：https://github.com/coreos/go-oidc/issues/397
 		verifierConfig.SkipClientIDCheck = true
 	}
 
@@ -698,10 +698,10 @@ type endpoint struct {
 	URL string `json:"endpoint,omitempty"`
 	// AccessToken 是访问时使用的 bearer token。为空则不使用。
 	// 按 OIDC 分布式声明规范，access token 是可选的。
-	// See: http://openid.net/specs/openid-connect-core-1_0.html#DistributedExample
+	// 参见：http://openid.net/specs/openid-connect-core-1_0.html#DistributedExample
 	AccessToken string `json:"access_token,omitempty"`
 	// JWT 是聚合声明（aggregated claims）的载体。目前不支持。
-	// See: http://openid.net/specs/openid-connect-core-1_0.html#AggregatedExample
+	// 参见：http://openid.net/specs/openid-connect-core-1_0.html#AggregatedExample
 	JWT string `json:"JWT,omitempty"`
 }
 
@@ -770,10 +770,10 @@ func (r *claimResolver) Verifier(iss string) (*idTokenVerifier, error) {
 // 提取到的声明值会被回填进传入的 claims。
 //
 // 分布式声明的形式如下所示，定义见 OIDC Connect Core 1.0 第 5.6.2 节。
-// See: https://openid.net/specs/openid-connect-core-1_0.html#AggregatedDistributedClaims
+// 参见：https://openid.net/specs/openid-connect-core-1_0.html#AggregatedDistributedClaims
 //
 //	{
-//	  ... (other normal claims)...
+//	... （其他普通 claim）...
 //	  "_claim_names": {
 //	    "groups": "src1"
 //	  },
@@ -1097,7 +1097,7 @@ func (a *jwtAuthenticator) getGroups(ctx context.Context, c claims, claimsValue 
 			// 有些管理员希望把 "role" 这类字符串 claim 当作组值使用。
 			// 允许 groups claim 是单个字符串而不是数组。
 			//
-			// See: https://github.com/kubernetes/kubernetes/issues/33290
+			// 参见：https://github.com/kubernetes/kubernetes/issues/33290
 			var groups stringOrArray
 			if err := c.unmarshalClaim(groupsClaim, &groups); err != nil {
 				return nil, fmt.Errorf("oidc: parse groups claim %q: %w", groupsClaim, err)

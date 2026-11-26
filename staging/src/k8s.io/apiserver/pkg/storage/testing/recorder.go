@@ -85,7 +85,7 @@ func NewKubernetesRecorder(client kubernetes.Interface) *KubernetesRecorder {
 
 // List 记录本次 List 的起始位置与分页参数后透传。
 func (r *KubernetesRecorder) List(ctx context.Context, key string, opts kubernetes.ListOptions) (kubernetes.ListResponse, error) {
-	// Continue, when set, is where the range actually starts (see kubernetes.Client.List), so fold it into Key.
+	// Continue 若设置，表示 range 实际开始的位置（见 kubernetes.Client.List），因此折叠进 Key。
 	// 折叠后，RecordedList.Key 始终表示“真实读取起点”，便于断言分页行为。
 	rangeStart := key
 	if opts.Continue != "" {
@@ -114,8 +114,8 @@ func (r *KubernetesRecorder) ListRequestForKey(key string) []RecordedList {
 	return r.listsPerKey[key]
 }
 
-// RecordedList is a list request captured by the recorder. Paged and streamed
-// reads both fold their resume point into Key.
+// RecordedList 是 recorder 捕获的 LIST 请求。分页与流式
+// 读取都把续读点折叠进 Key。
 type RecordedList struct {
 	Key      string
 	Revision int64

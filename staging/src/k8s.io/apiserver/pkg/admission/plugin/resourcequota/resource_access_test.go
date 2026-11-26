@@ -130,9 +130,8 @@ func TestLRUCacheLookup(t *testing.T) {
 	}
 }
 
-// TestGetQuotas ensures we do not have multiple LIST calls to the apiserver
-// in-flight at any one time. This is to ensure the issue described in #22422 do
-// not happen again.
+// TestGetQuotas 确保任意时刻至多有一个到 apiserver 的 LIST 调用正在进行，
+// 防止 #22422 描述的问题重现。
 //
 // 并发压测：同命名空间的 10 个并发调用应被 singleflight 合并为 1 次 LIST；
 // 不同命名空间互不共享，因此各 1 次。删除缓存后再调用应再触发一次 LIST。
@@ -179,7 +178,7 @@ func TestGetQuotas(t *testing.T) {
 			quota.Namespace = action.GetNamespace()
 			resourceQuotaList.Items = append(resourceQuotaList.Items, *quota)
 		}
-		// make the handler slow so concurrent calls exercise the singleflight
+		// 让 handler 变慢，使并发调用真正走 singleflight 合并
 		time.Sleep(time.Second)
 		return true, resourceQuotaList, nil
 	})
@@ -187,7 +186,7 @@ func TestGetQuotas(t *testing.T) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < 10; i++ {
 		wg.Add(2)
-		// simulating concurrent calls after a cache failure
+		// 模拟缓存失效后的并发调用
 		go func() {
 			defer wg.Done()
 			quotas, err := accessor.GetQuotas(testNamespace1)
@@ -204,7 +203,7 @@ func TestGetQuotas(t *testing.T) {
 			}
 		}()
 
-		// simulation of different namespaces is a call for a different group key, but not shared with the first namespace
+		// 不同命名空间对应不同的 group key，不与第一个命名空间共享结果
 		go func() {
 			defer wg.Done()
 			quotas, err := accessor.GetQuotas(testNamespace2)
@@ -222,11 +221,10 @@ func TestGetQuotas(t *testing.T) {
 		}()
 	}
 
-	// and here we wait for all the goroutines
+	// 此处等待所有 goroutine 完成
 	wg.Wait()
-	// since all the calls with the same namespace will be held, they must
-	// be caught on the singleflight group. there are two different sets of
-	// namespace calls hence only 2.
+	// 同命名空间的调用会被阻塞并汇聚到 singleflight group；
+	// 共两组不同命名空间的调用，因此只有 2 次。
 	if listCallCountTestNamespace1 != 1 {
 		t.Errorf("Expected 1 resource quota call, got %d", listCallCountTestNamespace1)
 	}
@@ -234,7 +232,7 @@ func TestGetQuotas(t *testing.T) {
 		t.Errorf("Expected 1 resource quota call, got %d", listCallCountTestNamespace2)
 	}
 
-	// invalidate the cache
+	// 使缓存失效
 	accessor.liveLookupCache.Remove(testNamespace1)
 	quotas, err := accessor.GetQuotas(testNamespace1)
 	if err != nil {

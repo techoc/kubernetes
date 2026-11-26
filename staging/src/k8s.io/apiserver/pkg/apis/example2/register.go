@@ -23,30 +23,30 @@ import (
 )
 
 var (
-	// SchemeBuilder collects the functions that add this group's types.
+	// SchemeBuilder 收集添加本组类型的函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme adds this group's types to a scheme.
+	// AddToScheme 将本组类型加入 scheme。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名
 const GroupName = "example2.apiserver.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本
 // 内部版本：Version 为 runtime.APIVersionInternal，仅供测试内部的类型注册。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受非限定 kind，返回带组名的 GroupKind
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组名的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// Adds the list of known types to the given scheme.
+// 将已知类型列表添加到给定的 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&example.ReplicaSet{},

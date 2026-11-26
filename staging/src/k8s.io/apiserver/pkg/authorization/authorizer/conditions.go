@@ -31,18 +31,18 @@ import (
 type conditionsAwareDecisionType int
 
 const (
-	// conditionsAwareDecisionTypeDeny represents the unconditional Deny decision.
-	// It is zero such that ConditionsAwareDecision{}.IsDeny() == true
+	// conditionsAwareDecisionTypeDeny 表示无条件 Deny 决策。
+	// 取零值，使 ConditionsAwareDecision{}.IsDeny() == true
 	conditionsAwareDecisionTypeDeny conditionsAwareDecisionType = 0
-	// conditionsAwareDecisionTypeAllow represents the unconditional Allow decision.
-	// It has a different value from DecisionAllow to never be conflated with that.
+	// conditionsAwareDecisionTypeAllow 表示无条件 Allow 决策。
+	// 取值与 DecisionAllow 不同，避免两者混淆。
 	conditionsAwareDecisionTypeAllow conditionsAwareDecisionType = 11
-	// conditionsAwareDecisionTypeNoOpinion represents the unconditional NoOpinion decision.
-	// It has a different value from DecisionNoOpinion to never be conflated with that.
+	// conditionsAwareDecisionTypeNoOpinion 表示无条件 NoOpinion 决策。
+	// 取值与 DecisionNoOpinion 不同，避免两者混淆。
 	conditionsAwareDecisionTypeNoOpinion conditionsAwareDecisionType = 12
-	// conditionsAwareDecisionTypeConditionsMap represents the conditional ConditionsMap decision.
+	// conditionsAwareDecisionTypeConditionsMap 表示条件性的 ConditionsMap 决策。
 	conditionsAwareDecisionTypeConditionsMap conditionsAwareDecisionType = 13
-	// conditionsAwareDecisionTypeUnion represents a conditional Union decision.
+	// conditionsAwareDecisionTypeUnion 表示条件性的 Union 决策。
 	conditionsAwareDecisionTypeUnion conditionsAwareDecisionType = 14
 )
 
@@ -70,7 +70,7 @@ type ConditionsAwareDecision struct {
 // Deny 对应结构体零值，使未初始化的决策天然 fail-closed。
 func ConditionsAwareDecisionDeny(reason string, err error) ConditionsAwareDecision {
 	return ConditionsAwareDecision{
-		// conditionsAwareDecisionTypeDeny == 0 == zero value
+		// conditionsAwareDecisionTypeDeny == 0 == 零值
 		// => ConditionsAwareDecision{} == ConditionsAwareDecisionDeny()
 		decisionType: conditionsAwareDecisionTypeDeny,
 		reason:       reason,
@@ -78,7 +78,7 @@ func ConditionsAwareDecisionDeny(reason string, err error) ConditionsAwareDecisi
 	}
 }
 
-// ConditionsAwareDecisionAllow constructs an Allow decision with the given reason and error.
+// ConditionsAwareDecisionAllow 用给定的 reason 和 error 构造 Allow 决策。
 func ConditionsAwareDecisionAllow(reason string, err error) ConditionsAwareDecision {
 	return ConditionsAwareDecision{
 		decisionType: conditionsAwareDecisionTypeAllow,
@@ -87,7 +87,7 @@ func ConditionsAwareDecisionAllow(reason string, err error) ConditionsAwareDecis
 	}
 }
 
-// ConditionsAwareDecisionNoOpinion constructs a NoOpinion decision with the given reason and error.
+// ConditionsAwareDecisionNoOpinion 用给定的 reason 和 error 构造 NoOpinion 决策。
 func ConditionsAwareDecisionNoOpinion(reason string, err error) ConditionsAwareDecision {
 	return ConditionsAwareDecision{
 		decisionType: conditionsAwareDecisionTypeNoOpinion,
@@ -119,35 +119,32 @@ func ConditionsAwareDecisionFromParts(unconditional Decision, reason string, err
 	}
 }
 
-// IsAllow returns true if the decision is an unconditional Allow.
+// IsAllow 在决策为无条件 Allow 时返回 true。
 func (d ConditionsAwareDecision) IsAllow() bool {
 	return d.decisionType == conditionsAwareDecisionTypeAllow
 }
 
-// IsNoOpinion returns true if the decision is an unconditional NoOpinion.
+// IsNoOpinion 在决策为无条件 NoOpinion 时返回 true。
 func (d ConditionsAwareDecision) IsNoOpinion() bool {
 	return d.decisionType == conditionsAwareDecisionTypeNoOpinion
 }
 
-// IsDeny returns true if the decision is an unconditional Deny.
+// IsDeny 在决策为无条件 Deny 时返回 true。
 func (d ConditionsAwareDecision) IsDeny() bool {
 	return d.decisionType == conditionsAwareDecisionTypeDeny // == 0 == zero value
 }
 
-// IsConditionsMap returns true if the decision is a conditional response
-// with a map of conditions to evaluate.
+// IsConditionsMap 在决策为条件型（带一组待求值条件）时返回 true。
 func (d ConditionsAwareDecision) IsConditionsMap() bool {
 	return d.decisionType == conditionsAwareDecisionTypeConditionsMap
 }
 
-// ConditionsMap returns the ConditionsMap, which is non-empty
-// if and only if IsConditionsMap is true.
+// ConditionsMap 返回 ConditionsMap，仅当 IsConditionsMap 为 true 时非空。
 func (d ConditionsAwareDecision) ConditionsMap() ConditionsMap {
 	return d.conditionsMap
 }
 
-// IsUnion returns true if the decision consists of other sub-decisions
-// unioned together in a tree-like structure.
+// IsUnion 在决策由多个子决策以树状结构组合而成时返回 true。
 func (d ConditionsAwareDecision) IsUnion() bool {
 	return d.decisionType == conditionsAwareDecisionTypeUnion
 }
@@ -177,10 +174,10 @@ func (d ConditionsAwareDecision) unconditionalParts() (Decision, string, error) 
 	case d.IsNoOpinion():
 		return DecisionNoOpinion, d.Reason(), d.Error()
 	default:
-		// An error is not returned here, as that could yield a HTTP response code of 500 instead of 403.
-		// For the use-case described above with regards to calling this function in Authorize, not returning
-		// an error is important, as it is valid to always fail closed, as if this happens, no unconditional
-		// permissions were given the requestor.
+		// 此处不返回 error，否则 HTTP 层可能响应 500 而不是 403。
+		// 对上文在 Authorize 中调用本函数的场景，不返回 error 很重要：
+		// 始终 fail closed 是合理的——一旦走到这里，请求方
+		// 并未获得任何无条件授权。
 		return d.FailureDecision(), "failed closed: tried to return conditional decision to conditions-unaware authorizer", nil
 	}
 }
@@ -241,16 +238,16 @@ func (d ConditionsAwareDecision) UnionedDecisions() iter.Seq2[string, Conditions
 	}
 }
 
-// Reason returns the reason supplied when constructing
-// an unconditional decision.
-// Reason is an empty string for conditional decisions.
+// Reason 返回构造无条件决策时提供的 reason。
+//
+// 条件决策的 Reason 为空字符串。
 func (d ConditionsAwareDecision) Reason() string {
 	return d.reason
 }
 
-// Error returns the error supplied when constructing
-// an unconditional decision.
-// Error is nil for conditional decisions.
+// Error 返回构造无条件决策时提供的 error。
+//
+// 条件决策的 Error 为 nil。
 func (d ConditionsAwareDecision) Error() error {
 	return d.err
 }
@@ -259,7 +256,7 @@ func (d ConditionsAwareDecision) Error() error {
 // 只含 reason/error 与条件数量，可安全写入日志与审计。
 func (d ConditionsAwareDecision) String() string {
 	if d.IsUnion() {
-		// No need to take d.reason or d.err into account, as they are always zero for the union.
+		// union 决策中 d.reason 与 d.err 恒为零值，无需考虑。
 		b := strings.Builder{}
 		b.WriteString("Union[")
 		for i, sub := range d.union.inner {
@@ -304,7 +301,7 @@ func (d ConditionsAwareDecision) String() string {
 		}
 		return fmt.Sprintf("ConditionsMap%s", paramsStr())
 	}
-	// Deny is written such that if none of the other modes apply,
-	// IsDenied() is true.
+	// Deny 的写法保证：若其他模式都不适用，
+	// IsDenied() 为 true。
 	return fmt.Sprintf("Deny%s", paramsStr())
 }

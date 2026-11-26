@@ -91,12 +91,12 @@ func (a *instrumentedAuthorizer) Authorize(ctx context.Context, attributes autho
 	decision, reason, err := a.delegate.Authorize(ctx, attributes)
 	switch decision {
 	case authorizer.DecisionNoOpinion:
-		// non-terminal, not reported
+		// 非终结状态，不上报
 	case authorizer.DecisionAllow:
-		// matches SubjectAccessReview status.allowed field name
+		// 与 SubjectAccessReview 的 status.allowed 字段名一致
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "allowed")
 	case authorizer.DecisionDeny:
-		// matches SubjectAccessReview status.denied field name
+		// 与 SubjectAccessReview 的 status.denied 字段名一致
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "denied")
 	default:
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "unknown")
@@ -104,38 +104,38 @@ func (a *instrumentedAuthorizer) Authorize(ctx context.Context, attributes autho
 	return decision, reason, err
 }
 
-// ConditionsAwareAuthorize delegates to the wrapped authorizer.
+// ConditionsAwareAuthorize 委派给被包装的授权器。
 func (a *instrumentedAuthorizer) ConditionsAwareAuthorize(ctx context.Context, attributes authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	decision := a.delegate.ConditionsAwareAuthorize(ctx, attributes)
 	switch {
 	case decision.IsNoOpinion():
-		// non-terminal, not reported
+		// 非终结状态，不上报
 	case decision.IsAllow():
-		// matches SubjectAccessReview status.allowed field name
+		// 与 SubjectAccessReview 的 status.allowed 字段名一致
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "allowed")
 	case decision.IsDeny():
-		// matches SubjectAccessReview status.denied field name
+		// 与 SubjectAccessReview 的 status.denied 字段名一致
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "denied")
 	default:
-		// the ConditionsAwareDecision enforces that there are no other possible states
-		// than Allow/Deny/NoOpinion/ConditionsMap/Union. The latter two are conditional
-		// decisions.
+		// ConditionsAwareDecision 保证不存在 Allow/Deny/NoOpinion/ConditionsMap/Union
+		// 之外的状态，后两者属于条件决策。
+		//
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "conditional")
 	}
 	return decision
 }
 
-// EvaluateConditions delegates to the wrapped authorizer, and registers the metric just like Authorize.
+// EvaluateConditions 委派给被包装的授权器，并像 Authorize 一样记录指标。
 func (a *instrumentedAuthorizer) EvaluateConditions(ctx context.Context, unevaluatedDecision authorizer.ConditionsAwareDecision, data authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	decision, reason, err := a.delegate.EvaluateConditions(ctx, unevaluatedDecision, data)
 	switch decision {
 	case authorizer.DecisionNoOpinion:
-		// non-terminal, not reported
+		// 非终结状态，不上报
 	case authorizer.DecisionAllow:
-		// matches SubjectAccessReview status.allowed field name
+		// 与 SubjectAccessReview 的 status.allowed 字段名一致
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "allowed")
 	case authorizer.DecisionDeny:
-		// matches SubjectAccessReview status.denied field name
+		// 与 SubjectAccessReview 的 status.denied 字段名一致
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "denied")
 	default:
 		RecordAuthorizationDecision(a.authorizerType, a.authorizerName, "unknown")

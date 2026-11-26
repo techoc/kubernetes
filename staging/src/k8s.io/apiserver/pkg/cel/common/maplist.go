@@ -127,11 +127,11 @@ func (a *mapListImpl) Get(obj interface{}) interface{} {
 	}
 	// 逐个索引剩余元素，找到目标即可短路；未处理部分继续保持惰性。
 	for len(a.unkeyedItems) > 0 {
-		// dequeue an unkeyed item
+		// 出队一个无 key 的条目
 		item := a.unkeyedItems[0]
 		a.unkeyedItems = a.unkeyedItems[1:]
 
-		// key the item
+		// 为该条目计算 key
 		mitem, ok := item.(map[string]interface{})
 		if !ok {
 			// 跳过非法元素，与 MakeMapList 接受宽松输入的行为一致。
@@ -147,7 +147,7 @@ func (a *mapListImpl) Get(obj interface{}) interface{} {
 			a.keyedItems[itemKey] = mitem
 		}
 
-		// if it matches, short-circuit
+		// 若匹配则短路返回
 		if itemKey == key {
 			return mitem
 		}

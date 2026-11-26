@@ -20,60 +20,60 @@ import (
 	"container/list"
 )
 
-// removeFromFIFOFunc removes a designated element from the list
-// if that element is in the list.
-// The complexity of the runtime cost is O(1).
-// The returned value is the element removed, if indeed one was removed,
-// otherwise `nil`.
+// removeFromFIFOFunc 从列表中移除指定元素（若存在）。
+//
+// 运行时复杂度为 O(1)。
+// 返回被移除的元素（若确有移除），
+// 否则为 `nil`。
 //
 // 幂等：重复调用只会成功一次，返回 nil 表示该请求已被别的路径移除。
 type removeFromFIFOFunc func() *request
 
-// walkFunc is called for each request in the list in the
-// oldest -> newest order.
-// ok: if walkFunc returns false then the iteration stops immediately.
-// walkFunc may remove the given request from the fifo,
-// but may not mutate the fifo in any othe way.
+// walkFunc 按最旧 -> 最新的顺序
+// 对列表中每个请求调用。
+// ok：walkFunc 返回 false 时立即停止迭代。
+// walkFunc 可以从 fifo 中移除给定请求，
+// 但不得以任何其他方式修改 fifo。
 //
 // 只允许删除当前元素，是因为 Walk 依赖元素链表指针继续遍历，插入或重排会使遍历失效。
 type walkFunc func(*request) (ok bool)
 
-// Internal interface to abstract out the implementation details
-// of the underlying list used to maintain the requests.
+// 内部接口，用于抽象
+// 维护请求的底层列表的实现细节。
 //
-// Note that a fifo, including the removeFromFIFOFuncs returned from Enqueue,
-// is not safe for concurrent use by multiple goroutines.
+// 注意：fifo（包括 Enqueue 返回的 removeFromFIFOFunc）
+// 不支持多个 goroutine 并发使用。
 //
 // 抽象成接口是为了便于在测试中替换实现；生产实现是下面的 requestFIFO。
 type fifo interface {
-	// Enqueue enqueues the specified request into the list and
-	// returns a removeFromFIFOFunc function that can be used to remove the
-	// request from the list
+	// Enqueue 把指定请求入队，并返回一个 removeFromFIFOFunc
+	// 函数，可用于把该请求从列表中移除。
+	//
 	Enqueue(*request) removeFromFIFOFunc
 
-	// Dequeue pulls out the oldest request from the list.
+	// Dequeue 取出列表中最旧的请求。
 	Dequeue() (*request, bool)
 
-	// Peek returns the oldest request without removing it.
+	// Peek 返回最旧的请求但不移除它。
 	Peek() (*request, bool)
 
-	// Length returns the number of requests in the list.
+	// Length 返回列表中的请求数。
 	Length() int
 
-	// QueueSum returns the sum of initial seats, final seats, and
-	// additional latency aggregated from all requests in this queue.
+	// QueueSum 返回本队列所有请求聚合的
+	// 初始 seats、最终 seats 与附加延迟之和。
 	QueueSum() queueSum
 
-	// Walk iterates through the list in order of oldest -> newest
-	// and executes the specified walkFunc for each request in that order.
+	// Walk 按最旧 -> 最新的顺序遍历列表，
+	// 并按该顺序对每个请求执行指定的 walkFunc。
 	//
-	// if the specified walkFunc returns false the Walk function
-	// stops the walk an returns immediately.
+	// 若指定的 walkFunc 返回 false，Walk 函数
+	// 立即停止遍历并返回。
 	Walk(walkFunc)
 }
 
-// the FIFO list implementation is not safe for concurrent use by multiple
-// goroutines.
+// FIFO 链表实现不支持多个 goroutine 并发使用。
+// goroutine 并发使用。
 //
 // 内嵌 container/list 以复用 O(1) 的删除；sum 是增量维护的聚合值，
 // 避免每次调度都遍历整条队列（队列可能很长）。

@@ -41,15 +41,15 @@ type RecommendedOptions struct {
 	Features       *FeatureOptions
 	CoreAPI        *CoreAPIOptions
 
-	// FeatureGate is a way to plumb feature gate through if you have them.
+	// FeatureGate 用于在已有特性门控时将其传递进来。
 	FeatureGate featuregate.FeatureGate
-	// ExtraAdmissionInitializers is called once after all ApplyTo from the options above, to pass the returned
-	// admission plugin initializers to Admission.ApplyTo.
+	// ExtraAdmissionInitializers 在上述所有选项的 ApplyTo 之后调用一次，
+	// 把返回的准入插件 initializer 传给 Admission.ApplyTo。
 	ExtraAdmissionInitializers func(c *server.RecommendedConfig) ([]admission.PluginInitializer, error)
 	Admission                  *AdmissionOptions
-	// API Server Egress Selector is used to control outbound traffic from the API Server
+	// API Server Egress Selector 用于控制 API Server 的出站流量
 	EgressSelector *EgressSelectorOptions
-	// Traces contains options to control distributed request tracing.
+	// Traces 包含控制分布式请求追踪的选项。
 	Traces *TracingOptions
 }
 
@@ -58,10 +58,10 @@ type RecommendedOptions struct {
 func NewRecommendedOptions(prefix string, codec runtime.Codec) *RecommendedOptions {
 	sso := NewSecureServingOptions()
 
-	// We are composing recommended options for an aggregated api-server,
-	// whose client is typically a proxy multiplexing many operations ---
-	// notably including long-running ones --- into one HTTP/2 connection
-	// into this server.  So allow many concurrent operations.
+	// 这里为聚合 api-server 组合推荐选项：其客户端通常是代理，
+	// 会把许多操作（尤其是长时运行的操作）复用
+	// 到同一个指向本服务器的 HTTP/2 连接上，
+	// 因此需要允许大量并发操作。
 	sso.HTTP2MaxStreamsPerConnection = 1000
 
 	return &RecommendedOptions{
@@ -72,9 +72,9 @@ func NewRecommendedOptions(prefix string, codec runtime.Codec) *RecommendedOptio
 		Audit:          NewAuditOptions(),
 		Features:       NewFeatureOptions(),
 		CoreAPI:        NewCoreAPIOptions(),
-		// Wired a global by default that sadly people will abuse to have different meanings in different repos.
-		// Please consider creating your own FeatureGate so you can have a consistent meaning for what a variable contains
-		// across different repos.  Future you will thank you.
+		// 默认接一个全局变量，可惜人们会在不同 repo 中赋予它不同含义。
+		// 建议创建自己的 FeatureGate，这样跨 repo 时变量含义才能保持一致。
+		// 未来的你会感谢现在的你。
 		FeatureGate:                feature.DefaultFeatureGate,
 		ExtraAdmissionInitializers: func(c *server.RecommendedConfig) ([]admission.PluginInitializer, error) { return nil, nil },
 		Admission:                  NewAdmissionOptions(),

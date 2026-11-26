@@ -101,7 +101,7 @@ func TypedToVal(val interface{}, schema Schema) ref.Val {
 		// 是为了强制新增 API 类型时审慎选择 CEL 映射，避免出现隐式、不可控的表示。
 		return types.NewErr("unsupported Go type for CEL: %T", typedVal)
 	default:
-		// continue on to the next switch
+		// 继续进入下一个 switch 分支
 	}
 
 	// 再按 kind 处理容器与基本类型；容器需要 schema 才能继续递归。
@@ -166,8 +166,8 @@ func TypedToVal(val interface{}, schema Schema) ref.Val {
 type typedStruct struct {
 	value reflect.Value // Kind is required to be: reflect.Struct
 
-	// propSchema finds the schema for a given key.
-	// The key is an unescaped JSON name, not an escaped CEL identifier.
+	// propSchema 查找给定 key 对应的 schema。
+	// key 是未转义的 JSON 名称，而非转义后的 CEL 标识符。
 	propSchema func(key string) (Schema, bool)
 }
 
@@ -231,8 +231,8 @@ func (s *typedStruct) IsSet(escapedField ref.Val) ref.Val {
 	return types.Bool(found)
 }
 
-// Get returns the value of a field. escapedKey must be a types.String containing the
-// escaped CEL identifier. For example, "__if__" for JSON name "if".
+// Get 返回字段值。escapedKey 必须是包含转义 CEL 标识符的 types.String，
+// 例如 JSON 名称 "if" 对应 "__if__"。
 func (s *typedStruct) Get(escapedKey ref.Val) ref.Val {
 	v, found := s.lookupField(escapedKey)
 	if !found {
@@ -429,10 +429,10 @@ func (it *sliceIter) Next() ref.Val {
 // 不触发相等比较；构建后即可 O(1) 定位。
 type typedMapList struct {
 	typedList
-	// keyProps are unescaped JSON property names
+	// keyProps 是未转义的 JSON 属性名
 	keyProps []string
 
-	// escapedKeyProps are escaped CEL identifiers
+	// escapedKeyProps 是转义后的 CEL 标识符
 	escapedKeyProps []string
 
 	sync.Once // for lazy load of mapOfList since it is only needed if Equals is called
@@ -481,16 +481,16 @@ func (t *typedMapList) toMapKey(element reflect.Value) interface{} {
 		}
 		raw := v.Interface()
 		if raw != nil && !reflect.TypeOf(raw).Comparable() {
-			// %#v includes type information and quotes strings, so the
-			// serialized form cannot collide with a comparable raw value.
+			// %#v 包含类型信息并给字符串加引号，
+			// 因此序列化结果不会与可比较的原始值冲突。
 			return fmt.Sprintf("%#v", raw)
 		}
 		return raw
 	}
 
-	// Arrays are comparable in go and may be used as map keys, but maps and slices are not.
-	// So we can special case small numbers of key props as arrays and fall back to serialization
-	// for larger numbers of key props
+	// Go 中数组可比较、可作 map key，而 map 与 slice 不行。
+	// 因此少量 key 属性用数组特化处理，更多时
+	// 回退到序列化。
 	if len(fieldEntries) == 1 {
 		return getKeyValue(fieldEntries[0])
 	}
@@ -505,7 +505,7 @@ func (t *typedMapList) toMapKey(element reflect.Value) interface{} {
 	for i := range fieldEntries {
 		key[i] = getKeyValue(fieldEntries[i])
 	}
-	// Serialize to a string for more than 3 keys. %#v quotes strings.
+	// 超过 3 个 key 时序列化为字符串。%#v 会为字符串加引号。
 	return fmt.Sprintf("%#v", key)
 }
 
@@ -605,8 +605,8 @@ func refValMapKey(element ref.Val, escapedKeyProps []string) interface{} {
 		}
 		raw := v.Value()
 		if raw != nil && !reflect.TypeOf(raw).Comparable() {
-			// %#v includes type information and quotes strings, so the
-			// serialized form cannot collide with a comparable raw value.
+			// %#v 包含类型信息并给字符串加引号，
+			// 因此序列化结果不会与可比较的原始值冲突。
 			return fmt.Sprintf("%#v", raw)
 		}
 		return raw
@@ -626,7 +626,7 @@ func refValMapKey(element ref.Val, escapedKeyProps []string) interface{} {
 	for i, kf := range escapedKeyProps {
 		key[i] = get(kf)
 	}
-	// Serialize to a string for more than 3 keys. %#v quotes strings.
+	// 超过 3 个 key 时序列化为字符串。%#v 会为字符串加引号。
 	return fmt.Sprintf("%#v", key)
 }
 
@@ -789,8 +789,8 @@ func setElementKey(element ref.Val) (value interface{}, err ref.Val) {
 	}
 	raw := element.Value()
 	if raw != nil && !reflect.TypeOf(raw).Comparable() {
-		// %#v includes type information and quotes strings, so the
-		// serialized form cannot collide with a comparable raw value.
+		// %#v 包含类型信息并给字符串加引号，
+		// 因此序列化结果不会与可比较的原始值冲突。
 		return fmt.Sprintf("%#v", raw), nil
 	}
 	return raw, nil
@@ -814,7 +814,7 @@ func (l *refValSetList) Add(other ref.Val) ref.Val {
 	return addToSetList(elements, oSetList)
 }
 
-// Equal on a set list ignores list element order.
+// set list 上的 Equal 忽略列表元素顺序。
 func (l *refValSetList) Equal(other ref.Val) ref.Val {
 	oSetList, ok := other.(traits.Lister)
 	if !ok {

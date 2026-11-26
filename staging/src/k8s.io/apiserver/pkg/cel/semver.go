@@ -31,7 +31,7 @@ var (
 	SemverType = cel.ObjectType("kubernetes.Semver")
 )
 
-// Semver provdes a CEL representation of a [semver.Version].
+// Semver 提供 [semver.Version] 的 CEL 表示。
 //
 // 内嵌 semver.Version 使比较运算（EQ/LT 等）直接复用库实现；这里只需补齐
 // cel-go 的 ref.Val 接口。

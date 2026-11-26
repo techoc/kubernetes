@@ -28,7 +28,7 @@ import (
 
 const connectionTimeout = 1 * time.Second
 
-// EtcdConnection holds the Etcd server list
+// EtcdConnection 保存 Etcd 服务器列表
 // ServerList 中的地址可以是 http(s)://、tcp:// 或裸 host:port。
 type EtcdConnection struct {
 	ServerList []string
@@ -56,12 +56,12 @@ func parseServerURI(serverURI string) (*url.URL, error) {
 	return connURL, nil
 }
 
-// CheckEtcdServers will attempt to reach all etcd servers once. If any
-// can be reached, return true.
+// CheckEtcdServers 尝试访问所有 etcd 服务器一次。只要有一个
+// 可访问就返回 true。
 //
 // 随机化顺序可以避免所有 apiserver 同时探测同一台 etcd，造成启动风暴。
 func (con EtcdConnection) CheckEtcdServers() (done bool, err error) {
-	// Attempt to reach every Etcd server randomly.
+	// 以随机顺序尝试访问每个 Etcd 服务器。
 	serverNumber := len(con.ServerList)
 	serverPerms := rand.Perm(serverNumber)
 	for _, index := range serverPerms {

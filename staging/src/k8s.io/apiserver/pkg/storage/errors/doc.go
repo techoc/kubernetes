@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package storage provides conversion of storage errors to API errors.
+// Package storage 提供把存储错误转换为 API 错误的功能。
 //
 // Package storage（此处实际为 errors 包）把底层存储/etcd 错误转换为
 // 用户可理解的 apierrors，并保证错误码与语义在重试、冲突、键不存在等

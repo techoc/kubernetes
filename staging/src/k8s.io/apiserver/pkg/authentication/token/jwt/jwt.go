@@ -16,8 +16,8 @@ limitations under the License.
 
 package jwt
 
-// CredentialIDForJTI converts a given JTI string into a credential identifier for use in a
-// users 'extra' info.
+// CredentialIDForJTI 把给定的 JTI 字符串转换为 credential 标识符，
+// 供用户 'extra' 信息使用。
 // JTI 为空时不生成标识，避免把空值当作可用的凭据 ID；
 // 前缀 "JTI=" 让消费方能在 extra 字段中区分不同来源的凭据标识。
 func CredentialIDForJTI(jti string) string {

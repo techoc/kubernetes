@@ -53,8 +53,8 @@ func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priori
 		maxSeats = e.config.MaximumMutatingSeatsLimit
 	}
 
-	// TODO(wojtekt): Remove once we tune the algorithm to not fail
-	// scalability tests.
+	// TODO(wojtekt): 待算法调优到不会让
+	// 扩展性测试失败后移除。
 	if !e.config.Enabled {
 		return WorkEstimate{
 			InitialSeats: minSeats,
@@ -63,8 +63,8 @@ func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priori
 
 	requestInfo, ok := apirequest.RequestInfoFrom(r.Context())
 	if !ok {
-		// no RequestInfo should never happen, but to be on the safe side
-		// let's return a large value.
+		// 不应出现没有 RequestInfo 的情况，但为安全起见
+		// 返回一个较大的值。
 		return WorkEstimate{
 			InitialSeats:      minSeats,
 			FinalSeats:        maxSeats,
@@ -83,63 +83,62 @@ func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priori
 	watchCount := e.countFn(requestInfo)
 	metrics.ObserveWatchCount(r.Context(), priorityLevelName, flowSchemaName, watchCount)
 
-	// The cost of the request associated with the watchers of that event
-	// consists of three parts:
-	// - cost of going through the event change logic
-	// - cost of serialization of the event
-	// - cost of processing an event object for each watcher (e.g. filtering,
-	//     sending data over network)
-	// We're starting simple to get some operational experience with it and
-	// we will work on tuning the algorithm later. Given that the actual work
-	// associated with processing watch events is happening in multiple
-	// goroutines (proportional to the number of watchers) that are all
-	// resumed at once, as a starting point we assume that each such goroutine
-	// is taking 1/Nth of a seat for M milliseconds.
-	// We allow the accounting of that work in P&F to be reshaped into another
-	// rectangle of equal area for practical reasons.
+	// 与该事件的 watcher 相关联的请求开销
+	// 由三部分组成：
+	// - 走完事件变更逻辑的开销
+	// - 事件序列化的开销
+	// - 每个 watcher 处理事件对象的开销（如过滤、
+	//     通过网络发送数据）
+	// 先从简单方案入手积累运行经验，
+	// 之后再调优算法。处理 watch 事件的实际工作
+	// 发生在多个 goroutine 中（数量与 watcher 数成正比），
+	// 且它们同时恢复运行。作为起点，假设每个这样的 goroutine
+	// 在 M 毫秒内占用 1/N 个 seat。
+	// 出于实际考虑，允许在 P&F 中把这部分工作的记账
+	// 重塑为面积相等的另一个矩形。
 	var finalSeats uint64
 	var additionalLatency time.Duration
 
-	// TODO: Make this unconditional after we tune the algorithm better.
-	//   Technically, there is an overhead connected to processing an event after
-	//   the request finishes even if there is a small number of watches.
-	//   However, until we tune the estimation we want to stay on the safe side
-	//   an avoid introducing additional latency for almost every single request.
+	// TODO：算法调优更好后，将其改为无条件执行。
+	//   严格来说，即使 watcher 数量很少，请求结束后处理事件
+	//   仍然存在开销。
+	//   但在调优估算之前，我们希望保守一些，
+	//   避免给几乎每个请求都引入额外延迟。
 	if watchCount >= int(e.config.WatchesPerSeat) {
-		// TODO: As described in the KEP, we should take into account that not all
-		//   events are equal and try to estimate the cost of a single event based on
-		//   some historical data about size of events.
+		// TODO：如 KEP 所述，应考虑事件并非一律相同，
+		//   并尝试根据事件大小的历史数据估算单个事件的开销。
+		//
 		finalSeats = uint64(math.Ceil(float64(watchCount) / e.config.WatchesPerSeat))
 		finalWork := SeatsTimesDuration(float64(finalSeats), e.config.eventAdditionalDuration())
 
-		// While processing individual events is highly parallel,
-		// the design/implementation of P&F has a couple limitations that
-		// make using this assumption in the P&F implementation very
-		// inefficient because:
-		// - we reserve max(initialSeats, finalSeats) for time of executing
-		//   both phases of the request
-		// - even more importantly, when a given `wide` request is the one to
-		//   be dispatched, we are not dispatching any other request until
-		//   we accumulate enough seats to dispatch the nominated one, even
-		//   if currently unoccupied seats would allow for dispatching some
-		//   other requests in the meantime
-		// As a consequence of these, the wider the request, the more capacity
-		// will effectively be blocked and unused during dispatching and
-		// executing this request.
+		// 虽然单个事件的处理高度并行，
+		// 但 P&F 的设计/实现有几个限制，
+		// 使得在 P&F 实现中使用这一假设非常低效，原因如下：
 		//
-		// To mitigate the impact of it, we're capping the maximum number of
-		// seats that can be assigned to a given request. Thanks to it:
-		// 1) we reduce the amount of seat-seconds that are "wasted" during
-		//    dispatching and executing initial phase of the request
-		// 2) we are not changing the finalWork estimate - just potentially
-		//    reshaping it to be narrower and longer. As long as the maximum
-		//    seats setting will prevent dispatching too many requests at once
-		//    to prevent overloading kube-apiserver (and/or etcd or the VM or
-		//    a physical machine it is running on), we believe the relaxed
-		//    version should be good enough to achieve the P&F goals.
+		// - 我们在执行请求的两个阶段期间，都预留
+		//   max(initialSeats, finalSeats)
+		// - 更重要的是，当某个 `wide` 请求被选中分发时，
+		//   在凑够足够 seats 分发它之前，不会分发其他请求，
+		//   即使当前空闲的 seats 本可以分发其他请求。
 		//
-		// TODO: Confirm that the current cap of maximumSeats allow us to
-		//   achieve the above.
+		// 因此，请求越宽，在分发和执行期间
+		// 被有效阻塞和浪费的容量就越多。
+		//
+		// 被有效阻塞和浪费的容量就越多。
+		//
+		// 为缓解这一影响，我们限制单个请求可分配的最大 seats。这样做：
+		//
+		// 1) 减少在分发与执行初始阶段"浪费"的 seat-seconds
+		//
+		// 2) 不改变 finalWork 估算，只是可能把它重塑得更窄更长。只要
+		// 最大 seats 设置能防止一次分发过多请求，
+		// 从而避免 kube-apiserver（以及 etcd、VM 或物理机）过载，
+		// 我们就认为这个放宽后的版本足以达成 P&F 的目标。
+		//
+		// 我们就认为这个放宽后的版本足以达成 P&F 的目标。
+		//
+		// TODO：确认当前 maximumSeats 上限确实能达到上述目标。
+		//
 		if finalSeats > maxSeats {
 			finalSeats = maxSeats
 		}
@@ -156,8 +155,8 @@ func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priori
 // isRequestExemptFromWatchEvents 标记不会产生 watch 事件的写请求。
 // serviceaccounts/token 只生成令牌、不写入存储，因此无需按 watcher 数计费。
 func isRequestExemptFromWatchEvents(requestInfo *apirequest.RequestInfo) bool {
-	// Creating token for service account does not produce any event,
-	// but still serviceaccounts can have multiple watchers.
+	// 为 service account 创建 token 不会产生任何事件，
+	// 但 serviceaccount 仍可能有多个 watcher。
 	if requestInfo.Resource == "serviceaccounts" && requestInfo.Subresource == "token" {
 		return true
 	}

@@ -48,7 +48,7 @@ func TestGCMDataStable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// IMPORTANT: If you must fix this test, then all previously encrypted data from previously compiled versions is broken unless you hardcode the nonce size to 12
+	// 重要：若必须修改此测试，除非把 nonce 长度硬编码为 12，否则此前编译版本加密的所有数据都会失效
 	if aead.NonceSize() != 12 {
 		t.Errorf("The underlying Golang crypto size has changed, old version of AES on disk will not be readable unless the AES implementation is changed to hardcode nonce size.")
 	}
@@ -147,8 +147,8 @@ func runEncrypt(t *testing.T, transformer value.Transformer) {
 	}
 }
 
-// TestGCMUnsafeCompatibility asserts that encryptions performed via
-// NewGCMTransformerWithUniqueKeyUnsafe can be decrypted via NewGCMTransformer.
+// TestGCMUnsafeCompatibility 断言用
+// NewGCMTransformerWithUniqueKeyUnsafe 加密的数据可由 NewGCMTransformer 解密。
 //
 // 加密器与解密器走不同构造路径，必须保证线上密文可被默认读取路径解密。
 func TestGCMUnsafeCompatibility(t *testing.T) {
@@ -198,7 +198,7 @@ func TestGCMLegacyDataCompatibility(t *testing.T) {
 
 	transformerDecrypt := newGCMTransformer(t, block, nil)
 
-	// recorded output from NewGCMTransformer at commit 3b1fc60d8010dd8b53e97ba80e4710dbb430beee
+	// 提交 3b1fc60d8010dd8b53e97ba80e4710dbb430beee 处 NewGCMTransformer 记录的输出
 	const legacyCiphertext = "\x9f'\xc8\xfc\xea\x8aX\xc4g\xd8\xe47\xdb\xf2\xd8YU\xf9\xb4\xbd\x91/N\xf9g\u05c8\xa0\xcb\ay}\xac\n?\n\bE`\\\xa8Z\xc8V+J\xe1"
 
 	ctx := context.Background()
@@ -219,7 +219,7 @@ func TestGCMLegacyDataCompatibility(t *testing.T) {
 // TestExtendedNonceGCMLegacyDataCompatibility 验证扩展 nonce（KDF 派生）格式的历史密文
 // 仍可解密，防止格式演进破坏已有数据。
 func TestExtendedNonceGCMLegacyDataCompatibility(t *testing.T) {
-	// recorded output from NewKDFExtendedNonceGCMTransformerWithUniqueSeed from https://github.com/kubernetes/kubernetes/pull/118828
+	// 来自 https://github.com/kubernetes/kubernetes/pull/118828 的 NewKDFExtendedNonceGCMTransformerWithUniqueSeed 记录的输出
 	const (
 		legacyKey        = "]@2:\x82\x0f\xf9Uag^;\x95\xe8\x18g\xc5\xfd\xd5a\xd3Z\x88\xa2Ћ\b\xaa\x9dO\xcf\\"
 		legacyCiphertext = "$Bu\x9e3\x94_\xba\xd7\t\xdbWz\x0f\x03\x7fا\t\xfcv\x97\x9b\x89B \x9d\xeb\xce˝W\xef\xe3\xd6\xffj\x1e\xf6\xee\x9aP\x03\xb9\x83;0C\xce\xc1\xe4{5\x17[\x15\x11\a\xa8\xd2Ak\x0e)k\xbff\xb5\xd1\x02\xfc\xefߚx\xf2\x93\xd2q"
@@ -258,8 +258,8 @@ func TestGCMUnsafeNonceGen(t *testing.T) {
 
 	counters := make([]uint64, count)
 
-	// run a bunch of go routines to make sure we are go routine safe
-	// on both the nonce generation and the actual encryption/decryption
+	// 运行多个 goroutine，确保 nonce 生成与实际加解密
+	// 都是 goroutine 安全的
 	var wg sync.WaitGroup
 	for i := 0; i < count; i++ {
 		i := i
@@ -429,13 +429,13 @@ func testGCMKeyRotation(t *testing.T, f transformerFunc) {
 		t.Fatalf("unexpected data: %t %q", stale, from)
 	}
 
-	// verify changing the context fails storage
+	// 验证改变 context 会使存储失败
 	_, _, err = p.TransformFromStorage(ctx, out, value.DefaultContext("incorrect_context"))
 	if err == nil {
 		t.Fatalf("expected unauthenticated data")
 	}
 
-	// reverse the order, use the second key
+	// 反转顺序，使用第二个 key
 	p = value.NewPrefixTransformers(testErr,
 		value.PrefixTransformer{Prefix: []byte("second:"), Transformer: f(t, block2, key2)},
 		value.PrefixTransformer{Prefix: []byte("first:"), Transformer: f(t, block1, key1)},
@@ -486,13 +486,13 @@ func TestCBCKeyRotation(t *testing.T) {
 		t.Fatalf("unexpected data: %t %q", stale, from)
 	}
 
-	// verify changing the context fails storage
+	// 验证改变 context 会使存储失败
 	_, _, err = p.TransformFromStorage(ctx, out, value.DefaultContext("incorrect_context"))
 	if err != nil {
 		t.Fatalf("CBC mode does not support authentication: %v", err)
 	}
 
-	// reverse the order, use the second key
+	// 反转顺序，使用第二个 key
 	p = value.NewPrefixTransformers(testErr,
 		value.PrefixTransformer{Prefix: []byte("second:"), Transformer: NewCBCTransformer(block2)},
 		value.PrefixTransformer{Prefix: []byte("first:"), Transformer: NewCBCTransformer(block1)},
@@ -594,7 +594,7 @@ func benchmarkGCMRead(b *testing.B, f transformerFunc, keyLength int, valueLengt
 	if err != nil {
 		b.Fatal(err)
 	}
-	// reverse the key order if expecting stale
+	// 若期望读到旧数据，则反转 key 顺序
 	if expectStale {
 		p = value.NewPrefixTransformers(nil,
 			value.PrefixTransformer{Prefix: []byte("second:"), Transformer: f(b, block2, key2)},
@@ -706,7 +706,7 @@ func benchmarkCBCRead(b *testing.B, keyLength int, valueLength int, expectStale 
 	if err != nil {
 		b.Fatal(err)
 	}
-	// reverse the key order if expecting stale
+	// 若期望读到旧数据，则反转 key 顺序
 	if expectStale {
 		p = value.NewPrefixTransformers(nil,
 			value.PrefixTransformer{Prefix: []byte("second:"), Transformer: NewCBCTransformer(block2)},

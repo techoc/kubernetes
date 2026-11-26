@@ -192,7 +192,7 @@ current-context: default
 	}
 
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 使用闭包，让 defer 语句在每次循环迭代之间触发。
 		err := func() error {
 			tempfile, err := os.CreateTemp("", "")
 			if err != nil {
@@ -208,7 +208,7 @@ current-context: default
 			if err := tmpl.Execute(tempfile, data); err != nil {
 				return fmt.Errorf("failed to execute test template: %v", err)
 			}
-			// Create a new authorizer
+			// 创建一个新的授权器
 			clientConfig, err := webhookutil.LoadKubeconfig(p, nil)
 			if err != nil {
 				return err
@@ -229,7 +229,7 @@ current-context: default
 	}
 }
 
-// V1Service mocks a remote service.
+// V1Service 模拟一个远程服务。
 type V1Service interface {
 	Review(*authorizationv1.SubjectAccessReview)
 	HTTPStatusCode() int
@@ -277,12 +277,12 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 			return
 		}
 
-		// ensure we received the serialized review as expected
+		// 确保按预期收到了序列化后的 review
 		if review.APIVersion != "authorization.k8s.io/v1" {
 			http.Error(w, fmt.Sprintf("wrong api version: %s", string(bodyData)), http.StatusBadRequest)
 			return
 		}
-		// once we have a successful request, always call the review to record that we were called
+		// 请求成功后，总是调用 review 以记录我们被调用过
 		s.Review(&review)
 		if s.HTTPStatusCode() < 200 || s.HTTPStatusCode() >= 300 {
 			http.Error(w, "HTTP Error", s.HTTPStatusCode())
@@ -308,7 +308,7 @@ func NewV1TestServer(s V1Service, cert, key, caCert []byte) (*httptest.Server, e
 	server.TLS = tlsConfig
 	server.StartTLS()
 
-	// Adjust the path to point to our custom path
+	// 调整路径，指向我们的自定义路径
 	serverURL, _ := url.Parse(server.URL)
 	serverURL.Path = webhookPath
 	server.URL = serverURL.String()
@@ -324,7 +324,7 @@ type mockV1Service struct {
 	statusCode int
 	called     int
 
-	// reviewHook is called just before returning from the Review() method
+	// reviewHook 在 Review() 方法返回前调用
 	reviewHook func(*authorizationv1.SubjectAccessReview)
 }
 
@@ -418,13 +418,13 @@ func TestV1TLSConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Plugin does not support insecure configurations.
+			// 该插件不支持不安全配置。
 			test:    "Server is using insecure connection",
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
-		// Use a closure so defer statements trigger between loop iterations.
+		// 使用闭包，让 defer 语句在每次循环迭代之间触发。
 		func() {
 			service := new(mockV1Service)
 			service.statusCode = 200
@@ -444,7 +444,7 @@ func TestV1TLSConfig(t *testing.T) {
 
 			attr := authorizer.AttributesRecord{User: &user.DefaultInfo{}}
 
-			// Allow all and see if we get an error.
+			// 全部放行，看看是否会报错。
 			service.Allow()
 			decision, _, err := wh.Authorize(context.Background(), attr)
 			if tt.wantAuth {
@@ -612,7 +612,7 @@ func TestV1WebhookCache(t *testing.T) {
 			Expression: "has(request.resourceAttributes) && request.resourceAttributes.namespace == 'kittensandponies'",
 		},
 	}
-	// Create an authorizer that caches successful responses "forever" (100 days).
+	// 创建一个"永久"（100 天）缓存成功响应的授权器。
 	wh, err := newV1Authorizer(s.URL, clientCert, clientKey, caCert, 2400*time.Hour, noopAuthorizerMetrics(), authorizationcel.NewDefaultCompiler(), expressions, "")
 	if err != nil {
 		t.Fatal(err)
@@ -655,31 +655,31 @@ func TestV1WebhookCache(t *testing.T) {
 	}
 
 	tests := []webhookCacheTestCase{
-		// server error and 429's retry
+		// 服务端错误与 429 会重试
 		{name: "server errors retry", attr: aliceAttr, allow: false, statusCode: 500, expectedErr: true, expectedAuthorized: false, expectedCalls: 5},
 		{name: "429s retry", attr: aliceAttr, allow: false, statusCode: 429, expectedErr: true, expectedAuthorized: false, expectedCalls: 5},
-		// regular errors return errors but do not retry
+		// 普通错误返回错误但不重试
 		{name: "404 doesnt retry", attr: aliceAttr, allow: false, statusCode: 404, expectedErr: true, expectedAuthorized: false, expectedCalls: 1},
 		{name: "403 doesnt retry", attr: aliceAttr, allow: false, statusCode: 403, expectedErr: true, expectedAuthorized: false, expectedCalls: 1},
 		{name: "401 doesnt retry", attr: aliceAttr, allow: false, statusCode: 401, expectedErr: true, expectedAuthorized: false, expectedCalls: 1},
-		// successful responses are cached
+		// 成功响应会被缓存
 		{name: "alice successful request", attr: aliceAttr, allow: true, statusCode: 200, expectedErr: false, expectedAuthorized: true, expectedCalls: 1},
-		// later requests within the cache window don't hit the backend
+		// 缓存窗口内的后续请求不会打到后端
 		{name: "alice cached request", attr: aliceAttr, allow: false, statusCode: 500, expectedErr: false, expectedAuthorized: true, expectedCalls: 0},
 
-		// a request with different attributes doesn't hit the cache
+		// 属性不同的请求不会命中缓存
 		{name: "bob failed request", attr: bobAttr, allow: false, statusCode: 500, expectedErr: true, expectedAuthorized: false, expectedCalls: 5},
-		// successful response for other attributes is cached
+		// 其他属性的成功响应会被缓存
 		{name: "bob unauthorized request", attr: bobAttr, allow: false, statusCode: 200, expectedErr: false, expectedAuthorized: false, expectedCalls: 1},
-		// later requests within the cache window don't hit the backend
+		// 缓存窗口内的后续请求不会打到后端
 		{name: "bob unauthorized cached request", attr: bobAttr, allow: false, statusCode: 500, expectedErr: false, expectedAuthorized: false, expectedCalls: 0},
-		// ridiculous unauthorized requests are not cached.
+		// 荒谬的未授权请求不会被缓存。
 		{name: "ridiculous unauthorized request", attr: bobRidiculousAttr, allow: false, statusCode: 200, expectedErr: false, expectedAuthorized: false, expectedCalls: 1},
-		// later ridiculous requests within the cache window still hit the backend
+		// 缓存窗口内后续的荒谬请求仍会打到后端
 		{name: "ridiculous unauthorized request again", attr: bobRidiculousAttr, allow: false, statusCode: 200, expectedErr: false, expectedAuthorized: false, expectedCalls: 1},
-		// ridiculous authorized requests are not cached.
+		// 荒谬的授权请求不会被缓存。
 		{name: "ridiculous authorized request", attr: aliceRidiculousAttr, allow: true, statusCode: 200, expectedErr: false, expectedAuthorized: true, expectedCalls: 1},
-		// later ridiculous requests within the cache window still hit the backend
+		// 缓存窗口内后续的荒谬请求仍会打到后端
 		{name: "ridiculous authorized request again", attr: aliceRidiculousAttr, allow: true, statusCode: 200, expectedErr: false, expectedAuthorized: true, expectedCalls: 1},
 	}
 
@@ -800,7 +800,7 @@ func TestStructuredAuthzConfigFeatureEnablement(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// create new compiler because it depends on the feature gate
+			// 新建 compiler，因为它依赖特性门控
 			compiler := authorizationcel.NewDefaultCompiler()
 
 			wh, err := newV1Authorizer(s.URL, clientCert, clientKey, caCert, 0, noopAuthorizerMetrics(), compiler, test.expressions, "")
@@ -1099,7 +1099,7 @@ func benchmarkNewWebhookAuthorizer(b *testing.B, expressions []apiserver.Webhook
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Create an authorizer with or without expressions to compile
+		// 创建带或不带待编译表达式的授权器
 		_, err := newV1Authorizer(s.URL, clientCert, clientKey, caCert, 0, noopAuthorizerMetrics(), authorizationcel.NewDefaultCompiler(), expressions, "")
 		if err != nil {
 			b.Fatal(err)
@@ -1129,7 +1129,7 @@ func benchmarkWebhookAuthorize(b *testing.B, expressions []apiserver.WebhookMatc
 		b.Fatal(err)
 	}
 	defer s.Close()
-	// Create an authorizer with or without expressions to compile
+	// 创建带或不带待编译表达式的授权器
 	wh, err := newV1Authorizer(s.URL, clientCert, clientKey, caCert, 0, noopAuthorizerMetrics(), authorizationcel.NewDefaultCompiler(), expressions, "")
 	if err != nil {
 		b.Fatal(err)
@@ -1137,7 +1137,7 @@ func benchmarkWebhookAuthorize(b *testing.B, expressions []apiserver.WebhookMatc
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Call authorize may or may not require cel evaluations
+		// 调用 authorize 可能需要也可能不需要 CEL 求值
 		_, _, err = wh.Authorize(context.Background(), attr)
 		if err != nil {
 			b.Fatal(err)
@@ -1405,7 +1405,7 @@ func TestV1WebhookMatchConditions(t *testing.T) {
 			name:               "match eval failed with bad SubjectAccessReviewSpec",
 			attr:               authorizer.AttributesRecord{},
 			expectedCompileErr: "",
-			// default decisionOnError in newWithBackoff to skip
+			// newWithBackoff 中默认的 decisionOnError 用于跳过
 			expectedDecision: authorizer.DecisionNoOpinion,
 			expectedEvalErr:  "cel evaluation error: expression 'request.resourceAttributes.verb == 'get'' resulted in error: no such key: resourceAttributes",
 			expressions: []apiserver.WebhookMatchCondition{

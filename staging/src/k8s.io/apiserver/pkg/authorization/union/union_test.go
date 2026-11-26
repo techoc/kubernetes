@@ -543,28 +543,28 @@ func TestUnionEvaluateConditions(t *testing.T) {
 
 		// === 条件决策与具体决策混合 ===
 
-		// conditional => noopinion, noopinion 	=== NoOpinion ok
-		// conditional => noopinion, allow		=== Allow ok
-		// conditional => noopinion, deny		=== Deny ok
-		// conditional => allow, noopinion		=== Allow ok
-		// conditional => allow, allow			=== Allow ok
-		// conditional => allow, deny			=== Allow ok
-		// conditional => deny, noopinion		=== Deny ok
-		// conditional => deny, allow			=== Deny ok
-		// conditional => deny, deny			=== Deny ok
+		// 条件 => noopinion、noopinion 	=== NoOpinion 正确
+		// 条件 => noopinion、allow		=== Allow 正确
+		// 条件 => noopinion、deny		=== Deny 正确
+		// 条件 => allow、noopinion		=== Allow 正确
+		// 条件 => allow、allow			=== Allow 正确
+		// 条件 => allow、deny			=== Allow 正确
+		// 条件 => deny、noopinion		=== Deny 正确
+		// 条件 => deny、allow			=== Deny 正确
+		// 条件 => deny、deny			=== Deny 正确
 		//
-		// conditional => noopinion, conditional => noopinion	=== NoOpinion ok
-		// conditional => noopinion, conditional => allow		=== Allow ok
-		// conditional => noopinion, conditional => deny		=== Deny ok
-		// ==> summarized as conditional => noopinion, X		=== X
-		// conditional => allow, conditional => noopinion		=== Allow
-		// conditional => allow, conditional => allow			=== Allow
-		// conditional => allow, conditional => deny			=== Allow
-		// ==> summarized as conditional => allow, <anything> 	=== Allow
-		// conditional => deny, conditional => noopinion		=== Deny
-		// conditional => deny, conditional => allow			=== Deny
-		// conditional => deny, conditional => deny				=== Deny
-		// ==> summarized as conditional => deny, <anything> 	=== Deny
+		// 条件 => noopinion、条件 => noopinion	=== NoOpinion 正确
+		// 条件 => noopinion、条件 => allow		=== Allow 正确
+		// 条件 => noopinion、条件 => deny		=== Deny 正确
+		// ==> 归纳为 条件 => noopinion、X		=== X
+		// 条件 => allow、条件 => noopinion		=== Allow
+		// 条件 => allow、条件 => allow			=== Allow
+		// 条件 => allow、条件 => deny			=== Allow
+		// ==> 归纳为 条件 => allow、<anything> 	=== Allow
+		// 条件 => deny、条件 => noopinion		=== Deny
+		// 条件 => deny、条件 => allow			=== Deny
+		// 条件 => deny、条件 => deny				=== Deny
+		// ==> 归纳为 条件 => deny、<anything> 	=== Deny
 
 		// 定理：NoOpinion 决策可插入任意位置
 		//		    === 最终决策不随排列改变
@@ -572,21 +572,21 @@ func TestUnionEvaluateConditions(t *testing.T) {
 		//
 		// 定理：具体 Allow 或 Deny 之后的后续项无关紧要：
 		//
-		// allow, <anything>		=== Allow
-		// deny, <anything>			=== Deny
+		// allow、<anything>		=== Allow
+		// deny、<anything>			=== Deny
 
-		// TODO(luxas): Implement differential testing
-		// a) For a chain of length N, create all permutations of N^6 as test cases
-		//	  ==> or instead work through all the possible combinations, and then insert NoOpinions?
-		//	  ==> e.g. start with "I want an Allow response, what are all the ways I can get that?"
-		// b) Using the formal model, compute the final decision
-		// c) For each test case, create each possible DAG combination of that chain
-		// d) For each DAG combo, run Authorize + Evaluate, and assert the final decision
+		// TODO(luxas): 实现差分测试
+		// a) 对长度为 N 的链，构造 N^6 种排列作为用例
+		//	  ==> 或者穷举所有组合，再插入 NoOpinion？
+		//	  ==> 例如从“我想要一个 Allow 响应，有哪些路径可以得到它？”出发
+		// b) 用形式化模型计算最终决策
+		// c) 对每个用例，构造该链的所有可能 DAG 组合
+		// d) 对每种 DAG 组合，运行 Authorize + Evaluate，断言最终决策
 
 		{
-			// PossibleDecisions of [CM(allow), Allow] is {Allow} (the CM either matches → Allow,
-			// or evaluates to NoOpinion → next leaf Allow), so each nested union eagerly
-			// simplifies to Allow.
+			// [CM(allow), Allow] 的 PossibleDecisions 为 {Allow}（CM 要么命中 → Allow，
+			// 要么求值为 NoOpinion → 下一个叶子 Allow），因此每层嵌套 union 都会立即
+			// 化简为 Allow。
 			name: "authz1 conditional => noopinion, authz2 allow (eagerly simplifies)",
 			authz1: &evalTestAuthz{
 				conditionEffect: effectAllow,
@@ -653,8 +653,8 @@ func TestUnionEvaluateConditions(t *testing.T) {
 		},
 		{
 			// inner=[union1=NoOpinion, union3=Union[CM(deny)], authz5=Deny].
-			// PossibleDecisions: NoOpinion → {NoOpinion}; Union[CM(deny)] → {NoOpinion, Deny};
-			// Deny → {Deny} (short-circuits, NoOpinion deleted) ⇒ {Deny}. Eagerly simplifies.
+			// PossibleDecisions：NoOpinion → {NoOpinion}；Union[CM(deny)] → {NoOpinion, Deny}；
+			// Deny → {Deny}（短路，去掉 NoOpinion）⇒ {Deny}。立即化简。
 			name:   "authz4 conditional => deny, authz5 deny (eagerly simplifies to Deny)",
 			authz1: noOpinion(),
 			authz2: noOpinion(),
@@ -807,9 +807,9 @@ func TestUnionEvaluateConditions(t *testing.T) {
 		// === 错误处理 ===
 
 		{
-			// authz1's error rides through three layers of union ToDecision (union2, union1, union0).
-			// Each layer prepends the source authorizer name when collecting deciding errors,
-			// so the final error string is "union1: union2: authz1: authz error".
+			// authz1 的错误穿过三层 union ToDecision（union2、union1、union0）。
+			// 每层在收集决策错误时都前置来源授权器名称，
+			// 因此最终错误字符串为 "union1: union2: authz1: authz error"。
 			name: "authorize error propagated",
 			authz1: &evalTestAuthz{
 				decision:     authorizer.DecisionAllow,

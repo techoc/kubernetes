@@ -61,14 +61,14 @@ func TestGetHash(t *testing.T) {
 		})
 	}
 
-	// Verify determinism
+	// 验证确定性
 	hash1 := getHash("same-input")
 	hash2 := getHash("same-input")
 	if hash1 != hash2 {
 		t.Errorf("getHash is not deterministic: %q != %q", hash1, hash2)
 	}
 
-	// Verify different inputs produce different hashes
+	// 验证不同输入产生不同哈希
 	hashA := getHash("input-a")
 	hashB := getHash("input-b")
 	if hashA == hashB {
@@ -84,7 +84,7 @@ func TestRecordAutomaticReloadSuccess(t *testing.T) {
 
 	RecordAutomaticReloadSuccess(ValidatingWebhookManifestType, "test-server-id", "test-config-data")
 
-	// Verify config info was recorded
+	// 验证配置信息已记录
 	provider := configHashProviders[ValidatingWebhookManifestType]
 	hashes := provider.GetCurrentHashes()
 	if len(hashes) < 2 {
@@ -104,7 +104,7 @@ func TestRecordAutomaticReloadFailure(t *testing.T) {
 	RegisterMetrics()
 	ResetMetricsForTest()
 
-	// Should not panic
+	// 不应 panic
 	RecordAutomaticReloadFailure(MutatingWebhookManifestType, "test-server-id")
 }
 
@@ -158,7 +158,7 @@ func TestRecordLastConfigInfo(t *testing.T) {
 			if hashes[0] != expectedAPIHash {
 				t.Errorf("apiserver hash = %q, want %q", hashes[0], expectedAPIHash)
 			}
-			// configData is already a hash, stored directly
+			// configData 已是哈希值，直接存储
 			if hashes[1] != tc.configData {
 				t.Errorf("config hash = %q, want %q", hashes[1], tc.configData)
 			}
@@ -169,7 +169,7 @@ func TestRecordLastConfigInfo(t *testing.T) {
 // TestRecordLastConfigInfoUnknownType 未知类型应静默忽略而不是 panic，
 // 便于前向兼容新增的 manifest 类型。
 func TestRecordLastConfigInfoUnknownType(t *testing.T) {
-	// Should not panic for unknown manifest type
+	// 未知 manifest 类型不应 panic
 	RecordLastConfigInfo(ManifestType("Unknown"), "server", "data")
 }
 
@@ -196,7 +196,7 @@ func TestMultiTypeConfigInfoCollectorDescribe(t *testing.T) {
 // TestMultiTypeConfigInfoCollectorCollectEmpty 验证所有 provider 为空时
 // collector 不输出任何指标，避免暴露无意义的空标签序列。
 func TestMultiTypeConfigInfoCollectorCollectEmpty(t *testing.T) {
-	// Reset all providers to empty state
+	// 将所有 provider 重置为空状态
 	for _, provider := range configHashProviders {
 		provider.SetHashes()
 	}
@@ -218,12 +218,12 @@ func TestMultiTypeConfigInfoCollectorCollectEmpty(t *testing.T) {
 // TestMultiTypeConfigInfoCollectorCollectWithData 验证只为已设置数据的类型
 // 输出指标：两个类型有数据时应恰好收集两条。
 func TestMultiTypeConfigInfoCollectorCollectWithData(t *testing.T) {
-	// Reset all providers
+	// 重置所有 provider
 	for _, provider := range configHashProviders {
 		provider.SetHashes()
 	}
 
-	// Set data for two types
+	// 为两个类型设置数据
 	RecordLastConfigInfo(ValidatingWebhookManifestType, "server-a", "config-a")
 	RecordLastConfigInfo(VAPManifestType, "server-b", "config-b")
 
@@ -244,7 +244,7 @@ func TestMultiTypeConfigInfoCollectorCollectWithData(t *testing.T) {
 // TestMultiTypeConfigInfoCollectorCollectAllTypes 验证四种类型全部有数据时
 // 收集到四条指标，确保 collector 遍历完整。
 func TestMultiTypeConfigInfoCollectorCollectAllTypes(t *testing.T) {
-	// Set data for all four types
+	// 为全部四种类型设置数据
 	RecordLastConfigInfo(ValidatingWebhookManifestType, "s1", "c1")
 	RecordLastConfigInfo(MutatingWebhookManifestType, "s2", "c2")
 	RecordLastConfigInfo(VAPManifestType, "s3", "c3")

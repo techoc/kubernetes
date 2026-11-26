@@ -26,8 +26,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// DefinitionsSchemaResolver resolves the schema of a built-in type
-// by looking up the OpenAPI definitions.
+// DefinitionsSchemaResolver 通过查找 OpenAPI definitions 解析内置类型的 schema。
 //
 // gvkToRef 是预建的 GVK→定义名索引；resolver 构建后只读，可并发使用。
 // 之所以预建索引，是因为 CEL 编译期可能对同一 GVK 反复解析 schema。
@@ -36,8 +35,8 @@ type DefinitionsSchemaResolver struct {
 	gvkToRef map[schema.GroupVersionKind]string
 }
 
-// NewDefinitionsSchemaResolver creates a new DefinitionsSchemaResolver.
-// An example working setup:
+// NewDefinitionsSchemaResolver 创建一个新的 DefinitionsSchemaResolver。
+// 一个可运行的示例配置：
 // getDefinitions = "k8s.io/kubernetes/pkg/generated/openapi".GetOpenAPIDefinitions
 // scheme         = "k8s.io/client-go/kubernetes/scheme".Scheme
 //
@@ -69,7 +68,7 @@ func (d *DefinitionsSchemaResolver) ResolveSchema(gvk schema.GroupVersionKind) (
 		return nil, fmt.Errorf("cannot resolve %v: %w", gvk, ErrSchemaNotFound)
 	}
 	s, err := PopulateRefs(func(ref string) (*spec.Schema, bool) {
-		// find the schema by the ref string, and return a deep copy
+		// 按 ref 字符串查找 schema，并返回深拷贝
 		def, ok := d.defs[ref]
 		if !ok {
 			return nil, false
@@ -97,7 +96,7 @@ func extensionsToGVKs(extensions spec.Extensions) []schema.GroupVersionKind {
 	}
 	result := make([]schema.GroupVersionKind, 0, len(gvks))
 	for _, gvkAny := range gvks {
-		// type check the map and all fields
+		// 对 map 及其所有字段做类型检查
 		gvkMap, ok := gvkAny.(map[string]any)
 		if !ok {
 			return nil

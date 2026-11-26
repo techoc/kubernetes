@@ -24,8 +24,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// LoopbackClientServerNameOverride is passed to the apiserver from the loopback client in order to
-// select the loopback certificate via SNI if TLS is used.
+// LoopbackClientServerNameOverride 由 loopback 客户端传给 apiserver，
+// 以便使用 TLS 时通过 SNI 选择 loopback 证书。
 //
 // 该名字同时用于两个目的：SNI 选择 loopback 证书，以及客户端校验证书
 // 中的 DNS SAN；两者必须一致，否则握手失败。
@@ -63,19 +63,19 @@ func (s *SecureServingInfo) NewLoopbackClientConfig(token string, loopbackCert [
 	}
 
 	c.BearerToken = token
-	// override the ServerName to select our loopback certificate via SNI. This name is also
-	// used by the client to compare the returns server certificate against.
+	// 覆盖 ServerName 以通过 SNI 选择 loopback 证书。客户端也用
+	// 该名称校验服务端返回的证书。
 	c.TLSClientConfig.ServerName = LoopbackClientServerNameOverride
 
 	return c, nil
 }
 
-// LoopbackHostPort returns the host and port loopback REST clients should use
-// to contact the server.
+// LoopbackHostPort 返回 loopback REST 客户端连接服务器时
+// 应使用的主机与端口。
 func LoopbackHostPort(bindAddress string) (string, string, error) {
 	host, port, err := net.SplitHostPort(bindAddress)
 	if err != nil {
-		// should never happen
+		// 不应发生
 		return "", "", fmt.Errorf("invalid server bind address: %q", bindAddress)
 	}
 
@@ -84,15 +84,15 @@ func LoopbackHostPort(bindAddress string) (string, string, error) {
 	// 期望的值是具体 IP 或 DNS 名，而不是 "0.0.0.0"：
 	// 通配地址不能直接用于连接，必须替换为具体回环地址。
 	if host == "0.0.0.0" || host == "::" {
-		// Get ip of local interface, but fall back to "localhost".
-		// Note that "localhost" is resolved with the external nameserver first with Go's stdlib.
-		// So if localhost.<yoursearchdomain> resolves, we don't get a 127.0.0.1 as expected.
+		// 获取本地接口 IP，失败则回退到 "localhost"。
+		// 注意 Go 标准库会先用外部域名服务器解析 "localhost"。
+		// 因此若 localhost.<yoursearchdomain> 可解析，就得不到期望的 127.0.0.1。
 		host = getLoopbackAddress(isIPv6)
 	}
 	return host, port, nil
 }
 
-// getLoopbackAddress returns the ip address of local loopback interface. If any error occurs or loopback interface is not found, will fall back to "localhost"
+// getLoopbackAddress 返回本地 loopback 接口的 IP 地址。发生错误或找不到 loopback 接口时，回退到 "localhost"
 //
 // 优先返回字面 IP 而非 "localhost"：某些环境的 DNS 搜索域会把
 // localhost.<domain> 解析到非回环地址，导致回环客户端连错地方。

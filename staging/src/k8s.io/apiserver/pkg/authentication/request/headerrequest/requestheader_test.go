@@ -153,8 +153,8 @@ func TestRequestHeader(t *testing.T) {
 			uidHeaders:  []string{"X-Remote-Uid"},
 			requestHeaders: http.Header{
 				"X-Remote-User": {"Bob"},
-				// The keys in http.Header MUST be http.CanonicalHeaderKey.
-				// Hence X-Remote-Uid-1 instead of X-Remote-UID-1.
+				// http.Header 的 key 必须是 http.CanonicalHeaderKey，
+				// 因此用 X-Remote-Uid-1 而不是 X-Remote-UID-1。
 				"X-Remote-Uid-1": {"8f5ea9d1-a5ed-4d02-80a2-26709216350b"},
 				"X-Remote-Uid-2": {"c7644180-c774-4a9b-81e5-3eef76f087ab"},
 			},

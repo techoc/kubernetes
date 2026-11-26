@@ -20,13 +20,13 @@ package authorizer
 // 使用接口而非具体结构，是为了让不同来源的规则（RBAC PolicyRule、
 // 聚合授权器返回值等）都能被同一套逻辑消费而不引入循环依赖。
 type ResourceRuleInfo interface {
-	// GetVerbs returns a list of kubernetes resource API verbs.
+	// GetVerbs 返回 Kubernetes 资源 API 的动词列表。
 	GetVerbs() []string
-	// GetAPIGroups return the names of the APIGroup that contains the resources.
+	// GetAPIGroups 返回包含这些资源的 APIGroup 名称。
 	GetAPIGroups() []string
-	// GetResources return a list of resources the rule applies to.
+	// GetResources 返回该规则适用的资源列表。
 	GetResources() []string
-	// GetResourceNames return a white list of names that the rule applies to.
+	// GetResourceNames 返回该规则适用的名称白名单。
 	GetResourceNames() []string
 }
 
@@ -60,9 +60,9 @@ func (i *DefaultResourceRuleInfo) GetResourceNames() []string {
 
 // NonResourceRuleInfo 描述一条针对非资源 URL 路径的授权规则。
 type NonResourceRuleInfo interface {
-	// GetVerbs returns a list of kubernetes resource API verbs.
+	// GetVerbs 返回 Kubernetes 资源 API 的动词列表。
 	GetVerbs() []string
-	// GetNonResourceURLs return a set of partial urls that a user should have access to.
+	// GetNonResourceURLs 返回用户可访问的部分 URL 集合。
 	GetNonResourceURLs() []string
 }
 

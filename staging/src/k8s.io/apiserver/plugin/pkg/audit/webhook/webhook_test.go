@@ -40,9 +40,9 @@ import (
 	v1 "k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
-// newWebhookHandler returns a handler which receives webhook events and decodes the
-// request body. The caller passes a callback which is called on each webhook POST.
-// The object passed to cb is of the same type as list.
+// newWebhookHandler 返回一个接收 webhook 事件并解码
+// 请求体的 handler。调用方传入一个回调，每次 webhook POST 都会调用它。
+// 传给 cb 的对象与 list 类型相同。
 func newWebhookHandler(t *testing.T, list runtime.Object, cb func(events runtime.Object)) http.Handler {
 	s := json.NewSerializerWithOptions(json.DefaultMetaFactory, audit.Scheme, audit.Scheme, json.SerializerOptions{})
 	return &testWebhookHandler{
@@ -88,7 +88,7 @@ func (t *testWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, "{}")
 		return
 	}
-	// In a goroutine, can't call Fatal.
+	// 在 goroutine 中不能调用 Fatal。
 	assert.NoError(t.t, err, "failed to read request body")
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
@@ -109,7 +109,7 @@ func newWebhook(t *testing.T, endpoint string, groupVersion schema.GroupVersion)
 		os.Remove(f.Name())
 	}()
 
-	// NOTE(ericchiang): Do we need to use a proper serializer?
+	// 注意(ericchiang)：需要使用正式的 serializer 吗？
 	require.NoError(t, stdjson.NewEncoder(f).Encode(config), "writing kubeconfig")
 
 	// 有限次退避：测试中不应无限重试，否则失败会表现为超时而非明确错误。
@@ -138,7 +138,7 @@ func TestWebhook(t *testing.T) {
 
 		backend := newWebhook(t, s.URL, auditv1.SchemeGroupVersion)
 
-		// Ensure this doesn't return a serialization error.
+		// 确保这里不会返回序列化错误。
 		event := &auditinternal.Event{}
 		require.NoErrorf(t, backend.processEvents(event), "failed to send events, apiVersion: %s", version)
 		require.Truef(t, gotEvents, "no events received, apiVersion: %s", version)

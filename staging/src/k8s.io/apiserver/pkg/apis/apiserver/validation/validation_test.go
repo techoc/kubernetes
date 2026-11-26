@@ -688,7 +688,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 								RequiredValue: "bar",
 							},
 						},
-						// allow email claim when email_verified is true or absent
+						// email_verified 为 true 或缺失时允许使用 email claim
 						ClaimMappings: api.ClaimMappings{
 							Username: api.PrefixedClaimOrExpression{
 								Expression: `claims.?email_verified.orValue(true) ? claims.email : claims.sub`,
@@ -715,7 +715,7 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 								RequiredValue: "bar",
 							},
 						},
-						// allow email claim only when email_verified is present and true
+						// 仅当 email_verified 存在且为 true 时允许使用 email claim
 						ClaimMappings: api.ClaimMappings{
 							Username: api.PrefixedClaimOrExpression{
 								Expression: `claims.?email_verified.orValue(false) ? claims.email : claims.sub`,
@@ -738,12 +738,12 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 						},
 						ClaimValidationRules: []api.ClaimValidationRule{
 							{
-								// By explicitly comparing the value to true, we let type-checking see the result will be
-								// a boolean, and to make sure a non-boolean email_verified claim will be caught at runtime.
+								// 显式与 true 比较，让类型检查确认结果是布尔值，
+								// 并确保非布尔的 email_verified claim 能在运行时被发现。
 								Expression: `claims.?email_verified.orValue(true) == true`,
 							},
 						},
-						// allow email claim only when email_verified is present and true
+						// 仅当 email_verified 存在且为 true 时允许使用 email claim
 						ClaimMappings: api.ClaimMappings{
 							Username: api.PrefixedClaimOrExpression{
 								Expression: `{claims.?email: "panda"}`,
@@ -767,13 +767,13 @@ func TestValidateAuthenticationConfiguration(t *testing.T) {
 						},
 						ClaimValidationRules: []api.ClaimValidationRule{
 							{
-								// This expression was previously documented in the godoc for the JWT authenticator
-								// and was incorrect. It was changed to the above expression in the previous test case.
-								// Testing the old expression here to confirm it fails validation.
+								// 该表达式曾错误地写在 JWT authenticator 的 godoc 中，
+								// 上一个用例已改为正确写法。
+								// 这里测试旧表达式，确认它无法通过校验。
 								Expression: `claims.?email_verified.orValue(true)`,
 							},
 						},
-						// allow email claim only when email_verified is present and true
+						// 仅当 email_verified 存在且为 true 时允许使用 email claim
 						ClaimMappings: api.ClaimMappings{
 							Username: api.PrefixedClaimOrExpression{
 								Expression: `{claims.?email: "panda"}`,

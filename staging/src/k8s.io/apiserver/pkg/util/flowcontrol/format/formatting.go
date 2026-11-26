@@ -28,16 +28,16 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// This file provides an easy way to mark a value for formatting to
-// `%s` in full detail IF it is printed but without costing a lot of
-// CPU or memory if the value is NOT printed.  The API Priority and
-// Fairness API objects are formatted into JSON.  The other types of
-// objects here are formatted into golang source.
+// 本文件提供一种便捷方式，把值标记为在需要时用 `%s`
+// 完整格式化输出，但若值未被打印，则不花费大量
+// CPU 或内存。API Priority and Fairness 的 API 对象
+// 格式化为 JSON，这里的其他类型
+// 格式化为 Go 源码。
 
 // Stringer 标记给定值由本包进行自定义格式化；仅保存引用，不做任何拷贝或序列化，因此构造本身几乎零成本。
 type Stringer struct{ val interface{} }
 
-// Fmt marks the given value for custom formatting by this package.
+// Fmt 把给定值标记为由本包自定义格式化。
 func Fmt(val interface{}) Stringer {
 	return Stringer{val}
 }
@@ -77,8 +77,7 @@ func (sr Stringer) String() string {
 	}
 }
 
-// ToJSON converts using encoding/json and handles errors by
-// formatting them
+// ToJSON 用 encoding/json 转换，并通过格式化来处理错误
 func ToJSON(val interface{}) string {
 	bs, err := json.Marshal(val)
 	str := string(bs)
@@ -102,16 +101,14 @@ func FmtPriorityLevelConfiguration(pl *flowcontrol.PriorityLevelConfiguration) s
 	return buf.String()
 }
 
-// FmtPriorityLevelConfigurationSpec returns a golang source
-// expression equivalent to the given value
+// FmtPriorityLevelConfigurationSpec 返回与给定值等价的 Go 源码表达式
 func FmtPriorityLevelConfigurationSpec(plSpec *flowcontrol.PriorityLevelConfigurationSpec) string {
 	var buf bytes.Buffer
 	BufferPriorityLevelConfigurationSpec(&buf, plSpec)
 	return buf.String()
 }
 
-// BufferPriorityLevelConfigurationSpec writes a golang source
-// expression for the given value to the given buffer
+// BufferPriorityLevelConfigurationSpec 把给定值的 Go 源码表达式写入给定 buffer
 func BufferPriorityLevelConfigurationSpec(buf *bytes.Buffer, plSpec *flowcontrol.PriorityLevelConfigurationSpec) {
 	buf.WriteString(fmt.Sprintf("flowcontrolv1.PriorityLevelConfigurationSpec{Type: %#v", plSpec.Type))
 	if plSpec.Limited != nil {
@@ -124,7 +121,7 @@ func BufferPriorityLevelConfigurationSpec(buf *bytes.Buffer, plSpec *flowcontrol
 	buf.WriteString("}")
 }
 
-// FmtFlowSchema produces a golang source expression of the value.
+// FmtFlowSchema 生成该值的 Go 源码表达式。
 func FmtFlowSchema(fs *flowcontrol.FlowSchema) string {
 	if fs == nil {
 		return "nil"
@@ -137,8 +134,7 @@ func FmtFlowSchema(fs *flowcontrol.FlowSchema) string {
 	return buf.String()
 }
 
-// FmtFlowSchemaSpec produces a golang source expression equivalent to
-// the given spec
+// FmtFlowSchemaSpec 生成与给定 spec 等价的 Go 源码表达式。
 func FmtFlowSchemaSpec(fsSpec *flowcontrol.FlowSchemaSpec) string {
 	var buf bytes.Buffer
 	BufferFlowSchemaSpec(&buf, fsSpec)
@@ -166,23 +162,22 @@ func BufferFlowSchemaSpec(buf *bytes.Buffer, fsSpec *flowcontrol.FlowSchemaSpec)
 	buf.WriteString("}}")
 }
 
-// FmtPolicyRulesWithSubjects produces a golang source expression of the value.
+// FmtPolicyRulesWithSubjects 生成该值的 Go 源码表达式。
 func FmtPolicyRulesWithSubjects(rule flowcontrol.PolicyRulesWithSubjects) string {
 	return "flowcontrolv1.PolicyRulesWithSubjects" + FmtPolicyRulesWithSubjectsSlim(rule)
 }
 
-// FmtPolicyRulesWithSubjectsSlim produces a golang source expression
-// of the value but without the leading type name.  See above for an
-// example context where this is useful.
+// FmtPolicyRulesWithSubjectsSlim 生成该值的 Go 源码表达式，
+// 但不包含前面的类型名。上文有示例说明
+// 何时需要这种形式。
 func FmtPolicyRulesWithSubjectsSlim(rule flowcontrol.PolicyRulesWithSubjects) string {
 	var buf bytes.Buffer
 	BufferFmtPolicyRulesWithSubjectsSlim(&buf, rule)
 	return buf.String()
 }
 
-// BufferFmtPolicyRulesWithSubjectsSlim writes a golang source
-// expression for the given value to the given buffer but excludes the
-// leading type name
+// BufferFmtPolicyRulesWithSubjectsSlim 把给定值的 Go 源码表达式写入给定 buffer，
+// 但不包含前面的类型名。
 func BufferFmtPolicyRulesWithSubjectsSlim(buf *bytes.Buffer, rule flowcontrol.PolicyRulesWithSubjects) {
 	buf.WriteString("{Subjects: []flowcontrolv1.Subject{")
 	for jdx, subj := range rule.Subjects {
@@ -218,7 +213,7 @@ func FmtUsers(list []user.Info) string {
 	return buf.String()
 }
 
-// FmtRequests produces a golang source expression of the value.
+// FmtRequests 生成该值的 Go 源码表达式。
 func FmtRequests(list []*request.RequestInfo) string {
 	var buf bytes.Buffer
 	buf.WriteString("[]*request.RequestInfo{")

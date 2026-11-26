@@ -34,11 +34,11 @@ import (
 // 对应证书，未知名称回退到默认证书，IP 形式的 SNI 也能匹配。
 func TestServingCert(t *testing.T) {
 	tlsConfig := &tls.Config{
-		// Can't use SSLv3 because of POODLE and BEAST
-		// Can't use TLSv1.0 because of POODLE and BEAST using CBC cipher
-		// Can't use TLSv1.1 because of RC4 cipher usage
+		// 因 POODLE 与 BEAST 漏洞，不能使用 SSLv3
+		// 因 POODLE 与 BEAST 利用 CBC 密码套件，不能使用 TLSv1.0
+		// 因使用 RC4 密码套件，不能使用 TLSv1.1
 		MinVersion: tls.VersionTLS12,
-		// enable HTTP2 for go's 1.7 HTTP Server
+		// 为 Go 1.7 的 HTTP Server 启用 HTTP2
 		NextProtos: []string{"h2", "http/1.1"},
 	}
 
@@ -196,7 +196,7 @@ func createListener(network, addr string) (net.Listener, int, error) {
 		return nil, 0, fmt.Errorf("failed to listen on %v: %v", addr, err)
 	}
 
-	// get port
+	// 获取端口
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		ln.Close()
@@ -213,7 +213,7 @@ type nullCAContent struct {
 
 var _ CAContentProvider = &nullCAContent{}
 
-// Name is just an identifier
+// Name 只是标识符
 func (c *nullCAContent) Name() string {
 	return c.name
 }
@@ -221,7 +221,7 @@ func (c *nullCAContent) Name() string {
 // AddListener 空实现：该测试不关心 CA 变更通知。
 func (c *nullCAContent) AddListener(Listener) {}
 
-// CurrentCABundleContent provides ca bundle byte content
+// CurrentCABundleContent 提供 CA bundle 的字节内容
 func (c *nullCAContent) CurrentCABundleContent() (cabundle []byte) {
 	return nil
 }

@@ -29,44 +29,44 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Backend describes the storage servers, the information here should be enough
-// for health validations.
+// Backend 描述存储服务器，其中的信息应足以
+// 进行健康检查。
 type Backend struct {
-	// the url of storage backend like: https://etcd.domain:2379
+	// 存储后端的 URL，如 https://etcd.domain:2379
 	Server string
-	// the required tls config
+	// 所需的 TLS 配置
 	TLSConfig *tls.Config
 }
 
-// StorageFactory is the interface to locate the storage for a given GroupResource
+// StorageFactory 是定位给定 GroupResource 存储位置的接口
 type StorageFactory interface {
-	// New finds the storage destination for the given group and resource. It will
-	// return an error if the group has no storage destination configured.
+	// New 查找给定 group 与 resource 的存储目标。若该 group
+	// 未配置存储目标，则返回错误。
 	NewConfig(groupResource schema.GroupResource, example runtime.Object) (*storagebackend.ConfigForResource, error)
 
-	// ResourcePrefix returns the overridden resource prefix for the GroupResource
-	// This allows for cohabitation of resources with different native types and provides
-	// centralized control over the shape of etcd directories
+	// ResourcePrefix 返回 GroupResource 被覆盖的资源前缀
+	// 这允许不同原生类型的资源共存，并集中控制
+	// etcd 目录的结构
 	ResourcePrefix(groupResource schema.GroupResource) string
 
-	// Configs gets configurations for all of registered storage destinations.
+	// Configs 获取所有已注册存储目标的配置。
 	Configs() []storagebackend.Config
 
-	// Backends gets all backends for all registered storage destinations.
-	// Used for getting all instances for health validations.
+	// Backends 获取所有已注册存储目标的所有后端。
+	// 用于获取所有实例以进行健康检查。
 	// Deprecated: Use Configs instead
 	//
 	// 已弃用：请改用 Configs，再按需自行构造健康检查所需的连接信息。
 	Backends() []Backend
 }
 
-// DefaultStorageFactory takes a GroupResource and returns back its storage interface.  This result includes:
-// 1. Merged etcd config, including: auth, server locations, prefixes
-// 2. Resource encodings for storage: group,version,kind to store as
-// 3. Cohabitating default: some resources like hpa are exposed through multiple APIs.  They must agree on 1 and 2
+// DefaultStorageFactory 接受 GroupResource 并返回其存储接口。结果包括：
+// 1. 合并后的 etcd 配置，包括认证、服务器地址、前缀
+// 2. 存储使用的资源编码：要存储为的 group/version/kind
+// 3. 共存默认值：某些资源（如 hpa）通过多个 API 暴露，它们必须在 1 和 2 上保持一致
 type DefaultStorageFactory struct {
-	// StorageConfig describes how to create a storage backend in general.
-	// Its authentication information will be used for every storage.Interface returned.
+	// StorageConfig 描述一般如何创建存储后端。
+	// 其认证信息将用于每一个返回的 storage.Interface。
 	StorageConfig storagebackend.Config
 
 	// Overrides 按 GroupResource 保存差异化存储配置；键可以是具体资源，也可以是 "*" 组别名。
@@ -75,47 +75,47 @@ type DefaultStorageFactory struct {
 	// DefaultResourcePrefixes 为历史资源保留固定的 etcd 目录名，避免升级后数据"搬家"。
 	DefaultResourcePrefixes map[schema.GroupResource]string
 
-	// DefaultMediaType is the media type used to store resources. If it is not set, "application/json" is used.
+	// DefaultMediaType 是用于存储资源的媒体类型。未设置时使用 "application/json"。
 	DefaultMediaType string
 
-	// DefaultSerializer is used to create encoders and decoders for the storage.Interface.
+	// DefaultSerializer 用于为 storage.Interface 创建编码器与解码器。
 	DefaultSerializer runtime.StorageSerializer
 
-	// ResourceEncodingConfig describes how to encode a particular GroupVersionResource
+	// ResourceEncodingConfig 描述如何编码特定的 GroupVersionResource
 	ResourceEncodingConfig ResourceEncodingConfig
 
-	// APIResourceConfigSource indicates whether the *storage* is enabled, NOT the API
-	// This is discrete from resource enablement because those are separate concerns.  How this source is configured
-	// is left to the caller.
+	// APIResourceConfigSource 指示*存储*是否启用，而非 API 是否启用
+	// 这与资源启用是两回事，配置方式留给调用方决定。
+	//
 	APIResourceConfigSource APIResourceConfigSource
 
-	// newStorageCodecFn exists to be overwritten for unit testing.
+	// newStorageCodecFn 存在是为了在单元测试中被覆盖。
 	newStorageCodecFn func(opts StorageCodecConfig) (codec runtime.Codec, encodeVersioner runtime.GroupVersioner, err error)
 }
 
 // groupResourceOverrides 是单个 GroupResource 的存储覆盖项。
 type groupResourceOverrides struct {
-	// etcdLocation contains the list of "special" locations that are used for particular GroupResources
-	// These are merged on top of the StorageConfig when requesting the storage.Interface for a given GroupResource
+	// etcdLocation 包含用于特定 GroupResource 的"特殊"位置列表
+	// 请求给定 GroupResource 的 storage.Interface 时，这些位置会覆盖在 StorageConfig 之上
 	etcdLocation []string
-	// etcdPrefix is the base location for a GroupResource.
+	// etcdPrefix 是 GroupResource 的基础存储位置。
 	etcdPrefix string
-	// etcdResourcePrefix is the location to use to store a particular type under the `etcdPrefix` location
-	// If empty, the default mapping is used.  If the default mapping doesn't contain an entry, it will use
-	// the ToLowered name of the resource, not including the group.
+	// etcdResourcePrefix 是在 `etcdPrefix` 下存储特定类型的位置。
+	// 为空时使用默认映射；若默认映射也没有对应条目，则使用
+	// 资源的小写名称（不含组名）。
 	etcdResourcePrefix string
-	// mediaType is the desired serializer to choose. If empty, the default is chosen.
+	// mediaType 是希望选择的 serializer。为空时选择默认值。
 	mediaType string
-	// serializer contains the list of "special" serializers for a GroupResource.  Resource=* means for the entire group
+	// serializer 包含 GroupResource 的"特殊" serializer 列表。Resource=* 表示对整个组生效
 	serializer runtime.StorageSerializer
-	// cohabitatingResources keeps track of which resources must be stored together.  This happens when we have multiple ways
-	// of exposing one set of concepts.  autoscaling.HPA and extensions.HPA as a for instance
-	// The order of the slice matters!  It is the priority order of lookup for finding a storage location
+	// cohabitatingResources 记录哪些资源必须存储在一起。当同一组概念
+	// 有多种暴露方式时会出现这种情况，例如 autoscaling.HPA 与 extensions.HPA。
+	// 切片的顺序很重要！它决定了查找存储位置的优先级。
 	cohabitatingResources []schema.GroupResource
-	// encoderDecoratorFn is optional and may wrap the provided encoder prior to being serialized.
+	// encoderDecoratorFn 是可选的，可在序列化前包装传入的 encoder。
 	encoderDecoratorFn func(runtime.Encoder) runtime.Encoder
-	// decoderDecoratorFn is optional and may wrap the provided decoders (can add new decoders). The order of
-	// returned decoders will be priority for attempt to decode.
+	// decoderDecoratorFn 是可选的，可包装传入的 decoder（添加新的 decoder）。返回
+	// decoder 的顺序即尝试解码的优先级。
 	decoderDecoratorFn func([]runtime.Decoder) []runtime.Decoder
 }
 

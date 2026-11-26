@@ -20,7 +20,7 @@ package server
 
 import "net/http"
 
-// Go versions before 1.27 do not limit the number of header values.
+// Go 1.27 之前不限制 header value 的数量。
 // 因此这里保持空实现；go1.27 及以上由同名的 go127 构建版本设置上限，
 // 两个文件必须保持签名一致，否则不同工具链下编译结果不同。
 func setMaxHeaderValueCount(*http.Server) {}

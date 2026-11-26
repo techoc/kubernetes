@@ -60,10 +60,10 @@ func TestDecoratedWatcher(t *testing.T) {
 	expectErrorEvent(t, dw) // expect error is plumbed and doesn't force close the watcher
 	expectPodEvent(t, dw, watch.Deleted)
 
-	// cancel the passed-in context to simulate request timeout
+	// 取消传入的 context，模拟请求超时
 	cancel()
 
-	// expect the decorated channel to be closed
+	// 期望装饰后的 channel 被关闭
 	select {
 	case e, ok := <-dw.ResultChan():
 		if ok {
@@ -73,7 +73,7 @@ func TestDecoratedWatcher(t *testing.T) {
 		t.Errorf("timeout after %v", wait.ForeverTestTimeout)
 	}
 
-	// expect the underlying watcher to have been stopped as a result of the context cancellation
+	// 期望底层 watcher 因 context 取消而被停止
 	if !w.IsStopped() {
 		t.Errorf("expected underlying watcher to be stopped")
 	}

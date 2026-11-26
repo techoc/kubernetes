@@ -30,8 +30,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// APIEnablementOptions contains the options for which resources to turn on and off.
-// Given small aggregated API servers, this option isn't required for "normal" API servers
+// APIEnablementOptions 包含要开启和关闭哪些资源的选项。
+// 对小型聚合 API server 而言此选项是必需的；"普通" API server 通常不需要
 //
 // 对应 --runtime-config 参数：以 key=value 的形式覆盖默认的资源启用状态。
 type APIEnablementOptions struct {
@@ -45,7 +45,7 @@ func NewAPIEnablementOptions() *APIEnablementOptions {
 	}
 }
 
-// AddFlags adds flags for a specific APIServer to the specified FlagSet
+// AddFlags 为指定 APIServer 向给定 FlagSet 添加 flag
 func (s *APIEnablementOptions) AddFlags(fs *pflag.FlagSet) {
 	if s == nil {
 		return
@@ -61,11 +61,11 @@ func (s *APIEnablementOptions) AddFlags(fs *pflag.FlagSet) {
 		"api/legacy is deprecated, and will be removed in a future version")
 }
 
-// Validate validates RuntimeConfig with a list of registries.
-// Usually this list only has one element, the apiserver registry of the process.
-// But in the advanced (and usually not recommended) case of delegated apiservers there can be more.
-// Validate will filter out the known groups of each registry.
-// If anything is left over after that, an error is returned.
+// Validate 用一组 registry 校验 RuntimeConfig。
+// 通常该列表只有一个元素，即进程的 apiserver registry。
+// 但在委托 apiserver 这种高级（通常不推荐）场景中可能有多个。
+// Validate 会过滤掉每个 registry 中已知的组，
+// 若还有剩余则报错。
 //
 // 注意：这里只校验“组是否存在”，不校验具体版本/资源是否可用，那部分由
 // MergeAPIResourceConfigs 在 ApplyTo 中处理。
@@ -76,7 +76,7 @@ func (s *APIEnablementOptions) Validate(registries ...GroupRegistry) []error {
 
 	errors := []error{}
 	if s.RuntimeConfig[resourceconfig.APIAll] == "false" && len(s.RuntimeConfig) == 1 {
-		// Do not allow only set api/all=false, in such case apiserver startup has no meaning.
+		// 不允许只设置 api/all=false，这样 apiserver 启动毫无意义。
 		return append(errors, fmt.Errorf("invalid runtime-config with only %v=false", resourceconfig.APIAll))
 	}
 
@@ -98,7 +98,7 @@ func (s *APIEnablementOptions) Validate(registries ...GroupRegistry) []error {
 	return errors
 }
 
-// ApplyTo override MergedResourceConfig with defaults and registry
+// ApplyTo 用默认值与 registry 覆盖 MergedResourceConfig
 //
 // 合并默认资源启用状态与 --runtime-config 覆盖项；若启用了版本模拟
 // （EmulationForwardCompatible），再按模拟版本调整启用集合。
@@ -111,7 +111,7 @@ func (s *APIEnablementOptions) ApplyTo(c *server.Config, defaultResourceConfig *
 	if err != nil {
 		return err
 	}
-	// apply emulation forward compatibility to the api enablement if applicable.
+	// 在适用时为 API enablement 应用前向兼容的模拟行为。
 	if c.EmulationForwardCompatible {
 		mergedResourceConfig, err = resourceconfig.EmulationForwardCompatibleResourceConfig(mergedResourceConfig, s.RuntimeConfig, registry)
 	}
@@ -124,7 +124,7 @@ func (s *APIEnablementOptions) ApplyTo(c *server.Config, defaultResourceConfig *
 	if binVersion != nil && emulatedVersion != nil && (binVersion.Major() != emulatedVersion.Major() || binVersion.Minor() != emulatedVersion.Minor()) {
 		for _, version := range registry.PrioritizedVersionsAllGroups() {
 			if strings.Contains(version.Version, "alpha") {
-				// Check if this alpha API is actually enabled before warning
+				// 发出警告前先检查该 alpha API 是否确实已启用
 				entireVersionEnabled := c.MergedResourceConfig.ExplicitGroupVersionConfigs[version]
 				individualResourceEnabled := false
 				for resource, enabled := range c.MergedResourceConfig.ExplicitResourceConfigs {
@@ -143,9 +143,9 @@ func (s *APIEnablementOptions) ApplyTo(c *server.Config, defaultResourceConfig *
 	return err
 }
 
-// GroupRegistry provides a method to check whether given group is registered.
+// GroupRegistry 提供检查给定组是否已注册的方法。
 type GroupRegistry interface {
-	// IsGroupRegistered returns true if given group is registered.
+	// 给定组已注册时 IsGroupRegistered 返回 true。
 	IsGroupRegistered(group string) bool
 }
 

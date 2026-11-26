@@ -31,9 +31,9 @@ import (
 // 两个变量底层指向同一个对象，因此通过可变接口修改后，
 // 通过只读接口查询时也能观察到修改结果。
 var (
-	// DefaultMutableFeatureGate is a mutable version of DefaultFeatureGate.
-	// Only top-level commands/options setup and the k8s.io/component-base/featuregate/testing package should make use of this.
-	// Tests that need to modify feature gates for the duration of their test should use:
+	// DefaultMutableFeatureGate 是 DefaultFeatureGate 的可变版本。
+	// 只应由顶层命令/选项装配代码与 k8s.io/component-base/featuregate/testing 包使用。
+	// 测试中若需在测试期间修改特性门控，应使用：
 	//   featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.<FeatureName>, <value>)
 	//
 	// DefaultMutableFeatureGate 是默认特性门控的可变版本。
@@ -46,8 +46,8 @@ var (
 	// 注意：不要让普通业务逻辑随意依赖这个可变变量，否则运行期间可能出现特性状态被意外修改的问题。
 	DefaultMutableFeatureGate featuregate.MutableVersionedFeatureGate = featuregate.NewFeatureGate()
 
-	// DefaultFeatureGate is a shared global FeatureGate.
-	// Top-level commands/options setup that needs to modify this feature gate should use DefaultMutableFeatureGate.
+	// DefaultFeatureGate 是共享的全局 FeatureGate。
+	// 需要修改它的顶层命令/选项装配代码应使用 DefaultMutableFeatureGate。
 	//
 	// DefaultFeatureGate 是 apiserver 共享的默认特性门控对象，但这里只暴露 FeatureGate 只读接口。
 	// 其他组件可以通过 Enabled() 查询某个特性是否启用，而不能通过该接口直接修改开关。

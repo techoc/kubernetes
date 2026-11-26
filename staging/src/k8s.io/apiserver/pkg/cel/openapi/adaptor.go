@@ -89,8 +89,8 @@ func (s *Schema) Properties() map[string]common.Schema {
 	}
 	res := make(map[string]common.Schema, len(s.Schema.Properties))
 	for n, prop := range s.Schema.Properties {
-		// map value is unaddressable, create a shallow copy
-		// this is a shallow non-recursive copy
+		// map value 不可寻址，创建浅拷贝
+		// 这只是浅层的非递归拷贝
 		s := prop
 		res[n] = &Schema{Schema: &s}
 	}

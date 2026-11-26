@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// APIResourceConfigSource is the interface to determine which groups and versions are enabled
+// APIResourceConfigSource 用于确定启用哪些组和版本
 //
 // 区分"是否启用"与"是否被显式设置"：前者决定行为，后者用于判断用户配置是否
 // 覆盖了默认值（例如决定是否打印提示或参与冲突检测）。
@@ -57,8 +57,8 @@ func NewResourceConfig() *ResourceConfig {
 	}
 }
 
-// DisableMatchingVersions disables all group/versions for which the matcher function returns true.
-// This will remove any preferences previously set on individual resources.
+// DisableMatchingVersions 禁用 matcher 函数返回 true 的所有 group/version。
+// 这会移除此前对单个资源设置的所有偏好。
 func (o *ResourceConfig) DisableMatchingVersions(matcher func(gv schema.GroupVersion) bool) {
 	for version := range o.GroupVersionConfigs {
 		if matcher(version) {
@@ -69,8 +69,8 @@ func (o *ResourceConfig) DisableMatchingVersions(matcher func(gv schema.GroupVer
 	}
 }
 
-// EnableMatchingVersions enables all group/versions for which the matcher function returns true.
-// This will remove any preferences previously set on individual resources.
+// EnableMatchingVersions 启用 matcher 函数返回 true 的所有 group/version。
+// 这会移除此前对单个资源设置的所有偏好。
 func (o *ResourceConfig) EnableMatchingVersions(matcher func(gv schema.GroupVersion) bool) {
 	for version := range o.GroupVersionConfigs {
 		if matcher(version) {
@@ -80,15 +80,15 @@ func (o *ResourceConfig) EnableMatchingVersions(matcher func(gv schema.GroupVers
 	}
 }
 
-// resourceMatcherForVersion matches resources in the specified version
+// resourceMatcherForVersion 匹配指定版本中的资源
 func resourceMatcherForVersion(gv schema.GroupVersion) func(gvr schema.GroupVersionResource) bool {
 	return func(gvr schema.GroupVersionResource) bool {
 		return gv == gvr.GroupVersion()
 	}
 }
 
-// removeMatchingResourcePreferences removes individual resource preferences that match.  This is useful when an override of a version or level enablement should
-// override the previously individual preferences.
+// removeMatchingResourcePreferences 移除匹配的单个资源偏好。当版本或级别
+// 的覆盖应优先于之前的单个偏好时，这一步是必要的。
 //
 // 先收集再删除：不能在遍历 map 的同时 delete，虽然 Go 允许，但语义上更清晰也更易审阅。
 func (o *ResourceConfig) removeMatchingResourcePreferences(matcher func(gvr schema.GroupVersionResource) bool) {
@@ -104,13 +104,13 @@ func (o *ResourceConfig) removeMatchingResourcePreferences(matcher func(gvr sche
 	}
 }
 
-// DisableVersions disables the versions entirely.
-// This will remove any preferences previously set on individual resources.
+// DisableVersions 完全禁用这些版本。
+// 这会移除此前对单个资源设置的所有偏好。
 func (o *ResourceConfig) DisableVersions(versions ...schema.GroupVersion) {
 	for _, version := range versions {
 		o.GroupVersionConfigs[version] = false
 
-		// a preference about a version takes priority over the previously set resources
+		// 对版本的设置优先于此前对资源的设置
 		o.removeMatchingResourcePreferences(resourceMatcherForVersion(version))
 	}
 }
@@ -124,13 +124,13 @@ func (o *ResourceConfig) ExplicitlyDisableVersions(versions ...schema.GroupVersi
 	o.DisableVersions(versions...)
 }
 
-// EnableVersions enables all resources in a given groupVersion.
-// This will remove any preferences previously set on individual resources.
+// EnableVersions 启用给定 groupVersion 中的所有资源。
+// 这会移除此前对单个资源设置的所有偏好。
 func (o *ResourceConfig) EnableVersions(versions ...schema.GroupVersion) {
 	for _, version := range versions {
 		o.GroupVersionConfigs[version] = true
 
-		// a preference about a version takes priority over the previously set resources
+		// 对版本的设置优先于此前对资源的设置
 		o.removeMatchingResourcePreferences(resourceMatcherForVersion(version))
 	}
 
@@ -144,7 +144,7 @@ func (o *ResourceConfig) ExplicitlyEnableVersions(versions ...schema.GroupVersio
 	o.EnableVersions(versions...)
 }
 
-// TODO this must be removed and we enable/disable individual resources.
+// TODO 必须移除它，改为启用/禁用单个资源。
 //
 // 读取 map 的零值为 false，因此未显式登记的版本默认是关闭的；
 // 默认开启由上层在初始化时统一登记，而不是在这里兜底。
@@ -187,7 +187,7 @@ func (o *ResourceConfig) ExplicitlyEnableResources(resources ...schema.GroupVers
 // 注意最后返回 true 而非 versionEnabled 的结果：能走到这里说明资源级未设置
 // 且所属版本已启用，此时资源默认可用。
 func (o *ResourceConfig) ResourceEnabled(resource schema.GroupVersionResource) bool {
-	// if a resource is explicitly set, that takes priority over the preference of the version.
+	// 若显式设置了某个资源，它优先于该版本的偏好。
 	resourceEnabled, explicitlySet := o.ResourceConfigs[resource]
 	if explicitlySet {
 		return resourceEnabled
@@ -196,7 +196,7 @@ func (o *ResourceConfig) ResourceEnabled(resource schema.GroupVersionResource) b
 	if !o.versionEnabled(resource.GroupVersion()) {
 		return false
 	}
-	// they are enabled by default.
+	// 它们默认处于启用状态。
 	return true
 }
 

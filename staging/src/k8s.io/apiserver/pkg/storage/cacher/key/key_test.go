@@ -27,13 +27,13 @@ func TestHasPathPrefix(t *testing.T) {
 		s      string
 		prefix string
 	}{
-		// Exact matches
+		// 精确匹配
 		{"", ""},
 		{"a", "a"},
 		{"a/", "a/"},
 		{"a/../", "a/../"},
 
-		// Path prefix matches
+		// 路径前缀匹配
 		{"a/b", "a"},
 		{"a/b", "a/"},
 		{"中文/", "中文"},
@@ -48,18 +48,18 @@ func TestHasPathPrefix(t *testing.T) {
 		s      string
 		prefix string
 	}{
-		// Mismatch
+		// 不匹配
 		{"a", "b"},
 
-		// Dir requirement
+		// 目录要求
 		{"a", "a/"},
 
-		// Prefix mismatch
+		// 前缀不匹配
 		{"ns2", "ns"},
 		{"ns2", "ns/"},
 		{"中文文", "中文"},
 
-		// Ensure no normalization is applied
+		// 确保不应用任何规范化
 		{"a/c/../b/", "a/b/"},
 		{"a/", "a/b/.."},
 	}

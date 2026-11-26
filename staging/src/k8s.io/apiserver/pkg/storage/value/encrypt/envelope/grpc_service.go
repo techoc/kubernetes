@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package envelope transforms values for storage at rest using a Envelope provider
+// Package envelope 用 Envelope provider 对静态存储的数据做转换
 package envelope
 
 import (
@@ -34,15 +34,15 @@ import (
 )
 
 const (
-	// unixProtocol is the only supported protocol for remote KMS provider.
+	// unixProtocol 是远程 KMS provider 唯一支持的协议。
 	unixProtocol = "unix"
-	// Current version for the protocol interface definition.
+	// 协议接口定义的当前版本。
 	kmsapiVersion = "v1beta1"
 
 	versionErrorf = "KMS provider api version %s is not supported, only %s is supported now"
 )
 
-// The gRPC implementation for envelope.Service.
+// envelope.Service 的 gRPC 实现。
 // 通过 Unix domain socket 与 KMS 插件通信；connection 的生命周期与 ctx 绑定。
 type gRPCService struct {
 	kmsClient      kmsapi.KeyManagementServiceClient
@@ -52,7 +52,7 @@ type gRPCService struct {
 	versionChecked bool
 }
 
-// NewGRPCService returns an envelope.Service which use gRPC to communicate the remote KMS provider.
+// NewGRPCService 返回一个用 gRPC 与远程 KMS provider 通信的 envelope.Service。
 func NewGRPCService(ctx context.Context, endpoint string, callTimeout time.Duration) (Service, error) {
 	klog.V(4).InfoS("Configure KMS provider", "endpoint", endpoint)
 
@@ -70,8 +70,8 @@ func NewGRPCService(ctx context.Context, endpoint string, callTimeout time.Durat
 		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
 		grpc.WithContextDialer(
 			func(context.Context, string) (net.Conn, error) {
-				// Ignoring addr and timeout arguments:
-				// addr - comes from the closure
+				// 忽略 addr 与 timeout 参数：
+				// addr —— 来自闭包
 				c, err := net.DialUnix(unixProtocol, nil, &net.UnixAddr{Name: addr})
 				if err != nil {
 					klog.ErrorS(err, "failed to create connection to unix socket", "addr", addr)
@@ -121,7 +121,7 @@ func (g *gRPCService) checkAPIVersion(ctx context.Context) error {
 	return nil
 }
 
-// Decrypt a given data string to obtain the original byte data.
+// 解密给定的数据字符串，得到原始字节数据。
 func (g *gRPCService) Decrypt(cipher []byte) ([]byte, error) {
 	// 每次调用单独计时超时，避免插件卡死拖住存储请求。
 	ctx, cancel := context.WithTimeout(context.Background(), g.callTimeout)
@@ -135,7 +135,7 @@ func (g *gRPCService) Decrypt(cipher []byte) ([]byte, error) {
 	return response.Plain, nil
 }
 
-// Encrypt bytes to a string ciphertext.
+// 把字节加密为字符串密文。
 func (g *gRPCService) Encrypt(plain []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), g.callTimeout)
 	defer cancel()

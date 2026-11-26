@@ -22,45 +22,39 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
-// ErrInternal the basic error that occurs when the expression fails to evaluate
-// due to internal reasons. Any Error that has the Type of
-// ErrorInternal is considered equal to ErrInternal
+// ErrInternal 表示表达式因内部原因求值失败的基础错误。
+// 任何 Type 为 ErrorInternal 的 Error 都视为与 ErrInternal 相等
 var ErrInternal = fmt.Errorf("internal")
 
-// ErrInvalid is the basic error that occurs when the expression fails to
-// evaluate but not due to internal reasons. Any Error that has the Type of
-// ErrorInvalid is considered equal to ErrInvalid.
+// ErrInvalid 表示表达式求值失败但非内部原因的基础错误。
+// 任何 Type 为 ErrorInvalid 的 Error 都视为与 ErrInvalid 相等。
 var ErrInvalid = fmt.Errorf("invalid")
 
-// ErrRequired is the basic error that occurs when the expression is required
-// but absent.
-// Any Error that has the Type of ErrorRequired is considered equal
-// to ErrRequired.
+// ErrRequired 表示必填表达式缺失时的基础错误。
+//
+// 任何 Type 为 ErrorRequired 的 Error 都视为与 ErrRequired 相等。
 var ErrRequired = fmt.Errorf("required")
 
-// ErrCompilation is the basic error that occurs when the expression fails to
-// compile. Any CompilationError wraps ErrCompilation.
-// ErrCompilation wraps ErrInvalid
+// ErrCompilation 表示表达式编译失败的基础错误。
+// 任何 CompilationError 都包装 ErrCompilation。
+// ErrCompilation 包装 ErrInvalid。
 var ErrCompilation = fmt.Errorf("%w: compilation error", ErrInvalid)
 
-// ErrOutOfBudget is the basic error that occurs when the expression fails due to
-// exceeding budget.
+// ErrOutOfBudget 表示表达式超出预算而失败的基础错误。
 var ErrOutOfBudget = fmt.Errorf("out of budget")
 
-// Error is an implementation of the 'error' interface, which represents a
-// XValidation error.
+// Error 实现 'error' 接口，表示一个 XValidation 错误。
 type Error struct {
 	Type   ErrorType
 	Detail string
 
-	// Cause is an optional wrapped errors that can be useful to
-	// programmatically retrieve detailed errors.
+	// Cause 是可选的被包装错误，便于以编程方式获取详细错误信息。
 	Cause error
 }
 
 var _ error = &Error{}
 
-// Error implements the error interface.
+// Error 实现 error 接口。
 func (v *Error) Error() string {
 	return v.Detail
 }
@@ -80,35 +74,33 @@ func (v *Error) Is(err error) bool {
 	return false
 }
 
-// Unwrap returns the wrapped Cause.
+// Unwrap 返回被包装的 Cause。
 func (v *Error) Unwrap() error {
 	return v.Cause
 }
 
-// ErrorType is a machine-readable value providing more detail about why
-// a XValidation is invalid.
+// ErrorType 是机器可读的值，提供 XValidation 无效的更详细原因。
 type ErrorType string
 
 const (
-	// ErrorTypeRequired is used to report withNullable values that are not
-	// provided (e.g. empty strings, null values, or empty arrays).  See
-	// Required().
+	// ErrorTypeRequired 用于报告未提供 withNullable 值
+	// （如空字符串、null 或空数组）。参见 Required()。
+	//
 	ErrorTypeRequired ErrorType = "RuleRequired"
-	// ErrorTypeInvalid is used to report malformed values
+	// ErrorTypeInvalid 用于报告格式错误的值
 	ErrorTypeInvalid ErrorType = "RuleInvalid"
-	// ErrorTypeInternal is used to report other errors that are not related
-	// to user input.  See InternalError().
+	// 参见 InternalError()。
 	ErrorTypeInternal ErrorType = "InternalError"
 )
 
-// CompilationError indicates an error during expression compilation.
-// It wraps ErrCompilation.
+// CompilationError 表示表达式编译期间的错误。
+// 它包装 ErrCompilation。
 type CompilationError struct {
 	err    *Error
 	Issues *cel.Issues
 }
 
-// NewCompilationError wraps a cel.Issues to indicate a compilation failure.
+// NewCompilationError 包装 cel.Issues，表示编译失败。
 func NewCompilationError(issues *cel.Issues) *CompilationError {
 	return &CompilationError{
 		Issues: issues,

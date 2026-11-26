@@ -35,12 +35,12 @@ import (
 // 多阶段设计是为了让写请求在返回客户端后仍能为其后续的 watch 通知预留容量，
 // 避免「已返回但仍在扩散」的请求瞬间压垮队列。
 type WorkEstimate struct {
-	// InitialSeats is the number of seats occupied while the server is
-	// executing this request.
+	// InitialSeats 是服务器执行此请求期间占用的 seat 数。
+	//
 	InitialSeats uint64
 
-	// FinalSeats is the number of seats occupied at the end,
-	// during the AdditionalLatency.
+	// FinalSeats 是结束时（在 AdditionalLatency 期间）占用的 seat 数。
+	//
 	FinalSeats uint64
 
 	// AdditionalLatency 指定请求结束后，为其分配的座位还必须额外保留的时长。
@@ -60,16 +60,13 @@ func (we *WorkEstimate) MaxSeats() int {
 	return int(we.FinalSeats)
 }
 
-// statsGetterFunc represents a function that gets the total
-// number of objects for a given resource.
+// statsGetterFunc 返回给定资源的对象总数。
 type statsGetterFunc func(string) (storage.Stats, error)
 
-// watchCountGetterFunc represents a function that gets the total
-// number of watchers potentially interested in a given request.
+// watchCountGetterFunc 返回可能关注给定请求的 watcher 总数。
 type watchCountGetterFunc func(*apirequest.RequestInfo) int
 
-// MaxSeatsFunc represents a function that returns the maximum seats
-// allowed for the work estimator for a given priority level.
+// MaxSeatsFunc 返回给定优先级下工作估算器允许的最大 seats。
 type maxSeatsFunc func(priorityLevelName string) uint64
 
 // NewWorkEstimator 估算给定请求将产生的工作量；若没有 WorkEstimatorFunc 匹配该请求，
@@ -88,9 +85,9 @@ func NewWorkEstimator(objectCountFn statsGetterFunc, watchCountFn watchCountGett
 	return estimator.estimate
 }
 
-// WorkEstimatorFunc returns the estimated work of a given request.
-// This function will be used by the Priority & Fairness filter to
-// estimate the work of incoming requests.
+// WorkEstimatorFunc 返回给定请求的估算工作量。
+// Priority & Fairness 过滤器用它来
+// 估算进入请求的工作量。
 type WorkEstimatorFunc func(request *http.Request, flowSchemaName, priorityLevelName string) WorkEstimate
 
 // EstimateWork 让函数类型满足接口，便于在测试中替换为固定估算值。
@@ -100,13 +97,13 @@ func (e WorkEstimatorFunc) EstimateWork(r *http.Request, flowSchemaName, priorit
 
 type workEstimator struct {
 	maxSeatsFn maxSeatsFunc
-	// the minimum number of seats a request must occupy
+	// 请求必须占用的最小 seat 数
 	minimumSeats uint64
-	// the default maximum number of seats a request can occupy
+	// 请求可占用的默认最大 seat 数
 	maximumSeatsLimit uint64
-	// listWorkEstimator estimates work for list request(s)
+	// listWorkEstimator 估算 LIST 请求的工作量
 	listWorkEstimator WorkEstimatorFunc
-	// mutatingWorkEstimator calculates the width of mutating request(s)
+	// mutatingWorkEstimator 计算变更请求的宽度
 	mutatingWorkEstimator WorkEstimatorFunc
 }
 
@@ -119,7 +116,7 @@ func (e *workEstimator) estimate(r *http.Request, flowSchemaName, priorityLevelN
 	requestInfo, ok := apirequest.RequestInfoFrom(r.Context())
 	if !ok {
 		klog.ErrorS(fmt.Errorf("no RequestInfo found in context"), "Failed to estimate work for the request", "URI", r.RequestURI)
-		// no RequestInfo should never happen, but to be on the safe side let's return maximumSeats
+		// 不应出现没有 RequestInfo 的情况，但为安全起见返回 maximumSeats
 		maxSeats := e.maxSeatsFn(priorityLevelName)
 		if maxSeats == 0 || maxSeats > e.maximumSeatsLimit {
 			maxSeats = e.maximumSeatsLimit
@@ -131,11 +128,11 @@ func (e *workEstimator) estimate(r *http.Request, flowSchemaName, priorityLevelN
 	case "list":
 		return e.listWorkEstimator.EstimateWork(r, flowSchemaName, priorityLevelName)
 	case "watch":
-		// WATCH supports `SendInitialEvents` option, which effectively means
-		// that is starts with sending of the contents of a corresponding LIST call.
-		// From that perspective, given that the watch only consumes APF seats
-		// during its initialization (sending init events), its cost should then
-		// be computed the same way as for a regular list.
+		// WATCH 支持 `SendInitialEvents` 选项，实际效果就是
+		// 先发送对应 LIST 调用的内容。
+		// 从这个角度看，watch 只在初始化（发送初始事件）期间占用 APF seats，
+		// 因此其开销应按与普通 LIST 相同的方式计算。
+		// 先发送对应 LIST 调用的内容。
 		if utilfeature.DefaultFeatureGate.Enabled(features.WatchList) {
 			return e.listWorkEstimator.EstimateWork(r, flowSchemaName, priorityLevelName)
 		}

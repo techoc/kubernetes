@@ -26,53 +26,53 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
-// URLs provides a CEL function library extension of URL parsing functions.
+// URLs 提供 URL 解析函数的 CEL 函数库扩展。
 //
 // url
 //
-// Converts a string to a URL or results in an error if the string is not a valid URL. The URL must be an absolute URI
-// or an absolute path.
+// 把字符串转换为 URL；若字符串不是合法 URL 则报错。URL 必须是绝对 URI
+// 或绝对路径。
 //
 //	url(<string>) <URL>
 //
-// Examples:
+// 示例：
 //
-//	url('https://user:pass@example.com:80/path?query=val#fragment') // returns a URL
-//	url('/absolute-path') // returns a URL
-//	url('https://a:b:c/') // error
-//	url('../relative-path') // error
+//	url('https://user:pass@example.com:80/path?query=val#fragment') // 返回一个 URL
+//	url('/absolute-path') // 返回一个 URL
+//	url('https://a:b:c/') // 报错
+//	url('../relative-path') // 报错
 //
 // isURL
 //
-// Returns true if a string is a valid URL. The URL must be an absolute URI or an absolute path.
+// 字符串是合法 URL 时返回 true。URL 必须是绝对 URI 或绝对路径。
 //
 //	isURL( <string>) <bool>
 //
-// Examples:
+// 示例：
 //
-//	isURL('https://user:pass@example.com:80/path?query=val#fragment') // returns true
-//	isURL('/absolute-path') // returns true
-//	isURL('https://a:b:c/') // returns false
-//	isURL('../relative-path') // returns false
+//	isURL('https://user:pass@example.com:80/path?query=val#fragment') // 返回 true
+//	isURL('/absolute-path') // 返回 true
+//	isURL('https://a:b:c/') // 返回 false
+//	isURL('../relative-path') // 返回 false
 //
 // getScheme / getHost / getHostname / getPort / getEscapedPath / getQuery
 //
-// Return the parsed components of a URL.
+// 返回 URL 解析后的各组件。
 //
-//   - getScheme: If absent in the URL, returns an empty string.
+//   - getScheme：URL 中不存在时返回空字符串。
 //
-//   - getHostname: IPv6 addresses are returned without braces, e.g. "::1". If absent in the URL, returns an empty string.
+//   - getHostname：IPv6 地址不带方括号返回，如 "::1"；URL 中不存在时返回空字符串。
 //
-//   - getHost: IPv6 addresses are returned with braces, e.g. "[::1]". If absent in the URL, returns an empty string.
+//   - getHost：IPv6 地址带方括号返回，如 "[::1]"；URL 中不存在时返回空字符串。
 //
-//   - getEscapedPath: The string returned by getEscapedPath is URL escaped, e.g. "with space" becomes "with%20space".
-//     If absent in the URL, returns an empty string.
+//   - getEscapedPath：返回值经过 URL 转义，如 "with space" 变为 "with%20space"。
+//     URL 中不存在时返回空字符串。
 //
-//   - getPort: If absent in the URL, returns an empty string.
+//   - getPort：URL 中不存在时返回空字符串。
 //
-//   - getQuery: Returns the query parameters in "matrix" form where a repeated query key is interpreted to
-//     mean that there are multiple values for that key. The keys and values are returned unescaped.
-//     If absent in the URL, returns an empty map.
+//   - getQuery：以 "matrix" 形式返回查询参数，重复的 key 表示
+//     该 key 有多个值。key 与 value 均返回未转义的形式。
+//     URL 中不存在时返回空 map。
 //
 //     <URL>.getScheme() <string>
 //     <URL>.getHost() <string>
@@ -81,29 +81,29 @@ import (
 //     <URL>.getEscapedPath() <string>
 //     <URL>.getQuery() <map <string>, <list <string>>
 //
-// Examples:
+// 示例：
 //
-//	url('/path').getScheme() // returns ''
-//	url('https://example.com/').getScheme() // returns 'https'
-//	url('https://example.com:80/').getHost() // returns 'example.com:80'
-//	url('https://example.com/').getHost() // returns 'example.com'
-//	url('https://[::1]:80/').getHost() // returns '[::1]:80'
-//	url('https://[::1]/').getHost() // returns '[::1]'
-//	url('/path').getHost() // returns ''
-//	url('https://example.com:80/').getHostname() // returns 'example.com'
-//	url('https://127.0.0.1:80/').getHostname() // returns '127.0.0.1'
-//	url('https://[::1]:80/').getHostname() // returns '::1'
-//	url('/path').getHostname() // returns ''
-//	url('https://example.com:80/').getPort() // returns '80'
-//	url('https://example.com/').getPort() // returns ''
-//	url('/path').getPort() // returns ''
-//	url('https://example.com/path').getEscapedPath() // returns '/path'
-//	url('https://example.com/path with spaces/').getEscapedPath() // returns '/path%20with%20spaces/'
-//	url('https://example.com').getEscapedPath() // returns ''
-//	url('https://example.com/path?k1=a&k2=b&k2=c').getQuery() // returns { 'k1': ['a'], 'k2': ['b', 'c']}
-//	url('https://example.com/path?key with spaces=value with spaces').getQuery() // returns { 'key with spaces': ['value with spaces']}
-//	url('https://example.com/path?').getQuery() // returns {}
-//	url('https://example.com/path').getQuery() // returns {}
+//	url('/path').getScheme() // 返回 ''
+//	url('https://example.com/').getScheme() // 返回 'https'
+//	url('https://example.com:80/').getHost() // 返回 'example.com:80'
+//	url('https://example.com/').getHost() // 返回 'example.com'
+//	url('https://[::1]:80/').getHost() // 返回 '[::1]:80'
+//	url('https://[::1]/').getHost() // 返回 '[::1]'
+//	url('/path').getHost() // 返回 ''
+//	url('https://example.com:80/').getHostname() // 返回 'example.com'
+//	url('https://127.0.0.1:80/').getHostname() // 返回 '127.0.0.1'
+//	url('https://[::1]:80/').getHostname() // 返回 '::1'
+//	url('/path').getHostname() // 返回 ''
+//	url('https://example.com:80/').getPort() // 返回 '80'
+//	url('https://example.com/').getPort() // 返回 ''
+//	url('/path').getPort() // 返回 ''
+//	url('https://example.com/path').getEscapedPath() // 返回 '/path'
+//	url('https://example.com/path with spaces/').getEscapedPath() // 返回 '/path%20with%20spaces/'
+//	url('https://example.com').getEscapedPath() // 返回 ''
+//	url('https://example.com/path?k1=a&k2=b&k2=c').getQuery() // 返回 { 'k1': ['a'], 'k2': ['b', 'c']}
+//	url('https://example.com/path?key with spaces=value with spaces').getQuery() // 返回 { 'key with spaces': ['value with spaces']}
+//	url('https://example.com/path?').getQuery() // 返回 {}
+//	url('https://example.com/path').getQuery() // 返回 {}
 //
 // URL 库把字符串转换为 kubernetes.URL 类型并暴露解析后的组件。
 // 只接受绝对 URI 或绝对路径，相对路径与畸形 URI 会被拒绝，以免策略中
@@ -194,7 +194,7 @@ func stringToUrl(arg ref.Val) ref.Val {
 	// 因此校验通过后必须用 url.Parse 重新解析才能得到正确的组件划分。
 	u, err := url.Parse(s)
 	if err != nil {
-		// Errors are not expected here since Parse is a more lenient parser than ParseRequestURI.
+		// 这里不应报错，因为 Parse 比 ParseRequestURI 更宽松。
 		return types.NewErr("URL parse error during conversion from string: %v", err)
 	}
 	return apiservercel.URL{URL: u}

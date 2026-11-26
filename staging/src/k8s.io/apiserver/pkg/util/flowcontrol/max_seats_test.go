@@ -30,7 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Test_GetMaxSeats tests max seats retrieved from MaxSeatsTracker
+// Test_GetMaxSeats 测试从 MaxSeatsTracker 取回的最大 seats
 // 验证最大 seats 由“服务端并发上限 / handSize（向上取整）”推导，
 // 并覆盖 handSize 变化对结果的影响。
 func Test_GetMaxSeats(t *testing.T) {
@@ -108,8 +108,8 @@ func Test_GetMaxSeats(t *testing.T) {
 				Clock:             clk,
 				InformerFactory:   informerFactory,
 				FlowcontrolClient: flowcontrolClient,
-				// for the purposes of this test, serverCL ~= nominalCL since there is
-				// only 1 PL with large concurrency shares, making mandatory PLs negligible.
+				// 在本测试中 serverCL ~= nominalCL，因为只有 1 个 PL
+				// 且并发份额很大，强制 PL 可忽略不计。
 				ServerConcurrencyLimit: testcase.nominalCL,
 				ReqsGaugeVec:           metrics.PriorityLevelConcurrencyGaugeVec,
 				ExecSeatsGaugeVec:      metrics.PriorityLevelExecutionSeatsGaugeVec,

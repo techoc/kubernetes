@@ -37,7 +37,7 @@ func ValidateCABundle(fldPath *field.Path, caBundle []byte) field.ErrorList {
 	return allErrors
 }
 
-// ValidateWebhookURL validates webhook's URL.
+// ValidateWebhookURL 校验 webhook 的 URL。
 // 安全边界：禁止 URL 中携带用户信息、fragment 与查询参数，
 // 避免 webhook 目标被注入额外语义或被客户端凭据混淆。
 // forceHttps 为 true 时仅允许 https scheme。
@@ -88,7 +88,7 @@ func ValidateWebhookService(fldPath *field.Path, namespace, name string, path *s
 		return allErrors
 	}
 
-	// TODO: replace below with url.Parse + verifying that host is empty?
+	// TODO：能否用 url.Parse 加校验 host 为空来替代下面这段？
 
 	urlPath := *path
 	// "/" 与空路径都表示根路径，无需进一步检查。

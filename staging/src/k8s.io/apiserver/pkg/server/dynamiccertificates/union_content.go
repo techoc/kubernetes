@@ -35,7 +35,7 @@ type unionCAContent []CAContentProvider
 var _ CAContentProvider = &unionCAContent{}
 var _ ControllerRunner = &unionCAContent{}
 
-// NewUnionCAContentProvider returns a CAContentProvider that is a union of other CAContentProviders
+// NewUnionCAContentProvider 返回一个由其他 CAContentProvider 组合而成的 CAContentProvider。
 //
 // NewUnionCAContentProvider 组合多个 CA 提供器；合并后的 bundle 按提供器
 // 顺序拼接，任一提供器的更新都会通过监听器传播。
@@ -43,7 +43,7 @@ func NewUnionCAContentProvider(caContentProviders ...CAContentProvider) CAConten
 	return unionCAContent(caContentProviders)
 }
 
-// Name is just an identifier
+// Name 只是标识符
 //
 // Name 用逗号连接各提供器名称，便于日志与指标中识别来源。
 func (c unionCAContent) Name() string {
@@ -54,7 +54,7 @@ func (c unionCAContent) Name() string {
 	return strings.Join(names, ",")
 }
 
-// CurrentCABundleContent provides ca bundle byte content
+// CurrentCABundleContent 提供 CA bundle 的字节内容
 //
 // CurrentCABundleContent 逐个去除空白并丢弃空 bundle，再用换行拼接，
 // 保证 PEM 块之间格式合法且不会出现空行导致的解析异常。
@@ -69,7 +69,7 @@ func (c unionCAContent) CurrentCABundleContent() []byte {
 	return bytes.Join(caBundles, []byte("\n"))
 }
 
-// CurrentCABundleContent provides ca bundle byte content
+// CurrentCABundleContent 提供 CA bundle 的字节内容
 //
 // VerifyOptions 基于合并后的 bundle 构建 x509 校验选项。注释中的函数名
 // 是历史遗留（应为 VerifyOptions）；bundle 为空时返回 false 表示不可用。
@@ -79,20 +79,20 @@ func (c unionCAContent) VerifyOptions() (x509.VerifyOptions, bool) {
 		return x509.VerifyOptions{}, false
 	}
 
-	// TODO make more efficient.  This isn't actually used in any of our mainline paths.  It's called to build the TLSConfig
-	// TODO on file changes, but the actual authentication runs against the individual items, not the union.
+	// TODO 提升效率。这不在任何主路径上使用：它仅在文件变化时
+	// 用于构建 TLSConfig，真正的认证针对各个独立项，而非这个联合对象。
 	// 各子提供器内容此前已校验，合并后仍失败说明是代码缺陷，
 	// 因此 panic 而不是静默返回错误，避免带着半可用 TLS 配置继续运行。
 	ret, err := newCABundleAndVerifier(c.Name(), c.CurrentCABundleContent())
 	if err != nil {
-		// because we're made up of already vetted values, this indicates some kind of coding error
+		// 由于组合的值都经过校验，这里出现错误说明是编码问题
 		panic(err)
 	}
 
 	return ret.verifyOptions, true
 }
 
-// AddListener adds a listener to be notified when the CA content changes.
+// AddListener 添加一个在 CA 内容变化时收到通知的监听器。
 //
 // AddListener 把监听器注册到每个子提供器，任一来源变化都能触发通知。
 func (c unionCAContent) AddListener(listener Listener) {
@@ -101,7 +101,7 @@ func (c unionCAContent) AddListener(listener Listener) {
 	}
 }
 
-// AddListener adds a listener to be notified when the CA content changes.
+// AddListener 添加一个在 CA 内容变化时收到通知的监听器。
 //
 // RunOnce 对实现了 ControllerRunner 的子提供器各执行一次同步；
 // 不支持的提供器跳过。错误聚合成一个返回给调用方。
@@ -118,7 +118,7 @@ func (c unionCAContent) RunOnce(ctx context.Context) error {
 	return utilerrors.NewAggregate(errors)
 }
 
-// Run runs the controller
+// Run 运行控制器
 //
 // Run 为每个可运行的子提供器启动独立 goroutine，使各自的重试与 watch
 // 互不阻塞。

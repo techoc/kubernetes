@@ -22,13 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的组名
 const GroupName = "audit.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接受非限定资源名，返回带组名的 GroupResource
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
@@ -40,9 +40,9 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 此处只注册手写函数，生成函数的注册位于生成文件中。
+	// 两者分离使生成文件缺失时代码仍可编译。
+	// 同时避免生成器覆盖手写注册内容。
 	//
 	// 手工编写的注册与 zz_generated 中的注册分开，保证在生成文件尚未产出时
 	// 包仍可编译，也避免生成器覆盖这里的内容。

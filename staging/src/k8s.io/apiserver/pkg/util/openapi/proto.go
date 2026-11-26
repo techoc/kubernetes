@@ -25,7 +25,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// ToProtoModels builds the proto formatted models from OpenAPI spec
+// ToProtoModels 从 OpenAPI spec 构建 proto 格式的模型
 //
 // proto.Models 是 kube-openapi 中用于结构化遍历 schema 的中间表示，
 // CEL 的类型检查依赖它。这里先经过 JSON 往返再解析，是为了复用 gnostic

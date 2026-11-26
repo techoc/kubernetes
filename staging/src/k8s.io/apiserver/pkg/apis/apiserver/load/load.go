@@ -54,7 +54,7 @@ func LoadFromFile(file string) (*api.AuthorizationConfiguration, error) {
 // reader 为 nil 表示未提供配置，此时返回默认配置。
 func LoadFromReader(reader io.Reader) (*api.AuthorizationConfiguration, error) {
 	if reader == nil {
-		// no reader specified, use default config
+		// 未指定 reader 时，使用默认配置
 		return LoadFromData(nil)
 	}
 
@@ -69,7 +69,7 @@ func LoadFromReader(reader io.Reader) (*api.AuthorizationConfiguration, error) {
 // 返回的始终是内部版本，便于调用方避免版本分支。
 func LoadFromData(data []byte) (*api.AuthorizationConfiguration, error) {
 	if len(data) == 0 {
-		// no config provided, return default
+		// 未提供配置时，返回默认配置
 		// 先对空的外部对象应用默认值，再转换到内部版本，
 		// 保证默认值只在外部类型上定义一处。
 		externalConfig := &externalapi.AuthorizationConfiguration{}

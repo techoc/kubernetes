@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kmsv2 transforms values for storage at rest using a Envelope v2 provider
+// Package kmsv2 用 Envelope v2 provider 对静态存储的数据做转换
 //
 // 信封加密：数据用本地生成的 DEK 加密，DEK 再由外部 KMS 加密后随数据一起存放。
 // 好处是批量数据加解密不经过 KMS，只有 DEK 轮换时才调用远端；代价是必须严格校验
@@ -56,12 +56,12 @@ func init() {
 	metrics.RegisterMetrics()
 }
 
-// nowFuncPerKMS allows us to swap the NowFunc for KMS providers in tests
-// Note: it cannot be set by an end user
+// nowFuncPerKMS 允许在测试中替换 KMS provider 的 NowFunc
+// 注意：最终用户不能设置它
 var nowFuncPerKMS sync.Map // map[string]func() time.Time, KMS name -> NowFunc
 
-// SetNowFuncForTests should only be called in tests to swap the NowFunc for KMS providers
-// Caller must guarantee that all KMS providers have distinct names across all tests.
+// SetNowFuncForTests 只能在测试中调用，用于替换 KMS provider 的 NowFunc
+// 调用方必须保证所有测试中 KMS provider 的名称互不相同。
 //
 // 返回的清理函数必须 defer 调用，否则会污染后续测试的时钟。
 func SetNowFuncForTests(kmsName string, fn func() time.Time) func() {
@@ -83,30 +83,29 @@ func GetNowFunc(kmsName string) func() time.Time {
 }
 
 const (
-	// KMSAPIVersionv2 is a version of the KMS API.
+	// KMSAPIVersionv2 是 KMS API 的一个版本。
 	KMSAPIVersionv2 = "v2"
-	// KMSAPIVersionv2beta1 is a version of the KMS API.
+	// KMSAPIVersionv2beta1 是 KMS API 的一个版本。
 	KMSAPIVersionv2beta1 = "v2beta1"
-	// annotationsMaxSize is the maximum size of the annotations.
+	// annotationsMaxSize 是注解的最大长度。
 	annotationsMaxSize = 32 * 1024 // 32 kB
-	// KeyIDMaxSize is the maximum size of the keyID.
+	// KeyIDMaxSize 是 keyID 的最大长度。
 	KeyIDMaxSize = 1 * 1024 // 1 kB
-	// encryptedDEKSourceMaxSize is the maximum size of the encrypted DEK source.
+	// encryptedDEKSourceMaxSize 是加密 DEK source 的最大长度。
 	encryptedDEKSourceMaxSize = 1 * 1024 // 1 kB
-	// cacheTTL is the default time-to-live for the cache entry.
-	// this allows the cache to grow to an infinite size for up to a day.
-	// there is unlikely to be any meaningful memory impact on the server
-	// because the cache will likely never have more than a few thousand entries.
-	// each entry can be large due to an internal cache that maps the DEK seed to individual
-	// DEK entries, but that cache has an aggressive TTL to keep the size under control.
-	// with DEK/seed reuse and no storage migration, the number of entries in this cache
-	// would be approximated by unique key IDs used by the KMS plugin
-	// combined with the number of server restarts.  If storage migration
-	// is performed after key ID changes, and the number of restarts
-	// is limited, this cache size may be as small as the number of API
-	// servers in use (once old entries expire out from the TTL).
+	// cacheTTL 是缓存条目的默认生存时间。
+	// 这允许缓存在一天内无限增长。
+	// 对服务器内存影响不大，
+	// 因为缓存条目很可能永远只有几千个。
+	// 单条可能很大，因为内部缓存把 DEK seed 映射到各个
+	// DEK 条目，但该缓存有激进的 TTL 来控制规模。
+	// 在 DEK/seed 复用且不迁移存储的情况下，本缓存中的条目数
+	// 约等于 KMS 插件使用的唯一 key ID 数
+	// 加上服务器重启次数。若在 key ID 变化后执行存储迁移，
+	// 且重启次数有限，则旧条目按 TTL 过期后，
+	// 本缓存的规模可小至在用的 API server 数量。
 	cacheTTL = 24 * time.Hour
-	// key ID related error codes for metrics
+	// 用于指标的 key ID 相关错误码
 	errKeyIDOKCode      ErrCodeKeyID = "ok"
 	errKeyIDEmptyCode   ErrCodeKeyID = "empty"
 	errKeyIDTooLongCode ErrCodeKeyID = "too_long"
@@ -132,10 +131,10 @@ type State struct {
 	// ExpirationTimestamp 是 DEK 的过期时间；过期后拒绝加密，强制重新向 KMS 取密钥。
 	ExpirationTimestamp time.Time
 
-	// CacheKey is the key used to cache the DEK/seed in envelopeTransformer.cache.
+	// CacheKey 是用于在 envelopeTransformer.cache 中缓存 DEK/seed 的 key。
 	CacheKey []byte
 
-	// KMSProviderName is used to dynamically look up the time function for tests
+	// KMSProviderName 用于在测试中动态查找时间函数
 	KMSProviderName string
 }
 
@@ -159,14 +158,14 @@ type envelopeTransformer struct {
 	providerName    string
 	stateFunc       StateFunc
 
-	// cache is a thread-safe expiring lru cache which caches decrypted DEKs indexed by their encrypted form.
+	// cache 是线程安全的过期 LRU 缓存，按加密形式索引已解密的 DEK。
 	cache       *simpleCache
 	apiServerID string
 }
 
-// NewEnvelopeTransformer returns a transformer which implements a KEK-DEK based envelope encryption scheme.
-// It uses envelopeService to encrypt and decrypt DEKs. Respective DEKs (in encrypted form) are prepended to
-// the data items they encrypt.
+// NewEnvelopeTransformer 返回一个实现 KEK-DEK envelope 加密方案的 transformer。
+// 它用 envelopeService 加解密 DEK。加密后的 DEK 会前置在
+// 它所加密的数据项之前。
 func NewEnvelopeTransformer(envelopeService kmsservice.Service, providerName string, stateFunc StateFunc, apiServerID string) value.Transformer {
 	return newEnvelopeTransformerWithClock(envelopeService, providerName, stateFunc, apiServerID, cacheTTL, clock.RealClock{})
 }
@@ -182,11 +181,11 @@ func newEnvelopeTransformerWithClock(envelopeService kmsservice.Service, provide
 	}
 }
 
-// TransformFromStorage decrypts data encrypted by this transformer using envelope encryption.
+// TransformFromStorage 用 envelope 加密解密由该 transformer 加密的数据。
 func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, bool, error) {
 	ctx, span := tracing.Start(ctx, "TransformFromStorage with envelopeTransformer",
 		attribute.String("transformer.provider.name", t.providerName),
-		// The service.instance_id of the apiserver is already available in the trace
+		// apiserver 的 service.instance_id 已在 trace 中可用
 		/*
 			{
 			"key": "service.instance.id",
@@ -210,8 +209,8 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 
 	useSeed := encryptedObject.EncryptedDEKSourceType == kmstypes.EncryptedDEKSourceType_HKDF_SHA256_XNONCE_AES_GCM_SEED
 
-	// TODO: consider marking state.EncryptedDEK != encryptedObject.EncryptedDEK as a stale read to support DEK defragmentation
-	//  at a minimum we should have a metric that helps the user understand if DEK fragmentation is high
+	// TODO：考虑把 state.EncryptedDEK != encryptedObject.EncryptedDEK 标记为陈旧读取，以支持 DEK 碎片整理
+	// 至少应提供一个指标，帮助用户了解 DEK 碎片化程度
 	//
 	// 读取路径不校验加密能力（DEK 过期只影响写），否则历史数据在轮换后可能再也读不出来。
 	state, err := t.stateFunc() // no need to call state.ValidateEncryptCapability on reads
@@ -224,7 +223,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 		return nil, false, err
 	}
 
-	// Look up the decrypted DEK from cache first
+	// 先从缓存查找已解密的 DEK
 	transformer := t.cache.get(encryptedObjectCacheKey)
 
 	// 若本地没有对应的 transformer，则回退到 envelope service（远端 KMS）。
@@ -276,11 +275,11 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 		nil
 }
 
-// TransformToStorage encrypts data to be written to disk using envelope encryption.
+// TransformToStorage 用 envelope 加密要写入磁盘的数据。
 func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byte, dataCtx value.Context) ([]byte, error) {
 	ctx, span := tracing.Start(ctx, "TransformToStorage with envelopeTransformer",
 		attribute.String("transformer.provider.name", t.providerName),
-		// The service.instance_id of the apiserver is already available in the trace
+		// apiserver 的 service.instance_id 已在 trace 中可用
 		/*
 			{
 			"key": "service.instance.id",
@@ -299,9 +298,9 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 		return nil, err
 	}
 
-	// this prevents a cache miss every time the DEK rotates
-	// this has the side benefit of causing the cache to perform a GC
-	// TODO see if we can do this inside the stateFunc control loop
+	// 避免每次 DEK 轮换时都缓存未命中
+	// 附带好处是让缓存执行 GC
+	// TODO 看能否在 stateFunc 控制循环内完成
 	//
 	// 写路径顺便把当前 transformer 放入缓存，使"刚写的数据马上被读"不必往返 KMS。
 	t.cache.set(state.CacheKey, state.Transformer)
@@ -331,7 +330,7 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 	}
 
 	span.AddEvent("About to encode encrypted object")
-	// Serialize the EncryptedObject to a byte array.
+	// 把 EncryptedObject 序列化为字节数组。
 	out, err := t.doEncode(encObjectCopy)
 	if err != nil {
 		span.AddEvent("Encoding encrypted object failed")
@@ -343,7 +342,7 @@ func (t *envelopeTransformer) TransformToStorage(ctx context.Context, data []byt
 	return out, nil
 }
 
-// addTransformerForDecryption inserts a new transformer to the Envelope cache of DEKs for future reads.
+// addTransformerForDecryption 向 DEK 的 Envelope 缓存插入新的 transformer，供后续读取使用。
 func (t *envelopeTransformer) addTransformerForDecryption(cacheKey []byte, key []byte, useSeed bool) (value.Read, error) {
 	var transformer value.Read
 	var err error
@@ -357,8 +356,8 @@ func (t *envelopeTransformer) addTransformerForDecryption(cacheKey []byte, key [
 		if err != nil {
 			return nil, err
 		}
-		// this is compatible with NewGCMTransformerWithUniqueKeyUnsafe for decryption
-		// it would use random nonces for encryption but we never do that
+		// 这与 NewGCMTransformerWithUniqueKeyUnsafe 的解密兼容
+		// 它加密时用随机 nonce，但我们从不这么做
 		transformer, err = aestransformer.NewGCMTransformer(block)
 	}
 	if err != nil {
@@ -391,8 +390,8 @@ func (t *envelopeTransformer) doDecode(originalData []byte) (*kmstypes.Encrypted
 	return o, nil
 }
 
-// GenerateTransformer generates a new transformer and encrypts the DEK/seed using the envelope service.
-// It returns the transformer, the encrypted DEK/seed, cache key and error.
+// GenerateTransformer 生成新的 transformer，并用 envelope service 加密 DEK/seed。
+// 返回 transformer、加密后的 DEK/seed、缓存 key 与错误。
 //
 // useSeed 决定 DEK 形态：种子可从同一 KMS 响应派生多个 nonce，减少 KMS 调用；
 // 非种子模式直接使用一段随机 AES 密钥。
@@ -494,9 +493,9 @@ func validateEncryptedDEKSource(encryptedDEKSource []byte) error {
 	return nil
 }
 
-// validateAnnotations tests the following:
-//  1. checks if the annotation key is fully qualified
-//  2. The size of annotations keys + values is less than 32 kB.
+// validateAnnotations 检查：
+//  1. 注解 key 是否是完全限定名
+//  2. 注解 key + value 的大小是否小于 32 kB。
 //
 // 要求全限定域名是为了让注解命名空间归属明确，避免不同 KMS 插件相互覆盖。
 // 逐项收集错误后聚合返回，便于一次性报告所有问题。
@@ -538,20 +537,20 @@ func getRequestInfoFromContext(ctx context.Context) *genericapirequest.RequestIn
 	return &genericapirequest.RequestInfo{}
 }
 
-// generateCacheKey returns a key for the cache.
-// The key is a concatenation of:
+// generateCacheKey 返回缓存用的 key。
+// 该 key 由以下内容拼接而成：
 //  0. encryptedDEKSourceType
 //  1. encryptedDEKSource
 //  2. keyID
-//  3. length of annotations
-//  4. annotations (sorted by key) - each annotation is a concatenation of:
-//     a. annotation key
-//     b. annotation value
+//  3. 注解数量
+//  4. 注解（按 key 排序）——每条注解由以下内容拼接：
+//     a. 注解 key
+//     b. 注解 value
 //
 // 注解按 key 排序，保证相同逻辑输入产生相同缓存键，否则 map 迭代顺序会导致缓存失效。
 // 使用长度前缀而非分隔符，避免键值拼接产生歧义（与 compare 的注入攻击同理）。
 func generateCacheKey(encryptedDEKSourceType kmstypes.EncryptedDEKSourceType, encryptedDEKSource []byte, keyID string, annotations map[string][]byte) ([]byte, error) {
-	// TODO(aramase): use sync pool buffer to avoid allocations
+	// TODO(aramase): 使用 sync pool buffer 避免分配
 	b := cryptobyte.NewBuilder(nil)
 	b.AddUint32(uint32(encryptedDEKSourceType))
 	b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
@@ -564,18 +563,18 @@ func generateCacheKey(encryptedDEKSourceType kmstypes.EncryptedDEKSourceType, en
 		return b.Bytes()
 	}
 
-	// add the length of annotations to the cache key
+	// 把注解数量加入缓存 key
 	b.AddUint32(uint32(len(annotations)))
 
-	// Sort the annotations by key.
+	// 按 key 对注解排序。
 	keys := make([]string, 0, len(annotations))
 	for k := range annotations {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		// The maximum size of annotations is annotationsMaxSize (32 kB) so we can safely
-		// assume that the length of the key and value will fit in a uint16.
+		// 注解最大长度为 annotationsMaxSize（32 kB），因此可以安全地
+		// 假定 key 与 value 的长度能放进 uint16。
 		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 			b.AddBytes(toBytes(k))
 		})
@@ -591,11 +590,11 @@ func generateCacheKey(encryptedDEKSourceType kmstypes.EncryptedDEKSourceType, en
 // 仅在生命周期确定短于源字符串时使用；空字符串返回 nil，因为 unsafe.StringData
 // 对空串的行为未定义。
 func toBytes(s string) []byte {
-	// unsafe.StringData is unspecified for the empty string, so we provide a strict interpretation
+	// 空字符串的 unsafe.StringData 行为未定义，这里采用严格解释
 	if len(s) == 0 {
 		return nil
 	}
-	// Copied from go 1.20.1 os.File.WriteString
+	// 摘自 go 1.20.1 的 os.File.WriteString
 	// https://github.com/golang/go/blob/202a1a57064127c3f19d96df57b9f9586145e21c/src/os/file.go#L246
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }

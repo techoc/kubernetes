@@ -49,16 +49,16 @@ func NewWatchCacheStorage(keyFunc func(runtime.Object) (string, error), indexers
 type WatchCacheStorage struct {
 	keyFunc func(runtime.Object) (string, error)
 
-	// store will effectively support LIST operation from the "end of cache
-	// history" i.e. from the moment just after the newest cached watched event.
-	// It is necessary to effectively allow clients to start watching at now.
-	// NOTE: We assume that <store> is thread-safe.
+	// 该 store 实际上支持从"缓存历史末尾"执行 LIST，
+	// 即从最新缓存 watch 事件之后的那一刻开始。
+	// 这样客户端才能从当前时刻开始 watch。
+	// 注意：假设 <store> 是线程安全的。
 	store Indexer
 
-	// ResourceVersion of the last list result (populated via Replace() method).
+	// 最近一次 LIST 结果的 ResourceVersion（通过 Replace() 填充）。
 	listResourceVersion uint64
 
-	// Stores previous snapshots of orderedLister to allow serving requests from previous revisions.
+	// 保存 orderedLister 的既往快照，以支持从旧版本提供服务。
 	//
 	// snapshottingEnabled 之所以用 atomic.Bool 而不是受外部锁保护的普通字段：
 	// 一致性检查器可能从独立 goroutine 把它置为 false，读写双方不共享同一把锁。
@@ -66,9 +66,9 @@ type WatchCacheStorage struct {
 	snapshottingEnabled atomic.Bool
 }
 
-// StoreLocked returns the live store as a Snapshot.
-// Unlike GetExactSnapshotLocked this is not an immutable point-in-time copy.
-// The caller must hold the lock for the duration of use.
+// StoreLocked 把当前 store 作为 Snapshot 返回。
+// 与 GetExactSnapshotLocked 不同，这不是不可变的时间点副本。
+// 调用方必须在使用期间持有锁。
 func (w *WatchCacheStorage) StoreLocked() Snapshot {
 	return w.store
 }
@@ -125,11 +125,11 @@ func (w *WatchCacheStorage) LatestSnapshotLocked() (Snapshot, bool) {
 // 后续写入不会改变正在遍历的列表。
 func (w *WatchCacheStorage) GetLatestSnapshotOrBuildLocked(key, continueKey string) (Snapshot, error) {
 	if snap, ok := w.LatestSnapshotLocked(); ok {
-		// Snapshots are added in order as we update store, so the
-		// latest snapshot match latest store state and latest revision.
+		// 快照随 store 更新按顺序添加，因此
+		// 最新的快照与 store 的最新状态及最新版本一致。
 		return snap, nil
 	}
-	// TODO: Consider using Indexer Clone() after benchmarking.
+	// TODO：基准测试后考虑使用 Indexer Clone()。
 	return orderedSnapshotResponseFromIndexer(w.store, key, continueKey)
 }
 
@@ -219,8 +219,8 @@ func (s sortableStoreElements) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-// Get takes runtime.Object as a parameter. However, it returns
-// pointer to <storeElement>.
+// Get 接受 runtime.Object 作为参数，但返回的是
+// 指向 <storeElement> 的指针。
 func (w *WatchCacheStorage) Get(obj interface{}) (interface{}, bool, error) {
 	object, ok := obj.(runtime.Object)
 	if !ok {
@@ -234,7 +234,7 @@ func (w *WatchCacheStorage) Get(obj interface{}) (interface{}, bool, error) {
 	return w.store.Get(&Element{Key: key, Object: object})
 }
 
-// GetByKey returns pointer to <storeElement>.
+// GetByKey 返回指向 <storeElement> 的指针。
 func (w *WatchCacheStorage) GetByKey(key string) (interface{}, bool, error) {
 	return w.store.GetByKey(key)
 }
@@ -244,12 +244,12 @@ func (w *WatchCacheStorage) ListKeys() []string {
 	return w.store.ListKeys()
 }
 
-// List returns list of pointers to <Element> objects.
+// List 返回指向 <Element> 对象的指针列表。
 func (w *WatchCacheStorage) List() []interface{} {
 	return w.store.List()
 }
 
-// UpdateStoreLocked executes a mutation (Add, Update, Delete) on the underlying store.
+// UpdateStoreLocked 对底层 store 执行一次变更（Add、Update、Delete）。
 //
 // 每次变更后追加一份快照，使快照序列与事件序列一一对应；
 // 快照仅在开关打开时维护，关闭后不再累积以节省内存。
@@ -273,14 +273,14 @@ func (w *WatchCacheStorage) UpdateStoreLocked(eventType watch.EventType, elem *E
 	return nil
 }
 
-// CompactSnapshotsLocked prunes snapshots older than the oldest history version.
+// CompactSnapshotsLocked 清理早于最老历史版本的快照。
 func (w *WatchCacheStorage) CompactSnapshotsLocked(oldestRV uint64) {
 	if w.snapshots != nil && w.snapshottingEnabled.Load() {
 		w.snapshots.RemoveLess(oldestRV)
 	}
 }
 
-// ReplaceLocked replaces the elements in the underlying store and resets snapshots.
+// ReplaceLocked 替换底层 store 中的元素并重置快照。
 //
 // Replace 代表一次完整重同步，旧快照已与新的 store 内容无关，必须先清空再登记新快照。
 func (w *WatchCacheStorage) ReplaceLocked(toReplace []interface{}, resourceVersion string, version uint64) error {
@@ -297,7 +297,7 @@ func (w *WatchCacheStorage) ReplaceLocked(toReplace []interface{}, resourceVersi
 	return nil
 }
 
-// GetExactSnapshotLocked retrieves a snapshot less than or equal to the given resource version.
+// GetExactSnapshotLocked 获取小于或等于给定 resourceVersion 的快照。
 //
 // 找不到时返回 ResourceExpired：调用方应据此让客户端重新 list，而不是回退到更旧的视图。
 func (w *WatchCacheStorage) GetExactSnapshotLocked(resourceVersion uint64) (Snapshot, error) {
@@ -311,7 +311,7 @@ func (w *WatchCacheStorage) GetExactSnapshotLocked(resourceVersion uint64) (Snap
 	return snap, nil
 }
 
-// GetByIndexSnapshot retrieves elements by index and wraps them in a Snapshot.
+// GetByIndexSnapshot 按索引检索元素，并包装为 Snapshot。
 // 索引查询结果无序，包装成 listSnapshot 让后续前缀遍历负责排序。
 func (w *WatchCacheStorage) GetByIndexSnapshot(indexName, value string) (Snapshot, error) {
 	result, err := w.store.ByIndex(indexName, value)
@@ -321,7 +321,7 @@ func (w *WatchCacheStorage) GetByIndexSnapshot(indexName, value string) (Snapsho
 	return listSnapshot{Items: result}, nil
 }
 
-// ListResourceVersion returns the list resource version.
+// ListResourceVersion 返回 LIST 的 resourceVersion。
 func (w *WatchCacheStorage) ListResourceVersion() uint64 {
 	return w.listResourceVersion
 }

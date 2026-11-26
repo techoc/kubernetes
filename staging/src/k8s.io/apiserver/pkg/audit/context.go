@@ -34,11 +34,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// The key type is unexported to prevent collisions
+// key 类型不导出，防止与其他包定义的 key 冲突
 type key int
 
-// auditKey is the context key for storing the audit context that is being
-// captured and the evaluated policy that applies to the given request.
+// auditKey 是用于存储审计上下文的 context key，其中包含正在捕获的审计事件
+// 以及适用于该请求的已求值策略。
 const auditKey key = iota
 
 // AuditContext 持有构造当前请求审计事件所需的信息。
@@ -46,24 +46,24 @@ const auditKey key = iota
 // 由 atomic.Bool 保证无锁读取安全；event 则被多个过滤器并发读写，统一由 lock 保护。
 // 任何新增字段都要明确归入其中一类。
 type AuditContext struct {
-	// initialized indicates whether requestAuditConfig and sink have been populated and are safe to read unguarded.
-	// This should only be set via Init().
+	// initialized 表示 requestAuditConfig 与 sink 已填充，可无锁读取。
+	// 只能通过 Init() 设置。
 	initialized atomic.Bool
-	// requestAuditConfig is the audit configuration that applies to the request.
-	// This should only be written via Init(RequestAuditConfig, Sink), and only read when initialized.Load() is true.
+	// requestAuditConfig 是适用于该请求的审计配置。
+	// 只能通过 Init(RequestAuditConfig, Sink) 写入，且只能在 initialized.Load() 为 true 时读取。
 	requestAuditConfig RequestAuditConfig
-	// sink is the sink to use when processing event stages.
-	// This should only be written via Init(RequestAuditConfig, Sink), and only read when initialized.Load() is true.
+	// sink 是处理事件阶段时使用的输出目标。
+	// 只能通过 Init(RequestAuditConfig, Sink) 写入，且只能在 initialized.Load() 为 true 时读取。
 	sink Sink
 
-	// lock guards event
+	// lock 保护 event
 	lock sync.Mutex
 
-	// event is the audit Event object that is being captured to be written in
-	// the API audit log.
+	// event 是正在捕获、准备写入 API 审计日志的审计事件对象。
+	//
 	event auditinternal.Event
 
-	// unguarded copy of auditID from the event
+	// 从 event 复制出的 auditID，可无锁读取
 	auditID atomic.Value
 }
 
@@ -72,12 +72,12 @@ type AuditContext struct {
 // 真正的 Level 判断要等策略求值后（Init）才能确定。
 func (ac *AuditContext) Enabled() bool {
 	if ac == nil {
-		// protect against nil pointers
+		// 防止 nil 指针
 		return false
 	}
 	if !ac.initialized.Load() {
-		// Note: An unset Level should be considered Enabled, so that request data (e.g. annotations)
-		// can still be captured before the audit policy is evaluated.
+		// 注意：未设置 Level 应视为已启用，以便审计策略求值前
+		// 仍能捕获请求数据（如注解）。
 		return true
 	}
 	return ac.requestAuditConfig.Level != auditinternal.LevelNone
@@ -100,7 +100,7 @@ func (ac *AuditContext) Init(requestAuditConfig RequestAuditConfig, sink Sink) e
 }
 
 func (ac *AuditContext) AuditID() types.UID {
-	// return the unguarded copy of the auditID
+	// 返回可无锁读取的 auditID 副本
 	id, _ := ac.auditID.Load().(types.UID)
 	return id
 }
@@ -168,7 +168,7 @@ func (ac *AuditContext) LogImpersonatedUser(user user.Info, constraint string) {
 func (ac *AuditContext) LogResponseObject(status *metav1.Status, obj *runtime.Unknown) {
 	ac.visitEvent(func(ae *auditinternal.Event) {
 		if status != nil {
-			// selectively copy the bounded fields.
+			// 有选择地复制有界的字段
 			ae.ResponseStatus = &metav1.Status{
 				Status:  status.Status,
 				Message: status.Message,
@@ -184,7 +184,7 @@ func (ac *AuditContext) LogResponseObject(status *metav1.Status, obj *runtime.Un
 	})
 }
 
-// LogRequestPatch fills in the given patch as the request object into an audit event.
+// LogRequestPatch 将给定 patch 作为请求对象填入审计事件。
 func (ac *AuditContext) LogRequestPatch(patch []byte) {
 	ac.visitEvent(func(ae *auditinternal.Event) {
 		ae.RequestObject = &runtime.Unknown{
@@ -194,7 +194,7 @@ func (ac *AuditContext) LogRequestPatch(patch []byte) {
 	})
 }
 
-// GetEventUser returns a copy of the User associated with the audit Event.
+// GetEventUser 返回审计事件中 User 的副本。
 func (ac *AuditContext) GetEventUser() authnv1.UserInfo {
 	var val *authnv1.UserInfo
 	ac.visitEvent(func(ev *auditinternal.Event) {
@@ -203,8 +203,8 @@ func (ac *AuditContext) GetEventUser() authnv1.UserInfo {
 	return *val
 }
 
-// GetEventImpersonatedUser returns a copy of the ImpersonatedUser associated with the audit Event,
-// or returns nil when there is no ImpersonatedUser.
+// GetEventImpersonatedUser 返回审计事件中 ImpersonatedUser 的副本，
+// 若没有 ImpersonatedUser 则返回 nil。
 func (ac *AuditContext) GetEventImpersonatedUser() *authnv1.UserInfo {
 	var val *authnv1.UserInfo
 	ac.visitEvent(func(ev *auditinternal.Event) {
@@ -338,8 +338,7 @@ func AddAuditAnnotations(ctx context.Context, keysAndValues ...string) {
 	}
 }
 
-// AddAuditAnnotationsMap is a bulk version of AddAuditAnnotation. Refer to AddAuditAnnotation for
-// restrictions on when this can be called.
+// AddAuditAnnotations 是 AddAuditAnnotation 的批量版本，调用时机限制见 AddAuditAnnotation。
 func AddAuditAnnotationsMap(ctx context.Context, annotations map[string]string) {
 	ac := AuditContextFrom(ctx)
 	if !ac.Enabled() {
@@ -382,16 +381,15 @@ func WithAuditContext(parent context.Context) context.Context {
 	})
 }
 
-// AuditContextFrom returns the pair of the audit configuration object
-// that applies to the given request and the audit event that is going to
-// be written to the API audit log.
+// AuditContextFrom 返回适用于该请求的审计配置对象
+// 与即将写入 API 审计日志的审计事件的组合。
 func AuditContextFrom(ctx context.Context) *AuditContext {
 	ev, _ := ctx.Value(auditKey).(*AuditContext)
 	return ev
 }
 
-// WithAuditID sets the AuditID on the AuditContext. The AuditContext must already be present in the
-// request context. If the specified auditID is empty, no value is set.
+// WithAuditID 在 AuditContext 上设置 AuditID。context 中必须已存在 AuditContext。
+// 若指定的 auditID 为空，则不设置任何值。
 func WithAuditID(ctx context.Context, auditID types.UID) {
 	if auditID == "" {
 		return
@@ -404,8 +402,7 @@ func WithAuditID(ctx context.Context, auditID types.UID) {
 	}
 }
 
-// AuditIDFrom returns the value of the audit ID from the request context, along with whether
-// auditing is enabled.
+// AuditIDFrom 从请求 context 返回审计 ID 的值以及审计是否启用。
 func AuditIDFrom(ctx context.Context) (types.UID, bool) {
 	if ac := AuditContextFrom(ctx); ac != nil {
 		id, _ := ac.auditID.Load().(types.UID)
@@ -425,8 +422,8 @@ func GetAuditIDTruncated(ctx context.Context) string {
 		return ""
 	}
 
-	// if the user has specified a very long audit ID then we will use the first N characters
-	// Note: assuming Audit-ID header is in ASCII
+	// 若用户指定了很长的审计 ID，则只取前 N 个字符
+	// 注意：假设 Audit-ID 头是 ASCII 编码
 	const maxAuditIDLength = 64
 	if len(auditID) > maxAuditIDLength {
 		auditID = auditID[:maxAuditIDLength]

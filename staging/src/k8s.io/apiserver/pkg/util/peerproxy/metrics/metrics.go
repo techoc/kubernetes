@@ -39,14 +39,14 @@ const (
 	// ProxyErrorEndpointResolution 表示解析对等 apiserver 网络地址失败。
 	// 以下错误原因作为指标 type 标签，取值必须稳定，否则会导致看板断档。
 	ProxyErrorEndpointResolution = "endpoint_resolution"
-	// ProxyErrorTransport indicates a failure to build the proxy transport for the request.
+	// ProxyErrorTransport 表示为请求构建代理传输失败。
 	ProxyErrorTransport = "proxy_transport"
 
-	// DiscoveryErrorLeaseList indicates a failure to list apiserver identity leases.
+	// DiscoveryErrorLeaseList 表示列举 apiserver 身份 lease 失败。
 	DiscoveryErrorLeaseList = "lease_list"
-	// DiscoveryErrorHostPortResolution indicates a failure to resolve host/port from an identity lease.
+	// DiscoveryErrorHostPortResolution 表示从身份 lease 解析 host/port 失败。
 	DiscoveryErrorHostPortResolution = "hostport_resolution"
-	// DiscoveryErrorFetch indicates a failure to fetch discovery document from a peer.
+	// DiscoveryErrorFetch 表示从 peer 拉取发现文档失败。
 	DiscoveryErrorFetch = "fetch_discovery"
 )
 
@@ -55,7 +55,7 @@ var registerMetricsOnce sync.Once
 // 指标用 sync.Once 注册，重复调用安全；标签刻意不包含 peer 地址，
 // 以防止基数爆炸。
 var (
-	// peerProxiedRequestsTotal counts the number of requests that were proxied to a peer kube-apiserver.
+	// peerProxiedRequestsTotal 统计被代理到 peer kube-apiserver 的请求数。
 	peerProxiedRequestsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      subsystem,
@@ -66,7 +66,7 @@ var (
 		[]string{statuscode, group, version, resource},
 	)
 
-	// peerProxyErrorsTotal counts the number of errors encountered while proxying requests to a peer kube-apiserver.
+	// peerProxyErrorsTotal 统计代理请求到 peer kube-apiserver 时遇到的错误数。
 	peerProxyErrorsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      subsystem,
@@ -77,7 +77,7 @@ var (
 		[]string{errorType, group, version, resource},
 	)
 
-	// peerDiscoverySyncErrorsTotal counts the number of errors encountered while syncing discovery information from a peer kube-apiserver.
+	// peerDiscoverySyncErrorsTotal 统计从 peer kube-apiserver 同步发现信息时的错误数。
 	peerDiscoverySyncErrorsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      subsystem,
@@ -103,17 +103,17 @@ func Reset() {
 	legacyregistry.Reset()
 }
 
-// IncPeerProxiedRequest increments the # of proxied requests to peer kube-apiserver
+// IncPeerProxiedRequest 增加代理到 peer kube-apiserver 的请求数
 func IncPeerProxiedRequest(ctx context.Context, status, g, v, r string) {
 	peerProxiedRequestsTotal.WithContext(ctx).WithLabelValues(status, g, v, r).Add(1)
 }
 
-// IncPeerProxyError increments the # of errors encountered during peer proxying
+// IncPeerProxyError 增加 peer 代理期间遇到的错误数
 func IncPeerProxyError(ctx context.Context, e, g, v, r string) {
 	peerProxyErrorsTotal.WithContext(ctx).WithLabelValues(e, g, v, r).Add(1)
 }
 
-// IncPeerDiscoverySyncError increments the # of errors encountered during peer discovery sync
+// IncPeerDiscoverySyncError 增加 peer 发现同步期间遇到的错误数
 func IncPeerDiscoverySyncError(ctx context.Context, e string) {
 	peerDiscoverySyncErrorsTotal.WithContext(ctx).WithLabelValues(e).Add(1)
 }

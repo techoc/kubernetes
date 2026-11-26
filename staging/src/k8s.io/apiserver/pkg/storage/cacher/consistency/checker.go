@@ -36,12 +36,12 @@ import (
 )
 
 var (
-	// CheckPeriod is the period of checking consistency between etcd and cache.
-	// 5 minutes were proposed to match the default compaction period. It's magnitute higher than
-	// List latency SLO (30 seconds) and timeout (1 minute).
+	// CheckPeriod 是检查 etcd 与缓存一致性的周期。
+	// 选 5 分钟是为了匹配默认压缩周期，它远高于
+	// LIST 延迟 SLO（30 秒）与超时（1 分钟）。
 	CheckPeriod = 5 * time.Minute
-	// PanicOnCacheInconsistency enables the consistency checking mechanism for cache.
-	// Based on KUBE_WATCHCACHE_CONSISTENCY_CHECKER environment variable.
+	// PanicOnCacheInconsistency 为缓存启用一致性检查机制。
+	// 基于 KUBE_WATCHCACHE_CONSISTENCY_CHECKER 环境变量。
 	PanicOnCacheInconsistency = false
 	// checkerListPageSize 是检查器发起 list 操作时的分块大小：
 	// 分页可避免一次性拉取超大资源集合；该值与 etcd 的默认页大小对齐。
@@ -95,7 +95,7 @@ func (c Checker) Run(stopCh <-chan struct{}) {
 	klog.V(3).InfoS("Cache consistency check start", "group", c.groupResource.Group, "resource", c.groupResource.Resource)
 	jitter := 0.5 // Period between [interval, interval * (1.0 + jitter)]
 	sliding := true
-	// wait.JitterUntilWithContext starts work immediately, so wait first.
+	// wait.JitterUntilWithContext 会立即开始工作，所以先等待。
 	select {
 	case <-time.After(wait.Jitter(CheckPeriod, jitter)):
 	case <-stopCh:
@@ -136,14 +136,14 @@ func (c *Checker) CalculateDigests(ctx context.Context) (*Digest, error) {
 	if !c.cacher.Ready() {
 		return nil, fmt.Errorf("cache is not ready")
 	}
-	// variables for tracking the diff in consistency checker
+	// 用于跟踪一致性检查器差异的变量
 	cacheItems := []namespaceNameRV{}
 	var foundDiff *diffDetail
 	var etcdIndex int
 
 	// 缓存侧一次性读取，同时记录顺序，供后续逐项比对使用。
 	cacheDigest, cacheResourceVersion, err := c.calculateStoreDigest(ctx, c.cacher, "0", 0, func(obj metav1.Object) {
-		// collect items from cacher's list
+		// 从 cacher 的 LIST 中收集条目
 		cacheItems = append(cacheItems, namespaceNameRV{Namespace: obj.GetNamespace(), Name: obj.GetName(), RV: obj.GetResourceVersion()})
 	})
 	if err != nil {

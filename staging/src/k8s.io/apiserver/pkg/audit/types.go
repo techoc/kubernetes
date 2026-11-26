@@ -23,11 +23,11 @@ import (
 // Sink 是审计事件接收端的最小接口。所有实现都必须满足下面的并发与所有权约定，
 // 因为这些约定是审计管道与后端之间唯一的契约。
 type Sink interface {
-	// ProcessEvents handles events. Per audit ID it might be that ProcessEvents is called up to three times.
-	// Errors might be logged by the sink itself. If an error should be fatal, leading to an internal
-	// error, ProcessEvents is supposed to panic. The event must not be mutated and is reused by the caller
-	// after the call returns, i.e. the sink has to make a deepcopy to keep a copy around if necessary.
-	// Returns true on success, may return false on error.
+	// ProcessEvents 处理事件。同一个 audit ID  ProcessEvents 最多可能被调用三次。
+	// sink 自身可能已记录错误。若某个错误是致命的、应导致内部错误，
+	// ProcessEvents 应当 panic。事件不得被修改，调用方会在返回后复用它，
+	// 因此 sink 若需保留副本必须深拷贝。
+	// 成功返回 true，出错可返回 false。
 	//
 	// 同一审计 ID 最多会被调用三次，分别对应请求的不同阶段（收到请求、响应头、响应体）。
 	// 事件对象在返回后即被调用方复用，sink 若要保留必须自行深拷贝；这是避免每请求多次
@@ -39,20 +39,20 @@ type Sink interface {
 type Backend interface {
 	Sink
 
-	// Run will initialize the backend. It must not block, but may run go routines in the background. If
-	// stopCh is closed, it is supposed to stop them. Run will be called before the first call to ProcessEvents.
+	// Run 初始化后端。它不得阻塞，但可在后台运行 goroutine。若
+	// stopCh 关闭，应停止它们。Run 在首次调用 ProcessEvents 之前被调用。
 	//
 	// 不得阻塞：它在服务启动路径上被同步调用。后台 goroutine 必须在 stopCh 关闭后退出，
 	// 否则 Shutdown 期间会泄漏。
 	Run(stopCh <-chan struct{}) error
 
-	// Shutdown will synchronously shut down the backend while making sure that all pending
-	// events are delivered. It can be assumed that this method is called after
-	// the stopCh channel passed to the Run method has been closed.
+	// Shutdown 同步关闭后端，同时确保所有待处理
+	// 事件都已投递。可假定调用时传给 Run 的 stopCh
+	// 已经关闭。
 	//
 	// 同步语义是审计完整性的保证：进程退出前必须把缓冲中的事件刷出去。
 	Shutdown()
 
-	// Returns the backend PluginName.
+	// 返回后端的 PluginName。
 	String() string
 }

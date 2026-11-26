@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-// DebugSocket installs profiling and debugflag as a Unix-Domain socket.
+// DebugSocket 把 profiling 与 debugflag 安装为 Unix 域 socket。
 //
 // 使用 Unix socket 而非 TCP 端口，是为了不把 pprof 和调试开关暴露到网络上：
 // 只有能访问该 socket 文件的本机进程才能调用，文件权限即是访问控制边界。
@@ -37,7 +37,7 @@ type DebugSocket struct {
 	mux  *http.ServeMux
 }
 
-// NewDebugSocket creates a new DebugSocket for the given path.
+// NewDebugSocket 为给定路径创建一个新的 DebugSocket。
 func NewDebugSocket(path string) *DebugSocket {
 	return &DebugSocket{
 		path: path,
@@ -45,7 +45,7 @@ func NewDebugSocket(path string) *DebugSocket {
 	}
 }
 
-// InstallProfiling installs profiling endpoints in the socket.
+// InstallProfiling 在 socket 中安装 profiling 端点。
 // 注册标准的 net/http/pprof 端点；先重定向无斜杠路径，保证两种写法都可用。
 func (s *DebugSocket) InstallProfiling() {
 	s.mux.HandleFunc("/debug/pprof", redirectTo("/debug/pprof/"))
@@ -56,7 +56,7 @@ func (s *DebugSocket) InstallProfiling() {
 	s.mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
-// InstallDebugFlag installs debug flag endpoints in the socket.
+// InstallDebugFlag 在 socket 中安装 debug flag 端点。
 //
 // 每个开关注册为 /debug/flags/<flag>，并加入索引页；同一 mux 可重复调用以挂载多个开关。
 func (s *DebugSocket) InstallDebugFlag(flag string, handler func(http.ResponseWriter, *http.Request)) {
@@ -70,14 +70,14 @@ func (s *DebugSocket) InstallDebugFlag(flag string, handler func(http.ResponseWr
 	f.addFlag(flag)
 }
 
-// Run starts the server and waits for stopCh to be closed to close the server.
+// Run 启动服务器并等待 stopCh 关闭后再关闭服务器。
 //
 //logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
 func (s *DebugSocket) Run(stopCh <-chan struct{}) error {
 	return s.RunWithContext(wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext starts the server and waits for the context to be cancelled to close the server.
+// RunWithContext 启动服务器并等待 context 取消后再关闭服务器。
 func (s *DebugSocket) RunWithContext(ctx context.Context) error {
 	// 先删除残留的 socket 文件：进程异常退出时文件会留下，不清理会导致 bind 失败。
 	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {

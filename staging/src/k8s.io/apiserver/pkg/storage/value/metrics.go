@@ -34,12 +34,12 @@ const (
 )
 
 /*
- * By default, all the following metrics are defined as falling under
- * ALPHA stability level https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
+ * 默认情况下，以下所有指标定义为
+ * ALPHA 稳定性级别 https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/1209-metrics-stability/kubernetes-control-plane-metrics-stability.md#stability-classes)
  *
- * Promoting the stability level of the metric is a responsibility of the component owner, since it
- * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
- * the metric stability policy.
+ * 提升指标的稳定性级别是组件所有者的责任，因为这需要
+ * 依照指标稳定性策略，明确承诺在多个版本中支持该指标。
+ *
  */
 // 以上指标默认均为 ALPHA 级别：升级稳定性等级需要组件 owner 明确承诺
 // 跨多个版本的支持，因此这里不做隐式升级。
@@ -52,8 +52,8 @@ var (
 			Subsystem: subsystem,
 			Name:      "transformation_duration_seconds",
 			Help:      "Latencies in seconds of value transformation operations.",
-			// In-process transformations (ex. AES CBC) complete on the order of 20 microseconds. However, when
-			// external KMS is involved latencies may climb into hundreds of milliseconds.
+			// 进程内转换（如 AES CBC）耗时约 20 微秒。但若涉及
+			// 外部 KMS，延迟可能上升到数百毫秒。
 			Buckets:        metrics.ExponentialBuckets(5e-6, 2, 25),
 			StabilityLevel: metrics.ALPHA,
 		},
@@ -124,7 +124,7 @@ func RegisterMetrics() {
 
 // RecordTransformation 记录一次 TransformFromStorage/TransformToStorage 的
 // 次数与耗时；仅成功时才记录耗时直方图，失败耗时对容量规划无意义。
-// Note that transformation_failures_total metric is deprecated, use transformation_operations_total instead.
+// 注意 transformation_failures_total 指标已弃用，请改用 transformation_operations_total。
 func RecordTransformation(resource, transformationType, transformerPrefix string, elapsed time.Duration, err error) {
 	transformerOperationsTotal.WithLabelValues(resource, transformationType, transformerPrefix, getErrorCode(err)).Inc()
 
@@ -148,7 +148,7 @@ func RecordDataKeyGeneration(start time.Time, err error) {
 	dataKeyGenerationLatencies.Observe(sinceInSeconds(start))
 }
 
-// sinceInSeconds gets the time since the specified start in seconds.
+// sinceInSeconds 返回从指定起点至今的秒数。
 func sinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
@@ -165,13 +165,13 @@ func getErrorCode(err error) string {
 		return codes.OK.String()
 	}
 
-	// handle errors wrapped with fmt.Errorf and similar
+	// 处理被 fmt.Errorf 及类似方式包装的错误
 	var s gRPCError
 	if errors.As(err, &s) {
 		return s.GRPCStatus().Code().String()
 	}
 
-	// This is not gRPC error. The operation must have failed before gRPC
-	// method was called, otherwise we would get gRPC error.
+	// 这不是 gRPC 错误。操作一定在 gRPC
+	// 方法被调用前就失败了，否则会得到 gRPC 错误。
 	return "unknown-non-grpc"
 }

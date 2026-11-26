@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// RESTOptions is set of resource-specific configuration options to generic registries.
+// RESTOptions 是传给 generic registry 的一组资源专属配置选项。
 //
 // 这些选项决定某个资源的存储后端、删除/回收行为、指标采集周期，
 // 以及向流量控制上报对象数量的追踪器。
@@ -45,7 +45,7 @@ type RESTOptions struct {
 	StorageObjectCountTracker flowcontrolrequest.StorageObjectCountTracker
 }
 
-// Implement RESTOptionsGetter so that RESTOptions can directly be used when available (i.e. tests)
+// 实现 RESTOptionsGetter，使测试等场景下可直接使用 RESTOptions。
 func (opts RESTOptions) GetRESTOptions(schema.GroupResource, runtime.Object) (RESTOptions, error) {
 	return opts, nil
 }
@@ -53,13 +53,13 @@ func (opts RESTOptions) GetRESTOptions(schema.GroupResource, runtime.Object) (RE
 // RESTOptionsGetter 根据资源（以及可选的示例对象）解析出存储选项。
 // 示例对象用于确定该资源的存储版本；为 nil 时使用资源默认存储版本。
 type RESTOptionsGetter interface {
-	// GetRESTOptions returns the RESTOptions for the given resource and example object.
-	// The example object is used to determine the storage version for the resource.
-	// If the example object is nil, the storage version will be determined by the resource's default storage version.
+	// GetRESTOptions 返回给定资源和示例对象的 RESTOptions。
+	// 示例对象用于确定资源的存储版本。
+	// 若示例对象为 nil，则使用资源的默认存储版本。
 	GetRESTOptions(resource schema.GroupResource, example runtime.Object) (RESTOptions, error)
 }
 
-// StoreOptions is set of configuration options used to complete generic registries.
+// StoreOptions 是用于补全 generic registry 的一组配置选项。
 //
 // TriggerFunc/AttrFunc/Indexers 把领域逻辑注入通用 Store：索引键、属性提取
 // 与附加索引，使同一套 Store 实现适配不同资源。

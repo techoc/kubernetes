@@ -38,7 +38,7 @@ const headerFmt = `
 Warning: This endpoint is not meant to be machine parseable, has no formatting compatibility guarantees and is for debugging purposes only.
 `
 
-// flagzTextSerializer implements runtime.Serializer for text/plain output.
+// flagzTextSerializer 为 text/plain 输出实现 runtime.Serializer。
 type flagzTextSerializer struct {
 	componentName string
 	flagReader    Reader

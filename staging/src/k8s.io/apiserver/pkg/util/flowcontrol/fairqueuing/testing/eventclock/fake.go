@@ -34,14 +34,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// waitGroupCounter is a wait group used for a GoRoutineCounter.  This private
-// type is used to disallow direct waitGroup access
+// waitGroupCounter 是用于 GoRoutineCounter 的 wait group。
+// 使用这个私有类型是为了禁止直接访问 waitGroup。
 type waitGroupCounter struct {
 	wg sync.WaitGroup
 }
 
-// compile time assertion that waitGroupCounter meets requirements
-// of GoRoutineCounter
+// 编译期断言：waitGroupCounter 满足
+// GoRoutineCounter 的要求。
 var _ counter.GoRoutineCounter = (*waitGroupCounter)(nil)
 
 // Add 记录 goroutine 计数的变化；在 klog 高详细级别下附上调用栈片段，
@@ -103,35 +103,34 @@ func (wgc *waitGroupCounter) Wait() {
 	wgc.wg.Wait()
 }
 
-// Fake is one whose time does not pass implicitly but
-// rather is explicitly set by invocations of its SetTime method.
-// Each Fake has an associated GoRoutineCounter that is
-// used to track associated activity.
-// For the EventAfterDuration and EventAfterTime methods,
-// the clock itself counts the start and stop of the EventFunc
-// and the client is responsible for counting any suspend and
-// resume internal to the EventFunc.
-// The Sleep method must only be invoked from a goroutine that is
-// counted in that GoRoutineCounter.
+// Fake 的时间不会隐式流逝，
+// 只能通过调用 SetTime 显式设置。
+// 每个 Fake 关联一个 GoRoutineCounter，用于
+// 跟踪相关活动。
+// 对 EventAfterDuration 与 EventAfterTime 方法，
+// 时钟本身统计 EventFunc 的开始与结束，
+// 客户端负责统计 EventFunc 内部的挂起与
+// 恢复。
+// Sleep 只能从被该 GoRoutineCounter 计数的
+// goroutine 中调用。
 type Fake struct {
 	baseclocktest.FakePassiveClock
 
-	// waiters is a heap of waiting work, sorted by time
+	// waiters 是按时间排序的待执行工作堆。
 	waiters     eventWaiterHeap
 	waitersLock sync.RWMutex
 
-	// clientWG may be nil and if not supplies constraints on time
-	// passing in Run.  The Run method will not pick a new time until
-	// this is nil or its counter is zero.
+	// clientWG 可为 nil，非 nil 时对 Run 中时间
+	// 的推进施加约束。其计数归零前 Run 不会选择新的时间。
+	// 才推进时间。
 	clientWG *waitGroupCounter
 
-	// fuzz is the amount of noise to add to scheduling.  An event
-	// requested to run at time T will run at some time chosen
-	// uniformly at random from the interval [T, T+fuzz]; the upper
-	// bound is exclusive iff fuzz is non-zero.
+	// fuzz 是调度时加入的噪声量。计划在 T 时刻运行的事件
+	// 实际会在 [T, T+fuzz] 区间内均匀随机选择一个时间运行；
+	// fuzz 非零时上界为开区间。
 	fuzz time.Duration
 
-	// rand is the random number generator to use in fuzzing
+	// rand 是模糊调度使用的随机数生成器。
 	rand *rand.Rand
 }
 
@@ -146,11 +145,11 @@ type eventWaiter struct {
 	f          eventclock.EventFunc
 }
 
-// NewFake constructs a new fake event clock.  The given `r *rand.Rand` must
-// henceforth not be used for any other purpose.  If `r` is nil then a
-// fresh one will be constructed, seeded with the current real time.
-// The clientWG can be `nil` and if not is used to let Run know about
-// additional work that has to complete before time can advance.
+// NewFake 构造一个新的假事件时钟。给定的 `r *rand.Rand`
+// 此后不得用于任何其他用途。`r` 为 nil 时会新建一个，
+// 以当前真实时间作为种子。
+// clientWG 可为 nil，非 nil 时用于告知 Run
+// 时间推进前必须完成的额外工作。
 func NewFake(t time.Time, fuzz time.Duration, r *rand.Rand) (*Fake, counter.GoRoutineCounter) {
 	grc := &waitGroupCounter{}
 
@@ -168,8 +167,8 @@ func NewFake(t time.Time, fuzz time.Duration, r *rand.Rand) (*Fake, counter.GoRo
 	}, grc
 }
 
-// GetNextTime returns the next time at which there is work scheduled,
-// and a bool indicating whether there is any such time
+// GetNextTime 返回下一个安排了工作的时间，
+// 以及是否存在这样的时间。
 func (fec *Fake) GetNextTime() (time.Time, bool) {
 	fec.waitersLock.RLock()
 	defer fec.waitersLock.RUnlock()
@@ -179,11 +178,11 @@ func (fec *Fake) GetNextTime() (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// Run runs all the events scheduled, and all the events they
-// schedule, and so on, until there are none scheduled or the limit is not
-// nil and the next time would exceed the limit.  The associated
-// GoRoutineCounter gates the advancing of time.  That is,
-// time is not advanced until all the associated work is finished.
+// Run 运行所有已安排的事件及其安排的事件，
+// 依此类推，直到没有事件或达到 limit（非 nil 且
+// 下一个时间会超过它）。关联的 GoRoutineCounter
+// 控制时间的推进：所有关联工作完成后
+// 时间才会推进。
 func (fec *Fake) Run(limit *time.Time) {
 	for {
 		fec.clientWG.Wait()
@@ -195,9 +194,9 @@ func (fec *Fake) Run(limit *time.Time) {
 	}
 }
 
-// SetTime sets the time and runs to completion all events that should
-// be started by the given time --- including any further events they
-// schedule
+// SetTime 设置时间，并运行到给定时刻为止所有应启动的事件——
+//
+// 包括它们进一步安排的事件。
 //
 // 事件在独立 goroutine 中执行并计入 clientWG，因此 SetTime 会等它们全部
 // 完成后才返回，保证测试观察到的状态是确定的。
@@ -208,9 +207,9 @@ func (fec *Fake) SetTime(t time.Time) {
 		func() {
 			fec.waitersLock.Lock()
 			defer fec.waitersLock.Unlock()
-			// This loop is because events run at a given time may schedule more
-			// events to run at that or an earlier time.
-			// Events should not advance the clock.  But just in case they do...
+			// 这个循环是因为在给定时刻运行的事件可能安排更多
+			// 在该时刻或更早运行的事件。
+			// 事件不应推进时钟，但以防万一……
 			now := fec.Now()
 			for len(fec.waiters) > 0 && !now.Before(fec.waiters[0].targetTime) {
 				ew := heap.Pop(&fec.waiters).(eventWaiter)
@@ -229,11 +228,11 @@ func (fec *Fake) SetTime(t time.Time) {
 	}
 }
 
-// Sleep returns after the given duration has passed.
-// Sleep must only be invoked in a goroutine that is counted
-// in the Fake's associated GoRoutineCounter.
-// Unlike the base FakeClock's Sleep, this method does not itself advance the clock
-// but rather leaves that up to other actors (e.g., Run).
+// Sleep 在给定时间过去后返回。
+// Sleep 只能在被 Fake 关联的 GoRoutineCounter
+// 计数的 goroutine 中调用。
+// 与基础 FakeClock 的 Sleep 不同，本方法不自行推进时钟，
+// 而是交由其他角色（如 Run）完成。
 func (fec *Fake) Sleep(duration time.Duration) {
 	doneCh := make(chan struct{})
 	fec.EventAfterDuration(func(time.Time) {
@@ -244,8 +243,8 @@ func (fec *Fake) Sleep(duration time.Duration) {
 	<-doneCh
 }
 
-// EventAfterDuration schedules the given function to be invoked once
-// the given duration has passed.
+// EventAfterDuration 安排给定函数在给定时间过去后
+// 调用一次。
 //
 // 若启用了 fuzz，实际触发时间会随机后移，用于暴露对精确时序的依赖。
 func (fec *Fake) EventAfterDuration(f eventclock.EventFunc, d time.Duration) {
@@ -256,8 +255,8 @@ func (fec *Fake) EventAfterDuration(f eventclock.EventFunc, d time.Duration) {
 	heap.Push(&fec.waiters, eventWaiter{targetTime: now.Add(d + fd), f: f})
 }
 
-// EventAfterTime schedules the given function to be invoked once
-// the given time has arrived.
+// EventAfterTime 安排给定函数在给定时间到达后
+// 调用一次。
 func (fec *Fake) EventAfterTime(f eventclock.EventFunc, t time.Time) {
 	fec.waitersLock.Lock()
 	defer fec.waitersLock.Unlock()

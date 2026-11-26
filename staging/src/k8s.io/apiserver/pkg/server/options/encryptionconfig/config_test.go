@@ -296,7 +296,7 @@ func TestEncryptionProviderConfigCorrect(t *testing.T) {
 		t.Fatalf("KMSCloseGracePeriod mismatch (-want +got):\n%s", cmp.Diff(expectedKMSCloseGracePeriod, kmsv2FirstEncryptionConfiguration.KMSCloseGracePeriod))
 	}
 
-	// Pick the transformer for any of the returned resources.
+	// 为返回的任意资源挑选 transformer。
 	identityFirstTransformer := identityFirstEncryptionConfiguration.Transformers[schema.ParseGroupResource("secrets")]
 	aesGcmFirstTransformer := aesGcmFirstEncryptionConfiguration.Transformers[schema.ParseGroupResource("secrets")]
 	aesCbcFirstTransformer := aesCbcFirstEncryptionConfiguration.Transformers[schema.ParseGroupResource("secrets")]
@@ -395,7 +395,7 @@ func TestKMSvsEnablement(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			// only the KMSv2 feature flag is enabled
+			// 只启用了 KMSv2 特性门控
 			_, err := LoadEncryptionConfig(testContext(t), testCase.filePath, false, "")
 
 			if len(testCase.expectedErr) > 0 && !strings.Contains(errString(err), testCase.expectedErr) {
@@ -454,7 +454,7 @@ func TestKMSvsEnablement(t *testing.T) {
 
 	for _, tt := range tts {
 		t.Run(tt.name, func(t *testing.T) {
-			// Just testing KMSv2 feature flag
+			// 仅测试 KMSv2 特性门控
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KMSv1, true)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -514,8 +514,8 @@ func TestKMSMaxTimeout(t *testing.T) {
 									Name:       "kms",
 									APIVersion: "v1",
 									Timeout: &metav1.Duration{
-										// default timeout is 3s
-										// this will be set automatically if not provided in config file
+										// 默认超时为 3s
+										// 配置文件中未提供时会自动设置
 										Duration: 3 * time.Second,
 									},
 									Endpoint: "unix:///tmp/testprovider.sock",
@@ -540,8 +540,8 @@ func TestKMSMaxTimeout(t *testing.T) {
 									Name:       "kms",
 									APIVersion: "v1",
 									Timeout: &metav1.Duration{
-										// default timeout is 3s
-										// this will be set automatically if not provided in config file
+										// 默认超时为 3s
+										// 配置文件中未提供时会自动设置
 										Duration: 3 * time.Second,
 									},
 									Endpoint: "unix:///tmp/testprovider.sock",
@@ -557,8 +557,8 @@ func TestKMSMaxTimeout(t *testing.T) {
 									Name:       "kms",
 									APIVersion: "v1",
 									Timeout: &metav1.Duration{
-										// default timeout is 3s
-										// this will be set automatically if not provided in config file
+										// 默认超时为 3s
+										// 配置文件中未提供时会自动设置
 										Duration: 3 * time.Second,
 									},
 									Endpoint: "unix:///tmp/testprovider.sock",
@@ -838,7 +838,7 @@ func TestKMSPluginHealthz(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// unset fields that are not relevant to the test
+			// 清空与测试无关的字段
 			for i := range got {
 				checker := got[i]
 				switch p := checker.(type) {
@@ -1445,7 +1445,7 @@ func TestWildcardStructure(t *testing.T) {
 				return
 			}
 
-			// check if expectedResourceTransformers are present
+			// 检查 expectedResourceTransformers 是否存在
 			for resource, expectedTransformerName := range tc.expectedResourceTransformers {
 				transformer := transformerFromOverrides(transformers, schema.ParseGroupResource(resource))
 				transformerName := string(
@@ -1691,13 +1691,13 @@ func testCBCKeyRotationWithProviders(t *testing.T, firstEncryptionConfig, firstP
 		t.Fatalf("unexpected data: %t %q", stale, from)
 	}
 
-	// verify changing the context fails storage
+	// 验证改变 context 会使存储失败
 	_, _, err = p.TransformFromStorage(ctx, out, value.DefaultContext("incorrect_context"))
 	if err != nil {
 		t.Fatalf("CBC mode does not support authentication: %v", err)
 	}
 
-	// reverse the order, use the second key
+	// 反转顺序，使用第二个 key
 	p = getTransformerFromEncryptionConfig(t, secondEncryptionConfig)
 	from, stale, err = p.TransformFromStorage(ctx, out, dataCtx)
 	if err != nil {
@@ -2186,7 +2186,7 @@ func Test_kmsv2PluginProbe_rotateDEKOnKeyIDChange(t *testing.T) {
 				t.Errorf("rotateDEKOnKeyIDChange() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			// if the old or new state is valid, we should be able to use it
+			// 只要旧状态或新状态有效，就应该能使用
 			if _, stateErr := h.getCurrentState(); stateErr == nil || err == nil {
 				transformer := envelopekmsv2.NewEnvelopeTransformer(
 					&testKMSv2EnvelopeService{err: fmt.Errorf("broken")}, // not called

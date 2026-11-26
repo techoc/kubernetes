@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	// health probes and metrics scraping are never rejected, we will continue
-	// serving these requests after shutdown delay duration elapses.
+	// 健康检查探针与指标抓取从不被拒绝，即使在关闭延迟期过后
+	// 仍继续服务这些请求。
 	//
 	// 探针与指标抓取豁免的原因是：它们通常来自本机或监控系统，
 	// 在优雅关闭窗口内仍需要反映真实状态；拒绝它们会让外部误判实例已死。
@@ -35,39 +35,39 @@ var (
 	}
 )
 
-// isRequestExemptFunc returns true if the request should not be rejected,
-// with a Retry-After response, otherwise it returns false.
+// isRequestExemptFunc 在请求不应被拒绝时返回 true
+// （即以 Retry-After 响应拒绝），否则返回 false。
 type isRequestExemptFunc func(*http.Request) bool
 
-// retryAfterParams dictates how the Retry-After response is constructed
+// retryAfterParams 决定如何构造 Retry-After 响应
 type retryAfterParams struct {
-	// TearDownConnection is true when we should send a 'Connection: close'
-	// header in the response so net/http can tear down the TCP connection.
+	// TearDownConnection 为 true 时，应在响应中发送 'Connection: close'
+	// 头，让 net/http 拆除 TCP 连接。
 	//
 	// 关闭连接是为了防止客户端复用已有连接继续发送请求，
 	// 迫使其通过新建连接（可能命中新实例）重试。
 	TearDownConnection bool
 
-	// Message describes why Retry-After response has been sent by the server
+	// Message 描述服务器为何发送 Retry-After 响应
 	Message string
 }
 
-// shouldRespondWithRetryAfterFunc returns true if the requests should
-// be rejected with a Retry-After response once certain conditions are met.
-// The retryAfterParams returned contains instructions on how to
-// construct the Retry-After response.
+// shouldRespondWithRetryAfterFunc 在满足特定条件时返回 true，
+// 表示请求应以 Retry-After 响应拒绝。
+// 返回的 retryAfterParams 包含如何构造
+// Retry-After 响应的说明。
 type shouldRespondWithRetryAfterFunc func() (*retryAfterParams, bool)
 
-// WithRetryAfter rejects any incoming new request(s) with a 429
-// if the specified shutdownDelayDurationElapsedFn channel is closed
+// 若指定的 shutdownDelayDurationElapsedFn channel 已关闭，
+// WithRetryAfter 用 429 拒绝所有新请求。
 //
-// It includes new request(s) on a new or an existing TCP connection
-// Any new request(s) arriving after shutdownDelayDurationElapsedFn is closed
-// are replied with a 429 and the following response headers:
-//   - 'Retry-After: N` (so client can retry after N seconds, hopefully on a new apiserver instance)
-//   - 'Connection: close': tear down the TCP connection
+// 包括新连接或已有连接上的新请求。
+// shutdownDelayDurationElapsedFn 关闭后到达的所有新请求
+// 都会收到 429 及如下响应头：
+//   - 'Retry-After: N'（客户端可在 N 秒后重试，希望落在新的 apiserver 实例上）
+//   - 'Connection: close'：拆除 TCP 连接
 //
-// TODO: is there a way to merge WithWaitGroup and this filter?
+// TODO：能否把 WithWaitGroup 与本过滤器合并？
 func WithRetryAfter(handler http.Handler, shutdownDelayDurationElapsedCh <-chan struct{}) http.Handler {
 	shutdownRetryAfterParams := &retryAfterParams{
 		TearDownConnection: true,
@@ -97,12 +97,12 @@ func withRetryAfter(handler http.Handler, isRequestExemptFn isRequestExemptFunc,
 			return
 		}
 
-		// If we are here this means it's time to send Retry-After response
+		// 走到这里说明该发送 Retry-After 响应了
 		//
-		// Copied from net/http2 library
-		// "Connection" headers aren't allowed in HTTP/2 (RFC 7540, 8.1.2.2),
-		// but respect "Connection" == "close" to mean sending a GOAWAY and tearing
-		// down the TCP connection when idle, like we do for HTTP/1.
+		// 摘自 net/http2 库
+		// HTTP/2 不允许 "Connection" 头（RFC 7540, 8.1.2.2），
+		// 但仍尊重 "Connection" == "close"：发送 GOAWAY 并在空闲时
+		// 拆除 TCP 连接，与 HTTP/1 的做法一致。
 		if params.TearDownConnection {
 			w.Header().Set("Connection", "close")
 		}
@@ -114,18 +114,18 @@ func withRetryAfter(handler http.Handler, isRequestExemptFn isRequestExemptFunc,
 	})
 }
 
-// isRequestExemptFromRetryAfter returns true if the given request should be exempt
-// from being rejected with a 'Retry-After' response.
-// NOTE: both 'WithRetryAfter' and 'WithWaitGroup' filters should use this function
-// to exempt the set of requests from being rejected or tracked.
+// isRequestExemptFromRetryAfter 在给定请求不应被拒绝时返回 true
+// （即以 'Retry-After' 响应拒绝）。
+// 注意：'WithRetryAfter' 与 'WithWaitGroup' 过滤器都应使用该函数
+// 来豁免相应的请求。
 func isRequestExemptFromRetryAfter(r *http.Request) bool {
 	return isKubeApiserverUserAgent(r) || hasExemptPathPrefix(r)
 }
 
-// isKubeApiserverUserAgent returns true if the user-agent matches
-// the one set by the local loopback.
-// NOTE: we can't look up the authenticated user informaion from the
-// request context since the authentication filter has not executed yet.
+// isKubeApiserverUserAgent 在 user-agent 与本地 loopback 设置的值
+// 匹配时返回 true。
+// 注意：此时认证过滤器尚未执行，无法从请求 context 中
+// 取得已认证的用户信息。
 //
 // 因此只能依赖 User-Agent 识别内部回环请求；该判断只影响“是否拒绝”，
 // 不参与任何鉴权决策，伪造 UA 最多换来一次正常处理。

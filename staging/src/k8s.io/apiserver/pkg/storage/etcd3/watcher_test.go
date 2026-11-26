@@ -158,16 +158,16 @@ func TestWatch(t *testing.T) {
 }
 
 // =======================================================================
-// Implementation-specific tests are following.
-// The following tests are exercising the details of the implementation
-// not the actual user-facing contract of storage interface.
-// As such, they may focus e.g. on non-functional aspects like performance
-// impact.
+// 以下是针对实现细节的测试。
+// 这些测试考察实现的细节，
+// 而非存储接口面向用户的契约。
+// 因此它们可能关注性能影响等
+// 非功能性方面。
 // =======================================================================
 
-// TestWatchErrorIncorrectConfiguration checks if an error
-// will be returned when the storage hasn't been properly
-// initialised for watch requests
+// TestWatchErrorIncorrectConfiguration 检查 storage 未正确
+// 初始化以处理 watch 请求时
+// 是否会返回错误。
 func TestWatchErrorIncorrectConfiguration(t *testing.T) {
 	scenarios := []struct {
 		name            string
@@ -245,8 +245,8 @@ func TestTooLargeResourceVersionErrorForWatchList(t *testing.T) {
 	if actualErr.Details.RetryAfterSeconds <= 0 {
 		t.Fatalf("RetryAfterSeconds must be > 0, actual value: %v", actualErr.Details.RetryAfterSeconds)
 	}
-	// rewrite the Details as it contains retry seconds
-	// and validate the whole struct
+	// 重写 Details，因为它包含重试秒数，
+	// 然后校验整个结构体
 	expectedErr.ErrStatus.Details = actualErr.Details
 	if diff := cmp.Diff(*actualErr, expectedErr.ErrStatus); diff != "" {
 		t.Fatalf("Unexpected error returned, diff: %v", diff)
@@ -341,7 +341,7 @@ func TestWatchChanSync(t *testing.T) {
 					t.Errorf("expected initialRev to be set, got %d", w.initialRev)
 				}
 
-				// close incomingEventChan so we can read incomingEventChan non-blocking
+				// 关闭 incomingEventChan，以便非阻塞地读取它
 				close(w.incomingEventChan)
 
 				eventsReceived := 0
@@ -366,8 +366,8 @@ func TestWatchChanSync(t *testing.T) {
 	}
 }
 
-// TestWatchChanSyncStreamMatchesPaginated verifies syncStreamRecursive queues the same
-// key/value/revision set as syncPaginated for the same etcd state.
+// TestWatchChanSyncStreamMatchesPaginated 验证对同一 etcd 状态，syncStreamRecursive
+// 与 syncPaginated 入队的 key/value/revision 集合一致。
 func TestWatchChanSyncStreamMatchesPaginated(t *testing.T) {
 	origCtx, store, _ := testSetup(t)
 
@@ -473,7 +473,7 @@ func TestWatchChanSyncStreamCompactionError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Compacting at r2's revision removes r1's, so a read pinned to r1 fails.
+	// 在 r2 的 revision 压缩会移除 r1 的版本，因此固定在 r1 的读取会失败。
 	if _, err := store.client.KV.Compact(ctx, r2.Header.Revision, clientv3.WithCompactPhysical()); err != nil {
 		t.Fatal(err)
 	}
@@ -548,20 +548,20 @@ etcd_requests_total{group="",operation="listStream",resource="pods"} 1
 	})
 }
 
-// NOTE: it's not thread-safe
+// 注意：不是线程安全的
 // etcdClientKVWrapper 用于在测试中注入故障（未实现的 RangeStream、固定 revision）
 // 并统计 Get/GetStream 调用次数。
 type etcdClientKVWrapper struct {
 	clientv3.KV
-	// keeps track of the number of times Get method is called
+	// 记录 Get 方法被调用的次数
 	getCallCounter int
-	// keeps track of the number of times GetStream method is called
+	// 记录 GetStream 方法被调用的次数
 	getStreamCallCounter int
-	// when set, GetStream is served by this KV instead
+	// 设置后，GetStream 改由该 KV 提供服务
 	streamKV clientv3.KV
-	// when nonzero, GetStream pins the stream to this revision
+	// 非零时，GetStream 把流固定在该 revision
 	streamRev int64
-	// getReactors is called after the etcd KV's get function is executed.
+	// getReactors 在 etcd KV 的 get 函数执行后调用。
 	getReactors []func()
 }
 
@@ -585,8 +585,8 @@ func (ecw *etcdClientKVWrapper) GetStream(ctx context.Context, key string, opts 
 	return ecw.KV.GetStream(ctx, key, opts...)
 }
 
-// unimplementedRangeStreamKV returns a clientv3.KV whose RangeStream fails with
-// Unimplemented on the first Recv, like an etcd server before 3.7.
+// unimplementedRangeStreamKV 返回一个 clientv3.KV，其 RangeStream 在
+// 第一次 Recv 时以 Unimplemented 失败，模拟 3.7 之前的 etcd server。
 func unimplementedRangeStreamKV() clientv3.KV {
 	return clientv3.NewKVFromKVClient(unimplementedRangeStreamKVClient{}, nil)
 }
@@ -658,7 +658,7 @@ func initStoreData(ctx context.Context, store storage.Interface) ([]interface{},
 // TestWatchWithShardSelector 验证分片选择器只返回 UID 哈希落在
 // [boundary, 2^64) 区间内的事件，确保跨 API server 的 watch 分片不重不漏。
 func TestWatchWithShardSelector(t *testing.T) {
-	// The shard [boundary, 2^64) contains exactly the higher of the two UID hashes.
+	// 分片 [boundary, 2^64) 恰好包含两个 UID hash 中较大的那个。
 	uidA, uidB := "uid-a", "uid-b"
 	hashA, hashB := "0x"+sharding.HashField(uidA), "0x"+sharding.HashField(uidB)
 	inShardUID, outOfShardUID, boundary := uidA, uidB, hashA
@@ -734,8 +734,8 @@ func TestWatchWithShardSelector(t *testing.T) {
 			}
 			defer w.Stop()
 
-			// pod-out is created first so that receiving pod-in's event first
-			// proves pod-out's event was filtered rather than still in flight.
+			// 先创建 pod-out，这样先收到 pod-in 的事件
+			// 就能证明 pod-out 的事件是被过滤掉了，而不是仍在传输中。
 			if err := store.Create(ctx, "/pods/test-ns/pod-out", newPod("pod-out", outOfShardUID), &example.Pod{}, 0); err != nil {
 				t.Fatalf("Create pod-out failed: %v", err)
 			}

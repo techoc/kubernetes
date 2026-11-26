@@ -329,8 +329,8 @@ type cacheSyncWaiterStub struct {
 	startedByInformerType map[reflect.Type]bool
 }
 
-// WaitForCacheSync is a stub implementation of the corresponding func
-// that simply returns the value passed during stub initialization.
+// WaitForCacheSync 是对应函数的桩实现，
+// 只返回桩初始化时传入的值。
 func (s cacheSyncWaiterStub) WaitForCacheSync(_ <-chan struct{}) map[reflect.Type]bool {
 	return s.startedByInformerType
 }
@@ -349,7 +349,7 @@ func TestInstallPathHandlerWithHealthyFunc(t *testing.T) {
 	}
 	InstallPathHandlerWithHealthyFunc(mux, "/readyz", hasBeenReadyFn, readyOnChanClose{readyzCh})
 
-	// scenario 1: expect the check to fail since the channel hasn't been closed
+	// 场景 1：channel 未关闭，期望检查失败
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://example.com%s", "/readyz"), nil)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -360,8 +360,8 @@ func TestInstallPathHandlerWithHealthyFunc(t *testing.T) {
 		t.Errorf("scenario 1: unexpected status code returned, expected %d, got %d", http.StatusInternalServerError, rr.Code)
 	}
 
-	// scenario 2: close the channel that will cause the readyz checker to report success,
-	//             verify that hasBeenReadyFn was called
+	// 场景 2：关闭 channel 会让 readyz 检查报告成功，
+	//         同时验证 hasBeenReadyFn 被调用
 	close(readyzCh)
 	rr = httptest.NewRecorder()
 	req = req.Clone(context.TODO())
@@ -373,7 +373,7 @@ func TestInstallPathHandlerWithHealthyFunc(t *testing.T) {
 		t.Errorf("scenario 2: unexpected value of hasBeenReadyCounter, expected 1, got %d", hasBeenReadyCounter)
 	}
 
-	// scenario 3: checks if hasBeenReadyFn hasn't been called again.
+	// 场景 3：检查 hasBeenReadyFn 没有再次被调用。
 	rr = httptest.NewRecorder()
 	req = req.Clone(context.TODO())
 	mux.ServeHTTP(rr, req)

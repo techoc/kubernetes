@@ -75,12 +75,12 @@ func TestCORSAllowedOrigins(t *testing.T) {
 			// 这里刻意展示未锚定正则的危险结果：example.com 会匹配
 			// example.com.hacker.org。真实集群靠 --cors-allowed-origins 的
 			// 启动校验阻止这种配置，过滤器本身不兜底。
-			// CVE-2022-1996: regular expression 'example.com' matches
-			// 'example.com.hacker.org' because it does not pin to the start
-			// and end of the host.
-			// The CVE should not occur in a real kubernetes cluster since we
-			// validate the regular expression specified in --cors-allowed-origins
-			// to ensure that it pins to the start and end of the host name.
+			// CVE-2022-1996：正则 'example.com' 会匹配
+			// 'example.com.hacker.org'，因为它没有锚定主机的
+			// 首尾。
+			// 真实 Kubernetes 集群中不应出现该 CVE，因为我们会
+			// 校验 --cors-allowed-origins 中指定的正则，
+			// 确保它锚定主机名的首尾。
 			name:           "regex does not pin, CVE-2022-1996 is not prevented",
 			allowedOrigins: []string{"example.com"},
 			origins:        []string{"http://example.com.hacker.org", "http://example.com.hacker.org:8080"},
@@ -88,7 +88,7 @@ func TestCORSAllowedOrigins(t *testing.T) {
 		},
 		{
 			// 锚定到 //主机(:|$) 后，恶意后缀无法再匹配。
-			// with a proper regular expression we can prevent CVE-2022-1996
+			// 使用正确的正则可避免 CVE-2022-1996
 			name:           "regex pins to start/end of the host name, CVE-2022-1996 is prevented",
 			allowedOrigins: []string{`//example.com(:|$)`},
 			origins:        []string{"http://example.com.hacker.org", "http://example.com.hacker.org:8080"},

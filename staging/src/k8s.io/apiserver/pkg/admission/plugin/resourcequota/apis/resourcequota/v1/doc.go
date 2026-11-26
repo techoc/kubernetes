@@ -19,7 +19,7 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=resourcequota.admission.k8s.io
 
-// Package v1 is the v1 version of the API.
+// Package v1 是 API 的 v1 版本
 // 该版本是 ResourceQuota 准入配置对外暴露的稳定版本，
 // 通过 conversion-gen 转换为内部版本后再由控制器使用。
 package v1

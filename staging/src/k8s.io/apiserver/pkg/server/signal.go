@@ -27,18 +27,18 @@ import (
 var onlyOneSignalHandler = make(chan struct{})
 var shutdownHandler chan os.Signal
 
-// SetupSignalHandler registered for SIGTERM and SIGINT. A stop channel is returned
-// which is closed on one of these signals. If a second signal is caught, the program
-// is terminated with exit code 1.
-// Only one of SetupSignalContext and SetupSignalHandler should be called, and only can
-// be called once.
+// SetupSignalHandler 注册 SIGTERM 与 SIGINT。返回的 stop channel
+// 在收到任一信号时关闭。若收到第二次信号，程序
+// 以退出码 1 终止。
+// SetupSignalContext 与 SetupSignalHandler 只能调用其中一个，
+// 且只能调用一次。
 func SetupSignalHandler() <-chan struct{} {
 	return SetupSignalContext().Done()
 }
 
-// SetupSignalContext is same as SetupSignalHandler, but a context.Context is returned.
-// Only one of SetupSignalContext and SetupSignalHandler should be called, and only can
-// be called once.
+// SetupSignalContext 与 SetupSignalHandler 相同，但返回 context.Context。
+// SetupSignalContext 与 SetupSignalHandler 只能调用其中一个，
+// 且只能调用一次。
 //
 // 第一次信号触发优雅关闭（cancel context），第二次信号直接退出，
 // 保证关闭卡住时运维仍能强制终止进程。
@@ -60,8 +60,8 @@ func SetupSignalContext() context.Context {
 	return ctx
 }
 
-// RequestShutdown emulates a received event that is considered as shutdown signal (SIGTERM/SIGINT)
-// This returns whether a handler was notified
+// RequestShutdown 模拟收到被视为关闭信号（SIGTERM/SIGINT）的事件
+// 返回是否有 handler 收到了通知
 //
 // 用于测试或内部触发关闭；非阻塞发送，无人监听时返回 false。
 func RequestShutdown() bool {

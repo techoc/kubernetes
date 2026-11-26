@@ -38,24 +38,24 @@ const (
 	labelSelectorVarName = "labelSelector"
 )
 
-// CompilationResult represents a compiled authorization cel expression.
+// CompilationResult 表示已编译的授权 CEL 表达式
 type CompilationResult struct {
 	Program            cel.Program
 	ExpressionAccessor ExpressionAccessor
 
-	// These track if a given expression uses fieldSelector and labelSelector,
-	// so construction of data passed to the CEL expression can be optimized if those fields are unused.
+	// 记录表达式是否使用 fieldSelector 与 labelSelector，
+	// 未使用时可跳过相应数据的构造，减少求值开销。
 	UsesFieldSelector bool
 	UsesLabelSelector bool
 }
 
-// EvaluationResult contains the minimal required fields and metadata of a cel evaluation
+// EvaluationResult 包含 CEL 求值所需的最小字段与元数据
 type EvaluationResult struct {
 	EvalResult         ref.Val
 	ExpressionAccessor ExpressionAccessor
 }
 
-// Compiler is an interface for compiling CEL expressions with the desired environment mode.
+// Compiler 是按指定环境模式编译 CEL 表达式的接口
 type Compiler interface {
 	CompileCELExpression(expressionAccessor ExpressionAccessor) (CompilationResult, error)
 }
@@ -65,13 +65,13 @@ type compiler struct {
 	envSet *environment.EnvSet
 }
 
-// NewDefaultCompiler returns a new Compiler following the default compatibility version.
-// Note: the compiler construction depends on feature gates and the compatibility version to be initialized.
+// NewDefaultCompiler 按默认兼容版本返回一个 Compiler。
+// 注意：构造 Compiler 依赖已初始化的特性门控与兼容版本。
 func NewDefaultCompiler() Compiler {
 	return NewCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()))
 }
 
-// NewCompiler returns a new Compiler.
+// NewCompiler 返回一个 Compiler。
 //
 // 通过 mustBuildEnv 注入 request 变量声明；构建失败属于编程错误，直接 panic。
 func NewCompiler(env *environment.EnvSet) Compiler {
@@ -122,18 +122,18 @@ func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor) (C
 	}
 	checkedExpr, err := cel.AstToCheckedExpr(ast)
 	if err != nil {
-		// should be impossible since env.Compile returned no issues
+		// env.Compile 未报错，这里不应失败
 		return resultError("unexpected compilation error: "+err.Error(), apiservercel.ErrorTypeInternal)
 	}
 	celAST, err := celast.ToAST(checkedExpr)
 	if err != nil {
-		// should be impossible since env.Compile returned no issues
+		// env.Compile 未报错，这里不应失败
 		return resultError("unexpected compilation error: "+err.Error(), apiservercel.ErrorTypeInternal)
 	}
 
 	var usesFieldSelector, usesLabelSelector bool
 	celast.PreOrderVisit(celast.NavigateAST(celAST), celast.NewExprVisitor(func(e celast.Expr) {
-		// we already know we use both, no need to inspect more
+		// 已知两者都用到了，无需继续检查
 		if usesFieldSelector && usesLabelSelector {
 			return
 		}
@@ -141,15 +141,15 @@ func (c compiler) CompileCELExpression(expressionAccessor ExpressionAccessor) (C
 		var fieldName string
 		switch e.Kind() {
 		case celast.SelectKind:
-			// simple select (.fieldSelector / .labelSelector)
+			// 普通选择（.fieldSelector / .labelSelector）
 			fieldName = e.AsSelect().FieldName()
 		case celast.CallKind:
-			// optional select (.?fieldSelector / .?labelSelector)
+			// 可选选择（.?fieldSelector / .?labelSelector）
 			if e.AsCall().FunctionName() != operators.OptSelect {
 				return
 			}
 			args := e.AsCall().Args()
-			// args[0] is the receiver (what comes before the `.?`), args[1] is the field name being optionally selected (what comes after the `.?`)
+			// args[0] 是接收者（`.?` 前的部分），args[1] 是被可选选择的字段名（`.?` 后的部分）
 			if len(args) != 2 || args[1].Kind() != celast.LiteralKind || args[1].AsLiteral().Type() != cel.StringType {
 				return
 			}
@@ -192,8 +192,8 @@ func mustBuildEnv(baseEnv *environment.EnvSet) *environment.EnvSet {
 	subjectAccessReviewSpecRequestType := buildRequestType(field, fields)
 	extended, err := baseEnv.Extend(
 		environment.VersionedOptions{
-			// we record this as 1.0 since it was available in the
-			// first version that supported this feature
+			// 记为 1.0，因为该功能在
+			// 首个支持它的版本中就已提供
 			IntroducedVersion: version.MajorMinor(1, 0),
 			EnvOptions: []cel.EnvOption{
 				cel.Variable(subjectAccessReviewRequestVarName, subjectAccessReviewSpecRequestType.CelType()),
@@ -210,8 +210,8 @@ func mustBuildEnv(baseEnv *environment.EnvSet) *environment.EnvSet {
 	return extended
 }
 
-// buildRequestType generates a DeclType for SubjectAccessReviewSpec.
-// if attributes are added here, also add to convertObjectToUnstructured.
+// buildRequestType 为 SubjectAccessReviewSpec 生成 DeclType。
+// 此处新增属性时，也必须同步到 convertObjectToUnstructured。
 func buildRequestType(field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) *apiservercel.DeclType {
 	resourceAttributesType := buildResourceAttributesType(field, fields)
 	nonResourceAttributesType := buildNonResourceAttributesType(field, fields)
@@ -225,8 +225,8 @@ func buildRequestType(field func(name string, declType *apiservercel.DeclType, r
 	))
 }
 
-// buildResourceAttributesType generates a DeclType for ResourceAttributes.
-// if attributes are added here, also add to convertObjectToUnstructured.
+// buildResourceAttributesType 为 ResourceAttributes 生成 DeclType。
+// 此处新增属性时，也必须同步到 convertObjectToUnstructured。
 func buildResourceAttributesType(field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) *apiservercel.DeclType {
 	resourceAttributesFields := []*apiservercel.DeclField{
 		field("namespace", apiservercel.StringType, false),
@@ -267,8 +267,8 @@ func buildSelectorRequirementType(field func(name string, declType *apiservercel
 	))
 }
 
-// buildNonResourceAttributesType generates a DeclType for NonResourceAttributes.
-// if attributes are added here, also add to convertObjectToUnstructured.
+// buildNonResourceAttributesType 为 NonResourceAttributes 生成 DeclType。
+// 此处新增属性时，也必须同步到 convertObjectToUnstructured。
 func buildNonResourceAttributesType(field func(name string, declType *apiservercel.DeclType, required bool) *apiservercel.DeclField, fields func(fields ...*apiservercel.DeclField) map[string]*apiservercel.DeclField) *apiservercel.DeclType {
 	return apiservercel.NewObjectType("kubernetes.NonResourceAttributes", fields(
 		field("path", apiservercel.StringType, false),
@@ -282,7 +282,7 @@ func buildNonResourceAttributesType(field func(name string, declType *apiserverc
 // 反之则会暴露未声明的数据。includeFieldSelector/includeLabelSelector 为 false 时跳过
 // 相应选择器的转换，这是一条纯粹的性能优化路径。
 func convertObjectToUnstructured(obj *authorizationv1.SubjectAccessReviewSpec, includeFieldSelector, includeLabelSelector bool) map[string]interface{} {
-	// Construct version containing every SubjectAccessReview user and string attribute field, even omitempty ones, for evaluation by CEL
+	// 构造包含 SubjectAccessReview 所有用户与字符串属性字段的版本，即使字段为 omitempty 也保留，供 CEL 求值
 	//
 	// extra 为 nil 时替换为空 map，保证表达式里 .extra 始终可访问而不会因 null 报错。
 	extra := obj.Extra
